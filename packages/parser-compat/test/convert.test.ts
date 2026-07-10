@@ -70,7 +70,7 @@ describe("toLegacyMatch", () => {
     const a = legacy.units["Player-1-A"]!;
     expect(a.damageOut).toHaveLength(1);
     const e = a.damageOut[0]!;
-    expect(e.effectiveAmount).toBe(100);
+    expect(e.effectiveAmount).toBe(-100);
     expect(e.spellId).toBe(50622);
     expect(e.spellName).toBe("Bladestorm");
     expect(e.logLine.event).toBe(LogEvent.SPELL_DAMAGE);
@@ -102,5 +102,46 @@ describe("toLegacyShuffle", () => {
     expect(legacy.rounds[0]!.dataType).toBe("ShuffleRound");
     expect(legacy.rounds[0]!.sequenceNumber).toBe(0);
     expect(legacy.rounds[1]!.units["Player-1-A"]!.info?.teamId).toBe(1);
+  });
+});
+
+describe("legacy damage conventions (adjudication #6, 2026-07-10)", () => {
+  const { matches } = parseLines([
+    "ARENA_MATCH_START,1825,41,3v3,1",
+    CI("Player-1-A", 0, 257, 2400),
+    DMG("Player-1-A", "Alice-X", "Player-2-B", "Bob-Y"),
+    // SPELL_ABSORBED: A 打 B,B 的盾(Player-2-B 自己的 PW:S)吸收 40
+    `SPELL_ABSORBED,Player-1-A,"Alice-X",0x511,0x80000000,Player-2-B,"Bob-Y",0x548,0x80000000,50622,"Bladestorm",0x1,Player-2-B,"Bob-Y",0x548,0x80000000,17,"Power Word: Shield",0x2,40,140,nil`,
+    "ARENA_MATCH_END,0,30,1500,1501",
+  ]);
+  const legacy = toLegacyMatch(matches[0]!);
+
+  it("damage rows are NEGATIVE in legacy shape (old HP-delta convention)", () => {
+    const a = legacy.units["Player-1-A"]!;
+    const dmg = a.damageOut.filter(
+      (e) => e.logLine.event === LogEvent.SPELL_DAMAGE,
+    );
+    expect(dmg).toHaveLength(1);
+    expect(dmg[0]!.effectiveAmount).toBe(-100);
+    expect(dmg[0]!.amount).toBe(-100);
+  });
+
+  it("SPELL_ABSORBED rows are interleaved into attacker's damageOut with POSITIVE absorbed amount", () => {
+    const a = legacy.units["Player-1-A"]!;
+    const abs = a.damageOut.filter(
+      (e) => e.logLine.event === LogEvent.SPELL_ABSORBED,
+    );
+    expect(abs).toHaveLength(1);
+    expect(abs[0]!.effectiveAmount).toBe(40);
+    expect((abs[0] as { absorbedAmount?: number }).absorbedAmount).toBe(40);
+  });
+
+  it("heal rows stay positive", () => {
+    // 上方 describe 的 A 自疗样本已验证正号;此处防回归:damageIn 同为负
+    const b = legacy.units["Player-2-B"]!;
+    const dIn = b.damageIn.filter(
+      (e) => e.logLine.event === LogEvent.SPELL_DAMAGE,
+    );
+    expect(dIn[0]!.effectiveAmount).toBe(-100);
   });
 });

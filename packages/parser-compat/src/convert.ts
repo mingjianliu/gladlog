@@ -123,37 +123,73 @@ function convertUnit(unit: GladUnit): ICombatUnit {
     }),
   );
 
-  const damageOut: IHpEvent[] = unit.damageOut.map((event) => ({
-    spellId: event.spellId,
-    spellName: event.spellName,
-    timestamp: event.timestamp,
-    srcUnitId: event.srcId,
-    srcUnitName: event.srcName,
-    destUnitId: event.destId,
-    destUnitName: event.destName,
-    amount: event.amount,
-    effectiveAmount: event.effectiveAmount,
-    logLine: {
-      event: LogEvent.SPELL_DAMAGE,
+  const damageOut: IHpEvent[] = [
+    ...unit.damageOut.map((event) => ({
+      spellId: event.spellId,
+      spellName: event.spellName,
       timestamp: event.timestamp,
-    },
-  }));
+      srcUnitId: event.srcId,
+      srcUnitName: event.srcName,
+      destUnitId: event.destId,
+      destUnitName: event.destName,
+      amount: -event.amount,
+      effectiveAmount: -event.effectiveAmount,
+      logLine: {
+        event: LogEvent.SPELL_DAMAGE,
+        timestamp: event.timestamp,
+      },
+    })),
+    ...unit.absorbsIn.map((event) => ({
+      spellId: event.spellId,
+      spellName: event.spellName,
+      timestamp: event.timestamp,
+      srcUnitId: event.srcId,
+      srcUnitName: event.srcName,
+      destUnitId: event.destId,
+      destUnitName: event.destName,
+      amount: event.absorbedAmount,
+      effectiveAmount: event.absorbedAmount,
+      absorbedAmount: event.absorbedAmount,
+      logLine: {
+        event: LogEvent.SPELL_ABSORBED,
+        timestamp: event.timestamp,
+      },
+    } as unknown as IHpEvent)),
+  ].sort((a, b) => a.timestamp - b.timestamp);
 
-  const damageIn: IHpEvent[] = unit.damageIn.map((event) => ({
-    spellId: event.spellId,
-    spellName: event.spellName,
-    timestamp: event.timestamp,
-    srcUnitId: event.srcId,
-    srcUnitName: event.srcName,
-    destUnitId: event.destId,
-    destUnitName: event.destName,
-    amount: event.amount,
-    effectiveAmount: event.effectiveAmount,
-    logLine: {
-      event: LogEvent.SPELL_DAMAGE,
+  const damageIn: IHpEvent[] = [
+    ...unit.damageIn.map((event) => ({
+      spellId: event.spellId,
+      spellName: event.spellName,
       timestamp: event.timestamp,
-    },
-  }));
+      srcUnitId: event.srcId,
+      srcUnitName: event.srcName,
+      destUnitId: event.destId,
+      destUnitName: event.destName,
+      amount: -event.amount,
+      effectiveAmount: -event.effectiveAmount,
+      logLine: {
+        event: LogEvent.SPELL_DAMAGE,
+        timestamp: event.timestamp,
+      },
+    })),
+    ...unit.absorbsOut.map((event) => ({
+      spellId: event.spellId,
+      spellName: event.spellName,
+      timestamp: event.timestamp,
+      srcUnitId: event.srcId,
+      srcUnitName: event.srcName,
+      destUnitId: event.destId,
+      destUnitName: event.destName,
+      amount: event.absorbedAmount,
+      effectiveAmount: event.absorbedAmount,
+      absorbedAmount: event.absorbedAmount,
+      logLine: {
+        event: LogEvent.SPELL_ABSORBED,
+        timestamp: event.timestamp,
+      },
+    } as unknown as IHpEvent)),
+  ].sort((a, b) => a.timestamp - b.timestamp);
 
   const healOut: IHpEvent[] = unit.healOut.map((event) => ({
     spellId: event.spellId,
