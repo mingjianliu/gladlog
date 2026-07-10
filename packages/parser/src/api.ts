@@ -1,11 +1,15 @@
 import { parseLine } from "./l1/parseLine";
 import { Segmenter } from "./l2/segmenter";
 import { Segment, ShuffleClose } from "./l2/types";
+import { buildMatch, buildShuffle } from "./l3/compose";
+import type { GladMatch, GladShuffle } from "./l3/model";
 
 interface EventMap {
   matchSegment: (seg: Segment) => void;
   shuffleSegments: (s: ShuffleClose) => void;
   diagnostic: (d: { code: string; lineRef?: string }) => void;
+  match: (m: GladMatch) => void;
+  shuffle: (s: GladShuffle) => void;
 }
 
 export class GladLogParser {
@@ -26,12 +30,24 @@ export class GladLogParser {
     this.wowVersion = opts?.wowVersion;
     this.segmenter = new Segmenter();
 
-    this.segmenter.onMatch((seg) => {
+    this.segmenter.onMatch((seg, end) => {
       this.emit("matchSegment", seg);
+      try {
+        const m = buildMatch(seg, end);
+        this.emit("match", m);
+      } catch (err) {
+        this.emit("diagnostic", { code: "BUILD_FAILED" });
+      }
     });
 
     this.segmenter.onShuffle((s) => {
       this.emit("shuffleSegments", s);
+      try {
+        const shuffle = buildShuffle(s);
+        this.emit("shuffle", shuffle);
+      } catch (err) {
+        this.emit("diagnostic", { code: "BUILD_FAILED" });
+      }
     });
 
     this.segmenter.onDiagnostic((d) => {
