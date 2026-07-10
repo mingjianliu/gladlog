@@ -2,7 +2,7 @@ function isValidDate(year: number, month: number, day: number): boolean {
   if (month < 1 || month > 12) return false;
   const days = [
     31,
-    (year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0)) ? 29 : 28,
+    year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0) ? 29 : 28,
     31,
     30,
     31,
@@ -12,18 +12,49 @@ function isValidDate(year: number, month: number, day: number): boolean {
     30,
     31,
     30,
-    31
+    31,
   ];
   const maxDays = days[month - 1];
   if (maxDays === undefined) return false;
   return day >= 1 && day <= maxDays;
 }
 
+// Cache for Intl.DateTimeFormat instances per timezone
+const formatterCache = new Map<string | undefined, Intl.DateTimeFormat>();
+
+// Cache for computed UTC offsets: key is "${timezone}|${year}-${month}-${day}-${hour}"
+const offsetCache = new Map<string, number>();
+
+function getFormatter(timezone: string | undefined): Intl.DateTimeFormat {
+  if (formatterCache.has(timezone)) {
+    return formatterCache.get(timezone)!;
+  }
+
+  const formatterOptions: Intl.DateTimeFormatOptions = {
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "numeric",
+    second: "numeric",
+    hour12: false,
+    hourCycle: "h23",
+  };
+  if (timezone !== undefined) {
+    formatterOptions.timeZone = timezone;
+  }
+  const formatter = new Intl.DateTimeFormat("en-US", formatterOptions);
+  formatterCache.set(timezone, formatter);
+  return formatter;
+}
+
 export function parseTimestamp(
   datePart: string,
-  opts?: { timezone?: string }
+  opts?: { timezone?: string },
 ): number | null {
-  const match = datePart.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4}) (\d{1,2}):(\d{1,2}):(\d{1,2})\.(\d{1,6})(?:([+-]\d+(?:\.\d+)?))?$/);
+  const match = datePart.match(
+    /^(\d{1,2})\/(\d{1,2})\/(\d{4}) (\d{1,2}):(\d{1,2}):(\d{1,2})\.(\d{1,6})(?:([+-]\d+(?:\.\d+)?))?$/,
+  );
   if (!match) return null;
 
   const month = parseInt(match[1]!, 10);
@@ -44,7 +75,7 @@ export function parseTimestamp(
     fractionStr.length >= 3
       ? fractionStr.slice(0, 3)
       : fractionStr.padEnd(3, "0"),
-    10
+    10,
   );
 
   if (suffix !== undefined) {
@@ -59,32 +90,35 @@ export function parseTimestamp(
     const W_target = Date.UTC(year, month - 1, day, hour, minute, second, ms);
 
     let u = W_target;
+    const formatter = getFormatter(timezone);
     for (let i = 0; i < 3; i++) {
-      const formatterOptions: Intl.DateTimeFormatOptions = {
-        year: "numeric",
-        month: "numeric",
-        day: "numeric",
-        hour: "numeric",
-        minute: "numeric",
-        second: "numeric",
-        hour12: false,
-        hourCycle: "h23",
-      };
-      if (timezone !== undefined) {
-        formatterOptions.timeZone = timezone;
-      }
-      const formatter = new Intl.DateTimeFormat("en-US", formatterOptions);
-
       const parts = formatter.formatToParts(new Date(u));
-      let pYear = 0, pMonth = 0, pDay = 0, pHour = 0, pMinute = 0, pSecond = 0;
+      let pYear = 0,
+        pMonth = 0,
+        pDay = 0,
+        pHour = 0,
+        pMinute = 0,
+        pSecond = 0;
       for (const part of parts) {
         switch (part.type) {
-          case "year": pYear = parseInt(part.value, 10); break;
-          case "month": pMonth = parseInt(part.value, 10); break;
-          case "day": pDay = parseInt(part.value, 10); break;
-          case "hour": pHour = parseInt(part.value, 10); break;
-          case "minute": pMinute = parseInt(part.value, 10); break;
-          case "second": pSecond = parseInt(part.value, 10); break;
+          case "year":
+            pYear = parseInt(part.value, 10);
+            break;
+          case "month":
+            pMonth = parseInt(part.value, 10);
+            break;
+          case "day":
+            pDay = parseInt(part.value, 10);
+            break;
+          case "hour":
+            pHour = parseInt(part.value, 10);
+            break;
+          case "minute":
+            pMinute = parseInt(part.value, 10);
+            break;
+          case "second":
+            pSecond = parseInt(part.value, 10);
+            break;
         }
       }
       if (pHour === 24) pHour = 0;
