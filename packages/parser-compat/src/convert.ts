@@ -1,0 +1,387 @@
+import type {
+  GladMatch,
+  GladShuffle,
+  GladUnit,
+  GladCombatantInfo,
+} from "@gladlog/parser";
+import {
+  CombatUnitClass,
+  CombatUnitReaction,
+  CombatUnitType,
+  CombatUnitSpec,
+  CombatResult,
+  LogEvent,
+} from "./enums";
+import type {
+  IArenaMatch,
+  IShuffleMatch,
+  ICombatUnit,
+  IHpEvent,
+  IAbsorbEvent,
+  IAuraEvent,
+  ISpellEvent,
+  CombatantInfo,
+  IStartInfo,
+  IAdvancedAction,
+  ILogLine,
+} from "./types";
+
+// Mapping from Blizzard classId to legacy CombatUnitClass enum value
+const BLIZZARD_CLASS_TO_LEGACY: Record<number, CombatUnitClass> = {
+  0: CombatUnitClass.None,
+  1: CombatUnitClass.Warrior, // Warrior
+  2: CombatUnitClass.Paladin, // Paladin
+  3: CombatUnitClass.Hunter, // Hunter
+  4: CombatUnitClass.Rogue, // Rogue
+  5: CombatUnitClass.Priest, // Priest
+  6: CombatUnitClass.DeathKnight, // DeathKnight
+  7: CombatUnitClass.Shaman, // Shaman
+  8: CombatUnitClass.Mage, // Mage
+  9: CombatUnitClass.Warlock, // Warlock
+  10: CombatUnitClass.Monk, // Monk
+  11: CombatUnitClass.Druid, // Druid
+  12: CombatUnitClass.DemonHunter, // DemonHunter
+  13: CombatUnitClass.Evoker, // Evoker
+};
+
+function kindToType(kind: string): CombatUnitType {
+  switch (kind) {
+    case "Player":
+      return CombatUnitType.Player;
+    case "NPC":
+      return CombatUnitType.NPC;
+    case "Pet":
+      return CombatUnitType.Pet;
+    case "Guardian":
+      return CombatUnitType.Guardian;
+    case "Object":
+      return CombatUnitType.Object;
+    default:
+      return CombatUnitType.None;
+  }
+}
+
+function reactionToLegacy(reaction: string): CombatUnitReaction {
+  switch (reaction) {
+    case "Friendly":
+      return CombatUnitReaction.Friendly;
+    case "Hostile":
+      return CombatUnitReaction.Hostile;
+    case "Neutral":
+      return CombatUnitReaction.Neutral;
+    default:
+      return CombatUnitReaction.Neutral;
+  }
+}
+
+function classIdToLegacy(classId: number): CombatUnitClass {
+  return BLIZZARD_CLASS_TO_LEGACY[classId] ?? CombatUnitClass.None;
+}
+
+function resultToLegacy(result: string): CombatResult {
+  switch (result) {
+    case "Win":
+      return CombatResult.Win;
+    case "Lose":
+      return CombatResult.Lose;
+    case "Draw":
+      return CombatResult.DrawGame;
+    default:
+      return CombatResult.Unknown;
+  }
+}
+
+function convertCombatantInfo(
+  info: GladCombatantInfo | undefined,
+): CombatantInfo | undefined {
+  if (!info) return undefined;
+  return {
+    teamId: info.teamId,
+    specId: info.specId,
+    personalRating: info.personalRating,
+    talents: info.talents,
+    pvpTalents: info.pvpTalents,
+    equipment: info.equipment,
+    interestingAurasJSON: JSON.stringify(info.interestingAuras),
+  };
+}
+
+function convertUnit(unit: GladUnit): ICombatUnit {
+  const deathRecords: ILogLine[] = unit.deaths.map((death) => ({
+    event: LogEvent.UNIT_DIED,
+    timestamp: death.timestamp,
+  }));
+
+  const advancedActions: IAdvancedAction[] = unit.advancedSamples.map(
+    (sample) => ({
+      advancedActorCurrentHp: sample.hp,
+      advancedActorMaxHp: sample.maxHp,
+      advancedActorPositionX: sample.x,
+      advancedActorPositionY: sample.y,
+      advanced: true,
+      timestamp: sample.timestamp,
+    }),
+  );
+
+  const damageOut: IHpEvent[] = unit.damageOut.map((event) => ({
+    spellId: event.spellId,
+    spellName: event.spellName,
+    timestamp: event.timestamp,
+    srcUnitId: event.srcId,
+    srcUnitName: event.srcName,
+    destUnitId: event.destId,
+    destUnitName: event.destName,
+    amount: event.amount,
+    effectiveAmount: event.effectiveAmount,
+    logLine: {
+      event: LogEvent.SPELL_DAMAGE,
+      timestamp: event.timestamp,
+    },
+  }));
+
+  const damageIn: IHpEvent[] = unit.damageIn.map((event) => ({
+    spellId: event.spellId,
+    spellName: event.spellName,
+    timestamp: event.timestamp,
+    srcUnitId: event.srcId,
+    srcUnitName: event.srcName,
+    destUnitId: event.destId,
+    destUnitName: event.destName,
+    amount: event.amount,
+    effectiveAmount: event.effectiveAmount,
+    logLine: {
+      event: LogEvent.SPELL_DAMAGE,
+      timestamp: event.timestamp,
+    },
+  }));
+
+  const healOut: IHpEvent[] = unit.healOut.map((event) => ({
+    spellId: event.spellId,
+    spellName: event.spellName,
+    timestamp: event.timestamp,
+    srcUnitId: event.srcId,
+    srcUnitName: event.srcName,
+    destUnitId: event.destId,
+    destUnitName: event.destName,
+    amount: event.amount,
+    effectiveAmount: event.effectiveAmount,
+    logLine: {
+      event: LogEvent.SPELL_HEAL,
+      timestamp: event.timestamp,
+    },
+  }));
+
+  const healIn: IHpEvent[] = unit.healIn.map((event) => ({
+    spellId: event.spellId,
+    spellName: event.spellName,
+    timestamp: event.timestamp,
+    srcUnitId: event.srcId,
+    srcUnitName: event.srcName,
+    destUnitId: event.destId,
+    destUnitName: event.destName,
+    amount: event.amount,
+    effectiveAmount: event.effectiveAmount,
+    logLine: {
+      event: LogEvent.SPELL_HEAL,
+      timestamp: event.timestamp,
+    },
+  }));
+
+  const absorbsOut: IAbsorbEvent[] = unit.absorbsOut.map((event) => ({
+    spellId: event.spellId,
+    spellName: event.spellName,
+    timestamp: event.timestamp,
+    srcUnitId: event.srcId,
+    srcUnitName: event.srcName,
+    destUnitId: event.destId,
+    destUnitName: event.destName,
+    absorbedAmount: event.absorbedAmount,
+    logLine: {
+      event: LogEvent.SPELL_ABSORBED,
+      timestamp: event.timestamp,
+    },
+  }));
+
+  const absorbsIn: IAbsorbEvent[] = unit.absorbsIn.map((event) => ({
+    spellId: event.spellId,
+    spellName: event.spellName,
+    timestamp: event.timestamp,
+    srcUnitId: event.srcId,
+    srcUnitName: event.srcName,
+    destUnitId: event.destId,
+    destUnitName: event.destName,
+    absorbedAmount: event.absorbedAmount,
+    logLine: {
+      event: LogEvent.SPELL_ABSORBED,
+      timestamp: event.timestamp,
+    },
+  }));
+
+  const auraEvents: IAuraEvent[] = unit.auraEvents.map((event) => ({
+    spellId: event.spellId,
+    spellName: event.spellName,
+    timestamp: event.timestamp,
+    srcUnitId: event.srcId,
+    srcUnitName: event.srcName,
+    destUnitId: event.destId,
+    destUnitName: event.destName,
+    auraType: event.auraType,
+    amount: event.amount,
+    logLine: {
+      event: LogEvent.SPELL_AURA_APPLIED,
+      timestamp: event.timestamp,
+    },
+  }));
+
+  const spellCastEvents: ISpellEvent[] = unit.casts.map((event) => ({
+    spellId: event.spellId,
+    spellName: event.spellName,
+    timestamp: event.timestamp,
+    srcUnitId: event.srcId,
+    srcUnitName: event.srcName,
+    destUnitId: event.destId,
+    destUnitName: event.destName,
+    logLine: {
+      event: LogEvent.SPELL_CAST_SUCCESS,
+      timestamp: event.timestamp,
+    },
+  }));
+
+  const petSpellCastEvents: ISpellEvent[] = unit.petCasts.map((event) => ({
+    spellId: event.spellId,
+    spellName: event.spellName,
+    timestamp: event.timestamp,
+    srcUnitId: event.srcId,
+    srcUnitName: event.srcName,
+    destUnitId: event.destId,
+    destUnitName: event.destName,
+    logLine: {
+      event: LogEvent.SPELL_CAST_SUCCESS,
+      timestamp: event.timestamp,
+    },
+  }));
+
+  const actionOut: ISpellEvent[] = unit.actionsOut.map((event) => ({
+    spellId: event.spellId,
+    spellName: event.spellName,
+    timestamp: event.timestamp,
+    srcUnitId: event.srcId,
+    srcUnitName: event.srcName,
+    destUnitId: event.destId,
+    destUnitName: event.destName,
+    logLine: {
+      event: LogEvent.SPELL_CAST_SUCCESS,
+      timestamp: event.timestamp,
+    },
+  }));
+
+  const actionIn: ISpellEvent[] = unit.actionsIn.map((event) => ({
+    spellId: event.spellId,
+    spellName: event.spellName,
+    timestamp: event.timestamp,
+    srcUnitId: event.srcId,
+    srcUnitName: event.srcName,
+    destUnitId: event.destId,
+    destUnitName: event.destName,
+    logLine: {
+      event: LogEvent.SPELL_CAST_SUCCESS,
+      timestamp: event.timestamp,
+    },
+  }));
+
+  return {
+    id: unit.id,
+    name: unit.name,
+    ownerId: unit.ownerId,
+    type: kindToType(unit.kind),
+    class: classIdToLegacy(unit.classId),
+    spec: String(unit.specId) as CombatUnitSpec | string,
+    reaction: reactionToLegacy(unit.reaction),
+    info: convertCombatantInfo(unit.info),
+    damageIn,
+    damageOut,
+    healIn,
+    healOut,
+    absorbsIn,
+    absorbsOut,
+    auraEvents,
+    spellCastEvents,
+    petSpellCastEvents,
+    actionIn,
+    actionOut,
+    deathRecords,
+    advancedActions,
+  };
+}
+
+export function toLegacyMatch(m: GladMatch): IArenaMatch {
+  const units: Record<string, ICombatUnit> = {};
+  for (const [id, unit] of Object.entries(m.units)) {
+    units[id] = convertUnit(unit);
+  }
+
+  const startInfo: IStartInfo = {
+    bracket: m.bracket,
+    zoneId: m.zoneId,
+    isRanked: true,
+  };
+
+  return {
+    dataType: "ArenaMatch",
+    startTime: m.startTime,
+    endTime: m.endTime,
+    units,
+    startInfo,
+    playerId: m.playerId,
+    playerTeamId: m.playerTeamId,
+    result: resultToLegacy(m.result),
+    winningTeamId: m.winningTeamId,
+    rawLines: m.rawLines,
+    durationInSeconds: (m.endTime - m.startTime) / 1000,
+    hasAdvancedLogging: m.hasAdvancedLogging,
+    timezone: m.timezone,
+    wowVersion: "retail",
+  };
+}
+
+export function toLegacyShuffle(s: GladShuffle): IShuffleMatch {
+  const rounds = s.rounds.map((round) => {
+    const units: Record<string, ICombatUnit> = {};
+    for (const [id, unit] of Object.entries(round.units)) {
+      units[id] = convertUnit(unit);
+    }
+
+    const startInfo: IStartInfo = {
+      bracket: round.bracket,
+      zoneId: round.zoneId,
+      isRanked: true,
+    };
+
+    return {
+      dataType: "ShuffleRound" as const,
+      sequenceNumber: round.sequenceNumber,
+      startTime: round.startTime,
+      endTime: round.endTime,
+      units,
+      startInfo,
+      playerId: round.playerId,
+      playerTeamId: round.playerTeamId,
+      result: resultToLegacy(round.result),
+      winningTeamId: round.winningTeamId,
+      rawLines: round.rawLines,
+      durationInSeconds: (round.endTime - round.startTime) / 1000,
+      hasAdvancedLogging: round.hasAdvancedLogging,
+      timezone: round.timezone,
+      wowVersion: "retail" as const,
+    };
+  });
+
+  return {
+    dataType: "ShuffleMatch",
+    rounds,
+    startTime: s.startTime,
+    endTime: s.endTime,
+    rawLines: s.rawLines,
+    result: resultToLegacy(s.result),
+  };
+}
