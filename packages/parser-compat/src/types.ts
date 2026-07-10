@@ -80,6 +80,11 @@ export interface IAdvancedAction {
   advancedActorPositionY: number;
   advanced: true;
   timestamp: number;
+  advancedActorId: string;
+  logLine: {
+    event: "ADVANCED_SAMPLE";
+    timestamp: number;
+  };
 }
 
 export interface IStartInfo {

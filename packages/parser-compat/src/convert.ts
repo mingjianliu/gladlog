@@ -138,6 +138,11 @@ function convertUnit(
       advancedActorPositionY: sample.y,
       advanced: true,
       timestamp: sample.timestamp,
+      advancedActorId: unit.id,
+      logLine: {
+        event: "ADVANCED_SAMPLE" as const,
+        timestamp: sample.timestamp,
+      },
     }),
   );
 

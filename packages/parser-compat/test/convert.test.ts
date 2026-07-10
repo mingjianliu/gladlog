@@ -291,3 +291,26 @@ describe("pet-target zeroing (adjudication #17: old zeroes eff for rows onto pet
     expect(d[0]!.effectiveAmount).toBe(-0);
   });
 });
+
+describe("advancedActions legacy shape (adjudication #20: logLine + advancedActorId)", () => {
+  const { matches } = parseLines([
+    "ARENA_MATCH_START,1825,41,3v3,1",
+    CI("Player-1-A", 0, 257, 2400),
+    DMG("Player-1-A", "Alice-X", "Player-2-B", "Bob-Y"),
+    "ARENA_MATCH_END,0,30,1500,1501",
+  ]);
+  const legacy = toLegacyMatch(matches[0]!);
+
+  it("entries carry advancedActorId and logLine.timestamp (downstream binary-search contract)", () => {
+    const b = legacy.units["Player-2-B"]!; // 伤害行 advanced actor = 受击者
+    expect(b.advancedActions.length).toBeGreaterThan(0);
+    const a = b.advancedActions[0]! as {
+      advancedActorId?: string;
+      logLine?: { timestamp?: number };
+      advancedActorCurrentHp?: number;
+    };
+    expect(a.advancedActorId).toBe("Player-2-B");
+    expect(typeof a.logLine?.timestamp).toBe("number");
+    expect(a.advancedActorCurrentHp).toBe(900);
+  });
+});
