@@ -77,6 +77,32 @@ export function buildRoster(records: ParsedLine[]): {
         }
       }
     }
+
+    if (record.combatantInfo) {
+      const { playerGuid } = record.combatantInfo;
+      if (playerGuid && playerGuid !== '0000000000000000') {
+        let u = units.get(playerGuid);
+        if (!u) {
+          u = {
+            id: playerGuid,
+            name: null,
+            kind: 'Player',
+            reaction: 'Unknown',
+            flagsSeen: [],
+          };
+          units.set(playerGuid, u);
+        }
+      }
+    }
+  }
+
+  if (ownerId === null) {
+    for (const record of records) {
+      if (record.combatantInfo) {
+        ownerId = record.combatantInfo.playerGuid;
+        break;
+      }
+    }
   }
 
   for (const [id, unit] of units.entries()) {

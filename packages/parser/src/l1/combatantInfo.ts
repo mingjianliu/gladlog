@@ -44,17 +44,19 @@ function decodeNested(s: string): unknown {
 }
 
 export function decodeCombatantInfo(params: string[]): GladCombatantInfoRaw | null {
-  if (params.length < 32) {
+  if (params.length < 30) {
     return null;
   }
 
+  const offset = params.length < 33 ? params.length - 33 : 0;
+
   const playerGuid = params[0];
   const teamIdStr = params[1];
-  const specIdStr = params[24];
-  const talentsStr = params[25];
-  const pvpTalentsStr = params[26];
-  const equipmentStr = params[27];
-  const interestingAurasStr = params[28];
+  const specIdStr = params[24 + offset];
+  const talentsStr = params[25 + offset];
+  const pvpTalentsStr = params[26 + offset];
+  const equipmentStr = params[27 + offset];
+  const interestingAurasStr = params[28 + offset];
   const personalRatingStr = params[params.length - 2];
 
   if (

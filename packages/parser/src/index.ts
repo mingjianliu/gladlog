@@ -17,4 +17,22 @@ export {
 export { decodeCombatantInfo } from "./l1/combatantInfo";
 export { GladLogParser } from "./api";
 export { Segment, ShuffleClose } from "./l2/types";
-
+export { buildMatch, buildShuffle } from "./l3/compose";
+export type {
+  MatchResult,
+  UnitKind,
+  Reaction,
+  GladCombatantInfo,
+  GladEventBase,
+  GladHpEvent,
+  GladAbsorbEvent,
+  GladSpellEvent,
+  GladAuraEvent,
+  GladDeathEvent,
+  GladAdvancedSample,
+  GladUnit,
+  GladMatchBase,
+  GladMatch,
+  GladShuffleRound,
+  GladShuffle,
+} from "./l3/model";

@@ -84,7 +84,7 @@ export interface GladMatchBase {
   endTime: number;
   units: Record<string, GladUnit>;
   playerId: string; // 日志所有者 GUID
-  playerTeamId: number;
+  playerTeamId: number | null;
   winningTeamId: number | null;
   result: MatchResult;
   linesTotal: number;
@@ -109,4 +109,5 @@ export interface GladShuffle {
   startTime: number;
   endTime: number;
   rawLines: string[];
+  result: MatchResult;
 }
