@@ -71,7 +71,7 @@ describe("toLegacyMatch", () => {
     expect(a.damageOut).toHaveLength(1);
     const e = a.damageOut[0]!;
     expect(e.effectiveAmount).toBe(-100);
-    expect(e.spellId).toBe(50622);
+    expect(e.spellId).toBe("50622");
     expect(e.spellName).toBe("Bladestorm");
     expect(e.logLine.event).toBe(LogEvent.SPELL_DAMAGE);
     expect(e.srcUnitId).toBe("Player-1-A");
@@ -149,7 +149,13 @@ describe("legacy damage conventions (adjudication #6, 2026-07-10)", () => {
 describe("event-name fidelity + SWING dedup (adjudication #10/#12)", () => {
   const PERIODIC = (src: string, sn: string, dst: string, dn: string) =>
     `SPELL_PERIODIC_DAMAGE,${src},"${sn}",0x511,0x80000000,${dst},"${dn}",0x548,0x80000000,589,"Shadow Word: Pain",0x20,${dst},0000000000000000,900,1000,0,0,0,0,0,0,0,100,100,0,1.0,-1.0,0,1.0,70,55,55,-1,32,0,0,0,nil,nil,nil`;
-  const SWING = (ev: string, src: string, sn: string, dst: string, dn: string) =>
+  const SWING = (
+    ev: string,
+    src: string,
+    sn: string,
+    dst: string,
+    dn: string,
+  ) =>
     `${ev},${src},"${sn}",0x511,0x80000000,${dst},"${dn}",0x548,0x80000000,${dst},0000000000000000,900,1000,0,0,0,0,0,0,0,100,100,0,1.0,-1.0,0,1.0,70,77,90,-1,1,0,0,0,nil,nil,nil`;
 
   const { matches } = parseLines([
@@ -157,7 +163,13 @@ describe("event-name fidelity + SWING dedup (adjudication #10/#12)", () => {
     CI("Player-1-A", 0, 257, 2400),
     PERIODIC("Player-1-A", "Alice-X", "Player-2-B", "Bob-Y"),
     SWING("SWING_DAMAGE", "Player-1-A", "Alice-X", "Player-2-B", "Bob-Y"),
-    SWING("SWING_DAMAGE_LANDED", "Player-1-A", "Alice-X", "Player-2-B", "Bob-Y"),
+    SWING(
+      "SWING_DAMAGE_LANDED",
+      "Player-1-A",
+      "Alice-X",
+      "Player-2-B",
+      "Bob-Y",
+    ),
     "ARENA_MATCH_END,0,30,1500,1501",
   ]);
   const legacy = toLegacyMatch(matches[0]!);
@@ -177,7 +189,8 @@ describe("event-name fidelity + SWING dedup (adjudication #10/#12)", () => {
     expect(swings[0]!.logLine.event).toBe(LogEvent.SWING_DAMAGE);
     // 伤害总量只含一次 swing:periodic 55 + swing 77(负号惯例)
     const total = a.damageOut.reduce(
-      (s, e) => s + Math.abs(e.effectiveAmount), 0,
+      (s, e) => s + Math.abs(e.effectiveAmount),
+      0,
     );
     expect(total).toBe(55 + 77);
   });
@@ -329,7 +342,7 @@ describe("logLine.parameters passthrough (adjudication #21)", () => {
   const a = legacy.units["Player-1-A"]!;
 
   it("aura event parameters: [11]='BUFF'|'DEBUFF' string, [12]=stacks as number", () => {
-    const aura = a.auraEvents.find((e) => e.spellId === 110310)! as {
+    const aura = a.auraEvents.find((e) => e.spellId === "110310")! as {
       logLine: { parameters: (string | number)[] };
     };
     expect(aura.logLine.parameters[11]).toBe("DEBUFF");
@@ -338,7 +351,7 @@ describe("logLine.parameters passthrough (adjudication #21)", () => {
   });
 
   it("heal event parameters: [30]=amount, [32]=overheal as numbers", () => {
-    const heal = a.healOut.find((e) => e.spellId === 2061)! as {
+    const heal = a.healOut.find((e) => e.spellId === "2061")! as {
       logLine: { parameters: (string | number)[] };
     };
     expect(heal.logLine.parameters[30]).toBe(200);
@@ -346,7 +359,9 @@ describe("logLine.parameters passthrough (adjudication #21)", () => {
   });
 
   it("guid/flag params stay strings", () => {
-    const aura = a.auraEvents[0]! as { logLine: { parameters: (string | number)[] } };
+    const aura = a.auraEvents[0]! as {
+      logLine: { parameters: (string | number)[] };
+    };
     expect(typeof aura.logLine.parameters[0]).toBe("string");
     expect(typeof aura.logLine.parameters[2]).toBe("string"); // 0x511 保持字符串
   });

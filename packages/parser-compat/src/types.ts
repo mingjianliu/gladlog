@@ -14,7 +14,7 @@ export interface ILogLine {
 }
 
 export interface ICombatEvent {
-  spellId: number;
+  spellId: string;
   spellName: string;
   timestamp: number;
   srcUnitId: string;
@@ -31,6 +31,7 @@ export interface IHpEvent extends ICombatEvent {
 
 export interface IAbsorbEvent extends ICombatEvent {
   absorbedAmount: number;
+  shieldSpellId?: string;
 }
 
 export interface ISpellEvent extends ICombatEvent {}

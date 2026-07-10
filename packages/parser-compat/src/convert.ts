@@ -99,9 +99,15 @@ function convertCombatantInfo(
     teamId: String(info.teamId),
     specId: String(info.specId),
     personalRating: info.personalRating,
-    talents: (info.talents as unknown as number[][]).map(arr => ({ id1: arr[0] ?? 0, id2: arr[1] ?? 0, count: arr[2] ?? 0 })),
-    pvpTalents: (info.pvpTalents as unknown as (number | string)[]).map(t => String(t)),
-    equipment: (info.equipment as unknown as any[]).map(eq => {
+    talents: (info.talents as unknown as number[][]).map((arr) => ({
+      id1: arr[0] ?? 0,
+      id2: arr[1] ?? 0,
+      count: arr[2] ?? 0,
+    })),
+    pvpTalents: (info.pvpTalents as unknown as (number | string)[]).map((t) =>
+      String(t),
+    ),
+    equipment: (info.equipment as unknown as any[]).map((eq) => {
       const [id, ilvl, enchants, bonuses, gems] = eq;
       return {
         id: String(id),
@@ -111,7 +117,13 @@ function convertCombatantInfo(
         gems: Array.isArray(gems) ? gems.map(String) : [],
       };
     }),
-    interestingAurasJSON: JSON.stringify((info.interestingAuras as any[]).flatMap(a => [a.casterGuid, a.spellId, 1])),
+    interestingAurasJSON: JSON.stringify(
+      (info.interestingAuras as any[]).flatMap((a) => [
+        a.casterGuid,
+        a.spellId,
+        1,
+      ]),
+    ),
   };
 }
 
@@ -130,7 +142,9 @@ function isPetOrGuardian(
   return destId.startsWith("Pet-");
 }
 
-function convertParams(params: string[] | undefined): (string | number)[] | undefined {
+function convertParams(
+  params: string[] | undefined,
+): (string | number)[] | undefined {
   if (!params) return undefined;
   return params.map((p) => {
     if (p === "nil" || p === "BUFF" || p === "DEBUFF") {
@@ -182,7 +196,7 @@ function convertUnit(
     ...unit.damageOut.map((event) => {
       const isPetDest = isPetOrGuardian(event.destId, allUnits);
       return {
-        spellId: event.spellId,
+        spellId: String(event.spellId),
         spellName: event.spellName,
         timestamp: event.timestamp,
         srcUnitId: event.srcId,
@@ -190,7 +204,9 @@ function convertUnit(
         destUnitId: event.destId,
         destUnitName: event.destName,
         amount: -event.amount,
-        effectiveAmount: isPetDest ? -0 : -(event.effectiveAmount - (event.absorbed ?? 0)),
+        effectiveAmount: isPetDest
+          ? -0
+          : -(event.effectiveAmount - (event.absorbed ?? 0)),
         logLine: {
           event: event.eventName as LogEvent,
           timestamp: event.timestamp,
@@ -201,7 +217,7 @@ function convertUnit(
     ...unit.absorbsIn.map((event) => {
       const isPetDest = isPetOrGuardian(event.srcId, allUnits);
       return {
-        spellId: event.spellId,
+        spellId: String(event.spellId),
         spellName: event.spellName,
         timestamp: event.timestamp,
         srcUnitId: event.attackerId,
@@ -224,7 +240,7 @@ function convertUnit(
     ...unit.damageIn.map((event) => {
       const isPetDest = isPetOrGuardian(event.destId, allUnits);
       return {
-        spellId: event.spellId,
+        spellId: String(event.spellId),
         spellName: event.spellName,
         timestamp: event.timestamp,
         srcUnitId: event.srcId,
@@ -232,7 +248,9 @@ function convertUnit(
         destUnitId: event.destId,
         destUnitName: event.destName,
         amount: -event.amount,
-        effectiveAmount: isPetDest ? -0 : -(event.effectiveAmount - (event.absorbed ?? 0)),
+        effectiveAmount: isPetDest
+          ? -0
+          : -(event.effectiveAmount - (event.absorbed ?? 0)),
         logLine: {
           event: event.eventName as LogEvent,
           timestamp: event.timestamp,
@@ -243,7 +261,7 @@ function convertUnit(
     ...unit.absorbsOut.map((event) => {
       const isPetDest = isPetOrGuardian(event.srcId, allUnits);
       return {
-        spellId: event.spellId,
+        spellId: String(event.spellId),
         spellName: event.spellName,
         timestamp: event.timestamp,
         srcUnitId: event.attackerId,
@@ -265,7 +283,7 @@ function convertUnit(
   const healOut: IHpEvent[] = unit.healOut.map((event) => {
     const isPetDest = isPetOrGuardian(event.destId, allUnits);
     return {
-      spellId: event.spellId,
+      spellId: String(event.spellId),
       spellName: event.spellName,
       timestamp: event.timestamp,
       srcUnitId: event.srcId,
@@ -285,7 +303,7 @@ function convertUnit(
   const healIn: IHpEvent[] = unit.healIn.map((event) => {
     const isPetDest = isPetOrGuardian(event.destId, allUnits);
     return {
-      spellId: event.spellId,
+      spellId: String(event.spellId),
       spellName: event.spellName,
       timestamp: event.timestamp,
       srcUnitId: event.srcId,
@@ -303,7 +321,7 @@ function convertUnit(
   });
 
   const absorbsOut: IAbsorbEvent[] = unit.absorbsOut.map((event) => ({
-    spellId: event.spellId,
+    spellId: String(event.spellId),
     spellName: event.spellName,
     timestamp: event.timestamp,
     srcUnitId: event.srcId,
@@ -319,7 +337,7 @@ function convertUnit(
   }));
 
   const absorbsIn: IAbsorbEvent[] = unit.absorbsIn.map((event) => ({
-    spellId: event.spellId,
+    spellId: String(event.spellId),
     spellName: event.spellName,
     timestamp: event.timestamp,
     srcUnitId: event.srcId,
@@ -335,7 +353,7 @@ function convertUnit(
   }));
 
   const auraEvents: IAuraEvent[] = unit.auraEvents.map((event) => ({
-    spellId: event.spellId,
+    spellId: String(event.spellId),
     spellName: event.spellName,
     timestamp: event.timestamp,
     srcUnitId: event.srcId,
@@ -352,7 +370,7 @@ function convertUnit(
   }));
 
   const spellCastEvents: ISpellEvent[] = unit.casts.map((event) => ({
-    spellId: event.spellId,
+    spellId: String(event.spellId),
     spellName: event.spellName,
     timestamp: event.timestamp,
     srcUnitId: event.srcId,
@@ -367,7 +385,7 @@ function convertUnit(
   }));
 
   const petSpellCastEvents: ISpellEvent[] = unit.petCasts.map((event) => ({
-    spellId: event.spellId,
+    spellId: String(event.spellId),
     spellName: event.spellName,
     timestamp: event.timestamp,
     srcUnitId: event.srcId,
@@ -382,7 +400,7 @@ function convertUnit(
   }));
 
   const actionOut: ISpellEvent[] = unit.actionsOut.map((event) => ({
-    spellId: event.spellId,
+    spellId: String(event.spellId),
     spellName: event.spellName,
     timestamp: event.timestamp,
     srcUnitId: event.srcId,
@@ -397,7 +415,7 @@ function convertUnit(
   }));
 
   const actionIn: ISpellEvent[] = unit.actionsIn.map((event) => ({
-    spellId: event.spellId,
+    spellId: String(event.spellId),
     spellName: event.spellName,
     timestamp: event.timestamp,
     srcUnitId: event.srcId,
@@ -439,7 +457,8 @@ function convertUnit(
 function mergePetEvents(units: Record<string, ICombatUnit>): void {
   for (const unit of Object.values(units)) {
     if (
-      (unit.type === CombatUnitType.Pet || unit.type === CombatUnitType.Guardian) &&
+      (unit.type === CombatUnitType.Pet ||
+        unit.type === CombatUnitType.Guardian) &&
       unit.ownerId &&
       units[unit.ownerId]
     ) {
@@ -510,9 +529,11 @@ export function toLegacyShuffle(s: GladShuffle): IShuffleMatch {
       units,
       startInfo,
       playerId: round.playerId,
-      playerTeamId: round.playerTeamId != null ? String(round.playerTeamId) : null,
+      playerTeamId:
+        round.playerTeamId != null ? String(round.playerTeamId) : null,
       result: resultToLegacy(round.result),
-      winningTeamId: round.winningTeamId != null ? String(round.winningTeamId) : null,
+      winningTeamId:
+        round.winningTeamId != null ? String(round.winningTeamId) : null,
       rawLines: round.rawLines,
       durationInSeconds: (round.endTime - round.startTime) / 1000,
       hasAdvancedLogging: round.hasAdvancedLogging,
