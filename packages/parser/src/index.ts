@@ -15,3 +15,6 @@ export {
   decodeArenaEnd,
 } from "./l1/decoders";
 export { decodeCombatantInfo } from "./l1/combatantInfo";
+export { GladLogParser } from "./api";
+export { Segment, ShuffleClose } from "./l2/types";
+
