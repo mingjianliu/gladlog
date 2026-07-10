@@ -1,6 +1,6 @@
 export type MatchResult = 'Win' | 'Lose' | 'Draw' | 'Unknown';
 export type UnitKind = 'Player' | 'Pet' | 'Guardian' | 'NPC' | 'Object' | 'Unknown';
-export type Reaction = 'Friendly' | 'Hostile' | 'Neutral';
+export type Reaction = 'Friendly' | 'Hostile' | 'Neutral' | 'Unknown';
 
 export interface GladCombatantInfo {
   teamId: number;

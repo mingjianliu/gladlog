@@ -65,6 +65,11 @@ export function parseLine(line: string, opts?: { timezone?: string }): ParsedLin
       result.absorbed = decodeAbsorbed(params);
     } else if (eventName === "UNIT_DIED" || eventName === "PARTY_KILL") {
       result.base = decodeBaseUnits(params);
+      if (eventName === "UNIT_DIED") {
+        result.unitDied = {
+          unconscious: params[8] === "1",
+        };
+      }
     } else if (eventName === "SWING_DAMAGE" || eventName === "SWING_DAMAGE_LANDED") {
       result.base = decodeBaseUnits(params);
       result.advanced = decodeAdvanced(params, 8);

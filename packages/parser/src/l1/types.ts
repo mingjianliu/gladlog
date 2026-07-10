@@ -29,4 +29,5 @@ export interface ParsedLine {
   arenaStart?: ReturnType<typeof decodeArenaStart>;
   arenaEnd?: ReturnType<typeof decodeArenaEnd>;
   combatantInfo?: NonNullable<ReturnType<typeof decodeCombatantInfo>>;
+  unitDied?: { unconscious: boolean };
 }
