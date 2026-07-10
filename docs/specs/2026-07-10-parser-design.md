@@ -107,8 +107,12 @@ interface GladShuffle {
 
 **L2 对局切分器** `Segmenter`——状态机,输入 LogRecord 流,输出 `Segment { records, rawLines, kind }`。规则:
 
-- `ARENA_MATCH_START` 开启缓冲;再次遇到 START 时丢弃前一段(诊断记录)并重开(对应"double_start"场景)。
-- `ARENA_MATCH_END` 闭合段。START 参数区分普通竞技场与 Solo Shuffle(bracket 字段);Shuffle 的 6 个回合在**一对 START/END 内**,回合边界由回合内标志(UNIT_DIED 后重置/交战重开等)判定——具体信号以 fixture(`one_solo_shuffle.txt` 等)实证为准。
+- **(2026-07-10 探针实证,修正原假设)** Shuffle 结构 = **每回合一个 `ARENA_MATCH_START`(bracket='Rated Solo Shuffle'),整场一个 `ARENA_MATCH_END`**。规则:
+  - 非 shuffle bracket(2v2/3v3):START 开启缓冲;再遇 START → 丢弃前段(诊断 `DOUBLE_START`)重开;END 闭合。
+  - shuffle bracket:连续 START 之间即回合;END 闭合最后一回合并结算整场;回合数可 <6(early leaver 合法,实证 fixture 只有 2 回合);END 的 winningTeamId=255 为"无胜者"哨兵。
+  - 每回合 START 后紧跟 6 条 COMBATANT_INFO,**teamId 每回合重新分配**——roster/reaction 必须按回合处理。
+  - reload 信号 = 流中出现 `COMBAT_LOG_VERSION`(+同 zone 的 `ZONE_CHANGE`);不终止在进行的对局/回合序列,按噪声跳过(实证:reload 后回合照常继续)。回合中 reload 丢行的残余风险:靠下一个 START/END 自然恢复状态,T1 差分度量其规模。
+  - `UNIT_DIED` 末参 =1 是假死/无意识(实证:猎人假死),**不算真死亡**;回合的逻辑胜负由该回合首个末参=0 的玩家死亡决定,段边界仍以下一 START/END 为准。
 - EOF/超时(可配置,默认 30 分钟无新行)未闭合段丢弃并出诊断。
 - **边缘场景行为契约(M2 前置探针产出,经 agy 辩论修正)**:对四个已知脏日志场景(`double_start`、`one_match_synthetic_no_end`、`shuffle_reloads`、`shuffle_early_leaver`),M2 的第一步是探针脚本在对应 fixture 与自采日志上实证"日志里究竟发生了什么"(reload 后 START 是否重发、early leaver 后回合如何闭合),据此写下每个场景的**行为契约**(哪些数据可恢复、哪些丢弃、丢弃计入哪个诊断码);L2 的验收 = 行为与契约一致,而非"全部恢复"。任何数据损失必须体现在诊断计数里,不允许静默。"无 START 即合成段"的启发式恢复不进 v1——T1 差分会暴露此类损失的真实规模,规模可观再立项。
 
