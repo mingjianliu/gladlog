@@ -97,12 +97,21 @@ function convertCombatantInfo(
   if (!info) return undefined;
   return {
     teamId: String(info.teamId),
-    specId: info.specId,
+    specId: String(info.specId),
     personalRating: info.personalRating,
-    talents: info.talents,
-    pvpTalents: info.pvpTalents,
-    equipment: info.equipment,
-    interestingAurasJSON: JSON.stringify(info.interestingAuras),
+    talents: (info.talents as unknown as number[][]).map(arr => ({ id1: arr[0] ?? 0, id2: arr[1] ?? 0, count: arr[2] ?? 0 })),
+    pvpTalents: (info.pvpTalents as unknown as (number | string)[]).map(t => String(t)),
+    equipment: (info.equipment as unknown as any[]).map(eq => {
+      const [id, ilvl, enchants, bonuses, gems] = eq;
+      return {
+        id: String(id),
+        ilvl: Number(ilvl),
+        enchants: Array.isArray(enchants) ? enchants.map(String) : [],
+        bonuses: Array.isArray(bonuses) ? bonuses.map(String) : [],
+        gems: Array.isArray(gems) ? gems.map(String) : [],
+      };
+    }),
+    interestingAurasJSON: JSON.stringify((info.interestingAuras as any[]).flatMap(a => [a.casterGuid, a.spellId, 1])),
   };
 }
 

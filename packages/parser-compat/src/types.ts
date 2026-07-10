@@ -42,11 +42,17 @@ export interface IAuraEvent extends ICombatEvent {
 
 export interface CombatantInfo {
   teamId: string;
-  specId: number;
+  specId: string;
   personalRating: number;
-  talents: unknown[];
-  pvpTalents: unknown[];
-  equipment: unknown[];
+  talents: { id1: number; id2: number; count: number }[];
+  pvpTalents: string[];
+  equipment: {
+    id: string;
+    ilvl: number;
+    enchants: string[];
+    bonuses: string[];
+    gems: string[];
+  }[];
   interestingAurasJSON: string;
 }
 

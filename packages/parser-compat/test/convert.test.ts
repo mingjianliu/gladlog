@@ -351,3 +351,40 @@ describe("logLine.parameters passthrough (adjudication #21)", () => {
     expect(typeof aura.logLine.parameters[2]).toBe("string"); // 0x511 保持字符串
   });
 });
+
+describe("CombatantInfo legacy shapes (adjudication #22, observed from old runtime)", () => {
+  const { matches } = parseLines([
+    "ARENA_MATCH_START,1825,41,3v3,1",
+    "COMBATANT_INFO,Player-1-A,0,1,2,3,4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,71,[(90269,112121,1),(90270,112122,2)],(0,1219165,1227751,236077),[(249952,298,(7991,0,0),(13448,13452),(241144,610))],[Player-1-A,386208,1],248,41,2273,13",
+    "ARENA_MATCH_END,0,30,1500,1501",
+  ]);
+  const info = toLegacyMatch(matches[0]!).units["Player-1-A"]!.info!;
+
+  it("talents: {id1,id2,count} objects", () => {
+    expect(info.talents[0]).toEqual({ id1: 90269, id2: 112121, count: 1 });
+    expect(info.talents[1]).toEqual({ id1: 90270, id2: 112122, count: 2 });
+  });
+  it("pvpTalents: string ids", () => {
+    expect(info.pvpTalents).toEqual(["0", "1219165", "1227751", "236077"]);
+  });
+  it("equipment: structured {id,ilvl,enchants,bonuses,gems}", () => {
+    expect(info.equipment[0]).toEqual({
+      id: "249952",
+      ilvl: 298,
+      enchants: ["7991", "0", "0"],
+      bonuses: ["13448", "13452"],
+      gems: ["241144", "610"],
+    });
+  });
+  it("interestingAurasJSON: JSON string of flat [guid, spellId, count] array", () => {
+    expect(JSON.parse(info.interestingAurasJSON as string)).toEqual([
+      "Player-1-A",
+      386208,
+      1,
+    ]);
+  });
+  it("specId and teamId are strings", () => {
+    expect(info.specId).toBe("71");
+    expect(info.teamId).toBe("0");
+  });
+});
