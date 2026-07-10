@@ -228,3 +228,35 @@ describe("absorb attribution + damage effective semantics (adjudication #13, rea
     expect(dmg[0]!.amount).toBe(-100);
   });
 });
+
+describe("pet merge into owner (adjudication #16: old attributes pet dmg/heal to owner)", () => {
+  const PETDMG =
+    'SPELL_DAMAGE,Pet-0-1-1-1-165189-01P,"Kitty",0x1112,0x80000000,Player-2-B,"Bob-Y",0x548,0x80000000,17253,"Bite",0x1,Pet-0-1-1-1-165189-01P,Player-1-A,500,500,0,0,0,0,0,0,3,10,10,0,1.0,-1.0,0,1.0,70,60,60,-1,1,0,0,0,nil,nil,nil';
+  const OWNDMG =
+    'SPELL_DAMAGE,Player-1-A,"Alice-X",0x511,0x80000000,Player-2-B,"Bob-Y",0x548,0x80000000,50622,"Bladestorm",0x1,Player-2-B,0000000000000000,900,1000,0,0,0,0,0,0,0,100,100,0,1.0,-1.0,0,1.0,70,40,40,-1,1,0,0,0,nil,nil,nil';
+  const { matches } = parseLines([
+    "ARENA_MATCH_START,1825,41,3v3,1",
+    CI("Player-1-A", 0, 253, 2400),
+    OWNDMG,
+    PETDMG,
+    "ARENA_MATCH_END,0,30,1500,1501",
+  ]);
+  const legacy = toLegacyMatch(matches[0]!);
+
+  it("owner's damageOut contains own + pet rows, timestamp-sorted", () => {
+    const a = legacy.units["Player-1-A"]!;
+    const dmg = a.damageOut.filter(
+      (e) => e.logLine.event === LogEvent.SPELL_DAMAGE,
+    );
+    expect(dmg).toHaveLength(2);
+    const total = dmg.reduce((s, e) => s + Math.abs(e.effectiveAmount), 0);
+    expect(total).toBe(100); // 40 own + 60 pet
+  });
+
+  it("victim's damageIn also carries both rows", () => {
+    const b = legacy.units["Player-2-B"]!;
+    expect(
+      b.damageIn.filter((e) => e.logLine.event === LogEvent.SPELL_DAMAGE),
+    ).toHaveLength(2);
+  });
+});

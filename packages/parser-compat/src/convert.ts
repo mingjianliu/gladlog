@@ -350,11 +350,33 @@ function convertUnit(unit: GladUnit): ICombatUnit {
   };
 }
 
+function mergePetEvents(units: Record<string, ICombatUnit>): void {
+  for (const unit of Object.values(units)) {
+    if (
+      (unit.type === CombatUnitType.Pet || unit.type === CombatUnitType.Guardian) &&
+      unit.ownerId &&
+      units[unit.ownerId]
+    ) {
+      const owner = units[unit.ownerId]!;
+      owner.damageOut = [...owner.damageOut, ...unit.damageOut].sort(
+        (a, b) => a.timestamp - b.timestamp,
+      );
+      owner.healOut = [...owner.healOut, ...unit.healOut].sort(
+        (a, b) => a.timestamp - b.timestamp,
+      );
+      owner.absorbsOut = [...owner.absorbsOut, ...unit.absorbsOut].sort(
+        (a, b) => a.timestamp - b.timestamp,
+      );
+    }
+  }
+}
+
 export function toLegacyMatch(m: GladMatch): IArenaMatch {
   const units: Record<string, ICombatUnit> = {};
   for (const [id, unit] of Object.entries(m.units)) {
     units[id] = convertUnit(unit);
   }
+  mergePetEvents(units);
 
   const startInfo: IStartInfo = {
     bracket: m.bracket,
@@ -386,6 +408,7 @@ export function toLegacyShuffle(s: GladShuffle): IShuffleMatch {
     for (const [id, unit] of Object.entries(round.units)) {
       units[id] = convertUnit(unit);
     }
+    mergePetEvents(units);
 
     const startInfo: IStartInfo = {
       bracket: round.bracket,
