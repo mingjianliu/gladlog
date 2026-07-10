@@ -40,7 +40,7 @@ export interface IAuraEvent extends ICombatEvent {
 }
 
 export interface CombatantInfo {
-  teamId: number;
+  teamId: string;
   specId: number;
   personalRating: number;
   talents: unknown[];
@@ -94,9 +94,9 @@ export interface IArenaCombatBase {
   units: Record<string, ICombatUnit>;
   startInfo: IStartInfo;
   playerId: string;
-  playerTeamId: number | null;
+  playerTeamId: string | null;
   result: CombatResult;
-  winningTeamId: number | null;
+  winningTeamId: string | null;
   rawLines: string[];
   durationInSeconds: number;
   hasAdvancedLogging: boolean;

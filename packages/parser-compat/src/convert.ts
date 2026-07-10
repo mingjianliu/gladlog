@@ -96,7 +96,7 @@ function convertCombatantInfo(
 ): CombatantInfo | undefined {
   if (!info) return undefined;
   return {
-    teamId: info.teamId,
+    teamId: String(info.teamId),
     specId: info.specId,
     personalRating: info.personalRating,
     talents: info.talents,
@@ -427,9 +427,9 @@ export function toLegacyMatch(m: GladMatch): IArenaMatch {
     units,
     startInfo,
     playerId: m.playerId,
-    playerTeamId: m.playerTeamId,
+    playerTeamId: m.playerTeamId != null ? String(m.playerTeamId) : null,
     result: resultToLegacy(m.result),
-    winningTeamId: m.winningTeamId,
+    winningTeamId: m.winningTeamId != null ? String(m.winningTeamId) : null,
     rawLines: m.rawLines,
     durationInSeconds: (m.endTime - m.startTime) / 1000,
     hasAdvancedLogging: m.hasAdvancedLogging,
@@ -460,9 +460,9 @@ export function toLegacyShuffle(s: GladShuffle): IShuffleMatch {
       units,
       startInfo,
       playerId: round.playerId,
-      playerTeamId: round.playerTeamId,
+      playerTeamId: round.playerTeamId != null ? String(round.playerTeamId) : null,
       result: resultToLegacy(round.result),
-      winningTeamId: round.winningTeamId,
+      winningTeamId: round.winningTeamId != null ? String(round.winningTeamId) : null,
       rawLines: round.rawLines,
       durationInSeconds: (round.endTime - round.startTime) / 1000,
       hasAdvancedLogging: round.hasAdvancedLogging,

@@ -45,8 +45,8 @@ describe("toLegacyMatch", () => {
     expect(legacy.startInfo.bracket).toBe("3v3");
     expect(legacy.startInfo.zoneId).toBe("1825");
     expect(legacy.playerId).toBe("Player-1-A");
-    expect(legacy.playerTeamId).toBe(0);
-    expect(legacy.winningTeamId).toBe(0);
+    expect(legacy.playerTeamId).toBe("0");
+    expect(legacy.winningTeamId).toBe("0");
     expect(legacy.result).toBe(CombatResult.Win);
     expect(legacy.durationInSeconds).toBeGreaterThan(0);
     expect(legacy.rawLines.length).toBeGreaterThanOrEqual(5);
@@ -62,7 +62,7 @@ describe("toLegacyMatch", () => {
     const b = legacy.units["Player-2-B"]!;
     expect(b.reaction).toBe(CombatUnitReaction.Hostile); // 2
     expect(b.class).toBe(CombatUnitClass.Warrior); // 1
-    expect(b.info?.teamId).toBe(1);
+    expect(b.info?.teamId).toBe("1");
     expect(b.info?.personalRating).toBe(2380);
   });
 
@@ -101,7 +101,7 @@ describe("toLegacyShuffle", () => {
     expect(legacy.rounds).toHaveLength(2);
     expect(legacy.rounds[0]!.dataType).toBe("ShuffleRound");
     expect(legacy.rounds[0]!.sequenceNumber).toBe(0);
-    expect(legacy.rounds[1]!.units["Player-1-A"]!.info?.teamId).toBe(1);
+    expect(legacy.rounds[1]!.units["Player-1-A"]!.info?.teamId).toBe("1");
   });
 });
 
