@@ -58,6 +58,7 @@ export function collectEvents(
         destName: record.base?.destName ?? "",
         amount: record.damage.amount,
         effectiveAmount: record.damage.effectiveAmount,
+        absorbed: record.damage.absorbed,
       };
 
       if (srcGuid && srcGuid !== "0000000000000000") {
@@ -121,6 +122,7 @@ export function collectEvents(
         destId: absorbDestGuid,
         destName: absorbDestName,
         absorbedAmount: record.absorbed.absorbedAmount,
+        attackerId: record.absorbed.attackerGuid,
       };
 
       if (absorbEvent.srcId && absorbEvent.srcId !== "0000000000000000") {

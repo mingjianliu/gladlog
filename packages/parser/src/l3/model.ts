@@ -26,10 +26,12 @@ export interface GladEventBase {
 export interface GladHpEvent extends GladEventBase {
   amount: number;
   effectiveAmount: number;
+  absorbed?: number;
 }
 
 export interface GladAbsorbEvent extends GladEventBase {
   absorbedAmount: number;
+  attackerId: string;
 }
 
 export interface GladSpellEvent extends GladEventBase {}

@@ -182,3 +182,49 @@ describe("event-name fidelity + SWING dedup (adjudication #10/#12)", () => {
     expect(total).toBe(55 + 77);
   });
 });
+
+describe("absorb attribution + damage effective semantics (adjudication #13, real lines)", () => {
+  // 真实行:Pakoartisti 攻击 Envenum,Vierforfear 的盾吸收 21986(spell 形态,22 项)
+  const ABS_SPELL =
+    'SPELL_ABSORBED,Player-1-ATK,"Atk-X",0x548,0x80000000,Player-2-VIC,"Vic-Y",0x10512,0x80000000,50622,"Bladestorm",0x1,Player-3-OWN,"Own-Z",0x511,0x80000000,1246768,"Power Word: Shield",0x2,21986,30763,nil';
+  // swing 形态(19 项,无攻击 spell 段)
+  const ABS_SWING =
+    'SPELL_ABSORBED,Player-1-ATK,"Atk-X",0x548,0x80000000,Player-2-VIC,"Vic-Y",0x10512,0x80000000,Player-3-OWN,"Own-Z",0x511,0x80000000,17,"Power Word: Shield",0x2,814,4755,nil';
+  // 带 absorbed 参数的伤害行:amount=100, overkill=-1, absorbed=30 → legacy eff = -(100-0-30) = -70
+  const DMG_ABS =
+    'SPELL_DAMAGE,Player-1-ATK,"Atk-X",0x548,0x80000000,Player-2-VIC,"Vic-Y",0x10512,0x80000000,50622,"Bladestorm",0x1,Player-2-VIC,0000000000000000,900,1000,0,0,0,0,0,0,0,100,100,0,1.0,-1.0,0,1.0,70,100,120,-1,1,0,0,30,nil,nil,nil';
+
+  const { matches } = parseLines([
+    "ARENA_MATCH_START,1825,41,3v3,1",
+    CI("Player-1-ATK", 0, 71, 2000),
+    DMG_ABS,
+    ABS_SPELL,
+    ABS_SWING,
+    "ARENA_MATCH_END,0,30,1500,1501",
+  ]);
+  const legacy = toLegacyMatch(matches[0]!);
+  const atk = legacy.units["Player-1-ATK"]!;
+
+  it("SPELL_ABSORBED rows land in the ATTACKER's damageOut (old attribution rule)", () => {
+    const abs = atk.damageOut.filter(
+      (e) => e.logLine.event === LogEvent.SPELL_ABSORBED,
+    );
+    expect(abs).toHaveLength(2);
+  });
+
+  it("absorbed amounts use the absorbed param (spell form 21986, swing form 814)", () => {
+    const abs = atk.damageOut
+      .filter((e) => e.logLine.event === LogEvent.SPELL_ABSORBED)
+      .map((e) => e.effectiveAmount)
+      .sort((a, b) => a - b);
+    expect(abs).toEqual([814, 21986]);
+  });
+
+  it("legacy damage effectiveAmount subtracts the absorbed param: -(100-0-30) = -70", () => {
+    const dmg = atk.damageOut.filter(
+      (e) => e.logLine.event === LogEvent.SPELL_DAMAGE,
+    );
+    expect(dmg[0]!.effectiveAmount).toBe(-70);
+    expect(dmg[0]!.amount).toBe(-100);
+  });
+});

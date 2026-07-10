@@ -133,7 +133,7 @@ function convertUnit(unit: GladUnit): ICombatUnit {
       destUnitId: event.destId,
       destUnitName: event.destName,
       amount: -event.amount,
-      effectiveAmount: -event.effectiveAmount,
+      effectiveAmount: -(event.effectiveAmount - (event.absorbed ?? 0)),
       logLine: {
         event: event.eventName as LogEvent,
         timestamp: event.timestamp,
@@ -143,10 +143,10 @@ function convertUnit(unit: GladUnit): ICombatUnit {
       spellId: event.spellId,
       spellName: event.spellName,
       timestamp: event.timestamp,
-      srcUnitId: event.srcId,
-      srcUnitName: event.srcName,
-      destUnitId: event.destId,
-      destUnitName: event.destName,
+      srcUnitId: event.attackerId,
+      srcUnitName: event.destName,
+      destUnitId: event.srcId,
+      destUnitName: event.srcName,
       amount: event.absorbedAmount,
       effectiveAmount: event.absorbedAmount,
       absorbedAmount: event.absorbedAmount,
@@ -156,7 +156,7 @@ function convertUnit(unit: GladUnit): ICombatUnit {
       },
     } as unknown as IHpEvent)),
   ].sort((a, b) => a.timestamp - b.timestamp);
-
+ 
   const damageIn: IHpEvent[] = [
     ...unit.damageIn.map((event) => ({
       spellId: event.spellId,
@@ -167,7 +167,7 @@ function convertUnit(unit: GladUnit): ICombatUnit {
       destUnitId: event.destId,
       destUnitName: event.destName,
       amount: -event.amount,
-      effectiveAmount: -event.effectiveAmount,
+      effectiveAmount: -(event.effectiveAmount - (event.absorbed ?? 0)),
       logLine: {
         event: event.eventName as LogEvent,
         timestamp: event.timestamp,
@@ -177,10 +177,10 @@ function convertUnit(unit: GladUnit): ICombatUnit {
       spellId: event.spellId,
       spellName: event.spellName,
       timestamp: event.timestamp,
-      srcUnitId: event.srcId,
-      srcUnitName: event.srcName,
-      destUnitId: event.destId,
-      destUnitName: event.destName,
+      srcUnitId: event.attackerId,
+      srcUnitName: event.destName,
+      destUnitId: event.srcId,
+      destUnitName: event.srcName,
       amount: event.absorbedAmount,
       effectiveAmount: event.absorbedAmount,
       absorbedAmount: event.absorbedAmount,

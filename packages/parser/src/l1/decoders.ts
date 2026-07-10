@@ -211,6 +211,8 @@ export function decodeExtraSpell(tailParams: string[]): {
 }
 
 export function decodeAbsorbed(params: string[]): {
+  attackerGuid: string;
+  victimGuid: string;
   shieldOwnerGuid: string;
   shieldOwnerName: string | null;
   shieldSpellId: number;
@@ -219,17 +221,47 @@ export function decodeAbsorbed(params: string[]): {
   totalAmount: number;
   critical: boolean;
 } {
-  const shieldOwnerNameRaw = params[12];
+  const attackerGuid = params[0] ?? "";
+  const victimGuid = params[4] ?? "";
+
+  let shieldOwnerGuid = "";
+  let shieldOwnerNameRaw: string | undefined;
+  let shieldSpellId = NaN;
+  let shieldSpellName = "";
+  let absorbedAmount = NaN;
+  let totalAmount = NaN;
+  let critical = false;
+
+  if (params.length === 18) {
+    shieldOwnerGuid = params[8] ?? "";
+    shieldOwnerNameRaw = params[9];
+    shieldSpellId = parseInt10(params[12]);
+    shieldSpellName = params[13] ?? "";
+    absorbedAmount = parseInt10(params[15]);
+    totalAmount = parseInt10(params[16]);
+    critical = decodeCritical(params[17]);
+  } else {
+    shieldOwnerGuid = params[11] ?? "";
+    shieldOwnerNameRaw = params[12];
+    shieldSpellId = parseInt10(params[15]);
+    shieldSpellName = params[16] ?? "";
+    absorbedAmount = parseInt10(params[18]);
+    totalAmount = parseInt10(params[19]);
+    critical = decodeCritical(params[20]);
+  }
+
   const shieldOwnerName = shieldOwnerNameRaw === "nil" || shieldOwnerNameRaw === undefined ? null : shieldOwnerNameRaw;
 
   return {
-    shieldOwnerGuid: params[11] ?? "",
+    attackerGuid,
+    victimGuid,
+    shieldOwnerGuid,
     shieldOwnerName,
-    shieldSpellId: parseInt10(params[15]),
-    shieldSpellName: params[16] ?? "",
-    absorbedAmount: parseInt10(params[18]),
-    totalAmount: parseInt10(params[19]),
-    critical: decodeCritical(params[20]),
+    shieldSpellId,
+    shieldSpellName,
+    absorbedAmount,
+    totalAmount,
+    critical,
   };
 }
 
