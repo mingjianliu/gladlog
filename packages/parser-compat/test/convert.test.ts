@@ -260,3 +260,34 @@ describe("pet merge into owner (adjudication #16: old attributes pet dmg/heal to
     ).toHaveLength(2);
   });
 });
+
+describe("pet-target zeroing (adjudication #17: old zeroes eff for rows onto pets)", () => {
+  const HEAL_PET =
+    'SPELL_PERIODIC_HEAL,Player-1-A,"Alice-X",0x511,0x80000000,Pet-0-1-1-1-165189-01P,"Kitty",0x1112,0x80000000,136,"Mend Pet",0x8,Pet-0-1-1-1-165189-01P,Player-1-A,500,500,0,0,0,0,0,0,3,10,10,0,1.0,-1.0,0,1.0,70,149504,149504,0,0,nil';
+  const DMG_PET =
+    'SPELL_DAMAGE,Player-2-B,"Bob-Y",0x548,0x80000000,Pet-0-1-1-1-165189-01P,"Kitty",0x1112,0x80000000,50622,"Bladestorm",0x1,Pet-0-1-1-1-165189-01P,Player-1-A,400,500,0,0,0,0,0,0,3,10,10,0,1.0,-1.0,0,1.0,70,100,100,-1,1,0,0,0,nil,nil,nil';
+  const { matches } = parseLines([
+    "ARENA_MATCH_START,1825,41,3v3,1",
+    CI("Player-1-A", 0, 253, 2400),
+    CI("Player-2-B", 1, 71, 2380),
+    HEAL_PET,
+    DMG_PET,
+    "ARENA_MATCH_END,0,30,1500,1501",
+  ]);
+  const legacy = toLegacyMatch(matches[0]!);
+
+  it("heal onto pet: row kept, effectiveAmount zeroed, amount kept", () => {
+    const a = legacy.units["Player-1-A"]!;
+    const h = a.healOut.filter((e) => e.destUnitId?.startsWith("Pet-"));
+    expect(h).toHaveLength(1);
+    expect(h[0]!.effectiveAmount).toBe(0);
+    expect(Math.abs(h[0]!.amount)).toBe(149504);
+  });
+
+  it("damage onto pet: row kept, effectiveAmount zeroed (negative-zero ok as 0)", () => {
+    const b = legacy.units["Player-2-B"]!;
+    const d = b.damageOut.filter((e) => e.destUnitId?.startsWith("Pet-"));
+    expect(d).toHaveLength(1);
+    expect(d[0]!.effectiveAmount).toBe(-0);
+  });
+});
