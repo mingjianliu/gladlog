@@ -481,6 +481,10 @@ function mergePetEvents(units: Record<string, ICombatUnit>): void {
 export function toLegacyMatch(m: GladMatch): IArenaMatch {
   const units: Record<string, ICombatUnit> = {};
   for (const [id, unit] of Object.entries(m.units)) {
+    // Filter: exclude Player units without CombatantInfo (outsider filter)
+    if (unit.kind === "Player" && !unit.info) {
+      continue;
+    }
     units[id] = convertUnit(unit, m.units);
   }
   mergePetEvents(units);
@@ -513,6 +517,10 @@ export function toLegacyShuffle(s: GladShuffle): IShuffleMatch {
   const rounds = s.rounds.map((round) => {
     const units: Record<string, ICombatUnit> = {};
     for (const [id, unit] of Object.entries(round.units)) {
+      // Filter: exclude Player units without CombatantInfo (outsider filter)
+      if (unit.kind === "Player" && !unit.info) {
+        continue;
+      }
       units[id] = convertUnit(unit, round.units);
     }
     mergePetEvents(units);

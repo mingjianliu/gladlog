@@ -109,6 +109,7 @@ describe("legacy damage conventions (adjudication #6, 2026-07-10)", () => {
   const { matches } = parseLines([
     "ARENA_MATCH_START,1825,41,3v3,1",
     CI("Player-1-A", 0, 257, 2400),
+    CI("Player-2-B", 1, 71, 2380),
     DMG("Player-1-A", "Alice-X", "Player-2-B", "Bob-Y"),
     // SPELL_ABSORBED: A 打 B,B 的盾(Player-2-B 自己的 PW:S)吸收 40
     `SPELL_ABSORBED,Player-1-A,"Alice-X",0x511,0x80000000,Player-2-B,"Bob-Y",0x548,0x80000000,50622,"Bladestorm",0x1,Player-2-B,"Bob-Y",0x548,0x80000000,17,"Power Word: Shield",0x2,40,140,nil`,
@@ -250,6 +251,7 @@ describe("pet merge into owner (adjudication #16: old attributes pet dmg/heal to
   const { matches } = parseLines([
     "ARENA_MATCH_START,1825,41,3v3,1",
     CI("Player-1-A", 0, 253, 2400),
+    CI("Player-2-B", 1, 71, 2380),
     OWNDMG,
     PETDMG,
     "ARENA_MATCH_END,0,30,1500,1501",
@@ -309,6 +311,7 @@ describe("advancedActions legacy shape (adjudication #20: logLine + advancedActo
   const { matches } = parseLines([
     "ARENA_MATCH_START,1825,41,3v3,1",
     CI("Player-1-A", 0, 257, 2400),
+    CI("Player-2-B", 1, 71, 2380),
     DMG("Player-1-A", "Alice-X", "Player-2-B", "Bob-Y"),
     "ARENA_MATCH_END,0,30,1500,1501",
   ]);
@@ -412,6 +415,7 @@ describe("absorb NOT interleaved into damageIn; spellSchoolId hex string (adjudi
   const { matches } = parseLines([
     "ARENA_MATCH_START,1825,41,3v3,1",
     CI("Player-1-ATK", 0, 64, 2000),
+    CI("Player-2-VIC", 1, 71, 2380),
     DMG8,
     ABS,
     "ARENA_MATCH_END,0,30,1500,1501",
@@ -435,5 +439,29 @@ describe("absorb NOT interleaved into damageIn; spellSchoolId hex string (adjudi
       spellSchoolId?: string;
     };
     expect(d.spellSchoolId).toBe("0x10");
+  });
+});
+
+describe("outsider filter (adjudication #27: CI-less players excluded from legacy units)", () => {
+  const { matches } = parseLines([
+    "ARENA_MATCH_START,1825,41,3v3,1",
+    CI("Player-1-A", 0, 257, 2400),
+    DMG("Player-1-A", "Alice-X", "Player-2-B", "Bob-Y"), // B 有 CI 吗?没有——但作为敌方参战者
+    CI("Player-2-B", 1, 71, 2380),
+    // Outsider:出现在事件里但整场无 COMBATANT_INFO
+    'SPELL_AURA_APPLIED,Player-9-OUT,"Watcher-Z",0x548,0x80000000,Player-9-OUT,"Watcher-Z",0x548,0x80000000,1784,"Stealth",0x1,BUFF',
+    "ARENA_MATCH_END,0,30,1500,1501",
+  ]);
+  const legacy = toLegacyMatch(matches[0]!);
+
+  it("CI-less player is excluded from legacy units; CI players kept", () => {
+    expect(legacy.units["Player-9-OUT"]).toBeUndefined();
+    expect(legacy.units["Player-1-A"]).toBeDefined();
+    expect(legacy.units["Player-2-B"]).toBeDefined();
+  });
+
+  it("non-player units unaffected by the filter", () => {
+    const kinds = Object.values(legacy.units).map((u) => u.type);
+    expect(kinds).toContain(1);
   });
 });
