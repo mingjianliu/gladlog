@@ -59,6 +59,7 @@ export function collectEvents(
         amount: record.damage.amount,
         effectiveAmount: record.damage.effectiveAmount,
         absorbed: record.damage.absorbed,
+        params: record.params,
       };
 
       if (srcGuid && srcGuid !== "0000000000000000") {
@@ -89,6 +90,7 @@ export function collectEvents(
         destName: record.base?.destName ?? "",
         amount: record.heal.amount,
         effectiveAmount: record.heal.effectiveAmount,
+        params: record.params,
       };
 
       if (srcGuid && srcGuid !== "0000000000000000") {
@@ -123,6 +125,7 @@ export function collectEvents(
         destName: absorbDestName,
         absorbedAmount: record.absorbed.absorbedAmount,
         attackerId: record.absorbed.attackerGuid,
+        params: record.params,
       };
 
       if (absorbEvent.srcId && absorbEvent.srcId !== "0000000000000000") {
@@ -153,6 +156,7 @@ export function collectEvents(
         destName: record.base?.destName ?? "",
         auraType: record.aura.auraType,
         amount: record.aura.amount,
+        params: record.params,
       };
 
       if (destGuid && destGuid !== "0000000000000000") {
@@ -174,6 +178,7 @@ export function collectEvents(
         srcName: record.base?.srcName ?? "",
         destId: destGuid ?? "",
         destName: record.base?.destName ?? "",
+        params: record.params,
       };
 
       if (srcGuid && srcGuid !== "0000000000000000") {
@@ -208,6 +213,7 @@ export function collectEvents(
         destId: destGuid ?? "",
         destName: record.base?.destName ?? "",
         unconscious: unconscious,
+        params: record.params,
       };
 
       if (destGuid && destGuid !== "0000000000000000") {
@@ -233,6 +239,7 @@ export function collectEvents(
         srcName: record.base?.srcName ?? "",
         destId: destGuid ?? "",
         destName: record.base?.destName ?? "",
+        params: record.params,
       };
 
       if (srcGuid && srcGuid !== "0000000000000000") {

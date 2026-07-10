@@ -314,3 +314,40 @@ describe("advancedActions legacy shape (adjudication #20: logLine + advancedActo
     expect(a.advancedActorCurrentHp).toBe(900);
   });
 });
+
+describe("logLine.parameters passthrough (adjudication #21)", () => {
+  const AURA_DOSE =
+    'SPELL_AURA_APPLIED_DOSE,Player-1-A,"Alice-X",0x511,0x80000000,Player-1-A,"Alice-X",0x511,0x80000000,110310,"Dampening",0x1,DEBUFF,7';
+  const { matches } = parseLines([
+    "ARENA_MATCH_START,1825,41,3v3,1",
+    CI("Player-1-A", 0, 257, 2400),
+    AURA_DOSE,
+    `SPELL_HEAL,Player-1-A,"Alice-X",0x511,0x80000000,Player-1-A,"Alice-X",0x511,0x80000000,2061,"Flash Heal",0x2,Player-1-A,0000000000000000,1000,1000,0,0,0,0,0,0,0,50,50,0,1.0,-1.0,0,1.0,70,200,200,50,0,nil`,
+    "ARENA_MATCH_END,0,30,1500,1501",
+  ]);
+  const legacy = toLegacyMatch(matches[0]!);
+  const a = legacy.units["Player-1-A"]!;
+
+  it("aura event parameters: [11]='BUFF'|'DEBUFF' string, [12]=stacks as number", () => {
+    const aura = a.auraEvents.find((e) => e.spellId === 110310)! as {
+      logLine: { parameters: (string | number)[] };
+    };
+    expect(aura.logLine.parameters[11]).toBe("DEBUFF");
+    expect(aura.logLine.parameters[12]).toBe(7);
+    expect(typeof aura.logLine.parameters[12]).toBe("number");
+  });
+
+  it("heal event parameters: [30]=amount, [32]=overheal as numbers", () => {
+    const heal = a.healOut.find((e) => e.spellId === 2061)! as {
+      logLine: { parameters: (string | number)[] };
+    };
+    expect(heal.logLine.parameters[30]).toBe(200);
+    expect(heal.logLine.parameters[32]).toBe(50);
+  });
+
+  it("guid/flag params stay strings", () => {
+    const aura = a.auraEvents[0]! as { logLine: { parameters: (string | number)[] } };
+    expect(typeof aura.logLine.parameters[0]).toBe("string");
+    expect(typeof aura.logLine.parameters[2]).toBe("string"); // 0x511 保持字符串
+  });
+});

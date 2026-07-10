@@ -10,6 +10,7 @@ import {
 export interface ILogLine {
   event: LogEvent | string;
   timestamp: number;
+  parameters?: (string | number)[];
 }
 
 export interface ICombatEvent {

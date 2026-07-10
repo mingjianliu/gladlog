@@ -21,6 +21,7 @@ export interface GladEventBase {
   srcName: string;
   destId: string;
   destName: string;
+  params: string[];
 }
 
 export interface GladHpEvent extends GladEventBase {

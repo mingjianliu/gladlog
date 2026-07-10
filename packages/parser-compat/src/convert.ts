@@ -121,6 +121,28 @@ function isPetOrGuardian(
   return destId.startsWith("Pet-");
 }
 
+function convertParams(params: string[] | undefined): (string | number)[] | undefined {
+  if (!params) return undefined;
+  return params.map((p) => {
+    if (p === "nil" || p === "BUFF" || p === "DEBUFF") {
+      return p;
+    }
+    if (p.startsWith("0x") || p.startsWith("0X")) {
+      return p;
+    }
+    if (p.length >= 15) {
+      return p;
+    }
+    if (/^-?\d+(\.\d+)?$/.test(p)) {
+      const num = Number(p);
+      if (!isNaN(num)) {
+        return num;
+      }
+    }
+    return p;
+  });
+}
+
 function convertUnit(
   unit: GladUnit,
   allUnits?: Record<string, GladUnit>,
@@ -128,6 +150,7 @@ function convertUnit(
   const deathRecords: ILogLine[] = unit.deaths.map((death) => ({
     event: LogEvent.UNIT_DIED,
     timestamp: death.timestamp,
+    parameters: convertParams(death.params),
   }));
 
   const advancedActions: IAdvancedAction[] = unit.advancedSamples.map(
@@ -162,6 +185,7 @@ function convertUnit(
         logLine: {
           event: event.eventName as LogEvent,
           timestamp: event.timestamp,
+          parameters: convertParams(event.params),
         },
       };
     }),
@@ -181,6 +205,7 @@ function convertUnit(
         logLine: {
           event: event.eventName as LogEvent,
           timestamp: event.timestamp,
+          parameters: convertParams(event.params),
         },
       } as unknown as IHpEvent;
     }),
@@ -202,6 +227,7 @@ function convertUnit(
         logLine: {
           event: event.eventName as LogEvent,
           timestamp: event.timestamp,
+          parameters: convertParams(event.params),
         },
       };
     }),
@@ -221,6 +247,7 @@ function convertUnit(
         logLine: {
           event: event.eventName as LogEvent,
           timestamp: event.timestamp,
+          parameters: convertParams(event.params),
         },
       } as unknown as IHpEvent;
     }),
@@ -241,6 +268,7 @@ function convertUnit(
       logLine: {
         event: event.eventName as LogEvent,
         timestamp: event.timestamp,
+        parameters: convertParams(event.params),
       },
     };
   });
@@ -260,6 +288,7 @@ function convertUnit(
       logLine: {
         event: event.eventName as LogEvent,
         timestamp: event.timestamp,
+        parameters: convertParams(event.params),
       },
     };
   });
@@ -276,6 +305,7 @@ function convertUnit(
     logLine: {
       event: event.eventName as LogEvent,
       timestamp: event.timestamp,
+      parameters: convertParams(event.params),
     },
   }));
 
@@ -291,6 +321,7 @@ function convertUnit(
     logLine: {
       event: event.eventName as LogEvent,
       timestamp: event.timestamp,
+      parameters: convertParams(event.params),
     },
   }));
 
@@ -307,6 +338,7 @@ function convertUnit(
     logLine: {
       event: event.eventName as LogEvent,
       timestamp: event.timestamp,
+      parameters: convertParams(event.params),
     },
   }));
 
@@ -321,6 +353,7 @@ function convertUnit(
     logLine: {
       event: event.eventName as LogEvent,
       timestamp: event.timestamp,
+      parameters: convertParams(event.params),
     },
   }));
 
@@ -335,6 +368,7 @@ function convertUnit(
     logLine: {
       event: event.eventName as LogEvent,
       timestamp: event.timestamp,
+      parameters: convertParams(event.params),
     },
   }));
 
@@ -349,6 +383,7 @@ function convertUnit(
     logLine: {
       event: event.eventName as LogEvent,
       timestamp: event.timestamp,
+      parameters: convertParams(event.params),
     },
   }));
 
@@ -363,6 +398,7 @@ function convertUnit(
     logLine: {
       event: event.eventName as LogEvent,
       timestamp: event.timestamp,
+      parameters: convertParams(event.params),
     },
   }));
 
