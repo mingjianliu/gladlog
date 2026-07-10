@@ -142,6 +142,25 @@ function isPetOrGuardian(
   return destId.startsWith("Pet-");
 }
 
+function getSpellSchoolId(
+  eventName: string,
+  params: string[] | undefined,
+): string {
+  // SWING events use '0x1'
+  if (eventName.startsWith("SWING")) {
+    return "0x1";
+  }
+  // For SPELL_* events, spell school is at params[10]
+  if (!params || params.length < 11) {
+    return "0x0";
+  }
+  const schoolStr = params[10];
+  if (schoolStr && (schoolStr.startsWith("0x") || schoolStr.startsWith("0X"))) {
+    return schoolStr;
+  }
+  return "0x0";
+}
+
 function convertParams(
   params: string[] | undefined,
 ): (string | number)[] | undefined {
@@ -207,6 +226,7 @@ function convertUnit(
         effectiveAmount: isPetDest
           ? -0
           : -(event.effectiveAmount - (event.absorbed ?? 0)),
+        spellSchoolId: getSpellSchoolId(event.eventName, event.params),
         logLine: {
           event: event.eventName as LogEvent,
           timestamp: event.timestamp,
@@ -227,6 +247,7 @@ function convertUnit(
         amount: event.absorbedAmount,
         effectiveAmount: isPetDest ? 0 : event.absorbedAmount,
         absorbedAmount: event.absorbedAmount,
+        spellSchoolId: getSpellSchoolId(event.eventName, event.params),
         logLine: {
           event: event.eventName as LogEvent,
           timestamp: event.timestamp,
@@ -236,8 +257,8 @@ function convertUnit(
     }),
   ].sort((a, b) => a.timestamp - b.timestamp);
 
-  const damageIn: IHpEvent[] = [
-    ...unit.damageIn.map((event) => {
+  const damageIn: IHpEvent[] = unit.damageIn
+    .map((event) => {
       const isPetDest = isPetOrGuardian(event.destId, allUnits);
       return {
         spellId: String(event.spellId),
@@ -251,34 +272,15 @@ function convertUnit(
         effectiveAmount: isPetDest
           ? -0
           : -(event.effectiveAmount - (event.absorbed ?? 0)),
+        spellSchoolId: getSpellSchoolId(event.eventName, event.params),
         logLine: {
           event: event.eventName as LogEvent,
           timestamp: event.timestamp,
           parameters: convertParams(event.params),
         },
       };
-    }),
-    ...unit.absorbsOut.map((event) => {
-      const isPetDest = isPetOrGuardian(event.srcId, allUnits);
-      return {
-        spellId: String(event.spellId),
-        spellName: event.spellName,
-        timestamp: event.timestamp,
-        srcUnitId: event.attackerId,
-        srcUnitName: event.destName,
-        destUnitId: event.srcId,
-        destUnitName: event.srcName,
-        amount: event.absorbedAmount,
-        effectiveAmount: isPetDest ? 0 : event.absorbedAmount,
-        absorbedAmount: event.absorbedAmount,
-        logLine: {
-          event: event.eventName as LogEvent,
-          timestamp: event.timestamp,
-          parameters: convertParams(event.params),
-        },
-      } as unknown as IHpEvent;
-    }),
-  ].sort((a, b) => a.timestamp - b.timestamp);
+    })
+    .sort((a, b) => a.timestamp - b.timestamp);
 
   const healOut: IHpEvent[] = unit.healOut.map((event) => {
     const isPetDest = isPetOrGuardian(event.destId, allUnits);

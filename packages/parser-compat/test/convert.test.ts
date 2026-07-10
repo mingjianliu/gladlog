@@ -403,3 +403,37 @@ describe("CombatantInfo legacy shapes (adjudication #22, observed from old runti
     expect(info.teamId).toBe("0");
   });
 });
+
+describe("absorb NOT interleaved into damageIn; spellSchoolId hex string (adjudication #24/#25)", () => {
+  const ABS =
+    'SPELL_ABSORBED,Player-1-ATK,"Atk-X",0x548,0x80000000,Player-2-VIC,"Vic-Y",0x10512,0x80000000,50622,"Bladestorm",0x1,Player-3-OWN,"Own-Z",0x511,0x80000000,1246768,"Power Word: Shield",0x2,21986,30763,nil';
+  const DMG8 =
+    'SPELL_DAMAGE,Player-1-ATK,"Atk-X",0x548,0x80000000,Player-2-VIC,"Vic-Y",0x10512,0x80000000,190356,"Blizzard",0x10,Player-2-VIC,0000000000000000,900,1000,0,0,0,0,0,0,0,100,100,0,1.0,-1.0,0,1.0,70,100,120,-1,16,0,0,0,nil,nil,nil';
+  const { matches } = parseLines([
+    "ARENA_MATCH_START,1825,41,3v3,1",
+    CI("Player-1-ATK", 0, 64, 2000),
+    DMG8,
+    ABS,
+    "ARENA_MATCH_END,0,30,1500,1501",
+  ]);
+  const legacy = toLegacyMatch(matches[0]!);
+
+  it("victim damageIn has NO SPELL_ABSORBED rows (old semantics: attacker-out only)", () => {
+    const vic = legacy.units["Player-2-VIC"]!;
+    expect(
+      vic.damageIn.filter((e) => e.logLine.event === LogEvent.SPELL_ABSORBED),
+    ).toHaveLength(0);
+    const atk = legacy.units["Player-1-ATK"]!;
+    expect(
+      atk.damageOut.filter((e) => e.logLine.event === LogEvent.SPELL_ABSORBED),
+    ).toHaveLength(1);
+  });
+
+  it("events carry spellSchoolId as 0x-hex string", () => {
+    const atk = legacy.units["Player-1-ATK"]!;
+    const d = atk.damageOut.find((e) => e.spellId === "190356")! as {
+      spellSchoolId?: string;
+    };
+    expect(d.spellSchoolId).toBe("0x10");
+  });
+});

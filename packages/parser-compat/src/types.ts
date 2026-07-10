@@ -27,6 +27,7 @@ export interface ICombatEvent {
 export interface IHpEvent extends ICombatEvent {
   amount: number;
   effectiveAmount: number;
+  spellSchoolId?: string;
 }
 
 export interface IAbsorbEvent extends ICombatEvent {
