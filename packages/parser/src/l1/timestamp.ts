@@ -23,7 +23,7 @@ export function parseTimestamp(
   datePart: string,
   opts?: { timezone?: string }
 ): number | null {
-  const match = datePart.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4}) (\d{1,2}):(\d{1,2}):(\d{1,2})\.(\d{4})$/);
+  const match = datePart.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4}) (\d{1,2}):(\d{1,2}):(\d{1,2})\.(\d{1,6})(?:([+-]\d+(?:\.\d+)?))?$/);
   if (!match) return null;
 
   const month = parseInt(match[1]!, 10);
@@ -32,14 +32,26 @@ export function parseTimestamp(
   const hour = parseInt(match[4]!, 10);
   const minute = parseInt(match[5]!, 10);
   const second = parseInt(match[6]!, 10);
-  const ffff = match[7]!;
+  const fractionStr = match[7]!;
+  const suffix = match[8];
 
   if (!isValidDate(year, month, day)) return null;
   if (hour < 0 || hour > 23) return null;
   if (minute < 0 || minute > 59) return null;
   if (second < 0 || second > 59) return null;
 
-  const ms = parseInt(ffff.slice(0, 3), 10);
+  const ms = parseInt(
+    fractionStr.length >= 3
+      ? fractionStr.slice(0, 3)
+      : fractionStr.padEnd(3, "0"),
+    10
+  );
+
+  if (suffix !== undefined) {
+    const offset = parseFloat(suffix);
+    const W_target = Date.UTC(year, month - 1, day, hour, minute, second, ms);
+    return W_target - offset * 3600000;
+  }
 
   const timezone = opts?.timezone;
 

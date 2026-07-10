@@ -62,3 +62,40 @@ describe("splitLine", () => {
     expect(splitLine("")).toBeNull();
   });
 });
+
+describe("parseTimestamp with explicit UTC offset suffix (real-world variant)", () => {
+  // 真实日志样本:'6/30/2026 23:54:08.392-4' —— 3 位毫秒 + UTC 偏移(小时,可带符号/小数)
+  it("offset wins over timezone option: 23:54:08.392 at UTC-4 = 03:54:08.392Z next day", () => {
+    const ms = parseTimestamp("6/30/2026 23:54:08.392-4", {
+      timezone: "Europe/Berlin",
+    });
+    expect(ms).toBe(Date.UTC(2026, 6, 1, 3, 54, 8, 392));
+  });
+  it("positive offset", () => {
+    const ms = parseTimestamp("6/30/2026 12:00:00.000+2", { timezone: "UTC" });
+    expect(ms).toBe(Date.UTC(2026, 5, 30, 10, 0, 0, 0));
+  });
+  it("fractional offset (e.g. +5.5)", () => {
+    const ms = parseTimestamp("6/30/2026 12:00:00.000+5.5", {
+      timezone: "UTC",
+    });
+    expect(ms).toBe(Date.UTC(2026, 5, 30, 6, 30, 0, 0));
+  });
+});
+
+describe("parseTimestamp with variable fractional-second width", () => {
+  it("5-digit fraction .38612 → 386ms", () => {
+    const ms = parseTimestamp("7/1/2026 09:58:03.38612", { timezone: "UTC" });
+    expect(ms).toBe(Date.UTC(2026, 6, 1, 9, 58, 3, 386));
+  });
+  it("3-digit fraction .392 → 392ms", () => {
+    const ms = parseTimestamp("6/30/2026 23:54:08.392", { timezone: "UTC" });
+    expect(ms).toBe(Date.UTC(2026, 5, 30, 23, 54, 8, 392));
+  });
+  it("5-digit fraction with offset .38612-4", () => {
+    const ms = parseTimestamp("7/1/2026 09:58:03.38612-4", {
+      timezone: "UTC",
+    });
+    expect(ms).toBe(Date.UTC(2026, 6, 1, 13, 58, 3, 386));
+  });
+});
