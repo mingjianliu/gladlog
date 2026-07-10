@@ -1,4 +1,4 @@
-import { ParsedLine } from "../l1/types";
+import type { ParsedLine } from "../l1/types";
 import { Segment, ShuffleClose } from "./types";
 
 export class Segmenter {

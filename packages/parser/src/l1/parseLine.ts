@@ -13,7 +13,7 @@ import {
 import { decodeCombatantInfo } from "./combatantInfo";
 import { splitLine } from "./splitTopLevel";
 import { parseTimestamp } from "./timestamp";
-import { ParsedLine } from "./types";
+import type { ParsedLine } from "./types";
 
 function findXIdx(params: string[], at: number): number {
   let xIdx = at + 14;
