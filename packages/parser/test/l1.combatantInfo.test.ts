@@ -66,3 +66,15 @@ describe("decodeCombatantInfo: 2024-vintage format (talents as flat tuple, no au
     expect([0, 1]).toContain(c.teamId);
   });
 });
+
+describe("decodeCombatantInfo: leading empty element in talents array (Blizzard quirk)", () => {
+  it("line 3: '[,(a,b,c),...]' decodes, spec=253, team=1, rating=2439", () => {
+    const parsed = splitLine(lines[3]!)!;
+    const c = decodeCombatantInfo(parsed.params)!;
+    expect(c).not.toBeNull();
+    expect(c.specId).toBe(253);
+    expect(c.teamId).toBe(1);
+    expect(c.personalRating).toBe(2439); // 尾部=honor750,season41,rating2439,tier303(控制者首次推导750有误,已按原始行更正)
+    expect(c.talents.length).toBeGreaterThan(5);
+  });
+});

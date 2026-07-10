@@ -18,12 +18,12 @@ function parseOuterSegment(s: string): string[] | null {
   if (s.startsWith("[") && s.endsWith("]")) {
     const inner = s.substring(1, s.length - 1);
     if (inner === "") return [];
-    return splitTopLevel(inner);
+    return splitTopLevel(inner).filter((item) => item !== "");
   }
   if (s.startsWith("(") && s.endsWith(")")) {
     const inner = s.substring(1, s.length - 1);
     if (inner === "") return [];
-    return splitTopLevel(inner);
+    return splitTopLevel(inner).filter((item) => item !== "");
   }
   return null;
 }
@@ -32,7 +32,7 @@ function decodeNested(s: string): unknown {
   if ((s.startsWith("[") && s.endsWith("]")) || (s.startsWith("(") && s.endsWith(")"))) {
     const inner = s.substring(1, s.length - 1);
     if (inner === "") return [];
-    return splitTopLevel(inner).map(decodeNested);
+    return splitTopLevel(inner).filter((item) => item !== "").map(decodeNested);
   }
   if (/^-?\d+$/.test(s)) {
     return parseInt(s, 10);
