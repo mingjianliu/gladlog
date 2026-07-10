@@ -72,6 +72,11 @@ export function parseLine(line: string, opts?: { timezone?: string }): ParsedLin
       }
     } else if (eventName === "SWING_DAMAGE" || eventName === "SWING_DAMAGE_LANDED") {
       result.base = decodeBaseUnits(params);
+      result.spell = {
+        spellId: 0,
+        spellName: "Melee",
+        spellSchool: 0,
+      };
       result.advanced = decodeAdvanced(params, 8);
       const xIdx = findXIdx(params, 8);
       const damageParams = (params.length - (xIdx + 5) >= 11) ? params.slice(-11) : params.slice(-10);

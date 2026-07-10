@@ -99,4 +99,26 @@ describe("collectEvents", () => {
       B.actionsIn.filter((x) => x.eventName === "SPELL_DAMAGE"),
     ).toHaveLength(1);
   });
+
+  it("SWING dedup: SWING_DAMAGE is collected in damage arrays, SWING_DAMAGE_LANDED is not, but both are in actions", () => {
+    const swingRecords = [
+      L('SWING_DAMAGE,Player-1-A,"Alice-X",0x511,0x80000000,Player-2-B,"Bob-Y",0x548,0x80000000,Player-2-B,0000000000000000,900,1000,0,0,0,0,0,0,0,100,100,0,1.0,-1.0,0,1.0,70,77,90,-1,1,0,0,0,nil,nil,nil', 8),
+      L('SWING_DAMAGE_LANDED,Player-1-A,"Alice-X",0x511,0x80000000,Player-2-B,"Bob-Y",0x548,0x80000000,Player-2-B,0000000000000000,900,1000,0,0,0,0,0,0,0,100,100,0,1.0,-1.0,0,1.0,70,77,90,-1,1,0,0,0,nil,nil,nil', 9),
+    ];
+    const swingRoster = buildRoster(swingRecords);
+    const swingUnits = collectEvents(swingRecords, swingRoster);
+    const swingA = swingUnits.get("Player-1-A")!;
+    const swingB = swingUnits.get("Player-2-B")!;
+
+    expect(swingA.damageOut).toHaveLength(1);
+    expect(swingA.damageOut[0]!.eventName).toBe("SWING_DAMAGE");
+
+    expect(swingB.damageIn).toHaveLength(1);
+    expect(swingB.damageIn[0]!.eventName).toBe("SWING_DAMAGE");
+
+    expect(swingA.actionsOut.filter(x => x.eventName === "SWING_DAMAGE")).toHaveLength(1);
+    expect(swingA.actionsOut.filter(x => x.eventName === "SWING_DAMAGE_LANDED")).toHaveLength(1);
+    expect(swingB.actionsIn.filter(x => x.eventName === "SWING_DAMAGE")).toHaveLength(1);
+    expect(swingB.actionsIn.filter(x => x.eventName === "SWING_DAMAGE_LANDED")).toHaveLength(1);
+  });
 });

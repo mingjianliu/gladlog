@@ -135,7 +135,7 @@ function convertUnit(unit: GladUnit): ICombatUnit {
       amount: -event.amount,
       effectiveAmount: -event.effectiveAmount,
       logLine: {
-        event: LogEvent.SPELL_DAMAGE,
+        event: event.eventName as LogEvent,
         timestamp: event.timestamp,
       },
     })),
@@ -151,7 +151,7 @@ function convertUnit(unit: GladUnit): ICombatUnit {
       effectiveAmount: event.absorbedAmount,
       absorbedAmount: event.absorbedAmount,
       logLine: {
-        event: LogEvent.SPELL_ABSORBED,
+        event: event.eventName as LogEvent,
         timestamp: event.timestamp,
       },
     } as unknown as IHpEvent)),
@@ -169,7 +169,7 @@ function convertUnit(unit: GladUnit): ICombatUnit {
       amount: -event.amount,
       effectiveAmount: -event.effectiveAmount,
       logLine: {
-        event: LogEvent.SPELL_DAMAGE,
+        event: event.eventName as LogEvent,
         timestamp: event.timestamp,
       },
     })),
@@ -185,7 +185,7 @@ function convertUnit(unit: GladUnit): ICombatUnit {
       effectiveAmount: event.absorbedAmount,
       absorbedAmount: event.absorbedAmount,
       logLine: {
-        event: LogEvent.SPELL_ABSORBED,
+        event: event.eventName as LogEvent,
         timestamp: event.timestamp,
       },
     } as unknown as IHpEvent)),
@@ -202,7 +202,7 @@ function convertUnit(unit: GladUnit): ICombatUnit {
     amount: event.amount,
     effectiveAmount: event.effectiveAmount,
     logLine: {
-      event: LogEvent.SPELL_HEAL,
+      event: event.eventName as LogEvent,
       timestamp: event.timestamp,
     },
   }));
@@ -218,7 +218,7 @@ function convertUnit(unit: GladUnit): ICombatUnit {
     amount: event.amount,
     effectiveAmount: event.effectiveAmount,
     logLine: {
-      event: LogEvent.SPELL_HEAL,
+      event: event.eventName as LogEvent,
       timestamp: event.timestamp,
     },
   }));
@@ -233,7 +233,7 @@ function convertUnit(unit: GladUnit): ICombatUnit {
     destUnitName: event.destName,
     absorbedAmount: event.absorbedAmount,
     logLine: {
-      event: LogEvent.SPELL_ABSORBED,
+      event: event.eventName as LogEvent,
       timestamp: event.timestamp,
     },
   }));
@@ -248,7 +248,7 @@ function convertUnit(unit: GladUnit): ICombatUnit {
     destUnitName: event.destName,
     absorbedAmount: event.absorbedAmount,
     logLine: {
-      event: LogEvent.SPELL_ABSORBED,
+      event: event.eventName as LogEvent,
       timestamp: event.timestamp,
     },
   }));
@@ -264,7 +264,7 @@ function convertUnit(unit: GladUnit): ICombatUnit {
     auraType: event.auraType,
     amount: event.amount,
     logLine: {
-      event: LogEvent.SPELL_AURA_APPLIED,
+      event: event.eventName as LogEvent,
       timestamp: event.timestamp,
     },
   }));
@@ -278,7 +278,7 @@ function convertUnit(unit: GladUnit): ICombatUnit {
     destUnitId: event.destId,
     destUnitName: event.destName,
     logLine: {
-      event: LogEvent.SPELL_CAST_SUCCESS,
+      event: event.eventName as LogEvent,
       timestamp: event.timestamp,
     },
   }));
@@ -292,7 +292,7 @@ function convertUnit(unit: GladUnit): ICombatUnit {
     destUnitId: event.destId,
     destUnitName: event.destName,
     logLine: {
-      event: LogEvent.SPELL_CAST_SUCCESS,
+      event: event.eventName as LogEvent,
       timestamp: event.timestamp,
     },
   }));
@@ -306,7 +306,7 @@ function convertUnit(unit: GladUnit): ICombatUnit {
     destUnitId: event.destId,
     destUnitName: event.destName,
     logLine: {
-      event: LogEvent.SPELL_CAST_SUCCESS,
+      event: event.eventName as LogEvent,
       timestamp: event.timestamp,
     },
   }));
@@ -320,7 +320,7 @@ function convertUnit(unit: GladUnit): ICombatUnit {
     destUnitId: event.destId,
     destUnitName: event.destName,
     logLine: {
-      event: LogEvent.SPELL_CAST_SUCCESS,
+      event: event.eventName as LogEvent,
       timestamp: event.timestamp,
     },
   }));

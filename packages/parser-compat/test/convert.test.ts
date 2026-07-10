@@ -145,3 +145,40 @@ describe("legacy damage conventions (adjudication #6, 2026-07-10)", () => {
     expect(dIn[0]!.effectiveAmount).toBe(-100);
   });
 });
+
+describe("event-name fidelity + SWING dedup (adjudication #10/#12)", () => {
+  const PERIODIC = (src: string, sn: string, dst: string, dn: string) =>
+    `SPELL_PERIODIC_DAMAGE,${src},"${sn}",0x511,0x80000000,${dst},"${dn}",0x548,0x80000000,589,"Shadow Word: Pain",0x20,${dst},0000000000000000,900,1000,0,0,0,0,0,0,0,100,100,0,1.0,-1.0,0,1.0,70,55,55,-1,32,0,0,0,nil,nil,nil`;
+  const SWING = (ev: string, src: string, sn: string, dst: string, dn: string) =>
+    `${ev},${src},"${sn}",0x511,0x80000000,${dst},"${dn}",0x548,0x80000000,${dst},0000000000000000,900,1000,0,0,0,0,0,0,0,100,100,0,1.0,-1.0,0,1.0,70,77,90,-1,1,0,0,0,nil,nil,nil`;
+
+  const { matches } = parseLines([
+    "ARENA_MATCH_START,1825,41,3v3,1",
+    CI("Player-1-A", 0, 257, 2400),
+    PERIODIC("Player-1-A", "Alice-X", "Player-2-B", "Bob-Y"),
+    SWING("SWING_DAMAGE", "Player-1-A", "Alice-X", "Player-2-B", "Bob-Y"),
+    SWING("SWING_DAMAGE_LANDED", "Player-1-A", "Alice-X", "Player-2-B", "Bob-Y"),
+    "ARENA_MATCH_END,0,30,1500,1501",
+  ]);
+  const legacy = toLegacyMatch(matches[0]!);
+  const a = legacy.units["Player-1-A"]!;
+
+  it("logLine.event preserves the real event name (PERIODIC stays PERIODIC)", () => {
+    const evs = a.damageOut.map((e) => e.logLine.event).sort();
+    expect(evs).toContain(LogEvent.SPELL_PERIODIC_DAMAGE);
+    expect(evs).toContain(LogEvent.SWING_DAMAGE);
+  });
+
+  it("SWING_DAMAGE_LANDED is NOT double-counted in damage arrays (old-parser dedup rule)", () => {
+    const swings = a.damageOut.filter((e) =>
+      String(e.logLine.event).startsWith("SWING"),
+    );
+    expect(swings).toHaveLength(1);
+    expect(swings[0]!.logLine.event).toBe(LogEvent.SWING_DAMAGE);
+    // 伤害总量只含一次 swing:periodic 55 + swing 77(负号惯例)
+    const total = a.damageOut.reduce(
+      (s, e) => s + Math.abs(e.effectiveAmount), 0,
+    );
+    expect(total).toBe(55 + 77);
+  });
+});

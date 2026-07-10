@@ -46,7 +46,7 @@ export function collectEvents(
     const destGuid = record.base?.destGuid;
 
     // 1. Damage group
-    if (record.damage) {
+    if (record.damage && record.eventName !== "SWING_DAMAGE_LANDED") {
       const hpEvent: GladHpEvent = {
         timestamp: record.timestamp,
         eventName: record.eventName,

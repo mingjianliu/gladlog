@@ -64,6 +64,17 @@ describe("parseLine family assembly", () => {
     );
   });
 
+  it("SWING_DAMAGE: base + spell (Melee) + advanced + damage, known", () => {
+    const raw =
+      '6/30/2026 19:10:41.7632  SWING_DAMAGE,Player-1329-0A8DFA0D,"Pakoartisti-Ravencrest-EU",0x548,0x80000000,Player-3679-0D4BB9FB,"Vierforfear-Aegwynn-EU",0x511,0x80000000,Player-3679-0D4BB9FB,0000000000000000,561041,584460,304,2954,761,2116,0,0,0,272876,273000,0,1004.81,-323.10,0,2.0923,298,23419,30536,-1,1,0,0,0,nil,nil,nil';
+    const r = parseLine(raw, { timezone: "UTC" })!;
+    expect(r.known).toBe(true);
+    expect(r.eventName).toBe("SWING_DAMAGE");
+    expect(r.spell?.spellId).toBe(0);
+    expect(r.spell?.spellName).toBe("Melee");
+    expect(r.damage?.effectiveAmount).toBe(23419);
+  });
+
   it("unknown event → generic record with known:false, params preserved", () => {
     const r = parseLine("6/30/2026 19:10:31.0000  SOME_FUTURE_EVENT,1,2", {
       timezone: "UTC",
