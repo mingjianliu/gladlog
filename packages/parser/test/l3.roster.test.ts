@@ -78,3 +78,18 @@ describe("buildRoster", () => {
     expect(r.units.has("Player-1-A")).toBe(true);
   });
 });
+
+describe("SPELL_SUMMON owner linkage (adjudication #18: totems/guardians)", () => {
+  it("summoned guardian gets ownerId from summoner", () => {
+    const records = [
+      L(
+        'SPELL_SUMMON,Player-1-A,"Alice-X",0x511,0x80000000,Creature-0-1-1-1-5923-0001,"Healing Stream Totem",0x2148,0x80000000,5394,"Healing Stream Totem",0x8',
+        1,
+      ),
+    ];
+    const r = buildRoster(records);
+    const totem = r.units.get("Creature-0-1-1-1-5923-0001")!;
+    expect(totem.kind).toBe("Guardian");
+    expect(totem.ownerId).toBe("Player-1-A");
+  });
+});

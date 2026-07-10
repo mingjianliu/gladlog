@@ -94,6 +94,20 @@ export function buildRoster(records: ParsedLine[]): {
         }
       }
     }
+
+    if (record.eventName === 'SPELL_SUMMON' && record.base) {
+      const { srcGuid, destGuid } = record.base;
+      if (srcGuid && destGuid && destGuid !== '0000000000000000') {
+        const destUnit = units.get(destGuid);
+        if (destUnit) {
+          // SUMMON priority is lower; do not overwrite existing ownerId if already set.
+          // This keeps the rule deterministic and ensures advanced ownerGuid takes precedence.
+          if (!destUnit.ownerId) {
+            destUnit.ownerId = srcGuid;
+          }
+        }
+      }
+    }
   }
 
   if (ownerId === null) {
