@@ -33,7 +33,11 @@ export function ShuffleReport({ shuffle }: { shuffle: StoredShuffle }) {
           </button>
         ))}
       </div>
-      <MatchReport source={round} roundLabel={`Round ${active + 1}`} />
+      <MatchReport
+        source={round}
+        roundLabel={`Round ${active + 1}`}
+        matchId={round.id}
+      />
     </div>
   );
 }

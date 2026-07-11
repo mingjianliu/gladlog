@@ -64,9 +64,16 @@ export default function App() {
           <main className="app-main">
             {doc && doc.data ? (
               doc.kind === "shuffle" ? (
-                <ShuffleReport key={selectedId ?? undefined} shuffle={doc.data} />
+                <ShuffleReport
+                  key={selectedId ?? undefined}
+                  shuffle={doc.data}
+                />
               ) : (
-                <MatchReport key={selectedId ?? undefined} source={doc.data} />
+                <MatchReport
+                  key={selectedId ?? undefined}
+                  source={doc.data}
+                  matchId={selectedId ?? undefined}
+                />
               )
             ) : (
               <div className="empty-state">选择一场对局</div>

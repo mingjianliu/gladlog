@@ -426,6 +426,49 @@ pre {
   padding-left: 16px;
 }
 
-.rpt-build { color: var(--ink-2); font-size: 12px; margin: 0 0 4px; }
-.rpt-build-raw summary { color: var(--mute); font-size: 11px; cursor: pointer; }
-.rpt-build-raw pre { max-height: 160px; overflow-y: auto; font-size: 10px; }
+.rpt-build {
+  color: var(--ink-2);
+  font-size: 12px;
+  margin: 0 0 4px;
+}
+.rpt-build-raw summary {
+  color: var(--mute);
+  font-size: 11px;
+  cursor: pointer;
+}
+.rpt-build-raw pre {
+  max-height: 160px;
+  overflow-y: auto;
+  font-size: 10px;
+}
+
+/* ── AI 分析面板 ── */
+.rpt-ai-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.rpt-ai-body {
+  max-height: 420px;
+  overflow-y: auto;
+  flex: 1;
+  margin-bottom: 8px;
+}
+.rpt-ai-body pre {
+  white-space: pre-wrap;
+  font-size: 12px;
+  margin: 0;
+}
+.rpt-ai-error {
+  color: var(--loss);
+  font-size: 12px;
+  padding: 8px;
+  margin-bottom: 8px;
+  background: rgba(248, 113, 113, 0.05);
+  border-radius: 4px;
+}
+.rpt-ai-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
