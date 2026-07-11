@@ -1,0 +1,26 @@
+{
+  "build": "12.1.0.68629",
+  "generatedAt": "2026-07-11T09:37:32.363Z",
+  "artifacts": {
+    "talentIdMap.json": {
+      "specs": 40
+    },
+    "spellNames.json": {
+      "entries": 413355,
+      "bytes": 12223778
+    },
+    "spellEffectGenerated.ts": {
+      "entries": 3560
+    },
+    "spellClassMapGenerated.ts": {
+      "entries": 32
+    },
+    "trinketItemIds.json": {
+      "adaptation": 28,
+      "relentless": 10
+    },
+    "talentModifiers.json": {
+      "trackedSpells": 129
+    }
+  }
+}

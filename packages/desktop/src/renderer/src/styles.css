@@ -472,3 +472,25 @@ pre {
   gap: 8px;
   margin-bottom: 8px;
 }
+
+/* ── talent/spell icons ── */
+.rpt-spellicon,
+.rpt-spellicon-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+  border-radius: 2px;
+  border: 1px solid var(--hairline);
+  box-sizing: border-box;
+  margin-right: 4px;
+}
+
+.rpt-spellicon-fallback {
+  background: var(--surface-2);
+  color: var(--ink-2);
+  font-size: 10px;
+  font-family: var(--font-data);
+  font-weight: bold;
+}
+

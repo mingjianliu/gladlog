@@ -44,6 +44,9 @@ export interface GladlogApi {
     onDone(cb: (d: { matchId: string; content: string }) => void): () => void;
     onError(cb: (d: { matchId: string; message: string }) => void): () => void;
   };
+  icon: {
+    get(name: string): Promise<string | null>;
+  };
 }
 declare global {
   interface Window {

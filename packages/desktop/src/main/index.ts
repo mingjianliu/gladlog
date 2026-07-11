@@ -13,6 +13,7 @@ import { MatchStore } from "./matchStore";
 import { SettingsStore, type GladlogSettings } from "./settingsStore";
 import { WorkerHost } from "./workerHost";
 import { createAiService, realClientFactory } from "./ai";
+import { createIconCache } from "./iconCache";
 
 app.setName("gladlog");
 log.initialize();
@@ -125,6 +126,7 @@ else {
       clientFactory: realClientFactory,
       emit: (ch, payload) => win?.webContents.send(ch, payload),
     });
+    const icons = createIconCache({ cacheDir: join(app.getPath("userData"), "icons") });
     registerIpc({
       store,
       settings,
@@ -132,6 +134,7 @@ else {
       getWindow: () => win,
       onWowDirectoryChanged: (s) => startMonitoring(s),
       ai,
+      icons,
     });
     startMonitoring(settings.get());
   });

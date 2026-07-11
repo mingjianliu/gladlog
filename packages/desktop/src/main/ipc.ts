@@ -16,8 +16,12 @@ export function registerIpc(deps: {
   getWindow: () => BrowserWindow | null;
   onWowDirectoryChanged: (settings: GladlogSettings) => void;
   ai: AiService;
+  icons: { get(name: string): Promise<string | null> };
 }): void {
   ipcMain.handle("gladlog:logs:getStatus", () => deps.getStatus());
+  ipcMain.handle("gladlog:icon:get", (_e, name: string) =>
+    deps.icons.get(String(name)),
+  );
   ipcMain.handle("gladlog:matches:list", () => deps.store.list());
   ipcMain.handle("gladlog:matches:get", (_e, id: string) => deps.store.get(id));
   ipcMain.handle("gladlog:settings:get", () =>

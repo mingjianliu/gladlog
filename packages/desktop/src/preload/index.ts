@@ -38,5 +38,8 @@ const api: GladlogApi = {
     onDone: sub<{ matchId: string; content: string }>("gladlog:ai:done"),
     onError: sub<{ matchId: string; message: string }>("gladlog:ai:error"),
   },
+  icon: {
+    get: (name) => ipcRenderer.invoke("gladlog:icon:get", name),
+  },
 };
 contextBridge.exposeInMainWorld("gladlog", api);

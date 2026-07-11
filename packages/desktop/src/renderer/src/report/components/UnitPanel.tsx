@@ -2,6 +2,7 @@ import type { ReportSource } from "../derive/types";
 import { deriveAuraEvents, deriveCasts } from "../derive/casts";
 import { specName } from "../data/gameConstants";
 import { getTalentNames } from "@gladlog/analysis";
+import { SpellIcon } from "./SpellIcon";
 
 const relTime = (t: number, start: number): string => {
   const s = (t - start) / 1000;
@@ -35,7 +36,7 @@ export function UnitPanel({
             <div className="rpt-talents">
               {named.map((t, idx) => (
                 <div key={idx}>
-                  {t.name}
+                  <SpellIcon icon={t.icon} label={t.name} /> {t.name}
                   {t.rank > 1 ? ` (${t.rank})` : ""}
                 </div>
               ))}

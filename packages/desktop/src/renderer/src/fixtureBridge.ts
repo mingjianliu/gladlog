@@ -115,6 +115,11 @@ export function installFixtureBridge(): void {
         return undefined;
       },
     },
+    icon: {
+      async get(): Promise<string | null> {
+        return null;
+      },
+    },
   };
 
   // Assign mock to window
