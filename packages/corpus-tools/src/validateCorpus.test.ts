@@ -45,4 +45,17 @@ describe("validateCorpus", () => {
       validateCorpus(corpusWith(bad), 30).some((v) => /insufficient/.test(v)),
     ).toBe(true);
   });
+  it("flags missing/unknown wowPatchVersion", () => {
+    const c = corpusWith(goodCell);
+    c.wowPatchVersion = "unknown";
+    expect(validateCorpus(c, 30).some((v) => /wowPatchVersion/.test(v))).toBe(
+      true,
+    );
+  });
+  it("flags a cell at/above floor wrongly marked insufficient", () => {
+    const bad = { ...goodCell, sampleN: 40, insufficient: true };
+    expect(
+      validateCorpus(corpusWith(bad), 30).some((v) => /insufficient/.test(v)),
+    ).toBe(true);
+  });
 });
