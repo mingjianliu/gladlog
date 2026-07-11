@@ -10,7 +10,9 @@
 
 ## 迁移顺序与依据
 
-### 1. KICK / timeline 事件标注类
+### 1. KICK / timeline 事件标注类 ✅(2026-07-11 随 timeline 变体 ADOPT 关闭)
+
+> **结论**:timeline 变体三轮 A/B 后收编为产线默认(gladlog ed29c81)。踢断覆盖 1.3%→100%(确定性),盲评 4 维 CI-improved,accuracy 回归经 spec tag + 密度压缩两轮修复后消除。附带红利:CRLF \r bug 修复(假死误记真死,17/176 场胜负判反纠正)。台账:eval-private ledger A/B cycles 三行。
 
 - **内容**:SPELL_INTERRUPT 的 `[KICK]` 时间轴行及同族标注。
 - **旧仓证据**:F20 pilot(2026-07-04)——确定性踢断覆盖 12%→100%(+88pp,10/10 对),盲评七维全 inconclusive 无回归,+1.4% token,ADOPT。同时是"盲评对 sufficiency 无裁决权"的实证案例。
