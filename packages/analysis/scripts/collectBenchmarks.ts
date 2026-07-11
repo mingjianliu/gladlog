@@ -19,7 +19,9 @@ import path from "path";
 import { GladLogParser } from "@gladlog/parser";
 import { toLegacyMatch, toLegacyShuffle } from "@gladlog/parser-compat";
 import { stratifiedSample, type SampleMeta } from "../src/benchmark/stratify";
+import { isHealerSpec, specToString } from "../src/utils/cooldowns";
 import {
+  createBenchmarkAccumulator,
   computeBenchmarks,
   type BenchmarkOutput,
   type SpecSummary,
@@ -98,6 +100,9 @@ async function main() {
   // 2. Parse logs and collect samples
   console.log(`Parsing logs...`);
   const pool: SampleMeta[] = [];
+  // 两趟设计:pass1 只留映射(避免整语料 legacy 对局驻留内存)
+  const sampleToCombat = new Map<string, string>();
+  const combatToLog = new Map<string, string>();
   let parsed = 0;
   let failed = 0;
 
@@ -105,79 +110,43 @@ async function main() {
     const logPath = logPaths[i];
     try {
       const content = await fs.readFile(logPath, "utf-8");
-      const lines = content.split("\n");
       const parser = new GladLogParser();
-      const matches: Array<{ type: "match"; data: any }> = [];
-
-      parser.on("arena_match_ended", (match) => {
-        matches.push({ type: "match", data: match });
+      const combats: { gladId: string; combat: any }[] = [];
+      parser.on("match", (m: any) =>
+        combats.push({ gladId: m.id, combat: toLegacyMatch(m) }),
+      );
+      parser.on("shuffle", (sh: any) => {
+        const legacy = toLegacyShuffle(sh);
+        (legacy.rounds ?? []).forEach((round: any, idx: number) =>
+          combats.push({ gladId: sh.rounds[idx]?.id ?? `${sh.rounds[0]?.id}-r${idx}`, combat: round }),
+        );
       });
-      parser.on("shuffle_completed", (shuffle) => {
-        // If shuffle has rounds, we process each round
-        if (shuffle.rounds) {
-          for (const round of shuffle.rounds) {
-            matches.push({ type: "round", data: round });
-          }
-        }
-      });
+      for (const line of content.split("\n")) parser.push(line);
+      parser.end();
 
-      for (const line of lines) {
-        parser.parseLine(line);
-      }
-      parser.flush();
-
-      // Process collected matches
-      for (const m of matches) {
-        // Convert to legacy format
-        const legacyMatch = m.type === "match" ? toLegacyMatch(m.data) : m.data;
-
-        // Extract player units and filter by rating
-        const allUnits = Object.values(legacyMatch.units);
-        const playerUnits = allUnits.filter((u: any) => u.type === 0); // CombatUnitType.Player
-
-        for (const unit of playerUnits) {
-          if ((unit.info?.personalRating ?? 0) >= minRating) {
-            const spec = String(unit.spec);
-            // Determine archetype from team composition
-            const friendlyUnits = allUnits.filter((u: any) => u.reaction === 0); // Friendly
-            const healerSpecs = new Set<string>();
-            let nonHealerCount = 0;
-
-            for (const fu of friendlyUnits) {
-              const fuSpec = String(fu.spec);
-              // Heuristic: specs with "Healer" in common names or healing focus
-              if (
-                fuSpec.includes("Holy") ||
-                fuSpec.includes("Restoration") ||
-                fuSpec.includes("Discipline") ||
-                fuSpec.includes("Mistweaver")
-              ) {
-                healerSpecs.add(fuSpec);
-              } else {
-                nonHealerCount++;
-              }
-            }
-
-            const archetype =
-              Array.from(healerSpecs).sort().join("+") +
-              (healerSpecs.size > 0 ? "/" : "") +
-              nonHealerCount;
-
-            pool.push({
-              id: `${logPath}:${unit.id}`,
-              spec,
-              archetype,
-            });
-          }
+      for (const { gladId, combat } of combats) {
+        combatToLog.set(gladId, logPath);
+        const units: any[] = Object.values(combat.units);
+        const players = units.filter((u) => u.info);
+        for (const unit of players) {
+          if ((unit.info?.personalRating ?? 0) < minRating) continue;
+          const spec = specToString(unit.spec) || String(unit.spec);
+          const team = players.filter((u) => u.info.teamId === unit.info.teamId);
+          const healers = team
+            .filter((u) => isHealerSpec(u.spec))
+            .map((u) => specToString(u.spec) || String(u.spec))
+            .sort();
+          const archetype = `${healers.join("+") || "no-healer"}/${team.length - healers.length}`;
+          const sampleId = `${gladId}:${unit.id}`;
+          pool.push({ id: sampleId, spec, archetype });
+          sampleToCombat.set(sampleId, gladId);
         }
       }
-
       parsed++;
     } catch (err) {
       console.warn(`  WARN: ${logPath}: ${err}`);
       failed++;
     }
-
     if ((i + 1) % 50 === 0) {
       console.log(`  processed ${i + 1} / ${logPaths.length}`);
     }
@@ -196,64 +165,50 @@ async function main() {
     console.log(`    ${spec}: n=${info.n}${suffix}`);
   }
 
-  // 4. Re-parse selected logs to get full combat objects
-  console.log(`\nRe-parsing selected logs for benchmark computation...`);
-  const selectedIds = new Set(stratified.selected.map((s) => s.id));
-  const matches = [];
-  let selectedParsed = 0;
-
-  for (let i = 0; i < logPaths.length; i++) {
-    const logPath = logPaths[i];
+  // 4. pass2:仅重析入选对局所在文件
+  const selectedCombatIds = new Set(
+    stratified.selected.map((sel) => sampleToCombat.get(sel.id)).filter(Boolean),
+  );
+  const selectedLogs = new Set(
+    [...selectedCombatIds].map((id) => combatToLog.get(id as string)).filter(Boolean),
+  );
+  console.log(`  Re-parsing ${selectedLogs.size} selected logs...`);
+  const benchAcc = createBenchmarkAccumulator(minRating);
+  let matchedCount = 0;
+  const seen = new Set<string>();
+  for (const logPath of selectedLogs) {
     try {
-      const content = await fs.readFile(logPath, "utf-8");
-      const lines = content.split("\n");
+      const content = await fs.readFile(logPath as string, "utf-8");
       const parser = new GladLogParser();
-      const logMatches: any[] = [];
-
-      parser.on("arena_match_ended", (match) => {
-        logMatches.push(match);
-      });
-      parser.on("shuffle_completed", (shuffle) => {
-        if (shuffle.rounds) {
-          logMatches.push(...shuffle.rounds);
+      parser.on("match", (m: any) => {
+        if (selectedCombatIds.has(m.id) && !seen.has(m.id)) {
+          seen.add(m.id);
+          benchAcc.add(toLegacyMatch(m));
+          matchedCount++;
         }
       });
-
-      for (const line of lines) {
-        parser.parseLine(line);
-      }
-      parser.flush();
-
-      // Check if any unit from this log is in selected
-      for (const m of logMatches) {
-        const legacyMatch = "playerId" in m ? toLegacyMatch(m) : m;
-        const allUnits = Object.values(legacyMatch.units);
-        for (const unit of allUnits) {
-          if (selectedIds.has(`${logPath}:${unit.id}`)) {
-            matches.push(legacyMatch);
-            selectedParsed++;
-            break;
+      parser.on("shuffle", (sh: any) => {
+        const legacy = toLegacyShuffle(sh);
+        (legacy.rounds ?? []).forEach((round: any, idx: number) => {
+          const gid = sh.rounds[idx]?.id;
+          if (gid && selectedCombatIds.has(gid) && !seen.has(gid)) {
+            seen.add(gid);
+            benchAcc.add(round);
+            matchedCount++;
           }
-        }
-      }
+        });
+      });
+      for (const line of content.split("\n")) parser.push(line);
+      parser.end();
     } catch {
-      // Skip failed parses
-    }
-
-    if ((i + 1) % 50 === 0) {
-      console.log(`  re-parsed ${i + 1} / ${logPaths.length}`);
+      /* skip */
     }
   }
-
-  // Deduplicate matches
-  const uniqueMatches = Array.from(
-    new Map(matches.map((m) => [m.id, m])).values(),
-  );
-  console.log(`  Matched combats: ${uniqueMatches.length} (deduplicated)`);
+  console.log(`  Matched combats: ${matchedCount} (deduplicated)`);
 
   // 5. Compute benchmarks
   console.log(`\nComputing benchmarks...`);
-  const benchmarkOutput = computeBenchmarks(uniqueMatches, minRating);
+  const benchmarkOutput = benchAcc.finalize();
 
   // 6. Write output
   const outputDir = path.dirname(out);

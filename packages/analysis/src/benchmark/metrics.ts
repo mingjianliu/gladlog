@@ -14,6 +14,7 @@ import type {
   IShuffleRound,
 } from "@gladlog/parser-compat";
 import { spellEffectData } from "../data/spellEffectData";
+import { specToString } from "../utils/cooldowns";
 import {
   annotateDefensiveTimings,
   extractMajorCooldowns,
@@ -104,11 +105,8 @@ function toPercentiles(values: number[]): Percentiles {
 }
 
 function specLabel(spec: string | number): string {
-  // Try to parse spec from CombatUnitSpec enum or return spec string
-  // This assumes spec is already a string (spec name) from newer parser
-  if (typeof spec === "string") return spec;
-  // Legacy numeric spec ID - would need enum mapping
-  return `Spec ${spec}`;
+  const label = specToString(spec as never);
+  return label && label !== "Unknown" ? label : String(spec);
 }
 
 function emptyTimingCounts(): TimingCounts & { total: number } {
@@ -335,10 +333,23 @@ export function computeBenchmarks(
   matches: AtomicArenaCombat[],
   ratingFloor: number = 0,
 ): BenchmarkOutput {
+  const acc = createBenchmarkAccumulator(ratingFloor);
+  for (const combat of matches) acc.add(combat);
+  return acc.finalize();
+}
+
+/** 流式聚合:逐场喂入即弃,避免整语料对局驻留内存 */
+export function createBenchmarkAccumulator(ratingFloor: number = 0): {
+  add(combat: AtomicArenaCombat): void;
+  finalize(): BenchmarkOutput;
+} {
   const acc: Record<string, SpecStats> = {};
-  for (const combat of matches) {
-    extractCombatStats(combat, acc, ratingFloor);
-  }
-  const bySpec = summarise(acc);
-  return { bySpec };
+  return {
+    add(combat) {
+      extractCombatStats(combat, acc, ratingFloor);
+    },
+    finalize() {
+      return { bySpec: summarise(acc) };
+    },
+  };
 }
