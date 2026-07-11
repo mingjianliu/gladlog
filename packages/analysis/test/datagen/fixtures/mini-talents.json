@@ -1,0 +1,93 @@
+[
+  {
+    "traitTreeId": 850,
+    "className": "Priest",
+    "classId": 5,
+    "specName": "Holy",
+    "specId": 257,
+    "classNodes": [
+      {
+        "id": 82709,
+        "name": "Renew",
+        "type": "single",
+        "posX": 1200,
+        "posY": 1500,
+        "maxRanks": 1,
+        "next": [],
+        "prev": [],
+        "entries": [
+          {
+            "id": 103846,
+            "definitionId": 108861,
+            "maxRanks": 1,
+            "type": "active",
+            "name": "Renew",
+            "spellId": 139,
+            "icon": "spell_holy_renew",
+            "index": 100
+          }
+        ]
+      }
+    ],
+    "specNodes": [
+      {
+        "id": 82713,
+        "name": "Holy Word: Serenity",
+        "type": "single",
+        "posX": 1200,
+        "posY": 1200,
+        "maxRanks": 1,
+        "next": [],
+        "prev": [],
+        "entries": [
+          {
+            "id": 103850,
+            "definitionId": 108865,
+            "maxRanks": 1,
+            "type": "active",
+            "name": "Holy Word: Serenity",
+            "spellId": 2050,
+            "icon": "spell_holy_persuitofjustice",
+            "index": 200
+          }
+        ]
+      }
+    ],
+    "heroNodes": [],
+    "subTreeNodes": []
+  },
+  {
+    "traitTreeId": 852,
+    "className": "Mage",
+    "classId": 8,
+    "specName": "Frost",
+    "specId": 64,
+    "classNodes": [
+      {
+        "id": 62113,
+        "name": "Polymorph",
+        "type": "single",
+        "posX": 900,
+        "posY": 900,
+        "maxRanks": 1,
+        "next": [],
+        "prev": [],
+        "entries": [
+          {
+            "id": 76890,
+            "definitionId": 81845,
+            "maxRanks": 1,
+            "type": "active",
+            "name": "Polymorph",
+            "spellId": 118,
+            "icon": "spell_nature_polymorph",
+            "index": 100
+          }
+        ]
+      }
+    ],
+    "specNodes": [],
+    "heroNodes": [],
+    "subTreeNodes": []
+  }
+]
