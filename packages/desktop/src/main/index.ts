@@ -38,7 +38,7 @@ function createWindow(): BrowserWindow {
     minWidth: 900,
     minHeight: 600,
     webPreferences: {
-      preload: join(import.meta.dirname, "../preload/index.mjs"),
+      preload: join(import.meta.dirname, "../preload/index.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
     },
