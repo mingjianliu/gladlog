@@ -1238,7 +1238,8 @@ export function detectOverlappedDefensives(
 export function formatOverlappedDefensivesForContext(overlaps: IOverlappedDefensive[]): string[] {
   if (overlaps.length === 0) return [];
   const lines: string[] = [];
-  lines.push('PANIC TRADING — MAJOR DEFENSIVE OVERLAPS (two buffs simultaneously active on the same target):');
+  // 段头中性化:'PANIC TRADING' 属加载性标签(2026-07-11 校准 labelBias 锚点命中)
+  lines.push('DEFENSIVE OVERLAPS (two buffs simultaneously active on the same target):');
 
   for (const o of overlaps) {
     const sim = o.simultaneousSeconds.toFixed(1);
@@ -1486,7 +1487,7 @@ export function detectPanicDefensives(
 export function formatPanicDefensivesForContext(panics: IPanicDefensive[]): string[] {
   if (panics.length === 0) return [];
   const lines: string[] = [];
-  lines.push('PANIC PRESSES (major defensive used with no enemy offensive threat and target not under pressure):');
+  lines.push('QUESTIONABLE CD TIMING (major defensive used with no enemy offensive threat and target not under pressure):');
 
   for (const p of panics) {
     lines.push(
