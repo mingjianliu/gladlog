@@ -19,3 +19,4 @@ export {
   type CalibrationCase,
 } from "./judge/buildCalibrationSuite";
 export { checkCalibration } from "./judge/checkCalibration";
+export { checkScoreProvenance } from "./provenance/checkScoreProvenance";
