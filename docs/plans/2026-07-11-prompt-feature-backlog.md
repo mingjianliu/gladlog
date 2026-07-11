@@ -19,7 +19,9 @@
 - **依赖**:无新依赖(interrupts 数据、时间轴管线均已在)。**先做差距盘点**:4a 移植版 matchTimeline 可能已带部分标注,treatment 只补缺口。
 - **A/B 目标维度**:sufficiency(以 quality-report 踢断覆盖率裁决,盲评行仅陈列)。
 
-### 2. HEALER EXPOSURE(直接搬 iter D inline 终态)
+### 2. HEALER EXPOSURE(直接搬 iter D inline 终态)✅(2026-07-11 盘点关闭:4a 已搬 inline 终态)
+
+> **盘点结论**:ENEMY CC KIT 每场一次头 + [HEALER EXPOSURE] 时间戳行内联时间轴——iter D 终态在 4a 移植时已带入,非 append 初版。旧仓的回归维度 inferenceScaffolding 在 timeline 变体三轮盲评中连续 CI-improved(+0.79/+0.93/+0.86),等效通过了本项的 A/B 验证。无需单独周期。
 
 - **内容**:tag 前缀 exposure 行**内联合并进时间轴**(mergeTimestampedLines)+ 每场一次 ENEMY CC KIT 头。
 - **旧仓证据**:append 初版造成 inferenceScaffolding **确证回归**(−0.33,sign p=.006,week-eval 2026-07-09);iter D inline 版修复至 0.00 差且 token −66.6/场,ADOPT(0e5612d2)。
@@ -35,7 +37,9 @@
 - **硬门**:扫描器重建后先对全语料跑 0-violation 验证,再进 A/B;违规非零不许开旗。
 - **A/B 目标维度**:inferenceScaffolding / accuracy;确定性 = 扫描器违规计数。
 
-### 4. CONTESTED(healer offense V2)
+### 4. CONTESTED(healer offense V2)🟡(2026-07-11 盘点:内容已在,确定性安全契约断言待复刻)
+
+> **盘点结论**:V2_CONTESTED_TRADES 已启用,[CONTESTED] 行在 34/176 场语料出现,含 F193 安全措辞("EV question, not a verdict"、70–85% 带、DR Full、enemy interrupts ready)。**余项**:把 F193 的确定性安全契约(0 unanchored / 0 above-Medium 置信度 / 0 sub-70% 带 / 阴性对照全净)复刻为全语料断言脚本跑一遍;rubric 条款是否已进 eval-baseline.md 待查。
 
 - **内容**:`[CONTESTED]` 争夺型换血事实(70–85% 带 + Full DR 时 CC ready + enemyInterruptsReady)+ 允许 ≤Medium 置信度锚定 trade findings 的 rubric 条款。
 - **旧仓证据**:F193(2026-07-09)——18 例受控校准(12 分层 + 6 相同 prompt 阴性对照),accuracy/labelBias CI 无回归,确定性安全契约 100%(0 unanchored / 0 above-Medium / 0 sub-70% / 阴性对照全净),ADOPT。
