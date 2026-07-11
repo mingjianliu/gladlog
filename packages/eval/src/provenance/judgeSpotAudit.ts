@@ -3,6 +3,8 @@ import { existsSync, readFileSync, readdirSync, writeFileSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
 
+import { promptFileFor } from "./checkScoreProvenance";
+
 interface AuditOptions {
   count?: number;
   model?: string;
@@ -48,7 +50,6 @@ export function extractSpotAuditCases(
   const sample = scoreFiles.filter((_, i) => i % step === 0).slice(0, count);
 
   const promptsDir = join(runDir, "prompts");
-  const promptFiles = readdirSync(promptsDir);
   const results: AuditResult[] = [];
 
   for (const f of sample) {
@@ -58,10 +59,11 @@ export function extractSpotAuditCases(
     const ord = String(
       (score.ordinal as number) ?? f.replace(/\.json$/, ""),
     ).padStart(3, "0");
-    const promptFile = promptFiles.find((p) => p.startsWith(`${ord}-`));
+    // 与 checkScoreProvenance.promptFileFor 同规则:前缀优先,回落 NNN.txt(终审 F5)
+    const promptPath = promptFileFor(ord, promptsDir);
     const responseFile = `${ord}.txt`;
 
-    if (!promptFile || !existsSync(join(runDir, "responses", responseFile))) {
+    if (!promptPath || !existsSync(join(runDir, "responses", responseFile))) {
       console.error(
         `[judge-spot-audit] ordinal ${ord}: missing prompt/response artifact, skipping`,
       );
@@ -82,7 +84,7 @@ export function extractSpotAuditCases(
     const task = `An LLM judge audited an AI coaching response against a match-data prompt. Independently re-check the judge's fact audit.
 
 Read BOTH files in this workspace IN FULL before answering:
-- prompt: ${join(runDir, "prompts", promptFile)}
+- prompt: ${promptPath}
 - response: ${join(runDir, "responses", responseFile)}
 
 The judge's fact audit:

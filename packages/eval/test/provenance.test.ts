@@ -21,6 +21,10 @@ function makeRun(): string {
 
 function validScore(): Record<string, unknown> {
   return {
+    ordinal: 1,
+    matchId: "abc12345",
+    spec: "Holy Priest",
+    result: "Loss",
     prompt: { sufficiency: 3, noise: 4, labelBias: 5 },
     response: {
       inferenceScaffolding: 4,
@@ -112,6 +116,46 @@ describe("checkScoreProvenance(严格,无 legacy 宽容)", () => {
     delete (s2.factAudit as Record<string, unknown>[])[0].verdict;
     writeScore(dir2, s2);
     expect(checkScoreProvenance(dir2).fail).toBe(1);
+  });
+
+  it("factAudit 第 4 条(非恰 3)→ FAIL", () => {
+    const dir = makeRun();
+    const s = validScore();
+    (s.factAudit as unknown[]).push({
+      claim: "extra",
+      verdict: "verified",
+      evidence: "x",
+    });
+    writeScore(dir, s);
+    const r = checkScoreProvenance(dir);
+    expect(r.fail).toBe(1);
+    expect(r.failures[0].reason).toMatch(/exactly 3/);
+  });
+
+  it("factAudit 缺 evidence 或 verdict 非枚举 → FAIL", () => {
+    const dir = makeRun();
+    const s = validScore();
+    delete (s.factAudit as Record<string, unknown>[])[1].evidence;
+    writeScore(dir, s);
+    expect(checkScoreProvenance(dir).fail).toBe(1);
+
+    const dir2 = makeRun();
+    const s2 = validScore();
+    (s2.factAudit as Record<string, unknown>[])[0].verdict = "maybe";
+    writeScore(dir2, s2);
+    const r2 = checkScoreProvenance(dir2);
+    expect(r2.fail).toBe(1);
+    expect(r2.failures[0].reason).toMatch(/verified\/refuted\/unsupported/);
+  });
+
+  it("缺根字段(spec)→ FAIL,reason 点名", () => {
+    const dir = makeRun();
+    const s = validScore();
+    delete s.spec;
+    writeScore(dir, s);
+    const r = checkScoreProvenance(dir);
+    expect(r.fail).toBe(1);
+    expect(r.failures[0].reason).toMatch(/spec/);
   });
 
   it("judgeModel 空 → FAIL", () => {

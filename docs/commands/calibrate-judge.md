@@ -16,7 +16,7 @@ npx tsx packages/eval/scripts/buildCalibration.ts --run <runId>   # 可加 --sou
 
 > 上游已知结果(2026-07-04):judge 对 accuracy/scaffolding/labelBias 缺陷检出可靠(100%),对 noise(67%)和 removed-deaths sufficiency(33%)不可靠——这两维在真实管线里由 `qualityCheck` 确定性指标裁决,它们在这里 FAIL 不阻塞目标维度为确定性指标的 A/B。gladlog 首轮校准即建立自己的基线。
 
-> **盲评铁律(不可协商):** 全部分数写完之前,你(编排者)和任何评分子代理都不得读 `calibration-manifest.json`——它写着每件的植入缺陷,读了校准就废了。只有 checkCalibration 读它。
+> **盲评铁律(不可协商):** 全部分数写完之前,你(编排者)和任何评分子代理都不得读 `calibration-manifest.json`——它写着每件的植入缺陷,读了校准就废了。只有 checkCalibration 读它。编排者对 `cases/` 同样只许列目录拿 CASEID,不许读任何 case 文件内容(近重复对比即可推断扰动),也不许读 `scores/*.json`;分数齐全与否只看文件存在性。
 
 ## Step 2: 逐件盲评
 

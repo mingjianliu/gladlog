@@ -58,6 +58,8 @@ BASE_DIR="<BASE>" npx tsx packages/eval/scripts/qualityCheck.ts
    ```
 
    > **盲评铁律(不可协商):** 在全部盲分写完之前,不读 `blind/mapping.json`——不是现在读,不是"核实一下"读,报错也不读。你实现了被测改动,知道哪件是 treatment 就毁了对比。只有 abStats 读 mapping。
+   >
+   > **同等铁律——盲件内容:** 编排者对 `blind/items/` 只许**列目录**拿 ITEMID,不许读任何 `prompt.txt`/`response.txt` 内容;也不许读 `blind/scores/*.json`(内容或 sha256 都能与你刚构建的两臂文件反查出臂别)。分数文件是否齐全只用文件存在性判断(`ls`),完整性校验放到解盲之后。
 
    对 `blind/items/` 每个目录起一个后台评分子代理(自包含,一件一代理——绝不两件进一个代理,它会认出配对):
 

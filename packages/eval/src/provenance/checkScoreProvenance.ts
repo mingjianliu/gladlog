@@ -27,7 +27,18 @@ function sha256String(s: string): string {
   return createHash("sha256").update(s).digest("hex");
 }
 
-function promptFileFor(ordinal: string, promptsDir: string): string | null {
+export const FACT_AUDIT_VERDICTS = [
+  "verified",
+  "refuted",
+  "unsupported",
+] as const;
+
+/** 统一的 prompt 文件解析:'<ordinal>-*' 前缀优先,回落 '<ordinal>.txt'。
+ * judgeSpotAudit/calibrateAuditor 共用,保持与校验器一致(终审 F5)。 */
+export function promptFileFor(
+  ordinal: string,
+  promptsDir: string,
+): string | null {
   // First try: look for a file starting with '<ordinal>-'
   const prefix = ordinal + "-";
   const promptFiles = existsSync(promptsDir) ? readdirSync(promptsDir) : [];
@@ -160,12 +171,12 @@ export function checkScoreProvenance(runDir: string): ScoreProvenanceResult {
       }
     }
 
-    // (d) Validate factAudit
+    // (d) Validate factAudit: 恰 3 条,claim/evidence 非空,verdict 为枚举值
     if (!hasFailed) {
       const factAudit = score.factAudit as unknown[] | undefined;
 
-      if (!Array.isArray(factAudit) || factAudit.length < 3) {
-        failReason = "factAudit must be an array with at least 3 entries";
+      if (!Array.isArray(factAudit) || factAudit.length !== 3) {
+        failReason = "factAudit must be an array with exactly 3 entries";
         hasFailed = true;
       } else {
         for (const entry of factAudit) {
@@ -174,14 +185,38 @@ export function checkScoreProvenance(runDir: string): ScoreProvenanceResult {
             !e ||
             typeof e.claim !== "string" ||
             !e.claim ||
-            typeof e.verdict !== "string" ||
-            !e.verdict
+            typeof e.evidence !== "string" ||
+            !e.evidence
           ) {
             failReason =
-              "All factAudit entries must have non-empty claim and verdict";
+              "All factAudit entries must have non-empty claim and evidence";
             hasFailed = true;
             break;
           }
+          if (
+            typeof e.verdict !== "string" ||
+            !(FACT_AUDIT_VERDICTS as readonly string[]).includes(e.verdict)
+          ) {
+            failReason = `factAudit verdict must be one of ${FACT_AUDIT_VERDICTS.join("/")}`;
+            hasFailed = true;
+            break;
+          }
+        }
+      }
+    }
+
+    // (e) Validate root metadata fields (工作流契约:ordinal/matchId/spec/result)
+    if (!hasFailed) {
+      for (const field of ["ordinal", "matchId", "spec", "result"]) {
+        const v = score[field];
+        const okField =
+          field === "ordinal"
+            ? Number.isInteger(v)
+            : typeof v === "string" && v.length > 0;
+        if (!okField) {
+          failReason = `Missing or invalid root field: ${field}`;
+          hasFailed = true;
+          break;
         }
       }
     }

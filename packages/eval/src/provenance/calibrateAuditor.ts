@@ -3,6 +3,8 @@ import { existsSync, readFileSync, readdirSync, writeFileSync } from "fs";
 import { homedir } from "os";
 import { dirname, join } from "path";
 
+import { promptFileFor } from "./checkScoreProvenance";
+
 interface CalibrationOptions {
   model?: string;
   root?: string; // repo root for report path
@@ -54,7 +56,7 @@ function corrupt(claim: string, type: string): CorruptedClaim {
       note: `${m[0]} -> 9${m[1]}${m[2]}`,
     };
   }
-  // fallback: timestamp shift attempt again, else fail loudly
+  // fallback: timestamp shift attempt again
   const t = claim.match(/(\d+):(\d\d)/);
   if (t) {
     return {
@@ -62,7 +64,11 @@ function corrupt(claim: string, type: string): CorruptedClaim {
       note: `timestamp ${t[0]} shifted`,
     };
   }
-  throw new Error("no mutable token found in claim");
+  // 纯文本主张(无数字 token)→ 语义反转回退,不再抛错让整跑崩(终审 F3)
+  return {
+    text: `No evidence exists that ${claim}`,
+    note: "text-only claim: semantic negation fallback",
+  };
 }
 
 export function calibrateAuditor(
@@ -93,7 +99,7 @@ export function calibrateAuditor(
     "007": { idx: 1, type: "numberDistort" },
   };
 
-  const promptFiles = readdirSync(join(archiveDir, "prompts"));
+  const promptsDir = join(archiveDir, "prompts");
   const results: CalibrationResult[] = [];
 
   for (const ord of ORDINALS) {
@@ -107,12 +113,11 @@ export function calibrateAuditor(
       string,
       unknown
     >;
-    const promptFile = promptFiles.find((p) =>
-      p.includes((score.matchId as string) ?? ""),
-    );
+    // 与 checkScoreProvenance.promptFileFor 同规则(终审 F5)
+    const promptPath = promptFileFor(ord, promptsDir);
     const responsePath = join(archiveDir, "responses", `${ord}.txt`);
 
-    if (!promptFile || !existsSync(responsePath)) {
+    if (!promptPath || !existsSync(responsePath)) {
       console.error(`[calibrate-auditor] ${ord}: missing artifacts, skipping`);
       continue;
     }
@@ -147,7 +152,7 @@ export function calibrateAuditor(
     const task = `An LLM judge audited an AI coaching response against a match-data prompt. Independently re-check the judge's fact audit.
 
 Read BOTH files in this workspace IN FULL before answering:
-- prompt: ${join(archiveDir, "prompts", promptFile)}
+- prompt: ${promptPath}
 - response: ${join(archiveDir, "responses", `${ord}.txt`)}
 
 The judge's fact audit:
