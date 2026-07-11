@@ -86,8 +86,11 @@ export async function buildCorpus(opts: {
         const friends = players.filter((u) => u.reaction === owner.reaction);
         const enemies = players.filter((u) => u.reaction !== owner.reaction);
 
-        // Build prompt
-        const prompt = buildMatchContext(combat, friends, enemies, { owner });
+        // Build prompt(GLADLOG_TIMELINE_PROMPT=1 → timeline 变体,A/B 处理臂用)
+        const prompt = buildMatchContext(combat, friends, enemies, {
+          owner,
+          useTimelinePrompt: process.env.GLADLOG_TIMELINE_PROMPT === "1",
+        });
 
         // Write prompt file
         const nnn = String(ordinal).padStart(3, "0");
