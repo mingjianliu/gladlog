@@ -29,7 +29,9 @@ export function deriveSummary(m: ReportSource): UnitTotals[] {
       sum(u.damageOut) + pets.reduce((a, p) => a + sum(p.damageOut), 0);
     const healingDone =
       sum(u.healOut) + pets.reduce((a, p) => a + sum(p.healOut), 0);
-    const absorbsDone = u.absorbsOut.reduce((a, e) => a + e.absorbedAmount, 0);
+    const absorbsDone =
+      u.absorbsOut.reduce((a, e) => a + e.absorbedAmount, 0) +
+      pets.reduce((a, p) => a + p.absorbsOut.reduce((x, e) => x + e.absorbedAmount, 0), 0);
     const damageTaken = sum(u.damageIn);
     const deaths = u.deaths.filter((d) => !d.unconscious).length;
     rows.push({

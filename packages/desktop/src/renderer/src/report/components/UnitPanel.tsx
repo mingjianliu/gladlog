@@ -27,6 +27,16 @@ export function UnitPanel({
           {u.info ? ` · ${u.info.personalRating}` : ""}
         </span>
       </h3>
+      {u.info && (
+        <>
+          {/* game-data pipeline in sub-project 5 will replace this with named rendering */}
+          <p className='rpt-build'>天赋 {u.info.talents.length} 项 · 装备 {u.info.equipment.length} 件</p>
+          <details className='rpt-build-raw'>
+            <summary>原始构建数据</summary>
+            <pre>{JSON.stringify({ talents: u.info.talents, pvpTalents: u.info.pvpTalents, equipment: u.info.equipment }, null, 1)}</pre>
+          </details>
+        </>
+      )}
       <h4>施法({casts.length})</h4>
       <div className="rpt-scroll">
         <table>

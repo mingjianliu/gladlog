@@ -99,6 +99,7 @@ function synthetic(): ReportSource {
         ownerId: "P1",
         damageOut: [hp(50)],
         healOut: [hp(20)],
+        absorbsOut: [{ ...hp(0), absorbedAmount: 60, attackerId: "P2" }],
       },
       P2: {
         ...emptyUnit,
@@ -129,6 +130,7 @@ describe("deriveSummary", () => {
     expect(rows[0]!.unitId).toBe("P1");
     expect(rows[0]!.damageDone).toBe(400); // 100+250+宠物50
     expect(rows[0]!.healingDone).toBe(50); // 30+宠物20
+    expect(rows[0]!.absorbsDone).toBe(60);
     expect(rows[0]!.damageTaken).toBe(500);
     expect(rows[0]!.deaths).toBe(1); // unconscious 不计
     expect(rows[0]!.dps).toBeCloseTo(40); // 400/10s

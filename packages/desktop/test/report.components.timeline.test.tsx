@@ -37,5 +37,6 @@ describe("UnitPanel", () => {
     expect(screen.getAllByText(u.name).length).toBeGreaterThan(0);
     const casts = deriveCasts(m, u.id);
     expect(screen.getByText(`施法(${casts.length})`)).toBeTruthy(); // 面板显示条数
+    expect(screen.getByText(/天赋 \d+ 项/)).toBeTruthy();
   });
 });
