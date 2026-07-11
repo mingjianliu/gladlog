@@ -1,0 +1,4 @@
+ID,DifficultyID,CategoryRecoveryTime,RecoveryTime,StartRecoveryTime,AuraSpellID,SpellID
+1,0,0,30000,1500,0,8122
+2,0,120000,0,1500,0,190319
+3,2,999000,0,1500,0,118

@@ -1,17 +1,33 @@
-export function transformSpellNames(csv: string): Record<string, string> {
-  const lines = csv.split("\n");
-  const result: Record<string, string> = {};
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("ID,")) continue;
-    const commaIndex = trimmed.indexOf(",");
-    if (commaIndex === -1) continue;
-    const id = trimmed.substring(0, commaIndex).trim();
-    let name = trimmed.substring(commaIndex + 1).trim();
-    if (name.startsWith('"') && name.endsWith('"')) {
-      name = name.slice(1, -1);
-    }
-    result[id] = name;
+import { parseCsv, fetchLatestBuild, fetchTable, assertMinRows } from "./lib/wagoCsv";
+import { writeArtifact } from "./lib/emit";
+
+export function transformSpellNames(csvText: string): Record<string, string> {
+  const { rows } = parseCsv(csvText);
+  const map: Record<string, string> = {};
+  for (const row of rows) {
+    map[row.ID] = row.Name_lang;
   }
-  return result;
+  return map;
+}
+
+export async function main(): Promise<void> {
+  const build = await fetchLatestBuild();
+  const csv = await fetchTable("SpellName", build);
+  const map = transformSpellNames(csv);
+  assertMinRows(Object.keys(map), 100000, "SpellName");
+  const outPath = new URL("../../src/data/spellNames.json", import.meta.url)
+    .pathname;
+  writeArtifact(outPath, JSON.stringify(map));
+  console.log(Object.keys(map).length, build);
+}
+
+if (
+  typeof process !== "undefined" &&
+  process.argv &&
+  process.argv[1]?.endsWith("genSpellNames.ts")
+) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
 }

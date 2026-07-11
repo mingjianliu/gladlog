@@ -1,0 +1,6 @@
+ID,Attributes_0,Attributes_1,Attributes_2,Attributes_3,Attributes_4,Attributes_5,Attributes_6,Attributes_7,Attributes_8,Attributes_9,Attributes_10,Attributes_11,Attributes_12,Attributes_13,Attributes_14,Attributes_15,Attributes_16,DifficultyID,CastingTimeIndex,DurationIndex,PvPDurationIndex,RangeIndex,SchoolMask,Speed,LaunchDelay,MinDuration,SpellIconFileDataID,ActiveIconFileDataID,ContentTuningID,ShowFutureSpellPlayerConditionID,SpellVisualScript,ActiveSpellVisualScript,SpellID
+1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,21,0,1,0,0,0,0,136243,0,0,0,0,0,118
+2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,99,0,1,0,0,0,0,136243,0,0,0,0,0,118
+3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4,5,1,0,0,0,0,136243,0,0,0,0,0,8122
+4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,30,0,1,0,0,0,0,136243,0,0,0,0,0,190319
+5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,8,0,1,0,0,0,0,136243,0,0,0,0,0,108271

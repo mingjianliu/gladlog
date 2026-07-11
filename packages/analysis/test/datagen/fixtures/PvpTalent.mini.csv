@@ -1,0 +1,3 @@
+Description_lang,ID,SpecID,SpellID,OverridesSpellID,Flags,ActionBarSpellID,PvpTalentCategoryID,LevelRequired,PlayerConditionID
+"Smoke Bomb desc",100,261,212182,0,0,0,2,49,0
+,101,257,289655,0,0,0,3,49,0

@@ -1,0 +1,5 @@
+ID,DifficultyID,Category,DefenseType,DiminishType,DispelType,Mechanic,PreventionType,StartRecoveryCategory,ChargeCategory,SpellID
+1,0,0,1,2,1,5,1,133,0,118
+2,0,0,1,0,2,0,1,133,0,1714
+3,0,0,1,0,0,0,1,133,1319,108271
+4,3,0,1,0,4,0,1,133,0,118
