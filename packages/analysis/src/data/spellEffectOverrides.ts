@@ -19,6 +19,11 @@ export const SPELL_EFFECT_OVERRIDES: Record<string, IMinedSpell> =
     [
       // ── 主防御 CD ──
       e("642", "Divine Shield", 300, 8),
+    e("498", "Divine Protection", 60, 8),
+    e("216331", "Avenging Crusader", 60, 15),
+    e("31821", "Aura Mastery", 180, 8),
+    e("64843", "Divine Hymn", 180, 8),
+    e("200183", "Apotheosis", 120, 20),
       e("45438", "Ice Block", 240, 10),
       e("31224", "Cloak of Shadows", 120, 5),
       e("5277", "Evasion", 120, 10),
@@ -56,7 +61,7 @@ export const SPELL_EFFECT_OVERRIDES: Record<string, IMinedSpell> =
       e("360194", "Deathmark", 120, 16),
       e("13750", "Adrenaline Rush", 180, 20),
       e("121471", "Shadow Blades", 90, 20),
-      e("190319", "Combustion", 120, 12),
+      e("190319", "Combustion", 120, 10),
       e("12472", "Icy Veins", 180, 25),
       e("365350", "Arcane Surge", 90, 15),
       e("1719", "Recklessness", 90, 16),
@@ -67,6 +72,7 @@ export const SPELL_EFFECT_OVERRIDES: Record<string, IMinedSpell> =
       e("391109", "Dark Ascension", 60, 20),
       e("375087", "Dragonrage", 120, 18),
       e("51271", "Pillar of Frost", 60, 12),
+    e("47568", "Empower Rune Weapon", 120, 20),
       e("275699", "Apocalypse", 90, 15),
       e("207289", "Unholy Assault", 90, 20),
       e("106951", "Berserk", 180, 20),

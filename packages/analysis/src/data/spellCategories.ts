@@ -106,7 +106,7 @@ export const SPELL_CATEGORIES: Record<string, ISpellCategoryEntry> = {
   "1719": { type: "buffs_offensive", duration: 16 }, // Recklessness
   "13750": { type: "buffs_offensive", duration: 20 }, // Adrenaline Rush
   "121471": { type: "buffs_offensive", duration: 20 }, // Shadow Blades
-  "190319": { type: "buffs_offensive", duration: 12 }, // Combustion
+  "190319": { type: "buffs_offensive", duration: 10 }, // Combustion
   "365350": { type: "buffs_offensive", duration: 15 }, // Arcane Surge
   "107574": { type: "buffs_offensive", duration: 20 }, // Avatar
   "10060": { type: "buffs_offensive", duration: 20 }, // Power Infusion
