@@ -21,7 +21,7 @@ d("buildCorpus", () => {
       expect(typeof e.ordinal).toBe("number");
       expect(typeof e.matchId).toBe("string");
       expect(typeof e.spec).toBe("string");
-      expect(typeof e.result).toBe("string");
+      expect(["Win", "Loss", "Unknown"]).toContain(e.result);
       const prompt = readFileSync(join(out, e.file), "utf-8");
       expect(prompt.length).toBeGreaterThan(500);
       expect(

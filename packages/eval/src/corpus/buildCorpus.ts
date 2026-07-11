@@ -100,14 +100,23 @@ export async function buildCorpus(opts: {
         const manifestFile = path.join(outDir, "manifests", `${nnn}.json`);
         await fs.writeJson(manifestFile, manifest, { spaces: 2 });
 
+        // result 为 owner 视角(旧台账/校准套件契约:'Win' | 'Loss' | 'Unknown')
+        const winningTeamId = combat.winningTeamId;
+        const ownerTeamId = owner.info?.teamId;
+        const result =
+          winningTeamId != null && ownerTeamId != null
+            ? String(winningTeamId) === String(ownerTeamId)
+              ? "Win"
+              : "Loss"
+            : "Unknown";
+
         // Create index entry
         entries.push({
           ordinal,
           file: `prompts/${nnn}-${id8}.txt`,
           matchId: gladId,
           spec: specToString(owner.spec) || String(owner.spec),
-          result:
-            combat.result !== undefined ? String(combat.result) : "unknown",
+          result,
         });
 
         ordinal++;
