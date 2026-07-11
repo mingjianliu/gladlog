@@ -204,6 +204,7 @@ function convertUnit(
       advanced: true,
       timestamp: sample.timestamp,
       advancedActorId: unit.id,
+      advancedActorPowers: [],
       logLine: {
         event: "ADVANCED_SAMPLE" as const,
         timestamp: sample.timestamp,
@@ -437,7 +438,7 @@ function convertUnit(
     ownerId: unit.ownerId,
     type: kindToType(unit.kind),
     class: classIdToLegacy(unit.classId),
-    spec: String(unit.specId) as CombatUnitSpec | string,
+    spec: String(unit.specId) as CombatUnitSpec,
     reaction: reactionToLegacy(unit.reaction),
     info: convertCombatantInfo(unit.info),
     damageIn,

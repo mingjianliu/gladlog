@@ -100,4 +100,22 @@ export const SPELL_CATEGORIES: Record<string, ISpellCategoryEntry> = {
   "196555": { type: "immunities", duration: 5 }, // Netherwalk
   "31224": { type: "immunities", duration: 5 }, // Cloak of Shadows
   "1022": { type: "immunities", duration: 10 }, // Blessing of Protection
+  // ── 进攻增益(spellDanger/isOffensiveSpell 消费)──
+  "12472": { type: "buffs_offensive", duration: 25 }, // Icy Veins
+  "19574": { type: "buffs_offensive", duration: 15 }, // Bestial Wrath
+  "1719": { type: "buffs_offensive", duration: 16 }, // Recklessness
+  "13750": { type: "buffs_offensive", duration: 20 }, // Adrenaline Rush
+  "121471": { type: "buffs_offensive", duration: 20 }, // Shadow Blades
+  "190319": { type: "buffs_offensive", duration: 12 }, // Combustion
+  "365350": { type: "buffs_offensive", duration: 15 }, // Arcane Surge
+  "107574": { type: "buffs_offensive", duration: 20 }, // Avatar
+  "10060": { type: "buffs_offensive", duration: 20 }, // Power Infusion
+  "375087": { type: "buffs_offensive", duration: 18 }, // Dragonrage
+  "51271": { type: "buffs_offensive", duration: 12 }, // Pillar of Frost
+  "31884": { type: "buffs_offensive", duration: 20 }, // Avenging Wrath
+  "288613": { type: "buffs_offensive", duration: 15 }, // Trueshot
+  // ── 进攻减益 ──
+  "702": { type: "debuffs_offensive" }, // Curse of Weakness
+  "1714": { type: "debuffs_offensive" }, // Curse of Tongues
+  "12654": { type: "debuffs_offensive" }, // Ignite
 };

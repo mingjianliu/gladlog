@@ -1,5 +1,6 @@
 import {
   CombatUnitClass,
+  CombatUnitPowerType,
   CombatUnitReaction,
   CombatUnitType,
   CombatUnitSpec,
@@ -64,7 +65,7 @@ export interface ICombatUnit {
   ownerId?: string;
   type: CombatUnitType;
   class: CombatUnitClass;
-  spec: CombatUnitSpec | string;
+  spec: CombatUnitSpec;
   reaction: CombatUnitReaction;
   info?: CombatantInfo;
   damageIn: IHpEvent[];
@@ -83,6 +84,8 @@ export interface ICombatUnit {
 }
 
 export interface IAdvancedAction {
+  /** 新 parser 未采集 powers;转换器恒填 [](mana 类判定优雅降级,见 4a 再对齐报告) */
+  advancedActorPowers: { type: CombatUnitPowerType; current: number; max: number }[];
   advancedActorCurrentHp: number;
   advancedActorMaxHp: number;
   advancedActorPositionX: number;
