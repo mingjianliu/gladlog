@@ -1,4 +1,4 @@
-import { SpellTag } from '@wowarenalogs/parser';
+import { SpellTag } from './spellTypes';
 
 /**
  * Keywords used to intelligently tag dynamically discovered spells.

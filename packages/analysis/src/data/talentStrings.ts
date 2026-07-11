@@ -1,4 +1,4 @@
-import talentIdMapData from '../../../data/talentIdMap.json';
+import talentIdMapData from './talentIdMap.json';
 
 export type RaidBotsTalentData = RaidbotsTalentSpec[];
 
