@@ -161,11 +161,10 @@ function getSpellSchoolId(
   return "0x0";
 }
 
-function convertParams(
-  params: string[] | undefined,
-): (string | number)[] {
+function convertParams(params: string[] | undefined): (string | number)[] {
   if (!params) return [];
   return params.map((p) => {
+    if (typeof p !== "string") return p;
     if (p === "nil" || p === "BUFF" || p === "DEBUFF") {
       return p;
     }
@@ -221,7 +220,7 @@ function convertUnit(
         spellName: event.spellName,
         timestamp: event.timestamp,
         ...unitFlagFields(event.params),
-    srcUnitId: event.srcId,
+        srcUnitId: event.srcId,
         srcUnitName: event.srcName,
         destUnitId: event.destId,
         destUnitName: event.destName,
@@ -268,7 +267,7 @@ function convertUnit(
         spellName: event.spellName,
         timestamp: event.timestamp,
         ...unitFlagFields(event.params),
-    srcUnitId: event.srcId,
+        srcUnitId: event.srcId,
         srcUnitName: event.srcName,
         destUnitId: event.destId,
         destUnitName: event.destName,
@@ -293,7 +292,7 @@ function convertUnit(
       spellName: event.spellName,
       timestamp: event.timestamp,
       ...unitFlagFields(event.params),
-    srcUnitId: event.srcId,
+      srcUnitId: event.srcId,
       srcUnitName: event.srcName,
       destUnitId: event.destId,
       destUnitName: event.destName,
@@ -314,7 +313,7 @@ function convertUnit(
       spellName: event.spellName,
       timestamp: event.timestamp,
       ...unitFlagFields(event.params),
-    srcUnitId: event.srcId,
+      srcUnitId: event.srcId,
       srcUnitName: event.srcName,
       destUnitId: event.destId,
       destUnitName: event.destName,
@@ -494,21 +493,34 @@ function mergePetEvents(units: Record<string, ICombatUnit>): void {
   }
 }
 
-
-
 function parseFlags(v: string | undefined): number {
   if (!v) return 0;
-  const n = v.startsWith("0x") || v.startsWith("0X") ? parseInt(v, 16) : parseInt(v, 10);
+  const n =
+    v.startsWith("0x") || v.startsWith("0X")
+      ? parseInt(v, 16)
+      : parseInt(v, 10);
   return Number.isFinite(n) ? n : 0;
 }
-function unitFlagFields(params: string[]): { srcUnitFlags: number; destUnitFlags: number } {
-  return { srcUnitFlags: parseFlags(params[2]), destUnitFlags: parseFlags(params[6]) };
+function unitFlagFields(params: string[] | undefined): {
+  srcUnitFlags: number;
+  destUnitFlags: number;
+} {
+  return {
+    srcUnitFlags: parseFlags(params?.[2]),
+    destUnitFlags: parseFlags(params?.[6]),
+  };
 }
 
 const EXTRA_SPELL_EVENTS = /DISPEL|INTERRUPT|STOLEN/;
-function extraSpellFields(eventName: string, params: string[]): { extraSpellId?: string; extraSpellName?: string } {
+function extraSpellFields(
+  eventName: string,
+  params: string[] | undefined,
+): { extraSpellId?: string; extraSpellName?: string } {
   if (!EXTRA_SPELL_EVENTS.test(eventName)) return {};
-  return { extraSpellId: String(params[11] ?? ""), extraSpellName: String(params[12] ?? "") };
+  return {
+    extraSpellId: String(params?.[11] ?? ""),
+    extraSpellName: String(params?.[12] ?? ""),
+  };
 }
 
 export function toLegacyMatch(m: GladMatch): IArenaMatch {

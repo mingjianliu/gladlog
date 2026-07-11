@@ -14,3 +14,8 @@ export * from "./utils/killWindowTargetSelection";
 export * from "./utils/dampening";
 export { SpellTag } from "./data/spellTypes";
 export { zoneMetadata } from "./data/zoneMetadata";
+export { classMetadata } from "./data/classSpells";
+export { spellClassMap } from "./data/drCategories";
+export { SPELL_CATEGORIES } from "./data/spellCategories";
+export { SPELL_EFFECT_OVERRIDES } from "./data/spellEffectOverrides";
+export { default as spellIdLists } from "./data/spellIdLists";
