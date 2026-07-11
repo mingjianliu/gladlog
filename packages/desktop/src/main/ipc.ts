@@ -2,6 +2,7 @@ import { app, dialog, ipcMain, shell, type BrowserWindow } from "electron";
 import type { GladlogSettings, SettingsStore } from "./settingsStore";
 import type { MatchStore } from "./matchStore";
 import type { LogsStatusSnapshot } from "../preload/api";
+import type { AiService } from "./ai";
 
 export function registerIpc(deps: {
   store: MatchStore;
@@ -9,6 +10,7 @@ export function registerIpc(deps: {
   getStatus: () => LogsStatusSnapshot | null;
   getWindow: () => BrowserWindow | null;
   onWowDirectoryChanged: (settings: GladlogSettings) => void;
+  ai: AiService;
 }): void {
   ipcMain.handle("gladlog:logs:getStatus", () => deps.getStatus());
   ipcMain.handle("gladlog:matches:list", () => deps.store.list());
@@ -38,4 +40,11 @@ export function registerIpc(deps: {
     if (/^https?:\/\//.test(url)) return shell.openExternal(url);
     return undefined;
   });
+  ipcMain.handle("gladlog:ai:analyze", (_e, matchId: string, context: string) =>
+    deps.ai.analyze(matchId, context),
+  );
+  ipcMain.handle("gladlog:ai:cancel", () => deps.ai.cancel());
+  ipcMain.handle("gladlog:ai:getCached", (_e, matchId: string) =>
+    deps.ai.getCached(matchId),
+  );
 }

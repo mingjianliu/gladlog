@@ -12,6 +12,7 @@ import { registerIpc } from "./ipc";
 import { MatchStore } from "./matchStore";
 import { SettingsStore, type GladlogSettings } from "./settingsStore";
 import { WorkerHost } from "./workerHost";
+import { createAiService, realClientFactory } from "./ai";
 
 app.setName("gladlog");
 log.initialize();
@@ -101,7 +102,10 @@ function startMonitoring(s: GladlogSettings): void {
     host = new WorkerHost({
       workerModulePath: join(import.meta.dirname, "worker.js"),
       onMessage: onWorkerMessage,
-      onQuarantine: (fileKey) => { quarantined.push(fileKey); log.error(`quarantined ${fileKey}`); },
+      onQuarantine: (fileKey) => {
+        quarantined.push(fileKey);
+        log.error(`quarantined ${fileKey}`);
+      },
       log: { info: (m) => log.info(m), error: (m) => log.error(m) },
     });
     host.start(config);
@@ -115,12 +119,19 @@ else {
     store = new MatchStore(join(userData(), "matches"));
     store.init();
     win = createWindow();
+    const ai = createAiService({
+      getSettings: () => settings.get(),
+      matchesDir: join(userData(), "matches"),
+      clientFactory: realClientFactory,
+      emit: (ch, payload) => win?.webContents.send(ch, payload),
+    });
     registerIpc({
       store,
       settings,
       getStatus: () => lastStatus,
       getWindow: () => win,
       onWowDirectoryChanged: (s) => startMonitoring(s),
+      ai,
     });
     startMonitoring(settings.get());
   });
