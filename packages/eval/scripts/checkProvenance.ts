@@ -11,12 +11,13 @@ async function main() {
     }
   }
 
-  if (!runId) {
-    console.error("Usage: checkProvenance --run <runId>");
+  if (!runId && !process.env.BASE_DIR) {
+    console.error("Usage: checkProvenance --run <runId>  (or set BASE_DIR)");
     process.exit(1);
   }
 
-  const runDirPath = process.env.BASE_DIR ?? runDir(resolveEvalHome(), runId);
+  const runDirPath =
+    process.env.BASE_DIR ?? runDir(resolveEvalHome(), runId as string);
   const result = checkScoreProvenance(runDirPath);
 
   console.log(`[checkProvenance] ${result.ok} ok, ${result.fail} fail`);
