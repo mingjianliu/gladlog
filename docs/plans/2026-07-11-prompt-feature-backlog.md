@@ -48,9 +48,17 @@
 - **注意**:rubric 文本改动 A/B 盖不住(prompt 不内嵌 system prompt)——照旧仓做法 per-arm 角色扮演覆盖,rubric 条款随 feature 一起进 `eval-baseline.md`。
 - **A/B 目标维度**:focusCalibration;确定性安全契约逐条复刻为断言。
 
-### 5. 机会项:驱散覆盖(不来自旧仓,来自我们自己的冒烟)
+### 5. 机会项:驱散覆盖 ✅(2026-07-11 关闭:A/B ADOPT,覆盖 40.3%→70.9%)
 
 4b e2e 冒烟首跑即测得 3v3 真实场次 **dispel 覆盖 0%**(4 次驱散不在 prompt 文本)——大概率是首轮 `/eval-baseline` 的 Top issue。修复属 prompt 构建器改动,同样走 `/eval-ab`,目标维度 sufficiency(确定性驱散覆盖率)。
+
+> **关闭证据(2026-07-11,gladlog 154d38c,A/B 台账 dispel-visibility 行)**:[CLEANSE] 具名驱散法术、队友 [PURGE]/[ENEMY PURGE] 行、[MINOR DISPELS] 折叠、manifest 剔除 12 个位移/变形破根伪驱散。确定性:覆盖 40.3%→70.9%(+30.6pp),token +1.3%;盲评 14 对七维全 inconclusive 零回归 → 凭确定性 ADOPT(F20 同构第二例)。
+
+---
+
+## 完成状态(2026-07-11)
+
+**五项全部关闭**:#1 KICK(timeline 变体 ADOPT)、#2 EXPOSURE inline(盘点已在)、#3 POSITIONING(扫描器 + 0-violation 门)、#4 CONTESTED(契约断言 + rubric 条款)、#5 驱散覆盖(A/B ADOPT)。本 backlog 待归档进 docs/reports/。剩余机会项:token 压缩迭代(timeline 变体 +76% vs 稀疏,旧仓 iter A-D 同题)——独立于本 backlog。
 
 ## 记账规则
 
