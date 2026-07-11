@@ -87,7 +87,10 @@ export function AIAnalysisPanel({
       (u) => u.reaction === CombatUnitReaction.Hostile,
     );
 
-    return buildMatchContext(legacy, friends, enemies, {});
+    // timeline 变体为产线默认(A/B 2026-07-11 三轮收编:确定性覆盖碾压 + 4 维盲评 CI-improved,accuracy 回归已消除)
+    return buildMatchContext(legacy, friends, enemies, {
+      useTimelinePrompt: true,
+    });
   }, [source]);
 
   const handleAnalyze = async () => {
