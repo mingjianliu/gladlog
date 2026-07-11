@@ -101,7 +101,7 @@ function startMonitoring(s: GladlogSettings): void {
     host = new WorkerHost({
       workerModulePath: join(import.meta.dirname, "worker.js"),
       onMessage: onWorkerMessage,
-      onQuarantine: (fileKey) => log.error(`quarantined ${fileKey}`),
+      onQuarantine: (fileKey) => { quarantined.push(fileKey); log.error(`quarantined ${fileKey}`); },
       log: { info: (m) => log.info(m), error: (m) => log.error(m) },
     });
     host.start(config);

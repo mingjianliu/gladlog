@@ -23,6 +23,7 @@ export function createWorkerRuntime(opts: {
   transport: WorkerTransport;
   watchFn?: typeof import("fs").watch;
   parserFactory?: () => ParserLike;
+  fatal?: (msg: string) => void;
 }): { dispose(): void } {
   let watcher: LogWatcher | null = null;
   let pipelines = new Map<string, FilePipeline>();
@@ -30,6 +31,10 @@ export function createWorkerRuntime(opts: {
   let config: WorkerConfig | null = null;
 
   const post = opts.transport.post;
+  const fatal = opts.fatal ?? ((msg) => {
+    console.error(msg);
+    process.exit(1);
+  });
 
   const fileStatuses = (): FileStatus[] => {
     if (!config) return [];
@@ -86,7 +91,12 @@ export function createWorkerRuntime(opts: {
     const p = pipelineFor(fileKey);
     if (!p) return;
     postStatus(true, { fileKey, offset: p.currentOffset });
-    p.processFlush();
+    try {
+      p.processFlush();
+    } catch (e) {
+      fatal(`[gladlog-worker] fatal parse error at ${fileKey}:${p.currentOffset}: ${e instanceof Error ? e.message : e}`);
+      return;
+    }
     registry.files[fileKey] = p.checkpoint;
   };
 

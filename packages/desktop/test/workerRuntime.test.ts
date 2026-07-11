@@ -149,4 +149,38 @@ describe("createWorkerRuntime", () => {
     expect(status.type === "status" && status.watching).toBe(false);
     rt.dispose();
   });
+
+  it("parser.push 抛出异常时会调用 injectable fatal handler 且不退出进程", () => {
+    const { logsDir, config } = setup();
+    writeFileSync(join(logsDir, "WoWCombatLog-1.txt"), "some combat log line\n");
+    const h = harness();
+    let fatalCalledWith: string | null = null;
+    const fatalSpy = (msg: string) => {
+      fatalCalledWith = msg;
+    };
+    const rt = createWorkerRuntime({
+      transport: h.transport,
+      watchFn: h.watchFn,
+      fatal: fatalSpy,
+      parserFactory: () => {
+        return {
+          push() {
+            throw new Error("mock parse error");
+          },
+          end() {},
+          hasOpenSegment() {
+            return false;
+          },
+          on() {
+            return this;
+          },
+        };
+      },
+    });
+    h.send({ type: "configure", config });
+    expect(fatalCalledWith).not.toBeNull();
+    expect(fatalCalledWith).toContain("[gladlog-worker] fatal parse error at WoWCombatLog-1.txt");
+    expect(fatalCalledWith).toContain("mock parse error");
+    rt.dispose();
+  });
 });
