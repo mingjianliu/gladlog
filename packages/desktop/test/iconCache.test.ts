@@ -10,7 +10,10 @@ function fakeFetch(status: number, body?: Buffer) {
   return vi.fn(async () => ({
     ok: status >= 200 && status < 300,
     status,
-    arrayBuffer: async () => (body ?? Buffer.alloc(0)).buffer.slice(0),
+    arrayBuffer: async () => {
+      const b = body ?? Buffer.alloc(0);
+      return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength);
+    },
   })) as unknown as typeof fetch;
 }
 
@@ -49,5 +52,19 @@ describe("createIconCache", () => {
     expect(existsSync(join(dir, "no_such_icon.jpg"))).toBe(false);
     expect(await cache.get("../etc/passwd")).toBeNull();
     expect(f).toHaveBeenCalledTimes(1);
+  });
+
+  it("会话拉取预算:超限后不再 fetch(防 renderer 滥用)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "gl-icon-"));
+    const f = fakeFetch(200, PNG_BYTES);
+    const cache = createIconCache({
+      cacheDir: dir,
+      fetchImpl: f,
+      maxFetchesPerSession: 2,
+    });
+    expect(await cache.get("icon_a")).not.toBeNull();
+    expect(await cache.get("icon_b")).not.toBeNull();
+    expect(await cache.get("icon_c")).toBeNull();
+    expect(f).toHaveBeenCalledTimes(2);
   });
 });

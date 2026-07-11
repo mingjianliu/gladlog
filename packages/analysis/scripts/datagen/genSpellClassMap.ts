@@ -9,9 +9,10 @@ import { collectCandidateIds } from "./lib/candidates";
 
 export function classesForMask(mask: number): number[] {
   const result: number[] = [];
-  let temp = mask;
+  // >>> 转无符号,防 bit31 置位时 int32 为负导致提前终止(终审 F4)
+  let temp = mask >>> 0;
   let bit = 0;
-  while (temp > 0 && bit < 32) {
+  while (temp !== 0 && bit < 32) {
     if ((temp & 1) === 1) {
       result.push(bit + 1);
     }
@@ -58,7 +59,11 @@ export async function main(): Promise<void> {
   const build = await fetchLatestBuild();
   const cacheDir = process.env.DATAGEN_CACHE ?? undefined;
 
-  const skillLineAbilityRaw = await fetchTable("SkillLineAbility", build, cacheDir);
+  const skillLineAbilityRaw = await fetchTable(
+    "SkillLineAbility",
+    build,
+    cacheDir,
+  );
   const skillLineAbilityParsed = parseCsv(skillLineAbilityRaw);
   assertColumns(
     skillLineAbilityParsed.header,

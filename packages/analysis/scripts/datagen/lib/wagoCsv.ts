@@ -1,7 +1,10 @@
 import fs from "fs-extra";
 import path from "path";
 
-export function parseCsv(text: string): { header: string[]; rows: Record<string, string>[] } {
+export function parseCsv(text: string): {
+  header: string[];
+  rows: Record<string, string>[];
+} {
   if (!text || !text.trim()) {
     return { header: [], rows: [] };
   }
@@ -53,14 +56,23 @@ export function parseCsv(text: string): { header: string[]; rows: Record<string,
     }
   }
 
-  if (currentRow.length > 0 || currentField !== "" || (text.length > 0 && text[text.length - 1] === ",")) {
+  if (
+    currentRow.length > 0 ||
+    currentField !== "" ||
+    (text.length > 0 && text[text.length - 1] === ",")
+  ) {
     currentRow.push(currentField);
     lines.push(currentRow);
   }
 
   if (lines.length > 0) {
     const last = lines[lines.length - 1];
-    if (last.length === 1 && last[0] === "" && text[text.length - 1] !== '"' && text[text.length - 1] !== ",") {
+    if (
+      last.length === 1 &&
+      last[0] === "" &&
+      text[text.length - 1] !== '"' &&
+      text[text.length - 1] !== ","
+    ) {
       lines.pop();
     }
   }
@@ -131,6 +143,11 @@ export async function fetchLatestBuild(): Promise<string> {
     }
   }
 
+  // build 号形状校验:该值会拼进缓存文件名与 URL,防 API 被劫持时的
+  // 路径投毒(终审 F6)
+  if (!/^\d+\.\d+\.\d+\.\d+$/.test(highestEntry.version)) {
+    throw new Error(`Unexpected build version format: ${highestEntry.version}`);
+  }
   return highestEntry.version;
 }
 
@@ -174,9 +191,7 @@ export function assertColumns(
 ): void {
   const missing = required.filter((col) => !header.includes(col));
   if (missing.length > 0) {
-    throw new Error(
-      `Table ${table} is missing columns: ${missing.join(", ")}`,
-    );
+    throw new Error(`Table ${table} is missing columns: ${missing.join(", ")}`);
   }
 }
 

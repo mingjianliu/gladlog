@@ -5,11 +5,16 @@ import { ensureDirSync } from "fs-extra";
 export function createIconCache(deps: {
   cacheDir: string;
   fetchImpl?: typeof fetch;
+  maxFetchesPerSession?: number;
 }): {
   get(iconName: string): Promise<string | null>;
 } {
   const failed = new Set<string>();
   const fetchFn = deps.fetchImpl ?? fetch;
+  // 会话级网络预算:防被攻陷的 renderer 用海量名字打穿内存/磁盘(终审 F5)。
+  // 正常战报的图标数远低于此;缓存命中不计入预算。
+  const maxFetches = deps.maxFetchesPerSession ?? 512;
+  let fetches = 0;
 
   return {
     async get(iconName: string): Promise<string | null> {
@@ -30,21 +35,18 @@ export function createIconCache(deps: {
         }
       }
 
+      if (fetches >= maxFetches) {
+        return null;
+      }
       try {
+        fetches++;
         const url = `https://wow.zamimg.com/images/wow/icons/large/${iconName}.jpg`;
         const res = await fetchFn(url);
         if (!res.ok) {
           failed.add(iconName);
           return null;
         }
-        const arrayBuffer = await res.arrayBuffer();
-        let buffer = Buffer.from(arrayBuffer);
-        if (deps.fetchImpl) {
-          const idx = buffer.indexOf(Buffer.from([0x89, 0x50, 0x4e, 0x47]));
-          if (idx !== -1) {
-            buffer = buffer.subarray(idx, idx + 4);
-          }
-        }
+        const buffer = Buffer.from(await res.arrayBuffer());
         ensureDirSync(deps.cacheDir);
         writeFileSync(filePath, buffer);
         return "data:image/jpeg;base64," + buffer.toString("base64");
