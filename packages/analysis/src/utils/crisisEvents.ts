@@ -3,7 +3,7 @@ import {
   CombatUnitType,
   ICombatUnit,
 } from "@gladlog/parser-compat";
-import { PASSIVE_SPELL_BLOCKLIST } from "./cooldowns";
+import { PASSIVE_SPELL_BLOCKLIST, specToString } from "./cooldowns";
 import { getEnglishSpellName } from "../data/spellEffectData";
 
 export interface IExtractedRotations {
@@ -55,7 +55,11 @@ export function extractRotations(
             a.advancedActorMaxHp > 0,
         )
         .map((a: any) => ({
-          targetName: u.name,
+          // Use the ally's spec name, not their raw character name: spec is the
+          // exemplar-relevant identity, is ASCII by construction, and avoids
+          // bundling real ladder players' (often non-ASCII) names into the
+          // static corpus. `u.spec` is a numeric spec id, so map it to a name.
+          targetName: u.spec ? specToString(u.spec) : "ally",
           time: (a.logLine.timestamp - match.startTime) / 1000,
           pct: (a.advancedActorCurrentHp / a.advancedActorMaxHp) * 100,
         })),

@@ -1,6 +1,9 @@
 import fs from "fs-extra";
 import path from "path";
+import { fileURLToPath } from "url";
 import { fetchMatchStubs, downloadLogText } from "../src/feedClient";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 import { buildPerMatchRecords } from "../src/perMatchRecord";
 import { aggregateCells } from "../src/cellAggregator";
 import { validateCorpus } from "../src/validateCorpus";

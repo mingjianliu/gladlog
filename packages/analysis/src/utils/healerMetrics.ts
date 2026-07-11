@@ -95,7 +95,11 @@ export function computeHealerMetrics(
       return sum + Math.abs(a.effectiveAmount);
     }, 0) +
     healerUnit.absorbsOut.reduce(
-      (sum: number, a: any) => sum + Math.abs(a.effectiveAmount),
+      // absorbsOut entries are IAbsorbEvent — the amount field is
+      // `absorbedAmount`, not `effectiveAmount` (that lives on IHpEvent).
+      // Reading the wrong field yields NaN, poisoning totalHealOut and
+      // silently forcing offensiveIndex to 0.
+      (sum: number, a: any) => sum + Math.abs(a.absorbedAmount),
       0,
     );
   const offensiveIndex = totalHealOut > 0 ? totalDamageOut / totalHealOut : 0;

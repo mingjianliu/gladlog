@@ -39,6 +39,45 @@ describe("computeHealerMetrics", () => {
     expect(m.defensiveOverlapRatio).toBeGreaterThanOrEqual(0);
     expect(m.burstResponseCoverage).toEqual({ answered: 0, windows: 0 });
   });
+  it("computes a finite, nonzero offensiveIndex when the healer dealt damage and shielded", () => {
+    // Regression: absorbsOut carries `absorbedAmount`, not `effectiveAmount`.
+    // Reading the wrong field made totalHealOut NaN → offensiveIndex silently 0
+    // for every real healer with shields (e.g. Disc Priest, Resto Shaman).
+    const c = stubCombat();
+    const h = c.units["H-Realm-US"];
+    h.damageOut = [
+      {
+        spellId: "589",
+        spellName: "Shadow Word: Pain",
+        timestamp: 1000,
+        effectiveAmount: -1000,
+        logLine: { event: "SPELL_DAMAGE", timestamp: 1000, parameters: [] },
+      },
+    ];
+    h.healOut = [
+      {
+        spellId: "2061",
+        spellName: "Flash Heal",
+        timestamp: 2000,
+        effectiveAmount: 2000,
+        logLine: { event: "SPELL_HEAL", timestamp: 2000, parameters: [] },
+      },
+    ];
+    h.absorbsOut = [
+      {
+        spellId: "17",
+        spellName: "Power Word: Shield",
+        timestamp: 3000,
+        absorbedAmount: 500,
+        logLine: { event: "SPELL_ABSORBED", timestamp: 3000, parameters: [] },
+      },
+    ];
+    const m = computeHealerMetrics(c, "H-Realm-US");
+    expect(Number.isFinite(m.offensiveIndex)).toBe(true);
+    expect(m.offensiveIndex).toBeGreaterThan(0);
+    // 1000 damage / (2000 heal + 500 absorb) = 0.4
+    expect(m.offensiveIndex).toBeCloseTo(0.4, 5);
+  });
   it("throws when the named healer is absent", () => {
     expect(() => computeHealerMetrics(stubCombat(), "Nobody")).toThrow(
       /not found/,
