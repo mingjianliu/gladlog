@@ -12,7 +12,13 @@ export default function App() {
   const [doc, setDoc] = useState<any | null>(null);
 
   useEffect(() => {
-    void bridge().matches.list().then(setMetas);
+    void bridge()
+      .matches.list()
+      .then((list) => {
+        setMetas(list);
+        // 启动即呈现最近一场,免去空态点击
+        setSelectedId((cur) => cur ?? list[0]?.id ?? null);
+      });
     const unMatchStored = bridge().logs.onMatchStored((m) =>
       setMetas((prev) => [m, ...prev]),
     );

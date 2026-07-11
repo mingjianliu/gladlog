@@ -6,8 +6,9 @@ import type {
 } from "../../src/renderer/src/report/derive/types";
 
 export function loadMatchFixture(): StoredMatch {
+  const base = import.meta.url;
   return JSON.parse(
-    readFileSync(new URL("report-match.json", import.meta.url).pathname, "utf-8"),
+    readFileSync(new URL("report-match.json", base).pathname, "utf-8"),
   ) as StoredMatch;
 }
 
@@ -16,8 +17,8 @@ export function buildSyntheticShuffle(base: StoredMatch): StoredShuffle {
     ...base,
     kind: "shuffleRound" as const,
     sequenceNumber: i,
-    startTime: base.startTime + i * 90_000,
-    endTime: base.endTime + i * 90_000,
+    startTime: base.startTime, // 不平移:事件时间戳未移,保持自洽
+    endTime: base.endTime,
     winningTeamId: i % 2,
   }));
   return {

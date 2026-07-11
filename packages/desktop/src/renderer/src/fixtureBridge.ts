@@ -10,8 +10,8 @@ function buildSyntheticShuffle(base: StoredMatch): StoredShuffle {
     ...base,
     kind: "shuffleRound" as const,
     sequenceNumber: i,
-    startTime: base.startTime + i * 90_000,
-    endTime: base.endTime + i * 90_000,
+    startTime: base.startTime, // 不平移:事件时间戳未移,保持自洽
+    endTime: base.endTime,
     winningTeamId: i % 2,
   }));
   return {
