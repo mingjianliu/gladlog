@@ -18,10 +18,56 @@ const STUBS_QUERY = `query GetLatestMatches($wowVersion: String!, $bracket: Stri
   }
 }`;
 
-type FetchLike = (
+type FetchResponse = {
+  ok: boolean;
+  status?: number;
+  json: () => Promise<any>;
+  text?: () => Promise<any>;
+};
+type FetchLike = (url: string, init?: any) => Promise<FetchResponse>;
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Fetch with exponential backoff. A production corpus build makes thousands of
+ * feed requests; transient 429/5xx and network blips are expected and must not
+ * abort the whole run. Retries only retryable failures (429, 5xx, network
+ * errors); 4xx (other than 429) throw immediately. Exposed for unit testing.
+ */
+export async function fetchWithRetry(
+  f: FetchLike,
   url: string,
-  init?: any,
-) => Promise<{ ok: boolean; json: () => Promise<any> }>;
+  init: any,
+  label: string,
+  opts: { retries?: number; baseDelayMs?: number } = {},
+): Promise<FetchResponse> {
+  const retries = opts.retries ?? 4;
+  const baseDelayMs = opts.baseDelayMs ?? 1000;
+  let lastErr: Error = new Error(`${label}: no attempt made`);
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    let res: FetchResponse | undefined;
+    let netErr: unknown;
+    try {
+      res = await f(url, init);
+    } catch (e) {
+      netErr = e;
+    }
+    if (res && res.ok) return res;
+    const status = res?.status;
+    const retryable =
+      netErr != null || status === 429 || (!!status && status >= 500);
+    lastErr =
+      netErr instanceof Error
+        ? netErr
+        : new Error(`${label} HTTP ${status ?? "?"}`);
+    if (!retryable || attempt === retries) throw lastErr;
+    // exponential backoff with jitter, capped
+    await sleep(
+      Math.min(baseDelayMs * 2 ** attempt, 15000) + Math.random() * 500,
+    );
+  }
+  throw lastErr;
+}
 
 export async function fetchMatchStubs(
   opts: { bracket: string; minRating: number; specId?: number; limit: number },
@@ -33,21 +79,25 @@ export async function fetchMatchStubs(
   let offset = 0;
   const page = 50;
   while (out.length < opts.limit) {
-    const res = await f(FEED_ENDPOINT, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        query: STUBS_QUERY,
-        variables: {
-          wowVersion: "retail",
-          bracket: opts.bracket,
-          offset,
-          count: page,
-          minRating: opts.minRating, // 服务端过滤
-        },
-      }),
-    });
-    if (!res.ok) throw new Error(`feed HTTP ${(res as any).status ?? "?"}`);
+    const res = await fetchWithRetry(
+      f,
+      FEED_ENDPOINT,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          query: STUBS_QUERY,
+          variables: {
+            wowVersion: "retail",
+            bracket: opts.bracket,
+            offset,
+            count: page,
+            minRating: opts.minRating, // 服务端过滤
+          },
+        }),
+      },
+      "feed",
+    );
     const combats = (await res.json())?.data?.latestMatches?.combats ?? [];
     if (combats.length === 0) break;
     for (const c of combats) {
@@ -73,7 +123,11 @@ export async function downloadLogText(
 ): Promise<string> {
   const f: FetchLike =
     fetchImpl ?? ((await import("node-fetch")).default as any);
-  const res = await f(stub.logObjectUrl);
-  if (!res.ok) throw new Error(`log download HTTP for ${stub.id}`);
+  const res = await fetchWithRetry(
+    f,
+    stub.logObjectUrl,
+    undefined,
+    `log download for ${stub.id}`,
+  );
   return await (res as any).text();
 }
