@@ -55,6 +55,25 @@ describe("mineSpellEffects(fixture goldens)", () => {
     expect(mined["108271"].durationSeconds).toBe(6);
   });
 
+  it("GCD 伪影(≤1.5s)不产出 cooldownSeconds", () => {
+    const gcdCsv = {
+      ...csv,
+      spellCooldowns: [
+        {
+          ID: "9",
+          DifficultyID: "0",
+          CategoryRecoveryTime: "1500",
+          RecoveryTime: "0",
+          StartRecoveryTime: "1500",
+          AuraSpellID: "0",
+          SpellID: "1714",
+        },
+      ],
+    };
+    const m = mineSpellEffects(gcdCsv, new Set(["1714"]));
+    expect(m["1714"].cooldownSeconds).toBeUndefined();
+  });
+
   it("无 name 的候选被跳过", () => {
     const m = mineSpellEffects(csv, new Set(["999999"]));
     expect(m["999999"]).toBeUndefined();
