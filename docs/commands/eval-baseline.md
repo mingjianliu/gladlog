@@ -104,6 +104,7 @@ BASE_DIR="$GLADLOG_EVAL_HOME/runs/<runId>" npx tsx packages/eval/scripts/quality
   - 5: PASS-1 主张全部验证;零事实错误。
   - 3: 1–2 处小错(时间戳差几秒、次要触发认错名)。
   - 1: 捏造法术/窗口/死亡,或给已死/不在场玩家提建议。
+  - F193 条款:锚定 `[CONTESTED]` 行、保持试探措辞(≤Medium 置信,不下断言)的换血权衡讨论**不算**捏造或 unsupported——该行本身就是 prompt 事实;只有当回复把它硬化成结论("你当时就该 CC")或脱离锚点自造场景时才扣分。
 
 - **outcomeAlignment** — 教练意见是否解释了实际赛果?
   - 5: 指出决定比赛的因果序列。

@@ -37,9 +37,9 @@
 - **硬门**:扫描器重建后先对全语料跑 0-violation 验证,再进 A/B;违规非零不许开旗。
 - **A/B 目标维度**:inferenceScaffolding / accuracy;确定性 = 扫描器违规计数。
 
-### 4. CONTESTED(healer offense V2)🟡(2026-07-11 盘点:内容已在,确定性安全契约断言待复刻)
+### 4. CONTESTED(healer offense V2)✅(2026-07-11 关闭:契约断言全净 + rubric 条款入册)
 
-> **盘点结论**:V2_CONTESTED_TRADES 已启用,[CONTESTED] 行在 34/176 场语料出现,含 F193 安全措辞("EV question, not a verdict"、70–85% 带、DR Full、enemy interrupts ready)。**余项**:把 F193 的确定性安全契约(0 unanchored / 0 above-Medium 置信度 / 0 sub-70% 带 / 阴性对照全净)复刻为全语料断言脚本跑一遍;rubric 条款是否已进 eval-baseline.md 待查。
+> **盘点结论**:V2_CONTESTED_TRADES 已启用,[CONTESTED] 行在 34/176 场语料出现,含 F193 安全措辞("EV question, not a verdict"、70–85% 带、DR Full、enemy interrupts ready)。**关闭证据**:`packages/eval/scripts/contestedContract.ts` 全语料(176 场)断言通过——45 条 [CONTESTED] / 34 场,0 unanchored / 0 sub-70% 带 / 0 缺 EV 措辞 / 0 超上限 / 0 块外;F193 rubric 条款(锚定 ≤Medium 换血讨论不算捏造)已入 eval-baseline.md accuracy 维。
 
 - **内容**:`[CONTESTED]` 争夺型换血事实(70–85% 带 + Full DR 时 CC ready + enemyInterruptsReady)+ 允许 ≤Medium 置信度锚定 trade findings 的 rubric 条款。
 - **旧仓证据**:F193(2026-07-09)——18 例受控校准(12 分层 + 6 相同 prompt 阴性对照),accuracy/labelBias CI 无回归,确定性安全契约 100%(0 unanchored / 0 above-Medium / 0 sub-70% / 阴性对照全净),ADOPT。
