@@ -1,2 +1,33 @@
-import { contextBridge } from "electron";
-contextBridge.exposeInMainWorld("gladlog", { ping: () => "pong" });
+import { contextBridge, ipcRenderer } from "electron";
+import type { GladlogApi } from "./api";
+
+function sub<T>(channel: string) {
+  return (cb: (payload: T) => void): (() => void) => {
+    const listener = (_e: unknown, payload: T) => cb(payload);
+    ipcRenderer.on(channel, listener);
+    return () => ipcRenderer.removeListener(channel, listener);
+  };
+}
+
+const api: GladlogApi = {
+  logs: {
+    getStatus: () => ipcRenderer.invoke("gladlog:logs:getStatus"),
+    onStatusChanged: sub("gladlog:logs:statusChanged"),
+    onMatchStored: sub("gladlog:logs:matchStored"),
+    onDiagnostic: sub("gladlog:logs:diagnostic"),
+  },
+  matches: {
+    list: () => ipcRenderer.invoke("gladlog:matches:list"),
+    get: (id) => ipcRenderer.invoke("gladlog:matches:get", id),
+  },
+  settings: {
+    get: () => ipcRenderer.invoke("gladlog:settings:get"),
+    save: (partial) => ipcRenderer.invoke("gladlog:settings:save", partial),
+  },
+  app: {
+    getVersion: () => ipcRenderer.invoke("gladlog:app:getVersion"),
+    selectDirectory: () => ipcRenderer.invoke("gladlog:app:selectDirectory"),
+    openExternal: (url) => ipcRenderer.invoke("gladlog:app:openExternal", url),
+  },
+};
+contextBridge.exposeInMainWorld("gladlog", api);

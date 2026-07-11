@@ -55,7 +55,7 @@ export class WorkerHost {
       this.opts.log.error(`[worker] ${d.toString().trim()}`),
     );
     child.on("message", (msg: WorkerToMain) => {
-      if (msg.type === "status" && msg.current) this.lastCurrent = msg.current;
+      if (msg.type === "status") this.lastCurrent = msg.current ?? null;
       if (msg.type === "match" || msg.type === "shuffle") this.crash = null; // 有进展,清计数
       this.opts.onMessage(msg);
     });
@@ -66,6 +66,7 @@ export class WorkerHost {
         this.crash,
         this.lastCurrent,
       );
+      this.lastCurrent = null;
       this.crash = record;
       if (
         quarantine &&
