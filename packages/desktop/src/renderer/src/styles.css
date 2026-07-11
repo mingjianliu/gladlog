@@ -55,3 +55,69 @@ button {
   padding: 2px 10px;
   cursor: pointer;
 }
+
+.rpt-header {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 16px;
+  padding: 12px;
+  border: 1px solid #333;
+  border-radius: 8px;
+}
+.rpt-player {
+  border-left: 3px solid #666;
+  padding: 2px 8px;
+  margin: 2px 0;
+}
+.rpt-player-name {
+  display: block;
+}
+.rpt-player-sub {
+  color: #8a8f98;
+  font-size: 11px;
+}
+.rpt-center {
+  text-align: center;
+  align-self: center;
+}
+.rpt-result {
+  font-size: 22px;
+  font-weight: 700;
+}
+.rpt-result-win {
+  color: #4ade80;
+}
+.rpt-result-lose {
+  color: #f87171;
+}
+.rpt-meta,
+.rpt-round {
+  color: #8a8f98;
+  font-size: 12px;
+}
+.rpt-meters {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.rpt-meter-row {
+  display: grid;
+  grid-template-columns: 140px 1fr 90px;
+  align-items: center;
+  gap: 8px;
+}
+.rpt-meter-bar-track {
+  background: #1c1f26;
+  border-radius: 3px;
+  height: 14px;
+  overflow: hidden;
+}
+.rpt-meter-bar {
+  display: block;
+  height: 100%;
+}
+.rpt-meter-value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
