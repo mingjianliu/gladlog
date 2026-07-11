@@ -24,6 +24,7 @@ async function main() {
       limit: PER_BRACKET,
     });
     console.log(`${bracket}: ${stubs.length} stubs`);
+    let i = 0;
     for (const stub of stubs) {
       try {
         const text = await downloadLogText(stub);
@@ -31,6 +32,10 @@ async function main() {
       } catch (e) {
         console.warn(`skip ${stub.id}: ${e}`);
       }
+      if (++i % 100 === 0)
+        console.log(
+          `  ${bracket}: ${i}/${stubs.length} logs, ${recs.length} records`,
+        );
     }
   }
   const corpus = aggregateCells(recs, N_FLOOR, {
