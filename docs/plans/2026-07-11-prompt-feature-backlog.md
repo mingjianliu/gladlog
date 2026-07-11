@@ -56,6 +56,23 @@
 
 ---
 
+## E2E 回归排查发现(2026-07-11,全量语料双引擎,详见 docs/reports/2026-07-11-e2e-old-vs-new-regression.md)
+
+三处 prompt 回归,均由 timeline 变体 ADOPT 引入:
+
+### R1 [High] 死亡结局块在 timeline 路径丢失 ⬜
+`buildMatchContext.ts` timeline 分支 526 行提前 return,`deathOutcomeBlock`(992 行)永不渲染——队友死亡时可用未放的救人外置(Pain Suppression/Lay on Hands)+ 死亡时免疫。分析已算出,纯渲染门。修复:块移入 timeline 分支。旧 139 场→新 0。**低风险高价值,建议优先。**
+
+### R2 [Medium] NEVER USED 冷却显式标记丢失 ⬜
+同根因(813 行 `[UNUSED]` 在 526 return 之后)。timeline loadout 列冷却但不标"整场未用"。旧 1080→新 47。可与 R1 一并修。
+
+### R3 [Medium] ABILITIES INTO IMMUNITY/DR 未移植 ⬜
+进攻打进敌方满 DR/免疫的浪费-GCD 事实,gladlog 无等价特征(真未移植,非渲染门)。旧 228→新 0。需新建 offensive-into-immunity 扫描,走 /eval-ab(目标 accuracy/focusCalibration)。
+
+次要:Lay on Hands 不在 extractMajorCooldowns loadout 表(装饰;R1 修复恢复其死亡标注)。
+
+---
+
 ## 完成状态(2026-07-11)
 
 **五项全部关闭**:#1 KICK(timeline 变体 ADOPT)、#2 EXPOSURE inline(盘点已在)、#3 POSITIONING(扫描器 + 0-violation 门)、#4 CONTESTED(契约断言 + rubric 条款)、#5 驱散覆盖(A/B ADOPT)。本 backlog 待归档进 docs/reports/。剩余机会项:token 压缩迭代(timeline 变体 +76% vs 稀疏,旧仓 iter A-D 同题)——独立于本 backlog。
