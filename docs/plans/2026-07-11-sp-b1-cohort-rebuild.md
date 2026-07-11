@@ -474,57 +474,103 @@ git commit -m "feat(analysis): port extractRotations/crisisEvents from old fork 
 
 ---
 
-### Task 3: 暴露 archetype 分类器
+### Task 3: enemy-comp archetype 分类器(cohort celling 轴)
+
+> **计划修正(执行期,控制器)**:原计划复用 gladlog 的 `computeMatchArchetype`([MATCH TYPE] 标签)。核对真实 API 后发现它是**赛况动态**(爆发节奏)分类,签名 6 参(含 ccTrinketSummaries / alignedBurstWindows / healerExposures 重依赖)、返回 measurements、标签需再经 15 字段 dynamics 组装 + classifyMatchArchetype,且对短局/噪声簇返回空串。而 Gemini debate 指出的聚合陷阱本质是**敌方阵容**依赖,非爆发动态。故改用**自建 enemy-comp 分类器**:自足(只需 `isMeleeSpec`/`isHealerSpec` + 敌方 specs)、更贴合 comp-context 意图、对 cohort 与用户对局用同一函数分类(SP-B2 查 cell 用同款),且天然非空(总落到确定桶)。
 
 **Files:**
 
-- Modify: `packages/analysis/src/index.ts`(若未导出)
-- Test: `packages/analysis/src/utils/matchArchetype.classify.test.ts`
+- Create: `packages/analysis/src/utils/enemyCompArchetype.ts`
+- Modify: `packages/analysis/src/index.ts`
+- Test: `packages/analysis/src/utils/enemyCompArchetype.test.ts`
 
 **Interfaces:**
 
-- Produces:`computeMatchArchetype(combat, friends, enemies): { archetype: string; ... }`(gladlog 已有;buildMatchContext 内部用来渲染 `[MATCH TYPE: ...]`)。本 task 确认它返回粗粒度 archetype 字符串并从 index 导出。
+- Consumes:`isMeleeSpec`、`isHealerSpec`(from `./cooldowns`);`ICombatUnit`(from `@gladlog/parser-compat`)。
+- Produces:`enemyCompArchetype(enemies: ICombatUnit[]): string` — 返回 4 桶之一:`"melee_cleave"` / `"caster_cleave"` / `"hybrid"` / `"other"`。
 
-- [ ] **Step 1: 写测试(锁定 archetype 是有限小集合的字符串)**
+- [ ] **Step 1: 写失败测试(真实行为断言)**
 
-`packages/analysis/src/utils/matchArchetype.classify.test.ts`:
+`packages/analysis/src/utils/enemyCompArchetype.test.ts`:
 
 ```typescript
 import { describe, expect, it } from "vitest";
-import { computeMatchArchetype } from "../index";
+import { enemyCompArchetype } from "./enemyCompArchetype";
 
-describe("computeMatchArchetype exposure", () => {
-  it("is exported and returns a non-empty archetype string", () => {
-    // 用 analysis 内既有 fixture(与 matchArchetype 现有单测同源)构造 combat/friends/enemies
-    // 实现者:复用 packages/analysis 内 matchArchetype 现有测试的 fixture 装配。
-    expect(typeof computeMatchArchetype).toBe("function");
+// 用 spec id 构造敌方单位;isMeleeSpec/isHealerSpec 按 gladlog 的 CombatUnitSpec 判定。
+// spec 常量取自 @gladlog/parser-compat 的 CombatUnitSpec(实现者 import 真值):
+//   melee dps 例:Warrior_Arms;ranged dps 例:Mage_Frost;healer 例:Paladin_Holy。
+function u(spec: string): any {
+  return { spec, type: 1 };
+}
+
+describe("enemyCompArchetype", () => {
+  it("two melee dps -> melee_cleave", () => {
+    // 两个近战 dps + 一个治疗
+    expect(enemyCompArchetype([u(MELEE), u(MELEE), u(HEALER)])).toBe(
+      "melee_cleave",
+    );
+  });
+  it("two ranged dps -> caster_cleave", () => {
+    expect(enemyCompArchetype([u(RANGED), u(RANGED), u(HEALER)])).toBe(
+      "caster_cleave",
+    );
+  });
+  it("one melee + one ranged dps -> hybrid", () => {
+    expect(enemyCompArchetype([u(MELEE), u(RANGED), u(HEALER)])).toBe("hybrid");
+  });
+  it("no dps (edge) -> other", () => {
+    expect(enemyCompArchetype([u(HEALER)])).toBe("other");
   });
 });
 ```
 
-- [ ] **Step 2: 跑测试确认失败**（若 index 未导出 computeMatchArchetype）
+> 实现者:把 `MELEE`/`RANGED`/`HEALER` 换成 `@gladlog/parser-compat` 的 `CombatUnitSpec` 里真实值——用 `isMeleeSpec` 判为 true 的一个近战 spec(如 Arms Warrior)、`isMeleeSpec` false 且非治疗的 ranged spec(如 Frost Mage)、`isHealerSpec` true 的治疗 spec(如 Holy Paladin)。可先在实现文件里 `console.log` 或查 `cooldowns.ts` 的 spec 集合确认。
 
-Run: `cd packages/analysis && npx vitest run src/utils/matchArchetype.classify.test.ts`
-Expected: FAIL(`computeMatchArchetype is not a function` / import 报错)。
+- [ ] **Step 2: 跑测试确认失败**
 
-- [ ] **Step 3: 从 index 导出**
+Run: `cd packages/analysis && npx vitest run src/utils/enemyCompArchetype.test.ts`
+Expected: FAIL(module 不存在)。
 
-`packages/analysis/src/index.ts` 加(若缺):
+- [ ] **Step 3: 实现 enemyCompArchetype.ts**
 
 ```typescript
-export { computeMatchArchetype } from "./utils/matchArchetype";
+import type { ICombatUnit } from "@gladlog/parser-compat";
+import { isHealerSpec, isMeleeSpec } from "./cooldowns";
+
+/**
+ * cohort-celling 的敌方阵容轴。粗 4 桶,兼顾战术上下文(治疗指标画像随敌方 comp 变)
+ * 与样本量(桶少)。cohort 与用户对局用同一函数分类,保证 SP-B2 查 cell 一致。
+ */
+export function enemyCompArchetype(enemies: ICombatUnit[]): string {
+  const dps = enemies.filter((e) => !isHealerSpec(e.spec));
+  const melee = dps.filter((e) => isMeleeSpec(e.spec)).length;
+  const ranged = dps.length - melee;
+  if (melee >= 2) return "melee_cleave";
+  if (ranged >= 2) return "caster_cleave";
+  if (melee >= 1 && ranged >= 1) return "hybrid";
+  return "other";
+}
 ```
 
-- [ ] **Step 4: 跑测试**
+若 `isMeleeSpec`/`isHealerSpec` 未从 `./cooldowns` 导出,加 `export`。
 
-Run: `cd packages/analysis && npx vitest run src/utils/matchArchetype.classify.test.ts`
-Expected: PASS。
+- [ ] **Step 4: 从 index 导出**
 
-- [ ] **Step 5: Commit**
+```typescript
+export { enemyCompArchetype } from "./utils/enemyCompArchetype";
+```
+
+- [ ] **Step 5: 跑测试 + tc**
+
+Run: `cd packages/analysis && npx vitest run src/utils/enemyCompArchetype.test.ts && npx tsc --noEmit`
+Expected: 4 测试 PASS;tc=0。
+
+- [ ] **Step 6: Commit**
 
 ```bash
-git add packages/analysis/src/index.ts packages/analysis/src/utils/matchArchetype.classify.test.ts
-git commit -m "feat(analysis): export computeMatchArchetype for cohort celling (SP-B1 T3)"
+git add packages/analysis/src/utils/enemyCompArchetype.ts packages/analysis/src/utils/enemyCompArchetype.test.ts packages/analysis/src/index.ts
+git commit -m "feat(analysis): enemy-comp archetype classifier for cohort celling (SP-B1 T3)"
 ```
 
 ---
@@ -777,10 +823,13 @@ export function aggregateCells(
   const byArche = new Map<string, PerMatchRecord[]>();
   const byParent = new Map<string, PerMatchRecord[]>();
   for (const r of records) {
-    const ak = `${r.spec}|${r.bracket}|${r.archetype}`;
     const pk = `${r.spec}|${r.bracket}|*`;
-    (byArche.get(ak) ?? byArche.set(ak, []).get(ak)!).push(r);
     (byParent.get(pk) ?? byParent.set(pk, []).get(pk)!).push(r);
+    // "*" 是父 cell 保留键;archetype 恰为 "*" 的记录只进父 cell(防与父 cell 撞键重复)
+    if (r.archetype !== "*") {
+      const ak = `${r.spec}|${r.bracket}|${r.archetype}`;
+      (byArche.get(ak) ?? byArche.set(ak, []).get(ak)!).push(r);
+    }
   }
   const cells: Cell[] = [];
   for (const [k, recs] of byArche) {
@@ -1133,7 +1182,7 @@ git commit -m "feat(corpus-tools): feed client + go/no-go smoke (SP-B1 T6)"
 
 **Interfaces:**
 
-- Consumes:`GladLogParser`(@gladlog/parser)、`toLegacyMatch`/`toLegacyShuffle`(@gladlog/parser-compat)、`computeHealerMetrics`/`extractRotations`/`computeMatchArchetype`/`isHealerSpec`/`specToString`(@gladlog/analysis)、`fetchMatchStubs`/`downloadLogText`(./feedClient)、`aggregateCells`/`validateCorpus`。
+- Consumes:`GladLogParser`(@gladlog/parser)、`toLegacyMatch`/`toLegacyShuffle`(@gladlog/parser-compat)、`computeHealerMetrics`/`extractRotations`/`enemyCompArchetype`/`isHealerSpec`/`specToString`(@gladlog/analysis)、`fetchMatchStubs`/`downloadLogText`(./feedClient)、`aggregateCells`/`validateCorpus`。
 - Produces:`buildPerMatchRecords(logText: string): PerMatchRecord[]`(单份日志 → 每个治疗-owner 视角一条记录);`buildCorpus` CLI 写 `packages/corpus-tools/data/reference_vectors.json`。
 
 - [ ] **Step 1: 写失败测试(用一份自采 fixture 日志)**
@@ -1182,7 +1231,7 @@ import {
 import {
   computeHealerMetrics,
   extractRotations,
-  computeMatchArchetype,
+  enemyCompArchetype,
   isHealerSpec,
   specToString,
 } from "@gladlog/analysis";
@@ -1216,12 +1265,12 @@ export function buildPerMatchRecords(logText: string): PerMatchRecord[] {
       } catch {
         continue;
       }
-      const arche = computeMatchArchetype(combat, friends, enemies);
+      const archetype = enemyCompArchetype(enemies);
       const rotations = extractRotations(healer, combat);
       out.push({
         spec: specToString(healer.spec),
         bracket: combat.startInfo?.bracket ?? "unknown",
-        archetype: (arche as any).archetype ?? String(arche),
+        archetype,
         metrics,
         crisisEvents: rotations.crisisEvents,
       });
@@ -1231,7 +1280,7 @@ export function buildPerMatchRecords(logText: string): PerMatchRecord[] {
 }
 ```
 
-(`computeMatchArchetype` 的确切返回形状由 T3 确定;若返回对象则取 `.archetype`,若返回字符串则直接用——实现者按 T3 导出的签名对齐。)
+(`enemyCompArchetype(enemies)` 直接返回 4 桶字符串之一,见 T3。)
 
 - [ ] **Step 4: 实现 buildCorpus.ts 编排 CLI**
 
