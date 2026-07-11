@@ -72,8 +72,8 @@ export class FilePipeline {
       this.createParser();
       this.cp = { offset: 0, firstLineChecksum: r.state.firstLineChecksum };
     }
-    this.tail = r.state;
     for (const line of r.lines) this.parser.push(line);
+    this.tail = r.state;
     if (!this.parser.hasOpenSegment()) {
       this.cp = {
         offset: this.tail.offset,
