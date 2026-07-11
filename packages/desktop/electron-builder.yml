@@ -1,0 +1,18 @@
+# electron-builder.yml
+appId: app.gladlog.desktop
+productName: gladlog
+electronVersion: 38.8.6
+directories:
+  output: dist-app
+  buildResources: build
+files:
+  - out/**
+  - package.json
+mac:
+  target: dmg
+  identity: null # 不签名
+win:
+  target: nsis
+nsis:
+  oneClick: true
+npmRebuild: false
