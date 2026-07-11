@@ -19,3 +19,5 @@ export { spellClassMap } from "./data/drCategories";
 export { SPELL_CATEGORIES } from "./data/spellCategories";
 export { SPELL_EFFECT_OVERRIDES } from "./data/spellEffectOverrides";
 export { default as spellIdLists } from "./data/spellIdLists";
+export { ccSpellIds, trinketSpellIds } from './data/spellTags';
+export { getEnglishSpellName } from './data/spellEffectData';
