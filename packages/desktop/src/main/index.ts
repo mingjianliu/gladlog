@@ -13,6 +13,7 @@ import { MatchStore } from "./matchStore";
 import { SettingsStore, type GladlogSettings } from "./settingsStore";
 import { WorkerHost } from "./workerHost";
 
+app.setName("gladlog");
 log.initialize();
 process.on("uncaughtException", (e) => log.error("[main] uncaught:", e));
 process.on("unhandledRejection", (e) =>

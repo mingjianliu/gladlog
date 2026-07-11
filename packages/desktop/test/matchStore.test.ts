@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync } from "fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import type { GladMatch, GladShuffle } from "@gladlog/parser";
@@ -102,5 +102,17 @@ describe("MatchStore", () => {
     expect(metas.map((m) => m.id)).toEqual(["m2", "m1"]);
     expect(s2.get("m1")).not.toBeNull();
     expect(s2.get("nope")).toBeNull();
+  });
+
+  it("自愈:meta.json 损坏后重存同 id 不抛并恢复三文件", () => {
+    const root = dir();
+    const s1 = new MatchStore(root);
+    s1.store(fakeMatch("heal1"));
+    rmSync(join(root, "heal1", "meta.json"));
+    const s2 = new MatchStore(root);
+    s2.init();
+    const r = s2.store(fakeMatch("heal1"));
+    expect(r.stored).toBe(true);
+    expect(existsSync(join(root, "heal1", "meta.json"))).toBe(true);
   });
 });

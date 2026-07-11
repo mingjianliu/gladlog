@@ -114,6 +114,7 @@ export class MatchStore {
       }),
     );
     writeFileSync(join(tmpDir, "raw.txt"), item.rawLines.join("\n") + "\n");
+    rmSync(finalDir, { recursive: true, force: true });
     renameSync(tmpDir, finalDir);
     this.index.set(id, meta);
     return { stored: true, meta };
