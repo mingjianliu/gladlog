@@ -523,6 +523,16 @@ export function buildMatchContext(
       positionLines.forEach((l) => tLines.push(l));
     }
 
+    // R1(E2E 回归修复):死亡结局块——队友在你死亡时可用未放的救人外置
+    // (Pain Suppression / Lay on Hands)+ 死者当时可用的免疫。此前该块只在下方
+    // sparse 路径 append,timeline 分支在此 return 前从不渲染(E2E 实测旧 139 场→新 0)。
+    const deathOutcomeBlockTimeline =
+      formatDeathOutcomeForContext(deathOutcome);
+    if (deathOutcomeBlockTimeline) {
+      tLines.push("");
+      tLines.push(deathOutcomeBlockTimeline);
+    }
+
     return tLines.join("\n");
   }
 
