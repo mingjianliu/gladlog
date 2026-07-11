@@ -13,7 +13,9 @@ describe("data layer", () => {
     expect(entries.length).toBeGreaterThan(60);
     for (const [id, s] of entries) {
       expect(s.spellId).toBe(id);
-      expect(s.cooldownSeconds ?? s.durationSeconds).toBeDefined();
+      expect(
+        s.cooldownSeconds ?? s.durationSeconds ?? (s as { dispelType?: string }).dispelType,
+      ).toBeDefined();
       expect(s.name.length).toBeGreaterThan(0);
     }
   });

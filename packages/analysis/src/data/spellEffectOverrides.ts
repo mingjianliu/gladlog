@@ -114,3 +114,18 @@ export const SPELL_EFFECT_OVERRIDES: Record<string, IMinedSpell> =
       e("78675", "Solar Beam", 60),
     ].map((s) => [s.spellId, s]),
   );
+
+// dispelType 补充(公开事实;dispelAnalysis 消费)
+const DISPEL_TYPES: Record<string, string> = {
+  "118": "Magic", "28271": "Magic", "28272": "Magic", "51514": "Curse",
+  "3355": "Magic", "8122": "Magic", "5782": "Magic", "2637": "Magic",
+  "339": "Magic", "122": "Magic", "217832": "Magic", "6789": "Magic",
+  "702": "Curse", "1714": "Curse", "5484": "Magic", "605": "Magic",
+  "82691": "Magic", "20066": "Magic", "9484": "Magic", "10060": "Magic",
+  "1022": "Magic", "6940": "Magic",
+};
+for (const [id, t] of Object.entries(DISPEL_TYPES)) {
+  const cur = SPELL_EFFECT_OVERRIDES[id];
+  if (cur) (cur as { dispelType?: string }).dispelType = t;
+  else SPELL_EFFECT_OVERRIDES[id] = { spellId: id, name: id, dispelType: t } as IMinedSpell;
+}

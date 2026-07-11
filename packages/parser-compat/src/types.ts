@@ -11,7 +11,7 @@ import {
 export interface ILogLine {
   event: LogEvent | string;
   timestamp: number;
-  parameters?: (string | number)[];
+  parameters: (string | number)[];
 }
 
 export interface ICombatEvent {
@@ -36,7 +36,17 @@ export interface IAbsorbEvent extends ICombatEvent {
   shieldSpellId?: string;
 }
 
-export interface ISpellEvent extends ICombatEvent {}
+export interface ISpellEvent extends ICombatEvent {
+  /** SPELL_DISPEL/_INTERRUPT/_STOLEN 类事件的目标法术(params[11..12]);其余事件为 undefined */
+  extraSpellId?: string;
+  extraSpellName?: string;
+}
+
+/** 旧接口别名:携带 extra 法术字段的动作事件 */
+export interface CombatExtraSpellAction extends ISpellEvent {
+  extraSpellId: string;
+  extraSpellName: string;
+}
 
 export interface IAuraEvent extends ICombatEvent {
   auraType: "BUFF" | "DEBUFF";
@@ -62,7 +72,7 @@ export interface CombatantInfo {
 export interface ICombatUnit {
   id: string;
   name: string;
-  ownerId?: string;
+  ownerId: string;
   type: CombatUnitType;
   class: CombatUnitClass;
   spec: CombatUnitSpec;

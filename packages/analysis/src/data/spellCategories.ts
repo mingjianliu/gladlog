@@ -41,7 +41,7 @@ export const SPELL_CATEGORIES: Record<string, ISpellCategoryEntry> = {
   "51514": cc(8), // Hex
   "5782": cc(6), // Fear
   "5484": cc(6), // Howl of Terror
-  "6789": cc(3), // Mortal Coil
+  "6789": cc(3), // Mortal Coil (DR: Incapacitate)
   "30283": cc(3), // Shadowfury
   "710": cc(6), // Banish
   "6358": cc(6), // Seduction
@@ -81,7 +81,8 @@ export const SPELL_CATEGORIES: Record<string, ISpellCategoryEntry> = {
   "46968": cc(2), // Shockwave
   "107570": cc(4), // Storm Bolt
   "20549": cc(2), // War Stomp
-  "118905": cc(3), // Static Charge (Capacitor Totem)
+  "118905": cc(3), // Static Charge (debuff)
+  "192058": cc(3), // Capacitor Totem
   "19386": cc(6), // Wyvern Sting
   // ── 定身 ──
   "122": root(6), // Frost Nova

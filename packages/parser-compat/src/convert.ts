@@ -163,8 +163,8 @@ function getSpellSchoolId(
 
 function convertParams(
   params: string[] | undefined,
-): (string | number)[] | undefined {
-  if (!params) return undefined;
+): (string | number)[] {
+  if (!params) return [];
   return params.map((p) => {
     if (p === "nil" || p === "BUFF" || p === "DEBUFF") {
       return p;
@@ -208,6 +208,7 @@ function convertUnit(
       logLine: {
         event: "ADVANCED_SAMPLE" as const,
         timestamp: sample.timestamp,
+        parameters: [],
       },
     }),
   );
@@ -403,6 +404,7 @@ function convertUnit(
   }));
 
   const actionOut: ISpellEvent[] = unit.actionsOut.map((event) => ({
+    ...extraSpellFields(event.eventName, event.params),
     spellId: String(event.spellId),
     spellName: event.spellName,
     timestamp: event.timestamp,
@@ -418,6 +420,7 @@ function convertUnit(
   }));
 
   const actionIn: ISpellEvent[] = unit.actionsIn.map((event) => ({
+    ...extraSpellFields(event.eventName, event.params),
     spellId: String(event.spellId),
     spellName: event.spellName,
     timestamp: event.timestamp,
@@ -435,7 +438,7 @@ function convertUnit(
   return {
     id: unit.id,
     name: unit.name,
-    ownerId: unit.ownerId,
+    ownerId: unit.ownerId ?? "",
     type: kindToType(unit.kind),
     class: classIdToLegacy(unit.classId),
     spec: String(unit.specId) as CombatUnitSpec,
@@ -477,6 +480,13 @@ function mergePetEvents(units: Record<string, ICombatUnit>): void {
       );
     }
   }
+}
+
+
+const EXTRA_SPELL_EVENTS = /DISPEL|INTERRUPT|STOLEN/;
+function extraSpellFields(eventName: string, params: string[]): { extraSpellId?: string; extraSpellName?: string } {
+  if (!EXTRA_SPELL_EVENTS.test(eventName)) return {};
+  return { extraSpellId: String(params[11] ?? ""), extraSpellName: String(params[12] ?? "") };
 }
 
 export function toLegacyMatch(m: GladMatch): IArenaMatch {
