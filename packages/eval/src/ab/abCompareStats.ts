@@ -50,7 +50,9 @@ export function makeRng(seed: number): () => number {
   let state = seed >>> 0 || 1;
   return () => {
     state = (state * 1664525 + 1013904223) >>> 0;
-    return state / 0xffffffff;
+    // 除以 2^32(而非 0xffffffff):保证输出严格 < 1,
+    // 否则 state 恰为 0xffffffff 时 Math.floor(rng()*len) 越界(review 修复)
+    return state / 0x100000000;
   };
 }
 
@@ -59,7 +61,11 @@ export function dimensionScore(
   dimension: string,
 ): number | null {
   const value = score.prompt?.[dimension] ?? score.response?.[dimension];
-  return typeof value === "number" ? value : null;
+  // 与 checkCalibration 同宽容度:数字化字符串("4")强转,防 judge
+  // 字符串输出导致全维 null → 空统计静默通过(review 修复)
+  if (value === undefined || value === null) return null;
+  const num = Number(value);
+  return !isNaN(num) ? num : null;
 }
 
 /** Two-sided exact sign test: P(X ≤ min(pos,neg) or X ≥ max(pos,neg)) for X ~ Binomial(pos+neg, 0.5). Ties dropped. */

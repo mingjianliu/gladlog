@@ -34,7 +34,8 @@ function makeRng(seed: number): () => number {
   let state = seed >>> 0 || 1;
   return () => {
     state = (state * 1664525 + 1013904223) >>> 0;
-    return state / 0xffffffff;
+    // 除以 2^32(而非 0xffffffff):保证输出严格 < 1(review 修复,与 abCompareStats 同)
+    return state / 0x100000000;
   };
 }
 

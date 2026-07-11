@@ -37,6 +37,26 @@ describe("abCompareStats 数学 golden", () => {
     expect(b1.lo).toBeLessThanOrEqual(b1.hi);
   });
 
+  it("makeRng 输出严格 ∈ [0,1):任何种子高频抽样不返回 1", () => {
+    for (const seed of [1, 42, 1337, 0xffffffff]) {
+      const rng = makeRng(seed);
+      for (let i = 0; i < 20000; i++) {
+        const v = rng();
+        expect(v).toBeGreaterThanOrEqual(0);
+        expect(v).toBeLessThan(1);
+      }
+    }
+  });
+
+  it("dimensionScore:数字化字符串强转(与校准侧一致),真非数值 null", () => {
+    expect(
+      dimensionScore({ prompt: { noise: "4" }, response: {} }, "noise"),
+    ).toBe(4);
+    expect(
+      dimensionScore({ prompt: {}, response: { accuracy: "3" } }, "accuracy"),
+    ).toBe(3);
+  });
+
   it("dimensionScore:prompt 侧优先,response 侧回落,非数值 null", () => {
     expect(
       dimensionScore({ prompt: { noise: 4 }, response: {} }, "noise"),
