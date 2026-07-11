@@ -60,10 +60,10 @@
 
 三处 prompt 回归,均由 timeline 变体 ADOPT 引入:
 
-### R1 [High] 死亡结局块在 timeline 路径丢失 ⬜
+### R1 [High] 死亡结局块在 timeline 路径丢失 ✅(2026-07-11 修复 commit 2ee7ee2)
 `buildMatchContext.ts` timeline 分支 526 行提前 return,`deathOutcomeBlock`(992 行)永不渲染——队友死亡时可用未放的救人外置(Pain Suppression/Lay on Hands)+ 死亡时免疫。分析已算出,纯渲染门。修复:块移入 timeline 分支。旧 139 场→新 0。**低风险高价值,建议优先。**
 
-### R2 [Medium] NEVER USED 冷却显式标记丢失 ⬜
+### R2 [Medium] NEVER USED 冷却显式标记丢失 ✅(2026-07-11 修复,与 R1 同批)
 同根因(813 行 `[UNUSED]` 在 526 return 之后)。timeline loadout 列冷却但不标"整场未用"。旧 1080→新 47。可与 R1 一并修。
 
 ### R3 [Medium] ABILITIES INTO IMMUNITY/DR 未移植 ⬜

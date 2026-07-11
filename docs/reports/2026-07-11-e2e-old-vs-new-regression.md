@@ -59,3 +59,13 @@ token:旧 3165 / 新 5313(timeline 变体更富)。Result 字符串差 92 处 = 
 - R1 + R2 共根(526 行提前 return 丢两个 sparse-only 块)→ 一次修复,列入 app/prompt backlog。
 - R3 新特征 → 走 `/eval-ab`(目标维度 accuracy / focusCalibration),列入 prompt feature backlog。
 - 4 处胜负更正、55 场多救回 = 新侧净收益,无需处置。
+
+
+## 修复确认(2026-07-11,commit 2ee7ee2)
+
+R1 + R2 已修(同根因:timeline 分支提前 return 漏渲染两个 sparse-only 块):
+- R1 死亡结局块移入 timeline 分支;R2 `buildPlayerLoadout` 给整场未放冷却打 `[UNUSED]`(owner + 队友,旧侧 owner-only 的严格超集)。
+- 全量回验(1245 prompt 重生成):R1 覆盖 139→**150**,R2 1080→**1106**,均恢复并略超旧侧;token +12/场(+0.2%)。analysis 491 测试绿。
+- 翻盘场 214211#003 印证:恢复"死亡时队友 Pain Suppression / Lay on Hands 可用"事实 + 暴露治疗攥两层压制未放。
+
+R3(进攻打进免疫)待定:`buildOffensiveWasteSummary` / `formatOffensiveWasteForContext` 已 import 并在构建器计算,疑似同类渲染门而非真未移植——待核实后单独处置。
