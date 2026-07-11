@@ -5,3 +5,4 @@ export {
   type ParsedCombat,
 } from "./quality/coverageManifest";
 export { buildCorpus, type IndexEntry } from "./corpus/buildCorpus";
+export { checkMatch, type MatchQuality } from "./quality/promptQualityCheck";
