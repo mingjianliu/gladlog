@@ -23,3 +23,11 @@ export { ccSpellIds, trinketSpellIds } from './data/spellTags';
 export { getEnglishSpellName } from './data/spellEffectData';
 export { getTalentNames } from "./data/talentNames";
 export { nodeMaps } from "./data/talentStrings";
+// 几何原语(positioning grounding 扫描器用,backlog #3)
+export {
+  getUnitPositionAtTime,
+  distanceBetween,
+  hasLineOfSight,
+  type IPosition,
+} from "./utils/losAnalysis";
+export { arenaObstacles } from "./data/arenaGeometry";

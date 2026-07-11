@@ -38,7 +38,8 @@ const MAX_ITER3_EVENTS = 2; // per event type
 // Position snapshots are event-driven; when the query time is further than this
 // from the nearest snapshot, the interpolated position is fabricated (unit was
 // idle/stealthed/drinking) — treat as unknown.
-const POSITION_MAX_GAP_MS = 8_000;
+// T3 grounding 守卫:同 ccTrinketAnalysis——禁跨空窗中段插值(TRAINED 0.4yd 假主张实锤)
+const POSITION_MAX_GAP_MS = 1_500;
 
 export type PositionEventType =
   | 'STAYED_IN'
@@ -429,8 +430,10 @@ export function computeOwnerPositionEvents(params: {
       // or reposition, so "reposition opportunity" would be a false criticism.
       const healerCC = (friendCCSummaries ?? []).find((c) => c.playerName === healerUnit.name)?.ccInstances ?? [];
       let runStart: number | null = null;
-      let runMinDist = Infinity;
       const trainerSeconds = new Map<string, number>();
+      // T3 grounding:"camped by X (closest N yd)" 的 N 必须是 X 自己的最近距离——
+      // 此前 N 取任意近战的全局最小,与具名 trainer 张冠李戴(扫描器实锤 2 例)。
+      const trainerMinDist = new Map<string, number>();
       let trainedCount = 0;
 
       const closeTrainRun = (endSeconds: number) => {
@@ -452,7 +455,7 @@ export function computeOwnerPositionEvents(params: {
             atSeconds: runStart,
             toSeconds: endSeconds,
             nearestEnemyName: topTrainer,
-            startDistanceYards: Math.round(runMinDist * 10) / 10,
+            startDistanceYards: Math.round((trainerMinDist.get(topTrainer) ?? Infinity) * 10) / 10,
             playersInvolved: [healerUnit.name],
             ownerIsSubject: healerUnit.id === owner.id,
             ownerCcLocked: ccOverlapSeconds(healerCC, runStart, endSeconds) >= (endSeconds - runStart) / 2,
@@ -460,8 +463,8 @@ export function computeOwnerPositionEvents(params: {
           trainedCount++;
         }
         runStart = null;
-        runMinDist = Infinity;
         trainerSeconds.clear();
+        trainerMinDist.clear();
       };
 
       for (let t = 0; t <= durationSeconds; t += 1) {
@@ -471,11 +474,13 @@ export function computeOwnerPositionEvents(params: {
         if (healerPos && !isDeadAt(healerUnit, tMs)) {
           let bestDist = Infinity;
           let bestName = '';
+          const perEnemyDist = new Map<string, number>();
           for (const e of enemyMelee) {
             if (isDeadAt(e, tMs)) continue;
             const ePos = getUnitPositionAtTime(e, tMs, POSITION_MAX_GAP_MS);
             if (!ePos) continue;
             const d = distanceBetween(healerPos, ePos);
+            perEnemyDist.set(e.name, d);
             if (d < bestDist) {
               bestDist = d;
               bestName = e.name;
@@ -484,8 +489,12 @@ export function computeOwnerPositionEvents(params: {
           if (bestDist <= HEALER_TRAINED_YARDS) {
             camped = true;
             if (runStart === null) runStart = t;
-            runMinDist = Math.min(runMinDist, bestDist);
             trainerSeconds.set(bestName, (trainerSeconds.get(bestName) ?? 0) + 1);
+            // 每个近战都记「自己」的窗口最近距离——具名 trainer 的 closest 不能
+            // 被"当秒另有更近者"挡掉(扫描器实锤 5.7 vs 实际 2.7)
+            for (const [name, d] of perEnemyDist) {
+              trainerMinDist.set(name, Math.min(trainerMinDist.get(name) ?? Infinity, d));
+            }
           }
         }
         if (!camped) closeTrainRun(t);

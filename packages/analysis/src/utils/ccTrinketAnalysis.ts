@@ -39,7 +39,10 @@ const SIGNIFICANT_CC_DAMAGE = 30_000;
 
 // Position snapshots are event-driven; beyond this gap to the nearest snapshot
 // the interpolated position is fabricated (unit idle/stealthed — worst in openers).
-const CC_POSITION_MAX_GAP_MS = 8_000;
+// T3 grounding 守卫:8s 允许跨潜行/传送采样空窗的中段线性插值,插出从未存在过的
+// 位置(全语料扫描实锤 16 条假距离,近战 Cheap Shot 被标 17-21yd)。1.5s 内的近边
+// 查询仍有效;空窗中段一律抑制(宁可不出主张,不出假主张)。
+const CC_POSITION_MAX_GAP_MS = 1_500;
 // No CC in the game casts beyond ~45yd; a larger computed distance is bad data
 // (100-game sweep: 0:06 Sap "64.7yd", 0:11 Sleep Walk "54.7yd").
 const CC_MAX_PLAUSIBLE_RANGE_YARDS = 45;
