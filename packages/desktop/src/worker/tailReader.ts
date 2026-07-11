@@ -63,7 +63,12 @@ export function readTail(
   let readFrom = cur.offset + cur.carry.length;
   if (readFrom >= size) return { lines, state: cur, rotated };
 
-  const fd = openSync(filePath, "r");
+  let fd: number;
+  try {
+    fd = openSync(filePath, "r");
+  } catch {
+    return { lines: [], state: cur, rotated };
+  }
   try {
     let carry = cur.carry;
     let offset = cur.offset;
