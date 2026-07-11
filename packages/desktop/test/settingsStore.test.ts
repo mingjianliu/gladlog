@@ -1,7 +1,12 @@
 import { mkdtempSync, readFileSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { SettingsStore } from "../src/main/settingsStore";
+import {
+  SettingsStore,
+  API_KEY_REDACTED,
+  redactSettings,
+  sanitizeSettingsPatch,
+} from "../src/main/settingsStore";
 
 const dir = () => mkdtempSync(join(tmpdir(), "gl-settings-"));
 
@@ -25,5 +30,34 @@ describe("SettingsStore", () => {
     const p = join(dir(), "settings.json");
     writeFileSync(p, "{not json");
     expect(new SettingsStore(p).get().wowDirectory).toBeNull();
+  });
+});
+
+describe("settings 脱敏(key 永不出主进程)", () => {
+  it("redactSettings:有 key → 哨兵(保真值);无 key → null", () => {
+    const base = {
+      wowDirectory: "/tmp/wow",
+      anthropicApiKey: "sk-real-secret",
+      anthropicModel: null,
+    };
+    const redacted = redactSettings(base);
+    expect(redacted.anthropicApiKey).toBe(API_KEY_REDACTED);
+    expect(redacted.anthropicApiKey).not.toContain("sk-real");
+    expect(!!redacted.anthropicApiKey).toBe(true);
+    expect(redacted.wowDirectory).toBe("/tmp/wow");
+    expect(
+      redactSettings({ ...base, anthropicApiKey: null }).anthropicApiKey,
+    ).toBeNull();
+  });
+  it("sanitizeSettingsPatch:哨兵回写被丢弃,真 key 保留", () => {
+    expect(
+      sanitizeSettingsPatch({
+        anthropicApiKey: API_KEY_REDACTED,
+        wowDirectory: "/x",
+      }),
+    ).toEqual({ wowDirectory: "/x" });
+    expect(sanitizeSettingsPatch({ anthropicApiKey: "sk-new" })).toEqual({
+      anthropicApiKey: "sk-new",
+    });
   });
 });

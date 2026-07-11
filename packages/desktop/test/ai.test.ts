@@ -1,7 +1,33 @@
 import { mkdtempSync, readFileSync, existsSync, mkdirSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { createAiService, type AnthropicLike } from "../src/main/ai";
+import { vi } from "vitest";
+import {
+  createAiService,
+  realClientFactory,
+  type AnthropicLike,
+} from "../src/main/ai";
+
+const sdkAbortSpy = vi.fn();
+vi.mock("@anthropic-ai/sdk", () => ({
+  Anthropic: class {
+    messages = {
+      stream: () => ({
+        abort: sdkAbortSpy,
+        async *[Symbol.asyncIterator]() {
+          yield {
+            type: "content_block_delta",
+            delta: { type: "text_delta", text: "hi" },
+          };
+          yield {
+            type: "content_block_delta",
+            delta: { type: "text_delta", text: "more" },
+          };
+        },
+      }),
+    };
+  },
+}));
 
 type Emitted = { channel: string; payload: unknown }[];
 
@@ -114,5 +140,61 @@ describe("ai service", () => {
     const cached = await svc2.getCached("m5");
     expect(cached?.content).toBe("cached!");
     expect(await svc2.getCached("nope")).toBeNull();
+  });
+
+  it("同一 match 快速二次 analyze:旧流终止,delta 不交错,done 只发一次", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    let calls = 0;
+    const client: AnthropicLike = {
+      stream: () => {
+        const n = ++calls;
+        return {
+          async *[Symbol.asyncIterator]() {
+            if (n === 1) {
+              yield { delta: "a" };
+              await gate;
+              yield { delta: "b" };
+            } else {
+              yield { delta: "x" };
+            }
+          },
+        };
+      },
+    };
+    const { svc, emitted, dir } = makeService({ client });
+    mkdirSync(join(dir, "m6"), { recursive: true });
+    const first = svc.analyze("m6", "ctx");
+    await flush();
+    const second = svc.analyze("m6", "ctx");
+    await flush();
+    release();
+    await Promise.all([first, second]);
+    await flush();
+    const deltas = emitted
+      .filter((e) => e.channel === "gladlog:ai:delta")
+      .map((e) => (e.payload as { text: string }).text);
+    expect(deltas).toEqual(["a", "x"]);
+    const dones = emitted.filter((e) => e.channel === "gladlog:ai:done");
+    expect(dones).toHaveLength(1);
+    expect((dones[0]!.payload as { content: string }).content).toBe("x");
+    const doc = JSON.parse(
+      readFileSync(join(dir, "m6", "analysis.json"), "utf-8"),
+    );
+    expect(doc.content).toBe("x");
+  });
+
+  it("realClientFactory:消费方提前 break → 底层 SDK 流被 abort", async () => {
+    sdkAbortSpy.mockClear();
+    const stream = realClientFactory("sk-test").stream({
+      model: "m",
+      max_tokens: 16,
+      messages: [{ role: "user", content: "c" }],
+    });
+    for await (const event of stream) {
+      expect(event.delta).toBe("hi");
+      break;
+    }
+    expect(sdkAbortSpy).toHaveBeenCalled();
   });
 });

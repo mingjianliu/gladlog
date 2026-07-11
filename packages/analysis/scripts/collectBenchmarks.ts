@@ -118,7 +118,10 @@ async function main() {
       parser.on("shuffle", (sh: any) => {
         const legacy = toLegacyShuffle(sh);
         (legacy.rounds ?? []).forEach((round: any, idx: number) =>
-          combats.push({ gladId: sh.rounds[idx]?.id ?? `${sh.rounds[0]?.id}-r${idx}`, combat: round }),
+          combats.push({
+            gladId: sh.rounds[idx]?.id ?? `${sh.rounds[0]?.id}-r${idx}`,
+            combat: round,
+          }),
         );
       });
       for (const line of content.split("\n")) parser.push(line);
@@ -131,7 +134,9 @@ async function main() {
         for (const unit of players) {
           if ((unit.info?.personalRating ?? 0) < minRating) continue;
           const spec = specToString(unit.spec) || String(unit.spec);
-          const team = players.filter((u) => u.info.teamId === unit.info.teamId);
+          const team = players.filter(
+            (u) => u.info.teamId === unit.info.teamId,
+          );
           const healers = team
             .filter((u) => isHealerSpec(u.spec))
             .map((u) => specToString(u.spec) || String(u.spec))
@@ -167,10 +172,14 @@ async function main() {
 
   // 4. pass2:仅重析入选对局所在文件
   const selectedCombatIds = new Set(
-    stratified.selected.map((sel) => sampleToCombat.get(sel.id)).filter(Boolean),
+    stratified.selected
+      .map((sel) => sampleToCombat.get(sel.id))
+      .filter(Boolean),
   );
   const selectedLogs = new Set(
-    [...selectedCombatIds].map((id) => combatToLog.get(id as string)).filter(Boolean),
+    [...selectedCombatIds]
+      .map((id) => combatToLog.get(id as string))
+      .filter(Boolean),
   );
   console.log(`  Re-parsing ${selectedLogs.size} selected logs...`);
   const benchAcc = createBenchmarkAccumulator(minRating);
@@ -190,7 +199,9 @@ async function main() {
       parser.on("shuffle", (sh: any) => {
         const legacy = toLegacyShuffle(sh);
         (legacy.rounds ?? []).forEach((round: any, idx: number) => {
-          const gid = sh.rounds[idx]?.id;
+          // 与 pass1 完全一致的 id 合成(含 fallback),否则被采样的
+          // fallback-id 轮次在 pass2 静默丢失
+          const gid = sh.rounds[idx]?.id ?? `${sh.rounds[0]?.id}-r${idx}`;
           if (gid && selectedCombatIds.has(gid) && !seen.has(gid)) {
             seen.add(gid);
             benchAcc.add(round);

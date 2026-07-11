@@ -1,5 +1,10 @@
 import { app, dialog, ipcMain, shell, type BrowserWindow } from "electron";
-import type { GladlogSettings, SettingsStore } from "./settingsStore";
+import {
+  redactSettings,
+  sanitizeSettingsPatch,
+  type GladlogSettings,
+  type SettingsStore,
+} from "./settingsStore";
 import type { MatchStore } from "./matchStore";
 import type { LogsStatusSnapshot } from "../preload/api";
 import type { AiService } from "./ai";
@@ -15,13 +20,16 @@ export function registerIpc(deps: {
   ipcMain.handle("gladlog:logs:getStatus", () => deps.getStatus());
   ipcMain.handle("gladlog:matches:list", () => deps.store.list());
   ipcMain.handle("gladlog:matches:get", (_e, id: string) => deps.store.get(id));
-  ipcMain.handle("gladlog:settings:get", () => deps.settings.get());
+  ipcMain.handle("gladlog:settings:get", () =>
+    redactSettings(deps.settings.get()),
+  );
   ipcMain.handle(
     "gladlog:settings:save",
-    (_e, partial: Partial<GladlogSettings>) => {
+    (_e, rawPartial: Partial<GladlogSettings>) => {
+      const partial = sanitizeSettingsPatch(rawPartial);
       const next = deps.settings.save(partial);
       if ("wowDirectory" in partial) deps.onWowDirectoryChanged(next);
-      return next;
+      return redactSettings(next);
     },
   );
   ipcMain.handle("gladlog:app:getVersion", () => app.getVersion());

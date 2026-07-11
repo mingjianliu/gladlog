@@ -12,6 +12,26 @@ const DEFAULTS: GladlogSettings = {
   anthropicModel: null,
 };
 
+// key 只存在于主进程;IPC 边界一律用哨兵替换真值(renderer 只需真值性)。
+export const API_KEY_REDACTED = "__gladlog_api_key_set__";
+
+export function redactSettings(s: GladlogSettings): GladlogSettings {
+  return {
+    ...s,
+    anthropicApiKey: s.anthropicApiKey ? API_KEY_REDACTED : null,
+  };
+}
+
+export function sanitizeSettingsPatch(
+  partial: Partial<GladlogSettings>,
+): Partial<GladlogSettings> {
+  if (partial.anthropicApiKey === API_KEY_REDACTED) {
+    const { anthropicApiKey: _redacted, ...rest } = partial;
+    return rest;
+  }
+  return partial;
+}
+
 export class SettingsStore {
   constructor(private filePath: string) {}
   get(): GladlogSettings {

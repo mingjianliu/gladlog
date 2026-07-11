@@ -29,17 +29,13 @@ export function createAiService(deps: {
     matchId: string,
   ): Promise<{ content: string; model: string; createdAt: number } | null>;
 } {
-  let currentAnalysisId: string | null = null;
-  let cancelRequested = false;
+  // 单调递增的代际号:每次 analyze/cancel 递增,旧流在下一次
+  // 循环检查时发现代际不符即退出——同 matchId 快速二次点击也安全。
+  let generation = 0;
 
   return {
     async analyze(matchId: string, context: string): Promise<void> {
-      // Cancel previous analysis
-      if (currentAnalysisId !== null) {
-        cancelRequested = true;
-      }
-      currentAnalysisId = matchId;
-      cancelRequested = false;
+      const myGen = ++generation;
 
       const settings = deps.getSettings();
       const model = settings.anthropicModel ?? "claude-sonnet-5";
@@ -65,7 +61,7 @@ export function createAiService(deps: {
         });
 
         for await (const event of stream) {
-          if (cancelRequested || currentAnalysisId !== matchId) {
+          if (myGen !== generation) {
             break;
           }
           if (event.delta) {
@@ -74,7 +70,7 @@ export function createAiService(deps: {
           }
         }
 
-        if (cancelRequested || currentAnalysisId !== matchId) {
+        if (myGen !== generation) {
           return;
         }
 
@@ -99,7 +95,7 @@ export function createAiService(deps: {
 
         deps.emit("gladlog:ai:done", { matchId, content: fullContent });
       } catch (err) {
-        if (cancelRequested || currentAnalysisId !== matchId) {
+        if (myGen !== generation) {
           return;
         }
         deps.emit("gladlog:ai:error", {
@@ -110,8 +106,7 @@ export function createAiService(deps: {
     },
 
     async cancel(): Promise<void> {
-      cancelRequested = true;
-      currentAnalysisId = null;
+      generation++;
     },
 
     async getCached(
@@ -150,13 +145,18 @@ export function realClientFactory(key: string): AnthropicLike {
         messages: params.messages,
       });
 
-      for await (const event of stream) {
-        if (
-          event.type === "content_block_delta" &&
-          event.delta.type === "text_delta"
-        ) {
-          yield { delta: event.delta.text };
+      try {
+        for await (const event of stream) {
+          if (
+            event.type === "content_block_delta" &&
+            event.delta.type === "text_delta"
+          ) {
+            yield { delta: event.delta.text };
+          }
         }
+      } finally {
+        // 消费方提前 break(取消)时确保底层 HTTP 流被挂断
+        stream.abort();
       }
     },
   };
