@@ -1172,47 +1172,93 @@ git commit -m "feat(corpus-tools): feed client + go/no-go smoke (SP-B1 T6)"
 
 ---
 
-### Task 7: collector 编排(端到端,fixture 集成)
+### Task 7: collector 编排(hermetic 单测 + CLI)
+
+> **计划修正(执行期,控制器)**:原计划用一份自采日志 fixture 做集成测试。仓内无现成完整-对局 fixture,提交真实玩家日志有隐私顾虑且体积大。故拆分:纯函数 `combatToRecords(combat)`(单场→记录,用合成 combat 单测,同 T1/T3 手法,hermetic 无网络无 fixture)+ 薄壳 `buildPerMatchRecords(logText)`(解析后 flatMap)。真实"解析+feed"集成在 T8 的真实构建里验证。
 
 **Files:**
 
-- Create: `packages/corpus-tools/src/perMatchRecord.ts`(单场 → PerMatchRecord)
+- Create: `packages/corpus-tools/src/perMatchRecord.ts`(`combatToRecords` + `buildPerMatchRecords`)
 - Create: `packages/corpus-tools/scripts/buildCorpus.ts`(编排 CLI)
 - Test: `packages/corpus-tools/src/perMatchRecord.test.ts`
 
 **Interfaces:**
 
-- Consumes:`GladLogParser`(@gladlog/parser)、`toLegacyMatch`/`toLegacyShuffle`(@gladlog/parser-compat)、`computeHealerMetrics`/`extractRotations`/`enemyCompArchetype`/`isHealerSpec`/`specToString`(@gladlog/analysis)、`fetchMatchStubs`/`downloadLogText`(./feedClient)、`aggregateCells`/`validateCorpus`。
-- Produces:`buildPerMatchRecords(logText: string): PerMatchRecord[]`(单份日志 → 每个治疗-owner 视角一条记录);`buildCorpus` CLI 写 `packages/corpus-tools/data/reference_vectors.json`。
+- Consumes:`GladLogParser`(@gladlog/parser)、`toLegacyMatch`/`toLegacyShuffle`/`CombatUnitReaction`(@gladlog/parser-compat)、`computeHealerMetrics`/`extractRotations`/`enemyCompArchetype`/`isHealerSpec`/`specToString`(@gladlog/analysis)、`fetchMatchStubs`/`downloadLogText`(./feedClient)、`aggregateCells`/`validateCorpus`(./…)。
+- Produces:`combatToRecords(combat: any): PerMatchRecord[]`(单场 → 每个 Friendly 治疗一条记录);`buildPerMatchRecords(logText: string): PerMatchRecord[]`(解析 + flatMap);`buildCorpus` CLI 写 `packages/corpus-tools/data/reference_vectors.json`。
 
-- [ ] **Step 1: 写失败测试(用一份自采 fixture 日志)**
+- [ ] **Step 1: 写失败测试(合成 combat,hermetic)**
 
 `packages/corpus-tools/src/perMatchRecord.test.ts`:
 
 ```typescript
 import { describe, expect, it } from "vitest";
-import fs from "fs-extra";
-import path from "path";
-import { buildPerMatchRecords } from "./perMatchRecord";
+import { combatToRecords } from "./perMatchRecord";
 
-// fixture:一份小的自采 solo shuffle 日志(实现者从 gladlog-eval-private/corpus 拷一份最小的进 packages/corpus-tools/test/fixtures/)
-const FIX = path.join(__dirname, "../test/fixtures/sample-ss.txt");
+// 合成一场:1 Friendly 治疗(Resto Shaman)+ 2 Hostile 近战 dps + 1 Hostile 治疗。
+// 字段取 computeHealerMetrics/extractRotations 实际读到的最小集(同 T1 stub 手法)。
+// reaction:CombatUnitReaction.Friendly=1,Hostile=2。type:Player=1。
+function unit(name: string, spec: string, reaction: number): any {
+  return {
+    id: name,
+    name,
+    spec,
+    type: 1,
+    reaction,
+    damageOut: [],
+    healOut: [],
+    absorbsOut: [],
+    damageIn: [],
+    spellCastEvents: [],
+    actionIn: [],
+    auraEvents: [],
+    advancedActions: [],
+    deathRecords: [],
+    info: { teamId: reaction === 1 ? "0" : "1" },
+  };
+}
+// 实现者:把 SHAMAN/WARRIOR/PALADIN 换成 @gladlog/parser-compat 的真实 CombatUnitSpec 值——
+// Resto Shaman(isHealerSpec true)、Arms Warrior(isMeleeSpec true 非 healer)、Holy Paladin(isHealerSpec true)。
+function synthCombat(): any {
+  const healer = unit("Me-Realm-US", SHAMAN, 1);
+  const eMelee1 = unit("E1-Realm-US", WARRIOR, 2);
+  const eMelee2 = unit("E2-Realm-US", WARRIOR, 2);
+  const eHealer = unit("EH-Realm-US", PALADIN, 2);
+  return {
+    units: {
+      [healer.name]: healer,
+      [eMelee1.name]: eMelee1,
+      [eMelee2.name]: eMelee2,
+      [eHealer.name]: eHealer,
+    },
+    startTime: 0,
+    endTime: 120000,
+    playerId: "Me-Realm-US",
+    startInfo: { bracket: "3v3", zoneId: 1 },
+  };
+}
 
-describe("buildPerMatchRecords", () => {
-  it("produces one record per healer round with in-domain metrics + archetype", () => {
-    const text = fs.readFileSync(FIX, "utf-8");
-    const recs = buildPerMatchRecords(text);
-    expect(recs.length).toBeGreaterThan(0);
-    for (const r of recs) {
-      expect(r.spec).toBeTruthy();
-      expect(r.bracket).toBeTruthy();
-      expect(r.archetype).toBeTruthy();
-      expect(typeof r.metrics.offensiveIndex).toBe("number");
-      for (const c of r.crisisEvents) expect(c).toMatch(/^[\x00-\x7F]*$/);
-    }
+describe("combatToRecords", () => {
+  it("emits one record per Friendly healer with in-domain metrics + comp archetype", () => {
+    const recs = combatToRecords(synthCombat());
+    expect(recs.length).toBe(1); // 只有 Friendly 的 Resto Shaman
+    const r = recs[0];
+    expect(r.spec).toBeTruthy();
+    expect(r.bracket).toBe("3v3");
+    expect(r.archetype).toBe("melee_cleave"); // 2 敌方近战 dps
+    expect(typeof r.metrics.offensiveIndex).toBe("number");
+    for (const c of r.crisisEvents) expect(c).toMatch(/^[\x00-\x7F]*$/);
+  });
+  it("returns [] when no Friendly healer is present", () => {
+    const c = synthCombat();
+    // 把 Friendly 治疗换成近战 → 无 Friendly healer
+    c.units["Me-Realm-US"].spec = WARRIOR;
+    expect(combatToRecords(c)).toEqual([]);
   });
 });
 ```
+
+> 实现者:`SHAMAN`/`WARRIOR`/`PALADIN` 换成真实 `CombatUnitSpec` 成员(查 `cooldowns.ts` 的 `isHealerSpec`/`isMeleeSpec` 确认;Resto Shaman、Arms Warrior、Holy Paladin)。
 
 - [ ] **Step 2: 跑测试确认失败**
 
@@ -1237,6 +1283,35 @@ import {
 } from "@gladlog/analysis";
 import type { PerMatchRecord } from "./cellAggregator";
 
+/** 单场 combat → 每个 Friendly 治疗一条记录(纯,可合成 combat 单测)。 */
+export function combatToRecords(combat: any): PerMatchRecord[] {
+  const players = (Object.values(combat.units) as any[]).filter((u) => u.info);
+  const healers = players.filter(
+    (u) => isHealerSpec(u.spec) && u.reaction === CombatUnitReaction.Friendly,
+  );
+  const out: PerMatchRecord[] = [];
+  for (const healer of healers) {
+    const enemies = players.filter((u) => u.reaction !== healer.reaction);
+    let metrics;
+    try {
+      metrics = computeHealerMetrics(combat, healer.name);
+    } catch {
+      continue;
+    }
+    const archetype = enemyCompArchetype(enemies);
+    const rotations = extractRotations(healer, combat);
+    out.push({
+      spec: specToString(healer.spec),
+      bracket: combat.startInfo?.bracket ?? "unknown",
+      archetype,
+      metrics,
+      crisisEvents: rotations.crisisEvents,
+    });
+  }
+  return out;
+}
+
+/** 一份日志 → 解析 → 每场记录。薄壳;真实解析集成在 T8 真跑里验证。 */
 export function buildPerMatchRecords(logText: string): PerMatchRecord[] {
   const parser = new GladLogParser();
   const combats: any[] = [];
@@ -1247,40 +1322,9 @@ export function buildPerMatchRecords(logText: string): PerMatchRecord[] {
   });
   for (const line of logText.split("\n")) parser.push(line);
   parser.end();
-
-  const out: PerMatchRecord[] = [];
-  for (const combat of combats) {
-    const players = (Object.values(combat.units) as any[]).filter(
-      (u) => u.info,
-    );
-    const healers = players.filter(
-      (u) => isHealerSpec(u.spec) && u.reaction === CombatUnitReaction.Friendly,
-    );
-    for (const healer of healers) {
-      const friends = players.filter((u) => u.reaction === healer.reaction);
-      const enemies = players.filter((u) => u.reaction !== healer.reaction);
-      let metrics;
-      try {
-        metrics = computeHealerMetrics(combat, healer.name);
-      } catch {
-        continue;
-      }
-      const archetype = enemyCompArchetype(enemies);
-      const rotations = extractRotations(healer, combat);
-      out.push({
-        spec: specToString(healer.spec),
-        bracket: combat.startInfo?.bracket ?? "unknown",
-        archetype,
-        metrics,
-        crisisEvents: rotations.crisisEvents,
-      });
-    }
-  }
-  return out;
+  return combats.flatMap((c) => combatToRecords(c));
 }
 ```
-
-(`enemyCompArchetype(enemies)` 直接返回 4 桶字符串之一,见 T3。)
 
 - [ ] **Step 4: 实现 buildCorpus.ts 编排 CLI**
 
@@ -1343,12 +1387,12 @@ main().catch((e) => {
 - [ ] **Step 5: 跑集成测试 + tc(fixture,不打网络)**
 
 Run: `cd packages/corpus-tools && npx vitest run && npx tsc --noEmit`
-Expected: perMatchRecord 测试 PASS(需实现者先放 `test/fixtures/sample-ss.txt` 最小自采日志);tc=0。
+Expected: perMatchRecord 2 测试 PASS(合成 combat,无 fixture/网络);cellAggregator + validateCorpus + feedClient 既有测试仍绿;tc=0。
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add packages/corpus-tools/src/perMatchRecord.ts packages/corpus-tools/src/perMatchRecord.test.ts packages/corpus-tools/scripts/buildCorpus.ts packages/corpus-tools/test/fixtures/
+git add packages/corpus-tools/src/perMatchRecord.ts packages/corpus-tools/src/perMatchRecord.test.ts packages/corpus-tools/scripts/buildCorpus.ts
 git commit -m "feat(corpus-tools): per-match record + buildCorpus orchestration (SP-B1 T7)"
 ```
 
