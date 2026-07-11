@@ -29,12 +29,13 @@
 - **依赖**:enemyCDs util(已搬)+ 子项目 5 法术数据(已入)。
 - **A/B 目标维度**:inferenceScaffolding(修复对象)+ focusCalibration;确定性 token 计数对比。
 
-### 3. POSITIONING(连几何扫描器一起)
+### 3. POSITIONING(连几何扫描器一起)✅(2026-07-11 关闭:扫描器建成 + 0-violation 硬门通过)
 
 - **内容**:POSITIONING 段、missed-trinket 距离/LoS 提示、位置图例。
 - **旧仓证据**:B124 判 INCONCLUSIVE(control 天花板 5.00)→ 以事实正确性 ADOPT:100 场扫描 POSITIONING 全净;假 "LoS blocked" 142→~0(守卫+几何重校准后);不可能 CC 距离 3→0。
 - **依赖**:arenaGeometry(4a 已搬,校准后版本)、坐标(compat 已供)、**几何 grounding 扫描器(未搬——本项的先行子任务,含变异测试)**。
 - **硬门**:扫描器重建后先对全语料跑 0-violation 验证,再进 A/B;违规非零不许开旗。
+- **关闭证据(2026-07-11,gladlog f004d74)**:POSITIONING 段/LoS 提示等内容 4a 已随 timeline 变体入册并经三轮盲评;扫描器(`packages/eval/scripts/positioningScan.ts`,5 类几何主张 × 真实采样时刻复算 × 合成夹具变异单测)全语料 2490 主张 0-violation。扫描器抓出并修复两个真管线缺陷:跨采样空窗插值幻觉位置(近战 Cheap Shot 标 17-21yd;gap 守卫 8s→1.5s)、TRAINED closest 距离与具名 trainer 张冠李戴(改 per-trainer min)。
 - **A/B 目标维度**:inferenceScaffolding / accuracy;确定性 = 扫描器违规计数。
 
 ### 4. CONTESTED(healer offense V2)✅(2026-07-11 关闭:契约断言全净 + rubric 条款入册)
