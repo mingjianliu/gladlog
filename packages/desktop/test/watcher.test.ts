@@ -30,14 +30,26 @@ describe("startLogWatcher", () => {
     w.close();
   });
 
-  it("rename 与非 WoWCombatLog*.txt 被忽略", async () => {
+  it("rename 与匹配的 WoWCombatLog*.txt 被处理并 flush", async () => {
     const seen: string[][] = [];
     const w = make(async (f) => {
       seen.push(f);
     });
     w.handleEvent("rename", "WoWCombatLog-1.txt");
+    await vi.advanceTimersByTimeAsync(100);
+    expect(seen).toEqual([["WoWCombatLog-1.txt"]]);
+    w.close();
+  });
+
+  it("非 WoWCombatLog*.txt 被忽略 (无论是 change 还是 rename)", async () => {
+    const seen: string[][] = [];
+    const w = make(async (f) => {
+      seen.push(f);
+    });
     w.handleEvent("change", "other.txt");
+    w.handleEvent("rename", "other.txt");
     w.handleEvent("change", "WoWCombatLog-1.log");
+    w.handleEvent("rename", "WoWCombatLog-1.log");
     await vi.advanceTimersByTimeAsync(1000);
     expect(seen).toEqual([]);
     w.close();

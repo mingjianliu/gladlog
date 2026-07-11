@@ -2,7 +2,7 @@ import { watch } from "fs";
 
 export interface LogWatcher {
   close(): void;
-  /** Exposed for tests; production events arrive via fs.watch. */
+  /** Exposed for tests; production events arrive via fs.watch. rename events are processed. */
   handleEvent(eventType: string, fileName: string | Buffer | null): void;
 }
 
@@ -55,7 +55,7 @@ export function startLogWatcher(opts: {
     eventType: string,
     fileName: string | Buffer | null,
   ): void => {
-    if (closed || eventType === "rename") return;
+    if (closed) return;
     if (
       typeof fileName !== "string" ||
       !fileName.includes("WoWCombatLog") ||
