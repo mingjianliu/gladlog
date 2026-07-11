@@ -474,57 +474,103 @@ git commit -m "feat(analysis): port extractRotations/crisisEvents from old fork 
 
 ---
 
-### Task 3: 暴露 archetype 分类器
+### Task 3: enemy-comp archetype 分类器(cohort celling 轴)
+
+> **计划修正(执行期,控制器)**:原计划复用 gladlog 的 `computeMatchArchetype`([MATCH TYPE] 标签)。核对真实 API 后发现它是**赛况动态**(爆发节奏)分类,签名 6 参(含 ccTrinketSummaries / alignedBurstWindows / healerExposures 重依赖)、返回 measurements、标签需再经 15 字段 dynamics 组装 + classifyMatchArchetype,且对短局/噪声簇返回空串。而 Gemini debate 指出的聚合陷阱本质是**敌方阵容**依赖,非爆发动态。故改用**自建 enemy-comp 分类器**:自足(只需 `isMeleeSpec`/`isHealerSpec` + 敌方 specs)、更贴合 comp-context 意图、对 cohort 与用户对局用同一函数分类(SP-B2 查 cell 用同款),且天然非空(总落到确定桶)。
 
 **Files:**
 
-- Modify: `packages/analysis/src/index.ts`(若未导出)
-- Test: `packages/analysis/src/utils/matchArchetype.classify.test.ts`
+- Create: `packages/analysis/src/utils/enemyCompArchetype.ts`
+- Modify: `packages/analysis/src/index.ts`
+- Test: `packages/analysis/src/utils/enemyCompArchetype.test.ts`
 
 **Interfaces:**
 
-- Produces:`computeMatchArchetype(combat, friends, enemies): { archetype: string; ... }`(gladlog 已有;buildMatchContext 内部用来渲染 `[MATCH TYPE: ...]`)。本 task 确认它返回粗粒度 archetype 字符串并从 index 导出。
+- Consumes:`isMeleeSpec`、`isHealerSpec`(from `./cooldowns`);`ICombatUnit`(from `@gladlog/parser-compat`)。
+- Produces:`enemyCompArchetype(enemies: ICombatUnit[]): string` — 返回 4 桶之一:`"melee_cleave"` / `"caster_cleave"` / `"hybrid"` / `"other"`。
 
-- [ ] **Step 1: 写测试(锁定 archetype 是有限小集合的字符串)**
+- [ ] **Step 1: 写失败测试(真实行为断言)**
 
-`packages/analysis/src/utils/matchArchetype.classify.test.ts`:
+`packages/analysis/src/utils/enemyCompArchetype.test.ts`:
 
 ```typescript
 import { describe, expect, it } from "vitest";
-import { computeMatchArchetype } from "../index";
+import { enemyCompArchetype } from "./enemyCompArchetype";
 
-describe("computeMatchArchetype exposure", () => {
-  it("is exported and returns a non-empty archetype string", () => {
-    // 用 analysis 内既有 fixture(与 matchArchetype 现有单测同源)构造 combat/friends/enemies
-    // 实现者:复用 packages/analysis 内 matchArchetype 现有测试的 fixture 装配。
-    expect(typeof computeMatchArchetype).toBe("function");
+// 用 spec id 构造敌方单位;isMeleeSpec/isHealerSpec 按 gladlog 的 CombatUnitSpec 判定。
+// spec 常量取自 @gladlog/parser-compat 的 CombatUnitSpec(实现者 import 真值):
+//   melee dps 例:Warrior_Arms;ranged dps 例:Mage_Frost;healer 例:Paladin_Holy。
+function u(spec: string): any {
+  return { spec, type: 1 };
+}
+
+describe("enemyCompArchetype", () => {
+  it("two melee dps -> melee_cleave", () => {
+    // 两个近战 dps + 一个治疗
+    expect(enemyCompArchetype([u(MELEE), u(MELEE), u(HEALER)])).toBe(
+      "melee_cleave",
+    );
+  });
+  it("two ranged dps -> caster_cleave", () => {
+    expect(enemyCompArchetype([u(RANGED), u(RANGED), u(HEALER)])).toBe(
+      "caster_cleave",
+    );
+  });
+  it("one melee + one ranged dps -> hybrid", () => {
+    expect(enemyCompArchetype([u(MELEE), u(RANGED), u(HEALER)])).toBe("hybrid");
+  });
+  it("no dps (edge) -> other", () => {
+    expect(enemyCompArchetype([u(HEALER)])).toBe("other");
   });
 });
 ```
 
-- [ ] **Step 2: 跑测试确认失败**（若 index 未导出 computeMatchArchetype）
+> 实现者:把 `MELEE`/`RANGED`/`HEALER` 换成 `@gladlog/parser-compat` 的 `CombatUnitSpec` 里真实值——用 `isMeleeSpec` 判为 true 的一个近战 spec(如 Arms Warrior)、`isMeleeSpec` false 且非治疗的 ranged spec(如 Frost Mage)、`isHealerSpec` true 的治疗 spec(如 Holy Paladin)。可先在实现文件里 `console.log` 或查 `cooldowns.ts` 的 spec 集合确认。
 
-Run: `cd packages/analysis && npx vitest run src/utils/matchArchetype.classify.test.ts`
-Expected: FAIL(`computeMatchArchetype is not a function` / import 报错)。
+- [ ] **Step 2: 跑测试确认失败**
 
-- [ ] **Step 3: 从 index 导出**
+Run: `cd packages/analysis && npx vitest run src/utils/enemyCompArchetype.test.ts`
+Expected: FAIL(module 不存在)。
 
-`packages/analysis/src/index.ts` 加(若缺):
+- [ ] **Step 3: 实现 enemyCompArchetype.ts**
 
 ```typescript
-export { computeMatchArchetype } from "./utils/matchArchetype";
+import type { ICombatUnit } from "@gladlog/parser-compat";
+import { isHealerSpec, isMeleeSpec } from "./cooldowns";
+
+/**
+ * cohort-celling 的敌方阵容轴。粗 4 桶,兼顾战术上下文(治疗指标画像随敌方 comp 变)
+ * 与样本量(桶少)。cohort 与用户对局用同一函数分类,保证 SP-B2 查 cell 一致。
+ */
+export function enemyCompArchetype(enemies: ICombatUnit[]): string {
+  const dps = enemies.filter((e) => !isHealerSpec(e.spec));
+  const melee = dps.filter((e) => isMeleeSpec(e.spec)).length;
+  const ranged = dps.length - melee;
+  if (melee >= 2) return "melee_cleave";
+  if (ranged >= 2) return "caster_cleave";
+  if (melee >= 1 && ranged >= 1) return "hybrid";
+  return "other";
+}
 ```
 
-- [ ] **Step 4: 跑测试**
+若 `isMeleeSpec`/`isHealerSpec` 未从 `./cooldowns` 导出,加 `export`。
 
-Run: `cd packages/analysis && npx vitest run src/utils/matchArchetype.classify.test.ts`
-Expected: PASS。
+- [ ] **Step 4: 从 index 导出**
 
-- [ ] **Step 5: Commit**
+```typescript
+export { enemyCompArchetype } from "./utils/enemyCompArchetype";
+```
+
+- [ ] **Step 5: 跑测试 + tc**
+
+Run: `cd packages/analysis && npx vitest run src/utils/enemyCompArchetype.test.ts && npx tsc --noEmit`
+Expected: 4 测试 PASS;tc=0。
+
+- [ ] **Step 6: Commit**
 
 ```bash
-git add packages/analysis/src/index.ts packages/analysis/src/utils/matchArchetype.classify.test.ts
-git commit -m "feat(analysis): export computeMatchArchetype for cohort celling (SP-B1 T3)"
+git add packages/analysis/src/utils/enemyCompArchetype.ts packages/analysis/src/utils/enemyCompArchetype.test.ts packages/analysis/src/index.ts
+git commit -m "feat(analysis): enemy-comp archetype classifier for cohort celling (SP-B1 T3)"
 ```
 
 ---
@@ -777,10 +823,13 @@ export function aggregateCells(
   const byArche = new Map<string, PerMatchRecord[]>();
   const byParent = new Map<string, PerMatchRecord[]>();
   for (const r of records) {
-    const ak = `${r.spec}|${r.bracket}|${r.archetype}`;
     const pk = `${r.spec}|${r.bracket}|*`;
-    (byArche.get(ak) ?? byArche.set(ak, []).get(ak)!).push(r);
     (byParent.get(pk) ?? byParent.set(pk, []).get(pk)!).push(r);
+    // "*" 是父 cell 保留键;archetype 恰为 "*" 的记录只进父 cell(防与父 cell 撞键重复)
+    if (r.archetype !== "*") {
+      const ak = `${r.spec}|${r.bracket}|${r.archetype}`;
+      (byArche.get(ak) ?? byArche.set(ak, []).get(ak)!).push(r);
+    }
   }
   const cells: Cell[] = [];
   for (const [k, recs] of byArche) {
@@ -1123,47 +1172,93 @@ git commit -m "feat(corpus-tools): feed client + go/no-go smoke (SP-B1 T6)"
 
 ---
 
-### Task 7: collector 编排(端到端,fixture 集成)
+### Task 7: collector 编排(hermetic 单测 + CLI)
+
+> **计划修正(执行期,控制器)**:原计划用一份自采日志 fixture 做集成测试。仓内无现成完整-对局 fixture,提交真实玩家日志有隐私顾虑且体积大。故拆分:纯函数 `combatToRecords(combat)`(单场→记录,用合成 combat 单测,同 T1/T3 手法,hermetic 无网络无 fixture)+ 薄壳 `buildPerMatchRecords(logText)`(解析后 flatMap)。真实"解析+feed"集成在 T8 的真实构建里验证。
 
 **Files:**
 
-- Create: `packages/corpus-tools/src/perMatchRecord.ts`(单场 → PerMatchRecord)
+- Create: `packages/corpus-tools/src/perMatchRecord.ts`(`combatToRecords` + `buildPerMatchRecords`)
 - Create: `packages/corpus-tools/scripts/buildCorpus.ts`(编排 CLI)
 - Test: `packages/corpus-tools/src/perMatchRecord.test.ts`
 
 **Interfaces:**
 
-- Consumes:`GladLogParser`(@gladlog/parser)、`toLegacyMatch`/`toLegacyShuffle`(@gladlog/parser-compat)、`computeHealerMetrics`/`extractRotations`/`computeMatchArchetype`/`isHealerSpec`/`specToString`(@gladlog/analysis)、`fetchMatchStubs`/`downloadLogText`(./feedClient)、`aggregateCells`/`validateCorpus`。
-- Produces:`buildPerMatchRecords(logText: string): PerMatchRecord[]`(单份日志 → 每个治疗-owner 视角一条记录);`buildCorpus` CLI 写 `packages/corpus-tools/data/reference_vectors.json`。
+- Consumes:`GladLogParser`(@gladlog/parser)、`toLegacyMatch`/`toLegacyShuffle`/`CombatUnitReaction`(@gladlog/parser-compat)、`computeHealerMetrics`/`extractRotations`/`enemyCompArchetype`/`isHealerSpec`/`specToString`(@gladlog/analysis)、`fetchMatchStubs`/`downloadLogText`(./feedClient)、`aggregateCells`/`validateCorpus`(./…)。
+- Produces:`combatToRecords(combat: any): PerMatchRecord[]`(单场 → 每个 Friendly 治疗一条记录);`buildPerMatchRecords(logText: string): PerMatchRecord[]`(解析 + flatMap);`buildCorpus` CLI 写 `packages/corpus-tools/data/reference_vectors.json`。
 
-- [ ] **Step 1: 写失败测试(用一份自采 fixture 日志)**
+- [ ] **Step 1: 写失败测试(合成 combat,hermetic)**
 
 `packages/corpus-tools/src/perMatchRecord.test.ts`:
 
 ```typescript
 import { describe, expect, it } from "vitest";
-import fs from "fs-extra";
-import path from "path";
-import { buildPerMatchRecords } from "./perMatchRecord";
+import { combatToRecords } from "./perMatchRecord";
 
-// fixture:一份小的自采 solo shuffle 日志(实现者从 gladlog-eval-private/corpus 拷一份最小的进 packages/corpus-tools/test/fixtures/)
-const FIX = path.join(__dirname, "../test/fixtures/sample-ss.txt");
+// 合成一场:1 Friendly 治疗(Resto Shaman)+ 2 Hostile 近战 dps + 1 Hostile 治疗。
+// 字段取 computeHealerMetrics/extractRotations 实际读到的最小集(同 T1 stub 手法)。
+// reaction:CombatUnitReaction.Friendly=1,Hostile=2。type:Player=1。
+function unit(name: string, spec: string, reaction: number): any {
+  return {
+    id: name,
+    name,
+    spec,
+    type: 1,
+    reaction,
+    damageOut: [],
+    healOut: [],
+    absorbsOut: [],
+    damageIn: [],
+    spellCastEvents: [],
+    actionIn: [],
+    auraEvents: [],
+    advancedActions: [],
+    deathRecords: [],
+    info: { teamId: reaction === 1 ? "0" : "1" },
+  };
+}
+// 实现者:把 SHAMAN/WARRIOR/PALADIN 换成 @gladlog/parser-compat 的真实 CombatUnitSpec 值——
+// Resto Shaman(isHealerSpec true)、Arms Warrior(isMeleeSpec true 非 healer)、Holy Paladin(isHealerSpec true)。
+function synthCombat(): any {
+  const healer = unit("Me-Realm-US", SHAMAN, 1);
+  const eMelee1 = unit("E1-Realm-US", WARRIOR, 2);
+  const eMelee2 = unit("E2-Realm-US", WARRIOR, 2);
+  const eHealer = unit("EH-Realm-US", PALADIN, 2);
+  return {
+    units: {
+      [healer.name]: healer,
+      [eMelee1.name]: eMelee1,
+      [eMelee2.name]: eMelee2,
+      [eHealer.name]: eHealer,
+    },
+    startTime: 0,
+    endTime: 120000,
+    playerId: "Me-Realm-US",
+    startInfo: { bracket: "3v3", zoneId: 1 },
+  };
+}
 
-describe("buildPerMatchRecords", () => {
-  it("produces one record per healer round with in-domain metrics + archetype", () => {
-    const text = fs.readFileSync(FIX, "utf-8");
-    const recs = buildPerMatchRecords(text);
-    expect(recs.length).toBeGreaterThan(0);
-    for (const r of recs) {
-      expect(r.spec).toBeTruthy();
-      expect(r.bracket).toBeTruthy();
-      expect(r.archetype).toBeTruthy();
-      expect(typeof r.metrics.offensiveIndex).toBe("number");
-      for (const c of r.crisisEvents) expect(c).toMatch(/^[\x00-\x7F]*$/);
-    }
+describe("combatToRecords", () => {
+  it("emits one record per Friendly healer with in-domain metrics + comp archetype", () => {
+    const recs = combatToRecords(synthCombat());
+    expect(recs.length).toBe(1); // 只有 Friendly 的 Resto Shaman
+    const r = recs[0];
+    expect(r.spec).toBeTruthy();
+    expect(r.bracket).toBe("3v3");
+    expect(r.archetype).toBe("melee_cleave"); // 2 敌方近战 dps
+    expect(typeof r.metrics.offensiveIndex).toBe("number");
+    for (const c of r.crisisEvents) expect(c).toMatch(/^[\x00-\x7F]*$/);
+  });
+  it("returns [] when no Friendly healer is present", () => {
+    const c = synthCombat();
+    // 把 Friendly 治疗换成近战 → 无 Friendly healer
+    c.units["Me-Realm-US"].spec = WARRIOR;
+    expect(combatToRecords(c)).toEqual([]);
   });
 });
 ```
+
+> 实现者:`SHAMAN`/`WARRIOR`/`PALADIN` 换成真实 `CombatUnitSpec` 成员(查 `cooldowns.ts` 的 `isHealerSpec`/`isMeleeSpec` 确认;Resto Shaman、Arms Warrior、Holy Paladin)。
 
 - [ ] **Step 2: 跑测试确认失败**
 
@@ -1182,12 +1277,41 @@ import {
 import {
   computeHealerMetrics,
   extractRotations,
-  computeMatchArchetype,
+  enemyCompArchetype,
   isHealerSpec,
   specToString,
 } from "@gladlog/analysis";
 import type { PerMatchRecord } from "./cellAggregator";
 
+/** 单场 combat → 每个 Friendly 治疗一条记录(纯,可合成 combat 单测)。 */
+export function combatToRecords(combat: any): PerMatchRecord[] {
+  const players = (Object.values(combat.units) as any[]).filter((u) => u.info);
+  const healers = players.filter(
+    (u) => isHealerSpec(u.spec) && u.reaction === CombatUnitReaction.Friendly,
+  );
+  const out: PerMatchRecord[] = [];
+  for (const healer of healers) {
+    const enemies = players.filter((u) => u.reaction !== healer.reaction);
+    let metrics;
+    try {
+      metrics = computeHealerMetrics(combat, healer.name);
+    } catch {
+      continue;
+    }
+    const archetype = enemyCompArchetype(enemies);
+    const rotations = extractRotations(healer, combat);
+    out.push({
+      spec: specToString(healer.spec),
+      bracket: combat.startInfo?.bracket ?? "unknown",
+      archetype,
+      metrics,
+      crisisEvents: rotations.crisisEvents,
+    });
+  }
+  return out;
+}
+
+/** 一份日志 → 解析 → 每场记录。薄壳;真实解析集成在 T8 真跑里验证。 */
 export function buildPerMatchRecords(logText: string): PerMatchRecord[] {
   const parser = new GladLogParser();
   const combats: any[] = [];
@@ -1198,40 +1322,9 @@ export function buildPerMatchRecords(logText: string): PerMatchRecord[] {
   });
   for (const line of logText.split("\n")) parser.push(line);
   parser.end();
-
-  const out: PerMatchRecord[] = [];
-  for (const combat of combats) {
-    const players = (Object.values(combat.units) as any[]).filter(
-      (u) => u.info,
-    );
-    const healers = players.filter(
-      (u) => isHealerSpec(u.spec) && u.reaction === CombatUnitReaction.Friendly,
-    );
-    for (const healer of healers) {
-      const friends = players.filter((u) => u.reaction === healer.reaction);
-      const enemies = players.filter((u) => u.reaction !== healer.reaction);
-      let metrics;
-      try {
-        metrics = computeHealerMetrics(combat, healer.name);
-      } catch {
-        continue;
-      }
-      const arche = computeMatchArchetype(combat, friends, enemies);
-      const rotations = extractRotations(healer, combat);
-      out.push({
-        spec: specToString(healer.spec),
-        bracket: combat.startInfo?.bracket ?? "unknown",
-        archetype: (arche as any).archetype ?? String(arche),
-        metrics,
-        crisisEvents: rotations.crisisEvents,
-      });
-    }
-  }
-  return out;
+  return combats.flatMap((c) => combatToRecords(c));
 }
 ```
-
-(`computeMatchArchetype` 的确切返回形状由 T3 确定;若返回对象则取 `.archetype`,若返回字符串则直接用——实现者按 T3 导出的签名对齐。)
 
 - [ ] **Step 4: 实现 buildCorpus.ts 编排 CLI**
 
@@ -1294,12 +1387,12 @@ main().catch((e) => {
 - [ ] **Step 5: 跑集成测试 + tc(fixture,不打网络)**
 
 Run: `cd packages/corpus-tools && npx vitest run && npx tsc --noEmit`
-Expected: perMatchRecord 测试 PASS(需实现者先放 `test/fixtures/sample-ss.txt` 最小自采日志);tc=0。
+Expected: perMatchRecord 2 测试 PASS(合成 combat,无 fixture/网络);cellAggregator + validateCorpus + feedClient 既有测试仍绿;tc=0。
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add packages/corpus-tools/src/perMatchRecord.ts packages/corpus-tools/src/perMatchRecord.test.ts packages/corpus-tools/scripts/buildCorpus.ts packages/corpus-tools/test/fixtures/
+git add packages/corpus-tools/src/perMatchRecord.ts packages/corpus-tools/src/perMatchRecord.test.ts packages/corpus-tools/scripts/buildCorpus.ts
 git commit -m "feat(corpus-tools): per-match record + buildCorpus orchestration (SP-B1 T7)"
 ```
 

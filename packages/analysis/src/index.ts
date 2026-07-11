@@ -3,6 +3,7 @@
 // StoredMatch 形状 utils 并存、逐 util 迁移(4a spec debate 让步)。
 export * from "./context/buildMatchContext";
 export * from "./utils/cooldowns";
+export * from "./utils/enemyCompArchetype";
 export * from "./utils/enemyCDs";
 export * from "./utils/offensiveWindows";
 export * from "./utils/drAnalysis";
@@ -19,8 +20,8 @@ export { spellClassMap } from "./data/drCategories";
 export { SPELL_CATEGORIES } from "./data/spellCategories";
 export { SPELL_EFFECT_OVERRIDES } from "./data/spellEffectOverrides";
 export { default as spellIdLists } from "./data/spellIdLists";
-export { ccSpellIds, trinketSpellIds } from './data/spellTags';
-export { getEnglishSpellName } from './data/spellEffectData';
+export { ccSpellIds, trinketSpellIds } from "./data/spellTags";
+export { getEnglishSpellName } from "./data/spellEffectData";
 export { getTalentNames } from "./data/talentNames";
 export { nodeMaps } from "./data/talentStrings";
 // 几何原语(positioning grounding 扫描器用,backlog #3)
@@ -31,3 +32,10 @@ export {
   type IPosition,
 } from "./utils/losAnalysis";
 export { arenaObstacles } from "./data/arenaGeometry";
+export {
+  computeHealerMetrics,
+  computeCDResponseLatency,
+} from "./utils/healerMetrics";
+export type { IHealerMetrics } from "./utils/healerMetrics";
+export { extractRotations } from "./utils/crisisEvents";
+export type { IExtractedRotations } from "./utils/crisisEvents";
