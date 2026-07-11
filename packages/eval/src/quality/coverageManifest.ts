@@ -88,6 +88,24 @@ export function buildCoverageManifest(combat: ParsedCombat, matchId: string): Co
   const dispels: ManifestEvent[] = [];
   const trinketCasts: ManifestEvent[] = [];
 
+  // T5 分母卫生:位移/变形被动破根(druid 变形、Disengage/Posthaste、Phantasm 等)
+  // 在日志里也发 SPELL_DISPEL,但不是"驱散决策"——不该进覆盖率分母。
+  // Blessing of Sacrifice / Incarnation 的 SPELL_DISPEL 亦为形态切换/转移副作用。
+  const MOVEMENT_ROOT_BREAK_DISPEL_IDS = new Set([
+    "5487", // Bear Form
+    "768", // Cat Form
+    "165961", // Travel Form
+    "781", // Disengage (Posthaste)
+    "114239", // Phantasm
+    "378076", // Thunderous Paws
+    "409293", // Burrow
+    "462820", // Jet Stream
+    "159535", // Ride the Wind
+    "365080", // Windwalking
+    "6940", // Blessing of Sacrifice
+    "33891", // Incarnation: Tree of Life
+  ]);
+
   // De-dup: the same action can appear on both src's actionOut and dest's actionIn.
   const seen = new Set<string>();
   const pushUnique = (
@@ -130,6 +148,7 @@ export function buildCoverageManifest(combat: ParsedCombat, matchId: string): Co
       if (event === 'SPELL_INTERRUPT') {
         pushUnique(interrupts, action);
       } else if (event === 'SPELL_DISPEL') {
+        if (action.spellId && MOVEMENT_ROOT_BREAK_DISPEL_IDS.has(action.spellId)) continue;
         pushUnique(dispels, action);
       }
     }

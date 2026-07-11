@@ -1538,10 +1538,13 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
         first.removedSpellId,
         first.removedSpellName,
       );
+      // T5(驱散覆盖):具名驱散法术——"用什么驱的"是教练建议(冷却、优先级)
+      // 的落点,也是确定性覆盖率的匹配键。
+      const viaTag = first.dispelSpellName ? ` (${first.dispelSpellName})` : "";
       if (group.length === 1) {
         addEntry(
           first.timeSeconds,
-          `${fmtTime(first.timeSeconds)}  [CLEANSE]   ${pid(first.sourceName)} dispelled ${removedSpellName} off ${pid(first.targetName)}${petTag}${fatalTag}`,
+          `${fmtTime(first.timeSeconds)}  [CLEANSE]   ${pid(first.sourceName)} dispelled ${removedSpellName} off ${pid(first.targetName)}${viaTag}${petTag}${fatalTag}`,
         );
       } else {
         const effects = group
@@ -1552,9 +1555,115 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
           .join(", ");
         addEntry(
           first.timeSeconds,
-          `${fmtTime(first.timeSeconds)}  [CLEANSE]   ${pid(first.sourceName)} dispelled ${group.length} effects: ${effects}${petTag}${fatalTag}`,
+          `${fmtTime(first.timeSeconds)}  [CLEANSE]   ${pid(first.sourceName)} dispelled ${group.length} effects: ${effects}${viaTag}${petTag}${fatalTag}`,
         );
       }
+    }
+  }
+
+  // ── [PURGE] / [ENEMY PURGE] events(T5 驱散覆盖)────────────────────────────
+  // 队友的进攻性 purge 与敌方剥我方增益此前完全不可见;同 [CLEANSE] 的
+  // F163 去噪(仅 Critical/High)与 B14 同秒同源合并。owner 自己的 purge 已在
+  // 其施法行内注记([removed: …]),不重复。
+  {
+    const purgeGroups = new Map<string, IDispelEvent[]>();
+    for (const purge of dispelSummary.ourPurges) {
+      if (purge.sourceName === owner.name) continue;
+      if (purge.priority !== "Critical" && purge.priority !== "High") continue;
+      const key = `${Math.round(purge.timeSeconds)}|${purge.sourceName}`;
+      const group = purgeGroups.get(key) ?? [];
+      group.push(purge);
+      purgeGroups.set(key, group);
+    }
+    for (const group of purgeGroups.values()) {
+      const first = group[0];
+      const viaTag = first.dispelSpellName ? ` (${first.dispelSpellName})` : "";
+      const effects = group
+        .map(
+          (c) =>
+            `${getEnglishSpellName(c.removedSpellId, c.removedSpellName)} off ${enemyPid(c.targetName)}`,
+        )
+        .join(", ");
+      addEntry(
+        first.timeSeconds,
+        `${fmtTime(first.timeSeconds)}  [PURGE]   ${pid(first.sourceName)} purged ${effects}${viaTag}`,
+      );
+    }
+
+    const hostileGroups = new Map<string, IDispelEvent[]>();
+    for (const purge of dispelSummary.hostilePurges) {
+      if (purge.priority !== "Critical" && purge.priority !== "High") continue;
+      const key = `${Math.round(purge.timeSeconds)}|${purge.sourceName}`;
+      const group = hostileGroups.get(key) ?? [];
+      group.push(purge);
+      hostileGroups.set(key, group);
+    }
+    for (const group of hostileGroups.values()) {
+      const first = group[0];
+      const viaTag = first.dispelSpellName ? ` (${first.dispelSpellName})` : "";
+      const effects = group
+        .map(
+          (c) =>
+            `${getEnglishSpellName(c.removedSpellId, c.removedSpellName)} off ${pid(c.targetName)}`,
+        )
+        .join(", ");
+      addEntry(
+        first.timeSeconds,
+        `${fmtTime(first.timeSeconds)}  [ENEMY PURGE]   ${enemyPid(first.sourceName)} stripped ${effects}${viaTag}`,
+      );
+    }
+  }
+
+  // ── [MINOR DISPELS] 折叠行(T5 驱散覆盖)──────────────────────────────────
+  // F163 滤掉的 low/medium 驱散不逐条上时间轴,但按 (来源, 驱散法术) 折叠成
+  // 一行计数——驱散工作量与所用法术对教练可见,token 代价 O(法术种类)。
+  {
+    const minor = new Map<
+      string,
+      { sourceLabel: string; spellName: string; count: number; firstSeconds: number }
+    >();
+    const foldMinor = (
+      events: IDispelEvent[],
+      labelOf: (name: string) => string,
+    ) => {
+      for (const e of events) {
+        if (e.priority === "Critical" || e.priority === "High") continue;
+        const spellName = e.dispelSpellName || "unknown";
+        const key = `${e.sourceName}|${spellName}`;
+        const cur = minor.get(key);
+        if (cur) {
+          cur.count++;
+          cur.firstSeconds = Math.min(cur.firstSeconds, e.timeSeconds);
+        } else {
+          minor.set(key, {
+            sourceLabel: labelOf(e.sourceName),
+            spellName,
+            count: 1,
+            firstSeconds: e.timeSeconds,
+          });
+        }
+      }
+    };
+    foldMinor(dispelSummary.allyCleanse, pid);
+    foldMinor(dispelSummary.ourPurges, pid);
+    foldMinor(dispelSummary.hostilePurges, enemyPid);
+
+    const bySource = new Map<string, Array<{ spellName: string; count: number; firstSeconds: number }>>();
+    for (const m of minor.values()) {
+      const list = bySource.get(m.sourceLabel) ?? [];
+      list.push(m);
+      bySource.set(m.sourceLabel, list);
+    }
+    for (const [sourceLabel, list] of bySource) {
+      list.sort((a, b) => a.firstSeconds - b.firstSeconds);
+      const firstSeconds = list[0].firstSeconds;
+      const parts = list
+        .map((m) => (m.count > 1 ? `${m.spellName} x${m.count}` : m.spellName))
+        .join(", ");
+      addEntry(
+        firstSeconds,
+        `${fmtTime(firstSeconds)}  [MINOR DISPELS]   ${sourceLabel}: ${parts} (low-priority, folded)`,
+      );
     }
   }
 
