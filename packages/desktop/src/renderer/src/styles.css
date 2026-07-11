@@ -172,4 +172,16 @@ button {
   color: #8a8f98;
 }
 
-
+.app-topbar{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-bottom:1px solid #333}
+.app-layout{display:grid;grid-template-columns:280px 1fr;height:calc(100vh - 46px)}
+.app-sidebar{border-right:1px solid #333;overflow-y:auto}
+.app-sidebar li{list-style:none;padding:6px 10px;cursor:pointer;border-bottom:1px solid #1c1f26}
+.app-sidebar li.sel{background:#2a3b55}
+.app-main{overflow-y:auto;padding:12px}
+.rpt-body{display:grid;grid-template-columns:1fr 320px;gap:12px;margin-top:12px}
+.rpt-mode-tabs button,.rpt-round-tabs button{background:#1c1f26;color:#ddd;border:1px solid #333;padding:3px 12px;cursor:pointer}
+.rpt-mode-tabs button.active,.rpt-round-tabs button.active{background:#2a3b55;border-color:#446}
+.rpt-shuffle-head{display:flex;gap:12px;align-items:center;margin-bottom:8px}
+.rpt-shuffle-seq i{font-style:normal;padding:1px 6px;margin-right:2px;border-radius:3px}
+.rpt-shuffle-seq i.w{background:#14532d;color:#4ade80}
+.rpt-shuffle-seq i.l{background:#7f1d1d;color:#f87171}
