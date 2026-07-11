@@ -19,16 +19,8 @@
  * to grade real prompt-builder changes.
  */
 
-import fs from 'fs-extra';
-import path from 'path';
-
-import { resolveRepoPath } from './resolveRepoPath';
-
-const BASE_DIR = resolveRepoPath(process.env.BASE_DIR ?? 'packages/tools/local-batch/healer-eval');
-const SUITE_DIR = path.join(BASE_DIR, 'judge-calibration');
-const PASS_THRESHOLD = Number(process.env.PASS_THRESHOLD ?? 0.8);
-/** Alternate scores subdir under the suite (e.g. SCORES_DIR=scores-model2 for a second-model pass). */
-const SCORES_SUBDIR = process.env.SCORES_DIR ?? 'scores';
+import fs from "fs-extra";
+import path from "path";
 
 interface CalibrationCase {
   caseId: string;
@@ -51,23 +43,40 @@ function dimensionScore(score: ScoreFile, dimension: string): number | null {
   return !isNaN(num) ? num : null;
 }
 
-async function main() {
-  const manifestPath = path.join(SUITE_DIR, 'calibration-manifest.json');
+export async function checkCalibration(
+  baseDir: string,
+  opts?: { passThreshold?: number; scoresSubdir?: string },
+): Promise<{
+  pass: boolean;
+  failures: { caseId: string; dimension: string; reason: string }[];
+}> {
+  const suiteDir = path.join(baseDir, "judge-calibration");
+  const passThreshold =
+    opts?.passThreshold ?? Number(process.env.PASS_THRESHOLD ?? 0.8);
+  const scoresSubdir = opts?.scoresSubdir ?? process.env.SCORES_DIR ?? "scores";
+
+  const manifestPath = path.join(suiteDir, "calibration-manifest.json");
   if (!(await fs.pathExists(manifestPath))) {
-    console.error(`No calibration manifest at ${manifestPath} — run start:buildJudgeCalibrationSuite first.`);
-    process.exit(1);
+    throw new Error(
+      `No calibration manifest at ${manifestPath} — run buildCalibrationSuite first.`,
+    );
   }
-  const manifest = (await fs.readJson(manifestPath)) as { seed: number; cases: CalibrationCase[] };
+  const manifest = (await fs.readJson(manifestPath)) as {
+    seed: number;
+    cases: CalibrationCase[];
+  };
 
   const scores = new Map<string, ScoreFile>();
   let missingScores = 0;
   for (const c of manifest.cases) {
-    const scorePath = path.join(SUITE_DIR, SCORES_SUBDIR, `${c.caseId}.json`);
+    const scorePath = path.join(suiteDir, scoresSubdir, `${c.caseId}.json`);
     if (await fs.pathExists(scorePath)) {
       try {
         scores.set(c.caseId, (await fs.readJson(scorePath)) as ScoreFile);
       } catch (err) {
-        console.error(`Error parsing JSON in score file ${scorePath}: ${err instanceof Error ? err.message : err}`);
+        console.error(
+          `Error parsing JSON in score file ${scorePath}: ${err instanceof Error ? err.message : err}`,
+        );
         missingScores++;
       }
     } else {
@@ -75,10 +84,15 @@ async function main() {
     }
   }
   if (missingScores > 0) {
-    console.warn(`WARNING: ${missingScores}/${manifest.cases.length} cases have no score file yet.`);
+    console.warn(
+      `WARNING: ${missingScores}/${manifest.cases.length} cases have no score file yet.`,
+    );
   }
 
-  const coverageRatio = manifest.cases.length > 0 ? (manifest.cases.length - missingScores) / manifest.cases.length : 0;
+  const coverageRatio =
+    manifest.cases.length > 0
+      ? (manifest.cases.length - missingScores) / manifest.cases.length
+      : 0;
   const MIN_COVERAGE = 0.8;
   if (coverageRatio < MIN_COVERAGE && !process.env.BYPASS_COVERAGE) {
     console.error(
@@ -88,7 +102,8 @@ async function main() {
   }
 
   const originals = new Map<number, CalibrationCase>();
-  for (const c of manifest.cases) if (c.perturbation === 'none') originals.set(c.sourceOrdinal, c);
+  for (const c of manifest.cases)
+    if (c.perturbation === "none") originals.set(c.sourceOrdinal, c);
 
   interface PairResult {
     perturbation: string;
@@ -102,12 +117,16 @@ async function main() {
   const pairs: PairResult[] = [];
 
   for (const c of manifest.cases) {
-    if (c.perturbation === 'none' || !c.targetDimension) continue;
+    if (c.perturbation === "none" || !c.targetDimension) continue;
     const original = originals.get(c.sourceOrdinal);
     const originalScore = original ? scores.get(original.caseId) : undefined;
     const perturbedScore = scores.get(c.caseId);
-    const orig = originalScore ? dimensionScore(originalScore, c.targetDimension) : null;
-    const pert = perturbedScore ? dimensionScore(perturbedScore, c.targetDimension) : null;
+    const orig = originalScore
+      ? dimensionScore(originalScore, c.targetDimension)
+      : null;
+    const pert = perturbedScore
+      ? dimensionScore(perturbedScore, c.targetDimension)
+      : null;
     pairs.push({
       perturbation: c.perturbation,
       dimension: c.targetDimension,
@@ -127,62 +146,97 @@ async function main() {
   }
 
   const lines: string[] = [];
-  lines.push('# Judge Calibration Report');
-  lines.push('');
+  lines.push("# Judge Calibration Report");
+  lines.push("");
   lines.push(
-    `**Generated:** ${new Date().toISOString().slice(0, 10)} | **Seed:** ${manifest.seed} | **Pass threshold:** ${PASS_THRESHOLD}`,
+    `**Generated:** ${new Date().toISOString().slice(0, 10)} | **Seed:** ${manifest.seed} | **Pass threshold:** ${passThreshold}`,
   );
-  lines.push('');
-  lines.push('A pair is *detected* when the judge scored the perturbed variant strictly lower than the');
-  lines.push('unmodified original on the targeted dimension. Undetected pairs mean the judge cannot see');
-  lines.push('that class of defect — its scores on that dimension carry no signal.');
-  lines.push('');
-  lines.push('| Dimension | Perturbation | Pairs | Detected | Rate | Verdict |');
-  lines.push('| --------- | ------------ | ----- | -------- | ---- | ------- |');
+  lines.push("");
+  lines.push(
+    "A pair is *detected* when the judge scored the perturbed variant strictly lower than the",
+  );
+  lines.push(
+    "unmodified original on the targeted dimension. Undetected pairs mean the judge cannot see",
+  );
+  lines.push(
+    "that class of defect — its scores on that dimension carry no signal.",
+  );
+  lines.push("");
+  lines.push(
+    "| Dimension | Perturbation | Pairs | Detected | Rate | Verdict |",
+  );
+  lines.push(
+    "| --------- | ------------ | ----- | -------- | ---- | ------- |",
+  );
 
   let anyFail = false;
   for (const [dimension, list] of [...byDimension.entries()].sort()) {
     const scoreable = list.filter((p) => p.detected !== null);
     const detected = scoreable.filter((p) => p.detected === true).length;
     const rate = scoreable.length > 0 ? detected / scoreable.length : 0;
-    const verdict = scoreable.length === 0 ? 'NO DATA' : rate >= PASS_THRESHOLD ? 'PASS' : 'FAIL';
-    if (verdict !== 'PASS') anyFail = true;
+    const verdict =
+      scoreable.length === 0
+        ? "NO DATA"
+        : rate >= passThreshold
+          ? "PASS"
+          : "FAIL";
+    if (verdict !== "PASS") anyFail = true;
     lines.push(
       `| ${dimension} | ${list[0].perturbation} | ${scoreable.length} | ${detected} | ${(rate * 100).toFixed(0)}% | ${verdict} |`,
     );
   }
 
-  lines.push('');
-  lines.push('## Pair Detail');
-  lines.push('');
-  lines.push('| Dimension | Source | Original | Perturbed | Detected | Injected defect |');
-  lines.push('| --------- | ------ | -------- | --------- | -------- | --------------- |');
+  lines.push("");
+  lines.push("## Pair Detail");
+  lines.push("");
+  lines.push(
+    "| Dimension | Source | Original | Perturbed | Detected | Injected defect |",
+  );
+  lines.push(
+    "| --------- | ------ | -------- | --------- | -------- | --------------- |",
+  );
   for (const p of pairs) {
     lines.push(
-      `| ${p.dimension} | ${String(p.sourceOrdinal).padStart(3, '0')} | ${p.originalScore ?? '—'} | ${p.perturbedScore ?? '—'} | ${
-        p.detected === null ? 'unscored' : p.detected ? 'yes' : '**NO**'
+      `| ${p.dimension} | ${String(p.sourceOrdinal).padStart(3, "0")} | ${p.originalScore ?? "—"} | ${p.perturbedScore ?? "—"} | ${
+        p.detected === null ? "unscored" : p.detected ? "yes" : "**NO**"
       } | ${p.detail} |`,
     );
   }
-  lines.push('');
+  lines.push("");
   lines.push(
     anyFail
-      ? '**Verdict: FAIL — do not trust judge scores on the failing dimensions until the judge prompt/rubric is fixed and this suite passes.**'
-      : '**Verdict: PASS — the judge detects all planted defect classes at or above threshold.**',
+      ? "**Verdict: FAIL — do not trust judge scores on the failing dimensions until the judge prompt/rubric is fixed and this suite passes.**"
+      : "**Verdict: PASS — the judge detects all planted defect classes at or above threshold.**",
   );
-  lines.push('');
+  lines.push("");
 
   const reportPath = path.join(
-    SUITE_DIR,
-    SCORES_SUBDIR === 'scores' ? 'calibration-report.md' : `calibration-report-${SCORES_SUBDIR}.md`,
+    suiteDir,
+    scoresSubdir === "scores"
+      ? "calibration-report.md"
+      : `calibration-report-${scoresSubdir}.md`,
   );
-  await fs.writeFile(reportPath, lines.join('\n'), 'utf8');
-  console.log(lines.join('\n'));
+  await fs.writeFile(reportPath, lines.join("\n"), "utf8");
+  console.log(lines.join("\n"));
   console.log(`\nReport written to ${reportPath}`);
-  if (anyFail) process.exit(1);
-}
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+  // Collect failures: undetected perturbed cases where detection rate fell below threshold
+  const failures: { caseId: string; dimension: string; reason: string }[] = [];
+  for (const p of pairs) {
+    if (p.detected === false) {
+      // This perturbed case was NOT detected (score did not go down)
+      failures.push({
+        caseId:
+          manifest.cases.find(
+            (c) =>
+              c.sourceOrdinal === p.sourceOrdinal &&
+              c.perturbation === p.perturbation,
+          )?.caseId ?? "",
+        dimension: p.dimension,
+        reason: `Judge did not detect ${p.perturbation}: original score ${p.originalScore}, perturbed score ${p.perturbedScore}`,
+      });
+    }
+  }
+
+  return { pass: !anyFail, failures };
+}
