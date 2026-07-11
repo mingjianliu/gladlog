@@ -91,6 +91,10 @@ export class GladLogParser {
     };
   }
 
+  public hasOpenSegment(): boolean {
+    return this.segmenter.hasOpenSegment();
+  }
+
   private emit<K extends keyof EventMap>(event: K, data: Parameters<EventMap[K]>[0]): void {
     const list = this.listeners[event];
     if (list) {

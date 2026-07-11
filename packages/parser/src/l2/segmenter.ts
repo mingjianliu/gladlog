@@ -130,4 +130,8 @@ export class Segmenter {
       this.rounds = [];
     }
   }
+
+  public hasOpenSegment(): boolean {
+    return this.state !== "IDLE";
+  }
 }
