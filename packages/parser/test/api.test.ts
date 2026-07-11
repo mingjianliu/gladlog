@@ -46,6 +46,30 @@ describe("GladLogParser shell (L1+L2 wiring)", () => {
     expect(st.linesDropped).toBe(0);
   });
 
+  it("trailing \\r (CRLF logs split on \\n) is stripped before parsing and hashing", () => {
+    // UNIT_DIED 的假死位是最后一个参数;残留 \r 会让 "1\r" !== "1",假死误判为真死
+    const run = (suffix: string) => {
+      const p = new GladLogParser({ timezone: "UTC" });
+      const segs: Segment[] = [];
+      p.on("matchSegment", (s: Segment) => segs.push(s));
+      const lines = [
+        ...LINES.slice(0, 2),
+        '6/30/2026 12:00:01.500  UNIT_DIED,0000000000000000,nil,0x80000000,0x80000000,Player-1-A,"Alice-X",0x512,0x80000000,1',
+        ...LINES.slice(2),
+      ];
+      for (const l of lines) p.push(l + suffix);
+      p.end();
+      return segs;
+    };
+    const clean = run("");
+    const crlf = run("\r");
+    expect(crlf).toHaveLength(1);
+    const died = crlf[0]!.records.find((r) => r.eventName === "UNIT_DIED");
+    expect(died?.unitDied?.unconscious).toBe(true);
+    // rawLines 已归一化,内容哈希与 LF 日志一致(与桌面端 tailReader 剥 \r 的行为对齐)
+    expect(crlf[0]!.rawLines).toEqual(clean[0]!.rawLines);
+  });
+
   it("diagnostic event surfaces BUILD_FAILED when buildMatch throws", () => {
     const p = new GladLogParser({ timezone: "UTC" });
     const diags: { code: string }[] = [];
@@ -71,7 +95,9 @@ describe("GladLogParser shell (L1+L2 wiring)", () => {
       throw new Error("Mocked failure");
     });
 
-    p.push("6/30/2026 12:00:00.000  ARENA_MATCH_START,1504,40,Rated Solo Shuffle,0");
+    p.push(
+      "6/30/2026 12:00:00.000  ARENA_MATCH_START,1504,40,Rated Solo Shuffle,0",
+    );
     p.push("6/30/2026 12:00:02.000  ARENA_MATCH_END,0,155,1729,1730");
 
     expect(diags.some((d) => d.code === "BUILD_FAILED")).toBe(true);

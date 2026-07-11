@@ -807,7 +807,8 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
 
       const isCC = ccSpellIds.has(cd.spellId);
       const extraLines: (string | DeferredSnapshot)[] = [
-        requestSnapshotPlaceholder(cast.timeSeconds, !isCC),
+        // T3: Δ 形式(此前非 CC 强制全量,是 [RES] token 主要来源;全量保留给死亡快照与 60s 定期刷新)
+        requestSnapshotPlaceholder(cast.timeSeconds),
       ];
 
       if (
@@ -1208,7 +1209,8 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
         addEntry(
           timeSeconds,
           `${fmtTime(timeSeconds)}  [YOU] [CD]   ${promotedDisplayName}${promotedTargetPart}${totemNote}${stasisAnnotation}${purgeNote}${ownerHardCcTagAt(timeSeconds)}`,
-          requestSnapshotPlaceholder(timeSeconds, true),
+          // T3: Δ 形式(同 ownerCDs 路径;全量保留给死亡快照与 60s 定期刷新)
+          requestSnapshotPlaceholder(timeSeconds),
         );
         continue;
       }
@@ -1748,6 +1750,8 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
 
   const lastEmittedHp = new Map<string, number>();
   const lastEmittedStatus = new Map<string, string>(); // 'alive' | 'dead'
+  const STATE_MIN_GAP_SECONDS = 3;
+  let lastStateEmitT = -100;
 
   for (let t = 0; t <= Math.floor(matchDurationS); t++) {
     const tsMs = matchStartMs + t * 1000;
@@ -1838,6 +1842,13 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       shouldEmit = true; // Always emit first tick
     } else if (keyMomentSeconds.has(t)) {
       shouldEmit = true; // Key moment snapshot
+    } else if (
+      t - lastStateEmitT < STATE_MIN_GAP_SECONDS &&
+      !isFirstDeathTick
+    ) {
+      // T3: 关键窗口内逐秒 STATE 是时间轴最大 token 源,也是盲评实测的"读串相邻行"
+      // 误归因温床;非关键时刻强制 ≥3s 间隔(死亡/keyMoment 不受限)
+      shouldEmit = false;
     } else {
       // Check if any player's HP changed by at least 10% or status changed since last emitted tick
       for (const p of [...currentFriendlies, ...currentEnemies]) {
@@ -1876,6 +1887,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       stateParts = `enemies ${enemyParts.join(" ")}`;
     }
 
+    lastStateEmitT = t;
     addEntry(t, `${fmtTime(t)}  [STATE]   ${stateParts}`);
   }
 
