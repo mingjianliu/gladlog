@@ -13,14 +13,16 @@ export function validateCorpus(corpus: Corpus, nFloor: number): string[] {
       v.push(`${tag}: below floor (${c.sampleN}) but not insufficient`);
     if (c.sampleN >= nFloor && c.insufficient)
       v.push(`${tag}: at/above floor (${c.sampleN}) but marked insufficient`);
-    // 1.5 延迟哨兵:n===0 却带非空 reactionLatency 分布(尤其 1.5)
+    // 1.5 延迟哨兵回归:旧 fork 把缺失的 reactionLatency 默认成 1.5s。若重现,
+    // 该假值会带着真实 record 计数(n>0)进入分布,中位数正好落在 1.5。真实
+    // 队列的插值中位数不可能精确等于 1.5,故 (n>0 && p50===1.5) 是可靠 tripwire。
+    // (旧实现查 n===0——但空分布经 percentile() 返 0 而非 1.5,永不触发,且恰好
+    // 漏掉真正的失败模式。)
     const rl = c.metrics.reactionLatency;
-    if (
-      rl &&
-      rl.n === 0 &&
-      (rl.p50 === 1.5 || rl.p10 === 1.5 || rl.p90 === 1.5)
-    )
-      v.push(`${tag}: reactionLatency 1.5 sentinel with 0 records`);
+    if (rl && rl.n > 0 && rl.p50 === 1.5)
+      v.push(
+        `${tag}: reactionLatency 1.5 sentinel (median 1.5 with ${rl.n} records)`,
+      );
     // crisis 英文/ASCII
     for (const crises of c.exemplarCrises)
       for (const line of crises)

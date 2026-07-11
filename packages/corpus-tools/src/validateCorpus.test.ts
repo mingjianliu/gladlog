@@ -24,14 +24,23 @@ describe("validateCorpus", () => {
   it("passes a clean corpus", () => {
     expect(validateCorpus(corpusWith(goodCell), 30)).toEqual([]);
   });
-  it("flags the 1.5 latency sentinel (0-record cell carrying 1.5)", () => {
+  it("flags the 1.5 latency sentinel when it recurs with real records (n>0)", () => {
+    // The real failure mode: a reintroduced 1.5s default arrives WITH records,
+    // so the median is exactly 1.5. (The old n===0 guard was unsatisfiable and
+    // missed this.)
     const bad = {
       ...goodCell,
-      metrics: { reactionLatency: { p10: 1.5, p50: 1.5, p90: 1.5, n: 0 } },
+      metrics: { reactionLatency: { p10: 1.5, p50: 1.5, p90: 1.5, n: 5 } },
     };
     expect(
       validateCorpus(corpusWith(bad), 30).some((v) => /1\.5 sentinel/.test(v)),
     ).toBe(true);
+  });
+  it("does not flag a legitimate reactionLatency distribution", () => {
+    // goodCell has p50=2 with n=40 — a real median, must pass clean.
+    expect(
+      validateCorpus(corpusWith(goodCell), 30).some((v) => /sentinel/.test(v)),
+    ).toBe(false);
   });
   it("flags non-ASCII crisis spell names", () => {
     const bad = { ...goodCell, exemplarCrises: [["[0:10] 承受 混乱之箭"]] };

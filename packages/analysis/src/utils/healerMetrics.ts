@@ -80,25 +80,20 @@ export function computeHealerMetrics(
     (sum: number, a: any) => sum + Math.abs(a.effectiveAmount),
     0,
   );
+  // Heal contribution uses the compat-computed effectiveAmount (amount minus
+  // overheal, and already zeroed for pet-targeted heals). The old fork decoded
+  // this from raw parameters[30]/[32]; gladlog's parser decodes heals
+  // positionally and Blizzard periodically adds advanced-log fields, so
+  // hardcoded absolute indices silently point at the wrong columns on a format
+  // shift — the exact scenario this once-per-patch offline tool runs in.
+  // amount - overheal === effectiveAmount, so the fallback is equivalent today
+  // and robust to drift. absorbsOut carries absorbedAmount, not effectiveAmount.
   const totalHealOut =
-    healerUnit.healOut.reduce((sum: number, a: any) => {
-      if (
-        (a.logLine.event === "SPELL_PERIODIC_HEAL" ||
-          a.logLine.event === "SPELL_HEAL") &&
-        typeof a.logLine.parameters[30] === "number" &&
-        typeof a.logLine.parameters[32] === "number" &&
-        !isNaN(a.logLine.parameters[30]) &&
-        !isNaN(a.logLine.parameters[32])
-      ) {
-        return sum + (a.logLine.parameters[30] - a.logLine.parameters[32]);
-      }
-      return sum + Math.abs(a.effectiveAmount);
-    }, 0) +
+    healerUnit.healOut.reduce(
+      (sum: number, a: any) => sum + Math.abs(a.effectiveAmount),
+      0,
+    ) +
     healerUnit.absorbsOut.reduce(
-      // absorbsOut entries are IAbsorbEvent — the amount field is
-      // `absorbedAmount`, not `effectiveAmount` (that lives on IHpEvent).
-      // Reading the wrong field yields NaN, poisoning totalHealOut and
-      // silently forcing offensiveIndex to 0.
       (sum: number, a: any) => sum + Math.abs(a.absorbedAmount),
       0,
     );
