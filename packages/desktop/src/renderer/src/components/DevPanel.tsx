@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { DiagnosticEntry, LogsStatusSnapshot } from "../../../preload/api";
 import type { StoredMatchMeta } from "../../../main/matchStore";
+import { bridge } from "../bridge";
 
 export function DevPanel() {
   const [status, setStatus] = useState<LogsStatusSnapshot | null>(null);
@@ -11,14 +12,14 @@ export function DevPanel() {
   const [wowDir, setWowDir] = useState<string | null>(null);
 
   useEffect(() => {
-    void window.gladlog.logs.getStatus().then(setStatus);
-    void window.gladlog.matches.list().then(setMatches);
-    void window.gladlog.settings.get().then((s) => setWowDir(s.wowDirectory));
-    const un1 = window.gladlog.logs.onStatusChanged(setStatus);
-    const un2 = window.gladlog.logs.onMatchStored((m) =>
+    void bridge().logs.getStatus().then(setStatus);
+    void bridge().matches.list().then(setMatches);
+    void bridge().settings.get().then((s) => setWowDir(s.wowDirectory));
+    const un1 = bridge().logs.onStatusChanged(setStatus);
+    const un2 = bridge().logs.onMatchStored((m) =>
       setMatches((prev) => [m, ...prev]),
     );
-    const un3 = window.gladlog.logs.onDiagnostic((d) =>
+    const un3 = bridge().logs.onDiagnostic((d) =>
       setDiags((prev) => [d, ...prev].slice(0, 100)),
     );
     return () => {
@@ -29,12 +30,12 @@ export function DevPanel() {
   }, []);
 
   useEffect(() => {
-    if (selected) void window.gladlog.matches.get(selected).then(setDetail);
+    if (selected) void bridge().matches.get(selected).then(setDetail);
     else setDetail(null);
   }, [selected]);
 
   const pickDir = async () => {
-    const dir = await window.gladlog.app.selectDirectory();
+    const dir = await bridge().app.selectDirectory();
     if (dir) setWowDir(dir);
   };
 

@@ -3,6 +3,7 @@ import { DevPanel } from "./components/DevPanel";
 import { MatchReport } from "./report/components/MatchReport";
 import { ShuffleReport } from "./report/components/ShuffleReport";
 import type { StoredMatchMeta } from "../../main/matchStore";
+import { bridge } from "./bridge";
 
 export default function App() {
   const [showDev, setShowDev] = useState(false);
@@ -11,8 +12,8 @@ export default function App() {
   const [doc, setDoc] = useState<any | null>(null);
 
   useEffect(() => {
-    void window.gladlog.matches.list().then(setMetas);
-    const unMatchStored = window.gladlog.logs.onMatchStored((m) =>
+    void bridge().matches.list().then(setMetas);
+    const unMatchStored = bridge().logs.onMatchStored((m) =>
       setMetas((prev) => [m, ...prev]),
     );
     return () => {
@@ -22,7 +23,7 @@ export default function App() {
 
   useEffect(() => {
     if (selectedId) {
-      void window.gladlog.matches.get(selectedId).then(setDoc);
+      void bridge().matches.get(selectedId).then(setDoc);
     } else {
       setDoc(null);
     }

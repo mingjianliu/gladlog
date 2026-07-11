@@ -118,5 +118,5 @@ export function installFixtureBridge(): void {
   };
 
   // Assign mock to window
-  window.gladlog = gladlogMock as any;
+  window.__gladlogFixture = gladlogMock as any;
 }
