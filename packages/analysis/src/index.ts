@@ -36,3 +36,5 @@ export {
   computeCDResponseLatency,
 } from "./utils/healerMetrics";
 export type { IHealerMetrics } from "./utils/healerMetrics";
+export { extractRotations } from "./utils/crisisEvents";
+export type { IExtractedRotations } from "./utils/crisisEvents";
