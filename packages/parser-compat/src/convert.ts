@@ -220,7 +220,8 @@ function convertUnit(
         spellId: String(event.spellId),
         spellName: event.spellName,
         timestamp: event.timestamp,
-        srcUnitId: event.srcId,
+        ...unitFlagFields(event.params),
+    srcUnitId: event.srcId,
         srcUnitName: event.srcName,
         destUnitId: event.destId,
         destUnitName: event.destName,
@@ -266,7 +267,8 @@ function convertUnit(
         spellId: String(event.spellId),
         spellName: event.spellName,
         timestamp: event.timestamp,
-        srcUnitId: event.srcId,
+        ...unitFlagFields(event.params),
+    srcUnitId: event.srcId,
         srcUnitName: event.srcName,
         destUnitId: event.destId,
         destUnitName: event.destName,
@@ -290,7 +292,8 @@ function convertUnit(
       spellId: String(event.spellId),
       spellName: event.spellName,
       timestamp: event.timestamp,
-      srcUnitId: event.srcId,
+      ...unitFlagFields(event.params),
+    srcUnitId: event.srcId,
       srcUnitName: event.srcName,
       destUnitId: event.destId,
       destUnitName: event.destName,
@@ -310,7 +313,8 @@ function convertUnit(
       spellId: String(event.spellId),
       spellName: event.spellName,
       timestamp: event.timestamp,
-      srcUnitId: event.srcId,
+      ...unitFlagFields(event.params),
+    srcUnitId: event.srcId,
       srcUnitName: event.srcName,
       destUnitId: event.destId,
       destUnitName: event.destName,
@@ -328,6 +332,7 @@ function convertUnit(
     spellId: String(event.spellId),
     spellName: event.spellName,
     timestamp: event.timestamp,
+    ...unitFlagFields(event.params),
     srcUnitId: event.srcId,
     srcUnitName: event.srcName,
     destUnitId: event.destId,
@@ -344,6 +349,7 @@ function convertUnit(
     spellId: String(event.spellId),
     spellName: event.spellName,
     timestamp: event.timestamp,
+    ...unitFlagFields(event.params),
     srcUnitId: event.srcId,
     srcUnitName: event.srcName,
     destUnitId: event.destId,
@@ -360,6 +366,7 @@ function convertUnit(
     spellId: String(event.spellId),
     spellName: event.spellName,
     timestamp: event.timestamp,
+    ...unitFlagFields(event.params),
     srcUnitId: event.srcId,
     srcUnitName: event.srcName,
     destUnitId: event.destId,
@@ -377,6 +384,7 @@ function convertUnit(
     spellId: String(event.spellId),
     spellName: event.spellName,
     timestamp: event.timestamp,
+    ...unitFlagFields(event.params),
     srcUnitId: event.srcId,
     srcUnitName: event.srcName,
     destUnitId: event.destId,
@@ -392,6 +400,7 @@ function convertUnit(
     spellId: String(event.spellId),
     spellName: event.spellName,
     timestamp: event.timestamp,
+    ...unitFlagFields(event.params),
     srcUnitId: event.srcId,
     srcUnitName: event.srcName,
     destUnitId: event.destId,
@@ -408,6 +417,7 @@ function convertUnit(
     spellId: String(event.spellId),
     spellName: event.spellName,
     timestamp: event.timestamp,
+    ...unitFlagFields(event.params),
     srcUnitId: event.srcId,
     srcUnitName: event.srcName,
     destUnitId: event.destId,
@@ -424,6 +434,7 @@ function convertUnit(
     spellId: String(event.spellId),
     spellName: event.spellName,
     timestamp: event.timestamp,
+    ...unitFlagFields(event.params),
     srcUnitId: event.srcId,
     srcUnitName: event.srcName,
     destUnitId: event.destId,
@@ -439,6 +450,7 @@ function convertUnit(
     id: unit.id,
     name: unit.name,
     ownerId: unit.ownerId ?? "",
+    isWellFormed: true,
     type: kindToType(unit.kind),
     class: classIdToLegacy(unit.classId),
     spec: String(unit.specId) as CombatUnitSpec,
@@ -482,6 +494,16 @@ function mergePetEvents(units: Record<string, ICombatUnit>): void {
   }
 }
 
+
+
+function parseFlags(v: string | undefined): number {
+  if (!v) return 0;
+  const n = v.startsWith("0x") || v.startsWith("0X") ? parseInt(v, 16) : parseInt(v, 10);
+  return Number.isFinite(n) ? n : 0;
+}
+function unitFlagFields(params: string[]): { srcUnitFlags: number; destUnitFlags: number } {
+  return { srcUnitFlags: parseFlags(params[2]), destUnitFlags: parseFlags(params[6]) };
+}
 
 const EXTRA_SPELL_EVENTS = /DISPEL|INTERRUPT|STOLEN/;
 function extraSpellFields(eventName: string, params: string[]): { extraSpellId?: string; extraSpellName?: string } {

@@ -1,0 +1,566 @@
+/**
+ * healerExposureAnalysis.ts
+ *
+ * At each enemy aligned burst window, snapshots healer CC vulnerability:
+ *   1. Trinket availability
+ *   2. Which enemies have LoS to the healer (can land CC)
+ *   3. Healer DR state per CC category at burst start
+ *
+ * Exposure labels (WoW 12.0, Full → 50% → Immune chain):
+ *   Critical  — trinket unavailable + Full DR threat in LoS
+ *   Exposed   — Full DR threat in LoS (trinket available), OR 50% DR + trinket unavailable
+ *   Pressured — only 50% DR threats in LoS, trinket available
+ *   Safe      — all threats pillar-blocked or healer Immune in all relevant categories
+ */
+
+import { AtomicArenaCombat, CombatUnitSpec, ICombatUnit, LogEvent } from '@gladlog/parser-compat';
+
+import { ccSpellIds } from '../data/spellTags';
+import { IPlayerCCTrinketSummary } from './ccTrinketAnalysis';
+import { fmtTime, specToString } from './cooldowns';
+import { DR_CATEGORY_MAP, DRLevel, getDRLevelAtTime } from './drAnalysis';
+import { IAlignedBurstWindow } from './enemyCDs';
+import {
+  distanceBetween,
+  getUnitPositionAtTime,
+  hasLineOfSight,
+  IPosition,
+  nearestLosBreakOption,
+} from './losAnalysis';
+
+// Max cast range for player CC spells in yards. Enemies beyond this distance
+// cannot land CC on the healer regardless of LoS.
+const MAX_CC_RANGE_YARDS = 40;
+
+/** Returns true if the enemy has an active CC aura at the given timestamp (ms). */
+function isEnemyInCC(enemy: ICombatUnit, atMs: number): boolean {
+  const active = new Map<string, boolean>();
+  for (const e of enemy.auraEvents) {
+    if (!e.spellId || !ccSpellIds.has(e.spellId)) continue;
+    if (e.logLine.timestamp > atMs) break;
+    if (e.logLine.event === LogEvent.SPELL_AURA_APPLIED) active.set(e.spellId, true);
+    else if (e.logLine.event === LogEvent.SPELL_AURA_REMOVED) active.set(e.spellId, false);
+  }
+  return [...active.values()].some(Boolean);
+}
+
+// ---------------------------------------------------------------------------
+// Spec → primary CC fallback (for enemies not yet observed casting CC)
+//
+// NOTE: This list is class-level, not spec-level. It's a best-effort heuristic
+// for enemies who haven't cast CC yet in this match. Observed CC data from
+// buildEnemyCCHistory() is always preferred over these defaults.
+// Known imprecisions: Rogue (Sub primary = Blind, not Kidney), Druid (Feral
+// primary = Cyclone/Maim), Warrior (Stormbolt often > Intimidating Shout).
+// Order matters: check "Demon Hunter" before "Hunter".
+// ---------------------------------------------------------------------------
+
+const SPEC_PRIMARY_CC: Array<{ keyword: string; spellName: string; category: string }> = [
+  { keyword: 'Demon Hunter', spellName: 'Imprison', category: 'Incapacitate' },
+  { keyword: 'Death Knight', spellName: 'Strangulate', category: 'Silence' },
+  { keyword: 'Mage', spellName: 'Polymorph', category: 'Incapacitate' },
+  { keyword: 'Rogue', spellName: 'Kidney Shot', category: 'Stun' },
+  { keyword: 'Warlock', spellName: 'Fear', category: 'Disorient' },
+  { keyword: 'Druid', spellName: 'Cyclone', category: 'Cyclone' },
+  { keyword: 'Hunter', spellName: 'Freezing Trap', category: 'Incapacitate' },
+  { keyword: 'Shaman', spellName: 'Hex', category: 'Incapacitate' },
+  { keyword: 'Paladin', spellName: 'Repentance', category: 'Incapacitate' },
+  { keyword: 'Warrior', spellName: 'Intimidating Shout', category: 'Disorient' },
+  { keyword: 'Monk', spellName: 'Paralysis', category: 'Incapacitate' },
+  { keyword: 'Priest', spellName: 'Psychic Scream', category: 'Disorient' },
+  { keyword: 'Evoker', spellName: 'Landslide', category: 'Disorient' },
+];
+
+function getPrimaryCC(specName: string): { spellName: string; category: string } | null {
+  for (const entry of SPEC_PRIMARY_CC) {
+    if (specName.includes(entry.keyword)) return entry;
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+export type HealerExposureLabel = 'Critical' | 'Exposed' | 'Pressured' | 'Safe';
+
+export interface IHealerCCThreat {
+  enemyName: string;
+  enemySpec: string;
+  /** DR category of the threat (e.g. "Incapacitate") */
+  ccCategory: string;
+  /** Representative spell name (e.g. "Polymorph") */
+  ccSpellName: string;
+  /** DR level healer would be at if this CC lands now */
+  healerDRLevel: Exclude<DRLevel, 'Immune'>;
+  /** true = this enemy is behind a pillar relative to the healer */
+  losBlocked: boolean;
+}
+
+export interface IHealerBurstExposure {
+  atSeconds: number;
+  burstDangerLabel: string;
+  trinketState: 'available' | 'on_cooldown' | 'passive';
+  /** Seconds from match start when trinket returns, if on_cooldown */
+  trinketAvailableAtSeconds: number | null;
+  /** All non-Immune threats (both exposed and pillar-blocked) */
+  threats: IHealerCCThreat[];
+  exposureLabel: HealerExposureLabel;
+  /** F194: nearest verified LoS-breaking reposition against an exposed threat.
+   *  null when the zone is unmapped or no obstacle blocks any exposed threat. */
+  losBreak?: { repositionYards: number; blocksEnemyName: string } | null;
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function getTrinketStateAtSeconds(
+  summary: IPlayerCCTrinketSummary,
+  atSeconds: number,
+): { state: 'available' | 'on_cooldown' | 'passive'; availableAtSeconds: number | null } {
+  // Relentless = passive DR reduction; Adaptation = auto-proc break — neither has a manual CD
+  if (summary.trinketType === 'Relentless' || summary.trinketType === 'Adaptation')
+    return { state: 'passive', availableAtSeconds: null };
+  const lastUse = [...summary.trinketUseTimes].reverse().find((t) => t <= atSeconds) ?? null;
+  if (lastUse === null) return { state: 'available', availableAtSeconds: null };
+  const readyAt = lastUse + summary.trinketCooldownSeconds;
+  if (readyAt <= atSeconds) return { state: 'available', availableAtSeconds: null };
+  return { state: 'on_cooldown', availableAtSeconds: readyAt };
+}
+
+function computeExposureLabel(
+  trinketState: 'available' | 'on_cooldown' | 'passive',
+  exposedThreats: IHealerCCThreat[],
+): HealerExposureLabel {
+  if (exposedThreats.length === 0) return 'Safe';
+  const hasFullDR = exposedThreats.some((t) => t.healerDRLevel === 'Full');
+  const has50DR = exposedThreats.some((t) => t.healerDRLevel === '50%');
+  const trinketUnavailable = trinketState === 'on_cooldown';
+  if (hasFullDR && trinketUnavailable) return 'Critical';
+  if (hasFullDR) return 'Exposed';
+  if (has50DR && trinketUnavailable) return 'Exposed';
+  if (has50DR) return 'Pressured';
+  return 'Safe';
+}
+
+/**
+ * Build a map of enemyName → observed CC categories from all friendly CC summaries.
+ * Prefer observed data over spec inference — only falls back to spec if no CC observed.
+ */
+function buildEnemyCCHistory(
+  allFriendlyCCSummaries: IPlayerCCTrinketSummary[],
+): Map<string, Array<{ spellName: string; category: string }>> {
+  const result = new Map<string, Array<{ spellName: string; category: string }>>();
+  for (const summary of allFriendlyCCSummaries) {
+    for (const cc of summary.ccInstances) {
+      const category = DR_CATEGORY_MAP[cc.spellId];
+      if (!category) continue;
+      const existing = result.get(cc.sourceName) ?? [];
+      if (!existing.some((e) => e.category === category)) {
+        existing.push({ spellName: cc.spellName, category });
+      }
+      result.set(cc.sourceName, existing);
+    }
+  }
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Main analysis
+// ---------------------------------------------------------------------------
+
+export function analyzeHealerExposureAtBurst(
+  burstWindows: IAlignedBurstWindow[],
+  enemies: ICombatUnit[],
+  healer: ICombatUnit,
+  healerCCSummary: IPlayerCCTrinketSummary,
+  allFriendlyCCSummaries: IPlayerCCTrinketSummary[],
+  zoneId: string,
+  matchStartMs: number,
+): IHealerBurstExposure[] {
+  const enemyCCHistory = buildEnemyCCHistory(allFriendlyCCSummaries);
+  const results: IHealerBurstExposure[] = [];
+
+  for (const window of burstWindows) {
+    const windowMs = matchStartMs + window.fromSeconds * 1000;
+
+    const healerPos = getUnitPositionAtTime(healer, windowMs);
+    if (!healerPos) continue; // no position data — skip
+
+    const { state: trinketState, availableAtSeconds: trinketAvailableAtSeconds } = getTrinketStateAtSeconds(
+      healerCCSummary,
+      window.fromSeconds,
+    );
+
+    const threats: IHealerCCThreat[] = [];
+    const enemyPosByName = new Map<string, IPosition>();
+
+    for (const enemy of enemies) {
+      const enemyPos = getUnitPositionAtTime(enemy, windowMs);
+      if (!enemyPos) continue;
+
+      const losResult = hasLineOfSight(zoneId, healerPos, enemyPos);
+      // null = arena geometry not mapped; treat as unblocked (conservative — assume worst case)
+      const losBlocked = losResult === null ? false : !losResult;
+
+      // B26: enemies beyond CC range or in CC cannot threaten the healer
+      const distance = distanceBetween(healerPos, enemyPos);
+      if (distance > MAX_CC_RANGE_YARDS) continue;
+      if (isEnemyInCC(enemy, windowMs)) continue;
+
+      enemyPosByName.set(enemy.name, enemyPos);
+
+      const enemySpec = specToString(enemy.spec);
+
+      // Use observed CC history; fall back to spec-based primary CC
+      const observedCCs = enemyCCHistory.get(enemy.name) ?? [];
+      const primaryCC = getPrimaryCC(enemySpec);
+      const ccSources = observedCCs.length > 0 ? observedCCs : primaryCC ? [primaryCC] : [];
+
+      for (const { spellName, category } of ccSources) {
+        const healerDRLevel = getDRLevelAtTime(healerCCSummary.ccInstances, category, window.fromSeconds);
+        if (healerDRLevel === 'Immune') continue; // healer is immune — not a threat
+
+        threats.push({
+          enemyName: enemy.name,
+          enemySpec,
+          ccCategory: category,
+          ccSpellName: spellName,
+          healerDRLevel: healerDRLevel as Exclude<DRLevel, 'Immune'>,
+          losBlocked,
+        });
+      }
+    }
+
+    if (threats.length === 0) continue;
+
+    const exposedThreats = threats.filter((t) => !t.losBlocked);
+    const exposureLabel = computeExposureLabel(trinketState, exposedThreats);
+
+    // F194: directional pillar hint — only offer a spot that verifiably breaks LoS to one
+    // of the exposed threats, instead of bare nearest-obstacle geometry (threat-blind).
+    const exposedEnemyPositions = Array.from(new Set(exposedThreats.map((t) => t.enemyName)))
+      .map((name) => ({ name, pos: enemyPosByName.get(name) }))
+      .filter((e): e is { name: string; pos: IPosition } => e.pos !== undefined);
+    const losBreak =
+      exposedEnemyPositions.length > 0 ? nearestLosBreakOption(zoneId, healerPos, exposedEnemyPositions) : null;
+
+    results.push({
+      atSeconds: window.fromSeconds,
+      burstDangerLabel: window.dangerLabel,
+      trinketState,
+      trinketAvailableAtSeconds,
+      threats,
+      exposureLabel,
+      losBreak: losBreak
+        ? { repositionYards: Math.round(losBreak.repositionYards * 10) / 10, blocksEnemyName: losBreak.blocksEnemyName }
+        : null,
+    });
+  }
+
+  return results;
+}
+
+// ---------------------------------------------------------------------------
+// Formatters
+//
+// The enemy CC kit (spell + DR category per enemy) is static for the match, so
+// it is stated ONCE in a kit header instead of being re-enumerated inside every
+// burst-window entry (2026-07-09 week-eval, reports/tokens.md proposal #1:
+// measured −173 tok/match recoverable). Per-window entries carry only the state
+// that actually varies window to window: trinket, DR level, LoS, verdict.
+// ---------------------------------------------------------------------------
+
+const EXPOSURE_ENTRY_TAG = '[HEALER EXPOSURE]   ';
+
+export interface IHealerExposureEntry {
+  atSeconds: number;
+  /** Single line, prefixed with `[HEALER EXPOSURE]   ` — callers prepend their own
+   *  timestamp presentation (timeline column or bracketed block style). */
+  line: string;
+}
+
+/**
+ * Enemy reference used inside per-window entries: bare spec when that spec is unique
+ * among the enemies appearing in this match's exposures; `Spec (Name)` when two+
+ * enemies share a spec. The kit header always carries `Spec (Name)`, so a spec-only
+ * reference still resolves unambiguously against it.
+ */
+function buildEnemyRefMap(exposures: IHealerBurstExposure[]): Map<string, string> {
+  const specByEnemyName = new Map<string, string>();
+  for (const e of exposures) {
+    for (const t of e.threats) {
+      if (!specByEnemyName.has(t.enemyName)) specByEnemyName.set(t.enemyName, t.enemySpec);
+    }
+  }
+
+  const specCounts = new Map<string, number>();
+  for (const spec of specByEnemyName.values()) {
+    specCounts.set(spec, (specCounts.get(spec) ?? 0) + 1);
+  }
+
+  const refMap = new Map<string, string>();
+  for (const [name, spec] of specByEnemyName) {
+    refMap.set(name, (specCounts.get(spec) ?? 0) > 1 ? `${spec} (${name})` : spec);
+  }
+  return refMap;
+}
+
+/**
+ * Once-per-match enemy CC kit header: the per-enemy union of (spell, DR category)
+ * across ALL burst windows, both in-LoS and pillar-blocked. Stable order: enemies
+ * by first appearance, spells by first appearance within each enemy.
+ */
+export function formatEnemyCCKitHeader(exposures: IHealerBurstExposure[]): string[] {
+  const enemyOrder: string[] = [];
+  const kits = new Map<string, { spec: string; spells: Array<{ spellName: string; category: string }> }>();
+
+  for (const e of exposures) {
+    for (const t of e.threats) {
+      let kit = kits.get(t.enemyName);
+      if (!kit) {
+        kit = { spec: t.enemySpec, spells: [] };
+        kits.set(t.enemyName, kit);
+        enemyOrder.push(t.enemyName);
+      }
+      if (!kit.spells.some((s) => s.spellName === t.ccSpellName && s.category === t.ccCategory)) {
+        kit.spells.push({ spellName: t.ccSpellName, category: t.ccCategory });
+      }
+    }
+  }
+
+  if (enemyOrder.length === 0) return [];
+
+  const parts = enemyOrder.map((name) => {
+    const kit = kits.get(name) as { spec: string; spells: Array<{ spellName: string; category: string }> };
+    const spellsStr = kit.spells.map((s) => `${s.spellName} [${s.category}]`).join(', ');
+    return `${kit.spec} (${name}): ${spellsStr}`;
+  });
+
+  return [`ENEMY CC KIT (threats to you): ${parts.join('; ')}`];
+}
+
+/** Compact single-line-per-window exposure entries (see module comment above). */
+export function formatHealerExposureEntries(exposures: IHealerBurstExposure[]): IHealerExposureEntry[] {
+  if (exposures.length === 0) return [];
+
+  const refMap = buildEnemyRefMap(exposures);
+  const refOf = (t: IHealerCCThreat) => refMap.get(t.enemyName) ?? `${t.enemySpec} (${t.enemyName})`;
+
+  return exposures.map((e) => {
+    const trinketStr =
+      e.trinketState === 'available'
+        ? 'trinket ready'
+        : e.trinketState === 'passive'
+          ? 'passive trinket'
+          : `trinket on CD${e.trinketAvailableAtSeconds !== null ? ` (back ${fmtTime(e.trinketAvailableAtSeconds)})` : ''}`;
+
+    const labelStr =
+      e.exposureLabel === 'Critical' ? '⚠ CRITICAL' : e.exposureLabel === 'Exposed' ? '⚠ Exposed' : e.exposureLabel;
+
+    // Actionable pillar hint: only on dangerous windows, only when a verified LoS-breaking
+    // spot is within realistic repositioning distance (~30yd).
+    const pillarStr =
+      (e.exposureLabel === 'Critical' || e.exposureLabel === 'Exposed') &&
+      e.losBreak &&
+      e.losBreak.repositionYards <= 30
+        ? ` — LoS break ~${e.losBreak.repositionYards}yd away (pillar-blocks ${e.losBreak.blocksEnemyName})`
+        : '';
+
+    const exposed = e.threats.filter((t) => !t.losBlocked);
+    const blocked = e.threats.filter((t) => t.losBlocked);
+
+    // IN LoS threats grouped per enemy: "<ref>: <Spell> <DR>, <Spell> <DR>; <ref>: …".
+    // Duration implication ("full/half duration") is defined once in the system-prompt DR legend —
+    // repeating it on all ~9k corpus lines cost ~40 tok/match (2026-07-09 week-eval, tokens.md #2).
+    const losOrder: string[] = [];
+    const losSpells = new Map<string, string[]>();
+    for (const t of exposed) {
+      const ref = refOf(t);
+      let spells = losSpells.get(ref);
+      if (!spells) {
+        spells = [];
+        losSpells.set(ref, spells);
+        losOrder.push(ref);
+      }
+      spells.push(`${t.ccSpellName} ${t.healerDRLevel === 'Full' ? 'Full DR' : '50% DR'}`);
+    }
+    const losStr = losOrder.map((ref) => `${ref}: ${(losSpells.get(ref) ?? []).join(', ')}`).join('; ');
+
+    const blockedRefs = [...new Set(blocked.map(refOf))].join(', ');
+
+    let verdict = '';
+    if (e.exposureLabel === 'Critical') {
+      verdict = 'No trinket + Full DR CC in LoS: healer cannot answer CC';
+    } else if (e.exposureLabel === 'Exposed' && exposed.some((t) => t.healerDRLevel === 'Full')) {
+      verdict = 'Full DR threat in LoS: trinket is the only answer';
+    }
+
+    let body = `${e.burstDangerLabel} burst — ${trinketStr} — ${labelStr}${pillarStr}`;
+    if (losStr) body += ` | IN LoS: ${losStr}`;
+    if (blockedRefs) body += ` | Pillar-blocked: ${blockedRefs}`;
+    if (verdict) body += ` | → ${verdict}`;
+
+    return { atSeconds: e.atSeconds, line: `${EXPOSURE_ENTRY_TAG}${body}` };
+  });
+}
+
+/** Block form used by the critical-moments path: kit stated once, one line per window. */
+export function formatHealerExposureForContext(exposures: IHealerBurstExposure[]): string[] {
+  if (exposures.length === 0) return [];
+
+  const lines: string[] = ['HEALER EXPOSURE DURING ENEMY BURST WINDOWS:'];
+  formatEnemyCCKitHeader(exposures).forEach((l) => lines.push(`  ${l}`));
+  lines.push('');
+
+  for (const entry of formatHealerExposureEntries(exposures)) {
+    const body = entry.line.startsWith(EXPOSURE_ENTRY_TAG) ? entry.line.slice(EXPOSURE_ENTRY_TAG.length) : entry.line;
+    lines.push(`  [${fmtTime(entry.atSeconds)}] ${body}`);
+  }
+
+  return lines;
+}
+
+// ─── Healer CC avoidance (#7) ──────────────────────────────────────────────
+
+interface IAvoidanceSpell {
+  spellId: string;
+  name: string;
+  cooldownSeconds: number;
+}
+
+const HEALER_AVOIDANCE_SPELLS: Partial<Record<CombatUnitSpec, IAvoidanceSpell[]>> = {
+  [CombatUnitSpec.Shaman_Restoration]: [{ spellId: '8177', name: 'Grounding Totem', cooldownSeconds: 25 }],
+  [CombatUnitSpec.Priest_Holy]: [{ spellId: '586', name: 'Fade', cooldownSeconds: 30 }],
+  [CombatUnitSpec.Priest_Discipline]: [{ spellId: '586', name: 'Fade', cooldownSeconds: 30 }],
+  [CombatUnitSpec.Paladin_Holy]: [{ spellId: '642', name: 'Divine Shield', cooldownSeconds: 300 }],
+  [CombatUnitSpec.Monk_Mistweaver]: [{ spellId: '122783', name: 'Diffuse Magic', cooldownSeconds: 90 }],
+  [CombatUnitSpec.Evoker_Preservation]: [{ spellId: '363916', name: 'Obsidian Scales', cooldownSeconds: 60 }],
+};
+
+export interface IHealerAvoidanceTool {
+  spellId: string;
+  spellName: string;
+  idleForSeconds: number;
+}
+
+export interface IHealerCCReceived {
+  atSeconds: number;
+  ccSpellName: string;
+  ccCategory: string;
+  durationSeconds: number;
+  teammateLowHp: boolean;
+  avoidanceToolsAvailable: IHealerAvoidanceTool[];
+}
+
+function lastAvoidanceCastSeconds(unit: ICombatUnit, spellId: string, matchStartMs: number): number | null {
+  const casts = unit.spellCastEvents.filter(
+    (e) => e.spellId === spellId && e.logLine.event === LogEvent.SPELL_CAST_SUCCESS,
+  );
+  if (casts.length === 0) return null;
+  return (Math.max(...casts.map((e) => e.logLine.timestamp)) - matchStartMs) / 1000;
+}
+
+function anyTeammateLowHp(friends: ICombatUnit[], atSeconds: number, matchStartMs: number): boolean {
+  const windowMs = 2_000;
+  const targetMs = atSeconds * 1000;
+  const startMs = targetMs - windowMs;
+  const endMs = targetMs + windowMs;
+
+  for (const unit of friends) {
+    const actions = unit.advancedActions;
+    if (actions.length === 0) continue;
+
+    let low = 0;
+    let high = actions.length - 1;
+    let firstIdx = actions.length;
+
+    while (low <= high) {
+      const mid = (low + high) >>> 1;
+      const t = actions[mid].logLine.timestamp - matchStartMs;
+      if (t >= startMs) {
+        firstIdx = mid;
+        high = mid - 1;
+      } else {
+        low = mid + 1;
+      }
+    }
+
+    for (let i = firstIdx; i < actions.length; i++) {
+      const action = actions[i];
+      const t = action.logLine.timestamp - matchStartMs;
+      if (t > endMs) break;
+
+      if (action.advancedActorMaxHp > 0) {
+        const hpPct = action.advancedActorCurrentHp / action.advancedActorMaxHp;
+        if (hpPct < 0.75) return true;
+      }
+    }
+  }
+  return false;
+}
+
+export function buildHealerCCReceivedEvents(
+  combat: Pick<AtomicArenaCombat, 'startTime'>,
+  healer: ICombatUnit,
+  friends: ICombatUnit[],
+  ccSummary: Pick<IPlayerCCTrinketSummary, 'ccInstances'>,
+): IHealerCCReceived[] {
+  const matchStartMs = combat.startTime;
+  const avoidanceSpells = HEALER_AVOIDANCE_SPELLS[healer.spec] ?? [];
+  const result: IHealerCCReceived[] = [];
+
+  for (const cc of ccSummary.ccInstances) {
+    const teammateLowHp = anyTeammateLowHp(friends, cc.atSeconds, matchStartMs);
+    if (!teammateLowHp) continue;
+
+    const avoidanceToolsAvailable: IHealerAvoidanceTool[] = [];
+    for (const spell of avoidanceSpells) {
+      const lastCast = lastAvoidanceCastSeconds(healer, spell.spellId, matchStartMs);
+      let availableSince: number;
+      if (lastCast === null) {
+        availableSince = 0;
+      } else {
+        const cdReadyAt = lastCast + spell.cooldownSeconds;
+        if (cdReadyAt > cc.atSeconds) continue;
+        availableSince = cdReadyAt;
+      }
+      const idleDuration = cc.atSeconds - availableSince;
+      if (idleDuration < 1.5) continue;
+      avoidanceToolsAvailable.push({
+        spellId: spell.spellId,
+        spellName: spell.name,
+        idleForSeconds: idleDuration,
+      });
+    }
+
+    result.push({
+      atSeconds: cc.atSeconds,
+      ccSpellName: cc.spellName,
+      ccCategory: cc.drInfo?.category ?? 'Unknown',
+      durationSeconds: cc.durationSeconds,
+      teammateLowHp,
+      avoidanceToolsAvailable,
+    });
+  }
+
+  return result;
+}
+
+export function formatHealerCCReceivedForContext(events: IHealerCCReceived[]): string {
+  if (events.length === 0) return '';
+  const lines: string[] = ['HEALER CC RECEIVED'];
+  for (const ev of events) {
+    const t = `${Math.floor(ev.atSeconds / 60)}:${String(Math.floor(ev.atSeconds % 60)).padStart(2, '0')}`;
+    if (ev.avoidanceToolsAvailable.length > 0) {
+      const tools = ev.avoidanceToolsAvailable
+        .map((a) => `${a.spellName} available ${Math.round(a.idleForSeconds)}s prior`)
+        .join(', ');
+      lines.push(`  [${t}] ${ev.ccSpellName} (${ev.durationSeconds}s) — ${tools}`);
+    } else {
+      lines.push(`  [${t}] ${ev.ccSpellName} (${ev.durationSeconds}s) — no avoidance tools available`);
+    }
+  }
+  return lines.join('\n');
+}

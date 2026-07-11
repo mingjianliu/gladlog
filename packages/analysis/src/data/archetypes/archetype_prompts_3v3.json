@@ -1,0 +1,829 @@
+{
+  "cluster_0": {
+    "label": "chain_cc_burst_short",
+    "matchCount": 237,
+    "minRating": 2000,
+    "generatedAt": "2026-05-20T06:45:32.159Z",
+    "specDistribution": {
+      "Restoration Druid": 30,
+      "Preservation Evoker": 114,
+      "Restoration Shaman": 17,
+      "Holy Priest": 15,
+      "Holy Paladin": 10,
+      "Discipline Priest": 25,
+      "Mistweaver Monk": 26
+    },
+    "dynamics": {
+      "burstWindowCount": 1.2,
+      "ccEventsPerMinute": 11.1,
+      "tunnelScore": 0.539,
+      "peakBurstScore": 17.8,
+      "durationSeconds": 73
+    },
+    "behaviors": {
+      "cdTiming": {
+        "Optimal": 0.508,
+        "Early": 0.073,
+        "Late": 0.059,
+        "Reactive": 0.012,
+        "Unknown": 0.115
+      },
+      "cdNeverUsedRate": 0.571,
+      "cdResponseLatencyMs": {
+        "median": 6377,
+        "p90": 17654
+      },
+      "ccOffensivePerMatch": {
+        "mean": 1.83,
+        "p75": 3
+      },
+      "drChainsCausedPerMatch": 0,
+      "purgeRatePerMin": 2.995,
+      "missedCleanseRate": 0.525,
+      "healingGapRate": 0.079,
+      "offensiveParticipationRate": 0.312,
+      "setupStyleBreakdown": {
+        "one_shot_burst": 0,
+        "cc_then_burst": 0.502,
+        "flat_dampening": 0,
+        "unknown": 0.498
+      },
+      "positioningBreakdown": {
+        "spread": 0.797,
+        "stationary": 0.089,
+        "clustered": 0.102,
+        "mobile": 0.013
+      }
+    },
+    "enemyHealerPartial": {
+      "note": "lower fidelity \u2014 cast events only, no HP/resource context",
+      "cdCastsObserved": {
+        "Deep Breath": 1.03,
+        "Rewind": 1,
+        "Emerald Communion": 1,
+        "Stasis": 1.16,
+        "Barkskin": 1.19,
+        "Tranquility": 1,
+        "Tail Swipe": 1,
+        "Hammer of Justice": 1.57,
+        "Avenging Crusader": 1.38,
+        "Cauterizing Flame": 1.08,
+        "Rescue": 1,
+        "Psychic Scream": 1.58,
+        "Power Infusion": 1.82,
+        "Pain Suppression": 1.52,
+        "Incarnation: Tree of Life": 1.29,
+        "Ironbark": 1.1,
+        "Blessing of Sacrifice": 1,
+        "Aura Mastery": 1,
+        "Leg Sweep": 1.08,
+        "Hex": 1,
+        "Spiritwalker's Grace": 1,
+        "Healing Tide Totem": 1,
+        "Guardian Spirit": 1.11,
+        "Divine Hymn": 1,
+        "Frenzied Regeneration": 1.33,
+        "Wing Buffet": 1,
+        "Paralysis": 1.45,
+        "Life Cocoon": 1,
+        "Apotheosis": 1,
+        "Mighty Bash": 1,
+        "Divine Protection": 1.13,
+        "Avenging Wrath": 1,
+        "Incapacitating Roar": 1.4,
+        "Desperate Prayer": 1,
+        "Power Word: Barrier": 1,
+        "Mass Entanglement": 1,
+        "Divine Shield": 1,
+        "Blessing of Protection": 1,
+        "Time Stop": 1,
+        "Stampeding Roar": 1,
+        "Zephyr": 1
+      },
+      "ccOffensivePerMatch": 0
+    },
+    "promptText": "**Opponents:** Enemy chains CC hard while rotating targets, then commits all their cooldowns into one coordinated burst window before the round can develop. The CC and the burst arrive almost together.\n\n**Your role:** Save your strongest defensive for the moment enemy CDs stack, not for the individual CC hits that precede it. This round is decided in one window.",
+    "isNoise": false
+  },
+  "cluster_1": {
+    "label": "cc_grind_single_push",
+    "matchCount": 320,
+    "minRating": 2000,
+    "generatedAt": "2026-05-20T06:45:32.161Z",
+    "specDistribution": {
+      "Preservation Evoker": 170,
+      "Holy Priest": 13,
+      "Discipline Priest": 26,
+      "Restoration Druid": 31,
+      "Restoration Shaman": 20,
+      "Holy Paladin": 26,
+      "Mistweaver Monk": 34
+    },
+    "dynamics": {
+      "burstWindowCount": 1.2,
+      "ccEventsPerMinute": 10.21,
+      "tunnelScore": 0.569,
+      "peakBurstScore": 7.4,
+      "durationSeconds": 167
+    },
+    "behaviors": {
+      "cdTiming": {
+        "Optimal": 0.416,
+        "Early": 0.089,
+        "Late": 0.138,
+        "Reactive": 0.038,
+        "Unknown": 0.299
+      },
+      "cdNeverUsedRate": 0.325,
+      "cdResponseLatencyMs": {
+        "median": 7745,
+        "p90": 17831
+      },
+      "ccOffensivePerMatch": {
+        "mean": 5.01,
+        "p75": 7
+      },
+      "drChainsCausedPerMatch": 0.02,
+      "purgeRatePerMin": 2.925,
+      "missedCleanseRate": 0.358,
+      "healingGapRate": 0.025,
+      "offensiveParticipationRate": 0.57,
+      "setupStyleBreakdown": {
+        "one_shot_burst": 0,
+        "cc_then_burst": 0.353,
+        "flat_dampening": 0.081,
+        "unknown": 0.566
+      },
+      "positioningBreakdown": {
+        "spread": 0.953,
+        "clustered": 0.025,
+        "stationary": 0.022
+      }
+    },
+    "enemyHealerPartial": {
+      "note": "lower fidelity \u2014 cast events only, no HP/resource context",
+      "cdCastsObserved": {
+        "Deep Breath": 1.34,
+        "Wing Buffet": 1.42,
+        "Rewind": 1.01,
+        "Emerald Communion": 1.1,
+        "Stasis": 1.58,
+        "Psychic Scream": 3,
+        "Power Infusion": 3,
+        "Pain Suppression": 1.97,
+        "Desperate Prayer": 1.8,
+        "Guardian Spirit": 1.68,
+        "Divine Hymn": 1.32,
+        "Apotheosis": 1.19,
+        "Mighty Bash": 1.33,
+        "Mass Entanglement": 1.83,
+        "Barkskin": 1.38,
+        "Frenzied Regeneration": 1.75,
+        "Incarnation: Tree of Life": 1.56,
+        "Ironbark": 1.3,
+        "Tail Swipe": 1.06,
+        "Hammer of Justice": 3.47,
+        "Avenging Crusader": 2.73,
+        "Blessing of Sacrifice": 1.52,
+        "Aura Mastery": 1.35,
+        "Blessing of Protection": 1,
+        "Hex": 3.13,
+        "Spiritwalker's Grace": 1.73,
+        "Healing Tide Totem": 1.68,
+        "Rescue": 1.42,
+        "Cauterizing Flame": 1.39,
+        "Time Stop": 1.71,
+        "Divine Shield": 1.1,
+        "Power Word: Barrier": 1,
+        "Divine Protection": 1.72,
+        "Incapacitating Roar": 2,
+        "Tranquility": 1,
+        "Paralysis": 3.15,
+        "Leg Sweep": 2.15,
+        "Life Cocoon": 1.5,
+        "Avenging Wrath": 1.83,
+        "Ascendance (Restoration)": 1,
+        "Blessing of Spellwarding": 1,
+        "Stampeding Roar": 1.25
+      },
+      "ccOffensivePerMatch": 0
+    },
+    "promptText": "**Opponents:** Enemies apply CC throughout the round while occasionally swapping targets, eventually committing to one burst window. The burst is real but not overwhelming \u2014 a war of attrition with one escalation point.\n\n**Your role:** Hold enough defensives for the eventual burst push rather than spending them on individual CC chains. Patience with cooldowns wins this archetype.",
+    "isNoise": false
+  },
+  "cluster_2": {
+    "label": "fast_one_sided",
+    "matchCount": 125,
+    "minRating": 2000,
+    "generatedAt": "2026-05-20T06:45:32.161Z",
+    "specDistribution": {
+      "Preservation Evoker": 49,
+      "Holy Priest": 6,
+      "Restoration Druid": 25,
+      "Discipline Priest": 18,
+      "Holy Paladin": 13,
+      "Mistweaver Monk": 11,
+      "Restoration Shaman": 3
+    },
+    "dynamics": {
+      "burstWindowCount": 0.1,
+      "ccEventsPerMinute": 5.37,
+      "tunnelScore": 0.644,
+      "peakBurstScore": 0.2,
+      "durationSeconds": 60
+    },
+    "behaviors": {
+      "cdTiming": {
+        "Optimal": 0.233,
+        "Early": 0.077,
+        "Late": 0.095,
+        "Reactive": 0.012,
+        "Unknown": 0.272
+      },
+      "cdNeverUsedRate": 0.649,
+      "cdResponseLatencyMs": {
+        "median": 10551,
+        "p90": 22431
+      },
+      "ccOffensivePerMatch": {
+        "mean": 1.69,
+        "p75": 3
+      },
+      "drChainsCausedPerMatch": 0,
+      "purgeRatePerMin": 3.188,
+      "missedCleanseRate": 0.333,
+      "healingGapRate": 0.008,
+      "offensiveParticipationRate": 0.22,
+      "setupStyleBreakdown": {
+        "one_shot_burst": 0,
+        "cc_then_burst": 0.152,
+        "flat_dampening": 0,
+        "unknown": 0.848
+      },
+      "positioningBreakdown": {
+        "spread": 0.872,
+        "mobile": 0.016,
+        "clustered": 0.072,
+        "stationary": 0.04
+      }
+    },
+    "enemyHealerPartial": {
+      "note": "lower fidelity \u2014 cast events only, no HP/resource context",
+      "cdCastsObserved": {
+        "Psychic Scream": 1.23,
+        "Power Infusion": 1.89,
+        "Guardian Spirit": 1,
+        "Divine Hymn": 1,
+        "Apotheosis": 1,
+        "Deep Breath": 1,
+        "Cauterizing Flame": 1,
+        "Rewind": 1,
+        "Emerald Communion": 1,
+        "Hex": 1,
+        "Spiritwalker's Grace": 1,
+        "Healing Tide Totem": 1,
+        "Stasis": 1,
+        "Pain Suppression": 1.27,
+        "Barkskin": 1,
+        "Ironbark": 1,
+        "Hammer of Justice": 1,
+        "Avenging Crusader": 1.33,
+        "Blessing of Sacrifice": 1,
+        "Wing Buffet": 1.33,
+        "Mass Entanglement": 1,
+        "Rescue": 1,
+        "Leg Sweep": 1.14,
+        "Life Cocoon": 1,
+        "Paralysis": 1.17,
+        "Aura Mastery": 1,
+        "Incarnation: Tree of Life": 1,
+        "Tail Swipe": 1,
+        "Divine Shield": 1
+      },
+      "ccOffensivePerMatch": 0
+    },
+    "promptText": "**Note:** This match ended quickly with one team dominant. The healer had little opportunity to influence the outcome \u2014 no coaching context is injected for this archetype.",
+    "isNoise": true
+  },
+  "cluster_3": {
+    "label": "dampening_burst_cycle",
+    "matchCount": 383,
+    "minRating": 2000,
+    "generatedAt": "2026-05-20T06:45:32.162Z",
+    "specDistribution": {
+      "Restoration Druid": 45,
+      "Preservation Evoker": 179,
+      "Restoration Shaman": 29,
+      "Discipline Priest": 34,
+      "Holy Priest": 21,
+      "Holy Paladin": 44,
+      "Mistweaver Monk": 31
+    },
+    "dynamics": {
+      "burstWindowCount": 2.8,
+      "ccEventsPerMinute": 9.3,
+      "tunnelScore": 0.579,
+      "peakBurstScore": 18.4,
+      "durationSeconds": 247
+    },
+    "behaviors": {
+      "cdTiming": {
+        "Optimal": 0.523,
+        "Early": 0.08,
+        "Late": 0.144,
+        "Reactive": 0.03,
+        "Unknown": 0.223
+      },
+      "cdNeverUsedRate": 0.219,
+      "cdResponseLatencyMs": {
+        "median": 7669,
+        "p90": 21136
+      },
+      "ccOffensivePerMatch": {
+        "mean": 8,
+        "p75": 11
+      },
+      "drChainsCausedPerMatch": 0.06,
+      "purgeRatePerMin": 2.631,
+      "missedCleanseRate": 0.386,
+      "healingGapRate": 0.039,
+      "offensiveParticipationRate": 0.624,
+      "setupStyleBreakdown": {
+        "one_shot_burst": 0,
+        "cc_then_burst": 0.308,
+        "flat_dampening": 0.172,
+        "unknown": 0.52
+      },
+      "positioningBreakdown": {
+        "spread": 0.984,
+        "stationary": 0.013,
+        "clustered": 0.003
+      }
+    },
+    "enemyHealerPartial": {
+      "note": "lower fidelity \u2014 cast events only, no HP/resource context",
+      "cdCastsObserved": {
+        "Psychic Scream": 4.42,
+        "Power Infusion": 4.68,
+        "Pain Suppression": 2.85,
+        "Divine Shield": 1.03,
+        "Hammer of Justice": 4.68,
+        "Blessing of Spellwarding": 1,
+        "Avenging Crusader": 3.43,
+        "Divine Protection": 2.79,
+        "Blessing of Sacrifice": 1.91,
+        "Aura Mastery": 1.61,
+        "Barkskin": 1.57,
+        "Incapacitating Roar": 2.73,
+        "Incarnation: Tree of Life": 2.7,
+        "Ironbark": 2.13,
+        "Deep Breath": 1.9,
+        "Tail Swipe": 1.09,
+        "Cauterizing Flame": 1.8,
+        "Rewind": 1.11,
+        "Emerald Communion": 1.24,
+        "Stasis": 2.22,
+        "Rescue": 1.9,
+        "Mighty Bash": 2.21,
+        "Frenzied Regeneration": 1.97,
+        "Tranquility": 1.07,
+        "Wing Buffet": 1.55,
+        "Mass Entanglement": 2.76,
+        "Stampeding Roar": 1.11,
+        "Guardian Spirit": 2.69,
+        "Divine Hymn": 1.86,
+        "Apotheosis": 1.68,
+        "Desperate Prayer": 1.17,
+        "Time Stop": 2,
+        "Hex": 3,
+        "Healing Tide Totem": 1.94,
+        "Spiritwalker's Grace": 1.75,
+        "Blessing of Protection": 1,
+        "Paralysis": 4.13,
+        "Leg Sweep": 3.53,
+        "Avenging Wrath": 2.4,
+        "Life Cocoon": 2.19,
+        "Power Word: Barrier": 1.33,
+        "Zephyr": 2
+      },
+      "ccOffensivePerMatch": 0
+    },
+    "promptText": "**Opponents:** Enemy runs a long round cycling through 2-3 coordinated burst pushes as dampening sets in. Enemies wait for CD availability before committing. Between pushes they maintain CC pressure.\n\n**Your role:** Distribute major cooldowns across multiple real burst windows. Getting caught without defensives on the third push is the most common failure.",
+    "isNoise": false
+  },
+  "cluster_4": {
+    "label": "offensive_trade",
+    "matchCount": 257,
+    "minRating": 2000,
+    "generatedAt": "2026-05-20T06:45:32.163Z",
+    "specDistribution": {
+      "Holy Priest": 20,
+      "Preservation Evoker": 68,
+      "Restoration Druid": 57,
+      "Holy Paladin": 18,
+      "Restoration Shaman": 20,
+      "Discipline Priest": 26,
+      "Mistweaver Monk": 48
+    },
+    "dynamics": {
+      "burstWindowCount": 1.5,
+      "ccEventsPerMinute": 7.36,
+      "tunnelScore": 0.62,
+      "peakBurstScore": 14,
+      "durationSeconds": 122
+    },
+    "behaviors": {
+      "cdTiming": {
+        "Optimal": 0.525,
+        "Early": 0.094,
+        "Late": 0.1,
+        "Reactive": 0.016,
+        "Unknown": 0.187
+      },
+      "cdNeverUsedRate": 0.371,
+      "cdResponseLatencyMs": {
+        "median": 8002,
+        "p90": 18096
+      },
+      "ccOffensivePerMatch": {
+        "mean": 5.22,
+        "p75": 7
+      },
+      "drChainsCausedPerMatch": 0.06,
+      "purgeRatePerMin": 2.223,
+      "missedCleanseRate": 0.388,
+      "healingGapRate": 0.024,
+      "offensiveParticipationRate": 0.575,
+      "setupStyleBreakdown": {
+        "one_shot_burst": 0,
+        "cc_then_burst": 0.226,
+        "flat_dampening": 0.031,
+        "unknown": 0.743
+      },
+      "positioningBreakdown": {
+        "spread": 0.907,
+        "clustered": 0.07,
+        "mobile": 0.004,
+        "stationary": 0.019
+      }
+    },
+    "enemyHealerPartial": {
+      "note": "lower fidelity \u2014 cast events only, no HP/resource context",
+      "cdCastsObserved": {
+        "Deep Breath": 1.16,
+        "Rewind": 1.04,
+        "Stasis": 1.46,
+        "Rescue": 1.17,
+        "Emerald Communion": 1.08,
+        "Psychic Scream": 1.87,
+        "Power Infusion": 2.39,
+        "Guardian Spirit": 1.28,
+        "Divine Hymn": 1.06,
+        "Apotheosis": 1,
+        "Hammer of Justice": 2.29,
+        "Avenging Crusader": 2.12,
+        "Blessing of Sacrifice": 1.27,
+        "Aura Mastery": 1.18,
+        "Paralysis": 2,
+        "Leg Sweep": 1.75,
+        "Life Cocoon": 1.13,
+        "Wing Buffet": 1.27,
+        "Barkskin": 1,
+        "Incapacitating Roar": 1.3,
+        "Incarnation: Tree of Life": 1.42,
+        "Divine Shield": 1,
+        "Divine Protection": 1.53,
+        "Pain Suppression": 1.79,
+        "Tail Swipe": 1,
+        "Cauterizing Flame": 1.26,
+        "Mighty Bash": 1,
+        "Tranquility": 1,
+        "Ironbark": 1.1,
+        "Blessing of Protection": 1,
+        "Hex": 1.25,
+        "Spiritwalker's Grace": 1.13,
+        "Healing Tide Totem": 1.17,
+        "Time Stop": 1.33,
+        "Zephyr": 1.67,
+        "Blessing of Spellwarding": 1,
+        "Desperate Prayer": 1,
+        "Mass Entanglement": 1,
+        "Avenging Wrath": 1.17,
+        "Frenzied Regeneration": 1,
+        "Stampeding Roar": 1
+      },
+      "ccOffensivePerMatch": 0
+    },
+    "promptText": "**Opponents:** Your team is pressuring the enemy heavily. Enemies are fighting from behind \u2014 their burst is reactive rather than structured. The damage is real but their timing is harder to control.\n\n**Your role:** Survive the enemy's desperation burst without overcommitting. Don't burn cooldowns preemptively \u2014 your team is winning the exchange.",
+    "isNoise": false
+  },
+  "cluster_5": {
+    "label": "deep_dampening_siege",
+    "matchCount": 113,
+    "minRating": 2000,
+    "generatedAt": "2026-05-20T06:45:32.163Z",
+    "specDistribution": {
+      "Restoration Druid": 18,
+      "Preservation Evoker": 46,
+      "Restoration Shaman": 10,
+      "Holy Paladin": 22,
+      "Holy Priest": 7,
+      "Discipline Priest": 5,
+      "Mistweaver Monk": 5
+    },
+    "dynamics": {
+      "burstWindowCount": 6.2,
+      "ccEventsPerMinute": 10.16,
+      "tunnelScore": 0.589,
+      "peakBurstScore": 21.8,
+      "durationSeconds": 327
+    },
+    "behaviors": {
+      "cdTiming": {
+        "Optimal": 0.595,
+        "Early": 0.1,
+        "Late": 0.167,
+        "Reactive": 0.016,
+        "Unknown": 0.122
+      },
+      "cdNeverUsedRate": 0.232,
+      "cdResponseLatencyMs": {
+        "median": 8739,
+        "p90": 22352
+      },
+      "ccOffensivePerMatch": {
+        "mean": 11.2,
+        "p75": 15
+      },
+      "drChainsCausedPerMatch": 0.2,
+      "purgeRatePerMin": 1.974,
+      "missedCleanseRate": 0.452,
+      "healingGapRate": 0.042,
+      "offensiveParticipationRate": 0.629,
+      "setupStyleBreakdown": {
+        "one_shot_burst": 0,
+        "cc_then_burst": 0.363,
+        "flat_dampening": 0.168,
+        "unknown": 0.469
+      },
+      "positioningBreakdown": {
+        "spread": 0.991,
+        "stationary": 0.009
+      }
+    },
+    "enemyHealerPartial": {
+      "note": "lower fidelity \u2014 cast events only, no HP/resource context",
+      "cdCastsObserved": {
+        "Psychic Scream": 6.55,
+        "Power Infusion": 6.59,
+        "Pain Suppression": 3.55,
+        "Desperate Prayer": 1.36,
+        "Guardian Spirit": 3.28,
+        "Divine Hymn": 2,
+        "Apotheosis": 2.56,
+        "Deep Breath": 2.22,
+        "Tail Swipe": 1.22,
+        "Wing Buffet": 1.73,
+        "Rewind": 1.38,
+        "Emerald Communion": 1.81,
+        "Stasis": 2.94,
+        "Rescue": 2.18,
+        "Paralysis": 3.83,
+        "Leg Sweep": 3.25,
+        "Life Cocoon": 2.17,
+        "Hammer of Justice": 6.7,
+        "Blessing of Protection": 1,
+        "Avenging Crusader": 5.38,
+        "Divine Protection": 3.5,
+        "Blessing of Sacrifice": 2.6,
+        "Aura Mastery": 2.3,
+        "Mighty Bash": 2.67,
+        "Incarnation: Tree of Life": 4.65,
+        "Ironbark": 3.03,
+        "Cauterizing Flame": 2.29,
+        "Time Stop": 3,
+        "Barkskin": 2.77,
+        "Tranquility": 1.28,
+        "Hex": 4.8,
+        "Spiritwalker's Grace": 2,
+        "Healing Tide Totem": 2.67,
+        "Mass Entanglement": 4.1,
+        "Incapacitating Roar": 3.4,
+        "Frenzied Regeneration": 2.33,
+        "Stampeding Roar": 1.13,
+        "Divine Shield": 1.22,
+        "Avenging Wrath": 3,
+        "Blessing of Spellwarding": 1,
+        "Power Word: Barrier": 1
+      },
+      "ccOffensivePerMatch": 0
+    },
+    "promptText": "**Opponents:** Enemies make 5-6 coordinated burst attempts across a 5+ minute round. CC pressure is constant between pushes to drain resources. Each push gets harder as dampening increases.\n\n**Your role:** Ration major cooldowns across the entire round. Using two on an early push leaves you exposed on the fifth.",
+    "isNoise": false
+  },
+  "cluster_6": {
+    "label": "cc_without_commit",
+    "matchCount": 139,
+    "minRating": 2000,
+    "generatedAt": "2026-05-20T06:45:32.163Z",
+    "specDistribution": {
+      "Preservation Evoker": 53,
+      "Restoration Shaman": 6,
+      "Holy Priest": 10,
+      "Restoration Druid": 15,
+      "Holy Paladin": 12,
+      "Discipline Priest": 12,
+      "Mistweaver Monk": 31
+    },
+    "dynamics": {
+      "burstWindowCount": 0,
+      "ccEventsPerMinute": 12.6,
+      "tunnelScore": 0.551,
+      "peakBurstScore": 0,
+      "durationSeconds": 100
+    },
+    "behaviors": {
+      "cdTiming": {
+        "Optimal": 0.365,
+        "Early": 0.04,
+        "Late": 0.068,
+        "Reactive": 0.038,
+        "Unknown": 0.31
+      },
+      "cdNeverUsedRate": 0.462,
+      "cdResponseLatencyMs": {
+        "median": 10188,
+        "p90": 12823
+      },
+      "ccOffensivePerMatch": {
+        "mean": 3.02,
+        "p75": 4
+      },
+      "drChainsCausedPerMatch": 0.04,
+      "purgeRatePerMin": 2.275,
+      "missedCleanseRate": 0.314,
+      "healingGapRate": 0,
+      "offensiveParticipationRate": 0.403,
+      "setupStyleBreakdown": {
+        "one_shot_burst": 0,
+        "cc_then_burst": 0.504,
+        "flat_dampening": 0.022,
+        "unknown": 0.475
+      },
+      "positioningBreakdown": {
+        "spread": 0.863,
+        "stationary": 0.058,
+        "clustered": 0.079
+      }
+    },
+    "enemyHealerPartial": {
+      "note": "lower fidelity \u2014 cast events only, no HP/resource context",
+      "cdCastsObserved": {
+        "Zephyr": 1,
+        "Emerald Communion": 1,
+        "Psychic Scream": 1.82,
+        "Power Infusion": 2.1,
+        "Pain Suppression": 1.5,
+        "Deep Breath": 1,
+        "Tail Swipe": 1,
+        "Rewind": 1,
+        "Stasis": 1,
+        "Rescue": 1.15,
+        "Hammer of Justice": 1.58,
+        "Blessing of Spellwarding": 1,
+        "Avenging Wrath": 1,
+        "Divine Protection": 1,
+        "Blessing of Sacrifice": 1,
+        "Wing Buffet": 1.13,
+        "Avenging Crusader": 1.63,
+        "Aura Mastery": 1,
+        "Paralysis": 2.05,
+        "Leg Sweep": 1.52,
+        "Life Cocoon": 1.11,
+        "Spiritwalker's Grace": 1,
+        "Healing Tide Totem": 1.06,
+        "Divine Hymn": 1,
+        "Hex": 1.82,
+        "Guardian Spirit": 1.33,
+        "Apotheosis": 1,
+        "Blessing of Protection": 1,
+        "Divine Shield": 1,
+        "Time Stop": 1,
+        "Barkskin": 1,
+        "Incarnation: Tree of Life": 2,
+        "Ironbark": 1.33,
+        "Cauterizing Flame": 1,
+        "Revival": 1,
+        "Tranquility": 1
+      },
+      "ccOffensivePerMatch": 0
+    },
+    "promptText": "**Opponents:** Enemies chain CC constantly but never organize their damage cooldowns into a real kill attempt. The CC is the entire strategy \u2014 drain mana, force trinkets, create exhaustion.\n\n**Your role:** Don't overreact. Ride out CC with baseline tools and save major cooldowns for a burst that may never come. The round is decided by who makes the first resource mistake.",
+    "isNoise": false
+  },
+  "cluster_7": {
+    "label": "passive_dampening",
+    "matchCount": 221,
+    "minRating": 2000,
+    "generatedAt": "2026-05-20T06:45:32.164Z",
+    "specDistribution": {
+      "Preservation Evoker": 67,
+      "Restoration Shaman": 12,
+      "Holy Priest": 16,
+      "Restoration Druid": 43,
+      "Discipline Priest": 25,
+      "Holy Paladin": 27,
+      "Mistweaver Monk": 31
+    },
+    "dynamics": {
+      "burstWindowCount": 0,
+      "ccEventsPerMinute": 8.55,
+      "tunnelScore": 0.564,
+      "peakBurstScore": 0,
+      "durationSeconds": 220
+    },
+    "behaviors": {
+      "cdTiming": {
+        "Optimal": 0.332,
+        "Early": 0.065,
+        "Late": 0.101,
+        "Reactive": 0.054,
+        "Unknown": 0.439
+      },
+      "cdNeverUsedRate": 0.242,
+      "cdResponseLatencyMs": {
+        "median": 21393,
+        "p90": 22756
+      },
+      "ccOffensivePerMatch": {
+        "mean": 7.42,
+        "p75": 10
+      },
+      "drChainsCausedPerMatch": 0.09,
+      "purgeRatePerMin": 2.226,
+      "missedCleanseRate": 0.263,
+      "healingGapRate": 0,
+      "offensiveParticipationRate": 0.705,
+      "setupStyleBreakdown": {
+        "one_shot_burst": 0,
+        "cc_then_burst": 0.222,
+        "flat_dampening": 0.158,
+        "unknown": 0.62
+      },
+      "positioningBreakdown": {
+        "spread": 0.973,
+        "stationary": 0.014,
+        "clustered": 0.014
+      }
+    },
+    "enemyHealerPartial": {
+      "note": "lower fidelity \u2014 cast events only, no HP/resource context",
+      "cdCastsObserved": {
+        "Psychic Scream": 3.2,
+        "Power Infusion": 3.22,
+        "Pain Suppression": 2.14,
+        "Guardian Spirit": 2.53,
+        "Divine Hymn": 2.06,
+        "Divine Shield": 1.04,
+        "Hammer of Justice": 4.6,
+        "Blessing of Protection": 1,
+        "Avenging Crusader": 3.48,
+        "Blessing of Sacrifice": 1.97,
+        "Aura Mastery": 1.64,
+        "Hex": 2.74,
+        "Spiritwalker's Grace": 1.63,
+        "Healing Tide Totem": 2.11,
+        "Deep Breath": 1.3,
+        "Rewind": 1.02,
+        "Emerald Communion": 1.13,
+        "Stasis": 1.65,
+        "Wing Buffet": 1.18,
+        "Rescue": 1.52,
+        "Mighty Bash": 1.8,
+        "Tranquility": 1,
+        "Incarnation: Tree of Life": 2.2,
+        "Ironbark": 2.4,
+        "Divine Protection": 2.76,
+        "Apotheosis": 1.65,
+        "Paralysis": 3.19,
+        "Leg Sweep": 2.39,
+        "Life Cocoon": 1.84,
+        "Avenging Wrath": 2.14,
+        "Barkskin": 1,
+        "Desperate Prayer": 1,
+        "Time Stop": 2.25,
+        "Power Word: Barrier": 1,
+        "Blessing of Spellwarding": 1,
+        "Stampeding Roar": 1,
+        "Cauterizing Flame": 1.86,
+        "Tail Swipe": 1,
+        "Revival": 2,
+        "Zephyr": 2,
+        "Frenzied Regeneration": 2
+      },
+      "ccOffensivePerMatch": 0
+    },
+    "promptText": "**Opponents:** Neither team escalates. Enemies apply moderate CC and steady pressure but never commit cooldowns to a kill window. The round drifts into deep dampening and is decided by accumulated mistakes rather than any moment of peak danger.\n\n**Your role:** With no real burst threat, offensive contribution matters more than defensive positioning. Your team's ability to CC the enemy healer and force them into poor decisions determines the outcome.",
+    "isNoise": false
+  }
+}

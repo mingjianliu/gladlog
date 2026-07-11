@@ -164,6 +164,7 @@ export function makeUnit(
 ): ICombatUnit {
   return {
     id,
+    isWellFormed: true,
     name: overrides.name ?? id,
     ownerId: overrides.ownerId ?? '',
     reaction: overrides.reaction ?? CombatUnitReaction.Friendly,

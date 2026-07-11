@@ -29,6 +29,7 @@ const PRIORITY_MAP = {
   disarms: 7,
   buffs_offensive: 8,
   debuffs_offensive: 9,
+  buffs_speed_boost: 10,
   buffs_other: 10,
   debuffs_other: 11,
 };

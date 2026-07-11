@@ -15,6 +15,9 @@ export interface ILogLine {
 }
 
 export interface ICombatEvent {
+  /** 原始 srcFlags/destFlags(params[2]/params[6],十六进制解码) */
+  srcUnitFlags: number;
+  destUnitFlags: number;
   spellId: string;
   spellName: string;
   timestamp: number;
@@ -41,6 +44,9 @@ export interface ISpellEvent extends ICombatEvent {
   extraSpellId?: string;
   extraSpellName?: string;
 }
+
+/** 旧接口别名:吸收事件 */
+export interface CombatAbsorbAction extends IAbsorbEvent {}
 
 /** 旧接口别名:携带 extra 法术字段的动作事件 */
 export interface CombatExtraSpellAction extends ISpellEvent {
@@ -73,6 +79,10 @@ export interface ICombatUnit {
   id: string;
   name: string;
   ownerId: string;
+  /** 转换后单位恒为 well-formed(parser 已过滤坏单位) */
+  isWellFormed: boolean;
+  /** 旧接口字段(旗标 affiliation 位);转换器不填,可选 */
+  affiliation?: number;
   type: CombatUnitType;
   class: CombatUnitClass;
   spec: CombatUnitSpec;
@@ -84,6 +94,15 @@ export interface ICombatUnit {
   healOut: IHpEvent[];
   absorbsIn: IAbsorbEvent[];
   absorbsOut: IAbsorbEvent[];
+  /** 旧接口字段:作为攻击方打掉的护盾吸收;转换器暂不填(可选) */
+  absorbsDamaged?: IAbsorbEvent[];
+  /** 旧接口字段族:_SUPPORT 事件(增辅贡献);转换器暂不填(可选) */
+  supportDamageIn?: IHpEvent[];
+  supportDamageOut?: IHpEvent[];
+  supportHealIn?: IHpEvent[];
+  supportHealOut?: IHpEvent[];
+  /** 旧接口字段:非假死死亡记录;转换器暂不填(可选,消费方回退 deathRecords) */
+  consciousDeathRecords?: ILogLine[];
   auraEvents: IAuraEvent[];
   spellCastEvents: ISpellEvent[];
   petSpellCastEvents: ISpellEvent[];

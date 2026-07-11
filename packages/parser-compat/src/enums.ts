@@ -159,3 +159,28 @@ export enum CombatUnitPowerType {
   Pain = 18,
   NumPowerTypes = 19
 }
+
+
+// ── 单位旗标解码(暴雪 combat log flags 公开掩码;供旧 utils 使用)──
+const TYPE_PLAYER = 0x0400;
+const TYPE_NPC = 0x0800;
+const TYPE_PET = 0x1000;
+const TYPE_GUARDIAN = 0x2000;
+const TYPE_OBJECT = 0x4000;
+const REACTION_FRIENDLY = 0x0010;
+const REACTION_HOSTILE = 0x0040;
+
+export function getUnitType(flags: number): CombatUnitType {
+  if (flags & TYPE_PLAYER) return CombatUnitType.Player;
+  if (flags & TYPE_PET) return CombatUnitType.Pet;
+  if (flags & TYPE_GUARDIAN) return CombatUnitType.Guardian;
+  if (flags & TYPE_NPC) return CombatUnitType.NPC;
+  if (flags & TYPE_OBJECT) return CombatUnitType.Object;
+  return CombatUnitType.None;
+}
+
+export function getUnitReaction(flags: number): CombatUnitReaction {
+  if (flags & REACTION_FRIENDLY) return CombatUnitReaction.Friendly;
+  if (flags & REACTION_HOSTILE) return CombatUnitReaction.Hostile;
+  return CombatUnitReaction.Neutral;
+}

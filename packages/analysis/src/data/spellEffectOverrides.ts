@@ -111,6 +111,7 @@ export const SPELL_EFFECT_OVERRIDES: Record<string, IMinedSpell> =
       e("132409", "Spell Lock", 24),
       e("351338", "Quell", 40),
       e("15487", "Silence", 45),
+    e("8122", "Psychic Scream", 30, 6),
       e("78675", "Solar Beam", 60),
     ].map((s) => [s.spellId, s]),
   );

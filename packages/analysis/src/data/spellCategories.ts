@@ -16,6 +16,7 @@ export interface ISpellCategoryEntry {
     | "debuffs_offensive"
     | "debuffs_defensive"
     | "debuffs_other"
+    | "buffs_speed_boost"
     | "interrupts"
     | "disarms";
   duration?: number;
@@ -115,6 +116,27 @@ export const SPELL_CATEGORIES: Record<string, ISpellCategoryEntry> = {
   "51271": { type: "buffs_offensive", duration: 12 }, // Pillar of Frost
   "31884": { type: "buffs_offensive", duration: 20 }, // Avenging Wrath
   "288613": { type: "buffs_offensive", duration: 15 }, // Trueshot
+  // ── 打断 ──
+  "1766": { type: "interrupts" },
+  "2139": { type: "interrupts" },
+  "6552": { type: "interrupts" },
+  "47528": { type: "interrupts" },
+  "57994": { type: "interrupts" },
+  "96231": { type: "interrupts" },
+  "106839": { type: "interrupts" },
+  "116705": { type: "interrupts" },
+  "147362": { type: "interrupts" },
+  "187707": { type: "interrupts" },
+  "183752": { type: "interrupts" },
+  "119910": { type: "interrupts" },
+  "132409": { type: "interrupts" },
+  "351338": { type: "interrupts" },
+  "15487": { type: "interrupts" },
+  "78675": { type: "interrupts" },
+  // ── 加速增益 ──
+  "2983": { type: "buffs_speed_boost", duration: 8 }, // Sprint
+  "1850": { type: "buffs_speed_boost", duration: 10 }, // Dash
+  "116841": { type: "buffs_speed_boost", duration: 6 }, // Tiger's Lust
   // ── 进攻减益 ──
   "702": { type: "debuffs_offensive" }, // Curse of Weakness
   "1714": { type: "debuffs_offensive" }, // Curse of Tongues
