@@ -28,6 +28,7 @@ export function deriveTimeline(m: ReportSource): TimelineData {
   const players = Object.values(m.units).filter(
     (u) => u.kind === "Player" && u.info,
   );
+  const allPlayers = Object.values(m.units).filter((u) => u.kind === 'Player');
   const series = !m.hasAdvancedLogging
     ? []
     : players
@@ -42,7 +43,7 @@ export function deriveTimeline(m: ReportSource): TimelineData {
         }))
         .filter((s) => s.points.length > 0)
         .sort((a, b) => a.teamId - b.teamId || a.name.localeCompare(b.name));
-  const deaths: DeathMark[] = players
+  const deaths: DeathMark[] = allPlayers
     .flatMap((u) =>
       u.deaths
         .filter((d) => !d.unconscious)
