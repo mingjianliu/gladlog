@@ -110,4 +110,31 @@ describe("validateCorpus", () => {
       true,
     );
   });
+  it("flags an activated buildGroup whose build-parent cell is below N_floor (guard post-assertion)", () => {
+    // A declared gate whose *×offensive build-parent has sampleN < nFloor should
+    // never happen (the guard prevents it) — but the validator must catch it if
+    // aggregateCells ever regresses.
+    const parent = {
+      ...goodCell,
+      spec: "Discipline Priest",
+      archetype: "*",
+      buildGroup: "offensive",
+      sampleN: 12,
+      insufficient: true,
+    };
+    const c = corpusWith(parent);
+    c.buildGroups = {
+      "Discipline Priest": {
+        keystoneNodeIds: [82585],
+        match: "any",
+        groupPresent: "offensive",
+        groupAbsent: "standard",
+      },
+    };
+    expect(
+      validateCorpus(c, 30).some((v) =>
+        /build-parent .* below N_floor/.test(v),
+      ),
+    ).toBe(true);
+  });
 });

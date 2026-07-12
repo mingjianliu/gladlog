@@ -115,7 +115,7 @@ describe("aggregateCells build-split", () => {
     expect(keys).toContain("*|offensive"); // build parent
     expect(keys).toContain("*|standard");
     expect(keys).toContain("*|*"); // bracket parent, build-agnostic
-    expect(keys).not.toContain("hybrid|*"); // gated spec does NOT emit archetype×*
+    expect(keys).toContain("hybrid|*"); // archetype baseline (kept for fallback)
     expect(c.buildGroups["Discipline Priest"]).toEqual({
       keystoneNodeIds: [82585],
       match: "any",

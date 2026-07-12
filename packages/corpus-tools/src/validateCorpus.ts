@@ -41,6 +41,18 @@ export function validateCorpus(corpus: Corpus, nFloor: number): string[] {
       v.push(`buildGroups[${spec}]: invalid match "${d.match}"`);
     if (d.groupPresent === d.groupAbsent)
       v.push(`buildGroups[${spec}]: groupPresent === groupAbsent`);
+    // 守卫的事后断言:门激活的每个 buildGroup 的 build 父(spec×bracket×*×group)
+    // 必须真的达标。若 aggregateCells 的守卫被改坏而发出未达标的分组,这里兜住。
+    for (const g of [d.groupPresent, d.groupAbsent]) {
+      const buildParents = corpus.cells.filter(
+        (c) => c.spec === spec && c.archetype === "*" && c.buildGroup === g,
+      );
+      for (const p of buildParents)
+        if (p.sampleN < nFloor)
+          v.push(
+            `buildGroups[${spec}] group "${g}": build-parent ${p.bracket} below N_floor (${p.sampleN})`,
+          );
+    }
   }
   return v;
 }

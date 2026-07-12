@@ -152,7 +152,12 @@ export function aggregateCells(
       : "*";
 
   // --- Emit cells: each record contributes to its fallback-chain tiers.
-  // buildGroup != "*": (archetype,group), (*,group), (*,*)
+  // A gated (build-split) record ALSO emits the build-agnostic archetype cell
+  // (archetype,*) so every bracket keeps an archetype baseline. This lets
+  // SP-B2's fallback be archetype×buildGroup → *×buildGroup → archetype×* → *×*
+  // and removes the hazard where a spec declared in buildGroups but only
+  // build-split in some brackets would skip the valid archetype×* cell.
+  // buildGroup != "*": (archetype,group), (archetype,*), (*,group), (*,*)
   // buildGroup == "*": (archetype,*), (*,*)
   const buckets = new Map<string, PerMatchRecord[]>();
   const push = (
@@ -170,7 +175,10 @@ export function aggregateCells(
     const bg = effGroup(r);
     if (bg !== "*") {
       activeSpecs.add(r.spec);
-      if (r.archetype !== "*") push(r.spec, r.bracket, r.archetype, bg, r);
+      if (r.archetype !== "*") {
+        push(r.spec, r.bracket, r.archetype, bg, r);
+        push(r.spec, r.bracket, r.archetype, "*", r); // archetype baseline
+      }
       push(r.spec, r.bracket, "*", bg, r);
       push(r.spec, r.bracket, "*", "*", r);
     } else {

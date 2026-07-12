@@ -73,8 +73,8 @@ SP-B1 收官后做了一次 build→指标方差研究(3600 场真实 2300+ Solo
 - `perMatchRecord.combatToRecords`:对每条治疗记录,若其 spec 在门表中,按门(`match` 算子作用于 `keystoneNodeIds` 与该治疗的 `talents`)判 `buildGroup = groupPresent|groupAbsent`;否则 `buildGroup = "*"`。记录带上 `buildGroup`。
 - `cellAggregator.aggregateCells`:cell 键变为 `spec|bracket|archetype|buildGroup`。发射的 cell 因专精是否门控而异,且**每个发射的 cell 都在某条回退链上**(不发无用 cell):
   - **非门控专精**(buildGroup 恒 `*`):`spec×bracket×archetype×*` 与 `spec×bracket×*×*` —— 与 SP-B1 完全一致。
-  - **门控专精**:`spec×bracket×archetype×buildGroup`(完整)、`spec×bracket×*×buildGroup`(**build 父**:保 build、并 archetype)、`spec×bracket×*×*`(bracket 父)。**不发** `archetype×*`(该 tier 在保-build 回退链上用不到)。
-- **回退偏好 = 保 build**(证据支撑):方差研究**证明**了门控专精的 build 效应(Disc offensiveIndex 2.4×),但**未**证明其在某稀有 archetype 上另有大差异;故完整 cell 稀疏时,"跨 archetype 的同 build 组"(`*×buildGroup`)比"同 archetype 的混 build"(`archetype×*`)更诚实。
+  - **门控专精**:`spec×bracket×archetype×buildGroup`(完整)、`spec×bracket×*×buildGroup`(**build 父**:保 build、并 archetype)、`spec×bracket×archetype×*`(**archetype 基线**:保 archetype、并 build)、`spec×bracket×*×*`(bracket 父)。门控专精**也发** `archetype×*`,使每个 bracket 都留有 archetype 基线(见回退)。
+- **回退偏好 = 保 build,但保留 archetype 基线**(证据支撑 + 收官审查修正):方差研究**证明**了门控专精的 build 效应(Disc offensiveIndex 2.4×),但**未**证明其在某稀有 archetype 上另有大差异;故优先保 build。但门是**逐 bracket** 激活的,一个 spec 可能在某 bracket 分裂、另一 bracket 未分裂;若不发 `archetype×*`,SP-B2 在未分裂 bracket 会从 `*×buildGroup`(缺失)直接掉到 `*×*`,漏掉本可用的 archetype 基线。故门控专精也发 `archetype×*`,回退链在 `*×buildGroup` 之后、`*×*` 之前命中它。
 - **N_floor 守卫(门激活条件,build 期算)**:门控专精的门只有当**其每个 buildGroup 的 `spec×bracket×*×buildGroup`(build 父)cell 都达 N_floor=30** 才**激活**;否则该专精**整体回落为 archetype-only**(cell 只出 `buildGroup="*"`,同非门控),且**不写进语料 `buildGroups`**。保证语料里出现的分组一定有样本支撑。
 
 ### 4. offensiveIndex winsorization(改 `cellAggregator.ts`)
@@ -105,7 +105,7 @@ SP-B1 收官后做了一次 build→指标方差研究(3600 场真实 2300+ Solo
 ## 运行时契约(SP-B2 消费,本 spec 只定义不实现)
 
 - **判组**:`g = corpus.buildGroups[userSpec]` 存在则按 `g.match`/`g.keystoneNodeIds` 对用户 build 的 talents 布尔判定 → `groupPresent|groupAbsent`;否则 `"*"`。
-- **回退(保-build 3 级)**:`spec×bracket×archetype×buildGroup` → `spec×bracket×*×buildGroup`(保 build、并 archetype)→ `spec×bracket×*×*` → insufficient("样本不足")。非门控专精为 2 级(`archetype×*` → `*×*`,同 SP-B1)。
+- **回退(保-build 4 级)**:`spec×bracket×archetype×buildGroup` → `spec×bracket×*×buildGroup`(保 build、并 archetype)→ `spec×bracket×archetype×*`(保 archetype、并 build)→ `spec×bracket×*×*` → insufficient("样本不足")。非门控专精为 2 级(`archetype×*` → `*×*`,同 SP-B1)。
 - **fail-open(硬约束)**:若 `corpus.wowPatchVersion` 与当前游戏 build 主版本不符,**或** `keystoneNodeIds` 在当前天赋树数据中不存在(节点被移除/改号),则该 spec 静默回落 `buildGroup="*"`,绝不崩、绝不盲评失效节点 id。
 
 ## 错误处理与验证门(硬门)
