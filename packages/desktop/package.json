@@ -41,6 +41,7 @@
       "output": "dist-app",
       "buildResources": "build"
     },
+    "afterSign": "build/afterSign.cjs",
     "extraResources": [
       {
         "from": "../corpus-tools/data/reference_vectors.json",
