@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { CombatUnitSpec } from "@gladlog/parser-compat";
+import { CombatUnitReaction, CombatUnitSpec } from "@gladlog/parser-compat";
 import { combatToRecords } from "./perMatchRecord";
+import type { KeystoneGate } from "./keystoneGates";
 
 const SHAMAN = CombatUnitSpec.Shaman_Restoration;
 const WARRIOR = CombatUnitSpec.Warrior_Arms;
@@ -49,7 +50,7 @@ function synthCombat(): any {
 
 describe("combatToRecords", () => {
   it("emits one record per Friendly healer with in-domain metrics + comp archetype", () => {
-    const recs = combatToRecords(synthCombat());
+    const recs = combatToRecords(synthCombat(), []);
     expect(recs.length).toBe(1); // 只有 Friendly 的 Resto Shaman
     const r = recs[0];
     expect(r.spec).toBeTruthy();
@@ -62,6 +63,84 @@ describe("combatToRecords", () => {
     const c = synthCombat();
     // 把 Friendly 治疗换成近战 → 无 Friendly healer
     c.units["Me-Realm-US"].spec = WARRIOR;
-    expect(combatToRecords(c)).toEqual([]);
+    expect(combatToRecords(c, [])).toEqual([]);
+  });
+});
+
+const discGate: KeystoneGate = {
+  spec: "Discipline Priest",
+  keystoneNodeIds: [82585],
+  match: "any",
+  metric: "offensiveIndex",
+  groupPresent: "offensive",
+  groupAbsent: "standard",
+};
+
+// Minimal synthetic combat with one Friendly Disc Priest healer carrying talents.
+// actionIn/auraEvents are required beyond the brief's literal fields: computeHealerMetrics
+// reads them (via cooldowns/ccTrinketAnalysis/enemyCDs) and throws without them, matching
+// the field set already used by the sibling stubs in this file and in
+// packages/analysis/src/utils/healerMetrics.test.ts.
+function combatWithDiscTalents(talentIds: number[]): any {
+  const healer = {
+    id: "h1",
+    name: "H-Realm-US",
+    type: 1, // Player
+    reaction: CombatUnitReaction.Friendly,
+    spec: CombatUnitSpec.Priest_Discipline,
+    info: {
+      teamId: "0",
+      talents: talentIds.map((id1) => ({ id1, id2: 0, count: 1 })),
+    },
+    damageOut: [],
+    healOut: [],
+    absorbsOut: [],
+    spellCastEvents: [],
+    actionIn: [],
+    auraEvents: [],
+    advancedActions: [],
+    deathRecords: [],
+    damageIn: [],
+  };
+  const enemy = {
+    id: "e1",
+    name: "E-Realm-US",
+    type: 1,
+    reaction: CombatUnitReaction.Hostile,
+    spec: CombatUnitSpec.Warrior_Arms,
+    info: { teamId: "1" },
+    damageOut: [],
+    healOut: [],
+    absorbsOut: [],
+    spellCastEvents: [],
+    actionIn: [],
+    auraEvents: [],
+    advancedActions: [],
+    deathRecords: [],
+    damageIn: [],
+  };
+  return {
+    units: { h1: healer, e1: enemy },
+    startTime: 0,
+    endTime: 60000,
+    startInfo: { bracket: "2v2" },
+  };
+}
+
+describe("combatToRecords buildGroup", () => {
+  it("assigns groupPresent when the healer has a keystone node", () => {
+    const recs = combatToRecords(combatWithDiscTalents([82585, 999]), [
+      discGate,
+    ]);
+    expect(recs).toHaveLength(1);
+    expect(recs[0].buildGroup).toBe("offensive");
+  });
+  it("assigns groupAbsent when the healer lacks the keystone", () => {
+    const recs = combatToRecords(combatWithDiscTalents([111, 222]), [discGate]);
+    expect(recs[0].buildGroup).toBe("standard");
+  });
+  it("assigns '*' when the spec is not gated", () => {
+    const recs = combatToRecords(combatWithDiscTalents([82585]), []);
+    expect(recs[0].buildGroup).toBe("*");
   });
 });

@@ -8,6 +8,7 @@ function corpusWith(cell: any): Corpus {
     builtAt: "now",
     sourceFloor: 2300,
     cells: [cell],
+    buildGroups: {},
   };
 }
 const goodCell = {
@@ -18,6 +19,7 @@ const goodCell = {
   insufficient: false,
   metrics: { reactionLatency: { p10: 1, p50: 2, p90: 3, n: 40 } },
   exemplarCrises: [["[0:10] taken Chaos Bolt"]],
+  buildGroup: "*",
 };
 
 describe("validateCorpus", () => {
@@ -65,6 +67,74 @@ describe("validateCorpus", () => {
     const bad = { ...goodCell, sampleN: 40, insufficient: true };
     expect(
       validateCorpus(corpusWith(bad), 30).some((v) => /insufficient/.test(v)),
+    ).toBe(true);
+  });
+  it("flags a non-'*' buildGroup cell whose spec is not declared in buildGroups", () => {
+    const bad = { ...goodCell, buildGroup: "offensive" };
+    const c = corpusWith(bad); // buildGroups is {}
+    expect(
+      validateCorpus(c, 30).some((v) => /undeclared buildGroup/.test(v)),
+    ).toBe(true);
+  });
+  it("passes a declared build-split cell", () => {
+    const cell = {
+      ...goodCell,
+      spec: "Discipline Priest",
+      buildGroup: "offensive",
+      sampleN: 40,
+    };
+    const c = corpusWith(cell);
+    c.buildGroups = {
+      "Discipline Priest": {
+        keystoneNodeIds: [82585],
+        match: "any",
+        groupPresent: "offensive",
+        groupAbsent: "standard",
+      },
+    };
+    expect(validateCorpus(c, 30).filter((v) => /buildGroup/.test(v))).toEqual(
+      [],
+    );
+  });
+  it("flags a buildGroups decl with empty keystoneNodeIds", () => {
+    const c = corpusWith(goodCell);
+    c.buildGroups = {
+      X: {
+        keystoneNodeIds: [],
+        match: "any",
+        groupPresent: "a",
+        groupAbsent: "b",
+      } as any,
+    };
+    expect(validateCorpus(c, 30).some((v) => /keystoneNodeIds/.test(v))).toBe(
+      true,
+    );
+  });
+  it("flags an activated buildGroup whose build-parent cell is below N_floor (guard post-assertion)", () => {
+    // A declared gate whose *×offensive build-parent has sampleN < nFloor should
+    // never happen (the guard prevents it) — but the validator must catch it if
+    // aggregateCells ever regresses.
+    const parent = {
+      ...goodCell,
+      spec: "Discipline Priest",
+      archetype: "*",
+      buildGroup: "offensive",
+      sampleN: 12,
+      insufficient: true,
+    };
+    const c = corpusWith(parent);
+    c.buildGroups = {
+      "Discipline Priest": {
+        keystoneNodeIds: [82585],
+        match: "any",
+        groupPresent: "offensive",
+        groupAbsent: "standard",
+      },
+    };
+    expect(
+      validateCorpus(c, 30).some((v) =>
+        /build-parent .* below N_floor/.test(v),
+      ),
     ).toBe(true);
   });
 });
