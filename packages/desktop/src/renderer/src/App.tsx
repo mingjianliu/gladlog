@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DevPanel } from "./components/DevPanel";
 import { MatchReport } from "./report/components/MatchReport";
 import { ShuffleReport } from "./report/components/ShuffleReport";
@@ -10,12 +10,16 @@ export default function App() {
   const [metas, setMetas] = useState<StoredMatchMeta[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [doc, setDoc] = useState<any | null>(null);
+  const [hasMore, setHasMore] = useState(true);
+  const loadingRef = useRef(false);
+  const PAGE = 100;
 
   useEffect(() => {
     void bridge()
-      .matches.list()
+      .matches.page({ limit: PAGE })
       .then((list) => {
         setMetas(list);
+        setHasMore(list.length === PAGE);
         // 启动即呈现最近一场,免去空态点击
         setSelectedId((cur) => cur ?? list[0]?.id ?? null);
       });
@@ -26,6 +30,27 @@ export default function App() {
       unMatchStored();
     };
   }, []);
+
+  const loadOlder = () => {
+    if (loadingRef.current || !hasMore) return;
+    const oldest = metas[metas.length - 1];
+    if (!oldest) return;
+    loadingRef.current = true;
+    void bridge()
+      .matches.page({ before: oldest.startTime, limit: PAGE })
+      .then((older) => {
+        setMetas((prev) => [...prev, ...older]);
+        setHasMore(older.length === PAGE);
+      })
+      .finally(() => {
+        loadingRef.current = false;
+      });
+  };
+
+  const onScroll = (e: React.UIEvent<HTMLUListElement>) => {
+    const el = e.currentTarget;
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 200) loadOlder();
+  };
 
   useEffect(() => {
     if (selectedId) {
@@ -48,7 +73,11 @@ export default function App() {
       ) : (
         <div className="app-layout">
           <aside className="app-sidebar">
-            <ul>
+            <ul
+              data-testid="match-list"
+              className="match-list"
+              onScroll={onScroll}
+            >
               {metas.map((m) => (
                 <li
                   key={m.id}
@@ -59,6 +88,7 @@ export default function App() {
                   {m.bracket} · {fmt(m.startTime)} · {m.result}
                 </li>
               ))}
+              {hasMore && <li className="loading-more">加载更早…</li>}
             </ul>
           </aside>
           <main className="app-main">
