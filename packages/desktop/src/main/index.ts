@@ -15,6 +15,7 @@ import { WorkerHost } from "./workerHost";
 import { createAiService, realClientFactory } from "./ai";
 import { createIconCache } from "./iconCache";
 import { createCompareService } from "./compare";
+import { createAnalysisService } from "./analysis";
 import { loadBundledCorpus, gameBuildFromManifest } from "./corpusLoader";
 import datagenManifest from "@gladlog/analysis/src/data/datagen-manifest.json";
 
@@ -142,6 +143,12 @@ else {
       gameBuild: () => gameBuildFromManifest(datagenManifest as { build?: string }),
       emit: (ch, payload) => win?.webContents.send(ch, payload),
     });
+    const analysis = createAnalysisService({
+      getSettings: () => settings.get(),
+      matchesDir: join(userData(), "matches"),
+      clientFactory: realClientFactory,
+      emit: (ch, payload) => win?.webContents.send(ch, payload),
+    });
     const icons = createIconCache({ cacheDir: join(app.getPath("userData"), "icons") });
     registerIpc({
       store,
@@ -151,6 +158,7 @@ else {
       onWowDirectoryChanged: (s) => startMonitoring(s),
       ai,
       compare,
+      analysis,
       icons,
     });
     startMonitoring(settings.get());

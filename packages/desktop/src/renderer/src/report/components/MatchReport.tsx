@@ -6,7 +6,7 @@ import { Meters } from "./Meters";
 import { ReportHeader } from "./ReportHeader";
 import { Timeline } from "./Timeline";
 import { UnitPanel } from "./UnitPanel";
-import { AIAnalysisPanel } from "./AIAnalysisPanel";
+import { StructuredAnalysisPanel } from "./StructuredAnalysisPanel";
 import { ProComparisonVerified } from "./ProComparisonVerified";
 
 type Mode = "damage" | "healing" | "taken";
@@ -78,7 +78,10 @@ export function MatchReport({
             <UnitPanel source={source} unitId={selected} />
           ) : (
             <>
-              <AIAnalysisPanel source={source} matchId={resolvedMatchId} />
+              <StructuredAnalysisPanel
+                source={source}
+                matchId={resolvedMatchId}
+              />
               <ProComparisonVerified
                 source={source}
                 matchId={resolvedMatchId}

@@ -55,6 +55,18 @@ export interface GladlogApi {
     onDone(cb: (d: { matchId: string; result: unknown }) => void): () => void;
     onError(cb: (d: { matchId: string; message: string }) => void): () => void;
   };
+  analysis: {
+    run(input: {
+      matchId: string;
+      candidates: any[];
+      richContext: string;
+      spec: string;
+    }): Promise<void>;
+    cancel(): Promise<void>;
+    getCached(matchId: string): Promise<unknown | null>;
+    onDone(cb: (d: { matchId: string; result: unknown }) => void): () => void;
+    onError(cb: (d: { matchId: string; message: string }) => void): () => void;
+  };
   icon: {
     get(name: string): Promise<string | null>;
   };
