@@ -17,6 +17,8 @@ describe("SettingsStore", () => {
       wowDirectory: null,
       anthropicApiKey: null,
       anthropicModel: null,
+      aiBackend: "anthropic",
+      aiBackendCommand: null,
     });
   });
   it("save 合并并持久化;文件为合法 JSON", () => {
@@ -39,6 +41,8 @@ describe("settings 脱敏(key 永不出主进程)", () => {
       wowDirectory: "/tmp/wow",
       anthropicApiKey: "sk-real-secret",
       anthropicModel: null,
+      aiBackend: "anthropic" as const,
+      aiBackendCommand: null,
     };
     const redacted = redactSettings(base);
     expect(redacted.anthropicApiKey).toBe(API_KEY_REDACTED);

@@ -1,15 +1,23 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "fs";
 import { dirname } from "path";
 
+export type AiBackend = "anthropic" | "claudeCli" | "agy";
+const AI_BACKENDS: AiBackend[] = ["anthropic", "claudeCli", "agy"];
+
 export interface GladlogSettings {
   wowDirectory: string | null;
   anthropicApiKey: string | null;
   anthropicModel: string | null;
+  // Debug: route LLM calls to a local CLI instead of the Anthropic API.
+  aiBackend: AiBackend;
+  aiBackendCommand: string | null;
 }
 const DEFAULTS: GladlogSettings = {
   wowDirectory: null,
   anthropicApiKey: null,
   anthropicModel: null,
+  aiBackend: "anthropic",
+  aiBackendCommand: null,
 };
 
 // key 只存在于主进程;IPC 边界一律用哨兵替换真值(renderer 只需真值性)。
@@ -25,11 +33,17 @@ export function redactSettings(s: GladlogSettings): GladlogSettings {
 export function sanitizeSettingsPatch(
   partial: Partial<GladlogSettings>,
 ): Partial<GladlogSettings> {
-  if (partial.anthropicApiKey === API_KEY_REDACTED) {
-    const { anthropicApiKey: _redacted, ...rest } = partial;
-    return rest;
+  let out = partial;
+  if (out.anthropicApiKey === API_KEY_REDACTED) {
+    const { anthropicApiKey: _redacted, ...rest } = out;
+    out = rest;
   }
-  return partial;
+  // Reject an unknown aiBackend value rather than persisting garbage.
+  if (out.aiBackend !== undefined && !AI_BACKENDS.includes(out.aiBackend)) {
+    const { aiBackend: _bad, ...rest } = out;
+    out = rest;
+  }
+  return out;
 }
 
 export class SettingsStore {

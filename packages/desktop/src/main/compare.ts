@@ -16,7 +16,12 @@ import {
   type ReferenceCorpus,
   type VerifiedComparison,
 } from "@gladlog/analysis";
-import { PROMPT_VERSION, realClientFactory, type AnthropicLike } from "./ai";
+import {
+  PROMPT_VERSION,
+  resolveAiClient,
+  type AiBackend,
+  type AnthropicLike,
+} from "./ai";
 
 const N_FLOOR = 30;
 
@@ -52,6 +57,8 @@ export function createCompareService(deps: {
     anthropicApiKey: string | null;
     anthropicModel: string | null;
     wowDirectory: string | null;
+    aiBackend?: AiBackend;
+    aiBackendCommand?: string | null;
   };
   clientFactory?: (key: string) => AnthropicLike;
   loadCorpus: () => ReferenceCorpus | null;
@@ -141,15 +148,17 @@ export function createCompareService(deps: {
       deps.emit("gladlog:compare:done", { matchId: input.matchId, result });
     };
 
-    if (!settings.anthropicApiKey || vc.dims.length === 0) {
-      finish(null, settings.anthropicApiKey ? "NO_DIMS" : "NO_API_KEY");
+    if (vc.dims.length === 0) {
+      finish(null, "NO_DIMS");
+      return;
+    }
+    const client = resolveAiClient(settings, deps.clientFactory);
+    if (!client) {
+      finish(null, "NO_API_KEY");
       return;
     }
 
     try {
-      const client = deps.clientFactory
-        ? deps.clientFactory(settings.anthropicApiKey)
-        : realClientFactory(settings.anthropicApiKey);
       const prompt = buildExemplarLedPrompt(vc, cell, input.spec);
       let raw = "";
       const stream = client.stream({

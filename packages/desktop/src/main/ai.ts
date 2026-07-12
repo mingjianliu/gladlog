@@ -1,3 +1,5 @@
+import { agyClientFactory, claudeCliClientFactory } from "./localAiBackends";
+
 // v3: candidate menu expanded — deaths tagged friendly/enemy (side fact) and
 // cd-waste events (never-used defensive cooldowns) added; prompt gained an event
 // legend and whole-round time display.
@@ -9,6 +11,31 @@ export interface AnthropicLike {
     max_tokens: number;
     messages: { role: "user"; content: string }[];
   }): AsyncIterable<{ delta?: string }>;
+}
+
+export type AiBackend = "anthropic" | "claudeCli" | "agy";
+
+export interface AiClientSettings {
+  anthropicApiKey: string | null;
+  aiBackend?: AiBackend | null;
+  aiBackendCommand?: string | null;
+}
+
+/**
+ * Pick the LLM client for the configured backend. Local backends (claudeCli,
+ * agy) need no API key; the Anthropic backend returns null without one so the
+ * service falls back to deterministic output.
+ */
+export function resolveAiClient(
+  settings: AiClientSettings,
+  anthropicFactory?: (key: string) => AnthropicLike,
+): AnthropicLike | null {
+  const backend = settings.aiBackend ?? "anthropic";
+  const cmd = settings.aiBackendCommand || undefined;
+  if (backend === "claudeCli") return claudeCliClientFactory({ cmd });
+  if (backend === "agy") return agyClientFactory({ script: cmd });
+  if (!settings.anthropicApiKey) return null;
+  return (anthropicFactory ?? realClientFactory)(settings.anthropicApiKey);
 }
 
 export function realClientFactory(key: string): AnthropicLike {

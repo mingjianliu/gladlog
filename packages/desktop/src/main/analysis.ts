@@ -13,7 +13,12 @@ import {
   type Finding,
   type RawFinding,
 } from "@gladlog/analysis";
-import { PROMPT_VERSION, realClientFactory, type AnthropicLike } from "./ai";
+import {
+  PROMPT_VERSION,
+  resolveAiClient,
+  type AiBackend,
+  type AnthropicLike,
+} from "./ai";
 
 export type AnalysisInput = {
   matchId: string;
@@ -32,6 +37,8 @@ export function createAnalysisService(deps: {
     anthropicApiKey: string | null;
     anthropicModel: string | null;
     wowDirectory: string | null;
+    aiBackend?: AiBackend;
+    aiBackendCommand?: string | null;
   };
   clientFactory?: (key: string) => AnthropicLike;
   matchesDir: string;
@@ -69,13 +76,11 @@ export function createAnalysisService(deps: {
     const fallback = () =>
       finish({ findings: [], dropped: 0, hadNarration: false });
 
-    if (!settings.anthropicApiKey || input.candidates.length === 0)
-      return fallback();
+    if (input.candidates.length === 0) return fallback();
+    const client = resolveAiClient(settings, deps.clientFactory);
+    if (!client) return fallback();
 
     try {
-      const client = deps.clientFactory
-        ? deps.clientFactory(settings.anthropicApiKey)
-        : realClientFactory(settings.anthropicApiKey);
       const prompt = buildFindingsPrompt(
         input.candidates,
         input.richContext,
