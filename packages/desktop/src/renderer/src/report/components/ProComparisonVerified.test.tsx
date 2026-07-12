@@ -31,7 +31,7 @@ const result = {
 };
 
 beforeEach(() => {
-  (globalThis as any).window.gladlog = {
+  (window as any).__gladlogFixture = {
     compare: {
       getCached: vi.fn().mockResolvedValue(result),
       run: vi.fn(),
@@ -44,12 +44,17 @@ beforeEach(() => {
 });
 
 describe("ProComparisonVerified", () => {
-  it("renders the verified report and the per-dim comparison + cohort meta", async () => {
-    render(<ProComparisonVerified match={{ id: "m1" } as any} />);
+  it("renders the cached verified report + per-dim comparison + cohort meta", async () => {
+    render(
+      <ProComparisonVerified
+        source={{ units: {}, startInfo: {} } as any}
+        matchId="m1"
+      />,
+    );
     // jest-dom is not installed; getByText/findByText throw if absent, so a
     // truthy assertion on the returned element is a real presence check.
     expect(await screen.findByText(/You landed 0.31 offense/)).toBeTruthy();
     expect(screen.getByText(/offensiveIndex/i)).toBeTruthy();
-    expect(screen.getByText(/offensive build/i)).toBeTruthy(); // build group shown in meta
+    expect(screen.getByText(/offensive build/i)).toBeTruthy(); // build group in meta
   });
 });

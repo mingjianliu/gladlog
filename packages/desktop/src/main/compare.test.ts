@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
+import { mkdtempSync, mkdirSync, writeFileSync } from "fs";
+import { join } from "path";
+import { tmpdir } from "os";
 import { createCompareService } from "./compare";
+import { PROMPT_VERSION } from "./ai";
 import type { ReferenceCorpus } from "@gladlog/analysis";
 
 const corpus: ReferenceCorpus = {
@@ -75,6 +79,42 @@ const input = {
 };
 
 describe("createCompareService", () => {
+  it("getCached returns null when the stored corpusVersion or promptVersion is stale", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "cmp-"));
+    const mk = (corpusVer: string) =>
+      createCompareService({
+        getSettings: () => ({
+          anthropicApiKey: "k",
+          anthropicModel: "m",
+          wowDirectory: null,
+        }),
+        clientFactory: () => ({
+          async *stream() {
+            yield { delta: "" };
+          },
+        }),
+        loadCorpus: () => ({ ...corpus, wowPatchVersion: corpusVer }),
+        gameBuild: () => corpusVer,
+        matchesDir: dir,
+        emit: () => {},
+      });
+    mkdirSync(join(dir, "m1"), { recursive: true });
+    writeFileSync(
+      join(dir, "m1", "compare.json"),
+      JSON.stringify({
+        corpusVersion: "12.1.0.68629",
+        promptVersion: PROMPT_VERSION,
+        result: {
+          verifiedComparison: { dims: [], facts: {} },
+          report: "cached",
+          droppedReason: null,
+          cellMeta: null,
+        },
+      }),
+    );
+    expect((await mk("12.1.0.68629").getCached("m1"))?.report).toBe("cached"); // versions match
+    expect(await mk("99.9.9.9").getCached("m1")).toBeNull(); // corpus version changed → stale
+  });
   it("interpolates placeholders and returns a verified report for the offensive build", async () => {
     const { s, emitted } = svc(
       "You hit {{offensiveIndex}} vs {{offensiveIndex.cohortMedian}}.",

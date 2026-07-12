@@ -10,10 +10,10 @@ export function interpolate(
   );
 }
 
-// A "stat-like" bare number: a decimal (0.85), or an integer immediately tied to
-// a stat context (% or "percentile"). Conversational integers ("2 minutes") are
-// allowed. Runs AFTER removing all placeholder spans.
-const DECIMAL = /(?<!\{\{[^}]*)\b\d+\.\d+\b/;
+// A "stat-like" bare number: a decimal (0.85 OR a leading-dot .85), or an integer
+// tied to a stat context (% or "percentile"). Conversational integers ("2 minutes")
+// are allowed. Runs AFTER placeholder spans are stripped, so no lookbehind needed.
+const DECIMAL = /\d*\.\d+/;
 const STAT_PCT = /\b\d+\s*%/;
 const PERCENTILE_NUM = /\b\d+(st|nd|rd|th)?\s*percentile/i;
 

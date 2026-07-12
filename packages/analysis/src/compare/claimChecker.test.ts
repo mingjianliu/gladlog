@@ -43,4 +43,9 @@ describe("claimChecker", () => {
     const r = claimChecker("You are in the 85% percentile.", facts);
     expect(r.ok).toBe(false);
   });
+  it("flags a leading-dot decimal (.85) — no digit before the dot", () => {
+    const r = claimChecker("Your index of .85 is high.", facts);
+    expect(r.ok).toBe(false);
+    expect(r.violations.some((v) => /\.85/.test(v))).toBe(true);
+  });
 });

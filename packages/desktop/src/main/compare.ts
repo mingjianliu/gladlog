@@ -190,7 +190,14 @@ export function createCompareService(deps: {
       const fp = join(deps.matchesDir, matchId, "compare.json");
       if (!existsSync(fp)) return null;
       try {
-        return JSON.parse(readFileSync(fp, "utf-8")).result as CompareResult;
+        const doc = JSON.parse(readFileSync(fp, "utf-8"));
+        // Cache key includes corpus version + PROMPT_VERSION: a rebuilt corpus
+        // (new patch, new distributions) or a prompt bump invalidates the stored
+        // report so we never serve numbers built against old distributions.
+        const corpus = deps.loadCorpus();
+        if (corpus && doc.corpusVersion !== corpus.wowPatchVersion) return null;
+        if (doc.promptVersion !== PROMPT_VERSION) return null;
+        return doc.result as CompareResult;
       } catch {
         return null;
       }

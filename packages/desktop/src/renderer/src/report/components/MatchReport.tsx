@@ -79,7 +79,10 @@ export function MatchReport({
           ) : (
             <>
               <AIAnalysisPanel source={source} matchId={resolvedMatchId} />
-              <ProComparisonVerified match={{ id: resolvedMatchId }} />
+              <ProComparisonVerified
+                source={source}
+                matchId={resolvedMatchId}
+              />
             </>
           )}
         </aside>
