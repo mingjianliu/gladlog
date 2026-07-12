@@ -12,13 +12,12 @@ import { registerIpc } from "./ipc";
 import { MatchStore } from "./matchStore";
 import { SettingsStore, type GladlogSettings } from "./settingsStore";
 import { WorkerHost } from "./workerHost";
-import { createAiService, realClientFactory } from "./ai";
+import { realClientFactory } from "./ai";
 import { createIconCache } from "./iconCache";
 import { createCompareService } from "./compare";
 import { createAnalysisService } from "./analysis";
 import { loadBundledCorpus, gameBuildFromManifest } from "./corpusLoader";
 import datagenManifest from "@gladlog/analysis/src/data/datagen-manifest.json";
-
 
 app.setName("gladlog");
 log.initialize();
@@ -125,22 +124,20 @@ else {
     store = new MatchStore(join(userData(), "matches"));
     store.init();
     win = createWindow();
-    const ai = createAiService({
-      getSettings: () => settings.get(),
-      matchesDir: join(userData(), "matches"),
-      clientFactory: realClientFactory,
-      emit: (ch, payload) => win?.webContents.send(ch, payload),
-    });
     const corpusPath = () =>
       app.isPackaged
         ? join(process.resourcesPath, "reference_vectors.json")
-        : join(import.meta.dirname, "../../../corpus-tools/data/reference_vectors.json");
+        : join(
+            import.meta.dirname,
+            "../../../corpus-tools/data/reference_vectors.json",
+          );
 
     const compare = createCompareService({
       getSettings: () => settings.get(),
       matchesDir: join(userData(), "matches"),
       loadCorpus: loadBundledCorpus(corpusPath),
-      gameBuild: () => gameBuildFromManifest(datagenManifest as { build?: string }),
+      gameBuild: () =>
+        gameBuildFromManifest(datagenManifest as { build?: string }),
       emit: (ch, payload) => win?.webContents.send(ch, payload),
     });
     const analysis = createAnalysisService({
@@ -149,14 +146,15 @@ else {
       clientFactory: realClientFactory,
       emit: (ch, payload) => win?.webContents.send(ch, payload),
     });
-    const icons = createIconCache({ cacheDir: join(app.getPath("userData"), "icons") });
+    const icons = createIconCache({
+      cacheDir: join(app.getPath("userData"), "icons"),
+    });
     registerIpc({
       store,
       settings,
       getStatus: () => lastStatus,
       getWindow: () => win,
       onWowDirectoryChanged: (s) => startMonitoring(s),
-      ai,
       compare,
       analysis,
       icons,

@@ -7,10 +7,8 @@ import {
 } from "./settingsStore";
 import type { MatchStore } from "./matchStore";
 import type { LogsStatusSnapshot } from "../preload/api";
-import type { AiService } from "./ai";
 import type { CompareService } from "./compare";
 import type { AnalysisService } from "./analysis";
-
 
 export function registerIpc(deps: {
   store: MatchStore;
@@ -18,7 +16,6 @@ export function registerIpc(deps: {
   getStatus: () => LogsStatusSnapshot | null;
   getWindow: () => BrowserWindow | null;
   onWowDirectoryChanged: (settings: GladlogSettings) => void;
-  ai: AiService;
   compare: CompareService;
   analysis: AnalysisService;
   icons: { get(name: string): Promise<string | null> };
@@ -57,19 +54,14 @@ export function registerIpc(deps: {
     if (/^https?:\/\//.test(url)) return shell.openExternal(url);
     return undefined;
   });
-  ipcMain.handle("gladlog:ai:analyze", (_e, matchId: string, context: string) =>
-    deps.ai.analyze(matchId, context),
-  );
-  ipcMain.handle("gladlog:ai:cancel", () => deps.ai.cancel());
-  ipcMain.handle("gladlog:ai:getCached", (_e, matchId: string) =>
-    deps.ai.getCached(matchId),
-  );
   ipcMain.handle("gladlog:compare:run", (_e, input) => deps.compare.run(input));
   ipcMain.handle("gladlog:compare:cancel", () => deps.compare.cancel());
   ipcMain.handle("gladlog:compare:getCached", (_e, matchId: string) =>
     deps.compare.getCached(matchId),
   );
-  ipcMain.handle("gladlog:analysis:run", (_e, input) => deps.analysis.run(input));
+  ipcMain.handle("gladlog:analysis:run", (_e, input) =>
+    deps.analysis.run(input),
+  );
   ipcMain.handle("gladlog:analysis:cancel", () => deps.analysis.cancel());
   ipcMain.handle("gladlog:analysis:getCached", (_e, matchId: string) =>
     deps.analysis.getCached(matchId),
