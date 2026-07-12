@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { aggregateCells, PerMatchRecord } from "./cellAggregator";
+import type { KeystoneGate } from "./keystoneGates";
 
 function rec(archetype: string, offensiveIndex: number): PerMatchRecord {
   return {
@@ -25,7 +26,7 @@ function rec(archetype: string, offensiveIndex: number): PerMatchRecord {
 describe("aggregateCells", () => {
   it("builds an archetype cell and a bracket-wide parent cell", () => {
     const recs = Array.from({ length: 40 }, (_, i) => rec("cc_swap_burst", i));
-    const corpus = aggregateCells(recs, 30);
+    const corpus = aggregateCells(recs, 30, {}, []);
     const arche = corpus.cells.find((c) => c.archetype === "cc_swap_burst")!;
     const parent = corpus.cells.find((c) => c.archetype === "*")!;
     expect(arche.sampleN).toBe(40);
@@ -35,7 +36,7 @@ describe("aggregateCells", () => {
   });
   it("marks an under-floor archetype cell insufficient", () => {
     const recs = Array.from({ length: 5 }, (_, i) => rec("rare_arch", i));
-    const corpus = aggregateCells(recs, 30);
+    const corpus = aggregateCells(recs, 30, {}, []);
     const cell = corpus.cells.find((c) => c.archetype === "rare_arch")!;
     expect(cell.insufficient).toBe(true);
   });
@@ -45,7 +46,7 @@ describe("aggregateCells", () => {
       (r.metrics as any).reactionLatency = null;
       return r;
     });
-    const corpus = aggregateCells(recs, 30);
+    const corpus = aggregateCells(recs, 30, {}, []);
     const cell = corpus.cells.find((c) => c.archetype === "cc_swap_burst")!;
     expect(cell.metrics.reactionLatency.n).toBe(0);
   });
@@ -69,9 +70,78 @@ describe("aggregateCells", () => {
       metrics: { offensiveIndex: 51.16 },
       crisisEvents: [],
     });
-    const corpus = aggregateCells(recs, 30, {});
+    const corpus = aggregateCells(recs, 30, {}, []);
     const cell = corpus.cells.find((c) => c.archetype === "a");
     // Without winsorization p90 would be pulled toward the 51 outlier; capped it stays ~0.3.
     expect(cell!.metrics.offensiveIndex.p90).toBeLessThan(1);
+  });
+});
+
+const gate: KeystoneGate = {
+  spec: "Discipline Priest",
+  keystoneNodeIds: [82585],
+  match: "any",
+  metric: "offensiveIndex",
+  groupPresent: "offensive",
+  groupAbsent: "standard",
+};
+function rec2(
+  spec: string,
+  archetype: string,
+  buildGroup: string,
+  oi: number,
+): any {
+  return {
+    spec,
+    bracket: "Rated Solo Shuffle",
+    archetype,
+    buildGroup,
+    metrics: { offensiveIndex: oi },
+    crisisEvents: [],
+  };
+}
+
+describe("aggregateCells build-split", () => {
+  it("emits archetype×buildGroup, *×buildGroup and *×* for an active gated spec", () => {
+    const recs: any[] = [];
+    for (let i = 0; i < 40; i++)
+      recs.push(rec2("Discipline Priest", "hybrid", "offensive", 0.49));
+    for (let i = 0; i < 40; i++)
+      recs.push(rec2("Discipline Priest", "hybrid", "standard", 0.2));
+    const c = aggregateCells(recs, 30, {}, [gate]);
+    const keys = c.cells.map((x) => `${x.archetype}|${x.buildGroup}`).sort();
+    expect(keys).toContain("hybrid|offensive");
+    expect(keys).toContain("hybrid|standard");
+    expect(keys).toContain("*|offensive"); // build parent
+    expect(keys).toContain("*|standard");
+    expect(keys).toContain("*|*"); // bracket parent, build-agnostic
+    expect(keys).not.toContain("hybrid|*"); // gated spec does NOT emit archetype×*
+    expect(c.buildGroups["Discipline Priest"]).toEqual({
+      keystoneNodeIds: [82585],
+      match: "any",
+      groupPresent: "offensive",
+      groupAbsent: "standard",
+    });
+  });
+  it("collapses to archetype-only when a buildGroup's build-parent is below N_floor", () => {
+    const recs: any[] = [];
+    for (let i = 0; i < 40; i++)
+      recs.push(rec2("Discipline Priest", "hybrid", "standard", 0.2));
+    for (let i = 0; i < 5; i++)
+      recs.push(rec2("Discipline Priest", "hybrid", "offensive", 0.49));
+    const c = aggregateCells(recs, 30, {}, [gate]);
+    const keys = c.cells.map((x) => `${x.archetype}|${x.buildGroup}`);
+    expect(keys).toContain("hybrid|*"); // collapsed to archetype-only
+    expect(keys).not.toContain("hybrid|offensive");
+    expect(c.buildGroups["Discipline Priest"]).toBeUndefined();
+  });
+  it("leaves non-gated specs exactly as SP-B1 (archetype×* and *×*)", () => {
+    const recs: any[] = [];
+    for (let i = 0; i < 40; i++)
+      recs.push(rec2("Mistweaver Monk", "hybrid", "*", 0.1));
+    const c = aggregateCells(recs, 30, {}, [gate]);
+    const keys = c.cells.map((x) => `${x.archetype}|${x.buildGroup}`).sort();
+    expect(keys).toEqual(["*|*", "hybrid|*"]);
+    expect(Object.keys(c.buildGroups)).toHaveLength(0);
   });
 });
