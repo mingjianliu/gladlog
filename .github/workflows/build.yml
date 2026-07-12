@@ -38,10 +38,11 @@ jobs:
       - run: npm ci
 
       - name: Package
+        # No signing certs in CI. On macOS we let electron-builder fall back to
+        # an ad-hoc signature (runnable after clearing quarantine) rather than
+        # CSC_IDENTITY_AUTO_DISCOVERY=false, which emits a broken partial
+        # signature that macOS reports as "damaged". Windows just goes unsigned.
         run: npm -w @gladlog/desktop run ${{ matrix.script }}
-        env:
-          # Unsigned builds; don't try to auto-discover a signing identity.
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
       - uses: actions/upload-artifact@v4
         with:
