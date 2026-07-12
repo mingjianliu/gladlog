@@ -7,6 +7,7 @@ import { ReportHeader } from "./ReportHeader";
 import { Timeline } from "./Timeline";
 import { UnitPanel } from "./UnitPanel";
 import { AIAnalysisPanel } from "./AIAnalysisPanel";
+import { ProComparisonVerified } from "./ProComparisonVerified";
 
 type Mode = "damage" | "healing" | "taken";
 type SideTab = "unit" | "ai";
@@ -76,7 +77,13 @@ export function MatchReport({
           {sideTab === "unit" ? (
             <UnitPanel source={source} unitId={selected} />
           ) : (
-            <AIAnalysisPanel source={source} matchId={resolvedMatchId} />
+            <>
+              <AIAnalysisPanel source={source} matchId={resolvedMatchId} />
+              <ProComparisonVerified
+                source={source}
+                matchId={resolvedMatchId}
+              />
+            </>
           )}
         </aside>
       </div>

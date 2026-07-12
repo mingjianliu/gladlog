@@ -16,3 +16,6 @@ win:
 nsis:
   oneClick: true
 npmRebuild: false
+extraResources:
+  - from: ../corpus-tools/data/reference_vectors.json
+    to: reference_vectors.json

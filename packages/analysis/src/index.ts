@@ -39,3 +39,10 @@ export {
 export type { IHealerMetrics } from "./utils/healerMetrics";
 export { extractRotations } from "./utils/crisisEvents";
 export type { IExtractedRotations } from "./utils/crisisEvents";
+
+export * from "./compare/corpusTypes";
+export * from "./compare/cellLookup";
+export * from "./compare/verifiedComparison";
+export * from "./compare/claimChecker";
+export * from "./compare/buildExemplarLedPrompt";
+
