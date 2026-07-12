@@ -44,6 +44,17 @@ export interface GladlogApi {
     onDone(cb: (d: { matchId: string; content: string }) => void): () => void;
     onError(cb: (d: { matchId: string; message: string }) => void): () => void;
   };
+  compare: {
+    run(input: {
+      matchId: string; healerMetrics: Record<string, number | null>; spec: string;
+      talents: number[]; bracket: string; archetype: string; wowBuild: string;
+    }): Promise<void>;
+    cancel(): Promise<void>;
+    getCached(matchId: string): Promise<unknown | null>;
+    onDelta(cb: (d: { matchId: string; text: string }) => void): () => void;
+    onDone(cb: (d: { matchId: string; result: unknown }) => void): () => void;
+    onError(cb: (d: { matchId: string; message: string }) => void): () => void;
+  };
   icon: {
     get(name: string): Promise<string | null>;
   };
