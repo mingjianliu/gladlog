@@ -34,20 +34,15 @@ export interface GladlogApi {
     selectDirectory(): Promise<string | null>; // 返回选中目录;取消 → null。选中即自动 save wowDirectory 并重启监控
     openExternal(url: string): Promise<void>;
   };
-  ai: {
-    analyze(matchId: string, context: string): Promise<void>;
-    cancel(): Promise<void>;
-    getCached(
-      matchId: string,
-    ): Promise<{ content: string; model: string; createdAt: number } | null>;
-    onDelta(cb: (d: { matchId: string; text: string }) => void): () => void;
-    onDone(cb: (d: { matchId: string; content: string }) => void): () => void;
-    onError(cb: (d: { matchId: string; message: string }) => void): () => void;
-  };
   compare: {
     run(input: {
-      matchId: string; healerMetrics: Record<string, number | null>; spec: string;
-      talents: number[]; bracket: string; archetype: string; wowBuild: string;
+      matchId: string;
+      healerMetrics: Record<string, number | null>;
+      spec: string;
+      talents: number[];
+      bracket: string;
+      archetype: string;
+      wowBuild: string;
     }): Promise<void>;
     cancel(): Promise<void>;
     getCached(matchId: string): Promise<unknown | null>;

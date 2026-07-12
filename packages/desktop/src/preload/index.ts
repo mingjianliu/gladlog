@@ -29,19 +29,11 @@ const api: GladlogApi = {
     selectDirectory: () => ipcRenderer.invoke("gladlog:app:selectDirectory"),
     openExternal: (url) => ipcRenderer.invoke("gladlog:app:openExternal", url),
   },
-  ai: {
-    analyze: (matchId, context) =>
-      ipcRenderer.invoke("gladlog:ai:analyze", matchId, context),
-    cancel: () => ipcRenderer.invoke("gladlog:ai:cancel"),
-    getCached: (matchId) => ipcRenderer.invoke("gladlog:ai:getCached", matchId),
-    onDelta: sub<{ matchId: string; text: string }>("gladlog:ai:delta"),
-    onDone: sub<{ matchId: string; content: string }>("gladlog:ai:done"),
-    onError: sub<{ matchId: string; message: string }>("gladlog:ai:error"),
-  },
   compare: {
     run: (input) => ipcRenderer.invoke("gladlog:compare:run", input),
     cancel: () => ipcRenderer.invoke("gladlog:compare:cancel"),
-    getCached: (matchId) => ipcRenderer.invoke("gladlog:compare:getCached", matchId),
+    getCached: (matchId) =>
+      ipcRenderer.invoke("gladlog:compare:getCached", matchId),
     onDelta: sub<{ matchId: string; text: string }>("gladlog:compare:delta"),
     onDone: sub<{ matchId: string; result: unknown }>("gladlog:compare:done"),
     onError: sub<{ matchId: string; message: string }>("gladlog:compare:error"),
@@ -49,9 +41,12 @@ const api: GladlogApi = {
   analysis: {
     run: (input) => ipcRenderer.invoke("gladlog:analysis:run", input),
     cancel: () => ipcRenderer.invoke("gladlog:analysis:cancel"),
-    getCached: (matchId) => ipcRenderer.invoke("gladlog:analysis:getCached", matchId),
+    getCached: (matchId) =>
+      ipcRenderer.invoke("gladlog:analysis:getCached", matchId),
     onDone: sub<{ matchId: string; result: unknown }>("gladlog:analysis:done"),
-    onError: sub<{ matchId: string; message: string }>("gladlog:analysis:error"),
+    onError: sub<{ matchId: string; message: string }>(
+      "gladlog:analysis:error",
+    ),
   },
   icon: {
     get: (name) => ipcRenderer.invoke("gladlog:icon:get", name),
