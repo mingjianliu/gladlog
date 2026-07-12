@@ -1,0 +1,13 @@
+{
+  "wowPatchVersion": "12.1.0.68629",
+  "gates": [
+    {
+      "spec": "Discipline Priest",
+      "keystoneNodeIds": [82585, 110277, 82583],
+      "match": "any",
+      "metric": "offensiveIndex",
+      "groupPresent": "offensive",
+      "groupAbsent": "standard"
+    }
+  ]
+}
