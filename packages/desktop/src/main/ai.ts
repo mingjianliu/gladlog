@@ -1,4 +1,7 @@
-export const PROMPT_VERSION = 2;
+// v3: candidate menu expanded — deaths tagged friendly/enemy (side fact) and
+// cd-waste events (never-used defensive cooldowns) added; prompt gained an event
+// legend and whole-round time display.
+export const PROMPT_VERSION = 3;
 
 export interface AnthropicLike {
   stream(params: {

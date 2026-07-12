@@ -9,10 +9,14 @@ export function TimelineStrip({
   activeEventIds: string[];
   onSelect: (id: string) => void;
 }) {
-  if (candidates.length === 0) return null;
+  // Only point-in-time events belong on a time axis. Whole-round observations
+  // (e.g. cd-waste, which has no `t` fact and t=0) would otherwise plot a
+  // misleading marker at the far left labeled "…at 0s".
+  const points = candidates.filter((c) => c.facts.t !== undefined);
+  if (points.length === 0) return null;
 
   // Since duration is not passed, derive from max T
-  const maxT = Math.max(1, ...candidates.map((c) => c.t));
+  const maxT = Math.max(1, ...points.map((c) => c.t));
 
   return (
     <div
@@ -22,10 +26,10 @@ export function TimelineStrip({
         background: "var(--bg-2, #1f2937)",
         borderRadius: "4px",
         margin: "12px 0",
-        border: "1px solid var(--border, #374151)"
+        border: "1px solid var(--border, #374151)",
       }}
     >
-      {candidates.map((c) => {
+      {points.map((c) => {
         const isActive = activeEventIds.includes(c.id);
         const left = `${(c.t / maxT) * 100}%`;
         return (
@@ -44,7 +48,7 @@ export function TimelineStrip({
                 : "var(--border, #4b5563)",
               cursor: "pointer",
               zIndex: isActive ? 2 : 1,
-              transition: "background 0.2s"
+              transition: "background 0.2s",
             }}
             title={`${c.type} at ${c.t}s`}
           />
