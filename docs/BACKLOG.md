@@ -71,3 +71,69 @@ pressure lane.
   deaths-only, `packages/desktop/src/renderer/src/report/components/TimelineStrip.tsx`)
   to render burst/pressure/exposure lanes with hover detail. Ties in with #1
   (video sync) if that ships — the same timeline could scrub the recording.
+
+## 5. Settings UI (Anthropic API key + model)
+
+There is currently **no GUI to enter the Anthropic API key** — only the DevPanel
+AI-backend dropdown. That's why the app shows `NO_API_KEY`. Add a real settings
+panel: API key (write-only, redacted like the main-process store already does),
+model, WoW dir, AI backend. Small; the IPC (`settings.get/save`, `redactSettings`)
+already exists — this is renderer UI.
+
+## 6. 2D positional replay
+
+A scrubbable top-down arena replay (positions, HP, casts, dampening over time) —
+distinct from #1's video. Old-fork reference: `CombatReport/CombatReplay/` (Pixi.js
+— `ReplayCharacter`, `ReplayHealthBar`, `ReplayCastBar`, `ReplayDampeningTracker`,
+speed control). gladlog already parses advanced-logging coordinates (positioning
+section in `buildMatchContext`), so the data exists. Medium–large; shares the
+timeline seam with #4.
+
+## 7. Competitive stats / trends
+
+Cross-match aggregation: win rate over time, per-spec/per-comp performance, a tier
+list. Old-fork reference: `CompetitiveStats/` (`SpecStats`, `CompStats`,
+`TierList`). gladlog stores every match locally, so this is aggregation + a new
+view — no cloud needed (unlike the old fork's server-backed version).
+
+## 8. Deterministic mistake detection
+
+A rules-based "mistakes" engine that flags concrete errors (trinket held through a
+full-DR CC, defensive wasted, kick missed) **without an LLM** — complements the AI
+findings with cheap, always-available, fully-verifiable output. Old-fork reference:
+`CombatReport/CombatMistakes/` (`analyzeMistakes` + `mistakeKnowledgeBase`). Fits
+gladlog's honesty ethos (deterministic, grounded) and reuses the existing
+`candidateFindings` / analysis utils. Medium.
+
+## 9. Match search / filter
+
+Filter the (now paginated) match list by spec, bracket, comp, result, date. Natural
+follow-on to the windowed list — extend `MatchStore.page` with predicates and add
+filter controls to the sidebar. Small–medium.
+
+---
+
+## Session follow-ups & hardening (smaller, not full features)
+
+- **Tolerant JSON extraction for local models** — the analysis service does
+  `JSON.parse(raw.trim())`; agy/Claude returned clean JSON in testing, but other
+  local models may wrap it in ```json fences → parse fails → silent fallback.
+  Strip fences / extract the first `[...]` before parsing so local backends are
+  robust. (Surfaced by the MODE=local e2e.)
+- **SP-A.1** — LLM-judge causal audit + digit/constant refinement (deferred from
+  the SP-A honesty gate; causal/qualitative claims can't be verified
+  deterministically).
+- **SP-B2.1** — CDN corpus refresh (ship an updated `reference_vectors.json`
+  without a full rebuild).
+- **zh/EN analysis-language toggle** — the prompts/output are zh-leaning; a
+  language switch for findings + narrative.
+- **Timeline-prompt token compression** — the timeline-variant prompt is ~76%
+  larger than the sparse one; compress it (also helps the slow `claude -p` local
+  backend).
+- **CI code-signing / notarization** — wire macOS notarization + Windows signing
+  secrets into `.github/workflows/build.yml` when certs exist, for zero-warning
+  installs. See [[gladlog-packaging-gotchas]].
+- **MatchStore hardening (accepted-low-risk today)** — `safeName` id collision →
+  phantom duplicates; out-of-band `meta.json` edits go stale (index is a cache).
+  Fine for the app-private store now; revisit if the store ever lives in a synced
+  folder.
