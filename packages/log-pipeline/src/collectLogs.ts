@@ -1,13 +1,6 @@
 /* eslint-disable no-console */
 import { Buffer } from "node:buffer";
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  renameSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, statSync } from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
 
@@ -91,12 +84,11 @@ export async function runCollection(
       const tail = body.subarray(seek);
       remaining.delete(`${action.startOffset}_${action.length}`);
       if (tail.length === 0) continue;
-      const existing = existsSync(outPath)
-        ? readFileSync(outPath)
-        : Buffer.alloc(0);
-      const tmp = `${outPath}.tmp`;
-      writeFileSync(tmp, Buffer.concat([existing, tail]));
-      renameSync(tmp, outPath);
+      // Append-only: the output grows strictly forward and has no concurrent
+      // reader (reconstruct-only), so a plain append is O(tail) instead of the
+      // O(size) read+concat+rewrite. A torn append leaves a correct prefix; the
+      // next run re-reads the real size and resumes via advance-by-actual.
+      appendFileSync(outPath, tail);
       stats.segmentsFetched += 1;
       stats.bytesAppended += tail.length; // advance by ACTUAL bytes, not the key's claim
       updated = true;

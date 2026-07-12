@@ -1,4 +1,3 @@
- 
 /**
  * streamCli.ts — CLI entry for the streamer (Windows side): watch the WoW log
  * dir and write segments to the storage folder (a Google Drive folder via the

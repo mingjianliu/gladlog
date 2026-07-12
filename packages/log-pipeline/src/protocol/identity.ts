@@ -5,6 +5,12 @@ import { createHash } from "crypto";
  * same name is detected by checksum change, not just by shrinking size. Returns
  * null until the file has a complete first line — WoW writes whole lines
  * constantly, so this resolves within seconds.
+ *
+ * Load-bearing assumption: the first line is UNIQUE per log generation. WoW
+ * prefixes every line with a millisecond timestamp, so this holds. The whole
+ * no-corruption guarantee (same gen8 ⇒ byte-identical source for a given
+ * offset range) rests on it — a log format with a constant first line would
+ * collide gen8 and could corrupt reconstruction across generations.
  */
 export function firstLineChecksum(head: Buffer): string | null {
   const nl = head.indexOf(0x0a); // \n

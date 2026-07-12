@@ -15,6 +15,7 @@ export default tseslint.config(
       "**/coverage/**",
       "**/*.d.ts",
       "scratch/**",
+      "**/dist-app/**",
     ],
   },
   js.configs.recommended,
@@ -43,15 +44,20 @@ export default tseslint.config(
       // deliberate style rather than churn working code (spec: don't
       // mass-rewrite unrelated logic):
       // - `any` is used intentionally at parser/compat boundaries → warn.
-      // - the parser/tests legitimately match control chars (\x00, \n).
       // - `interface X extends Y {}` is a real pattern here (Finding).
       "@typescript-eslint/no-explicit-any": "warn",
-      "no-control-regex": "off",
       "@typescript-eslint/no-empty-object-type": [
         "error",
         { allowInterfaces: "with-single-extends" },
       ],
     },
+  },
+  {
+    // The parser, the corpus validator, and tests legitimately match control
+    // chars (\x00, CRLF) in raw combat-log / corpus bytes; keep no-control-regex
+    // on for other source so a stray control char in an ordinary regex is caught.
+    files: ["packages/parser/**", "packages/corpus-tools/**", "**/*.test.ts"],
+    rules: { "no-control-regex": "off" },
   },
   {
     // Operational logging is legitimate in build scripts, CLI entrypoints, and
