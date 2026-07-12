@@ -14,7 +14,7 @@ export function interpolate(
 // tied to a stat context (% or "percentile"). Conversational integers ("2 minutes")
 // are allowed. Runs AFTER placeholder spans are stripped, so no lookbehind needed.
 const DECIMAL = /\d*\.\d+/;
-const STAT_PCT = /\b\d+\s*%/;
+const STAT_PCT = /\b\d+\s*(%|percent\b)/i; // digit + % OR the word "percent"
 const PERCENTILE_NUM = /\b\d+(st|nd|rd|th)?\s*percentile/i;
 
 export function claimChecker(

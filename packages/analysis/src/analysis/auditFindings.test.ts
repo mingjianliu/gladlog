@@ -43,6 +43,45 @@ describe("auditFindings", () => {
     expect(r.findings).toHaveLength(0);
     expect(r.dropped[0].reason).toMatch(/ground|unanchored/i);
   });
+  it("drops a multi-event finding whose referenced events collide on a fact key with differing values", () => {
+    const two: CandidateEvent[] = [
+      candidates[0],
+      {
+        id: "death:b:40",
+        type: "death",
+        t: 40,
+        unitNames: ["Ally"],
+        facts: { t: "40", unit: "Ally" },
+      },
+    ];
+    const r = auditFindings(
+      [
+        {
+          ...base,
+          eventIds: ["death:a:30", "death:b:40"],
+          explanation: "Two deaths, both around {{t}}s.",
+        },
+      ],
+      two,
+    );
+    expect(r.findings).toHaveLength(0);
+    expect(r.dropped[0].reason).toMatch(/ambiguous|collid/i);
+  });
+  it("keeps a finding referencing a bracket/format term (2v2) — not a fabricated digit", () => {
+    const r = auditFindings(
+      [
+        {
+          ...base,
+          explanation: "In the 2v2 you went down at {{t}}s; play safer.",
+        },
+      ],
+      candidates,
+    );
+    expect(r.findings).toHaveLength(1);
+    expect(r.findings[0].explanation).toBe(
+      "In the 2v2 you went down at 30s; play safer.",
+    );
+  });
   it("drops a finding citing a non-existent event (grounding)", () => {
     const r = auditFindings(
       [{ ...base, eventIds: ["death:zzz:99"] }],

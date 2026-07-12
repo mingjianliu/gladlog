@@ -35,7 +35,9 @@ describe("verifiedComparison", () => {
     expect(dim.value).toBe(0.31);
     expect(dim.percentile).toBeGreaterThan(10);
     expect(dim.percentile).toBeLessThan(50);
-    expect(dim.verdict).toMatch(/quartile|mid-pack/);
+    expect(dim.verdict).toMatch(
+      /higher than most|lower than most|around the cohort median/,
+    );
     expect(vc.facts["offensiveIndex"]).toBe("0.31");
     expect(vc.facts["offensiveIndex.cohortMedian"]).toBe("0.49");
     expect(vc.facts["offensiveIndex.verdict"]).toBe(dim.verdict);

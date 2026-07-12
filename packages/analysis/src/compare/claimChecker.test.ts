@@ -48,4 +48,8 @@ describe("claimChecker", () => {
     expect(r.ok).toBe(false);
     expect(r.violations.some((v) => /\.85/.test(v))).toBe(true);
   });
+  it("flags a word-form percentage (100 percent), not just the % symbol", () => {
+    const r = claimChecker("You used 100 percent of your cooldowns.", facts);
+    expect(r.ok).toBe(false);
+  });
 });

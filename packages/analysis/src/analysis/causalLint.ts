@@ -11,7 +11,7 @@ const PATTERNS: Array<[string, RegExp]> = [
   // "it cost you nothing to try" (resource-cost observation) does NOT false-drop.
   [
     "cost-outcome",
-    /\bcost (you |him |her |them |the team )?(the )?(game|round|match|series)\b/i,
+    /\bcost (you |us |him |her |them |the team )?(the )?(game|round|match|series)\b/i,
   ],
   ["got-killed", /\bgot (you|him|her|them|the team) killed\b/i],
   // "that's/which is why <negative outcome>" — a causal explanation of a loss.

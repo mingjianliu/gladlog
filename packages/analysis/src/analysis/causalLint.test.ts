@@ -25,6 +25,9 @@ describe("causalLint (enforces the no-strong-causal-claim policy)", () => {
       causalLint("You die because you overextend.").length,
     ).toBeGreaterThan(0);
     expect(causalLint("That greed cost the round.").length).toBeGreaterThan(0);
+    expect(
+      causalLint("Overextending cost us the game.").length,
+    ).toBeGreaterThan(0);
   });
   it("allows observational + suggestive coaching (no strong causal connective)", () => {
     expect(
