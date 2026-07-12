@@ -1,0 +1,62 @@
+name: build
+
+# Builds the desktop app installers natively — Windows (NSIS .exe + zip) on a
+# Windows runner, macOS (.dmg) on a macOS runner. No Wine needed.
+#
+# - Run manually from the Actions tab (workflow_dispatch) to get installers as
+#   downloadable artifacts.
+# - Push a tag like v0.0.1 to also publish them to a GitHub Release.
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write # needed for the Release step on tags
+
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            script: package:win
+          - os: macos-latest
+            script: package:mac
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Package
+        run: npm -w @gladlog/desktop run ${{ matrix.script }}
+        env:
+          # Unsigned builds; don't try to auto-discover a signing identity.
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gladlog-${{ runner.os }}
+          path: |
+            packages/desktop/dist-app/*.exe
+            packages/desktop/dist-app/*.dmg
+            packages/desktop/dist-app/*.zip
+          if-no-files-found: ignore
+
+      - name: Release (tags only)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            packages/desktop/dist-app/*.exe
+            packages/desktop/dist-app/*.dmg
+            packages/desktop/dist-app/*.zip
