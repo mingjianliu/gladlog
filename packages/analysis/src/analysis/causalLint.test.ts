@@ -36,4 +36,12 @@ describe("causalLint (enforces the no-strong-causal-claim policy)", () => {
       causalLint("Consider saving the trinket for the first swap."),
     ).toEqual([]);
   });
+  it("does not false-drop resource-cost observations or positive reinforcement (narrowed patterns)", () => {
+    expect(causalLint("It cost you nothing to try the early swap.")).toEqual(
+      [],
+    );
+    expect(
+      causalLint("Great peel — which is why you survived the go."),
+    ).toEqual([]);
+  });
 });

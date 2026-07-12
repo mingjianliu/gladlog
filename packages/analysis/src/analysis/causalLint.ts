@@ -7,9 +7,23 @@ const OUTCOME =
 const PATTERNS: Array<[string, RegExp]> = [
   ["outcome-because", new RegExp(`\\b${OUTCOME}\\b[^.]*\\bbecause\\b`, "i")],
   ["because-outcome", new RegExp(`\\bbecause\\b[^.]*\\b${OUTCOME}\\b`, "i")],
-  ["cost", /\bcost (you|him|her|them|the team|the round|the game)\b/i],
+  // "cost <the game/round/match/series>" — the causal-outcome form. Narrowed so
+  // "it cost you nothing to try" (resource-cost observation) does NOT false-drop.
+  [
+    "cost-outcome",
+    /\bcost (you |him |her |them |the team )?(the )?(game|round|match|series)\b/i,
+  ],
   ["got-killed", /\bgot (you|him|her|them|the team) killed\b/i],
-  ["thats-why", /\b(that'?s|this is|which is) why\b/i],
+  // "that's/which is why <negative outcome>" — a causal explanation of a loss.
+  // Narrowed to require a negative outcome so positive reinforcement ("which is
+  // why you survived") is not dropped.
+  [
+    "thats-why-outcome",
+    new RegExp(
+      `\\b(that'?s|this is|which is) why\\b[^.]*\\b${OUTCOME}\\b`,
+      "i",
+    ),
+  ],
   [
     "led-to",
     new RegExp(`\\b(led to|resulted in|caused)\\b[^.]*\\b${OUTCOME}\\b`, "i"),
