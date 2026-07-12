@@ -65,6 +65,26 @@ npx vitest run   # cellAggregator / validateCorpus / feedClient / perMatchRecord
 
 `combatToRecords` 用合成 combat(纯函数)测,不依赖真实日志 fixture(隐私/体积);`buildPerMatchRecords` 是 parse 包装。
 
+## Build-aware 分组(SP-B1.5)
+
+对**天赋 build 会实质改变被对比指标**的治疗专精,cell 再按一个确定性的 keystone-天赋布尔门分成 buildGroup(如 Discipline Priest 的 `offensive`/`standard`),让"你的打法 vs 群体"在同一 build 家族内比较;对 build 不影响指标的专精(Mistweaver、Preservation Evoker)保持 archetype-only,不碎样本。
+
+**门表**:`data/keystoneGates.json`(版本戳、人工复核)。schema:`{ wowPatchVersion, gates: [{ spec, keystoneNodeIds, match: "any"|"all", metric, groupPresent, groupAbsent }] }`。当前已激活:Discipline Priest → Voidweaver 包 `[82585,110277,82583]`(any)→ `offensive`/`standard`。
+
+**发现流程(维护者,补丁后重跑)**:
+
+```
+STUDY_LOGS=600 STUDY_OUT=<rows.json> npx tsx scripts/collectBuildStudy.ts   # 采逐轮 {spec,archetype,talents,metrics}
+STUDY_ROWS=<rows.json> npx tsx scripts/discoverKeystones.ts                  # 按 metric 分离度排候选 keystone
+# 人工复核候选 → 手编 data/keystoneGates.json(工具从不自动写)
+```
+
+**cell 分裂 + N_floor 守卫**:门控专精发 `spec×bracket×archetype×buildGroup` cell,回退偏好保 build(`archetype×buildGroup` → `*×buildGroup` → `*×*`)。门只在**每个 buildGroup 的 build 父(`*×buildGroup`)cell 都 ≥ N_floor=30** 时激活;否则该 spec 整体回落 archetype-only,且不写进语料 `buildGroups`。语料顶层 `buildGroups` 声明已激活门,供运行时(SP-B2)判组。
+
+**offensiveIndex winsorization**:聚合前按池 p99 截尾(伤害/治疗在某轮治疗≈0 时会爆炸)。仅保护达标 cell;极小的 insufficient cell(如 n=4)p99≈max,截尾无效但该 cell 不被消费。
+
+**运行时(SP-B2,本包不实现)**:读 `corpus.buildGroups` 对用户 build 做 O(1) 布尔判组;**fail-open** —— 门表版本与游戏 build 不符、或 keystone 节点已失效时,静默回落 `buildGroup="*"`。
+
 ## 合规
 
 - **数据源**:wowarenalogs.com feed = 用户**自有旧产品**的公共 API,数据主权在用户;仅构建期、维护者侧、离线调用。
