@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 import { cleanupAppliedSegments } from "./cleanup";
 import { loadCollectorConfig } from "./collect/collectorConfig";
 import { runCollection } from "./collectLogs";
