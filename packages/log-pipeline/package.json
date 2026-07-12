@@ -1,0 +1,16 @@
+{
+  "name": "@gladlog/log-pipeline",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "gladlog-stream": "src/streamCli.ts",
+    "gladlog-collect": "src/collectCli.ts"
+  },
+  "scripts": {
+    "stream": "tsx src/streamCli.ts",
+    "collect": "tsx src/collectCli.ts",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc --noEmit"
+  }
+}
