@@ -11,6 +11,11 @@ describe("percentileRank (piecewise-linear over p10/p50/p90)", () => {
     expect(percentileRank(0.05, d)).toBe(10); // below p10 clamps to 10
     expect(percentileRank(0.9, d)).toBe(90); // above p90 clamps to 90
   });
+  it("returns 50 at the median even on a degenerate/sparse clump (value=0, median=0)", () => {
+    // Regression: a sparse metric where the cohort's p10=p50=0 must NOT label a
+    // user at 0 as bottom-quartile — they're at the median clump (mid-pack).
+    expect(percentileRank(0, { p10: 0, p50: 0, p90: 0.6 })).toBe(50);
+  });
 });
 
 describe("verifiedComparison", () => {
@@ -34,10 +39,21 @@ describe("verifiedComparison", () => {
     expect(vc.facts["offensiveIndex"]).toBe("0.31");
     expect(vc.facts["offensiveIndex.cohortMedian"]).toBe("0.49");
     expect(vc.facts["offensiveIndex.verdict"]).toBe(dim.verdict);
+    // percentile fact is a bare ordinal ("25th"), NOT "25th percentile" — the LLM
+    // adds the word, so the fact must not double it.
+    expect(vc.facts["offensiveIndex.percentile"]).toMatch(/^\d+(st|nd|rd|th)$/);
   });
   it("skips metrics the cell has no distribution for, and null user values", () => {
     const vc = verifiedComparison({ offensiveIndex: null, ccDensity: 1 }, cell);
     expect(vc.dims.find((x) => x.key === "offensiveIndex")).toBeUndefined();
     expect(vc.dims.find((x) => x.key === "ccDensity")).toBeUndefined(); // no dist in cell
+  });
+  it("skips a dim whose cohort has zero samples (n=0 → bogus all-zero comparison)", () => {
+    const emptyDimCell = {
+      ...cell,
+      metrics: { ccDensity: { p10: 0, p50: 0, p90: 0, n: 0 } },
+    } as ReferenceCell;
+    const vc = verifiedComparison({ ccDensity: 1.5 }, emptyDimCell);
+    expect(vc.dims.find((x) => x.key === "ccDensity")).toBeUndefined();
   });
 });

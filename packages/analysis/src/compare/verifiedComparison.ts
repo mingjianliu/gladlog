@@ -19,9 +19,12 @@ export function percentileRank(
   value: number,
   d: { p10: number; p50: number; p90: number },
 ): number {
+  // At the median → 50, checked FIRST so a value sitting on a degenerate/sparse
+  // clump (e.g. value=0 when p10=p50=0) reads "mid-pack", not "bottom quartile".
+  if (value === d.p50) return 50;
   if (value <= d.p10) return 10;
   if (value >= d.p90) return 90;
-  if (value <= d.p50) {
+  if (value < d.p50) {
     const t = (value - d.p10) / (d.p50 - d.p10 || 1);
     return 10 + t * 40;
   }
@@ -37,6 +40,11 @@ function verdictFor(percentile: number): string {
 }
 
 const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(2));
+function ordinal(n: number): string {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`;
+}
 
 export function verifiedComparison(
   metrics: Record<string, number | null>,
@@ -47,6 +55,9 @@ export function verifiedComparison(
   for (const [key, dist] of Object.entries(cell.metrics)) {
     const value = metrics[key];
     if (typeof value !== "number" || Number.isNaN(value)) continue;
+    // No cohort samples for this dim → the p10/p50/p90 are all 0 (empty pool),
+    // so any comparison is bogus. Skip it rather than show a fake percentile.
+    if (!dist || dist.n === 0) continue;
     const percentile = Math.round(percentileRank(value, dist));
     const verdict = verdictFor(percentile);
     dims.push({
@@ -62,7 +73,7 @@ export function verifiedComparison(
     facts[`${key}.cohortMedian`] = fmt(dist.p50);
     facts[`${key}.p10`] = fmt(dist.p10);
     facts[`${key}.p90`] = fmt(dist.p90);
-    facts[`${key}.percentile`] = `${percentile}th percentile`;
+    facts[`${key}.percentile`] = ordinal(percentile); // "10th" — the LLM adds "percentile"
     facts[`${key}.verdict`] = verdict;
   }
   return { dims, facts };
