@@ -48,17 +48,26 @@ export function ProComparisonVerified({
   const [result, setResult] = useState<CompareResult | null>(null);
   const [error, setError] = useState<string>("");
 
-  // Show any cached (version-matched) result on mount.
+  // Show any cached (version-matched) result on mount. Reset state on matchId
+  // change (the panel is not remounted per match) and guard against a late
+  // resolve from a previous match overwriting the current one.
   useEffect(() => {
+    let cancelled = false;
+    setResult(null);
+    setState("idle");
+    setError("");
     void (async () => {
       const cached = (await bridge().compare.getCached(
         matchId,
       )) as CompareResult | null;
-      if (cached) {
+      if (!cancelled && cached) {
         setResult(cached);
         setState("done");
       }
     })();
+    return () => {
+      cancelled = true;
+    };
   }, [matchId]);
 
   // Subscribe to the (verified) done + error events. We deliberately do NOT
