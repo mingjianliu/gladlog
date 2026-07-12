@@ -71,5 +71,14 @@ export default tseslint.config(
     ],
     rules: { "no-console": "off" },
   },
+  {
+    // `.cjs` files are CommonJS (e.g. electron-builder hooks loaded via require);
+    // require() is the correct import form there.
+    files: ["**/*.cjs"],
+    rules: {
+      "@typescript-eslint/no-require-imports": "off",
+      "no-console": "off",
+    },
+  },
   prettier,
 );
