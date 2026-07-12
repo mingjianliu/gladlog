@@ -137,3 +137,29 @@ filter controls to the sidebar. Small–medium.
   phantom duplicates; out-of-band `meta.json` edits go stale (index is a cache).
   Fine for the app-private store now; revisit if the store ever lives in a synced
   folder.
+
+## 10. Surface the structured analysis (currently LLM-text-only)
+
+gladlog computes a deep per-match analysis (~40 signals) inside `buildMatchContext`
+but feeds *all* of it to the LLM as text — the UI surfaces only the 6 healer
+metrics + deaths/cd-waste. The rest is invisible to the user. Items #2 (interrupts),
+#3 (purge), #4 (burst timeline) are subsets of this. Other computed-but-unshown
+signals worth their own panels/lanes:
+
+- **Diminishing returns / dampening** — `computeIncomingDR`, `computeDampeningTimeline`, `buildDampeningEvents`.
+- **CC chains** — `analyzeOutgoingCCChains`, `extractAoeCCEvents`, healer-CC-received.
+- **Kill windows / target selection** — `analyzeKillWindowTargetSelection`, `buildKillSequenceBlock`, contested-trade facts.
+- **Positioning / LoS** — `computeOwnerPositionEvents`, `analyzeHealerExposureAtBurst`.
+- **Defensive management** — `detectFriendlyCDOverlaps`, `detectOverlappedDefensives`, `detectPanicDefensives`, `findCheaperDefensiveAlternatives`, `computeCDResponseLatency`.
+- **Healing gaps** — `detectHealingGaps`, `computeSlackSegments`, `computeHealingInWindow`.
+- **Trinket usage** — `analyzePlayerCCAndTrinket`, `detectTrinketType`.
+- **Death root-cause** — `buildDeathRootCauseTrace`, `findContributingDeath` (UI shows the death time only; the "why" is text-only).
+- **Match arc / flow** — `buildMatchArc`, `buildMatchFlow`, `extractMatchDynamics`.
+
+Approach: promote these from `buildMatchContext` text into structured events (like
+`extractCandidateFindings` does for deaths/cd-waste) so both the UI *and* the
+findings pipeline can use them — and so #8 (deterministic mistakes) has grounded
+inputs. Big theme; slice into panels/lanes over several sub-projects.
+
+Note: `extractRotations` is computed but only consumed by offline `corpus-tools`,
+not the app — either surface it or leave it corpus-only by design.
