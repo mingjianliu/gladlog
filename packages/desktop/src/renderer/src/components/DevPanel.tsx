@@ -10,11 +10,19 @@ export function DevPanel() {
   const [detail, setDetail] = useState<unknown | null>(null);
   const [diags, setDiags] = useState<DiagnosticEntry[]>([]);
   const [wowDir, setWowDir] = useState<string | null>(null);
+  const [aiBackend, setAiBackend] = useState<"anthropic" | "claudeCli" | "agy">(
+    "anthropic",
+  );
 
   useEffect(() => {
     void bridge().logs.getStatus().then(setStatus);
     void bridge().matches.list().then(setMatches);
-    void bridge().settings.get().then((s) => setWowDir(s.wowDirectory));
+    void bridge()
+      .settings.get()
+      .then((s) => {
+        setWowDir(s.wowDirectory);
+        setAiBackend(s.aiBackend);
+      });
     const un1 = bridge().logs.onStatusChanged(setStatus);
     const un2 = bridge().logs.onMatchStored((m) =>
       setMatches((prev) => [m, ...prev]),
@@ -48,6 +56,21 @@ export function DevPanel() {
         <p>
           WoW 目录:{wowDir ?? "未设置"}{" "}
           <button onClick={() => void pickDir()}>选择目录…</button>
+        </p>
+        <p>
+          AI 后端(调试):{" "}
+          <select
+            value={aiBackend}
+            onChange={(e) => {
+              const v = e.target.value as "anthropic" | "claudeCli" | "agy";
+              setAiBackend(v);
+              void bridge().settings.save({ aiBackend: v });
+            }}
+          >
+            <option value="anthropic">Anthropic API</option>
+            <option value="claudeCli">Claude CLI(本地)</option>
+            <option value="agy">agy / Gemini(本地)</option>
+          </select>
         </p>
         <p>
           {status

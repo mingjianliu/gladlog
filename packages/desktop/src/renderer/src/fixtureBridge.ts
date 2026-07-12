@@ -1,4 +1,8 @@
-import type { StoredMatch, StoredShuffle, StoredShuffleRound } from "./report/derive/types";
+import type {
+  StoredMatch,
+  StoredShuffle,
+  StoredShuffleRound,
+} from "./report/derive/types";
 import type { GladlogSettings } from "../../main/settingsStore";
 import type { StoredMatchMeta } from "../../main/matchStore";
 import type { LogsStatusSnapshot } from "../../preload/api";
@@ -31,6 +35,8 @@ export function installFixtureBridge(): void {
     wowDirectory: null,
     anthropicApiKey: null,
     anthropicModel: null,
+    aiBackend: "anthropic",
+    aiBackendCommand: null,
   };
 
   const gladlogMock = {
