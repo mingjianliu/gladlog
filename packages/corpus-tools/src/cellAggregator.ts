@@ -60,10 +60,17 @@ function distFor(
   records: PerMatchRecord[],
   metric: keyof IHealerMetrics,
 ): MetricDist {
-  const vals = records
+  let vals = records
     .map((r) => r.metrics[metric])
     .filter((v): v is number => typeof v === "number" && !Number.isNaN(v))
     .sort((a, b) => a - b);
+  // offensiveIndex = damage/heal is unbounded and explodes when a healer barely
+  // healed (early death / DPS round). Winsorize to the pool p99 so p90 isn't
+  // dragged by fat-tail outliers. Only this metric is unbounded-ratio.
+  if (metric === "offensiveIndex" && vals.length > 0) {
+    const cap = percentile(vals, 0.99);
+    vals = vals.map((v) => Math.min(v, cap));
+  }
   return {
     p10: percentile(vals, 0.1),
     p50: percentile(vals, 0.5),

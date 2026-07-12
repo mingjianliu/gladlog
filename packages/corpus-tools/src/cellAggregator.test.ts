@@ -49,4 +49,29 @@ describe("aggregateCells", () => {
     const cell = corpus.cells.find((c) => c.archetype === "cc_swap_burst")!;
     expect(cell.metrics.reactionLatency.n).toBe(0);
   });
+  it("winsorizes offensiveIndex to the pool p99 so a healing~0 blowup can't skew p90", () => {
+    // 100 normal values ~0.3 plus one 51.16 blowup (healing~0 round).
+    const recs: any[] = [];
+    for (let i = 0; i < 100; i++)
+      recs.push({
+        spec: "X",
+        bracket: "b",
+        archetype: "a",
+        buildGroup: "*",
+        metrics: { offensiveIndex: 0.3 },
+        crisisEvents: [],
+      });
+    recs.push({
+      spec: "X",
+      bracket: "b",
+      archetype: "a",
+      buildGroup: "*",
+      metrics: { offensiveIndex: 51.16 },
+      crisisEvents: [],
+    });
+    const corpus = aggregateCells(recs, 30, {});
+    const cell = corpus.cells.find((c) => c.archetype === "a");
+    // Without winsorization p90 would be pulled toward the 51 outlier; capped it stays ~0.3.
+    expect(cell!.metrics.offensiveIndex.p90).toBeLessThan(1);
+  });
 });
