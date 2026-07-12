@@ -26,6 +26,10 @@ export function registerIpc(deps: {
   );
   ipcMain.handle("gladlog:matches:list", () => deps.store.list());
   ipcMain.handle("gladlog:matches:get", (_e, id: string) => deps.store.get(id));
+  ipcMain.handle(
+    "gladlog:matches:page",
+    (_e, opts: { before?: number; limit: number }) => deps.store.page(opts),
+  );
   ipcMain.handle("gladlog:settings:get", () =>
     redactSettings(deps.settings.get()),
   );
