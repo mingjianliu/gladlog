@@ -6,6 +6,7 @@ function rec(archetype: string, offensiveIndex: number): PerMatchRecord {
     spec: "RestorationShaman",
     bracket: "3v3",
     archetype,
+    buildGroup: "*",
     metrics: {
       offensiveIndex,
       ccDensity: 1,

@@ -4,6 +4,7 @@ export interface PerMatchRecord {
   spec: string;
   bracket: string;
   archetype: string;
+  buildGroup: string; // "*" = build-agnostic (non-gated spec or unmatched)
   metrics: IHealerMetrics;
   crisisEvents: string[];
 }
