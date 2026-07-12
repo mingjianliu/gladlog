@@ -102,6 +102,7 @@ export async function flushFile(opts: {
       logFileName,
       gen8,
       startOffset,
+      delta.length,
     );
     await adapter.put(segmentKey, gzipSync(delta));
     return {
