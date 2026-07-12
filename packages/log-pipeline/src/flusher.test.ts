@@ -1,11 +1,13 @@
-import { gunzipSync } from "node:zlib";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { gunzipSync } from "node:zlib";
+
 import { describe, expect, it } from "vitest";
+
 import { flushFile } from "./flusher";
-import { MemoryStorageAdapter } from "./storage/MemoryStorageAdapter";
 import { parseSegmentKey } from "./protocol/segments";
+import { MemoryStorageAdapter } from "./storage/MemoryStorageAdapter";
 
 describe("flushFile", () => {
   it("writes one length-encoded, gzipped segment for the delta", async () => {
