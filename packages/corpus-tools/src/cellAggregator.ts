@@ -141,8 +141,15 @@ export function aggregateCells(
       buildParentCount.get(`${r.spec}|${r.bracket}|${g.groupAbsent}`) ?? 0;
     if (nPresent < nFloor || nAbsent < nFloor) deactivated.add(sb);
   }
+  // A record is build-split only if its spec is actually gated AND not
+  // deactivated. This makes aggregateCells self-consistent regardless of input:
+  // a non-"*" buildGroup on a spec absent from `gates` (e.g. inconsistent
+  // upstream gates) collapses to "*", so we never emit a build-split cell for a
+  // spec that won't appear in `buildGroups`.
   const effGroup = (r: PerMatchRecord): string =>
-    deactivated.has(`${r.spec}|${r.bracket}`) ? "*" : r.buildGroup;
+    gateBySpec.has(r.spec) && !deactivated.has(`${r.spec}|${r.bracket}`)
+      ? r.buildGroup
+      : "*";
 
   // --- Emit cells: each record contributes to its fallback-chain tiers.
   // buildGroup != "*": (archetype,group), (*,group), (*,*)

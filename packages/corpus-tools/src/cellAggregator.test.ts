@@ -144,4 +144,16 @@ describe("aggregateCells build-split", () => {
     expect(keys).toEqual(["*|*", "hybrid|*"]);
     expect(Object.keys(c.buildGroups)).toHaveLength(0);
   });
+  it("never emits a build-split cell for a spec absent from gates, even if records carry a non-'*' buildGroup", () => {
+    // Defensive: a record with buildGroup="offensive" but whose spec is NOT in
+    // gates must collapse to "*", so no undeclared build-split cell is emitted
+    // and buildGroups stays empty. (aggregateCells self-consistency, not just
+    // reliant on combatToRecords assigning "*" upstream.)
+    const recs: any[] = [];
+    for (let i = 0; i < 40; i++)
+      recs.push(rec2("Restoration Shaman", "hybrid", "offensive", 0.3));
+    const c = aggregateCells(recs, 30, {}, [gate]); // gate is Disc-only
+    expect(c.cells.every((x) => x.buildGroup === "*")).toBe(true);
+    expect(Object.keys(c.buildGroups)).toHaveLength(0);
+  });
 });
