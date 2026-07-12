@@ -1,5 +1,5 @@
 import { execFileSync } from "child_process";
-import { existsSync, readFileSync, readdirSync, writeFileSync } from "fs";
+import { existsSync, readFileSync, writeFileSync } from "fs";
 import { homedir } from "os";
 import { dirname, join } from "path";
 
@@ -240,7 +240,7 @@ For each claim, output one line: CLAIM <n>: AGREE or DISAGREE — <one-sentence 
   );
   writeFileSync(reportPath, lines.join("\n"));
   const report = lines.join("\n");
-  console.log(
+  console.warn(
     `[calibrate-auditor] detection ${detected}/${planted.length}, clean-agreement ${cleanOk}/${clean.length}; report: ${reportPath}`,
   );
 

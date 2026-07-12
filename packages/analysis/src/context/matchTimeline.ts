@@ -1,5 +1,4 @@
 import {
-  CombatExtraSpellAction,
   CombatUnitReaction,
   CombatUnitType,
   getUnitType,

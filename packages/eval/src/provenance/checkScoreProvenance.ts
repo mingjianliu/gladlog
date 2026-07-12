@@ -23,9 +23,7 @@ function sha256File(filePath: string): string {
   return createHash("sha256").update(content).digest("hex");
 }
 
-function sha256String(s: string): string {
-  return createHash("sha256").update(s).digest("hex");
-}
+
 
 export const FACT_AUDIT_VERDICTS = [
   "verified",

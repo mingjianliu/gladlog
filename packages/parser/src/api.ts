@@ -35,7 +35,7 @@ export class GladLogParser {
       try {
         const m = buildMatch(seg, end);
         this.emit("match", m);
-      } catch (err) {
+      } catch {
         this.emit("diagnostic", { code: "BUILD_FAILED" });
       }
     });
@@ -45,7 +45,7 @@ export class GladLogParser {
       try {
         const shuffle = buildShuffle(s);
         this.emit("shuffle", shuffle);
-      } catch (err) {
+      } catch {
         this.emit("diagnostic", { code: "BUILD_FAILED" });
       }
     });

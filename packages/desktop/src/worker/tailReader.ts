@@ -78,7 +78,7 @@ export function readTail(
       const n = readSync(fd, buf, 0, want, readFrom);
       if (n <= 0) break;
       readFrom += n;
-      let data = Buffer.concat([carry, buf.subarray(0, n)]);
+      const data = Buffer.concat([carry, buf.subarray(0, n)]);
       let start = 0;
       for (;;) {
         const nl = data.indexOf(0x0a, start);

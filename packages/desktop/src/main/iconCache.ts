@@ -50,7 +50,7 @@ export function createIconCache(deps: {
         ensureDirSync(deps.cacheDir);
         writeFileSync(filePath, buffer);
         return "data:image/jpeg;base64," + buffer.toString("base64");
-      } catch (err) {
+      } catch {
         failed.add(iconName);
         return null;
       }

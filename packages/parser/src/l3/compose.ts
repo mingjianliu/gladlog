@@ -1,5 +1,5 @@
 import type { Segment, ShuffleClose } from "../l2/types";
-import type { GladMatch, GladShuffle, GladShuffleRound, GladUnit } from "./model";
+import type { GladMatch, GladShuffle, GladShuffleRound } from "./model";
 import { buildRoster } from "./roster";
 import { collectEvents } from "./collect";
 import { classIdOf } from "./data/specToClass";
