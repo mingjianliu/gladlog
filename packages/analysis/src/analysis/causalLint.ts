@@ -1,13 +1,18 @@
 // Strong causal attribution the "avoid-causality-by-design" policy forbids. This
 // checks causal LANGUAGE (enforcing the policy), not causal TRUTH (unverifiable).
+// Regex-only by design (semantic/LLM-judge causal audit is deferred to SP-A.1);
+// covers the common connectives incl. present-tense outcomes.
+const OUTCOME =
+  "(died|death|dies|die|lost|loss|lose|loses|wiped|wipe|killed|defeat)";
 const PATTERNS: Array<[string, RegExp]> = [
-  ["because-death", /\b(died|death|lost|loss|wiped)\b[^.]*\bbecause\b/i],
-  ["because-then-outcome", /\bbecause\b[^.]*\b(died|death|lost|loss|wiped)\b/i],
-  ["cost-you", /\bcost (you|him|her|them|the team)\b/i],
-  ["thats-why", /\b(that'?s|this is) why\b/i],
+  ["outcome-because", new RegExp(`\\b${OUTCOME}\\b[^.]*\\bbecause\\b`, "i")],
+  ["because-outcome", new RegExp(`\\bbecause\\b[^.]*\\b${OUTCOME}\\b`, "i")],
+  ["cost", /\bcost (you|him|her|them|the team|the round|the game)\b/i],
+  ["got-killed", /\bgot (you|him|her|them|the team) killed\b/i],
+  ["thats-why", /\b(that'?s|this is|which is) why\b/i],
   [
     "led-to",
-    /\b(led to|resulted in|caused)\b[^.]*\b(loss|death|wipe|defeat)\b/i,
+    new RegExp(`\\b(led to|resulted in|caused)\\b[^.]*\\b${OUTCOME}\\b`, "i"),
   ],
 ];
 

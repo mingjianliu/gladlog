@@ -14,6 +14,18 @@ describe("causalLint (enforces the no-strong-causal-claim policy)", () => {
     );
     expect(causalLint("This led to the loss.").length).toBeGreaterThan(0);
   });
+  it("flags the strengthened patterns (got-killed, which-is-why, present-tense, cost-the-round)", () => {
+    expect(
+      causalLint("Poor positioning got you killed.").length,
+    ).toBeGreaterThan(0);
+    expect(
+      causalLint("Which is why you lost that round.").length,
+    ).toBeGreaterThan(0);
+    expect(
+      causalLint("You die because you overextend.").length,
+    ).toBeGreaterThan(0);
+    expect(causalLint("That greed cost the round.").length).toBeGreaterThan(0);
+  });
   it("allows observational + suggestive coaching (no strong causal connective)", () => {
     expect(
       causalLint(

@@ -25,6 +25,24 @@ describe("auditFindings", () => {
     expect(r.findings).toHaveLength(1);
     expect(r.findings[0].explanation).toBe("You died at 30s.");
   });
+  it("drops a finding with a fabricated bare INTEGER outside a placeholder", () => {
+    // The real death is at t=30; "47s" is fabricated. Integers are the analysis
+    // fabrication surface, so a raw digit outside a placeholder must be dropped.
+    const r = auditFindings(
+      [{ ...base, explanation: "You died at 47s." }],
+      candidates,
+    );
+    expect(r.findings).toHaveLength(0);
+    expect(r.dropped[0].reason).toMatch(/raw digit|numeric/i);
+  });
+  it("drops an unanchored finding with empty eventIds (grounding)", () => {
+    const r = auditFindings(
+      [{ ...base, eventIds: [], explanation: "Play more defensively." }],
+      candidates,
+    );
+    expect(r.findings).toHaveLength(0);
+    expect(r.dropped[0].reason).toMatch(/ground|unanchored/i);
+  });
   it("drops a finding citing a non-existent event (grounding)", () => {
     const r = auditFindings(
       [{ ...base, eventIds: ["death:zzz:99"] }],
