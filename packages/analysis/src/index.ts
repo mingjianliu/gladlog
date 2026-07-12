@@ -46,3 +46,10 @@ export * from "./compare/verifiedComparison";
 export * from "./compare/claimChecker";
 export * from "./compare/buildExemplarLedPrompt";
 
+export * from "./analysis/types";
+export * from "./analysis/candidateFindings";
+export * from "./analysis/causalLint";
+export * from "./analysis/auditFindings";
+export * from "./analysis/buildFindingsPrompt";
+
+
