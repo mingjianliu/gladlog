@@ -149,7 +149,7 @@ For each claim, output one line: CLAIM <n>: AGREE or DISAGREE — <one-sentence 
 
   const reportPath = join(runDir, "spot-audit-report.md");
   writeFileSync(reportPath, report);
-  console.log(
+  console.warn(
     `[judge-spot-audit] agreement ${agreed}/${total}; full report: ${reportPath}`,
   );
 

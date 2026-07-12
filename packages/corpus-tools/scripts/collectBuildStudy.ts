@@ -84,7 +84,7 @@ async function main() {
           });
         }
       }
-    } catch (e) {
+    } catch {
       // transient/parse errors are tolerable in a study sample
     }
     if (++done % 100 === 0)

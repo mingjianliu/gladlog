@@ -4,11 +4,10 @@ import { bridge } from "../../bridge";
 import {
   extractCandidateFindings,
   buildMatchContext,
-  computeHealerMetrics,
   specToString,
   isHealerSpec,
 } from "@gladlog/analysis";
-import type { CandidateEvent, Finding } from "@gladlog/analysis";
+import type { Finding } from "@gladlog/analysis";
 import { toLegacyMatch, CombatUnitReaction } from "@gladlog/parser-compat";
 import type { GladMatch } from "@gladlog/parser";
 import { MatchHero } from "./MatchHero";

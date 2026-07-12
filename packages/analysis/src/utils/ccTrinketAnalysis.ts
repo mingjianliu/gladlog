@@ -620,7 +620,7 @@ export function analyzePlayerCCAndTrinket(
           }
         }
       }
-    } catch (e) {
+    } catch {
       // Ignore parse errors
     }
   }

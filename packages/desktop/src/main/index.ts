@@ -28,7 +28,7 @@ process.on("unhandledRejection", (e) =>
 
 let win: BrowserWindow | null = null;
 let lastStatus: LogsStatusSnapshot | null = null;
-let quarantined: string[] = [];
+const quarantined: string[] = [];
 
 const userData = () => app.getPath("userData");
 const settings = new SettingsStore(

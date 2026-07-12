@@ -22,9 +22,6 @@ import { stratifiedSample, type SampleMeta } from "../src/benchmark/stratify";
 import { isHealerSpec, specToString } from "../src/utils/cooldowns";
 import {
   createBenchmarkAccumulator,
-  computeBenchmarks,
-  type BenchmarkOutput,
-  type SpecSummary,
 } from "../src/benchmark/metrics";
 
 // ── Argument parsing ──────────────────────────────────────────────────────────

@@ -9,11 +9,8 @@ import {
 } from "@gladlog/parser-compat";
 import type {
   AtomicArenaCombat,
-  ICombatUnit,
   IArenaMatch,
-  IShuffleRound,
 } from "@gladlog/parser-compat";
-import { spellEffectData } from "../data/spellEffectData";
 import { specToString } from "../utils/cooldowns";
 import {
   annotateDefensiveTimings,

@@ -12,7 +12,6 @@
  */
 
 import fs from "fs-extra";
-import path from "path";
 import { buildCorpus } from "../src/corpus/buildCorpus";
 import { resolveEvalHome, runDir } from "../src/evalHome";
 

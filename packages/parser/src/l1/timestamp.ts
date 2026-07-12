@@ -22,8 +22,7 @@ function isValidDate(year: number, month: number, day: number): boolean {
 // Cache for Intl.DateTimeFormat instances per timezone
 const formatterCache = new Map<string | undefined, Intl.DateTimeFormat>();
 
-// Cache for computed UTC offsets: key is "${timezone}|${year}-${month}-${day}-${hour}"
-const offsetCache = new Map<string, number>();
+
 
 function getFormatter(timezone: string | undefined): Intl.DateTimeFormat {
   if (formatterCache.has(timezone)) {

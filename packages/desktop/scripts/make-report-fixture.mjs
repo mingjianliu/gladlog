@@ -30,7 +30,7 @@ if (!match) {
   process.exit(1);
 }
 
-const { rawLines, ...data } = match;
+const { rawLines: _rawLines, ...data } = match;
 let text = JSON.stringify(data, null, 1);
 // 脱敏:每个 Player 单位的名字(Name-Realm)全局替换为 PlayerA-Test 等
 const players = Object.values(data.units).filter((u) => u.kind === "Player");

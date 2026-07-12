@@ -1,4 +1,4 @@
-import { CombatExtraSpellAction, CombatUnitSpec, ICombatUnit, LogEvent } from '@gladlog/parser-compat';
+import { CombatUnitSpec, ICombatUnit, LogEvent } from '@gladlog/parser-compat';
 
 import { getEnglishSpellName, spellEffectData } from '../data/spellEffectData';
 import spellIdListsData from '../data/spellIdLists';

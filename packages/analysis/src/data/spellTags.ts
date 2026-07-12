@@ -1,4 +1,4 @@
-import { SPELL_CATEGORIES as rawSpellsData, ISpellCategoryEntry as ISpellMetadataSource } from './spellCategories';
+import { SPELL_CATEGORIES as rawSpellsData } from './spellCategories';
 
 interface ISpellMetadata {
   type:
