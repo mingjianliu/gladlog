@@ -24,6 +24,7 @@ export interface GladlogApi {
   matches: {
     list(): Promise<StoredMatchMeta[]>;
     get(id: string): Promise<unknown | null>;
+    page(opts: { before?: number; limit: number }): Promise<StoredMatchMeta[]>;
   };
   settings: {
     get(): Promise<GladlogSettings>;

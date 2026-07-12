@@ -494,3 +494,13 @@ pre {
   font-weight: bold;
 }
 
+
+.match-list {
+  overflow-y: auto;
+  max-height: calc(100vh - 60px);
+}
+.match-list .loading-more {
+  opacity: 0.6;
+  font-style: italic;
+  cursor: default;
+}
