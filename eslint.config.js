@@ -14,6 +14,7 @@ export default tseslint.config(
       "**/release/**",
       "**/coverage/**",
       "**/*.d.ts",
+      "scratch/**",
     ],
   },
   js.configs.recommended,
@@ -38,7 +39,31 @@ export default tseslint.config(
           caughtErrorsIgnorePattern: "^_",
         },
       ],
+      // Real-bug rules stay `error`; the following match this codebase's
+      // deliberate style rather than churn working code (spec: don't
+      // mass-rewrite unrelated logic):
+      // - `any` is used intentionally at parser/compat boundaries → warn.
+      // - the parser/tests legitimately match control chars (\x00, \n).
+      // - `interface X extends Y {}` is a real pattern here (Finding).
+      "@typescript-eslint/no-explicit-any": "warn",
+      "no-control-regex": "off",
+      "@typescript-eslint/no-empty-object-type": [
+        "error",
+        { allowInterfaces: "with-single-extends" },
+      ],
     },
+  },
+  {
+    // Operational logging is legitimate in build scripts, CLI entrypoints, and
+    // the Electron main process; keep `no-console` for library/renderer code.
+    files: [
+      "**/scripts/**",
+      "**/*[Cc]li.ts",
+      "**/*.bench.ts",
+      "packages/desktop/src/main/**",
+      "packages/desktop/scripts/**",
+    ],
+    rules: { "no-console": "off" },
   },
   prettier,
 );
