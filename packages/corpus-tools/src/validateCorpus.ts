@@ -7,7 +7,7 @@ export function validateCorpus(corpus: Corpus, nFloor: number): string[] {
   if (!corpus.wowPatchVersion || corpus.wowPatchVersion === "unknown")
     v.push("corpus.wowPatchVersion missing/unknown");
   for (const c of corpus.cells) {
-    const tag = `${c.spec}|${c.bracket}|${c.archetype}`;
+    const tag = `${c.spec}|${c.bracket}|${c.archetype}|${c.buildGroup}`;
     // N_floor 一致性
     if (c.sampleN < nFloor && !c.insufficient)
       v.push(`${tag}: below floor (${c.sampleN}) but not insufficient`);
@@ -28,6 +28,19 @@ export function validateCorpus(corpus: Corpus, nFloor: number): string[] {
       for (const line of crises)
         if (!ASCII.test(line))
           v.push(`${tag}: non-ASCII crisis line: ${line.slice(0, 40)}`);
+    // build-group integrity: any non-"*" buildGroup cell's spec must be declared
+    if (c.buildGroup !== "*" && !corpus.buildGroups?.[c.spec])
+      v.push(
+        `${tag}: undeclared buildGroup "${c.buildGroup}" (spec not in buildGroups)`,
+      );
+  }
+  for (const [spec, d] of Object.entries(corpus.buildGroups ?? {})) {
+    if (!d.keystoneNodeIds || d.keystoneNodeIds.length === 0)
+      v.push(`buildGroups[${spec}]: empty keystoneNodeIds`);
+    if (d.match !== "any" && d.match !== "all")
+      v.push(`buildGroups[${spec}]: invalid match "${d.match}"`);
+    if (d.groupPresent === d.groupAbsent)
+      v.push(`buildGroups[${spec}]: groupPresent === groupAbsent`);
   }
   return v;
 }
