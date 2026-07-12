@@ -46,6 +46,13 @@ const api: GladlogApi = {
     onDone: sub<{ matchId: string; result: unknown }>("gladlog:compare:done"),
     onError: sub<{ matchId: string; message: string }>("gladlog:compare:error"),
   },
+  analysis: {
+    run: (input) => ipcRenderer.invoke("gladlog:analysis:run", input),
+    cancel: () => ipcRenderer.invoke("gladlog:analysis:cancel"),
+    getCached: (matchId) => ipcRenderer.invoke("gladlog:analysis:getCached", matchId),
+    onDone: sub<{ matchId: string; result: unknown }>("gladlog:analysis:done"),
+    onError: sub<{ matchId: string; message: string }>("gladlog:analysis:error"),
+  },
   icon: {
     get: (name) => ipcRenderer.invoke("gladlog:icon:get", name),
   },
