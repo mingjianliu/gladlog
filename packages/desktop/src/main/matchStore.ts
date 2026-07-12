@@ -124,6 +124,16 @@ export class MatchStore {
     return [...this.index.values()].sort((a, b) => b.startTime - a.startTime);
   }
 
+  page(opts: { before?: number; limit: number }): StoredMatchMeta[] {
+    const limit = Math.max(1, Math.min(500, Math.floor(opts.limit || 0)));
+    const before = Number.isFinite(opts.before as number)
+      ? (opts.before as number)
+      : Infinity;
+    return this.list()
+      .filter((m) => m.startTime < before)
+      .slice(0, limit);
+  }
+
   get(id: string): unknown | null {
     if (!this.index.has(id)) return null;
     try {
