@@ -7,6 +7,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 import { buildPerMatchRecords } from "../src/perMatchRecord";
 import { aggregateCells } from "../src/cellAggregator";
 import { validateCorpus } from "../src/validateCorpus";
+import { loadGateTable } from "../src/keystoneGates";
 
 const BRACKETS = ["Rated Solo Shuffle", "2v2", "3v3"];
 const MIN_RATING = Number(process.env.MIN_RATING ?? 2300);
@@ -14,8 +15,10 @@ const PER_BRACKET = Number(process.env.PER_BRACKET ?? 1200); // 足以让主流 
 const N_FLOOR = 30;
 const PATCH = process.env.WOW_PATCH ?? "unknown";
 const OUT = path.join(__dirname, "../data/reference_vectors.json");
+const GATES = path.join(__dirname, "../data/keystoneGates.json");
 
 async function main() {
+  const gateTable = await loadGateTable(GATES);
   const recs = [];
   for (const bracket of BRACKETS) {
     const stubs = await fetchMatchStubs({
@@ -28,7 +31,7 @@ async function main() {
     for (const stub of stubs) {
       try {
         const text = await downloadLogText(stub);
-        recs.push(...buildPerMatchRecords(text));
+        recs.push(...buildPerMatchRecords(text, gateTable.gates));
       } catch (e) {
         console.warn(`skip ${stub.id}: ${e}`);
       }
@@ -38,10 +41,12 @@ async function main() {
         );
     }
   }
-  const corpus = aggregateCells(recs, N_FLOOR, {
-    wowPatchVersion: PATCH,
-    sourceFloor: MIN_RATING,
-  });
+  const corpus = aggregateCells(
+    recs,
+    N_FLOOR,
+    { wowPatchVersion: PATCH, sourceFloor: MIN_RATING },
+    gateTable.gates,
+  );
   const violations = validateCorpus(corpus, N_FLOOR);
   if (violations.length > 0) {
     console.error(`VALIDATION FAILED (${violations.length}):`);
@@ -51,7 +56,9 @@ async function main() {
   await fs.ensureDir(path.dirname(OUT));
   await fs.writeJson(OUT, corpus, { spaces: 0 });
   const sizeMB = (fs.statSync(OUT).size / 1e6).toFixed(2);
-  console.log(`wrote ${corpus.cells.length} cells (${sizeMB}MB) → ${OUT}`);
+  console.log(
+    `wrote ${corpus.cells.length} cells (${sizeMB}MB), buildGroups: ${Object.keys(corpus.buildGroups).join(", ") || "none"} → ${OUT}`,
+  );
 }
 main().catch((e) => {
   console.error(e);
