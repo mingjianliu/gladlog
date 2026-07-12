@@ -533,6 +533,14 @@ export function buildMatchContext(
       tLines.push(deathOutcomeBlockTimeline);
     }
 
+    // R3(E2E 回归修复):进攻技能打进免疫/DR 块。此前该块也只在下方 sparse 路径 append。
+    const offensiveWasteBlockTimeline =
+      formatOffensiveWasteForContext(offensiveWaste);
+    if (offensiveWasteBlockTimeline) {
+      tLines.push("");
+      tLines.push(offensiveWasteBlockTimeline);
+    }
+
     return tLines.join("\n");
   }
 
