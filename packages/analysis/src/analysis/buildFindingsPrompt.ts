@@ -25,8 +25,10 @@ export function buildFindingsPrompt(
     ``,
     `HARD RULES:`,
     `- Reference only event ids from the menu (in "eventIds"). Never invent an event.`,
-    `- Any number in "explanation" must be a {{key}} placeholder drawn from the referenced events' facts (e.g. {{t}}). Never write a raw statistic yourself.`,
+    `- Write NO digits at all in "explanation". Every number must be a {{key}} placeholder drawn from the referenced events' facts (e.g. {{t}}). For counts or durations you have no placeholder for, use words ("twice", "briefly", "early", "a few globals") — never a raw number. An explanation containing any bare digit will be discarded.`,
     `- Do NOT assert causation. No "because … you lost", "cost you the game", "that's why", "led to the loss". State observations and suggestions only.`,
+    ``,
+    `Example explanation: "You went down at {{t}}s; consider holding the trinket for the first swap and using your wall a beat earlier." (numbers only via placeholders; no causation)`,
     ``,
     `Output ONLY a JSON array: [{ "eventIds": string[], "severity": "high"|"med"|"low", "category": string, "title": string, "explanation": string }]`,
   ].join("\n");

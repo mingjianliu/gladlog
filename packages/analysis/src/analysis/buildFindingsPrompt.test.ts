@@ -25,5 +25,6 @@ describe("buildFindingsPrompt", () => {
     expect(p).toMatch(/placeholder|\{\{/); // numbers via placeholders
     expect(p).toMatch(/because|causal|caused/i); // the no-causal rule is stated
     expect(p).toMatch(/Discipline Priest/);
+    expect(p).toMatch(/no digits|words|discarded/i); // strict no-raw-digit guidance
   });
 });
