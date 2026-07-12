@@ -138,6 +138,10 @@ const getSettings = () => ({
   anthropicApiKey: KEY ?? "replay-dummy",
   anthropicModel: MODEL,
   wowDirectory: null,
+  aiBackend:
+    (process.env.AI_BACKEND as "anthropic" | "claudeCli" | "agy" | undefined) ??
+    "anthropic",
+  aiBackendCommand: null,
 });
 
 async function deriveInputs() {
@@ -305,10 +309,40 @@ async function live() {
   );
 }
 
+// Like live(), but injects NO clientFactory — the services call resolveAiClient
+// with getSettings().aiBackend (set via AI_BACKEND=agy|claudeCli), exercising the
+// real local-CLI backend end-to-end: real match → prompt → local model → gates.
+async function local() {
+  const { analysisInput, compareInput, meta } = await deriveInputs();
+  console.log(
+    `match: ${meta.spec} | ${meta.bracket} | ${meta.archetype} | healer=${meta.healer} | backend=${process.env.AI_BACKEND ?? "anthropic"}`,
+  );
+  const aCol = await runAnalysis(analysisInput, undefined);
+  const aDone = aCol.events.find((e) => e.ch === "gladlog:analysis:done")?.p
+    ?.result;
+  const aErr = aCol.events.find((e) => e.ch === "gladlog:analysis:error")?.p;
+  if (aErr) console.log(`ANALYSIS ERROR: ${aErr.message}`);
+  console.log(
+    `ANALYSIS: hadNarration=${aDone?.hadNarration} kept=${aDone?.findings.length} dropped=${aDone?.dropped}`,
+  );
+  (aDone?.findings ?? []).forEach((f: any) =>
+    console.log(`  [${f.severity}] ${f.title} — ${f.explanation}`),
+  );
+  const cCol = await runCompare(compareInput, undefined);
+  const cDone = cCol.events.find((e) => e.ch === "gladlog:compare:done")?.p
+    ?.result;
+  const cErr = cCol.events.find((e) => e.ch === "gladlog:compare:error")?.p;
+  if (cErr) console.log(`COMPARE ERROR: ${cErr.message}`);
+  console.log(
+    `COMPARE: ${cDone?.report ?? `(dropped: ${cDone?.droppedReason})`}`,
+  );
+}
+
 async function main() {
   console.log(`\n=== SP-A/SP-B2 smoke (MODE=${MODE}) ===`);
   if (MODE === "dump") return dump();
   if (MODE === "replay") return replay();
+  if (MODE === "local") return local();
   return live();
 }
 main().catch((e) => {
