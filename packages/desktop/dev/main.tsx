@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 
 import { MatchReport } from "../src/renderer/src/report/components/MatchReport";
@@ -96,14 +96,39 @@ const sampleCompare = {
   },
 };
 
-const FIXTURES: Record<string, StoredMatch> = {
-  "real · 真实 3v3(纳格兰)": realMatch as unknown as StoredMatch,
+const BASE_FIXTURES: Record<string, StoredMatch> = {
+  "real · 真实 3v3(纳格兰,裁剪匿名)": realMatch as unknown as StoredMatch,
   "synthetic · 合成小样": synthMatch as unknown as StoredMatch,
 };
+// 完整真实局:dev/local/full-match.json(gitignored,仅本机)。存在则运行时加载。
+const LOCAL_KEY = "real · 完整真实局(本地 dev/local)";
 
 function Harness() {
-  const keys = Object.keys(FIXTURES);
+  const [local, setLocal] = useState<StoredMatch | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("./local/full-match.json")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (!cancelled && j) setLocal(j as StoredMatch);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const fixtures: Record<string, StoredMatch> = local
+    ? { [LOCAL_KEY]: local, ...BASE_FIXTURES }
+    : BASE_FIXTURES;
+  const keys = Object.keys(fixtures);
   const [which, setWhich] = useState(keys[0]!);
+  // 本地完整局加载完成后自动切过去
+  useEffect(() => {
+    if (local) setWhich(LOCAL_KEY);
+  }, [local]);
+
+  const current = fixtures[which] ?? fixtures[keys[0]!]!;
   return (
     <>
       <div className="harness-bar">
@@ -121,7 +146,7 @@ function Harness() {
         <span className="harness-hint">纯浏览器渲染 · HMR · 免 Electron</span>
       </div>
       <div className="harness-body">
-        <MatchReport key={which} source={FIXTURES[which]!} matchId={which} />
+        <MatchReport key={which} source={current} matchId={which} />
       </div>
     </>
   );
