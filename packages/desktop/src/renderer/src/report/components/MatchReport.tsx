@@ -63,8 +63,15 @@ export function MatchReport({
       {view === "replay" && <ReplayView source={source} />}
       {view === "ai" && (
         <div className="rpt-ai-full">
-          <StructuredAnalysisPanel source={source} matchId={resolvedMatchId} />
-          <ProComparisonVerified source={source} matchId={resolvedMatchId} />
+          <div className="rpt-ai-main">
+            <StructuredAnalysisPanel
+              source={source}
+              matchId={resolvedMatchId}
+            />
+          </div>
+          <aside className="rpt-ai-side">
+            <ProComparisonVerified source={source} matchId={resolvedMatchId} />
+          </aside>
         </div>
       )}
     </div>

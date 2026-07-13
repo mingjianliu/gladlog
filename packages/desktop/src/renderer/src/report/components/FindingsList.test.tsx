@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+
 import { FindingsList } from "./FindingsList";
 
 const findings = [
@@ -31,5 +32,23 @@ describe("FindingsList", () => {
   it("renders an empty state when there are no findings", () => {
     render(<FindingsList findings={[]} onSelect={() => {}} />);
     expect(screen.getByText(/no findings|nothing/i)).toBeTruthy();
+  });
+  it("long explanation clamps to 2 lines with 展开全文/收起 toggle", () => {
+    const long = [
+      {
+        eventIds: [],
+        severity: "med",
+        category: "positioning",
+        title: "Spread",
+        explanation: "站位".repeat(80),
+      },
+    ];
+    const { container } = render(
+      <FindingsList findings={long as any} onSelect={() => {}} />,
+    );
+    expect(container.querySelector(".rpt-finding-body.clamp")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /展开全文/ }));
+    expect(container.querySelector(".rpt-finding-body.clamp")).toBeNull();
+    expect(screen.getByRole("button", { name: /收起/ })).toBeTruthy();
   });
 });
