@@ -56,4 +56,36 @@ describe("checkFaithful: timeline", () => {
     const divs = checkFaithful("timeline", container, model);
     expect(divs.some((d) => d.invariant === "maps-to-event")).toBe(true);
   });
+
+  it("HAS TEETH: a fabricated tooltip is caught", () => {
+    const model = timelineMarks(candidates);
+    const { container } = render(
+      <TimelineStrip
+        candidates={candidates}
+        activeEventIds={[]}
+        onSelect={() => {}}
+      />,
+    );
+    const mark = container.querySelector<HTMLElement>('[data-mark-id="a"]');
+    mark!.setAttribute("title", "kick at 999s"); // fabricated
+    const divs = checkFaithful("timeline", container, model);
+    expect(
+      divs.some((d) => d.element === "a" && d.invariant === "view-faithful"),
+    ).toBe(true);
+  });
+
+  it("NO FALSE-FAIL: a pre-combat (negative t) mark renders off-edge, not flagged", () => {
+    // The original strip mapped negative t to a negative left% (off the left
+    // edge). The checker must not reject it (agy review finding #2).
+    const withPrepull = [ev("pre", -2), ...candidates];
+    const model = timelineMarks(withPrepull);
+    const { container } = render(
+      <TimelineStrip
+        candidates={withPrepull}
+        activeEventIds={[]}
+        onSelect={() => {}}
+      />,
+    );
+    expect(checkFaithful("timeline", container, model)).toEqual([]);
+  });
 });

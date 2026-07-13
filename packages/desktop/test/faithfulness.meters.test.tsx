@@ -43,4 +43,28 @@ describe("checkFaithful: meters", () => {
       ),
     ).toBe(true);
   });
+
+  it("HAS TEETH: a px width (not %) is caught (parseFloat would strip the unit)", () => {
+    const model = meterRows(rows, "damage");
+    const { container } = render(<Meters rows={rows} mode="damage" />);
+    const bar = container.querySelector<HTMLElement>(".rpt-meter-bar");
+    // Same numeric value, wrong unit: a visually-broken 50px bar.
+    bar!.style.width = `${model[0]!.widthPct}px`;
+    const divs = checkFaithful("meters", container, model);
+    expect(divs.some((d) => d.invariant === "unit")).toBe(true);
+  });
+
+  it("HAS TEETH: a fabricated tooltip is caught", () => {
+    const model = meterRows(rows, "damage");
+    const { container } = render(<Meters rows={rows} mode="damage" />);
+    const row = container.querySelector<HTMLElement>(".rpt-meter-row");
+    row!.setAttribute("title", "Someone: 42"); // fabricated tooltip number
+    const divs = checkFaithful("meters", container, model);
+    expect(
+      divs.some(
+        (d) =>
+          d.invariant === "view-faithful" && d.sourceRef.endsWith(".title"),
+      ),
+    ).toBe(true);
+  });
 });

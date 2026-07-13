@@ -69,4 +69,23 @@ describe("checkFaithful: cohort", () => {
     const divs = checkFaithful("cohort", container, lyingModel);
     expect(divs.some((d) => d.invariant === "order-consistent")).toBe(true);
   });
+
+  it("NO FALSE-FAIL: a clustered cohort (value == all anchors) with a mid percentile is not flagged", () => {
+    // Degenerate distribution: everyone scored 10, so p10==p50==p90==value.
+    // A tie can legitimately assign the 50th percentile — the strict-outer /
+    // inclusive-middle rule must not reject it (agy review finding #1).
+    const clustered = cohortDims([
+      {
+        key: "uptime",
+        value: 10,
+        p10: 10,
+        p50: 10,
+        p90: 10,
+        percentile: 50,
+        verdict: "median",
+      },
+    ]);
+    const { container } = render(<CohortDimsTable rows={clustered} />);
+    expect(checkFaithful("cohort", container, clustered)).toEqual([]);
+  });
 });

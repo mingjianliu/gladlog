@@ -47,8 +47,21 @@ function checkMeters(root: HTMLElement, rows: MeterRow[]): Divergence[] {
       });
       continue;
     }
-    const widthPct = parseFloat(bar.style.width);
+    const widthRaw = bar.style.width.trim();
+    const widthPct = parseFloat(widthRaw);
     const label = (valEl.textContent ?? "").trim();
+    // (B) unit: the bar width must be a percentage. parseFloat happily strips
+    // "px"/"em", so a mis-unit'd (visually broken) render would otherwise pass.
+    if (!widthRaw.endsWith("%")) {
+      out.push({
+        component: "meters",
+        element: row.unitId,
+        rendered: widthRaw,
+        expected: "a % value",
+        invariant: "unit",
+        sourceRef: `meterRows[${i}].widthPct`,
+      });
+    }
     // (A) view-faithful: rendered == selector
     if (Number.isNaN(widthPct) || !approxEq(widthPct, row.widthPct)) {
       out.push({
@@ -58,6 +71,19 @@ function checkMeters(root: HTMLElement, rows: MeterRow[]): Divergence[] {
         expected: `${row.widthPct}%`,
         invariant: "view-faithful",
         sourceRef: `meterRows[${i}].widthPct`,
+      });
+    }
+    // (A) view-faithful: the tooltip carries the same name + number.
+    const title = el.getAttribute("title") ?? "";
+    const expectedTitle = `${row.name}: ${row.label}`;
+    if (title !== expectedTitle) {
+      out.push({
+        component: "meters",
+        element: row.unitId,
+        rendered: title,
+        expected: expectedTitle,
+        invariant: "view-faithful",
+        sourceRef: `meterRows[${i}].title`,
       });
     }
     if (label !== row.label) {
@@ -154,7 +180,19 @@ function checkTimeline(root: HTMLElement, model: TimelineMarks): Divergence[] {
       });
       continue;
     }
-    const leftPct = parseFloat(el.style.left);
+    const leftRaw = el.style.left.trim();
+    const leftPct = parseFloat(leftRaw);
+    // (B) unit: the offset must be a percentage (parseFloat would strip px/em).
+    if (!leftRaw.endsWith("%")) {
+      out.push({
+        component: "timeline",
+        element: id,
+        rendered: leftRaw,
+        expected: "a % value",
+        invariant: "unit",
+        sourceRef: `timelineMarks.marks[${id}].leftPct`,
+      });
+    }
     // (A) view-faithful
     if (Number.isNaN(leftPct) || !approxEq(leftPct, mark.leftPct)) {
       out.push({
@@ -166,13 +204,28 @@ function checkTimeline(root: HTMLElement, model: TimelineMarks): Divergence[] {
         sourceRef: `timelineMarks.marks[${id}].leftPct`,
       });
     }
-    // (B) bounds: t in [0, maxT]
-    if (!(mark.t >= -TOL && mark.t <= model.maxT + TOL)) {
+    // (A) view-faithful: the tooltip carries the same type + time.
+    const title = el.getAttribute("title") ?? "";
+    const expectedTitle = `${mark.type} at ${mark.t}s`;
+    if (title !== expectedTitle) {
+      out.push({
+        component: "timeline",
+        element: id,
+        rendered: title,
+        expected: expectedTitle,
+        invariant: "view-faithful",
+        sourceRef: `timelineMarks.marks[${id}].t`,
+      });
+    }
+    // (B) bounds: a mark cannot claim a time beyond the axis max. The lower side
+    // is intentionally unbounded — the original strip renders pre-combat
+    // (negative t) marks off the left edge, and C1 must not false-fail that.
+    if (mark.t > model.maxT + TOL) {
       out.push({
         component: "timeline",
         element: id,
         rendered: String(mark.t),
-        expected: `[0,${model.maxT}]`,
+        expected: `<= ${model.maxT}`,
         invariant: "bounds",
         sourceRef: `timelineMarks.marks[${id}].t`,
       });
@@ -244,10 +297,15 @@ function checkCohort(root: HTMLElement, rows: CohortDimRow[]): Divergence[] {
     if (row.value !== null) {
       const v = row.value;
       const p = row.percentile;
+      // Strict outer bands only: a value strictly above p90 must sit at >=90th,
+      // strictly below p10 at <=10th. On the boundaries (v == an anchor) the
+      // percentile is ambiguous under ties, so the inclusive middle band
+      // [10,90] applies — this avoids false-failing a clustered cohort where
+      // p10==p50==p90 (agy review finding #1).
       let ok: boolean;
-      if (v >= row.p90) ok = p >= 90;
-      else if (v <= row.p10) ok = p <= 10;
-      else ok = p > 10 && p < 90; // p10 < v < p90
+      if (v > row.p90) ok = p >= 90;
+      else if (v < row.p10) ok = p <= 10;
+      else ok = p >= 10 && p <= 90;
       if (!ok) {
         out.push({
           component: "cohort",
