@@ -1,5 +1,6 @@
 import type { MeterRow } from "./meterRows";
 import type { TimelineMarks } from "./timelineMarks";
+import type { CohortDimRow } from "./cohortDims";
 
 export interface Divergence {
   component: "meters" | "cohort" | "timeline";
@@ -193,6 +194,75 @@ function checkTimeline(root: HTMLElement, model: TimelineMarks): Divergence[] {
   return out;
 }
 
+function checkCohort(root: HTMLElement, rows: CohortDimRow[]): Divergence[] {
+  const out: Divergence[] = [];
+  const els = Array.from(
+    root.querySelectorAll<HTMLElement>('[data-testid="cohort-dim"]'),
+  );
+  const byKey = new Map(rows.map((r) => [r.key, r]));
+  if (els.length !== rows.length) {
+    out.push({
+      component: "cohort",
+      element: "(count)",
+      rendered: String(els.length),
+      expected: String(rows.length),
+      invariant: "missing",
+      sourceRef: "cohortDims.length",
+    });
+  }
+  for (const el of els) {
+    const key = el.getAttribute("data-dim-key") ?? "";
+    const row = byKey.get(key);
+    if (!row) {
+      out.push({
+        component: "cohort",
+        element: key,
+        rendered: key,
+        expected: "a key present in cohortDims",
+        invariant: "maps-to-event",
+        sourceRef: "cohortDims[].key",
+      });
+      continue;
+    }
+    const valText = (
+      el.querySelector(".rpt-cohort-value")?.textContent ?? ""
+    ).trim();
+    // (A) view-faithful: "value (Nth)" == selector labels
+    const expected = `${row.valueLabel} (${row.percentileLabel})`;
+    if (valText !== expected) {
+      out.push({
+        component: "cohort",
+        element: key,
+        rendered: valText,
+        expected,
+        invariant: "view-faithful",
+        sourceRef: `cohortDims[${key}]`,
+      });
+    }
+    // (B) order-consistency vs p10/p50/p90 (NOT a percentile recompute). Skip
+    // when value is null (N/A dim — nothing to compare).
+    if (row.value !== null) {
+      const v = row.value;
+      const p = row.percentile;
+      let ok: boolean;
+      if (v >= row.p90) ok = p >= 90;
+      else if (v <= row.p10) ok = p <= 10;
+      else ok = p > 10 && p < 90; // p10 < v < p90
+      if (!ok) {
+        out.push({
+          component: "cohort",
+          element: key,
+          rendered: `pct=${p}`,
+          expected: `consistent with value ${v} vs p10=${row.p10}/p90=${row.p90}`,
+          invariant: "order-consistent",
+          sourceRef: `cohortDims[${key}].percentile`,
+        });
+      }
+    }
+  }
+  return out;
+}
+
 export function checkFaithful(
   kind: "meters",
   root: HTMLElement,
@@ -204,6 +274,11 @@ export function checkFaithful(
   selectorOutput: TimelineMarks,
 ): Divergence[];
 export function checkFaithful(
+  kind: "cohort",
+  root: HTMLElement,
+  selectorOutput: CohortDimRow[],
+): Divergence[];
+export function checkFaithful(
   kind: string,
   root: HTMLElement,
   selectorOutput: unknown,
@@ -213,6 +288,8 @@ export function checkFaithful(
       return checkMeters(root, selectorOutput as MeterRow[]);
     case "timeline":
       return checkTimeline(root, selectorOutput as TimelineMarks);
+    case "cohort":
+      return checkCohort(root, selectorOutput as CohortDimRow[]);
     default:
       throw new Error(`checkFaithful: unknown kind "${kind}"`);
   }
