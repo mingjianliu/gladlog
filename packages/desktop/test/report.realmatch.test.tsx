@@ -37,13 +37,15 @@ describe("真实比赛数据渲染", () => {
     expect(deriveUnitTimeline(m, anyPlayer.id).length).toBeGreaterThan(0);
   });
 
-  it("战报视图:头/时间轴/单位面板齐全", () => {
+  it("战报视图:头/榜单卡/时间轴齐全(全宽,无侧栏)", () => {
     const { container } = render(<MatchReport source={m} />);
     expect(screen.getByText(m.result)).toBeTruthy();
+    expect(container.querySelector(".rpt-meters-card")).toBeTruthy();
     expect(
       container.querySelector("[data-testid='rpt-timeline']"),
     ).toBeTruthy();
-    expect(container.querySelector(".rpt-unitpanel")).toBeTruthy();
+    // View B 单位侧栏已按设计移除
+    expect(container.querySelector(".rpt-unitpanel")).toBeNull();
   });
 
   it("回放视图:真实坐标画出多个单位", () => {

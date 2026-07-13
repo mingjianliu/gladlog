@@ -208,36 +208,82 @@ pre {
   letter-spacing: 0.12em;
 }
 
-/* ── meters:细条、圆角数据端、2px 行距 ── */
+/* ── meters:榜单卡片(模式切换内嵌卡头)+ 细条 ── */
+.rpt-meters-card {
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  padding: 10px 14px 8px;
+}
+.rpt-meters-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.rpt-card-label {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--mute);
+}
+/* 内嵌段控:比顶层视图 tab 更小、gold-dim 激活 */
+.rpt-mode-seg {
+  display: flex;
+  gap: 2px;
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  border-radius: 5px;
+  padding: 2px;
+}
+.rpt-mode-seg button {
+  background: transparent;
+  color: var(--ink-2);
+  border: none;
+  border-radius: 4px;
+  padding: 3px 12px;
+  font-size: 11px;
+}
+.rpt-mode-seg button:hover {
+  color: var(--ink);
+}
+.rpt-mode-seg button.active {
+  background: var(--gold-dim);
+  color: var(--bg);
+  font-weight: 600;
+}
 .rpt-meters {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 10px 0 4px;
+  padding: 8px 0 2px;
 }
 .rpt-meter-row {
   display: grid;
-  grid-template-columns: 150px 1fr 92px;
+  grid-template-columns: 150px 1fr 100px;
   align-items: center;
   gap: 10px;
   padding: 2px 0;
 }
 .rpt-meter-name {
   font-size: 12px;
+  color: var(--ink);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.rpt-meter-name.enemy {
+  color: var(--ink-2);
+}
 .rpt-meter-bar-track {
   background: var(--surface-2);
-  border-radius: 0 4px 4px 0;
-  height: 12px;
+  border-radius: 0 3px 3px 0;
+  height: 14px;
   overflow: hidden;
 }
 .rpt-meter-bar {
   display: block;
   height: 100%;
-  border-radius: 0 4px 4px 0;
+  border-radius: 0 3px 3px 0;
   min-width: 2px;
 }
 .rpt-meter-value {
@@ -245,7 +291,7 @@ pre {
   font-family: var(--font-data);
   font-variant-numeric: tabular-nums;
   font-size: 12px;
-  color: var(--ink-2);
+  color: var(--ink);
 }
 
 /* ── 时间轴 ── */
@@ -281,11 +327,10 @@ pre {
 
 /* ── 单位面板 ── */
 .rpt-body {
-  display: grid;
-  grid-template-columns: 1fr 330px;
+  display: flex;
+  flex-direction: column;
   gap: 14px;
   margin-top: 14px;
-  align-items: start;
 }
 .rpt-side {
   background: var(--surface);
@@ -402,21 +447,23 @@ pre {
   border-bottom-color: var(--gold);
 }
 
-/* ── 顶层视图 tab(战报 / AI 分析):比模式 tab 更醒目 ── */
+/* ── 顶层视图 tab(战报 / 回放 / AI 分析):填充金色段控 ── */
 .rpt-view-tabs {
   display: flex;
-  gap: 4px;
+  gap: 6px;
   margin-top: 14px;
-  border-bottom: 1px solid var(--hairline);
+  width: fit-content;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  padding: 4px;
 }
 .rpt-view-tabs button {
   background: transparent;
   color: var(--ink-2);
   border: none;
-  border-bottom: 2px solid transparent;
-  border-radius: 0;
-  padding: 8px 18px;
-  margin-bottom: -1px;
+  border-radius: 5px;
+  padding: 7px 20px;
   font-size: 14px;
   font-weight: 600;
 }
@@ -424,8 +471,8 @@ pre {
   color: var(--ink);
 }
 .rpt-view-tabs button.active {
-  color: var(--ink);
-  border-bottom-color: var(--gold);
+  background: var(--gold);
+  color: var(--bg);
 }
 
 /* ── AI 分析全宽视图:脱离右侧窄栏,给长文本铺开空间 ── */

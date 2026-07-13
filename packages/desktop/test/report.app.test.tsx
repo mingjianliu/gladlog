@@ -11,14 +11,16 @@ import {
 const m = loadMatchFixture();
 
 describe("MatchReport", () => {
-  it("组装:头/meters/时间轴/单位面板齐全,默认选中 log owner", () => {
+  it("组装:头/榜单卡/时间轴齐全(全宽,无侧栏)", () => {
     const { container } = render(<MatchReport source={m} />);
     expect(screen.getByText(m.result)).toBeTruthy();
+    expect(container.querySelector(".rpt-meters-card")).toBeTruthy();
     expect(
       container.querySelector("[data-testid='rpt-timeline']"),
     ).toBeTruthy();
     const owner = m.units[m.playerId]!;
-    expect(screen.getAllByText(owner.name).length).toBeGreaterThan(1); // header + unit panel
+    expect(screen.getAllByText(owner.name).length).toBeGreaterThan(1); // header + 榜单行
+    expect(container.querySelector(".rpt-unitpanel")).toBeNull(); // View B 已移除
   });
   it("meters 模式切换按钮工作", () => {
     render(<MatchReport source={m} />);

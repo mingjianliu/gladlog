@@ -7,6 +7,7 @@ export interface MeterRow {
   unitId: string;
   name: string;
   classId: number;
+  teamId: number;
   value: number;
   widthPct: number;
   label: string;
@@ -32,6 +33,7 @@ export function meterRows(rows: UnitTotals[], mode: MeterMode): MeterRow[] {
       unitId: r.unitId,
       name: r.name,
       classId: r.classId,
+      teamId: r.teamId,
       value,
       widthPct: (value / max) * 100,
       label: Math.round(value).toLocaleString("en-US"),
