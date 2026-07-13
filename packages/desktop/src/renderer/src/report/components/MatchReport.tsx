@@ -76,7 +76,11 @@ export function MatchReport({
             <Timeline data={timeline} onSelectUnit={setUnitId} />
           </div>
           <aside className="rpt-side">
-            <UnitPanel source={source} unitId={selected} />
+            <UnitPanel
+              source={source}
+              unitId={selected}
+              onSelectUnit={setUnitId}
+            />
           </aside>
         </div>
       ) : (

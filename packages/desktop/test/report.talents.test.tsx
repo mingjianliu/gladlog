@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
-import { UnitPanel } from "../src/renderer/src/report/components/UnitPanel";
 import { nodeMaps } from "@gladlog/analysis";
+import { render, screen } from "@testing-library/react";
+
+import { UnitPanel } from "../src/renderer/src/report/components/UnitPanel";
 import { loadMatchFixture } from "./fixtures/loadFixture";
 
 const baseMatch = loadMatchFixture();
@@ -9,7 +10,9 @@ const baseMatch = loadMatchFixture();
 describe("UnitPanel talents", () => {
   it("renders named talent if resolved from real analysis data", () => {
     const specIds = Object.keys(nodeMaps).map(Number);
-    const specId = specIds.find((id) => nodeMaps[id].classNodes.length > 0) as number;
+    const specId = specIds.find(
+      (id) => nodeMaps[id].classNodes.length > 0,
+    ) as number;
     const node = nodeMaps[specId].classNodes[0];
     const entry = node.entries[0];
 
@@ -22,18 +25,24 @@ describe("UnitPanel talents", () => {
         [unitId]: {
           ...unit,
           specId: specId,
-          info: unit.info ? {
-            ...unit.info,
-            specId: specId,
-            talents: [
-              { id1: node.id, id2: entry.id, count: 1 }
-            ]
-          } : undefined
-        }
-      }
+          info: unit.info
+            ? {
+                ...unit.info,
+                specId: specId,
+                talents: [{ id1: node.id, id2: entry.id, count: 1 }],
+              }
+            : undefined,
+        },
+      },
     };
 
-    render(<UnitPanel source={modifiedMatch} unitId={unitId} />);
+    render(
+      <UnitPanel
+        source={modifiedMatch}
+        unitId={unitId}
+        onSelectUnit={() => {}}
+      />,
+    );
 
     expect(screen.getByText(entry.name)).toBeTruthy();
   });
@@ -47,18 +56,24 @@ describe("UnitPanel talents", () => {
         ...baseMatch.units,
         [unitId]: {
           ...unit,
-          info: unit.info ? {
-            ...unit.info,
-            specId: 999999,
-            talents: [
-              { id1: 999, id2: 999, count: 1 }
-            ]
-          } : undefined
-        }
-      }
+          info: unit.info
+            ? {
+                ...unit.info,
+                specId: 999999,
+                talents: [{ id1: 999, id2: 999, count: 1 }],
+              }
+            : undefined,
+        },
+      },
     };
 
-    render(<UnitPanel source={modifiedMatch} unitId={unitId} />);
+    render(
+      <UnitPanel
+        source={modifiedMatch}
+        unitId={unitId}
+        onSelectUnit={() => {}}
+      />,
+    );
 
     expect(screen.getByText(/天赋 1 项/)).toBeTruthy();
   });

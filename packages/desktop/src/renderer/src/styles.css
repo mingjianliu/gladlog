@@ -308,6 +308,10 @@ pre {
   max-height: 230px;
   overflow-y: auto;
 }
+/* 合并事件流一屏更长 */
+.rpt-scroll-tall {
+  max-height: 420px;
+}
 .rpt-scroll table {
   width: 100%;
   border-collapse: collapse;
@@ -325,6 +329,51 @@ pre {
 }
 .rpt-dim {
   color: var(--ink-2);
+}
+
+/* ── 单位面板:玩家筛选 + 合并事件流(施法/重要光环)── */
+.rpt-unit-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.rpt-unit-filter span {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--gold);
+}
+.rpt-unit-filter select {
+  flex: 1;
+  min-width: 0;
+  background: var(--surface-2);
+  color: var(--ink);
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  padding: 3px 6px;
+  font-family: var(--font-ui);
+  font-size: 12px;
+}
+/* aura 行左侧细色条,与施法行区分 */
+.rpt-ev-aura td:first-child {
+  box-shadow: inset 2px 0 0 var(--gold-dim);
+}
+.rpt-aura-on {
+  color: var(--win);
+  font-weight: 600;
+}
+.rpt-aura-off {
+  color: var(--mute);
+  font-weight: 600;
+}
+.rpt-cat {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--gold-dim);
+  border: 1px solid var(--hairline);
+  border-radius: 3px;
+  padding: 0 5px;
+  white-space: nowrap;
 }
 
 /* ── 模式/回合 tab:激活 = 鎏金底线 ── */
