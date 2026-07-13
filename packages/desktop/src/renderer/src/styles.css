@@ -632,7 +632,7 @@ pre {
   text-align: center;
 }
 .rpt-replay-field {
-  width: min(520px, 100%);
+  width: min(440px, 100%);
   aspect-ratio: 1 / 1;
   background: var(--surface);
   border: 1px solid var(--hairline);
@@ -703,7 +703,7 @@ pre {
   display: flex;
   flex-wrap: wrap;
   gap: 6px 10px;
-  width: min(520px, 100%);
+  width: min(440px, 100%);
   font-size: 11px;
   color: var(--ink-2);
 }
@@ -738,7 +738,7 @@ pre {
   display: flex;
   align-items: center;
   gap: 12px;
-  width: min(520px, 100%);
+  width: min(440px, 100%);
   background: var(--surface);
   border: 1px solid var(--hairline);
   border-radius: 8px;
@@ -848,8 +848,8 @@ pre {
   color: var(--ink-2);
   border: 1px solid var(--hairline);
   border-radius: 999px;
-  padding: 2px 9px 2px 3px;
-  font-size: 11px;
+  padding: 2px 10px 2px 3px;
+  font-size: 12px;
 }
 .rpt-gcd-chip.active {
   background: rgba(201, 163, 94, 0.14);
@@ -881,29 +881,29 @@ pre {
 }
 .rpt-gcd-axis {
   position: relative;
-  width: 38px;
+  width: 44px;
   flex: none;
 }
 .rpt-gcd-tick {
   position: absolute;
-  right: 4px;
+  right: 5px;
   transform: translateY(-50%);
   font-family: var(--font-data);
-  font-size: 10px;
+  font-size: 11px;
   color: var(--mute);
 }
 .rpt-gcd-col {
-  width: 158px;
+  width: 206px;
   flex: none;
   display: flex;
   flex-direction: column;
 }
 .rpt-gcd-col-head {
-  height: 28px;
+  height: 30px;
   display: flex;
   align-items: center;
-  gap: 5px;
-  font-size: 11px;
+  gap: 6px;
+  font-size: 12px;
   color: var(--ink);
   border-bottom: 1px solid var(--hairline);
 }
@@ -924,15 +924,15 @@ pre {
   position: absolute;
   left: 3px;
   right: 2px;
-  height: 13px;
+  height: 17px;
   display: flex;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
   background: var(--surface-2);
   border: 1px solid var(--hairline);
   border-radius: 3px;
-  padding: 0 4px;
-  font-size: 9px;
+  padding: 0 6px;
+  font-size: 11px;
   line-height: 1;
   color: var(--ink-2);
   white-space: nowrap;
@@ -951,8 +951,8 @@ pre {
   color: var(--gold);
 }
 .rpt-gcd-act-dot {
-  width: 6px;
-  height: 6px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   flex: none;
 }
