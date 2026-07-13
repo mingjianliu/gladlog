@@ -941,7 +941,7 @@ pre {
   overflow: hidden;
 }
 .rpt-gcd-act.future {
-  opacity: 0.32;
+  opacity: 0.5;
 }
 .rpt-gcd-act.recent {
   box-shadow: 0 0 0 1px var(--gold);

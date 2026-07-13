@@ -170,10 +170,11 @@ export function GcdSwimlane({
                     const elapsed = c.t <= t;
                     const recent = elapsed && c.t >= t - GCD_MS;
                     const major = isMajorCd(c.spellId);
+                    // 只在播放时把「未来」的技能压暗以显示进度;暂停/开头一律亮。
                     const cls = [
                       "rpt-gcd-act",
                       major ? "major" : "",
-                      elapsed ? "" : "future",
+                      playing && !elapsed ? "future" : "",
                       recent ? "recent" : "",
                     ]
                       .filter(Boolean)
