@@ -8,6 +8,7 @@ import {
   sampleAt,
 } from "../derive/replay";
 import type { ReportSource } from "../derive/types";
+import { GcdSwimlane } from "./GcdSwimlane";
 
 const VW = 520;
 const VH = 520;
@@ -39,6 +40,9 @@ export function ReplayView({ source }: { source: ReportSource }) {
   const [t, setT] = useState(startTime);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState<(typeof SPEEDS)[number]>(1);
+  const [selUnits, setSelUnits] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(tracks.map((tr) => [tr.unitId, true])),
+  );
   const prevRef = useRef<number>(0);
 
   useEffect(() => {
@@ -95,142 +99,180 @@ export function ReplayView({ source }: { source: ReportSource }) {
 
   return (
     <div className="rpt-replay">
-      <svg
-        className="rpt-replay-field"
-        viewBox={`0 0 ${VW} ${VH}`}
-        data-testid="rpt-replay-field"
-        preserveAspectRatio="xMidYMid meet"
-      >
-        <defs>
-          <radialGradient id="rpt-arena-floor" cx="50%" cy="50%" r="70%">
-            <stop offset="0%" stopColor="var(--surface-2)" />
-            <stop offset="100%" stopColor="var(--bg)" />
-          </radialGradient>
-        </defs>
-        <rect
-          x={offX}
-          y={offY}
-          width={aw}
-          height={ah}
-          rx={6}
-          className="rpt-replay-arena"
-          fill="url(#rpt-arena-floor)"
-        />
-        {/* 中央区域微光带 */}
-        <circle
-          cx={cxA}
-          cy={cyA}
-          r={Math.min(aw, ah) * 0.4}
-          className="rpt-replay-zone"
-        />
-        {/* 立柱(空间锚点) */}
-        {pillars.map((p, i) => (
-          <g key={`p${i}`}>
+      <div className="rpt-replay-stage">
+        <div className="rpt-replay-arena-col">
+          <svg
+            className="rpt-replay-field"
+            viewBox={`0 0 ${VW} ${VH}`}
+            data-testid="rpt-replay-field"
+            preserveAspectRatio="xMidYMid meet"
+          >
+            <defs>
+              <radialGradient id="rpt-arena-floor" cx="50%" cy="50%" r="70%">
+                <stop offset="0%" stopColor="var(--surface-2)" />
+                <stop offset="100%" stopColor="var(--bg)" />
+              </radialGradient>
+            </defs>
+            <rect
+              x={offX}
+              y={offY}
+              width={aw}
+              height={ah}
+              rx={6}
+              className="rpt-replay-arena"
+              fill="url(#rpt-arena-floor)"
+            />
+            {/* 中央区域微光带 */}
             <circle
-              cx={p.x}
-              cy={p.y}
-              r={pillarR}
-              className="rpt-replay-pillar"
+              cx={cxA}
+              cy={cyA}
+              r={Math.min(aw, ah) * 0.4}
+              className="rpt-replay-zone"
             />
-            <circle
-              cx={p.x}
-              cy={p.y}
-              r={pillarR * 0.6}
-              className="rpt-replay-pillar-inner"
-            />
-          </g>
-        ))}
-        {/* 网格线 */}
-        {Array.from({ length: GRID - 1 }, (_, i) => {
-          const fx = offX + ((i + 1) / GRID) * aw;
-          const fy = offY + ((i + 1) / GRID) * ah;
-          return (
-            <g key={`g${i}`} className="rpt-replay-grid">
-              <line x1={fx} y1={offY} x2={fx} y2={offY + ah} />
-              <line x1={offX} y1={fy} x2={offX + aw} y2={fy} />
-            </g>
-          );
-        })}
-        {/* 走位尾迹(最近数秒) */}
-        {tracks.map((tr) => {
-          const pts = pathUpTo(tr, t);
-          if (pts.length < 2) return null;
-          return (
-            <polyline
-              key={`tr${tr.unitId}`}
-              className="rpt-replay-trail"
-              points={pts.map((p) => `${toX(p.x)},${toY(p.y)}`).join(" ")}
-              stroke={classColor(tr.classId)}
-            />
-          );
-        })}
-        {/* 阵亡:残影 + ✕ */}
-        {tracks.map((tr) => {
-          if (tr.deathT == null || t < tr.deathT) return null;
-          const dp = deathPosition(tr);
-          if (!dp) return null;
-          const cx = toX(dp.x);
-          const cy = toY(dp.y);
-          return (
-            <g key={`d${tr.unitId}`}>
-              <circle
-                cx={cx}
-                cy={cy}
-                r={13}
-                className="rpt-replay-ghost"
-                fill={classColor(tr.classId)}
-              />
-              <text x={cx} y={cy + 4} className="rpt-replay-death">
-                ✕
-              </text>
-            </g>
-          );
-        })}
-        {/* 存活单位:职业色圆点 + 字形 + 名字 + 血条 */}
-        {tracks.map((tr) => {
-          const at = sampleAt(tr, t);
-          if (!at) return null;
-          const cx = toX(at.x);
-          const cy = toY(at.y);
-          const hp =
-            at.maxHp > 0 ? Math.max(0, Math.min(1, at.hp / at.maxHp)) : 1;
-          return (
-            <g key={tr.unitId} className="rpt-replay-unit">
-              <text x={cx} y={cy - 19} className="rpt-replay-name">
-                {tr.name}
-              </text>
-              <circle
-                cx={cx}
-                cy={cy}
-                r={13}
-                fill={classColor(tr.classId)}
-                stroke={reactionRing(tr.reaction)}
-                strokeWidth={2.5}
-                fillOpacity={0.4 + 0.6 * hp}
-              />
-              <text x={cx} y={cy + 3.2} className="rpt-replay-glyph">
-                {classGlyph(tr.classId)}
-              </text>
-              <rect
-                x={cx - 16}
-                y={cy + 16}
-                width={32}
-                height={4}
-                rx={2}
-                className="rpt-replay-hp-track"
-              />
-              <rect
-                x={cx - 16}
-                y={cy + 16}
-                width={32 * hp}
-                height={4}
-                rx={2}
-                fill={hpColor(hp)}
-              />
-            </g>
-          );
-        })}
-      </svg>
+            {/* 立柱(空间锚点) */}
+            {pillars.map((p, i) => (
+              <g key={`p${i}`}>
+                <circle
+                  cx={p.x}
+                  cy={p.y}
+                  r={pillarR}
+                  className="rpt-replay-pillar"
+                />
+                <circle
+                  cx={p.x}
+                  cy={p.y}
+                  r={pillarR * 0.6}
+                  className="rpt-replay-pillar-inner"
+                />
+              </g>
+            ))}
+            {/* 网格线 */}
+            {Array.from({ length: GRID - 1 }, (_, i) => {
+              const fx = offX + ((i + 1) / GRID) * aw;
+              const fy = offY + ((i + 1) / GRID) * ah;
+              return (
+                <g key={`g${i}`} className="rpt-replay-grid">
+                  <line x1={fx} y1={offY} x2={fx} y2={offY + ah} />
+                  <line x1={offX} y1={fy} x2={offX + aw} y2={fy} />
+                </g>
+              );
+            })}
+            {/* 走位尾迹(最近数秒) */}
+            {tracks.map((tr) => {
+              const pts = pathUpTo(tr, t);
+              if (pts.length < 2) return null;
+              return (
+                <polyline
+                  key={`tr${tr.unitId}`}
+                  className="rpt-replay-trail"
+                  points={pts.map((p) => `${toX(p.x)},${toY(p.y)}`).join(" ")}
+                  stroke={classColor(tr.classId)}
+                />
+              );
+            })}
+            {/* 阵亡:残影 + ✕ */}
+            {tracks.map((tr) => {
+              if (tr.deathT == null || t < tr.deathT) return null;
+              const dp = deathPosition(tr);
+              if (!dp) return null;
+              const cx = toX(dp.x);
+              const cy = toY(dp.y);
+              return (
+                <g key={`d${tr.unitId}`}>
+                  <circle
+                    cx={cx}
+                    cy={cy}
+                    r={13}
+                    className="rpt-replay-ghost"
+                    fill={classColor(tr.classId)}
+                  />
+                  <text x={cx} y={cy + 4} className="rpt-replay-death">
+                    ✕
+                  </text>
+                </g>
+              );
+            })}
+            {/* 存活单位:职业色圆点 + 字形 + 名字 + 血条 */}
+            {tracks.map((tr) => {
+              const at = sampleAt(tr, t);
+              if (!at) return null;
+              const cx = toX(at.x);
+              const cy = toY(at.y);
+              const hp =
+                at.maxHp > 0 ? Math.max(0, Math.min(1, at.hp / at.maxHp)) : 1;
+              return (
+                <g key={tr.unitId} className="rpt-replay-unit">
+                  <text x={cx} y={cy - 19} className="rpt-replay-name">
+                    {tr.name}
+                  </text>
+                  <circle
+                    cx={cx}
+                    cy={cy}
+                    r={13}
+                    fill={classColor(tr.classId)}
+                    stroke={reactionRing(tr.reaction)}
+                    strokeWidth={2.5}
+                    fillOpacity={0.4 + 0.6 * hp}
+                  />
+                  <text x={cx} y={cy + 3.2} className="rpt-replay-glyph">
+                    {classGlyph(tr.classId)}
+                  </text>
+                  <rect
+                    x={cx - 16}
+                    y={cy + 16}
+                    width={32}
+                    height={4}
+                    rx={2}
+                    className="rpt-replay-hp-track"
+                  />
+                  <rect
+                    x={cx - 16}
+                    y={cy + 16}
+                    width={32 * hp}
+                    height={4}
+                    rx={2}
+                    fill={hpColor(hp)}
+                  />
+                </g>
+              );
+            })}
+          </svg>
+
+          <div className="rpt-replay-legend">
+            {tracks.map((tr) => {
+              const dead = tr.deathT != null && t >= tr.deathT;
+              return (
+                <span
+                  key={tr.unitId}
+                  className={dead ? "rpt-replay-leg dead" : "rpt-replay-leg"}
+                >
+                  <span
+                    className="rpt-replay-swatch"
+                    style={{
+                      background: classColor(tr.classId),
+                      borderColor: reactionRing(tr.reaction),
+                    }}
+                  >
+                    {classGlyph(tr.classId)}
+                  </span>
+                  {tr.name}
+                  {dead ? " ✝" : ""}
+                </span>
+              );
+            })}
+          </div>
+        </div>
+
+        <GcdSwimlane
+          source={source}
+          tracks={tracks}
+          t={t}
+          startTime={startTime}
+          endTime={endTime}
+          selUnits={selUnits}
+          onToggle={(id) => setSelUnits((s) => ({ ...s, [id]: !s[id] }))}
+        />
+      </div>
 
       <div className="rpt-replay-controls">
         <button
@@ -266,30 +308,6 @@ export function ReplayView({ source }: { source: ReportSource }) {
             </button>
           ))}
         </div>
-      </div>
-
-      <div className="rpt-replay-legend">
-        {tracks.map((tr) => {
-          const dead = tr.deathT != null && t >= tr.deathT;
-          return (
-            <span
-              key={tr.unitId}
-              className={dead ? "rpt-replay-leg dead" : "rpt-replay-leg"}
-            >
-              <span
-                className="rpt-replay-swatch"
-                style={{
-                  background: classColor(tr.classId),
-                  borderColor: reactionRing(tr.reaction),
-                }}
-              >
-                {classGlyph(tr.classId)}
-              </span>
-              {tr.name}
-              {dead ? " ✝" : ""}
-            </span>
-          );
-        })}
       </div>
     </div>
   );

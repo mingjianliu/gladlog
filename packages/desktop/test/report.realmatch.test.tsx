@@ -65,4 +65,18 @@ describe("真实比赛数据渲染", () => {
     );
     expect(container.querySelector(".rpt-replay-play")).toBeTruthy();
   });
+
+  it("回放:GCD 泳道随玩家 chip 切换列 + 共享时间光标", () => {
+    const { container } = render(<MatchReport source={m} />);
+    fireEvent.click(screen.getByRole("button", { name: /回放/ }));
+    expect(container.querySelector(".rpt-gcd")).toBeTruthy();
+    expect(container.querySelector(".rpt-gcd-cursor")).toBeTruthy();
+    const chips =
+      container.querySelectorAll<HTMLButtonElement>(".rpt-gcd-chip");
+    expect(chips.length).toBeGreaterThan(1);
+    const cols0 = container.querySelectorAll(".rpt-gcd-col").length;
+    expect(cols0).toBe(chips.length); // 默认全选
+    fireEvent.click(chips[0]!); // 关掉第一个玩家列
+    expect(container.querySelectorAll(".rpt-gcd-col").length).toBe(cols0 - 1);
+  });
 });

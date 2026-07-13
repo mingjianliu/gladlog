@@ -26,6 +26,18 @@ export function auraCategory(spellId: number): string | undefined {
   return SPELL_CATEGORIES[String(spellId)]?.type;
 }
 
+/** 该施法是否为大招/关键 CD(免疫/防御CD/进攻CD/缴械),用于 GCD 泳道高亮。 */
+const MAJOR_CD_TYPES = new Set([
+  "immunities",
+  "buffs_defensive",
+  "buffs_offensive",
+  "disarms",
+]);
+export function isMajorCd(spellId: number): boolean {
+  const c = auraCategory(spellId);
+  return c != null && MAJOR_CD_TYPES.has(c);
+}
+
 export function deriveCasts(m: ReportSource, unitId: string): CastRow[] {
   const u = m.units[unitId];
   if (!u) return [];
