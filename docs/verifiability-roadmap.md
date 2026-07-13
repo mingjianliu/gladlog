@@ -46,11 +46,19 @@ PROMPT achieves this via grounding + claim-checking. LOG and VISION should too.
 
 Prove the parser turns raw combat logs into correct structured matches.
 
-- **A1. Differential oracle** _(the roadmap's long-planned "private oracle")_ —
-  run the old fork's parser (CC-BY-NC-ND is fine for **private** local use) and
-  the new parser on the same real logs; diff the structured output on the fields
-  the app actually consumes; quantify drift; gate parity. Catches silent parse
-  regressions the golden tests miss. Private repo, like the eval ledger.
+- **A1. Differential oracle** ✅ _(done 2026-07-13)_ — a standing, re-runnable
+  parity gate in the private repo (`~/code/gladlog-eval-private/oracle/`) that
+  diffs the old-fork parser vs the new parser on real logs: Level-1 core facts
+  (roster/spec/team/result/deaths/damage+heal totals, damage & heal checked
+  per-combat-total against M4-grounded envelopes) + Level-2 prompt marker-class
+  presence (corpus-level, catches a whole analysis block dropped — R1/R3-class).
+  Alignment by death-signature LCS; salvage (new-side shuffle/DC recovery)
+  adjudicated. Machine-readable `report.json` + non-zero exit on any new
+  unadjudicated diff; `npm run verify:parser-oracle` (skips without the private
+  repo — never in public CI). Clean-room: only `runOld.ts` touches the old fork,
+  emitting JSON the oracle consumes. First run: subset 3696 → 0 unadjudicated,
+  and it surfaced a real finding (see backlog: new `[ENEMY HARD CAST]` narrower
+  than old). Spec `docs/specs/2026-07-13-parser-differential-oracle-design.md`.
 - **A2. Invariants / property tests** — assertions that hold on ANY parsed match:
   monotonic timestamps, HP ∈ [0,100], every death has a damage source, offsets
   consistent, `firstLineChecksum` stable, round boundaries well-formed. Fuzz over

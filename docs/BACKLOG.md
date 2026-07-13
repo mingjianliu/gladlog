@@ -133,6 +133,14 @@ filter controls to the sidebar. Small–medium.
 - **CI code-signing / notarization** — wire macOS notarization + Windows signing
   secrets into `.github/workflows/build.yml` when certs exist, for zero-warning
   installs. See [[gladlog-packaging-gotchas]].
+- **F170 `[ENEMY HARD CAST]` narrower than old (A1 oracle finding, 2026-07-13)** —
+  the parser differential oracle found the new timeline pipeline emits
+  `[ENEMY HARD CAST]` (`packages/analysis/src/context/matchTimeline.ts:1350`, F170
+  hard-cast kill spells Chaos Bolt/Pyroblast) in **zero** aligned combats across the
+  subset while the old pipeline emits it systematically. Investigate whether the new
+  side's hard-cast spell list / gating is too narrow (a real regression to widen) or
+  an intentional scope change (then confirm + leave adjudicated). Currently allowlisted
+  in the oracle baseline pending this. Small.
 - **MatchStore hardening (accepted-low-risk today)** — `safeName` id collision →
   phantom duplicates; out-of-band `meta.json` edits go stale (index is a cache).
   Fine for the app-private store now; revisit if the store ever lives in a synced
@@ -141,7 +149,7 @@ filter controls to the sidebar. Small–medium.
 ## 10. Surface the structured analysis (currently LLM-text-only)
 
 gladlog computes a deep per-match analysis (~40 signals) inside `buildMatchContext`
-but feeds *all* of it to the LLM as text — the UI surfaces only the 6 healer
+but feeds _all_ of it to the LLM as text — the UI surfaces only the 6 healer
 metrics + deaths/cd-waste. The rest is invisible to the user. Items #2 (interrupts),
 #3 (purge), #4 (burst timeline) are subsets of this. Other computed-but-unshown
 signals worth their own panels/lanes:
@@ -157,7 +165,7 @@ signals worth their own panels/lanes:
 - **Match arc / flow** — `buildMatchArc`, `buildMatchFlow`, `extractMatchDynamics`.
 
 Approach: promote these from `buildMatchContext` text into structured events (like
-`extractCandidateFindings` does for deaths/cd-waste) so both the UI *and* the
+`extractCandidateFindings` does for deaths/cd-waste) so both the UI _and_ the
 findings pipeline can use them — and so #8 (deterministic mistakes) has grounded
 inputs. Big theme; slice into panels/lanes over several sub-projects.
 
