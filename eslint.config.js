@@ -16,6 +16,7 @@ export default tseslint.config(
       "**/*.d.ts",
       "scratch/**",
       "**/dist-app/**",
+      ".claude/**",
     ],
   },
   js.configs.recommended,

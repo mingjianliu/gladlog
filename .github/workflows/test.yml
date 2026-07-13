@@ -1,0 +1,37 @@
+name: test
+
+# Correctness gate: lint, typecheck, the full vitest suite across all
+# workspaces, and the headless data-faithfulness check (verify:vision).
+# Runs on every push to main and on pull requests. Installer packaging lives
+# in build.yml (manual / tag-triggered) — this workflow never builds binaries.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests (all workspaces)
+        run: npm test
+
+      - name: Data-faithfulness (verify:vision)
+        run: npm -w @gladlog/desktop run verify:vision
