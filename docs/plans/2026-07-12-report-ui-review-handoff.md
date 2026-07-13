@@ -1,5 +1,11 @@
 # 战报 UI 三项改动 —— 实现 & 视觉复审交接（2026-07-12）
 
+> ⚠️ **历史文档(2026-07-13)。** 这是初版三项改动(#3/#4/#5)的交接;之后 UI 经过
+> 设计交接**整体重设计 + 多轮迭代**(如 View B 单位侧栏已删、竞技场重绘并铺真实地图、
+> 新增 GCD 泳道、AI 双栏)。现状看
+> [`2026-07-13-report-ui-current-state.md`](./2026-07-13-report-ui-current-state.md);
+> 文中「fixture 预览坏了」也已修好,`VITE_FIXTURE_MODE=1 npm run dev` 可用。
+
 分支 `worktree-report-ui-backlog`,三项 UI 需求各一个 per-feature 提交。行为已用
 vitest 验证(见下);**视觉部分未验证**,交由另一个 agent 复审。本文是给复审者的
 完整交接:改了什么、怎么跑起来看、每项看什么、有哪些 v1 取舍待定。

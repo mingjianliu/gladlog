@@ -1,5 +1,10 @@
 # gladlog — Report UI Design-Review Brief
 
+> ⚠️ **已实现 / 历史文档(2026-07-13)。** 本简报当时发给云端设计工具做视觉重设计,
+> 提出的方案**已全部实现并进一步迭代**。它描述的是**重设计前**的状态,不代表现状。
+> 现状看 [`2026-07-13-report-ui-current-state.md`](./2026-07-13-report-ui-current-state.md)。
+> (文中「fixture 预览坏了」也已修好。)
+
 > Instructions for a visual/design pass on three newly-built report views.
 > **Merged to `main`** (pull latest) — code + a real render fixture are in the
 > repo, so you can render without a WoW client. The functionality and layout are

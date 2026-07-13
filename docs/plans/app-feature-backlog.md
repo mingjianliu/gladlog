@@ -18,6 +18,10 @@
 
 中文客户端日志的时间轴里技能名中英混排(妖术/分筋错骨 vs Hammer of Justice)。`getEnglishSpellName` 已能把大部分名字转英文;可评估:prompt 全英文化(对模型更稳)+ 回复语言由 #1 控制。属 prompt 构建器改动,若做需走 /eval-ab(目标维度 accuracy)。
 
+> 注(2026-07-13):下面 #3/#4/#5 的**最终形态经过整体重设计**(顶层段控 tab、
+> 删单位侧栏、竞技场重绘 + 真实地图、GCD 泳道、AI 双栏等)。现状见
+> [`2026-07-13-report-ui-current-state.md`](./2026-07-13-report-ui-current-state.md)。
+
 ## 3. AI 分析拆成独立 Tab(脱离右侧窄栏)✅(2026-07-12 实现,branch `worktree-report-ui-backlog`)
 
 **需求**:AI 分析现在挤在右侧 `rpt-side` 侧栏里,当作 `sideTab` 的一个二态(单位详情 / AI 分析)。文本量大时太窄。要把 AI 分析提升为顶层的独立 Tab,给足横向空间。
