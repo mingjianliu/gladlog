@@ -130,6 +130,12 @@ Pick a match **with advanced combat logging** so the replay has positions
 `packages/desktop/src/renderer/src/report/components/` (`MatchReport`,
 `UnitPanel`, `ReplayView`); all styles in `.../renderer/src/styles.css`.
 
+**Real sample data in-repo:** `packages/desktop/test/fixtures/real-match-sample.json`
+is a genuine 3v3 (Nagrand, Win) — anonymized (names/GUIDs → generic) and trimmed
+to the first 90s — so you can render real movement/spells without the app. It has
+real `advancedSamples` (positions), real casts/auras/classes, and one death in
+window. `report.realmatch.test.tsx` renders it through all three views.
+
 > Companion doc: `2026-07-12-report-ui-review-handoff.md` (dev-oriented — commit
 > map, test coverage, and a note that the `VITE_FIXTURE_MODE` fixture preview is
 > currently broken; use `npm run dev` with a real match instead).
