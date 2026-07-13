@@ -48,14 +48,21 @@ describe("真实比赛数据渲染", () => {
     expect(container.querySelector(".rpt-unitpanel")).toBeNull();
   });
 
-  it("回放视图:真实坐标画出多个单位", () => {
+  it("回放视图:竞技场画出多个单位(职业字形 + 血条)", () => {
     const { container } = render(<MatchReport source={m} />);
     fireEvent.click(screen.getByRole("button", { name: /回放/ }));
     expect(
       container.querySelector("[data-testid='rpt-replay-field']"),
     ).toBeTruthy();
-    expect(
-      container.querySelectorAll(".rpt-replay-unit").length,
-    ).toBeGreaterThan(1);
+    const units = container.querySelectorAll(".rpt-replay-unit");
+    expect(units.length).toBeGreaterThan(1);
+    // 竞技场重绘:每个存活单位带 2 字母职业字形 + 血条
+    expect(container.querySelectorAll(".rpt-replay-glyph").length).toBe(
+      units.length,
+    );
+    expect(container.querySelectorAll(".rpt-replay-hp-track").length).toBe(
+      units.length,
+    );
+    expect(container.querySelector(".rpt-replay-play")).toBeTruthy();
   });
 });

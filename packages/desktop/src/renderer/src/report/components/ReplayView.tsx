@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { classColor } from "../data/gameConstants";
+import { classColor, classGlyph } from "../data/gameConstants";
 import {
   deathPosition,
   deriveReplay,
@@ -9,9 +9,9 @@ import {
 } from "../derive/replay";
 import type { ReportSource } from "../derive/types";
 
-const VW = 640;
-const VH = 640;
-const PAD = 48;
+const VW = 520;
+const VH = 520;
+const PAD = 46;
 const GRID = 4;
 const SPEEDS = [1, 2, 4] as const;
 
@@ -21,6 +21,9 @@ const reactionRing = (reaction: string): string =>
     : reaction === "Hostile"
       ? "var(--loss)"
       : "var(--mute)";
+
+const hpColor = (f: number): string =>
+  f > 0.6 ? "var(--win)" : f >= 0.3 ? "var(--gold)" : "var(--loss)";
 
 const relTime = (t: number, start: number): string => {
   const s = Math.max(0, (t - start) / 1000);
@@ -72,11 +75,21 @@ export function ReplayView({ source }: { source: ReportSource }) {
   const spanX = bounds.maxX - bounds.minX || 1;
   const spanY = bounds.maxY - bounds.minY || 1;
   const scale = Math.min((VW - 2 * PAD) / spanX, (VH - 2 * PAD) / spanY);
-  const offX = (VW - spanX * scale) / 2;
-  const offY = (VH - spanY * scale) / 2;
+  const aw = spanX * scale;
+  const ah = spanY * scale;
+  const offX = (VW - aw) / 2;
+  const offY = (VH - ah) / 2;
   // WoW y 向北为正 → 反转,使北在上方
   const toX = (x: number): number => offX + (x - bounds.minX) * scale;
   const toY = (y: number): number => offY + (bounds.maxY - y) * scale;
+
+  const cxA = offX + aw / 2;
+  const cyA = offY + ah / 2;
+  const pillarR = Math.min(aw, ah) * 0.085;
+  const pillars = [
+    { x: offX + aw * 0.34, y: offY + ah * 0.42 },
+    { x: offX + aw * 0.66, y: offY + ah * 0.58 },
+  ];
 
   const atEnd = t >= endTime;
 
@@ -88,21 +101,53 @@ export function ReplayView({ source }: { source: ReportSource }) {
         data-testid="rpt-replay-field"
         preserveAspectRatio="xMidYMid meet"
       >
+        <defs>
+          <radialGradient id="rpt-arena-floor" cx="50%" cy="50%" r="70%">
+            <stop offset="0%" stopColor="var(--surface-2)" />
+            <stop offset="100%" stopColor="var(--bg)" />
+          </radialGradient>
+        </defs>
         <rect
           x={offX}
           y={offY}
-          width={spanX * scale}
-          height={spanY * scale}
+          width={aw}
+          height={ah}
+          rx={6}
           className="rpt-replay-arena"
+          fill="url(#rpt-arena-floor)"
         />
-        {/* 网格线,提供空间参照 */}
+        {/* 中央区域微光带 */}
+        <circle
+          cx={cxA}
+          cy={cyA}
+          r={Math.min(aw, ah) * 0.4}
+          className="rpt-replay-zone"
+        />
+        {/* 立柱(空间锚点) */}
+        {pillars.map((p, i) => (
+          <g key={`p${i}`}>
+            <circle
+              cx={p.x}
+              cy={p.y}
+              r={pillarR}
+              className="rpt-replay-pillar"
+            />
+            <circle
+              cx={p.x}
+              cy={p.y}
+              r={pillarR * 0.6}
+              className="rpt-replay-pillar-inner"
+            />
+          </g>
+        ))}
+        {/* 网格线 */}
         {Array.from({ length: GRID - 1 }, (_, i) => {
-          const fx = offX + ((i + 1) / GRID) * spanX * scale;
-          const fy = offY + ((i + 1) / GRID) * spanY * scale;
+          const fx = offX + ((i + 1) / GRID) * aw;
+          const fy = offY + ((i + 1) / GRID) * ah;
           return (
             <g key={`g${i}`} className="rpt-replay-grid">
-              <line x1={fx} y1={offY} x2={fx} y2={offY + spanY * scale} />
-              <line x1={offX} y1={fy} x2={offX + spanX * scale} y2={fy} />
+              <line x1={fx} y1={offY} x2={fx} y2={offY + ah} />
+              <line x1={offX} y1={fy} x2={offX + aw} y2={fy} />
             </g>
           );
         })}
@@ -119,44 +164,69 @@ export function ReplayView({ source }: { source: ReportSource }) {
             />
           );
         })}
-        {/* 阵亡标记 */}
+        {/* 阵亡:残影 + ✕ */}
         {tracks.map((tr) => {
           if (tr.deathT == null || t < tr.deathT) return null;
           const dp = deathPosition(tr);
           if (!dp) return null;
+          const cx = toX(dp.x);
+          const cy = toY(dp.y);
           return (
-            <text
-              key={`d${tr.unitId}`}
-              x={toX(dp.x)}
-              y={toY(dp.y) + 4}
-              className="rpt-replay-death"
-            >
-              ✕
-            </text>
+            <g key={`d${tr.unitId}`}>
+              <circle
+                cx={cx}
+                cy={cy}
+                r={13}
+                className="rpt-replay-ghost"
+                fill={classColor(tr.classId)}
+              />
+              <text x={cx} y={cy + 4} className="rpt-replay-death">
+                ✕
+              </text>
+            </g>
           );
         })}
-        {/* 存活单位 */}
+        {/* 存活单位:职业色圆点 + 字形 + 名字 + 血条 */}
         {tracks.map((tr) => {
           const at = sampleAt(tr, t);
           if (!at) return null;
           const cx = toX(at.x);
           const cy = toY(at.y);
-          const hpFrac =
+          const hp =
             at.maxHp > 0 ? Math.max(0, Math.min(1, at.hp / at.maxHp)) : 1;
           return (
             <g key={tr.unitId} className="rpt-replay-unit">
+              <text x={cx} y={cy - 19} className="rpt-replay-name">
+                {tr.name}
+              </text>
               <circle
                 cx={cx}
                 cy={cy}
-                r={11}
+                r={13}
                 fill={classColor(tr.classId)}
                 stroke={reactionRing(tr.reaction)}
                 strokeWidth={2.5}
-                fillOpacity={0.35 + 0.65 * hpFrac}
+                fillOpacity={0.4 + 0.6 * hp}
               />
-              <text x={cx} y={cy - 15} className="rpt-replay-name">
-                {tr.name}
+              <text x={cx} y={cy + 3.2} className="rpt-replay-glyph">
+                {classGlyph(tr.classId)}
               </text>
+              <rect
+                x={cx - 16}
+                y={cy + 16}
+                width={32}
+                height={4}
+                rx={2}
+                className="rpt-replay-hp-track"
+              />
+              <rect
+                x={cx - 16}
+                y={cy + 16}
+                width={32 * hp}
+                height={4}
+                rx={2}
+                fill={hpColor(hp)}
+              />
             </g>
           );
         })}
@@ -164,6 +234,7 @@ export function ReplayView({ source }: { source: ReportSource }) {
 
       <div className="rpt-replay-controls">
         <button
+          className="rpt-replay-play"
           onClick={() => {
             if (atEnd) setT(startTime);
             setPlaying((p) => !p);
@@ -183,6 +254,7 @@ export function ReplayView({ source }: { source: ReportSource }) {
         <span className="rpt-replay-time">
           {relTime(t, startTime)} / {relTime(endTime, startTime)}
         </span>
+        <span className="rpt-replay-divider" />
         <div className="rpt-replay-speed">
           {SPEEDS.map((s) => (
             <button
@@ -210,7 +282,9 @@ export function ReplayView({ source }: { source: ReportSource }) {
                   background: classColor(tr.classId),
                   borderColor: reactionRing(tr.reaction),
                 }}
-              />
+              >
+                {classGlyph(tr.classId)}
+              </span>
               {tr.name}
               {dead ? " ✝" : ""}
             </span>

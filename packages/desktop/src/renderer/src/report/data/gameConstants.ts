@@ -79,6 +79,27 @@ export function classColor(classId: number): string {
   return CLASS_COLORS[classId] || "#9d9d9d";
 }
 
+/** 2 字母职业字形(用于回放圆点/图例);classId 见暴雪 class ID。 */
+export const CLASS_GLYPH: Record<number, string> = {
+  1: "WA",
+  2: "PA",
+  3: "HU",
+  4: "RO",
+  5: "PR",
+  6: "DK",
+  7: "SH",
+  8: "MG",
+  9: "WL",
+  10: "MK",
+  11: "DR",
+  12: "DH",
+  13: "EV",
+};
+
+export function classGlyph(classId: number): string {
+  return CLASS_GLYPH[classId] || "??";
+}
+
 export function className(classId: number): string {
   return CLASS_NAMES[classId] || "Unknown";
 }
