@@ -6,6 +6,20 @@ UI → export. The PROMPT pillar already enforces this ("every claim grounded in
 real event"); this roadmap extends the same discipline to LOG and VISION so the
 whole app is a chain of grounded, independently-checkable transforms.
 
+**Two audiences — not just CI.** These checks serve two purposes, and the second
+is as important as the first:
+
+1. **CI / regression gates** — catch breakage over time.
+2. **Cross-agent verification & feedback** — the substrate that lets one agent
+   objectively check another's work and hand back _grounded, actionable_ feedback.
+   This is how gladlog is actually built (agy/Gemini implements → Claude verifies
+   via deterministic gates; Claude writes → agy re-verifies; the eval harness's
+   LLM-judge literally is one agent scoring another). A check is only useful for
+   this if an agent can **run it headlessly** and read a **legible diff** ("field
+   X diverged from source Y at Z") that a fixing agent can act on and a reviewing
+   agent can re-confirm. Design every check as a produce → verify → feedback loop
+   primitive, not just a red/green CI light.
+
 This is a **roadmap**, not a spec. Each sub-project below gets its own
 brainstorm → spec → plan → implementation cycle when picked up.
 
@@ -21,8 +35,10 @@ brainstorm → spec → plan → implementation cycle when picked up.
 
 A transform is _verifiable_ when: (1) its output is a pure function of named,
 inspectable inputs; (2) an automated check proves the output is consistent with
-those inputs; (3) failures are legible (say what diverged and where). PROMPT
-achieves this via grounding + claim-checking. LOG and VISION should too.
+those inputs; (3) failures are legible (say what diverged and where); (4) the
+check runs **headlessly and emits a machine-readable diff**, so an agent — not
+just CI — can invoke it, act on the result, and have another agent re-confirm.
+PROMPT achieves this via grounding + claim-checking. LOG and VISION should too.
 
 ---
 
@@ -97,6 +113,7 @@ after the per-pillar checks exist (it composes them).
 
 - Not a rewrite — reuse the existing gates, eval tools, selectors, and fixtures.
 - Not cloud/CI-only — checks run locally (`npm run typecheck`/vitest) first; CI
-  is additive.
+  is additive. Each is also **agent-invokable** and emits a structured diff, so
+  it doubles as a cross-agent verification/feedback primitive (see Two audiences).
 - The private differential/eval oracles stay private (compliance), like
   `~/code/gladlog-eval-private`.
