@@ -353,6 +353,43 @@ pre {
   border-bottom-color: var(--gold);
 }
 
+/* ── 顶层视图 tab(战报 / AI 分析):比模式 tab 更醒目 ── */
+.rpt-view-tabs {
+  display: flex;
+  gap: 4px;
+  margin-top: 14px;
+  border-bottom: 1px solid var(--hairline);
+}
+.rpt-view-tabs button {
+  background: transparent;
+  color: var(--ink-2);
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  padding: 8px 18px;
+  margin-bottom: -1px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.rpt-view-tabs button:hover {
+  color: var(--ink);
+}
+.rpt-view-tabs button.active {
+  color: var(--ink);
+  border-bottom-color: var(--gold);
+}
+
+/* ── AI 分析全宽视图:脱离右侧窄栏,给长文本铺开空间 ── */
+.rpt-ai-full {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.rpt-ai-full .rpt-ai-body {
+  max-height: none;
+}
+
 /* ── shuffle 场级头:W/L 胶囊序列 ── */
 .rpt-shuffle-head {
   display: flex;
@@ -493,7 +530,6 @@ pre {
   font-family: var(--font-data);
   font-weight: bold;
 }
-
 
 .match-list {
   overflow-y: auto;

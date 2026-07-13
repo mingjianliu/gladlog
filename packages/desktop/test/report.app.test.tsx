@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen } from "@testing-library/react";
+
 import { MatchReport } from "../src/renderer/src/report/components/MatchReport";
 import { ShuffleReport } from "../src/renderer/src/report/components/ShuffleReport";
 import {
@@ -26,6 +27,49 @@ describe("MatchReport", () => {
       (screen.getByRole("button", { name: /治疗/ }) as HTMLButtonElement)
         .className,
     ).toMatch(/active/);
+  });
+});
+
+describe("MatchReport 顶层视图 tab(战报 / AI 分析)", () => {
+  beforeEach(() => {
+    // AI 视图挂载 StructuredAnalysisPanel + ProComparisonVerified,二者走 bridge()
+    (window as any).__gladlogFixture = {
+      analysis: {
+        getCached: vi.fn().mockResolvedValue(null),
+        run: vi.fn(),
+        cancel: vi.fn(),
+        onDone: () => () => {},
+        onError: () => () => {},
+      },
+      compare: {
+        getCached: vi.fn().mockResolvedValue(null),
+        run: vi.fn(),
+        cancel: vi.fn(),
+        onDelta: () => () => {},
+        onDone: () => () => {},
+        onError: () => () => {},
+      },
+    };
+  });
+
+  it("默认在战报视图:时间轴在、AI 面板不在", () => {
+    const { container } = render(<MatchReport source={m} />);
+    expect(
+      container.querySelector("[data-testid='rpt-timeline']"),
+    ).toBeTruthy();
+    expect(container.querySelector(".rpt-ai-full")).toBeNull();
+  });
+
+  it("点 AI 分析:战报 body 隐藏、AI 全宽视图出现;点回战报可返回", () => {
+    const { container } = render(<MatchReport source={m} />);
+    fireEvent.click(screen.getByRole("button", { name: /AI 分析/ }));
+    expect(container.querySelector(".rpt-ai-full")).toBeTruthy();
+    expect(container.querySelector(".rpt-body")).toBeNull();
+    expect(container.querySelector("[data-testid='rpt-timeline']")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /战报/ }));
+    expect(container.querySelector(".rpt-body")).toBeTruthy();
+    expect(container.querySelector(".rpt-ai-full")).toBeNull();
   });
 });
 
