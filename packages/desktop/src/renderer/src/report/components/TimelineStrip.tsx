@@ -1,4 +1,5 @@
 import type { CandidateEvent } from "@gladlog/analysis";
+import { timelineMarks } from "../derive/timelineMarks";
 
 export function TimelineStrip({
   candidates,
@@ -9,14 +10,8 @@ export function TimelineStrip({
   activeEventIds: string[];
   onSelect: (id: string) => void;
 }) {
-  // Only point-in-time events belong on a time axis. Whole-round observations
-  // (e.g. cd-waste, which has no `t` fact and t=0) would otherwise plot a
-  // misleading marker at the far left labeled "…at 0s".
-  const points = candidates.filter((c) => c.facts.t !== undefined);
-  if (points.length === 0) return null;
-
-  // Since duration is not passed, derive from max T
-  const maxT = Math.max(1, ...points.map((c) => c.t));
+  const { marks } = timelineMarks(candidates);
+  if (marks.length === 0) return null;
 
   return (
     <div
@@ -29,16 +24,17 @@ export function TimelineStrip({
         border: "1px solid var(--border, #374151)",
       }}
     >
-      {points.map((c) => {
-        const isActive = activeEventIds.includes(c.id);
-        const left = `${(c.t / maxT) * 100}%`;
+      {marks.map((m) => {
+        const isActive = activeEventIds.includes(m.id);
         return (
           <div
-            key={c.id}
-            onClick={() => onSelect(c.id)}
+            key={m.id}
+            data-testid="timeline-mark"
+            data-mark-id={m.id}
+            onClick={() => onSelect(m.id)}
             style={{
               position: "absolute",
-              left,
+              left: `${m.leftPct}%`,
               top: 0,
               bottom: 0,
               width: "4px",
@@ -50,7 +46,7 @@ export function TimelineStrip({
               zIndex: isActive ? 2 : 1,
               transition: "background 0.2s",
             }}
-            title={`${c.type} at ${c.t}s`}
+            title={`${m.type} at ${m.t}s`}
           />
         );
       })}

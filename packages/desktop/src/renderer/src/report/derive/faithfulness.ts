@@ -1,4 +1,5 @@
 import type { MeterRow } from "./meterRows";
+import type { TimelineMarks } from "./timelineMarks";
 
 export interface Divergence {
   component: "meters" | "cohort" | "timeline";
@@ -122,10 +123,85 @@ function checkMeters(root: HTMLElement, rows: MeterRow[]): Divergence[] {
   return out;
 }
 
+function checkTimeline(root: HTMLElement, model: TimelineMarks): Divergence[] {
+  const out: Divergence[] = [];
+  const markEls = Array.from(
+    root.querySelectorAll<HTMLElement>('[data-testid="timeline-mark"]'),
+  );
+  const byId = new Map(model.marks.map((m) => [m.id, m]));
+  if (markEls.length !== model.marks.length) {
+    out.push({
+      component: "timeline",
+      element: "(count)",
+      rendered: String(markEls.length),
+      expected: String(model.marks.length),
+      invariant: "missing",
+      sourceRef: "timelineMarks.marks.length",
+    });
+  }
+  for (const el of markEls) {
+    const id = el.getAttribute("data-mark-id") ?? "";
+    const mark = byId.get(id);
+    if (!mark) {
+      out.push({
+        component: "timeline",
+        element: id,
+        rendered: id,
+        expected: "an id present in timelineMarks.marks",
+        invariant: "maps-to-event",
+        sourceRef: "timelineMarks.marks[].id",
+      });
+      continue;
+    }
+    const leftPct = parseFloat(el.style.left);
+    // (A) view-faithful
+    if (Number.isNaN(leftPct) || !approxEq(leftPct, mark.leftPct)) {
+      out.push({
+        component: "timeline",
+        element: id,
+        rendered: String(el.style.left),
+        expected: `${mark.leftPct}%`,
+        invariant: "view-faithful",
+        sourceRef: `timelineMarks.marks[${id}].leftPct`,
+      });
+    }
+    // (B) bounds: t in [0, maxT]
+    if (!(mark.t >= -TOL && mark.t <= model.maxT + TOL)) {
+      out.push({
+        component: "timeline",
+        element: id,
+        rendered: String(mark.t),
+        expected: `[0,${model.maxT}]`,
+        invariant: "bounds",
+        sourceRef: `timelineMarks.marks[${id}].t`,
+      });
+    }
+    // (B) leftPct == t/maxT*100 (selector internal consistency; non-circular:
+    // re-derives the derived leftPct from the more-primitive t and maxT)
+    const expLeft = (mark.t / model.maxT) * 100;
+    if (!approxEq(leftPct, expLeft)) {
+      out.push({
+        component: "timeline",
+        element: id,
+        rendered: String(leftPct),
+        expected: String(expLeft),
+        invariant: "leftpct",
+        sourceRef: `timelineMarks.marks[${id}]`,
+      });
+    }
+  }
+  return out;
+}
+
 export function checkFaithful(
   kind: "meters",
   root: HTMLElement,
   selectorOutput: MeterRow[],
+): Divergence[];
+export function checkFaithful(
+  kind: "timeline",
+  root: HTMLElement,
+  selectorOutput: TimelineMarks,
 ): Divergence[];
 export function checkFaithful(
   kind: string,
@@ -135,6 +211,8 @@ export function checkFaithful(
   switch (kind) {
     case "meters":
       return checkMeters(root, selectorOutput as MeterRow[]);
+    case "timeline":
+      return checkTimeline(root, selectorOutput as TimelineMarks);
     default:
       throw new Error(`checkFaithful: unknown kind "${kind}"`);
   }
