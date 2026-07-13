@@ -5,13 +5,13 @@ import { deriveCasts, isMajorCd } from "../derive/casts";
 import type { ReplayTrack } from "../derive/replay";
 import type { ReportSource } from "../derive/types";
 
-const PX_PER_SEC = 15;
+const PX_PER_SEC = 16;
 const GCD_MS = 1500;
 const TICK_SEC = 15;
 const HEAD_H = 30; // 列头高度,时间轴/光标需下移这么多以对齐列体
-const CHIP_H = 17;
-const CHIP_STEP = 19; // 同列相邻 chip 最小间距:密集时下推,避免重叠
-const VIEWPORT_H = 600; // 泳道可视高度(超出纵向滚动)
+const CHIP_H = 23;
+const CHIP_STEP = 26; // 同列相邻 chip 最小间距:密集时下推,避免重叠
+const VIEWPORT_H = 620; // 泳道可视高度(超出纵向滚动)
 
 const reactionRing = (reaction: string): string =>
   reaction === "Friendly"
