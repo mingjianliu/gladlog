@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ReportSource } from "../derive/types";
+import { cohortDims } from "../derive/cohortDims";
+import { CohortDimsTable } from "./CohortDimsTable";
 import { bridge } from "../../bridge";
 import {
   computeHealerMetrics,
@@ -163,26 +165,7 @@ export function ProComparisonVerified({
             N=
             {result.cellMeta.sampleN}
           </p>
-          {result.verifiedComparison.dims.length > 0 && (
-            <div style={{ marginBottom: "16px" }}>
-              {result.verifiedComparison.dims.map((dim) => (
-                <div
-                  key={dim.key}
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    fontSize: "13px",
-                  }}
-                >
-                  <span>{dim.key}</span>
-                  <span>
-                    {dim.value !== null ? dim.value : "N/A"} ({dim.percentile}
-                    th)
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
+          <CohortDimsTable rows={cohortDims(result.verifiedComparison.dims)} />
           {result.report !== null ? (
             <p style={{ whiteSpace: "pre-wrap", fontSize: "13px" }}>
               {result.report}

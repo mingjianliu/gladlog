@@ -8,6 +8,7 @@
     "build": "electron-vite build",
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc --noEmit -p tsconfig.json",
+    "verify:vision": "tsx scripts/verifyVision.ts",
     "package:mac": "electron-vite build && electron-builder --mac",
     "package:win": "electron-vite build && electron-builder --win"
   },
