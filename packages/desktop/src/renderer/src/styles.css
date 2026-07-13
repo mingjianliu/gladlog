@@ -632,7 +632,8 @@ pre {
   text-align: center;
 }
 .rpt-replay-field {
-  width: min(440px, 100%);
+  width: 100%;
+  max-width: 560px;
   aspect-ratio: 1 / 1;
   background: var(--surface);
   border: 1px solid var(--hairline);
@@ -738,7 +739,7 @@ pre {
   display: flex;
   align-items: center;
   gap: 12px;
-  width: min(440px, 100%);
+  width: 100%;
   background: var(--surface);
   border: 1px solid var(--hairline);
   border-radius: 8px;
@@ -802,13 +803,14 @@ pre {
   align-items: stretch;
 }
 .rpt-replay-stage {
-  display: flex;
-  gap: 16px;
-  align-items: flex-start;
+  display: grid;
+  grid-template-columns: 1fr 2fr; /* 竞技场 : GCD 泳道 = 1 : 2 */
+  gap: 8px;
+  align-items: start;
   width: 100%;
 }
 .rpt-replay-arena-col {
-  flex: 0 0 auto;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
