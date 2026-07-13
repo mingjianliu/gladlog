@@ -66,6 +66,18 @@ describe("真实比赛数据渲染", () => {
     expect(container.querySelector(".rpt-replay-play")).toBeTruthy();
   });
 
+  it("战报点名字:隐藏该玩家生命曲线 + 该行变暗", () => {
+    const { container } = render(<MatchReport source={m} />);
+    const lines0 = container.querySelectorAll(".rpt-tl-line").length;
+    expect(lines0).toBeGreaterThan(1);
+    // 榜首玩家(有 advancedSamples → 有生命曲线)
+    fireEvent.click(
+      container.querySelector<HTMLButtonElement>(".rpt-meter-name")!,
+    );
+    expect(container.querySelector(".rpt-meter-row.off")).toBeTruthy();
+    expect(container.querySelectorAll(".rpt-tl-line").length).toBe(lines0 - 1);
+  });
+
   it("回放:GCD 泳道随玩家 chip 切换列 + 共享时间光标", () => {
     const { container } = render(<MatchReport source={m} />);
     fireEvent.click(screen.getByRole("button", { name: /回放/ }));

@@ -1,7 +1,8 @@
 import { scaleLinear } from "d3-scale";
 import { useState } from "react";
-import type { TimelineData } from "../derive/timeline";
+
 import { classColor } from "../data/gameConstants";
+import type { TimelineData } from "../derive/timeline";
 
 const W = 800,
   H = 220,
@@ -10,11 +11,20 @@ const W = 800,
 export function Timeline({
   data,
   onSelectUnit,
+  hidden,
 }: {
   data: TimelineData;
   onSelectUnit?: (unitId: string) => void;
+  /** 隐藏的 unitId 集合:这些玩家的生命曲线/死亡标记不画。 */
+  hidden?: Set<string>;
 }) {
   const [cursor, setCursor] = useState<number | null>(null);
+  const series = hidden
+    ? data.series.filter((s) => !hidden.has(s.unitId))
+    : data.series;
+  const deaths = hidden
+    ? data.deaths.filter((d) => !hidden.has(d.unitId))
+    : data.deaths;
   const x = scaleLinear()
     .domain([data.start, data.end])
     .range([PAD.l, W - PAD.r]);
@@ -49,7 +59,7 @@ export function Timeline({
             </text>
           </g>
         ))}
-        {data.series.map((s) => (
+        {series.map((s) => (
           <path
             key={s.unitId}
             className="rpt-tl-line"
@@ -68,7 +78,7 @@ export function Timeline({
             <title>{s.name}</title>
           </path>
         ))}
-        {data.deaths.map((d, i) => (
+        {deaths.map((d, i) => (
           <g
             key={i}
             className="rpt-tl-death"

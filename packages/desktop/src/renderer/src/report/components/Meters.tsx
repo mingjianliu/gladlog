@@ -1,4 +1,4 @@
-import { type MeterMode,meterRows } from "../derive/meterRows";
+import { type MeterMode, meterRows } from "../derive/meterRows";
 import type { UnitTotals } from "../derive/summary";
 
 const MODE_LABEL: Record<MeterMode, string> = {
@@ -12,11 +12,16 @@ export function Meters({
   mode,
   onMode,
   playerTeamId,
+  hidden,
+  onToggleUnit,
 }: {
   rows: UnitTotals[];
   mode: MeterMode;
   onMode?: (m: MeterMode) => void;
   playerTeamId?: number | null;
+  /** 隐藏的 unitId 集合(用于生命曲线筛选);对应行变暗、圆点镂空。 */
+  hidden?: Set<string>;
+  onToggleUnit?: (unitId: string) => void;
 }) {
   const items = meterRows(rows, mode);
   return (
@@ -38,17 +43,34 @@ export function Meters({
       <div className="rpt-meters">
         {items.map((r) => {
           const enemy = playerTeamId != null && r.teamId !== playerTeamId;
+          const off = hidden?.has(r.unitId) ?? false;
+          const nameCls = [
+            "rpt-meter-name",
+            enemy ? "enemy" : "",
+            off ? "off" : "",
+          ]
+            .filter(Boolean)
+            .join(" ");
           return (
             <div
               key={r.unitId}
-              className="rpt-meter-row"
+              className={off ? "rpt-meter-row off" : "rpt-meter-row"}
               title={`${r.name}: ${r.label}`}
             >
-              <span
-                className={enemy ? "rpt-meter-name enemy" : "rpt-meter-name"}
+              <button
+                type="button"
+                className={nameCls}
+                onClick={() => onToggleUnit?.(r.unitId)}
               >
+                <span
+                  className="rpt-meter-dot"
+                  style={{
+                    background: off ? "transparent" : r.color,
+                    borderColor: r.color,
+                  }}
+                />
                 {r.name}
-              </span>
+              </button>
               <span className="rpt-meter-bar-track">
                 <span
                   className="rpt-meter-bar"

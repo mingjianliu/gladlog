@@ -30,8 +30,17 @@ export function MatchReport({
 }) {
   const [mode, setMode] = useState<MeterMode>("damage");
   const [view, setView] = useState<View>("report");
+  const [hidden, setHidden] = useState<Set<string>>(new Set());
   const summary = useMemo(() => deriveSummary(source), [source]);
   const timeline = useMemo(() => deriveTimeline(source), [source]);
+
+  const toggleUnit = (id: string) =>
+    setHidden((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   const resolvedMatchId = matchId ?? source.id;
 
@@ -56,8 +65,10 @@ export function MatchReport({
             mode={mode}
             onMode={setMode}
             playerTeamId={source.playerTeamId}
+            hidden={hidden}
+            onToggleUnit={toggleUnit}
           />
-          <Timeline data={timeline} />
+          <Timeline data={timeline} hidden={hidden} onSelectUnit={toggleUnit} />
         </div>
       )}
       {view === "replay" && <ReplayView source={source} />}

@@ -271,6 +271,7 @@ export function ReplayView({ source }: { source: ReportSource }) {
           endTime={endTime}
           selUnits={selUnits}
           onToggle={(id) => setSelUnits((s) => ({ ...s, [id]: !s[id] }))}
+          playing={playing}
         />
       </div>
 
