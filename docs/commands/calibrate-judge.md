@@ -37,14 +37,21 @@ npx tsx packages/eval/scripts/buildCalibration.ts --run <runId>   # 可加 --sou
 
 ```bash
 npx tsx packages/eval/scripts/checkCalibration.ts --run <runId>   # PASS_THRESHOLD 默认 0.8
+# 可调环境变量:MIN_PAIRS(默认 4)DELTA_FLOOR(默认 1)SPECIFICITY_TOL(默认 0,整数 rubric 严格;连续 rubric 调高)
 ```
 
-写 `judge-calibration/calibration-report.md`,打印逐维检出率;任一维检出 < 80% 退出码 1(FAIL)。
+一件扰动**算检出**要同时过判别效度两关,不只是"降了分":
+
+1. **敏感性** — 目标维度比 none 对照低至少 `DELTA_FLOOR`(阈上降幅,滤掉 judge 噪声/整数打平)。
+2. **特异性** — 其余每一维都在 `SPECIFICITY_TOL` 之内不动。否则一个"凡文本变了就全维扣分"的无脑差评判官会白白过关,却对具体缺陷零信号。
+
+写 `judge-calibration/calibration-report.md`,打印逐维检出率;任一维检出 < 80%、或可评对数 < `MIN_PAIRS`(判 INSUFFICIENT)退出码 1(FAIL)。
 
 ## 解读
 
 - **PASS** — 这些维度的 judge 分数有信号,A/B Δ 可以当真(仍受样本量约束)。
-- **某维 FAIL** — judge 看不见该缺陷类:该维的 A/B Δ 不可采信。改 rubric 锚点(`eval-baseline.md`)后**不重建套件**(同种子可控对比),重评(Step 2)、重判(Step 3)。
+- **某维 FAIL** — judge 看不见该缺陷类,或对该缺陷是"全维乱扣"而非定向识别:该维的 A/B Δ 不可采信。改 rubric 锚点(`eval-baseline.md`)后**不重建套件**(同种子可控对比),重评(Step 2)、重判(Step 3)。
+- **某维 INSUFFICIENT** — 可评对数不足 `MIN_PAIRS`,判别不出结论:提高 `--source-count` 重建套件,或临时降 `MIN_PAIRS`(会削弱跨维合取的统计强度)。
 - 每轮 verdict 记入 `$GLADLOG_EVAL_HOME/ledger.md` 的 Judge calibrations 表。
 
 ## 注意
