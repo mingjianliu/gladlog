@@ -1,10 +1,11 @@
 # gladlog — Report UI Design-Review Brief
 
 > Instructions for a visual/design pass on three newly-built report views.
-> Branch `worktree-report-ui-backlog`. The functionality and layout are done and
-> tested; **this brief is about the visual design** — hierarchy, spacing, color,
-> motion, legibility. Please critique and propose improved styling that stays
-> inside the existing design system.
+> **Merged to `main`** (pull latest) — code + a real render fixture are in the
+> repo, so you can render without a WoW client. The functionality and layout are
+> done and tested; **this brief is about the visual design** — hierarchy, spacing,
+> color, motion, legibility. Please critique and propose improved styling that
+> stays inside the existing design system.
 
 ---
 
@@ -116,26 +117,35 @@ tokens above) for the three views — especially **View C (replay)**, which is t
 newest and most open-ended. Keep everything theme-consistent; the win is that
 all three read as one system with the existing chrome.
 
-## 5. How to see the real thing
+## 5. How to render it (primary path for a design tool)
 
-Run the actual app for reference (design from the live UI, not just this text):
+You do **not** need a WoW client or the Electron app. Everything is on `main`.
+
+**Data — a real, committed match (recommended input):**
+`packages/desktop/test/fixtures/real-match-sample.json` — a genuine 3v3 (Nagrand,
+Win), anonymized (names/GUIDs → generic) and trimmed to the first 90s. It carries
+real `advancedSamples` (movement coordinates), real casts/auras, real
+classes/specs, and one death in window — i.e. everything the three views consume.
+This is the input to design against.
+
+**Components (pure React + CSS, no Electron API needed to render):**
+`packages/desktop/src/renderer/src/report/components/` — `MatchReport` (top-level
+tabs), `UnitPanel` (View B), `ReplayView` (View C). All styling lives in one file:
+`packages/desktop/src/renderer/src/styles.css`. Render `MatchReport` with the
+fixture above as `source` and you get all three views (the AI-analysis tab is the
+only part that needs a data bridge — skip it for design).
+
+`packages/desktop/test/report.realmatch.test.tsx` shows exactly how the fixture is
+loaded and rendered through the views (a working reference harness).
+
+**Live app (optional, for the full feel):**
 
 ```bash
-cd packages/desktop
-npm run dev            # opens the Electron window
+cd packages/desktop && npm run dev     # opens the Electron window
 ```
 
-Pick a match **with advanced combat logging** so the replay has positions
-(otherwise replay shows the fallback message). Component source:
-`packages/desktop/src/renderer/src/report/components/` (`MatchReport`,
-`UnitPanel`, `ReplayView`); all styles in `.../renderer/src/styles.css`.
-
-**Real sample data in-repo:** `packages/desktop/test/fixtures/real-match-sample.json`
-is a genuine 3v3 (Nagrand, Win) — anonymized (names/GUIDs → generic) and trimmed
-to the first 90s — so you can render real movement/spells without the app. It has
-real `advancedSamples` (positions), real casts/auras/classes, and one death in
-window. `report.realmatch.test.tsx` renders it through all three views.
+Pick a match with advanced combat logging so replay has positions.
 
 > Companion doc: `2026-07-12-report-ui-review-handoff.md` (dev-oriented — commit
-> map, test coverage, and a note that the `VITE_FIXTURE_MODE` fixture preview is
-> currently broken; use `npm run dev` with a real match instead).
+> map, test coverage, and a note that the `VITE_FIXTURE_MODE` in-app fixture
+> preview is currently broken; use the committed fixture or `npm run dev`).
