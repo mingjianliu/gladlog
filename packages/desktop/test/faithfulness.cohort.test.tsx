@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from "vitest";
 import { render } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
+
 import { CohortDimsTable } from "../src/renderer/src/report/components/CohortDimsTable";
 import {
-  cohortDims,
   type CohortDim,
+  cohortDims,
 } from "../src/renderer/src/report/derive/cohortDims";
 import { checkFaithful } from "../src/renderer/src/report/derive/faithfulness";
 

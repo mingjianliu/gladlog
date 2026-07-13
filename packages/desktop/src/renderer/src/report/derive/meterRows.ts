@@ -1,5 +1,5 @@
-import type { UnitTotals } from "./summary";
 import { classColor } from "../data/gameConstants";
+import type { UnitTotals } from "./summary";
 
 export type MeterMode = "damage" | "healing" | "taken";
 

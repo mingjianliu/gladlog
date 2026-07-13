@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from "vitest";
 import { render } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
+
 import { Meters } from "../src/renderer/src/report/components/Meters";
-import { deriveSummary } from "../src/renderer/src/report/derive/summary";
-import { meterRows } from "../src/renderer/src/report/derive/meterRows";
 import { checkFaithful } from "../src/renderer/src/report/derive/faithfulness";
+import { meterRows } from "../src/renderer/src/report/derive/meterRows";
+import { deriveSummary } from "../src/renderer/src/report/derive/summary";
 import { loadMatchFixture } from "./fixtures/loadFixture";
 
 const m = loadMatchFixture();

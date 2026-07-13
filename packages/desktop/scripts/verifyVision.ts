@@ -2,25 +2,26 @@
 // static HTML, parses it with jsdom, runs checkFaithful, prints structured
 // diffs, and exits non-zero if anything diverged. Cross-agent primitive:
 //   npm -w @gladlog/desktop run verify:vision
+import type { CandidateEvent } from "@gladlog/analysis";
+import { JSDOM } from "jsdom";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { JSDOM } from "jsdom";
-import { loadMatchFixture } from "../test/fixtures/loadFixture";
-import { deriveSummary } from "../src/renderer/src/report/derive/summary";
-import { meterRows } from "../src/renderer/src/report/derive/meterRows";
-import { timelineMarks } from "../src/renderer/src/report/derive/timelineMarks";
+
+import { CohortDimsTable } from "../src/renderer/src/report/components/CohortDimsTable";
+import { Meters } from "../src/renderer/src/report/components/Meters";
+import { TimelineStrip } from "../src/renderer/src/report/components/TimelineStrip";
 import {
-  cohortDims,
   type CohortDim,
+  cohortDims,
 } from "../src/renderer/src/report/derive/cohortDims";
 import {
   checkFaithful,
   type Divergence,
 } from "../src/renderer/src/report/derive/faithfulness";
-import { Meters } from "../src/renderer/src/report/components/Meters";
-import { TimelineStrip } from "../src/renderer/src/report/components/TimelineStrip";
-import { CohortDimsTable } from "../src/renderer/src/report/components/CohortDimsTable";
-import type { CandidateEvent } from "@gladlog/analysis";
+import { meterRows } from "../src/renderer/src/report/derive/meterRows";
+import { deriveSummary } from "../src/renderer/src/report/derive/summary";
+import { timelineMarks } from "../src/renderer/src/report/derive/timelineMarks";
+import { loadMatchFixture } from "../test/fixtures/loadFixture";
 
 function rootOf(html: string): HTMLElement {
   const dom = new JSDOM(

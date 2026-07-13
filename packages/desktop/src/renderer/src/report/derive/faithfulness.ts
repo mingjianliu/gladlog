@@ -1,6 +1,6 @@
+import type { CohortDimRow } from "./cohortDims";
 import type { MeterRow } from "./meterRows";
 import type { TimelineMarks } from "./timelineMarks";
-import type { CohortDimRow } from "./cohortDims";
 
 export interface Divergence {
   component: "meters" | "cohort" | "timeline";

@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from "vitest";
-import { render } from "@testing-library/react";
-import { TimelineStrip } from "../src/renderer/src/report/components/TimelineStrip";
-import { timelineMarks } from "../src/renderer/src/report/derive/timelineMarks";
-import { checkFaithful } from "../src/renderer/src/report/derive/faithfulness";
 import type { CandidateEvent } from "@gladlog/analysis";
+import { render } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
+
+import { TimelineStrip } from "../src/renderer/src/report/components/TimelineStrip";
+import { checkFaithful } from "../src/renderer/src/report/derive/faithfulness";
+import { timelineMarks } from "../src/renderer/src/report/derive/timelineMarks";
 
 function ev(id: string, t: number, type = "death"): CandidateEvent {
   return { id, type, t, unitNames: [], facts: { t: String(t) } };
