@@ -439,6 +439,110 @@ pre {
   max-height: none;
 }
 
+/* ── 回放(2D 走位模拟)── */
+.rpt-replay {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.rpt-replay-empty {
+  padding: 40px;
+  text-align: center;
+}
+.rpt-replay-field {
+  width: min(640px, 100%);
+  aspect-ratio: 1 / 1;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+}
+.rpt-replay-arena {
+  fill: var(--bg);
+  stroke: var(--hairline);
+  stroke-width: 1;
+}
+.rpt-replay-grid line {
+  stroke: var(--hairline-soft);
+  stroke-width: 1;
+}
+.rpt-replay-trail {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  opacity: 0.4;
+}
+.rpt-replay-death {
+  fill: var(--loss);
+  font-size: 15px;
+  font-weight: 700;
+  text-anchor: middle;
+  opacity: 0.7;
+}
+.rpt-replay-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  width: min(640px, 100%);
+  font-size: 11px;
+  color: var(--ink-2);
+}
+.rpt-replay-leg {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.rpt-replay-leg.dead {
+  color: var(--mute);
+  text-decoration: line-through;
+}
+.rpt-replay-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid;
+  display: inline-block;
+}
+.rpt-replay-name {
+  fill: var(--ink-2);
+  font-size: 11px;
+  font-family: var(--font-data);
+  text-anchor: middle;
+  pointer-events: none;
+}
+.rpt-replay-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: min(640px, 100%);
+}
+.rpt-replay-scrub {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--gold);
+}
+.rpt-replay-time {
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.rpt-replay-speed {
+  display: flex;
+  gap: 2px;
+}
+.rpt-replay-speed button {
+  padding: 3px 8px;
+  font-size: 11px;
+}
+.rpt-replay-speed button.active {
+  color: var(--ink);
+  border-color: var(--gold);
+}
+
 /* ── shuffle 场级头:W/L 胶囊序列 ── */
 .rpt-shuffle-head {
   display: flex;

@@ -71,6 +71,19 @@ describe("MatchReport 顶层视图 tab(战报 / AI 分析)", () => {
     expect(container.querySelector(".rpt-body")).toBeTruthy();
     expect(container.querySelector(".rpt-ai-full")).toBeNull();
   });
+
+  it("点回放:出现 2D 走位场地,战报 body 隐藏", () => {
+    const { container } = render(<MatchReport source={m} />);
+    fireEvent.click(screen.getByRole("button", { name: /回放/ }));
+    expect(
+      container.querySelector("[data-testid='rpt-replay-field']"),
+    ).toBeTruthy();
+    expect(container.querySelector(".rpt-body")).toBeNull();
+    // fixture 带 advancedSamples → 至少画出一个单位
+    expect(
+      container.querySelectorAll(".rpt-replay-unit").length,
+    ).toBeGreaterThan(0);
+  });
 });
 
 describe("ShuffleReport", () => {

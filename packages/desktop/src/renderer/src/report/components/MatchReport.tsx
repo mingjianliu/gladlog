@@ -5,13 +5,14 @@ import { deriveTimeline } from "../derive/timeline";
 import type { ReportSource } from "../derive/types";
 import { Meters } from "./Meters";
 import { ProComparisonVerified } from "./ProComparisonVerified";
+import { ReplayView } from "./ReplayView";
 import { ReportHeader } from "./ReportHeader";
 import { StructuredAnalysisPanel } from "./StructuredAnalysisPanel";
 import { Timeline } from "./Timeline";
 import { UnitPanel } from "./UnitPanel";
 
 type Mode = "damage" | "healing" | "taken";
-type View = "report" | "ai";
+type View = "report" | "replay" | "ai";
 
 const MODE_LABEL: Record<Mode, string> = {
   damage: "伤害",
@@ -21,6 +22,7 @@ const MODE_LABEL: Record<Mode, string> = {
 
 const VIEW_LABEL: Record<View, string> = {
   report: "战报",
+  replay: "回放",
   ai: "AI 分析",
 };
 
@@ -58,7 +60,7 @@ export function MatchReport({
           </button>
         ))}
       </div>
-      {view === "report" ? (
+      {view === "report" && (
         <div className="rpt-body">
           <div className="rpt-main">
             <div className="rpt-mode-tabs">
@@ -83,7 +85,9 @@ export function MatchReport({
             />
           </aside>
         </div>
-      ) : (
+      )}
+      {view === "replay" && <ReplayView source={source} />}
+      {view === "ai" && (
         <div className="rpt-ai-full">
           <StructuredAnalysisPanel source={source} matchId={resolvedMatchId} />
           <ProComparisonVerified source={source} matchId={resolvedMatchId} />
