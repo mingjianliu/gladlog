@@ -6,10 +6,12 @@ description: Run and drive gladlog's report UI locally to see/screenshot it. Use
 # Run the gladlog report UI (`dev:ui` test bed)
 
 gladlog's report UI is pure React + one `styles.css`. This test bed renders it in
-a plain browser via Vite (HMR) with real fixture data and a mock AI bridge — it
-**bypasses Electron and the broken in-app fixture preview** (see
-`docs/plans/2026-07-12-report-ui-review-handoff.md`). Use it to see/iterate/
-screenshot the three views (战报 / 回放 / AI 分析).
+a plain browser via Vite (HMR) with real fixture data and a mock AI bridge —
+fastest loop for iterating on the three views (战报 / 回放 / AI 分析), no Electron.
+
+（另一条路:`VITE_FIXTURE_MODE=1 npm run dev` 起真 Electron 应用 + 免真数据的
+fixture 预览——已修好,能走完整 App(比赛列表→报表)。想看真窗口/主进程行为用它;
+只迭代 report UI 用本 dev:ui 更快。)
 
 All paths relative to `packages/desktop/`.
 

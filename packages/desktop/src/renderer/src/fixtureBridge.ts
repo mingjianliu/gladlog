@@ -1,12 +1,12 @@
+import matchJson from "../../../test/fixtures/report-match.json";
+import type { StoredMatchMeta } from "../../main/matchStore";
+import type { GladlogSettings } from "../../main/settingsStore";
+import type { LogsStatusSnapshot } from "../../preload/api";
 import type {
   StoredMatch,
   StoredShuffle,
   StoredShuffleRound,
 } from "./report/derive/types";
-import type { GladlogSettings } from "../../main/settingsStore";
-import type { StoredMatchMeta } from "../../main/matchStore";
-import type { LogsStatusSnapshot } from "../../preload/api";
-import matchJson from "../../../test/fixtures/report-match.json";
 
 // keep in sync with test/fixtures/loadFixture.ts
 function buildSyntheticShuffle(base: StoredMatch): StoredShuffle {
@@ -38,6 +38,64 @@ export function installFixtureBridge(): void {
     aiBackend: "anthropic",
     aiBackendCommand: null,
   };
+
+  // 让 AI 视图在 fixture 预览下有内容(findings 卡片 + cohort 对比)。
+  const sampleAnalysis = {
+    findings: [
+      {
+        eventIds: ["e1"],
+        severity: "high",
+        category: "survival",
+        title: "被集火秒杀",
+        explanation:
+          "敌方双 DPS 进攻 CD 对齐时,你在没有减伤/位移的情况下于 1.4s 内掉血 82% 后阵亡;此前贴在开阔地带、离掩体较远。",
+      },
+      {
+        eventIds: ["e2"],
+        severity: "med",
+        category: "cooldowns",
+        title: "防御 CD 留手",
+        explanation:
+          "整场保留了一个大防御 CD 未用即阵亡——上一段承伤窗口本应交出以打断集火节奏。",
+      },
+      {
+        eventIds: ["e3"],
+        severity: "low",
+        category: "positioning",
+        title: "站位偏开阔",
+        explanation: "多数时间停留在中场开阔区,较少利用立柱拉视线。",
+      },
+    ],
+    dropped: 0,
+    hadNarration: true,
+  };
+  const sampleCompare = {
+    verifiedComparison: {
+      dims: [
+        {
+          key: "offensiveIndex",
+          value: 0.31,
+          p10: 0.2,
+          p50: 0.49,
+          p90: 0.7,
+          percentile: 28,
+          verdict: "bottom quartile of your cohort",
+        },
+      ],
+      facts: {},
+    },
+    report: "相对同 spec/comp 分档,你的进攻输出与防御 CD 利用都偏低。",
+    droppedReason: null,
+    cellMeta: {
+      spec: "Retribution Paladin",
+      bracket: "3v3",
+      archetype: "melee-cleave",
+      buildGroup: "offensive",
+      sampleN: 128,
+      fellBackTo: "archetype×buildGroup",
+    },
+  };
+  const off = () => () => {};
 
   const gladlogMock = {
     logs: {
@@ -100,6 +158,19 @@ export function installFixtureBridge(): void {
         }
         return null;
       },
+      async page(opts: {
+        before?: number;
+        limit: number;
+      }): Promise<StoredMatchMeta[]> {
+        const all = await gladlogMock.matches.list();
+        const filtered =
+          opts.before == null
+            ? all
+            : all.filter((mt) => mt.startTime < opts.before!);
+        return filtered
+          .sort((a, b) => b.startTime - a.startTime)
+          .slice(0, opts.limit);
+      },
     },
     settings: {
       async get(): Promise<GladlogSettings> {
@@ -125,6 +196,25 @@ export function installFixtureBridge(): void {
       async get(): Promise<string | null> {
         return null;
       },
+    },
+    analysis: {
+      async getCached(): Promise<unknown> {
+        return sampleAnalysis;
+      },
+      run() {},
+      cancel() {},
+      onDone: off,
+      onError: off,
+    },
+    compare: {
+      async getCached(): Promise<unknown> {
+        return sampleCompare;
+      },
+      run() {},
+      cancel() {},
+      onDelta: off,
+      onDone: off,
+      onError: off,
     },
   };
 

@@ -14,6 +14,23 @@ export default defineConfig({
       },
     },
   },
-  preload: { plugins: [externalizeDepsPlugin()], build: { rollupOptions: { output: { format: 'cjs', entryFileNames: '[name].cjs' } } } },
-  renderer: { plugins: [react()], root: "src/renderer" },
+  preload: {
+    plugins: [externalizeDepsPlugin()],
+    build: {
+      rollupOptions: {
+        output: { format: "cjs", entryFileNames: "[name].cjs" },
+      },
+    },
+  },
+  renderer: {
+    plugins: [react()],
+    root: "src/renderer",
+    // 把 shell 的 VITE_FIXTURE_MODE 显式注入 renderer(否则 electron-vite 不暴露它,
+    // fixture 分支会被当死代码消掉)。VITE_FIXTURE_MODE=1 npm run dev 即免真数据预览。
+    define: {
+      "import.meta.env.VITE_FIXTURE_MODE": JSON.stringify(
+        process.env.VITE_FIXTURE_MODE ?? "",
+      ),
+    },
+  },
 });
