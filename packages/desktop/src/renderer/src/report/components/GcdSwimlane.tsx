@@ -180,7 +180,16 @@ export function GcdSwimlane({
                       .filter(Boolean)
                       .join(" ");
                     return (
-                      <div key={i} className={cls} style={{ top: y }}>
+                      <div
+                        key={i}
+                        className={cls}
+                        style={{ top: y }}
+                        title={
+                          c.targetName
+                            ? `${c.spellName} → ${c.targetName}`
+                            : c.spellName
+                        }
+                      >
                         <span
                           className="rpt-gcd-act-dot"
                           style={{
@@ -193,11 +202,6 @@ export function GcdSwimlane({
                           {c.byPet ? "🐾 " : ""}
                           {c.spellName}
                         </span>
-                        {c.targetName ? (
-                          <span className="rpt-gcd-act-target">
-                            → {c.targetName}
-                          </span>
-                        ) : null}
                         {major ? (
                           <span className="rpt-gcd-act-cd">CD</span>
                         ) : null}

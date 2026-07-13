@@ -974,9 +974,6 @@ pre {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.rpt-gcd-act-target {
-  color: var(--mute);
-}
 .rpt-gcd-act-cd {
   color: var(--gold);
   font-weight: 600;
