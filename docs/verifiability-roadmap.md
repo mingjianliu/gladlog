@@ -25,11 +25,11 @@ brainstorm → spec → plan → implementation cycle when picked up.
 
 ## Current state (uneven)
 
-| Pillar     | Today                                                                                                                                                                                                                 | Verdict                                                          |
-| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| **PROMPT** | 3 honesty gates (`auditFindings` grounding/numeric/causal, `causalLint`, `claimChecker` + template interpolation) + 12-tool eval harness (blind A/B, calibration, provenance, `positioningScan`, `contestedContract`) | Strong — the reference for the others                            |
-| **LOG**    | 13 parser test files, one golden fixture test (`l3.golden.test.ts`), byte-exact log-pipeline reconstruction                                                                                                           | Moderate — no differential oracle, no invariants                 |
-| **VISION** | 4 functional renderer tests                                                                                                                                                                                           | Weak — no data-faithfulness, visual-regression, or export checks |
+| Pillar     | Today                                                                                                                                                                                                                 | Verdict                                                                           |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| **PROMPT** | 3 honesty gates (`auditFindings` grounding/numeric/causal, `causalLint`, `claimChecker` + template interpolation) + 12-tool eval harness (blind A/B, calibration, provenance, `positioningScan`, `contestedContract`) | Strong — the reference for the others                                             |
+| **LOG**    | 13 parser test files, one golden fixture test (`l3.golden.test.ts`), byte-exact log-pipeline reconstruction                                                                                                           | Moderate — no differential oracle, no invariants                                  |
+| **VISION** | 4 functional renderer tests + **C1 data-faithfulness** (pure selectors + `checkFaithful` DOM harness + `verify:vision`, done 2026-07-12)                                                                              | Improving — data-faithfulness landed; visual-regression (C2) + export (C3) remain |
 
 ## Guiding principle
 
@@ -77,12 +77,18 @@ Already strong; close the known holes.
 
 The weakest pillar; make the UI as honest as the LLM output.
 
-- **C1. Data-faithfulness (the UI can't lie)** — the on-brand core. Every rendered
-  number / bar / timeline mark must come from a **pure, tested selector** over the
-  match+analysis data; tests assert the rendered DOM value equals the computed
-  value (no fabricated, stale, or mis-scaled visuals). This is `claimChecker` for
-  pixels: the meters, cohort percentiles, and timeline marks provably match their
-  source.
+- **C1. Data-faithfulness (the UI can't lie)** ✅ _(done 2026-07-12)_ — the on-brand
+  core. Render-math extracted to pure, tested selectors (`report/derive/meterRows`,
+  `timelineMarks`, `cohortDims`); the meters/cohort/timeline components are dumb
+  renderers. `report/derive/faithfulness.ts` `checkFaithful(kind, root, selectorOutput)`
+  walks the rendered DOM and emits `Divergence[]` on (A) view-faithful mismatches
+  (rendered ≠ selector, incl. tooltips + non-% units) and (B) non-circular structural
+  invariants (meter range/monotonic/max-100/format-roundtrip; cohort percentile
+  order-consistency vs p10/p90; timeline bounds/leftpct/maps-to-event). It deliberately
+  does NOT re-derive aggregation or percentile (would false-fail on pets / be circular —
+  agy debate). Each check has a has-teeth test; `npm run verify:vision` runs headlessly,
+  prints JSON diffs, exits non-zero. Spec: `docs/specs/2026-07-12-vision-data-faithfulness-design.md`,
+  plan: `docs/superpowers/plans/2026-07-12-vision-data-faithfulness.md`.
 - **C2. Visual regression** — snapshot the rendered report (jsdom DOM snapshot
   now; Playwright/Electron screenshot later) and fail the build on unexpected
   visual diffs. Catches accidental layout/scale breakage.
