@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { arenaMap, arenaMapUrl, arenaPx, arenaToPx } from "../data/arenaMaps";
 import { classColor, classGlyph } from "../data/gameConstants";
 import {
   deathPosition,
@@ -10,8 +11,8 @@ import {
 import type { ReportSource } from "../derive/types";
 import { GcdSwimlane } from "./GcdSwimlane";
 
-const VW = 520;
-const VH = 520;
+const FALLBACK_VW = 520;
+const FALLBACK_VH = 520;
 const PAD = 46;
 const GRID = 4;
 const SPEEDS = [1, 2, 4] as const;
@@ -76,24 +77,52 @@ export function ReplayView({ source }: { source: ReportSource }) {
     );
   }
 
-  const spanX = bounds.maxX - bounds.minX || 1;
-  const spanY = bounds.maxY - bounds.minY || 1;
-  const scale = Math.min((VW - 2 * PAD) / spanX, (VH - 2 * PAD) / spanY);
-  const aw = spanX * scale;
-  const ah = spanY * scale;
-  const offX = (VW - aw) / 2;
-  const offY = (VH - ah) / 2;
-  // WoW y 向北为正 → 反转,使北在上方
-  const toX = (x: number): number => offX + (x - bounds.minX) * scale;
-  const toY = (y: number): number => offY + (bounds.maxY - y) * scale;
+  // 有该竞技场底图时:坐标系 = minimap 像素(世界坐标经 5px/单位映射,对齐底图);
+  // 否则回退到「按样本包围盒 + 抽象地面」。
+  const zoneId = (source as { zoneId?: string | number }).zoneId;
+  const zoneMap = arenaMap(zoneId);
 
-  const cxA = offX + aw / 2;
-  const cyA = offY + ah / 2;
-  const pillarR = Math.min(aw, ah) * 0.085;
-  const pillars = [
-    { x: offX + aw * 0.34, y: offY + ah * 0.42 },
-    { x: offX + aw * 0.66, y: offY + ah * 0.58 },
-  ];
+  let VW: number;
+  let VH: number;
+  let toX: (x: number) => number;
+  let toY: (y: number) => number;
+  // 抽象地面参数(仅无底图时用)
+  let aw = 0;
+  let ah = 0;
+  let offX = 0;
+  let offY = 0;
+  let cxA = 0;
+  let cyA = 0;
+  let pillarR = 0;
+  let pillars: { x: number; y: number }[] = [];
+
+  if (zoneMap) {
+    const px = arenaPx(zoneMap);
+    VW = px.w;
+    VH = px.h;
+    toX = (x) => arenaToPx(zoneMap, x, 0).x;
+    toY = (y) => arenaToPx(zoneMap, 0, y).y;
+  } else {
+    VW = FALLBACK_VW;
+    VH = FALLBACK_VH;
+    const spanX = bounds.maxX - bounds.minX || 1;
+    const spanY = bounds.maxY - bounds.minY || 1;
+    const scale = Math.min((VW - 2 * PAD) / spanX, (VH - 2 * PAD) / spanY);
+    aw = spanX * scale;
+    ah = spanY * scale;
+    offX = (VW - aw) / 2;
+    offY = (VH - ah) / 2;
+    // WoW y 向北为正 → 反转,使北在上方
+    toX = (x) => offX + (x - bounds.minX) * scale;
+    toY = (y) => offY + (bounds.maxY - y) * scale;
+    cxA = offX + aw / 2;
+    cyA = offY + ah / 2;
+    pillarR = Math.min(aw, ah) * 0.085;
+    pillars = [
+      { x: offX + aw * 0.34, y: offY + ah * 0.42 },
+      { x: offX + aw * 0.66, y: offY + ah * 0.58 },
+    ];
+  }
 
   const atEnd = t >= endTime;
 
@@ -106,57 +135,96 @@ export function ReplayView({ source }: { source: ReportSource }) {
             viewBox={`0 0 ${VW} ${VH}`}
             data-testid="rpt-replay-field"
             preserveAspectRatio="xMidYMid meet"
+            style={{ aspectRatio: `${VW} / ${VH}` }}
           >
-            <defs>
-              <radialGradient id="rpt-arena-floor" cx="50%" cy="50%" r="70%">
-                <stop offset="0%" stopColor="var(--surface-2)" />
-                <stop offset="100%" stopColor="var(--bg)" />
-              </radialGradient>
-            </defs>
-            <rect
-              x={offX}
-              y={offY}
-              width={aw}
-              height={ah}
-              rx={6}
-              className="rpt-replay-arena"
-              fill="url(#rpt-arena-floor)"
-            />
-            {/* 中央区域微光带 */}
-            <circle
-              cx={cxA}
-              cy={cyA}
-              r={Math.min(aw, ah) * 0.4}
-              className="rpt-replay-zone"
-            />
-            {/* 立柱(空间锚点) */}
-            {pillars.map((p, i) => (
-              <g key={`p${i}`}>
-                <circle
-                  cx={p.x}
-                  cy={p.y}
-                  r={pillarR}
-                  className="rpt-replay-pillar"
+            {zoneMap ? (
+              <>
+                {/* 地面(底图为透明障碍图时透出) */}
+                <rect
+                  x={0}
+                  y={0}
+                  width={VW}
+                  height={VH}
+                  className="rpt-replay-map-floor"
                 />
-                <circle
-                  cx={p.x}
-                  cy={p.y}
-                  r={pillarR * 0.6}
-                  className="rpt-replay-pillar-inner"
+                {/* 该竞技场真实 minimap 底图(CDN 运行时加载) */}
+                <image
+                  href={arenaMapUrl(zoneId as string | number)}
+                  x={0}
+                  y={0}
+                  width={VW}
+                  height={VH}
+                  preserveAspectRatio="none"
+                  className="rpt-replay-map"
                 />
-              </g>
-            ))}
-            {/* 网格线 */}
-            {Array.from({ length: GRID - 1 }, (_, i) => {
-              const fx = offX + ((i + 1) / GRID) * aw;
-              const fy = offY + ((i + 1) / GRID) * ah;
-              return (
-                <g key={`g${i}`} className="rpt-replay-grid">
-                  <line x1={fx} y1={offY} x2={fx} y2={offY + ah} />
-                  <line x1={offX} y1={fy} x2={offX + aw} y2={fy} />
-                </g>
-              );
-            })}
+                {/* 压暗一层,保证圆点/尾迹在底图上有对比 */}
+                <rect
+                  x={0}
+                  y={0}
+                  width={VW}
+                  height={VH}
+                  className="rpt-replay-map-veil"
+                />
+              </>
+            ) : (
+              <>
+                <defs>
+                  <radialGradient
+                    id="rpt-arena-floor"
+                    cx="50%"
+                    cy="50%"
+                    r="70%"
+                  >
+                    <stop offset="0%" stopColor="var(--surface-2)" />
+                    <stop offset="100%" stopColor="var(--bg)" />
+                  </radialGradient>
+                </defs>
+                <rect
+                  x={offX}
+                  y={offY}
+                  width={aw}
+                  height={ah}
+                  rx={6}
+                  className="rpt-replay-arena"
+                  fill="url(#rpt-arena-floor)"
+                />
+                {/* 中央区域微光带 */}
+                <circle
+                  cx={cxA}
+                  cy={cyA}
+                  r={Math.min(aw, ah) * 0.4}
+                  className="rpt-replay-zone"
+                />
+                {/* 立柱(空间锚点) */}
+                {pillars.map((p, i) => (
+                  <g key={`p${i}`}>
+                    <circle
+                      cx={p.x}
+                      cy={p.y}
+                      r={pillarR}
+                      className="rpt-replay-pillar"
+                    />
+                    <circle
+                      cx={p.x}
+                      cy={p.y}
+                      r={pillarR * 0.6}
+                      className="rpt-replay-pillar-inner"
+                    />
+                  </g>
+                ))}
+                {/* 网格线 */}
+                {Array.from({ length: GRID - 1 }, (_, i) => {
+                  const fx = offX + ((i + 1) / GRID) * aw;
+                  const fy = offY + ((i + 1) / GRID) * ah;
+                  return (
+                    <g key={`g${i}`} className="rpt-replay-grid">
+                      <line x1={fx} y1={offY} x2={fx} y2={offY + ah} />
+                      <line x1={offX} y1={fy} x2={offX + aw} y2={fy} />
+                    </g>
+                  );
+                })}
+              </>
+            )}
             {/* 走位尾迹(最近数秒) */}
             {tracks.map((tr) => {
               const pts = pathUpTo(tr, t);
