@@ -1,0 +1,53 @@
+:root {
+  color-scheme: dark;
+}
+body {
+  margin: 0;
+  background: #0d0f12;
+}
+.harness-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 16px;
+  background: #14171c;
+  border-bottom: 1px solid #262b34;
+  color: #e8eaf0;
+  font:
+    13px -apple-system,
+    system-ui,
+    "Segoe UI",
+    sans-serif;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.harness-bar strong {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-size: 12px;
+}
+.harness-bar label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #98a1b0;
+  font-size: 12px;
+}
+.harness-bar select {
+  background: #1a1e25;
+  color: #e8eaf0;
+  border: 1px solid #262b34;
+  border-radius: 4px;
+  padding: 3px 8px;
+  font: inherit;
+}
+.harness-hint {
+  margin-left: auto;
+  color: #626b7a;
+  font-size: 11px;
+}
+.harness-body {
+  padding: 16px;
+}
