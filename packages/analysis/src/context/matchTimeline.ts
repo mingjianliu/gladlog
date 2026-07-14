@@ -1719,7 +1719,11 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
           : enemyPid(petOwner.name);
         return `${ownerLabel}'s pet`;
       }
-      return name.split("-")[0];
+      const short = name.split("-")[0];
+      // Unresolved unit = pet/NPC whose owner lookup failed. Its name is
+      // client-localized — don't leak a non-ASCII unit name into the prompt.
+      const isLocalized = [...short].some((c) => c.charCodeAt(0) > 127);
+      return isLocalized ? "[pet]" : short;
     };
     const seenKicks = new Set<string>();
     const allUnitsForKicks = friends ? [...friends] : [];
@@ -1736,9 +1740,9 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
         const atSeconds = (action.timestamp - matchStartMs) / 1000;
         if (atSeconds < 0) continue;
         const kicker = resolveKicker(action.srcUnitName);
-        const victim = friendlyNames.has(action.destUnitName)
-          ? pid(action.destUnitName)
-          : enemyPid(action.destUnitName);
+        // Victims get the same resolution as kickers: players → pid, pets →
+        // owner attribution ("N's pet"), localized NPC names suppressed.
+        const victim = resolveKicker(action.destUnitName);
         const kickSpell = getEnglishSpellName(
           action.spellId ?? "",
           action.spellName ?? "interrupt",
