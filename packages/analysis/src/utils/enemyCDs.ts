@@ -1,13 +1,31 @@
-import { AtomicArenaCombat, ICombatUnit, LogEvent } from '@gladlog/parser-compat';
+import {
+  AtomicArenaCombat,
+  ICombatUnit,
+  LogEvent,
+} from "@gladlog/parser-compat";
 
-import { spellEffectData } from '../data/spellEffectData';
-import { SPELL_CATEGORIES as spellsData } from '../data/spellCategories';
-import { fmtTime, getUnitHpAtTimestamp, IDamageBucket, isHealerSpec, specToString } from './cooldowns';
+import { spellEffectData } from "../data/spellEffectData";
+import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
+import {
+  fmtTime,
+  getUnitHpAtTimestamp,
+  IDamageBucket,
+  isHealerSpec,
+  specToString,
+} from "./cooldowns";
 
 type SpellEntry = { type: string };
 const SPELLS = spellsData as Record<string, SpellEntry>;
-import { computeDampening, dampeningDangerMultiplier, fmtDampening } from './dampening';
-import { dangerLabel, isOffensiveSpell, spellDangerWeight } from './spellDanger';
+import {
+  computeDampening,
+  dampeningDangerMultiplier,
+  fmtDampening,
+} from "./dampening";
+import {
+  dangerLabel,
+  isOffensiveSpell,
+  spellDangerWeight,
+} from "./spellDanger";
 
 const MIN_CD_SECONDS = 30;
 /** Two enemy offensive CD casts within this window are considered an aligned burst */
@@ -41,10 +59,10 @@ export interface IAlignedBurstWindow {
   activeCDs: Array<{ playerName: string; spellName: string; spellId: string }>;
   /** Ex-ante threat from the stacked CDs alone (weights × alignment × dampening) — outcome-independent */
   threatScore: number;
-  threatLabel: 'Low' | 'Moderate' | 'High' | 'Critical';
+  threatLabel: "Low" | "Moderate" | "High" | "Critical";
   /** Combined score including outcome factors (damage dealt, healer CC) — kept for existing consumers */
   dangerScore: number;
-  dangerLabel: 'Low' | 'Moderate' | 'High' | 'Critical';
+  dangerLabel: "Low" | "Moderate" | "High" | "Critical";
   dampeningPct: number; // 0–1
   damageInWindow: number;
   damageRatio: number;
@@ -93,8 +111,12 @@ export function reconstructEnemyCDTimeline(
       if (!isOffensiveSpell(spellId)) continue;
       const effectData = spellEffectData[spellId];
       if (!effectData) continue;
-      const cooldownSeconds = effectData.cooldownSeconds ?? effectData.charges?.chargeCooldownSeconds ?? 0;
-      if (cooldownSeconds < MIN_CD_SECONDS || cooldownSeconds > MAX_CD_SECONDS) continue;
+      const cooldownSeconds =
+        effectData.cooldownSeconds ??
+        effectData.charges?.chargeCooldownSeconds ??
+        0;
+      if (cooldownSeconds < MIN_CD_SECONDS || cooldownSeconds > MAX_CD_SECONDS)
+        continue;
 
       const castTimeSeconds = (cast.logLine.timestamp - matchStartMs) / 1000;
       const buffDuration = effectData.durationSeconds ?? 0;
@@ -102,7 +124,8 @@ export function reconstructEnemyCDTimeline(
       // Deduplicate: same player + same spellName within 1s = one cast (guards against double-parsed events and multi-target buffs)
       const isDuplicate = offensiveCDs.some(
         (existing) =>
-          existing.spellName === effectData.name && Math.abs(castTimeSeconds - existing.castTimeSeconds) < 1,
+          existing.spellName === effectData.name &&
+          Math.abs(castTimeSeconds - existing.castTimeSeconds) < 1,
       );
       if (isDuplicate) continue;
 
@@ -147,8 +170,12 @@ export function reconstructEnemyCDTimeline(
   // sums) so windows of different spans compare fairly — the old ±10s sample around the window START
   // mis-measured the damage of 69% of windows by >25% (91% of windows outlast 10s; 2026-07-03 audit).
   const allFriendlyDamage = (friendlies ?? []).flatMap((u) => u.damageIn);
-  const totalFriendlyDamage = allFriendlyDamage.reduce((sum, e) => sum + Math.abs(e.effectiveAmount), 0);
-  const avgDamageRate = matchDurationSeconds > 0 ? totalFriendlyDamage / matchDurationSeconds : 0;
+  const totalFriendlyDamage = allFriendlyDamage.reduce(
+    (sum, e) => sum + Math.abs(e.effectiveAmount),
+    0,
+  );
+  const avgDamageRate =
+    matchDurationSeconds > 0 ? totalFriendlyDamage / matchDurationSeconds : 0;
 
   // Group casts by ACTIVE-PRESSURE OVERLAP: a cast joins the current group if it lands while any of
   // the group's buffs is still running OR within BURST_CLUSTER_SECONDS of a group cast (superset of the
@@ -176,7 +203,11 @@ export function reconstructEnemyCDTimeline(
   for (const inWindow of groups) {
     const qualifies =
       inWindow.length >= 2 ||
-      inWindow.some((c) => spellDangerWeight(c.spellId, c.cooldownSeconds) >= SOLO_WINDOW_MIN_WEIGHT);
+      inWindow.some(
+        (c) =>
+          spellDangerWeight(c.spellId, c.cooldownSeconds) >=
+          SOLO_WINDOW_MIN_WEIGHT,
+      );
     if (qualifies) {
       const windowStart = inWindow[0].time;
       // toSeconds = when the last buff in this window actually expires, not just when it was cast.
@@ -184,7 +215,10 @@ export function reconstructEnemyCDTimeline(
       const windowEnd = Math.max(...inWindow.map((c) => c.buffEndSeconds));
 
       // Compute CD-based danger score
-      const cdScore = inWindow.reduce((sum, c) => sum + spellDangerWeight(c.spellId, c.cooldownSeconds), 0);
+      const cdScore = inWindow.reduce(
+        (sum, c) => sum + spellDangerWeight(c.spellId, c.cooldownSeconds),
+        0,
+      );
       const alignmentMultiplier = inWindow.length >= 3 ? 1.5 : 1.0;
 
       // Damage over the ACTUAL window span [start, end], compared as a rate to the match average.
@@ -197,12 +231,21 @@ export function reconstructEnemyCDTimeline(
 
       const windowSpan = Math.max(windowEnd - windowStart, 1);
       const damageRatio =
-        avgDamageRate > 0 ? Math.min(6.0, Math.max(windowDamage / windowSpan / avgDamageRate, 0.5)) : 0.5;
+        avgDamageRate > 0
+          ? Math.min(
+              6.0,
+              Math.max(windowDamage / windowSpan / avgDamageRate, 0.5),
+            )
+          : 0.5;
 
       // Dampening at window start
-      const bracket = combat.startInfo?.bracket ?? '3v3';
+      const bracket = combat.startInfo?.bracket ?? "3v3";
       const allPlayers = [...enemies, ...(friendlies ?? [])];
-      const dampening = computeDampening(windowStart * 1000 + matchStartMs, bracket, allPlayers);
+      const dampening = computeDampening(
+        windowStart * 1000 + matchStartMs,
+        bracket,
+        allPlayers,
+      );
       const dampeningMult = dampeningDangerMultiplier(dampening);
 
       // Hoist window timestamps here so both the healer CC block and HP sampling share the same values
@@ -220,8 +263,11 @@ export function reconstructEnemyCDTimeline(
         for (const a of owner.auraEvents) {
           if (!a.spellId) continue;
           const entry = SPELLS[a.spellId];
-          if (entry?.type === 'cc') {
-            if (a.logLine.event === LogEvent.SPELL_AURA_APPLIED || a.logLine.event === LogEvent.SPELL_AURA_REFRESH) {
+          if (entry?.type === "cc") {
+            if (
+              a.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
+              a.logLine.event === LogEvent.SPELL_AURA_REFRESH
+            ) {
               ccStartBySpell.set(a.spellId, a.logLine.timestamp);
             } else if (
               a.logLine.event === LogEvent.SPELL_AURA_REMOVED ||
@@ -230,7 +276,11 @@ export function reconstructEnemyCDTimeline(
             ) {
               const ccStart = ccStartBySpell.get(a.spellId) ?? 0;
               const ccEnd = a.logLine.timestamp;
-              if (ccStart > 0 && ccStart < windowEndMs && ccEnd > windowStartMs) {
+              if (
+                ccStart > 0 &&
+                ccStart < windowEndMs &&
+                ccEnd > windowStartMs
+              ) {
                 ccIntervals.push({
                   start: Math.max(ccStart, windowStartMs),
                   end: Math.min(ccEnd, windowEndMs),
@@ -266,7 +316,10 @@ export function reconstructEnemyCDTimeline(
           }
           merged.push(current);
 
-          ccDurationMs = merged.reduce((sum, interval) => sum + (interval.end - interval.start), 0);
+          ccDurationMs = merged.reduce(
+            (sum, interval) => sum + (interval.end - interval.start),
+            0,
+          );
         }
 
         healerCCed = ccDurationMs > 0;
@@ -294,16 +347,23 @@ export function reconstructEnemyCDTimeline(
       const score = threatScore * damageRatio * healerMult;
 
       // Find the most-pressured friendly unit (highest damageIn during the burst window).
-      // HP is sampled with a bounded window (half the burst duration, min 3s) so readings
-      // stay within the burst period rather than bleeding into adjacent periods.
-      const hpLookupRadiusMs = Math.max((windowEndMs - windowStartMs) / 2, 3_000);
-      let mostPressuredTarget: IAlignedBurstWindow['mostPressuredTarget'];
+      // B4 fix: HP endpoint readings must be sampled NEAR the endpoint they claim to
+      // represent. The old radius (half the burst duration, up to ±9s+) let a "start HP"
+      // reading come from mid-window, contradicting the [STATE] snapshots at the same
+      // timestamp and feeding coach errors. ±3s matches the [DMG SPIKE] sampling (±2s)
+      // closely; when no sample exists that near, render nothing instead of a wrong number.
+      const hpLookupRadiusMs = 3_000;
+      let mostPressuredTarget: IAlignedBurstWindow["mostPressuredTarget"];
       if (friendlies && friendlies.length > 0) {
         let topUnit: ICombatUnit | null = null;
         let topDmg = 0;
         for (const f of friendlies) {
           const dmg = f.damageIn
-            .filter((d) => d.logLine.timestamp >= windowStartMs && d.logLine.timestamp <= windowEndMs)
+            .filter(
+              (d) =>
+                d.logLine.timestamp >= windowStartMs &&
+                d.logLine.timestamp <= windowEndMs,
+            )
             .reduce((sum, d) => sum + Math.abs(d.effectiveAmount), 0);
           if (dmg > topDmg) {
             topDmg = dmg;
@@ -314,9 +374,17 @@ export function reconstructEnemyCDTimeline(
           const midMs = windowStartMs + (windowEndMs - windowStartMs) / 2;
           mostPressuredTarget = {
             unitName: topUnit.name,
-            startHpPct: getUnitHpAtTimestamp(topUnit, windowStartMs, hpLookupRadiusMs),
+            startHpPct: getUnitHpAtTimestamp(
+              topUnit,
+              windowStartMs,
+              hpLookupRadiusMs,
+            ),
             midHpPct: getUnitHpAtTimestamp(topUnit, midMs, hpLookupRadiusMs),
-            endHpPct: getUnitHpAtTimestamp(topUnit, windowEndMs, hpLookupRadiusMs),
+            endHpPct: getUnitHpAtTimestamp(
+              topUnit,
+              windowEndMs,
+              hpLookupRadiusMs,
+            ),
           };
         }
       }
@@ -350,29 +418,34 @@ export function reconstructEnemyCDTimeline(
  * Outputs burst window summaries only — individual per-player cast timestamps are captured
  * by MATCH ARC and would dilute LLM attention if repeated here.
  */
-export function formatEnemyCDTimelineForContext(timeline: IEnemyCDTimeline, matchDurationSeconds: number): string[] {
+export function formatEnemyCDTimelineForContext(
+  timeline: IEnemyCDTimeline,
+  matchDurationSeconds: number,
+): string[] {
   const lines: string[] = [];
 
-  lines.push('## Enemy Cooldown Timeline');
+  lines.push("## Enemy Cooldown Timeline");
 
   if (timeline.alignedBurstWindows.length === 0) {
     lines.push(
       timeline.players.length === 0
-        ? '  No enemy offensive cooldown data found.'
-        : '  No coordinated enemy burst windows detected — sustained/individual pressure only.',
+        ? "  No enemy offensive cooldown data found."
+        : "  No coordinated enemy burst windows detected — sustained/individual pressure only.",
     );
     return lines;
   }
 
   lines.push(
-    '  (Threat = strength of the stacked CDs before outcome; Outcome = what actually happened. High threat with below-average damage usually means the burst was well defended — worth crediting.)',
+    "  (Threat = strength of the stacked CDs before outcome; Outcome = what actually happened. High threat with below-average damage usually means the burst was well defended — worth crediting.)",
   );
   timeline.alignedBurstWindows.forEach((w, idx) => {
     const dampStr = fmtDampening(w.dampeningPct);
-    const cdNames = w.activeCDs.map((c) => `${c.spellName} (${c.playerName})`).join(' + ');
+    const cdNames = w.activeCDs
+      .map((c) => `${c.spellName} (${c.playerName})`)
+      .join(" + ");
     const dmgM = (w.damageInWindow / 1_000_000).toFixed(2);
     const ratioStr = `${w.damageRatio.toFixed(1)}× match avg rate`;
-    const healerStr = w.healerCCed ? 'healer CCed' : 'healer free';
+    const healerStr = w.healerCCed ? "healer CCed" : "healer free";
     lines.push(
       `  #${idx + 1} — ${fmtTime(w.fromSeconds)}–${fmtTime(w.toSeconds)} | Threat: ${w.threatLabel} (${w.threatScore.toFixed(1)}) | Dampening: ${dampStr}`,
     );
@@ -386,7 +459,7 @@ export function formatEnemyCDTimelineForContext(timeline: IEnemyCDTimeline, matc
         t.endHpPct !== null ? `${t.endHpPct}% end` : null,
       ]
         .filter(Boolean)
-        .join(' → ');
+        .join(" → ");
       if (hpStr) lines.push(`    Most pressured: ${t.unitName} HP: ${hpStr}`);
     }
   });
@@ -397,7 +470,9 @@ export function formatEnemyCDTimelineForContext(timeline: IEnemyCDTimeline, matc
   for (const player of timeline.players) {
     for (const cd of player.offensiveCDs) {
       if (cd.availableAgainAtSeconds > matchDurationSeconds) {
-        unusedByCDId.add(`${player.specName}: ${cd.spellName} — not used again after ${fmtTime(cd.castTimeSeconds)}`);
+        unusedByCDId.add(
+          `${player.specName}: ${cd.spellName} — not used again after ${fmtTime(cd.castTimeSeconds)}`,
+        );
       }
     }
   }
@@ -406,8 +481,8 @@ export function formatEnemyCDTimelineForContext(timeline: IEnemyCDTimeline, matc
     // 2062 earlier-than-static recasts across the corpus), so never claim a CD "was still unavailable" —
     // only that it was not SEEN again.
     lines.push(
-      '  Not cast again before the match ended (note: talents/procs often shorten real cooldowns, so availability is not implied): ' +
-        [...unusedByCDId].join('; '),
+      "  Not cast again before the match ended (note: talents/procs often shorten real cooldowns, so availability is not implied): " +
+        [...unusedByCDId].join("; "),
     );
   }
 
@@ -428,10 +503,13 @@ export function formatKillAttemptWindowsForContext(
   pressureWindows: IDamageBucket[],
 ): string[] {
   if (alignedBurstWindows.length === 0) {
-    return ['## Kill Attempt Windows', '  None detected (no aligned enemy burst windows).'];
+    return [
+      "## Kill Attempt Windows",
+      "  None detected (no aligned enemy burst windows).",
+    ];
   }
 
-  const lines: string[] = ['## Kill Attempt Windows'];
+  const lines: string[] = ["## Kill Attempt Windows"];
   let unconfirmedCount = 0;
 
   for (const burst of alignedBurstWindows) {
@@ -447,14 +525,16 @@ export function formatKillAttemptWindowsForContext(
       continue;
     }
     const dmgM = (spike.totalDamage / 1_000_000).toFixed(2);
-    const cdNames = burst.activeCDs.map((c) => c.spellName).join(' + ');
+    const cdNames = burst.activeCDs.map((c) => c.spellName).join(" + ");
     lines.push(
       `  ${fmtTime(burst.fromSeconds)}–${fmtTime(burst.toSeconds)}  ${dmgM}M on ${spike.targetSpec} | CDs: ${cdNames}`,
     );
   }
 
   if (lines.length === 1) {
-    lines.push('  No burst windows had a confirmed damage spike above threshold.');
+    lines.push(
+      "  No burst windows had a confirmed damage spike above threshold.",
+    );
   }
   if (unconfirmedCount > 0) {
     lines.push(
