@@ -373,6 +373,13 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       const id = enemyIdMap.get(destUnitName) ?? enemyIdMap.get(cleanDest);
       if (id !== undefined) return String(id);
     }
+    // Unmapped target = totem/pet/NPC (not one of the arena players, who are all
+    // pid-mapped above). Its name comes from the log in the client's locale — do
+    // not leak a localized (e.g. Chinese) unit name into an English prompt. Cast
+    // lines tag [totem/pet] separately, so suppress the name here; ASCII names
+    // (rare English-locale NPCs) still pass through unchanged.
+    const isLocalized = [...cleanDest].some((ch) => ch.charCodeAt(0) > 127);
+    if (isLocalized) return "";
     return cleanDest;
   }
 
@@ -1271,9 +1278,15 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
         // self) keeps the ": X" form.
         let line: string;
         if (isCC) {
-          const tgt =
+          const tgtLabel =
             cast.targetName && cast.targetName !== "nil"
-              ? ` → ${enemyPid(cast.targetName)}`
+              ? enemyPid(cast.targetName)
+              : "";
+          // Suppress localized (non-ASCII) totem/pet/NPC target names — never leak
+          // a client-locale unit name into the English prompt.
+          const tgt =
+            tgtLabel && ![...tgtLabel].some((c) => c.charCodeAt(0) > 127)
+              ? ` → ${tgtLabel}`
               : "";
           line = `${fmtTime(cast.timeSeconds)}  [TEAM] [CC]   ${pid(player.name)} (${spec}) cast ${cd.spellName}${tgt}${groundingNote}`;
         } else {
@@ -1619,7 +1632,12 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   {
     const minor = new Map<
       string,
-      { sourceLabel: string; spellName: string; count: number; firstSeconds: number }
+      {
+        sourceLabel: string;
+        spellName: string;
+        count: number;
+        firstSeconds: number;
+      }
     >();
     const foldMinor = (
       events: IDispelEvent[],
@@ -1647,7 +1665,10 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     foldMinor(dispelSummary.ourPurges, pid);
     foldMinor(dispelSummary.hostilePurges, enemyPid);
 
-    const bySource = new Map<string, Array<{ spellName: string; count: number; firstSeconds: number }>>();
+    const bySource = new Map<
+      string,
+      Array<{ spellName: string; count: number; firstSeconds: number }>
+    >();
     for (const m of minor.values()) {
       const list = bySource.get(m.sourceLabel) ?? [];
       list.push(m);
