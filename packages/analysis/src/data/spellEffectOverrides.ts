@@ -19,11 +19,11 @@ export const SPELL_EFFECT_OVERRIDES: Record<string, IMinedSpell> =
     [
       // ── 主防御 CD ──
       e("642", "Divine Shield", 300, 8),
-    e("498", "Divine Protection", 60, 8),
-    e("216331", "Avenging Crusader", 60, 15),
-    e("31821", "Aura Mastery", 180, 8),
-    e("64843", "Divine Hymn", 180, 8),
-    e("200183", "Apotheosis", 120, 20),
+      e("498", "Divine Protection", 60, 8),
+      e("216331", "Avenging Crusader", 60, 15),
+      e("31821", "Aura Mastery", 180, 8),
+      e("64843", "Divine Hymn", 180, 8),
+      e("200183", "Apotheosis", 120, 20),
       e("45438", "Ice Block", 240, 10),
       e("31224", "Cloak of Shadows", 120, 5),
       e("5277", "Evasion", 120, 10),
@@ -58,6 +58,11 @@ export const SPELL_EFFECT_OVERRIDES: Record<string, IMinedSpell> =
       e("374348", "Renewing Blaze", 90, 8),
       e("357170", "Time Dilation", 60, 8),
       // ── 主进攻 CD(durationSeconds 用于 enemyCDs 到期跟踪)──
+      // 2026-07-14 全量审计补:生成层缺失的主爆发 CD(配套 spellCategories 分类新增)
+      e("386997", "Soul Rot", 60, 8),
+      e("258925", "Fel Barrage", 90, 3),
+      e("185313", "Shadow Dance", 60, 8),
+      e("360952", "Coordinated Assault", 120, 20),
       e("360194", "Deathmark", 120, 16),
       e("13750", "Adrenaline Rush", 180, 20),
       e("121471", "Shadow Blades", 90, 20),
@@ -72,7 +77,7 @@ export const SPELL_EFFECT_OVERRIDES: Record<string, IMinedSpell> =
       e("391109", "Dark Ascension", 60, 20),
       e("375087", "Dragonrage", 120, 18),
       e("51271", "Pillar of Frost", 60, 12),
-    e("47568", "Empower Rune Weapon", 120, 20),
+      e("47568", "Empower Rune Weapon", 120, 20),
       e("275699", "Apocalypse", 90, 15),
       e("207289", "Unholy Assault", 90, 20),
       e("106951", "Berserk", 180, 20),
@@ -111,22 +116,43 @@ export const SPELL_EFFECT_OVERRIDES: Record<string, IMinedSpell> =
       e("132409", "Spell Lock", 24),
       e("351338", "Quell", 40),
       e("15487", "Silence", 45),
-    e("8122", "Psychic Scream", 30, 6),
+      e("8122", "Psychic Scream", 30, 6),
       e("78675", "Solar Beam", 60),
     ].map((s) => [s.spellId, s]),
   );
 
 // dispelType 补充(公开事实;dispelAnalysis 消费)
 const DISPEL_TYPES: Record<string, string> = {
-  "118": "Magic", "28271": "Magic", "28272": "Magic", "51514": "Curse",
-  "3355": "Magic", "8122": "Magic", "5782": "Magic", "2637": "Magic",
-  "339": "Magic", "122": "Magic", "217832": "Magic", "6789": "Magic",
-  "702": "Curse", "1714": "Curse", "5484": "Magic", "605": "Magic",
-  "82691": "Magic", "20066": "Magic", "9484": "Magic", "10060": "Magic",
-  "1022": "Magic", "6940": "Magic",
+  "118": "Magic",
+  "28271": "Magic",
+  "28272": "Magic",
+  "51514": "Curse",
+  "3355": "Magic",
+  "8122": "Magic",
+  "5782": "Magic",
+  "2637": "Magic",
+  "339": "Magic",
+  "122": "Magic",
+  "217832": "Magic",
+  "6789": "Magic",
+  "702": "Curse",
+  "1714": "Curse",
+  "5484": "Magic",
+  "605": "Magic",
+  "82691": "Magic",
+  "20066": "Magic",
+  "9484": "Magic",
+  "10060": "Magic",
+  "1022": "Magic",
+  "6940": "Magic",
 };
 for (const [id, t] of Object.entries(DISPEL_TYPES)) {
   const cur = SPELL_EFFECT_OVERRIDES[id];
   if (cur) (cur as { dispelType?: string }).dispelType = t;
-  else SPELL_EFFECT_OVERRIDES[id] = { spellId: id, name: id, dispelType: t } as IMinedSpell;
+  else
+    SPELL_EFFECT_OVERRIDES[id] = {
+      spellId: id,
+      name: id,
+      dispelType: t,
+    } as IMinedSpell;
 }

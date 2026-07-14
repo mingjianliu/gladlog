@@ -116,6 +116,16 @@ export const SPELL_CATEGORIES: Record<string, ISpellCategoryEntry> = {
   "51271": { type: "buffs_offensive", duration: 12 }, // Pillar of Frost
   "31884": { type: "buffs_offensive", duration: 20 }, // Avenging Wrath
   "288613": { type: "buffs_offensive", duration: 15 }, // Trueshot
+  // 2026-07-14 全量审计补:21% 语料整场零 [ENEMY CD]——下列主爆发 CD 此前缺分类,
+  // isOffensiveSpell 返回 false 被 enemyCDs 静默丢弃(DH/贼/术/元素/生存猎为主)。
+  "370965": { type: "debuffs_offensive", duration: 6 }, // The Hunt
+  "258925": { type: "buffs_offensive", duration: 3 }, // Fel Barrage
+  "185313": { type: "buffs_offensive", duration: 8 }, // Shadow Dance
+  "360194": { type: "debuffs_offensive", duration: 16 }, // Deathmark
+  "205180": { type: "buffs_offensive", duration: 20 }, // Summon Darkglare
+  "386997": { type: "debuffs_offensive", duration: 8 }, // Soul Rot
+  "191634": { type: "buffs_offensive", duration: 15 }, // Ascendance (Elemental)
+  "360952": { type: "buffs_offensive", duration: 20 }, // Coordinated Assault
   // ── 打断 ──
   "1766": { type: "interrupts" },
   "2139": { type: "interrupts" },
