@@ -69,6 +69,8 @@ BASE_DIR="$GLADLOG_EVAL_HOME/runs/<runId>" npx tsx packages/eval/scripts/quality
 
 **PASS 2 — 锚定维度评估:** 7 维每维先写一句证据,再按下方锚点选分。`quality-report.json` 有实测值的维度,分数必须与实测一致(规则内联)并引用数字。
 
+**维度独立性(判别效度,强制):** 7 维各自独立打分,只按本维定义评判。某一维的缺陷绝不下拉其它维——具体:捏造/无支持主张只压 `accuracy`;重复/冗余行只压 `noise`;加载严重度标签只压 `labelBias`;事件乱序只压 `inferenceScaffolding`;缺失关键数据块(死亡/CD/CC)只压 `sufficiency`;与赛果矛盾的开场/收尾框架只压 `outcomeAlignment`(仅当该框架同时把某条真实事件说反才另计 `accuracy`,并在 factAudit 指名该主张);琐事挤占定胜负时刻只压 `focusCalibration`。**定稿前自检:若你压低了不止一维,必须为每一维给出各自独立、维度专属的证据;给不出专属理由的维度,回填到未扰动版本应得的分。** 整体"这份看起来更差/更好"的印象不是任何单维加减分的依据——判别效度要求每个分数只反映它自己那一维。
+
 **PASS 3 — 生成 JSON:** 只在 1–2 遍完成后写分数文件。
 
 ### Rubric(锚定 1 / 3 / 5;2、4 用于居间)
