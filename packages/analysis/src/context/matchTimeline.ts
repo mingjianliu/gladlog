@@ -1148,11 +1148,16 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
         destType === CombatUnitType.Guardian ||
         destType === CombatUnitType.Pet
       ) {
-        // B44: distinguish Grounding Totem absorption (wasted cast) from other totem/pet targets
-        totemNote =
-          (e.destUnitName?.toLowerCase().includes("grounding totem") ?? false)
-            ? " [absorbed: Grounding Totem]"
-            : " [totem/pet]";
+        // B44: distinguish Grounding Totem absorption (wasted cast) from other totem/pet
+        // targets. Detect by npcId from the dest GUID (locale-independent — the unit NAME
+        // is client-localized and the English substring check misses on non-EN logs),
+        // keeping the name check as fallback for GUID-less events.
+        const destIsGroundingTotem =
+          getNpcIdFromGuid(e.destUnitId ?? "") === GROUNDING_TOTEM_NPC_ID ||
+          (e.destUnitName?.toLowerCase().includes("grounding totem") ?? false);
+        totemNote = destIsGroundingTotem
+          ? " [absorbed: Grounding Totem]"
+          : " [totem/pet]";
       }
 
       // F159 / M-i: Annotate offensive-purge casts with the removed buff.
