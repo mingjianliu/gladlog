@@ -1,14 +1,22 @@
-import { ICombatUnit, LogEvent } from '@gladlog/parser-compat';
+import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
-import { spellEffectData } from '../data/spellEffectData';
-import { SPELL_CATEGORIES as spellsData } from '../data/spellCategories';
-import { ccSpellIds } from '../data/spellTags';
-import { fmtTime, isHealerSpec, specToString } from './cooldowns';
-import { DRLevel, getDRCategory, getDRLevelAtTime, IDRInfo } from './drAnalysis';
-import { IEnemyCDTimeline } from './enemyCDs';
-import { computeEnemyInterruptAvailability } from './enemyInterrupts';
-import { getHpPercentAtTime, getTrinketStateAtTime } from './killWindowTargetSelection';
-import { IOffensiveWindow } from './offensiveWindows';
+import { getEnglishSpellName, spellEffectData } from "../data/spellEffectData";
+import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
+import { ccSpellIds } from "../data/spellTags";
+import { fmtTime, isHealerSpec, specToString } from "./cooldowns";
+import {
+  DRLevel,
+  getDRCategory,
+  getDRLevelAtTime,
+  IDRInfo,
+} from "./drAnalysis";
+import { IEnemyCDTimeline } from "./enemyCDs";
+import { computeEnemyInterruptAvailability } from "./enemyInterrupts";
+import {
+  getHpPercentAtTime,
+  getTrinketStateAtTime,
+} from "./killWindowTargetSelection";
+import { IOffensiveWindow } from "./offensiveWindows";
 
 type SpellEntry = { type: string };
 const SPELLS = spellsData as Record<string, SpellEntry>;
@@ -53,18 +61,29 @@ export interface IContestedSegment extends ISlackSegment {
 type CCInterval = ReadonlyArray<{ atSeconds: number; durationSeconds: number }>;
 
 function isEnemyCDActiveAt(timeline: IEnemyCDTimeline, t: number): boolean {
-  return timeline.players.some((p) => p.offensiveCDs.some((cd) => cd.castTimeSeconds <= t && t < cd.buffEndSeconds));
+  return timeline.players.some((p) =>
+    p.offensiveCDs.some(
+      (cd) => cd.castTimeSeconds <= t && t < cd.buffEndSeconds,
+    ),
+  );
 }
 
 function isOwnerCCdAt(ownerCC: CCInterval, t: number): boolean {
-  return ownerCC.some((cc) => cc.atSeconds <= t && t < cc.atSeconds + cc.durationSeconds);
+  return ownerCC.some(
+    (cc) => cc.atSeconds <= t && t < cc.atSeconds + cc.durationSeconds,
+  );
 }
 
-function ownerMobilityCastTimes(owner: ICombatUnit, matchStartMs: number): number[] {
+function ownerMobilityCastTimes(
+  owner: ICombatUnit,
+  matchStartMs: number,
+): number[] {
   return owner.spellCastEvents
     .filter(
       (e) =>
-        e.logLine.event === LogEvent.SPELL_CAST_SUCCESS && e.spellId && SPELLS[e.spellId]?.type === 'buffs_speed_boost',
+        e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+        e.spellId &&
+        SPELLS[e.spellId]?.type === "buffs_speed_boost",
     )
     .map((e) => (e.logLine.timestamp - matchStartMs) / 1000);
 }
@@ -79,10 +98,15 @@ export function computeSlackSegments(
   ownerPurgeTimesSeconds: ReadonlyArray<number>,
 ): { advancedLoggingAvailable: boolean; segments: ISlackSegment[] } {
   const matchStartMs = combat.startTime;
-  const durationSeconds = Math.floor((combat.endTime - combat.startTime) / 1000);
+  const durationSeconds = Math.floor(
+    (combat.endTime - combat.startTime) / 1000,
+  );
 
-  const advancedLoggingAvailable = friends.every((f) => f.advancedActions.length > 0);
-  if (!advancedLoggingAvailable) return { advancedLoggingAvailable: false, segments: [] };
+  const advancedLoggingAvailable = friends.every(
+    (f) => f.advancedActions.length > 0,
+  );
+  if (!advancedLoggingAvailable)
+    return { advancedLoggingAvailable: false, segments: [] };
 
   const mobilityTimes = ownerMobilityCastTimes(owner, matchStartMs);
 
@@ -93,7 +117,8 @@ export function computeSlackSegments(
     }
     if (isEnemyCDActiveAt(enemyCDTimeline, t)) return false;
     if (isOwnerCCdAt(ownerCCInstances, t)) return false;
-    if (mobilityTimes.some((m) => t >= m && t < m + MOBILITY_EXCLUSION_SECONDS)) return false;
+    if (mobilityTimes.some((m) => t >= m && t < m + MOBILITY_EXCLUSION_SECONDS))
+      return false;
     return true;
   };
 
@@ -108,7 +133,8 @@ export function computeSlackSegments(
       segStart = null;
     }
   }
-  if (segStart !== null) raw.push({ fromSeconds: segStart, toSeconds: durationSeconds });
+  if (segStart !== null)
+    raw.push({ fromSeconds: segStart, toSeconds: durationSeconds });
 
   const enemyIds = new Set(enemies.map((e) => e.id));
 
@@ -123,13 +149,26 @@ export function computeSlackSegments(
         .filter((d) => inSeg(d.logLine.timestamp) && enemyIds.has(d.destUnitId))
         .reduce((sum, d) => sum + Math.max(0, d.effectiveAmount), 0);
       const casts = owner.spellCastEvents.filter(
-        (e) => e.logLine.event === LogEvent.SPELL_CAST_SUCCESS && inSeg(e.logLine.timestamp) && e.spellId,
+        (e) =>
+          e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+          inSeg(e.logLine.timestamp) &&
+          e.spellId,
       );
-      const ownerCCCasts = casts.filter((e) => ccSpellIds.has(e.spellId as string)).length;
-      const ownerKickCasts = casts.filter((e) => SPELLS[e.spellId as string]?.type === 'interrupts').length;
-      const ownerPurgeCasts = ownerPurgeTimesSeconds.filter((t) => t >= s.fromSeconds && t < s.toSeconds).length;
+      const ownerCCCasts = casts.filter((e) =>
+        ccSpellIds.has(e.spellId as string),
+      ).length;
+      const ownerKickCasts = casts.filter(
+        (e) => SPELLS[e.spellId as string]?.type === "interrupts",
+      ).length;
+      const ownerPurgeCasts = ownerPurgeTimesSeconds.filter(
+        (t) => t >= s.fromSeconds && t < s.toSeconds,
+      ).length;
 
-      const idle = ownerDamage === 0 && ownerCCCasts === 0 && ownerKickCasts === 0 && ownerPurgeCasts === 0;
+      const idle =
+        ownerDamage === 0 &&
+        ownerCCCasts === 0 &&
+        ownerKickCasts === 0 &&
+        ownerPurgeCasts === 0;
       return {
         fromSeconds: s.fromSeconds,
         toSeconds: s.toSeconds,
@@ -155,10 +194,15 @@ export function computeContestedSegments(
   ownerPurgeTimesSeconds: ReadonlyArray<number>,
 ): { advancedLoggingAvailable: boolean; segments: IContestedSegment[] } {
   const matchStartMs = combat.startTime;
-  const durationSeconds = Math.floor((combat.endTime - combat.startTime) / 1000);
+  const durationSeconds = Math.floor(
+    (combat.endTime - combat.startTime) / 1000,
+  );
 
-  const advancedLoggingAvailable = friends.every((f) => f.advancedActions.length > 0);
-  if (!advancedLoggingAvailable) return { advancedLoggingAvailable: false, segments: [] };
+  const advancedLoggingAvailable = friends.every(
+    (f) => f.advancedActions.length > 0,
+  );
+  if (!advancedLoggingAvailable)
+    return { advancedLoggingAvailable: false, segments: [] };
 
   const mobilityTimes = ownerMobilityCastTimes(owner, matchStartMs);
 
@@ -174,7 +218,8 @@ export function computeContestedSegments(
     if (!hasOneUnderSlackThreshold) return false;
     if (isEnemyCDActiveAt(enemyCDTimeline, t)) return false;
     if (isOwnerCCdAt(ownerCCInstances, t)) return false;
-    if (mobilityTimes.some((m) => t >= m && t < m + MOBILITY_EXCLUSION_SECONDS)) return false;
+    if (mobilityTimes.some((m) => t >= m && t < m + MOBILITY_EXCLUSION_SECONDS))
+      return false;
     return true;
   };
 
@@ -188,7 +233,8 @@ export function computeContestedSegments(
       segStart = null;
     }
   }
-  if (segStart !== null) raw.push({ fromSeconds: segStart, toSeconds: durationSeconds });
+  if (segStart !== null)
+    raw.push({ fromSeconds: segStart, toSeconds: durationSeconds });
 
   const enemyIds = new Set(enemies.map((e) => e.id));
 
@@ -203,13 +249,26 @@ export function computeContestedSegments(
         .filter((d) => inSeg(d.logLine.timestamp) && enemyIds.has(d.destUnitId))
         .reduce((sum, d) => sum + Math.max(0, d.effectiveAmount), 0);
       const casts = owner.spellCastEvents.filter(
-        (e) => e.logLine.event === LogEvent.SPELL_CAST_SUCCESS && inSeg(e.logLine.timestamp) && e.spellId,
+        (e) =>
+          e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+          inSeg(e.logLine.timestamp) &&
+          e.spellId,
       );
-      const ownerCCCasts = casts.filter((e) => ccSpellIds.has(e.spellId as string)).length;
-      const ownerKickCasts = casts.filter((e) => SPELLS[e.spellId as string]?.type === 'interrupts').length;
-      const ownerPurgeCasts = ownerPurgeTimesSeconds.filter((t) => t >= s.fromSeconds && t < s.toSeconds).length;
+      const ownerCCCasts = casts.filter((e) =>
+        ccSpellIds.has(e.spellId as string),
+      ).length;
+      const ownerKickCasts = casts.filter(
+        (e) => SPELLS[e.spellId as string]?.type === "interrupts",
+      ).length;
+      const ownerPurgeCasts = ownerPurgeTimesSeconds.filter(
+        (t) => t >= s.fromSeconds && t < s.toSeconds,
+      ).length;
 
-      const idle = ownerDamage === 0 && ownerCCCasts === 0 && ownerKickCasts === 0 && ownerPurgeCasts === 0;
+      const idle =
+        ownerDamage === 0 &&
+        ownerCCCasts === 0 &&
+        ownerKickCasts === 0 &&
+        ownerPurgeCasts === 0;
 
       const ownerHealing = (owner.healOut ?? [])
         .filter((h) => inSeg(h.logLine.timestamp))
@@ -279,7 +338,9 @@ export function computeContestedTradeFacts(
   if (ccSpells.length === 0) return [];
 
   const overlapsKillWindow = (seg: IContestedSegment) =>
-    offensiveWindows.some((w) => w.fromSeconds < seg.toSeconds && seg.fromSeconds < w.toSeconds);
+    offensiveWindows.some(
+      (w) => w.fromSeconds < seg.toSeconds && seg.fromSeconds < w.toSeconds,
+    );
 
   const facts: IContestedTradeFact[] = [];
   for (const seg of contestedSegments) {
@@ -288,16 +349,34 @@ export function computeContestedTradeFacts(
     const readyAtFullDR = ccSpells.find(
       (s) =>
         isCCReadyAt(s, seg.fromSeconds) &&
-        getDRLevelAtTime(enemyHealerCCInstances, getDRCategory(s.spellId), seg.fromSeconds) === 'Full',
+        getDRLevelAtTime(
+          enemyHealerCCInstances,
+          getDRCategory(s.spellId),
+          seg.fromSeconds,
+        ) === "Full",
     );
     if (!readyAtFullDR) continue;
 
-    const trinketAvailable = getTrinketStateAtTime(enemyHealer, seg.fromSeconds, matchStartMs, true);
+    const trinketAvailable = getTrinketStateAtTime(
+      enemyHealer,
+      seg.fromSeconds,
+      matchStartMs,
+      true,
+    );
     const enemyHealerTrinket =
-      trinketAvailable === true ? 'available' : trinketAvailable === false ? 'on CD' : 'unknown';
+      trinketAvailable === true
+        ? "available"
+        : trinketAvailable === false
+          ? "on CD"
+          : "unknown";
 
-    const interrupts = computeEnemyInterruptAvailability(enemies, matchStartMs + seg.fromSeconds * 1000);
-    const enemyInterruptsReady = interrupts.filter((i) => i.cdRemainingSeconds === 0).length;
+    const interrupts = computeEnemyInterruptAvailability(
+      enemies,
+      matchStartMs + seg.fromSeconds * 1000,
+    );
+    const enemyInterruptsReady = interrupts.filter(
+      (i) => i.cdRemainingSeconds === 0,
+    ).length;
 
     facts.push({
       fromSeconds: seg.fromSeconds,
@@ -314,7 +393,9 @@ export function computeContestedTradeFacts(
     });
   }
 
-  return facts.sort((a, b) => b.durationSeconds - a.durationSeconds).slice(0, MAX_CONTESTED_FACTS);
+  return facts
+    .sort((a, b) => b.durationSeconds - a.durationSeconds)
+    .slice(0, MAX_CONTESTED_FACTS);
 }
 
 // ── Task 2: Kill-window contribution analysis ──────────────────────────────
@@ -344,21 +425,27 @@ interface IOwnerCCSpell {
 }
 
 /** Owner CC spells observed at least once in cast history (honest availability: never-cast spells are unknowable). */
-function collectOwnerCCSpells(owner: ICombatUnit, matchStartMs: number): IOwnerCCSpell[] {
+function collectOwnerCCSpells(
+  owner: ICombatUnit,
+  matchStartMs: number,
+): IOwnerCCSpell[] {
   const bySpell = new Map<string, IOwnerCCSpell>();
   for (const e of owner.spellCastEvents) {
     if (e.logLine.event !== LogEvent.SPELL_CAST_SUCCESS || !e.spellId) continue;
     if (!ccSpellIds.has(e.spellId)) continue;
     const entry = bySpell.get(e.spellId) ?? {
       spellId: e.spellId,
-      spellName: e.spellName ?? e.spellId,
+      spellName: getEnglishSpellName(e.spellId, e.spellName),
       cooldownSeconds: spellEffectData[e.spellId]?.cooldownSeconds ?? 0,
       castTimesSeconds: [],
     };
     entry.castTimesSeconds.push((e.logLine.timestamp - matchStartMs) / 1000);
     bySpell.set(e.spellId, entry);
   }
-  return [...bySpell.values()].map((s) => ({ ...s, castTimesSeconds: s.castTimesSeconds.sort((a, b) => a - b) }));
+  return [...bySpell.values()].map((s) => ({
+    ...s,
+    castTimesSeconds: s.castTimesSeconds.sort((a, b) => a - b),
+  }));
 }
 
 function isCCReadyAt(spell: IOwnerCCSpell, atSeconds: number): boolean {
@@ -368,10 +455,16 @@ function isCCReadyAt(spell: IOwnerCCSpell, atSeconds: number): boolean {
     if (t < atSeconds) lastBefore = t;
     else break;
   }
-  return lastBefore === undefined || lastBefore + spell.cooldownSeconds <= atSeconds;
+  return (
+    lastBefore === undefined || lastBefore + spell.cooldownSeconds <= atSeconds
+  );
 }
 
-type CCWithDR = ReadonlyArray<{ atSeconds: number; durationSeconds: number; drInfo: IDRInfo | null }>;
+type CCWithDR = ReadonlyArray<{
+  atSeconds: number;
+  durationSeconds: number;
+  drInfo: IDRInfo | null;
+}>;
 
 export function computeWindowContributions(
   combat: { startTime: number; endTime: number },
@@ -393,12 +486,21 @@ export function computeWindowContributions(
       .map((s) => ({
         spellName: s.spellName,
         enemyHealerDR: enemyHealer
-          ? getDRLevelAtTime(enemyHealerCCInstances, getDRCategory(s.spellId), w.fromSeconds)
+          ? getDRLevelAtTime(
+              enemyHealerCCInstances,
+              getDRCategory(s.spellId),
+              w.fromSeconds,
+            )
           : null,
       }));
 
     const ownerCastCCInWindow = owner.spellCastEvents.some((e) => {
-      if (e.logLine.event !== LogEvent.SPELL_CAST_SUCCESS || !e.spellId || !ccSpellIds.has(e.spellId)) return false;
+      if (
+        e.logLine.event !== LogEvent.SPELL_CAST_SUCCESS ||
+        !e.spellId ||
+        !ccSpellIds.has(e.spellId)
+      )
+        return false;
       const t = (e.logLine.timestamp - matchStartMs) / 1000;
       return t >= w.fromSeconds && t < w.toSeconds;
     });
@@ -406,7 +508,9 @@ export function computeWindowContributions(
     const ownerDamageInWindow = owner.damageOut
       .filter((d) => {
         const t = (d.logLine.timestamp - matchStartMs) / 1000;
-        return t >= w.fromSeconds && t < w.toSeconds && enemyIds.has(d.destUnitId);
+        return (
+          t >= w.fromSeconds && t < w.toSeconds && enemyIds.has(d.destUnitId)
+        );
       })
       .reduce((sum, d) => sum + Math.max(0, d.effectiveAmount), 0);
 
@@ -418,9 +522,14 @@ export function computeWindowContributions(
 
     let teamMinHpPct: number | null = null;
     for (const f of friends) {
-      for (let t = Math.ceil(w.fromSeconds); t <= Math.floor(w.toSeconds); t++) {
+      for (
+        let t = Math.ceil(w.fromSeconds);
+        t <= Math.floor(w.toSeconds);
+        t++
+      ) {
         const hp = getHpPercentAtTime(f, t, matchStartMs);
-        if (hp !== null && (teamMinHpPct === null || hp < teamMinHpPct)) teamMinHpPct = hp;
+        if (hp !== null && (teamMinHpPct === null || hp < teamMinHpPct))
+          teamMinHpPct = hp;
       }
     }
 
@@ -469,7 +578,9 @@ export function computeWindowCreationFacts(
   if (ccSpells.length === 0) return [];
 
   const overlapsKillWindow = (seg: ISlackSegment) =>
-    offensiveWindows.some((w) => w.fromSeconds < seg.toSeconds && seg.fromSeconds < w.toSeconds);
+    offensiveWindows.some(
+      (w) => w.fromSeconds < seg.toSeconds && seg.fromSeconds < w.toSeconds,
+    );
 
   const facts: IWindowCreationFact[] = [];
   for (const seg of slackSegments) {
@@ -478,11 +589,20 @@ export function computeWindowCreationFacts(
     const readyAtFullDR = ccSpells.find(
       (s) =>
         isCCReadyAt(s, seg.fromSeconds) &&
-        getDRLevelAtTime(enemyHealerCCInstances, getDRCategory(s.spellId), seg.fromSeconds) === 'Full',
+        getDRLevelAtTime(
+          enemyHealerCCInstances,
+          getDRCategory(s.spellId),
+          seg.fromSeconds,
+        ) === "Full",
     );
     if (!readyAtFullDR) continue;
 
-    const trinketAvailable = getTrinketStateAtTime(enemyHealer, seg.fromSeconds, matchStartMs, true);
+    const trinketAvailable = getTrinketStateAtTime(
+      enemyHealer,
+      seg.fromSeconds,
+      matchStartMs,
+      true,
+    );
     // trinketAvailable === true → healer can break the opener; not a clean opportunity
     if (trinketAvailable === true) continue;
 
@@ -492,12 +612,14 @@ export function computeWindowCreationFacts(
       ccSpellName: readyAtFullDR.spellName,
       enemyHealerName: enemyHealer.name,
       enemyHealerSpec: specToString(enemyHealer.spec),
-      enemyHealerDRLevel: 'Full',
+      enemyHealerDRLevel: "Full",
       enemyHealerTrinketOnCD: trinketAvailable === null ? null : true,
     });
   }
 
-  return facts.sort((a, b) => b.slackDurationSeconds - a.slackDurationSeconds).slice(0, MAX_WINDOW_CREATION_FACTS);
+  return facts
+    .sort((a, b) => b.slackDurationSeconds - a.slackDurationSeconds)
+    .slice(0, MAX_WINDOW_CREATION_FACTS);
 }
 
 // ── Task 4: Summary entry point + context formatter ───────────────────────
@@ -583,9 +705,16 @@ export function buildHealerOffenseSummary(
   };
 }
 
-export function formatHealerOffenseForContext(summary: IHealerOffenseSummary): string[] {
+export function formatHealerOffenseForContext(
+  summary: IHealerOffenseSummary,
+): string[] {
   if (!summary.advancedLoggingAvailable) return [];
-  const { slackSegments, windowContributions, windowCreationFacts, contestedTradeFacts } = summary;
+  const {
+    slackSegments,
+    windowContributions,
+    windowCreationFacts,
+    contestedTradeFacts,
+  } = summary;
   if (
     slackSegments.length === 0 &&
     windowContributions.length === 0 &&
@@ -595,20 +724,36 @@ export function formatHealerOffenseForContext(summary: IHealerOffenseSummary): s
     return [];
 
   const lines: string[] = [];
-  lines.push('HEALER OFFENSE (slack-gated facts — team ≥85% HP, no enemy offensive CDs active, you un-CC-d):');
+  lines.push(
+    "HEALER OFFENSE (slack-gated facts — team ≥85% HP, no enemy offensive CDs active, you un-CC-d):",
+  );
 
   // Hoist the owner's static CC spell set once instead of repeating the name on every
   // [KILL WINDOW] line (~25 tok/match, 2026-07-09 week-eval tokens.md #5). Readiness and
   // enemy-healer DR stay per-window below — only the name is static.
-  const ownerCCSpellNames = [...new Set(windowContributions.flatMap((w) => w.ownerCCReady.map((c) => c.spellName)))];
-  const singleOwnerCC = ownerCCSpellNames.length === 1 ? ownerCCSpellNames[0] : null;
+  const ownerCCSpellNames = [
+    ...new Set(
+      windowContributions.flatMap((w) =>
+        w.ownerCCReady.map((c) => c.spellName),
+      ),
+    ),
+  ];
+  const singleOwnerCC =
+    ownerCCSpellNames.length === 1 ? ownerCCSpellNames[0] : null;
   if (singleOwnerCC) {
     lines.push(`  Your CC: ${singleOwnerCC}.`);
   }
 
-  const totalSlack = slackSegments.reduce((s, seg) => s + seg.durationSeconds, 0);
-  const idleSegs = slackSegments.filter((s) => s.idle && s.durationSeconds >= IDLE_PRIORITY_SECONDS);
-  const idleSlack = slackSegments.filter((s) => s.idle).reduce((s, seg) => s + seg.durationSeconds, 0);
+  const totalSlack = slackSegments.reduce(
+    (s, seg) => s + seg.durationSeconds,
+    0,
+  );
+  const idleSegs = slackSegments.filter(
+    (s) => s.idle && s.durationSeconds >= IDLE_PRIORITY_SECONDS,
+  );
+  const idleSlack = slackSegments
+    .filter((s) => s.idle)
+    .reduce((s, seg) => s + seg.durationSeconds, 0);
   if (slackSegments.length > 0) {
     lines.push(
       `  Slack time: ${totalSlack}s across ${slackSegments.length} segment(s); ${idleSlack}s with zero offensive output.`,
@@ -625,7 +770,9 @@ export function formatHealerOffenseForContext(summary: IHealerOffenseSummary): s
   let shownWindows = windowContributions;
   let omittedWindows: IWindowContribution[] = [];
   if (windowContributions.length > MAX_KILL_WINDOW_LINES) {
-    const byFreeDesc = [...windowContributions].sort((a, b) => b.ownerFreeSeconds - a.ownerFreeSeconds);
+    const byFreeDesc = [...windowContributions].sort(
+      (a, b) => b.ownerFreeSeconds - a.ownerFreeSeconds,
+    );
     const keep = new Set(byFreeDesc.slice(0, MAX_KILL_WINDOW_LINES));
     shownWindows = windowContributions.filter((w) => keep.has(w));
     omittedWindows = windowContributions.filter((w) => !keep.has(w));
@@ -636,19 +783,27 @@ export function formatHealerOffenseForContext(summary: IHealerOffenseSummary): s
       w.ownerCCReady.length > 0
         ? singleOwnerCC
           ? // Name hoisted to the "Your CC:" header line above; keep only the per-window state.
-            `CC ready${w.ownerCCReady[0].enemyHealerDR ? ` (enemy healer DR: ${w.ownerCCReady[0].enemyHealerDR})` : ''}`
+            `CC ready${w.ownerCCReady[0].enemyHealerDR ? ` (enemy healer DR: ${w.ownerCCReady[0].enemyHealerDR})` : ""}`
           : `your CC ready: ${w.ownerCCReady
-              .map((c) => `${c.spellName}${c.enemyHealerDR ? ` (enemy healer DR: ${c.enemyHealerDR})` : ''}`)
-              .join(', ')}`
+              .map(
+                (c) =>
+                  `${c.spellName}${c.enemyHealerDR ? ` (enemy healer DR: ${c.enemyHealerDR})` : ""}`,
+              )
+              .join(", ")}`
         : // Pre-existing wording fix: an empty ready-list can also mean "observed CC is on cooldown
           // at window start" — only claim "not observed" when no CC was seen anywhere in the match.
           ownerCCSpellNames.length > 0
-          ? 'your CC on cooldown'
-          : 'no owner CC observed this match';
-    const cast = w.ownerCastCCInWindow ? 'you cast CC in this window' : 'you cast no CC';
+          ? "your CC on cooldown"
+          : "no owner CC observed this match";
+    const cast = w.ownerCastCCInWindow
+      ? "you cast CC in this window"
+      : "you cast no CC";
     const dmg = `your damage ${(w.ownerDamageInWindow / 1000).toFixed(0)}k`;
     const free = `free ${Math.round(w.ownerFreeSeconds)}s of ${Math.round(w.toSeconds - w.fromSeconds)}s`;
-    const teamHp = w.teamMinHpPct !== null ? `, team min HP ${Math.round(w.teamMinHpPct)}%` : '';
+    const teamHp =
+      w.teamMinHpPct !== null
+        ? `, team min HP ${Math.round(w.teamMinHpPct)}%`
+        : "";
     lines.push(
       `  [KILL WINDOW] ${fmtTime(w.fromSeconds)}–${fmtTime(w.toSeconds)} on ${w.targetSpec} (${w.targetName}): ${ready}; ${cast}; ${dmg}; ${free}${teamHp}.`,
     );
@@ -663,7 +818,10 @@ export function formatHealerOffenseForContext(summary: IHealerOffenseSummary): s
   }
 
   for (const f of windowCreationFacts) {
-    const trinket = f.enemyHealerTrinketOnCD === true ? 'trinket on CD' : 'trinket state unknown (never observed)';
+    const trinket =
+      f.enemyHealerTrinketOnCD === true
+        ? "trinket on CD"
+        : "trinket state unknown (never observed)";
     lines.push(
       `  [OPPORTUNITY] ${fmtTime(f.atSeconds)} (slack ${f.slackDurationSeconds}s): ${f.ccSpellName} ready; enemy healer ${f.enemyHealerName} DR Full, ${trinket} (opportunity, not a verdict).`,
     );
@@ -678,6 +836,6 @@ export function formatHealerOffenseForContext(summary: IHealerOffenseSummary): s
   // The "facts, not conclusions / cross-check the timeline / valid uses of slack" guidance is
   // already in the system prompt's healer-offense rules — repeating it here cost ~35 tok/match
   // (2026-07-09 week-eval tokens.md #4). "Outranks" is NOT in the system prompt, so it stays.
-  lines.push('  Note: healing under pressure always outranks offense.');
+  lines.push("  Note: healing under pressure always outranks offense.");
   return lines;
 }
