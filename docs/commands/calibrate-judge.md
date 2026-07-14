@@ -37,7 +37,7 @@ npx tsx packages/eval/scripts/buildCalibration.ts --run <runId>   # 可加 --sou
 
 ```bash
 npx tsx packages/eval/scripts/checkCalibration.ts --run <runId>   # PASS_THRESHOLD 默认 0.8
-# 可调环境变量:MIN_PAIRS(默认 4)DELTA_FLOOR(默认 1)SPECIFICITY_TOL(默认 0,整数 rubric 严格;连续 rubric 调高)
+# 可调环境变量:MIN_PAIRS(默认 4)DELTA_FLOOR(默认 1)SPECIFICITY_TOL(默认 1,整数 rubric 适用——±1 是量化抖动不是缺陷信号;连续 rubric 可降到 0)
 ```
 
 一件扰动**算检出**要同时过判别效度两关,不只是"降了分":

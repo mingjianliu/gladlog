@@ -29,7 +29,8 @@
  * prompt-builder changes.
  *
  * Tunables (opts or env): PASS_THRESHOLD, MIN_PAIRS (4), DELTA_FLOOR (1),
- * SPECIFICITY_TOL (0 — integer-rubric strict; raise for continuous rubrics).
+ * SPECIFICITY_TOL (1 — integer-rubric default; 0 only for continuous rubrics,
+ * where 1-pt co-movement is signal rather than quantization noise).
  */
 
 import fs from "fs-extra";
@@ -103,8 +104,12 @@ export async function checkCalibration(
   const scoresSubdir = opts?.scoresSubdir ?? process.env.SCORES_DIR ?? "scores";
   const minPairs = opts?.minPairs ?? Number(process.env.MIN_PAIRS ?? 4);
   const deltaFloor = opts?.deltaFloor ?? Number(process.env.DELTA_FLOOR ?? 1);
+  // Default 1, not 0: on an integer 1–5 rubric even a calibrated judge wobbles untargeted
+  // dims by ±1 (empirical, 2026-07-14: a judge with strong sensitivity — 31/35 planted
+  // defects detected — scored 1/40 at TOL=0 purely on 1-pt co-movement). TOL=0 measures
+  // integer-quantization noise, not discriminant validity; keep 0 only for continuous rubrics.
   const specificityTol =
-    opts?.specificityTol ?? Number(process.env.SPECIFICITY_TOL ?? 0);
+    opts?.specificityTol ?? Number(process.env.SPECIFICITY_TOL ?? 1);
 
   const manifestPath = path.join(suiteDir, "calibration-manifest.json");
   if (!(await fs.pathExists(manifestPath))) {
