@@ -633,9 +633,15 @@ export function computeWindowCreationFacts(
     });
   }
 
-  return facts
-    .sort((a, b) => b.slackDurationSeconds - a.slackDurationSeconds)
-    .slice(0, MAX_WINDOW_CREATION_FACTS);
+  return (
+    facts
+      // Select the highest-leverage facts (longest slack) …
+      .sort((a, b) => b.slackDurationSeconds - a.slackDurationSeconds)
+      .slice(0, MAX_WINDOW_CREATION_FACTS)
+      // … but RENDER chronologically: judges read the leverage-sorted list
+      // ("0:30 before 0:00") as a timeline error (invariant sweep, 2026-07-16).
+      .sort((a, b) => a.atSeconds - b.atSeconds)
+  );
 }
 
 // ── Task 4: Summary entry point + context formatter ───────────────────────
