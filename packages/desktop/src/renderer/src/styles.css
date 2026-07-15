@@ -607,6 +607,11 @@ pre {
   font-size: 11px;
   padding: 2px 8px;
 }
+.rpt-finding-ev .rpt-finding-jump {
+  margin-left: 8px;
+  color: var(--gold);
+  border-color: var(--gold-dim);
+}
 /* cohort 对比:右栏 sticky 卡片 */
 .rpt-ai-side .rpt-ai-panel {
   background: var(--surface);
@@ -963,6 +968,21 @@ pre {
 }
 .rpt-gcd-act.major .rpt-gcd-act-name {
   color: var(--gold);
+}
+/* 证据链跳转命中的 chip:闪金后回落(key 混入 nonce,每次跳转重放) */
+.rpt-gcd-act.flash {
+  animation: rpt-gcd-flash 2.4s ease-out;
+}
+@keyframes rpt-gcd-flash {
+  0% {
+    box-shadow: 0 0 0 3px var(--gold);
+  }
+  60% {
+    box-shadow: 0 0 0 2px var(--gold);
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
 }
 .rpt-gcd-act-dot {
   width: 7px;

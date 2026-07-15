@@ -4,9 +4,12 @@ import { useState } from "react";
 export function FindingsList({
   findings,
   onSelect,
+  onJump,
 }: {
   findings: Finding[];
   onSelect: (eventIds: string[]) => void;
+  /** 跳到回放:定位到该 finding 引用的最早事件时刻。 */
+  onJump?: (eventIds: string[]) => void;
 }) {
   const [open, setOpen] = useState<Record<number, boolean>>({});
 
@@ -51,6 +54,14 @@ export function FindingsList({
             {f.eventIds && f.eventIds.length > 0 && (
               <div className="rpt-finding-ev">
                 <button onClick={() => onSelect(f.eventIds)}>Evidence</button>
+                {onJump && (
+                  <button
+                    className="rpt-finding-jump"
+                    onClick={() => onJump(f.eventIds)}
+                  >
+                    ▶ 回放此刻
+                  </button>
+                )}
               </div>
             )}
           </div>

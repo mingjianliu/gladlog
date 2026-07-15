@@ -100,7 +100,7 @@
 - **UI**:`App.tsx` 列表 li 重排两行:上行 result 色条 + 地图 + 时长 + 评分,下行两组 spec 图标 vs 分隔。胜负染色沿用 `badge-*` 类。
 - **测试**:`App.pagination.test.tsx` 旁补 meta 缺字段回退渲染的断言。
 
-## 8. 证据链跳转 + KILL WINDOW/VULNERABLE 标注回放 ⬜(2026-07-17;新仓独有差异化,旧仓没有)
+## 8. 证据链跳转 + KILL WINDOW/VULNERABLE 标注回放 🔶 部分完成(2026-07-17 核心链路已实现:finding「回放此刻」→ 切回放 + seek + 泳道闪金 + 滚动定位,nonce 防重复消费;剩余:TimelineStrip 标记跳转入口、KILL WINDOW/VULNERABLE scrubber 色带)
 
 **需求**:AI 分析的 findings 带经过验证的时间戳/事件 id —— 让每个时间戳**可点**:点击 → 切回放视图、seek 播放时钟到 t、GCD 泳道对应列高亮该时刻。把「信教练」变成「自己看」——这是全链路可验证方向在 UI 上的落点。顺带:把 `[KILL WINDOW]` burst 与 `[VULNERABLE]` 段画到回放 scrubber/TimelineStrip 上(2026-07-17 重设计后 span 已短而诚实,p50 14s,适合可视化)。
 

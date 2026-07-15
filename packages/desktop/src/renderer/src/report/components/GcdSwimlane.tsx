@@ -55,6 +55,7 @@ export function GcdSwimlane({
   selUnits,
   onToggle,
   playing,
+  flash,
 }: {
   source: ReportSource;
   tracks: ReplayTrack[];
@@ -64,6 +65,12 @@ export function GcdSwimlane({
   selUnits: Record<string, boolean>;
   onToggle: (unitId: string) => void;
   playing: boolean;
+  /** 证据链跳转:该时刻 ±2s 内(且命中 unitNames 的列)的 chip 闪金提示。 */
+  flash?: {
+    tMs: number;
+    unitNames: string[];
+    nonce: number;
+  } | null;
 }) {
   const durationSec = Math.max(1, (endTime - startTime) / 1000);
   const laneH = durationSec * PX_PER_SEC;
@@ -107,6 +114,14 @@ export function GcdSwimlane({
     el.scrollTop = cursorY - el.clientHeight * 0.4;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [t, playing]);
+
+  // 证据链跳转:新 flash 请求时滚到目标时刻(暂停态也生效)
+  useEffect(() => {
+    if (!flash || !scrollRef.current) return;
+    const el = scrollRef.current;
+    el.scrollTop = HEAD_H + yFor(flash.tMs) - el.clientHeight * 0.4;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flash?.nonce]);
 
   const ticks: number[] = [];
   for (let s = 0; s <= durationSec; s += TICK_SEC) ticks.push(s);
@@ -170,18 +185,26 @@ export function GcdSwimlane({
                     const elapsed = c.t <= t;
                     const recent = elapsed && c.t >= t - GCD_MS;
                     const major = isMajorCd(c.spellId);
+                    // 证据链闪金:时刻 ±2s 内,且(无点名 or 本列被点名)。
+                    // key 混入 nonce 强制重挂载,让 CSS 动画每次跳转都重放。
+                    const flashed =
+                      !!flash &&
+                      Math.abs(c.t - flash.tMs) <= 2000 &&
+                      (flash.unitNames.length === 0 ||
+                        flash.unitNames.includes(tr.name));
                     // 只在播放时把「未来」的技能压暗以显示进度;暂停/开头一律亮。
                     const cls = [
                       "rpt-gcd-act",
                       major ? "major" : "",
                       playing && !elapsed ? "future" : "",
                       recent ? "recent" : "",
+                      flashed ? "flash" : "",
                     ]
                       .filter(Boolean)
                       .join(" ");
                     return (
                       <div
-                        key={i}
+                        key={flashed ? `${i}-f${flash.nonce}` : i}
                         className={cls}
                         style={{ top: y }}
                         title={

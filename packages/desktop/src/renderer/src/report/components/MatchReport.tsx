@@ -31,6 +31,22 @@ export function MatchReport({
   const [mode, setMode] = useState<MeterMode>("damage");
   const [view, setView] = useState<View>("report");
   const [hidden, setHidden] = useState<Set<string>>(new Set());
+  // 证据链跳转请求:AI 视图点「回放此刻」→ 切回放并 seek。nonce 防重复消费,
+  // 回放时钟保持 ReplayView 局部(提升热 state 会让三视图随 tick 重渲)。
+  const [seekReq, setSeekReq] = useState<{
+    tMs: number;
+    unitNames: string[];
+    nonce: number;
+  } | null>(null);
+
+  const handleSeekEvent = (tSeconds: number, unitNames: string[]) => {
+    setSeekReq({
+      tMs: source.startTime + tSeconds * 1000,
+      unitNames,
+      nonce: Date.now(),
+    });
+    setView("replay");
+  };
   const summary = useMemo(() => deriveSummary(source), [source]);
   const timeline = useMemo(() => deriveTimeline(source), [source]);
 
@@ -71,13 +87,14 @@ export function MatchReport({
           <Timeline data={timeline} hidden={hidden} onSelectUnit={toggleUnit} />
         </div>
       )}
-      {view === "replay" && <ReplayView source={source} />}
+      {view === "replay" && <ReplayView source={source} seekReq={seekReq} />}
       {view === "ai" && (
         <div className="rpt-ai-full">
           <div className="rpt-ai-main">
             <StructuredAnalysisPanel
               source={source}
               matchId={resolvedMatchId}
+              onSeekEvent={handleSeekEvent}
             />
           </div>
           <aside className="rpt-ai-side">

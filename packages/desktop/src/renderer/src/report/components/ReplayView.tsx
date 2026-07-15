@@ -34,7 +34,19 @@ const relTime = (t: number, start: number): string => {
     .padStart(2, "0")}`;
 };
 
-export function ReplayView({ source }: { source: ReportSource }) {
+export interface SeekRequest {
+  tMs: number;
+  unitNames: string[];
+  nonce: number;
+}
+
+export function ReplayView({
+  source,
+  seekReq,
+}: {
+  source: ReportSource;
+  seekReq?: SeekRequest | null;
+}) {
   const data = useMemo(() => deriveReplay(source), [source]);
   const { startTime, endTime, bounds, tracks } = data;
 
@@ -45,6 +57,16 @@ export function ReplayView({ source }: { source: ReportSource }) {
     Object.fromEntries(tracks.map((tr) => [tr.unitId, true])),
   );
   const prevRef = useRef<number>(0);
+  const seekNonceRef = useRef<number>(0);
+
+  // 证据链 seek:按 nonce 消费一次(组件在视图切换时重挂载,ref 归零后
+  // 首次挂载也会消费同一请求)。定位后暂停,让用户从该时刻自己看。
+  useEffect(() => {
+    if (!seekReq || seekReq.nonce === seekNonceRef.current) return;
+    seekNonceRef.current = seekReq.nonce;
+    setT(Math.min(endTime, Math.max(startTime, seekReq.tMs)));
+    setPlaying(false);
+  }, [seekReq, startTime, endTime]);
 
   useEffect(() => {
     if (!playing) return;
@@ -340,6 +362,7 @@ export function ReplayView({ source }: { source: ReportSource }) {
           selUnits={selUnits}
           onToggle={(id) => setSelUnits((s) => ({ ...s, [id]: !s[id] }))}
           playing={playing}
+          flash={seekReq}
         />
       </div>
 
