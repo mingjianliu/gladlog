@@ -477,15 +477,21 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       // offensive CD/CC target (an enemy) rendered as a raw name, or as the WRONG friendly id
       // when both teams had a player with the same display name.
       const shortTarget = targetName.split("-")[0];
-      const targetLabel = targetUnit
+      const resolved = targetUnit
         ? targetUnit.reaction === CombatUnitReaction.Hostile
           ? enemyPid(targetName)
           : pid(targetName)
-        : // Unknown unit = totem/pet/NPC; suppress client-localized names
-          // (locale-leak audit) — ASCII English NPC names still pass through.
-          [...shortTarget].some((c) => c.charCodeAt(0) > 127)
-          ? "[pet/NPC]"
-          : shortTarget;
+        : shortTarget;
+      // Totem/pet/NPC targets resolve through the pid fallback to their log
+      // name, which is client-localized (根基图腾 leak, locale audit). Known
+      // critical NPCs get their English name via npcId; anything else
+      // non-ASCII is suppressed. ASCII English names still pass through.
+      const npcEnglish = targetUnit
+        ? CRITICAL_NON_PLAYER_NPC_NAMES[getNpcIdFromGuid(targetUnit.id) ?? ""]
+        : undefined;
+      const targetLabel = [...resolved].some((c) => c.charCodeAt(0) > 127)
+        ? (npcEnglish ?? "[pet/NPC]")
+        : resolved;
       targetPart = ` → ${targetLabel}`;
       const hpPct =
         overrideHpPct ??
