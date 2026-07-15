@@ -502,7 +502,15 @@ export function computeWindowContributions(
       )
         return false;
       const t = (e.logLine.timestamp - matchStartMs) / 1000;
-      return t >= w.fromSeconds && t < w.toSeconds;
+      // Rendered-grid rule (invariant sweep I2, 2026-07-16): the window header
+      // and the timeline [YOU] [CC] lines both render floored seconds, so the
+      // membership test must use the same grid — fractional boundaries made
+      // "you cast no CC" coexist with a [YOU] [CC] line at the rendered
+      // window edge in 12/1245 prompts.
+      return (
+        Math.floor(t) >= Math.floor(w.fromSeconds) &&
+        Math.floor(t) <= Math.floor(w.toSeconds)
+      );
     });
 
     const ownerDamageInWindow = owner.damageOut

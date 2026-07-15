@@ -1210,7 +1210,12 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       let orderNote = "";
       if (nearestCC !== undefined) {
         if (tsMs < nearestCC) {
-          orderNote = " [completed before CC landed]";
+          // "succeeded", not "completed": SPELL_CAST_SUCCESS fires at channel
+          // START for channeled spells, so a channel broken by this very CC
+          // carried both "[completed before CC landed]" and "interrupted at
+          // 0.1s" — a direct self-contradiction at pivotal moments (invariant
+          // sweep I3, flagged independently by 4+ blind judges).
+          orderNote = " [cast succeeded before CC landed]";
         } else if (tsMs > nearestCC) {
           orderNote = " [succeeded after CC arrived — within 1s in log]";
         } else {
