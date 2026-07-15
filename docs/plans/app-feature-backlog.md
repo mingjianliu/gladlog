@@ -58,3 +58,95 @@
 - **落点**:作为 #3 引入的顶层 `View` 的第三个值 `"replay"`,与报告/AI 平级。
 - **渲染**:一个随时间轴 scrub 的 canvas/SVG 俯视图 —— 单位为点、阵营着色、施法/控制/死亡以标记或高亮表示;复用现有 `deriveTimeline` 的事件序列做时间驱动。
 - **范围**:体量最大、最不确定的一项,建议先做 spike 验证坐标数据,再决定是精确走位还是事件动画。
+
+---
+
+> 下面 #6–#11 来自 2026-07-17 与旧仓 wowarenalogs UI 的逐项对比(`~/code/wowarenalogs/packages/shared/src/components/CombatReport/` 15 个 tab 逐个过)。
+> 结论:三视图段控结构**优于**旧仓 15 平铺 tab,保持不动;缺的是旧仓已验证有用的**内容**,以及新仓独有的**证据链跳转**机会。
+> 通用架构事实(实现前先记住):renderer 只依赖 `@gladlog/parser`(新 parser doc,`u.deaths`/advanced 采样带 x/y/hp);**main 进程已依赖 `@gladlog/analysis`**(`src/main/analysis.ts` 构建 findings prompt)。所以凡是要用 analysis 谓词/白名单的功能,首选「main 算好 → IPC 给 renderer」,不要在 renderer 重抄常量(门规谓词即规范)。
+
+## 6. 死亡回顾 Death Recap ⬜(2026-07-17,对比旧仓 CombatDeathReports;优先级最高)
+
+**需求**:竞技场复盘工具的第一用例。点 HP 曲线上的死亡标记(或战报视图新增「死亡」列表)→ 打开该次死亡的回顾面板:死前 ~10s 的承伤事件流、治疗在干嘛(被控/在读条/在跑位)、死者自己的防御 CD 用没用(可用而未按 = 高亮)、附「跳到回放该时刻」按钮。
+
+**旧仓对应**:`CombatDeathReports/index.tsx`(128 行)——按死亡数排序选玩家、每次死亡一个 `CombatUnitTimelineView`、"only show CC" 过滤;好用但只是事件罗列。
+
+**新仓的差异化机会**:analysis 包有**审计过的 death-trace**(全量审计 0/3733 违规的那条门规)——死亡回顾不该重新发明事件筛选,应复用同一谓词链。
+
+**实现要点**:
+
+- **数据**:main 进程新增 IPC(如 `report:deathRecap(matchId)`),内部走 `@gladlog/analysis` 的 death-trace 路径(`parser-compat` 转换已在 main 侧可用),输出结构化 recap:`{ unitId, deathT, events: [{t, kind: dmg|heal|cc|def_used|def_available, ...}], healerState, defensivesUnused }`。**不要**在 renderer 从新 parser doc 手搓一份"差不多"的筛选——那就是审计里反复出现的双谓词病。
+- **入口 UI**:`Timeline.tsx` 死亡标记 onClick → 打开 recap 抽屉/卡片(新组件 `DeathRecap.tsx`);战报视图 Meters 卡下方可加一行死亡摘要 chips(死者名 + 时间,点击同源)。
+- **跳转**:recap 内「回放此刻」→ 切到回放视图并 `setT(deathT - 8s)`(播放时钟已是共享 state:`t/playing/speed/selUnits`)。
+- **测试**:`dev:ui` 测试台真实 fixture(`real-match-sample.json` 裁前 90s 内有死亡吗?若无,换/补一份含死亡的匿名 fixture)+ recap IPC 的单测(死者防御 CD 可用性断言)。
+
+## 7. 对局列表富行 ⬜(2026-07-17,对比旧仓 CombatStubList;性价比最高)
+
+**需求**:现在列表行是纯文本 `[kind] bracket · 时间 · result`。改成:双方**专精图标**(己方/敌方分组)、地图名、时长、场均评分 badge、胜负着色 —— 一眼扫过一晚的场次。
+
+**旧仓对应**:`CombatStubList/rows.tsx` + `bits.tsx`(ResultBadge / RatingBadge / TeamSpecs / durationString / zoneMetadata)。
+
+**实现要点**:
+
+- **meta 扩展**:`src/main/matchStore.ts` 的 `StoredMatchMeta` 加可选字段:`durationS`、`zoneId`(已有)、`avgRating?`、`teams?: [{specId, classId}[], ...]`(两队专精,序列化成小数组,别塞全 roster)。索引是 JSONL 追加 + `meta.json` 兜底重建:**新字段一律 optional**,旧行渲染回退到现文本样式;或提供一次性 `rebuildIndex`(已有从 meta.json 重建的路径,加字段后跑一遍即可回填)。
+- **专精图标**:渲染侧已有 `SpellIcon` 的 bridge 图标缓存机制(`b.icon.get(name)` → dataURL);spec 图标同路复用,需要 specId→icon 名映射(`report/data/gameConstants.ts` 旁新增;旧仓 `utils/images` 有对照表可抄)。
+- **地图名**:旧仓 `data/zoneMetadata.ts` 有 zoneId→名字全表,直接搬(纯公开事实数据)。
+- **UI**:`App.tsx` 列表 li 重排两行:上行 result 色条 + 地图 + 时长 + 评分,下行两组 spec 图标 vs 分隔。胜负染色沿用 `badge-*` 类。
+- **测试**:`App.pagination.test.tsx` 旁补 meta 缺字段回退渲染的断言。
+
+## 8. 证据链跳转 + KILL WINDOW/VULNERABLE 标注回放 ⬜(2026-07-17;新仓独有差异化,旧仓没有)
+
+**需求**:AI 分析的 findings 带经过验证的时间戳/事件 id —— 让每个时间戳**可点**:点击 → 切回放视图、seek 播放时钟到 t、GCD 泳道对应列高亮该时刻。把「信教练」变成「自己看」——这是全链路可验证方向在 UI 上的落点。顺带:把 `[KILL WINDOW]` burst 与 `[VULNERABLE]` 段画到回放 scrubber/TimelineStrip 上(2026-07-17 重设计后 span 已短而诚实,p50 14s,适合可视化)。
+
+**实现要点**:
+
+- **findings 时间戳解析**:`StructuredAnalysisPanel`/`FindingsList` 渲染的 findings JSON 里时间引用格式先盘点(`mm:ss` 文本 or 结构化字段);若只有文本,在 main 侧生成时补结构化 `refs: [{t, unitId?}]`(prompt 构建处有 event-id menu,数据在)。
+- **跳转管线**:`MatchReport` 顶层已持有 view 状态 + 回放时钟;加一个 `seekTo(t, unitIds?)` 回调下传 AI 视图,点击 → `setView("replay")` + `setT(t)` + `setSelUnits(unitIds)`。
+- **窗口标注**:main 侧对每场跑 `computeOffensiveWindows`(analysis 已依赖)→ IPC 给 renderer `{bursts, vulnSpans}`;`TimelineStrip.tsx`/回放 scrubber 画半透明色带(burst=金,vulnerable=灰红),hover 显示 target + 团伤。**常量不复制**:数据在 main 用 `KW_BURST_*`/`computeBurstSubWindows` 算好传结构,renderer 只画。
+- **泳道高亮**:`GcdSwimlane` 加「t 附近 chip 高亮」态(光标已横贯,只需临时 flash 样式)。
+- **测试**:seek 回调单测 + fixture 上点击 finding 跳转的集成测试(dev:ui)。
+
+## 9. GCD 泳道 chip 技能图标 ⬜(2026-07-17,对比旧仓全站 SpellIcon)
+
+**需求**:泳道 chip 现在只有技能名文本;图标扫读速度远快于文字(旧仓所有施法处都渲染 WoW 图标)。宽 chip = 图标+名,窄 chip(碰撞压缩时)= 仅图标,title 保持现状。
+
+**实现要点**:
+
+- `SpellIcon.tsx` 已存在(bridge 图标缓存 → dataURL,fallback 首字母),现仅 `UnitPanel` 用 —— 直接进 `GcdSwimlane.tsx` 的 chip 渲染。
+- **spellId→icon 名映射**:盘点 `UnitPanel` 的 icon 名来源(derive 层哪个字段);若泳道的 cast 数据缺 icon 字段,在 `report/derive/casts.ts` 的 `deriveUnitTimeline` 补(数据源:新 parser doc 的 spell 信息或 `gameConstants` 旁新映射表)。
+- **性能**:一场几百 chip,每个 SpellIcon 一次 bridge round-trip 会抖 —— bridge 侧已有缓存,renderer 侧再加内存 memo(同 icon 名只请求一次,Map<name, Promise<dataURL>>)。
+- **测试**:泳道渲染测试补 icon fallback 断言(无 icon 名时仍出首字母块,不空洞)。
+
+## 10. 数据统计视图:打断/控制/驱散表 ⬜(2026-07-17,对比旧仓 CombatCC + CombatDispels + Scoreboard)
+
+**需求**:每玩家一行的硬数据表:打断做/挨(次数与 /min)、被控总时长(秒和占比)、控制输出秒数、驱散/偷 buff 次数(治疗产品重点:你被控 34s / 全场 6:20 是标题级数字)。落点:战报视图 Meters 卡旁的第四张卡,或榜单模式段控加一项「统计」。
+
+**旧仓对应**:`CombatCC/index.tsx`(53 行的表,列结构直接抄)+ `CombatDispels/index.tsx`(262 行,含驱散明细展开)。
+
+**实现要点**:
+
+- **数据**:analysis 包已为 prompt 计算这些(interrupts 白名单——今天刚补 7 个 id、CC 时长、dispelAnalysis)——同 #6 原则,main 算 → IPC 结构化表(`report:statsTable(matchId)`),renderer 只渲染。**不要**在 renderer 按新 parser doc 重实现 CC 判定(白名单腐烂病的第 9 个案例就会诞生在这)。
+- **UI**:`Meters.tsx` 的榜单模式段控(伤害/治疗/承伤)加「统计」项,切换时整卡换成表格渲染(新组件 `StatsTable.tsx`);友敌着色沿用 `--ink`/`--ink-2`。
+- **明细展开**(v2 可后置):行点开 → 该玩家的打断/被控明细(时间 + 技能),时间戳接 #8 的 seekTo。
+- **测试**:IPC 表数据单测(用含打断/驱散的 fixture 断言行数值)。
+
+## 11. 回放增强三小件 ⬜(2026-07-17,对比旧仓 CombatReplay 子组件;低优先)
+
+**需求 & 旧仓对应**:(a) **dampening 追踪**(`ReplayDampeningTracker`)——回放控件条角落常显当前 dampening %;(b) **施法条**(`ReplayCastBar`)——读条中的单位脚下画进度条(开始/打断/完成事件已在 doc);(c) **单位 HP 数字**(`ReplayHpNumbers`)——血条旁小字 HP%(现在只有变色血条)。
+
+**实现要点**:
+
+- 全部纯 renderer 工作,数据都在新 parser doc / 现有 derive 层:dampening 从 aura 事件推(prompt 侧已有渲染逻辑可参考谓词),cast 从 `deriveCasts` 的开始/结束事件,HP 数字直接用回放插值采样值。
+- 落点都在 `ReplayView.tsx`(383 行)内加子渲染;控件条布局注意别挤掉 1×/2×/4× 段控。
+- (b) 有细节坑:打断 vs 完成 vs 被推 —— 谓词对齐 `matchTimeline` 的 channel 语义(2026-07-16 刚修过 "completed before CC landed" 的教训:SPELL_CAST_SUCCESS 在 channel 是开始不是完成)。
+
+## 明确不抄清单(2026-07-17 对比结论,防止未来重提)
+
+- **15 平铺 tab 结构**:碎片化,三视图段控更好。
+- **Video/OBS 录制 tab**:需要 recorder 整包,产品方向不同。
+- **云端分享 URL / 社区 / 天梯 / CharacterStats / CompetitiveStats**:gladlog 是本地优先;分享需求走 C3 导出(自包含 HTML)而不是云。
+- **CombatMistakes 规则库整包**:AI + 确定性 findings 管线已取代;但 `mistakeKnowledgeBase.ts` 值得读一遍当**确定性 findings 的选题清单**(哪些规则可下沉为 analysis 侧确定性检查)。
+- **CombatLogView 原始日志查看器**:开发者视图(DevPanel)已覆盖调试需求。
+- **玩家装备/天赋 tab + 外站链接**(ArmoryLink/CheckPvP/Drustvar/GearStick/Seramate):nice-to-have,若做玩家 popover 时顺带,不单列。
+
+**建议实施顺序**:#7(半天级,立刻可见)→ #6(核心价值)→ #8(差异化)→ #9 → #10 → #11。
