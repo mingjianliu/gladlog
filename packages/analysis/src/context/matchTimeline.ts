@@ -1077,6 +1077,71 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       activeFold = null;
     };
 
+    // T-noise A/B (2026-07-15): high-frequency filler casts (Soothing Mist,
+    // Crackling Jade Lightning, …) dominated template-duplicate lines corpus-
+    // wide (42% of all lines). Spells cast ≥ SPAM_FOLD_THRESHOLD times fold
+    // into windowed run-lines that survive interleaved entries and critical
+    // windows (entries are time-sorted at assembly, so a fold line emitted at
+    // its start second renders chronologically).
+    const SPAM_FOLD_THRESHOLD = 12;
+    const SPAM_FOLD_MAX_GAP_SECONDS = 30;
+    const ownerCastCountByName = new Map<string, number>();
+    for (const e of owner.spellCastEvents ?? []) {
+      if (e.logLine.event !== LogEvent.SPELL_CAST_SUCCESS || !e.spellId)
+        continue;
+      const n =
+        HEALER_CAST_SPELL_ID_TO_NAME[e.spellId] ??
+        getEnglishSpellName(e.spellId, e.spellName);
+      if (!n) continue;
+      ownerCastCountByName.set(n, (ownerCastCountByName.get(n) ?? 0) + 1);
+    }
+    const spamFolds = new Map<
+      string,
+      {
+        startTimeSeconds: number;
+        lastTimeSeconds: number;
+        count: number;
+        targets: Set<string>;
+      }
+    >();
+    const flushSpamFold = (displayName: string) => {
+      const f = spamFolds.get(displayName);
+      if (!f) return;
+      spamFolds.delete(displayName);
+      const target =
+        f.targets.size === 1
+          ? [...f.targets][0]
+          : f.targets.size > 1
+            ? "various"
+            : "";
+      const targetPart = target ? ` → ${target}` : "";
+      const spanSeconds = Math.round(f.lastTimeSeconds - f.startTimeSeconds);
+      const countPart =
+        f.count > 1
+          ? ` (x${f.count}${spanSeconds > 0 ? ` over ${spanSeconds}s` : ""})`
+          : "";
+      addEntry(
+        f.startTimeSeconds,
+        `${fmtTime(f.startTimeSeconds)}  [YOU] [CAST]   ${displayName}${countPart}${targetPart}`,
+      );
+    };
+
+    // T-noise A/B (2026-07-15): channeled CDs re-fire SPELL_CAST_SUCCESS per
+    // tick under a different spellId but the same name (Divine Hymn 0:49 +
+    // 0:50 + 0:51 …). The [CD] line already states the channel span, so tick
+    // [CAST] lines are pure duplication — suppress same-name casts within a
+    // short window after a tracked-CD cast (≥30s CDs cannot genuinely recast
+    // that fast).
+    const CHANNEL_TICK_SUPPRESS_SECONDS = 10;
+    const trackedCastTimesByName = new Map<string, number[]>();
+    for (const [spellId, times] of trackedCastsBySpellId) {
+      const n = getEnglishSpellName(spellId, undefined);
+      if (!n) continue;
+      const arr = trackedCastTimesByName.get(n) ?? [];
+      for (const t of times) arr.push((t - matchStartMs) / 1000);
+      trackedCastTimesByName.set(n, arr);
+    }
+
     for (const e of owner.spellCastEvents ?? []) {
       if (e.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
       if (!e.spellId) continue;
@@ -1102,6 +1167,20 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       )
         continue;
       const timeSeconds = (tsMs - matchStartMs) / 1000;
+
+      // Channel-tick suppression: same-name success within 10s after a
+      // tracked-CD cast is a channel tick (different spellId, so the ±1s
+      // trackedSet check above misses it); the [CD] line already carries the
+      // channel span.
+      const trackedTimes = trackedCastTimesByName.get(displayName);
+      if (
+        trackedTimes?.some(
+          (t) =>
+            timeSeconds - t > 0 &&
+            timeSeconds - t <= CHANNEL_TICK_SUPPRESS_SECONDS,
+        )
+      )
+        continue;
 
       let stasisAnnotation = "";
       const activeStasis = stasisEvents.find(
@@ -1238,14 +1317,42 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
         continue;
       }
 
+      const hasAnnotation =
+        totemNote !== "" ||
+        orderNote !== "" ||
+        stasisAnnotation !== "" ||
+        purgeNote !== "";
+
+      // Spam-spell windowed fold: high-frequency fillers fold across
+      // interleaved entries AND inside critical windows — per-cast lines for
+      // a spell hit ≥12×/match carry no per-instance signal, only tokens.
+      // Annotated casts still render individually (the annotation is the
+      // signal) without breaking the running fold.
+      if (
+        !hasAnnotation &&
+        (ownerCastCountByName.get(displayName) ?? 0) >= SPAM_FOLD_THRESHOLD
+      ) {
+        const f = spamFolds.get(displayName);
+        if (f && timeSeconds - f.lastTimeSeconds <= SPAM_FOLD_MAX_GAP_SECONDS) {
+          f.count++;
+          f.lastTimeSeconds = timeSeconds;
+          if (targetLabel) f.targets.add(targetLabel);
+        } else {
+          flushSpamFold(displayName);
+          spamFolds.set(displayName, {
+            startTimeSeconds: timeSeconds,
+            lastTimeSeconds: timeSeconds,
+            count: 1,
+            targets: new Set(targetLabel ? [targetLabel] : []),
+          });
+        }
+        continue;
+      }
+
       // F151 Repetitive Cast Folding:
       // Simple casts outside critical windows are foldable.
       const isFoldable =
-        totemNote === "" &&
-        orderNote === "" &&
-        stasisAnnotation === "" &&
-        purgeNote === "" &&
-        !criticalWindowSet.has(Math.floor(timeSeconds));
+        !hasAnnotation && !criticalWindowSet.has(Math.floor(timeSeconds));
 
       if (isFoldable) {
         if (
@@ -1274,6 +1381,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
 
     // Flush any remaining active folds at loop end
     flushFold();
+    for (const name of [...spamFolds.keys()]) flushSpamFold(name);
   }
 
   // ── [TEAM] [CD] events ────────────────────────────────────────────────────
