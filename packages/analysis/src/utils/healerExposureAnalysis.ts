@@ -43,6 +43,13 @@ const MAX_CC_RANGE_YARDS = 40;
 // show it already broken, producing a false "go break LoS" suggestion.
 const POSITION_MAX_GAP_MS = 1_500;
 
+// G5 take 2 (2026-07-15): the LoS predicate mirrors the eval positioning
+// gate verbatim — ±2s integer-second sweep, interpolated positions with a
+// 3s max gap. These two constants MUST stay equal to TIME_SLACK_SECONDS /
+// POSITION_MAX_GAP_MS in packages/eval/src/quality/positioningScan.ts.
+const LOS_SWEEP_SLACK_S = 2;
+const LOS_SWEEP_GAP_MS = 3_000;
+
 /** Returns true if the enemy has an active CC aura at the given timestamp (ms). */
 function isEnemyInCC(enemy: ICombatUnit, atMs: number): boolean {
   const active = new Map<string, boolean>();
@@ -245,28 +252,38 @@ export function analyzeHealerExposureAtBurst(
       );
       if (!enemyPos) continue;
 
-      // LoS is topological — evaluate it at RAW sampled positions, never at
-      // interpolated points (a between-samples straight line can cross a pillar
-      // edge neither real position crossed; G5 residual, 2026-07-14 audit).
-      // Interpolated positions remain in use for the continuous distance gate.
-      const healerRawPos =
-        getUnitRawPositionAtTime(healer, windowMs, POSITION_MAX_GAP_MS) ??
-        healerPos;
-      const enemyRawPos =
-        getUnitRawPositionAtTime(enemy, windowMs, POSITION_MAX_GAP_MS) ??
-        enemyPos;
-      const losResult = hasLineOfSight(zoneId, healerRawPos, enemyRawPos);
-      // null = arena geometry not mapped; treat as unblocked (conservative — assume worst case)
-      const losBlocked = losResult === null ? false : !losResult;
+      // LoS uses the exact semantics of the eval positioning gate (G5): sweep
+      // ±2s at integer seconds with interpolated positions (3s max gap); the
+      // enemy is "in LoS" if ANY evaluable instant has LoS (unmapped geometry
+      // = visible). Any single-instant check — raw or interpolated — either
+      // pairs non-simultaneous samples or crosses pillar edges neither real
+      // position crossed; sharing the gate's sweep is the only consistent
+      // definition (G5 take 2, 2026-07-15 audit).
+      let sawAnyLosSample = false;
+      let sawLoS = false;
+      for (let dt = -LOS_SWEEP_SLACK_S; dt <= LOS_SWEEP_SLACK_S; dt++) {
+        const ts = windowMs + dt * 1000;
+        const hp = getUnitPositionAtTime(healer, ts, LOS_SWEEP_GAP_MS);
+        const ep = getUnitPositionAtTime(enemy, ts, LOS_SWEEP_GAP_MS);
+        if (!hp || !ep) continue;
+        sawAnyLosSample = true;
+        if (hasLineOfSight(zoneId, hp, ep) !== false) sawLoS = true;
+      }
+      // Blocked only when positions exist and NO swept instant had LoS.
+      const losBlocked = sawAnyLosSample && !sawLoS;
 
       // B26: enemies beyond CC range or in CC cannot threaten the healer
       const distance = distanceBetween(healerPos, enemyPos);
       if (distance > MAX_CC_RANGE_YARDS) continue;
       if (isEnemyInCC(enemy, windowMs)) continue;
 
-      // Store the RAW position — the losBreak suggestion below verifies pillar
-      // blocking geometrically and must not run on interpolated points either.
-      enemyPosByName.set(enemy.name, enemyRawPos);
+      // Store the RAW position when one exists — the losBreak suggestion below
+      // does pillar geometry and real samples beat interpolated points there.
+      enemyPosByName.set(
+        enemy.name,
+        getUnitRawPositionAtTime(enemy, windowMs, POSITION_MAX_GAP_MS) ??
+          enemyPos,
+      );
 
       const enemySpec = specToString(enemy.spec);
 
@@ -311,7 +328,11 @@ export function analyzeHealerExposureAtBurst(
       );
     const losBreak =
       exposedEnemyPositions.length > 0
-        ? nearestLosBreakOption(zoneId, healerRawPosForBreak, exposedEnemyPositions)
+        ? nearestLosBreakOption(
+            zoneId,
+            healerRawPosForBreak,
+            exposedEnemyPositions,
+          )
         : null;
 
     results.push({
