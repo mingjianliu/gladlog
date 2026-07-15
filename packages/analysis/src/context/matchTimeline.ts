@@ -69,6 +69,7 @@ import {
   getNpcIdFromGuid,
   getTopDamageSourcesInWindow,
   GROUNDING_TOTEM_NPC_ID,
+  CRITICAL_NON_PLAYER_NPC_NAMES,
   HEALER_CAST_SPELL_ID_TO_NAME,
   HEALING_AMPLIFIER_SPELL_IDS,
   HEALING_WINDOW_EARLY_CD_SECONDS,
@@ -475,11 +476,16 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       // F139: resolve by the target's actual reaction — pid() only knows friendlies, so an
       // offensive CD/CC target (an enemy) rendered as a raw name, or as the WRONG friendly id
       // when both teams had a player with the same display name.
+      const shortTarget = targetName.split("-")[0];
       const targetLabel = targetUnit
         ? targetUnit.reaction === CombatUnitReaction.Hostile
           ? enemyPid(targetName)
           : pid(targetName)
-        : targetName.split("-")[0];
+        : // Unknown unit = totem/pet/NPC; suppress client-localized names
+          // (locale-leak audit) — ASCII English NPC names still pass through.
+          [...shortTarget].some((c) => c.charCodeAt(0) > 127)
+          ? "[pet/NPC]"
+          : shortTarget;
       targetPart = ` → ${targetLabel}`;
       const hpPct =
         overrideHpPct ??
@@ -651,7 +657,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
           if (atSeconds > durationS) continue; // Match End cleanup suppression
 
           const deathLines: string[] = [
-            `${fmtTime(atSeconds)}  [UNIT DESTROYED]   ${unit.name} (${reactionStr})`,
+            `${fmtTime(atSeconds)}  [UNIT DESTROYED]   ${CRITICAL_NON_PLAYER_NPC_NAMES[getNpcIdFromGuid(unit.id) ?? ""] ?? unit.name} (${reactionStr})`,
           ];
 
           const topSources = getTopDamageSourcesInWindow(
