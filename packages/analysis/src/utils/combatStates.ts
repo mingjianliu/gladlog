@@ -1,10 +1,14 @@
 // packages/shared/src/utils/combatStates.ts
-import { AtomicArenaCombat, ICombatUnit, LogEvent } from '@gladlog/parser-compat';
+import {
+  AtomicArenaCombat,
+  ICombatUnit,
+  LogEvent,
+} from "@gladlog/parser-compat";
 
-import { getEnglishSpellName } from '../data/spellEffectData';
+import { getEnglishSpellName } from "../data/spellEffectData";
 
 export interface IFormInterval {
-  form: 'Bear' | 'Cat';
+  form: "Bear" | "Cat";
   startSeconds: number;
   endSeconds: number;
 }
@@ -32,7 +36,10 @@ export function extractSpiritOfRedemptionIntervals(
   let ghostStart: number | null = null;
 
   for (const aura of unit.auraEvents) {
-    const isGhost = aura.spellId === '27827' || aura.spellId === '215982' || aura.spellId === '215769';
+    const isGhost =
+      aura.spellId === "27827" ||
+      aura.spellId === "215982" ||
+      aura.spellId === "215769";
 
     if (aura.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
       if (isGhost) {
@@ -60,7 +67,10 @@ export function extractSpiritOfRedemptionIntervals(
   return intervals;
 }
 
-export function extractShapeshiftIntervals(unit: ICombatUnit, combat: AtomicArenaCombat): IFormInterval[] {
+export function extractShapeshiftIntervals(
+  unit: ICombatUnit,
+  combat: AtomicArenaCombat,
+): IFormInterval[] {
   const intervals: IFormInterval[] = [];
   let bearStart: number | null = null;
   let catStart: number | null = null;
@@ -68,8 +78,8 @@ export function extractShapeshiftIntervals(unit: ICombatUnit, combat: AtomicAren
   for (const aura of unit.auraEvents) {
     if (!aura.spellName) continue;
 
-    const isBear = aura.spellId === '5487' || aura.spellId === '9634'; // Bear Form, Dire Bear Form
-    const isCat = aura.spellId === '768'; // Cat Form
+    const isBear = aura.spellId === "5487" || aura.spellId === "9634"; // Bear Form, Dire Bear Form
+    const isCat = aura.spellId === "768"; // Cat Form
 
     if (aura.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
       if (isBear) {
@@ -80,14 +90,14 @@ export function extractShapeshiftIntervals(unit: ICombatUnit, combat: AtomicAren
     } else if (aura.logLine.event === LogEvent.SPELL_AURA_REMOVED) {
       if (isBear && bearStart !== null) {
         intervals.push({
-          form: 'Bear',
+          form: "Bear",
           startSeconds: (bearStart - combat.startTime) / 1000,
           endSeconds: (aura.logLine.timestamp - combat.startTime) / 1000,
         });
         bearStart = null;
       } else if (isCat && catStart !== null) {
         intervals.push({
-          form: 'Cat',
+          form: "Cat",
           startSeconds: (catStart - combat.startTime) / 1000,
           endSeconds: (aura.logLine.timestamp - combat.startTime) / 1000,
         });
@@ -99,14 +109,14 @@ export function extractShapeshiftIntervals(unit: ICombatUnit, combat: AtomicAren
   // Handle forms held until the end of the match
   if (bearStart !== null) {
     intervals.push({
-      form: 'Bear',
+      form: "Bear",
       startSeconds: (bearStart - combat.startTime) / 1000,
       endSeconds: (combat.endTime - combat.startTime) / 1000,
     });
   }
   if (catStart !== null) {
     intervals.push({
-      form: 'Cat',
+      form: "Cat",
       startSeconds: (catStart - combat.startTime) / 1000,
       endSeconds: (combat.endTime - combat.startTime) / 1000,
     });
@@ -119,7 +129,7 @@ export function extractShapeshiftIntervals(unit: ICombatUnit, combat: AtomicAren
 // then replays them on release. It is a *stacked* aura: applied with charges,
 // each stored spell removes a dose (SPELL_AURA_REMOVED_DOSE), and the final
 // removal (SPELL_AURA_REMOVED) is the release.
-const STASIS_SPELL_ID = '370537';
+const STASIS_SPELL_ID = "370537";
 
 // Spells Stasis commonly stores for Preservation, used to resolve stored-spell
 // NAMES. Off-GCD utility cast during Stasis (e.g. Hover) does NOT consume a
@@ -128,16 +138,27 @@ const STASIS_SPELL_ID = '370537';
 // resolved — but the dose-derived storedCount still records that the release
 // was non-empty (see IStasisEvent.storedCount), so it is never shown as empty.
 const STASIS_STORABLE_HEAL_IDS = new Set([
-  '355936', // Dream Breath
-  '367226', // Spiritbloom
-  '366155', // Reversion
-  '355913', // Emerald Blossom
-  '360995', // Verdant Embrace
-  '361469', // Living Flame
-  '364343', // Echo
+  "355936", // Dream Breath
+  "367226", // Spiritbloom
+  "366155", // Reversion
+  "355913", // Emerald Blossom
+  "360995", // Verdant Embrace
+  "361195", // Verdant Embrace (alternate cast-success id seen in 12.x logs)
+  "361469", // Living Flame
+  "361509", // Living Flame (heal-component id logged as cast success)
+  "431443", // Chrono Flame (Chronowarden Living Flame replacement)
+  "364343", // Echo
+  "1256581", // Merithra's Blessing (12.1 Preservation heal)
+  // Whitelist audit 2026-07-15: the log's own AURA_REMOVED_DOSE count proved
+  // 3 spells stored while the list captured 2 in 24/51 corpus releases — the
+  // four ids above were the casts inside those windows. storedCount (dose-
+  // derived) remains the ground truth; keep it ≥ spells.length as invariant.
 ]);
 
-export function extractStasisEvents(unit: ICombatUnit, combat: AtomicArenaCombat): IStasisEvent[] {
+export function extractStasisEvents(
+  unit: ICombatUnit,
+  combat: AtomicArenaCombat,
+): IStasisEvent[] {
   const events: IStasisEvent[] = [];
   let isBuffering = false;
   let startSeconds = 0;
@@ -172,16 +193,26 @@ export function extractStasisEvents(unit: ICombatUnit, combat: AtomicArenaCombat
     });
 
   for (const e of mergedEvents) {
-    if (e.spellId === STASIS_SPELL_ID && e.logLine.event === LogEvent.SPELL_CAST_SUCCESS) {
+    if (
+      e.spellId === STASIS_SPELL_ID &&
+      e.logLine.event === LogEvent.SPELL_CAST_SUCCESS
+    ) {
       lastStasisCastTimestamp = e.logLine.timestamp;
     }
 
-    if (e.spellId === STASIS_SPELL_ID && e.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
+    if (
+      e.spellId === STASIS_SPELL_ID &&
+      e.logLine.event === LogEvent.SPELL_AURA_APPLIED
+    ) {
       isBuffering = true;
       startSeconds = (e.logLine.timestamp - combat.startTime) / 1000;
       bufferedSpells = [];
       doseRemovals = 0;
-    } else if (e.spellId === STASIS_SPELL_ID && e.logLine.event === LogEvent.SPELL_AURA_REMOVED && isBuffering) {
+    } else if (
+      e.spellId === STASIS_SPELL_ID &&
+      e.logLine.event === LogEvent.SPELL_AURA_REMOVED &&
+      isBuffering
+    ) {
       // The final removal is itself one stored-spell consumption when doses preceded it.
       const dosedCount = doseRemovals > 0 ? doseRemovals + 1 : doseRemovals;
       const storedCount = Math.max(bufferedSpells.length, dosedCount);
@@ -203,7 +234,11 @@ export function extractStasisEvents(unit: ICombatUnit, combat: AtomicArenaCombat
         });
       }
       isBuffering = false;
-    } else if (isBuffering && e.spellId === STASIS_SPELL_ID && e.logLine.event === LogEvent.SPELL_AURA_REMOVED_DOSE) {
+    } else if (
+      isBuffering &&
+      e.spellId === STASIS_SPELL_ID &&
+      e.logLine.event === LogEvent.SPELL_AURA_REMOVED_DOSE
+    ) {
       doseRemovals += 1;
     } else if (
       isBuffering &&
@@ -212,7 +247,9 @@ export function extractStasisEvents(unit: ICombatUnit, combat: AtomicArenaCombat
       STASIS_STORABLE_HEAL_IDS.has(e.spellId) &&
       bufferedSpells.length < 3
     ) {
-      bufferedSpells.push(getEnglishSpellName(e.spellId, e.spellName ?? 'Unknown'));
+      bufferedSpells.push(
+        getEnglishSpellName(e.spellId, e.spellName ?? "Unknown"),
+      );
     }
   }
 
