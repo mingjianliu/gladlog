@@ -50,6 +50,13 @@ BASE_DIR="$GLADLOG_EVAL_HOME/runs/<runId>" npx tsx packages/eval/scripts/quality
 > - Specific decisions that affected the outcome
 > - Concrete adjustments for next time
 >
+> ACCURACY DISCIPLINE (mandatory): before finalizing, re-verify every specific claim you
+> make — each timestamp, count, HP value, cooldown state, and causal attribution — against
+> the exact line(s) of the match prompt. If you cannot point to a specific prompt line
+> supporting a detail, remove or soften it. Never harden ambiguous log annotations (e.g.
+> "ended early — absorbed, dispelled, or cancelled") into one specific cause. When counting
+> events (stuns, casts, spikes), recount from the timeline rather than from memory.
+>
 > Write your coaching response to:
 > `$GLADLOG_EVAL_HOME/runs/<runId>/responses/NNN.txt`
 >
