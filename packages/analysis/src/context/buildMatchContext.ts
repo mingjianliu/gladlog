@@ -92,6 +92,7 @@ import {
 import { getPvpToolkit } from "../utils/talentBehaviors";
 import {
   channelWasInterrupted,
+  DMG_SPIKE_THRESHOLD,
   mergeTimestampedLines,
 } from "./timelineHelpers";
 import {
@@ -376,6 +377,15 @@ export function buildMatchContext(
     offensiveWindows,
     friendCCSummaries: ccTrinketSummaries,
     healerExposures,
+    // B4 fix: hand the positioning analysis the same damage-spike windows the timeline's
+    // [OFFENSIVE WINDOW]/[DMG SPIKE] headers render, so burst-target claims cannot diverge.
+    spikeWindows: pressureWindows
+      .filter((pw) => pw.totalDamage >= DMG_SPIKE_THRESHOLD)
+      .map((pw) => ({
+        fromSeconds: pw.fromSeconds,
+        toSeconds: pw.toSeconds,
+        targetName: pw.targetName,
+      })),
   });
   const positionLines = formatPositionEventsForContext(positionEvents);
 

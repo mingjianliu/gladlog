@@ -69,6 +69,7 @@ import {
   getNpcIdFromGuid,
   getTopDamageSourcesInWindow,
   GROUNDING_TOTEM_NPC_ID,
+  CRITICAL_NON_PLAYER_NPC_NAMES,
   HEALER_CAST_SPELL_ID_TO_NAME,
   HEALING_AMPLIFIER_SPELL_IDS,
   HEALING_WINDOW_EARLY_CD_SECONDS,
@@ -373,6 +374,13 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       const id = enemyIdMap.get(destUnitName) ?? enemyIdMap.get(cleanDest);
       if (id !== undefined) return String(id);
     }
+    // Unmapped target = totem/pet/NPC (not one of the arena players, who are all
+    // pid-mapped above). Its name comes from the log in the client's locale — do
+    // not leak a localized (e.g. Chinese) unit name into an English prompt. Cast
+    // lines tag [totem/pet] separately, so suppress the name here; ASCII names
+    // (rare English-locale NPCs) still pass through unchanged.
+    const isLocalized = [...cleanDest].some((ch) => ch.charCodeAt(0) > 127);
+    if (isLocalized) return "";
     return cleanDest;
   }
 
@@ -468,11 +476,22 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       // F139: resolve by the target's actual reaction — pid() only knows friendlies, so an
       // offensive CD/CC target (an enemy) rendered as a raw name, or as the WRONG friendly id
       // when both teams had a player with the same display name.
-      const targetLabel = targetUnit
+      const shortTarget = targetName.split("-")[0];
+      const resolved = targetUnit
         ? targetUnit.reaction === CombatUnitReaction.Hostile
           ? enemyPid(targetName)
           : pid(targetName)
-        : targetName.split("-")[0];
+        : shortTarget;
+      // Totem/pet/NPC targets resolve through the pid fallback to their log
+      // name, which is client-localized (根基图腾 leak, locale audit). Known
+      // critical NPCs get their English name via npcId; anything else
+      // non-ASCII is suppressed. ASCII English names still pass through.
+      const npcEnglish = targetUnit
+        ? CRITICAL_NON_PLAYER_NPC_NAMES[getNpcIdFromGuid(targetUnit.id) ?? ""]
+        : undefined;
+      const targetLabel = [...resolved].some((c) => c.charCodeAt(0) > 127)
+        ? (npcEnglish ?? "[pet/NPC]")
+        : resolved;
       targetPart = ` → ${targetLabel}`;
       const hpPct =
         overrideHpPct ??
@@ -644,7 +663,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
           if (atSeconds > durationS) continue; // Match End cleanup suppression
 
           const deathLines: string[] = [
-            `${fmtTime(atSeconds)}  [UNIT DESTROYED]   ${unit.name} (${reactionStr})`,
+            `${fmtTime(atSeconds)}  [UNIT DESTROYED]   ${CRITICAL_NON_PLAYER_NPC_NAMES[getNpcIdFromGuid(unit.id) ?? ""] ?? unit.name} (${reactionStr})`,
           ];
 
           const topSources = getTopDamageSourcesInWindow(
@@ -1141,11 +1160,16 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
         destType === CombatUnitType.Guardian ||
         destType === CombatUnitType.Pet
       ) {
-        // B44: distinguish Grounding Totem absorption (wasted cast) from other totem/pet targets
-        totemNote =
-          (e.destUnitName?.toLowerCase().includes("grounding totem") ?? false)
-            ? " [absorbed: Grounding Totem]"
-            : " [totem/pet]";
+        // B44: distinguish Grounding Totem absorption (wasted cast) from other totem/pet
+        // targets. Detect by npcId from the dest GUID (locale-independent — the unit NAME
+        // is client-localized and the English substring check misses on non-EN logs),
+        // keeping the name check as fallback for GUID-less events.
+        const destIsGroundingTotem =
+          getNpcIdFromGuid(e.destUnitId ?? "") === GROUNDING_TOTEM_NPC_ID ||
+          (e.destUnitName?.toLowerCase().includes("grounding totem") ?? false);
+        totemNote = destIsGroundingTotem
+          ? " [absorbed: Grounding Totem]"
+          : " [totem/pet]";
       }
 
       // F159 / M-i: Annotate offensive-purge casts with the removed buff.
@@ -1271,9 +1295,15 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
         // self) keeps the ": X" form.
         let line: string;
         if (isCC) {
-          const tgt =
+          const tgtLabel =
             cast.targetName && cast.targetName !== "nil"
-              ? ` → ${enemyPid(cast.targetName)}`
+              ? enemyPid(cast.targetName)
+              : "";
+          // Suppress localized (non-ASCII) totem/pet/NPC target names — never leak
+          // a client-locale unit name into the English prompt.
+          const tgt =
+            tgtLabel && ![...tgtLabel].some((c) => c.charCodeAt(0) > 127)
+              ? ` → ${tgtLabel}`
               : "";
           line = `${fmtTime(cast.timeSeconds)}  [TEAM] [CC]   ${pid(player.name)} (${spec}) cast ${cd.spellName}${tgt}${groundingNote}`;
         } else {
@@ -1619,7 +1649,12 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   {
     const minor = new Map<
       string,
-      { sourceLabel: string; spellName: string; count: number; firstSeconds: number }
+      {
+        sourceLabel: string;
+        spellName: string;
+        count: number;
+        firstSeconds: number;
+      }
     >();
     const foldMinor = (
       events: IDispelEvent[],
@@ -1647,7 +1682,10 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     foldMinor(dispelSummary.ourPurges, pid);
     foldMinor(dispelSummary.hostilePurges, enemyPid);
 
-    const bySource = new Map<string, Array<{ spellName: string; count: number; firstSeconds: number }>>();
+    const bySource = new Map<
+      string,
+      Array<{ spellName: string; count: number; firstSeconds: number }>
+    >();
     for (const m of minor.values()) {
       const list = bySource.get(m.sourceLabel) ?? [];
       list.push(m);
@@ -1693,7 +1731,11 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
           : enemyPid(petOwner.name);
         return `${ownerLabel}'s pet`;
       }
-      return name.split("-")[0];
+      const short = name.split("-")[0];
+      // Unresolved unit = pet/NPC whose owner lookup failed. Its name is
+      // client-localized — don't leak a non-ASCII unit name into the prompt.
+      const isLocalized = [...short].some((c) => c.charCodeAt(0) > 127);
+      return isLocalized ? "[pet]" : short;
     };
     const seenKicks = new Set<string>();
     const allUnitsForKicks = friends ? [...friends] : [];
@@ -1710,9 +1752,9 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
         const atSeconds = (action.timestamp - matchStartMs) / 1000;
         if (atSeconds < 0) continue;
         const kicker = resolveKicker(action.srcUnitName);
-        const victim = friendlyNames.has(action.destUnitName)
-          ? pid(action.destUnitName)
-          : enemyPid(action.destUnitName);
+        // Victims get the same resolution as kickers: players → pid, pets →
+        // owner attribution ("N's pet"), localized NPC names suppressed.
+        const victim = resolveKicker(action.destUnitName);
         const kickSpell = getEnglishSpellName(
           action.spellId ?? "",
           action.spellName ?? "interrupt",
@@ -1749,7 +1791,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     for (const gap of healingGaps) {
       addEntry(
         gap.fromSeconds,
-        `${fmtTime(gap.fromSeconds)}  [INACTIVITY]   ${pid(owner.name)} inactive ${gap.durationSeconds.toFixed(1)}s (${gap.freeCastSeconds.toFixed(1)}s free) while ${pid(gap.mostDamagedName)} under pressure`,
+        `${fmtTime(gap.fromSeconds)}  [INACTIVITY]   ${pid(owner.name)} inactive ${gap.durationSeconds.toFixed(1)}s (${gap.freeCastSeconds.toFixed(1)}s of it un-CC'd/free to cast) while ${pid(gap.mostDamagedName)} under pressure`,
       );
     }
   }

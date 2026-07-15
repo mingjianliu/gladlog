@@ -13,10 +13,19 @@
  * written per-match by buildHealerPromptCorpus.ts as manifests/NNN.json.
  */
 
-import { CombatUnitReaction, CombatUnitType, ICombatUnit } from '@gladlog/parser-compat';
-import type { IArenaMatch, IShuffleRound } from '@gladlog/parser-compat';
+import {
+  CombatUnitReaction,
+  CombatUnitType,
+  ICombatUnit,
+} from "@gladlog/parser-compat";
+import type { IArenaMatch, IShuffleRound } from "@gladlog/parser-compat";
 
-import { ccSpellIds, trinketSpellIds, specToString, getEnglishSpellName } from '@gladlog/analysis';
+import {
+  ccSpellIds,
+  trinketSpellIds,
+  specToString,
+  getEnglishSpellName,
+} from "@gladlog/analysis";
 
 export type ParsedCombat = IArenaMatch | IShuffleRound;
 
@@ -35,13 +44,13 @@ export interface ManifestEvent {
 export interface ManifestDeath {
   tRelSec: number;
   unitName: string;
-  reaction: 'friendly' | 'hostile';
+  reaction: "friendly" | "hostile";
 }
 
 export interface CoverageManifest {
   matchId: string;
   durationSec: number;
-  players: { name: string; spec: string; reaction: 'friendly' | 'hostile' }[];
+  players: { name: string; spec: string; reaction: "friendly" | "hostile" }[];
   /** UNIT_DIED records for player units (excludes feign-style conscious deaths). */
   deaths: ManifestDeath[];
   /** SPELL_AURA_APPLIED of CC-typed spells (spellTags ccSpellIds) landing on player units. */
@@ -68,17 +77,22 @@ function playerUnits(combat: ParsedCombat): ICombatUnit[] {
   return (Object.values(combat.units) as ICombatUnit[]).filter(
     (u) =>
       u.type === CombatUnitType.Player &&
-      (u.reaction === CombatUnitReaction.Friendly || u.reaction === CombatUnitReaction.Hostile),
+      (u.reaction === CombatUnitReaction.Friendly ||
+        u.reaction === CombatUnitReaction.Hostile),
   );
 }
 
-function reactionLabel(u: ICombatUnit): 'friendly' | 'hostile' {
-  return u.reaction === CombatUnitReaction.Friendly ? 'friendly' : 'hostile';
+function reactionLabel(u: ICombatUnit): "friendly" | "hostile" {
+  return u.reaction === CombatUnitReaction.Friendly ? "friendly" : "hostile";
 }
 
-export function buildCoverageManifest(combat: ParsedCombat, matchId: string): CoverageManifest {
+export function buildCoverageManifest(
+  combat: ParsedCombat,
+  matchId: string,
+): CoverageManifest {
   const startTime = combat.startTime;
-  const rel = (timestamp: number) => Math.round(((timestamp - startTime) / 1000) * 10) / 10;
+  const rel = (timestamp: number) =>
+    Math.round(((timestamp - startTime) / 1000) * 10) / 10;
   const players = playerUnits(combat);
   const playerNames = new Set(players.map((p) => p.name));
 
@@ -104,6 +118,19 @@ export function buildCoverageManifest(combat: ParsedCombat, matchId: string): Co
     "365080", // Windwalking
     "6940", // Blessing of Sacrifice
     "33891", // Incarnation: Tree of Life
+    // B3 (2026-07-14 full-scale audit): more rider-dispels found at 1245-match scale —
+    // SPELL_DISPEL fired as a side effect of a movement/form/offense/defense action,
+    // not a cleanse decision. Frequencies from the audit corpus in parens.
+    // Deliberate cleanses stay in the denominator (Naturalize, Cauterizing Flame,
+    // Master's Call, Tiger's Lust, Tranq Shot, Fire Breath/Scouring Flame, …).
+    "24858", // Moonkin Form — form-shift root-break (459)
+    "48020", // Demonic Circle: Teleport — movement rider (390)
+    "370665", // Rescue — Evoker reposition; root-removal rider (405)
+    "357210", // Deep Breath — movement/damage rider (245)
+    "384784", // Wilderness Medicine — passive Mend Pet cleanse rider (237)
+    "227847", // Bladestorm — self snare-removal rider on an offensive CD (187)
+    "20589", // Escape Artist — self root-break utility, same family as Disengage (181)
+    "115203", // Fortifying Brew — defensive CD rider (153)
   ]);
 
   // De-dup: the same action can appear on both src's actionOut and dest's actionIn.
@@ -133,11 +160,15 @@ export function buildCoverageManifest(combat: ParsedCombat, matchId: string): Co
 
   for (const unit of players) {
     for (const record of unit.deathRecords) {
-      deaths.push({ tRelSec: rel(record.timestamp), unitName: unit.name, reaction: reactionLabel(unit) });
+      deaths.push({
+        tRelSec: rel(record.timestamp),
+        unitName: unit.name,
+        reaction: reactionLabel(unit),
+      });
     }
 
     for (const aura of unit.auraEvents) {
-      if (aura.logLine.event !== 'SPELL_AURA_APPLIED') continue;
+      if (aura.logLine.event !== "SPELL_AURA_APPLIED") continue;
       if (!aura.spellId || !ccSpellIds.has(aura.spellId)) continue;
       if (!playerNames.has(aura.destUnitName)) continue;
       pushUnique(ccApplied, aura);
@@ -145,27 +176,36 @@ export function buildCoverageManifest(combat: ParsedCombat, matchId: string): Co
 
     for (const action of [...unit.actionOut, ...unit.actionIn]) {
       const event = action.logLine.event;
-      if (event === 'SPELL_INTERRUPT') {
+      if (event === "SPELL_INTERRUPT") {
         pushUnique(interrupts, action);
-      } else if (event === 'SPELL_DISPEL') {
-        if (action.spellId && MOVEMENT_ROOT_BREAK_DISPEL_IDS.has(action.spellId)) continue;
+      } else if (event === "SPELL_DISPEL") {
+        if (
+          action.spellId &&
+          MOVEMENT_ROOT_BREAK_DISPEL_IDS.has(action.spellId)
+        )
+          continue;
         pushUnique(dispels, action);
       }
     }
 
     for (const cast of unit.spellCastEvents) {
-      if (cast.logLine.event !== 'SPELL_CAST_SUCCESS') continue;
+      if (cast.logLine.event !== "SPELL_CAST_SUCCESS") continue;
       if (!cast.spellId || !TRINKET_SPELL_ID_SET.has(cast.spellId)) continue;
       pushUnique(trinketCasts, cast);
     }
   }
 
-  const byTime = <T extends { tRelSec: number }>(list: T[]) => list.sort((a, b) => a.tRelSec - b.tRelSec);
+  const byTime = <T extends { tRelSec: number }>(list: T[]) =>
+    list.sort((a, b) => a.tRelSec - b.tRelSec);
 
   return {
     matchId,
     durationSec: Math.round((combat.endTime - combat.startTime) / 1000),
-    players: players.map((p) => ({ name: p.name, spec: specToString(p.spec), reaction: reactionLabel(p) })),
+    players: players.map((p) => ({
+      name: p.name,
+      spec: specToString(p.spec),
+      reaction: reactionLabel(p),
+    })),
     deaths: byTime(deaths),
     ccApplied: byTime(ccApplied),
     interrupts: byTime(interrupts),
@@ -173,7 +213,7 @@ export function buildCoverageManifest(combat: ParsedCombat, matchId: string): Co
     trinketCasts: byTime(trinketCasts),
     counts: {
       deaths: deaths.length,
-      friendlyDeaths: deaths.filter((d) => d.reaction === 'friendly').length,
+      friendlyDeaths: deaths.filter((d) => d.reaction === "friendly").length,
       ccApplied: ccApplied.length,
       interrupts: interrupts.length,
       dispels: dispels.length,

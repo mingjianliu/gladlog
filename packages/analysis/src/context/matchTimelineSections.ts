@@ -1,12 +1,17 @@
-import { CombatAbsorbAction, ICombatUnit, LogEvent } from '@gladlog/parser-compat';
+import {
+  CombatAbsorbAction,
+  ICombatUnit,
+  LogEvent,
+} from "@gladlog/parser-compat";
 
-import { getEnglishSpellName } from '../data/spellEffectData';
-import { IPlayerCCTrinketSummary } from '../utils/ccTrinketAnalysis';
+import { getEnglishSpellName } from "../data/spellEffectData";
+import { IPlayerCCTrinketSummary } from "../utils/ccTrinketAnalysis";
 import {
   fmtTime,
   FORBEARANCE_GATED_IDS,
   getUnitHpAtTimestamp,
   getUnitManaAtTimestamp,
+  HP_SAMPLE_RADIUS_MS,
   IDamageBucket,
   IMajorCooldownInfo,
   isHealerSpec,
@@ -14,81 +19,84 @@ import {
   specToBenchmarkKey,
   specToString,
   USABLE_WHILE_CC_SPELL_IDS,
-} from '../utils/cooldowns';
-import { wasLockedOutThroughWindow } from '../utils/deathOutcomeAnalysis';
-import { getHpPercentAtTime } from '../utils/killWindowTargetSelection';
-import { benchmarks } from '../utils/specBaselines';
-import { DMG_SPIKE_THRESHOLD, getTopDamageSourcesInWindow } from './timelineHelpers';
+} from "../utils/cooldowns";
+import { wasLockedOutThroughWindow } from "../utils/deathOutcomeAnalysis";
+import { getHpPercentAtTime } from "../utils/killWindowTargetSelection";
+import { benchmarks } from "../utils/specBaselines";
+import {
+  DMG_SPIKE_THRESHOLD,
+  getTopDamageSourcesInWindow,
+} from "./timelineHelpers";
 
 // ── Rot Pressure (F147) ─────────────────────────────────────────────────────
 
 const DOT_SPELL_IDS = new Set<string>([
-  '980',
-  '172',
-  '30108',
-  '461531',
-  '63106',
-  '205179',
-  '361695', // Warlock
-  '589',
-  '34914',
-  '2944',
-  '390978', // Priest
-  '164812',
-  '8921',
-  '164815',
-  '93402',
-  '202347',
-  '1079',
-  '155722',
-  '1822',
-  '192090',
-  '106830', // Druid
-  '1943',
-  '703',
-  '2818',
-  '122233',
-  '121411', // Rogue
-  '191587',
-  '55078',
-  '55095', // DK
-  '188389', // Shaman
-  '269747',
-  '271788',
-  '118253',
-  '217200', // Hunter
-  '12654', // Mage
-  '115767',
-  '84617', // Warrior
-  '357209', // Evoker
+  "980",
+  "172",
+  "30108",
+  "461531",
+  "63106",
+  "205179",
+  "361695", // Warlock
+  "589",
+  "34914",
+  "2944",
+  "390978", // Priest
+  "164812",
+  "8921",
+  "164815",
+  "93402",
+  "202347",
+  "1079",
+  "155722",
+  "1822",
+  "192090",
+  "106830", // Druid
+  "1943",
+  "703",
+  "2818",
+  "122233",
+  "121411", // Rogue
+  "191587",
+  "55078",
+  "55095", // DK
+  "188389", // Shaman
+  "269747",
+  "271788",
+  "118253",
+  "217200", // Hunter
+  "12654", // Mage
+  "115767",
+  "84617", // Warrior
+  "357209", // Evoker
 ]);
 
 const DOT_SPELL_NAMES = new Set<string>([
-  'agony',
-  'corruption',
-  'unstable affliction',
-  'wither',
-  'shadow word: pain',
-  'vampiric touch',
-  'devouring plague',
-  'sunfire',
-  'moonfire',
-  'stellar flare',
-  'rip',
-  'rake',
-  'thrash',
-  'rupture',
-  'garrote',
-  'deadly poison',
-  'crimson tempest',
-  'virulent plague',
-  'blood plague',
-  'frost fever',
-  'flame shock',
-  'serpent sting',
-  'ignite',
-  'deep wounds',
-  'fire breath',
+  "agony",
+  "corruption",
+  "unstable affliction",
+  "wither",
+  "shadow word: pain",
+  "vampiric touch",
+  "devouring plague",
+  "sunfire",
+  "moonfire",
+  "stellar flare",
+  "rip",
+  "rake",
+  "thrash",
+  "rupture",
+  "garrote",
+  "deadly poison",
+  "crimson tempest",
+  "virulent plague",
+  "blood plague",
+  "frost fever",
+  "flame shock",
+  "serpent sting",
+  "ignite",
+  "deep wounds",
+  "fire breath",
 ]);
 
 interface IDotInterval {
@@ -98,7 +106,11 @@ interface IDotInterval {
   endMs: number;
 }
 
-function extractPlayerDotIntervals(player: ICombatUnit, matchStartMs: number, matchEndMs: number): IDotInterval[] {
+function extractPlayerDotIntervals(
+  player: ICombatUnit,
+  matchStartMs: number,
+  matchEndMs: number,
+): IDotInterval[] {
   const intervals: IDotInterval[] = [];
   const openDots = new Map<string, number>();
 
@@ -108,15 +120,17 @@ function extractPlayerDotIntervals(player: ICombatUnit, matchStartMs: number, ma
     const ts = event.logLine.timestamp;
     if (ts > matchEndMs) continue;
 
-    const spellId = event.spellId ?? '';
+    const spellId = event.spellId ?? "";
     const spellName = getEnglishSpellName(spellId, event.spellName);
     const spellNameLower = spellName.toLowerCase();
 
-    const isDot = DOT_SPELL_IDS.has(spellId) || [...DOT_SPELL_NAMES].some((name) => spellNameLower.includes(name));
+    const isDot =
+      DOT_SPELL_IDS.has(spellId) ||
+      [...DOT_SPELL_NAMES].some((name) => spellNameLower.includes(name));
     if (!isDot) continue;
 
     const auraType = event.logLine.parameters[11];
-    if (auraType === 'BUFF') continue;
+    if (auraType === "BUFF") continue;
 
     const stateKey = `${spellId}:${event.srcUnitId}`;
     if (event.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
@@ -138,8 +152,8 @@ function extractPlayerDotIntervals(player: ICombatUnit, matchStartMs: number, ma
   }
 
   for (const [stateKey, startMs] of openDots) {
-    const spellId = stateKey.split(':')[0];
-    const spellName = getEnglishSpellName(spellId, '');
+    const spellId = stateKey.split(":")[0];
+    const spellName = getEnglishSpellName(spellId, "");
     intervals.push({
       spellId,
       spellName,
@@ -164,15 +178,32 @@ export function emitRotPressureEntries(params: {
   pid: (name: string) => string;
   addEntry: (timeSeconds: number, ...lines: string[]) => void;
 }): void {
-  const { allPlayers, matchStartMs, matchEndMs, matchDurationS, pid, addEntry } = params;
+  const {
+    allPlayers,
+    matchStartMs,
+    matchEndMs,
+    matchDurationS,
+    pid,
+    addEntry,
+  } = params;
 
   for (const player of allPlayers) {
-    const dotIntervals = extractPlayerDotIntervals(player, matchStartMs, matchEndMs);
+    const dotIntervals = extractPlayerDotIntervals(
+      player,
+      matchStartMs,
+      matchEndMs,
+    );
     const durationSeconds = Math.floor(matchDurationS);
     const dotCounts = new Array(durationSeconds + 1).fill(0);
     for (const interval of dotIntervals) {
-      const startSec = Math.max(0, Math.ceil((interval.startMs - matchStartMs) / 1000));
-      const endSec = Math.min(durationSeconds, Math.floor((interval.endMs - matchStartMs) / 1000));
+      const startSec = Math.max(
+        0,
+        Math.ceil((interval.startMs - matchStartMs) / 1000),
+      );
+      const endSec = Math.min(
+        durationSeconds,
+        Math.floor((interval.endMs - matchStartMs) / 1000),
+      );
       for (let t = startSec; t <= endSec; t++) {
         dotCounts[t]++;
       }
@@ -185,7 +216,7 @@ export function emitRotPressureEntries(params: {
       const tsMs = matchStartMs + t * 1000;
       const dotCount = dotCounts[t];
 
-      const hp = getUnitHpAtTimestamp(player, tsMs, 5000);
+      const hp = getUnitHpAtTimestamp(player, tsMs, HP_SAMPLE_RADIUS_MS);
 
       if (hp !== null && hp < 40 && dotCount >= 3) {
         consecutiveRotSeconds++;
@@ -197,12 +228,15 @@ export function emitRotPressureEntries(params: {
           let totalDmg = 0;
 
           for (const dmg of player.damageIn) {
-            if (dmg.timestamp >= windowStartMs && dmg.timestamp <= windowEndMs) {
+            if (
+              dmg.timestamp >= windowStartMs &&
+              dmg.timestamp <= windowEndMs
+            ) {
               const amount = Math.abs(dmg.effectiveAmount || dmg.amount);
               totalDmg += amount;
               if (
-                dmg.logLine.event === 'SPELL_PERIODIC_DAMAGE' ||
-                dmg.logLine.event === 'SPELL_PERIODIC_DAMAGE_SUPPORT'
+                dmg.logLine.event === "SPELL_PERIODIC_DAMAGE" ||
+                dmg.logLine.event === "SPELL_PERIODIC_DAMAGE_SUPPORT"
               ) {
                 periodicDmg += amount;
               }
@@ -240,7 +274,15 @@ export function emitDmgSpikeEntries(params: {
   enemyIdMap?: Map<string, number>;
   addEntry: (timeSeconds: number, ...lines: string[]) => void;
 }): void {
-  const { pressureWindows, friends, matchStartMs, pid, playerIdMap, enemyIdMap, addEntry } = params;
+  const {
+    pressureWindows,
+    friends,
+    matchStartMs,
+    pid,
+    playerIdMap,
+    enemyIdMap,
+    addEntry,
+  } = params;
 
   for (const pw of pressureWindows) {
     if (pw.totalDamage < DMG_SPIKE_THRESHOLD) continue;
@@ -250,30 +292,46 @@ export function emitDmgSpikeEntries(params: {
     const dpsK = Math.round(pw.totalDamage / Math.max(1, windowSec) / 1000);
 
     const targetUnit = friends.find((f) => f.name === pw.targetName);
-    const hpFrom = targetUnit ? getUnitHpAtTimestamp(targetUnit, matchStartMs + pw.fromSeconds * 1000, 2000) : null;
-    const hpTo = targetUnit ? getUnitHpAtTimestamp(targetUnit, matchStartMs + pw.toSeconds * 1000, 2000) : null;
-    let hpStr = '';
+    const hpFrom = targetUnit
+      ? getUnitHpAtTimestamp(
+          targetUnit,
+          matchStartMs + pw.fromSeconds * 1000,
+          HP_SAMPLE_RADIUS_MS,
+        )
+      : null;
+    const hpTo = targetUnit
+      ? getUnitHpAtTimestamp(
+          targetUnit,
+          matchStartMs + pw.toSeconds * 1000,
+          HP_SAMPLE_RADIUS_MS,
+        )
+      : null;
+    let hpStr = "";
     if (hpFrom !== null && hpTo !== null) {
       const hpDelta = hpTo - hpFrom;
       const hpVelocity = hpDelta / Math.max(1, windowSec);
-      const sign = hpVelocity > 0 ? '+' : '';
+      const sign = hpVelocity > 0 ? "+" : "";
       hpStr = ` (${hpFrom}% -> ${hpTo}% HP, ${sign}${hpVelocity.toFixed(0)}%/s)`;
     }
 
-    const benchmarkKey = targetUnit ? specToBenchmarkKey(targetUnit.spec) : '';
+    const benchmarkKey = targetUnit ? specToBenchmarkKey(targetUnit.spec) : "";
     let b = benchmarks.bySpec[benchmarkKey];
 
     // Fallback logic for missing specs: try generic spec for same class (e.g. Shadow -> Holy Priest baseline)
     if (!b && targetUnit) {
-      const className = benchmarkKey.split(' ')[0];
-      const fallbackKey = Object.keys(benchmarks.bySpec).find((k) => k.startsWith(className));
+      const className = benchmarkKey.split(" ")[0];
+      const fallbackKey = Object.keys(benchmarks.bySpec).find((k) =>
+        k.startsWith(className),
+      );
       if (fallbackKey) b = benchmarks.bySpec[fallbackKey];
     }
 
     const fromMs = matchStartMs + pw.fromSeconds * 1000;
     const toMs = matchStartMs + pw.toSeconds * 1000;
     const windowEvents =
-      targetUnit?.damageIn.filter((d) => d.logLine.timestamp >= fromMs && d.logLine.timestamp <= toMs) ?? [];
+      targetUnit?.damageIn.filter(
+        (d) => d.logLine.timestamp >= fromMs && d.logLine.timestamp <= toMs,
+      ) ?? [];
     const totalAbsorbed = windowEvents.reduce((sum, d) => {
       if (d.logLine.event === LogEvent.SPELL_ABSORBED) {
         return sum + ((d as unknown as CombatAbsorbAction).absorbedAmount ?? 0);
@@ -281,7 +339,10 @@ export function emitDmgSpikeEntries(params: {
       return sum;
     }, 0);
 
-    const absorbStr = totalAbsorbed > 100_000 ? ` (${(totalAbsorbed / 1_000_000).toFixed(2)}M absorbed)` : '';
+    const absorbStr =
+      totalAbsorbed > 100_000
+        ? ` (${(totalAbsorbed / 1_000_000).toFixed(2)}M absorbed)`
+        : "";
 
     const topSources = targetUnit
       ? getTopDamageSourcesInWindow(
@@ -293,7 +354,10 @@ export function emitDmgSpikeEntries(params: {
           enemyIdMap,
         )
       : [];
-    const sourceStr = topSources.length > 0 ? `\n                 Top sources: ${topSources.join(', ')}` : '';
+    const sourceStr =
+      topSources.length > 0
+        ? `\n                 Top sources: ${topSources.join(", ")}`
+        : "";
 
     addEntry(
       pw.fromSeconds,
@@ -333,7 +397,10 @@ export function emitManaMarkerEntries(params: {
     addEntry,
   } = params;
 
-  const friendlyHealers = [owner, ...friends.filter((f) => f.id !== owner.id)].filter((u) => isHealerSpec(u.spec));
+  const friendlyHealers = [
+    owner,
+    ...friends.filter((f) => f.id !== owner.id),
+  ].filter((u) => isHealerSpec(u.spec));
   const enemyHealers = enemies.filter((u) => isHealerSpec(u.spec));
   if (friendlyHealers.length > 0 || enemyHealers.length > 0) {
     for (let t = 0; t <= Math.floor(matchDurationS); t += 30) {
@@ -347,7 +414,8 @@ export function emitManaMarkerEntries(params: {
 
         const mana = getUnitManaAtTimestamp(u, tsMs);
         if (mana) {
-          const pct = mana.max > 0 ? Math.round((mana.current / mana.max) * 100) : 0;
+          const pct =
+            mana.max > 0 ? Math.round((mana.current / mana.max) * 100) : 0;
           friendlyParts.push(`${pid(u.name)}:${pct}%`);
         }
       }
@@ -360,7 +428,8 @@ export function emitManaMarkerEntries(params: {
 
         const mana = getUnitManaAtTimestamp(u, tsMs);
         if (mana) {
-          const pct = mana.max > 0 ? Math.round((mana.current / mana.max) * 100) : 0;
+          const pct =
+            mana.max > 0 ? Math.round((mana.current / mana.max) * 100) : 0;
           enemyParts.push(`${enemyPid(u.name)}:${pct}%`);
         }
       }
@@ -368,11 +437,11 @@ export function emitManaMarkerEntries(params: {
       if (friendlyParts.length > 0 || enemyParts.length > 0) {
         let manaParts: string;
         if (friendlyParts.length > 0 && enemyParts.length > 0) {
-          manaParts = `friends ${friendlyParts.join(' ')} / enemies ${enemyParts.join(' ')}`;
+          manaParts = `friends ${friendlyParts.join(" ")} / enemies ${enemyParts.join(" ")}`;
         } else if (friendlyParts.length > 0) {
-          manaParts = `friends ${friendlyParts.join(' ')}`;
+          manaParts = `friends ${friendlyParts.join(" ")}`;
         } else {
-          manaParts = `enemies ${enemyParts.join(' ')}`;
+          manaParts = `enemies ${enemyParts.join(" ")}`;
         }
         addEntry(t, `${fmtTime(t)}  [MANA]   ${manaParts}`);
       }
@@ -389,17 +458,30 @@ export function emitManaMarkerEntries(params: {
  * and `addEntry` are passed in so the caller's closure state is preserved.
  */
 export function emitFriendlyDeathEntries<S>(params: {
-  friendlyDeaths: Array<{ spec: string; name: string; atSeconds: number; note?: string }>;
+  friendlyDeaths: Array<{
+    spec: string;
+    name: string;
+    atSeconds: number;
+    note?: string;
+  }>;
   unitsByName: Map<string, ICombatUnit>;
   ccTrinketSummaries: IPlayerCCTrinketSummary[];
   owner: ICombatUnit;
   ownerCDs: IMajorCooldownInfo[];
-  teammateCDs: Array<{ player: ICombatUnit; spec: string; cds: IMajorCooldownInfo[] }>;
+  teammateCDs: Array<{
+    player: ICombatUnit;
+    spec: string;
+    cds: IMajorCooldownInfo[];
+  }>;
   matchStartMs: number;
   pid: (name: string) => string;
   playerIdMap?: Map<string, number>;
   enemyIdMap?: Map<string, number>;
-  requestSnapshotPlaceholder: (timeSeconds: number, forceFull?: boolean, bypassDebounce?: boolean) => S;
+  requestSnapshotPlaceholder: (
+    timeSeconds: number,
+    forceFull?: boolean,
+    bypassDebounce?: boolean,
+  ) => S;
   addEntry: (timeSeconds: number, ...lines: (string | S)[]) => void;
 }): void {
   const {
@@ -419,11 +501,17 @@ export function emitFriendlyDeathEntries<S>(params: {
 
   for (const death of friendlyDeaths) {
     const dyingUnit = unitsByName.get(death.name);
-    let unusedDefensives = '';
+    let unusedDefensives = "";
     let trinketAvailable = false;
     if (dyingUnit) {
-      const summary = ccTrinketSummaries.find((s) => s.playerName === death.name);
-      if (summary && (summary.trinketType === 'Gladiator' || summary.trinketType === 'Adaptation')) {
+      const summary = ccTrinketSummaries.find(
+        (s) => s.playerName === death.name,
+      );
+      if (
+        summary &&
+        (summary.trinketType === "Gladiator" ||
+          summary.trinketType === "Adaptation")
+      ) {
         const cooldownSec = summary.trinketCooldownSeconds;
         let lastUse: number | undefined;
         for (let i = summary.trinketUseTimes.length - 1; i >= 0; i--) {
@@ -433,16 +521,21 @@ export function emitFriendlyDeathEntries<S>(params: {
             break;
           }
         }
-        trinketAvailable = lastUse === undefined || death.atSeconds - lastUse >= cooldownSec;
+        trinketAvailable =
+          lastUse === undefined || death.atSeconds - lastUse >= cooldownSec;
       }
 
       // F145: Teammate Defensive Persistence Check — find big buttons that were available at death
       const allPlayerCDs = [
         ...ownerCDs.filter(() => owner.name === death.name),
-        ...teammateCDs.filter((tc) => tc.player.name === death.name).flatMap((tc) => tc.cds),
+        ...teammateCDs
+          .filter((tc) => tc.player.name === death.name)
+          .flatMap((tc) => tc.cds),
       ];
 
-      const isLockedOut = summary ? wasLockedOutThroughWindow(summary, death.atSeconds) : false;
+      const isLockedOut = summary
+        ? wasLockedOutThroughWindow(summary, death.atSeconds)
+        : false;
       const forbearance = selfForbearanceActiveAt(
         dyingUnit,
         Array.from(unitsByName.values()),
@@ -451,24 +544,30 @@ export function emitFriendlyDeathEntries<S>(params: {
       );
 
       const readyAtDeath = allPlayerCDs
-        .filter((cd) => cd.tag === 'Defensive' || cd.tag === 'External')
+        .filter((cd) => cd.tag === "Defensive" || cd.tag === "External")
         .filter((cd) =>
-          cd.availableWindows.some((w) => death.atSeconds >= w.fromSeconds && death.atSeconds <= w.toSeconds),
+          cd.availableWindows.some(
+            (w) =>
+              death.atSeconds >= w.fromSeconds &&
+              death.atSeconds <= w.toSeconds,
+          ),
         )
         // B12/C3: only flag if it was actually usable (not locked out through the lethal window, or is a CC-breaking defensive)
-        .filter((cd) => !isLockedOut || USABLE_WHILE_CC_SPELL_IDS.has(cd.spellId))
+        .filter(
+          (cd) => !isLockedOut || USABLE_WHILE_CC_SPELL_IDS.has(cd.spellId),
+        )
         // Forbearance: a paladin can't press Spellwarding/BoP/LoH/Divine Shield if it self-applied
         // Forbearance in the last 30s — don't list those as "unused" (false accusation).
         .filter((cd) => !(forbearance && FORBEARANCE_GATED_IDS.has(cd.spellId)))
         .map((cd) => cd.spellName);
 
       if (readyAtDeath.length > 0) {
-        unusedDefensives = ` (Unused: ${readyAtDeath.join(', ')})`;
+        unusedDefensives = ` (Unused: ${readyAtDeath.join(", ")})`;
       }
     }
 
-    const trinketPart = trinketAvailable ? ' (PvP Trinket available)' : '';
-    const notePart = death.note ? ` [${death.note}]` : '';
+    const trinketPart = trinketAvailable ? " (PvP Trinket available)" : "";
+    const notePart = death.note ? ` [${death.note}]` : "";
     const deathLines: (string | S)[] = [
       `${fmtTime(death.atSeconds)}  [DEATH]  ${pid(death.name)} (${death.spec} — friendly)${unusedDefensives}${trinketPart}${notePart}`,
       requestSnapshotPlaceholder(death.atSeconds - 3, true, true),
@@ -478,18 +577,39 @@ export function emitFriendlyDeathEntries<S>(params: {
       const checkpoints = [15, 10, 5, 3, 2, 1];
       const trajectory: string[] = [];
       for (const secondsBefore of checkpoints) {
-        const pct = getHpPercentAtTime(dyingUnit, death.atSeconds - secondsBefore, matchStartMs);
-        if (pct !== null) trajectory.push(`${Math.round(pct)}% at T-${secondsBefore}s`);
+        // Deaths are critical windows: the surrounding [STATE] ticks sample at
+        // ±1.5s — use the identical radius so a trace checkpoint and a STATE
+        // line about the same second resolve to the same advanced sample.
+        // Integer-second grid (floor) — the same instants the [STATE] ticks
+        // sample — so a checkpoint and a co-second STATE line resolve to the
+        // SAME advanced sample and can never print different numbers.
+        const pct = getHpPercentAtTime(
+          dyingUnit,
+          Math.floor(death.atSeconds) - secondsBefore,
+          matchStartMs,
+          1_500,
+        );
+        if (pct !== null)
+          trajectory.push(`${Math.round(pct)}% at T-${secondsBefore}s`);
       }
       if (trajectory.length > 0) {
-        deathLines.push(`               HP: ${trajectory.join(' → ')} → dead`);
+        deathLines.push(`               HP: ${trajectory.join(" → ")} → dead`);
       }
 
       // Top damage sources in final 10s — uses shared helper to avoid duplication
       const deathMs = matchStartMs + death.atSeconds * 1000;
-      const topSources = getTopDamageSourcesInWindow(dyingUnit, deathMs, 10_000, 3, playerIdMap, enemyIdMap);
+      const topSources = getTopDamageSourcesInWindow(
+        dyingUnit,
+        deathMs,
+        10_000,
+        3,
+        playerIdMap,
+        enemyIdMap,
+      );
       if (topSources.length > 0) {
-        deathLines.push(`               Top damage in final 10s: ${topSources.join(', ')}`);
+        deathLines.push(
+          `               Top damage in final 10s: ${topSources.join(", ")}`,
+        );
       }
     }
 
@@ -508,7 +628,11 @@ export function emitEnemyDeathEntries<S>(params: {
   enemyPid: (name: string) => string;
   playerIdMap?: Map<string, number>;
   enemyIdMap?: Map<string, number>;
-  requestSnapshotPlaceholder: (timeSeconds: number, forceFull?: boolean, bypassDebounce?: boolean) => S;
+  requestSnapshotPlaceholder: (
+    timeSeconds: number,
+    forceFull?: boolean,
+    bypassDebounce?: boolean,
+  ) => S;
   addEntry: (timeSeconds: number, ...lines: (string | S)[]) => void;
 }): void {
   const {
@@ -535,18 +659,39 @@ export function emitEnemyDeathEntries<S>(params: {
       const checkpoints = [15, 10, 5, 3, 2, 1];
       const trajectory: string[] = [];
       for (const secondsBefore of checkpoints) {
-        const pct = getHpPercentAtTime(dyingUnit, death.atSeconds - secondsBefore, matchStartMs);
-        if (pct !== null) trajectory.push(`${Math.round(pct)}% at T-${secondsBefore}s`);
+        // Deaths are critical windows: the surrounding [STATE] ticks sample at
+        // ±1.5s — use the identical radius so a trace checkpoint and a STATE
+        // line about the same second resolve to the same advanced sample.
+        // Integer-second grid (floor) — the same instants the [STATE] ticks
+        // sample — so a checkpoint and a co-second STATE line resolve to the
+        // SAME advanced sample and can never print different numbers.
+        const pct = getHpPercentAtTime(
+          dyingUnit,
+          Math.floor(death.atSeconds) - secondsBefore,
+          matchStartMs,
+          1_500,
+        );
+        if (pct !== null)
+          trajectory.push(`${Math.round(pct)}% at T-${secondsBefore}s`);
       }
       if (trajectory.length > 0) {
-        deathLines.push(`               HP: ${trajectory.join(' → ')} → dead`);
+        deathLines.push(`               HP: ${trajectory.join(" → ")} → dead`);
       }
 
       // Top damage sources in final 10s
       const deathMs = matchStartMs + death.atSeconds * 1000;
-      const topSources = getTopDamageSourcesInWindow(dyingUnit, deathMs, 10_000, 3, playerIdMap, enemyIdMap);
+      const topSources = getTopDamageSourcesInWindow(
+        dyingUnit,
+        deathMs,
+        10_000,
+        3,
+        playerIdMap,
+        enemyIdMap,
+      );
       if (topSources.length > 0) {
-        deathLines.push(`               Top damage in final 10s: ${topSources.join(', ')}`);
+        deathLines.push(
+          `               Top damage in final 10s: ${topSources.join(", ")}`,
+        );
       }
     }
 

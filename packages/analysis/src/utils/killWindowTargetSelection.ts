@@ -1,23 +1,33 @@
-import { AtomicArenaCombat, ICombatUnit, LogEvent } from '@gladlog/parser-compat';
+import {
+  AtomicArenaCombat,
+  ICombatUnit,
+  LogEvent,
+} from "@gladlog/parser-compat";
 
-import { spellEffectData } from '../data/spellEffectData';
-import spellIdListsData from '../data/spellIdLists';
-import { fmtTime, specToString } from './cooldowns';
-import { IOffensiveWindow } from './offensiveWindows';
+import { spellEffectData } from "../data/spellEffectData";
+import spellIdListsData from "../data/spellIdLists";
+import {
+  fmtTime,
+  getUnitHpAtTimestamp,
+  HP_SAMPLE_RADIUS_MS,
+  specToString,
+} from "./cooldowns";
+import { IOffensiveWindow } from "./offensiveWindows";
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
 const MAJOR_DEF_IDS = new Set<string>(
-  (spellIdListsData as unknown as { externalOrBigDefensiveSpellIds?: string[] }).externalOrBigDefensiveSpellIds ?? [],
+  (spellIdListsData as unknown as { externalOrBigDefensiveSpellIds?: string[] })
+    .externalOrBigDefensiveSpellIds ?? [],
 );
 
 /** PvP trinket spell IDs that break CC / grant freedom. */
 const PVP_TRINKET_SPELL_IDS = new Set<string>([
-  '336126', // Gladiator's Medallion (active break-CC)
-  '195710', // Primal Gladiator's Badge (older active trinket)
-  '208683', // Might of the Alliance / Horde (active)
+  "336126", // Gladiator's Medallion (active break-CC)
+  "195710", // Primal Gladiator's Badge (older active trinket)
+  "208683", // Might of the Alliance / Horde (active)
 ]);
 
 /** Healer trinket CD (seconds). */
@@ -74,22 +84,24 @@ export interface IKillWindowTargetEval {
  * Returns the unit's HP% (0–100) at `atSeconds`, using the nearest advancedAction
  * entry at or before that time. Returns null when advanced logging is unavailable.
  */
-export function getHpPercentAtTime(enemy: ICombatUnit, atSeconds: number, matchStartMs: number): number | null {
-  const actions = enemy.advancedActions;
-  if (!actions || actions.length === 0) return null;
-
-  const targetMs = matchStartMs + atSeconds * 1000;
-
-  // Iterate backwards — first entry at or before targetMs is the answer (O(1) common case)
-  for (let i = actions.length - 1; i >= 0; i--) {
-    const a = actions[i];
-    if (a.logLine.timestamp <= targetMs) {
-      if (a.advancedActorMaxHp <= 0) return null;
-      return Math.min(100, Math.max(0, (a.advancedActorCurrentHp / a.advancedActorMaxHp) * 100));
-    }
-  }
-
-  return null;
+export function getHpPercentAtTime(
+  enemy: ICombatUnit,
+  atSeconds: number,
+  matchStartMs: number,
+  maxDtMs: number = HP_SAMPLE_RADIUS_MS,
+): number | null {
+  // B4 residual fix (2026-07-14 audit): the old implementation returned the nearest
+  // sample AT OR BEFORE the instant with NO time bound — a unit idle/CC'd for 20s got a
+  // 20s-stale HP printed as "HP at T-15s", contradicting the [STATE]/[DMG SPIKE] lines
+  // sampled near the same instant and demonstrably feeding coach errors. All prompt HP
+  // claims now share one bounded nearest-sample primitive (getUnitHpAtTimestamp,
+  // HP_SAMPLE_RADIUS_MS); instants without a near-enough reading render nothing.
+  const pct = getUnitHpAtTimestamp(
+    enemy,
+    matchStartMs + atSeconds * 1000,
+    maxDtMs,
+  );
+  return pct === null ? null : Math.min(100, Math.max(0, pct));
 }
 
 /**
@@ -113,7 +125,10 @@ export function getLowestHpPercentInWindow(
     if (a.logLine.timestamp < fromMs) continue;
     if (a.logLine.timestamp > toMs) break;
     if (a.advancedActorMaxHp <= 0) continue;
-    const pct = Math.min(100, Math.max(0, (a.advancedActorCurrentHp / a.advancedActorMaxHp) * 100));
+    const pct = Math.min(
+      100,
+      Math.max(0, (a.advancedActorCurrentHp / a.advancedActorMaxHp) * 100),
+    );
     if (lowest === null || pct < lowest) lowest = pct;
   }
   return lowest;
@@ -145,7 +160,10 @@ function getDefensiveStateAtTime(
 
     const effectData = spellEffectData[spellId];
     if (!effectData) continue;
-    const cdSeconds = effectData.cooldownSeconds ?? effectData.charges?.chargeCooldownSeconds ?? 0;
+    const cdSeconds =
+      effectData.cooldownSeconds ??
+      effectData.charges?.chargeCooldownSeconds ??
+      0;
     if (cdSeconds < 30) continue;
 
     const spellName = effectData.name;
@@ -159,9 +177,15 @@ function getDefensiveStateAtTime(
     const effectData = spellEffectData[spellId];
     if (!effectData) continue;
 
-    const cdSeconds = effectData.cooldownSeconds ?? effectData.charges?.chargeCooldownSeconds ?? 0;
+    const cdSeconds =
+      effectData.cooldownSeconds ??
+      effectData.charges?.chargeCooldownSeconds ??
+      0;
     const maxCharges = effectData.charges?.charges ?? 1;
-    const buffSeconds = effectData.durationSeconds && effectData.durationSeconds > 0 ? effectData.durationSeconds : 8;
+    const buffSeconds =
+      effectData.durationSeconds && effectData.durationSeconds > 0
+        ? effectData.durationSeconds
+        : 8;
 
     // Simulate charge regeneration sequentially
     casts.sort((a, b) => a.castSeconds - b.castSeconds);
@@ -169,9 +193,14 @@ function getDefensiveStateAtTime(
     let nextRegenTime = 0;
 
     for (const cast of casts) {
-      while (nextRegenTime > 0 && nextRegenTime <= cast.castSeconds && currentCharges < maxCharges) {
+      while (
+        nextRegenTime > 0 &&
+        nextRegenTime <= cast.castSeconds &&
+        currentCharges < maxCharges
+      ) {
         currentCharges++;
-        nextRegenTime = currentCharges < maxCharges ? nextRegenTime + cdSeconds : 0;
+        nextRegenTime =
+          currentCharges < maxCharges ? nextRegenTime + cdSeconds : 0;
       }
       currentCharges = Math.max(0, currentCharges - 1);
       if (currentCharges < maxCharges && nextRegenTime === 0) {
@@ -180,12 +209,18 @@ function getDefensiveStateAtTime(
     }
 
     // Process regens up to window start
-    while (nextRegenTime > 0 && nextRegenTime <= windowStartSeconds && currentCharges < maxCharges) {
+    while (
+      nextRegenTime > 0 &&
+      nextRegenTime <= windowStartSeconds &&
+      currentCharges < maxCharges
+    ) {
       currentCharges++;
-      nextRegenTime = currentCharges < maxCharges ? nextRegenTime + cdSeconds : 0;
+      nextRegenTime =
+        currentCharges < maxCharges ? nextRegenTime + cdSeconds : 0;
     }
 
-    const buffActive = casts[casts.length - 1].castSeconds + buffSeconds > windowStartSeconds;
+    const buffActive =
+      casts[casts.length - 1].castSeconds + buffSeconds > windowStartSeconds;
     const cdOnCooldown = currentCharges === 0;
 
     if (buffActive || cdOnCooldown) {
@@ -228,20 +263,35 @@ export function getTrinketStateAtTime(
 /**
  * Builds a full snapshot for one enemy at the given window start.
  */
-function snapshotEnemy(enemy: ICombatUnit, windowStartSeconds: number, matchStartMs: number): IEnemySnapshot {
+function snapshotEnemy(
+  enemy: ICombatUnit,
+  windowStartSeconds: number,
+  matchStartMs: number,
+): IEnemySnapshot {
   const hpPercent = getHpPercentAtTime(enemy, windowStartSeconds, matchStartMs);
-  const { available, unavailable } = getDefensiveStateAtTime(enemy, windowStartSeconds, matchStartMs);
+  const { available, unavailable } = getDefensiveStateAtTime(
+    enemy,
+    windowStartSeconds,
+    matchStartMs,
+  );
   const isHealerUnit = false; // spec-based healer check would require cooldowns import — use fixed DPS CD for enemies
-  const trinketAvailable = getTrinketStateAtTime(enemy, windowStartSeconds, matchStartMs, isHealerUnit);
+  const trinketAvailable = getTrinketStateAtTime(
+    enemy,
+    windowStartSeconds,
+    matchStartMs,
+    isHealerUnit,
+  );
 
-  const trinketScore = trinketAvailable === false ? 1 : trinketAvailable === true ? 0 : 0.5;
+  const trinketScore =
+    trinketAvailable === false ? 1 : trinketAvailable === true ? 0 : 0.5;
   const totalTracked = available.length + unavailable.length + 1; // +1 for trinket
   const spentTracked = unavailable.length + trinketScore;
   const defensivesFraction = totalTracked > 0 ? spentTracked / totalTracked : 0;
   const hpFraction = hpPercent !== null ? hpPercent / 100 : 0.5; // assume 50% if unknown
 
   const trinketPenalty = trinketAvailable === false ? 15 : 0;
-  const softnessScore = 50 * (1 - hpFraction) + 50 * defensivesFraction + trinketPenalty;
+  const softnessScore =
+    50 * (1 - hpFraction) + 50 * defensivesFraction + trinketPenalty;
 
   return {
     unitId: enemy.id,
@@ -286,20 +336,31 @@ export function analyzeKillWindowTargetSelection(
     const otherEnemies = enemies.filter((e) => e.id !== window.targetUnitId);
     if (otherEnemies.length === 0) continue;
 
-    const focusedSnapshot = snapshotEnemy(focusedEnemy, window.fromSeconds, matchStartMs);
-    const otherSnapshots = otherEnemies.map((e) => snapshotEnemy(e, window.fromSeconds, matchStartMs));
+    const focusedSnapshot = snapshotEnemy(
+      focusedEnemy,
+      window.fromSeconds,
+      matchStartMs,
+    );
+    const otherSnapshots = otherEnemies.map((e) =>
+      snapshotEnemy(e, window.fromSeconds, matchStartMs),
+    );
 
     // Find the single best alternative target (highest softness score)
-    const bestAlternative = otherSnapshots.reduce<IEnemySnapshot | null>((best, s) => {
-      if (!best) return s;
-      return s.softnessScore > best.softnessScore ? s : best;
-    }, null);
+    const bestAlternative = otherSnapshots.reduce<IEnemySnapshot | null>(
+      (best, s) => {
+        if (!best) return s;
+        return s.softnessScore > best.softnessScore ? s : best;
+      },
+      null,
+    );
 
     // Flag as "better target exists" when the alternative is meaningfully softer
     // (at least 15 score points ahead, to avoid noise from equal states)
     const SCORE_MARGIN = 15;
     const betterTargetExists =
-      bestAlternative !== null && bestAlternative.softnessScore > focusedSnapshot.softnessScore + SCORE_MARGIN;
+      bestAlternative !== null &&
+      bestAlternative.softnessScore >
+        focusedSnapshot.softnessScore + SCORE_MARGIN;
 
     results.push({
       windowFromSeconds: window.fromSeconds,
@@ -307,8 +368,12 @@ export function analyzeKillWindowTargetSelection(
       focusedTarget: focusedSnapshot,
       otherTargets: otherSnapshots,
       betterTargetExists,
-      betterTargetName: betterTargetExists ? bestAlternative?.playerName : undefined,
-      betterTargetSpec: betterTargetExists ? bestAlternative?.playerSpec : undefined,
+      betterTargetName: betterTargetExists
+        ? bestAlternative?.playerName
+        : undefined,
+      betterTargetSpec: betterTargetExists
+        ? bestAlternative?.playerSpec
+        : undefined,
     });
   }
 
@@ -320,34 +385,45 @@ export function analyzeKillWindowTargetSelection(
 // ---------------------------------------------------------------------------
 
 function fmtHp(hp: number | null): string {
-  if (hp === null) return 'HP unknown';
+  if (hp === null) return "HP unknown";
   return `${Math.round(hp)}% HP`;
 }
 
 function fmtDefensives(snap: IEnemySnapshot): string {
-  if (snap.defensivesAvailable.length === 0 && snap.defensivesUnavailable.length === 0) {
-    return 'no defensives tracked';
+  if (
+    snap.defensivesAvailable.length === 0 &&
+    snap.defensivesUnavailable.length === 0
+  ) {
+    return "no defensives tracked";
   }
   const parts: string[] = [];
   if (snap.defensivesUnavailable.length > 0) {
-    parts.push(`no defensives (${snap.defensivesUnavailable.join(', ')} spent)`);
+    parts.push(
+      `no defensives (${snap.defensivesUnavailable.join(", ")} spent)`,
+    );
   } else if (snap.defensivesAvailable.length > 0) {
-    parts.push(`defensives up: ${snap.defensivesAvailable.join(', ')}`);
+    parts.push(`defensives up: ${snap.defensivesAvailable.join(", ")}`);
   }
-  if (snap.trinketAvailable === false) parts.push('trinket on CD');
-  else if (snap.trinketAvailable === true) parts.push('trinket available');
-  return parts.join(', ');
+  if (snap.trinketAvailable === false) parts.push("trinket on CD");
+  else if (snap.trinketAvailable === true) parts.push("trinket available");
+  return parts.join(", ");
 }
 
-export function formatKillWindowTargetSelectionForContext(evals: IKillWindowTargetEval[]): string[] {
+export function formatKillWindowTargetSelectionForContext(
+  evals: IKillWindowTargetEval[],
+): string[] {
   if (evals.length === 0) return [];
 
   const lines: string[] = [];
-  lines.push('KILL WINDOW TARGET SELECTION — per-window enemy state comparison:');
+  lines.push(
+    "KILL WINDOW TARGET SELECTION — per-window enemy state comparison:",
+  );
 
   for (const ev of evals) {
-    lines.push('');
-    lines.push(`  Window ${fmtTime(ev.windowFromSeconds)}–${fmtTime(ev.windowToSeconds)}:`);
+    lines.push("");
+    lines.push(
+      `  Window ${fmtTime(ev.windowFromSeconds)}–${fmtTime(ev.windowToSeconds)}:`,
+    );
 
     // Focused target
     const f = ev.focusedTarget;

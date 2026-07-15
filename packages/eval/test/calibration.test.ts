@@ -1,12 +1,13 @@
 import {
-  mkdtempSync,
-  mkdirSync,
-  writeFileSync,
-  readFileSync,
   existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  writeFileSync,
 } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+
 import { buildCalibrationSuite } from "../src/judge/buildCalibrationSuite";
 import { checkCalibration } from "../src/judge/checkCalibration";
 
@@ -126,5 +127,208 @@ describe("checkCalibration", () => {
     const r = await checkCalibration(base);
     expect(r.pass).toBe(false);
     expect(r.failures.length).toBeGreaterThan(0);
+  });
+});
+
+const DIMS = [
+  "sufficiency",
+  "noise",
+  "labelBias",
+  "inferenceScaffolding",
+  "accuracy",
+  "outcomeAlignment",
+  "focusCalibration",
+] as const;
+
+/** Build a run whose PROMPT contains a death line (so removed-deaths fires) and
+ * enough event lines for every perturbation to trigger — one perturbation per
+ * dimension per source, i.e. `sourceCount` pairs per dimension. */
+function makeTmpRun(sourceCount: number): string {
+  const base = mkdtempSync(join(tmpdir(), "gl-cal2-"));
+  mkdirSync(join(base, "prompts"), { recursive: true });
+  mkdirSync(join(base, "responses"), { recursive: true });
+  const eventLines = Array.from(
+    { length: 30 },
+    (_, i) =>
+      `[0:${String(i + 10).padStart(2, "0")}] Kidney Shot lands on Holy Priest for ${100 + i}`,
+  );
+  eventLines.push("[0:24] Holy Priest died to a Kidney Shot follow-up");
+  const prompt = `MATCH SUMMARY\n  Spec: Holy Priest\nTIMELINE\n${eventLines.join("\n")}\n`;
+  const response =
+    "Your positioning was solid in the opener, and the early cooldown trades went your way.\n\n" +
+    "The death at 0:24 traces directly to the trinket timing: holding it through the first stun " +
+    "meant the follow-up Kidney Shot connected at full duration while your defensive was still queued.\n\n" +
+    "Keep pre-casting before the stun window closes, and track the enemy interrupt so your clutch " +
+    "cast is not thrown into a guaranteed lockout.";
+  const index = Array.from({ length: sourceCount }, (_, k) => {
+    const ordinal = k + 1;
+    const nnn = String(ordinal).padStart(3, "0");
+    writeFileSync(join(base, "prompts", `${nnn}-m${ordinal}.txt`), prompt);
+    writeFileSync(join(base, "responses", `${nnn}.txt`), response);
+    return {
+      ordinal,
+      file: `prompts/${nnn}-m${ordinal}.txt`,
+      matchId: `m${ordinal}`,
+      spec: "Holy Priest",
+      result: ordinal % 2 === 1 ? "Win" : "Loss",
+    };
+  });
+  writeFileSync(join(base, "index.json"), JSON.stringify(index, null, 2));
+  return base;
+}
+
+interface ManifestCase {
+  caseId: string;
+  perturbation: string;
+  targetDimension: string | null;
+}
+
+/** Write per-case scores. `score(dim, isPerturbed, targetDim)` returns the value
+ * the judge assigns to `dim` for a case (none-control when !isPerturbed).
+ * Returning `null` OMITS the dimension entirely; returning a string writes it
+ * verbatim (to exercise string-numeric handling). */
+function writeScores(
+  base: string,
+  score: (
+    dim: string,
+    isPerturbed: boolean,
+    targetDim: string | null,
+  ) => number | string | null,
+): void {
+  const scoresDir = join(base, "judge-calibration", "scores");
+  const manifest = JSON.parse(
+    readFileSync(
+      join(base, "judge-calibration", "calibration-manifest.json"),
+      "utf-8",
+    ),
+  ) as { cases: ManifestCase[] };
+  for (const c of manifest.cases) {
+    const isPerturbed = c.perturbation !== "none";
+    const prompt: Record<string, number | string> = {};
+    for (const d of DIMS) {
+      const v = score(d, isPerturbed, c.targetDimension);
+      if (v !== null) prompt[d] = v;
+    }
+    writeFileSync(
+      join(scoresDir, `${c.caseId}.json`),
+      JSON.stringify({ prompt, response: {} }),
+    );
+  }
+}
+
+describe("checkCalibration — discriminant validity (specificity)", () => {
+  it("扣分只落在目标维度的判官 → PASS;对所有维度一律扣分的‘无脑差评’判官 → FAIL", async () => {
+    // Discriminating judge: perturbed drops ONLY the targeted dim by 2.
+    const discBase = makeTmpRun(2);
+    await buildCalibrationSuite(discBase, { sourceCount: 2, seed: 42 });
+    writeScores(discBase, (dim, isPerturbed, targetDim) =>
+      isPerturbed && dim === targetDim ? 3 : 5,
+    );
+    const disc = await checkCalibration(discBase, {
+      minPairs: 2,
+      deltaFloor: 1,
+      specificityTol: 0,
+    });
+    expect(disc.pass).toBe(true);
+
+    // "Hater" judge: perturbed drops EVERY dimension by 2. Under a targeted-only
+    // check this passes trivially; discriminant validity must reject it.
+    const haterBase = makeTmpRun(2);
+    await buildCalibrationSuite(haterBase, { sourceCount: 2, seed: 42 });
+    writeScores(haterBase, (_dim, isPerturbed) => (isPerturbed ? 3 : 5));
+    const hater = await checkCalibration(haterBase, {
+      minPairs: 2,
+      deltaFloor: 1,
+      specificityTol: 0,
+    });
+    expect(hater.pass).toBe(false);
+    expect(hater.failures.length).toBeGreaterThan(0);
+  });
+});
+
+describe("checkCalibration — minimum pairs guard", () => {
+  it("每维可评对数 < minPairs → 该维 INSUFFICIENT,整体不判 PASS", async () => {
+    const base = makeTmpRun(2); // 2 pairs per dimension
+    await buildCalibrationSuite(base, { sourceCount: 2, seed: 42 });
+    writeScores(base, (dim, isPerturbed, targetDim) =>
+      isPerturbed && dim === targetDim ? 3 : 5,
+    );
+    // Same perfect discriminator scores: passes at minPairs=2, insufficient at 3.
+    const enough = await checkCalibration(base, {
+      minPairs: 2,
+      deltaFloor: 1,
+      specificityTol: 0,
+    });
+    expect(enough.pass).toBe(true);
+    const tooFew = await checkCalibration(base, {
+      minPairs: 3,
+      deltaFloor: 1,
+      specificityTol: 0,
+    });
+    expect(tooFew.pass).toBe(false);
+  });
+});
+
+describe("checkCalibration — targeted delta floor", () => {
+  it("目标维度降幅低于 deltaFloor → 不计为检出", async () => {
+    const base = makeTmpRun(2);
+    await buildCalibrationSuite(base, { sourceCount: 2, seed: 42 });
+    // Perturbed targeted dim drops by only 0.5; untargeted dims unchanged.
+    writeScores(base, (dim, isPerturbed, targetDim) =>
+      isPerturbed && dim === targetDim ? 7.5 : 8,
+    );
+    const strict = await checkCalibration(base, {
+      minPairs: 2,
+      deltaFloor: 1,
+      specificityTol: 0,
+    });
+    expect(strict.pass).toBe(false); // 0.5 drop < 1.0 floor → undetected
+    const lenient = await checkCalibration(base, {
+      minPairs: 2,
+      deltaFloor: 0.4,
+      specificityTol: 0,
+    });
+    expect(lenient.pass).toBe(true); // 0.5 drop >= 0.4 floor → detected
+  });
+});
+
+describe("checkCalibration — specificity completeness", () => {
+  it("扰动件省略未目标维度(判官漏打分)→ 视为特异性违规,不给免费通过", async () => {
+    const base = makeTmpRun(2);
+    await buildCalibrationSuite(base, { sourceCount: 2, seed: 42 });
+    // Control scores every dimension; perturbed case scores ONLY the targeted
+    // dim (drops it) and OMITS all others — we cannot confirm they stayed put.
+    writeScores(base, (dim, isPerturbed, targetDim) => {
+      if (!isPerturbed) return 5;
+      return dim === targetDim ? 3 : null; // null = omit from JSON
+    });
+    const r = await checkCalibration(base, {
+      minPairs: 2,
+      deltaFloor: 1,
+      specificityTol: 0,
+    });
+    expect(r.pass).toBe(false);
+    expect(r.failures.length).toBeGreaterThan(0);
+  });
+});
+
+describe("checkCalibration — string-numeric handling", () => {
+  it("空字符串分数 → 不可评(null),不当作 0", async () => {
+    const base = makeTmpRun(2);
+    await buildCalibrationSuite(base, { sourceCount: 2, seed: 42 });
+    // Control scores 5 everywhere; perturbed targeted dim is an EMPTY STRING.
+    // Number("") === 0 would fake a 5→0 drop; it must instead be unscoreable.
+    writeScores(base, (dim, isPerturbed, targetDim) => {
+      if (!isPerturbed) return 5;
+      return dim === targetDim ? "" : 5;
+    });
+    const r = await checkCalibration(base, {
+      minPairs: 2,
+      deltaFloor: 1,
+      specificityTol: 0,
+    });
+    // Empty targeted scores are unscoreable → dimensions have 0 scoreable pairs
+    // → NO DATA / not a PASS. A buggy Number("")===0 would report detections.
+    expect(r.pass).toBe(false);
   });
 });

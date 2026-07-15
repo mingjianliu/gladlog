@@ -9,13 +9,22 @@
  * events when positions are absent. Distances are in game yards (~1 unit).
  */
 
-import { AtomicArenaCombat, ICombatUnit } from '@gladlog/parser-compat';
+import { AtomicArenaCombat, ICombatUnit } from "@gladlog/parser-compat";
 
-import { ICCInstance } from './ccTrinketAnalysis';
-import { fmtTime, getUnitHpAtTimestamp, IMajorCooldownInfo, isHealerSpec, isMeleeSpec } from './cooldowns';
-import { IAlignedBurstWindow } from './enemyCDs';
-import { HealerExposureLabel, IHealerBurstExposure } from './healerExposureAnalysis';
-import { distanceBetween, getUnitPositionAtTime } from './losAnalysis';
+import { ICCInstance } from "./ccTrinketAnalysis";
+import {
+  fmtTime,
+  getUnitHpAtTimestamp,
+  IMajorCooldownInfo,
+  isHealerSpec,
+  isMeleeSpec,
+} from "./cooldowns";
+import { IAlignedBurstWindow } from "./enemyCDs";
+import {
+  HealerExposureLabel,
+  IHealerBurstExposure,
+} from "./healerExposureAnalysis";
+import { distanceBetween, getUnitPositionAtTime } from "./losAnalysis";
 
 // Thresholds (yards / seconds) — starting values from the Feature 15 spec.
 const CLOSE_RANGE_YARDS = 12; // "in range" of an enemy
@@ -42,12 +51,12 @@ const MAX_ITER3_EVENTS = 2; // per event type
 const POSITION_MAX_GAP_MS = 1_500;
 
 export type PositionEventType =
-  | 'STAYED_IN'
-  | 'KITED'
-  | 'MISSED_PUSH'
-  | 'CD_OUT_OF_RANGE'
-  | 'SPLIT_PUSH'
-  | 'HEALER_TRAINED';
+  | "STAYED_IN"
+  | "KITED"
+  | "MISSED_PUSH"
+  | "CD_OUT_OF_RANGE"
+  | "SPLIT_PUSH"
+  | "HEALER_TRAINED";
 
 export interface IPositionEvent {
   type: PositionEventType;
@@ -104,7 +113,8 @@ function nearestEnemyAt(
   tMs: number,
   ownerUnit: ICombatUnit,
 ): INearestEnemy | null {
-  const pos = ownerPos ?? getUnitPositionAtTime(ownerUnit, tMs, POSITION_MAX_GAP_MS);
+  const pos =
+    ownerPos ?? getUnitPositionAtTime(ownerUnit, tMs, POSITION_MAX_GAP_MS);
   if (!pos) return null;
   let best: INearestEnemy | null = null;
   for (const enemy of enemies) {
@@ -123,7 +133,7 @@ function nearestEnemyAt(
  *  Overlapping CC instances (simultaneous stun + silence) are merged, not
  *  summed — otherwise stacked CCs could exceed the window length. */
 function ccOverlapSeconds(
-  ccInstances: Array<Pick<ICCInstance, 'atSeconds' | 'durationSeconds'>>,
+  ccInstances: Array<Pick<ICCInstance, "atSeconds" | "durationSeconds">>,
   fromSeconds: number,
   toSeconds: number,
 ): number {
@@ -152,16 +162,20 @@ function ccOverlapSeconds(
 }
 
 function isAvailableAt(cd: IMajorCooldownInfo, atSeconds: number): boolean {
-  return cd.availableWindows.some((w) => atSeconds >= w.fromSeconds && atSeconds <= w.toSeconds);
+  return cd.availableWindows.some(
+    (w) => atSeconds >= w.fromSeconds && atSeconds <= w.toSeconds,
+  );
 }
 
 export function computeOwnerPositionEvents(params: {
   owner: ICombatUnit;
   enemies: ICombatUnit[];
-  combat: Pick<AtomicArenaCombat, 'startTime' | 'endTime'>;
+  combat: Pick<AtomicArenaCombat, "startTime" | "endTime">;
   burstWindows: IAlignedBurstWindow[];
   ownerCooldowns: IMajorCooldownInfo[];
-  ownerCCSummary?: { ccInstances: Array<Pick<ICCInstance, 'atSeconds' | 'durationSeconds'>> };
+  ownerCCSummary?: {
+    ccInstances: Array<Pick<ICCInstance, "atSeconds" | "durationSeconds">>;
+  };
   isHealer: boolean;
   ownerIsMelee: boolean;
   /** Iter 3 (optional): full friendly team, used for SPLIT_PUSH / HEALER_TRAINED */
@@ -177,9 +191,18 @@ export function computeOwnerPositionEvents(params: {
   /** Iter 3 (optional): per-friend CC data so CC-locked players are not blamed */
   friendCCSummaries?: Array<{
     playerName: string;
-    ccInstances: Array<Pick<ICCInstance, 'atSeconds' | 'durationSeconds'>>;
+    ccInstances: Array<Pick<ICCInstance, "atSeconds" | "durationSeconds">>;
   }>;
   healerExposures?: IHealerBurstExposure[];
+  /** B4 fix (optional): damage-spike windows (pre-filtered to >= DMG_SPIKE_THRESHOLD by the
+   * caller). When a spike overlaps a burst window, its targetName is the burst-target claim —
+   * the SAME source the [OFFENSIVE WINDOW] timeline header renders — so the POSITIONING line
+   * can never contradict the timeline about who the burst hit. */
+  spikeWindows?: Array<{
+    fromSeconds: number;
+    toSeconds: number;
+    targetName: string;
+  }>;
 }): IPositionEvent[] {
   const {
     owner,
@@ -194,6 +217,7 @@ export function computeOwnerPositionEvents(params: {
     offensiveWindows,
     friendCCSummaries,
     healerExposures,
+    spikeWindows,
   } = params;
   const matchStartMs = combat.startTime;
   const durationSeconds = (combat.endTime - combat.startTime) / 1000;
@@ -202,8 +226,8 @@ export function computeOwnerPositionEvents(params: {
   if ((owner.advancedActions ?? []).length === 0) return [];
 
   const ccInstances = ownerCCSummary?.ccInstances ?? [];
-  const defensiveCDs = ownerCooldowns.filter((cd) => cd.tag === 'Defensive');
-  const offensiveCDs = ownerCooldowns.filter((cd) => cd.tag === 'Offensive');
+  const defensiveCDs = ownerCooldowns.filter((cd) => cd.tag === "Defensive");
+  const offensiveCDs = ownerCooldowns.filter((cd) => cd.tag === "Offensive");
 
   // ── 1. Burst-window engagement: STAYED_IN / KITED ─────────────────────────
   for (const w of burstWindows) {
@@ -213,15 +237,28 @@ export function computeOwnerPositionEvents(params: {
 
     const exposure =
       isHealer && healerExposures
-        ? healerExposures.find((e) => Math.abs(e.atSeconds - w.fromSeconds) < 0.1)
+        ? healerExposures.find(
+            (e) => Math.abs(e.atSeconds - w.fromSeconds) < 0.1,
+          )
         : undefined;
     const healerExposureLabel = exposure?.exposureLabel;
 
     // CC'd for most of the window → could not choose to kite; not a decision
-    if (ccOverlapSeconds(ccInstances, w.fromSeconds, evalEnd) >= evalSpan / 2) continue;
+    if (ccOverlapSeconds(ccInstances, w.fromSeconds, evalEnd) >= evalSpan / 2)
+      continue;
 
-    const start = nearestEnemyAt(enemies, null, matchStartMs + w.fromSeconds * 1000, owner);
-    const end = nearestEnemyAt(enemies, null, matchStartMs + evalEnd * 1000, owner);
+    const start = nearestEnemyAt(
+      enemies,
+      null,
+      matchStartMs + w.fromSeconds * 1000,
+      owner,
+    );
+    const end = nearestEnemyAt(
+      enemies,
+      null,
+      matchStartMs + evalEnd * 1000,
+      owner,
+    );
     if (!start || !end) continue;
     if (start.distanceYards > CLOSE_RANGE_YARDS) continue; // was not in range to begin with
 
@@ -229,16 +266,31 @@ export function computeOwnerPositionEvents(params: {
     // shows up as a mid-window peak that endpoint-only checks would miss.
     let maxDistance = Math.max(start.distanceYards, end.distanceYards);
     for (let t = Math.ceil(w.fromSeconds) + 1; t < evalEnd; t += 1) {
-      const sample = nearestEnemyAt(enemies, null, matchStartMs + t * 1000, owner);
+      const sample = nearestEnemyAt(
+        enemies,
+        null,
+        matchStartMs + t * 1000,
+        owner,
+      );
       if (sample) maxDistance = Math.max(maxDistance, sample.distanceYards);
     }
 
     const delta = end.distanceYards - start.distanceYards;
-    const targetName = w.mostPressuredTarget?.unitName;
-    const burstTargetsOwner = targetName !== undefined ? targetName === owner.name : undefined;
+    // B4 fix: prefer the overlapping damage-spike's target (identical ±5s overlap rule to the
+    // [OFFENSIVE WINDOW] header in matchTimeline) so this line and the timeline can never
+    // disagree about who the burst hit; fall back to the whole-window most-pressured unit.
+    const overlappingSpike = spikeWindows?.find(
+      (pw) =>
+        pw.fromSeconds >= w.fromSeconds - 5 &&
+        pw.fromSeconds <= w.toSeconds + 5,
+    );
+    const targetName =
+      overlappingSpike?.targetName ?? w.mostPressuredTarget?.unitName;
+    const burstTargetsOwner =
+      targetName !== undefined ? targetName === owner.name : undefined;
     if (maxDistance - start.distanceYards >= KITE_DELTA_YARDS) {
       events.push({
-        type: 'KITED',
+        type: "KITED",
         atSeconds: w.fromSeconds,
         toSeconds: evalEnd,
         startDistanceYards: Math.round(start.distanceYards * 10) / 10,
@@ -260,15 +312,23 @@ export function computeOwnerPositionEvents(params: {
       // The OUTCOME: did staying in actually cost HP? This is what turns STAYED_IN
       // from a hedge-pileup into a checkable finding — a coach should only fault a
       // stay that dropped the owner low, not one that cost nothing.
-      const hpStart = getUnitHpAtTimestamp(owner, matchStartMs + w.fromSeconds * 1000, POSITION_MAX_GAP_MS);
+      const hpStart = getUnitHpAtTimestamp(
+        owner,
+        matchStartMs + w.fromSeconds * 1000,
+        POSITION_MAX_GAP_MS,
+      );
       let hpMin = hpStart;
       for (let t = Math.ceil(w.fromSeconds); t <= evalEnd; t += 1) {
-        const hp = getUnitHpAtTimestamp(owner, matchStartMs + t * 1000, POSITION_MAX_GAP_MS);
+        const hp = getUnitHpAtTimestamp(
+          owner,
+          matchStartMs + t * 1000,
+          POSITION_MAX_GAP_MS,
+        );
         if (hp !== null && (hpMin === null || hp < hpMin)) hpMin = hp;
       }
 
       events.push({
-        type: 'STAYED_IN',
+        type: "STAYED_IN",
         atSeconds: w.fromSeconds,
         toSeconds: evalEnd,
         startDistanceYards: Math.round(start.distanceYards * 10) / 10,
@@ -277,7 +337,9 @@ export function computeOwnerPositionEvents(params: {
         dangerLabel: w.dangerLabel,
         dampeningPct: w.dampeningPct,
         ownerDefensiveAvailable:
-          defensiveCDs.length > 0 ? defensiveCDs.some((cd) => isAvailableAt(cd, w.fromSeconds)) : undefined,
+          defensiveCDs.length > 0
+            ? defensiveCDs.some((cd) => isAvailableAt(cd, w.fromSeconds))
+            : undefined,
         burstTargetsOwner,
         burstTargetName: burstTargetsOwner === false ? targetName : undefined,
         ownerHpStartPct: hpStart === null ? null : Math.round(hpStart),
@@ -290,7 +352,9 @@ export function computeOwnerPositionEvents(params: {
 
   // ── 2. MISSED_PUSH: offensive CDs up, no enemy burst, parked far away ─────
   if (!isHealer && offensiveCDs.length > 0) {
-    const threshold = ownerIsMelee ? MISSED_PUSH_MELEE_YARDS : MISSED_PUSH_RANGED_YARDS;
+    const threshold = ownerIsMelee
+      ? MISSED_PUSH_MELEE_YARDS
+      : MISSED_PUSH_RANGED_YARDS;
     const enemyDeathTimes = enemies.flatMap((e) =>
       (e.deathRecords ?? []).map((d) => (d.timestamp - matchStartMs) / 1000),
     );
@@ -306,7 +370,7 @@ export function computeOwnerPositionEvents(params: {
         missedPushCount < MAX_MISSED_PUSH_EVENTS
       ) {
         events.push({
-          type: 'MISSED_PUSH',
+          type: "MISSED_PUSH",
           atSeconds: runStart,
           toSeconds: endSeconds,
           startDistanceYards: Math.round(runMinDist * 10) / 10,
@@ -321,15 +385,28 @@ export function computeOwnerPositionEvents(params: {
     // living enemy's position to be known. A stealthed/idle enemy (no recent
     // snapshots) could be anywhere, including on top of the owner.
     const allLivingEnemiesKnownAt = (tMs: number) =>
-      enemies.every((e) => isDeadAt(e, tMs) || getUnitPositionAtTime(e, tMs, POSITION_MAX_GAP_MS) !== null);
+      enemies.every(
+        (e) =>
+          isDeadAt(e, tMs) ||
+          getUnitPositionAtTime(e, tMs, POSITION_MAX_GAP_MS) !== null,
+      );
 
     for (let t = 0; t <= durationSeconds; t += 1) {
       const tMs = matchStartMs + t * 1000;
-      const allOffensivesReady = offensiveCDs.every((cd) => isAvailableAt(cd, t));
-      const inBurst = burstWindows.some((w) => t >= w.fromSeconds && t <= w.toSeconds);
-      const nearKill = enemyDeathTimes.some((d) => t >= d - KILL_PROXIMITY_SECONDS && t <= d);
+      const allOffensivesReady = offensiveCDs.every((cd) =>
+        isAvailableAt(cd, t),
+      );
+      const inBurst = burstWindows.some(
+        (w) => t >= w.fromSeconds && t <= w.toSeconds,
+      );
+      const nearKill = enemyDeathTimes.some(
+        (d) => t >= d - KILL_PROXIMITY_SECONDS && t <= d,
+      );
       const nearest =
-        allOffensivesReady && !inBurst && !nearKill && allLivingEnemiesKnownAt(tMs)
+        allOffensivesReady &&
+        !inBurst &&
+        !nearKill &&
+        allLivingEnemiesKnownAt(tMs)
           ? nearestEnemyAt(enemies, null, tMs, owner)
           : null;
 
@@ -347,7 +424,12 @@ export function computeOwnerPositionEvents(params: {
   if (!isHealer) {
     for (const cd of offensiveCDs) {
       for (const cast of cd.casts) {
-        const atCast = nearestEnemyAt(enemies, null, matchStartMs + cast.timeSeconds * 1000, owner);
+        const atCast = nearestEnemyAt(
+          enemies,
+          null,
+          matchStartMs + cast.timeSeconds * 1000,
+          owner,
+        );
         if (!atCast || atCast.distanceYards <= CD_RANGE_YARDS) continue;
         const later = nearestEnemyAt(
           enemies,
@@ -359,7 +441,7 @@ export function computeOwnerPositionEvents(params: {
         // connects within seconds is normal play, not wasted uptime.
         if (later && later.distanceYards > CD_RANGE_YARDS) {
           events.push({
-            type: 'CD_OUT_OF_RANGE',
+            type: "CD_OUT_OF_RANGE",
             atSeconds: cast.timeSeconds,
             startDistanceYards: Math.round(atCast.distanceYards * 10) / 10,
             nearestEnemyName: atCast.enemyName,
@@ -372,16 +454,23 @@ export function computeOwnerPositionEvents(params: {
 
   // ── 4. Iter 3: SPLIT_PUSH — a melee DPS away from the target during a committed push ──
   if (friends && offensiveWindows) {
-    const ccByName = new Map((friendCCSummaries ?? []).map((c) => [c.playerName, c.ccInstances]));
+    const ccByName = new Map(
+      (friendCCSummaries ?? []).map((c) => [c.playerName, c.ccInstances]),
+    );
     let splitCount = 0;
     for (const w of offensiveWindows) {
       if (splitCount >= MAX_ITER3_EVENTS) break;
       if ((w.friendlyOffensives ?? []).length < 2) continue; // not a committed push
 
-      const target = enemies.find((e) => e.id === w.targetUnitId) ?? enemies.find((e) => e.name === w.targetName);
-      if (!target || isDeadAt(target, matchStartMs + w.fromSeconds * 1000)) continue;
+      const target =
+        enemies.find((e) => e.id === w.targetUnitId) ??
+        enemies.find((e) => e.name === w.targetName);
+      if (!target || isDeadAt(target, matchStartMs + w.fromSeconds * 1000))
+        continue;
 
-      const meleeDps = friends.filter((f) => isMeleeSpec(f.spec) && !isHealerSpec(f.spec));
+      const meleeDps = friends.filter(
+        (f) => isMeleeSpec(f.spec) && !isHealerSpec(f.spec),
+      );
       if (meleeDps.length < 2) continue; // convergence is only positionally checkable for melee
 
       const evalEnd = Math.min(w.toSeconds, w.fromSeconds + BURST_EVAL_SECONDS);
@@ -392,7 +481,11 @@ export function computeOwnerPositionEvents(params: {
         if (isDeadAt(dps, matchStartMs + w.fromSeconds * 1000)) continue;
         // CC-locked for most of the evaluated span → could not converge; not a decision
         const cc = ccByName.get(dps.name) ?? [];
-        if (ccOverlapSeconds(cc, w.fromSeconds, evalEnd) >= (evalEnd - w.fromSeconds) / 2) continue;
+        if (
+          ccOverlapSeconds(cc, w.fromSeconds, evalEnd) >=
+          (evalEnd - w.fromSeconds) / 2
+        )
+          continue;
 
         const dists = sampleTimes.map((t) => {
           const tMs = matchStartMs + t * 1000;
@@ -400,17 +493,23 @@ export function computeOwnerPositionEvents(params: {
           // position — distances to/from it would falsely read as abandoning the push.
           if (isDeadAt(target, tMs) || isDeadAt(dps, tMs)) return null;
           const dpsPos = getUnitPositionAtTime(dps, tMs, POSITION_MAX_GAP_MS);
-          const tgtPos = getUnitPositionAtTime(target, tMs, POSITION_MAX_GAP_MS);
+          const tgtPos = getUnitPositionAtTime(
+            target,
+            tMs,
+            POSITION_MAX_GAP_MS,
+          );
           return dpsPos && tgtPos ? distanceBetween(dpsPos, tgtPos) : null;
         });
         if (dists.some((d) => d === null)) continue; // unreliable positions — no claim
-        if (dists.every((d) => (d as number) <= PUSH_ON_TARGET_YARDS)) onTarget.push(dps.name);
-        else if (dists.every((d) => (d as number) > PUSH_AWOL_YARDS)) awol.push(dps.name);
+        if (dists.every((d) => (d as number) <= PUSH_ON_TARGET_YARDS))
+          onTarget.push(dps.name);
+        else if (dists.every((d) => (d as number) > PUSH_AWOL_YARDS))
+          awol.push(dps.name);
       }
 
       if (onTarget.length >= 1 && awol.length >= 1) {
         events.push({
-          type: 'SPLIT_PUSH',
+          type: "SPLIT_PUSH",
           atSeconds: w.fromSeconds,
           toSeconds: w.toSeconds,
           nearestEnemyName: w.targetName,
@@ -424,11 +523,19 @@ export function computeOwnerPositionEvents(params: {
   // ── 5. Iter 3: HEALER_TRAINED — enemy melee camping the friendly healer ───
   if (friends) {
     const healerUnit = friends.find((f) => isHealerSpec(f.spec));
-    const enemyMelee = enemies.filter((e) => isMeleeSpec(e.spec) && !isHealerSpec(e.spec));
-    if (healerUnit && enemyMelee.length > 0 && (healerUnit.advancedActions ?? []).length > 0) {
+    const enemyMelee = enemies.filter(
+      (e) => isMeleeSpec(e.spec) && !isHealerSpec(e.spec),
+    );
+    if (
+      healerUnit &&
+      enemyMelee.length > 0 &&
+      (healerUnit.advancedActions ?? []).length > 0
+    ) {
       // The healer's own CC — a healer CC-locked through the camp can't self-peel
       // or reposition, so "reposition opportunity" would be a false criticism.
-      const healerCC = (friendCCSummaries ?? []).find((c) => c.playerName === healerUnit.name)?.ccInstances ?? [];
+      const healerCC =
+        (friendCCSummaries ?? []).find((c) => c.playerName === healerUnit.name)
+          ?.ccInstances ?? [];
       let runStart: number | null = null;
       const trainerSeconds = new Map<string, number>();
       // T3 grounding:"camped by X (closest N yd)" 的 N 必须是 X 自己的最近距离——
@@ -442,7 +549,7 @@ export function computeOwnerPositionEvents(params: {
           endSeconds - runStart >= HEALER_TRAINED_MIN_SECONDS &&
           trainedCount < MAX_ITER3_EVENTS
         ) {
-          let topTrainer = '';
+          let topTrainer = "";
           let topSeconds = -1;
           for (const [name, secs] of trainerSeconds) {
             if (secs > topSeconds) {
@@ -451,14 +558,18 @@ export function computeOwnerPositionEvents(params: {
             }
           }
           events.push({
-            type: 'HEALER_TRAINED',
+            type: "HEALER_TRAINED",
             atSeconds: runStart,
             toSeconds: endSeconds,
             nearestEnemyName: topTrainer,
-            startDistanceYards: Math.round((trainerMinDist.get(topTrainer) ?? Infinity) * 10) / 10,
+            startDistanceYards:
+              Math.round((trainerMinDist.get(topTrainer) ?? Infinity) * 10) /
+              10,
             playersInvolved: [healerUnit.name],
             ownerIsSubject: healerUnit.id === owner.id,
-            ownerCcLocked: ccOverlapSeconds(healerCC, runStart, endSeconds) >= (endSeconds - runStart) / 2,
+            ownerCcLocked:
+              ccOverlapSeconds(healerCC, runStart, endSeconds) >=
+              (endSeconds - runStart) / 2,
           });
           trainedCount++;
         }
@@ -469,11 +580,15 @@ export function computeOwnerPositionEvents(params: {
 
       for (let t = 0; t <= durationSeconds; t += 1) {
         const tMs = matchStartMs + t * 1000;
-        const healerPos = getUnitPositionAtTime(healerUnit, tMs, POSITION_MAX_GAP_MS);
+        const healerPos = getUnitPositionAtTime(
+          healerUnit,
+          tMs,
+          POSITION_MAX_GAP_MS,
+        );
         let camped = false;
         if (healerPos && !isDeadAt(healerUnit, tMs)) {
           let bestDist = Infinity;
-          let bestName = '';
+          let bestName = "";
           const perEnemyDist = new Map<string, number>();
           for (const e of enemyMelee) {
             if (isDeadAt(e, tMs)) continue;
@@ -489,11 +604,17 @@ export function computeOwnerPositionEvents(params: {
           if (bestDist <= HEALER_TRAINED_YARDS) {
             camped = true;
             if (runStart === null) runStart = t;
-            trainerSeconds.set(bestName, (trainerSeconds.get(bestName) ?? 0) + 1);
+            trainerSeconds.set(
+              bestName,
+              (trainerSeconds.get(bestName) ?? 0) + 1,
+            );
             // 每个近战都记「自己」的窗口最近距离——具名 trainer 的 closest 不能
             // 被"当秒另有更近者"挡掉(扫描器实锤 5.7 vs 实际 2.7)
             for (const [name, d] of perEnemyDist) {
-              trainerMinDist.set(name, Math.min(trainerMinDist.get(name) ?? Infinity, d));
+              trainerMinDist.set(
+                name,
+                Math.min(trainerMinDist.get(name) ?? Infinity, d),
+              );
             }
           }
         }
@@ -508,48 +629,60 @@ export function computeOwnerPositionEvents(params: {
 
 // ─── Formatter ───────────────────────────────────────────────────────────────
 
-export function formatPositionEventsForContext(events: IPositionEvent[]): string[] {
+export function formatPositionEventsForContext(
+  events: IPositionEvent[],
+): string[] {
   if (events.length === 0) return [];
 
   const lines: string[] = [];
-  lines.push('POSITIONING (log owner only; distances from advanced-logging coordinates):');
+  lines.push(
+    "POSITIONING (log owner only; distances from advanced-logging coordinates):",
+  );
 
-  const stayedIn = events.filter((e) => e.type === 'STAYED_IN');
-  const kited = events.filter((e) => e.type === 'KITED');
-  const missedPush = events.filter((e) => e.type === 'MISSED_PUSH');
-  const outOfRange = events.filter((e) => e.type === 'CD_OUT_OF_RANGE');
+  const stayedIn = events.filter((e) => e.type === "STAYED_IN");
+  const kited = events.filter((e) => e.type === "KITED");
+  const missedPush = events.filter((e) => e.type === "MISSED_PUSH");
+  const outOfRange = events.filter((e) => e.type === "CD_OUT_OF_RANGE");
 
   if (stayedIn.length > 0) {
-    lines.push('  STAYED IN during enemy burst (close range, little distance gained):');
+    lines.push(
+      "  STAYED IN during enemy burst (close range, little distance gained):",
+    );
     for (const e of stayedIn) {
       const defStr =
         e.ownerDefensiveAvailable === undefined
-          ? ''
+          ? ""
           : e.ownerDefensiveAvailable
-            ? ' — a defensive CD was available'
-            : ' — no defensive CD available';
+            ? " — a defensive CD was available"
+            : " — no defensive CD available";
       const targetStr =
         e.burstTargetsOwner === true
-          ? ' — you were the burst target'
+          ? " — you were the burst target"
           : e.burstTargetName
             ? ` — burst targeted ${e.burstTargetName}, staying in may be deliberate`
-            : '';
+            : "";
       // Lead with the HP OUTCOME when we have it — it's the fact that decides
       // whether the stay was a mistake, replacing the old hedge-pileup.
-      let hpStr = '';
+      let hpStr = "";
       if (e.ownerHpMinPct !== null && e.ownerHpMinPct !== undefined) {
         const tag =
           e.ownerHpMinPct <= 35
-            ? ' (near-death — the stay was costly)'
-            : e.ownerHpMinPct >= 85 && (e.ownerHpStartPct ?? 100) - e.ownerHpMinPct < 15
-              ? ' (no real cost)'
-              : '';
+            ? " (near-death — the stay was costly)"
+            : e.ownerHpMinPct >= 85 &&
+                (e.ownerHpStartPct ?? 100) - e.ownerHpMinPct < 15
+              ? " (no real cost)"
+              : "";
         hpStr = ` — HP ${e.ownerHpStartPct}%→${e.ownerHpMinPct}%${tag}`;
       } else {
         // No HP data — fall back to the dampening context hedge.
-        hpStr = (e.dampeningPct ?? 0) >= 0.2 ? ' (high dampening — staying in may be correct)' : '';
+        hpStr =
+          (e.dampeningPct ?? 0) >= 0.2
+            ? " (high dampening — staying in may be correct)"
+            : "";
       }
-      const exposureStr = e.healerExposureLabel ? ` — healer exposure: ${e.healerExposureLabel}` : '';
+      const exposureStr = e.healerExposureLabel
+        ? ` — healer exposure: ${e.healerExposureLabel}`
+        : "";
       lines.push(
         `    ${fmtTime(e.atSeconds)} [${e.dangerLabel} burst] ${e.startDistanceYards}→${e.endDistanceYards}yd from ${e.nearestEnemyName}${targetStr}${exposureStr}${hpStr}${defStr}`,
       );
@@ -557,15 +690,17 @@ export function formatPositionEventsForContext(events: IPositionEvent[]): string
   }
 
   if (kited.length > 0) {
-    lines.push('  KITED during enemy burst (opened distance):');
+    lines.push("  KITED during enemy burst (opened distance):");
     for (const e of kited) {
       const targetStr =
         e.burstTargetsOwner === true
-          ? ' — you were the burst target'
+          ? " — you were the burst target"
           : e.burstTargetName
             ? ` — burst targeted ${e.burstTargetName}, who may have needed heals/peels`
-            : '';
-      const exposureStr = e.healerExposureLabel ? ` — healer exposure: ${e.healerExposureLabel}` : '';
+            : "";
+      const exposureStr = e.healerExposureLabel
+        ? ` — healer exposure: ${e.healerExposureLabel}`
+        : "";
       lines.push(
         `    ${fmtTime(e.atSeconds)} [${e.dangerLabel} burst] opened ${e.startDistanceYards}→${e.endDistanceYards}yd from ${e.nearestEnemyName}${targetStr}${exposureStr}`,
       );
@@ -573,7 +708,9 @@ export function formatPositionEventsForContext(events: IPositionEvent[]): string
   }
 
   if (missedPush.length > 0) {
-    lines.push('  MISSED PUSH (your offensive CDs available, no enemy burst, but disengaged):');
+    lines.push(
+      "  MISSED PUSH (your offensive CDs available, no enemy burst, but disengaged):",
+    );
     for (const e of missedPush) {
       lines.push(
         `    ${fmtTime(e.atSeconds)}–${fmtTime(e.toSeconds ?? e.atSeconds)} stayed >${e.startDistanceYards}yd from all enemies`,
@@ -582,7 +719,9 @@ export function formatPositionEventsForContext(events: IPositionEvent[]): string
   }
 
   if (outOfRange.length > 0) {
-    lines.push('  OFFENSIVE CD OUT OF RANGE (cast while far from every enemy):');
+    lines.push(
+      "  OFFENSIVE CD OUT OF RANGE (cast while far from every enemy):",
+    );
     for (const e of outOfRange) {
       lines.push(
         `    ${fmtTime(e.atSeconds)} ${e.spellName} cast ${e.startDistanceYards}yd from nearest enemy (still >${CD_RANGE_YARDS}yd ${CD_RANGE_RECHECK_SECONDS}s later)`,
@@ -590,25 +729,31 @@ export function formatPositionEventsForContext(events: IPositionEvent[]): string
     }
   }
 
-  const splitPush = events.filter((e) => e.type === 'SPLIT_PUSH');
+  const splitPush = events.filter((e) => e.type === "SPLIT_PUSH");
   if (splitPush.length > 0) {
-    lines.push('  SPLIT PUSH (a melee DPS was away from the push target while offensive CDs were committed):');
+    lines.push(
+      "  SPLIT PUSH (a melee DPS was away from the push target while offensive CDs were committed):",
+    );
     for (const e of splitPush) {
       lines.push(
-        `    ${fmtTime(e.atSeconds)}\u2013${fmtTime(e.toSeconds ?? e.atSeconds)} push on ${e.nearestEnemyName}: ${(e.playersInvolved ?? []).join(', ')} stayed >${PUSH_AWOL_YARDS}yd away \u2014 split pressure can be deliberate; verify intent`,
+        `    ${fmtTime(e.atSeconds)}\u2013${fmtTime(e.toSeconds ?? e.atSeconds)} push on ${e.nearestEnemyName}: ${(e.playersInvolved ?? []).join(", ")} stayed >${PUSH_AWOL_YARDS}yd away \u2014 split pressure can be deliberate; verify intent`,
       );
     }
   }
 
-  const trained = events.filter((e) => e.type === 'HEALER_TRAINED');
+  const trained = events.filter((e) => e.type === "HEALER_TRAINED");
   if (trained.length > 0) {
-    lines.push(`  HEALER TRAINED (enemy melee camped the healer within ${HEALER_TRAINED_YARDS}yd):`);
+    lines.push(
+      `  HEALER TRAINED (enemy melee camped the healer within ${HEALER_TRAINED_YARDS}yd):`,
+    );
     for (const e of trained) {
-      const subject = e.ownerIsSubject ? 'you were' : `your healer (${(e.playersInvolved ?? [])[0] ?? 'healer'}) was`;
+      const subject = e.ownerIsSubject
+        ? "you were"
+        : `your healer (${(e.playersInvolved ?? [])[0] ?? "healer"}) was`;
       // A healer CC-locked through the camp can't self-reposition \u2014 team must peel.
       const advice = e.ownerCcLocked
-        ? 'CC-locked through this \u2014 team must peel (could not self-reposition)'
-        : 'peel or reposition opportunity';
+        ? "CC-locked through this \u2014 team must peel (could not self-reposition)"
+        : "peel or reposition opportunity";
       lines.push(
         `    ${fmtTime(e.atSeconds)}\u2013${fmtTime(e.toSeconds ?? e.atSeconds)} ${subject} camped by ${e.nearestEnemyName} (closest ${e.startDistanceYards}yd) \u2014 ${advice}`,
       );
@@ -616,7 +761,7 @@ export function formatPositionEventsForContext(events: IPositionEvent[]): string
   }
 
   lines.push(
-    '  Note: melee and ranged expected distances differ; treat these as engagement-state evidence, not verdicts.',
+    "  Note: melee and ranged expected distances differ; treat these as engagement-state evidence, not verdicts.",
   );
 
   return lines;

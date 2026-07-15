@@ -2,10 +2,12 @@
 /**
  * CLI: Check judge calibration
  *
- * Grades the LLM judge against the synthetic-defect suite. For every perturbed
- * case, the judge's score on the targeted dimension must be LOWER than its
- * score for the unmodified sibling (same source ordinal). Ground truth is known
- * because we injected the defects ourselves.
+ * Grades the LLM judge against the synthetic-defect suite. A perturbed case
+ * counts as detected only when it clears discriminant validity: the TARGETED
+ * dimension drops below its unmodified sibling by >= DELTA_FLOOR (sensitivity)
+ * AND every UNtargeted dimension stays within SPECIFICITY_TOL (specificity).
+ * Ground truth is known because we injected the defects ourselves. See
+ * src/judge/checkCalibration.ts for the full criteria and tunables.
  *
  * Reads:
  *   baseDir/judge-calibration/calibration-manifest.json
@@ -14,7 +16,8 @@
  *   baseDir/judge-calibration/calibration-report.md
  *
  * Exit code 0 if all dimensions pass threshold; exit code 1 if any dimension
- * fails (a judge that cannot see planted defects must not be trusted to grade
+ * fails, is INSUFFICIENT (< MIN_PAIRS scoreable pairs), or has no data (a judge
+ * that cannot discriminately see planted defects must not be trusted to grade
  * real prompt-builder changes).
  *
  * Usage:

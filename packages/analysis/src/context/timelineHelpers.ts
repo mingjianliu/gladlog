@@ -47,40 +47,47 @@ export function getNpcIdFromGuid(guid: string): string | null {
 
 export const GROUNDING_TOTEM_NPC_ID = '5925';
 
-export const CRITICAL_NON_PLAYER_NPC_IDS = new Set<string>([
+/** Critical non-player units by npcId, with canonical English display names —
+ * unit.name in the log is client-localized (地狱火爪牙 etc.), so renderers must
+ * print these names, never the logged one (locale-leak audit 2026-07-14). */
+export const CRITICAL_NON_PLAYER_NPC_NAMES: Record<string, string> = {
   // Shaman Totems
-  '3527', // Healing Stream Totem
-  '59764', // Healing Tide Totem
-  '100943', // Earthen Wall Totem
-  '53006', // Spirit Link Totem
-  GROUNDING_TOTEM_NPC_ID, // Grounding Totem
-  '5913', // Tremor Totem
-  '105427', // Totem of Wrath / Skyfury Totem
-  '10467', // Mana Tide Totem
-  '61245', // Capacitor Totem
-  '60561', // Earthgrab Totem
-  '179867', // Static Field Totem
-  '225409', // Surging Totem
-  '108270', // Stone Bulwark Totem
+  "3527": "Healing Stream Totem",
+  "59764": "Healing Tide Totem",
+  "100943": "Earthen Wall Totem",
+  "53006": "Spirit Link Totem",
+  [GROUNDING_TOTEM_NPC_ID]: "Grounding Totem",
+  "5913": "Tremor Totem",
+  "105427": "Skyfury Totem",
+  "10467": "Mana Tide Totem",
+  "61245": "Capacitor Totem",
+  "60561": "Earthgrab Totem",
+  "179867": "Static Field Totem",
+  "225409": "Surging Totem",
+  "108270": "Stone Bulwark Totem",
   // Priest
-  '62982', // Mindbender
-  '19668', // Shadowfiend
-  '121111', // Psyfiend
-  '224466', // Voidwraith
-  '189820', // Lightwell
-  '198236', // Divine Image
+  "62982": "Mindbender",
+  "19668": "Shadowfiend",
+  "121111": "Psyfiend",
+  "224466": "Voidwraith",
+  "189820": "Lightwell",
+  "198236": "Divine Image",
   // Monk
-  '63508', // Xuen
+  "63508": "Xuen",
   // Warlock
-  '103673', // Darkglare
-  '135002', // Demonic Tyrant
-  '179193', // Fel Obelisk
-  '107024', // Fel Lord
-  '196111', // Pit Lord
-  '89', // Infernal
+  "103673": "Darkglare",
+  "135002": "Demonic Tyrant",
+  "179193": "Fel Obelisk",
+  "107024": "Fel Lord",
+  "196111": "Pit Lord",
+  "89": "Infernal",
   // Death Knight
-  '27829', // Gargoyle
-]);
+  "27829": "Gargoyle",
+};
+
+export const CRITICAL_NON_PLAYER_NPC_IDS = new Set<string>(
+  Object.keys(CRITICAL_NON_PLAYER_NPC_NAMES),
+);
 
 export function isCriticalNonPlayerUnit(unit: ICombatUnit): boolean {
   const npcId = getNpcIdFromGuid(unit.id);

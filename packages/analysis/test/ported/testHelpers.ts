@@ -13,13 +13,17 @@ import {
   CombatUnitType,
   ICombatUnit,
   LogEvent,
-} from '@gladlog/parser-compat';
+} from "@gladlog/parser-compat";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyObj = Record<string, any>;
 
 /** Minimal damage-taken event (CombatHpUpdateAction shape). */
-export function makeDamageEvent(timestamp: number, amount: number, destUnitId = 'player-1'): AnyObj {
+export function makeDamageEvent(
+  timestamp: number,
+  amount: number,
+  destUnitId = "player-1",
+): AnyObj {
   return {
     logLine: { event: LogEvent.SPELL_DAMAGE, timestamp, parameters: [] },
     timestamp,
@@ -29,28 +33,33 @@ export function makeDamageEvent(timestamp: number, amount: number, destUnitId = 
     advancedActorCurrentHp: 400_000,
     advancedActorPositionX: 0,
     advancedActorPositionY: 0,
-    srcUnitId: 'enemy-1',
-    srcUnitName: 'Enemy',
+    srcUnitId: "enemy-1",
+    srcUnitName: "Enemy",
     destUnitId,
-    destUnitName: 'Target',
-    spellId: '1',
-    spellName: 'TestSpell',
+    destUnitName: "Target",
+    spellId: "1",
+    spellName: "TestSpell",
   };
 }
 
 /** Minimal SPELL_HEAL event (CombatHpUpdateAction shape). */
-export function makeHealEvent(timestamp: number, srcUnitId: string, amount: number, overhealAmount = 0): AnyObj {
+export function makeHealEvent(
+  timestamp: number,
+  srcUnitId: string,
+  amount: number,
+  overhealAmount = 0,
+): AnyObj {
   return {
     logLine: { event: LogEvent.SPELL_HEAL, timestamp, parameters: [] },
     timestamp,
     amount,
     effectiveAmount: amount - overhealAmount,
     srcUnitId,
-    srcUnitName: 'Healer',
-    destUnitId: 'player-1',
-    destUnitName: 'Target',
-    spellId: '1',
-    spellName: 'TestHeal',
+    srcUnitName: "Healer",
+    destUnitId: "player-1",
+    destUnitName: "Target",
+    spellId: "1",
+    spellName: "TestHeal",
     advancedActorMaxHp: 500_000,
     advancedActorCurrentHp: 400_000,
     advancedActorPositionX: 0,
@@ -63,9 +72,9 @@ export function makeSpellCastEvent(
   spellId: string,
   timestamp: number,
   destUnitId: string,
-  destUnitName = 'Target',
-  srcUnitId = 'player-1',
-  srcUnitName = 'Player',
+  destUnitName = "Target",
+  srcUnitId = "player-1",
+  srcUnitName = "Player",
   destUnitFlags = 0,
   spellName?: string,
 ): AnyObj {
@@ -92,9 +101,9 @@ export function makeAuraEvent(
   event: LogEvent,
   spellId: string,
   timestamp: number,
-  srcUnitId = 'enemy-1',
-  destUnitId = 'player-1',
-  auraType: 'BUFF' | 'DEBUFF' = 'DEBUFF',
+  srcUnitId = "enemy-1",
+  destUnitId = "player-1",
+  auraType: "BUFF" | "DEBUFF" = "DEBUFF",
 ): AnyObj {
   const parameters: (string | number)[] = [];
   parameters[11] = auraType;
@@ -104,9 +113,9 @@ export function makeAuraEvent(
     spellId,
     spellName: spellId,
     srcUnitId,
-    srcUnitName: 'Source',
+    srcUnitName: "Source",
     destUnitId,
-    destUnitName: 'Target',
+    destUnitName: "Target",
     effectiveAmount: 0,
     advancedActorMaxHp: 0,
     advancedActorCurrentHp: 0,
@@ -131,14 +140,14 @@ export function makeAdvancedAction(
     advancedActorFacing: 0,
     advancedActorItemLevel: 450,
     advancedActorPowers: [],
-    advancedActorId: 'unit-1',
-    advancedOwnerId: '',
+    advancedActorId: "unit-1",
+    advancedOwnerId: "",
     spellId: null,
     spellName: null,
-    srcUnitId: 'unit-1',
-    srcUnitName: '',
-    destUnitId: 'unit-1',
-    destUnitName: '',
+    srcUnitId: "unit-1",
+    srcUnitName: "",
+    destUnitId: "unit-1",
+    destUnitName: "",
   };
 }
 
@@ -166,30 +175,39 @@ export function makeUnit(
     id,
     isWellFormed: true,
     name: overrides.name ?? id,
-    ownerId: overrides.ownerId ?? '',
+    ownerId: overrides.ownerId ?? "",
     reaction: overrides.reaction ?? CombatUnitReaction.Friendly,
     type: CombatUnitType.Player,
     class: overrides.class ?? CombatUnitClass.None,
     spec: overrides.spec ?? CombatUnitSpec.None,
-    info: overrides.info as ICombatUnit['info'],
-    damageIn: (overrides.damageIn ?? []) as ICombatUnit['damageIn'],
+    info: overrides.info as ICombatUnit["info"],
+    damageIn: (overrides.damageIn ?? []) as ICombatUnit["damageIn"],
     damageOut: [],
     healIn: [],
-    healOut: (overrides.healOut ?? []) as ICombatUnit['healOut'],
+    healOut: (overrides.healOut ?? []) as ICombatUnit["healOut"],
     absorbsIn: [],
     absorbsOut: [],
-    actionIn: (overrides.actionIn ?? []) as ICombatUnit['actionIn'],
-    actionOut: (overrides.actionOut ?? []) as ICombatUnit['actionOut'],
-    auraEvents: (overrides.auraEvents ?? []) as ICombatUnit['auraEvents'],
-    spellCastEvents: (overrides.spellCastEvents ?? []) as ICombatUnit['spellCastEvents'],
-    petSpellCastEvents: [] as ICombatUnit['petSpellCastEvents'],
-    deathRecords: (overrides.deathRecords ?? []) as ICombatUnit['deathRecords'],
-    advancedActions: (overrides.advancedActions ?? []) as ICombatUnit['advancedActions'],
+    actionIn: (overrides.actionIn ?? []) as ICombatUnit["actionIn"],
+    actionOut: (overrides.actionOut ?? []) as ICombatUnit["actionOut"],
+    auraEvents: (overrides.auraEvents ?? []) as ICombatUnit["auraEvents"],
+    spellCastEvents: (overrides.spellCastEvents ??
+      []) as ICombatUnit["spellCastEvents"],
+    petSpellCastEvents: [] as ICombatUnit["petSpellCastEvents"],
+    deathRecords: (overrides.deathRecords ?? []) as ICombatUnit["deathRecords"],
+    // Stamp advancedActorId like production convert.ts does (unit.id) — the shared HP
+    // sampler (getUnitHpAtTimestamp) rejects samples whose actor id doesn't match.
+    advancedActions: (overrides.advancedActions ?? []).map((a) => ({
+      ...a,
+      advancedActorId: id,
+    })) as ICombatUnit["advancedActions"],
   };
 }
 
 /** Build a minimal AtomicArenaCombat-compatible combat object. */
-export function makeCombat(startTime: number, endTime: number): { startTime: number; endTime: number } {
+export function makeCombat(
+  startTime: number,
+  endTime: number,
+): { startTime: number; endTime: number } {
   return { startTime, endTime };
 }
 
@@ -200,8 +218,8 @@ export function makeInterruptEvent(
   interruptedSpellId: string,
   interruptedSpellName: string,
   timestamp: number,
-  srcUnitId = 'enemy-1',
-  srcUnitName = 'Enemy',
+  srcUnitId = "enemy-1",
+  srcUnitName = "Enemy",
 ): AnyObj {
   return {
     logLine: { event: LogEvent.SPELL_INTERRUPT, timestamp, parameters: [] },
@@ -212,8 +230,8 @@ export function makeInterruptEvent(
     extraSpellName: kickSpellName,
     srcUnitId,
     srcUnitName,
-    destUnitId: 'player-1',
-    destUnitName: 'Target',
+    destUnitId: "player-1",
+    destUnitName: "Target",
     effectiveAmount: 0,
     advancedActorMaxHp: 0,
     advancedActorCurrentHp: 0,
@@ -235,8 +253,8 @@ export function makeDispelAction(
   dispelSpellId: string,
   removedSpellId: string,
   removedSpellName: string,
-  destUnitName = 'Target',
-  srcUnitName = 'Source',
+  destUnitName = "Target",
+  srcUnitName = "Source",
 ): AnyObj {
   return {
     logLine: { event: LogEvent.SPELL_DISPEL, timestamp, parameters: [] },

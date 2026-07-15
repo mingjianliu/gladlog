@@ -116,12 +116,33 @@ after the per-pillar checks exist (it composes them).
 
 ## Suggested order
 
-1. **C1 (data-faithfulness)** — biggest gap, highest trust value, on-brand, small–medium.
-2. **A1 (differential oracle)** — quantifies parser correctness against the proven old parser; de-risks everything downstream.
+1. ~~**C1 (data-faithfulness)**~~ — ✅ done 2026-07-12.
+2. ~~**A1 (differential oracle)**~~ — ✅ done 2026-07-13 (found a real F170 gap; see backlog).
 3. **C2/C3 (visual regression + export)** — lock the UI once C1 makes it honest.
 4. **B1/B2 (causal judge + provenance)** — push the already-strong pillar further.
 5. **A2/A3, B3** — breadth/hardening.
 6. **Trust chain** — capstone once the pieces exist.
+
+### Next up (backlog, post C1+A1) — each its own brainstorm → spec → plan
+
+- **C2 — visual regression** _(next)_: snapshot the rendered report (jsdom DOM
+  snapshot now; Playwright/Electron screenshot later); fail on unexpected visual
+  diffs. Builds directly on C1's now-honest selectors/components. Small–medium.
+- **C3 — export fidelity**: round-trip "Copy Markdown" / "Export Image" output ==
+  rendered == computed. Pairs with C2. Small–medium.
+- **B1 — LLM-judge causal audit (SP-A.1)**: calibrated judge for causal/qualitative
+  claims the deterministic gates can't check. Medium.
+- **B2 — full provenance trace**: every AI finding → candidate event → source log
+  line/offset, exportable ("why did it say this?"). Medium.
+- **A2 — parser invariants / property tests**: monotonic timestamps, HP∈[0,100],
+  every death has a source, offsets consistent, round boundaries well-formed; fuzz
+  over the real-log corpus. Complements A1 (A1 = vs old parser; A2 = intrinsic).
+- **A3 — fixture-coverage corpus**: curated diverse real logs (every healer spec,
+  each bracket, pets/DC/reset/CRLF) frozen as golden tests + coverage manifest.
+- **B3 — tolerant JSON extraction + wider eval coverage** (also in `BACKLOG.md`).
+- **Trust chain** — capstone e2e once the per-pillar checks exist.
+- **F170 `[ENEMY HARD CAST]` narrower than old** — the concrete gladlog finding A1
+  surfaced; in `docs/BACKLOG.md`. Fix-or-confirm, then de-allowlist in the oracle.
 
 ## Non-goals
 

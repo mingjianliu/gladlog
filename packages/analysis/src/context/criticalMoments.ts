@@ -137,7 +137,7 @@ export function buildDeathRootCauseTrace(
     }
     if (trajectory.length > 0) {
       traces.push(
-        `HP trajectory before death: ${trajectory.join(' → ')} → dead (sampled from last action as source — readings may lag by a few seconds if player was CCed or not casting)`,
+        `HP trajectory before death: ${trajectory.join(' → ')} → dead (each checkpoint sampled within ±3s of its instant; checkpoints with no near reading are omitted)`,
       );
     }
   }
