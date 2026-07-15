@@ -1,0 +1,14 @@
+# gladlog
+
+## 门规谓词即规范(shared-predicate rule)
+
+分析代码(`packages/analysis`)与验证门(`packages/eval` 的 positioningScan/qualityCheck/layerA 审计)对**同一个事实**(HP、距离、LoS、时间点)必须共享**同一个谓词**:同一常量、同一采样函数、同一容差,且**锚定在渲染值上**——prompt 渲染 `fmtTime`(向下取整秒),门规重新解析渲染文本,所以分析内部的小数秒/原始时刻在写入 prompt 前必须先 floor 到渲染网格再做任何门规会复算的判定。
+
+违反此规则的历史代价:2026-07 全量审计中 5 个独立 bug 全是这一类(HP 采样半径不一致、有界 vs 无界回溯、插值 vs raw vs 非同时刻采样对 LoS、小数秒 vs 渲染秒扫描网格)。修法永远是让分析消费门规的谓词,不是反过来放松门规。共享点示例:`cooldowns.ts` 的 `HP_SAMPLE_RADIUS_MS`;`healerExposureAnalysis.ts` 的 `LOS_SWEEP_SLACK_S`/`LOS_SWEEP_GAP_MS` 必须等于 `positioningScan.ts` 的 `TIME_SLACK_SECONDS`/`POSITION_MAX_GAP_MS`。
+
+新增任何"分析断言 X、门规验证 X"的配对时:谓词放一处 export,两边 import;做不到时写断言相等的单测,别靠注释。
+
+## 常用
+
+- 类型检查:`npm run typecheck`(绝不 `tsc -b`,会往 src 吐 .js)。
+- eval 工作流:`/eval-baseline`(找问题)→ `/eval-ab`(验证修复)→ `/calibrate-judge`(判分前校准)→ `/pipeline-audit`(全语料审计)。产物在 `$GLADLOG_EVAL_HOME`(默认 `~/code/gladlog-eval-private`)。
