@@ -64,6 +64,12 @@
 > 下面 #6–#11 来自 2026-07-17 与旧仓 wowarenalogs UI 的逐项对比(`~/code/wowarenalogs/packages/shared/src/components/CombatReport/` 15 个 tab 逐个过)。
 > 结论:三视图段控结构**优于**旧仓 15 平铺 tab,保持不动;缺的是旧仓已验证有用的**内容**,以及新仓独有的**证据链跳转**机会。
 > 通用架构事实(实现前先记住):renderer 只依赖 `@gladlog/parser`(新 parser doc,`u.deaths`/advanced 采样带 x/y/hp);**main 进程已依赖 `@gladlog/analysis`**(`src/main/analysis.ts` 构建 findings prompt)。所以凡是要用 analysis 谓词/白名单的功能,首选「main 算好 → IPC 给 renderer」,不要在 renderer 重抄常量(门规谓词即规范)。
+>
+> **2026-07-17 细化研究**:代码级核实 + 每项设计决策见
+> [`2026-07-17-ui-backlog-research.md`](./2026-07-17-ui-backlog-research.md)——
+> 其中三条横切发现**修正了本节的架构假设**(renderer 其实已 import analysis 纯数据
+> export;#8 证据链在 AI 视图内已存在一半;#9 卡在 spellId→icon 映射这张数据表上),
+> 实施以研究文档为准。实施顺序也修订为 #7→#8→#6→#9→#10→#11。
 
 ## 6. 死亡回顾 Death Recap ⬜(2026-07-17,对比旧仓 CombatDeathReports;优先级最高)
 
