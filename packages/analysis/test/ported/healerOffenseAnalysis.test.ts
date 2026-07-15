@@ -260,9 +260,16 @@ describe("computeSlackSegments", () => {
 
 // Task 2: Kill-window contribution analysis
 import { computeWindowContributions } from "../../src/utils/healerOffenseAnalysis";
-import { IOffensiveWindow } from "../../src/utils/offensiveWindows";
+import {
+  computeBurstSubWindows,
+  IOffensiveWindow,
+} from "../../src/utils/offensiveWindows";
 
-function makeWindow(fromSeconds: number, toSeconds: number): IOffensiveWindow {
+function makeWindow(
+  fromSeconds: number,
+  toSeconds: number,
+  bursts?: IOffensiveWindow["bursts"],
+): IOffensiveWindow {
   return {
     targetUnitId: "enemy-1",
     targetName: "Edk",
@@ -274,6 +281,9 @@ function makeWindow(fromSeconds: number, toSeconds: number): IOffensiveWindow {
     damageRatio: 1,
     capitalized: false,
     friendlyOffensives: [],
+    // Default: one burst spanning the whole window, so existing expectations
+    // (contribution span == window span, [KILL WINDOW] label) keep holding.
+    bursts: bursts ?? [{ fromSeconds, toSeconds, damage: 50_000 }],
   };
 }
 
@@ -698,11 +708,141 @@ describe("buildHealerOffenseSummary + formatHealerOffenseForContext", () => {
 
 import { MAX_KILL_WINDOW_LINES } from "../../src/utils/healerOffenseAnalysis";
 
+describe("burst sub-windows (2026-07-17 kill-window redesign)", () => {
+  it("computeBurstSubWindows: splits on gaps, drops sub-threshold clusters, caps count, clamps to span", () => {
+    const events = [
+      // burst 1: 40k at t=10..12
+      { t: 10, amount: 20_000 },
+      { t: 12, amount: 20_000 },
+      // gap > KW_BURST_GAP_S
+      { t: 30, amount: 5_000 }, // lone dribble < KW_BURST_MIN_DAMAGE → dropped
+      // burst 2: 100k at t=50..53
+      { t: 50, amount: 60_000 },
+      { t: 53, amount: 40_000 },
+    ];
+    const bursts = computeBurstSubWindows(events, 5, 60);
+    expect(bursts.length).toBe(2);
+    expect(bursts[0].damage).toBe(40_000);
+    expect(bursts[1].damage).toBe(100_000);
+    // chronological, padded ±0.5s, clamped inside [5, 60]
+    expect(bursts[0].fromSeconds).toBeCloseTo(9.5);
+    expect(bursts[0].toSeconds).toBeCloseTo(12.5);
+    expect(bursts[1].fromSeconds).toBeCloseTo(49.5);
+    expect(bursts[1].toSeconds).toBeCloseTo(53.5);
+  });
+
+  it("computeBurstSubWindows: single big hit gets a non-zero-width span", () => {
+    const bursts = computeBurstSubWindows([{ t: 20, amount: 80_000 }], 0, 100);
+    expect(bursts.length).toBe(1);
+    expect(bursts[0].toSeconds - bursts[0].fromSeconds).toBeGreaterThanOrEqual(
+      1.5,
+    );
+  });
+
+  it("computeWindowContributions: one contribution per burst carrying the vuln span; empty bursts → unpunished full span", () => {
+    const owner = makeFriend("owner", { spellCastEvents: [] });
+    const enemyDk = makeUnit("enemy-1", {
+      reaction: CombatUnitReaction.Hostile,
+      name: "Edk",
+    });
+    const withBursts = makeWindow(40, 140, [
+      { fromSeconds: 50, toSeconds: 55, damage: 90_000 },
+      { fromSeconds: 100, toSeconds: 108, damage: 60_000 },
+    ]);
+    const punished = computeWindowContributions(
+      combat,
+      owner,
+      [owner],
+      [enemyDk],
+      [withBursts],
+      [],
+      [],
+    );
+    expect(punished.length).toBe(2);
+    expect(punished[0]).toMatchObject({
+      fromSeconds: 50,
+      toSeconds: 55,
+      vulnFromSeconds: 40,
+      vulnToSeconds: 140,
+      unpunished: false,
+    });
+    expect(punished[1].fromSeconds).toBe(100);
+
+    const unpunished = computeWindowContributions(
+      combat,
+      owner,
+      [owner],
+      [enemyDk],
+      [makeWindow(40, 140, [])],
+      [],
+      [],
+    );
+    expect(unpunished.length).toBe(1);
+    expect(unpunished[0]).toMatchObject({
+      fromSeconds: 40,
+      toSeconds: 140,
+      unpunished: true,
+    });
+  });
+
+  it("format: bursts render [KILL WINDOW] with the defenseless span note; unpunished renders [VULNERABLE] never punished", () => {
+    const base = {
+      targetName: "Edk",
+      targetSpec: "Frost Death Knight",
+      enemyHealerName: "Rsham",
+      enemyHealerSpec: "Restoration Shaman",
+      ownerCCReady: [],
+      ownerCastCCInWindow: false,
+      ownerDamageInWindow: 12_000,
+      ownerFreeSeconds: 5,
+      teamMinHpPct: 80,
+    };
+    const summary = {
+      advancedLoggingAvailable: true,
+      slackSegments: [],
+      windowContributions: [
+        {
+          ...base,
+          fromSeconds: 50,
+          toSeconds: 55,
+          vulnFromSeconds: 40,
+          vulnToSeconds: 140,
+          unpunished: false,
+          teamDamageInVulnSpan: 90_000,
+        },
+        {
+          ...base,
+          fromSeconds: 200,
+          toSeconds: 260,
+          vulnFromSeconds: 200,
+          vulnToSeconds: 260,
+          unpunished: true,
+          teamDamageInVulnSpan: 8_000,
+        },
+      ],
+      windowCreationFacts: [],
+      contestedTradeFacts: [],
+    };
+    const text = formatHealerOffenseForContext(summary).join("\n");
+    expect(text).toContain(
+      "[KILL WINDOW] 0:50–0:55 on Frost Death Knight (Edk)",
+    );
+    expect(text).toContain("target defenseless 0:40–2:20");
+    expect(text).toContain(
+      "[VULNERABLE] 3:20–4:20 (60s) on Frost Death Knight (Edk): no major defensives, never punished (team damage 8k total)",
+    );
+  });
+});
+
 describe("formatHealerOffenseForContext KILL WINDOW cap", () => {
   function synthWindow(i: number, freeSeconds: number) {
     return {
       fromSeconds: i * 20,
       toSeconds: i * 20 + 10,
+      vulnFromSeconds: i * 20,
+      vulnToSeconds: i * 20 + 10,
+      unpunished: false,
+      teamDamageInVulnSpan: 50_000,
       targetName: `Enemy${i}`,
       targetSpec: "Frost Death Knight",
       enemyHealerName: "Rsham",
@@ -731,7 +871,7 @@ describe("formatHealerOffenseForContext KILL WINDOW cap", () => {
     const killLines = (text.match(/\[KILL WINDOW\]/g) ?? []).length;
     expect(killLines).toBe(MAX_KILL_WINDOW_LINES);
     // Omitted = windows 0..2 (least free); shown windows keep chronological order.
-    expect(text).toContain(`[+3 more kill windows omitted`);
+    expect(text).toContain(`[+3 more windows omitted`);
     expect(text).not.toContain("(Enemy0)");
     expect(text).not.toContain("(Enemy1):");
     expect(text).toContain("(Enemy3)");
@@ -758,7 +898,7 @@ describe("formatHealerOffenseForContext KILL WINDOW cap", () => {
     expect((text.match(/\[KILL WINDOW\]/g) ?? []).length).toBe(
       MAX_KILL_WINDOW_LINES,
     );
-    expect(text).not.toContain("more kill windows omitted");
+    expect(text).not.toContain("more windows omitted");
   });
 });
 

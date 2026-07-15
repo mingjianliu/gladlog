@@ -407,8 +407,20 @@ export function computeContestedTradeFacts(
 // ── Task 2: Kill-window contribution analysis ──────────────────────────────
 
 export interface IWindowContribution {
+  /** Rendered span: a damage-burst sub-window, or the full vulnerability span when unpunished. */
   fromSeconds: number;
   toSeconds: number;
+  /** Full vulnerability span this contribution belongs to. */
+  vulnFromSeconds: number;
+  vulnToSeconds: number;
+  /**
+   * True when the vulnerability span contained no qualifying team damage burst
+   * (enemy sat defenseless, never punished) — rendered as [VULNERABLE], not
+   * [KILL WINDOW]. See offensiveWindows.ts burst constants (2026-07-17).
+   */
+  unpunished: boolean;
+  /** Total team damage to the target over the full vulnerability span. */
+  teamDamageInVulnSpan: number;
   targetName: string;
   targetSpec: string;
   enemyHealerName: string | null;
@@ -486,16 +498,25 @@ export function computeWindowContributions(
   const ccSpells = collectOwnerCCSpells(owner, matchStartMs);
   const enemyIds = new Set(enemies.map((e) => e.id));
 
-  return offensiveWindows.map((w) => {
+  // One contribution per damage burst (kill attempt) inside each vulnerability
+  // span; spans with no qualifying burst yield a single unpunished contribution
+  // over the full span (2026-07-17 kill-window redesign — spans are a state,
+  // bursts are the opportunities).
+  const evalSpan = (
+    w: IOffensiveWindow,
+    fromSeconds: number,
+    toSeconds: number,
+    unpunished: boolean,
+  ): IWindowContribution => {
     const ownerCCReady = ccSpells
-      .filter((s) => isCCReadyAt(s, w.fromSeconds))
+      .filter((s) => isCCReadyAt(s, fromSeconds))
       .map((s) => ({
         spellName: s.spellName,
         enemyHealerDR: enemyHealer
           ? getDRLevelAtTime(
               enemyHealerCCInstances,
               getDRCategory(s.spellId),
-              w.fromSeconds,
+              fromSeconds,
             )
           : null,
       }));
@@ -514,35 +535,29 @@ export function computeWindowContributions(
       // "you cast no CC" coexist with a [YOU] [CC] line at the rendered
       // window edge in 12/1245 prompts.
       return (
-        Math.floor(t) >= Math.floor(w.fromSeconds) &&
-        Math.floor(t) <= Math.floor(w.toSeconds)
+        Math.floor(t) >= Math.floor(fromSeconds) &&
+        Math.floor(t) <= Math.floor(toSeconds)
       );
     });
 
     const ownerDamageInWindow = owner.damageOut
       .filter((d) => {
         const t = (d.logLine.timestamp - matchStartMs) / 1000;
-        return (
-          t >= w.fromSeconds && t < w.toSeconds && enemyIds.has(d.destUnitId)
-        );
+        return t >= fromSeconds && t < toSeconds && enemyIds.has(d.destUnitId);
       })
       // Same sign fix as the slack segments above: damage is negative in the
       // log convention; max(0,·) yielded absorb-only "your damage" figures.
       .reduce((sum, d) => sum + Math.abs(d.effectiveAmount), 0);
 
     let ccdSeconds = 0;
-    for (let t = Math.floor(w.fromSeconds); t < w.toSeconds; t++) {
+    for (let t = Math.floor(fromSeconds); t < toSeconds; t++) {
       if (isOwnerCCdAt(ownerCCInstances, t)) ccdSeconds++;
     }
-    const ownerFreeSeconds = Math.max(0, w.durationSeconds - ccdSeconds);
+    const ownerFreeSeconds = Math.max(0, toSeconds - fromSeconds - ccdSeconds);
 
     let teamMinHpPct: number | null = null;
     for (const f of friends) {
-      for (
-        let t = Math.ceil(w.fromSeconds);
-        t <= Math.floor(w.toSeconds);
-        t++
-      ) {
+      for (let t = Math.ceil(fromSeconds); t <= Math.floor(toSeconds); t++) {
         const hp = getHpPercentAtTime(f, t, matchStartMs);
         if (hp !== null && (teamMinHpPct === null || hp < teamMinHpPct))
           teamMinHpPct = hp;
@@ -550,8 +565,12 @@ export function computeWindowContributions(
     }
 
     return {
-      fromSeconds: w.fromSeconds,
-      toSeconds: w.toSeconds,
+      fromSeconds,
+      toSeconds,
+      vulnFromSeconds: w.fromSeconds,
+      vulnToSeconds: w.toSeconds,
+      unpunished,
+      teamDamageInVulnSpan: w.friendlyDamageInWindow,
       targetName: w.targetName,
       targetSpec: w.targetSpec,
       enemyHealerName: enemyHealer?.name ?? null,
@@ -562,7 +581,13 @@ export function computeWindowContributions(
       ownerFreeSeconds,
       teamMinHpPct,
     };
-  });
+  };
+
+  return offensiveWindows.flatMap((w) =>
+    w.bursts.length > 0
+      ? w.bursts.map((b) => evalSpan(w, b.fromSeconds, b.toSeconds, false))
+      : [evalSpan(w, w.fromSeconds, w.toSeconds, true)],
+  );
 }
 
 // ── Task 3: Window-creation opportunity facts ──────────────────────────────
@@ -652,6 +677,13 @@ export interface IHealerOffenseSummary {
   windowContributions: IWindowContribution[];
   windowCreationFacts: IWindowCreationFact[];
   contestedTradeFacts: IContestedTradeFact[];
+  /**
+   * CC spells the owner cast at least once this match (cast history, not
+   * readiness). The "no owner CC observed this match" fallback must key off
+   * this — deriving it from ready-at-window-start lists rendered "no owner CC
+   * observed" next to "you cast CC in this window" (164/1245 prompts).
+   */
+  ownerCCSpellsObserved?: string[];
 }
 
 export function buildHealerOffenseSummary(
@@ -724,6 +756,9 @@ export function buildHealerOffenseSummary(
       enemyHealerCCInstances,
     ),
     contestedTradeFacts,
+    ownerCCSpellsObserved: collectOwnerCCSpells(owner, combat.startTime).map(
+      (s) => s.spellName,
+    ),
   };
 }
 
@@ -814,7 +849,10 @@ export function formatHealerOffenseForContext(
               .join(", ")}`
         : // Pre-existing wording fix: an empty ready-list can also mean "observed CC is on cooldown
           // at window start" — only claim "not observed" when no CC was seen anywhere in the match.
-          ownerCCSpellNames.length > 0
+          // Cast history (ownerCCSpellsObserved) is the authority; the ready-name fallback covers
+          // directly-constructed summaries without the field.
+          (summary.ownerCCSpellsObserved?.length ?? ownerCCSpellNames.length) >
+            0
           ? "your CC on cooldown"
           : "no owner CC observed this match";
     const cast = w.ownerCastCCInWindow
@@ -826,16 +864,30 @@ export function formatHealerOffenseForContext(
       w.teamMinHpPct !== null
         ? `, team min HP ${Math.round(w.teamMinHpPct)}%`
         : "";
-    lines.push(
-      `  [KILL WINDOW] ${fmtTime(w.fromSeconds)}–${fmtTime(w.toSeconds)} on ${w.targetSpec} (${w.targetName}): ${ready}; ${cast}; ${dmg}; ${free}${teamHp}.`,
-    );
+    if (w.unpunished) {
+      // No qualifying team damage burst in the whole vulnerability span — the
+      // missed-opportunity case. Rendered as a state, not a kill attempt.
+      lines.push(
+        `  [VULNERABLE] ${fmtTime(w.fromSeconds)}–${fmtTime(w.toSeconds)} (${Math.round(w.toSeconds - w.fromSeconds)}s) on ${w.targetSpec} (${w.targetName}): no major defensives, never punished (team damage ${(w.teamDamageInVulnSpan / 1000).toFixed(0)}k total); ${ready}; ${cast}; ${dmg}; ${free}${teamHp}.`,
+      );
+    } else {
+      // Kill windows are team-damage bursts inside the vulnerability span; the
+      // span itself is appended when it extends meaningfully past the burst.
+      const spanNote =
+        w.vulnToSeconds - w.vulnFromSeconds > w.toSeconds - w.fromSeconds + 2
+          ? `; target defenseless ${fmtTime(w.vulnFromSeconds)}–${fmtTime(w.vulnToSeconds)}`
+          : "";
+      lines.push(
+        `  [KILL WINDOW] ${fmtTime(w.fromSeconds)}–${fmtTime(w.toSeconds)} on ${w.targetSpec} (${w.targetName}): ${ready}; ${cast}; ${dmg}; ${free}${teamHp}${spanNote}.`,
+      );
+    }
   }
 
   if (omittedWindows.length > 0) {
     const omDmg = omittedWindows.reduce((s, w) => s + w.ownerDamageInWindow, 0);
     const omCC = omittedWindows.filter((w) => w.ownerCastCCInWindow).length;
     lines.push(
-      `  [+${omittedWindows.length} more kill windows omitted (least free time): your damage ${(omDmg / 1000).toFixed(0)}k total, CC cast in ${omCC} of ${omittedWindows.length}]`,
+      `  [+${omittedWindows.length} more windows omitted (least free time): your damage ${(omDmg / 1000).toFixed(0)}k total, CC cast in ${omCC} of ${omittedWindows.length}]`,
     );
   }
 
