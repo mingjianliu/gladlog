@@ -166,7 +166,9 @@ function extractCombatStats(
   const totalFriendlyDmg = friendlies
     .flatMap((f) => f.damageOut)
     .reduce((s, d) => {
-      return "effectiveAmount" in d ? s + Math.max(0, d.effectiveAmount) : s;
+      // Damage is negative in the log convention (absorbs positive): abs(·),
+      // not max(0,·), or DPS baselines count absorbed-only damage.
+      return "effectiveAmount" in d ? s + Math.abs(d.effectiveAmount) : s;
     }, 0);
   const avgDmgPerSec =
     durationSeconds > 0 ? totalFriendlyDmg / durationSeconds : 0;

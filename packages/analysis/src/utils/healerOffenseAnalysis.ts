@@ -147,7 +147,10 @@ export function computeSlackSegments(
       };
       const ownerDamage = owner.damageOut
         .filter((d) => inSeg(d.logLine.timestamp) && enemyIds.has(d.destUnitId))
-        .reduce((sum, d) => sum + Math.max(0, d.effectiveAmount), 0);
+        // Damage events carry NEGATIVE effectiveAmount (absorbs positive);
+        // max(0,·) counted absorbed-only damage — "your damage 0k" while
+        // Starsurges landed (invariant sweep, raw-log verified 2026-07-16).
+        .reduce((sum, d) => sum + Math.abs(d.effectiveAmount), 0);
       const casts = owner.spellCastEvents.filter(
         (e) =>
           e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
@@ -247,7 +250,10 @@ export function computeContestedSegments(
       };
       const ownerDamage = owner.damageOut
         .filter((d) => inSeg(d.logLine.timestamp) && enemyIds.has(d.destUnitId))
-        .reduce((sum, d) => sum + Math.max(0, d.effectiveAmount), 0);
+        // Damage events carry NEGATIVE effectiveAmount (absorbs positive);
+        // max(0,·) counted absorbed-only damage — "your damage 0k" while
+        // Starsurges landed (invariant sweep, raw-log verified 2026-07-16).
+        .reduce((sum, d) => sum + Math.abs(d.effectiveAmount), 0);
       const casts = owner.spellCastEvents.filter(
         (e) =>
           e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
@@ -520,7 +526,9 @@ export function computeWindowContributions(
           t >= w.fromSeconds && t < w.toSeconds && enemyIds.has(d.destUnitId)
         );
       })
-      .reduce((sum, d) => sum + Math.max(0, d.effectiveAmount), 0);
+      // Same sign fix as the slack segments above: damage is negative in the
+      // log convention; max(0,·) yielded absorb-only "your damage" figures.
+      .reduce((sum, d) => sum + Math.abs(d.effectiveAmount), 0);
 
     let ccdSeconds = 0;
     for (let t = Math.floor(w.fromSeconds); t < w.toSeconds; t++) {

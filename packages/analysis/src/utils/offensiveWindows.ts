@@ -136,8 +136,11 @@ export function computeOffensiveWindows(
   const totalFriendlyDamageOut = friendlies
     .flatMap((f) => f.damageOut)
     .reduce((sum, d) => {
-      // damageOut includes absorbs; only count raw damage events (effectiveAmount > 0)
-      return 'effectiveAmount' in d ? sum + Math.max(0, d.effectiveAmount) : sum;
+      // Sign convention (raw-log verified 2026-07-16): raw damage events are
+      // NEGATIVE, SPELL_ABSORBED positive — the old comment had it backwards
+      // and max(0,·) summed absorbs only. abs(·) counts both real damage and
+      // absorbed pressure, matching the damageIn spike convention.
+      return 'effectiveAmount' in d ? sum + Math.abs(d.effectiveAmount) : sum;
     }, 0);
   const avgDmgPerSec = matchDurationSeconds > 0 ? totalFriendlyDamageOut / matchDurationSeconds : 0;
 
