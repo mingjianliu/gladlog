@@ -85,12 +85,14 @@ export const SPELL_CATEGORIES: Record<string, ISpellCategoryEntry> = {
   "118905": cc(3), // Static Charge (debuff)
   "192058": cc(3), // Capacitor Totem
   "19386": cc(6), // Wyvern Sting
+  "207685": cc(), // Sigil of Misery(disorient debuff aura id;时长以日志 aura applied→removed 实测为准。审计发现缺失:DH 恐惧完全未入 CC 覆盖)
   // ── 定身 ──
   "122": root(6), // Frost Nova
   "33395": root(6), // Freeze (Water Elemental)
   "339": root(8), // Entangling Roots
   "102359": root(8), // Mass Entanglement
   "64695": root(6), // Earthgrab Totem
+  "1234195": root(3), // Void Nova (Devourer DH — AoE 伤害+可驱散魔法定身,语料实证 2026-07-14)
   // ── 缴械 ──
   "236077": { type: "disarms", duration: 5 }, // Disarm (Warrior)
   "207777": { type: "disarms", duration: 5 }, // Dismantle
@@ -126,6 +128,10 @@ export const SPELL_CATEGORIES: Record<string, ISpellCategoryEntry> = {
   "386997": { type: "debuffs_offensive", duration: 8 }, // Soul Rot
   "191634": { type: "buffs_offensive", duration: 15 }, // Ascendance (Elemental)
   "360952": { type: "buffs_offensive", duration: 20 }, // Coordinated Assault
+  // Devourer Demon Hunter (12.1 新专精)——审计语料实证提取(2026-07-14):
+  // 施放频率/事件行为来自 123 场真实对局;时长取挖掘层 DB2 数值。
+  "1241937": { type: "buffs_offensive", duration: 5 }, // Soul Immolation(主爆发,60s 充能)
+  "1246167": { type: "debuffs_offensive", duration: 2 }, // The Hunt(Devourer 变体 id)
   // ── 打断 ──
   "1766": { type: "interrupts" },
   "2139": { type: "interrupts" },
