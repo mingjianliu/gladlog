@@ -28,6 +28,7 @@ import { IAlignedBurstWindow } from "./enemyCDs";
 import {
   distanceBetween,
   getUnitPositionAtTime,
+  getUnitRawPositionAtTime,
   hasLineOfSight,
   IPosition,
   nearestLosBreakOption,
@@ -224,6 +225,9 @@ export function analyzeHealerExposureAtBurst(
       POSITION_MAX_GAP_MS,
     );
     if (!healerPos) continue; // no position data — skip
+    const healerRawPosForBreak =
+      getUnitRawPositionAtTime(healer, windowMs, POSITION_MAX_GAP_MS) ??
+      healerPos;
 
     const {
       state: trinketState,
@@ -241,7 +245,17 @@ export function analyzeHealerExposureAtBurst(
       );
       if (!enemyPos) continue;
 
-      const losResult = hasLineOfSight(zoneId, healerPos, enemyPos);
+      // LoS is topological — evaluate it at RAW sampled positions, never at
+      // interpolated points (a between-samples straight line can cross a pillar
+      // edge neither real position crossed; G5 residual, 2026-07-14 audit).
+      // Interpolated positions remain in use for the continuous distance gate.
+      const healerRawPos =
+        getUnitRawPositionAtTime(healer, windowMs, POSITION_MAX_GAP_MS) ??
+        healerPos;
+      const enemyRawPos =
+        getUnitRawPositionAtTime(enemy, windowMs, POSITION_MAX_GAP_MS) ??
+        enemyPos;
+      const losResult = hasLineOfSight(zoneId, healerRawPos, enemyRawPos);
       // null = arena geometry not mapped; treat as unblocked (conservative — assume worst case)
       const losBlocked = losResult === null ? false : !losResult;
 
@@ -250,7 +264,9 @@ export function analyzeHealerExposureAtBurst(
       if (distance > MAX_CC_RANGE_YARDS) continue;
       if (isEnemyInCC(enemy, windowMs)) continue;
 
-      enemyPosByName.set(enemy.name, enemyPos);
+      // Store the RAW position — the losBreak suggestion below verifies pillar
+      // blocking geometrically and must not run on interpolated points either.
+      enemyPosByName.set(enemy.name, enemyRawPos);
 
       const enemySpec = specToString(enemy.spec);
 
@@ -295,7 +311,7 @@ export function analyzeHealerExposureAtBurst(
       );
     const losBreak =
       exposedEnemyPositions.length > 0
-        ? nearestLosBreakOption(zoneId, healerPos, exposedEnemyPositions)
+        ? nearestLosBreakOption(zoneId, healerRawPosForBreak, exposedEnemyPositions)
         : null;
 
     results.push({
