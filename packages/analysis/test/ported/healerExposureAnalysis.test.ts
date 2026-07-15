@@ -128,7 +128,7 @@ describe('healerExposureAnalysis — exposure calculation', () => {
     expect(res[0].exposureLabel).toBe('Exposed');
 
     const lines = formatHealerExposureForContext(res);
-    expect(lines.join('\n')).toContain('trinket is the only answer');
+    expect(lines.join('\n')).toContain('Full-DR CC in LoS; trinket up (sole CC counter)');
   });
 
   it('handles passive trinkets (Relentless/Adaptation)', () => {
@@ -587,7 +587,7 @@ describe('healerExposureAnalysis — compact per-window entries', () => {
     ]);
     expect(entries[0].line).toContain('trinket on CD (back 0:40)');
     expect(entries[0].line).toContain('⚠ CRITICAL');
-    expect(entries[0].line).toContain('| → No trinket + Full DR CC in LoS: healer cannot answer CC');
+    expect(entries[0].line).toContain('| → no trinket available while Full-DR CC is in LoS');
   });
 });
 
@@ -622,7 +622,7 @@ describe('healerExposureAnalysis — formatting', () => {
     expect(windowLines).toHaveLength(1);
     expect(windowLines[0]).toContain('IN LoS: Frost Mage: Polymorph Full DR');
     expect(windowLines[0]).toContain('| Pillar-blocked: Arms Warrior');
-    expect(windowLines[0]).toContain('| → No trinket + Full DR CC in LoS: healer cannot answer CC');
+    expect(windowLines[0]).toContain('| → no trinket available while Full-DR CC is in LoS');
   });
 
   it('formatHealerCCReceivedForContext produces brief summary', () => {

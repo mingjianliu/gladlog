@@ -519,14 +519,18 @@ export function formatHealerExposureEntries(
 
     const blockedRefs = [...new Set(blocked.map(refOf))].join(", ");
 
+    // labelBias fix (2026-07-15): judges across three independent batches
+    // docked the old verdict phrasings ("trinket is the only answer",
+    // "healer cannot answer CC") as pre-drawn conclusions. State the same
+    // facts neutrally and let the coach draw the verdict.
     let verdict = "";
     if (e.exposureLabel === "Critical") {
-      verdict = "No trinket + Full DR CC in LoS: healer cannot answer CC";
+      verdict = "no trinket available while Full-DR CC is in LoS";
     } else if (
       e.exposureLabel === "Exposed" &&
       exposed.some((t) => t.healerDRLevel === "Full")
     ) {
-      verdict = "Full DR threat in LoS: trinket is the only answer";
+      verdict = "Full-DR CC in LoS; trinket up (sole CC counter)";
     }
 
     let body = `${e.burstDangerLabel} burst — ${trinketStr} — ${labelStr}${pillarStr}`;

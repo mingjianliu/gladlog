@@ -311,7 +311,12 @@ export function emitDmgSpikeEntries(params: {
       const hpDelta = hpTo - hpFrom;
       const hpVelocity = hpDelta / Math.max(1, windowSec);
       const sign = hpVelocity > 0 ? "+" : "";
-      hpStr = ` (${hpFrom}% -> ${hpTo}% HP, ${sign}${hpVelocity.toFixed(0)}%/s)`;
+      // labelBias fix (3 independent judge batches, 2026-07-15): a [DMG SPIKE]
+      // whose target ends the window at equal-or-higher HP reads as a severity
+      // verdict on a non-event. Keep the tag and the percent format (the
+      // Layer-A HP gate parses them) but state the outcome explicitly.
+      const outcomeTag = hpDelta >= 0 ? " — healed through" : "";
+      hpStr = ` (${hpFrom}% -> ${hpTo}% HP, ${sign}${hpVelocity.toFixed(0)}%/s${outcomeTag})`;
     }
 
     const benchmarkKey = targetUnit ? specToBenchmarkKey(targetUnit.spec) : "";
