@@ -9,6 +9,7 @@ import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
 import {
   fmtTime,
   getUnitHpAtTimestamp,
+  HP_SAMPLE_RADIUS_MS,
   IDamageBucket,
   isHealerSpec,
   specToString,
@@ -352,7 +353,7 @@ export function reconstructEnemyCDTimeline(
       // reading come from mid-window, contradicting the [STATE] snapshots at the same
       // timestamp and feeding coach errors. ±3s matches the [DMG SPIKE] sampling (±2s)
       // closely; when no sample exists that near, render nothing instead of a wrong number.
-      const hpLookupRadiusMs = 3_000;
+      const hpLookupRadiusMs = HP_SAMPLE_RADIUS_MS;
       let mostPressuredTarget: IAlignedBurstWindow["mostPressuredTarget"];
       if (friendlies && friendlies.length > 0) {
         let topUnit: ICombatUnit | null = null;

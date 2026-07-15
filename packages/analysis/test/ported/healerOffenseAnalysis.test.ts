@@ -86,9 +86,10 @@ describe("computeSlackSegments", () => {
 
   it("excludes seconds where a friendly is below 85% HP", () => {
     const owner = makeFriend("owner");
-    // teammate drops to 60% HP from t=20s to t=40s
+    // teammate drops to 60% HP from t=20s to t=40s (1s sample grid so the
+    // nearest-sample HP reads have exact boundaries under the shared ±3s radius)
     const mateActions: unknown[] = [];
-    for (let s = 0; s <= 120; s += 5) {
+    for (let s = 0; s <= 120; s += 1) {
       const hp = s >= 20 && s < 40 ? 300_000 : 500_000;
       mateActions.push(makeAdvancedAction(T0 + s * 1000, 0, 0, 500_000, hp));
     }
@@ -993,19 +994,18 @@ describe("F193 V2 — contested trade facts", () => {
   });
 
   it("covers contested segment early endings, damage/healing in contested segments, damage in windows, and multi-CC formatting", () => {
+    // mate at 80% HP (contested band) from t=10s to t<25s, full HP otherwise.
+    // 1s sample grid: the shared ±3s nearest-sample HP reader (B4 fix) no longer
+    // back-fills sparse gaps, so the contested window must be actually sampled.
+    const mateActions: unknown[] = [];
+    for (let s = 0; s <= 120; s += 1) {
+      const hp = s >= 10 && s < 25 ? 160_000 : 200_000;
+      mateActions.push(makeAdvancedAction(T0 + s * 1000, 0, 0, 200_000, hp));
+    }
     const mate = makeFriend("mate", {
-      advancedActions: [
-        makeAdvancedAction(T0, 0, 0, 200_000, 200_000),
-        makeAdvancedAction(T0 + 10_000, 0, 0, 200_000, 160_000),
-        makeAdvancedAction(T0 + 25_000, 0, 0, 200_000, 200_000),
-      ],
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      advancedActions: mateActions as any[],
     });
-    const act1 = mate.advancedActions[0] as any;
-    act1.advancedActorId = "mate";
-    const act2 = mate.advancedActions[1] as any;
-    act2.advancedActorId = "mate";
-    const act3 = mate.advancedActions[2] as any;
-    act3.advancedActorId = "mate";
 
     const enemy = makeUnit("enemy-1", {
       reaction: CombatUnitReaction.Hostile,

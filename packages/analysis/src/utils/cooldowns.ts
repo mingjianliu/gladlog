@@ -5,26 +5,32 @@ import {
   CombatUnitSpec,
   ICombatUnit,
   LogEvent,
-} from '@gladlog/parser-compat';
+} from "@gladlog/parser-compat";
 
-import { classMetadata } from '../data/classSpells';
-import { SpellTag } from '../data/spellTypes';
+import { classMetadata } from "../data/classSpells";
+import { SpellTag } from "../data/spellTypes";
 
-import { getEnglishSpellName, spellEffectData } from '../data/spellEffectData';
-import spellIdListsData from '../data/spellIdLists';
-import { binarySearchClosest } from './binarySearch';
-import { DISCOVERY_TAG_RULES } from '../data/discoveryRules';
-import { CD_TALENT_MODIFIERS } from './talentModifiers';
-import { getPlayerTalentedSpellInfo, getSpecTalentTreeSpellInfo } from './talents';
+import { getEnglishSpellName, spellEffectData } from "../data/spellEffectData";
+import spellIdListsData from "../data/spellIdLists";
+import { binarySearchClosest } from "./binarySearch";
+import { DISCOVERY_TAG_RULES } from "../data/discoveryRules";
+import { CD_TALENT_MODIFIERS } from "./talentModifiers";
+import {
+  getPlayerTalentedSpellInfo,
+  getSpecTalentTreeSpellInfo,
+} from "./talents";
 
 export const MAJOR_DEFENSIVE_IDS = new Set<string>(
-  (spellIdListsData as unknown as { externalOrBigDefensiveSpellIds?: string[] }).externalOrBigDefensiveSpellIds ?? [],
+  (spellIdListsData as unknown as { externalOrBigDefensiveSpellIds?: string[] })
+    .externalOrBigDefensiveSpellIds ?? [],
 );
 
 // H11: defensives that can be cast on a teammate (not just self). Used to avoid suggesting
 // self-only tools (e.g. Barkskin) as "cheaper" alternatives when the annotated cast was an
 // external thrown on an ally — a self-only tool can't help that ally.
-const EXTERNAL_DEFENSIVE_IDS = new Set<string>(spellIdListsData.externalDefensiveSpellIds as string[]);
+const EXTERNAL_DEFENSIVE_IDS = new Set<string>(
+  spellIdListsData.externalDefensiveSpellIds as string[],
+);
 
 /**
  * B112/B127: true when a big personal defensive is SELF-ONLY (cannot be cast on an ally) — e.g.
@@ -36,7 +42,9 @@ const EXTERNAL_DEFENSIVE_IDS = new Set<string>(spellIdListsData.externalDefensiv
  * mis-rendered as self.
  */
 export function isSelfOnlyDefensive(spellId: string): boolean {
-  return MAJOR_DEFENSIVE_IDS.has(spellId) && !EXTERNAL_DEFENSIVE_IDS.has(spellId);
+  return (
+    MAJOR_DEFENSIVE_IDS.has(spellId) && !EXTERNAL_DEFENSIVE_IDS.has(spellId)
+  );
 }
 
 /** True if this defensive can be cast on an ALLY (an external). A Defensive-tagged CD that is NOT
@@ -55,13 +63,13 @@ export function isAllyCastableDefensive(spellId: string): boolean {
  */
 export const CD_ROLE_TAGS: Record<string, string> = {
   // Mistweaver Monk (B113)
-  '388615': 'mana+heal CD', // Restoral — restores team mana and heals; NOT a defensive/CC
-  '325197': 'healing CD', // Invoke Chi-Ji, the Red Crane — healing throughput
-  '116680': 'heal amplifier', // Thunder Focus Tea — empowers the next heal; not a defensive
+  "388615": "mana+heal CD", // Restoral — restores team mana and heals; NOT a defensive/CC
+  "325197": "healing CD", // Invoke Chi-Ji, the Red Crane — healing throughput
+  "116680": "heal amplifier", // Thunder Focus Tea — empowers the next heal; not a defensive
   // Preservation Evoker (B130)
-  '357170': 'ally heal-over-time', // Time Dilation — delayed healing on an ally; throughput
-  '370553': 'cast-time modifier', // Tip the Scales — makes next Empower instant; cheap modifier
-  '358267': 'mobility', // Hover — cast while moving; not a defensive
+  "357170": "ally heal-over-time", // Time Dilation — delayed healing on an ally; throughput
+  "370553": "cast-time modifier", // Tip the Scales — makes next Empower instant; cheap modifier
+  "358267": "mobility", // Hover — cast while moving; not a defensive
 };
 
 /** Returns a role descriptor for a throughput/modifier CD, or undefined if none is tagged. */
@@ -75,14 +83,14 @@ export function cdRoleTag(spellId: string): string | undefined {
  * "premature". For these the relevant context is the lowest-HP ally at cast time, not the healer.
  */
 export const TEAM_HEAL_CD_IDS = new Set<string>([
-  '64843', // Divine Hymn — Holy Priest
-  '115310', // Revival — Mistweaver Monk
-  '363534', // Rewind — Preservation Evoker
-  '359816', // Dream Flight — Preservation Evoker
-  '388615', // Restoral — Mistweaver Monk
-  '325197', // Invoke Chi-Ji, the Red Crane — Mistweaver Monk
-  '740', // Tranquility — Restoration Druid
-  '108280', // Healing Tide Totem — Restoration Shaman
+  "64843", // Divine Hymn — Holy Priest
+  "115310", // Revival — Mistweaver Monk
+  "363534", // Rewind — Preservation Evoker
+  "359816", // Dream Flight — Preservation Evoker
+  "388615", // Restoral — Mistweaver Monk
+  "325197", // Invoke Chi-Ji, the Red Crane — Mistweaver Monk
+  "740", // Tranquility — Restoration Druid
+  "108280", // Healing Tide Totem — Restoration Shaman
 ]);
 
 /** True for team-wide healing CDs whose timeline context should be the lowest ally, not the caster. */
@@ -91,33 +99,36 @@ export function isTeamHealCD(spellId: string): boolean {
 }
 
 const ADDITIONAL_OVERLAP_DEFENSIVE_IDS = new Set<string>([
-  '108416', // Dark Pact (Warlock)
-  '5277', // Evasion (Rogue)
-  '122783', // Diffuse Magic (Monk)
-  '122278', // Dampen Harm (Monk)
-  '184662', // Shield of Vengeance (Paladin)
-  '145629', // Anti-Magic Zone (DK)
-  '62618', // Power Word: Barrier (Priest)
-  '374348', // Renewing Blaze (Evoker)
-  '201633', // Earthen Wall Totem (Shaman)
-  '98008', // Spirit Link Totem (Shaman)
-  '196555', // Netherwalk (DH)
-  '47536', // Rapture (Priest)
+  "108416", // Dark Pact (Warlock)
+  "5277", // Evasion (Rogue)
+  "122783", // Diffuse Magic (Monk)
+  "122278", // Dampen Harm (Monk)
+  "184662", // Shield of Vengeance (Paladin)
+  "145629", // Anti-Magic Zone (DK)
+  "62618", // Power Word: Barrier (Priest)
+  "374348", // Renewing Blaze (Evoker)
+  "201633", // Earthen Wall Totem (Shaman)
+  "98008", // Spirit Link Totem (Shaman)
+  "196555", // Netherwalk (DH)
+  "47536", // Rapture (Priest)
 ]);
 
-const ALL_MAJOR_DEFENSIVE_IDS = new Set<string>([...MAJOR_DEFENSIVE_IDS, ...ADDITIONAL_OVERLAP_DEFENSIVE_IDS]);
+const ALL_MAJOR_DEFENSIVE_IDS = new Set<string>([
+  ...MAJOR_DEFENSIVE_IDS,
+  ...ADDITIONAL_OVERLAP_DEFENSIVE_IDS,
+]);
 
 /**
  * Spell IDs that can be cast while the player is stunned or otherwise CC'd.
  * Used to avoid blaming players for "unused" defensives when they were locked out.
  */
 export const USABLE_WHILE_CC_SPELL_IDS = new Set<string>([
-  '33206', // Pain Suppression
-  '22812', // Barkskin
-  '47585', // Dispersion
-  '642', // Divine Shield
-  '55233', // Vampiric Blood
-  '48792', // Icebound Fortitude
+  "33206", // Pain Suppression
+  "22812", // Barkskin
+  "47585", // Dispersion
+  "642", // Divine Shield
+  "55233", // Vampiric Blood
+  "48792", // Icebound Fortitude
 ]);
 
 /**
@@ -128,7 +139,12 @@ export const USABLE_WHILE_CC_SPELL_IDS = new Set<string>([
  * applying cast: Divine Shield always self-applies; the ally-castable ones self-apply only when cast on self.
  */
 export const FORBEARANCE_SECONDS = 30;
-export const FORBEARANCE_GATED_IDS = new Set<string>(['642', '633', '1022', '204018']); // DivineShield, LayOnHands, BoP, Spellwarding
+export const FORBEARANCE_GATED_IDS = new Set<string>([
+  "642",
+  "633",
+  "1022",
+  "204018",
+]); // DivineShield, LayOnHands, BoP, Spellwarding
 export function selfForbearanceActiveAt(
   unit: ICombatUnit,
   allUnits: ICombatUnit[],
@@ -140,8 +156,9 @@ export function selfForbearanceActiveAt(
       if (cast.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
       if (!cast.spellId || !FORBEARANCE_GATED_IDS.has(cast.spellId)) continue;
       const castSec = (cast.timestamp - matchStartMs) / 1000;
-      if (castSec > atSeconds || atSeconds - castSec > FORBEARANCE_SECONDS) continue;
-      if (cast.spellId === '642') {
+      if (castSec > atSeconds || atSeconds - castSec > FORBEARANCE_SECONDS)
+        continue;
+      if (cast.spellId === "642") {
         if (u.id === unit.id) return true;
       } else {
         if (cast.destUnitId === unit.id) return true;
@@ -154,7 +171,9 @@ export function selfForbearanceActiveAt(
 // All spells tagged 'Offensive' in classMetadata — used to detect active enemy burst windows
 const OFFENSIVE_SPELL_IDS = new Set<string>(
   classMetadata.flatMap((cls) =>
-    cls.abilities.filter((a) => a.tags.includes(SpellTag.Offensive)).map((a) => a.spellId),
+    cls.abilities
+      .filter((a) => a.tags.includes(SpellTag.Offensive))
+      .map((a) => a.spellId),
   ),
 );
 
@@ -166,14 +185,14 @@ const MIN_CD_SECONDS = 30;
  * Filtering these removes noise from the [YOU] [CAST] timeline.
  */
 export const PASSIVE_SPELL_BLOCKLIST = new Set([
-  'Reclamation',
-  'Infusion of Light',
+  "Reclamation",
+  "Infusion of Light",
   "Ysera's Gift",
   "Nature's Vigor",
-  'Resounding Voice',
-  'Eminence',
-  'Awakening',
-  'Divine Purpose',
+  "Resounding Voice",
+  "Eminence",
+  "Awakening",
+  "Divine Purpose",
 ]);
 
 /**
@@ -184,117 +203,126 @@ export const PASSIVE_SPELL_BLOCKLIST = new Set([
  */
 const SPEC_EXCLUSIVE_SPELLS: Record<string, CombatUnitSpec[]> = {
   // Druid
-  '102560': [CombatUnitSpec.Druid_Balance], // Incarnation: Chosen of Elune
-  '194223': [CombatUnitSpec.Druid_Balance], // Celestial Alignment
-  '102543': [CombatUnitSpec.Druid_Feral], // Incarnation: King of the Jungle
-  '106839': [CombatUnitSpec.Druid_Feral], // Skull Bash
-  '106951': [CombatUnitSpec.Druid_Feral], // Berserk
-  '102558': [CombatUnitSpec.Druid_Guardian], // Incarnation: Guardian of Ursoc
-  '18562': [CombatUnitSpec.Druid_Restoration], // Swiftmend
-  '33891': [CombatUnitSpec.Druid_Restoration], // Incarnation: Tree of Life
-  '102342': [CombatUnitSpec.Druid_Restoration], // Ironbark
-  '236696': [CombatUnitSpec.Druid_Restoration], // Thorns
-  '740': [CombatUnitSpec.Druid_Restoration], // Tranquility
+  "102560": [CombatUnitSpec.Druid_Balance], // Incarnation: Chosen of Elune
+  "194223": [CombatUnitSpec.Druid_Balance], // Celestial Alignment
+  "102543": [CombatUnitSpec.Druid_Feral], // Incarnation: King of the Jungle
+  "106839": [CombatUnitSpec.Druid_Feral], // Skull Bash
+  "106951": [CombatUnitSpec.Druid_Feral], // Berserk
+  "102558": [CombatUnitSpec.Druid_Guardian], // Incarnation: Guardian of Ursoc
+  "18562": [CombatUnitSpec.Druid_Restoration], // Swiftmend
+  "33891": [CombatUnitSpec.Druid_Restoration], // Incarnation: Tree of Life
+  "102342": [CombatUnitSpec.Druid_Restoration], // Ironbark
+  "236696": [CombatUnitSpec.Druid_Restoration], // Thorns
+  "740": [CombatUnitSpec.Druid_Restoration], // Tranquility
   // Monk
-  '115203': [CombatUnitSpec.Monk_BrewMaster], // Fortifying Brew
-  '122470': [CombatUnitSpec.Monk_Windwalker], // Touch of Karma
-  '123904': [CombatUnitSpec.Monk_Windwalker], // Invoke Xuen, the White Tiger
-  '137639': [CombatUnitSpec.Monk_Windwalker], // Storm, Earth, and Fire
-  '201318': [CombatUnitSpec.Monk_Windwalker], // Fortifying Elixir
-  '116849': [CombatUnitSpec.Monk_Mistweaver], // Life Cocoon
+  "115203": [CombatUnitSpec.Monk_BrewMaster], // Fortifying Brew
+  "122470": [CombatUnitSpec.Monk_Windwalker], // Touch of Karma
+  "123904": [CombatUnitSpec.Monk_Windwalker], // Invoke Xuen, the White Tiger
+  "137639": [CombatUnitSpec.Monk_Windwalker], // Storm, Earth, and Fire
+  "201318": [CombatUnitSpec.Monk_Windwalker], // Fortifying Elixir
+  "116849": [CombatUnitSpec.Monk_Mistweaver], // Life Cocoon
   // Paladin
-  '498': [CombatUnitSpec.Paladin_Holy], // Divine Protection
-  '6940': [CombatUnitSpec.Paladin_Holy], // Blessing of Sacrifice
-  '199448': [CombatUnitSpec.Paladin_Holy], // Blessing of Sacrifice
-  '210294': [CombatUnitSpec.Paladin_Holy], // Divine Favor
-  '31821': [CombatUnitSpec.Paladin_Holy], // Aura Mastery
-  '216331': [CombatUnitSpec.Paladin_Holy], // Avenging Crusader
-  '86659': [CombatUnitSpec.Paladin_Protection], // Guardian of Ancient Kings
-  '337851': [CombatUnitSpec.Paladin_Protection], // Guardian of Ancient Kings
-  '337852': [CombatUnitSpec.Paladin_Protection], // Reign of Ancient Kings
-  '228049': [CombatUnitSpec.Paladin_Protection], // Guardian of the Forgotten Queen
-  '31850': [CombatUnitSpec.Paladin_Protection], // Ardent Defender
+  "498": [CombatUnitSpec.Paladin_Holy], // Divine Protection
+  "6940": [CombatUnitSpec.Paladin_Holy], // Blessing of Sacrifice
+  "199448": [CombatUnitSpec.Paladin_Holy], // Blessing of Sacrifice
+  "210294": [CombatUnitSpec.Paladin_Holy], // Divine Favor
+  "31821": [CombatUnitSpec.Paladin_Holy], // Aura Mastery
+  "216331": [CombatUnitSpec.Paladin_Holy], // Avenging Crusader
+  "86659": [CombatUnitSpec.Paladin_Protection], // Guardian of Ancient Kings
+  "337851": [CombatUnitSpec.Paladin_Protection], // Guardian of Ancient Kings
+  "337852": [CombatUnitSpec.Paladin_Protection], // Reign of Ancient Kings
+  "228049": [CombatUnitSpec.Paladin_Protection], // Guardian of the Forgotten Queen
+  "31850": [CombatUnitSpec.Paladin_Protection], // Ardent Defender
   // Priest
-  '33206': [CombatUnitSpec.Priest_Discipline], // Pain Suppression
-  '47536': [CombatUnitSpec.Priest_Discipline], // Rapture
-  '62618': [CombatUnitSpec.Priest_Discipline], // Power Word: Barrier
-  '81782': [CombatUnitSpec.Priest_Discipline], // Power Word: Barrier
-  '197871': [CombatUnitSpec.Priest_Discipline], // Dark Archangel
-  '19236': [CombatUnitSpec.Priest_Holy], // Desperate Prayer
-  '196762': [CombatUnitSpec.Priest_Holy], // Inner Focus
-  '200183': [CombatUnitSpec.Priest_Holy], // Apotheosis
-  '47788': [CombatUnitSpec.Priest_Holy], // Guardian Spirit
-  '64843': [CombatUnitSpec.Priest_Holy], // Divine Hymn
-  '47585': [CombatUnitSpec.Priest_Shadow], // Dispersion
-  '64044': [CombatUnitSpec.Priest_Shadow], // Psychic Horror
+  "33206": [CombatUnitSpec.Priest_Discipline], // Pain Suppression
+  "47536": [CombatUnitSpec.Priest_Discipline], // Rapture
+  "62618": [CombatUnitSpec.Priest_Discipline], // Power Word: Barrier
+  "81782": [CombatUnitSpec.Priest_Discipline], // Power Word: Barrier
+  "197871": [CombatUnitSpec.Priest_Discipline], // Dark Archangel
+  "19236": [CombatUnitSpec.Priest_Holy], // Desperate Prayer
+  "196762": [CombatUnitSpec.Priest_Holy], // Inner Focus
+  "200183": [CombatUnitSpec.Priest_Holy], // Apotheosis
+  "47788": [CombatUnitSpec.Priest_Holy], // Guardian Spirit
+  "64843": [CombatUnitSpec.Priest_Holy], // Divine Hymn
+  "47585": [CombatUnitSpec.Priest_Shadow], // Dispersion
+  "64044": [CombatUnitSpec.Priest_Shadow], // Psychic Horror
   // Warlock
-  '113860': [CombatUnitSpec.Warlock_Affliction], // Dark Soul: Misery
-  '113858': [CombatUnitSpec.Warlock_Destruction], // Dark Soul: Instability
+  "113860": [CombatUnitSpec.Warlock_Affliction], // Dark Soul: Misery
+  "113858": [CombatUnitSpec.Warlock_Destruction], // Dark Soul: Instability
   // Rogue
-  '5277': [CombatUnitSpec.Rogue_Assassination], // Evasion
-  '36554': [CombatUnitSpec.Rogue_Assassination], // Shadowstep
-  '79140': [CombatUnitSpec.Rogue_Assassination], // Vendetta/Deathmark
-  '1776': [CombatUnitSpec.Rogue_Outlaw], // Gouge
-  '2094': [CombatUnitSpec.Rogue_Outlaw], // Blind
-  '13750': [CombatUnitSpec.Rogue_Outlaw], // Adrenaline Rush
-  '51690': [CombatUnitSpec.Rogue_Outlaw], // Killing Spree
-  '121471': [CombatUnitSpec.Rogue_Subtlety], // Shadow Blades
-  '185313': [CombatUnitSpec.Rogue_Subtlety], // Shadow Dance
-  '185422': [CombatUnitSpec.Rogue_Subtlety], // Shadow Dance
-  '207736': [CombatUnitSpec.Rogue_Subtlety], // Shadowy Duel
-  '212182': [CombatUnitSpec.Rogue_Subtlety], // Smoke Bomb
-  '213981': [CombatUnitSpec.Rogue_Subtlety], // Cold Blood
+  "5277": [CombatUnitSpec.Rogue_Assassination], // Evasion
+  "36554": [CombatUnitSpec.Rogue_Assassination], // Shadowstep
+  "79140": [CombatUnitSpec.Rogue_Assassination], // Vendetta/Deathmark
+  "1776": [CombatUnitSpec.Rogue_Outlaw], // Gouge
+  "2094": [CombatUnitSpec.Rogue_Outlaw], // Blind
+  "13750": [CombatUnitSpec.Rogue_Outlaw], // Adrenaline Rush
+  "51690": [CombatUnitSpec.Rogue_Outlaw], // Killing Spree
+  "121471": [CombatUnitSpec.Rogue_Subtlety], // Shadow Blades
+  "185313": [CombatUnitSpec.Rogue_Subtlety], // Shadow Dance
+  "185422": [CombatUnitSpec.Rogue_Subtlety], // Shadow Dance
+  "207736": [CombatUnitSpec.Rogue_Subtlety], // Shadowy Duel
+  "212182": [CombatUnitSpec.Rogue_Subtlety], // Smoke Bomb
+  "213981": [CombatUnitSpec.Rogue_Subtlety], // Cold Blood
   // Shaman
-  '191634': [CombatUnitSpec.Shaman_Elemental], // Stormkeeper
-  '58875': [CombatUnitSpec.Shaman_Enhancement], // Spirit Walk
-  '98008': [CombatUnitSpec.Shaman_Restoration], // Spirit Link Totem
-  '204293': [CombatUnitSpec.Shaman_Restoration], // Spirit Link
-  '204336': [CombatUnitSpec.Shaman_Elemental, CombatUnitSpec.Shaman_Enhancement, CombatUnitSpec.Shaman_Restoration], // Grounding Totem
+  "191634": [CombatUnitSpec.Shaman_Elemental], // Stormkeeper
+  "58875": [CombatUnitSpec.Shaman_Enhancement], // Spirit Walk
+  "98008": [CombatUnitSpec.Shaman_Restoration], // Spirit Link Totem
+  "204293": [CombatUnitSpec.Shaman_Restoration], // Spirit Link
+  "204336": [
+    CombatUnitSpec.Shaman_Elemental,
+    CombatUnitSpec.Shaman_Enhancement,
+    CombatUnitSpec.Shaman_Restoration,
+  ], // Grounding Totem
   // Mage
-  '12042': [CombatUnitSpec.Mage_Arcane], // Arcane Power
-  '205025': [CombatUnitSpec.Mage_Arcane], // Presence of Mind
-  '190319': [CombatUnitSpec.Mage_Fire], // Combustion
-  '12472': [CombatUnitSpec.Mage_Frost], // Icy Veins
+  "12042": [CombatUnitSpec.Mage_Arcane], // Arcane Power
+  "205025": [CombatUnitSpec.Mage_Arcane], // Presence of Mind
+  "190319": [CombatUnitSpec.Mage_Fire], // Combustion
+  "12472": [CombatUnitSpec.Mage_Frost], // Icy Veins
   // Hunter
-  '19574': [CombatUnitSpec.Hunter_BeastMastery], // Bestial Wrath
-  '19386': [CombatUnitSpec.Hunter_BeastMastery], // Wyvern Sting
-  '24394': [CombatUnitSpec.Hunter_BeastMastery], // Intimidation
-  '19577': [CombatUnitSpec.Hunter_BeastMastery], // Intimidation
-  '213691': [CombatUnitSpec.Hunter_Marksmanship], // Scatter Shot
+  "19574": [CombatUnitSpec.Hunter_BeastMastery], // Bestial Wrath
+  "19386": [CombatUnitSpec.Hunter_BeastMastery], // Wyvern Sting
+  "24394": [CombatUnitSpec.Hunter_BeastMastery], // Intimidation
+  "19577": [CombatUnitSpec.Hunter_BeastMastery], // Intimidation
+  "213691": [CombatUnitSpec.Hunter_Marksmanship], // Scatter Shot
   // Demon Hunter
-  '211881': [CombatUnitSpec.DemonHunter_Havoc], // Fel Eruption
-  '207684': [CombatUnitSpec.DemonHunter_Vengeance], // Sigil of Misery
+  "211881": [CombatUnitSpec.DemonHunter_Havoc], // Fel Eruption
+  "207684": [CombatUnitSpec.DemonHunter_Vengeance], // Sigil of Misery
   // Death Knight
-  '55233': [CombatUnitSpec.DeathKnight_Blood], // Vampiric Blood
-  '49028': [CombatUnitSpec.DeathKnight_Blood], // Dancing Rune Weapon
-  '108199': [CombatUnitSpec.DeathKnight_Blood], // Gorefiend's Grasp
-  '221562': [CombatUnitSpec.DeathKnight_Blood], // Asphyxiate (Blood)
-  '51271': [CombatUnitSpec.DeathKnight_Frost], // Pillar of Frost
-  '47568': [CombatUnitSpec.DeathKnight_Frost], // Empower Rune Weapon
-  '279302': [CombatUnitSpec.DeathKnight_Frost], // Frostwyrm's Fury
-  '196770': [CombatUnitSpec.DeathKnight_Frost], // Remorseless Winter
-  '152279': [CombatUnitSpec.DeathKnight_Frost], // Breath of Sindragosa
-  '42650': [CombatUnitSpec.DeathKnight_Unholy], // Army of the Dead
-  '49206': [CombatUnitSpec.DeathKnight_Unholy], // Summon Gargoyle
-  '220143': [CombatUnitSpec.DeathKnight_Unholy], // Apocalypse
-  '108194': [CombatUnitSpec.DeathKnight_Unholy], // Asphyxiate (Unholy)
+  "55233": [CombatUnitSpec.DeathKnight_Blood], // Vampiric Blood
+  "49028": [CombatUnitSpec.DeathKnight_Blood], // Dancing Rune Weapon
+  "108199": [CombatUnitSpec.DeathKnight_Blood], // Gorefiend's Grasp
+  "221562": [CombatUnitSpec.DeathKnight_Blood], // Asphyxiate (Blood)
+  "51271": [CombatUnitSpec.DeathKnight_Frost], // Pillar of Frost
+  "47568": [CombatUnitSpec.DeathKnight_Frost], // Empower Rune Weapon
+  "279302": [CombatUnitSpec.DeathKnight_Frost], // Frostwyrm's Fury
+  "196770": [CombatUnitSpec.DeathKnight_Frost], // Remorseless Winter
+  "152279": [CombatUnitSpec.DeathKnight_Frost], // Breath of Sindragosa
+  "42650": [CombatUnitSpec.DeathKnight_Unholy], // Army of the Dead
+  "49206": [CombatUnitSpec.DeathKnight_Unholy], // Summon Gargoyle
+  "220143": [CombatUnitSpec.DeathKnight_Unholy], // Apocalypse
+  "108194": [CombatUnitSpec.DeathKnight_Unholy], // Asphyxiate (Unholy)
   // Evoker
-  '375087': [CombatUnitSpec.Evoker_Devastation], // Dragonrage
-  '363916': [CombatUnitSpec.Evoker_Devastation, CombatUnitSpec.Evoker_Preservation, CombatUnitSpec.Evoker_Augmentation], // Obsidian Scales
-  '359816': [CombatUnitSpec.Evoker_Preservation], // Dream Flight
-  '363534': [CombatUnitSpec.Evoker_Preservation], // Rewind
-  '370960': [CombatUnitSpec.Evoker_Preservation], // Emerald Communion
-  '370537': [CombatUnitSpec.Evoker_Preservation], // Stasis
-  '370665': [CombatUnitSpec.Evoker_Preservation], // Rescue
-  '403631': [CombatUnitSpec.Evoker_Augmentation], // Breath of Eons
-  '404977': [CombatUnitSpec.Evoker_Augmentation], // Time Skip
-  '360828': [CombatUnitSpec.Evoker_Augmentation], // Blistering Scales
+  "375087": [CombatUnitSpec.Evoker_Devastation], // Dragonrage
+  "363916": [
+    CombatUnitSpec.Evoker_Devastation,
+    CombatUnitSpec.Evoker_Preservation,
+    CombatUnitSpec.Evoker_Augmentation,
+  ], // Obsidian Scales
+  "359816": [CombatUnitSpec.Evoker_Preservation], // Dream Flight
+  "363534": [CombatUnitSpec.Evoker_Preservation], // Rewind
+  "370960": [CombatUnitSpec.Evoker_Preservation], // Emerald Communion
+  "370537": [CombatUnitSpec.Evoker_Preservation], // Stasis
+  "370665": [CombatUnitSpec.Evoker_Preservation], // Rescue
+  "403631": [CombatUnitSpec.Evoker_Augmentation], // Breath of Eons
+  "404977": [CombatUnitSpec.Evoker_Augmentation], // Time Skip
+  "360828": [CombatUnitSpec.Evoker_Augmentation], // Blistering Scales
 };
 
 /** Ignore available windows shorter than this (e.g. just before match ends) */
 const GRACE_SECONDS = 3;
 
-export type DefensiveTimingLabel = 'Optimal' | 'Early' | 'Late' | 'Reactive' | 'Unknown';
+export type DefensiveTimingLabel =
+  "Optimal" | "Early" | "Late" | "Reactive" | "Unknown";
 
 export interface ICooldownCast {
   timeSeconds: number;
@@ -309,11 +337,29 @@ export interface ICooldownCast {
 }
 
 /**
+ * Shared HP sampling radius for prompt-rendered HP claims (B4 residual fix,
+ * 2026-07-14 audit). Every renderer that prints an HP% for a specific instant
+ * ([STATE] baseline ticks, [DMG SPIKE] endpoints, death HP-trajectory
+ * checkpoints, burst most-pressured readings) must sample within this radius
+ * of the claimed instant, or print nothing — otherwise two lines about the
+ * same second can disagree and force the model to guess which is real.
+ */
+export const HP_SAMPLE_RADIUS_MS = 3_000;
+
+/**
  * Returns the HP% (0–100) of `unit` at the given timestamp by finding the nearest
  * advancedAction where advancedActorId === unit.id. Returns null when no data exists.
  */
-export function getUnitHpAtTimestamp(unit: ICombatUnit, timestampMs: number, maxDtMs = 10_000): number | null {
-  const closestAction = binarySearchClosest(unit.advancedActions, timestampMs, (a) => a.logLine.timestamp);
+export function getUnitHpAtTimestamp(
+  unit: ICombatUnit,
+  timestampMs: number,
+  maxDtMs = 10_000,
+): number | null {
+  const closestAction = binarySearchClosest(
+    unit.advancedActions,
+    timestampMs,
+    (a) => a.logLine.timestamp,
+  );
 
   if (!closestAction) {
     return null;
@@ -332,7 +378,10 @@ export function getUnitHpAtTimestamp(unit: ICombatUnit, timestampMs: number, max
     return null;
   }
 
-  return Math.round((closestAction.advancedActorCurrentHp / closestAction.advancedActorMaxHp) * 100);
+  return Math.round(
+    (closestAction.advancedActorCurrentHp / closestAction.advancedActorMaxHp) *
+      100,
+  );
 }
 
 /**
@@ -345,7 +394,11 @@ export function getUnitManaAtTimestamp(
   timestampMs: number,
   maxDtMs = 10_000,
 ): { current: number; max: number } | null {
-  const closestAction = binarySearchClosest(unit.advancedActions, timestampMs, (a) => a.logLine.timestamp);
+  const closestAction = binarySearchClosest(
+    unit.advancedActions,
+    timestampMs,
+    (a) => a.logLine.timestamp,
+  );
 
   if (!closestAction) {
     return null;
@@ -355,7 +408,9 @@ export function getUnitManaAtTimestamp(
     return null;
   }
 
-  const manaPower = closestAction.advancedActorPowers.find((p) => p.type === CombatUnitPowerType.Mana);
+  const manaPower = closestAction.advancedActorPowers.find(
+    (p) => p.type === CombatUnitPowerType.Mana,
+  );
   if (!manaPower) {
     return null;
   }
@@ -382,14 +437,20 @@ export function computeOverallHealingMetrics(
   let totalAmount = 0;
   let totalEffective = 0;
   for (const h of unit.healOut) {
-    if (h.logLine.timestamp >= matchStartMs && h.logLine.timestamp <= matchEndMs) {
+    if (
+      h.logLine.timestamp >= matchStartMs &&
+      h.logLine.timestamp <= matchEndMs
+    ) {
       totalAmount += h.amount;
       totalEffective += h.effectiveAmount;
     }
   }
 
   const hps = totalEffective / durationSeconds;
-  const overhealPct = totalAmount > 0 ? Math.round(((totalAmount - totalEffective) / totalAmount) * 100) : 0;
+  const overhealPct =
+    totalAmount > 0
+      ? Math.round(((totalAmount - totalEffective) / totalAmount) * 100)
+      : 0;
   return { hps, overhealPct };
 }
 
@@ -421,7 +482,10 @@ export interface IMajorCooldownInfo {
  * For a given unit, return all class-tagged major cooldowns (>= 30s) with
  * cast times and idle availability windows derived from the combat log.
  */
-export function extractMajorCooldowns(unit: ICombatUnit, combat: AtomicArenaCombat): IMajorCooldownInfo[] {
+export function extractMajorCooldowns(
+  unit: ICombatUnit,
+  combat: AtomicArenaCombat,
+): IMajorCooldownInfo[] {
   const matchStartMs = combat.startTime;
   const matchEndMs = combat.endTime;
   const matchDurationSeconds = (matchEndMs - matchStartMs) / 1000;
@@ -430,21 +494,33 @@ export function extractMajorCooldowns(unit: ICombatUnit, combat: AtomicArenaComb
   if (!classData) return [];
 
   if (unit.class === CombatUnitClass.Priest) {
-    const hasUP1 = classData.abilities.some((a) => a.spellId === '421116');
+    const hasUP1 = classData.abilities.some((a) => a.spellId === "421116");
     if (!hasUP1) {
-      classData.abilities.push({ spellId: '421116', name: 'Ultimate Penitence', tags: [SpellTag.Defensive] });
+      classData.abilities.push({
+        spellId: "421116",
+        name: "Ultimate Penitence",
+        tags: [SpellTag.Defensive],
+      });
     }
-    const hasUP2 = classData.abilities.some((a) => a.spellId === '421453');
+    const hasUP2 = classData.abilities.some((a) => a.spellId === "421453");
     if (!hasUP2) {
-      classData.abilities.push({ spellId: '421453', name: 'Ultimate Penitence', tags: [SpellTag.Defensive] });
+      classData.abilities.push({
+        spellId: "421453",
+        name: "Ultimate Penitence",
+        tags: [SpellTag.Defensive],
+      });
     }
   }
 
   const specIdNum = parseInt(unit.spec, 10);
   const specTalentTreeSpellInfo = getSpecTalentTreeSpellInfo(specIdNum);
   const specTalentTreeSpellIds = new Set(specTalentTreeSpellInfo.keys());
-  const talentedSpellInfo = unit.info?.talents ? getPlayerTalentedSpellInfo(specIdNum, unit.info.talents) : null;
-  const talentedSpellIds = talentedSpellInfo ? new Set(talentedSpellInfo.keys()) : null;
+  const talentedSpellInfo = unit.info?.talents
+    ? getPlayerTalentedSpellInfo(specIdNum, unit.info.talents)
+    : null;
+  const talentedSpellIds = talentedSpellInfo
+    ? new Set(talentedSpellInfo.keys())
+    : null;
   // PvP talents selected by this player (spell IDs). Available when COMBATANT_INFO is present.
   const pvpTalentIds = new Set<string>(unit.info?.pvpTalents ?? []);
   const hasCombatantInfo = unit.info !== undefined;
@@ -463,7 +539,10 @@ export function extractMajorCooldowns(unit: ICombatUnit, combat: AtomicArenaComb
     if (spell.tags.length === 0) return false;
     const effectData = spellEffectData[spell.spellId];
     if (!effectData) return false;
-    const cd = effectData.cooldownSeconds ?? effectData.charges?.chargeCooldownSeconds ?? 0;
+    const cd =
+      effectData.cooldownSeconds ??
+      effectData.charges?.chargeCooldownSeconds ??
+      0;
     if (cd < MIN_CD_SECONDS) return false;
     const allowedSpecs = SPEC_EXCLUSIVE_SPELLS[spell.spellId];
     if (allowedSpecs && !allowedSpecs.includes(unit.spec)) return false;
@@ -477,7 +556,11 @@ export function extractMajorCooldowns(unit: ICombatUnit, combat: AtomicArenaComb
       }
       // If talent data failed to parse (talentedSpellIds null) but COMBATANT_INFO is present,
       // require cast evidence to avoid including talents the player didn't actually take.
-      if (talentedSpellIds === null && hasCombatantInfo && !castSpellIds.has(spell.spellId)) {
+      if (
+        talentedSpellIds === null &&
+        hasCombatantInfo &&
+        !castSpellIds.has(spell.spellId)
+      ) {
         return false;
       }
     } else if (hasCombatantInfo) {
@@ -487,7 +570,10 @@ export function extractMajorCooldowns(unit: ICombatUnit, combat: AtomicArenaComb
       // This filters out PvP talents the player didn't pick while keeping baseline abilities
       // that were used. Baseline abilities that were never used and aren't PvP talents will be
       // silently excluded — acceptable trade-off to avoid false "never used X" reports.
-      if (!pvpTalentIds.has(spell.spellId) && !castSpellIds.has(spell.spellId)) {
+      if (
+        !pvpTalentIds.has(spell.spellId) &&
+        !castSpellIds.has(spell.spellId)
+      ) {
         return false;
       }
     }
@@ -502,12 +588,15 @@ export function extractMajorCooldowns(unit: ICombatUnit, combat: AtomicArenaComb
     for (const [spellId, info] of talentedSpellInfo.entries()) {
       if (seen.has(spellId)) continue;
       // Only discover buttons (active nodes). Passives are handled via CD_TALENT_MODIFIERS.
-      if (info.type !== 'active') continue;
+      if (info.type !== "active") continue;
 
       const effectData = spellEffectData[spellId];
       if (!effectData) continue;
 
-      const cd = effectData.cooldownSeconds ?? effectData.charges?.chargeCooldownSeconds ?? 0;
+      const cd =
+        effectData.cooldownSeconds ??
+        effectData.charges?.chargeCooldownSeconds ??
+        0;
       if (cd >= MIN_CD_SECONDS) {
         // Intelligent tagging based on name pattern rules
         const name = effectData.name.toLowerCase();
@@ -532,17 +621,23 @@ export function extractMajorCooldowns(unit: ICombatUnit, combat: AtomicArenaComb
     const effectData = spellEffectData[spell.spellId];
     if (!effectData) return [];
 
-    let cooldownSeconds = effectData.cooldownSeconds ?? effectData.charges?.chargeCooldownSeconds ?? 0;
+    let cooldownSeconds =
+      effectData.cooldownSeconds ??
+      effectData.charges?.chargeCooldownSeconds ??
+      0;
     let baselineCharges = effectData.charges?.charges ?? 1;
 
     // Apply talent-based modifications if the player's talents are known
     const modifiers = CD_TALENT_MODIFIERS[spell.spellId];
     if (modifiers && (talentedSpellIds || pvpTalentIds.size > 0)) {
       for (const mod of modifiers) {
-        if (talentedSpellIds?.has(mod.talentSpellId) || pvpTalentIds.has(mod.talentSpellId)) {
-          if (mod.effect === 'extra_charge') {
+        if (
+          talentedSpellIds?.has(mod.talentSpellId) ||
+          pvpTalentIds.has(mod.talentSpellId)
+        ) {
+          if (mod.effect === "extra_charge") {
             baselineCharges += mod.value;
-          } else if (mod.effect === 'reduce_cd') {
+          } else if (mod.effect === "reduce_cd") {
             cooldownSeconds -= mod.value;
           }
         }
@@ -550,10 +645,14 @@ export function extractMajorCooldowns(unit: ICombatUnit, combat: AtomicArenaComb
     }
 
     const castEvents = unit.spellCastEvents.filter(
-      (e) => e.spellId === spell.spellId && e.logLine.event === LogEvent.SPELL_CAST_SUCCESS,
+      (e) =>
+        e.spellId === spell.spellId &&
+        e.logLine.event === LogEvent.SPELL_CAST_SUCCESS,
     );
 
-    const isDefOrExternal = spell.tags.includes(SpellTag.Defensive) || (spell.tags as string[]).includes('External');
+    const isDefOrExternal =
+      spell.tags.includes(SpellTag.Defensive) ||
+      (spell.tags as string[]).includes("External");
     const isControl = spell.tags.includes(SpellTag.Control);
 
     const rawCasts: ICooldownCast[] = castEvents
@@ -561,11 +660,20 @@ export function extractMajorCooldowns(unit: ICombatUnit, combat: AtomicArenaComb
       .map((e) => {
         const timeSeconds = (e.logLine.timestamp - matchStartMs) / 1000;
         const cast: ICooldownCast = { timeSeconds };
-        if ((isDefOrExternal || isControl) && e.destUnitId && e.destUnitName && e.destUnitName !== 'nil') {
+        if (
+          (isDefOrExternal || isControl) &&
+          e.destUnitId &&
+          e.destUnitName &&
+          e.destUnitName !== "nil"
+        ) {
           cast.targetName = e.destUnitName;
           const targetUnit = combat.units[e.destUnitId];
           if (targetUnit) {
-            const hp = getUnitHpAtTimestamp(targetUnit, e.logLine.timestamp, 2_000);
+            const hp = getUnitHpAtTimestamp(
+              targetUnit,
+              e.logLine.timestamp,
+              2_000,
+            );
             if (hp !== null) cast.targetHpPct = hp;
           }
         }
@@ -586,7 +694,11 @@ export function extractMajorCooldowns(unit: ICombatUnit, combat: AtomicArenaComb
     const pushWindow = (from: number, to: number) => {
       const duration = to - from;
       if (duration > GRACE_SECONDS) {
-        availableWindows.push({ fromSeconds: from, toSeconds: to, durationSeconds: duration });
+        availableWindows.push({
+          fromSeconds: from,
+          toSeconds: to,
+          durationSeconds: duration,
+        });
       }
     };
 
@@ -601,7 +713,10 @@ export function extractMajorCooldowns(unit: ICombatUnit, combat: AtomicArenaComb
       // Windows between casts (and from last cast to match end)
       for (let i = 0; i < casts.length; i++) {
         const cdReadyAt = casts[i].timeSeconds + cooldownSeconds;
-        const nextCastAt = i + 1 < casts.length ? casts[i + 1].timeSeconds : matchDurationSeconds;
+        const nextCastAt =
+          i + 1 < casts.length
+            ? casts[i + 1].timeSeconds
+            : matchDurationSeconds;
         if (cdReadyAt < matchDurationSeconds - GRACE_SECONDS) {
           pushWindow(cdReadyAt, nextCastAt);
         }
@@ -640,16 +755,16 @@ export function extractMajorCooldowns(unit: ICombatUnit, combat: AtomicArenaComb
  * Emerald Communion"): they neither reduce damage taken nor heal, so they can't cover the same need.
  */
 const NON_SUBSTITUTE_DEFENSIVE_IDS = new Set<string>([
-  '374251', // Cauterizing Flame (Evoker) — dispel
-  '370665', // Rescue (Evoker) — mobility / reposition
-  '58875', // Spirit Walk (Shaman) — mobility / snare break
-  '106898', // Stampeding Roar (Druid) — group mobility
-  '77761', // Stampeding Roar (Bear form variant)
-  '77764', // Stampeding Roar (Cat form variant)
-  '370537', // Stasis (Evoker) — spell storage utility
-  '204336', // Grounding Totem (Shaman) — single-spell reflect
-  '8178', // Grounding Totem (older id)
-  '79206', // Spiritwalker's Grace (Shaman) — cast-while-moving utility
+  "374251", // Cauterizing Flame (Evoker) — dispel
+  "370665", // Rescue (Evoker) — mobility / reposition
+  "58875", // Spirit Walk (Shaman) — mobility / snare break
+  "106898", // Stampeding Roar (Druid) — group mobility
+  "77761", // Stampeding Roar (Bear form variant)
+  "77764", // Stampeding Roar (Cat form variant)
+  "370537", // Stasis (Evoker) — spell storage utility
+  "204336", // Grounding Totem (Shaman) — single-spell reflect
+  "8178", // Grounding Totem (older id)
+  "79206", // Spiritwalker's Grace (Shaman) — cast-while-moving utility
 ]);
 
 /**
@@ -659,7 +774,7 @@ const NON_SUBSTITUTE_DEFENSIVE_IDS = new Set<string>([
  * `cheaper available:` note. Follow-up to B138/B142 (surfaced by the 2026-07-02 meta-eval).
  */
 export const THROUGHPUT_EMPOWER_DEFENSIVE_IDS = new Set<string>([
-  '200183', // Apotheosis (Holy Priest) — empowers Holy Words; not a survival cooldown
+  "200183", // Apotheosis (Holy Priest) — empowers Holy Words; not a survival cooldown
 ]);
 
 /**
@@ -682,14 +797,17 @@ export function findCheaperDefensiveAlternatives(
     .filter(
       (other) =>
         other.spellId !== cd.spellId &&
-        (other.tag === 'Defensive' || other.tag === 'External') &&
+        (other.tag === "Defensive" || other.tag === "External") &&
         !other.isThroughput &&
         !NON_SUBSTITUTE_DEFENSIVE_IDS.has(other.spellId) &&
         other.cooldownSeconds < cd.cooldownSeconds &&
-        other.availableWindows.some((w) => atSeconds >= w.fromSeconds && atSeconds <= w.toSeconds) &&
+        other.availableWindows.some(
+          (w) => atSeconds >= w.fromSeconds && atSeconds <= w.toSeconds,
+        ) &&
         // H11: a self-only tool can't help a teammate — only suggest it when the cast that's
         // being annotated targeted the owner themself.
-        (!opts.castTargetIsTeammate || EXTERNAL_DEFENSIVE_IDS.has(other.spellId)),
+        (!opts.castTargetIsTeammate ||
+          EXTERNAL_DEFENSIVE_IDS.has(other.spellId)),
     )
     .map((other) => other.spellName);
 }
@@ -722,7 +840,7 @@ const REACTIVE_RATIO = 1.75;
 // SpellTag.External was removed from the enum — use the string literal so this compiles
 // under any tsconfig target. No spells currently carry the 'External' tag, but the set
 // is kept for future-proofing (externals like Pain Suppression are tagged Defensive).
-export const DEFENSIVE_TAGS = new Set<string>([SpellTag.Defensive, 'External']);
+export const DEFENSIVE_TAGS = new Set<string>([SpellTag.Defensive, "External"]);
 
 /**
  * Annotates each cast on Defensive/External cooldowns with a timing label:
@@ -752,19 +870,20 @@ export function annotateDefensiveTimings(
       const t = cast.timeSeconds;
 
       // ── 1. Aligned burst window ────────────────────────────────────────────
-      let bestAligned: { label: DefensiveTimingLabel; context: string } | null = null;
+      let bestAligned: { label: DefensiveTimingLabel; context: string } | null =
+        null;
       for (const w of enemyCDTimeline.alignedBurstWindows) {
         if (t >= w.fromSeconds && t <= w.toSeconds) {
           bestAligned = {
-            label: 'Optimal',
+            label: "Optimal",
             context: `cast during burst window ${fmtTime(w.fromSeconds)}–${fmtTime(w.toSeconds)}`,
           };
           break; // Optimal is the highest tier, stop searching
         }
         if (t >= w.fromSeconds - PRE_WALL_SECONDS && t < w.fromSeconds) {
-          if (!bestAligned || bestAligned.label === 'Late') {
+          if (!bestAligned || bestAligned.label === "Late") {
             bestAligned = {
-              label: 'Early',
+              label: "Early",
               context: `cast ${(w.fromSeconds - t).toFixed(1)}s before burst window at ${fmtTime(w.fromSeconds)} — possible pre-wall`,
             };
           }
@@ -772,7 +891,7 @@ export function annotateDefensiveTimings(
         if (t > w.toSeconds && t <= w.toSeconds + LATE_WINDOW_SECONDS) {
           if (!bestAligned) {
             bestAligned = {
-              label: 'Late',
+              label: "Late",
               context: `cast ${(t - w.toSeconds).toFixed(1)}s after burst window ended at ${fmtTime(w.toSeconds)}`,
             };
           }
@@ -786,27 +905,34 @@ export function annotateDefensiveTimings(
       }
 
       // ── 2. Single-enemy offensive CD active during cast ────────────────────
-      let bestSingle: { label: DefensiveTimingLabel; context: string } | null = null;
+      let bestSingle: { label: DefensiveTimingLabel; context: string } | null =
+        null;
       for (const ec of allSingleCDs) {
         if (t >= ec.castTimeSeconds && t <= ec.buffEndSeconds) {
           bestSingle = {
-            label: 'Optimal',
+            label: "Optimal",
             context: `cast during enemy ${ec.spellName} active ${fmtTime(ec.castTimeSeconds)}–${fmtTime(ec.buffEndSeconds)}`,
           };
           break; // Optimal stops search
         }
-        if (t >= ec.castTimeSeconds - PRE_WALL_SECONDS && t < ec.castTimeSeconds) {
-          if (!bestSingle || bestSingle.label === 'Late') {
+        if (
+          t >= ec.castTimeSeconds - PRE_WALL_SECONDS &&
+          t < ec.castTimeSeconds
+        ) {
+          if (!bestSingle || bestSingle.label === "Late") {
             bestSingle = {
-              label: 'Early',
+              label: "Early",
               context: `cast ${(ec.castTimeSeconds - t).toFixed(1)}s before enemy ${ec.spellName} at ${fmtTime(ec.castTimeSeconds)} — possible pre-wall`,
             };
           }
         }
-        if (t > ec.buffEndSeconds && t <= ec.buffEndSeconds + LATE_WINDOW_SECONDS) {
+        if (
+          t > ec.buffEndSeconds &&
+          t <= ec.buffEndSeconds + LATE_WINDOW_SECONDS
+        ) {
           if (!bestSingle) {
             bestSingle = {
-              label: 'Late',
+              label: "Late",
               context: `cast ${(t - ec.buffEndSeconds).toFixed(1)}s after enemy ${ec.spellName} expired at ${fmtTime(ec.buffEndSeconds)}`,
             };
           }
@@ -825,18 +951,31 @@ export function annotateDefensiveTimings(
       // not the friendly target's damage. (Target resolution is tracked in overlaps, not here).
       const castMs = matchStartMs + t * 1000;
       const dmgBefore = unit.damageIn
-        .filter((d) => d.logLine.timestamp >= castMs - TIMING_DAMAGE_WINDOW_S * 1000 && d.logLine.timestamp < castMs)
+        .filter(
+          (d) =>
+            d.logLine.timestamp >= castMs - TIMING_DAMAGE_WINDOW_S * 1000 &&
+            d.logLine.timestamp < castMs,
+        )
         .reduce((sum, d) => sum + Math.abs(d.effectiveAmount), 0);
       const dmgAfter = unit.damageIn
-        .filter((d) => d.logLine.timestamp >= castMs && d.logLine.timestamp < castMs + TIMING_DAMAGE_WINDOW_S * 1000)
+        .filter(
+          (d) =>
+            d.logLine.timestamp >= castMs &&
+            d.logLine.timestamp < castMs + TIMING_DAMAGE_WINDOW_S * 1000,
+        )
         .reduce((sum, d) => sum + Math.abs(d.effectiveAmount), 0);
 
-      if (dmgBefore > 50_000 && dmgAfter > 0 && dmgBefore > dmgAfter * REACTIVE_RATIO) {
-        cast.timingLabel = 'Reactive';
+      if (
+        dmgBefore > 50_000 &&
+        dmgAfter > 0 &&
+        dmgBefore > dmgAfter * REACTIVE_RATIO
+      ) {
+        cast.timingLabel = "Reactive";
         cast.timingContext = `damage spike appeared to peak before cast (${Math.round(dmgBefore / 1000)}k in 3s before vs ${Math.round(dmgAfter / 1000)}k after)`;
       } else {
-        cast.timingLabel = 'Unknown';
-        cast.timingContext = 'no enemy burst window or damage curve signal nearby';
+        cast.timingLabel = "Unknown";
+        cast.timingContext =
+          "no enemy burst window or damage curve signal nearby";
       }
     }
   }
@@ -874,7 +1013,10 @@ export function computePressureWindows(
     let j = 0;
     let windowDamage = 0;
     for (let i = 0; i < damageEvents.length; i++) {
-      while (j < damageEvents.length && damageEvents[j].timeSec <= damageEvents[i].timeSec + windowSeconds) {
+      while (
+        j < damageEvents.length &&
+        damageEvents[j].timeSec <= damageEvents[i].timeSec + windowSeconds
+      ) {
         windowDamage += damageEvents[j].amount;
         j++;
       }
@@ -897,7 +1039,9 @@ export function computePressureWindows(
     const overlaps = distinctSpikes.some(
       (s) =>
         s.targetName === spike.targetName &&
-        Math.min(s.toSeconds, spike.toSeconds) - Math.max(s.fromSeconds, spike.fromSeconds) > 0,
+        Math.min(s.toSeconds, spike.toSeconds) -
+          Math.max(s.fromSeconds, spike.fromSeconds) >
+          0,
     );
     if (!overlaps) {
       distinctSpikes.push(spike);
@@ -914,48 +1058,48 @@ export function computePressureWindows(
 
 export function specToString(spec: CombatUnitSpec): string {
   const map: Partial<Record<CombatUnitSpec, string>> = {
-    [CombatUnitSpec.DeathKnight_Blood]: 'Blood Death Knight',
-    [CombatUnitSpec.DeathKnight_Frost]: 'Frost Death Knight',
-    [CombatUnitSpec.DeathKnight_Unholy]: 'Unholy Death Knight',
-    [CombatUnitSpec.DemonHunter_Havoc]: 'Havoc Demon Hunter',
-    [CombatUnitSpec.DemonHunter_Vengeance]: 'Vengeance Demon Hunter',
-    [CombatUnitSpec.DemonHunter_Devourer]: 'Devourer Demon Hunter',
-    [CombatUnitSpec.Druid_Balance]: 'Balance Druid',
-    [CombatUnitSpec.Druid_Feral]: 'Feral Druid',
-    [CombatUnitSpec.Druid_Guardian]: 'Guardian Druid',
-    [CombatUnitSpec.Druid_Restoration]: 'Restoration Druid',
-    [CombatUnitSpec.Hunter_BeastMastery]: 'Beast Mastery Hunter',
-    [CombatUnitSpec.Hunter_Marksmanship]: 'Marksmanship Hunter',
-    [CombatUnitSpec.Hunter_Survival]: 'Survival Hunter',
-    [CombatUnitSpec.Mage_Arcane]: 'Arcane Mage',
-    [CombatUnitSpec.Mage_Fire]: 'Fire Mage',
-    [CombatUnitSpec.Mage_Frost]: 'Frost Mage',
-    [CombatUnitSpec.Monk_BrewMaster]: 'Brewmaster Monk',
-    [CombatUnitSpec.Monk_Windwalker]: 'Windwalker Monk',
-    [CombatUnitSpec.Monk_Mistweaver]: 'Mistweaver Monk',
-    [CombatUnitSpec.Paladin_Holy]: 'Holy Paladin',
-    [CombatUnitSpec.Paladin_Protection]: 'Protection Paladin',
-    [CombatUnitSpec.Paladin_Retribution]: 'Retribution Paladin',
-    [CombatUnitSpec.Priest_Discipline]: 'Discipline Priest',
-    [CombatUnitSpec.Priest_Holy]: 'Holy Priest',
-    [CombatUnitSpec.Priest_Shadow]: 'Shadow Priest',
-    [CombatUnitSpec.Rogue_Assassination]: 'Assassination Rogue',
-    [CombatUnitSpec.Rogue_Outlaw]: 'Outlaw Rogue',
-    [CombatUnitSpec.Rogue_Subtlety]: 'Subtlety Rogue',
-    [CombatUnitSpec.Shaman_Elemental]: 'Elemental Shaman',
-    [CombatUnitSpec.Shaman_Enhancement]: 'Enhancement Shaman',
-    [CombatUnitSpec.Shaman_Restoration]: 'Restoration Shaman',
-    [CombatUnitSpec.Warlock_Affliction]: 'Affliction Warlock',
-    [CombatUnitSpec.Warlock_Demonology]: 'Demonology Warlock',
-    [CombatUnitSpec.Warlock_Destruction]: 'Destruction Warlock',
-    [CombatUnitSpec.Warrior_Arms]: 'Arms Warrior',
-    [CombatUnitSpec.Warrior_Fury]: 'Fury Warrior',
-    [CombatUnitSpec.Warrior_Protection]: 'Protection Warrior',
-    [CombatUnitSpec.Evoker_Devastation]: 'Devastation Evoker',
-    [CombatUnitSpec.Evoker_Preservation]: 'Preservation Evoker',
-    [CombatUnitSpec.Evoker_Augmentation]: 'Augmentation Evoker',
+    [CombatUnitSpec.DeathKnight_Blood]: "Blood Death Knight",
+    [CombatUnitSpec.DeathKnight_Frost]: "Frost Death Knight",
+    [CombatUnitSpec.DeathKnight_Unholy]: "Unholy Death Knight",
+    [CombatUnitSpec.DemonHunter_Havoc]: "Havoc Demon Hunter",
+    [CombatUnitSpec.DemonHunter_Vengeance]: "Vengeance Demon Hunter",
+    [CombatUnitSpec.DemonHunter_Devourer]: "Devourer Demon Hunter",
+    [CombatUnitSpec.Druid_Balance]: "Balance Druid",
+    [CombatUnitSpec.Druid_Feral]: "Feral Druid",
+    [CombatUnitSpec.Druid_Guardian]: "Guardian Druid",
+    [CombatUnitSpec.Druid_Restoration]: "Restoration Druid",
+    [CombatUnitSpec.Hunter_BeastMastery]: "Beast Mastery Hunter",
+    [CombatUnitSpec.Hunter_Marksmanship]: "Marksmanship Hunter",
+    [CombatUnitSpec.Hunter_Survival]: "Survival Hunter",
+    [CombatUnitSpec.Mage_Arcane]: "Arcane Mage",
+    [CombatUnitSpec.Mage_Fire]: "Fire Mage",
+    [CombatUnitSpec.Mage_Frost]: "Frost Mage",
+    [CombatUnitSpec.Monk_BrewMaster]: "Brewmaster Monk",
+    [CombatUnitSpec.Monk_Windwalker]: "Windwalker Monk",
+    [CombatUnitSpec.Monk_Mistweaver]: "Mistweaver Monk",
+    [CombatUnitSpec.Paladin_Holy]: "Holy Paladin",
+    [CombatUnitSpec.Paladin_Protection]: "Protection Paladin",
+    [CombatUnitSpec.Paladin_Retribution]: "Retribution Paladin",
+    [CombatUnitSpec.Priest_Discipline]: "Discipline Priest",
+    [CombatUnitSpec.Priest_Holy]: "Holy Priest",
+    [CombatUnitSpec.Priest_Shadow]: "Shadow Priest",
+    [CombatUnitSpec.Rogue_Assassination]: "Assassination Rogue",
+    [CombatUnitSpec.Rogue_Outlaw]: "Outlaw Rogue",
+    [CombatUnitSpec.Rogue_Subtlety]: "Subtlety Rogue",
+    [CombatUnitSpec.Shaman_Elemental]: "Elemental Shaman",
+    [CombatUnitSpec.Shaman_Enhancement]: "Enhancement Shaman",
+    [CombatUnitSpec.Shaman_Restoration]: "Restoration Shaman",
+    [CombatUnitSpec.Warlock_Affliction]: "Affliction Warlock",
+    [CombatUnitSpec.Warlock_Demonology]: "Demonology Warlock",
+    [CombatUnitSpec.Warlock_Destruction]: "Destruction Warlock",
+    [CombatUnitSpec.Warrior_Arms]: "Arms Warrior",
+    [CombatUnitSpec.Warrior_Fury]: "Fury Warrior",
+    [CombatUnitSpec.Warrior_Protection]: "Protection Warrior",
+    [CombatUnitSpec.Evoker_Devastation]: "Devastation Evoker",
+    [CombatUnitSpec.Evoker_Preservation]: "Preservation Evoker",
+    [CombatUnitSpec.Evoker_Augmentation]: "Augmentation Evoker",
   };
-  return map[spec] ?? 'Unknown';
+  return map[spec] ?? "Unknown";
 }
 
 const HEALER_SPECS = new Set([
@@ -1005,15 +1149,17 @@ export function isMeleeSpec(spec: CombatUnitSpec): boolean {
  * Returns the key used for this spec in benchmarks.json (e.g. "DeathKnight Frost").
  */
 export function specToBenchmarkKey(spec: CombatUnitSpec): string {
-  const key = Object.keys(CombatUnitSpec).find((k) => CombatUnitSpec[k as keyof typeof CombatUnitSpec] === spec);
-  return key?.replace('_', ' ') ?? 'Unknown';
+  const key = Object.keys(CombatUnitSpec).find(
+    (k) => CombatUnitSpec[k as keyof typeof CombatUnitSpec] === spec,
+  );
+  return key?.replace("_", " ") ?? "Unknown";
 }
 
 /** Format seconds as m:ss string */
 export function fmtTime(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);
-  return `${m}:${s.toString().padStart(2, '0')}`;
+  return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -1051,7 +1197,7 @@ export function detectFriendlyCDOverlaps(
   for (const player of friendlyPlayers) {
     const cds = extractMajorCooldowns(player, combat);
     for (const cd of cds) {
-      if (cd.tag !== 'Defensive') continue;
+      if (cd.tag !== "Defensive") continue;
       for (const cast of cd.casts) {
         allCasts.push({
           spec: specToString(player.spec),
@@ -1073,12 +1219,17 @@ export function detectFriendlyCDOverlaps(
     const anchor = allCasts[i].castTimeSeconds;
     const group: IOverlapCast[] = [];
     let j = i;
-    while (j < allCasts.length && allCasts[j].castTimeSeconds - anchor <= overlapWindowSeconds) {
+    while (
+      j < allCasts.length &&
+      allCasts[j].castTimeSeconds - anchor <= overlapWindowSeconds
+    ) {
       group.push(allCasts[j]);
       j++;
     }
     if (group.length >= 2) {
-      const duringPressureSpike = pressureWindows.some((w) => anchor >= w.fromSeconds - 5 && anchor <= w.toSeconds + 5);
+      const duringPressureSpike = pressureWindows.some(
+        (w) => anchor >= w.fromSeconds - 5 && anchor <= w.toSeconds + 5,
+      );
       groups.push({ timeSeconds: anchor, casts: group, duringPressureSpike });
     }
     i = j === i ? i + 1 : j;
@@ -1087,17 +1238,21 @@ export function detectFriendlyCDOverlaps(
   return groups;
 }
 
-export function formatFriendlyCDOverlapsForContext(groups: IFriendlyCDOverlapGroup[]): string[] {
+export function formatFriendlyCDOverlapsForContext(
+  groups: IFriendlyCDOverlapGroup[],
+): string[] {
   const lines: string[] = [];
-  lines.push('FRIENDLY DEFENSIVE CD OVERLAPS (multiple defensives within 3s of each other):');
+  lines.push(
+    "FRIENDLY DEFENSIVE CD OVERLAPS (multiple defensives within 3s of each other):",
+  );
 
   if (groups.length === 0) {
-    lines.push('  No overlapping defensive cooldowns detected.');
+    lines.push("  No overlapping defensive cooldowns detected.");
     return lines;
   }
 
   for (const group of groups) {
-    const spike = group.duringPressureSpike ? ' [DURING PRESSURE SPIKE]' : '';
+    const spike = group.duringPressureSpike ? " [DURING PRESSURE SPIKE]" : "";
     lines.push(`  At ${fmtTime(group.timeSeconds)}${spike}:`);
     for (const c of group.casts) {
       lines.push(`    - ${c.spec} (${c.playerName}) used ${c.spellName}`);
@@ -1173,7 +1328,7 @@ export function detectOverlappedDefensives(
 
       let targetId = action.destUnitId;
       let targetName = action.destUnitName;
-      if (!targetId || targetId === '0000000000000000') {
+      if (!targetId || targetId === "0000000000000000") {
         targetId = unit.id;
         targetName = unit.name;
       }
@@ -1206,7 +1361,9 @@ export function detectOverlappedDefensives(
     for (let j = i + 1; j < casts.length; j++) {
       const second = casts[j];
       const gapSeconds = second.timeSeconds - first.timeSeconds;
-      const firstDuration = spellEffectData[first.spellId]?.durationSeconds || OVERLAP_ASSUME_DURATION_S;
+      const firstDuration =
+        spellEffectData[first.spellId]?.durationSeconds ||
+        OVERLAP_ASSUME_DURATION_S;
       const maxGap = firstDuration - MIN_SIMULTANEOUS_SECONDS;
       if (gapSeconds > maxGap) break;
       if (first.targetUnitId !== second.targetUnitId) continue;
@@ -1235,11 +1392,15 @@ export function detectOverlappedDefensives(
   return overlaps;
 }
 
-export function formatOverlappedDefensivesForContext(overlaps: IOverlappedDefensive[]): string[] {
+export function formatOverlappedDefensivesForContext(
+  overlaps: IOverlappedDefensive[],
+): string[] {
   if (overlaps.length === 0) return [];
   const lines: string[] = [];
   // 段头中性化:'PANIC TRADING' 属加载性标签(2026-07-11 校准 labelBias 锚点命中)
-  lines.push('DEFENSIVE OVERLAPS (two buffs simultaneously active on the same target):');
+  lines.push(
+    "DEFENSIVE OVERLAPS (two buffs simultaneously active on the same target):",
+  );
 
   for (const o of overlaps) {
     const sim = o.simultaneousSeconds.toFixed(1);
@@ -1335,7 +1496,8 @@ function hasOffensiveSpellActive(
   for (const aura of unit.auraEvents) {
     const spellId = aura.spellId;
     if (!spellId || !OFFENSIVE_SPELL_IDS.has(spellId)) continue;
-    if (requiredSourceIds !== null && !requiredSourceIds.has(aura.srcUnitId)) continue;
+    if (requiredSourceIds !== null && !requiredSourceIds.has(aura.srcUnitId))
+      continue;
 
     if (aura.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
       const b = applied.get(spellId) ?? [];
@@ -1368,7 +1530,9 @@ function hasOffensiveSpellActive(
  */
 export function getPressureThreshold(unit: ICombatUnit): number {
   if (unit.advancedActions.length > 0) {
-    const maxHp = Math.max(...unit.advancedActions.map((a) => a.advancedActorMaxHp));
+    const maxHp = Math.max(
+      ...unit.advancedActions.map((a) => a.advancedActorMaxHp),
+    );
     if (maxHp > 0) return maxHp * PANIC_PRESS_PRESSURE_PCT;
   }
   // Role-based fallback: tanks absorb far more damage than the flat 250k implied
@@ -1443,28 +1607,46 @@ export function detectPanicDefensives(
       const targetUnit = unitMap.get(action.destUnitId);
 
       // 1. Enemy self-buffs: Combustion, Recklessness, etc.
-      if (enemies.some((e) => hasOffensiveSpellActive(e, castMs, null))) continue;
+      if (enemies.some((e) => hasOffensiveSpellActive(e, castMs, null)))
+        continue;
 
       // 2. Offensive debuffs on the target from enemies: Deathmark, Colossus Smash, etc.
-      if (targetUnit && hasOffensiveSpellActive(targetUnit, castMs, enemyIds)) continue;
+      if (targetUnit && hasOffensiveSpellActive(targetUnit, castMs, enemyIds))
+        continue;
 
       // 3. Local pressure: raw damage to target in the 3s before this cast
-      const pressureThreshold = targetUnit ? getPressureThreshold(targetUnit) : PANIC_PRESS_DAMAGE_THRESHOLD_DPS;
+      const pressureThreshold = targetUnit
+        ? getPressureThreshold(targetUnit)
+        : PANIC_PRESS_DAMAGE_THRESHOLD_DPS;
       const preCastDamage = (targetUnit?.damageIn ?? [])
-        .filter((d) => d.logLine.timestamp >= castMs - PANIC_PRESS_PRE_CAST_WINDOW_MS && d.logLine.timestamp < castMs)
+        .filter(
+          (d) =>
+            d.logLine.timestamp >= castMs - PANIC_PRESS_PRE_CAST_WINDOW_MS &&
+            d.logLine.timestamp < castMs,
+        )
         .reduce((sum, d) => sum + Math.abs(d.effectiveAmount), 0);
       if (preCastDamage >= pressureThreshold) continue;
 
       // 3. Post-cast pressure: if the target took significant damage in the 4s after, it was a pre-wall
       const postCastDamage = (targetUnit?.damageIn ?? [])
-        .filter((d) => d.logLine.timestamp > castMs && d.logLine.timestamp <= castMs + PANIC_PRESS_POST_CAST_WINDOW_MS)
+        .filter(
+          (d) =>
+            d.logLine.timestamp > castMs &&
+            d.logLine.timestamp <= castMs + PANIC_PRESS_POST_CAST_WINDOW_MS,
+        )
         .reduce((sum, d) => sum + Math.abs(d.effectiveAmount), 0);
       if (postCastDamage >= pressureThreshold) continue;
 
       // 4. Enemy burst started within 2s after the cast — valid pre-wall, not a panic
       if (
         targetUnit &&
-        offensiveThreatStartedAfter(targetUnit, enemies, enemyIds, castMs, ENEMY_BURST_POST_CAST_WINDOW_MS)
+        offensiveThreatStartedAfter(
+          targetUnit,
+          enemies,
+          enemyIds,
+          castMs,
+          ENEMY_BURST_POST_CAST_WINDOW_MS,
+        )
       )
         continue;
 
@@ -1475,7 +1657,7 @@ export function detectPanicDefensives(
         spellName: getEnglishSpellName(spellId, action.spellName),
         spellId,
         targetName: action.destUnitName,
-        targetSpec: targetUnit ? specToString(targetUnit.spec) : 'Unknown',
+        targetSpec: targetUnit ? specToString(targetUnit.spec) : "Unknown",
       });
     }
   }
@@ -1484,10 +1666,14 @@ export function detectPanicDefensives(
   return results;
 }
 
-export function formatPanicDefensivesForContext(panics: IPanicDefensive[]): string[] {
+export function formatPanicDefensivesForContext(
+  panics: IPanicDefensive[],
+): string[] {
   if (panics.length === 0) return [];
   const lines: string[] = [];
-  lines.push('QUESTIONABLE CD TIMING (major defensive used with no enemy offensive threat and target not under pressure):');
+  lines.push(
+    "QUESTIONABLE CD TIMING (major defensive used with no enemy offensive threat and target not under pressure):",
+  );
 
   for (const p of panics) {
     lines.push(
