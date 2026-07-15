@@ -59,6 +59,9 @@ export const SPELL_EFFECT_OVERRIDES: Record<string, IMinedSpell> =
       e("357170", "Time Dilation", 60, 8),
       // ── 主进攻 CD(durationSeconds 用于 enemyCDs 到期跟踪)──
       // 2026-07-14 全量审计补:生成层缺失的主爆发 CD(配套 spellCategories 分类新增)
+      // 2026-07-17 专精级排查补:生成层无此条目;CD/时长为语料实测
+      // (min inter-cast gap 60.0s / buff applied→removed 中位数 20.0s)
+      e("442726", "Malevolence", 60, 20),
       e("386997", "Soul Rot", 60, 8),
       e("258925", "Fel Barrage", 90, 3),
       e("185313", "Shadow Dance", 60, 8),

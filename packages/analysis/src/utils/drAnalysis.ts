@@ -89,6 +89,7 @@ export const DR_CATEGORY_MAP: Record<string, string> = (() => {
   map["64044"] = "Horror"; // Psychic Horror (Shadow Priest)
   map["323467"] = "Horror"; // Sin and Punishment (Shadow Priest)
   map["376077"] = "Stun"; // Champion's Spear (Warrior/Evoker-adjacent)
+  map["30283"] = "Stun"; // Shadowfury (Warlock) — missing DiminishType; shares Stun DR
   // Ursol's Vortex (102793, Druid) is a knockback/displacement with no tracked DR family
   // ('Root' is not a real DR category — see SCM_CATEGORY_LABELS). It falls back to self-DR.
   map["217832"] = "Incapacitate"; // Imprison (Demon Hunter)

@@ -128,6 +128,29 @@ export const SPELL_CATEGORIES: Record<string, ISpellCategoryEntry> = {
   "386997": { type: "debuffs_offensive", duration: 8 }, // Soul Rot
   "191634": { type: "buffs_offensive", duration: 15 }, // Ascendance (Elemental)
   "360952": { type: "buffs_offensive", duration: 20 }, // Coordinated Assault
+  // 2026-07-17 专精级排查:none-tracked 率 100% 的专精(冰法 210/210、踏风 129/129)
+  // 及高缺口专精,按语料 SPELL_CAST_SUCCESS 实证补齐 12.x 实际爆发按钮。
+  // 冰法 12.x 已无 Icy Veins 施放(重做为被动),实际压力 CD 是下面两个;
+  // 惩戒的缺口大半是 Radiant Glory 被动触发复仇之怒(无施放事件),cast 型追踪器无解,属预期。
+  "84714": { type: "debuffs_offensive", duration: 15 }, // Frozen Orb(冰法,60s)
+  "205021": { type: "debuffs_offensive", duration: 4 }, // Ray of Frost(冰法,60s 充能)
+  "392983": { type: "debuffs_offensive", duration: 6 }, // Strike of the Windlord(踏风,35s)
+  "1233448": { type: "buffs_offensive", duration: 15 }, // Dark Transformation(邪DK 12.x 变体 id,45s)
+  "42650": { type: "buffs_offensive", duration: 30 }, // Army of the Dead(邪DK,90s)
+  "102560": { type: "buffs_offensive", duration: 30 }, // Incarnation: Chosen of Elune(鸟德,180s)
+  "194223": { type: "buffs_offensive", duration: 20 }, // Celestial Alignment(鸟德,180s)
+  "102543": { type: "buffs_offensive", duration: 20 }, // Incarnation: Avatar of Ashamane(野德,180s)
+  "106951": { type: "buffs_offensive", duration: 20 }, // Berserk(野德,180s)
+  "274837": { type: "debuffs_offensive", duration: 6 }, // Feral Frenzy(野德,45s)
+  "114051": { type: "buffs_offensive", duration: 15 }, // Ascendance(增强,180s)
+  // 增强 Doom Winds 注:12.x 激活不产生独立 SPELL_CAST_SUCCESS(469270 是逐次攻击的
+  // proc 施放,间隔中位数 1s),cast 型追踪器无法跟踪——余下 none-tracked 属预期。
+  "466772": { type: "buffs_offensive", duration: 8 }, // Doom Winds buff id(仅 aura,供 spellDanger)
+  "1122": { type: "buffs_offensive", duration: 30 }, // Summon Infernal(毁灭,120s;施放 id,111685 是 aura id)
+  "6353": { type: "debuffs_offensive", duration: 0 }, // Soul Fire(毁灭,45s 重击)
+  "442726": { type: "buffs_offensive", duration: 20 }, // Malevolence(毁灭英雄天赋,60s——语料实测)
+  "1261193": { type: "debuffs_offensive", duration: 0 }, // Boomstick(生存猎 12.x,60s 充能)
+  "1250646": { type: "debuffs_offensive", duration: 0 }, // Takedown(生存猎 12.x,90s)
   // Devourer Demon Hunter (12.1 新专精)——审计语料实证提取(2026-07-14):
   // 施放频率/事件行为来自 123 场真实对局;时长取挖掘层 DB2 数值。
   "1241937": { type: "buffs_offensive", duration: 5 }, // Soul Immolation(主爆发,60s 充能)
@@ -149,6 +172,14 @@ export const SPELL_CATEGORIES: Record<string, ISpellCategoryEntry> = {
   "351338": { type: "interrupts" },
   "15487": { type: "interrupts" },
   "78675": { type: "interrupts" },
+  // 2026-07-17 语料实证补(SPELL_INTERRUPT 事件里出现但此前不在名单):
+  "19647": { type: "interrupts" }, // Spell Lock(术士地狱犬,语料 476 次!)
+  "93985": { type: "interrupts" }, // Skull Bash(德鲁伊,346 次)
+  "97547": { type: "interrupts" }, // Solar Beam 打断分量 id(78675 是施放 id)
+  "347008": { type: "interrupts" }, // Axe Toss 变体(46 次)
+  "91807": { type: "interrupts" }, // Shambling Rush(DK 食尸鬼,25 次)
+  "217824": { type: "interrupts" }, // Shield of Virtue(防骑 PvP 天赋)
+  "31935": { type: "interrupts" }, // Avenger's Shield
   // ── 加速增益 ──
   "2983": { type: "buffs_speed_boost", duration: 8 }, // Sprint
   "1850": { type: "buffs_speed_boost", duration: 10 }, // Dash
