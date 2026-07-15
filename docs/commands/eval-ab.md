@@ -50,8 +50,12 @@ BASE_DIR="<BASE>" npx tsx packages/eval/scripts/qualityCheck.ts
 
 1. 读 state,打印改动/目标维度/control 信息。
 2. **在含被测改动的代码上**用**同一份 manifest** 重建 treatment 臂(方法同 Phase 1 第 2 步,目录 `ab/<abId>/treatment`)。核对 treatment 的 `fingerprint.txt` 与 state 里的 control fingerprint 一致——**不一致 = 语料不同,拒绝对比,中止**。
-3. 共享回复生成(BASE=treatment)。
-4. **盲评:**
+3. **两臂必须真的不同(pre-flight,回复生成之前):** 被测改动动了 prompt 构建器时,diff 两臂 prompts —— 全部逐字相同 = 有一臂用错了代码,中止排查。已知陷阱(2026-07-15 实翻):**git worktree + 软链根 node_modules** —— workspace 包软链(`node_modules/@gladlog/analysis → ../../packages/analysis`)相对解析回主树源码,control 臂静默用 HEAD 构建。worktree 里必须 `npm ci` 装自己的 node_modules。
+   ```bash
+   diff -qr ab/<abId>/control/prompts ab/<abId>/treatment/prompts | head -3   # 应有差异;无差异=中止
+   ```
+4. 共享回复生成(BASE=treatment)。
+5. **盲评:**
 
    ```bash
    AB_DIR="$GLADLOG_EVAL_HOME/ab/<abId>" npx tsx packages/eval/scripts/blindPool.ts
@@ -79,12 +83,12 @@ BASE_DIR="<BASE>" npx tsx packages/eval/scripts/qualityCheck.ts
 
    输出逐维 Δ均值、SD、95% bootstrap CI、符号检验 p、verdict(improved/regressed = CI 不含 0),并写 `comparison-stats.json`。
 
-5. **对比报告** `ab/<abId>/comparison-report.md`,两类证据:
+6. **对比报告** `ab/<abId>/comparison-report.md`,两类证据:
    - **确定性指标**(sufficiency/noise/labelBias 的裁决依据):diff 两臂 `quality-report.json`——覆盖率、重复率、刷屏行、偏向词、hard failures、近似 token。
    - **盲评统计**(accuracy/outcomeAlignment/focusCalibration/inferenceScaffolding 的裁决依据):abStats 表。
      盲评表里的 sufficiency/noise 行仅供陈列,**无裁决权**——盲评者单件看 prompt、无 quality-report 锚定,看不出构建器改动加了/掉了什么(上游实证:F20 试点,实测踢断覆盖差 88 个百分点而两臂 judge sufficiency 均 4.9)。这些维度以确定性 diff 为准。
      报告结构:确定性指标表 → 目标维度逐 ordinal 表(解盲后)→ 全维盲评统计表 → Regressions(CI 全负的维度 + 明确恶化的确定性指标;inconclusive 且点估计为负的标 "(inconclusive — monitor)",不算回归)→ 新问题(treatment 盲分 ≤2 而配对 control >2 的件)→ Triage(fix now / next cycle / backlog)→ Rubric Feedback → Decision(IMPROVED/INCONCLUSIVE/REGRESSED + 建议 ADOPT/ABANDON/ITERATE;inconclusive 就明说,凭确定性理由 adopt 是用户的裁量——绝不把 inconclusive 包装成赢)。
-6. state 的 `treatmentRuns` +1,phase 保持 `treatment-ready`;打印摘要。
+7. state 的 `treatmentRuns` +1,phase 保持 `treatment-ready`;打印摘要。
 
 ## Phase 3 — 收尾(adopt / abandon)
 
