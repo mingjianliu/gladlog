@@ -1,5 +1,10 @@
 import type { CandidateEvent } from "./types";
 
+// ACCURACY NOTE (2026-07-15 A/B evidence): the HARD RULES below — event-id
+// menu, placeholder-only numbers, causation ban — are this prompt's version
+// of the responder ACCURACY DISCIPLINE that a blind A/B measured at
+// accuracy +0.71 [0.43, 1.00] (p=0.004, 42/42 claims verified) for the
+// free-text eval coach. Do not weaken these constraints without an A/B.
 export function buildFindingsPrompt(
   candidates: CandidateEvent[],
   richContext: string,

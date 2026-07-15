@@ -11,11 +11,15 @@
  * used by buildArchetypePrompts.ts. Any change to that vector must be mirrored here.
  */
 
-import model3v3 from '../data/archetypes/archetype_model_3v3.json';
-import modelSoloShuffle from '../data/archetypes/archetype_model_solo_shuffle.json';
-import prompts3v3 from '../data/archetypes/archetype_prompts_3v3.json';
-import promptsSoloShuffle from '../data/archetypes/archetype_prompts_solo_shuffle.json';
-import { classifyCluster, IArchetypeModel, IMatchDynamicFeatures } from './archetypeInference';
+import model3v3 from "../data/archetypes/archetype_model_3v3.json";
+import modelSoloShuffle from "../data/archetypes/archetype_model_solo_shuffle.json";
+import prompts3v3 from "../data/archetypes/archetype_prompts_3v3.json";
+import promptsSoloShuffle from "../data/archetypes/archetype_prompts_solo_shuffle.json";
+import {
+  classifyCluster,
+  IArchetypeModel,
+  IMatchDynamicFeatures,
+} from "./archetypeInference";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -48,28 +52,37 @@ const MAX_DISTANCE_SD = 4.5;
 
 // ── Bracket detection ─────────────────────────────────────────────────────────
 
-export type ArchetypeBracket = '3v3' | 'solo_shuffle';
+export type ArchetypeBracket = "3v3" | "solo_shuffle";
 
 /**
  * Maps the raw bracket string from combat metadata to the archetype slug.
  * Returns null for brackets we don't have a model for (2v2, BG Blitz, etc.).
  */
-export function bracketToArchetypeSlug(bracket: string | undefined | null): ArchetypeBracket | null {
+export function bracketToArchetypeSlug(
+  bracket: string | undefined | null,
+): ArchetypeBracket | null {
   if (!bracket) return null;
   const lower = bracket.toLowerCase();
-  if (lower.includes('solo')) return 'solo_shuffle';
-  if (lower.includes('3v3')) return '3v3';
+  if (lower.includes("solo")) return "solo_shuffle";
+  if (lower.includes("3v3")) return "3v3";
   return null;
 }
 
 // ── Data accessors ────────────────────────────────────────────────────────────
 
 function getModel(slug: ArchetypeBracket): IArchetypeModel {
-  return (slug === 'solo_shuffle' ? modelSoloShuffle : model3v3) as IArchetypeModel;
+  return (
+    slug === "solo_shuffle" ? modelSoloShuffle : model3v3
+  ) as IArchetypeModel;
 }
 
-function getPrompts(slug: ArchetypeBracket): Record<string, IArchetypeClusterPrompt> {
-  return (slug === 'solo_shuffle' ? promptsSoloShuffle : prompts3v3) as Record<string, IArchetypeClusterPrompt>;
+function getPrompts(
+  slug: ArchetypeBracket,
+): Record<string, IArchetypeClusterPrompt> {
+  return (slug === "solo_shuffle" ? promptsSoloShuffle : prompts3v3) as Record<
+    string,
+    IArchetypeClusterPrompt
+  >;
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -119,12 +132,17 @@ export function buildArchetypeInjectionHeader(
   bracket: string | undefined | null,
   dynamics: IMatchDynamicFeatures,
 ): string {
-  if (dynamics.durationSeconds < MIN_DURATION_SECONDS_FOR_INJECTION) return '';
+  if (dynamics.durationSeconds < MIN_DURATION_SECONDS_FOR_INJECTION) return "";
 
   const result = classifyMatchArchetype(bracket, dynamics);
-  if (!result) return '';
-  if (result.isNoise) return '';
-  if (result.distance > MAX_DISTANCE_SD) return '';
+  if (!result) return "";
+  if (result.isNoise) return "";
+  if (result.distance > MAX_DISTANCE_SD) return "";
 
-  return `[MATCH TYPE: ${result.label}]`;
+  // labelBias fix (2026-07-15): the bare "[MATCH TYPE: x]" header read as a
+  // verdict planted before any data — blind judges docked it (2-3s) and
+  // responses demonstrably absorbed it as a conclusion. Keep the routing
+  // value but state what it is: a statistical cluster tag to be verified
+  // against the timeline, not a judgement.
+  return `[MATCH PATTERN: ${result.label} — statistical cluster tag, verify against the timeline; not a verdict]`;
 }
