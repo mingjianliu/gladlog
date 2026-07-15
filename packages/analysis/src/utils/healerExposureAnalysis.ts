@@ -259,10 +259,16 @@ export function analyzeHealerExposureAtBurst(
       // pairs non-simultaneous samples or crosses pillar edges neither real
       // position crossed; sharing the gate's sweep is the only consistent
       // definition (G5 take 2, 2026-07-15 audit).
+      // The sweep anchors on the FLOORED second: the prompt renders fmtTime
+      // (floored), and the gate re-parses that rendered time — sweeping from
+      // fractional fromSeconds probes different instants than the gate and
+      // flips borderline pillar geometry (death-trace fix, same class).
+      const flooredWindowMs =
+        matchStartMs + Math.floor(window.fromSeconds) * 1000;
       let sawAnyLosSample = false;
       let sawLoS = false;
       for (let dt = -LOS_SWEEP_SLACK_S; dt <= LOS_SWEEP_SLACK_S; dt++) {
-        const ts = windowMs + dt * 1000;
+        const ts = flooredWindowMs + dt * 1000;
         const hp = getUnitPositionAtTime(healer, ts, LOS_SWEEP_GAP_MS);
         const ep = getUnitPositionAtTime(enemy, ts, LOS_SWEEP_GAP_MS);
         if (!hp || !ep) continue;
