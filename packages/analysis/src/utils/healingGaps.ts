@@ -1,7 +1,7 @@
-import { ICombatUnit, LogEvent } from '@gladlog/parser-compat';
+import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
-import { SPELL_CATEGORIES as spellsData } from '../data/spellCategories';
-import { fmtTime, isHealerSpec, specToString } from './cooldowns';
+import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
+import { fmtTime, isHealerSpec, specToString } from "./cooldowns";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -25,7 +25,7 @@ const GAP_PRESSURE_FALLBACK_DPS = 40_000;
 const GAP_PRESSURE_FALLBACK_HEALER = 25_000;
 
 // Spell types that prevent the healer from casting
-const CAST_PREVENTING_TYPES = new Set(['cc', 'immunities_spells']);
+const CAST_PREVENTING_TYPES = new Set(["cc", "immunities_spells"]);
 
 type SpellEntry = { type: string };
 const SPELLS = spellsData as Record<string, SpellEntry>;
@@ -53,10 +53,14 @@ export interface IHealingGap {
 
 function getGapPressureThreshold(unit: ICombatUnit): number {
   if (unit.advancedActions.length > 0) {
-    const maxHp = Math.max(...unit.advancedActions.map((a) => a.advancedActorMaxHp));
+    const maxHp = Math.max(
+      ...unit.advancedActions.map((a) => a.advancedActorMaxHp),
+    );
     if (maxHp > 0) return maxHp * GAP_PRESSURE_PCT;
   }
-  return isHealerSpec(unit.spec) ? GAP_PRESSURE_FALLBACK_HEALER : GAP_PRESSURE_FALLBACK_DPS;
+  return isHealerSpec(unit.spec)
+    ? GAP_PRESSURE_FALLBACK_HEALER
+    : GAP_PRESSURE_FALLBACK_DPS;
 }
 
 // ---------------------------------------------------------------------------
@@ -68,7 +72,12 @@ function getGapPressureThreshold(unit: ICombatUnit): number {
  * was in a cast-preventing effect (hard CC or silence) sourced from an enemy.
  * Uses merged-interval math to avoid double-counting overlapping CC.
  */
-function getCCCoveredMs(unit: ICombatUnit, fromMs: number, toMs: number, enemyIds: Set<string>): number {
+function getCCCoveredMs(
+  unit: ICombatUnit,
+  fromMs: number,
+  toMs: number,
+  enemyIds: Set<string>,
+): number {
   const applied = new Map<string, number[]>();
   const removed = new Map<string, number[]>();
 
@@ -151,7 +160,9 @@ export function detectHealingGaps(
     .filter((e) => e.logLine.event === LogEvent.SPELL_CAST_SUCCESS)
     .map((e) => e.logLine.timestamp);
 
-  const activeTimestamps = Array.from(new Set([...healTimestamps, ...castTimestamps])).sort((a, b) => a - b);
+  const activeTimestamps = Array.from(
+    new Set([...healTimestamps, ...castTimestamps]),
+  ).sort((a, b) => a - b);
 
   // Build raw gap intervals [fromMs, toMs] where no heal/cast was produced
   const rawGaps: Array<{ fromMs: number; toMs: number }> = [];
@@ -187,7 +198,9 @@ export function detectHealingGaps(
   const deathTimestamps = healer.deathRecords
     .map((r) => r.timestamp)
     .filter((ts) => ts >= matchStartMs && ts <= matchEndMs);
-  const firstDeathMs = deathTimestamps.length ? Math.min(...deathTimestamps) : Infinity;
+  const firstDeathMs = deathTimestamps.length
+    ? Math.min(...deathTimestamps)
+    : Infinity;
 
   for (const { fromMs, toMs } of rawGaps) {
     // B19: skip gaps at match start — pre-combat initialization artifact
@@ -204,13 +217,17 @@ export function detectHealingGaps(
 
     // Pressure check: did any teammate take significant damage in this window?
     let mostDamagedAmount = 0;
-    let mostDamagedName = '';
-    let mostDamagedSpec = '';
+    let mostDamagedName = "";
+    let mostDamagedSpec = "";
     let anyUnderPressure = false;
 
     for (const teammate of teammates) {
       const dmg = teammate.damageIn
-        .filter((d) => d.logLine.timestamp >= fromMs && d.logLine.timestamp <= effectiveToMs)
+        .filter(
+          (d) =>
+            d.logLine.timestamp >= fromMs &&
+            d.logLine.timestamp <= effectiveToMs,
+        )
         .reduce((sum, d) => sum + Math.abs(d.effectiveAmount), 0);
 
       if (dmg >= getGapPressureThreshold(teammate)) anyUnderPressure = true;
@@ -243,10 +260,15 @@ export function detectHealingGaps(
 
 export function formatHealingGapsForContext(gaps: IHealingGap[]): string[] {
   const lines: string[] = [];
-  lines.push('HEALER INACTIVITY (intervals >3s where healer cast no spells while a teammate was under pressure):');
+  // "free" wording made explicit (2026-07-14 audit): judges found coach responses
+  // inverting its meaning — free = seconds NOT under CC/silence, i.e. time the
+  // healer physically could have cast but didn't.
+  lines.push(
+    'HEALER INACTIVITY (intervals >3s where healer cast no spells while a teammate was under pressure; "free" = un-CC\'d seconds the healer COULD have cast):',
+  );
 
   if (gaps.length === 0) {
-    lines.push('  None detected.');
+    lines.push("  None detected.");
     return lines;
   }
 
@@ -255,7 +277,7 @@ export function formatHealingGapsForContext(gaps: IHealingGap[]): string[] {
     const dur = g.durationSeconds.toFixed(1);
     const free = g.freeCastSeconds.toFixed(1);
     lines.push(
-      `  [INACTIVITY] From ${fmtTime(g.fromSeconds)} to ${fmtTime(g.toSeconds)} (${dur}s duration, ${free}s free window), no heals or spells cast while ${g.mostDamagedSpec} (${g.mostDamagedName}) took ${dmgK}k damage.`,
+      `  [INACTIVITY] From ${fmtTime(g.fromSeconds)} to ${fmtTime(g.toSeconds)} (${dur}s total, ${free}s of it un-CC'd/free to cast), no heals or spells cast while ${g.mostDamagedSpec} (${g.mostDamagedName}) took ${dmgK}k damage.`,
     );
   }
 
