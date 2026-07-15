@@ -189,7 +189,12 @@ export function chargesReadyCount(
   timeSeconds: number,
 ): number {
   const maxCharges = cd.maxChargesDetected > 1 ? cd.maxChargesDetected : 1;
-  const priorCasts = cd.casts.filter((c) => c.timeSeconds < timeSeconds - 0.5);
+  // ≤ t+0.5: a cast in the same rendered second counts as already consumed —
+  // a [RES] block under a [CD] line must reflect the state AFTER that line's
+  // cast, not before it (RES-lag defect, Gemini adversarial review 2026-07-15;
+  // the old `< t − 0.5` guard made every snapshot stale by exactly the event
+  // it was attached to). Same boundary at every priorCasts site in this file.
+  const priorCasts = cd.casts.filter((c) => c.timeSeconds <= timeSeconds + 0.5);
   if (priorCasts.length === 0) return maxCharges;
   const recent = priorCasts.slice(-maxCharges);
   const stillRecharging = recent.filter(
@@ -218,7 +223,7 @@ export function computeReadyNames(
     ];
   for (const { displayName, cd } of allFriendlyCDs) {
     const priorCasts = cd.casts.filter(
-      (c) => c.timeSeconds < timeSeconds - 0.5,
+      (c) => c.timeSeconds <= timeSeconds + 0.5,
     );
     if (priorCasts.length === 0) {
       if (timeSeconds > 5) readyNames.push(displayName);
@@ -257,7 +262,7 @@ export function computeOnCDDisplayNames(
     ];
   for (const { displayName, cd } of allFriendlyCDs) {
     const priorCasts = cd.casts.filter(
-      (c) => c.timeSeconds < timeSeconds - 0.5,
+      (c) => c.timeSeconds <= timeSeconds + 0.5,
     );
     if (priorCasts.length === 0) continue;
     const charges = cd.maxChargesDetected > 1 ? cd.maxChargesDetected : 1;
@@ -359,7 +364,7 @@ export function buildResourceSnapshot({
   const currentOnCDNames: string[] = [];
   for (const { displayName, cd } of allFriendlyCDs) {
     const priorCasts = cd.casts.filter(
-      (c) => c.timeSeconds < timeSeconds - 0.5,
+      (c) => c.timeSeconds <= timeSeconds + 0.5,
     );
     if (priorCasts.length === 0) continue;
     const charges = cd.maxChargesDetected > 1 ? cd.maxChargesDetected : 1;
@@ -621,7 +626,7 @@ export function buildJsonSituationSnapshot({
 
   for (const { spellName, info } of allFriendlyCDs) {
     const priorCasts = info.casts.filter(
-      (c) => c.timeSeconds < timeSeconds - 0.5,
+      (c) => c.timeSeconds <= timeSeconds + 0.5,
     );
     if (priorCasts.length === 0) {
       if (timeSeconds > 5) rdy.push(spellName);

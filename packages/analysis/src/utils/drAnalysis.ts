@@ -20,12 +20,12 @@ import {
   ICombatUnit,
   IShuffleRound,
   LogEvent,
-} from '@gladlog/parser-compat';
+} from "@gladlog/parser-compat";
 
-import { spellClassMap } from '../data/drCategories';
-import { getEnglishSpellName } from '../data/spellEffectData';
-import { ccSpellIds } from '../data/spellTags';
-import { specToString } from './cooldowns';
+import { spellClassMap } from "../data/drCategories";
+import { getEnglishSpellName } from "../data/spellEffectData";
+import { ccSpellIds } from "../data/spellTags";
+import { specToString } from "./cooldowns";
 
 // ── DR category constants ─────────────────────────────────────────────────────
 
@@ -34,12 +34,12 @@ export const DR_RESET_MS = 16_000;
 // spellClassMap DR categories to import, mapped to display names.
 // 'taunt' and 'root' are excluded — not relevant for PvP CC analysis.
 const SCM_CATEGORY_LABELS: Record<string, string> = {
-  stun: 'Stun',
-  knockback: 'Knockback',
-  incapacitate: 'Incapacitate',
-  disorient: 'Disorient',
-  silence: 'Silence',
-  disarm: 'Disarm',
+  stun: "Stun",
+  knockback: "Knockback",
+  incapacitate: "Incapacitate",
+  disorient: "Disorient",
+  silence: "Silence",
+  disarm: "Disarm",
 };
 
 /**
@@ -58,7 +58,10 @@ const SCM_CATEGORY_LABELS: Record<string, string> = {
 export const DR_CATEGORY_MAP: Record<string, string> = (() => {
   const map: Record<string, string> = {};
 
-  const dr = spellClassMap.diminishingReturns as Record<string, { spellId: string }[]>;
+  const dr = spellClassMap.diminishingReturns as Record<
+    string,
+    { spellId: string }[]
+  >;
   for (const [cat, entries] of Object.entries(dr)) {
     const label = SCM_CATEGORY_LABELS[cat];
     if (!label) continue;
@@ -68,45 +71,50 @@ export const DR_CATEGORY_MAP: Record<string, string> = (() => {
   }
 
   // Supplement: racials and pet abilities not resolvable to player specs in DB2
-  map['20549'] = 'Stun'; // War Stomp (Tauren racial)
-  map['24394'] = 'Stun'; // Intimidation (Hunter pet)
-  map['107079'] = 'Stun'; // Quaking Palm (Pandaren racial)
+  map["20549"] = "Stun"; // War Stomp (Tauren racial)
+  map["24394"] = "Stun"; // Intimidation (Hunter pet)
+  map["107079"] = "Stun"; // Quaking Palm (Pandaren racial)
 
   // Supplement: AoE CC rank variants sharing DR with their base spell
-  map['316593'] = 'Disorient'; // Intimidating Shout rank 2 (base 5246 = Disorient)
-  map['316595'] = 'Disorient'; // Intimidating Shout rank 3
-  map['6358'] = 'Disorient'; // Seduction (Warlock pet)
+  map["316593"] = "Disorient"; // Intimidating Shout rank 2 (base 5246 = Disorient)
+  map["316595"] = "Disorient"; // Intimidating Shout rank 3
+  map["6358"] = "Disorient"; // Seduction (Warlock pet)
 
   // Supplement: silences missing DB2 DiminishType flag
-  map['47476'] = 'Silence'; // Strangulate (Death Knight)
-  map['81261'] = 'Silence'; // Solar Beam (Druid) — zone silence
-  map['204490'] = 'Silence'; // Sigil of Silence (Demon Hunter)
+  map["47476"] = "Silence"; // Strangulate (Death Knight)
+  map["81261"] = "Silence"; // Solar Beam (Druid) — zone silence
+  map["204490"] = "Silence"; // Sigil of Silence (Demon Hunter)
 
   // Supplement: DR categories absent from DB2 DiminishType system
-  map['64044'] = 'Horror'; // Psychic Horror (Shadow Priest)
-  map['323467'] = 'Horror'; // Sin and Punishment (Shadow Priest)
-  map['376077'] = 'Stun'; // Champion's Spear (Warrior/Evoker-adjacent)
+  map["64044"] = "Horror"; // Psychic Horror (Shadow Priest)
+  map["323467"] = "Horror"; // Sin and Punishment (Shadow Priest)
+  map["376077"] = "Stun"; // Champion's Spear (Warrior/Evoker-adjacent)
   // Ursol's Vortex (102793, Druid) is a knockback/displacement with no tracked DR family
   // ('Root' is not a real DR category — see SCM_CATEGORY_LABELS). It falls back to self-DR.
-  map['217832'] = 'Incapacitate'; // Imprison (Demon Hunter)
-  map['118381'] = 'Incapacitate'; // Polymorph: Turtle
-  map['161353'] = 'Incapacitate'; // Polymorph: Polar Bear
-  map['161354'] = 'Incapacitate'; // Polymorph: Monkey
-  map['161355'] = 'Incapacitate'; // Polymorph: Penguin
-  map['61305'] = 'Incapacitate'; // Polymorph: Black Cat
-  map['61721'] = 'Incapacitate'; // Polymorph: Rabbit
-  map['61780'] = 'Incapacitate'; // Polymorph: Turkey
-  map['12826'] = 'Incapacitate'; // Polymorph: Polymorph
-  map['28272'] = 'Incapacitate'; // Polymorph: Pig
-  map['28271'] = 'Incapacitate'; // Polymorph: Turtle (Old)
-  map['115268'] = 'Incapacitate'; // Mesmerize (Shivan pet)
-  map['22570'] = 'Stun'; // Maim (should be Stun per DB2, but often missing)
+  map["217832"] = "Incapacitate"; // Imprison (Demon Hunter)
+  map["118381"] = "Incapacitate"; // Polymorph: Turtle
+  map["161353"] = "Incapacitate"; // Polymorph: Polar Bear
+  map["161354"] = "Incapacitate"; // Polymorph: Monkey
+  map["161355"] = "Incapacitate"; // Polymorph: Penguin
+  map["61305"] = "Incapacitate"; // Polymorph: Black Cat
+  map["61721"] = "Incapacitate"; // Polymorph: Rabbit
+  map["61780"] = "Incapacitate"; // Polymorph: Turkey
+  map["12826"] = "Incapacitate"; // Polymorph: Polymorph
+  map["28272"] = "Incapacitate"; // Polymorph: Pig
+  map["28271"] = "Incapacitate"; // Polymorph: Turtle (Old)
+  map["115268"] = "Incapacitate"; // Mesmerize (Shivan pet)
+  map["22570"] = "Stun"; // Maim (should be Stun per DB2, but often missing)
 
   // DB2 override: Cyclone has its own DR category in WoW, not shared with Disorient
-  map['33786'] = 'Cyclone';
+  map["33786"] = "Cyclone";
 
   // DB2 override: Incapacitating Roar is Disorient in WoW, not Incapacitate
-  map['99'] = 'Disorient';
+  map["99"] = "Disorient";
+
+  // Sigil of Misery (DH) — Disorient DR. Missing from the generated map, so
+  // the timeline rendered the raw-id fallback "[DR: spell:207685 …]"
+  // (Gemini adversarial review, 2026-07-15).
+  map["207685"] = "Disorient";
 
   return map;
 })();
@@ -116,18 +124,18 @@ export const DR_CATEGORY_MAP: Record<string, string> = (() => {
  * Used to group SPELL_AURA_APPLIED events from analyzeOutgoingCCChains into per-cast AoE events.
  */
 export const AOE_CC_SPELL_IDS = new Set<string>([
-  '8122', // Psychic Scream (Priest)
-  '5246', // Intimidating Shout (Warrior)
-  '316593', // Intimidating Shout (rank 2)
-  '316595', // Intimidating Shout (rank 3)
-  '5484', // Howl of Terror (Warlock)
-  '77505', // Shockwave (Warrior)
-  '119381', // Leg Sweep (Monk)
-  '20549', // War Stomp (Tauren racial)
-  '99', // Incapacitating Roar (Druid Bear)
-  '30283', // Shadowfury (Warlock) — small AoE on impact
-  '255941', // Bursting Shot (Hunter) — disorients group
-  '207685', // Sigil of Misery (Demon Hunter) — AoE incapacitate
+  "8122", // Psychic Scream (Priest)
+  "5246", // Intimidating Shout (Warrior)
+  "316593", // Intimidating Shout (rank 2)
+  "316595", // Intimidating Shout (rank 3)
+  "5484", // Howl of Terror (Warlock)
+  "77505", // Shockwave (Warrior)
+  "119381", // Leg Sweep (Monk)
+  "20549", // War Stomp (Tauren racial)
+  "99", // Incapacitating Roar (Druid Bear)
+  "30283", // Shadowfury (Warlock) — small AoE on impact
+  "255941", // Bursting Shot (Hunter) — disorients group
+  "207685", // Sigil of Misery (Demon Hunter) — AoE incapacitate
 ]);
 
 export interface IAoeCCEvent {
@@ -141,7 +149,7 @@ export interface IAoeCCEvent {
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export type DRLevel = 'Full' | '50%' | '25%' | 'Immune';
+export type DRLevel = "Full" | "50%" | "25%" | "Immune";
 
 export interface IDRInfo {
   /** DR category name (Stun / Incapacitate / Disorient / etc.) */
@@ -181,7 +189,10 @@ export function getDRCategory(spellId: string): string {
  * from auraEvents will never receive an Immune result in the outgoing-CC path.
  * The type is kept for correctness in the incoming-CC path (duration already recorded).
  */
-export function getDRLevel(history: CCEntry[], newApplyMs: number): { level: DRLevel; sequenceIndex: number } {
+export function getDRLevel(
+  history: CCEntry[],
+  newApplyMs: number,
+): { level: DRLevel; sequenceIndex: number } {
   let chainLength = 0;
   let checkTime = newApplyMs;
 
@@ -201,7 +212,8 @@ export function getDRLevel(history: CCEntry[], newApplyMs: number): { level: DRL
   }
 
   // WoW 12.0: Full → 50% → Immune (25% tier removed)
-  const level: DRLevel = chainLength === 0 ? 'Full' : chainLength === 1 ? '50%' : 'Immune';
+  const level: DRLevel =
+    chainLength === 0 ? "Full" : chainLength === 1 ? "50%" : "Immune";
   return { level, sequenceIndex: chainLength };
 }
 
@@ -212,7 +224,11 @@ export function getDRLevel(history: CCEntry[], newApplyMs: number): { level: DRL
  * Used by healer exposure analysis to know how much a CC would hurt at burst start.
  */
 export function getDRLevelAtTime(
-  ccInstances: ReadonlyArray<{ atSeconds: number; durationSeconds: number; drInfo: IDRInfo | null }>,
+  ccInstances: ReadonlyArray<{
+    atSeconds: number;
+    durationSeconds: number;
+    drInfo: IDRInfo | null;
+  }>,
   category: string,
   atSeconds: number,
 ): DRLevel {
@@ -231,8 +247,8 @@ export function getDRLevelAtTime(
     }
   }
 
-  if (atSeconds - lastExpiredAt > DR_RESET_S) return 'Full';
-  return chainLength === 1 ? '50%' : 'Immune';
+  if (atSeconds - lastExpiredAt > DR_RESET_S) return "Full";
+  return chainLength === 1 ? "50%" : "Immune";
 }
 
 // ── Incoming CC DR annotation ─────────────────────────────────────────────────
@@ -243,7 +259,11 @@ export function getDRLevelAtTime(
  * spell ID is not in ccSpellIds).
  */
 export function computeIncomingDR(
-  ccInstances: Array<{ atSeconds: number; durationSeconds: number; spellId: string }>,
+  ccInstances: Array<{
+    atSeconds: number;
+    durationSeconds: number;
+    spellId: string;
+  }>,
   matchStartMs: number,
 ): Array<IDRInfo | null> {
   // Per DR-category history: list of resolved {applyMs, removeMs}
@@ -297,15 +317,24 @@ export function analyzeOutgoingCCChains(
   combat: IArenaMatch | IShuffleRound,
 ): IOutgoingCCChain[] {
   const friendlyIds = new Set(friendlies.map((f) => f.id));
-  const friendlySpecMap = new Map(friendlies.map((f) => [f.id, specToString(f.spec)]));
+  const friendlySpecMap = new Map(
+    friendlies.map((f) => [f.id, specToString(f.spec)]),
+  );
   const matchStartMs = combat.startTime;
 
   return enemies
-    .filter((e) => e.type === CombatUnitType.Player && e.reaction === CombatUnitReaction.Hostile)
+    .filter(
+      (e) =>
+        e.type === CombatUnitType.Player &&
+        e.reaction === CombatUnitReaction.Hostile,
+    )
     .map((enemy) => {
       // Per DR-category history on this enemy
       const history: Map<string, CCEntry[]> = new Map();
-      const pending: Map<string, { applyMs: number; spellName: string; srcId: string; srcName: string }> = new Map();
+      const pending: Map<
+        string,
+        { applyMs: number; spellName: string; srcId: string; srcName: string }
+      > = new Map();
       const applications: IOutgoingCCApplication[] = [];
 
       // Helper: close a pending CC entry and push it to applications + history
@@ -314,7 +343,7 @@ export function analyzeOutgoingCCChains(
         if (!p) return;
         pending.delete(key);
 
-        const spellId = key.split(':')[0];
+        const spellId = key.split(":")[0];
         if (!spellId) return;
         const category = getDRCategory(spellId);
         const cat = history.get(category) ?? [];
@@ -330,9 +359,9 @@ export function analyzeOutgoingCCChains(
           spellId,
           spellName: p.spellName,
           casterName: p.srcName,
-          casterSpec: friendlySpecMap.get(p.srcId) ?? 'Unknown',
+          casterSpec: friendlySpecMap.get(p.srcId) ?? "Unknown",
           drInfo: {
-            category: DR_CATEGORY_MAP[spellId] ?? 'Unknown',
+            category: DR_CATEGORY_MAP[spellId] ?? "Unknown",
             level,
             sequenceIndex,
           },
@@ -385,7 +414,9 @@ export function analyzeOutgoingCCChains(
         targetName: enemy.name,
         targetSpec: specToString(enemy.spec),
         applications,
-        hasWastedApplications: applications.some((a) => a.drInfo.level === '25%' || a.drInfo.level === 'Immune'),
+        hasWastedApplications: applications.some(
+          (a) => a.drInfo.level === "25%" || a.drInfo.level === "Immune",
+        ),
       };
     })
     .filter((chain) => chain.applications.length > 0);
@@ -394,13 +425,15 @@ export function analyzeOutgoingCCChains(
 // ── Formatters ────────────────────────────────────────────────────────────────
 
 export const DR_LEVEL_LABEL: Record<DRLevel, string> = {
-  Full: 'full duration',
-  '50%': '50% DR',
-  '25%': '25% DR',
-  Immune: 'IMMUNE',
+  Full: "full duration",
+  "50%": "50% DR",
+  "25%": "25% DR",
+  Immune: "IMMUNE",
 };
 
-export function formatOutgoingCCChainsForContext(chains: IOutgoingCCChain[]): string[] {
+export function formatOutgoingCCChainsForContext(
+  chains: IOutgoingCCChain[],
+): string[] {
   const bodyLines: string[] = [];
 
   for (const chain of chains) {
@@ -410,22 +443,33 @@ export function formatOutgoingCCChainsForContext(chains: IOutgoingCCChain[]): st
     // ground truth. Drop them from the breakdown and the counts so the line stays
     // internally consistent; skip a chain entirely if nothing identifiable remains.
     const apps = chain.applications.filter(
-      (a) => a.drInfo.category !== 'Unknown' && !a.drInfo.category.startsWith('spell:'),
+      (a) =>
+        a.drInfo.category !== "Unknown" &&
+        !a.drInfo.category.startsWith("spell:"),
     );
     if (apps.length === 0) continue;
 
     const total = apps.length;
-    const immuneCount = apps.filter((a) => a.drInfo.level === 'Immune').length;
-    const reducedCount = apps.filter((a) => a.drInfo.level !== 'Full' && a.drInfo.level !== 'Immune').length;
+    const immuneCount = apps.filter((a) => a.drInfo.level === "Immune").length;
+    const reducedCount = apps.filter(
+      (a) => a.drInfo.level !== "Full" && a.drInfo.level !== "Immune",
+    ).length;
 
     // Group by DR category for the summary
     const categoryMap = new Map<string, number>();
     for (const app of apps) {
-      categoryMap.set(app.drInfo.category, (categoryMap.get(app.drInfo.category) ?? 0) + 1);
+      categoryMap.set(
+        app.drInfo.category,
+        (categoryMap.get(app.drInfo.category) ?? 0) + 1,
+      );
     }
-    const categoryStr = [...categoryMap.entries()].map(([cat, count]) => `${count}× ${cat}`).join(', ');
+    const categoryStr = [...categoryMap.entries()]
+      .map(([cat, count]) => `${count}× ${cat}`)
+      .join(", ");
 
-    const wastedNote = chain.hasWastedApplications ? ` ⚠ ${immuneAppsNote(immuneCount)}` : '';
+    const wastedNote = chain.hasWastedApplications
+      ? ` ⚠ ${immuneAppsNote(immuneCount)}`
+      : "";
 
     bodyLines.push(
       `  ${chain.targetSpec} (${chain.targetName}): ${total} CC — ${categoryStr} | ${reducedCount} reduced, ${immuneCount} immune${wastedNote}`,
@@ -433,11 +477,13 @@ export function formatOutgoingCCChainsForContext(chains: IOutgoingCCChain[]): st
   }
 
   if (bodyLines.length === 0) return [];
-  return ['## CC Chains', ...bodyLines];
+  return ["## CC Chains", ...bodyLines];
 }
 
 function immuneAppsNote(count: number): string {
-  return count > 0 ? `${count} hit immune — switch CC category or target after 2 applications` : 'DR wasted';
+  return count > 0
+    ? `${count} hit immune — switch CC category or target after 2 applications`
+    : "DR wasted";
 }
 
 /**
@@ -485,18 +531,26 @@ export function extractAoeCCEvents(chains: IOutgoingCCChain[]): IAoeCCEvent[] {
     const pairKey = `${app.spellId}\x00${app.casterName}`;
     const prev = currentEvent.get(pairKey);
 
-    if (prev === undefined || app.atSeconds - prev.atSeconds > GROUPING_WINDOW_S) {
+    if (
+      prev === undefined ||
+      app.atSeconds - prev.atSeconds > GROUPING_WINDOW_S
+    ) {
       const evt: IAoeCCEvent = {
         casterName: app.casterName,
         spellId: app.spellId,
         spellName: app.spellName,
         atSeconds: app.atSeconds,
-        targets: [{ name: app.targetName, durationSeconds: app.durationSeconds }],
+        targets: [
+          { name: app.targetName, durationSeconds: app.durationSeconds },
+        ],
       };
       events.push(evt);
       currentEvent.set(pairKey, evt);
     } else {
-      prev.targets.push({ name: app.targetName, durationSeconds: app.durationSeconds });
+      prev.targets.push({
+        name: app.targetName,
+        durationSeconds: app.durationSeconds,
+      });
     }
   }
 

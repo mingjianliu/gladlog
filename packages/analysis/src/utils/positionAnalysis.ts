@@ -672,7 +672,7 @@ export function formatPositionEventsForContext(
                 (e.ownerHpStartPct ?? 100) - e.ownerHpMinPct < 15
               ? " (no real cost)"
               : "";
-        hpStr = ` — HP ${e.ownerHpStartPct}%→${e.ownerHpMinPct}%${tag}`;
+        hpStr = ` — your HP ${e.ownerHpStartPct}%→${e.ownerHpMinPct}% (min over window)${tag}`;
       } else {
         // No HP data — fall back to the dampening context hedge.
         hpStr =
@@ -683,8 +683,16 @@ export function formatPositionEventsForContext(
       const exposureStr = e.healerExposureLabel
         ? ` — healer exposure: ${e.healerExposureLabel}`
         : "";
+      // Render the full window span: the HP outcome is the MIN over
+      // [atSeconds, toSeconds], and a bare start-time reads as "HP was X→Y at
+      // that instant" — two separate LLM reviewers mis-anchored the min-HP to
+      // the start second and called it a misattribution (2026-07-15).
+      const spanStr =
+        e.toSeconds !== undefined && e.toSeconds > e.atSeconds
+          ? `${fmtTime(e.atSeconds)}–${fmtTime(e.toSeconds)}`
+          : fmtTime(e.atSeconds);
       lines.push(
-        `    ${fmtTime(e.atSeconds)} [${e.dangerLabel} burst] ${e.startDistanceYards}→${e.endDistanceYards}yd from ${e.nearestEnemyName}${targetStr}${exposureStr}${hpStr}${defStr}`,
+        `    ${spanStr} [${e.dangerLabel} burst] ${e.startDistanceYards}→${e.endDistanceYards}yd from ${e.nearestEnemyName}${targetStr}${exposureStr}${hpStr}${defStr}`,
       );
     }
   }
