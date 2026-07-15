@@ -646,8 +646,14 @@ export function extractMajorCooldowns(
 
     const castEvents = unit.spellCastEvents.filter(
       (e) =>
-        e.spellId === spell.spellId &&
-        e.logLine.event === LogEvent.SPELL_CAST_SUCCESS,
+        e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+        (e.spellId === spell.spellId ||
+          // Variant cast ids (form-specific Stampeding Roar, talent-modified
+          // Blessing of Sacrifice / Oppressing Roar, …) log a different id
+          // with the same English name. Exact-id matching stamped 15/1245
+          // prompts' real casts [UNUSED] and emitted bogus "available all
+          // match" windows (invariant sweep I1, 2026-07-16).
+          (!!e.spellId && getEnglishSpellName(e.spellId, "") === spell.name)),
     );
 
     const isDefOrExternal =

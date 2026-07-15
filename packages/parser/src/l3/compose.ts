@@ -12,10 +12,10 @@ function calculateFnv1a32(lines: string[]): string {
   for (const line of lines) {
     for (let i = 0; i < line.length; i++) {
       const charCode = line.charCodeAt(i);
-      hash ^= charCode & 0xFF;
+      hash ^= charCode & 0xff;
       hash = Math.imul(hash, 16777619);
-      if (charCode > 0xFF) {
-        hash ^= (charCode >> 8) & 0xFF;
+      if (charCode > 0xff) {
+        hash ^= (charCode >> 8) & 0xff;
         hash = Math.imul(hash, 16777619);
       }
     }
@@ -80,7 +80,11 @@ export function buildMatch(seg: Segment, end: ParsedLine): GladMatch {
   };
 }
 
-function buildShuffleRound(seg: Segment, index: number, resolvedOwnerId: string | null): GladShuffleRound {
+function buildShuffleRound(
+  seg: Segment,
+  index: number,
+  resolvedOwnerId: string | null,
+): GladShuffleRound {
   const roster = buildRoster(seg.records);
   const gladUnitsMap = collectEvents(seg.records, roster);
 
@@ -111,30 +115,50 @@ function buildShuffleRound(seg: Segment, index: number, resolvedOwnerId: string 
 
   // Find round deaths in chronological order
   const roundDeaths: { destId: string }[] = [];
+  let lastRoundDeathTs = 0;
   for (const r of seg.records) {
     if (r.eventName === "UNIT_DIED") {
       const destGuid = r.base?.destGuid;
       if (destGuid) {
-        const isPlayer = destGuid.startsWith("Player-") || roster.units.get(destGuid)?.kind === "Player";
+        const isPlayer =
+          destGuid.startsWith("Player-") ||
+          roster.units.get(destGuid)?.kind === "Player";
         if (isPlayer) {
           const lastParam = r.params[r.params.length - 1];
-          const unconscious = r.unitDied?.unconscious ?? (lastParam === "1");
+          const unconscious = r.unitDied?.unconscious ?? lastParam === "1";
           if (!unconscious) {
             roundDeaths.push({ destId: destGuid });
+            lastRoundDeathTs = Math.max(lastRoundDeathTs, r.timestamp);
           }
         }
       }
     }
   }
 
-  const teamOf = (unitId: string) => gladUnitsMap.get(unitId)?.info?.teamId ?? null;
+  const teamOf = (unitId: string) =>
+    gladUnitsMap.get(unitId)?.info?.teamId ?? null;
   const winningTeamId = roundWinner(roundDeaths, teamOf);
   const result = matchResult(winningTeamId, playerTeamId);
 
   const startTime = seg.startLine.timestamp;
-  const endTime = seg.records.length > 0 
-    ? seg.records[seg.records.length - 1]!.timestamp 
-    : startTime;
+  // Solo Shuffle rounds have no ARENA_MATCH_END: the segment runs until the
+  // next round's ARENA_MATCH_START, so "last record" includes the whole
+  // between-round gap. That inflated round durations (~35s observed) and
+  // attributed between-round re-setup casts (Beacons, buffs) to the previous
+  // round — dead players appeared to cast (invariant sweep I9, 2026-07-16).
+  // A shuffle round ends at its deciding death: clamp endTime to the last
+  // round-ending player death plus a short grace for trailing combat records.
+  // Timeout rounds (no deaths) keep the last-record end. rawLines/id are
+  // untouched, so match ids and corpus fingerprints stay stable.
+  const ROUND_END_GRACE_MS = 2_000;
+  const lastRecordTs =
+    seg.records.length > 0
+      ? seg.records[seg.records.length - 1]!.timestamp
+      : startTime;
+  const endTime =
+    lastRoundDeathTs > 0
+      ? Math.min(lastRecordTs, lastRoundDeathTs + ROUND_END_GRACE_MS)
+      : lastRecordTs;
 
   const rawLines = seg.rawLines;
   const id = calculateFnv1a32(rawLines);
@@ -172,14 +196,18 @@ export function buildShuffle(close: ShuffleClose): GladShuffle {
     }
   }
 
-  const rounds = close.rounds.map((roundSeg, idx) => buildShuffleRound(roundSeg, idx, ownerId));
-  
+  const rounds = close.rounds.map((roundSeg, idx) =>
+    buildShuffleRound(roundSeg, idx, ownerId),
+  );
+
   const startTime = rounds[0] ? rounds[0].startTime : 0;
   const endTime = close.end.timestamp;
 
   const rawLines = [...rounds.flatMap((r) => r.rawLines), close.end.raw];
 
-  const endWinner = close.end.arenaEnd ? close.end.arenaEnd.winningTeamId : null;
+  const endWinner = close.end.arenaEnd
+    ? close.end.arenaEnd.winningTeamId
+    : null;
   const lastRound = rounds[rounds.length - 1];
   const playerTeamId = lastRound ? lastRound.playerTeamId : null;
   const result = matchResult(endWinner, playerTeamId);
