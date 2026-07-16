@@ -31,6 +31,7 @@ export function collectEvents(
       absorbsOut: [],
       absorbsIn: [],
       casts: [],
+      castStarts: [],
       petCasts: [],
       auraEvents: [],
       actionsOut: [],
@@ -163,6 +164,26 @@ export function collectEvents(
         const destUnit = gladUnits.get(destGuid);
         if (destUnit) {
           destUnit.auraEvents.push(auraEvent);
+        }
+      }
+    }
+
+    // 5b. SPELL_CAST_START(读条开始)——只挂 src 单位,瞬发无此事件
+    if (record.eventName === "SPELL_CAST_START") {
+      if (srcGuid && srcGuid !== "0000000000000000") {
+        const srcUnit = gladUnits.get(srcGuid);
+        if (srcUnit) {
+          srcUnit.castStarts.push({
+            timestamp: record.timestamp,
+            eventName: record.eventName,
+            spellId: record.spell?.spellId ?? 0,
+            spellName: record.spell?.spellName ?? "",
+            srcId: srcGuid,
+            srcName: record.base?.srcName ?? "",
+            destId: destGuid ?? "",
+            destName: record.base?.destName ?? "",
+            params: record.params,
+          });
         }
       }
     }

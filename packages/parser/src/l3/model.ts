@@ -70,6 +70,8 @@ export interface GladUnit {
   absorbsOut: GladAbsorbEvent[];
   absorbsIn: GladAbsorbEvent[];
   casts: GladSpellEvent[];
+  /** SPELL_CAST_START(读条开始;瞬发无此事件)。回放读条条消费。 */
+  castStarts: GladSpellEvent[];
   petCasts: GladSpellEvent[];
   auraEvents: GladAuraEvent[];
   actionsOut: GladSpellEvent[];

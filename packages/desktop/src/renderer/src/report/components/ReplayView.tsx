@@ -8,6 +8,7 @@ import {
   pathUpTo,
   sampleAt,
 } from "../derive/replay";
+import { castBarAt, deriveCastBars } from "../derive/castBars";
 import { deriveCasts } from "../derive/casts";
 import { dampeningAt, deriveDampeningSeries } from "../derive/dampeningSeries";
 import type { ReportSource } from "../derive/types";
@@ -57,11 +58,19 @@ export function ReplayView({
   const { startTime, endTime, bounds, tracks } = data;
   const vulnBands = useMemo(() => deriveVulnBands(source), [source]);
   const dampSeries = useMemo(() => deriveDampeningSeries(source), [source]);
-  // 施法闪现(#11b 降级版):parser 无 SPELL_CAST_START,用 SUCCESS 瞬间闪现
+  // 施法闪现(#11b):SUCCESS 瞬间闪现(瞬发也可见)
   const castsByUnit = useMemo(
     () =>
       Object.fromEntries(
         tracks.map((tr) => [tr.unitId, deriveCasts(source, tr.unitId)]),
+      ),
+    [source, tracks],
+  );
+  // 真读条条(#11b 完全版):parser castStarts;旧存档 doc 无字段 → 空
+  const castBarsByUnit = useMemo(
+    () =>
+      Object.fromEntries(
+        tracks.map((tr) => [tr.unitId, deriveCastBars(source, tr.unitId)]),
       ),
     [source, tracks],
   );
@@ -357,6 +366,44 @@ export function ReplayView({
                   >
                     {Math.round(hp * 100)}%
                   </text>
+                  {/* 真读条条:进行中的读条在血条下画进度(金=会完成,红=被掐) */}
+                  {(() => {
+                    const bar = castBarAt(castBarsByUnit[tr.unitId] ?? [], t);
+                    if (!bar) return null;
+                    const frac = Math.max(
+                      0,
+                      Math.min(
+                        1,
+                        (t - bar.fromMs) /
+                          Math.max(1, bar.toMs - bar.fromMs),
+                      ),
+                    );
+                    return (
+                      <g className="rpt-replay-castbar">
+                        <rect
+                          x={cx - 16}
+                          y={cy + 22}
+                          width={32}
+                          height={3}
+                          rx={1.5}
+                          className="rpt-replay-hp-track"
+                        />
+                        <rect
+                          x={cx - 16}
+                          y={cy + 22}
+                          width={32 * frac}
+                          height={3}
+                          rx={1.5}
+                          fill={
+                            bar.outcome === "completed"
+                              ? "var(--gold)"
+                              : "var(--loss)"
+                          }
+                        />
+                        <title>{`读条:${bar.spellName}${bar.outcome === "cut" ? "(被掐)" : ""}`}</title>
+                      </g>
+                    );
+                  })()}
                   {/* 施法闪现(#11b):刚成功的施法在头顶闪 1.2s */}
                   {(() => {
                     const cs = castsByUnit[tr.unitId] ?? [];

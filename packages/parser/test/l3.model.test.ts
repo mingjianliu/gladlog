@@ -56,6 +56,7 @@ describe("l3 model types compile and are structurally usable", () => {
       absorbsOut: [],
       absorbsIn: [],
       casts: [],
+      castStarts: [],
       petCasts: [],
       auraEvents: [],
       actionsOut: [],

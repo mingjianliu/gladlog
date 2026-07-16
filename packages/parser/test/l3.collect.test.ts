@@ -26,6 +26,10 @@ const records: ParsedLine[] = [
     4,
   ),
   L(
+    'SPELL_CAST_START,Player-2-B,"Bob-Y",0x548,0x80000000,0000000000000000,nil,0x80000000,0x80000000,30451,"Arcane Blast",64',
+    4,
+  ),
+  L(
     'SPELL_INTERRUPT,Player-1-A,"Alice-X",0x511,0x80000000,Player-2-B,"Bob-Y",0x548,0x80000000,6552,"Pummel",0x1,30451,"Arcane Blast",64',
     5,
   ),
@@ -64,6 +68,13 @@ describe("collectEvents", () => {
     expect(B.auraEvents).toHaveLength(1);
     expect(B.auraEvents[0]!.auraType).toBe("BUFF");
     expect(B.auraEvents[0]!.spellId).toBe(386208);
+  });
+
+  it("castStarts: SPELL_CAST_START 挂到 src 单位(读条开始)", () => {
+    expect(B.castStarts).toHaveLength(1);
+    expect(B.castStarts[0]!.spellId).toBe(30451);
+    expect(B.castStarts[0]!.spellName).toBe("Arcane Blast");
+    expect(A.castStarts).toHaveLength(0);
   });
 
   it("casts: pet cast goes to pet.casts AND owner's petCasts", () => {

@@ -136,7 +136,7 @@
 - **明细展开**(v2 可后置):行点开 → 该玩家的打断/被控明细(时间 + 技能),时间戳接 #8 的 seekTo。
 - **测试**:IPC 表数据单测(用含打断/驱散的 fixture 断言行数值)。
 
-## 11. 回放增强三小件 ✅(2026-07-17 实现 `c03731f`:HP 数字 + dampening 指示(同谓词逐秒序列)+ 施法闪现降级版;真读条条 = parser SPELL_CAST_START spike 单列未做)
+## 11. 回放增强三小件 ✅(2026-07-17 实现 `c03731f`:HP 数字 + dampening 指示(同谓词逐秒序列)+ 施法闪现;**真读条条 2026-07-18 补齐**:parser L3 收集 castStarts(L1 泛型分支本就解析,~5.6k 事件/整晚日志,parity gate 0 diffs),deriveCastBars 配对 start→同技能 SUCCESS=完成/下一次重读或 4s 兜底=被掐,金/红进度条;旧存档 doc 无字段自然无条,重新导入即有)
 
 **需求 & 旧仓对应**:(a) **dampening 追踪**(`ReplayDampeningTracker`)——回放控件条角落常显当前 dampening %;(b) **施法条**(`ReplayCastBar`)——读条中的单位脚下画进度条(开始/打断/完成事件已在 doc);(c) **单位 HP 数字**(`ReplayHpNumbers`)——血条旁小字 HP%(现在只有变色血条)。
 
