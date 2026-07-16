@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from "react";
 
 import { classColor, classGlyph } from "../data/gameConstants";
 import { deriveCasts, isMajorCd } from "../derive/casts";
+import { SpellIcon } from "./SpellIcon";
 import type { ReplayTrack } from "../derive/replay";
 import type { ReportSource } from "../derive/types";
 
@@ -213,14 +214,22 @@ export function GcdSwimlane({
                             : c.spellName
                         }
                       >
-                        <span
-                          className="rpt-gcd-act-dot"
-                          style={{
-                            background: major
-                              ? "var(--gold)"
-                              : classColor(tr.classId),
-                          }}
-                        />
+                        {c.icon ? (
+                          <SpellIcon
+                            icon={c.icon}
+                            label={c.spellName}
+                            size={14}
+                          />
+                        ) : (
+                          <span
+                            className="rpt-gcd-act-dot"
+                            style={{
+                              background: major
+                                ? "var(--gold)"
+                                : classColor(tr.classId),
+                            }}
+                          />
+                        )}
                         <span className="rpt-gcd-act-name">
                           {c.byPet ? "🐾 " : ""}
                           {c.spellName}

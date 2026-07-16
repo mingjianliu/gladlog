@@ -34,6 +34,9 @@ export async function main(): Promise<void> {
       "spellClassMapGenerated.ts": {
         entries: generatedEntries("spellClassMapGenerated.ts"),
       },
+      "spellIconsGenerated.ts": {
+        entries: generatedEntries("spellIconsGenerated.ts"),
+      },
       "trinketItemIds.json": {
         adaptation: readJson("trinketItemIds.json").adaptationItemIds.length,
         relentless: readJson("trinketItemIds.json").relentlessItemIds.length,

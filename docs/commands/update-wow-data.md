@@ -34,6 +34,8 @@ npx tsx packages/analysis/scripts/datagen/genTrinketItemIds.ts
 npx tsx packages/analysis/scripts/datagen/genTalentModifiers.ts
 # 6. 法术→职业映射
 npx tsx packages/analysis/scripts/datagen/genSpellClassMap.ts
+# 6b. 法术图标名(desktop 泳道/回放图标;SpellMisc→ManifestInterfaceData)
+npx tsx packages/analysis/scripts/datagen/genSpellIcons.ts
 # 7. manifest 汇总
 npx tsx packages/analysis/scripts/datagen/writeManifest.ts
 ```

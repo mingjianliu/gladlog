@@ -2,9 +2,22 @@ import { useEffect, useState } from "react";
 import { bridge } from "../../bridge";
 
 export interface SpellIconProps {
-  icon: string;
+  icon?: string;
   label: string;
   size?: number;
+}
+
+// 同名 icon 只发一次 IPC(泳道一场几百 chip;bridge 侧有磁盘缓存,这层防
+// round-trip 抖动)。Promise 缓存:并发请求共享同一 in-flight。
+const iconMemo = new Map<string, Promise<string | null>>();
+function getIconCached(icon: string): Promise<string | null> {
+  const hit = iconMemo.get(icon);
+  if (hit) return hit;
+  const b = bridge();
+  const p =
+    b && b.icon ? b.icon.get(icon) : Promise.resolve<string | null>(null);
+  iconMemo.set(icon, p);
+  return p;
 }
 
 export function SpellIcon({ icon, label, size = 16 }: SpellIconProps) {
@@ -18,16 +31,9 @@ export function SpellIcon({ icon, label, size = 16 }: SpellIconProps) {
       setLoading(false);
       return;
     }
-    const b = bridge();
-    if (!b || !b.icon) {
-      setDataUrl(null);
-      setLoading(false);
-      return;
-    }
     setLoading(true);
     let active = true;
-    b.icon
-      .get(icon)
+    getIconCached(icon)
       .then((url) => {
         if (active) {
           setDataUrl(url);
@@ -68,12 +74,7 @@ export function SpellIcon({ icon, label, size = 16 }: SpellIconProps) {
 
   if (dataUrl) {
     return (
-      <img
-        src={dataUrl}
-        alt={label}
-        className="rpt-spellicon"
-        style={style}
-      />
+      <img src={dataUrl} alt={label} className="rpt-spellicon" style={style} />
     );
   }
 

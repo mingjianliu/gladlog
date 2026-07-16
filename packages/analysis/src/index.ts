@@ -23,6 +23,7 @@ export { SPELL_EFFECT_OVERRIDES } from "./data/spellEffectOverrides";
 export { default as spellIdLists } from "./data/spellIdLists";
 export { ccSpellIds, trinketSpellIds } from "./data/spellTags";
 export { getEnglishSpellName } from "./data/spellEffectData";
+export { SPELL_ICONS_GENERATED } from "./data/spellIconsGenerated";
 export { getTalentNames } from "./data/talentNames";
 export { nodeMaps } from "./data/talentStrings";
 // 几何原语(positioning grounding 扫描器用,backlog #3)

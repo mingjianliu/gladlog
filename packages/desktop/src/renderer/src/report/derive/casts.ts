@@ -1,4 +1,4 @@
-import { SPELL_CATEGORIES } from "@gladlog/analysis";
+import { SPELL_CATEGORIES, SPELL_ICONS_GENERATED } from "@gladlog/analysis";
 
 import type { ReportSource } from "./types";
 
@@ -8,6 +8,8 @@ export interface CastRow {
   spellName: string;
   targetName: string;
   byPet: boolean;
+  /** 图标基名(挖掘表 spellIconsGenerated);缺表项 undefined → 首字母 fallback。 */
+  icon?: string;
 }
 export interface AuraRow {
   t: number;
@@ -49,6 +51,7 @@ export function deriveCasts(m: ReportSource, unitId: string): CastRow[] {
       spellName: e.spellName,
       targetName: e.destName,
       byPet,
+      icon: SPELL_ICONS_GENERATED[String(e.spellId)],
     });
   return [...u.casts.map(row(false)), ...u.petCasts.map(row(true))].sort(
     (a, b) => a.t - b.t,

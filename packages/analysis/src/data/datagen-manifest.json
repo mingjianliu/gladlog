@@ -21,6 +21,9 @@
     },
     "talentModifiers.json": {
       "trackedSpells": 129
+    },
+    "spellIconsGenerated.ts": {
+      "entries": 3568
     }
   }
 }

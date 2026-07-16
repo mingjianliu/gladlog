@@ -32,3 +32,21 @@ describe("SpellIcon", () => {
     expect(screen.getByText("S")).toBeTruthy();
   });
 });
+
+import { deriveCasts } from "../src/renderer/src/report/derive/casts";
+import { loadRealMatchFixture } from "./fixtures/loadFixture";
+
+describe("泳道技能图标(backlog #9)", () => {
+  it("deriveCasts:真实 fixture 大多数 chip 带 icon 名,缺表项 undefined", () => {
+    const m = loadRealMatchFixture();
+    const player = Object.values(m.units).find((u) => u.kind === "Player")!;
+    const casts = deriveCasts(m, player.id);
+    expect(casts.length).toBeGreaterThan(0);
+    const withIcon = casts.filter((c) => c.icon);
+    // 候选集覆盖策展目录∪天赋——真实对局的施法命中率应过半
+    expect(withIcon.length / casts.length).toBeGreaterThan(0.5);
+    for (const c of withIcon) {
+      expect(c.icon).toMatch(/^[a-z0-9_-]+$/i);
+    }
+  });
+});

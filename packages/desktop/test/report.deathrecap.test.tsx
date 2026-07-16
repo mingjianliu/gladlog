@@ -14,7 +14,7 @@ function withInjectedDeath() {
   const m = JSON.parse(JSON.stringify(base)) as typeof base;
   const players = Object.values(m.units).filter(
     (u) => u.kind === "Player" && (u as { damageIn?: unknown[] }).damageIn?.length,
-  ) as Array<{
+  ) as unknown as Array<{
     id: string;
     name: string;
     damageIn: Array<{ timestamp: number }>;
