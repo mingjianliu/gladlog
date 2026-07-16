@@ -1503,3 +1503,52 @@ pre {
 .rpt-replay-band:hover {
   filter: brightness(1.4);
 }
+
+/* ── 列表筛选条 ── */
+.mlf {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--hairline);
+  flex-wrap: wrap;
+}
+.mlf-seg {
+  display: inline-flex;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.mlf-seg button {
+  font-size: 11px;
+  padding: 3px 8px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink-2);
+}
+.mlf-seg button.active {
+  background: var(--surface-2);
+  color: var(--gold);
+}
+.mlf select {
+  font-size: 11px;
+  max-width: 108px;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  padding: 2px 4px;
+}
+.mlf-spec {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+}
+.mlf-clear {
+  font-size: 10px;
+  color: var(--mute);
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}

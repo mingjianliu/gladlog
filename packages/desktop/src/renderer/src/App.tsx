@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { DevPanel } from "./components/DevPanel";
 import { MatchListRow } from "./components/MatchListRow";
+import {
+  applyFilter,
+  EMPTY_FILTER,
+  MatchListFilter,
+  type ListFilter,
+} from "./components/MatchListFilter";
 import { MatchReport } from "./report/components/MatchReport";
 import { ShuffleReport } from "./report/components/ShuffleReport";
 import type { StoredMatchMeta } from "../../main/matchStore";
@@ -12,6 +18,7 @@ export default function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [doc, setDoc] = useState<any | null>(null);
   const [hasMore, setHasMore] = useState(true);
+  const [filter, setFilter] = useState<ListFilter>(EMPTY_FILTER);
   const loadingRef = useRef(false);
   const PAGE = 100;
 
@@ -72,12 +79,17 @@ export default function App() {
       ) : (
         <div className="app-layout">
           <aside className="app-sidebar">
+            <MatchListFilter
+              metas={metas}
+              filter={filter}
+              onChange={setFilter}
+            />
             <ul
               data-testid="match-list"
               className="match-list"
               onScroll={onScroll}
             >
-              {metas.map((m) => (
+              {applyFilter(metas, filter).map((m) => (
                 <li
                   key={m.id}
                   className={m.id === selectedId ? "sel" : ""}
