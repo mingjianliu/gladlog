@@ -1574,3 +1574,76 @@ pre {
 .rpt-shuffle-seq i.cur {
   outline: 1px solid var(--gold);
 }
+
+/* ── 战绩仪表盘(phase3 #1)── */
+.dash {
+  padding: 16px 20px;
+  max-width: 900px;
+  overflow-y: auto;
+  max-height: calc(100vh - 60px);
+}
+.dash-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.dash-overview {
+  display: flex;
+  gap: 24px;
+  margin-bottom: 14px;
+}
+.dash-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  padding: 10px 22px;
+}
+.dash-stat-v {
+  font-size: 22px;
+  font-family: var(--font-data);
+  font-weight: bold;
+}
+.dash-stat-k {
+  font-size: 11px;
+  color: var(--mute);
+}
+.dash-win {
+  color: var(--win);
+}
+.dash-loss {
+  color: var(--loss);
+}
+.dash-card {
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+}
+.dash-curve {
+  width: 100%;
+  margin-top: 8px;
+}
+.dash-series-label {
+  font-size: 9px;
+  font-family: var(--font-data);
+}
+.dash-tables {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.dash-note {
+  font-size: 10px;
+  color: var(--mute);
+  font-weight: normal;
+}
+.dash-empty {
+  color: var(--mute);
+  font-size: 12px;
+  font-style: italic;
+}

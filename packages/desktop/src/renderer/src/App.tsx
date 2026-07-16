@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { DevPanel } from "./components/DevPanel";
+import { StatsDashboard } from "./components/StatsDashboard";
 import { MatchListRow } from "./components/MatchListRow";
 import {
   applyFilter,
@@ -12,8 +13,15 @@ import { ShuffleReport } from "./report/components/ShuffleReport";
 import type { StoredMatchMeta } from "../../main/matchStore";
 import { bridge } from "./bridge";
 
+type AppView = "matches" | "stats" | "dev";
+const APP_VIEW_LABEL: Record<AppView, string> = {
+  matches: "对局",
+  stats: "战绩",
+  dev: "开发者",
+};
+
 export default function App() {
-  const [showDev, setShowDev] = useState(false);
+  const [appView, setAppView] = useState<AppView>("matches");
   const [metas, setMetas] = useState<StoredMatchMeta[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [doc, setDoc] = useState<any | null>(null);
@@ -72,10 +80,27 @@ export default function App() {
     <div className="app-container">
       <header className="app-topbar">
         <h1>gladlog</h1>
-        <button onClick={() => setShowDev((prev) => !prev)}>开发者视图</button>
+        <div className="rpt-mode-seg">
+          {(Object.keys(APP_VIEW_LABEL) as AppView[]).map((v) => (
+            <button
+              key={v}
+              className={v === appView ? "active" : ""}
+              onClick={() => setAppView(v)}
+            >
+              {APP_VIEW_LABEL[v]}
+            </button>
+          ))}
+        </div>
       </header>
-      {showDev ? (
+      {appView === "dev" ? (
         <DevPanel />
+      ) : appView === "stats" ? (
+        <StatsDashboard
+          onCompClick={(specId) => {
+            setFilter({ ...EMPTY_FILTER, specId });
+            setAppView("matches");
+          }}
+        />
       ) : (
         <div className="app-layout">
           <aside className="app-sidebar">

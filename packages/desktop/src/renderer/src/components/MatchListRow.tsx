@@ -15,7 +15,13 @@ const fmtDuration = (s: number): string =>
 const fmtWhen = (t: number): string => new Date(t).toLocaleString();
 
 /** spec 图标(CDN);加载失败/未知 spec → 职业色字形点(与回放图例同款)。 */
-function SpecDot({ specId, classId }: { specId: number; classId: number }) {
+export function SpecDot({
+  specId,
+  classId,
+}: {
+  specId: number;
+  classId: number;
+}) {
   const [broken, setBroken] = useState(false);
   const url = specIconUrl(specId);
   if (!url || broken) {
