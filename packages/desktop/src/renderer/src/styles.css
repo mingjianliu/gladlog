@@ -1249,3 +1249,48 @@ pre {
   color: var(--mute);
   font-family: var(--font-data);
 }
+
+/* ── #8 收尾:窗口色带 + strip 跳转 ── */
+.rpt-replay-scrub-wrap {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+.rpt-replay-scrub-wrap .rpt-replay-scrub {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+}
+.rpt-replay-bands {
+  position: absolute;
+  inset: 6px 0;
+  pointer-events: none;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.rpt-replay-band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  pointer-events: auto;
+}
+.rpt-replay-band-burst,
+.rpt-strip-band-burst {
+  background: color-mix(in srgb, var(--gold) 32%, transparent);
+}
+.rpt-replay-band-vulnerable,
+.rpt-strip-band-vulnerable {
+  background: color-mix(in srgb, var(--loss) 22%, transparent);
+}
+.rpt-strip-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rpt-strip-jump {
+  font-size: 11px;
+  padding: 2px 8px;
+  color: var(--gold);
+  white-space: nowrap;
+}

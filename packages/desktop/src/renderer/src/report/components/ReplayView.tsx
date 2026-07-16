@@ -9,6 +9,7 @@ import {
   sampleAt,
 } from "../derive/replay";
 import type { ReportSource } from "../derive/types";
+import { deriveVulnBands } from "../derive/vulnWindows";
 import { GcdSwimlane } from "./GcdSwimlane";
 
 const FALLBACK_VW = 520;
@@ -49,6 +50,7 @@ export function ReplayView({
 }) {
   const data = useMemo(() => deriveReplay(source), [source]);
   const { startTime, endTime, bounds, tracks } = data;
+  const vulnBands = useMemo(() => deriveVulnBands(source), [source]);
 
   const [t, setT] = useState(startTime);
   const [playing, setPlaying] = useState(false);
@@ -376,15 +378,43 @@ export function ReplayView({
         >
           {playing ? "⏸ 暂停" : atEnd ? "↻ 重放" : "▶ 播放"}
         </button>
-        <input
-          type="range"
-          className="rpt-replay-scrub"
-          min={startTime}
-          max={endTime}
-          step={100}
-          value={t}
-          onChange={(e) => setT(Number(e.target.value))}
-        />
+        <div className="rpt-replay-scrub-wrap">
+          {/* KILL WINDOW/VULNERABLE 色带:金 = 击杀尝试 burst,灰红 = 无人惩罚的脆弱段 */}
+          <div className="rpt-replay-bands">
+            {vulnBands.map((b, i) => {
+              const span = Math.max(1, endTime - startTime);
+              const fromMs = source.startTime + b.fromS * 1000;
+              const toMs = source.startTime + b.toS * 1000;
+              const left = ((fromMs - startTime) / span) * 100;
+              const width = Math.max(0.4, ((toMs - fromMs) / span) * 100);
+              if (left >= 100 || left + width <= 0) return null;
+              return (
+                <div
+                  key={i}
+                  className={`rpt-replay-band rpt-replay-band-${b.kind}`}
+                  style={{
+                    left: `${Math.max(0, left)}%`,
+                    width: `${Math.min(100 - Math.max(0, left), width)}%`,
+                  }}
+                  title={
+                    b.kind === "burst"
+                      ? `击杀尝试 on ${b.targetName}(团队伤害 ${(b.damage / 1000).toFixed(0)}k)`
+                      : `${b.targetName} 无大防御且未被惩罚(团队伤害仅 ${(b.damage / 1000).toFixed(0)}k)`
+                  }
+                />
+              );
+            })}
+          </div>
+          <input
+            type="range"
+            className="rpt-replay-scrub"
+            min={startTime}
+            max={endTime}
+            step={100}
+            value={t}
+            onChange={(e) => setT(Number(e.target.value))}
+          />
+        </div>
         <span className="rpt-replay-time">
           {relTime(t, startTime)} / {relTime(endTime, startTime)}
         </span>

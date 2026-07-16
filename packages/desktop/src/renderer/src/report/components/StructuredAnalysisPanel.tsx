@@ -10,6 +10,7 @@ import {
 import type { Finding } from "@gladlog/analysis";
 import { toLegacyMatch, CombatUnitReaction } from "@gladlog/parser-compat";
 import type { GladMatch } from "@gladlog/parser";
+import { deriveVulnBands } from "../derive/vulnWindows";
 import { MatchHero } from "./MatchHero";
 import { TimelineStrip } from "./TimelineStrip";
 import { FindingsList } from "./FindingsList";
@@ -113,6 +114,8 @@ export function StructuredAnalysisPanel({
     }
   }, [source, matchId]);
 
+  const vulnBands = useMemo(() => deriveVulnBands(source), [source]);
+
   // finding 的 eventIds → 引用事件里最早的 t + 涉及单位;同时点亮 strip 标记。
   const handleJump = (eventIds: string[]) => {
     if (!onSeekEvent || !input) return;
@@ -153,6 +156,10 @@ export function StructuredAnalysisPanel({
             candidates={input?.candidates ?? []}
             activeEventIds={activeEventIds}
             onSelect={(id) => setActiveEventIds([id])}
+            bands={vulnBands}
+            onJump={
+              onSeekEvent ? (tSeconds) => onSeekEvent(tSeconds, []) : undefined
+            }
           />
 
           {result.hadNarration === false ? (
