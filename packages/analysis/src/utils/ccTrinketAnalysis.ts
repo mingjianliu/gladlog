@@ -294,8 +294,12 @@ export function analyzePlayerCCAndTrinket(
   player: ICombatUnit,
   enemies: ICombatUnit[],
   combat: { startTime: number; endTime: number; startInfo: { zoneId: string } },
+  // 2026-07-18 baseline 排查:敌方宠物的 CC(Intimidation/Seduction 等)此前被
+  // src ∈ 敌方玩家 的过滤静默丢弃(54/176 场漏 Intimidation)——[CC ON TEAM]、
+  // 饰品窗口、DR 链全部下游失明。调用方传入敌方宠物单位补全 src 集。
+  enemyPets: ICombatUnit[] = [],
 ): IPlayerCCTrinketSummary {
-  const enemyIds = new Set(enemies.map((u) => u.id));
+  const enemyIds = new Set([...enemies, ...enemyPets].map((u) => u.id));
   const matchStartMs = combat.startTime;
 
   const trinketType = detectTrinketType(player);

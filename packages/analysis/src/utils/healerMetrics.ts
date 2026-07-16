@@ -153,10 +153,15 @@ export function computeHealerMetrics(
   ).length;
   const defensiveOverlapRatio = myOverlapCount / (myTotalDefensives + 1);
 
+  const enemyPlayerIds = new Set(enemies.map((u: any) => u.id));
+  const enemyPets = Object.values(combat.units ?? {}).filter(
+    (u: any) => u.ownerId && enemyPlayerIds.has(u.ownerId),
+  ) as any[];
   const ccTrinketSummary = analyzePlayerCCAndTrinket(
     healerUnit,
     enemies,
     combat as any,
+    enemyPets,
   );
   const successCasts = healerUnit.spellCastEvents.filter(
     (e: any) => e.logLine.event === "SPELL_CAST_SUCCESS",

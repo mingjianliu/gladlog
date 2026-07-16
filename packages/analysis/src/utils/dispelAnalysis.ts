@@ -1066,6 +1066,29 @@ export function reconstructDispelSummary(
   return { allyCleanse, ourPurges, hostilePurges, missedCleanseWindows, ccEfficiency, missedPurgeWindows };
 }
 
+/**
+ * 敌方队内解逐条(2026-07-18 baseline 排查):对面奶把你的 CC/dot 从他们队友
+ * 身上解掉——此前整类事件不渲染(42/176 场漏 Purify),教练关键信息
+ * ("你的 Hex 秒被解")+ 覆盖门 sufficiency 主要缺口。上限 8 条,超出折叠。
+ */
+export function formatEnemyDispelsForContext(
+  enemySummary: IDispelSummary,
+): string[] {
+  const evs = enemySummary.allyCleanse;
+  if (evs.length === 0) return [];
+  const lines: string[] = ['ENEMY DISPELS (their team cleansing your CC/dots off themselves):'];
+  const shown = evs.slice(0, 8);
+  for (const e of shown) {
+    lines.push(
+      `  ${fmtTime(e.timeSeconds)}  ${e.sourceSpec} ${e.dispelSpellName} removed ${e.removedSpellName} from ${e.targetSpec}`,
+    );
+  }
+  if (evs.length > shown.length) {
+    lines.push(`  [+${evs.length - shown.length} more enemy dispels folded]`);
+  }
+  return lines;
+}
+
 export function formatDispelContextForAI(summary: IDispelSummary): string[] {
   const lines: string[] = [];
   const { missedCleanseWindows, ccEfficiency, missedPurgeWindows } = summary;

@@ -72,7 +72,11 @@ export function deriveStatsTable(source: ReportSource): StatsRow[] {
     for (const p of players) {
       const opponents =
         p.reaction === CombatUnitReaction.Friendly ? enemies : friends;
-      const cc = analyzePlayerCCAndTrinket(p, opponents, combatLike);
+      const oppIds = new Set(opponents.map((o) => o.id));
+      const oppPets = Object.values(legacy.units).filter(
+        (u) => u.ownerId && oppIds.has(u.ownerId),
+      );
+      const cc = analyzePlayerCCAndTrinket(p, opponents, combatLike, oppPets);
       const ccTakenS = cc.ccInstances.reduce(
         (s, i) => s + i.durationSeconds,
         0,

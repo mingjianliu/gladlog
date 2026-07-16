@@ -36,6 +36,7 @@ import {
   annotateMissedPurgesWithKillWindows,
   canOffensivePurge,
   formatDispelContextForAI,
+  formatEnemyDispelsForContext,
   reconstructDispelSummary,
 } from "../utils/dispelAnalysis";
 import {
@@ -218,8 +219,22 @@ export function buildMatchContext(
     combat,
   );
   const dispelSummary = reconstructDispelSummary(friends, enemies, combat);
+  // 反向视角:敌方给自己队友解(消费同一谓词,双向对称)
+  const enemyDispelSummary = reconstructDispelSummary(
+    enemies,
+    friends,
+    combat,
+    Object.values(combat.units ?? {}).filter(
+      (u) => u.ownerId && enemies.some((e) => e.id === u.ownerId),
+    ),
+  );
+  // 敌方宠物/守卫(ownerId ∈ 敌方玩家):其 CC 也必须进 CC 管线
+  const enemyPlayerIds = new Set(enemies.map((e) => e.id));
+  const enemyPets = Object.values(combat.units ?? {}).filter(
+    (u) => u.ownerId && enemyPlayerIds.has(u.ownerId),
+  );
   const ccTrinketSummaries = friends.map((p) =>
-    analyzePlayerCCAndTrinket(p, enemies, combat),
+    analyzePlayerCCAndTrinket(p, enemies, combat, enemyPets),
   );
   const outgoingCCChains = analyzeOutgoingCCChains(
     friends as ICombatUnit[],
@@ -265,13 +280,23 @@ export function buildMatchContext(
   const ownerCCSummary = ccTrinketSummaries.find(
     (s) => s.playerName === owner.name,
   );
+  const friendlyPets = Object.values(combat.units ?? {}).filter(
+    (u) => u.ownerId && friends.some((f) => f.id === u.ownerId),
+  );
+  // 全部敌人的受控摘要(2026-07-18 覆盖修复):我方(队友/宠物)打到敌人身上
+  // 的 CC 此前只有大 CD 目录内的施法行可见 —— [CC ON ENEMY] 光环行补齐,
+  // 与 [CC ON TEAM] 同一谓词(analyzePlayerCCAndTrinket)。
+  const enemyCCSummaries = enemies.map((e) =>
+    analyzePlayerCCAndTrinket(
+      e as ICombatUnit,
+      friends as ICombatUnit[],
+      combat,
+      friendlyPets,
+    ),
+  );
   const enemyHealerUnit = enemies.find((e) => isHealerSpec(e.spec));
   const enemyHealerCCSummary = enemyHealerUnit
-    ? analyzePlayerCCAndTrinket(
-        enemyHealerUnit as ICombatUnit,
-        friends as ICombatUnit[],
-        combat,
-      )
+    ? enemyCCSummaries[enemies.indexOf(enemyHealerUnit)]
     : undefined;
   const ownerPurgeTimes = dispelSummary.ourPurges
     .filter((p) => p.sourceName === owner.name)
@@ -495,6 +520,8 @@ export function buildMatchContext(
       enemyCDTimeline,
       ccTrinketSummaries,
       dispelSummary,
+      enemyDispelSummary,
+      enemyCCSummaries,
       friendlyDeaths,
       enemyDeaths,
       pressureWindows,
@@ -955,6 +982,9 @@ export function buildMatchContext(
 
   lines.push("");
   formatDispelContextForAI(dispelSummary).forEach((l) => lines.push(l));
+  formatEnemyDispelsForContext(enemyDispelSummary).forEach((l) =>
+    lines.push(l),
+  );
 
   if (healer) {
     lines.push("");

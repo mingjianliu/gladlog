@@ -110,6 +110,10 @@ export interface BuildMatchTimelineParams {
   enemyCDTimeline: IEnemyCDTimeline;
   ccTrinketSummaries: IPlayerCCTrinketSummary[];
   dispelSummary: IDispelSummary;
+  /** 敌方视角驱散(他们给自己队友解 —— 我方 CC/dot 被解;2026-07-18 覆盖修复)。 */
+  enemyDispelSummary?: IDispelSummary;
+  /** 每个敌人的受控摘要(我方 CC 落在敌人身上;owner 的已有施法行,渲染时跳过)。 */
+  enemyCCSummaries?: IPlayerCCTrinketSummary[];
   friendlyDeaths: Array<{
     spec: string;
     name: string;
@@ -189,6 +193,8 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     enemyCDTimeline,
     ccTrinketSummaries,
     dispelSummary,
+    enemyDispelSummary,
+    enemyCCSummaries,
     friendlyDeaths,
     enemyDeaths,
     pressureWindows,
@@ -1624,6 +1630,21 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     }
   }
 
+  // ── [CC ON ENEMY]:我方 CC 落在敌人身上(2026-07-18 覆盖修复)────────────
+  // owner 的 CC 已有 [YOU] [CC] 施法行,跳过避免重复;队友/宠物来源补齐。
+  if (enemyCCSummaries) {
+    for (const summary of enemyCCSummaries) {
+      for (const cc of summary.ccInstances) {
+        if (cc.sourceName === owner.name) continue;
+        const durStr = ` (${cc.durationSeconds.toFixed(0)}s)`;
+        addEntry(
+          cc.atSeconds,
+          `${fmtTime(cc.atSeconds)}  [CC ON ENEMY]   ${enemyPid(summary.playerName)} ← ${cc.spellName} (by ${pid(cc.sourceName)})${durStr}`,
+        );
+      }
+    }
+  }
+
   // ── [UNCLEANSED DEBUFF] and [CLEANSE] events ──────────────────────────────────
 
   for (const miss of dispelSummary.missedCleanseWindows) {
@@ -1754,6 +1775,34 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
         `${fmtTime(first.timeSeconds)}  [ENEMY PURGE]   ${enemyPid(first.sourceName)} stripped ${effects}${viaTag}`,
       );
     }
+
+    // [ENEMY CLEANSE]:对面把我方 CC/dot 从他们队友身上解掉(教练关键信息
+    // ——"你的 Hex 秒被解";2026-07-18 baseline 排查:此前整类不可见,
+    // 42/176 场漏 Purify)。同级 Critical/High 过滤 + 同秒同源合并。
+    if (enemyDispelSummary) {
+      const enemyCleanseGroups = new Map<string, IDispelEvent[]>();
+      for (const c of enemyDispelSummary.allyCleanse) {
+        if (c.priority !== "Critical" && c.priority !== "High") continue;
+        const key = `${Math.round(c.timeSeconds)}|${c.sourceName}`;
+        const group = enemyCleanseGroups.get(key) ?? [];
+        group.push(c);
+        enemyCleanseGroups.set(key, group);
+      }
+      for (const group of enemyCleanseGroups.values()) {
+        const first = group[0];
+        const viaTag = first.dispelSpellName ? ` (${first.dispelSpellName})` : "";
+        const effects = group
+          .map(
+            (c) =>
+              `${getEnglishSpellName(c.removedSpellId, c.removedSpellName)} off ${enemyPid(c.targetName)}`,
+          )
+          .join(", ");
+        addEntry(
+          first.timeSeconds,
+          `${fmtTime(first.timeSeconds)}  [ENEMY CLEANSE]   ${enemyPid(first.sourceName)} cleansed ${effects}${viaTag}`,
+        );
+      }
+    }
   }
 
   // ── [MINOR DISPELS] 折叠行(T5 驱散覆盖)──────────────────────────────────
@@ -1794,6 +1843,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     foldMinor(dispelSummary.allyCleanse, pid);
     foldMinor(dispelSummary.ourPurges, pid);
     foldMinor(dispelSummary.hostilePurges, enemyPid);
+    if (enemyDispelSummary) foldMinor(enemyDispelSummary.allyCleanse, enemyPid);
 
     const bySource = new Map<
       string,

@@ -87,7 +87,13 @@ export function extractMatchDynamics(
   if (durationSeconds < 10) return null;
 
   const healerUnit = friends.find((u) => isHealerSpec(u.spec)) ?? null;
-  const ccTrinketSummaries = friends.map((p) => analyzePlayerCCAndTrinket(p, enemies, combat));
+  const enemyPlayerIds = new Set(enemies.map((u) => u.id));
+  const enemyPets = Object.values(combat.units ?? {}).filter(
+    (u) => u.ownerId && enemyPlayerIds.has(u.ownerId),
+  );
+  const ccTrinketSummaries = friends.map((p) =>
+    analyzePlayerCCAndTrinket(p, enemies, combat, enemyPets),
+  );
   const enemyCDTimeline = reconstructEnemyCDTimeline(enemies, combat, healerUnit ?? undefined, friends);
 
   const healerCCSummary = healerUnit ? ccTrinketSummaries.find((s) => s.playerName === healerUnit.name) : undefined;
