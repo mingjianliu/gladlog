@@ -3,9 +3,9 @@ import {
   analyzeKickAudit,
   auditWindowTargeting,
   computeOffensiveWindows,
-  isHealerSpec,
   type IBurstLedgerEntry,
   type IKickAuditEntry,
+  isHealerSpec,
   type IWindowTargetingAudit,
 } from "@gladlog/analysis";
 import { CombatUnitReaction } from "@gladlog/parser-compat";

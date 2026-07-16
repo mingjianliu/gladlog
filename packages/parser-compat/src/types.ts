@@ -1,10 +1,10 @@
 import {
+  CombatResult,
   CombatUnitClass,
   CombatUnitPowerType,
   CombatUnitReaction,
-  CombatUnitType,
   CombatUnitSpec,
-  CombatResult,
+  CombatUnitType,
   LogEvent,
 } from "./enums";
 

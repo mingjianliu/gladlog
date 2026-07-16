@@ -1,29 +1,30 @@
 import type {
+  GladCombatantInfo,
   GladMatch,
   GladShuffle,
   GladUnit,
-  GladCombatantInfo,
 } from "@gladlog/parser";
+
 import {
+  CombatResult,
   CombatUnitClass,
   CombatUnitReaction,
-  CombatUnitType,
   CombatUnitSpec,
-  CombatResult,
+  CombatUnitType,
   LogEvent,
 } from "./enums";
 import type {
+  CombatantInfo,
+  IAbsorbEvent,
+  IAdvancedAction,
   IArenaMatch,
-  IShuffleMatch,
+  IAuraEvent,
   ICombatUnit,
   IHpEvent,
-  IAbsorbEvent,
-  IAuraEvent,
-  ISpellEvent,
-  CombatantInfo,
-  IStartInfo,
-  IAdvancedAction,
   ILogLine,
+  IShuffleMatch,
+  ISpellEvent,
+  IStartInfo,
 } from "./types";
 
 // Mapping from Blizzard classId to legacy CombatUnitClass enum value
