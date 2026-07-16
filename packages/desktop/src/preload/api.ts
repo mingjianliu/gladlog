@@ -20,6 +20,16 @@ export interface GladlogApi {
     onStatusChanged(cb: (s: LogsStatusSnapshot) => void): () => void;
     onMatchStored(cb: (meta: StoredMatchMeta) => void): () => void;
     onDiagnostic(cb: (d: DiagnosticEntry) => void): () => void;
+    /** 历史日志导入:弹文件选择框 → 逐文件解析入库;取消 → null。 */
+    importFiles(): Promise<{
+      files: number;
+      stored: number;
+      dup: number;
+      failed: number;
+    } | null>;
+    onImportProgress(
+      cb: (p: { file: string; i: number; n: number; stored: number; dup: number }) => void,
+    ): () => void;
   };
   matches: {
     list(): Promise<StoredMatchMeta[]>;

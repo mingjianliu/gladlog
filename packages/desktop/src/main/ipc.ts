@@ -1,4 +1,5 @@
 import { app, dialog, ipcMain, shell, type BrowserWindow } from "electron";
+import { importLogFiles } from "./importLogs";
 import {
   redactSettings,
   sanitizeSettingsPatch,
@@ -33,6 +34,19 @@ export function registerIpc(deps: {
   ipcMain.handle("gladlog:matches:rebuildIndex", () =>
     deps.store.rebuildIndex(),
   );
+  ipcMain.handle("gladlog:logs:importFiles", async () => {
+    const win = deps.getWindow();
+    if (!win) return null;
+    const r = await dialog.showOpenDialog(win, {
+      title: "选择 WoWCombatLog 文件",
+      properties: ["openFile", "multiSelections"],
+      filters: [{ name: "Combat Log", extensions: ["txt", "log"] }],
+    });
+    if (r.canceled || r.filePaths.length === 0) return null;
+    return importLogFiles(r.filePaths, deps.store, (ch, payload) => {
+      deps.getWindow()?.webContents.send(ch, payload);
+    });
+  });
   ipcMain.handle("gladlog:settings:get", () =>
     redactSettings(deps.settings.get()),
   );

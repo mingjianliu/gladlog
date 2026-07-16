@@ -1723,3 +1723,13 @@ pre {
   font-size: 11px;
   color: var(--mute);
 }
+
+.import-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.import-progress {
+  font-size: 11px;
+  color: var(--ink-2);
+}

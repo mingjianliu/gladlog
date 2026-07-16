@@ -15,6 +15,8 @@ const api: GladlogApi = {
     onStatusChanged: sub("gladlog:logs:statusChanged"),
     onMatchStored: sub("gladlog:logs:matchStored"),
     onDiagnostic: sub("gladlog:logs:diagnostic"),
+    importFiles: () => ipcRenderer.invoke("gladlog:logs:importFiles"),
+    onImportProgress: sub("gladlog:import:progress"),
   },
   matches: {
     list: () => ipcRenderer.invoke("gladlog:matches:list"),

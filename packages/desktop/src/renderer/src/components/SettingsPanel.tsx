@@ -7,6 +7,7 @@ import {
   type GladlogSettings,
 } from "../../../main/settingsStore";
 import { bridge } from "../bridge";
+import { ImportButton } from "./ImportButton";
 
 /**
  * 设置页(phase3 #2a):用户项的正式家 —— WoW 目录、API key(哨兵掩码)、
@@ -64,6 +65,10 @@ export function SettingsPanel() {
           >
             选择目录…
           </button>
+        </div>
+        <div className="settings-row">
+          <span className="settings-k">历史日志</span>
+          <ImportButton />
         </div>
       </section>
 

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { DevPanel } from "./components/DevPanel";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { StatsDashboard } from "./components/StatsDashboard";
+import { ImportButton } from "./components/ImportButton";
 import { MatchListRow } from "./components/MatchListRow";
 import {
   applyFilter,
@@ -180,17 +181,23 @@ export default function App() {
                       }
                     >
                       选择 WoW 目录…
-                    </button>
+                    </button>{" "}
+                    <ImportButton />
                     <p className="onboard-hint">
                       需要开启游戏内战斗记录(高级模式);AI 分析在「设置」里配
                       API key,不配也能看战报与回放。
                     </p>
                   </>
                 ) : (
-                  <p>
-                    ✅ 正在监控 <code>{wowDir}</code> —— 打一场竞技场,战报会
-                    自动出现在左侧。
-                  </p>
+                  <>
+                    <p>
+                      ✅ 正在监控 <code>{wowDir}</code> —— 打一场竞技场,战报会
+                      自动出现在左侧。
+                    </p>
+                    <p>
+                      <ImportButton />
+                    </p>
+                  </>
                 )}
               </div>
             ) : (
