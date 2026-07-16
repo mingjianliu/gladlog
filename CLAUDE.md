@@ -11,4 +11,5 @@
 ## 常用
 
 - 类型检查:`npm run typecheck`(绝不 `tsc -b`,会往 src 吐 .js)。
+- desktop push 前:`npm test --workspace=packages/desktop && npm run typecheck && npx eslint packages/desktop/src --quiet`——CI 的 tsc 含 test 文件、且有独立 Lint 步,本地测试都不覆盖(连挂过三次)。工程约定见 `.claude/skills/desktop-dev`。
 - eval 工作流:`/eval-baseline`(找问题)→ `/eval-ab`(验证修复)→ `/calibrate-judge`(判分前校准)→ `/pipeline-audit`(全语料审计)。产物在 `$GLADLOG_EVAL_HOME`(默认 `~/code/gladlog-eval-private`)。

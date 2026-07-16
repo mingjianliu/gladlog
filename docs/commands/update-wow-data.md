@@ -60,6 +60,25 @@ DATAGEN_CACHE=$DATAGEN_CACHE npx tsx packages/analysis/scripts/datagen/validateC
 npm test --workspaces && npm run typecheck --workspaces --if-present
 ```
 
+### 7. 白名单腐烂检查(语料覆盖率回归)
+
+新 build 常伴技能重做/换 id,策展白名单会静默失效(2026-07 专精级排查:
+冰法/踏风/生存猎 none-tracked 率 100%,根因全是重做)。数据刷新后在最近
+语料上重建样本 prompt 并查两个率:
+
+```bash
+# 敌方 CD 追踪缺口:按专精算 none-tracked 率(看分母!绝对数会骗人)
+grep -rB6 "<cooldowns>none tracked" <runDir>/prompts | grep -o 'spec="[^"]*"' | sort | uniq -c | sort -rn
+# DR 分类缺口:任何 [DR: spell:<id> 回退渲染都是缺映射
+grep -rho "\[DR: spell:[0-9]*" <runDir>/prompts | sort | uniq -c
+```
+
+任一专精率突增 → 按「语料实证」流程补:挖该专精 SPELL_CAST_SUCCESS 找新
+爆发 id(带 cd 数据过滤会**恰好漏掉新 id**,先看无过滤 top,再补 override,
+cd/时长用语料实测:min inter-cast gap / buff applied→removed 中位数)。
+已知预期缺口(勿误报):惩戒 Radiant Glory 被动 AW、增强 Doom Winds 逐击
+proc——cast 型追踪器无解,注释在 spellCategories.ts。
+
 必须全绿。4a 的数据校准断言若因新数据翻红:以人工校准值为准 → 把正确值补进 `SPELL_EFFECT_OVERRIDES`(覆盖层恒赢),不改测试。
 
 ### 7. 汇总
