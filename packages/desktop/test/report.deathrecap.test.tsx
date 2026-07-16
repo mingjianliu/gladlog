@@ -84,3 +84,23 @@ describe("死亡回顾(backlog #6)", () => {
     expect(screen.queryByTestId("death-recap")).toBeNull();
   });
 });
+
+describe("回放视图死亡回顾入口(#6 v2)", () => {
+  it("scrub 到死亡后点 ✕ → 回顾卡打开(回放视图内)", () => {
+    const { container } = render(<MatchReport source={m} matchId="t" />);
+    fireEvent.click(screen.getByRole("button", { name: "回放" }));
+    // scrub 到末尾让阵亡残影出现
+    const scrub = container.querySelector(
+      ".rpt-replay-scrub",
+    ) as HTMLInputElement;
+    fireEvent.change(scrub, { target: { value: scrub.max } });
+    const ghost = container.querySelector(".rpt-replay-ghost-click");
+    expect(ghost).toBeTruthy();
+    fireEvent.click(ghost!);
+    expect(screen.getByTestId("death-recap")).toBeTruthy();
+    // 关闭后仍在回放视图
+    fireEvent.click(screen.getByRole("button", { name: "✕" }));
+    expect(screen.queryByTestId("death-recap")).toBeNull();
+    expect(container.querySelector(".rpt-replay-scrub")).toBeTruthy();
+  });
+});

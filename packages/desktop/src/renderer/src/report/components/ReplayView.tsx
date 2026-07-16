@@ -46,9 +46,12 @@ export interface SeekRequest {
 export function ReplayView({
   source,
   seekReq,
+  onDeathClick,
 }: {
   source: ReportSource;
   seekReq?: SeekRequest | null;
+  /** 阵亡 ✕ 点击 → 死亡回顾(#6 v2)。t 为绝对 ms。 */
+  onDeathClick?: (unitId: string, tMs: number) => void;
 }) {
   const data = useMemo(() => deriveReplay(source), [source]);
   const { startTime, endTime, bounds, tracks } = data;
@@ -281,7 +284,15 @@ export function ReplayView({
               const cx = toX(dp.x);
               const cy = toY(dp.y);
               return (
-                <g key={`d${tr.unitId}`}>
+                <g
+                  key={`d${tr.unitId}`}
+                  className={onDeathClick ? "rpt-replay-ghost-click" : undefined}
+                  onClick={
+                    onDeathClick
+                      ? () => onDeathClick(tr.unitId, tr.deathT!)
+                      : undefined
+                  }
+                >
                   <circle
                     cx={cx}
                     cy={cy}
@@ -292,6 +303,7 @@ export function ReplayView({
                   <text x={cx} y={cy + 4} className="rpt-replay-death">
                     ✕
                   </text>
+                  <title>{`${tr.name} 阵亡${onDeathClick ? " — 点击看死亡回顾" : ""}`}</title>
                 </g>
               );
             })}

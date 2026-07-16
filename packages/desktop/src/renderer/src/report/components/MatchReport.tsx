@@ -108,19 +108,26 @@ export function MatchReport({
             onSelectUnit={toggleUnit}
             onDeathClick={openRecap}
           />
-          {recap && (
-            <DeathRecapCard
-              recap={recap}
-              onClose={() => setRecap(null)}
-              onJump={(tSeconds, unitNames) => {
-                setRecap(null);
-                handleSeekEvent(tSeconds, unitNames);
-              }}
-            />
-          )}
         </div>
       )}
-      {view === "replay" && <ReplayView source={source} seekReq={seekReq} />}
+      {view === "replay" && (
+        <ReplayView
+          source={source}
+          seekReq={seekReq}
+          onDeathClick={openRecap}
+        />
+      )}
+      {/* 死亡回顾卡:战报与回放两个视图共用(AI 视图不渲染) */}
+      {view !== "ai" && recap && (
+        <DeathRecapCard
+          recap={recap}
+          onClose={() => setRecap(null)}
+          onJump={(tSeconds, unitNames) => {
+            setRecap(null);
+            handleSeekEvent(tSeconds, unitNames);
+          }}
+        />
+      )}
       {view === "ai" && (
         <div className="rpt-ai-full">
           <div className="rpt-ai-main">

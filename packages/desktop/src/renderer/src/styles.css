@@ -1486,3 +1486,12 @@ pre {
 .rpt-gcd-act.seekable:hover {
   box-shadow: 0 0 0 1px var(--gold-dim);
 }
+
+/* 回放阵亡 ✕ 可点(#6 v2) */
+.rpt-replay-ghost-click {
+  cursor: pointer;
+}
+.rpt-replay-ghost-click:hover .rpt-replay-ghost {
+  stroke: var(--gold);
+  stroke-width: 2px;
+}
