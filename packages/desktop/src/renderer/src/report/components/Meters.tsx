@@ -19,6 +19,7 @@ export function Meters({
   onToggleUnit,
   statsRows,
   durationS,
+  onSeek,
 }: {
   rows: UnitTotals[];
   mode: MeterMode;
@@ -30,6 +31,8 @@ export function Meters({
   /** 「统计」模式数据(backlog #10);未传则不显示该模式。 */
   statsRows?: StatsRow[];
   durationS?: number;
+  /** 统计明细的回放跳转(v2)。 */
+  onSeek?: (tSeconds: number, unitNames: string[]) => void;
 }) {
   const items = meterRows(rows, mode === "stats" ? "damage" : mode);
   const modes = (Object.keys(MODE_LABEL) as MeterMode[]).filter(
@@ -52,7 +55,7 @@ export function Meters({
         </div>
       </div>
       {mode === "stats" && statsRows ? (
-        <StatsTable rows={statsRows} durationS={durationS ?? 1} />
+        <StatsTable rows={statsRows} durationS={durationS ?? 1} onSeek={onSeek} />
       ) : (
         <div className="rpt-meters">
           {items.map((r) => {

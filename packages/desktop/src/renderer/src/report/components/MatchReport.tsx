@@ -100,6 +100,7 @@ export function MatchReport({
             onToggleUnit={toggleUnit}
             statsRows={statsRows}
             durationS={(source.endTime - source.startTime) / 1000}
+            onSeek={handleSeekEvent}
           />
           <Timeline
             data={timeline}

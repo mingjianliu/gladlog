@@ -35,3 +35,45 @@ describe("统计表(backlog #10)", () => {
     expect(screen.queryByTestId("stats-table")).toBeNull();
   });
 });
+
+describe("统计表行展开(#10 v2)", () => {
+  it("derive:detail 三组各按时间升序,总数与行汇总一致", () => {
+    const rows = deriveStatsTable(m);
+    for (const r of rows) {
+      expect(r.detail.kicksCast.length).toBe(r.kicksCast);
+      expect(r.detail.kicksTaken.length).toBe(r.kicksTaken);
+      for (const group of [
+        r.detail.kicksCast,
+        r.detail.kicksTaken,
+        r.detail.ccTaken,
+      ]) {
+        for (let i = 1; i < group.length; i++) {
+          expect(group[i]!.tS).toBeGreaterThanOrEqual(group[i - 1]!.tS);
+        }
+      }
+    }
+    // fixture 里至少一行有明细可展开
+    expect(
+      rows.some(
+        (r) =>
+          r.detail.kicksCast.length +
+            r.detail.kicksTaken.length +
+            r.detail.ccTaken.length >
+          0,
+      ),
+    ).toBe(true);
+  });
+
+  it("UI:点行展开明细,点 ▶ 跳回放(提前 3s、带玩家名)且切到回放视图", () => {
+    const { container } = render(<MatchReport source={m} matchId="t" />);
+    fireEvent.click(screen.getByRole("button", { name: "统计" }));
+    const row = container.querySelector(".rpt-stats-expandable")!;
+    expect(row).toBeTruthy();
+    fireEvent.click(row);
+    const jump = container.querySelector(".rpt-stats-detail-jump")!;
+    expect(jump).toBeTruthy();
+    fireEvent.click(jump);
+    // 跳转后切到回放视图(scrubber 存在)
+    expect(container.querySelector(".rpt-replay-scrub")).toBeTruthy();
+  });
+});

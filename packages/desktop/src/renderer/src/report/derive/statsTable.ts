@@ -1,5 +1,6 @@
 import {
   analyzePlayerCCAndTrinket,
+  getEnglishSpellName,
   reconstructDispelSummary,
   SPELL_CATEGORIES,
 } from "@gladlog/analysis";
@@ -7,6 +8,13 @@ import { CombatUnitReaction, LogEvent } from "@gladlog/parser-compat";
 
 import { toLegacySafe } from "./legacySource";
 import type { ReportSource } from "./types";
+
+/** 明细实例(行展开用,backlog #10 v2);tS = 相对秒。 */
+export interface StatsInstance {
+  tS: number;
+  /** 事件描述,如 "Wind Shear → Chaos Bolt" / "Kidney Shot 5.0s(Rogue X)"。 */
+  label: string;
+}
 
 export interface StatsRow {
   unitId: string;
@@ -25,6 +33,12 @@ export interface StatsRow {
   cleanses: number;
   /** 进攻驱散/偷 buff 次数。 */
   purges: number;
+  /** 行展开明细:打断施放 / 被打断 / 被控(各按时间升序)。 */
+  detail: {
+    kicksCast: StatsInstance[];
+    kicksTaken: StatsInstance[];
+    ccTaken: StatsInstance[];
+  };
 }
 
 /**
@@ -63,11 +77,12 @@ export function deriveStatsTable(source: ReportSource): StatsRow[] {
         (s, i) => s + i.durationSeconds,
         0,
       );
-      const kicksCast = p.spellCastEvents.filter(
+      const kickCastEvents = p.spellCastEvents.filter(
         (e) =>
           e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
           SPELL_CATEGORIES[e.spellId ?? ""]?.type === "interrupts",
-      ).length;
+      );
+      const kicksCast = kickCastEvents.length;
       const dispels =
         p.reaction === CombatUnitReaction.Friendly ? ourDispels : theirDispels;
       const cleanses = dispels.allyCleanse.filter(
@@ -89,6 +104,26 @@ export function deriveStatsTable(source: ReportSource): StatsRow[] {
         ccTakenPct: Math.round((100 * ccTakenS) / durationS),
         cleanses,
         purges,
+        detail: {
+          kicksCast: kickCastEvents
+            .map((e) => ({
+              tS: (e.logLine.timestamp - legacy.startTime) / 1000,
+              label: getEnglishSpellName(e.spellId ?? "", e.spellName ?? ""),
+            }))
+            .sort((a, b) => a.tS - b.tS),
+          kicksTaken: cc.interruptInstances
+            .map((i) => ({
+              tS: i.atSeconds,
+              label: `${i.kickSpellName} 打断 ${i.interruptedSpellName}(${i.sourceName})`,
+            }))
+            .sort((a, b) => a.tS - b.tS),
+          ccTaken: cc.ccInstances
+            .map((i) => ({
+              tS: i.atSeconds,
+              label: `${i.spellName} ${i.durationSeconds.toFixed(1)}s(${i.sourceName})`,
+            }))
+            .sort((a, b) => a.tS - b.tS),
+        },
       });
     }
     // 己方在前,组内按被控时长降序(最被针对的最上)

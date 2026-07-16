@@ -1437,3 +1437,44 @@ pre {
   background: var(--surface-2);
   color: var(--gold);
 }
+
+/* ── 统计表行展开(#10 v2)── */
+.rpt-stats-expandable {
+  cursor: pointer;
+}
+.rpt-stats-caret {
+  color: var(--mute);
+  font-size: 10px;
+}
+.rpt-stats-detail-row td {
+  background: var(--surface-2);
+  padding: 6px 10px;
+}
+.rpt-stats-detail-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 10px;
+  margin: 2px 0;
+}
+.rpt-stats-detail-title {
+  color: var(--mute);
+  font-size: 10px;
+  min-width: 52px;
+}
+.rpt-stats-detail-item {
+  font-size: 11px;
+  white-space: nowrap;
+}
+.rpt-stats-detail-t {
+  color: var(--gold);
+}
+.rpt-stats-detail-jump {
+  margin-left: 3px;
+  padding: 0 4px;
+  font-size: 9px;
+  color: var(--gold);
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
