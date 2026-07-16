@@ -20,16 +20,25 @@ import { resolveEvalHome, runDir } from "../src/evalHome";
 function parseArgs(): {
   manifest: string;
   run: string;
+  owner: "healer" | "dps";
 } {
   const args = process.argv.slice(2);
   const result = {
     manifest: "",
     run: "",
+    owner: "healer" as "healer" | "dps",
   };
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--manifest") result.manifest = args[i + 1];
     else if (args[i] === "--run") result.run = args[i + 1];
+    else if (args[i] === "--owner") {
+      if (args[i + 1] !== "healer" && args[i + 1] !== "dps") {
+        console.error("Error: --owner must be healer|dps");
+        process.exit(1);
+      }
+      result.owner = args[i + 1] as "healer" | "dps";
+    }
   }
 
   if (!result.manifest) {
@@ -48,9 +57,9 @@ function parseArgs(): {
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main() {
-  const { manifest: manifestPath, run: runId } = parseArgs();
+  const { manifest: manifestPath, run: runId, owner } = parseArgs();
 
-  console.log("Building healer prompt corpus from local logs");
+  console.log(`Building ${owner} prompt corpus from local logs`);
   console.log();
 
   // 1. Read manifest
@@ -82,7 +91,7 @@ async function main() {
   const { entries, fingerprint } = await buildCorpus({
     logPaths,
     outDir,
-    ownerFilter: "healer",
+    ownerFilter: owner,
   });
 
   // 4. Report results

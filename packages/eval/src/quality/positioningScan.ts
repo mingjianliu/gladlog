@@ -26,6 +26,7 @@ import {
   distanceBetween,
   getUnitPositionAtTime,
   hasLineOfSight,
+  isHealerSpec,
 } from "@gladlog/analysis";
 
 export type GeoClaimKind =
@@ -41,6 +42,9 @@ export interface GeoClaim {
   unitName?: string;
   /** G1:被 CC 的我方单位(行内 "X ←" 的 pid 标签) */
   targetName?: string;
+  /** 距离主体(默认 owner)。G2 "your healer (X) was camped" 变体的主体是治疗
+   * 而非 owner —— DPS 语料上用 owner 复算全是假违规(D2 实测 27 条)。 */
+  subjectName?: string;
   raw: string;
 }
 
@@ -111,7 +115,7 @@ export function extractGeoClaims(promptText: string): GeoExtraction {
 
     // G2: 1:13–1:21 you were camped by Rockxtv-Illidan-US (closest 1.3yd) — …
     m = line.match(
-      /^ +(\d+:\d{2})[–-](\d+:\d{2}) (?:you were|your healer \([^)]*\) was) camped by (\S+) \(closest ([\d.]+)yd\)/,
+      /^ +(\d+:\d{2})[–-](\d+:\d{2}) (?:you were|your healer \(([^)]*)\) was) camped by (\S+) \(closest ([\d.]+)yd\)/,
     );
     if (m) {
       claims.push({
@@ -119,8 +123,9 @@ export function extractGeoClaims(promptText: string): GeoExtraction {
         lineNo,
         atSeconds: parseTime(m[1]),
         toSeconds: parseTime(m[2]),
-        distanceYards: Number(m[4]),
-        unitName: m[3],
+        distanceYards: Number(m[5]),
+        unitName: m[4],
+        subjectName: m[3] || undefined,
         raw: line,
       });
       continue;
@@ -226,6 +231,10 @@ function windowDistanceSpan(
       if (act.timestamp >= fromMs && act.timestamp <= toMs) instants.add(act.timestamp);
     }
   }
+  // getUnitPositionAtTime 是线性插值的:管线可在任意亚秒时刻取值,两单位的
+  // 采样时刻不重合时,交叉逼近的最小值只存在于采样点之间(D2 实测:声明 1.7yd
+  // 为真、仅采样时刻扫描给 span-min 5.3yd 的假违规)。补 250ms 网格闭合盲区。
+  for (let ts = fromMs; ts <= toMs; ts += 250) instants.add(ts);
   let min: number | null = null;
   let max: number | null = null;
   for (const ts of instants) {
@@ -261,6 +270,8 @@ function minDistanceInWindow(
       if (act.timestamp >= fromMs && act.timestamp <= toMs) instants.add(act.timestamp);
     }
   }
+  // 与 windowDistanceSpan 同理:插值原语要求亚秒网格,否则漏交叉低谷
+  for (let ts = fromMs; ts <= toMs; ts += 250) instants.add(ts);
   let min: number | null = null;
   for (const ts of instants) {
     const pa = getUnitPositionAtTime(a, ts, POSITION_MAX_GAP_MS);
@@ -320,8 +331,12 @@ export function checkGeoClaims(
           unverifiable++;
           continue;
         }
+        // 距离主体:"your healer (X) was camped" 的主体是 X,不是 owner
+        const subject =
+          (claim.subjectName ? resolveUnit(claim.subjectName, ctx) : null) ??
+          ctx.owner;
         const min = minDistanceInWindow(
-          ctx.owner,
+          subject,
           camper,
           claim.atSeconds,
           claim.toSeconds ?? claim.atSeconds,
@@ -420,9 +435,17 @@ export function checkGeoClaims(
         // ±slack 内任一采样互见即 grounded(柱边亚秒抖动不算假主张)
         let sawAny = false;
         let sawLoS = false;
+        // [HEALER EXPOSURE] 恒以友方治疗为主体(healerExposureAnalysis 锚定
+        // healerUnit);owner 是 DPS 时用 owner 复算即主语错位(D2 实测)。
+        const exposureSubject =
+          ctx.friends.find((u) => isHealerSpec(u.spec)) ?? ctx.owner;
         for (let dt = -TIME_SLACK_SECONDS; dt <= TIME_SLACK_SECONDS; dt++) {
           const ts = ctx.matchStartMs + (claim.atSeconds + dt) * 1000;
-          const po = getUnitPositionAtTime(ctx.owner, ts, POSITION_MAX_GAP_MS);
+          const po = getUnitPositionAtTime(
+            exposureSubject,
+            ts,
+            POSITION_MAX_GAP_MS,
+          );
           const pe = getUnitPositionAtTime(enemy, ts, POSITION_MAX_GAP_MS);
           if (!po || !pe) continue;
           sawAny = true;

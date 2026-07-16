@@ -19,12 +19,16 @@ export interface IndexEntry {
   matchId: string;
   spec: string;
   result: string;
+  /** prompt 主角单位名 —— 验证门据此复原视角(缺省 = 旧语料,门回退友方治疗)。 */
+  ownerName?: string;
 }
 
 export async function buildCorpus(opts: {
   logPaths: string[];
   outDir: string;
-  ownerFilter?: "healer";
+  /** healer = 友方治疗;dps = 友方非治疗中总伤害最高者(D2 降级验证语料:
+   * 记录者不是该 DPS,但确定性分析全部视角无关,仅 [YOU] 意图性弱一档)。 */
+  ownerFilter?: "healer" | "dps";
 }): Promise<{ entries: IndexEntry[]; fingerprint: string }> {
   const { logPaths, outDir, ownerFilter } = opts;
   const entries: IndexEntry[] = [];
@@ -76,6 +80,24 @@ export async function buildCorpus(opts: {
             // Skip this combat if no healer found when ownerFilter is "healer"
             continue;
           }
+        } else if (ownerFilter === "dps") {
+          // 友方非治疗中总伤害最高者(确定性;并列取先遍历到的)
+          let best: any = null;
+          let bestDmg = -1;
+          for (const u of players) {
+            if (u.reaction !== CombatUnitReaction.Friendly) continue;
+            if (isHealerSpec(u.spec)) continue;
+            const dmg = (u.damageOut ?? []).reduce(
+              (sum: number, e: any) => sum + Math.abs(e.effectiveAmount ?? 0),
+              0,
+            );
+            if (dmg > bestDmg) {
+              bestDmg = dmg;
+              best = u;
+            }
+          }
+          owner = best;
+          if (!owner) continue;
         } else {
           // Default: use first player
           owner = players[0];
@@ -120,6 +142,7 @@ export async function buildCorpus(opts: {
           matchId: gladId,
           spec: specToString(owner.spec) || String(owner.spec),
           result,
+          ownerName: owner.name,
         });
 
         ordinal++;

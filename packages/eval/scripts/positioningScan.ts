@@ -86,7 +86,12 @@ async function main() {
   const matchesMissing = index.length - seen.size;
 
   async function scanOne(
-    entry: { ordinal: number; file: string; matchId: string },
+    entry: {
+      ordinal: number;
+      file: string;
+      matchId: string;
+      ownerName?: string;
+    },
     combat: any,
   ) {
     const promptText = await fs.readFile(
@@ -99,9 +104,20 @@ async function main() {
 
     const units: any[] = Object.values(combat.units);
     const players = units.filter((u) => u.info);
-    const owner = players.find(
-      (u) => isHealerSpec(u.spec) && u.reaction === CombatUnitReaction.Friendly,
-    );
+    // owner = 语料 index 记录的 prompt 主角(D2:DPS 语料的距离声明是 DPS 视角,
+    // 拿治疗坐标复算全是假违规);旧语料无 ownerName → 回退友方治疗(原行为)。
+    const owner =
+      (entry.ownerName
+        ? players.find(
+            (u) =>
+              u.name === entry.ownerName &&
+              u.reaction === CombatUnitReaction.Friendly,
+          )
+        : undefined) ??
+      players.find(
+        (u) =>
+          isHealerSpec(u.spec) && u.reaction === CombatUnitReaction.Friendly,
+      );
     if (!owner) return;
     const ctx = {
       owner,
