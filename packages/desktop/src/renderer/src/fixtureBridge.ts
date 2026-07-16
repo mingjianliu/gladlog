@@ -141,6 +141,9 @@ export function installFixtureBridge(): void {
           },
         ];
       },
+      async rebuildIndex(): Promise<{ updated: number; failed: number }> {
+        return { updated: 0, failed: 0 };
+      },
       async get(id: string): Promise<unknown | null> {
         if (id === "fixture-match") {
           return {

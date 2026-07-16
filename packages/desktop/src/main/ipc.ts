@@ -30,6 +30,9 @@ export function registerIpc(deps: {
     "gladlog:matches:page",
     (_e, opts: { before?: number; limit: number }) => deps.store.page(opts),
   );
+  ipcMain.handle("gladlog:matches:rebuildIndex", () =>
+    deps.store.rebuildIndex(),
+  );
   ipcMain.handle("gladlog:settings:get", () =>
     redactSettings(deps.settings.get()),
   );

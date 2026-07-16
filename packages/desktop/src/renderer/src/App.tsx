@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { DevPanel } from "./components/DevPanel";
+import { MatchListRow } from "./components/MatchListRow";
 import { MatchReport } from "./report/components/MatchReport";
 import { ShuffleReport } from "./report/components/ShuffleReport";
 import type { StoredMatchMeta } from "../../main/matchStore";
@@ -60,8 +61,6 @@ export default function App() {
     }
   }, [selectedId]);
 
-  const fmt = (t: number) => new Date(t).toLocaleString();
-
   return (
     <div className="app-container">
       <header className="app-topbar">
@@ -84,8 +83,7 @@ export default function App() {
                   className={m.id === selectedId ? "sel" : ""}
                   onClick={() => setSelectedId(m.id)}
                 >
-                  <span className={`badge badge-${m.kind}`}>[{m.kind}]</span>{" "}
-                  {m.bracket} · {fmt(m.startTime)} · {m.result}
+                  <MatchListRow meta={m} />
                 </li>
               ))}
               {hasMore && <li className="loading-more">加载更早…</li>}

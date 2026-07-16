@@ -20,6 +20,7 @@ const api: GladlogApi = {
     list: () => ipcRenderer.invoke("gladlog:matches:list"),
     get: (id) => ipcRenderer.invoke("gladlog:matches:get", id),
     page: (opts) => ipcRenderer.invoke("gladlog:matches:page", opts),
+    rebuildIndex: () => ipcRenderer.invoke("gladlog:matches:rebuildIndex"),
   },
   settings: {
     get: () => ipcRenderer.invoke("gladlog:settings:get"),

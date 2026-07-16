@@ -20,9 +20,57 @@ export interface StoredMatchMeta {
   endTime: number;
   result: string;
   storedAt: number;
+  // ── 富行字段(2026-07-17 backlog #7)——全部 optional,旧索引行缺字段时
+  //    列表回退纯文本样式;旧数据可用 rebuildIndex() 一次性回填。──
+  durationS?: number;
+  /** 己方队平均个人评分;无评分数据时 null。 */
+  avgRating?: number | null;
+  /** [己方, 敌方] 两组专精(只存渲染需要的 id,不存名字)。 */
+  teams?: Array<Array<{ specId: number; classId: number }>>;
 }
 
 const safeName = (id: string): string => id.replace(/[^A-Za-z0-9._-]/g, "_");
+
+interface RosterUnitLike {
+  kind?: string;
+  specId?: number;
+  classId?: number;
+  info?: { teamId?: number; personalRating?: number } | null;
+}
+
+/** 从对局 doc 提炼富行字段(store 时全量 doc 在手,零额外 IO)。 */
+function metaExtras(src: {
+  startTime: number;
+  endTime: number;
+  playerTeamId?: number;
+  units?: Record<string, RosterUnitLike>;
+}): Pick<StoredMatchMeta, "durationS" | "avgRating" | "teams"> {
+  const durationS = Math.max(
+    0,
+    Math.round((src.endTime - src.startTime) / 1000),
+  );
+  const own: Array<{ specId: number; classId: number }> = [];
+  const foe: Array<{ specId: number; classId: number }> = [];
+  const ratings: number[] = [];
+  for (const u of Object.values(src.units ?? {})) {
+    if (u.kind !== "Player" || !u.info) continue;
+    const entry = { specId: u.specId ?? 0, classId: u.classId ?? 0 };
+    if (u.info.teamId === src.playerTeamId) {
+      own.push(entry);
+      if (
+        typeof u.info.personalRating === "number" &&
+        u.info.personalRating > 0
+      )
+        ratings.push(u.info.personalRating);
+    } else {
+      foe.push(entry);
+    }
+  }
+  const avgRating = ratings.length
+    ? Math.round(ratings.reduce((s, r) => s + r, 0) / ratings.length)
+    : null;
+  return { durationS, avgRating, teams: [own, foe] };
+}
 
 export class MatchStore {
   private index = new Map<string, StoredMatchMeta>();
@@ -133,6 +181,12 @@ export class MatchStore {
         endTime: item.endTime,
         result: String(item.result),
         storedAt: this.now(),
+        // 阵容取首回合(shuffle 每回合换边,首回合即入场名单);时长取全程。
+        ...metaExtras(first as unknown as Parameters<typeof metaExtras>[0]),
+        durationS: Math.max(
+          0,
+          Math.round((item.endTime - item.startTime) / 1000),
+        ),
       };
       data = {
         ...item,
@@ -150,6 +204,7 @@ export class MatchStore {
         endTime: item.endTime,
         result: String(item.result),
         storedAt: this.now(),
+        ...metaExtras(item as unknown as Parameters<typeof metaExtras>[0]),
       };
       data = { ...item, rawLines: undefined };
     }
@@ -189,6 +244,50 @@ export class MatchStore {
     this.index.set(id, meta);
     this.appendIndexLine(meta);
     return { stored: true, meta };
+  }
+
+  /**
+   * 用户主动触发的一次性回填(DevPanel 按钮):逐目录读 match.json,重提炼
+   * 富行字段并重写 meta.json + 索引。旧行缺字段是常态(渲染回退),不自动跑。
+   */
+  rebuildIndex(): { updated: number; failed: number } {
+    let updated = 0;
+    let failed = 0;
+    for (const [id, meta] of [...this.index]) {
+      try {
+        const doc = JSON.parse(
+          readFileSync(join(this.rootDir, safeName(id), "match.json"), "utf-8"),
+        ) as { kind: string; data: Record<string, unknown> };
+        const src =
+          doc.kind === "shuffle"
+            ? (doc.data as { rounds?: unknown[] }).rounds?.[0]
+            : doc.data;
+        if (!src) {
+          failed++;
+          continue;
+        }
+        const next: StoredMatchMeta = {
+          ...meta,
+          ...metaExtras(src as Parameters<typeof metaExtras>[0]),
+        };
+        if (doc.kind === "shuffle") {
+          next.durationS = Math.max(
+            0,
+            Math.round((meta.endTime - meta.startTime) / 1000),
+          );
+        }
+        writeFileSync(
+          join(this.rootDir, safeName(id), "meta.json"),
+          JSON.stringify(next, null, 2),
+        );
+        this.index.set(id, next);
+        updated++;
+      } catch {
+        failed++;
+      }
+    }
+    this.rewriteIndex();
+    return { updated, failed };
   }
 
   list(): StoredMatchMeta[] {

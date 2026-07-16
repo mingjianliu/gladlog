@@ -1168,3 +1168,84 @@ pre {
   font-style: italic;
   cursor: default;
 }
+
+/* ── 对局列表富行(backlog #7)── */
+.mlr {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.mlr-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.mlr-result {
+  font-family: var(--font-data);
+  font-size: 10px;
+  font-weight: bold;
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+.mlr-result-win {
+  color: var(--win);
+  background: color-mix(in srgb, var(--win) 14%, transparent);
+}
+.mlr-result-loss,
+.mlr-result-lose {
+  color: var(--loss);
+  background: color-mix(in srgb, var(--loss) 14%, transparent);
+}
+.mlr-zone {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.mlr-dur,
+.mlr-rating {
+  font-family: var(--font-data);
+  font-size: 11px;
+  color: var(--ink-2);
+}
+.mlr-rating {
+  color: var(--gold);
+}
+.mlr-teams {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.mlr-team {
+  display: inline-flex;
+  gap: 2px;
+}
+.mlr-vs {
+  font-size: 9px;
+  color: var(--mute);
+  margin: 0 2px;
+}
+.mlr-spec {
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  object-fit: cover;
+}
+.mlr-spec-fallback {
+  font-size: 8px;
+  font-weight: bold;
+  color: #fff;
+  font-family: var(--font-data);
+}
+.mlr-when {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--mute);
+  font-family: var(--font-data);
+}

@@ -58,6 +58,19 @@ export function DevPanel() {
           <button onClick={() => void pickDir()}>选择目录…</button>
         </p>
         <p>
+          <button
+            onClick={() =>
+              void bridge()
+                .matches.rebuildIndex()
+                .then((r) =>
+                  alert(`索引已重建:更新 ${r.updated},失败 ${r.failed}`),
+                )
+            }
+          >
+            重建对局索引(回填富行字段)
+          </button>
+        </p>
+        <p>
           AI 后端(调试):{" "}
           <select
             value={aiBackend}

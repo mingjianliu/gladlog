@@ -25,6 +25,8 @@ export interface GladlogApi {
     list(): Promise<StoredMatchMeta[]>;
     get(id: string): Promise<unknown | null>;
     page(opts: { before?: number; limit: number }): Promise<StoredMatchMeta[]>;
+    /** 一次性回填富行字段(逐目录读 match.json 重铸 meta),用户主动触发。 */
+    rebuildIndex(): Promise<{ updated: number; failed: number }>;
   };
   settings: {
     get(): Promise<GladlogSettings>;

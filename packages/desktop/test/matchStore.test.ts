@@ -116,3 +116,80 @@ describe("MatchStore", () => {
     expect(existsSync(join(root, "heal1", "meta.json"))).toBe(true);
   });
 });
+
+describe("富行 meta 字段(backlog #7)", () => {
+  const withUnits = (id: string): GladMatch =>
+    ({
+      ...(fakeMatch(id) as unknown as Record<string, unknown>),
+      startTime: 100_000,
+      endTime: 245_000,
+      playerTeamId: 0,
+      units: {
+        a: {
+          kind: "Player",
+          specId: 105,
+          classId: 11,
+          info: { teamId: 0, personalRating: 2400 },
+        },
+        b: {
+          kind: "Player",
+          specId: 71,
+          classId: 1,
+          info: { teamId: 0, personalRating: 2600 },
+        },
+        c: {
+          kind: "Player",
+          specId: 64,
+          classId: 8,
+          info: { teamId: 1, personalRating: 2500 },
+        },
+        pet: { kind: "Pet", specId: 0, classId: 0 },
+      },
+    }) as unknown as GladMatch;
+
+  it("store 时提炼 durationS/avgRating/teams(宠物排除,己方在前)", () => {
+    const s = new MatchStore(dir());
+    const { meta } = s.store(withUnits("rich1"));
+    expect(meta!.durationS).toBe(145);
+    expect(meta!.avgRating).toBe(2500); // (2400+2600)/2
+    expect(meta!.teams).toEqual([
+      [
+        { specId: 105, classId: 11 },
+        { specId: 71, classId: 1 },
+      ],
+      [{ specId: 64, classId: 8 }],
+    ]);
+  });
+
+  it("rebuildIndex 给旧 meta 回填富行字段", () => {
+    const d = dir();
+    const s = new MatchStore(d);
+    const { meta } = s.store(withUnits("rich2"));
+    // 模拟旧索引:剥掉富行字段重写 meta.json 与内存索引
+    const stripped = { ...meta! };
+    delete stripped.durationS;
+    delete stripped.avgRating;
+    delete stripped.teams;
+    (s as unknown as { index: Map<string, unknown> }).index.set(
+      "rich2",
+      stripped,
+    );
+    const r = s.rebuildIndex();
+    expect(r.updated).toBe(1);
+    const after = s.list().find((m) => m.id === "rich2")!;
+    expect(after.durationS).toBe(145);
+    expect(after.teams?.[0]?.length).toBe(2);
+  });
+
+  it("无评分数据时 avgRating 为 null,不炸", () => {
+    const s = new MatchStore(dir());
+    const m = withUnits("rich3") as unknown as {
+      units: Record<string, { info?: { personalRating?: number } }>;
+    };
+    for (const u of Object.values(m.units)) {
+      if (u.info) delete u.info.personalRating;
+    }
+    const { meta } = s.store(m as unknown as GladMatch);
+    expect(meta!.avgRating).toBeNull();
+  });
+});
