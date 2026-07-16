@@ -8,6 +8,8 @@ import {
   pathUpTo,
   sampleAt,
 } from "../derive/replay";
+import { deriveCasts } from "../derive/casts";
+import { dampeningAt, deriveDampeningSeries } from "../derive/dampeningSeries";
 import type { ReportSource } from "../derive/types";
 import { deriveVulnBands } from "../derive/vulnWindows";
 import { GcdSwimlane } from "./GcdSwimlane";
@@ -51,6 +53,15 @@ export function ReplayView({
   const data = useMemo(() => deriveReplay(source), [source]);
   const { startTime, endTime, bounds, tracks } = data;
   const vulnBands = useMemo(() => deriveVulnBands(source), [source]);
+  const dampSeries = useMemo(() => deriveDampeningSeries(source), [source]);
+  // 施法闪现(#11b 降级版):parser 无 SPELL_CAST_START,用 SUCCESS 瞬间闪现
+  const castsByUnit = useMemo(
+    () =>
+      Object.fromEntries(
+        tracks.map((tr) => [tr.unitId, deriveCasts(source, tr.unitId)]),
+      ),
+    [source, tracks],
+  );
 
   const [t, setT] = useState(startTime);
   const [playing, setPlaying] = useState(false);
@@ -325,6 +336,34 @@ export function ReplayView({
                     rx={2}
                     fill={hpColor(hp)}
                   />
+                  {/* HP 数字(#11c) */}
+                  <text
+                    x={cx + 20}
+                    y={cy + 20.5}
+                    className="rpt-replay-hpnum"
+                    fill={hpColor(hp)}
+                  >
+                    {Math.round(hp * 100)}%
+                  </text>
+                  {/* 施法闪现(#11b):刚成功的施法在头顶闪 1.2s */}
+                  {(() => {
+                    const cs = castsByUnit[tr.unitId] ?? [];
+                    let last: (typeof cs)[number] | null = null;
+                    for (const c of cs) {
+                      if (c.t > t) break;
+                      if (t - c.t <= 1200) last = c;
+                    }
+                    if (!last) return null;
+                    return (
+                      <text
+                        x={cx}
+                        y={cy - 30}
+                        className="rpt-replay-castflash"
+                      >
+                        ✦ {last.spellName}
+                      </text>
+                    );
+                  })()}
                 </g>
               );
             })}
@@ -418,6 +457,14 @@ export function ReplayView({
         <span className="rpt-replay-time">
           {relTime(t, startTime)} / {relTime(endTime, startTime)}
         </span>
+        {(() => {
+          const d = dampeningAt(dampSeries, (t - source.startTime) / 1000);
+          return d != null && d > 0 ? (
+            <span className="rpt-replay-damp" title="治疗衰减(dampening)">
+              衰减 {d}%
+            </span>
+          ) : null;
+        })()}
         <span className="rpt-replay-divider" />
         <div className="rpt-replay-speed">
           {SPEEDS.map((s) => (

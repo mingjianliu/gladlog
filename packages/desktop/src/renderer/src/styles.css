@@ -1390,3 +1390,25 @@ pre {
   color: var(--mute);
   font-size: 11px;
 }
+
+/* ── 回放三小件(backlog #11)── */
+.rpt-replay-hpnum {
+  font-size: 8px;
+  font-family: var(--font-data);
+  dominant-baseline: middle;
+}
+.rpt-replay-castflash {
+  font-size: 9px;
+  fill: var(--gold);
+  text-anchor: middle;
+  font-family: var(--font-data);
+  paint-order: stroke;
+  stroke: rgba(0, 0, 0, 0.7);
+  stroke-width: 2px;
+}
+.rpt-replay-damp {
+  font-size: 11px;
+  color: var(--loss);
+  font-family: var(--font-data);
+  white-space: nowrap;
+}
