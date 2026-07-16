@@ -14,7 +14,7 @@
 - **缓存**:每场缓存是单文件 `<matchesDir>/<matchId>/analysis.json`,doc 里需加 `language` 字段;`getCached` 匹配当前语言不符时视为未命中(或文件名分键 `analysis.<lang>.json`,可同时保留两种语言的结果——推荐后者)。
 - **注意**:语言属请求参数而非 prompt 构建器改动,`PROMPT_VERSION` 不需要 bump;时间轴 prompt 本体保持英文结构(spell 名中英混排问题单列,见 #2)。
 
-## 2. 时间轴 spell 名统一(机会项,随 #1 顺带评估)⬜
+## 2. 时间轴 spell 名统一 ✅(2026-07-18 核实已被全量审计顺带解决:CJK 修复(getEnglishSpellName 全覆盖 + 最终标签守卫 3cb15ea)后,fresh 176-prompt 语料 CJK=0,spell 名已全英文;无 prompt 构建器改动需求,/eval-ab 免了)
 
 中文客户端日志的时间轴里技能名中英混排(妖术/分筋错骨 vs Hammer of Justice)。`getEnglishSpellName` 已能把大部分名字转英文;可评估:prompt 全英文化(对模型更稳)+ 回复语言由 #1 控制。属 prompt 构建器改动,若做需走 /eval-ab(目标维度 accuracy)。
 
