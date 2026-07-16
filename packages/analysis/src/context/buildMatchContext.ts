@@ -4,10 +4,15 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
-import { getEnglishSpellName } from "../data/spellEffectData";
 import { SPELL_CATEGORIES } from "../data/spellCategories";
+import { getEnglishSpellName } from "../data/spellEffectData";
 import { zoneMetadata } from "../data/zoneMetadata";
 import { buildArchetypeInjectionHeader } from "../utils/archetypeInjection";
+import {
+  analyzeBurstLedger,
+  auditWindowTargeting,
+  formatBurstLedgerForContext,
+} from "../utils/burstLedger";
 import {
   analyzePlayerCCAndTrinket,
   formatCCTrinketForContext,
@@ -65,6 +70,7 @@ import {
   detectHealingGaps,
   formatHealingGapsForContext,
 } from "../utils/healingGaps";
+import { analyzeKickAudit } from "../utils/kickAudit";
 import {
   analyzeKillWindowTargetSelection,
   formatKillWindowTargetSelectionForContext,
@@ -483,6 +489,37 @@ export function buildMatchContext(
         tLines.push("<healer_offense>");
         healerOffenseTimelineLines.forEach((l) => tLines.push(l));
         tLines.push("</healer_offense>");
+      }
+    }
+
+    // DPS owner(D2):爆发账本块 —— healer_offense 的对位物。谓词与战报卡
+    // 完全同源(analyzeBurstLedger/auditWindowTargeting/analyzeKickAudit);
+    // healer owner 不进此分支,治疗 prompt 字节不变。
+    if (!healer) {
+      const ledgerLines = formatBurstLedgerForContext(
+        analyzeBurstLedger(
+          owner as ICombatUnit,
+          friends.filter((p) => p.id !== owner.id) as ICombatUnit[],
+          enemies as ICombatUnit[],
+          combat,
+        ),
+        auditWindowTargeting(
+          owner as ICombatUnit,
+          offensiveWindows,
+          enemies as ICombatUnit[],
+          combat,
+        ),
+        analyzeKickAudit(
+          owner as ICombatUnit,
+          enemies as ICombatUnit[],
+          combat,
+        ),
+      );
+      if (ledgerLines.length > 0) {
+        tLines.push("");
+        tLines.push("<burst_ledger>");
+        ledgerLines.forEach((l) => tLines.push(l));
+        tLines.push("</burst_ledger>");
       }
     }
 

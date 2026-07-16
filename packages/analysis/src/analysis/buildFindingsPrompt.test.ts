@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+
 import { buildFindingsPrompt } from "./buildFindingsPrompt";
 import type { CandidateEvent } from "./types";
 

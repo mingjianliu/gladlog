@@ -1,10 +1,19 @@
-import type { CandidateEvent } from "./types";
 import { CombatUnitReaction } from "@gladlog/parser-compat";
+
 import {
-  isHealerSpec,
+  analyzeBurstLedger,
+  auditWindowTargeting,
+  ON_TARGET_GOOD_PCT,
+} from "../utils/burstLedger";
+import {
   extractMajorCooldowns,
   type IMajorCooldownInfo,
+  isHealerSpec,
 } from "../utils/cooldowns";
+import { analyzeOutgoingCCChains } from "../utils/drAnalysis";
+import { analyzeKickAudit } from "../utils/kickAudit";
+import { computeOffensiveWindows } from "../utils/offensiveWindows";
+import type { CandidateEvent } from "./types";
 
 const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 
@@ -47,9 +56,15 @@ export function cdWasteEvents(
  *
  * Current menu:
  *  - death (all units, tagged friendly/enemy so the LLM knows kill vs loss)
- *  - cd-waste (the Friendly healer's never-used DEFENSIVE major cooldowns)
+ *  - cd-waste (the owner's — default: the Friendly healer's — never-used
+ *    DEFENSIVE major cooldowns)
+ *  - DPS owner only (D2; healer menus unchanged): burst-into-immunity /
+ *    off-target-in-window / juked-kick / dr-clipped-cc
  */
-export function extractCandidateFindings(combat: any): CandidateEvent[] {
+export function extractCandidateFindings(
+  combat: any,
+  ownerId?: string,
+): CandidateEvent[] {
   const out: CandidateEvent[] = [];
   const units = Object.values(combat?.units ?? {}) as any[];
   const start = combat?.startTime ?? 0;
@@ -74,21 +89,131 @@ export function extractCandidateFindings(combat: any): CandidateEvent[] {
     }
   }
 
-  // --- cd-waste: the Friendly healer's never-used defensive cooldowns ---
+  // --- cd-waste: the owner's never-used defensive cooldowns ---
+  // ownerId 缺省时回退到友方治疗(既有行为,治疗管线菜单不变)。
   const healer = units.find(
     (u) =>
       u.info &&
       u.reaction === CombatUnitReaction.Friendly &&
       isHealerSpec(u.spec),
   );
-  if (healer) {
+  const owner =
+    (ownerId ? units.find((u) => u.info && u.id === ownerId) : undefined) ??
+    healer;
+  if (owner) {
     let cds: IMajorCooldownInfo[] = [];
     try {
-      cds = extractMajorCooldowns(healer, combat);
+      cds = extractMajorCooldowns(owner, combat);
     } catch {
       cds = [];
     }
-    out.push(...cdWasteEvents(cds, healer));
+    out.push(...cdWasteEvents(cds, owner));
+  }
+
+  // --- DPS owner events (D2) — healer owners skip this whole branch ---
+  if (owner && !isHealerSpec(owner.spec)) {
+    try {
+      out.push(...dpsOwnerEvents(combat, owner, units));
+    } catch {
+      /* 任何分析抛错都不应拖垮既有菜单 */
+    }
+  }
+
+  return out;
+}
+
+/** 25%/Immune = wasted(镜像 IOutgoingCCChain.hasWastedApplications 的定义)。 */
+const WASTED_DR_LEVELS = new Set(["25%", "Immune"]);
+
+function dpsOwnerEvents(
+  combat: any,
+  owner: any,
+  units: any[],
+): CandidateEvent[] {
+  const out: CandidateEvent[] = [];
+  const players = units.filter((u) => u.info);
+  const friends = players.filter((u) => u.reaction === owner.reaction);
+  const enemies = players.filter((u) => u.reaction !== owner.reaction);
+  if (enemies.length === 0) return out;
+  const allies = friends.filter((u) => u.id !== owner.id);
+
+  // burst-into-immunity:主目标在爆发内挂着免疫(纯减伤不报,留给 prompt 块叙述)
+  for (const b of analyzeBurstLedger(owner, allies, enemies, combat)) {
+    const t = b.dominantTarget;
+    if (!t) continue;
+    const imm = t.defensivesHit.find((d) => d.isImmunity);
+    if (!imm) continue;
+    out.push({
+      id: `burst-immune:${owner.id}:${Math.round(b.fromSeconds)}`,
+      type: "burst-into-immunity",
+      t: b.fromSeconds,
+      unitNames: [owner.name, t.unitName],
+      spell: b.spells[0]?.spellName,
+      facts: {
+        t: fmt(b.fromSeconds),
+        spell: b.spells.map((s) => s.spellName).join(" + "),
+        target: t.unitName,
+        immunity: imm.spellName,
+        overlap: imm.overlapSeconds.toFixed(1),
+      },
+    });
+  }
+
+  // off-target-in-window:kill window 内命中窗口目标的伤害占比过低
+  const windows = computeOffensiveWindows(enemies, friends, combat);
+  for (const w of auditWindowTargeting(owner, windows, enemies, combat)) {
+    if (w.onTargetPct >= ON_TARGET_GOOD_PCT) continue;
+    out.push({
+      id: `off-target:${owner.id}:${Math.round(w.windowFromSeconds)}`,
+      type: "off-target-in-window",
+      t: w.windowFromSeconds,
+      unitNames: [owner.name, w.windowTargetName],
+      facts: {
+        t: fmt(w.windowFromSeconds),
+        target: w.windowTargetName,
+        onTargetPct: String(w.onTargetPct),
+        ...(w.topOffTarget ? { offTarget: w.topOffTarget.unitName } : {}),
+      },
+    });
+  }
+
+  // juked-kick:被假读条骗掉的打断
+  for (const k of analyzeKickAudit(owner, enemies, combat)) {
+    if (k.result !== "juked") continue;
+    out.push({
+      id: `juked-kick:${owner.id}:${Math.round(k.atSeconds)}`,
+      type: "juked-kick",
+      t: k.atSeconds,
+      unitNames: [owner.name, ...(k.targetName ? [k.targetName] : [])],
+      spell: k.kickSpellName,
+      facts: {
+        t: fmt(k.atSeconds),
+        kick: k.kickSpellName,
+        fake: k.jukedBySpellName ?? "",
+      },
+    });
+  }
+
+  // dr-clipped-cc:owner 的 CC 落在 25%/Immune DR 上(踩了队友的链)
+  for (const chain of analyzeOutgoingCCChains(friends, enemies, combat)) {
+    for (const app of chain.applications) {
+      if (app.casterName !== owner.name) continue;
+      if (!WASTED_DR_LEVELS.has(app.drInfo.level)) continue;
+      out.push({
+        id: `dr-clipped:${owner.id}:${Math.round(app.atSeconds)}`,
+        type: "dr-clipped-cc",
+        t: app.atSeconds,
+        unitNames: [owner.name, chain.targetName],
+        spell: app.spellName,
+        facts: {
+          t: fmt(app.atSeconds),
+          spell: app.spellName,
+          target: chain.targetName,
+          dr: app.drInfo.level,
+          duration: app.durationSeconds.toFixed(1),
+        },
+      });
+    }
   }
 
   return out;

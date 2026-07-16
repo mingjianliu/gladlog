@@ -1,6 +1,8 @@
-import { describe, expect, it } from "vitest";
-import { createAnalysisService } from "./analysis";
 import type { CandidateEvent } from "@gladlog/analysis";
+import { describe, expect, it } from "vitest";
+
+import { PROMPT_VERSION } from "./ai";
+import { createAnalysisService } from "./analysis";
 
 const candidates: CandidateEvent[] = [
   {
@@ -138,7 +140,7 @@ describe("AI 语言(backlog #1)", () => {
       join(dir, "m1", "analysis-v2.json"),
       JSON.stringify({
         schemaVersion: 1,
-        promptVersion: 3,
+        promptVersion: PROMPT_VERSION,
         createdAt: 1,
         result: { findings: [], dropped: 0, hadNarration: false },
       }),
@@ -188,7 +190,7 @@ describe("跨场聚合(phase3 #3b)", () => {
     const doc = (createdAt: number, findings: unknown[]) =>
       JSON.stringify({
         schemaVersion: 1,
-        promptVersion: 3,
+        promptVersion: PROMPT_VERSION,
         createdAt,
         result: { findings, dropped: 0, hadNarration: true },
       });

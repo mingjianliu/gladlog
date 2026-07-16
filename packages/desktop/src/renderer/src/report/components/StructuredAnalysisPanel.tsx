@@ -1,20 +1,21 @@
-import { useEffect, useMemo, useState } from "react";
-import type { ReportSource } from "../derive/types";
-import { bridge } from "../../bridge";
-import {
-  extractCandidateFindings,
-  buildMatchContext,
-  specToString,
-  isHealerSpec,
-} from "@gladlog/analysis";
 import type { Finding } from "@gladlog/analysis";
+import {
+  buildMatchContext,
+  extractCandidateFindings,
+  isHealerSpec,
+  specToString,
+} from "@gladlog/analysis";
 import { CombatUnitReaction } from "@gladlog/parser-compat";
+import { useEffect, useMemo, useState } from "react";
+
+import { bridge } from "../../bridge";
 import { toLegacySafe } from "../derive/legacySource";
+import type { ReportSource } from "../derive/types";
 import { deriveVulnBands } from "../derive/vulnWindows";
+import { ExportButtons } from "./ExportButtons";
+import { FindingsList } from "./FindingsList";
 import { MatchHero } from "./MatchHero";
 import { TimelineStrip } from "./TimelineStrip";
-import { FindingsList } from "./FindingsList";
-import { ExportButtons } from "./ExportButtons";
 
 type AnalysisResult = {
   findings: Finding[];
@@ -142,21 +143,30 @@ export function StructuredAnalysisPanel({
   const input = useMemo(() => {
     try {
       const legacy = toLegacySafe(source);
-      const candidates = extractCandidateFindings(legacy);
       const players = Object.values(legacy.units).filter((u) => u.info);
-      const healer = players.find(
-        (u) =>
-          isHealerSpec(u.spec) && u.reaction === CombatUnitReaction.Friendly,
-      );
-      if (!healer) return null;
+      // owner = 日志记录者(playerId);找不到时回退友方治疗(旧行为)。
+      // DPS 记录者从此走 DPS 视角(D2)—— 治疗记录者行为不变。
+      const owner =
+        players.find(
+          (u) =>
+            u.id === legacy.playerId &&
+            u.reaction === CombatUnitReaction.Friendly,
+        ) ??
+        players.find(
+          (u) =>
+            isHealerSpec(u.spec) && u.reaction === CombatUnitReaction.Friendly,
+        );
+      if (!owner) return null;
 
-      const friends = players.filter((u) => u.reaction === healer.reaction);
-      const enemies = players.filter((u) => u.reaction !== healer.reaction);
+      const candidates = extractCandidateFindings(legacy, owner.id);
+      const friends = players.filter((u) => u.reaction === owner.reaction);
+      const enemies = players.filter((u) => u.reaction !== owner.reaction);
 
       const richContext = buildMatchContext(legacy, friends, enemies, {
         useTimelinePrompt: true,
+        owner,
       });
-      const spec = specToString(healer.spec);
+      const spec = specToString(owner.spec);
 
       return {
         matchId,

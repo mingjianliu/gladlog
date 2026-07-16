@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+
 import { auditFindings } from "./auditFindings";
 import type { CandidateEvent, RawFinding } from "./types";
 

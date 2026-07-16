@@ -1,6 +1,6 @@
-import type { CandidateEvent, RawFinding, Finding, AuditResult } from "./types";
+import { claimChecker,interpolate } from "../compare/claimChecker";
 import { causalLint } from "./causalLint";
-import { interpolate, claimChecker } from "../compare/claimChecker";
+import type { AuditResult,CandidateEvent, Finding, RawFinding } from "./types";
 
 const RANK: Record<string, number> = { high: 0, med: 1, low: 2 };
 

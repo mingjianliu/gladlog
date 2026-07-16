@@ -1,13 +1,19 @@
 import { AtomicArenaCombat, ICombatUnit } from "@gladlog/parser-compat";
 
 import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
+import { getEnglishSpellName } from "../data/spellEffectData";
 import spellIdListsData from "../data/spellIdLists";
-import { getUnitHpAtTimestamp, HP_SAMPLE_RADIUS_MS } from "./cooldowns";
+import {
+  fmtTime,
+  getUnitHpAtTimestamp,
+  HP_SAMPLE_RADIUS_MS,
+} from "./cooldowns";
 import {
   BURST_CLUSTER_SECONDS,
   IEnemyCDCast,
   reconstructEnemyCDTimeline,
 } from "./enemyCDs";
+import type { IKickAuditEntry } from "./kickAudit";
 import { MIN_WINDOW_SECONDS } from "./killWindowTargetSelection";
 import { IOffensiveWindow } from "./offensiveWindows";
 import { buildAuraIntervals } from "./utils";
@@ -183,7 +189,8 @@ export function analyzeBurstLedger(
         if (overlapMs / 1000 < MIN_DEFENSIVE_OVERLAP_S) continue;
         defensivesHit.push({
           spellId: iv.spellId,
-          spellName: iv.spellName,
+          // 中文客户端日志的 aura 名是本地化文本 —— prompt/facts 必须英文(CJK 泄漏审计教训)
+          spellName: getEnglishSpellName(iv.spellId, iv.spellName),
           overlapSeconds: Math.round(overlapMs / 100) / 10,
           isImmunity: SPELLS[iv.spellId]?.type === "immunities",
         });
@@ -308,4 +315,85 @@ export function auditWindowTargeting(
   }
 
   return audits;
+}
+
+/** On-target share below this = off-target discipline problem.
+ * Shared by the report card chip, the prompt block, and the off-target finding. */
+export const ON_TARGET_GOOD_PCT = 50;
+
+// ---------------------------------------------------------------------------
+// Prompt formatter (DPS owner — timeline path <burst_ledger> block)
+// ---------------------------------------------------------------------------
+
+const fmtM = (n: number): string => `${(n / 1_000_000).toFixed(2)}M`;
+
+/**
+ * Renders the burst ledger as plain text for the AI context (DPS owners).
+ * Times via fmtTime (floored render grid), percentages as ints — any future
+ * gate re-parsing these lines re-derives the same values.
+ */
+export function formatBurstLedgerForContext(
+  bursts: IBurstLedgerEntry[],
+  targeting: IWindowTargetingAudit[],
+  kicks: IKickAuditEntry[],
+): string[] {
+  if (bursts.length + targeting.length + kicks.length === 0) return [];
+  const lines: string[] = ["## BURST LEDGER (your offensive audit)"];
+
+  bursts.forEach((b, i) => {
+    lines.push(
+      `  Burst #${i + 1} — ${fmtTime(b.fromSeconds)}–${fmtTime(b.toSeconds)} | ${b.spells.map((s) => s.spellName).join(" + ")}`,
+    );
+    const t = b.dominantTarget;
+    if (t) {
+      const hpStr =
+        t.hpStartPct !== null && t.hpEndPct !== null
+          ? ` ${Math.round(t.hpStartPct)}% → ${Math.round(t.hpEndPct)}%`
+          : "";
+      lines.push(
+        `    Target: ${t.unitName}${hpStr} | your damage ${fmtM(t.damage)}${t.died ? " | target DIED" : ""}`,
+      );
+      for (const d of t.defensivesHit) {
+        lines.push(
+          `    ${d.isImmunity ? "⚠ Hit IMMUNITY" : "Hit major defensive"}: ${d.spellName} active ${d.overlapSeconds.toFixed(1)}s of this burst`,
+        );
+      }
+    } else {
+      lines.push(`    No damage dealt to enemy players during this burst.`);
+    }
+    lines.push(
+      b.allyCDsOverlapping.length > 0
+        ? `    Aligned with: ${b.allyCDsOverlapping.map((a) => `${a.playerName} (${a.spellName})`).join(", ")}`
+        : `    Solo burst — no ally offensive CD overlapped.`,
+    );
+  });
+
+  const offTarget = targeting.filter((w) => w.onTargetPct < ON_TARGET_GOOD_PCT);
+  for (const w of offTarget) {
+    lines.push(
+      `  Off-target: window ${fmtTime(w.windowFromSeconds)}–${fmtTime(w.windowToSeconds)} target ${w.windowTargetName} — only ${w.onTargetPct}% of your damage on target` +
+        (w.topOffTarget
+          ? ` (largest off-target: ${w.topOffTarget.unitName} ${fmtM(w.topOffTarget.damage)})`
+          : ""),
+    );
+  }
+
+  if (kicks.length > 0) {
+    const parts = kicks.map((k) => {
+      const at = fmtTime(k.atSeconds);
+      switch (k.result) {
+        case "landed":
+          return `${at} ${k.kickSpellName} → interrupted ${k.interruptedSpellName}`;
+        case "juked":
+          return `${at} ${k.kickSpellName} → JUKED by fake ${k.jukedBySpellName}`;
+        case "missed":
+          return `${at} ${k.kickSpellName} → hit nothing`;
+        default:
+          return `${at} ${k.kickSpellName} → outcome unknown (no cast-start data)`;
+      }
+    });
+    lines.push(`  Kicks: ${parts.join(" | ")}`);
+  }
+
+  return lines;
 }

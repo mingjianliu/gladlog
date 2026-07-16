@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+
 import { causalLint } from "./causalLint";
 
 describe("causalLint (enforces the no-strong-causal-claim policy)", () => {

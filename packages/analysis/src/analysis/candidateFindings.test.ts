@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { extractCandidateFindings, cdWasteEvents } from "./candidateFindings";
+
+import { cdWasteEvents,extractCandidateFindings } from "./candidateFindings";
 
 // Synthetic combat: one Friendly death + one Hostile death. spec "256" is
 // Priest_Discipline (a healer) with reaction 1 (Friendly).
