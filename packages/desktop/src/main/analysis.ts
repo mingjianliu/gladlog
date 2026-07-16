@@ -127,10 +127,39 @@ export function createAnalysisService(deps: {
     }
   }
 
+  const flagsPath = (matchId: string) =>
+    join(deps.matchesDir, matchId, "findingFlags.json");
+
   return {
     run,
     async cancel(): Promise<void> {
       generation++;
+    },
+    /** finding 跟进标记(phase3 #3a)。key = category|sorted(eventIds),语言无关。 */
+    async getFlags(matchId: string): Promise<Record<string, string>> {
+      try {
+        return JSON.parse(readFileSync(flagsPath(matchId), "utf-8"));
+      } catch {
+        return {};
+      }
+    },
+    async setFlag(
+      matchId: string,
+      key: string,
+      flag: "done" | "recurring" | null,
+    ): Promise<Record<string, string>> {
+      const cur = await this.getFlags(matchId);
+      if (flag === null) delete cur[key];
+      else cur[key] = flag;
+      try {
+        mkdirSync(join(deps.matchesDir, matchId), { recursive: true });
+        const tmp = flagsPath(matchId) + ".tmp";
+        writeFileSync(tmp, JSON.stringify(cur, null, 2), "utf-8");
+        renameSync(tmp, flagsPath(matchId));
+      } catch {
+        /* best-effort */
+      }
+      return cur;
     },
     async getCached(matchId: string): Promise<AnalysisResult | null> {
       const lang: AiLanguage = deps.getSettings().aiLanguage ?? "zh";

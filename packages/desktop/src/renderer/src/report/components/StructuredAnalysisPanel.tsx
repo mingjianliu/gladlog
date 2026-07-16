@@ -13,7 +13,7 @@ import { toLegacySafe } from "../derive/legacySource";
 import { deriveVulnBands } from "../derive/vulnWindows";
 import { MatchHero } from "./MatchHero";
 import { TimelineStrip } from "./TimelineStrip";
-import { FindingsList } from "./FindingsList";
+import { FindingsList, findingKey } from "./FindingsList";
 import { ExportButtons } from "./ExportButtons";
 
 type AnalysisResult = {
@@ -41,6 +41,29 @@ export function StructuredAnalysisPanel({
   // 教练回复语言(backlog #1):持久化在 settings,main 侧按它注入 system
   // prompt 并分键缓存;这里只需在切换后重查缓存。
   const [lang, setLang] = useState<"zh" | "en" | null>(null);
+  const [flags, setFlags] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    try {
+      void bridge()
+        .analysis.getFlags(matchId)
+        .then(setFlags)
+        .catch(() => setFlags({}));
+    } catch {
+      setFlags({});
+    }
+  }, [matchId]);
+
+  const handleFlag = (key: string, flag: "done" | "recurring" | null) => {
+    try {
+      void bridge()
+        .analysis.setFlag(matchId, key, flag)
+        .then(setFlags)
+        .catch(() => {});
+    } catch {
+      /* 测试桩无该面 */
+    }
+  };
 
   useEffect(() => {
     // 测试桩/旧 fixture bridge 可能没有 settings 面 —— 静默回退默认中文
@@ -206,6 +229,8 @@ export function StructuredAnalysisPanel({
               findings={result.findings}
               onSelect={setActiveEventIds}
               onJump={onSeekEvent ? handleJump : undefined}
+              flags={flags}
+              onFlag={handleFlag}
             />
           )}
 

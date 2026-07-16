@@ -2,7 +2,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import { FindingsList } from "./FindingsList";
+import { FindingsList, findingKey } from "./FindingsList";
 
 const findings = [
   {
@@ -50,5 +50,40 @@ describe("FindingsList", () => {
     fireEvent.click(screen.getByRole("button", { name: /展开全文/ }));
     expect(container.querySelector(".rpt-finding-body.clamp")).toBeNull();
     expect(screen.getByRole("button", { name: /收起/ })).toBeTruthy();
+  });
+});
+
+describe("finding 标记按钮(phase3 #3a)", () => {
+  it("findingKey 语言无关(与 title 无关,eventIds 排序)", () => {
+    const a = { eventIds: ["e2", "e1"], category: "survival", title: "死亡", severity: "high", explanation: "x" };
+    const b = { eventIds: ["e1", "e2"], category: "survival", title: "Death", severity: "high", explanation: "y" };
+    expect(findingKey(a as never)).toBe(findingKey(b as never));
+  });
+
+  it("点「已跟进」回调 done,再点清除;active 态跟随 flags", () => {
+    const calls: Array<[string, string | null]> = [];
+    const key = findingKey(findings[0] as never);
+    const { rerender } = render(
+      <FindingsList
+        findings={findings as never}
+        onSelect={() => {}}
+        flags={{}}
+        onFlag={(k, f) => calls.push([k, f])}
+      />,
+    );
+    fireEvent.click(screen.getAllByRole("button", { name: /已跟进/ })[0]!);
+    expect(calls).toEqual([[key, "done"]]);
+    rerender(
+      <FindingsList
+        findings={findings as never}
+        onSelect={() => {}}
+        flags={{ [key]: "done" }}
+        onFlag={(k, f) => calls.push([k, f])}
+      />,
+    );
+    const btn = screen.getAllByRole("button", { name: /已跟进/ })[0]!;
+    expect(btn.className).toContain("active");
+    fireEvent.click(btn);
+    expect(calls[1]).toEqual([key, null]);
   });
 });

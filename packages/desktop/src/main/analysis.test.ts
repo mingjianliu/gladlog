@@ -149,3 +149,32 @@ describe("AI 语言(backlog #1)", () => {
     expect(await zhDefault.s.getCached("m1")).toBeNull();
   });
 });
+
+describe("finding 标记(phase3 #3a)", () => {
+  it("setFlag 落盘、覆盖、清除;getFlags 缺文件回空", async () => {
+    const { mkdtempSync } = await import("fs");
+    const { tmpdir } = await import("os");
+    const { join } = await import("path");
+    const dir = mkdtempSync(join(tmpdir(), "gl-flags-"));
+    const s = createAnalysisService({
+      getSettings: () => ({
+        anthropicApiKey: null,
+        anthropicModel: null,
+        wowDirectory: null,
+      }),
+      matchesDir: dir,
+      emit: () => {},
+    });
+    expect(await s.getFlags("m1")).toEqual({});
+    await s.setFlag("m1", "survival|e1,e2", "done");
+    expect(await s.getFlags("m1")).toEqual({ "survival|e1,e2": "done" });
+    await s.setFlag("m1", "survival|e1,e2", "recurring");
+    await s.setFlag("m1", "cd|e3", "done");
+    expect(await s.getFlags("m1")).toEqual({
+      "survival|e1,e2": "recurring",
+      "cd|e3": "done",
+    });
+    await s.setFlag("m1", "cd|e3", null);
+    expect(await s.getFlags("m1")).toEqual({ "survival|e1,e2": "recurring" });
+  });
+});

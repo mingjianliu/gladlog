@@ -72,6 +72,12 @@ export interface GladlogApi {
     }): Promise<void>;
     cancel(): Promise<void>;
     getCached(matchId: string): Promise<unknown | null>;
+    getFlags(matchId: string): Promise<Record<string, string>>;
+    setFlag(
+      matchId: string,
+      key: string,
+      flag: "done" | "recurring" | null,
+    ): Promise<Record<string, string>>;
     onDone(cb: (d: { matchId: string; result: unknown }) => void): () => void;
     onError(cb: (d: { matchId: string; message: string }) => void): () => void;
   };

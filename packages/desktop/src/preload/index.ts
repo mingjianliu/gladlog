@@ -47,6 +47,10 @@ const api: GladlogApi = {
     cancel: () => ipcRenderer.invoke("gladlog:analysis:cancel"),
     getCached: (matchId) =>
       ipcRenderer.invoke("gladlog:analysis:getCached", matchId),
+    getFlags: (matchId) =>
+      ipcRenderer.invoke("gladlog:analysis:getFlags", matchId),
+    setFlag: (matchId, key, flag) =>
+      ipcRenderer.invoke("gladlog:analysis:setFlag", matchId, key, flag),
     onDone: sub<{ matchId: string; result: unknown }>("gladlog:analysis:done"),
     onError: sub<{ matchId: string; message: string }>(
       "gladlog:analysis:error",

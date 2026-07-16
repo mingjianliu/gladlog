@@ -87,4 +87,12 @@ export function registerIpc(deps: {
   ipcMain.handle("gladlog:analysis:getCached", (_e, matchId: string) =>
     deps.analysis.getCached(matchId),
   );
+  ipcMain.handle("gladlog:analysis:getFlags", (_e, matchId: string) =>
+    deps.analysis.getFlags(matchId),
+  );
+  ipcMain.handle(
+    "gladlog:analysis:setFlag",
+    (_e, matchId: string, key: string, flag: "done" | "recurring" | null) =>
+      deps.analysis.setFlag(matchId, key, flag),
+  );
 }

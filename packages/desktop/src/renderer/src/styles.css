@@ -1733,3 +1733,28 @@ pre {
   font-size: 11px;
   color: var(--ink-2);
 }
+
+/* finding 跟进标记(phase3 #3a) */
+.rpt-finding-flags {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 4px;
+}
+.rpt-finding-ev {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.rpt-finding-flags button {
+  font-size: 10px;
+  padding: 1px 7px;
+  color: var(--mute);
+}
+.rpt-finding-flags button.active {
+  color: var(--win);
+  border-color: var(--win);
+}
+.rpt-finding-flags button.active.rec {
+  color: var(--loss);
+  border-color: var(--loss);
+}
