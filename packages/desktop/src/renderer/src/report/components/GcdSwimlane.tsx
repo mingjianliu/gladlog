@@ -57,6 +57,7 @@ export function GcdSwimlane({
   onToggle,
   playing,
   flash,
+  onSeekT,
 }: {
   source: ReportSource;
   tracks: ReplayTrack[];
@@ -72,6 +73,8 @@ export function GcdSwimlane({
     unitNames: string[];
     nonce: number;
   } | null;
+  /** 点 chip → 共享时钟 seek 到该施法时刻(两栏同步)。 */
+  onSeekT?: (tMs: number) => void;
 }) {
   const durationSec = Math.max(1, (endTime - startTime) / 1000);
   const laneH = durationSec * PX_PER_SEC;
@@ -206,12 +209,13 @@ export function GcdSwimlane({
                     return (
                       <div
                         key={flashed ? `${i}-f${flash.nonce}` : i}
-                        className={cls}
+                        className={onSeekT ? `${cls} seekable` : cls}
                         style={{ top: y }}
+                        onClick={onSeekT ? () => onSeekT(c.t) : undefined}
                         title={
-                          c.targetName
+                          (c.targetName
                             ? `${c.spellName} → ${c.targetName}`
-                            : c.spellName
+                            : c.spellName) + (onSeekT ? "(点击定位)" : "")
                         }
                       >
                         {c.icon ? (

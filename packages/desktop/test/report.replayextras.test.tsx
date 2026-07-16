@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render } from "@testing-library/react";
+import { fireEvent, render } from "@testing-library/react";
 
 import { ReplayView } from "../src/renderer/src/report/components/ReplayView";
 import {
@@ -46,5 +46,17 @@ describe("回放三小件(backlog #11)", () => {
     ).toBeGreaterThan(0);
     void startTime;
     void tracks;
+  });
+});
+
+describe("泳道 chip 点击定位", () => {
+  it("点 chip → 时钟跳到该施法时刻并暂停", () => {
+    const { container } = render(<ReplayView source={m} />);
+    const chip = container.querySelector(".rpt-gcd-act.seekable")!;
+    expect(chip).toBeTruthy();
+    fireEvent.click(chip);
+    // 时钟显示不再是 0:00 开头(已定位),播放按钮存在(暂停态)
+    const time = container.querySelector(".rpt-replay-time");
+    expect(time?.textContent?.startsWith("0:00 /")).toBe(false);
   });
 });

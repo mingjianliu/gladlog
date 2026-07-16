@@ -404,6 +404,10 @@ export function ReplayView({
           onToggle={(id) => setSelUnits((s) => ({ ...s, [id]: !s[id] }))}
           playing={playing}
           flash={seekReq}
+          onSeekT={(tMs) => {
+            setT(Math.min(endTime, Math.max(startTime, tMs)));
+            setPlaying(false);
+          }}
         />
       </div>
 

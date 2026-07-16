@@ -1478,3 +1478,11 @@ pre {
   background: transparent;
   cursor: pointer;
 }
+
+/* 泳道 chip 点击定位 */
+.rpt-gcd-act.seekable {
+  cursor: pointer;
+}
+.rpt-gcd-act.seekable:hover {
+  box-shadow: 0 0 0 1px var(--gold-dim);
+}
