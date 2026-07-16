@@ -1,16 +1,17 @@
-import fs from "fs-extra";
-import path from "path";
-import { GladLogParser } from "@gladlog/parser";
-import {
-  toLegacyMatch,
-  toLegacyShuffle,
-  CombatUnitReaction,
-} from "@gladlog/parser-compat";
 import {
   buildMatchContext,
   isHealerSpec,
   specToString,
 } from "@gladlog/analysis";
+import { GladLogParser } from "@gladlog/parser";
+import {
+  CombatUnitReaction,
+  toLegacyMatch,
+  toLegacyShuffle,
+} from "@gladlog/parser-compat";
+import fs from "fs-extra";
+import path from "path";
+
 import { buildCoverageManifest } from "../quality/coverageManifest";
 
 export interface IndexEntry {
@@ -27,8 +28,10 @@ export async function buildCorpus(opts: {
   logPaths: string[];
   outDir: string;
   /** healer = 友方治疗;dps = 友方非治疗中总伤害最高者(D2 降级验证语料:
-   * 记录者不是该 DPS,但确定性分析全部视角无关,仅 [YOU] 意图性弱一档)。 */
-  ownerFilter?: "healer" | "dps";
+   * 记录者不是该 DPS,但确定性分析全部视角无关,仅 [YOU] 意图性弱一档);
+   * recorder = 日志记录者本人(与产品 StructuredAnalysisPanel 同语义,
+   * 真 DPS 视角语料用它)。 */
+  ownerFilter?: "healer" | "dps" | "recorder";
 }): Promise<{ entries: IndexEntry[]; fingerprint: string }> {
   const { logPaths, outDir, ownerFilter } = opts;
   const entries: IndexEntry[] = [];
@@ -80,6 +83,9 @@ export async function buildCorpus(opts: {
             // Skip this combat if no healer found when ownerFilter is "healer"
             continue;
           }
+        } else if (ownerFilter === "recorder") {
+          owner = players.find((u) => u.id === combat.playerId);
+          if (!owner) continue;
         } else if (ownerFilter === "dps") {
           // 友方非治疗中总伤害最高者(确定性;并列取先遍历到的)
           let best: any = null;

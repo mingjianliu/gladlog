@@ -1,4 +1,4 @@
-/* eslint-disable no-console */
+ 
 /**
  * CLI: Build healer prompt corpus from local WoW combat logs
  *
@@ -12,6 +12,7 @@
  */
 
 import fs from "fs-extra";
+
 import { buildCorpus } from "../src/corpus/buildCorpus";
 import { resolveEvalHome, runDir } from "../src/evalHome";
 
@@ -20,24 +21,28 @@ import { resolveEvalHome, runDir } from "../src/evalHome";
 function parseArgs(): {
   manifest: string;
   run: string;
-  owner: "healer" | "dps";
+  owner: "healer" | "dps" | "recorder";
 } {
   const args = process.argv.slice(2);
   const result = {
     manifest: "",
     run: "",
-    owner: "healer" as "healer" | "dps",
+    owner: "healer" as "healer" | "dps" | "recorder",
   };
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--manifest") result.manifest = args[i + 1];
     else if (args[i] === "--run") result.run = args[i + 1];
     else if (args[i] === "--owner") {
-      if (args[i + 1] !== "healer" && args[i + 1] !== "dps") {
-        console.error("Error: --owner must be healer|dps");
+      if (
+        args[i + 1] !== "healer" &&
+        args[i + 1] !== "dps" &&
+        args[i + 1] !== "recorder"
+      ) {
+        console.error("Error: --owner must be healer|dps|recorder");
         process.exit(1);
       }
-      result.owner = args[i + 1] as "healer" | "dps";
+      result.owner = args[i + 1] as "healer" | "dps" | "recorder";
     }
   }
 
