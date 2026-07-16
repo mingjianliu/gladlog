@@ -1923,3 +1923,29 @@ pre {
   stroke-dasharray: 4 3;
   pointer-events: none;
 }
+
+/* ── 本场目标(D3 教练闭环)── */
+.rpt-ai-goals {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 10px;
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  font-size: 11px;
+}
+.rpt-ai-goals-title {
+  color: var(--mute);
+}
+.rpt-ai-goal {
+  color: var(--gold);
+  border: 1px solid color-mix(in srgb, var(--gold) 40%, transparent);
+  border-radius: 8px;
+  padding: 1px 7px;
+  white-space: nowrap;
+  max-width: 340px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

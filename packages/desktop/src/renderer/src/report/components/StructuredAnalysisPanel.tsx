@@ -44,6 +44,34 @@ export function StructuredAnalysisPanel({
   const [lang, setLang] = useState<"zh" | "en" | null>(null);
   const [flags, setFlags] = useState<Record<string, string>>({});
   const [preview, setPreview] = useState("");
+  // 本场目标(D3 闭环):跨场标记「还在犯」的 top 分类,作为本场观察目标。
+  const [goals, setGoals] = useState<
+    Array<{ category: string; recurring: number; lastTitle?: string }>
+  >([]);
+
+  useEffect(() => {
+    try {
+      const p = bridge().analysis.aggregate?.();
+      if (!p) return;
+      void p
+        .then((cats) =>
+          setGoals(
+            (cats ?? [])
+              .filter((c) => c.recurring > 0)
+              .sort((a, b) => b.recurring - a.recurring)
+              .slice(0, 3)
+              .map((c) => ({
+                category: c.category,
+                recurring: c.recurring,
+                lastTitle: c.recent?.[0]?.title,
+              })),
+          ),
+        )
+        .catch(() => {});
+    } catch {
+      /* 测试桩无该面 */
+    }
+  }, [matchId]);
 
   useEffect(() => {
     try {
@@ -208,6 +236,19 @@ export function StructuredAnalysisPanel({
 
   return (
     <div className="rpt-ai-panel">
+      {goals.length > 0 && (
+        <div className="rpt-ai-goals" data-testid="ai-goals">
+          <span className="rpt-ai-goals-title">
+            本场目标 —— 你标记过「还在犯」的问题:
+          </span>
+          {goals.map((g) => (
+            <span key={g.category} className="rpt-ai-goal">
+              ↻{g.recurring} {g.category}
+              {g.lastTitle ? `(上次:${g.lastTitle})` : ""}
+            </span>
+          ))}
+        </div>
+      )}
       {error && <div className="rpt-ai-error">{error}</div>}
 
       {result && (

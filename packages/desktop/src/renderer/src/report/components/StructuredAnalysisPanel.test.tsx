@@ -62,3 +62,37 @@ describe("StructuredAnalysisPanel", () => {
     );
   });
 });
+
+describe("本场目标(D3 教练闭环)", () => {
+  it("aggregate 有「还在犯」分类时渲染目标卡,按 recurring 降序取 top", async () => {
+    const fx = (window as any).__gladlogFixture;
+    fx.analysis.aggregate = vi.fn().mockResolvedValue([
+      { category: "survival", count: 5, recurring: 2, done: 1, recent: [{ matchId: "x", title: "开怕晚了", severity: "high", createdAt: 2 }] },
+      { category: "positioning", count: 3, recurring: 0, done: 3, recent: [] },
+      { category: "cd", count: 4, recurring: 4, done: 0, recent: [{ matchId: "y", title: "壁垒全场没按", severity: "med", createdAt: 1 }] },
+    ]);
+    render(
+      <StructuredAnalysisPanel
+        source={{ units: {}, startInfo: {} } as any}
+        matchId="m1"
+      />,
+    );
+    const card = await screen.findByTestId("ai-goals");
+    expect(card.textContent).toContain("↻4 cd");
+    expect(card.textContent).toContain("↻2 survival");
+    expect(card.textContent).toContain("壁垒全场没按");
+    // recurring=0 的分类不出现
+    expect(card.textContent).not.toContain("positioning");
+  });
+
+  it("桩无 aggregate 面时不渲染、不崩(旧行为兼容)", async () => {
+    render(
+      <StructuredAnalysisPanel
+        source={{ units: {}, startInfo: {} } as any}
+        matchId="m1"
+      />,
+    );
+    await screen.findByText(/You died at 30s/);
+    expect(screen.queryByTestId("ai-goals")).toBeNull();
+  });
+});
