@@ -3,6 +3,8 @@ import { dirname } from "path";
 
 export type AiBackend = "anthropic" | "claudeCli" | "agy";
 const AI_BACKENDS: AiBackend[] = ["anthropic", "claudeCli", "agy"];
+export type AiLanguage = "zh" | "en";
+const AI_LANGUAGES: AiLanguage[] = ["zh", "en"];
 
 export interface GladlogSettings {
   wowDirectory: string | null;
@@ -11,6 +13,8 @@ export interface GladlogSettings {
   // Debug: route LLM calls to a local CLI instead of the Anthropic API.
   aiBackend: AiBackend;
   aiBackendCommand: string | null;
+  /** 教练回复输出语言(backlog #1);默认中文,与 UI 一致。 */
+  aiLanguage: AiLanguage;
 }
 const DEFAULTS: GladlogSettings = {
   wowDirectory: null,
@@ -18,6 +22,7 @@ const DEFAULTS: GladlogSettings = {
   anthropicModel: null,
   aiBackend: "anthropic",
   aiBackendCommand: null,
+  aiLanguage: "zh",
 };
 
 // key 只存在于主进程;IPC 边界一律用哨兵替换真值(renderer 只需真值性)。
@@ -41,6 +46,10 @@ export function sanitizeSettingsPatch(
   // Reject an unknown aiBackend value rather than persisting garbage.
   if (out.aiBackend !== undefined && !AI_BACKENDS.includes(out.aiBackend)) {
     const { aiBackend: _bad, ...rest } = out;
+    out = rest;
+  }
+  if (out.aiLanguage !== undefined && !AI_LANGUAGES.includes(out.aiLanguage)) {
+    const { aiLanguage: _bad, ...rest } = out;
     out = rest;
   }
   return out;

@@ -1412,3 +1412,28 @@ pre {
   font-family: var(--font-data);
   white-space: nowrap;
 }
+
+/* ── AI 回复语言切换(backlog #1)── */
+.rpt-ai-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.rpt-ai-lang {
+  display: inline-flex;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.rpt-ai-lang button {
+  font-size: 11px;
+  padding: 3px 10px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink-2);
+}
+.rpt-ai-lang button.active {
+  background: var(--surface-2);
+  color: var(--gold);
+}

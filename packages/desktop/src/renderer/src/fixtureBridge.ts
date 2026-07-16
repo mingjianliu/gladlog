@@ -37,6 +37,7 @@ export function installFixtureBridge(): void {
     anthropicModel: null,
     aiBackend: "anthropic",
     aiBackendCommand: null,
+    aiLanguage: "zh",
   };
 
   // 让 AI 视图在 fixture 预览下有内容(findings 卡片 + cohort 对比)。

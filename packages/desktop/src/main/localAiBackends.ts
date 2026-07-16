@@ -59,8 +59,14 @@ function resolveViaLoginShell(cmd: string): Promise<string> {
   return p;
 }
 
-const joinPrompt = (params: { messages: { content: string }[] }): string =>
-  params.messages.map((m) => m.content).join("\n");
+// 本地 CLI 后端没有独立 system 通道:system 拼接在 prompt 最前。
+const joinPrompt = (params: {
+  system?: string;
+  messages: { content: string }[];
+}): string =>
+  [params.system, ...params.messages.map((m) => m.content)]
+    .filter((s): s is string => !!s)
+    .join("\n");
 
 /** `claude -p --output-format text`, prompt on stdin, stdout = clean completion. */
 export function claudeCliClientFactory(opts?: {

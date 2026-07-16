@@ -38,6 +38,33 @@ export function StructuredAnalysisPanel({
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string>("");
   const [activeEventIds, setActiveEventIds] = useState<string[]>([]);
+  // 教练回复语言(backlog #1):持久化在 settings,main 侧按它注入 system
+  // prompt 并分键缓存;这里只需在切换后重查缓存。
+  const [lang, setLang] = useState<"zh" | "en" | null>(null);
+
+  useEffect(() => {
+    // 测试桩/旧 fixture bridge 可能没有 settings 面 —— 静默回退默认中文
+    try {
+      void bridge()
+        .settings.get()
+        .then((s) =>
+          setLang((s as { aiLanguage?: "zh" | "en" }).aiLanguage ?? "zh"),
+        )
+        .catch(() => setLang("zh"));
+    } catch {
+      setLang("zh");
+    }
+  }, []);
+
+  const switchLang = async (next: "zh" | "en") => {
+    if (next === lang || state === "running") return;
+    setLang(next);
+    try {
+      await bridge().settings.save({ aiLanguage: next });
+    } catch {
+      /* 无 settings 面(测试桩)时仅本地切换 */
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -57,7 +84,7 @@ export function StructuredAnalysisPanel({
     return () => {
       cancelled = true;
     };
-  }, [matchId]);
+  }, [matchId, lang]);
 
   useEffect(() => {
     const offDone = bridge().analysis.onDone(
@@ -196,6 +223,18 @@ export function StructuredAnalysisPanel({
         >
           {buttonText}
         </button>
+        <div className="rpt-ai-lang" title="教练回复语言">
+          {(["zh", "en"] as const).map((l) => (
+            <button
+              key={l}
+              className={l === lang ? "active" : ""}
+              disabled={state === "running"}
+              onClick={() => void switchLang(l)}
+            >
+              {l === "zh" ? "中文" : "EN"}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );

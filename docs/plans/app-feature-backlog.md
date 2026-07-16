@@ -2,7 +2,7 @@
 
 > 桌面 App 侧的功能需求(区别于 prompt 质量类改动,不走 /eval-ab;UI/交互改动直接实现 + 常规测试)。
 
-## 1. AI 分析语言切换(中文 / English)⬜(用户提出 2026-07-11)
+## 1. AI 分析语言切换(中文 / English)✅(2026-07-18 实现:分析按钮旁 中文/EN 段控,持久化 settings.aiLanguage(默认 zh);main 侧 buildCoachSystemPrompt 注入 system(本地 CLI 后端拼接 prompt 前);缓存语言分键 analysis-v2.<lang>.json 两语并存,旧无键缓存仅英文兜底;PROMPT_VERSION 未 bump)
 
 **需求**:在 AI 分析生成处(AIAnalysisPanel 的"分析"按钮旁)加一个语言切换按钮,可选中文或英文,控制教练回复的输出语言。
 

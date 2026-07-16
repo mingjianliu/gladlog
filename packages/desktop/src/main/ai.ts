@@ -9,8 +9,24 @@ export interface AnthropicLike {
   stream(params: {
     model: string;
     max_tokens: number;
+    /** 教练角色 + 输出语言指令(backlog #1);本地后端拼接到 prompt 前。 */
+    system?: string;
     messages: { role: "user"; content: string }[];
   }): AsyncIterable<{ delta?: string }>;
+}
+
+export type AiLanguage = "zh" | "en";
+
+/**
+ * 教练系统提示(backlog #1):角色设定 + 输出语言。语言是请求参数而非
+ * prompt 构建器改动 —— PROMPT_VERSION 不 bump;时间轴 prompt 本体保持英文。
+ */
+export function buildCoachSystemPrompt(lang: AiLanguage): string {
+  const language =
+    lang === "zh"
+      ? "Respond entirely in Simplified Chinese (简体中文). Keep spell/ability names in English."
+      : "Respond in English.";
+  return `You are a World of Warcraft arena coach reviewing a player's match. Be direct, specific, and grounded strictly in the provided events. ${language}`;
 }
 
 export type AiBackend = "anthropic" | "claudeCli" | "agy";
@@ -43,6 +59,7 @@ export function realClientFactory(key: string): AnthropicLike {
     async *stream(params: {
       model: string;
       max_tokens: number;
+      system?: string;
       messages: { role: "user"; content: string }[];
     }): AsyncIterable<{ delta?: string }> {
       const { Anthropic } = await import("@anthropic-ai/sdk");
@@ -50,6 +67,7 @@ export function realClientFactory(key: string): AnthropicLike {
       const stream = await client.messages.stream({
         model: params.model,
         max_tokens: params.max_tokens,
+        ...(params.system ? { system: params.system } : {}),
         messages: params.messages,
       });
 

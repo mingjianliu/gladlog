@@ -88,3 +88,25 @@ describe("resolveAiClient", () => {
     ).not.toBeNull();
   });
 });
+
+describe("system prompt 经本地后端(backlog #1)", () => {
+  it("claudeCli:system 拼接在 prompt 最前", async () => {
+    const seen: string[] = [];
+    const client = claudeCliClientFactory({
+      cmd: "claude",
+      run: async (_cmd, _args, stdin) => {
+        seen.push(stdin);
+        return "ok";
+      },
+    });
+    for await (const _ of client.stream({
+      model: "m",
+      max_tokens: 1,
+      system: "SYS-LANG",
+      messages: [{ role: "user", content: "PROMPT" }],
+    })) {
+      /* drain */
+    }
+    expect(seen[0]).toBe("SYS-LANG\nPROMPT");
+  });
+});
