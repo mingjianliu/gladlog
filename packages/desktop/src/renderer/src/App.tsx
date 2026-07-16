@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { DevPanel } from "./components/DevPanel";
+import { SettingsPanel } from "./components/SettingsPanel";
 import { StatsDashboard } from "./components/StatsDashboard";
 import { MatchListRow } from "./components/MatchListRow";
 import {
@@ -13,10 +14,11 @@ import { ShuffleReport } from "./report/components/ShuffleReport";
 import type { StoredMatchMeta } from "../../main/matchStore";
 import { bridge } from "./bridge";
 
-type AppView = "matches" | "stats" | "dev";
+type AppView = "matches" | "stats" | "settings" | "dev";
 const APP_VIEW_LABEL: Record<AppView, string> = {
   matches: "对局",
   stats: "战绩",
+  settings: "设置",
   dev: "开发者",
 };
 
@@ -94,6 +96,8 @@ export default function App() {
       </header>
       {appView === "dev" ? (
         <DevPanel />
+      ) : appView === "settings" ? (
+        <SettingsPanel />
       ) : appView === "stats" ? (
         <StatsDashboard
           onCompClick={(specId) => {
