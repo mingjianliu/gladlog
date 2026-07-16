@@ -1294,3 +1294,71 @@ pre {
   color: var(--gold);
   white-space: nowrap;
 }
+
+/* ── 死亡回顾抽屉卡(backlog #6)── */
+.rpt-tl-death-click {
+  cursor: pointer;
+}
+.rpt-recap {
+  margin-top: 12px;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-left: 3px solid var(--loss);
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+.rpt-recap-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.rpt-recap-title {
+  font-weight: bold;
+  font-size: 13px;
+}
+.rpt-recap-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.rpt-recap-close {
+  font-size: 12px;
+  padding: 2px 8px;
+}
+.rpt-recap-verdictish {
+  font-size: 12px;
+  color: var(--ink-2);
+  margin: 4px 0;
+}
+.rpt-recap-pill {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border: 1px solid var(--gold-dim);
+  border-radius: 999px;
+  color: var(--gold);
+  font-size: 11px;
+}
+.rpt-recap-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-family: var(--font-data);
+}
+.rpt-recap-table td {
+  padding: 2px 8px 2px 0;
+  border-top: 1px solid var(--hairline);
+  white-space: nowrap;
+}
+.rpt-recap-spell {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rpt-recap-dmg .rpt-recap-kind { color: var(--loss); }
+.rpt-recap-heal .rpt-recap-kind { color: var(--win); }
+.rpt-recap-cc .rpt-recap-kind { color: var(--gold); }
+.rpt-recap-def_used .rpt-recap-kind { color: var(--ink-2); }
+.rpt-recap-amt { text-align: right; }
+.rpt-recap-empty { color: var(--mute); font-style: italic; }

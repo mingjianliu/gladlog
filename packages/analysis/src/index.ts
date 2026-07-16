@@ -13,6 +13,7 @@ export * from "./utils/healingGaps";
 export * from "./utils/healerOffenseAnalysis";
 export * from "./utils/killWindowTargetSelection";
 export * from "./utils/dampening";
+export * from "./utils/deathOutcomeAnalysis";
 export { SpellTag } from "./data/spellTypes";
 export { zoneMetadata } from "./data/zoneMetadata";
 export { classMetadata } from "./data/classSpells";

@@ -12,11 +12,14 @@ export function Timeline({
   data,
   onSelectUnit,
   hidden,
+  onDeathClick,
 }: {
   data: TimelineData;
   onSelectUnit?: (unitId: string) => void;
   /** 隐藏的 unitId 集合:这些玩家的生命曲线/死亡标记不画。 */
   hidden?: Set<string>;
+  /** 死亡标记点击 → 打开死亡回顾(backlog #6)。t 为绝对 ms。 */
+  onDeathClick?: (unitId: string, t: number) => void;
 }) {
   const [cursor, setCursor] = useState<number | null>(null);
   const series = hidden
@@ -81,11 +84,16 @@ export function Timeline({
         {deaths.map((d, i) => (
           <g
             key={i}
-            className="rpt-tl-death"
+            className={
+              onDeathClick ? "rpt-tl-death rpt-tl-death-click" : "rpt-tl-death"
+            }
             transform={`translate(${x(d.t).toFixed(1)},${PAD.t})`}
+            onClick={
+              onDeathClick ? () => onDeathClick(d.unitId, d.t) : undefined
+            }
           >
             <path d="M-5,-10 L5,-10 L0,0 Z" />
-            <title>{`${d.name} 死亡 @ ${relSec(d.t)}s`}</title>
+            <title>{`${d.name} 死亡 @ ${relSec(d.t)}s${onDeathClick ? " — 点击看死亡回顾" : ""}`}</title>
           </g>
         ))}
         {cursor !== null && cursor >= PAD.l && cursor <= W - PAD.r ? (

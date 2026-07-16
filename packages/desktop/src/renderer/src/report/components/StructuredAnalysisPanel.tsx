@@ -8,8 +8,8 @@ import {
   isHealerSpec,
 } from "@gladlog/analysis";
 import type { Finding } from "@gladlog/analysis";
-import { toLegacyMatch, CombatUnitReaction } from "@gladlog/parser-compat";
-import type { GladMatch } from "@gladlog/parser";
+import { CombatUnitReaction } from "@gladlog/parser-compat";
+import { toLegacySafe } from "../derive/legacySource";
 import { deriveVulnBands } from "../derive/vulnWindows";
 import { MatchHero } from "./MatchHero";
 import { TimelineStrip } from "./TimelineStrip";
@@ -83,10 +83,7 @@ export function StructuredAnalysisPanel({
 
   const input = useMemo(() => {
     try {
-      const legacy = toLegacyMatch({
-        ...source,
-        rawLines: [],
-      } as unknown as GladMatch);
+      const legacy = toLegacySafe(source);
       const candidates = extractCandidateFindings(legacy);
       const players = Object.values(legacy.units).filter((u) => u.info);
       const healer = players.find(

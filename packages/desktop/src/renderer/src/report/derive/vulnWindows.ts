@@ -1,7 +1,7 @@
 import { computeOffensiveWindows } from "@gladlog/analysis";
-import { CombatUnitReaction, toLegacyMatch } from "@gladlog/parser-compat";
-import type { GladMatch } from "@gladlog/parser";
+import { CombatUnitReaction } from "@gladlog/parser-compat";
 
+import { toLegacySafe } from "./legacySource";
 import type { ReportSource } from "./types";
 
 /**
@@ -21,10 +21,7 @@ export interface VulnBand {
 
 export function deriveVulnBands(source: ReportSource): VulnBand[] {
   try {
-    const legacy = toLegacyMatch({
-      ...source,
-      rawLines: [],
-    } as unknown as GladMatch);
+    const legacy = toLegacySafe(source);
     const players = Object.values(legacy.units).filter((u) => u.info);
     const friendlies = players.filter(
       (u) => u.reaction === CombatUnitReaction.Friendly,

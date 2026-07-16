@@ -1,9 +1,11 @@
 import { useMemo, useState } from "react";
 
 import type { MeterMode } from "../derive/meterRows";
+import { deriveDeathRecaps, type DeathRecap } from "../derive/deathRecap";
 import { deriveSummary } from "../derive/summary";
 import { deriveTimeline } from "../derive/timeline";
 import type { ReportSource } from "../derive/types";
+import { DeathRecapCard } from "./DeathRecapCard";
 import { Meters } from "./Meters";
 import { ProComparisonVerified } from "./ProComparisonVerified";
 import { ReplayView } from "./ReplayView";
@@ -49,6 +51,17 @@ export function MatchReport({
   };
   const summary = useMemo(() => deriveSummary(source), [source]);
   const timeline = useMemo(() => deriveTimeline(source), [source]);
+  const [recap, setRecap] = useState<DeathRecap | null>(null);
+
+  // 死亡标记点击 → 找该单位最近的回顾(懒算,点击才 derive)
+  const openRecap = (unitId: string, tMs: number) => {
+    const tS = (tMs - source.startTime) / 1000;
+    const all = deriveDeathRecaps(source);
+    const hit = all
+      .filter((r) => r.unitId === unitId)
+      .sort((a, b) => Math.abs(a.deathS - tS) - Math.abs(b.deathS - tS))[0];
+    if (hit) setRecap(hit);
+  };
 
   const toggleUnit = (id: string) =>
     setHidden((prev) => {
@@ -84,7 +97,22 @@ export function MatchReport({
             hidden={hidden}
             onToggleUnit={toggleUnit}
           />
-          <Timeline data={timeline} hidden={hidden} onSelectUnit={toggleUnit} />
+          <Timeline
+            data={timeline}
+            hidden={hidden}
+            onSelectUnit={toggleUnit}
+            onDeathClick={openRecap}
+          />
+          {recap && (
+            <DeathRecapCard
+              recap={recap}
+              onClose={() => setRecap(null)}
+              onJump={(tSeconds, unitNames) => {
+                setRecap(null);
+                handleSeekEvent(tSeconds, unitNames);
+              }}
+            />
+          )}
         </div>
       )}
       {view === "replay" && <ReplayView source={source} seekReq={seekReq} />}
