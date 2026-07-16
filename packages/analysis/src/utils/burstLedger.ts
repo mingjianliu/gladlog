@@ -354,8 +354,10 @@ export function formatBurstLedgerForContext(
         `    Target: ${t.unitName}${hpStr} | your damage ${fmtM(t.damage)}${t.died ? " | target DIED" : ""}`,
       );
       for (const d of t.defensivesHit) {
+        // 2026-07-16 冒烟实测:不写明"挂在目标身上",responder 会误读成
+        // 己方外置(PS 只能给队友 → 推理成"不算目标减伤")。主语必须显式。
         lines.push(
-          `    ${d.isImmunity ? "⚠ Hit IMMUNITY" : "Hit major defensive"}: ${d.spellName} active ${d.overlapSeconds.toFixed(1)}s of this burst`,
+          `    ${d.isImmunity ? "⚠ Target was IMMUNE" : "Target had a major defensive up"}: ${d.spellName} active ON THE TARGET ${d.overlapSeconds.toFixed(1)}s of this burst`,
         );
       }
     } else {

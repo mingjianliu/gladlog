@@ -92,6 +92,13 @@ healingGaps、healer exposure、HPS 基准。
   (2+ 敌对玩家同一整秒打同一目标;宠物归主人)。**D1 全部收官。**
 - **D2(AI 泛化)**:owner 视角泛化 + 4 类新 candidate events + DPS prompt
   变体;/eval-baseline DPS 版跑通。
+  **✅ 2026-07-16 完成**:owner=日志记录者(治疗 prompt 字节不变,单测钉死);
+  DPS owner 得 `<burst_ledger>` 块 + 四类新事件(legend 按在场类型动态);
+  PROMPT_VERSION 4。eval:`buildCorpus --owner dps`(降级语料 176 场)+
+  门规主语三修 + 插值盲区补网格 → 几何门 0/2665;6 场 sonnet 冒烟全部
+  以账本为骨架(runId 2026-07-16-dps-smoke)。
+  **剩余**:正式 DPS baseline 需真 DPS 视角日志(用户提供)+ DPS 化
+  sufficiency 锚点的 judge-instructions 变体。
 - **D3(闭环)**:DPS findings 进「最常犯的问题」聚合与「本场目标」
   (backlog #12–#19 的教练闭环对 DPS 同样成立)。
 
