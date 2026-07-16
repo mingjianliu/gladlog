@@ -1897,3 +1897,29 @@ pre {
 .rpt-ledger-chip-dim {
   color: var(--mute);
 }
+
+/* ── 回放爆发红光 + 同秒集火(DPS D1 顺带项)── */
+@keyframes rpt-burst-pulse {
+  0%,
+  100% {
+    stroke-opacity: 0.95;
+    stroke-width: 2.5px;
+  }
+  50% {
+    stroke-opacity: 0.25;
+    stroke-width: 5px;
+  }
+}
+.rpt-replay-burst-ring {
+  fill: none;
+  stroke: var(--loss);
+  animation: rpt-burst-pulse 1.1s ease-in-out infinite;
+  pointer-events: none;
+}
+.rpt-replay-focus-ring {
+  fill: none;
+  stroke: var(--gold);
+  stroke-width: 1.8px;
+  stroke-dasharray: 4 3;
+  pointer-events: none;
+}

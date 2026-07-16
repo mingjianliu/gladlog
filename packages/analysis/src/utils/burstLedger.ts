@@ -75,8 +75,9 @@ export interface IBurstLedgerEntry {
   allyCDsOverlapping: Array<{ playerName: string; spellName: string }>;
 }
 
-/** Active span of one offensive CD cast: buff duration when known, grouping reach otherwise. */
-function castSpan(cd: IEnemyCDCast): { from: number; to: number } {
+/** Active span of one offensive CD cast: buff duration when known, grouping reach otherwise.
+ * Exported for the replay burst visual — the pulse must cover exactly the span the ledger audits. */
+export function burstCastSpan(cd: IEnemyCDCast): { from: number; to: number } {
   const to = Math.max(cd.buffEndSeconds, cd.castTimeSeconds + MIN_BURST_SPAN_S);
   return { from: cd.castTimeSeconds, to };
 }
@@ -111,7 +112,7 @@ export function analyzeBurstLedger(
       ).map((cd) => ({
         playerName: a.name,
         spellName: cd.spellName,
-        ...castSpan(cd),
+        ...burstCastSpan(cd),
       })),
     );
 
@@ -130,7 +131,7 @@ export function analyzeBurstLedger(
         groups.push(current);
         current = [cd];
       }
-      reach = Math.max(reach, castSpan(cd).to);
+      reach = Math.max(reach, burstCastSpan(cd).to);
     }
     if (current.length > 0) groups.push(current);
   }
@@ -139,7 +140,7 @@ export function analyzeBurstLedger(
   for (const group of groups) {
     const fromSeconds = group[0].castTimeSeconds;
     const toSeconds = Math.min(
-      Math.max(...group.map((cd) => castSpan(cd).to)),
+      Math.max(...group.map((cd) => burstCastSpan(cd).to)),
       matchEndS,
     );
     const fromMs = matchStartMs + fromSeconds * 1000;

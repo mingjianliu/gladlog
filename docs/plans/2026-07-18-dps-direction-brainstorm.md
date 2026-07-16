@@ -87,7 +87,9 @@ healingGaps、healer exposure、HPS 基准。
   juked 用 castStartEvents,回溯常量与读条条 CAST_BAR_MAX_MS 断言相等);
   parser-compat 补可选 `castStartEvents`;战报卡 `BurstLedgerCard`(玩家分页、
   三节、行行 ▶ 跳回放)。旧档 kick 判 unknown,重导入即有读条数据。
-  剩余:回放爆发视觉(敌方大 CD 开启红光脉冲)与同秒集火高亮 —— 两类玩家通用。
+  **✅ 回放视觉两件 2026-07-16 完成**:敌方进攻 CD active 红光脉冲环
+  (span = burstCastSpan,与账本审计同一区间)+ 同秒集火金色虚线环
+  (2+ 敌对玩家同一整秒打同一目标;宠物归主人)。**D1 全部收官。**
 - **D2(AI 泛化)**:owner 视角泛化 + 4 类新 candidate events + DPS prompt
   变体;/eval-baseline DPS 版跑通。
 - **D3(闭环)**:DPS findings 进「最常犯的问题」聚合与「本场目标」

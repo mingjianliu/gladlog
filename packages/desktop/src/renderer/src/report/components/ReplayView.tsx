@@ -1,18 +1,18 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-
 import { arenaObstacles } from "@gladlog/analysis";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { arenaMap, arenaMapUrl, arenaPx, arenaToPx } from "../data/arenaMaps";
 import { classColor, classGlyph } from "../data/gameConstants";
+import { castBarAt, deriveCastBars } from "../derive/castBars";
+import { deriveCasts } from "../derive/casts";
+import { dampeningAt, deriveDampeningSeries } from "../derive/dampeningSeries";
 import {
   deathPosition,
   deriveReplay,
   pathUpTo,
   sampleAt,
 } from "../derive/replay";
-import { castBarAt, deriveCastBars } from "../derive/castBars";
-import { deriveCasts } from "../derive/casts";
-import { dampeningAt, deriveDampeningSeries } from "../derive/dampeningSeries";
+import { deriveBurstAuras, deriveFocusFire } from "../derive/replayHighlights";
 import type { ReportSource } from "../derive/types";
 import { deriveVulnBands } from "../derive/vulnWindows";
 import { GcdSwimlane } from "./GcdSwimlane";
@@ -77,6 +77,10 @@ export function ReplayView({
     [source, tracks],
   );
 
+  // 爆发红光 + 同秒集火(DPS D1):谓词在 analysis/derive,这里只查 t
+  const burstAuras = useMemo(() => deriveBurstAuras(source), [source]);
+  const focusFire = useMemo(() => deriveFocusFire(source), [source]);
+
   const [t, setT] = useState(startTime);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState<(typeof SPEEDS)[number]>(1);
@@ -105,7 +109,8 @@ export function ReplayView({
         setPlaying((p) => !p);
       } else if (e.code === "ArrowLeft" || e.code === "ArrowRight") {
         e.preventDefault();
-        const step = (e.shiftKey ? 1_000 : 5_000) * (e.code === "ArrowLeft" ? -1 : 1);
+        const step =
+          (e.shiftKey ? 1_000 : 5_000) * (e.code === "ArrowLeft" ? -1 : 1);
         setT((cur) => Math.min(endTime, Math.max(startTime, cur + step)));
       }
     };
@@ -335,7 +340,9 @@ export function ReplayView({
               return (
                 <g
                   key={`d${tr.unitId}`}
-                  className={onDeathClick ? "rpt-replay-ghost-click" : undefined}
+                  className={
+                    onDeathClick ? "rpt-replay-ghost-click" : undefined
+                  }
                   onClick={
                     onDeathClick
                       ? () => onDeathClick(tr.unitId, tr.deathT!)
@@ -366,6 +373,39 @@ export function ReplayView({
                 at.maxHp > 0 ? Math.max(0, Math.min(1, at.hp / at.maxHp)) : 1;
               return (
                 <g key={tr.unitId} className="rpt-replay-unit">
+                  {/* 爆发红光脉冲:敌方进攻大 CD active(span 与爆发账本同谓词) */}
+                  {(() => {
+                    const span = (burstAuras[tr.unitId] ?? []).find(
+                      (s) => t >= s.fromMs && t <= s.toMs,
+                    );
+                    if (!span) return null;
+                    return (
+                      <circle
+                        cx={cx}
+                        cy={cy}
+                        r={19}
+                        className="rpt-replay-burst-ring"
+                      >
+                        <title>{`${tr.name} 爆发中:${span.spellName}`}</title>
+                      </circle>
+                    );
+                  })()}
+                  {/* 同秒集火高亮:2+ 敌对玩家同一秒打这个目标 */}
+                  {(() => {
+                    const sec = Math.floor((t - source.startTime) / 1000);
+                    const n = focusFire[tr.unitId]?.[sec];
+                    if (!n) return null;
+                    return (
+                      <circle
+                        cx={cx}
+                        cy={cy}
+                        r={16}
+                        className="rpt-replay-focus-ring"
+                      >
+                        <title>{`集火:${n} 人同秒打击 ${tr.name}`}</title>
+                      </circle>
+                    );
+                  })()}
                   <text x={cx} y={cy - 19} className="rpt-replay-name">
                     {tr.name}
                   </text>
@@ -414,8 +454,7 @@ export function ReplayView({
                       0,
                       Math.min(
                         1,
-                        (t - bar.fromMs) /
-                          Math.max(1, bar.toMs - bar.fromMs),
+                        (t - bar.fromMs) / Math.max(1, bar.toMs - bar.fromMs),
                       ),
                     );
                     return (
@@ -454,11 +493,7 @@ export function ReplayView({
                     }
                     if (!last) return null;
                     return (
-                      <text
-                        x={cx}
-                        y={cy - 30}
-                        className="rpt-replay-castflash"
-                      >
+                      <text x={cx} y={cy - 30} className="rpt-replay-castflash">
                         ✦ {last.spellName}
                       </text>
                     );
