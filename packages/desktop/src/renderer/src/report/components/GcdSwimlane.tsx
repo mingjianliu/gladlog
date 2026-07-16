@@ -58,6 +58,7 @@ export function GcdSwimlane({
   playing,
   flash,
   onSeekT,
+  onDeathClick,
 }: {
   source: ReportSource;
   tracks: ReplayTrack[];
@@ -75,6 +76,8 @@ export function GcdSwimlane({
   } | null;
   /** 点 chip → 共享时钟 seek 到该施法时刻(两栏同步)。 */
   onSeekT?: (tMs: number) => void;
+  /** 点阵亡 divider → 死亡回顾。 */
+  onDeathClick?: (unitId: string, tMs: number) => void;
 }) {
   const durationSec = Math.max(1, (endTime - startTime) / 1000);
   const laneH = durationSec * PX_PER_SEC;
@@ -246,8 +249,18 @@ export function GcdSwimlane({
                   })}
                   {tr.deathT != null && (
                     <div
-                      className="rpt-gcd-death"
+                      className={
+                        onDeathClick
+                          ? "rpt-gcd-death rpt-gcd-death-click"
+                          : "rpt-gcd-death"
+                      }
                       style={{ top: yFor(tr.deathT) }}
+                      onClick={
+                        onDeathClick
+                          ? () => onDeathClick(tr.unitId, tr.deathT!)
+                          : undefined
+                      }
+                      title={onDeathClick ? "点击看死亡回顾" : undefined}
                     >
                       阵亡
                     </div>

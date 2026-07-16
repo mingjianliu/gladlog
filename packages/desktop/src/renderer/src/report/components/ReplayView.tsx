@@ -467,6 +467,7 @@ export function ReplayView({
             setT(Math.min(endTime, Math.max(startTime, tMs)));
             setPlaying(false);
           }}
+          onDeathClick={onDeathClick}
         />
       </div>
 

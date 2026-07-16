@@ -1552,3 +1552,10 @@ pre {
   background: transparent;
   cursor: pointer;
 }
+
+.rpt-gcd-death-click {
+  cursor: pointer;
+}
+.rpt-gcd-death-click:hover {
+  color: var(--gold);
+}

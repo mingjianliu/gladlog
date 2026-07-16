@@ -103,4 +103,13 @@ describe("回放视图死亡回顾入口(#6 v2)", () => {
     expect(screen.queryByTestId("death-recap")).toBeNull();
     expect(container.querySelector(".rpt-replay-scrub")).toBeTruthy();
   });
+
+  it("泳道阵亡 divider 也可开回顾", () => {
+    const { container } = render(<MatchReport source={m} matchId="t" />);
+    fireEvent.click(screen.getByRole("button", { name: "回放" }));
+    const divider = container.querySelector(".rpt-gcd-death-click");
+    expect(divider).toBeTruthy();
+    fireEvent.click(divider!);
+    expect(screen.getByTestId("death-recap")).toBeTruthy();
+  });
 });
