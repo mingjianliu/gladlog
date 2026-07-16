@@ -55,11 +55,14 @@ export function TimelineStrip({
                 width: `${width}%`,
                 top: 0,
                 bottom: 0,
+                cursor: onJump ? "pointer" : undefined,
               }}
+              onClick={onJump ? () => onJump(b.fromS) : undefined}
               title={
-                b.kind === "burst"
+                (b.kind === "burst"
                   ? `击杀尝试 on ${b.targetName}`
-                  : `${b.targetName} 脆弱且未被惩罚`
+                  : `${b.targetName} 脆弱且未被惩罚`) +
+                (onJump ? "(点击回放)" : "")
               }
             />
           );

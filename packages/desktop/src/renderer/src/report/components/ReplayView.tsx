@@ -451,10 +451,15 @@ export function ReplayView({
                     left: `${Math.max(0, left)}%`,
                     width: `${Math.min(100 - Math.max(0, left), width)}%`,
                   }}
+                  onClick={() => {
+                    setT(Math.min(endTime, Math.max(startTime, fromMs)));
+                    setPlaying(false);
+                  }}
                   title={
-                    b.kind === "burst"
+                    (b.kind === "burst"
                       ? `击杀尝试 on ${b.targetName}(团队伤害 ${(b.damage / 1000).toFixed(0)}k)`
-                      : `${b.targetName} 无大防御且未被惩罚(团队伤害仅 ${(b.damage / 1000).toFixed(0)}k)`
+                      : `${b.targetName} 无大防御且未被惩罚(团队伤害仅 ${(b.damage / 1000).toFixed(0)}k)`) +
+                    "(点击定位)"
                   }
                 />
               );

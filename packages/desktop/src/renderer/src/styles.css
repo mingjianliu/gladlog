@@ -1495,3 +1495,11 @@ pre {
   stroke: var(--gold);
   stroke-width: 2px;
 }
+
+/* 色带可点 */
+.rpt-replay-band {
+  cursor: pointer;
+}
+.rpt-replay-band:hover {
+  filter: brightness(1.4);
+}

@@ -150,4 +150,30 @@ describe("#8 收尾:strip 跳转 + 窗口色带", () => {
     const { container } = render(<ReplayView source={m} />);
     expect(container.querySelector(".rpt-replay-bands")).toBeTruthy();
   });
+
+  it("色带可点:scrubber 色带点击 → 时钟定位到带起点;strip 色带点击 → onJump(fromS)", () => {
+    // scrubber 侧
+    const { container } = render(<ReplayView source={m} />);
+    const band = container.querySelector(".rpt-replay-band") as HTMLElement;
+    expect(band).toBeTruthy();
+    fireEvent.click(band);
+    const time = container.querySelector(".rpt-replay-time");
+    expect(time?.textContent?.startsWith("0:00 /")).toBe(false);
+
+    // strip 侧
+    const jumps: number[] = [];
+    const { container: c2 } = render(
+      <TimelineStrip
+        candidates={candidates as never}
+        activeEventIds={[]}
+        onSelect={() => {}}
+        onJump={(t) => jumps.push(t)}
+        bands={[
+          { kind: "burst", fromS: 12, toS: 20, targetName: "X", damage: 90000 },
+        ]}
+      />,
+    );
+    fireEvent.click(c2.querySelector('[data-testid="strip-band"]')!);
+    expect(jumps).toEqual([12]);
+  });
 });
