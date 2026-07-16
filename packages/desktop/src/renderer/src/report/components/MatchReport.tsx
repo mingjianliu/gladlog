@@ -1,12 +1,14 @@
 import { useMemo, useState } from "react";
 
 import type { MeterMode } from "../derive/meterRows";
+import { deriveBurstLedger } from "../derive/burstLedger";
 import { deriveDeathRecaps, type DeathRecap } from "../derive/deathRecap";
 import { deriveStatsTable } from "../derive/statsTable";
 import { deriveVulnBands } from "../derive/vulnWindows";
 import { deriveSummary } from "../derive/summary";
 import { deriveTimeline } from "../derive/timeline";
 import type { ReportSource } from "../derive/types";
+import { BurstLedgerCard } from "./BurstLedgerCard";
 import { DeathRecapCard } from "./DeathRecapCard";
 import { Meters } from "./Meters";
 import { ProComparisonVerified } from "./ProComparisonVerified";
@@ -55,6 +57,7 @@ export function MatchReport({
   const timeline = useMemo(() => deriveTimeline(source), [source]);
   const statsRows = useMemo(() => deriveStatsTable(source), [source]);
   const vulnBands = useMemo(() => deriveVulnBands(source), [source]);
+  const ledgerPlayers = useMemo(() => deriveBurstLedger(source), [source]);
   const [recap, setRecap] = useState<DeathRecap | null>(null);
 
   // 死亡标记点击 → 找该单位最近的回顾(懒算,点击才 derive)
@@ -112,6 +115,7 @@ export function MatchReport({
             bands={vulnBands}
             onBandClick={(tS) => handleSeekEvent(tS, [])}
           />
+          <BurstLedgerCard players={ledgerPlayers} onSeek={handleSeekEvent} />
         </div>
       )}
       {view === "replay" && (

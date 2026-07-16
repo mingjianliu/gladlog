@@ -81,7 +81,13 @@ healingGaps、healer exposure、HPS 基准。
 - **D1(纯 UI,无 prompt 风险)**:burstAlignment/targetAudit/kickAudit 三个
   derive + 战报视图的 "爆发账本" 卡(每次爆发一行:时刻/目标/对齐状态/收益,
   可点跳回放)。DPS 玩家立刻有确定性复盘可看,不动 AI。
-  顺带做回放爆发视觉(敌方大 CD 开启红光脉冲)与同秒集火高亮 —— 两类玩家通用。
+  **✅ 账本三件 2026-07-16 完成**:analysis `burstLedger.ts`(爆发分组复用
+  enemyCDs 的 BURST_CLUSTER_SECONDS/CD 谓词;免疫命中用真实 aura 区间
+  `buildAuraIntervals`)+ `kickAudit.ts`(landed = SPELL_INTERRUPT 镜像;
+  juked 用 castStartEvents,回溯常量与读条条 CAST_BAR_MAX_MS 断言相等);
+  parser-compat 补可选 `castStartEvents`;战报卡 `BurstLedgerCard`(玩家分页、
+  三节、行行 ▶ 跳回放)。旧档 kick 判 unknown,重导入即有读条数据。
+  剩余:回放爆发视觉(敌方大 CD 开启红光脉冲)与同秒集火高亮 —— 两类玩家通用。
 - **D2(AI 泛化)**:owner 视角泛化 + 4 类新 candidate events + DPS prompt
   变体;/eval-baseline DPS 版跑通。
 - **D3(闭环)**:DPS findings 进「最常犯的问题」聚合与「本场目标」

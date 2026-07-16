@@ -35,8 +35,9 @@ const HEALER_TRINKET_CD_S = 90;
 /** DPS trinket CD (seconds). */
 const DPS_TRINKET_CD_S = 120;
 
-/** Minimum window duration to bother comparing (mirrors MIN_VULN_SECONDS in offensiveWindows). */
-const MIN_WINDOW_SECONDS = 5;
+/** Minimum window duration to bother comparing (mirrors MIN_VULN_SECONDS in offensiveWindows).
+ * Shared with burstLedger's targeting audit — same "window long enough to judge" fact. */
+export const MIN_WINDOW_SECONDS = 5;
 
 // ---------------------------------------------------------------------------
 // Interfaces

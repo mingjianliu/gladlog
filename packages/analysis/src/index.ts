@@ -12,6 +12,8 @@ export * from "./utils/dispelAnalysis";
 export * from "./utils/healingGaps";
 export * from "./utils/healerOffenseAnalysis";
 export * from "./utils/killWindowTargetSelection";
+export * from "./utils/burstLedger";
+export * from "./utils/kickAudit";
 export * from "./utils/dampening";
 export * from "./utils/deathOutcomeAnalysis";
 export { SpellTag } from "./data/spellTypes";
@@ -53,5 +55,3 @@ export * from "./analysis/candidateFindings";
 export * from "./analysis/causalLint";
 export * from "./analysis/auditFindings";
 export * from "./analysis/buildFindingsPrompt";
-
-

@@ -105,6 +105,8 @@ export interface ICombatUnit {
   consciousDeathRecords?: ILogLine[];
   auraEvents: IAuraEvent[];
   spellCastEvents: ISpellEvent[];
+  /** SPELL_CAST_START(读条开始;瞬发无此事件)。旧存档 doc 无 castStarts 字段 → [](可选,消费方需容忍缺席)。 */
+  castStartEvents?: ISpellEvent[];
   petSpellCastEvents: ISpellEvent[];
   actionIn: ISpellEvent[];
   actionOut: ISpellEvent[];
@@ -114,7 +116,11 @@ export interface ICombatUnit {
 
 export interface IAdvancedAction {
   /** 新 parser 未采集 powers;转换器恒填 [](mana 类判定优雅降级,见 4a 再对齐报告) */
-  advancedActorPowers: { type: CombatUnitPowerType; current: number; max: number }[];
+  advancedActorPowers: {
+    type: CombatUnitPowerType;
+    current: number;
+    max: number;
+  }[];
   advancedActorCurrentHp: number;
   advancedActorMaxHp: number;
   advancedActorPositionX: number;

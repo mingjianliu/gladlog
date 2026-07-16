@@ -29,8 +29,9 @@ import {
 } from "./spellDanger";
 
 const MIN_CD_SECONDS = 30;
-/** Two enemy offensive CD casts within this window are considered an aligned burst */
-const BURST_CLUSTER_SECONDS = 10;
+/** Two offensive CD casts within this window are considered an aligned burst.
+ * Shared with burstLedger (friendly-side burst grouping) — one clustering predicate for both teams. */
+export const BURST_CLUSTER_SECONDS = 10;
 /** A single CD with at least this danger weight forms a burst window on its own (≈ a 2-minute major) */
 const SOLO_WINDOW_MIN_WEIGHT = 1.3;
 

@@ -4,9 +4,10 @@ import {
   IArenaMatch,
   ICombatUnit,
   IShuffleMatch,
+  LogEvent,
   WoWCombatLogParser,
-} from '@gladlog/parser-compat';
-import _ from 'lodash';
+} from "@gladlog/parser-compat";
+import _ from "lodash";
 
 const combatUnitSpecReverse: Record<string, string> = {};
 const combatUnitClassReverse: Record<string, string> = {};
@@ -17,14 +18,21 @@ _.keys(CombatUnitSpec).forEach((k) => {
   combatUnitSpecReverse[CombatUnitSpec[k as keyof typeof CombatUnitSpec]] = k;
 });
 _.keys(CombatUnitClass).forEach((k) => {
-  combatUnitClassReverse[CombatUnitClass[k as keyof typeof CombatUnitClass]] = k;
+  combatUnitClassReverse[CombatUnitClass[k as keyof typeof CombatUnitClass]] =
+    k;
 });
 
 _.keys(CombatUnitSpec).forEach((k) => {
-  specNames[CombatUnitSpec[k as keyof typeof CombatUnitSpec]] = k.split('_').reverse().join(' ');
+  specNames[CombatUnitSpec[k as keyof typeof CombatUnitSpec]] = k
+    .split("_")
+    .reverse()
+    .join(" ");
 });
 _.keys(CombatUnitClass).forEach((k) => {
-  classNames[CombatUnitClass[k as keyof typeof CombatUnitClass]] = k.split('_').reverse().join(' ');
+  classNames[CombatUnitClass[k as keyof typeof CombatUnitClass]] = k
+    .split("_")
+    .reverse()
+    .join(" ");
 });
 
 type ParseResult = {
@@ -33,6 +41,67 @@ type ParseResult = {
 };
 
 export const SIGNIFICANT_DAMAGE_HEAL_THRESHOLD = 10000;
+
+export interface IAuraInterval {
+  spellId: string;
+  spellName: string;
+  startMs: number;
+  endMs: number;
+}
+
+/**
+ * Reconstructs actual active intervals of the given auras on a unit from its
+ * aura event stream. Event set matches enemyCDs' CC-interval block:
+ * APPLIED/REFRESH open, REMOVED/BROKEN/BROKEN_SPELL close; auras still open at
+ * the end close at `openEndMs` (match end).
+ */
+export function buildAuraIntervals(
+  unit: ICombatUnit,
+  spellIds: ReadonlySet<string>,
+  openEndMs: number,
+): IAuraInterval[] {
+  const open = new Map<string, { startMs: number; spellName: string }>();
+  const intervals: IAuraInterval[] = [];
+  for (const a of unit.auraEvents) {
+    if (!a.spellId || !spellIds.has(a.spellId)) continue;
+    const ev = a.logLine.event;
+    if (
+      ev === LogEvent.SPELL_AURA_APPLIED ||
+      ev === LogEvent.SPELL_AURA_REFRESH
+    ) {
+      if (!open.has(a.spellId)) {
+        open.set(a.spellId, {
+          startMs: a.logLine.timestamp,
+          spellName: a.spellName ?? a.spellId,
+        });
+      }
+    } else if (
+      ev === LogEvent.SPELL_AURA_REMOVED ||
+      ev === LogEvent.SPELL_AURA_BROKEN ||
+      ev === LogEvent.SPELL_AURA_BROKEN_SPELL
+    ) {
+      const o = open.get(a.spellId);
+      if (o) {
+        intervals.push({
+          spellId: a.spellId,
+          spellName: o.spellName,
+          startMs: o.startMs,
+          endMs: a.logLine.timestamp,
+        });
+        open.delete(a.spellId);
+      }
+    }
+  }
+  for (const [spellId, o] of open) {
+    intervals.push({
+      spellId,
+      spellName: o.spellName,
+      startMs: o.startMs,
+      endMs: openEndMs,
+    });
+  }
+  return intervals.sort((x, y) => x.startMs - y.startMs);
+}
 
 export const healerSpecs = [
   CombatUnitSpec.Paladin_Holy,
@@ -55,7 +124,11 @@ export const tankSpecs = [
 export const tanksOrHealers = [...healerSpecs, ...tankSpecs];
 
 export class Utils {
-  public static parseFromStringArray(buffer: string[], wowVersion: string, timezone?: string): ParseResult {
+  public static parseFromStringArray(
+    buffer: string[],
+    wowVersion: string,
+    timezone?: string,
+  ): ParseResult {
     const logParser = new WoWCombatLogParser(wowVersion, timezone);
 
     const results: ParseResult = {
@@ -63,11 +136,11 @@ export class Utils {
       shuffleMatches: [],
     };
 
-    logParser.on('arena_match_ended', (data: IArenaMatch) => {
+    logParser.on("arena_match_ended", (data: IArenaMatch) => {
       results.arenaMatches.push(data);
     });
 
-    logParser.on('solo_shuffle_ended', (data: IShuffleMatch) => {
+    logParser.on("solo_shuffle_ended", (data: IShuffleMatch) => {
       results.shuffleMatches.push(data);
     });
     // TODO: handle onError here?
@@ -151,9 +224,14 @@ export class Utils {
   public static getAverageItemLevel(player: ICombatUnit): number {
     // advanced actions contain information about the character's item level. if that's available,
     // we should use that before trying to do our own calculations based on gear.
-    const advancedActions = player.advancedActions.filter((action) => (action as any).advancedActorItemLevel > 0);
+    const advancedActions = player.advancedActions.filter(
+      (action) => (action as any).advancedActorItemLevel > 0,
+    );
     if (advancedActions.length > 0) {
-      return Math.round(_.sum(advancedActions.map((a) => (a as any).advancedActorItemLevel)) / advancedActions.length);
+      return Math.round(
+        _.sum(advancedActions.map((a) => (a as any).advancedActorItemLevel)) /
+          advancedActions.length,
+      );
     }
 
     if (!(player.info?.equipment && player.info.equipment.length >= 16)) {
@@ -161,11 +239,15 @@ export class Utils {
     }
 
     // if using offhand weapon this calculation is normal
-    if (player.info.equipment[16].id !== '0') {
-      return Math.round(_.sumBy(player.info.equipment, 'ilvl') / 16);
+    if (player.info.equipment[16].id !== "0") {
+      return Math.round(_.sumBy(player.info.equipment, "ilvl") / 16);
     }
     // otherwise, the 2h weapon counts as 2 slots with the same ilvl
-    return Math.round((player.info.equipment[15].ilvl + Math.round(_.sumBy(player.info.equipment, 'ilvl'))) / 16);
+    return Math.round(
+      (player.info.equipment[15].ilvl +
+        Math.round(_.sumBy(player.info.equipment, "ilvl"))) /
+        16,
+    );
   }
 
   public static filterNulls<T>(items: (T | null | undefined)[]): T[] {
@@ -196,24 +278,24 @@ export class Utils {
       default:
         return `https://images.wowarenalogs.com/classes/${combatUnitClassReverse[unitClass].toLowerCase()}.jpeg`;
       case CombatUnitClass.None:
-        return 'https://images.wowarenalogs.com/common/question_mark.jpeg';
+        return "https://images.wowarenalogs.com/common/question_mark.jpeg";
     }
   }
 
   public static printCombatNumber(num: number, isCritical = false): string {
-    const criticalMarker = '*';
+    const criticalMarker = "*";
 
     if (num < 1000) {
-      return `${num.toFixed()}${isCritical ? criticalMarker : ''}`;
+      return `${num.toFixed()}${isCritical ? criticalMarker : ""}`;
     }
     if (num < 10000) {
-      return `${(num / 1000).toFixed(1)}k${isCritical ? criticalMarker : ''}`;
+      return `${(num / 1000).toFixed(1)}k${isCritical ? criticalMarker : ""}`;
     }
 
     if (num >= 1000000) {
-      return `${(num / 1000000).toFixed(2)}m${isCritical ? criticalMarker : ''}`;
+      return `${(num / 1000000).toFixed(2)}m${isCritical ? criticalMarker : ""}`;
     }
 
-    return `${(num / 1000).toFixed()}k${isCritical ? criticalMarker : ''}`;
+    return `${(num / 1000).toFixed()}k${isCritical ? criticalMarker : ""}`;
   }
 }

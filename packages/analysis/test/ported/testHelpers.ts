@@ -160,10 +160,12 @@ export function makeUnit(
     class?: CombatUnitClass;
     reaction?: CombatUnitReaction;
     spellCastEvents?: AnyObj[];
+    castStartEvents?: AnyObj[];
     auraEvents?: AnyObj[];
     actionIn?: AnyObj[];
     actionOut?: AnyObj[];
     damageIn?: AnyObj[];
+    damageOut?: AnyObj[];
     healOut?: AnyObj[];
     advancedActions?: AnyObj[];
     deathRecords?: AnyObj[];
@@ -182,7 +184,7 @@ export function makeUnit(
     spec: overrides.spec ?? CombatUnitSpec.None,
     info: overrides.info as ICombatUnit["info"],
     damageIn: (overrides.damageIn ?? []) as ICombatUnit["damageIn"],
-    damageOut: [],
+    damageOut: (overrides.damageOut ?? []) as ICombatUnit["damageOut"],
     healIn: [],
     healOut: (overrides.healOut ?? []) as ICombatUnit["healOut"],
     absorbsIn: [],
@@ -192,6 +194,8 @@ export function makeUnit(
     auraEvents: (overrides.auraEvents ?? []) as ICombatUnit["auraEvents"],
     spellCastEvents: (overrides.spellCastEvents ??
       []) as ICombatUnit["spellCastEvents"],
+    castStartEvents: (overrides.castStartEvents ??
+      []) as ICombatUnit["castStartEvents"],
     petSpellCastEvents: [] as ICombatUnit["petSpellCastEvents"],
     deathRecords: (overrides.deathRecords ?? []) as ICombatUnit["deathRecords"],
     // Stamp advancedActorId like production convert.ts does (unit.id) — the shared HP

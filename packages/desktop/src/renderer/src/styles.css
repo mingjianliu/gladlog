@@ -1815,3 +1815,85 @@ pre {
   word-break: break-all;
   margin-bottom: 8px;
 }
+
+/* ── 爆发账本(DPS 方向 D1)── */
+.rpt-ledger {
+  margin-top: 14px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.rpt-ledger-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+.rpt-ledger-title {
+  font-size: 12px;
+  color: var(--ink-2);
+  letter-spacing: 0.06em;
+}
+.rpt-ledger-tabs {
+  display: inline-flex;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.rpt-ledger-tabs button {
+  font-size: 11px;
+  padding: 3px 10px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink-2);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.rpt-ledger-tabs button.active {
+  background: var(--surface-2);
+  color: var(--gold);
+}
+.rpt-ledger-section {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 8px 0 2px;
+}
+.rpt-ledger-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 8px;
+  font-size: 11px;
+}
+.rpt-ledger-spells {
+  color: var(--ink-2);
+}
+.rpt-ledger-chip {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  border: 1px solid var(--hairline);
+  white-space: nowrap;
+}
+.rpt-ledger-chip-bad {
+  color: var(--loss);
+  border-color: color-mix(in srgb, var(--loss) 45%, transparent);
+}
+.rpt-ledger-chip-warn {
+  color: #fbbf24;
+  border-color: color-mix(in srgb, #fbbf24 45%, transparent);
+}
+.rpt-ledger-chip-good {
+  color: var(--win);
+  border-color: color-mix(in srgb, var(--win) 45%, transparent);
+}
+.rpt-ledger-chip-kill {
+  color: var(--gold);
+  border-color: color-mix(in srgb, var(--gold) 55%, transparent);
+}
+.rpt-ledger-chip-dim {
+  color: var(--mute);
+}

@@ -395,6 +395,25 @@ function convertUnit(
     },
   }));
 
+  // 旧存档 doc 无 castStarts 字段 → [](castBars/kickAudit 消费方按可选处理)
+  const castStartEvents: ISpellEvent[] = (
+    (unit as { castStarts?: typeof unit.casts }).castStarts ?? []
+  ).map((event) => ({
+    spellId: String(event.spellId),
+    spellName: event.spellName,
+    timestamp: event.timestamp,
+    ...unitFlagFields(event.params),
+    srcUnitId: event.srcId,
+    srcUnitName: event.srcName,
+    destUnitId: event.destId,
+    destUnitName: event.destName,
+    logLine: {
+      event: event.eventName as LogEvent,
+      timestamp: event.timestamp,
+      parameters: convertParams(event.params),
+    },
+  }));
+
   const petSpellCastEvents: ISpellEvent[] = unit.petCasts.map((event) => ({
     spellId: String(event.spellId),
     spellName: event.spellName,
@@ -463,6 +482,7 @@ function convertUnit(
     absorbsOut,
     auraEvents,
     spellCastEvents,
+    castStartEvents,
     petSpellCastEvents,
     actionIn,
     actionOut,
