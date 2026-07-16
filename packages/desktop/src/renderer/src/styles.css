@@ -1362,3 +1362,31 @@ pre {
 .rpt-recap-def_used .rpt-recap-kind { color: var(--ink-2); }
 .rpt-recap-amt { text-align: right; }
 .rpt-recap-empty { color: var(--mute); font-style: italic; }
+
+/* ── 统计表(backlog #10)── */
+.rpt-stats {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-family: var(--font-data);
+}
+.rpt-stats th {
+  text-align: left;
+  font-size: 10px;
+  color: var(--mute);
+  font-weight: normal;
+  padding: 4px 8px 4px 0;
+  border-bottom: 1px solid var(--hairline);
+}
+.rpt-stats td {
+  padding: 4px 8px 4px 0;
+  border-bottom: 1px solid var(--hairline);
+  white-space: nowrap;
+}
+.rpt-stats-enemy td:first-child {
+  color: var(--ink-2);
+}
+.rpt-stats-dim {
+  color: var(--mute);
+  font-size: 11px;
+}

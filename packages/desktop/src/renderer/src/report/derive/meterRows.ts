@@ -1,7 +1,8 @@
 import { classColor } from "../data/gameConstants";
 import type { UnitTotals } from "./summary";
 
-export type MeterMode = "damage" | "healing" | "taken";
+// "stats" 是第四种榜单模式(统计表),不走 meterRows 数值路径。
+export type MeterMode = "damage" | "healing" | "taken" | "stats";
 
 export interface MeterRow {
   unitId: string;
