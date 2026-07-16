@@ -178,6 +178,16 @@
   SPELL_CAST_START/STOP 进 doc,评估体积),**不阻塞本项**。
 - **(c)**:直接做,血条旁 9px 等宽 HP%。
 
+## 实施结果(2026-07-17,全部完成)
+
+#7 `8772f4f` → #8 `60d9707`+`b825184` → #6 `3501c76` → #9 `b2fc00f` →
+#10 `f32a4d2` → #11 `c03731f`。**与设计的一处偏离**:#6/#10/#11a 定的
+「main 算好 → IPC」改为 renderer derive 直调 analysis(toLegacySafe 垫片
++ StructuredAnalysisPanel 先例)——谓词仍单一来源,少一层 IPC 面;垫片
+顺带修好裁剪 fixture 下 analysis 派生 UI 静默消失的问题。#11b 施法条
+确认做不了(parser 无 SPELL_CAST_START),降级为施法闪现,真读条 spike
+单列。
+
 ## 实施顺序(研究后修订)
 
 1. **#7 富行**(全独立,半天级)

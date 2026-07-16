@@ -71,7 +71,7 @@
 > export;#8 证据链在 AI 视图内已存在一半;#9 卡在 spellId→icon 映射这张数据表上),
 > 实施以研究文档为准。实施顺序也修订为 #7→#8→#6→#9→#10→#11。
 
-## 6. 死亡回顾 Death Recap ⬜(2026-07-17,对比旧仓 CombatDeathReports;优先级最高)
+## 6. 死亡回顾 Death Recap ✅(2026-07-17 实现 `3501c76`:点死亡标记 → 死前 10s 事件流 + 可用未按保命 + 回放此刻;覆盖双方死亡;renderer derive 消费 analysis 谓词——研究文档定的 IPC 方案改为渲染层直调,因 StructuredAnalysisPanel 先例)
 
 **需求**:竞技场复盘工具的第一用例。点 HP 曲线上的死亡标记(或战报视图新增「死亡」列表)→ 打开该次死亡的回顾面板:死前 ~10s 的承伤事件流、治疗在干嘛(被控/在读条/在跑位)、死者自己的防御 CD 用没用(可用而未按 = 高亮)、附「跳到回放该时刻」按钮。
 
@@ -86,7 +86,7 @@
 - **跳转**:recap 内「回放此刻」→ 切到回放视图并 `setT(deathT - 8s)`(播放时钟已是共享 state:`t/playing/speed/selUnits`)。
 - **测试**:`dev:ui` 测试台真实 fixture(`real-match-sample.json` 裁前 90s 内有死亡吗?若无,换/补一份含死亡的匿名 fixture)+ recap IPC 的单测(死者防御 CD 可用性断言)。
 
-## 7. 对局列表富行 ⬜(2026-07-17,对比旧仓 CombatStubList;性价比最高)
+## 7. 对局列表富行 ✅(2026-07-17 实现 `8772f4f`:胜负/地图/时长/评分 + 双方 spec 图标;旧行回退 + DevPanel 重建索引回填)
 
 **需求**:现在列表行是纯文本 `[kind] bracket · 时间 · result`。改成:双方**专精图标**(己方/敌方分组)、地图名、时长、场均评分 badge、胜负着色 —— 一眼扫过一晚的场次。
 
@@ -100,7 +100,7 @@
 - **UI**:`App.tsx` 列表 li 重排两行:上行 result 色条 + 地图 + 时长 + 评分,下行两组 spec 图标 vs 分隔。胜负染色沿用 `badge-*` 类。
 - **测试**:`App.pagination.test.tsx` 旁补 meta 缺字段回退渲染的断言。
 
-## 8. 证据链跳转 + KILL WINDOW/VULNERABLE 标注回放 🔶 部分完成(2026-07-17 核心链路已实现:finding「回放此刻」→ 切回放 + seek + 泳道闪金 + 滚动定位,nonce 防重复消费;剩余:TimelineStrip 标记跳转入口、KILL WINDOW/VULNERABLE scrubber 色带)
+## 8. 证据链跳转 + KILL WINDOW/VULNERABLE 标注回放 ✅(2026-07-17 全部完成 `60d9707`+`b825184`:finding/strip「回放此刻」→ seek + 泳道闪金;scrubber + strip 窗口色带,金=burst 灰红=vulnerable)
 
 **需求**:AI 分析的 findings 带经过验证的时间戳/事件 id —— 让每个时间戳**可点**:点击 → 切回放视图、seek 播放时钟到 t、GCD 泳道对应列高亮该时刻。把「信教练」变成「自己看」——这是全链路可验证方向在 UI 上的落点。顺带:把 `[KILL WINDOW]` burst 与 `[VULNERABLE]` 段画到回放 scrubber/TimelineStrip 上(2026-07-17 重设计后 span 已短而诚实,p50 14s,适合可视化)。
 
@@ -112,7 +112,7 @@
 - **泳道高亮**:`GcdSwimlane` 加「t 附近 chip 高亮」态(光标已横贯,只需临时 flash 样式)。
 - **测试**:seek 回调单测 + fixture 上点击 finding 跳转的集成测试(dev:ui)。
 
-## 9. GCD 泳道 chip 技能图标 ⬜(2026-07-17,对比旧仓全站 SpellIcon)
+## 9. GCD 泳道 chip 技能图标 ✅(2026-07-17 实现 `b2fc00f`:genSpellIcons 挖掘表 3568 条(update-wow-data 加 6b 步)+ chip 真图标 + SpellIcon Promise memo)
 
 **需求**:泳道 chip 现在只有技能名文本;图标扫读速度远快于文字(旧仓所有施法处都渲染 WoW 图标)。宽 chip = 图标+名,窄 chip(碰撞压缩时)= 仅图标,title 保持现状。
 
@@ -123,7 +123,7 @@
 - **性能**:一场几百 chip,每个 SpellIcon 一次 bridge round-trip 会抖 —— bridge 侧已有缓存,renderer 侧再加内存 memo(同 icon 名只请求一次,Map<name, Promise<dataURL>>)。
 - **测试**:泳道渲染测试补 icon fallback 断言(无 icon 名时仍出首字母块,不空洞)。
 
-## 10. 数据统计视图:打断/控制/驱散表 ⬜(2026-07-17,对比旧仓 CombatCC + CombatDispels + Scoreboard)
+## 10. 数据统计视图:打断/控制/驱散表 ✅(2026-07-17 实现 `f32a4d2`:榜单第四模式「统计」,deriveStatsTable 全走 analysis 谓词;明细展开留 v2)
 
 **需求**:每玩家一行的硬数据表:打断做/挨(次数与 /min)、被控总时长(秒和占比)、控制输出秒数、驱散/偷 buff 次数(治疗产品重点:你被控 34s / 全场 6:20 是标题级数字)。落点:战报视图 Meters 卡旁的第四张卡,或榜单模式段控加一项「统计」。
 
@@ -136,7 +136,7 @@
 - **明细展开**(v2 可后置):行点开 → 该玩家的打断/被控明细(时间 + 技能),时间戳接 #8 的 seekTo。
 - **测试**:IPC 表数据单测(用含打断/驱散的 fixture 断言行数值)。
 
-## 11. 回放增强三小件 ⬜(2026-07-17,对比旧仓 CombatReplay 子组件;低优先)
+## 11. 回放增强三小件 ✅(2026-07-17 实现 `c03731f`:HP 数字 + dampening 指示(同谓词逐秒序列)+ 施法闪现降级版;真读条条 = parser SPELL_CAST_START spike 单列未做)
 
 **需求 & 旧仓对应**:(a) **dampening 追踪**(`ReplayDampeningTracker`)——回放控件条角落常显当前 dampening %;(b) **施法条**(`ReplayCastBar`)——读条中的单位脚下画进度条(开始/打断/完成事件已在 doc);(c) **单位 HP 数字**(`ReplayHpNumbers`)——血条旁小字 HP%(现在只有变色血条)。
 
