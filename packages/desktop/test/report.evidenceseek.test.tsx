@@ -177,3 +177,19 @@ describe("#8 收尾:strip 跳转 + 窗口色带", () => {
     expect(jumps).toEqual([12]);
   });
 });
+
+describe("战报 HP 时间轴色带", () => {
+  it("真实 fixture:时间轴渲染色带,点击切到回放并定位", async () => {
+    const { MatchReport } = await import(
+      "../src/renderer/src/report/components/MatchReport"
+    );
+    const { container } = render(<MatchReport source={m} matchId="t" />);
+    const band = container.querySelector('[data-testid="tl-band"]');
+    expect(band).toBeTruthy();
+    fireEvent.click(band!);
+    // 已切回放视图且时钟不在 0:00(定位到带起点)
+    const time = container.querySelector(".rpt-replay-time");
+    expect(time).toBeTruthy();
+    expect(time?.textContent?.startsWith("0:00 /")).toBe(false);
+  });
+});

@@ -3,6 +3,7 @@ import { useState } from "react";
 
 import { classColor } from "../data/gameConstants";
 import type { TimelineData } from "../derive/timeline";
+import type { VulnBand } from "../derive/vulnWindows";
 
 const W = 800,
   H = 220,
@@ -13,6 +14,8 @@ export function Timeline({
   onSelectUnit,
   hidden,
   onDeathClick,
+  bands,
+  onBandClick,
 }: {
   data: TimelineData;
   onSelectUnit?: (unitId: string) => void;
@@ -20,6 +23,9 @@ export function Timeline({
   hidden?: Set<string>;
   /** 死亡标记点击 → 打开死亡回顾(backlog #6)。t 为绝对 ms。 */
   onDeathClick?: (unitId: string, t: number) => void;
+  /** KILL WINDOW/VULNERABLE 背景色带(相对秒);点击 → 回放该时刻。 */
+  bands?: VulnBand[];
+  onBandClick?: (tSeconds: number) => void;
 }) {
   const [cursor, setCursor] = useState<number | null>(null);
   const series = hidden
@@ -62,6 +68,32 @@ export function Timeline({
             </text>
           </g>
         ))}
+        {(bands ?? []).map((b, i) => {
+          const fromX = x(data.start + b.fromS * 1000);
+          const toX = x(data.start + b.toS * 1000);
+          return (
+            <rect
+              key={`band${i}`}
+              data-testid="tl-band"
+              className={`rpt-tl-band rpt-tl-band-${b.kind}`}
+              x={fromX}
+              y={PAD.t}
+              width={Math.max(2, toX - fromX)}
+              height={H - PAD.t - PAD.b}
+              onClick={
+                onBandClick ? () => onBandClick(b.fromS) : undefined
+              }
+              style={{ cursor: onBandClick ? "pointer" : undefined }}
+            >
+              <title>
+                {(b.kind === "burst"
+                  ? `击杀尝试 on ${b.targetName}(团队伤害 ${(b.damage / 1000).toFixed(0)}k)`
+                  : `${b.targetName} 脆弱且未被惩罚`) +
+                  (onBandClick ? "(点击回放)" : "")}
+              </title>
+            </rect>
+          );
+        })}
         {series.map((s) => (
           <path
             key={s.unitId}

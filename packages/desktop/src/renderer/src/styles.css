@@ -1559,3 +1559,14 @@ pre {
 .rpt-gcd-death-click:hover {
   color: var(--gold);
 }
+
+/* HP 时间轴窗口色带 */
+.rpt-tl-band-burst {
+  fill: color-mix(in srgb, var(--gold) 14%, transparent);
+}
+.rpt-tl-band-vulnerable {
+  fill: color-mix(in srgb, var(--loss) 10%, transparent);
+}
+.rpt-tl-band:hover {
+  filter: brightness(1.5);
+}
