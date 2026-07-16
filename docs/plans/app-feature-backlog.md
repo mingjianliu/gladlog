@@ -156,3 +156,56 @@
 - **玩家装备/天赋 tab + 外站链接**(ArmoryLink/CheckPvP/Drustvar/GearStick/Seramate):nice-to-have,若做玩家 popover 时顺带,不单列。
 
 **建议实施顺序**:#7(半天级,立刻可见)→ #6(核心价值)→ #8(差异化)→ #9 → #10 → #11。
+
+---
+
+> #12–#19 来自 2026-07-18 玩家视角头脑风暴(三种画像走查:上分治疗/休闲玩家/DPS)。
+> 优先级:P0 = 决定新用户第一晚留存;P1 = 高频摩擦;P2 = 低频但会炸。
+> DPS 方向单列(战略项,见 `2026-07-18-dps-direction-brainstorm.md`)。
+
+## 12. 记录状态可见 + 没开日志醒目警告 ⬜(P0 —— 信任基石)
+
+**需求**:玩家最致命的失败模式是"打了一晚忘开 /combatlog,啥都没记"。而"正在记录吗"现在藏在开发者视图里。主界面要常显记录状态;检测到异常(监控中但日志长时间无新对局/无增长)要醒目提示;引导页推荐自动记录插件。
+
+**实现要点**:
+- 顶栏加状态灯(●绿=监控中且日志活跃 / ●黄=监控中但今日无写入 / ●红=未设目录或文件不可读),数据源 `logs:getStatus` + `onStatusChanged`(已有 IPC,DevPanel 在用)。
+- "打了却没记"检测:main 侧 watcher 已知文件 size/offset;加一个启发式——应用运行 >30min 且 WoW 进程在跑(可检测?不可靠则退化为"日志 2h 无增长且用户点开过应用")→ 温和横幅提示"游戏内输入 /combatlog 或安装自动记录插件"。
+- 引导卡与用户手册加插件推荐段。
+
+## 13. 高级战斗日志引导 ⬜(P0)
+
+**需求**:未开 Advanced Logging 时回放只有一句"无位置数据",玩家不知道去哪开。要带路径截图的引导(系统设置→网络→高级战斗日志)+ 事前检测。
+
+**实现要点**:parser/monitor 侧从日志头 `ADVANCED_LOG_ENABLED,0/1` 已能判断;meta 或 status 透出 advancedEnabled;回放空态与首启引导渲染完整开启步骤(文案即可,截图后补);列表行可加小标记提示该场无高级数据。
+
+## 14. 无 AI 体验强化 + API key 引导 ⬜(P0)
+
+**需求**:Anthropic key 对普通玩家是天堑(注册/绑卡/token 计费),会导致 AI 功能实际无人用。短期不做服务端(违背本地优先),而是:①把无 AI 的确定性复盘(死亡回顾/统计表/窗口色带)在 AI 视图空态里显式导流("不配 key 你已经有这些");②设置页 key 行加一段"如何获取"链接与预估花费(每场约 ~1 分钱级);③AI 视图在无 key 时展示确定性 candidate events(代码里 hadNarration=false 路径已有,把它变成卖点而非降级)。
+
+## 15. UI i18n + 技能名本地化悬浮 ⬜(P0 —— 双向硬伤)
+
+**需求**:UI 全中文劝退国际用户;findings 里英文技能名让国服玩家陌生。①UI 文案抽 i18n(zh/en 两档,复用 settings.aiLanguage 或独立 uiLanguage);②技能名处(泳道 chip title/统计明细/死亡回顾)悬浮显示本地化名。
+
+**实现要点**:文案集中在组件内字符串——抽 `renderer/src/i18n.ts` 字典 + `t()`;技能名本地化数据源 = 日志本身的 zhCN spellName(doc 里有原名!)/或 datagen 拉多语言 SpellName 表(genSpellNames 已有 enUS 管线,加 locale 参数)。工作量主要在文案抽取,分批做(先顶栏/设置/引导,再 report)。
+
+## 16. 会话分组 + 晚间小结 ⬜(P1)
+
+**需求**:玩家节奏是"连排 N 场睡前复盘"。列表按会话(间隔 >1h 分段)分组;每组头部一张小结行(N 胜 M 负、最常对阵、被谁打爆);战绩页加"本次会话"档。
+
+**实现要点**:纯 meta 推导(startTime 间隔聚类),`dashboard.ts` 旁加 `sessions.ts`;列表分组头 = sticky 小行;period 选项加 "session"。
+
+## 17. 自动分析开关 + 完成通知 ⬜(P1)
+
+**需求**:打完自动跑 AI 分析(成本自担,默认关),生成完系统通知。**实现要点**:settings 加 `autoAnalyze: boolean`;main 在 matchStored 后(有 key 且开关开)自建 input(main 已能 toLegacy+buildMatchContext)调 analysis.run;Electron Notification 完成提示。注意与手动触发的 generation 竞争(已有 gen 计数)。
+
+## 18. 首次使用 coach marks ⬜(P1 —— 发现性,近零成本)
+
+**需求**:死亡三角可点、统计模式、泳道 chip 可点、色带可点 —— 全靠碰运气发现。首次进入各视图时给 2–3 个一次性气泡(localStorage 记已读)。
+
+## 19. 运营三小件 ⬜(P2)
+
+- **磁盘清理**:设置页显示 matches 目录体积;按时间/数量归档或删除 raw.txt(match.json 保留,回放仍可用);
+- **大场次打开性能**:MatchReport 挂载时 derive 全家桶同步算——statsRows/vulnBands 改 idle 化或切视图才算(注意统计按钮显隐依赖,用 count 轻推导替代全量);
+- **崩溃/隔离可见**:日志文件被 quarantine 时用户侧一条提示而非静默。
+
+> **回放爆发视觉**(敌方大 CD 开启单位红光脉冲、三人同秒集火连线)与**反驳预判 findings**(prompt 已含"你当时未被控"类数据,让 findings 文本主动带上)归入 DPS 方向文档一并设计——它们对两类玩家同等重要。
