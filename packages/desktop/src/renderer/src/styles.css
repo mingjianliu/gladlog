@@ -1792,3 +1792,26 @@ pre {
 .dash-issue-recent:hover {
   color: var(--gold);
 }
+
+/* 障碍物描边(phase3 #4) */
+.rpt-replay-obstacle {
+  fill: color-mix(in srgb, var(--ink-2) 12%, transparent);
+  stroke: var(--ink-2);
+  stroke-opacity: 0.35;
+  stroke-width: 1;
+  pointer-events: none;
+}
+
+/* AI 生成流式预览(phase3 #4) */
+.rpt-ai-preview {
+  font-size: 10px;
+  color: var(--mute);
+  background: var(--surface-2);
+  border-radius: 6px;
+  padding: 8px 10px;
+  max-height: 120px;
+  overflow: hidden;
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin-bottom: 8px;
+}

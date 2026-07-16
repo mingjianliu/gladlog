@@ -103,7 +103,13 @@ export function createAnalysisService(deps: {
       });
       for await (const ev of stream) {
         if (myGen !== generation) return;
-        if (ev.delta) raw += ev.delta;
+        if (ev.delta) {
+          raw += ev.delta;
+          deps.emit("gladlog:analysis:delta", {
+            matchId: input.matchId,
+            text: ev.delta,
+          });
+        }
       }
       if (myGen !== generation) return;
 

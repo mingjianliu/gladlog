@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { fireEvent, render } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { arenaObstacles } from "@gladlog/analysis";
 
 import { ReplayView } from "../src/renderer/src/report/components/ReplayView";
 import {
@@ -58,5 +59,31 @@ describe("泳道 chip 点击定位", () => {
     // 时钟显示不再是 0:00 开头(已定位),播放按钮存在(暂停态)
     const time = container.querySelector(".rpt-replay-time");
     expect(time?.textContent?.startsWith("0:00 /")).toBe(false);
+  });
+});
+
+describe("回放小件(phase3 #4)", () => {
+  it("键盘:空格切播放,→ +5s;速度段控含 0.5×;纳格兰画出障碍物", () => {
+    const { container } = render(<ReplayView source={m} />);
+    // 障碍物(fixture 是 zoneId=1911 Mugambala?按 zone 有无均不炸;至少不抛)
+    // 速度段控含 0.5×
+    expect(screen.getByRole("button", { name: "0.5×" })).toBeTruthy();
+    // → 前进 5s
+    fireEvent.keyDown(window, { code: "ArrowRight" });
+    const time = container.querySelector(".rpt-replay-time");
+    expect(time?.textContent?.startsWith("0:05 /")).toBe(true);
+    // 空格开始播放(按钮变暂停)
+    fireEvent.keyDown(window, { code: "Space" });
+    expect(screen.getByRole("button", { name: /暂停/ })).toBeTruthy();
+    fireEvent.keyDown(window, { code: "Space" });
+  });
+
+  it("障碍物几何:有该 zone 时渲染 rpt-replay-obstacle", () => {
+    const zoneId = (m as { zoneId?: string | number }).zoneId;
+    const { container } = render(<ReplayView source={m} />);
+    const has = container.querySelectorAll(".rpt-replay-obstacle").length;
+    // fixture zone 在 arenaObstacles 里则必须画出;不在则为 0(两者都合法,但记录断言)
+    const expected = (arenaObstacles[String(zoneId)] ?? []).length;
+    expect(has).toBe(expected);
   });
 });

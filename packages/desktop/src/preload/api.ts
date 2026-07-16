@@ -93,6 +93,7 @@ export interface GladlogApi {
       key: string,
       flag: "done" | "recurring" | null,
     ): Promise<Record<string, string>>;
+    onDelta(cb: (d: { matchId: string; text: string }) => void): () => void;
     onDone(cb: (d: { matchId: string; result: unknown }) => void): () => void;
     onError(cb: (d: { matchId: string; message: string }) => void): () => void;
   };

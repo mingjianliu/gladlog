@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { arenaObstacles } from "@gladlog/analysis";
+
 import { arenaMap, arenaMapUrl, arenaPx, arenaToPx } from "../data/arenaMaps";
 import { classColor, classGlyph } from "../data/gameConstants";
 import {
@@ -19,7 +21,7 @@ const FALLBACK_VW = 520;
 const FALLBACK_VH = 520;
 const PAD = 46;
 const GRID = 4;
-const SPEEDS = [1, 2, 4] as const;
+const SPEEDS = [0.5, 1, 2, 4] as const;
 
 const reactionRing = (reaction: string): string =>
   reaction === "Friendly"
@@ -92,6 +94,24 @@ export function ReplayView({
     setT(Math.min(endTime, Math.max(startTime, seekReq.tMs)));
     setPlaying(false);
   }, [seekReq, startTime, endTime]);
+
+  // 键盘:空格 播放/暂停,←/→ ±5s(Shift ±1s)。输入控件聚焦时不拦截。
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+      if (e.code === "Space") {
+        e.preventDefault();
+        setPlaying((p) => !p);
+      } else if (e.code === "ArrowLeft" || e.code === "ArrowRight") {
+        e.preventDefault();
+        const step = (e.shiftKey ? 1_000 : 5_000) * (e.code === "ArrowLeft" ? -1 : 1);
+        setT((cur) => Math.min(endTime, Math.max(startTime, cur + step)));
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [startTime, endTime]);
 
   useEffect(() => {
     if (!playing) return;
@@ -271,6 +291,26 @@ export function ReplayView({
                   );
                 })}
               </>
+            )}
+            {/* 障碍物(LoS 几何,与 analysis 谓词同源) */}
+            {(arenaObstacles[String(zoneId)] ?? []).map((o, i) =>
+              o.type === "circle" ? (
+                <circle
+                  key={`ob${i}`}
+                  className="rpt-replay-obstacle"
+                  cx={toX(o.cx)}
+                  cy={toY(o.cy)}
+                  r={Math.abs(toX(o.cx + o.r) - toX(o.cx))}
+                />
+              ) : (
+                <polygon
+                  key={`ob${i}`}
+                  className="rpt-replay-obstacle"
+                  points={o.vertices
+                    .map(([vx, vy]) => `${toX(vx)},${toY(vy)}`)
+                    .join(" ")}
+                />
+              ),
             )}
             {/* 走位尾迹(最近数秒) */}
             {tracks.map((tr) => {

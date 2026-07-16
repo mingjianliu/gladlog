@@ -42,6 +42,7 @@ export function StructuredAnalysisPanel({
   // prompt 并分键缓存;这里只需在切换后重查缓存。
   const [lang, setLang] = useState<"zh" | "en" | null>(null);
   const [flags, setFlags] = useState<Record<string, string>>({});
+  const [preview, setPreview] = useState("");
 
   useEffect(() => {
     try {
@@ -110,6 +111,12 @@ export function StructuredAnalysisPanel({
   }, [matchId, lang]);
 
   useEffect(() => {
+    const offDelta = bridge().analysis.onDelta?.(
+      (d: { matchId: string; text: string }) => {
+        if (d.matchId !== matchId) return;
+        setPreview((p) => (p + d.text).slice(-600));
+      },
+    );
     const offDone = bridge().analysis.onDone(
       (d: { matchId: string; result: unknown }) => {
         if (d.matchId !== matchId) return;
@@ -126,6 +133,7 @@ export function StructuredAnalysisPanel({
       },
     );
     return () => {
+      offDelta?.();
       offDone();
       offError();
     };
@@ -176,6 +184,7 @@ export function StructuredAnalysisPanel({
   const handleAnalyze = async () => {
     if (!input) return;
     setError("");
+    setPreview("");
     setState("running");
     await bridge().analysis.run(input);
   };
@@ -239,6 +248,12 @@ export function StructuredAnalysisPanel({
             heroText={`${result.findings.length} findings`}
           />
         </div>
+      )}
+
+      {state === "running" && preview && (
+        <pre className="rpt-ai-preview" data-testid="ai-preview">
+          {preview}
+        </pre>
       )}
 
       <div className="rpt-ai-actions">
