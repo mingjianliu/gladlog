@@ -1,9 +1,8 @@
 import type { Finding } from "@gladlog/analysis";
 import { useState } from "react";
 
-/** 语言无关的 finding 标记键:category|sorted(eventIds)。 */
-export const findingKey = (f: Finding): string =>
-  `${f.category}|${[...(f.eventIds ?? [])].sort().join(",")}`;
+import { findingKey } from "../../../../shared/findingKey";
+export { findingKey };
 
 export function FindingsList({
   findings,

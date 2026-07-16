@@ -90,6 +90,7 @@ export function registerIpc(deps: {
   ipcMain.handle("gladlog:analysis:getFlags", (_e, matchId: string) =>
     deps.analysis.getFlags(matchId),
   );
+  ipcMain.handle("gladlog:analysis:aggregate", () => deps.analysis.aggregate());
   ipcMain.handle(
     "gladlog:analysis:setFlag",
     (_e, matchId: string, key: string, flag: "done" | "recurring" | null) =>

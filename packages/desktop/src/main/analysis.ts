@@ -1,10 +1,12 @@
 import {
   writeFileSync,
   readFileSync,
+  readdirSync,
   existsSync,
   mkdirSync,
   renameSync,
 } from "fs";
+import { findingKey } from "../shared/findingKey";
 import { join } from "path";
 import {
   buildFindingsPrompt,
@@ -142,6 +144,116 @@ export function createAnalysisService(deps: {
       } catch {
         return {};
       }
+    },
+    /**
+     * 跨场聚合(phase3 #3b):扫全部已分析对局的 findings,按 category 计数
+     * (双语言缓存按 lang 优先取一份,不重复计),附最近实例与标记统计。
+     */
+    async aggregate(): Promise<
+      Array<{
+        category: string;
+        count: number;
+        recurring: number;
+        done: number;
+        recent: Array<{
+          matchId: string;
+          title: string;
+          severity: string;
+          createdAt: number;
+        }>;
+      }>
+    > {
+      const lang: AiLanguage = deps.getSettings().aiLanguage ?? "zh";
+      let dirs: string[] = [];
+      try {
+        dirs = readdirSync(deps.matchesDir).filter(
+          (d) => !d.startsWith(".") && !d.startsWith("_"),
+        );
+      } catch {
+        return [];
+      }
+      const byCategory = new Map<
+        string,
+        {
+          count: number;
+          recurring: number;
+          done: number;
+          recent: Array<{
+            matchId: string;
+            title: string;
+            severity: string;
+            createdAt: number;
+          }>;
+        }
+      >();
+      for (const dir of dirs) {
+        const base = join(deps.matchesDir, dir);
+        const candidates = [
+          `analysis-v2.${lang}.json`,
+          `analysis-v2.${lang === "zh" ? "en" : "zh"}.json`,
+          "analysis-v2.json",
+        ];
+        const file = candidates.find((f) => existsSync(join(base, f)));
+        if (!file) continue;
+        try {
+          const doc = JSON.parse(readFileSync(join(base, file), "utf-8"));
+          if (doc.promptVersion !== PROMPT_VERSION) continue;
+          const findings: Array<{
+            category: string;
+            title: string;
+            severity: string;
+            eventIds?: string[];
+          }> = doc.result?.findings ?? [];
+          let flags: Record<string, string> = {};
+          try {
+            flags = JSON.parse(
+              readFileSync(join(base, "findingFlags.json"), "utf-8"),
+            );
+          } catch {
+            /* 无标记 */
+          }
+          let matchId = dir;
+          try {
+            matchId = JSON.parse(
+              readFileSync(join(base, "..", dir, "meta.json"), "utf-8"),
+            ).id;
+          } catch {
+            /* 目录名兜底 */
+          }
+          for (const f of findings) {
+            const agg = byCategory.get(f.category) ?? {
+              count: 0,
+              recurring: 0,
+              done: 0,
+              recent: [],
+            };
+            agg.count++;
+            const flag = flags[findingKey(f)];
+            if (flag === "recurring") agg.recurring++;
+            if (flag === "done") agg.done++;
+            agg.recent.push({
+              matchId,
+              title: f.title,
+              severity: f.severity,
+              createdAt: doc.createdAt ?? 0,
+            });
+            byCategory.set(f.category, agg);
+          }
+        } catch {
+          /* 坏文件跳过 */
+        }
+      }
+      return [...byCategory.entries()]
+        .map(([category, a]) => ({
+          category,
+          count: a.count,
+          recurring: a.recurring,
+          done: a.done,
+          recent: a.recent
+            .sort((x, y) => y.createdAt - x.createdAt)
+            .slice(0, 3),
+        }))
+        .sort((a, b) => b.count - a.count);
     },
     async setFlag(
       matchId: string,

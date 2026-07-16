@@ -118,6 +118,10 @@ export default function App() {
             setFilter({ ...EMPTY_FILTER, specId });
             setAppView("matches");
           }}
+          onOpenMatch={(matchId) => {
+            setSelectedId(matchId);
+            setAppView("matches");
+          }}
         />
       ) : (
         <div className="app-layout">

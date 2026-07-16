@@ -178,3 +178,69 @@ describe("finding 标记(phase3 #3a)", () => {
     expect(await s.getFlags("m1")).toEqual({ "survival|e1,e2": "recurring" });
   });
 });
+
+describe("跨场聚合(phase3 #3b)", () => {
+  it("按 category 计数、双语言只计一份、flag 统计、recent 按时间", async () => {
+    const { mkdtempSync, mkdirSync, writeFileSync } = await import("fs");
+    const { tmpdir } = await import("os");
+    const { join } = await import("path");
+    const dir = mkdtempSync(join(tmpdir(), "gl-agg-"));
+    const doc = (createdAt: number, findings: unknown[]) =>
+      JSON.stringify({
+        schemaVersion: 1,
+        promptVersion: 3,
+        createdAt,
+        result: { findings, dropped: 0, hadNarration: true },
+      });
+    const f = (category: string, title: string, ids: string[]) => ({
+      category,
+      title,
+      severity: "high",
+      eventIds: ids,
+      explanation: "",
+    });
+    // m1:zh + en 双缓存(只应计一次);m2:仅 en;m1 有 recurring 标记
+    mkdirSync(join(dir, "m1"));
+    writeFileSync(
+      join(dir, "m1", "analysis-v2.zh.json"),
+      doc(200, [f("survival", "死亡A", ["e1"]), f("cd", "CD浪费", ["e2"])]),
+    );
+    writeFileSync(
+      join(dir, "m1", "analysis-v2.en.json"),
+      doc(200, [f("survival", "DeathA", ["e1"])]),
+    );
+    writeFileSync(
+      join(dir, "m1", "findingFlags.json"),
+      JSON.stringify({ "survival|e1": "recurring" }),
+    );
+    writeFileSync(
+      join(dir, "m1", "meta.json"),
+      JSON.stringify({ id: "m1-real" }),
+    );
+    mkdirSync(join(dir, "m2"));
+    writeFileSync(
+      join(dir, "m2", "analysis-v2.en.json"),
+      doc(100, [f("survival", "DeathB", ["e9"])]),
+    );
+
+    const s = createAnalysisService({
+      getSettings: () => ({
+        anthropicApiKey: null,
+        anthropicModel: null,
+        wowDirectory: null,
+        aiLanguage: "zh",
+      }),
+      matchesDir: dir,
+      emit: () => {},
+    });
+    const agg = await s.aggregate();
+    const survival = agg.find((a) => a.category === "survival")!;
+    // m1 取 zh 一份(1 条 survival)+ m2 en 兜底(1 条)= 2
+    expect(survival.count).toBe(2);
+    expect(survival.recurring).toBe(1);
+    // recent 按 createdAt 降序,最新的是 m1(200),meta.json 的真实 id 生效
+    expect(survival.recent[0]!.matchId).toBe("m1-real");
+    expect(survival.recent[0]!.title).toBe("死亡A");
+    expect(agg.find((a) => a.category === "cd")!.count).toBe(1);
+  });
+});

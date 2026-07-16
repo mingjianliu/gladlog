@@ -106,19 +106,39 @@ function RatingCurve({
  * 战绩仪表盘(phase3 #1):全量 meta 索引聚合 —— 总览、评分曲线(按 bracket)、
  * 敌方 comp 胜率、地图胜率。comp 行点击 → 回对局列表预置该 spec 筛选。
  */
+interface CategoryAgg {
+  category: string;
+  count: number;
+  recurring: number;
+  done: number;
+  recent: Array<{ matchId: string; title: string; severity: string }>;
+}
+
 export function StatsDashboard({
   onCompClick,
+  onOpenMatch,
 }: {
   /** comp 行点击:带该 comp 首个 specId 回列表筛选。 */
   onCompClick?: (specId: number) => void;
+  /** 「最常犯的问题」最近实例点击 → 打开该场。 */
+  onOpenMatch?: (matchId: string) => void;
 }) {
   const [metas, setMetas] = useState<StoredMatchMeta[]>([]);
   const [period, setPeriod] = useState<DashPeriod>("week");
+  const [issues, setIssues] = useState<CategoryAgg[]>([]);
 
   useEffect(() => {
     void bridge()
       .matches.list()
       .then((all) => setMetas(all));
+    try {
+      void bridge()
+        .analysis.aggregate()
+        .then(setIssues)
+        .catch(() => setIssues([]));
+    } catch {
+      setIssues([]);
+    }
   }, []);
 
   const dash = useMemo(() => deriveDashboard(metas, period), [metas, period]);
@@ -167,6 +187,40 @@ export function StatsDashboard({
         <span className="rpt-card-label">评分曲线(己方队均)</span>
         <RatingCurve series={dash.ratingSeries} />
       </div>
+
+      {issues.length > 0 && (
+        <div className="dash-card" data-testid="dash-issues">
+          <span className="rpt-card-label">
+            最常犯的问题(全部已分析对局)
+          </span>
+          {issues.slice(0, 3).map((c) => (
+            <div key={c.category} className="dash-issue">
+              <span className="dash-issue-head">
+                <b>{c.category}</b> × {c.count}
+                {c.recurring > 0 && (
+                  <span className="dash-issue-rec">↻ 还在犯 {c.recurring}</span>
+                )}
+                {c.done > 0 && (
+                  <span className="dash-issue-done">✓ 已跟进 {c.done}</span>
+                )}
+              </span>
+              {c.recent[0] && (
+                <button
+                  className="dash-issue-recent"
+                  onClick={
+                    onOpenMatch
+                      ? () => onOpenMatch(c.recent[0]!.matchId)
+                      : undefined
+                  }
+                  title="打开该场"
+                >
+                  最近:{c.recent[0].title}
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="dash-tables">
         <div className="dash-card">

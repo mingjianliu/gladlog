@@ -73,6 +73,21 @@ export interface GladlogApi {
     cancel(): Promise<void>;
     getCached(matchId: string): Promise<unknown | null>;
     getFlags(matchId: string): Promise<Record<string, string>>;
+    /** 跨场 finding 聚合(category 计数 + 最近实例 + 标记统计)。 */
+    aggregate(): Promise<
+      Array<{
+        category: string;
+        count: number;
+        recurring: number;
+        done: number;
+        recent: Array<{
+          matchId: string;
+          title: string;
+          severity: string;
+          createdAt: number;
+        }>;
+      }>
+    >;
     setFlag(
       matchId: string,
       key: string,

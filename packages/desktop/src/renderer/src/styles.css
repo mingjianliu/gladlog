@@ -1758,3 +1758,37 @@ pre {
   color: var(--loss);
   border-color: var(--loss);
 }
+
+/* 最常犯的问题(phase3 #3b) */
+.dash-issue {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 5px 0;
+  border-top: 1px solid var(--hairline);
+  font-size: 12px;
+}
+.dash-issue-head b {
+  font-family: var(--font-data);
+}
+.dash-issue-rec {
+  margin-left: 8px;
+  color: var(--loss);
+  font-size: 10px;
+}
+.dash-issue-done {
+  margin-left: 8px;
+  color: var(--win);
+  font-size: 10px;
+}
+.dash-issue-recent {
+  border: none;
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 11px;
+  cursor: pointer;
+  text-align: left;
+}
+.dash-issue-recent:hover {
+  color: var(--gold);
+}
