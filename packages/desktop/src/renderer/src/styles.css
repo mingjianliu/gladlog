@@ -1691,3 +1691,35 @@ pre {
   padding: 4px 8px;
   font-size: 12px;
 }
+
+/* ── 首启引导(phase3 #2b)── */
+.onboard {
+  max-width: 460px;
+  margin: 80px auto;
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  padding: 24px 28px;
+}
+.onboard h2 {
+  font-size: 16px;
+  margin-bottom: 12px;
+}
+.onboard ol {
+  margin: 0 0 14px 18px;
+  font-size: 13px;
+  color: var(--ink-2);
+  line-height: 1.9;
+}
+.onboard-cta {
+  font-size: 13px;
+  padding: 6px 16px;
+  color: var(--gold);
+  border-color: var(--gold-dim);
+}
+.onboard-hint {
+  margin-top: 12px;
+  font-size: 11px;
+  color: var(--mute);
+}

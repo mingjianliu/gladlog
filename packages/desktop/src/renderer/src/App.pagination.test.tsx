@@ -35,6 +35,7 @@ beforeEach(() => {
   (bridge as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
     matches: { page, get: vi.fn().mockResolvedValue(null), list: vi.fn() },
     logs: { onMatchStored: () => () => {} },
+    settings: { get: vi.fn().mockResolvedValue({ wowDirectory: "/wow" }) },
   });
 });
 
@@ -58,5 +59,43 @@ describe("App pagination", () => {
     });
     fireEvent.scroll(list);
     await waitFor(() => expect(matchRows()).toHaveLength(200));
+  });
+});
+
+describe("首启引导(phase3 #2b)", () => {
+  it("无对局且未设目录 → 引导卡;选目录后转监控提示", async () => {
+    const selectDirectory = vi.fn().mockResolvedValue("/wow/dir");
+    (bridge as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      matches: {
+        page: vi.fn().mockResolvedValue([]),
+        get: vi.fn().mockResolvedValue(null),
+        list: vi.fn(),
+      },
+      logs: { onMatchStored: () => () => {} },
+      settings: { get: vi.fn().mockResolvedValue({ wowDirectory: null }) },
+      app: { selectDirectory },
+    });
+    render(<App />);
+    await waitFor(() => expect(screen.getByTestId("onboard")).toBeTruthy());
+    expect(screen.getByText(/欢迎使用 gladlog/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /选择 WoW 目录/ }));
+    await waitFor(() => expect(screen.getByText(/正在监控/)).toBeTruthy());
+    expect(selectDirectory).toHaveBeenCalled();
+  });
+
+  it("有对局时不出引导(仍是选择提示)", async () => {
+    (bridge as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      matches: {
+        page: vi.fn().mockResolvedValue([meta("m1", 5)]),
+        get: vi.fn().mockResolvedValue(null),
+        list: vi.fn(),
+      },
+      logs: { onMatchStored: () => () => {} },
+      settings: { get: vi.fn().mockResolvedValue({ wowDirectory: null }) },
+    });
+    render(<App />);
+    await waitFor(() =>
+      expect(screen.queryByTestId("onboard")).toBeNull(),
+    );
   });
 });

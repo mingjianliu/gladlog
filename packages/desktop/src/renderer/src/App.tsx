@@ -29,6 +29,19 @@ export default function App() {
   const [doc, setDoc] = useState<any | null>(null);
   const [hasMore, setHasMore] = useState(true);
   const [filter, setFilter] = useState<ListFilter>(EMPTY_FILTER);
+  const [wowDir, setWowDir] = useState<string | null>(null);
+
+  useEffect(() => {
+    // 测试桩可能没有 settings 面
+    try {
+      void bridge()
+        .settings.get()
+        .then((s) => setWowDir(s.wowDirectory))
+        .catch(() => {});
+    } catch {
+      /* noop */
+    }
+  }, []);
   const loadingRef = useRef(false);
   const PAGE = 100;
 
@@ -144,6 +157,42 @@ export default function App() {
                   matchId={selectedId ?? undefined}
                 />
               )
+            ) : metas.length === 0 ? (
+              <div className="onboard" data-testid="onboard">
+                <h2>欢迎使用 gladlog</h2>
+                {wowDir == null ? (
+                  <>
+                    <ol>
+                      <li>
+                        选择 WoW 安装目录(自动定位战斗日志并开始监控)
+                      </li>
+                      <li>打一场竞技场,或导入历史日志</li>
+                      <li>回来看战报、回放和 AI 分析</li>
+                    </ol>
+                    <button
+                      className="onboard-cta"
+                      onClick={() =>
+                        void bridge()
+                          .app.selectDirectory()
+                          .then((dir) => {
+                            if (dir) setWowDir(dir);
+                          })
+                      }
+                    >
+                      选择 WoW 目录…
+                    </button>
+                    <p className="onboard-hint">
+                      需要开启游戏内战斗记录(高级模式);AI 分析在「设置」里配
+                      API key,不配也能看战报与回放。
+                    </p>
+                  </>
+                ) : (
+                  <p>
+                    ✅ 正在监控 <code>{wowDir}</code> —— 打一场竞技场,战报会
+                    自动出现在左侧。
+                  </p>
+                )}
+              </div>
             ) : (
               <div className="empty-state">选择一场对局</div>
             )}
