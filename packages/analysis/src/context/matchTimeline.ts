@@ -2419,6 +2419,11 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     ...summaryLines,
     "MATCH TIMELINE",
     "  Units: M = Million damage (1,000,000), k = Thousand damage (1,000)",
+    // 2026-07-18 baseline:两个独立 responder 把 [DR: Full] 反读成"已完全
+    // 递减/CC 无效"——图例一句话消歧(Full = 无递减 = 全时长 = 最佳 CC 时机)。
+    "  [DR: <category> <level>] on CC lines = diminishing returns state when it LANDED:",
+    "    Full = NO diminishing returns yet (full duration — the best time to land CC);",
+    "    50% / 25% = duration reduced to half / quarter; Immune = DR'd to zero.",
     "",
     `[PERSPECTIVE: Log Owner - ${ownerSpec}]`,
     `(You are the ${ownerSpec} in this match. Your actions are marked with [YOU].)`,

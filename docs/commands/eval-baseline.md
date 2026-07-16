@@ -57,6 +57,11 @@ BASE_DIR="$GLADLOG_EVAL_HOME/runs/<runId>" npx tsx packages/eval/scripts/quality
 > "ended early — absorbed, dispelled, or cancelled") into one specific cause. When counting
 > events (stuns, casts, spikes), recount from the timeline rather than from memory.
 >
+> FOCUS DISCIPLINE: structure the response around the 2-3 windows that actually
+> decided the match; give each secondary observation at most one line, and label
+> minor items as minor. Do not let "what went right" match the decisive analysis
+> in length.
+>
 > Write your coaching response to:
 > `$GLADLOG_EVAL_HOME/runs/<runId>/responses/NNN.txt`
 >
