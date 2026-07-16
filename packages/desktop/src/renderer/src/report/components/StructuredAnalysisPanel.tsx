@@ -13,7 +13,7 @@ import { toLegacySafe } from "../derive/legacySource";
 import { deriveVulnBands } from "../derive/vulnWindows";
 import { MatchHero } from "./MatchHero";
 import { TimelineStrip } from "./TimelineStrip";
-import { FindingsList, findingKey } from "./FindingsList";
+import { FindingsList } from "./FindingsList";
 import { ExportButtons } from "./ExportButtons";
 
 type AnalysisResult = {
