@@ -97,8 +97,13 @@ healingGaps、healer exposure、HPS 基准。
   PROMPT_VERSION 4。eval:`buildCorpus --owner dps`(降级语料 176 场)+
   门规主语三修 + 插值盲区补网格 → 几何门 0/2665;6 场 sonnet 冒烟全部
   以账本为骨架(runId 2026-07-16-dps-smoke)。
-  **剩余**:正式 DPS baseline 需真 DPS 视角日志(用户提供)+ DPS 化
-  sufficiency 锚点的 judge-instructions 变体。
+  **✅ 正式 DPS baseline 2026-07-16 收官**(runId 2026-07-16-dps-public):
+  60 场真 DPS 记录者公开对局(wowarenalogs 公开通道),DPS judge 变体,
+  全 sonnet。acc 4.52(与治疗基线持平)/ suff 4.60 / focus 4.98 /
+  outcome 4.97;hard flag 1;factAudit 166v/14r/0u;账本为 60/60 回复骨架。
+  Top 修复项(全确定性):kickAudit 宠物 kick src + 队友踢断误判 juke、
+  off-target 窗口截断在目标死亡、[HEALER EXPOSURE] 饰品主语、野生 CC 覆盖
+  尾巴排查。详见 eval-report.md。
 - **D3(闭环)**:DPS findings 进「最常犯的问题」聚合与「本场目标」
   (backlog #12–#19 的教练闭环对 DPS 同样成立)。
 
