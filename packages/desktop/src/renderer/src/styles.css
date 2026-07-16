@@ -1570,3 +1570,7 @@ pre {
 .rpt-tl-band:hover {
   filter: brightness(1.5);
 }
+
+.rpt-shuffle-seq i.cur {
+  outline: 1px solid var(--gold);
+}

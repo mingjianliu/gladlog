@@ -1,3 +1,5 @@
+import { zoneMetadata } from "@gladlog/analysis";
+
 import type { ReportSource } from "../derive/types";
 import { deriveRoster } from "../derive/roster";
 import { classColor, specName } from "../data/gameConstants";
@@ -38,8 +40,9 @@ export function ReportHeader({
           {source.result}
         </div>
         <div className="rpt-meta">
-          {source.bracket} · zone {source.zoneId} ·{" "}
-          {fmtDuration(source.endTime - source.startTime)}
+          {source.bracket} ·{" "}
+          {zoneMetadata[String(source.zoneId)]?.name ?? `zone ${source.zoneId}`}{" "}
+          · {fmtDuration(source.endTime - source.startTime)}
         </div>
       </div>
       <div className="rpt-team rpt-team-right">

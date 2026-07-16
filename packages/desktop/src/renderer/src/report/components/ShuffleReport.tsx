@@ -15,7 +15,15 @@ export function ShuffleReport({ shuffle }: { shuffle: StoredShuffle }) {
           {shuffle.rounds.map((r, i) => (
             <i
               key={i}
-              className={r.winningTeamId === r.playerTeamId ? "w" : "l"}
+              className={[
+                r.winningTeamId === r.playerTeamId ? "w" : "l",
+                i === active ? "cur" : "",
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              onClick={() => setActive(i)}
+              title={`Round ${i + 1}`}
+              style={{ cursor: "pointer" }}
             >
               {r.winningTeamId === r.playerTeamId ? "W" : "L"}
             </i>
