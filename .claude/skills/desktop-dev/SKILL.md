@@ -61,3 +61,11 @@ npm test --workspace=packages/desktop \
 **语料实证**(SPELL_CAST_SUCCESS 挖掘 + per-spec 率而非绝对数),cd/时长
 生成层没有的用语料实测(min inter-cast gap / aura applied→removed 中位数),
 别拍脑袋。刷新流程见 docs/commands/update-wow-data.md。
+
+## renderer 与 main 的 import 边界(v0.0.4 构建事故)
+
+renderer/preload 从 `src/main/*` 只能 **type-only import**(`import type`,编译期擦除)。
+值引入(常量也算!)会把整个 main 模块连同 `fs`/`path` 卷进 renderer 包 ——
+dev 与 vitest 都不挡,只有 `electron-vite build`(生产打包)才炸。
+跨界共享的常量放 `src/shared/`(protocol.ts / findingKey.ts 先例),main 侧可 re-export。
+CI 的 test workflow 已加 electron-vite build 步兜底。

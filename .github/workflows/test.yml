@@ -35,3 +35,8 @@ jobs:
 
       - name: Data-faithfulness (verify:vision)
         run: npm -w @gladlog/desktop run verify:vision
+
+      # 生产打包用 electron-vite build,dev/vitest 都不跑它 —— renderer 值引入
+      # main 模块这类问题只有它能抓(v0.0.4 首包双平台实锤)。
+      - name: Production bundle (electron-vite build)
+        run: npm -w @gladlog/desktop run build
