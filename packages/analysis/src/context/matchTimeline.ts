@@ -363,6 +363,32 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   }
 
   /**
+   * 施法者标签(CC 行 "(by X)" 用):玩家 → pid/enemyPid;宠物 → 主人标签
+   * + "'s pet";无主可查的本地化名(CJK 宠物名等)→ "[pet]"。
+   * 与 [KICK] 行的 resolveKicker 同规 —— 2026-07-17 千场 fuzz:猎人宠
+   * Intimidation 的 "(by 狂野獠牙)" 泄漏 CJK 宠物名 ×72。
+   */
+  function actorLabel(name: string, side: "friendly" | "enemy"): string {
+    const primary = side === "friendly" ? pid(name) : enemyPid(name);
+    if (/^\d/.test(primary)) return primary; // 命中玩家映射(玩家名不会以数字开头)
+    const petUnit = allUnits?.find(
+      (u) => u.name === name && u.ownerId.length > 0,
+    );
+    const roster = [...friends, ...(enemies ?? [])];
+    const ownerUnit = petUnit
+      ? roster.find((u) => u.id === petUnit.ownerId)
+      : undefined;
+    if (ownerUnit) {
+      const label = friends.some((f) => f.id === ownerUnit.id)
+        ? pid(ownerUnit.name)
+        : enemyPid(ownerUnit.name);
+      return `${label}'s pet`;
+    }
+    const short = name.split("-")[0];
+    return [...short].some((c) => c.charCodeAt(0) > 127) ? "[pet]" : short;
+  }
+
+  /**
    * Resolves a cast's destUnitName to a display label for [YOU] [CAST] entries.
    * Returns "self" for self-casts, a numeric ID for known players, or the raw name.
    * Returns "" when destUnitName is empty (AoE spells with no specific log target).
@@ -1611,7 +1637,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       addEntry(
         cc.atSeconds,
         // B112: "(by N)" not "(N)" — the bare "(6)" caster-id was misread as a "6s" duration.
-        `${fmtTime(cc.atSeconds)}  [CC ON TEAM]   ${pid(summary.playerName)} ← ${cc.spellName} (by ${enemyPid(cc.sourceName)})${durStr}${drStr}${backlashStr}${posStr}${trinketNote}${cleansedNote}`,
+        `${fmtTime(cc.atSeconds)}  [CC ON TEAM]   ${pid(summary.playerName)} ← ${cc.spellName} (by ${actorLabel(cc.sourceName, "enemy")})${durStr}${drStr}${backlashStr}${posStr}${trinketNote}${cleansedNote}`,
       );
     }
 
@@ -1624,7 +1650,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
           avoided.atSeconds,
           // M-g: state the observed facts (CC cast did not land; avoidance ability present),
           // not a causal verdict. Let the model infer whether the ability caused the avoidance.
-          `${fmtTime(avoided.atSeconds)}  [CC AVOIDED?]   ${pid(summary.playerName)}: ${avoided.spellName} (by ${enemyPid(avoided.sourceName)}) did not land; ${avoided.avoidanceSpellName} active`,
+          `${fmtTime(avoided.atSeconds)}  [CC AVOIDED?]   ${pid(summary.playerName)}: ${avoided.spellName} (by ${actorLabel(avoided.sourceName, "enemy")}) did not land; ${avoided.avoidanceSpellName} active`,
         );
       }
     }
@@ -1639,7 +1665,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
         const durStr = ` (${cc.durationSeconds.toFixed(0)}s)`;
         addEntry(
           cc.atSeconds,
-          `${fmtTime(cc.atSeconds)}  [CC ON ENEMY]   ${enemyPid(summary.playerName)} ← ${cc.spellName} (by ${pid(cc.sourceName)})${durStr}`,
+          `${fmtTime(cc.atSeconds)}  [CC ON ENEMY]   ${enemyPid(summary.playerName)} ← ${cc.spellName} (by ${actorLabel(cc.sourceName, "friendly")})${durStr}`,
         );
       }
     }
