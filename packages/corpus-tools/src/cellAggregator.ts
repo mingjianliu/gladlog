@@ -83,7 +83,7 @@ function distFor(
   metric: string,
 ): MetricDist {
   let vals = records
-    .map((r) => (r.metrics as Record<string, unknown>)[metric])
+    .map((r) => (r.metrics as unknown as Record<string, unknown>)[metric])
     .filter((v): v is number => typeof v === "number" && !Number.isNaN(v))
     .sort((a, b) => a - b);
   // offensiveIndex = damage/heal is unbounded and explodes when a healer barely

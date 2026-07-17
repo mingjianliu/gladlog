@@ -57,7 +57,7 @@ describe("combatToRecords", () => {
     expect(r.spec).toBeTruthy();
     expect(r.bracket).toBe("3v3");
     expect(r.archetype).toBe("melee_cleave"); // 2 敌方近战 dps
-    expect(typeof r.metrics.offensiveIndex).toBe("number");
+    expect(typeof (r.metrics as unknown as Record<string, unknown>).offensiveIndex).toBe("number");
     for (const c of r.crisisEvents) expect(c).toMatch(/^[\x00-\x7F]*$/);
   });
   it("Friendly 非治疗照样出记录(DPS 指标组,pro-comparison P1)", () => {
@@ -66,7 +66,7 @@ describe("combatToRecords", () => {
     c.units["Me-Realm-US"].spec = WARRIOR;
     const recs = combatToRecords(c, []);
     expect(recs).toHaveLength(1);
-    const m = recs[0]!.metrics as Record<string, unknown>;
+    const m = recs[0]!.metrics as unknown as Record<string, unknown>;
     expect(typeof m.burstCount).toBe("number");
     expect("offensiveIndex" in m).toBe(false);
   });
