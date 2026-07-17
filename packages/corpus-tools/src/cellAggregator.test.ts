@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { lookupCell } from "@gladlog/analysis";
 
 import { aggregateCells, PerMatchRecord } from "./cellAggregator";
 import type { KeystoneGate } from "./keystoneGates";
@@ -186,7 +187,6 @@ describe("P2 对阵 comp cell", () => {
 
   it("lookupCell:comp tier 置顶命中,无 comp cell 时回退旧链", async () => {
     const { aggregateCells } = await import("./cellAggregator");
-    const { lookupCell } = await import("@gladlog/analysis");
     const recs = Array.from({ length: 40 }, (_, i) => rec("Frost Mage", "A + B + C", 100 + i, "Holy Priest"));
     const corpus = aggregateCells(recs, 30, { wowPatchVersion: "12.0", sourceFloor: 2300 }, []) as any;
     const hit = lookupCell(corpus, { spec: "Frost Mage", bracket: "3v3", archetype: "double-melee", buildGroup: "*", enemyComp: "A + B + C" }, 30);
