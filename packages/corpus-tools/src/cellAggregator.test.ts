@@ -158,3 +158,42 @@ describe("aggregateCells build-split", () => {
     expect(Object.keys(c.buildGroups)).toHaveLength(0);
   });
 });
+
+describe("P2 对阵 comp cell", () => {
+  const rec = (spec: string, enemyComp: string, durationS: number, firstKill: string): any => ({
+    spec, bracket: "3v3", archetype: "double-melee", buildGroup: "*",
+    enemyComp, durationS, firstEnemyKillSpec: firstKill,
+    metrics: { burstCount: 2, burstConversionRate: 0.5, burstIntoDefensiveRatio: 0, alignedBurstRatio: 1, onTargetPct: 0.7, kickLandedRate: 1, kicksJukedCount: 0, firstBurstSeconds: 10 },
+    crisisEvents: [],
+  });
+
+  it("高频 comp(≥20)出 comp cell,带时长分布与先杀计数;低频不出", async () => {
+    const { aggregateCells } = await import("./cellAggregator");
+    const recs = [
+      ...Array.from({ length: 25 }, (_, i) => rec("Frost Mage", "A + B + C", 100 + i, i < 17 ? "Holy Priest" : "Arms Warrior")),
+      ...Array.from({ length: 5 }, () => rec("Frost Mage", "X + Y + Z", 90, "Holy Priest")),
+    ];
+    const corpus = aggregateCells(recs, 30, { wowPatchVersion: "12.0", sourceFloor: 2300 }, []);
+    const comp = corpus.cells.filter((c: any) => c.enemyComp);
+    expect(comp).toHaveLength(1);
+    expect(comp[0].enemyComp).toBe("A + B + C");
+    expect(comp[0].sampleN).toBe(25);
+    expect(comp[0].durationS?.n).toBe(25);
+    expect(comp[0].firstKill?.["Holy Priest"]).toBe(17);
+    // 普通 tier 不受影响,comp cell 不混入 archetype 桶
+    expect(corpus.cells.some((c: any) => !c.enemyComp && c.archetype === "double-melee")).toBe(true);
+  });
+
+  it("lookupCell:comp tier 置顶命中,无 comp cell 时回退旧链", async () => {
+    const { aggregateCells } = await import("./cellAggregator");
+    const { lookupCell } = await import("@gladlog/analysis");
+    const recs = Array.from({ length: 40 }, (_, i) => rec("Frost Mage", "A + B + C", 100 + i, "Holy Priest"));
+    const corpus = aggregateCells(recs, 30, { wowPatchVersion: "12.0", sourceFloor: 2300 }, []) as any;
+    const hit = lookupCell(corpus, { spec: "Frost Mage", bracket: "3v3", archetype: "double-melee", buildGroup: "*", enemyComp: "A + B + C" }, 30);
+    expect(hit.fellBackTo).toBe("enemyComp");
+    expect(hit.cell?.enemyComp).toBe("A + B + C");
+    const miss = lookupCell(corpus, { spec: "Frost Mage", bracket: "3v3", archetype: "double-melee", buildGroup: "*", enemyComp: "NO + PE + Q" }, 30);
+    expect(miss.fellBackTo).not.toBe("enemyComp");
+    expect(miss.cell?.enemyComp).toBeUndefined();
+  });
+});

@@ -28,6 +28,8 @@ const N_FLOOR = 30;
 export type CompareInput = {
   matchId: string;
   healerMetrics: Record<string, number | null>;
+  /** P2:敌方阵容签名(enemyCompSignature);命中 comp cell 时对比更情境化。 */
+  enemyComp?: string;
   spec: string;
   talents: number[];
   bracket: string;
@@ -94,6 +96,7 @@ export function createCompareService(deps: {
         bracket: input.bracket,
         archetype: input.archetype,
         buildGroup,
+        enemyComp: input.enemyComp,
       },
       N_FLOOR,
     );
@@ -109,11 +112,36 @@ export function createCompareService(deps: {
     }
 
     const vc = verifiedComparison(input.healerMetrics, cell);
+    // P2 comp cell:附时长中位与先杀分布(facts 供 LLM 引用,cellMeta 供 UI)
+    let firstKillTop: { spec: string; pct: number } | null = null;
+    if (cell.firstKill) {
+      const entries = Object.entries(cell.firstKill).sort(
+        (a, b) => b[1] - a[1],
+      );
+      const total = entries.reduce((sum, [, n]) => sum + n, 0);
+      if (entries.length > 0 && total > 0) {
+        firstKillTop = {
+          spec: entries[0][0],
+          pct: Math.round((100 * entries[0][1]) / total),
+        };
+      }
+    }
+    if (cell.enemyComp) {
+      vc.facts["cohort.enemyComp"] = cell.enemyComp;
+      if (cell.durationS)
+        vc.facts["cohort.durationP50"] = String(Math.round(cell.durationS.p50));
+      if (firstKillTop)
+        vc.facts["cohort.firstKillTop"] =
+          `${firstKillTop.spec} (${firstKillTop.pct}%)`;
+    }
     const cellMeta = {
       spec: cell.spec,
       bracket: cell.bracket,
       archetype: cell.archetype,
       buildGroup: cell.buildGroup,
+      enemyComp: cell.enemyComp ?? null,
+      durationP50: cell.durationS ? Math.round(cell.durationS.p50) : null,
+      firstKillTop,
       sampleN: cell.sampleN,
       fellBackTo,
     };

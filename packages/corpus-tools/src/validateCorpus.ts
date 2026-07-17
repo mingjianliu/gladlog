@@ -1,4 +1,4 @@
-import type { Corpus } from "./cellAggregator";
+import { COMP_CELL_N_FLOOR, type Corpus } from "./cellAggregator";
 
 const ASCII = /^[\x00-\x7F]*$/;
 
@@ -9,9 +9,13 @@ export function validateCorpus(corpus: Corpus, nFloor: number): string[] {
   for (const c of corpus.cells) {
     const tag = `${c.spec}|${c.bracket}|${c.archetype}|${c.buildGroup}`;
     // N_floor 一致性
-    if (c.sampleN < nFloor && !c.insufficient)
+    // P2 comp cell 用 COMP_CELL_N_FLOOR(与 aggregator 同一常量)
+    const floor = (c as { enemyComp?: string }).enemyComp
+      ? COMP_CELL_N_FLOOR
+      : nFloor;
+    if (c.sampleN < floor && !c.insufficient)
       v.push(`${tag}: below floor (${c.sampleN}) but not insufficient`);
-    if (c.sampleN >= nFloor && c.insufficient)
+    if (c.sampleN >= floor && c.insufficient)
       v.push(`${tag}: at/above floor (${c.sampleN}) but marked insufficient`);
     // 1.5 延迟哨兵回归:旧 fork 把缺失的 reactionLatency 默认成 1.5s。若重现,
     // 该假值会带着真实 record 计数(n>0)进入分布,中位数正好落在 1.5。真实

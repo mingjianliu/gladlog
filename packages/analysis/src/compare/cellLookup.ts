@@ -20,9 +20,28 @@ export function assignBuildGroup(
 
 export function lookupCell(
   corpus: ReferenceCorpus,
-  sel: { spec: string; bracket: string; archetype: string; buildGroup: string },
+  sel: {
+    spec: string;
+    bracket: string;
+    archetype: string;
+    buildGroup: string;
+    /** P2:敌方阵容签名;命中同 comp 的高手 cell 时优先(情境化对比)。 */
+    enemyComp?: string;
+  },
   nFloor: number,
 ): { cell: ReferenceCell | null; fellBackTo: string } {
+  // P2 顶层 tier:同敌方阵容的 comp cell(archetype/buildGroup 为 *)。
+  // 回退链:enemyComp → archetype×buildGroup → … → *×*。
+  if (sel.enemyComp) {
+    const compCell = corpus.cells.find(
+      (c) =>
+        c.spec === sel.spec &&
+        c.bracket === sel.bracket &&
+        c.enemyComp === sel.enemyComp &&
+        !c.insufficient,
+    );
+    if (compCell) return { cell: compCell, fellBackTo: "enemyComp" };
+  }
   // build-preferring 4-level fallback; each tier is (archetype, buildGroup) keys.
   const tiers: Array<[string, string, string]> = [
     [sel.archetype, sel.buildGroup, "archetype×buildGroup"],
@@ -37,6 +56,7 @@ export function lookupCell(
         c.bracket === sel.bracket &&
         c.archetype === a &&
         c.buildGroup === b &&
+        !c.enemyComp &&
         !c.insufficient &&
         c.sampleN >= nFloor,
     );

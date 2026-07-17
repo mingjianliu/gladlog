@@ -45,7 +45,13 @@ window 里**。全场标量抹平了这件事。要变细,不是加更多标量,
 语料:`npm run logs:fetch-public -- --bracket 3v3 --min-rating 2400 --count 300`
 (minRating 修好后高分段可抓;记录者 spec 天然分桶)。
 
-### P2:对阵 comp 维度(情境化的第一步)
+### P2:对阵 comp 维度 ✅(2026-07-17 完成)
+
+> enemyCompSignature 单一谓词(builder/renderer 共用);comp cell =
+> spec|bracket|敌方阵容,COMP_CELL_N_FLOOR=20(validateCorpus 共用常量),
+> 附时长分布 + 先杀计数;lookupCell comp tier 置顶、回退旧链;UI 显示
+> 「对阵同阵容的高手场 · 时长中位 · X% 先杀 Y」。首建 14 个 comp cell
+> (随周度刷新增长)。
 
 cell key 加**敌方 comp 签名**(specId 升序,同战绩页 comps 口径):
 "2400 分惩戒骑 vs 法牧贼:平均 2:10 结束、67% 先杀牧师、开场爆发

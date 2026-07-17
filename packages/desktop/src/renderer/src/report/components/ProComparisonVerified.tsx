@@ -6,6 +6,7 @@ import { bridge } from "../../bridge";
 import {
   computeDpsMetrics,
   computeHealerMetrics,
+  enemyCompSignature,
   specToString,
   isHealerSpec,
   enemyCompArchetype,
@@ -30,6 +31,9 @@ type CompareResult = {
   report: string | null;
   droppedReason: string | null;
   cellMeta: {
+    enemyComp?: string | null;
+    durationP50?: number | null;
+    firstKillTop?: { spec: string; pct: number } | null;
     spec: string;
     bracket: string;
     archetype: string;
@@ -133,6 +137,9 @@ export function ProComparisonVerified({
       return {
         matchId,
         healerMetrics: metrics as unknown as Record<string, number | null>,
+        enemyComp: enemyCompSignature(
+          enemies.map((e) => specToString(e.spec)),
+        ),
         spec: specToString(owner.spec),
         talents,
         bracket: legacy.startInfo?.bracket ?? "unknown",
@@ -171,10 +178,23 @@ export function ProComparisonVerified({
               marginBottom: "12px",
             }}
           >
+            {result.cellMeta.enemyComp
+              ? `对阵同阵容(${result.cellMeta.enemyComp})的高手场 · `
+              : ""}
             {result.cellMeta.spec} · {result.cellMeta.bracket} ·{" "}
             {result.cellMeta.archetype} · {result.cellMeta.buildGroup} build ·
             N=
             {result.cellMeta.sampleN}
+            {result.cellMeta.enemyComp && result.cellMeta.durationP50 != null && (
+              <>
+                {" · 时长中位 "}
+                {Math.floor(result.cellMeta.durationP50 / 60)}:
+                {String(result.cellMeta.durationP50 % 60).padStart(2, "0")}
+                {result.cellMeta.firstKillTop
+                  ? ` · ${result.cellMeta.firstKillTop.pct}% 先杀 ${result.cellMeta.firstKillTop.spec}`
+                  : ""}
+              </>
+            )}
           </p>
           <CohortDimsTable rows={cohortDims(result.verifiedComparison.dims)} />
           {result.report !== null ? (

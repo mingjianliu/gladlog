@@ -11,6 +11,10 @@ export interface PerMatchRecord {
    * 同一 cell 内只会出现一种;n=0 的维度由消费方(verifiedComparison)跳过。 */
   metrics: IHealerMetrics | IDpsMetrics;
   crisisEvents: string[];
+  /** P2:敌方阵容签名(enemyCompSignature)/对局时长/首杀敌人 spec。 */
+  enemyComp?: string;
+  durationS?: number;
+  firstEnemyKillSpec?: string;
 }
 export interface MetricDist {
   p10: number;
@@ -23,9 +27,12 @@ export interface Cell {
   bracket: string;
   archetype: string;
   buildGroup: string;
+  enemyComp?: string;
   sampleN: number;
   insufficient: boolean;
   metrics: Record<string, MetricDist>;
+  durationS?: MetricDist;
+  firstKill?: Record<string, number>;
   exemplarCrises: string[][];
 }
 export interface BuildGroupDecl {
@@ -124,6 +131,9 @@ function buildCell(
   };
 }
 
+/** P2 comp cell 的样本门槛(validateCorpus 共用 —— 门规谓词即规范)。 */
+export const COMP_CELL_N_FLOOR = 20;
+
 export function aggregateCells(
   records: PerMatchRecord[],
   nFloor: number,
@@ -204,6 +214,41 @@ export function aggregateCells(
   for (const [k, recs] of buckets) {
     const [spec, bracket, archetype, buildGroup] = k.split("|");
     cells.push(buildCell(spec, bracket, archetype, buildGroup, recs, nFloor));
+  }
+
+  // --- P2:对阵 comp 维度 cell(spec|bracket|enemyComp)。只对样本充足的
+  // 高频 comp 出 cell(COMP_N_FLOOR);其余走既有回退链。附 comp 级聚合量:
+  // 时长分布 + 先杀谁计数。
+  const COMP_N_FLOOR = COMP_CELL_N_FLOOR;
+  const compBuckets = new Map<string, PerMatchRecord[]>();
+  for (const r of records) {
+    if (!r.enemyComp) continue;
+    const k = `${r.spec}|${r.bracket}|${r.enemyComp}`;
+    (compBuckets.get(k) ?? compBuckets.set(k, []).get(k)!).push(r);
+  }
+  for (const [k, recs] of compBuckets) {
+    if (recs.length < COMP_N_FLOOR) continue;
+    const [spec, bracket, enemyComp] = k.split("|");
+    const cell = buildCell(spec, bracket, "*", "*", recs, COMP_N_FLOOR);
+    cell.enemyComp = enemyComp;
+    const durs = recs
+      .map((r) => r.durationS)
+      .filter((d): d is number => typeof d === "number")
+      .sort((a, b) => a - b);
+    cell.durationS = {
+      p10: percentile(durs, 0.1),
+      p50: percentile(durs, 0.5),
+      p90: percentile(durs, 0.9),
+      n: durs.length,
+    };
+    const firstKill: Record<string, number> = {};
+    for (const r of recs) {
+      if (!r.firstEnemyKillSpec) continue;
+      firstKill[r.firstEnemyKillSpec] =
+        (firstKill[r.firstEnemyKillSpec] ?? 0) + 1;
+    }
+    cell.firstKill = firstKill;
+    cells.push(cell);
   }
 
   // --- buildGroups: declare each gated spec that stayed active in >=1 bracket.

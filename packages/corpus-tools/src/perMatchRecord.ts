@@ -2,6 +2,7 @@ import {
   computeDpsMetrics,
   computeHealerMetrics,
   enemyCompArchetype,
+  enemyCompSignature,
   extractRotations,
   isHealerSpec,
   specToString,
@@ -40,6 +41,24 @@ export function combatToRecords(
       continue;
     }
     const archetype = enemyCompArchetype(enemies);
+    // P2:comp 签名 + 时长 + 先杀谁(comp cell 级聚合量)
+    const enemyComp = enemyCompSignature(
+      enemies.map((e: any) => specToString(e.spec)),
+    );
+    const durationS = Math.max(
+      0,
+      Math.round(((combat.endTime ?? 0) - (combat.startTime ?? 0)) / 1000),
+    );
+    let firstEnemyKillSpec = "";
+    let firstDeathTs = Infinity;
+    for (const e of enemies) {
+      for (const d of e.deathRecords ?? []) {
+        if (d.timestamp < firstDeathTs) {
+          firstDeathTs = d.timestamp;
+          firstEnemyKillSpec = specToString(e.spec);
+        }
+      }
+    }
     const rotations = extractRotations(unit, combat);
     const spec = specToString(unit.spec);
     const gate = gates.find((g) => g.spec === spec);
@@ -52,6 +71,9 @@ export function combatToRecords(
       bracket: combat.startInfo?.bracket ?? "unknown",
       archetype,
       buildGroup,
+      enemyComp,
+      durationS,
+      firstEnemyKillSpec,
       metrics,
       crisisEvents: rotations.crisisEvents,
     });
