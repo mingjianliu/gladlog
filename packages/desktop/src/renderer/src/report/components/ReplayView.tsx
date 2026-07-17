@@ -228,8 +228,8 @@ export function ReplayView({
               const fx = (e.clientX - rect.left) / rect.width;
               const fy = (e.clientY - rect.top) / rect.height;
               const factor = e.deltaY > 0 ? 1.25 : 0.8;
-              let w = Math.min(VW, Math.max(VW / 5, cur.w * factor));
-              let h = (w / VW) * VH;
+              const w = Math.min(VW, Math.max(VW / 5, cur.w * factor));
+              const h = (w / VW) * VH;
               let x = cur.x + fx * (cur.w - w);
               let y = cur.y + fy * (cur.h - h);
               x = Math.min(Math.max(0, x), VW - w);
