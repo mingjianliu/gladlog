@@ -5,7 +5,12 @@ import type { StoredMatchMeta } from "../../../main/matchStore";
 import { bridge } from "../bridge";
 import { specName } from "../report/data/gameConstants";
 import { SpecDot } from "./MatchListRow";
-import { deriveDashboard, periodStart, type DashPeriod } from "./dashboard";
+import {
+  type DashPeriod,
+  deriveDashboard,
+  listCharacters,
+  periodStart,
+} from "./dashboard";
 
 const PERIOD_LABEL: Record<DashPeriod, string> = {
   today: "今天",
@@ -125,6 +130,8 @@ export function StatsDashboard({
 }) {
   const [metas, setMetas] = useState<StoredMatchMeta[]>([]);
   const [period, setPeriod] = useState<DashPeriod>("week");
+  // 角色筛选(多角色玩家的战绩区分;undefined = 全部)
+  const [character, setCharacter] = useState<string | undefined>(undefined);
   const [issues, setIssues] = useState<CategoryAgg[]>([]);
 
   useEffect(() => {
@@ -141,7 +148,11 @@ export function StatsDashboard({
     }
   }, []);
 
-  const dash = useMemo(() => deriveDashboard(metas, period), [metas, period]);
+  const characters = useMemo(() => listCharacters(metas), [metas]);
+  const dash = useMemo(
+    () => deriveDashboard(metas, period, Date.now(), character),
+    [metas, period, character],
+  );
 
   return (
     <div className="dash" data-testid="stats-dashboard">
@@ -159,6 +170,28 @@ export function StatsDashboard({
           ))}
         </div>
       </div>
+
+      {characters.length >= 2 && (
+        <div className="dash-chars" data-testid="dash-chars">
+          <button
+            className={character === undefined ? "active" : ""}
+            onClick={() => setCharacter(undefined)}
+          >
+            全部角色
+          </button>
+          {characters.map((c) => (
+            <button
+              key={c.name}
+              className={c.name === character ? "active" : ""}
+              onClick={() => setCharacter(c.name)}
+              title={`${c.games} 场`}
+            >
+              {c.name.split("-")[0]}
+              <span className="dash-chars-n">{c.games}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="dash-overview">
         <div className="dash-stat">
@@ -184,7 +217,9 @@ export function StatsDashboard({
       </div>
 
       <div className="dash-card">
-        <span className="rpt-card-label">评分曲线(己方队均)</span>
+        <span className="rpt-card-label">
+          评分曲线({character ? `${character.split("-")[0]} 本人` : "本人评分,旧数据回退队均"})
+        </span>
         <RatingCurve series={dash.ratingSeries} />
       </div>
 

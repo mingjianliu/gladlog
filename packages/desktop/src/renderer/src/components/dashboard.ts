@@ -52,10 +52,13 @@ export function deriveDashboard(
   metas: StoredMatchMeta[],
   period: DashPeriod,
   now = Date.now(),
+  /** 角色名筛选(undefined = 全部角色)。 */
+  character?: string,
 ): Dashboard {
   const from = periodStart(period, now);
   const rows = metas
     .filter((m) => m.startTime >= from)
+    .filter((m) => !character || m.playerName === character)
     .sort((a, b) => a.startTime - b.startTime);
 
   const wins = rows.filter(isWin).length;
@@ -70,9 +73,14 @@ export function deriveDashboard(
 
   const byBracket = new Map<string, RatingPoint[]>();
   for (const m of rows) {
-    if (typeof m.avgRating !== "number" || m.avgRating <= 0) continue;
+    // 曲线优先记录者本人评分(队均在多角色/组排下跳来跳去);旧行回退队均
+    const rating =
+      typeof m.playerRating === "number" && m.playerRating > 0
+        ? m.playerRating
+        : m.avgRating;
+    if (typeof rating !== "number" || rating <= 0) continue;
     const list = byBracket.get(m.bracket) ?? [];
-    list.push({ t: m.startTime, rating: m.avgRating });
+    list.push({ t: m.startTime, rating });
     byBracket.set(m.bracket, list);
   }
   const ratingSeries = [...byBracket.entries()]
@@ -121,4 +129,18 @@ export function deriveDashboard(
     zones,
     legacyRows,
   };
+}
+
+/** 角色清单(按场次降序);旧行无 playerName 归入 undefined,不出现在清单。 */
+export function listCharacters(
+  metas: StoredMatchMeta[],
+): Array<{ name: string; games: number }> {
+  const byName = new Map<string, number>();
+  for (const m of metas) {
+    if (!m.playerName) continue;
+    byName.set(m.playerName, (byName.get(m.playerName) ?? 0) + 1);
+  }
+  return [...byName.entries()]
+    .map(([name, games]) => ({ name, games }))
+    .sort((a, b) => b.games - a.games);
 }

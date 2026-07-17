@@ -27,12 +27,17 @@ export interface StoredMatchMeta {
   avgRating?: number | null;
   /** [己方, 敌方] 两组专精(只存渲染需要的 id,不存名字)。 */
   teams?: Array<Array<{ specId: number; classId: number }>>;
+  /** 记录者角色名(多角色战绩区分;旧行缺字段 → 重建索引回填)。 */
+  playerName?: string;
+  /** 记录者本人个人评分(评分曲线用;队均 avgRating 保留兜底)。 */
+  playerRating?: number | null;
 }
 
 const safeName = (id: string): string => id.replace(/[^A-Za-z0-9._-]/g, "_");
 
 interface RosterUnitLike {
   kind?: string;
+  name?: string;
   specId?: number;
   classId?: number;
   info?: { teamId?: number; personalRating?: number } | null;
@@ -43,8 +48,12 @@ function metaExtras(src: {
   startTime: number;
   endTime: number;
   playerTeamId?: number;
+  playerId?: string;
   units?: Record<string, RosterUnitLike>;
-}): Pick<StoredMatchMeta, "durationS" | "avgRating" | "teams"> {
+}): Pick<
+  StoredMatchMeta,
+  "durationS" | "avgRating" | "teams" | "playerName" | "playerRating"
+> {
   const durationS = Math.max(
     0,
     Math.round((src.endTime - src.startTime) / 1000),
@@ -69,7 +78,15 @@ function metaExtras(src: {
   const avgRating = ratings.length
     ? Math.round(ratings.reduce((s, r) => s + r, 0) / ratings.length)
     : null;
-  return { durationS, avgRating, teams: [own, foe] };
+  // 记录者本人:角色名(多角色区分)+ 个人评分(曲线不再吃队均)
+  const recorder = src.playerId ? src.units?.[src.playerId] : undefined;
+  const playerName = recorder?.name;
+  const playerRating =
+    typeof recorder?.info?.personalRating === "number" &&
+    recorder.info.personalRating > 0
+      ? recorder.info.personalRating
+      : null;
+  return { durationS, avgRating, teams: [own, foe], playerName, playerRating };
 }
 
 export class MatchStore {

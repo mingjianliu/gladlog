@@ -23,7 +23,13 @@ export type Runner = (
 
 const defaultRun: Runner = (file, args, stdin) =>
   new Promise((resolve, reject) => {
-    const child = spawn(file, args, { stdio: ["pipe", "pipe", "pipe"] });
+    const isWinBatch =
+      process.platform === "win32" && /\.(cmd|bat)$/i.test(file);
+    const child = isWinBatch
+      ? spawn("cmd.exe", ["/c", file, ...args], {
+          stdio: ["pipe", "pipe", "pipe"],
+        })
+      : spawn(file, args, { stdio: ["pipe", "pipe", "pipe"] });
     let out = "";
     let err = "";
     const timer = setTimeout(() => {
@@ -50,10 +56,18 @@ const resolvedCmds = new Map<string, Promise<string>>();
 function resolveViaLoginShell(cmd: string): Promise<string> {
   let p = resolvedCmds.get(cmd);
   if (!p) {
-    const shell = process.env.SHELL || "/bin/zsh";
-    p = execFileP(shell, ["-lc", `command -v ${cmd}`])
-      .then((r) => r.stdout.trim() || cmd)
-      .catch(() => cmd);
+    if (process.platform === "win32") {
+      // Windows 无登录 shell 概念,用 where 找绝对路径(npm 全局装的是
+      // claude.cmd,裸名 spawn 会 ENOENT)。
+      p = execFileP("where", [cmd])
+        .then((r) => r.stdout.split(/\r?\n/).find((l) => l.trim())?.trim() || cmd)
+        .catch(() => cmd);
+    } else {
+      const shell = process.env.SHELL || "/bin/zsh";
+      p = execFileP(shell, ["-lc", `command -v ${cmd}`])
+        .then((r) => r.stdout.trim() || cmd)
+        .catch(() => cmd);
+    }
     resolvedCmds.set(cmd, p);
   }
   return p;

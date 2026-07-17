@@ -82,6 +82,15 @@ export function ReplayView({
   const focusFire = useMemo(() => deriveFocusFire(source), [source]);
 
   const [t, setT] = useState(startTime);
+  // 缩放/平移(小地图人堆看不清 —— 滚轮缩放、拖拽平移、双击/按钮复位)。
+  // view = SVG viewBox;null = 全景。坐标换算不动(只改视窗)。
+  const [view, setView] = useState<{
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+  } | null>(null);
+  const panRef = useRef<{ px: number; py: number } | null>(null);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState<(typeof SPEEDS)[number]>(1);
   const [selUnits, setSelUnits] = useState<Record<string, boolean>>(() =>
@@ -203,11 +212,52 @@ export function ReplayView({
       <div className="rpt-replay-stage">
         <div className="rpt-replay-arena-col">
           <svg
-            className="rpt-replay-field"
-            viewBox={`0 0 ${VW} ${VH}`}
+            className={view ? "rpt-replay-field zoomed" : "rpt-replay-field"}
+            viewBox={
+              view
+                ? `${view.x} ${view.y} ${view.w} ${view.h}`
+                : `0 0 ${VW} ${VH}`
+            }
             data-testid="rpt-replay-field"
             preserveAspectRatio="xMidYMid meet"
             style={{ aspectRatio: `${VW} / ${VH}` }}
+            onWheel={(e) => {
+              // 以光标为中心缩放;1×–5×
+              const rect = e.currentTarget.getBoundingClientRect();
+              const cur = view ?? { x: 0, y: 0, w: VW, h: VH };
+              const fx = (e.clientX - rect.left) / rect.width;
+              const fy = (e.clientY - rect.top) / rect.height;
+              const factor = e.deltaY > 0 ? 1.25 : 0.8;
+              let w = Math.min(VW, Math.max(VW / 5, cur.w * factor));
+              let h = (w / VW) * VH;
+              let x = cur.x + fx * (cur.w - w);
+              let y = cur.y + fy * (cur.h - h);
+              x = Math.min(Math.max(0, x), VW - w);
+              y = Math.min(Math.max(0, y), VH - h);
+              setView(w >= VW ? null : { x, y, w, h });
+            }}
+            onPointerDown={(e) => {
+              if (!view) return;
+              panRef.current = { px: e.clientX, py: e.clientY };
+              e.currentTarget.setPointerCapture(e.pointerId);
+            }}
+            onPointerMove={(e) => {
+              if (!view || !panRef.current) return;
+              const rect = e.currentTarget.getBoundingClientRect();
+              const dx = ((e.clientX - panRef.current.px) / rect.width) * view.w;
+              const dy =
+                ((e.clientY - panRef.current.py) / rect.height) * view.h;
+              panRef.current = { px: e.clientX, py: e.clientY };
+              setView({
+                ...view,
+                x: Math.min(Math.max(0, view.x - dx), VW - view.w),
+                y: Math.min(Math.max(0, view.y - dy), VH - view.h),
+              });
+            }}
+            onPointerUp={() => {
+              panRef.current = null;
+            }}
+            onDoubleClick={() => setView(null)}
           >
             {zoneMap ? (
               <>
@@ -610,6 +660,15 @@ export function ReplayView({
           ) : null;
         })()}
         <span className="rpt-replay-divider" />
+        {view && (
+          <button
+            className="rpt-replay-zoom-reset"
+            title="复位缩放(或双击地图)"
+            onClick={() => setView(null)}
+          >
+            ⤢ {Math.round((VW / view.w) * 10) / 10}× 复位
+          </button>
+        )}
         <div className="rpt-replay-speed">
           {SPEEDS.map((s) => (
             <button

@@ -97,3 +97,52 @@ describe("StatsDashboard UI", () => {
     expect(picked).toEqual([64]);
   });
 });
+
+describe("角色区分(用户反馈:17 个号分数跳来跳去)", () => {
+  const mk = (over: Partial<import("../src/main/matchStore").StoredMatchMeta>) =>
+    ({
+      id: Math.random().toString(36).slice(2),
+      kind: "match",
+      bracket: "3v3",
+      zoneId: "1",
+      startTime: Date.now() - 1000,
+      endTime: Date.now(),
+      result: "Win",
+      storedAt: Date.now(),
+      ...over,
+    }) as import("../src/main/matchStore").StoredMatchMeta;
+
+  it("listCharacters 按场次降序;deriveDashboard 按角色过滤", async () => {
+    const { deriveDashboard, listCharacters } = await import(
+      "../src/renderer/src/components/dashboard"
+    );
+    const metas = [
+      mk({ playerName: "A-Realm", result: "Win" }),
+      mk({ playerName: "A-Realm", result: "Loss" }),
+      mk({ playerName: "B-Realm", result: "Win" }),
+      mk({}), // 旧行无 playerName
+    ];
+    const chars = listCharacters(metas);
+    expect(chars.map((c) => c.name)).toEqual(["A-Realm", "B-Realm"]);
+    const all = deriveDashboard(metas, "all");
+    expect(all.games).toBe(4);
+    const onlyA = deriveDashboard(metas, "all", Date.now(), "A-Realm");
+    expect(onlyA.games).toBe(2);
+    expect(onlyA.wins).toBe(1);
+  });
+
+  it("评分曲线优先记录者本人评分,旧行回退队均", async () => {
+    const { deriveDashboard } = await import(
+      "../src/renderer/src/components/dashboard"
+    );
+    const t = Date.now();
+    const metas = [
+      mk({ startTime: t - 5000, playerRating: 1800, avgRating: 2100 }),
+      mk({ startTime: t - 4000, playerRating: 1820, avgRating: 2050 }),
+      mk({ startTime: t - 3000, avgRating: 1500 }), // 旧行:回退队均
+    ];
+    const d = deriveDashboard(metas, "all");
+    const pts = d.ratingSeries[0]!.points.map((p) => p.rating);
+    expect(pts).toEqual([1800, 1820, 1500]);
+  });
+});

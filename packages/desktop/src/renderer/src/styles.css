@@ -1949,3 +1949,42 @@ pre {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* ── 回放缩放 + 战绩角色筛选 ── */
+.rpt-replay-field.zoomed {
+  cursor: grab;
+}
+.rpt-replay-field.zoomed:active {
+  cursor: grabbing;
+}
+.rpt-replay-zoom-reset {
+  font-size: 11px;
+  color: var(--gold);
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  padding: 2px 8px;
+  background: transparent;
+}
+.dash-chars {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 4px;
+}
+.dash-chars button {
+  font-size: 11px;
+  padding: 3px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--ink-2);
+}
+.dash-chars button.active {
+  color: var(--gold);
+  border-color: color-mix(in srgb, var(--gold) 50%, transparent);
+}
+.dash-chars-n {
+  margin-left: 5px;
+  color: var(--mute);
+  font-size: 10px;
+}
