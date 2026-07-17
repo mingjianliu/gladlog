@@ -16,7 +16,13 @@ window 里**。全场标量抹平了这件事。要变细,不是加更多标量,
 
 ## 二、三层扩展(由浅入深,全部有现成谓词)
 
-### P1:DPS 指标组进 cell(纯扩容,即拿即用)
+### P1:DPS 指标组进 cell ✅(2026-07-17 完成)
+
+> computeDpsMetrics 7 维(谓词=账本三件套)→ perMatchRecord 友方 DPS 记录 →
+> cell 聚合;全量重建 2300+ ×3600 场 → 387 cells(262 DPS/27 专精,最大
+> n=1885);UI key 通用零改动,ProComparisonVerified 按记录者角色选指标。
+> 重建入口 corpus:build-reference(LOG_CACHE_DIR 缓存);周度 launchd 自装
+> 命令见 collect-logs.md。
 
 爆发账本三件套(`analyzeBurstLedger`/`auditWindowTargeting`/`analyzeKickAudit`)
 是确定性纯函数,直接对高分语料的 DPS 记录者跑,聚成分布:
