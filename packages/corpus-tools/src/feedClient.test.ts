@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+
 import { fetchMatchStubs, fetchWithRetry } from "./feedClient";
 
 describe("fetchMatchStubs", () => {

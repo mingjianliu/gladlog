@@ -131,3 +131,95 @@ export async function downloadLogText(
   );
   return await (res as any).text();
 }
+
+// ── 详细 stubs(fetch-public 语料抓取用)────────────────────────────────────
+// 与 STUBS_QUERY 同一端点/同一分页/同一重试;字段超集:识别记录者与高级日志。
+// 注意:minRating 是服务端 Firestore 复合索引变量,必须与 bracket 同传
+// (bracket:null + minRating → FAILED_PRECONDITION,2026-07-16 实测)。
+
+export interface DetailedStubUnit {
+  id: string;
+  name: string;
+  spec: string;
+  reaction: number;
+}
+
+export interface DetailedMatchStub {
+  typename: string;
+  id: string;
+  logObjectUrl: string;
+  playerId: string;
+  hasAdvancedLogging: boolean;
+  durationInSeconds: number;
+  bracket: string;
+  units: DetailedStubUnit[];
+}
+
+const DETAILED_STUBS_QUERY = `query GetLatestMatchesDetailed($wowVersion: String!, $bracket: String, $offset: Int!, $count: Int!, $minRating: Float) {
+  latestMatches(wowVersion: $wowVersion, bracket: $bracket, offset: $offset, count: $count, minRating: $minRating) {
+    combats {
+      __typename
+      ... on ArenaMatchDataStub {
+        id logObjectUrl playerId hasAdvancedLogging durationInSeconds
+        startInfo { bracket }
+        units { id name spec reaction }
+      }
+      ... on ShuffleRoundStub {
+        id logObjectUrl playerId hasAdvancedLogging durationInSeconds
+        startInfo { bracket }
+        units { id name spec reaction }
+      }
+    }
+    queryLimitReached
+  }
+}`;
+
+export async function fetchDetailedStubs(
+  opts: {
+    bracket?: string;
+    minRating?: number;
+    offset?: number;
+    count?: number;
+  },
+  fetchImpl?: FetchLike,
+): Promise<{ stubs: DetailedMatchStub[]; queryLimitReached: boolean }> {
+  const f: FetchLike =
+    fetchImpl ?? ((await import("node-fetch")).default as any);
+  if (opts.minRating && !opts.bracket) {
+    throw new Error(
+      "minRating requires bracket (server-side composite index; 2026-07-16 FAILED_PRECONDITION)",
+    );
+  }
+  const res = await fetchWithRetry(
+    f,
+    FEED_ENDPOINT,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        query: DETAILED_STUBS_QUERY,
+        variables: {
+          wowVersion: "retail",
+          bracket: opts.bracket ?? null,
+          offset: opts.offset ?? 0,
+          count: opts.count ?? 50,
+          minRating: opts.minRating && opts.minRating > 0 ? opts.minRating : null,
+        },
+      }),
+    },
+    "feed-detailed",
+  );
+  const data = (await res.json())?.data?.latestMatches;
+  if (!data) throw new Error("feed-detailed: empty latestMatches response");
+  const stubs: DetailedMatchStub[] = (data.combats ?? []).map((c: any) => ({
+    typename: c.__typename ?? "",
+    id: c.id,
+    logObjectUrl: c.logObjectUrl,
+    playerId: c.playerId ?? "",
+    hasAdvancedLogging: !!c.hasAdvancedLogging,
+    durationInSeconds: c.durationInSeconds ?? 0,
+    bracket: c.startInfo?.bracket ?? "",
+    units: c.units ?? [],
+  }));
+  return { stubs, queryLimitReached: !!data.queryLimitReached };
+}

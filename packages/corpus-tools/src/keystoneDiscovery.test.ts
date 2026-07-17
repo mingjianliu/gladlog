@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+
 import { rankKeystoneCandidates, type StudyRow } from "./keystoneDiscovery";
 
 describe("rankKeystoneCandidates", () => {

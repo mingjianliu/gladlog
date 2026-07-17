@@ -9,7 +9,10 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "verify:parser-oracle": "node scripts/verify-parser-oracle.mjs"
+    "verify:parser-oracle": "node scripts/verify-parser-oracle.mjs",
+    "logs:stream": "npm -w @gladlog/log-pipeline run stream --",
+    "logs:collect": "npm -w @gladlog/log-pipeline run collect --",
+    "logs:fetch-public": "tsx packages/eval/scripts/fetchPublicLogs.ts"
   },
   "devDependencies": {
     "eslint": "^9.39.5",

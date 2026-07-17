@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { validateCorpus } from "./validateCorpus";
+
 import type { Corpus } from "./cellAggregator";
+import { validateCorpus } from "./validateCorpus";
 
 function corpusWith(cell: any): Corpus {
   return {

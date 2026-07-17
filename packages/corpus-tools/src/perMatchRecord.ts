@@ -1,16 +1,17 @@
-import { GladLogParser } from "@gladlog/parser";
-import {
-  toLegacyMatch,
-  toLegacyShuffle,
-  CombatUnitReaction,
-} from "@gladlog/parser-compat";
 import {
   computeHealerMetrics,
-  extractRotations,
   enemyCompArchetype,
+  extractRotations,
   isHealerSpec,
   specToString,
 } from "@gladlog/analysis";
+import { GladLogParser } from "@gladlog/parser";
+import {
+  CombatUnitReaction,
+  toLegacyMatch,
+  toLegacyShuffle,
+} from "@gladlog/parser-compat";
+
 import type { PerMatchRecord } from "./cellAggregator";
 import { assignBuildGroup, type KeystoneGate } from "./keystoneGates";
 

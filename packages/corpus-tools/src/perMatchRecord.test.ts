@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
 import { CombatUnitReaction, CombatUnitSpec } from "@gladlog/parser-compat";
-import { combatToRecords } from "./perMatchRecord";
+import { describe, expect, it } from "vitest";
+
 import type { KeystoneGate } from "./keystoneGates";
+import { combatToRecords } from "./perMatchRecord";
 
 const SHAMAN = CombatUnitSpec.Shaman_Restoration;
 const WARRIOR = CombatUnitSpec.Warrior_Arms;

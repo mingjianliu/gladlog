@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+
 import { assignBuildGroup, type KeystoneGate } from "./keystoneGates";
 
 const discGate: KeystoneGate = {
