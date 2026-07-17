@@ -14,9 +14,7 @@ describe("回放缩放(用户反馈:人堆看不清)", () => {
     fireEvent.wheel(svg, { deltaY: -100, clientX: 100, clientY: 100 });
     const after = svg.getAttribute("viewBox")!;
     expect(after).not.toBe(before);
-    expect(svg.className.baseVal ?? svg.getAttribute("class")).toContain(
-      "zoomed",
-    );
+    expect(svg.getAttribute("class")).toContain("zoomed");
     // 复位按钮
     const reset = container.querySelector(".rpt-replay-zoom-reset")!;
     expect(reset).toBeTruthy();
