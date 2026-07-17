@@ -33,3 +33,7 @@ export type WorkerToMain =
       files: FileStatus[];
       current?: { fileKey: string; offset: number }; // 正在处理的位置(崩溃归因用)
     };
+
+/** 设置回读时 API key 的掩码值(renderer 与 main 共享的协议常量;
+ * renderer 绝不可值引入 main 模块 —— v0.0.4 构建实锤:会把 fs 卷进浏览器包)。 */
+export const API_KEY_REDACTED = "__gladlog_api_key_set__";

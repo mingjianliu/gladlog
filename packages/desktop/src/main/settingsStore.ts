@@ -26,7 +26,8 @@ const DEFAULTS: GladlogSettings = {
 };
 
 // key 只存在于主进程;IPC 边界一律用哨兵替换真值(renderer 只需真值性)。
-export const API_KEY_REDACTED = "__gladlog_api_key_set__";
+export { API_KEY_REDACTED } from "../shared/protocol";
+import { API_KEY_REDACTED } from "../shared/protocol";
 
 export function redactSettings(s: GladlogSettings): GladlogSettings {
   return {

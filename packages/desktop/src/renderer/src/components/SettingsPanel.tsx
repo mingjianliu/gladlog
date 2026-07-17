@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 
-import {
-  API_KEY_REDACTED,
-  type AiBackend,
-  type AiLanguage,
-  type GladlogSettings,
+import type {
+  AiBackend,
+  AiLanguage,
+  GladlogSettings,
 } from "../../../main/settingsStore";
+import { API_KEY_REDACTED } from "../../../shared/protocol";
 import { bridge } from "../bridge";
 import { ImportButton } from "./ImportButton";
 
