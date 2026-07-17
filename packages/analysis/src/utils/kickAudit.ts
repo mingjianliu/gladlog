@@ -54,6 +54,14 @@ export function analyzeKickAudit(
 ): IKickAuditEntry[] {
   const matchStartMs = combat.startTime;
   const enemyPlayers = enemies.filter((e) => e.info);
+  // 宠物执行的打断(术士 Spell Lock 等)的 SPELL_INTERRUPT src 是宠物 id ——
+  // landed 检测必须连同 owner 的宠物一起认(2026-07-16 DPS baseline ~5 场误标)。
+  const kickerIds = new Set<string>([player.id]);
+  for (const u of Object.values(
+    (combat as { units?: Record<string, ICombatUnit> }).units ?? {},
+  )) {
+    if (u.ownerId === player.id) kickerIds.add(u.id);
+  }
 
   const kicks = player.spellCastEvents.filter(
     (e) =>
@@ -62,14 +70,15 @@ export function analyzeKickAudit(
   );
   if (kicks.length === 0) return [];
 
-  // Landed evidence: every SPELL_INTERRUPT on any enemy sourced by this player.
-  const landedEvents = enemyPlayers.flatMap((enemy) =>
+  // Landed evidence: every SPELL_INTERRUPT on any enemy sourced by this player
+  // (or their pet). ALL interrupt events are also kept: a cast-start that ended
+  // because ANYONE kicked it is not a fake cast.
+  const allInterrupts = enemyPlayers.flatMap((enemy) =>
     enemy.actionIn.filter(
-      (a) =>
-        a.logLine.event === LogEvent.SPELL_INTERRUPT &&
-        a.srcUnitId === player.id,
+      (a) => a.logLine.event === LogEvent.SPELL_INTERRUPT,
     ),
   );
+  const landedEvents = allInterrupts.filter((a) => kickerIds.has(a.srcUnitId));
 
   // Whether ANY cast-start data exists in this match (old archives have none).
   const hasCastStartData = enemyPlayers.some(
@@ -94,19 +103,18 @@ export function analyzeKickAudit(
       (a) => Math.abs(a.logLine.timestamp - kickMs) <= LANDED_PAIR_MS,
     );
     if (landed) {
+      // 原始 SPELL_INTERRUPT 语义:spellId = 踢技,extraSpellId = 被断法术
       const extra = landed as CombatExtraSpellAction;
       entries.push({
         ...base,
         result: "landed",
         interruptedSpellName: getEnglishSpellName(
-          landed.spellId ?? "",
-          landed.spellName ?? "",
+          extra.extraSpellId ?? "",
+          extra.extraSpellName ?? "",
         ),
-        // extraSpellId is the kick itself; landed.spellId the interrupted cast —
-        // keep extra referenced so the pairing intent is explicit.
         kickSpellName: getEnglishSpellName(
-          extra.extraSpellId ?? base.kickSpellId,
-          extra.extraSpellName ?? base.kickSpellName,
+          landed.spellId ?? base.kickSpellId,
+          landed.spellName ?? base.kickSpellName,
         ),
       });
       continue;
@@ -136,7 +144,16 @@ export function analyzeKickAudit(
             c.logLine.timestamp >= stMs &&
             c.logLine.timestamp <= stMs + JUKE_LOOKBACK_MS,
         );
-        if (!completed) {
+        // 该读条被任何人(队友!)打断 = 真读条被踢,不是假读条
+        // (2026-07-16 DPS baseline:队友踢断被误标 "JUKED by fake")
+        const wasInterrupted = allInterrupts.some(
+          (a) =>
+            a.destUnitId === enemy.id &&
+            (a as CombatExtraSpellAction).extraSpellId === st.spellId &&
+            a.logLine.timestamp >= stMs &&
+            a.logLine.timestamp <= stMs + JUKE_LOOKBACK_MS,
+        );
+        if (!completed && !wasInterrupted) {
           jukedBy = getEnglishSpellName(st.spellId ?? "", st.spellName ?? "");
           break outer;
         }

@@ -128,7 +128,7 @@ describe('healerExposureAnalysis — exposure calculation', () => {
     expect(res[0].exposureLabel).toBe('Exposed');
 
     const lines = formatHealerExposureForContext(res);
-    expect(lines.join('\n')).toContain('Full-DR CC in LoS; trinket up (sole CC counter)');
+    expect(lines.join('\n')).toContain('Full-DR CC in LoS; healer trinket up (sole CC counter)');
   });
 
   it('handles passive trinkets (Relentless/Adaptation)', () => {
@@ -585,9 +585,9 @@ describe('healerExposureAnalysis — compact per-window entries', () => {
     const entries = formatHealerExposureEntries([
       makeExposure({ exposureLabel: 'Critical', trinketState: 'on_cooldown', trinketAvailableAtSeconds: 40 }),
     ]);
-    expect(entries[0].line).toContain('trinket on CD (back 0:40)');
+    expect(entries[0].line).toContain('healer trinket on CD (back 0:40)');
     expect(entries[0].line).toContain('⚠ CRITICAL');
-    expect(entries[0].line).toContain('| → no trinket available while Full-DR CC is in LoS');
+    expect(entries[0].line).toContain('| → healer has no trinket available while Full-DR CC is in LoS');
   });
 });
 
@@ -616,13 +616,13 @@ describe('healerExposureAnalysis — formatting', () => {
       '  ENEMY CC KIT (threats to you): Frost Mage (M1): Polymorph [Incapacitate]; Arms Warrior (W1): Intimidating Shout [Disorient]',
     );
     expect(text).toContain('⚠ CRITICAL');
-    expect(text).toContain('trinket on CD (back 0:40)');
+    expect(text).toContain('healer trinket on CD (back 0:40)');
     // Per-window line is compact: spec-only refs, no per-window kit re-enumeration
     const windowLines = lines.filter((l) => l.startsWith('  [0:10]'));
     expect(windowLines).toHaveLength(1);
     expect(windowLines[0]).toContain('IN LoS: Frost Mage: Polymorph Full DR');
     expect(windowLines[0]).toContain('| Pillar-blocked: Arms Warrior');
-    expect(windowLines[0]).toContain('| → no trinket available while Full-DR CC is in LoS');
+    expect(windowLines[0]).toContain('| → healer has no trinket available while Full-DR CC is in LoS');
   });
 
   it('formatHealerCCReceivedForContext produces brief summary', () => {

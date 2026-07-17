@@ -583,15 +583,19 @@ export function analyzePlayerCCAndTrinket(
     if (action.logLine.event !== LogEvent.SPELL_INTERRUPT) continue;
     if (!enemyIds.has(action.srcUnitId)) continue;
     const extraAction = action as unknown as CombatExtraSpellAction;
-    const kickSpellId = extraAction.extraSpellId;
+    // 原始 SPELL_INTERRUPT 语义:spellId = 踢技,extraSpellId = 被断法术
+    //(matchTimeline [KICK] 行一直按此渲染)。移植版此前按老 parser 假设
+    // 取反,连带 lockout 时长查错表 —— 门规谓词分叉第 13 例,2026-07-16
+    // DPS baseline 账本 vs 时间轴矛盾牵出。
+    const kickSpellId = action.spellId ?? '';
     const lockoutDurationSeconds = spells[kickSpellId]?.duration ?? 3;
     interruptInstances.push({
       atSeconds: (action.timestamp - matchStartMs) / 1000,
       lockoutDurationSeconds,
       kickSpellId,
-      kickSpellName: getEnglishSpellName(kickSpellId, extraAction.extraSpellName),
-      interruptedSpellId: action.spellId ?? '',
-      interruptedSpellName: getEnglishSpellName(action.spellId ?? '', action.spellName),
+      kickSpellName: getEnglishSpellName(kickSpellId, action.spellName),
+      interruptedSpellId: extraAction.extraSpellId ?? '',
+      interruptedSpellName: getEnglishSpellName(extraAction.extraSpellId ?? '', extraAction.extraSpellName),
       sourceName: action.srcUnitName,
       sourceSpec: enemySpecMap.get(action.srcUnitId) ?? 'Unknown',
     });

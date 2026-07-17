@@ -470,12 +470,14 @@ export function formatHealerExposureEntries(
     refMap.get(t.enemyName) ?? `${t.enemySpec} (${t.enemyName})`;
 
   return exposures.map((e) => {
+    // 主语显式化(2026-07-16 DPS baseline:021/056 两场 responder 把这里的
+    // 饰品状态误读为 owner 本人的饰品 —— 这是治疗的饰品,必须写明)
     const trinketStr =
       e.trinketState === "available"
-        ? "trinket ready"
+        ? "healer trinket ready"
         : e.trinketState === "passive"
-          ? "passive trinket"
-          : `trinket on CD${e.trinketAvailableAtSeconds !== null ? ` (back ${fmtTime(e.trinketAvailableAtSeconds)})` : ""}`;
+          ? "healer trinket passive"
+          : `healer trinket on CD${e.trinketAvailableAtSeconds !== null ? ` (back ${fmtTime(e.trinketAvailableAtSeconds)})` : ""}`;
 
     const labelStr =
       e.exposureLabel === "Critical"
@@ -525,12 +527,12 @@ export function formatHealerExposureEntries(
     // facts neutrally and let the coach draw the verdict.
     let verdict = "";
     if (e.exposureLabel === "Critical") {
-      verdict = "no trinket available while Full-DR CC is in LoS";
+      verdict = "healer has no trinket available while Full-DR CC is in LoS";
     } else if (
       e.exposureLabel === "Exposed" &&
       exposed.some((t) => t.healerDRLevel === "Full")
     ) {
-      verdict = "Full-DR CC in LoS; trinket up (sole CC counter)";
+      verdict = "Full-DR CC in LoS; healer trinket up (sole CC counter)";
     }
 
     let body = `${e.burstDangerLabel} burst — ${trinketStr} — ${labelStr}${pillarStr}`;

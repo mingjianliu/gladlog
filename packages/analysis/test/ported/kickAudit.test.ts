@@ -136,3 +136,48 @@ describe("kickAudit", () => {
     expect(analyzeKickAudit(player, [enemy], makeCombat())).toHaveLength(0);
   });
 });
+
+describe("kickAudit — DPS baseline 修复(2026-07-16)", () => {
+  it("宠物执行的打断(src=宠物 id)也算 landed", () => {
+    const kickTs = MATCH_START + 20_000;
+    // Spell Lock 19647 若不在 interrupts 分类,用风剪代替语义:owner 施放、宠物落地
+    const player = makeKicker(kickTs);
+    const pet = makeUnit("pet1", { name: "Felhunter", ownerId: "p1" } as any);
+    const enemy = makeUnit("e1", {
+      name: "Enemy",
+      info,
+      actionIn: [
+        makeInterruptEvent(WIND_SHEAR, "Wind Shear", "116", "Frostbolt", kickTs, "pet1", "Felhunter"),
+      ],
+    } as any);
+    const combat = {
+      startTime: MATCH_START,
+      endTime: MATCH_START + 120_000,
+      units: { p1: player, pet1: pet, e1: enemy },
+    } as any;
+    const entries = analyzeKickAudit(player, [enemy], combat);
+    expect(entries[0].result).toBe("landed");
+  });
+
+  it("敌方读条被队友打断 ≠ 假读条:不判 juked", () => {
+    const kickTs = MATCH_START + 20_000;
+    const player = makeKicker(kickTs);
+    const stTs = kickTs - 1_500;
+    const enemy = makeUnit("e1", {
+      name: "Enemy",
+      info,
+      castStartEvents: [castStart("116", stTs, "e1")],
+      // 队友 f2 在读条开始后 1s 打断了它(SPELL_INTERRUPT src=f2,dest=e1)
+      actionIn: [
+        (() => {
+          const ev = makeInterruptEvent("57994", "Wind Shear", "116", "Frostbolt", stTs + 1_000, "f2", "Teammate");
+          ev.destUnitId = "e1";
+          return ev;
+        })(),
+      ],
+    } as any);
+    const entries = analyzeKickAudit(player, [enemy], makeCombat());
+    // 不是 juked(读条是真的,被队友踢了);player 自己的风剪落空 → missed
+    expect(entries[0].result).toBe("missed");
+  });
+});

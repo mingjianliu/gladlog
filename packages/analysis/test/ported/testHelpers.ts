@@ -225,13 +225,14 @@ export function makeInterruptEvent(
   srcUnitId = "enemy-1",
   srcUnitName = "Enemy",
 ): AnyObj {
+  // 原始 SPELL_INTERRUPT 语义:spellId = 踢技,extraSpellId = 被断法术
   return {
     logLine: { event: LogEvent.SPELL_INTERRUPT, timestamp, parameters: [] },
     timestamp,
-    spellId: interruptedSpellId,
-    spellName: interruptedSpellName,
-    extraSpellId: kickSpellId,
-    extraSpellName: kickSpellName,
+    spellId: kickSpellId,
+    spellName: kickSpellName,
+    extraSpellId: interruptedSpellId,
+    extraSpellName: interruptedSpellName,
     srcUnitId,
     srcUnitName,
     destUnitId: "player-1",

@@ -275,7 +275,17 @@ export function auditWindowTargeting(
   for (const w of windows) {
     if (w.durationSeconds < MIN_WINDOW_SECONDS) continue;
     const fromMs = matchStartMs + w.fromSeconds * 1000;
-    const toMs = matchStartMs + w.toSeconds * 1000;
+    // 窗口目标死后的伤害占比无意义 —— 评估截断在目标死亡时刻
+    // (2026-07-16 DPS baseline:≥8 场 responder/judge 点名该 artifact)。
+    const target = enemyById.get(w.targetUnitId);
+    const targetDeathMs = target?.deathRecords
+      .map((d) => d.timestamp)
+      .find((t) => t > fromMs);
+    const toMs = Math.min(
+      matchStartMs + w.toSeconds * 1000,
+      targetDeathMs ?? Infinity,
+    );
+    if ((toMs - fromMs) / 1000 < MIN_WINDOW_SECONDS) continue;
 
     const damageMap = new Map<string, number>();
     for (const d of player.damageOut) {
@@ -304,7 +314,7 @@ export function auditWindowTargeting(
 
     audits.push({
       windowFromSeconds: w.fromSeconds,
-      windowToSeconds: w.toSeconds,
+      windowToSeconds: (toMs - matchStartMs) / 1000,
       windowTargetId: w.targetUnitId,
       windowTargetName: w.targetName,
       playerDamageTotal: total,

@@ -315,3 +315,69 @@ describe("burstLedger — window targeting audit", () => {
     ).toHaveLength(0);
   });
 });
+
+describe("auditWindowTargeting — 目标死亡截断(2026-07-16 baseline 修复)", () => {
+  it("窗口目标死后的伤害不计入占比,windowToSeconds 截断在死亡时刻", () => {
+    const w: IOffensiveWindow = {
+      targetUnitId: "e1",
+      targetName: "Healer",
+      targetSpec: "Holy Paladin",
+      fromSeconds: 20,
+      toSeconds: 60,
+      durationSeconds: 40,
+      friendlyDamageInWindow: 0,
+      damageRatio: 0,
+      capitalized: false,
+      friendlyOffensives: [],
+      bursts: [],
+    };
+    const player = makeUnit("p1", {
+      name: "Ret",
+      info,
+      damageOut: [
+        dmgOut(MATCH_START + 22_000, -80_000, "e1"), // 目标死前:在目标身上
+        dmgOut(MATCH_START + 40_000, -500_000, "e2"), // 目标死后:切了别人(不该惩罚)
+      ],
+    } as any);
+    const e1 = makeUnit("e1", {
+      name: "Healer",
+      info,
+      deathRecords: [{ timestamp: MATCH_START + 30_000 } as any],
+    } as any);
+    const e2 = makeUnit("e2", { name: "Tank", info } as any);
+
+    const audits = auditWindowTargeting(player, [w], [e1, e2], makeCombat());
+    expect(audits).toHaveLength(1);
+    expect(audits[0].windowToSeconds).toBe(30);
+    expect(audits[0].onTargetPct).toBe(100); // 死后那 0.5M 不再稀释占比
+  });
+
+  it("目标死得太快(截断后 < 最小窗口)则整条跳过", () => {
+    const w: IOffensiveWindow = {
+      targetUnitId: "e1",
+      targetName: "Healer",
+      targetSpec: "Holy Paladin",
+      fromSeconds: 20,
+      toSeconds: 60,
+      durationSeconds: 40,
+      friendlyDamageInWindow: 0,
+      damageRatio: 0,
+      capitalized: false,
+      friendlyOffensives: [],
+      bursts: [],
+    };
+    const player = makeUnit("p1", {
+      name: "Ret",
+      info,
+      damageOut: [dmgOut(MATCH_START + 21_000, -80_000, "e1")],
+    } as any);
+    const e1 = makeUnit("e1", {
+      name: "Healer",
+      info,
+      deathRecords: [{ timestamp: MATCH_START + 22_000 } as any],
+    } as any);
+    expect(
+      auditWindowTargeting(player, [w], [e1], makeCombat()),
+    ).toHaveLength(0);
+  });
+});
