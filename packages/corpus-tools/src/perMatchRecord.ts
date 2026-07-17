@@ -1,4 +1,5 @@
 import {
+  computeDpsMetrics,
   computeHealerMetrics,
   enemyCompArchetype,
   extractRotations,
@@ -15,29 +16,34 @@ import {
 import type { PerMatchRecord } from "./cellAggregator";
 import { assignBuildGroup, type KeystoneGate } from "./keystoneGates";
 
-/** 单场 combat → 每个 Friendly 治疗一条记录(纯,可合成 combat 单测)。 */
+/** 单场 combat → 每个 Friendly 玩家一条记录(治疗=IHealerMetrics,
+ * DPS=IDpsMetrics;纯函数,可合成 combat 单测)。沿用 Friendly-only 惯例
+ * (记录者侧数据最完整);spec 不相交保证 cell 内指标集单一。 */
 export function combatToRecords(
   combat: any,
   gates: KeystoneGate[],
 ): PerMatchRecord[] {
   const players = (Object.values(combat.units) as any[]).filter((u) => u.info);
-  const healers = players.filter(
-    (u) => isHealerSpec(u.spec) && u.reaction === CombatUnitReaction.Friendly,
+  const friendly = players.filter(
+    (u) => u.reaction === CombatUnitReaction.Friendly,
   );
   const out: PerMatchRecord[] = [];
-  for (const healer of healers) {
-    const enemies = players.filter((u) => u.reaction !== healer.reaction);
+  for (const unit of friendly) {
+    const enemies = players.filter((u) => u.reaction !== unit.reaction);
+    const healer = isHealerSpec(unit.spec);
     let metrics;
     try {
-      metrics = computeHealerMetrics(combat, healer.name);
+      metrics = healer
+        ? computeHealerMetrics(combat, unit.name)
+        : computeDpsMetrics(combat, unit.name);
     } catch {
       continue;
     }
     const archetype = enemyCompArchetype(enemies);
-    const rotations = extractRotations(healer, combat);
-    const spec = specToString(healer.spec);
+    const rotations = extractRotations(unit, combat);
+    const spec = specToString(unit.spec);
     const gate = gates.find((g) => g.spec === spec);
-    const talents = (healer.info?.talents ?? [])
+    const talents = (unit.info?.talents ?? [])
       .map((t: any) => t.id1)
       .filter(Boolean);
     const buildGroup = gate ? assignBuildGroup(talents, gate) : "*";

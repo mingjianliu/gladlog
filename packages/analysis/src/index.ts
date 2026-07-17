@@ -14,6 +14,7 @@ export * from "./utils/healerOffenseAnalysis";
 export * from "./utils/killWindowTargetSelection";
 export * from "./utils/burstLedger";
 export * from "./utils/kickAudit";
+export * from "./utils/dpsMetrics";
 export * from "./utils/dampening";
 export * from "./utils/deathOutcomeAnalysis";
 export { SpellTag } from "./data/spellTypes";

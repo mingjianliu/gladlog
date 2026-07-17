@@ -43,3 +43,39 @@ npm run logs:fetch-public -- --count 60 --bracket 3v3 --min-rating 1600
 - 所有 wowarenalogs 网络访问都过 `fetchWithRetry`(429/5xx 指数退避)+
   礼貌延时;GraphQL 的 combats 是接口类型,**必须**用
   `... on ArenaMatchDataStub` 内联片段选字段(直接选 400)。
+
+## 5. 高手基准语料(reference corpus)刷新
+
+```bash
+# 全量重建(2300+,三个 bracket 各 1200 场,~1h;LOG_CACHE_DIR 缓存原始日志加速复跑)
+WOW_PATCH=12.1.0.68629 LOG_CACHE_DIR=$HOME/code/gladlog-eval-private/corpus/logcache \
+  npm run corpus:build-reference
+```
+
+产物 `packages/corpus-tools/data/reference_vectors.json`(dev 直读;打包进 release
+resources)。含治疗 6 维 + DPS 7 维(爆发转化/免疫占比/协同/on-target/kick 等,
+谓词=爆发账本三件套)。
+
+**周度自动刷新(需自己安装,一条命令)**:
+
+```bash
+cat > ~/Library/LaunchAgents/com.gladlog.corpus-refresh.plist <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.gladlog.corpus-refresh</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/zsh</string><string>-lc</string>
+    <string>cd $HOME/code/gladlog &amp;&amp; WOW_PATCH=12.1.0.68629 LOG_CACHE_DIR=$HOME/code/gladlog-eval-private/corpus/logcache npm run corpus:build-reference >> /tmp/gladlog-corpus-refresh.log 2>&amp;1</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <dict><key>Weekday</key><integer>0</integer><key>Hour</key><integer>4</integer><key>Minute</key><integer>0</integer></dict>
+</dict>
+</plist>
+PLIST
+launchctl load ~/Library/LaunchAgents/com.gladlog.corpus-refresh.plist
+```
+
+卸载:`launchctl unload ~/Library/LaunchAgents/com.gladlog.corpus-refresh.plist && rm 同文件`。

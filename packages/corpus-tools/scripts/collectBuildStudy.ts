@@ -4,18 +4,19 @@
  * to a JSON the analysis pass reads, so clustering/tests iterate without
  * re-parsing. Solo Shuffle only (richest healer sample).
  */
-import fs from "fs-extra";
-import path from "path";
-import { fileURLToPath } from "url";
-import { fetchMatchStubs, downloadLogText } from "../src/feedClient";
-import { GladLogParser } from "@gladlog/parser";
-import { toLegacyShuffle, CombatUnitReaction } from "@gladlog/parser-compat";
 import {
   computeHealerMetrics,
   enemyCompArchetype,
   isHealerSpec,
   specToString,
 } from "@gladlog/analysis";
+import { GladLogParser } from "@gladlog/parser";
+import { CombatUnitReaction,toLegacyShuffle } from "@gladlog/parser-compat";
+import fs from "fs-extra";
+import path from "path";
+import { fileURLToPath } from "url";
+
+import { downloadLogText,fetchMatchStubs } from "../src/feedClient";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const N = Number(process.env.STUDY_LOGS ?? 600);

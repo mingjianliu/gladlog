@@ -60,11 +60,15 @@ describe("combatToRecords", () => {
     expect(typeof r.metrics.offensiveIndex).toBe("number");
     for (const c of r.crisisEvents) expect(c).toMatch(/^[\x00-\x7F]*$/);
   });
-  it("returns [] when no Friendly healer is present", () => {
+  it("Friendly 非治疗照样出记录(DPS 指标组,pro-comparison P1)", () => {
     const c = synthCombat();
-    // 把 Friendly 治疗换成近战 → 无 Friendly healer
+    // 把 Friendly 治疗换成近战 → 出的是 IDpsMetrics 记录而非 []
     c.units["Me-Realm-US"].spec = WARRIOR;
-    expect(combatToRecords(c, [])).toEqual([]);
+    const recs = combatToRecords(c, []);
+    expect(recs).toHaveLength(1);
+    const m = recs[0]!.metrics as Record<string, unknown>;
+    expect(typeof m.burstCount).toBe("number");
+    expect("offensiveIndex" in m).toBe(false);
   });
 });
 

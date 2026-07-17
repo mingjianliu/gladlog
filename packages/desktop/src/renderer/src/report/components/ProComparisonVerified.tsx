@@ -4,6 +4,7 @@ import { cohortDims } from "../derive/cohortDims";
 import { CohortDimsTable } from "./CohortDimsTable";
 import { bridge } from "../../bridge";
 import {
+  computeDpsMetrics,
   computeHealerMetrics,
   specToString,
   isHealerSpec,
@@ -109,20 +110,30 @@ export function ProComparisonVerified({
         rawLines: [],
       } as unknown as GladMatch);
       const players = Object.values(legacy.units).filter((u) => u.info);
-      const healer = players.find(
-        (u) =>
-          isHealerSpec(u.spec) && u.reaction === CombatUnitReaction.Friendly,
-      );
-      if (!healer) return null;
-      const enemies = players.filter((u) => u.reaction !== healer.reaction);
-      const metrics = computeHealerMetrics(legacy, healer.name);
-      const talents = (healer.info?.talents ?? [])
+      // owner = 日志记录者(与 AI 面板同语义);DPS 记录者走 DPS 指标组
+      // (pro-comparison P1),找不到时回退友方治疗(旧行为)。
+      const owner =
+        players.find(
+          (u) =>
+            u.id === legacy.playerId &&
+            u.reaction === CombatUnitReaction.Friendly,
+        ) ??
+        players.find(
+          (u) =>
+            isHealerSpec(u.spec) && u.reaction === CombatUnitReaction.Friendly,
+        );
+      if (!owner) return null;
+      const enemies = players.filter((u) => u.reaction !== owner.reaction);
+      const metrics = isHealerSpec(owner.spec)
+        ? computeHealerMetrics(legacy, owner.name)
+        : computeDpsMetrics(legacy, owner.name);
+      const talents = (owner.info?.talents ?? [])
         .map((t: { id1: number }) => t.id1)
         .filter(Boolean);
       return {
         matchId,
         healerMetrics: metrics as unknown as Record<string, number | null>,
-        spec: specToString(healer.spec),
+        spec: specToString(owner.spec),
         talents,
         bracket: legacy.startInfo?.bracket ?? "unknown",
         archetype: enemyCompArchetype(enemies),

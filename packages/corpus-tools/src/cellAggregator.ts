@@ -1,4 +1,4 @@
-import type { IHealerMetrics } from "@gladlog/analysis";
+import type { IDpsMetrics, IHealerMetrics } from "@gladlog/analysis";
 
 import type { KeystoneGate } from "./keystoneGates";
 
@@ -7,7 +7,9 @@ export interface PerMatchRecord {
   bracket: string;
   archetype: string;
   buildGroup: string; // "*" = build-agnostic (non-gated spec or unmatched)
-  metrics: IHealerMetrics;
+  /** healer 记录 = IHealerMetrics;dps 记录 = IDpsMetrics。spec 天然不相交,
+   * 同一 cell 内只会出现一种;n=0 的维度由消费方(verifiedComparison)跳过。 */
+  metrics: IHealerMetrics | IDpsMetrics;
   crisisEvents: string[];
 }
 export interface MetricDist {
@@ -40,14 +42,24 @@ export interface Corpus {
   cells: Cell[];
 }
 
-// 逐维取值:6 个标量维;reactionLatency 可为 null(不计入该维分布)。
-const SCALAR_METRICS: Array<keyof IHealerMetrics> = [
+// 逐维取值:healer 6 维 + dps 7 维;null(如 reactionLatency、无爆发场的
+// 比率)不计入该维分布。DPS 维全部有界(比率 0–1/秒/次数),无需 winsorize。
+const SCALAR_METRICS: string[] = [
+  // healer
   "offensiveIndex",
   "ccDensity",
   "reactionLatency",
   "defensiveOverlapRatio",
   "effectiveCastRatio",
   "ccAvoidanceRate",
+  // dps(pro-comparison P1,谓词=爆发账本三件套)
+  "burstConversionRate",
+  "burstIntoDefensiveRatio",
+  "alignedBurstRatio",
+  "onTargetPct",
+  "kickLandedRate",
+  "kicksJukedCount",
+  "firstBurstSeconds",
 ];
 
 function percentile(sorted: number[], p: number): number {
@@ -68,10 +80,10 @@ function percentile(sorted: number[], p: number): number {
 
 function distFor(
   records: PerMatchRecord[],
-  metric: keyof IHealerMetrics,
+  metric: string,
 ): MetricDist {
   let vals = records
-    .map((r) => r.metrics[metric])
+    .map((r) => (r.metrics as Record<string, unknown>)[metric])
     .filter((v): v is number => typeof v === "number" && !Number.isNaN(v))
     .sort((a, b) => a - b);
   // offensiveIndex = damage/heal is unbounded and explodes when a healer barely
