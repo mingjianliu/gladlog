@@ -2,6 +2,13 @@ import { existsSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 import { ensureDirSync } from "fs-extra";
 
+/**
+ * 创建图标缓存服务。
+ *
+ * - 缓存目录由调用方传入（生产环境为 app.getPath('userData')/icons，见 main/index.ts）。
+ * - 文件按图标名落盘为 <name>.jpg，无驱逐策略（磁盘缓存永久保留，靠图标集有限天然有界）。
+ * - 会话级 fetch 预算默认 512，失败名单 failed 为会话级 memo，均不跨会话持久。
+ */
 export function createIconCache(deps: {
   cacheDir: string;
   fetchImpl?: typeof fetch;
