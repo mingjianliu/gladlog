@@ -105,6 +105,14 @@ const LOCAL_KEY = "real · 完整真实局(本地 dev/local)";
 
 function Harness() {
   const [local, setLocal] = useState<StoredMatch | null>(null);
+  // 压测样本池(dev/local/stress-*.json,gitignored;由 make-report-fixture.mjs
+  // --keep-names 从野生日志生成)。清单存在才加载;选中时才拉文件(最大 200MB+)。
+  const [stressIndex, setStressIndex] = useState<
+    Array<{ file: string; label: string }>
+  >([]);
+  const [stressLoaded, setStressLoaded] = useState<Record<string, StoredMatch>>(
+    {},
+  );
   useEffect(() => {
     let cancelled = false;
     fetch("./local/full-match.json")
@@ -113,20 +121,50 @@ function Harness() {
         if (!cancelled && j) setLocal(j as StoredMatch);
       })
       .catch(() => {});
+    fetch("./local/stress-index.json")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (!cancelled && Array.isArray(j)) setStressIndex(j);
+      })
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
   }, []);
 
-  const fixtures: Record<string, StoredMatch> = local
-    ? { [LOCAL_KEY]: local, ...BASE_FIXTURES }
-    : BASE_FIXTURES;
+  const fixtures: Record<string, StoredMatch> = {
+    ...(local ? { [LOCAL_KEY]: local } : {}),
+    ...BASE_FIXTURES,
+    ...stressLoaded,
+  };
+  for (const s of stressIndex) {
+    if (!(s.label in fixtures)) {
+      fixtures[s.label] = null as unknown as StoredMatch; // 占位:选中时按需加载
+    }
+  }
   const keys = Object.keys(fixtures);
   const [which, setWhich] = useState(keys[0]!);
   // 本地完整局加载完成后自动切过去
   useEffect(() => {
     if (local) setWhich(LOCAL_KEY);
   }, [local]);
+
+  // 选中未加载的压测样本 → 按需 fetch(大文件只在需要时进内存)
+  useEffect(() => {
+    const entry = stressIndex.find((s) => s.label === which);
+    if (!entry || stressLoaded[which]) return;
+    let cancelled = false;
+    fetch(`./local/${entry.file}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (!cancelled && j)
+          setStressLoaded((prev) => ({ ...prev, [which]: j as StoredMatch }));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [which, stressIndex, stressLoaded]);
 
   const current = fixtures[which] ?? fixtures[keys[0]!]!;
   return (
@@ -146,7 +184,11 @@ function Harness() {
         <span className="harness-hint">纯浏览器渲染 · HMR · 免 Electron</span>
       </div>
       <div className="harness-body">
-        <MatchReport key={which} source={current} matchId={which} />
+        {current ? (
+          <MatchReport key={which} source={current} matchId={which} />
+        ) : (
+          <div style={{ padding: 24 }}>加载压测样本中…(大文件请稍候)</div>
+        )}
       </div>
     </>
   );
