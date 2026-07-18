@@ -218,7 +218,7 @@ describe("富行 meta 字段(backlog #7)", () => {
     const retrieved = await getPromise;
     expect(retrieved).not.toBeNull();
     const tEnd = Date.now();
-    console.log(`[probe] get took ${tEnd - t0}ms, page took ${pageEnd - pageStart}ms`);
+    console.warn(`[probe] get took ${tEnd - t0}ms, page took ${pageEnd - pageStart}ms`);
   });
 
   it("LRU 缓存正常工作：最多缓存 2 个条目且遵循 LRU 淘汰", async () => {
