@@ -45,13 +45,19 @@ description: gladlog desktop(Electron)改代码的工程约定与坑。改 packa
 ```bash
 npm test --workspace=packages/desktop \
   && npm run typecheck \
-  && npx eslint packages/desktop/src --quiet
+  && npx eslint . --quiet
 ```
+
+- **lint 必须全仓 `.`**,不能只 `packages/desktop/src`:CI 的 Lint 步是全仓,
+  test 文件/scripts 里一个 `console.log` 就能红(2026-07-18 实锤);
 
 - CI 的 `tsc -p` 包含 **test 文件**,本地 vitest 不查类型;
 - CI 有独立 **Lint 步**,error 级 no-unused-vars 会挡 merge;
 - push 后 `gh run watch <显式 run id> --exit-status`(push 完立刻取 latest
   会抓到上一条 run);
+- **复合命令里绝不 `cd`**:`cd packages/desktop && …` 会把 shell cwd 永久留在
+  子目录,后续所有相对路径命令(git add、npm --workspace)静默错位(一个
+  session 连踩三次)。要么绝对路径,要么单命令内 `(cd … && …)` 子壳。
 - **`grep -c` 计数为 0 时退出码是 1**,放在 `&&` 链里会静默咬断后面的
   commit/push——检查用 `grep -c ... || true` 或单独跑。
 
