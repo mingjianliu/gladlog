@@ -730,31 +730,50 @@ pre {
   text-anchor: middle;
   pointer-events: none;
 }
-/* 竞技场框体(替代旧 legend):友方/敌方两组,血量常驻可读 */
-.rpt-replay-frames-row {
-  display: flex;
-  gap: 10px;
+/* 竞技场框体(1f):贴场地两侧 96px 列,友左敌右 */
+.rpt-replay-arena-grid {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr) 96px;
+  gap: 8px;
+  align-items: start;
   width: 100%;
-  justify-content: center;
+}
+.rpt-replay-arena-grid > svg {
+  grid-column: 2;
 }
 .rpt-replay-frames {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  min-width: 150px;
-  flex: 1;
-  max-width: 220px;
+  gap: 4px;
+  padding-top: 8px;
+}
+.rpt-replay-frames.friendly {
+  grid-column: 1;
+  grid-row: 1;
+}
+.rpt-replay-frames.enemy {
+  grid-column: 3;
+  grid-row: 1;
 }
 .rpt-frame {
   display: flex;
   align-items: center;
-  gap: 6px;
   background: var(--surface);
-  border: 1px solid var(--hairline);
+  border: 1px solid var(--hairline-soft);
   border-radius: 5px;
-  padding: 3px 7px;
+  padding: 4px 7px;
   font-size: 11px;
   cursor: default;
+}
+.rpt-frame-burst {
+  margin-left: 4px;
+  font-size: 9px;
+  color: var(--loss);
+}
+.rpt-frame-pct {
+  display: block;
+  font-size: 10px;
+  margin-top: 1px;
 }
 .rpt-replay-frames.enemy .rpt-frame {
   border-left: 2px solid var(--loss);
@@ -2596,4 +2615,58 @@ pre {
   bottom: 0;
   width: 3px;
   border-radius: 1.5px;
+}
+
+/* ── 1f:控件条 + 泳道 ── */
+.rpt-replay-play {
+  border: 1px solid var(--accent);
+  color: var(--accent-text);
+  background: transparent;
+  border-radius: 7px;
+}
+.rpt-replay-play:hover {
+  background: var(--accent-fill);
+}
+.rpt-replay-hints {
+  font-size: 11px;
+  color: #595d6c;
+  margin-top: 6px;
+  text-align: center;
+}
+/* 每 5s 一条 1px 背景分隔线(PX_PER_SEC=16 → 80px) */
+.rpt-gcd-col-body {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 79px,
+    var(--surface) 79px,
+    var(--surface) 80px
+  );
+}
+.rpt-gcd-legend {
+  font-size: 11px;
+  color: var(--accent-text);
+}
+.rpt-gcd-cursor-badge {
+  position: absolute;
+  right: 0;
+  top: -7px;
+  background: var(--accent);
+  color: var(--bg);
+  font-size: 9px;
+  border-radius: 3px;
+  padding: 0 4px;
+  font-variant-numeric: tabular-nums;
+}
+/* 大招 chip(1f):accent 族;「最近 GCD」保持描金,不再冲突 */
+.rpt-gcd-act.major {
+  background: var(--accent-fill);
+  border: 1px solid var(--accent-line);
+  border-left: 2px solid var(--accent);
+}
+.rpt-gcd-act.major .rpt-gcd-act-name {
+  color: var(--accent-text);
+}
+.rpt-gcd-act-cd {
+  color: var(--accent-text);
 }

@@ -8,7 +8,7 @@ import type { ReportSource } from "../derive/types";
 
 const PX_PER_SEC = 16;
 const GCD_MS = 1500;
-const TICK_SEC = 15;
+const TICK_SEC = 5; // 1f:刻度从 15s 加密到 5s(背景另有每 5s 分隔线)
 const HEAD_H = 30; // 列头高度,时间轴/光标需下移这么多以对齐列体
 const CHIP_H = 23;
 const CHIP_STEP = 26; // 同列相邻 chip 最小间距:密集时下推,避免重叠
@@ -160,6 +160,7 @@ export function GcdSwimlane({
     <div className="rpt-gcd">
       <div className="rpt-gcd-head">
         <span className="rpt-card-label">GCD 模式 · 每 GCD 谁做了什么</span>
+        <span className="rpt-gcd-legend">▮ 大招</span>
         <span className="rpt-gcd-sub">与地图共享时间轴</span>
       </div>
 
@@ -322,7 +323,12 @@ export function GcdSwimlane({
           <div
             className="rpt-gcd-cursor"
             style={{ top: HEAD_H + Math.min(contentH, Math.max(0, yFor(t))) }}
-          />
+          >
+            {/* 右端时间徽标(1f) */}
+            <span className="rpt-gcd-cursor-badge">
+              {mmss(Math.max(0, (t - startTime) / 1000))}
+            </span>
+          </div>
         </div>
       </div>
     </div>
