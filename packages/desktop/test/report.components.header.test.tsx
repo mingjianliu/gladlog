@@ -7,19 +7,21 @@ import { loadMatchFixture } from "./fixtures/loadFixture";
 
 const m = loadMatchFixture();
 
-describe("ReportHeader", () => {
-  it("渲染结果、bracket、全部玩家名", () => {
-    render(<ReportHeader source={m} />);
-    expect(screen.getByText(m.result)).toBeTruthy();
+describe("ReportHeader(1c 单行页头)", () => {
+  it("渲染本地化胜负 + bracket·地图·时长;玩家名不再出现在页头", () => {
+    const { container } = render(<ReportHeader source={m} />);
+    expect(
+      screen.getByText(m.result.toLowerCase() === "win" ? "胜利" : "失败"),
+    ).toBeTruthy();
     expect(screen.getByText(new RegExp(m.bracket))).toBeTruthy();
     for (const u of Object.values(m.units)) {
       if (u.kind === "Player" && u.info)
-        expect(screen.getByText(u.name)).toBeTruthy();
+        expect(container.textContent).not.toContain(u.name);
     }
   });
-  it("roundLabel 显示", () => {
+  it("roundLabel 并入 meta 行", () => {
     render(<ReportHeader source={m} roundLabel="Round 2" />);
-    expect(screen.getByText("Round 2")).toBeTruthy();
+    expect(screen.getByText(/Round 2/)).toBeTruthy();
   });
 });
 

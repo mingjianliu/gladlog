@@ -13,7 +13,9 @@ const m = loadMatchFixture();
 describe("MatchReport", () => {
   it("组装:头/榜单卡/时间轴齐全(全宽,无侧栏)", () => {
     const { container } = render(<MatchReport source={m} />);
-    expect(screen.getByText(m.result)).toBeTruthy();
+    expect(
+      screen.getByText(m.result.toLowerCase() === "win" ? "胜利" : "失败"),
+    ).toBeTruthy();
     expect(container.querySelector(".rpt-meters-card")).toBeTruthy();
     expect(
       container.querySelector("[data-testid='rpt-timeline']"),

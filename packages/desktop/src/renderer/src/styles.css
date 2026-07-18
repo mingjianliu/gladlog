@@ -2670,3 +2670,119 @@ pre {
 .rpt-gcd-act-cd {
   color: var(--accent-text);
 }
+
+/* ── 1c:战报页头一行 + 窗口列表 + 两栏 + 死亡回顾常驻栏 ── */
+.rpt-head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 2px 0;
+}
+.rpt-head-left {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.rpt-head-result {
+  font-size: 16px;
+  font-weight: 600;
+}
+.rpt-head-meta {
+  font-size: 12px;
+  color: var(--mute);
+}
+.rpt-head-tabs {
+  margin-top: 0;
+}
+.rpt-windows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+.rpt-window {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg);
+  border: 1px solid var(--hairline-soft);
+  border-radius: 7px;
+  padding: 5px 10px;
+  font-size: 12px;
+}
+.rpt-window-click {
+  cursor: pointer;
+}
+.rpt-window-click:hover {
+  border-color: var(--accent-line);
+}
+.rpt-window-bar {
+  width: 3px;
+  align-self: stretch;
+  border-radius: 2px;
+  flex: none;
+}
+.rpt-window-t {
+  color: var(--mute);
+  font-variant-numeric: tabular-nums;
+  flex: none;
+}
+.rpt-window-title {
+  color: var(--ink);
+}
+.rpt-window-detail {
+  color: var(--ink-2);
+}
+.rpt-window-go {
+  margin-left: auto;
+  color: var(--accent);
+}
+.rpt-body-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-items: start;
+}
+.rpt-recap-col {
+  min-width: 0;
+}
+.rpt-recap-placeholder {
+  border: 1px dashed var(--hairline);
+  border-radius: 8px;
+  color: var(--mute);
+  font-size: 12.5px;
+  padding: 32px 0;
+  text-align: center;
+}
+.rpt-meter-glyph {
+  width: 17px;
+  height: 17px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8px;
+  font-weight: 700;
+  color: #10121c;
+  flex: none;
+}
+.rpt-tl-death-dot {
+  fill: var(--surface);
+  stroke: var(--loss);
+  stroke-width: 1.5;
+}
+.rpt-tl-death-x {
+  fill: var(--loss);
+  font-size: 7px;
+  font-weight: 700;
+}
+.rpt-tl-death-label {
+  fill: var(--ink-2);
+  font-size: 9px;
+}
+.rpt-tl-band-burst {
+  fill: rgba(217, 168, 66, 0.16);
+}
+.rpt-tl-band-vulnerable {
+  fill: rgba(224, 133, 133, 0.14);
+}

@@ -6,7 +6,7 @@ import type { TimelineData } from "../derive/timeline";
 import type { VulnBand } from "../derive/vulnWindows";
 
 const W = 800,
-  H = 220,
+  H = 240,
   PAD = { l: 34, r: 8, t: 18, b: 18 };
 
 /**
@@ -134,7 +134,7 @@ export function Timeline({
             className="rpt-tl-line"
             fill="none"
             stroke={classColor(s.classId)}
-            strokeWidth={1.5}
+            strokeWidth={2}
             strokeLinejoin="round"
             strokeLinecap="round"
             vectorEffect="non-scaling-stroke"
@@ -152,6 +152,7 @@ export function Timeline({
             <title>{s.name}</title>
           </path>
         ))}
+        {/* 死亡标记(1c):圆点 + ✕ + 上方名字·时间标注 */}
         {deaths.map((d, i) => (
           <g
             key={i}
@@ -163,7 +164,13 @@ export function Timeline({
               onDeathClick ? () => onDeathClick(d.unitId, d.t) : undefined
             }
           >
-            <path d="M-5,-10 L5,-10 L0,0 Z" />
+            <circle r={5} className="rpt-tl-death-dot" />
+            <text y={2.6} className="rpt-tl-death-x" textAnchor="middle">
+              ✕
+            </text>
+            <text y={-8} className="rpt-tl-death-label" textAnchor="middle">
+              {d.name.split("-")[0]} {relSec(d.t)}s
+            </text>
             <title>{`${d.name} 死亡 @ ${relSec(d.t)}s${onDeathClick ? " — 点击看死亡回顾" : ""}`}</title>
           </g>
         ))}

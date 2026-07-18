@@ -1,14 +1,23 @@
 import { zoneMetadata } from "@gladlog/analysis";
 
 import type { ReportSource } from "../derive/types";
-import { deriveRoster } from "../derive/roster";
-import { classColor, specName } from "../data/gameConstants";
 
 function fmtDuration(ms: number): string {
   const s = Math.max(0, Math.round(ms / 1000));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
+const RESULT_LABEL: Record<string, string> = {
+  win: "胜利",
+  loss: "失败",
+  lose: "失败",
+  draw: "平局",
+};
+
+/**
+ * 页头一行(1c):胜负 + 赛制·地图·时长。玩家名/评分不再出现在页头
+ * (它们在榜单里);右侧视图 tab 由 MatchReport 排进同一行。
+ */
 export function ReportHeader({
   source,
   roundLabel,
@@ -16,50 +25,18 @@ export function ReportHeader({
   source: ReportSource;
   roundLabel?: string;
 }) {
-  const teams = deriveRoster(source);
+  const res = source.result.toLowerCase();
   return (
-    <header className="rpt-header">
-      <div className="rpt-team">
-        {teams[0]?.players.map((p) => (
-          <div
-            key={p.unitId}
-            className="rpt-player"
-            style={{ borderLeftColor: classColor(p.classId) }}
-          >
-            <span className="rpt-player-name">{p.name}</span>
-            <span className="rpt-player-sub">
-              {specName(p.specId)}
-              {p.rating !== null ? ` · ${p.rating}` : ""}
-            </span>
-          </div>
-        ))}
-      </div>
-      <div className="rpt-center">
-        {roundLabel ? <div className="rpt-round">{roundLabel}</div> : null}
-        <div className={`rpt-result rpt-result-${source.result.toLowerCase()}`}>
-          {source.result}
-        </div>
-        <div className="rpt-meta">
-          {source.bracket} ·{" "}
-          {zoneMetadata[String(source.zoneId)]?.name ?? `zone ${source.zoneId}`}{" "}
-          · {fmtDuration(source.endTime - source.startTime)}
-        </div>
-      </div>
-      <div className="rpt-team rpt-team-right">
-        {teams[1]?.players.map((p) => (
-          <div
-            key={p.unitId}
-            className="rpt-player"
-            style={{ borderLeftColor: classColor(p.classId) }}
-          >
-            <span className="rpt-player-name">{p.name}</span>
-            <span className="rpt-player-sub">
-              {specName(p.specId)}
-              {p.rating !== null ? ` · ${p.rating}` : ""}
-            </span>
-          </div>
-        ))}
-      </div>
-    </header>
+    <div className="rpt-head-left">
+      <span className={`rpt-head-result rpt-result-${res}`}>
+        {RESULT_LABEL[res] ?? source.result}
+      </span>
+      <span className="rpt-head-meta">
+        {source.bracket} ·{" "}
+        {zoneMetadata[String(source.zoneId)]?.name ?? `zone ${source.zoneId}`} ·{" "}
+        {fmtDuration(source.endTime - source.startTime)}
+        {roundLabel ? ` · ${roundLabel}` : ""}
+      </span>
+    </div>
   );
 }

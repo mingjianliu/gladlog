@@ -16,6 +16,7 @@ import { ReplayView } from "./ReplayView";
 import { ReportHeader } from "./ReportHeader";
 import { StructuredAnalysisPanel } from "./StructuredAnalysisPanel";
 import { Timeline } from "./Timeline";
+import { WindowList } from "./WindowList";
 
 type View = "report" | "replay" | "ai";
 
@@ -82,40 +83,65 @@ export function MatchReport({
 
   return (
     <div className="rpt-match">
-      <ReportHeader source={source} roundLabel={roundLabel} />
-      <div className="rpt-view-tabs">
-        {(Object.keys(VIEW_LABEL) as View[]).map((k) => (
-          <button
-            key={k}
-            className={k === view ? "active" : ""}
-            onClick={() => setView(k)}
-          >
-            {VIEW_LABEL[k]}
-          </button>
-        ))}
+      {/* 页头一行(1c):胜负+meta 左,视图 tab 右 */}
+      <div className="rpt-head-row">
+        <ReportHeader source={source} roundLabel={roundLabel} />
+        <div className="rpt-view-tabs rpt-head-tabs">
+          {(Object.keys(VIEW_LABEL) as View[]).map((k) => (
+            <button
+              key={k}
+              className={k === view ? "active" : ""}
+              onClick={() => setView(k)}
+            >
+              {VIEW_LABEL[k]}
+            </button>
+          ))}
+        </div>
       </div>
       {view === "report" && (
         <div className="rpt-body">
-          <Meters
-            rows={summary}
-            mode={mode}
-            onMode={setMode}
-            playerTeamId={source.playerTeamId}
-            hidden={hidden}
-            onToggleUnit={toggleUnit}
-            statsRows={statsRows}
-            durationS={(source.endTime - source.startTime) / 1000}
-            onSeek={handleSeekEvent}
-            source={source}
-          />
-          <Timeline
-            data={timeline}
-            hidden={hidden}
-            onSelectUnit={toggleUnit}
-            onDeathClick={openRecap}
-            bands={vulnBands}
-            onBandClick={(tS) => handleSeekEvent(tS, [])}
-          />
+          {/* 主卡:生命曲线 + 窗口列表(1c) */}
+          <div>
+            <Timeline
+              data={timeline}
+              hidden={hidden}
+              onSelectUnit={toggleUnit}
+              onDeathClick={openRecap}
+              bands={vulnBands}
+              onBandClick={(tS) => handleSeekEvent(tS, [])}
+            />
+            <WindowList bands={vulnBands} onSeek={handleSeekEvent} />
+          </div>
+          {/* 下方两栏:榜单 | 死亡回顾常驻栏(1c) */}
+          <div className="rpt-body-cols">
+            <Meters
+              rows={summary}
+              mode={mode}
+              onMode={setMode}
+              playerTeamId={source.playerTeamId}
+              hidden={hidden}
+              onToggleUnit={toggleUnit}
+              statsRows={statsRows}
+              durationS={(source.endTime - source.startTime) / 1000}
+              onSeek={handleSeekEvent}
+              source={source}
+            />
+            <div className="rpt-recap-col">
+              {recap ? (
+                <DeathRecapCard
+                  recap={recap}
+                  onClose={() => setRecap(null)}
+                  onJump={(tSeconds, unitNames) => {
+                    handleSeekEvent(tSeconds, unitNames);
+                  }}
+                />
+              ) : (
+                <div className="rpt-recap-placeholder">
+                  点击曲线上的 ✕ 查看死亡回顾
+                </div>
+              )}
+            </div>
+          </div>
           <BurstLedgerCard players={ledgerPlayers} onSeek={handleSeekEvent} />
         </div>
       )}
@@ -126,8 +152,8 @@ export function MatchReport({
           onDeathClick={openRecap}
         />
       )}
-      {/* 死亡回顾卡:战报与回放两个视图共用(AI 视图不渲染) */}
-      {view !== "ai" && recap && (
+      {/* 死亡回顾浮层:仅回放视图(战报视图已改为右栏常驻位,1c) */}
+      {view === "replay" && recap && (
         <DeathRecapCard
           recap={recap}
           onClose={() => setRecap(null)}

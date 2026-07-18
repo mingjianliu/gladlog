@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
+import { classGlyph } from "../data/gameConstants";
 import { deriveDetailBreakdown } from "../derive/detailBreakdown";
 import { type MeterMode, meterRows } from "../derive/meterRows";
 import type { StatsRow } from "../derive/statsTable";
@@ -108,12 +109,19 @@ export function Meters({
                     onClick={() => onToggleUnit?.(r.unitId)}
                   >
                     <span
-                      className="rpt-meter-dot"
-                      style={{
-                        background: off ? "transparent" : r.color,
-                        borderColor: r.color,
-                      }}
-                    />
+                      className="rpt-meter-glyph"
+                      style={
+                        off
+                          ? {
+                              background: "transparent",
+                              border: `1.5px solid ${r.color}`,
+                              color: r.color,
+                            }
+                          : { background: r.color }
+                      }
+                    >
+                      {classGlyph(r.classId)}
+                    </span>
                     {r.name}
                   </button>
                   <span
