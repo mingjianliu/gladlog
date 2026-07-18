@@ -1,6 +1,11 @@
+import { useEffect, useState } from "react";
+
+import { deriveDetailBreakdown } from "../derive/detailBreakdown";
 import { type MeterMode, meterRows } from "../derive/meterRows";
 import type { StatsRow } from "../derive/statsTable";
 import type { UnitTotals } from "../derive/summary";
+import type { ReportSource } from "../derive/types";
+import { BreakdownTable } from "./BreakdownTable";
 import { StatsTable } from "./StatsTable";
 
 const MODE_LABEL: Record<MeterMode, string> = {
@@ -20,6 +25,7 @@ export function Meters({
   statsRows,
   durationS,
   onSeek,
+  source,
 }: {
   rows: UnitTotals[];
   mode: MeterMode;
@@ -33,7 +39,13 @@ export function Meters({
   durationS?: number;
   /** 统计明细的回放跳转(v2)。 */
   onSeek?: (tSeconds: number, unitNames: string[]) => void;
+  /** 明细展开数据源(backlog #11);未传则行不可展开(旧调用形态)。 */
+  source?: ReportSource;
 }) {
+  // 行内明细展开:同一时刻只展开一人;切模式收起
+  const [expandedUnitId, setExpandedUnitId] = useState<string | null>(null);
+  useEffect(() => setExpandedUnitId(null), [mode]);
+  const expandable = source != null && mode !== "stats";
   const items = meterRows(rows, mode === "stats" ? "damage" : mode);
   const modes = (Object.keys(MODE_LABEL) as MeterMode[]).filter(
     (k) => k !== "stats" || (statsRows?.length ?? 0) > 0,
@@ -55,7 +67,11 @@ export function Meters({
         </div>
       </div>
       {mode === "stats" && statsRows ? (
-        <StatsTable rows={statsRows} durationS={durationS ?? 1} onSeek={onSeek} />
+        <StatsTable
+          rows={statsRows}
+          durationS={durationS ?? 1}
+          onSeek={onSeek}
+        />
       ) : (
         <div className="rpt-meters">
           {items.map((r) => {
@@ -69,32 +85,59 @@ export function Meters({
               .filter(Boolean)
               .join(" ");
             return (
-              <div
-                key={r.unitId}
-                className={off ? "rpt-meter-row off" : "rpt-meter-row"}
-                title={`${r.name}: ${r.label}`}
-              >
-                <button
-                  type="button"
-                  className={nameCls}
-                  onClick={() => onToggleUnit?.(r.unitId)}
+              <div key={r.unitId} className="rpt-meter-unit">
+                <div
+                  className={off ? "rpt-meter-row off" : "rpt-meter-row"}
+                  title={`${r.name}: ${r.label}`}
                 >
+                  <button
+                    type="button"
+                    className={nameCls}
+                    onClick={() => onToggleUnit?.(r.unitId)}
+                  >
+                    <span
+                      className="rpt-meter-dot"
+                      style={{
+                        background: off ? "transparent" : r.color,
+                        borderColor: r.color,
+                      }}
+                    />
+                    {r.name}
+                  </button>
                   <span
-                    className="rpt-meter-dot"
-                    style={{
-                      background: off ? "transparent" : r.color,
-                      borderColor: r.color,
-                    }}
+                    className={
+                      expandable
+                        ? "rpt-meter-body rpt-meter-clickable"
+                        : "rpt-meter-body"
+                    }
+                    onClick={
+                      expandable
+                        ? () =>
+                            setExpandedUnitId((cur) =>
+                              cur === r.unitId ? null : r.unitId,
+                            )
+                        : undefined
+                    }
+                  >
+                    <span className="rpt-meter-bar-track">
+                      <span
+                        className="rpt-meter-bar"
+                        style={{ width: `${r.widthPct}%`, background: r.color }}
+                      />
+                    </span>
+                    <span className="rpt-meter-value">{r.label}</span>
+                  </span>
+                </div>
+                {expandable && expandedUnitId === r.unitId && (
+                  <BreakdownTable
+                    {...deriveDetailBreakdown(
+                      source,
+                      r.unitId,
+                      mode as "damage" | "healing" | "taken",
+                    )}
+                    mode={mode as "damage" | "healing" | "taken"}
                   />
-                  {r.name}
-                </button>
-                <span className="rpt-meter-bar-track">
-                  <span
-                    className="rpt-meter-bar"
-                    style={{ width: `${r.widthPct}%`, background: r.color }}
-                  />
-                </span>
-                <span className="rpt-meter-value">{r.label}</span>
+                )}
               </div>
             );
           })}

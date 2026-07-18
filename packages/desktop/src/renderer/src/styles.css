@@ -2131,3 +2131,52 @@ pre {
   display: block;
   margin-bottom: 2px;
 }
+
+/* ── 战报明细 breakdown(meters 行内展开)── */
+.rpt-meter-body {
+  display: contents;
+}
+.rpt-meter-clickable {
+  cursor: pointer;
+}
+.rpt-meter-clickable:hover .rpt-meter-value {
+  color: var(--gold);
+}
+.rpt-breakdown {
+  width: 100%;
+  margin: 4px 0 10px;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.rpt-breakdown th {
+  text-align: left;
+  color: var(--mute);
+  font-weight: 500;
+  padding: 2px 8px;
+  border-bottom: 1px solid var(--hairline);
+}
+.rpt-breakdown td {
+  padding: 3px 8px;
+  border-bottom: 1px solid var(--hairline-soft);
+  font-variant-numeric: tabular-nums;
+}
+.rpt-breakdown-spell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.rpt-breakdown-tag {
+  font-size: 10px;
+  color: var(--ink-2);
+  border: 1px solid var(--hairline);
+  border-radius: 3px;
+  padding: 0 4px;
+}
+.rpt-breakdown-rest td {
+  color: var(--mute);
+}
+.rpt-breakdown-empty {
+  color: var(--mute);
+  font-size: 12px;
+  padding: 4px 8px;
+}
