@@ -68,7 +68,8 @@ pre {
 /* ── 应用骨架 ── */
 .app-topbar {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
+  gap: 28px;
   align-items: center;
   padding: 10px 16px;
   border-bottom: 1px solid var(--hairline);
@@ -2673,6 +2674,7 @@ pre {
   display: flex;
   align-items: baseline;
   gap: 10px;
+  margin-left: auto;
 }
 .rpt-head-result {
   font-size: 16px;

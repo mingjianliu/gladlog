@@ -85,9 +85,8 @@ export function MatchReport({
 
   return (
     <div className="rpt-match">
-      {/* 页头一行(1c):胜负+meta 左,视图 tab 右 */}
+      {/* 页头一行:视图 tab 靠左(用户反馈),胜负+meta 靠右 */}
       <div className="rpt-head-row">
-        <ReportHeader source={source} roundLabel={roundLabel} />
         <div className="rpt-view-tabs rpt-head-tabs">
           {(Object.keys(VIEW_LABEL) as View[]).map((k) => (
             <button
@@ -99,6 +98,7 @@ export function MatchReport({
             </button>
           ))}
         </div>
+        <ReportHeader source={source} roundLabel={roundLabel} />
       </div>
       {view === "report" && (
         <div className="rpt-body">
