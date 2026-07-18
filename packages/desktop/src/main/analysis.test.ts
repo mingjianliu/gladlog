@@ -246,3 +246,26 @@ describe("跨场聚合(phase3 #3b)", () => {
     expect(agg.find((a) => a.category === "cd")!.count).toBe(1);
   });
 });
+
+describe("fallbackReason(0 finding 可解释)", () => {
+  it("无候选 → no-candidates", async () => {
+    const { s: svc1, emitted } = svc("unused");
+    await svc1.run({ ...input, candidates: [] });
+    const done = emitted.find((e) => e.ch === "gladlog:analysis:done")!;
+    expect(done.p.result.fallbackReason).toBe("no-candidates");
+  });
+  it("无 client → no-client;坏 JSON → bad-json", async () => {
+    const a = svc("unused", null);
+    await a.s.run(input);
+    expect(
+      a.emitted.find((e) => e.ch === "gladlog:analysis:done")!.p.result
+        .fallbackReason,
+    ).toBe("no-client");
+    const b = svc("not json at all");
+    await b.s.run(input);
+    expect(
+      b.emitted.find((e) => e.ch === "gladlog:analysis:done")!.p.result
+        .fallbackReason,
+    ).toBe("bad-json");
+  });
+});

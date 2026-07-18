@@ -34,6 +34,8 @@ export type AnalysisResult = {
   findings: Finding[];
   dropped: number;
   hadNarration: boolean;
+  /** 确定性回退的原因(hadNarration=false 时);旧缓存无此字段。 */
+  fallbackReason?: "no-candidates" | "no-client" | "bad-json";
 };
 
 export function createAnalysisService(deps: {
@@ -80,13 +82,13 @@ export function createAnalysisService(deps: {
       deps.emit("gladlog:analysis:done", { matchId: input.matchId, result });
     };
 
-    // deterministic fallback: no narration, just the candidate count as empty findings
-    const fallback = () =>
-      finish({ findings: [], dropped: 0, hadNarration: false });
+    // deterministic fallback: no narration;reason 让 UI 分因显示(0 finding 可解释)
+    const fallback = (reason: "no-candidates" | "no-client" | "bad-json") =>
+      finish({ findings: [], dropped: 0, hadNarration: false, fallbackReason: reason });
 
-    if (input.candidates.length === 0) return fallback();
+    if (input.candidates.length === 0) return fallback("no-candidates");
     const client = resolveAiClient(settings, deps.clientFactory);
-    if (!client) return fallback();
+    if (!client) return fallback("no-client");
 
     try {
       const prompt = buildFindingsPrompt(
@@ -118,7 +120,7 @@ export function createAnalysisService(deps: {
         parsed = JSON.parse(raw.trim());
         if (!Array.isArray(parsed)) throw new Error("not an array");
       } catch {
-        return fallback(); // invalid JSON → deterministic
+        return fallback("bad-json"); // invalid JSON → deterministic
       }
       const audit = auditFindings(parsed, input.candidates);
       finish({

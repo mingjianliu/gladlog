@@ -20,7 +20,24 @@ type AnalysisResult = {
   findings: Finding[];
   dropped: number;
   hadNarration: boolean;
+  fallbackReason?: "no-candidates" | "no-client" | "bad-json";
 };
+
+/** 0 finding 的中文解释(按回退原因/审计丢弃区分,不再用统一英文提示)。 */
+function zeroFindingText(r: AnalysisResult): string {
+  if (r.dropped > 0)
+    return `模型输出了 ${r.dropped} 条,但全部未通过审计(裸数字/编造事件/因果断言)被丢弃 —— 可点「重新分析」再试。`;
+  switch (r.fallbackReason) {
+    case "no-candidates":
+      return "本场无可指摘事件(无人阵亡、资源使用无明显问题)—— 这是好事,不硬编教练意见。";
+    case "no-client":
+      return "未配置 AI(设置里填 API key 或本地 CLI 后端),仅展示确定性事件。";
+    case "bad-json":
+      return "模型返回格式异常,已回退为确定性展示 —— 可点「重新分析」再试。";
+    default:
+      return "未生成解说(旧版本缓存),点「重新分析」重新生成。";
+  }
+}
 
 type State = "idle" | "running" | "done" | "error";
 
@@ -317,15 +334,14 @@ export function StructuredAnalysisPanel({
                 onSelectEvidence={setActiveEventIds}
               />
               <p
+                data-testid="zero-finding-reason"
                 style={{
                   color: "var(--mute)",
                   fontSize: "12px",
-                  fontStyle: "italic",
                   marginBottom: "12px",
                 }}
               >
-                Showing candidate events deterministically. No narration
-                generated.
+                {zeroFindingText(result)}
               </p>
               <FindingsList findings={[]} onSelect={setActiveEventIds} />
             </div>
