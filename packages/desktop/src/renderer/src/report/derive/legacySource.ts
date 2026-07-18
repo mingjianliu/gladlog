@@ -20,6 +20,8 @@ const UNIT_ARRAYS = [
   "petCasts",
 ] as const;
 
+const cache = new WeakMap<ReportSource, ReturnType<typeof toLegacyMatch>>();
+
 /**
  * 安全版 toLegacyMatch:给缺失的单位事件数组补空数组再转换。
  * 渲染测试 fixture 为控体积剥掉了 healIn/absorbsIn/actionsIn/Out,裸转换会
@@ -27,6 +29,10 @@ const UNIT_ARRAYS = [
  * 此垫片零影响。
  */
 export function toLegacySafe(source: ReportSource) {
+  const cached = cache.get(source);
+  if (cached) {
+    return cached;
+  }
   const units = Object.fromEntries(
     Object.entries(source.units).map(([id, u]) => {
       const padded: Record<string, unknown> = { ...u };
@@ -36,9 +42,11 @@ export function toLegacySafe(source: ReportSource) {
       return [id, padded];
     }),
   );
-  return toLegacyMatch({
+  const result = toLegacyMatch({
     ...source,
     units,
     rawLines: [],
   } as unknown as GladMatch);
+  cache.set(source, result);
+  return result;
 }
