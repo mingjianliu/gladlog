@@ -1,1930 +1,1875 @@
 {
-  "generatedAt": "2026-07-16T07:56:40.032Z",
-  "matchCount": "0[object Object][object Object][object Object][object Object][object Object][object Object][object Object][object Object][object Object][object Object][object Object][object Object][object Object][object Object][object Object][object Object][object Object][object Object][object Object][object Object][object Object][object Object][object Object][object Object][object Object][object Object][object Object][object Object][object Object][object Object][object Object][object Object][object Object][object Object][object Object]",
-  "bracket": "3v3",
+  "generatedAt": "2026-07-18T01:20:25.574Z",
+  "parser": "gladlog",
   "minRating": 2100,
+  "sampleSizes": {
+    "Shadow Priest": {
+      "n": 178,
+      "insufficient": false
+    },
+    "Unholy Death Knight": {
+      "n": 212,
+      "insufficient": false
+    },
+    "Discipline Priest": {
+      "n": 80,
+      "insufficient": false
+    },
+    "Havoc Demon Hunter": {
+      "n": 77,
+      "insufficient": false
+    },
+    "Feral Druid": {
+      "n": 57,
+      "insufficient": false
+    },
+    "Holy Priest": {
+      "n": 68,
+      "insufficient": false
+    },
+    "Arms Warrior": {
+      "n": 251,
+      "insufficient": false
+    },
+    "Retribution Paladin": {
+      "n": 253,
+      "insufficient": false
+    },
+    "Mistweaver Monk": {
+      "n": 53,
+      "insufficient": false
+    },
+    "Fury Warrior": {
+      "n": 115,
+      "insufficient": false
+    },
+    "Marksmanship Hunter": {
+      "n": 278,
+      "insufficient": false
+    },
+    "Subtlety Rogue": {
+      "n": 118,
+      "insufficient": false
+    },
+    "Devourer Demon Hunter": {
+      "n": 135,
+      "insufficient": false
+    },
+    "Augmentation Evoker": {
+      "n": 76,
+      "insufficient": false
+    },
+    "Frost Mage": {
+      "n": 281,
+      "insufficient": false
+    },
+    "Beast Mastery Hunter": {
+      "n": 164,
+      "insufficient": false
+    },
+    "Holy Paladin": {
+      "n": 51,
+      "insufficient": false
+    },
+    "Restoration Shaman": {
+      "n": 75,
+      "insufficient": false
+    },
+    "Destruction Warlock": {
+      "n": 94,
+      "insufficient": false
+    },
+    "Assassination Rogue": {
+      "n": 175,
+      "insufficient": false
+    },
+    "Windwalker Monk": {
+      "n": 225,
+      "insufficient": false
+    },
+    "Preservation Evoker": {
+      "n": 67,
+      "insufficient": false
+    },
+    "Restoration Druid": {
+      "n": 78,
+      "insufficient": false
+    },
+    "Elemental Shaman": {
+      "n": 195,
+      "insufficient": false
+    },
+    "Frost Death Knight": {
+      "n": 141,
+      "insufficient": false
+    },
+    "Survival Hunter": {
+      "n": 176,
+      "insufficient": false
+    },
+    "Enhancement Shaman": {
+      "n": 106,
+      "insufficient": false
+    },
+    "Affliction Warlock": {
+      "n": 225,
+      "insufficient": false
+    },
+    "Arcane Mage": {
+      "n": 39,
+      "insufficient": false
+    },
+    "Devastation Evoker": {
+      "n": 64,
+      "insufficient": false
+    },
+    "Fire Mage": {
+      "n": 44,
+      "insufficient": false
+    },
+    "Demonology Warlock": {
+      "n": 23,
+      "insufficient": true
+    },
+    "Balance Druid": {
+      "n": 4,
+      "insufficient": true
+    },
+    "Outlaw Rogue": {
+      "n": 37,
+      "insufficient": false
+    }
+  },
   "bySpec": {
-    "Shaman Restoration": {
-      "sampleCount": 132,
+    "Discipline Priest": {
+      "sampleCount": 163,
       "pressureWindows": {
-        "p50": 42699,
-        "p75": 117114,
-        "p90": 260611,
-        "p95": 360761
+        "p50": 6569,
+        "p75": 57767,
+        "p90": 150954,
+        "p95": 245588
       },
       "hps": {
-        "p50": 51251.203666105925,
-        "p75": 56937.6740022606,
-        "p90": 61379.57293933107,
-        "p95": 65998.86847468939
+        "p50": 25593.42231713828,
+        "p75": 31035.879843308907,
+        "p90": 35128.596610545894,
+        "p95": 37721.637508625136
       },
       "dps": {
-        "p50": 62587.28786926461,
-        "p75": 71785.17701843081,
-        "p90": 76383.2922945836,
-        "p95": 79573.96983496351
+        "p50": 64144.3410517204,
+        "p75": 73958.81192373809,
+        "p90": 81250.10066945186,
+        "p95": 85424.78807433878
       },
       "matchDuration": {
-        "p50": 158.104,
-        "p75": 194.51,
-        "p90": 215.396,
-        "p95": 226.497
-      },
-      "cdUsage": {
-        "Astral Shift": {
-          "neverUsedRate": 0.727,
-          "medianFirstUseSeconds": 89.889,
-          "p75FirstUseSeconds": 144.666
-        },
-        "Spirit Link Totem": {
-          "neverUsedRate": 0.311,
-          "medianFirstUseSeconds": 115.274,
-          "p75FirstUseSeconds": 148.898
-        },
-        "Spiritwalker's Grace": {
-          "neverUsedRate": 0.152,
-          "medianFirstUseSeconds": 85.159,
-          "p75FirstUseSeconds": 110.98
-        },
-        "Spirit Walk": {
-          "neverUsedRate": 0.326,
-          "medianFirstUseSeconds": 62.318,
-          "p75FirstUseSeconds": 103.816
-        }
-      },
-      "defensiveTiming": {
-        "sampleCasts": 387,
-        "optimalPct": 48.3,
-        "earlyPct": 7.2,
-        "latePct": 17.3,
-        "reactivePct": 4.9,
-        "unknownPct": 22.2
-      },
-      "purgesPerMinute": {
-        "p50": 0.87156096568955,
-        "p75": 2.0213136292686213,
-        "p90": 2.965837262037901,
-        "p95": 3.3270489076189422
-      },
-      "dampeningAtDeath": null
-    },
-    "Shaman Enhancement": {
-      "sampleCount": 120,
-      "pressureWindows": {
-        "p50": 205464,
-        "p75": 389670,
-        "p90": 590205,
-        "p95": 702487
-      },
-      "hps": {
-        "p50": 5353.979238754326,
-        "p75": 7640.766852476262,
-        "p90": 8697.728902250343,
-        "p95": 9870.116674258084
-      },
-      "dps": {
-        "p50": 71785.17701843081,
-        "p75": 83574.8886414254,
-        "p90": 96572.4130853111,
-        "p95": 100614.58934237092
-      },
-      "matchDuration": {
-        "p50": 147.495,
-        "p75": 186.886,
-        "p90": 237.116,
-        "p95": 317.996
-      },
-      "cdUsage": {
-        "Astral Shift": {
-          "neverUsedRate": 0.233,
-          "medianFirstUseSeconds": 29.992,
-          "p75FirstUseSeconds": 78.105
-        },
-        "Ascendance": {
-          "neverUsedRate": 0.467,
-          "medianFirstUseSeconds": 18.132,
-          "p75FirstUseSeconds": 25.638
-        },
-        "Spirit Walk": {
-          "neverUsedRate": 0.692,
-          "medianFirstUseSeconds": 34.972,
-          "p75FirstUseSeconds": 52.438
-        }
-      },
-      "defensiveTiming": {
-        "sampleCasts": 209,
-        "optimalPct": 67,
-        "earlyPct": 6.7,
-        "latePct": 10,
-        "reactivePct": 5.3,
-        "unknownPct": 11
-      },
-      "purgesPerMinute": {
-        "p50": 1.0381026943090346,
-        "p75": 2.261441480490356,
-        "p90": 3.0247779728946287,
-        "p95": 3.693804156555733
-      },
-      "dampeningAtDeath": {
-        "p50": 0.19,
-        "p75": 0.41,
-        "p90": 0.48,
-        "p95": 0.67
-      }
-    },
-    "Mage Frost": {
-      "sampleCount": 239,
-      "pressureWindows": {
-        "p50": 165771,
-        "p75": 326048,
-        "p90": 491311,
-        "p95": 588721
-      },
-      "hps": {
-        "p50": 490.69899090962946,
-        "p75": 1001.7312550421332,
-        "p90": 1417.891807022552,
-        "p95": 1888.0508738382175
-      },
-      "dps": {
-        "p50": 63658.014441581574,
-        "p75": 73994.91624845206,
-        "p90": 84920.17292870775,
-        "p95": 94386.9333575047
-      },
-      "matchDuration": {
-        "p50": 155.7,
-        "p75": 218.251,
-        "p90": 298.918,
-        "p95": 363.33
-      },
-      "cdUsage": {
-        "Ice Block": {
-          "neverUsedRate": 0.402,
-          "medianFirstUseSeconds": 87.929,
-          "p75FirstUseSeconds": 121.947
-        },
-        "Ice Barrier": {
-          "neverUsedRate": 0.021,
-          "medianFirstUseSeconds": 21.135,
-          "p75FirstUseSeconds": 29.03
-        },
-        "Dragon's Breath": {
-          "neverUsedRate": 0.079,
-          "medianFirstUseSeconds": 35.881,
-          "p75FirstUseSeconds": 63.428
-        }
-      },
-      "defensiveTiming": {
-        "sampleCasts": 1529,
-        "optimalPct": 53.9,
-        "earlyPct": 8.6,
-        "latePct": 13.7,
-        "reactivePct": 3.1,
-        "unknownPct": 20.7
-      },
-      "purgesPerMinute": {
-        "p50": 1.9816368320232514,
-        "p75": 3.65586156470875,
-        "p90": 5.018098608983066,
-        "p95": 5.934718100890208
-      },
-      "dampeningAtDeath": {
-        "p50": 0.21,
-        "p75": 0.35,
-        "p90": 0.56,
-        "p95": 0.6
-      }
-    },
-    "DeathKnight Unholy": {
-      "sampleCount": 66,
-      "pressureWindows": {
-        "p50": 128768,
-        "p75": 273104,
-        "p90": 420255,
-        "p95": 530542
-      },
-      "hps": {
-        "p50": 1728.7442164928516,
-        "p75": 2999.791489877561,
-        "p90": 3974.866234863419,
-        "p95": 5056.495610963634
-      },
-      "dps": {
-        "p50": 67082.41862120353,
-        "p75": 78080.23903118924,
-        "p90": 85083.71053524953,
-        "p95": 91256.2243269851
-      },
-      "matchDuration": {
-        "p50": 126.236,
-        "p75": 154.947,
-        "p90": 190.942,
-        "p95": 211.369
-      },
-      "cdUsage": {
-        "Icebound Fortitude": {
-          "neverUsedRate": 0.227,
-          "medianFirstUseSeconds": 67.36,
-          "p75FirstUseSeconds": 97.478
-        },
-        "Anti-Magic Zone": {
-          "neverUsedRate": 0.348,
-          "medianFirstUseSeconds": 65.74,
-          "p75FirstUseSeconds": 103.471
-        },
-        "Blinding Sleet": {
-          "neverUsedRate": 0.045,
-          "medianFirstUseSeconds": 24.188,
-          "p75FirstUseSeconds": 38.521
-        },
-        "Anti-Magic Shell": {
-          "neverUsedRate": 0.879,
-          "medianFirstUseSeconds": 22.801,
-          "p75FirstUseSeconds": 30.232
-        }
-      },
-      "defensiveTiming": {
-        "sampleCasts": 114,
-        "optimalPct": 57,
-        "earlyPct": 7.9,
-        "latePct": 8.8,
-        "reactivePct": 11.4,
-        "unknownPct": 14.9
-      },
-      "purgesPerMinute": null,
-      "dampeningAtDeath": {
-        "p50": 0.48,
-        "p75": 0.52,
-        "p90": 0.69,
-        "p95": 0.81
-      }
-    },
-    "Paladin Holy": {
-      "sampleCount": 59,
-      "pressureWindows": {
-        "p50": 30059,
-        "p75": 148935,
-        "p90": 297382,
-        "p95": 380978
-      },
-      "hps": {
-        "p50": 32802.7613837074,
-        "p75": 42184.720542909265,
-        "p90": 48774.05886694963,
-        "p95": 51411.29556330124
-      },
-      "dps": {
-        "p50": 57604.74921395419,
-        "p75": 67175.35467068742,
-        "p90": 74876.88906505586,
-        "p95": 85136.94150948
-      },
-      "matchDuration": {
-        "p50": 135.738,
-        "p75": 193.351,
-        "p90": 215.227,
-        "p95": 229.475
-      },
-      "cdUsage": {
-        "Divine Shield": {
-          "neverUsedRate": 0.305,
-          "medianFirstUseSeconds": 96.018,
-          "p75FirstUseSeconds": 126.946
-        },
-        "Blessing of Protection": {
-          "neverUsedRate": 0.831,
-          "medianFirstUseSeconds": 121.565,
-          "p75FirstUseSeconds": 167.982
-        },
-        "Blessing of Spellwarding": {
-          "neverUsedRate": 0.932,
-          "medianFirstUseSeconds": 99.637,
-          "p75FirstUseSeconds": 121.273
-        },
-        "Blessing of Sacrifice": {
-          "neverUsedRate": 0.153,
-          "medianFirstUseSeconds": 30.96,
-          "p75FirstUseSeconds": 63.771
-        },
-        "Divine Protection": {
-          "neverUsedRate": 0.153,
-          "medianFirstUseSeconds": 39.607,
-          "p75FirstUseSeconds": 79.255
-        },
-        "Avenging Crusader": {
-          "neverUsedRate": 0.051,
-          "medianFirstUseSeconds": 48.739,
-          "p75FirstUseSeconds": 75.276
-        },
-        "Aura Mastery": {
-          "neverUsedRate": 0.051,
-          "medianFirstUseSeconds": 30.45,
-          "p75FirstUseSeconds": 47.047
-        },
-        "Hammer of Justice": {
-          "neverUsedRate": 0.085,
-          "medianFirstUseSeconds": 38.022,
-          "p75FirstUseSeconds": 56.678
-        },
-        "Blinding Light": {
-          "neverUsedRate": 0.898,
-          "medianFirstUseSeconds": 47.344,
-          "p75FirstUseSeconds": 75.196
-        }
-      },
-      "defensiveTiming": {
-        "sampleCasts": 391,
-        "optimalPct": 55.5,
-        "earlyPct": 5.1,
-        "latePct": 18.7,
-        "reactivePct": 2.3,
-        "unknownPct": 18.4
-      },
-      "purgesPerMinute": null,
-      "dampeningAtDeath": {
-        "p50": 0.46,
-        "p75": 0.69,
-        "p90": 0.79,
-        "p95": 1
-      }
-    },
-    "Rogue Outlaw": {
-      "sampleCount": 147,
-      "pressureWindows": {
-        "p50": 129195,
-        "p75": 256042,
-        "p90": 388748,
-        "p95": 479058
-      },
-      "hps": {
-        "p50": 2007.2530069110096,
-        "p75": 2645.626302464564,
-        "p90": 3323.344185198263,
-        "p95": 3714.464866559548
-      },
-      "dps": {
-        "p50": 61800.29542325955,
-        "p75": 73893.50293506564,
-        "p90": 81977.57585709855,
-        "p95": 95233.62086288635
-      },
-      "matchDuration": {
-        "p50": 170.224,
-        "p75": 255.076,
-        "p90": 362.142,
-        "p95": 384.273
-      },
-      "cdUsage": {
-        "Cloak of Shadows": {
-          "neverUsedRate": 0.32,
-          "medianFirstUseSeconds": 104.113,
-          "p75FirstUseSeconds": 134.927
-        },
-        "Adrenaline Rush": {
-          "neverUsedRate": 0,
-          "medianFirstUseSeconds": 15.614,
-          "p75FirstUseSeconds": 19.844
-        },
-        "Blind": {
-          "neverUsedRate": 0.177,
-          "medianFirstUseSeconds": 38.834,
-          "p75FirstUseSeconds": 72.121
-        },
-        "Kidney Shot": {
-          "neverUsedRate": 0.054,
-          "medianFirstUseSeconds": 21.929,
-          "p75FirstUseSeconds": 33.505
-        }
-      },
-      "defensiveTiming": {
-        "sampleCasts": 123,
-        "optimalPct": 57.7,
-        "earlyPct": 9.8,
-        "latePct": 12.2,
-        "reactivePct": 9.8,
-        "unknownPct": 10.6
-      },
-      "purgesPerMinute": null,
-      "dampeningAtDeath": {
-        "p50": 0.11,
-        "p75": 0.24,
-        "p90": 0.29,
-        "p95": 0.3
-      }
-    },
-    "Warlock Destruction": {
-      "sampleCount": 45,
-      "pressureWindows": {
-        "p50": 142711,
-        "p75": 298830,
-        "p90": 485132,
-        "p95": 583307
-      },
-      "hps": {
-        "p50": 2503.285451896183,
-        "p75": 3339.415653289263,
-        "p90": 4288.54967890424,
-        "p95": 4991.317057461013
-      },
-      "dps": {
-        "p50": 61379.61511445623,
-        "p75": 76810.14413730975,
-        "p90": 87606.75115768949,
-        "p95": 94386.9333575047
-      },
-      "matchDuration": {
-        "p50": 156.858,
-        "p75": 196.093,
-        "p90": 212.78,
-        "p95": 220.814
-      },
-      "cdUsage": {
-        "Dark Pact": {
-          "neverUsedRate": 0.044,
-          "medianFirstUseSeconds": 16.676,
-          "p75FirstUseSeconds": 27.961
-        },
-        "Unending Resolve": {
-          "neverUsedRate": 0.422,
-          "medianFirstUseSeconds": 94.312,
-          "p75FirstUseSeconds": 146.919
-        },
-        "Shadowfury": {
-          "neverUsedRate": 0.844,
-          "medianFirstUseSeconds": 53.448,
-          "p75FirstUseSeconds": 79.367
-        }
-      },
-      "defensiveTiming": {
-        "sampleCasts": 147,
-        "optimalPct": 56.5,
-        "earlyPct": 8.2,
-        "latePct": 10.2,
-        "reactivePct": 7.5,
-        "unknownPct": 17.7
-      },
-      "purgesPerMinute": {
-        "p50": 0,
-        "p75": 0,
-        "p90": 0,
-        "p95": 0
-      },
-      "dampeningAtDeath": {
-        "p50": 0.39,
-        "p75": 0.48,
-        "p90": 0.52,
-        "p95": 0.54
-      }
-    },
-    "Warlock Affliction": {
-      "sampleCount": 63,
-      "pressureWindows": {
-        "p50": 94475,
-        "p75": 270769,
-        "p90": 453107,
-        "p95": 584574
-      },
-      "hps": {
-        "p50": 1986.52016647032,
-        "p75": 3314.549101557859,
-        "p90": 3983.129912899385,
-        "p95": 4476.670433145009
-      },
-      "dps": {
-        "p50": 67081.57136298715,
-        "p75": 75880.74413897048,
-        "p90": 90664.90482350766,
-        "p95": 98988.36847731027
-      },
-      "matchDuration": {
-        "p50": 150.009,
-        "p75": 175.885,
-        "p90": 194.063,
-        "p95": 228.15
-      },
-      "cdUsage": {
-        "Dark Pact": {
-          "neverUsedRate": 0.079,
-          "medianFirstUseSeconds": 16.834,
-          "p75FirstUseSeconds": 26.21
-        },
-        "Summon Darkglare": {
-          "neverUsedRate": 0.016,
-          "medianFirstUseSeconds": 29.206,
-          "p75FirstUseSeconds": 44.336
-        },
-        "Unending Resolve": {
-          "neverUsedRate": 0.54,
-          "medianFirstUseSeconds": 83.582,
-          "p75FirstUseSeconds": 117.081
-        }
-      },
-      "defensiveTiming": {
-        "sampleCasts": 175,
-        "optimalPct": 56.6,
-        "earlyPct": 11.4,
-        "latePct": 14.9,
-        "reactivePct": 2.3,
-        "unknownPct": 14.9
-      },
-      "purgesPerMinute": {
-        "p50": 0,
-        "p75": 0,
-        "p90": 0,
-        "p95": 0
-      },
-      "dampeningAtDeath": {
-        "p50": 0.41,
-        "p75": 0.54,
-        "p90": 0.64,
-        "p95": 0.73
-      }
-    },
-    "Druid Feral": {
-      "sampleCount": 57,
-      "pressureWindows": {
-        "p50": 154963,
-        "p75": 295802,
-        "p90": 458365,
-        "p95": 583577
-      },
-      "hps": {
-        "p50": 3149.277507894781,
-        "p75": 4945.852635484353,
-        "p90": 7117.379956727178,
-        "p95": 9629.532729841452
-      },
-      "dps": {
-        "p50": 64530.459731767536,
-        "p75": 71865.94346774484,
-        "p90": 80959.91135454578,
-        "p95": 84972.3692888004
-      },
-      "matchDuration": {
-        "p50": 153.723,
-        "p75": 194.063,
-        "p90": 245.553,
-        "p95": 299.167
-      },
-      "cdUsage": {
-        "Barkskin": {
-          "neverUsedRate": 0.088,
-          "medianFirstUseSeconds": 26.955,
-          "p75FirstUseSeconds": 43.729
-        },
-        "Survival Instincts": {
-          "neverUsedRate": 0.526,
-          "medianFirstUseSeconds": 113.156,
-          "p75FirstUseSeconds": 155.866
-        },
-        "Mighty Bash": {
-          "neverUsedRate": 0.737,
-          "medianFirstUseSeconds": 33.927,
-          "p75FirstUseSeconds": 43.797
-        },
-        "Incarnation: Avatar of Ashamane": {
-          "neverUsedRate": 0,
-          "medianFirstUseSeconds": 10.118,
-          "p75FirstUseSeconds": 14.295
-        },
-        "Stampeding Roar": {
-          "neverUsedRate": 0.368,
-          "medianFirstUseSeconds": 4.444,
-          "p75FirstUseSeconds": 55.912
-        },
-        "Incapacitating Roar": {
-          "neverUsedRate": 0.316,
-          "medianFirstUseSeconds": 39.987,
-          "p75FirstUseSeconds": 58.819
-        }
-      },
-      "defensiveTiming": {
-        "sampleCasts": 131,
-        "optimalPct": 69.5,
-        "earlyPct": 7.6,
-        "latePct": 11.5,
-        "reactivePct": 2.3,
-        "unknownPct": 9.2
-      },
-      "purgesPerMinute": null,
-      "dampeningAtDeath": {
-        "p50": 0.12,
-        "p75": 0.56,
-        "p90": 0.75,
-        "p95": 0.85
-      }
-    },
-    "Priest Discipline": {
-      "sampleCount": 208,
-      "pressureWindows": {
-        "p50": 26893,
-        "p75": 93967,
-        "p90": 241496,
-        "p95": 366977
-      },
-      "hps": {
-        "p50": 31559.230860675223,
-        "p75": 36700.37868645527,
-        "p90": 41176.63876820854,
-        "p95": 43017.071166652364
-      },
-      "dps": {
-        "p50": 70665.35608308605,
-        "p75": 80920.62651441505,
-        "p90": 90850.89947312076,
-        "p95": 96794.14708826473
-      },
-      "matchDuration": {
-        "p50": 125,
-        "p75": 164.443,
-        "p90": 187.1,
-        "p95": 205.053
+        "p50": 127.502,
+        "p75": 172.607,
+        "p90": 234.96,
+        "p95": 314.626
       },
       "cdUsage": {
         "Pain Suppression": {
-          "neverUsedRate": 0.063,
-          "medianFirstUseSeconds": 41.096,
-          "p75FirstUseSeconds": 70.649
+          "neverUsedRate": 0.043,
+          "medianFirstUseSeconds": 27.038,
+          "p75FirstUseSeconds": 50.001
         },
         "Power Infusion": {
-          "neverUsedRate": 0.072,
-          "medianFirstUseSeconds": 22.944,
-          "p75FirstUseSeconds": 40.308
+          "neverUsedRate": 0.061,
+          "medianFirstUseSeconds": 17.977,
+          "p75FirstUseSeconds": 26.609
         },
         "Psychic Scream": {
-          "neverUsedRate": 0.139,
-          "medianFirstUseSeconds": 39.767,
-          "p75FirstUseSeconds": 69.185
+          "neverUsedRate": 0.117,
+          "medianFirstUseSeconds": 34.358,
+          "p75FirstUseSeconds": 56.984
         },
         "Ultimate Penitence": {
-          "neverUsedRate": 0.231,
-          "medianFirstUseSeconds": 76.305,
-          "p75FirstUseSeconds": 95.445
+          "neverUsedRate": 0.19,
+          "medianFirstUseSeconds": 49.435,
+          "p75FirstUseSeconds": 73.216
         }
       },
       "defensiveTiming": {
-        "sampleCasts": 507,
-        "optimalPct": 49.7,
-        "earlyPct": 7.5,
-        "latePct": 16.8,
-        "reactivePct": 1.4,
-        "unknownPct": 24.7
+        "sampleCasts": 455,
+        "optimalPct": 55.8,
+        "earlyPct": 5.9,
+        "latePct": 12.3,
+        "reactivePct": 0.9,
+        "unknownPct": 25.1
       },
       "purgesPerMinute": {
-        "p50": 0,
-        "p75": 0.5824507586421132,
-        "p90": 1.3243766232810694,
-        "p95": 1.9424660068448802
+        "p50": 0.30905372899078504,
+        "p75": 1.2694651320243737,
+        "p90": 2.4094934040118066,
+        "p95": 3.874148861235031
       },
       "dampeningAtDeath": {
-        "p50": 0.19,
-        "p75": 0.36,
+        "p50": 0.48,
+        "p75": 0.59,
+        "p90": 0.7,
+        "p95": 0.73
+      }
+    },
+    "Feral Druid": {
+      "sampleCount": 23,
+      "pressureWindows": {
+        "p50": 142220,
+        "p75": 263952,
+        "p90": 423065,
+        "p95": 499841
+      },
+      "hps": {
+        "p50": 3093.421710197533,
+        "p75": 4076.4514696116075,
+        "p90": 4634.626828425538,
+        "p95": 4837.1173188459
+      },
+      "dps": {
+        "p50": 64466.94638325571,
+        "p75": 71395.81645056726,
+        "p90": 87717.74727092292,
+        "p95": 89685.21985918494
+      },
+      "matchDuration": {
+        "p50": 147.919,
+        "p75": 179.212,
+        "p90": 227.373,
+        "p95": 314.626
+      },
+      "cdUsage": {
+        "Barkskin": {
+          "neverUsedRate": 0.043,
+          "medianFirstUseSeconds": 31.795,
+          "p75FirstUseSeconds": 59.914
+        },
+        "Survival Instincts": {
+          "neverUsedRate": 0.478,
+          "medianFirstUseSeconds": 55.758,
+          "p75FirstUseSeconds": 171.657
+        },
+        "Incapacitating Roar": {
+          "neverUsedRate": 0.261,
+          "medianFirstUseSeconds": 50.608,
+          "p75FirstUseSeconds": 69.57
+        },
+        "Incarnation: Avatar of Ashamane": {
+          "neverUsedRate": 0,
+          "medianFirstUseSeconds": 12.537,
+          "p75FirstUseSeconds": 13.537
+        },
+        "Stampeding Roar": {
+          "neverUsedRate": 0.565,
+          "medianFirstUseSeconds": 19.23,
+          "p75FirstUseSeconds": 53.138
+        }
+      },
+      "defensiveTiming": {
+        "sampleCasts": 49,
+        "optimalPct": 57.1,
+        "earlyPct": 10.2,
+        "latePct": 10.2,
+        "reactivePct": 8.2,
+        "unknownPct": 14.3
+      },
+      "purgesPerMinute": null,
+      "dampeningAtDeath": null
+    },
+    "Unholy Death Knight": {
+      "sampleCount": 32,
+      "pressureWindows": {
+        "p50": 193186,
+        "p75": 380661,
+        "p90": 554895,
+        "p95": 637387
+      },
+      "hps": {
+        "p50": 2170.072929578277,
+        "p75": 5209.29889653186,
+        "p90": 6067.645867098866,
+        "p95": 7140.5783036866305
+      },
+      "dps": {
+        "p50": 64760.14657488514,
+        "p75": 71395.81645056726,
+        "p90": 80553.70146893596,
+        "p95": 85424.78807433878
+      },
+      "matchDuration": {
+        "p50": 120.916,
+        "p75": 158.966,
+        "p90": 190.99,
+        "p95": 240.879
+      },
+      "cdUsage": {
+        "Icebound Fortitude": {
+          "neverUsedRate": 0.281,
+          "medianFirstUseSeconds": 25.399,
+          "p75FirstUseSeconds": 63.138
+        },
+        "Anti-Magic Shell": {
+          "neverUsedRate": 0.656,
+          "medianFirstUseSeconds": 20.296,
+          "p75FirstUseSeconds": 27.937
+        },
+        "Anti-Magic Zone": {
+          "neverUsedRate": 0.531,
+          "medianFirstUseSeconds": 61.449,
+          "p75FirstUseSeconds": 86.397
+        },
+        "Blinding Sleet": {
+          "neverUsedRate": 0.094,
+          "medianFirstUseSeconds": 31.625,
+          "p75FirstUseSeconds": 50.017
+        }
+      },
+      "defensiveTiming": {
+        "sampleCasts": 58,
+        "optimalPct": 51.7,
+        "earlyPct": 10.3,
+        "latePct": 12.1,
+        "reactivePct": 6.9,
+        "unknownPct": 19
+      },
+      "purgesPerMinute": null,
+      "dampeningAtDeath": {
+        "p50": 0.21,
+        "p75": 0.37,
+        "p90": 0.64,
+        "p95": 0.64
+      }
+    },
+    "Shadow Priest": {
+      "sampleCount": 33,
+      "pressureWindows": {
+        "p50": 120371,
+        "p75": 335290,
+        "p90": 553881,
+        "p95": 682846
+      },
+      "hps": {
+        "p50": 6021.426849843336,
+        "p75": 8543.688958241375,
+        "p90": 9877.386046273285,
+        "p95": 10918.793773841795
+      },
+      "dps": {
+        "p50": 66015.54540785876,
+        "p75": 77220.14137718263,
+        "p90": 83127.16557303058,
+        "p95": 84308.82086906183
+      },
+      "matchDuration": {
+        "p50": 125.358,
+        "p75": 170.399,
+        "p90": 249.348,
+        "p95": 283.364
+      },
+      "cdUsage": {
+        "Dispersion": {
+          "neverUsedRate": 0.545,
+          "medianFirstUseSeconds": 74.882,
+          "p75FirstUseSeconds": 139.631
+        },
+        "Power Infusion": {
+          "neverUsedRate": 0.03,
+          "medianFirstUseSeconds": 20.81,
+          "p75FirstUseSeconds": 24.211
+        },
+        "Psychic Scream": {
+          "neverUsedRate": 0,
+          "medianFirstUseSeconds": 26.476,
+          "p75FirstUseSeconds": 35.67
+        }
+      },
+      "defensiveTiming": {
+        "sampleCasts": 16,
+        "optimalPct": 87.5,
+        "earlyPct": 0,
+        "latePct": 6.3,
+        "reactivePct": 6.3,
+        "unknownPct": 0
+      },
+      "purgesPerMinute": {
+        "p50": 1.5623372565357774,
+        "p75": 2.6142489013930215,
+        "p90": 3.403289846851957,
+        "p95": 4.530125333467559
+      },
+      "dampeningAtDeath": {
+        "p50": 0.31,
+        "p75": 0.41,
         "p90": 0.5,
         "p95": 0.54
       }
     },
-    "Warrior Arms": {
-      "sampleCount": 166,
+    "Affliction Warlock": {
+      "sampleCount": 56,
       "pressureWindows": {
-        "p50": 220470,
-        "p75": 415890,
-        "p90": 691603,
-        "p95": 39111
+        "p50": 102283,
+        "p75": 295080,
+        "p90": 496514,
+        "p95": 600329
       },
       "hps": {
-        "p50": 5436.992534124331,
-        "p75": 8169.17653085987,
-        "p90": 10057.768247838785,
-        "p95": 11823.4030182765
+        "p50": 2471.7471463988622,
+        "p75": 3428.101546457323,
+        "p90": 4135.364313285577,
+        "p95": 4733.3667817686355
       },
       "dps": {
-        "p50": 67516.62698359914,
-        "p75": 78757.78481460238,
-        "p90": 94433.4010294478,
-        "p95": 98566.5900882639
+        "p50": 67078.69400686439,
+        "p75": 76711.24922010819,
+        "p90": 83127.16557303058,
+        "p95": 84976.8785409005
       },
       "matchDuration": {
-        "p50": 143.911,
-        "p75": 191.05,
-        "p90": 264.249,
-        "p95": 321.771
+        "p50": 147.121,
+        "p75": 184.237,
+        "p90": 255.8,
+        "p95": 371.893
       },
       "cdUsage": {
-        "Die by the Sword": {
-          "neverUsedRate": 0.289,
-          "medianFirstUseSeconds": 51.808,
-          "p75FirstUseSeconds": 97.734
+        "Unending Resolve": {
+          "neverUsedRate": 0.411,
+          "medianFirstUseSeconds": 100.288,
+          "p75FirstUseSeconds": 118.882
         },
-        "Rallying Cry": {
-          "neverUsedRate": 0.404,
-          "medianFirstUseSeconds": 85.389,
-          "p75FirstUseSeconds": 129.914
+        "Dark Pact": {
+          "neverUsedRate": 0.054,
+          "medianFirstUseSeconds": 20.045,
+          "p75FirstUseSeconds": 30.09
         },
-        "Avatar": {
-          "neverUsedRate": 0.006,
-          "medianFirstUseSeconds": 14.869,
-          "p75FirstUseSeconds": 19.778
-        },
-        "Bladestorm": {
-          "neverUsedRate": 0.09,
-          "medianFirstUseSeconds": 19.517,
-          "p75FirstUseSeconds": 35.287
-        },
-        "Shockwave": {
-          "neverUsedRate": 0.229,
-          "medianFirstUseSeconds": 23.154,
-          "p75FirstUseSeconds": 34.266
-        },
-        "Storm Bolt": {
-          "neverUsedRate": 0.06,
-          "medianFirstUseSeconds": 20.789,
-          "p75FirstUseSeconds": 36.256
-        },
-        "Berserker Shout": {
-          "neverUsedRate": 0.319,
-          "medianFirstUseSeconds": 33.113,
-          "p75FirstUseSeconds": 51.489
-        },
-        "Intimidating Shout": {
-          "neverUsedRate": 0.139,
-          "medianFirstUseSeconds": 41.981,
-          "p75FirstUseSeconds": 67.218
+        "Summon Darkglare": {
+          "neverUsedRate": 0.018,
+          "medianFirstUseSeconds": 28.291,
+          "p75FirstUseSeconds": 39.07
         }
       },
       "defensiveTiming": {
-        "sampleCasts": 256,
-        "optimalPct": 68,
-        "earlyPct": 5.1,
-        "latePct": 14.5,
-        "reactivePct": 5.9,
-        "unknownPct": 6.6
+        "sampleCasts": 174,
+        "optimalPct": 55.7,
+        "earlyPct": 11.5,
+        "latePct": 10.9,
+        "reactivePct": 2.9,
+        "unknownPct": 19
+      },
+      "purgesPerMinute": {
+        "p50": 0,
+        "p75": 0,
+        "p90": 0,
+        "p95": 0
+      },
+      "dampeningAtDeath": {
+        "p50": 0.1,
+        "p75": 0.13,
+        "p90": 0.56,
+        "p95": 0.56
+      }
+    },
+    "Restoration Shaman": {
+      "sampleCount": 82,
+      "pressureWindows": {
+        "p50": 15599,
+        "p75": 75462,
+        "p90": 211772,
+        "p95": 344574
+      },
+      "hps": {
+        "p50": 37467.89000728607,
+        "p75": 48253.89995594634,
+        "p90": 56181.58326817826,
+        "p95": 58176.13825616849
+      },
+      "dps": {
+        "p50": 56215.86316494261,
+        "p75": 65978.84868563822,
+        "p90": 75990.33353506825,
+        "p95": 77474.01115795039
+      },
+      "matchDuration": {
+        "p50": 148.344,
+        "p75": 204.954,
+        "p90": 255.8,
+        "p95": 371.893
+      },
+      "cdUsage": {
+        "Astral Shift": {
+          "neverUsedRate": 0.707,
+          "medianFirstUseSeconds": 90.155,
+          "p75FirstUseSeconds": 139.935
+        },
+        "Spirit Link Totem": {
+          "neverUsedRate": 0.439,
+          "medianFirstUseSeconds": 107.352,
+          "p75FirstUseSeconds": 158.129
+        },
+        "Spiritwalker's Grace": {
+          "neverUsedRate": 0.171,
+          "medianFirstUseSeconds": 59.648,
+          "p75FirstUseSeconds": 101.097
+        },
+        "Spirit Walk": {
+          "neverUsedRate": 0.683,
+          "medianFirstUseSeconds": 73.359,
+          "p75FirstUseSeconds": 118.045
+        }
+      },
+      "defensiveTiming": {
+        "sampleCasts": 202,
+        "optimalPct": 44.6,
+        "earlyPct": 9.4,
+        "latePct": 16.3,
+        "reactivePct": 5,
+        "unknownPct": 24.8
+      },
+      "purgesPerMinute": {
+        "p50": 0.8298755186721991,
+        "p75": 1.6169564836586336,
+        "p90": 2.0223264843876394,
+        "p95": 2.4995486925971697
+      },
+      "dampeningAtDeath": {
+        "p50": 0.16,
+        "p75": 0.47,
+        "p90": 0.51,
+        "p95": 0.56
+      }
+    },
+    "Assassination Rogue": {
+      "sampleCount": 60,
+      "pressureWindows": {
+        "p50": 165009,
+        "p75": 298026,
+        "p90": 449520,
+        "p95": 532443
+      },
+      "hps": {
+        "p50": 1670.0320445123018,
+        "p75": 2443.8346063413887,
+        "p90": 3201.8530101641904,
+        "p95": 3549.6777441189424
+      },
+      "dps": {
+        "p50": 56215.86316494261,
+        "p75": 65365.68027773186,
+        "p90": 72632.82485226962,
+        "p95": 77097.37102163104
+      },
+      "matchDuration": {
+        "p50": 134.531,
+        "p75": 207.363,
+        "p90": 250.658,
+        "p95": 267.583
+      },
+      "cdUsage": {
+        "Cloak of Shadows": {
+          "neverUsedRate": 0.433,
+          "medianFirstUseSeconds": 53.465,
+          "p75FirstUseSeconds": 91.353
+        },
+        "Evasion": {
+          "neverUsedRate": 0.367,
+          "medianFirstUseSeconds": 66.856,
+          "p75FirstUseSeconds": 114.521
+        },
+        "Deathmark": {
+          "neverUsedRate": 0.017,
+          "medianFirstUseSeconds": 31.461,
+          "p75FirstUseSeconds": 49.604
+        },
+        "Kidney Shot": {
+          "neverUsedRate": 0.017,
+          "medianFirstUseSeconds": 30.452,
+          "p75FirstUseSeconds": 43.381
+        },
+        "Blind": {
+          "neverUsedRate": 0.2,
+          "medianFirstUseSeconds": 50.852,
+          "p75FirstUseSeconds": 76.096
+        }
+      },
+      "defensiveTiming": {
+        "sampleCasts": 91,
+        "optimalPct": 51.6,
+        "earlyPct": 0,
+        "latePct": 13.2,
+        "reactivePct": 20.9,
+        "unknownPct": 14.3
       },
       "purgesPerMinute": null,
       "dampeningAtDeath": {
-        "p50": 0.21,
-        "p75": 0.41,
-        "p90": 0.65,
-        "p95": 0.69
+        "p50": 0.17,
+        "p75": 0.52,
+        "p90": 0.64,
+        "p95": 0.65
       }
     },
-    "Priest Shadow": {
-      "sampleCount": 48,
+    "Arms Warrior": {
+      "sampleCount": 58,
       "pressureWindows": {
-        "p50": 189414,
-        "p75": 419457,
-        "p90": 616978,
-        "p95": 718189
+        "p50": 314299,
+        "p75": 11899,
+        "p90": 301544,
+        "p95": 476624
       },
       "hps": {
-        "p50": 8237.66757452431,
-        "p75": 9600.214240925243,
-        "p90": 11215.387719803979,
-        "p95": 11635.491042369742
+        "p50": 6460.443293965378,
+        "p75": 7547.004340896237,
+        "p90": 8661.529261770713,
+        "p95": 9087.605797398515
       },
       "dps": {
-        "p50": 70247.84098825927,
-        "p75": 79184.46331412146,
-        "p90": 95889.60039357582,
-        "p95": 102751.06054575635
+        "p50": 64982.1309560213,
+        "p75": 75990.33353506825,
+        "p90": 81739.93298055985,
+        "p95": 85388.37037772514
       },
       "matchDuration": {
-        "p50": 135.518,
-        "p75": 160.451,
-        "p90": 194.804,
-        "p95": 210.301
+        "p50": 160.775,
+        "p75": 207.838,
+        "p90": 314.634,
+        "p95": 408.441
       },
       "cdUsage": {
-        "Dispersion": {
-          "neverUsedRate": 0.521,
-          "medianFirstUseSeconds": 90.773,
-          "p75FirstUseSeconds": 106.159
+        "Die by the Sword": {
+          "neverUsedRate": 0.293,
+          "medianFirstUseSeconds": 74.437,
+          "p75FirstUseSeconds": 105.436
         },
-        "Power Infusion": {
+        "Rallying Cry": {
+          "neverUsedRate": 0.293,
+          "medianFirstUseSeconds": 89.151,
+          "p75FirstUseSeconds": 129.095
+        },
+        "Avatar": {
           "neverUsedRate": 0,
-          "medianFirstUseSeconds": 14.051,
-          "p75FirstUseSeconds": 17.865
+          "medianFirstUseSeconds": 15.085,
+          "p75FirstUseSeconds": 21.941
         },
-        "Psychic Scream": {
-          "neverUsedRate": 0.021,
-          "medianFirstUseSeconds": 24.544,
-          "p75FirstUseSeconds": 45.509
+        "Bladestorm": {
+          "neverUsedRate": 0.034,
+          "medianFirstUseSeconds": 18.574,
+          "p75FirstUseSeconds": 24.784
+        },
+        "Shockwave": {
+          "neverUsedRate": 0.31,
+          "medianFirstUseSeconds": 29.23,
+          "p75FirstUseSeconds": 47.268
+        },
+        "Storm Bolt": {
+          "neverUsedRate": 0.017,
+          "medianFirstUseSeconds": 16.376,
+          "p75FirstUseSeconds": 33.173
+        },
+        "Berserker Shout": {
+          "neverUsedRate": 0.431,
+          "medianFirstUseSeconds": 41.021,
+          "p75FirstUseSeconds": 82.853
+        },
+        "Intimidating Shout": {
+          "neverUsedRate": 0.103,
+          "medianFirstUseSeconds": 40.301,
+          "p75FirstUseSeconds": 63.802
+        }
+      },
+      "defensiveTiming": {
+        "sampleCasts": 101,
+        "optimalPct": 60.4,
+        "earlyPct": 3,
+        "latePct": 10.9,
+        "reactivePct": 8.9,
+        "unknownPct": 16.8
+      },
+      "purgesPerMinute": null,
+      "dampeningAtDeath": {
+        "p50": 0.14,
+        "p75": 0.24,
+        "p90": 0.36,
+        "p95": 0.52
+      }
+    },
+    "Mistweaver Monk": {
+      "sampleCount": 18,
+      "pressureWindows": {
+        "p50": 25789,
+        "p75": 95000,
+        "p90": 219327,
+        "p95": 363831
+      },
+      "hps": {
+        "p50": 41084.46034952138,
+        "p75": 57014.121645008025,
+        "p90": 62009.55038450679,
+        "p95": 78394.9517834321
+      },
+      "dps": {
+        "p50": 64760.14657488514,
+        "p75": 76924.38249268431,
+        "p90": 104303.11374462648,
+        "p95": 107048.09241450329
+      },
+      "matchDuration": {
+        "p50": 130.482,
+        "p75": 172.14,
+        "p90": 199.334,
+        "p95": 364.964
+      },
+      "cdUsage": {
+        "Life Cocoon": {
+          "neverUsedRate": 0.056,
+          "medianFirstUseSeconds": 39.447,
+          "p75FirstUseSeconds": 52.86
+        },
+        "Leg Sweep": {
+          "neverUsedRate": 0,
+          "medianFirstUseSeconds": 33.97,
+          "p75FirstUseSeconds": 41.709
+        },
+        "Paralysis": {
+          "neverUsedRate": 0,
+          "medianFirstUseSeconds": 27.811,
+          "p75FirstUseSeconds": 37.726
+        },
+        "Tiger's Lust": {
+          "neverUsedRate": 0.389,
+          "medianFirstUseSeconds": 46.099,
+          "p75FirstUseSeconds": 61.563
         }
       },
       "defensiveTiming": {
         "sampleCasts": 27,
-        "optimalPct": 70.4,
-        "earlyPct": 0,
-        "latePct": 14.8,
-        "reactivePct": 7.4,
-        "unknownPct": 7.4
+        "optimalPct": 59.3,
+        "earlyPct": 7.4,
+        "latePct": 7.4,
+        "reactivePct": 3.7,
+        "unknownPct": 22.2
       },
-      "purgesPerMinute": {
-        "p50": 1.1166010663540185,
-        "p75": 2.156013223547771,
-        "p90": 3.8645787206634195,
-        "p95": 4.3678983735645085
-      },
-      "dampeningAtDeath": {
-        "p50": 0.46,
-        "p75": 0.56,
-        "p90": 0.58,
-        "p95": 0.68
-      }
+      "purgesPerMinute": null,
+      "dampeningAtDeath": null
     },
-    "DemonHunter Devourer": {
-      "sampleCount": 86,
+    "Marksmanship Hunter": {
+      "sampleCount": 87,
       "pressureWindows": {
-        "p50": 131660,
-        "p75": 289317,
-        "p90": 475598,
-        "p95": 572536
+        "p50": 214127,
+        "p75": 490705,
+        "p90": 64565,
+        "p95": 74092
       },
       "hps": {
-        "p50": 5565.974307640974,
-        "p75": 7688.440447466549,
-        "p90": 9045.164688920928,
-        "p95": 9455.93165525791
+        "p50": 2898.0876711355995,
+        "p75": 4026.82800299137,
+        "p90": 5024.914060106872,
+        "p95": 6411.190243306028
       },
       "dps": {
-        "p50": 67213.17253415506,
-        "p75": 76810.14413730975,
-        "p90": 90267.92676631777,
-        "p95": 99074.19962335216
+        "p50": 64889.49862449409,
+        "p75": 78319.37298294145,
+        "p90": 88490.2866439631,
+        "p95": 92583.9518431178
       },
       "matchDuration": {
-        "p50": 122.945,
-        "p75": 159.731,
-        "p90": 191.601,
-        "p95": 199.948
+        "p50": 130.482,
+        "p75": 173.462,
+        "p90": 253.012,
+        "p95": 356.035
       },
       "cdUsage": {
-        "Darkness": {
-          "neverUsedRate": 0.512,
-          "medianFirstUseSeconds": 76.931,
-          "p75FirstUseSeconds": 123.511
+        "Aspect of the Turtle": {
+          "neverUsedRate": 0.471,
+          "medianFirstUseSeconds": 95.623,
+          "p75FirstUseSeconds": 127.869
         },
-        "Void Nova": {
-          "neverUsedRate": 0.023,
-          "medianFirstUseSeconds": 20.117,
-          "p75FirstUseSeconds": 32.773
+        "Exhilaration": {
+          "neverUsedRate": 0.31,
+          "medianFirstUseSeconds": 46.886,
+          "p75FirstUseSeconds": 76.483
         },
-        "Blur": {
-          "neverUsedRate": 0.233,
-          "medianFirstUseSeconds": 20.779,
-          "p75FirstUseSeconds": 37.898
+        "Trueshot": {
+          "neverUsedRate": 0.011,
+          "medianFirstUseSeconds": 16.216,
+          "p75FirstUseSeconds": 23.151
+        },
+        "Tar Trap": {
+          "neverUsedRate": 0.908,
+          "medianFirstUseSeconds": 18.838,
+          "p75FirstUseSeconds": 75.46
+        },
+        "Roar of Sacrifice": {
+          "neverUsedRate": 0.793,
+          "medianFirstUseSeconds": 22.103,
+          "p75FirstUseSeconds": 43.762
         }
       },
       "defensiveTiming": {
-        "sampleCasts": 146,
-        "optimalPct": 54.1,
-        "earlyPct": 13,
-        "latePct": 12.3,
-        "reactivePct": 8.9,
-        "unknownPct": 11.6
+        "sampleCasts": 156,
+        "optimalPct": 60.3,
+        "earlyPct": 6.4,
+        "latePct": 16,
+        "reactivePct": 10.3,
+        "unknownPct": 7.1
       },
       "purgesPerMinute": null,
       "dampeningAtDeath": {
-        "p50": 0.35,
-        "p75": 0.54,
-        "p90": 0.56,
+        "p50": 0.27,
+        "p75": 0.52,
+        "p90": 0.62,
+        "p95": 0.67
+      }
+    },
+    "Survival Hunter": {
+      "sampleCount": 29,
+      "pressureWindows": {
+        "p50": 127358,
+        "p75": 275087,
+        "p90": 473113,
+        "p95": 628715
+      },
+      "hps": {
+        "p50": 1449.5487027098052,
+        "p75": 2532.061949954272,
+        "p90": 3084.617231834785,
+        "p95": 3084.929151972495
+      },
+      "dps": {
+        "p50": 64975.93363008963,
+        "p75": 74274.03937156918,
+        "p90": 81205.12704720616,
+        "p95": 82923.55750793153
+      },
+      "matchDuration": {
+        "p50": 121.793,
+        "p75": 160.382,
+        "p90": 290.794,
+        "p95": 292.566
+      },
+      "cdUsage": {
+        "Aspect of the Turtle": {
+          "neverUsedRate": 0.828,
+          "medianFirstUseSeconds": 68.16,
+          "p75FirstUseSeconds": 193.511
+        },
+        "Exhilaration": {
+          "neverUsedRate": 0.31,
+          "medianFirstUseSeconds": 38.256,
+          "p75FirstUseSeconds": 59.835
+        },
+        "Roar of Sacrifice": {
+          "neverUsedRate": 1,
+          "medianFirstUseSeconds": null,
+          "p75FirstUseSeconds": null
+        },
+        "Tar Trap": {
+          "neverUsedRate": 0.931,
+          "medianFirstUseSeconds": 6.915,
+          "p75FirstUseSeconds": 53.391
+        }
+      },
+      "defensiveTiming": {
+        "sampleCasts": 34,
+        "optimalPct": 64.7,
+        "earlyPct": 0,
+        "latePct": 5.9,
+        "reactivePct": 11.8,
+        "unknownPct": 17.6
+      },
+      "purgesPerMinute": null,
+      "dampeningAtDeath": {
+        "p50": 0.1,
+        "p75": 0.15,
+        "p90": 0.21,
+        "p95": 0.21
+      }
+    },
+    "Subtlety Rogue": {
+      "sampleCount": 26,
+      "pressureWindows": {
+        "p50": 69264,
+        "p75": 173267,
+        "p90": 358878,
+        "p95": 464767
+      },
+      "hps": {
+        "p50": 1680.1026706935154,
+        "p75": 2701.841631135713,
+        "p90": 4252.83596040277,
+        "p95": 4513.398300345614
+      },
+      "dps": {
+        "p50": 47018.654798682925,
+        "p75": 56797.38148984199,
+        "p90": 64016.91190689661,
+        "p95": 67449.36108327642
+      },
+      "matchDuration": {
+        "p50": 134.276,
+        "p75": 177.059,
+        "p90": 338.345,
+        "p95": 380.694
+      },
+      "cdUsage": {
+        "Cloak of Shadows": {
+          "neverUsedRate": 0.269,
+          "medianFirstUseSeconds": 102.313,
+          "p75FirstUseSeconds": 139.295
+        },
+        "Shadow Blades": {
+          "neverUsedRate": 0,
+          "medianFirstUseSeconds": 38.041,
+          "p75FirstUseSeconds": 66.549
+        },
+        "Kidney Shot": {
+          "neverUsedRate": 0,
+          "medianFirstUseSeconds": 17.818,
+          "p75FirstUseSeconds": 31.168
+        },
+        "Blind": {
+          "neverUsedRate": 0.115,
+          "medianFirstUseSeconds": 45.074,
+          "p75FirstUseSeconds": 77.815
+        }
+      },
+      "defensiveTiming": {
+        "sampleCasts": 23,
+        "optimalPct": 52.2,
+        "earlyPct": 4.3,
+        "latePct": 13,
+        "reactivePct": 4.3,
+        "unknownPct": 26.1
+      },
+      "purgesPerMinute": null,
+      "dampeningAtDeath": {
+        "p50": 0.1,
+        "p75": 0.2,
+        "p90": 0.26,
+        "p95": 0.26
+      }
+    },
+    "Frost Mage": {
+      "sampleCount": 81,
+      "pressureWindows": {
+        "p50": 156561,
+        "p75": 309966,
+        "p90": 453582,
+        "p95": 558559
+      },
+      "hps": {
+        "p50": 429.37491907289916,
+        "p75": 1019.0621286278309,
+        "p90": 1880.1277065509196,
+        "p95": 2515.8631099242402
+      },
+      "dps": {
+        "p50": 59422.69454919438,
+        "p75": 69560.84840055632,
+        "p90": 74963.53305412603,
+        "p95": 80553.70146893596
+      },
+      "matchDuration": {
+        "p50": 145.281,
+        "p75": 199.334,
+        "p90": 288.746,
+        "p95": 338.345
+      },
+      "cdUsage": {
+        "Ice Block": {
+          "neverUsedRate": 0.358,
+          "medianFirstUseSeconds": 84.731,
+          "p75FirstUseSeconds": 131.828
+        },
+        "Ice Barrier": {
+          "neverUsedRate": 0.012,
+          "medianFirstUseSeconds": 23.362,
+          "p75FirstUseSeconds": 33.607
+        },
+        "Dragon's Breath": {
+          "neverUsedRate": 0.062,
+          "medianFirstUseSeconds": 36.891,
+          "p75FirstUseSeconds": 62.833
+        }
+      },
+      "defensiveTiming": {
+        "sampleCasts": 533,
+        "optimalPct": 44.3,
+        "earlyPct": 7.9,
+        "latePct": 12.2,
+        "reactivePct": 5.1,
+        "unknownPct": 30.6
+      },
+      "purgesPerMinute": {
+        "p50": 0.4855626052052311,
+        "p75": 2.1190431343002447,
+        "p90": 3.3262004811903365,
+        "p95": 4.814829675400232
+      },
+      "dampeningAtDeath": {
+        "p50": 0.39,
+        "p75": 0.58,
+        "p90": 0.81,
+        "p95": 0.89
+      }
+    },
+    "Destruction Warlock": {
+      "sampleCount": 30,
+      "pressureWindows": {
+        "p50": 125012,
+        "p75": 302100,
+        "p90": 487981,
+        "p95": 618150
+      },
+      "hps": {
+        "p50": 2930.7920516703234,
+        "p75": 3575.494554606826,
+        "p90": 3939.23999559843,
+        "p95": 4471.861753098049
+      },
+      "dps": {
+        "p50": 64982.1309560213,
+        "p75": 74159.94391107191,
+        "p90": 75680.72843664358,
+        "p95": 79195.95993558549
+      },
+      "matchDuration": {
+        "p50": 153.197,
+        "p75": 201.445,
+        "p90": 227.983,
+        "p95": 265.293
+      },
+      "cdUsage": {
+        "Unending Resolve": {
+          "neverUsedRate": 0.333,
+          "medianFirstUseSeconds": 96.762,
+          "p75FirstUseSeconds": 133.781
+        },
+        "Dark Pact": {
+          "neverUsedRate": 0,
+          "medianFirstUseSeconds": 20.446,
+          "p75FirstUseSeconds": 30.637
+        }
+      },
+      "defensiveTiming": {
+        "sampleCasts": 107,
+        "optimalPct": 59.8,
+        "earlyPct": 15.9,
+        "latePct": 8.4,
+        "reactivePct": 0.9,
+        "unknownPct": 15
+      },
+      "purgesPerMinute": {
+        "p50": 0,
+        "p75": 0,
+        "p90": 0,
+        "p95": 0
+      },
+      "dampeningAtDeath": {
+        "p50": 0.12,
+        "p75": 0.48,
+        "p90": 0.52,
+        "p95": 0.75
+      }
+    },
+    "Holy Priest": {
+      "sampleCount": 73,
+      "pressureWindows": {
+        "p50": 28054,
+        "p75": 73856,
+        "p90": 163824,
+        "p95": 213256
+      },
+      "hps": {
+        "p50": 41461.774014198956,
+        "p75": 51910.76177686495,
+        "p90": 60228.01093281608,
+        "p95": 62142.84092779351
+      },
+      "dps": {
+        "p50": 48718.1991063967,
+        "p75": 61292.15971780727,
+        "p90": 71180.55354677535,
+        "p95": 78375.11915340496
+      },
+      "matchDuration": {
+        "p50": 127.687,
+        "p75": 172.393,
+        "p90": 207.297,
+        "p95": 233.82
+      },
+      "cdUsage": {
+        "Guardian Spirit": {
+          "neverUsedRate": 0.233,
+          "medianFirstUseSeconds": 37.134,
+          "p75FirstUseSeconds": 70.812
+        },
+        "Desperate Prayer": {
+          "neverUsedRate": 0.904,
+          "medianFirstUseSeconds": 110.58,
+          "p75FirstUseSeconds": 137.164
+        },
+        "Divine Hymn": {
+          "neverUsedRate": 0.329,
+          "medianFirstUseSeconds": 35.953,
+          "p75FirstUseSeconds": 54.61
+        },
+        "Apotheosis": {
+          "neverUsedRate": 0.178,
+          "medianFirstUseSeconds": 64.19,
+          "p75FirstUseSeconds": 90.979
+        },
+        "Power Infusion": {
+          "neverUsedRate": 0.014,
+          "medianFirstUseSeconds": 20.293,
+          "p75FirstUseSeconds": 27.742
+        },
+        "Psychic Scream": {
+          "neverUsedRate": 0.123,
+          "medianFirstUseSeconds": 28.443,
+          "p75FirstUseSeconds": 56.327
+        }
+      },
+      "defensiveTiming": {
+        "sampleCasts": 271,
+        "optimalPct": 55.4,
+        "earlyPct": 7,
+        "latePct": 9.6,
+        "reactivePct": 2.2,
+        "unknownPct": 25.8
+      },
+      "purgesPerMinute": {
+        "p50": 1.4169825356902477,
+        "p75": 2.7903342820469894,
+        "p90": 4.73780836881206,
+        "p95": 6.012506012506012
+      },
+      "dampeningAtDeath": {
+        "p50": 0.56,
+        "p75": 0.62,
+        "p90": 0.62,
         "p95": 0.62
       }
     },
-    "Druid Balance": {
-      "sampleCount": 49,
+    "Retribution Paladin": {
+      "sampleCount": 35,
       "pressureWindows": {
-        "p50": 226008,
-        "p75": 420342,
-        "p90": 585071,
-        "p95": 683318
+        "p50": 158528,
+        "p75": 346129,
+        "p90": 524308,
+        "p95": 700782
       },
       "hps": {
-        "p50": 3331.9832258468755,
-        "p75": 4430.767677560842,
-        "p90": 6242.613897258163,
-        "p95": 7132.374350086656
+        "p50": 6951.312795081688,
+        "p75": 11371.601917754053,
+        "p90": 13225.076858123175,
+        "p95": 13758.534586067564
       },
       "dps": {
-        "p50": 63101.69139708519,
-        "p75": 72384.13620042196,
-        "p90": 77730.48124991609,
-        "p95": 83377.5244525403
+        "p50": 66239.92391562786,
+        "p75": 75387.20599977764,
+        "p90": 82705.2513275494,
+        "p95": 85388.37037772514
       },
       "matchDuration": {
-        "p50": 175.209,
-        "p75": 202.274,
-        "p90": 223.439,
-        "p95": 226.497
+        "p50": 167.983,
+        "p75": 204.768,
+        "p90": 314.634,
+        "p95": 408.441
       },
       "cdUsage": {
-        "Barkskin": {
-          "neverUsedRate": 0.041,
-          "medianFirstUseSeconds": 25.05,
-          "p75FirstUseSeconds": 54.499
+        "Blessing of Protection": {
+          "neverUsedRate": 0.686,
+          "medianFirstUseSeconds": 93.789,
+          "p75FirstUseSeconds": 185.214
         },
-        "Incapacitating Roar": {
-          "neverUsedRate": 0.571,
-          "medianFirstUseSeconds": 31.552,
-          "p75FirstUseSeconds": 46.869
+        "Avenging Wrath": {
+          "neverUsedRate": 0,
+          "medianFirstUseSeconds": 14.234,
+          "p75FirstUseSeconds": 20.147
         },
-        "Stampeding Roar": {
-          "neverUsedRate": 0.388,
-          "medianFirstUseSeconds": 68.727,
-          "p75FirstUseSeconds": 125.453
+        "Hammer of Justice": {
+          "neverUsedRate": 0.029,
+          "medianFirstUseSeconds": 14.276,
+          "p75FirstUseSeconds": 21.93
         },
-        "Incarnation: Chosen of Elune": {
-          "neverUsedRate": 0.02,
-          "medianFirstUseSeconds": 18.732,
-          "p75FirstUseSeconds": 24.407
+        "Blinding Light": {
+          "neverUsedRate": 0.543,
+          "medianFirstUseSeconds": 38.781,
+          "p75FirstUseSeconds": 47.426
         },
-        "Mighty Bash": {
-          "neverUsedRate": 0.49,
-          "medianFirstUseSeconds": 26.484,
-          "p75FirstUseSeconds": 49.731
+        "Divine Shield": {
+          "neverUsedRate": 0.686,
+          "medianFirstUseSeconds": 118.825,
+          "p75FirstUseSeconds": 248.95
+        },
+        "Blessing of Spellwarding": {
+          "neverUsedRate": 0.743,
+          "medianFirstUseSeconds": 150.238,
+          "p75FirstUseSeconds": 156.163
         }
       },
       "defensiveTiming": {
-        "sampleCasts": 96,
-        "optimalPct": 54.2,
-        "earlyPct": 12.5,
-        "latePct": 6.3,
-        "reactivePct": 11.5,
-        "unknownPct": 15.6
+        "sampleCasts": 32,
+        "optimalPct": 46.9,
+        "earlyPct": 18.8,
+        "latePct": 12.5,
+        "reactivePct": 3.1,
+        "unknownPct": 18.8
       },
       "purgesPerMinute": null,
       "dampeningAtDeath": {
-        "p50": 0.48,
-        "p75": 0.65,
-        "p90": 0.77,
-        "p95": 0.91
+        "p50": 0.27,
+        "p75": 0.33,
+        "p90": 0.36,
+        "p95": 0.36
       }
     },
-    "Evoker Preservation": {
-      "sampleCount": 161,
+    "Fury Warrior": {
+      "sampleCount": 9,
       "pressureWindows": {
-        "p50": 93916,
-        "p75": 193880,
-        "p90": 366233,
-        "p95": 493424
+        "p50": 186601,
+        "p75": 342783,
+        "p90": 527144,
+        "p95": 640614
       },
       "hps": {
-        "p50": 58248.92878411551,
-        "p75": 67265.79792075888,
-        "p90": 77051.10267498973,
-        "p95": 81140.08526139669
+        "p50": 4157.537663374239,
+        "p75": 4847.599381153669,
+        "p90": 6598.312867058195,
+        "p95": 6598.312867058195
       },
       "dps": {
-        "p50": 69306.67807034023,
-        "p75": 81234.37029171629,
-        "p90": 94433.4010294478,
-        "p95": 100614.58934237092
+        "p50": 60753.55545342146,
+        "p75": 67091.37110200267,
+        "p90": 90072.29501672882,
+        "p95": 90072.29501672882
       },
       "matchDuration": {
-        "p50": 142.518,
-        "p75": 197.267,
-        "p90": 298.918,
-        "p95": 334.132
+        "p50": 77.589,
+        "p75": 102.713,
+        "p90": 154.481,
+        "p95": 154.481
+      },
+      "cdUsage": {
+        "Enraged Regeneration": {
+          "neverUsedRate": 0.333,
+          "medianFirstUseSeconds": 52.353,
+          "p75FirstUseSeconds": 83.81
+        },
+        "Rallying Cry": {
+          "neverUsedRate": 0.778,
+          "medianFirstUseSeconds": 18.762,
+          "p75FirstUseSeconds": 64.08
+        },
+        "Recklessness": {
+          "neverUsedRate": 0.111,
+          "medianFirstUseSeconds": 16.072,
+          "p75FirstUseSeconds": 31.24
+        },
+        "Bladestorm": {
+          "neverUsedRate": 0.889,
+          "medianFirstUseSeconds": 55.906,
+          "p75FirstUseSeconds": 55.906
+        },
+        "Shockwave": {
+          "neverUsedRate": 0.222,
+          "medianFirstUseSeconds": 39.772,
+          "p75FirstUseSeconds": 55.29
+        },
+        "Storm Bolt": {
+          "neverUsedRate": 0,
+          "medianFirstUseSeconds": 20.697,
+          "p75FirstUseSeconds": 30.921
+        },
+        "Berserker Shout": {
+          "neverUsedRate": 0.444,
+          "medianFirstUseSeconds": 21.576,
+          "p75FirstUseSeconds": 79.419
+        },
+        "Intimidating Shout": {
+          "neverUsedRate": 0.111,
+          "medianFirstUseSeconds": 41.588,
+          "p75FirstUseSeconds": 48.75
+        },
+        "Avatar": {
+          "neverUsedRate": 0.333,
+          "medianFirstUseSeconds": 15.58,
+          "p75FirstUseSeconds": 20.646
+        }
+      },
+      "defensiveTiming": null,
+      "purgesPerMinute": null,
+      "dampeningAtDeath": null
+    },
+    "Devourer Demon Hunter": {
+      "sampleCount": 25,
+      "pressureWindows": {
+        "p50": 165536,
+        "p75": 345269,
+        "p90": 545155,
+        "p95": 619900
+      },
+      "hps": {
+        "p50": 5750.474826870818,
+        "p75": 7229.842355068369,
+        "p90": 9390.862421824086,
+        "p95": 9416.17383957857
+      },
+      "dps": {
+        "p50": 63263.12713672092,
+        "p75": 76738.49356256265,
+        "p90": 89169.39824857395,
+        "p95": 89690.28562815585
+      },
+      "matchDuration": {
+        "p50": 87.463,
+        "p75": 122.747,
+        "p90": 134.276,
+        "p95": 141.584
+      },
+      "cdUsage": {
+        "Blur": {
+          "neverUsedRate": 0.12,
+          "medianFirstUseSeconds": 21.338,
+          "p75FirstUseSeconds": 31.312
+        },
+        "Darkness": {
+          "neverUsedRate": 0.4,
+          "medianFirstUseSeconds": 46.318,
+          "p75FirstUseSeconds": 64.989
+        },
+        "Void Nova": {
+          "neverUsedRate": 0.08,
+          "medianFirstUseSeconds": 25.526,
+          "p75FirstUseSeconds": 43.574
+        }
+      },
+      "defensiveTiming": {
+        "sampleCasts": 42,
+        "optimalPct": 59.5,
+        "earlyPct": 21.4,
+        "latePct": 2.4,
+        "reactivePct": 2.4,
+        "unknownPct": 14.3
+      },
+      "purgesPerMinute": null,
+      "dampeningAtDeath": {
+        "p50": 0.1,
+        "p75": 0.17,
+        "p90": 0.21,
+        "p95": 0.37
+      }
+    },
+    "Augmentation Evoker": {
+      "sampleCount": 16,
+      "pressureWindows": {
+        "p50": 118560,
+        "p75": 273890,
+        "p90": 421697,
+        "p95": 510094
+      },
+      "hps": {
+        "p50": 2334.4443031767078,
+        "p75": 2629.098648675783,
+        "p90": 4289.584075576651,
+        "p95": 4856.515848813432
+      },
+      "dps": {
+        "p50": 52657.50040866738,
+        "p75": 62958.1149729936,
+        "p90": 77670.18065137608,
+        "p95": 78364.09481297321
+      },
+      "matchDuration": {
+        "p50": 154.481,
+        "p75": 174.022,
+        "p90": 211.051,
+        "p95": 220.228
       },
       "cdUsage": {
         "Obsidian Scales": {
-          "neverUsedRate": 0.236,
-          "medianFirstUseSeconds": 42.57,
-          "p75FirstUseSeconds": 80.999
+          "neverUsedRate": 0.063,
+          "medianFirstUseSeconds": 23.956,
+          "p75FirstUseSeconds": 52.902
         },
         "Renewing Blaze": {
           "neverUsedRate": 1,
           "medianFirstUseSeconds": null,
           "p75FirstUseSeconds": null
         },
-        "Time Dilation": {
-          "neverUsedRate": 0.019,
-          "medianFirstUseSeconds": 22.858,
-          "p75FirstUseSeconds": 33.61
-        },
         "Oppressing Roar": {
-          "neverUsedRate": 0.273,
-          "medianFirstUseSeconds": 33.304,
-          "p75FirstUseSeconds": 58.002
-        }
-      },
-      "defensiveTiming": {
-        "sampleCasts": 865,
-        "optimalPct": 55,
-        "earlyPct": 6.8,
-        "latePct": 15.3,
-        "reactivePct": 7.1,
-        "unknownPct": 15.8
-      },
-      "purgesPerMinute": {
-        "p50": 2.6125576939824087,
-        "p75": 2.700999369766814,
-        "p90": 5.948947216613787,
-        "p95": 5.948947216613787
-      },
-      "dampeningAtDeath": {
-        "p50": 0.15,
-        "p75": 0.27,
-        "p90": 0.37,
-        "p95": 0.77
-      }
-    },
-    "DemonHunter Havoc": {
-      "sampleCount": 72,
-      "pressureWindows": {
-        "p50": 120053,
-        "p75": 246791,
-        "p90": 394064,
-        "p95": 505849
-      },
-      "hps": {
-        "p50": 4634.701936141304,
-        "p75": 6970.683494577595,
-        "p90": 8553.156923076924,
-        "p95": 9391.380296808624
-      },
-      "dps": {
-        "p50": 64125.071681975016,
-        "p75": 75234.7122707404,
-        "p90": 87533.25928819021,
-        "p95": 90664.90482350766
-      },
-      "matchDuration": {
-        "p50": 137.842,
-        "p75": 183.711,
-        "p90": 212.78,
-        "p95": 224.905
-      },
-      "cdUsage": {
-        "Blur": {
-          "neverUsedRate": 0.236,
-          "medianFirstUseSeconds": 31.706,
-          "p75FirstUseSeconds": 82.874
-        },
-        "The Hunt": {
-          "neverUsedRate": 0,
-          "medianFirstUseSeconds": 12.558,
-          "p75FirstUseSeconds": 17.864
-        },
-        "Chaos Nova": {
-          "neverUsedRate": 0,
-          "medianFirstUseSeconds": 19.809,
-          "p75FirstUseSeconds": 30.484
-        },
-        "Darkness": {
-          "neverUsedRate": 0.389,
-          "medianFirstUseSeconds": 109.171,
-          "p75FirstUseSeconds": 119.99
-        }
-      },
-      "defensiveTiming": {
-        "sampleCasts": 121,
-        "optimalPct": 62.8,
-        "earlyPct": 8.3,
-        "latePct": 11.6,
-        "reactivePct": 8.3,
-        "unknownPct": 9.1
-      },
-      "purgesPerMinute": {
-        "p50": 2.749871672655276,
-        "p75": 3.450814392196558,
-        "p90": 4.335081127946823,
-        "p95": 4.94486475794887
-      },
-      "dampeningAtDeath": {
-        "p50": 0.4,
-        "p75": 0.64,
-        "p90": 0.69,
-        "p95": 0.69
-      }
-    },
-    "Paladin Retribution": {
-      "sampleCount": 176,
-      "pressureWindows": {
-        "p50": 167764,
-        "p75": 324373,
-        "p90": 505983,
-        "p95": 634139
-      },
-      "hps": {
-        "p50": 6053.222956004092,
-        "p75": 7987.200477068199,
-        "p90": 10134.2868818962,
-        "p95": 12117.066259568814
-      },
-      "dps": {
-        "p50": 62872.62637903066,
-        "p75": 70774.97737782638,
-        "p90": 79670.728980322,
-        "p95": 87533.25928819021
-      },
-      "matchDuration": {
-        "p50": 156.858,
-        "p75": 189.645,
-        "p90": 212.883,
-        "p95": 224.189
-      },
-      "cdUsage": {
-        "Divine Shield": {
-          "neverUsedRate": 0.557,
-          "medianFirstUseSeconds": 128.194,
-          "p75FirstUseSeconds": 162.665
-        },
-        "Blessing of Spellwarding": {
-          "neverUsedRate": 0.727,
-          "medianFirstUseSeconds": 137.068,
-          "p75FirstUseSeconds": 154.495
-        },
-        "Avenging Wrath": {
-          "neverUsedRate": 0,
-          "medianFirstUseSeconds": 15.305,
-          "p75FirstUseSeconds": 18.777
-        },
-        "Hammer of Justice": {
-          "neverUsedRate": 0.017,
-          "medianFirstUseSeconds": 15.854,
-          "p75FirstUseSeconds": 23.443
-        },
-        "Blinding Light": {
-          "neverUsedRate": 0.364,
-          "medianFirstUseSeconds": 37.964,
-          "p75FirstUseSeconds": 61.228
-        },
-        "Blessing of Protection": {
-          "neverUsedRate": 0.761,
-          "medianFirstUseSeconds": 88.776,
-          "p75FirstUseSeconds": 158.212
-        }
-      },
-      "defensiveTiming": {
-        "sampleCasts": 168,
-        "optimalPct": 57.7,
-        "earlyPct": 8.3,
-        "latePct": 9.5,
-        "reactivePct": 4.8,
-        "unknownPct": 19.6
-      },
-      "purgesPerMinute": null,
-      "dampeningAtDeath": {
-        "p50": 0.41,
-        "p75": 0.62,
-        "p90": 0.75,
-        "p95": 0.75
-      }
-    },
-    "Monk Windwalker": {
-      "sampleCount": 84,
-      "pressureWindows": {
-        "p50": 193417,
-        "p75": 336277,
-        "p90": 504984,
-        "p95": 594375
-      },
-      "hps": {
-        "p50": 1126.206848649024,
-        "p75": 1622.6742011065387,
-        "p90": 2043.372788999549,
-        "p95": 2553.6378491946152
-      },
-      "dps": {
-        "p50": 56312.5669650572,
-        "p75": 63717.146795588946,
-        "p90": 77210.34691390638,
-        "p95": 81942.43720392381
-      },
-      "matchDuration": {
-        "p50": 115.666,
-        "p75": 173.507,
-        "p90": 207.783,
-        "p95": 216.127
-      },
-      "cdUsage": {
-        "Touch of Karma": {
-          "neverUsedRate": 0.345,
-          "medianFirstUseSeconds": 58.138,
-          "p75FirstUseSeconds": 107.687
-        },
-        "Leg Sweep": {
-          "neverUsedRate": 0.024,
-          "medianFirstUseSeconds": 17.231,
-          "p75FirstUseSeconds": 28.32
-        },
-        "Paralysis": {
-          "neverUsedRate": 0.048,
-          "medianFirstUseSeconds": 21.031,
-          "p75FirstUseSeconds": 36.423
-        },
-        "Tiger's Lust": {
-          "neverUsedRate": 0.107,
-          "medianFirstUseSeconds": 25.916,
-          "p75FirstUseSeconds": 50.063
-        }
-      },
-      "defensiveTiming": {
-        "sampleCasts": 69,
-        "optimalPct": 60.9,
-        "earlyPct": 4.3,
-        "latePct": 18.8,
-        "reactivePct": 1.4,
-        "unknownPct": 14.5
-      },
-      "purgesPerMinute": null,
-      "dampeningAtDeath": {
-        "p50": 0.42,
-        "p75": 0.58,
-        "p90": 0.71,
-        "p95": 0.73
-      }
-    },
-    "Shaman Elemental": {
-      "sampleCount": 37,
-      "pressureWindows": {
-        "p50": 148448,
-        "p75": 297828,
-        "p90": 481391,
-        "p95": 614206
-      },
-      "hps": {
-        "p50": 3684.9522841307844,
-        "p75": 5356.271201102303,
-        "p90": 6529.197546639408,
-        "p95": 9981.089591797736
-      },
-      "dps": {
-        "p50": 61488.39100137991,
-        "p75": 69380.27700923088,
-        "p90": 80859.10149046166,
-        "p95": 85641.48152445037
-      },
-      "matchDuration": {
-        "p50": 154.274,
-        "p75": 183.086,
-        "p90": 207.164,
-        "p95": 231.976
-      },
-      "cdUsage": {
-        "Astral Shift": {
-          "neverUsedRate": 0.351,
-          "medianFirstUseSeconds": 67.835,
-          "p75FirstUseSeconds": 91.532
-        },
-        "Ascendance": {
-          "neverUsedRate": 0,
-          "medianFirstUseSeconds": 16.194,
-          "p75FirstUseSeconds": 21.51
-        },
-        "Spiritwalker's Grace": {
-          "neverUsedRate": 0.216,
-          "medianFirstUseSeconds": 14.441,
-          "p75FirstUseSeconds": 20.276
-        }
-      },
-      "defensiveTiming": {
-        "sampleCasts": 73,
-        "optimalPct": 53.4,
-        "earlyPct": 12.3,
-        "latePct": 16.4,
-        "reactivePct": 9.6,
-        "unknownPct": 8.2
-      },
-      "purgesPerMinute": {
-        "p50": 2.3170048850186324,
-        "p75": 3.4896183853037215,
-        "p90": 4.515760002408405,
-        "p95": 4.756404158456207
-      },
-      "dampeningAtDeath": {
-        "p50": 0.35,
-        "p75": 0.71,
-        "p90": 0.73,
-        "p95": 0.73
-      }
-    },
-    "Hunter BeastMastery": {
-      "sampleCount": 95,
-      "pressureWindows": {
-        "p50": 152791,
-        "p75": 353849,
-        "p90": 533814,
-        "p95": 647070
-      },
-      "hps": {
-        "p50": 1398.222708501511,
-        "p75": 2109.3282871827028,
-        "p90": 2910.6632430599293,
-        "p95": 3216.652400591394
-      },
-      "dps": {
-        "p50": 63759.90817822275,
-        "p75": 71252.04152521267,
-        "p90": 79267.01205418621,
-        "p95": 86798.84049075661
-      },
-      "matchDuration": {
-        "p50": 109.123,
-        "p75": 151.402,
-        "p90": 180.785,
-        "p95": 207.044
-      },
-      "cdUsage": {
-        "Bestial Wrath": {
-          "neverUsedRate": 0.011,
-          "medianFirstUseSeconds": 14.823,
-          "p75FirstUseSeconds": 18.51
-        },
-        "Roar of Sacrifice": {
-          "neverUsedRate": 0.747,
-          "medianFirstUseSeconds": 32.851,
-          "p75FirstUseSeconds": 46.439
-        },
-        "Aspect of the Turtle": {
-          "neverUsedRate": 0.653,
-          "medianFirstUseSeconds": 83.024,
-          "p75FirstUseSeconds": 122.063
-        },
-        "Exhilaration": {
-          "neverUsedRate": 0.389,
-          "medianFirstUseSeconds": 43.497,
-          "p75FirstUseSeconds": 66.021
-        },
-        "Tar Trap": {
-          "neverUsedRate": 0.916,
-          "medianFirstUseSeconds": 30.459,
-          "p75FirstUseSeconds": 80.634
-        }
-      },
-      "defensiveTiming": {
-        "sampleCasts": 119,
-        "optimalPct": 66.4,
-        "earlyPct": 3.4,
-        "latePct": 7.6,
-        "reactivePct": 14.3,
-        "unknownPct": 8.4
-      },
-      "purgesPerMinute": null,
-      "dampeningAtDeath": {
-        "p50": 0.27,
-        "p75": 0.36,
-        "p90": 0.67,
-        "p95": 0.75
-      }
-    },
-    "Rogue Subtlety": {
-      "sampleCount": 41,
-      "pressureWindows": {
-        "p50": 122798,
-        "p75": 250974,
-        "p90": 396497,
-        "p95": 503080
-      },
-      "hps": {
-        "p50": 1888.8966715230304,
-        "p75": 2620.6605949494356,
-        "p90": 3043.8713227936764,
-        "p95": 3136.444457399364
-      },
-      "dps": {
-        "p50": 57612.04756588004,
-        "p75": 61756.98897558202,
-        "p90": 70688.40215351786,
-        "p95": 77108.15448840076
-      },
-      "matchDuration": {
-        "p50": 124.019,
-        "p75": 172.587,
-        "p90": 199.88,
-        "p95": 205.934
-      },
-      "cdUsage": {
-        "Cloak of Shadows": {
-          "neverUsedRate": 0.366,
-          "medianFirstUseSeconds": 74.196,
-          "p75FirstUseSeconds": 99.297
-        },
-        "Shadow Blades": {
-          "neverUsedRate": 0,
-          "medianFirstUseSeconds": 12.171,
-          "p75FirstUseSeconds": 18.745
-        },
-        "Kidney Shot": {
-          "neverUsedRate": 0,
-          "medianFirstUseSeconds": 21.136,
-          "p75FirstUseSeconds": 37.024
-        },
-        "Blind": {
-          "neverUsedRate": 0.098,
-          "medianFirstUseSeconds": 31.234,
-          "p75FirstUseSeconds": 57.453
-        }
-      },
-      "defensiveTiming": {
-        "sampleCasts": 28,
-        "optimalPct": 39.3,
-        "earlyPct": 7.1,
-        "latePct": 17.9,
-        "reactivePct": 17.9,
-        "unknownPct": 17.9
-      },
-      "purgesPerMinute": null,
-      "dampeningAtDeath": null
-    },
-    "Rogue Assassination": {
-      "sampleCount": 63,
-      "pressureWindows": {
-        "p50": 164191,
-        "p75": 322711,
-        "p90": 473267,
-        "p95": 571252
-      },
-      "hps": {
-        "p50": 1814.9552317086877,
-        "p75": 2301.2349585216093,
-        "p90": 2627.818362193362,
-        "p95": 3027.0652956059516
-      },
-      "dps": {
-        "p50": 63905.77084980993,
-        "p75": 72594.02335097796,
-        "p90": 81386.11364352841,
-        "p95": 85011.9395180618
-      },
-      "matchDuration": {
-        "p50": 122.248,
-        "p75": 160.702,
-        "p90": 178.79,
-        "p95": 197.267
-      },
-      "cdUsage": {
-        "Cloak of Shadows": {
-          "neverUsedRate": 0.175,
-          "medianFirstUseSeconds": 46.837,
-          "p75FirstUseSeconds": 80.089
-        },
-        "Evasion": {
-          "neverUsedRate": 0.302,
-          "medianFirstUseSeconds": 50.954,
-          "p75FirstUseSeconds": 84.308
-        },
-        "Deathmark": {
-          "neverUsedRate": 0,
-          "medianFirstUseSeconds": 27.859,
-          "p75FirstUseSeconds": 51.618
-        },
-        "Kidney Shot": {
-          "neverUsedRate": 0.016,
-          "medianFirstUseSeconds": 28.505,
-          "p75FirstUseSeconds": 46.891
-        },
-        "Blind": {
-          "neverUsedRate": 0.127,
-          "medianFirstUseSeconds": 35.456,
-          "p75FirstUseSeconds": 61.83
-        }
-      },
-      "defensiveTiming": {
-        "sampleCasts": 111,
-        "optimalPct": 54.1,
-        "earlyPct": 12.6,
-        "latePct": 11.7,
-        "reactivePct": 8.1,
-        "unknownPct": 13.5
-      },
-      "purgesPerMinute": null,
-      "dampeningAtDeath": {
-        "p50": 0.4,
-        "p75": 0.54,
-        "p90": 0.58,
-        "p95": 0.63
-      }
-    },
-    "Mage Fire": {
-      "sampleCount": 17,
-      "pressureWindows": {
-        "p50": 224666,
-        "p75": 397829,
-        "p90": 602856,
-        "p95": 743294
-      },
-      "hps": {
-        "p50": 1683.2966901581526,
-        "p75": 2035.1903396605487,
-        "p90": 2880.234825053869,
-        "p95": 4015.217524697797
-      },
-      "dps": {
-        "p50": 59487.31335412617,
-        "p75": 67627.75364973053,
-        "p90": 71256.43491361348,
-        "p95": 73334.19239991764
-      },
-      "matchDuration": {
-        "p50": 135.416,
-        "p75": 155.985,
-        "p90": 190.2,
-        "p95": 191.132
-      },
-      "cdUsage": {
-        "Ice Block": {
-          "neverUsedRate": 0.529,
-          "medianFirstUseSeconds": 106.059,
-          "p75FirstUseSeconds": 127.418
-        },
-        "Combustion": {
-          "neverUsedRate": 0,
-          "medianFirstUseSeconds": 18.94,
-          "p75FirstUseSeconds": 25.597
-        },
-        "Dragon's Breath": {
-          "neverUsedRate": 0.235,
-          "medianFirstUseSeconds": 36.988,
-          "p75FirstUseSeconds": 51.639
-        }
-      },
-      "defensiveTiming": null,
-      "purgesPerMinute": {
-        "p50": 0.8771545107670716,
-        "p75": 1.6279574560451486,
-        "p90": 4.186070849249123,
-        "p95": 4.7004658282160525
-      },
-      "dampeningAtDeath": {
-        "p50": 0.48,
-        "p75": 0.62,
-        "p90": 0.63,
-        "p95": 0.63
-      }
-    },
-    "DeathKnight Frost": {
-      "sampleCount": 37,
-      "pressureWindows": {
-        "p50": 182829,
-        "p75": 370352,
-        "p90": 585817,
-        "p95": 715932
-      },
-      "hps": {
-        "p50": 1776.1128663934683,
-        "p75": 3888.3390911806314,
-        "p90": 5230.866843865215,
-        "p95": 6529.5654050942585
-      },
-      "dps": {
-        "p50": 61459.988993433464,
-        "p75": 74379.74220469291,
-        "p90": 78578.13367532865,
-        "p95": 91037.25920288883
-      },
-      "matchDuration": {
-        "p50": 145.458,
-        "p75": 172.863,
-        "p90": 187.161,
-        "p95": 222.974
-      },
-      "cdUsage": {
-        "Icebound Fortitude": {
-          "neverUsedRate": 0.297,
-          "medianFirstUseSeconds": 56.444,
-          "p75FirstUseSeconds": 102.401
-        },
-        "Anti-Magic Shell": {
-          "neverUsedRate": 0.919,
-          "medianFirstUseSeconds": 27.587,
-          "p75FirstUseSeconds": 33.344
-        },
-        "Anti-Magic Zone": {
-          "neverUsedRate": 0.405,
-          "medianFirstUseSeconds": 60.707,
-          "p75FirstUseSeconds": 100.361
-        },
-        "Pillar of Frost": {
-          "neverUsedRate": 0,
-          "medianFirstUseSeconds": 14.141,
-          "p75FirstUseSeconds": 23.192
-        },
-        "Empower Rune Weapon": {
-          "neverUsedRate": 0,
-          "medianFirstUseSeconds": 14.334,
-          "p75FirstUseSeconds": 22.437
-        },
-        "Blinding Sleet": {
-          "neverUsedRate": 0,
-          "medianFirstUseSeconds": 10.565,
-          "p75FirstUseSeconds": 18.328
-        }
-      },
-      "defensiveTiming": {
-        "sampleCasts": 62,
-        "optimalPct": 67.7,
-        "earlyPct": 4.8,
-        "latePct": 14.5,
-        "reactivePct": 6.5,
-        "unknownPct": 6.5
-      },
-      "purgesPerMinute": null,
-      "dampeningAtDeath": {
-        "p50": 0.44,
-        "p75": 0.56,
-        "p90": 0.58,
-        "p95": 0.77
-      }
-    },
-    "Hunter Survival": {
-      "sampleCount": 28,
-      "pressureWindows": {
-        "p50": 146009,
-        "p75": 321494,
-        "p90": 476197,
-        "p95": 558802
-      },
-      "hps": {
-        "p50": 1556.061960942683,
-        "p75": 1931.6642422038367,
-        "p90": 2171.5542232827815,
-        "p95": 2885.987060123087
-      },
-      "dps": {
-        "p50": 59697.020031150154,
-        "p75": 65644.38418665648,
-        "p90": 72692.69200176175,
-        "p95": 74023.24095579558
-      },
-      "matchDuration": {
-        "p50": 130.864,
-        "p75": 161.379,
-        "p90": 212.519,
-        "p95": 214.973
-      },
-      "cdUsage": {
-        "Exhilaration": {
-          "neverUsedRate": 0.25,
-          "medianFirstUseSeconds": 54.039,
-          "p75FirstUseSeconds": 89.414
-        },
-        "Tar Trap": {
-          "neverUsedRate": 0.929,
-          "medianFirstUseSeconds": 56.067,
-          "p75FirstUseSeconds": 92.644
-        },
-        "Roar of Sacrifice": {
-          "neverUsedRate": 0.5,
-          "medianFirstUseSeconds": 28.045,
-          "p75FirstUseSeconds": 43.226
-        },
-        "Aspect of the Turtle": {
-          "neverUsedRate": 0.75,
-          "medianFirstUseSeconds": 103.002,
-          "p75FirstUseSeconds": 144.798
+          "neverUsedRate": 0.125,
+          "medianFirstUseSeconds": 22.312,
+          "p75FirstUseSeconds": 39.935
         }
       },
       "defensiveTiming": {
         "sampleCasts": 34,
-        "optimalPct": 52.9,
+        "optimalPct": 50,
         "earlyPct": 8.8,
         "latePct": 20.6,
-        "reactivePct": 11.8,
-        "unknownPct": 5.9
+        "reactivePct": 8.8,
+        "unknownPct": 11.8
       },
-      "purgesPerMinute": null,
-      "dampeningAtDeath": null
-    },
-    "Monk Mistweaver": {
-      "sampleCount": 253,
-      "pressureWindows": {
-        "p50": 35116,
-        "p75": 108862,
-        "p90": 244939,
-        "p95": 375326
+      "purgesPerMinute": {
+        "p50": 2.3303836717784066,
+        "p75": 3.713752230830333,
+        "p90": 4.548663593159947,
+        "p95": 6.790851214336241
       },
-      "hps": {
-        "p50": 42135.1564877834,
-        "p75": 47754.83316680292,
-        "p90": 55043.71171773391,
-        "p95": 59355.37627038988
-      },
-      "dps": {
-        "p50": 63682.14756549668,
-        "p75": 75454.01234567902,
-        "p90": 82580.70295266995,
-        "p95": 92077.71063385793
-      },
-      "matchDuration": {
-        "p50": 150.244,
-        "p75": 190.822,
-        "p90": 268.726,
-        "p95": 362.142
-      },
-      "cdUsage": {
-        "Life Cocoon": {
-          "neverUsedRate": 0.04,
-          "medianFirstUseSeconds": 35.366,
-          "p75FirstUseSeconds": 60.128
-        },
-        "Leg Sweep": {
-          "neverUsedRate": 0.055,
-          "medianFirstUseSeconds": 39.26,
-          "p75FirstUseSeconds": 60.652
-        },
-        "Paralysis": {
-          "neverUsedRate": 0.063,
-          "medianFirstUseSeconds": 34.813,
-          "p75FirstUseSeconds": 52.665
-        },
-        "Tiger's Lust": {
-          "neverUsedRate": 0.395,
-          "medianFirstUseSeconds": 24.507,
-          "p75FirstUseSeconds": 75.447
-        }
-      },
-      "defensiveTiming": {
-        "sampleCasts": 398,
-        "optimalPct": 67.6,
-        "earlyPct": 7,
-        "latePct": 9.5,
-        "reactivePct": 0.8,
-        "unknownPct": 15.1
-      },
-      "purgesPerMinute": null,
       "dampeningAtDeath": {
-        "p50": 0.15,
-        "p75": 0.29,
-        "p90": 0.67,
-        "p95": 0.71
+        "p50": 0.48,
+        "p75": 0.66,
+        "p90": 0.75,
+        "p95": 0.75
       }
     },
-    "Hunter Marksmanship": {
-      "sampleCount": 77,
+    "Enhancement Shaman": {
+      "sampleCount": 19,
       "pressureWindows": {
-        "p50": 187911,
-        "p75": 389883,
-        "p90": 567401,
-        "p95": 692682
+        "p50": 278898,
+        "p75": 498730,
+        "p90": 687476,
+        "p95": 844351
       },
       "hps": {
-        "p50": 2423.509943276929,
-        "p75": 3090.1959118361337,
-        "p90": 3611.835406888674,
-        "p95": 4143.3518605094105
+        "p50": 7416.118072503299,
+        "p75": 10747.160945046338,
+        "p90": 12565.682536867924,
+        "p95": 13171.8355789037
       },
       "dps": {
-        "p50": 62254.79919473163,
-        "p75": 71962.65996945063,
-        "p90": 84314.38955019489,
-        "p95": 91202.91889578429
+        "p50": 64975.93363008963,
+        "p75": 77185.82304526749,
+        "p90": 80629.498830107,
+        "p95": 84339.74566358908
       },
       "matchDuration": {
-        "p50": 141.237,
-        "p75": 174.799,
-        "p90": 193.902,
-        "p95": 206.458
+        "p50": 151.969,
+        "p75": 213.373,
+        "p90": 292.566,
+        "p95": 412.235
       },
       "cdUsage": {
-        "Aspect of the Turtle": {
-          "neverUsedRate": 0.584,
-          "medianFirstUseSeconds": 100.415,
-          "p75FirstUseSeconds": 151.246
+        "Astral Shift": {
+          "neverUsedRate": 0.158,
+          "medianFirstUseSeconds": 23.812,
+          "p75FirstUseSeconds": 58.883
         },
-        "Exhilaration": {
-          "neverUsedRate": 0.286,
-          "medianFirstUseSeconds": 53.854,
-          "p75FirstUseSeconds": 82.782
+        "Ascendance": {
+          "neverUsedRate": 0.105,
+          "medianFirstUseSeconds": 17.83,
+          "p75FirstUseSeconds": 19.235
         },
-        "Trueshot": {
-          "neverUsedRate": 0,
-          "medianFirstUseSeconds": 24.541,
-          "p75FirstUseSeconds": 30.993
-        },
-        "Roar of Sacrifice": {
-          "neverUsedRate": 0.481,
-          "medianFirstUseSeconds": 33.236,
-          "p75FirstUseSeconds": 80.646
-        },
-        "Tar Trap": {
-          "neverUsedRate": 0.935,
-          "medianFirstUseSeconds": 58.238,
-          "p75FirstUseSeconds": 100.816
+        "Spirit Walk": {
+          "neverUsedRate": 0.421,
+          "medianFirstUseSeconds": 77.297,
+          "p75FirstUseSeconds": 195.985
         }
       },
       "defensiveTiming": {
-        "sampleCasts": 113,
-        "optimalPct": 64.6,
-        "earlyPct": 2.7,
-        "latePct": 12.4,
-        "reactivePct": 14.2,
-        "unknownPct": 6.2
+        "sampleCasts": 41,
+        "optimalPct": 58.5,
+        "earlyPct": 9.8,
+        "latePct": 17.1,
+        "reactivePct": 4.9,
+        "unknownPct": 9.8
       },
-      "purgesPerMinute": null,
+      "purgesPerMinute": {
+        "p50": 1.7465765885963103,
+        "p75": 3.1923666965212067,
+        "p90": 4.780361151598375,
+        "p95": 4.833252779120348
+      },
+      "dampeningAtDeath": null
+    },
+    "Elemental Shaman": {
+      "sampleCount": 20,
+      "pressureWindows": {
+        "p50": 163231,
+        "p75": 414006,
+        "p90": 621791,
+        "p95": 726016
+      },
+      "hps": {
+        "p50": 4339.861245279705,
+        "p75": 6236.7254202619,
+        "p90": 7306.599816227877,
+        "p95": 7540.091316308747
+      },
+      "dps": {
+        "p50": 58880.77055252205,
+        "p75": 64889.49862449409,
+        "p90": 70108.57871536116,
+        "p95": 84180.10456717605
+      },
+      "matchDuration": {
+        "p50": 120.916,
+        "p75": 158.274,
+        "p90": 173.477,
+        "p95": 173.808
+      },
+      "cdUsage": {
+        "Astral Shift": {
+          "neverUsedRate": 0.3,
+          "medianFirstUseSeconds": 23.859,
+          "p75FirstUseSeconds": 86.38
+        },
+        "Ascendance": {
+          "neverUsedRate": 0,
+          "medianFirstUseSeconds": 25.168,
+          "p75FirstUseSeconds": 36.3
+        },
+        "Spiritwalker's Grace": {
+          "neverUsedRate": 0.05,
+          "medianFirstUseSeconds": 35.932,
+          "p75FirstUseSeconds": 69.847
+        }
+      },
+      "defensiveTiming": {
+        "sampleCasts": 43,
+        "optimalPct": 65.1,
+        "earlyPct": 4.7,
+        "latePct": 7,
+        "reactivePct": 4.7,
+        "unknownPct": 18.6
+      },
+      "purgesPerMinute": {
+        "p50": 0.7557246139506762,
+        "p75": 1.2815720617290542,
+        "p90": 3.10705755176811,
+        "p95": 3.4567687853778675
+      },
       "dampeningAtDeath": {
-        "p50": 0.46,
-        "p75": 0.56,
-        "p90": 0.62,
+        "p50": 0.44,
+        "p75": 0.5,
+        "p90": 0.63,
         "p95": 0.63
       }
     },
-    "Priest Holy": {
-      "sampleCount": 74,
+    "Windwalker Monk": {
+      "sampleCount": 89,
       "pressureWindows": {
-        "p50": 35801,
-        "p75": 91563,
-        "p90": 174363,
-        "p95": 238912
+        "p50": 119471,
+        "p75": 254295,
+        "p90": 392664,
+        "p95": 485762
       },
       "hps": {
-        "p50": 48152.8611705738,
-        "p75": 55408.53874058227,
-        "p90": 61866.64645055645,
-        "p95": 66524.67816199963
+        "p50": 817.8475709461748,
+        "p75": 1123.174810343421,
+        "p90": 1671.5972729486243,
+        "p95": 1774.749537059019
       },
       "dps": {
-        "p50": 55838.70834195818,
-        "p75": 62721.00129595525,
-        "p90": 68549.49632706196,
-        "p95": 71256.43491361348
+        "p50": 36466.19848988994,
+        "p75": 55778.26267424566,
+        "p90": 69683.10776193322,
+        "p95": 74653.74957439564
       },
       "matchDuration": {
-        "p50": 136.77,
-        "p75": 165.19,
-        "p90": 204.484,
-        "p95": 219.869
+        "p50": 127.928,
+        "p75": 186.759,
+        "p90": 262.683,
+        "p95": 303.901
       },
       "cdUsage": {
-        "Guardian Spirit": {
-          "neverUsedRate": 0.068,
-          "medianFirstUseSeconds": 62.337,
-          "p75FirstUseSeconds": 84.027
+        "Touch of Karma": {
+          "neverUsedRate": 0.202,
+          "medianFirstUseSeconds": 48.892,
+          "p75FirstUseSeconds": 97.331
         },
-        "Desperate Prayer": {
-          "neverUsedRate": 0.77,
-          "medianFirstUseSeconds": 77.98,
-          "p75FirstUseSeconds": 96.356
+        "Leg Sweep": {
+          "neverUsedRate": 0.034,
+          "medianFirstUseSeconds": 17.213,
+          "p75FirstUseSeconds": 26.742
         },
-        "Divine Hymn": {
-          "neverUsedRate": 0.014,
-          "medianFirstUseSeconds": 25.655,
-          "p75FirstUseSeconds": 33.46
+        "Paralysis": {
+          "neverUsedRate": 0.101,
+          "medianFirstUseSeconds": 30.246,
+          "p75FirstUseSeconds": 48.94
         },
-        "Apotheosis": {
-          "neverUsedRate": 0.162,
-          "medianFirstUseSeconds": 84.205,
-          "p75FirstUseSeconds": 97.419
-        },
-        "Power Infusion": {
-          "neverUsedRate": 0,
-          "medianFirstUseSeconds": 16.756,
-          "p75FirstUseSeconds": 23.963
-        },
-        "Psychic Scream": {
-          "neverUsedRate": 0.081,
-          "medianFirstUseSeconds": 38.632,
-          "p75FirstUseSeconds": 56.407
+        "Tiger's Lust": {
+          "neverUsedRate": 0.292,
+          "medianFirstUseSeconds": 34.73,
+          "p75FirstUseSeconds": 85.751
         }
       },
       "defensiveTiming": {
-        "sampleCasts": 380,
-        "optimalPct": 61.1,
-        "earlyPct": 7.1,
-        "latePct": 14.5,
-        "reactivePct": 0.5,
-        "unknownPct": 16.8
+        "sampleCasts": 95,
+        "optimalPct": 49.5,
+        "earlyPct": 7.4,
+        "latePct": 9.5,
+        "reactivePct": 0,
+        "unknownPct": 33.7
       },
-      "purgesPerMinute": {
-        "p50": 0.8657196655436358,
-        "p75": 1.9877916463056062,
-        "p90": 3.34852571853781,
-        "p95": 4.952443840556706
-      },
-      "dampeningAtDeath": null
+      "purgesPerMinute": null,
+      "dampeningAtDeath": {
+        "p50": 0.44,
+        "p75": 0.53,
+        "p90": 0.62,
+        "p95": 0.64
+      }
     },
-    "Evoker Devastation": {
-      "sampleCount": 31,
+    "Restoration Druid": {
+      "sampleCount": 75,
       "pressureWindows": {
-        "p50": 93261,
-        "p75": 231829,
-        "p90": 410074,
-        "p95": 482587
+        "p50": 45381,
+        "p75": 139172,
+        "p90": 270661,
+        "p95": 379435
       },
       "hps": {
-        "p50": 1739.5098138919964,
-        "p75": 3781.4671461660373,
-        "p90": 5448.892555837032,
-        "p95": 6745.343278661501
+        "p50": 40322.43032468113,
+        "p75": 56554.21443106129,
+        "p90": 60615.888404533565,
+        "p95": 64895.85157670879
       },
       "dps": {
-        "p50": 74379.74220469291,
-        "p75": 83985.73763873537,
-        "p90": 95112.34456906011,
-        "p95": 101134.02674215806
+        "p50": 56402.79226589807,
+        "p75": 67180.35922788363,
+        "p90": 74977.12189871231,
+        "p95": 79851.06343764975
       },
       "matchDuration": {
-        "p50": 127.646,
-        "p75": 147.495,
-        "p90": 153.723,
-        "p95": 179.025
+        "p50": 132.224,
+        "p75": 180.429,
+        "p90": 228.837,
+        "p95": 265.293
+      },
+      "cdUsage": {
+        "Barkskin": {
+          "neverUsedRate": 0.533,
+          "medianFirstUseSeconds": 46.133,
+          "p75FirstUseSeconds": 100.362
+        },
+        "Ironbark": {
+          "neverUsedRate": 0.053,
+          "medianFirstUseSeconds": 30.324,
+          "p75FirstUseSeconds": 55.581
+        },
+        "Tranquility": {
+          "neverUsedRate": 0.667,
+          "medianFirstUseSeconds": 75.768,
+          "p75FirstUseSeconds": 101.473
+        },
+        "Incapacitating Roar": {
+          "neverUsedRate": 0.467,
+          "medianFirstUseSeconds": 52.77,
+          "p75FirstUseSeconds": 100.437
+        },
+        "Stampeding Roar": {
+          "neverUsedRate": 0.773,
+          "medianFirstUseSeconds": 28.253,
+          "p75FirstUseSeconds": 58.807
+        },
+        "Convoke the Spirits": {
+          "neverUsedRate": 0.907,
+          "medianFirstUseSeconds": 26.84,
+          "p75FirstUseSeconds": 49.765
+        },
+        "Mighty Bash": {
+          "neverUsedRate": 0.893,
+          "medianFirstUseSeconds": 59.384,
+          "p75FirstUseSeconds": 68.678
+        }
+      },
+      "defensiveTiming": {
+        "sampleCasts": 200,
+        "optimalPct": 50.5,
+        "earlyPct": 5,
+        "latePct": 13,
+        "reactivePct": 7,
+        "unknownPct": 24.5
+      },
+      "purgesPerMinute": null,
+      "dampeningAtDeath": {
+        "p50": 0.44,
+        "p75": 0.57,
+        "p90": 0.6,
+        "p95": 0.6
+      }
+    },
+    "Holy Paladin": {
+      "sampleCount": 33,
+      "pressureWindows": {
+        "p50": 29445,
+        "p75": 100947,
+        "p90": 211585,
+        "p95": 300418
+      },
+      "hps": {
+        "p50": 32301.99883039182,
+        "p75": 39479.66578291958,
+        "p90": 51915.00373136593,
+        "p95": 52493.35802862855
+      },
+      "dps": {
+        "p50": 59455.84641684758,
+        "p75": 76738.49356256265,
+        "p90": 84976.8785409005,
+        "p95": 91590.69076622708
+      },
+      "matchDuration": {
+        "p50": 164.819,
+        "p75": 201.445,
+        "p90": 248.382,
+        "p95": 267.685
+      },
+      "cdUsage": {
+        "Divine Shield": {
+          "neverUsedRate": 0.364,
+          "medianFirstUseSeconds": 145.531,
+          "p75FirstUseSeconds": 167.248
+        },
+        "Blessing of Protection": {
+          "neverUsedRate": 0.758,
+          "medianFirstUseSeconds": 157.284,
+          "p75FirstUseSeconds": 171.394
+        },
+        "Blessing of Spellwarding": {
+          "neverUsedRate": 0.727,
+          "medianFirstUseSeconds": 183.977,
+          "p75FirstUseSeconds": 191.224
+        },
+        "Blessing of Sacrifice": {
+          "neverUsedRate": 0.152,
+          "medianFirstUseSeconds": 63.504,
+          "p75FirstUseSeconds": 111.723
+        },
+        "Divine Protection": {
+          "neverUsedRate": 0.273,
+          "medianFirstUseSeconds": 58.531,
+          "p75FirstUseSeconds": 75.509
+        },
+        "Avenging Crusader": {
+          "neverUsedRate": 0.455,
+          "medianFirstUseSeconds": 35.361,
+          "p75FirstUseSeconds": 48.766
+        },
+        "Aura Mastery": {
+          "neverUsedRate": 0.242,
+          "medianFirstUseSeconds": 84.321,
+          "p75FirstUseSeconds": 124.219
+        },
+        "Hammer of Justice": {
+          "neverUsedRate": 0.091,
+          "medianFirstUseSeconds": 22.493,
+          "p75FirstUseSeconds": 38.554
+        },
+        "Blinding Light": {
+          "neverUsedRate": 0.545,
+          "medianFirstUseSeconds": 63.525,
+          "p75FirstUseSeconds": 122.661
+        },
+        "Avenging Wrath": {
+          "neverUsedRate": 0.576,
+          "medianFirstUseSeconds": 34.986,
+          "p75FirstUseSeconds": 84.021
+        }
+      },
+      "defensiveTiming": {
+        "sampleCasts": 199,
+        "optimalPct": 57.3,
+        "earlyPct": 9,
+        "latePct": 9,
+        "reactivePct": 3,
+        "unknownPct": 21.6
+      },
+      "purgesPerMinute": null,
+      "dampeningAtDeath": null
+    },
+    "Beast Mastery Hunter": {
+      "sampleCount": 9,
+      "pressureWindows": {
+        "p50": 111778,
+        "p75": 283970,
+        "p90": 486017,
+        "p95": 617756
+      },
+      "hps": {
+        "p50": 2124.9763302404845,
+        "p75": 4306.524298648045,
+        "p90": 5834.472304366193,
+        "p95": 5834.472304366193
+      },
+      "dps": {
+        "p50": 58386.821899566916,
+        "p75": 61565.8724659311,
+        "p90": 68191.06305299107,
+        "p95": 68191.06305299107
+      },
+      "matchDuration": {
+        "p50": 112.566,
+        "p75": 121.772,
+        "p90": 201.445,
+        "p95": 201.445
+      },
+      "cdUsage": {
+        "Exhilaration": {
+          "neverUsedRate": 0.222,
+          "medianFirstUseSeconds": 36.819,
+          "p75FirstUseSeconds": 42.217
+        },
+        "Bestial Wrath": {
+          "neverUsedRate": 0,
+          "medianFirstUseSeconds": 17.668,
+          "p75FirstUseSeconds": 21.709
+        },
+        "Roar of Sacrifice": {
+          "neverUsedRate": 0.667,
+          "medianFirstUseSeconds": 79.53,
+          "p75FirstUseSeconds": 93.72
+        },
+        "Aspect of the Turtle": {
+          "neverUsedRate": 0.667,
+          "medianFirstUseSeconds": 24.889,
+          "p75FirstUseSeconds": 118.659
+        },
+        "Tar Trap": {
+          "neverUsedRate": 0.778,
+          "medianFirstUseSeconds": 42.01,
+          "p75FirstUseSeconds": 45.475
+        }
+      },
+      "defensiveTiming": {
+        "sampleCasts": 13,
+        "optimalPct": 53.8,
+        "earlyPct": 7.7,
+        "latePct": 15.4,
+        "reactivePct": 7.7,
+        "unknownPct": 15.4
+      },
+      "purgesPerMinute": null,
+      "dampeningAtDeath": null
+    },
+    "Devastation Evoker": {
+      "sampleCount": 6,
+      "pressureWindows": {
+        "p50": 149012,
+        "p75": 308064,
+        "p90": 413818,
+        "p95": 451743
+      },
+      "hps": {
+        "p50": 2723.7890768183483,
+        "p75": 8102.60733880304,
+        "p90": 8503.480864052593,
+        "p95": 8503.480864052593
+      },
+      "dps": {
+        "p50": 79765.68409677614,
+        "p75": 81250.10066945186,
+        "p90": 81268.47198610047,
+        "p95": 81268.47198610047
+      },
+      "matchDuration": {
+        "p50": 84.052,
+        "p75": 107.054,
+        "p90": 170.36,
+        "p95": 170.36
       },
       "cdUsage": {
         "Obsidian Scales": {
-          "neverUsedRate": 0.161,
-          "medianFirstUseSeconds": 22.712,
-          "p75FirstUseSeconds": 37.841
+          "neverUsedRate": 0.167,
+          "medianFirstUseSeconds": 28.022,
+          "p75FirstUseSeconds": 31.146
         },
         "Renewing Blaze": {
           "neverUsedRate": 1,
@@ -1933,389 +1878,154 @@
         },
         "Dragonrage": {
           "neverUsedRate": 0,
-          "medianFirstUseSeconds": 17.179,
-          "p75FirstUseSeconds": 23.332
+          "medianFirstUseSeconds": 24.07,
+          "p75FirstUseSeconds": 26.126
         },
         "Oppressing Roar": {
-          "neverUsedRate": 0.516,
-          "medianFirstUseSeconds": 18.319,
-          "p75FirstUseSeconds": 31.014
-        }
-      },
-      "defensiveTiming": {
-        "sampleCasts": 53,
-        "optimalPct": 60.4,
-        "earlyPct": 5.7,
-        "latePct": 17,
-        "reactivePct": 1.9,
-        "unknownPct": 15.1
-      },
-      "purgesPerMinute": {
-        "p50": 4.365165975515387,
-        "p75": 5.521920050486126,
-        "p90": 6.906418035617385,
-        "p95": 7.005774456521739
-      },
-      "dampeningAtDeath": {
-        "p50": 0.33,
-        "p75": 0.44,
-        "p90": 0.48,
-        "p95": 0.48
-      }
-    },
-    "Mage Arcane": {
-      "sampleCount": 15,
-      "pressureWindows": {
-        "p50": 173248,
-        "p75": 359389,
-        "p90": 573681,
-        "p95": 696803
-      },
-      "hps": {
-        "p50": 544.30549528581,
-        "p75": 666.1282349418981,
-        "p90": 1876.5946241849315,
-        "p95": 2785.0372756902557
-      },
-      "dps": {
-        "p50": 62592.67749182633,
-        "p75": 78275.90004870191,
-        "p90": 79564.79641791728,
-        "p95": 83059.60581886438
-      },
-      "matchDuration": {
-        "p50": 134.997,
-        "p75": 172.892,
-        "p90": 198.147,
-        "p95": 218.723
-      },
-      "cdUsage": {
-        "Ice Block": {
-          "neverUsedRate": 0.667,
-          "medianFirstUseSeconds": 108.006,
-          "p75FirstUseSeconds": 121.75
-        },
-        "Arcane Surge": {
-          "neverUsedRate": 0,
-          "medianFirstUseSeconds": 16.959,
-          "p75FirstUseSeconds": 21.296
-        },
-        "Dragon's Breath": {
-          "neverUsedRate": 0,
-          "medianFirstUseSeconds": 31.092,
-          "p75FirstUseSeconds": 51.647
+          "neverUsedRate": 1,
+          "medianFirstUseSeconds": null,
+          "p75FirstUseSeconds": null
         }
       },
       "defensiveTiming": null,
-      "purgesPerMinute": {
-        "p50": 2.0887437598780174,
-        "p75": 3.57632473028551,
-        "p90": 5.3946727606488585,
-        "p95": 5.40491847581299
-      },
-      "dampeningAtDeath": {
-        "p50": 0.4,
-        "p75": 0.44,
-        "p90": 0.56,
-        "p95": 0.56
-      }
-    },
-    "Warlock Demonology": {
-      "sampleCount": 36,
-      "pressureWindows": {
-        "p50": 59499,
-        "p75": 167852,
-        "p90": 314048,
-        "p95": 405882
-      },
-      "hps": {
-        "p50": 1373.8238355175122,
-        "p75": 2212.3718668465312,
-        "p90": 2755.096003359163,
-        "p95": 3890.8269454493297
-      },
-      "dps": {
-        "p50": 66899.65987496356,
-        "p75": 72698.59280625985,
-        "p90": 81386.11364352841,
-        "p95": 88559.33692830038
-      },
-      "matchDuration": {
-        "p50": 160.451,
-        "p75": 191.813,
-        "p90": 227.123,
-        "p95": 243.121
-      },
-      "cdUsage": {
-        "Dark Pact": {
-          "neverUsedRate": 0.194,
-          "medianFirstUseSeconds": 26.752,
-          "p75FirstUseSeconds": 56.727
-        },
-        "Summon Demonic Tyrant": {
-          "neverUsedRate": 0,
-          "medianFirstUseSeconds": 18.386,
-          "p75FirstUseSeconds": 29.475
-        },
-        "Power Siphon": {
-          "neverUsedRate": 0.444,
-          "medianFirstUseSeconds": 6.206,
-          "p75FirstUseSeconds": 7.8
-        },
-        "Unending Resolve": {
-          "neverUsedRate": 0.639,
-          "medianFirstUseSeconds": 138.051,
-          "p75FirstUseSeconds": 170.977
-        }
-      },
-      "defensiveTiming": {
-        "sampleCasts": 82,
-        "optimalPct": 63.4,
-        "earlyPct": 9.8,
-        "latePct": 12.2,
-        "reactivePct": 0,
-        "unknownPct": 14.6
-      },
-      "purgesPerMinute": {
-        "p50": 0,
-        "p75": 0,
-        "p90": 0,
-        "p95": 0
-      },
+      "purgesPerMinute": null,
       "dampeningAtDeath": null
     },
-    "Druid Restoration": {
-      "sampleCount": 70,
+    "Preservation Evoker": {
+      "sampleCount": 41,
       "pressureWindows": {
-        "p50": 56833,
-        "p75": 149674,
-        "p90": 289901,
-        "p95": 384357
+        "p50": 97684,
+        "p75": 205463,
+        "p90": 387650,
+        "p95": 493019
       },
       "hps": {
-        "p50": 52825.26443342166,
-        "p75": 60688.81160004704,
-        "p90": 66263.47178259863,
-        "p95": 71522.96836192289
+        "p50": 45997.69567555111,
+        "p75": 60814.9074074074,
+        "p90": 66915.3464025404,
+        "p95": 69038.53214926137
       },
       "dps": {
-        "p50": 60093.31611981073,
-        "p75": 64090.194159191975,
-        "p90": 71372.12345164236,
-        "p95": 75536.77717510906
+        "p50": 48942.08511435735,
+        "p75": 74579.74591189425,
+        "p90": 82923.55750793153,
+        "p95": 88490.2866439631
       },
       "matchDuration": {
-        "p50": 148.654,
-        "p75": 178.79,
-        "p90": 198.147,
-        "p95": 207.164
+        "p50": 139.489,
+        "p75": 190.99,
+        "p90": 221.027,
+        "p95": 291.6
       },
       "cdUsage": {
-        "Ironbark": {
-          "neverUsedRate": 0.029,
-          "medianFirstUseSeconds": 40.381,
-          "p75FirstUseSeconds": 71.934
+        "Obsidian Scales": {
+          "neverUsedRate": 0.195,
+          "medianFirstUseSeconds": 29.98,
+          "p75FirstUseSeconds": 50.971
         },
-        "Tranquility": {
-          "neverUsedRate": 0.386,
-          "medianFirstUseSeconds": 106.666,
-          "p75FirstUseSeconds": 140.458
-        },
-        "Incapacitating Roar": {
-          "neverUsedRate": 0.914,
-          "medianFirstUseSeconds": 78.388,
-          "p75FirstUseSeconds": 104.512
-        },
-        "Stampeding Roar": {
-          "neverUsedRate": 0.9,
-          "medianFirstUseSeconds": 4.914,
-          "p75FirstUseSeconds": 6.133
-        },
-        "Barkskin": {
-          "neverUsedRate": 0.329,
-          "medianFirstUseSeconds": 52.941,
-          "p75FirstUseSeconds": 108.433
-        },
-        "Mighty Bash": {
-          "neverUsedRate": 0.243,
-          "medianFirstUseSeconds": 79.454,
-          "p75FirstUseSeconds": 99.34
-        }
-      },
-      "defensiveTiming": {
-        "sampleCasts": 222,
-        "optimalPct": 59.5,
-        "earlyPct": 5.4,
-        "latePct": 15.8,
-        "reactivePct": 2.7,
-        "unknownPct": 16.7
-      },
-      "purgesPerMinute": null,
-      "dampeningAtDeath": {
-        "p50": 0.49,
-        "p75": 0.6,
-        "p90": 0.67,
-        "p95": 0.67
-      }
-    },
-    "Warrior Fury": {
-      "sampleCount": 27,
-      "pressureWindows": {
-        "p50": 237624,
-        "p75": 380809,
-        "p90": 544994,
-        "p95": 642664
-      },
-      "hps": {
-        "p50": 4123.613090746486,
-        "p75": 5751.435813088144,
-        "p90": 6388.861772509146,
-        "p95": 6828.534337480547
-      },
-      "dps": {
-        "p50": 66035.48671438584,
-        "p75": 75130.41719528564,
-        "p90": 81234.37029171629,
-        "p95": 84314.38955019489
-      },
-      "matchDuration": {
-        "p50": 180.133,
-        "p75": 206.927,
-        "p90": 224.189,
-        "p95": 232.617
-      },
-      "cdUsage": {
-        "Enraged Regeneration": {
-          "neverUsedRate": 0.074,
-          "medianFirstUseSeconds": 83.329,
-          "p75FirstUseSeconds": 134.894
-        },
-        "Rallying Cry": {
-          "neverUsedRate": 0.37,
-          "medianFirstUseSeconds": 101.314,
-          "p75FirstUseSeconds": 162.833
-        },
-        "Recklessness": {
-          "neverUsedRate": 0,
-          "medianFirstUseSeconds": 17.683,
-          "p75FirstUseSeconds": 22.526
-        },
-        "Bladestorm": {
-          "neverUsedRate": 0.778,
-          "medianFirstUseSeconds": 16.592,
-          "p75FirstUseSeconds": 24.729
-        },
-        "Storm Bolt": {
-          "neverUsedRate": 0,
-          "medianFirstUseSeconds": 22.72,
-          "p75FirstUseSeconds": 52.651
-        },
-        "Berserker Shout": {
-          "neverUsedRate": 0.185,
-          "medianFirstUseSeconds": 34.066,
-          "p75FirstUseSeconds": 63.326
-        },
-        "Intimidating Shout": {
-          "neverUsedRate": 0,
-          "medianFirstUseSeconds": 33.602,
-          "p75FirstUseSeconds": 59.368
-        },
-        "Shockwave": {
-          "neverUsedRate": 0.407,
-          "medianFirstUseSeconds": 46.5,
-          "p75FirstUseSeconds": 63.797
-        },
-        "Avatar": {
-          "neverUsedRate": 0.222,
-          "medianFirstUseSeconds": 18.34,
-          "p75FirstUseSeconds": 24.659
-        }
-      },
-      "defensiveTiming": {
-        "sampleCasts": 49,
-        "optimalPct": 57.1,
-        "earlyPct": 8.2,
-        "latePct": 14.3,
-        "reactivePct": 6.1,
-        "unknownPct": 14.3
-      },
-      "purgesPerMinute": null,
-      "dampeningAtDeath": {
-        "p50": 0.5,
-        "p75": 0.77,
-        "p90": 0.81,
-        "p95": 0.81
-      }
-    },
-    "Paladin Protection": {
-      "sampleCount": 6,
-      "pressureWindows": {
-        "p50": 56465,
-        "p75": 230048,
-        "p90": 366981,
-        "p95": 440666
-      },
-      "hps": {
-        "p50": 8715.058562787619,
-        "p75": 10650.03006614552,
-        "p90": 15062.828558332722,
-        "p95": 15062.828558332722
-      },
-      "dps": {
-        "p50": 51017.80809471558,
-        "p75": 59249.00548328137,
-        "p90": 64825.598670015206,
-        "p95": 64825.598670015206
-      },
-      "matchDuration": {
-        "p50": 143.081,
-        "p75": 177.534,
-        "p90": 218.817,
-        "p95": 218.817
-      },
-      "cdUsage": {
-        "Ardent Defender": {
-          "neverUsedRate": 0.667,
-          "medianFirstUseSeconds": 21.237,
-          "p75FirstUseSeconds": 33.231
-        },
-        "Guardian of Ancient Kings": {
+        "Renewing Blaze": {
           "neverUsedRate": 1,
           "medianFirstUseSeconds": null,
           "p75FirstUseSeconds": null
         },
-        "Blessing of Spellwarding": {
-          "neverUsedRate": 0.667,
-          "medianFirstUseSeconds": 111.166,
-          "p75FirstUseSeconds": 203.506
+        "Time Dilation": {
+          "neverUsedRate": 0.049,
+          "medianFirstUseSeconds": 20.335,
+          "p75FirstUseSeconds": 43.149
         },
-        "Avenging Wrath": {
-          "neverUsedRate": 0,
-          "medianFirstUseSeconds": 8.737,
-          "p75FirstUseSeconds": 21.787
-        },
-        "Hammer of Justice": {
-          "neverUsedRate": 0,
-          "medianFirstUseSeconds": 8.041,
-          "p75FirstUseSeconds": 14.781
-        },
-        "Blinding Light": {
-          "neverUsedRate": 0,
-          "medianFirstUseSeconds": 42.54,
-          "p75FirstUseSeconds": 64.151
-        },
-        "Divine Shield": {
-          "neverUsedRate": 0.5,
-          "medianFirstUseSeconds": 156.776,
-          "p75FirstUseSeconds": 213.517
-        },
-        "Blessing of Protection": {
-          "neverUsedRate": 1,
-          "medianFirstUseSeconds": null,
-          "p75FirstUseSeconds": null
+        "Oppressing Roar": {
+          "neverUsedRate": 0.293,
+          "medianFirstUseSeconds": 26.998,
+          "p75FirstUseSeconds": 49.857
         }
       },
-      "defensiveTiming": null,
+      "defensiveTiming": {
+        "sampleCasts": 219,
+        "optimalPct": 48.9,
+        "earlyPct": 5,
+        "latePct": 14.2,
+        "reactivePct": 8.7,
+        "unknownPct": 23.3
+      },
+      "purgesPerMinute": {
+        "p50": 2.451547880092069,
+        "p75": 3.2407032326014744,
+        "p90": 4.732510288065844,
+        "p95": 5.886488872900895
+      },
+      "dampeningAtDeath": {
+        "p50": 0.54,
+        "p75": 0.59,
+        "p90": 0.64,
+        "p95": 0.64
+      }
+    },
+    "Frost Death Knight": {
+      "sampleCount": 13,
+      "pressureWindows": {
+        "p50": 206605,
+        "p75": 349605,
+        "p90": 477062,
+        "p95": 555012
+      },
+      "hps": {
+        "p50": 3592.365004992703,
+        "p75": 6845.892872545355,
+        "p90": 9504.523780413254,
+        "p95": 9505.831282576464
+      },
+      "dps": {
+        "p50": 72806.43360213123,
+        "p75": 78903.29490238924,
+        "p90": 88490.2866439631,
+        "p95": 96733.62676479785
+      },
+      "matchDuration": {
+        "p50": 83.154,
+        "p75": 145.058,
+        "p90": 160.307,
+        "p95": 176.194
+      },
+      "cdUsage": {
+        "Icebound Fortitude": {
+          "neverUsedRate": 0.077,
+          "medianFirstUseSeconds": 26.34,
+          "p75FirstUseSeconds": 29.224
+        },
+        "Anti-Magic Zone": {
+          "neverUsedRate": 0.385,
+          "medianFirstUseSeconds": 85.407,
+          "p75FirstUseSeconds": 101.702
+        },
+        "Pillar of Frost": {
+          "neverUsedRate": 0,
+          "medianFirstUseSeconds": 13.699,
+          "p75FirstUseSeconds": 16.448
+        },
+        "Empower Rune Weapon": {
+          "neverUsedRate": 0,
+          "medianFirstUseSeconds": 15.771,
+          "p75FirstUseSeconds": 18.28
+        },
+        "Blinding Sleet": {
+          "neverUsedRate": 0,
+          "medianFirstUseSeconds": 16.037,
+          "p75FirstUseSeconds": 28.097
+        },
+        "Anti-Magic Shell": {
+          "neverUsedRate": 0.846,
+          "medianFirstUseSeconds": 15.586,
+          "p75FirstUseSeconds": 60.002
+        }
+      },
+      "defensiveTiming": {
+        "sampleCasts": 27,
+        "optimalPct": 66.7,
+        "earlyPct": 3.7,
+        "latePct": 14.8,
+        "reactivePct": 0,
+        "unknownPct": 14.8
+      },
       "purgesPerMinute": null,
       "dampeningAtDeath": null
     }
