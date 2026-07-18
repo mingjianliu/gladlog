@@ -185,3 +185,18 @@ not the app — either surface it or leave it corpus-only by design.
 数据全在 unit 事件数组里(damageOut/healOut/damageIn 按 spellId 聚合即可),
 纯 derive + 展开式 UI(meters 行点击展开或独立 detail tab)。与 #10 的
 结构化面板方向互补:这是"原始账目",#10 是"分析结论"。
+
+## 12. 懒加载后台补载 + 战绩动态更新
+
+用户反馈(2026-07-18):当前懒加载(首屏只 parse 最近 N 场)加载确实快了,
+但有两个残缺:
+
+1. **没有后台补载**:首屏之后剩余对局不会在空闲时继续 parse,列表往下翻/
+   搜索旧场次仍然缺;应在首屏渲染完成后用空闲队列(逐场、可中断)把剩余
+   对局补进内存缓存。
+2. **战绩仪表盘不随补载更新**:统计页仍然只算最初 load 的那几盘——补载
+   完成一批后应增量重算聚合(或至少提供"已统计 X/Y 场"提示 + 手动刷新),
+   否则胜率/分角色统计对老玩家是错的。
+
+关联:docs/plans/2026-07-19-large-match-load-optimization.md(方案 A 的
+workerHost 异步 parse + LRU 已设计,可作为后台补载的执行载体)。
