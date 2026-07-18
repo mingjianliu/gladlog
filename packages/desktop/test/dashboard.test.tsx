@@ -2,6 +2,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 
 import {
+  deriveCurrentRating,
   deriveDashboard,
   periodStart,
 } from "../src/renderer/src/components/dashboard";
@@ -144,5 +145,36 @@ describe("角色区分(用户反馈:17 个号分数跳来跳去)", () => {
     const d = deriveDashboard(metas, "all");
     const pts = d.ratingSeries[0]!.points.map((p) => p.rating);
     expect(pts).toEqual([1800, 1820, 1500]);
+  });
+});
+
+describe("deriveCurrentRating(1h 总览带)", () => {
+  it("取最近有评分场的 bracket,与期起点前最近同 bracket 场相减", () => {
+    const metas = [
+      meta({ id: "a", bracket: "3v3", playerRating: 2145, startTime: NOW - H }),
+      meta({
+        id: "b",
+        bracket: "3v3",
+        playerRating: 2082,
+        startTime: NOW - 8 * 24 * H, // 期起点(7 天)之前 → 基线
+      }),
+      meta({ id: "c", bracket: "2v2", playerRating: 1800, startTime: NOW - 2 * H }),
+    ];
+    const cur = deriveCurrentRating(metas, NOW - 7 * 24 * H);
+    expect(cur).toEqual({ bracket: "3v3", rating: 2145, delta: 63 });
+  });
+
+  it("无基线 → delta null;全无评分 → null", () => {
+    const cur = deriveCurrentRating(
+      [meta({ playerRating: 2000, startTime: NOW - H })],
+      NOW - 7 * 24 * H,
+    );
+    expect(cur!.delta).toBeNull();
+    expect(
+      deriveCurrentRating(
+        [meta({ playerRating: null, avgRating: null })],
+        NOW,
+      ),
+    ).toBeNull();
   });
 });

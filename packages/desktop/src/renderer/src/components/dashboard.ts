@@ -144,3 +144,40 @@ export function listCharacters(
     .map(([name, games]) => ({ name, games }))
     .sort((a, b) => b.games - a.games);
 }
+
+const ratingOf = (m: StoredMatchMeta): number | null =>
+  typeof m.playerRating === "number" && m.playerRating > 0
+    ? m.playerRating
+    : typeof m.avgRating === "number" && m.avgRating > 0
+      ? m.avgRating
+      : null;
+
+export interface CurrentRating {
+  bracket: string;
+  rating: number;
+  /** 与时间范围起点前最近一场(同 bracket)的差;无基线 → null。 */
+  delta: number | null;
+}
+
+/** 总览带「当前评分与变化」(1h):最近一场有评分对局的 bracket 为准。 */
+export function deriveCurrentRating(
+  metas: StoredMatchMeta[],
+  from: number,
+  character?: string,
+): CurrentRating | null {
+  const rated = metas
+    .filter((m) => !character || m.playerName === character)
+    .filter((m) => ratingOf(m) != null)
+    .sort((a, b) => b.startTime - a.startTime);
+  const latest = rated[0];
+  if (!latest) return null;
+  const baseline = rated.find(
+    (m) => m.bracket === latest.bracket && m.startTime < from,
+  );
+  const rating = ratingOf(latest)!;
+  return {
+    bracket: latest.bracket,
+    rating,
+    delta: baseline ? rating - ratingOf(baseline)! : null,
+  };
+}

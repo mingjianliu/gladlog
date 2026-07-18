@@ -1709,10 +1709,117 @@ pre {
   justify-content: space-between;
   margin-bottom: 12px;
 }
-.dash-overview {
-  display: flex;
-  gap: 24px;
+.dash-title {
+  font-size: 14px;
+  font-weight: 500;
+}
+.dash-head .dash-chars {
+  margin: 0 auto 0 14px;
+}
+.dash-period {
+  margin-left: auto;
+}
+/* 总览数字带(1h):全页唯一饱和色块 */
+.dash-band {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border-radius: 10px;
+  background: linear-gradient(135deg, #262a60, #353b80);
   margin-bottom: 14px;
+  padding: 14px 0;
+}
+.dash-band-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  border-left: 1px solid #ffffff22;
+}
+.dash-band-cell:first-child {
+  border-left: none;
+}
+.dash-band-v {
+  font-size: 34px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.dash-band-sub {
+  font-size: 13px;
+  font-weight: 500;
+  color: #ffffffb0;
+}
+.dash-band-k {
+  font-size: 11px;
+  color: #ffffff90;
+}
+.dash-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.dash-legend {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+.dash-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.dash-legend-line {
+  width: 12px;
+  height: 2px;
+  border-radius: 1px;
+}
+/* 对阵敌方阵容(1h):三列 grid + 胜率条 */
+.dash-comps {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 6px;
+}
+.dash-comp {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+}
+.dash-comp-click {
+  cursor: pointer;
+}
+.dash-comp-click:hover {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.dash-comp-specs {
+  display: inline-flex;
+  gap: 3px;
+}
+.dash-comp-track {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.dash-comp-bar {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+}
+.dash-comp-num {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.dash-comp-games {
+  color: #595d6c;
+}
+.dash-comp-foot {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--mute);
 }
 .dash-stat {
   display: flex;
@@ -1924,13 +2031,16 @@ pre {
 .dash-issue {
   display: flex;
   align-items: baseline;
-  gap: 12px;
-  padding: 5px 0;
-  border-top: 1px solid var(--hairline);
-  font-size: 12px;
+  gap: 10px;
+  padding: 6px 0;
+  border-top: 1px solid var(--hairline-soft);
+  font-size: 12.5px;
 }
-.dash-issue-head b {
-  font-family: var(--font-data);
+.dash-issue-title {
+  font-weight: 500;
+}
+.dash-issue-count {
+  color: var(--mute);
 }
 .dash-issue-rec {
   margin-left: 8px;
@@ -1943,9 +2053,10 @@ pre {
   font-size: 10px;
 }
 .dash-issue-recent {
+  margin-left: auto;
   border: none;
   background: transparent;
-  color: var(--ink-2);
+  color: var(--accent);
   font-size: 11px;
   cursor: pointer;
   text-align: left;
