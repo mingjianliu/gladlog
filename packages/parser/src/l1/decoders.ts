@@ -292,3 +292,63 @@ export function decodeArenaEnd(params: string[]): {
     team1Mmr: parseInt10(params[3]),
   };
 }
+
+/** damage/heal 事件尾参定位用:找到 advanced 坐标对(x,y)的起始下标。 */
+export function findXIdx(params: string[], at: number): number {
+  let xIdx = at + 14;
+  for (let i = at + 4; i < params.length - 1; i++) {
+    const val1 = params[i];
+    const val2 = params[i + 1];
+    if (
+      val1 !== undefined &&
+      val2 !== undefined &&
+      val1.includes(".") &&
+      val2.includes(".")
+    ) {
+      xIdx = i;
+      break;
+    }
+  }
+  return xIdx;
+}
+
+/** damage/heal 事件的尾参切片规则(单源:parseLine 与消费方共用)。 */
+export function hpTailSlice(
+  eventName: string,
+  params: string[],
+): { kind: "damage" | "heal"; tail: string[] } | null {
+  if (eventName.endsWith("_HEAL")) {
+    if (params.length < 5) return null;
+    return { kind: "heal", tail: params.slice(-5) };
+  }
+  const isSwing =
+    eventName === "SWING_DAMAGE" || eventName === "SWING_DAMAGE_LANDED";
+  if (!isSwing && !eventName.endsWith("_DAMAGE")) return null;
+  if (params.length < 10) return null;
+  const at = isSwing ? 8 : 11;
+  const xIdx = findXIdx(params, at);
+  const tail =
+    params.length - (xIdx + 5) >= 11 ? params.slice(-11) : params.slice(-10);
+  return { kind: "damage", tail };
+}
+
+/**
+ * 从完整 params 解码 damage/heal 尾参(明细 breakdown 的暴击/量值单源入口)。
+ * 非 hp 事件或参数不足 → null(裁剪 doc 无 params 时消费方传 [] 得 null)。
+ */
+export function decodeHpTail(
+  eventName: string,
+  params: string[],
+): { critical: boolean; amount: number; effectiveAmount: number } | null {
+  const sliced = hpTailSlice(eventName, params);
+  if (!sliced) return null;
+  const d =
+    sliced.kind === "heal"
+      ? decodeHeal(sliced.tail)
+      : decodeDamage(sliced.tail);
+  return {
+    critical: d.critical,
+    amount: d.amount,
+    effectiveAmount: d.effectiveAmount,
+  };
+}

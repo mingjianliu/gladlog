@@ -9,33 +9,27 @@ import {
   decodeAbsorbed,
   decodeArenaStart,
   decodeArenaEnd,
+  hpTailSlice,
 } from "./decoders";
 import { decodeCombatantInfo } from "./combatantInfo";
 import { splitLine } from "./splitTopLevel";
 import { parseTimestamp } from "./timestamp";
 import type { ParsedLine } from "./types";
 
-function findXIdx(params: string[], at: number): number {
-  let xIdx = at + 14;
-  for (let i = at + 4; i < params.length - 1; i++) {
-    const val1 = params[i];
-    const val2 = params[i + 1];
-    if (val1 !== undefined && val2 !== undefined && val1.includes(".") && val2.includes(".")) {
-      xIdx = i;
-      break;
-    }
-  }
-  return xIdx;
-}
-
-export function parseLine(line: string, opts?: { timezone?: string }): ParsedLine | null {
+export function parseLine(
+  line: string,
+  opts?: { timezone?: string },
+): ParsedLine | null {
   try {
     const split = splitLine(line);
     if (!split) return null;
 
     const { datePart, eventName, params } = split;
 
-    if (eventName === "" && (params.length === 0 || params.every(p => p === ""))) {
+    if (
+      eventName === "" &&
+      (params.length === 0 || params.every((p) => p === ""))
+    ) {
       return null;
     }
 
@@ -70,7 +64,10 @@ export function parseLine(line: string, opts?: { timezone?: string }): ParsedLin
           unconscious: params[8] === "1",
         };
       }
-    } else if (eventName === "SWING_DAMAGE" || eventName === "SWING_DAMAGE_LANDED") {
+    } else if (
+      eventName === "SWING_DAMAGE" ||
+      eventName === "SWING_DAMAGE_LANDED"
+    ) {
       result.base = decodeBaseUnits(params);
       result.spell = {
         spellId: 0,
@@ -78,21 +75,20 @@ export function parseLine(line: string, opts?: { timezone?: string }): ParsedLin
         spellSchool: 0,
       };
       result.advanced = decodeAdvanced(params, 8);
-      const xIdx = findXIdx(params, 8);
-      const damageParams = (params.length - (xIdx + 5) >= 11) ? params.slice(-11) : params.slice(-10);
-      result.damage = decodeDamage(damageParams);
+      const swingTail = hpTailSlice(eventName, params);
+      if (swingTail) result.damage = decodeDamage(swingTail.tail);
     } else if (eventName.endsWith("_DAMAGE")) {
       result.base = decodeBaseUnits(params);
       result.spell = decodeSpell(params, 8);
       result.advanced = decodeAdvanced(params, 11);
-      const xIdx = findXIdx(params, 11);
-      const damageParams = (params.length - (xIdx + 5) >= 11) ? params.slice(-11) : params.slice(-10);
-      result.damage = decodeDamage(damageParams);
+      const dmgTail = hpTailSlice(eventName, params);
+      if (dmgTail) result.damage = decodeDamage(dmgTail.tail);
     } else if (eventName.endsWith("_HEAL")) {
       result.base = decodeBaseUnits(params);
       result.spell = decodeSpell(params, 8);
       result.advanced = decodeAdvanced(params, 11);
-      result.heal = decodeHeal(params.slice(-5));
+      const healTail = hpTailSlice(eventName, params);
+      if (healTail) result.heal = decodeHeal(healTail.tail);
     } else if (eventName === "SPELL_CAST_SUCCESS") {
       result.base = decodeBaseUnits(params);
       result.spell = decodeSpell(params, 8);
@@ -123,10 +119,14 @@ export function parseLine(line: string, opts?: { timezone?: string }): ParsedLin
       result.base = decodeBaseUnits(params);
       result.spell = decodeSpell(params, 8);
       result.extraSpell = decodeExtraSpell(params.slice(11));
-    } else if (eventName.startsWith("SPELL_") || eventName.startsWith("RANGE_")) {
-      const hasExcluded = eventName.includes("_ABSORBED") ||
-                          eventName.includes("_AURA_") ||
-                          eventName.includes("PERIODIC");
+    } else if (
+      eventName.startsWith("SPELL_") ||
+      eventName.startsWith("RANGE_")
+    ) {
+      const hasExcluded =
+        eventName.includes("_ABSORBED") ||
+        eventName.includes("_AURA_") ||
+        eventName.includes("PERIODIC");
       if (!hasExcluded) {
         result.base = decodeBaseUnits(params);
         result.spell = decodeSpell(params, 8);

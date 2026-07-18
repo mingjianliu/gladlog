@@ -7,6 +7,8 @@ export {
   decodeSpell,
   decodeDamage,
   decodeHeal,
+  decodeHpTail,
+  hpTailSlice,
   decodeAdvanced,
   decodeAura,
   decodeExtraSpell,
