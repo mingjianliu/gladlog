@@ -172,7 +172,7 @@ inputs. Big theme; slice into panels/lanes over several sub-projects.
 Note: `extractRotations` is computed but only consumed by offline `corpus-tools`,
 not the app — either surface it or leave it corpus-only by design.
 
-## 11. 战报明细 breakdown(wowarenalogs 原版 detail 级)
+## 11. 战报明细 breakdown(wowarenalogs 原版 detail 级)✅(2026-07-18 已完成:meters 行内展开,输出/治疗/承伤三模式;承疗按来源与打断/驱散清单未做——用户未选)
 
 用户提出(2026-07-18):当前战报 meters 只有每人总量(伤害/治疗一条),
 信息量不如老 wowarenalogs 的 detail 视图。目标:点开一个玩家 → 具体分解:
