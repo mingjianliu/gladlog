@@ -635,7 +635,10 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     );
     if (!overlappingSpike) continue;
     const dmgM = (overlappingSpike.totalDamage / 1_000_000).toFixed(2);
-    const cdNames = burst.activeCDs.map((c) => c.spellName).join(" + ");
+    // 每个 CD 带实际施放时刻——窗口是并集,无时刻列表被读成起点同时全开(059)
+    const cdNames = burst.activeCDs
+      .map((c) => `${c.spellName}@${fmtTime(c.castSeconds)}`)
+      .join(" + ");
     addEntry(
       burst.fromSeconds,
       `${fmtTime(burst.fromSeconds)}  [OFFENSIVE WINDOW]   ${fmtTime(burst.fromSeconds)}–${fmtTime(burst.toSeconds)} | ${dmgM}M on ${pid(overlappingSpike.targetName)} (${overlappingSpike.targetSpec}) | CDs: ${cdNames}`,

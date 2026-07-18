@@ -58,7 +58,13 @@ export interface IEnemyPlayerTimeline {
 export interface IAlignedBurstWindow {
   fromSeconds: number;
   toSeconds: number;
-  activeCDs: Array<{ playerName: string; spellName: string; spellId: string }>;
+  activeCDs: Array<{
+    playerName: string;
+    spellName: string;
+    spellId: string;
+    /** 该 CD 在窗口内的实际施放秒——渲染必须带上,否则列表被读成"窗口起点同时全开"(059 误读)。 */
+    castSeconds: number;
+  }>;
   /** Ex-ante threat from the stacked CDs alone (weights × alignment × dampening) — outcome-independent */
   threatScore: number;
   threatLabel: "Low" | "Moderate" | "High" | "Critical";
@@ -398,6 +404,7 @@ export function reconstructEnemyCDTimeline(
           playerName: c.playerName,
           spellName: c.spellName,
           spellId: c.spellId,
+          castSeconds: c.time,
         })),
         threatScore,
         threatLabel: dangerLabel(threatScore),
@@ -442,8 +449,13 @@ export function formatEnemyCDTimelineForContext(
   );
   timeline.alignedBurstWindows.forEach((w, idx) => {
     const dampStr = fmtDampening(w.dampeningPct);
+    // 每个 CD 带自己的施放时刻:窗口是"最早施放→最晚 buff 结束"的并集,
+    // 不带时刻的列表曾被读成窗口起点同时全开(059)。
     const cdNames = w.activeCDs
-      .map((c) => `${c.spellName} (${c.playerName})`)
+      .map(
+        (c) =>
+          `${c.spellName} (${c.playerName}, cast ${fmtTime(c.castSeconds)})`,
+      )
       .join(" + ");
     const dmgM = (w.damageInWindow / 1_000_000).toFixed(2);
     const ratioStr = `${w.damageRatio.toFixed(1)}× match avg rate`;
@@ -527,7 +539,9 @@ export function formatKillAttemptWindowsForContext(
       continue;
     }
     const dmgM = (spike.totalDamage / 1_000_000).toFixed(2);
-    const cdNames = burst.activeCDs.map((c) => c.spellName).join(" + ");
+    const cdNames = burst.activeCDs
+      .map((c) => `${c.spellName}@${fmtTime(c.castSeconds)}`)
+      .join(" + ");
     lines.push(
       `  ${fmtTime(burst.fromSeconds)}–${fmtTime(burst.toSeconds)}  ${dmgM}M on ${spike.targetSpec} | CDs: ${cdNames}`,
     );

@@ -92,6 +92,7 @@ export const SPELL_CATEGORIES: Record<string, ISpellCategoryEntry> = {
   "5246": cc(6), // Intimidating Shout(2811 次;此前完全缺席)
   "360806": cc(6), // Sleep Walk(2035 次;Evoker 主 CC,此前完全缺席)
   "163505": cc(4), // Rake 潜行眩晕(928 次;DR 表已有、cc 表缺席)
+  "372245": cc(3), // Terror of the Skies — Evoker Deep Breath 天赋眩晕(2481 次,p50=3.0s;agy 交叉复核发现)
   "20549": cc(2), // War Stomp
   "118905": cc(3), // Static Charge (debuff)
   "192058": cc(3), // Capacitor Totem

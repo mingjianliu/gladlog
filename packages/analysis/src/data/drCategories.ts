@@ -22,6 +22,7 @@ export const spellClassMap = {
       "107570",
       "132168", // Shockwave 眩晕光环(aura 事件带光环 id,仅有施法 id 时 DR 链失明)
       "132169", // Storm Bolt 眩晕光环
+      "372245", // Terror of the Skies(Deep Breath 天赋眩晕)
       "118905",
       "89766",
       "117526",
