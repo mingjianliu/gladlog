@@ -87,7 +87,7 @@ async function main() {
       const body = line.slice(comma + 1); // src 起始的 CSV 体
       const fields = splitCsv(body);
       if (fields.length < 10) continue;
-      const [srcGuid, srcName, , , dstGuid] = fields;
+      const [srcGuid, , , , dstGuid] = fields;
       const spellId = fields[8];
       const spellName = (fields[9] ?? "").replace(/^"|"$/g, "");
       if (!/^\d+$/.test(spellId)) continue;
