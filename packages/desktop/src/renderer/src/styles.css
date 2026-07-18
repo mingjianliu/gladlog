@@ -1742,27 +1742,30 @@ pre {
   font-size: 15px;
   margin-bottom: 12px;
 }
-.settings-saved {
-  color: var(--win);
-  font-size: 12px;
-  margin-bottom: 8px;
-}
-.settings-row {
+.settings-group-head {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 6px 0;
-  flex-wrap: wrap;
+}
+.settings-saved-inline {
+  color: var(--win);
+  font-size: 11px;
+}
+/* 三列 grid:标签 | 值/输入 | 操作(1i) */
+.settings-grid {
+  display: grid;
+  grid-template-columns: 130px 1fr auto;
+  gap: 12px 16px;
+  align-items: center;
+  padding-top: 10px;
 }
 .settings-k {
-  min-width: 130px;
   color: var(--ink-2);
-  font-size: 12px;
+  font-size: 12.5px;
 }
 .settings-v {
   font-size: 12px;
   color: var(--mute);
-  max-width: 300px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1771,10 +1774,47 @@ pre {
 .settings select {
   background: var(--surface-2);
   color: var(--ink);
-  border: 1px solid var(--hairline);
-  border-radius: 6px;
-  padding: 4px 8px;
+  border: 1px solid var(--hairline-soft);
+  border-radius: 7px;
+  padding: 5px 10px;
   font-size: 12px;
+  width: 100%;
+  max-width: 420px;
+}
+.settings select {
+  width: auto;
+}
+.settings-key-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.settings-pill-ok {
+  flex: none;
+  color: var(--win);
+  border: 1px solid color-mix(in srgb, var(--win) 33%, transparent);
+  border-radius: 999px;
+  padding: 1px 9px;
+  font-size: 11px;
+}
+.settings-actions {
+  display: flex;
+  gap: 8px;
+}
+.settings-danger {
+  border: none;
+  color: var(--loss);
+  padding: 3px 6px;
+}
+.settings-note {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  color: #595d6c;
+}
+.settings-seg {
+  width: fit-content;
 }
 
 /* ── 首启引导(phase3 #2b)── */
