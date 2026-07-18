@@ -186,7 +186,7 @@ not the app — either surface it or leave it corpus-only by design.
 纯 derive + 展开式 UI(meters 行点击展开或独立 detail tab)。与 #10 的
 结构化面板方向互补:这是"原始账目",#10 是"分析结论"。
 
-## 12. 懒加载后台补载 + 战绩动态更新
+## 12. 懒加载后台补载 + 战绩动态更新 ✅(2026-07-18 已完成,见 App.tsx 后台补载循环 + StatsDashboard matchStored 订阅)
 
 用户反馈(2026-07-18):当前懒加载(首屏只 parse 最近 N 场)加载确实快了,
 但有两个残缺:
