@@ -272,6 +272,123 @@ export function createAnalysisService(deps: {
         }))
         .sort((a, b) => b.count - a.count);
     },
+    /**
+     * 错题本(跨场):全部已分析对局的 findings 按 category 分组,
+     * 每条带对局 meta(时间/地图/胜负)与跟进标记,组内按时间倒序。
+     */
+    async notebook(): Promise<
+      Array<{
+        category: string;
+        count: number;
+        recurring: number;
+        done: number;
+        entries: Array<{
+          matchId: string;
+          flagKey: string;
+          flag: string | null;
+          title: string;
+          explanation: string;
+          severity: string;
+          startTime: number;
+          zoneId?: string;
+          result?: string;
+          bracket?: string;
+        }>;
+      }>
+    > {
+      const lang: AiLanguage = deps.getSettings().aiLanguage ?? "zh";
+      let dirs: string[] = [];
+      try {
+        dirs = readdirSync(deps.matchesDir).filter(
+          (d) => !d.startsWith(".") && !d.startsWith("_"),
+        );
+      } catch {
+        return [];
+      }
+      type Entry = {
+        matchId: string;
+        flagKey: string;
+        flag: string | null;
+        title: string;
+        explanation: string;
+        severity: string;
+        startTime: number;
+        zoneId?: string;
+        result?: string;
+        bracket?: string;
+      };
+      const byCategory = new Map<string, Entry[]>();
+      for (const dir of dirs) {
+        const base = join(deps.matchesDir, dir);
+        const candidates = [
+          `analysis-v2.${lang}.json`,
+          `analysis-v2.${lang === "zh" ? "en" : "zh"}.json`,
+          "analysis-v2.json",
+        ];
+        const file = candidates.find((f) => existsSync(join(base, f)));
+        if (!file) continue;
+        try {
+          const doc = JSON.parse(readFileSync(join(base, file), "utf-8"));
+          if (doc.promptVersion !== PROMPT_VERSION) continue;
+          const findings: Array<{
+            category: string;
+            title: string;
+            explanation?: string;
+            severity: string;
+            eventIds?: string[];
+          }> = doc.result?.findings ?? [];
+          if (findings.length === 0) continue;
+          let flags: Record<string, string> = {};
+          try {
+            flags = JSON.parse(
+              readFileSync(join(base, "findingFlags.json"), "utf-8"),
+            );
+          } catch {
+            /* 无标记 */
+          }
+          let meta: {
+            id?: string;
+            startTime?: number;
+            zoneId?: string;
+            result?: string;
+            bracket?: string;
+          } = {};
+          try {
+            meta = JSON.parse(readFileSync(join(base, "meta.json"), "utf-8"));
+          } catch {
+            /* 目录名兜底 */
+          }
+          for (const f of findings) {
+            const key = findingKey(f);
+            const list = byCategory.get(f.category) ?? [];
+            list.push({
+              matchId: meta.id ?? dir,
+              flagKey: key,
+              flag: flags[key] ?? null,
+              title: f.title,
+              explanation: f.explanation ?? "",
+              severity: f.severity,
+              startTime: meta.startTime ?? doc.createdAt ?? 0,
+              zoneId: meta.zoneId,
+              result: meta.result,
+              bracket: meta.bracket,
+            });
+            byCategory.set(f.category, list);
+          }
+        } catch {
+          /* 坏文件跳过 */
+        }
+      }
+      return [...byCategory.entries()]
+        .map(([category, entries]) => ({
+          category,
+          count: entries.length,
+          recurring: entries.filter((e) => e.flag === "recurring").length,
+          done: entries.filter((e) => e.flag === "done").length,
+          entries: entries.sort((a, b) => b.startTime - a.startTime),
+        }))
+        .sort((a, b) => b.count - a.count);
+    },
     async setFlag(
       matchId: string,
       key: string,

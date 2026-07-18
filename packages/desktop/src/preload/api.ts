@@ -28,7 +28,13 @@ export interface GladlogApi {
       failed: number;
     } | null>;
     onImportProgress(
-      cb: (p: { file: string; i: number; n: number; stored: number; dup: number }) => void,
+      cb: (p: {
+        file: string;
+        i: number;
+        n: number;
+        stored: number;
+        dup: number;
+      }) => void,
     ): () => void;
   };
   matches: {
@@ -85,6 +91,27 @@ export interface GladlogApi {
           title: string;
           severity: string;
           createdAt: number;
+        }>;
+      }>
+    >;
+    /** 错题本:全部已分析对局的 findings 按类型分组(含 meta 与标记)。 */
+    notebook(): Promise<
+      Array<{
+        category: string;
+        count: number;
+        recurring: number;
+        done: number;
+        entries: Array<{
+          matchId: string;
+          flagKey: string;
+          flag: string | null;
+          title: string;
+          explanation: string;
+          severity: string;
+          startTime: number;
+          zoneId?: string;
+          result?: string;
+          bracket?: string;
         }>;
       }>
     >;

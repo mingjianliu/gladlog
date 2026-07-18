@@ -55,6 +55,9 @@ npm test --workspace=packages/desktop \
 - CI 有独立 **Lint 步**,error 级 no-unused-vars 会挡 merge;
 - push 后 `gh run watch <显式 run id> --exit-status`(push 完立刻取 latest
   会抓到上一条 run);
+- **门禁链里绝不给 typecheck/test 加管道**:`npm run typecheck | tail -1 && …`
+  的退出码是 tail 的,tsc 红了链条照样绿(2026-07-18 实锤:漏放一个 TS2322
+  过了本地门禁,靠 agy 复核抓回)。要裁输出就先跑完存变量,退出码单独查。
 - **复合命令里绝不 `cd`**:`cd packages/desktop && …` 会把 shell cwd 永久留在
   子目录,后续所有相对路径命令(git add、npm --workspace)静默错位(一个
   session 连踩三次)。要么绝对路径,要么单命令内 `(cd … && …)` 子壳。

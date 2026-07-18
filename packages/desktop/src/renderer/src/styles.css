@@ -2852,3 +2852,72 @@ pre {
   color: var(--mute);
   margin: 8px 0 4px;
 }
+
+/* ── 错题本(战绩页内嵌,按类型分组展开)── */
+.dash-nb-group {
+  border-top: 1px solid var(--hairline-soft);
+}
+.dash-nb-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 7px 0;
+  font-size: 12.5px;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.dash-nb-caret {
+  color: var(--mute);
+  font-size: 10px;
+}
+.dash-nb-cat {
+  font-weight: 500;
+}
+.dash-nb-count {
+  color: var(--mute);
+}
+.dash-nb-entry {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 0 4px 20px;
+  font-size: 12px;
+}
+.dash-nb-when {
+  color: var(--mute);
+  font-variant-numeric: tabular-nums;
+  flex: none;
+  width: 34px;
+}
+.dash-nb-meta {
+  color: var(--ink-2);
+  flex: none;
+}
+.dash-nb-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dash-nb-actions {
+  display: inline-flex;
+  gap: 4px;
+  flex: none;
+}
+.dash-nb-actions button {
+  padding: 0 7px;
+  font-size: 11px;
+}
+.dash-nb-actions button.active {
+  color: var(--win);
+  border-color: var(--win);
+}
+.dash-nb-actions button.active.rec {
+  color: var(--loss);
+  border-color: var(--loss);
+}

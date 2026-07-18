@@ -205,6 +205,42 @@ export function installFixtureBridge(): void {
       async getCached(): Promise<unknown> {
         return sampleAnalysis;
       },
+      async notebook(): Promise<unknown[]> {
+        return [
+          {
+            category: "目标选择",
+            count: 2,
+            recurring: 1,
+            done: 0,
+            entries: [
+              {
+                matchId: "fixture-1",
+                flagKey: "k1",
+                flag: "recurring",
+                title: "爆发打进减伤",
+                explanation: "开大时目标挂着 40% 减伤墙。",
+                severity: "high",
+                startTime: Date.now() - 86_400_000,
+                zoneId: "1505",
+                result: "Loss",
+                bracket: "3v3",
+              },
+              {
+                matchId: "fixture-1",
+                flagKey: "k2",
+                flag: null,
+                title: "脱火过多",
+                explanation: "击杀窗口内 40% 伤害打在副目标。",
+                severity: "med",
+                startTime: Date.now() - 172_800_000,
+                zoneId: "980",
+                result: "Win",
+                bracket: "3v3",
+              },
+            ],
+          },
+        ];
+      },
       run() {},
       cancel() {},
       onDone: off,

@@ -2,6 +2,7 @@ import type { CandidateEvent } from "@gladlog/analysis";
 import { describe, expect, it } from "vitest";
 
 import { PROMPT_VERSION } from "./ai";
+import { findingKey } from "../shared/findingKey";
 import { createAnalysisService } from "./analysis";
 
 const candidates: CandidateEvent[] = [
@@ -267,5 +268,85 @@ describe("fallbackReason(0 finding 可解释)", () => {
       b.emitted.find((e) => e.ch === "gladlog:analysis:done")!.p.result
         .fallbackReason,
     ).toBe("bad-json");
+  });
+});
+
+describe("notebook(错题本跨场分组)", () => {
+  it("按 category 分组、并入 meta 与标记、组内时间倒序", async () => {
+    const { mkdtempSync, mkdirSync, writeFileSync } = await import("fs");
+    const { tmpdir } = await import("os");
+    const { join } = await import("path");
+    const dir = mkdtempSync(join(tmpdir(), "gl-nb-"));
+
+    const writeMatch = (
+      id: string,
+      startTime: number,
+      findings: Array<{
+        eventIds: string[];
+        severity: string;
+        category: string;
+        title: string;
+        explanation: string;
+      }>,
+      flags?: Record<string, string>,
+    ) => {
+      const base = join(dir, id);
+      mkdirSync(base, { recursive: true });
+      writeFileSync(
+        join(base, "analysis-v2.zh.json"),
+        JSON.stringify({
+          schemaVersion: 1,
+          promptVersion: PROMPT_VERSION,
+          language: "zh",
+          createdAt: startTime,
+          result: { findings, dropped: 0, hadNarration: true },
+        }),
+      );
+      writeFileSync(
+        join(base, "meta.json"),
+        JSON.stringify({
+          id,
+          startTime,
+          zoneId: "1505",
+          result: "Win",
+          bracket: "3v3",
+        }),
+      );
+      if (flags)
+        writeFileSync(join(base, "findingFlags.json"), JSON.stringify(flags));
+    };
+
+    const f = (category: string, title: string, ev: string) => ({
+      eventIds: [ev],
+      severity: "high",
+      category,
+      title,
+      explanation: "x",
+    });
+    writeMatch("old", 1000, [f("生存", "早的", "e1")]);
+    writeMatch("new", 2000, [f("生存", "晚的", "e2"), f("打断", "另一类", "e3")], {
+      [findingKey(f("生存", "晚的", "e2"))]: "recurring",
+    });
+
+    const s2 = createAnalysisService({
+      getSettings: () => ({ aiLanguage: "zh" }) as never,
+      matchesDir: dir,
+      clientFactory: () => null as never,
+      emit: () => {},
+    });
+    const nb = await s2.notebook();
+    expect(nb.map((g) => g.category)).toEqual(["生存", "打断"]); // 按 count 降序
+    const surv = nb[0]!;
+    expect(surv.count).toBe(2);
+    expect(surv.recurring).toBe(1);
+    expect(surv.entries.map((e) => e.title)).toEqual(["晚的", "早的"]); // 时间倒序
+    expect(surv.entries[0]).toMatchObject({
+      matchId: "new",
+      flag: "recurring",
+      zoneId: "1505",
+      result: "Win",
+      bracket: "3v3",
+      startTime: 2000,
+    });
   });
 });

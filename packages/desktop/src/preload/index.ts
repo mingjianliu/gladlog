@@ -50,6 +50,7 @@ const api: GladlogApi = {
     getFlags: (matchId) =>
       ipcRenderer.invoke("gladlog:analysis:getFlags", matchId),
     aggregate: () => ipcRenderer.invoke("gladlog:analysis:aggregate"),
+    notebook: () => ipcRenderer.invoke("gladlog:analysis:notebook"),
     setFlag: (matchId, key, flag) =>
       ipcRenderer.invoke("gladlog:analysis:setFlag", matchId, key, flag),
     onDelta: sub<{ matchId: string; text: string }>("gladlog:analysis:delta"),

@@ -137,12 +137,24 @@ function RatingCurve({
  * 战绩仪表盘(phase3 #1):全量 meta 索引聚合 —— 总览、评分曲线(按 bracket)、
  * 敌方 comp 胜率、地图胜率。comp 行点击 → 回对局列表预置该 spec 筛选。
  */
-interface CategoryAgg {
+interface NotebookEntry {
+  matchId: string;
+  flagKey: string;
+  flag: string | null;
+  title: string;
+  explanation: string;
+  severity: string;
+  startTime: number;
+  zoneId?: string;
+  result?: string;
+  bracket?: string;
+}
+interface NotebookGroup {
   category: string;
   count: number;
   recurring: number;
   done: number;
-  recent: Array<{ matchId: string; title: string; severity: string }>;
+  entries: NotebookEntry[];
 }
 
 export function StatsDashboard({
@@ -158,7 +170,8 @@ export function StatsDashboard({
   const [period, setPeriod] = useState<DashPeriod>("week");
   // 角色筛选(多角色玩家的战绩区分;undefined = 全部)
   const [character, setCharacter] = useState<string | undefined>(undefined);
-  const [issues, setIssues] = useState<CategoryAgg[]>([]);
+  const [notebook, setNotebook] = useState<NotebookGroup[]>([]);
+  const [openCats, setOpenCats] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     const refresh = () => {
@@ -166,14 +179,14 @@ export function StatsDashboard({
         .matches.list()
         .then((all) => setMetas(all))
         .catch(() => {});
-      // 「最常犯的问题」一并重取:入库常伴随分析缓存变化
+      // 错题本一并重取:入库常伴随分析缓存变化
       try {
         void bridge()
-          .analysis.aggregate()
-          .then(setIssues)
-          .catch(() => setIssues([]));
+          .analysis.notebook()
+          .then(setNotebook)
+          .catch(() => setNotebook([]));
       } catch {
-        setIssues([]);
+        setNotebook([]);
       }
     };
     refresh();
@@ -194,6 +207,37 @@ export function StatsDashboard({
       un?.();
     };
   }, []);
+
+  const flagEntry = (e: NotebookEntry, flag: "done" | "recurring") => {
+    const next = e.flag === flag ? null : flag;
+    // 稳定键匹配(matchId+flagKey = 后端 setFlag 的键语义):引用相等会在
+    // IPC 未决期间的刷新/连点后失配,UI 与落盘状态脱钩(agy 复核 #1)
+    const isTarget = (x: NotebookEntry) =>
+      x.matchId === e.matchId && x.flagKey === e.flagKey;
+    try {
+      void bridge()
+        .analysis.setFlag(e.matchId, e.flagKey, next)
+        .then(() =>
+          setNotebook((groups) =>
+            groups.map((g) => ({
+              ...g,
+              recurring: g.entries.filter((x) =>
+                isTarget(x) ? next === "recurring" : x.flag === "recurring",
+              ).length,
+              done: g.entries.filter((x) =>
+                isTarget(x) ? next === "done" : x.flag === "done",
+              ).length,
+              entries: g.entries.map((x) =>
+                isTarget(x) ? { ...x, flag: next } : x,
+              ),
+            })),
+          ),
+        )
+        .catch(() => {});
+    } catch {
+      /* 测试桩无该面 */
+    }
+  };
 
   const characters = useMemo(() => listCharacters(metas), [metas]);
   const dash = useMemo(
@@ -325,34 +369,86 @@ export function StatsDashboard({
         <RatingCurve series={dash.ratingSeries} />
       </div>
 
-      {issues.length > 0 && (
-        <div className="dash-card" data-testid="dash-issues">
-          <span className="rpt-card-label">最常犯的问题(全部已分析对局)</span>
-          {issues.slice(0, 3).map((c) => (
-            <div key={c.category} className="dash-issue">
-              <span className="dash-issue-title">{c.category}</span>
-              <span className="dash-issue-count">×{c.count}</span>
-              {c.recurring > 0 && (
-                <span className="dash-issue-rec">↻ {c.recurring}</span>
-              )}
-              {c.done > 0 && (
-                <span className="dash-issue-done">✓ {c.done}</span>
-              )}
-              {c.recent[0] && (
+      {notebook.length > 0 && (
+        <div className="dash-card" data-testid="dash-notebook">
+          <span className="rpt-card-label">
+            错题本 —— 最常犯的问题(全部已分析对局)
+          </span>
+          {notebook.map((g) => {
+            const open = !!openCats[g.category];
+            return (
+              <div key={g.category} className="dash-nb-group">
                 <button
-                  className="dash-issue-recent"
-                  onClick={
-                    onOpenMatch
-                      ? () => onOpenMatch(c.recent[0]!.matchId)
-                      : undefined
+                  className="dash-nb-head"
+                  onClick={() =>
+                    setOpenCats((o) => ({ ...o, [g.category]: !o[g.category] }))
                   }
-                  title={c.recent[0].title}
                 >
-                  最近一场 →
+                  <span className="dash-nb-caret">{open ? "▼" : "▸"}</span>
+                  <span className="dash-nb-cat">{g.category}</span>
+                  <span className="dash-nb-count">×{g.count}</span>
+                  {g.recurring > 0 && (
+                    <span className="dash-issue-rec">↻ {g.recurring}</span>
+                  )}
+                  {g.done > 0 && (
+                    <span className="dash-issue-done">✓ {g.done}</span>
+                  )}
                 </button>
-              )}
-            </div>
-          ))}
+                {open &&
+                  g.entries.map((e, i) => (
+                    <div
+                      key={`${e.matchId}:${e.flagKey}:${i}`}
+                      className="dash-nb-entry"
+                    >
+                      <span className="dash-nb-when">
+                        {new Date(e.startTime).getMonth() + 1}/
+                        {new Date(e.startTime).getDate()}
+                      </span>
+                      <span className="dash-nb-meta">
+                        {e.zoneId
+                          ? (zoneMetadata[e.zoneId]?.name ?? e.bracket ?? "")
+                          : (e.bracket ?? "")}
+                        {e.result
+                          ? ` · ${e.result.toLowerCase() === "win" ? "胜" : "负"}`
+                          : ""}
+                      </span>
+                      <span
+                        className={`dash-nb-sev rpt-finding-${e.severity}`}
+                      >
+                        <span className="rpt-finding-sev">{e.severity}</span>
+                      </span>
+                      <span className="dash-nb-title" title={e.explanation}>
+                        {e.title}
+                      </span>
+                      <span className="dash-nb-actions">
+                        <button
+                          className={e.flag === "done" ? "active" : ""}
+                          title="标记为已改进"
+                          onClick={() => flagEntry(e, "done")}
+                        >
+                          ✓
+                        </button>
+                        <button
+                          className={e.flag === "recurring" ? "active rec" : ""}
+                          title="标记为还在犯"
+                          onClick={() => flagEntry(e, "recurring")}
+                        >
+                          ↻
+                        </button>
+                        {onOpenMatch && (
+                          <button
+                            className="dash-issue-recent"
+                            onClick={() => onOpenMatch(e.matchId)}
+                          >
+                            打开该场 →
+                          </button>
+                        )}
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            );
+          })}
         </div>
       )}
 
