@@ -39,14 +39,6 @@ export function CohortDimsTable({
         )}
       </div>
       {rows.map((dim) => {
-        // 分布条定标:[p10,p90] 外扩 12%,并保证你的值在轴内
-        const lo0 = Math.min(dim.p10, dim.value ?? dim.p10);
-        const hi0 = Math.max(dim.p90, dim.value ?? dim.p90);
-        const span = Math.max(hi0 - lo0, 1e-9);
-        const lo = lo0 - span * 0.12;
-        const hi = hi0 + span * 0.12;
-        const pct = (v: number): number =>
-          Math.max(0, Math.min(100, ((v - lo) / (hi - lo)) * 100));
         const color = cursorColor(dim.score);
         return (
           <div
@@ -56,27 +48,24 @@ export function CohortDimsTable({
             className="rpt-cohort-row"
           >
             <span className="rpt-cohort-key">{dim.keyLabel}</span>
+            {/* 评分长条(视觉主体):长度 = 方向修正评分,越长越好;
+                条内数字 = 评分;中点刻度 = 同组中位参照(50 分) */}
             <span
               className="rpt-cohort-dist"
-              title={`p10 ${dim.p10} · p50 ${dim.p50} · p90 ${dim.p90}`}
+              title={`评分 ${dim.score}(方向修正)· p10 ${dim.p10} · p50 ${dim.p50} · p90 ${dim.p90}`}
             >
               <span
-                className="rpt-cohort-dist-range"
+                className="rpt-cohort-scorebar"
                 style={{
-                  left: `${pct(dim.p10)}%`,
-                  width: `${Math.max(1, pct(dim.p90) - pct(dim.p10))}%`,
+                  width: `${Math.max(6, dim.score)}%`,
+                  background: `color-mix(in srgb, ${color} 55%, var(--surface-2))`,
+                  borderRight: `3px solid ${color}`,
                 }}
               />
-              <span
-                className="rpt-cohort-dist-p50"
-                style={{ left: `${pct(dim.p50)}%` }}
-              />
-              {dim.value !== null && (
-                <span
-                  className="rpt-cohort-dist-you"
-                  style={{ left: `${pct(dim.value)}%`, background: color }}
-                />
-              )}
+              <span className="rpt-cohort-dist-p50" style={{ left: "50%" }} />
+              <span className="rpt-cohort-score" style={{ color }}>
+                {dim.score}
+              </span>
             </span>
             <span className="rpt-cohort-value" style={{ color }}>
               {dim.valueLabel} ({dim.percentileLabel} · {dim.verdictLabel})

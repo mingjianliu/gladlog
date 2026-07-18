@@ -2583,30 +2583,34 @@ pre {
 }
 .rpt-cohort-dist {
   position: relative;
-  height: 14px;
+  height: 20px;
   background: var(--surface-2);
-  border-radius: 4px;
+  border-radius: 5px;
+  overflow: hidden;
 }
-.rpt-cohort-dist-range {
-  position: absolute;
-  top: 3px;
-  bottom: 3px;
-  background: var(--hairline);
-  border-radius: 4px;
-}
-.rpt-cohort-dist-p50 {
-  position: absolute;
-  top: 1px;
-  bottom: 1px;
-  width: 1.5px;
-  background: var(--ink-2);
-}
-.rpt-cohort-dist-you {
+.rpt-cohort-scorebar {
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 3px;
-  border-radius: 1.5px;
+  left: 0;
+  border-radius: 5px 0 0 5px;
+}
+.rpt-cohort-dist-p50 {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  width: 1.5px;
+  background: var(--ink-2);
+  opacity: 0.6;
+}
+.rpt-cohort-score {
+  position: absolute;
+  right: 8px;
+  top: 0;
+  line-height: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 /* ── 1f:控件条 + 泳道 ── */

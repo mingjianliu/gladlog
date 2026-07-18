@@ -62,6 +62,8 @@ export function MatchReport({
   const [recap, setRecap] = useState<DeathRecap | null>(null);
   // 回放光标投影(1c):从回放切回战报时显示最后位置
   const [lastReplayT, setLastReplayT] = useState<number | null>(null);
+  // AI 一键同跑:分析主按钮 nonce → cohort 对比(合并两个按钮)
+  const [aiRunNonce, setAiRunNonce] = useState(0);
 
   // 死亡标记点击 → 找该单位最近的回顾(懒算,点击才 derive)
   const openRecap = (unitId: string, tMs: number) => {
@@ -174,11 +176,14 @@ export function MatchReport({
               source={source}
               matchId={resolvedMatchId}
               onSeekEvent={handleSeekEvent}
+              onRunAll={() => setAiRunNonce((n) => n + 1)}
             />
             <div className="rpt-ai-cohort">
               <ProComparisonVerified
                 source={source}
                 matchId={resolvedMatchId}
+                runSignal={aiRunNonce}
+                hideActions
               />
             </div>
           </div>

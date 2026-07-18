@@ -45,11 +45,14 @@ export function StructuredAnalysisPanel({
   source,
   matchId,
   onSeekEvent,
+  onRunAll,
 }: {
   source: ReportSource;
   matchId: string;
   /** 证据链跳转:切到回放并定位到 t(秒,自 combat start)。 */
   onSeekEvent?: (tSeconds: number, unitNames: string[]) => void;
+  /** 合并按钮(用户反馈):主按钮同时触发 cohort 对比。 */
+  onRunAll?: () => void;
 }) {
   const [state, setState] = useState<State>("idle");
   const [result, setResult] = useState<AnalysisResult | null>(null);
@@ -257,15 +260,12 @@ export function StructuredAnalysisPanel({
     setError("");
     setPreview("");
     setState("running");
+    onRunAll?.(); // 一键同跑 cohort 对比
     await bridge().analysis.run(input);
   };
 
   const buttonText =
-    state === "running"
-      ? "分析中…"
-      : state === "done"
-        ? "重新分析"
-        : "结构化分析";
+    state === "running" ? "分析中…" : state === "done" ? "重新分析" : "AI 分析";
 
   return (
     <div className="rpt-ai-panel">

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReportSource } from "../derive/types";
 import { cohortDims } from "../derive/cohortDims";
 import { CohortDimsTable } from "./CohortDimsTable";
@@ -47,9 +47,15 @@ type State = "idle" | "running" | "done" | "error";
 export function ProComparisonVerified({
   source,
   matchId,
+  runSignal,
+  hideActions,
 }: {
   source: ReportSource;
   matchId: string;
+  /** 合并按钮:nonce 变化时触发对比(与 AI 分析一键同跑)。 */
+  runSignal?: number;
+  /** 合并按钮模式下隐藏本面板自己的操作行。 */
+  hideActions?: boolean;
 }) {
   const [state, setState] = useState<State>("idle");
   const [result, setResult] = useState<CompareResult | null>(null);
@@ -170,6 +176,15 @@ export function ProComparisonVerified({
     await bridge().compare.run(input);
   };
 
+  // 合并按钮(用户反馈):AI 分析主按钮的 nonce 变化 → 同步触发对比
+  const lastSignal = useRef(runSignal ?? 0);
+  useEffect(() => {
+    if (runSignal == null || runSignal === lastSignal.current) return;
+    lastSignal.current = runSignal;
+    void handleCompare();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runSignal]);
+
   const buttonText =
     state === "running"
       ? "对比中…"
@@ -249,14 +264,16 @@ export function ProComparisonVerified({
           </p>
         </div>
       )}
-      <div className="rpt-ai-actions">
-        <button
-          onClick={handleCompare}
-          disabled={!input || state === "running"}
-        >
-          {buttonText}
-        </button>
-      </div>
+      {!hideActions && (
+        <div className="rpt-ai-actions">
+          <button
+            onClick={handleCompare}
+            disabled={!input || state === "running"}
+          >
+            {buttonText}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
