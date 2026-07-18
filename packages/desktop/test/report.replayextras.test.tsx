@@ -109,3 +109,31 @@ describe("竞技场框体侧栏(血条防遮挡)", () => {
     expect(container.querySelector(".rpt-replay-hover-ring")).toBeNull();
   });
 });
+
+describe("GCD 泳道两队分组", () => {
+  it("友方列在前敌方列在后,交界有分隔竖线", () => {
+    const { container } = render(<ReplayView source={m} />);
+    const data = deriveReplay(m as never);
+    const nFriendly = data.tracks.filter(
+      (t) => t.reaction === "Friendly",
+    ).length;
+    const nEnemy = data.tracks.length - nFriendly;
+    if (nFriendly > 0 && nEnemy > 0) {
+      expect(
+        container.querySelectorAll("[data-testid='gcd-team-divider']").length,
+      ).toBe(1);
+    }
+    // 列头顺序:前 nFriendly 列全友方
+    const heads = [...container.querySelectorAll(".rpt-gcd-col-name")].map(
+      (el) => el.textContent,
+    );
+    const friendlyNames = new Set(
+      data.tracks
+        .filter((t) => t.reaction === "Friendly")
+        .map((t) => t.name),
+    );
+    for (let i = 0; i < nFriendly; i++) {
+      expect(friendlyNames.has(heads[i] ?? "")).toBe(true);
+    }
+  });
+});

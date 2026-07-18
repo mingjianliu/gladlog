@@ -2252,3 +2252,17 @@ pre {
   font-size: 12px;
   padding: 4px 8px;
 }
+
+/* ── GCD 泳道两队分组 ── */
+.rpt-gcd-col-wrap {
+  display: flex;
+  flex: none;
+  gap: 6px;
+}
+.rpt-gcd-divider {
+  width: 2px;
+  flex: none;
+  background: linear-gradient(var(--gold-dim), var(--hairline));
+  border-radius: 1px;
+  margin: 0 3px;
+}

@@ -90,7 +90,15 @@ export function GcdSwimlane({
     return map;
   }, [source, tracks]);
 
-  const cols = tracks.filter((tr) => selUnits[tr.unitId]);
+  // 两队分组:友方列在左、敌方列在右,渲染时在交界画分隔线
+  const orderedTracks = [
+    ...tracks.filter((tr) => tr.reaction === "Friendly"),
+    ...tracks.filter((tr) => tr.reaction !== "Friendly"),
+  ];
+  const cols = orderedTracks.filter((tr) => selUnits[tr.unitId]);
+  const friendlyColCount = cols.filter(
+    (tr) => tr.reaction === "Friendly",
+  ).length;
 
   // 每列碰撞避让布局:相邻 chip 至少间隔 CHIP_STEP,密集处顺次下推。
   // 下推不得越过比赛结束线 —— 结束前的密集施法此前会被推到结束线之外,
@@ -156,7 +164,7 @@ export function GcdSwimlane({
       </div>
 
       <div className="rpt-gcd-chips">
-        {tracks.map((tr) => (
+        {orderedTracks.map((tr) => (
           <button
             key={tr.unitId}
             className={
@@ -189,108 +197,122 @@ export function GcdSwimlane({
             ))}
           </div>
 
-          {/* 每玩家一列 */}
-          {cols.map((tr) => {
+          {/* 每玩家一列;友/敌交界插分隔竖线 */}
+          {cols.map((tr, colIdx) => {
             const dead = tr.deathT != null;
             return (
-              <div key={tr.unitId} className="rpt-gcd-col">
-                <div
-                  className={
-                    dead ? "rpt-gcd-col-head dead" : "rpt-gcd-col-head"
-                  }
-                >
-                  <Dot track={tr} />
-                  <span className="rpt-gcd-col-name">{tr.name}</span>
-                </div>
-                <div className="rpt-gcd-col-body" style={{ height: contentH }}>
-                  {(laidByUnit[tr.unitId] ?? []).map(({ c, y }, i) => {
-                    const elapsed = c.t <= t;
-                    const recent = elapsed && c.t >= t - GCD_MS;
-                    const major = isMajorCd(c.spellId);
-                    // 证据链闪金:时刻 ±2s 内,且(无点名 or 本列被点名)。
-                    // key 混入 nonce 强制重挂载,让 CSS 动画每次跳转都重放。
-                    const flashed =
-                      !!flash &&
-                      Math.abs(c.t - flash.tMs) <= 2000 &&
-                      (flash.unitNames.length === 0 ||
-                        flash.unitNames.includes(tr.name));
-                    // 只在播放时把「未来」的技能压暗以显示进度;暂停/开头一律亮。
-                    const cls = [
-                      "rpt-gcd-act",
-                      major ? "major" : "",
-                      playing && !elapsed ? "future" : "",
-                      recent ? "recent" : "",
-                      flashed ? "flash" : "",
-                    ]
-                      .filter(Boolean)
-                      .join(" ");
-                    return (
+              <div key={tr.unitId} className="rpt-gcd-col-wrap">
+                {colIdx === friendlyColCount &&
+                  friendlyColCount > 0 &&
+                  colIdx < cols.length && (
+                    <div
+                      className="rpt-gcd-divider"
+                      data-testid="gcd-team-divider"
+                      style={{ height: contentH + HEAD_H }}
+                    />
+                  )}
+                <div className="rpt-gcd-col">
+                  <div
+                    className={
+                      dead ? "rpt-gcd-col-head dead" : "rpt-gcd-col-head"
+                    }
+                  >
+                    <Dot track={tr} />
+                    <span className="rpt-gcd-col-name">{tr.name}</span>
+                  </div>
+                  <div
+                    className="rpt-gcd-col-body"
+                    style={{ height: contentH }}
+                  >
+                    {(laidByUnit[tr.unitId] ?? []).map(({ c, y }, i) => {
+                      const elapsed = c.t <= t;
+                      const recent = elapsed && c.t >= t - GCD_MS;
+                      const major = isMajorCd(c.spellId);
+                      // 证据链闪金:时刻 ±2s 内,且(无点名 or 本列被点名)。
+                      // key 混入 nonce 强制重挂载,让 CSS 动画每次跳转都重放。
+                      const flashed =
+                        !!flash &&
+                        Math.abs(c.t - flash.tMs) <= 2000 &&
+                        (flash.unitNames.length === 0 ||
+                          flash.unitNames.includes(tr.name));
+                      // 只在播放时把「未来」的技能压暗以显示进度;暂停/开头一律亮。
+                      const cls = [
+                        "rpt-gcd-act",
+                        major ? "major" : "",
+                        playing && !elapsed ? "future" : "",
+                        recent ? "recent" : "",
+                        flashed ? "flash" : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" ");
+                      return (
+                        <div
+                          key={flashed ? `${i}-f${flash.nonce}` : i}
+                          className={onSeekT ? `${cls} seekable` : cls}
+                          style={{ top: y }}
+                          onClick={onSeekT ? () => onSeekT(c.t) : undefined}
+                          title={
+                            (c.targetName
+                              ? `${c.spellName} → ${c.targetName}`
+                              : c.spellName) + (onSeekT ? "(点击定位)" : "")
+                          }
+                        >
+                          {c.icon ? (
+                            <SpellIcon
+                              icon={c.icon}
+                              label={c.spellName}
+                              size={14}
+                            />
+                          ) : (
+                            <span
+                              className="rpt-gcd-act-dot"
+                              style={{
+                                background: major
+                                  ? "var(--gold)"
+                                  : classColor(tr.classId),
+                              }}
+                            />
+                          )}
+                          <span className="rpt-gcd-act-name">
+                            {c.byPet ? "🐾 " : ""}
+                            {c.spellName}
+                          </span>
+                          {major ? (
+                            <span className="rpt-gcd-act-cd">CD</span>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                    {(overflowByUnit[tr.unitId] ?? 0) > 0 && (
                       <div
-                        key={flashed ? `${i}-f${flash.nonce}` : i}
-                        className={onSeekT ? `${cls} seekable` : cls}
-                        style={{ top: y }}
-                        onClick={onSeekT ? () => onSeekT(c.t) : undefined}
-                        title={
-                          (c.targetName
-                            ? `${c.spellName} → ${c.targetName}`
-                            : c.spellName) + (onSeekT ? "(点击定位)" : "")
-                        }
+                        className="rpt-gcd-act rpt-gcd-overflow"
+                        style={{ top: laneH + 3 }}
+                        title="结束前施法过密,已折叠(不是比赛结束后的施法)"
                       >
-                        {c.icon ? (
-                          <SpellIcon
-                            icon={c.icon}
-                            label={c.spellName}
-                            size={14}
-                          />
-                        ) : (
-                          <span
-                            className="rpt-gcd-act-dot"
-                            style={{
-                              background: major
-                                ? "var(--gold)"
-                                : classColor(tr.classId),
-                            }}
-                          />
-                        )}
                         <span className="rpt-gcd-act-name">
-                          {c.byPet ? "🐾 " : ""}
-                          {c.spellName}
+                          +{overflowByUnit[tr.unitId]} 施法(收尾密集)
                         </span>
-                        {major ? (
-                          <span className="rpt-gcd-act-cd">CD</span>
-                        ) : null}
                       </div>
-                    );
-                  })}
-                  {(overflowByUnit[tr.unitId] ?? 0) > 0 && (
-                    <div
-                      className="rpt-gcd-act rpt-gcd-overflow"
-                      style={{ top: laneH + 3 }}
-                      title="结束前施法过密,已折叠(不是比赛结束后的施法)"
-                    >
-                      <span className="rpt-gcd-act-name">
-                        +{overflowByUnit[tr.unitId]} 施法(收尾密集)
-                      </span>
-                    </div>
-                  )}
-                  {tr.deathT != null && (
-                    <div
-                      className={
-                        onDeathClick
-                          ? "rpt-gcd-death rpt-gcd-death-click"
-                          : "rpt-gcd-death"
-                      }
-                      style={{ top: yFor(tr.deathT) }}
-                      onClick={
-                        onDeathClick
-                          ? () => onDeathClick(tr.unitId, tr.deathT!)
-                          : undefined
-                      }
-                      title={onDeathClick ? "点击看死亡回顾" : undefined}
-                    >
-                      阵亡
-                    </div>
-                  )}
+                    )}
+                    {tr.deathT != null && (
+                      <div
+                        className={
+                          onDeathClick
+                            ? "rpt-gcd-death rpt-gcd-death-click"
+                            : "rpt-gcd-death"
+                        }
+                        style={{ top: yFor(tr.deathT) }}
+                        onClick={
+                          onDeathClick
+                            ? () => onDeathClick(tr.unitId, tr.deathT!)
+                            : undefined
+                        }
+                        title={onDeathClick ? "点击看死亡回顾" : undefined}
+                      >
+                        阵亡
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             );
