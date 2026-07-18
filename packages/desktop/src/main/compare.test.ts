@@ -104,6 +104,7 @@ describe("createCompareService", () => {
       JSON.stringify({
         corpusVersion: "12.1.0.68629",
         promptVersion: PROMPT_VERSION,
+        language: "zh", // 语言分键:缺失/不匹配 → 缓存失效
         result: {
           verifiedComparison: { dims: [], facts: {} },
           report: "cached",

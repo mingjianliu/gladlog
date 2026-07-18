@@ -15,9 +15,9 @@ export function CohortDimsTable({ rows }: { rows: CohortDimRow[] }) {
             fontSize: "13px",
           }}
         >
-          <span className="rpt-cohort-key">{dim.key}</span>
+          <span className="rpt-cohort-key">{dim.keyLabel}</span>
           <span className="rpt-cohort-value">
-            {dim.valueLabel} ({dim.percentileLabel})
+            {dim.valueLabel} ({dim.percentileLabel} · {dim.verdictLabel})
           </span>
         </div>
       ))}

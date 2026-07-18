@@ -280,8 +280,9 @@ function checkCohort(root: HTMLElement, rows: CohortDimRow[]): Divergence[] {
     const valText = (
       el.querySelector(".rpt-cohort-value")?.textContent ?? ""
     ).trim();
-    // (A) view-faithful: "value (Nth)" == selector labels
-    const expected = `${row.valueLabel} (${row.percentileLabel})`;
+    // (A) view-faithful: "value (Nth · verdict)" == selector labels(与
+    // CohortDimsTable 渲染格式同源;本地化后含 verdictLabel)
+    const expected = `${row.valueLabel} (${row.percentileLabel} · ${row.verdictLabel})`;
     if (valText !== expected) {
       out.push({
         component: "cohort",

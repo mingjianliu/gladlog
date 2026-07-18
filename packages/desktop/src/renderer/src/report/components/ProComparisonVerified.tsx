@@ -54,6 +54,20 @@ export function ProComparisonVerified({
   const [state, setState] = useState<State>("idle");
   const [result, setResult] = useState<CompareResult | null>(null);
   const [error, setError] = useState<string>("");
+  const [lang, setLang] = useState<"en" | "zh">("zh");
+
+  useEffect(() => {
+    // 教练回复语言同时决定面板/表格文案语言;bridge 面可能缺(fixture 桩)
+    void (async () => {
+      try {
+        const s = await bridge().settings.get();
+        if (s?.aiLanguage === "en" || s?.aiLanguage === "zh")
+          setLang(s.aiLanguage);
+      } catch {
+        /* 默认 zh */
+      }
+    })();
+  }, []);
 
   // Show any cached (version-matched) result on mount. Reset state on matchId
   // change (the panel is not remounted per match) and guard against a late
@@ -137,9 +151,7 @@ export function ProComparisonVerified({
       return {
         matchId,
         healerMetrics: metrics as unknown as Record<string, number | null>,
-        enemyComp: enemyCompSignature(
-          enemies.map((e) => specToString(e.spec)),
-        ),
+        enemyComp: enemyCompSignature(enemies.map((e) => specToString(e.spec))),
         spec: specToString(owner.spec),
         talents,
         bracket: legacy.startInfo?.bracket ?? "unknown",
@@ -170,7 +182,7 @@ export function ProComparisonVerified({
       {error && <div className="rpt-ai-error">{error}</div>}
       {result && result.cellMeta && (
         <div className="rpt-ai-body">
-          <h3>vs your cohort</h3>
+          <h3>{lang === "zh" ? "vs 同水平高手" : "vs your cohort"}</h3>
           <p
             style={{
               color: "var(--ink-2)",
@@ -185,18 +197,21 @@ export function ProComparisonVerified({
             {result.cellMeta.archetype} · {result.cellMeta.buildGroup} build ·
             N=
             {result.cellMeta.sampleN}
-            {result.cellMeta.enemyComp && result.cellMeta.durationP50 != null && (
-              <>
-                {" · 时长中位 "}
-                {Math.floor(result.cellMeta.durationP50 / 60)}:
-                {String(result.cellMeta.durationP50 % 60).padStart(2, "0")}
-                {result.cellMeta.firstKillTop
-                  ? ` · ${result.cellMeta.firstKillTop.pct}% 先杀 ${result.cellMeta.firstKillTop.spec}`
-                  : ""}
-              </>
-            )}
+            {result.cellMeta.enemyComp &&
+              result.cellMeta.durationP50 != null && (
+                <>
+                  {" · 时长中位 "}
+                  {Math.floor(result.cellMeta.durationP50 / 60)}:
+                  {String(result.cellMeta.durationP50 % 60).padStart(2, "0")}
+                  {result.cellMeta.firstKillTop
+                    ? ` · ${result.cellMeta.firstKillTop.pct}% 先杀 ${result.cellMeta.firstKillTop.spec}`
+                    : ""}
+                </>
+              )}
           </p>
-          <CohortDimsTable rows={cohortDims(result.verifiedComparison.dims)} />
+          <CohortDimsTable
+            rows={cohortDims(result.verifiedComparison.dims, lang)}
+          />
           {result.report !== null ? (
             <p style={{ whiteSpace: "pre-wrap", fontSize: "13px" }}>
               {result.report}
@@ -210,11 +225,14 @@ export function ProComparisonVerified({
                   fontStyle: "italic",
                 }}
               >
-                Showing measured numbers only
+                {lang === "zh"
+                  ? "仅展示实测数据(AI 解说未生成)"
+                  : "Showing measured numbers only"}
               </p>
               {result.droppedReason && (
                 <p style={{ color: "var(--mute)", fontSize: "11px" }}>
-                  Reason: {result.droppedReason}
+                  {lang === "zh" ? "原因:" : "Reason: "}
+                  {result.droppedReason}
                 </p>
               )}
             </div>
@@ -224,7 +242,9 @@ export function ProComparisonVerified({
       {result && !result.cellMeta && (
         <div className="rpt-ai-body">
           <p style={{ color: "var(--ink-2)", fontSize: "12px" }}>
-            Not enough cohort data for this build and comp yet.
+            {lang === "zh"
+              ? "该专精/阵容的高手参照样本还不够,暂无法对比。"
+              : "Not enough cohort data for this build and comp yet."}
           </p>
         </div>
       )}

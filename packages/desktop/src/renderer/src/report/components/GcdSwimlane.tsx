@@ -93,25 +93,40 @@ export function GcdSwimlane({
   const cols = tracks.filter((tr) => selUnits[tr.unitId]);
 
   // 每列碰撞避让布局:相邻 chip 至少间隔 CHIP_STEP,密集处顺次下推。
-  const { laidByUnit, contentH } = useMemo(() => {
+  // 下推不得越过比赛结束线 —— 结束前的密集施法此前会被推到结束线之外,
+  // 看起来像"比赛结束了还有一堆技能没放完"(用户实测反馈)。越界部分
+  // 折叠为列底 +N 汇总。
+  const { laidByUnit, contentH, overflowByUnit } = useMemo(() => {
     const laidByUnit: Record<string, Laid[]> = {};
-    let maxBottom = laneH;
+    const overflowByUnit: Record<string, number> = {};
+    let anyOverflow = false;
     for (const tr of cols) {
       const casts = (castsByUnit[tr.unitId] ?? []).filter(
-        (c) => tr.deathT == null || c.t <= tr.deathT,
+        (c) => (tr.deathT == null || c.t <= tr.deathT) && c.t <= endTime,
       );
       let lastY = -Infinity;
-      const laid: Laid[] = casts.map((c) => {
+      const laid: Laid[] = [];
+      let overflow = 0;
+      for (const c of casts) {
         const y = Math.max(yFor(c.t), lastY + CHIP_STEP);
+        if (y > laneH - CHIP_H) {
+          overflow++;
+          continue;
+        }
         lastY = y;
-        return { c, y };
-      });
+        laid.push({ c, y });
+      }
       laidByUnit[tr.unitId] = laid;
-      if (laid.length) maxBottom = Math.max(maxBottom, lastY + CHIP_H);
+      overflowByUnit[tr.unitId] = overflow;
+      if (overflow > 0) anyOverflow = true;
     }
-    return { laidByUnit, contentH: maxBottom };
+    return {
+      laidByUnit,
+      overflowByUnit,
+      contentH: laneH + (anyOverflow ? CHIP_H + 6 : 0),
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cols, castsByUnit, laneH]);
+  }, [cols, castsByUnit, laneH, endTime]);
 
   // 播放时让光标保持在视口 ~40% 处
   useEffect(() => {
@@ -247,6 +262,17 @@ export function GcdSwimlane({
                       </div>
                     );
                   })}
+                  {(overflowByUnit[tr.unitId] ?? 0) > 0 && (
+                    <div
+                      className="rpt-gcd-act rpt-gcd-overflow"
+                      style={{ top: laneH + 3 }}
+                      title="结束前施法过密,已折叠(不是比赛结束后的施法)"
+                    >
+                      <span className="rpt-gcd-act-name">
+                        +{overflowByUnit[tr.unitId]} 施法(收尾密集)
+                      </span>
+                    </div>
+                  )}
                   {tr.deathT != null && (
                     <div
                       className={

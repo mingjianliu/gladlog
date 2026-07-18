@@ -2016,3 +2016,11 @@ pre {
   color: var(--mute);
   font-size: 10px;
 }
+
+/* 泳道列底折叠汇总(结束前施法过密的 +N,防止下推越过结束线) */
+.rpt-gcd-overflow {
+  color: var(--mute);
+  font-style: italic;
+  border: 1px dashed var(--hairline);
+  background: transparent;
+}

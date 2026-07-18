@@ -54,7 +54,8 @@ describe("ProComparisonVerified", () => {
     // jest-dom is not installed; getByText/findByText throw if absent, so a
     // truthy assertion on the returned element is a real presence check.
     expect(await screen.findByText(/You landed 0.31 offense/)).toBeTruthy();
-    expect(screen.getByText(/offensiveIndex/i)).toBeTruthy();
+    // 维度键经 metricLabels 本地化(默认 zh)
+    expect(screen.getByText(/进攻输出指数/)).toBeTruthy();
     expect(screen.getByText(/offensive build/i)).toBeTruthy(); // build group in meta
   });
 });

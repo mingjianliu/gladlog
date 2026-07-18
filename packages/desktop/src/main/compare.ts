@@ -13,13 +13,16 @@ import {
   buildExemplarLedPrompt,
   interpolate,
   claimChecker,
+  verdictLabel,
   type ReferenceCorpus,
   type VerifiedComparison,
 } from "@gladlog/analysis";
 import {
+  buildCoachSystemPrompt,
   PROMPT_VERSION,
   resolveAiClient,
   type AiBackend,
+  type AiLanguage,
   type AnthropicLike,
 } from "./ai";
 
@@ -61,6 +64,7 @@ export function createCompareService(deps: {
     wowDirectory: string | null;
     aiBackend?: AiBackend;
     aiBackendCommand?: string | null;
+    aiLanguage?: AiLanguage;
   };
   clientFactory?: (key: string) => AnthropicLike;
   loadCorpus: () => ReferenceCorpus | null;
@@ -146,6 +150,7 @@ export function createCompareService(deps: {
       fellBackTo,
     };
     const settings = deps.getSettings();
+    const lang: AiLanguage = settings.aiLanguage ?? "zh";
 
     const finish = (report: string | null, droppedReason: string | null) => {
       const result: CompareResult = {
@@ -164,6 +169,7 @@ export function createCompareService(deps: {
             schemaVersion: 1,
             corpusVersion: corpus.wowPatchVersion,
             promptVersion: PROMPT_VERSION,
+            language: lang,
             createdAt: Date.now(),
             result,
           }),
@@ -191,7 +197,9 @@ export function createCompareService(deps: {
       let raw = "";
       const stream = client.stream({
         model: settings.anthropicModel ?? "claude-sonnet-5",
-        max_tokens: 1024,
+        max_tokens: 1500,
+        // 解说语言跟随教练回复语言设置(此前漏了 system,永远英文)
+        system: buildCoachSystemPrompt(lang),
         messages: [{ role: "user", content: prompt }],
       });
       for await (const ev of stream) {
@@ -205,10 +213,20 @@ export function createCompareService(deps: {
         }
       }
       if (myGen !== generation) return;
+      // 中文解说时:判词占位符替换为中文(占位解析仍按英文 facts 校验)
+      const displayFacts =
+        lang === "zh"
+          ? Object.fromEntries(
+              Object.entries(vc.facts).map(([k, v]) => [
+                k,
+                k.endsWith(".verdict") ? verdictLabel(v, "zh") : v,
+              ]),
+            )
+          : vc.facts;
       const check = claimChecker(raw, vc.facts);
       if (!check.ok)
         finish(null, `claimChecker: ${check.violations.join("; ")}`);
-      else finish(interpolate(raw, vc.facts), null);
+      else finish(interpolate(raw, displayFacts), null);
     } catch (err) {
       if (myGen !== generation) return;
       deps.emit("gladlog:compare:error", {
@@ -234,6 +252,9 @@ export function createCompareService(deps: {
         const corpus = deps.loadCorpus();
         if (corpus && doc.corpusVersion !== corpus.wowPatchVersion) return null;
         if (doc.promptVersion !== PROMPT_VERSION) return null;
+        // 语言分键:解说语言换了就重新生成(旧缓存无 language 字段 → 失效)
+        const lang = deps.getSettings().aiLanguage ?? "zh";
+        if (doc.language !== lang) return null;
         return doc.result as CompareResult;
       } catch {
         return null;

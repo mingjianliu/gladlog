@@ -16,7 +16,13 @@ export function buildExemplarLedPrompt(
     .map((c) => `  - ${c}`)
     .join("\n");
   return [
-    `You are a World of Warcraft arena coach. Write 2-3 short paragraphs comparing this ${specName}'s play to their skill cohort (bracket ${cell.bracket}, comp ${cell.archetype}, build group ${cell.buildGroup}, N=${cell.sampleN}).`,
+    `You are a World of Warcraft arena coach. Compare this ${specName}'s play to their skill cohort (bracket ${cell.bracket}, comp ${cell.archetype}, build group ${cell.buildGroup}, N=${cell.sampleN}).`,
+    ``,
+    `STRUCTURE (make it genuinely instructive, not a number dump):`,
+    `1. One opening sentence: overall read of where this player sits vs the cohort.`,
+    `2. For each dimension where the player is meaningfully BELOW the cohort (per its verdict placeholder): a short paragraph that (a) explains in plain language what that metric measures and why it wins games, (b) states the gap using the value/median placeholders, (c) gives ONE concrete, actionable adjustment for the next session.`,
+    `3. One short paragraph acknowledging the strongest dimension (what to keep doing).`,
+    `4. Close with a single priority: if they fix only one thing, which and why.`,
     ``,
     `HARD RULES:`,
     `- Refer to EVERY number and every performance judgement ONLY through the placeholders below. Never write a raw statistic, percentage, or percentile yourself — write the placeholder and it will be substituted.`,

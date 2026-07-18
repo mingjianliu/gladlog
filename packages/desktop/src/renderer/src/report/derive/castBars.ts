@@ -52,7 +52,11 @@ export function deriveCastBars(
         c.timestamp <= st.timestamp + PAIR_WINDOW_MS &&
         c.timestamp <= nextStartT,
     );
-    const cap = Math.min(nextStartT, st.timestamp + CAST_BAR_MAX_MS);
+    // 比赛结束即一切读条终止:无 SUCCESS 的兜底时长不得越过 endTime,
+    // 否则回放终点会出现"永远读不完"的条(用户实测反馈)。
+    const endMs = (source as { endTime?: number }).endTime ?? Infinity;
+    if (st.timestamp >= endMs) continue;
+    const cap = Math.min(nextStartT, st.timestamp + CAST_BAR_MAX_MS, endMs);
     bars.push({
       unitId,
       spellId: st.spellId,
