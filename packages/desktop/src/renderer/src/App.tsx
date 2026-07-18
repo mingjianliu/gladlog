@@ -112,7 +112,7 @@ export default function App() {
     <div className="app-container">
       <header className="app-topbar">
         <h1>gladlog</h1>
-        <div className="rpt-mode-seg">
+        <div className="rpt-view-tabs app-view-tabs">
           {(Object.keys(APP_VIEW_LABEL) as AppView[]).map((v) => (
             <button
               key={v}
