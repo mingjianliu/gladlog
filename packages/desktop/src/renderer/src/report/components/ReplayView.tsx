@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import arenaFloorsJson from "../data/arenaFloors.json";
 import { arenaMap, arenaMapUrl, arenaPx, arenaToPx } from "../data/arenaMaps";
-import { classColor, classGlyph } from "../data/gameConstants";
+import { classColor, classGlyph, specIconUrl } from "../data/gameConstants";
 import { castBarAt, deriveCastBars } from "../derive/castBars";
 import { deriveCasts } from "../derive/casts";
 import { dampeningAt, deriveDampeningSeries } from "../derive/dampeningSeries";
@@ -302,6 +302,12 @@ export function ReplayView({
             }}
             onDoubleClick={() => setView(null)}
           >
+            {/* 单位专精图标的圆形裁剪(单位组内局部坐标,全场共用一个) */}
+            <defs>
+              <clipPath id="rpt-unit-clip">
+                <circle r={11} cx={0} cy={0} />
+              </clipPath>
+            </defs>
             {zoneMap ? (
               <>
                 {/* 地面(底图为透明障碍图时透出) */}
@@ -543,6 +549,24 @@ export function ReplayView({
                   <text x={cx} y={cy + 3.2} className="rpt-replay-glyph">
                     {classGlyph(tr.classId)}
                   </text>
+                  {/* 专精图标叠加(CDN 同对局列表先例);加载失败时什么都不画,
+                      底下的职业色圆点+字形自然兜底 */}
+                  {specIconUrl(tr.specId) && (
+                    <g
+                      transform={`translate(${cx},${cy})`}
+                      clipPath="url(#rpt-unit-clip)"
+                      pointerEvents="none"
+                    >
+                      <image
+                        href={specIconUrl(tr.specId)!}
+                        x={-11}
+                        y={-11}
+                        width={22}
+                        height={22}
+                        preserveAspectRatio="xMidYMid slice"
+                      />
+                    </g>
+                  )}
                   <rect
                     x={cx - 16}
                     y={cy + 16}
