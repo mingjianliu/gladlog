@@ -171,10 +171,21 @@ export function deriveCurrentRating(
     .sort((a, b) => b.startTime - a.startTime);
   const latest = rated[0];
   if (!latest) return null;
-  const baseline = rated.find(
-    (m) => m.bracket === latest.bracket && m.startTime < from,
-  );
   const rating = ratingOf(latest)!;
+  // delta 只在 latest 落在时间范围内才有意义;基线排除 latest 本身,
+  // 且评分源同类相比(本人 CR vs CR,队均 MMR vs MMR),不混比。
+  const personal = (m: StoredMatchMeta): boolean =>
+    typeof m.playerRating === "number" && m.playerRating > 0;
+  const baseline =
+    latest.startTime >= from
+      ? rated.find(
+          (m) =>
+            m !== latest &&
+            m.bracket === latest.bracket &&
+            m.startTime < from &&
+            personal(m) === personal(latest),
+        )
+      : undefined;
   return {
     bracket: latest.bracket,
     rating,

@@ -52,6 +52,7 @@ export function Timeline({
   onDeathClick,
   bands,
   onBandClick,
+  cursorT,
 }: {
   data: TimelineData;
   onSelectUnit?: (unitId: string) => void;
@@ -62,6 +63,8 @@ export function Timeline({
   /** KILL WINDOW/VULNERABLE 背景色带(相对秒);点击 → 回放该时刻。 */
   bands?: VulnBand[];
   onBandClick?: (tSeconds: number) => void;
+  /** 回放光标投影(1c):从回放切回时的最后时刻(绝对 ms)。 */
+  cursorT?: number | null;
 }) {
   const [cursor, setCursor] = useState<number | null>(null);
   const series = hidden
@@ -174,6 +177,27 @@ export function Timeline({
             <title>{`${d.name} 死亡 @ ${relSec(d.t)}s${onDeathClick ? " — 点击看死亡回顾" : ""}`}</title>
           </g>
         ))}
+        {/* 回放光标投影(1c):accent 虚线 + 时间标签 */}
+        {cursorT != null && cursorT >= data.start && cursorT <= data.end && (
+          <g className="rpt-tl-replay-cursor" data-testid="tl-replay-cursor">
+            <line
+              x1={x(cursorT)}
+              x2={x(cursorT)}
+              y1={PAD.t}
+              y2={H - PAD.b}
+              stroke="var(--accent)"
+              strokeDasharray="3 3"
+            />
+            <text
+              x={x(cursorT) + 4}
+              y={PAD.t + 9}
+              className="rpt-tl-axis"
+              fill="var(--accent)"
+            >
+              回放 {relSec(cursorT)}s
+            </text>
+          </g>
+        )}
         {cursor !== null && cursor >= PAD.l && cursor <= W - PAD.r ? (
           <g>
             <line

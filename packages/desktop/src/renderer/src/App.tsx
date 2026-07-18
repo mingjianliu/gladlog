@@ -113,12 +113,14 @@ export default function App() {
     const map = new Map<string, number | null>();
     const last = new Map<string, number>();
     for (const m of [...metas].sort((a, b) => a.startTime - b.startTime)) {
-      const r = m.playerRating ?? m.avgRating ?? null;
+      const personal = typeof m.playerRating === "number" && m.playerRating > 0;
+      const r = personal ? m.playerRating! : (m.avgRating ?? null);
       if (r == null) {
         map.set(m.id, null);
         continue;
       }
-      const key = `${m.bracket}|${m.playerName ?? ""}`;
+      // 评分源同类相比:本人 CR 与队均 MMR 不混比(agy 复核)
+      const key = `${m.bracket}|${m.playerName ?? ""}|${personal ? "cr" : "mmr"}`;
       const prev = last.get(key);
       map.set(m.id, prev != null ? r - prev : null);
       last.set(key, r);

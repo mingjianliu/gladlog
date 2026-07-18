@@ -94,38 +94,36 @@ export function FindingsList({
                     ▶ 回放此刻
                   </button>
                 )}
-                {onFlag &&
-                  (() => {
-                    const key = findingKey(f);
-                    const cur = flags?.[key];
-                    return (
-                      <span className="rpt-finding-flags">
-                        <button
-                          className={cur === "done" ? "active" : ""}
-                          title="标记为已改进"
-                          onClick={() =>
-                            onFlag(key, cur === "done" ? null : "done")
-                          }
-                        >
-                          ✓ 已跟进
-                        </button>
-                        <button
-                          className={cur === "recurring" ? "active rec" : ""}
-                          title="标记为还在犯"
-                          onClick={() =>
-                            onFlag(
-                              key,
-                              cur === "recurring" ? null : "recurring",
-                            )
-                          }
-                        >
-                          ↻ 还在犯
-                        </button>
-                      </span>
-                    );
-                  })()}
               </div>
             )}
+            {/* 跟进标记独立于证据守卫:无 eventIds 的 finding 也能标记(agy 复核) */}
+            {onFlag &&
+              (() => {
+                const key = findingKey(f);
+                const cur = flags?.[key];
+                return (
+                  <span className="rpt-finding-flags">
+                    <button
+                      className={cur === "done" ? "active" : ""}
+                      title="标记为已改进"
+                      onClick={() =>
+                        onFlag(key, cur === "done" ? null : "done")
+                      }
+                    >
+                      ✓ 已跟进
+                    </button>
+                    <button
+                      className={cur === "recurring" ? "active rec" : ""}
+                      title="标记为还在犯"
+                      onClick={() =>
+                        onFlag(key, cur === "recurring" ? null : "recurring")
+                      }
+                    >
+                      ↻ 还在犯
+                    </button>
+                  </span>
+                );
+              })()}
           </div>
         );
       })}

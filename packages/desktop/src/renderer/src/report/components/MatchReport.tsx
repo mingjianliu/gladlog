@@ -60,6 +60,8 @@ export function MatchReport({
   const vulnBands = useMemo(() => deriveVulnBands(source), [source]);
   const ledgerPlayers = useMemo(() => deriveBurstLedger(source), [source]);
   const [recap, setRecap] = useState<DeathRecap | null>(null);
+  // 回放光标投影(1c):从回放切回战报时显示最后位置
+  const [lastReplayT, setLastReplayT] = useState<number | null>(null);
 
   // 死亡标记点击 → 找该单位最近的回顾(懒算,点击才 derive)
   const openRecap = (unitId: string, tMs: number) => {
@@ -109,6 +111,7 @@ export function MatchReport({
               onDeathClick={openRecap}
               bands={vulnBands}
               onBandClick={(tS) => handleSeekEvent(tS, [])}
+              cursorT={lastReplayT}
             />
             <WindowList bands={vulnBands} onSeek={handleSeekEvent} />
           </div>
@@ -150,6 +153,7 @@ export function MatchReport({
           source={source}
           seekReq={seekReq}
           onDeathClick={openRecap}
+          onLastT={setLastReplayT}
         />
       )}
       {/* 死亡回顾浮层:仅回放视图(战报视图已改为右栏常驻位,1c) */}

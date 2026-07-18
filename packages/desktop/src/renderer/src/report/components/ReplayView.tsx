@@ -51,11 +51,14 @@ export function ReplayView({
   source,
   seekReq,
   onDeathClick,
+  onLastT,
 }: {
   source: ReportSource;
   seekReq?: SeekRequest | null;
   /** 阵亡 ✕ 点击 → 死亡回顾(#6 v2)。t 为绝对 ms。 */
   onDeathClick?: (unitId: string, tMs: number) => void;
+  /** 卸载(切走视图)时回报最后时刻(绝对 ms)—— 战报曲线投影用(1c)。 */
+  onLastT?: (tMs: number) => void;
 }) {
   const data = useMemo(() => deriveReplay(source), [source]);
   const { startTime, endTime, bounds, tracks } = data;
@@ -83,6 +86,16 @@ export function ReplayView({
   const focusFire = useMemo(() => deriveFocusFire(source), [source]);
 
   const [t, setT] = useState(startTime);
+  // 回放时钟保持局部(热 tick);仅卸载时把最后位置回报给 MatchReport(冷路径)
+  const lastTRef = useRef(startTime);
+  lastTRef.current = t;
+  const onLastTRef = useRef(onLastT);
+  onLastTRef.current = onLastT;
+  useEffect(() => {
+    return () => {
+      onLastTRef.current?.(lastTRef.current);
+    };
+  }, []);
   // 缩放/平移(小地图人堆看不清 —— 滚轮缩放、拖拽平移、双击/按钮复位)。
   // view = SVG viewBox;null = 全景。坐标换算不动(只改视窗)。
   const [view, setView] = useState<{

@@ -1054,12 +1054,6 @@ pre {
 .rpt-gcd-act.recent {
   box-shadow: 0 0 0 1px var(--gold);
 }
-.rpt-gcd-act.major {
-  border-left: 2px solid var(--accent-line);
-}
-.rpt-gcd-act.major .rpt-gcd-act-name {
-  color: var(--accent);
-}
 /* 证据链跳转命中的 chip:闪金后回落(key 混入 nonce,每次跳转重放) */
 .rpt-gcd-act.flash {
   animation: rpt-gcd-flash 2.4s ease-out;
@@ -1422,10 +1416,8 @@ pre {
   cursor: pointer;
 }
 .rpt-recap {
-  margin-top: 12px;
   background: var(--surface);
-  border: 1px solid var(--hairline);
-  border-left: 3px solid var(--loss);
+  border: 1px solid rgba(224, 133, 133, 0.33);
   border-radius: 8px;
   padding: 12px 14px;
 }
@@ -1932,6 +1924,10 @@ pre {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.settings input {
+  width: 100%;
+  max-width: 420px;
+}
 .settings input,
 .settings select {
   background: var(--surface-2);
@@ -1940,11 +1936,6 @@ pre {
   border-radius: 7px;
   padding: 5px 10px;
   font-size: 12px;
-  width: 100%;
-  max-width: 420px;
-}
-.settings select {
-  width: auto;
 }
 .settings-key-cell {
   display: flex;
@@ -2785,4 +2776,33 @@ pre {
 }
 .rpt-tl-band-vulnerable {
   fill: rgba(224, 133, 133, 0.14);
+}
+
+
+/* ── 1c 死亡回顾五列(时间44|类型40|技能|数额|来源),行距 5px ── */
+.rpt-recap-table {
+  border-spacing: 0 5px;
+  border-collapse: separate;
+}
+.rpt-recap-t {
+  width: 44px;
+  color: var(--mute);
+  font-variant-numeric: tabular-nums;
+}
+.rpt-recap-kind {
+  width: 40px;
+}
+.rpt-recap-amt {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.rpt-recap-src {
+  color: var(--mute);
+}
+/* 角色 chips 激活 = accent 胶囊(1h,agy 复核第 6 条) */
+.dash-chars button.active {
+  background: var(--accent-fill);
+  color: var(--accent-text);
+  border-color: var(--accent-line);
+  border-radius: 999px;
 }
