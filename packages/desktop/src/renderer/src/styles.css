@@ -2266,3 +2266,44 @@ pre {
   border-radius: 1px;
   margin: 0 3px;
 }
+
+/* ── cohort 评分条 + 总结行 ── */
+.rpt-cohort-summary {
+  font-size: 12px;
+  color: var(--ink-2);
+  padding: 4px 0 8px;
+  border-bottom: 1px solid var(--hairline-soft);
+  margin-bottom: 6px;
+}
+.rpt-cohort-summary b {
+  color: var(--gold);
+  font-family: var(--font-data);
+  font-size: 14px;
+}
+.rpt-cohort-row {
+  display: grid;
+  grid-template-columns: minmax(110px, auto) 1fr minmax(0, auto);
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  padding: 2px 0;
+}
+.rpt-cohort-bar-track {
+  height: 6px;
+  background: var(--surface-2);
+  border-radius: 3px;
+  overflow: hidden;
+  min-width: 60px;
+}
+.rpt-cohort-bar {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+}
+.rpt-cohort-value {
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
+  text-align: right;
+  white-space: nowrap;
+}

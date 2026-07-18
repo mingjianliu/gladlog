@@ -26,4 +26,13 @@ describe("cohortDims", () => {
     expect(row.valueLabel).toBe("N/A");
     expect(row.value).toBeNull();
   });
+
+  it("评分方向修正:正向指标 score=percentile,反向指标 score=100-percentile", () => {
+    const [pos] = cohortDims([dim({ key: "offensiveIndex", percentile: 30 })]);
+    expect(pos.score).toBe(30);
+    const [neg] = cohortDims([
+      dim({ key: "reactionLatency", percentile: 30 }),
+    ]);
+    expect(neg.score).toBe(70);
+  });
 });

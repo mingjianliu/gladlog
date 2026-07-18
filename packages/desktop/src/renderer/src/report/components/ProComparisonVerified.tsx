@@ -210,6 +210,7 @@ export function ProComparisonVerified({
               )}
           </p>
           <CohortDimsTable
+            lang={lang}
             rows={cohortDims(result.verifiedComparison.dims, lang)}
           />
           {result.report !== null ? (

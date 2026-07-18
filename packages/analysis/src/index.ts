@@ -56,4 +56,4 @@ export * from "./analysis/candidateFindings";
 export * from "./analysis/causalLint";
 export * from "./analysis/auditFindings";
 export * from "./analysis/buildFindingsPrompt";
-export { METRIC_LABELS, VERDICT_LABELS, metricLabel, verdictLabel } from "./compare/metricLabels";
+export { METRIC_LABELS, VERDICT_LABELS, METRIC_LOWER_IS_BETTER, metricLabel, metricScore, verdictLabel } from "./compare/metricLabels";

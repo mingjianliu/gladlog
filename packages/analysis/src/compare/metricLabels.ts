@@ -50,6 +50,23 @@ export function metricLabel(key: string, lang: "en" | "zh"): string {
   return METRIC_LABELS[key]?.[lang] ?? key;
 }
 
+/**
+ * 评分方向单源:percentile 是中性排名,评分必须方向修正。
+ * "lower" = 数值越低越好(评分 = 100 - percentile);其余越高越好。
+ */
+export const METRIC_LOWER_IS_BETTER = new Set<string>([
+  "reactionLatency",
+  "defensiveOverlapRatio",
+  "burstIntoDefensiveRatio",
+  "kicksJukedCount",
+  "firstBurstSeconds",
+]);
+
+/** 方向修正后的 0-100 评分(越高越好)。 */
+export function metricScore(key: string, percentile: number): number {
+  return METRIC_LOWER_IS_BETTER.has(key) ? 100 - percentile : percentile;
+}
+
 export function verdictLabel(verdict: string, lang: "en" | "zh"): string {
   return VERDICT_LABELS[verdict]?.[lang] ?? verdict;
 }

@@ -55,7 +55,7 @@ describe("ProComparisonVerified", () => {
     // truthy assertion on the returned element is a real presence check.
     expect(await screen.findByText(/You landed 0.31 offense/)).toBeTruthy();
     // 维度键经 metricLabels 本地化(默认 zh)
-    expect(screen.getByText(/进攻输出指数/)).toBeTruthy();
+    expect(screen.getAllByText(/进攻输出指数/).length).toBeGreaterThan(0);
     expect(screen.getByText(/offensive build/i)).toBeTruthy(); // build group in meta
   });
 });
