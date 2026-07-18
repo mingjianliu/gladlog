@@ -9,7 +9,24 @@ import { analyzeKickAudit } from "./kickAudit";
 import { computeOffensiveWindows } from "./offensiveWindows";
 
 /** 爆发"转化"判定:窗口内主目标死了,或净掉血 ≥ 此百分点。 */
-const CONVERTED_HP_DROP_PT = 20;
+export const CONVERTED_HP_DROP_PT = 20;
+
+/**
+ * 爆发转化谓词单源:dpsMetrics 聚合与 candidateFindings 的
+ * unconverted-burst 候选共用(门规谓词即规范)。
+ */
+export function isBurstConverted(t: {
+  died: boolean;
+  hpStartPct: number | null;
+  hpEndPct: number | null;
+}): boolean {
+  return (
+    t.died ||
+    (t.hpStartPct !== null &&
+      t.hpEndPct !== null &&
+      t.hpStartPct - t.hpEndPct >= CONVERTED_HP_DROP_PT)
+  );
+}
 
 /**
  * DPS 高手对比指标(pro-comparison P1)。与爆发账本/战报卡完全同谓词
@@ -70,12 +87,7 @@ export function computeDpsMetrics(
   let aligned = 0;
   for (const b of bursts) {
     const t = b.dominantTarget;
-    const dropped =
-      t !== null &&
-      (t.died ||
-        (t.hpStartPct !== null &&
-          t.hpEndPct !== null &&
-          t.hpStartPct - t.hpEndPct >= CONVERTED_HP_DROP_PT));
+    const dropped = t !== null && isBurstConverted(t);
     if (dropped) converted++;
     if (t && t.defensivesHit.length > 0) intoDefensive++;
     if (b.allyCDsOverlapping.length > 0) aligned++;

@@ -1,6 +1,7 @@
 import type { CandidateEvent } from "./types";
 
 const DPS_LEGENDS: Record<string, string> = {
+  "unconverted-burst": `- "unconverted-burst": your offensive cooldowns (facts.spell) put facts.damageM M damage on facts.target but it did NOT convert — target survived with HP facts.hpStart% → facts.hpEnd% (facts.defensive names a damage reduction that was up, if any; facts.allyAligned says whether an ally offensive CD overlapped). Coach setup: pair the burst with CC on the healer, align with ally CDs, or pick a target without a defensive ready.`,
   "burst-into-immunity": `- "burst-into-immunity": you opened offensive cooldowns (facts.spell) while the target had a full immunity running (facts.immunity, active facts.overlap seconds of the burst). Coach burst timing or a target swap.`,
   "off-target-in-window": `- "off-target-in-window": during a kill window on facts.target, only facts.onTargetPct percent of your damage landed on that target (facts.offTarget absorbed the most). Coach target discipline.`,
   "juked-kick": `- "juked-kick": your interrupt (facts.kick) was baited out by a fake cast (facts.fake) — the enemy cancelled and you kicked air. Coach kick patience/holding for the real cast.`,
@@ -40,7 +41,7 @@ export function buildFindingsPrompt(
     })
     .join("\n");
   return [
-    `You are a World of Warcraft arena coach reviewing a ${specName}'s match. Produce a short list of coaching findings as JSON.`,
+    `You are a World of Warcraft arena coach reviewing a ${specName}'s match. Produce 3-5 coaching findings as JSON — as many as the event menu genuinely supports; never pad with weak or duplicate items. When the menu contains non-death event types (bursts, kicks, targeting), cover at least one of them — deaths matter most but are not the whole story.`,
     ``,
     `Match context (for reasoning about the arc — do NOT cite anything not in the event menu):`,
     richContext,

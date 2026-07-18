@@ -10,6 +10,7 @@ import {
   type IMajorCooldownInfo,
   isHealerSpec,
 } from "../utils/cooldowns";
+import { isBurstConverted } from "../utils/dpsMetrics";
 import { analyzeOutgoingCCChains } from "../utils/drAnalysis";
 import { analyzeKickAudit } from "../utils/kickAudit";
 import { computeOffensiveWindows } from "../utils/offensiveWindows";
@@ -137,8 +138,54 @@ function dpsOwnerEvents(
   if (enemies.length === 0) return out;
   const allies = friends.filter((u) => u.id !== owner.id);
 
+  const ledger = analyzeBurstLedger(owner, allies, enemies, combat);
+
+  // unconverted-burst:爆发窗口没转化(目标没死、净掉血不足)——用户反馈
+  // findings 全是死亡/击杀窗口,爆发账本的信息没有证据 id 可引。转化谓词
+  // 与 dpsMetrics.burstConversionRate 同源(isBurstConverted)。免疫场景归
+  // burst-into-immunity 不重复;按伤害取前 2 个,避免刷屏小爆发。
+  const unconverted = ledger
+    .filter((b) => {
+      const t = b.dominantTarget;
+      return (
+        t !== null &&
+        !isBurstConverted(t) &&
+        !t.defensivesHit.some((d) => d.isImmunity)
+      );
+    })
+    .sort(
+      (a, b) =>
+        (b.dominantTarget?.damage ?? 0) - (a.dominantTarget?.damage ?? 0),
+    )
+    .slice(0, 2);
+  for (const b of unconverted) {
+    const t = b.dominantTarget!;
+    const def = t.defensivesHit[0];
+    out.push({
+      id: `unconverted-burst:${owner.id}:${Math.round(b.fromSeconds)}`,
+      type: "unconverted-burst",
+      t: b.fromSeconds,
+      unitNames: [owner.name, t.unitName],
+      spell: b.spells[0]?.spellName,
+      facts: {
+        t: fmt(b.fromSeconds),
+        spell: b.spells.map((s) => s.spellName).join(" + "),
+        target: t.unitName,
+        damageM: (t.damage / 1_000_000).toFixed(2),
+        ...(t.hpStartPct !== null && t.hpEndPct !== null
+          ? {
+              hpStart: String(t.hpStartPct),
+              hpEnd: String(t.hpEndPct),
+            }
+          : {}),
+        ...(def ? { defensive: def.spellName } : {}),
+        allyAligned: b.allyCDsOverlapping.length > 0 ? "yes" : "no",
+      },
+    });
+  }
+
   // burst-into-immunity:主目标在爆发内挂着免疫(纯减伤不报,留给 prompt 块叙述)
-  for (const b of analyzeBurstLedger(owner, allies, enemies, combat)) {
+  for (const b of ledger) {
     const t = b.dominantTarget;
     if (!t) continue;
     const imm = t.defensivesHit.find((d) => d.isImmunity);
