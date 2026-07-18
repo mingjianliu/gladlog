@@ -9,7 +9,78 @@ import {
   writeFileSync,
 } from "fs";
 import { join } from "path";
+import { Worker } from "worker_threads";
 import type { GladMatch, GladShuffle } from "@gladlog/parser";
+
+interface CacheEntry {
+  id: string;
+  data: unknown;
+}
+
+class MatchLruCache {
+  private entries: CacheEntry[] = [];
+
+  get(id: string): unknown | undefined {
+    const idx = this.entries.findIndex((e) => e.id === id);
+    if (idx === -1) return undefined;
+    const entry = this.entries[idx]!;
+    this.entries.splice(idx, 1);
+    this.entries.unshift(entry);
+    return entry.data;
+  }
+
+  set(id: string, data: unknown): void {
+    const idx = this.entries.findIndex((e) => e.id === id);
+    if (idx !== -1) {
+      this.entries.splice(idx, 1);
+    }
+    this.entries.unshift({ id, data });
+    if (this.entries.length > 2) {
+      this.entries.pop();
+    }
+  }
+
+  clear(): void {
+    this.entries = [];
+  }
+}
+
+function parseMatchFileInWorker(filePath: string): Promise<unknown | null> {
+  return new Promise((resolve) => {
+    const code = `
+      const { parentPort, workerData } = require('worker_threads');
+      const { readFileSync } = require('fs');
+      try {
+        const content = readFileSync(workerData.filePath, 'utf8');
+        const parsed = JSON.parse(content);
+        parentPort.postMessage({ success: true, data: parsed });
+      } catch (err) {
+        parentPort.postMessage({ success: false, error: err.message });
+      }
+    `;
+    const worker = new Worker(code, {
+      eval: true,
+      workerData: { filePath },
+    });
+    worker.on("message", (msg) => {
+      if (msg.success) {
+        resolve(msg.data);
+      } else {
+        resolve(null);
+      }
+      worker.terminate();
+    });
+    worker.on("error", () => {
+      resolve(null);
+      worker.terminate();
+    });
+    worker.on("exit", (code) => {
+      if (code !== 0) {
+        resolve(null);
+      }
+    });
+  });
+}
 
 export interface StoredMatchMeta {
   id: string;
@@ -92,6 +163,7 @@ function metaExtras(src: {
 export class MatchStore {
   private index = new Map<string, StoredMatchMeta>();
   private now: () => number;
+  private lru = new MatchLruCache();
 
   constructor(
     private rootDir: string,
@@ -119,6 +191,7 @@ export class MatchStore {
 
   init(): StoredMatchMeta[] {
     this.index.clear();
+    this.lru.clear();
     // 1) Fast path: one read of the append-only index (dedup by id, last wins).
     try {
       const raw = readFileSync(this.indexPath(), "utf-8");
@@ -268,6 +341,7 @@ export class MatchStore {
    * 富行字段并重写 meta.json + 索引。旧行缺字段是常态(渲染回退),不自动跑。
    */
   rebuildIndex(): { updated: number; failed: number } {
+    this.lru.clear();
     let updated = 0;
     let failed = 0;
     for (const [id, meta] of [...this.index]) {
@@ -321,12 +395,18 @@ export class MatchStore {
       .slice(0, limit);
   }
 
-  get(id: string): unknown | null {
+  async get(id: string): Promise<unknown | null> {
     if (!this.index.has(id)) return null;
+    const cached = this.lru.get(id);
+    if (cached !== undefined) return cached;
     try {
-      return JSON.parse(
-        readFileSync(join(this.rootDir, safeName(id), "match.json"), "utf-8"),
-      ) as unknown;
+      const data = await parseMatchFileInWorker(
+        join(this.rootDir, safeName(id), "match.json"),
+      );
+      if (data !== null) {
+        this.lru.set(id, data);
+      }
+      return data;
     } catch {
       return null;
     }

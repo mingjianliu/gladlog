@@ -1,6 +1,7 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, mkdirSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+import { describe, expect, it } from "vitest";
 import type { GladMatch, GladShuffle } from "@gladlog/parser";
 import { MatchStore } from "../src/main/matchStore";
 
@@ -92,7 +93,7 @@ describe("MatchStore", () => {
     expect(s.store(empty)).toEqual({ stored: false, meta: null });
   });
 
-  it("init 重扫恢复索引,list 按 startTime 降序", () => {
+  it("init 重扫恢复索引,list 按 startTime 降序", async () => {
     const root = dir();
     const s1 = new MatchStore(root);
     s1.store({ ...fakeMatch("m1"), startTime: 100 } as GladMatch);
@@ -100,8 +101,8 @@ describe("MatchStore", () => {
     const s2 = new MatchStore(root);
     const metas = s2.init();
     expect(metas.map((m) => m.id)).toEqual(["m2", "m1"]);
-    expect(s2.get("m1")).not.toBeNull();
-    expect(s2.get("nope")).toBeNull();
+    expect(await s2.get("m1")).not.toBeNull();
+    expect(await s2.get("nope")).toBeNull();
   });
 
   it("自愈:meta.json 损坏后重存同 id 不抛并恢复三文件", () => {
@@ -191,5 +192,57 @@ describe("富行 meta 字段(backlog #7)", () => {
     }
     const { meta } = s.store(m as unknown as GladMatch);
     expect(meta!.avgRating).toBeNull();
+  });
+
+  it("get 未决时，发一个 page 应立即返回 (<100ms)", async () => {
+    const root = dir();
+    const s = new MatchStore(root);
+    const largeId = "large_match";
+    const data = { dummy: "x".repeat(15 * 1024 * 1024) };
+    const safeDir = join(root, largeId);
+    mkdirSync(safeDir, { recursive: true });
+    writeFileSync(join(safeDir, "match.json"), JSON.stringify({ data }));
+
+    s.init();
+    (s as any).index.set(largeId, { id: largeId, startTime: 100 } as any);
+
+    const t0 = Date.now();
+    const getPromise = s.get(largeId);
+
+    const pageStart = Date.now();
+    s.page({ limit: 10 });
+    const pageEnd = Date.now();
+
+    expect(pageEnd - pageStart).toBeLessThan(100);
+
+    const retrieved = await getPromise;
+    expect(retrieved).not.toBeNull();
+    const tEnd = Date.now();
+    console.log(`[probe] get took ${tEnd - t0}ms, page took ${pageEnd - pageStart}ms`);
+  });
+
+  it("LRU 缓存正常工作：最多缓存 2 个条目且遵循 LRU 淘汰", async () => {
+    const root = dir();
+    const s = new MatchStore(root);
+
+    for (const id of ["m1", "m2", "m3"]) {
+      const safeDir = join(root, id);
+      mkdirSync(safeDir, { recursive: true });
+      writeFileSync(join(safeDir, "match.json"), JSON.stringify({ id, data: id }));
+      (s as any).index.set(id, { id, startTime: 100 } as any);
+    }
+
+    const res1 = await s.get("m1");
+    const res2 = await s.get("m2");
+
+    const res1_again = await s.get("m1");
+    const res2_again = await s.get("m2");
+    expect(res1).toBe(res1_again);
+    expect(res2).toBe(res2_again);
+
+    await s.get("m3");
+
+    const res1_third = await s.get("m1");
+    expect(res1_third).not.toBe(res1);
   });
 });
