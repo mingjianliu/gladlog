@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { DevPanel } from "./components/DevPanel";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { StatsDashboard } from "./components/StatsDashboard";
@@ -108,6 +108,60 @@ export default function App() {
     }
   }, [selectedId]);
 
+  // 评分涨跌(1e):同 bracket+角色 的相邻两场差值;首场/无评分 → null 不显示箭头
+  const ratingDeltas = useMemo(() => {
+    const map = new Map<string, number | null>();
+    const last = new Map<string, number>();
+    for (const m of [...metas].sort((a, b) => a.startTime - b.startTime)) {
+      const r = m.playerRating ?? m.avgRating ?? null;
+      if (r == null) {
+        map.set(m.id, null);
+        continue;
+      }
+      const key = `${m.bracket}|${m.playerName ?? ""}`;
+      const prev = last.get(key);
+      map.set(m.id, prev != null ? r - prev : null);
+      last.set(key, r);
+    }
+    return map;
+  }, [metas]);
+
+  // 日期分组(1e):今天/昨天/M月D日 + 当日小结「N 场 · W-L」
+  const grouped = useMemo(() => {
+    const list = applyFilter(metas, filter);
+    const groups: Array<{
+      key: string;
+      label: string;
+      summary: string;
+      items: StoredMatchMeta[];
+    }> = [];
+    const today = new Date();
+    const dayLabel = (d: Date): string => {
+      const sameDay = (a: Date, b: Date) =>
+        a.getFullYear() === b.getFullYear() &&
+        a.getMonth() === b.getMonth() &&
+        a.getDate() === b.getDate();
+      const yesterday = new Date(today.getTime() - 86_400_000);
+      if (sameDay(d, today)) return "今天";
+      if (sameDay(d, yesterday)) return "昨天";
+      return `${d.getMonth() + 1}月${d.getDate()}日`;
+    };
+    for (const m of list) {
+      const d = new Date(m.startTime);
+      const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+      const cur = groups[groups.length - 1];
+      if (cur && cur.key === key) cur.items.push(m);
+      else groups.push({ key, label: dayLabel(d), summary: "", items: [m] });
+    }
+    for (const g of groups) {
+      const wins = g.items.filter((m) =>
+        m.result.toLowerCase().startsWith("win"),
+      ).length;
+      g.summary = `${g.items.length} 场 · ${wins}-${g.items.length - wins}`;
+    }
+    return groups;
+  }, [metas, filter]);
+
   return (
     <div className="app-container">
       <header className="app-topbar">
@@ -148,15 +202,24 @@ export default function App() {
               onChange={setFilter}
             />
             <ul data-testid="match-list" className="match-list">
-              {applyFilter(metas, filter).map((m) => (
-                <li
-                  key={m.id}
-                  className={m.id === selectedId ? "sel" : ""}
-                  onClick={() => setSelectedId(m.id)}
-                >
-                  <MatchListRow meta={m} />
-                </li>
-              ))}
+              {grouped.flatMap((g) => [
+                <li key={`g:${g.key}`} className="mlr-group">
+                  <span>{g.label}</span>
+                  <span className="mlr-group-sum">{g.summary}</span>
+                </li>,
+                ...g.items.map((m) => (
+                  <li
+                    key={m.id}
+                    className={m.id === selectedId ? "sel" : ""}
+                    onClick={() => setSelectedId(m.id)}
+                  >
+                    <MatchListRow
+                      meta={m}
+                      ratingDelta={ratingDeltas.get(m.id)}
+                    />
+                  </li>
+                )),
+              ])}
               {hasMore && <li className="loading-more">后台补载中…</li>}
             </ul>
           </aside>

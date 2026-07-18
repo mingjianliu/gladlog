@@ -36,7 +36,7 @@ describe("MatchListRow(backlog #7)", () => {
       ],
     };
     const { container } = render(<ul><li><MatchListRow meta={rich} /></li></ul>);
-    expect(screen.getByText("win")).toBeTruthy();
+    expect(container.querySelector(".mlr-win")).toBeTruthy(); // 胜负=左缘色线类,无文字徽章(1e)
     expect(screen.getByText("Nagrand Arena")).toBeTruthy();
     expect(screen.getByText("2:25")).toBeTruthy();
     expect(screen.getByText("2500")).toBeTruthy();

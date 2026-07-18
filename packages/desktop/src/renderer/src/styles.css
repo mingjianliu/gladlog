@@ -1253,21 +1253,29 @@ pre {
   gap: 6px;
   min-width: 0;
 }
-.mlr-result {
-  font-family: var(--font-data);
-  font-size: 10px;
-  font-weight: bold;
-  padding: 1px 5px;
-  border-radius: 3px;
+/* 胜负 = 行左缘 2px 色线(无文字徽章,1e);选中态与其共存 */
+.app-sidebar li {
+  position: relative;
 }
-.mlr-result-win {
-  color: var(--win);
-  background: color-mix(in srgb, var(--win) 14%, transparent);
+.app-sidebar li:has(.mlr-win) {
+  box-shadow: inset 2px 0 0 var(--win);
 }
-.mlr-result-loss,
-.mlr-result-lose {
-  color: var(--loss);
-  background: color-mix(in srgb, var(--loss) 14%, transparent);
+.app-sidebar li:has(.mlr-loss) {
+  box-shadow: inset 2px 0 0 var(--loss);
+}
+.app-sidebar li.sel {
+  background: #1e2130;
+  box-shadow: inset 3px 0 0 -1px var(--accent);
+}
+.app-sidebar li.sel:has(.mlr-win) {
+  box-shadow:
+    inset 2px 0 0 var(--win),
+    inset 6px 0 0 -3px var(--accent);
+}
+.app-sidebar li.sel:has(.mlr-loss) {
+  box-shadow:
+    inset 2px 0 0 var(--loss),
+    inset 6px 0 0 -3px var(--accent);
 }
 .mlr-zone {
   flex: 1;
@@ -1275,16 +1283,37 @@ pre {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink);
 }
 .mlr-dur,
 .mlr-rating {
-  font-family: var(--font-data);
   font-size: 11px;
-  color: var(--ink-2);
+  color: var(--mute);
 }
-.mlr-rating {
-  color: var(--accent);
+.mlr-rating.up {
+  color: var(--accent-soft);
+}
+.mlr-rating.down {
+  color: var(--mute);
+}
+/* 日期分组头(1e) */
+.mlr-group {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--mute);
+  cursor: default !important;
+  background: var(--bg) !important;
+  padding: 7px 12px 5px !important;
+}
+.mlr-group-sum {
+  color: #595d6c;
+  letter-spacing: 0;
 }
 .mlr-teams {
   display: flex;
@@ -1301,25 +1330,27 @@ pre {
   margin: 0 2px;
 }
 .mlr-spec {
-  width: 18px;
-  height: 18px;
-  border-radius: 3px;
+  width: 17px;
+  height: 17px;
+  border-radius: 4px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   object-fit: cover;
 }
+.mlr-team {
+  display: inline-flex;
+  gap: 3px;
+}
 .mlr-spec-fallback {
   font-size: 8px;
   font-weight: bold;
-  color: #fff;
-  font-family: var(--font-data);
+  color: #10121c;
 }
 .mlr-when {
   margin-left: auto;
-  font-size: 10px;
+  font-size: 11px;
   color: var(--mute);
-  font-family: var(--font-data);
 }
 
 /* ── #8 收尾:窗口色带 + strip 跳转 ── */
@@ -1600,29 +1631,32 @@ pre {
 }
 .mlf-seg {
   display: inline-flex;
+  height: 26px;
+  align-items: stretch;
   border: 1px solid var(--hairline);
-  border-radius: 6px;
+  border-radius: 7px;
   overflow: hidden;
 }
 .mlf-seg button {
   font-size: 11px;
-  padding: 3px 8px;
+  padding: 0 9px;
   border: none;
   border-radius: 0;
   background: transparent;
   color: var(--ink-2);
 }
 .mlf-seg button.active {
-  background: var(--surface-2);
-  color: var(--accent);
+  background: var(--accent-fill);
+  color: var(--accent-text);
 }
 .mlf select {
   font-size: 11px;
+  height: 26px;
   max-width: 108px;
   background: var(--surface);
   color: var(--ink);
   border: 1px solid var(--hairline);
-  border-radius: 6px;
+  border-radius: 7px;
   padding: 2px 4px;
 }
 .mlf-spec {
@@ -1631,11 +1665,13 @@ pre {
   border-radius: 3px;
 }
 .mlf-clear {
-  font-size: 10px;
-  color: var(--mute);
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--accent);
   border: none;
   background: transparent;
   cursor: pointer;
+  padding: 0 2px;
 }
 
 .rpt-gcd-death-click {

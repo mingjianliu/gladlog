@@ -21,7 +21,11 @@ const meta = (id: string, startTime: number) => ({
 const matchRows = () =>
   screen
     .getAllByRole("listitem")
-    .filter((li) => !li.className.includes("loading-more"));
+    .filter(
+      (li) =>
+        !li.className.includes("loading-more") &&
+        !li.className.includes("mlr-group"),
+    );
 
 beforeEach(() => {
   const page = vi.fn(async (opts: { before?: number; limit: number }) => {

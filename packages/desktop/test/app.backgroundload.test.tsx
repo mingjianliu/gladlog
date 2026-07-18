@@ -46,7 +46,7 @@ describe("后台补载(backlog #12)", () => {
     const list = await screen.findByTestId("match-list");
     await waitFor(
       () => {
-        expect(list.querySelectorAll("li:not(.loading-more)").length).toBe(250);
+        expect(list.querySelectorAll("li:not(.loading-more):not(.mlr-group)").length).toBe(250);
       },
       { timeout: 4000 },
     );
