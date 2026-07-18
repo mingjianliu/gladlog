@@ -87,3 +87,25 @@ describe("回放小件(phase3 #4)", () => {
     expect(has).toBe(expected);
   });
 });
+
+describe("竞技场框体侧栏(血条防遮挡)", () => {
+  it("友方/敌方两组框体齐全,每行有血条与百分比;hover 行点亮场上光环", () => {
+    const { container } = render(<ReplayView source={m} />);
+    const data = deriveReplay(m as never);
+    const friendly = data.tracks.filter((t) => t.reaction === "Friendly");
+    const enemy = data.tracks.filter((t) => t.reaction !== "Friendly");
+    const fCol = container.querySelector("[data-testid='rpt-frames-friendly']")!;
+    const eCol = container.querySelector("[data-testid='rpt-frames-enemy']")!;
+    expect(fCol.querySelectorAll(".rpt-frame").length).toBe(friendly.length);
+    expect(eCol.querySelectorAll(".rpt-frame").length).toBe(enemy.length);
+    expect(fCol.querySelectorAll(".rpt-frame-bar").length).toBeGreaterThan(0);
+    expect(fCol.querySelectorAll(".rpt-frame-pct").length).toBeGreaterThan(0);
+    // 旧 legend 已被框体取代
+    expect(container.querySelector(".rpt-replay-legend")).toBeNull();
+    // hover 联动:框体行 hover → 场上出现金色光环
+    fireEvent.mouseEnter(fCol.querySelector(".rpt-frame")!);
+    expect(container.querySelector(".rpt-replay-hover-ring")).toBeTruthy();
+    fireEvent.mouseLeave(fCol.querySelector(".rpt-frame")!);
+    expect(container.querySelector(".rpt-replay-hover-ring")).toBeNull();
+  });
+});

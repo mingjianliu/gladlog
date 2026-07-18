@@ -130,6 +130,8 @@ export function ReplayView({
   const [selUnits, setSelUnits] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(tracks.map((tr) => [tr.unitId, true])),
   );
+  // 侧栏框体/场上单位 hover 联动:高亮 + raise 到最上层
+  const [hoverUnit, setHoverUnit] = useState<string | null>(null);
   const prevRef = useRef<number>(0);
   const seekNonceRef = useRef<number>(0);
 
@@ -463,8 +465,15 @@ export function ReplayView({
                 </g>
               );
             })}
-            {/* 存活单位:职业色圆点 + 字形 + 名字 + 血条 */}
-            {tracks.map((tr) => {
+            {/* 存活单位:职业色圆点 + 字形 + 名字 + 血条。
+                hover(侧栏或场上)的单位排到最后 = SVG 最上层,重叠时可看清 */}
+            {(hoverUnit
+              ? [
+                  ...tracks.filter((tr) => tr.unitId !== hoverUnit),
+                  ...tracks.filter((tr) => tr.unitId === hoverUnit),
+                ]
+              : tracks
+            ).map((tr) => {
               const at = sampleAt(tr, t);
               if (!at) return null;
               const cx = toX(at.x);
@@ -472,7 +481,20 @@ export function ReplayView({
               const hp =
                 at.maxHp > 0 ? Math.max(0, Math.min(1, at.hp / at.maxHp)) : 1;
               return (
-                <g key={tr.unitId} className="rpt-replay-unit">
+                <g
+                  key={tr.unitId}
+                  className="rpt-replay-unit"
+                  onMouseEnter={() => setHoverUnit(tr.unitId)}
+                  onMouseLeave={() => setHoverUnit(null)}
+                >
+                  {hoverUnit === tr.unitId && (
+                    <circle
+                      cx={cx}
+                      cy={cy}
+                      r={17}
+                      className="rpt-replay-hover-ring"
+                    />
+                  )}
                   {/* 爆发红光脉冲:敌方进攻大 CD active(span 与爆发账本同谓词) */}
                   {(() => {
                     const span = (burstAuras[tr.unitId] ?? []).find(
@@ -603,28 +625,77 @@ export function ReplayView({
             })}
           </svg>
 
-          <div className="rpt-replay-legend">
-            {tracks.map((tr) => {
-              const dead = tr.deathT != null && t >= tr.deathT;
-              return (
-                <span
-                  key={tr.unitId}
-                  className={dead ? "rpt-replay-leg dead" : "rpt-replay-leg"}
-                >
-                  <span
-                    className="rpt-replay-swatch"
-                    style={{
-                      background: classColor(tr.classId),
-                      borderColor: reactionRing(tr.reaction),
-                    }}
-                  >
-                    {classGlyph(tr.classId)}
-                  </span>
-                  {tr.name}
-                  {dead ? " ✝" : ""}
-                </span>
-              );
-            })}
+          {/* 竞技场框体(WoW party/arena frames 式):血量不再被场上重叠遮挡 */}
+          <div className="rpt-replay-frames-row">
+            {(["Friendly", "Hostile"] as const).map((side) => (
+              <div
+                key={side}
+                className={`rpt-replay-frames ${side === "Friendly" ? "friendly" : "enemy"}`}
+                data-testid={`rpt-frames-${side === "Friendly" ? "friendly" : "enemy"}`}
+              >
+                {tracks
+                  .filter((tr) =>
+                    side === "Friendly"
+                      ? tr.reaction === "Friendly"
+                      : tr.reaction !== "Friendly",
+                  )
+                  .map((tr) => {
+                    const at = sampleAt(tr, t);
+                    const dead = !at;
+                    const hp =
+                      at && at.maxHp > 0
+                        ? Math.max(0, Math.min(1, at.hp / at.maxHp))
+                        : 0;
+                    return (
+                      <div
+                        key={tr.unitId}
+                        className={[
+                          "rpt-frame",
+                          dead ? "dead" : "",
+                          hoverUnit === tr.unitId ? "hovered" : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" ")}
+                        onMouseEnter={() => setHoverUnit(tr.unitId)}
+                        onMouseLeave={() => setHoverUnit(null)}
+                      >
+                        <span
+                          className="rpt-replay-swatch"
+                          style={{
+                            background: classColor(tr.classId),
+                            borderColor: reactionRing(tr.reaction),
+                          }}
+                        >
+                          {classGlyph(tr.classId)}
+                        </span>
+                        <span className="rpt-frame-main">
+                          <span className="rpt-frame-name">{tr.name}</span>
+                          {dead ? (
+                            <span className="rpt-frame-dead">✝ 阵亡</span>
+                          ) : (
+                            <span className="rpt-frame-bar">
+                              <span
+                                style={{
+                                  width: `${hp * 100}%`,
+                                  background: hpColor(hp),
+                                }}
+                              />
+                            </span>
+                          )}
+                        </span>
+                        {!dead && (
+                          <span
+                            className="rpt-frame-pct"
+                            style={{ color: hpColor(hp) }}
+                          >
+                            {Math.round(hp * 100)}%
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+              </div>
+            ))}
           </div>
         </div>
 

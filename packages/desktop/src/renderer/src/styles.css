@@ -723,26 +723,85 @@ pre {
   text-anchor: middle;
   pointer-events: none;
 }
-.rpt-replay-legend {
+/* 竞技场框体(替代旧 legend):友方/敌方两组,血量常驻可读 */
+.rpt-replay-frames-row {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px 10px;
-  width: min(440px, 100%);
-  font-size: 11px;
-  color: var(--ink-2);
+  gap: 10px;
+  width: 100%;
+  justify-content: center;
 }
-.rpt-replay-leg {
-  display: inline-flex;
+.rpt-replay-frames {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 150px;
+  flex: 1;
+  max-width: 220px;
+}
+.rpt-frame {
+  display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   background: var(--surface);
   border: 1px solid var(--hairline);
-  border-radius: 999px;
-  padding: 2px 9px 2px 3px;
+  border-radius: 5px;
+  padding: 3px 7px;
+  font-size: 11px;
+  cursor: default;
 }
-.rpt-replay-leg.dead {
+.rpt-replay-frames.enemy .rpt-frame {
+  border-left: 2px solid var(--loss);
+}
+.rpt-replay-frames.friendly .rpt-frame {
+  border-left: 2px solid var(--win);
+}
+.rpt-frame.hovered {
+  border-color: var(--gold-dim);
+  background: var(--surface-2);
+}
+.rpt-frame.dead {
+  opacity: 0.55;
+}
+.rpt-frame-main {
+  flex: 1;
+  min-width: 0;
+}
+.rpt-frame-name {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+}
+.rpt-frame-bar {
+  display: block;
+  height: 5px;
+  border-radius: 2.5px;
+  background: var(--surface-2);
+  overflow: hidden;
+  margin-top: 2px;
+}
+.rpt-frame-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 2.5px;
+}
+.rpt-frame-dead {
   color: var(--mute);
-  text-decoration: line-through;
+  font-size: 10px;
+}
+.rpt-frame-pct {
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  flex: none;
+}
+.rpt-replay-hover-ring {
+  fill: none;
+  stroke: var(--gold);
+  stroke-width: 1.5;
+  stroke-dasharray: 3 3;
+  pointer-events: none;
 }
 .rpt-replay-swatch {
   width: 15px;
