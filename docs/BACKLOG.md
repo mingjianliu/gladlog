@@ -171,3 +171,17 @@ inputs. Big theme; slice into panels/lanes over several sub-projects.
 
 Note: `extractRotations` is computed but only consumed by offline `corpus-tools`,
 not the app — either surface it or leave it corpus-only by design.
+
+## 11. 战报明细 breakdown(wowarenalogs 原版 detail 级)
+
+用户提出(2026-07-18):当前战报 meters 只有每人总量(伤害/治疗一条),
+信息量不如老 wowarenalogs 的 detail 视图。目标:点开一个玩家 → 具体分解:
+
+- **输出按技能分解**:每个技能的总伤害/占比/次数/暴击率/最大一击;
+- **治疗按技能分解**(含过量治疗占比);
+- **承伤按来源分解**:谁的什么技能打了你多少(死亡分析的常备需求);
+- **承疗按来源**;可选:打断/驱散/控制的逐条清单。
+
+数据全在 unit 事件数组里(damageOut/healOut/damageIn 按 spellId 聚合即可),
+纯 derive + 展开式 UI(meters 行点击展开或独立 detail tab)。与 #10 的
+结构化面板方向互补:这是"原始账目",#10 是"分析结论"。
