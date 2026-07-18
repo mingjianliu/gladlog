@@ -15,7 +15,6 @@ import type { ReportSource } from "../derive/types";
 import { ExportButtons } from "./ExportButtons";
 import { FindingsList } from "./FindingsList";
 import { KeyMomentAxis } from "./KeyMomentAxis";
-import { MatchHero } from "./MatchHero";
 
 type AnalysisResult = {
   findings: Finding[];
@@ -253,6 +252,44 @@ export function StructuredAnalysisPanel({
 
   return (
     <div className="rpt-ai-panel">
+      {/* 操作区置顶(1g):主按钮 + 语言段控 + 状态文字 + 右端导出 */}
+      <div className="rpt-ai-actions rpt-ai-actions-top">
+        <button
+          className="rpt-ai-primary"
+          onClick={handleAnalyze}
+          disabled={!input || state === "running"}
+        >
+          {buttonText}
+        </button>
+        <div className="rpt-ai-lang" title="教练回复语言">
+          {(["zh", "en"] as const).map((l) => (
+            <button
+              key={l}
+              className={l === lang ? "active" : ""}
+              disabled={state === "running"}
+              onClick={() => void switchLang(l)}
+            >
+              {l === "zh" ? "中文" : "EN"}
+            </button>
+          ))}
+        </div>
+        {result && (
+          <span className="rpt-ai-status">
+            已缓存 · {result.findings.length} 条 findings
+            {result.findings[0]?.severity
+              ? ` · 最高严重度 ${result.findings[0].severity}`
+              : ""}
+          </span>
+        )}
+        {result && (
+          <span className="rpt-ai-export">
+            <ExportButtons
+              findings={result.findings}
+              heroText={`${result.findings.length} findings`}
+            />
+          </span>
+        )}
+      </div>
       {goals.length > 0 && (
         <div className="rpt-ai-goals" data-testid="ai-goals">
           <span className="rpt-ai-goals-title">
@@ -270,12 +307,6 @@ export function StructuredAnalysisPanel({
 
       {result && (
         <div className="rpt-ai-body">
-          <MatchHero
-            source={source}
-            findingCount={result.findings.length}
-            topSeverity={result.findings[0]?.severity}
-          />
-
           {result.hadNarration === false ? (
             <div>
               <KeyMomentAxis
@@ -324,11 +355,6 @@ export function StructuredAnalysisPanel({
               )}
             </>
           )}
-
-          <ExportButtons
-            findings={result.findings}
-            heroText={`${result.findings.length} findings`}
-          />
         </div>
       )}
 
@@ -337,27 +363,6 @@ export function StructuredAnalysisPanel({
           {preview}
         </pre>
       )}
-
-      <div className="rpt-ai-actions">
-        <button
-          onClick={handleAnalyze}
-          disabled={!input || state === "running"}
-        >
-          {buttonText}
-        </button>
-        <div className="rpt-ai-lang" title="教练回复语言">
-          {(["zh", "en"] as const).map((l) => (
-            <button
-              key={l}
-              className={l === lang ? "active" : ""}
-              disabled={state === "running"}
-              onClick={() => void switchLang(l)}
-            >
-              {l === "zh" ? "中文" : "EN"}
-            </button>
-          ))}
-        </div>
-      </div>
     </div>
   );
 }

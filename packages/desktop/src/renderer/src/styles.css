@@ -2284,64 +2284,60 @@ pre {
   background: transparent;
 }
 
-/* ── 关键时刻轴(AI 分析页脊柱) ── */
+/* ── 关键时刻轴(1g:单侧左轨) ── */
 .rpt-axis {
-  position: relative;
   margin: 14px 0;
-  padding: 4px 0;
 }
-.rpt-axis::before {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  background: var(--hairline);
-}
-.rpt-axis-row {
-  position: relative;
-  display: flex;
-  margin: 6px 0;
-}
-.rpt-axis-row.left {
-  justify-content: flex-start;
-  padding-right: calc(50% + 14px);
-}
-.rpt-axis-row.right {
-  justify-content: flex-end;
-  padding-left: calc(50% + 14px);
-}
-.rpt-axis-row.band {
-  justify-content: center;
-}
-.rpt-axis-row.left > *:last-child {
-  margin-left: auto;
-}
-.rpt-axis-row.right > *:last-child {
-  margin-right: auto;
+.rpt-axis-item {
+  display: grid;
+  grid-template-columns: 52px 1fr;
+  column-gap: 0;
 }
 .rpt-axis-gap {
-  position: absolute;
-  left: 50%;
-  top: -8px;
-  transform: translateX(-50%);
-  font-size: 10px;
+  grid-column: 2;
+  font-size: 10.5px;
   color: var(--mute);
+  padding: 4px 0 4px 16px;
+  border-left: 2px dashed var(--hairline-soft);
+  margin-left: 3px;
+}
+.rpt-axis-t {
+  text-align: right;
+  padding-right: 12px;
+  font-size: 11px;
+  color: var(--mute);
+  font-variant-numeric: tabular-nums;
+  padding-top: 4px;
+}
+.rpt-axis-entry {
+  position: relative;
+  border-left: 2px solid var(--hairline);
+  margin-left: 3px;
+  padding: 0 0 14px 16px;
+}
+.rpt-axis-entry.last {
+  border-image: linear-gradient(var(--hairline) calc(100% - 48px), transparent)
+    1;
+}
+.rpt-axis-dot {
+  position: absolute;
+  left: -6px;
+  top: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
   background: var(--bg);
-  padding: 0 6px;
-  white-space: nowrap;
-  z-index: 1;
+  border: 2px solid var(--accent-line);
 }
 .rpt-axis-node {
   display: inline-flex;
   align-items: baseline;
   gap: 6px;
-  border: 1px solid var(--hairline);
+  border: 1px solid var(--hairline-soft);
   border-radius: 6px;
   background: var(--surface);
   padding: 4px 10px;
-  font-size: 12px;
+  font-size: 12.5px;
   color: var(--ink);
   text-align: left;
   cursor: pointer;
@@ -2349,40 +2345,15 @@ pre {
 .rpt-axis-node:hover {
   border-color: var(--accent-line);
 }
-.rpt-axis-time {
-  font-family: var(--font-data);
-  font-variant-numeric: tabular-nums;
-  color: var(--mute);
-  font-size: 11px;
-}
-.rpt-axis-node.k-death.s-friendly {
-  border-left: 3px solid var(--loss);
-}
-.rpt-axis-node.k-death.s-enemy {
-  border-left: 3px solid var(--win);
-}
-.rpt-axis-node.k-cc.s-enemy {
-  border-left: 3px solid var(--loss);
-}
-.rpt-axis-node.k-cc.s-friendly {
-  border-left: 3px solid var(--win);
-}
-.rpt-axis-node.k-burst-band.s-friendly {
-  background: color-mix(in srgb, var(--win) 10%, var(--surface));
-}
-.rpt-axis-node.k-burst-band.s-enemy {
-  background: color-mix(in srgb, var(--loss) 10%, var(--surface));
+.rpt-axis-node.k-burst-band {
+  background: color-mix(in srgb, var(--gold) 8%, var(--surface));
 }
 .rpt-axis-detail {
   color: var(--ink-2);
   font-size: 11px;
 }
 .rpt-axis-finding {
-  max-width: 46%;
-}
-.rpt-axis-finding .rpt-axis-time {
-  display: block;
-  margin-bottom: 2px;
+  max-width: 64ch;
 }
 
 /* ── 战报明细 breakdown(meters 行内展开)── */
@@ -2517,4 +2488,112 @@ pre {
     var(--hairline) calc(100% - 48px),
     transparent
   );
+}
+
+/* ── 1g:操作区置顶 + 目标条 + finding 标签 + cohort 分布条 ── */
+.rpt-ai-actions-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.rpt-ai-primary {
+  border: 1px solid var(--accent);
+  color: var(--accent-text);
+  border-radius: 7px;
+  padding: 5px 16px;
+}
+.rpt-ai-status {
+  font-size: 12px;
+  color: var(--ink-2);
+}
+.rpt-ai-export {
+  margin-left: auto;
+}
+.rpt-ai-goals {
+  background: color-mix(in srgb, var(--accent-fill) 20%, transparent);
+  border: 1px solid var(--accent-line);
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+.rpt-ai-goal {
+  color: var(--accent-text) !important;
+  border-color: var(--accent-line) !important;
+}
+.rpt-finding {
+  position: relative;
+}
+.rpt-finding-flags {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+}
+.rpt-finding-sev {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+.rpt-finding-high .rpt-finding-sev {
+  color: var(--loss);
+  background: #e0858518;
+}
+.rpt-finding-med .rpt-finding-sev {
+  color: var(--gold);
+  background: color-mix(in srgb, var(--gold) 10%, transparent);
+}
+.rpt-finding-low .rpt-finding-sev {
+  color: var(--mute);
+  background: color-mix(in srgb, var(--mute) 12%, transparent);
+}
+.rpt-finding-title {
+  font-size: 13.5px;
+  font-weight: 500;
+}
+.rpt-finding-body {
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: var(--ink-2);
+}
+.rpt-finding-jump {
+  border: none;
+  color: var(--accent);
+}
+/* cohort 三列:名称 | 分布条 | 判定(1g) */
+.rpt-cohort-row {
+  display: grid;
+  grid-template-columns: 150px 1fr minmax(120px, auto);
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+  padding: 3px 0;
+}
+.rpt-cohort-dist {
+  position: relative;
+  height: 14px;
+  background: var(--surface-2);
+  border-radius: 4px;
+}
+.rpt-cohort-dist-range {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  background: var(--hairline);
+  border-radius: 4px;
+}
+.rpt-cohort-dist-p50 {
+  position: absolute;
+  top: 1px;
+  bottom: 1px;
+  width: 1.5px;
+  background: var(--ink-2);
+}
+.rpt-cohort-dist-you {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  border-radius: 1.5px;
 }
