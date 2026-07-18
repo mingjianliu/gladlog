@@ -641,7 +641,8 @@ export function ReplayView({
                   )
                   .map((tr) => {
                     const at = sampleAt(tr, t);
-                    const dead = !at;
+                    // 死亡判定与旧 legend 同谓词(deathT),不借道 sampleAt 的 null
+                    const dead = tr.deathT != null && t >= tr.deathT;
                     const hp =
                       at && at.maxHp > 0
                         ? Math.max(0, Math.min(1, at.hp / at.maxHp))

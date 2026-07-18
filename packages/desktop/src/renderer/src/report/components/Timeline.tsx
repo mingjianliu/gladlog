@@ -26,15 +26,19 @@ function smoothPath(
       )
       .join(" ");
   const cy = (v: number) => Math.max(yMin, Math.min(yMax, v));
-  let d = `M${pts[0]!.x.toFixed(1)},${pts[0]!.y.toFixed(1)}`;
-  for (let i = 0; i < pts.length - 1; i++) {
-    const p0 = pts[Math.max(0, i - 1)]!;
-    const p1 = pts[i]!;
-    const p2 = pts[i + 1]!;
-    const p3 = pts[Math.min(pts.length - 1, i + 2)]!;
-    const c1x = p1.x + (p2.x - p0.x) / 6;
+  // 端点 y 也钳制(logging 抖动可能给出 >100%/<0% 的比值,控制点钳而端点
+  // 不钳会在边界处画出折角);控制点 x 钳在段内,非均匀采样时防时间轴回弯。
+  const P = pts.map((p) => ({ x: p.x, y: cy(p.y) }));
+  let d = `M${P[0]!.x.toFixed(1)},${P[0]!.y.toFixed(1)}`;
+  for (let i = 0; i < P.length - 1; i++) {
+    const p0 = P[Math.max(0, i - 1)]!;
+    const p1 = P[i]!;
+    const p2 = P[i + 1]!;
+    const p3 = P[Math.min(P.length - 1, i + 2)]!;
+    const cx = (v: number) => Math.max(p1.x, Math.min(p2.x, v));
+    const c1x = cx(p1.x + (p2.x - p0.x) / 6);
     const c1y = cy(p1.y + (p2.y - p0.y) / 6);
-    const c2x = p2.x - (p3.x - p1.x) / 6;
+    const c2x = cx(p2.x - (p3.x - p1.x) / 6);
     const c2y = cy(p2.y - (p3.y - p1.y) / 6);
     d += ` C${c1x.toFixed(1)},${c1y.toFixed(1)} ${c2x.toFixed(1)},${c2y.toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`;
   }
