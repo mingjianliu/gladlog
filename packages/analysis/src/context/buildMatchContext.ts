@@ -224,20 +224,30 @@ export function buildMatchContext(
     enemies as ICombatUnit[],
     combat,
   );
-  const dispelSummary = reconstructDispelSummary(friends, enemies, combat);
+  // 两侧宠物/守卫(ownerId ∈ 对应玩家):CC 与驱散管线都要看到
+  const enemyPlayerIds = new Set(enemies.map((e) => e.id));
+  const enemyPets = Object.values(combat.units ?? {}).filter(
+    (u) => u.ownerId && enemyPlayerIds.has(u.ownerId),
+  );
+  const friendlyPets = Object.values(combat.units ?? {}).filter(
+    (u) => u.ownerId && friends.some((f) => f.id === u.ownerId),
+  );
+  // 覆盖尾巴修复:两侧宠物都传入 —— 此前主 summary 无宠物,魔狱犬
+  // Devour Magic(我方 purge / 敌方 purge)两个方向都不进任何桶。
+  const dispelSummary = reconstructDispelSummary(
+    friends,
+    enemies,
+    combat,
+    friendlyPets,
+    enemyPets,
+  );
   // 反向视角:敌方给自己队友解(消费同一谓词,双向对称)
   const enemyDispelSummary = reconstructDispelSummary(
     enemies,
     friends,
     combat,
-    Object.values(combat.units ?? {}).filter(
-      (u) => u.ownerId && enemies.some((e) => e.id === u.ownerId),
-    ),
-  );
-  // 敌方宠物/守卫(ownerId ∈ 敌方玩家):其 CC 也必须进 CC 管线
-  const enemyPlayerIds = new Set(enemies.map((e) => e.id));
-  const enemyPets = Object.values(combat.units ?? {}).filter(
-    (u) => u.ownerId && enemyPlayerIds.has(u.ownerId),
+    enemyPets,
+    friendlyPets,
   );
   const ccTrinketSummaries = friends.map((p) =>
     analyzePlayerCCAndTrinket(p, enemies, combat, enemyPets),
@@ -285,9 +295,6 @@ export function buildMatchContext(
   // Healer offense V1 (slack-gated facts) — healer log owners only
   const ownerCCSummary = ccTrinketSummaries.find(
     (s) => s.playerName === owner.name,
-  );
-  const friendlyPets = Object.values(combat.units ?? {}).filter(
-    (u) => u.ownerId && friends.some((f) => f.id === u.ownerId),
   );
   // 全部敌人的受控摘要(2026-07-18 覆盖修复):我方(队友/宠物)打到敌人身上
   // 的 CC 此前只有大 CD 目录内的施法行可见 —— [CC ON ENEMY] 光环行补齐,

@@ -1657,11 +1657,26 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   }
 
   // ── [CC ON ENEMY]:我方 CC 落在敌人身上(2026-07-18 覆盖修复)────────────
-  // owner 的 CC 已有 [YOU] [CC] 施法行,跳过避免重复;队友/宠物来源补齐。
+  // owner 的 CC 仅当有 [YOU] [CC] 施法行(即在追踪 CD 目录内)才跳过——
+  // 无追踪 CD 的 CC(Sap/Cheap Shot/Gouge/Polymorph 等)两条路都不渲染,
+  // 曾造成 DPS baseline 11 场 CC 覆盖 <80% 尾巴。队友/宠物来源照常补齐。
+  const ownerRenderedCcIds = new Set(
+    ownerCDs.filter((cd) => ccSpellIds.has(cd.spellId)).map((cd) => cd.spellId),
+  );
   if (enemyCCSummaries) {
     for (const summary of enemyCCSummaries) {
+      // 敌方饰品使用此前完全不渲染(野生 60 场审计:30/57 场覆盖 <80%,
+      // 全部缺口是 hostile 侧)——"目标交没交饰品"是爆发转化审计的核心事实,
+      // 缺席时教练只能以"trinket state never observed"降置信。
+      for (const t of summary.trinketUseTimes) {
+        addEntry(
+          t,
+          `${fmtTime(t)}  [ENEMY TRINKET]   ${enemyPid(summary.playerName)} used PvP trinket`,
+        );
+      }
       for (const cc of summary.ccInstances) {
-        if (cc.sourceName === owner.name) continue;
+        if (cc.sourceName === owner.name && ownerRenderedCcIds.has(cc.spellId))
+          continue;
         const durStr = ` (${cc.durationSeconds.toFixed(0)}s)`;
         addEntry(
           cc.atSeconds,
@@ -1757,7 +1772,8 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   {
     const purgeGroups = new Map<string, IDispelEvent[]>();
     for (const purge of dispelSummary.ourPurges) {
-      if (purge.sourceName === owner.name) continue;
+      // 宠物代施(Devour Magic 等)没有 owner 施法行可注记,不能跳过
+      if (purge.sourceName === owner.name && !purge.isPetDispel) continue;
       if (purge.priority !== "Critical" && purge.priority !== "High") continue;
       const key = `${Math.round(purge.timeSeconds)}|${purge.sourceName}`;
       const group = purgeGroups.get(key) ?? [];
@@ -1816,7 +1832,9 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       }
       for (const group of enemyCleanseGroups.values()) {
         const first = group[0];
-        const viaTag = first.dispelSpellName ? ` (${first.dispelSpellName})` : "";
+        const viaTag = first.dispelSpellName
+          ? ` (${first.dispelSpellName})`
+          : "";
         const effects = group
           .map(
             (c) =>

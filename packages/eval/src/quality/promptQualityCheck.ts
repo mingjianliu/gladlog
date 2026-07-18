@@ -125,7 +125,8 @@ export function checkSpells(
  * are rendered as annotations like "trinketed", "trinket broke this CC", or a
  * "[TRINKET]" marker (status lines like "trinket: ON CD" are not uses). Count
  * use-annotation lines against the manifest's cast count. */
-const TRINKET_USE = /trinketed|trinket broke|\[TRINKET\]|trinket:\s*used/i;
+const TRINKET_USE =
+  /trinketed|trinket broke|\[(ENEMY )?TRINKET\]|trinket:\s*used/i;
 
 export function checkTrinkets(
   promptLines: string[],
