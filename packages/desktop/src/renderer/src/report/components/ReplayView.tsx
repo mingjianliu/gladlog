@@ -1,6 +1,7 @@
 import { arenaObstacles } from "@gladlog/analysis";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import arenaFloorsJson from "../data/arenaFloors.json";
 import { arenaMap, arenaMapUrl, arenaPx, arenaToPx } from "../data/arenaMaps";
 import { classColor, classGlyph } from "../data/gameConstants";
 import { castBarAt, deriveCastBars } from "../derive/castBars";
@@ -91,6 +92,39 @@ export function ReplayView({
     h: number;
   } | null>(null);
   const panRef = useRef<{ px: number; py: number } | null>(null);
+  // 缩放交互:普通滚轮留给页面滚动,只有 ⌘/Ctrl+滚轮(触控板捏合同)才缩放。
+  // React 17+ 的合成 wheel 是 passive 监听、preventDefault 无效,必须原生挂。
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const dimsRef = useRef({ vw: FALLBACK_VW, vh: FALLBACK_VH });
+  const applyZoom = useCallback((factor: number, fx: number, fy: number) => {
+    const { vw, vh } = dimsRef.current;
+    setView((cur0) => {
+      const cur = cur0 ?? { x: 0, y: 0, w: vw, h: vh };
+      const w = Math.min(vw, Math.max(vw / 5, cur.w * factor));
+      const h = (w / vw) * vh;
+      let x = cur.x + fx * (cur.w - w);
+      let y = cur.y + fy * (cur.h - h);
+      x = Math.min(Math.max(0, x), vw - w);
+      y = Math.min(Math.max(0, y), vh - h);
+      return w >= vw ? null : { x, y, w, h };
+    });
+  }, []);
+  useEffect(() => {
+    const el = svgRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return; // 普通滚轮 = 页面滚动
+      e.preventDefault(); // 拦掉浏览器整页缩放
+      const rect = el.getBoundingClientRect();
+      applyZoom(
+        e.deltaY > 0 ? 1.25 : 0.8,
+        (e.clientX - rect.left) / rect.width,
+        (e.clientY - rect.top) / rect.height,
+      );
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [applyZoom, tracks.length]);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState<(typeof SPEEDS)[number]>(1);
   const [selUnits, setSelUnits] = useState<Record<string, boolean>>(() =>
@@ -162,6 +196,14 @@ export function ReplayView({
   // 否则回退到「按样本包围盒 + 抽象地面」。
   const zoneId = (source as { zoneId?: string | number }).zoneId;
   const zoneMap = arenaMap(zoneId);
+  // 语料实测的可行走地面轮廓(floorScan.ts 产物):场地边缘/入场房都是
+  // 真实 LoS 参照。CDN 底图只有柱子点阵,边界靠这个。
+  const floorOutline = (
+    arenaFloorsJson as unknown as Record<
+      string,
+      { outline: [number, number][] }
+    >
+  )[String(zoneId ?? "")]?.outline;
 
   let VW: number;
   let VH: number;
@@ -186,16 +228,26 @@ export function ReplayView({
   } else {
     VW = FALLBACK_VW;
     VH = FALLBACK_VH;
-    const spanX = bounds.maxX - bounds.minX || 1;
-    const spanY = bounds.maxY - bounds.minY || 1;
+    // 有实测地面轮廓时:包围盒并上轮廓(边缘/入场房可能超出本场样本范围)
+    const eb = { ...bounds };
+    if (floorOutline) {
+      for (const [fx, fy] of floorOutline) {
+        if (fx < eb.minX) eb.minX = fx;
+        if (fx > eb.maxX) eb.maxX = fx;
+        if (fy < eb.minY) eb.minY = fy;
+        if (fy > eb.maxY) eb.maxY = fy;
+      }
+    }
+    const spanX = eb.maxX - eb.minX || 1;
+    const spanY = eb.maxY - eb.minY || 1;
     const scale = Math.min((VW - 2 * PAD) / spanX, (VH - 2 * PAD) / spanY);
     aw = spanX * scale;
     ah = spanY * scale;
     offX = (VW - aw) / 2;
     offY = (VH - ah) / 2;
     // WoW y 向北为正 → 反转,使北在上方
-    toX = (x) => offX + (x - bounds.minX) * scale;
-    toY = (y) => offY + (bounds.maxY - y) * scale;
+    toX = (x) => offX + (x - eb.minX) * scale;
+    toY = (y) => offY + (eb.maxY - y) * scale;
     cxA = offX + aw / 2;
     cyA = offY + ah / 2;
     pillarR = Math.min(aw, ah) * 0.085;
@@ -205,6 +257,8 @@ export function ReplayView({
     ];
   }
 
+  dimsRef.current = { vw: VW, vh: VH };
+
   const atEnd = t >= endTime;
 
   return (
@@ -212,6 +266,7 @@ export function ReplayView({
       <div className="rpt-replay-stage">
         <div className="rpt-replay-arena-col">
           <svg
+            ref={svgRef}
             className={view ? "rpt-replay-field zoomed" : "rpt-replay-field"}
             viewBox={
               view
@@ -221,21 +276,6 @@ export function ReplayView({
             data-testid="rpt-replay-field"
             preserveAspectRatio="xMidYMid meet"
             style={{ aspectRatio: `${VW} / ${VH}` }}
-            onWheel={(e) => {
-              // 以光标为中心缩放;1×–5×
-              const rect = e.currentTarget.getBoundingClientRect();
-              const cur = view ?? { x: 0, y: 0, w: VW, h: VH };
-              const fx = (e.clientX - rect.left) / rect.width;
-              const fy = (e.clientY - rect.top) / rect.height;
-              const factor = e.deltaY > 0 ? 1.25 : 0.8;
-              const w = Math.min(VW, Math.max(VW / 5, cur.w * factor));
-              const h = (w / VW) * VH;
-              let x = cur.x + fx * (cur.w - w);
-              let y = cur.y + fy * (cur.h - h);
-              x = Math.min(Math.max(0, x), VW - w);
-              y = Math.min(Math.max(0, y), VH - h);
-              setView(w >= VW ? null : { x, y, w, h });
-            }}
             onPointerDown={(e) => {
               if (!view) return;
               panRef.current = { px: e.clientX, py: e.clientY };
@@ -244,7 +284,8 @@ export function ReplayView({
             onPointerMove={(e) => {
               if (!view || !panRef.current) return;
               const rect = e.currentTarget.getBoundingClientRect();
-              const dx = ((e.clientX - panRef.current.px) / rect.width) * view.w;
+              const dx =
+                ((e.clientX - panRef.current.px) / rect.width) * view.w;
               const dy =
                 ((e.clientY - panRef.current.py) / rect.height) * view.h;
               panRef.current = { px: e.clientX, py: e.clientY };
@@ -346,6 +387,15 @@ export function ReplayView({
                   );
                 })}
               </>
+            )}
+            {/* 可行走地面轮廓(语料实测):场地边缘 + 入场房,LoS 参照 */}
+            {floorOutline && (
+              <polygon
+                className="rpt-replay-floor-outline"
+                points={floorOutline
+                  .map(([fx, fy]) => `${toX(fx)},${toY(fy)}`)
+                  .join(" ")}
+              />
             )}
             {/* 障碍物(LoS 几何,与 analysis 谓词同源) */}
             {(arenaObstacles[String(zoneId)] ?? []).map((o, i) =>
@@ -660,15 +710,31 @@ export function ReplayView({
           ) : null;
         })()}
         <span className="rpt-replay-divider" />
-        {view && (
+        <span className="rpt-replay-zoom-group">
           <button
-            className="rpt-replay-zoom-reset"
-            title="复位缩放(或双击地图)"
-            onClick={() => setView(null)}
+            className="rpt-replay-zoom-btn"
+            title="放大(也可 ⌘/Ctrl+滚轮,拖拽平移)"
+            onClick={() => applyZoom(0.8, 0.5, 0.5)}
           >
-            ⤢ {Math.round((VW / view.w) * 10) / 10}× 复位
+            +
           </button>
-        )}
+          <button
+            className="rpt-replay-zoom-btn"
+            title="缩小"
+            onClick={() => applyZoom(1.25, 0.5, 0.5)}
+          >
+            −
+          </button>
+          {view && (
+            <button
+              className="rpt-replay-zoom-reset"
+              title="复位缩放(或双击地图)"
+              onClick={() => setView(null)}
+            >
+              ⤢ {Math.round((VW / view.w) * 10) / 10}× 复位
+            </button>
+          )}
+        </span>
         <div className="rpt-replay-speed">
           {SPEEDS.map((s) => (
             <button

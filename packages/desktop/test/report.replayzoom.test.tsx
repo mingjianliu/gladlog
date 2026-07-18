@@ -11,7 +11,7 @@ describe("回放缩放(用户反馈:人堆看不清)", () => {
     const { container } = render(<ReplayView source={m} />);
     const svg = container.querySelector("[data-testid=rpt-replay-field]")!;
     const before = svg.getAttribute("viewBox")!;
-    fireEvent.wheel(svg, { deltaY: -100, clientX: 100, clientY: 100 });
+    fireEvent.wheel(svg, { deltaY: -100, clientX: 100, clientY: 100, ctrlKey: true });
     const after = svg.getAttribute("viewBox")!;
     expect(after).not.toBe(before);
     expect(svg.getAttribute("class")).toContain("zoomed");
@@ -21,7 +21,7 @@ describe("回放缩放(用户反馈:人堆看不清)", () => {
     fireEvent.click(reset);
     expect(svg.getAttribute("viewBox")).toBe(before);
     // 再放大后双击复位
-    fireEvent.wheel(svg, { deltaY: -100, clientX: 100, clientY: 100 });
+    fireEvent.wheel(svg, { deltaY: -100, clientX: 100, clientY: 100, ctrlKey: true });
     expect(svg.getAttribute("viewBox")).not.toBe(before);
     fireEvent.dblClick(svg);
     expect(svg.getAttribute("viewBox")).toBe(before);
@@ -31,9 +31,9 @@ describe("回放缩放(用户反馈:人堆看不清)", () => {
     const { container } = render(<ReplayView source={m} />);
     const svg = container.querySelector("[data-testid=rpt-replay-field]")!;
     const before = svg.getAttribute("viewBox")!;
-    fireEvent.wheel(svg, { deltaY: -100, clientX: 100, clientY: 100 });
-    fireEvent.wheel(svg, { deltaY: 100, clientX: 100, clientY: 100 });
-    fireEvent.wheel(svg, { deltaY: 100, clientX: 100, clientY: 100 });
+    fireEvent.wheel(svg, { deltaY: -100, clientX: 100, clientY: 100, ctrlKey: true });
+    fireEvent.wheel(svg, { deltaY: 100, clientX: 100, clientY: 100, ctrlKey: true });
+    fireEvent.wheel(svg, { deltaY: 100, clientX: 100, clientY: 100, ctrlKey: true });
     expect(svg.getAttribute("viewBox")).toBe(before);
     expect(container.querySelector(".rpt-replay-zoom-reset")).toBeNull();
   });

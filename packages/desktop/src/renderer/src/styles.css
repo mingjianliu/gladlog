@@ -1356,12 +1356,25 @@ pre {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.rpt-recap-dmg .rpt-recap-kind { color: var(--loss); }
-.rpt-recap-heal .rpt-recap-kind { color: var(--win); }
-.rpt-recap-cc .rpt-recap-kind { color: var(--gold); }
-.rpt-recap-def_used .rpt-recap-kind { color: var(--ink-2); }
-.rpt-recap-amt { text-align: right; }
-.rpt-recap-empty { color: var(--mute); font-style: italic; }
+.rpt-recap-dmg .rpt-recap-kind {
+  color: var(--loss);
+}
+.rpt-recap-heal .rpt-recap-kind {
+  color: var(--win);
+}
+.rpt-recap-cc .rpt-recap-kind {
+  color: var(--gold);
+}
+.rpt-recap-def_used .rpt-recap-kind {
+  color: var(--ink-2);
+}
+.rpt-recap-amt {
+  text-align: right;
+}
+.rpt-recap-empty {
+  color: var(--mute);
+  font-style: italic;
+}
 
 /* ── 统计表(backlog #10)── */
 .rpt-stats {
@@ -1793,6 +1806,16 @@ pre {
   color: var(--gold);
 }
 
+/* 可行走地面轮廓(语料实测:场地边缘 + 入场房) */
+.rpt-replay-floor-outline {
+  fill: color-mix(in srgb, var(--ink-2) 5%, transparent);
+  stroke: var(--ink-2);
+  stroke-opacity: 0.45;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
 /* 障碍物描边(phase3 #4) */
 .rpt-replay-obstacle {
   fill: color-mix(in srgb, var(--ink-2) 12%, transparent);
@@ -1957,13 +1980,18 @@ pre {
 .rpt-replay-field.zoomed:active {
   cursor: grabbing;
 }
-.rpt-replay-zoom-reset {
+.rpt-replay-zoom-reset,
+.rpt-replay-zoom-btn {
   font-size: 11px;
   color: var(--gold);
   border: 1px solid var(--hairline);
   border-radius: 6px;
   padding: 2px 8px;
   background: transparent;
+}
+.rpt-replay-zoom-group {
+  display: inline-flex;
+  gap: 4px;
 }
 .dash-chars {
   display: flex;
