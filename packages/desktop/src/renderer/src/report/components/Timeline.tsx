@@ -9,6 +9,38 @@ const W = 800,
   H = 220,
   PAD = { l: 34, r: 8, t: 18, b: 18 };
 
+/**
+ * Catmull-Rom → 三次贝塞尔的平滑路径:每秒采样的 HP 折线直接连线太生硬。
+ * 控制点 y 钳制在绘图区内,防止急降/急升处的过冲画出 >100% 或 <0% 的假象。
+ */
+function smoothPath(
+  pts: Array<{ x: number; y: number }>,
+  yMin: number,
+  yMax: number,
+): string {
+  if (pts.length === 0) return "";
+  if (pts.length < 3)
+    return pts
+      .map(
+        (p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`,
+      )
+      .join(" ");
+  const cy = (v: number) => Math.max(yMin, Math.min(yMax, v));
+  let d = `M${pts[0]!.x.toFixed(1)},${pts[0]!.y.toFixed(1)}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[Math.max(0, i - 1)]!;
+    const p1 = pts[i]!;
+    const p2 = pts[i + 1]!;
+    const p3 = pts[Math.min(pts.length - 1, i + 2)]!;
+    const c1x = p1.x + (p2.x - p0.x) / 6;
+    const c1y = cy(p1.y + (p2.y - p0.y) / 6);
+    const c2x = p2.x - (p3.x - p1.x) / 6;
+    const c2y = cy(p2.y - (p3.y - p1.y) / 6);
+    d += ` C${c1x.toFixed(1)},${c1y.toFixed(1)} ${c2x.toFixed(1)},${c2y.toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`;
+  }
+  return d;
+}
+
 export function Timeline({
   data,
   onSelectUnit,
@@ -80,9 +112,7 @@ export function Timeline({
               y={PAD.t}
               width={Math.max(2, toX - fromX)}
               height={H - PAD.t - PAD.b}
-              onClick={
-                onBandClick ? () => onBandClick(b.fromS) : undefined
-              }
+              onClick={onBandClick ? () => onBandClick(b.fromS) : undefined}
               style={{ cursor: onBandClick ? "pointer" : undefined }}
             >
               <title>
@@ -101,14 +131,19 @@ export function Timeline({
             fill="none"
             stroke={classColor(s.classId)}
             strokeWidth={1.5}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+            vectorEffect="non-scaling-stroke"
             style={{ cursor: onSelectUnit ? "pointer" : undefined }}
             onClick={() => onSelectUnit?.(s.unitId)}
-            d={s.points
-              .map(
-                (p, i) =>
-                  `${i === 0 ? "M" : "L"}${x(p.t).toFixed(1)},${y(p.maxHp > 0 ? p.hp / p.maxHp : 0).toFixed(1)}`,
-              )
-              .join(" ")}
+            d={smoothPath(
+              s.points.map((p) => ({
+                x: x(p.t),
+                y: y(p.maxHp > 0 ? p.hp / p.maxHp : 0),
+              })),
+              PAD.t,
+              H - PAD.b,
+            )}
           >
             <title>{s.name}</title>
           </path>
