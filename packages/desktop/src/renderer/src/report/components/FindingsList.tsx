@@ -1,13 +1,19 @@
-import type { Finding } from "@gladlog/analysis";
+import type { CandidateEvent, Finding } from "@gladlog/analysis";
 import { useState } from "react";
 
 import { findingKey } from "../../../../shared/findingKey";
 export { findingKey };
 
+const mmss = (sec: number): string =>
+  `${Math.floor(sec / 60)}:${Math.floor(sec % 60)
+    .toString()
+    .padStart(2, "0")}`;
+
 export function FindingsList({
   findings,
   onSelect,
   onJump,
+  candidates,
   flags,
   onFlag,
 }: {
@@ -15,6 +21,8 @@ export function FindingsList({
   onSelect: (eventIds: string[]) => void;
   /** 跳到回放:定位到该 finding 引用的最早事件时刻。 */
   onJump?: (eventIds: string[]) => void;
+  /** 候选事件池:证据 chip 显示每条证据的发生时刻(可各自点跳)。 */
+  candidates?: CandidateEvent[];
   /** 跟进标记(phase3 #3a):key = findingKey(f)。 */
   flags?: Record<string, string>;
   onFlag?: (key: string, flag: "done" | "recurring" | null) => void;
@@ -62,6 +70,22 @@ export function FindingsList({
             {f.eventIds && f.eventIds.length > 0 && (
               <div className="rpt-finding-ev">
                 <button onClick={() => onSelect(f.eventIds)}>Evidence</button>
+                {/* 每条证据的发生时刻:各自可点跳到回放对应瞬间 */}
+                {(candidates ?? [])
+                  .filter(
+                    (c) => f.eventIds.includes(c.id) && Number.isFinite(c.t),
+                  )
+                  .sort((a, b) => a.t - b.t)
+                  .map((c) => (
+                    <button
+                      key={c.id}
+                      className="rpt-finding-evt"
+                      title={onJump ? `跳到 ${mmss(c.t)} 的回放` : mmss(c.t)}
+                      onClick={onJump ? () => onJump([c.id]) : undefined}
+                    >
+                      ⏱ {mmss(c.t)}
+                    </button>
+                  ))}
                 {onJump && (
                   <button
                     className="rpt-finding-jump"

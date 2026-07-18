@@ -289,6 +289,7 @@ export function StructuredAnalysisPanel({
               findings={result.findings}
               onSelect={setActiveEventIds}
               onJump={onSeekEvent ? handleJump : undefined}
+              candidates={input?.candidates ?? []}
               flags={flags}
               onFlag={handleFlag}
             />

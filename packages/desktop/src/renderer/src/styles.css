@@ -612,6 +612,17 @@ pre {
   color: var(--gold);
   border-color: var(--gold-dim);
 }
+/* 证据时间 chip:每条证据的发生时刻,单独可点跳 */
+.rpt-finding-ev .rpt-finding-evt {
+  margin-left: 4px;
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
+}
+.rpt-finding-ev .rpt-finding-evt:hover {
+  color: var(--gold);
+  border-color: var(--gold-dim);
+}
 /* cohort 对比:右栏 sticky 卡片 */
 .rpt-ai-side .rpt-ai-panel {
   background: var(--surface);
