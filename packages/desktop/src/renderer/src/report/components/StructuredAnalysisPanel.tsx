@@ -9,13 +9,13 @@ import { CombatUnitReaction } from "@gladlog/parser-compat";
 import { useEffect, useMemo, useState } from "react";
 
 import { bridge } from "../../bridge";
+import { deriveKeyMoments } from "../derive/keyMoments";
 import { toLegacySafe } from "../derive/legacySource";
 import type { ReportSource } from "../derive/types";
-import { deriveVulnBands } from "../derive/vulnWindows";
 import { ExportButtons } from "./ExportButtons";
 import { FindingsList } from "./FindingsList";
+import { KeyMomentAxis } from "./KeyMomentAxis";
 import { MatchHero } from "./MatchHero";
-import { TimelineStrip } from "./TimelineStrip";
 
 type AnalysisResult = {
   findings: Finding[];
@@ -38,7 +38,7 @@ export function StructuredAnalysisPanel({
   const [state, setState] = useState<State>("idle");
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string>("");
-  const [activeEventIds, setActiveEventIds] = useState<string[]>([]);
+  const [, setActiveEventIds] = useState<string[]>([]);
   // 教练回复语言(backlog #1):持久化在 settings,main 侧按它注入 system
   // prompt 并分键缓存;这里只需在切换后重查缓存。
   const [lang, setLang] = useState<"zh" | "en" | null>(null);
@@ -207,9 +207,9 @@ export function StructuredAnalysisPanel({
     }
   }, [source, matchId]);
 
-  const vulnBands = useMemo(() => deriveVulnBands(source), [source]);
+  const keyMoments = useMemo(() => deriveKeyMoments(source), [source]);
 
-  // finding 的 eventIds → 引用事件里最早的 t + 涉及单位;同时点亮 strip 标记。
+  // finding 的 eventIds → 引用事件里最早的 t + 涉及单位。
   const handleJump = (eventIds: string[]) => {
     if (!onSeekEvent || !input) return;
     const evs = input.candidates.filter((c) => eventIds.includes(c.id));
@@ -259,18 +259,15 @@ export function StructuredAnalysisPanel({
             topSeverity={result.findings[0]?.severity}
           />
 
-          <TimelineStrip
-            candidates={input?.candidates ?? []}
-            activeEventIds={activeEventIds}
-            onSelect={(id) => setActiveEventIds([id])}
-            bands={vulnBands}
-            onJump={
-              onSeekEvent ? (tSeconds) => onSeekEvent(tSeconds, []) : undefined
-            }
-          />
-
           {result.hadNarration === false ? (
             <div>
+              <KeyMomentAxis
+                moments={keyMoments}
+                findings={[]}
+                candidates={input?.candidates ?? []}
+                onSeek={onSeekEvent}
+                onSelectEvidence={setActiveEventIds}
+              />
               <p
                 style={{
                   color: "var(--mute)",
@@ -285,14 +282,47 @@ export function StructuredAnalysisPanel({
               <FindingsList findings={[]} onSelect={setActiveEventIds} />
             </div>
           ) : (
-            <FindingsList
-              findings={result.findings}
-              onSelect={setActiveEventIds}
-              onJump={onSeekEvent ? handleJump : undefined}
-              candidates={input?.candidates ?? []}
-              flags={flags}
-              onFlag={handleFlag}
-            />
+            (() => {
+              // 分流谓词与 buildFindingsPrompt 的 whole-round 判定同源:
+              // facts.t 缺席 = 整场观察(cd-waste 等),不进时间轴。
+              const timedIds = new Set(
+                (input?.candidates ?? [])
+                  .filter((c) => c.facts.t !== undefined)
+                  .map((c) => c.id),
+              );
+              const timed = result.findings.filter((f) =>
+                f.eventIds?.some((id) => timedIds.has(id)),
+              );
+              const wholeRound = result.findings.filter(
+                (f) => !timed.includes(f),
+              );
+              return (
+                <>
+                  <KeyMomentAxis
+                    moments={keyMoments}
+                    findings={timed}
+                    candidates={input?.candidates ?? []}
+                    onSeek={onSeekEvent}
+                    onSelectEvidence={setActiveEventIds}
+                    flags={flags}
+                    onFlag={handleFlag}
+                  />
+                  {wholeRound.length > 0 && (
+                    <>
+                      <h4 className="rpt-axis-wholeround-label">整场观察</h4>
+                      <FindingsList
+                        findings={wholeRound}
+                        onSelect={setActiveEventIds}
+                        onJump={onSeekEvent ? handleJump : undefined}
+                        candidates={input?.candidates ?? []}
+                        flags={flags}
+                        onFlag={handleFlag}
+                      />
+                    </>
+                  )}
+                </>
+              );
+            })()
           )}
 
           <ExportButtons

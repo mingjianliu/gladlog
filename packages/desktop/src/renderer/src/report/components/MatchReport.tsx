@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 
 import { deriveBurstLedger } from "../derive/burstLedger";
-import { type DeathRecap,deriveDeathRecaps } from "../derive/deathRecap";
+import { type DeathRecap, deriveDeathRecaps } from "../derive/deathRecap";
 import type { MeterMode } from "../derive/meterRows";
 import { deriveStatsTable } from "../derive/statsTable";
 import { deriveSummary } from "../derive/summary";
@@ -144,10 +144,13 @@ export function MatchReport({
               matchId={resolvedMatchId}
               onSeekEvent={handleSeekEvent}
             />
+            <div className="rpt-ai-cohort">
+              <ProComparisonVerified
+                source={source}
+                matchId={resolvedMatchId}
+              />
+            </div>
           </div>
-          <aside className="rpt-ai-side">
-            <ProComparisonVerified source={source} matchId={resolvedMatchId} />
-          </aside>
         </div>
       )}
     </div>

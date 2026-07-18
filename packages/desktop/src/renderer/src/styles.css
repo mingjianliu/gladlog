@@ -501,28 +501,16 @@ pre {
   color: var(--bg);
 }
 
-/* ── AI 分析:双栏(findings 左 + cohort 对比 sticky 右)── */
+/* ── AI 分析:单列(关键时刻轴脊柱 + cohort 全宽底部)── */
 .rpt-ai-full {
   margin-top: 14px;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 460px;
-  gap: 16px;
-  align-items: start;
+  display: block;
 }
 .rpt-ai-main {
   min-width: 0;
 }
-.rpt-ai-side {
-  position: sticky;
-  top: 12px;
-}
-@media (max-width: 1040px) {
-  .rpt-ai-full {
-    grid-template-columns: 1fr;
-  }
-  .rpt-ai-side {
-    position: static;
-  }
+.rpt-ai-cohort {
+  margin-top: 16px;
 }
 .rpt-ai-full .rpt-ai-body {
   max-height: none;
@@ -623,16 +611,23 @@ pre {
   color: var(--gold);
   border-color: var(--gold-dim);
 }
-/* cohort 对比:右栏 sticky 卡片 */
-.rpt-ai-side .rpt-ai-panel {
+/* cohort 对比:全宽底部卡片 */
+.rpt-ai-cohort .rpt-ai-panel {
   background: var(--surface);
   border: 1px solid var(--hairline);
   border-radius: 8px;
   padding: 14px 16px;
 }
-.rpt-ai-side .rpt-ai-panel h3 {
+.rpt-ai-cohort .rpt-ai-panel h3 {
   margin: 0 0 8px;
   font-size: 13px;
+}
+/* 整场观察(无时刻 finding)小节标 */
+.rpt-axis-wholeround-label {
+  margin: 14px 0 8px;
+  font-size: 12px;
+  color: var(--ink-2);
+  text-transform: none;
 }
 
 /* ── 回放(2D 竞技场走位模拟)── */
@@ -2056,11 +2051,23 @@ pre {
   display: flex;
   margin: 6px 0;
 }
-.rpt-axis-row.left { justify-content: flex-start; padding-right: calc(50% + 14px); }
-.rpt-axis-row.right { justify-content: flex-end; padding-left: calc(50% + 14px); }
-.rpt-axis-row.band { justify-content: center; }
-.rpt-axis-row.left > *:last-child { margin-left: auto; }
-.rpt-axis-row.right > *:last-child { margin-right: auto; }
+.rpt-axis-row.left {
+  justify-content: flex-start;
+  padding-right: calc(50% + 14px);
+}
+.rpt-axis-row.right {
+  justify-content: flex-end;
+  padding-left: calc(50% + 14px);
+}
+.rpt-axis-row.band {
+  justify-content: center;
+}
+.rpt-axis-row.left > *:last-child {
+  margin-left: auto;
+}
+.rpt-axis-row.right > *:last-child {
+  margin-right: auto;
+}
 .rpt-axis-gap {
   position: absolute;
   left: 50%;
@@ -2086,19 +2093,41 @@ pre {
   text-align: left;
   cursor: pointer;
 }
-.rpt-axis-node:hover { border-color: var(--gold-dim); }
+.rpt-axis-node:hover {
+  border-color: var(--gold-dim);
+}
 .rpt-axis-time {
   font-family: var(--font-data);
   font-variant-numeric: tabular-nums;
   color: var(--mute);
   font-size: 11px;
 }
-.rpt-axis-node.k-death.s-friendly { border-left: 3px solid var(--loss); }
-.rpt-axis-node.k-death.s-enemy { border-left: 3px solid var(--win); }
-.rpt-axis-node.k-cc.s-enemy { border-left: 3px solid var(--loss); }
-.rpt-axis-node.k-cc.s-friendly { border-left: 3px solid var(--win); }
-.rpt-axis-node.k-burst-band.s-friendly { background: color-mix(in srgb, var(--win) 10%, var(--surface)); }
-.rpt-axis-node.k-burst-band.s-enemy { background: color-mix(in srgb, var(--loss) 10%, var(--surface)); }
-.rpt-axis-detail { color: var(--ink-2); font-size: 11px; }
-.rpt-axis-finding { max-width: 46%; }
-.rpt-axis-finding .rpt-axis-time { display: block; margin-bottom: 2px; }
+.rpt-axis-node.k-death.s-friendly {
+  border-left: 3px solid var(--loss);
+}
+.rpt-axis-node.k-death.s-enemy {
+  border-left: 3px solid var(--win);
+}
+.rpt-axis-node.k-cc.s-enemy {
+  border-left: 3px solid var(--loss);
+}
+.rpt-axis-node.k-cc.s-friendly {
+  border-left: 3px solid var(--win);
+}
+.rpt-axis-node.k-burst-band.s-friendly {
+  background: color-mix(in srgb, var(--win) 10%, var(--surface));
+}
+.rpt-axis-node.k-burst-band.s-enemy {
+  background: color-mix(in srgb, var(--loss) 10%, var(--surface));
+}
+.rpt-axis-detail {
+  color: var(--ink-2);
+  font-size: 11px;
+}
+.rpt-axis-finding {
+  max-width: 46%;
+}
+.rpt-axis-finding .rpt-axis-time {
+  display: block;
+  margin-bottom: 2px;
+}
