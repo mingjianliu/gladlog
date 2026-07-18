@@ -1,3 +1,4 @@
+import { listAiDebug } from "./aiDebugLog";
 import { app, dialog, ipcMain, shell, type BrowserWindow } from "electron";
 import { importLogFiles } from "./importLogs";
 import {
@@ -91,6 +92,7 @@ export function registerIpc(deps: {
     deps.analysis.getFlags(matchId),
   );
   ipcMain.handle("gladlog:analysis:aggregate", () => deps.analysis.aggregate());
+  ipcMain.handle("gladlog:debug:aiCalls", () => listAiDebug());
   ipcMain.handle(
     "gladlog:analysis:setFlag",
     (_e, matchId: string, key: string, flag: "done" | "recurring" | null) =>

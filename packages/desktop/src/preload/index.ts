@@ -61,5 +61,8 @@ const api: GladlogApi = {
   icon: {
     get: (name) => ipcRenderer.invoke("gladlog:icon:get", name),
   },
+  debug: {
+    aiCalls: () => ipcRenderer.invoke("gladlog:debug:aiCalls"),
+  },
 };
 contextBridge.exposeInMainWorld("gladlog", api);

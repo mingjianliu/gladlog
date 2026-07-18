@@ -100,6 +100,19 @@ export interface GladlogApi {
   icon: {
     get(name: string): Promise<string | null>;
   };
+  /** 开发者页:最近 10 次 AI 调用的 prompt 与原始返回(仅内存)。 */
+  debug: {
+    aiCalls(): Promise<
+      Array<{
+        kind: "analysis" | "compare";
+        matchId: string;
+        at: number;
+        model: string;
+        prompt: string;
+        raw: string;
+      }>
+    >;
+  };
 }
 declare global {
   interface Window {

@@ -2812,3 +2812,43 @@ pre {
   border-color: var(--accent-line);
   border-radius: 999px;
 }
+
+/* ── 回放布局切换:纯地图 / 地图+GCD ── */
+.rpt-replay-layout-seg {
+  width: fit-content;
+  margin-bottom: 8px;
+}
+.rpt-replay-stage.map-only {
+  grid-template-columns: 1fr;
+}
+.rpt-replay-stage.map-only .rpt-replay-arena-grid {
+  grid-template-columns: 140px minmax(0, 1fr) 140px;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+/* ── 开发者页 AI 调用调试 ── */
+.dev-aicall {
+  border: 1px solid var(--hairline-soft);
+  border-radius: 6px;
+  margin: 6px 0;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+.dev-aicall summary {
+  cursor: pointer;
+  color: var(--ink-2);
+}
+.dev-aicall pre {
+  max-height: 320px;
+  overflow: auto;
+  background: var(--surface-2);
+  border-radius: 6px;
+  padding: 8px;
+  font-size: 11px;
+}
+.dev-aicall h3 {
+  font-size: 11px;
+  color: var(--mute);
+  margin: 8px 0 4px;
+}

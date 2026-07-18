@@ -86,6 +86,24 @@ export function ReplayView({
   const focusFire = useMemo(() => deriveFocusFire(source), [source]);
 
   const [t, setT] = useState(startTime);
+  // 布局模式(用户反馈):地图+GCD / 纯地图;localStorage 记忆
+  const [layout, setLayout] = useState<"full" | "map">(() => {
+    try {
+      return localStorage.getItem("gladlog.replayLayout") === "map"
+        ? "map"
+        : "full";
+    } catch {
+      return "full";
+    }
+  });
+  const switchLayout = (next: "full" | "map") => {
+    setLayout(next);
+    try {
+      localStorage.setItem("gladlog.replayLayout", next);
+    } catch {
+      /* 隐私模式等 */
+    }
+  };
   // 回放时钟保持局部(热 tick);仅卸载时把最后位置回报给 MatchReport(冷路径)
   const lastTRef = useRef(startTime);
   lastTRef.current = t;
@@ -278,7 +296,22 @@ export function ReplayView({
 
   return (
     <div className="rpt-replay">
-      <div className="rpt-replay-stage">
+      <div className="rpt-replay-layout-seg rpt-mode-seg">
+        {(["full", "map"] as const).map((m) => (
+          <button
+            key={m}
+            className={layout === m ? "active" : ""}
+            onClick={() => switchLayout(m)}
+          >
+            {m === "full" ? "地图 + GCD" : "纯地图"}
+          </button>
+        ))}
+      </div>
+      <div
+        className={
+          layout === "map" ? "rpt-replay-stage map-only" : "rpt-replay-stage"
+        }
+      >
         <div className="rpt-replay-arena-col">
           <div className="rpt-replay-arena-grid">
             <svg
@@ -749,6 +782,7 @@ export function ReplayView({
           </div>
         </div>
 
+        {layout === "full" && (
         <GcdSwimlane
           source={source}
           tracks={tracks}
@@ -765,6 +799,7 @@ export function ReplayView({
           }}
           onDeathClick={onDeathClick}
         />
+        )}
       </div>
 
       <div className="rpt-replay-controls">

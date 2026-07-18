@@ -6,6 +6,7 @@ import {
   mkdirSync,
   renameSync,
 } from "fs";
+import { recordAiDebug } from "./aiDebugLog";
 import { findingKey } from "../shared/findingKey";
 import { join } from "path";
 import {
@@ -114,6 +115,14 @@ export function createAnalysisService(deps: {
         }
       }
       if (myGen !== generation) return;
+      recordAiDebug({
+        kind: "analysis",
+        matchId: input.matchId,
+        at: Date.now(),
+        model: settings.anthropicModel ?? "claude-sonnet-5",
+        prompt,
+        raw,
+      });
 
       let parsed: RawFinding[];
       try {

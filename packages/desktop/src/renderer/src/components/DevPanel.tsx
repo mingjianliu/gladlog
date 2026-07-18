@@ -13,6 +13,26 @@ export function DevPanel() {
   const [aiBackend, setAiBackend] = useState<"anthropic" | "claudeCli" | "agy">(
     "anthropic",
   );
+  const [aiCalls, setAiCalls] = useState<
+    Array<{
+      kind: "analysis" | "compare";
+      matchId: string;
+      at: number;
+      model: string;
+      prompt: string;
+      raw: string;
+    }>
+  >([]);
+  const refreshAiCalls = () => {
+    try {
+      void bridge()
+        .debug.aiCalls()
+        .then(setAiCalls)
+        .catch(() => setAiCalls([]));
+    } catch {
+      /* 测试桩无该面 */
+    }
+  };
 
   useEffect(() => {
     void bridge().logs.getStatus().then(setStatus);
@@ -119,6 +139,29 @@ export function DevPanel() {
       <section className="panel detail">
         <h2>详情</h2>
         <pre>{detail ? JSON.stringify(detail, null, 2) : "选择一场对局"}</pre>
+      </section>
+      <section className="panel" data-testid="ai-debug">
+        <h2>
+          AI 调用调试({aiCalls.length}){" "}
+          <button onClick={refreshAiCalls}>刷新</button>
+        </h2>
+        {aiCalls.length === 0 && (
+          <p className="rpt-dim">
+            无记录 —— 跑一次 AI 分析/对比后点「刷新」。仅保留最近 10 次,存内存不落盘。
+          </p>
+        )}
+        {aiCalls.map((c, i) => (
+          <details key={i} className="dev-aicall">
+            <summary>
+              [{c.kind}] {c.matchId} · {new Date(c.at).toLocaleTimeString()} ·{" "}
+              {c.model} · prompt {c.prompt.length} 字 / 返回 {c.raw.length} 字
+            </summary>
+            <h3>Prompt</h3>
+            <pre>{c.prompt}</pre>
+            <h3>返回文本</h3>
+            <pre>{c.raw}</pre>
+          </details>
+        ))}
       </section>
       <section className="panel">
         <h2>诊断({diags.length})</h2>

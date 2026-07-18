@@ -1,3 +1,4 @@
+import { recordAiDebug } from "./aiDebugLog";
 import {
   writeFileSync,
   readFileSync,
@@ -213,6 +214,14 @@ export function createCompareService(deps: {
         }
       }
       if (myGen !== generation) return;
+      recordAiDebug({
+        kind: "compare",
+        matchId: input.matchId,
+        at: Date.now(),
+        model: settings.anthropicModel ?? "claude-sonnet-5",
+        prompt,
+        raw,
+      });
       // 中文解说时:判词占位符替换为中文(占位解析仍按英文 facts 校验)
       const displayFacts =
         lang === "zh"
