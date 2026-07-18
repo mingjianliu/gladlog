@@ -24,9 +24,9 @@ export const spellEffectData = {
   ...SPELL_EFFECT_OVERRIDES,
 } as Record<string, IMinedSpell>;
 
-import rawSpellNames from "./spellNames.json";
+const rawSpellNames = await import("./spellNames.json");
 
-const spellNamesMap = rawSpellNames as unknown as Record<string, string>;
+const spellNamesMap = (rawSpellNames.default ?? rawSpellNames) as unknown as Record<string, string>;
 
 export function getEnglishSpellName(
   spellId: string,

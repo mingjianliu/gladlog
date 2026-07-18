@@ -1,4 +1,4 @@
-import talentIdMapData from './talentIdMap.json';
+const talentIdMapData = await import('./talentIdMap.json');
 
 export type RaidBotsTalentData = RaidbotsTalentSpec[];
 
@@ -121,7 +121,7 @@ type ExportStream = {
   bitWidth: number;
 }[];
 
-const talentIdMap = talentIdMapData as RaidBotsTalentData;
+const talentIdMap = (talentIdMapData.default ?? talentIdMapData) as RaidBotsTalentData;
 
 const emptyTreeHash: ExportStream = Array(128 / 8).fill({
   value: 0,

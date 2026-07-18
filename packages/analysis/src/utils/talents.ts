@@ -1,7 +1,8 @@
 import _ from 'lodash';
 
 import { nodeMaps } from '../data/talentStrings';
-import talentIdMap from '../data/talentIdMap.json';
+const talentIdMapModule = await import('../data/talentIdMap.json');
+const talentIdMap = talentIdMapModule.default ?? talentIdMapModule;
 
 type HeroTalent = {
   id: number;
