@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { DevPanel } from "./components/DevPanel";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { StatsDashboard } from "./components/StatsDashboard";
@@ -43,46 +43,62 @@ export default function App() {
       /* noop */
     }
   }, []);
-  const loadingRef = useRef(false);
   const PAGE = 100;
 
   useEffect(() => {
-    void bridge()
-      .matches.page({ limit: PAGE })
-      .then((list) => {
-        setMetas(list);
-        setHasMore(list.length === PAGE);
-        // 启动即呈现最近一场,免去空态点击
-        setSelectedId((cur) => cur ?? list[0]?.id ?? null);
-      });
-    const unMatchStored = bridge().logs.onMatchStored((m) =>
-      setMetas((prev) => [m, ...prev]),
-    );
+    let cancelled = false;
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    // 后台补载(backlog #12)是唯一的分页驱动:首屏一页立即渲染,之后空闲
+    // 逐页拉满整个 meta 索引(meta 行极小,全量常驻可承受)。不与滚动加载
+    // 并存 —— 双驱动会在 hasMore/游标上互相踩(agy 复核第 1 条)。
+    void (async () => {
+      const first = await bridge().matches.page({ limit: PAGE });
+      if (cancelled) return;
+      setMetas(first);
+      setHasMore(first.length === PAGE);
+      // 启动即呈现最近一场,免去空态点击
+      setSelectedId((cur) => cur ?? first[0]?.id ?? null);
+      let cursor = first[first.length - 1]?.startTime;
+      let more = first.length === PAGE;
+      while (more && !cancelled && cursor !== undefined) {
+        await sleep(150); // 逐页让位于用户交互与其它 IPC
+        if (cancelled) return;
+        const older = await bridge().matches.page({
+          before: cursor,
+          limit: PAGE,
+        });
+        if (cancelled) return;
+        setMetas((prev) => {
+          const seen = new Set(prev.map((m) => m.id));
+          const fresh = older.filter((m) => !seen.has(m.id));
+          return fresh.length ? [...prev, ...fresh] : prev;
+        });
+        const next = older[older.length - 1]?.startTime;
+        // 游标必须严格递减,否则终止(防异常数据把循环钉死在同一页)
+        more = older.length === PAGE && next !== undefined && next < cursor;
+        cursor = next;
+        if (!more) setHasMore(false);
+      }
+    })();
+    // 入库通知按时间排序插入:历史导入会涌入旧场次,裸 prepend 会破坏
+    // 列表的新→旧排序(agy 复核第 2 条)。
+    let unMatchStored: (() => void) | undefined;
+    try {
+      unMatchStored = bridge().logs.onMatchStored((m) =>
+        setMetas((prev) =>
+          prev.some((p) => p.id === m.id)
+            ? prev
+            : [...prev, m].sort((a, b) => b.startTime - a.startTime),
+        ),
+      );
+    } catch {
+      /* 测试桩无 logs 面 */
+    }
     return () => {
-      unMatchStored();
+      cancelled = true;
+      unMatchStored?.();
     };
   }, []);
-
-  const loadOlder = () => {
-    if (loadingRef.current || !hasMore) return;
-    const oldest = metas[metas.length - 1];
-    if (!oldest) return;
-    loadingRef.current = true;
-    void bridge()
-      .matches.page({ before: oldest.startTime, limit: PAGE })
-      .then((older) => {
-        setMetas((prev) => [...prev, ...older]);
-        setHasMore(older.length === PAGE);
-      })
-      .finally(() => {
-        loadingRef.current = false;
-      });
-  };
-
-  const onScroll = (e: React.UIEvent<HTMLUListElement>) => {
-    const el = e.currentTarget;
-    if (el.scrollHeight - el.scrollTop - el.clientHeight < 200) loadOlder();
-  };
 
   useEffect(() => {
     if (selectedId) {
@@ -131,11 +147,7 @@ export default function App() {
               filter={filter}
               onChange={setFilter}
             />
-            <ul
-              data-testid="match-list"
-              className="match-list"
-              onScroll={onScroll}
-            >
+            <ul data-testid="match-list" className="match-list">
               {applyFilter(metas, filter).map((m) => (
                 <li
                   key={m.id}
@@ -145,7 +157,7 @@ export default function App() {
                   <MatchListRow meta={m} />
                 </li>
               ))}
-              {hasMore && <li className="loading-more">加载更早…</li>}
+              {hasMore && <li className="loading-more">后台补载中…</li>}
             </ul>
           </aside>
           <main className="app-main">
@@ -168,9 +180,7 @@ export default function App() {
                 {wowDir == null ? (
                   <>
                     <ol>
-                      <li>
-                        选择 WoW 安装目录(自动定位战斗日志并开始监控)
-                      </li>
+                      <li>选择 WoW 安装目录(自动定位战斗日志并开始监控)</li>
                       <li>打一场竞技场,或导入历史日志</li>
                       <li>回来看战报、回放和 AI 分析</li>
                     </ol>
@@ -188,8 +198,8 @@ export default function App() {
                     </button>{" "}
                     <ImportButton />
                     <p className="onboard-hint">
-                      需要开启游戏内战斗记录(高级模式);AI 分析在「设置」里配
-                      API key,不配也能看战报与回放。
+                      需要开启游戏内战斗记录(高级模式);AI 分析在「设置」里配 API
+                      key,不配也能看战报与回放。
                     </p>
                   </>
                 ) : (

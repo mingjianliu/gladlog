@@ -17,7 +17,7 @@ const meta = (id: string, startTime: number) => ({
   storedAt: 0,
 });
 
-// Count only real match rows, not the "加载更早…" loading indicator.
+// Count only real match rows, not the "后台补载中…" loading indicator.
 const matchRows = () =>
   screen
     .getAllByRole("listitem")
@@ -40,25 +40,13 @@ beforeEach(() => {
 });
 
 describe("App pagination", () => {
-  it("loads the first 100 on mount and appends older on scroll-to-bottom", async () => {
+  it("首屏 100 条即渲染,其余后台自动补满(无需滚动)", async () => {
     render(<App />);
     await waitFor(() => expect(matchRows()).toHaveLength(100));
-    const list = screen.getByTestId("match-list");
-    // simulate reaching the bottom
-    Object.defineProperty(list, "scrollHeight", {
-      value: 1000,
-      configurable: true,
+    // 后台循环逐页(150ms/页)拉满 250 条
+    await waitFor(() => expect(matchRows()).toHaveLength(250), {
+      timeout: 4000,
     });
-    Object.defineProperty(list, "clientHeight", {
-      value: 300,
-      configurable: true,
-    });
-    Object.defineProperty(list, "scrollTop", {
-      value: 700,
-      configurable: true,
-    });
-    fireEvent.scroll(list);
-    await waitFor(() => expect(matchRows()).toHaveLength(200));
   });
 });
 
@@ -94,8 +82,6 @@ describe("首启引导(phase3 #2b)", () => {
       settings: { get: vi.fn().mockResolvedValue({ wowDirectory: null }) },
     });
     render(<App />);
-    await waitFor(() =>
-      expect(screen.queryByTestId("onboard")).toBeNull(),
-    );
+    await waitFor(() => expect(screen.queryByTestId("onboard")).toBeNull());
   });
 });

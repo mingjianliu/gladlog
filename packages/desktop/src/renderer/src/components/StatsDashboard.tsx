@@ -135,17 +135,38 @@ export function StatsDashboard({
   const [issues, setIssues] = useState<CategoryAgg[]>([]);
 
   useEffect(() => {
-    void bridge()
-      .matches.list()
-      .then((all) => setMetas(all));
-    try {
+    const refresh = () => {
       void bridge()
-        .analysis.aggregate()
-        .then(setIssues)
-        .catch(() => setIssues([]));
+        .matches.list()
+        .then((all) => setMetas(all))
+        .catch(() => {});
+      // 「最常犯的问题」一并重取:入库常伴随分析缓存变化
+      try {
+        void bridge()
+          .analysis.aggregate()
+          .then(setIssues)
+          .catch(() => setIssues([]));
+      } catch {
+        setIssues([]);
+      }
+    };
+    refresh();
+    // 战绩随入库动态更新(backlog #12):watcher 补历史/实时入库时不再停留在
+    // mount 时的快照。防抖合并批量入库(历史导入一次涌入几百场)。
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let un: (() => void) | undefined;
+    try {
+      un = bridge().logs.onMatchStored(() => {
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(refresh, 500);
+      });
     } catch {
-      setIssues([]);
+      /* 测试桩无 logs 面 */
     }
+    return () => {
+      if (timer) clearTimeout(timer);
+      un?.();
+    };
   }, []);
 
   const characters = useMemo(() => listCharacters(metas), [metas]);
@@ -218,16 +239,18 @@ export function StatsDashboard({
 
       <div className="dash-card">
         <span className="rpt-card-label">
-          评分曲线({character ? `${character.split("-")[0]} 本人` : "本人评分,旧数据回退队均"})
+          评分曲线(
+          {character
+            ? `${character.split("-")[0]} 本人`
+            : "本人评分,旧数据回退队均"}
+          )
         </span>
         <RatingCurve series={dash.ratingSeries} />
       </div>
 
       {issues.length > 0 && (
         <div className="dash-card" data-testid="dash-issues">
-          <span className="rpt-card-label">
-            最常犯的问题(全部已分析对局)
-          </span>
+          <span className="rpt-card-label">最常犯的问题(全部已分析对局)</span>
           {issues.slice(0, 3).map((c) => (
             <div key={c.category} className="dash-issue">
               <span className="dash-issue-head">
