@@ -81,6 +81,17 @@ export const SPELL_CATEGORIES: Record<string, ISpellCategoryEntry> = {
   "213691": cc(4), // Scatter Shot
   "46968": cc(2), // Shockwave
   "107570": cc(4), // Storm Bolt
+  // ── 施法/光环双 id 错位补全(fuzz-1000 千场语料实证 2026-07-19)──
+  // 白名单收的是施法 id,但 SPELL_AURA_APPLIED 记的是光环 id ——
+  // aura 侧 CC 管线(ccWindows/DR/覆盖 manifest)对这些法术整体失明,
+  // 且覆盖门与 manifest 共享同一白名单,此类腐烂只能靠语料挖矿发现。
+  // 时长为语料 applied→removed 实测(p50–p90,含 DR 影响)。
+  "132168": cc(2), // Shockwave 眩晕光环(4102 次/1000 场;施法 id 46968)
+  "132169": cc(4), // Storm Bolt 眩晕光环(2895 次;施法 id 107570)
+  "118699": cc(6), // Fear 光环(1830 次;施法 id 5782)
+  "5246": cc(6), // Intimidating Shout(2811 次;此前完全缺席)
+  "360806": cc(6), // Sleep Walk(2035 次;Evoker 主 CC,此前完全缺席)
+  "163505": cc(4), // Rake 潜行眩晕(928 次;DR 表已有、cc 表缺席)
   "20549": cc(2), // War Stomp
   "118905": cc(3), // Static Charge (debuff)
   "192058": cc(3), // Capacitor Totem
