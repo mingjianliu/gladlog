@@ -102,9 +102,18 @@ export function deriveDetailBreakdown(
   const map = new Map<string, Acc>();
 
   if (mode === "taken") {
+    // 短名撞车(同名不同服)时回退全名,避免两行同标签无法区分
+    const shortCount = new Map<string, number>();
+    const fulls = new Set((self.damageIn ?? []).map((e) => e.srcName ?? "?"));
+    for (const f of fulls) {
+      const short = f.split("-")[0]!;
+      shortCount.set(short, (shortCount.get(short) ?? 0) + 1);
+    }
     for (const e of self.damageIn ?? []) {
-      const src = (e.srcName ?? "?").split("-")[0];
-      const key = `${e.srcName}:${e.spellId}`;
+      const full = e.srcName ?? "?";
+      const short = full.split("-")[0]!;
+      const src = (shortCount.get(short) ?? 0) > 1 ? full : short;
+      const key = `${full}:${e.spellId}`;
       addHp(
         acc(map, key, {
           label: `${src}:${e.spellName || "近战"}`,
@@ -114,8 +123,9 @@ export function deriveDetailBreakdown(
       );
     }
   } else {
+    // 宠物名不切分:宠物没有服务器后缀,含连字符是名字本身
     const own = [{ unit: self, prefix: "" }].concat(
-      pets.map((p) => ({ unit: p, prefix: `${p.name.split("-")[0]}:` })),
+      pets.map((p) => ({ unit: p, prefix: `${p.name}:` })),
     );
     for (const { unit, prefix } of own) {
       const events =

@@ -2133,8 +2133,21 @@ pre {
 }
 
 /* ── 战报明细 breakdown(meters 行内展开)── */
+/* 真实布局盒(非 display:contents):跨 grid 2-3 列,列间隙也可点击 */
 .rpt-meter-body {
-  display: contents;
+  grid-column: 2 / 4;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.rpt-meter-body .rpt-meter-bar-track {
+  flex: 1;
+  min-width: 0;
+}
+.rpt-meter-body .rpt-meter-value {
+  flex: none;
+  width: 100px;
 }
 .rpt-meter-clickable {
   cursor: pointer;

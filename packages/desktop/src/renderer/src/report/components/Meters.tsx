@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { deriveDetailBreakdown } from "../derive/detailBreakdown";
 import { type MeterMode, meterRows } from "../derive/meterRows";
@@ -46,6 +46,18 @@ export function Meters({
   const [expandedUnitId, setExpandedUnitId] = useState<string | null>(null);
   useEffect(() => setExpandedUnitId(null), [mode]);
   const expandable = source != null && mode !== "stats";
+  // 展开数据 memo:Meters 随回放 tick 等高频重渲,不能每帧重聚合
+  const expandedData = useMemo(
+    () =>
+      expandable && expandedUnitId
+        ? deriveDetailBreakdown(
+            source,
+            expandedUnitId,
+            mode as "damage" | "healing" | "taken",
+          )
+        : null,
+    [expandable, source, expandedUnitId, mode],
+  );
   const items = meterRows(rows, mode === "stats" ? "damage" : mode);
   const modes = (Object.keys(MODE_LABEL) as MeterMode[]).filter(
     (k) => k !== "stats" || (statsRows?.length ?? 0) > 0,
@@ -128,13 +140,9 @@ export function Meters({
                     <span className="rpt-meter-value">{r.label}</span>
                   </span>
                 </div>
-                {expandable && expandedUnitId === r.unitId && (
+                {expandedData && expandedUnitId === r.unitId && (
                   <BreakdownTable
-                    {...deriveDetailBreakdown(
-                      source,
-                      r.unitId,
-                      mode as "damage" | "healing" | "taken",
-                    )}
+                    {...expandedData}
                     mode={mode as "damage" | "healing" | "taken"}
                   />
                 )}
