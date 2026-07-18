@@ -17,6 +17,7 @@ export function SettingsPanel() {
   const [settings, setSettings] = useState<GladlogSettings | null>(null);
   const [keyInput, setKeyInput] = useState("");
   const [modelInput, setModelInput] = useState("");
+  const [cmdInput, setCmdInput] = useState("");
   const [saved, setSaved] = useState<string>("");
 
   useEffect(() => {
@@ -25,6 +26,7 @@ export function SettingsPanel() {
       .then((s) => {
         setSettings(s);
         setModelInput(s.anthropicModel ?? "");
+        setCmdInput(s.aiBackendCommand ?? "");
       });
   }, []);
 
@@ -132,6 +134,26 @@ export function SettingsPanel() {
             <option value="agy">agy / Gemini(本地)</option>
           </select>
         </div>
+        {settings.aiBackend !== "anthropic" && (
+          <div className="settings-row">
+            <span className="settings-k">命令路径</span>
+            <input
+              placeholder={
+                settings.aiBackend === "claudeCli"
+                  ? "留空自动查找;找不到时填完整路径,如 C:\\Users\\你\\AppData\\Roaming\\npm\\claude.cmd"
+                  : "留空自动查找;或填脚本完整路径"
+              }
+              value={cmdInput}
+              onChange={(e) => setCmdInput(e.target.value)}
+              onBlur={() =>
+                void save(
+                  { aiBackendCommand: cmdInput.trim() || null },
+                  "命令路径已保存",
+                )
+              }
+            />
+          </div>
+        )}
         <div className="settings-row">
           <span className="settings-k">教练回复语言</span>
           <div className="rpt-mode-seg">
