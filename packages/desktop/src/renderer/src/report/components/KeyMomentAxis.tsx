@@ -1,4 +1,5 @@
 import type { CandidateEvent, Finding } from "@gladlog/analysis";
+import { useMemo } from "react";
 
 import { findingKey } from "../../../../shared/findingKey";
 import type { KeyMoment } from "../derive/keyMoments";
@@ -40,30 +41,40 @@ export function KeyMomentAxis({
   flags?: Record<string, string>;
   onFlag?: (key: string, flag: "done" | "recurring" | null) => void;
 }) {
-  const byId = new Map(candidates.map((c) => [c.id, c]));
-  const entries: Entry[] = [
-    ...moments.map((m): Entry => ({ at: m.t, kind: "moment", m })),
-    ...findings.flatMap((f): Entry[] => {
-      const ts = (f.eventIds ?? [])
-        .map((id) => byId.get(id)?.t)
-        .filter((t): t is number => Number.isFinite(t));
-      return ts.length ? [{ at: Math.min(...ts), kind: "finding", f }] : [];
-    }),
-  ].sort((a, b) => a.at - b.at);
+  const byId = useMemo(
+    () => new Map(candidates.map((c) => [c.id, c])),
+    [candidates],
+  );
+  // 归并 + 排序 + 交错侧一次算好(渲染体保持纯函数,无迭代间可变状态)
+  const entries = useMemo(() => {
+    const merged: Entry[] = [
+      ...moments.map((m): Entry => ({ at: m.t, kind: "moment", m })),
+      ...findings.flatMap((f): Entry[] => {
+        const ts = (f.eventIds ?? [])
+          .map((id) => byId.get(id)?.t)
+          .filter((t): t is number => Number.isFinite(t));
+        return ts.length ? [{ at: Math.min(...ts), kind: "finding", f }] : [];
+      }),
+    ].sort((a, b) => a.at - b.at);
+    let flip = 0;
+    return merged.map((e) => {
+      const band = e.kind === "moment" && e.m.kind === "burst-band";
+      const side = band ? "band" : flip++ % 2 === 0 ? "left" : "right";
+      const key =
+        e.kind === "finding"
+          ? `f:${findingKey(e.f)}`
+          : `m:${e.m.kind}:${e.m.t}:${e.m.title}:${e.m.unitNames.join(",")}`;
+      return { ...e, side, key };
+    });
+  }, [moments, findings, byId]);
 
-  let flip = 0;
-  let prevAt: number | null = null;
   return (
     <div className="rpt-axis" data-testid="key-moment-axis">
       {entries.map((e, i) => {
-        const gap =
-          prevAt !== null && e.at - prevAt > GAP_S ? e.at - prevAt : null;
-        prevAt = e.at;
-        // burst-band 画在脊柱本体,不参与左右交错
-        const band = e.kind === "moment" && e.m.kind === "burst-band";
-        const side = band ? "band" : flip++ % 2 === 0 ? "left" : "right";
+        const prev = entries[i - 1];
+        const gap = prev && e.at - prev.at > GAP_S ? e.at - prev.at : null;
         return (
-          <div key={i} className={`rpt-axis-row ${side}`}>
+          <div key={e.key} className={`rpt-axis-row ${e.side}`}>
             {gap !== null && (
               <div className="rpt-axis-gap" data-testid="axis-gap">
                 ⏱ {Math.round(gap)}s 无关键事件

@@ -209,6 +209,23 @@ export function StructuredAnalysisPanel({
 
   const keyMoments = useMemo(() => deriveKeyMoments(source), [source]);
 
+  // 分流谓词与 buildFindingsPrompt 的 whole-round 判定同源:
+  // facts.t 缺席 = 整场观察(cd-waste 等),不进时间轴。
+  const splitFindings = useMemo(() => {
+    const timedIds = new Set(
+      (input?.candidates ?? [])
+        .filter((c) => c.facts.t !== undefined)
+        .map((c) => c.id),
+    );
+    const timed = (result?.findings ?? []).filter((f) =>
+      f.eventIds?.some((id) => timedIds.has(id)),
+    );
+    const wholeRound = (result?.findings ?? []).filter(
+      (f) => !timed.includes(f),
+    );
+    return { timed, wholeRound };
+  }, [input, result]);
+
   // finding 的 eventIds → 引用事件里最早的 t + 涉及单位。
   const handleJump = (eventIds: string[]) => {
     if (!onSeekEvent || !input) return;
@@ -282,47 +299,30 @@ export function StructuredAnalysisPanel({
               <FindingsList findings={[]} onSelect={setActiveEventIds} />
             </div>
           ) : (
-            (() => {
-              // 分流谓词与 buildFindingsPrompt 的 whole-round 判定同源:
-              // facts.t 缺席 = 整场观察(cd-waste 等),不进时间轴。
-              const timedIds = new Set(
-                (input?.candidates ?? [])
-                  .filter((c) => c.facts.t !== undefined)
-                  .map((c) => c.id),
-              );
-              const timed = result.findings.filter((f) =>
-                f.eventIds?.some((id) => timedIds.has(id)),
-              );
-              const wholeRound = result.findings.filter(
-                (f) => !timed.includes(f),
-              );
-              return (
+            <>
+              <KeyMomentAxis
+                moments={keyMoments}
+                findings={splitFindings.timed}
+                candidates={input?.candidates ?? []}
+                onSeek={onSeekEvent}
+                onSelectEvidence={setActiveEventIds}
+                flags={flags}
+                onFlag={handleFlag}
+              />
+              {splitFindings.wholeRound.length > 0 && (
                 <>
-                  <KeyMomentAxis
-                    moments={keyMoments}
-                    findings={timed}
+                  <h4 className="rpt-axis-wholeround-label">整场观察</h4>
+                  <FindingsList
+                    findings={splitFindings.wholeRound}
+                    onSelect={setActiveEventIds}
+                    onJump={onSeekEvent ? handleJump : undefined}
                     candidates={input?.candidates ?? []}
-                    onSeek={onSeekEvent}
-                    onSelectEvidence={setActiveEventIds}
                     flags={flags}
                     onFlag={handleFlag}
                   />
-                  {wholeRound.length > 0 && (
-                    <>
-                      <h4 className="rpt-axis-wholeround-label">整场观察</h4>
-                      <FindingsList
-                        findings={wholeRound}
-                        onSelect={setActiveEventIds}
-                        onJump={onSeekEvent ? handleJump : undefined}
-                        candidates={input?.candidates ?? []}
-                        flags={flags}
-                        onFlag={handleFlag}
-                      />
-                    </>
-                  )}
                 </>
-              );
-            })()
+              )}
+            </>
           )}
 
           <ExportButtons

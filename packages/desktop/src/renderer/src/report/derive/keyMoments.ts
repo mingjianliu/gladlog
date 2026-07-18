@@ -208,7 +208,8 @@ export function deriveKeyMoments(
           detail: `${cc.durationSeconds.toFixed(0)}s${
             cc.trinketState === "used" ? " · 交饰品解" : ""
           }`,
-          unitNames: [u.name],
+          // 施法者 + 受控者都进 unitNames,回放才能同时高亮敌方施法者
+          unitNames: [cc.sourceName, u.name],
           jumpT: cc.atSeconds,
         });
       }
