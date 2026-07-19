@@ -329,7 +329,7 @@ Match C with Match A's」—— **不成立**。`aggregate()` 不接受 matchId 
 | P3#10 | 目标死亡截断取最早一次,不依赖有序 | `624952c` |
 | 新#2 | getFlags 补 cancelled 守卫(后半条驳回) | `90a1e36` |
 | P2#7 | fmt 提取单源 fmtFactNum(统一 fmtTime 不做) | `dd428dd` |
-| P1#1 | STAYED_IN 需付真实代价才开深挖门 | `800fd71` |
+| P1#1 | STAYED_IN 需付真实代价才开深挖门 | `43f4b65` |
 
 **已出设计,未实现**
 
