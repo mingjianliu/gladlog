@@ -126,3 +126,30 @@ describe("滚轮判定表(Windows 鼠标也要能用)", () => {
     expect(svg.getAttribute("viewBox")).not.toBe(before);
   });
 });
+
+describe("缩放按钮(+/-)", () => {
+  it("点击+按钮放大,点击-按钮缩小到全景并隐藏复位按钮", () => {
+    const { container } = render(<ReplayView source={m} />);
+    const svg = container.querySelector("[data-testid=rpt-replay-field]")!;
+    const panorama = svg.getAttribute("viewBox")!;
+
+    // 点击 + 按钮放大
+    const zoomButtons = container.querySelectorAll(".rpt-replay-zoom-btn");
+    const zoomInBtn = zoomButtons[0];
+    fireEvent.click(zoomInBtn);
+    const zoomed = svg.getAttribute("viewBox")!;
+    expect(zoomed).not.toBe(panorama);
+
+    // 复位按钮应该出现
+    const resetBtn = container.querySelector(".rpt-replay-zoom-reset");
+    expect(resetBtn).toBeTruthy();
+
+    // 点击 - 按钮缩小回到全景
+    const zoomOutBtn = zoomButtons[1];
+    fireEvent.click(zoomOutBtn);
+    expect(svg.getAttribute("viewBox")).toBe(panorama);
+
+    // 复位按钮应该消失
+    expect(container.querySelector(".rpt-replay-zoom-reset")).toBeNull();
+  });
+});

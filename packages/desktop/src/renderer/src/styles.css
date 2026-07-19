@@ -893,11 +893,6 @@ pre {
   color: var(--ink-2);
   white-space: nowrap;
 }
-.rpt-replay-divider {
-  width: 1px;
-  align-self: stretch;
-  background: var(--hairline);
-}
 .rpt-replay-speed {
   display: flex;
   gap: 2px;
