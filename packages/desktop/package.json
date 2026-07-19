@@ -1,6 +1,6 @@
 {
   "name": "@gladlog/desktop",
-  "version": "0.0.13",
+  "version": "0.0.14",
   "type": "module",
   "main": "out/main/index.js",
   "scripts": {
