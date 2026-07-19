@@ -161,18 +161,21 @@ export function StructuredAnalysisPanel({
     setActiveEventIds([]);
     void (async () => {
       try {
-        const cached = (await bridge().analysis.getCached(
+        // 单次原子查询:缓存与 running 必须在主进程一次读出。分两次问
+        // (getCached → isRunning)会在两次 await 之间漏掉恰好此刻完成的那轮 ——
+        // 缓存还没落盘、running 已经清了,面板停在空闲态而结果已在盘上。
+        const { cached, running } = (await bridge().analysis.getState(
           matchId,
-        )) as AnalysisResult | null;
+        )) as { cached: AnalysisResult | null; running: boolean };
         if (cancelled) return;
         if (cached) {
           resultForRef.current = matchId;
           setResult(cached);
           setState("done");
-        } else if (await bridge().analysis.isRunning(matchId)) {
+        } else if (running) {
           // 重挂时(切 tab/切场回来)若首轮还在主进程跑,显示「分析中…」而非
           // 空闲态 —— 否则用户以为丢了、再点一次会重复跑。done 事件回来时补上结果。
-          if (!cancelled) setState("running");
+          setState("running");
         }
       } catch {
         /* 测试桩/无 bridge 面:保持空闲 */

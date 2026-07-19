@@ -77,8 +77,10 @@ export interface GladlogApi {
       spec: string;
     }): Promise<void>;
     cancel(): Promise<void>;
-    /** 首轮分析是否正在跑(重挂时查询,显示「分析中…」防重点)。 */
-    isRunning(matchId: string): Promise<boolean>;
+    /** 重挂时的单次原子查询:缓存 + 是否在跑。分两次问会漏掉恰好此刻完成的那轮。 */
+    getState(
+      matchId: string,
+    ): Promise<{ cached: unknown | null; running: boolean }>;
     getCached(matchId: string): Promise<unknown | null>;
     getFlags(matchId: string): Promise<Record<string, string>>;
     /** 跨场 finding 聚合(category 计数 + 最近实例 + 标记统计)。 */

@@ -584,3 +584,80 @@ describe("deepen 幂等守卫(周度复核 P2#4)", () => {
     expect(streamCalls).toBe(2);
   });
 });
+
+describe("getState 原子查询(周度复核 P2#5)", () => {
+  const mk = async () => {
+    const { mkdtempSync } = await import("fs");
+    const { tmpdir } = await import("os");
+    const { join } = await import("path");
+    return createAnalysisService({
+      getSettings: () => ({ anthropicApiKey: "k" }) as never,
+      matchesDir: mkdtempSync(join(tmpdir(), "gl-getstate-")),
+      clientFactory: () => null as never,
+      emit: () => {},
+    });
+  };
+
+  it("未跑过 → {cached:null, running:false}", async () => {
+    const s = await mk();
+    expect(await s.getState("m1")).toEqual({ cached: null, running: false });
+  });
+
+  it("在跑但还没落盘 → {cached:null, running:true}(面板显示「分析中…」)", async () => {
+    const { mkdtempSync } = await import("fs");
+    const { tmpdir } = await import("os");
+    const { join } = await import("path");
+    let release!: () => void;
+    const inFlight = new Promise<void>((r) => (release = r));
+    const s = createAnalysisService({
+      getSettings: () => ({ anthropicApiKey: "k" }) as never,
+      matchesDir: mkdtempSync(join(tmpdir(), "gl-getstate-run-")),
+      clientFactory: () =>
+        ({
+          stream: () =>
+            (async function* () {
+              await inFlight;
+              yield { delta: "[]" };
+            })(),
+        }) as never,
+      emit: () => {},
+    });
+    const p = s.run({
+      matchId: "m1",
+      candidates: [{ id: "c1", type: "x", t: 1, unitNames: [], facts: {} }],
+      richContext: "ctx",
+      spec: "Frost Mage",
+    } as never);
+    const mid = await s.getState("m1");
+    expect(mid).toEqual({ cached: null, running: true });
+    release();
+    await p;
+  });
+
+  it("跑完后 → cached 非空、running 已清(两次分开问时漏结果的那个缝)", async () => {
+    const { mkdtempSync } = await import("fs");
+    const { tmpdir } = await import("os");
+    const { join } = await import("path");
+    const s = createAnalysisService({
+      getSettings: () => ({ anthropicApiKey: "k" }) as never,
+      matchesDir: mkdtempSync(join(tmpdir(), "gl-getstate-done-")),
+      clientFactory: () =>
+        ({
+          stream: () =>
+            (async function* () {
+              yield { delta: "[]" };
+            })(),
+        }) as never,
+      emit: () => {},
+    });
+    await s.run({
+      matchId: "m1",
+      candidates: [{ id: "c1", type: "x", t: 1, unitNames: [], facts: {} }],
+      richContext: "ctx",
+      spec: "Frost Mage",
+    } as never);
+    const after = await s.getState("m1");
+    expect(after.running).toBe(false);
+    expect(after.cached).not.toBeNull(); // 结果拿得到,不会停在空闲态
+  });
+});

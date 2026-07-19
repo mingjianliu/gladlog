@@ -566,6 +566,24 @@ export function createAnalysisService(deps: {
       }
       return cur;
     },
+    /**
+     * 面板重挂时的**单次原子**查询(周度复核 P2#5)。
+     *
+     * 分两次 IPC(getCached → isRunning)时,两次 await 之间恰好完成的那一轮会
+     * 掉进缝里:第一次读缓存还没落盘 → null,第二次查 running 已经清了 → false,
+     * 面板于是停在空闲态,而结果其实已经躺在盘上(用户看到的还是「点我分析」)。
+     *
+     * 合并成一次调用后,renderer 侧不再有可插入的 await。顺序也刻意先 running
+     * 后 cached:万一将来这里插入异步,后读的 cached 仍能兜住刚完成的那一轮;
+     * 反过来写就还是漏。
+     */
+    async getState(
+      matchId: string,
+    ): Promise<{ cached: AnalysisResult | null; running: boolean }> {
+      const runningNow = running.has(matchId);
+      const cached = await this.getCached(matchId);
+      return { cached, running: runningNow };
+    },
     async getCached(matchId: string): Promise<AnalysisResult | null> {
       const lang: AiLanguage = deps.getSettings().aiLanguage ?? "zh";
       let fp = join(deps.matchesDir, matchId, `analysis-v2.${lang}.json`);

@@ -24,6 +24,9 @@ beforeEach(() => {
       save: vi.fn().mockResolvedValue({}),
     },
     analysis: {
+      // 面板重挂走 getState(缓存 + running 一次原子读出);getCached 仍保留在
+      // 桩上,语言切换用例断言的是「重查缓存」这件事本身。
+      getState: vi.fn().mockResolvedValue({ cached: result, running: false }),
       getCached: vi.fn().mockResolvedValue(result),
       run: vi.fn(),
       cancel: vi.fn(),
@@ -53,13 +56,11 @@ describe("StructuredAnalysisPanel", () => {
     );
     await screen.findByText(/You died at 30s/);
     const fx = (window as any).__gladlogFixture;
-    const callsBefore = fx.analysis.getCached.mock.calls.length;
+    const callsBefore = fx.analysis.getState.mock.calls.length;
     fireEvent.click(screen.getByRole("button", { name: "EN" }));
     await screen.findByText(/You died at 30s/); // 重查后重新渲染
     expect(fx.settings.save).toHaveBeenCalledWith({ aiLanguage: "en" });
-    expect(fx.analysis.getCached.mock.calls.length).toBeGreaterThan(
-      callsBefore,
-    );
+    expect(fx.analysis.getState.mock.calls.length).toBeGreaterThan(callsBefore);
   });
 });
 
@@ -67,9 +68,30 @@ describe("本场目标(D3 教练闭环)", () => {
   it("aggregate 有「还在犯」分类时渲染目标卡,按 recurring 降序取 top", async () => {
     const fx = (window as any).__gladlogFixture;
     fx.analysis.aggregate = vi.fn().mockResolvedValue([
-      { category: "survival", count: 5, recurring: 2, done: 1, recent: [{ matchId: "x", title: "开怕晚了", severity: "high", createdAt: 2 }] },
+      {
+        category: "survival",
+        count: 5,
+        recurring: 2,
+        done: 1,
+        recent: [
+          { matchId: "x", title: "开怕晚了", severity: "high", createdAt: 2 },
+        ],
+      },
       { category: "positioning", count: 3, recurring: 0, done: 3, recent: [] },
-      { category: "cd", count: 4, recurring: 4, done: 0, recent: [{ matchId: "y", title: "壁垒全场没按", severity: "med", createdAt: 1 }] },
+      {
+        category: "cd",
+        count: 4,
+        recurring: 4,
+        done: 0,
+        recent: [
+          {
+            matchId: "y",
+            title: "壁垒全场没按",
+            severity: "med",
+            createdAt: 1,
+          },
+        ],
+      },
     ]);
     render(
       <StructuredAnalysisPanel
