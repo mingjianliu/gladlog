@@ -74,6 +74,19 @@ export interface PackItem {
   facts: Record<string, string>;
 }
 
+/** 进攻类 kind 集合(单源):`PackItem.kind` 的进攻子集,prompt 图例门与未来
+ * 任何"是否进攻条目"判断都从这里读,别在别处重列字符串数组(会跟 union 类型脱钩)。 */
+export const OFFENSIVE_KINDS = new Set<PackItem["kind"]>([
+  "target-hp",
+  "enemy-defensive",
+  "immunity",
+  "our-cc",
+  "our-cd",
+  "off-target",
+  "juked-kick",
+  "dr-clip",
+]);
+
 export interface DeepDivePack {
   findingIndex: number;
   anchorFrom: number;
@@ -668,6 +681,31 @@ export function hasOffensiveCoachableSignal(items: PackItem[]): boolean {
   );
 }
 
+const OFFENSIVE_CANDIDATE_TYPES = new Set([
+  "unconverted-burst",
+  "burst-into-immunity",
+  "off-target-in-window",
+  "juked-kick",
+  "dr-clipped-cc",
+]);
+
+/** 分发:finding 引用候选多数派决定路由;平票偏 survival(死亡教练价值锚定更强)。 */
+export function classifyFindingKind(
+  finding: Finding,
+  candidates: CandidateEvent[],
+): "survival" | "offensive" {
+  const byId = new Map(candidates.map((c) => [c.id, c]));
+  let off = 0,
+    surv = 0;
+  for (const id of finding.eventIds ?? []) {
+    const t = byId.get(id)?.type;
+    if (!t) continue;
+    if (OFFENSIVE_CANDIDATE_TYPES.has(t)) off++;
+    else surv++;
+  }
+  return off > surv ? "offensive" : "survival";
+}
+
 /** 深挖 prompt:每个 pack 一段;审计纪律与初轮同宗(占位符/无因果/只引清单)。 */
 export function buildDeepDivePrompt(
   packs: DeepDivePack[],
@@ -703,6 +741,11 @@ export function buildDeepDivePrompt(
     `HARD RULES:`,
     `- Coach ${ownerShort} (facts with role=owner). role=teammate / role=enemy items are context only — cite a teammate's mistake ONLY when ${ownerShort} could have covered it (peel/CC the attacker, give an external, swap targets).`,
     `- kind=position items are ${ownerShort}'s own movement: kind=stayed-in = stood in a threat and took avoidable damage (hpMin is where HP bottomed, defAvail says if a defensive was up); kind=missed-push = drifted out of range (dist yards) when pressure was needed; kind=cd-out-of-range = fired a cooldown (spell) with no valid target in range. Coach the movement decision, not just cooldown usage.`,
+    ...(packs.some((p) => p.items.some((it) => OFFENSIVE_KINDS.has(it.kind)))
+      ? [
+          `- Offensive items (non-death findings): kind=target-hp = the enemy target's HP (hp) at that moment; kind=enemy-defensive / kind=immunity = what answered ${ownerShort}'s burst on that target (immunity has overlap seconds); kind=our-cc = ${ownerShort}'s team CC landed on the enemy healer; kind=our-cd = ${ownerShort}'s team offensive cooldown; kind=off-target = damage went to the wrong target (onTargetPct); kind=juked-kick = an interrupt spent on a fake cast (fake); kind=dr-clip = a CC landed on wasted DR (dr). You had the kill set up — coach what to change to close it (swap to the exposed target, hold burst past the immunity, lock their healer first), not survival.`,
+        ]
+      : []),
     `- If, after reviewing a pack, you cannot name a specific ${ownerShort}-team decision that was clearly suboptimal, OMIT that finding from your output entirely. Do NOT manufacture generic advice ("use defensives better", "peel/reposition", "watch HP"). A clean window is a valid outcome — say nothing rather than pad.`,
     `- Prefer a firm verdict ("trinket the second stun, not the first") over hedging ("worth reconsidering whether...").`,
     `- Reference only pack items; list the keys you used in "citedKeys" (non-empty).`,

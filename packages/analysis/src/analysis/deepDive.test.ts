@@ -3,12 +3,13 @@ import { describe, expect, it } from "vitest";
 import {
   auditDeepDives,
   buildDeepDivePrompt,
+  classifyFindingKind,
   hasCoachableSignal,
   hasOffensiveCoachableSignal,
   offensivePackItems,
   type DeepDivePack,
 } from "./deepDive";
-import type { Finding } from "./types";
+import type { CandidateEvent, Finding } from "./types";
 import type { IBurstLedgerEntry } from "../utils/burstLedger";
 
 const pack: DeepDivePack = {
@@ -402,5 +403,70 @@ describe("offensivePackItems(进攻证据映射,纯函数)", () => {
         (i) => i.kind === "target-hp" && i.t === 55 && i.facts.hp === "18",
       ),
     ).toBeTruthy();
+  });
+});
+
+describe("classifyFindingKind(分发)", () => {
+  const cand = (id: string, type: string): CandidateEvent => ({
+    id,
+    type,
+    t: 10,
+    unitNames: [],
+    facts: {},
+  });
+  const cands = [
+    cand("d1", "death"),
+    cand("b1", "unconverted-burst"),
+    cand("o1", "off-target-in-window"),
+  ];
+  const F = (eventIds: string[]): Finding => ({
+    eventIds,
+    severity: "high",
+    category: "x",
+    title: "x",
+    explanation: "x",
+  });
+  it("death 候选 → survival", () => {
+    expect(classifyFindingKind(F(["d1"]), cands)).toBe("survival");
+  });
+  it("非死亡候选 → offensive", () => {
+    expect(classifyFindingKind(F(["b1"]), cands)).toBe("offensive");
+    expect(classifyFindingKind(F(["o1"]), cands)).toBe("offensive");
+  });
+  it("混合平票偏 survival", () => {
+    expect(classifyFindingKind(F(["d1", "b1"]), cands)).toBe("survival");
+  });
+});
+
+describe("buildDeepDivePrompt 进攻图例", () => {
+  it("含进攻 pack 时 prompt 印进攻条目说明", () => {
+    const pack = {
+      findingIndex: 0,
+      anchorFrom: 0,
+      anchorTo: 50,
+      items: [
+        {
+          key: "p1",
+          kind: "target-hp",
+          t: 44,
+          label: "",
+          unitNames: [],
+          facts: { t: "44", hp: "18", role: "enemy-target" },
+        },
+      ],
+      facts: { "p1.t": "44", "p1.hp": "18", "p1.role": "enemy-target" },
+    } as never;
+    const findings = [
+      {
+        eventIds: ["b1"],
+        severity: "high",
+        category: "x",
+        title: "爆发没打死",
+        explanation: "x",
+      },
+    ] as never;
+    const p = buildDeepDivePrompt([pack], findings, "Frost Mage", "Me-Area52");
+    expect(p).toContain("kind=target-hp");
+    expect(p).toContain("close it"); // 进攻教练框架关键词
   });
 });
