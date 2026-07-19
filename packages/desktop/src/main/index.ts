@@ -18,8 +18,13 @@ import { createCompareService } from "./compare";
 import { createAnalysisService } from "./analysis";
 import { loadBundledCorpus, gameBuildFromManifest } from "./corpusLoader";
 import datagenManifest from "@gladlog/analysis/src/data/datagen-manifest.json";
+import { e2eUserDataDir } from "./e2eEnv";
 
 app.setName("gladlog");
+// E2E:必须早于任何 app.getPath('userData') 调用(下方 settings 即是)
+const e2eDir = e2eUserDataDir(process.env);
+if (e2eDir) app.setPath("userData", e2eDir);
+
 log.initialize();
 process.on("uncaughtException", (e) => log.error("[main] uncaught:", e));
 process.on("unhandledRejection", (e) =>
