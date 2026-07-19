@@ -85,6 +85,22 @@ export function createAnalysisService(deps: {
   // running 永久残留(复审发现:换语言到无缓存的语言会卡在分析中)。
   const running = new Map<string, number>();
 
+  /** 正在深挖的 matchId —— 幂等守卫用,见 deepen。 */
+  const deepening = new Set<string>();
+
+  /**
+   * 回收该场的代际条目。generations 只增不删的话,长会话里每个看过的 matchId
+   * 都会留一条(量很小,但没有理由留)。
+   *
+   * 只在该场彻底静默(无 run、无 deepen 在飞)时回收 —— 否则在飞的那一轮
+   * 会因为 generations.get() 变 undefined 而 isCurrent 判假,把自己当成过期的
+   * 中途 abort,等于凭空丢一次分析。
+   */
+  const reapGeneration = (matchId: string) => {
+    if (!running.has(matchId) && !deepening.has(matchId))
+      generations.delete(matchId);
+  };
+
   async function run(input: AnalysisInput): Promise<void> {
     const myGen = nextGen(input.matchId);
     running.set(input.matchId, myGen);
@@ -92,6 +108,7 @@ export function createAnalysisService(deps: {
       // 仅当这条 running 仍归我(未被更晚的 run 接管)才清。deepen 不碰 running,
       // 故被 deepen 取代的 run 走到这里 running 仍是自己 → 正常清,不泄漏。
       if (running.get(input.matchId) === myGen) running.delete(input.matchId);
+      reapGeneration(input.matchId);
     };
     const settings = deps.getSettings();
     const lang: AiLanguage = settings.aiLanguage ?? "zh";
@@ -199,9 +216,6 @@ export function createAnalysisService(deps: {
   const flagsPath = (matchId: string) =>
     join(deps.matchesDir, matchId, "findingFlags.json");
 
-  /** 正在深挖的 matchId —— 幂等守卫用,见 deepen。 */
-  const deepening = new Set<string>();
-
   /**
    * 深挖轮(自动追问):renderer 在初轮 done 后为高严重度 finding 构建
    * 确定性证据包并调用;本方法跑第二次 LLM、auditDeepDives 审计、把
@@ -221,6 +235,7 @@ export function createAnalysisService(deps: {
       await deepenInner(input);
     } finally {
       deepening.delete(input.matchId);
+      reapGeneration(input.matchId);
     }
   }
 
@@ -577,6 +592,13 @@ export function createAnalysisService(deps: {
      * 后 cached:万一将来这里插入异步,后读的 cached 仍能兜住刚完成的那一轮;
      * 反过来写就还是漏。
      */
+    /**
+     * 仅测试用:代际表条目数。回收(reapGeneration)是纯内部状态,没有别的
+     * 观察面 —— 泄漏只表现为内存缓慢增长,不暴露就只能靠读代码保证。
+     */
+    __generationCount(): number {
+      return generations.size;
+    },
     async getState(
       matchId: string,
     ): Promise<{ cached: AnalysisResult | null; running: boolean }> {

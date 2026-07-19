@@ -661,3 +661,111 @@ describe("getState 原子查询(周度复核 P2#5)", () => {
     expect(after.cached).not.toBeNull(); // 结果拿得到,不会停在空闲态
   });
 });
+
+describe("代际条目回收(周度复核 P3#9)", () => {
+  const mkSvc = async (gen: () => AsyncGenerator<{ delta: string }>) => {
+    const { mkdtempSync } = await import("fs");
+    const { tmpdir } = await import("os");
+    const { join } = await import("path");
+    return createAnalysisService({
+      getSettings: () => ({ anthropicApiKey: "k" }) as never,
+      matchesDir: mkdtempSync(join(tmpdir(), "gl-reap-")),
+      clientFactory: () => ({ stream: () => gen() }) as never,
+      emit: () => {},
+    });
+  };
+  const input = (matchId: string) =>
+    ({
+      matchId,
+      candidates: [{ id: "c1", type: "x", t: 1, unitNames: [], facts: {} }],
+      richContext: "ctx",
+      spec: "Frost Mage",
+    }) as never;
+
+  it("跑完即回收,不随看过的场次线性增长", async () => {
+    const s = await mkSvc(async function* () {
+      yield { delta: "[]" };
+    });
+    for (const id of ["m1", "m2", "m3"]) await s.run(input(id));
+    // 三场都跑完 → 三条代际都该回收(经 getState 侧信道观察:全部回到初始态)
+    for (const id of ["m1", "m2", "m3"])
+      expect((await s.getState(id)).running).toBe(false);
+    expect(s.__generationCount()).toBe(0);
+  });
+
+  it("deepen 收尾时不得回收同场在飞的 run —— 否则 run 把自己判成过期,分析凭空丢", async () => {
+    // 这是守卫真正吃劲的场景:deepen 在飞 → 用户手点「AI 分析」→ 新 run 接管
+    // (代际 ++,deepen 随即判过期退出)→ deepen 的 finally 回收代际条目。
+    // 若无「无 run 在飞才回收」的判据,新 run 下一拍 isCurrent 就读到 undefined,
+    // 把自己当成过期的中途 abort,缓存永不落盘。
+    const { mkdtempSync } = await import("fs");
+    const { tmpdir } = await import("os");
+    const { join } = await import("path");
+    let releaseDeep!: () => void;
+    const deepInFlight = new Promise<void>((r) => (releaseDeep = r));
+    let releaseRun!: () => void;
+    const runInFlight = new Promise<void>((r) => (releaseRun = r));
+    let call = 0;
+    const s = createAnalysisService({
+      getSettings: () => ({ anthropicApiKey: "k" }) as never,
+      matchesDir: mkdtempSync(join(tmpdir(), "gl-reap-race-")),
+      clientFactory: () =>
+        ({
+          stream: () => {
+            const mine = ++call;
+            return (async function* () {
+              await (mine === 1 ? deepInFlight : runInFlight);
+              yield { delta: "[]" };
+            })();
+          },
+        }) as never,
+      emit: () => {},
+    });
+
+    const deep = s.deepen({
+      matchId: "m1",
+      findings: [] as never,
+      packs: [
+        {
+          findingIndex: 0,
+          anchorFrom: 0,
+          anchorTo: 10,
+          items: [
+            {
+              key: "p1",
+              kind: "cc" as const,
+              t: 5,
+              label: "x",
+              unitNames: [],
+              facts: { t: "5" },
+            },
+          ],
+          facts: { "p1.t": "5" },
+        },
+      ] as never,
+      spec: "Frost Mage",
+    });
+    const run = s.run(input("m1")); // 新 run 接管,deepen 就此过期
+    releaseDeep();
+    await deep; // deepen 收尾 → finally → reapGeneration
+    releaseRun();
+    await run;
+    // run 没被误 abort:结果落了盘
+    expect((await s.getState("m1")).cached).not.toBeNull();
+  });
+
+  it("在飞期间不回收 —— 回收了会让这一轮把自己判成过期而中途 abort", async () => {
+    let release!: () => void;
+    const inFlight = new Promise<void>((r) => (release = r));
+    const s = await mkSvc(async function* () {
+      await inFlight;
+      yield { delta: "[]" };
+    });
+    const p = s.run(input("m1"));
+    expect(s.__generationCount()).toBe(1); // 在飞,必须留着
+    release();
+    await p;
+    expect(s.__generationCount()).toBe(0); // 落地后回收
+    expect((await s.getState("m1")).cached).not.toBeNull(); // 没被误 abort
+  });
+});
