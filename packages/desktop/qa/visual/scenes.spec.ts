@@ -9,7 +9,10 @@ import { FIXED_NOW } from "../../dev/fixtures/fixedNow";
 import { SCENE_NAMES, type SceneName } from "../../dev/scenes";
 
 /** 每个场景的「渲染完成」锚点:等它出现再截图,避免拍到半渲染帧。 */
-const ANCHOR: Record<SceneName, string> = {
+// report-heavy 是首渲计时专用的大号载荷,不做像素基线(见 firstPaint.spec.ts)
+const SNAPSHOT_SCENES = SCENE_NAMES.filter((s) => s !== "report-heavy");
+
+const ANCHOR: Partial<Record<SceneName, string>> = {
   "report-battle": "[data-testid=rpt-timeline]",
   "report-replay": "[data-testid=rpt-replay-field]",
   "report-ai": ".rpt-match",
@@ -32,7 +35,7 @@ const ANCHOR: Record<SceneName, string> = {
  */
 const BOOT_TIMEOUT_MS = 60_000;
 
-for (const scene of SCENE_NAMES) {
+for (const scene of SNAPSHOT_SCENES) {
   test(`场景 ${scene} 与基线一致`, async ({ page }) => {
     // 只钉死 Date.now()/new Date(),不接管定时器 —— App 的后台补载用 setTimeout,
     // 假定时器会把它冻住。
@@ -41,7 +44,7 @@ for (const scene of SCENE_NAMES) {
     await expect(page.locator(`[data-scene-ready=${scene}]`)).toBeAttached({
       timeout: BOOT_TIMEOUT_MS,
     });
-    await expect(page.locator(ANCHOR[scene])).toBeVisible({
+    await expect(page.locator(ANCHOR[scene]!)).toBeVisible({
       timeout: BOOT_TIMEOUT_MS,
     });
     await expect(page).toHaveScreenshot(`${scene}.png`, { fullPage: true });

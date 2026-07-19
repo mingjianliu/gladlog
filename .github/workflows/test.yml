@@ -75,6 +75,15 @@ jobs:
       - name: Visual regression + a11y
         run: npm -w @gladlog/desktop run test:visual
 
+      # 拆成两步是为了让构建失败与测试失败在日志里分得开
+      - name: Build app bundle
+        run: npm -w @gladlog/desktop run build
+
+      # Electron 在无头 CI 里需要虚拟显示
+      - name: E2E (three core journeys + cold start)
+        run: xvfb-run --auto-servernum npx playwright test -c qa/playwright.config.ts --project=e2e
+        working-directory: packages/desktop
+
       # 失败必须留证:没有 diff 三联图就无法人工裁决
       - uses: actions/upload-artifact@v4
         if: failure()

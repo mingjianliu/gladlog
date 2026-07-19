@@ -47,3 +47,47 @@ export function installAppShellFixture(): void {
       .sort((a, b) => b.startTime - a.startTime)
       .slice(0, o.limit);
 }
+
+/** 首渲计时用的大号局:把真实样本的事件流按固定倍数复制并平移时间,
+ *  形状与真实数据一致、规模放大 N 倍。确定性(无随机),但**不做截图基线**
+ *  —— 它的价值是压出渲染耗时,不是锁定长相。 */
+export function heavyMatch(
+  base: Record<string, unknown>,
+  factor = 12,
+): Record<string, unknown> {
+  const span = (base["endTime"] as number) - (base["startTime"] as number);
+  const srcUnits = base["units"] as Record<string, Record<string, unknown>>;
+  const units: Record<string, unknown> = {};
+  for (const [id, u] of Object.entries(srcUnits)) {
+    const grown: Record<string, unknown> = { ...u };
+    for (const field of [
+      "damageOut",
+      "damageIn",
+      "healOut",
+      "absorbsOut",
+      "casts",
+      "auraEvents",
+      "advancedSamples",
+    ]) {
+      const arr = u[field] as Array<Record<string, unknown>> | undefined;
+      if (!Array.isArray(arr) || arr.length === 0) continue;
+      const out: unknown[] = [];
+      for (let k = 0; k < factor; k++) {
+        for (const e of arr) {
+          const shifted: Record<string, unknown> = { ...e };
+          if (typeof e["t"] === "number") shifted["t"] = e["t"] + k * span;
+          if (typeof e["timestamp"] === "number")
+            shifted["timestamp"] = (e["timestamp"] as number) + k * span;
+          out.push(shifted);
+        }
+      }
+      grown[field] = out;
+    }
+    units[id] = grown;
+  }
+  return {
+    ...base,
+    endTime: (base["startTime"] as number) + span * factor,
+    units,
+  };
+}

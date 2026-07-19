@@ -8,6 +8,8 @@ export const SCENE_NAMES = [
   "dashboard",
   "settings",
   "matchlist",
+  // 只用于首渲计时的大号载荷 —— 尺寸随数据规模变化,不做像素基线
+  "report-heavy",
 ] as const;
 
 export type SceneName = (typeof SCENE_NAMES)[number];

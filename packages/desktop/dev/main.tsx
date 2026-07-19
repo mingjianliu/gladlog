@@ -10,7 +10,7 @@ import "./harness.css";
 import { resolveScene, type SceneName } from "./scenes";
 import App from "../src/renderer/src/App";
 import { installFixtureBridge } from "../src/renderer/src/fixtureBridge";
-import { installAppShellFixture } from "./fixtures/appShell";
+import { heavyMatch, installAppShellFixture } from "./fixtures/appShell";
 
 const off = () => () => {};
 
@@ -110,7 +110,11 @@ const LOCAL_KEY = "real · 完整真实局(本地 dev/local)";
 // 场景模式(?scene=…):渲染单一确定状态,给视觉回归截图用。
 // data-scene-ready 是 Playwright 的就绪信号 —— 挂上即表示该场景已渲染。
 const SCENE_VIEW: Record<
-  "report-battle" | "report-replay" | "report-ai" | "report-synth",
+  | "report-battle"
+  | "report-replay"
+  | "report-ai"
+  | "report-synth"
+  | "report-heavy",
   { fixture: StoredMatch; initialView: "report" | "replay" | "ai" }
 > = {
   "report-battle": {
@@ -127,6 +131,13 @@ const SCENE_VIEW: Record<
   },
   "report-synth": {
     fixture: synthMatch as unknown as StoredMatch,
+    initialView: "report",
+  },
+  // 首渲计时专用:真实样本按固定倍数确定性放大,不做截图基线
+  "report-heavy": {
+    fixture: heavyMatch(
+      realMatch as unknown as Record<string, unknown>,
+    ) as unknown as StoredMatch,
     initialView: "report",
   },
 };
