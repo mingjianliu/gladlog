@@ -4,7 +4,7 @@
 
 **Goal:** 给 gladlog 前端建一座分层质检塔——视觉回归、无障碍、E2E 核心链路、性能预算——每层的「合格」都是机器可判定的断言。
 
-**Architecture:** 一个 Playwright 依赖吃三层:`visual` project 驱动现有 `dev:ui` 纯浏览器测试台(截图 + axe + 首渲计时),`e2e` project 用 `_electron.launch()` 驱动 `electron-vite build` 产物(三条核心链路 + 冷启动)。解析预算是 parser 包里的普通 vitest 测试。截图基线只有 linux 一套(CI 即权威,本地经 docker 生成)。
+**Architecture:** 一个 Playwright 依赖吃三层:`visual` project 驱动现有 `dev:ui` 纯浏览器测试台(截图 + axe + 首渲计时),`e2e` project 用 `_electron.launch()` 驱动 `electron-vite build` 产物(三条核心链路 + 冷启动)。解析预算是 parser 包里的普通 vitest 测试。截图基线只有 linux 一套,由 CI 生成与判定(本机无容器运行时,2026-07-19 决议)。
 
 **Tech Stack:** Playwright (`@playwright/test`)、`@axe-core/playwright`、vitest、React 19、Electron 38、TypeScript(ESM,`moduleResolution: bundler`)。
 
@@ -15,7 +15,7 @@
 - 类型检查一律 `npm run typecheck`(= `tsc --noEmit`)。**绝不 `tsc -b`**——会往 src 吐 .js 污染树。
 - 每个 task 的最后一步 commit 之前必须过:`npm test --workspace=packages/desktop && npm run typecheck && npx eslint packages/desktop/src --quiet`。CI 的 tsc 含 test 文件、且有独立 Lint 步。
 - **门规谓词即规范**:分析代码与验证门对同一个事实必须共享同一个谓词——同一常量、同一函数,一处 export 两边 import。本计划里具体体现为 `PROMPT_VERSION`(Task 11)与三个预算常量(Task 15)。
-- 截图基线**只有 linux 一套**,由 Playwright 官方 docker 镜像生成。Playwright config **不得**在 `snapshotPathTemplate` 里加 `{platform}`——加了就等于允许第二套标准。
+- 截图基线**只有 linux 一套**,由 CI(ubuntu-latest)生成与判定;本机只跑 `test:visual:smoke`(带 `--ignore-snapshots`,不写基线)。Playwright config **不得**在 `snapshotPathTemplate` 里加 `{platform}`——加了就等于允许第二套标准。
 - 所有新增 QA 代码放 `packages/desktop/qa/`,不混进 vitest 的 `test/`。vitest 必须显式 exclude `qa/**`(默认 include 会吞掉 `*.spec.ts`,Task 4 处理)。
 - 性能预算走 **measure-then-lock**:先只测量并打印 `[budget]` 行,拿到真实 CI 数字后再锁常量(Task 15)。任何一步都不许写「随便填个数」。
 - 新增 npm 依赖只装到 `packages/desktop` workspace(`npm i -D -w @gladlog/desktop ...`),不污染 root。
@@ -629,7 +629,7 @@ npx playwright install --with-deps chromium
 npx playwright --version
 ```
 
-记下版本号(形如 `Version 1.5x.y`),下一步的 docker 镜像 tag 必须与它一致。
+记下版本号(形如 `Version 1.5x.y`)——CI 的浏览器缓存键用它,版本变了缓存自动失效。
 
 - [ ] **Step 2: 隔离 vitest 与 Playwright**
 
@@ -745,52 +745,52 @@ for (const scene of SCENE_NAMES) {
 
 - [ ] **Step 5: 加 npm scripts**
 
-`packages/desktop/package.json` 的 scripts 追加(docker 镜像 tag 用 Step 1 记下的版本号替换 `vX.Y.Z`):
+`packages/desktop/package.json` 的 scripts 追加:
 
 ```json
     "test:visual": "playwright test -c qa/playwright.config.ts --project=visual",
-    "test:visual:docker": "docker run --rm --init --network host -v \"$PWD/../..\":/w -w /w/packages/desktop mcr.microsoft.com/playwright:vX.Y.Z-noble npx playwright test -c qa/playwright.config.ts --project=visual",
-    "test:visual:update": "docker run --rm --init --network host -v \"$PWD/../..\":/w -w /w/packages/desktop mcr.microsoft.com/playwright:vX.Y.Z-noble npx playwright test -c qa/playwright.config.ts --project=visual --update-snapshots",
+    "test:visual:smoke": "playwright test -c qa/playwright.config.ts --project=visual --ignore-snapshots",
 ```
 
-`test:visual` 直接跑本机浏览器(mac 上会与 linux 基线不符,仅用于「这测试跑得通吗」的冒烟);**判定用 `test:visual:docker`,更新基线用 `test:visual:update`**——两者都在 linux 容器里,与 CI 同源。在 `package.json` 的这三条上方加一行注释不可行(JSON 无注释),改为在 `qa/playwright.config.ts` 顶部写清楚:
+**基线由 CI 生成(2026-07-19 决议)**:本机无容器运行时,linux 基线改由 GitHub Actions 产出(见 Task 6),CI 既是基线的生产者也是判定者——单源约束原样成立。本机只跑 `test:visual:smoke`:`--ignore-snapshots` 让它验证「测试跑得通、场景渲染得出来」,同时**不比对也不写入**任何基线图。这一点是硬要求:本机直跑 `test:visual` 在基线缺失时会把 mac 截图写成基线,正是要避免的事。
+
+在 `qa/playwright.config.ts` 顶部写清楚:
 
 ```ts
-// 判定与基线更新一律走 docker(见 package.json 的 test:visual:docker /
-// test:visual:update)。本机直跑 test:visual 只是冒烟 —— mac 字体渲染与
-// linux 基线不同,必然报 diff,不代表回归。
+// 基线是 linux 单源,由 CI 生成与判定(.github/workflows/test.yml 的
+// frontend-qa job + visual-baseline workflow)。本机只跑
+// npm run test:visual:smoke —— 它带 --ignore-snapshots,不比对也不写基线;
+// 直跑 test:visual 会在基线缺失时写入 mac 截图,污染单源。
 ```
 
-- [ ] **Step 6: 生成基线**
+- [ ] **Step 6: 本机冒烟(不产基线)**
 
 ```bash
-cd packages/desktop && npm run test:visual:update
+cd packages/desktop && npm run test:visual:smoke
 ```
 
-Expected: 7 个 png 写入 `qa/__screenshots__/scenes.spec.ts/`。命令输出形如 `7 passed`,并提示 snapshots written。
+Expected: `7 passed`。这一步只证明 7 个场景都能渲染出锚点元素、axe 之外的流程跑得通。**不会**产生 `qa/__screenshots__/` 下的任何文件——跑完确认 `git status` 里没有 png。
 
-若 docker 拉不到镜像或本机无 docker,**停下来报告**,不要退而求其次用本机基线——那会永久破坏基线单源。
+若某场景超时,说明锚点选择器或场景本身有问题,在这里修掉(比留到 CI 便宜得多)。
 
-- [ ] **Step 7: 确认基线稳定(连跑两次)**
+- [ ] **Step 7: 确认没有误写基线**
 
 ```bash
-cd packages/desktop && npm run test:visual:docker && npm run test:visual:docker
+cd /Users/mingjianliu/code/gladlog && git status --short packages/desktop/qa/
 ```
 
-Expected: 两次都 `7 passed`。若某场景抖动,**先查确定性漏洞**(未冻结的时间、随机数、异步竞态),不许直接调大 `maxDiffPixelRatio`。
+Expected: 只有 `.ts` 文件,**没有任何 `.png`**。若出现 png,说明跑成了 `test:visual` 而不是 smoke——删掉它们重来,mac 基线一旦提交就破坏了单源。
 
-- [ ] **Step 8: 肉眼审基线**
-
-逐张打开 `qa/__screenshots__/scenes.spec.ts/*.png` 看一遍。基线即标准——一张画错的基线会把错误固化成「正确」。确认七张图都是预期的页面(战报/回放/AI/合成战报/仪表盘/设置/列表)。
-
-- [ ] **Step 9: 全量检查 + 提交**
+- [ ] **Step 8: 全量检查 + 提交**
 
 ```bash
 cd /Users/mingjianliu/code/gladlog
 npm test --workspace=packages/desktop && npm run typecheck && npx eslint packages/desktop --quiet
 git add packages/desktop/qa packages/desktop/package.json packages/desktop/vitest.config.ts packages/desktop/tsconfig.json .gitignore package-lock.json
-git commit -m "test(visual): Playwright 视觉回归 —— 7 场景 linux 单源基线"
+git commit -m "test(visual): Playwright 视觉回归骨架 —— 7 场景,基线待 CI 生成"
 ```
+
+基线图本身在 Task 6 生成并单独提交。
 
 ---
 
@@ -870,7 +870,7 @@ expect(
 - [ ] **Step 4: 跑一次,看首扫结果**
 
 ```bash
-cd packages/desktop && npm run test:visual:docker
+cd packages/desktop && npm run test:visual:smoke
 ```
 
 Expected: 大概率 FAIL,列出一批违规(深色游戏风 UI 的 `color-contrast` 最典型)。把每条的 `rule` 与 `target` 记下来。
@@ -963,7 +963,44 @@ frontend-qa:
         retention-days: 14
 ```
 
-注意 job 里跑的是 `test:visual`(CI 本身就是 linux,不需要再套 docker)。
+注意 job 里跑的是 `test:visual`(CI 本身就是 linux,不需要容器)。
+
+- [ ] **Step 1b: 加基线生成 workflow**
+
+本机无容器运行时,linux 基线由 CI 产出(2026-07-19 决议)。新建 `.github/workflows/visual-baseline.yml`——**手动触发**,跑 `--update-snapshots` 并把生成的 png 作为 artifact 上传:
+
+```yaml
+name: visual-baseline
+
+# 手动触发:生成/更新 linux 截图基线,产物下载后由人审、再提交。
+# 基线的权威在人 —— 这个 workflow 只负责在与 CI 同一环境里把图画出来。
+on: workflow_dispatch
+
+jobs:
+  baseline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Install browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Generate baselines
+        run: npm -w @gladlog/desktop run test:visual -- --update-snapshots
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: visual-baselines
+          path: packages/desktop/qa/__screenshots__/
+          retention-days: 7
+```
 
 - [ ] **Step 2: 本地验证 workflow 语法**
 
@@ -984,14 +1021,45 @@ git add .github/workflows/test.yml
 git commit -m "ci: frontend-qa job —— 视觉回归 + a11y,失败上传 diff 产物"
 ```
 
-- [ ] **Step 4: 推分支并确认 CI 绿**
+- [ ] **Step 4: 推分支,生成基线**
 
 ```bash
 git push -u origin HEAD
+gh workflow run visual-baseline.yml --ref "$(git branch --show-current)"
+sleep 30
+gh run watch "$(gh run list --workflow=visual-baseline.yml --limit 1 --json databaseId --jq '.[0].databaseId')" --exit-status
+```
+
+Expected: baseline job 通过(`--update-snapshots` 下所有场景都算 pass)。
+
+- [ ] **Step 5: 下载基线并肉眼审**
+
+```bash
+cd /Users/mingjianliu/code/gladlog
+gh run download "$(gh run list --workflow=visual-baseline.yml --limit 1 --json databaseId --jq '.[0].databaseId')" \
+  -n visual-baselines -D packages/desktop/qa/__screenshots__/
+find packages/desktop/qa/__screenshots__ -name "*.png" | sort
+```
+
+Expected: 7 个 png。**逐张打开看一遍**——基线即标准,一张画错的基线会把错误固化成「正确」。确认七张分别是:战报、回放、AI 分析、合成战报、仪表盘、设置、比赛列表,且内容不是空态/报错页。
+
+- [ ] **Step 6: 提交基线**
+
+```bash
+git add packages/desktop/qa/__screenshots__
+git commit -m "test(visual): 提交 CI 生成的 7 张 linux 基线(人工审过)"
+git push
+```
+
+- [ ] **Step 7: 确认判定生效**
+
+```bash
 gh run watch "$(gh run list --limit 1 --json databaseId --jq '.[0].databaseId')" --exit-status
 ```
 
-Expected: `frontend-qa` job 通过。**若 CI 报截图 diff 而本地 docker 通过**,说明容器与 runner 的渲染环境有差(字体缺失最常见):对比失败产物里的 actual 图,在 job 里补齐字体或改用与 CI 同镜像的容器生成基线,不要改容差。
+Expected: `frontend-qa` job 通过——这次是**真的在比对**基线,不再是缺图跳过。
+
+若某场景报 diff:说明该场景不确定性(未冻结的时间、随机数、异步竞态)。**先查确定性漏洞,不许调大容差**;修完重新走 Step 4-6 更新基线。
 
 ---
 
@@ -2086,7 +2154,7 @@ test("大号对局的报表首渲在预算内(未锁定时只测量)", async ({ 
 - [ ] **Step 4: 跑一次**
 
 ```bash
-cd packages/desktop && npm run test:visual:docker
+cd packages/desktop && npm run test:visual:smoke
 ```
 
 Expected: 全绿(7 张截图 + 1 条首渲计时),输出含 `[budget] firstPaint=…ms n=3`。
@@ -2167,7 +2235,7 @@ export const BUDGET_MS: {
 
 ```bash
 npm test --workspace=packages/parser -- parseBudget
-cd packages/desktop && npm run test:visual:docker && npm run test:e2e
+cd packages/desktop && npm run test:visual:smoke && npm run test:e2e
 ```
 
 Expected: 全绿。再做一次**反向验证**——临时把 `parse` 改成 `1`,重跑 `npm test --workspace=packages/parser -- parseBudget`,确认 FAIL(证明断言不是摆设),然后改回。
@@ -2206,10 +2274,10 @@ Expected: `test` 与 `frontend-qa` 两个 job 都通过。
 全部 15 个 task 完成后,逐条确认(每条都要有证据,不许凭印象):
 
 - [ ] `npm test` 全绿,且日志里有三行 `[budget]`
-- [ ] `npm -w @gladlog/desktop run test:visual:docker` 全绿(7 截图 + 1 首渲)
+- [ ] `npm -w @gladlog/desktop run test:visual:smoke` 本机全绿(7 场景 + 1 首渲,不产基线);CI 的 `frontend-qa` job 比对基线也全绿
 - [ ] `npm -w @gladlog/desktop run test:e2e` 全绿(3 条链路)
 - [ ] `npm run typecheck` 与 `npm run lint` 全绿
 - [ ] CI 上 `test` 与 `frontend-qa` 两 job 均绿
-- [ ] 故意改一处 CSS 颜色 → `test:visual:docker` 报 diff → 还原后恢复绿(证明视觉回归真的在守)
+- [ ] 故意改一处 CSS 颜色 → 推上去看 CI 的 `frontend-qa` 报 diff → 还原后恢复绿(证明视觉回归真的在守)
 - [ ] `qa/__screenshots__/` 下 7 张基线图已提交,且肉眼审过
 - [ ] `qa/axe-allowlist.ts` 里每条豁免都有具体理由(没有「暂时」「以后再说」这类空话)

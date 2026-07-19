@@ -46,13 +46,17 @@ packages/desktop/qa/
 
 不混入 vitest 的 `test/`。新脚本(`packages/desktop/package.json`):
 
-- `test:visual` — 跑视觉 + axe + 首渲(本地经 docker,见基线单源)
-- `test:visual:update` — docker 内 `--update-snapshots` 重生成基线
-- `test:e2e` — 构建后跑 Electron E2E
+- `test:visual` — 视觉 + axe + 首渲(CI 里跑,比对基线)
+- `test:visual:smoke` — 本机冒烟,带 `--ignore-snapshots`:验证场景渲染得出来,但**不比对也不写入**基线
+- `test:e2e` — 构建后跑 Electron E2E(本机可跑)
 
 ### 基线单源
 
-截图基线**只有 linux 一套**,由官方 Playwright docker 镜像生成,CI(ubuntu)即权威。mac 本地跑视觉套件 = 同一条 docker 命令,不产生第二套标准。与项目"谓词单源"哲学同构:一个事实(页面长相)只有一个判定谓词(linux 渲染 + 同一容差)。
+截图基线**只有 linux 一套**,由 CI(ubuntu-latest)生成与判定——`visual-baseline.yml` 手动触发跑 `--update-snapshots`,产物下载后由人审、再提交;此后 `frontend-qa` job 每次比对它。与项目"谓词单源"哲学同构:一个事实(页面长相)只有一个判定谓词(linux 渲染 + 同一容差)。
+
+原方案是本机用 Playwright 官方 docker 镜像生成基线,但这台机器没有任何容器运行时(2026-07-19 查实),改为 CI 生成。**约束没有放松,只是换了产地**:CI 本就是基线权威,现在它同时是生产者。代价是每次改版更新基线要走一轮 CI(手动触发 → 下载 → 审 → 提交),而基线更新本就是低频且必须有人审的动作。
+
+配套的硬要求:本机**绝不能**直跑 `test:visual`——基线缺失时 Playwright 会把当次截图写成基线,mac 字体渲染一旦被提交就破坏了单源。所以本机入口只有 `test:visual:smoke`。
 
 ## 视觉回归(C2)
 
