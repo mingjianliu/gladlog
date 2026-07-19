@@ -1,6 +1,6 @@
 // 进攻深挖价值 A/B(生成器)。before = 非死亡 finding 不深挖(现状,席位全给死亡);
 // after = 进攻深挖上线。价值问题 = 新产的进攻深挖是好教练还是填充?两桶同 v12 prompt:
-//   offensive:非死亡候选过 hasOffensiveCoachableSignal(按类型分层采样,保证五类都有)。
+//   offensive:非死亡候选过 hasOffensiveCoachableSignal(按类型分层采样,保证四类都有)。
 //   survival(对照锚):死亡候选过 hasCoachableSignal —— 证明 judge 尺子正常 + 进攻不劣于生存。
 // judge 盲评后揭盲比均值。
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "fs";
@@ -159,7 +159,7 @@ for (const path of files) {
   }
 }
 
-// offensive 分层:五类各取 min(bucket, WANT_EACH/5 向上取整),再补齐到 WANT_EACH。
+// offensive 分层:四类各取 min(bucket, ceil(WANT_EACH/类数)),再补齐到 WANT_EACH。
 const perType = Math.ceil(WANT_EACH / OFFENSIVE.size);
 const offensive: Array<{ prompt: string; cell: Cell }> = [];
 for (const [, bucket] of offByType) offensive.push(...bucket.slice(0, perType));
