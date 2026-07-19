@@ -61,15 +61,16 @@ export function useReplayZoom() {
 
   const reset = useCallback(() => setView(null), []);
 
-  // 回调 ref:元素来了就装监听,走了就拆。本任务保持原规则(必须按 ⌘/Ctrl),
-  // 改判定表是 Task 3 的事。
+  // 回调 ref:元素来了就装监听,走了就拆。
   const hotZoneRef = useCallback(
     (el: HTMLDivElement | null) => {
       detachRef.current?.();
       detachRef.current = null;
       if (!el) return;
       const onWheel = (e: WheelEvent) => {
-        if (!e.ctrlKey && !e.metaKey) return;
+        // 全景态的裸滚轮留给页面滚动 —— 必须原样 return、不碰 preventDefault,
+        // 否则地图会变成滚动黑洞。进入缩放态 = 明确的"我在看地图",此时才接管。
+        if (!e.ctrlKey && !e.metaKey && !viewRef.current) return;
         e.preventDefault();
         const svg = svgRef.current;
         if (!svg) return;
