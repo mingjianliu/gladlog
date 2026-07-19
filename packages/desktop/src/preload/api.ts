@@ -115,6 +115,13 @@ export interface GladlogApi {
         }>;
       }>
     >;
+    /** 深挖轮(自动追问):初轮 done 后由 renderer 触发,证据包在 renderer 确定性构建。 */
+    deepen(input: {
+      matchId: string;
+      findings: unknown[];
+      packs: unknown[];
+      spec: string;
+    }): Promise<void>;
     setFlag(
       matchId: string,
       key: string,

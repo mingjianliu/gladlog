@@ -2,7 +2,9 @@ import { claimChecker,interpolate } from "../compare/claimChecker";
 import { causalLint } from "./causalLint";
 import type { AuditResult,CandidateEvent, Finding, RawFinding } from "./types";
 
-const RANK: Record<string, number> = { high: 0, med: 1, low: 2 };
+/** 严重度排序单源(high > med > low):审计排序与深挖选择共用。 */
+export const SEVERITY_RANK: Record<string, number> = { high: 0, med: 1, low: 2 };
+const RANK = SEVERITY_RANK;
 
 export function auditFindings(
   raw: RawFinding[],

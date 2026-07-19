@@ -13,7 +13,13 @@ export interface RawFinding {
   title: string;
   explanation: string;
 }
-export interface Finding extends RawFinding {} // explanation is interpolated post-audit
+export interface Finding extends RawFinding {
+  /** 深挖轮产物(自动追问):审计通过的叙述 + 证据 chips(相对秒,可跳回放)。 */
+  deepDive?: {
+    text: string;
+    chips: Array<{ t: number; label: string; unitNames: string[] }>;
+  };
+} // explanation is interpolated post-audit
 export interface AuditResult {
   findings: Finding[];
   dropped: Array<{ finding: RawFinding; reason: string }>;

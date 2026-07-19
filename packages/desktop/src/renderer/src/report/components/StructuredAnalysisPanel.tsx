@@ -6,9 +6,15 @@ import {
   specToString,
 } from "@gladlog/analysis";
 import { CombatUnitReaction } from "@gladlog/parser-compat";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { bridge } from "../../bridge";
+import {
+  buildDeepDivePack,
+  DEEP_DIVE_MAX,
+  SEVERITY_RANK,
+  type DeepDivePack,
+} from "@gladlog/analysis";
 import { deriveKeyMoments } from "../derive/keyMoments";
 import { toLegacySafe } from "../derive/legacySource";
 import type { ReportSource } from "../derive/types";
@@ -21,6 +27,7 @@ type AnalysisResult = {
   dropped: number;
   hadNarration: boolean;
   fallbackReason?: "no-candidates" | "no-client" | "bad-json";
+  deepened?: boolean;
 };
 
 /** 0 finding 的中文解释(按回退原因/审计丢弃区分,不再用统一英文提示)。 */
@@ -56,6 +63,9 @@ export function StructuredAnalysisPanel({
 }) {
   const [state, setState] = useState<State>("idle");
   const [result, setResult] = useState<AnalysisResult | null>(null);
+  // result 归属的 matchId:切场瞬间 result 仍是旧场数据,深挖触发必须核对
+  // 归属,否则会把 A 场 findings 写进 B 场缓存(agy 复核 #1)
+  const resultForRef = useRef<string | null>(null);
   const [error, setError] = useState<string>("");
   const [, setActiveEventIds] = useState<string[]>([]);
   // 教练回复语言(backlog #1):持久化在 settings,main 侧按它注入 system
@@ -141,6 +151,7 @@ export function StructuredAnalysisPanel({
   useEffect(() => {
     let cancelled = false;
     setResult(null);
+    resultForRef.current = null;
     setState("idle");
     setError("");
     setActiveEventIds([]);
@@ -149,6 +160,7 @@ export function StructuredAnalysisPanel({
         matchId,
       )) as AnalysisResult | null;
       if (!cancelled && cached) {
+        resultForRef.current = matchId;
         setResult(cached);
         setState("done");
       }
@@ -168,6 +180,7 @@ export function StructuredAnalysisPanel({
     const offDone = bridge().analysis.onDone(
       (d: { matchId: string; result: unknown }) => {
         if (d.matchId !== matchId) return;
+        resultForRef.current = matchId;
         setResult(d.result as AnalysisResult);
         setState("done");
         setError("");
@@ -227,6 +240,42 @@ export function StructuredAnalysisPanel({
   }, [source, matchId]);
 
   const keyMoments = useMemo(() => deriveKeyMoments(source), [source]);
+
+  // 深挖轮(自动追问):初轮结果落地后,为高严重度 finding 构建确定性证据包
+  // 并触发第二轮。deepened 标志防重;包为空时也调用一次以落标志。
+  useEffect(() => {
+    if (!result || !input) return;
+    if (resultForRef.current !== matchId) return; // 切场瞬间的旧 result
+    if (!result.hadNarration || result.deepened) return;
+    if (result.findings.length === 0) return;
+    try {
+      const legacy = toLegacySafe(source);
+      const packs: DeepDivePack[] = [];
+      const ranked = result.findings
+        .map((f, i) => ({ f, i }))
+        .sort(
+          (a, b) =>
+            (SEVERITY_RANK[a.f.severity] ?? 9) -
+              (SEVERITY_RANK[b.f.severity] ?? 9) || a.i - b.i,
+        );
+      for (const { f, i } of ranked) {
+        if (packs.length >= DEEP_DIVE_MAX) break;
+        const pack = buildDeepDivePack(legacy, f, i, input.candidates);
+        if (pack) packs.push(pack);
+      }
+      void bridge()
+        .analysis.deepen({
+          matchId,
+          findings: result.findings,
+          packs,
+          spec: input.spec,
+        })
+        .catch(() => {});
+    } catch {
+      /* 测试桩无该面 / 构包失败:保持初轮 */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [result, matchId]);
 
   // 分流谓词与 buildFindingsPrompt 的 whole-round 判定同源:
   // facts.t 缺席 = 整场观察(cd-waste 等),不进时间轴。
@@ -363,6 +412,7 @@ export function StructuredAnalysisPanel({
                     findings={splitFindings.wholeRound}
                     onSelect={setActiveEventIds}
                     onJump={onSeekEvent ? handleJump : undefined}
+                    onJumpT={onSeekEvent}
                     candidates={input?.candidates ?? []}
                     flags={flags}
                     onFlag={handleFlag}

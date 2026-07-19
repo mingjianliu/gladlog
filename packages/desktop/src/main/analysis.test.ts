@@ -350,3 +350,113 @@ describe("notebook(错题本跨场分组)", () => {
     });
   });
 });
+
+describe("deepen(深挖轮)", () => {
+  const pack = {
+    findingIndex: 0,
+    anchorFrom: 100,
+    anchorTo: 150,
+    items: [
+      {
+        key: "p1",
+        kind: "cc" as const,
+        t: 128,
+        label: "Fear → Healer(4.0s)",
+        unitNames: ["Healer-R"],
+        facts: { t: "128", spell: "Fear", duration: "4.0" },
+      },
+    ],
+    facts: { "p1.t": "128", "p1.spell": "Fear", "p1.duration": "4.0" },
+  };
+  const baseFindings = [
+    {
+      eventIds: ["death:v:150"],
+      severity: "high",
+      category: "survival",
+      title: "被秒",
+      explanation: "You died at 150s.",
+    },
+  ];
+
+  it("合规深挖 → 合并进结果并再次 emit done;审不过 → 保持初轮", async () => {
+    const { mkdtempSync } = await import("fs");
+    const { tmpdir } = await import("os");
+    const { join } = await import("path");
+    const good = JSON.stringify([
+      {
+        findingIndex: 0,
+        deepDive: "At {{p1.t}}s the healer ate {{p1.spell}}. Swap earlier.",
+        citedKeys: ["p1"],
+      },
+    ]);
+    const emitted: Array<{ ch: string; p: any }> = [];
+    const svcDeep = (raw: string) =>
+      createAnalysisService({
+        getSettings: () => ({ anthropicApiKey: "k" }) as never,
+        matchesDir: mkdtempSync(join(tmpdir(), "gl-deep-")),
+        clientFactory: () =>
+          ({
+            stream: () =>
+              (async function* () {
+                yield { delta: raw };
+              })(),
+          }) as never,
+        emit: (ch, p) => emitted.push({ ch, p }),
+      });
+
+    await svcDeep(good).deepen({
+      matchId: "m1",
+      findings: baseFindings as never,
+      packs: [pack] as never,
+      spec: "Frost Mage",
+    });
+    const done = emitted.filter((e) => e.ch === "gladlog:analysis:done").pop()!;
+    expect(done.p.result.deepened).toBe(true);
+    expect(done.p.result.findings[0].deepDive.text).toContain(
+      "At 128s the healer ate Fear",
+    );
+    expect(done.p.result.findings[0].deepDive.chips[0].t).toBe(128);
+
+    emitted.length = 0;
+    const bad = JSON.stringify([
+      {
+        findingIndex: 0,
+        deepDive: "The Fear caused your death at {{p1.t}}s.", // 因果断言
+        citedKeys: ["p1"],
+      },
+    ]);
+    await svcDeep(bad).deepen({
+      matchId: "m1",
+      findings: baseFindings as never,
+      packs: [pack] as never,
+      spec: "Frost Mage",
+    });
+    const done2 = emitted
+      .filter((e) => e.ch === "gladlog:analysis:done")
+      .pop()!;
+    expect(done2.p.result.deepened).toBe(true);
+    expect(done2.p.result.findings[0].deepDive).toBeUndefined();
+  });
+
+  it("无 client / 空 packs → 只落 deepened 标志,不调模型", async () => {
+    const { mkdtempSync } = await import("fs");
+    const { tmpdir } = await import("os");
+    const { join } = await import("path");
+    const emitted: Array<{ ch: string; p: any }> = [];
+    const s2 = createAnalysisService({
+      getSettings: () => ({}) as never,
+      matchesDir: mkdtempSync(join(tmpdir(), "gl-deep2-")),
+      clientFactory: () => null as never,
+      emit: (ch, p) => emitted.push({ ch, p }),
+    });
+    await s2.deepen({
+      matchId: "m1",
+      findings: baseFindings as never,
+      packs: [] as never,
+      spec: "s",
+    });
+    const done = emitted.filter((e) => e.ch === "gladlog:analysis:done").pop()!;
+    expect(done.p.result.deepened).toBe(true);
+    expect(done.p.result.findings[0].deepDive).toBeUndefined();
+  });
+});

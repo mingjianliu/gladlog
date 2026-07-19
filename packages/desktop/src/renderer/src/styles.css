@@ -2921,3 +2921,29 @@ pre {
   color: var(--loss);
   border-color: var(--loss);
 }
+
+/* ── finding 深挖块(自动追问轮)── */
+.rpt-finding-deep {
+  margin: 6px 0 2px;
+  padding: 8px 10px;
+  border-left: 2px solid var(--accent-line);
+  background: color-mix(in srgb, var(--accent-fill) 30%, transparent);
+  border-radius: 0 6px 6px 0;
+}
+.rpt-finding-deep-tag {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--accent-text);
+  letter-spacing: 0.08em;
+}
+.rpt-finding-deep-text {
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--ink-2);
+  margin: 3px 0 6px;
+}
+.rpt-finding-deep-chips {
+  display: inline-flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}

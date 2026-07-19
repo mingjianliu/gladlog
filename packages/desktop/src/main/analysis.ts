@@ -7,6 +7,11 @@ import {
   renameSync,
 } from "fs";
 import { recordAiDebug } from "./aiDebugLog";
+import {
+  auditDeepDives,
+  buildDeepDivePrompt,
+  type DeepDivePack,
+} from "@gladlog/analysis";
 import { findingKey } from "../shared/findingKey";
 import { join } from "path";
 import {
@@ -37,6 +42,8 @@ export type AnalysisResult = {
   hadNarration: boolean;
   /** 确定性回退的原因(hadNarration=false 时);旧缓存无此字段。 */
   fallbackReason?: "no-candidates" | "no-client" | "bad-json";
+  /** 深挖轮已跑(无论产出几条),renderer 防重触发。 */
+  deepened?: boolean;
 };
 
 export function createAnalysisService(deps: {
@@ -149,8 +156,87 @@ export function createAnalysisService(deps: {
   const flagsPath = (matchId: string) =>
     join(deps.matchesDir, matchId, "findingFlags.json");
 
+  /**
+   * 深挖轮(自动追问):renderer 在初轮 done 后为高严重度 finding 构建
+   * 确定性证据包并调用;本方法跑第二次 LLM、auditDeepDives 审计、把
+   * deepDive 合并进缓存与结果,再 emit 一次 done。审不过 → 静默保持初轮。
+   */
+  async function deepen(input: {
+    matchId: string;
+    findings: Finding[];
+    packs: DeepDivePack[];
+    spec: string;
+  }): Promise<void> {
+    const myGen = ++generation;
+    const settings = deps.getSettings();
+    const lang: AiLanguage = settings.aiLanguage ?? "zh";
+    const client = resolveAiClient(settings, deps.clientFactory);
+    // 无 client / 无 pack:标记 deepened 防重触发,内容保持初轮
+    const cachedPath = join(deps.matchesDir, input.matchId, `analysis-v2.${lang}.json`);
+    const writeMerged = (findings: Finding[]) => {
+      try {
+        const doc = JSON.parse(readFileSync(cachedPath, "utf-8"));
+        doc.result = { ...doc.result, findings, deepened: true };
+        const tmp = cachedPath + ".tmp";
+        writeFileSync(tmp, JSON.stringify(doc), "utf-8");
+        renameSync(tmp, cachedPath);
+        deps.emit("gladlog:analysis:done", {
+          matchId: input.matchId,
+          result: doc.result,
+        });
+      } catch {
+        /* 缓存缺失:仅 emit 内存结果 */
+        deps.emit("gladlog:analysis:done", {
+          matchId: input.matchId,
+          result: { findings, dropped: 0, hadNarration: true, deepened: true },
+        });
+      }
+    };
+    if (!client || input.packs.length === 0) return writeMerged(input.findings);
+    try {
+      const prompt = buildDeepDivePrompt(input.packs, input.findings, input.spec);
+      let raw = "";
+      const stream = client.stream({
+        model: settings.anthropicModel ?? "claude-sonnet-5",
+        max_tokens: 2048,
+        system: buildCoachSystemPrompt(lang),
+        messages: [{ role: "user", content: prompt }],
+      });
+      for await (const ev of stream) {
+        if (myGen !== generation) return;
+        if (ev.delta) raw += ev.delta;
+      }
+      if (myGen !== generation) return;
+      recordAiDebug({
+        kind: "analysis",
+        matchId: `${input.matchId}#deepdive`,
+        at: Date.now(),
+        model: settings.anthropicModel ?? "claude-sonnet-5",
+        prompt,
+        raw,
+      });
+      let parsed: unknown = null;
+      try {
+        parsed = JSON.parse(raw.trim());
+      } catch {
+        /* 坏 JSON → 保持初轮 */
+      }
+      const dives = auditDeepDives(parsed, input.packs);
+      const merged = input.findings.map((f, i) => {
+        const d = dives.find((x) => x.findingIndex === i);
+        return d ? { ...f, deepDive: { text: d.text, chips: d.chips } } : f;
+      });
+      if (myGen !== generation) return; // 保险:写盘/emit 前复查代际
+      writeMerged(merged);
+    } catch {
+      if (myGen !== generation) return;
+      writeMerged(input.findings); // 深挖失败不致命,保持初轮
+    }
+  }
+
   return {
     run,
+    deepen,
     async cancel(): Promise<void> {
       generation++;
     },

@@ -135,6 +135,33 @@ export function KeyMomentAxis({
                     <span className="rpt-finding-title">{e.f.title}</span>
                   </div>
                   <p className="rpt-finding-body">{e.f.explanation}</p>
+                  {e.f.deepDive && (
+                    <div
+                      className="rpt-finding-deep"
+                      data-testid="finding-deepdive"
+                    >
+                      <span className="rpt-finding-deep-tag">深挖</span>
+                      <p className="rpt-finding-deep-text">
+                        {e.f.deepDive.text}
+                      </p>
+                      <span className="rpt-finding-deep-chips">
+                        {e.f.deepDive.chips.map((c, ci) => (
+                          <button
+                            key={ci}
+                            className="rpt-finding-evt"
+                            title={c.label}
+                            onClick={
+                              onSeek
+                                ? () => onSeek(c.t, c.unitNames)
+                                : undefined
+                            }
+                          >
+                            ⏱ {mmss(c.t)} {c.label}
+                          </button>
+                        ))}
+                      </span>
+                    </div>
+                  )}
                   <div className="rpt-finding-ev">
                     <button onClick={() => onSelectEvidence(e.f.eventIds)}>
                       Evidence

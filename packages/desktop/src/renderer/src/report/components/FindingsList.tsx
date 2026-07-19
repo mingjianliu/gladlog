@@ -13,6 +13,7 @@ export function FindingsList({
   findings,
   onSelect,
   onJump,
+  onJumpT,
   candidates,
   flags,
   onFlag,
@@ -21,6 +22,8 @@ export function FindingsList({
   onSelect: (eventIds: string[]) => void;
   /** 跳到回放:定位到该 finding 引用的最早事件时刻。 */
   onJump?: (eventIds: string[]) => void;
+  /** 深挖 chips 直跳(相对秒 + 单位)。 */
+  onJumpT?: (tSeconds: number, unitNames: string[]) => void;
   /** 候选事件池:证据 chip 显示每条证据的发生时刻(可各自点跳)。 */
   candidates?: CandidateEvent[];
   /** 跟进标记(phase3 #3a):key = findingKey(f)。 */
@@ -59,6 +62,26 @@ export function FindingsList({
             >
               {f.explanation}
             </p>
+            {f.deepDive && (
+              <div className="rpt-finding-deep" data-testid="finding-deepdive">
+                <span className="rpt-finding-deep-tag">深挖</span>
+                <p className="rpt-finding-deep-text">{f.deepDive.text}</p>
+                <span className="rpt-finding-deep-chips">
+                  {f.deepDive.chips.map((c, ci) => (
+                    <button
+                      key={ci}
+                      className="rpt-finding-evt"
+                      title={c.label}
+                      onClick={
+                        onJump ? () => onJumpT?.(c.t, c.unitNames) : undefined
+                      }
+                    >
+                      ⏱ {mmss(c.t)} {c.label}
+                    </button>
+                  ))}
+                </span>
+              </div>
+            )}
             {clampable && (
               <button
                 className="rpt-finding-toggle"

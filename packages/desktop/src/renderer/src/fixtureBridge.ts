@@ -50,6 +50,13 @@ export function installFixtureBridge(): void {
         title: "被集火秒杀",
         explanation:
           "敌方双 DPS 进攻 CD 对齐时,你在没有减伤/位移的情况下于 1.4s 内掉血 82% 后阵亡;此前贴在开阔地带、离掩体较远。",
+        deepDive: {
+          text: "在 2:08 你的治疗吃了 4 秒恐惧且饰品在 CD;2:10 敌方战士开天神下凡;你的 HP 从 T-15s 的 86% 一路掉到 T-5s 的 41%。下次看到治疗被控且无解时,提前一个 GCD 交墙或拉向立柱。",
+          chips: [
+            { t: 128, label: "恐惧 → 治疗(4.0s)", unitNames: ["Healer"] },
+            { t: 130, label: "敌 天神下凡(Warr)", unitNames: ["Warr"] },
+          ],
+        },
       },
       {
         eventIds: ["e2"],
@@ -69,6 +76,7 @@ export function installFixtureBridge(): void {
     ],
     dropped: 0,
     hadNarration: true,
+    deepened: true, // fixture 模式防深挖触发循环
   };
   const sampleCompare = {
     verifiedComparison: {
@@ -205,6 +213,7 @@ export function installFixtureBridge(): void {
       async getCached(): Promise<unknown> {
         return sampleAnalysis;
       },
+      async deepen(): Promise<void> {},
       async notebook(): Promise<unknown[]> {
         return [
           {
