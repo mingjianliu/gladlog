@@ -204,15 +204,61 @@ describe("hasCoachableSignal(可教信号门,修 1)", () => {
       ]),
     ).toBe(false);
   });
-  it("走位失误(修 3)= 信号:STAYED_IN 只在掉血时触发,故任一走位条即真失误", () => {
+  it("走位:missed-push / 空放直通(本身即失误)", () => {
     expect(
       hasCoachableSignal([
-        item("position", { role: "owner", kind: "stayed-in", hpMin: "12" }),
+        item("position", { role: "owner", kind: "missed-push", dist: "35" }),
       ]),
     ).toBe(true);
     expect(
       hasCoachableSignal([
-        item("position", { role: "owner", kind: "missed-push", dist: "35" }),
+        item("position", {
+          role: "owner",
+          kind: "cd-out-of-range",
+          spell: "Ring of Frost",
+        }),
+      ]),
+    ).toBe(true);
+  });
+
+  it("走位:STAYED_IN 必须付出真实代价才开门(周度复核 P1#1)", () => {
+    // 站到濒死 → 真失误
+    expect(
+      hasCoachableSignal([
+        item("position", {
+          role: "owner",
+          kind: "stayed-in",
+          hpStart: "100",
+          hpMin: "12",
+        }),
+      ]),
+    ).toBe(true);
+    // 100%→98%:干净窗口,不值得一轮模型调用(旧实现在这里恒 true)
+    expect(
+      hasCoachableSignal([
+        item("position", {
+          role: "owner",
+          kind: "stayed-in",
+          hpStart: "100",
+          hpMin: "98",
+        }),
+      ]),
+    ).toBe(false);
+    // 血线高但跌幅够大(100→84)→ 仍算代价
+    expect(
+      hasCoachableSignal([
+        item("position", {
+          role: "owner",
+          kind: "stayed-in",
+          hpStart: "100",
+          hpMin: "84",
+        }),
+      ]),
+    ).toBe(true);
+    // 无 HP 数据 → 保持改动前行为(视为有代价),便于 eval 归因
+    expect(
+      hasCoachableSignal([
+        item("position", { role: "owner", kind: "stayed-in" }),
       ]),
     ).toBe(true);
   });

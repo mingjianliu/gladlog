@@ -51,6 +51,35 @@ const MAX_ITER3_EVENTS = 2; // per event type
 // T3 grounding 守卫:同 ccTrinketAnalysis——禁跨空窗中段插值(TRAINED 0.4yd 假主张实锤)
 const POSITION_MAX_GAP_MS = INTERP_MAX_GAP_MS;
 
+/** STAYED_IN「站桩到濒死」的阈值:低于它一定算付出了代价。 */
+export const STAYED_IN_NEAR_DEATH_PCT = 35;
+/** 「没有真实代价」判据:最低血仍在此之上,且相对起始血的跌幅小于 DROP。 */
+export const STAYED_IN_NO_COST_MIN_HP_PCT = 85;
+export const STAYED_IN_NO_COST_MAX_DROP_PCT = 15;
+
+/**
+ * 这次 STAYED_IN 是否付出了真实代价(单源谓词)。
+ *
+ * context formatter 用它决定要不要打 "(no real cost)" 标签,深挖的可教信号门
+ * 用它决定要不要为这条走位开一轮模型调用 —— 同一个事实必须同一个谓词。
+ * 此前门那边写着「STAYED_IN 已经只在掉血时触发」的注释,而事实上
+ * computeOwnerPositionEvents 从未按 HP 过滤,判据是纯几何:于是 HP 100%→98%
+ * 的干净窗口照样开门,白烧一轮调用还大概率产出套话(周度复核 P1#1)。
+ *
+ * 无 HP 数据时返回 true(视为有代价):保持改动前的行为,只切掉「可证明无代价」
+ * 这一类,便于 eval 归因过门率的变化。
+ */
+export function stayedInHadRealCost(
+  hpMinPct: number | null | undefined,
+  hpStartPct: number | null | undefined,
+): boolean {
+  if (hpMinPct === null || hpMinPct === undefined) return true;
+  const noCost =
+    hpMinPct >= STAYED_IN_NO_COST_MIN_HP_PCT &&
+    (hpStartPct ?? 100) - hpMinPct < STAYED_IN_NO_COST_MAX_DROP_PCT;
+  return !noCost;
+}
+
 export type PositionEventType =
   | "STAYED_IN"
   | "KITED"
@@ -667,10 +696,9 @@ export function formatPositionEventsForContext(
       let hpStr = "";
       if (e.ownerHpMinPct !== null && e.ownerHpMinPct !== undefined) {
         const tag =
-          e.ownerHpMinPct <= 35
+          e.ownerHpMinPct <= STAYED_IN_NEAR_DEATH_PCT
             ? " (near-death — the stay was costly)"
-            : e.ownerHpMinPct >= 85 &&
-                (e.ownerHpStartPct ?? 100) - e.ownerHpMinPct < 15
+            : !stayedInHadRealCost(e.ownerHpMinPct, e.ownerHpStartPct)
               ? " (no real cost)"
               : "";
         hpStr = ` — your HP ${e.ownerHpStartPct}%→${e.ownerHpMinPct}% (min over window)${tag}`;

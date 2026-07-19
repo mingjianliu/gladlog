@@ -23,6 +23,7 @@ import { getHpPercentAtTime } from "../utils/killWindowTargetSelection";
 import {
   computeOwnerPositionEvents,
   type IPositionEvent,
+  stayedInHadRealCost,
 } from "../utils/positionAnalysis";
 import { causalLint } from "./causalLint";
 import { fmtFactNum as fmt } from "./factFormat";
@@ -341,6 +342,10 @@ export function buildDeepDivePack(
         if (e.nearestEnemyName) f.enemy = sn(e.nearestEnemyName);
         if (e.dangerLabel) f.threat = e.dangerLabel;
         if (e.type === "STAYED_IN") {
+          // hpStart 与 hpMin 成对给:门要靠「起始→最低」的跌幅判断有无代价
+          // (stayedInHadRealCost),模型也能据此说「从满血被打到 X」。
+          if (e.ownerHpStartPct != null)
+            f.hpStart = String(Math.round(e.ownerHpStartPct));
           if (e.ownerHpMinPct != null)
             f.hpMin = String(Math.round(e.ownerHpMinPct));
           if (e.ownerDefensiveAvailable !== undefined)
@@ -649,8 +654,16 @@ export function hasCoachableSignal(items: PackItem[]): boolean {
       return true;
     if (it.kind === "dispel" && f.priority === "Low" && enemyCdInWin)
       return true;
-    // 走位失误(修 3):STAYED_IN 已经只在掉血时触发,MISSED_PUSH/空放皆真失误。
-    if (it.kind === "position") return true;
+    // 走位失误:MISSED_PUSH/空放本身即失误,直通;STAYED_IN 必须付出真实代价才算
+    // —— 判据与 context formatter 的 "(no real cost)" 标签同源(周度复核 P1#1:
+    // 那里曾写着「STAYED_IN 已经只在掉血时触发」,而源头从未按 HP 过滤)。
+    if (it.kind === "position") {
+      if (f.kind !== "stayed-in") return true;
+      return stayedInHadRealCost(
+        f.hpMin === undefined ? null : Number(f.hpMin),
+        f.hpStart === undefined ? null : Number(f.hpStart),
+      );
+    }
     return false;
   });
 }
