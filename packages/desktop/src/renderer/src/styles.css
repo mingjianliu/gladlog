@@ -739,8 +739,9 @@ pre {
   align-items: start;
   width: 100%;
 }
-.rpt-replay-arena-grid > svg {
+.rpt-replay-arena-grid > .rpt-replay-map-cell {
   grid-column: 2;
+  min-width: 0;
 }
 .rpt-replay-frames {
   display: flex;
