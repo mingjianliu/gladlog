@@ -6,9 +6,16 @@ import {
   annotateDefensiveTimings,
   DEFENSIVE_TAGS,
   extractMajorCooldowns,
+  isHealerSpec,
+  isMeleeSpec,
+  type IMajorCooldownInfo,
 } from "../utils/cooldowns";
 import { reconstructEnemyCDTimeline } from "../utils/enemyCDs";
 import { getHpPercentAtTime } from "../utils/killWindowTargetSelection";
+import {
+  computeOwnerPositionEvents,
+  type IPositionEvent,
+} from "../utils/positionAnalysis";
 import { causalLint } from "./causalLint";
 import { claimChecker, interpolate } from "../compare/claimChecker";
 import type { CandidateEvent, Finding } from "./types";
@@ -26,10 +33,17 @@ const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
  * 会被裸数字审计误杀;chips 的 unitNames 保留全名给回放定位。 */
 const sn = (name: string) => name.split("-")[0] ?? name;
 
+/** 走位失误的三类(修 3):只收真失误,KITED/HEALER_TRAINED 等不算。 */
+const POSITION_MISTAKES = new Set<IPositionEvent["type"]>([
+  "STAYED_IN",
+  "MISSED_PUSH",
+  "CD_OUT_OF_RANGE",
+]);
+
 export interface PackItem {
   /** 占位符命名空间(p1, p2, …):叙述里用 {{p1.t}} 引用。 */
   key: string;
-  kind: "cc" | "defensive" | "enemy-cd" | "hp" | "dispel";
+  kind: "cc" | "defensive" | "enemy-cd" | "hp" | "dispel" | "position";
   /** 相对秒(chip 跳转锚点)。 */
   t: number;
   /** chip 文本。 */
@@ -89,6 +103,12 @@ export function buildDeepDivePack(
   };
   const enemyPets = petsOf(enemies);
   const friendlyPets = petsOf(friends);
+  const ownerUnit = ownerName
+    ? friends.find((u) => u.name === ownerName)
+    : undefined;
+  // 走位分析(修 3)复用 owner 的 CC/CD 摘要,循环里顺手捕获,不重复算。
+  let ownerCcSummary: ReturnType<typeof analyzePlayerCCAndTrinket> | undefined;
+  let ownerCds: IMajorCooldownInfo[] | undefined;
 
   const raw: Omit<PackItem, "key">[] = [];
 
@@ -96,6 +116,7 @@ export function buildDeepDivePack(
   for (const u of friends) {
     try {
       const s = analyzePlayerCCAndTrinket(u, enemies, combat, enemyPets);
+      if (u === ownerUnit) ownerCcSummary = s;
       for (const cc of s.ccInstances) {
         if (!inWin(cc.atSeconds)) continue;
         raw.push({
@@ -129,6 +150,7 @@ export function buildDeepDivePack(
         combat,
         enemyTl,
       );
+      if (u === ownerUnit) ownerCds = cds;
       for (const cd of cds) {
         if (!DEFENSIVE_TAGS.has(cd.tag)) continue;
         for (const cast of cd.casts) {
@@ -245,6 +267,64 @@ export function buildDeepDivePack(
     /* 单类缺席 */
   }
 
+  // 走位失误(修 3):owner 的 STAYED_IN/MISSED_PUSH/CD_OUT_OF_RANGE 落在窗口内。
+  // 补上资源信号看不见的「死于走位」缺口(519 场调查:救回贼 9/40、Havoc 4/9)。
+  if (ownerUnit && enemyTl) {
+    try {
+      const posEvents = computeOwnerPositionEvents({
+        owner: ownerUnit,
+        enemies,
+        combat,
+        burstWindows: enemyTl.alignedBurstWindows,
+        ownerCooldowns: ownerCds ?? [],
+        ownerCCSummary: ownerCcSummary,
+        isHealer: isHealerSpec(ownerUnit.spec),
+        ownerIsMelee: isMeleeSpec(ownerUnit.spec),
+        friends,
+      });
+      for (const e of posEvents) {
+        if (!POSITION_MISTAKES.has(e.type)) continue;
+        if (!inWin(e.atSeconds)) continue;
+        const f: Record<string, string> = {
+          t: fmt(e.atSeconds),
+          role: "owner",
+          kind:
+            e.type === "STAYED_IN"
+              ? "stayed-in"
+              : e.type === "MISSED_PUSH"
+                ? "missed-push"
+                : "cd-out-of-range",
+        };
+        if (e.nearestEnemyName) f.enemy = sn(e.nearestEnemyName);
+        if (e.dangerLabel) f.threat = e.dangerLabel;
+        if (e.type === "STAYED_IN") {
+          if (e.ownerHpMinPct != null)
+            f.hpMin = String(Math.round(e.ownerHpMinPct));
+          if (e.ownerDefensiveAvailable !== undefined)
+            f.defAvail = e.ownerDefensiveAvailable ? "yes" : "no";
+        }
+        if (e.type === "MISSED_PUSH" && e.startDistanceYards != null)
+          f.dist = String(Math.round(e.startDistanceYards));
+        if (e.type === "CD_OUT_OF_RANGE" && e.spellName) f.spell = e.spellName;
+        const label =
+          e.type === "STAYED_IN"
+            ? `走位:停留承压`
+            : e.type === "MISSED_PUSH"
+              ? `走位:脱节`
+              : `走位:${e.spellName ?? "大招"}空放`;
+        raw.push({
+          kind: "position",
+          t: e.atSeconds,
+          label,
+          unitNames: [ownerUnit.name],
+          facts: f,
+        });
+      }
+    } catch {
+      /* 走位分析需高级日志/几何,缺则该类缺席 */
+    }
+  }
+
   // 截断按「靠近焦点时刻」而非纯时间序:窗口早段的密集小事件不能把
   // 死亡/锚点附近的关键证据挤出包(agy 复核 #4);选完再按时间排列出清单。
   // focusT 已在 HP 段声明(= anchorTo - PACK_AFTER_S)。
@@ -289,6 +369,8 @@ export function hasCoachableSignal(items: PackItem[]): boolean {
       return true;
     if (it.kind === "dispel" && f.priority === "Low" && enemyCdInWin)
       return true;
+    // 走位失误(修 3):STAYED_IN 已经只在掉血时触发,MISSED_PUSH/空放皆真失误。
+    if (it.kind === "position") return true;
     return false;
   });
 }
@@ -327,6 +409,7 @@ export function buildDeepDivePrompt(
     ``,
     `HARD RULES:`,
     `- Coach ${ownerShort} (facts with role=owner). role=teammate / role=enemy items are context only — cite a teammate's mistake ONLY when ${ownerShort} could have covered it (peel/CC the attacker, give an external, swap targets).`,
+    `- kind=position items are ${ownerShort}'s own movement: kind=stayed-in = stood in a threat and took avoidable damage (hpMin is where HP bottomed, defAvail says if a defensive was up); kind=missed-push = drifted out of range (dist yards) when pressure was needed; kind=cd-out-of-range = fired a cooldown (spell) with no valid target in range. Coach the movement decision, not just cooldown usage.`,
     `- If, after reviewing a pack, you cannot name a specific ${ownerShort}-team decision that was clearly suboptimal, OMIT that finding from your output entirely. Do NOT manufacture generic advice ("use defensives better", "peel/reposition", "watch HP"). A clean window is a valid outcome — say nothing rather than pad.`,
     `- Prefer a firm verdict ("trinket the second stun, not the first") over hedging ("worth reconsidering whether...").`,
     `- Reference only pack items; list the keys you used in "citedKeys" (non-empty).`,

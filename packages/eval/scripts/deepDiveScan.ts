@@ -45,7 +45,7 @@ const packSizes: number[] = [];
 const bySpec = new Map<string, { anchors: number; gated: number }>();
 // t/duration/hp 是合法数值字段(模型必走占位符);其余文本字段若含数字,
 // 模型写字面量就会被裸数字审计误杀(realm 名是已修的一例,spell 名同类风险)。
-const NUMERIC_FIELDS = new Set(["t", "duration", "hp"]);
+const NUMERIC_FIELDS = new Set(["t", "duration", "hp", "dist", "hpMin"]);
 const hasDigit = /\d/;
 
 for (const path of files) {

@@ -19,7 +19,12 @@ const pack: DeepDivePack = {
       t: 128,
       label: "Fear → Healer(4.0s)",
       unitNames: ["Healer-R"],
-      facts: { t: "128", spell: "Fear", duration: "4.0", trinket: "on_cooldown" },
+      facts: {
+        t: "128",
+        spell: "Fear",
+        duration: "4.0",
+        trinket: "on_cooldown",
+      },
     },
     {
       key: "p2",
@@ -171,5 +176,17 @@ describe("hasCoachableSignal(可教信号门,修 1)", () => {
         item("enemy-cd", { role: "enemy" }),
       ]),
     ).toBe(false);
+  });
+  it("走位失误(修 3)= 信号:STAYED_IN 只在掉血时触发,故任一走位条即真失误", () => {
+    expect(
+      hasCoachableSignal([
+        item("position", { role: "owner", kind: "stayed-in", hpMin: "12" }),
+      ]),
+    ).toBe(true);
+    expect(
+      hasCoachableSignal([
+        item("position", { role: "owner", kind: "missed-push", dist: "35" }),
+      ]),
+    ).toBe(true);
   });
 });
