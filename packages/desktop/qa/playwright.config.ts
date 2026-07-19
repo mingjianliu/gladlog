@@ -25,8 +25,16 @@ export default defineConfig({
     ? [["list"], ["html", { open: "never" }]]
     : [["list"]],
   expect: {
-    // 容差只吸收抗锯齿噪声,不用来放水
-    toHaveScreenshot: { maxDiffPixelRatio: 0.01 },
+    // 容差只吸收抗锯齿噪声,不用来放水。
+    //
+    // 用**绝对像素数**而不是比例:整页截图动辄 1280×1300,maxDiffPixelRatio
+    // 0.01 等于放行 16000 多个像素 —— 实测把主题色 --win 从 #7ac9a3 改成
+    // #22cc55(胜负文字、评分曲线全变色)照样绿灯,因为受影响的小字加起来
+    // 不到 1%。那种「守不住」的门比没有门更坏,它会给人虚假的安全感。
+    //
+    // threshold 是**每像素**的颜色距离容忍(抗锯齿噪声在这一层被吸收),
+    // maxDiffPixels 是允许有多少个像素越过该距离。两者分工不同,不要混为一谈。
+    toHaveScreenshot: { threshold: 0.2, maxDiffPixels: 100 },
   },
   use: { trace: "retain-on-failure" },
   projects: [
