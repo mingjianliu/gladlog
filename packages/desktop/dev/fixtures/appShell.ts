@@ -1,10 +1,11 @@
 import type { StoredMatchMeta } from "../../src/main/matchStore";
 import { installFixtureBridge } from "../../src/renderer/src/fixtureBridge";
 
-/** 固定基准时刻(2026-07-19T12:00:00Z)。视觉回归会用 Playwright 的
- *  clock.setFixedTime 把 Date.now() 钉在同一时刻,两边必须一致,
- *  否则「今天/昨天」分组与仪表盘周期会随真实时间漂移 → 截图 flaky。 */
-export const FIXED_NOW = Date.UTC(2026, 6, 19, 12, 0, 0);
+import { FIXED_NOW } from "./fixedNow";
+
+// 单源在 ./fixedNow(零 import 的叶子模块,Playwright 的 Node 进程也能吃)。
+// 这里再导出一次,浏览器侧的既有引用不必改。
+export { FIXED_NOW };
 
 const HOUR = 3_600_000;
 const DAY = 86_400_000;
