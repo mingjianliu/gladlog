@@ -121,6 +121,7 @@ export interface GladlogApi {
       findings: unknown[];
       packs: unknown[];
       spec: string;
+      ownerName?: string;
     }): Promise<void>;
     setFlag(
       matchId: string,

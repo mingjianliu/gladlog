@@ -58,6 +58,7 @@ export function buildDeepDivePack(
   finding: Finding,
   findingIndex: number,
   candidates: CandidateEvent[],
+  ownerName?: string,
 ): DeepDivePack | null {
   const byId = new Map(candidates.map((c) => [c.id, c]));
   const ts = (finding.eventIds ?? [])
@@ -79,6 +80,9 @@ export function buildDeepDivePack(
     (u) => u.reaction !== CombatUnitReaction.Friendly,
   );
   if (friends.length === 0 || enemies.length === 0) return null;
+  // role 标签(修 2):owner=被教的人,教练落点优先它;teammate/enemy 仅背景。
+  const friendlyRole = (fullName: string) =>
+    ownerName && fullName === ownerName ? "owner" : "teammate";
   const petsOf = (side: any[]) => {
     const ids = new Set(side.map((u) => u.id));
     return units.filter((u) => u.ownerId && ids.has(u.ownerId));
@@ -103,6 +107,7 @@ export function buildDeepDivePack(
             t: fmt(cc.atSeconds),
             spell: cc.spellName,
             unit: sn(u.name),
+            role: friendlyRole(u.name),
             duration: cc.durationSeconds.toFixed(1),
             trinket: cc.trinketState,
           },
@@ -137,6 +142,7 @@ export function buildDeepDivePack(
               t: fmt(cast.timeSeconds),
               spell: cd.spellName,
               unit: sn(u.name),
+              role: friendlyRole(u.name),
               ...(cast.timingLabel && cast.timingLabel !== "Unknown"
                 ? { timing: cast.timingLabel }
                 : {}),
@@ -164,6 +170,7 @@ export function buildDeepDivePack(
             t: fmt(cd.castTimeSeconds),
             spell: cd.spellName,
             player: sn(p.playerName),
+            role: "enemy",
           },
         });
       }
@@ -194,7 +201,12 @@ export function buildDeepDivePack(
           t: tPt,
           label: `${sn(u.name)} HP ${Math.round(pct)}%`,
           unitNames: [u.name],
-          facts: { t: fmt(tPt), unit: sn(u.name), hp: String(Math.round(pct)) },
+          facts: {
+            t: fmt(tPt),
+            unit: sn(u.name),
+            role: friendlyRole(u.name),
+            hp: String(Math.round(pct)),
+          },
         });
       }
     } catch {
@@ -224,6 +236,7 @@ export function buildDeepDivePack(
           removed: e.removedSpellName,
           src: sn(e.sourceName),
           tgt: sn(e.targetName),
+          role: friendlyRole(e.sourceName),
           priority: e.priority,
         },
       });
@@ -241,6 +254,8 @@ export function buildDeepDivePack(
     .sort((a, b) => a.t - b.t)
     .map((it, i) => ({ ...it, key: `p${i + 1}` }));
   if (items.length === 0) return null;
+  // 可教信号门(修 1)由调用方施用:hasCoachableSignal(pack.items) → false 则跳过。
+  // 门放调用方而非这里,职责分离(构包 vs 是否值得深挖),eval 也能一路量 before/after。
 
   const facts: Record<string, string> = {};
   for (const it of items)
@@ -249,12 +264,43 @@ export function buildDeepDivePack(
   return { findingIndex, anchorFrom, anchorTo, items, facts };
 }
 
+/**
+ * 可教信号(修 1):包内是否含 ≥1 条「我方可控失误」—— 判据全用 pack facts,
+ * 与 death-setup 三型同源:防御交早/晚、被控时饰品在手没交、敌方大 CD 开着
+ * 时刷低优先级驱散(浪费 GCD)。无信号 = 干净窗口,不值得一轮模型调用。
+ */
+export function hasCoachableSignal(items: PackItem[]): boolean {
+  const enemyCdInWin = items.some((i) => i.kind === "enemy-cd");
+  return items.some((it) => {
+    const f = it.facts;
+    if (f.role === "enemy") return false; // 只看我方可控
+    if (
+      it.kind === "defensive" &&
+      (f.timing === "Early" || f.timing === "Late")
+    )
+      return true;
+    // 仅 ≥3s 硬控算"饰品该交没交":微控/打断不交饰品是常态不是失误(220 场
+    // 确定性实测:不设时长门时 available_unused 命中 242 次、门形同虚设)。
+    if (
+      it.kind === "cc" &&
+      f.trinket === "available_unused" &&
+      Number(f.duration) >= 3
+    )
+      return true;
+    if (it.kind === "dispel" && f.priority === "Low" && enemyCdInWin)
+      return true;
+    return false;
+  });
+}
+
 /** 深挖 prompt:每个 pack 一段;审计纪律与初轮同宗(占位符/无因果/只引清单)。 */
 export function buildDeepDivePrompt(
   packs: DeepDivePack[],
   findings: Finding[],
   specName: string,
+  ownerName?: string,
 ): string {
+  const ownerShort = ownerName ? ownerName.split("-")[0] : "the log owner";
   const sections = packs.map((p) => {
     const f = findings[p.findingIndex]!;
     const listing = p.items
@@ -275,11 +321,14 @@ export function buildDeepDivePrompt(
     ].join("\n");
   });
   return [
-    `You are a World of Warcraft arena coach deepening findings from a ${specName}'s match review. For EACH finding below, write ONE short paragraph (3-5 sentences) that digs into the underlying play using ONLY its evidence pack.`,
+    `You are a World of Warcraft arena coach deepening findings from ${ownerShort}'s (a ${specName}) match review. You are coaching ${ownerShort} — the person reviewing their own game. For a finding, write ONE short paragraph (3-5 sentences) ONLY IF you can name a specific decision ${ownerShort}'s team could have made differently, grounded in the evidence pack.`,
     ``,
     ...sections,
     ``,
     `HARD RULES:`,
+    `- Coach ${ownerShort} (facts with role=owner). role=teammate / role=enemy items are context only — cite a teammate's mistake ONLY when ${ownerShort} could have covered it (peel/CC the attacker, give an external, swap targets).`,
+    `- If, after reviewing a pack, you cannot name a specific ${ownerShort}-team decision that was clearly suboptimal, OMIT that finding from your output entirely. Do NOT manufacture generic advice ("use defensives better", "peel/reposition", "watch HP"). A clean window is a valid outcome — say nothing rather than pad.`,
+    `- Prefer a firm verdict ("trinket the second stun, not the first") over hedging ("worth reconsidering whether...").`,
     `- Reference only pack items; list the keys you used in "citedKeys" (non-empty).`,
     `- Write NO digits in "deepDive". Every number must be a {{key.field}} placeholder from that finding's pack (e.g. {{p1.t}}, {{p2.duration}}). Words for counts ("twice", "briefly") are fine.`,
     `- Do NOT assert causation ("led to"/"caused"/"resulted in" a death/loss). Describe the sequence neutrally and coach what to do differently at these moments.`,

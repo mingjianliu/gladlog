@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   auditDeepDives,
   buildDeepDivePrompt,
+  hasCoachableSignal,
   type DeepDivePack,
 } from "./deepDive";
 import type { Finding } from "./types";
@@ -104,5 +105,71 @@ describe("buildDeepDivePrompt", () => {
     expect(p).toContain("{{key.field}}");
     expect(p).toContain('"citedKeys"');
     expect(p).toContain("Do NOT assert causation");
+  });
+});
+
+describe("hasCoachableSignal(可教信号门,修 1)", () => {
+  const item = (kind: string, facts: Record<string, string>) =>
+    ({ key: "p1", kind, t: 1, label: "", unitNames: [], facts }) as never;
+  it("防御 Early/Late = 信号;Optimal = 无信号", () => {
+    expect(
+      hasCoachableSignal([
+        item("defensive", { role: "owner", timing: "Early" }),
+      ]),
+    ).toBe(true);
+    expect(
+      hasCoachableSignal([
+        item("defensive", { role: "owner", timing: "Optimal" }),
+      ]),
+    ).toBe(false);
+  });
+  it("≥3s 硬控 + 饰品 available_unused = 信号;<3s 或 on_cooldown 无信号", () => {
+    expect(
+      hasCoachableSignal([
+        item("cc", {
+          role: "teammate",
+          trinket: "available_unused",
+          duration: "4.0",
+        }),
+      ]),
+    ).toBe(true);
+    expect(
+      hasCoachableSignal([
+        item("cc", {
+          role: "teammate",
+          trinket: "available_unused",
+          duration: "1.2",
+        }),
+      ]),
+    ).toBe(false);
+    expect(
+      hasCoachableSignal([
+        item("cc", {
+          role: "teammate",
+          trinket: "on_cooldown",
+          duration: "4.0",
+        }),
+      ]),
+    ).toBe(false);
+  });
+  it("低优先级驱散 + 窗口内敌方 CD = 信号;无敌方 CD 则不算", () => {
+    expect(
+      hasCoachableSignal([
+        item("dispel", { role: "owner", priority: "Low" }),
+        item("enemy-cd", { role: "enemy" }),
+      ]),
+    ).toBe(true);
+    expect(
+      hasCoachableSignal([item("dispel", { role: "owner", priority: "Low" })]),
+    ).toBe(false);
+  });
+  it("敌方条目自身不算信号;纯中性窗口 → false", () => {
+    expect(
+      hasCoachableSignal([
+        item("cc", { role: "teammate", trinket: "used" }),
+        item("hp", { role: "owner", hp: "50" }),
+        item("enemy-cd", { role: "enemy" }),
+      ]),
+    ).toBe(false);
   });
 });

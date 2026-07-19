@@ -166,6 +166,7 @@ export function createAnalysisService(deps: {
     findings: Finding[];
     packs: DeepDivePack[];
     spec: string;
+    ownerName?: string;
   }): Promise<void> {
     const myGen = ++generation;
     const settings = deps.getSettings();
@@ -194,7 +195,7 @@ export function createAnalysisService(deps: {
     };
     if (!client || input.packs.length === 0) return writeMerged(input.findings);
     try {
-      const prompt = buildDeepDivePrompt(input.packs, input.findings, input.spec);
+      const prompt = buildDeepDivePrompt(input.packs, input.findings, input.spec, input.ownerName);
       let raw = "";
       const stream = client.stream({
         model: settings.anthropicModel ?? "claude-sonnet-5",

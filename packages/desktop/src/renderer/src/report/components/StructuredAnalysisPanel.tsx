@@ -12,6 +12,7 @@ import { bridge } from "../../bridge";
 import {
   buildDeepDivePack,
   DEEP_DIVE_MAX,
+  hasCoachableSignal,
   SEVERITY_RANK,
   type DeepDivePack,
 } from "@gladlog/analysis";
@@ -233,6 +234,7 @@ export function StructuredAnalysisPanel({
         candidates,
         richContext,
         spec,
+        ownerName: owner.name,
       };
     } catch {
       return null;
@@ -260,8 +262,15 @@ export function StructuredAnalysisPanel({
         );
       for (const { f, i } of ranked) {
         if (packs.length >= DEEP_DIVE_MAX) break;
-        const pack = buildDeepDivePack(legacy, f, i, input.candidates);
-        if (pack) packs.push(pack);
+        const pack = buildDeepDivePack(
+          legacy,
+          f,
+          i,
+          input.candidates,
+          input.ownerName,
+        );
+        // 可教信号门(修 1):干净窗口不深挖,避免硬编套话
+        if (pack && hasCoachableSignal(pack.items)) packs.push(pack);
       }
       void bridge()
         .analysis.deepen({
@@ -269,6 +278,7 @@ export function StructuredAnalysisPanel({
           findings: result.findings,
           packs,
           spec: input.spec,
+          ownerName: input.ownerName,
         })
         .catch(() => {});
     } catch {
