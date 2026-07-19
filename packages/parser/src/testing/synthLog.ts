@@ -1,7 +1,7 @@
 /** 确定性合成战斗日志:E2E 导入链路与性能预算的共同载荷。
  *  无真实玩家数据,可按 eventsPerRound 放大体积,同参数逐字节可复现。 */
 export function synthArenaLog(opts?: {
-  rounds?: number;
+  /** 事件条数,体积由它放大;三处消费方都只需要一场比赛,不需要多轮。 */
   eventsPerRound?: number;
   startMs?: number;
 }): string {
