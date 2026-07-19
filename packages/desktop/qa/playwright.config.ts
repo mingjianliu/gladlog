@@ -5,10 +5,15 @@
 
 import { defineConfig, devices } from "@playwright/test";
 
-import { VISUAL_PORT as PORT } from "./ports";
+import { VISUAL_PORT as PORT } from "../dev/ports";
 
 export default defineConfig({
   testDir: ".",
+  // 单条用例的总预算。必须显著大于 qa/visual/scenes.spec.ts 的 BOOT_TIMEOUT_MS ——
+  // Playwright 的 per-test 默认预算只有 30s,而报表页首屏本身就要 ~24s
+  // (spellNames.json 12MB 顶层 await,详见该文件注释)。默认值下 CI 只要比
+  // 本机慢一点,用例就会先被 30s 砍掉,断言级的超时根本轮不到生效。
+  timeout: 120_000,
   // 运行产物留在 qa/ 内,与 .gitignore 的两条规则对齐
   outputDir: "test-results",
   // 基线单源:路径里**不含 {platform}** —— linux 一套基线即唯一标准。
