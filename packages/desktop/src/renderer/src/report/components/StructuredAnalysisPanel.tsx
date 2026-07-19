@@ -11,8 +11,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { bridge } from "../../bridge";
 import {
   buildDeepDivePack,
+  buildOffensiveDeepDivePack,
+  classifyFindingKind,
   DEEP_DIVE_MAX,
   hasCoachableSignal,
+  hasOffensiveCoachableSignal,
   SEVERITY_RANK,
   type DeepDivePack,
 } from "@gladlog/analysis";
@@ -252,7 +255,6 @@ export function StructuredAnalysisPanel({
     if (result.findings.length === 0) return;
     try {
       const legacy = toLegacySafe(source);
-      const packs: DeepDivePack[] = [];
       const ranked = result.findings
         .map((f, i) => ({ f, i }))
         .sort(
@@ -260,18 +262,36 @@ export function StructuredAnalysisPanel({
             (SEVERITY_RANK[a.f.severity] ?? 9) -
               (SEVERITY_RANK[b.f.severity] ?? 9) || a.i - b.i,
         );
+      // 生存席:按严重度取 ≤DEEP_DIVE_MAX 个死亡类过门 pack(原逻辑,只加 survival 分流)
+      const survivalPacks: DeepDivePack[] = [];
+      const offensivePacks: DeepDivePack[] = [];
       for (const { f, i } of ranked) {
-        if (packs.length >= DEEP_DIVE_MAX) break;
-        const pack = buildDeepDivePack(
-          legacy,
-          f,
-          i,
-          input.candidates,
-          input.ownerName,
-        );
-        // 可教信号门(修 1):干净窗口不深挖,避免硬编套话
-        if (pack && hasCoachableSignal(pack.items)) packs.push(pack);
+        const kind = classifyFindingKind(f, input.candidates);
+        if (kind === "survival") {
+          if (survivalPacks.length >= DEEP_DIVE_MAX) continue;
+          const pack = buildDeepDivePack(
+            legacy,
+            f,
+            i,
+            input.candidates,
+            input.ownerName,
+          );
+          // 可教信号门(修 1):干净窗口不深挖,避免硬编套话
+          if (pack && hasCoachableSignal(pack.items)) survivalPacks.push(pack);
+        } else {
+          if (offensivePacks.length >= 1) continue; // OFFENSIVE_DEEP_DIVE_MAX = 1(保底一席)
+          const pack = buildOffensiveDeepDivePack(
+            legacy,
+            f,
+            i,
+            input.candidates,
+            input.ownerName,
+          );
+          if (pack && hasOffensiveCoachableSignal(pack.items))
+            offensivePacks.push(pack);
+        }
       }
+      const packs = [...survivalPacks, ...offensivePacks];
       void bridge()
         .analysis.deepen({
           matchId,
