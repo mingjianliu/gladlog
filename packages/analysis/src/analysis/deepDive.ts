@@ -657,22 +657,24 @@ export function hasCoachableSignal(items: PackItem[]): boolean {
   });
 }
 
-/** 进攻深挖:目标触底阈值(%);低于它 + 有防御/免疫接了 = 「该换/该等/该控奶」。 */
+/** 进攻深挖:目标触底阈值(%);低于它 + 有(非免疫)防御接了 = 「该控奶/该换端」。 */
 const OFFENSIVE_HP_THRESHOLD = 35;
 
 /**
- * 进攻信号(进攻深挖门):非死亡候选已 pre-curate 为失误,门轻 —— 要求进攻故事在场:
- * 目标血线触底且有防御/免疫接了(该换/该等/该控奶),或 off-target/juked/dr-clip 各自即失误。
+ * 进攻信号(进攻深挖门):非死亡候选已 pre-curate 为失误,门轻 —— 要求进攻故事在场。
+ * 免疫单独即可教:把爆发砸进免疫本身就是失误(该追踪敌方免疫、别硬开),不要求目标
+ * 也触底 —— 免疫恰恰阻止了掉血,再要求 ≤35% 逻辑自相矛盾(519 场扫描实测:合门时
+ * burst-into-immunity 仅 10% 过门,漏掉了旗舰进攻失误)。其余:目标被打低且有非免疫
+ * 防御接了(该控奶/换端),或 off-target/juked/dr-clip 各自即失误。
  */
 export function hasOffensiveCoachableSignal(items: PackItem[]): boolean {
+  if (items.some((i) => i.kind === "immunity")) return true;
   const targetBottomed = items.some(
     (i) =>
       i.kind === "target-hp" && Number(i.facts.hp) <= OFFENSIVE_HP_THRESHOLD,
   );
-  const answered = items.some(
-    (i) => i.kind === "enemy-defensive" || i.kind === "immunity",
-  );
-  if (targetBottomed && answered) return true;
+  const defensiveAnswered = items.some((i) => i.kind === "enemy-defensive");
+  if (targetBottomed && defensiveAnswered) return true;
   return items.some(
     (i) =>
       i.kind === "off-target" ||

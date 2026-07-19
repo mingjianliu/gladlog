@@ -244,6 +244,26 @@ describe("hasOffensiveCoachableSignal(进攻信号门,进攻深挖)", () => {
       ]),
     ).toBe(false);
   });
+  it("免疫单独即信号(不要求目标触底);非免疫防御单独不算(Task 5 扫描修正)", () => {
+    // 把爆发砸进免疫本身就是失误,即使目标血量还很高
+    expect(
+      hasOffensiveCoachableSignal([
+        item("immunity", { role: "enemy", spell: "Ice Block" }),
+      ]),
+    ).toBe(true);
+    expect(
+      hasOffensiveCoachableSignal([
+        item("target-hp", { role: "enemy-target", hp: "90" }),
+        item("immunity", { role: "enemy", spell: "Divine Shield" }),
+      ]),
+    ).toBe(true);
+    // 非免疫防御单独、目标没触底 → 不是信号(需目标同时被打低才成「该控奶」故事)
+    expect(
+      hasOffensiveCoachableSignal([
+        item("enemy-defensive", { role: "enemy", spell: "Ice Barrier" }),
+      ]),
+    ).toBe(false);
+  });
 });
 
 describe("offensivePackItems(进攻证据映射,纯函数)", () => {
