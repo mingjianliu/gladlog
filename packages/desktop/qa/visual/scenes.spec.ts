@@ -1,4 +1,7 @@
+import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
+
+import { isExempt } from "../axe-allowlist";
 
 // 从零 import 的叶子模块取,别从 appShell 取 —— 后者会把 fixtureBridge 的
 // JSON 导入拖进 Playwright 的 Node 进程,直接报 import-attribute 错。
@@ -42,5 +45,19 @@ for (const scene of SCENE_NAMES) {
       timeout: BOOT_TIMEOUT_MS,
     });
     await expect(page).toHaveScreenshot(`${scene}.png`, { fullPage: true });
+
+    // 无障碍:标准是 WCAG 2.1 A+AA,违规集合必须 ⊆ 显式豁免清单
+    const axe = await new AxeBuilder({ page })
+      .withTags(["wcag2a", "wcag2aa"])
+      .analyze();
+    const unexpected = axe.violations.flatMap((v) =>
+      v.nodes
+        .map((n) => ({ rule: v.id, target: n.target.join(" ") }))
+        .filter((x) => !isExempt(x.rule, x.target)),
+    );
+    expect(
+      unexpected,
+      `场景 ${scene} 出现未豁免的无障碍违规;修掉它,或写进 qa/axe-allowlist.ts 并说明理由`,
+    ).toEqual([]);
   });
 }

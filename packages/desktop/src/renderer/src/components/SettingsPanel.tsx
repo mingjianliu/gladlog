@@ -152,6 +152,7 @@ export function SettingsPanel() {
           <span className="settings-k">后端</span>
           <span>
             <select
+              aria-label="AI 后端"
               value={settings.aiBackend}
               onChange={(e) =>
                 void save(

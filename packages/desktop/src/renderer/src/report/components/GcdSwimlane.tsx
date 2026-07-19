@@ -193,6 +193,10 @@ export function GcdSwimlane({
       <div
         className="rpt-gcd-scroll"
         ref={scrollRef}
+        // 可滚动区域必须能用键盘聚焦,否则只能靠鼠标滚 —— 键盘用户到不了
+        tabIndex={0}
+        role="group"
+        aria-label="GCD 泳道(可滚动)"
         style={{ maxHeight: VIEWPORT_H }}
       >
         <div className="rpt-gcd-body" style={{ height: contentH + HEAD_H }}>
