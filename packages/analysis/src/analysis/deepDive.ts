@@ -43,7 +43,21 @@ const POSITION_MISTAKES = new Set<IPositionEvent["type"]>([
 export interface PackItem {
   /** 占位符命名空间(p1, p2, …):叙述里用 {{p1.t}} 引用。 */
   key: string;
-  kind: "cc" | "defensive" | "enemy-cd" | "hp" | "dispel" | "position";
+  kind:
+    | "cc"
+    | "defensive"
+    | "enemy-cd"
+    | "hp"
+    | "dispel"
+    | "position"
+    | "target-hp"
+    | "enemy-defensive"
+    | "immunity"
+    | "our-cc"
+    | "our-cd"
+    | "off-target"
+    | "juked-kick"
+    | "dr-clip";
   /** 相对秒(chip 跳转锚点)。 */
   t: number;
   /** chip 文本。 */
@@ -373,6 +387,30 @@ export function hasCoachableSignal(items: PackItem[]): boolean {
     if (it.kind === "position") return true;
     return false;
   });
+}
+
+/** 进攻深挖:目标触底阈值(%);低于它 + 有防御/免疫接了 = 「该换/该等/该控奶」。 */
+const OFFENSIVE_HP_THRESHOLD = 35;
+
+/**
+ * 进攻信号(进攻深挖门):非死亡候选已 pre-curate 为失误,门轻 —— 要求进攻故事在场:
+ * 目标血线触底且有防御/免疫接了(该换/该等/该控奶),或 off-target/juked/dr-clip 各自即失误。
+ */
+export function hasOffensiveCoachableSignal(items: PackItem[]): boolean {
+  const targetBottomed = items.some(
+    (i) =>
+      i.kind === "target-hp" && Number(i.facts.hp) <= OFFENSIVE_HP_THRESHOLD,
+  );
+  const answered = items.some(
+    (i) => i.kind === "enemy-defensive" || i.kind === "immunity",
+  );
+  if (targetBottomed && answered) return true;
+  return items.some(
+    (i) =>
+      i.kind === "off-target" ||
+      i.kind === "juked-kick" ||
+      i.kind === "dr-clip",
+  );
 }
 
 /** 深挖 prompt:每个 pack 一段;审计纪律与初轮同宗(占位符/无因果/只引清单)。 */

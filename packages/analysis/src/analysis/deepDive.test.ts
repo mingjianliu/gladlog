@@ -4,6 +4,7 @@ import {
   auditDeepDives,
   buildDeepDivePrompt,
   hasCoachableSignal,
+  hasOffensiveCoachableSignal,
   type DeepDivePack,
 } from "./deepDive";
 import type { Finding } from "./types";
@@ -188,5 +189,54 @@ describe("hasCoachableSignal(可教信号门,修 1)", () => {
         item("position", { role: "owner", kind: "missed-push", dist: "35" }),
       ]),
     ).toBe(true);
+  });
+});
+
+describe("hasOffensiveCoachableSignal(进攻信号门,进攻深挖)", () => {
+  const item = (kind: string, facts: Record<string, string>) =>
+    ({ key: "p1", kind, t: 1, label: "", unitNames: [], facts }) as never;
+  it("目标触底 + 防御/免疫接了 = 信号", () => {
+    expect(
+      hasOffensiveCoachableSignal([
+        item("target-hp", { role: "enemy-target", hp: "22" }),
+        item("immunity", { role: "enemy", spell: "Divine Shield" }),
+      ]),
+    ).toBe(true);
+    expect(
+      hasOffensiveCoachableSignal([
+        item("target-hp", { role: "enemy-target", hp: "20" }),
+        item("enemy-defensive", { role: "enemy", spell: "Ice Barrier" }),
+      ]),
+    ).toBe(true);
+  });
+  it("off-target / juked / dr-clip 各自即信号", () => {
+    expect(
+      hasOffensiveCoachableSignal([
+        item("off-target", { role: "owner", onTargetPct: "40" }),
+      ]),
+    ).toBe(true);
+    expect(
+      hasOffensiveCoachableSignal([
+        item("juked-kick", { role: "owner", kick: "Kick" }),
+      ]),
+    ).toBe(true);
+    expect(
+      hasOffensiveCoachableSignal([
+        item("dr-clip", { role: "owner", dr: "Immune" }),
+      ]),
+    ).toBe(true);
+  });
+  it("目标没触底 / 只有 target-hp 无防御 → 无信号", () => {
+    expect(
+      hasOffensiveCoachableSignal([
+        item("target-hp", { role: "enemy-target", hp: "80" }),
+        item("enemy-defensive", { role: "enemy", spell: "Ice Barrier" }),
+      ]),
+    ).toBe(false);
+    expect(
+      hasOffensiveCoachableSignal([
+        item("target-hp", { role: "enemy-target", hp: "15" }),
+      ]),
+    ).toBe(false);
   });
 });
