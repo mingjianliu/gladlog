@@ -352,6 +352,48 @@ describe("auditWindowTargeting — 目标死亡截断(2026-07-16 baseline 修复
     expect(audits[0].onTargetPct).toBe(100); // 死后那 0.5M 不再稀释占比
   });
 
+  it("deathRecords 乱序时仍截在最早那次死亡(周度复核 P3#10)", () => {
+    // 旧实现用 .find() 取「数组序第一个 > fromMs」,等于假设 deathRecords 已按
+    // 时间升序 —— 那是上游实现细节不是契约。乱序时会截到更晚的死亡,窗口被拉长、
+    // 死后切目标的伤害重新混进分母,on-target 占比被稀释。
+    const w: IOffensiveWindow = {
+      targetUnitId: "e1",
+      targetName: "Healer",
+      targetSpec: "Holy Paladin",
+      fromSeconds: 20,
+      toSeconds: 60,
+      durationSeconds: 40,
+      friendlyDamageInWindow: 0,
+      damageRatio: 0,
+      capitalized: false,
+      friendlyOffensives: [],
+      bursts: [],
+    };
+    const player = makeUnit("p1", {
+      name: "Ret",
+      info,
+      damageOut: [
+        dmgOut(MATCH_START + 22_000, -80_000, "e1"),
+        dmgOut(MATCH_START + 40_000, -500_000, "e2"), // 30s 死亡之后,不该计入
+      ],
+    } as any);
+    const e1 = makeUnit("e1", {
+      name: "Healer",
+      info,
+      // 晚的那次排在前面(竞技场可复活/多次死亡记录时的真实可能顺序)
+      deathRecords: [
+        { timestamp: MATCH_START + 50_000 } as any,
+        { timestamp: MATCH_START + 30_000 } as any,
+      ],
+    } as any);
+    const e2 = makeUnit("e2", { name: "Tank", info } as any);
+
+    const audits = auditWindowTargeting(player, [w], [e1, e2], makeCombat());
+    expect(audits).toHaveLength(1);
+    expect(audits[0].windowToSeconds).toBe(30); // 最早那次,不是数组序第一个
+    expect(audits[0].onTargetPct).toBe(100);
+  });
+
   it("目标死得太快(截断后 < 最小窗口)则整条跳过", () => {
     const w: IOffensiveWindow = {
       targetUnitId: "e1",

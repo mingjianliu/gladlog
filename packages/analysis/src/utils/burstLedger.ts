@@ -278,9 +278,14 @@ export function auditWindowTargeting(
     // 窗口目标死后的伤害占比无意义 —— 评估截断在目标死亡时刻
     // (2026-07-16 DPS baseline:≥8 场 responder/judge 点名该 artifact)。
     const target = enemyById.get(w.targetUnitId);
-    const targetDeathMs = target?.deathRecords
+    // 取窗口后**最早**的一次死亡。用 .find() 取「数组序第一个」等于假设
+    // deathRecords 已按时间升序 —— 那是上游的实现细节,不是契约;一旦乱序会
+    // 截到更晚的死亡,窗口被拉长、on-target 占比被稀释。min 不依赖顺序。
+    const deathsAfter = (target?.deathRecords ?? [])
       .map((d) => d.timestamp)
-      .find((t) => t > fromMs);
+      .filter((t) => t > fromMs);
+    const targetDeathMs =
+      deathsAfter.length > 0 ? Math.min(...deathsAfter) : undefined;
     const toMs = Math.min(
       matchStartMs + w.toSeconds * 1000,
       targetDeathMs ?? Infinity,
