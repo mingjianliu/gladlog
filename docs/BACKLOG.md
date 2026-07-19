@@ -200,3 +200,17 @@ not the app — either surface it or leave it corpus-only by design.
 
 关联:docs/plans/2026-07-19-large-match-load-optimization.md(方案 A 的
 workerHost 异步 parse + LRU 已设计,可作为后台补载的执行载体)。
+
+## 13. 深挖全局锚点 / 非击杀失误独立发现(2026-07-19 记入)
+
+现状:深挖是**放大镜**——只在初轮已标记 finding 的时刻窗口 `[-30s,+10s]` 内收
+证据(含走位),不做全局扫描。若某时段初轮没标 finding,即使那里有走位失误/其他
+证据也**不会**进深挖(见 [[gladlog-deepdive-value]])。
+
+方向:让非击杀失误当**独立锚点 / 新 finding**,而非只作现有 finding 窗口内的补充。
+raw 信号大多已有(`candidateFindings.ts` 的 `unconverted-burst` / `burst-into-immunity`
+/ `off-target-in-window` / `juked-kick` / `dr-clipped-cc` / `cd-waste`,加 `computeOwnerPositionEvents`
+的走位失误)。权衡:这把深挖从「把已知死亡讲透」变成「发现初轮漏掉的新问题」,
+必须配同款信号门(hasCoachableSignal 精神)+ 审计,否则重引噪音/填充风险。
+与 #8(确定性 mistake 引擎)、#10(结构化信号上浮)方向重叠——三者应一起想清楚
+「非击杀时段帮助」的产品形态再动手。本条是那次 brainstorm 的一个候选实现路径。
