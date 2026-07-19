@@ -107,14 +107,25 @@ export function StructuredAnalysisPanel({
   }, [matchId]);
 
   useEffect(() => {
+    // cancelled 守卫:flags 是**按场**的数据,快速切场时先发的请求可能后到,
+    // 把上一场的标记盖到当前场上(标记会渲染成 finding 上的「还在犯/已解决」,
+    // 张冠李戴)。与上面 getState 那个 effect 同款写法。
+    let cancelled = false;
     try {
       void bridge()
         .analysis.getFlags(matchId)
-        .then(setFlags)
-        .catch(() => setFlags({}));
+        .then((f) => {
+          if (!cancelled) setFlags(f);
+        })
+        .catch(() => {
+          if (!cancelled) setFlags({});
+        });
     } catch {
       setFlags({});
     }
+    return () => {
+      cancelled = true;
+    };
   }, [matchId]);
 
   const handleFlag = (key: string, flag: "done" | "recurring" | null) => {

@@ -118,3 +118,38 @@ describe("本场目标(D3 教练闭环)", () => {
     expect(screen.queryByTestId("ai-goals")).toBeNull();
   });
 });
+
+describe("getFlags 竞态守卫(周度复核 新#2)", () => {
+  it("快速切场时,先发后到的旧场 flags 不会盖到当前场上", async () => {
+    const { findingKey } = await import("../../../../shared/findingKey");
+    const key = findingKey(result.findings[0] as never);
+    const fx = (window as any).__gladlogFixture;
+
+    // m1 的 flags 慢:解析时 m2 已经挂上了。m2 无标记。
+    let releaseM1!: (v: Record<string, string>) => void;
+    const m1Flags = new Promise<Record<string, string>>((r) => {
+      releaseM1 = r;
+    });
+    fx.analysis.getFlags = vi.fn((id: string) =>
+      id === "m1" ? m1Flags : Promise.resolve({}),
+    );
+
+    const { rerender } = render(
+      <StructuredAnalysisPanel
+        source={{ units: {}, startInfo: {} } as any}
+        matchId="m1"
+      />,
+    );
+    rerender(
+      <StructuredAnalysisPanel
+        source={{ units: {}, startInfo: {} } as any}
+        matchId="m2"
+      />,
+    );
+    releaseM1({ [key]: "done" }); // 旧场的响应此刻才到
+    await screen.findByText(/You died at 30s/);
+
+    const btn = screen.getByTitle("标记为已改进");
+    expect(btn.className).not.toContain("active"); // 旧场标记没串过来
+  });
+});
