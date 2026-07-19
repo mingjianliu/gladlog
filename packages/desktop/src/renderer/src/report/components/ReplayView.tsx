@@ -759,7 +759,11 @@ export function ReplayView({
         )}
 
         {mode === "split" && (
-          <ReplaySplitter onRatioChange={setRatio} stageRef={stageRef} />
+          <ReplaySplitter
+            ratio={ratio}
+            onRatioChange={setRatio}
+            stageRef={stageRef}
+          />
         )}
 
         {mode !== "map" && (

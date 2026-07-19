@@ -63,3 +63,62 @@ describe("回放三档布局", () => {
     expect(svg2.getAttribute("viewBox")).toBe(zoomed);
   });
 });
+
+function splitter(container: HTMLElement): HTMLElement {
+  const el = container.querySelector(".rpt-replay-splitter");
+  if (!el) throw new Error("找不到分隔条(split 档下才渲染)");
+  return el as HTMLElement;
+}
+
+// Task 6 code review 修复 4:分隔条键盘可达性(WAI-ARIA Window Splitter 模式)。
+// 键盘交互不依赖 getBoundingClientRect(),jsdom 里可测——跟拖拽本身(Task 6
+// brief 明确不写自动化测试,mock rect 只测得到 mock 自己)不一样。
+describe("分隔条键盘可达性", () => {
+  it("初始 aria-value* 反映默认比例(1/3)与 [SPLIT_MIN, SPLIT_MAX] 范围", () => {
+    const { container } = render(<ReplayView source={m} />);
+    const el = splitter(container);
+    expect(el.getAttribute("aria-valuenow")).toBe("33"); // round(1/3 * 100)
+    expect(el.getAttribute("aria-valuemin")).toBe("20"); // SPLIT_MIN
+    expect(el.getAttribute("aria-valuemax")).toBe("80"); // SPLIT_MAX
+    expect(el.getAttribute("tabindex")).toBe("0");
+  });
+
+  it("→ 增大比例,aria-valuenow 同步变大", () => {
+    const { container } = render(<ReplayView source={m} />);
+    const el = splitter(container);
+    fireEvent.keyDown(el, { key: "ArrowRight" });
+    expect(el.getAttribute("aria-valuenow")).toBe("38"); // 33.33 + 5 = 38.33 → 38
+  });
+
+  it("← 减小比例,aria-valuenow 同步变小", () => {
+    const { container } = render(<ReplayView source={m} />);
+    const el = splitter(container);
+    fireEvent.keyDown(el, { key: "ArrowLeft" });
+    expect(el.getAttribute("aria-valuenow")).toBe("28"); // 33.33 - 5 = 28.33 → 28
+  });
+
+  it("Home 落到下限 SPLIT_MIN(0.2)", () => {
+    const { container } = render(<ReplayView source={m} />);
+    const el = splitter(container);
+    fireEvent.keyDown(el, { key: "ArrowRight" }); // 先离开默认值,确认 Home 真的把它拉回来而非巧合停在原地
+    fireEvent.keyDown(el, { key: "Home" });
+    expect(el.getAttribute("aria-valuenow")).toBe("20");
+  });
+
+  it("End 落到上限 SPLIT_MAX(0.8)", () => {
+    const { container } = render(<ReplayView source={m} />);
+    const el = splitter(container);
+    fireEvent.keyDown(el, { key: "End" });
+    expect(el.getAttribute("aria-valuenow")).toBe("80");
+  });
+
+  it("←/→ 不冒泡到 ReplayView 的全局播放头快进快退(避免同时跳时间轴)", () => {
+    const { container } = render(<ReplayView source={m} />);
+    const el = splitter(container);
+    const timeBefore = container.querySelector(".rpt-replay-time")!.textContent;
+    fireEvent.keyDown(el, { key: "ArrowRight" });
+    fireEvent.keyDown(el, { key: "ArrowLeft" });
+    const timeAfter = container.querySelector(".rpt-replay-time")!.textContent;
+    expect(timeAfter).toBe(timeBefore);
+  });
+});
