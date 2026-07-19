@@ -11,6 +11,14 @@ import {
   type IMajorCooldownInfo,
 } from "../utils/cooldowns";
 import { reconstructEnemyCDTimeline } from "../utils/enemyCDs";
+import {
+  analyzeBurstLedger,
+  type IBurstLedgerEntry,
+} from "../utils/burstLedger";
+import {
+  analyzeOutgoingCCChains,
+  type IOutgoingCCChain,
+} from "../utils/drAnalysis";
 import { getHpPercentAtTime } from "../utils/killWindowTargetSelection";
 import {
   computeOwnerPositionEvents,
@@ -355,6 +363,245 @@ export function buildDeepDivePack(
   for (const it of items)
     for (const [k, v] of Object.entries(it.facts)) facts[`${it.key}.${k}`] = v;
 
+  return { findingIndex, anchorFrom, anchorTo, items, facts };
+}
+
+export interface OffensiveMapInput {
+  entries: IBurstLedgerEntry[];
+  healerChains: IOutgoingCCChain[];
+  candFacts: Record<string, string>[];
+  candTypes: string[];
+  ownerName?: string;
+  inWin: (t: number) => boolean;
+}
+
+/** 进攻证据 → PackItem(纯):目标血线/敌方防御免疫/我方对敌奶 CC/大招对齐 + 类型专属条。 */
+export function offensivePackItems(
+  inp: OffensiveMapInput,
+): Omit<PackItem, "key">[] {
+  const raw: Omit<PackItem, "key">[] = [];
+  const ownerShort = inp.ownerName ? sn(inp.ownerName) : undefined;
+  const role = (name: string) =>
+    ownerShort && sn(name) === ownerShort ? "owner" : "teammate";
+
+  for (const e of inp.entries) {
+    if (!inp.inWin(e.fromSeconds) && !inp.inWin(e.toSeconds)) continue;
+    const t = e.dominantTarget;
+    if (t) {
+      // 目标血线:start(burst 起)+ end(burst 止),取自 ledger 已算值(谓词单源)
+      if (t.hpStartPct != null && inp.inWin(e.fromSeconds))
+        raw.push({
+          kind: "target-hp",
+          t: e.fromSeconds,
+          label: `${sn(t.unitName)} HP`,
+          unitNames: [t.unitName],
+          facts: {
+            t: fmt(e.fromSeconds),
+            hp: String(t.hpStartPct),
+            unit: sn(t.unitName),
+            role: "enemy-target",
+          },
+        });
+      if (t.hpEndPct != null && inp.inWin(e.toSeconds))
+        raw.push({
+          kind: "target-hp",
+          t: e.toSeconds,
+          label: `${sn(t.unitName)} HP`,
+          unitNames: [t.unitName],
+          facts: {
+            t: fmt(e.toSeconds),
+            hp: String(t.hpEndPct),
+            unit: sn(t.unitName),
+            role: "enemy-target",
+          },
+        });
+      for (const d of t.defensivesHit) {
+        raw.push({
+          kind: d.isImmunity ? "immunity" : "enemy-defensive",
+          t: e.fromSeconds,
+          label: `${d.spellName}(${sn(t.unitName)})`,
+          unitNames: [t.unitName],
+          facts: {
+            t: fmt(e.fromSeconds),
+            spell: d.spellName,
+            unit: sn(t.unitName),
+            role: "enemy",
+            ...(d.isImmunity ? { overlap: d.overlapSeconds.toFixed(1) } : {}),
+          },
+        });
+      }
+    }
+    // 我方大招对齐(owner 自身 spells + ally 重叠)
+    for (const s of e.spells)
+      if (inp.inWin(s.castTimeSeconds))
+        raw.push({
+          kind: "our-cd",
+          t: s.castTimeSeconds,
+          label: `${s.spellName}`,
+          unitNames: inp.ownerName ? [inp.ownerName] : [],
+          facts: {
+            t: fmt(s.castTimeSeconds),
+            spell: s.spellName,
+            unit: ownerShort ?? "owner",
+            role: "owner",
+          },
+        });
+    for (const a of e.allyCDsOverlapping)
+      raw.push({
+        kind: "our-cd",
+        t: e.fromSeconds,
+        label: `${a.spellName}(${sn(a.playerName)})`,
+        unitNames: [a.playerName],
+        facts: {
+          t: fmt(e.fromSeconds),
+          spell: a.spellName,
+          unit: sn(a.playerName),
+          role: role(a.playerName),
+        },
+      });
+  }
+
+  // 我方对敌奶 CC 链(窗口内)
+  for (const chain of inp.healerChains)
+    for (const app of chain.applications) {
+      if (!inp.inWin(app.atSeconds)) continue;
+      raw.push({
+        kind: "our-cc",
+        t: app.atSeconds,
+        label: `${app.spellName} → ${sn(chain.targetName)}`,
+        unitNames: [app.casterName],
+        facts: {
+          t: fmt(app.atSeconds),
+          spell: app.spellName,
+          unit: sn(chain.targetName),
+          caster: sn(app.casterName),
+          role: role(app.casterName),
+        },
+      });
+    }
+
+  // 类型专属条(承接候选自带 facts;名字短名)
+  inp.candTypes.forEach((type, i) => {
+    const cf = inp.candFacts[i] ?? {};
+    const tt = Number(cf.t);
+    if (type === "off-target-in-window")
+      raw.push({
+        kind: "off-target",
+        t: Number.isFinite(tt) ? tt : 0,
+        label: `脱靶`,
+        unitNames: [],
+        facts: {
+          ...(cf.t ? { t: cf.t } : {}),
+          role: "owner",
+          ...(cf.onTargetPct ? { onTargetPct: cf.onTargetPct } : {}),
+          ...(cf.offTarget ? { target: sn(cf.offTarget) } : {}),
+        },
+      });
+    if (type === "juked-kick")
+      raw.push({
+        kind: "juked-kick",
+        t: Number.isFinite(tt) ? tt : 0,
+        label: `被骗踢`,
+        unitNames: [],
+        facts: {
+          ...(cf.t ? { t: cf.t } : {}),
+          role: "owner",
+          ...(cf.kick ? { kick: cf.kick } : {}),
+          ...(cf.fake ? { fake: cf.fake } : {}),
+        },
+      });
+    if (type === "dr-clipped-cc")
+      raw.push({
+        kind: "dr-clip",
+        t: Number.isFinite(tt) ? tt : 0,
+        label: `踩 DR`,
+        unitNames: [],
+        facts: {
+          ...(cf.t ? { t: cf.t } : {}),
+          role: "owner",
+          ...(cf.spell ? { spell: cf.spell } : {}),
+          ...(cf.target ? { target: sn(cf.target) } : {}),
+          ...(cf.dr ? { dr: cf.dr } : {}),
+        },
+      });
+  });
+
+  return raw;
+}
+
+export function buildOffensiveDeepDivePack(
+  combat: any,
+  finding: Finding,
+  findingIndex: number,
+  candidates: CandidateEvent[],
+  ownerName?: string,
+): DeepDivePack | null {
+  const byId = new Map(candidates.map((c) => [c.id, c]));
+  const cands = (finding.eventIds ?? [])
+    .map((id) => byId.get(id))
+    .filter((c): c is CandidateEvent => !!c);
+  const ts = cands
+    .filter((c) => Number.isFinite(c.t) && c.t > 0)
+    .map((c) => c.t);
+  if (ts.length === 0) return null;
+  const durS = ((combat?.endTime ?? 0) - (combat?.startTime ?? 0)) / 1000;
+  const anchorFrom = Math.max(0, Math.min(...ts) - PACK_BEFORE_S);
+  const anchorTo = Math.min(durS, Math.max(...ts) + PACK_AFTER_S);
+  const inWin = (t: number) => t >= anchorFrom && t <= anchorTo;
+
+  const units = Object.values(combat?.units ?? {}) as any[];
+  const players = units.filter((u) => u.info);
+  const friends = players.filter(
+    (u) => u.reaction === CombatUnitReaction.Friendly,
+  );
+  const enemies = players.filter(
+    (u) => u.reaction !== CombatUnitReaction.Friendly,
+  );
+  if (friends.length === 0 || enemies.length === 0) return null;
+  const owner = ownerName
+    ? friends.find((u) => u.name === ownerName)
+    : undefined;
+  if (!owner) return null;
+
+  let entries: IBurstLedgerEntry[] = [];
+  let healerChains: IOutgoingCCChain[] = [];
+  try {
+    entries = analyzeBurstLedger(owner, friends, enemies, combat);
+  } catch {
+    /* 无高级日志 */
+  }
+  try {
+    const enemyHealers = new Set(
+      enemies.filter((e) => isHealerSpec(e.spec)).map((e) => e.name),
+    );
+    healerChains = analyzeOutgoingCCChains(friends, enemies, combat).filter(
+      (c) => enemyHealers.has(c.targetName),
+    );
+  } catch {
+    /* 缺席 */
+  }
+
+  const raw = offensivePackItems({
+    entries,
+    healerChains,
+    candFacts: cands.map((c) => c.facts),
+    candTypes: cands.map((c) => c.type),
+    ownerName,
+    inWin,
+  });
+  if (raw.length === 0) return null;
+
+  // 截断:靠近焦点时刻(复用死亡 pack 同逻辑)
+  const focusT = Math.min(...ts);
+  const items: PackItem[] = raw
+    .sort((a, b) => Math.abs(a.t - focusT) - Math.abs(b.t - focusT))
+    .slice(0, PACK_MAX_ITEMS)
+    .sort((a, b) => a.t - b.t)
+    .map((it, i) => ({ ...it, key: `p${i + 1}` }));
+
+  const facts: Record<string, string> = {};
+  for (const it of items)
+    for (const [k, v] of Object.entries(it.facts)) facts[`${it.key}.${k}`] = v;
   return { findingIndex, anchorFrom, anchorTo, items, facts };
 }
 
