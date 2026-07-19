@@ -19,4 +19,10 @@ describe("resolveScene", () => {
     expect(SCENE_NAMES.length).toBeGreaterThan(0);
     expect(new Set(SCENE_NAMES).size).toBe(SCENE_NAMES.length);
   });
+
+  it("app-shell 场景也可直达", () => {
+    expect(resolveScene("?scene=dashboard")).toBe("dashboard");
+    expect(resolveScene("?scene=settings")).toBe("settings");
+    expect(resolveScene("?scene=matchlist")).toBe("matchlist");
+  });
 });

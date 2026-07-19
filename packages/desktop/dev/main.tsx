@@ -8,6 +8,8 @@ import synthMatch from "../test/fixtures/report-match.json";
 import "../src/renderer/src/styles.css";
 import "./harness.css";
 import { resolveScene, type SceneName } from "./scenes";
+import App from "../src/renderer/src/App";
+import { installAppShellFixture } from "./fixtures/appShell";
 
 const off = () => () => {};
 
@@ -107,7 +109,7 @@ const LOCAL_KEY = "real · 完整真实局(本地 dev/local)";
 // 场景模式(?scene=…):渲染单一确定状态,给视觉回归截图用。
 // data-scene-ready 是 Playwright 的就绪信号 —— 挂上即表示该场景已渲染。
 const SCENE_VIEW: Record<
-  SceneName,
+  "report-battle" | "report-replay" | "report-ai" | "report-synth",
   { fixture: StoredMatch; initialView: "report" | "replay" | "ai" }
 > = {
   "report-battle": {
@@ -128,8 +130,29 @@ const SCENE_VIEW: Record<
   },
 };
 
+const APP_SHELL_VIEW = {
+  dashboard: "stats",
+  settings: "settings",
+  matchlist: "matches",
+} as const;
+
+function AppShellScene({ name }: { name: SceneName }) {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    installAppShellFixture();
+    setReady(true);
+  }, []);
+  if (!ready) return null;
+  return (
+    <div className="scene-root scene-appshell" data-scene-ready={name}>
+      <App initialAppView={APP_SHELL_VIEW[name as keyof typeof APP_SHELL_VIEW]} />
+    </div>
+  );
+}
+
 function Scene({ name }: { name: SceneName }) {
-  const cfg = SCENE_VIEW[name];
+  if (name in APP_SHELL_VIEW) return <AppShellScene name={name} />;
+  const cfg = SCENE_VIEW[name as keyof typeof SCENE_VIEW];
   return (
     <div className="scene-root" data-scene-ready={name}>
       <MatchReport

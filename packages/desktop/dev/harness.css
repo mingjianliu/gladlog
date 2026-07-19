@@ -56,3 +56,6 @@ body {
 .scene-root {
   padding: 16px;
 }
+.scene-appshell {
+  padding: 0;
+}

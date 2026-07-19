@@ -5,6 +5,9 @@ export const SCENE_NAMES = [
   "report-replay",
   "report-ai",
   "report-synth",
+  "dashboard",
+  "settings",
+  "matchlist",
 ] as const;
 
 export type SceneName = (typeof SCENE_NAMES)[number];
