@@ -74,6 +74,45 @@ describe("createAnalysisService", () => {
   });
 });
 
+describe("isRunning 追踪(切页防丢 + 泄漏回归)", () => {
+  it("完成后清除 running", async () => {
+    const { s } = svc(JSON.stringify([]));
+    await s.run(input);
+    expect(await s.isRunning("m1")).toBe(false);
+  });
+
+  // 复审发现的泄漏:run 被 deepen(++同一 matchId 代际)取代时,旧实现的 abort
+  // 路径不清 running(且清理判据是「代际是否最新」,deepen 后必假)→ running 永久
+  // 残留 → 换到无缓存语言时卡「分析中…」。修:running 存代际、按主人身份清、abort 也清。
+  it("run 被 deepen 取代后 running 不泄漏", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const s = createAnalysisService({
+      getSettings: () => ({
+        anthropicApiKey: "k",
+        anthropicModel: "m",
+        wowDirectory: null,
+      }),
+      clientFactory: () => ({
+        async *stream() {
+          yield { delta: JSON.stringify([]) };
+          await gate; // 挂住:模拟首轮还在跑
+        },
+      }),
+      matchesDir: "/tmp/nope-" + Math.random(),
+      emit: () => {},
+    });
+    const runP = s.run(input); // 加 running,产首 delta 后停在 gate
+    await new Promise((r) => setTimeout(r, 0)); // 让 for-await 停到 gate
+    expect(await s.isRunning("m1")).toBe(true);
+    // packs 空 → deepen 只 ++代际即返回(不流式),恰好模拟「深挖取代在跑的 run」
+    await s.deepen({ matchId: "m1", findings: [], packs: [], spec: "x" });
+    release(); // run 恢复 → isCurrent 假 → abort → clearRunning
+    await runP;
+    expect(await s.isRunning("m1")).toBe(false); // 旧实现此处残留 true
+  });
+});
+
 describe("AI 语言(backlog #1)", () => {
   const finding = JSON.stringify([
     {
@@ -324,9 +363,14 @@ describe("notebook(错题本跨场分组)", () => {
       explanation: "x",
     });
     writeMatch("old", 1000, [f("生存", "早的", "e1")]);
-    writeMatch("new", 2000, [f("生存", "晚的", "e2"), f("打断", "另一类", "e3")], {
-      [findingKey(f("生存", "晚的", "e2"))]: "recurring",
-    });
+    writeMatch(
+      "new",
+      2000,
+      [f("生存", "晚的", "e2"), f("打断", "另一类", "e3")],
+      {
+        [findingKey(f("生存", "晚的", "e2"))]: "recurring",
+      },
+    );
 
     const s2 = createAnalysisService({
       getSettings: () => ({ aiLanguage: "zh" }) as never,

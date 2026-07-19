@@ -71,16 +71,20 @@ export function createAnalysisService(deps: {
   const isCurrent = (matchId: string, gen: number) =>
     generations.get(matchId) === gen;
 
-  // 当前正在跑首轮分析的 matchId —— 渲染层重挂(切 tab/切场回来)时查询,
-  // 若在跑就显示「分析中…」而非空闲态,省得用户以为丢了又点一次(会重复跑)。
-  const running = new Set<string>();
+  // 当前正在跑首轮分析的 matchId → 拥有它的 run 代际。渲染层重挂(切 tab/切场
+  // 回来)时查询,若在跑就显示「分析中…」而非空闲态,省得用户以为丢了又点一次。
+  // 存代际而非裸集合:清理时按「我是不是这条 running 的主人」判,而不是按代际是否
+  // 最新 —— 否则 deepen 会 ++ 代际、让被它取代的 run abort 时判自己非最新而不清,
+  // running 永久残留(复审发现:换语言到无缓存的语言会卡在分析中)。
+  const running = new Map<string, number>();
 
   async function run(input: AnalysisInput): Promise<void> {
     const myGen = nextGen(input.matchId);
-    running.add(input.matchId);
+    running.set(input.matchId, myGen);
     const clearRunning = () => {
-      // 仅当我仍是最新代际才清:被更晚的 run 接管时 running 归它管。
-      if (isCurrent(input.matchId, myGen)) running.delete(input.matchId);
+      // 仅当这条 running 仍归我(未被更晚的 run 接管)才清。deepen 不碰 running,
+      // 故被 deepen 取代的 run 走到这里 running 仍是自己 → 正常清,不泄漏。
+      if (running.get(input.matchId) === myGen) running.delete(input.matchId);
     };
     const settings = deps.getSettings();
     const lang: AiLanguage = settings.aiLanguage ?? "zh";
@@ -137,7 +141,10 @@ export function createAnalysisService(deps: {
         messages: [{ role: "user", content: prompt }],
       });
       for await (const ev of stream) {
-        if (!isCurrent(input.matchId, myGen)) return;
+        if (!isCurrent(input.matchId, myGen)) {
+          clearRunning();
+          return;
+        }
         if (ev.delta) {
           raw += ev.delta;
           deps.emit("gladlog:analysis:delta", {
@@ -146,7 +153,10 @@ export function createAnalysisService(deps: {
           });
         }
       }
-      if (!isCurrent(input.matchId, myGen)) return;
+      if (!isCurrent(input.matchId, myGen)) {
+        clearRunning();
+        return;
+      }
       recordAiDebug({
         kind: "analysis",
         matchId: input.matchId,
