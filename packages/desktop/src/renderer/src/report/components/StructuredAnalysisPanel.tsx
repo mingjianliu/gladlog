@@ -19,6 +19,7 @@ import {
   SEVERITY_RANK,
   type DeepDivePack,
 } from "@gladlog/analysis";
+import { resolveJumpTarget } from "../derive/jumpTarget";
 import { deriveKeyMoments } from "../derive/keyMoments";
 import { toLegacySafe } from "../derive/legacySource";
 import type { ReportSource } from "../derive/types";
@@ -350,14 +351,14 @@ export function StructuredAnalysisPanel({
     return { timed, wholeRound };
   }, [input, result]);
 
-  // finding 的 eventIds → 引用事件里最早的 t + 涉及单位。
+  // finding 的 eventIds → 引用事件里最早的 t + 涉及单位(查表在 derive 层,
+  // 那里有单测 —— 播种式的 E2E 撞不上真实候选 id,覆盖不到这条路径)。
   const handleJump = (eventIds: string[]) => {
     if (!onSeekEvent || !input) return;
-    const evs = input.candidates.filter((c) => eventIds.includes(c.id));
-    if (evs.length === 0) return;
-    const first = evs.reduce((a, b) => (a.t <= b.t ? a : b));
+    const target = resolveJumpTarget(input.candidates, eventIds);
+    if (!target) return;
     setActiveEventIds(eventIds);
-    onSeekEvent(first.t, [...new Set(evs.flatMap((e) => e.unitNames))]);
+    onSeekEvent(target.t, target.unitNames);
   };
 
   const handleAnalyze = async () => {

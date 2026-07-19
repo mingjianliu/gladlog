@@ -10,7 +10,7 @@ import {
   firstMatchId,
   importLog,
   launchApp,
-  matchRows,
+  openAiView,
 } from "../support/launch";
 import { seedAnalysis } from "../support/seedAnalysis";
 
@@ -41,11 +41,7 @@ test("链路2:点 finding 深挖 chip → 回放跳到该时刻", async () => {
   ]);
 
   const second = await launchApp(userData);
-  await expect(matchRows(second.page).first()).toBeVisible({
-    timeout: BOOT_TIMEOUT_MS,
-  });
-  await matchRows(second.page).first().click();
-  await second.page.getByRole("button", { name: "AI 分析" }).click();
+  await openAiView(second.page);
 
   // finding 卡片在,且带「回放此刻」
   await expect(second.page.getByText("被集火秒杀")).toBeVisible({

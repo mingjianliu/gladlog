@@ -67,3 +67,12 @@ export function firstMatchId(userData: string): string {
   if (!id) throw new Error(`${dir} 下没有入库的对局`);
   return id;
 }
+
+/** 打开第一场对局的 AI 分析视图 —— 两个 spec 共用的入口动作。 */
+export async function openAiView(page: Page): Promise<void> {
+  await expect(matchRows(page).first()).toBeVisible({
+    timeout: BOOT_TIMEOUT_MS,
+  });
+  await matchRows(page).first().click();
+  await page.getByRole("button", { name: "AI 分析" }).click();
+}

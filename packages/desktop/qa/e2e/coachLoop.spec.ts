@@ -10,18 +10,9 @@ import {
   firstMatchId,
   importLog,
   launchApp,
-  matchRows,
+  openAiView,
 } from "../support/launch";
 import { seedAnalysis } from "../support/seedAnalysis";
-
-/** 打开第一场对局的 AI 分析视图。 */
-async function openAiView(page: Awaited<ReturnType<typeof launchApp>>["page"]) {
-  await expect(matchRows(page).first()).toBeVisible({
-    timeout: BOOT_TIMEOUT_MS,
-  });
-  await matchRows(page).first().click();
-  await page.getByRole("button", { name: "AI 分析" }).click();
-}
 
 test("链路3:标记 finding → 战绩页聚合可见 → 重启后标记仍在", async () => {
   const userData = mkdtempSync(join(tmpdir(), "gladlog-e2e-"));
