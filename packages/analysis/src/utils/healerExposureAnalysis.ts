@@ -33,22 +33,21 @@ import {
   IPosition,
   nearestLosBreakOption,
 } from "./losAnalysis";
+import {
+  INTERP_MAX_GAP_MS,
+  LOS_SWEEP_GAP_MS,
+  LOS_SWEEP_SLACK_S,
+} from "./positionSampling";
 
 // Max cast range for player CC spells in yards. Enemies beyond this distance
 // cannot land CC on the healer regardless of LoS.
 const MAX_CC_RANGE_YARDS = 40;
 // G5 grounding guard (2026-07-14 full-scale audit, same rule as positionAnalysis /
-// ccTrinketAnalysis): positions interpolated across a sampling gap larger than this are
-// fabricated (unit idle/stealthed) — a stale position can claim LoS where real samples
-// show it already broken, producing a false "go break LoS" suggestion.
-const POSITION_MAX_GAP_MS = 1_500;
-
-// G5 take 2 (2026-07-15): the LoS predicate mirrors the eval positioning
-// gate verbatim — ±2s integer-second sweep, interpolated positions with a
-// 3s max gap. These two constants MUST stay equal to TIME_SLACK_SECONDS /
-// POSITION_MAX_GAP_MS in packages/eval/src/quality/positioningScan.ts.
-const LOS_SWEEP_SLACK_S = 2;
-const LOS_SWEEP_GAP_MS = 3_000;
+// ccTrinketAnalysis) + G5 take 2 (2026-07-15): the LoS predicate mirrors the eval
+// positioning gate. 三个常量都从 positionSampling 单源 import —— 曾经是本文件私有
+// 声明 + 一句「MUST stay equal to positioningScan.ts」的注释,而 CLAUDE.md 明令
+// 「谓词放一处 export,两边 import…别靠注释」。
+const POSITION_MAX_GAP_MS = INTERP_MAX_GAP_MS;
 
 /** Returns true if the enemy has an active CC aura at the given timestamp (ms). */
 function isEnemyInCC(enemy: ICombatUnit, atMs: number): boolean {

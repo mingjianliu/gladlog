@@ -27,6 +27,8 @@ import {
   getUnitPositionAtTime,
   hasLineOfSight,
   isHealerSpec,
+  LOS_SWEEP_GAP_MS,
+  LOS_SWEEP_SLACK_S,
 } from "@gladlog/analysis";
 
 export type GeoClaimKind =
@@ -62,8 +64,11 @@ export interface GeoCheckResult {
 
 const IMPOSSIBLE_CC_YARDS = 50;
 const TRAINED_MAX_YARDS = 8;
-const TIME_SLACK_SECONDS = 2;
-const POSITION_MAX_GAP_MS = 3_000;
+// 门规谓词单源(CLAUDE.md):分析侧的 LoS 扫描必须与本门规逐字节同参,否则
+// 门规复算不出分析的结论、或反过来放行幻觉主张。曾经两边各自私有声明、靠
+// healerExposureAnalysis.ts 一句注释耦合,现从 @gladlog/analysis 单源 import。
+const TIME_SLACK_SECONDS = LOS_SWEEP_SLACK_S;
+const POSITION_MAX_GAP_MS = LOS_SWEEP_GAP_MS;
 
 function parseTime(t: string): number {
   const [m, s] = t.split(":").map(Number);

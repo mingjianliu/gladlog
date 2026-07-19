@@ -25,6 +25,7 @@ import {
   IHealerBurstExposure,
 } from "./healerExposureAnalysis";
 import { distanceBetween, getUnitPositionAtTime } from "./losAnalysis";
+import { INTERP_MAX_GAP_MS } from "./positionSampling";
 
 // Thresholds (yards / seconds) — starting values from the Feature 15 spec.
 const CLOSE_RANGE_YARDS = 12; // "in range" of an enemy
@@ -48,7 +49,7 @@ const MAX_ITER3_EVENTS = 2; // per event type
 // from the nearest snapshot, the interpolated position is fabricated (unit was
 // idle/stealthed/drinking) — treat as unknown.
 // T3 grounding 守卫:同 ccTrinketAnalysis——禁跨空窗中段插值(TRAINED 0.4yd 假主张实锤)
-const POSITION_MAX_GAP_MS = 1_500;
+const POSITION_MAX_GAP_MS = INTERP_MAX_GAP_MS;
 
 export type PositionEventType =
   | "STAYED_IN"

@@ -3,6 +3,7 @@
 // StoredMatch 形状 utils 并存、逐 util 迁移(4a spec debate 让步)。
 export * from "./context/buildMatchContext";
 export * from "./utils/cooldowns";
+export * from "./utils/positionSampling";
 export * from "./utils/enemyCompArchetype";
 export * from "./utils/enemyCDs";
 export * from "./utils/offensiveWindows";
