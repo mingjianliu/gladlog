@@ -85,6 +85,9 @@ export function registerIpc(deps: {
     deps.analysis.run(input),
   );
   ipcMain.handle("gladlog:analysis:cancel", () => deps.analysis.cancel());
+  ipcMain.handle("gladlog:analysis:isRunning", (_e, matchId: string) =>
+    deps.analysis.isRunning(matchId),
+  );
   ipcMain.handle("gladlog:analysis:getCached", (_e, matchId: string) =>
     deps.analysis.getCached(matchId),
   );

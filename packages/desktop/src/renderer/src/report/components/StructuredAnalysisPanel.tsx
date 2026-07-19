@@ -160,13 +160,22 @@ export function StructuredAnalysisPanel({
     setError("");
     setActiveEventIds([]);
     void (async () => {
-      const cached = (await bridge().analysis.getCached(
-        matchId,
-      )) as AnalysisResult | null;
-      if (!cancelled && cached) {
-        resultForRef.current = matchId;
-        setResult(cached);
-        setState("done");
+      try {
+        const cached = (await bridge().analysis.getCached(
+          matchId,
+        )) as AnalysisResult | null;
+        if (cancelled) return;
+        if (cached) {
+          resultForRef.current = matchId;
+          setResult(cached);
+          setState("done");
+        } else if (await bridge().analysis.isRunning(matchId)) {
+          // 重挂时(切 tab/切场回来)若首轮还在主进程跑,显示「分析中…」而非
+          // 空闲态 —— 否则用户以为丢了、再点一次会重复跑。done 事件回来时补上结果。
+          if (!cancelled) setState("running");
+        }
+      } catch {
+        /* 测试桩/无 bridge 面:保持空闲 */
       }
     })();
     return () => {
@@ -175,32 +184,35 @@ export function StructuredAnalysisPanel({
   }, [matchId, lang]);
 
   useEffect(() => {
-    const offDelta = bridge().analysis.onDelta?.(
-      (d: { matchId: string; text: string }) => {
+    // 常驻挂载后此 effect 在任何视图下都跑;bridge 面缺席(测试桩)不能让挂载抛。
+    let offDelta: (() => void) | undefined;
+    let offDone: (() => void) | undefined;
+    let offError: (() => void) | undefined;
+    try {
+      const ai = bridge().analysis;
+      offDelta = ai.onDelta?.((d: { matchId: string; text: string }) => {
         if (d.matchId !== matchId) return;
         setPreview((p) => (p + d.text).slice(-600));
-      },
-    );
-    const offDone = bridge().analysis.onDone(
-      (d: { matchId: string; result: unknown }) => {
+      });
+      offDone = ai.onDone((d: { matchId: string; result: unknown }) => {
         if (d.matchId !== matchId) return;
         resultForRef.current = matchId;
         setResult(d.result as AnalysisResult);
         setState("done");
         setError("");
-      },
-    );
-    const offError = bridge().analysis.onError(
-      (d: { matchId: string; message: string }) => {
+      });
+      offError = ai.onError((d: { matchId: string; message: string }) => {
         if (d.matchId !== matchId) return;
         setState("error");
         setError(d.message);
-      },
-    );
+      });
+    } catch {
+      /* 测试桩/无 bridge 面:不订阅,挂载不抛 */
+    }
     return () => {
       offDelta?.();
-      offDone();
-      offError();
+      offDone?.();
+      offError?.();
     };
   }, [matchId]);
 
@@ -348,8 +360,13 @@ export function StructuredAnalysisPanel({
 
   return (
     <div className="rpt-ai-panel">
-      {/* 操作区置顶(1g):主按钮 + 语言段控 + 状态文字 + 右端导出 */}
-      <div className="rpt-ai-actions rpt-ai-actions-top">
+      {/* 操作区置顶(1g):主按钮 + 语言段控 + 状态文字 + 右端导出。
+          未分析时(无 result)主按钮作醒目居中大 CTA;出结果后回落紧凑行。 */}
+      <div
+        className={`rpt-ai-actions rpt-ai-actions-top${
+          result ? "" : " rpt-ai-actions-hero"
+        }`}
+      >
         <button
           className="rpt-ai-primary"
           onClick={handleAnalyze}

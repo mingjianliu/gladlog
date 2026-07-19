@@ -2515,6 +2515,30 @@ pre {
   border-radius: 7px;
   padding: 5px 16px;
 }
+/* 未分析时:主按钮作醒目居中大 CTA(用户反馈:按钮太小,放中间大一点)。
+   出结果后 .rpt-ai-actions-hero 撤销,回落为紧凑操作行(重新分析 + 语言 + 导出)。 */
+.rpt-ai-actions-hero {
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 14px;
+  padding: 44px 0 36px;
+}
+.rpt-ai-actions-hero .rpt-ai-primary {
+  font-size: 17px;
+  font-weight: 600;
+  padding: 14px 48px;
+  border-radius: 10px;
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 3px 14px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.rpt-ai-actions-hero .rpt-ai-primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+.rpt-ai-actions-hero .rpt-ai-primary:disabled {
+  opacity: 0.75;
+}
 .rpt-ai-status {
   font-size: 12px;
   color: var(--ink-2);
@@ -2783,7 +2807,6 @@ pre {
 .rpt-tl-band-vulnerable {
   fill: rgba(224, 133, 133, 0.14);
 }
-
 
 /* ── 1c 死亡回顾五列(时间44|类型40|技能|数额|来源),行距 5px ── */
 .rpt-recap-table {

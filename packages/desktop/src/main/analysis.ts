@@ -59,14 +59,34 @@ export function createAnalysisService(deps: {
   matchesDir: string;
   emit: (channel: string, payload: unknown) => void;
 }) {
-  let generation = 0;
+  // 代际计数器按 matchId 分桶:每场独立。旧实现是单个全局计数器,任何新
+  // run/deepen(比如开 B 场或深挖 B)都会 ++,让 A 场正在跑的分析被判过期 abort、
+  // 永不写缓存 —— 这正是「看别的游戏就丢了之前的分析」的根。
+  const generations = new Map<string, number>();
+  const nextGen = (matchId: string) => {
+    const g = (generations.get(matchId) ?? 0) + 1;
+    generations.set(matchId, g);
+    return g;
+  };
+  const isCurrent = (matchId: string, gen: number) =>
+    generations.get(matchId) === gen;
+
+  // 当前正在跑首轮分析的 matchId —— 渲染层重挂(切 tab/切场回来)时查询,
+  // 若在跑就显示「分析中…」而非空闲态,省得用户以为丢了又点一次(会重复跑)。
+  const running = new Set<string>();
 
   async function run(input: AnalysisInput): Promise<void> {
-    const myGen = ++generation;
+    const myGen = nextGen(input.matchId);
+    running.add(input.matchId);
+    const clearRunning = () => {
+      // 仅当我仍是最新代际才清:被更晚的 run 接管时 running 归它管。
+      if (isCurrent(input.matchId, myGen)) running.delete(input.matchId);
+    };
     const settings = deps.getSettings();
     const lang: AiLanguage = settings.aiLanguage ?? "zh";
 
     const finish = (result: AnalysisResult) => {
+      clearRunning();
       const dir = join(deps.matchesDir, input.matchId);
       try {
         mkdirSync(dir, { recursive: true });
@@ -92,7 +112,12 @@ export function createAnalysisService(deps: {
 
     // deterministic fallback: no narration;reason 让 UI 分因显示(0 finding 可解释)
     const fallback = (reason: "no-candidates" | "no-client" | "bad-json") =>
-      finish({ findings: [], dropped: 0, hadNarration: false, fallbackReason: reason });
+      finish({
+        findings: [],
+        dropped: 0,
+        hadNarration: false,
+        fallbackReason: reason,
+      });
 
     if (input.candidates.length === 0) return fallback("no-candidates");
     const client = resolveAiClient(settings, deps.clientFactory);
@@ -112,7 +137,7 @@ export function createAnalysisService(deps: {
         messages: [{ role: "user", content: prompt }],
       });
       for await (const ev of stream) {
-        if (myGen !== generation) return;
+        if (!isCurrent(input.matchId, myGen)) return;
         if (ev.delta) {
           raw += ev.delta;
           deps.emit("gladlog:analysis:delta", {
@@ -121,7 +146,7 @@ export function createAnalysisService(deps: {
           });
         }
       }
-      if (myGen !== generation) return;
+      if (!isCurrent(input.matchId, myGen)) return;
       recordAiDebug({
         kind: "analysis",
         matchId: input.matchId,
@@ -145,7 +170,8 @@ export function createAnalysisService(deps: {
         hadNarration: audit.findings.length > 0,
       });
     } catch (err) {
-      if (myGen !== generation) return;
+      if (!isCurrent(input.matchId, myGen)) return;
+      clearRunning();
       deps.emit("gladlog:analysis:error", {
         matchId: input.matchId,
         message: err instanceof Error ? err.message : String(err),
@@ -168,12 +194,16 @@ export function createAnalysisService(deps: {
     spec: string;
     ownerName?: string;
   }): Promise<void> {
-    const myGen = ++generation;
+    const myGen = nextGen(input.matchId);
     const settings = deps.getSettings();
     const lang: AiLanguage = settings.aiLanguage ?? "zh";
     const client = resolveAiClient(settings, deps.clientFactory);
     // 无 client / 无 pack:标记 deepened 防重触发,内容保持初轮
-    const cachedPath = join(deps.matchesDir, input.matchId, `analysis-v2.${lang}.json`);
+    const cachedPath = join(
+      deps.matchesDir,
+      input.matchId,
+      `analysis-v2.${lang}.json`,
+    );
     const writeMerged = (findings: Finding[]) => {
       try {
         const doc = JSON.parse(readFileSync(cachedPath, "utf-8"));
@@ -195,7 +225,12 @@ export function createAnalysisService(deps: {
     };
     if (!client || input.packs.length === 0) return writeMerged(input.findings);
     try {
-      const prompt = buildDeepDivePrompt(input.packs, input.findings, input.spec, input.ownerName);
+      const prompt = buildDeepDivePrompt(
+        input.packs,
+        input.findings,
+        input.spec,
+        input.ownerName,
+      );
       let raw = "";
       const stream = client.stream({
         model: settings.anthropicModel ?? "claude-sonnet-5",
@@ -204,10 +239,10 @@ export function createAnalysisService(deps: {
         messages: [{ role: "user", content: prompt }],
       });
       for await (const ev of stream) {
-        if (myGen !== generation) return;
+        if (!isCurrent(input.matchId, myGen)) return;
         if (ev.delta) raw += ev.delta;
       }
-      if (myGen !== generation) return;
+      if (!isCurrent(input.matchId, myGen)) return;
       recordAiDebug({
         kind: "analysis",
         matchId: `${input.matchId}#deepdive`,
@@ -227,10 +262,10 @@ export function createAnalysisService(deps: {
         const d = dives.find((x) => x.findingIndex === i);
         return d ? { ...f, deepDive: { text: d.text, chips: d.chips } } : f;
       });
-      if (myGen !== generation) return; // 保险:写盘/emit 前复查代际
+      if (!isCurrent(input.matchId, myGen)) return; // 保险:写盘/emit 前复查代际
       writeMerged(merged);
     } catch {
-      if (myGen !== generation) return;
+      if (!isCurrent(input.matchId, myGen)) return;
       writeMerged(input.findings); // 深挖失败不致命,保持初轮
     }
   }
@@ -239,7 +274,13 @@ export function createAnalysisService(deps: {
     run,
     deepen,
     async cancel(): Promise<void> {
-      generation++;
+      // 全场取消:每场代际 +1,所有在跑的 run/deepen 循环下一拍即 abort。
+      for (const [id, g] of generations) generations.set(id, g + 1);
+      running.clear();
+    },
+    /** 首轮分析是否正在跑(渲染层重挂时查询,显示「分析中…」防重点)。 */
+    async isRunning(matchId: string): Promise<boolean> {
+      return running.has(matchId);
     },
     /** finding 跟进标记(phase3 #3a)。key = category|sorted(eventIds),语言无关。 */
     async getFlags(matchId: string): Promise<Record<string, string>> {
