@@ -22,6 +22,9 @@ export const PACK_AFTER_S = 10;
 const PACK_MAX_ITEMS = 14;
 
 const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
+/** 短名(去 realm):facts 里的名字用它 —— realm 常含数字(Area52),写进正文
+ * 会被裸数字审计误杀;chips 的 unitNames 保留全名给回放定位。 */
+const sn = (name: string) => name.split("-")[0] ?? name;
 
 export interface PackItem {
   /** 占位符命名空间(p1, p2, …):叙述里用 {{p1.t}} 引用。 */
@@ -99,7 +102,7 @@ export function buildDeepDivePack(
           facts: {
             t: fmt(cc.atSeconds),
             spell: cc.spellName,
-            unit: u.name,
+            unit: sn(u.name),
             duration: cc.durationSeconds.toFixed(1),
             trinket: cc.trinketState,
           },
@@ -133,7 +136,7 @@ export function buildDeepDivePack(
             facts: {
               t: fmt(cast.timeSeconds),
               spell: cd.spellName,
-              unit: u.name,
+              unit: sn(u.name),
               ...(cast.timingLabel && cast.timingLabel !== "Unknown"
                 ? { timing: cast.timingLabel }
                 : {}),
@@ -160,7 +163,7 @@ export function buildDeepDivePack(
           facts: {
             t: fmt(cd.castTimeSeconds),
             spell: cd.spellName,
-            player: p.playerName,
+            player: sn(p.playerName),
           },
         });
       }
@@ -175,25 +178,23 @@ export function buildDeepDivePack(
       byId.get(id)?.unitNames.includes(u.name),
     ),
   );
+  const focusT = anchorTo - PACK_AFTER_S;
   for (const u of focus) {
     try {
-      const checkpoints = [15, 10, 5];
-      const factsHp: Record<string, string> = {};
-      for (const back of checkpoints) {
-        const pct = getHpPercentAtTime(
-          u,
-          anchorTo - PACK_AFTER_S - back,
-          combat.startTime,
-        );
-        if (pct !== null) factsHp[`hpT${back}`] = String(Math.round(pct));
-      }
-      if (Object.keys(factsHp).length > 0) {
+      // 逐检查点独立条目:t=真实时刻(占位符)、hp=血量(占位符),不再把
+      // 偏移量 15/10/5 编进 key 名 —— 那会诱导模型写「死前 15 秒」的裸数字
+      // 被审计丢(2026-07-19 纪律 smoke 实测根因)。
+      for (const back of [15, 10, 5]) {
+        const tPt = focusT - back;
+        if (tPt < 0) continue;
+        const pct = getHpPercentAtTime(u, tPt, combat.startTime);
+        if (pct === null) continue;
         raw.push({
           kind: "hp",
-          t: anchorTo - PACK_AFTER_S,
-          label: `${u.name.split("-")[0]} HP 轨迹`,
+          t: tPt,
+          label: `${sn(u.name)} HP ${Math.round(pct)}%`,
           unitNames: [u.name],
-          facts: { t: fmt(anchorTo - PACK_AFTER_S), unit: u.name, ...factsHp },
+          facts: { t: fmt(tPt), unit: sn(u.name), hp: String(Math.round(pct)) },
         });
       }
     } catch {
@@ -221,8 +222,8 @@ export function buildDeepDivePack(
           t: fmt(e.timeSeconds),
           spell: e.dispelSpellName,
           removed: e.removedSpellName,
-          src: e.sourceName,
-          tgt: e.targetName,
+          src: sn(e.sourceName),
+          tgt: sn(e.targetName),
           priority: e.priority,
         },
       });
@@ -233,7 +234,7 @@ export function buildDeepDivePack(
 
   // 截断按「靠近焦点时刻」而非纯时间序:窗口早段的密集小事件不能把
   // 死亡/锚点附近的关键证据挤出包(agy 复核 #4);选完再按时间排列出清单。
-  const focusT = anchorTo - PACK_AFTER_S;
+  // focusT 已在 HP 段声明(= anchorTo - PACK_AFTER_S)。
   const items: PackItem[] = raw
     .sort((a, b) => Math.abs(a.t - focusT) - Math.abs(b.t - focusT))
     .slice(0, PACK_MAX_ITEMS)
@@ -258,10 +259,11 @@ export function buildDeepDivePrompt(
     const f = findings[p.findingIndex]!;
     const listing = p.items
       .map(
+        // units= 不印:名字已在 facts(unit/player/src/tgt),独立 token 会
+        // 诱导模型写 {{pN.units}} 这个不存在的占位符 → 整条被 claimChecker 丢
+        // (2026-07-19 深挖纪律 smoke 实测:3/6 失败全栽在 .units 幽灵字段)。
         (it) =>
-          `  - key=${it.key} kind=${it.kind} t=${fmt(it.t)}s units=${it.unitNames.join("/")} facts={${Object.entries(
-            it.facts,
-          )
+          `  - key=${it.key} kind=${it.kind} facts={${Object.entries(it.facts)
             .map(([k, v]) => `${k}=${v}`)
             .join(", ")}}`,
       )
