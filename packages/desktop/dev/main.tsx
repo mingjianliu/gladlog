@@ -9,6 +9,7 @@ import "../src/renderer/src/styles.css";
 import "./harness.css";
 import { resolveScene, type SceneName } from "./scenes";
 import App from "../src/renderer/src/App";
+import { installFixtureBridge } from "../src/renderer/src/fixtureBridge";
 import { installAppShellFixture } from "./fixtures/appShell";
 
 const off = () => () => {};
@@ -145,7 +146,9 @@ function AppShellScene({ name }: { name: SceneName }) {
   if (!ready) return null;
   return (
     <div className="scene-root scene-appshell" data-scene-ready={name}>
-      <App initialAppView={APP_SHELL_VIEW[name as keyof typeof APP_SHELL_VIEW]} />
+      <App
+        initialAppView={APP_SHELL_VIEW[name as keyof typeof APP_SHELL_VIEW]}
+      />
     </div>
   );
 }
@@ -256,6 +259,11 @@ function Harness() {
 }
 
 const scene = resolveScene(window.location.search);
+
+// 场景模式统一用 fixtureBridge 的完整 mock(比本文件顶部那份精简 mock 多了
+// getState/getFlags/notebook,AI 视图才会真的渲染出 finding 卡片而不是停在
+// 空闲态)。必须在 render 之前同步装好 —— 面板挂载时的 effect 立刻就要读它。
+if (scene) installFixtureBridge();
 
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
