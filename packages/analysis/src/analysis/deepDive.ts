@@ -11,6 +11,14 @@ import {
   type IMajorCooldownInfo,
 } from "../utils/cooldowns";
 import { reconstructEnemyCDTimeline } from "../utils/enemyCDs";
+import {
+  analyzeBurstLedger,
+  type IBurstLedgerEntry,
+} from "../utils/burstLedger";
+import {
+  analyzeOutgoingCCChains,
+  type IOutgoingCCChain,
+} from "../utils/drAnalysis";
 import { getHpPercentAtTime } from "../utils/killWindowTargetSelection";
 import {
   computeOwnerPositionEvents,
@@ -43,7 +51,20 @@ const POSITION_MISTAKES = new Set<IPositionEvent["type"]>([
 export interface PackItem {
   /** 占位符命名空间(p1, p2, …):叙述里用 {{p1.t}} 引用。 */
   key: string;
-  kind: "cc" | "defensive" | "enemy-cd" | "hp" | "dispel" | "position";
+  kind:
+    | "cc"
+    | "defensive"
+    | "enemy-cd"
+    | "hp"
+    | "dispel"
+    | "position"
+    | "target-hp"
+    | "enemy-defensive"
+    | "immunity"
+    | "our-cc"
+    | "our-cd"
+    | "off-target"
+    | "dr-clip";
   /** 相对秒(chip 跳转锚点)。 */
   t: number;
   /** chip 文本。 */
@@ -51,6 +72,18 @@ export interface PackItem {
   unitNames: string[];
   facts: Record<string, string>;
 }
+
+/** 进攻类 kind 集合(单源):`PackItem.kind` 的进攻子集,prompt 图例门与未来
+ * 任何"是否进攻条目"判断都从这里读,别在别处重列字符串数组(会跟 union 类型脱钩)。 */
+export const OFFENSIVE_KINDS = new Set<PackItem["kind"]>([
+  "target-hp",
+  "enemy-defensive",
+  "immunity",
+  "our-cc",
+  "our-cd",
+  "off-target",
+  "dr-clip",
+]);
 
 export interface DeepDivePack {
   findingIndex: number;
@@ -344,6 +377,243 @@ export function buildDeepDivePack(
   return { findingIndex, anchorFrom, anchorTo, items, facts };
 }
 
+export interface OffensiveMapInput {
+  entries: IBurstLedgerEntry[];
+  healerChains: IOutgoingCCChain[];
+  candFacts: Record<string, string>[];
+  candTypes: string[];
+  ownerName?: string;
+  inWin: (t: number) => boolean;
+}
+
+/** 进攻证据 → PackItem(纯):目标血线/敌方防御免疫/我方对敌奶 CC/大招对齐 + 类型专属条。 */
+export function offensivePackItems(
+  inp: OffensiveMapInput,
+): Omit<PackItem, "key">[] {
+  const raw: Omit<PackItem, "key">[] = [];
+  const ownerShort = inp.ownerName ? sn(inp.ownerName) : undefined;
+  // 全名比较(agy 复核):短名会在跨服撞名(同名不同服)时把队友误判成 owner —
+  // 与 buildDeepDivePack 的 friendlyRole 同款,role 只认全名,display 仍用短名。
+  const role = (name: string) =>
+    inp.ownerName && name === inp.ownerName ? "owner" : "teammate";
+
+  for (const e of inp.entries) {
+    if (!inp.inWin(e.fromSeconds) && !inp.inWin(e.toSeconds)) continue;
+    const t = e.dominantTarget;
+    if (t) {
+      // 目标血线:start(burst 起)+ end(burst 止),取自 ledger 已算值(谓词单源)
+      if (t.hpStartPct != null && inp.inWin(e.fromSeconds))
+        raw.push({
+          kind: "target-hp",
+          t: e.fromSeconds,
+          label: `${sn(t.unitName)} HP`,
+          unitNames: [t.unitName],
+          facts: {
+            t: fmt(e.fromSeconds),
+            hp: String(t.hpStartPct),
+            unit: sn(t.unitName),
+            role: "enemy-target",
+          },
+        });
+      if (t.hpEndPct != null && inp.inWin(e.toSeconds))
+        raw.push({
+          kind: "target-hp",
+          t: e.toSeconds,
+          label: `${sn(t.unitName)} HP`,
+          unitNames: [t.unitName],
+          facts: {
+            t: fmt(e.toSeconds),
+            hp: String(t.hpEndPct),
+            unit: sn(t.unitName),
+            role: "enemy-target",
+          },
+        });
+      // 窗口守卫(agy 复核):这条固定锚在 e.fromSeconds,外层 guard 是
+      // fromSeconds OR toSeconds 命中就放行整条 entry,单独补 inWin 防止
+      // fromSeconds 落在窗口外时仍把该条目时刻标在窗口外(pack 的
+      // anchorFrom/anchorTo 是 prompt 里明写的范围,条目时刻不能越界)。
+      if (inp.inWin(e.fromSeconds))
+        for (const d of t.defensivesHit) {
+          raw.push({
+            kind: d.isImmunity ? "immunity" : "enemy-defensive",
+            t: e.fromSeconds,
+            label: `${d.spellName}(${sn(t.unitName)})`,
+            unitNames: [t.unitName],
+            facts: {
+              t: fmt(e.fromSeconds),
+              spell: d.spellName,
+              unit: sn(t.unitName),
+              role: "enemy",
+              ...(d.isImmunity ? { overlap: d.overlapSeconds.toFixed(1) } : {}),
+            },
+          });
+        }
+    }
+    // 我方大招对齐(owner 自身 spells + ally 重叠)
+    for (const s of e.spells)
+      if (inp.inWin(s.castTimeSeconds))
+        raw.push({
+          kind: "our-cd",
+          t: s.castTimeSeconds,
+          label: `${s.spellName}`,
+          unitNames: inp.ownerName ? [inp.ownerName] : [],
+          facts: {
+            t: fmt(s.castTimeSeconds),
+            spell: s.spellName,
+            unit: ownerShort ?? "owner",
+            role: "owner",
+          },
+        });
+    if (inp.inWin(e.fromSeconds))
+      for (const a of e.allyCDsOverlapping)
+        raw.push({
+          kind: "our-cd",
+          t: e.fromSeconds,
+          label: `${a.spellName}(${sn(a.playerName)})`,
+          unitNames: [a.playerName],
+          facts: {
+            t: fmt(e.fromSeconds),
+            spell: a.spellName,
+            unit: sn(a.playerName),
+            role: role(a.playerName),
+          },
+        });
+  }
+
+  // 我方对敌奶 CC 链(窗口内)
+  for (const chain of inp.healerChains)
+    for (const app of chain.applications) {
+      if (!inp.inWin(app.atSeconds)) continue;
+      raw.push({
+        kind: "our-cc",
+        t: app.atSeconds,
+        label: `${app.spellName} → ${sn(chain.targetName)}`,
+        unitNames: [app.casterName],
+        facts: {
+          t: fmt(app.atSeconds),
+          spell: app.spellName,
+          unit: sn(chain.targetName),
+          caster: sn(app.casterName),
+          role: role(app.casterName),
+        },
+      });
+    }
+
+  // 类型专属条(承接候选自带 facts;名字短名)
+  inp.candTypes.forEach((type, i) => {
+    const cf = inp.candFacts[i] ?? {};
+    const tt = Number(cf.t);
+    if (type === "off-target-in-window")
+      raw.push({
+        kind: "off-target",
+        t: Number.isFinite(tt) ? tt : 0,
+        label: `脱靶`,
+        unitNames: [],
+        facts: {
+          ...(cf.t ? { t: cf.t } : {}),
+          role: "owner",
+          ...(cf.onTargetPct ? { onTargetPct: cf.onTargetPct } : {}),
+          ...(cf.offTarget ? { target: sn(cf.offTarget) } : {}),
+        },
+      });
+    // juked-kick 已从进攻深挖降级(Task 6 A/B:5 类里唯一均值 <3.5,combined 2.9,
+    // 四个 ≤2 分全是它 —— 「读假招别乱踢」是自明的泛化建议,深挖只是硬套上下文,
+    // 不产生新洞察。仍作初轮 finding 保留,只是不深挖)。故此处不再产 juked 条目。
+    if (type === "dr-clipped-cc")
+      raw.push({
+        kind: "dr-clip",
+        t: Number.isFinite(tt) ? tt : 0,
+        label: `踩 DR`,
+        unitNames: [],
+        facts: {
+          ...(cf.t ? { t: cf.t } : {}),
+          role: "owner",
+          ...(cf.spell ? { spell: cf.spell } : {}),
+          ...(cf.target ? { target: sn(cf.target) } : {}),
+          ...(cf.dr ? { dr: cf.dr } : {}),
+        },
+      });
+  });
+
+  return raw;
+}
+
+export function buildOffensiveDeepDivePack(
+  combat: any,
+  finding: Finding,
+  findingIndex: number,
+  candidates: CandidateEvent[],
+  ownerName?: string,
+): DeepDivePack | null {
+  const byId = new Map(candidates.map((c) => [c.id, c]));
+  const cands = (finding.eventIds ?? [])
+    .map((id) => byId.get(id))
+    .filter((c): c is CandidateEvent => !!c);
+  const ts = cands
+    .filter((c) => Number.isFinite(c.t) && c.t > 0)
+    .map((c) => c.t);
+  if (ts.length === 0) return null;
+  const durS = ((combat?.endTime ?? 0) - (combat?.startTime ?? 0)) / 1000;
+  const anchorFrom = Math.max(0, Math.min(...ts) - PACK_BEFORE_S);
+  const anchorTo = Math.min(durS, Math.max(...ts) + PACK_AFTER_S);
+  const inWin = (t: number) => t >= anchorFrom && t <= anchorTo;
+
+  const units = Object.values(combat?.units ?? {}) as any[];
+  const players = units.filter((u) => u.info);
+  const friends = players.filter(
+    (u) => u.reaction === CombatUnitReaction.Friendly,
+  );
+  const enemies = players.filter(
+    (u) => u.reaction !== CombatUnitReaction.Friendly,
+  );
+  if (friends.length === 0 || enemies.length === 0) return null;
+  const owner = ownerName
+    ? friends.find((u) => u.name === ownerName)
+    : undefined;
+  if (!owner) return null;
+
+  let entries: IBurstLedgerEntry[] = [];
+  let healerChains: IOutgoingCCChain[] = [];
+  try {
+    entries = analyzeBurstLedger(owner, friends, enemies, combat);
+  } catch {
+    /* 无高级日志 */
+  }
+  try {
+    const enemyHealers = new Set(
+      enemies.filter((e) => isHealerSpec(e.spec)).map((e) => e.name),
+    );
+    healerChains = analyzeOutgoingCCChains(friends, enemies, combat).filter(
+      (c) => enemyHealers.has(c.targetName),
+    );
+  } catch {
+    /* 缺席 */
+  }
+
+  const raw = offensivePackItems({
+    entries,
+    healerChains,
+    candFacts: cands.map((c) => c.facts),
+    candTypes: cands.map((c) => c.type),
+    ownerName,
+    inWin,
+  });
+  if (raw.length === 0) return null;
+
+  // 截断:靠近焦点时刻(复用死亡 pack 同逻辑)
+  const focusT = Math.min(...ts);
+  const items: PackItem[] = raw
+    .sort((a, b) => Math.abs(a.t - focusT) - Math.abs(b.t - focusT))
+    .slice(0, PACK_MAX_ITEMS)
+    .sort((a, b) => a.t - b.t)
+    .map((it, i) => ({ ...it, key: `p${i + 1}` }));
+
+  const facts: Record<string, string> = {};
+  for (const it of items)
+    for (const [k, v] of Object.entries(it.facts)) facts[`${it.key}.${k}`] = v;
+  return { findingIndex, anchorFrom, anchorTo, items, facts };
+}
+
 /**
  * 可教信号(修 1):包内是否含 ≥1 条「我方可控失误」—— 判据全用 pack facts,
  * 与 death-setup 三型同源:防御交早/晚、被控时饰品在手没交、敌方大 CD 开着
@@ -373,6 +643,55 @@ export function hasCoachableSignal(items: PackItem[]): boolean {
     if (it.kind === "position") return true;
     return false;
   });
+}
+
+/** 进攻深挖:目标触底阈值(%);低于它 + 有(非免疫)防御接了 = 「该控奶/该换端」。 */
+const OFFENSIVE_HP_THRESHOLD = 35;
+
+/**
+ * 进攻信号(进攻深挖门):非死亡候选已 pre-curate 为失误,门轻 —— 要求进攻故事在场。
+ * 免疫单独即可教:把爆发砸进免疫本身就是失误(该追踪敌方免疫、别硬开),不要求目标
+ * 也触底 —— 免疫恰恰阻止了掉血,再要求 ≤35% 逻辑自相矛盾(519 场扫描实测:合门时
+ * burst-into-immunity 仅 10% 过门,漏掉了旗舰进攻失误)。其余:目标被打低且有非免疫
+ * 防御接了(该控奶/换端),或 off-target/dr-clip 各自即失误。
+ * (juked-kick 已降级,不进进攻深挖 —— 见 offensivePackItems 注释与 OFFENSIVE_CANDIDATE_TYPES。)
+ */
+export function hasOffensiveCoachableSignal(items: PackItem[]): boolean {
+  if (items.some((i) => i.kind === "immunity")) return true;
+  const targetBottomed = items.some(
+    (i) =>
+      i.kind === "target-hp" && Number(i.facts.hp) <= OFFENSIVE_HP_THRESHOLD,
+  );
+  const defensiveAnswered = items.some((i) => i.kind === "enemy-defensive");
+  if (targetBottomed && defensiveAnswered) return true;
+  return items.some((i) => i.kind === "off-target" || i.kind === "dr-clip");
+}
+
+// juked-kick 剔除(Task 6 A/B):进攻深挖只留价值 ≥4.4 的四类;juked-kick 深挖 combined
+// 2.9(唯一 <3.5),故降级为只作初轮 finding,不路由进攻深挖(→ classify 归 survival,
+// 生存门不命中即不深挖)。
+const OFFENSIVE_CANDIDATE_TYPES = new Set([
+  "unconverted-burst",
+  "burst-into-immunity",
+  "off-target-in-window",
+  "dr-clipped-cc",
+]);
+
+/** 分发:finding 引用候选多数派决定路由;平票偏 survival(死亡教练价值锚定更强)。 */
+export function classifyFindingKind(
+  finding: Finding,
+  candidates: CandidateEvent[],
+): "survival" | "offensive" {
+  const byId = new Map(candidates.map((c) => [c.id, c]));
+  let off = 0,
+    surv = 0;
+  for (const id of finding.eventIds ?? []) {
+    const t = byId.get(id)?.type;
+    if (!t) continue;
+    if (OFFENSIVE_CANDIDATE_TYPES.has(t)) off++;
+    else surv++;
+  }
+  return off > surv ? "offensive" : "survival";
 }
 
 /** 深挖 prompt:每个 pack 一段;审计纪律与初轮同宗(占位符/无因果/只引清单)。 */
@@ -410,6 +729,11 @@ export function buildDeepDivePrompt(
     `HARD RULES:`,
     `- Coach ${ownerShort} (facts with role=owner). role=teammate / role=enemy items are context only — cite a teammate's mistake ONLY when ${ownerShort} could have covered it (peel/CC the attacker, give an external, swap targets).`,
     `- kind=position items are ${ownerShort}'s own movement: kind=stayed-in = stood in a threat and took avoidable damage (hpMin is where HP bottomed, defAvail says if a defensive was up); kind=missed-push = drifted out of range (dist yards) when pressure was needed; kind=cd-out-of-range = fired a cooldown (spell) with no valid target in range. Coach the movement decision, not just cooldown usage.`,
+    ...(packs.some((p) => p.items.some((it) => OFFENSIVE_KINDS.has(it.kind)))
+      ? [
+          `- Offensive items (non-death findings): kind=target-hp = the enemy target's HP (hp) at that moment; kind=enemy-defensive / kind=immunity = what answered ${ownerShort}'s burst on that target (immunity has overlap seconds); kind=our-cc = ${ownerShort}'s team CC landed on the enemy healer; kind=our-cd = ${ownerShort}'s team offensive cooldown; kind=off-target = damage went to the wrong target (onTargetPct); kind=dr-clip = a CC landed on wasted DR (dr). You had the kill set up — coach what to change to close it (swap to the exposed target, hold burst past the immunity, lock their healer first), not survival.`,
+        ]
+      : []),
     `- If, after reviewing a pack, you cannot name a specific ${ownerShort}-team decision that was clearly suboptimal, OMIT that finding from your output entirely. Do NOT manufacture generic advice ("use defensives better", "peel/reposition", "watch HP"). A clean window is a valid outcome — say nothing rather than pad.`,
     `- Prefer a firm verdict ("trinket the second stun, not the first") over hedging ("worth reconsidering whether...").`,
     `- Reference only pack items; list the keys you used in "citedKeys" (non-empty).`,

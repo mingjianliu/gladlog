@@ -3,10 +3,14 @@ import { describe, expect, it } from "vitest";
 import {
   auditDeepDives,
   buildDeepDivePrompt,
+  classifyFindingKind,
   hasCoachableSignal,
+  hasOffensiveCoachableSignal,
+  offensivePackItems,
   type DeepDivePack,
 } from "./deepDive";
-import type { Finding } from "./types";
+import type { CandidateEvent, Finding } from "./types";
+import type { IBurstLedgerEntry } from "../utils/burstLedger";
 
 const pack: DeepDivePack = {
   findingIndex: 0,
@@ -110,6 +114,8 @@ describe("buildDeepDivePrompt", () => {
     expect(p).toContain("{{key.field}}");
     expect(p).toContain('"citedKeys"');
     expect(p).toContain("Do NOT assert causation");
+    // 生存-only pack(cc/enemy-cd 条目)不应触发进攻图例(锁定门条件不被反转)
+    expect(p).not.toContain("Offensive items");
   });
 });
 
@@ -188,5 +194,300 @@ describe("hasCoachableSignal(可教信号门,修 1)", () => {
         item("position", { role: "owner", kind: "missed-push", dist: "35" }),
       ]),
     ).toBe(true);
+  });
+});
+
+describe("hasOffensiveCoachableSignal(进攻信号门,进攻深挖)", () => {
+  const item = (kind: string, facts: Record<string, string>) =>
+    ({ key: "p1", kind, t: 1, label: "", unitNames: [], facts }) as never;
+  it("目标触底 + 防御/免疫接了 = 信号", () => {
+    expect(
+      hasOffensiveCoachableSignal([
+        item("target-hp", { role: "enemy-target", hp: "22" }),
+        item("immunity", { role: "enemy", spell: "Divine Shield" }),
+      ]),
+    ).toBe(true);
+    expect(
+      hasOffensiveCoachableSignal([
+        item("target-hp", { role: "enemy-target", hp: "20" }),
+        item("enemy-defensive", { role: "enemy", spell: "Ice Barrier" }),
+      ]),
+    ).toBe(true);
+  });
+  it("off-target / dr-clip 各自即信号(juked-kick 已降级不算)", () => {
+    expect(
+      hasOffensiveCoachableSignal([
+        item("off-target", { role: "owner", onTargetPct: "40" }),
+      ]),
+    ).toBe(true);
+    expect(
+      hasOffensiveCoachableSignal([
+        item("dr-clip", { role: "owner", dr: "Immune" }),
+      ]),
+    ).toBe(true);
+  });
+  it("目标没触底 / 只有 target-hp 无防御 → 无信号", () => {
+    expect(
+      hasOffensiveCoachableSignal([
+        item("target-hp", { role: "enemy-target", hp: "80" }),
+        item("enemy-defensive", { role: "enemy", spell: "Ice Barrier" }),
+      ]),
+    ).toBe(false);
+    expect(
+      hasOffensiveCoachableSignal([
+        item("target-hp", { role: "enemy-target", hp: "15" }),
+      ]),
+    ).toBe(false);
+  });
+  it("免疫单独即信号(不要求目标触底);非免疫防御单独不算(Task 5 扫描修正)", () => {
+    // 把爆发砸进免疫本身就是失误,即使目标血量还很高
+    expect(
+      hasOffensiveCoachableSignal([
+        item("immunity", { role: "enemy", spell: "Ice Block" }),
+      ]),
+    ).toBe(true);
+    expect(
+      hasOffensiveCoachableSignal([
+        item("target-hp", { role: "enemy-target", hp: "90" }),
+        item("immunity", { role: "enemy", spell: "Divine Shield" }),
+      ]),
+    ).toBe(true);
+    // 非免疫防御单独、目标没触底 → 不是信号(需目标同时被打低才成「该控奶」故事)
+    expect(
+      hasOffensiveCoachableSignal([
+        item("enemy-defensive", { role: "enemy", spell: "Ice Barrier" }),
+      ]),
+    ).toBe(false);
+  });
+});
+
+describe("offensivePackItems(进攻证据映射,纯函数)", () => {
+  const entry: IBurstLedgerEntry = {
+    fromSeconds: 40,
+    toSeconds: 44,
+    spells: [{ spellId: "1", spellName: "Combustion", castTimeSeconds: 40 }],
+    totalDamage: 500000,
+    damageByTarget: [
+      { unitId: "e1", unitName: "Rdruid-Area52", damage: 500000 },
+    ],
+    dominantTarget: {
+      unitId: "e1",
+      unitName: "Rdruid-Area52",
+      hpStartPct: 70,
+      hpEndPct: 18,
+      damage: 500000,
+      defensivesHit: [
+        {
+          spellId: "9",
+          spellName: "Ice Block",
+          overlapSeconds: 2.5,
+          isImmunity: true,
+        },
+      ],
+      died: false,
+    },
+    allyCDsOverlapping: [
+      { playerName: "Mate-Area52", spellName: "Power Infusion" },
+    ],
+  };
+  const inWin = (t: number) => t >= 10 && t <= 50;
+
+  it("burst-into-immunity:出 target-hp(start+end)+ immunity + our-cd,名字短名、role 正确", () => {
+    const items = offensivePackItems({
+      entries: [entry],
+      healerChains: [],
+      candFacts: [{ immunity: "Ice Block", overlap: "2.5" }],
+      candTypes: ["burst-into-immunity"],
+      ownerName: "Me-Area52",
+      inWin,
+    });
+    const kinds = items.map((i) => i.kind);
+    expect(kinds).toContain("target-hp");
+    expect(kinds).toContain("immunity");
+    expect(
+      items.find((i) => i.kind === "target-hp" && i.facts.hp === "18"),
+    ).toBeTruthy();
+    // 短名:realm 数字去掉,否则裸数字审计误杀
+    expect(items.find((i) => i.facts.unit === "Rdruid")).toBeTruthy();
+    expect(
+      items.every(
+        (i) => i.facts.unit === undefined || !/\d/.test(i.facts.unit),
+      ),
+    ).toBe(true);
+    // 免疫 role=enemy
+    expect(items.find((i) => i.kind === "immunity")!.facts.role).toBe("enemy");
+  });
+
+  it("healer CC 链在窗口内 → our-cc(role=owner);窗口外的丢弃", () => {
+    const items = offensivePackItems({
+      entries: [],
+      candTypes: ["off-target-in-window"],
+      candFacts: [
+        {
+          onTargetPct: "40",
+          target: "Rdruid-Area52",
+          offTarget: "Warr-Area52",
+        },
+      ],
+      healerChains: [
+        {
+          targetName: "Hpal-Area52",
+          targetSpec: "65",
+          hasWastedApplications: false,
+          applications: [
+            {
+              atSeconds: 42,
+              durationSeconds: 3,
+              spellId: "118",
+              spellName: "Polymorph",
+              casterName: "Me-Area52",
+              casterSpec: "Mage",
+              drInfo: { level: "Full" } as never,
+            },
+            {
+              atSeconds: 99,
+              durationSeconds: 3,
+              spellId: "82691",
+              spellName: "Ring of Frost",
+              casterName: "Me-Area52",
+              casterSpec: "Mage",
+              drInfo: { level: "Full" } as never,
+            },
+          ],
+        },
+      ],
+      ownerName: "Me-Area52",
+      inWin,
+    });
+    const cc = items.filter((i) => i.kind === "our-cc");
+    expect(cc).toHaveLength(1); // 窗口外的 99s 被 inWin 丢
+    expect(cc[0]!.facts.role).toBe("owner");
+    // off-target 类型条:来自候选 facts
+    const off = items.find((i) => i.kind === "off-target");
+    expect(off!.facts.onTargetPct).toBe("40");
+    expect(off!.facts.target).toBe("Warr"); // offTarget 短名
+  });
+
+  it("Fix 1 回归:跨服撞名的队友(短名同、全名不同)不能被判成 owner", () => {
+    const crossRealmEntry: IBurstLedgerEntry = {
+      ...entry,
+      allyCDsOverlapping: [
+        { playerName: "Me-Ragnaros", spellName: "Power Infusion" },
+      ],
+    };
+    const items = offensivePackItems({
+      entries: [crossRealmEntry],
+      healerChains: [],
+      candFacts: [],
+      candTypes: [],
+      ownerName: "Me-Area52",
+      inWin,
+    });
+    const ourCd = items.find(
+      (i) => i.kind === "our-cd" && i.facts.spell === "Power Infusion",
+    );
+    expect(ourCd).toBeTruthy();
+    expect(ourCd!.facts.role).toBe("teammate");
+    // owner 自己的 spell 条目不受影响,role 仍是 owner
+    const ownCd = items.find(
+      (i) => i.kind === "our-cd" && i.facts.spell === "Combustion",
+    );
+    expect(ownCd!.facts.role).toBe("owner");
+  });
+
+  it("Fix 2 回归:burst 起点落在窗口外 → 锚在 fromSeconds 的条目丢弃,hp-end 仍保留", () => {
+    const lateWin = (t: number) => t >= 50 && t <= 90;
+    const spanningEntry: IBurstLedgerEntry = {
+      ...entry,
+      fromSeconds: 40,
+      toSeconds: 55,
+    };
+    const items = offensivePackItems({
+      entries: [spanningEntry],
+      healerChains: [],
+      candFacts: [],
+      candTypes: [],
+      ownerName: "Me-Area52",
+      inWin: lateWin,
+    });
+    // fromSeconds=40 在窗口外:defensivesHit(immunity)、allyCDsOverlapping(our-cd)
+    // 都锚在 e.fromSeconds,不能出现 t=40 的条目
+    expect(items.some((i) => i.t === 40)).toBe(false);
+    expect(items.some((i) => i.kind === "immunity")).toBe(false);
+    // hp-end 锚在 toSeconds=55,在窗口内,应保留
+    expect(
+      items.find(
+        (i) => i.kind === "target-hp" && i.t === 55 && i.facts.hp === "18",
+      ),
+    ).toBeTruthy();
+  });
+});
+
+describe("classifyFindingKind(分发)", () => {
+  const cand = (id: string, type: string): CandidateEvent => ({
+    id,
+    type,
+    t: 10,
+    unitNames: [],
+    facts: {},
+  });
+  const cands = [
+    cand("d1", "death"),
+    cand("b1", "unconverted-burst"),
+    cand("o1", "off-target-in-window"),
+    cand("j1", "juked-kick"),
+  ];
+  const F = (eventIds: string[]): Finding => ({
+    eventIds,
+    severity: "high",
+    category: "x",
+    title: "x",
+    explanation: "x",
+  });
+  it("death 候选 → survival", () => {
+    expect(classifyFindingKind(F(["d1"]), cands)).toBe("survival");
+  });
+  it("非死亡候选 → offensive", () => {
+    expect(classifyFindingKind(F(["b1"]), cands)).toBe("offensive");
+    expect(classifyFindingKind(F(["o1"]), cands)).toBe("offensive");
+  });
+  it("混合平票偏 survival", () => {
+    expect(classifyFindingKind(F(["d1", "b1"]), cands)).toBe("survival");
+  });
+  it("juked-kick 已降级 → survival(不路由进攻深挖)", () => {
+    expect(classifyFindingKind(F(["j1"]), cands)).toBe("survival");
+  });
+});
+
+describe("buildDeepDivePrompt 进攻图例", () => {
+  it("含进攻 pack 时 prompt 印进攻条目说明", () => {
+    const pack = {
+      findingIndex: 0,
+      anchorFrom: 0,
+      anchorTo: 50,
+      items: [
+        {
+          key: "p1",
+          kind: "target-hp",
+          t: 44,
+          label: "",
+          unitNames: [],
+          facts: { t: "44", hp: "18", role: "enemy-target" },
+        },
+      ],
+      facts: { "p1.t": "44", "p1.hp": "18", "p1.role": "enemy-target" },
+    } as never;
+    const findings = [
+      {
+        eventIds: ["b1"],
+        severity: "high",
+        category: "x",
+        title: "爆发没打死",
+        explanation: "x",
+      },
+    ] as never;
+    const p = buildDeepDivePrompt([pack], findings, "Frost Mage", "Me-Area52");
+    expect(p).toContain("kind=target-hp");
+    expect(p).toContain("close it"); // 进攻教练框架关键词
   });
 });
