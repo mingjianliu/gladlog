@@ -1,4 +1,17 @@
-const PLACEHOLDER = /\{\{\s*([\w.]+)\s*\}\}/g;
+/**
+ * 占位符语法(单源)。interpolate / claimChecker / 深挖审计必须共用这一条 ——
+ * 各写各的会漂:深挖审计曾自带 `/\{\{(p\d+)\.[^}]+\}\}/`,不容忍前导空格,
+ * 于是模型写 `{{ p1.t }}` 时 claimChecker 认、裸数字检查也认,唯独审计抓不到
+ * key → citedKeys 为空时整条被静默丢弃,不为空时 chips 退化成只认 citedKeys,
+ * 把「chips 取 citedKeys ∪ usedKeys 防跳错时刻」那个修补悄悄废掉。
+ */
+export const PLACEHOLDER = /\{\{\s*([\w.]+)\s*\}\}/g;
+
+/** 文本里实际用到的占位符键(如 `p1.t`),去重、保持出现顺序。 */
+export function extractPlaceholderKeys(text: string): string[] {
+  const re = new RegExp(PLACEHOLDER.source, "g");
+  return [...new Set([...text.matchAll(re)].map((m) => m[1]!))];
+}
 
 /** Replace every {{key}} present in facts with its value; unknown keys stay literal. */
 export function interpolate(

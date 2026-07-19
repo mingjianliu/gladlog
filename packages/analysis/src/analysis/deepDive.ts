@@ -25,7 +25,11 @@ import {
   type IPositionEvent,
 } from "../utils/positionAnalysis";
 import { causalLint } from "./causalLint";
-import { claimChecker, interpolate } from "../compare/claimChecker";
+import {
+  claimChecker,
+  extractPlaceholderKeys,
+  interpolate,
+} from "../compare/claimChecker";
 import type { CandidateEvent, Finding } from "./types";
 
 /** 深挖轮(自动追问):每场最多深挖的 finding 数(高严重度优先)。 */
@@ -780,12 +784,14 @@ export function auditDeepDives(
     if (!pack || typeof entry.deepDive !== "string") continue;
     const valid = new Set(pack.items.map((i) => i.key));
     // 文本里实际使用的 pack 键({{pK.field}}):必须全部合法;chips 取
-    // citedKeys ∪ usedKeys(agy 复核 #6:两者错位会让 chip 跳错时刻)
+    // citedKeys ∪ usedKeys(agy 复核 #6:两者错位会让 chip 跳错时刻)。
+    // 占位符正则从 claimChecker 单源取 —— 本地自写会与它漂开(周度复核新#1:
+    // 旧的 /\{\{(p\d+)\.[^}]+\}\}/ 不容忍 `{{ p1.t }}` 的空格,claimChecker 却容忍)。
     const usedKeys = [
       ...new Set(
-        [...entry.deepDive.matchAll(/\{\{(p\d+)\.[^}]+\}\}/g)].map(
-          (m) => m[1]!,
-        ),
+        extractPlaceholderKeys(entry.deepDive)
+          .map((k) => k.split(".")[0]!)
+          .filter((ns) => /^p\d+$/.test(ns)),
       ),
     ];
     if (!usedKeys.every((k) => valid.has(k))) continue;

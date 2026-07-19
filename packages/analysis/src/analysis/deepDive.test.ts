@@ -97,6 +97,25 @@ describe("auditDeepDives", () => {
     expect(rescued[0]!.chips.map((c) => c.t)).toEqual([128]);
   });
 
+  it("占位符带空格 {{ p1.t }}:与 claimChecker 同源,usedKeys 仍抓得到(新#1)", () => {
+    // 旧实现审计侧自带 /\{\{(p\d+)\.[^}]+\}\}/ 不容忍前导空格,而 claimChecker
+    // 的 PLACEHOLDER 容忍 → 文本通过校验但 usedKeys 为空:citedKeys 缺席时整条
+    // 被静默丢弃,在场时 chips 退化成只认 citedKeys(跳错时刻)。
+    const spaced = auditDeepDives(
+      [
+        {
+          findingIndex: 0,
+          deepDive: "At {{ p1.t }}s the healer was locked down. Swap earlier.",
+          citedKeys: [],
+        },
+      ],
+      [pack],
+    );
+    expect(spaced).toHaveLength(1); // citedKeys 空也能靠 usedKeys 兜底
+    expect(spaced[0]!.text).toContain("At 128s the healer was locked down");
+    expect(spaced[0]!.chips.map((c) => c.t)).toEqual([128]);
+  });
+
   it("findingIndex 无对应 pack → 丢弃;非数组输入 → 空", () => {
     expect(
       auditDeepDives(
