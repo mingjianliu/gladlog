@@ -652,7 +652,6 @@ pre {
 }
 .rpt-replay-field {
   width: 100%;
-  max-width: 560px;
   aspect-ratio: 1 / 1;
   background: var(--surface);
   border: 1px solid var(--hairline);
@@ -921,10 +920,17 @@ pre {
 }
 .rpt-replay-stage {
   display: grid;
-  grid-template-columns: 1fr 2fr; /* 竞技场 : GCD 泳道 = 1 : 2 */
   gap: 8px;
   align-items: start;
   width: 100%;
+}
+/* split 档是 3 条轨(地图 : 6px 分隔条槽位 : GCD);Task 6 前分隔条槽位是空
+   的,若不显式定位,自动布局会把 GCD 挤进中间 6px 槽——固定两端到列 1/3。 */
+.rpt-replay-stage.mode-split > .rpt-replay-arena-col {
+  grid-column: 1;
+}
+.rpt-replay-stage.mode-split > .rpt-gcd {
+  grid-column: 3;
 }
 .rpt-replay-arena-col {
   min-width: 0;
@@ -2844,15 +2850,13 @@ pre {
   border-radius: 999px;
 }
 
-/* ── 回放布局切换:纯地图 / 地图+GCD ── */
+/* ── 回放布局切换:纯地图 / 地图+GCD / 纯 GCD ── */
 .rpt-replay-layout-seg {
   width: fit-content;
   margin-bottom: 8px;
 }
-.rpt-replay-stage.map-only {
-  grid-template-columns: 1fr;
-}
-.rpt-replay-stage.map-only .rpt-replay-arena-grid {
+/* 纯地图档:框体加宽 + 整体居中(列宽由内联样式给) */
+.rpt-replay-stage.mode-map .rpt-replay-arena-grid {
   grid-template-columns: 140px minmax(0, 1fr) 140px;
   max-width: 1100px;
   margin: 0 auto;

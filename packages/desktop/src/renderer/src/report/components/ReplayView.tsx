@@ -18,6 +18,7 @@ import type { ReportSource } from "../derive/types";
 import { deriveVulnBands } from "../derive/vulnWindows";
 import { GcdSwimlane } from "./GcdSwimlane";
 import { ReplayZoomControls } from "./ReplayZoomControls";
+import { useReplayLayout, type ReplayLayoutMode } from "./useReplayLayout";
 import { useReplayZoom } from "./useReplayZoom";
 
 const FALLBACK_VW = 520;
@@ -25,6 +26,11 @@ const FALLBACK_VH = 520;
 const PAD = 46;
 const GRID = 4;
 const SPEEDS = [0.5, 1, 2, 4] as const;
+const LAYOUT_MODES: readonly (readonly [ReplayLayoutMode, string])[] = [
+  ["split", "地图 + GCD"],
+  ["map", "纯地图"],
+  ["gcd", "纯 GCD"],
+];
 
 const reactionRing = (reaction: string): string =>
   reaction === "Friendly"
@@ -88,24 +94,11 @@ export function ReplayView({
   const focusFire = useMemo(() => deriveFocusFire(source), [source]);
 
   const [t, setT] = useState(startTime);
-  // 布局模式(用户反馈):地图+GCD / 纯地图;localStorage 记忆
-  const [layout, setLayout] = useState<"full" | "map">(() => {
-    try {
-      return localStorage.getItem("gladlog.replayLayout") === "map"
-        ? "map"
-        : "full";
-    } catch {
-      return "full";
-    }
-  });
-  const switchLayout = (next: "full" | "map") => {
-    setLayout(next);
-    try {
-      localStorage.setItem("gladlog.replayLayout", next);
-    } catch {
-      /* 隐私模式等 */
-    }
-  };
+  // 布局模式(用户反馈):地图+GCD / 纯地图 / 纯 GCD;localStorage 记忆
+  // setRatio 本任务未消费 —— 下一任务的可拖拽分隔条(ReplaySplitter)会用它。
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { mode, ratio, setMode, setRatio } = useReplayLayout();
+  const stageRef = useRef<HTMLDivElement | null>(null);
   // 回放时钟保持局部(热 tick);仅卸载时把最后位置回报给 MatchReport(冷路径)
   const lastTRef = useRef(startTime);
   lastTRef.current = t;
@@ -262,506 +255,511 @@ export function ReplayView({
   return (
     <div className="rpt-replay">
       <div className="rpt-replay-layout-seg rpt-mode-seg">
-        {(["full", "map"] as const).map((m) => (
+        {LAYOUT_MODES.map(([value, label]) => (
           <button
-            key={m}
-            className={layout === m ? "active" : ""}
-            onClick={() => switchLayout(m)}
+            key={value}
+            className={mode === value ? "active" : ""}
+            onClick={() => setMode(value)}
           >
-            {m === "full" ? "地图 + GCD" : "纯地图"}
+            {label}
           </button>
         ))}
       </div>
       <div
-        className={
-          layout === "map" ? "rpt-replay-stage map-only" : "rpt-replay-stage"
-        }
+        className={`rpt-replay-stage mode-${mode}`}
+        ref={stageRef}
+        style={{
+          gridTemplateColumns:
+            mode === "split" ? `${ratio}fr 6px ${1 - ratio}fr` : "1fr",
+        }}
       >
-        <div className="rpt-replay-arena-col">
-          <div className="rpt-replay-arena-grid">
-            <div className="rpt-replay-map-cell" ref={zoom.hotZoneRef}>
-              <svg
-                ref={zoom.svgRef}
-                className={
-                  view ? "rpt-replay-field zoomed" : "rpt-replay-field"
-                }
-                viewBox={
-                  view
-                    ? `${view.x} ${view.y} ${view.w} ${view.h}`
-                    : `0 0 ${VW} ${VH}`
-                }
-                data-testid="rpt-replay-field"
-                preserveAspectRatio="xMidYMid meet"
-                style={{ aspectRatio: `${VW} / ${VH}` }}
-                onPointerDown={(e) => {
-                  if (!view) return;
-                  panRef.current = { px: e.clientX, py: e.clientY };
-                  e.currentTarget.setPointerCapture(e.pointerId);
-                }}
-                onPointerMove={(e) => {
-                  if (!view || !panRef.current) return;
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  zoom.panByPixels(
-                    e.clientX - panRef.current.px,
-                    e.clientY - panRef.current.py,
-                    rect,
-                  );
-                  panRef.current = { px: e.clientX, py: e.clientY };
-                }}
-                onPointerUp={() => {
-                  panRef.current = null;
-                }}
-                onDoubleClick={zoom.reset}
-              >
-                {/* 单位专精图标的圆形裁剪(单位组内局部坐标,全场共用一个) */}
-                <defs>
-                  <clipPath id="rpt-unit-clip">
-                    <circle r={11} cx={0} cy={0} />
-                  </clipPath>
-                </defs>
-                {zoneMap ? (
-                  <>
-                    {/* 地面(底图为透明障碍图时透出) */}
-                    <rect
-                      x={0}
-                      y={0}
-                      width={VW}
-                      height={VH}
-                      className="rpt-replay-map-floor"
-                    />
-                    {/* 该竞技场真实 minimap 底图(CDN 运行时加载) */}
-                    <image
-                      href={arenaMapUrl(zoneId as string | number)}
-                      x={0}
-                      y={0}
-                      width={VW}
-                      height={VH}
-                      preserveAspectRatio="none"
-                      className="rpt-replay-map"
-                    />
-                    {/* 压暗一层,保证圆点/尾迹在底图上有对比 */}
-                    <rect
-                      x={0}
-                      y={0}
-                      width={VW}
-                      height={VH}
-                      className="rpt-replay-map-veil"
-                    />
-                  </>
-                ) : (
-                  <>
-                    <defs>
-                      <radialGradient
-                        id="rpt-arena-floor"
-                        cx="50%"
-                        cy="50%"
-                        r="70%"
-                      >
-                        <stop offset="0%" stopColor="var(--surface-2)" />
-                        <stop offset="100%" stopColor="var(--bg)" />
-                      </radialGradient>
-                    </defs>
-                    <rect
-                      x={offX}
-                      y={offY}
-                      width={aw}
-                      height={ah}
-                      rx={6}
-                      className="rpt-replay-arena"
-                      fill="url(#rpt-arena-floor)"
-                    />
-                    {/* 中央区域微光带 */}
-                    <circle
-                      cx={cxA}
-                      cy={cyA}
-                      r={Math.min(aw, ah) * 0.4}
-                      className="rpt-replay-zone"
-                    />
-                    {/* 立柱(空间锚点) */}
-                    {pillars.map((p, i) => (
-                      <g key={`p${i}`}>
-                        <circle
-                          cx={p.x}
-                          cy={p.y}
-                          r={pillarR}
-                          className="rpt-replay-pillar"
-                        />
-                        <circle
-                          cx={p.x}
-                          cy={p.y}
-                          r={pillarR * 0.6}
-                          className="rpt-replay-pillar-inner"
-                        />
-                      </g>
-                    ))}
-                    {/* 网格线 */}
-                    {Array.from({ length: GRID - 1 }, (_, i) => {
-                      const fx = offX + ((i + 1) / GRID) * aw;
-                      const fy = offY + ((i + 1) / GRID) * ah;
-                      return (
-                        <g key={`g${i}`} className="rpt-replay-grid">
-                          <line x1={fx} y1={offY} x2={fx} y2={offY + ah} />
-                          <line x1={offX} y1={fy} x2={offX + aw} y2={fy} />
-                        </g>
-                      );
-                    })}
-                  </>
-                )}
-                {/* 可行走地面轮廓(语料实测):场地边缘 + 入场房,LoS 参照 */}
-                {floorOutline && (
-                  <polygon
-                    className="rpt-replay-floor-outline"
-                    points={floorOutline
-                      .map(([fx, fy]) => `${toX(fx)},${toY(fy)}`)
-                      .join(" ")}
-                  />
-                )}
-                {/* 障碍物(LoS 几何,与 analysis 谓词同源) */}
-                {(arenaObstacles[String(zoneId)] ?? []).map((o, i) =>
-                  o.type === "circle" ? (
-                    <circle
-                      key={`ob${i}`}
-                      className="rpt-replay-obstacle"
-                      cx={toX(o.cx)}
-                      cy={toY(o.cy)}
-                      r={Math.abs(toX(o.cx + o.r) - toX(o.cx))}
-                    />
-                  ) : (
-                    <polygon
-                      key={`ob${i}`}
-                      className="rpt-replay-obstacle"
-                      points={o.vertices
-                        .map(([vx, vy]) => `${toX(vx)},${toY(vy)}`)
-                        .join(" ")}
-                    />
-                  ),
-                )}
-                {/* 走位尾迹(最近数秒) */}
-                {tracks.map((tr) => {
-                  const pts = pathUpTo(tr, t);
-                  if (pts.length < 2) return null;
-                  return (
-                    <polyline
-                      key={`tr${tr.unitId}`}
-                      className="rpt-replay-trail"
-                      points={pts
-                        .map((p) => `${toX(p.x)},${toY(p.y)}`)
-                        .join(" ")}
-                      stroke={classColor(tr.classId)}
-                    />
-                  );
-                })}
-                {/* 阵亡:残影 + ✕ */}
-                {tracks.map((tr) => {
-                  if (tr.deathT == null || t < tr.deathT) return null;
-                  const dp = deathPosition(tr);
-                  if (!dp) return null;
-                  const cx = toX(dp.x);
-                  const cy = toY(dp.y);
-                  return (
-                    <g
-                      key={`d${tr.unitId}`}
-                      className={
-                        onDeathClick ? "rpt-replay-ghost-click" : undefined
-                      }
-                      onClick={
-                        onDeathClick
-                          ? () => onDeathClick(tr.unitId, tr.deathT!)
-                          : undefined
-                      }
-                    >
-                      <circle
-                        cx={cx}
-                        cy={cy}
-                        r={13}
-                        className="rpt-replay-ghost"
-                        fill={classColor(tr.classId)}
+        {mode !== "gcd" && (
+          <div className="rpt-replay-arena-col">
+            <div className="rpt-replay-arena-grid">
+              <div className="rpt-replay-map-cell" ref={zoom.hotZoneRef}>
+                <svg
+                  ref={zoom.svgRef}
+                  className={
+                    view ? "rpt-replay-field zoomed" : "rpt-replay-field"
+                  }
+                  viewBox={
+                    view
+                      ? `${view.x} ${view.y} ${view.w} ${view.h}`
+                      : `0 0 ${VW} ${VH}`
+                  }
+                  data-testid="rpt-replay-field"
+                  preserveAspectRatio="xMidYMid meet"
+                  style={{ aspectRatio: `${VW} / ${VH}` }}
+                  onPointerDown={(e) => {
+                    if (!view) return;
+                    panRef.current = { px: e.clientX, py: e.clientY };
+                    e.currentTarget.setPointerCapture(e.pointerId);
+                  }}
+                  onPointerMove={(e) => {
+                    if (!view || !panRef.current) return;
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    zoom.panByPixels(
+                      e.clientX - panRef.current.px,
+                      e.clientY - panRef.current.py,
+                      rect,
+                    );
+                    panRef.current = { px: e.clientX, py: e.clientY };
+                  }}
+                  onPointerUp={() => {
+                    panRef.current = null;
+                  }}
+                  onDoubleClick={zoom.reset}
+                >
+                  {/* 单位专精图标的圆形裁剪(单位组内局部坐标,全场共用一个) */}
+                  <defs>
+                    <clipPath id="rpt-unit-clip">
+                      <circle r={11} cx={0} cy={0} />
+                    </clipPath>
+                  </defs>
+                  {zoneMap ? (
+                    <>
+                      {/* 地面(底图为透明障碍图时透出) */}
+                      <rect
+                        x={0}
+                        y={0}
+                        width={VW}
+                        height={VH}
+                        className="rpt-replay-map-floor"
                       />
-                      <text x={cx} y={cy + 4} className="rpt-replay-death">
-                        ✕
-                      </text>
-                      <title>{`${tr.name} 阵亡${onDeathClick ? " — 点击看死亡回顾" : ""}`}</title>
-                    </g>
-                  );
-                })}
-                {/* 存活单位:职业色圆点 + 字形 + 名字 + 血条。
-                hover(侧栏或场上)的单位排到最后 = SVG 最上层,重叠时可看清 */}
-                {(hoverUnit
-                  ? [
-                      ...tracks.filter((tr) => tr.unitId !== hoverUnit),
-                      ...tracks.filter((tr) => tr.unitId === hoverUnit),
-                    ]
-                  : tracks
-                ).map((tr) => {
-                  const at = sampleAt(tr, t);
-                  if (!at) return null;
-                  const cx = toX(at.x);
-                  const cy = toY(at.y);
-                  const hp =
-                    at.maxHp > 0
-                      ? Math.max(0, Math.min(1, at.hp / at.maxHp))
-                      : 1;
-                  return (
-                    <g
-                      key={tr.unitId}
-                      className="rpt-replay-unit"
-                      onMouseEnter={() => setHoverUnit(tr.unitId)}
-                      onMouseLeave={() => setHoverUnit(null)}
-                    >
-                      {hoverUnit === tr.unitId && (
+                      {/* 该竞技场真实 minimap 底图(CDN 运行时加载) */}
+                      <image
+                        href={arenaMapUrl(zoneId as string | number)}
+                        x={0}
+                        y={0}
+                        width={VW}
+                        height={VH}
+                        preserveAspectRatio="none"
+                        className="rpt-replay-map"
+                      />
+                      {/* 压暗一层,保证圆点/尾迹在底图上有对比 */}
+                      <rect
+                        x={0}
+                        y={0}
+                        width={VW}
+                        height={VH}
+                        className="rpt-replay-map-veil"
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <defs>
+                        <radialGradient
+                          id="rpt-arena-floor"
+                          cx="50%"
+                          cy="50%"
+                          r="70%"
+                        >
+                          <stop offset="0%" stopColor="var(--surface-2)" />
+                          <stop offset="100%" stopColor="var(--bg)" />
+                        </radialGradient>
+                      </defs>
+                      <rect
+                        x={offX}
+                        y={offY}
+                        width={aw}
+                        height={ah}
+                        rx={6}
+                        className="rpt-replay-arena"
+                        fill="url(#rpt-arena-floor)"
+                      />
+                      {/* 中央区域微光带 */}
+                      <circle
+                        cx={cxA}
+                        cy={cyA}
+                        r={Math.min(aw, ah) * 0.4}
+                        className="rpt-replay-zone"
+                      />
+                      {/* 立柱(空间锚点) */}
+                      {pillars.map((p, i) => (
+                        <g key={`p${i}`}>
+                          <circle
+                            cx={p.x}
+                            cy={p.y}
+                            r={pillarR}
+                            className="rpt-replay-pillar"
+                          />
+                          <circle
+                            cx={p.x}
+                            cy={p.y}
+                            r={pillarR * 0.6}
+                            className="rpt-replay-pillar-inner"
+                          />
+                        </g>
+                      ))}
+                      {/* 网格线 */}
+                      {Array.from({ length: GRID - 1 }, (_, i) => {
+                        const fx = offX + ((i + 1) / GRID) * aw;
+                        const fy = offY + ((i + 1) / GRID) * ah;
+                        return (
+                          <g key={`g${i}`} className="rpt-replay-grid">
+                            <line x1={fx} y1={offY} x2={fx} y2={offY + ah} />
+                            <line x1={offX} y1={fy} x2={offX + aw} y2={fy} />
+                          </g>
+                        );
+                      })}
+                    </>
+                  )}
+                  {/* 可行走地面轮廓(语料实测):场地边缘 + 入场房,LoS 参照 */}
+                  {floorOutline && (
+                    <polygon
+                      className="rpt-replay-floor-outline"
+                      points={floorOutline
+                        .map(([fx, fy]) => `${toX(fx)},${toY(fy)}`)
+                        .join(" ")}
+                    />
+                  )}
+                  {/* 障碍物(LoS 几何,与 analysis 谓词同源) */}
+                  {(arenaObstacles[String(zoneId)] ?? []).map((o, i) =>
+                    o.type === "circle" ? (
+                      <circle
+                        key={`ob${i}`}
+                        className="rpt-replay-obstacle"
+                        cx={toX(o.cx)}
+                        cy={toY(o.cy)}
+                        r={Math.abs(toX(o.cx + o.r) - toX(o.cx))}
+                      />
+                    ) : (
+                      <polygon
+                        key={`ob${i}`}
+                        className="rpt-replay-obstacle"
+                        points={o.vertices
+                          .map(([vx, vy]) => `${toX(vx)},${toY(vy)}`)
+                          .join(" ")}
+                      />
+                    ),
+                  )}
+                  {/* 走位尾迹(最近数秒) */}
+                  {tracks.map((tr) => {
+                    const pts = pathUpTo(tr, t);
+                    if (pts.length < 2) return null;
+                    return (
+                      <polyline
+                        key={`tr${tr.unitId}`}
+                        className="rpt-replay-trail"
+                        points={pts
+                          .map((p) => `${toX(p.x)},${toY(p.y)}`)
+                          .join(" ")}
+                        stroke={classColor(tr.classId)}
+                      />
+                    );
+                  })}
+                  {/* 阵亡:残影 + ✕ */}
+                  {tracks.map((tr) => {
+                    if (tr.deathT == null || t < tr.deathT) return null;
+                    const dp = deathPosition(tr);
+                    if (!dp) return null;
+                    const cx = toX(dp.x);
+                    const cy = toY(dp.y);
+                    return (
+                      <g
+                        key={`d${tr.unitId}`}
+                        className={
+                          onDeathClick ? "rpt-replay-ghost-click" : undefined
+                        }
+                        onClick={
+                          onDeathClick
+                            ? () => onDeathClick(tr.unitId, tr.deathT!)
+                            : undefined
+                        }
+                      >
                         <circle
                           cx={cx}
                           cy={cy}
-                          r={17}
-                          className="rpt-replay-hover-ring"
+                          r={13}
+                          className="rpt-replay-ghost"
+                          fill={classColor(tr.classId)}
                         />
-                      )}
-                      {/* 爆发红光脉冲:敌方进攻大 CD active(span 与爆发账本同谓词) */}
-                      {(() => {
-                        const span = (burstAuras[tr.unitId] ?? []).find(
-                          (s) => t >= s.fromMs && t <= s.toMs,
-                        );
-                        if (!span) return null;
-                        return (
-                          <circle
-                            cx={cx}
-                            cy={cy}
-                            r={19}
-                            className="rpt-replay-burst-ring"
-                          >
-                            <title>{`${tr.name} 爆发中:${span.spellName}`}</title>
-                          </circle>
-                        );
-                      })()}
-                      {/* 同秒集火高亮:2+ 敌对玩家同一秒打这个目标 */}
-                      {(() => {
-                        const sec = Math.floor((t - source.startTime) / 1000);
-                        const n = focusFire[tr.unitId]?.[sec];
-                        if (!n) return null;
-                        return (
-                          <circle
-                            cx={cx}
-                            cy={cy}
-                            r={16}
-                            className="rpt-replay-focus-ring"
-                          >
-                            <title>{`集火:${n} 人同秒打击 ${tr.name}`}</title>
-                          </circle>
-                        );
-                      })()}
-                      <text x={cx} y={cy - 19} className="rpt-replay-name">
-                        {tr.name}
-                      </text>
-                      <circle
-                        cx={cx}
-                        cy={cy}
-                        r={13}
-                        fill={classColor(tr.classId)}
-                        stroke={reactionRing(tr.reaction)}
-                        strokeWidth={2.5}
-                        fillOpacity={0.4 + 0.6 * hp}
-                      />
-                      <text x={cx} y={cy + 3.2} className="rpt-replay-glyph">
-                        {classGlyph(tr.classId)}
-                      </text>
-                      {/* 专精图标叠加(CDN 同对局列表先例);加载失败时什么都不画,
-                      底下的职业色圆点+字形自然兜底 */}
-                      {specIconUrl(tr.specId) && (
-                        <g
-                          transform={`translate(${cx},${cy})`}
-                          clipPath="url(#rpt-unit-clip)"
-                          pointerEvents="none"
-                        >
-                          <image
-                            href={specIconUrl(tr.specId)!}
-                            x={-11}
-                            y={-11}
-                            width={22}
-                            height={22}
-                            preserveAspectRatio="xMidYMid slice"
-                          />
-                        </g>
-                      )}
-                      <rect
-                        x={cx - 16}
-                        y={cy + 16}
-                        width={32}
-                        height={4}
-                        rx={2}
-                        className="rpt-replay-hp-track"
-                      />
-                      <rect
-                        x={cx - 16}
-                        y={cy + 16}
-                        width={32 * hp}
-                        height={4}
-                        rx={2}
-                        fill={hpColor(hp)}
-                      />
-                      {/* HP 数字(#11c) */}
-                      <text
-                        x={cx + 20}
-                        y={cy + 20.5}
-                        className="rpt-replay-hpnum"
-                        fill={hpColor(hp)}
-                      >
-                        {Math.round(hp * 100)}%
-                      </text>
-                      {/* 真读条条:进行中的读条在血条下画进度(金=会完成,红=被掐) */}
-                      {(() => {
-                        const bar = castBarAt(
-                          castBarsByUnit[tr.unitId] ?? [],
-                          t,
-                        );
-                        if (!bar) return null;
-                        const frac = Math.max(
-                          0,
-                          Math.min(
-                            1,
-                            (t - bar.fromMs) /
-                              Math.max(1, bar.toMs - bar.fromMs),
-                          ),
-                        );
-                        return (
-                          <g className="rpt-replay-castbar">
-                            <rect
-                              x={cx - 16}
-                              y={cy + 22}
-                              width={32}
-                              height={3}
-                              rx={1.5}
-                              className="rpt-replay-hp-track"
-                            />
-                            <rect
-                              x={cx - 16}
-                              y={cy + 22}
-                              width={32 * frac}
-                              height={3}
-                              rx={1.5}
-                              fill={
-                                bar.outcome === "completed"
-                                  ? "var(--gold)"
-                                  : "var(--loss)"
-                              }
-                            />
-                            <title>{`读条:${bar.spellName}${bar.outcome === "cut" ? "(被掐)" : ""}`}</title>
-                          </g>
-                        );
-                      })()}
-                      {/* 施法闪现(#11b):刚成功的施法在头顶闪 1.2s */}
-                      {(() => {
-                        const cs = castsByUnit[tr.unitId] ?? [];
-                        let last: (typeof cs)[number] | null = null;
-                        for (const c of cs) {
-                          if (c.t > t) break;
-                          if (t - c.t <= 1200) last = c;
-                        }
-                        if (!last) return null;
-                        return (
-                          <text
-                            x={cx}
-                            y={cy - 30}
-                            className="rpt-replay-castflash"
-                          >
-                            ✦ {last.spellName}
-                          </text>
-                        );
-                      })()}
-                    </g>
-                  );
-                })}
-              </svg>
-              <ReplayZoomControls
-                zoomLevel={zoom.zoomLevel}
-                onZoomIn={() => zoom.applyZoom(0.8, 0.5, 0.5)}
-                onZoomOut={() => zoom.applyZoom(1.25, 0.5, 0.5)}
-                onReset={zoom.reset}
-              />
-            </div>
-
-            {/* 竞技场框体(1f):贴场地两侧,友左敌右;血量不受场上重叠遮挡 */}
-            {(["Friendly", "Hostile"] as const).map((side) => (
-              <div
-                key={side}
-                className={`rpt-replay-frames ${side === "Friendly" ? "friendly" : "enemy"}`}
-                data-testid={`rpt-frames-${side === "Friendly" ? "friendly" : "enemy"}`}
-              >
-                {tracks
-                  .filter((tr) =>
-                    side === "Friendly"
-                      ? tr.reaction === "Friendly"
-                      : tr.reaction !== "Friendly",
-                  )
-                  .map((tr) => {
-                    const at = sampleAt(tr, t);
-                    // 死亡判定与旧 legend 同谓词(deathT),不借道 sampleAt 的 null
-                    const dead = tr.deathT != null && t >= tr.deathT;
-                    const hp =
-                      at && at.maxHp > 0
-                        ? Math.max(0, Math.min(1, at.hp / at.maxHp))
-                        : 0;
-                    // 百分比三段色(1f):>60% 稳 / 30–60% 警 / <30% 危
-                    const pctColor =
-                      hp > 0.6
-                        ? "var(--win)"
-                        : hp >= 0.3
-                          ? "var(--gold)"
-                          : "var(--loss)";
-                    const bursting = (burstAuras[tr.unitId] ?? []).some(
-                      (s) => t >= s.fromMs && t <= s.toMs,
+                        <text x={cx} y={cy + 4} className="rpt-replay-death">
+                          ✕
+                        </text>
+                        <title>{`${tr.name} 阵亡${onDeathClick ? " — 点击看死亡回顾" : ""}`}</title>
+                      </g>
                     );
+                  })}
+                  {/* 存活单位:职业色圆点 + 字形 + 名字 + 血条。
+                hover(侧栏或场上)的单位排到最后 = SVG 最上层,重叠时可看清 */}
+                  {(hoverUnit
+                    ? [
+                        ...tracks.filter((tr) => tr.unitId !== hoverUnit),
+                        ...tracks.filter((tr) => tr.unitId === hoverUnit),
+                      ]
+                    : tracks
+                  ).map((tr) => {
+                    const at = sampleAt(tr, t);
+                    if (!at) return null;
+                    const cx = toX(at.x);
+                    const cy = toY(at.y);
+                    const hp =
+                      at.maxHp > 0
+                        ? Math.max(0, Math.min(1, at.hp / at.maxHp))
+                        : 1;
                     return (
-                      <div
+                      <g
                         key={tr.unitId}
-                        className={[
-                          "rpt-frame",
-                          dead ? "dead" : "",
-                          hoverUnit === tr.unitId ? "hovered" : "",
-                        ]
-                          .filter(Boolean)
-                          .join(" ")}
+                        className="rpt-replay-unit"
                         onMouseEnter={() => setHoverUnit(tr.unitId)}
                         onMouseLeave={() => setHoverUnit(null)}
                       >
-                        <span className="rpt-frame-main">
-                          <span className="rpt-frame-name">
-                            {tr.name}
-                            {bursting && !dead && (
-                              <span className="rpt-frame-burst">爆发</span>
-                            )}
-                          </span>
-                          {dead ? (
-                            <span className="rpt-frame-dead">
-                              ✝ 阵亡 {relTime(tr.deathT!, startTime)}
-                            </span>
-                          ) : (
-                            <span className="rpt-frame-bar">
-                              <span
-                                style={{
-                                  width: `${hp * 100}%`,
-                                  background: hpColor(hp),
-                                }}
-                              />
-                            </span>
-                          )}
-                          {!dead && (
-                            <span
-                              className="rpt-frame-pct"
-                              style={{ color: pctColor }}
+                        {hoverUnit === tr.unitId && (
+                          <circle
+                            cx={cx}
+                            cy={cy}
+                            r={17}
+                            className="rpt-replay-hover-ring"
+                          />
+                        )}
+                        {/* 爆发红光脉冲:敌方进攻大 CD active(span 与爆发账本同谓词) */}
+                        {(() => {
+                          const span = (burstAuras[tr.unitId] ?? []).find(
+                            (s) => t >= s.fromMs && t <= s.toMs,
+                          );
+                          if (!span) return null;
+                          return (
+                            <circle
+                              cx={cx}
+                              cy={cy}
+                              r={19}
+                              className="rpt-replay-burst-ring"
                             >
-                              {Math.round(hp * 100)}%
-                            </span>
-                          )}
-                        </span>
-                      </div>
+                              <title>{`${tr.name} 爆发中:${span.spellName}`}</title>
+                            </circle>
+                          );
+                        })()}
+                        {/* 同秒集火高亮:2+ 敌对玩家同一秒打这个目标 */}
+                        {(() => {
+                          const sec = Math.floor((t - source.startTime) / 1000);
+                          const n = focusFire[tr.unitId]?.[sec];
+                          if (!n) return null;
+                          return (
+                            <circle
+                              cx={cx}
+                              cy={cy}
+                              r={16}
+                              className="rpt-replay-focus-ring"
+                            >
+                              <title>{`集火:${n} 人同秒打击 ${tr.name}`}</title>
+                            </circle>
+                          );
+                        })()}
+                        <text x={cx} y={cy - 19} className="rpt-replay-name">
+                          {tr.name}
+                        </text>
+                        <circle
+                          cx={cx}
+                          cy={cy}
+                          r={13}
+                          fill={classColor(tr.classId)}
+                          stroke={reactionRing(tr.reaction)}
+                          strokeWidth={2.5}
+                          fillOpacity={0.4 + 0.6 * hp}
+                        />
+                        <text x={cx} y={cy + 3.2} className="rpt-replay-glyph">
+                          {classGlyph(tr.classId)}
+                        </text>
+                        {/* 专精图标叠加(CDN 同对局列表先例);加载失败时什么都不画,
+                      底下的职业色圆点+字形自然兜底 */}
+                        {specIconUrl(tr.specId) && (
+                          <g
+                            transform={`translate(${cx},${cy})`}
+                            clipPath="url(#rpt-unit-clip)"
+                            pointerEvents="none"
+                          >
+                            <image
+                              href={specIconUrl(tr.specId)!}
+                              x={-11}
+                              y={-11}
+                              width={22}
+                              height={22}
+                              preserveAspectRatio="xMidYMid slice"
+                            />
+                          </g>
+                        )}
+                        <rect
+                          x={cx - 16}
+                          y={cy + 16}
+                          width={32}
+                          height={4}
+                          rx={2}
+                          className="rpt-replay-hp-track"
+                        />
+                        <rect
+                          x={cx - 16}
+                          y={cy + 16}
+                          width={32 * hp}
+                          height={4}
+                          rx={2}
+                          fill={hpColor(hp)}
+                        />
+                        {/* HP 数字(#11c) */}
+                        <text
+                          x={cx + 20}
+                          y={cy + 20.5}
+                          className="rpt-replay-hpnum"
+                          fill={hpColor(hp)}
+                        >
+                          {Math.round(hp * 100)}%
+                        </text>
+                        {/* 真读条条:进行中的读条在血条下画进度(金=会完成,红=被掐) */}
+                        {(() => {
+                          const bar = castBarAt(
+                            castBarsByUnit[tr.unitId] ?? [],
+                            t,
+                          );
+                          if (!bar) return null;
+                          const frac = Math.max(
+                            0,
+                            Math.min(
+                              1,
+                              (t - bar.fromMs) /
+                                Math.max(1, bar.toMs - bar.fromMs),
+                            ),
+                          );
+                          return (
+                            <g className="rpt-replay-castbar">
+                              <rect
+                                x={cx - 16}
+                                y={cy + 22}
+                                width={32}
+                                height={3}
+                                rx={1.5}
+                                className="rpt-replay-hp-track"
+                              />
+                              <rect
+                                x={cx - 16}
+                                y={cy + 22}
+                                width={32 * frac}
+                                height={3}
+                                rx={1.5}
+                                fill={
+                                  bar.outcome === "completed"
+                                    ? "var(--gold)"
+                                    : "var(--loss)"
+                                }
+                              />
+                              <title>{`读条:${bar.spellName}${bar.outcome === "cut" ? "(被掐)" : ""}`}</title>
+                            </g>
+                          );
+                        })()}
+                        {/* 施法闪现(#11b):刚成功的施法在头顶闪 1.2s */}
+                        {(() => {
+                          const cs = castsByUnit[tr.unitId] ?? [];
+                          let last: (typeof cs)[number] | null = null;
+                          for (const c of cs) {
+                            if (c.t > t) break;
+                            if (t - c.t <= 1200) last = c;
+                          }
+                          if (!last) return null;
+                          return (
+                            <text
+                              x={cx}
+                              y={cy - 30}
+                              className="rpt-replay-castflash"
+                            >
+                              ✦ {last.spellName}
+                            </text>
+                          );
+                        })()}
+                      </g>
                     );
                   })}
+                </svg>
+                <ReplayZoomControls
+                  zoomLevel={zoom.zoomLevel}
+                  onZoomIn={() => zoom.applyZoom(0.8, 0.5, 0.5)}
+                  onZoomOut={() => zoom.applyZoom(1.25, 0.5, 0.5)}
+                  onReset={zoom.reset}
+                />
               </div>
-            ))}
-          </div>
-        </div>
 
-        {layout === "full" && (
+              {/* 竞技场框体(1f):贴场地两侧,友左敌右;血量不受场上重叠遮挡 */}
+              {(["Friendly", "Hostile"] as const).map((side) => (
+                <div
+                  key={side}
+                  className={`rpt-replay-frames ${side === "Friendly" ? "friendly" : "enemy"}`}
+                  data-testid={`rpt-frames-${side === "Friendly" ? "friendly" : "enemy"}`}
+                >
+                  {tracks
+                    .filter((tr) =>
+                      side === "Friendly"
+                        ? tr.reaction === "Friendly"
+                        : tr.reaction !== "Friendly",
+                    )
+                    .map((tr) => {
+                      const at = sampleAt(tr, t);
+                      // 死亡判定与旧 legend 同谓词(deathT),不借道 sampleAt 的 null
+                      const dead = tr.deathT != null && t >= tr.deathT;
+                      const hp =
+                        at && at.maxHp > 0
+                          ? Math.max(0, Math.min(1, at.hp / at.maxHp))
+                          : 0;
+                      // 百分比三段色(1f):>60% 稳 / 30–60% 警 / <30% 危
+                      const pctColor =
+                        hp > 0.6
+                          ? "var(--win)"
+                          : hp >= 0.3
+                            ? "var(--gold)"
+                            : "var(--loss)";
+                      const bursting = (burstAuras[tr.unitId] ?? []).some(
+                        (s) => t >= s.fromMs && t <= s.toMs,
+                      );
+                      return (
+                        <div
+                          key={tr.unitId}
+                          className={[
+                            "rpt-frame",
+                            dead ? "dead" : "",
+                            hoverUnit === tr.unitId ? "hovered" : "",
+                          ]
+                            .filter(Boolean)
+                            .join(" ")}
+                          onMouseEnter={() => setHoverUnit(tr.unitId)}
+                          onMouseLeave={() => setHoverUnit(null)}
+                        >
+                          <span className="rpt-frame-main">
+                            <span className="rpt-frame-name">
+                              {tr.name}
+                              {bursting && !dead && (
+                                <span className="rpt-frame-burst">爆发</span>
+                              )}
+                            </span>
+                            {dead ? (
+                              <span className="rpt-frame-dead">
+                                ✝ 阵亡 {relTime(tr.deathT!, startTime)}
+                              </span>
+                            ) : (
+                              <span className="rpt-frame-bar">
+                                <span
+                                  style={{
+                                    width: `${hp * 100}%`,
+                                    background: hpColor(hp),
+                                  }}
+                                />
+                              </span>
+                            )}
+                            {!dead && (
+                              <span
+                                className="rpt-frame-pct"
+                                style={{ color: pctColor }}
+                              >
+                                {Math.round(hp * 100)}%
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                      );
+                    })}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {mode !== "map" && (
           <GcdSwimlane
             source={source}
             tracks={tracks}
