@@ -7,6 +7,7 @@ import realMatch from "../test/fixtures/real-match-sample.json";
 import synthMatch from "../test/fixtures/report-match.json";
 import "../src/renderer/src/styles.css";
 import "./harness.css";
+import { resolveScene, type SceneName } from "./scenes";
 
 const off = () => () => {};
 
@@ -103,6 +104,43 @@ const BASE_FIXTURES: Record<string, StoredMatch> = {
 // 完整真实局:dev/local/full-match.json(gitignored,仅本机)。存在则运行时加载。
 const LOCAL_KEY = "real · 完整真实局(本地 dev/local)";
 
+// 场景模式(?scene=…):渲染单一确定状态,给视觉回归截图用。
+// data-scene-ready 是 Playwright 的就绪信号 —— 挂上即表示该场景已渲染。
+const SCENE_VIEW: Record<
+  SceneName,
+  { fixture: StoredMatch; initialView: "report" | "replay" | "ai" }
+> = {
+  "report-battle": {
+    fixture: realMatch as unknown as StoredMatch,
+    initialView: "report",
+  },
+  "report-replay": {
+    fixture: realMatch as unknown as StoredMatch,
+    initialView: "replay",
+  },
+  "report-ai": {
+    fixture: realMatch as unknown as StoredMatch,
+    initialView: "ai",
+  },
+  "report-synth": {
+    fixture: synthMatch as unknown as StoredMatch,
+    initialView: "report",
+  },
+};
+
+function Scene({ name }: { name: SceneName }) {
+  const cfg = SCENE_VIEW[name];
+  return (
+    <div className="scene-root" data-scene-ready={name}>
+      <MatchReport
+        source={cfg.fixture}
+        matchId={name}
+        initialView={cfg.initialView}
+      />
+    </div>
+  );
+}
+
 function Harness() {
   const [local, setLocal] = useState<StoredMatch | null>(null);
   // 压测样本池(dev/local/stress-*.json,gitignored;由 make-report-fixture.mjs
@@ -194,8 +232,10 @@ function Harness() {
   );
 }
 
+const scene = resolveScene(window.location.search);
+
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <Harness />
+    {scene ? <Scene name={scene} /> : <Harness />}
   </React.StrictMode>,
 );
