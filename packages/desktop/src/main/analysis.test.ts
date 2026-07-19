@@ -504,3 +504,83 @@ describe("deepen(深挖轮)", () => {
     expect(done.p.result.findings[0].deepDive).toBeUndefined();
   });
 });
+
+describe("deepen 幂等守卫(周度复核 P2#4)", () => {
+  // 病根:renderer 的触发条件是缓存里 deepened 仍为 false,而该标志要等本轮
+  // writeMerged 才落盘。深挖在飞的几十秒里切走再切回 → 面板重挂 → 再触发一次,
+  // 白烧一轮 token(旧 gen 会被 nextGen 判过期 abort,但请求已经发出去了)。
+  it("同一场深挖在飞时的重复调用被丢弃,模型只调一次", async () => {
+    const { mkdtempSync } = await import("fs");
+    const { tmpdir } = await import("os");
+    const { join } = await import("path");
+    const payload = JSON.stringify([
+      {
+        findingIndex: 0,
+        deepDive: "At {{p1.t}}s the healer ate {{p1.spell}}. Swap earlier.",
+        citedKeys: ["p1"],
+      },
+    ]);
+    let streamCalls = 0;
+    let release!: () => void;
+    const inFlight = new Promise<void>((r) => (release = r));
+    const s = createAnalysisService({
+      getSettings: () => ({ anthropicApiKey: "k" }) as never,
+      matchesDir: mkdtempSync(join(tmpdir(), "gl-deep-idem-")),
+      clientFactory: () =>
+        ({
+          stream: () => {
+            streamCalls++;
+            return (async function* () {
+              await inFlight; // 卡住 = 深挖在飞
+              yield { delta: payload };
+            })();
+          },
+        }) as never,
+      emit: () => {},
+    });
+    const args = {
+      matchId: "m1",
+      findings: [
+        {
+          eventIds: ["death:v:150"],
+          severity: "high",
+          category: "survival",
+          title: "被秒",
+          explanation: "You died at 150s.",
+        },
+      ] as never,
+      packs: [
+        {
+          findingIndex: 0,
+          anchorFrom: 100,
+          anchorTo: 150,
+          items: [
+            {
+              key: "p1",
+              kind: "cc" as const,
+              t: 128,
+              label: "Fear → Healer",
+              unitNames: ["Healer-R"],
+              facts: { t: "128", spell: "Fear" },
+            },
+          ],
+          facts: { "p1.t": "128", "p1.spell": "Fear" },
+        },
+      ] as never,
+      spec: "Frost Mage",
+    };
+
+    const first = s.deepen(args);
+    expect(streamCalls).toBe(1); // 首轮已进流式
+    await s.deepen(args); // 切页回来的重复触发
+    expect(streamCalls).toBe(1); // 没有第二次模型调用
+    release();
+    await first;
+    expect(streamCalls).toBe(1);
+
+    // 守卫是「在飞期间」而非「永久」:本轮结束后仍可再深挖(用户手动重跑)
+    release = () => {};
+    await s.deepen(args);
+    expect(streamCalls).toBe(2);
+  });
+});

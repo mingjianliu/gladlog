@@ -45,6 +45,13 @@ export type AnalysisResult = {
   /** 深挖轮已跑(无论产出几条),renderer 防重触发。 */
   deepened?: boolean;
 };
+export type DeepenInput = {
+  matchId: string;
+  findings: Finding[];
+  packs: DeepDivePack[];
+  spec: string;
+  ownerName?: string;
+};
 
 export function createAnalysisService(deps: {
   getSettings: () => {
@@ -192,18 +199,32 @@ export function createAnalysisService(deps: {
   const flagsPath = (matchId: string) =>
     join(deps.matchesDir, matchId, "findingFlags.json");
 
+  /** 正在深挖的 matchId —— 幂等守卫用,见 deepen。 */
+  const deepening = new Set<string>();
+
   /**
    * 深挖轮(自动追问):renderer 在初轮 done 后为高严重度 finding 构建
    * 确定性证据包并调用;本方法跑第二次 LLM、auditDeepDives 审计、把
    * deepDive 合并进缓存与结果,再 emit 一次 done。审不过 → 静默保持初轮。
+   *
+   * 幂等守卫:同一场深挖在飞时,重复调用直接丢弃。renderer 的触发条件是
+   * 缓存里 `deepened` 仍为 false,而该标志要等本轮 writeMerged 才落盘 ——
+   * 深挖在飞的那几十秒里用户切走再切回,面板重挂就会再触发一次,白烧一轮
+   * token(旧 gen 虽会被 nextGen 判过期 abort,但请求早已发出、钱已经花了)。
+   * 守卫必须放主进程:renderer 侧「先查 isDeepening 再调」是 TOCTOU,两次
+   * 重挂可能都查到 false,挡不住。
    */
-  async function deepen(input: {
-    matchId: string;
-    findings: Finding[];
-    packs: DeepDivePack[];
-    spec: string;
-    ownerName?: string;
-  }): Promise<void> {
+  async function deepen(input: DeepenInput): Promise<void> {
+    if (deepening.has(input.matchId)) return;
+    deepening.add(input.matchId);
+    try {
+      await deepenInner(input);
+    } finally {
+      deepening.delete(input.matchId);
+    }
+  }
+
+  async function deepenInner(input: DeepenInput): Promise<void> {
     const myGen = nextGen(input.matchId);
     const settings = deps.getSettings();
     const lang: AiLanguage = settings.aiLanguage ?? "zh";
