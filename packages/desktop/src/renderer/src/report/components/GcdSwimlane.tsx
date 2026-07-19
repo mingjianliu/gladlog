@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import { classColor, classGlyph } from "../data/gameConstants";
 import { deriveCasts, isMajorCd } from "../derive/casts";
-import { SpellIcon } from "./SpellIcon";
 import type { ReplayTrack } from "../derive/replay";
 import type { ReportSource } from "../derive/types";
+import { SpellIcon } from "./SpellIcon";
 
 const PX_PER_SEC = 16;
 const GCD_MS = 1500;
@@ -81,7 +81,11 @@ export function GcdSwimlane({
 }) {
   const durationSec = Math.max(1, (endTime - startTime) / 1000);
   const laneH = durationSec * PX_PER_SEC;
-  const yFor = (ts: number): number => ((ts - startTime) / 1000) * PX_PER_SEC;
+  // useCallback:布局 useMemo 依赖它,裸箭头每帧新身份会再次让 memo 失效。
+  const yFor = useCallback(
+    (ts: number): number => ((ts - startTime) / 1000) * PX_PER_SEC,
+    [startTime],
+  );
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const castsByUnit = useMemo(() => {
@@ -90,12 +94,20 @@ export function GcdSwimlane({
     return map;
   }, [source, tracks]);
 
-  // 两队分组:友方列在左、敌方列在右,渲染时在交界画分隔线
-  const orderedTracks = [
-    ...tracks.filter((tr) => tr.reaction === "Friendly"),
-    ...tracks.filter((tr) => tr.reaction !== "Friendly"),
-  ];
-  const cols = orderedTracks.filter((tr) => selUnits[tr.unitId]);
+  // 两队分组:友方列在左、敌方列在右,渲染时在交界画分隔线。
+  // 必须 useMemo:这两个数组是下面布局 useMemo 的依赖,裸表达式每次 render 都是
+  // 新身份,会让那个 O(列 × 施法数) 的碰撞避让布局每帧重算(memo 形同虚设)。
+  const orderedTracks = useMemo(
+    () => [
+      ...tracks.filter((tr) => tr.reaction === "Friendly"),
+      ...tracks.filter((tr) => tr.reaction !== "Friendly"),
+    ],
+    [tracks],
+  );
+  const cols = useMemo(
+    () => orderedTracks.filter((tr) => selUnits[tr.unitId]),
+    [orderedTracks, selUnits],
+  );
   const friendlyColCount = cols.filter(
     (tr) => tr.reaction === "Friendly",
   ).length;
@@ -133,8 +145,7 @@ export function GcdSwimlane({
       overflowByUnit,
       contentH: laneH + (anyOverflow ? CHIP_H + 6 : 0),
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cols, castsByUnit, laneH, endTime]);
+  }, [cols, castsByUnit, laneH, endTime, yFor]);
 
   // 播放时让光标保持在视口 ~40% 处
   useEffect(() => {
