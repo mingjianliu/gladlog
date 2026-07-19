@@ -25,6 +25,7 @@ import {
   type IPositionEvent,
 } from "../utils/positionAnalysis";
 import { causalLint } from "./causalLint";
+import { fmtFactNum as fmt } from "./factFormat";
 import {
   claimChecker,
   extractPlaceholderKeys,
@@ -40,7 +41,6 @@ export const PACK_AFTER_S = 10;
 /** 证据包条目上限(按时间序截断,防 prompt 膨胀)。 */
 const PACK_MAX_ITEMS = 14;
 
-const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 /** 短名(去 realm):facts 里的名字用它 —— realm 常含数字(Area52),写进正文
  * 会被裸数字审计误杀;chips 的 unitNames 保留全名给回放定位。 */
 const sn = (name: string) => name.split("-")[0] ?? name;

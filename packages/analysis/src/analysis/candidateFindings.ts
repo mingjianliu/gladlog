@@ -19,9 +19,9 @@ import { isBurstConverted } from "../utils/dpsMetrics";
 import { analyzeOutgoingCCChains } from "../utils/drAnalysis";
 import { analyzeKickAudit } from "../utils/kickAudit";
 import { computeOffensiveWindows } from "../utils/offensiveWindows";
+import { fmtFactNum as fmt } from "./factFormat";
 import type { CandidateEvent } from "./types";
 
-const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 
 /**
  * Map never-used major cooldowns to cd-waste candidate events. Pure (no combat
