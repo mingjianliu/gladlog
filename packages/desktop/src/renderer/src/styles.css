@@ -932,6 +932,17 @@ pre {
 .rpt-replay-stage.mode-split > .rpt-gcd {
   grid-column: 3;
 }
+/* 拖拽分隔条:不显式定位,自动落进列 1/3 之间唯一空闲的列 2。 */
+.rpt-replay-splitter {
+  cursor: col-resize;
+  background: var(--hairline);
+  border-radius: 3px;
+  align-self: stretch;
+  touch-action: none;
+}
+.rpt-replay-splitter:hover {
+  background: var(--accent-line);
+}
 .rpt-replay-arena-col {
   min-width: 0;
   display: flex;

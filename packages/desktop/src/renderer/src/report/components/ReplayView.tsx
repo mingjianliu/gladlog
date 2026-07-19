@@ -17,6 +17,7 @@ import { deriveBurstAuras, deriveFocusFire } from "../derive/replayHighlights";
 import type { ReportSource } from "../derive/types";
 import { deriveVulnBands } from "../derive/vulnWindows";
 import { GcdSwimlane } from "./GcdSwimlane";
+import { ReplaySplitter } from "./ReplaySplitter";
 import { ReplayZoomControls } from "./ReplayZoomControls";
 import { useReplayLayout, type ReplayLayoutMode } from "./useReplayLayout";
 import { useReplayZoom } from "./useReplayZoom";
@@ -95,8 +96,6 @@ export function ReplayView({
 
   const [t, setT] = useState(startTime);
   // 布局模式(用户反馈):地图+GCD / 纯地图 / 纯 GCD;localStorage 记忆
-  // setRatio 本任务未消费 —— 下一任务的可拖拽分隔条(ReplaySplitter)会用它。
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { mode, ratio, setMode, setRatio } = useReplayLayout();
   const stageRef = useRef<HTMLDivElement | null>(null);
   // 回放时钟保持局部(热 tick);仅卸载时把最后位置回报给 MatchReport(冷路径)
@@ -757,6 +756,10 @@ export function ReplayView({
               ))}
             </div>
           </div>
+        )}
+
+        {mode === "split" && (
+          <ReplaySplitter onRatioChange={setRatio} stageRef={stageRef} />
         )}
 
         {mode !== "map" && (
