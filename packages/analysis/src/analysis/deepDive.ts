@@ -381,8 +381,10 @@ export function offensivePackItems(
 ): Omit<PackItem, "key">[] {
   const raw: Omit<PackItem, "key">[] = [];
   const ownerShort = inp.ownerName ? sn(inp.ownerName) : undefined;
+  // 全名比较(agy 复核):短名会在跨服撞名(同名不同服)时把队友误判成 owner —
+  // 与 buildDeepDivePack 的 friendlyRole 同款,role 只认全名,display 仍用短名。
   const role = (name: string) =>
-    ownerShort && sn(name) === ownerShort ? "owner" : "teammate";
+    inp.ownerName && name === inp.ownerName ? "owner" : "teammate";
 
   for (const e of inp.entries) {
     if (!inp.inWin(e.fromSeconds) && !inp.inWin(e.toSeconds)) continue;
@@ -415,21 +417,26 @@ export function offensivePackItems(
             role: "enemy-target",
           },
         });
-      for (const d of t.defensivesHit) {
-        raw.push({
-          kind: d.isImmunity ? "immunity" : "enemy-defensive",
-          t: e.fromSeconds,
-          label: `${d.spellName}(${sn(t.unitName)})`,
-          unitNames: [t.unitName],
-          facts: {
-            t: fmt(e.fromSeconds),
-            spell: d.spellName,
-            unit: sn(t.unitName),
-            role: "enemy",
-            ...(d.isImmunity ? { overlap: d.overlapSeconds.toFixed(1) } : {}),
-          },
-        });
-      }
+      // 窗口守卫(agy 复核):这条固定锚在 e.fromSeconds,外层 guard 是
+      // fromSeconds OR toSeconds 命中就放行整条 entry,单独补 inWin 防止
+      // fromSeconds 落在窗口外时仍把该条目时刻标在窗口外(pack 的
+      // anchorFrom/anchorTo 是 prompt 里明写的范围,条目时刻不能越界)。
+      if (inp.inWin(e.fromSeconds))
+        for (const d of t.defensivesHit) {
+          raw.push({
+            kind: d.isImmunity ? "immunity" : "enemy-defensive",
+            t: e.fromSeconds,
+            label: `${d.spellName}(${sn(t.unitName)})`,
+            unitNames: [t.unitName],
+            facts: {
+              t: fmt(e.fromSeconds),
+              spell: d.spellName,
+              unit: sn(t.unitName),
+              role: "enemy",
+              ...(d.isImmunity ? { overlap: d.overlapSeconds.toFixed(1) } : {}),
+            },
+          });
+        }
     }
     // 我方大招对齐(owner 自身 spells + ally 重叠)
     for (const s of e.spells)
@@ -446,19 +453,20 @@ export function offensivePackItems(
             role: "owner",
           },
         });
-    for (const a of e.allyCDsOverlapping)
-      raw.push({
-        kind: "our-cd",
-        t: e.fromSeconds,
-        label: `${a.spellName}(${sn(a.playerName)})`,
-        unitNames: [a.playerName],
-        facts: {
-          t: fmt(e.fromSeconds),
-          spell: a.spellName,
-          unit: sn(a.playerName),
-          role: role(a.playerName),
-        },
-      });
+    if (inp.inWin(e.fromSeconds))
+      for (const a of e.allyCDsOverlapping)
+        raw.push({
+          kind: "our-cd",
+          t: e.fromSeconds,
+          label: `${a.spellName}(${sn(a.playerName)})`,
+          unitNames: [a.playerName],
+          facts: {
+            t: fmt(e.fromSeconds),
+            spell: a.spellName,
+            unit: sn(a.playerName),
+            role: role(a.playerName),
+          },
+        });
   }
 
   // 我方对敌奶 CC 链(窗口内)

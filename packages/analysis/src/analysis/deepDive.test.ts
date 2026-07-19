@@ -349,4 +349,58 @@ describe("offensivePackItems(进攻证据映射,纯函数)", () => {
     expect(off!.facts.onTargetPct).toBe("40");
     expect(off!.facts.target).toBe("Warr"); // offTarget 短名
   });
+
+  it("Fix 1 回归:跨服撞名的队友(短名同、全名不同)不能被判成 owner", () => {
+    const crossRealmEntry: IBurstLedgerEntry = {
+      ...entry,
+      allyCDsOverlapping: [
+        { playerName: "Me-Ragnaros", spellName: "Power Infusion" },
+      ],
+    };
+    const items = offensivePackItems({
+      entries: [crossRealmEntry],
+      healerChains: [],
+      candFacts: [],
+      candTypes: [],
+      ownerName: "Me-Area52",
+      inWin,
+    });
+    const ourCd = items.find(
+      (i) => i.kind === "our-cd" && i.facts.spell === "Power Infusion",
+    );
+    expect(ourCd).toBeTruthy();
+    expect(ourCd!.facts.role).toBe("teammate");
+    // owner 自己的 spell 条目不受影响,role 仍是 owner
+    const ownCd = items.find(
+      (i) => i.kind === "our-cd" && i.facts.spell === "Combustion",
+    );
+    expect(ownCd!.facts.role).toBe("owner");
+  });
+
+  it("Fix 2 回归:burst 起点落在窗口外 → 锚在 fromSeconds 的条目丢弃,hp-end 仍保留", () => {
+    const lateWin = (t: number) => t >= 50 && t <= 90;
+    const spanningEntry: IBurstLedgerEntry = {
+      ...entry,
+      fromSeconds: 40,
+      toSeconds: 55,
+    };
+    const items = offensivePackItems({
+      entries: [spanningEntry],
+      healerChains: [],
+      candFacts: [],
+      candTypes: [],
+      ownerName: "Me-Area52",
+      inWin: lateWin,
+    });
+    // fromSeconds=40 在窗口外:defensivesHit(immunity)、allyCDsOverlapping(our-cd)
+    // 都锚在 e.fromSeconds,不能出现 t=40 的条目
+    expect(items.some((i) => i.t === 40)).toBe(false);
+    expect(items.some((i) => i.kind === "immunity")).toBe(false);
+    // hp-end 锚在 toSeconds=55,在窗口内,应保留
+    expect(
+      items.find(
+        (i) => i.kind === "target-hp" && i.t === 55 && i.facts.hp === "18",
+      ),
+    ).toBeTruthy();
+  });
 });
