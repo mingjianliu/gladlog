@@ -99,7 +99,7 @@ describe("clampSplitRatio", () => {
 
 - [ ] **Step 2: 跑测试,确认失败**
 
-Run: `npx vitest run --workspace=packages/desktop src/renderer/src/report/components/useReplayLayout.test.ts`
+Run: `npm test --workspace=packages/desktop -- src/renderer/src/report/components/useReplayLayout.test.ts`
 Expected: FAIL,报找不到模块 `./useReplayLayout`
 
 - [ ] **Step 3: 写实现**
@@ -198,7 +198,7 @@ export function useReplayLayout(): {
 
 - [ ] **Step 4: 跑测试,确认通过**
 
-Run: `npx vitest run --workspace=packages/desktop src/renderer/src/report/components/useReplayLayout.test.ts`
+Run: `npm test --workspace=packages/desktop -- src/renderer/src/report/components/useReplayLayout.test.ts`
 Expected: PASS,4 个用例
 
 - [ ] **Step 5: 提交**
@@ -261,7 +261,7 @@ git commit -m "feat(replay): 分栏比例状态与 clampSplitRatio"
 
 - [ ] **Step 1: 先跑现有测试,记下绿的基线**
 
-Run: `npx vitest run --workspace=packages/desktop test/report.replayzoom.test.tsx`
+Run: `npm test --workspace=packages/desktop -- test/report.replayzoom.test.tsx`
 Expected: PASS,2 个用例。这是本任务的回归网,搬迁后必须还是这个结果。
 
 - [ ] **Step 2: 写 hook**
@@ -445,7 +445,7 @@ onPointerMove={(e) => {
 
 - [ ] **Step 4: 跑测试,确认与 Step 1 相同**
 
-Run: `npx vitest run --workspace=packages/desktop test/report.replayzoom.test.tsx`
+Run: `npm test --workspace=packages/desktop -- test/report.replayzoom.test.tsx`
 Expected: PASS,2 个用例 —— 与 Step 1 一字不差
 
 再跑全量确认没波及别处:
@@ -546,7 +546,7 @@ describe("滚轮判定表(Windows 鼠标也要能用)", () => {
 
 - [ ] **Step 2: 跑测试,确认失败**
 
-Run: `npx vitest run --workspace=packages/desktop test/report.replayzoom.test.tsx`
+Run: `npm test --workspace=packages/desktop -- test/report.replayzoom.test.tsx`
 Expected: 前两个新用例 FAIL(裸滚轮当前不缩放),第三个 PASS(wrapper 在 Task 2 已就位)
 
 - [ ] **Step 3: 改判定规则**
@@ -571,7 +571,7 @@ if (!e.ctrlKey && !e.metaKey && !viewRef.current) return;
 
 - [ ] **Step 4: 跑测试,确认通过**
 
-Run: `npx vitest run --workspace=packages/desktop test/report.replayzoom.test.tsx`
+Run: `npm test --workspace=packages/desktop -- test/report.replayzoom.test.tsx`
 Expected: PASS,5 个用例(原 2 + 新 3)
 
 - [ ] **Step 5: 提交**
@@ -737,7 +737,9 @@ function modeButton(container: HTMLElement, label: string): HTMLElement {
 }
 
 describe("回放三档布局", () => {
-  beforeEach(() => localStorage.clear());
+  // 本仓 vitest 环境下 localStorage 是 undefined(已实测),不能调 .clear() ——
+  // 那会抛 TypeError。useReplayLayout 的读写都在 try/catch 里,读不到就落回
+  // 默认档,所以每个用例天然是干净的初始状态,无需清理。
 
   it("纯 GCD 档不渲染地图与缩放浮层", () => {
     const { container } = render(<ReplayView source={m} />);
@@ -789,7 +791,7 @@ describe("回放三档布局", () => {
 
 - [ ] **Step 2: 跑测试,确认失败**
 
-Run: `npx vitest run --workspace=packages/desktop test/report.replaysplit.test.tsx`
+Run: `npm test --workspace=packages/desktop -- test/report.replaysplit.test.tsx`
 Expected: FAIL,`找不到档位按钮:纯 GCD`
 
 - [ ] **Step 3: 改 `ReplayView`**
@@ -903,7 +905,7 @@ GcdSwimlane 的门控(`:785`)从 `layout === "full"` 改为 `mode !== "map"`。
 
 - [ ] **Step 5: 跑测试,确认通过**
 
-Run: `npx vitest run --workspace=packages/desktop test/report.replaysplit.test.tsx`
+Run: `npm test --workspace=packages/desktop -- test/report.replaysplit.test.tsx`
 Expected: PASS,3 个用例
 
 Run: `npm test --workspace=packages/desktop`
