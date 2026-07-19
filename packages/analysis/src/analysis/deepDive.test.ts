@@ -114,6 +114,8 @@ describe("buildDeepDivePrompt", () => {
     expect(p).toContain("{{key.field}}");
     expect(p).toContain('"citedKeys"');
     expect(p).toContain("Do NOT assert causation");
+    // 生存-only pack(cc/enemy-cd 条目)不应触发进攻图例(锁定门条件不被反转)
+    expect(p).not.toContain("Offensive items");
   });
 });
 
