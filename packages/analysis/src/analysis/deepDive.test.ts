@@ -1,7 +1,9 @@
+import { CombatUnitReaction } from "@gladlog/parser-compat";
 import { describe, expect, it } from "vitest";
 
 import {
   auditDeepDives,
+  buildDeepDivePack,
   buildDeepDivePrompt,
   classifyFindingKind,
   hasCoachableSignal,
@@ -489,5 +491,79 @@ describe("buildDeepDivePrompt 进攻图例", () => {
     const p = buildDeepDivePrompt([pack], findings, "Frost Mage", "Me-Area52");
     expect(p).toContain("kind=target-hp");
     expect(p).toContain("close it"); // 进攻教练框架关键词
+  });
+});
+
+describe("buildDeepDivePack:focusT 锚在最末锚点(不从 clamp 过的 anchorTo 反推)", () => {
+  // 竞技场里决定性死亡就是比赛结束的原因,所以「锚点 + PACK_AFTER_S > 比赛时长」
+  // 是常态。旧写法 focusT = anchorTo - PACK_AFTER_S 在 anchorTo 被 durS 夹住后
+  // 会比真锚点早,HP 检查点整体前移(实测早 5s → 三个「死前血线」全部错位)。
+  const mkUnit = (id: string, name: string, friendly: boolean) => ({
+    id,
+    name,
+    info: { specId: "0" },
+    spec: "0",
+    reaction: friendly
+      ? CombatUnitReaction.Friendly
+      : CombatUnitReaction.Hostile,
+    // 每秒一个 HP 采样,HP% = 100 - 秒数 → 从 hp 值就能反推被采样的时刻
+    advancedActions: Array.from({ length: 106 }, (_, s) => ({
+      logLine: { timestamp: s * 1000 },
+      advancedActorId: id,
+      advancedActorCurrentHp: 100 - s,
+      advancedActorMaxHp: 100,
+    })),
+    damageOut: [],
+    damageIn: [],
+    healOut: [],
+    healIn: [],
+    absorbsOut: [],
+    absorbsIn: [],
+    casts: [],
+    castStarts: [],
+    petCasts: [],
+    auraEvents: [],
+    actionsOut: [],
+    actionsIn: [],
+    deathRecords: [],
+  });
+
+  const combat = {
+    startTime: 0,
+    endTime: 105_000, // durS = 105
+    units: {
+      o: mkUnit("o", "Owner-Area52", true),
+      e: mkUnit("e", "Warr-Area52", false),
+    },
+  };
+  const candidates = [
+    {
+      id: "death:o:100",
+      type: "death-setup",
+      t: 100,
+      unitNames: ["Owner-Area52"],
+      facts: { t: "100" },
+    },
+  ] as unknown as CandidateEvent[];
+  const finding = {
+    eventIds: ["death:o:100"],
+    severity: "high",
+    category: "survival",
+    title: "被秒",
+    explanation: "x",
+  } as Finding;
+
+  it("锚点 100s / 比赛 105s:HP 检查点是 85/90/95,不是被夹早的 80/85/90", () => {
+    const p = buildDeepDivePack(combat, finding, 0, candidates, "Owner-Area52");
+    expect(p).not.toBeNull();
+    // anchorTo 被 durS 夹到 105(< 100 + PACK_AFTER_S),这是触发条件
+    expect(p!.anchorTo).toBe(105);
+    const hpTimes = p!.items.filter((i) => i.kind === "hp").map((i) => i.t);
+    expect(hpTimes).toEqual([85, 90, 95]);
+    // HP 值 = 100 - 秒数,再次确认采样落在这三个真实时刻上
+    const hpVals = p!.items
+      .filter((i) => i.kind === "hp")
+      .map((i) => i.facts.hp);
+    expect(hpVals).toEqual(["15", "10", "5"]);
   });
 });

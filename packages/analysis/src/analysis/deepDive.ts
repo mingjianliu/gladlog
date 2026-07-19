@@ -240,7 +240,13 @@ export function buildDeepDivePack(
       byId.get(id)?.unitNames.includes(u.name),
     ),
   );
-  const focusT = anchorTo - PACK_AFTER_S;
+  // 焦点 = 最末锚点(死亡/高潮时刻)。**不要**写成 anchorTo - PACK_AFTER_S:
+  // anchorTo 被 durS 夹过,一旦比赛在锚点后 <PACK_AFTER_S 秒就结束(竞技场里
+  // 决定性死亡恰恰就是比赛结束的原因,这是常态不是边角),反推回来会比真锚点早,
+  // HP 检查点与截断中心一起前移(实测 100s 死/105s 结束 → focusT 早 5s,
+  // 三个「死前血线」全部错位)。进攻路径的 focusT 用 Math.min(首锚点=起手)——
+  // 两条路径语义本就不同,不要强行统一。
+  const focusT = Math.max(...ts);
   for (const u of focus) {
     try {
       // 逐检查点独立条目:t=真实时刻(占位符)、hp=血量(占位符),不再把
@@ -360,7 +366,7 @@ export function buildDeepDivePack(
 
   // 截断按「靠近焦点时刻」而非纯时间序:窗口早段的密集小事件不能把
   // 死亡/锚点附近的关键证据挤出包(agy 复核 #4);选完再按时间排列出清单。
-  // focusT 已在 HP 段声明(= anchorTo - PACK_AFTER_S)。
+  // focusT 已在 HP 段声明(= 最末锚点 Math.max(...ts))。
   const items: PackItem[] = raw
     .sort((a, b) => Math.abs(a.t - focusT) - Math.abs(b.t - focusT))
     .slice(0, PACK_MAX_ITEMS)
