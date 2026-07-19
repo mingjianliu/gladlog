@@ -1,0 +1,37 @@
+name: visual-baseline
+
+# 生成/更新 linux 截图基线。手动触发,产物下载后由人审、再提交。
+#
+# 为什么基线在 CI 生成:开发机没有容器运行时,而基线必须是 linux 单源
+# (mac 字体渲染与 ubuntu 不同,两套基线 = 两套标准)。CI 本就是基线的
+# 判定者,这里让它同时当生产者 —— 约束没放松,只是换了产地。
+#
+# 基线的权威始终在人:这个 workflow 只负责在与判定同一环境里把图画出来,
+# 审图与提交是人的动作。
+on: workflow_dispatch
+
+jobs:
+  baseline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Install browsers
+        run: npx playwright install --with-deps chromium
+
+      # --update-snapshots:缺图就画、有图就覆盖
+      - name: Generate baselines
+        run: npm -w @gladlog/desktop run test:visual -- --update-snapshots
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: visual-baselines
+          path: packages/desktop/qa/__screenshots__/
+          retention-days: 7
