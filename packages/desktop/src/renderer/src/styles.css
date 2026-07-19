@@ -742,6 +742,18 @@ pre {
 .rpt-replay-arena-grid > .rpt-replay-map-cell {
   grid-column: 2;
   min-width: 0;
+  position: relative;
+}
+.rpt-replay-map-cell .rpt-replay-zoom-group {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  border: 1px solid var(--hairline);
 }
 .rpt-replay-frames {
   display: flex;

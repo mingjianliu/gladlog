@@ -17,6 +17,7 @@ import { deriveBurstAuras, deriveFocusFire } from "../derive/replayHighlights";
 import type { ReportSource } from "../derive/types";
 import { deriveVulnBands } from "../derive/vulnWindows";
 import { GcdSwimlane } from "./GcdSwimlane";
+import { ReplayZoomControls } from "./ReplayZoomControls";
 import { useReplayZoom } from "./useReplayZoom";
 
 const FALLBACK_VW = 520;
@@ -670,6 +671,12 @@ export function ReplayView({
                   );
                 })}
               </svg>
+              <ReplayZoomControls
+                zoomLevel={zoom.zoomLevel}
+                onZoomIn={() => zoom.applyZoom(0.8, 0.5, 0.5)}
+                onZoomOut={() => zoom.applyZoom(1.25, 0.5, 0.5)}
+                onReset={zoom.reset}
+              />
             </div>
 
             {/* 竞技场框体(1f):贴场地两侧,友左敌右;血量不受场上重叠遮挡 */}
@@ -837,32 +844,6 @@ export function ReplayView({
             </span>
           ) : null;
         })()}
-        <span className="rpt-replay-divider" />
-        <span className="rpt-replay-zoom-group">
-          <button
-            className="rpt-replay-zoom-btn"
-            title="放大(也可 ⌘/Ctrl+滚轮,拖拽平移)"
-            onClick={() => zoom.applyZoom(0.8, 0.5, 0.5)}
-          >
-            +
-          </button>
-          <button
-            className="rpt-replay-zoom-btn"
-            title="缩小"
-            onClick={() => zoom.applyZoom(1.25, 0.5, 0.5)}
-          >
-            −
-          </button>
-          {view && (
-            <button
-              className="rpt-replay-zoom-reset"
-              title="复位缩放(或双击地图)"
-              onClick={zoom.reset}
-            >
-              ⤢ {zoom.zoomLevel}× 复位
-            </button>
-          )}
-        </span>
         <div className="rpt-replay-speed">
           {SPEEDS.map((s) => (
             <button
