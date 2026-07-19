@@ -214,3 +214,20 @@ raw 信号大多已有(`candidateFindings.ts` 的 `unconverted-burst` / `burst-i
 必须配同款信号门(hasCoachableSignal 精神)+ 审计,否则重引噪音/填充风险。
 与 #8(确定性 mistake 引擎)、#10(结构化信号上浮)方向重叠——三者应一起想清楚
 「非击杀时段帮助」的产品形态再动手。本条是那次 brainstorm 的一个候选实现路径。
+
+## spellNames 12MB 顶层 await 阻塞首屏(2026-07-19,质检体系量化)
+
+`packages/analysis/src/data/spellEffectData.ts:27` 顶层 `await import("./spellNames.json")`
+(12MB)会阻塞整个模块图求值 —— 任何 import 该模块的代码都要等这 12MB 下完并解析
+才能继续。实测三处一致:
+
+- dev server 单页 22.4s 卡在 spellNames.json
+- build+preview 同样 ~23s
+- **真实 Electron 应用冷启动 CI 实测 18.7–24.0s**(`[budget] coldStart`)
+
+后果:`qa/budgets.ts` 的 firstPaint(41s)与 coldStart(36s)只能锁在 20 秒量级 ——
+那是现状的诚实刻度,不是可接受的目标;视觉套件也因此每个场景要 ~24s(7 场景 3 分钟)。
+
+修法方向:把英文法术名查表改成**惰性加载**(首次 `getEnglishSpellName` 调用时再取,
+或改成按 spellId 分片),让模块图求值不再等它。改完把三个预算往下压,并把
+`qa/visual/scenes.spec.ts` 的 `BOOT_TIMEOUT_MS` 一并调低。

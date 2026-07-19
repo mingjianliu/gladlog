@@ -29,7 +29,7 @@ brainstorm → spec → plan → implementation cycle when picked up.
 | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
 | **PROMPT** | 3 honesty gates (`auditFindings` grounding/numeric/causal, `causalLint`, `claimChecker` + template interpolation) + 12-tool eval harness (blind A/B, calibration, provenance, `positioningScan`, `contestedContract`) | Strong — the reference for the others                                             |
 | **LOG**    | 13 parser test files, one golden fixture test (`l3.golden.test.ts`), byte-exact log-pipeline reconstruction                                                                                                           | Moderate — no differential oracle, no invariants                                  |
-| **VISION** | 4 functional renderer tests + **C1 data-faithfulness** (pure selectors + `checkFaithful` DOM harness + `verify:vision`, done 2026-07-12)                                                                              | Improving — data-faithfulness landed; visual-regression (C2) + export (C3) remain |
+| **VISION** | 4 functional renderer tests + **C1 data-faithfulness** (pure selectors + `checkFaithful` DOM harness + `verify:vision`, done 2026-07-12)                                                                              | Improving — data-faithfulness landed; **C2 视觉回归已落地**(Playwright:7 场景 linux 单源基线 + axe WCAG AA + E2E 三链路 + 三项性能预算,2026-07-19);export (C3) remains |
 
 ## Guiding principle
 
@@ -97,9 +97,13 @@ The weakest pillar; make the UI as honest as the LLM output.
   agy debate). Each check has a has-teeth test; `npm run verify:vision` runs headlessly,
   prints JSON diffs, exits non-zero. Spec: `docs/specs/2026-07-12-vision-data-faithfulness-design.md`,
   plan: `docs/superpowers/plans/2026-07-12-vision-data-faithfulness.md`.
-- **C2. Visual regression** — snapshot the rendered report (jsdom DOM snapshot
-  now; Playwright/Electron screenshot later) and fail the build on unexpected
-  visual diffs. Catches accidental layout/scale breakage.
+- **C2. Visual regression** ✅ _(done 2026-07-19)_ — Playwright 截图 7 个
+  URL 可直达的场景(战报/回放/AI/合成/仪表盘/设置/列表),基线是 **linux
+  单源**、由 CI 生成与判定、由人审后提交;同一批加载顺带跑 axe(WCAG 2.1
+  AA,违规必须 ⊆ 显式豁免清单)。附带落地:`_electron` 驱动的 E2E 三条
+  核心链路(导入→报告 / 证据链跳转 / 教练闭环+重启持久化),以及
+  measure-then-lock 的三项性能预算(解析/首渲/冷启动)。
+  规格 `docs/superpowers/specs/2026-07-19-frontend-qa-design.md`。
 - **C3. Export fidelity** — round-trip check that "Copy Markdown" / "Export Image"
   output matches the on-screen data (exported numbers == rendered numbers ==
   computed values), so a shared report is as trustworthy as the live one.
@@ -118,17 +122,14 @@ after the per-pillar checks exist (it composes them).
 
 1. ~~**C1 (data-faithfulness)**~~ — ✅ done 2026-07-12.
 2. ~~**A1 (differential oracle)**~~ — ✅ done 2026-07-13 (found a real F170 gap; see backlog).
-3. **C2/C3 (visual regression + export)** — lock the UI once C1 makes it honest.
+3. ~~**C2 (visual regression)**~~ — ✅ done 2026-07-19。**C3 (export)** 待做。
 4. **B1/B2 (causal judge + provenance)** — push the already-strong pillar further.
 5. **A2/A3, B3** — breadth/hardening.
 6. **Trust chain** — capstone once the pieces exist.
 
 ### Next up (backlog, post C1+A1) — each its own brainstorm → spec → plan
 
-- **C2 — visual regression** _(next)_: snapshot the rendered report (jsdom DOM
-  snapshot now; Playwright/Electron screenshot later); fail on unexpected visual
-  diffs. Builds directly on C1's now-honest selectors/components. Small–medium.
-- **C3 — export fidelity**: round-trip "Copy Markdown" / "Export Image" output ==
+- **C3 — export fidelity** _(next)_: round-trip "Copy Markdown" / "Export Image" output ==
   rendered == computed. Pairs with C2. Small–medium.
 - **B1 — LLM-judge causal audit (SP-A.1)**: calibrated judge for causal/qualitative
   claims the deterministic gates can't check. Medium.

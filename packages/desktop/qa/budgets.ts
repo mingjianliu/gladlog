@@ -17,9 +17,23 @@ export const BUDGET_MS: {
   firstPaint: number | null;
   coldStart: number | null;
 } = {
-  parse: null,
-  firstPaint: null,
-  coldStart: null,
+  // 锁定依据:2026-07-19 在 ubuntu-latest 上跑的 4 次 CI 采样,取最大值 × 1.5
+  // 后向上取整。(计划写的是 5 次取 p95;n=4 时最大值即 p95 的保守近似,
+  // ×1.5 的余量本来就是为 runner 波动留的。)
+  //   parse:      3287 / 2993 / 3352 / 3159  → max 3352  × 1.5 → 5100
+  //   firstPaint: 24961 / 22180 / 26977 / 21906 → max 26977 × 1.5 → 41000
+  //   coldStart:  22467 / 19049 / 23976 / 18743 → max 23976 × 1.5 → 36000
+  //
+  // 这三条抓的是**数量级回退**(例如意外的 O(n²)),不是 5% 抖动。
+  // 放宽任何一个值都要把理由写进 commit message。
+  //
+  // firstPaint/coldStart 现在锁在 20 秒量级,是因为应用首屏确实要那么久 ——
+  // spellEffectData.ts 顶层 `await import("./spellNames.json")`(12MB)阻塞
+  // 整个模块图求值。这两个数字是**现状的诚实刻度**,不是可接受的目标;
+  // 那笔成本一旦惰性化,这里要跟着往下压。
+  parse: 5100,
+  firstPaint: 41000,
+  coldStart: 36000,
 };
 
 /** 统一的测量输出格式 —— CI 日志就是锁定预算时的数据源。 */
