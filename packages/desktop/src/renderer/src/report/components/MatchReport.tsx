@@ -30,13 +30,15 @@ export function MatchReport({
   source,
   roundLabel,
   matchId,
+  initialView = "report",
 }: {
   source: ReportSource;
   roundLabel?: string;
   matchId?: string;
+  initialView?: View;
 }) {
   const [mode, setMode] = useState<MeterMode>("damage");
-  const [view, setView] = useState<View>("report");
+  const [view, setView] = useState<View>(initialView);
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   // 证据链跳转请求:AI 视图点「回放此刻」→ 切回放并 seek。nonce 防重复消费,
   // 回放时钟保持 ReplayView 局部(提升热 state 会让三视图随 tick 重渲)。
