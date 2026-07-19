@@ -14,6 +14,7 @@
     "verify:vision": "tsx scripts/verifyVision.ts",
     "test:visual": "playwright test -c qa/playwright.config.ts --project=visual",
     "test:visual:smoke": "playwright test -c qa/playwright.config.ts --project=visual --ignore-snapshots",
+    "test:e2e": "electron-vite build && playwright test -c qa/playwright.config.ts --project=e2e",
     "package:mac": "electron-vite build && electron-builder --mac",
     "package:win": "electron-vite build && electron-builder --win"
   },

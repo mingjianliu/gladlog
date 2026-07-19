@@ -44,15 +44,19 @@ export default defineConfig({
       testMatch: /e2e\/.*\.spec\.ts$/,
     },
   ],
-  // 打包后再 preview,不用 dev server:dev 模式每开一个新页面都要重新拉取
-  // 上百个未打包 ESM 模块(实测单页 ~24s,服务端缓存热了也没用 —— 成本在
-  // 浏览器侧的请求瀑布)。打包一次 ~5s,之后每页 <1s,且截图里没有
-  // HMR/react-refresh 这类只存在于 dev 的东西。
-  webServer: {
-    command: "npm run build:ui && npm run preview:ui",
-    cwd: "..",
-    url: `http://localhost:${PORT}`,
-    reuseExistingServer: false,
-    timeout: 180_000,
-  },
+  // e2e project 驱动的是打包好的 Electron 应用,压根不需要这个测试台服务器 ——
+  // 无条件起会白等一次构建,还会在本机已有 preview 时撞端口。
+  webServer: process.argv.includes("--project=e2e")
+    ? undefined
+    : {
+        // 打包后再 preview,不用 dev server:dev 模式每开一个新页面都要重新
+        // 拉取上百个未打包 ESM 模块(实测单页 ~24s,服务端缓存热了也没用 ——
+        // 成本在浏览器侧的请求瀑布)。打包一次 ~5s,之后每页 <1s,且截图里
+        // 没有 HMR/react-refresh 这类只存在于 dev 的东西。
+        command: "npm run build:ui && npm run preview:ui",
+        cwd: "..",
+        url: `http://localhost:${PORT}`,
+        reuseExistingServer: false,
+        timeout: 180_000,
+      },
 });
