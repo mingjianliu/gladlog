@@ -310,30 +310,58 @@ Match C with Match A's」—— **不成立**。`aggregate()` 不接受 matchId 
 
 ---
 
-## 待办清单(跨 AI 定稿后,共 13 条)
+## 待办清单(跨 AI 定稿 13 条 —— 执行结果)
 
-复核已闭环,以下按「能不能直接改」分档。**没有一条已经动过代码。**
+11 条已落地并各自 commit,每条都验证过测试对旧实现报错(不是「写完就绿」的假测试)。
 
-**可直接改,不需要跑 eval**(改的是门/取景/卫生,不动 prompt 文本):
+**已完成**
 
-- [ ] P1#3 `focusT = Math.max(...ts)` + `durS` clamp 的回归用例
-- [ ] P2#4 `deepen` 纳入 running/`isDeepening` IPC
-- [ ] P2#5 `isRunning` false 分支补一次 `getCached`(或换原子 `getState`)
-- [ ] P2#6 常量 export 单源 + 断言相等单测 + `1_500` 改名
-- [ ] 新#1 `usedKeys` 复用 claimChecker 的 `PLACEHOLDER`
-- [ ] P3#8 `orderedTracks`/`cols` 补 useMemo,去掉 :136 的 disable
-- [ ] P3#9 `generations` 清理
-- [ ] P3#10 `targetDeathMs` 改 `Math.min` 或把有序性写进契约
-- [ ] 新#2(半条)`getFlags` effect 补 `cancelled`
+| # | 内容 | commit |
+| --- | --- | --- |
+| P1#3 | focusT 锚最末锚点,不从被 clamp 的 anchorTo 反推 | `536295c` |
+| P2#4 | deepen 幂等守卫(切页不再重复烧 token) | `ce33ef9` |
+| P2#5 | 面板重挂改单次原子 getState | `d4bf4b4` |
+| P2#6 | 位置采样谓词单源 export + 改名去撞名 | `46fc19a` |
+| 新#1 | 占位符正则从 claimChecker 单源取 | `5845f95` |
+| P3#8 | GcdSwimlane 布局 memo 真正生效 | `1da25f9` |
+| P3#9 | 代际条目回收(仅在该场静默时) | `8a37def` |
+| P3#10 | 目标死亡截断取最早一次,不依赖有序 | `624952c` |
+| 新#2 | getFlags 补 cancelled 守卫(后半条驳回) | `90a1e36` |
+| P2#7 | fmt 提取单源 fmtFactNum(统一 fmtTime 不做) | `dd428dd` |
+| P1#1 | STAYED_IN 需付真实代价才开深挖门 | `800fd71` |
 
-**改了要跑一轮 eval**(动的是进门率 / prompt 文本,会移动 filler 与过门率基线):
+**已出设计,未实现**
 
-- [ ] P1#1 STAYED_IN HP 门 —— 倾向在 `hasCoachableSignal` 侧加,阈值复用
-      formatter 的 `(no real cost)` 判据并 export 成单一谓词
-- [ ] P2#7 `fmt` 提取单源(无争议先做);是否统一到 `fmtTime` 是产品决策,单独议
+- P1#2 全程免疫检测 → `docs/specs/2026-07-19-immunity-detection-design.md`。
+  写 spec 时有个关键发现,把它从「设计取舍」降级成了有直接证据的问题:
+  **免疫消掉的是伤害,不是施法** —— `spellCastEvents` 逐条带 `destUnitId`
+  (`convert.ts:383`),对着无敌泡砸下去的每一发都留有目标记录。所以「爆发意图
+  目标」不需要启发式猜测,直接查施法目标即可。spec 里仍有几个必须先定的数
+  (`INTENT_MIN_CASTS`、宠物施法是否计入),留给确定性扫描定标,别在代码里随手拍。
 
-**先设计再动手**:
+**评估后不做**
 
-- [ ] P1#2 免疫检测脱离 dominantTarget —— 卡在「爆发意图目标」谓词怎么定义,
-      这是设计取舍不是实现问题,建议先出 spec
-- [ ] P3#11 截断与门的顺序 —— 现状概率低,**建议不动**,只留记录
+- P3#11 截断(PACK_MAX_ITEMS=14)发生在门之前,理论上唯一那条可教条目可能被截掉。
+  排序按「靠近 focusT」,可教条目通常离锚点近,概率低;改了要重跑 eval。只留记录。
+- P2#7 后半:把 facts 的 `83.5` 统一到 fmtTime 的 `1:23`。属产品决策,会改 prompt
+  文本。改为在模块注释与单测里把两套刻度的差异钉住,防止有人「顺手统一」。
+
+**P1#1 的效果如实记录**(确定性扫描,4 语料 556 pack,不调模型):
+
+| 语料 | packs | 含走位 | stayed-in | 无代价 | 过门翻转 |
+| --- | --- | --- | --- | --- | --- |
+| deepdive-220 | 179 | 19 | 17 | 2 | 0 |
+| deepdive-hi | 191 | 23 | 21 | 3 | 0 |
+| deepdive-2v2 | 136 | 24 | 20 | 1 | 0 |
+| public-dps | 50 | 10 | 8 | 1 | 1 |
+
+7 个无代价 STAYED_IN 里只有 1 个真正改变过门结果(556 分之 1)—— 其余 6 个包内
+另有信号,本来就该开门。**这条的收益不是省调用,是拆掉一个假前提**:门此前依赖
+一句与代码矛盾的注释,一旦有人放宽 STAYED_IN 的几何判据,门会静默失效而没有任何
+测试拦得住。
+
+**遗留的环境问题(未处理,等确认)**
+
+`.claude/worktrees/report-ui-redesign/` 是个残留 git worktree,内含全套陈旧副本。
+从仓库根跑 `npx vitest` 会扫到它、并用根配置去跑,产生与当前改动无关的失败
+(本次排查中误导过两次)。`npm test --workspace=...` 不受影响。建议清掉。
