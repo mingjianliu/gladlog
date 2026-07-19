@@ -16,7 +16,6 @@ const OFFENSIVE = new Set([
   "unconverted-burst",
   "burst-into-immunity",
   "off-target-in-window",
-  "juked-kick",
   "dr-clipped-cc",
 ]);
 // t/hp/onTargetPct/dr/overlap 是合法数值字段(模型走占位符);其余文本字段含数字 =

@@ -214,15 +214,10 @@ describe("hasOffensiveCoachableSignal(进攻信号门,进攻深挖)", () => {
       ]),
     ).toBe(true);
   });
-  it("off-target / juked / dr-clip 各自即信号", () => {
+  it("off-target / dr-clip 各自即信号(juked-kick 已降级不算)", () => {
     expect(
       hasOffensiveCoachableSignal([
         item("off-target", { role: "owner", onTargetPct: "40" }),
-      ]),
-    ).toBe(true);
-    expect(
-      hasOffensiveCoachableSignal([
-        item("juked-kick", { role: "owner", kick: "Kick" }),
       ]),
     ).toBe(true);
     expect(
@@ -440,6 +435,7 @@ describe("classifyFindingKind(分发)", () => {
     cand("d1", "death"),
     cand("b1", "unconverted-burst"),
     cand("o1", "off-target-in-window"),
+    cand("j1", "juked-kick"),
   ];
   const F = (eventIds: string[]): Finding => ({
     eventIds,
@@ -457,6 +453,9 @@ describe("classifyFindingKind(分发)", () => {
   });
   it("混合平票偏 survival", () => {
     expect(classifyFindingKind(F(["d1", "b1"]), cands)).toBe("survival");
+  });
+  it("juked-kick 已降级 → survival(不路由进攻深挖)", () => {
+    expect(classifyFindingKind(F(["j1"]), cands)).toBe("survival");
   });
 });
 

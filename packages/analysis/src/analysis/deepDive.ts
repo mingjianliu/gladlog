@@ -64,7 +64,6 @@ export interface PackItem {
     | "our-cc"
     | "our-cd"
     | "off-target"
-    | "juked-kick"
     | "dr-clip";
   /** 相对秒(chip 跳转锚点)。 */
   t: number;
@@ -83,7 +82,6 @@ export const OFFENSIVE_KINDS = new Set<PackItem["kind"]>([
   "our-cc",
   "our-cd",
   "off-target",
-  "juked-kick",
   "dr-clip",
 ]);
 
@@ -518,19 +516,9 @@ export function offensivePackItems(
           ...(cf.offTarget ? { target: sn(cf.offTarget) } : {}),
         },
       });
-    if (type === "juked-kick")
-      raw.push({
-        kind: "juked-kick",
-        t: Number.isFinite(tt) ? tt : 0,
-        label: `被骗踢`,
-        unitNames: [],
-        facts: {
-          ...(cf.t ? { t: cf.t } : {}),
-          role: "owner",
-          ...(cf.kick ? { kick: cf.kick } : {}),
-          ...(cf.fake ? { fake: cf.fake } : {}),
-        },
-      });
+    // juked-kick 已从进攻深挖降级(Task 6 A/B:5 类里唯一均值 <3.5,combined 2.9,
+    // 四个 ≤2 分全是它 —— 「读假招别乱踢」是自明的泛化建议,深挖只是硬套上下文,
+    // 不产生新洞察。仍作初轮 finding 保留,只是不深挖)。故此处不再产 juked 条目。
     if (type === "dr-clipped-cc")
       raw.push({
         kind: "dr-clip",
@@ -665,7 +653,8 @@ const OFFENSIVE_HP_THRESHOLD = 35;
  * 免疫单独即可教:把爆发砸进免疫本身就是失误(该追踪敌方免疫、别硬开),不要求目标
  * 也触底 —— 免疫恰恰阻止了掉血,再要求 ≤35% 逻辑自相矛盾(519 场扫描实测:合门时
  * burst-into-immunity 仅 10% 过门,漏掉了旗舰进攻失误)。其余:目标被打低且有非免疫
- * 防御接了(该控奶/换端),或 off-target/juked/dr-clip 各自即失误。
+ * 防御接了(该控奶/换端),或 off-target/dr-clip 各自即失误。
+ * (juked-kick 已降级,不进进攻深挖 —— 见 offensivePackItems 注释与 OFFENSIVE_CANDIDATE_TYPES。)
  */
 export function hasOffensiveCoachableSignal(items: PackItem[]): boolean {
   if (items.some((i) => i.kind === "immunity")) return true;
@@ -675,19 +664,16 @@ export function hasOffensiveCoachableSignal(items: PackItem[]): boolean {
   );
   const defensiveAnswered = items.some((i) => i.kind === "enemy-defensive");
   if (targetBottomed && defensiveAnswered) return true;
-  return items.some(
-    (i) =>
-      i.kind === "off-target" ||
-      i.kind === "juked-kick" ||
-      i.kind === "dr-clip",
-  );
+  return items.some((i) => i.kind === "off-target" || i.kind === "dr-clip");
 }
 
+// juked-kick 剔除(Task 6 A/B):进攻深挖只留价值 ≥4.4 的四类;juked-kick 深挖 combined
+// 2.9(唯一 <3.5),故降级为只作初轮 finding,不路由进攻深挖(→ classify 归 survival,
+// 生存门不命中即不深挖)。
 const OFFENSIVE_CANDIDATE_TYPES = new Set([
   "unconverted-burst",
   "burst-into-immunity",
   "off-target-in-window",
-  "juked-kick",
   "dr-clipped-cc",
 ]);
 
@@ -745,7 +731,7 @@ export function buildDeepDivePrompt(
     `- kind=position items are ${ownerShort}'s own movement: kind=stayed-in = stood in a threat and took avoidable damage (hpMin is where HP bottomed, defAvail says if a defensive was up); kind=missed-push = drifted out of range (dist yards) when pressure was needed; kind=cd-out-of-range = fired a cooldown (spell) with no valid target in range. Coach the movement decision, not just cooldown usage.`,
     ...(packs.some((p) => p.items.some((it) => OFFENSIVE_KINDS.has(it.kind)))
       ? [
-          `- Offensive items (non-death findings): kind=target-hp = the enemy target's HP (hp) at that moment; kind=enemy-defensive / kind=immunity = what answered ${ownerShort}'s burst on that target (immunity has overlap seconds); kind=our-cc = ${ownerShort}'s team CC landed on the enemy healer; kind=our-cd = ${ownerShort}'s team offensive cooldown; kind=off-target = damage went to the wrong target (onTargetPct); kind=juked-kick = an interrupt spent on a fake cast (fake); kind=dr-clip = a CC landed on wasted DR (dr). You had the kill set up — coach what to change to close it (swap to the exposed target, hold burst past the immunity, lock their healer first), not survival.`,
+          `- Offensive items (non-death findings): kind=target-hp = the enemy target's HP (hp) at that moment; kind=enemy-defensive / kind=immunity = what answered ${ownerShort}'s burst on that target (immunity has overlap seconds); kind=our-cc = ${ownerShort}'s team CC landed on the enemy healer; kind=our-cd = ${ownerShort}'s team offensive cooldown; kind=off-target = damage went to the wrong target (onTargetPct); kind=dr-clip = a CC landed on wasted DR (dr). You had the kill set up — coach what to change to close it (swap to the exposed target, hold burst past the immunity, lock their healer first), not survival.`,
         ]
       : []),
     `- If, after reviewing a pack, you cannot name a specific ${ownerShort}-team decision that was clearly suboptimal, OMIT that finding from your output entirely. Do NOT manufacture generic advice ("use defensives better", "peel/reposition", "watch HP"). A clean window is a valid outcome — say nothing rather than pad.`,
