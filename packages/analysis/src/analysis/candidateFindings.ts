@@ -1,15 +1,20 @@
 import { CombatUnitReaction } from "@gladlog/parser-compat";
 
+import { DEATH_CC_LOOKBACK_S } from "../context/criticalMoments";
+import { lastCastBefore } from "../context/timelineHelpers";
 import {
   analyzeBurstLedger,
   auditWindowTargeting,
   ON_TARGET_GOOD_PCT,
 } from "../utils/burstLedger";
+import { analyzePlayerCCAndTrinket } from "../utils/ccTrinketAnalysis";
 import {
+  annotateDefensiveTimings,
   extractMajorCooldowns,
   type IMajorCooldownInfo,
   isHealerSpec,
 } from "../utils/cooldowns";
+import { reconstructEnemyCDTimeline } from "../utils/enemyCDs";
 import { isBurstConverted } from "../utils/dpsMetrics";
 import { analyzeOutgoingCCChains } from "../utils/drAnalysis";
 import { analyzeKickAudit } from "../utils/kickAudit";
@@ -57,10 +62,12 @@ export function cdWasteEvents(
  *
  * Current menu:
  *  - death (all units, tagged friendly/enemy so the LLM knows kill vs loss)
+ *  - death-setup (all owners): 友方死亡的前因链事件(healer-locked /
+ *    trinket-early / defensive-early),每死亡 ≤2 条,时刻在死亡之前
  *  - cd-waste (the owner's — default: the Friendly healer's — never-used
  *    DEFENSIVE major cooldowns)
- *  - DPS owner only (D2; healer menus unchanged): burst-into-immunity /
- *    off-target-in-window / juked-kick / dr-clipped-cc
+ *  - DPS owner only: burst-into-immunity / off-target-in-window /
+ *    juked-kick / dr-clipped-cc / unconverted-burst
  */
 export function extractCandidateFindings(
   combat: any,
@@ -88,6 +95,13 @@ export function extractCandidateFindings(
         facts: { t: fmt(t), unit: u.name, side },
       });
     }
+  }
+
+  // --- death-setup:友方死亡的前因链(推理链证据,所有 owner 视角)---
+  try {
+    out.push(...extractDeathSetups(combat, units, start));
+  } catch {
+    /* 任何分析抛错都不应拖垮既有菜单 */
   }
 
   // --- cd-waste: the owner's never-used defensive cooldowns ---
@@ -123,8 +137,239 @@ export function extractCandidateFindings(
   return out;
 }
 
+/** death-setup 集成:逐友方死亡装配 parts(摘要按 victim 惰性算一次)。 */
+function extractDeathSetups(
+  combat: any,
+  units: any[],
+  start: number,
+): CandidateEvent[] {
+  const out: CandidateEvent[] = [];
+  const players = units.filter((u) => u.info);
+  const friends = players.filter(
+    (u) => u.reaction === CombatUnitReaction.Friendly,
+  );
+  const enemies = players.filter(
+    (u) => u.reaction !== CombatUnitReaction.Friendly,
+  );
+  if (friends.length === 0 || enemies.length === 0) return out;
+  const enemyIds = new Set(enemies.map((e) => e.id));
+  const enemyPets = units.filter((u) => u.ownerId && enemyIds.has(u.ownerId));
+  const healer = friends.find((u) => isHealerSpec(u.spec));
+
+  const ccMemo = new Map<
+    string,
+    ReturnType<typeof analyzePlayerCCAndTrinket>
+  >();
+  const ccOf = (u: any) => {
+    let v = ccMemo.get(u.id);
+    if (!v) {
+      v = analyzePlayerCCAndTrinket(u, enemies, combat, enemyPets);
+      ccMemo.set(u.id, v);
+    }
+    return v;
+  };
+  // timing 审计需要敌方 CD 时间线(整场算一次);extractMajorCooldowns 的
+  // casts 不自带 timingLabel,必须过 annotateDefensiveTimings 才有 Early
+  // 判定(agy 复核 #1:漏标注则 defensive-early 生产上永不触发)。
+  let enemyTl: ReturnType<typeof reconstructEnemyCDTimeline> | null = null;
+  const cdMemo = new Map<string, IMajorCooldownInfo[]>();
+  const cdsOf = (u: any) => {
+    let v = cdMemo.get(u.id);
+    if (!v) {
+      enemyTl = enemyTl ?? reconstructEnemyCDTimeline(enemies, combat);
+      v = annotateDefensiveTimings(
+        extractMajorCooldowns(u, combat),
+        u,
+        combat,
+        enemyTl,
+      );
+      cdMemo.set(u.id, v);
+    }
+    return v;
+  };
+
+  for (const u of friends) {
+    for (const d of (u.deathRecords ?? []) as any[]) {
+      const deathT = ((d.timestamp ?? 0) - start) / 1000;
+      const parts: DeathSetupParts = {
+        deathT,
+        victim: { id: u.id, name: u.name },
+      };
+      // 各摘要独立容错:合成 fixture 缺 startInfo/事件数组时单项缺席,
+      // 不影响其它前因判定(与菜单整体 try/catch 双层)。
+      try {
+        parts.victimCC = ccOf(u);
+      } catch {
+        /* 摘要不可算 → 该前因类缺席 */
+      }
+      try {
+        parts.victimCDs = cdsOf(u);
+      } catch {
+        /* 同上 */
+      }
+      if (healer && healer.id !== u.id) {
+        try {
+          parts.healerCC = {
+            healerName: healer.name,
+            ccInstances: ccOf(healer).ccInstances,
+          };
+        } catch {
+          /* 同上 */
+        }
+      }
+      out.push(...deathSetupEvents(parts));
+    }
+  }
+  return out;
+}
+
 /** 25%/Immune = wasted(镜像 IOutgoingCCChain.hasWastedApplications 的定义)。 */
 const WASTED_DR_LEVELS = new Set(["25%", "Immune"]);
+
+/** death-setup:前因事件距死亡的最大回溯(秒)——更早的资源消耗与该死亡因果太弱。 */
+export const DEATH_SETUP_LOOKBACK_S = 90;
+/** death-setup:治疗被控的最小时长(秒)——短失能不构成击杀窗口无解。 */
+const HEALER_LOCK_MIN_S = 3;
+/** 每个死亡最多带的前因事件数(优先级 healer-locked > trinket-early > defensive-early)。 */
+const SETUPS_PER_DEATH = 2;
+
+export interface DeathSetupParts {
+  deathT: number;
+  victim: { id: string; name: string };
+  /** victim 的 CC/饰品摘要(analyzePlayerCCAndTrinket 的相关切片)。 */
+  victimCC?: {
+    ccInstances: Array<{
+      atSeconds: number;
+      durationSeconds: number;
+      spellName: string;
+      trinketState: string;
+    }>;
+    trinketUseTimes: number[];
+  };
+  /** victim 的大 CD(extractMajorCooldowns)。 */
+  victimCDs?: Array<
+    Pick<
+      IMajorCooldownInfo,
+      | "spellId"
+      | "spellName"
+      | "tag"
+      | "cooldownSeconds"
+      | "casts"
+      | "neverUsed"
+    >
+  >;
+  /** 友方治疗(非 victim)的 CC 摘要。 */
+  healerCC?: {
+    healerName: string;
+    ccInstances: Array<{
+      atSeconds: number;
+      durationSeconds: number;
+      spellName: string;
+      sourceName: string;
+    }>;
+  };
+}
+
+/**
+ * death-setup 候选(推理链):把一个友方死亡回溯到更早的前因时刻,给模型
+ * 可引用的"链条另一端"。纯函数(hand-built 可单测);判定全部镜像
+ * buildDeathRootCauseTrace 的既有谓词:
+ *  - healer-locked:治疗的 CC 覆盖死亡前 DEATH_CC_LOOKBACK_S 窗口(同一窗口常量);
+ *  - trinket-early:victim 死亡窗口内被控且 trinketState=on_cooldown(trace 的
+ *    CC 行),前因时刻 = 更早的那次饰品施放;
+ *  - defensive-early:victim 的大防御在死亡时 ON COOLDOWN 且上次使用被 timing
+ *    审计标为 Early(trace 的 [last use: EARLY] 行),前因时刻 = 那次施放。
+ */
+export function deathSetupEvents(parts: DeathSetupParts): CandidateEvent[] {
+  const { deathT, victim } = parts;
+  const out: CandidateEvent[] = [];
+  const inWindow = (cc: { atSeconds: number; durationSeconds: number }) =>
+    cc.atSeconds <= deathT &&
+    cc.atSeconds + cc.durationSeconds >= deathT - DEATH_CC_LOOKBACK_S;
+
+  // healer-locked:治疗在击杀窗口内被 ≥3s 控且早于死亡时刻
+  const lock = parts.healerCC?.ccInstances.find(
+    (cc) =>
+      inWindow(cc) &&
+      cc.durationSeconds >= HEALER_LOCK_MIN_S &&
+      cc.atSeconds < deathT,
+  );
+  if (lock) {
+    out.push({
+      id: `death-setup:${victim.id}:${Math.round(deathT)}:healer-locked`,
+      type: "death-setup",
+      t: lock.atSeconds,
+      unitNames: [parts.healerCC!.healerName, victim.name],
+      spell: lock.spellName,
+      facts: {
+        t: fmt(lock.atSeconds),
+        kind: "healer-locked",
+        deathT: fmt(deathT),
+        victim: victim.name,
+        healer: parts.healerCC!.healerName,
+        cc: lock.spellName,
+        duration: lock.durationSeconds.toFixed(1),
+      },
+    });
+  }
+
+  // trinket-early:死亡窗口内被控且饰品在 CD;前因 = 更早的那次饰品施放
+  const deadInCC = parts.victimCC?.ccInstances.find(
+    (cc) => inWindow(cc) && cc.trinketState === "on_cooldown",
+  );
+  if (deadInCC) {
+    const trinketT = [...(parts.victimCC?.trinketUseTimes ?? [])]
+      .filter(
+        (t) => t < deadInCC.atSeconds && t >= deathT - DEATH_SETUP_LOOKBACK_S,
+      )
+      .pop();
+    if (trinketT !== undefined) {
+      out.push({
+        id: `death-setup:${victim.id}:${Math.round(deathT)}:trinket-early`,
+        type: "death-setup",
+        t: trinketT,
+        unitNames: [victim.name],
+        facts: {
+          t: fmt(trinketT),
+          kind: "trinket-early",
+          deathT: fmt(deathT),
+          victim: victim.name,
+          ccAtDeath: deadInCC.spellName,
+          gapS: fmt(deathT - trinketT),
+        },
+      });
+    }
+  }
+
+  // defensive-early:死亡时 ON COOLDOWN 且上次使用被 timing 审计标 Early
+  for (const cd of parts.victimCDs ?? []) {
+    if (cd.tag !== "Defensive" || cd.neverUsed) continue;
+    const last = lastCastBefore(cd as IMajorCooldownInfo, deathT);
+    if (!last) continue;
+    const readyAt = last.timeSeconds + cd.cooldownSeconds;
+    if (readyAt <= deathT) continue; // 死亡时可用 → 不是"提前用掉"链
+    if (last.timingLabel !== "Early") continue;
+    if (last.timeSeconds < deathT - DEATH_SETUP_LOOKBACK_S) continue;
+    out.push({
+      id: `death-setup:${victim.id}:${Math.round(deathT)}:defensive-early`,
+      type: "death-setup",
+      t: last.timeSeconds,
+      unitNames: [victim.name],
+      spell: cd.spellName,
+      facts: {
+        t: fmt(last.timeSeconds),
+        kind: "defensive-early",
+        deathT: fmt(deathT),
+        victim: victim.name,
+        spell: cd.spellName,
+        gapS: fmt(deathT - last.timeSeconds),
+      },
+    });
+    break; // 一个死亡最多一条 defensive-early(取第一个命中的大防御)
+  }
+
+  return out.slice(0, SETUPS_PER_DEATH);
+}
 
 function dpsOwnerEvents(
   combat: any,

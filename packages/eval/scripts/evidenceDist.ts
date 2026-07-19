@@ -1,0 +1,90 @@
+// 语料实证(常驻工具):DPS 公开语料跑 extractCandidateFindings,候选按
+// 类型 × 比赛阶段(前/中/后 1/3)分布。改动候选提取/prompt 引导后跑一把
+// 对比时段覆盖。2026-07-19 基线:death 88% 在后 1/3;death-setup 落地后
+// 菜单 avg 5.7→6.3/场(38 条链条候选/60 场:healer-locked 25 / trinket-early 8 / defensive-early 5)。
+import { readdirSync, readFileSync } from "fs";
+import { join } from "path";
+import { GladLogParser, type GladMatch } from "@gladlog/parser";
+import { toLegacyMatch, CombatUnitReaction } from "@gladlog/parser-compat";
+import { extractCandidateFindings, isHealerSpec } from "@gladlog/analysis";
+
+const dir = "/Users/mingjianliu/code/gladlog-eval-private/corpus/public-dps";
+const files = readdirSync(dir).filter((f) => f.endsWith(".txt"));
+
+type Cell = { early: number; mid: number; late: number; whole: number };
+const byType = new Map<string, Cell>();
+const cell = (t: string): Cell => {
+  let c = byType.get(t);
+  if (!c) {
+    c = { early: 0, mid: 0, late: 0, whole: 0 };
+    byType.set(t, c);
+  }
+  return c;
+};
+let matches = 0;
+let menuTotal = 0;
+
+for (const f of files) {
+  const parser = new GladLogParser();
+  const items: GladMatch[] = [];
+  parser.on("match", (m: GladMatch) => items.push(m));
+  for (const line of readFileSync(join(dir, f), "utf8").split("\n"))
+    parser.push(line);
+  parser.end();
+  for (const m of items) {
+    try {
+      const legacy = toLegacyMatch({ ...m, rawLines: [] } as GladMatch);
+      const players = Object.values(legacy.units).filter((u) => u.info);
+      const owner =
+        players.find(
+          (u) =>
+            u.id === legacy.playerId &&
+            u.reaction === CombatUnitReaction.Friendly,
+        ) ??
+        players.find(
+          (u) =>
+            isHealerSpec(u.spec) && u.reaction === CombatUnitReaction.Friendly,
+        );
+      if (!owner) continue;
+      const durS = (legacy.endTime - legacy.startTime) / 1000;
+      const cands = extractCandidateFindings(legacy, owner.id);
+      matches++;
+      menuTotal += cands.length;
+      for (const c of cands) {
+        const key =
+          c.type === "death-setup" ? `death-setup/${c.facts.kind}` : c.type;
+        const cc = cell(key);
+        if (c.facts.t === undefined) cc.whole++;
+        else {
+          const frac = c.t / Math.max(1, durS);
+          if (frac < 1 / 3) cc.early++;
+          else if (frac < 2 / 3) cc.mid++;
+          else cc.late++;
+        }
+      }
+    } catch {
+      /* 跳过坏场 */
+    }
+  }
+}
+
+console.warn(
+  `matches=${matches} menuTotal=${menuTotal} avg=${(menuTotal / matches).toFixed(1)}/场`,
+);
+console.warn("type".padEnd(22), "前1/3", "中1/3", "后1/3", "整场");
+for (const [t, c] of [...byType.entries()].sort(
+  (a, b) =>
+    b[1].early +
+    b[1].mid +
+    b[1].late +
+    b[1].whole -
+    (a[1].early + a[1].mid + a[1].late + a[1].whole),
+)) {
+  console.warn(
+    t.padEnd(22),
+    String(c.early).padStart(4),
+    String(c.mid).padStart(4),
+    String(c.late).padStart(4),
+    String(c.whole).padStart(4),
+  );
+}

@@ -8,9 +8,17 @@ const DPS_LEGENDS: Record<string, string> = {
   "dr-clipped-cc": `- "dr-clipped-cc": your CC (facts.spell) landed on facts.target at facts.dr diminishing returns (only facts.duration seconds). Coach CC sequencing with your team.`,
 };
 
-function dpsLegendLines(candidates: CandidateEvent[]): string[] {
+/** 所有 owner 视角通用的条件图例(菜单出现该类型才输出;无该类型时 prompt 字节不变)。 */
+const CHAIN_LEGENDS: Record<string, string> = {
+  "death-setup": `- "death-setup": a precursor moment tied to a later friendly death at facts.deathT (facts.kind: "healer-locked" = the healer was CC'd through the kill window; "trinket-early" = the victim's trinket was spent at facts.t and still down when they died in CC; "defensive-early" = a major defensive was spent early per the timing audit and unavailable at death). When a death has setup events with matching deathT, cite them TOGETHER in one finding and coach the setup moment. Describe the sequence neutrally — "at {{t}}s X happened; at {{deathT}}s the death followed" — and suggest what to do differently at the setup moment. The no-causation hard rule still applies: never write that the setup "led to"/"caused"/"resulted in" the death.`,
+};
+
+function legendLines(
+  map: Record<string, string>,
+  candidates: CandidateEvent[],
+): string[] {
   const present = new Set(candidates.map((c) => c.type));
-  return Object.entries(DPS_LEGENDS)
+  return Object.entries(map)
     .filter(([type]) => present.has(type))
     .map(([, line]) => line);
 }
@@ -41,7 +49,7 @@ export function buildFindingsPrompt(
     })
     .join("\n");
   return [
-    `You are a World of Warcraft arena coach reviewing a ${specName}'s match. Produce 3-5 coaching findings as JSON — as many as the event menu genuinely supports; never pad with weak or duplicate items. When the menu contains non-death event types (bursts, kicks, targeting), cover at least one of them — deaths matter most but are not the whole story.`,
+    `You are a World of Warcraft arena coach reviewing a ${specName}'s match. Produce 3-5 coaching findings as JSON — as many as the event menu genuinely supports; never pad with weak or duplicate items. When the menu contains non-death event types (bursts, kicks, targeting), cover at least one of them — deaths matter most but are not the whole story. At most 2 findings may be anchored solely on death events; when a death has "death-setup" events, pair them into one chain finding instead of adding another death-only item.`,
     ``,
     `Match context (for reasoning about the arc — do NOT cite anything not in the event menu):`,
     richContext,
@@ -54,7 +62,8 @@ export function buildFindingsPrompt(
     `- "cd-waste": a major defensive cooldown the player never pressed the entire match (facts.spell names it). This is a whole-round observation with no timestamp.`,
     // DPS-owner 事件类型的 legend 只在菜单里出现该类型时输出 —— 治疗菜单无
     // 这些类型,治疗 prompt 保持字节不变(D2)。
-    ...dpsLegendLines(candidates),
+    ...legendLines(CHAIN_LEGENDS, candidates),
+    ...legendLines(DPS_LEGENDS, candidates),
     ``,
     `HARD RULES:`,
     `- Reference only event ids from the menu (in "eventIds"). Never invent an event.`,

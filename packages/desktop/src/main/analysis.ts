@@ -100,7 +100,7 @@ export function createAnalysisService(deps: {
       let raw = "";
       const stream = client.stream({
         model: settings.anthropicModel ?? "claude-sonnet-5",
-        max_tokens: 2048,
+        max_tokens: 4096, // 3-5 条 + death-setup 链条解释;2048 会 JSON 截断→整体回退
         system: buildCoachSystemPrompt(lang),
         messages: [{ role: "user", content: prompt }],
       });

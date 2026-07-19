@@ -50,6 +50,12 @@ export interface CriticalMoment {
   rootCauseTrace?: string[];
 }
 
+/**
+ * 死亡回溯的 CC 回看窗口(秒):death-trace 与 death-setup 候选共用
+ * (谓词即规范 —— 两边判定「死亡窗口内的 CC」必须同一窗口)。
+ */
+export const DEATH_CC_LOOKBACK_S = 12;
+
 export function getEnemyStateAtTime(
   timeSeconds: number,
   enemyCDTimeline: IEnemyCDTimeline,
@@ -205,9 +211,8 @@ export function buildDeathRootCauseTrace(
 
   // 2. CC active on the dying player in the 12s window before/at death
   if (dyingPlayerCC) {
-    const CC_LOOKBACK = 12;
     const relevantCC = dyingPlayerCC.ccInstances.filter(
-      (cc) => cc.atSeconds <= deathTimeSeconds && cc.atSeconds + cc.durationSeconds >= deathTimeSeconds - CC_LOOKBACK,
+      (cc) => cc.atSeconds <= deathTimeSeconds && cc.atSeconds + cc.durationSeconds >= deathTimeSeconds - DEATH_CC_LOOKBACK_S,
     );
     for (const cc of relevantCC) {
       const endAt = cc.atSeconds + cc.durationSeconds;

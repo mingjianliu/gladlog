@@ -7,7 +7,7 @@ import { agyClientFactory, claudeCliClientFactory } from "./localAiBackends";
 // 旧缓存(同 matchId 的治疗视角结果)必须失效;DPS owner 菜单新增四类事件
 // (burst-into-immunity / off-target-in-window / juked-kick / dr-clipped-cc)
 // 与 <burst_ledger> 块。治疗记录者 prompt 字节不变,缓存键随版本一并轮换。
-export const PROMPT_VERSION = 5;
+export const PROMPT_VERSION = 6; // death-setup 链条候选 + 图例 + 死亡锚定上限
 
 export interface AnthropicLike {
   stream(params: {
