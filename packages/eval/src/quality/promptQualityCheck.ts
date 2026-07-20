@@ -296,9 +296,31 @@ const MISSED_OPTION = /^\s*\[(\d+):(\d+)\].*?\bhad ([A-Za-z' :]+?) available/;
 // "      [RES] rdy:…  cd:Ironbark(48s),Stampeding Roar(91s),2:Icebound Fortitude(42s)  enemy:…"
 // 队友项带 "N:" 前缀,充能项带 "[1/2]" 后缀,都要剥掉。
 const RES_CD_BLOCK = /\[RES\].*?\bcd:(\S(?:.*?))(?:\s{2,}|$)/;
-const CD_ENTRY = /(?:^|,)\s*(?:\d+:)?([A-Za-z' :]+?)\s*\(/g;
+/** 台账条目:可选 "N:" 归属前缀(捕获)+ 技能名。无前缀 = log owner 自己的。 */
+const CD_ENTRY = /(?:^|,)\s*(?:(\d+):)?([A-Za-z' :]+?)\s*\(/g;
 /** 时间戳行:"1:53  [DEATH] …" */
 const LEADING_TIME = /^(\d+):(\d+)\s/;
+/** 名册行:'  <unit id="2" name="Ëxørçïsm-Tichondrius-US" spec="…" role="…">' */
+const ROSTER_UNIT = /<unit\s+id="(\d+)"\s+name="([^"]+)"/;
+/** 声称者的两种句式 —— 名字含非 ASCII 与撇号(Øxý、Kel'Thuzad),别用 ASCII 字符类。 */
+const OWNER_DIED_FORM = /\bdied\s*—\s*(\S+)\s+had\b/;
+const OWNER_SELF_FORM = /\(([^)]+)\)\s*—\s*had\b/;
+
+/** 名册:角色名 → 数字 id,外加 log owner 的 id(无前缀台账条目归它)。 */
+function parseRoster(lines: string[]): {
+  idByName: Map<string, string>;
+  ownerId: string | null;
+} {
+  const idByName = new Map<string, string>();
+  let ownerId: string | null = null;
+  for (const line of lines) {
+    const m = line.match(ROSTER_UNIT);
+    if (!m) continue;
+    idByName.set(m[2], m[1]);
+    if (/role="log owner"/.test(line)) ownerId = m[1];
+  }
+  return { idByName, ownerId };
+}
 
 /**
  * 硬不变量:`DEATHS WITH MISSED OPTIONS` 声称"available"的冷却,不得同时出现在
@@ -308,25 +330,42 @@ const LEADING_TIME = /^(\d+):(\d+)\s/;
  * OPTIONS 写 "had Ironbark available"。根因是同一技能两个独立维护的冷却值 ——
  * `deathOutcomeAnalysis` 私有表 45s vs 主路径解析 65s(见该文件的根因注释)。
  * 已由共享解析器修掉,这条门规防它复发。
+ *
+ * **判定必须带归属**(2026-07-20 全语料审计订正):台账条目的 `N:` 前缀标明
+ * 技能属于谁,早期实现把它剥掉只按技能名比对 —— 镜像阵容(同队两个圣骑)里
+ * 甲的 Divine Shield 在冷却,会把「乙有 Divine Shield 可用」误判成矛盾。
+ * 全语料 9 条报告里 6 条是这么来的(67% 假阳性)。missed-option 行写角色名、
+ * 台账写数字 id,两者靠名册对齐;判不出归属就**不报**——守不住的门比没有门更坏。
  */
 export function checkCooldownLedgerConsistency(lines: string[]): string[] {
-  // 每条 [RES] 的冷却中技能集合,按其上方最近的带时间戳行定位。
-  const onCooldownAt: { atSeconds: number; spells: Set<string> }[] = [];
+  const { idByName, ownerId } = parseRoster(lines);
+
+  // 每条 [RES] 的冷却中技能集合(带归属),按其上方最近的带时间戳行定位。
+  const onCooldownAt: { atSeconds: number; owned: Set<string> }[] = [];
   let currentSeconds: number | null = null;
   for (const line of lines) {
     const t = line.match(LEADING_TIME);
     if (t) currentSeconds = Number(t[1]) * 60 + Number(t[2]);
     const res = line.match(RES_CD_BLOCK);
     if (!res || currentSeconds === null) continue;
-    const spells = new Set<string>();
-    for (const e of res[1].matchAll(CD_ENTRY)) spells.add(e[1].trim());
-    onCooldownAt.push({ atSeconds: currentSeconds, spells });
+    const owned = new Set<string>();
+    for (const e of res[1].matchAll(CD_ENTRY)) {
+      // 无前缀 = log owner 自己的冷却
+      const who = e[1] ?? ownerId;
+      if (!who) continue; // 名册缺失且条目无前缀 → 归属不明,不参与判定
+      owned.add(`${who}|${e[2].trim()}`);
+    }
+    onCooldownAt.push({ atSeconds: currentSeconds, owned });
   }
 
   const violations: string[] = [];
   lines.forEach((line, i) => {
     const m = line.match(MISSED_OPTION);
     if (!m) return;
+    const claimant =
+      line.match(OWNER_DIED_FORM)?.[1] ?? line.match(OWNER_SELF_FORM)?.[1];
+    const claimantId = claimant ? idByName.get(claimant) : undefined;
+    if (!claimantId) return; // 判不出是谁的技能 → 不报
     const at = Number(m[1]) * 60 + Number(m[2]);
     const spell = m[3].trim();
     // 该时刻或之前最近的一条台账
@@ -335,9 +374,9 @@ export function checkCooldownLedgerConsistency(lines: string[]): string[] {
       if (entry.atSeconds > at) continue;
       if (!nearest || entry.atSeconds > nearest.atSeconds) nearest = entry;
     }
-    if (nearest?.spells.has(spell)) {
+    if (nearest?.owned.has(`${claimantId}|${spell}`)) {
       violations.push(
-        `line ${i + 1}: ${m[1]}:${m[2]} 声称 "${spell}" available,但同时刻 [RES] 台账把它列在 cd: 中`,
+        `line ${i + 1}: ${m[1]}:${m[2]} 声称 ${claimant} 的 "${spell}" available,但同时刻 [RES] 台账把它列在 cd: 中`,
       );
     }
   });
