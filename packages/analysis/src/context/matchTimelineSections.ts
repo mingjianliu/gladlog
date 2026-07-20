@@ -583,7 +583,14 @@ export function emitFriendlyDeathEntries<S>(params: {
     const notePart = death.note ? ` [${death.note}]` : "";
     const deathLines: (string | S)[] = [
       `${fmtTime(death.atSeconds)}  [DEATH]  ${pid(death.name)} (${death.spec} — friendly)${unusedDefensives}${trinketPart}${notePart}`,
-      requestSnapshotPlaceholder(death.atSeconds - 3, true, true),
+      // 锚定在渲染时刻:这条 [RES] 紧贴上面那行 [DEATH],自己不带时间戳,
+      // 读者(和门规)只能把它读成与死亡同刻。此前取 T-3s(无注释、随
+      // c54d051 整体移植带入),于是冷却若恰在这 3 秒内转好,台账写"冷却中"
+      // 而同刻的 DEATHS WITH MISSED OPTIONS 写"available" —— 两边各自对
+      // 自己的时刻都没算错,是渲染把两个时刻并置成了一个。
+      // 同一行的 unusedDefensives 与 MISSED OPTIONS 块都在 death.atSeconds
+      // 求值,这里跟它们对齐。2026-07-20 全语料:3/1245 场因此自相矛盾。
+      requestSnapshotPlaceholder(death.atSeconds, true, true),
     ];
     if (dyingUnit) {
       // HP trajectory
@@ -664,7 +671,14 @@ export function emitEnemyDeathEntries<S>(params: {
     const deathLines: (string | S)[] = [
       `${fmtTime(death.atSeconds)}  [DEATH]  ${enemyPid(death.name)} (${death.spec} — enemy)`,
       `${fmtTime(death.atSeconds)}  [ROSTER]  enemy ${enemyPid(death.name)} removed (dead)`,
-      requestSnapshotPlaceholder(death.atSeconds - 3, true, true),
+      // 锚定在渲染时刻:这条 [RES] 紧贴上面那行 [DEATH],自己不带时间戳,
+      // 读者(和门规)只能把它读成与死亡同刻。此前取 T-3s(无注释、随
+      // c54d051 整体移植带入),于是冷却若恰在这 3 秒内转好,台账写"冷却中"
+      // 而同刻的 DEATHS WITH MISSED OPTIONS 写"available" —— 两边各自对
+      // 自己的时刻都没算错,是渲染把两个时刻并置成了一个。
+      // 同一行的 unusedDefensives 与 MISSED OPTIONS 块都在 death.atSeconds
+      // 求值,这里跟它们对齐。2026-07-20 全语料:3/1245 场因此自相矛盾。
+      requestSnapshotPlaceholder(death.atSeconds, true, true),
     ];
 
     if (dyingUnit) {
