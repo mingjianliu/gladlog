@@ -347,6 +347,36 @@ export interface ICooldownCast {
 export const HP_SAMPLE_RADIUS_MS = 3_000;
 
 /**
+ * 关键窗口内的收窄半径。存在理由是正当的:关键窗口按 1s 密集出 tick,若仍用
+ * ±3s,相邻两个 tick 会取到同一条底层读数,把一次快速掉血渲染成平线。
+ */
+export const HP_SAMPLE_RADIUS_CRITICAL_MS = 1_500;
+
+/**
+ * **同一时刻的 HP 采样半径 —— 单一事实源。**
+ *
+ * 打印某一瞬间 HP% 的每一个渲染器都必须从这里取半径,不许各自定义常量。
+ *
+ * 2026-07-20 的 50 场 eval 实证了违反它的代价:`[STATE]` tick 在关键窗口用
+ * ±1.5s,而 `[DMG SPIKE]` 端点恒用 ±3s —— 而 DMG SPIKE **只发生在关键窗口**
+ * (那正是它成为 spike 的原因)。两者必然取到不同样本,于是同一秒的两行给出
+ * 互相矛盾的 HP:31/50 场命中,最极端处 spike 报 2% 而 STATE 报 88%。
+ * 其中 ord 008 已导致模型把不存在的濒死写进教练结论(accuracy 判 2)。
+ *
+ * 上面 HP_SAMPLE_RADIUS_MS 的注释早就写明「[STATE] 基线 tick 与 [DMG SPIKE]
+ * 端点必须同半径」——是后加的关键窗口收窄只改了一侧,把这条不变量破坏掉了。
+ * 所以修法是让半径成为**随时刻取值的共享谓词**,而不是让两个魔数碰巧相等。
+ */
+export function hpSampleRadiusMs(
+  tSeconds: number,
+  criticalWindowSeconds: ReadonlySet<number>,
+): number {
+  return criticalWindowSeconds.has(Math.floor(tSeconds))
+    ? HP_SAMPLE_RADIUS_CRITICAL_MS
+    : HP_SAMPLE_RADIUS_MS;
+}
+
+/**
  * Returns the HP% (0–100) of `unit` at the given timestamp by finding the nearest
  * advancedAction where advancedActorId === unit.id. Returns null when no data exists.
  */

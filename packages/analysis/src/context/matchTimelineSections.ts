@@ -19,6 +19,7 @@ import {
   specToBenchmarkKey,
   specToString,
   USABLE_WHILE_CC_SPELL_IDS,
+  hpSampleRadiusMs,
 } from "../utils/cooldowns";
 import { wasLockedOutThroughWindow } from "../utils/deathOutcomeAnalysis";
 import { getHpPercentAtTime } from "../utils/killWindowTargetSelection";
@@ -272,6 +273,8 @@ export function emitDmgSpikeEntries(params: {
   pid: (name: string) => string;
   playerIdMap?: Map<string, number>;
   enemyIdMap?: Map<string, number>;
+  /** [STATE] tick 所用的关键窗口集合 —— 半径必须与它一致,见 hpSampleRadiusMs。 */
+  criticalWindowSeconds: ReadonlySet<number>;
   addEntry: (timeSeconds: number, ...lines: string[]) => void;
 }): void {
   const {
@@ -281,6 +284,7 @@ export function emitDmgSpikeEntries(params: {
     pid,
     playerIdMap,
     enemyIdMap,
+    criticalWindowSeconds,
     addEntry,
   } = params;
 
@@ -292,18 +296,20 @@ export function emitDmgSpikeEntries(params: {
     const dpsK = Math.round(pw.totalDamage / Math.max(1, windowSec) / 1000);
 
     const targetUnit = friends.find((f) => f.name === pw.targetName);
+    // 半径必须与同秒 [STATE] tick 一致(共享谓词);恒用 ±3s 会在关键窗口
+    // 取到与 STATE 不同的样本,同一秒两行 HP 打架 —— 2026-07-20 eval 31/50 场。
     const hpFrom = targetUnit
       ? getUnitHpAtTimestamp(
           targetUnit,
           matchStartMs + pw.fromSeconds * 1000,
-          HP_SAMPLE_RADIUS_MS,
+          hpSampleRadiusMs(pw.fromSeconds, criticalWindowSeconds),
         )
       : null;
     const hpTo = targetUnit
       ? getUnitHpAtTimestamp(
           targetUnit,
           matchStartMs + pw.toSeconds * 1000,
-          HP_SAMPLE_RADIUS_MS,
+          hpSampleRadiusMs(pw.toSeconds, criticalWindowSeconds),
         )
       : null;
     let hpStr = "";

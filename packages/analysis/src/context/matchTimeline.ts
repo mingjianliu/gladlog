@@ -25,6 +25,7 @@ import {
   isTeamHealCD,
   THROUGHPUT_EMPOWER_DEFENSIVE_IDS,
   specToString,
+  hpSampleRadiusMs,
 } from "../utils/cooldowns";
 import {
   buildDampeningEvents,
@@ -1986,6 +1987,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   // ── [DMG SPIKE] events ─────────────────────────────────────────────────────
 
   emitDmgSpikeEntries({
+    criticalWindowSeconds: criticalWindowSet,
     pressureWindows,
     friends,
     matchStartMs,
@@ -2052,8 +2054,9 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   // Emit HP ticks — use a narrower sample window inside critical windows so adjacent
   // 1-second ticks cannot both claim the same underlying reading (which would give a
   // misleadingly flat HP line during a fast drop).
-  const HP_SAMPLE_WINDOW_CRITICAL_MS = 1_500; // ±1.5s for 1s dense ticks
-  const HP_SAMPLE_WINDOW_BASELINE_MS = 3_000; // ±3s for 3s baseline ticks
+  // 半径从共享谓词 hpSampleRadiusMs 取(cooldowns.ts)—— 这里曾经是两个局部
+  // 常量,而 [DMG SPIKE] 那侧恒用 ±3s,导致同一秒两行 HP 打架(2026-07-20 eval
+  // 实证 31/50 场)。别再在这里定义半径常量。
 
   // B106: when a numeric ID map is present, sort HP tokens by player ID so the model
   // can align HP readings with class labels listed elsewhere in player-ID order.
@@ -2115,9 +2118,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
 
   for (let t = 0; t <= Math.floor(matchDurationS); t++) {
     const tsMs = matchStartMs + t * 1000;
-    const sampleWindowMs = criticalWindowSet.has(t)
-      ? HP_SAMPLE_WINDOW_CRITICAL_MS
-      : HP_SAMPLE_WINDOW_BASELINE_MS;
+    const sampleWindowMs = hpSampleRadiusMs(t, criticalWindowSet);
 
     const friendlyParts: string[] = [];
     const currentFriendlies = friendlyHpUnits.map(({ unit, label }) => {
