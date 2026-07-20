@@ -622,11 +622,21 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   // ── [OFFENSIVE WINDOW] synthesized headers ─────────────────────────────────
 
   for (const burst of enemyCDTimeline.alignedBurstWindows) {
-    const overlappingSpike = pressureWindows.find(
+    // 取窗口内伤害最大的 spike —— 与渲染文案 "peak spike" 一致。此前用 .find()
+    // 拿到的也是最大值,但那依赖 **pressureWindows 恰好按 totalDamage 降序**
+    // 这一隐式行为(本文件另一处 qualifyingSpikes 已因同样的顺序依赖出过错)。
+    // 这里把判据写明:排序若变,语义不会静默跟着变。
+    const candidates = pressureWindows.filter(
       (pw) =>
         pw.totalDamage >= DMG_SPIKE_THRESHOLD &&
         pw.fromSeconds >= burst.fromSeconds - 5 &&
         pw.fromSeconds <= burst.toSeconds + 5,
+    );
+    const overlappingSpike = candidates.reduce<
+      (typeof candidates)[number] | undefined
+    >(
+      (best, pw) => (!best || pw.totalDamage > best.totalDamage ? pw : best),
+      undefined,
     );
     if (!overlappingSpike) continue;
     const dmgM = (overlappingSpike.totalDamage / 1_000_000).toFixed(2);
@@ -636,7 +646,11 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       .join(" + ");
     addEntry(
       burst.fromSeconds,
-      `${fmtTime(burst.fromSeconds)}  [OFFENSIVE WINDOW]   ${fmtTime(burst.fromSeconds)}–${fmtTime(burst.toSeconds)} | ${dmgM}M on ${pid(overlappingSpike.targetName)} (${overlappingSpike.targetSpec}) | CDs: ${cdNames}`,
+      // 伤害数字是**那条 DMG SPIKE 窗口**的总伤害,不是本 burst 窗口内的伤害 ——
+      // 两个区间不同。此前只印 burst 的起止,读者必然把该数字读成「这段窗口内的
+      // 伤害」(I 类:ord 017 的 responder 因此写错结论)。把伤害的归属窗口显式
+      // 标出,数字与区间才对得上。
+      `${fmtTime(burst.fromSeconds)}  [OFFENSIVE WINDOW]   ${fmtTime(burst.fromSeconds)}–${fmtTime(burst.toSeconds)} | peak spike ${dmgM}M on ${pid(overlappingSpike.targetName)} (${overlappingSpike.targetSpec}) over ${fmtTime(overlappingSpike.fromSeconds)}–${fmtTime(overlappingSpike.toSeconds)} | CDs: ${cdNames}`,
     );
   }
 
@@ -2477,6 +2491,8 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     "    a leading `-<spell>` marks one that just LEFT the ready set. `cd:<spell>(Ns)` = seconds until it returns.",
     "  [DMG SPIKE] timestamp = the window's START; its `A% -> B% HP` spans that window, so B is at start+duration.",
     "  Window durations `(Ns)` are computed from the displayed start/end timestamps, so they always match what you see.",
+    "  [OFFENSIVE WINDOW] `X on <unit>` = damage DEALT TO that unit (it is the victim, not the dealer);",
+    "    its `peak spike` figure covers the spike's own sub-window, printed after it — not the whole offensive window.",
     "",
     `[PERSPECTIVE: Log Owner - ${ownerSpec}]`,
     `(You are the ${ownerSpec} in this match. Your actions are marked with [YOU].)`,
