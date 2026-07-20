@@ -10,6 +10,8 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # 手动触发:功能分支上验证 job 本身(尤其视觉基线相关的 frontend-qa)
+  workflow_dispatch:
 
 jobs:
   test:
@@ -40,3 +42,52 @@ jobs:
       # main 模块这类问题只有它能抓(v0.0.4 首包双平台实锤)。
       - name: Production bundle (electron-vite build)
         run: npm -w @gladlog/desktop run build
+
+  # 前端质检:视觉回归 + 无障碍。与 test job 并行,不拖慢快反馈。
+  # 截图基线是 linux 单源 —— CI 既是生产者(visual-baseline.yml)也是判定者。
+  frontend-qa:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # 浏览器二进制按 Playwright 版本缓存,避免每次 CI 重下
+      - name: Playwright version
+        id: pw
+        run: echo "v=$(npx playwright --version | tr -d ' ')" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.v }}
+
+      - name: Install browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Visual regression + a11y
+        run: npm -w @gladlog/desktop run test:visual
+
+      # 拆成两步是为了让构建失败与测试失败在日志里分得开
+      - name: Build app bundle
+        run: npm -w @gladlog/desktop run build
+
+      # Electron 在无头 CI 里需要虚拟显示
+      - name: E2E (three core journeys + cold start)
+        run: xvfb-run --auto-servernum npx playwright test -c qa/playwright.config.ts --project=e2e
+        working-directory: packages/desktop
+
+      # 失败必须留证:没有 diff 三联图就无法人工裁决
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            packages/desktop/qa/playwright-report/
+            packages/desktop/qa/test-results/
+          retention-days: 14

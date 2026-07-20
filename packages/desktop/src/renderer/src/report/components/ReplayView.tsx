@@ -783,22 +783,22 @@ export function ReplayView({
         </div>
 
         {layout === "full" && (
-        <GcdSwimlane
-          source={source}
-          tracks={tracks}
-          t={t}
-          startTime={startTime}
-          endTime={endTime}
-          selUnits={selUnits}
-          onToggle={(id) => setSelUnits((s) => ({ ...s, [id]: !s[id] }))}
-          playing={playing}
-          flash={seekReq}
-          onSeekT={(tMs) => {
-            setT(Math.min(endTime, Math.max(startTime, tMs)));
-            setPlaying(false);
-          }}
-          onDeathClick={onDeathClick}
-        />
+          <GcdSwimlane
+            source={source}
+            tracks={tracks}
+            t={t}
+            startTime={startTime}
+            endTime={endTime}
+            selUnits={selUnits}
+            onToggle={(id) => setSelUnits((s) => ({ ...s, [id]: !s[id] }))}
+            playing={playing}
+            flash={seekReq}
+            onSeekT={(tMs) => {
+              setT(Math.min(endTime, Math.max(startTime, tMs)));
+              setPlaying(false);
+            }}
+            onDeathClick={onDeathClick}
+          />
         )}
       </div>
 
@@ -849,6 +849,7 @@ export function ReplayView({
           </div>
           <input
             type="range"
+            aria-label="回放时间轴"
             className="rpt-replay-scrub"
             min={startTime}
             max={endTime}

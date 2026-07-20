@@ -213,6 +213,17 @@ export function installFixtureBridge(): void {
       async getCached(): Promise<unknown> {
         return sampleAnalysis;
       },
+      /** 面板真正读的是这个(缓存与 running 一次原子读出)。缺了它面板会
+       *  吞掉异常停在空闲态 —— fixture 预览里看不到任何 finding。 */
+      async getState(): Promise<unknown> {
+        return { cached: sampleAnalysis, running: false };
+      },
+      async getFlags(): Promise<Record<string, string>> {
+        return {};
+      },
+      async setFlag(): Promise<Record<string, string>> {
+        return {};
+      },
       async deepen(): Promise<void> {},
       async notebook(): Promise<unknown[]> {
         return [

@@ -10,5 +10,5 @@
     "types": ["vitest/globals", "node", "vite/client"],
     "resolveJsonModule": true
   },
-  "include": ["src", "test"]
+  "include": ["src", "test", "dev", "qa"]
 }

@@ -23,8 +23,12 @@ const APP_VIEW_LABEL: Record<AppView, string> = {
   dev: "开发者",
 };
 
-export default function App() {
-  const [appView, setAppView] = useState<AppView>("matches");
+export default function App({
+  initialAppView = "matches",
+}: {
+  initialAppView?: AppView;
+} = {}) {
+  const [appView, setAppView] = useState<AppView>(initialAppView);
   const [metas, setMetas] = useState<StoredMatchMeta[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [doc, setDoc] = useState<any | null>(null);

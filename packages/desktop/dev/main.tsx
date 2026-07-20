@@ -7,6 +7,10 @@ import realMatch from "../test/fixtures/real-match-sample.json";
 import synthMatch from "../test/fixtures/report-match.json";
 import "../src/renderer/src/styles.css";
 import "./harness.css";
+import { resolveScene, type SceneName } from "./scenes";
+import App from "../src/renderer/src/App";
+import { installFixtureBridge } from "../src/renderer/src/fixtureBridge";
+import { heavyMatch, installAppShellFixture } from "./fixtures/appShell";
 
 const off = () => () => {};
 
@@ -103,6 +107,77 @@ const BASE_FIXTURES: Record<string, StoredMatch> = {
 // 完整真实局:dev/local/full-match.json(gitignored,仅本机)。存在则运行时加载。
 const LOCAL_KEY = "real · 完整真实局(本地 dev/local)";
 
+// 场景模式(?scene=…):渲染单一确定状态,给视觉回归截图用。
+// data-scene-ready 是 Playwright 的就绪信号 —— 挂上即表示该场景已渲染。
+const SCENE_VIEW: Record<
+  | "report-battle"
+  | "report-replay"
+  | "report-ai"
+  | "report-synth"
+  | "report-heavy",
+  { fixture: StoredMatch; initialView: "report" | "replay" | "ai" }
+> = {
+  "report-battle": {
+    fixture: realMatch as unknown as StoredMatch,
+    initialView: "report",
+  },
+  "report-replay": {
+    fixture: realMatch as unknown as StoredMatch,
+    initialView: "replay",
+  },
+  "report-ai": {
+    fixture: realMatch as unknown as StoredMatch,
+    initialView: "ai",
+  },
+  "report-synth": {
+    fixture: synthMatch as unknown as StoredMatch,
+    initialView: "report",
+  },
+  // 首渲计时专用:真实样本按固定倍数确定性放大,不做截图基线
+  "report-heavy": {
+    fixture: heavyMatch(
+      realMatch as unknown as Record<string, unknown>,
+    ) as unknown as StoredMatch,
+    initialView: "report",
+  },
+};
+
+const APP_SHELL_VIEW = {
+  dashboard: "stats",
+  settings: "settings",
+  matchlist: "matches",
+} as const;
+
+function AppShellScene({ name }: { name: SceneName }) {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    installAppShellFixture();
+    setReady(true);
+  }, []);
+  if (!ready) return null;
+  return (
+    <div className="scene-root scene-appshell" data-scene-ready={name}>
+      <App
+        initialAppView={APP_SHELL_VIEW[name as keyof typeof APP_SHELL_VIEW]}
+      />
+    </div>
+  );
+}
+
+function Scene({ name }: { name: SceneName }) {
+  if (name in APP_SHELL_VIEW) return <AppShellScene name={name} />;
+  const cfg = SCENE_VIEW[name as keyof typeof SCENE_VIEW];
+  return (
+    <div className="scene-root" data-scene-ready={name}>
+      <MatchReport
+        source={cfg.fixture}
+        matchId={name}
+        initialView={cfg.initialView}
+      />
+    </div>
+  );
+}
+
 function Harness() {
   const [local, setLocal] = useState<StoredMatch | null>(null);
   // 压测样本池(dev/local/stress-*.json,gitignored;由 make-report-fixture.mjs
@@ -194,8 +269,15 @@ function Harness() {
   );
 }
 
+const scene = resolveScene(window.location.search);
+
+// 场景模式统一用 fixtureBridge 的完整 mock(比本文件顶部那份精简 mock 多了
+// getState/getFlags/notebook,AI 视图才会真的渲染出 finding 卡片而不是停在
+// 空闲态)。必须在 render 之前同步装好 —— 面板挂载时的 effect 立刻就要读它。
+if (scene) installFixtureBridge();
+
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <Harness />
+    {scene ? <Scene name={scene} /> : <Harness />}
   </React.StrictMode>,
 );

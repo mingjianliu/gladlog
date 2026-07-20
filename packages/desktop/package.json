@@ -6,10 +6,15 @@
   "scripts": {
     "dev": "electron-vite dev",
     "dev:ui": "vite --config dev/vite.config.mts",
+    "build:ui": "vite build --config dev/vite.config.mts",
+    "preview:ui": "vite preview --config dev/vite.config.mts",
     "build": "electron-vite build",
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "verify:vision": "tsx scripts/verifyVision.ts",
+    "test:visual": "playwright test -c qa/playwright.config.ts --project=visual",
+    "test:visual:smoke": "playwright test -c qa/playwright.config.ts --project=visual --ignore-snapshots",
+    "test:e2e": "electron-vite build && playwright test -c qa/playwright.config.ts --project=e2e",
     "package:mac": "electron-vite build && electron-builder --mac",
     "package:win": "electron-vite build && electron-builder --win"
   },
@@ -20,6 +25,8 @@
     "electron-log": "^5.2.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.12.1",
+    "@playwright/test": "^1.61.1",
     "@testing-library/react": "^16.3.2",
     "@types/d3-scale": "^4.0.9",
     "@types/node": "^26.1.1",

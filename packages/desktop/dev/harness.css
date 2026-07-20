@@ -51,3 +51,11 @@ body {
 .harness-body {
   padding: 16px;
 }
+
+/* 场景模式:无工具栏,内边距与 app 主区一致,截图里只剩被测 UI */
+.scene-root {
+  padding: 16px;
+}
+.scene-appshell {
+  padding: 0;
+}
