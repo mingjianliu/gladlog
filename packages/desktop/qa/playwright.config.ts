@@ -34,7 +34,7 @@ export default defineConfig({
     //
     // threshold 是**每像素**的颜色距离容忍(抗锯齿噪声在这一层被吸收),
     // maxDiffPixels 是允许有多少个像素越过该距离。两者分工不同,不要混为一谈。
-    toHaveScreenshot: { threshold: 0.2, maxDiffPixels: 100 },
+    toHaveScreenshot: { threshold: 0.05, maxDiffPixels: 100 },
   },
   use: { trace: "retain-on-failure" },
   projects: [
