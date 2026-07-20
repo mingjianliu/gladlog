@@ -1220,6 +1220,21 @@ export function toRenderSecond(seconds: number): number {
   return Math.floor(seconds);
 }
 
+/**
+ * 一个时间窗在 prompt 上**显示出来的**宽度(秒)。
+ *
+ * 窗口普遍渲染成 `fmtTime(from)–fmtTime(to) (Ns)`。若 N 直接取原始
+ * `toSeconds - fromSeconds` 再 round,读者按显示的起止相减会得到另一个数
+ * (如 `0:10–0:20 (9s)`)—— 2026-07-20 eval 的 E/G 类「窗口时长口径不明」。
+ * 宽度必须由**显示的端点**导出,渲染物才自洽。
+ */
+export function renderedWindowSeconds(
+  fromSeconds: number,
+  toSeconds: number,
+): number {
+  return Math.max(0, toRenderSecond(toSeconds) - toRenderSecond(fromSeconds));
+}
+
 // ---------------------------------------------------------------------------
 // Friendly CD overlap detection
 // ---------------------------------------------------------------------------

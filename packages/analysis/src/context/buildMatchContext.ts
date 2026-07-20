@@ -29,6 +29,7 @@ import {
   formatPanicDefensivesForContext,
   IEnemyCDTimelineForTiming,
   isHealerSpec,
+  renderedWindowSeconds,
   specToString,
 } from "../utils/cooldowns";
 import { isMeleeSpec } from "../utils/cooldowns";
@@ -943,7 +944,7 @@ export function buildMatchContext(
               ? ` — pressure during idle: ${overlapping.map((p) => `${fmtTime(p.fromSeconds)} (${(p.totalDamage / 1_000_000).toFixed(2)}M on ${p.targetSpec})`).join(", ")}`
               : "";
           lines.push(
-            `      ${fmtTime(w.fromSeconds)}–${fmtTime(w.toSeconds)} (${Math.round(w.durationSeconds)}s)${pressureNote}`,
+            `      ${fmtTime(w.fromSeconds)}–${fmtTime(w.toSeconds)} (${renderedWindowSeconds(w.fromSeconds, w.toSeconds)}s)${pressureNote}`,
           );
         });
       }

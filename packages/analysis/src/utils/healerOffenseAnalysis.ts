@@ -3,7 +3,12 @@ import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 import { getEnglishSpellName, spellEffectData } from "../data/spellEffectData";
 import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
 import { ccSpellIds } from "../data/spellTags";
-import { fmtTime, isHealerSpec, specToString } from "./cooldowns";
+import {
+  fmtTime,
+  isHealerSpec,
+  renderedWindowSeconds,
+  specToString,
+} from "./cooldowns";
 import {
   DRLevel,
   getDRCategory,
@@ -859,7 +864,7 @@ export function formatHealerOffenseForContext(
       ? "you cast CC in this window"
       : "you cast no CC";
     const dmg = `your damage ${(w.ownerDamageInWindow / 1000).toFixed(0)}k`;
-    const free = `free ${Math.round(w.ownerFreeSeconds)}s of ${Math.round(w.toSeconds - w.fromSeconds)}s`;
+    const free = `free ${Math.round(w.ownerFreeSeconds)}s of ${renderedWindowSeconds(w.fromSeconds, w.toSeconds)}s`;
     const teamHp =
       w.teamMinHpPct !== null
         ? `, team min HP ${Math.round(w.teamMinHpPct)}%`
@@ -868,7 +873,7 @@ export function formatHealerOffenseForContext(
       // No qualifying team damage burst in the whole vulnerability span — the
       // missed-opportunity case. Rendered as a state, not a kill attempt.
       lines.push(
-        `  [VULNERABLE] ${fmtTime(w.fromSeconds)}–${fmtTime(w.toSeconds)} (${Math.round(w.toSeconds - w.fromSeconds)}s) on ${w.targetSpec} (${w.targetName}): no major defensives, never punished (team damage ${(w.teamDamageInVulnSpan / 1000).toFixed(0)}k total); ${ready}; ${cast}; ${dmg}; ${free}${teamHp}.`,
+        `  [VULNERABLE] ${fmtTime(w.fromSeconds)}–${fmtTime(w.toSeconds)} (${renderedWindowSeconds(w.fromSeconds, w.toSeconds)}s) on ${w.targetSpec} (${w.targetName}): no major defensives, never punished (team damage ${(w.teamDamageInVulnSpan / 1000).toFixed(0)}k total); ${ready}; ${cast}; ${dmg}; ${free}${teamHp}.`,
       );
     } else {
       // Kill windows are team-damage bursts inside the vulnerability span; the

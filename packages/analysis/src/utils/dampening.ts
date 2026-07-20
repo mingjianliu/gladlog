@@ -1,5 +1,6 @@
 import { CombatUnitSpec, ICombatUnit } from "@gladlog/parser-compat";
 
+import { toRenderSecond } from "./cooldowns";
 import { tanksOrHealers } from "./utils";
 
 // DF RULES https://www.icy-veins.com/forums/topic/69530-dampening-and-healing-changes-in-dragonflight-pre-patch-phase-2-arenas/
@@ -223,7 +224,9 @@ export function formatDampeningForContext(
   const durationSeconds = (endTime - startTime) / 1000;
   if (durationSeconds < 90 && finalDamp < 0.15) {
     return [
-      `DAMPENING (${bracket}): n/a — match ended (${Math.round(durationSeconds)}s) before dampening ramped (${fmtDampening(finalDamp)} at end)`,
+      // 归渲染网格:MATCH FACTS 的 Duration 用 fmtTime(向下取整),这里若用
+      // Math.round,36.8s 的对局会一处报 37s、一处报 0:36(H 类自相矛盾)。
+      `DAMPENING (${bracket}): n/a — match ended (${toRenderSecond(durationSeconds)}s) before dampening ramped (${fmtDampening(finalDamp)} at end)`,
     ];
   }
 

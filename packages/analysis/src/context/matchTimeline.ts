@@ -2443,6 +2443,13 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     "  [DR: <category> <level>] on CC lines = diminishing returns state when it LANDED:",
     "    Full = NO diminishing returns yet (full duration — the best time to land CC);",
     "    50% / 25% = duration reduced to half / quarter; Immune = DR'd to zero.",
+    // 2026-07-20 eval:9/50 场判为「记号无图例」——同一记号可被读成相反含义。
+    // 下面四条各对应 judge 举出的一处歧义。
+    "  [n/m] after a spell = CHARGES REMAINING / total (so [1/2] = one charge left, one on cooldown).",
+    "  [RES] rdy: = abilities READY at that instant. `rdy:Δ` = unchanged since the previous [RES];",
+    "    a leading `-<spell>` marks one that just LEFT the ready set. `cd:<spell>(Ns)` = seconds until it returns.",
+    "  [DMG SPIKE] timestamp = the window's START; its `A% -> B% HP` spans that window, so B is at start+duration.",
+    "  Window durations `(Ns)` are computed from the displayed start/end timestamps, so they always match what you see.",
     "",
     `[PERSPECTIVE: Log Owner - ${ownerSpec}]`,
     `(You are the ${ownerSpec} in this match. Your actions are marked with [YOU].)`,

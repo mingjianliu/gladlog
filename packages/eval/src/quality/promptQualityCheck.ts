@@ -263,6 +263,33 @@ export function checkSameSecondHpConsistency(lines: string[]): string[] {
   return violations;
 }
 
+// "2:57–3:15 (19s)" —— 窗口起止 + 标注时长
+const WINDOW_SPAN = /(\d+):(\d+)–(\d+):(\d+)\s*\((\d+)s\)/g;
+
+/**
+ * 硬不变量:窗口标注的时长必须等于显示的起止之差。
+ *
+ * 2026-07-20 eval 的 E/G 类「窗口时长口径不明」:`2:57–3:15 (19s)` —— 读者按
+ * 显示的时间戳相减得 18s,标注却是 19s(标注取自未取整的原始值)。渲染物
+ * 必须自洽,否则同一记号可被读成两个数。
+ */
+export function checkWindowSpanConsistency(lines: string[]): string[] {
+  const violations: string[] = [];
+  lines.forEach((line, i) => {
+    for (const m of line.matchAll(WINDOW_SPAN)) {
+      const from = Number(m[1]) * 60 + Number(m[2]);
+      const to = Number(m[3]) * 60 + Number(m[4]);
+      const labelled = Number(m[5]);
+      if (to - from !== labelled) {
+        violations.push(
+          `line ${i + 1}: ${m[1]}:${m[2]}–${m[3]}:${m[4]} 相减为 ${to - from}s,却标注 (${labelled}s)`,
+        );
+      }
+    }
+  });
+  return violations;
+}
+
 export function duplicateRatio(
   lines: string[],
   normalize: (line: string) => string,
@@ -313,6 +340,7 @@ export function checkMatch(
   }
   hardFailures.push(...checkPercentileMonotonicity(lines));
   hardFailures.push(...checkSameSecondHpConsistency(lines));
+  hardFailures.push(...checkWindowSpanConsistency(lines));
 
   return {
     ordinal: entry.ordinal,
