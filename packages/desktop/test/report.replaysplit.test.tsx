@@ -14,10 +14,26 @@ function modeButton(container: HTMLElement, label: string): HTMLElement {
   return btn as HTMLElement;
 }
 
+/**
+ * 每个用例都从干净状态起步。
+ *
+ * useReplayLayout 会把档位与分栏比例写进 localStorage,挂载时再读回来。
+ * 原先这里假设「本仓 vitest 环境下 localStorage 是 undefined,所以天然干净」
+ * —— 那是**环境巧合而非保证**:本机确实读不到,CI 的 jsdom 里它是存在的,
+ * 于是上一条用例存进去的比例漏给了下一条(CI 实测:「← 减小比例」从上一条
+ * 留下的 38.33 起步,得到 33 而不是期望的 28)。
+ *
+ * 所以显式清,并且两种环境都要能跑:没有 localStorage 时 ?. 直接短路。
+ */
+beforeEach(() => {
+  try {
+    globalThis.localStorage?.clear();
+  } catch {
+    /* 该环境不提供 localStorage —— 本就没有可泄漏的状态 */
+  }
+});
+
 describe("回放三档布局", () => {
-  // 本仓 vitest 环境下 localStorage 是 undefined(已实测),不能调 .clear() ——
-  // 那会抛 TypeError。useReplayLayout 的读写都在 try/catch 里,读不到就落回
-  // 默认档,所以每个用例天然是干净的初始状态,无需清理。
 
   it("纯 GCD 档不渲染地图与缩放浮层", () => {
     const { container } = render(<ReplayView source={m} />);
