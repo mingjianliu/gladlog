@@ -17,7 +17,12 @@
 | H     | 时长两套取整口径(0:36 vs 37s)            | —              | 已修       | `cd60380` |
 | F     | 自己施放的 CC 缺 DR 标注                 | 0/159 行       | **86/159** | `be36279` |
 | I     | OFFENSIVE WINDOW 伤害与区间对不上        | —              | 已修       | `23de9f5` |
-| **D** | 冷却台账自相矛盾(1 场)                    | —              | 非数据不一致,改图例 | `dbe61bd` |
+| **D** | 冷却台账自相矛盾(同一技能两个冷却常量)   | 1/50 场        | **0**      | `c820ad4` |
+
+> **D 类有过一次错误结论。** `dbe61bd` 曾判定「非数据不一致,只是记号歧义」并只改图例 ——
+> 那是**只查了一个样本(Lay on Hands)就外推整类**。真根因是 `deathOutcomeAnalysis` 私有表
+> 与主路径各自维护冷却值(Ironbark 45s vs 65s),由盲评 responder 用反例推翻,修于 `c820ad4`。
+> 详见本文末 D 类小节。
 
 ---
 
@@ -74,17 +79,19 @@ NaN 源头:`metrics.ts` 里 damageIn 的 `Math.abs(d.effectiveAmount)` 无守卫
 
 `packages/eval/src/quality/promptQualityCheck.ts`,均已接入 `hardFailures`:
 
-- `checkPercentileMonotonicity` —— 同行百分位必须单调不减
+- `checkPercentileMonotonicity` —— 同行百分位必须单调不减(B 类)
 - `checkSameSecondHpConsistency` —— 同秒同单位 HP 必须一致(容忍 3pp);
   A 类的 `X% -> Y% HP` 与 C 类的 `→ 目标 (X% HP)` 共用这一套判据
-- `checkWindowSpanConsistency` —— 标注时长必须等于显示起止之差
+- `checkWindowSpanConsistency` —— 标注时长必须等于显示起止之差(E/G 类)
+- `checkCooldownLedgerConsistency` —— MISSED OPTIONS 声称 available 的冷却,
+  不得同时出现在同秒 `[RES]` 台账的 `cd:` 里(D 类,`0eeabb2` 补齐)
 
 这些判据**不依赖模型**,是本轮所有 A/B 的度量工具。复现方法:
 
 ```bash
 npx tsx packages/eval/scripts/buildCorpus.ts \
   --manifest <50 条日志清单> --run <runId>
-# 然后对 runs/<runId>/prompts 跑上面三条判据
+# 然后对 runs/<runId>/prompts 跑上面四条判据
 ```
 
 ## 千场管线复验(改动全部落地后)
@@ -100,7 +107,7 @@ npx tsx packages/eval/scripts/buildCorpus.ts \
 
 ---
 
-## D 类冷却台账自相矛盾(1 场)—— 已查清
+## D 类冷却台账自相矛盾 —— 已修复(`c820ad4`),但先错过一次
 
 > **⚠️ 两次结论,第一次是错的。** `dbe61bd` 判定「非数据不一致,只改图例」——
 > **该结论已被 `c820ad4` 推翻**。真根因见本节末尾「订正」。原始记录保留。
@@ -148,6 +155,7 @@ npx tsx packages/eval/scripts/buildCorpus.ts \
 可用性判定消费与台账同源的已解析冷却。确定性 A/B:虚假 available 1/50 → 0/50。
 
 > **两条教训**
+>
 > 1. 「两处判定打架」先问是不是在断言同一件事 —— 但**别只查一个样本就下结论**。
 >    Lay on Hands 那个样本确实是「未追踪」,而 Ironbark 是真的数据不一致;
 >    我用前者的结论覆盖了整类,漏掉了后者。
@@ -156,8 +164,10 @@ npx tsx packages/eval/scripts/buildCorpus.ts \
 
 ## 其它已知陷阱(踩过的)
 
-1. **七维分数不可作跨 run 绝对刻度** —— 未跑 `/calibrate-judge`,judge 间口径
-   不一致。本轮所有结论改用确定性判据,不依赖分数。
+1. **七维分数不可作跨 run 绝对刻度** —— 挖缺陷那轮未跑 `/calibrate-judge`,
+   judge 间口径不一致,故那轮所有结论改用确定性判据。
+   (后续 A/B 轮已补校准,量化结果见 `HANDOFF-2026-07-20-ab-blind-eval.md`
+   与 `docs/commands/eval-ab.md` 的 MDE 段 —— 别把这两轮的状态混为一谈。)
 2. **缺陷线 ≠ 分数线** —— 46/50 场报了缺陷却只有 1 场 flagged;responder 多数
    情况自行绕开矛盾数据,`accuracy` 反而高分。缺陷必须单独收集。
    **且 judge 会漏报**:B 类 judge 报 11 场,确定性判据实测 14 场。
@@ -169,7 +179,5 @@ npx tsx packages/eval/scripts/buildCorpus.ts \
 
 ## 工程约定
 
-- 提交:**直接 commit + push 到 main**,不建分支不开 PR;CI 红了再修
-- 提交前:`npm run presubmit`
-- eval 产物在 `$GLADLOG_EVAL_HOME`(默认 `~/code/gladlog-eval-private`)
-- responder/judge 批量子代理一律 **sonnet**;agy 用于跨 AI 复核
+不在此重复 —— 单一真源见 `CLAUDE.md`(提交方式、`npm run presubmit`、谓词单源、
+修复要给前后数字)与 `docs/commands/eval-*.md`(eval 产物位置、判分模型固定 sonnet)。
