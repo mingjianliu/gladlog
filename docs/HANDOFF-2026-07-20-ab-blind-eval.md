@@ -82,11 +82,13 @@ accuracy 在 **36/50 对上变动,其中 17 对跳 ±2**,配对 SD **1.30**,
 
 ## 遗留待办
 
-1. **D 类检测器仍未固化。** A/B/C、E/G 三条判据已是常驻门规
-   (`packages/eval/src/quality/promptQualityCheck.ts` 接在 `hardFailures` 上,各带单测):
-   `checkPercentileMonotonicity` / `checkSameSecondHpConsistency` / `checkWindowSpanConsistency`。
-   **D 类(MISSED OPTIONS 声称可用 vs 台账 `cd:`)没有回归保护**,值得照这三条补一个。
-2. **accuracy rubric 锚点改造**(见上)。
+1. ~~**D 类检测器仍未固化。**~~ **已完成(`0eeabb2`)** —— `checkCooldownLedgerConsistency`
+   已接入 `hardFailures`,8 条单测。四条判据现已齐全:
+   `checkPercentileMonotonicity`(B)/ `checkSameSecondHpConsistency`(A+C)/
+   `checkWindowSpanConsistency`(E/G)/ `checkCooldownLedgerConsistency`(D)。
+2. ~~**accuracy rubric 锚点改造**~~ **已完成(`258dcdc`)** —— `docs/commands/eval-ab.md`
+   新增「开跑前必算 MDE」段:各维 SD 实测表、`MDE ≈ 1.96×SD/√n`、accuracy 改锚
+   factAudit refuted 条数(SD 1.298→0.842,MDE 0.36→0.23)、结论必须带数字而非只写标签。
 3. **sufficiency 判官盲区**修复,或改为确定性覆盖门直接给分。
 4. `blindPool` 生成盲件时应给出 `matchId` 占位约定 —— 本轮盲件无 `MATCHID:` 头,
    子代理各自用了 `null` / `"unknown"` / `"NO_MATCHID_HEADER_FOUND"` 三种写法
