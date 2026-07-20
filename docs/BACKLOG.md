@@ -215,19 +215,30 @@ raw 信号大多已有(`candidateFindings.ts` 的 `unconverted-burst` / `burst-i
 与 #8(确定性 mistake 引擎)、#10(结构化信号上浮)方向重叠——三者应一起想清楚
 「非击杀时段帮助」的产品形态再动手。本条是那次 brainstorm 的一个候选实现路径。
 
-## spellNames 12MB 顶层 await 阻塞首屏(2026-07-19,质检体系量化)
+## ~~spellNames 12MB 顶层 await 阻塞首屏~~ ✅ 已修(2026-07-19)
 
-`packages/analysis/src/data/spellEffectData.ts:27` 顶层 `await import("./spellNames.json")`
-(12MB)会阻塞整个模块图求值 —— 任何 import 该模块的代码都要等这 12MB 下完并解析
-才能继续。实测三处一致:
+**症状**:首屏(报表渲染 / 应用冷启动)固定要等 ~22-25 秒。
 
-- dev server 单页 22.4s 卡在 spellNames.json
-- build+preview 同样 ~23s
-- **真实 Electron 应用冷启动 CI 实测 18.7–24.0s**(`[budget] coldStart`)
+**根因不是「文件大」,是「编译成了源码」**:`spellNames.json` 有 41 万个键,
+Vite 5 默认把 JSON 转成 **JS 对象字面量**,V8 必须把它当源码解析。同一份数据
+`JSON.parse` 只要 **42ms** —— 差了三个数量级。
 
-后果:`qa/budgets.ts` 的 firstPaint(41s)与 coldStart(36s)只能锁在 20 秒量级 ——
-那是现状的诚实刻度,不是可接受的目标;视觉套件也因此每个场景要 ~24s(7 场景 3 分钟)。
+**修法**:三个构建目标(main/preload/renderer)与试验台配置都打开
+`json: { stringify: true }`,让 Vite 产出 `JSON.parse("…")`。一行配置,
+不动任何 API、不改 40+ 个 `getEnglishSpellName` 调用点。
 
-修法方向:把英文法术名查表改成**惰性加载**(首次 `getEnglishSpellName` 调用时再取,
-或改成按 spellId 分片),让模块图求值不再等它。改完把三个预算往下压,并把
-`qa/visual/scenes.spec.ts` 的 `BOOT_TIMEOUT_MS` 一并调低。
+**效果**(CI 实测):
+
+| 指标 | 修前 | 修后 |
+| --- | --- | --- |
+| 应用冷启动 | 18.7–24.0s | 1.59–1.72s |
+| 报表首渲 | 21.9–27.0s | 2.12–2.19s |
+| 视觉套件总耗时 | 3.0 分钟 | 22 秒 |
+| E2E 套件总耗时 | 1.3 分钟 | 14.5 秒 |
+
+`qa/budgets.ts` 的三个预算随之从 5100/41000/36000 收紧到 4900/3300/2600。
+
+**留给后来者的教训**:大 JSON 进 bundle 之前先确认它走的是 `JSON.parse` 而不是
+对象字面量。这个坑没有任何报错,只表现为「启动很慢」,而且大到一定程度才显形。
+质检体系的性能预算就是为了让这类回退不再靠人肉察觉 —— 它是被
+`[budget] coldStart` 量出来的,不是被谁「觉得有点慢」发现的。
