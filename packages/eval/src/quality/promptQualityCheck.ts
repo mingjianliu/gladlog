@@ -290,6 +290,60 @@ export function checkWindowSpanConsistency(lines: string[]): string[] {
   return violations;
 }
 
+// "  [1:53] X died — Y had Ironbark available, caster was free"
+// "  [2:21] Frost Mage (N) — had Ice Block available, was not CC'd"
+const MISSED_OPTION = /^\s*\[(\d+):(\d+)\].*?\bhad ([A-Za-z' :]+?) available/;
+// "      [RES] rdy:…  cd:Ironbark(48s),Stampeding Roar(91s),2:Icebound Fortitude(42s)  enemy:…"
+// 队友项带 "N:" 前缀,充能项带 "[1/2]" 后缀,都要剥掉。
+const RES_CD_BLOCK = /\[RES\].*?\bcd:(\S(?:.*?))(?:\s{2,}|$)/;
+const CD_ENTRY = /(?:^|,)\s*(?:\d+:)?([A-Za-z' :]+?)\s*\(/g;
+/** 时间戳行:"1:53  [DEATH] …" */
+const LEADING_TIME = /^(\d+):(\d+)\s/;
+
+/**
+ * 硬不变量:`DEATHS WITH MISSED OPTIONS` 声称"available"的冷却,不得同时出现在
+ * 同一时刻 `[RES]` 台账的 `cd:`(冷却中)列表里。
+ *
+ * 2026-07-20 实证(ord 041):死亡在 1:53,台账写 `cd:Ironbark(7s)`,而 MISSED
+ * OPTIONS 写 "had Ironbark available"。根因是同一技能两个独立维护的冷却值 ——
+ * `deathOutcomeAnalysis` 私有表 45s vs 主路径解析 65s(见该文件的根因注释)。
+ * 已由共享解析器修掉,这条门规防它复发。
+ */
+export function checkCooldownLedgerConsistency(lines: string[]): string[] {
+  // 每条 [RES] 的冷却中技能集合,按其上方最近的带时间戳行定位。
+  const onCooldownAt: { atSeconds: number; spells: Set<string> }[] = [];
+  let currentSeconds: number | null = null;
+  for (const line of lines) {
+    const t = line.match(LEADING_TIME);
+    if (t) currentSeconds = Number(t[1]) * 60 + Number(t[2]);
+    const res = line.match(RES_CD_BLOCK);
+    if (!res || currentSeconds === null) continue;
+    const spells = new Set<string>();
+    for (const e of res[1].matchAll(CD_ENTRY)) spells.add(e[1].trim());
+    onCooldownAt.push({ atSeconds: currentSeconds, spells });
+  }
+
+  const violations: string[] = [];
+  lines.forEach((line, i) => {
+    const m = line.match(MISSED_OPTION);
+    if (!m) return;
+    const at = Number(m[1]) * 60 + Number(m[2]);
+    const spell = m[3].trim();
+    // 该时刻或之前最近的一条台账
+    let nearest: (typeof onCooldownAt)[number] | undefined;
+    for (const entry of onCooldownAt) {
+      if (entry.atSeconds > at) continue;
+      if (!nearest || entry.atSeconds > nearest.atSeconds) nearest = entry;
+    }
+    if (nearest?.spells.has(spell)) {
+      violations.push(
+        `line ${i + 1}: ${m[1]}:${m[2]} 声称 "${spell}" available,但同时刻 [RES] 台账把它列在 cd: 中`,
+      );
+    }
+  });
+  return violations;
+}
+
 export function duplicateRatio(
   lines: string[],
   normalize: (line: string) => string,
@@ -341,6 +395,7 @@ export function checkMatch(
   hardFailures.push(...checkPercentileMonotonicity(lines));
   hardFailures.push(...checkSameSecondHpConsistency(lines));
   hardFailures.push(...checkWindowSpanConsistency(lines));
+  hardFailures.push(...checkCooldownLedgerConsistency(lines));
 
   return {
     ordinal: entry.ordinal,
