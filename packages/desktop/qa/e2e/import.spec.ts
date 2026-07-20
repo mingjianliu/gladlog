@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from "fs";
+import { mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 
@@ -63,9 +63,19 @@ test("链路1:导入日志 → 比赛列表 → 三视图都有内容", async ()
     timeout: BOOT_TIMEOUT_MS,
   });
 
-  // AI 分析:面板在(未配 key 时是空闲态按钮,只断言面板存在)
+  // AI 分析:面板在。锚点必须是 AI 视图**独有**的 .rpt-ai-panel ——
+  // .rpt-match 是三视图共用的报表根节点,点击前就已可见,拿它做断言
+  // 等于什么都没测(点击没生效/视图没切/面板抛异常都照样绿)。
   await page.getByRole("button", { name: "AI 分析" }).click();
-  await expect(page.locator(".rpt-match")).toBeVisible();
+  await expect(page.locator(".rpt-head-tabs button.active")).toHaveText(
+    "AI 分析",
+  );
+  await expect(page.locator(".rpt-ai-primary")).toBeVisible({
+    timeout: BOOT_TIMEOUT_MS,
+  });
 
   await app.close();
+
+  // 临时 userData 里有合成日志与入库数据,跑完删掉,别在 /tmp 里堆积
+  rmSync(userData, { recursive: true, force: true });
 });

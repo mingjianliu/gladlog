@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from "fs";
+import { mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 
@@ -64,4 +64,7 @@ test("链路2:点 finding 深挖 chip → 回放跳到该时刻", async () => {
   await expect(second.page.locator(".rpt-replay-time")).toContainText("0:12");
 
   await second.app.close();
+
+  // 临时 userData 里有合成日志与入库数据,跑完删掉,别在 /tmp 里堆积
+  rmSync(userData, { recursive: true, force: true });
 });

@@ -49,9 +49,12 @@ for (const scene of SNAPSHOT_SCENES) {
     });
     await expect(page).toHaveScreenshot(`${scene}.png`, { fullPage: true });
 
-    // 无障碍:标准是 WCAG 2.1 A+AA,违规集合必须 ⊆ 显式豁免清单
+    // 无障碍:标准是 WCAG 2.1 A+AA,违规集合必须 ⊆ 显式豁免清单。
+    // 四个标签一个都不能少:axe 把 2.1 新增的规则(autocomplete-valid、
+    // avoid-inline-spacing、css-orientation-lock、label-content-name-mismatch)
+    // 只挂 wcag21* 标签,漏掉它们就是「声称 2.1、实跑 2.0」。
     const axe = await new AxeBuilder({ page })
-      .withTags(["wcag2a", "wcag2aa"])
+      .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
       .analyze();
     const unexpected = axe.violations.flatMap((v) =>
       v.nodes

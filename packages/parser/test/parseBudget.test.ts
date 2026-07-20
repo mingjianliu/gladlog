@@ -4,9 +4,6 @@ import { BUDGET_MS, reportBudget } from "../../desktop/qa/budgets";
 import { GladLogParser } from "../src/api";
 import { synthArenaLog } from "../src/testing/synthLog";
 
-/** 大号载荷:约 20 万行,贴近一晚上的真实战斗日志量级。 */
-const BIG_LOG = synthArenaLog({ eventsPerRound: 200_000 });
-
 function parseOnce(text: string): number {
   const t0 = performance.now();
   const p = new GladLogParser({ timezone: "UTC" });
@@ -20,7 +17,10 @@ function parseOnce(text: string): number {
 
 describe("解析速度预算", () => {
   it("大日志解析耗时在预算内(未锁定时只测量)", () => {
-    const runs = [1, 2, 3].map(() => parseOnce(BIG_LOG)).sort((a, b) => a - b);
+    // 在 test 体内生成:放模块顶层的话,即便这条测试被 --grep 过滤掉,
+    // 每个跑 npm test 的人都要白付这几十 MB 的生成开销。
+    const bigLog = synthArenaLog({ eventsPerRound: 200_000 });
+    const runs = [1, 2, 3].map(() => parseOnce(bigLog)).sort((a, b) => a - b);
     const median = runs[1]!;
     reportBudget("parse", median, runs.length);
     if (BUDGET_MS.parse !== null) {

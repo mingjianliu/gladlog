@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from "fs";
+import { mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 
@@ -61,4 +61,7 @@ test("链路3:标记 finding → 战绩页聚合可见 → 重启后标记仍在
     third.page.locator(".rpt-finding-flags button.active"),
   ).toBeVisible({ timeout: BOOT_TIMEOUT_MS });
   await third.app.close();
+
+  // 临时 userData 里有合成日志与入库数据,跑完删掉,别在 /tmp 里堆积
+  rmSync(userData, { recursive: true, force: true });
 });
