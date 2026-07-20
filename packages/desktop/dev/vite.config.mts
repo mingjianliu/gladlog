@@ -17,4 +17,8 @@ export default defineConfig({
   // target=esnext:游戏数据模块用了顶层 await,默认 target 会拒绝。试验台只
   // 在现代 Chromium(Playwright 自带 / 本机浏览器)里跑,不需要向下兼容。
   build: { outDir: "dist-ui", emptyOutDir: true, target: "esnext" },
+  // 大 JSON 走 JSON.parse 而不是对象字面量:spellNames.json 有 41 万个键,
+  // 编译成 JS 对象字面量要 V8 当源码解析(实测阻塞首屏 ~22s),而同样的
+  // 数据 JSON.parse 只要 42ms。Vite 5 的默认值是 false,必须显式打开。
+  json: { stringify: true },
 });

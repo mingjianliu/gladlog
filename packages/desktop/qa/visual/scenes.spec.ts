@@ -25,15 +25,11 @@ const ANCHOR: Partial<Record<SceneName, string>> = {
 /**
  * 首屏就绪超时。
  *
- * 报表页首次渲染要 ~25s —— 不是打包或网络的锅:`spellEffectData.ts` 顶层
- * `await import("./spellNames.json")`(12MB)会阻塞整个模块图求值,任何
- * import 它的模块都得等这 12MB 下完并解析。实测 dev(22.4s 卡在
- * spellNames.json)与 build+preview(~23s 卡在 spellNames chunk)一致。
- *
- * 每开一个新页面都要重付这笔钱,摊销不掉,所以这里给足超时。真把
- * spellNames 改成惰性加载后,这个常量应当跟着降下来 —— 别忘了改。
+ * 场景实测 ~2-3s(2026-07-19 把大 JSON 改成 JSON.parse 之后;在那之前是
+ * ~24s,成因见 electron.vite.config.ts 的注释)。15s 留了足够余量应付 CI
+ * 的慢 runner,又不至于让真坏掉的场景卡满一分钟才报错。
  */
-const BOOT_TIMEOUT_MS = 60_000;
+const BOOT_TIMEOUT_MS = 15_000;
 
 for (const scene of SNAPSHOT_SCENES) {
   test(`场景 ${scene} 与基线一致`, async ({ page }) => {
@@ -47,7 +43,11 @@ for (const scene of SNAPSHOT_SCENES) {
     await expect(page.locator(ANCHOR[scene]!)).toBeVisible({
       timeout: BOOT_TIMEOUT_MS,
     });
-    await expect(page).toHaveScreenshot(`${scene}.png`, { fullPage: true });
+    // soft:截图不一致时**继续**跑 axe,否则视觉回归会遮蔽无障碍回归
+    // ——一次运行只报一半问题,人还要来回跑两轮才看全。
+    await expect.soft(page).toHaveScreenshot(`${scene}.png`, {
+      fullPage: true,
+    });
 
     // 无障碍:标准是 WCAG 2.1 A+AA,违规集合必须 ⊆ 显式豁免清单。
     // 四个标签一个都不能少:axe 把 2.1 新增的规则(autocomplete-valid、

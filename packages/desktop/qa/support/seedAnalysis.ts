@@ -1,7 +1,10 @@
 import { mkdirSync, writeFileSync } from "fs";
-import { join } from "path";
+import { dirname, join } from "path";
 
-import { PROMPT_VERSION } from "../../src/shared/promptVersion";
+import {
+  analysisCacheDoc,
+  analysisCachePath,
+} from "../../src/shared/analysisCache";
 
 export type SeedFinding = {
   eventIds: string[];
@@ -21,25 +24,26 @@ export type SeedFinding = {
 
 /**
  * 把 canned 分析结果写进主进程读的那个缓存文件,让 E2E 不打真 API 也有
- * findings 可点。写入格式与 src/main/analysis.ts 的 finish() 完全一致 ——
- * 包括 promptVersion(不一致会被 getCached 丢弃,面板停在空闲态)。
+ * findings 可点。路径与信封都取自 src/shared/analysisCache —— 与主进程
+ * 同源,避免「文件名/字段改了但播种侧没跟上」导致的静默未命中。
  */
 export function seedAnalysis(
   userData: string,
   matchId: string,
   findings: SeedFinding[],
 ): void {
-  const dir = join(userData, "matches", matchId);
-  mkdirSync(dir, { recursive: true });
+  const fp = analysisCachePath(join(userData, "matches"), matchId, "zh");
+  mkdirSync(dirname(fp), { recursive: true });
   writeFileSync(
-    join(dir, "analysis-v2.zh.json"),
-    JSON.stringify({
-      schemaVersion: 1,
-      promptVersion: PROMPT_VERSION,
-      language: "zh",
-      createdAt: Date.now(),
-      result: { findings, dropped: 0, hadNarration: true, deepened: true },
-    }),
+    fp,
+    JSON.stringify(
+      analysisCacheDoc("zh", {
+        findings,
+        dropped: 0,
+        hadNarration: true,
+        deepened: true,
+      }),
+    ),
     "utf-8",
   );
 }

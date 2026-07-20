@@ -19,6 +19,10 @@ export default defineConfig({
   // 基线单源:路径里**不含 {platform}** —— linux 一套基线即唯一标准。
   snapshotPathTemplate: "{testDir}/__screenshots__/{testFileName}/{arg}{ext}",
   fullyParallel: false,
+  // workers=1:两个性能预算(firstPaint / coldStart)与其它用例抢同一台机器
+  // 时,测出来的是争用而不是性能。全套跑完只要几十秒,串行的代价远小于
+  // 「预算数字不可信」的代价。
+  workers: 1,
   forbidOnly: !!process.env["CI"],
   retries: 0,
   reporter: process.env["CI"]

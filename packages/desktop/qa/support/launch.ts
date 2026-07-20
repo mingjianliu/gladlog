@@ -16,8 +16,9 @@ export const MAIN_ENTRY = resolve(
   "../../out/main/index.js",
 );
 
-/** 首屏就绪的宽限:应用冷启动实测 ~24s(spellNames 12MB 顶层 await)。 */
-export const BOOT_TIMEOUT_MS = 60_000;
+/** 首屏就绪的宽限:应用冷启动实测 ~2s(2026-07-19 大 JSON 改 JSON.parse 之后;
+ *  在那之前是 ~25s)。15s 给 CI 的慢 runner 留足余量。 */
+export const BOOT_TIMEOUT_MS = 15_000;
 
 export async function launchApp(
   userData: string,
