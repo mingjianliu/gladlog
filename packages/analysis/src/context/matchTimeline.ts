@@ -2518,6 +2518,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       enemyDeaths,
       isHealer,
       pid,
+      actorLabel,
     }),
   );
 

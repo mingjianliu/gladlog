@@ -5,21 +5,21 @@ import {
   getUnitType,
   ICombatUnit,
   LogEvent,
-} from '@gladlog/parser-compat';
+} from "@gladlog/parser-compat";
 
-import { getEnglishSpellName, spellEffectData } from '../data/spellEffectData';
-import { IPlayerCCTrinketSummary } from '../utils/ccTrinketAnalysis';
+import { getEnglishSpellName, spellEffectData } from "../data/spellEffectData";
+import { IPlayerCCTrinketSummary } from "../utils/ccTrinketAnalysis";
 import {
   fmtTime,
   IMajorCooldownInfo,
   isHealerSpec,
   PASSIVE_SPELL_BLOCKLIST,
   specToString,
-} from '../utils/cooldowns';
-import { getDampeningPercentage } from '../utils/dampening';
-import { IEnemyCDTimeline } from '../utils/enemyCDs';
-import { getHpPercentAtTime } from '../utils/killWindowTargetSelection';
-import { getSpellSchoolName } from '../utils/spellSchools';
+} from "../utils/cooldowns";
+import { getDampeningPercentage } from "../utils/dampening";
+import { IEnemyCDTimeline } from "../utils/enemyCDs";
+import { getHpPercentAtTime } from "../utils/killWindowTargetSelection";
+import { getSpellSchoolName } from "../utils/spellSchools";
 
 export { PASSIVE_SPELL_BLOCKLIST };
 
@@ -32,20 +32,20 @@ export function lastCastBefore(cd: IMajorCooldownInfo, timeSeconds: number) {
 
 export function getNpcIdFromGuid(guid: string): string | null {
   if (!guid) return null;
-  const parts = guid.split('-');
+  const parts = guid.split("-");
   if (
     parts.length >= 6 &&
-    (guid.startsWith('Creature') ||
-      guid.startsWith('Vehicle') ||
-      guid.startsWith('Pet') ||
-      guid.startsWith('GameObject'))
+    (guid.startsWith("Creature") ||
+      guid.startsWith("Vehicle") ||
+      guid.startsWith("Pet") ||
+      guid.startsWith("GameObject"))
   ) {
     return parts[5];
   }
   return null;
 }
 
-export const GROUNDING_TOTEM_NPC_ID = '5925';
+export const GROUNDING_TOTEM_NPC_ID = "5925";
 
 /** Critical non-player units by npcId, with canonical English display names —
  * unit.name in the log is client-localized (地狱火爪牙 etc.), so renderers must
@@ -106,30 +106,30 @@ export function isCriticalNonPlayerUnit(unit: ICombatUnit): boolean {
  */
 export const HEALER_CAST_SPELL_ID_TO_NAME: Record<string, string> = {
   // ── Priest ─────────────────────────────────────────────────────────────────
-  '10060': 'Power Infusion', // Holy/Disc — external DPS CD
-  '33206': 'Pain Suppression', // Disc — defensive external
-  '265202': 'Holy Word: Salvation', // Holy — raid/party heal CD
-  '200183': 'Apotheosis', // Holy — healing amplifier
-  '47788': 'Guardian Spirit', // Holy — prevent-death external
+  "10060": "Power Infusion", // Holy/Disc — external DPS CD
+  "33206": "Pain Suppression", // Disc — defensive external
+  "265202": "Holy Word: Salvation", // Holy — raid/party heal CD
+  "200183": "Apotheosis", // Holy — healing amplifier
+  "47788": "Guardian Spirit", // Holy — prevent-death external
   // ── Shaman ─────────────────────────────────────────────────────────────────
-  '108280': 'Healing Tide Totem', // Resto — party heal CD
-  '98008': 'Spirit Link Totem', // Resto — damage redistribution
-  '114052': 'Ascendance', // Resto — healing burst CD
+  "108280": "Healing Tide Totem", // Resto — party heal CD
+  "98008": "Spirit Link Totem", // Resto — damage redistribution
+  "114052": "Ascendance", // Resto — healing burst CD
   // ── Druid ──────────────────────────────────────────────────────────────────
-  '29166': 'Innervate', // Resto — mana external / self
-  '740': 'Tranquility', // Resto — AoE heal channel
+  "29166": "Innervate", // Resto — mana external / self
+  "740": "Tranquility", // Resto — AoE heal channel
   // ── Monk ───────────────────────────────────────────────────────────────────
-  '116849': 'Life Cocoon', // Mistweaver — absorb external
-  '115310': 'Revival', // Mistweaver — group dispel + heal
+  "116849": "Life Cocoon", // Mistweaver — absorb external
+  "115310": "Revival", // Mistweaver — group dispel + heal
   // ── Paladin ────────────────────────────────────────────────────────────────
-  '31884': 'Avenging Wrath', // Holy — healing/damage amp
-  '216331': 'Avenging Crusader', // Holy alt-talent
-  '114165': 'Holy Prism', // not a CD but a high-value cast tracked in some builds
-  '6940': 'Blessing of Sacrifice', // Holy — damage redirect external
-  '316011': 'Symbol of Hope', // Holy — mana restoration for team
+  "31884": "Avenging Wrath", // Holy — healing/damage amp
+  "216331": "Avenging Crusader", // Holy alt-talent
+  "114165": "Holy Prism", // not a CD but a high-value cast tracked in some builds
+  "6940": "Blessing of Sacrifice", // Holy — damage redirect external
+  "316011": "Symbol of Hope", // Holy — mana restoration for team
   // ── Evoker ─────────────────────────────────────────────────────────────────
-  '363534': 'Rewind', // Preservation — rewind time
-  '370537': 'Stasis', // Preservation — store heals
+  "363534": "Rewind", // Preservation — rewind time
+  "370537": "Stasis", // Preservation — store heals
 };
 
 // ── Enemy major buff tracking (F67) ──────────────────────────────────────────
@@ -137,8 +137,11 @@ export const HEALER_CAST_SPELL_ID_TO_NAME: Record<string, string> = {
 // Only spells that generate SPELL_AURA_APPLIED events on enemy players in WoW combat logs.
 // Mass-buff effects (Bloodlust, Heroism, Time Warp) do NOT generate individual aura events for
 // enemy team members — they are already visible via [ENEMY CD] / Enemy active in the prompt.
-const ENEMY_MAJOR_BUFF_SPELL_IDS: Record<string, { name: string; purgeable: boolean }> = {
-  '10060': { name: 'Power Infusion', purgeable: true },
+const ENEMY_MAJOR_BUFF_SPELL_IDS: Record<
+  string,
+  { name: string; purgeable: boolean }
+> = {
+  "10060": { name: "Power Infusion", purgeable: true },
 };
 
 export interface IEnemyBuffInterval {
@@ -171,7 +174,7 @@ export function extractEnemyMajorBuffIntervals(
     for (const event of enemy.auraEvents) {
       const ts: number = event.logLine.timestamp;
       if (ts >= matchStartMs) break; // auraEvents are chronological; stop at match start
-      const spellId = event.spellId ?? '';
+      const spellId = event.spellId ?? "";
       if (!ENEMY_MAJOR_BUFF_SPELL_IDS[spellId]) continue;
       const stateKey = `${spellId}:${event.srcUnitId}`;
       if (event.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
@@ -186,7 +189,7 @@ export function extractEnemyMajorBuffIntervals(
 
     // Main pass: process events during the match
     for (const event of enemy.auraEvents) {
-      const spellId = event.spellId ?? '';
+      const spellId = event.spellId ?? "";
       const buffDef = ENEMY_MAJOR_BUFF_SPELL_IDS[spellId];
       if (!buffDef) continue;
 
@@ -215,7 +218,7 @@ export function extractEnemyMajorBuffIntervals(
 
     // Clamp any unclosed buffs to match end
     for (const [stateKey, startMs] of openBuffs) {
-      const spellId = stateKey.split(':')[0];
+      const spellId = stateKey.split(":")[0];
       const buffDef = ENEMY_MAJOR_BUFF_SPELL_IDS[spellId];
       if (buffDef) {
         intervals.push({
@@ -251,21 +254,21 @@ export interface ICDExpiryEvent {
    * these stops the model from inventing a dispel for a naturally-expired buff and lets it tell a
    * consumed absorb (e.g. Life Cocoon) from an expired one.
    */
-  cause: 'expired' | 'ended_early';
+  cause: "expired" | "ended_early";
 }
 
 export const CHANNELED_CD_SPELL_IDS = new Set<string>([
-  '740', // Tranquility (Druid)
-  '64843', // Divine Hymn (Priest)
-  '370960', // Emerald Communion (Evoker)
-  '421116', // Ultimate Penitence (Priest cast)
-  '421453', // Ultimate Penitence (Priest aura)
-  '115176', // Zen Meditation (Monk)
+  "740", // Tranquility (Druid)
+  "64843", // Divine Hymn (Priest)
+  "370960", // Emerald Communion (Evoker)
+  "421116", // Ultimate Penitence (Priest cast)
+  "421453", // Ultimate Penitence (Priest aura)
+  "115176", // Zen Meditation (Monk)
 ]);
 
 export const SPELL_DURATION_OVERRIDES: Record<string, number> = {
-  '421116': 6.5, // Ultimate Penitence
-  '421453': 6.5, // Ultimate Penitence
+  "421116": 6.5, // Ultimate Penitence
+  "421453": 6.5, // Ultimate Penitence
 };
 
 // M-b: a real aura removal arrives at ~nominal duration plus minor server-tick/latency slack;
@@ -294,8 +297,10 @@ export function extractOwnerCDBuffExpiry(
   for (const cd of ownerCDs) {
     // CC spells apply their aura to the enemy, not a friendly — SPELL_AURA_REMOVED never
     // appears in friends' events. DR also makes the estimated duration wrong. Skip entirely.
-    if (cd.tag === 'Control') continue;
-    const duration = SPELL_DURATION_OVERRIDES[cd.spellId] || spellEffectData[cd.spellId]?.durationSeconds;
+    if (cd.tag === "Control") continue;
+    const duration =
+      SPELL_DURATION_OVERRIDES[cd.spellId] ||
+      spellEffectData[cd.spellId]?.durationSeconds;
     if (!duration || duration <= 0) continue;
 
     // Collect all SPELL_AURA_REMOVED timestamps for this spell cast by the owner,
@@ -303,7 +308,9 @@ export function extractOwnerCDBuffExpiry(
     const removalTimestampsMs: number[] = [];
     for (const friend of friends) {
       for (const event of friend.auraEvents) {
-        const isMatch = event.spellId === cd.spellId || (cd.spellId === '421116' && event.spellId === '421453');
+        const isMatch =
+          event.spellId === cd.spellId ||
+          (cd.spellId === "421116" && event.spellId === "421453");
         if (
           isMatch &&
           event.srcUnitId === ownerId &&
@@ -321,7 +328,10 @@ export function extractOwnerCDBuffExpiry(
       const castMs = matchStartMs + cast.timeSeconds * 1000;
 
       // Skip removals that happened before this cast started (orphans / prior applications).
-      while (removalIndex < removalTimestampsMs.length && removalTimestampsMs[removalIndex] < castMs) {
+      while (
+        removalIndex < removalTimestampsMs.length &&
+        removalTimestampsMs[removalIndex] < castMs
+      ) {
         removalIndex++;
       }
 
@@ -334,10 +344,12 @@ export function extractOwnerCDBuffExpiry(
       // leave removalIndex where it is so the removal remains available for that later cast.
       const withinWindow =
         removalIndex < removalTimestampsMs.length &&
-        removalTimestampsMs[removalIndex] <= castMs + (duration + BUFF_EXPIRY_PAIRING_TOLERANCE_S) * 1000;
+        removalTimestampsMs[removalIndex] <=
+          castMs + (duration + BUFF_EXPIRY_PAIRING_TOLERANCE_S) * 1000;
 
       if (withinWindow) {
-        expiresAtSeconds = (removalTimestampsMs[removalIndex] - matchStartMs) / 1000;
+        expiresAtSeconds =
+          (removalTimestampsMs[removalIndex] - matchStartMs) / 1000;
         isEstimated = false;
         removalIndex++;
       } else {
@@ -349,8 +361,11 @@ export function extractOwnerCDBuffExpiry(
       // its full duration. A confirmed removal more than a tick before the natural end means the buff
       // was ended early (absorb consumed, dispelled, or cancelled) rather than expiring.
       const naturalEndSeconds = cast.timeSeconds + duration;
-      const cause: ICDExpiryEvent['cause'] =
-        !isEstimated && expiresAtSeconds < naturalEndSeconds - BUFF_FADE_EARLY_TOLERANCE_S ? 'ended_early' : 'expired';
+      const cause: ICDExpiryEvent["cause"] =
+        !isEstimated &&
+        expiresAtSeconds < naturalEndSeconds - BUFF_FADE_EARLY_TOLERANCE_S
+          ? "ended_early"
+          : "expired";
 
       result.push({
         spellId: cd.spellId,
@@ -371,7 +386,9 @@ export function extractOwnerCDBuffExpiry(
  * interrupt that lands right as the channel stops still counts). Used to confirm an early-
  * ended channel was actually interrupted, vs. a self-cancel/movement. */
 export function channelWasInterrupted(
-  ownerSummary: Pick<IPlayerCCTrinketSummary, 'ccInstances' | 'interruptInstances'> | undefined,
+  ownerSummary:
+    | Pick<IPlayerCCTrinketSummary, "ccInstances" | "interruptInstances">
+    | undefined,
   startSeconds: number,
   endSeconds: number,
 ): boolean {
@@ -382,8 +399,11 @@ export function channelWasInterrupted(
   if (kickInWindow) return true;
 
   return ownerSummary.ccInstances.some((cc) => {
-    const landedInWindow = cc.atSeconds >= startSeconds - 0.5 && cc.atSeconds <= endSeconds + 0.5;
-    const activeAtEnd = endSeconds >= cc.atSeconds - 0.5 && endSeconds <= cc.atSeconds + cc.durationSeconds + 0.5;
+    const landedInWindow =
+      cc.atSeconds >= startSeconds - 0.5 && cc.atSeconds <= endSeconds + 0.5;
+    const activeAtEnd =
+      endSeconds >= cc.atSeconds - 0.5 &&
+      endSeconds <= cc.atSeconds + cc.durationSeconds + 0.5;
     return landedInWindow || activeAtEnd;
   });
 }
@@ -414,14 +434,20 @@ export function mergeTimestampedLines(
     const m = TIMESTAMPED_LINE_REGEX.exec(line);
     return m ? parseInt(m[1], 10) * 60 + parseInt(m[2], 10) : null;
   });
-  const lastTimestampedIndex = lineTimes.reduce((last, t, i) => (t !== null ? i : last), -1);
+  const lastTimestampedIndex = lineTimes.reduce(
+    (last, t, i) => (t !== null ? i : last),
+    -1,
+  );
 
   const result: string[] = [];
   let nextInsert = 0;
   for (let i = 0; i < timelineLines.length; i++) {
     const t = lineTimes[i];
     if (t !== null) {
-      while (nextInsert < sortedInserts.length && sortedInserts[nextInsert].atSeconds < t) {
+      while (
+        nextInsert < sortedInserts.length &&
+        sortedInserts[nextInsert].atSeconds < t
+      ) {
         result.push(sortedInserts[nextInsert].line);
         nextInsert++;
       }
@@ -452,9 +478,9 @@ export const DMG_SPIKE_THRESHOLD = 300_000;
  * and append a [HEALING] line (per-5s HPS + overheal %). Restricted to pure healing amps.
  */
 export const HEALING_AMPLIFIER_SPELL_IDS = new Set([
-  '10060', // Power Infusion (15s)
-  '29166', // Innervate (8s)
-  '114052', // Ascendance (15s)
+  "10060", // Power Infusion (15s)
+  "29166", // Innervate (8s)
+  "114052", // Ascendance (15s)
 ]);
 
 /** CD cast within this many seconds of match start is considered "early" for healing-window suppression. */
@@ -472,11 +498,16 @@ export const HEALING_WINDOW_MIN_HPS = 1_000;
  * so every event in the window is counted exactly once.
  */
 export function computeHealingInWindow(
-  healOut: ICombatUnit['healOut'],
+  healOut: ICombatUnit["healOut"],
   fromMs: number,
   toMs: number,
-): { buckets: Array<{ fromSeconds: number; toSeconds: number; hps: number }>; overhealPct: number } | null {
-  const events = healOut.filter((h) => h.logLine.timestamp >= fromMs && h.logLine.timestamp <= toMs);
+): {
+  buckets: Array<{ fromSeconds: number; toSeconds: number; hps: number }>;
+  overhealPct: number;
+} | null {
+  const events = healOut.filter(
+    (h) => h.logLine.timestamp >= fromMs && h.logLine.timestamp <= toMs,
+  );
   if (events.length === 0) return null;
 
   let totalAmount = 0;
@@ -488,9 +519,17 @@ export function computeHealingInWindow(
 
   const windowSeconds = (toMs - fromMs) / 1000;
   const BUCKET_SIZE = 5;
-  const buckets: Array<{ fromSeconds: number; toSeconds: number; hps: number }> = [];
+  const buckets: Array<{
+    fromSeconds: number;
+    toSeconds: number;
+    hps: number;
+  }> = [];
 
-  for (let bucketStart = 0; bucketStart < windowSeconds; bucketStart += BUCKET_SIZE) {
+  for (
+    let bucketStart = 0;
+    bucketStart < windowSeconds;
+    bucketStart += BUCKET_SIZE
+  ) {
     const bucketEnd = Math.min(bucketStart + BUCKET_SIZE, windowSeconds);
     const isLastBucket = bucketEnd >= windowSeconds;
     const bucketFromMs = fromMs + bucketStart * 1000;
@@ -501,14 +540,23 @@ export function computeHealingInWindow(
       .filter(
         (h) =>
           h.logLine.timestamp >= bucketFromMs &&
-          (isLastBucket ? h.logLine.timestamp <= bucketToMs : h.logLine.timestamp < bucketToMs),
+          (isLastBucket
+            ? h.logLine.timestamp <= bucketToMs
+            : h.logLine.timestamp < bucketToMs),
       )
       .reduce((sum, h) => sum + h.effectiveAmount, 0);
 
-    buckets.push({ fromSeconds: bucketStart, toSeconds: bucketEnd, hps: bucketEffective / bucketDuration });
+    buckets.push({
+      fromSeconds: bucketStart,
+      toSeconds: bucketEnd,
+      hps: bucketEffective / bucketDuration,
+    });
   }
 
-  const overhealPct = totalAmount > 0 ? Math.round(((totalAmount - totalEffective) / totalAmount) * 100) : 0;
+  const overhealPct =
+    totalAmount > 0
+      ? Math.round(((totalAmount - totalEffective) / totalAmount) * 100)
+      : 0;
   return { buckets, overhealPct };
 }
 
@@ -535,29 +583,37 @@ export function getTopDamageSourcesInWindow(
     // B24: pet/guardian units may have localized (non-ASCII) names from non-en-US clients;
     // replace with "[pet]" to keep attribution readable without localization noise.
     const srcType = getUnitType(d.srcUnitFlags);
-    const isPet = srcType === CombatUnitType.Pet || srcType === CombatUnitType.Guardian;
+    const isPet =
+      srcType === CombatUnitType.Pet || srcType === CombatUnitType.Guardian;
 
-    let srcName = 'Unknown';
+    let srcName = "Unknown";
     if (!isPet && d.srcUnitName) {
-      const cleanSrcName = d.srcUnitName.split('-')[0];
-      const isSrcFriendly = getUnitReaction(d.srcUnitFlags) === CombatUnitReaction.Friendly;
+      const cleanSrcName = d.srcUnitName.split("-")[0];
+      const isSrcFriendly =
+        getUnitReaction(d.srcUnitFlags) === CombatUnitReaction.Friendly;
       if (isSrcFriendly && playerIdMap) {
-        const id = playerIdMap.get(d.srcUnitName) ?? playerIdMap.get(cleanSrcName);
+        const id =
+          playerIdMap.get(d.srcUnitName) ?? playerIdMap.get(cleanSrcName);
         srcName = id !== undefined ? String(id) : cleanSrcName;
       } else if (!isSrcFriendly && enemyIdMap) {
-        const id = enemyIdMap.get(d.srcUnitName) ?? enemyIdMap.get(cleanSrcName);
+        const id =
+          enemyIdMap.get(d.srcUnitName) ?? enemyIdMap.get(cleanSrcName);
         srcName = id !== undefined ? String(id) : cleanSrcName;
       } else {
         srcName = cleanSrcName;
       }
     } else if (isPet) {
-      srcName = '[pet]';
+      srcName = "[pet]";
     }
 
-    const baseSpellLabel = d.spellId ? getEnglishSpellName(d.spellId, d.spellName) : (d.spellName ?? 'melee');
+    const baseSpellLabel = d.spellId
+      ? getEnglishSpellName(d.spellId, d.spellName)
+      : (d.spellName ?? "melee");
 
     const schoolName = getSpellSchoolName(d.spellSchoolId);
-    const spellLabel = schoolName ? `${baseSpellLabel} [${schoolName}]` : baseSpellLabel;
+    const spellLabel = schoolName
+      ? `${baseSpellLabel} [${schoolName}]`
+      : baseSpellLabel;
 
     const key = `${srcName} — ${spellLabel}`;
     buckets.set(key, (buckets.get(key) ?? 0) + dmg);
@@ -583,16 +639,29 @@ export function buildMatchEndBlock(params: {
   pid: (name: string) => string;
   enemyPid: (name: string) => string;
 }): string[] {
-  const { matchEndMs, matchEndSeconds, bracket, owner, friends, enemies, friendlyDeaths, enemyDeaths, pid, enemyPid } =
-    params;
+  const {
+    matchEndMs,
+    matchEndSeconds,
+    bracket,
+    owner,
+    friends,
+    enemies,
+    friendlyDeaths,
+    enemyDeaths,
+    pid,
+    enemyPid,
+  } = params;
 
   const lines: string[] = [];
 
   // Final dampening — only when bracket is available
-  const finalDampPct = bracket ? getDampeningPercentage(bracket, [...friends, ...enemies], matchEndMs) : null;
-  const dampStr = finalDampPct !== null ? `   damp: ${Math.round(finalDampPct)}%` : '';
+  const finalDampPct = bracket
+    ? getDampeningPercentage(bracket, [...friends, ...enemies], matchEndMs)
+    : null;
+  const dampStr =
+    finalDampPct !== null ? `   damp: ${Math.round(finalDampPct)}%` : "";
 
-  lines.push('');
+  lines.push("");
   lines.push(`${fmtTime(matchEndSeconds)}  [MATCH END]${dampStr}`);
 
   // Build sets of dead players for quick lookup
@@ -600,12 +669,16 @@ export function buildMatchEndBlock(params: {
   const deadEnemyNames = new Set(enemyDeaths.map((d) => d.name));
   // For players who died multiple times, use the last death timestamp
   const friendDeathTimeByName = new Map<string, number>();
-  for (const d of friendlyDeaths) friendDeathTimeByName.set(d.name, d.atSeconds);
+  for (const d of friendlyDeaths)
+    friendDeathTimeByName.set(d.name, d.atSeconds);
   const enemyDeathTimeByName = new Map<string, number>();
   for (const d of enemyDeaths) enemyDeathTimeByName.set(d.name, d.atSeconds);
 
   // B36: stable ordering — log owner always first, then other friendlies in their original order.
-  const orderedFriendsForEnd = [owner, ...friends.filter((u) => u.id !== owner.id)];
+  const orderedFriendsForEnd = [
+    owner,
+    ...friends.filter((u) => u.id !== owner.id),
+  ];
   const friendParts = orderedFriendsForEnd.map((u) => {
     if (deadFriendlyNames.has(u.name)) {
       const deathAt = friendDeathTimeByName.get(u.name) ?? 0;
@@ -614,7 +687,7 @@ export function buildMatchEndBlock(params: {
     const pct = getHpPercentAtTime(u, matchEndSeconds, params.matchStartMs);
     // B18/B23: clamp to 100%
     const clamped = pct !== null ? Math.min(Math.round(pct), 100) : null;
-    return `${pid(u.name)}:${clamped !== null ? `${clamped}%` : '?'}`;
+    return `${pid(u.name)}:${clamped !== null ? `${clamped}%` : "?"}`;
   });
 
   const enemyParts = enemies.map((u) => {
@@ -625,14 +698,15 @@ export function buildMatchEndBlock(params: {
     const pct = getHpPercentAtTime(u, matchEndSeconds, params.matchStartMs);
     // B18: clamp to 100%
     const clamped = pct !== null ? Math.min(Math.round(pct), 100) : null;
-    return `${enemyPid(u.name)}:${clamped !== null ? `${clamped}%` : '?'}`;
+    return `${enemyPid(u.name)}:${clamped !== null ? `${clamped}%` : "?"}`;
   });
 
   const stateParts: string[] = [];
-  if (friendParts.length > 0) stateParts.push(`friends ${friendParts.join(' ')}`);
-  if (enemyParts.length > 0) stateParts.push(`enemies ${enemyParts.join(' ')}`);
+  if (friendParts.length > 0)
+    stateParts.push(`friends ${friendParts.join(" ")}`);
+  if (enemyParts.length > 0) stateParts.push(`enemies ${enemyParts.join(" ")}`);
   if (stateParts.length > 0) {
-    lines.push(`  ${stateParts.join(' / ')}`);
+    lines.push(`  ${stateParts.join(" / ")}`);
   }
 
   return lines;
@@ -647,13 +721,26 @@ export function buildKillSequenceBlock(params: {
   friends: ICombatUnit[];
   enemies: ICombatUnit[];
   ownerCDs: IMajorCooldownInfo[];
-  teammateCDs: Array<{ player: ICombatUnit; spec: string; cds: IMajorCooldownInfo[] }>;
+  teammateCDs: Array<{
+    player: ICombatUnit;
+    spec: string;
+    cds: IMajorCooldownInfo[];
+  }>;
   enemyCDTimeline: IEnemyCDTimeline;
   ccTrinketSummaries: IPlayerCCTrinketSummary[];
   friendlyDeaths: Array<{ spec: string; name: string; atSeconds: number }>;
   enemyDeaths: Array<{ spec: string; name: string; atSeconds: number }>;
   isHealer: boolean;
   pid: (name: string) => string;
+  /**
+   * 施法者标签谓词(matchTimeline 的 actorLabel)。**必须传**,不能用 pid 代替:
+   * pid 只映射友方,而 CC 来源通常是敌方 —— 查不到就回落成裸角色名,于是
+   * [HEALER CC] 打出 "(by Fatalbur)" 而全文别处都是 "5(EShaman)",模型无法
+   * 交叉指认;中文客户端日志还会漏 CJK 单位名。
+   * 2026-07-20 全语料审计:该行 100/100 全部裸名,对照 [CC ON TEAM] 仅 0.3%。
+   * 同类 bug 2026-07-17 在 [CC ON TEAM]/[KICK] 两条路径修过,此处是漏网的第三条。
+   */
+  actorLabel: (name: string, side: "friendly" | "enemy") => string;
 }): string[] {
   const {
     matchStartMs,
@@ -668,6 +755,7 @@ export function buildKillSequenceBlock(params: {
     friendlyDeaths,
     enemyDeaths,
     pid,
+    actorLabel,
   } = params;
 
   const lines: string[] = [];
@@ -685,7 +773,11 @@ export function buildKillSequenceBlock(params: {
 
     if (firstDeath) {
       const deathTime = firstDeath.atSeconds;
-      const killSeqEntries: Array<{ timeSeconds: number; label: string; text: string }> = [];
+      const killSeqEntries: Array<{
+        timeSeconds: number;
+        label: string;
+        text: string;
+      }> = [];
 
       // 1. Healer CC
       const isFriendlyDeath = friends.some((f) => f.name === firstDeath.name);
@@ -694,16 +786,24 @@ export function buildKillSequenceBlock(params: {
 
       if (dyingHealer) {
         // Detailed CC summary is available for friends.
-        const healerSummary = ccTrinketSummaries.find((s) => s.playerName === dyingHealer.name);
+        const healerSummary = ccTrinketSummaries.find(
+          (s) => s.playerName === dyingHealer.name,
+        );
         if (healerSummary) {
           const relevantCC = [...healerSummary.ccInstances]
-            .filter((cc) => cc.atSeconds <= deathTime && cc.atSeconds + cc.durationSeconds >= deathTime - 12)
+            .filter(
+              (cc) =>
+                cc.atSeconds <= deathTime &&
+                cc.atSeconds + cc.durationSeconds >= deathTime - 12,
+            )
             .sort((a, b) => b.atSeconds - a.atSeconds)[0];
           if (relevantCC) {
+            // 施放者在垂死治疗的对面:友方死 → 敌方施放,反之亦然。
+            const ccSide = isFriendlyDeath ? "enemy" : "friendly";
             killSeqEntries.push({
               timeSeconds: relevantCC.atSeconds,
-              label: '[HEALER CC]',
-              text: `${pid(dyingHealer.name)} (${specToString(dyingHealer.spec)}) ← ${relevantCC.spellName} (by ${pid(relevantCC.sourceName)})`,
+              label: "[HEALER CC]",
+              text: `${pid(dyingHealer.name)} (${specToString(dyingHealer.spec)}) ← ${relevantCC.spellName} (by ${actorLabel(relevantCC.sourceName, ccSide)})`,
             });
           }
         }
@@ -715,21 +815,29 @@ export function buildKillSequenceBlock(params: {
           (w) => w.fromSeconds <= deathTime && w.toSeconds >= deathTime - 12,
         );
         if (activeBurst) {
-          const cdNames = activeBurst.activeCDs.map((c) => c.spellName).join(' + ');
+          const cdNames = activeBurst.activeCDs
+            .map((c) => c.spellName)
+            .join(" + ");
           killSeqEntries.push({
             timeSeconds: activeBurst.fromSeconds,
-            label: '[ENEMY CD]',
+            label: "[ENEMY CD]",
             text: `${cdNames} active`,
           });
         } else {
           const individualCDs = enemyCDTimeline.players.flatMap((p) =>
-            p.offensiveCDs.filter((cd) => cd.castTimeSeconds <= deathTime && cd.castTimeSeconds >= deathTime - 15),
+            p.offensiveCDs.filter(
+              (cd) =>
+                cd.castTimeSeconds <= deathTime &&
+                cd.castTimeSeconds >= deathTime - 15,
+            ),
           );
           if (individualCDs.length > 0) {
-            const latest = [...individualCDs].sort((a, b) => b.castTimeSeconds - a.castTimeSeconds)[0];
+            const latest = [...individualCDs].sort(
+              (a, b) => b.castTimeSeconds - a.castTimeSeconds,
+            )[0];
             killSeqEntries.push({
               timeSeconds: latest.castTimeSeconds,
-              label: '[ENEMY CD]',
+              label: "[ENEMY CD]",
               text: `${latest.spellName} active`,
             });
           }
@@ -742,21 +850,26 @@ export function buildKillSequenceBlock(params: {
         if (dyingUnit) {
           const allFriendlyCDs = [
             ...ownerCDs.map((cd) => ({ player: owner, cd })),
-            ...teammateCDs.flatMap((t) => t.cds.map((cd) => ({ player: t.player, cd }))),
+            ...teammateCDs.flatMap((t) =>
+              t.cds.map((cd) => ({ player: t.player, cd })),
+            ),
           ];
           const unusedDefensives = allFriendlyCDs.filter(({ player, cd }) => {
-            if (cd.tag !== 'Defensive' && cd.tag !== 'External') return false;
+            if (cd.tag !== "Defensive" && cd.tag !== "External") return false;
 
             // Relevant if: own CD, or an external, or any healer defensive CD (usually team-relevant)
             const isDyingPlayer = player.name === dyingUnit.name;
-            const isExternal = cd.tag === 'External';
+            const isExternal = cd.tag === "External";
             const isHealerCD = isHealerSpec(player.spec);
 
             const isRelevant = isDyingPlayer || isExternal || isHealerCD;
             if (!isRelevant) return false;
 
             const lastCast = lastCastBefore(cd, deathTime);
-            return !lastCast || lastCast.timeSeconds + cd.cooldownSeconds <= deathTime;
+            return (
+              !lastCast ||
+              lastCast.timeSeconds + cd.cooldownSeconds <= deathTime
+            );
           });
 
           if (unusedDefensives.length > 0) {
@@ -766,7 +879,7 @@ export function buildKillSequenceBlock(params: {
             topUnused.forEach((u) => {
               killSeqEntries.push({
                 timeSeconds: Math.max(0, deathTime - 1),
-                label: '[DEFENSIVE AVAILABLE]',
+                label: "[DEFENSIVE AVAILABLE]",
                 text: `${pid(u.player.name)}: ${u.cd.spellName} available but unused`,
               });
             });
@@ -779,23 +892,29 @@ export function buildKillSequenceBlock(params: {
         ? friends.find((f) => f.name === firstDeath.name)
         : enemies.find((e) => e.name === firstDeath.name);
       if (dyingUnit) {
-        const topSources = getTopDamageSourcesInWindow(dyingUnit, matchStartMs + deathTime * 1000, 5000);
+        const topSources = getTopDamageSourcesInWindow(
+          dyingUnit,
+          matchStartMs + deathTime * 1000,
+          5000,
+        );
         if (topSources.length > 0) {
           killSeqEntries.push({
             timeSeconds: deathTime,
-            label: '[KILL]',
+            label: "[KILL]",
             text: `${pid(firstDeath.name)} (${firstDeath.spec}) dead (Killer: ${topSources[0]})`,
           });
         }
       }
 
       if (killSeqEntries.length > 0) {
-        lines.push('');
-        lines.push('KILL SEQUENCE');
+        lines.push("");
+        lines.push("KILL SEQUENCE");
         killSeqEntries
           .sort((a, b) => a.timeSeconds - b.timeSeconds)
           .forEach((e) => {
-            lines.push(`${fmtTime(e.timeSeconds)}  ${e.label.padEnd(22)} ${e.text}`);
+            lines.push(
+              `${fmtTime(e.timeSeconds)}  ${e.label.padEnd(22)} ${e.text}`,
+            );
           });
       }
     }
