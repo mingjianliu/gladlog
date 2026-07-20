@@ -273,15 +273,36 @@ export function ReplayView({
       <div
         className={`rpt-replay-stage mode-${mode}`}
         ref={stageRef}
-        style={{
-          gridTemplateColumns:
-            mode === "split" ? `${ratio}fr 6px ${1 - ratio}fr` : "1fr",
-        }}
+        style={
+          {
+            gridTemplateColumns:
+              mode === "split" ? `${ratio}fr 6px ${1 - ratio}fr` : "1fr",
+            // 纯地图档才注入:split/gcd 档的尺寸归 ratio 管,别让这个变量
+            // 泄漏到它们的 CSS 上。
+            //
+            // 给的是**宽度**而不是高度:场地 SVG 锁死 aspectRatio,高度由宽度
+            // 推出,而宽度能被 minmax(0, …) 收进容器 —— 高度驱动则没有这个
+            // 上界,窄窗口下地图会撑破栅格、把敌方血条框压到地图上(实测
+            // 900px 容器 + 1400px 高度:grid 溢出到 1416px,右列 x=776 落在
+            // 地图身上)。所以高度是「意图」,宽度是「可收缩的实现」。
+            ...(mode === "map"
+              ? { "--map-w": `${Math.round(mapHeight * (VW / VH))}px` }
+              : {}),
+          } as React.CSSProperties
+        }
       >
         {mode !== "gcd" && (
           <div className="rpt-replay-arena-col">
             <div className="rpt-replay-arena-grid">
-              <div className="rpt-replay-map-cell" ref={zoom.hotZoneRef}>
+              <div
+                className="rpt-replay-map-cell"
+                ref={(el) => {
+                  // hotZoneRef 是回调 ref(useReplayZoom 里绑 wheel 监听),
+                  // 不是 RefObject —— 必须调用,不能写 .current
+                  zoom.hotZoneRef(el);
+                  mapCellRef.current = el;
+                }}
+              >
                 <svg
                   ref={zoom.svgRef}
                   className={
@@ -694,6 +715,15 @@ export function ReplayView({
                   onReset={zoom.reset}
                 />
               </div>
+
+              {/* 纯地图档:拖下边沿调高度(宽由 aspectRatio 推出 = 整体缩放) */}
+              {mode === "map" && (
+                <ReplayMapResizer
+                  mapHeight={mapHeight}
+                  onHeightChange={setMapHeight}
+                  cellRef={mapCellRef}
+                />
+              )}
 
               {/* 竞技场框体(1f):贴场地两侧,友左敌右;血量不受场上重叠遮挡 */}
               {(["Friendly", "Hostile"] as const).map((side) => (

@@ -22,7 +22,6 @@ import { computeOffensiveWindows } from "../utils/offensiveWindows";
 import { fmtFactNum as fmt } from "./factFormat";
 import type { CandidateEvent } from "./types";
 
-
 /**
  * Map never-used major cooldowns to cd-waste candidate events. Pure (no combat
  * traversal) so the mapping rule is unit-testable with hand-built cooldown
@@ -48,6 +47,7 @@ export function cdWasteEvents(
         t: 0, // whole-round observation, not time-specific
         unitNames: [healer.name],
         spell: cd.spellName,
+        spellId: cd.spellId,
         facts: { spell: cd.spellName, unit: healer.name },
       });
     }
@@ -264,6 +264,8 @@ export interface DeathSetupParts {
     ccInstances: Array<{
       atSeconds: number;
       durationSeconds: number;
+      /** 可选:真实调用方传的是带 id 的 ICCInstance,测试夹具可省(仅供图标)。 */
+      spellId?: string;
       spellName: string;
       sourceName: string;
     }>;
@@ -301,6 +303,7 @@ export function deathSetupEvents(parts: DeathSetupParts): CandidateEvent[] {
       t: lock.atSeconds,
       unitNames: [parts.healerCC!.healerName, victim.name],
       spell: lock.spellName,
+      spellId: lock.spellId,
       facts: {
         t: fmt(lock.atSeconds),
         kind: "healer-locked",
@@ -356,6 +359,7 @@ export function deathSetupEvents(parts: DeathSetupParts): CandidateEvent[] {
       t: last.timeSeconds,
       unitNames: [victim.name],
       spell: cd.spellName,
+      spellId: cd.spellId,
       facts: {
         t: fmt(last.timeSeconds),
         kind: "defensive-early",
@@ -412,6 +416,7 @@ function dpsOwnerEvents(
       t: b.fromSeconds,
       unitNames: [owner.name, t.unitName],
       spell: b.spells[0]?.spellName,
+      spellId: b.spells[0]?.spellId,
       facts: {
         t: fmt(b.fromSeconds),
         spell: b.spells.map((s) => s.spellName).join(" + "),
@@ -441,6 +446,7 @@ function dpsOwnerEvents(
       t: b.fromSeconds,
       unitNames: [owner.name, t.unitName],
       spell: b.spells[0]?.spellName,
+      spellId: b.spells[0]?.spellId,
       facts: {
         t: fmt(b.fromSeconds),
         spell: b.spells.map((s) => s.spellName).join(" + "),
@@ -478,6 +484,7 @@ function dpsOwnerEvents(
       t: k.atSeconds,
       unitNames: [owner.name, ...(k.targetName ? [k.targetName] : [])],
       spell: k.kickSpellName,
+      spellId: k.kickSpellId,
       facts: {
         t: fmt(k.atSeconds),
         kick: k.kickSpellName,
@@ -497,6 +504,7 @@ function dpsOwnerEvents(
         t: app.atSeconds,
         unitNames: [owner.name, chain.targetName],
         spell: app.spellName,
+        spellId: app.spellId,
         facts: {
           t: fmt(app.atSeconds),
           spell: app.spellName,

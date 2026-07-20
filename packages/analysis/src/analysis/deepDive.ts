@@ -75,6 +75,12 @@ export interface PackItem {
   /** chip 文本。 */
   label: string;
   unitNames: string[];
+  /**
+   * 技能 id(字符串)。纯展示:UI 查 SPELL_ICONS_GENERATED 出图标。
+   * 与 CandidateEvent.spellId 同性质 —— 不进 prompt、不进 facts、不受门规
+   * 审计约束。无单一技能的条目(HP、脱靶、踩 DR)本就留空。
+   */
+  spellId?: string;
   facts: Record<string, string>;
 }
 
@@ -159,6 +165,7 @@ export function buildDeepDivePack(
         if (!inWin(cc.atSeconds)) continue;
         raw.push({
           kind: "cc",
+          spellId: cc.spellId,
           t: cc.atSeconds,
           label: `${cc.spellName} → ${u.name.split("-")[0]}(${cc.durationSeconds.toFixed(1)}s)`,
           unitNames: [u.name],
@@ -195,6 +202,7 @@ export function buildDeepDivePack(
           if (!inWin(cast.timeSeconds)) continue;
           raw.push({
             kind: "defensive",
+            spellId: cd.spellId,
             t: cast.timeSeconds,
             label: `${cd.spellName}(${u.name.split("-")[0]})`,
             unitNames: [u.name],
@@ -223,6 +231,7 @@ export function buildDeepDivePack(
         if (!inWin(cd.castTimeSeconds)) continue;
         raw.push({
           kind: "enemy-cd",
+          spellId: cd.spellId,
           t: cd.castTimeSeconds,
           label: `敌 ${cd.spellName}(${p.playerName.split("-")[0]})`,
           unitNames: [p.playerName],
@@ -293,6 +302,7 @@ export function buildDeepDivePack(
       if (!inWin(e.timeSeconds)) continue;
       raw.push({
         kind: "dispel",
+        spellId: e.dispelSpellId,
         t: e.timeSeconds,
         label: `${e.dispelSpellName} 解 ${e.removedSpellName}`,
         unitNames: [e.sourceName, e.targetName],
@@ -451,6 +461,7 @@ export function offensivePackItems(
         for (const d of t.defensivesHit) {
           raw.push({
             kind: d.isImmunity ? "immunity" : "enemy-defensive",
+            spellId: d.spellId,
             t: e.fromSeconds,
             label: `${d.spellName}(${sn(t.unitName)})`,
             unitNames: [t.unitName],
@@ -501,6 +512,7 @@ export function offensivePackItems(
       if (!inp.inWin(app.atSeconds)) continue;
       raw.push({
         kind: "our-cc",
+        spellId: app.spellId,
         t: app.atSeconds,
         label: `${app.spellName} → ${sn(chain.targetName)}`,
         unitNames: [app.casterName],
@@ -772,7 +784,13 @@ export interface DeepDiveResult {
   /** 已插值的叙述文本。 */
   text: string;
   /** 引用的证据 chips(跳回放锚点)。 */
-  chips: Array<{ t: number; label: string; unitNames: string[] }>;
+  chips: Array<{
+    t: number;
+    label: string;
+    unitNames: string[];
+    /** 仅供 UI 出图标;透传自 PackItem.spellId。 */
+    spellId?: string;
+  }>;
 }
 
 /**
@@ -825,7 +843,12 @@ export function auditDeepDives(
       chips: keys
         .map((k) => itemsByKey.get(k)!)
         .sort((a, b) => a.t - b.t)
-        .map((i) => ({ t: i.t, label: i.label, unitNames: i.unitNames })),
+        .map((i) => ({
+          t: i.t,
+          label: i.label,
+          unitNames: i.unitNames,
+          spellId: i.spellId,
+        })),
     });
   }
   return out;
