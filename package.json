@@ -9,6 +9,7 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
+    "presubmit": "npm run lint && npm run typecheck && npm test && npm -w @gladlog/desktop run verify:vision && npm -w @gladlog/desktop run build",
     "verify:parser-oracle": "node scripts/verify-parser-oracle.mjs",
     "logs:stream": "npm -w @gladlog/log-pipeline run stream --",
     "logs:collect": "npm -w @gladlog/log-pipeline run collect --",

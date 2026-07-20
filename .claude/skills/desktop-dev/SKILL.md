@@ -43,10 +43,24 @@ description: gladlog desktop(Electron)改代码的工程约定与坑。改 packa
 ## push 前检查(CI 与本地不等价,连挂过三次)
 
 ```bash
-npm test --workspace=packages/desktop \
-  && npm run typecheck \
-  && npx eslint . --quiet
+npm run presubmit    # = lint + typecheck + 全 workspace test + verify:vision + electron-vite build
 ```
+
+这一条覆盖 CI `test` job 的全部 5 步。**别再手敲那三件套**(旧清单只有
+test/typecheck/lint,漏掉后两步):
+
+- `npm test` 必须是**全 workspace**,不能只 `--workspace=packages/desktop`
+  —— analysis/parser 的用例也在 CI 的 `npm test` 里;
+- `verify:vision`(数据忠实度)与 `build`(生产打包)是**本地唯二能抓、
+  但三件套抓不到**的两类:后者专抓 renderer 值引入 `src/main/*`
+  (v0.0.4 首包双平台实锤),dev 与 vitest 都不挡。
+
+CI 还有一个 `frontend-qa` job,**本地不要跑**:
+
+- `test:visual` 截图基线是 CI(linux)单源生成的,本机跑必然假红;
+- E2E 需要 xvfb,macOS 上环境不等价。
+
+改了 report UI 的话,`report-*` 视觉基线会变 —— 走 visual-baseline.yml 重生成。
 
 - **lint 必须全仓 `.`**,不能只 `packages/desktop/src`:CI 的 Lint 步是全仓,
   test 文件/scripts 里一个 `console.log` 就能红(2026-07-18 实锤);
