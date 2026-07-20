@@ -19,7 +19,6 @@ import {
   specToBenchmarkKey,
   specToString,
   USABLE_WHILE_CC_SPELL_IDS,
-  hpSampleRadiusMs,
   toRenderSecond,
 } from "../utils/cooldowns";
 import { wasLockedOutThroughWindow } from "../utils/deathOutcomeAnalysis";
@@ -274,8 +273,6 @@ export function emitDmgSpikeEntries(params: {
   pid: (name: string) => string;
   playerIdMap?: Map<string, number>;
   enemyIdMap?: Map<string, number>;
-  /** [STATE] tick 所用的关键窗口集合 —— 半径必须与它一致,见 hpSampleRadiusMs。 */
-  criticalWindowSeconds: ReadonlySet<number>;
   addEntry: (timeSeconds: number, ...lines: string[]) => void;
 }): void {
   const {
@@ -285,7 +282,6 @@ export function emitDmgSpikeEntries(params: {
     pid,
     playerIdMap,
     enemyIdMap,
-    criticalWindowSeconds,
     addEntry,
   } = params;
 
@@ -300,21 +296,22 @@ export function emitDmgSpikeEntries(params: {
     // 采样时刻必须先归到渲染网格:本行的时间戳经 fmtTime 向下取整,而 [STATE]
     // 按整数秒采样。用小数秒 pw.fromSeconds 取样会命中另一个 advancedAction,
     // 于是同一显示秒下两行 HP 打架(2026-07-20 eval 26/50 场,中位 7pp)。
-    // 半径同样按渲染秒取,与 [STATE] tick 共享谓词。
+    // 半径全程统一 HP_SAMPLE_RADIUS_MS,与 [STATE] tick 一致(同时刻 + 同半径
+    // ⇒ 必然取到同一条读数)。曾经关键窗口收窄到 ±1.5s,已删,见 cooldowns.ts。
     const fromSec = toRenderSecond(pw.fromSeconds);
     const toSec = toRenderSecond(pw.toSeconds);
     const hpFrom = targetUnit
       ? getUnitHpAtTimestamp(
           targetUnit,
           matchStartMs + fromSec * 1000,
-          hpSampleRadiusMs(fromSec, criticalWindowSeconds),
+          HP_SAMPLE_RADIUS_MS,
         )
       : null;
     const hpTo = targetUnit
       ? getUnitHpAtTimestamp(
           targetUnit,
           matchStartMs + toSec * 1000,
-          hpSampleRadiusMs(toSec, criticalWindowSeconds),
+          HP_SAMPLE_RADIUS_MS,
         )
       : null;
     let hpStr = "";

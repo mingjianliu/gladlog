@@ -346,35 +346,26 @@ export interface ICooldownCast {
  */
 export const HP_SAMPLE_RADIUS_MS = 3_000;
 
-/**
- * 关键窗口内的收窄半径。存在理由是正当的:关键窗口按 1s 密集出 tick,若仍用
- * ±3s,相邻两个 tick 会取到同一条底层读数,把一次快速掉血渲染成平线。
+/*
+ * 曾经这里还有一个 HP_SAMPLE_RADIUS_CRITICAL_MS = 1500(关键窗口收窄半径)
+ * 和取值谓词 hpSampleRadiusMs()。2026-07-20 已整套删除,理由记在这里,免得
+ * 有人凭「关键时刻该用更新鲜的读数」的直觉再加回来:
+ *
+ * 1. **它没修好它声称要修的问题。** 当初以为「同秒两行 HP 打架」源于两侧半径
+ *    不同,于是把半径收敛成共享谓词 —— 实测 26/50 → 26/50,一个数都没动。
+ *    因为 getUnitHpAtTimestamp 是先取最近样本、再用半径决定接受与否:改半径
+ *    只能把值变成 null,**永远不会改变取到的数值**。真根因是查询时刻不在同一
+ *    网格(见 toRenderSecond),对齐时刻后才归零。
+ * 2. **它与既有机制冗余。** 「密集 tick 重复取样」早就由 STATE 的发射门解决了
+ *    (HP 变化 ≥10% 或状态改变才出行),那是行级去重,不需要靠丢数据实现。
+ * 3. **它主动损失覆盖,且损失在最要紧的地方。** 实测 24/50 场里,±1.5s 把
+ *    单位整个从 [STATE] 行删掉,而关键窗口正是模型最需要完整队伍血线的时刻。
+ *    被删掉的恰恰是 advancedActions 稀疏的单位 —— 也就是没在挨打的人,他们
+ *    的 HP 本来就平稳,±3s 的读数对他们完全准确。
+ *
+ * 结论:全程统一用 HP_SAMPLE_RADIUS_MS。要提升新鲜度请改发射门或采样源,
+ * 不要再引入第二个半径。
  */
-export const HP_SAMPLE_RADIUS_CRITICAL_MS = 1_500;
-
-/**
- * **同一时刻的 HP 采样半径 —— 单一事实源。**
- *
- * 打印某一瞬间 HP% 的每一个渲染器都必须从这里取半径,不许各自定义常量。
- *
- * 2026-07-20 的 50 场 eval 实证了违反它的代价:`[STATE]` tick 在关键窗口用
- * ±1.5s,而 `[DMG SPIKE]` 端点恒用 ±3s —— 而 DMG SPIKE **只发生在关键窗口**
- * (那正是它成为 spike 的原因)。两者必然取到不同样本,于是同一秒的两行给出
- * 互相矛盾的 HP:31/50 场命中,最极端处 spike 报 2% 而 STATE 报 88%。
- * 其中 ord 008 已导致模型把不存在的濒死写进教练结论(accuracy 判 2)。
- *
- * 上面 HP_SAMPLE_RADIUS_MS 的注释早就写明「[STATE] 基线 tick 与 [DMG SPIKE]
- * 端点必须同半径」——是后加的关键窗口收窄只改了一侧,把这条不变量破坏掉了。
- * 所以修法是让半径成为**随时刻取值的共享谓词**,而不是让两个魔数碰巧相等。
- */
-export function hpSampleRadiusMs(
-  tSeconds: number,
-  criticalWindowSeconds: ReadonlySet<number>,
-): number {
-  return criticalWindowSeconds.has(Math.floor(tSeconds))
-    ? HP_SAMPLE_RADIUS_CRITICAL_MS
-    : HP_SAMPLE_RADIUS_MS;
-}
 
 /**
  * Returns the HP% (0–100) of `unit` at the given timestamp by finding the nearest

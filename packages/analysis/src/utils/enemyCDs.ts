@@ -528,11 +528,20 @@ export function formatKillAttemptWindowsForContext(
 
   for (const burst of alignedBurstWindows) {
     // Spike's start time must fall within [burstStart-5s, burstEnd+5s] — covers lead-in and trailing damage
-    const spike = pressureWindows.find(
+    // 取伤害最大的那条。此前用 .find(),拿到最大值靠的是 pressureWindows 恰好按
+    // totalDamage 降序这一**隐式行为** —— 同一个坑本仓已中过三次(matchTimeline
+    // 的 qualifyingSpikes、OFFENSIVE WINDOW,以及这里)。判据写明,排序变了语义不变。
+    const spikeCandidates = pressureWindows.filter(
       (pw) =>
         pw.totalDamage >= KILL_ATTEMPT_SPIKE_THRESHOLD &&
         pw.fromSeconds >= burst.fromSeconds - 5 &&
         pw.fromSeconds <= burst.toSeconds + 5,
+    );
+    const spike = spikeCandidates.reduce<
+      (typeof spikeCandidates)[number] | undefined
+    >(
+      (best, pw) => (!best || pw.totalDamage > best.totalDamage ? pw : best),
+      undefined,
     );
     if (!spike) {
       unconfirmedCount++;
@@ -543,7 +552,9 @@ export function formatKillAttemptWindowsForContext(
       .map((c) => `${c.spellName}@${fmtTime(c.castSeconds)}`)
       .join(" + ");
     lines.push(
-      `  ${fmtTime(burst.fromSeconds)}–${fmtTime(burst.toSeconds)}  ${dmgM}M on ${spike.targetSpec} | CDs: ${cdNames}`,
+      // 伤害数字属于那条 spike 自己的窗口,不是本 burst 窗口内的总伤害 ——
+      // 两个区间不同,只印 burst 起止会被读成「这段窗口内的伤害」(同 I 类)。
+      `  ${fmtTime(burst.fromSeconds)}–${fmtTime(burst.toSeconds)}  peak spike ${dmgM}M on ${spike.targetSpec} over ${fmtTime(spike.fromSeconds)}–${fmtTime(spike.toSeconds)} | CDs: ${cdNames}`,
     );
   }
 

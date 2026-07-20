@@ -19,13 +19,13 @@ import {
   findCheaperDefensiveAlternatives,
   fmtTime,
   getUnitHpAtTimestamp,
+  HP_SAMPLE_RADIUS_MS,
   IDamageBucket,
   IMajorCooldownInfo,
   isSelfOnlyDefensive,
   isTeamHealCD,
   THROUGHPUT_EMPOWER_DEFENSIVE_IDS,
   specToString,
-  hpSampleRadiusMs,
   toRenderSecond,
 } from "../utils/cooldowns";
 import {
@@ -1999,7 +1999,6 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   // ── [DMG SPIKE] events ─────────────────────────────────────────────────────
 
   emitDmgSpikeEntries({
-    criticalWindowSeconds: criticalWindowSet,
     pressureWindows,
     friends,
     matchStartMs,
@@ -2063,12 +2062,9 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     }
   }
 
-  // Emit HP ticks — use a narrower sample window inside critical windows so adjacent
-  // 1-second ticks cannot both claim the same underlying reading (which would give a
-  // misleadingly flat HP line during a fast drop).
-  // 半径从共享谓词 hpSampleRadiusMs 取(cooldowns.ts)—— 这里曾经是两个局部
-  // 常量,而 [DMG SPIKE] 那侧恒用 ±3s,导致同一秒两行 HP 打架(2026-07-20 eval
-  // 实证 31/50 场)。别再在这里定义半径常量。
+  // HP tick 全程用同一个半径 HP_SAMPLE_RADIUS_MS。曾经关键窗口收窄到 ±1.5s,
+  // 已删 —— 理由见 cooldowns.ts 中 HP_SAMPLE_RADIUS_MS 下方那段(要点:它没修好
+  // 声称要修的问题,与 STATE 发射门冗余,且在关键窗口主动丢覆盖)。
 
   // B106: when a numeric ID map is present, sort HP tokens by player ID so the model
   // can align HP readings with class labels listed elsewhere in player-ID order.
@@ -2130,7 +2126,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
 
   for (let t = 0; t <= Math.floor(matchDurationS); t++) {
     const tsMs = matchStartMs + t * 1000;
-    const sampleWindowMs = hpSampleRadiusMs(t, criticalWindowSet);
+    const sampleWindowMs = HP_SAMPLE_RADIUS_MS;
 
     const friendlyParts: string[] = [];
     const currentFriendlies = friendlyHpUnits.map(({ unit, label }) => {
@@ -2487,6 +2483,11 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     // 2026-07-20 eval:9/50 场判为「记号无图例」——同一记号可被读成相反含义。
     // 下面四条各对应 judge 举出的一处歧义。
     "  [n/m] after a spell = CHARGES REMAINING / total (so [1/2] = one charge left, one on cooldown).",
+    // D 类(2026-07-20 eval):台账没列 Lay on Hands,而 DEATHS WITH MISSED OPTIONS
+    // 说它 available —— judge 读成两处判定打架。实为台账**不追踪**该技能(语料
+    // 千场仅 1 次施放,无实证基础纳入追踪),而「未列出」与「不可用」无从区分。
+    "  [RES] lists TRACKED major cooldowns only — an ability absent from both `rdy:` and `cd:`",
+    "    is one this ledger does not track, NOT one that was unavailable. Other sections may still cite it.",
     "  [RES] rdy: = abilities READY at that instant. `rdy:Δ` = unchanged since the previous [RES];",
     "    a leading `-<spell>` marks one that just LEFT the ready set. `cd:<spell>(Ns)` = seconds until it returns.",
     "  [DMG SPIKE] timestamp = the window's START; its `A% -> B% HP` spans that window, so B is at start+duration.",

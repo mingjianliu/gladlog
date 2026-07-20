@@ -310,7 +310,12 @@ export interface IOutgoingCCChain {
 /**
  * Scans enemy aura events for CC spells cast by friendly players.
  * Returns per-enemy CC chains annotated with DR levels.
- * Only returns chains that have at least one application at reduced DR (>= 50% reduction).
+ *
+ * 返回**所有**至少落地过一次 CC 的敌人链,不按 DR 等级过滤(降级与否记在
+ * 每条 application 的 drInfo 上,整条链另有 hasWastedApplications 标志)。
+ * 此处注释一度写成「只返回至少有一次降级的链」——与实际过滤条件
+ * (applications.length > 0)不符;时间轴渲染 [YOU] [CC] 的 DR 标注依赖
+ * 全量返回,别按那句话把过滤加回来。
  */
 export function analyzeOutgoingCCChains(
   friendlies: ICombatUnit[],
