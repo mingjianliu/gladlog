@@ -862,7 +862,8 @@ export function ReplayView({
         </div>
       </div>
       <div className="rpt-replay-hints">
-        空格 播放/暂停 · ← → ±5s · Shift ±1s · ⌘+滚轮 缩放 · 双击复位
+        空格 播放/暂停 · ← → ±5s · Shift ±1s · ⌘/Ctrl+滚轮
+        缩放(放大后滚轮可继续)· 双击复位 · 分隔条可拖(聚焦后 ← →)
       </div>
     </div>
   );
