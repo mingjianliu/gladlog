@@ -2,16 +2,26 @@ name: test
 
 # Correctness gate: lint, typecheck, the full vitest suite across all
 # workspaces, and the headless data-faithfulness check (verify:vision).
-# Runs on every push to main and on pull requests. Installer packaging lives
-# in build.yml (manual / tag-triggered) — this workflow never builds binaries.
+# Installer packaging lives in build.yml (manual / tag-triggered) —
+# this workflow never builds binaries.
 
 on:
+  # **所有分支**都跑,不只是 main。只在 main 上跑的代价实测过一次:回放改版
+  # 的截图 diff 与一条 localStorage 状态泄漏的单测,都是合进 main 之后才现形
+  # 的(2026-07-20)。功能分支上跑,这类问题在合并前就能看到。
   push:
-    branches: [main]
+  # 保留 PR 触发:fork 过来的 PR 不会有 push 事件。
   pull_request:
     branches: [main]
-  # 手动触发:功能分支上验证 job 本身(尤其视觉基线相关的 frontend-qa)
   workflow_dispatch:
+
+# 同一个 ref 上只保留最新一次运行 —— 连续推送时自动取消上一次。
+# 放开到全分支后这条是控制 CI 用量的主要手段(frontend-qa 含 Playwright
+# 浏览器与 Electron,单次约 4-5 分钟)。main 上不取消:那里每个提交的
+# 绿灯都是要留档的结论,不是过程信息。
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   test:
