@@ -1,161 +1,139 @@
-# HANDOFF 2026-07-20 — 盲评 A/B(模型侧验证)续跑
+# 2026-07-20 盲评 A/B(模型侧验证)—— 已收官
 
-> **给新会话:** 从「立即要做的事」往下照做。所有产物都在盘上,不需要重建任何东西。
+> **状态:完成。** 本文档从「交接待办」转为「结果记录」。
 > 姊妹文档 `HANDOFF-2026-07-20-prompt-defects.md` 记录被验证的那批修复本身。
 
-## 为什么会有这份交接
+## 一句话结论
 
-上一个会话把 8 类 prompt 缺陷全修了,并用**确定性文本判据**验证(A 26/50→0、
+**盲评没有检出教练质量提升(七维全 inconclusive,含目标维度)。
+采纳依据是确定性指标,不是 A/B。** 任何把本轮读作「A/B 验证通过」的说法都是错的。
+
+## 为什么会有这一轮
+
+上上个会话把 8 类 prompt 缺陷全修了,并用**确定性文本判据**验证(A 26/50→0、
 B 14/50→0、C 2/50→0、E/G 4/33→0、D 1/50→0、F 0→86/159 行、H/I 已修)。
 
-但那只证明了 **prompt 内部自洽**,没证明**教练质量变好**。这轮盲评 A/B 是补
-第二重证据。上一会话在**子代理配额 200/200 用尽**时停住,盲评只完成 6/100。
+但那只证明了 **prompt 内部自洽**,没证明**教练质量变好**。这轮盲评 A/B 是补第二重证据。
+上一会话在**子代理配额 200/200 用尽**时停在 6/100,本会话补齐了剩下 94 件。
 
-## 当前状态
+## 结果
 
 EVAL_HOME = `/Users/mingjianliu/code/gladlog-eval-private`
-abId = `2026-07-20-prompt-defects` → `$EVAL_HOME/ab/2026-07-20-prompt-defects/`
+abId = `2026-07-20-prompt-defects`;产物已 commit(私有仓 `ac73af4`)。
 
-| 阶段                              | 状态                                                             |
-| --------------------------------- | ---------------------------------------------------------------- |
-| judge 校准                        | ✅ 40/40,**accuracy 检出 100%**(目标维度),报告见下               |
-| 双臂组装 + 预检                   | ✅ fingerprint 一致 `98: be78167b..2faaf381`;98/98 prompt 有差异 |
-| control 回复                      | ✅ 50/50(复用 `runs/2026-07-20-smoke`,构建于 `18d5fad`)          |
-| treatment 回复                    | ✅ 50/50(构建于全部修复之后)                                     |
-| ordinal↔MATCHID 完整性            | ✅ 50/50 全对齐                                                  |
-| 盲评池                            | ✅ 100 件 / 50 对 已生成                                         |
-| **盲评打分**                      | ⛔ **6/100**(item-01..06 已完成)                                 |
-| 解盲统计 / 对比报告 / 台账        | ⬜ 未开始                                                        |
-| eval-report 勘误(用户要的第 2 件) | ⬜ 未开始                                                        |
+### 盲评统计(50 对,100 件,全 sonnet)
 
-`blind/mapping.json` **从未被读过**。保持这样。
+| 维度                 | control | treatment | Δ (95% CI)               | p     | 判定         |
+| -------------------- | ------- | --------- | ------------------------ | ----- | ------------ |
+| **accuracy(目标)**   | 4.44    | 4.14      | **−0.30 [−0.66, +0.06]** | 0.243 | inconclusive |
+| sufficiency          | 4.82    | 4.72      | −0.10 [−0.28, 0.06]      | 0.774 | inconclusive |
+| noise                | 4.70    | 4.74      | +0.04 [−0.12, 0.20]      | 0.815 | inconclusive |
+| labelBias            | 4.88    | 4.90      | +0.02 [−0.10, 0.14]      | 1.000 | inconclusive |
+| inferenceScaffolding | 4.86    | 4.92      | +0.06 [−0.10, 0.20]      | 0.508 | inconclusive |
+| outcomeAlignment     | 4.98    | 4.96      | −0.02 [−0.10, 0.04]      | 1.000 | inconclusive |
+| focusCalibration     | 4.98    | 5.00      | +0.02 [0.00, 0.06]       | 1.000 | inconclusive |
 
-## 立即要做的事
+零 CI 回归、零新问题 —— **两臂 350 个维度分(50 对 × 7 维)无一 ≤2**。
+accuracy 点估计为负,按工作流标记 (inconclusive — monitor),不算回归。
 
-### 0. 先确认配额够
+### 确定性指标(采纳依据)
 
-上一会话就是死在这上面。需要 **≥94** 个子代理余量。若不够,先设
-`CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION`(建议 300)再开工,别派到一半再撞墙。
+| 指标                                         | control               | treatment            |
+| -------------------------------------------- | --------------------- | -------------------- |
+| hard-failure 行数                            | **185**               | **0**                |
+| 含 ≥1 条 hard failure 的场次                 | **80 / 98**           | **0 / 98**           |
+| A DMG SPIKE↔STATE HP 分叉                    | 71 行 / 51 场         | 0                    |
+| B 基线百分位倒置                             | 27 行 / 27 场         | 0                    |
+| C `[CD]` 内嵌 HP↔STATE                       | 77 行 / 52 场         | 0                    |
+| E/G 窗口时长与起止不符                       | 10 行 / 10 场         | 0                    |
+| coverage(deaths/cc/interrupt/trinket/dispel) | 100/100/100/100/98.0% | 未回退               |
+| approxTokens (p50)                           | 4970                  | 5218(**+5.0%**,代价) |
 
-### 1. 补齐 94 件盲评
+**Decision: ADOPT —— 凭确定性,不凭盲评。**
+理由:修的是 prompt **内部自相矛盾**,危害不在当场扣分(上轮实证 46/50 场报缺陷、
+仅 1 场 flagged,因为 responder 多数时候自行识破绕开),而在于**正确性依赖模型恰好
+足够谨慎**,且 ord 043 已观察到从「识破弃用」滑向「引用转述」。修掉矛盾是移除这份依赖。
 
-```bash
-AB=/Users/mingjianliu/code/gladlog-eval-private/ab/2026-07-20-prompt-defects
-ls "$AB/blind/items"            # 拿 ITEMID(只列目录,不看内容)
-ls "$AB/blind/scores"           # 看哪些已完成 —— 只补缺的,别重派 item-01..06
-```
+## 本轮最有价值的产出是方法论,不是分数
 
-对**每个缺分数的 ITEMID** 起一个 **sonnet** 子代理(一件一代理,绝不两件合并):
+### 1. accuracy 的判官噪声底 SD = 1.30 —— 这一维作 A/B 目标近乎失效
 
-> You are scoring a WoW arena coaching prompt/response pair.
->
-> Read exactly these two files:
->
-> - /Users/mingjianliu/code/gladlog-eval-private/ab/2026-07-20-prompt-defects/blind/items/ITEMID/prompt.txt
-> - /Users/mingjianliu/code/gladlog-eval-private/ab/2026-07-20-prompt-defects/blind/items/ITEMID/response.txt
->
-> Apply the scoring rubric from /Users/mingjianliu/code/gladlog/docs/commands/eval-baseline.md Step 3 exactly — the three-pass process (fact audit -> anchored dimension assessment -> JSON) and the 1/3/5 anchors. There is no quality-report.json for this item — skip the consistency rules that reference it.
->
-> Do not read any other file or directory. In particular do NOT read mapping.json, any other item directory, or any scores file.
->
-> Write ONLY the score JSON (standard 7-dimension format, factAudit + provenance included) to:
-> /Users/mingjianliu/code/gladlog-eval-private/ab/2026-07-20-prompt-defects/blind/scores/ITEMID.json
->
-> Your final message should just confirm the file was written — do not summarize the scores.
+accuracy 在 **36/50 对上变动,其中 17 对跳 ±2**,配对 SD **1.30**,
+是其余六维(0.14–0.65)的 **2–9 倍**。同一份底层对局、同一个判官模型。
+**在这个噪声下 |Δ| < 0.4 根本测不出**,本轮无力拒绝 −0.30。
 
-派完等齐(只用 `ls | wc -l` 判断,**不看分数内容**)。
+→ 建议把 accuracy 锚点**绑定到 `factAudit` 的 refuted 条数**(0 条→5,
+1 条非承重→4,1 条承重或 2 条→3),把自由裁量换成计数;或同件多判取中位。
 
-### 2. 解盲 + 统计
+### 2. sufficiency 判官盲区 20%(校准实测)
 
-```bash
-AB_DIR=/Users/mingjianliu/code/gladlog-eval-private/ab/2026-07-20-prompt-defects \
-  npx tsx packages/eval/scripts/abStats.ts
-```
+注入手段「删掉整场死亡行」,5 件里 **4 件判官给分持平或更高**(5→5、5→5、5→5、4→5)。
+**该维盲评无裁决权**,只能由确定性覆盖门裁决。这是跨轮次的方法论债。
 
-输出逐维 Δ均值、SD、95% bootstrap CI、符号检验 p、verdict。
+> 两条合起来:**七维里有两维目前不具裁决力。** 下一轮 A/B 选目标维度时必须考虑这点。
 
-### 3. 对比报告
+## 订正上一版交接文档的两处
 
-写 `$AB/comparison-report.md`,结构见 `docs/commands/eval-ab.md` 第 6 步。裁决分工:
+- **校准不是 40/40。** 实为 **35 对(7 维 × 5)**,整体 verdict 是 **FAIL**
+  (被 sufficiency 1/5 拖累)。目标维度 accuracy **5/5 = 100%** 不受影响,
+  故 accuracy 一维可信、结论成立 —— 但原表述失准。
+- **`state.json` 原本不存在**(本轮双臂与盲池是手工组装,未走 Phase 1/2 自动流程),
+  已于解盲后补写。
 
-- **确定性指标裁决** sufficiency / noise / labelBias
-  —— 本轮校准实测 judge 在 sufficiency 上只有 **20%** 检出(删掉整场死亡行,
-  5 件里 4 件分数持平或更高),盲评分在这一维**没有裁决权**。
-- **盲评统计裁决** accuracy(目标维度,校准 100%)/ outcomeAlignment /
-  focusCalibration / inferenceScaffolding。
-- 置信区间跨 0 就写 **inconclusive**,不许包装成赢。
+## 遗留待办
 
-### 4. 台账
+1. **D 类检测器仍未固化。** A/B/C、E/G 三条判据已是常驻门规
+   (`packages/eval/src/quality/promptQualityCheck.ts` 接在 `hardFailures` 上,各带单测):
+   `checkPercentileMonotonicity` / `checkSameSecondHpConsistency` / `checkWindowSpanConsistency`。
+   **D 类(MISSED OPTIONS 声称可用 vs 台账 `cd:`)没有回归保护**,值得照这三条补一个。
+2. **accuracy rubric 锚点改造**(见上)。
+3. **sufficiency 判官盲区**修复,或改为确定性覆盖门直接给分。
+4. `blindPool` 生成盲件时应给出 `matchId` 占位约定 —— 本轮盲件无 `MATCHID:` 头,
+   子代理各自用了 `null` / `"unknown"` / `"NO_MATCHID_HEADER_FOUND"` 三种写法
+   (都没编造,符合预期,但不统一)。
+5. **下一步:** 跑 `/eval-baseline` 立新基线,重点回看 accuracy 是否仍在 4.1–4.4,
+   以排除 −0.30 是真效应而非噪声。
 
-向 `$EVAL_HOME/ledger.md` 的 A/B cycles 表追加一行(date、commit、改动描述、
-目标维度、pairs n、目标 Δ 均值 (95% CI)、verdict、decision)。
+## 盲评纪律(本轮全程遵守,后续沿用)
 
-### 5. 然后做用户要的第 2 件:eval-report 勘误
-
-`$EVAL_HOME/runs/2026-07-20-smoke/eval-report.md` 里的数字已被推翻,加勘误段:
-
-- A 类:judge 报 31/50,确定性判据实测 **26/50**
-- B 类:judge 报 11/50,实测 **14/50**(judge 漏报 3 场)
-- 它给出的修复建议**已全部执行**,commit:
-  `0e13264`(A+B) `f42fca1`(C) `cd60380`(E/G+H) `be36279`(F) `23de9f5`(I)
-  `dbe61bd`(删两档半径) `8f48174`(裸秒时间戳) `c820ad4`(D)
-- 附本轮校准结论,尤其 sufficiency 20% 盲区
-
-## 铁律(不可协商)
-
-1. **不读 `blind/mapping.json`** —— 在全部分数写完之前不读,报错也不读,
-   「核实一下」也不读。只有 `abStats` 读它。
+1. **不读 `blind/mapping.json`** —— 全部分数落盘前不读,报错也不读,「核实一下」也不读。
+   只有 `abStats` 读它。本轮直到 100/100 才首次读取。
 2. **不读盲件内容、不读 `blind/scores/*.json`** —— 齐全与否只用 `ls` 判断。
-3. **编排会话绝不亲自评分。** 若你就是实现这批修复的那个会话,你看一眼 prompt
-   就能认出属于哪一臂(A 类同秒 HP、B 类倒置基线、F 类 DR 标注都是显眼特征),
-   你打的分是自评不是评测。
+3. **编排会话绝不亲自评分。** 实现了被测改动的会话一眼就能认出臂别
+   (A 类同秒 HP、B 类倒置基线、F 类 DR 标注都是显眼特征),打的分是自评不是评测。
 4. **不得基于子代理返回的摘要选择性重派或剔除任何一件。** 完成通知里带评分摘要,
    这是唯一能让编排者无意中污染对比的通道 —— 只按「文件在不在」补派。
-5. **判分模型固定 sonnet,不要换 agy。** 本轮校准是对 sonnet 做的,换模型则
-   校准结论失效;且已落盘的 6 件是 sonnet 打的,混判会毁掉配对统计。
-   agy 的位置在**报告写完之后做跨 AI 复核**,那只需一两次调用。
+5. **判分模型固定 sonnet。** 校准是对 sonnet 做的,换模型则校准失效;
+   已落盘的件也是 sonnet 打的,混判会毁掉配对统计。agy 的位置在报告写完后做跨 AI 复核。
 
-## 本会话踩过的坑
+## 踩过的坑(两个会话累计)
 
-- **子代理配额是硬墙**(200/200),撞上就只能换会话或提配额 —— 开工前先确认。
-- **派子代理时 NNN/ITEMID 写错没有任何东西当场挡住**。本会话早些时候把 041 派成
-  031,靠事后完整性检查才发现。派完必做核对。
-- **聚合前先确认没有在飞的子代理**。本会话早些时候在 judge 还在跑时就发布了数字,
-  后到的结果改变了两维均值,只能补勘误。
-- **私有仓有非本会话产生的未提交改动**(`runs/tail-recheck/*` 等)——
-  **不要 commit 它们**。上一会话曾把用户的本地 commit 卷进 PR 出过事。
+- **子代理配额是硬墙**(200/200)。开工前先确认余量;94 件需 ≥94。
+  本会话在新会话里从零开始,94 件安全落在 200 内。
+- **安全分类器会间歇性不可用**,`Agent` 启动被拒且**不会自动重试** ——
+  本会话有 6 次启动被拒(item-83/92/93/97/98 及一次早期)。
+  **必须按文件存在性复核并补派**,不能假定「派出去了就跑了」。
+- **派子代理时 ITEMID 写错没有任何东西当场挡住**。上一会话把 041 派成 031,
+  靠事后完整性检查才发现。本会话的对策:每个子代理提示里写明 item id 并要求
+  **它自己核对三条路径一致、不一致就中止**,派完再用 `comm` 复核。
+- **聚合前先确认没有在飞的子代理。** 上一会话在 judge 还在跑时就发布了数字,
+  后到的结果改变了两维均值,只能补勘误。本会话用后台 `until` 循环等到 100/100 才跑 abStats。
+- **私有仓有非本会话产生的未提交改动**(`runs/tail-recheck/*` 65 个文件 + ~24 个
+  未跟踪 run 目录)—— **绝不 `git add -A`**。本会话只按显式路径 stage
+  (`ledger.md` / `ab/2026-07-20-prompt-defects` / `runs/2026-07-20-smoke`),
+  commit 前核验 `tail-recheck` staged 数为 0。
 - 复合命令里绝不 `cd`;门禁链里绝不加管道(退出码会变成 tail 的)。
 
-## 背景:今天最重要的一条教训
+## 背景:这轮最该记住的一条
 
 A 类的第一版修复(`3cd5342`)带着一份很有说服力的 commit message 进了 main,
 **实测 26/50 → 26/50,一个数都没改**。原因是 `getUnitHpAtTimestamp` 先取最近样本
-再用半径决定接受与否,改半径只能把值变成 null,永远不会改变数值;真根因是查询
-时刻不在同一渲染网格。是后来建的确定性判据把它抓出来的。
+再用半径决定接受与否,改半径只能把值变成 null,永远不会改变数值;真根因是查询时刻
+不在同一渲染网格。是后来建的确定性判据把它抓出来的。
 
-同类事情当天发生了第二次:D 类我判定「非数据不一致,只改图例」,**也是错的** ——
+同类事情当天发生了第二次:D 类「非数据不一致,只改图例」的判断**也是错的** ——
 被 A/B 轮次里一个 responder 子代理用反例推翻(见 `c820ad4`)。
 
 > 两条都指向同一件事:**自己实现、自己验证的闭环会漏掉整类错误。**
-> 独立判据(确定性检查)和独立评审(盲评子代理)各抓回一个,这就是这轮 A/B
-> 值得跑完的理由 —— 即使最后结论是 inconclusive。
-
-## 确定性判据在哪
-
-已固化为常驻门规(`packages/eval/src/quality/promptQualityCheck.ts`,接在
-`hardFailures` 上,有单测):
-
-- `checkPercentileMonotonicity` —— 同行百分位必须单调不减(B 类)
-- `checkSameSecondHpConsistency` —— 同秒同单位 HP 必须一致,容忍 3pp(A + C 类)
-- `checkWindowSpanConsistency` —— 标注时长必须等于显示起止之差(E/G 类)
-
-D 类的检测器(MISSED OPTIONS 声称可用 vs 台账列在 cd:)**尚未固化**,上一会话
-只写在 scratchpad 里,已随会话失效。若要防回归,值得照上面三条的样子补一个。
-
-复现任意判据的方法:
-
-```bash
-npx tsx packages/eval/scripts/buildCorpus.ts \
-  --manifest <50 条日志清单> --run <runId>
-# 然后对 runs/<runId>/prompts 跑判据
-```
+> 独立判据(确定性检查)和独立评审(盲评子代理)各抓回一个。
+> 这就是这轮 A/B 值得跑完的理由 —— **即使最后结论确实是 inconclusive。**
