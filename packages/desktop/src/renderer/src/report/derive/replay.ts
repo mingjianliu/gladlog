@@ -159,3 +159,24 @@ export function deathPosition(
   }
   return { x: p.x, y: p.y };
 }
+
+/**
+ * t 时刻该单位的位置是否**有据可依**。
+ *
+ * 坐标只搭在特定几类战斗记录上(`*_DAMAGE` 记承伤方、`*_HEAL` 记被治疗者、
+ * `SPELL_CAST_SUCCESS` 记施法者),而**跑动不产生任何战斗日志记录**。所以
+ * 开局一个人只是在跑、没施法也没被打没被治,日志里关于他一条记录都没有 ——
+ * 实测真实局里首样本最晚到 +14.2s,某个 shuffle 轮里六个人全部晚于 +4.4s。
+ *
+ * 这段空窗里 `sampleAt` 会把位置钉在**首样本**上(它是唯一有的坐标),于是
+ * 画面把人画在「他第一次卷进战斗的地方」——通常离起跑点隔了大半个场地。
+ * 渲染层必须用本谓词把那段时间标成「位置未知」,而不是当作确定位置画。
+ *
+ * 谓词单源:渲染与测试共用本函数,别在组件里重写 `t >= samples[0].t`。
+ */
+export function positionKnownAt(track: ReplayTrack, t: number): boolean {
+  const first = track.samples[0];
+  if (!first) return false;
+  if (track.deathT != null && t >= track.deathT) return false;
+  return t >= first.t;
+}

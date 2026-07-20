@@ -2985,3 +2985,23 @@ pre {
   gap: 6px;
   flex-wrap: wrap;
 }
+
+/* 位置未知态:首样本之前日志里没有该单位的坐标(跑动不产生战斗日志记录)。
+   虚线空心 + 压暗 = 「这不是一个已知位置」,与实心的确定位置明确区分。 */
+.rpt-replay-unit-unknown {
+  opacity: 0.45;
+}
+.rpt-replay-unit-unknown circle {
+  fill-opacity: 0.08;
+  stroke-dasharray: 3 3;
+}
+/* 血条与血量数字一并藏起来:它们同样取自首样本,在盲窗里一样没有依据 ——
+   只藏圆点不藏数字,等于换个地方接着编。 */
+.rpt-replay-unit-unknown image,
+.rpt-replay-unit-unknown rect,
+.rpt-replay-unit-unknown .rpt-replay-hpnum {
+  display: none;
+}
+.rpt-replay-unit-unknown .rpt-replay-name {
+  font-style: italic;
+}
