@@ -22,6 +22,10 @@ import {
   type RawFinding,
 } from "@gladlog/analysis";
 import {
+  analysisCacheDoc,
+  analysisCachePath,
+} from "../shared/analysisCache";
+import {
   buildCoachSystemPrompt,
   PROMPT_VERSION,
   resolveAiClient,
@@ -119,19 +123,10 @@ export function createAnalysisService(deps: {
       try {
         mkdirSync(dir, { recursive: true });
         // 语言分键缓存(backlog #1 推荐项):两种语言的结果可同时保留
-        const tmp = join(dir, `analysis-v2.${lang}.json.tmp`);
-        writeFileSync(
-          tmp,
-          JSON.stringify({
-            schemaVersion: 1,
-            promptVersion: PROMPT_VERSION,
-            language: lang,
-            createdAt: Date.now(),
-            result,
-          }),
-          "utf-8",
-        );
-        renameSync(tmp, join(dir, `analysis-v2.${lang}.json`));
+        const target = analysisCachePath(deps.matchesDir, input.matchId, lang);
+        const tmp = `${target}.tmp`;
+        writeFileSync(tmp, JSON.stringify(analysisCacheDoc(lang, result)), "utf-8");
+        renameSync(tmp, target);
       } catch {
         /* best-effort */
       }
@@ -608,7 +603,7 @@ export function createAnalysisService(deps: {
     },
     async getCached(matchId: string): Promise<AnalysisResult | null> {
       const lang: AiLanguage = deps.getSettings().aiLanguage ?? "zh";
-      let fp = join(deps.matchesDir, matchId, `analysis-v2.${lang}.json`);
+      let fp = analysisCachePath(deps.matchesDir, matchId, lang);
       if (!existsSync(fp)) {
         // 兼容:语言分键前的旧缓存没有 system prompt,输出实际是英文 ——
         // 只在请求英文时兜底读取,请求中文时视为未命中(重新生成)。

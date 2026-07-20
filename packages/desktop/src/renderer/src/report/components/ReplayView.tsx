@@ -833,6 +833,7 @@ export function ReplayView({
           </div>
           <input
             type="range"
+            aria-label="回放时间轴"
             className="rpt-replay-scrub"
             min={startTime}
             max={endTime}

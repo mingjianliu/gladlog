@@ -3,3 +3,6 @@ dist/
 scratch/
 .DS_Store
 .superpowers/
+packages/desktop/qa/test-results/
+packages/desktop/qa/playwright-report/
+packages/desktop/dev/dist-ui/
