@@ -385,6 +385,29 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     return cleanDest;
   }
 
+  /**
+   * 玩家自己施放的 CC 在**落地时**的 DR 状态,渲染成 `[DR: 类别 等级]` ——
+   * 与 [CC ON TEAM] 完全同格式(F 类:此前只有收到的 CC 带 DR,自己放的不带)。
+   *
+   * DR 本身不重算:直接查 analyzeOutgoingCCChains 已标注好的 drInfo,避免出现
+   * 第二套 DR 判定(谓词单源)。匹配用 spellId + 落地秒,时间按渲染网格比对
+   * (链里的 atSeconds 是小数秒,cast.timeSeconds 也是,统一 floor 后再比)。
+   */
+  function outgoingDrTag(
+    spellId: string,
+    cast: { timeSeconds: number },
+  ): string {
+    const t = toRenderSecond(cast.timeSeconds);
+    for (const chain of outgoingCCChains ?? []) {
+      for (const app of chain.applications) {
+        if (app.spellId !== spellId) continue;
+        if (toRenderSecond(app.atSeconds) !== t) continue;
+        return ` [DR: ${app.drInfo.category} ${app.drInfo.level}]`;
+      }
+    }
+    return "";
+  }
+
   function getCDTargetAndVelocityPart(
     spellId: string,
     rawTimeSeconds: number,
@@ -862,6 +885,10 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       }
 
       const prefix = ccSpellIds.has(cd.spellId) ? "[YOU] [CC]" : "[YOU] [CD]";
+      // F 类(2026-07-20 eval):[CC ON TEAM] 带 [DR: 类别 等级],而玩家自己
+      // 施放的 CC 不带 —— 不对称的信息缺口,诱导模型把敌方行的语义迁移到自己
+      // 身上。出向 DR 本就算好了(outgoingCCChains 的 drInfo),此处对齐渲染。
+      const outgoingDrNote = isCC ? outgoingDrTag(cd.spellId, cast) : "";
       const groundingNote = groundingAbsorbNote(
         cd.spellId,
         cd.spellName,
@@ -999,7 +1026,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
 
       addEntry(
         cast.timeSeconds,
-        `${fmtTime(cast.timeSeconds)}  ${prefix}   ${displayNameWithChannel}${targetPart}${dampeningNote}${cheaperNote}${groundingNote}${interruptNote}${ownerHardCcTagAt(cast.timeSeconds)}`,
+        `${fmtTime(cast.timeSeconds)}  ${prefix}   ${displayNameWithChannel}${targetPart}${outgoingDrNote}${dampeningNote}${cheaperNote}${groundingNote}${interruptNote}${ownerHardCcTagAt(cast.timeSeconds)}`,
         ...extraLines,
       );
     }
