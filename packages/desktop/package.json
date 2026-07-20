@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.111.0",
+    "@fontsource/inter": "^5.3.0",
     "@gladlog/parser": "0.0.1",
     "d3-scale": "^4.0.2",
     "electron-log": "^5.2.0"
