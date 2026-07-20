@@ -1350,7 +1350,9 @@ export function formatDispelContextForAI(summary: IDispelSummary): string[] {
   );
   for (const miss of killWindowMisses) {
     lines.push(
-      `  MISSED PURGE DURING FRIENDLY KILL WINDOW: ${miss.spellName} on ${miss.enemySpec} (${miss.enemyName}) at ${Math.round(miss.timeSeconds)}s (${Math.round(miss.durationSeconds)}s unpurged, priority ${miss.priority})`,
+      // 时刻用 fmtTime,与 prompt 里其它所有时间戳一致 —— 此前渲染成裸秒
+      // ("at 94s"),既与全文记号不符,也容易被读成时长而非绝对时刻。
+      `  MISSED PURGE DURING FRIENDLY KILL WINDOW: ${miss.spellName} on ${miss.enemySpec} (${miss.enemyName}) at ${fmtTime(miss.timeSeconds)} (${Math.round(miss.durationSeconds)}s unpurged, priority ${miss.priority})`,
     );
   }
 
