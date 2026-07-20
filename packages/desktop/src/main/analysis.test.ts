@@ -19,7 +19,6 @@ function svc(streamText: string, apiKey: string | null = "k") {
   const s = createAnalysisService({
     getSettings: () => ({
       anthropicApiKey: apiKey,
-      anthropicModel: "m",
       wowDirectory: null,
     }),
     clientFactory: () => ({
@@ -90,7 +89,6 @@ describe("isRunning 追踪(切页防丢 + 泄漏回归)", () => {
     const s = createAnalysisService({
       getSettings: () => ({
         anthropicApiKey: "k",
-        anthropicModel: "m",
         wowDirectory: null,
       }),
       clientFactory: () => ({
@@ -129,7 +127,6 @@ describe("AI 语言(backlog #1)", () => {
     const s = createAnalysisService({
       getSettings: () => ({
         anthropicApiKey: "k",
-        anthropicModel: "m",
         wowDirectory: null,
         aiLanguage: lang,
       }),
@@ -201,7 +198,6 @@ describe("finding 标记(phase3 #3a)", () => {
     const s = createAnalysisService({
       getSettings: () => ({
         anthropicApiKey: null,
-        anthropicModel: null,
         wowDirectory: null,
       }),
       matchesDir: dir,
@@ -268,7 +264,6 @@ describe("跨场聚合(phase3 #3b)", () => {
     const s = createAnalysisService({
       getSettings: () => ({
         anthropicApiKey: null,
-        anthropicModel: null,
         wowDirectory: null,
         aiLanguage: "zh",
       }),
@@ -767,5 +762,71 @@ describe("代际条目回收(周度复核 P3#9)", () => {
     await p;
     expect(s.__generationCount()).toBe(0); // 落地后回收
     expect((await s.getState("m1")).cached).not.toBeNull(); // 没被误 abort
+  });
+});
+
+/**
+ * 真实模型输出的形态回归。
+ *
+ * 现网 bug(2026-07-20 复现):`claude -p` 对 findings prompt 返回的是
+ * ```json … ``` 围栏包裹的**完全合规**内容,而 main 侧 JSON.parse(raw.trim())
+ * 零容错,于是整份好分析被判 bad-json、退成确定性展示。
+ *
+ * 旧测试只喂 "not json at all" 断言回退生效 —— 那验证的是回退机制本身,
+ * 把「严格解析」编码成了正确行为,所以永远抓不到这类误杀。这里补的是
+ * 反向断言:**本该被接受的真实输出必须活下来**。
+ */
+describe("模型输出形态容错(bad-json 误杀回归)", () => {
+  const good = [
+    {
+      eventIds: ["death:a:30"],
+      severity: "high",
+      category: "survival",
+      title: "阵亡",
+      explanation: "你在 {{t}}s 倒下,考虑早一拍交减伤。",
+    },
+  ];
+  const body = JSON.stringify(good, null, 2);
+
+  const runWith = async (raw: string) => {
+    const { s, emitted } = svc(raw);
+    await s.run(input);
+    return emitted.find((e) => e.ch === "gladlog:analysis:done")!.p.result;
+  };
+
+  it("```json 围栏(claude -p 实测形态)不该被判 bad-json", async () => {
+    const r = await runWith("```json\n" + body + "\n```");
+    expect(r.fallbackReason).toBeUndefined();
+    expect(r.hadNarration).toBe(true);
+    expect(r.findings).toHaveLength(1);
+  });
+
+  it("裸 ``` 围栏(无语言标注)同样要吃下", async () => {
+    const r = await runWith("```\n" + body + "\n```");
+    expect(r.fallbackReason).toBeUndefined();
+    expect(r.findings).toHaveLength(1);
+  });
+
+  it("围栏外还有前后散文(system prompt 要求中文回复时常见)", async () => {
+    const r = await runWith(
+      "好的,以下是本场的教练要点:\n\n```json\n" + body + "\n```\n\n希望有帮助。",
+    );
+    expect(r.fallbackReason).toBeUndefined();
+    expect(r.findings).toHaveLength(1);
+  });
+
+  it("真正的垃圾仍要回退 —— 容错不能把 bad-json 兜没了", async () => {
+    expect((await runWith("not json at all")).fallbackReason).toBe("bad-json");
+    expect((await runWith("")).fallbackReason).toBe("bad-json");
+    // 截断的数组:救不回来就该老实回退,不能吐半份
+    expect(
+      (await runWith('```json\n[{"eventIds":["death:a:30"],"sev')).fallbackReason,
+    ).toBe("bad-json");
+  });
+
+  it("顶层是对象(非数组)仍判 bad-json —— 契约是数组", async () => {
+    expect((await runWith('```json\n{"findings":[]}\n```')).fallbackReason).toBe(
+      "bad-json",
+    );
   });
 });

@@ -53,7 +53,6 @@ function svc(
     getSettings: () => ({
       // respect an explicit null (nullish `??` would coerce it back to "k")
       anthropicApiKey: opts && "apiKey" in opts ? (opts.apiKey ?? null) : "k",
-      anthropicModel: "claude-sonnet-5",
       wowDirectory: null,
     }),
     clientFactory: () => ({
@@ -85,7 +84,6 @@ describe("createCompareService", () => {
       createCompareService({
         getSettings: () => ({
           anthropicApiKey: "k",
-          anthropicModel: "m",
           wowDirectory: null,
         }),
         clientFactory: () => ({

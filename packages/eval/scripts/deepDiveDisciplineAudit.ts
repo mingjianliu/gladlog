@@ -2,7 +2,11 @@
 // auditDeepDives,量化通过率;违规按原因归类。回答:模型拿到深度后守不守规。
 import { existsSync, readFileSync, readdirSync } from "fs";
 import { join } from "path";
-import { auditDeepDives, type DeepDivePack } from "@gladlog/analysis";
+import {
+  auditDeepDives,
+  type DeepDivePack,
+  parseModelJsonArray,
+} from "@gladlog/analysis";
 
 const outDir = process.argv[2] ?? "/tmp/deepdive-smoke";
 const respDir = join(outDir, "responses");
@@ -24,16 +28,10 @@ for (const pf of packFiles.sort()) {
   const { pack } = JSON.parse(readFileSync(join(outDir, pf), "utf8")) as {
     pack: DeepDivePack;
   };
-  const raw = readFileSync(respPath, "utf8").trim();
-  // 容错:回复可能带 ```json 围栏
-  const jsonStr = raw
-    .replace(/^```(?:json)?/, "")
-    .replace(/```$/, "")
-    .trim();
-  let parsed: unknown = null;
-  try {
-    parsed = JSON.parse(jsonStr);
-  } catch {
+  const raw = readFileSync(respPath, "utf8");
+  // 围栏容错走共享谓词(与 desktop 产品路径同源)
+  const parsed = parseModelJsonArray(raw);
+  if (!parsed) {
     noJson++;
     console.warn(`  ${tag}: JSON 解析失败`);
     continue;

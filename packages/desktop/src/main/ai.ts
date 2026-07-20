@@ -26,7 +26,8 @@ export function buildCoachSystemPrompt(lang: AiLanguage): string {
   return `You are a World of Warcraft arena coach reviewing a player's match. Be direct, specific, and grounded strictly in the provided events. ${language}`;
 }
 
-export type AiBackend = "anthropic" | "claudeCli" | "agy";
+export type { AiBackend } from "../shared/aiModels";
+import type { AiBackend } from "../shared/aiModels";
 
 export interface AiClientSettings {
   anthropicApiKey: string | null;

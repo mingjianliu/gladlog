@@ -1,4 +1,5 @@
 import { recordAiDebug } from "./aiDebugLog";
+import { resolveAiModel, type AiModelSelection } from "../shared/aiModels";
 import {
   writeFileSync,
   readFileSync,
@@ -61,7 +62,7 @@ export type CompareService = ReturnType<typeof createCompareService>;
 export function createCompareService(deps: {
   getSettings: () => {
     anthropicApiKey: string | null;
-    anthropicModel: string | null;
+    aiModels?: AiModelSelection | null;
     wowDirectory: string | null;
     aiBackend?: AiBackend;
     aiBackendCommand?: string | null;
@@ -197,7 +198,7 @@ export function createCompareService(deps: {
       const prompt = buildExemplarLedPrompt(vc, cell, input.spec);
       let raw = "";
       const stream = client.stream({
-        model: settings.anthropicModel ?? "claude-sonnet-5",
+        model: resolveAiModel(settings),
         max_tokens: 1500,
         // 解说语言跟随教练回复语言设置(此前漏了 system,永远英文)
         system: buildCoachSystemPrompt(lang),
@@ -218,7 +219,7 @@ export function createCompareService(deps: {
         kind: "compare",
         matchId: input.matchId,
         at: Date.now(),
-        model: settings.anthropicModel ?? "claude-sonnet-5",
+        model: resolveAiModel(settings),
         prompt,
         raw,
       });
