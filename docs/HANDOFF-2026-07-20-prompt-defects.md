@@ -81,22 +81,42 @@ npx tsx packages/eval/scripts/buildCorpus.ts \
 # 然后对 runs/<runId>/prompts 跑上面三条判据
 ```
 
+## 千场管线复验(改动全部落地后)
+
+`pipelineFuzz --count 1000 --run fuzz-2026-07-20-postfix`:
+
+```
+{"files":1000,"parseFail":0,"matches":695,"rounds":1830,"combatsAudited":2525}
+229 findings —— 全部为 cjk:*(CN 服玩家名,合法),与改动前那轮数量完全一致
+```
+
+无新增 finding 类别、无解析失败、无异常 —— 本轮改动未引入管线回归。
+
 ---
 
 ## 未完成:D 类冷却台账自相矛盾(1 场)
 
-死亡块的冷却台账与「DEATHS WITH MISSED OPTIONS」标注,对**同一个冷却**的
-可用性判断相反。典型的「同一事实两条判定路径」——按本轮的经验,大概率是
-两处各自算「该 CD 在死亡时刻是否可用」,而**时刻或冷却起点的口径不一致**。
+死亡块的 `[RES]` 冷却台账与「DEATHS WITH MISSED OPTIONS」对**同一个冷却**的
+可用性判断相反。
 
-建议排查顺序(与 A/C 同款):
+**已确认的事实**(实例:`003-c5f8395a.txt` @ 2:03):
 
-1. 先找这两处分别在哪算可用性(`criticalMoments.ts` 的 death 块 vs
-   missed-options 的生成处)
-2. 对照它们的**查询时刻**(是否都归了渲染网格)和**冷却起点**
-   (`lastCast.timeSeconds + cd.cooldownSeconds` 的取整口径)
-3. 修法照旧:抽一个共享谓词,两边 import;**别靠注释对齐**
-4. 加确定性判据后再验:同一 CD 在同一秒不得既「可用」又「不可用」
+- `[RES]` 台账的 `rdy:` / `cd:` 两列**都没有 Lay on Hands**,即该路径完全不
+  跟踪这个技能
+- 同一时刻 MISSED OPTIONS 却写「had Lay on Hands available」
+- 两条路径用的是**各自独立维护的技能清单**:missed-options 走
+  `deathOutcomeAnalysis.ts` 自有的 `EXTERNAL_DEFENSIVE_SPELLS` /
+  `IMMUNITY_SPELLS`;`[RES]` 台账走 `extractMajorCooldowns`
+
+**未坐实的部分**:`[RES]` 台账的技能清单具体由哪份数据驱动,我没查到底
+(排查中一度误以为是 `SPELL_CATEGORIES`,但那份只存 CC/定身/免疫,不是
+防御台账的来源 —— 别沿用这个错误前提)。下一步应先确定 `extractMajorCooldowns`
+的清单来源,再比对两份清单的差集。
+
+**注意:这属于白名单腐烂类,不能拍脑袋改。** 按 CLAUDE.md 与 desktop-dev
+skill,动任何 spell-id 白名单前必须先做**语料实证**(SPELL_CAST_SUCCESS 挖掘、
+per-spec 率、冷却/持续时长用语料实测),否则会把一个不一致换成另一个。
+而且给 `[RES]` 台账新增追踪技能会改动**每一份含帕拉丁的 prompt**,不是小改。
 
 ## 其它已知陷阱(踩过的)
 
