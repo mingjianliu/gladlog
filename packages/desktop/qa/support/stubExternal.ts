@@ -44,12 +44,18 @@ function pngChunk(type: string, data: Buffer): Buffer {
 }
 
 /**
- * 桩底图:64×64 半透明 PNG —— 外框 + 居中方块。
+ * 桩底图:64×64 半透明 PNG —— 外框 + 左上角标。
  *
  * 就地生成而不是入仓二进制:桩件的样子必须是**可审的**。真底图是「透明背景 +
  * 不透明碰撞体」的形状图(实测 1911.png 仅 1860 B),桩件沿用同一形态,于是
  * <image> 的定位/拉伸/veil 压暗这几层在基线里仍然被覆盖到;换成纯色块就测不出
- * 底图错位了。图案刻意规整,底图这层一旦画歪,基线 diff 一眼能看出来。
+ * 底图错位了。
+ *
+ * 图案两个要素各有分工,别随手改:
+ *   外框 —— 钉住 <image> 的四至,底图错位/拉伸比例变了,框会跟着偏;
+ *   左上角标 —— 刻意**非对称**。arenaToPx 是 x 轴翻转的(见 arenaMaps.ts),
+ *              底图若被镜像,对称图案看不出来,角标能。
+ * 中间留空:场中央是单位聚集处,桩件不该在那儿盖住真正要看的东西。
  */
 export function minimapStubPng(): Buffer {
   const SIZE = 64;
@@ -66,13 +72,14 @@ export function minimapStubPng(): Buffer {
     for (let x = 0; x < SIZE; x++) {
       const onBorder =
         x < BORDER || y < BORDER || x >= SIZE - BORDER || y >= SIZE - BORDER;
-      const inCenter =
-        x >= SIZE / 2 - 10 &&
-        x < SIZE / 2 + 10 &&
-        y >= SIZE / 2 - 10 &&
-        y < SIZE / 2 + 10;
+      // 角标只占左上,且离框有间隙 —— 镜像/翻转后位置立刻不对
+      const inCornerMark =
+        x >= BORDER + 4 &&
+        x < BORDER + 14 &&
+        y >= BORDER + 4 &&
+        y < BORDER + 14;
       if (onBorder) paint(x, y, 142, 255);
-      else if (inCenter) paint(x, y, 120, 210);
+      else if (inCornerMark) paint(x, y, 120, 210);
     }
   }
   // 逐行加 filter 字节 0(None)
