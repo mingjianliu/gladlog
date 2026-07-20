@@ -11,12 +11,14 @@ import {
   deathPosition,
   deriveReplay,
   pathUpTo,
+  positionKnownAt,
   sampleAt,
 } from "../derive/replay";
 import { deriveBurstAuras, deriveFocusFire } from "../derive/replayHighlights";
 import type { ReportSource } from "../derive/types";
 import { deriveVulnBands } from "../derive/vulnWindows";
 import { GcdSwimlane } from "./GcdSwimlane";
+import { ReplayMapResizer } from "./ReplayMapResizer";
 import { ReplaySplitter } from "./ReplaySplitter";
 import { ReplayZoomControls } from "./ReplayZoomControls";
 import { useReplayLayout, type ReplayLayoutMode } from "./useReplayLayout";
@@ -96,8 +98,12 @@ export function ReplayView({
 
   const [t, setT] = useState(startTime);
   // 布局模式(用户反馈):地图+GCD / 纯地图 / 纯 GCD;localStorage 记忆
-  const { mode, ratio, setMode, setRatio } = useReplayLayout();
+  const { mode, ratio, mapHeight, setMode, setRatio, setMapHeight } =
+    useReplayLayout();
   const stageRef = useRef<HTMLDivElement | null>(null);
+  // 地图单元:纯地图档量它的顶边换算拖拽高度(缩放热区已占用 hotZoneRef,
+  // 两个 ref 指同一节点,挂载时一起写)
+  const mapCellRef = useRef<HTMLDivElement | null>(null);
   // 回放时钟保持局部(热 tick);仅卸载时把最后位置回报给 MatchReport(冷路径)
   const lastTRef = useRef(startTime);
   lastTRef.current = t;
@@ -434,6 +440,7 @@ export function ReplayView({
                   )}
                   {/* 走位尾迹(最近数秒) */}
                   {tracks.map((tr) => {
+                    if (!positionKnownAt(tr, t)) return null; // 没走过的路不画
                     const pts = pathUpTo(tr, t);
                     if (pts.length < 2) return null;
                     return (
@@ -491,6 +498,10 @@ export function ReplayView({
                   ).map((tr) => {
                     const at = sampleAt(tr, t);
                     if (!at) return null;
+                    // 首样本之前日志里没有该单位的任何坐标 —— sampleAt 只能把
+                    // 位置钉在首样本上,那是「他第一次卷进战斗的地方」。标成
+                    // 未知态,别让读图的人以为他在那儿站了十几秒。
+                    const known = positionKnownAt(tr, t);
                     const cx = toX(at.x);
                     const cy = toY(at.y);
                     const hp =
@@ -500,7 +511,11 @@ export function ReplayView({
                     return (
                       <g
                         key={tr.unitId}
-                        className="rpt-replay-unit"
+                        className={
+                          known
+                            ? "rpt-replay-unit"
+                            : "rpt-replay-unit rpt-replay-unit-unknown"
+                        }
                         onMouseEnter={() => setHoverUnit(tr.unitId)}
                         onMouseLeave={() => setHoverUnit(null)}
                       >
@@ -548,6 +563,11 @@ export function ReplayView({
                         <text x={cx} y={cy - 19} className="rpt-replay-name">
                           {tr.name}
                         </text>
+                        {!known && (
+                          <title>
+                            {`${tr.name}:该时刻日志里还没有他的坐标(跑动不产生战斗日志记录)。圆点画在他首次卷入战斗的位置,不代表他此刻在这儿。`}
+                          </title>
+                        )}
                         <circle
                           cx={cx}
                           cy={cy}
@@ -865,6 +885,12 @@ export function ReplayView({
       <div className="rpt-replay-hints">
         空格 播放/暂停 · ← → ±5s · Shift ±1s · ⌘/Ctrl+滚轮
         缩放(放大后滚轮可继续)· 双击复位 · 分隔条可拖(聚焦后 ← →)
+      </div>
+      {/* 图例放一处,不逐个单位加后缀 —— 开局常常六个人同时未知,
+          逐个加会让名字标签互相压住。 */}
+      <div className="rpt-replay-hints">
+        虚线空心 = 该时刻日志里还没有此人坐标(跑动不进战斗日志,要等他施法、
+        挨打或被治疗才会暴露位置)
       </div>
     </div>
   );
