@@ -8,12 +8,9 @@ name: visual-baseline
 #
 # 基线的权威始终在人:这个 workflow 只负责在与判定同一环境里把图画出来,
 # 审图与提交是人的动作。
-on:
-  workflow_dispatch:
-  # TEMPORARY(frontend-qa 分支专用):workflow_dispatch 只能从默认分支触发,
-  # 而本 workflow 还没进 main。合并前必须删掉这三行,只留 workflow_dispatch。
-  push:
-    branches: [frontend-qa]
+# 注意:workflow_dispatch 只能从**默认分支**触发。本 workflow 进 main 之后
+# 才能用 `gh workflow run visual-baseline.yml --ref <branch>` 给任意分支生成基线。
+on: workflow_dispatch
 
 jobs:
   baseline:

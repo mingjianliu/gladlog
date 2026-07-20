@@ -7,9 +7,7 @@ name: test
 
 on:
   push:
-    # TEMPORARY: frontend-qa 分支在合并前需要自己跑 CI 验证新 job;
-    # 合并前把 frontend-qa 从这个列表里删掉,只留 main。
-    branches: [main, frontend-qa]
+    branches: [main]
   pull_request:
     branches: [main]
   # 手动触发:功能分支上验证 job 本身(尤其视觉基线相关的 frontend-qa)
