@@ -216,6 +216,8 @@ export function checkPercentileMonotonicity(lines: string[]): string[] {
 // "0:27  [DMG SPIKE]   2(SHunter) (Survival Hunter): 0.88M in 10s (…) (79% -> 29% HP, …)"
 const SPIKE_HP =
   /^(\d+):(\d+)\s+\[DMG SPIKE\]\s+(\S+)\s+\([^)]*\):.*?\((\d+)%\s*->\s*(\d+)%\s*HP/;
+// "0:15  [YOU] [CD]   Holy Word: Chastise → 6(RPaladin) (68% HP)" —— C 类的行内嵌 HP
+const INLINE_HP = /^(\d+):(\d+)\s+.*?→\s*(\S+)\s*\((\d+)%\s*HP/;
 // "0:21  [STATE]   friends 1(HPriest):99 2(SHunter):76 / enemies 4(AWarrior):90"
 const STATE_LINE = /^(\d+):(\d+)\s+\[STATE\]\s+(.*)$/;
 /** 允许的良性采样抖动(百分点)。超过这个值即视为两条渲染路径打架。 */
@@ -242,16 +244,19 @@ export function checkSameSecondHpConsistency(lines: string[]): string[] {
 
   const violations: string[] = [];
   lines.forEach((line, i) => {
-    const m = line.match(SPIKE_HP);
+    // [DMG SPIKE] 的 "X% -> Y% HP"(A 类)与行内嵌 "→ 目标 (X% HP)"(C 类)
+    // 是同一条不变量的两种渲染形态,共用一套判据。
+    const isSpike = line.includes("[DMG SPIKE]");
+    const m = isSpike ? line.match(SPIKE_HP) : line.match(INLINE_HP);
     if (!m) return;
     const t = Number(m[1]) * 60 + Number(m[2]);
     const stateHp = stateAt.get(t)?.get(m[3]);
     if (stateHp === undefined) return;
-    const spikeHp = Number(m[4]);
-    const delta = Math.abs(stateHp - spikeHp);
+    const claimed = Number(m[4]);
+    const delta = Math.abs(stateHp - claimed);
     if (delta > HP_AGREEMENT_TOLERANCE_PP) {
       violations.push(
-        `line ${i + 1}: ${m[1]}:${m[2]} ${m[3]} — [DMG SPIKE] 报 ${spikeHp}% 而同秒 [STATE] 报 ${stateHp}%(Δ${delta}pp)`,
+        `line ${i + 1}: ${m[1]}:${m[2]} ${m[3]} — ${isSpike ? "[DMG SPIKE]" : "行内嵌"} 报 ${claimed}% 而同秒 [STATE] 报 ${stateHp}%(Δ${delta}pp)`,
       );
     }
   });

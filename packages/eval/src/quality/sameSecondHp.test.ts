@@ -70,6 +70,25 @@ describe("checkSameSecondHpConsistency", () => {
     ).toHaveLength(1);
   });
 
+  it("**回归**:C 类行内嵌 HP —— 线上真实 Δ13pp(023-d17001ce)", () => {
+    const v = checkSameSecondHpConsistency([
+      "1:54  [YOU] [CD]   Chi Burst → 5(DDHunter) (73% HP)",
+      "1:54  [STATE]   friends 1(MMonk):88 / enemies 5(DDHunter):86",
+    ]);
+    expect(v).toHaveLength(1);
+    expect(v[0]).toContain("行内嵌");
+    expect(v[0]).toContain("Δ13pp");
+  });
+
+  it("行内嵌 HP 一致时不报", () => {
+    expect(
+      checkSameSecondHpConsistency([
+        "1:54  [YOU] [CD]   Chi Burst → 5(DDHunter) (86% HP)",
+        "1:54  [STATE]   friends 1(MMonk):88 / enemies 5(DDHunter):86",
+      ]),
+    ).toEqual([]);
+  });
+
   it("空输入 → 无违规", () => {
     expect(checkSameSecondHpConsistency([])).toEqual([]);
   });

@@ -26,6 +26,7 @@ import {
   THROUGHPUT_EMPOWER_DEFENSIVE_IDS,
   specToString,
   hpSampleRadiusMs,
+  toRenderSecond,
 } from "../utils/cooldowns";
 import {
   buildDampeningEvents,
@@ -386,11 +387,14 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
 
   function getCDTargetAndVelocityPart(
     spellId: string,
-    timeSeconds: number,
+    rawTimeSeconds: number,
     targetName: string | undefined,
     overrideHpPct?: number,
     forceSelf = false,
   ): string {
+    // 本行的时间戳经 fmtTime 向下取整,而 [STATE] 按整数秒采样 —— 内嵌 HP 必须
+    // 查同一时刻,否则同一显示秒下两个 HP 打架(C 类,见 toRenderSecond 的说明)。
+    const timeSeconds = toRenderSecond(rawTimeSeconds);
     // B112/B127: self-only defensives (Obsidian Scales, Divine Shield, Ice Block, …) log whatever
     // unit the caster was targeting — often an enemy — as their "target". forceSelf overrides that so
     // the line renders (self) with the caster's own HP, never "→ <enemy>" with that enemy's HP.

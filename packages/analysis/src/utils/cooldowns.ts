@@ -705,10 +705,13 @@ export function extractMajorCooldowns(
           cast.targetName = e.destUnitName;
           const targetUnit = combat.units[e.destUnitId];
           if (targetUnit) {
+            // 这个值最终渲染在 `[CD] … → 目标 (N% HP)` 里,与同秒 [STATE] 并列。
+            // 曾用原始日志毫秒 + 独立的 2s 半径采样(第三条 HP 路径),于是同一
+            // 显示秒下两个 HP 打架(C 类)。归到渲染网格 + 共享半径常量。
             const hp = getUnitHpAtTimestamp(
               targetUnit,
-              e.logLine.timestamp,
-              2_000,
+              matchStartMs + toRenderSecond(timeSeconds) * 1000,
+              HP_SAMPLE_RADIUS_MS,
             );
             if (hp !== null) cast.targetHpPct = hp;
           }
