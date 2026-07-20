@@ -193,6 +193,7 @@ function writeScores(
     dim: string,
     isPerturbed: boolean,
     targetDim: string | null,
+    perturbation?: string,
   ) => number | string | null,
 ): void {
   const scoresDir = join(base, "judge-calibration", "scores");
@@ -206,7 +207,7 @@ function writeScores(
     const isPerturbed = c.perturbation !== "none";
     const prompt: Record<string, number | string> = {};
     for (const d of DIMS) {
-      const v = score(d, isPerturbed, c.targetDimension);
+      const v = score(d, isPerturbed, c.targetDimension, c.perturbation);
       if (v !== null) prompt[d] = v;
     }
     writeFileSync(
@@ -243,6 +244,61 @@ describe("checkCalibration — discriminant validity (specificity)", () => {
     });
     expect(hater.pass).toBe(false);
     expect(hater.failures.length).toBeGreaterThan(0);
+  });
+});
+
+describe("checkCalibration — 构造性耦合维度豁免特异性", () => {
+  /**
+   * removed-deaths 删的是 **prompt** 里的死亡行,而 response 保持不动 —— 回复里
+   * 关于那次死亡的主张于是真的不再被 prompt 支持,accuracy 本就该掉。这不是
+   * 「凡文本变了就全维扣分」的无脑差评,是判官在正确地做事,却被特异性规则罚。
+   *
+   * 2026-07-20 全语料校准实测:11 个未检出里 9 个是特异性,逐条查渗漏维,
+   * 10 条里 8 条是同一个 `accuracy 5→3`。sufficiency 被这条压到 20%,而其真实
+   * 敏感性是 60%。
+   *
+   * 豁免必须**窄**:只有内容被删除的扰动才构造性耦合 accuracy。乱序
+   * (shuffled-events)内容完整保留,每条主张仍可查证,accuracy 掉分是判官偷懒
+   * 而不是构造使然 —— 那条必须继续严格。
+   */
+  it("removed-deaths:accuracy 同掉 → 仍算检出(构造性耦合)", async () => {
+    const base = makeTmpRun(2);
+    await buildCalibrationSuite(base, { sourceCount: 2, seed: 42 });
+    writeScores(base, (dim, isPerturbed, targetDim, perturbation) => {
+      if (!isPerturbed) return 5;
+      if (dim === targetDim) return 3;
+      if (perturbation === "removed-deaths" && dim === "accuracy") return 3;
+      return 5;
+    });
+    const r = await checkCalibration(base, {
+      minPairs: 2,
+      deltaFloor: 1,
+      specificityTol: 0,
+    });
+    // sufficiency 的对不再因 accuracy 同掉而被判特异性违规
+    expect(
+      r.failures.filter((f) => f.dimension === "sufficiency"),
+    ).toHaveLength(0);
+  });
+
+  it("shuffled-events:accuracy 同掉 → 不算检出(内容未删,不构造性耦合)", async () => {
+    const base = makeTmpRun(2);
+    await buildCalibrationSuite(base, { sourceCount: 2, seed: 42 });
+    writeScores(base, (dim, isPerturbed, targetDim, perturbation) => {
+      if (!isPerturbed) return 5;
+      if (dim === targetDim) return 3;
+      if (perturbation === "shuffled-events" && dim === "accuracy") return 3;
+      return 5;
+    });
+    const r = await checkCalibration(base, {
+      minPairs: 2,
+      deltaFloor: 1,
+      specificityTol: 0,
+    });
+    // 乱序不豁免:accuracy 同掉仍判特异性违规
+    expect(
+      r.failures.filter((f) => f.dimension === "inferenceScaffolding").length,
+    ).toBeGreaterThan(0);
   });
 });
 

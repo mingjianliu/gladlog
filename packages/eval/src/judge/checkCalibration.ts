@@ -36,6 +36,34 @@
 import fs from "fs-extra";
 import path from "path";
 
+/**
+ * 构造性耦合:按扰动的**构造**必然带动的未目标维度,豁免特异性检查。
+ *
+ * 这不是放水,是修掉一个前提错误。特异性检查隐含假设「扰动是维度正交的」——
+ * 判官若同时动了别的维,就是在对「文本变了」反应而非对具体缺陷反应。但
+ * `removed-deaths` 删的是 **prompt** 里的死亡行,而 response **保持不动**:
+ * 回复里关于那次死亡的主张于是真的不再被 prompt 支持,accuracy 本就该掉。
+ * 判官是在正确地做事,却被规则罚 —— 前提不成立,不是判官不合格。
+ *
+ * 实测依据(2026-07-20 全语料校准,1245 场语料 @ 92f96d2,40 件套件 seed 42):
+ * 11 个未检出里 9 个是特异性而非敏感性;逐条查渗漏维,10 条里 8 条是同一个
+ * `accuracy 5→3`。sufficiency 因此被压到 20%,而其真实敏感性是 3/5=60%。
+ *
+ * **豁免必须窄 —— 只给内容被删除的扰动。** 其余六类都不在此列,理由逐条:
+ *   - `shuffled-events` 只乱序,内容完整保留,每条主张仍可查证 → accuracy 掉分
+ *     是判官放弃查证,不是构造使然,必须继续判违规;
+ *   - `duplicated-noise` / `severity-labels` 只增不减,不影响可查证性;
+ *   - `fabricated-claim` / `wrong-outcome` / `trivia-focus` 改的是 response,
+ *     prompt 侧维度不受影响;其中 wrong-outcome 渗到 accuracy 是 rubric 独立性
+ *     规则应用不一致(见 eval-baseline.md),属判官问题,不豁免。
+ *
+ * 加新扰动类时:先问「不改判官的前提下,这个维度会不会必然动」。答案是否,
+ * 就别往这张表里加 —— 每加一条都在削弱这道门的裁决力。
+ */
+const COUPLED_BY_CONSTRUCTION: Record<string, readonly string[]> = {
+  "removed-deaths": ["accuracy"],
+};
+
 interface CalibrationCase {
   caseId: string;
   sourceOrdinal: number;
@@ -172,6 +200,8 @@ export async function checkCalibration(
     /** Why an otherwise-lowered case was still not counted, for the report. */
     missReason: "floor" | "specificity" | null;
     maxUntargetedDrift: number | null;
+    /** 漂移最大的那个未目标维度的名字 —— 报告里点名,免得人工去比对分数文件。 */
+    driftDimension: string | null;
     detail: string;
   }
   const pairs: PairResult[] = [];
@@ -191,6 +221,7 @@ export async function checkCalibration(
     let detected: boolean | null = null;
     let missReason: "floor" | "specificity" | null = null;
     let maxUntargetedDrift: number | null = null;
+    let driftDimension: string | null = null;
 
     if (orig !== null && pert !== null && originalScore && perturbedScore) {
       // (1) Sensitivity: the targeted dimension must drop by at least the floor.
@@ -205,9 +236,13 @@ export async function checkCalibration(
       // incompleteness is itself a specificity violation, not a free pass.
       const untargeted = new Set<string>(scoredDimensions(originalScore));
       untargeted.delete(c.targetDimension);
+      const exempt = new Set<string>(
+        COUPLED_BY_CONSTRUCTION[c.perturbation] ?? [],
+      );
       let drift = 0;
       let specificityViolated = false;
       for (const d of untargeted) {
+        if (exempt.has(d)) continue; // 构造性耦合 —— 见 COUPLED_BY_CONSTRUCTION
         const od = dimensionScore(originalScore, d);
         const pd = dimensionScore(perturbedScore, d);
         if (od === null) continue; // not part of the control baseline
@@ -216,7 +251,10 @@ export async function checkCalibration(
           continue;
         }
         const delta = Math.abs(od - pd);
-        if (delta > drift) drift = delta;
+        if (delta > drift) {
+          drift = delta;
+          driftDimension = d;
+        }
         if (delta > specificityTol) specificityViolated = true;
       }
       maxUntargetedDrift = drift;
@@ -235,6 +273,7 @@ export async function checkCalibration(
       detected,
       missReason,
       maxUntargetedDrift,
+      driftDimension,
       detail: c.perturbationDetail,
     });
   }
@@ -305,7 +344,7 @@ export async function checkCalibration(
   lines.push("## Pair Detail");
   lines.push("");
   lines.push(
-    "| Dimension | Source | Original | Perturbed | maxΔother | Detected | Injected defect |",
+    "| Dimension | Source | Original | Perturbed | maxΔother | 漂移维 | Detected | Injected defect |",
   );
   lines.push(
     "| --------- | ------ | -------- | --------- | --------- | -------- | --------------- |",
@@ -320,7 +359,7 @@ export async function checkCalibration(
             ? "**NO (spec)**"
             : "**NO**";
     lines.push(
-      `| ${p.dimension} | ${String(p.sourceOrdinal).padStart(3, "0")} | ${p.originalScore ?? "—"} | ${p.perturbedScore ?? "—"} | ${p.maxUntargetedDrift ?? "—"} | ${detectedCell} | ${p.detail} |`,
+      `| ${p.dimension} | ${String(p.sourceOrdinal).padStart(3, "0")} | ${p.originalScore ?? "—"} | ${p.perturbedScore ?? "—"} | ${p.maxUntargetedDrift ?? "—"} | ${p.driftDimension ?? "—"} | ${detectedCell} | ${p.detail} |`,
     );
   }
   lines.push("");
@@ -347,7 +386,7 @@ export async function checkCalibration(
     if (p.detected === false) {
       const why =
         p.missReason === "specificity"
-          ? `also moved or dropped untargeted dimensions (maxΔother ${p.maxUntargetedDrift}) — reacted to the change, not the defect`
+          ? `also moved or dropped untargeted dimensions (maxΔother ${p.maxUntargetedDrift} on ${p.driftDimension ?? "?"}) — reacted to the change, not the defect`
           : `targeted score did not drop by >= ${deltaFloor}`;
       failures.push({
         caseId: p.caseId,
