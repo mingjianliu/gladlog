@@ -5,6 +5,7 @@
 
 import { defineConfig, devices } from "@playwright/test";
 
+import { isE2EOnlyRun } from "./argv";
 import { VISUAL_PORT as PORT } from "../dev/ports";
 
 export default defineConfig({
@@ -63,7 +64,7 @@ export default defineConfig({
   ],
   // e2e project 驱动的是打包好的 Electron 应用,压根不需要这个测试台服务器 ——
   // 无条件起会白等一次构建,还会在本机已有 preview 时撞端口。
-  webServer: process.argv.includes("--project=e2e")
+  webServer: isE2EOnlyRun(process.argv)
     ? undefined
     : {
         // 打包后再 preview,不用 dev server:dev 模式每开一个新页面都要重新

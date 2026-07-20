@@ -15,7 +15,9 @@ const SNAPSHOT_SCENES = SCENE_NAMES.filter((s) => s !== "report-heavy");
 const ANCHOR: Partial<Record<SceneName, string>> = {
   "report-battle": "[data-testid=rpt-timeline]",
   "report-replay": "[data-testid=rpt-replay-field]",
-  "report-ai": ".rpt-match",
+  // 用深挖块而不是 .rpt-match:后者是三视图共用的报表根节点,挂载即满足,
+  // 而 finding 卡片来自异步的 analysis.getState —— 拿根节点当锚点等于不等。
+  "report-ai": "[data-testid=finding-deepdive]",
   "report-synth": "[data-testid=rpt-timeline]",
   dashboard: "[data-testid=stats-dashboard]",
   settings: "[data-testid=settings-panel]",
