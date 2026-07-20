@@ -1,8 +1,17 @@
-import { AtomicArenaCombat, CombatUnitSpec, ICombatUnit, LogEvent } from '@gladlog/parser-compat';
+import {
+  AtomicArenaCombat,
+  CombatUnitSpec,
+  ICombatUnit,
+  LogEvent,
+} from "@gladlog/parser-compat";
 
-import { IPlayerCCTrinketSummary } from './ccTrinketAnalysis';
-import { specToString } from './cooldowns';
-import { distanceBetween, getUnitPositionAtTime, hasLineOfSight } from './losAnalysis';
+import { IPlayerCCTrinketSummary } from "./ccTrinketAnalysis";
+import { specToString } from "./cooldowns";
+import {
+  distanceBetween,
+  getUnitPositionAtTime,
+  hasLineOfSight,
+} from "./losAnalysis";
 
 interface IImmunitySpell {
   name: string;
@@ -14,65 +23,88 @@ interface IImmunitySpell {
 }
 
 const IMMUNITY_SPELLS: Record<string, IImmunitySpell> = {
-  '642': {
-    name: 'Divine Shield',
+  "642": {
+    name: "Divine Shield",
     cooldownSeconds: 300,
-    lockoutSpellId: '25771',
-    specs: [CombatUnitSpec.Paladin_Holy, CombatUnitSpec.Paladin_Retribution, CombatUnitSpec.Paladin_Protection],
+    lockoutSpellId: "25771",
+    specs: [
+      CombatUnitSpec.Paladin_Holy,
+      CombatUnitSpec.Paladin_Retribution,
+      CombatUnitSpec.Paladin_Protection,
+    ],
   },
-  '45438': {
-    name: 'Ice Block',
+  "45438": {
+    name: "Ice Block",
     cooldownSeconds: 240,
-    lockoutSpellId: '41425',
-    specs: [CombatUnitSpec.Mage_Arcane, CombatUnitSpec.Mage_Fire, CombatUnitSpec.Mage_Frost],
+    lockoutSpellId: "41425",
+    specs: [
+      CombatUnitSpec.Mage_Arcane,
+      CombatUnitSpec.Mage_Fire,
+      CombatUnitSpec.Mage_Frost,
+    ],
     // B30: Cold Snap (235219) resets Ice Block's cooldown
-    resetSpellIds: ['235219'],
+    resetSpellIds: ["235219"],
   },
-  '47585': {
-    name: 'Dispersion',
+  "47585": {
+    name: "Dispersion",
     cooldownSeconds: 90,
     specs: [CombatUnitSpec.Priest_Shadow],
   },
-  '186265': {
-    name: 'Aspect of the Turtle',
+  "186265": {
+    name: "Aspect of the Turtle",
     cooldownSeconds: 180,
-    specs: [CombatUnitSpec.Hunter_BeastMastery, CombatUnitSpec.Hunter_Marksmanship, CombatUnitSpec.Hunter_Survival],
+    specs: [
+      CombatUnitSpec.Hunter_BeastMastery,
+      CombatUnitSpec.Hunter_Marksmanship,
+      CombatUnitSpec.Hunter_Survival,
+    ],
   },
-  '196555': {
-    name: 'Netherwalk',
+  "196555": {
+    name: "Netherwalk",
     cooldownSeconds: 30,
     specs: [CombatUnitSpec.DemonHunter_Havoc],
   },
 };
 
-const EXTERNAL_DEFENSIVE_SPELLS: Record<string, { name: string; cooldownSeconds: number; specs: CombatUnitSpec[] }> = {
-  '102342': {
-    name: 'Ironbark',
+const EXTERNAL_DEFENSIVE_SPELLS: Record<
+  string,
+  { name: string; cooldownSeconds: number; specs: CombatUnitSpec[] }
+> = {
+  "102342": {
+    name: "Ironbark",
     cooldownSeconds: 45,
     specs: [CombatUnitSpec.Druid_Restoration],
   },
-  '33206': {
-    name: 'Pain Suppression',
+  "33206": {
+    name: "Pain Suppression",
     cooldownSeconds: 180,
     specs: [CombatUnitSpec.Priest_Discipline],
   },
-  '47788': {
-    name: 'Guardian Spirit',
+  "47788": {
+    name: "Guardian Spirit",
     cooldownSeconds: 180,
     specs: [CombatUnitSpec.Priest_Holy],
   },
-  '1022': {
-    name: 'Blessing of Protection',
+  "1022": {
+    name: "Blessing of Protection",
     cooldownSeconds: 300,
-    specs: [CombatUnitSpec.Paladin_Holy, CombatUnitSpec.Paladin_Retribution, CombatUnitSpec.Paladin_Protection],
+    specs: [
+      CombatUnitSpec.Paladin_Holy,
+      CombatUnitSpec.Paladin_Retribution,
+      CombatUnitSpec.Paladin_Protection,
+    ],
   },
-  '633': {
-    name: 'Lay on Hands',
+  "633": {
+    name: "Lay on Hands",
     cooldownSeconds: 420,
-    specs: [CombatUnitSpec.Paladin_Holy, CombatUnitSpec.Paladin_Retribution, CombatUnitSpec.Paladin_Protection],
+    specs: [
+      CombatUnitSpec.Paladin_Holy,
+      CombatUnitSpec.Paladin_Retribution,
+      CombatUnitSpec.Paladin_Protection,
+    ],
   },
-  '116849': {
-    name: 'Life Cocoon',
+  "116849": {
+    name: "Life Cocoon",
     cooldownSeconds: 120,
     specs: [CombatUnitSpec.Monk_Mistweaver],
   },
@@ -104,12 +136,19 @@ export interface IDeathOutcomeSummary {
   events: IDeathOutcomeEvent[];
 }
 
-function lastCastSeconds(unit: ICombatUnit, spellId: string, matchStartMs: number): number | null {
+function lastCastSeconds(
+  unit: ICombatUnit,
+  spellId: string,
+  matchStartMs: number,
+): number | null {
   const casts = unit.spellCastEvents.filter(
-    (e) => e.spellId === spellId && e.logLine.event === LogEvent.SPELL_CAST_SUCCESS,
+    (e) =>
+      e.spellId === spellId && e.logLine.event === LogEvent.SPELL_CAST_SUCCESS,
   );
   if (casts.length === 0) return null;
-  return (Math.max(...casts.map((e) => e.logLine.timestamp)) - matchStartMs) / 1000;
+  return (
+    (Math.max(...casts.map((e) => e.logLine.timestamp)) - matchStartMs) / 1000
+  );
 }
 
 function isAvailableAt(
@@ -129,7 +168,11 @@ function isAvailableAt(
   if (resetSpellIds && resetSpellIds.length > 0) {
     for (const resetId of resetSpellIds) {
       const resetCast = lastCastSeconds(unit, resetId, matchStartMs);
-      if (resetCast !== null && resetCast > lastCast && resetCast <= atSeconds) {
+      if (
+        resetCast !== null &&
+        resetCast > lastCast &&
+        resetCast <= atSeconds
+      ) {
         // Reset happened after the last use — it is now available
         return true;
       }
@@ -142,11 +185,16 @@ function isAvailableAt(
 type LockoutIntervals = [number, number][];
 
 /** Build lockout intervals for one (unit, spellId) pair once per match. */
-function buildLockoutIntervals(unit: ICombatUnit, lockoutSpellId: string, matchStartMs: number): LockoutIntervals {
+function buildLockoutIntervals(
+  unit: ICombatUnit,
+  lockoutSpellId: string,
+  matchStartMs: number,
+): LockoutIntervals {
   const relevant = unit.auraEvents
     .filter((e) => e.spellId === lockoutSpellId)
     .sort((a, b) => {
-      if (a.logLine.timestamp !== b.logLine.timestamp) return a.logLine.timestamp - b.logLine.timestamp;
+      if (a.logLine.timestamp !== b.logLine.timestamp)
+        return a.logLine.timestamp - b.logLine.timestamp;
       if (a.logLine.event === LogEvent.SPELL_AURA_APPLIED) return -1;
       if (b.logLine.event === LogEvent.SPELL_AURA_APPLIED) return 1;
       return 0;
@@ -157,7 +205,10 @@ function buildLockoutIntervals(unit: ICombatUnit, lockoutSpellId: string, matchS
   for (const e of relevant) {
     const t = (e.logLine.timestamp - matchStartMs) / 1000;
     if (e.logLine.event === LogEvent.SPELL_AURA_APPLIED) openAt = t;
-    else if (e.logLine.event === LogEvent.SPELL_AURA_REMOVED && openAt !== null) {
+    else if (
+      e.logLine.event === LogEvent.SPELL_AURA_REMOVED &&
+      openAt !== null
+    ) {
       intervals.push([openAt, t]);
       openAt = null;
     }
@@ -166,7 +217,10 @@ function buildLockoutIntervals(unit: ICombatUnit, lockoutSpellId: string, matchS
 }
 
 /** B29: O(log N) lockout check using pre-built intervals. */
-function isLockedOutAt(intervals: LockoutIntervals, atSeconds: number): boolean {
+function isLockedOutAt(
+  intervals: LockoutIntervals,
+  atSeconds: number,
+): boolean {
   let lo = 0;
   let hi = intervals.length - 1;
   while (lo <= hi) {
@@ -195,7 +249,7 @@ export const MIN_FREE_GAP_SECONDS = 1;
  * count as lockout. Uniform CC model: every CC type is treated the same.
  */
 export function wasLockedOutThroughWindow(
-  ccSummary: Pick<IPlayerCCTrinketSummary, 'playerName' | 'ccInstances'>,
+  ccSummary: Pick<IPlayerCCTrinketSummary, "playerName" | "ccInstances">,
   deathSeconds: number,
   windowSeconds = LETHAL_WINDOW_SECONDS,
 ): boolean {
@@ -204,7 +258,7 @@ export function wasLockedOutThroughWindow(
   if (windowEnd <= windowStart) return false;
 
   const intervals = ccSummary.ccInstances
-    .filter((cc) => cc.trinketState !== 'used')
+    .filter((cc) => cc.trinketState !== "used")
     .map((cc): [number, number] => [
       Math.max(windowStart, cc.atSeconds),
       Math.min(windowEnd, cc.atSeconds + cc.durationSeconds),
@@ -227,18 +281,36 @@ export function wasLockedOutThroughWindow(
 const EXTERNAL_SPELL_RANGE_YARDS = 40;
 
 export function buildDeathOutcomeSummary(
-  combat: Pick<AtomicArenaCombat, 'startTime'> & { zoneId?: string },
+  combat: Pick<AtomicArenaCombat, "startTime"> & { zoneId?: string },
   friends: ICombatUnit[],
-  ccSummaries: Pick<IPlayerCCTrinketSummary, 'playerName' | 'ccInstances'>[],
+  ccSummaries: Pick<IPlayerCCTrinketSummary, "playerName" | "ccInstances">[],
+  /**
+   * 返回某单位某技能**已解析的**冷却秒数(即 `[RES]` 台账渲染所用的那个值,
+   * 含天赋修正)。传入后优先于下面 EXTERNAL_DEFENSIVE_SPELLS 表里的常量。
+   *
+   * 为什么必须传:本表曾自带 cooldownSeconds,与主路径(extractMajorCooldowns
+   * → spellEffectData + 天赋修正)各自维护,同一个技能出现两个值。实证
+   * (2026-07-20,ord 041):Ironbark 本表写 45s、台账解析为 65s,0:52 施放后
+   * 1:53 时本块判"available"而同秒台账写 `cd:Ironbark(7s)` —— 同一份 prompt
+   * 对同一个冷却给出相反结论。谓词单源:可用性判定必须消费同一个冷却值。
+   */
+  resolvedCooldownSeconds?: (
+    unit: ICombatUnit,
+    spellId: string,
+  ) => number | undefined,
 ): IDeathOutcomeSummary {
   const matchStartMs = combat.startTime;
   const events: IDeathOutcomeEvent[] = [];
 
   // B29: pre-build lockout intervals once per (unit, spell) pair to avoid O(N) filter+sort per death
   const lockoutCache = new Map<string, LockoutIntervals>();
-  const getLockoutIntervals = (unit: ICombatUnit, spellId: string): LockoutIntervals => {
+  const getLockoutIntervals = (
+    unit: ICombatUnit,
+    spellId: string,
+  ): LockoutIntervals => {
     const key = `${unit.id}:${spellId}`;
-    if (!lockoutCache.has(key)) lockoutCache.set(key, buildLockoutIntervals(unit, spellId, matchStartMs));
+    if (!lockoutCache.has(key))
+      lockoutCache.set(key, buildLockoutIntervals(unit, spellId, matchStartMs));
     return lockoutCache.get(key) ?? [];
   };
 
@@ -250,13 +322,31 @@ export function buildDeathOutcomeSummary(
       const availableImmunities: IDeathImmuneAvailable[] = [];
       for (const [spellId, spell] of Object.entries(IMMUNITY_SPELLS)) {
         if (!spell.specs.includes(unit.spec)) continue;
-        if (!isAvailableAt(unit, spellId, spell.cooldownSeconds, atSeconds, matchStartMs, spell.resetSpellIds))
+        if (
+          !isAvailableAt(
+            unit,
+            spellId,
+            spell.cooldownSeconds,
+            atSeconds,
+            matchStartMs,
+            spell.resetSpellIds,
+          )
+        )
           continue;
-        if (spell.lockoutSpellId && isLockedOutAt(getLockoutIntervals(unit, spell.lockoutSpellId), atSeconds)) continue;
+        if (
+          spell.lockoutSpellId &&
+          isLockedOutAt(
+            getLockoutIntervals(unit, spell.lockoutSpellId),
+            atSeconds,
+          )
+        )
+          continue;
         availableImmunities.push({
           spellId,
           spellName: spell.name,
-          wasInCC: ccSummary ? wasLockedOutThroughWindow(ccSummary, atSeconds) : false,
+          wasInCC: ccSummary
+            ? wasLockedOutThroughWindow(ccSummary, atSeconds)
+            : false,
         });
       }
 
@@ -268,31 +358,55 @@ export function buildDeathOutcomeSummary(
         if (teammate.id === unit.id) continue;
         // A teammate who is already dead at this death cannot cast an external — don't list their
         // tools as "available" (would blame a dead player for not saving a later death).
-        if (teammate.deathRecords.some((d) => d.timestamp < deathRecord.timestamp)) continue;
-        const teammateCCSummary = ccSummaries.find((s) => s.playerName === teammate.name);
+        if (
+          teammate.deathRecords.some((d) => d.timestamp < deathRecord.timestamp)
+        )
+          continue;
+        const teammateCCSummary = ccSummaries.find(
+          (s) => s.playerName === teammate.name,
+        );
 
         // B27: skip if teammate was out of spell range or LoS-blocked at death time
         const casterPos = getUnitPositionAtTime(teammate, deathMs);
         if (dyingPos && casterPos) {
-          if (distanceBetween(dyingPos, casterPos) > EXTERNAL_SPELL_RANGE_YARDS) continue;
+          if (distanceBetween(dyingPos, casterPos) > EXTERNAL_SPELL_RANGE_YARDS)
+            continue;
           if (combat.zoneId) {
             const los = hasLineOfSight(combat.zoneId, casterPos, dyingPos);
             if (los === false) continue; // confirmed LoS blocked (null = unmapped, pass through)
           }
         }
 
-        for (const [spellId, spell] of Object.entries(EXTERNAL_DEFENSIVE_SPELLS)) {
+        for (const [spellId, spell] of Object.entries(
+          EXTERNAL_DEFENSIVE_SPELLS,
+        )) {
           const everCast = teammate.spellCastEvents.some(
-            (e) => e.spellId === spellId && e.logLine.event === LogEvent.SPELL_CAST_SUCCESS,
+            (e) =>
+              e.spellId === spellId &&
+              e.logLine.event === LogEvent.SPELL_CAST_SUCCESS,
           );
           if (!everCast && !spell.specs.includes(teammate.spec)) continue;
-          if (!isAvailableAt(teammate, spellId, spell.cooldownSeconds, atSeconds, matchStartMs)) continue;
+          // 冷却值优先取**已解析的**(与 [RES] 台账同源,含天赋修正);
+          // 拿不到才退回本表常量。见本函数签名处的根因说明。
+          if (
+            !isAvailableAt(
+              teammate,
+              spellId,
+              resolvedCooldownSeconds?.(teammate, spellId) ??
+                spell.cooldownSeconds,
+              atSeconds,
+              matchStartMs,
+            )
+          )
+            continue;
           missedExternals.push({
             casterName: teammate.name,
             casterSpec: specToString(teammate.spec),
             spellId,
             spellName: spell.name,
-            casterWasInCC: teammateCCSummary ? wasLockedOutThroughWindow(teammateCCSummary, atSeconds) : false,
+            casterWasInCC: teammateCCSummary
+              ? wasLockedOutThroughWindow(teammateCCSummary, atSeconds)
+              : false,
           });
         }
       }
@@ -312,19 +426,25 @@ export function buildDeathOutcomeSummary(
   return { events };
 }
 
-export function formatDeathOutcomeForContext(summary: IDeathOutcomeSummary): string {
-  if (summary.events.length === 0) return '';
-  const lines: string[] = ['DEATHS WITH MISSED OPTIONS'];
+export function formatDeathOutcomeForContext(
+  summary: IDeathOutcomeSummary,
+): string {
+  if (summary.events.length === 0) return "";
+  const lines: string[] = ["DEATHS WITH MISSED OPTIONS"];
   for (const ev of summary.events) {
-    const t = `${Math.floor(ev.atSeconds / 60)}:${String(Math.floor(ev.atSeconds % 60)).padStart(2, '0')}`;
+    const t = `${Math.floor(ev.atSeconds / 60)}:${String(Math.floor(ev.atSeconds % 60)).padStart(2, "0")}`;
     for (const imm of ev.availableImmunities) {
-      const ccNote = imm.wasInCC ? ', was in CC' : ", was not CC'd";
-      lines.push(`  [${t}] ${ev.deadPlayerSpec} (${ev.deadPlayer}) — had ${imm.spellName} available${ccNote}`);
+      const ccNote = imm.wasInCC ? ", was in CC" : ", was not CC'd";
+      lines.push(
+        `  [${t}] ${ev.deadPlayerSpec} (${ev.deadPlayer}) — had ${imm.spellName} available${ccNote}`,
+      );
     }
     for (const ext of ev.missedExternals) {
-      const ccNote = ext.casterWasInCC ? ', caster in CC' : ', caster was free';
-      lines.push(`  [${t}] ${ev.deadPlayer} died — ${ext.casterName} had ${ext.spellName} available${ccNote}`);
+      const ccNote = ext.casterWasInCC ? ", caster in CC" : ", caster was free";
+      lines.push(
+        `  [${t}] ${ev.deadPlayer} died — ${ext.casterName} had ${ext.spellName} available${ccNote}`,
+      );
     }
   }
-  return lines.join('\n');
+  return lines.join("\n");
 }

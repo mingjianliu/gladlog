@@ -285,10 +285,23 @@ export function buildMatchContext(
         )
       : [];
 
+  // 把**已解析的**冷却(即 [RES] 台账渲染所用的值)下发给死亡块的可用性判定 ——
+  // 否则两处各用一套常量,同一份 prompt 会对同一个冷却给出相反结论(D 类)。
+  const resolvedCdByUnit = new Map<string, Map<string, number>>();
+  for (const { player, cds } of [
+    { player: owner as ICombatUnit, cds: cooldowns },
+    ...teammateCooldowns,
+  ]) {
+    const bySpell = new Map<string, number>();
+    for (const cd of cds) bySpell.set(cd.spellId, cd.cooldownSeconds);
+    resolvedCdByUnit.set(player.id, bySpell);
+  }
+
   const deathOutcome = buildDeathOutcomeSummary(
     { startTime: combat.startTime, zoneId: combat.startInfo?.zoneId },
     friends as ICombatUnit[],
     ccTrinketSummaries,
+    (unit, spellId) => resolvedCdByUnit.get(unit.id)?.get(spellId),
   );
   const offensiveWaste = buildOffensiveWasteSummary(
     combat,
