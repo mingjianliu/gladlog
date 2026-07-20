@@ -615,6 +615,14 @@ pre {
   font-variant-numeric: tabular-nums;
   color: var(--ink-2);
 }
+/* chip 内含技能图标时的混排:图标与文字垂直居中。用 inline-flex 而非
+   vertical-align —— 图标是 <img>(替换元素),基线对齐会让它整体下坠。
+   没有图标的 chip 落到同一规则上也无副作用(单个文本子节点)。 */
+.rpt-finding-evt {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
 .rpt-finding-ev .rpt-finding-evt:hover {
   color: var(--accent);
   border-color: var(--accent-line);
@@ -2858,11 +2866,35 @@ pre {
   width: fit-content;
   margin-bottom: 8px;
 }
-/* 纯地图档:框体加宽 + 整体居中(列宽由内联样式给) */
+/* 纯地图档:高度驱动缩放。场地 SVG 锁死 aspectRatio,给定高度就推出宽度,
+   所以中列用 auto 让它按 SVG 的固有宽度收缩,再靠 justify-content 把整条
+   轨道居中 —— 两侧 140px 框体自然贴着地图,不需要像旧版那样用写死的
+   max-width:1100px 去凑(那个上限正是竖屏放不大的原因)。 */
 .rpt-replay-stage.mode-map .rpt-replay-arena-grid {
-  grid-template-columns: 140px minmax(0, 1fr) 140px;
-  max-width: 1100px;
+  /* minmax(0, --map-w):目标宽度是**上界**不是定值 —— 有空间就长到用户
+     设的高度所对应的宽度,空间不够就自己缩,永远不撑破容器(用 auto 或
+     定值都会溢出,把两侧血条框压到地图上)。 */
+  grid-template-columns: 140px minmax(0, var(--map-w, 800px)) 140px;
+  justify-content: center;
   margin: 0 auto;
+}
+.rpt-replay-stage.mode-map .rpt-replay-map-cell > .rpt-replay-field {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+/* 高度拖拽条:横向版的 .rpt-replay-splitter,贴在地图下沿 */
+.rpt-replay-map-resizer {
+  grid-column: 2;
+  height: 6px;
+  margin-top: 4px;
+  cursor: row-resize;
+  background: var(--hairline);
+  border-radius: 3px;
+}
+.rpt-replay-map-resizer:hover,
+.rpt-replay-map-resizer:focus-visible {
+  background: var(--accent, #6aa9ff);
 }
 
 /* ── 开发者页 AI 调用调试 ── */

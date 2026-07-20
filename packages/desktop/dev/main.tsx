@@ -24,6 +24,25 @@ const sampleAnalysis = {
       title: "被集火秒杀",
       explanation:
         "0:41 敌方双 DPS 进攻 CD 对齐,你在没有减伤/位移的情况下于 1.4s 内掉血 82% 后阵亡。此前 3s 你贴在开阔地带、离掩体 12 码。",
+      // 深挖 chip:混一条带技能的和一条无技能的,用来看图标混排/缺省两种形态
+      deepDive: {
+        text: "承伤窗口内敌方寒冰新星先手,你的位移在 CD。",
+        chips: [
+          {
+            t: 38,
+            label: "寒冰新星",
+            unitNames: ["Player1-Test"],
+            spellId: "122",
+          },
+          {
+            t: 40,
+            label: "变形术",
+            unitNames: ["Player3-Test"],
+            spellId: "118",
+          },
+          { t: 41, label: "脱靶", unitNames: ["Player1-Test"] },
+        ],
+      },
     },
     {
       eventIds: ["e2"],
@@ -82,11 +101,27 @@ const sampleCompare = {
   },
 };
 
+// 技能图标桩:主进程的 icon 缓存在试验台里不存在。返回一个可辨认的小方块,
+// 用来看图标与文字的混排(泳道 chip、finding chip 都吃这一面)。
+const FAKE_ICON =
+  "data:image/svg+xml;utf8," +
+  encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32">
+       <rect width="32" height="32" rx="6" fill="#5b4bb8"/>
+       <circle cx="16" cy="16" r="7" fill="#c9b8ff"/>
+     </svg>`,
+  );
+
 (window as unknown as { __gladlogFixture: unknown }).__gladlogFixture = {
+  icon: { get: async () => FAKE_ICON },
   analysis: {
+    // 面板读的是 getState(缓存 + running 一次原子读出),不是 getCached ——
+    // 桩少这一面时面板永远停在空闲态,AI 视图在试验台里看不到任何 finding。
+    getState: async () => ({ cached: sampleAnalysis, running: false }),
     getCached: async () => sampleAnalysis,
     run: () => {},
     cancel: () => {},
+    onDelta: off,
     onDone: off,
     onError: off,
   },

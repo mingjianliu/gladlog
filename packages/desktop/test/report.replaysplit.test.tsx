@@ -23,9 +23,26 @@ function modeButton(container: HTMLElement, label: string): HTMLElement {
  * 于是上一条用例存进去的比例漏给了下一条(CI 实测:「← 减小比例」从上一条
  * 留下的 38.33 起步,得到 33 而不是期望的 28)。
  *
- * 所以显式清,并且两种环境都要能跑:没有 localStorage 时 ?. 直接短路。
+ * 所以显式清 —— 并且不能止于「清」:这个差异是双向温床,不依赖持久化的
+ * 用例会因泄漏而 CI 红,依赖持久化的用例(纯地图档高度记忆)则本地红。
+ * 缺失时补一个内存 shim,让两种环境跑的是同一条代码路径。
  */
+function ensureLocalStorage(): void {
+  if (globalThis.localStorage) return;
+  const mem = new Map<string, string>();
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: {
+      getItem: (k: string) => mem.get(k) ?? null,
+      setItem: (k: string, v: string) => void mem.set(k, String(v)),
+      removeItem: (k: string) => void mem.delete(k),
+      clear: () => mem.clear(),
+    },
+  });
+}
+
 beforeEach(() => {
+  ensureLocalStorage();
   try {
     globalThis.localStorage?.clear();
   } catch {
@@ -34,7 +51,6 @@ beforeEach(() => {
 });
 
 describe("回放三档布局", () => {
-
   it("纯 GCD 档不渲染地图与缩放浮层", () => {
     const { container } = render(<ReplayView source={m} />);
     expect(
@@ -136,5 +152,72 @@ describe("分隔条键盘可达性", () => {
     fireEvent.keyDown(el, { key: "ArrowLeft" });
     const timeAfter = container.querySelector(".rpt-replay-time")!.textContent;
     expect(timeAfter).toBe(timeBefore);
+  });
+});
+
+describe("纯地图档的高度调节", () => {
+  const resizer = (c: HTMLElement) =>
+    c.querySelector("[data-testid=rpt-replay-map-resizer]") as HTMLElement;
+
+  it("只在纯地图档出现 —— 另外两档尺寸归 ratio 管", () => {
+    const { container } = render(<ReplayView source={m} />);
+    expect(resizer(container)).toBeFalsy(); // 默认 split 档
+    fireEvent.click(modeButton(container, "纯地图"));
+    expect(resizer(container)).toBeTruthy();
+    fireEvent.click(modeButton(container, "纯 GCD"));
+    expect(resizer(container)).toBeFalsy();
+  });
+
+  it("键盘 ↓/↑ 调高度,并按场地宽高比换成 stage 的 --map-w", () => {
+    const { container } = render(<ReplayView source={m} />);
+    fireEvent.click(modeButton(container, "纯地图"));
+    const stage = container.querySelector(".rpt-replay-stage") as HTMLElement;
+    const widthPx = () =>
+      Number(stage.style.getPropertyValue("--map-w").replace("px", ""));
+    const before = Number(resizer(container).getAttribute("aria-valuenow"));
+    const beforeW = widthPx();
+
+    fireEvent.keyDown(resizer(container), { key: "ArrowDown" });
+    const after = Number(resizer(container).getAttribute("aria-valuenow"));
+    expect(after).toBeGreaterThan(before);
+    // 下发的是宽度(高度靠 aspectRatio 推回来),因为只有宽度能被
+    // minmax(0,…) 收进容器;高度变大 → 宽度必须同向变大
+    expect(widthPx()).toBeGreaterThan(beforeW);
+
+    fireEvent.keyDown(resizer(container), { key: "ArrowUp" });
+    expect(Number(resizer(container).getAttribute("aria-valuenow"))).toBe(
+      before,
+    );
+  });
+
+  it("Home/End 到两端,越界被 clamp 住", () => {
+    const { container } = render(<ReplayView source={m} />);
+    fireEvent.click(modeButton(container, "纯地图"));
+    const min = Number(resizer(container).getAttribute("aria-valuemin"));
+    const max = Number(resizer(container).getAttribute("aria-valuemax"));
+
+    fireEvent.keyDown(resizer(container), { key: "Home" });
+    expect(Number(resizer(container).getAttribute("aria-valuenow"))).toBe(min);
+    // 已在下限,继续按 ↑ 不该越过
+    fireEvent.keyDown(resizer(container), { key: "ArrowUp" });
+    expect(Number(resizer(container).getAttribute("aria-valuenow"))).toBe(min);
+
+    fireEvent.keyDown(resizer(container), { key: "End" });
+    expect(Number(resizer(container).getAttribute("aria-valuenow"))).toBe(max);
+    fireEvent.keyDown(resizer(container), { key: "ArrowDown" });
+    expect(Number(resizer(container).getAttribute("aria-valuenow"))).toBe(max);
+  });
+
+  it("高度记进 localStorage,重挂后保持", () => {
+    const { container, unmount } = render(<ReplayView source={m} />);
+    fireEvent.click(modeButton(container, "纯地图"));
+    fireEvent.keyDown(resizer(container), { key: "ArrowDown" });
+    const picked = Number(resizer(container).getAttribute("aria-valuenow"));
+    unmount();
+
+    const again = render(<ReplayView source={m} />);
+    expect(Number(resizer(again.container).getAttribute("aria-valuenow"))).toBe(
+      picked,
+    );
   });
 });
