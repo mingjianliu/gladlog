@@ -1198,6 +1198,25 @@ export function fmtTime(seconds: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
+/**
+ * 把任意时刻归到 **prompt 的渲染网格**(整数秒)—— 与 fmtTime 同一取整规则。
+ *
+ * **任何要连同时间戳一起渲染的采样,都必须先过这个函数再取值。**
+ *
+ * 2026-07-20 实证(A 类,26/50 场):`[STATE]` 按整数秒 tick 采样,而
+ * `[DMG SPIKE]` 用 `pw.fromSeconds`(小数秒)采样,两者却都经 fmtTime 渲染成
+ * **同一个显示秒** —— 于是同一行时间戳下两个 HP 数字互相矛盾(中位数 7pp,
+ * 最大 25pp)。注意:这不是采样半径问题 —— getUnitHpAtTimestamp 是「先取最近
+ * 样本、再用半径决定接受与否」,改半径只会让值变成 null,**永远不会改变数值**。
+ * 唯一能让两侧一致的办法,是让它们查询同一个时刻。
+ *
+ * 见 CLAUDE.md「门规谓词即规范」:分析内部的小数秒必须先 floor 到渲染网格,
+ * 再做任何会被渲染或被门规复算的判定。
+ */
+export function toRenderSecond(seconds: number): number {
+  return Math.floor(seconds);
+}
+
 // ---------------------------------------------------------------------------
 // Friendly CD overlap detection
 // ---------------------------------------------------------------------------

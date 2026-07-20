@@ -171,6 +171,93 @@ export function checkFriendlyDeaths(
   };
 }
 
+/**
+ * 一行里的百分位记号,如 `Marksmanship Hunter (n=87): p50 214k | p90 65k`。
+ * 数字后可带单位后缀(k/m/s/%),同一行的记号必须同单位才比较。
+ */
+const PERCENTILE_TOKEN = /\bp(\d{1,2})\s+(-?\d+(?:\.\d+)?)(k|m|s|%)?/gi;
+
+/**
+ * 硬不变量:同一行里的百分位序列必须**单调不减**(p50 ≤ p75 ≤ p90 ≤ p95)。
+ *
+ * 2026-07-20 的 50 场 eval 里 11 场读到倒置基线(`p50 214k | p90 65k`),根因是
+ * benchmarks 样本池混入 NaN 后 `sort((a,b)=>a-b)` 静默留下乱序数组。那类 bug
+ * 产出的仍是「看起来正常的数字」,只有顺序不对 —— 模型和人都极难发现,但这条
+ * 确定性检查一抓一个准,且不依赖任何模型判断。
+ *
+ * 按「门规谓词即规范」:这里**重新解析渲染后的 prompt 文本**,而不是去读分析
+ * 内部的对象。判据锚定在模型真正读到的那串字符上。
+ */
+export function checkPercentileMonotonicity(lines: string[]): string[] {
+  const violations: string[] = [];
+  lines.forEach((line, i) => {
+    const byUnit = new Map<string, { pct: number; value: number }[]>();
+    for (const m of line.matchAll(PERCENTILE_TOKEN)) {
+      const unit = (m[3] ?? "").toLowerCase();
+      if (!byUnit.has(unit)) byUnit.set(unit, []);
+      byUnit.get(unit)!.push({ pct: Number(m[1]), value: Number(m[2]) });
+    }
+    for (const [unit, tokens] of byUnit) {
+      if (tokens.length < 2) continue;
+      const seq = [...tokens].sort((a, b) => a.pct - b.pct);
+      for (let k = 1; k < seq.length; k++) {
+        if (seq[k].value < seq[k - 1].value) {
+          violations.push(
+            `line ${i + 1}: p${seq[k - 1].pct} ${seq[k - 1].value}${unit} > p${seq[k].pct} ${seq[k].value}${unit} — 百分位倒置: ${line.trim()}`,
+          );
+          break;
+        }
+      }
+    }
+  });
+  return violations;
+}
+
+// "0:27  [DMG SPIKE]   2(SHunter) (Survival Hunter): 0.88M in 10s (…) (79% -> 29% HP, …)"
+const SPIKE_HP =
+  /^(\d+):(\d+)\s+\[DMG SPIKE\]\s+(\S+)\s+\([^)]*\):.*?\((\d+)%\s*->\s*(\d+)%\s*HP/;
+// "0:21  [STATE]   friends 1(HPriest):99 2(SHunter):76 / enemies 4(AWarrior):90"
+const STATE_LINE = /^(\d+):(\d+)\s+\[STATE\]\s+(.*)$/;
+/** 允许的良性采样抖动(百分点)。超过这个值即视为两条渲染路径打架。 */
+const HP_AGREEMENT_TOLERANCE_PP = 3;
+
+/**
+ * 硬不变量:同一渲染秒、同一单位,`[DMG SPIKE]` 声称的 HP 必须与 `[STATE]` 一致。
+ *
+ * 2026-07-20 实证:修前 26/50 场共 33 处矛盾(中位 7pp,最大 25pp),根因是
+ * STATE 按整数秒采样而 DMG SPIKE 按小数秒采样,却渲染成同一个显示秒。
+ * 注意曾走过的弯路:按「统一采样半径」修实测一个数都没动 —— 半径只控制
+ * 接受/拒绝,不改变取到的样本。判据必须锚定在**渲染文本**上,才能测出真效果。
+ */
+export function checkSameSecondHpConsistency(lines: string[]): string[] {
+  const stateAt = new Map<number, Map<string, number>>();
+  for (const line of lines) {
+    const m = line.match(STATE_LINE);
+    if (!m) continue;
+    const units = new Map<string, number>();
+    for (const u of m[3].matchAll(/(\S+?):(\d+)\b/g))
+      units.set(u[1], Number(u[2]));
+    stateAt.set(Number(m[1]) * 60 + Number(m[2]), units);
+  }
+
+  const violations: string[] = [];
+  lines.forEach((line, i) => {
+    const m = line.match(SPIKE_HP);
+    if (!m) return;
+    const t = Number(m[1]) * 60 + Number(m[2]);
+    const stateHp = stateAt.get(t)?.get(m[3]);
+    if (stateHp === undefined) return;
+    const spikeHp = Number(m[4]);
+    const delta = Math.abs(stateHp - spikeHp);
+    if (delta > HP_AGREEMENT_TOLERANCE_PP) {
+      violations.push(
+        `line ${i + 1}: ${m[1]}:${m[2]} ${m[3]} — [DMG SPIKE] 报 ${spikeHp}% 而同秒 [STATE] 报 ${stateHp}%(Δ${delta}pp)`,
+      );
+    }
+  });
+  return violations;
+}
+
 export function duplicateRatio(
   lines: string[],
   normalize: (line: string) => string,
@@ -219,6 +306,8 @@ export function checkMatch(
       `friendly death(s) absent from prompt: ${friendlyDeaths.missing.join(", ")}`,
     );
   }
+  hardFailures.push(...checkPercentileMonotonicity(lines));
+  hardFailures.push(...checkSameSecondHpConsistency(lines));
 
   return {
     ordinal: entry.ordinal,

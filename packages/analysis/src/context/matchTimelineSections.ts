@@ -20,6 +20,7 @@ import {
   specToString,
   USABLE_WHILE_CC_SPELL_IDS,
   hpSampleRadiusMs,
+  toRenderSecond,
 } from "../utils/cooldowns";
 import { wasLockedOutThroughWindow } from "../utils/deathOutcomeAnalysis";
 import { getHpPercentAtTime } from "../utils/killWindowTargetSelection";
@@ -296,20 +297,24 @@ export function emitDmgSpikeEntries(params: {
     const dpsK = Math.round(pw.totalDamage / Math.max(1, windowSec) / 1000);
 
     const targetUnit = friends.find((f) => f.name === pw.targetName);
-    // 半径必须与同秒 [STATE] tick 一致(共享谓词);恒用 ±3s 会在关键窗口
-    // 取到与 STATE 不同的样本,同一秒两行 HP 打架 —— 2026-07-20 eval 31/50 场。
+    // 采样时刻必须先归到渲染网格:本行的时间戳经 fmtTime 向下取整,而 [STATE]
+    // 按整数秒采样。用小数秒 pw.fromSeconds 取样会命中另一个 advancedAction,
+    // 于是同一显示秒下两行 HP 打架(2026-07-20 eval 26/50 场,中位 7pp)。
+    // 半径同样按渲染秒取,与 [STATE] tick 共享谓词。
+    const fromSec = toRenderSecond(pw.fromSeconds);
+    const toSec = toRenderSecond(pw.toSeconds);
     const hpFrom = targetUnit
       ? getUnitHpAtTimestamp(
           targetUnit,
-          matchStartMs + pw.fromSeconds * 1000,
-          hpSampleRadiusMs(pw.fromSeconds, criticalWindowSeconds),
+          matchStartMs + fromSec * 1000,
+          hpSampleRadiusMs(fromSec, criticalWindowSeconds),
         )
       : null;
     const hpTo = targetUnit
       ? getUnitHpAtTimestamp(
           targetUnit,
-          matchStartMs + pw.toSeconds * 1000,
-          hpSampleRadiusMs(pw.toSeconds, criticalWindowSeconds),
+          matchStartMs + toSec * 1000,
+          hpSampleRadiusMs(toSec, criticalWindowSeconds),
         )
       : null;
     let hpStr = "";

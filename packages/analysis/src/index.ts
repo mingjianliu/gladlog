@@ -3,6 +3,7 @@
 // StoredMatch 形状 utils 并存、逐 util 迁移(4a spec debate 让步)。
 export * from "./context/buildMatchContext";
 export * from "./utils/cooldowns";
+export * from "./utils/stats";
 export * from "./utils/positionSampling";
 export * from "./utils/enemyCompArchetype";
 export * from "./utils/enemyCDs";
@@ -59,4 +60,11 @@ export * from "./analysis/auditFindings";
 export * from "./analysis/buildFindingsPrompt";
 export * from "./analysis/parseModelJson";
 export * from "./analysis/deepDive";
-export { METRIC_LABELS, VERDICT_LABELS, METRIC_LOWER_IS_BETTER, metricLabel, metricScore, verdictLabel } from "./compare/metricLabels";
+export {
+  METRIC_LABELS,
+  VERDICT_LABELS,
+  METRIC_LOWER_IS_BETTER,
+  metricLabel,
+  metricScore,
+  verdictLabel,
+} from "./compare/metricLabels";

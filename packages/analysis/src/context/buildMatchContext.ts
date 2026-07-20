@@ -102,6 +102,7 @@ import {
   DMG_SPIKE_THRESHOLD,
   mergeTimestampedLines,
 } from "./timelineHelpers";
+import { buildCriticalWindowSet } from "./criticalWindows";
 import {
   buildMatchArc,
   buildMatchTimeline,
@@ -257,6 +258,14 @@ export function buildMatchContext(
     enemies as ICombatUnit[],
     combat,
   );
+  // 关键窗口只在这里构建一次,下游所有 HP 消费者共享 —— 见 criticalWindows.ts。
+  const criticalWindowSeconds = buildCriticalWindowSet({
+    friendlyDeaths,
+    enemyDeaths,
+    pressureWindows,
+    ccTrinketSummaries,
+    matchDurationSeconds: durationSeconds,
+  });
   const healerUnit = friends.find((p) => isHealerSpec(p.spec)) as
     ICombatUnit | undefined;
   const healerCCSummary = healerUnit
@@ -581,6 +590,7 @@ export function buildMatchContext(
       outgoingCCChains,
       bracket: combat.startInfo.bracket,
       stasisEvents,
+      criticalWindowSeconds,
     } as BuildMatchTimelineParams);
 
     // Merge each per-window exposure entry into the timeline at its timestamp so the

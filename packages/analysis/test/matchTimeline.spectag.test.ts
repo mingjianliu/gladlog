@@ -5,10 +5,14 @@ import { makeUnit } from "./ported/testHelpers";
 describe("buildMatchTimeline spec tag behavior", () => {
   it("asserts spec tags are attached, abbreviated correctly, and omitted if not found", () => {
     const owner = makeUnit("PlayerYou", { spec: CombatUnitSpec.Priest_Holy });
-    const alice = makeUnit("Alice", { spec: CombatUnitSpec.Hunter_BeastMastery });
+    const alice = makeUnit("Alice", {
+      spec: CombatUnitSpec.Hunter_BeastMastery,
+    });
     const bob = makeUnit("Bob", { spec: CombatUnitSpec.None });
     const charlie = makeUnit("Charlie", { spec: CombatUnitSpec.Mage_Fire });
-    const enemyUnit = makeUnit("Enemy1", { spec: CombatUnitSpec.DemonHunter_Havoc });
+    const enemyUnit = makeUnit("Enemy1", {
+      spec: CombatUnitSpec.DemonHunter_Havoc,
+    });
 
     const friends = [owner, alice, bob];
     const enemies = [enemyUnit];
@@ -19,9 +23,7 @@ describe("buildMatchTimeline spec tag behavior", () => {
       ["Bob", 2],
       ["Charlie", 3],
     ]);
-    const enemyIdMap = new Map<string, number>([
-      ["Enemy1", 4],
-    ]);
+    const enemyIdMap = new Map<string, number>([["Enemy1", 4]]);
 
     const teammateCDs = [
       {
@@ -94,6 +96,7 @@ describe("buildMatchTimeline spec tag behavior", () => {
       playerIdMap,
       enemyIdMap,
       outgoingCCChains: [],
+      criticalWindowSeconds: new Set<number>(),
     });
 
     // Assert (a): Spec tags are attached and multi-word spec names are abbreviated

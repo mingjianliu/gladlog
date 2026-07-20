@@ -171,6 +171,12 @@ export interface BuildMatchTimelineParams {
     intervals: ISpiritOfRedemptionInterval[];
   }>;
   stateFormat?: "inline" | "summary" | "verbose";
+  /**
+   * 关键窗口秒集合 —— 由 buildMatchContext 用 buildCriticalWindowSet 构建后传入。
+   * **必填且不在此处自建**:所有 HP 消费者(STATE / DMG SPIKE / CD / 死亡块)
+   * 必须共享同一个集合才能取到同一个采样半径,见 criticalWindows.ts。
+   */
+  criticalWindowSeconds: ReadonlySet<number>;
 }
 
 const HIGH_VALUE_PURGEABLE_BUFFS = new Set<string>([
@@ -216,6 +222,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     shapeshiftIntervals = [],
     spiritOfRedemptionIntervals = [],
     stateFormat = "summary",
+    criticalWindowSeconds: criticalWindowSet,
   } = params;
 
   const matchDurationS = (matchEndMs - matchStartMs) / 1000;
@@ -225,48 +232,8 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     matchEndMs,
   );
 
-  const criticalWindowSet = new Set<number>(); // which tick-seconds are in a critical window
-  for (const d of friendlyDeaths) {
-    // [T-10, T] window before death
-    for (
-      let t = Math.max(0, Math.ceil(d.atSeconds - 10));
-      t <= Math.floor(d.atSeconds);
-      t++
-    ) {
-      criticalWindowSet.add(t);
-    }
-  }
-  for (const d of enemyDeaths) {
-    for (
-      let t = Math.max(0, Math.ceil(d.atSeconds - 10));
-      t <= Math.floor(d.atSeconds);
-      t++
-    ) {
-      criticalWindowSet.add(t);
-    }
-  }
-  for (const pw of pressureWindows) {
-    if (pw.totalDamage >= DMG_SPIKE_THRESHOLD) {
-      // ±5s centred on the spike start — clamp both edges
-      const from = Math.max(0, Math.ceil(pw.fromSeconds - 5));
-      const to = Math.min(
-        Math.floor(matchDurationS),
-        Math.floor(pw.fromSeconds + 5),
-      );
-      for (let t = from; t <= to; t++) criticalWindowSet.add(t);
-    }
-  }
-  for (const summary of ccTrinketSummaries) {
-    for (const cc of summary.ccInstances) {
-      // [cc.atSeconds, cc.atSeconds + 10] look-ahead — clamp right edge
-      const from = Math.max(0, Math.ceil(cc.atSeconds));
-      const to = Math.min(
-        Math.floor(matchDurationS),
-        Math.floor(cc.atSeconds + 10),
-      );
-      for (let t = from; t <= to; t++) criticalWindowSet.add(t);
-    }
-  }
+  // criticalWindowSet 由调用方(buildMatchContext)用 buildCriticalWindowSet 构建后
+  // 传入 —— 这里刻意不自建,否则 [CD]/死亡块等模块拿不到同一个集合。
 
   // F143: Pre-calculate Grounding Totem absorbs
   const groundingAbsorbs: Array<{

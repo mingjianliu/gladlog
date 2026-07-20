@@ -7,10 +7,7 @@ import {
   CombatUnitType,
   LogEvent,
 } from "@gladlog/parser-compat";
-import type {
-  AtomicArenaCombat,
-  IArenaMatch,
-} from "@gladlog/parser-compat";
+import type { AtomicArenaCombat, IArenaMatch } from "@gladlog/parser-compat";
 import { specToString } from "../utils/cooldowns";
 import {
   annotateDefensiveTimings,
@@ -20,6 +17,7 @@ import {
 import { getDampeningPercentage } from "../utils/dampening";
 import { canOffensivePurge } from "../utils/dispelAnalysis";
 import { reconstructEnemyCDTimeline } from "../utils/enemyCDs";
+import { toSortedFinite } from "../utils/stats";
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -91,8 +89,8 @@ function percentile(sorted: number[], p: number): number {
   return sorted[Math.max(0, Math.ceil((p / 100) * sorted.length) - 1)];
 }
 
-function toPercentiles(values: number[]): Percentiles {
-  const s = [...values].sort((a, b) => a - b);
+export function toPercentiles(values: number[]): Percentiles {
+  const s = toSortedFinite(values);
   return {
     p50: percentile(s, 50),
     p75: percentile(s, 75),
@@ -185,8 +183,14 @@ function extractCombatStats(
     const bucketCount = Math.ceil(durationSeconds / WINDOW_SECONDS);
     const buckets = new Array<number>(bucketCount).fill(0);
     for (const d of unit.damageIn) {
+      // effectiveAmount 可能缺失(同 totalFriendlyDmg 处的 `in` 守卫)。不守卫的话
+      // Math.abs(undefined) = NaN 会污染整个 bucket,进而毁掉排序 —— 见 toSortedFinite。
+      if (!("effectiveAmount" in d) || !Number.isFinite(d.effectiveAmount))
+        continue;
       const t = (d.logLine.timestamp - matchStartMs) / 1000;
       const bi = Math.min(Math.floor(t / WINDOW_SECONDS), bucketCount - 1);
+      // bi 非有限时 buckets[NaN] 会写成非索引属性 —— 展开时静默丢失,不是累加。
+      if (!Number.isInteger(bi) || bi < 0) continue;
       buckets[bi] += Math.abs(d.effectiveAmount);
     }
     stats.pressureWindowsSamples.push(...buckets);
@@ -273,7 +277,7 @@ function summarise(
     const cdUsage: Record<string, CDSummary> = {};
     for (const [spellLabel, timings] of Object.entries(stats.cdFirstUse)) {
       const used = timings.filter((t): t is number => t !== null);
-      const sorted = [...used].sort((a, b) => a - b);
+      const sorted = toSortedFinite(used);
       cdUsage[spellLabel] = {
         neverUsedRate:
           Math.round(((timings.length - used.length) / timings.length) * 1000) /

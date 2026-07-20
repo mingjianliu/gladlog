@@ -21,6 +21,8 @@
 import fs from "fs-extra";
 import path from "path";
 
+import { toSortedFinite } from "@gladlog/analysis";
+
 const BOOTSTRAP_SEED = Number(process.env.BOOTSTRAP_SEED ?? 1337);
 const BOOTSTRAP_ITERATIONS = 10000;
 
@@ -102,10 +104,16 @@ export function bootstrapCI(
       sum += deltas[Math.floor(rng() * deltas.length)];
     means.push(sum / deltas.length);
   }
-  means.sort((a, b) => a - b);
+  // 走共享谓词:单个 NaN 会让 (a,b)=>a-b 静默留下乱序数组,置信区间边界随之
+  // 变成任意样本 —— 且看起来仍是「正常数字」。见 analysis/utils/stats.ts。
+  const sorted = toSortedFinite(means);
+  if (sorted.length === 0) return { lo: NaN, hi: NaN };
+  // 取值规则与历史一致(lo=floor(n*.025), hi=ceil(n*.975)-1),只是排序换成了
+  // 共享谓词 —— 不改变干净输入下的任何既有结果,故与旧 run 仍可比。
+  const clamp = (i: number) => Math.min(sorted.length - 1, Math.max(0, i));
   return {
-    lo: means[Math.floor(BOOTSTRAP_ITERATIONS * 0.025)],
-    hi: means[Math.ceil(BOOTSTRAP_ITERATIONS * 0.975) - 1],
+    lo: sorted[clamp(Math.floor(sorted.length * 0.025))],
+    hi: sorted[clamp(Math.ceil(sorted.length * 0.975) - 1)],
   };
 }
 

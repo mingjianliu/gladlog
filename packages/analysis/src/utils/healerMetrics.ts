@@ -14,14 +14,10 @@ import {
   MAJOR_DEFENSIVE_IDS,
 } from "./cooldowns";
 import { reconstructEnemyCDTimeline } from "./enemyCDs";
+import { medianFinite } from "./stats";
 
-function median(values: number[]): number {
-  if (values.length === 0) return 0;
-  const sorted = [...values].sort((a, b) => a - b);
-  const half = Math.floor(sorted.length / 2);
-  if (sorted.length % 2 !== 0) return sorted[half];
-  return (sorted[half - 1] + sorted[half]) / 2.0;
-}
+// 中位数走共享谓词 —— 别在这里自己 sort,见 stats.ts 的 NaN 排序污染说明。
+const median = medianFinite;
 
 export function computeCDResponseLatency(
   annotatedCooldowns: IMajorCooldownInfo[],
