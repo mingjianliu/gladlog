@@ -2,7 +2,15 @@
    夜蓝底 + accent 紫交互;金只留数据语义(大招/击杀窗口/未按判定);
    身份色 = 暴雪职业色(数据层,勿用于 chrome)。
    字体统一 Inter,数字 tabular-nums(不再 monospace)。 */
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+/* Inter 自托管(@fontsource,随包发布),不走 Google Fonts CDN。
+   两个理由,都不是洁癖:
+   1) 产品是桌面端,用户可能离线看战报 —— 网络字体一断,全 UI 掉回系统字体;
+   2) 视觉基线是像素级单源标准,网络字体让「同一份代码」在不同网络下渲染不同。
+   只取 latin 子集:Inter 不含 CJK,中文本来就落到系统字体。 */
+@import "@fontsource/inter/latin-400.css";
+@import "@fontsource/inter/latin-500.css";
+@import "@fontsource/inter/latin-600.css";
+@import "@fontsource/inter/latin-700.css";
 :root {
   --bg: #161826;
   --surface: #1b1e2c;

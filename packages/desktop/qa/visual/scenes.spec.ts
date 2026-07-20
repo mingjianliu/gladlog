@@ -2,6 +2,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
 import { isExempt } from "../axe-allowlist";
+import { isolateExternalRequests } from "../support/stubExternal";
 
 // 从零 import 的叶子模块取,别从 appShell 取 —— 后者会把 fixtureBridge 的
 // JSON 导入拖进 Playwright 的 Node 进程,直接报 import-attribute 错。
@@ -35,6 +36,8 @@ const BOOT_TIMEOUT_MS = 15_000;
 
 for (const scene of SNAPSHOT_SCENES) {
   test(`场景 ${scene} 与基线一致`, async ({ page }) => {
+    // 外部网络隔离必须在 goto 之前:基线不能取决于公网可达性(见 stubExternal.ts)
+    const leaked = await isolateExternalRequests(page);
     // 只钉死 Date.now()/new Date(),不接管定时器 —— App 的后台补载用 setTimeout,
     // 假定时器会把它冻住。
     await page.clock.setFixedTime(new Date(FIXED_NOW));
@@ -66,6 +69,13 @@ for (const scene of SNAPSHOT_SCENES) {
     expect(
       unexpected,
       `场景 ${scene} 出现未豁免的无障碍违规;修掉它,或写进 qa/axe-allowlist.ts 并说明理由`,
+    ).toEqual([]);
+
+    // 泄漏账本:基线随公网可达性漂移是隐蔽的随机红灯,必须在引入时就挡住。
+    // 要么把资源变成本地的,要么在 stubExternal.ts 里给它一个固定桩件。
+    expect(
+      leaked,
+      `场景 ${scene} 请求了未打桩的外部资源 —— 基线会随网络抖动;见 qa/support/stubExternal.ts`,
     ).toEqual([]);
   });
 }

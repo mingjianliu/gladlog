@@ -2,11 +2,14 @@ import { expect, test } from "@playwright/test";
 
 import { FIXED_NOW } from "../../dev/fixtures/fixedNow";
 import { BUDGET_MS, reportBudget } from "../budgets";
+import { isolateExternalRequests } from "../support/stubExternal";
 
 /** 大号载荷的首渲天然比普通场景慢,用例总预算要压得住三次采样。 */
 test.setTimeout(120_000);
 
 test("大号对局的报表首渲在预算内(未锁定时只测量)", async ({ page }) => {
+  // 同样隔离外网:首渲预算测的是我们的代码,不该把公网 RTT 算进去
+  await isolateExternalRequests(page);
   await page.clock.setFixedTime(new Date(FIXED_NOW));
 
   const samples: number[] = [];
