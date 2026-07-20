@@ -102,8 +102,8 @@ npx tsx packages/eval/scripts/buildCorpus.ts \
 
 ## D 类冷却台账自相矛盾(1 场)—— 已查清
 
-> **已于 `dbe61bd` 查清并处理 —— 结论是不该按原设想修。** 下面保留原始记录,
-> 结论见本节末尾。
+> **⚠️ 两次结论,第一次是错的。** `dbe61bd` 判定「非数据不一致,只改图例」——
+> **该结论已被 `c820ad4` 推翻**。真根因见本节末尾「订正」。原始记录保留。
 
 死亡块的 `[RES]` 冷却台账与「DEATHS WITH MISSED OPTIONS」对**同一个冷却**的
 可用性判断相反。
@@ -117,7 +117,7 @@ npx tsx packages/eval/scripts/buildCorpus.ts \
   `deathOutcomeAnalysis.ts` 自有的 `EXTERNAL_DEFENSIVE_SPELLS` /
   `IMMUNITY_SPELLS`;`[RES]` 台账走 `extractMajorCooldowns`
 
-### 结论(`dbe61bd`)
+### 结论一(`dbe61bd`)—— **后被证伪,勿采信**
 
 - `[RES]` 台账的数据源是 **`classMetadata` + `spellEffectData`**,不是上面
   猜的 `SPELL_CATEGORIES`(那份只存 CC/定身/免疫)。
@@ -130,9 +130,29 @@ npx tsx packages/eval/scripts/buildCorpus.ts \
   真正的问题是**读者无法区分「台账不追踪」与「不可用」**。
 - 采用的修法:在图例写明 `[RES]` 只列受追踪的 CD,缺席 ≠ 不可用。
 
-> 教训:「两处判定打架」不一定要靠统一数据源解决 —— 先确认两处**是不是在
-> 断言同一件事**。这里一处说「可用」、另一处根本没表态,是渲染语义没交代
-> 清楚,不是数据不一致。
+### 订正(`c820ad4`)—— 真根因
+
+上面那个结论错在**只查了 Lay on Hands 一个样本就外推**。A/B 轮次里 responder
+子代理在 ord 041 上给出反例:
+
+- 死亡 1:53,`[RES]` 台账 `cd:Ironbark(7s)`(冷却中)
+- 同一 prompt 的 MISSED OPTIONS 写 "had Ironbark available"
+- Ironbark **在**受追踪清单里 —— 不是白名单缺失
+
+**真根因:同一技能两个独立维护的冷却值**(重复常量漂移)。
+`deathOutcomeAnalysis.ts` 的 EXTERNAL_DEFENSIVE_SPELLS 自带 cooldownSeconds
+(Ironbark 45s),主路径经 spellEffectData + 天赋修正解析为 65s。
+验算:0:52 施放 → 0:52+45=1:37「可用」;0:52+65=1:57,1:53 时仍在冷却。
+
+修法:`buildDeathOutcomeSummary` 新增 `resolvedCooldownSeconds` 解析器入参,
+可用性判定消费与台账同源的已解析冷却。确定性 A/B:虚假 available 1/50 → 0/50。
+
+> **两条教训**
+> 1. 「两处判定打架」先问是不是在断言同一件事 —— 但**别只查一个样本就下结论**。
+>    Lay on Hands 那个样本确实是「未追踪」,而 Ironbark 是真的数据不一致;
+>    我用前者的结论覆盖了整类,漏掉了后者。
+> 2. 独立的第二双眼睛有实际价值:这个反例是盲评 responder 发现的,它拒绝采信
+>    MISSED OPTIONS,理由是与同一份 prompt 的台账矛盾。
 
 ## 其它已知陷阱(踩过的)
 
