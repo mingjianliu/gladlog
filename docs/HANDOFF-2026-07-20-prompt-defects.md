@@ -17,7 +17,7 @@
 | `43c6e2e`  | 纯地图档高度可调 + finding chip 技能图标                                          |
 | `18d5fad`  | `npm run presubmit` 一键门禁 + `modelFormatAudit.ts`                              |
 | `9b8e40d`  | 重生成 `report-replay` / `settings` 视觉基线                                      |
-| _(待提交)_ | **A 类修复:HP 采样半径单源谓词** — 见下                                           |
+| `3cd5342`  | **A 类修复:HP 采样半径单源谓词** + 本 handoff                                     |
 
 ### 已验证的三层结果
 
@@ -29,7 +29,7 @@
 
 ---
 
-## A 类修复(本次改动,待提交)
+## A 类修复(已提交 `3cd5342`)
 
 **根因(读代码坐实,非推测)**:`cooldowns.ts` 的 `HP_SAMPLE_RADIUS_MS` docstring
 明文规定 `[STATE]` tick 与 `[DMG SPIKE]` 端点必须同半径。后来 `matchTimeline.ts`
@@ -68,8 +68,26 @@
 - **C**:`[CD]`/`[RES]` 行内嵌 `(X% HP)` 与同秒 `[STATE]` 冲突,最大差 **13pp**,
   且出现在决定性死亡前 2 秒(ord 014 三处实例)。
 - **C2**:DEATH 块逐秒 HP 轨迹与相邻 STATE 冲突。
-- **很可能与 A 同根因** —— 先查这些渲染点是否也各自传半径常量;若是,同样改调
-  `hpSampleRadiusMs`。修 A 时我只改了 DMG SPIKE 一处,**C/C2 未查**。
+**根因已查明(2026-07-20,与 A 同根)**:HP 原语本身早在 2026-07-14 审计时就统一成
+`getUnitHpAtTimestamp` 了 —— 问题不在原语,在**半径**:所有这些调用点都写死默认
+`HP_SAMPLE_RADIUS_MS`(±3s),而 `[STATE]` 在关键窗口用 ±1.5s。防御 CD 恰恰在
+爆发期施放(= 关键窗口),所以 `[CD]` 行的内嵌 HP 与同秒 STATE 系统性分叉。
+
+**待改的调用点清单**(已 grep 确认,全部仍传死半径):
+
+| 文件 | 行 | 渲染物 |
+|---|---|---|
+| `context/criticalMoments.ts` | ~398 `hpPctNote()` | `[CD]` 行内嵌 `(X% HP)` ← **C 类主犯** |
+| `context/criticalMoments.ts` | 362 / 437 / 478 | 死亡前 HP、burst 最受压玩家 HP |
+| `context/matchTimelineSections.ts` | 220 | `[ROT PRESSURE]` 的 `hp < 40` 阈值判定 |
+| `utils/burstLedger.ts` | 209–210 | `hpStartPct` / `hpEndPct` |
+| `utils/enemyCDs.ts` | 363 | `hpLookupRadiusMs` |
+| `utils/killWindowTargetSelection.ts` | 92 | `getHpPercentAtTime` 的默认参数 |
+
+**改法**:与 A 相同 —— 传 `hpSampleRadiusMs(t, criticalWindowSeconds)` 而非常量。
+**难点**:`criticalWindowSet` 目前是 `matchTimeline.ts` 的局部变量,这些模块拿不到。
+需要先把它提成可共享的产物(建议:在构建它的地方 export 出来,或提到一个
+`criticalWindows.ts`),再逐个调用点接上。这是个跨模块布线改动,**别赶工**。
 
 ### E/G 记号无图例(9 场)
 
