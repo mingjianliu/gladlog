@@ -34,7 +34,7 @@ export function installFixtureBridge(): void {
   let currentSettings: GladlogSettings = {
     wowDirectory: null,
     anthropicApiKey: null,
-    anthropicModel: null,
+    aiModels: {},
     aiBackend: "anthropic",
     aiBackendCommand: null,
     aiLanguage: "zh",

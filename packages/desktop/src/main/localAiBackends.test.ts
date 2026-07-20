@@ -49,7 +49,35 @@ describe("local AI backends", () => {
       return "ok";
     };
     await collect(agyClientFactory({ node: "node", script: "/x", run }));
-    expect(gotArgs).toEqual(["/x", "ask", "--timeout", "110", "hi"]);
+    expect(gotArgs).toEqual([
+      "/x",
+      "ask",
+      "--model",
+      "m",
+      "--timeout",
+      "110",
+      "hi",
+    ]);
+  });
+
+  it("两个本地后端都把 params.model 透传成 --model(否则模型下拉对它们是摆设)", async () => {
+    const seen: Record<string, string[]> = {};
+    const capture =
+      (key: string): Runner =>
+      async (_f, args) => {
+        seen[key] = args;
+        return "ok";
+      };
+    await collect(
+      claudeCliClientFactory({ cmd: "claude", run: capture("claudeCli") }),
+    );
+    await collect(
+      agyClientFactory({ node: "node", script: "/x", run: capture("agy") }),
+    );
+    for (const key of ["claudeCli", "agy"]) {
+      const args = seen[key];
+      expect(args[args.indexOf("--model") + 1]).toBe("m");
+    }
   });
 
   it("non-zero exit surfaces as an error (not silent)", async () => {

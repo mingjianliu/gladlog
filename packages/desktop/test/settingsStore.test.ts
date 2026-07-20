@@ -16,7 +16,7 @@ describe("SettingsStore", () => {
     expect(s.get()).toEqual({
       wowDirectory: null,
       anthropicApiKey: null,
-      anthropicModel: null,
+      aiModels: {},
       aiBackend: "anthropic",
       aiBackendCommand: null,
       aiLanguage: "zh",
@@ -34,6 +34,21 @@ describe("SettingsStore", () => {
     writeFileSync(p, "{not json");
     expect(new SettingsStore(p).get().wowDirectory).toBeNull();
   });
+  it("旧版单字段 anthropicModel 迁进 aiModels.anthropic", () => {
+    const p = join(dir(), "settings.json");
+    writeFileSync(p, JSON.stringify({ anthropicModel: "claude-opus-4-8" }));
+    expect(new SettingsStore(p).get().aiModels).toEqual({
+      anthropic: "claude-opus-4-8",
+    });
+  });
+  it("旧字段是自由文本,非白名单值丢弃而不是带毒迁移", () => {
+    const p = join(dir(), "settings.json");
+    writeFileSync(
+      p,
+      JSON.stringify({ anthropicModel: "claude-3-opus-legacy" }),
+    );
+    expect(new SettingsStore(p).get().aiModels).toEqual({});
+  });
 });
 
 describe("settings 脱敏(key 永不出主进程)", () => {
@@ -41,7 +56,7 @@ describe("settings 脱敏(key 永不出主进程)", () => {
     const base = {
       wowDirectory: "/tmp/wow",
       anthropicApiKey: "sk-real-secret",
-      anthropicModel: null,
+      aiModels: {},
       aiBackend: "anthropic" as const,
       aiBackendCommand: null,
       aiLanguage: "zh" as const,
@@ -64,6 +79,22 @@ describe("settings 脱敏(key 永不出主进程)", () => {
     ).toEqual({ wowDirectory: "/x" });
     expect(sanitizeSettingsPatch({ anthropicApiKey: "sk-new" })).toEqual({
       anthropicApiKey: "sk-new",
+    });
+  });
+  it("sanitizeSettingsPatch:模型逐格按后端白名单校验,非法格丢弃", () => {
+    expect(
+      sanitizeSettingsPatch({
+        aiModels: {
+          anthropic: "claude-opus-4-8", // 合法
+          agy: "claude-opus-4-8", // agy 用别名,这是 Anthropic id → 丢
+          claudeCli: "claude-sonnet-5", // 合法
+        },
+      }),
+    ).toEqual({
+      aiModels: {
+        anthropic: "claude-opus-4-8",
+        claudeCli: "claude-sonnet-5",
+      },
     });
   });
 });

@@ -60,7 +60,13 @@ function resolveViaLoginShell(cmd: string): Promise<string> {
       // Windows 无登录 shell 概念,用 where 找绝对路径(npm 全局装的是
       // claude.cmd,裸名 spawn 会 ENOENT)。
       p = execFileP("where", [cmd])
-        .then((r) => r.stdout.split(/\r?\n/).find((l) => l.trim())?.trim() || cmd)
+        .then(
+          (r) =>
+            r.stdout
+              .split(/\r?\n/)
+              .find((l) => l.trim())
+              ?.trim() || cmd,
+        )
         .catch(() => cmd);
     } else {
       const shell = process.env.SHELL || "/bin/zsh";
@@ -93,7 +99,7 @@ export function claudeCliClientFactory(opts?: {
       const cmd = opts?.cmd || (await resolveViaLoginShell("claude"));
       const out = await run(
         cmd,
-        ["-p", "--output-format", "text"],
+        ["-p", "--output-format", "text", "--model", params.model],
         joinPrompt(params),
       );
       yield { delta: out };
@@ -120,7 +126,15 @@ export function agyClientFactory(opts?: {
       const script = opts?.script || AGY_DEFAULT;
       const out = await run(
         node,
-        [script, "ask", "--timeout", "110", joinPrompt(params)],
+        [
+          script,
+          "ask",
+          "--model",
+          params.model,
+          "--timeout",
+          "110",
+          joinPrompt(params),
+        ],
         "",
       );
       yield { delta: stripAgyHeader(out) };

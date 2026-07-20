@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 
-import type {
-  AiBackend,
-  AiLanguage,
-  GladlogSettings,
-} from "../../../main/settingsStore";
+import type { AiLanguage, GladlogSettings } from "../../../main/settingsStore";
+import {
+  AI_MODELS,
+  resolveAiModel,
+  type AiBackend,
+} from "../../../shared/aiModels";
 import { API_KEY_REDACTED } from "../../../shared/protocol";
 import { bridge } from "../bridge";
 import { ImportButton } from "./ImportButton";
@@ -18,7 +19,6 @@ type SettingsGroup = "game" | "ai";
 export function SettingsPanel() {
   const [settings, setSettings] = useState<GladlogSettings | null>(null);
   const [keyInput, setKeyInput] = useState("");
-  const [modelInput, setModelInput] = useState("");
   const [cmdInput, setCmdInput] = useState("");
   const [saved, setSaved] = useState<{
     group: SettingsGroup;
@@ -30,7 +30,6 @@ export function SettingsPanel() {
       .settings.get()
       .then((s) => {
         setSettings(s);
-        setModelInput(s.anthropicModel ?? "");
         setCmdInput(s.aiBackendCommand ?? "");
       });
   }, []);
@@ -135,20 +134,6 @@ export function SettingsPanel() {
             )}
           </span>
 
-          <span className="settings-k">模型</span>
-          <input
-            placeholder="claude-sonnet-5(默认)"
-            value={modelInput}
-            onChange={(e) => setModelInput(e.target.value)}
-            onBlur={() =>
-              void save(
-                { anthropicModel: modelInput.trim() || null },
-                "模型已保存",
-              )
-            }
-          />
-          <span />
-
           <span className="settings-k">后端</span>
           <span>
             <select
@@ -169,6 +154,31 @@ export function SettingsPanel() {
               调试可切 Claude CLI / agy(本地),不走网络
             </span>
           </span>
+          <span />
+
+          <span className="settings-k">模型</span>
+          <select
+            aria-label="模型"
+            value={resolveAiModel(settings)}
+            onChange={(e) =>
+              void save(
+                {
+                  // 按后端分格写:切回上一个后端时它自己的选择还在
+                  aiModels: {
+                    ...settings.aiModels,
+                    [settings.aiBackend]: e.target.value,
+                  },
+                },
+                "模型已保存",
+              )
+            }
+          >
+            {AI_MODELS[settings.aiBackend].map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.label}
+              </option>
+            ))}
+          </select>
           <span />
 
           {settings.aiBackend !== "anthropic" && (

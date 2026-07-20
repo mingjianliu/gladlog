@@ -3,7 +3,9 @@
 // 深挖交错匿名写成 judge 输入(judge 盲评,不知哪条是 before/after)。
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "fs";
 import { join } from "path";
-import { auditDeepDives, type DeepDivePack } from "@gladlog/analysis";
+import { auditDeepDives, type DeepDivePack,
+  parseModelJsonArray,
+} from "@gladlog/analysis";
 
 const AB = process.argv[2]!;
 
@@ -26,15 +28,10 @@ function loadArm(arm: "before" | "after"): Row[] {
     const { pack, finding } = JSON.parse(
       readFileSync(join(AB, pf), "utf8"),
     ) as { pack: DeepDivePack; finding: { title: string } };
-    const raw = readFileSync(respPath, "utf8")
-      .trim()
-      .replace(/^```(?:json)?/, "")
-      .replace(/```$/, "")
-      .trim();
-    let parsed: unknown = null;
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
+    const raw = readFileSync(respPath, "utf8");
+    // 围栏容错走共享谓词(与 desktop 产品路径同源)
+    const parsed = parseModelJsonArray(raw);
+    if (!parsed) {
       rows.push({
         tag,
         arm,

@@ -13,6 +13,8 @@ import {
   type DeepDivePack,
 } from "@gladlog/analysis";
 import { findingKey } from "../shared/findingKey";
+import { parseModelJsonArray } from "@gladlog/analysis";
+import { resolveAiModel, type AiModelSelection } from "../shared/aiModels";
 import { join } from "path";
 import {
   buildFindingsPrompt,
@@ -21,10 +23,7 @@ import {
   type Finding,
   type RawFinding,
 } from "@gladlog/analysis";
-import {
-  analysisCacheDoc,
-  analysisCachePath,
-} from "../shared/analysisCache";
+import { analysisCacheDoc, analysisCachePath } from "../shared/analysisCache";
 import {
   buildCoachSystemPrompt,
   PROMPT_VERSION,
@@ -60,7 +59,7 @@ export type DeepenInput = {
 export function createAnalysisService(deps: {
   getSettings: () => {
     anthropicApiKey: string | null;
-    anthropicModel: string | null;
+    aiModels?: AiModelSelection | null;
     wowDirectory: string | null;
     aiBackend?: AiBackend;
     aiBackendCommand?: string | null;
@@ -125,7 +124,11 @@ export function createAnalysisService(deps: {
         // 语言分键缓存(backlog #1 推荐项):两种语言的结果可同时保留
         const target = analysisCachePath(deps.matchesDir, input.matchId, lang);
         const tmp = `${target}.tmp`;
-        writeFileSync(tmp, JSON.stringify(analysisCacheDoc(lang, result)), "utf-8");
+        writeFileSync(
+          tmp,
+          JSON.stringify(analysisCacheDoc(lang, result)),
+          "utf-8",
+        );
         renameSync(tmp, target);
       } catch {
         /* best-effort */
@@ -154,7 +157,7 @@ export function createAnalysisService(deps: {
       );
       let raw = "";
       const stream = client.stream({
-        model: settings.anthropicModel ?? "claude-sonnet-5",
+        model: resolveAiModel(settings),
         max_tokens: 4096, // 3-5 条 + death-setup 链条解释;2048 会 JSON 截断→整体回退
         system: buildCoachSystemPrompt(lang),
         messages: [{ role: "user", content: prompt }],
@@ -180,16 +183,16 @@ export function createAnalysisService(deps: {
         kind: "analysis",
         matchId: input.matchId,
         at: Date.now(),
-        model: settings.anthropicModel ?? "claude-sonnet-5",
+        model: resolveAiModel(settings),
         prompt,
         raw,
       });
 
-      let parsed: RawFinding[];
-      try {
-        parsed = JSON.parse(raw.trim());
-        if (!Array.isArray(parsed)) throw new Error("not an array");
-      } catch {
+      // 围栏/散文容错走共享谓词(parseModelJson):claude -p 实测会把完全
+      // 合规的内容包进 ```json 围栏,旧的 JSON.parse(raw.trim()) 零容错,
+      // 整份好分析被误判 bad-json。截断与顶层对象仍返回 null → 照旧回退。
+      const parsed = parseModelJsonArray(raw) as RawFinding[] | null;
+      if (!parsed) {
         return fallback("bad-json"); // invalid JSON → deterministic
       }
       const audit = auditFindings(parsed, input.candidates);
@@ -274,7 +277,7 @@ export function createAnalysisService(deps: {
       );
       let raw = "";
       const stream = client.stream({
-        model: settings.anthropicModel ?? "claude-sonnet-5",
+        model: resolveAiModel(settings),
         max_tokens: 2048,
         system: buildCoachSystemPrompt(lang),
         messages: [{ role: "user", content: prompt }],
@@ -288,16 +291,13 @@ export function createAnalysisService(deps: {
         kind: "analysis",
         matchId: `${input.matchId}#deepdive`,
         at: Date.now(),
-        model: settings.anthropicModel ?? "claude-sonnet-5",
+        model: resolveAiModel(settings),
         prompt,
         raw,
       });
-      let parsed: unknown = null;
-      try {
-        parsed = JSON.parse(raw.trim());
-      } catch {
-        /* 坏 JSON → 保持初轮 */
-      }
+      // 同 findings 路径:围栏包裹时旧写法拿不到数组,深挖会静默消失
+      // (auditDeepDives 内部 Array.isArray 判假直接返回空)。null → 保持初轮。
+      const parsed = parseModelJsonArray(raw);
       const dives = auditDeepDives(parsed, input.packs);
       const merged = input.findings.map((f, i) => {
         const d = dives.find((x) => x.findingIndex === i);
