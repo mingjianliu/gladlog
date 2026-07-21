@@ -40,6 +40,12 @@ npx tsx packages/eval/scripts/buildCalibration.ts --run <runId>   # 可加 --sou
 > factAudit included) to
 > `$GLADLOG_EVAL_HOME/runs/<runId>/judge-calibration/scores/CASEID.json`.
 
+> **重评某件之前,必须先删掉它的旧评分文件。** 写工具普遍要求「文件已存在则先读再写」——
+> 重发到同一路径时,新判官会被迫读到**上一个判官的评分**。2026-07-21 实测:补发的判官
+> 读到旧分后,把自己的 `inferenceScaffolding` 由 5 改成 4,正好等于旧分。它诚实报告了,
+> 但那一维已经不是独立判断。**这是工具约束造成的污染,不是判官不守规矩,靠加禁令堵不住** ——
+> 只能先 `rm` 目标文件,并在 prompt 里写明「该文件不存在,若报告已存在也不要读,直接覆盖」。
+
 > **这三段是实测换来的,别删**(2026-07-21,80 件校准):旧模板只说了「不要读其他文件」,
 > 结果 **2/80 越界** —— 一个判官 grep 了 `calibration-manifest.json` 读到植入缺陷描述;
 > 另一个读了兄弟评分文件、并用「兄弟件是镜像缺陷」来佐证自己的判定。根因是模板**没告诉

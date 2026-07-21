@@ -226,6 +226,48 @@ accuracy 的两个未检出(源 001、源 010)**都不是判官没找到**。两
 
 ---
 
+## 7ter. 修完上限后的完整 7 维 —— 6/7 PASS
+
+全 80 件在新审计集规则下重评(`scores-det3/`),连跑两次哈希一致(`e7558ccce567ab82`)。
+
+| 维度                 | 改动前 `scores` | `3d92ba3` 后 `scores-det2` | **+上限修复 `scores-det3`** |
+| -------------------- | --------------- | -------------------------- | --------------------------- |
+| accuracy             | 80%             | 80%                        | **90%**                     |
+| focusCalibration     | 80%             | 70% FAIL                   | **100%**                    |
+| inferenceScaffolding | 100%            | 80%                        | **90%**                     |
+| labelBias            | 70% FAIL        | 80%                        | 80%                         |
+| noise                | 50% FAIL        | 90%                        | 90%                         |
+| outcomeAlignment     | 80%             | 100%                       | **90%**                     |
+| sufficiency          | 40% FAIL        | 30% FAIL                   | 20% FAIL                    |
+| **合计**             | **4/7**         | **5/7**                    | **6/7**                     |
+
+门槛是 5/7,**现在 6/7 且有余量** —— 六个 PASS 里只有 labelBias 压在 80% 线上,其余都是 90–100%
+(det2 时是三个压线)。
+
+### 剩下的 FAIL 只有 sufficiency,而且是纯盲区
+
+10 对里 8 对未检出,**全部零反应**:`5→5` 五次、`4→4` 一次、`3→3` 一次、`4→4`(漂移 2)一次。
+删光死亡行,判官不扣分。**第五次独立复现,别再试图用 rubric 修它** —— 按 `eval-ab.md` 的既定
+分工交给 `qualityCheck` 的确定性覆盖门。
+
+### 一个值得看的结构发现:sufficiency 现在是最大的**泄漏源**
+
+其余六维一共 6 件未检出,**全是特异性**(漂移 2),其中 **4 件的漂移维就是 `sufficiency`**
+(accuracy/005、inferenceScaffolding/009、labelBias/009、outcomeAlignment/005)。
+也就是说:判官对 sufficiency 打分本身最不稳,这份不稳又反过来踩掉别的维的特异性容差。
+
+> **但不要因此就把 sufficiency 移出特异性检查。** 那样做六维会全部升到 90–100%,
+> 看着很漂亮 —— 而这正是 ledger 里警告过的「调门规直到变绿」。只有当 sufficiency 确实
+> 由确定性覆盖门独立裁决时,这个豁免才成立;那是产品决定,不是我能自己下的。
+
+### 尺度提醒(仍然适用)
+
+n=10 配 0.8 阈值,**一件 = 10pp**。相对 det2,只有 **focusCalibration(+3 件)** 超出 ±1~2 的
+噪声带;accuracy/inferenceScaffolding 各 +1、outcomeAlignment/sufficiency 各 −1,都不做因果解读。
+相对最初的 `scores` 基线,超出噪声带的是 **noise(+4)** 与 **focusCalibration(+2)**。
+
+---
+
 ## 7. 建议(等人拍板)
 
 1. **先修 12 条上限的覆盖漏洞再开 Layer B。** 现在的 5/7 里,accuracy 的两个「未检出」
