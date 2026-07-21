@@ -180,7 +180,20 @@ export interface BuildMatchTimelineParams {
   criticalWindowSeconds: ReadonlySet<number>;
 }
 
-const HIGH_VALUE_PURGEABLE_BUFFS = new Set<string>([
+/**
+ * 发射端白名单:哪些敌方增益值得报「你本可以驱散」。
+ *
+ * ⚠ 这个集合**不是**唯一的闸门。一条 miss 要走到这里,得先过 dispelAnalysis 的两道:
+ *   ① spellEffectData[id].dispelType === "Magic"   (DB2 挖掘 + 人工覆盖层)
+ *   ② SPELL_CATEGORIES[id] 的 type 映射到 Critical/High(未收录 → Low → 丢弃)
+ * 三份清单断言的是同一件事(「这个增益可驱散且值得驱散」)却各自独立 —— 2026-07-21
+ * 全语料实测:9 条里 7 条是死条目,产品实际只发得出 Power Infusion 与 BoP。
+ *
+ * 所以本集合与上游的一致性由 `matchTimeline.purgeWhitelist.test.ts` 断言,
+ * 已知因缺 dispelType 数据而失效的条目登记在 `PURGE_WHITELIST_DATA_BLOCKED`,
+ * 下次刷新 DB2 数据时测试会把它们顶出来。别只往这里加 id —— 加了也不会生效。
+ */
+export const HIGH_VALUE_PURGEABLE_BUFFS = new Set<string>([
   "10060", // Power Infusion
   "113858", // Dark Soul: Instability
   "113861", // Dark Soul: Misery
@@ -188,6 +201,20 @@ const HIGH_VALUE_PURGEABLE_BUFFS = new Set<string>([
   "12472", // Icy Veins
   "1022", // Blessing of Protection
   "1044", // Blessing of Freedom
+  "198111", // Temporal Shield
+  "110909", // Alter Time
+  "6940", // Blessing of Sacrifice
+]);
+
+/**
+ * 白名单里当前发不出来的条目 —— 缺的是 dispelType(DB2 挖掘只覆盖了 3560 条里的 123 条,
+ * 缺失≠不可驱散,只是没挖到)。不是「不该报」,是「报不了」。补齐数据后从这里删掉即可。
+ */
+export const PURGE_WHITELIST_DATA_BLOCKED = new Set<string>([
+  "113858", // Dark Soul: Instability
+  "113861", // Dark Soul: Misery
+  "190319", // Combustion
+  "12472", // Icy Veins
   "198111", // Temporal Shield
   "110909", // Alter Time
 ]);

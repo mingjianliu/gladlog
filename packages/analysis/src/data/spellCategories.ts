@@ -116,6 +116,11 @@ export const SPELL_CATEGORIES: Record<string, ISpellCategoryEntry> = {
   "196555": { type: "immunities", duration: 5 }, // Netherwalk
   "31224": { type: "immunities", duration: 5 }, // Cloak of Shadows
   "1022": { type: "immunities", duration: 10 }, // Blessing of Protection
+  // 2026-07-21 补:漏驱散白名单里的圣骑士三祝福,只有 BoP 有分类条目,
+  // Freedom/Sacrifice 缺 → getPriority 落 Low → 全语料 1245 场一次都没发出来。
+  // 两者的 dispelType=Magic 来自 DB2 挖掘(权威),缺的只是分类标签。
+  "1044": { type: "buffs_defensive", duration: 8 }, // Blessing of Freedom
+  "6940": { type: "buffs_defensive", duration: 12 }, // Blessing of Sacrifice
   // ── 进攻增益(spellDanger/isOffensiveSpell 消费)──
   "12472": { type: "buffs_offensive", duration: 25 }, // Icy Veins
   "19574": { type: "buffs_offensive", duration: 15 }, // Bestial Wrath
