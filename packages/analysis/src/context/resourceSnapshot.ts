@@ -57,6 +57,12 @@ export function buildPlayerLoadout(
   }>,
   enemyCDTimeline: IEnemyCDTimeline,
   enemies?: ICombatUnit[],
+  /**
+   * 敌方技能组(与友方同源:`extractMajorCooldowns`,按天赋过滤)。
+   * 传入后敌方 `<cooldowns>` 与友方同格式、同 `[UNUSED]` 语义;
+   * 缺省(老调用点/夹具)回落到旧的"只列本场放过的"行为。
+   */
+  enemyCooldowns?: Array<{ player: ICombatUnit; cds: IMajorCooldownInfo[] }>,
 ): {
   text: string;
   playerIdMap: Map<string, number>;
@@ -117,20 +123,40 @@ export function buildPlayerLoadout(
     lines.push("  </unit>");
   }
 
+  // 敌方技能组优先用 extractMajorCooldowns 的结果(与友方同源、按天赋过滤、
+  // 带 [UNUSED]);查不到才回落到"本场放过的"旧行为。见 buildMatchContext 里
+  // enemyCooldowns 的注释。
+  const enemyKitByName = new Map<string, IMajorCooldownInfo[]>();
+  for (const { player, cds } of enemyCooldowns ?? []) {
+    if (cds.length === 0) continue;
+    enemyKitByName.set(player.name, cds);
+    enemyKitByName.set(player.name.split("-")[0], cds);
+  }
+  const enemyKitFor = (name: string): IMajorCooldownInfo[] | undefined =>
+    enemyKitByName.get(name) ?? enemyKitByName.get(name.split("-")[0]);
+
   for (const player of enemyCDTimeline.players) {
     const pid = nextId++;
     enemyIdMap.set(player.playerName, pid);
     enemyIdMap.set(player.playerName.split("-")[0], pid);
+    const kit = enemyKitFor(player.playerName);
+    // **并集,不是替换。** 两条路径用不同目录:extractMajorCooldowns 走
+    // classMetadata(天赋过滤、含未使用),enemyCDTimeline 走 isOffensiveSpell +
+    // spellEffectData(只含本场放过的)。前者独有的是"没交的牌",后者独有的是
+    // 一批进攻爆发 CD(Frozen Orb / Army of the Dead / Shadow Dance / Stormkeeper …)。
+    // 首版直接替换,实测丢了 1418 条,丢的恰好是"什么爆发要来了"那半 —— 对治疗
+    // 教练与"他还有什么没交"同等重要。同名以技能组的值为准(天赋修正后的冷却),
+    // 避免同一技能出现两个冷却值(2026-07-20 D 类的教训)。
+    const kitNames = new Set((kit ?? []).map((c) => c.spellName));
+    const observedOnly: string[] = [];
     const seen = new Set<string>();
-    const uniqueCDs: string[] = [];
     for (const cd of player.offensiveCDs) {
-      const key = `${cd.spellName}|${cd.cooldownSeconds}`;
-      if (!seen.has(key)) {
-        seen.add(key);
-        uniqueCDs.push(`${cd.spellName} [${cd.cooldownSeconds}s]`);
-      }
+      if (kitNames.has(cd.spellName) || seen.has(cd.spellName)) continue;
+      seen.add(cd.spellName);
+      observedOnly.push(`${cd.spellName} [${cd.cooldownSeconds}s]`);
     }
-    const cdStr = uniqueCDs.length > 0 ? uniqueCDs.join(", ") : "none tracked";
+    const parts = [...(kit ?? []).map(fmtCDLabel), ...observedOnly];
+    const cdStr = parts.length > 0 ? parts.join(", ") : "none tracked";
     lines.push(
       `  <unit id="${pid}" name="${player.playerName}" spec="${player.specName}" role="enemy">`,
     );
@@ -146,10 +172,13 @@ export function buildPlayerLoadout(
     const pid = nextId++;
     enemyIdMap.set(enemy.name, pid);
     enemyIdMap.set(cleanEnemyName, pid);
+    const kit = enemyKitFor(enemy.name);
     lines.push(
       `  <unit id="${pid}" name="${enemy.name}" spec="${specToString(enemy.spec)}" role="enemy">`,
     );
-    lines.push(`    <cooldowns>none tracked</cooldowns>`);
+    lines.push(
+      `    <cooldowns>${kit ? kit.map(fmtCDLabel).join(", ") : "none tracked"}</cooldowns>`,
+    );
     lines.push("  </unit>");
   }
 

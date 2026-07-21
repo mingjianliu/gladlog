@@ -193,6 +193,24 @@ export function buildMatchContext(
   const teammateCooldowns = friends
     .filter((p) => p.id !== owner.id)
     .map((p) => ({ player: p, cds: extractMajorCooldowns(p, combat) }));
+  // 敌方技能组走**同一个提取器**(2026-07-21 证据缺口普查 P1)。
+  //
+  // 此前敌方的 <cooldowns> 只列「这一场真放过的」,一次没放就打 "none tracked"
+  // —— 全语料 805/1245(65%)的场次至少有一个敌人是这个状态。而段落名就叫
+  // player_loadout,loadout 是技能组不是施放记录:友方渲染的是技能组(名副其实),
+  // 敌方渲染的是施放记录(名不副实)。
+  //
+  // 对治疗教练,敌方最有价值的信息恰恰是**「他还有什么没交」**,被丢掉的正是那半。
+  // 数据一直都在:实测敌我双方都带 COMBATANT_INFO(75–79 条天赋),
+  // extractMajorCooldowns 对敌方同样按天赋过滤、同样产出 [UNUSED] 标记 ——
+  // 敌方那条路径只是从来没调用过它。
+  //
+  // 只改渲染层,不动 enemyCDTimeline:后者的 offensiveCDs 还喂 burst 窗口与
+  // [ENEMY CD] 时间轴事件,那些**必须保持施放驱动**,不能混入没放过的 CD。
+  const enemyCooldowns = (enemies ?? []).map((e) => ({
+    player: e,
+    cds: extractMajorCooldowns(e as ICombatUnit, combat),
+  }));
   const enemyCDTimeline = reconstructEnemyCDTimeline(
     enemies,
     combat,
@@ -565,6 +583,7 @@ export function buildMatchContext(
       allTeamCDsWithSpec,
       enemyCDTimeline,
       enemies as ICombatUnit[],
+      enemyCooldowns,
     );
     tLines.push(loadoutText);
 
