@@ -2,7 +2,11 @@ import { createHash } from "crypto";
 import { mkdtempSync, mkdirSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { checkScoreProvenance } from "../src/provenance/checkScoreProvenance";
+import {
+  FACT_AUDIT_MAX,
+  FACT_AUDIT_MIN,
+  checkScoreProvenance,
+} from "../src/provenance/checkScoreProvenance";
 
 const sha256 = (s: string) => createHash("sha256").update(s).digest("hex");
 
@@ -118,37 +122,37 @@ describe("checkScoreProvenance(严格,无 legacy 宽容)", () => {
     expect(checkScoreProvenance(dir2).fail).toBe(1);
   });
 
-  /** 2026-07-20:PASS 1 审计集改为规则确定(全部含 M:SS 的断言句,上限 12,
-   *  不足 3 补到 3),合法长度因此是 [3,12] —— 第 4 条不再是错误。 */
-  it("factAudit 4–12 条 → OK(规则集大小随回复而变)", () => {
-    const dir = makeRun();
-    const s = validScore();
-    for (let i = 0; i < 9; i++) {
-      (s.factAudit as unknown[]).push({
-        claim: `extra ${i}`,
+  /** 2026-07-20:PASS 1 审计集改为规则确定(全部含 M:SS 的断言句,有上限,不足下限
+   *  时补齐),合法长度因此是 [FACT_AUDIT_MIN, FACT_AUDIT_MAX] —— 第 4 条不再是错误。
+   *  两个用例都从常量推出条数,不写死数字:2026-07-20 与 07-21 两次改上限都因为
+   *  这里写死而漏改(见 CLAUDE.md「门规谓词即规范」)。 */
+  const padTo = (s: Record<string, unknown>, n: number) => {
+    const fa = s.factAudit as unknown[];
+    while (fa.length < n)
+      fa.push({
+        claim: `extra ${fa.length}`,
         verdict: "verified",
         evidence: "x",
       });
-    }
-    expect((s.factAudit as unknown[]).length).toBe(12);
+    return s;
+  };
+
+  it("factAudit 恰好到上限 → OK(规则集大小随回复而变)", () => {
+    const dir = makeRun();
+    const s = padTo(validScore(), FACT_AUDIT_MAX);
+    expect((s.factAudit as unknown[]).length).toBe(FACT_AUDIT_MAX);
     writeScore(dir, s);
     expect(checkScoreProvenance(dir).fail).toBe(0);
   });
 
-  it("factAudit 超过 12 条 → FAIL(超出规则上限)", () => {
+  it("factAudit 超过上限 → FAIL", () => {
     const dir = makeRun();
-    const s = validScore();
-    for (let i = 0; i < 10; i++) {
-      (s.factAudit as unknown[]).push({
-        claim: `extra ${i}`,
-        verdict: "verified",
-        evidence: "x",
-      });
-    }
-    writeScore(dir, s);
+    writeScore(dir, padTo(validScore(), FACT_AUDIT_MAX + 1));
     const r = checkScoreProvenance(dir);
     expect(r.fail).toBe(1);
-    expect(r.failures[0].reason).toMatch(/3 to 12/);
+    expect(r.failures[0].reason).toMatch(
+      new RegExp(`${FACT_AUDIT_MIN} to ${FACT_AUDIT_MAX}`),
+    );
   });
 
   it("factAudit 缺 evidence 或 verdict 非枚举 → FAIL", () => {

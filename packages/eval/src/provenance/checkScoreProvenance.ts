@@ -29,6 +29,22 @@ export const FACT_AUDIT_VERDICTS = [
   "unsupported",
 ] as const;
 
+/**
+ * Legal factAudit length — must stay equal to the PASS 1 audit-set bounds
+ * documented in `docs/commands/eval-baseline.md`. The doc is the spec the judge
+ * reads; this validator is the gate that checks the judge obeyed it. If the two
+ * disagree, correct scores get rejected (or wrong ones accepted) — so
+ * `factAuditBounds.test.ts` parses the doc and asserts these exact numbers.
+ *
+ * MAX was 12 until 2026-07-21. Raised to 20 after the cap was measured hiding
+ * real defects: in the calibration suite the planted fabrication landed on the
+ * 13th timestamp-bearing sentence, outside the first-12 window, so two judges
+ * found it, wrote it into `notes`, and the rubric forbade it from counting.
+ * accuracy scored 8/10 while the judge's true sensitivity was 10/10.
+ */
+export const FACT_AUDIT_MIN = 3;
+export const FACT_AUDIT_MAX = 20;
+
 /** 统一的 prompt 文件解析:'<ordinal>-*' 前缀优先,回落 '<ordinal>.txt'。
  * judgeSpotAudit/calibrateAuditor 共用,保持与校验器一致(终审 F5)。 */
 export function promptFileFor(
@@ -167,21 +183,22 @@ export function checkScoreProvenance(runDir: string): ScoreProvenanceResult {
       }
     }
 
-    // (d) Validate factAudit: 3–12 条,claim/evidence 非空,verdict 为枚举值。
+    // (d) Validate factAudit: [FACT_AUDIT_MIN, FACT_AUDIT_MAX] 条,claim/evidence
+    // 非空,verdict 为枚举值。
     //
     // 区间而非定值:2026-07-20 起 PASS 1 的审计集由规则确定(见 eval-baseline.md)
-    // —— 取回复里全部含 M:SS 时间戳的断言句,上限 12;不足 3 条时补到 3。所以
-    // 合法长度恰好是 [3, 12]。**必须记录完整的规则集,不许截断**:审计集确定化的
-    // 意义就在于复核者能验证"这批主张确实被查过";只记 3 条等于把可复核性丢掉。
+    // —— 取回复里全部含 M:SS 时间戳的断言句,有上限;不足下限时补齐。所以合法长度
+    // 恰好是那条规则的下限与上限。**必须记录完整的规则集,不许截断**:审计集确定化
+    // 的意义就在于复核者能验证"这批主张确实被查过";只记 3 条等于把可复核性丢掉。
     if (!hasFailed) {
       const factAudit = score.factAudit as unknown[] | undefined;
 
       if (
         !Array.isArray(factAudit) ||
-        factAudit.length < 3 ||
-        factAudit.length > 12
+        factAudit.length < FACT_AUDIT_MIN ||
+        factAudit.length > FACT_AUDIT_MAX
       ) {
-        failReason = "factAudit must be an array with 3 to 12 entries";
+        failReason = `factAudit must be an array with ${FACT_AUDIT_MIN} to ${FACT_AUDIT_MAX} entries`;
         hasFailed = true;
       } else {
         for (const entry of factAudit) {

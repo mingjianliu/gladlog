@@ -26,10 +26,26 @@ npx tsx packages/eval/scripts/buildCalibration.ts --run <runId>   # 可加 --sou
 > `$GLADLOG_EVAL_HOME/runs/<runId>/judge-calibration/cases/CASEID/prompt.txt` and `.../CASEID/response.txt`.
 > Apply the scoring rubric from `docs/commands/eval-baseline.md` Step 3 exactly — three-pass
 > process (fact audit → anchored dimension assessment → JSON) and the 1/3/5 anchors. There is no
-> quality-report.json for this item — skip the consistency rules that reference it. Do not read any
-> other file, directory listing, or manifest. Write ONLY the score JSON (standard 7-dimension
-> format with prompt and response blocks, factAudit included) to
+> quality-report.json for this item — skip the consistency rules that reference it.
+>
+> BLIND-EVALUATION RULE — NON-NEGOTIABLE: read ONLY the two files named above plus the rubric.
+> Do NOT read, grep, list, or otherwise inspect `calibration-manifest.json`, any other case
+> directory, any other score file, or any directory listing under `judge-calibration/`. Your
+> judgment must rest solely on the prompt and response text in front of you — never on what
+> another case was scored or on whether a defect "looks planted".
+>
+> For `matchId`: write `"unknown"`. Do not go looking for it.
+>
+> Write ONLY the score JSON (standard 7-dimension format with prompt and response blocks,
+> factAudit included) to
 > `$GLADLOG_EVAL_HOME/runs/<runId>/judge-calibration/scores/CASEID.json`.
+
+> **这三段是实测换来的,别删**(2026-07-21,80 件校准):旧模板只说了「不要读其他文件」,
+> 结果 **2/80 越界** —— 一个判官 grep 了 `calibration-manifest.json` 读到植入缺陷描述;
+> 另一个读了兄弟评分文件、并用「兄弟件是镜像缺陷」来佐证自己的判定。根因是模板**没告诉
+> 判官 `matchId` 找不到时该写什么**,于是它们为了填字段去翻目录,顺手看到了不该看的。
+> 「显式给出兜底值」比「禁止某个行为」有效:堵住动机,而不只是宣布规则。
+> 两件都已隔离重评。**盲评在 harness 层面守不住,只能靠模板 + 事后自述 + 隔离重评。**
 
 全部一次并行派出。一件一代理——绝不两件进一个代理(它会认出近重复 prompt 并推断扰动)。
 
