@@ -114,25 +114,84 @@ accuracy 方差现在集中在那一个源上,而它是查证漏检。
 
 ---
 
-## 5. 对 Layer B 的意思
+## 5. 完整 7 维 verdict —— 剩余 50 件已补齐
 
-- 原状态 **4/7**(PASS: inferenceScaffolding / accuracy / outcomeAlignment / focusCalibration;
-  FAIL: sufficiency / noise / labelBias)。
-- 本轮把 noise 从 FAIL 翻成 PASS,labelBias 保持 PASS。**若其余五维不变,即 5/7,达到判分门槛。**
-- **但「其余五维不变」目前是假设,不是测量。** 另外五维的扰动件
-  (`fabricated-claim` / `removed-deaths` / `shuffled-events` / `wrong-outcome` / `trivia-focus`,
-  共 50 件)**没有在 v3 rubric 下重评过**,拿 v3 的 `none` 对照去配 v2 的扰动件是无效比较。
-  要给出真正的 7 维 verdict,得把那 50 件补齐。
-- `sufficiency` 的真盲区跟本轮无关,仍按 BACKLOG 14.2 第二方向绕过(交给 `qualityCheck`
-  的确定性覆盖门)。
+80 件全部在 v3 rubric 下重评(`scores-det2/`),与改动前的 `scores/` 是同套件、同 seed、
+同判官模型的**受控对比**。两次连跑结果完全一致。
+
+| 维度                 | 扰动类           | 改动前 `scores` | 改动后 `scores-det2` | Δ(件)  |
+| -------------------- | ---------------- | --------------- | -------------------- | ------ |
+| accuracy             | fabricated-claim | 80% PASS        | 80% PASS             | 0      |
+| inferenceScaffolding | shuffled-events  | 100% PASS       | 80% PASS             | −2     |
+| outcomeAlignment     | wrong-outcome    | 80% PASS        | **100% PASS**        | +2     |
+| **noise**            | duplicated-noise | **50% FAIL**    | **90% PASS**         | **+4** |
+| **labelBias**        | severity-labels  | **70% FAIL**    | **80% PASS**         | +1     |
+| **focusCalibration** | trivia-focus     | 80% PASS        | **70% FAIL**         | −1     |
+| sufficiency          | removed-deaths   | 40% FAIL        | 30% FAIL             | −1     |
+| **合计**             |                  | **4/7**         | **5/7 —— 达标**      |        |
+
+`calibrate-judge.md` 要求 5/7 才能判分。**门槛过了。**
+
+### ⚠ 但这个 5/7 很脆,别当成稳态
+
+- n=10 配 0.8 阈值,**一件 = 10pp**。七维里只有 **noise(+4)** 的变动超出 ±1~2 的噪声带,
+  而且它有机制解释(accuracy 漂移被压下去,见 §4)。其余六维的移动全都在一两件之内,
+  **不做因果解读**。
+- 五个 PASS 里有三个(accuracy / inferenceScaffolding / labelBias)**恰好压线 80%**,
+  再掉一件就 FAIL。
+
+### 两个 FAIL 的性质完全不同,且都不是「判官看不见」
+
+逐对拆 `calibration-report-scores-det2.md` 的明细:
+
+| 维度                 | 敏感性(判官有没有看见)    | 判未检出的真实原因                                                                                            |
+| -------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| **accuracy**         | **10/10 全看见**          | 2 件是 **12 条上限的规则伪影**(见下),不是漏检                                                                 |
+| **focusCalibration** | **10/10 全看见**(5→1/2/3) | 3 件全是特异性:漂移 2 分到 outcomeAlignment / inferenceScaffolding / sufficiency —— **已经不再漏到 accuracy** |
+| **sufficiency**      | **3/10**                  | 真盲区:7 件里 6 件 `5→5`、1 件 `4→5`(**反而升了**)                                                            |
+
+**只有 sufficiency 是真的看不见。** 第四次独立复现,结论不变。
+
+### 发现一个规则 bug:12 条上限会吃掉植入的捏造
+
+accuracy 的两个未检出(源 001、源 010)**都不是判官没找到**。两个判官都在 notes 里写明:
+捏造的 `Mass Dispel` 那句是响应里第 **13** 个带时间戳的句子,刚好越过 `cca541c` 定的
+「前 12 条」审计集,而 rubric 明确规定「集合外发现的问题写进 notes,但不影响分数」。
+判官照规矩办事,规则把 10/10 记成了 8/10。
+
+这不是校准套件的问题,是**审计集选取规则本身的覆盖漏洞** —— `fabricateClaim` 插入的位置
+不受 12 条窗口约束。修法三选一:抬高上限、把「提到 prompt 里不存在的法术」的句子无条件
+纳入审计集、或改成跨全文分层抽样而非取前 12。**修完 accuracy 应当是 100%,那时候的
+5/7 才算站得稳。**
 
 ---
 
-## 6. 建议(等人拍板)
+## 6. 盲评纪律:80 个判官里 2 个越界
 
-1. **补评剩余 50 件**到 `scores-det2/`,拿到完整 7 维 verdict —— 这是唯一还挡着 Layer B 的测量。
-   成本约 50 个子代理。
-2. 若目标是继续压方差,方向应该是**查证漏检**而不是锚点:锚点这条已经见底(0/30 违规,
-   没有剩余空间)。可考虑要求判官对每条主张写出**它在 prompt 里的行号**,把「查过了」
-   变成可核对的痕迹。
-3. **不要**再叠新的 rubric 改动直到 1 做完 —— 现在的归因刚刚干净,再叠就分不清了。
+`calibrate-judge.md` 的盲评铁律**在 harness 层面守不住**这件事,本轮又有实证:
+
+- **case-37** 的判官 grep 了 `calibration-manifest.json`,读到了该件的植入缺陷描述。
+  它自己主动报告了这件事,并说 grep 之前已独立得出同样诊断 —— 但这条不能靠自述采信。
+- **case-57** 的判官读了 `scores-det2/case-02.json`,并明确用它佐证自己的判定
+  (「兄弟件是镜像缺陷,所以这是植入的」)。这直接影响了结论。
+
+两件都已隔离(移出目录另存)并用**加了显式禁令的 prompt 重评**,上表数字来自干净重评。
+另有若干判官为了找 `matchId` 读过兄弟评分文件的格式 —— 没有触及判定,但同源。
+
+**根因是我的派发 prompt**:只说了「不要读其他文件」,没说「找不到 matchId 就写 unknown」,
+于是判官为了填字段去翻目录。重评用的 prompt 已经补上这一句,应固化进 `calibrate-judge.md`
+的 Step 2 模板。
+
+---
+
+## 7. 建议(等人拍板)
+
+1. **先修 12 条上限的覆盖漏洞再开 Layer B。** 现在的 5/7 里,accuracy 的两个「未检出」
+   是假的;修完是 100%,五个压线 PASS 里最关键的一个就稳了。这是低成本高杠杆的一步。
+2. **`calibrate-judge.md` Step 2 模板补两句**:matchId 找不到就写 unknown;显式禁止读
+   manifest / 其他 case / 其他评分文件,并说明理由。本轮 2/80 越界都源于模板缺这两句。
+3. 若目标是继续压方差,方向是**查证漏检**而不是锚点 —— 锚点已见底(0/30 违规,无剩余空间)。
+   可考虑要求判官对每条主张写出**它在 prompt 里的行号**,把「查过了」变成可核对的痕迹。
+4. `sufficiency` 不要再试图靠 rubric 修 —— 四次独立测量都是盲区。按 BACKLOG 14.2 第二方向,
+   交给 `qualityCheck` 的确定性覆盖门裁决,`eval-ab.md` 本来就是这么规定的。
+5. **不要**再叠新的 rubric 改动直到 1 做完 —— 现在的归因刚刚干净,再叠就分不清了。
