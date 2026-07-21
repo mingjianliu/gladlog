@@ -118,18 +118,37 @@ describe("checkScoreProvenance(严格,无 legacy 宽容)", () => {
     expect(checkScoreProvenance(dir2).fail).toBe(1);
   });
 
-  it("factAudit 第 4 条(非恰 3)→ FAIL", () => {
+  /** 2026-07-20:PASS 1 审计集改为规则确定(全部含 M:SS 的断言句,上限 12,
+   *  不足 3 补到 3),合法长度因此是 [3,12] —— 第 4 条不再是错误。 */
+  it("factAudit 4–12 条 → OK(规则集大小随回复而变)", () => {
     const dir = makeRun();
     const s = validScore();
-    (s.factAudit as unknown[]).push({
-      claim: "extra",
-      verdict: "verified",
-      evidence: "x",
-    });
+    for (let i = 0; i < 9; i++) {
+      (s.factAudit as unknown[]).push({
+        claim: `extra ${i}`,
+        verdict: "verified",
+        evidence: "x",
+      });
+    }
+    expect((s.factAudit as unknown[]).length).toBe(12);
+    writeScore(dir, s);
+    expect(checkScoreProvenance(dir).fail).toBe(0);
+  });
+
+  it("factAudit 超过 12 条 → FAIL(超出规则上限)", () => {
+    const dir = makeRun();
+    const s = validScore();
+    for (let i = 0; i < 10; i++) {
+      (s.factAudit as unknown[]).push({
+        claim: `extra ${i}`,
+        verdict: "verified",
+        evidence: "x",
+      });
+    }
     writeScore(dir, s);
     const r = checkScoreProvenance(dir);
     expect(r.fail).toBe(1);
-    expect(r.failures[0].reason).toMatch(/exactly 3/);
+    expect(r.failures[0].reason).toMatch(/3 to 12/);
   });
 
   it("factAudit 缺 evidence 或 verdict 非枚举 → FAIL", () => {

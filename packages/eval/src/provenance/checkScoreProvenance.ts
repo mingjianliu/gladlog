@@ -23,8 +23,6 @@ function sha256File(filePath: string): string {
   return createHash("sha256").update(content).digest("hex");
 }
 
-
-
 export const FACT_AUDIT_VERDICTS = [
   "verified",
   "refuted",
@@ -169,12 +167,21 @@ export function checkScoreProvenance(runDir: string): ScoreProvenanceResult {
       }
     }
 
-    // (d) Validate factAudit: 恰 3 条,claim/evidence 非空,verdict 为枚举值
+    // (d) Validate factAudit: 3–12 条,claim/evidence 非空,verdict 为枚举值。
+    //
+    // 区间而非定值:2026-07-20 起 PASS 1 的审计集由规则确定(见 eval-baseline.md)
+    // —— 取回复里全部含 M:SS 时间戳的断言句,上限 12;不足 3 条时补到 3。所以
+    // 合法长度恰好是 [3, 12]。**必须记录完整的规则集,不许截断**:审计集确定化的
+    // 意义就在于复核者能验证"这批主张确实被查过";只记 3 条等于把可复核性丢掉。
     if (!hasFailed) {
       const factAudit = score.factAudit as unknown[] | undefined;
 
-      if (!Array.isArray(factAudit) || factAudit.length !== 3) {
-        failReason = "factAudit must be an array with exactly 3 entries";
+      if (
+        !Array.isArray(factAudit) ||
+        factAudit.length < 3 ||
+        factAudit.length > 12
+      ) {
+        failReason = "factAudit must be an array with 3 to 12 entries";
         hasFailed = true;
       } else {
         for (const entry of factAudit) {

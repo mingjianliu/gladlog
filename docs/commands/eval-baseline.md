@@ -191,7 +191,7 @@ BASE_DIR="$GLADLOG_EVAL_HOME/runs/<runId>" npx tsx packages/eval/scripts/quality
 }
 ```
 
-7 个数值分全部为 1–5 整数。`factAudit` 恰 3 条,`verdict` ∈ `verified` / `refuted` / `unsupported`。`provenance` 每份必填:hash 用 `shasum -a 256 <prompt 文件> <response 文件>` 在**完整读过这两个文件之后**计算;绝不给不是本轮评的分数文件回填溯源。
+7 个数值分全部为 1–5 整数。`factAudit` 记录 PASS 1 **规则集的全部条目,不许截断**(合法长度 3–12,正好对应该规则的下限与上限);`verdict` ∈ `verified` / `refuted` / `unsupported`。`provenance` 每份必填:hash 用 `shasum -a 256 <prompt 文件> <response 文件>` 在**完整读过这两个文件之后**计算;绝不给不是本轮评的分数文件回填溯源。
 
 评分全部写完后跑严格校验(任一文件不合格 = 整个 run 作废,修复后重评):
 
