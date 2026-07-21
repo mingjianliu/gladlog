@@ -13,9 +13,11 @@
 - 套件:`runs/2026-07-20-smoke/judge-calibration`,seed 42,n=10 源。
 - 三份评分:`scores/`(v1)、`scores-det/`(v2 = `cca541c` 规则集)、
   `scores-det2/`(v3 = `3d92ba3` 查表锚点 + `回复:X | prompt:Y`)。
-- 本轮补完 v3 的 25 件(此前已有 case-01/06/08/13/14),共 30 件 = 10 源 ×
-  `{none, severity-labels, duplicated-noise}`。
+- 本轮补完 v3 的 **75 件**(此前已有 case-01/06/08/13/14),`scores-det2/` 现为完整 80 件。
+  §1–§4 用其中 30 件(10 源 × `{none, severity-labels, duplicated-noise}` —— 回复完全相同、
+  可当同一份材料被三个判官读三遍的那一组);§5 用全部 80 件出 7 维 verdict。
 - 判据脚本:`packages/eval/scripts/judgeVariance.ts`(`4ded221` 落地,4 条单测)。
+- `scores-det/` 只有那 30 件,故只进 §1–§4 的对比,不出现在 §5 的 7 维表里。
 
 **哈希稳定性**:连跑两次得到相同 `inputHash`(`scores-det2` = `f2d1acf57b12186c`)。
 第一次读数拿到的是 `07eaf049c44bba60` —— 两个子代理在完成通知发出前又重写了文件,
