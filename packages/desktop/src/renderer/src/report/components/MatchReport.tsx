@@ -2,6 +2,8 @@ import { useMemo, useState } from "react";
 
 import { deriveBurstLedger } from "../derive/burstLedger";
 import { type DeathRecap, deriveDeathRecaps } from "../derive/deathRecap";
+import { deriveDispelDash } from "../derive/dispelDash";
+import { deriveKickDash } from "../derive/kickDash";
 import type { MeterMode } from "../derive/meterRows";
 import { deriveStatsTable } from "../derive/statsTable";
 import { deriveSummary } from "../derive/summary";
@@ -10,6 +12,8 @@ import type { ReportSource } from "../derive/types";
 import { deriveVulnBands } from "../derive/vulnWindows";
 import { BurstLedgerCard } from "./BurstLedgerCard";
 import { DeathRecapCard } from "./DeathRecapCard";
+import { DispelDashboard } from "./DispelDashboard";
+import { KickDashboard } from "./KickDashboard";
 import { Meters } from "./Meters";
 import { ProComparisonVerified } from "./ProComparisonVerified";
 import { ReplayView } from "./ReplayView";
@@ -61,6 +65,8 @@ export function MatchReport({
   const statsRows = useMemo(() => deriveStatsTable(source), [source]);
   const vulnBands = useMemo(() => deriveVulnBands(source), [source]);
   const ledgerPlayers = useMemo(() => deriveBurstLedger(source), [source]);
+  const kickRows = useMemo(() => deriveKickDash(source), [source]);
+  const dispelDash = useMemo(() => deriveDispelDash(source), [source]);
   const [recap, setRecap] = useState<DeathRecap | null>(null);
   // 回放光标投影(1c):从回放切回战报时显示最后位置
   const [lastReplayT, setLastReplayT] = useState<number | null>(null);
@@ -150,6 +156,8 @@ export function MatchReport({
             </div>
           </div>
           <BurstLedgerCard players={ledgerPlayers} onSeek={handleSeekEvent} />
+          <KickDashboard rows={kickRows} onSeek={handleSeekEvent} />
+          <DispelDashboard dash={dispelDash} onSeek={handleSeekEvent} />
         </div>
       )}
       {view === "replay" && (
