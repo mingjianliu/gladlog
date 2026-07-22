@@ -2073,6 +2073,31 @@
      ]
     },
     {
+     "timestamp": 1782875855365,
+     "eventName": "SPELL_AURA_APPLIED",
+     "spellId": 10060,
+     "spellName": "Power Infusion",
+     "srcId": "Player-57-0DFDEAC2",
+     "srcName": "PlayerC-Test",
+     "destId": "Player-157-0B92DD0B",
+     "destName": "PlayerA-Test",
+     "auraType": "BUFF",
+     "params": [
+      "Player-57-0DFDEAC2",
+      "PlayerC-Test",
+      "0x512",
+      "0x80000000",
+      "Player-157-0B92DD0B",
+      "PlayerA-Test",
+      "0x548",
+      "0x80000000",
+      "10060",
+      "Power Infusion",
+      "0x40",
+      "BUFF"
+     ]
+    },
+    {
      "timestamp": 1782875856545,
      "eventName": "SPELL_AURA_REMOVED",
      "spellId": 65081,
@@ -2999,6 +3024,31 @@
       "Ignite",
       "0x4",
       "DEBUFF\r"
+     ]
+    },
+    {
+     "timestamp": 1782875862365,
+     "eventName": "SPELL_AURA_REMOVED",
+     "spellId": 10060,
+     "spellName": "Power Infusion",
+     "srcId": "Player-57-0DFDEAC2",
+     "srcName": "PlayerC-Test",
+     "destId": "Player-157-0B92DD0B",
+     "destName": "PlayerA-Test",
+     "auraType": "BUFF",
+     "params": [
+      "Player-57-0DFDEAC2",
+      "PlayerC-Test",
+      "0x512",
+      "0x80000000",
+      "Player-157-0B92DD0B",
+      "PlayerA-Test",
+      "0x548",
+      "0x80000000",
+      "10060",
+      "Power Infusion",
+      "0x40",
+      "BUFF"
      ]
     },
     {
@@ -36518,6 +36568,31 @@
       "Ignite",
       "0x4",
       "DEBUFF\r"
+     ]
+    },
+    {
+     "timestamp": 1782875858573,
+     "eventName": "SPELL_INTERRUPT",
+     "spellId": 2139,
+     "spellName": "Counterspell",
+     "srcId": "Player-57-0DFFA9C4",
+     "srcName": "PlayerD-Test",
+     "destId": "Player-57-0DFDEAC2",
+     "destName": "PlayerC-Test",
+     "params": [
+      "Player-57-0DFFA9C4",
+      "PlayerD-Test",
+      "0x512",
+      "0x80000000",
+      "Player-57-0DFDEAC2",
+      "PlayerC-Test",
+      "0x548",
+      "0x80000000",
+      "2139",
+      "Counterspell",
+      "0x40",
+      "585",
+      "Smite"
      ]
     }
    ],
