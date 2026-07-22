@@ -26,7 +26,7 @@ a death / finding / burst window and jump to that moment in the video.
 - **gladlog seam:** the desktop app already stores matches with `startTime`/
   `endTime`; a recording started around a match window can be associated by time.
 
-## 2. Interrupt (kick) dashboard
+## 2. Interrupt (kick) dashboard ✅(2026-07-22 与 #3 打包落地,f145aaf:KickDashboard 两队聚合 + 逐条审计 + seek;与爆发账本同谓词 analyzeKickAudit)
 
 A per-match (and maybe cross-match) view of interrupts: kicks landed vs. missed,
 by player, interrupt availability windows, locked schools, wasted kicks.
@@ -39,7 +39,7 @@ by player, interrupt availability windows, locked schools, wasted kicks.
   renderer + a small aggregator in `analysis` (kicks by caster/target, hit/miss,
   interrupt uptime). Reuse the report UI patterns (FindingsList/TimelineStrip).
 
-## 3. Purge / dispel dashboard
+## 3. Purge / dispel dashboard ✅(2026-07-22 与 #2 打包落地,f145aaf:DispelDashboard 账目双向 + 漏 purge/漏解列表 + CC 解除率;reconstructDispelSummary 同谓词)
 
 A view of offensive purges and dispels: purges done, **missed purge
 opportunities** (an enemy buff left up), by player, plus friendly dispels.
@@ -105,7 +105,7 @@ findings with cheap, always-available, fully-verifiable output. Old-fork referen
 gladlog's honesty ethos (deterministic, grounded) and reuses the existing
 `candidateFindings` / analysis utils. Medium.
 
-## 9. Match search / filter
+## 9. Match search / filter ✅(2026-07-22 收尾,fc2c73b:原有 胜负/赛制/单专精 基础上补 comp(专精 chips 同队全含)与日期范围;#12 全量 meta 常驻后纯客户端过滤即覆盖全集,未动 MatchStore)
 
 Filter the (now paginated) match list by spec, bracket, comp, result, date. Natural
 follow-on to the windowed list — extend `MatchStore.page` with predicates and add
@@ -125,7 +125,7 @@ filter controls to the sidebar. Small–medium.
   deterministically).
 - **SP-B2.1** — CDN corpus refresh (ship an updated `reference_vectors.json`
   without a full rebuild).
-- **zh/EN analysis-language toggle** — the prompts/output are zh-leaning; a
+- ~~**zh/EN analysis-language toggle**~~ ✅(实为已完成、状态未更新:settingsStore.aiLanguage + buildCoachSystemPrompt 语言注入 + 按语言分缓存 + SettingsPanel 开关 + 面板跟随,全部 LLM 出口——叙事/深挖/findings/对比解说——均消费该设置;2026-07-22 核实)— the prompts/output are zh-leaning; a
   language switch for findings + narrative.
 - **Timeline-prompt token compression** — the timeline-variant prompt is ~76%
   larger than the sparse one; compress it (also helps the slow `claude -p` local
