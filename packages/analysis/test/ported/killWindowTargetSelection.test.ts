@@ -116,7 +116,7 @@ describe("killWindowTargetSelection — main analysis", () => {
     ).toHaveLength(0);
   });
 
-  it("handles no trinket use detected (B41)", () => {
+  it("no trinket use detected → available(开局重置推断,2026-07-22 拍板)(B41)", () => {
     const enemy = makeUnit("e1", { name: "E1", spellCastEvents: [] });
     const enemy2 = makeUnit("e2", { name: "E2" });
     const windows = [
@@ -132,7 +132,7 @@ describe("killWindowTargetSelection — main analysis", () => {
       [enemy, enemy2],
       makeCombat(),
     );
-    expect(result[0].otherTargets[0].trinketAvailable).toBeNull();
+    expect(result[0].otherTargets[0].trinketAvailable).toBe(true);
   });
 
   it("handles no defensives tracked formatting (B42)", () => {
@@ -145,7 +145,7 @@ describe("killWindowTargetSelection — main analysis", () => {
         hpPercent: 100,
         defensivesAvailable: [],
         defensivesUnavailable: [],
-        trinketAvailable: null,
+        trinketAvailable: true,
         softnessScore: 10,
       },
       otherTargets: [],

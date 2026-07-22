@@ -121,6 +121,20 @@ export const SPELL_CATEGORIES: Record<string, ISpellCategoryEntry> = {
   // 两者的 dispelType=Magic 来自 DB2 挖掘(权威),缺的只是分类标签。
   "1044": { type: "buffs_defensive", duration: 8 }, // Blessing of Freedom
   "6940": { type: "buffs_defensive", duration: 12 }, // Blessing of Sacrifice
+  // 2026-07-22 拍板补:漏驱散只收「离散主动 CD」、不收常驻 HoT/护盾(放开常驻类
+  // 实测 103 → 892 行,59% 是回春类噪声——见 2026-07-21-evidence-gap-survey §6.5)。
+  // 下列 7 条与 Power Infusion 同类;id 从 EN 语料 SPELL_AURA_APPLIED 反向提取、
+  // 中文全量语料按 id 复核(83–862 次/70 日志),dispelType=Magic 来自 DB2。
+  // 时长为 EN 语料 applied→removed p50;Tip the Scales / Nature's Swiftness p50
+  // 仅 0.4s(被下一次施法立即消费),3s 未净化门槛天然滤掉即时消费的实例。
+  "210256": { type: "buffs_defensive", duration: 5 }, // Blessing of Sanctuary(509 次)
+  "29166": { type: "buffs_defensive", duration: 8 }, // Innervate(183 次)
+  "212295": { type: "buffs_defensive", duration: 3 }, // Nether Ward(607 次)
+  "378441": { type: "buffs_defensive", duration: 4 }, // Time Stop(48 次)
+  "370553": { type: "buffs_defensive", duration: 3 }, // Tip the Scales(969 次;p90=3.3s)
+  "132158": { type: "buffs_defensive", duration: 3 }, // Nature's Swiftness(1257 次;p90=2.9s)
+  "378081": { type: "buffs_defensive", duration: 3 }, // Nature's Swiftness 变体 id(621 次——双 id 腐烂教训,两个都收)
+  "79206": { type: "buffs_defensive", duration: 16 }, // Spiritwalker's Grace(705 次)
   // ── 进攻增益(spellDanger/isOffensiveSpell 消费)──
   "12472": { type: "buffs_offensive", duration: 25 }, // Icy Veins
   "19574": { type: "buffs_offensive", duration: 15 }, // Bestial Wrath

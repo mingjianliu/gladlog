@@ -575,8 +575,10 @@ describe("computeWindowCreationFacts", () => {
     ).toEqual([]);
   });
 
-  it("emits fact with null trinketOnCD when enemy healer has never cast trinket", () => {
-    // Enemy healer with no trinket cast history (trinket state unknown)
+  it("从未观察到饰品使用 → 推定可用,不发 fact(开局重置推断,2026-07-22 拍板)", () => {
+    // 旧行为:未观察到 = 「状态未知」也发 fact —— 全语料 95.5% 的 [OPPORTUNITY]
+    // 行(1424/1491)靠它支撑,在暗示一个可能不存在的机会。新行为:开局冷却
+    // 重置 ⇒ 没用过就是可用 ⇒ 敌方治疗能反手解开局,不构成干净机会。
     const enemyHealerNoTrinket = makeUnit("enemy-h", {
       reaction: CombatUnitReaction.Hostile,
       spec: CombatUnitSpec.Shaman_Restoration,
@@ -603,12 +605,7 @@ describe("computeWindowCreationFacts", () => {
       [],
       [],
     );
-    expect(facts.length).toBe(1);
-    expect(facts[0].atSeconds).toBe(40);
-    expect(facts[0].enemyHealerTrinketOnCD).toBe(null);
-    expect(facts[0].enemyHealerSpec).toBe(
-      specToString(CombatUnitSpec.Shaman_Restoration),
-    );
+    expect(facts).toHaveLength(0);
   });
 });
 
@@ -956,7 +953,7 @@ describe("F193 V2 — contested trade facts", () => {
     const fact = summary.contestedTradeFacts[0];
     expect(fact.teamMinHpPct).toBe(75);
     expect(fact.ccSpellName).toBe("Psychic Scream");
-    expect(fact.enemyHealerTrinket).toBe("unknown"); // trinket never used/observed
+    expect(fact.enemyHealerTrinket).toBe("available"); // 从未观察到使用 → 开局重置推定可用(2026-07-22 拍板)
     expect(fact.enemyInterruptsReady).toBe(1); // Warrior interrupt is ready
 
     const lines = formatHealerOffenseForContext(summary);

@@ -76,4 +76,19 @@ describe("HIGH_VALUE_PURGEABLE_BUFFS 与上游目录一致", () => {
       expect(reachesEmitter(spellId).ok, `spell ${spellId}`).toBe(true);
     }
   });
+
+  it("2026-07-22 拍板的七条离散主动 CD(八个 id)都能走到发射端", () => {
+    for (const spellId of [
+      "210256", // Blessing of Sanctuary
+      "29166", // Innervate
+      "212295", // Nether Ward
+      "378441", // Time Stop
+      "370553", // Tip the Scales
+      "132158", // Nature's Swiftness
+      "378081", // Nature's Swiftness(变体 id)
+      "79206", // Spiritwalker's Grace
+    ]) {
+      expect(reachesEmitter(spellId).ok, `spell ${spellId}`).toBe(true);
+    }
+  });
 });

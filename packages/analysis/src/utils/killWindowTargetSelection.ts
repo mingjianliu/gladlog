@@ -53,8 +53,8 @@ export interface IEnemySnapshot {
   defensivesAvailable: string[];
   /** Major defensive CDs that are on cooldown or whose buff is currently active. */
   defensivesUnavailable: string[];
-  /** true = trinket off cooldown, false = on cooldown, null = no trinket detected. */
-  trinketAvailable: boolean | null;
+  /** true = trinket off cooldown(含从未观察到使用——开局重置即就绪), false = on cooldown. */
+  trinketAvailable: boolean;
   /**
    * Softness score (higher = easier kill target):
    *   50 * (1 − hpFraction) + 50 * defensivesFraction
@@ -236,14 +236,19 @@ function getDefensiveStateAtTime(
 
 /**
  * Returns whether this enemy's PvP trinket is available at `windowStartSeconds`.
- * null when no trinket use was ever detected (can't determine type).
+ *
+ * Never-observed = available(不再返回 null)。游戏事实:竞技场开局冷却重置,
+ * 饰品必然就绪;友方路径一直按「没用过 = 可用」推,敌方按「未知」是同一事实
+ * 的不对称(2026-07-21 证据缺口普查 §6.5,2026-07-22 用户拍板)。此前 95.5%
+ * 的 [OPPORTUNITY] 行(1424/1491)靠「状态未知」支撑——在暗示一个可能不存在
+ * 的机会,比缺证据更糟。
  */
 export function getTrinketStateAtTime(
   enemy: ICombatUnit,
   windowStartSeconds: number,
   matchStartMs: number,
   isHealer: boolean,
-): boolean | null {
+): boolean {
   const trinketCD = isHealer ? HEALER_TRINKET_CD_S : DPS_TRINKET_CD_S;
   let lastUseSeconds: number | null = null;
 
@@ -257,7 +262,7 @@ export function getTrinketStateAtTime(
     lastUseSeconds = castSeconds;
   }
 
-  if (lastUseSeconds === null) return null; // no trinket use detected
+  if (lastUseSeconds === null) return true; // never observed → arena-start reset ⇒ available
   return lastUseSeconds + trinketCD <= windowStartSeconds;
 }
 
@@ -283,14 +288,13 @@ function snapshotEnemy(
     isHealerUnit,
   );
 
-  const trinketScore =
-    trinketAvailable === false ? 1 : trinketAvailable === true ? 0 : 0.5;
+  const trinketScore = trinketAvailable ? 0 : 1;
   const totalTracked = available.length + unavailable.length + 1; // +1 for trinket
   const spentTracked = unavailable.length + trinketScore;
   const defensivesFraction = totalTracked > 0 ? spentTracked / totalTracked : 0;
   const hpFraction = hpPercent !== null ? hpPercent / 100 : 0.5; // assume 50% if unknown
 
-  const trinketPenalty = trinketAvailable === false ? 15 : 0;
+  const trinketPenalty = trinketAvailable ? 0 : 15;
   const softnessScore =
     50 * (1 - hpFraction) + 50 * defensivesFraction + trinketPenalty;
 
@@ -405,8 +409,7 @@ function fmtDefensives(snap: IEnemySnapshot): string {
   } else if (snap.defensivesAvailable.length > 0) {
     parts.push(`defensives up: ${snap.defensivesAvailable.join(", ")}`);
   }
-  if (snap.trinketAvailable === false) parts.push("trinket on CD");
-  else if (snap.trinketAvailable === true) parts.push("trinket available");
+  parts.push(snap.trinketAvailable ? "trinket available" : "trinket on CD");
   return parts.join(", ");
 }
 

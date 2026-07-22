@@ -374,12 +374,7 @@ export function computeContestedTradeFacts(
       matchStartMs,
       true,
     );
-    const enemyHealerTrinket =
-      trinketAvailable === true
-        ? "available"
-        : trinketAvailable === false
-          ? "on CD"
-          : "unknown";
+    const enemyHealerTrinket = trinketAvailable ? "available" : "on CD";
 
     const interrupts = computeEnemyInterruptAvailability(
       enemies,
@@ -605,8 +600,9 @@ export interface IWindowCreationFact {
   enemyHealerSpec: string;
   /** Always 'Full' by construction — facts are only emitted at full DR. */
   enemyHealerDRLevel: DRLevel;
-  /** true = trinket known on CD; null = trinket never observed (state unknown). */
-  enemyHealerTrinketOnCD: boolean | null;
+  /** Always true by construction — never-observed = available(开局重置)会被
+   * 过滤掉,fact 只在 trinket 确认在 CD 时发出。 */
+  enemyHealerTrinketOnCD: boolean;
 }
 
 export function computeWindowCreationFacts(
@@ -649,8 +645,10 @@ export function computeWindowCreationFacts(
       matchStartMs,
       true,
     );
-    // trinketAvailable === true → healer can break the opener; not a clean opportunity
-    if (trinketAvailable === true) continue;
+    // trinket available(含从未观察到使用——开局重置即就绪)→ healer can break
+    // the opener; not a clean opportunity. 2026-07-22 拍板前这里把「未知」也放行,
+    // 95.5% 的 [OPPORTUNITY] 行靠它支撑——在暗示可能不存在的机会。
+    if (trinketAvailable) continue;
 
     facts.push({
       atSeconds: seg.fromSeconds,
@@ -659,7 +657,7 @@ export function computeWindowCreationFacts(
       enemyHealerName: enemyHealer.name,
       enemyHealerSpec: specToString(enemyHealer.spec),
       enemyHealerDRLevel: "Full",
-      enemyHealerTrinketOnCD: trinketAvailable === null ? null : true,
+      enemyHealerTrinketOnCD: true,
     });
   }
 
@@ -897,12 +895,8 @@ export function formatHealerOffenseForContext(
   }
 
   for (const f of windowCreationFacts) {
-    const trinket =
-      f.enemyHealerTrinketOnCD === true
-        ? "trinket on CD"
-        : "trinket state unknown (never observed)";
     lines.push(
-      `  [OPPORTUNITY] ${fmtTime(f.atSeconds)} (slack ${f.slackDurationSeconds}s): ${f.ccSpellName} ready; enemy healer ${f.enemyHealerName} DR Full, ${trinket} (opportunity, not a verdict).`,
+      `  [OPPORTUNITY] ${fmtTime(f.atSeconds)} (slack ${f.slackDurationSeconds}s): ${f.ccSpellName} ready; enemy healer ${f.enemyHealerName} DR Full, trinket on CD (opportunity, not a verdict).`,
     );
   }
 

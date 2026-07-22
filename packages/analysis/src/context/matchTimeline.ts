@@ -204,6 +204,16 @@ export const HIGH_VALUE_PURGEABLE_BUFFS = new Set<string>([
   "198111", // Temporal Shield
   "110909", // Alter Time
   "6940", // Blessing of Sacrifice
+  // 2026-07-22 拍板补:离散主动 CD 七条(不收常驻 HoT/护盾)——语料双向实证,
+  // 见 spellCategories.ts 同日注释。
+  "210256", // Blessing of Sanctuary
+  "29166", // Innervate
+  "212295", // Nether Ward
+  "378441", // Time Stop
+  "370553", // Tip the Scales
+  "132158", // Nature's Swiftness
+  "378081", // Nature's Swiftness(变体 id)
+  "79206", // Spiritwalker's Grace
 ]);
 
 /**
