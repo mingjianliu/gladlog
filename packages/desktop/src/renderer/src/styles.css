@@ -1713,6 +1713,33 @@ pre {
   height: 16px;
   border-radius: 3px;
 }
+.mlf-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  height: 26px;
+  padding: 0 8px;
+  background: var(--accent-fill);
+  color: var(--accent-text);
+  border: none;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.mlf input[type="date"] {
+  font-size: 11px;
+  height: 26px;
+  max-width: 118px;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--hairline);
+  border-radius: 7px;
+  padding: 2px 4px;
+}
+.mlf-datesep {
+  color: var(--ink-2);
+  font-size: 11px;
+}
 .mlf-clear {
   margin-left: auto;
   font-size: 11px;

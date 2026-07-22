@@ -191,7 +191,7 @@ export default function App({
       ) : appView === "stats" ? (
         <StatsDashboard
           onCompClick={(specId) => {
-            setFilter({ ...EMPTY_FILTER, specId });
+            setFilter({ ...EMPTY_FILTER, specIds: [specId] });
             setAppView("matches");
           }}
           onOpenMatch={(matchId) => {

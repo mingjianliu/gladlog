@@ -20,7 +20,7 @@ const base = loadRealMatchFixture();
  */
 function withInjectedUtility() {
   const m = JSON.parse(JSON.stringify(base)) as typeof base;
-  const units = m.units as Record<string, Record<string, unknown>>;
+  const units = m.units as unknown as Record<string, Record<string, unknown>>;
   const p1 = units["Player-1-00000001"]!; // Friendly kicker/purger
   const p2 = units["Player-1-00000002"]!; // Hostile target
   const p3 = units["Player-1-00000003"]!; // Friendly cleanse target
