@@ -2517,7 +2517,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     "    is one this ledger does not track, NOT one that was unavailable. Other sections may still cite it.",
     "  [RES] rdy: = abilities READY at that instant. `rdy:Δ` = unchanged since the previous [RES];",
     "    a leading `-<spell>` marks one that just LEFT the ready set. `cd:<spell>(Ns)` = seconds until it returns.",
-    "  [DMG SPIKE] timestamp = the window's START; its `A% -> B% HP` spans that window, so B is at start+duration.",
+    "  [DMG SPIKE] `START–END` = the window's exact bounds; its `A% -> B% HP` maps directly to those two timestamps.",
     "  Window durations `(Ns)` are computed from the displayed start/end timestamps, so they always match what you see.",
     "  [OFFENSIVE WINDOW] `X on <unit>` = damage DEALT TO that unit (it is the victim, not the dealer);",
     "    its `peak spike` figure covers the spike's own sub-window, printed after it — not the whole offensive window.",

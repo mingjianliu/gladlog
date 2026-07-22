@@ -57,6 +57,11 @@ BASE_DIR="$GLADLOG_EVAL_HOME/runs/<runId>" npx tsx packages/eval/scripts/quality
 > "ended early — absorbed, dispelled, or cancelled") into one specific cause. When counting
 > events (stuns, casts, spikes), recount from the timeline rather than from memory.
 >
+> Also re-verify WHO each claim is about: match the exact unit tag (e.g. `4(AWarrior)`)
+> named on that prompt line, not just its timestamp and value. In dense multi-unit fights
+> it is easy to attribute a cast, cooldown, or kill to a plausible-sounding but wrong unit —
+> treat unit identity as a fact to check, same as the timestamp and the number.
+>
 > FOCUS DISCIPLINE: structure the response around the 2-3 windows that actually
 > decided the match; give each secondary observation at most one line, and label
 > minor items as minor. Do not let "what went right" match the decisive analysis
@@ -144,7 +149,7 @@ BASE_DIR="$GLADLOG_EVAL_HOME/runs/<runId>" npx tsx packages/eval/scripts/quality
   - 5: 无重复状态/触发刷屏;每行都是状态变化。
   - 3: 约 10–30% 行为重复/未变状态。
   - 1: 时间轴 >50% 是刷屏或重复。
-  - 一致性规则: 按该场实测 `exactDuplicateRatio` / `resReadySpamLines` 打分并在证据句引用数字,不许凭印象。
+  - 一致性规则: 按该场实测 `exactDuplicateRatio` / `resReadySpamLines` / `templateDuplicateRatio` 打分并在证据句引用数字,不许凭印象;三者中任一落入某档区间即可定档,不要求三者同时满足。
 
 - **labelBias** — 标签是否在推理前就带节奏?
   - 5: 中性标题;严重度标记只出现在数据支持处(真实的 25% 以下 HP 骤降)。

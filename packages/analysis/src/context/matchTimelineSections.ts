@@ -374,7 +374,7 @@ export function emitDmgSpikeEntries(params: {
 
     addEntry(
       pw.fromSeconds,
-      `${fmtTime(pw.fromSeconds)}  [DMG SPIKE]   ${pid(pw.targetName)} (${pw.targetSpec}): ${dmgM}M in ${windowSec}s (${dpsK}k DPS)${hpStr}${absorbStr}${sourceStr}`,
+      `${fmtTime(pw.fromSeconds)}–${fmtTime(pw.toSeconds)}  [DMG SPIKE]   ${pid(pw.targetName)} (${pw.targetSpec}): ${dmgM}M in ${windowSec}s (${dpsK}k DPS)${hpStr}${absorbStr}${sourceStr}`,
     );
   }
 }
