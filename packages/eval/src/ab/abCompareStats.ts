@@ -138,20 +138,40 @@ export async function main(): Promise<void> {
 
   const scoresByArm = new Map<string, ScoreFile>(); // key: arm|ordinal
   let missing = 0;
+  // matchId 占位约定(eval-ab.md):盲件不带 MATCHID 头,score JSON 的 matchId
+  // 必须写盲件 id 本身。不核对的话判官会各自编占位(实测出过 null/"unknown"/
+  // "NO_MATCHID_HEADER_FOUND" 三种),下游按 matchId 聚合就得逐轮考古。
+  // 等于**真实** matchId 是更糟的情况 —— 盲件里没有这个信息,判官只可能从
+  // 越权读文件得到,按破盲嫌疑单独告警。
+  const nonconforming: string[] = [];
+  const leaks: string[] = [];
   for (const item of mapping) {
     const scorePath = path.join(blindDir, "scores", `${item.blindId}.json`);
     if (!(await fs.pathExists(scorePath))) {
       missing++;
       continue;
     }
-    scoresByArm.set(
-      `${item.arm}|${item.ordinal}`,
-      (await fs.readJson(scorePath)) as ScoreFile,
-    );
+    const score = (await fs.readJson(scorePath)) as ScoreFile & {
+      matchId?: unknown;
+    };
+    if (score.matchId === item.matchId) {
+      leaks.push(item.blindId);
+    } else if (score.matchId !== item.blindId) {
+      nonconforming.push(`${item.blindId}=${JSON.stringify(score.matchId)}`);
+    }
+    scoresByArm.set(`${item.arm}|${item.ordinal}`, score);
   }
   if (missing > 0)
     console.warn(
       `WARNING: ${missing}/${mapping.length} blind items unscored — their pairs are dropped.`,
+    );
+  if (leaks.length > 0)
+    console.warn(
+      `WARNING: ${leaks.length} score file(s) contain the REAL matchId (${leaks.join(", ")}) — the blind item does not carry it, so the judge can only have read files it was told not to. Treat this run's blinding as suspect.`,
+    );
+  if (nonconforming.length > 0)
+    console.warn(
+      `WARNING: ${nonconforming.length} score file(s) violate the matchId=blindId placeholder convention (eval-ab.md): ${nonconforming.slice(0, 5).join(", ")}${nonconforming.length > 5 ? ", …" : ""}`,
     );
 
   const ordinals = [...new Set(mapping.map((m) => m.ordinal))].sort(

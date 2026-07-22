@@ -67,6 +67,15 @@ npx tsx packages/eval/scripts/checkCalibration.ts --run <runId>   # PASS_THRESHO
 1. **敏感性** — 目标维度比 none 对照低至少 `DELTA_FLOOR`(阈上降幅,滤掉 judge 噪声/整数打平)。
 2. **特异性** — 其余每一维都在 `SPECIFICITY_TOL` 之内不动。否则一个"凡文本变了就全维扣分"的无脑差评判官会白白过关,却对具体缺陷零信号。
 
+**例外:sufficiency 由确定性覆盖门裁决,不看判官盲分。** 判官只看得见 prompt 里有什么,
+看不见构建器没放进来什么——removed-deaths 删光死亡行,判官 8/10 对零反应(5→5),
+三轮 rubric 改动零作用,五次独立测量复现(BACKLOG 14.2 终稿)。checkCalibration 对
+removed-deaths 对子直接跑 `checkFriendlyDeaths`(与生产 `qualityCheck` 同一谓词,
+锚定 `runs/<runId>/manifests/NNN.json` 的 ground truth):original 干净且 perturbed
+报缺 → 检出。**因此 run 目录必须有 `manifests/`**(buildCorpus 会写;老 run 被清理过
+的,用同一份日志清单重建后按 matchId 对齐拷回)。源场没有友方死亡的对子记无管辖权
+(unscored),不算检出也不算漏检。判官对 sufficiency 的盲分照常写、照常陈列——仅无裁决权。
+
 写 `judge-calibration/calibration-report.md`,打印逐维检出率;任一维检出 < 80%、或可评对数 < `MIN_PAIRS`(判 INSUFFICIENT)退出码 1(FAIL)。
 
 ## 解读

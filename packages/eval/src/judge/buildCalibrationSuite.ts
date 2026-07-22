@@ -29,6 +29,8 @@
 import fs from "fs-extra";
 import path from "path";
 
+import { DEATH_KEYWORDS } from "../quality/promptQualityCheck";
+
 // Deterministic LCG so the suite is reproducible for a given SEED.
 function makeRng(seed: number): () => number {
   let state = seed >>> 0 || 1;
@@ -250,10 +252,10 @@ function triviaFocus(responseText: string): { text: string; detail: string } {
 function removeDeaths(
   promptText: string,
 ): { text: string; detail: string } | null {
+  // 与 promptQualityCheck 的 sufficiency 覆盖门共享同一谓词:这里删掉的行
+  // 正是门规会去找的行,检出因此是构造保证的,不依赖判官。
   const lines = promptText.split("\n");
-  const kept = lines.filter(
-    (l) => !/death|died|dies|killed|\[DEATH\]/i.test(l),
-  );
+  const kept = lines.filter((l) => !DEATH_KEYWORDS.test(l));
   const removed = lines.length - kept.length;
   if (removed === 0) return null;
   return {

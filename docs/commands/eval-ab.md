@@ -73,7 +73,13 @@ BASE_DIR="<BASE>" npx tsx packages/eval/scripts/qualityCheck.ts
    > process, 1/3/5 anchors; there is no quality-report.json for this item — skip the consistency
    > rules that reference it). Do not read any other file or directory. Write ONLY the score JSON
    > (standard 7-dimension format, factAudit + provenance included) to
-   > `$GLADLOG_EVAL_HOME/ab/<abId>/blind/scores/ITEMID.json`.
+   > `$GLADLOG_EVAL_HOME/ab/<abId>/blind/scores/ITEMID.json`. In that JSON set `matchId` to
+   > exactly `ITEMID` — the blind item id. Do not guess, invent, or go looking for a real match id.
+
+   (matchId=ITEMID 是固定占位约定 —— 盲件按设计不带 `MATCHID:` 头,2026-07-20 那轮判官
+   各自编了 `null`/`"unknown"`/`"NO_MATCHID_HEADER_FOUND"` 三种写法。abStats 解盲时会核对
+   该字段:不等于盲件 id 记不合规;等于**真实** matchId 则按破盲嫌疑单独告警。后续要按
+   真实 matchId 聚合的分析一律经 `blind/mapping.json` 换算。)
 
    全部分数写完后解盲并算配对统计:
 

@@ -3,6 +3,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  rmSync,
   writeFileSync,
 } from "fs";
 import { tmpdir } from "os";
@@ -140,6 +141,39 @@ const DIMS = [
   "focusCalibration",
 ] as const;
 
+/** Ground-truth coverage manifest matching makeTmpRun's prompt: one friendly
+ * Holy Priest death at 0:24. The sufficiency det-gate reads these — a run
+ * without manifests/ cannot adjudicate sufficiency at all. */
+function writeCoverageManifest(base: string, ordinal: number): void {
+  const nnn = String(ordinal).padStart(3, "0");
+  mkdirSync(join(base, "manifests"), { recursive: true });
+  writeFileSync(
+    join(base, "manifests", `${nnn}.json`),
+    JSON.stringify({
+      matchId: `m${ordinal}`,
+      durationSec: 60,
+      players: [
+        { name: "Priesty-Realm-US", spec: "Holy Priest", reaction: "friendly" },
+      ],
+      deaths: [
+        { tRelSec: 24, unitName: "Priesty-Realm-US", reaction: "friendly" },
+      ],
+      ccApplied: [],
+      interrupts: [],
+      dispels: [],
+      trinketCasts: [],
+      counts: {
+        deaths: 1,
+        friendlyDeaths: 1,
+        ccApplied: 0,
+        interrupts: 0,
+        dispels: 0,
+        trinketCasts: 0,
+      },
+    }),
+  );
+}
+
 /** Build a run whose PROMPT contains a death line (so removed-deaths fires) and
  * enough event lines for every perturbation to trigger — one perturbation per
  * dimension per source, i.e. `sourceCount` pairs per dimension. */
@@ -165,6 +199,7 @@ function makeTmpRun(sourceCount: number): string {
     const nnn = String(ordinal).padStart(3, "0");
     writeFileSync(join(base, "prompts", `${nnn}-m${ordinal}.txt`), prompt);
     writeFileSync(join(base, "responses", `${nnn}.txt`), response);
+    writeCoverageManifest(base, ordinal);
     return {
       ordinal,
       file: `prompts/${nnn}-m${ordinal}.txt`,
@@ -365,6 +400,91 @@ describe("checkCalibration — specificity completeness", () => {
     });
     expect(r.pass).toBe(false);
     expect(r.failures.length).toBeGreaterThan(0);
+  });
+});
+
+describe("checkCalibration — sufficiency 由确定性覆盖门裁决", () => {
+  /**
+   * BACKLOG 14.2 终稿(五次独立测量):removed-deaths 删光死亡行,判官 10 对里
+   * 8 对零反应(5→5),三轮 rubric 改动零作用 —— 判官看不见构建器没放进来什么。
+   * 裁决权移交确定性覆盖门:original 干净 + perturbed 报缺 → 检出,与判官盲分
+   * 完全无关。下面第一个用例就是那个盲区场景本身:判官给 5→5,门照样检出。
+   */
+  it("判官 sufficiency 给 5→5(盲区场景)→ 门仍检出,该维无 failure", async () => {
+    const base = makeTmpRun(2);
+    await buildCalibrationSuite(base, { sourceCount: 2, seed: 42 });
+    // 判官对所有件所有维一律 5 分 —— 对 removed-deaths 完全零反应。
+    writeScores(base, () => 5);
+    const r = await checkCalibration(base, {
+      minPairs: 2,
+      deltaFloor: 1,
+      specificityTol: 0,
+    });
+    expect(
+      r.failures.filter((f) => f.dimension === "sufficiency"),
+    ).toHaveLength(0);
+  });
+
+  it("manifests/ 缺失 → sufficiency 不可裁决(NO DATA),整体不判 PASS", async () => {
+    const base = makeTmpRun(2);
+    await buildCalibrationSuite(base, { sourceCount: 2, seed: 42 });
+    rmSync(join(base, "manifests"), { recursive: true, force: true });
+    // 判官是完美判别器 —— 若 sufficiency 仍走判官,整体会 PASS;
+    // 门守不住时必须显式失败,不许静默降级回判官。
+    writeScores(base, (dim, isPerturbed, targetDim) =>
+      isPerturbed && dim === targetDim ? 3 : 5,
+    );
+    const r = await checkCalibration(base, {
+      minPairs: 2,
+      deltaFloor: 1,
+      specificityTol: 0,
+    });
+    expect(r.pass).toBe(false);
+    expect(
+      r.failures.filter((f) => f.dimension === "sufficiency").length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("扰动件没删成功(门在两侧都干净)→ 判未检出而非误报检出", async () => {
+    const base = makeTmpRun(2);
+    await buildCalibrationSuite(base, { sourceCount: 2, seed: 42 });
+    // 人为把 perturbed 件的 prompt 换回原文 —— 模拟「扰动没生效」:
+    // 门在两侧都看不到缺失,必须判 NO 而不是 yes。
+    const manifest = JSON.parse(
+      readFileSync(
+        join(base, "judge-calibration", "calibration-manifest.json"),
+        "utf-8",
+      ),
+    ) as { cases: (ManifestCase & { sourceOrdinal: number })[] };
+    const byOrdinal = new Map<number, string>();
+    for (const c of manifest.cases)
+      if (c.perturbation === "none") byOrdinal.set(c.sourceOrdinal, c.caseId);
+    for (const c of manifest.cases) {
+      if (c.perturbation !== "removed-deaths") continue;
+      const originalPrompt = readFileSync(
+        join(
+          base,
+          "judge-calibration",
+          "cases",
+          byOrdinal.get(c.sourceOrdinal)!,
+          "prompt.txt",
+        ),
+        "utf-8",
+      );
+      writeFileSync(
+        join(base, "judge-calibration", "cases", c.caseId, "prompt.txt"),
+        originalPrompt,
+      );
+    }
+    writeScores(base, () => 5);
+    const r = await checkCalibration(base, {
+      minPairs: 2,
+      deltaFloor: 1,
+      specificityTol: 0,
+    });
+    expect(
+      r.failures.filter((f) => f.dimension === "sufficiency").length,
+    ).toBeGreaterThan(0);
   });
 });
 

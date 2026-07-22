@@ -4,9 +4,13 @@
  *
  * Grades the LLM judge against the synthetic-defect suite built by
  * buildJudgeCalibrationSuite.ts. Ground truth is known because we injected the
- * defects ourselves — no human annotation involved. A perturbed case counts as
- * *detected* only when it clears a discriminant-validity bar, not mere
- * sensitivity:
+ * defects ourselves — no human annotation involved.
+ *
+ * Exception: dimensions in DET_GATE_DIMENSIONS (sufficiency) are adjudicated by
+ * the deterministic coverage gate, not judge scores — see the constant's doc.
+ *
+ * For judge-adjudicated dimensions, a perturbed case counts as *detected* only
+ * when it clears a discriminant-validity bar, not mere sensitivity:
  *   (1) Sensitivity — the TARGETED dimension drops below the unmodified sibling
  *       (same source ordinal) by at least DELTA_FLOOR. The floor separates a
  *       real defect signal from judge noise / integer-rubric ties.
@@ -35,6 +39,21 @@
 
 import fs from "fs-extra";
 import path from "path";
+
+import type { CoverageManifest } from "../quality/coverageManifest";
+import { checkFriendlyDeaths } from "../quality/promptQualityCheck";
+
+/**
+ * sufficiency 由确定性覆盖门裁决,不再看判官盲分。
+ *
+ * 依据(docs/BACKLOG.md 14.2 终稿,五次独立测量):删光 prompt 里全部死亡行,
+ * 判官 10 对里 8 对零反应(5→5 五次),检出率 40% → 30% → 20%,三轮 rubric
+ * 改动零作用 —— 判官只看得见 prompt 里有什么,看不见构建器没放进来什么,
+ * 结构性盲区。`eval-ab.md` 本来就规定该维以确定性指标为准,这里把校准侧
+ * 也对齐:对 removed-deaths 对子直接跑 `checkFriendlyDeaths`(与生产门规
+ * 同一谓词),original 干净且 perturbed 报缺 → 检出。
+ */
+const DET_GATE_DIMENSIONS = new Set(["sufficiency"]);
 
 /**
  * 构造性耦合:按扰动的**构造**必然带动的未目标维度,豁免特异性检查。
@@ -189,6 +208,37 @@ export async function checkCalibration(
   for (const c of manifest.cases)
     if (c.perturbation === "none") originals.set(c.sourceOrdinal, c);
 
+  /** 覆盖门:读某个 case 的 prompt,对着该源 ordinal 的 ground-truth manifest
+   * 数缺失的友方死亡。返回 null = 无法裁决(manifest 缺失或该场没有友方死亡,
+   * 门无管辖权)。 */
+  const gateMissingCount = async (
+    caseId: string,
+    sourceOrdinal: number,
+  ): Promise<{ missing: number; total: number } | null> => {
+    const manifestFile = path.join(
+      baseDir,
+      "manifests",
+      `${String(sourceOrdinal).padStart(3, "0")}.json`,
+    );
+    if (!(await fs.pathExists(manifestFile))) {
+      console.warn(
+        `WARNING: no coverage manifest at ${manifestFile} — sufficiency det-gate cannot run for ordinal ${sourceOrdinal}. Rebuild the corpus (buildCorpus writes manifests/NNN.json).`,
+      );
+      return null;
+    }
+    const coverage = (await fs.readJson(manifestFile)) as CoverageManifest;
+    const total = coverage.deaths.filter(
+      (d) => d.reaction === "friendly",
+    ).length;
+    if (total === 0) return null; // 没有友方死亡 → removed-deaths 删的只是敌方行,门无管辖权
+    const promptText = await fs.readFile(
+      path.join(suiteDir, "cases", caseId, "prompt.txt"),
+      "utf8",
+    );
+    const result = checkFriendlyDeaths(promptText.split("\n"), coverage);
+    return { missing: result.missing.length, total };
+  };
+
   interface PairResult {
     caseId: string;
     perturbation: string;
@@ -198,7 +248,7 @@ export async function checkCalibration(
     perturbedScore: number | null;
     detected: boolean | null; // null = unscoreable
     /** Why an otherwise-lowered case was still not counted, for the report. */
-    missReason: "floor" | "specificity" | null;
+    missReason: "floor" | "specificity" | "det-gate" | null;
     maxUntargetedDrift: number | null;
     /** 漂移最大的那个未目标维度的名字 —— 报告里点名,免得人工去比对分数文件。 */
     driftDimension: string | null;
@@ -217,6 +267,35 @@ export async function checkCalibration(
     const pert = perturbedScore
       ? dimensionScore(perturbedScore, c.targetDimension)
       : null;
+
+    if (DET_GATE_DIMENSIONS.has(c.targetDimension)) {
+      // 确定性覆盖门裁决:original 必须干净、perturbed 必须报缺。判官盲分
+      // (orig/pert)照旧记录,仅供陈列 —— 无裁决权(eval-ab.md)。
+      const origGate = original
+        ? await gateMissingCount(original.caseId, c.sourceOrdinal)
+        : null;
+      const pertGate = await gateMissingCount(c.caseId, c.sourceOrdinal);
+      const scoreable = origGate !== null && pertGate !== null;
+      const detected = scoreable
+        ? origGate.missing === 0 && pertGate.missing > 0
+        : null;
+      pairs.push({
+        caseId: c.caseId,
+        perturbation: c.perturbation,
+        dimension: c.targetDimension,
+        sourceOrdinal: c.sourceOrdinal,
+        originalScore: orig,
+        perturbedScore: pert,
+        detected,
+        missReason: detected === false ? "det-gate" : null,
+        maxUntargetedDrift: null,
+        driftDimension: null,
+        detail: scoreable
+          ? `${c.perturbationDetail} | det-gate: original missing ${origGate.missing}/${origGate.total}, perturbed missing ${pertGate.missing}/${pertGate.total}`
+          : `${c.perturbationDetail} | det-gate unscoreable (no manifest or no friendly deaths)`,
+      });
+      continue;
+    }
 
     let detected: boolean | null = null;
     let missReason: "floor" | "specificity" | null = null;
@@ -309,6 +388,19 @@ export async function checkCalibration(
   );
   lines.push("");
   lines.push(
+    "**sufficiency is adjudicated by the deterministic coverage gate** (checkFriendlyDeaths",
+  );
+  lines.push(
+    "against the ground-truth manifest), not by judge blind scores — the judge structurally",
+  );
+  lines.push(
+    "cannot see what the builder omitted (BACKLOG 14.2, five independent measurements).",
+  );
+  lines.push(
+    "Judge scores for sufficiency pairs are shown for reference only.",
+  );
+  lines.push("");
+  lines.push(
     "| Dimension | Perturbation | Pairs | Detected | Rate | Verdict |",
   );
   lines.push(
@@ -335,8 +427,11 @@ export async function checkCalibration(
         dimension,
         reason: `${verdict}: only ${scoreable.length} scoreable pair(s), need >= ${minPairs}`,
       });
+    const perturbationLabel = DET_GATE_DIMENSIONS.has(dimension)
+      ? `${list[0].perturbation} (det-gate)`
+      : list[0].perturbation;
     lines.push(
-      `| ${dimension} | ${list[0].perturbation} | ${scoreable.length} | ${detected} | ${(rate * 100).toFixed(0)}% | ${verdict} |`,
+      `| ${dimension} | ${perturbationLabel} | ${scoreable.length} | ${detected} | ${(rate * 100).toFixed(0)}% | ${verdict} |`,
     );
   }
 
@@ -357,7 +452,9 @@ export async function checkCalibration(
           ? "yes"
           : p.missReason === "specificity"
             ? "**NO (spec)**"
-            : "**NO**";
+            : p.missReason === "det-gate"
+              ? "**NO (det-gate)**"
+              : "**NO**";
     lines.push(
       `| ${p.dimension} | ${String(p.sourceOrdinal).padStart(3, "0")} | ${p.originalScore ?? "—"} | ${p.perturbedScore ?? "—"} | ${p.maxUntargetedDrift ?? "—"} | ${p.driftDimension ?? "—"} | ${detectedCell} | ${p.detail} |`,
     );
@@ -387,7 +484,9 @@ export async function checkCalibration(
       const why =
         p.missReason === "specificity"
           ? `also moved or dropped untargeted dimensions (maxΔother ${p.maxUntargetedDrift} on ${p.driftDimension ?? "?"}) — reacted to the change, not the defect`
-          : `targeted score did not drop by >= ${deltaFloor}`;
+          : p.missReason === "det-gate"
+            ? `deterministic coverage gate did not flag the perturbed prompt (or flagged the original) — see pair detail`
+            : `targeted score did not drop by >= ${deltaFloor}`;
       failures.push({
         caseId: p.caseId,
         dimension: p.dimension,

@@ -33,7 +33,10 @@ import path from "path";
 
 import { CoverageManifest } from "./coverageManifest";
 
-const DEATH_KEYWORDS = /death|died|dies|killed|\[DEATH\]/i;
+/** 「死亡相关行」的唯一谓词。calibration 的 removed-deaths 扰动与这里的
+ * sufficiency 覆盖门必须用同一个正则——扰动删的行和门规找的行一旦漂移,
+ * 校准就在测两个不同的东西(门规谓词即规范)。 */
+export const DEATH_KEYWORDS = /death|died|dies|killed|\[DEATH\]/i;
 const RES_READY_SPAM = /\[RES\] rdy:/;
 const BIAS_LEXICON = [
   "[CRITICAL]",
