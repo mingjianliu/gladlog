@@ -488,6 +488,27 @@ describe("checkCalibration — sufficiency 由确定性覆盖门裁决", () => {
   });
 });
 
+describe("checkCalibration — det-gate 维度不参与特异性判定(§7ter,2026-07-22 拍板)", () => {
+  it("扰动件的 sufficiency 盲分乱动 → 不再把其他维判成特异性违规", async () => {
+    const base = makeTmpRun(2);
+    await buildCalibrationSuite(base, { sourceCount: 2, seed: 42 });
+    // 判别器判官,但所有扰动件的 sufficiency 盲分都掉 2 —— sufficiency 已由
+    // 覆盖门裁决,它的抖动不该拖挂别的维。
+    writeScores(base, (dim, isPerturbed, targetDim) => {
+      if (!isPerturbed) return 5;
+      if (dim === targetDim) return 3;
+      if (dim === "sufficiency") return 3;
+      return 5;
+    });
+    const r = await checkCalibration(base, {
+      minPairs: 2,
+      deltaFloor: 1,
+      specificityTol: 0,
+    });
+    expect(r.pass).toBe(true);
+  });
+});
+
 describe("checkCalibration — string-numeric handling", () => {
   it("空字符串分数 → 不可评(null),不当作 0", async () => {
     const base = makeTmpRun(2);

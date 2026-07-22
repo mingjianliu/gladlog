@@ -322,6 +322,12 @@ export async function checkCalibration(
       let specificityViolated = false;
       for (const d of untargeted) {
         if (exempt.has(d)) continue; // 构造性耦合 —— 见 COUPLED_BY_CONSTRUCTION
+        // 确定性门裁决的维度(sufficiency)不参与特异性判定:该维的判官盲分
+        // 已无裁决权,它的抖动不该再把别的维拖成"未检出"。det3 实测它是最大
+        // 泄漏源——六维共 6 件特异性未检出里 4 件的漂移维就是 sufficiency
+        // (judge-variance-v3 §7ter)。前提成立(覆盖门已独立裁决该维)后
+        // 2026-07-22 拍板启用。
+        if (DET_GATE_DIMENSIONS.has(d)) continue;
         const od = dimensionScore(originalScore, d);
         const pd = dimensionScore(perturbedScore, d);
         if (od === null) continue; // not part of the control baseline
