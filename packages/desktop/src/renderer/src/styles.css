@@ -1726,6 +1726,11 @@ pre {
   border-radius: 7px;
   cursor: pointer;
 }
+.mlf-dates {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
 .mlf input[type="date"] {
   font-size: 11px;
   height: 26px;

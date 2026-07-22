@@ -157,23 +157,26 @@ export function MatchListFilter({
           {specName(id) || `spec ${id}`} ✕
         </button>
       ))}
-      <input
-        type="date"
-        value={filter.dateFrom ?? ""}
-        onChange={(e) =>
-          onChange({ ...filter, dateFrom: e.target.value || null })
-        }
-        title="起始日期"
-      />
-      <span className="mlf-datesep">–</span>
-      <input
-        type="date"
-        value={filter.dateTo ?? ""}
-        onChange={(e) =>
-          onChange({ ...filter, dateTo: e.target.value || null })
-        }
-        title="结束日期"
-      />
+      {/* 日期组包成不可拆单元:flex-wrap 折行时整组一起走,分隔符不孤行 */}
+      <span className="mlf-dates">
+        <input
+          type="date"
+          value={filter.dateFrom ?? ""}
+          onChange={(e) =>
+            onChange({ ...filter, dateFrom: e.target.value || null })
+          }
+          title="起始日期"
+        />
+        <span className="mlf-datesep">–</span>
+        <input
+          type="date"
+          value={filter.dateTo ?? ""}
+          onChange={(e) =>
+            onChange({ ...filter, dateTo: e.target.value || null })
+          }
+          title="结束日期"
+        />
+      </span>
       {active && (
         <button className="mlf-clear" onClick={() => onChange(EMPTY_FILTER)}>
           清除
