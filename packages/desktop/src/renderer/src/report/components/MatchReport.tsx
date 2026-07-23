@@ -37,17 +37,20 @@ export function MatchReport({
   roundLabel,
   matchId,
   initialView = "report",
+  initialTimeRange = null,
 }: {
   source: ReportSource;
   roundLabel?: string;
   matchId?: string;
   initialView?: View;
+  /** 初始时间窗(视觉场景 report-window 用;交互入口是拖选/phase 下拉)。 */
+  initialTimeRange?: TimeRange | null;
 }) {
   const [mode, setMode] = useState<MeterMode>("damage");
   const [view, setView] = useState<View>(initialView);
   // 时间窗联动(第四阶段①):null = 全场。聚合面板吃窗口;HP 曲线/窗口列表/
   // 死亡回顾/爆发账本/回放保持全场口径(见 plan 文档的口径表)。
-  const [timeRange, setTimeRange] = useState<TimeRange | null>(null);
+  const [timeRange, setTimeRange] = useState<TimeRange | null>(initialTimeRange);
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   // 证据链跳转请求:AI 视图点「回放此刻」→ 切回放并 seek。nonce 防重复消费,
   // 回放时钟保持 ReplayView 局部(提升热 state 会让三视图随 tick 重渲)。

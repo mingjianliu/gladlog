@@ -149,8 +149,13 @@ const SCENE_VIEW: Record<
   | "report-replay"
   | "report-ai"
   | "report-synth"
+  | "report-window"
   | "report-heavy",
-  { fixture: StoredMatch; initialView: "report" | "replay" | "ai" }
+  {
+    fixture: StoredMatch;
+    initialView: "report" | "replay" | "ai";
+    initialTimeRange?: { fromS: number; toS: number };
+  }
 > = {
   "report-battle": {
     fixture: realMatch as unknown as StoredMatch,
@@ -167,6 +172,12 @@ const SCENE_VIEW: Record<
   "report-synth": {
     fixture: synthMatch as unknown as StoredMatch,
     initialView: "report",
+  },
+  // 时间窗选中态:窗口取真实局的第一个击杀尝试段(0:36–0:59)
+  "report-window": {
+    fixture: realMatch as unknown as StoredMatch,
+    initialView: "report",
+    initialTimeRange: { fromS: 36, toS: 59 },
   },
   // 首渲计时专用:真实样本按固定倍数确定性放大,不做截图基线
   "report-heavy": {
@@ -208,6 +219,7 @@ function Scene({ name }: { name: SceneName }) {
         source={cfg.fixture}
         matchId={name}
         initialView={cfg.initialView}
+        initialTimeRange={cfg.initialTimeRange ?? null}
       />
     </div>
   );

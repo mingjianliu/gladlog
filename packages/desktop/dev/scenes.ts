@@ -5,6 +5,8 @@ export const SCENE_NAMES = [
   "report-replay",
   "report-ai",
   "report-synth",
+  // 时间窗联动(第四阶段①)的选中态:唯一的可见新状态,单独入基线
+  "report-window",
   "dashboard",
   "settings",
   "matchlist",
