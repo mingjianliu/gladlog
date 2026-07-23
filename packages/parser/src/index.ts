@@ -38,3 +38,4 @@ export type {
   GladShuffleRound,
   GladShuffle,
 } from "./l3/model";
+export * from "./invariants";

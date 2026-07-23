@@ -10,6 +10,7 @@ import { deriveMistakes } from "../derive/mistakes";
 import { deriveStatsTable } from "../derive/statsTable";
 import { deriveSummary } from "../derive/summary";
 import { deriveTimeline } from "../derive/timeline";
+import { buildReportMarkdown } from "../derive/exportReport";
 import { rangeDurationS, type TimeRange } from "../derive/timeRange";
 import type { ReportSource } from "../derive/types";
 import { deriveVulnBands } from "../derive/vulnWindows";
@@ -65,7 +66,23 @@ export function MatchReport({
     unitNames: string[];
     nonce: number;
   } | null>(null);
+  // B2 溯源请求:finding →「原始事件」→ 切事件视图并预置 ±15s + 单位过滤
+  const [inspectReq, setInspectReq] = useState<{
+    fromS: number;
+    toS: number;
+    unitName: string | null;
+    nonce: number;
+  } | null>(null);
 
+  const handleInspectEvents = (tSeconds: number, unitNames: string[]) => {
+    setInspectReq({
+      fromS: Math.max(0, tSeconds - 15),
+      toS: tSeconds + 15,
+      unitName: unitNames[0]?.split("-")[0] ?? null,
+      nonce: Date.now(),
+    });
+    setView("events");
+  };
   const handleSeekEvent = (tSeconds: number, unitNames: string[]) => {
     setSeekReq({
       tMs: source.startTime + tSeconds * 1000,
@@ -155,11 +172,24 @@ export function MatchReport({
         <div className="rpt-body">
           {/* 主卡:生命曲线 + 窗口列表(1c);时间窗工具条(第四阶段①) */}
           <div>
-            <TimeRangeBar
-              bands={vulnBands}
-              range={timeRange}
-              onChange={setTimeRange}
-            />
+            <div className="rpt-toolbar-row">
+              <TimeRangeBar
+                bands={vulnBands}
+                range={timeRange}
+                onChange={setTimeRange}
+              />
+              <button
+                className="rpt-btn rpt-export-report"
+                title="导出当前(窗口)口径的战报 Markdown"
+                onClick={() =>
+                  void navigator.clipboard.writeText(
+                    buildReportMarkdown(source, timeRange),
+                  )
+                }
+              >
+                复制 Markdown
+              </button>
+            </div>
             <Timeline
               data={timeline}
               hidden={hidden}
@@ -219,6 +249,7 @@ export function MatchReport({
           bands={vulnBands}
           globalRange={timeRange}
           onSeek={handleSeekEvent}
+          inspectReq={inspectReq}
         />
       )}
       {view === "replay" && (
@@ -247,6 +278,7 @@ export function MatchReport({
               source={source}
               matchId={resolvedMatchId}
               onSeekEvent={handleSeekEvent}
+              onInspectEvents={handleInspectEvents}
               onRunAll={() => setAiRunNonce((n) => n + 1)}
             />
             <div className="rpt-ai-cohort">

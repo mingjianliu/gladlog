@@ -57,12 +57,15 @@ export function StructuredAnalysisPanel({
   source,
   matchId,
   onSeekEvent,
+  onInspectEvents,
   onRunAll,
 }: {
   source: ReportSource;
   matchId: string;
   /** 证据链跳转:切到回放并定位到 t(秒,自 combat start)。 */
   onSeekEvent?: (tSeconds: number, unitNames: string[]) => void;
+  /** B2 溯源:跳 events 视图并预置过滤(finding →「原始事件」)。 */
+  onInspectEvents?: (tSeconds: number, unitNames: string[]) => void;
   /** 合并按钮(用户反馈):主按钮同时触发 cohort 对比。 */
   onRunAll?: () => void;
 }) {
@@ -475,6 +478,7 @@ export function StructuredAnalysisPanel({
                     onSelect={setActiveEventIds}
                     onJump={onSeekEvent ? handleJump : undefined}
                     onJumpT={onSeekEvent}
+                    onInspect={onInspectEvents}
                     candidates={input?.candidates ?? []}
                     flags={flags}
                     onFlag={handleFlag}

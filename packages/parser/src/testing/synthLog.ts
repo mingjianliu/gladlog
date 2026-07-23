@@ -71,6 +71,15 @@ export function synthArenaLog(opts?: {
 
   const victim = players[5]!;
   const endT = 1000 + eventsPerRound * 100 + 500;
+  // 死者必须先承伤:A2 不变量 death-has-damage(死亡前 10s 内有承伤来源)。
+  // 主循环里 dst=players[(i+3)%6]=victim 时恰好都是 i%3==2 的 SPELL_HEAL 分支,
+  // victim 全场零承伤 —— 物理不一致,由不变量抓出后在此补一记致死伤害。
+  const killer = players[0]!;
+  const killAdvanced = `${killer.guid},0000000000000000,100000,100000,0,0,0,0,0,0,0,0,0,0,1000.00,-2000.00,0,1.0,0`;
+  push(
+    endT - 200,
+    `SPELL_DAMAGE,${killer.guid},"${killer.name}",${killer.flags},0x0,${victim.guid},"${victim.name}",${victim.flags},0x0,133,"Fireball",0x4,${killAdvanced},250000,250000,0,4,0,0,0,0,nil,nil,nil`,
+  );
   push(
     endT,
     `UNIT_DIED,0000000000000000,nil,0x0,0x0,${victim.guid},"${victim.name}",${victim.flags},0x0,0`,

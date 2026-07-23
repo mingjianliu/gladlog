@@ -488,6 +488,23 @@ describe("checkCalibration — sufficiency 由确定性覆盖门裁决", () => {
   });
 });
 
+describe("buildCalibrationSuite — classes 过滤(B1 迷你套件)", () => {
+  it("只生成请求的扰动类;causal-hardening 需要 ≥2 个不同时间戳才生成", async () => {
+    const base = makeTmpRun(2);
+    const cases = await buildCalibrationSuite(base, {
+      sourceCount: 2,
+      seed: 42,
+      classes: ["causal-hardening"],
+    });
+    const kinds = new Set(cases.map((c) => c.perturbation));
+    for (const k of kinds) {
+      expect(["none", "causal-hardening"]).toContain(k);
+    }
+    // makeTmpRun 的回复含 "0:24" 一个时间戳 → 不足两个,causal 不生成(不硬编)
+    // 若未来夹具回复加了第二个时间戳,这里的断言仍然成立(⊆ 检查)。
+  });
+});
+
 describe("checkCalibration — det-gate 维度不参与特异性判定(§7ter,2026-07-22 拍板)", () => {
   it("扰动件的 sufficiency 盲分乱动 → 不再把其他维判成特异性违规", async () => {
     const base = makeTmpRun(2);

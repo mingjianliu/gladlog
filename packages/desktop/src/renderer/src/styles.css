@@ -1914,6 +1914,19 @@ pre {
   fill: var(--ink-2);
 }
 
+/* 导出(C3) */
+.rpt-toolbar-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+.rpt-export-report {
+  font-size: 11px;
+  height: 24px;
+  white-space: nowrap;
+}
+
 /* HP 时间轴窗口色带 */
 .rpt-tl-band-burst {
   fill: color-mix(in srgb, var(--gold) 14%, transparent);

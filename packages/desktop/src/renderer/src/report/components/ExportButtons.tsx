@@ -1,34 +1,25 @@
-import React from "react";
 import type { Finding } from "@gladlog/analysis";
+
+import { buildFindingsMarkdown } from "../derive/exportReport";
 
 interface ExportButtonsProps {
   findings: Finding[];
   heroText: string;
 }
 
+/** findings 导出:字符串组装在 derive/exportReport(C3 保真测试覆盖),
+ * 组件只管剪贴板。图片导出未实现(roadmap C3 注明缺口),不摆假按钮。 */
 export function ExportButtons({ findings, heroText }: ExportButtonsProps) {
   const handleCopyMarkdown = () => {
-    const lines = [heroText];
-    if (findings.length > 0) {
-      lines.push("");
-    }
-    for (const f of findings) {
-      lines.push(`- [${f.severity.toUpperCase()}] ${f.title} — ${f.explanation}`);
-    }
-    navigator.clipboard.writeText(lines.join("\n"));
-  };
-
-  const handleExportImage = () => {
-    // TODO: implement image export
+    void navigator.clipboard.writeText(
+      buildFindingsMarkdown(findings, heroText),
+    );
   };
 
   return (
-    <div className="flex gap-2 mt-4">
+    <div className="rpt-export-btns">
       <button className="rpt-btn" onClick={handleCopyMarkdown}>
         Copy Markdown
-      </button>
-      <button className="rpt-btn" onClick={handleExportImage}>
-        Export Image
       </button>
     </div>
   );

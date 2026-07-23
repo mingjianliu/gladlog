@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import {
   deriveEventRows,
@@ -28,12 +28,20 @@ export function EventsPanel({
   bands,
   globalRange,
   onSeek,
+  inspectReq,
 }: {
   source: ReportSource;
   bands: VulnBand[];
   /** 全局时间窗(战报视图选的);作为锚定选项之一。 */
   globalRange: TimeRange | null;
   onSeek?: (tSeconds: number, unitNames: string[]) => void;
+  /** B2 溯源请求(finding →「原始事件」):nonce 变化时预置过滤。 */
+  inspectReq?: {
+    fromS: number;
+    toS: number;
+    unitName: string | null;
+    nonce: number;
+  } | null;
 }) {
   const allRows = useMemo(() => deriveEventRows(source), [source]);
   const unitNames = useMemo(
@@ -51,12 +59,26 @@ export function EventsPanel({
   const [kinds, setKinds] = useState<EventKind[]>([]);
   const [unitName, setUnitName] = useState<string | null>(null);
   const [spellQuery, setSpellQuery] = useState("");
-  // 锚定键:'all' | 'global' | 'band:<i>' —— 每次渲染从键解 range,不存副本
+  // 锚定键:'all' | 'global' | 'custom' | 'band:<i>' —— 每次渲染从键解 range
   const [anchor, setAnchor] = useState<string>(globalRange ? "global" : "all");
+  const [customRange, setCustomRange] = useState<TimeRange | null>(null);
   const [shown, setShown] = useState(PAGE);
 
+  // 溯源请求落地:±15s 窗口 + 单位过滤,清掉类型/技能过滤(别把目标事件滤没)
+  useEffect(() => {
+    if (!inspectReq) return;
+    setCustomRange({ fromS: inspectReq.fromS, toS: inspectReq.toS });
+    setAnchor("custom");
+    setUnitName(inspectReq.unitName);
+    setKinds([]);
+    setSpellQuery("");
+    setShown(PAGE);
+  }, [inspectReq?.nonce]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const range: TimeRange | null =
-    anchor === "global"
+    anchor === "custom"
+      ? customRange
+      : anchor === "global"
       ? globalRange
       : anchor.startsWith("band:")
         ? (() => {
@@ -122,6 +144,11 @@ export function EventsPanel({
           title="窗口锚定"
         >
           <option value="all">全场</option>
+          {customRange && (
+            <option value="custom">
+              溯源窗口 {fmtT(customRange.fromS)}–{fmtT(customRange.toS)}
+            </option>
+          )}
           {globalRange && (
             <option value="global">
               全局时间窗 {fmtT(globalRange.fromS)}–{fmtT(globalRange.toS)}
