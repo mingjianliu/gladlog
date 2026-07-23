@@ -89,6 +89,11 @@ BASE_DIR="$GLADLOG_EVAL_HOME/runs/<runId>" npx tsx packages/eval/scripts/quality
    **前缀截断会让回复末尾成为盲区**(见下方「为什么不取前 N 条」)。
 3. 若不足 3 条,按出现顺序补入含百分比或伤害数字的断言句,凑满 3 条。
 4. 纯建议句(「下次早点交」)不是断言,不入集;含时间戳的建议句按其断言部分入集。
+5. **含因果连接词的断言必须入集**(caused / direct result of / led to / because of /
+   「导致」「造成」等):因果本身是需要支持的主张 —— **时序相邻不构成因果支持**,
+   prompt 只能证明「先后」,不能证明「因为」。把两个真实事件硬化成单因归因
+   (尤其 "no other factor contributed" 式排他句)而无日志依据 = `unsupported`。
+   (B1 校准实测:未加本条时,判官对植入的因果硬化句 10 对漏 3 对零反应。)
 
 逐条找到证明或证伪它的确切 prompt 行,原文引用记入 `factAudit`。找不到支持行的主张 = 捏造。
 
