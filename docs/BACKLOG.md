@@ -96,7 +96,7 @@ list. Old-fork reference: `CompetitiveStats/` (`SpecStats`, `CompStats`,
 `TierList`). gladlog stores every match locally, so this is aggregation + a new
 view — no cloud needed (unlike the old fork's server-backed version).
 
-## 8. Deterministic mistake detection
+## 8. Deterministic mistake detection ✅ v1(2026-07-23 落地于 release/0.1 分支,c59ba8c:MISTAKE_RULES 8 条三档规则 + 防腐测试 + MistakesCard/时间轴 ⚠;全部消费既有确定性谓词,不经 LLM。扩规则时在 MISTAKE_RULES 表态即可)
 
 A rules-based "mistakes" engine that flags concrete errors (trinket held through a
 full-DR CC, defensive wasted, kick missed) **without an LLM** — complements the AI
