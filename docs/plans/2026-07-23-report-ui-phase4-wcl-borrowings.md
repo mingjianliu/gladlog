@@ -4,7 +4,7 @@
 (~/code/wowanalyzer,CodeGraph 索引)的架构调研。四项按依赖排序:
 ①时间窗联动 → ④光环区间集/uptime 条 → ②events 视图 → ③确定性 mistake 引擎(#8)。
 
-## ① 时间窗联动(地基)
+## ① 时间窗联动(地基)✅(2026-07-23 落地,e1be96d..ccd9e72:拖选/phase 下拉/chip,混合口径 + 守恒测试 + report-window 基线)
 
 **目标**:Timeline 上拖选时间段 / phase 下拉选窗口,聚合面板全部重算到该窗口。
 WCL 的对应物是「一切视图 = (事件流, 时间窗, 过滤器) 的查询」;WoWAnalyzer 靠
@@ -30,20 +30,20 @@ WindowList 文案);清除按钮;当前窗口显示在 rpt-head 一行。
 **验收**:窗口内 Meters 总和 = 全场明细中 tS∈窗口 的事件加总(守恒测试);
 statsTable 窗口计数 ≤ 全场计数;视觉基线加一个「选中窗口」场景。
 
-## ④ 光环区间集 + uptime 条
+## ④ 光环区间集 + uptime 条 ✅(2026-07-23 落地:analysis buildAuraIntervals 谓词单源 + 推断段留痕;uptime 取区间并集——实测同名 buff 多来源重叠会翻倍,并集修正;AuraUptimeCard 窗口联动)
 
 共享 builder(WoWAnalyzer 的 Auras/getBuffStacks 模式):auraEvents 配对
 applied→removed、refresh 合并(BuffRefreshNormalizer 的 buffer 思路)、开局已挂
 推断段打 `inferred` 标。CC/DR/关键增益 uptime 条从同一区间集渲染;现有 ccWindows
 路径逐步迁移消费它(谓词单源,不允许出现第二套配对逻辑)。
 
-## ② events 视图(兼 B2 溯源容器)
+## ② events 视图(兼 B2 溯源容器)✅(2026-07-23 落地:第四视图 tab,类型 chips/单位/技能子串/窗口锚定(全场・全局窗・击杀/脆弱窗)+ 分页 + ▶ 逐行跳回放;finding 卡片深链入口留后续)
 
 结构化过滤(类型/来源/目标/技能/时间窗),不做表达式 DSL;杀手锏是「锚定到窗口」
 下拉(现成的击杀窗/压力窗/CC 链即 WCL `IN RANGE FROM..TO` 的 90% 用例)。
 finding 卡片加「查看原始事件」→ 预置过滤跳转。虚拟滚动(事件量 ~万级)。
 
-## ③ #8 确定性 mistake 引擎
+## ③ #8 确定性 mistake 引擎 ✅(2026-07-23 落地:MISTAKE_RULES 8 条三档规则 + IGNORED 豁免表 + 上游类型必须表态的防腐测试;MistakesCard + 时间轴 ⚠ 标记;juked-kick 走 kickAudit 全友方,防 candidate 版只盖 DPS 的漏)
 
 抄三样:规则 = 数据对象(`{actual, isGreaterThan:{minor,average,major}}` 三档);
 规则表可枚举 → purgeWhitelist 式防腐测试(每条规则要么语料里能触发、要么进豁免表);

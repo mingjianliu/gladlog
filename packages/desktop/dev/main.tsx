@@ -150,10 +150,11 @@ const SCENE_VIEW: Record<
   | "report-ai"
   | "report-synth"
   | "report-window"
+  | "report-events"
   | "report-heavy",
   {
     fixture: StoredMatch;
-    initialView: "report" | "replay" | "ai";
+    initialView: "report" | "replay" | "events" | "ai";
     initialTimeRange?: { fromS: number; toS: number };
   }
 > = {
@@ -178,6 +179,10 @@ const SCENE_VIEW: Record<
     fixture: realMatch as unknown as StoredMatch,
     initialView: "report",
     initialTimeRange: { fromS: 36, toS: 59 },
+  },
+  "report-events": {
+    fixture: realMatch as unknown as StoredMatch,
+    initialView: "events",
   },
   // 首渲计时专用:真实样本按固定倍数确定性放大,不做截图基线
   "report-heavy": {

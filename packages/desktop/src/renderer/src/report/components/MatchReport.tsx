@@ -1,21 +1,26 @@
 import { useMemo, useState } from "react";
 
+import { deriveAuraUptime } from "../derive/auraUptime";
 import { deriveBurstLedger } from "../derive/burstLedger";
 import { type DeathRecap, deriveDeathRecaps } from "../derive/deathRecap";
 import { deriveDispelDash } from "../derive/dispelDash";
 import { deriveKickDash } from "../derive/kickDash";
 import type { MeterMode } from "../derive/meterRows";
+import { deriveMistakes } from "../derive/mistakes";
 import { deriveStatsTable } from "../derive/statsTable";
 import { deriveSummary } from "../derive/summary";
 import { deriveTimeline } from "../derive/timeline";
 import { rangeDurationS, type TimeRange } from "../derive/timeRange";
 import type { ReportSource } from "../derive/types";
 import { deriveVulnBands } from "../derive/vulnWindows";
+import { AuraUptimeCard } from "./AuraUptimeCard";
 import { BurstLedgerCard } from "./BurstLedgerCard";
 import { DeathRecapCard } from "./DeathRecapCard";
 import { DispelDashboard } from "./DispelDashboard";
+import { EventsPanel } from "./EventsPanel";
 import { KickDashboard } from "./KickDashboard";
 import { Meters } from "./Meters";
+import { MistakesCard } from "./MistakesCard";
 import { ProComparisonVerified } from "./ProComparisonVerified";
 import { ReplayView } from "./ReplayView";
 import { ReportHeader } from "./ReportHeader";
@@ -24,11 +29,12 @@ import { Timeline } from "./Timeline";
 import { TimeRangeBar } from "./TimeRangeBar";
 import { WindowList } from "./WindowList";
 
-type View = "report" | "replay" | "ai";
+type View = "report" | "replay" | "events" | "ai";
 
 const VIEW_LABEL: Record<View, string> = {
   report: "战报",
   replay: "回放",
+  events: "事件",
   ai: "AI 分析",
 };
 
@@ -86,6 +92,21 @@ export function MatchReport({
   const dispelDash = useMemo(
     () => deriveDispelDash(source, timeRange),
     [source, timeRange],
+  );
+  const auraUptime = useMemo(
+    () => deriveAuraUptime(source, timeRange),
+    [source, timeRange],
+  );
+  // 失误清单:全场 derive 一次(标记要画全场),卡片按窗口过滤
+  const mistakesAll = useMemo(() => deriveMistakes(source), [source]);
+  const mistakes = useMemo(
+    () =>
+      timeRange
+        ? mistakesAll.filter(
+            (mk) => mk.tS >= timeRange.fromS && mk.tS <= timeRange.toS,
+          )
+        : mistakesAll,
+    [mistakesAll, timeRange],
   );
   const [recap, setRecap] = useState<DeathRecap | null>(null);
   // 回放光标投影(1c):从回放切回战报时显示最后位置
@@ -149,6 +170,8 @@ export function MatchReport({
               cursorT={lastReplayT}
               range={timeRange}
               onRangeSelect={(fromS, toS) => setTimeRange({ fromS, toS })}
+              marks={mistakesAll}
+              onMarkClick={(tS) => handleSeekEvent(Math.max(0, tS - 3), [])}
             />
             <WindowList bands={vulnBands} onSeek={handleSeekEvent} />
           </div>
@@ -183,10 +206,20 @@ export function MatchReport({
               )}
             </div>
           </div>
+          <MistakesCard mistakes={mistakes} onSeek={handleSeekEvent} />
           <BurstLedgerCard players={ledgerPlayers} onSeek={handleSeekEvent} />
           <KickDashboard rows={kickRows} onSeek={handleSeekEvent} />
           <DispelDashboard dash={dispelDash} onSeek={handleSeekEvent} />
+          <AuraUptimeCard data={auraUptime} range={timeRange} />
         </div>
+      )}
+      {view === "events" && (
+        <EventsPanel
+          source={source}
+          bands={vulnBands}
+          globalRange={timeRange}
+          onSeek={handleSeekEvent}
+        />
       )}
       {view === "replay" && (
         <ReplayView

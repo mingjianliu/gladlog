@@ -1809,6 +1809,111 @@ pre {
   color: var(--ink-2);
 }
 
+/* 光环 uptime 卡(第四阶段④) */
+.rpt-aura-table td {
+  vertical-align: middle;
+}
+.rpt-aura-name {
+  white-space: nowrap;
+}
+.rpt-aura-spell {
+  white-space: nowrap;
+  color: var(--ink-2);
+}
+.rpt-aura-bar-cell {
+  width: 100%;
+}
+.rpt-aura-bar {
+  display: block;
+  width: 100%;
+  height: 12px;
+}
+.rpt-aura-track {
+  fill: color-mix(in srgb, var(--ink-2) 12%, transparent);
+  rx: 2;
+}
+.rpt-aura-window {
+  fill: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.rpt-aura-seg {
+  rx: 1.5;
+}
+.rpt-aura-offense {
+  fill: var(--gold);
+}
+.rpt-aura-defense {
+  fill: color-mix(in srgb, var(--accent) 75%, white);
+}
+.rpt-aura-cc {
+  fill: var(--loss);
+}
+.rpt-aura-inferred {
+  fill-opacity: 0.45;
+  stroke: currentColor;
+  stroke-dasharray: 2 2;
+  stroke-width: 0.8;
+}
+.rpt-aura-pct {
+  white-space: nowrap;
+  text-align: right;
+}
+
+/* events 视图(第四阶段②) */
+.rpt-events {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.rpt-events-filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 11px;
+}
+.rpt-events-filters select,
+.rpt-events-filters input[type="search"] {
+  font-size: 11px;
+  height: 26px;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--hairline);
+  border-radius: 7px;
+  padding: 2px 6px;
+}
+.rpt-events-filters input[type="search"] {
+  width: 150px;
+}
+.rpt-events-table th,
+.rpt-events-table td {
+  text-align: left;
+  padding: 2px 8px;
+}
+.rpt-events-more {
+  align-self: center;
+  font-size: 11px;
+  color: var(--accent);
+  border: 1px solid var(--hairline);
+  background: transparent;
+  border-radius: 7px;
+  padding: 4px 12px;
+  cursor: pointer;
+}
+
+/* 失误标记与清单(第四阶段③) */
+.rpt-tl-mistake {
+  font-size: 9px;
+}
+.rpt-tl-mistake-major {
+  fill: var(--loss);
+}
+.rpt-tl-mistake-average {
+  fill: var(--gold);
+}
+.rpt-tl-mistake-minor {
+  fill: var(--ink-2);
+}
+
 /* HP 时间轴窗口色带 */
 .rpt-tl-band-burst {
   fill: color-mix(in srgb, var(--gold) 14%, transparent);

@@ -60,6 +60,8 @@ export function Timeline({
   cursorT,
   range,
   onRangeSelect,
+  marks,
+  onMarkClick,
 }: {
   data: TimelineData;
   onSelectUnit?: (unitId: string) => void;
@@ -76,6 +78,9 @@ export function Timeline({
   range?: TimeRange | null;
   /** 图上拖选提交窗口(相对秒)。 */
   onRangeSelect?: (fromS: number, toS: number) => void;
+  /** 失误标记(第四阶段③):顶部 ⚠,点击跳回放。 */
+  marks?: Array<{ tS: number; label: string; severity: string }>;
+  onMarkClick?: (tS: number) => void;
 }) {
   const [cursor, setCursor] = useState<number | null>(null);
   const [dragFrom, setDragFrom] = useState<number | null>(null);
@@ -249,6 +254,23 @@ export function Timeline({
             <title>{`${d.name} 死亡 @ ${relSec(d.t)}s${onDeathClick ? " — 点击看死亡回顾" : ""}`}</title>
           </g>
         ))}
+        {/* 失误 ⚠ 标记(第四阶段③):顶部小三角,按严重度着色 */}
+        {(marks ?? [])
+          .filter((mk) => mk.tS > 0)
+          .map((mk, i) => (
+            <text
+              key={`mk${i}`}
+              x={x(data.start + mk.tS * 1000)}
+              y={PAD.t - 6}
+              textAnchor="middle"
+              className={`rpt-tl-mistake rpt-tl-mistake-${mk.severity}`}
+              data-testid="tl-mistake"
+              onClick={onMarkClick ? () => onMarkClick(mk.tS) : undefined}
+              style={{ cursor: onMarkClick ? "pointer" : undefined }}
+            >
+              ⚠<title>{mk.label}</title>
+            </text>
+          ))}
         {/* 回放光标投影(1c):accent 虚线 + 时间标签 */}
         {cursorT != null && cursorT >= data.start && cursorT <= data.end && (
           <g className="rpt-tl-replay-cursor" data-testid="tl-replay-cursor">

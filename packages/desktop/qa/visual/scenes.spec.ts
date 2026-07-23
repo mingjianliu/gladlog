@@ -22,6 +22,7 @@ const ANCHOR: Partial<Record<SceneName, string>> = {
   "report-synth": "[data-testid=rpt-timeline]",
   // 选中态锚点用窗口 chip:chip 出现 = 窗口态已应用,聚合面板已按窗口重算
   "report-window": "[data-testid=time-range-chip]",
+  "report-events": "[data-testid=events-panel]",
   dashboard: "[data-testid=stats-dashboard]",
   settings: "[data-testid=settings-panel]",
   matchlist: "[data-testid=match-list]",
