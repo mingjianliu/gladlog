@@ -19,8 +19,13 @@ export function TimeRangeBar({
   range: TimeRange | null;
   onChange: (r: TimeRange | null) => void;
 }) {
+  // band 的起止带小数秒(渲染标签取整),回显匹配用容差,别精确相等
   const selectedIdx = range
-    ? bands.findIndex((b) => b.fromS === range.fromS && b.toS === range.toS)
+    ? bands.findIndex(
+        (b) =>
+          Math.abs(b.fromS - range.fromS) < 0.5 &&
+          Math.abs(b.toS - range.toS) < 0.5,
+      )
     : -1;
   return (
     <div className="rpt-trb" data-testid="time-range-bar">
