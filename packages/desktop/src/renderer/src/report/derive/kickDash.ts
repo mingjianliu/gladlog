@@ -2,6 +2,7 @@ import { analyzeKickAudit, type IKickAuditEntry } from "@gladlog/analysis";
 import { CombatUnitReaction } from "@gladlog/parser-compat";
 
 import { toLegacySafe } from "./legacySource";
+import { tInRange, type TimeRange } from "./timeRange";
 import type { ReportSource } from "./types";
 
 export interface KickDashRow {
@@ -24,7 +25,12 @@ export interface KickDashRow {
  * analysis 的 analyzeKickAudit(与爆发账本"打断审计"同一谓词)——账本只看
  * 友方且按玩家分页,这里补上敌方侧与全场对照。
  */
-export function deriveKickDash(source: ReportSource): KickDashRow[] {
+/** range(时间窗联动①):判定在全量流上算(landed 配对不受窗口边界影响),
+ * 之后按 atSeconds 过滤条目 —— 事实层过滤,见 derive/timeRange.ts。 */
+export function deriveKickDash(
+  source: ReportSource,
+  range?: TimeRange | null,
+): KickDashRow[] {
   try {
     const legacy = toLegacySafe(source);
     const players = Object.values(legacy.units).filter((u) => u.info);
@@ -40,7 +46,9 @@ export function deriveKickDash(source: ReportSource): KickDashRow[] {
     for (const p of players) {
       const opponents =
         p.reaction === CombatUnitReaction.Friendly ? enemies : friends;
-      const entries = analyzeKickAudit(p, opponents, legacy);
+      const entries = analyzeKickAudit(p, opponents, legacy).filter((e) =>
+        tInRange(e.atSeconds, range),
+      );
       if (entries.length === 0) continue;
       const count = (r: IKickAuditEntry["result"]) =>
         entries.filter((e) => e.result === r).length;

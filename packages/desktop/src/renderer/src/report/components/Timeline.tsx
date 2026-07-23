@@ -3,7 +3,12 @@ import { useState } from "react";
 
 import { classColor } from "../data/gameConstants";
 import type { TimelineData } from "../derive/timeline";
+import type { TimeRange } from "../derive/timeRange";
 import type { VulnBand } from "../derive/vulnWindows";
+
+/** 拖选至少要拖出这么多 viewBox 像素才算窗口选择,否则视为普通点击
+ * (band/曲线/死亡标记的 onClick 不受影响)。 */
+const DRAG_MIN_PX = 8;
 
 const W = 800,
   H = 240,
@@ -53,6 +58,8 @@ export function Timeline({
   bands,
   onBandClick,
   cursorT,
+  range,
+  onRangeSelect,
 }: {
   data: TimelineData;
   onSelectUnit?: (unitId: string) => void;
@@ -65,8 +72,13 @@ export function Timeline({
   onBandClick?: (tSeconds: number) => void;
   /** 回放光标投影(1c):从回放切回时的最后时刻(绝对 ms)。 */
   cursorT?: number | null;
+  /** 时间窗联动①:当前窗口(相对秒),画成高亮选区;曲线永远全场。 */
+  range?: TimeRange | null;
+  /** 图上拖选提交窗口(相对秒)。 */
+  onRangeSelect?: (fromS: number, toS: number) => void;
 }) {
   const [cursor, setCursor] = useState<number | null>(null);
+  const [dragFrom, setDragFrom] = useState<number | null>(null);
   const series = hidden
     ? data.series.filter((s) => !hidden.has(s.unitId))
     : data.series;
@@ -91,7 +103,41 @@ export function Timeline({
           const rect = e.currentTarget.getBoundingClientRect();
           setCursor(((e.clientX - rect.left) / rect.width) * W);
         }}
-        onMouseLeave={() => setCursor(null)}
+        onMouseLeave={() => {
+          setCursor(null);
+          setDragFrom(null);
+        }}
+        onMouseDown={
+          onRangeSelect
+            ? (e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                setDragFrom(((e.clientX - rect.left) / rect.width) * W);
+              }
+            : undefined
+        }
+        onMouseUp={
+          onRangeSelect
+            ? () => {
+                if (
+                  dragFrom !== null &&
+                  cursor !== null &&
+                  Math.abs(cursor - dragFrom) >= DRAG_MIN_PX
+                ) {
+                  const [a, b] = [
+                    Math.min(dragFrom, cursor),
+                    Math.max(dragFrom, cursor),
+                  ];
+                  const toRel = (px: number) =>
+                    Math.max(
+                      0,
+                      Math.round((x.invert(px) - data.start) / 100) / 10,
+                    );
+                  onRangeSelect(toRel(a), toRel(b));
+                }
+                setDragFrom(null);
+              }
+            : undefined
+        }
       >
         {[0, 0.5, 1].map((p) => (
           <g key={p}>
@@ -131,6 +177,32 @@ export function Timeline({
             </rect>
           );
         })}
+        {/* 时间窗选区(①):已提交窗口高亮 + 拖选过程中的预览 */}
+        {range && (
+          <rect
+            data-testid="tl-range"
+            className="rpt-tl-range"
+            x={x(data.start + range.fromS * 1000)}
+            y={PAD.t}
+            width={Math.max(
+              2,
+              x(data.start + range.toS * 1000) -
+                x(data.start + range.fromS * 1000),
+            )}
+            height={H - PAD.t - PAD.b}
+          />
+        )}
+        {dragFrom !== null &&
+          cursor !== null &&
+          Math.abs(cursor - dragFrom) >= DRAG_MIN_PX && (
+            <rect
+              className="rpt-tl-range rpt-tl-range-preview"
+              x={Math.min(dragFrom, cursor)}
+              y={PAD.t}
+              width={Math.abs(cursor - dragFrom)}
+              height={H - PAD.t - PAD.b}
+            />
+          )}
         {series.map((s) => (
           <path
             key={s.unitId}

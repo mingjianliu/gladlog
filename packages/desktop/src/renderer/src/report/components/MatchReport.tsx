@@ -8,6 +8,7 @@ import type { MeterMode } from "../derive/meterRows";
 import { deriveStatsTable } from "../derive/statsTable";
 import { deriveSummary } from "../derive/summary";
 import { deriveTimeline } from "../derive/timeline";
+import { rangeDurationS, type TimeRange } from "../derive/timeRange";
 import type { ReportSource } from "../derive/types";
 import { deriveVulnBands } from "../derive/vulnWindows";
 import { BurstLedgerCard } from "./BurstLedgerCard";
@@ -20,6 +21,7 @@ import { ReplayView } from "./ReplayView";
 import { ReportHeader } from "./ReportHeader";
 import { StructuredAnalysisPanel } from "./StructuredAnalysisPanel";
 import { Timeline } from "./Timeline";
+import { TimeRangeBar } from "./TimeRangeBar";
 import { WindowList } from "./WindowList";
 
 type View = "report" | "replay" | "ai";
@@ -43,6 +45,9 @@ export function MatchReport({
 }) {
   const [mode, setMode] = useState<MeterMode>("damage");
   const [view, setView] = useState<View>(initialView);
+  // 时间窗联动(第四阶段①):null = 全场。聚合面板吃窗口;HP 曲线/窗口列表/
+  // 死亡回顾/爆发账本/回放保持全场口径(见 plan 文档的口径表)。
+  const [timeRange, setTimeRange] = useState<TimeRange | null>(null);
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   // 证据链跳转请求:AI 视图点「回放此刻」→ 切回放并 seek。nonce 防重复消费,
   // 回放时钟保持 ReplayView 局部(提升热 state 会让三视图随 tick 重渲)。
@@ -60,13 +65,25 @@ export function MatchReport({
     });
     setView("replay");
   };
-  const summary = useMemo(() => deriveSummary(source), [source]);
+  const summary = useMemo(
+    () => deriveSummary(source, timeRange),
+    [source, timeRange],
+  );
   const timeline = useMemo(() => deriveTimeline(source), [source]);
-  const statsRows = useMemo(() => deriveStatsTable(source), [source]);
+  const statsRows = useMemo(
+    () => deriveStatsTable(source, timeRange),
+    [source, timeRange],
+  );
   const vulnBands = useMemo(() => deriveVulnBands(source), [source]);
   const ledgerPlayers = useMemo(() => deriveBurstLedger(source), [source]);
-  const kickRows = useMemo(() => deriveKickDash(source), [source]);
-  const dispelDash = useMemo(() => deriveDispelDash(source), [source]);
+  const kickRows = useMemo(
+    () => deriveKickDash(source, timeRange),
+    [source, timeRange],
+  );
+  const dispelDash = useMemo(
+    () => deriveDispelDash(source, timeRange),
+    [source, timeRange],
+  );
   const [recap, setRecap] = useState<DeathRecap | null>(null);
   // 回放光标投影(1c):从回放切回战报时显示最后位置
   const [lastReplayT, setLastReplayT] = useState<number | null>(null);
@@ -112,8 +129,13 @@ export function MatchReport({
       </div>
       {view === "report" && (
         <div className="rpt-body">
-          {/* 主卡:生命曲线 + 窗口列表(1c) */}
+          {/* 主卡:生命曲线 + 窗口列表(1c);时间窗工具条(第四阶段①) */}
           <div>
+            <TimeRangeBar
+              bands={vulnBands}
+              range={timeRange}
+              onChange={setTimeRange}
+            />
             <Timeline
               data={timeline}
               hidden={hidden}
@@ -122,6 +144,8 @@ export function MatchReport({
               bands={vulnBands}
               onBandClick={(tS) => handleSeekEvent(tS, [])}
               cursorT={lastReplayT}
+              range={timeRange}
+              onRangeSelect={(fromS, toS) => setTimeRange({ fromS, toS })}
             />
             <WindowList bands={vulnBands} onSeek={handleSeekEvent} />
           </div>
@@ -135,9 +159,10 @@ export function MatchReport({
               hidden={hidden}
               onToggleUnit={toggleUnit}
               statsRows={statsRows}
-              durationS={(source.endTime - source.startTime) / 1000}
+              durationS={rangeDurationS(source, timeRange)}
               onSeek={handleSeekEvent}
               source={source}
+              range={timeRange}
             />
             <div className="rpt-recap-col">
               {recap ? (

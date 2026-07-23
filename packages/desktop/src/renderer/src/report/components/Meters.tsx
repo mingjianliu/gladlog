@@ -5,6 +5,7 @@ import { deriveDetailBreakdown } from "../derive/detailBreakdown";
 import { type MeterMode, meterRows } from "../derive/meterRows";
 import type { StatsRow } from "../derive/statsTable";
 import type { UnitTotals } from "../derive/summary";
+import type { TimeRange } from "../derive/timeRange";
 import type { ReportSource } from "../derive/types";
 import { BreakdownTable } from "./BreakdownTable";
 import { StatsTable } from "./StatsTable";
@@ -27,6 +28,7 @@ export function Meters({
   durationS,
   onSeek,
   source,
+  range,
 }: {
   rows: UnitTotals[];
   mode: MeterMode;
@@ -42,6 +44,8 @@ export function Meters({
   onSeek?: (tSeconds: number, unitNames: string[]) => void;
   /** 明细展开数据源(backlog #11);未传则行不可展开(旧调用形态)。 */
   source?: ReportSource;
+  /** 时间窗联动①:传给明细分解,保证与榜单总量同口径。 */
+  range?: TimeRange | null;
 }) {
   // 行内明细展开:同一时刻只展开一人;切模式收起
   const [expandedUnitId, setExpandedUnitId] = useState<string | null>(null);
@@ -55,9 +59,10 @@ export function Meters({
             source,
             expandedUnitId,
             mode as "damage" | "healing" | "taken",
+            range,
           )
         : null,
-    [expandable, source, expandedUnitId, mode],
+    [expandable, source, expandedUnitId, mode, range],
   );
   const items = meterRows(rows, mode === "stats" ? "damage" : mode);
   const modes = (Object.keys(MODE_LABEL) as MeterMode[]).filter(

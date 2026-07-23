@@ -7,6 +7,13 @@ import {
 import { CombatUnitReaction, LogEvent } from "@gladlog/parser-compat";
 
 import { toLegacySafe } from "./legacySource";
+import {
+  eventInRange,
+  overlapSeconds,
+  rangeDurationS,
+  tInRange,
+  type TimeRange,
+} from "./timeRange";
 import type { ReportSource } from "./types";
 
 /** 明细实例(行展开用,backlog #10 v2);tS = 相对秒。 */
@@ -46,10 +53,16 @@ export interface StatsRow {
  * 谓词(analyzePlayerCCAndTrinket / reconstructDispelSummary / 打断分类表),
  * 渲染层不重造白名单——那是白名单腐烂病的诞生地。
  */
-export function deriveStatsTable(source: ReportSource): StatsRow[] {
+/** range(时间窗联动①):事实层过滤 —— 判定仍在全量流上算(状态推理不受
+ * 窗口污染),之后按事实时刻过滤/按重叠裁剪时长。谓词见 derive/timeRange.ts。 */
+export function deriveStatsTable(
+  source: ReportSource,
+  range?: TimeRange | null,
+): StatsRow[] {
   try {
     const legacy = toLegacySafe(source);
-    const durationS = Math.max(1, (legacy.endTime - legacy.startTime) / 1000);
+    const durationS = Math.max(1, rangeDurationS(legacy, range));
+    const inR = eventInRange(legacy, range);
     const players = Object.values(legacy.units).filter((u) => u.info);
     if (players.length === 0) return [];
     const friends = players.filter(
@@ -77,23 +90,31 @@ export function deriveStatsTable(source: ReportSource): StatsRow[] {
         (u) => u.ownerId && oppIds.has(u.ownerId),
       );
       const cc = analyzePlayerCCAndTrinket(p, opponents, combatLike, oppPets);
-      const ccTakenS = cc.ccInstances.reduce(
-        (s, i) => s + i.durationSeconds,
+      // 窗口内的 CC 实例:重叠 >0 即计条数,时长按重叠部分计(跨界不整段消失)
+      const ccInWindow = cc.ccInstances.filter(
+        (i) => overlapSeconds(i.atSeconds, i.durationSeconds, range) > 0,
+      );
+      const ccTakenS = ccInWindow.reduce(
+        (s, i) => s + overlapSeconds(i.atSeconds, i.durationSeconds, range),
         0,
+      );
+      const kicksTakenInWindow = cc.interruptInstances.filter((i) =>
+        tInRange(i.atSeconds, range),
       );
       const kickCastEvents = p.spellCastEvents.filter(
         (e) =>
           e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
-          SPELL_CATEGORIES[e.spellId ?? ""]?.type === "interrupts",
+          SPELL_CATEGORIES[e.spellId ?? ""]?.type === "interrupts" &&
+          inR(e.logLine),
       );
       const kicksCast = kickCastEvents.length;
       const dispels =
         p.reaction === CombatUnitReaction.Friendly ? ourDispels : theirDispels;
       const cleanses = dispels.allyCleanse.filter(
-        (d) => d.sourceName === p.name,
+        (d) => d.sourceName === p.name && tInRange(d.timeSeconds, range),
       ).length;
       const purges = dispels.ourPurges.filter(
-        (d) => d.sourceName === p.name,
+        (d) => d.sourceName === p.name && tInRange(d.timeSeconds, range),
       ).length;
 
       rows.push({
@@ -103,7 +124,7 @@ export function deriveStatsTable(source: ReportSource): StatsRow[] {
         reaction:
           p.reaction === CombatUnitReaction.Friendly ? "Friendly" : "Hostile",
         kicksCast,
-        kicksTaken: cc.interruptInstances.length,
+        kicksTaken: kicksTakenInWindow.length,
         ccTakenS: Math.round(ccTakenS * 10) / 10,
         ccTakenPct: Math.round((100 * ccTakenS) / durationS),
         cleanses,
@@ -115,13 +136,13 @@ export function deriveStatsTable(source: ReportSource): StatsRow[] {
               label: getEnglishSpellName(e.spellId ?? "", e.spellName ?? ""),
             }))
             .sort((a, b) => a.tS - b.tS),
-          kicksTaken: cc.interruptInstances
+          kicksTaken: kicksTakenInWindow
             .map((i) => ({
               tS: i.atSeconds,
               label: `${i.kickSpellName} 打断 ${i.interruptedSpellName}(${i.sourceName})`,
             }))
             .sort((a, b) => a.tS - b.tS),
-          ccTaken: cc.ccInstances
+          ccTaken: ccInWindow
             .map((i) => ({
               tS: i.atSeconds,
               label: `${i.spellName} ${i.durationSeconds.toFixed(1)}s(${i.sourceName})`,

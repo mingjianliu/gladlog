@@ -1762,6 +1762,53 @@ pre {
   color: var(--accent);
 }
 
+/* 时间窗联动(第四阶段①) */
+.rpt-tl-range {
+  fill: color-mix(in srgb, var(--accent) 12%, transparent);
+  stroke: var(--accent);
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+  pointer-events: none;
+}
+.rpt-tl-range-preview {
+  stroke-dasharray: 2 2;
+  fill: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+.rpt-trb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 11px;
+}
+.rpt-trb select {
+  font-size: 11px;
+  height: 24px;
+  max-width: 240px;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--hairline);
+  border-radius: 7px;
+  padding: 1px 4px;
+}
+.rpt-trb-chip {
+  padding: 2px 8px;
+  border-radius: 7px;
+  background: var(--accent-fill);
+  color: var(--accent-text);
+}
+.rpt-trb-clear {
+  font-size: 11px;
+  color: var(--accent);
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 0 2px;
+}
+.rpt-trb-hint {
+  color: var(--ink-2);
+}
+
 /* HP 时间轴窗口色带 */
 .rpt-tl-band-burst {
   fill: color-mix(in srgb, var(--gold) 14%, transparent);

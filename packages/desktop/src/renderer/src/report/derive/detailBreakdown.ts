@@ -1,5 +1,6 @@
 import { decodeHpTail } from "@gladlog/parser";
 
+import { eventInRange, type TimeRange } from "./timeRange";
 import type { ReportSource } from "./types";
 
 export interface BreakdownRow {
@@ -16,6 +17,7 @@ export interface BreakdownRow {
 }
 
 interface HpEventLike {
+  timestamp?: number;
   eventName?: string;
   spellId?: number | string;
   spellName?: string;
@@ -25,6 +27,7 @@ interface HpEventLike {
   params?: string[];
 }
 interface AbsorbEventLike {
+  timestamp?: number;
   spellId?: number | string;
   spellName?: string;
   absorbedAmount?: number;
@@ -94,22 +97,27 @@ export function deriveDetailBreakdown(
   source: ReportSource,
   unitId: string,
   mode: "damage" | "healing" | "taken",
+  /** 时间窗联动①:与 deriveSummary 同谓词过滤,分解合计仍恒等于 meterValue。 */
+  range?: TimeRange | null,
 ): { rows: BreakdownRow[]; critAvailable: boolean } {
   const units = Object.values(source.units) as unknown as UnitLike[];
   const self = units.find((u) => u.id === unitId);
   if (!self) return { rows: [], critAvailable: false };
   const pets = units.filter((u) => u.ownerId === unitId);
+  const inR = eventInRange(source, range);
   const map = new Map<string, Acc>();
 
   if (mode === "taken") {
     // 短名撞车(同名不同服)时回退全名,避免两行同标签无法区分
     const shortCount = new Map<string, number>();
-    const fulls = new Set((self.damageIn ?? []).map((e) => e.srcName ?? "?"));
+    const fulls = new Set(
+      (self.damageIn ?? []).filter(inR).map((e) => e.srcName ?? "?"),
+    );
     for (const f of fulls) {
       const short = f.split("-")[0]!;
       shortCount.set(short, (shortCount.get(short) ?? 0) + 1);
     }
-    for (const e of self.damageIn ?? []) {
+    for (const e of (self.damageIn ?? []).filter(inR)) {
       const full = e.srcName ?? "?";
       const short = full.split("-")[0]!;
       const src = (shortCount.get(short) ?? 0) > 1 ? full : short;
@@ -128,8 +136,9 @@ export function deriveDetailBreakdown(
       pets.map((p) => ({ unit: p, prefix: `${p.name}:` })),
     );
     for (const { unit, prefix } of own) {
-      const events =
-        mode === "damage" ? (unit.damageOut ?? []) : (unit.healOut ?? []);
+      const events = (
+        mode === "damage" ? (unit.damageOut ?? []) : (unit.healOut ?? [])
+      ).filter(inR);
       for (const e of events) {
         const key = `${prefix}${e.spellId}`;
         addHp(
@@ -141,7 +150,7 @@ export function deriveDetailBreakdown(
         );
       }
       if (mode === "healing") {
-        for (const e of unit.absorbsOut ?? []) {
+        for (const e of (unit.absorbsOut ?? []).filter(inR)) {
           const key = `ab:${prefix}${e.spellId}`;
           const a = acc(map, key, {
             label: `${prefix}${e.spellName || "吸收"}`,

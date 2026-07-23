@@ -9,6 +9,7 @@ import {
 import { CombatUnitReaction } from "@gladlog/parser-compat";
 
 import { toLegacySafe } from "./legacySource";
+import { tInRange, type TimeRange } from "./timeRange";
 import type { ReportSource } from "./types";
 
 /** 单条驱散/漏驱散实例(行展开与列表用);tS = 相对秒。 */
@@ -59,7 +60,12 @@ const fmtName = (id: string, fallback: string): string =>
  * analysis 的 reconstructDispelSummary —— 与 prompt 侧 [MISSED PURGE
  * OPPORTUNITY]/[CLEANSE] 同一谓词,渲染层不重造白名单。
  */
-export function deriveDispelDash(source: ReportSource): DispelDash {
+/** range(时间窗联动①):账目/漏机会按事实时刻过滤;ccEfficiency 是全场聚合
+ * (analysis 不带逐窗时刻),窗口激活时由组件标注「全场口径」。 */
+export function deriveDispelDash(
+  source: ReportSource,
+  range?: TimeRange | null,
+): DispelDash {
   try {
     const legacy = toLegacySafe(source);
     const players = Object.values(legacy.units).filter((u) => u.info);
@@ -110,8 +116,12 @@ export function deriveDispelDash(source: ReportSource): DispelDash {
     const rows: DispelDashRow[] = [];
     for (const p of players) {
       const side = p.reaction === CombatUnitReaction.Friendly ? ours : theirs;
-      const cleanse = side.allyCleanse.filter((d) => d.sourceName === p.name);
-      const purge = side.ourPurges.filter((d) => d.sourceName === p.name);
+      const cleanse = side.allyCleanse.filter(
+        (d) => d.sourceName === p.name && tInRange(d.timeSeconds, range),
+      );
+      const purge = side.ourPurges.filter(
+        (d) => d.sourceName === p.name && tInRange(d.timeSeconds, range),
+      );
       if (cleanse.length + purge.length === 0) continue;
       rows.push({
         unitId: p.id,
@@ -135,6 +145,7 @@ export function deriveDispelDash(source: ReportSource): DispelDash {
     );
 
     const missedPurges: DispelInstance[] = ours.missedPurgeWindows
+      .filter((w) => tInRange(w.timeSeconds, range))
       .map((w) => ({
         tS: w.timeSeconds,
         label: `${fmtName(w.spellId, w.spellName)} 挂在 ${w.enemyName} 身上 ${Math.round(
@@ -147,6 +158,7 @@ export function deriveDispelDash(source: ReportSource): DispelDash {
       .sort((a, b) => a.tS - b.tS);
 
     const missedCleanses: DispelInstance[] = ours.missedCleanseWindows
+      .filter((w) => tInRange(w.timeSeconds, range))
       .map((w) => ({
         tS: w.timeSeconds,
         label: `${w.targetName} 挂 ${fmtName(w.spellId, w.spellName)} ${Math.round(
