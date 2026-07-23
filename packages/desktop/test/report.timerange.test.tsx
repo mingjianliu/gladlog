@@ -88,6 +88,24 @@ describe("时间窗联动(第四阶段①)— derive 层", () => {
 });
 
 describe("时间窗联动 — UI 集成", () => {
+  it("phase 下拉回显:窗口与 band 差小数秒(标签取整)仍能选中", () => {
+    const bands = deriveVulnBands(m);
+    const b0 = bands[0]!;
+    // 模拟「从取整标签来的窗口」(如视觉场景的 {36,59} vs band 的 36.734/59.189)
+    const { container } = render(
+      <MatchReport
+        source={m}
+        matchId="t"
+        initialTimeRange={{ fromS: Math.floor(b0.fromS), toS: Math.floor(b0.toS) }}
+      />,
+    );
+    const select = container
+      .querySelector("[data-testid=time-range-bar]")!
+      .querySelector("select") as HTMLSelectElement;
+    expect(select.value).toBe("0");
+  });
+
+
   it("phase 下拉选窗口 → chip 出现、榜单数值变化;清除 → 复原", () => {
     const bands = deriveVulnBands(m);
     // fixture 没有窗口时本用例无意义 —— 用断言防静默空转

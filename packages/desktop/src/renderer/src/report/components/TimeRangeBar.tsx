@@ -19,12 +19,13 @@ export function TimeRangeBar({
   range: TimeRange | null;
   onChange: (r: TimeRange | null) => void;
 }) {
-  // band 的起止带小数秒(渲染标签取整),回显匹配用容差,别精确相等
+  // band 的起止带小数秒而显示标签向下取整(实测 36.734 显示 0:36),
+  // 回显匹配用 1s 容差 —— 相邻窗口起点差远大于 1s,无误配风险。
   const selectedIdx = range
     ? bands.findIndex(
         (b) =>
-          Math.abs(b.fromS - range.fromS) < 0.5 &&
-          Math.abs(b.toS - range.toS) < 0.5,
+          Math.abs(b.fromS - range.fromS) < 1 &&
+          Math.abs(b.toS - range.toS) < 1,
       )
     : -1;
   return (
