@@ -14,6 +14,7 @@ import {
   type IMajorCooldownInfo,
   isHealerSpec,
 } from "../utils/cooldowns";
+import { CORPUS_OBSERVED_DISPEL_IDS } from "../data/dispelObservedGenerated";
 import {
   annotateMissedPurgesWithKillWindows,
   reconstructDispelSummary,
@@ -355,8 +356,24 @@ function teamPlayEvents(
     } catch {
       /* 击杀窗口标注失败 → duringKillWindow 缺席,优先级过滤仍然生效 */
     }
-    out.push(...missedCleanseEvents(ds.missedCleanseWindows));
-    out.push(...missedPurgeEvents(ds.missedPurgeWindows));
+    // 可解性置信门:只报语料里真被人解过的 id(confidenceAudit 实测:
+    // DB2 标 Magic 但 1245 场从未被观测解除的有 Paralysis/Intimidating
+    // Shout/Incapacitating Roar/Blind/Blessing of Sacrifice —— "你该解掉它"
+    // 在语料层站不住,砍掉后两类主张 100% 有实战观测背书)。
+    out.push(
+      ...missedCleanseEvents(
+        ds.missedCleanseWindows.filter((w) =>
+          CORPUS_OBSERVED_DISPEL_IDS.has(w.spellId),
+        ),
+      ),
+    );
+    out.push(
+      ...missedPurgeEvents(
+        ds.missedPurgeWindows.filter((w) =>
+          CORPUS_OBSERVED_DISPEL_IDS.has(w.spellId),
+        ),
+      ),
+    );
   } catch {
     /* 驱散摘要不可算 → 两类缺席 */
   }
