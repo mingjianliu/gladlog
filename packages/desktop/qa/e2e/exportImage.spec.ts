@@ -75,9 +75,12 @@ test("链路4:导出图片 → 整页 PNG 落盘且尺寸为全文高度", async
   const pxHeight = buf.readUInt32BE(20);
   // 物理像素 = 逻辑宽 × scaleFactor(CI linux 一般 1)
   expect(pxWidth).toBeGreaterThanOrEqual(1280);
-  // 全文高度:战报页(曲线+榜单+失误+打断/驱散+uptime)远超一个视口
-  expect(pxHeight).toBeGreaterThan(1000);
+  // 离屏窗初始高 500(exportImage.ts 故意压小):>600 证明捕获超出了
+  // 初始视口(整页而非首屏)。合成日志战报实测 ~873px,真实对局更高。
+  expect(pxHeight).toBeGreaterThan(600);
   expect(result!.width).toBeGreaterThanOrEqual(1280);
+  // 返回值与 PNG 字节自洽
+  expect(result!.height).toBe(pxHeight);
 
   await app.close();
   rmSync(userData, { recursive: true, force: true });

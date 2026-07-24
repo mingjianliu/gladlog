@@ -53,10 +53,12 @@ export async function exportReportImage(
     (opts.roundSeq != null ? `&round=${opts.roundSeq}` : "") +
     (opts.range ? `&from=${opts.range.fromS}&to=${opts.range.toS}` : "");
 
+  // 初始高度故意小于任何真实战报:内容高于视口时 scrollHeight 才是真实
+  // 全文高度,也让 E2E 能证明「捕获超出了初始视口」而非截了首屏。
   const w = new BrowserWindow({
     show: false,
     width: EXPORT_WIDTH,
-    height: 900,
+    height: 500,
     webPreferences: {
       preload: opts.preloadPath,
       contextIsolation: true,
