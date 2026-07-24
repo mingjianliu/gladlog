@@ -23,6 +23,10 @@ const api: GladlogApi = {
     get: (id) => ipcRenderer.invoke("gladlog:matches:get", id),
     page: (opts) => ipcRenderer.invoke("gladlog:matches:page", opts),
     rebuildIndex: () => ipcRenderer.invoke("gladlog:matches:rebuildIndex"),
+    rawLine: (id, opts) =>
+      ipcRenderer.invoke("gladlog:matches:rawLine", id, opts),
+    exportImage: (opts) =>
+      ipcRenderer.invoke("gladlog:matches:exportImage", opts),
   },
   settings: {
     get: () => ipcRenderer.invoke("gladlog:settings:get"),

@@ -1,32 +1,43 @@
 import { useMemo, useState } from "react";
 
+import { bridge } from "../../bridge";
+
+import { deriveAuraUptime } from "../derive/auraUptime";
 import { deriveBurstLedger } from "../derive/burstLedger";
 import { type DeathRecap, deriveDeathRecaps } from "../derive/deathRecap";
 import { deriveDispelDash } from "../derive/dispelDash";
 import { deriveKickDash } from "../derive/kickDash";
 import type { MeterMode } from "../derive/meterRows";
+import { deriveMistakes } from "../derive/mistakes";
 import { deriveStatsTable } from "../derive/statsTable";
 import { deriveSummary } from "../derive/summary";
 import { deriveTimeline } from "../derive/timeline";
+import { buildReportMarkdown } from "../derive/exportReport";
+import { rangeDurationS, type TimeRange } from "../derive/timeRange";
 import type { ReportSource } from "../derive/types";
 import { deriveVulnBands } from "../derive/vulnWindows";
+import { AuraUptimeCard } from "./AuraUptimeCard";
 import { BurstLedgerCard } from "./BurstLedgerCard";
 import { DeathRecapCard } from "./DeathRecapCard";
 import { DispelDashboard } from "./DispelDashboard";
+import { EventsPanel } from "./EventsPanel";
 import { KickDashboard } from "./KickDashboard";
 import { Meters } from "./Meters";
+import { MistakesCard } from "./MistakesCard";
 import { ProComparisonVerified } from "./ProComparisonVerified";
 import { ReplayView } from "./ReplayView";
 import { ReportHeader } from "./ReportHeader";
 import { StructuredAnalysisPanel } from "./StructuredAnalysisPanel";
 import { Timeline } from "./Timeline";
+import { TimeRangeBar } from "./TimeRangeBar";
 import { WindowList } from "./WindowList";
 
-type View = "report" | "replay" | "ai";
+type View = "report" | "replay" | "events" | "ai";
 
 const VIEW_LABEL: Record<View, string> = {
   report: "战报",
   replay: "回放",
+  events: "事件",
   ai: "AI 分析",
 };
 
@@ -35,14 +46,22 @@ export function MatchReport({
   roundLabel,
   matchId,
   initialView = "report",
+  initialTimeRange = null,
 }: {
   source: ReportSource;
   roundLabel?: string;
   matchId?: string;
   initialView?: View;
+  /** 初始时间窗(视觉场景 report-window 用;交互入口是拖选/phase 下拉)。 */
+  initialTimeRange?: TimeRange | null;
 }) {
   const [mode, setMode] = useState<MeterMode>("damage");
   const [view, setView] = useState<View>(initialView);
+  // 时间窗联动(第四阶段①):null = 全场。聚合面板吃窗口;HP 曲线/窗口列表/
+  // 死亡回顾/爆发账本/回放保持全场口径(见 plan 文档的口径表)。
+  const [timeRange, setTimeRange] = useState<TimeRange | null>(
+    initialTimeRange,
+  );
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   // 证据链跳转请求:AI 视图点「回放此刻」→ 切回放并 seek。nonce 防重复消费,
   // 回放时钟保持 ReplayView 局部(提升热 state 会让三视图随 tick 重渲)。
@@ -51,7 +70,23 @@ export function MatchReport({
     unitNames: string[];
     nonce: number;
   } | null>(null);
+  // B2 溯源请求:finding →「原始事件」→ 切事件视图并预置 ±15s + 单位过滤
+  const [inspectReq, setInspectReq] = useState<{
+    fromS: number;
+    toS: number;
+    unitName: string | null;
+    nonce: number;
+  } | null>(null);
 
+  const handleInspectEvents = (tSeconds: number, unitNames: string[]) => {
+    setInspectReq({
+      fromS: Math.max(0, tSeconds - 15),
+      toS: tSeconds + 15,
+      unitName: unitNames[0]?.split("-")[0] ?? null,
+      nonce: Date.now(),
+    });
+    setView("events");
+  };
   const handleSeekEvent = (tSeconds: number, unitNames: string[]) => {
     setSeekReq({
       tMs: source.startTime + tSeconds * 1000,
@@ -60,13 +95,40 @@ export function MatchReport({
     });
     setView("replay");
   };
-  const summary = useMemo(() => deriveSummary(source), [source]);
+  const summary = useMemo(
+    () => deriveSummary(source, timeRange),
+    [source, timeRange],
+  );
   const timeline = useMemo(() => deriveTimeline(source), [source]);
-  const statsRows = useMemo(() => deriveStatsTable(source), [source]);
+  const statsRows = useMemo(
+    () => deriveStatsTable(source, timeRange),
+    [source, timeRange],
+  );
   const vulnBands = useMemo(() => deriveVulnBands(source), [source]);
   const ledgerPlayers = useMemo(() => deriveBurstLedger(source), [source]);
-  const kickRows = useMemo(() => deriveKickDash(source), [source]);
-  const dispelDash = useMemo(() => deriveDispelDash(source), [source]);
+  const kickRows = useMemo(
+    () => deriveKickDash(source, timeRange),
+    [source, timeRange],
+  );
+  const dispelDash = useMemo(
+    () => deriveDispelDash(source, timeRange),
+    [source, timeRange],
+  );
+  const auraUptime = useMemo(
+    () => deriveAuraUptime(source, timeRange),
+    [source, timeRange],
+  );
+  // 失误清单:全场 derive 一次(标记要画全场),卡片按窗口过滤
+  const mistakesAll = useMemo(() => deriveMistakes(source), [source]);
+  const mistakes = useMemo(
+    () =>
+      timeRange
+        ? mistakesAll.filter(
+            (mk) => mk.tS >= timeRange.fromS && mk.tS <= timeRange.toS,
+          )
+        : mistakesAll,
+    [mistakesAll, timeRange],
+  );
   const [recap, setRecap] = useState<DeathRecap | null>(null);
   // 回放光标投影(1c):从回放切回战报时显示最后位置
   const [lastReplayT, setLastReplayT] = useState<number | null>(null);
@@ -112,8 +174,46 @@ export function MatchReport({
       </div>
       {view === "report" && (
         <div className="rpt-body">
-          {/* 主卡:生命曲线 + 窗口列表(1c) */}
+          {/* 主卡:生命曲线 + 窗口列表(1c);时间窗工具条(第四阶段①) */}
           <div>
+            <div className="rpt-toolbar-row">
+              <TimeRangeBar
+                bands={vulnBands}
+                range={timeRange}
+                onChange={setTimeRange}
+              />
+              <button
+                className="rpt-btn rpt-export-report"
+                title="导出当前(窗口)口径的战报 Markdown"
+                onClick={() =>
+                  void navigator.clipboard.writeText(
+                    buildReportMarkdown(source, timeRange),
+                  )
+                }
+              >
+                复制 Markdown
+              </button>
+              <button
+                className="rpt-btn rpt-export-image"
+                title="导出战报图片(离屏渲染同一页面后整页截图)"
+                onClick={() => {
+                  try {
+                    void bridge().matches.exportImage({
+                      matchId: resolvedMatchId,
+                      roundSeq:
+                        source.kind === "shuffleRound"
+                          ? source.sequenceNumber
+                          : null,
+                      range: timeRange,
+                    });
+                  } catch {
+                    /* fixture/测试台无桥 → 静默 */
+                  }
+                }}
+              >
+                导出图片
+              </button>
+            </div>
             <Timeline
               data={timeline}
               hidden={hidden}
@@ -122,6 +222,10 @@ export function MatchReport({
               bands={vulnBands}
               onBandClick={(tS) => handleSeekEvent(tS, [])}
               cursorT={lastReplayT}
+              range={timeRange}
+              onRangeSelect={(fromS, toS) => setTimeRange({ fromS, toS })}
+              marks={mistakesAll}
+              onMarkClick={(tS) => handleSeekEvent(Math.max(0, tS - 3), [])}
             />
             <WindowList bands={vulnBands} onSeek={handleSeekEvent} />
           </div>
@@ -135,9 +239,10 @@ export function MatchReport({
               hidden={hidden}
               onToggleUnit={toggleUnit}
               statsRows={statsRows}
-              durationS={(source.endTime - source.startTime) / 1000}
+              durationS={rangeDurationS(source, timeRange)}
               onSeek={handleSeekEvent}
               source={source}
+              range={timeRange}
             />
             <div className="rpt-recap-col">
               {recap ? (
@@ -155,10 +260,22 @@ export function MatchReport({
               )}
             </div>
           </div>
+          <MistakesCard mistakes={mistakes} onSeek={handleSeekEvent} />
           <BurstLedgerCard players={ledgerPlayers} onSeek={handleSeekEvent} />
           <KickDashboard rows={kickRows} onSeek={handleSeekEvent} />
           <DispelDashboard dash={dispelDash} onSeek={handleSeekEvent} />
+          <AuraUptimeCard data={auraUptime} range={timeRange} />
         </div>
+      )}
+      {view === "events" && (
+        <EventsPanel
+          source={source}
+          bands={vulnBands}
+          globalRange={timeRange}
+          onSeek={handleSeekEvent}
+          inspectReq={inspectReq}
+          matchId={resolvedMatchId}
+        />
       )}
       {view === "replay" && (
         <ReplayView
@@ -186,6 +303,7 @@ export function MatchReport({
               source={source}
               matchId={resolvedMatchId}
               onSeekEvent={handleSeekEvent}
+              onInspectEvents={handleInspectEvents}
               onRunAll={() => setAiRunNonce((n) => n + 1)}
             />
             <div className="rpt-ai-cohort">

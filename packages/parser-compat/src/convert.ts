@@ -193,6 +193,7 @@ function convertUnit(
     event: LogEvent.UNIT_DIED,
     timestamp: death.timestamp,
     parameters: convertParams(death.params),
+    lineIndex: death.lineIndex,
   }));
 
   const advancedActions: IAdvancedAction[] = unit.advancedSamples.map(
@@ -234,6 +235,7 @@ function convertUnit(
           event: event.eventName as LogEvent,
           timestamp: event.timestamp,
           parameters: convertParams(event.params),
+          lineIndex: event.lineIndex,
         },
       };
     }),
@@ -255,6 +257,7 @@ function convertUnit(
           event: event.eventName as LogEvent,
           timestamp: event.timestamp,
           parameters: convertParams(event.params),
+          lineIndex: event.lineIndex,
         },
       } as unknown as IHpEvent;
     }),
@@ -281,6 +284,7 @@ function convertUnit(
           event: event.eventName as LogEvent,
           timestamp: event.timestamp,
           parameters: convertParams(event.params),
+          lineIndex: event.lineIndex,
         },
       };
     })
@@ -303,6 +307,7 @@ function convertUnit(
         event: event.eventName as LogEvent,
         timestamp: event.timestamp,
         parameters: convertParams(event.params),
+        lineIndex: event.lineIndex,
       },
     };
   });
@@ -324,6 +329,7 @@ function convertUnit(
         event: event.eventName as LogEvent,
         timestamp: event.timestamp,
         parameters: convertParams(event.params),
+        lineIndex: event.lineIndex,
       },
     };
   });
@@ -342,6 +348,7 @@ function convertUnit(
       event: event.eventName as LogEvent,
       timestamp: event.timestamp,
       parameters: convertParams(event.params),
+      lineIndex: event.lineIndex,
     },
   }));
 
@@ -359,6 +366,7 @@ function convertUnit(
       event: event.eventName as LogEvent,
       timestamp: event.timestamp,
       parameters: convertParams(event.params),
+      lineIndex: event.lineIndex,
     },
   }));
 
@@ -377,6 +385,7 @@ function convertUnit(
       event: event.eventName as LogEvent,
       timestamp: event.timestamp,
       parameters: convertParams(event.params),
+      lineIndex: event.lineIndex,
     },
   }));
 
@@ -393,6 +402,7 @@ function convertUnit(
       event: event.eventName as LogEvent,
       timestamp: event.timestamp,
       parameters: convertParams(event.params),
+      lineIndex: event.lineIndex,
     },
   }));
 
@@ -412,6 +422,7 @@ function convertUnit(
       event: event.eventName as LogEvent,
       timestamp: event.timestamp,
       parameters: convertParams(event.params),
+      lineIndex: event.lineIndex,
     },
   }));
 
@@ -428,6 +439,7 @@ function convertUnit(
       event: event.eventName as LogEvent,
       timestamp: event.timestamp,
       parameters: convertParams(event.params),
+      lineIndex: event.lineIndex,
     },
   }));
 
@@ -445,6 +457,7 @@ function convertUnit(
       event: event.eventName as LogEvent,
       timestamp: event.timestamp,
       parameters: convertParams(event.params),
+      lineIndex: event.lineIndex,
     },
   }));
 
@@ -462,6 +475,7 @@ function convertUnit(
       event: event.eventName as LogEvent,
       timestamp: event.timestamp,
       parameters: convertParams(event.params),
+      lineIndex: event.lineIndex,
     },
   }));
 

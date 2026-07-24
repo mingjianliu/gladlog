@@ -12,6 +12,9 @@ export interface ILogLine {
   event: LogEvent | string;
   timestamp: number;
   parameters: (string | number)[];
+  /** 源行在所属对局 rawLines(落盘 raw.txt)里的下标;shuffle 为轮内下标,
+   * 整场偏移由各轮 linesTotal 累加。旧档没有(undefined)→ 深链降级隐藏。 */
+  lineIndex?: number;
 }
 
 export interface ICombatEvent {

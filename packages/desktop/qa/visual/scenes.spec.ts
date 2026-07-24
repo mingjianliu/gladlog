@@ -20,6 +20,9 @@ const ANCHOR: Partial<Record<SceneName, string>> = {
   // 而 finding 卡片来自异步的 analysis.getState —— 拿根节点当锚点等于不等。
   "report-ai": "[data-testid=finding-deepdive]",
   "report-synth": "[data-testid=rpt-timeline]",
+  // 选中态锚点用窗口 chip:chip 出现 = 窗口态已应用,聚合面板已按窗口重算
+  "report-window": "[data-testid=time-range-chip]",
+  "report-events": "[data-testid=events-panel]",
   dashboard: "[data-testid=stats-dashboard]",
   settings: "[data-testid=settings-panel]",
   matchlist: "[data-testid=match-list]",

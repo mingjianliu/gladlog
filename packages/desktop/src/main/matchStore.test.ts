@@ -103,3 +103,54 @@ describe("MatchStore NDJSON index", () => {
     ).toEqual(["a", "b"]);
   });
 });
+
+describe("MatchStore.rawLine(B2 溯源:lineIndex → raw.txt 行)", () => {
+  it("普通对局:直接按下标取行", async () => {
+    const s = tmpStore();
+    const m = mkMatch("r1", 100);
+    (m as unknown as { rawLines: string[] }).rawLines = ["L0", "L1", "L2"];
+    s.store(m);
+    expect(await s.rawLine("r1", { lineIndex: 1 })).toEqual({
+      line: "L1",
+      fileLine: 1,
+    });
+    expect(await s.rawLine("r1", { lineIndex: 99 })).toBeNull();
+    expect(await s.rawLine("r1", { lineIndex: -1 })).toBeNull();
+    expect(await s.rawLine("nope", { lineIndex: 0 })).toBeNull();
+  });
+
+  it("shuffle:轮内下标 + 前序轮 linesTotal 偏移", async () => {
+    const s = tmpStore();
+    const round = (seq: number, lines: string[]) =>
+      ({
+        kind: "shuffleRound",
+        id: `sr${seq}`,
+        sequenceNumber: seq,
+        bracket: "Rated Solo Shuffle",
+        zoneId: "0",
+        startTime: 100 + seq,
+        endTime: 101 + seq,
+        result: 0,
+        linesTotal: lines.length,
+        rawLines: lines,
+      }) as unknown as GladMatch;
+    const shuffle = {
+      kind: "shuffle",
+      startTime: 100,
+      endTime: 200,
+      result: 0,
+      rounds: [round(0, ["A0", "A1"]), round(1, ["B0", "B1", "B2"])],
+      rawLines: ["A0", "A1", "B0", "B1", "B2", "END"],
+    } as unknown as GladMatch;
+    s.store(shuffle as never);
+    // 轮 1 的下标 2 → 偏移 2(轮 0 的 linesTotal)+ 2 = 整场第 4 行 "B2"
+    expect(await s.rawLine("sr0", { roundSeq: 1, lineIndex: 2 })).toEqual({
+      line: "B2",
+      fileLine: 4,
+    });
+    expect(await s.rawLine("sr0", { roundSeq: 0, lineIndex: 0 })).toEqual({
+      line: "A0",
+      fileLine: 0,
+    });
+  });
+});

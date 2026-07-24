@@ -14,6 +14,13 @@ import {
   type IMajorCooldownInfo,
   isHealerSpec,
 } from "../utils/cooldowns";
+import { CORPUS_OBSERVED_DISPEL_IDS } from "../data/dispelObservedGenerated";
+import {
+  annotateMissedPurgesWithKillWindows,
+  reconstructDispelSummary,
+  type IMissedCleanseWindow,
+  type IMissedPurgeWindow,
+} from "../utils/dispelAnalysis";
 import { reconstructEnemyCDTimeline } from "../utils/enemyCDs";
 import { isBurstConverted } from "../utils/dpsMetrics";
 import { analyzeOutgoingCCChains } from "../utils/drAnalysis";
@@ -132,6 +139,251 @@ export function extractCandidateFindings(
     } catch {
       /* 任何分析抛错都不应拖垮既有菜单 */
     }
+  }
+
+  // --- 团队协作事件(所有 owner 视角,2026-07-24 覆盖面扩充)---
+  // 动机(evidenceDist 实测):治疗视角菜单 avg 3.4/场、41% 的场 ≤2 条、
+  // 15/17 场只覆盖末 1/3 —— 既有类型里进攻四类治疗触发不了,只剩 death
+  // (天然在结尾)。漏解/漏 purge/被连控/被打断吃满 横跨全场且治疗强相关。
+  if (owner) {
+    try {
+      out.push(...teamPlayEvents(combat, owner, units));
+    } catch {
+      /* 任何分析抛错都不应拖垮既有菜单 */
+    }
+  }
+
+  return out;
+}
+
+/** 每场各团队协作类型的条数上限(按可教价值排序后截断,防刷屏)。 */
+const MISSED_CLEANSE_CAP = 3;
+const MISSED_PURGE_CAP = 3;
+const CC_LOCKED_CAP = 3;
+const KICK_EATEN_CAP = 2;
+/** cc-locked:单次被控多长才值得教(短控是常态噪声)。 */
+const CC_LOCKED_MIN_S = 4;
+
+/** missed-cleanse 映射(纯函数,可 hand-built 单测):高价值控制挂在队友
+ * 身上超时未解。只取 Critical/High;解控技能在 CD 的窗口不报(没得教)。 */
+export function missedCleanseEvents(
+  windows: Pick<
+    IMissedCleanseWindow,
+    | "timeSeconds"
+    | "durationSeconds"
+    | "targetName"
+    | "spellName"
+    | "spellId"
+    | "priority"
+    | "postCcDamage"
+    | "cleanseWasOnCD"
+  >[],
+): CandidateEvent[] {
+  return windows
+    .filter(
+      (w) =>
+        (w.priority === "Critical" || w.priority === "High") &&
+        !w.cleanseWasOnCD,
+    )
+    .sort((a, b) => b.postCcDamage - a.postCcDamage)
+    .slice(0, MISSED_CLEANSE_CAP)
+    .map((w) => ({
+      id: `missed-cleanse:${w.targetName}:${Math.round(w.timeSeconds)}`,
+      type: "missed-cleanse",
+      t: w.timeSeconds,
+      unitNames: [w.targetName],
+      spell: w.spellName,
+      spellId: w.spellId,
+      facts: {
+        t: fmt(w.timeSeconds),
+        target: w.targetName,
+        cc: w.spellName,
+        duration: w.durationSeconds.toFixed(1),
+        priority: w.priority,
+        postCcDamageK: (w.postCcDamage / 1000).toFixed(0),
+      },
+    }));
+}
+
+/** missed-purge 映射(纯函数):敌方高价值增益挂满未被 purge。
+ * Critical/High 或落在我方击杀窗口内的才报;purge 在 CD 的不报。 */
+export function missedPurgeEvents(
+  windows: Pick<
+    IMissedPurgeWindow,
+    | "timeSeconds"
+    | "durationSeconds"
+    | "enemyName"
+    | "spellName"
+    | "spellId"
+    | "priority"
+    | "purgeWasOnCD"
+    | "duringKillWindow"
+  >[],
+): CandidateEvent[] {
+  return windows
+    .filter(
+      (w) =>
+        !w.purgeWasOnCD &&
+        (w.priority === "Critical" ||
+          w.priority === "High" ||
+          w.duringKillWindow === true),
+    )
+    .sort(
+      (a, b) =>
+        Number(b.duringKillWindow ?? false) -
+          Number(a.duringKillWindow ?? false) ||
+        b.durationSeconds - a.durationSeconds,
+    )
+    .slice(0, MISSED_PURGE_CAP)
+    .map((w) => ({
+      id: `missed-purge:${w.enemyName}:${Math.round(w.timeSeconds)}`,
+      type: "missed-purge",
+      t: w.timeSeconds,
+      unitNames: [w.enemyName],
+      spell: w.spellName,
+      spellId: w.spellId,
+      facts: {
+        t: fmt(w.timeSeconds),
+        enemy: w.enemyName,
+        buff: w.spellName,
+        duration: w.durationSeconds.toFixed(1),
+        priority: w.priority,
+        inKillWindow: w.duringKillWindow ? "yes" : "no",
+      },
+    }));
+}
+
+/** cc-locked 映射(纯函数):owner 自己被 ≥CC_LOCKED_MIN_S 秒的硬控。
+ * trinketState 直接进 facts —— "手里攥着饰品被控满" 与 "饰品在 CD 被控满"
+ * 是两种不同的教法,模型按状态区分。 */
+export function ccLockedEvents(
+  instances: Pick<
+    ReturnType<typeof analyzePlayerCCAndTrinket>["ccInstances"][number],
+    | "atSeconds"
+    | "durationSeconds"
+    | "spellName"
+    | "spellId"
+    | "sourceName"
+    | "trinketState"
+    | "damageTakenDuring"
+  >[],
+  owner: { id: string; name: string },
+): CandidateEvent[] {
+  return instances
+    .filter((cc) => cc.durationSeconds >= CC_LOCKED_MIN_S)
+    .sort((a, b) => b.damageTakenDuring - a.damageTakenDuring)
+    .slice(0, CC_LOCKED_CAP)
+    .map((cc) => ({
+      id: `cc-locked:${owner.id}:${Math.round(cc.atSeconds)}`,
+      type: "cc-locked",
+      t: cc.atSeconds,
+      unitNames: [owner.name, cc.sourceName],
+      spell: cc.spellName,
+      spellId: cc.spellId,
+      facts: {
+        t: fmt(cc.atSeconds),
+        cc: cc.spellName,
+        duration: cc.durationSeconds.toFixed(1),
+        source: cc.sourceName,
+        trinketState: cc.trinketState,
+        damageTakenK: (cc.damageTakenDuring / 1000).toFixed(0),
+      },
+    }));
+}
+
+/** kick-eaten 映射(纯函数):owner 硬读条被敌方打断(治疗尤其可教:假读条)。 */
+export function kickEatenEvents(
+  instances: Pick<
+    ReturnType<typeof analyzePlayerCCAndTrinket>["interruptInstances"][number],
+    | "atSeconds"
+    | "lockoutDurationSeconds"
+    | "kickSpellName"
+    | "interruptedSpellName"
+    | "sourceName"
+  >[],
+  owner: { id: string; name: string },
+): CandidateEvent[] {
+  return instances
+    .sort((a, b) => b.lockoutDurationSeconds - a.lockoutDurationSeconds)
+    .slice(0, KICK_EATEN_CAP)
+    .map((k) => ({
+      id: `kick-eaten:${owner.id}:${Math.round(k.atSeconds)}`,
+      type: "kick-eaten",
+      t: k.atSeconds,
+      unitNames: [owner.name, k.sourceName],
+      spell: k.interruptedSpellName,
+      facts: {
+        t: fmt(k.atSeconds),
+        interrupted: k.interruptedSpellName,
+        kick: k.kickSpellName,
+        source: k.sourceName,
+        lockout: k.lockoutDurationSeconds.toFixed(1),
+      },
+    }));
+}
+
+/** 团队协作事件集成:漏解/漏 purge(全队口径)+ owner 被控/被打断。 */
+function teamPlayEvents(
+  combat: any,
+  owner: any,
+  units: any[],
+): CandidateEvent[] {
+  const out: CandidateEvent[] = [];
+  const players = units.filter((u) => u.info);
+  const friends = players.filter((u) => u.reaction === owner.reaction);
+  const enemies = players.filter((u) => u.reaction !== owner.reaction);
+  if (friends.length === 0 || enemies.length === 0) return out;
+  const friendIds = new Set(friends.map((u) => u.id));
+  const enemyIds = new Set(enemies.map((u) => u.id));
+  const friendlyPets = units.filter(
+    (u) => u.ownerId && friendIds.has(u.ownerId),
+  );
+  const enemyPets = units.filter((u) => u.ownerId && enemyIds.has(u.ownerId));
+
+  try {
+    const ds = reconstructDispelSummary(
+      friends,
+      enemies,
+      combat,
+      friendlyPets,
+      enemyPets,
+    );
+    try {
+      annotateMissedPurgesWithKillWindows(
+        ds.missedPurgeWindows,
+        computeOffensiveWindows(enemies, friends, combat),
+      );
+    } catch {
+      /* 击杀窗口标注失败 → duringKillWindow 缺席,优先级过滤仍然生效 */
+    }
+    // 可解性置信门:只报语料里真被人解过的 id(confidenceAudit 实测:
+    // DB2 标 Magic 但 1245 场从未被观测解除的有 Paralysis/Intimidating
+    // Shout/Incapacitating Roar/Blind/Blessing of Sacrifice —— "你该解掉它"
+    // 在语料层站不住,砍掉后两类主张 100% 有实战观测背书)。
+    out.push(
+      ...missedCleanseEvents(
+        ds.missedCleanseWindows.filter((w) =>
+          CORPUS_OBSERVED_DISPEL_IDS.has(w.spellId),
+        ),
+      ),
+    );
+    out.push(
+      ...missedPurgeEvents(
+        ds.missedPurgeWindows.filter((w) =>
+          CORPUS_OBSERVED_DISPEL_IDS.has(w.spellId),
+        ),
+      ),
+    );
+  } catch {
+    /* 驱散摘要不可算 → 两类缺席 */
+  }
+
+  try {
+    const cc = analyzePlayerCCAndTrinket(owner, enemies, combat, enemyPets);
+    out.push(...ccLockedEvents(cc.ccInstances, owner));
+    out.push(...kickEatenEvents(cc.interruptInstances, owner));
+  } catch {
+    /* owner CC 摘要不可算 → 两类缺席 */
   }
 
   return out;

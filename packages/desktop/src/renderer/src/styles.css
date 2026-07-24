@@ -1762,6 +1762,181 @@ pre {
   color: var(--accent);
 }
 
+/* 时间窗联动(第四阶段①) */
+.rpt-tl-range {
+  fill: color-mix(in srgb, var(--accent) 12%, transparent);
+  stroke: var(--accent);
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+  pointer-events: none;
+}
+.rpt-tl-range-preview {
+  stroke-dasharray: 2 2;
+  fill: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+.rpt-trb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 11px;
+}
+.rpt-trb select {
+  font-size: 11px;
+  height: 24px;
+  max-width: 240px;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--hairline);
+  border-radius: 7px;
+  padding: 1px 4px;
+}
+.rpt-trb-chip {
+  padding: 2px 8px;
+  border-radius: 7px;
+  background: var(--accent-fill);
+  color: var(--accent-text);
+}
+.rpt-trb-clear {
+  font-size: 11px;
+  color: var(--accent);
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 0 2px;
+}
+.rpt-trb-hint {
+  color: var(--ink-2);
+}
+
+/* 光环 uptime 卡(第四阶段④) */
+.rpt-aura-table td {
+  vertical-align: middle;
+}
+.rpt-aura-name {
+  white-space: nowrap;
+}
+.rpt-aura-spell {
+  white-space: nowrap;
+  color: var(--ink-2);
+}
+.rpt-aura-bar-cell {
+  width: 100%;
+}
+.rpt-aura-bar {
+  display: block;
+  width: 100%;
+  height: 12px;
+}
+.rpt-aura-track {
+  fill: color-mix(in srgb, var(--ink-2) 12%, transparent);
+  rx: 2;
+}
+.rpt-aura-window {
+  fill: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.rpt-aura-seg {
+  rx: 1.5;
+}
+.rpt-aura-offense {
+  fill: var(--gold);
+}
+.rpt-aura-defense {
+  fill: color-mix(in srgb, var(--accent) 75%, white);
+}
+.rpt-aura-cc {
+  fill: var(--loss);
+}
+.rpt-aura-inferred {
+  fill-opacity: 0.45;
+  stroke: currentColor;
+  stroke-dasharray: 2 2;
+  stroke-width: 0.8;
+}
+.rpt-aura-pct {
+  white-space: nowrap;
+  text-align: right;
+}
+
+/* events 视图(第四阶段②) */
+.rpt-events {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.rpt-events-filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 11px;
+}
+.rpt-events-filters select,
+.rpt-events-filters input[type="search"] {
+  font-size: 11px;
+  height: 26px;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--hairline);
+  border-radius: 7px;
+  padding: 2px 6px;
+}
+.rpt-events-filters input[type="search"] {
+  width: 150px;
+}
+.rpt-events-table th,
+.rpt-events-table td {
+  text-align: left;
+  padding: 2px 8px;
+}
+.rpt-events-rawline td {
+  padding: 4px 10px 8px;
+  background: color-mix(in srgb, var(--accent) 4%, transparent);
+}
+.rpt-events-rawline code {
+  font-size: 10.5px;
+  word-break: break-all;
+  color: var(--text-dim, #9aa);
+}
+
+.rpt-events-more {
+  align-self: center;
+  font-size: 11px;
+  color: var(--accent);
+  border: 1px solid var(--hairline);
+  background: transparent;
+  border-radius: 7px;
+  padding: 4px 12px;
+  cursor: pointer;
+}
+
+/* 失误标记与清单(第四阶段③) */
+.rpt-tl-mistake {
+  font-size: 9px;
+}
+.rpt-tl-mistake-major {
+  fill: var(--loss);
+}
+.rpt-tl-mistake-average {
+  fill: var(--gold);
+}
+.rpt-tl-mistake-minor {
+  fill: var(--ink-2);
+}
+
+/* 导出(C3) */
+.rpt-toolbar-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+.rpt-export-report {
+  font-size: 11px;
+  height: 24px;
+  white-space: nowrap;
+}
+
 /* HP 时间轴窗口色带 */
 .rpt-tl-band-burst {
   fill: color-mix(in srgb, var(--gold) 14%, transparent);

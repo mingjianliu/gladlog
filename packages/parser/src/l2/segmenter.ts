@@ -18,7 +18,9 @@ export class Segmenter {
     this.shuffleCallback = cb;
   }
 
-  public onDiagnostic(cb: (d: { code: string; lineRef?: string }) => void): void {
+  public onDiagnostic(
+    cb: (d: { code: string; lineRef?: string }) => void,
+  ): void {
     this.diagnosticCallback = cb;
   }
 
@@ -116,6 +118,9 @@ export class Segmenter {
       }
     } else {
       if (this.state !== "IDLE" && this.currentSegment) {
+        // records 与 rawLines 同步推进;lineIndex 必须等于 raw 即将落到的下标,
+        // 这是事件 → raw.txt 行号深链(B2)的唯一对齐点。
+        line.lineIndex = this.currentSegment.rawLines.length;
         this.currentSegment.records.push(line);
         this.currentSegment.rawLines.push(raw);
       }

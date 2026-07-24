@@ -14,6 +14,7 @@ export * from "./utils/dispelAnalysis";
 export * from "./utils/healingGaps";
 export * from "./utils/healerOffenseAnalysis";
 export * from "./utils/killWindowTargetSelection";
+export * from "./utils/auraIntervals";
 export * from "./utils/burstLedger";
 export * from "./utils/kickAudit";
 export * from "./utils/dpsMetrics";

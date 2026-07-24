@@ -30,6 +30,7 @@ export function FindingsList({
   onSelect,
   onJump,
   onJumpT,
+  onInspect,
   candidates,
   flags,
   onFlag,
@@ -40,6 +41,8 @@ export function FindingsList({
   onJump?: (eventIds: string[]) => void;
   /** 深挖 chips 直跳(相对秒 + 单位)。 */
   onJumpT?: (tSeconds: number, unitNames: string[]) => void;
+  /** B2 溯源:跳 events 视图并预置「该时刻 ± 窗口 + 该单位」过滤。 */
+  onInspect?: (tSeconds: number, unitNames: string[]) => void;
   /** 候选事件池:证据 chip 显示每条证据的发生时刻(可各自点跳)。 */
   candidates?: CandidateEvent[];
   /** 跟进标记(phase3 #3a):key = findingKey(f)。 */
@@ -139,6 +142,26 @@ export function FindingsList({
                     ▶ 回放此刻
                   </button>
                 )}
+                {onInspect &&
+                  (() => {
+                    // B2 溯源:取该 finding 最早的证据事件为锚
+                    const first = (candidates ?? [])
+                      .filter(
+                        (c) =>
+                          f.eventIds.includes(c.id) && Number.isFinite(c.t),
+                      )
+                      .sort((a, b) => a.t - b.t)[0];
+                    if (!first) return null;
+                    return (
+                      <button
+                        className="rpt-finding-jump"
+                        title="在事件视图里查看该时刻的原始事件"
+                        onClick={() => onInspect(first.t, first.unitNames)}
+                      >
+                        ⛏ 原始事件
+                      </button>
+                    );
+                  })()}
               </div>
             )}
             {/* 跟进标记独立于证据守卫:无 eventIds 的 finding 也能标记(agy 复核) */}

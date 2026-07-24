@@ -11,7 +11,7 @@ import type {
 
 export function collectEvents(
   records: ParsedLine[],
-  roster: { ownerId: string | null; units: Map<string, RosterUnit> }
+  roster: { ownerId: string | null; units: Map<string, RosterUnit> },
 ): Map<string, GladUnit> {
   const gladUnits = new Map<string, GladUnit>();
 
@@ -61,6 +61,7 @@ export function collectEvents(
         effectiveAmount: record.damage.effectiveAmount,
         absorbed: record.damage.absorbed,
         params: record.params,
+        lineIndex: record.lineIndex,
       };
 
       if (srcGuid && srcGuid !== "0000000000000000") {
@@ -92,6 +93,7 @@ export function collectEvents(
         amount: record.heal.amount,
         effectiveAmount: record.heal.effectiveAmount,
         params: record.params,
+        lineIndex: record.lineIndex,
       };
 
       if (srcGuid && srcGuid !== "0000000000000000") {
@@ -113,7 +115,8 @@ export function collectEvents(
     if (record.absorbed) {
       const absorbDestGuid = record.params[0] ?? "";
       const destNameRaw = record.params[1];
-      const absorbDestName = (destNameRaw === "nil" || destNameRaw === undefined) ? "" : destNameRaw;
+      const absorbDestName =
+        destNameRaw === "nil" || destNameRaw === undefined ? "" : destNameRaw;
 
       const absorbEvent: GladAbsorbEvent = {
         timestamp: record.timestamp,
@@ -121,12 +124,17 @@ export function collectEvents(
         spellId: record.absorbed.shieldSpellId,
         spellName: record.absorbed.shieldSpellName,
         srcId: record.absorbed.shieldOwnerGuid,
-        srcName: (record.absorbed.shieldOwnerName === "nil" || !record.absorbed.shieldOwnerName) ? "" : record.absorbed.shieldOwnerName,
+        srcName:
+          record.absorbed.shieldOwnerName === "nil" ||
+          !record.absorbed.shieldOwnerName
+            ? ""
+            : record.absorbed.shieldOwnerName,
         destId: absorbDestGuid,
         destName: absorbDestName,
         absorbedAmount: record.absorbed.absorbedAmount,
         attackerId: record.absorbed.attackerGuid,
         params: record.params,
+        lineIndex: record.lineIndex,
       };
 
       if (absorbEvent.srcId && absorbEvent.srcId !== "0000000000000000") {
@@ -158,6 +166,7 @@ export function collectEvents(
         auraType: record.aura.auraType,
         amount: record.aura.amount,
         params: record.params,
+        lineIndex: record.lineIndex,
       };
 
       if (destGuid && destGuid !== "0000000000000000") {
@@ -183,6 +192,7 @@ export function collectEvents(
             destId: destGuid ?? "",
             destName: record.base?.destName ?? "",
             params: record.params,
+            lineIndex: record.lineIndex,
           });
         }
       }
@@ -200,6 +210,7 @@ export function collectEvents(
         destId: destGuid ?? "",
         destName: record.base?.destName ?? "",
         params: record.params,
+        lineIndex: record.lineIndex,
       };
 
       if (srcGuid && srcGuid !== "0000000000000000") {
@@ -222,7 +233,7 @@ export function collectEvents(
     // 6. UNIT_DIED
     if (record.eventName === "UNIT_DIED") {
       const lastParam = record.params[record.params.length - 1];
-      const unconscious = record.unitDied?.unconscious ?? (lastParam === "1");
+      const unconscious = record.unitDied?.unconscious ?? lastParam === "1";
 
       const deathEvent: GladDeathEvent = {
         timestamp: record.timestamp,
@@ -235,6 +246,7 @@ export function collectEvents(
         destName: record.base?.destName ?? "",
         unconscious: unconscious,
         params: record.params,
+        lineIndex: record.lineIndex,
       };
 
       if (destGuid && destGuid !== "0000000000000000") {
@@ -261,6 +273,7 @@ export function collectEvents(
         destId: destGuid ?? "",
         destName: record.base?.destName ?? "",
         params: record.params,
+        lineIndex: record.lineIndex,
       };
 
       if (srcGuid && srcGuid !== "0000000000000000") {

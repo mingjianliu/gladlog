@@ -57,7 +57,8 @@ type Perturbation =
   | "shuffled-events"
   | "removed-deaths"
   | "wrong-outcome"
-  | "trivia-focus";
+  | "trivia-focus"
+  | "causal-hardening";
 
 export interface CalibrationCase {
   caseId: string;
@@ -249,6 +250,26 @@ function triviaFocus(responseText: string): { text: string; detail: string } {
   };
 }
 
+/** causal-hardening → accuracy(B1 / SP-A.1):把回复里两个**真实**时刻硬化成
+ * 无支持的因果断言 —— 事件都真、时间都真,唯独「导致」是编的。确定性门
+ * (HP/窗口/台账)全都看不见它,只有判官的事实审计能抓(该主张找不到支持行
+ * = unsupported)。确定性构造:取回复前两个不同 M:SS 时间戳,零随机。 */
+function hardenCausation(
+  responseText: string,
+): { text: string; detail: string } | null {
+  const stamps = [...responseText.matchAll(/\b(\d+:\d{2})\b/g)].map(
+    (m) => m[1]!,
+  );
+  const uniq = [...new Set(stamps)];
+  if (uniq.length < 2) return null;
+  const [t1, t2] = [uniq[0]!, uniq[1]!];
+  const claim = `\n\nOne causal thread deserves emphasis: the collapse at ${t2} was a direct result of the decision made at ${t1} — that earlier moment caused everything that followed, and no other factor contributed meaningfully.`;
+  return {
+    text: responseText.trim() + claim,
+    detail: `hardened an unsupported causal chain ${t1} → ${t2}`,
+  };
+}
+
 function removeDeaths(
   promptText: string,
 ): { text: string; detail: string } | null {
@@ -266,8 +287,15 @@ function removeDeaths(
 
 export async function buildCalibrationSuite(
   baseDir: string,
-  opts: { sourceCount: number; seed: number },
+  opts: {
+    sourceCount: number;
+    seed: number;
+    /** 只生成这些扰动类(B1 迷你套件用);缺省 = 全部。none 恒生成。 */
+    classes?: Perturbation[];
+  },
 ): Promise<CalibrationCase[]> {
+  const wantClass = (c: Perturbation) =>
+    !opts.classes || opts.classes.includes(c);
   const outDir = path.join(baseDir, "judge-calibration");
   const indexFile = path.join(baseDir, "index.json");
   const responsesDir = path.join(baseDir, "responses");
@@ -347,55 +375,76 @@ export async function buildCalibrationSuite(
 
     push("none", null, prompt, response, "unmodified original");
 
-    const fab = fabricateClaim(prompt, response, localRng);
-    if (fab) push("fabricated-claim", "accuracy", prompt, fab.text, fab.detail);
+    if (wantClass("fabricated-claim")) {
+      const fab = fabricateClaim(prompt, response, localRng);
+      if (fab)
+        push("fabricated-claim", "accuracy", prompt, fab.text, fab.detail);
+    }
 
-    const noise = duplicateNoise(prompt, localRng);
-    if (noise)
-      push("duplicated-noise", "noise", noise.text, response, noise.detail);
+    if (wantClass("duplicated-noise")) {
+      const noise = duplicateNoise(prompt, localRng);
+      if (noise)
+        push("duplicated-noise", "noise", noise.text, response, noise.detail);
+    }
 
-    const bias = addSeverityLabels(prompt, localRng);
-    if (bias)
-      push("severity-labels", "labelBias", bias.text, response, bias.detail);
+    if (wantClass("severity-labels")) {
+      const bias = addSeverityLabels(prompt, localRng);
+      if (bias)
+        push("severity-labels", "labelBias", bias.text, response, bias.detail);
+    }
 
-    const shuffled = shuffleEvents(prompt, localRng);
-    if (shuffled)
+    if (wantClass("shuffled-events")) {
+      const shuffled = shuffleEvents(prompt, localRng);
+      if (shuffled)
+        push(
+          "shuffled-events",
+          "inferenceScaffolding",
+          shuffled.text,
+          response,
+          shuffled.detail,
+        );
+    }
+
+    if (wantClass("removed-deaths")) {
+      const noDeaths = removeDeaths(prompt);
+      if (noDeaths)
+        push(
+          "removed-deaths",
+          "sufficiency",
+          noDeaths.text,
+          response,
+          noDeaths.detail,
+        );
+    }
+
+    if (wantClass("wrong-outcome")) {
+      const outcome = wrongOutcome(response, entry.result);
+      if (outcome)
+        push(
+          "wrong-outcome",
+          "outcomeAlignment",
+          prompt,
+          outcome.text,
+          outcome.detail,
+        );
+    }
+
+    if (wantClass("trivia-focus")) {
+      const trivia = triviaFocus(response);
       push(
-        "shuffled-events",
-        "inferenceScaffolding",
-        shuffled.text,
-        response,
-        shuffled.detail,
-      );
-
-    const noDeaths = removeDeaths(prompt);
-    if (noDeaths)
-      push(
-        "removed-deaths",
-        "sufficiency",
-        noDeaths.text,
-        response,
-        noDeaths.detail,
-      );
-
-    const outcome = wrongOutcome(response, entry.result);
-    if (outcome)
-      push(
-        "wrong-outcome",
-        "outcomeAlignment",
+        "trivia-focus",
+        "focusCalibration",
         prompt,
-        outcome.text,
-        outcome.detail,
+        trivia.text,
+        trivia.detail,
       );
+    }
 
-    const trivia = triviaFocus(response);
-    push(
-      "trivia-focus",
-      "focusCalibration",
-      prompt,
-      trivia.text,
-      trivia.detail,
-    );
+    if (wantClass("causal-hardening")) {
+      const causal = hardenCausation(response);
+      if (causal)
+        push("causal-hardening", "accuracy", prompt, causal.text, causal.detail);
+    }
   }
 
   // Shuffle case order and assign opaque ids so the scoring agent cannot infer

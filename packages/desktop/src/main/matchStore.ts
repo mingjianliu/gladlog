@@ -411,4 +411,41 @@ export class MatchStore {
       return null;
     }
   }
+
+  /**
+   * B2 溯源深链:事件 lineIndex → raw.txt 原始行。
+   * lineIndex 是解析时段内下标(shuffle 为轮内下标);整场 raw.txt 的偏移
+   * 由前序各轮 linesTotal 累加 —— 与 compose 拼接 rawLines 的顺序同源
+   * (rounds 顺序 + 末尾 ARENA_MATCH_END 行,末行不影响前缀偏移)。
+   */
+  async rawLine(
+    id: string,
+    opts: { roundSeq?: number | null; lineIndex: number },
+  ): Promise<{ line: string; fileLine: number } | null> {
+    if (!this.index.has(id)) return null;
+    if (!Number.isInteger(opts.lineIndex) || opts.lineIndex < 0) return null;
+    try {
+      let offset = 0;
+      if (opts.roundSeq != null) {
+        const doc = (await this.get(id)) as {
+          data?: { rounds?: { sequenceNumber: number; linesTotal: number }[] };
+        } | null;
+        const rounds = doc?.data?.rounds;
+        if (!Array.isArray(rounds)) return null;
+        for (const r of rounds) {
+          if (r.sequenceNumber < opts.roundSeq) offset += r.linesTotal;
+        }
+      }
+      const raw = readFileSync(
+        join(this.rootDir, safeName(id), "raw.txt"),
+        "utf-8",
+      );
+      const lines = raw.split("\n");
+      const fileLine = offset + opts.lineIndex;
+      const line = lines[fileLine];
+      return line === undefined || line === "" ? null : { line, fileLine };
+    } catch {
+      return null;
+    }
+  }
 }

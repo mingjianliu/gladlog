@@ -81,6 +81,13 @@ const DET_GATE_DIMENSIONS = new Set(["sufficiency"]);
  */
 const COUPLED_BY_CONSTRUCTION: Record<string, readonly string[]> = {
   "removed-deaths": ["accuracy"],
+  // causal-hardening 注入的是一句「赛果因果官方定论」("the collapse was a
+  // direct result of … no other factor contributed")——它**就是** outcomeAlignment
+  // 的评判对象,该维随之动是判官在正确做事。2026-07-23 逐案验证(B1 迷你套件
+  // ord 239/299):两个判官的 outcomeAlignment notes 都点名注入句本身
+  // (「该结论同时是回复对赛果因果链的'官方定论'…拖累 outcomeAlignment」),
+  // 不是对「文本变了」的泛化反应。豁免仅此一维。
+  "causal-hardening": ["outcomeAlignment"],
 };
 
 interface CalibrationCase {
