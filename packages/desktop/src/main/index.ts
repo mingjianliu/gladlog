@@ -8,6 +8,7 @@ import {
   realFsProbe,
   resolveLogsDir,
 } from "./detectWowDir";
+import { exportReportImage } from "./exportImage";
 import { registerIpc } from "./ipc";
 import { MatchStore } from "./matchStore";
 import { SettingsStore, type GladlogSettings } from "./settingsStore";
@@ -163,6 +164,14 @@ else {
       compare,
       analysis,
       icons,
+      exportImage: (opts) =>
+        exportReportImage({
+          ...opts,
+          parent: win,
+          preloadPath: join(import.meta.dirname, "../preload/index.cjs"),
+          rendererUrl: process.env["ELECTRON_RENDERER_URL"] ?? null,
+          rendererFile: join(import.meta.dirname, "../renderer/index.html"),
+        }),
     });
     startMonitoring(settings.get());
   });

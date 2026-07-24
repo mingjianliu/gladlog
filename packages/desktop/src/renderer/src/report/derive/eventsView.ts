@@ -31,6 +31,8 @@ export interface EventRow {
   spellName: string;
   /** 数额(伤害/治疗)或补充说明(打断了什么/驱掉了什么/光环增减)。 */
   detail: string;
+  /** 源行在对局 rawLines 里的下标(B2 溯源);旧档解析无此字段 → undefined。 */
+  lineIndex?: number;
 }
 
 export interface EventsFilter {
@@ -59,6 +61,7 @@ interface RawEvent {
   extraSpellName?: string;
   params?: string[];
   unconscious?: boolean;
+  lineIndex?: number;
 }
 
 interface UnitLike {
@@ -103,6 +106,7 @@ export function deriveEventRows(source: ReportSource): EventRow[] {
         spellId: String(e.spellId ?? ""),
         spellName: spellNameOf(e),
         detail,
+        lineIndex: e.lineIndex,
       });
 
     for (const u of Object.values(source.units) as unknown as UnitLike[]) {

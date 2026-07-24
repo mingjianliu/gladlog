@@ -153,6 +153,18 @@ export function installFixtureBridge(): void {
       async rebuildIndex(): Promise<{ updated: number; failed: number }> {
         return { updated: 0, failed: 0 };
       },
+      // fixture 无 raw.txt(裁剪档也没有 lineIndex)→ 深链降级为不可用
+      async rawLine(): Promise<{ line: string; fileLine: number } | null> {
+        return null;
+      },
+      // fixture 模式无主进程,导出降级为不可用
+      async exportImage(): Promise<{
+        path: string;
+        width: number;
+        height: number;
+      } | null> {
+        return null;
+      },
       async get(id: string): Promise<unknown | null> {
         if (id === "fixture-match") {
           return {

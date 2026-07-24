@@ -17,10 +17,15 @@
 
 ## Step 1: 构建语料(新建模式)
 
-日志清单在 `$GLADLOG_EVAL_HOME/corpus/manifest.txt`(每行一个本地 WoWCombatLog 路径)。若不存在,中止并提示用户先准备清单。
+日志清单**优先用 A3 覆盖清单** `$GLADLOG_EVAL_HOME/corpus/manifest-coverage.txt`——
+它由 `coverageCorpus.ts` 贪心集覆盖生成,保证 7 治疗专精 × 3 括号 ×
+crlf/宠物/shuffle/濒死 边角全部在场(B3「加宽 eval 覆盖」的落点);先跑
+`npx tsx packages/eval/scripts/coverageCorpus.ts --check` 验清单未漂移。
+覆盖清单不存在或本轮要复现旧 run 口径时,退回 `corpus/manifest.txt`
+(每行一个本地 WoWCombatLog 路径);两者都不存在则中止并提示用户先准备清单。
 
 ```bash
-npx tsx packages/eval/scripts/buildCorpus.ts --manifest "$GLADLOG_EVAL_HOME/corpus/manifest.txt" --run <runId>
+npx tsx packages/eval/scripts/buildCorpus.ts --manifest "$GLADLOG_EVAL_HOME/corpus/manifest-coverage.txt" --run <runId>
 ```
 
 非零退出即中止。完成后确认 `runs/<runId>/index.json` 存在并读取条目列表(每条:`ordinal`、`file`、`matchId`、`spec`、`result`)。构建器同时写覆盖清单 `manifests/NNN.json`。

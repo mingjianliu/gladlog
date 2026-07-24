@@ -21,6 +21,12 @@ export function registerIpc(deps: {
   compare: CompareService;
   analysis: AnalysisService;
   icons: { get(name: string): Promise<string | null> };
+  exportImage: (opts: {
+    matchId: string;
+    roundSeq?: number | null;
+    range?: { fromS: number; toS: number } | null;
+    savePath?: string;
+  }) => Promise<{ path: string; width: number; height: number } | null>;
 }): void {
   ipcMain.handle("gladlog:logs:getStatus", () => deps.getStatus());
   ipcMain.handle("gladlog:icon:get", (_e, name: string) =>
@@ -34,6 +40,26 @@ export function registerIpc(deps: {
   );
   ipcMain.handle("gladlog:matches:rebuildIndex", () =>
     deps.store.rebuildIndex(),
+  );
+  ipcMain.handle(
+    "gladlog:matches:exportImage",
+    (
+      _e,
+      opts: {
+        matchId: string;
+        roundSeq?: number | null;
+        range?: { fromS: number; toS: number } | null;
+        savePath?: string;
+      },
+    ) => deps.exportImage(opts),
+  );
+  ipcMain.handle(
+    "gladlog:matches:rawLine",
+    (_e, id: string, opts: { roundSeq?: number | null; lineIndex: number }) =>
+      deps.store.rawLine(String(id), {
+        roundSeq: opts?.roundSeq ?? null,
+        lineIndex: Number(opts?.lineIndex),
+      }),
   );
   ipcMain.handle("gladlog:logs:importFiles", async () => {
     const win = deps.getWindow();

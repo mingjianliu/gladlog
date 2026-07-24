@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 
+import { bridge } from "../../bridge";
 import {
   deriveEventRows,
   EMPTY_EVENTS_FILTER,
@@ -29,6 +30,7 @@ export function EventsPanel({
   globalRange,
   onSeek,
   inspectReq,
+  matchId,
 }: {
   source: ReportSource;
   bands: VulnBand[];
@@ -42,7 +44,41 @@ export function EventsPanel({
     unitName: string | null;
     nonce: number;
   } | null;
+  /** 存储 id(raw.txt 所在目录);缺省时原始行按钮隐藏(fixture/测试台)。 */
+  matchId?: string;
 }) {
+  // shuffle 单回合的 lineIndex 是轮内下标;整场 raw.txt 偏移由 main 端按
+  // 前序轮 linesTotal 累加(matchStore.rawLine),这里只带 sequenceNumber。
+  const roundSeq =
+    source.kind === "shuffleRound" ? source.sequenceNumber : null;
+  const [rawView, setRawView] = useState<{
+    key: string;
+    text: string | null;
+    fileLine: number | null;
+  } | null>(null);
+  // key 含渲染序号:同一时刻可有多条同源行(AoE),别一键展开一片
+  const rawKeyOf = (r: { tS: number; lineIndex?: number }, i: number) =>
+    `${i}:${r.tS}:${r.lineIndex}`;
+  const toggleRaw = async (r: { tS: number; lineIndex?: number }, i: number) => {
+    const key = rawKeyOf(r, i);
+    if (rawView?.key === key) {
+      setRawView(null);
+      return;
+    }
+    try {
+      const res = await bridge().matches.rawLine(matchId!, {
+        roundSeq,
+        lineIndex: r.lineIndex!,
+      });
+      setRawView({
+        key,
+        text: res?.line ?? null,
+        fileLine: res?.fileLine ?? null,
+      });
+    } catch {
+      setRawView({ key, text: null, fileLine: null });
+    }
+  };
   const allRows = useMemo(() => deriveEventRows(source), [source]);
   const unitNames = useMemo(
     () =>
@@ -79,13 +115,13 @@ export function EventsPanel({
     anchor === "custom"
       ? customRange
       : anchor === "global"
-      ? globalRange
-      : anchor.startsWith("band:")
-        ? (() => {
-            const b = bands[Number(anchor.slice(5))];
-            return b ? { fromS: b.fromS, toS: b.toS } : null;
-          })()
-        : null;
+        ? globalRange
+        : anchor.startsWith("band:")
+          ? (() => {
+              const b = bands[Number(anchor.slice(5))];
+              return b ? { fromS: b.fromS, toS: b.toS } : null;
+            })()
+          : null;
 
   const filtered = useMemo(
     () =>
@@ -189,30 +225,61 @@ export function EventsPanel({
         </thead>
         <tbody>
           {filtered.slice(0, shown).map((r, i) => (
-            <tr key={i}>
-              <td className="rpt-stats-detail-t">{fmtT(r.tS)}</td>
-              <td>{EVENT_KIND_LABEL[r.kind]}</td>
-              <td>{r.srcName}</td>
-              <td>{r.destName}</td>
-              <td>{r.spellName}</td>
-              <td className="rpt-stats-dim">{r.detail}</td>
-              <td>
-                {onSeek && (
-                  <button
-                    className="rpt-stats-detail-jump"
-                    title="回放此刻"
-                    onClick={() =>
-                      onSeek(
-                        Math.max(0, r.tS - 3),
-                        [r.destName || r.srcName].filter(Boolean),
-                      )
-                    }
-                  >
-                    ▶
-                  </button>
-                )}
-              </td>
-            </tr>
+            <Fragment key={i}>
+              <tr>
+                <td className="rpt-stats-detail-t">{fmtT(r.tS)}</td>
+                <td>{EVENT_KIND_LABEL[r.kind]}</td>
+                <td>{r.srcName}</td>
+                <td>{r.destName}</td>
+                <td>{r.spellName}</td>
+                <td className="rpt-stats-dim">{r.detail}</td>
+                <td>
+                  {matchId && r.lineIndex != null && (
+                    <button
+                      className="rpt-stats-detail-jump"
+                      title="查看原始日志行"
+                      onClick={() => void toggleRaw(r, i)}
+                    >
+                      ㏒
+                    </button>
+                  )}
+                  {onSeek && (
+                    <button
+                      className="rpt-stats-detail-jump"
+                      title="回放此刻"
+                      onClick={() =>
+                        onSeek(
+                          Math.max(0, r.tS - 3),
+                          [r.destName || r.srcName].filter(Boolean),
+                        )
+                      }
+                    >
+                      ▶
+                    </button>
+                  )}
+                </td>
+              </tr>
+              {rawView?.key === rawKeyOf(r, i) && (
+                <tr className="rpt-events-rawline">
+                  <td colSpan={7}>
+                    {rawView.text ? (
+                      <code>
+                        {rawView.fileLine != null && (
+                          <span className="rpt-stats-dim">
+                            raw.txt:{rawView.fileLine + 1}{" "}
+                          </span>
+                        )}
+                        {rawView.text}
+                      </code>
+                    ) : (
+                      <span className="rpt-stats-dim">
+                        原始行不可用(旧档无行号或 raw.txt 缺失)
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              )}
+            </Fragment>
           ))}
         </tbody>
       </table>

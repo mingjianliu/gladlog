@@ -1889,6 +1889,16 @@ pre {
   text-align: left;
   padding: 2px 8px;
 }
+.rpt-events-rawline td {
+  padding: 4px 10px 8px;
+  background: color-mix(in srgb, var(--accent) 4%, transparent);
+}
+.rpt-events-rawline code {
+  font-size: 10.5px;
+  word-break: break-all;
+  color: var(--text-dim, #9aa);
+}
+
 .rpt-events-more {
   align-self: center;
   font-size: 11px;

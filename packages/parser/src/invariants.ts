@@ -1,3 +1,4 @@
+import { parseLine } from "./l1/parseLine";
 import type { GladMatchBase, GladUnit } from "./l3/model";
 
 /**
@@ -15,7 +16,8 @@ export interface InvariantViolation {
     | "hp-range"
     | "death-has-damage"
     | "pet-owner-resolves"
-    | "start-before-end";
+    | "start-before-end"
+    | "line-resolves";
   unitId?: string;
   detail: string;
 }
@@ -61,11 +63,9 @@ export function checkParserInvariants(m: GladMatchBase): InvariantViolation[] {
       detail: `startTime ${m.startTime} !< endTime ${m.endTime}`,
     });
   }
-  const isRound =
-    (m as { kind?: string }).kind === "shuffleRound";
+  const isRound = (m as { kind?: string }).kind === "shuffleRound";
   const lo = m.startTime - TIME_GRACE_MS;
-  const hi =
-    m.endTime + (isRound ? ROUND_TRAILING_GRACE_MS : TIME_GRACE_MS);
+  const hi = m.endTime + (isRound ? ROUND_TRAILING_GRACE_MS : TIME_GRACE_MS);
 
   const unitIds = new Set(Object.keys(m.units));
 
@@ -111,6 +111,44 @@ export function checkParserInvariants(m: GladMatchBase): InvariantViolation[] {
         unitId: id,
         detail: `ownerId ${u.ownerId} 不在 units 里`,
       });
+    }
+
+    // 「每个事件可回源」(B2 溯源深链的门规):事件必须带 lineIndex,且
+    // rawLines[lineIndex] 重解析后 eventName/timestamp 与事件一致 ——
+    // 抓分段器 records/rawLines 错位与 lineIndex 丢失(advancedSamples 是
+    // 合成样本无源行,豁免)。每单位每数组只验首个事件:对齐是结构性质,
+    // 首个错位即全错位,全量重解析在 1245 场语料上是 O(全事件) 的浪费。
+    for (const key of EVENT_ARRAYS) {
+      if (key === "advancedSamples") continue;
+      const e = (
+        (u[key] ?? []) as {
+          timestamp: number;
+          eventName?: string;
+          lineIndex?: number;
+        }[]
+      )[0];
+      if (!e) continue;
+      if (e.lineIndex == null) {
+        out.push({
+          code: "line-resolves",
+          unitId: id,
+          detail: `${key}[0] 缺 lineIndex(@${e.timestamp})`,
+        });
+        continue;
+      }
+      const raw = m.rawLines[e.lineIndex];
+      const reparsed = raw === undefined ? null : parseLine(raw);
+      if (
+        !reparsed ||
+        reparsed.eventName !== e.eventName ||
+        reparsed.timestamp !== e.timestamp
+      ) {
+        out.push({
+          code: "line-resolves",
+          unitId: id,
+          detail: `${key}[0] lineIndex=${e.lineIndex} 与 rawLines 不对齐(事件 ${e.eventName}@${e.timestamp} vs 行 ${reparsed?.eventName}@${reparsed?.timestamp})`,
+        });
+      }
     }
 
     // 「每个死亡有来源」:玩家真死(非 unconscious)前 10s 内必须有承伤

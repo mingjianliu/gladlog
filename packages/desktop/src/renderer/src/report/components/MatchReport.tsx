@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
 
+import { bridge } from "../../bridge";
+
 import { deriveAuraUptime } from "../derive/auraUptime";
 import { deriveBurstLedger } from "../derive/burstLedger";
 import { type DeathRecap, deriveDeathRecaps } from "../derive/deathRecap";
@@ -57,7 +59,9 @@ export function MatchReport({
   const [view, setView] = useState<View>(initialView);
   // 时间窗联动(第四阶段①):null = 全场。聚合面板吃窗口;HP 曲线/窗口列表/
   // 死亡回顾/爆发账本/回放保持全场口径(见 plan 文档的口径表)。
-  const [timeRange, setTimeRange] = useState<TimeRange | null>(initialTimeRange);
+  const [timeRange, setTimeRange] = useState<TimeRange | null>(
+    initialTimeRange,
+  );
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   // 证据链跳转请求:AI 视图点「回放此刻」→ 切回放并 seek。nonce 防重复消费,
   // 回放时钟保持 ReplayView 局部(提升热 state 会让三视图随 tick 重渲)。
@@ -189,6 +193,26 @@ export function MatchReport({
               >
                 复制 Markdown
               </button>
+              <button
+                className="rpt-btn rpt-export-image"
+                title="导出战报图片(离屏渲染同一页面后整页截图)"
+                onClick={() => {
+                  try {
+                    void bridge().matches.exportImage({
+                      matchId: resolvedMatchId,
+                      roundSeq:
+                        source.kind === "shuffleRound"
+                          ? source.sequenceNumber
+                          : null,
+                      range: timeRange,
+                    });
+                  } catch {
+                    /* fixture/测试台无桥 → 静默 */
+                  }
+                }}
+              >
+                导出图片
+              </button>
             </div>
             <Timeline
               data={timeline}
@@ -250,6 +274,7 @@ export function MatchReport({
           globalRange={timeRange}
           onSeek={handleSeekEvent}
           inspectReq={inspectReq}
+          matchId={resolvedMatchId}
         />
       )}
       {view === "replay" && (

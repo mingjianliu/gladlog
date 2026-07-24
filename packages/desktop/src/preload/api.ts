@@ -43,6 +43,20 @@ export interface GladlogApi {
     page(opts: { before?: number; limit: number }): Promise<StoredMatchMeta[]>;
     /** 一次性回填富行字段(逐目录读 match.json 重铸 meta),用户主动触发。 */
     rebuildIndex(): Promise<{ updated: number; failed: number }>;
+    /** B2 溯源:事件 lineIndex → raw.txt 原始行(shuffle 传轮 sequenceNumber)。
+     * 旧档无 lineIndex / 行不存在 → null,UI 降级隐藏。 */
+    rawLine(
+      id: string,
+      opts: { roundSeq?: number | null; lineIndex: number },
+    ): Promise<{ line: string; fileLine: number } | null>;
+    /** C3 导出图片:离屏窗口渲染同一 renderer 后整页截图。savePath 仅
+     * E2E/脚本直传;UI 调用省略 → 弹系统保存框。取消/失败 → null。 */
+    exportImage(opts: {
+      matchId: string;
+      roundSeq?: number | null;
+      range?: { fromS: number; toS: number } | null;
+      savePath?: string;
+    }): Promise<{ path: string; width: number; height: number } | null>;
   };
   settings: {
     get(): Promise<GladlogSettings>;

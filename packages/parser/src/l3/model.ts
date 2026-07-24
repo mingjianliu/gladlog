@@ -1,6 +1,7 @@
-export type MatchResult = 'Win' | 'Lose' | 'Draw' | 'Unknown';
-export type UnitKind = 'Player' | 'Pet' | 'Guardian' | 'NPC' | 'Object' | 'Unknown';
-export type Reaction = 'Friendly' | 'Hostile' | 'Neutral' | 'Unknown';
+export type MatchResult = "Win" | "Lose" | "Draw" | "Unknown";
+export type UnitKind =
+  "Player" | "Pet" | "Guardian" | "NPC" | "Object" | "Unknown";
+export type Reaction = "Friendly" | "Hostile" | "Neutral" | "Unknown";
 
 export interface GladCombatantInfo {
   teamId: number;
@@ -22,6 +23,9 @@ export interface GladEventBase {
   destId: string;
   destName: string;
   params: string[];
+  /** 本事件源行在所属对局 rawLines 里的下标(shuffle 为轮内下标,整场
+   * raw.txt 的偏移由各轮 linesTotal 累加)。B2 溯源深链锚点。 */
+  lineIndex?: number;
 }
 
 export interface GladHpEvent extends GladEventBase {
@@ -38,7 +42,7 @@ export interface GladAbsorbEvent extends GladEventBase {
 export interface GladSpellEvent extends GladEventBase {}
 
 export interface GladAuraEvent extends GladEventBase {
-  auraType: 'BUFF' | 'DEBUFF';
+  auraType: "BUFF" | "DEBUFF";
   amount?: number;
 }
 
@@ -100,16 +104,16 @@ export interface GladMatchBase {
 }
 
 export interface GladMatch extends GladMatchBase {
-  kind: 'match';
+  kind: "match";
 }
 
 export interface GladShuffleRound extends GladMatchBase {
-  kind: 'shuffleRound';
+  kind: "shuffleRound";
   sequenceNumber: number;
 }
 
 export interface GladShuffle {
-  kind: 'shuffle';
+  kind: "shuffle";
   rounds: GladShuffleRound[];
   startTime: number;
   endTime: number;
