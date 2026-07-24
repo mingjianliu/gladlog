@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { cdWasteEvents, deathSetupEvents, extractCandidateFindings } from "./candidateFindings";
+import {
+  cdWasteEvents,
+  deathSetupEvents,
+  extractCandidateFindings,
+  missedCleanseEvents,
+  missedPurgeEvents,
+  ccLockedEvents,
+  kickEatenEvents,
+} from "./candidateFindings";
 
 // Synthetic combat: one Friendly death + one Hostile death. spec "256" is
 // Priest_Discipline (a healer) with reaction 1 (Friendly).
@@ -274,5 +282,87 @@ describe("deathSetupEvents(死亡前因链,纯函数)", () => {
       "healer-locked",
       "trinket-early",
     ]);
+  });
+});
+
+describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
+  it("missed-cleanse:只报 Critical/High 且解控可用;按承伤排序截 3", () => {
+    const w = (p: string, dmg: number, onCD = false) => ({
+      timeSeconds: 30,
+      durationSeconds: 5,
+      targetName: "Ally",
+      spellName: "Fear",
+      spellId: "5782",
+      priority: p as never,
+      postCcDamage: dmg,
+      cleanseWasOnCD: onCD,
+    });
+    const evts = missedCleanseEvents([
+      w("Critical", 100_000),
+      w("High", 50_000),
+      w("Medium", 999_999), // 低优先级不报
+      w("Critical", 80_000, true), // 解控在 CD 不报
+      w("High", 70_000),
+      w("High", 60_000), // 第 4 条被截
+    ]);
+    expect(evts).toHaveLength(3);
+    expect(evts[0]!.facts["postCcDamageK"]).toBe("100");
+    expect(evts.every((e) => e.type === "missed-cleanse")).toBe(true);
+  });
+
+  it("missed-purge:击杀窗口内的 Medium 也报;purge 在 CD 不报", () => {
+    const w = (p: string, kw: boolean, onCD = false, dur = 10) => ({
+      timeSeconds: 20,
+      durationSeconds: dur,
+      enemyName: "Enemy",
+      spellName: "PI",
+      spellId: "10060",
+      priority: p as never,
+      purgeWasOnCD: onCD,
+      duringKillWindow: kw,
+    });
+    const evts = missedPurgeEvents([
+      w("Medium", true), // 击杀窗口内 → 报
+      w("Medium", false), // 窗口外低优先级 → 不报
+      w("High", false, true), // CD 中 → 不报
+      w("High", false),
+    ]);
+    expect(evts).toHaveLength(2);
+    expect(evts[0]!.facts["inKillWindow"]).toBe("yes"); // 窗口内排前
+  });
+
+  it("cc-locked:≥4s 才报,trinketState 进 facts", () => {
+    const cc = (dur: number, state: string, dmg: number) => ({
+      atSeconds: 40,
+      durationSeconds: dur,
+      spellName: "Polymorph",
+      spellId: "118",
+      sourceName: "Mage",
+      trinketState: state as never,
+      damageTakenDuring: dmg,
+    });
+    const evts = ccLockedEvents(
+      [cc(3.9, "available_unused", 999_999), cc(6, "on_cooldown", 50_000)],
+      { id: "P1", name: "Me" },
+    );
+    expect(evts).toHaveLength(1);
+    expect(evts[0]!.facts["trinketState"]).toBe("on_cooldown");
+    expect(evts[0]!.facts["damageTakenK"]).toBe("50");
+  });
+
+  it("kick-eaten:按锁定时长排序截 2", () => {
+    const k = (lock: number) => ({
+      atSeconds: 10,
+      lockoutDurationSeconds: lock,
+      kickSpellName: "Kick",
+      interruptedSpellName: "Chain Heal",
+      sourceName: "Rogue",
+    });
+    const evts = kickEatenEvents([k(3), k(5), k(4)], {
+      id: "P1",
+      name: "Me",
+    });
+    expect(evts).toHaveLength(2);
+    expect(evts[0]!.facts["lockout"]).toBe("5.0");
   });
 });

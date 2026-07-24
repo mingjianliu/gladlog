@@ -1,9 +1,13 @@
-import { claimChecker,interpolate } from "../compare/claimChecker";
+import { claimChecker, interpolate } from "../compare/claimChecker";
 import { causalLint } from "./causalLint";
-import type { AuditResult,CandidateEvent, Finding, RawFinding } from "./types";
+import type { AuditResult, CandidateEvent, Finding, RawFinding } from "./types";
 
 /** 严重度排序单源(high > med > low):审计排序与深挖选择共用。 */
-export const SEVERITY_RANK: Record<string, number> = { high: 0, med: 1, low: 2 };
+export const SEVERITY_RANK: Record<string, number> = {
+  high: 0,
+  med: 1,
+  low: 2,
+};
 const RANK = SEVERITY_RANK;
 
 export function auditFindings(
@@ -27,19 +31,26 @@ export function auditFindings(
     }
     // Facts the explanation may cite = the union of the referenced events' facts.
     // If two referenced events share a fact key with DIFFERING values (e.g. two
-    // deaths, each with its own t), the placeholder is ambiguous — a last-write
-    // merge would silently mis-attribute. Drop such findings rather than guess.
+    // deaths, each with its own t), that placeholder is ambiguous — a last-write
+    // merge would silently mis-attribute. 2026-07-24 精化:只有当解释**实际
+    // 使用**了冲突键才丢 —— 旧规则只要冲突键存在就整条丢,把 prompt 明确
+    // 鼓励的多事件链条(death+setup、多次漏解)一并误杀(smoke 实测 3/7 条
+    // 死于此)。防误归因性质不变:任何被渲染的占位符仍必须唯一解析。
     const facts: Record<string, string> = {};
-    let collision = false;
+    const colliding = new Set<string>();
     for (const r of refs as CandidateEvent[])
       for (const [k, v] of Object.entries(r.facts)) {
-        if (k in facts && facts[k] !== v) collision = true;
+        if (k in facts && facts[k] !== v) colliding.add(k);
         facts[k] = v;
       }
-    if (collision) {
+    const usedKeys = [
+      ...f.explanation.matchAll(/\{\{\s*([^}\s]+)\s*\}\}/g),
+    ].map((m) => m[1]!);
+    const ambiguous = usedKeys.filter((k) => colliding.has(k));
+    if (ambiguous.length > 0) {
       dropped.push({
         finding: f,
-        reason: "ambiguous: colliding fact keys across referenced events",
+        reason: `ambiguous: placeholder(s) ${ambiguous.join(",")} collide across referenced events`,
       });
       continue;
     }

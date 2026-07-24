@@ -83,11 +83,18 @@ export const MISTAKE_RULES: readonly MistakeRule[] = [
 ] as const;
 
 /** candidateFindings 会产、但刻意不算 mistake 的类型(死亡是结果不是失误;
- * death-setup 是叙事链证据,进 AI 管线不进失误清单;juked-kick 走 kickAudit)。 */
+ * death-setup 是叙事链证据,进 AI 管线不进失误清单;juked-kick 走 kickAudit)。
+ * 2026-07-24 团队协作四类:missed-cleanse/missed-purge 由 dispelSummary 直供
+ * (DispelDashboard 漏解/漏 purge 行,candidate 版会双计);cc-locked/kick-eaten
+ * 是"发生在你身上的事"——可教但不是失误断言,进 AI 管线不进失误清单。 */
 export const IGNORED_CANDIDATE_TYPES: ReadonlySet<string> = new Set([
   "death",
   "death-setup",
   "juked-kick",
+  "missed-cleanse",
+  "missed-purge",
+  "cc-locked",
+  "kick-eaten",
 ]);
 
 export interface Mistake {

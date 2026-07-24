@@ -8,8 +8,20 @@ import { GladLogParser, type GladMatch } from "@gladlog/parser";
 import { toLegacyMatch, CombatUnitReaction } from "@gladlog/parser-compat";
 import { extractCandidateFindings, isHealerSpec } from "@gladlog/analysis";
 
+// --manifest <file> 时改读清单里的日志(如 A3 覆盖清单 → 治疗视角语料);
+// 默认仍是 DPS 公开语料目录。
+const argv = process.argv.slice(2);
+const mIdx = argv.indexOf("--manifest");
 const dir = "/Users/mingjianliu/code/gladlog-eval-private/corpus/public-dps";
-const files = readdirSync(dir).filter((f) => f.endsWith(".txt"));
+const files: string[] =
+  mIdx >= 0
+    ? readFileSync(argv[mIdx + 1]!, "utf8")
+        .split("\n")
+        .map((l) => l.trim())
+        .filter(Boolean)
+    : readdirSync(dir)
+        .filter((f) => f.endsWith(".txt"))
+        .map((f) => join(dir, f));
 
 type Cell = { early: number; mid: number; late: number; whole: number };
 const byType = new Map<string, Cell>();
@@ -23,12 +35,14 @@ const cell = (t: string): Cell => {
 };
 let matches = 0;
 let menuTotal = 0;
+const perMatch: number[] = []; // 每场菜单条数(下尾诊断)
+const phaseCover: number[] = []; // 每场覆盖的时段数(前/中/后有带时刻候选算 1)
 
 for (const f of files) {
   const parser = new GladLogParser();
   const items: GladMatch[] = [];
   parser.on("match", (m: GladMatch) => items.push(m));
-  for (const line of readFileSync(join(dir, f), "utf8").split("\n"))
+  for (const line of readFileSync(f, "utf8").split("\n"))
     parser.push(line);
   parser.end();
   for (const m of items) {
@@ -50,6 +64,14 @@ for (const f of files) {
       const cands = extractCandidateFindings(legacy, owner.id);
       matches++;
       menuTotal += cands.length;
+      perMatch.push(cands.length);
+      const ph = new Set<string>();
+      for (const c of cands) {
+        if (c.facts.t === undefined) continue;
+        const fr = c.t / Math.max(1, durS);
+        ph.add(fr < 1 / 3 ? "e" : fr < 2 / 3 ? "m" : "l");
+      }
+      phaseCover.push(ph.size);
       for (const c of cands) {
         const key =
           c.type === "death-setup" ? `death-setup/${c.facts.kind}` : c.type;
@@ -68,8 +90,19 @@ for (const f of files) {
   }
 }
 
+perMatch.sort((a, b) => a - b);
+const q = (f: number) => perMatch[Math.floor(f * (perMatch.length - 1))];
 console.warn(
   `matches=${matches} menuTotal=${menuTotal} avg=${(menuTotal / matches).toFixed(1)}/场`,
+);
+console.warn(
+  `每场分布 min=${q(0)} p10=${q(0.1)} p25=${q(0.25)} p50=${q(0.5)} p90=${q(0.9)} max=${q(1)};` +
+    ` ≤2条的场 ${perMatch.filter((n) => n <= 2).length}/${matches},` +
+    ` ≤4条的场 ${perMatch.filter((n) => n <= 4).length}/${matches}`,
+);
+console.warn(
+  `时段覆盖:三段全有 ${phaseCover.filter((n) => n === 3).length}/${matches},` +
+    ` 两段 ${phaseCover.filter((n) => n === 2).length},只一段 ${phaseCover.filter((n) => n === 1).length}`,
 );
 console.warn("type".padEnd(22), "前1/3", "中1/3", "后1/3", "整场");
 for (const [t, c] of [...byType.entries()].sort(
