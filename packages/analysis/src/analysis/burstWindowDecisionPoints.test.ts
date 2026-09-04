@@ -37,7 +37,7 @@ const T0 = 1_000_000;
 const AR = "13750";
 /** Recklessness (1719) — the second CD used to build two-CD windows here. */
 const RECK = "1719";
-/** Barkskin (22812), a `bigDefensiveSpellIds` personal wall. */
+/** Ironbark (22812), a `bigDefensiveSpellIds` personal wall. */
 const BARKSKIN = "22812";
 /** Healing Tide Totem (108280), a `TEAM_HEAL_CD_IDS` healing cooldown. */
 const HEALING_TIDE = "108280";
@@ -84,10 +84,14 @@ function friendly(over: Record<string, unknown> = {}) {
     name: "Friend-R",
     reaction: CombatUnitReaction.Friendly,
     // a real class/spec: `extractMajorCooldowns` (the feasibility gate) builds
-    // its ledger from classMetadata and returns [] for an unknown class
+    // its ledger from classMetadata and returns [] for an unknown class.
+    // Balance, not Restoration, since 2026-09-04 (GH #63): for HEALER specs
+    // the generated save roster is the authority and Barkskin measured no
+    // save effect there, so a Resto Druid's Barkskin is no longer a wall —
+    // these tests are about the window mechanics, not about that ruling.
     class: CombatUnitClass.Druid,
-    spec: CombatUnitSpec.Druid_Restoration,
-    info: { teamId: "0", specId: "105" },
+    spec: CombatUnitSpec.Druid_Balance,
+    info: { teamId: "0", specId: "102" },
     advancedActions: [],
     damageIn: [],
     healIn: [],
@@ -420,7 +424,10 @@ describe("burstWindowDecisionPoints — the pressured friendly (correction 1)", 
     friendly({
       id: "F2",
       name: "Mate-R",
-      info: { teamId: "0", specId: "257" },
+      // the healer — a real healer spec so the generated save roster (GH #63)
+      // tags Tranquility / Ironbark Defensive for it
+      spec: CombatUnitSpec.Druid_Restoration,
+      info: { teamId: "0", specId: "105" },
       advancedActions: hpTrack("F2", 0, 40, 95),
       ...over2,
     }),
@@ -434,7 +441,7 @@ describe("burstWindowDecisionPoints — the pressured friendly (correction 1)", 
   });
 
   it("a teammate's ready wall does NOT make the window feasible — it cannot reach the pressured friendly", () => {
-    // Barkskin on the healer is a personal wall: ready, but useless to F1.
+    // Ironbark on the healer is a personal wall: ready, but useless to F1.
     const pts = burstWindowDecisionPoints(
       combat(twoFriendlies({}, { spellCastEvents: [cast(BARKSKIN, 120)] })),
     );
@@ -612,6 +619,7 @@ describe("burstWindowDecisionPoints — teammate reachability gate (GH #60 tail,
     friendly({
       id: "F2",
       name: "Mate-R",
+      spec: CombatUnitSpec.Druid_Restoration,
       info: { teamId: "0", specId: "105" },
       spellCastEvents: [cast(TRANQUILITY, 120)],
       ...mateOver,
@@ -657,6 +665,7 @@ describe("burstWindowDecisionPoints — teammate reachability gate (GH #60 tail,
         friendly({
           id: "F2",
           name: "Mate-R",
+          spec: CombatUnitSpec.Druid_Restoration,
           info: { teamId: "0", specId: "105" },
           spellCastEvents: [cast(TRANQUILITY, 120)],
           advancedActions: trackAt("F2", 0, 40, 95, 0, 500),

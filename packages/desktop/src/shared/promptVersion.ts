@@ -347,4 +347,11 @@
 //  quoted against the cohort (spec × hero tree) median trigger HP from the
 //  corpus; context fact only, no candidate. Timeline text changes for healer
 //  prompts wherever a cohort cell exists.
-export const PROMPT_VERSION = 52;
+//  v53 (2026-09-04, GH #63): healer save-cooldown roster generated from
+//  official data + corpus (healerSaveCdGenerated.json, 42 spells, user-signed
+//  save_role/not_save_role) replaces the hand catalog for healer specs —
+//  cd-hoarded / cd-waste / the [RES] ledger / [CD PRIOR] all see Healing
+//  Tide, Lay on Hands, Revival, Chi-Ji, Rewind, Divine Toll…; [RES] snapshot
+//  instants floored to the render grid (about 60% of [RES] lines change by
+//  ±1 s); [CD PRIOR] reference table regenerated over the new roster.
+export const PROMPT_VERSION = 53;

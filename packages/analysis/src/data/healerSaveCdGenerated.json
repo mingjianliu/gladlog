@@ -1,0 +1,1372 @@
+{
+  "meta": {
+    "generatedAt": "2026-09-04",
+    "corpus": "1814 archived files (12.1+ rounds only)",
+    "command": "npx tsx packages/eval/scripts/healerSaveCdScan.ts emit-table --in <counts.json> --out <file.json>",
+    "minShare": 0.02,
+    "minCooldownSeconds": 30,
+    "criterion": "pressed in >= minShare of the spec's rounds AND official cooldown >= minCooldownSeconds AND (official ability profile can save (ally: mitigation/absorb/heals-others/healing-received/damage-school immunity via official targeting; self: mitigation/absorb/immunity/self-heal) OR user-signed throughput_role/save_role) AND NOT user-signed not_save_role AND the impact door: n >= 100 and (Δ >= 10 pp or death-contrast >= 5 pp)",
+    "impact": "impact.jsonl"
+  },
+  "specs": {
+    "Discipline Priest": {
+      "rounds": 932,
+      "spells": [
+        {
+          "spellId": "472433",
+          "name": "Evangelism",
+          "cooldownSeconds": 90,
+          "share": 0.932,
+          "rounds": 869,
+          "casts": 1957,
+          "savesAlly": false,
+          "savesSelf": false,
+          "why": [
+            "save-role (user-signed, 2026-09-04)",
+            "door: n=1251 Δ8.7pp death-contrast 2.2pp"
+          ]
+        },
+        {
+          "spellId": "33206",
+          "name": "Pain Suppression",
+          "cooldownSeconds": 180,
+          "share": 0.896,
+          "rounds": 835,
+          "casts": 1607,
+          "savesAlly": true,
+          "savesSelf": false,
+          "why": [
+            "ally: mitigation",
+            "door: n=1293 Δ8.8pp death-contrast 9.6pp"
+          ]
+        },
+        {
+          "spellId": "421453",
+          "name": "Ultimate Penitence",
+          "cooldownSeconds": 240,
+          "share": 0.738,
+          "rounds": 688,
+          "casts": 698,
+          "savesAlly": false,
+          "savesSelf": true,
+          "why": [
+            "self: absorb",
+            "door: n=387 Δ30.0pp death-contrast 8.3pp"
+          ]
+        },
+        {
+          "spellId": "19236",
+          "name": "Desperate Prayer",
+          "cooldownSeconds": 90,
+          "share": 0.177,
+          "rounds": 165,
+          "casts": 192,
+          "savesAlly": false,
+          "savesSelf": true,
+          "why": [
+            "self: self-heal",
+            "door: n=151 Δ11.9pp death-contrast 7.9pp"
+          ]
+        }
+      ],
+      "stripDefensive": [
+        "10060",
+        "256948",
+        "32375",
+        "336126",
+        "586",
+        "58984",
+        "73325",
+        "7744",
+        "8122"
+      ]
+    },
+    "Holy Paladin": {
+      "rounds": 1181,
+      "spells": [
+        {
+          "spellId": "6940",
+          "name": "Blessing of Sacrifice",
+          "cooldownSeconds": 120,
+          "share": 0.776,
+          "rounds": 917,
+          "casts": 1388,
+          "savesAlly": true,
+          "savesSelf": false,
+          "why": [
+            "ally: absorb",
+            "save-role (user-signed, 2026-09-04)",
+            "door: n=961 Δ9.8pp death-contrast 3.9pp"
+          ]
+        },
+        {
+          "spellId": "31821",
+          "name": "Aura Mastery",
+          "cooldownSeconds": 180,
+          "share": 0.77,
+          "rounds": 909,
+          "casts": 1164,
+          "savesAlly": true,
+          "savesSelf": false,
+          "why": [
+            "ally: mitigation",
+            "save-role (user-signed, 2026-09-04)",
+            "door: n=901 Δ9.9pp death-contrast 4.2pp"
+          ]
+        },
+        {
+          "spellId": "216331",
+          "name": "Avenging Crusader",
+          "cooldownSeconds": 60,
+          "share": 0.647,
+          "rounds": 764,
+          "casts": 1849,
+          "savesAlly": false,
+          "savesSelf": false,
+          "why": [
+            "throughput-role (user-signed save)",
+            "door: n=1275 Δ17.0pp death-contrast 3.1pp"
+          ]
+        },
+        {
+          "spellId": "471195",
+          "name": "Lay on Hands",
+          "cooldownSeconds": 600,
+          "share": 0.601,
+          "rounds": 710,
+          "casts": 745,
+          "savesAlly": true,
+          "savesSelf": false,
+          "why": [
+            "ally: heals-others",
+            "door: n=718 Δ61.0pp death-contrast 23.3pp"
+          ]
+        },
+        {
+          "spellId": "642",
+          "name": "Divine Shield",
+          "cooldownSeconds": 300,
+          "share": 0.587,
+          "rounds": 693,
+          "casts": 703,
+          "savesAlly": false,
+          "savesSelf": true,
+          "why": [
+            "self: mitigation+immunity+self-heal",
+            "door: n=666 Δ12.0pp death-contrast 13.8pp"
+          ]
+        },
+        {
+          "spellId": "31884",
+          "name": "Avenging Wrath",
+          "cooldownSeconds": 120,
+          "share": 0.307,
+          "rounds": 362,
+          "casts": 555,
+          "savesAlly": false,
+          "savesSelf": false,
+          "why": [
+            "save-role (user-signed, 2026-09-04)",
+            "door: n=456 Δ21.3pp death-contrast 2.7pp"
+          ]
+        },
+        {
+          "spellId": "1022",
+          "name": "Blessing of Protection",
+          "cooldownSeconds": 300,
+          "share": 0.295,
+          "rounds": 348,
+          "casts": 350,
+          "savesAlly": true,
+          "savesSelf": false,
+          "why": [
+            "ally: mitigation+immunity",
+            "door: n=310 Δ10.8pp death-contrast 11.8pp"
+          ]
+        },
+        {
+          "spellId": "375576",
+          "name": "Divine Toll",
+          "cooldownSeconds": 60,
+          "share": 0.266,
+          "rounds": 314,
+          "casts": 1153,
+          "savesAlly": false,
+          "savesSelf": false,
+          "why": [
+            "save-role (user-signed, 2026-09-04)",
+            "door: n=878 Δ13.4pp death-contrast 2.6pp"
+          ]
+        },
+        {
+          "spellId": "204018",
+          "name": "Blessing of Spellwarding",
+          "cooldownSeconds": 180,
+          "share": 0.261,
+          "rounds": 308,
+          "casts": 309,
+          "savesAlly": true,
+          "savesSelf": false,
+          "why": [
+            "ally: mitigation+immunity",
+            "door: n=279 Δ5.0pp death-contrast 7.4pp"
+          ]
+        },
+        {
+          "spellId": "199448",
+          "name": "Blessing of Sacrifice",
+          "cooldownSeconds": 120,
+          "share": 0.093,
+          "rounds": 110,
+          "casts": 159,
+          "savesAlly": true,
+          "savesSelf": false,
+          "why": [
+            "ally: absorb",
+            "door: n=142 Δ0.3pp death-contrast 8.4pp"
+          ]
+        }
+      ],
+      "stripDefensive": [
+        "114165",
+        "115750",
+        "155145",
+        "190784",
+        "336126",
+        "345228",
+        "410126",
+        "432459",
+        "432472",
+        "498",
+        "59752",
+        "853"
+      ]
+    },
+    "Holy Priest": {
+      "rounds": 2617,
+      "spells": [
+        {
+          "spellId": "47788",
+          "name": "Guardian Spirit",
+          "cooldownSeconds": 180,
+          "share": 0.837,
+          "rounds": 2191,
+          "casts": 3795,
+          "savesAlly": true,
+          "savesSelf": false,
+          "why": [
+            "ally: healing-received",
+            "door: n=3318 Δ44.8pp death-contrast 15.4pp"
+          ]
+        },
+        {
+          "spellId": "586",
+          "name": "Fade",
+          "cooldownSeconds": 30,
+          "share": 0.834,
+          "rounds": 2182,
+          "casts": 6483,
+          "savesAlly": false,
+          "savesSelf": true,
+          "why": [
+            "self: mitigation",
+            "door: n=2495 Δ12.1pp death-contrast 4.8pp"
+          ]
+        },
+        {
+          "spellId": "215769",
+          "name": "Spirit of Redemption",
+          "cooldownSeconds": 120,
+          "share": 0.819,
+          "rounds": 2144,
+          "casts": 2987,
+          "savesAlly": false,
+          "savesSelf": true,
+          "why": [
+            "self: absorb",
+            "door: n=1766 Δ23.6pp death-contrast 6.4pp"
+          ]
+        },
+        {
+          "spellId": "200183",
+          "name": "Apotheosis",
+          "cooldownSeconds": 120,
+          "share": 0.739,
+          "rounds": 1934,
+          "casts": 2472,
+          "savesAlly": false,
+          "savesSelf": false,
+          "why": [
+            "throughput-role (user-signed save)",
+            "door: n=1726 Δ29.2pp death-contrast 7.6pp"
+          ]
+        },
+        {
+          "spellId": "64843",
+          "name": "Divine Hymn",
+          "cooldownSeconds": 180,
+          "share": 0.716,
+          "rounds": 1874,
+          "casts": 2398,
+          "savesAlly": true,
+          "savesSelf": false,
+          "why": [
+            "ally: heals-others+healing-received",
+            "door: n=1365 Δ23.6pp death-contrast 6.1pp"
+          ]
+        },
+        {
+          "spellId": "19236",
+          "name": "Desperate Prayer",
+          "cooldownSeconds": 90,
+          "share": 0.127,
+          "rounds": 333,
+          "casts": 424,
+          "savesAlly": false,
+          "savesSelf": true,
+          "why": [
+            "self: self-heal",
+            "door: n=311 Δ19.2pp death-contrast 5.5pp"
+          ]
+        }
+      ],
+      "stripDefensive": [
+        "10060",
+        "2050",
+        "256948",
+        "32375",
+        "336126",
+        "34861",
+        "58984",
+        "73325",
+        "7744",
+        "8122",
+        "88625"
+      ]
+    },
+    "Mistweaver Monk": {
+      "rounds": 444,
+      "spells": [
+        {
+          "spellId": "116849",
+          "name": "Life Cocoon",
+          "cooldownSeconds": 120,
+          "share": 0.842,
+          "rounds": 374,
+          "casts": 509,
+          "savesAlly": true,
+          "savesSelf": false,
+          "why": [
+            "ally: absorb+healing-received",
+            "door: n=484 Δ33.7pp death-contrast 18.4pp"
+          ]
+        },
+        {
+          "spellId": "325197",
+          "name": "Invoke Chi-Ji, the Red Crane",
+          "cooldownSeconds": 120,
+          "share": 0.824,
+          "rounds": 366,
+          "casts": 563,
+          "savesAlly": true,
+          "savesSelf": false,
+          "why": [
+            "ally: team-heal (registered)",
+            "door: n=316 Δ21.7pp death-contrast 5.9pp"
+          ]
+        },
+        {
+          "spellId": "388615",
+          "name": "Restoral",
+          "cooldownSeconds": 180,
+          "share": 0.646,
+          "rounds": 287,
+          "casts": 321,
+          "savesAlly": true,
+          "savesSelf": false,
+          "why": [
+            "ally: heals-others",
+            "door: n=277 Δ18.1pp death-contrast 11.6pp"
+          ]
+        },
+        {
+          "spellId": "115203",
+          "name": "Fortifying Brew",
+          "cooldownSeconds": 360,
+          "share": 0.381,
+          "rounds": 169,
+          "casts": 203,
+          "savesAlly": false,
+          "savesSelf": true,
+          "why": [
+            "self: mitigation",
+            "door: n=158 Δ11.2pp death-contrast 3.2pp"
+          ]
+        },
+        {
+          "spellId": "443028",
+          "name": "Celestial Conduit",
+          "cooldownSeconds": 90,
+          "share": 0.108,
+          "rounds": 48,
+          "casts": 70,
+          "savesAlly": false,
+          "savesSelf": true,
+          "why": [
+            "self: self-heal",
+            "save-role (user-signed, 2026-09-04)",
+            "door: n=45 Δ25.6pp death-contrast 3.3pp"
+          ]
+        },
+        {
+          "spellId": "115310",
+          "name": "Revival",
+          "cooldownSeconds": 180,
+          "share": 0.081,
+          "rounds": 36,
+          "casts": 40,
+          "savesAlly": true,
+          "savesSelf": false,
+          "why": [
+            "ally: heals-others",
+            "save-role (user-signed, 2026-09-04)",
+            "door: n=36 Δ28.8pp death-contrast 4.7pp"
+          ]
+        }
+      ],
+      "stripDefensive": [
+        "107079",
+        "115078",
+        "116680",
+        "116841",
+        "116844",
+        "119381",
+        "119996",
+        "198898",
+        "322109",
+        "322118",
+        "336126",
+        "33697",
+        "345228",
+        "410322",
+        "434766",
+        "447446",
+        "58984",
+        "7744"
+      ]
+    },
+    "Preservation Evoker": {
+      "rounds": 362,
+      "spells": [
+        {
+          "spellId": "370553",
+          "name": "Tip the Scales",
+          "cooldownSeconds": 120,
+          "share": 0.945,
+          "rounds": 342,
+          "casts": 566,
+          "savesAlly": false,
+          "savesSelf": false,
+          "why": [
+            "save-role (user-signed, 2026-09-04)",
+            "door: n=283 Δ20.3pp death-contrast 5.8pp"
+          ]
+        },
+        {
+          "spellId": "357170",
+          "name": "Time Dilation",
+          "cooldownSeconds": 60,
+          "share": 0.912,
+          "rounds": 330,
+          "casts": 1077,
+          "savesAlly": true,
+          "savesSelf": false,
+          "why": [
+            "ally: mitigation+absorb",
+            "door: n=915 Δ38.4pp death-contrast 12.3pp"
+          ]
+        },
+        {
+          "spellId": "370537",
+          "name": "Stasis",
+          "cooldownSeconds": 90,
+          "share": 0.84,
+          "rounds": 304,
+          "casts": 510,
+          "savesAlly": false,
+          "savesSelf": false,
+          "why": [
+            "save-role (user-signed, 2026-09-04)",
+            "door: n=286 Δ18.3pp death-contrast 7.6pp"
+          ]
+        },
+        {
+          "spellId": "370960",
+          "name": "Emerald Communion",
+          "cooldownSeconds": 180,
+          "share": 0.677,
+          "rounds": 245,
+          "casts": 258,
+          "savesAlly": false,
+          "savesSelf": true,
+          "why": [
+            "self: self-heal",
+            "door: n=254 Δ64.6pp death-contrast 22.0pp"
+          ]
+        },
+        {
+          "spellId": "363916",
+          "name": "Obsidian Scales",
+          "cooldownSeconds": 90,
+          "share": 0.674,
+          "rounds": 244,
+          "casts": 517,
+          "savesAlly": false,
+          "savesSelf": true,
+          "why": [
+            "self: mitigation",
+            "door: n=330 Δ17.5pp death-contrast 4.0pp"
+          ]
+        },
+        {
+          "spellId": "363534",
+          "name": "Rewind",
+          "cooldownSeconds": 240,
+          "share": 0.613,
+          "rounds": 222,
+          "casts": 223,
+          "savesAlly": true,
+          "savesSelf": false,
+          "why": [
+            "ally: heals-others",
+            "door: n=217 Δ39.8pp death-contrast 18.1pp"
+          ]
+        },
+        {
+          "spellId": "374251",
+          "name": "Cauterizing Flame",
+          "cooldownSeconds": 60,
+          "share": 0.326,
+          "rounds": 118,
+          "casts": 191,
+          "savesAlly": true,
+          "savesSelf": false,
+          "why": [
+            "ally: heals-others",
+            "door: n=133 Δ19.8pp death-contrast 9.7pp"
+          ]
+        }
+      ],
+      "stripDefensive": [
+        "336126",
+        "355913",
+        "355936",
+        "357208",
+        "357210",
+        "357214",
+        "358267",
+        "358385",
+        "368970",
+        "370665",
+        "372048",
+        "374968",
+        "382266",
+        "382614",
+        "406732",
+        "406971"
+      ]
+    },
+    "Restoration Druid": {
+      "rounds": 940,
+      "spells": [
+        {
+          "spellId": "132158",
+          "name": "Nature's Swiftness",
+          "cooldownSeconds": 60,
+          "share": 0.846,
+          "rounds": 795,
+          "casts": 1403,
+          "savesAlly": false,
+          "savesSelf": false,
+          "why": [
+            "save-role (user-signed, 2026-09-04)",
+            "door: n=678 Δ1.8pp death-contrast 0.2pp"
+          ]
+        },
+        {
+          "spellId": "102342",
+          "name": "Ironbark",
+          "cooldownSeconds": 90,
+          "share": 0.835,
+          "rounds": 785,
+          "casts": 1277,
+          "savesAlly": true,
+          "savesSelf": false,
+          "why": [
+            "ally: mitigation",
+            "door: n=1059 Δ23.2pp death-contrast 4.3pp"
+          ]
+        },
+        {
+          "spellId": "740",
+          "name": "Tranquility",
+          "cooldownSeconds": 180,
+          "share": 0.262,
+          "rounds": 246,
+          "casts": 251,
+          "savesAlly": true,
+          "savesSelf": false,
+          "why": [
+            "ally: absorb+heals-others",
+            "door: n=221 Δ16.1pp death-contrast -1.7pp"
+          ]
+        },
+        {
+          "spellId": "391528",
+          "name": "Convoke the Spirits",
+          "cooldownSeconds": 120,
+          "share": 0.184,
+          "rounds": 173,
+          "casts": 320,
+          "savesAlly": false,
+          "savesSelf": false,
+          "why": [
+            "save-role (user-signed, 2026-09-04)",
+            "door: n=181 Δ11.3pp death-contrast -0.7pp"
+          ]
+        },
+        {
+          "spellId": "473909",
+          "name": "Ancient of Lore",
+          "cooldownSeconds": 90,
+          "share": 0.091,
+          "rounds": 86,
+          "casts": 166,
+          "savesAlly": false,
+          "savesSelf": true,
+          "why": [
+            "self: mitigation",
+            "save-role (user-signed, 2026-09-04)",
+            "door: n=99 Δ8.5pp death-contrast 2.2pp"
+          ]
+        }
+      ],
+      "stripDefensive": [
+        "102359",
+        "102793",
+        "106898",
+        "1850",
+        "22570",
+        "22812",
+        "22842",
+        "29166",
+        "336126",
+        "33891",
+        "5211",
+        "58984",
+        "77764",
+        "99"
+      ]
+    },
+    "Restoration Shaman": {
+      "rounds": 824,
+      "spells": [
+        {
+          "spellId": "108280",
+          "name": "Healing Tide Totem",
+          "cooldownSeconds": 180,
+          "share": 0.876,
+          "rounds": 722,
+          "casts": 1081,
+          "savesAlly": true,
+          "savesSelf": false,
+          "why": [
+            "ally: team-heal (registered)",
+            "door: n=870 Δ19.1pp death-contrast 4.4pp"
+          ]
+        },
+        {
+          "spellId": "378081",
+          "name": "Nature's Swiftness",
+          "cooldownSeconds": 60,
+          "share": 0.692,
+          "rounds": 570,
+          "casts": 1259,
+          "savesAlly": false,
+          "savesSelf": false,
+          "why": [
+            "save-role (user-signed, 2026-09-04)",
+            "door: n=1055 Δ19.5pp death-contrast 4.5pp"
+          ]
+        },
+        {
+          "spellId": "98008",
+          "name": "Spirit Link Totem",
+          "cooldownSeconds": 180,
+          "share": 0.557,
+          "rounds": 459,
+          "casts": 478,
+          "savesAlly": true,
+          "savesSelf": false,
+          "why": [
+            "ally: mitigation",
+            "door: n=454 Δ38.6pp death-contrast 11.4pp"
+          ]
+        },
+        {
+          "spellId": "108271",
+          "name": "Astral Shift",
+          "cooldownSeconds": 90,
+          "share": 0.275,
+          "rounds": 227,
+          "casts": 293,
+          "savesAlly": false,
+          "savesSelf": true,
+          "why": [
+            "self: mitigation",
+            "door: n=231 Δ14.9pp death-contrast 4.9pp"
+          ]
+        }
+      ],
+      "stripDefensive": [
+        "192058",
+        "192077",
+        "198103",
+        "204331",
+        "204336",
+        "210873",
+        "255654",
+        "269352",
+        "305483",
+        "336126",
+        "33697",
+        "355580",
+        "383013",
+        "443454",
+        "51485",
+        "51514",
+        "58875",
+        "79206",
+        "8143"
+      ]
+    }
+  },
+  "rejectedForReview": {
+    "Discipline Priest": [
+      {
+        "spellId": "10060",
+        "name": "Power Infusion",
+        "cooldownSeconds": 120,
+        "share": 0.928,
+        "reason": "official profile silent (reachesAlly=true, hitsEnemy=false, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "8122",
+        "name": "Psychic Scream",
+        "cooldownSeconds": 30,
+        "share": 0.818,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "586",
+        "name": "Fade",
+        "cooldownSeconds": 30,
+        "share": 0.712,
+        "reason": "below the door: n=839 Δ0.0pp death-contrast 1.3pp"
+      },
+      {
+        "spellId": "336126",
+        "name": "Gladiator's Medallion",
+        "cooldownSeconds": 120,
+        "share": 0.707,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "73325",
+        "name": "Leap of Faith",
+        "cooldownSeconds": 90,
+        "share": 0.343,
+        "reason": "official profile silent (reachesAlly=true, hitsEnemy=false, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "7744",
+        "name": "Will of the Forsaken",
+        "cooldownSeconds": 120,
+        "share": 0.18,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "32375",
+        "name": "Mass Dispel",
+        "cooldownSeconds": 120,
+        "share": 0.117,
+        "reason": "official profile silent (reachesAlly=true, hitsEnemy=true, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "58984",
+        "name": "Shadowmeld",
+        "cooldownSeconds": 120,
+        "share": 0.07,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+      }
+    ],
+    "Holy Paladin": [
+      {
+        "spellId": "853",
+        "name": "Hammer of Justice",
+        "cooldownSeconds": 45,
+        "share": 0.925,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=true, haste=-)"
+      },
+      {
+        "spellId": "190784",
+        "name": "Divine Steed",
+        "cooldownSeconds": 45,
+        "share": 0.86,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "336126",
+        "name": "Gladiator's Medallion",
+        "cooldownSeconds": 120,
+        "share": 0.734,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "432459",
+        "name": "Holy Bulwark",
+        "cooldownSeconds": 60,
+        "share": 0.651,
+        "reason": "user-ruled not a save tool (not_save_role, 2026-09-04)"
+      },
+      {
+        "spellId": "432472",
+        "name": "Sacred Weapon",
+        "cooldownSeconds": 60,
+        "share": 0.635,
+        "reason": "user-ruled not a save tool (not_save_role, 2026-09-04)"
+      },
+      {
+        "spellId": "498",
+        "name": "Divine Protection",
+        "cooldownSeconds": 60,
+        "share": 0.592,
+        "reason": "below the door: n=922 Δ0.9pp death-contrast 0.5pp"
+      },
+      {
+        "spellId": "115750",
+        "name": "Blinding Light",
+        "cooldownSeconds": 90,
+        "share": 0.573,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "410126",
+        "name": "Searing Glare",
+        "cooldownSeconds": 60,
+        "share": 0.225,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "59752",
+        "name": "Will to Survive",
+        "cooldownSeconds": 180,
+        "share": 0.133,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "6262",
+        "name": "Healthstone",
+        "cooldownSeconds": 60,
+        "share": 0.051,
+        "reason": "below the door: n=54 Δ-2.4pp death-contrast 0.0pp"
+      },
+      {
+        "spellId": "633",
+        "name": "Lay on Hands",
+        "cooldownSeconds": 600,
+        "share": 0.041,
+        "reason": "below the door: n=44 Δ41.0pp death-contrast 16.3pp"
+      }
+    ],
+    "Holy Priest": [
+      {
+        "spellId": "2050",
+        "name": "Holy Word: Serenity",
+        "cooldownSeconds": 60,
+        "share": 0.971,
+        "reason": "user-ruled not a save tool (not_save_role, 2026-09-04)"
+      },
+      {
+        "spellId": "88625",
+        "name": "Holy Word: Chastise",
+        "cooldownSeconds": 60,
+        "share": 0.958,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=true, haste=-)"
+      },
+      {
+        "spellId": "10060",
+        "name": "Power Infusion",
+        "cooldownSeconds": 120,
+        "share": 0.935,
+        "reason": "official profile silent (reachesAlly=true, hitsEnemy=false, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "8122",
+        "name": "Psychic Scream",
+        "cooldownSeconds": 30,
+        "share": 0.92,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "336126",
+        "name": "Gladiator's Medallion",
+        "cooldownSeconds": 120,
+        "share": 0.718,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "73325",
+        "name": "Leap of Faith",
+        "cooldownSeconds": 90,
+        "share": 0.36,
+        "reason": "official profile silent (reachesAlly=true, hitsEnemy=false, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "7744",
+        "name": "Will of the Forsaken",
+        "cooldownSeconds": 120,
+        "share": 0.246,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "34861",
+        "name": "Holy Word: Sanctify",
+        "cooldownSeconds": 60,
+        "share": 0.19,
+        "reason": "user-ruled not a save tool (not_save_role, 2026-09-04)"
+      },
+      {
+        "spellId": "32375",
+        "name": "Mass Dispel",
+        "cooldownSeconds": 120,
+        "share": 0.167,
+        "reason": "official profile silent (reachesAlly=true, hitsEnemy=true, dealsDamage=false, haste=-)"
+      }
+    ],
+    "Mistweaver Monk": [
+      {
+        "spellId": "116680",
+        "name": "Thunder Focus Tea",
+        "cooldownSeconds": 30,
+        "share": 0.941,
+        "reason": "user-ruled not a save tool (not_save_role, 2026-09-04)"
+      },
+      {
+        "spellId": "119381",
+        "name": "Leg Sweep",
+        "cooldownSeconds": 60,
+        "share": 0.887,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "115078",
+        "name": "Paralysis",
+        "cooldownSeconds": 45,
+        "share": 0.822,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "336126",
+        "name": "Gladiator's Medallion",
+        "cooldownSeconds": 120,
+        "share": 0.664,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "198898",
+        "name": "Song of Chi-Ji",
+        "cooldownSeconds": 30,
+        "share": 0.622,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "116841",
+        "name": "Tiger's Lust",
+        "cooldownSeconds": 30,
+        "share": 0.5,
+        "reason": "official profile silent (reachesAlly=true, hitsEnemy=false, dealsDamage=false, haste=70)"
+      },
+      {
+        "spellId": "119996",
+        "name": "Transcendence: Transfer",
+        "cooldownSeconds": 45,
+        "share": 0.297,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "322109",
+        "name": "Touch of Death",
+        "cooldownSeconds": 180,
+        "share": 0.146,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=true, haste=-)"
+      },
+      {
+        "spellId": "116844",
+        "name": "Ring of Peace",
+        "cooldownSeconds": 45,
+        "share": 0.126,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "7744",
+        "name": "Will of the Forsaken",
+        "cooldownSeconds": 120,
+        "share": 0.106,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "322118",
+        "name": "Invoke Yu'lon, the Jade Serpent",
+        "cooldownSeconds": 120,
+        "share": 0.083,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "447446",
+        "name": "Cherry Blossom Trail",
+        "cooldownSeconds": 600,
+        "share": 0.07,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "33697",
+        "name": "Blood Fury",
+        "cooldownSeconds": 120,
+        "share": 0.061,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "345228",
+        "name": "Gladiator's Badge",
+        "cooldownSeconds": 60,
+        "share": 0.054,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+      }
+    ],
+    "Preservation Evoker": [
+      {
+        "spellId": "355936",
+        "name": "Dream Breath",
+        "cooldownSeconds": 30,
+        "share": 0.972,
+        "reason": "user-ruled not a save tool (not_save_role, 2026-09-04)"
+      },
+      {
+        "spellId": "358267",
+        "name": "Hover",
+        "cooldownSeconds": 35,
+        "share": 0.956,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=30)"
+      },
+      {
+        "spellId": "357208",
+        "name": "Fire Breath",
+        "cooldownSeconds": 30,
+        "share": 0.928,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "357210",
+        "name": "Deep Breath",
+        "cooldownSeconds": 120,
+        "share": 0.87,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "336126",
+        "name": "Gladiator's Medallion",
+        "cooldownSeconds": 120,
+        "share": 0.713,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "358385",
+        "name": "Landslide",
+        "cooldownSeconds": 90,
+        "share": 0.541,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "370665",
+        "name": "Rescue",
+        "cooldownSeconds": 60,
+        "share": 0.428,
+        "reason": "official profile silent (reachesAlly=true, hitsEnemy=false, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "374968",
+        "name": "Time Spiral",
+        "cooldownSeconds": 120,
+        "share": 0.367,
+        "reason": "official profile silent (reachesAlly=true, hitsEnemy=false, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "357214",
+        "name": "Wing Buffet",
+        "cooldownSeconds": 180,
+        "share": 0.331,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "372048",
+        "name": "Oppressing Roar",
+        "cooldownSeconds": 120,
+        "share": 0.326,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "406971",
+        "name": "Oppressing Roar",
+        "cooldownSeconds": 120,
+        "share": 0.251,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "368970",
+        "name": "Tail Swipe",
+        "cooldownSeconds": 180,
+        "share": 0.18,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "406732",
+        "name": "Spatial Paradox",
+        "cooldownSeconds": 180,
+        "share": 0.055,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+      }
+    ],
+    "Restoration Druid": [
+      {
+        "spellId": "336126",
+        "name": "Gladiator's Medallion",
+        "cooldownSeconds": 120,
+        "share": 0.739,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "33891",
+        "name": "Incarnation: Tree of Life",
+        "cooldownSeconds": 180,
+        "share": 0.586,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "102793",
+        "name": "Ursol's Vortex",
+        "cooldownSeconds": 60,
+        "share": 0.52,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "22812",
+        "name": "Barkskin",
+        "cooldownSeconds": 60,
+        "share": 0.487,
+        "reason": "below the door: n=427 Δ2.3pp death-contrast 1.7pp"
+      },
+      {
+        "spellId": "22570",
+        "name": "Maim",
+        "cooldownSeconds": 30,
+        "share": 0.466,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=true, haste=-)"
+      },
+      {
+        "spellId": "29166",
+        "name": "Innervate",
+        "cooldownSeconds": 180,
+        "share": 0.416,
+        "reason": "official profile silent (reachesAlly=true, hitsEnemy=false, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "99",
+        "name": "Incapacitating Roar",
+        "cooldownSeconds": 30,
+        "share": 0.348,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "5211",
+        "name": "Mighty Bash",
+        "cooldownSeconds": 60,
+        "share": 0.338,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "1850",
+        "name": "Dash",
+        "cooldownSeconds": 120,
+        "share": 0.318,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=60)"
+      },
+      {
+        "spellId": "58984",
+        "name": "Shadowmeld",
+        "cooldownSeconds": 120,
+        "share": 0.304,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "22842",
+        "name": "Frenzied Regeneration",
+        "cooldownSeconds": 36,
+        "share": 0.214,
+        "reason": "below the door: n=242 Δ-2.2pp death-contrast -0.6pp"
+      },
+      {
+        "spellId": "77764",
+        "name": "Stampeding Roar",
+        "cooldownSeconds": 120,
+        "share": 0.122,
+        "reason": "official profile silent (reachesAlly=true, hitsEnemy=false, dealsDamage=false, haste=60)"
+      },
+      {
+        "spellId": "102359",
+        "name": "Mass Entanglement",
+        "cooldownSeconds": 30,
+        "share": 0.109,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=true, haste=-)"
+      },
+      {
+        "spellId": "106898",
+        "name": "Stampeding Roar",
+        "cooldownSeconds": 120,
+        "share": 0.1,
+        "reason": "official profile silent (reachesAlly=true, hitsEnemy=false, dealsDamage=false, haste=60)"
+      },
+      {
+        "spellId": "6262",
+        "name": "Healthstone",
+        "cooldownSeconds": 60,
+        "share": 0.021,
+        "reason": "below the door: n=19 Δ-10.8pp death-contrast 4.9pp"
+      }
+    ],
+    "Restoration Shaman": [
+      {
+        "spellId": "51485",
+        "name": "Earthgrab Totem",
+        "cooldownSeconds": 30,
+        "share": 0.899,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "204336",
+        "name": "Grounding Totem",
+        "cooldownSeconds": 30,
+        "share": 0.808,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "192058",
+        "name": "Capacitor Totem",
+        "cooldownSeconds": 60,
+        "share": 0.8,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "336126",
+        "name": "Gladiator's Medallion",
+        "cooldownSeconds": 120,
+        "share": 0.75,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "79206",
+        "name": "Spiritwalker's Grace",
+        "cooldownSeconds": 120,
+        "share": 0.671,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "51514",
+        "name": "Hex",
+        "cooldownSeconds": 30,
+        "share": 0.593,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "8143",
+        "name": "Tremor Totem",
+        "cooldownSeconds": 60,
+        "share": 0.464,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "305483",
+        "name": "Lightning Lasso",
+        "cooldownSeconds": 45,
+        "share": 0.436,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "355580",
+        "name": "Static Field Totem",
+        "cooldownSeconds": 90,
+        "share": 0.397,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "58875",
+        "name": "Spirit Walk",
+        "cooldownSeconds": 60,
+        "share": 0.323,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=60)"
+      },
+      {
+        "spellId": "33697",
+        "name": "Blood Fury",
+        "cooldownSeconds": 120,
+        "share": 0.268,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "443454",
+        "name": "Ancestral Swiftness",
+        "cooldownSeconds": 30,
+        "share": 0.242,
+        "reason": "user-ruled not a save tool (not_save_role, 2026-09-04)"
+      },
+      {
+        "spellId": "210873",
+        "name": "Hex",
+        "cooldownSeconds": 30,
+        "share": 0.093,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "198103",
+        "name": "Earth Elemental",
+        "cooldownSeconds": 180,
+        "share": 0.08,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "204331",
+        "name": "Counterstrike Totem",
+        "cooldownSeconds": 45,
+        "share": 0.061,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+      },
+      {
+        "spellId": "59547",
+        "name": "Gift of the Naaru",
+        "cooldownSeconds": 120,
+        "share": 0.056,
+        "reason": "below the door: n=41 Δ13.9pp death-contrast -3.6pp"
+      }
+    ]
+  }
+}

@@ -48,8 +48,13 @@ describe("checkCdPriorRefConsistency", () => {
     expect(out[0]).toContain("查不到");
   });
 
-  it("lines that do not carry the tag are ignored", () => {
+  it("lines that do not carry the tag are ignored, and so is the legend line (it carries the tag but no reference by design)", () => {
     expect(checkCdPriorRefConsistency(["0:10  [STATE] …", "  - id=cd-hoarded:x type=cd-hoarded"])).toHaveLength(0);
+    expect(
+      checkCdPriorRefConsistency([
+        "  [CD PRIOR] = a friendly dipped below the HP at which this healer's cohort usually spends a save cooldown — context, not a mistake.",
+      ]),
+    ).toHaveLength(0);
   });
 
   const withTable = REF ? it : it.skip;

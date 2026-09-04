@@ -247,8 +247,8 @@ describe("formatBurstAnsweredLines — wording", () => {
 const T0 = 1_000_000;
 /** Adrenaline Rush — the corpus' most common solo burst opener. */
 const AR = "13750";
-/** Barkskin — a `bigDefensiveSpellIds` personal wall, i.e. a `wall` answer. */
-const BARKSKIN = "22812";
+/** Ironbark — a `bigDefensiveSpellIds` personal wall, i.e. a `wall` answer. */
+const BARKSKIN = "102342";
 
 const cast = (spellId: string, tSec: number, destUnitId?: string) => ({
   spellId,

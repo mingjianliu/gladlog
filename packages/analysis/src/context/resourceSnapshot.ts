@@ -9,6 +9,7 @@ import {
 } from "../utils/cooldowns";
 import { IEnemyCDTimeline } from "../utils/enemyCDs";
 import { sumIncomingPressure } from "../utils/incomingPressure";
+import { toRenderSecond } from "../utils/renderGrid";
 import { getPvpToolkit } from "../utils/talentBehaviors";
 
 // F169: number of friendly units with an active Atonement (194384) at a given time. Disc Priest
@@ -368,7 +369,7 @@ export interface ResourceSnapshotParams {
 }
 
 export function buildResourceSnapshot({
-  timeSeconds,
+  timeSeconds: rawTimeSeconds,
   ownerCDs,
   ownerName,
   ownerSpec: _ownerSpec,
@@ -381,6 +382,15 @@ export function buildResourceSnapshot({
   matchStartMs,
   ownerUnit,
 }: ResourceSnapshotParams): string {
+  // Render-grid anchor (CLAUDE.md shared-predicate rule; GH #63, 2026-09-04):
+  // callers hand in the cast's fractional instant, but the line is printed
+  // next to `fmtTime`'s floored second, so every "(Ns)" / rdy / cd fact here
+  // is computed at that floored second — a snapshot at 10.2 s and at 10.0 s
+  // are byte-identical (test/context.resourceSnapshot.test.ts pins it). The
+  // seam surfaced when Fade (30 s) entered the Discipline ledger through the
+  // healer save-CD roster: cast at 3.6 s, remaining read 24 s at 10.0 and
+  // 23 s at 10.2.
+  const timeSeconds = toRenderSecond(rawTimeSeconds);
   function pid(name: string): string {
     if (!playerIdMap) return name;
     const id = playerIdMap.get(name);

@@ -122,6 +122,25 @@ cat $GLADLOG_EVAL_HOME/corpus/manifest-fullscale.txt \
 nice -n 10 npx tsx packages/eval/scripts/confidenceAudit.ts --manifest /tmp/manifest-dispel-union.txt \
   --emit-table --date $(date +%F) > /tmp/dispelObservedGenerated.ts \
   && cp /tmp/dispelObservedGenerated.ts packages/analysis/src/data/dispelObservedGenerated.ts
+# 6b-pre-7. Healer save-cooldown ROSTER (healerSaveCdGenerated.json; GH #63, 2026-09-04). The authority for which
+#   cooldowns a healer spec's ledger tracks as save tools (cd-hoarded / cd-waste / [RES] / [CD PRIOR]); replaces the
+#   hand catalog + name-regex discovery for healer specs. Inputs: (1) corpus press counts per spec (scan), (2) the
+#   impact rows from saveCdImpactScan.ts (the user-ruled door: n >= 100 and Δ protection >= 10 pp or death-contrast
+#   >= 5 pp), (3) the user signature register curatedAbilityFacts.ts kinds save_role / not_save_role. Regenerate at
+#   season start (new ids — Lay on Hands 633 → 471195 was one) and after any change to abilityProfile / the door.
+#   Then regenerate 6b-pre-6 (the roster is its input). Health test: test/cooldowns.healerSaveCdRoster.test.ts.
+E=$GLADLOG_EVAL_HOME; R=$E/reports/healer-save-cd-$(date +%F); mkdir -p $R
+npx tsx packages/eval/scripts/healerSaveCdScan.ts scan --manifest $E/corpus/manifest-archive-2026-08-28-newseason.txt \
+  --every 10 --out $R/counts.json                                            # ~15 min, single process
+nice -n 10 npx tsx packages/eval/scripts/saveCdImpactScan.ts scan --manifest $E/corpus/manifest-archive-2026-08-28-newseason.txt \
+  --every 10 --out $R/impact.jsonl                                           # ~40 min, single process
+npx tsx packages/eval/scripts/saveCdImpactScan.ts report --in $R/impact.jsonl > $R/impact-report.md
+npx tsx packages/eval/scripts/saveCdImpactScan.ts talents --in $R/impact.jsonl > $R/talents-report.md
+npx tsx packages/eval/scripts/healerSaveCdScan.ts emit-table --in $R/counts.json --impact $R/impact.jsonl \
+  --out packages/analysis/src/data/healerSaveCdGenerated.json
+#   Read rejectedForReview in the json: "below the door" rows are measured negatives; a spell the user wants
+#   in anyway is signed as save_role (a ruling beats the door), one they want out as not_save_role.
+
 # 6b-pre-6. Save-cooldown cohort trigger-HP table ([CD PRIOR] context fact; GH #54 (f) / BACKLOG #38 (a)(h),
 #   user ruling 2026-09-04 option 1). Per (spec | hero tree | spellId): the median lowest-alive-friendly gridHpPct
 #   at which healers of that cohort press that save cooldown, plus a spec-wide `|*|` roll-up. Corpus-driven, NOT DB2.

@@ -11,6 +11,10 @@ import { isSurvivalWall } from "../data/abilityProfile";
 import { classMetadata } from "../data/classSpells";
 import { CURATED_ABILITY_FACTS } from "../data/curatedAbilityFacts";
 import { DISCOVERY_TAG_RULES } from "../data/discoveryRules";
+import {
+  healerSaveCdRoster,
+  healerSaveCdStripDefensive,
+} from "../data/healerSaveCd";
 import { PVP_TALENT_REPLACES_GENERATED } from "../data/pvpTalentReplacesGenerated";
 import { OFFENSIVE_RACIAL_SPELL_IDS } from "../data/racialAbilities";
 import { getEnglishSpellName, spellEffectData } from "../data/spellEffectData";
@@ -1433,6 +1437,66 @@ export function extractMajorCooldowns(
           majorSpells.push({ spellId, name: effectData.name, tags });
           seen.add(spellId);
         }
+      }
+    }
+  }
+
+  // --- Healer save-cooldown roster (GH #63, 2026-09-04) ---
+  // The generated roster is the AUTHORITY for healer specs: every roster
+  // spell the unit has evidence for (cast it, has it talented, or picked it
+  // as a PvP talent — the same evidence rules the catalog branches above
+  // apply) enters the ledger tagged Defensive, and a catalog Offensive tag on
+  // the same id is dropped (Avenging Wrath heals in a Holy Paladin's hands;
+  // `isThroughput` reads that tag). Spells the roster does not list are left
+  // exactly as the catalog had them. See data/healerSaveCd.ts.
+  const saveRoster = healerSaveCdRoster(specToString(unit.spec));
+  if (saveRoster) {
+    // Authority cuts both ways — but only on EVIDENCE: a catalog / name-regex
+    // Defensive tag is dropped for this healer when the generated table says
+    // so (`stripDefensive`: user-ruled out, profile-ineligible CC relief /
+    // mobility such as Spirit Walk and Spiritwalker's Grace from the `/spirit/`
+    // regex, or measured below the door like Divine Protection and Barkskin).
+    // An unmeasured catalog Defensive (Power Word: Barrier, n < 100) is left
+    // alone. The spell stays in the ledger under its other tags; with no
+    // other tag it leaves the major-cooldown list altogether.
+    // COPY-ON-WRITE: `majorSpells` entries are the static `classMetadata`
+    // objects themselves. Mutating `tags` in place leaked the strip into the
+    // shared catalog (a Resto Druid processed once removed Barkskin's tag for
+    // every Druid afterwards — caught by test ordering, 2026-09-04).
+    const strip = healerSaveCdStripDefensive(specToString(unit.spec));
+    for (let i = majorSpells.length - 1; i >= 0; i--) {
+      const sp = majorSpells[i]!;
+      if (!strip.has(sp.spellId) || !sp.tags.includes(SpellTag.Defensive)) continue;
+      const tags = sp.tags.filter((t) => t !== SpellTag.Defensive);
+      if (tags.length === 0) majorSpells.splice(i, 1);
+      else majorSpells[i] = { ...sp, tags };
+    }
+    for (const [spellId, entry] of saveRoster) {
+      if (replacedByPvpTalent.has(spellId)) continue;
+      const evidence =
+        castSpellIds.has(spellId) ||
+        pvpTalentIds.has(spellId) ||
+        (talentedSpellIds !== null && talentedSpellIds.has(spellId));
+      if (!evidence) continue;
+      const idx = majorSpells.findIndex((s) => s.spellId === spellId);
+      if (idx >= 0) {
+        const existing = majorSpells[idx]!;
+        majorSpells[idx] = {
+          ...existing,
+          tags: [
+            SpellTag.Defensive,
+            ...existing.tags.filter(
+              (t) => t !== SpellTag.Defensive && t !== SpellTag.Offensive,
+            ),
+          ],
+        };
+      } else {
+        majorSpells.push({
+          spellId,
+          name: spellEffectData[spellId]?.name ?? entry.name,
+          tags: [SpellTag.Defensive],
+        });
+        seen.add(spellId);
       }
     }
   }

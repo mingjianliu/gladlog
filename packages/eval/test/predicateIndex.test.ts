@@ -48,6 +48,7 @@ import * as burstWindowPrior from "@gladlog/analysis/src/data/burstWindowPrior";
 import * as candidateTypeFlags from "@gladlog/analysis/src/data/candidateTypeFlags";
 import { CANDIDATE_TYPE_FLAGS } from "@gladlog/analysis/src/data/candidateTypeFlags";
 import * as cdTriggerPriorData from "@gladlog/analysis/src/data/cdTriggerPrior";
+import * as healerSaveCd from "@gladlog/analysis/src/data/healerSaveCd";
 import { DISPEL_FEATURE_FLAGS } from "@gladlog/analysis/src/data/dispelFeatureFlags";
 import * as dispelObservedGenerated from "@gladlog/analysis/src/data/dispelObservedGenerated";
 import * as dispelVerdicts from "@gladlog/analysis/src/data/dispelVerdicts";
@@ -769,6 +770,12 @@ const INDEX: PredicateRow[] = [
     file: `${A}/context/burstAnswered.ts`,
     symbol: "BURST_ANSWERED_MAX_HP_PCT",
     mod: burstAnswered,
+  },
+  // Healer save-cooldown roster (2026-09-04, GH #63)
+  {
+    file: `${A}/data/healerSaveCd.ts`,
+    symbol: "healerSaveCdRoster",
+    mod: healerSaveCd,
   },
   // [CD PRIOR] cohort context fact (2026-09-04, GH #54 (f))
   {

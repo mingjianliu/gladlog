@@ -779,7 +779,10 @@ export function checkCdPriorRefConsistency(lines: string[]): string[] {
   const failures: string[] = [];
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!;
-    if (!line.includes("[CD PRIOR]")) continue;
+    // Only the timestamped entry lines — the legend ("  [CD PRIOR] = a friendly
+    // dipped …") carries the tag too and has no reference by design (33/309
+    // false hardFailures on the first corpus run, 2026-09-04).
+    if (!/^\s*\d+:\d{2}\s+\[CD PRIOR\]/.test(line)) continue;
     const ref = line.match(/\[ref=([^\]]+)\]\s*$/);
     const nums = line.match(/median lowest-friendly HP of (\d+)% \(n=(\d+)\)/);
     if (!ref || !nums) {
