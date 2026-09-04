@@ -2070,7 +2070,7 @@ SP-B1.5 的 `buildGroups`(本条要替换的就是它的分组维度)。
   prompt 段逐行文字渲染。演示还抓出 opener 用原始日志名(客户端语言)的
   bug —— 同一 opener 分裂中英两条、CJK 会漏进 prompt,已改走
   `getEnglishSpellName`(coreSequences 本就如此)。
-- **未完(运维)**:生产 `reference_vectors.json` 重建 —— `buildCorpus.ts`
+- ~~**未完(运维)**~~ **已完成 2026-08-25 晚(`aa10f3e2`,首次生产重建收官)**:生产 `reference_vectors.json` 已重建 —— builtAt 2026-08-25T20:03Z,436 cell 全部带 rotationSummary,26 个 buildGroup,治疗按英雄树拆出 46 个 cell(奶萨 Farseer/Totemic、奶骑 Lightsmith/Herald、奶龙 Flameshaper/Chronowarden、奶德 Keeper/Wildstalker、戒律 standard/offensive)。下面一段是重建前写的,留作记录(2026-09-04 核对时这行仍写着未完,误把它当成待办报给用户)。原文:`buildCorpus.ts`
   已 `await ensureHeroTalents()`,对 2300+ feed 拉取(小时级,LOG_CACHE_DIR
   可复用 eval 缓存)。重建之前 rotationSummary 缺失,prompt 显式降级
   ("no rotation data in this corpus build"),英雄分组同样等重建后生效。
