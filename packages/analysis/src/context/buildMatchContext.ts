@@ -4,6 +4,11 @@ import {
   type BurstWindowDecisionPoint,
   burstWindowDecisionPoints,
 } from "../analysis/burstWindowDecisionPoints";
+import {
+  type CdPriorHoldEpisode,
+  cdPriorHoldEpisodes,
+} from "../analysis/cdTriggerPrior";
+import { lookupCdTriggerPrior } from "../data/cdTriggerPrior";
 import { zoneMetadata } from "../data/zoneMetadata";
 import { buildArchetypeInjectionHeader } from "../utils/archetypeInjection";
 import {
@@ -81,6 +86,7 @@ import {
   formatDTPSBaselines,
   formatSpecBaselines,
 } from "../utils/specBaselines";
+import { heroBuildGroupOf } from "../utils/talents";
 import { buildCriticalWindowSet } from "./criticalWindows";
 import {
   formatDecisiveCounterfactualLine,
@@ -677,6 +683,28 @@ export function buildMatchContext(
     /* no burst windows → no [BURST ANSWERED] lines */
   }
 
+  // [CD PRIOR] context lines (GH #54 (f) / BACKLOG #38 (a)(h), user ruling
+  // 2026-09-04 option 1). Healer owners only — the cohort table is built from
+  // healer rounds. The cohort is the owner's spec × hero tree, resolved
+  // through the SAME two functions the corpus scan keyed the table with
+  // (`specToString` → ownerSpec, `heroBuildGroupOf`); a table with no cell
+  // for this cooldown simply yields no episode. Fails silently like the
+  // burst windows above.
+  let cdPriorEpisodes: CdPriorHoldEpisode[] = [];
+  const cdPriorCohort = {
+    spec: ownerSpec,
+    heroTree: heroBuildGroupOf(owner?.info?.talents),
+  };
+  if (healer) {
+    try {
+      cdPriorEpisodes = cdPriorHoldEpisodes(owner, combat, (spellId) =>
+        lookupCdTriggerPrior(cdPriorCohort.spec, cdPriorCohort.heroTree, spellId),
+      );
+    } catch {
+      /* no cohort reference → no [CD PRIOR] lines */
+    }
+  }
+
   const timelineText = buildMatchTimeline({
     owner: owner as ICombatUnit,
     ownerSpec,
@@ -706,6 +734,8 @@ export function buildMatchContext(
     criticalWindowSeconds,
     counterfactualOf,
     burstWindows,
+    cdPriorEpisodes,
+    cdPriorCohort,
   } as BuildMatchTimelineParams);
 
   // Merge each per-window exposure entry into the timeline at its timestamp so the

@@ -342,4 +342,9 @@
 //  lines carry team-offensive-CD-ready / reachability / enemy-healer-state
 //  facts, [VULNERABLE] accusations pass an accountability gate (acquitted
 //  spans say why), and the DPS view gains the lean <kill_windows> block.
-export const PROMPT_VERSION = 51;
+//  v52 (2026-09-04, GH #54 (f) / BACKLOG #38 (a)(h), user ruling option 1):
+//  [CD PRIOR] context lines + legend — a healer owner's held save cooldown
+//  quoted against the cohort (spec × hero tree) median trigger HP from the
+//  corpus; context fact only, no candidate. Timeline text changes for healer
+//  prompts wherever a cohort cell exists.
+export const PROMPT_VERSION = 52;

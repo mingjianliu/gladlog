@@ -2092,6 +2092,20 @@ SP-B1.5 的 `buildGroups`(本条要替换的就是它的分组维度)。
 
 ### (a) `cd-hoarded` 的单一 35% 门 → 每个 CD 自己的触发血线【最可动手】
 
+**2026-09-04 裁决与落地(GH #54 (f)):用户裁「选项一 = 上下文事实」,不做硬阈值。**
+落地为 `[CD PRIOR]` 时间线行(`analysis/cdTriggerPrior.ts` 引擎、`data/cdTriggerPrior.ts` +
+`cdTriggerPriorGenerated.json` 参照表、`context/cdPrior.ts` 渲染、门规 `checkCdPriorRefConsistency`
+第 16 类硬失败、扫描 `eval/scripts/cdTriggerPriorScan.ts`、例子 `cdPriorExampleGen.ts`,runbook 6b-pre-6),
+PROMPT_VERSION 51→52。表:18,134 文件归档 12.1+,179,342 次救人 CD 按键 / 17,070 场,81 个单元格,
+群体 = 全部(`report` 实测:70 个有高分群体的格里只有 3 个 hi−all ≥3pp,不值得引入分数)。
+**(f) 的前提被证伪**:49 个树级单元格里只有 2 个与专精级差 ≥3pp(痛苦压制 49/49/50、铁木树皮 48/50、
+时间膨胀 49/51、灵魂链接 29/31)—— 树影响的是牌表不是血线,键仍带树、专精级回退。
+验收(605 文件 / 1,270 回合同一 manifest):findings prompt 哈希不动(候选层逐字节不变),
+context 多出 `[CD PRIOR]` 173 行 / 133 个回合;无持续门时 999 行(54% 是单秒闪跳、37% 低于中位不足 3pp),
+持续门 = 下探跨过 3 秒响应窗且 owner 有 ≥3 个能施法的秒(`CD_PRIOR_MIN_PERSIST_S` = `RESPONSE_WINDOW_MS`)。
+待裁:神圣赞美诗 + 神圣化身两张牌占 47% 的行(54+28/173),它们是 cd-hoarded 同一份名单里的 Defensive 标签
+吞吐/群疗 CD —— 要不要把这两类从 `[CD PRIOR]` 名单里剔掉(改名单就要重扫表)。下一步 = 盲评/反向探针看模型用不用。
+
 **2026-08-30 补记(GH #34 决策点重写)**:`cd-hoarded` 已换成决策点形状 ——
 危机判定不再走本条讨论的 `CD_HOARD_CRISIS_HP_PCT`,改用 `crisisDecisionPoints`
 自己的 `CRISIS_HP_PCT`(40%,与 `crisis-no-response` 共享同一谓词,见

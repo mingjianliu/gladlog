@@ -575,6 +575,30 @@ type CdHoardCandidateCd = Pick<
 > &
   Partial<Pick<IMajorCooldownInfo, "isThroughput" | "charges">>;
 
+/** The shape `isSpendableDefensiveCd` / `readyDefensiveCds` read. Exported
+ * so the cohort-prior engine (`analysis/cdTriggerPrior.ts`) can type its
+ * input against the same pick rather than re-listing the fields. */
+export type SpendableDefensiveCd = CdHoardCandidateCd;
+
+/**
+ * "Is this one of the owner's SAVE cooldowns at all" — the time-independent
+ * half of `readyDefensiveCds`'s gate: Defensive-tagged, not a throughput CD,
+ * and something the player can actually press (not a proc). Exported
+ * (2026-09-04, GH #54 (f) / BACKLOG #38 (a)) so the `[CD PRIOR]` cohort
+ * engine and its corpus scan count exactly the cooldowns `cd-hoarded` would
+ * accuse over — one roster, both consumers (CLAUDE.md shared-predicate rule);
+ * `readyDefensiveCds` below is now written through it.
+ */
+export function isSpendableDefensiveCd(
+  cd: Pick<SpendableDefensiveCd, "spellId" | "tag" | "isThroughput">,
+): boolean {
+  return (
+    cd.tag === "Defensive" &&
+    !cd.isThroughput &&
+    !isProcOnlyActivation(cd.spellId)
+  );
+}
+
 /** Base "can this Defensive CD be pressed at all right now" gate — the part
  * of the readiness predicate that does NOT depend on whose crisis this is;
  * `helps` layers the own-crisis-vs-teammate-crisis distinction on top. */
@@ -584,12 +608,7 @@ function readyDefensiveCds(
   helps: (cd: CdHoardCandidateCd) => boolean,
 ): CdHoardCandidateCd[] {
   return cds.filter(
-    (cd) =>
-      cd.tag === "Defensive" &&
-      !cd.isThroughput &&
-      !isProcOnlyActivation(cd.spellId) &&
-      cdAvailableAt(cd, tSec) &&
-      helps(cd),
+    (cd) => isSpendableDefensiveCd(cd) && cdAvailableAt(cd, tSec) && helps(cd),
   );
 }
 

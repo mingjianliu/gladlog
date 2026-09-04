@@ -6,14 +6,17 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
+import { type BurstWindowDecisionPoint } from "../analysis/burstWindowDecisionPoints";
+import type { CdPriorHoldEpisode } from "../analysis/cdTriggerPrior";
+import { DISPEL_FEATURE_FLAGS } from "../data/dispelFeatureFlags";
 import { getEnglishSpellName, spellEffectData } from "../data/spellEffectData";
 import { ccSpellIds } from "../data/spellTags";
+import { COPY_CAST_IDS } from "../utils/castPress";
+import type { ICcBreakEvent } from "../utils/ccBreakAnalysis";
 import {
   CC_AVOIDANCE_BUFF_SPELLS,
   IPlayerCCTrinketSummary,
 } from "../utils/ccTrinketAnalysis";
-import type { ICcBreakEvent } from "../utils/ccBreakAnalysis";
-import { COPY_CAST_IDS } from "../utils/castPress";
 import {
   IFormInterval,
   ISpiritOfRedemptionInterval,
@@ -40,7 +43,6 @@ import {
   specToString,
   THROUGHPUT_EMPOWER_DEFENSIVE_IDS,
 } from "../utils/cooldowns";
-import { fmtTime, toRenderSecond } from "../utils/renderGrid";
 import {
   buildDampeningEvents,
   getDampeningPercentage,
@@ -54,20 +56,20 @@ import {
   IDispelSummary,
   wasRemovedByAllyDispel,
 } from "../utils/dispelAnalysis";
-import { DISPEL_FEATURE_FLAGS } from "../data/dispelFeatureFlags";
 import { extractAoeCCEvents, IOutgoingCCChain } from "../utils/drAnalysis";
 import { IEnemyCDTimeline } from "../utils/enemyCDs";
 import { computeEnemyInterruptAvailability } from "../utils/enemyInterrupts";
 import { IHealingGap } from "../utils/healingGaps";
 import { sumIncomingPressure } from "../utils/incomingPressure";
-import { resourceDeltaPct } from "../utils/resourceAt";
 import { getHpPercentAtTime } from "../utils/killWindowTargetSelection";
+import { fmtTime, toRenderSecond } from "../utils/renderGrid";
+import { resourceDeltaPct } from "../utils/resourceAt";
 import { getInterruptImmunityConditions } from "../utils/talentBehaviors";
-import { type BurstWindowDecisionPoint } from "../analysis/burstWindowDecisionPoints";
 import {
   BURST_ANSWERED_LEGEND,
   formatBurstAnsweredLines,
 } from "./burstAnswered";
+import { CD_PRIOR_LEGEND, formatCdPriorLines } from "./cdPrior";
 import {
   emitDmgSpikeEntries,
   emitEnemyDeathEntries,
@@ -86,19 +88,19 @@ import {
   CHANNELED_CD_SPELL_IDS,
   channelWasInterrupted,
   computeHealingInWindow,
+  CRITICAL_NON_PLAYER_NPC_NAMES,
   DMG_SPIKE_THRESHOLD,
   extractEnemyMajorBuffIntervals,
   extractOwnerCDBuffExpiry,
   getNpcIdFromGuid,
   getTopDamageSourcesInWindow,
   GROUNDING_TOTEM_NPC_ID,
-  CRITICAL_NON_PLAYER_NPC_NAMES,
   HEALER_CAST_SPELL_ID_TO_NAME,
   HEALING_AMPLIFIER_SPELL_IDS,
-  MANA_COOLDOWN_SPELL_IDS,
   HEALING_WINDOW_EARLY_CD_SECONDS,
   HEALING_WINDOW_MIN_HPS,
   isCriticalNonPlayerUnit,
+  MANA_COOLDOWN_SPELL_IDS,
   PASSIVE_SPELL_BLOCKLIST,
 } from "./timelineHelpers";
 
@@ -220,6 +222,11 @@ export interface BuildMatchTimelineParams {
    * (`context/burstAnswered.ts`); absent ⇒ no such lines and no legend.
    */
   burstWindows?: BurstWindowDecisionPoint[];
+  /** [CD PRIOR] hold episodes (context/cdPrior.ts) + the cohort they were
+   * looked up under; computed in buildMatchContext (it has `combat`), rendered
+   * here so the lines share the time-sorted stream. */
+  cdPriorEpisodes?: CdPriorHoldEpisode[];
+  cdPriorCohort?: { spec: string; heroTree: string };
 }
 
 /**
@@ -305,6 +312,8 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     criticalWindowSeconds: criticalWindowSet,
     counterfactualOf,
     burstWindows,
+    cdPriorEpisodes,
+    cdPriorCohort,
   } = params;
 
   const matchDurationS = (matchEndMs - matchStartMs) / 1000;
@@ -2309,6 +2318,20 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     addEntry(e.atSeconds, `${fmtTime(e.atSeconds)}  ${e.line}`);
   }
 
+  // ── [CD PRIOR] context lines ───────────────────────────────────────────────
+  // Cohort-norm fact for a held save cooldown, NOT a candidate — see
+  // context/cdPrior.ts. Same render-vs-legend discipline as [BURST ANSWERED]:
+  // the legend is decided on what actually renders.
+  const cdPriorEntries =
+    cdPriorCohort && cdPriorEpisodes
+      ? formatCdPriorLines(cdPriorEpisodes, cdPriorCohort).filter(
+          (e) => e.atSeconds <= matchEndSeconds,
+        )
+      : [];
+  for (const e of cdPriorEntries) {
+    addEntry(e.atSeconds, `${fmtTime(e.atSeconds)}  ${e.line}`);
+  }
+
   // ── [HEALER INACTIVITY] events (healer only) ────────────────────────────────────
 
   if (isHealer) {
@@ -2767,6 +2790,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     "    its `peak spike` figure covers the spike's own sub-window, printed after it — not the whole offensive window.",
     // Conditional: a round with no such line pays no tokens for its legend.
     ...(burstAnsweredEntries.length > 0 ? BURST_ANSWERED_LEGEND : []),
+    ...(cdPriorEntries.length > 0 ? CD_PRIOR_LEGEND : []),
     "",
     `[PERSPECTIVE: Log Owner - ${ownerSpec}]`,
     `(You are the ${ownerSpec} in this match. Your actions are marked with [YOU].)`,

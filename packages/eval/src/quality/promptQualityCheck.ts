@@ -39,6 +39,7 @@ import {
   burstRefContrastPp,
   lookupBurstWindowPrior,
 } from "@gladlog/analysis/src/data/burstWindowPrior";
+import { lookupCdTriggerPrior } from "@gladlog/analysis/src/data/cdTriggerPrior";
 import { classMetadata } from "@gladlog/analysis/src/data/classSpells";
 import { ATTEMPT_INTO_TRINKET_OUTCOME_REF } from "@gladlog/analysis/src/data/outcomeRefs";
 import {
@@ -764,6 +765,60 @@ export function checkBurstWindowRefConsistency(lines: string[]): string[] {
  * quoted contrast must clear the same min-contrast door the producer used —
  * a line citing numbers that argue against its own accusation is a
  * hardFailure, not a style problem. */
+/**
+ * 16th hardFailure class (2026-09-04, GH #54 (f) / BACKLOG #38 (a)(h)): a
+ * `[CD PRIOR]` context line's cohort numbers equal the reference table's.
+ * The producer (`context/cdPrior.ts`) renders `medianHpPct` / `n` and the
+ * cohort label from `lookupCdTriggerPrior(spec, heroTree, spellId)`; this
+ * gate re-parses the line's `[ref=spec|tree|spellId]` suffix, redoes the
+ * SAME lookup and demands the same integers and the same fallback wording
+ * ("(spec-wide)" ⟺ the resolved key's tree is `*`). One import, both sides.
+ * Fails closed on a malformed line.
+ */
+export function checkCdPriorRefConsistency(lines: string[]): string[] {
+  const failures: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+    if (!line.includes("[CD PRIOR]")) continue;
+    const ref = line.match(/\[ref=([^\]]+)\]\s*$/);
+    const nums = line.match(/median lowest-friendly HP of (\d+)% \(n=(\d+)\)/);
+    if (!ref || !nums) {
+      failures.push(`line ${i + 1}: [CD PRIOR] 行缺 [ref=…] 或参照数字,无法核对语料参照`);
+      continue;
+    }
+    const cellKey = ref[1]!;
+    const parts = cellKey.split("|");
+    if (parts.length !== 3) {
+      failures.push(`line ${i + 1}: [CD PRIOR] 的 cellKey 形状不对 ${cellKey}`);
+      continue;
+    }
+    const [spec, tree, spellId] = parts as [string, string, string];
+    const found = lookupCdTriggerPrior(spec, tree, spellId);
+    if (!found) {
+      failures.push(
+        `line ${i + 1}: [CD PRIOR] 引用了表里查不到/不够样本的单元格 ${cellKey}`,
+      );
+      continue;
+    }
+    if (found.cellKey !== cellKey)
+      failures.push(
+        `line ${i + 1}: [CD PRIOR] cellKey=${cellKey} 但查表解析到 ${found.cellKey}`,
+      );
+    if (Number(nums[1]) !== found.medianHpPct)
+      failures.push(
+        `line ${i + 1}: [CD PRIOR] 渲染中位血线 ${nums[1]}% ≠ 表 ${found.medianHpPct}%`,
+      );
+    if (Number(nums[2]) !== found.n)
+      failures.push(`line ${i + 1}: [CD PRIOR] 渲染 n=${nums[2]} ≠ 表 n=${found.n}`);
+    const saysSpecWide = line.includes("(spec-wide) cohort");
+    if (saysSpecWide !== (tree === "*"))
+      failures.push(
+        `line ${i + 1}: [CD PRIOR] 「spec-wide」措辞与 cellKey 的树 ${tree} 不一致`,
+      );
+  }
+  return failures;
+}
+
 export function checkSyncWindowRefConsistency(lines: string[]): string[] {
   const failures: string[] = [];
   for (let i = 0; i < lines.length; i++) {
@@ -1390,6 +1445,7 @@ export function checkMatch(
   hardFailures.push(...checkBehaviorPriorConsistency(lines));
   hardFailures.push(...checkBurstWindowRefConsistency(lines));
   hardFailures.push(...checkSyncWindowRefConsistency(lines));
+  hardFailures.push(...checkCdPriorRefConsistency(lines));
   hardFailures.push(...checkCrisisHpStateConsistency(lines));
   hardFailures.push(...checkOutcomeRefConsistency(lines));
   hardFailures.push(...checkMenuTRenderGrid(lines));

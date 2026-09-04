@@ -122,6 +122,24 @@ cat $GLADLOG_EVAL_HOME/corpus/manifest-fullscale.txt \
 nice -n 10 npx tsx packages/eval/scripts/confidenceAudit.ts --manifest /tmp/manifest-dispel-union.txt \
   --emit-table --date $(date +%F) > /tmp/dispelObservedGenerated.ts \
   && cp /tmp/dispelObservedGenerated.ts packages/analysis/src/data/dispelObservedGenerated.ts
+# 6b-pre-6. Save-cooldown cohort trigger-HP table ([CD PRIOR] context fact; GH #54 (f) / BACKLOG #38 (a)(h),
+#   user ruling 2026-09-04 option 1). Per (spec | hero tree | spellId): the median lowest-alive-friendly gridHpPct
+#   at which healers of that cohort press that save cooldown, plus a spec-wide `|*|` roll-up. Corpus-driven, NOT DB2.
+#   Regenerate at season start and whenever packages/analysis/src/analysis/cdTriggerPrior.ts (the observation
+#   predicate) or cooldownTiming.ts' isSpendableDefensiveCd (the roster) changes. ~50 min over the archive as
+#   3 nice shards. `report` prints the tree-vs-spec-wide and hi-vs-all deltas the cohort choice is made on;
+#   `--cohort hi` (percentile >= 60 within bracket x ISO week) is the alternative to the default `all`.
+#   Health test: packages/analysis/src/data/cdTriggerPrior.test.ts.
+E=$GLADLOG_EVAL_HOME; R=$E/reports/cd-trigger-prior-$(date +%F); mkdir -p $R
+for i in 0 1 2; do nice -n 10 npx tsx packages/eval/scripts/cdTriggerPriorScan.ts scan \
+  --manifest $E/corpus/manifest-archive-2026-08-28-newseason.txt --ledger $E/archive/ledger \
+  --out $R/shard$i.jsonl --offset $((i*6045)) --limit 6045 2> $R/shard$i.err & done; wait
+cat $R/shard*.jsonl > $R/rows.jsonl
+npx tsx packages/eval/scripts/cdTriggerPriorScan.ts report --in $R/rows.jsonl > $R/report.md
+#   emit-table writes temp-then-cp itself; --out may point straight at the imported json.
+npx tsx packages/eval/scripts/cdTriggerPriorScan.ts emit-table --in $R/rows.jsonl \
+  --out packages/analysis/src/data/cdTriggerPriorGenerated.json --corpus "wowarenalogs archive $(date +%F)"
+
 # 6b-pre-5. Kick school-lockout lengths (kickLockoutObservedGenerated.json; consumed by
 #   kickLockoutSeconds → the [RES] `-Ns[kick]` field, the kick-eaten candidate's lockout fact and the
 #   "dispeller was locked out" cleanse exemption). Corpus-driven, NOT DB2: a kick is Effect 68 with no

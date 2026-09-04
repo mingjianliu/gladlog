@@ -28,6 +28,7 @@ import * as burstWindowResponse from "@gladlog/analysis/src/analysis/candidates/
 import * as cooldownTiming from "@gladlog/analysis/src/analysis/candidates/cooldownTiming";
 import * as death from "@gladlog/analysis/src/analysis/candidates/death";
 import * as candidatesShared from "@gladlog/analysis/src/analysis/candidates/shared";
+import * as cdTriggerPrior from "@gladlog/analysis/src/analysis/cdTriggerPrior";
 import * as crisisDecisionPoints from "@gladlog/analysis/src/analysis/crisisDecisionPoints";
 import * as factFormat from "@gladlog/analysis/src/analysis/factFormat";
 import * as findingCategories from "@gladlog/analysis/src/analysis/findingCategories";
@@ -37,6 +38,7 @@ import * as buildExemplarLedPrompt from "@gladlog/analysis/src/compare/buildExem
 import * as cellLookup from "@gladlog/analysis/src/compare/cellLookup";
 import * as claimChecker from "@gladlog/analysis/src/compare/claimChecker";
 import * as burstAnswered from "@gladlog/analysis/src/context/burstAnswered";
+import * as cdPrior from "@gladlog/analysis/src/context/cdPrior";
 import * as matchTimelineSections from "@gladlog/analysis/src/context/matchTimelineSections";
 import * as timelineHelpers from "@gladlog/analysis/src/context/timelineHelpers";
 import * as abilityProfileMod from "@gladlog/analysis/src/data/abilityProfile";
@@ -45,6 +47,7 @@ import * as behaviorPrior from "@gladlog/analysis/src/data/behaviorPrior";
 import * as burstWindowPrior from "@gladlog/analysis/src/data/burstWindowPrior";
 import * as candidateTypeFlags from "@gladlog/analysis/src/data/candidateTypeFlags";
 import { CANDIDATE_TYPE_FLAGS } from "@gladlog/analysis/src/data/candidateTypeFlags";
+import * as cdTriggerPriorData from "@gladlog/analysis/src/data/cdTriggerPrior";
 import { DISPEL_FEATURE_FLAGS } from "@gladlog/analysis/src/data/dispelFeatureFlags";
 import * as dispelObservedGenerated from "@gladlog/analysis/src/data/dispelObservedGenerated";
 import * as dispelVerdicts from "@gladlog/analysis/src/data/dispelVerdicts";
@@ -767,6 +770,52 @@ const INDEX: PredicateRow[] = [
     symbol: "BURST_ANSWERED_MAX_HP_PCT",
     mod: burstAnswered,
   },
+  // [CD PRIOR] cohort context fact (2026-09-04, GH #54 (f))
+  {
+    file: `${A}/analysis/candidates/cooldownTiming.ts`,
+    symbol: "isSpendableDefensiveCd",
+    mod: cooldownTiming,
+  },
+  {
+    file: `${A}/data/cdTriggerPrior.ts`,
+    symbol: "lookupCdTriggerPrior",
+    mod: cdTriggerPriorData,
+  },
+  {
+    file: `${A}/data/cdTriggerPrior.ts`,
+    symbol: "CD_TRIGGER_PRIOR_N_FLOOR",
+    mod: cdTriggerPriorData,
+  },
+  {
+    file: `${A}/analysis/cdTriggerPrior.ts`,
+    symbol: "cdTriggerObservations",
+    mod: cdTriggerPrior,
+  },
+  {
+    file: `${A}/analysis/cdTriggerPrior.ts`,
+    symbol: "cdPriorHoldEpisodes",
+    mod: cdTriggerPrior,
+  },
+  {
+    file: `${A}/analysis/cdTriggerPrior.ts`,
+    symbol: "lowestFriendlyGridHp",
+    mod: cdTriggerPrior,
+  },
+  {
+    file: `${A}/analysis/cdTriggerPrior.ts`,
+    symbol: "CD_PRIOR_MIN_PERSIST_S",
+    mod: cdTriggerPrior,
+  },
+  {
+    file: `${A}/context/cdPrior.ts`,
+    symbol: "formatCdPriorLines",
+    mod: cdPrior,
+  },
+  {
+    file: `${A}/context/cdPrior.ts`,
+    symbol: "CD_PRIOR_CAP",
+    mod: cdPrior,
+  },
   // Formatting and notation
   {
     file: `${A}/compare/claimChecker.ts`,
@@ -823,6 +872,11 @@ const INDEX: PredicateRow[] = [
   {
     file: `${E}/quality/promptQualityCheck.ts`,
     symbol: "checkBurstWindowRefConsistency",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkCdPriorRefConsistency",
     mod: promptQualityCheck,
   },
   {

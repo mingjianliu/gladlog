@@ -125,6 +125,10 @@
     "syncWindowPriorGenerated.json": {
       "entries": 3,
       "producer": "packages/eval/scripts/syncWindowScan.ts emit-table"
+    },
+    "cdTriggerPriorGenerated.json": {
+      "entries": 81,
+      "producer": "packages/eval/scripts/cdTriggerPriorScan.ts emit-table"
     }
   }
 }
