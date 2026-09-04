@@ -20,6 +20,10 @@
  *                 # ruling is made on
  *   emit-table  tsx cdTriggerPriorScan.ts emit-table --in <file.jsonl>
  *                 --out <file.json> [--cohort all|hi] [--corpus <label>]
+ *   roster      tsx cdTriggerPriorScan.ts roster
+ *                 # the spells the CURRENT generated table can quote, with the
+ *                 # official ability profile (who it reaches, what it does) —
+ *                 # the list a roster ruling is made on
  * `emit-table` writes through a temp file and copies it into place: never
  * redirect `>` straight into the imported json.
  *
@@ -42,7 +46,10 @@ import {
   type CdTriggerObservation,
   cdTriggerObservations,
 } from "@gladlog/analysis/src/analysis/cdTriggerPrior";
+import { abilityProfile } from "@gladlog/analysis/src/data/abilityProfile";
 import { CD_TRIGGER_PRIOR_N_FLOOR } from "@gladlog/analysis/src/data/cdTriggerPrior";
+import GENERATED from "@gladlog/analysis/src/data/cdTriggerPriorGenerated.json";
+import { TEAM_HEAL_CD_IDS } from "@gladlog/analysis/src/utils/cooldowns";
 import { PATCH_121_GOLIVE_EPOCH_MS } from "@gladlog/analysis/src/utils/drAnalysis";
 import { GladLogParser } from "@gladlog/parser";
 import {
@@ -380,12 +387,38 @@ function emitTable(): void {
   console.error(`wrote ${Object.keys(out).length} cells (cohort=${cohort}) → ${outPath}`);
 }
 
+function roster(): void {
+  const cells = (GENERATED as any).cells as Record<
+    string,
+    { n: number; medianHpPct: number; spellName: string }
+  >;
+  console.log(
+    "| spec | spell | id | n | p50 | reaches ally | mitigation % | absorb | heals self | heals others | healing recv % | immune | throughput role | team heal |",
+  );
+  console.log("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|");
+  for (const [k, c] of Object.entries(cells).sort()) {
+    const [spec, tree, id] = k.split("|") as [string, string, string];
+    if (tree !== "*") continue;
+    const p = abilityProfile(id);
+    const immune =
+      (p.immuneSchools ? `schools ${p.immuneSchools}` : "") +
+      (p.immuneMechanics?.length ? ` mech ${p.immuneMechanics.join("/")}` : "");
+    console.log(
+      `| ${spec} | ${c.spellName} | ${id} | ${c.n}${c.n < CD_TRIGGER_PRIOR_N_FLOOR ? " (under floor)" : ""} | ${c.medianHpPct} | ${p.reachesAlly ? "yes" : "no"} | ${p.mitigationPct ?? ""} | ${p.absorbs ? "yes" : ""} | ${p.healsSelf ? "yes" : ""} | ${p.healsOthers ? "yes" : ""} | ${p.healingReceivedPct ?? ""} | ${immune.trim()} | ${p.throughputRole ? "yes" : ""} | ${TEAM_HEAL_CD_IDS.has(id) ? "yes" : ""} |`,
+    );
+  }
+}
+
 async function main(): Promise<void> {
   if (cmd === "scan") await scan();
+  else if (cmd === "roster") {
+    await ensureAnalysisData();
+    roster();
+  }
   else if (cmd === "report") report();
   else if (cmd === "emit-table") emitTable();
   else {
-    console.error("usage: scan | report | emit-table (see header)");
+    console.error("usage: scan | report | emit-table | roster (see header)");
     process.exit(1);
   }
 }
