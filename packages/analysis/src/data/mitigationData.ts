@@ -42,9 +42,9 @@ export const MITIGATION_OVERRIDES: Record<string, IMitigationEntry> = {
   "186265": { pct: 100, schoolMask: 0x7f }, // Aspect of the Turtle: deflection = immunity (DB2 aura184/185/186 are all -200% hit); the spec decision overrides the generation layer's 30 with immunity semantics (that 30 is the residual mitigation on damage that isn't deflected)
 
   // —— The mitigation aura hangs off a different id (the generation layer can't find it by cast id) ——
-  "51052": { pct: 15, schoolMask: 0x7e }, // Anti-Magic Zone: DR aura 145629 (observed), currently -15/126; the same-named 332831 (-20) is not observed and judged not live
+  "51052": { pct: 30, schoolMask: 0x7e }, // Anti-Magic Zone: DR aura 145629 (observed), aura87 −15/126 × PvpMultiplier 2 = 30 % in PvP (2026-09-04 user ruling "PvP 值为官方值", BACKLOG #41; was 15 = the PvE number); the same-named 332831 (-20) is not observed and judged not live
   "198589": { pct: 25, schoolMask: 0x7f }, // Blur 疾影术:DR aura 212800(S2 归档已观测),`aura87 pts=-25 misc=127`;cast id 198589 自己只有一条 `E64 trig=212800`,所以生成层按 cast id 找不到它。2026-08-22 用户确认「的确是减伤,而且是大技能」后补登记
-  "62618": { pct: 20, schoolMask: 0x7f }, // Power Word: Barrier: DR aura 81782 (observed), currently -20/127
+  "62618": { pct: 40, schoolMask: 0x7f }, // Power Word: Barrier: DR aura 81782 (observed), aura87 −20/127 × PvpMultiplier 2 = 40 % in PvP (2026-09-04 user ruling, BACKLOG #41; was 20 = the PvE number)
   "98008": { pct: 10, schoolMask: 0x7f }, // Spirit Link Totem: DR aura 325174 (observed), currently -10/127 (98007 has the same value but is not observed)
   "61336": { pct: 50, schoolMask: 0x7f }, // Survival Instincts: the cast id is dummy only (points=50); same-named 50322/236157 are both currently -50/127; stable at 50% long-term
   "115203": { pct: 20, schoolMask: 0x7f }, // Fortifying Brew: the cast id's dummy effect is ±20 (wowhead currently shows -20 too); the actual buff 120954 has aura87 base value 0 filled in by script, and a separate -15 variant exists (243435, not observed). 2026-07-30 user decision: take 20%

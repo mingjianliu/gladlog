@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "generatedAt": "2026-08-22T09:43:07.986Z",
+    "generatedAt": "2026-09-04T23:33:57.498Z",
     "build": "12.1.0.69404",
     "source": "zhCN Spell.Description_lang tooltip predicate over the talent spell universe (talentIdMap class/spec/hero nodes ∪ PvpTalent pool); percentage resolved through the placeholder the tooltip points at",
     "universeSize": 3491,
@@ -35,10 +35,10 @@
       ]
     },
     "31821": {
-      "pct": 9,
+      "pct": 21,
       "auraSpellId": "31821",
       "zh": "光环掌握",
-      "via": "self s1 (aura 107) = -9",
+      "via": "self s1 (aura 107) = -21.06",
       "beneficiary": "self",
       "source": "spec",
       "specIds": [
@@ -46,10 +46,10 @@
       ]
     },
     "31850": {
-      "pct": 30,
+      "pct": 45,
       "auraSpellId": "31850",
       "zh": "炽热防御者",
-      "via": "self w1 (aura 87) = -30",
+      "via": "self w1 (aura 87) = -45",
       "beneficiary": "self",
       "source": "spec",
       "specIds": [
@@ -70,10 +70,10 @@
       ]
     },
     "53480": {
-      "pct": 15,
+      "pct": 25,
       "auraSpellId": "53480",
       "zh": "牺牲咆哮",
-      "via": "self s1 (aura 87) = -15",
+      "via": "self s1 (aura 87) = -25",
       "beneficiary": "other",
       "source": "class",
       "specIds": [
@@ -209,10 +209,10 @@
       ]
     },
     "206967": {
-      "pct": 20,
+      "pct": 10,
       "auraSpellId": "206967",
       "zh": "浮空城意志",
-      "via": "self s2 (aura 4) = 20",
+      "via": "self s2 (aura 4) = 10",
       "beneficiary": "self",
       "source": "class",
       "specIds": [
@@ -222,10 +222,10 @@
       ]
     },
     "208154": {
-      "pct": 10,
+      "pct": 5,
       "auraSpellId": "208154",
       "zh": "战争印记",
-      "via": "self s1 (aura 107) = -10",
+      "via": "self s1 (aura 107) = -5",
       "beneficiary": "self",
       "source": "spec",
       "specIds": [
@@ -331,10 +331,10 @@
       ]
     },
     "382020": {
-      "pct": 3,
+      "pct": 5,
       "auraSpellId": "382020",
       "zh": "大地祥和",
-      "via": "self s3 (aura 107) = -3",
+      "via": "self s3 (aura 107) = -5.01",
       "beneficiary": "other",
       "source": "spec",
       "specIds": [
@@ -460,10 +460,10 @@
       ]
     },
     "429642": {
-      "pct": 5,
+      "pct": 3,
       "auraSpellId": "429642",
       "zh": "百战之创",
-      "via": "self s4 (aura 87) = -5",
+      "via": "self s4 (aura 87) = -3",
       "beneficiary": "self",
       "source": "hero",
       "specIds": [

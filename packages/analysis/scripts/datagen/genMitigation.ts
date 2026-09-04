@@ -1,16 +1,19 @@
+import spellIdLists from "../../src/data/spellIdLists";
+import { writeArtifact } from "./lib/emit";
+import { PVP_MULTIPLIER_COLUMN, pvpBasePoints } from "./lib/pvpMultiplier";
 import {
-  parseCsv,
-  fetchLatestBuild,
-  fetchTable,
   assertColumns,
   assertMinRows,
+  fetchLatestBuild,
+  fetchTable,
+  parseCsv,
 } from "./lib/wagoCsv";
-import { writeArtifact } from "./lib/emit";
-import spellIdLists from "../../src/data/spellIdLists";
 
 /** AURA_MOD_DAMAGE_PERCENT_TAKEN: EffectBasePointsF is a negative percentage,
  * EffectMiscValue_0 is the school mask (same bit meaning as the log's
- * spellSchoolId). */
+ * spellSchoolId). The percentage is scaled by `PvpMultiplier` (lib/pvpMultiplier.ts,
+ * user ruling 2026-09-04: the PvP value is the official value — Divine
+ * Protection −20 × 1.75 = 35 %). */
 const MITIGATION_AURA = "87";
 
 export interface IMitigationRaw {
@@ -37,7 +40,7 @@ function transformMitigationRows(
     if (row.EffectAura !== MITIGATION_AURA) continue;
     const id = row.SpellID;
     if (!whitelistIds.has(id)) continue;
-    const points = Number(row.EffectBasePointsF);
+    const points = pvpBasePoints(row);
     const mask = Number(row.EffectMiscValue_0);
     const arr = seen.get(id) ?? [];
     // keep the raw sign for now; it is judged during convergence
@@ -96,6 +99,7 @@ export async function main(): Promise<void> {
       "EffectBasePointsF",
       "EffectMiscValue_0",
       "SpellID",
+      PVP_MULTIPLIER_COLUMN,
     ],
     "SpellEffect",
   );

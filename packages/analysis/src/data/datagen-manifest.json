@@ -1,6 +1,6 @@
 {
   "build": "12.1.0.69404",
-  "generatedAt": "2026-09-02T17:15:07.318Z",
+  "generatedAt": "2026-09-04T23:34:01.055Z",
   "artifacts": {
     "talentIdMap.json": {
       "specs": 40
@@ -40,7 +40,7 @@
     "talentMitigationGenerated.json": {
       "entries": 59,
       "pendingRuling": 0,
-      "bytes": 14810
+      "bytes": 14816
     },
     "offGcdGenerated.ts": {
       "entries": 422
@@ -50,7 +50,7 @@
       "absorbs": 109,
       "healsOthers": 264,
       "hitsEnemy": 1638,
-      "bytes": 93486
+      "bytes": 93485
     },
     "spellSchoolsGenerated.ts": {
       "entries": 6447,
@@ -120,7 +120,7 @@
       "kicks": 17,
       "bytes": 2546,
       "generator": "packages/eval/scripts/kickLockoutScan.ts",
-      "consumer": "data/spellCategories.ts kickLockoutSeconds (GH #62)"
+      "consumer": "data/spellEffectData.ts kickLockoutSeconds — verification gate, official DB2 PvP duration first (GH #62, 2026-09-04)"
     },
     "syncWindowPriorGenerated.json": {
       "entries": 3,

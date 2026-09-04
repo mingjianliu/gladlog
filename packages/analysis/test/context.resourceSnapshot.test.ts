@@ -3,7 +3,7 @@ import {
   CombatUnitSpec,
   LogEvent,
 } from "@gladlog/parser-compat";
-import { describe, expect,it } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import {
   buildPlayerLoadout,
@@ -24,7 +24,7 @@ import {
   reconstructEnemyCDTimeline,
 } from "../src/utils/enemyCDs";
 import { loadLegacyMatchFixture } from "./helpers/legacyFixture";
-import { makeAuraEvent,makeUnit } from "./ported/testHelpers";
+import { makeAuraEvent, makeUnit } from "./ported/testHelpers";
 
 describe("context.resourceSnapshot unit tests", () => {
   // ── 1. countActiveAtonements ────────────────────────────────────────────────
@@ -513,9 +513,10 @@ describe("context.resourceSnapshot unit tests", () => {
       // Verify the enemy CD information
       expect(resText).toContain("enemy:Combustion/Fire Mage");
       // Verify the CC information
-      // Counterspell locks for 6 s (corpus-observed, GH #62; the old 3 s
-      // fallback rendered "-1s" here for the same fixture)
-      expect(resText).toContain("cc:1/Counterspell-4s[kick]");
+      // Counterspell locks for 5 s (official DB2 PvP duration, 2026-09-04;
+      // the corpus bin mode had said 6, the old 3 s fallback rendered "-1s"
+      // here for the same fixture)
+      expect(resText).toContain("cc:1/Counterspell-3s[kick]");
       expect(resText).toContain("2/Rake-1s[stun]");
     });
 

@@ -51,6 +51,7 @@ import { classMetadata } from "../../src/data/classSpells";
 import spellIdLists from "../../src/data/spellIdLists";
 import { ALLY_IMPLICIT_TARGETS } from "./lib/allyTargets";
 import { writeArtifact } from "./lib/emit";
+import { PVP_MULTIPLIER_COLUMN, pvpBasePoints } from "./lib/pvpMultiplier";
 import {
   assertColumns,
   assertMinRows,
@@ -187,6 +188,7 @@ async function main(): Promise<void> {
       "EffectBasePointsF",
       "ImplicitTarget_0",
       "ImplicitTarget_1",
+      PVP_MULTIPLIER_COLUMN,
     ],
     "SpellEffect",
   );
@@ -204,7 +206,9 @@ async function main(): Promise<void> {
     effect: r.Effect,
     aura: r.EffectAura,
     trigger: r.EffectTriggerSpell,
-    points: Number(r.EffectBasePointsF),
+    // PvP-scaled (lib/pvpMultiplier.ts): healingReceivedPct / hastePct are
+    // arena numbers; the boolean facts only look at the sign / non-zero.
+    points: pvpBasePoints(r),
     targets: [r.ImplicitTarget_0, r.ImplicitTarget_1].filter(
       (t) => t && t !== "0",
     ),

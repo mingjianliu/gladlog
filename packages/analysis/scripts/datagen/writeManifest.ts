@@ -278,7 +278,8 @@ export async function main(): Promise<void> {
         ).length,
         bytes: statSync(dataDir + "kickLockoutObservedGenerated.json").size,
         generator: "packages/eval/scripts/kickLockoutScan.ts",
-        consumer: "data/spellCategories.ts kickLockoutSeconds (GH #62)",
+        consumer:
+          "data/spellEffectData.ts kickLockoutSeconds — verification gate, official DB2 PvP duration first (GH #62, 2026-09-04)",
       },
     },
   };

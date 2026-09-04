@@ -1,20 +1,25 @@
 /**
  * kickLockoutScan.ts — observed school-lockout length per kick id (GH #62).
  *
- * Why this exists: `kickLockoutSeconds` (data/spellCategories.ts) was documented
- * as "table lookup with a conservative 3 s fallback", but no `interrupts` entry
- * ever carried a duration and DB2 has none for kick ids (a kick is Effect 68
- * INTERRUPT_CAST with no SpellDuration row), so every kick answered 3 s. The
- * lockout is observable in the log instead: after `SPELL_INTERRUPT` the victim
- * cannot cast the locked school, and players re-cast the moment it unlocks —
- * so the gap from the interrupt to the victim's FIRST subsequent
- * `SPELL_CAST_START` / `SPELL_CAST_SUCCESS` whose school mask overlaps the
- * locked school clusters tightly at the lockout length (0.5 s bins, lower edge).
+ * Role since 2026-09-04: the VERIFICATION table for `kickLockoutSeconds`
+ * (data/spellEffectData.ts), which answers from the official DB2 PvP duration
+ * of the kick spell (SpellMisc.PvPDurationIndex via genSpellEffects) first.
+ * GH #62 built this scan believing DB2 had no lockout field; it does, and the
+ * generated table already carried Kick = 3. The scan stays because the
+ * official value must be re-checked against the log each season: after
+ * `SPELL_INTERRUPT` the victim cannot cast the locked school, and players
+ * re-cast the moment it unlocks — so the gap from the interrupt to the
+ * victim's FIRST subsequent `SPELL_CAST_START` / `SPELL_CAST_SUCCESS` whose
+ * school mask overlaps the locked school clusters tightly at the lockout
+ * length (0.5 s bins, lower edge). `test/kickLockout.test.ts` gates on the
+ * p25 (|official − p25| ≤ 0.5 s, n ≥ 100) — the bin mode can sit one bin
+ * late (Counterspell mode 6, p25 5.04, official 5).
  *
  * Output: `packages/analysis/src/data/kickLockoutObservedGenerated.json`
  * (consumed by `kickLockoutSeconds`; listed in `writeManifest.ts`). Only kick
  * ids with ≥ MIN_N pairs and a mode ≥ MIN_LOCKOUT_S are written; everything
- * else keeps the 3 s fallback. Re-run each season (update-wow-data §6b-pre-5).
+ * else falls through to the official value / 3 s. Re-run each season
+ * (update-wow-data §6b-pre-5).
  *
  * Usage:
  *   npx tsx packages/eval/scripts/kickLockoutScan.ts \

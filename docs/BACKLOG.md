@@ -2463,3 +2463,53 @@ Stream 97.8% 的教训:光环在免控图腾自己身上,是目标类型混杂�
 经原始行核查是**同显示秒两次真实按键**(774 单 id、40 文件零同刻对)——
 不是 bug,是测量键的显示秒粒度;圣化之地类同 id 复记归 #36(a) 的折叠管。
 测量脚本 `packages/eval/scripts/dupLineScan.ts`(前后同判据)。
+
+## 41. 外部数据源借用清单:PvpMultiplier / hotfix / 踢技锁定官方化 / 数据刷新(logged 2026-09-04,用户裁决顺序 2→1→3→4)
+
+来源:2026-09-03/04 对「有没有现成模拟器可借」的实测调研(TrinityCore master、SimulationCraft、
+私服 playerbots、wago.tools)。结论:**没有可借的竞技场模拟器**(SimC 是 PvE 木桩且无治疗专精模型;
+TrinityCore 行为层是逆向近似——DR 手写 switch 40 个 id、不认 PvPDurationIndex、英雄天赋 0 提及;
+playerbots 全是 3.3.5),能借的是**数据与语义**。量化:语料观测 5,362 个 id 里 SimC 类模块引用 31.5%、
+TrinityCore 15.7%;wago CSV 不含 hotfix(`hotfixes=` 参数被忽略,真言术盾 PvpMultiplier@69587 wago=1.0、
+实时 1.15),SimC 生成数据带 134 条效果热修、38 条落在语料技能上、5 条落在手工表 id 上。
+用户裁决(2026-09-04):PvP 值为官方值;踢技锁定官方优先、语料做校验门;顺序 2→1→3→4;只记 BACKLOG 不开 issue。
+
+- (1) **生成器消费 `SpellEffect.PvpMultiplier`** —— 它是「PvP 战斗中」的乘区(交叉验证:致死之伤 −50 × 0.5 = −25%、
+  圣疗术 100 × 0.75 = 75%、压迫咆哮 50 × 0.6 = 30% 已于 09-02 按此手算),但 genMitigation / genTalentMitigation /
+  genAbilityEffects 都不乘,产品一直渲染 PvE 值。暴露面:生成层 39 条 aura87 里 6 条错(圣佑术 498 20→35、
+  坚定防御者 31850 30→45、适者生存 264735 30→25、牺牲咆哮 53480 15→25、429642 5→3),手工覆盖 AMZ 145629 15→30、
+  真言术:障 81782 20→40;语料 5,362 id 中 607 个带倍率,73 张手工表 464 id 中 63 个带。`MITIGATION_VERDICTS`
+  里用户 08-17 签的 officialPct 是 PvE 值,随之改写(用户已裁)。消费方 12 处(counterfactual / killAttempts /
+  killWindowTargetSelection / deathOutcomeAnalysis / candidateFindings…),验收 acceptanceCapture 前后对照。
+  **2026-09-04 已做**:`scripts/datagen/lib/pvpMultiplier.ts` 一个谓词,三个生成器共用;69404 同 build 重生成——
+  生成层 498 20→35 / 31850 30→45 / 264735 30→25,天赋层 31850 30→45、53480 15→25、429642 5→3、
+  206967 浮空城意志 20→10、208154 战争印记 10→5、382020 大地祥和 3→5、**31821 光环掌握 9→21**(aura107 −9 × 2.34);
+  手工覆盖 AMZ 15→30、真言术:障 20→40;签字表 5 条 officialPct 随裁决改写、档位不动。abilityEffects 的
+  healingReceivedPct / hastePct 无变化(带倍率的受治疗行全是负值,本就不收)。
+  **留给用户看的一条**:光环掌握 31821 手工覆盖是用户 08-22 裁的 20%,当时官方链路只能推到 12%(3 + 9);按 PvP 倍率
+  官方链路现在推到 3 + 21 = 24%,与裁决值只差 4 个点——是否改按官方 24%,待裁,未动。
+  **顺带发现**:`writeManifest.ts` 整体重写 manifest,会丢掉扫描脚本 emit-table 登记的条目(本次丢了
+  syncWindowPrior / cdTriggerPrior 两条,已按 HEAD 版本合并回去;`datagenManifest.test.ts` 抓得到)。
+  下次全量刷新(4)时要么把这两条登进 writeManifest,要么让它合并已有条目——另一会话正在改 cdTriggerPrior,先不动。
+  验收(同 605 场,以 (2) 落地后的采集为基线):dps:burst-into-mitigation 120 → 136(+16),attempt-into-trinket
+  dps 1860 → 1848 / healer 930 → 924(−18);其余逐类计数不变。机制只有一个:AMZ 15 → 30 跨过了 killAttempts /
+  killWindowTargetSelection 的「≥20% 大减伤」集合,同时圣佑术 35 / AMZ 30 / 真言术:障 40 跨过 burst-into-mitigation
+  的 30% 门槛——打进这些减伤的窗口从「打进饰品」改判为「打进减伤」。findings 哈希 29dd8677 → 2264e707。
+- (2) **踢技锁定官方优先** —— DB2 `SpellMisc.PvPDurationIndex` 就是锁定时长,`spellEffectGenerated` 早已有
+  Kick = 3;GH #62「DB2 无字段」的结论是错的。官方 vs 语料 p25 在 n ≥ 100 的 14 条全部 ≤ 0.45 s;法术反制众数 6
+  对官方 5 是分箱伪影(p25 = 5.04)。**2026-09-04 已做**:谓词搬到 spellEffectData.ts(避免循环 import),
+  `test/kickLockout.test.ts` 钉 |官方 − p25| ≤ 0.5 s。顺带发现:override 层整对象展开会吞掉生成层的
+  `durationSeconds`(与 08-19 dispelType 被吞同类),踢技谓词改为字段级读取;`spellEffectData` 合并本身
+  是否也该字段级恢复 duration,另议(会改动 ccFullDurationSeconds 对所有被 override id 的答案)。
+  验收(S2 归档 every-30 = 605 场 / 1,270 回合,acceptanceCapture):逐类候选计数**全部不变**(kick-eaten 1030/507 等),
+  只有上下文层动——`[kick]` 行 4,001 → 3,851(法术反制少 1 秒锁定,150 个 [RES] 刻不再显示残余锁定;
+  改动行全是 Counterspell / Axe Toss),findings 哈希 a808fad9 → 29dd8677 来自 kick-eaten 的 lockout 事实 6 → 5。
+- (3) **hotfix 叠加层** —— 新增 datagen 步骤拉 SimC `midnight` 分支的 sc_spell_data.inc,解析三张热修数组
+  (field 27 = PvpMultiplier、10 = 系数、14 = 基础值)成 hotfixOverlayGenerated.json,生成器读 SpellEffect 行时叠加;
+  manifest 记 hotfix 日期与哈希。依赖 (1)。
+- (4) **数据刷新 69404 → 69587**(最新 retail 2026-09-01),按 update-wow-data.md 全流程 + §7b 三扫描。
+- (5) 文档纠错:update-wow-data.md「PvP modifiers not encoded in DB2」gotcha(09-04 已改)、predicate-index 两份登记。
+- (6) **减伤叠加公式进 counterfactual.ts**(TrinityCore:不同光环乘法叠加、同 SpellGroup 取最高)——先数语料里
+  「死亡窗口内 ≥2 层减伤同时在」的样本量再决定。排在 (1) 之后。
+- (7) 记账不做:SimC 类模块对照 genTalentModifiers(仅 DPS)、SimC APL 档案给 rotation-study 当词表、
+  TrinityCore DR 表当缴械/击退第二意见。估值模型 V(s) / 策略模型 π_r(Maia-2 式)是另一条大线,未立项。

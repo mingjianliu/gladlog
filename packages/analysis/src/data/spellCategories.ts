@@ -11,8 +11,6 @@
  * To be replaced by generated output once subproject 5's data pipeline is
  * built.
  */
-import { KICK_LOCKOUT_OBSERVED } from "./kickLockoutObservedGenerated";
-
 export interface ISpellCategoryEntry {
   type:
     | "cc"
@@ -34,9 +32,10 @@ export interface ISpellCategoryEntry {
    * and `test/ccFullDuration.test.ts` fails if a cc/root entry carries a hand
    * duration DB2 already covers (2026-09-02: 61 such numbers removed, 21 of
    * the 22 that disagreed with DB2 were wrong). For `interrupts` it would be
-   * a hand override of the school-lockout length — `kickLockoutSeconds` reads
-   * the corpus-observed `KICK_LOCKOUT_OBSERVED` first (GH #62), this field
-   * second, 3 s last; no interrupt entry carries one today.
+   * a hand override of the school-lockout length — `kickLockoutSeconds`
+   * (spellEffectData.ts) reads the official DB2 PvP duration first, the
+   * corpus-observed `KICK_LOCKOUT_OBSERVED` second, this field third, 3 s
+   * last; no interrupt entry carries one today.
    * Every other type: none — the 70 informational buff / debuff / immunity /
    * disarm numbers were removed the same day (30 disagreed with DB2, zero
    * consumers read them); `test/ccFullDuration.test.ts` pins the field to the
@@ -69,35 +68,11 @@ export function isCastBlockingAuraType(type: string): boolean {
   return CAST_BLOCKING_AURA_TYPES.has(type as ISpellCategoryEntry["type"]);
 }
 
-/**
- * Kick -> school lockout seconds (single-source predicate): SPELL_INTERRUPT
- * has only an event and no aura, so the lockout duration can only come from a
- * table; kicks not found there conservatively use 3s. The interruptInstances
- * in ccTrinketAnalysis and the "dispeller was locked out" gate in
- * dispelAnalysis share this one copy -- writing it twice is exactly the
- * breeding ground for accidents like gate-predicate divergence case 13
- * (negating SPELL_INTERRUPT).
- *
- * GH #62 (2026-09-02): the table is the corpus-observed
- * `KICK_LOCKOUT_OBSERVED` (kickLockoutObservedGenerated.json, regenerated per
- * season by packages/eval/scripts/kickLockoutScan.ts). Until then this
- * function had returned 3 for EVERY kick: no `interrupts` entry ever carried a
- * `duration`, and DB2 has no lockout field (Effect 68 INTERRUPT_CAST, no
- * SpellDuration row). Measured on the 12.1 archive (605 files, 5,322
- * interrupt→recast pairs): Counterspell 6, Spell Lock 5, Quell 4, Wind Shear
- * 2, melee kicks 3 — the fallback was right by accident for the melee kicks
- * and wrong for the five that matter to the "dispeller was locked out" gate
- * (too short = fewer exemptions = more accusations, the opposite of
- * "conservative"). The hand `duration` on an `interrupts` entry stays as a
- * second fallback so a future hand override still has a place to live.
- */
-export function kickLockoutSeconds(kickSpellId: string): number {
-  return (
-    KICK_LOCKOUT_OBSERVED[kickSpellId]?.lockoutSeconds ??
-    SPELL_CATEGORIES[kickSpellId]?.duration ??
-    3
-  );
-}
+// `kickLockoutSeconds` (kick -> school-lockout seconds) lives in
+// spellEffectData.ts next to `ccFullDurationSeconds`: both answer from the
+// official DB2 PvP duration first (2026-09-04), and spellEffectData already
+// imports this file for the hand fallback, so defining it here would create an
+// import cycle.
 
 const cc = (duration?: number): ISpellCategoryEntry => ({
   type: "cc",

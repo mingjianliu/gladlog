@@ -208,10 +208,10 @@ export const MITIGATION_VERDICTS: Record<string, IMitigationVerdict> = {
   },
   "264735": {
     zh: "优胜劣汰",
-    officialPct: 30,
+    officialPct: 25,
     verdict: "kill-live-gated",
     source:
-      "2026-08-17 减伤裁定问卷(32 条全表),artifact 63e64c88;只有击杀不成立时才算该转火",
+      "2026-08-17 减伤裁定问卷(32 条全表),artifact 63e64c88;只有击杀不成立时才算该转火。officialPct 30 → 25:2026-09-04 用户裁定「PvP 值为官方值」(−30 × PvpMultiplier 0.8333,BACKLOG #41),档位不变",
     approved: "2026-08-17 user",
   },
   "48792": {
@@ -233,9 +233,9 @@ export const MITIGATION_VERDICTS: Record<string, IMitigationVerdict> = {
   },
   "31850": {
     zh: "炽热防御者",
-    officialPct: 30,
+    officialPct: 45,
     verdict: "unconditional",
-    note: "免死机制,远高于记录的 30%",
+    note: "免死机制,远高于记录的 45%(2026-09-04 起按 PvP 值:−30 × 1.5;签字时记录为 30)",
     source:
       "2026-08-17 减伤裁定问卷(32 条全表),artifact 63e64c88;打进去就是白打,与击杀是否成立无关",
     approved: "2026-08-17 user",
@@ -267,10 +267,10 @@ export const MITIGATION_VERDICTS: Record<string, IMitigationVerdict> = {
   },
   "498": {
     zh: "圣佑术",
-    officialPct: 20,
+    officialPct: 35,
     verdict: "kill-live-gated",
     source:
-      "2026-08-17 减伤裁定问卷(32 条全表),artifact 63e64c88;只有击杀不成立时才算该转火",
+      "2026-08-17 减伤裁定问卷(32 条全表),artifact 63e64c88;只有击杀不成立时才算该转火。officialPct 20 → 35:2026-09-04 用户裁定「PvP 值为官方值」(DB2 aura87 −20 × PvpMultiplier 1.75,BACKLOG #41),档位不变",
     approved: "2026-08-17 user",
   },
   "115203": {
@@ -291,7 +291,7 @@ export const MITIGATION_VERDICTS: Record<string, IMitigationVerdict> = {
   },
   "62618": {
     zh: "真言术:障",
-    officialPct: 20,
+    officialPct: 40,
     verdict: "never",
     note: "原裁定(2026-08-17):**该技能在 12.1 已不存在**,故判 never;当时自陈「本机语料对此无发言权 —— 整个 1028 场库最新一场是 2026-08-11,12.1 上线后 0 场,库里那 2 次施放是 07-06/07-07 的版本前残留」,并附带主张『81782 在语料里 0 次,该 20% 从未被验证,清理 MITIGATION_TABLE 时应一并移除』。\n\n**2026-08-22:前提被证伪,退回待裁。** 证据是四天后(08-21)落地的 S2 归档 —— 12.1 开服首周 10,682 场 / 17,586 回合真实对局(`corpus/manifest-archive-2026-08-21.txt`),其观测集 5,303 个 id 里 **62618 与 81782 都在**。也就是说这技能在 12.1 活着,连它的减伤光环都观测得到,两条主张同时不成立。本机库仍然说不上话(按 PATCH_121_GOLIVE_EPOCH_MS 切开:12.1 前 376 场里施放 13 次、光环 69 次;12.1 后只有 24 场,施放 0 次 —— 样本太小,不能当证据用,原裁定说的「版本前残留」这一点本身是对的)。\n\n既然 never 建立在已被推翻的前提上,就不能继续挂着冒充实质裁定,退回 unresolved 等重裁(两档对消费方行为一致:offensiveWasteAnalysis 对 never 与 unresolved 都不出面,所以这次退回**不改变任何产品行为**)。重裁问题:对面奶交了真言术:障(团队 20%),该继续打还是转火?\n\n**2026-08-22 裁定人回应**:「障存在,我看错了,只不过正常人都不会点他。」—— 存在性主张正式撤回(原 2026-08-17 判词的前提作废),同时给出实战注记:这天赋很少有人点。语料佐证该注记:12.1 归档随机 600 场里 **20 场出现过(3.3%)**,本机库 12.1 后 24 场 0 次。**档位本人未裁**,所以保持 unresolved —— 现在这个 unresolved 的含义已经和 2026-08-17 那次不同:不再是「技能不存在」,而是「技能存在但罕见,该不该顶着打没裁过」。**2026-08-22 补裁定案**:「加,但不是大减伤」—— 20% 这个量级不构成真实阻碍,取 never(永不产出「打进减伤」的浪费判断);减伤值 20% 本身照常参与伤害算术,不动。至此这条的三段历史齐了:判 never(前提=技能不存在,错)→ 退回 unresolved(前提被证伪)→ 重新判 never(理由换成「不是大减伤」,前提正确)。",
     source:
@@ -318,10 +318,10 @@ export const MITIGATION_VERDICTS: Record<string, IMitigationVerdict> = {
   },
   "51052": {
     zh: "反魔法领域",
-    officialPct: 15,
+    officialPct: 30,
     verdict: "kill-live-gated",
     source:
-      "2026-08-17 减伤裁定问卷(32 条全表),artifact 63e64c88;只有击杀不成立时才算该转火",
+      "2026-08-17 减伤裁定问卷(32 条全表),artifact 63e64c88;只有击杀不成立时才算该转火。officialPct 15 → 30:2026-09-04 用户裁定「PvP 值为官方值」(DR 光环 145629 aura87 −15 × PvpMultiplier 2,BACKLOG #41),档位不变",
     approved: "2026-08-17 user",
   },
   "386208": {

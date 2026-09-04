@@ -354,4 +354,12 @@
 //  Tide, Lay on Hands, Revival, Chi-Ji, Rewind, Divine Toll…; [RES] snapshot
 //  instants floored to the render grid (about 60% of [RES] lines change by
 //  ±1 s); [CD PRIOR] reference table regenerated over the new roster.
-export const PROMPT_VERSION = 53;
+//  v54 (2026-09-04, BACKLOG #41, user ruling "PvP 值为官方值"): official-PvP
+//  data batch — (2) kick school-lockout now reads the kick's own DB2 PvP
+//  duration first (Counterspell 6 → 5 s, Axe Toss 3.5 → 3 s in the [RES]
+//  `-Ns[kick]` field, kick-eaten lockout fact and cannot-cast exemptions);
+//  (1) mitigation / talent-mitigation / healing-received percentages
+//  multiplied by SpellEffect.PvpMultiplier (Divine Protection 20 → 35 %,
+//  AMZ 15 → 30 %, PW:Barrier 20 → 40 %, …); (3) SimC hotfix overlay. One
+//  bump for the whole batch.
+export const PROMPT_VERSION = 54;

@@ -1,6 +1,7 @@
+import { KICK_LOCKOUT_OBSERVED } from "./kickLockoutObservedGenerated";
 import { SPELL_CATEGORIES } from "./spellCategories";
-import { SPELL_EFFECT_OVERRIDES } from "./spellEffectOverrides";
 import { SPELL_EFFECTS_GENERATED } from "./spellEffectGenerated";
+import { SPELL_EFFECT_OVERRIDES } from "./spellEffectOverrides";
 
 /*
  Interface and export for data mined from the WOW spells db itself
@@ -84,6 +85,67 @@ export function ccFullDurationSeconds(spellId: string): number | undefined {
   return (
     spellEffectData[spellId]?.durationSeconds ??
     SPELL_CATEGORIES[spellId]?.duration
+  );
+}
+
+// ── Kick school lockout: one predicate ──────────────────────────────────────
+/**
+ * Kick -> school-lockout seconds. SPELL_INTERRUPT has only an event and no
+ * aura, so the length is a lookup; the interruptInstances in
+ * ccTrinketAnalysis and the cannot-cast intervals (dispel "locked out" gate,
+ * healing-gap free time) share this one copy.
+ *
+ * Source order — official first, corpus as the verification gate (user ruling
+ * 2026-09-04):
+ *   1. DB2 `durationSeconds` of the kick spell itself — `genSpellEffects`
+ *      prefers `SpellMisc.PvPDurationIndex`, and for kicks that IS the PvP
+ *      lockout (Kick 1766: PvE index 32 = 6 s, PvP index 27 = 3 s). GH #62
+ *      (2026-09-02) had concluded "DB2 has no lockout field" and built the
+ *      corpus scan instead; the field was there all along, the generated
+ *      table already carried Kick = 3.
+ *   2. corpus-observed `KICK_LOCKOUT_OBSERVED` (kickLockoutScan.ts), kept as
+ *      the fallback for a kick DB2 leaves blank;
+ *   3. a hand `interrupts` duration in SPELL_CATEGORIES;
+ *   4. 3 s.
+ *
+ * Verification (2026-09-04, S2 archive every-30th = 605 files, 5,322
+ * interrupt→recast pairs): official vs the observed p25 agreed within 0.5 s
+ * for all 14 kicks with n ≥ 100 (max |Δ| 0.45 s, Quell); the two visible
+ * disagreements were scan artifacts on the bin MODE, not the lockout —
+ * Counterspell mode 6 vs official 5 (p25 = 5.04 s: a quarter of victims
+ * recast before 6 s, impossible under a 6 s lockout) and Axe Toss 3.5 vs 3
+ * (n = 40). `test/kickLockout.test.ts` pins |official − p25| ≤ 0.5 s for
+ * every observed kick with n ≥ 100 so a DB2 refresh that breaks the
+ * agreement turns CI red instead of silently changing exemptions.
+ * Direction of the change: Counterspell 6 → 5 s = one second less cannot-cast
+ * exemption for its victims.
+ *
+ * Why the official value is read field-by-field and not through the merged
+ * `spellEffectData`: the override layer lists most kicks for their COOLDOWN
+ * (`e("1766", "Kick", 15)`), and the whole-object spread in the merge then
+ * replaces the generated entry — deleting its `durationSeconds`, the same
+ * shadowing that ate `dispelType` on 2026-08-19. An override that sets a kick
+ * duration explicitly still wins (that is how a DB2 error would be patched);
+ * an override that is silent on duration falls through to the generated
+ * official value instead of to the corpus table.
+ */
+export function kickLockoutOfficialSeconds(
+  kickSpellId: string,
+): number | undefined {
+  return (
+    (SPELL_EFFECT_OVERRIDES as Record<string, IMinedSpell>)[kickSpellId]
+      ?.durationSeconds ??
+    (SPELL_EFFECTS_GENERATED as Record<string, IMinedSpell>)[kickSpellId]
+      ?.durationSeconds
+  );
+}
+
+export function kickLockoutSeconds(kickSpellId: string): number {
+  return (
+    kickLockoutOfficialSeconds(kickSpellId) ??
+    KICK_LOCKOUT_OBSERVED[kickSpellId]?.lockoutSeconds ??
+    SPELL_CATEGORIES[kickSpellId]?.duration ??
+    3
   );
 }
 

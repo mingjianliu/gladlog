@@ -159,13 +159,14 @@ npx tsx packages/eval/scripts/cdTriggerPriorScan.ts report --in $R/rows.jsonl > 
 npx tsx packages/eval/scripts/cdTriggerPriorScan.ts emit-table --in $R/rows.jsonl \
   --out packages/analysis/src/data/cdTriggerPriorGenerated.json --corpus "wowarenalogs archive $(date +%F)"
 
-# 6b-pre-5. Kick school-lockout lengths (kickLockoutObservedGenerated.json; consumed by
-#   kickLockoutSeconds → the [RES] `-Ns[kick]` field, the kick-eaten candidate's lockout fact and the
-#   "dispeller was locked out" cleanse exemption). Corpus-driven, NOT DB2: a kick is Effect 68 with no
-#   SpellDuration row, so the lockout is only observable — first same-school cast after SPELL_INTERRUPT,
-#   0.5 s-bin mode. Every 30th archive file is enough (≈600 files, ~1 min, 5k+ pairs); ids under 20 pairs
-#   keep the 3 s fallback. Season-dependent (12.1: Counterspell 6, Spell Lock 5, Quell 4, Wind Shear 2,
-#   melee kicks 3), so re-run per season and diff the entries. Then re-run step 7 (writeManifest). (GH #62)
+# 6b-pre-5. Kick school-lockout VERIFICATION table (kickLockoutObservedGenerated.json). Since 2026-09-04
+#   kickLockoutSeconds (spellEffectData.ts → the [RES] `-Ns[kick]` field, the kick-eaten lockout fact and the
+#   "dispeller was locked out" cleanse exemption) answers from the OFFICIAL duration first — the kick spell's
+#   own SpellMisc.PvPDurationIndex, which step 3 already emits (Kick 3 s, Counterspell 5 s) — and this corpus
+#   table is the gate: packages/analysis/test/kickLockout.test.ts pins |official − p25| ≤ 0.5 s for every id
+#   with n ≥ 100. Observation = first same-school cast after SPELL_INTERRUPT, 0.5 s-bin mode; every 30th
+#   archive file is enough (≈600 files, ~1 min, 5k+ pairs). Re-run per season, then step 7 (writeManifest);
+#   a red gate means DB2 and the log disagree — investigate, do not hand-patch the number. (GH #62)
 npx tsx packages/eval/scripts/kickLockoutScan.ts \
   --manifest $GLADLOG_EVAL_HOME/corpus/manifest-archive-<date>.txt --every 30
 # 6b. Spell icon names (desktop swimlane/replay icons; SpellMisc -> ManifestInterfaceData;
@@ -184,12 +185,17 @@ npx tsx packages/analysis/scripts/datagen/genDrCategories.ts
 npx tsx packages/analysis/scripts/datagen/genSpellReach.ts
 # 6f. off-GCD active abilities table (SpellCooldowns StartRecoveryTime==0; consumed by swimlane folding)
 npx tsx packages/analysis/scripts/datagen/genOffGcd.ts
-# 6g. Damage mitigation table (#17 foundation; whitelist = big ∪ external 35 items, curated overrides in mitigationData.ts)
+# 6g. Damage mitigation table (#17 foundation; whitelist = big ∪ external 35 items, curated overrides in mitigationData.ts).
+#     Percentages are PvP-scaled: aura87 EffectBasePointsF × SpellEffect.PvpMultiplier via lib/pvpMultiplier.ts
+#     (user ruling 2026-09-04 "PvP 值为官方值", BACKLOG #41 — Divine Protection 20 → 35, Ardent Defender 30 → 45,
+#     Survival of the Fittest 30 → 25). A changed pct turns mitigationVerdicts.test.ts red (officialPct drift):
+#     re-sign the verdict row, do not edit the generated number.
 npx tsx packages/analysis/scripts/datagen/genMitigation.ts
 # 6g2. Talent-granted damage reduction (2026-08-18; zhCN tooltip predicate over the talent universe
 #      incl. the PvP pool; two positive controls throw on failure — 473909 知识古树 / 431873 瞬息之隔.
 #      Registered in the manifest but MISSED by the 69382 season refresh because this runbook lacked
 #      the line — the manifest records artifacts, only this file drives regeneration.)
+#      Percentages PvP-scaled through lib/pvpMultiplier.ts too (Roar of Sacrifice 15 → 25, 百战之创 5 → 3).
 npx tsx packages/analysis/scripts/datagen/genTalentMitigation.ts
 # 6h. Usable while CC'd table (B1; SpellMisc.Attributes bitwise union search, anchored to usableWhileCcAnchors.ts;
 #     only stunned dimension converges to a unique bit combination; feared/confused are known gaps — see generated file header
@@ -221,6 +227,7 @@ npx tsx packages/analysis/scripts/datagen/genSpellSchools.ts
 #      受治疗增益 / aura31 加速。消费方 data/abilityProfile.ts。非零退出 = 正反
 #      对照组不匹配(如自由祝福的 0 点 aura31 死槽又被当成加速),按实测改规则,
 #      不要放宽断言。)
+#      healingReceivedPct / hastePct PvP-scaled through lib/pvpMultiplier.ts (2026-09-04).
 npx tsx packages/analysis/scripts/datagen/genAbilityEffects.ts
 # 7. Manifest summary
 npx tsx packages/analysis/scripts/datagen/writeManifest.ts
@@ -410,6 +417,6 @@ records self-removals — Disengage / Master's Call / Tiger's Lust / Rescue stri
 shell — the "cooldown" it returns is the cast time/GCD, not the real cooldown; use wowhead via search-result
 snippets or the DB2 CSVs instead.
 
-- Override layer maintenance tax (final judgment by spec on record): PvP durations / server-side modifiers are not encoded in DB2; when deviations are found, add `SPELL_EFFECT_OVERRIDES` entries in place.
+- Override layer maintenance tax (final judgment by spec on record): when a deviation from DB2 is corpus-evidenced, add `SPELL_EFFECT_OVERRIDES` / `CORPUS_DURATION_PATCHES` entries in place. **Do not** assume the deviation is "PvP not encoded in DB2" — it usually is: `SpellMisc.PvPDurationIndex` (durations; `genSpellEffects` prefers it) and `SpellEffect.PvpMultiplier` (percentages / coefficients / base points in PvP combat — 3,607 spells carry one ≠ 1 at 12.1.0.69404; Mortal Wounds −50 × 0.5 = −25 %, Lay on Hands 100 × 0.75 = 75 %). The old note "PvP durations / server-side modifiers are not encoded in DB2" cost the kick-lockout corpus scan (GH #62) and left the mitigation generators emitting PvE percentages (BACKLOG #41).
 - `spellNames.json` at 12MB is expected; optimizing slow dev initial load is a separate matter.
 - Icons are fetched at runtime + cached to disk, not involved in data updates.

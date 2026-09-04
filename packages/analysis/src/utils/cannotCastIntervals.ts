@@ -2,9 +2,9 @@ import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import {
   isCastBlockingAuraType,
-  kickLockoutSeconds,
   SPELL_CATEGORIES as SPELLS,
 } from "../data/spellCategories";
+import { kickLockoutSeconds } from "../data/spellEffectData";
 
 /**
  * "When could this unit not cast?" — ONE predicate for the two consumers that

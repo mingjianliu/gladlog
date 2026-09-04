@@ -57,6 +57,7 @@ import * as outcomeRefs from "@gladlog/analysis/src/data/outcomeRefs";
 import * as racialAbilities from "@gladlog/analysis/src/data/racialAbilities";
 import * as spellCategories from "@gladlog/analysis/src/data/spellCategories";
 import * as spellEffectData from "@gladlog/analysis/src/data/spellEffectData";
+import * as pvpMultiplier from "../../analysis/scripts/datagen/lib/pvpMultiplier";
 import * as spellSchools from "@gladlog/analysis/src/data/spellSchools";
 import * as spellTags from "@gladlog/analysis/src/data/spellTags";
 import * as spellTargeting from "@gladlog/analysis/src/data/spellTargeting";
@@ -472,14 +473,19 @@ const INDEX: PredicateRow[] = [
     mod: positionSampling,
   },
   {
-    file: `${A}/data/spellCategories.ts`,
+    file: `${A}/data/spellEffectData.ts`,
     symbol: "kickLockoutSeconds",
-    mod: spellCategories,
+    mod: spellEffectData,
   },
   {
     file: `${A}/data/spellEffectData.ts`,
     symbol: "ccFullDurationSeconds",
     mod: spellEffectData,
+  },
+  {
+    file: "packages/analysis/scripts/datagen/lib/pvpMultiplier.ts",
+    symbol: "pvpBasePoints",
+    mod: pvpMultiplier,
   },
   {
     file: `${A}/utils/dispelAnalysis.ts`,

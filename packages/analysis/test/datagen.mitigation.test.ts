@@ -1,22 +1,40 @@
 import { describe, expect, test } from "vitest";
+
 import { transformMitigation } from "../scripts/datagen/genMitigation";
 
 // Minimal SpellEffect CSV sample: the column names follow the real table (the
 // implementer first pulled a real CSV header via fetchTable to check; the names
 // below are the ones genTalentModifiers already consumes)
 const HEADER =
-  "ID,DifficultyID,EffectAura,EffectBasePointsF,EffectMiscValue_0,SpellID,Effect";
+  "ID,DifficultyID,EffectAura,EffectBasePointsF,EffectMiscValue_0,SpellID,Effect,PvpMultiplier";
 const row = (
   spellId: string,
   aura: string,
   points: string,
   misc: string,
   diff = "0",
+  pvp = "1",
 ) =>
-  `${Math.random().toString().slice(2, 8)},${diff},${aura},${points},${misc},${spellId},6`;
+  `${Math.random().toString().slice(2, 8)},${diff},${aura},${points},${misc},${spellId},6,${pvp}`;
 
 describe("transformMitigation", () => {
   const WL = new Set(["22812", "33206", "642", "97462"]);
+
+  test("PvpMultiplier 乘在基础值上(2026-09-04 用户裁决:PvP 值为官方值):圣佑术 -20 × 1.75 = 35,优胜劣汰 -30 × 0.8333 = 25,空列按 1", () => {
+    const csv = [
+      "ID,DifficultyID,EffectAura,EffectBasePointsF,EffectMiscValue_0,SpellID,Effect,PvpMultiplier",
+      row("498", "87", "-20", "127", "0", "1.75"), // Divine Protection
+      row("264735", "87", "-30", "127", "0", "0.83333301544"), // Survival of the Fittest
+      row("22812", "87", "-20", "127", "0", ""), // blank column → ×1
+    ].join("\n");
+    const r = transformMitigation(csv, new Set(["498", "264735", "22812"]));
+    expect(r.entries).toEqual({
+      "498": { pct: 35, schoolMask: 127 },
+      "264735": { pct: 25, schoolMask: 127 },
+      "22812": { pct: 20, schoolMask: 127 },
+    });
+    expect(r.unresolved).toEqual([]);
+  });
 
   test("87 行:负 points 取绝对值,mask 透传;非白名单/非 87 行忽略", () => {
     const csv = [

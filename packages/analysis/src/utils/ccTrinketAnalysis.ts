@@ -5,23 +5,21 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
-import { getEnglishSpellName } from "../data/spellEffectData";
-import {
-  spellSchoolMask,
-  immunityCoversSpell,
-  isPhysicalSpell,
-} from "../data/spellSchools";
 import {
   BREAK_RACIAL_SPELL_IDS,
   racialName,
   SHARED_CD_RACIAL_SPELL_IDS,
   TRINKET_RACIAL_SHARED_LOCKOUT_MS,
 } from "../data/racialAbilities";
-import { kickLockoutSeconds } from "../data/spellCategories";
+import { getEnglishSpellName, kickLockoutSeconds } from "../data/spellEffectData";
+import {
+  immunityCoversSpell,
+  isPhysicalSpell,
+  spellSchoolMask,
+} from "../data/spellSchools";
 import { ccSpellIds, disarmSpellIds, rootSpellIds } from "../data/spellTags";
 import trinketItemIdsData from "../data/trinketItemIds.json";
 import { isHealerSpec, specToString } from "./cooldowns";
-import { fmtTime } from "./renderGrid";
 import { computeIncomingDR, IDRInfo, matchPendingCcKey } from "./drAnalysis";
 import {
   distanceBetween,
@@ -32,6 +30,7 @@ import {
   CC_MAX_PLAUSIBLE_RANGE_YARDS,
   INTERP_MAX_GAP_MS,
 } from "./positionSampling";
+import { fmtTime } from "./renderGrid";
 import { getTalentAvoidanceBuffs } from "./talentBehaviors";
 import { DPS_TRINKET_CD_S, HEALER_TRINKET_CD_S } from "./trinketCooldown";
 

@@ -67,8 +67,8 @@
 import { readFileSync } from "node:fs";
 
 import { PVP_TALENT_POOL_GENERATED } from "../../src/data/pvpTalentPoolGenerated";
-
 import { writeArtifact } from "./lib/emit";
+import { PVP_MULTIPLIER_COLUMN, pvpBasePoints } from "./lib/pvpMultiplier";
 import {
   assertColumns,
   assertMinRows,
@@ -296,6 +296,7 @@ export async function main(): Promise<void> {
       "EffectBasePointsF",
       "EffectIndex",
       "SpellID",
+      PVP_MULTIPLIER_COLUMN,
     ],
     "SpellEffect",
   );
@@ -305,7 +306,9 @@ export async function main(): Promise<void> {
     const byIndex = effects.get(row.SpellID) ?? new Map();
     byIndex.set(Number(row.EffectIndex), {
       aura: row.EffectAura,
-      pts: Number(row.EffectBasePointsF),
+      // PvP-scaled (lib/pvpMultiplier.ts): the tooltip placeholder resolves to
+      // the arena number — Roar of Sacrifice $s1 = −15 × 1.667 = 25 %.
+      pts: pvpBasePoints(row),
     });
     effects.set(row.SpellID, byIndex);
   }

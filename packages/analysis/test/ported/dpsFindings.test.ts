@@ -295,8 +295,10 @@ describe("burst-into-mitigation(OFFENSIVE-002,2026-08-11 信号扩容批 2)", ()
   });
 
   it("减伤百分比低于门槛(<30%):不产出", () => {
-    // Anti-Magic Zone: 15% per MITIGATION_TABLE — below BURST_INTO_MITIGATION_MIN_PCT
-    const { combat } = buildMitigationCombat({ mitSpellId: "51052" });
+    // Barkskin: 20% per MITIGATION_TABLE — below BURST_INTO_MITIGATION_MIN_PCT
+    // (Anti-Magic Zone used to be the example at 15%; since 2026-09-04 it is the
+    // PvP value 30% and sits exactly on the threshold)
+    const { combat } = buildMitigationCombat({ mitSpellId: "22812" });
     const events = extractCandidateFindings(combat, "p1");
     expect(events.some((e) => e.type === "burst-into-mitigation")).toBe(false);
   });
