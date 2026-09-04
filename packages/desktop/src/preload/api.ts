@@ -5,6 +5,8 @@ import type { ChatSendResult, ChatState } from "../main/coachChat";
 import type { LearningState } from "../main/learning";
 import type { StoredMatchMeta } from "../main/matchStore";
 import type { RecorderStatus } from "../main/recorder";
+import type { ObsAudioDevice } from "../main/managedObsBackend";
+import type { ManagedObsPrefs } from "../shared/managedObsPrefs";
 import type { ObsInstallProgress } from "../main/obsAssets";
 import type { GladlogSettings } from "../main/settingsStore";
 import type { UpdateState } from "../main/updater";
@@ -414,6 +416,25 @@ export interface GladlogApi {
       installed: boolean;
       platformSupported: boolean;
     }>;
+    /** Managed-OBS prefs (2026-09-04). Devices the managed instance can
+     * record: `output` = desktop audio, `input` = microphones. Empty lists
+     * when the managed instance is not running. */
+    listAudioDevices(): Promise<{
+      output: ObsAudioDevice[];
+      input: ObsAudioDevice[];
+    }>;
+    /** Read the user's own OBS install (current profile + scene collection)
+     * and copy its recording folder / desktop audio / mic into settings.
+     * `applied` is the patch that was saved; found=false: no OBS config on
+     * this machine. Read-only on the user's OBS. */
+    importObsPrefs(): Promise<{
+      found: boolean;
+      configRoot?: string;
+      applied?: Partial<ManagedObsPrefs>;
+    }>;
+    /** System folder picker for the recording directory; saves
+     * `recordingDirectory` on pick. Cancelled → null. */
+    selectRecordingDirectory(): Promise<string | null>;
   };
   icon: {
     get(name: string): Promise<string | null>;

@@ -287,6 +287,30 @@ describe("RecordingsStore", () => {
     expect(existsSync(indexed)).toBe(true);
     expect(logs.join("\n")).toMatch(/1 个未入索引文件/);
   });
+
+  it("视频目录可与索引目录分离(managed-OBS prefs):孤儿扫描看视频目录,索引仍写在索引目录", () => {
+    const logs: string[] = [];
+    const indexDir = mkdtempSync(join(tmpdir(), "gladlog-rec-idx-"));
+    const videoDir = mkdtempSync(join(tmpdir(), "gladlog-rec-vid-"));
+    const store = new RecordingsStore(
+      indexDir,
+      (m) => logs.push(m),
+      () => videoDir,
+    );
+    const indexed = fakeVideo(videoDir, "indexed.mp4");
+    store.add({
+      schema: 2,
+      videoPath: indexed,
+      startedAt: T0,
+      stoppedAt: T0 + 1,
+      matchIds: ["m1"],
+    });
+    fakeVideo(videoDir, "stray.mp4");
+    fakeVideo(indexDir, "not-a-video-in-index-dir.mp4"); // must NOT be counted
+    store.prune({ keepCount: 10, maxBytes: Number.POSITIVE_INFINITY });
+    expect(existsSync(join(indexDir, "recordings.ndjson"))).toBe(true);
+    expect(logs.join("\n")).toMatch(/1 个未入索引文件/);
+  });
 });
 
 describe("RecordingsStore schema 2", () => {

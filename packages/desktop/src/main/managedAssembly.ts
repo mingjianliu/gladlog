@@ -1,4 +1,9 @@
 import { MANAGED_WS_PORT } from "../shared/obsAsset";
+import {
+  managedObsPrefsChanged,
+  type ManagedObsPrefs,
+  resolveRecordingDir,
+} from "../shared/managedObsPrefs";
 import type { ObsAssets } from "./obsAssets";
 import type { ObsConfigSpec } from "./obsConfigWriter";
 import type {
@@ -61,6 +66,12 @@ export interface ManagedAssemblyState {
   chain: Promise<void>;
 }
 
+/** What assembly reads from settings: the mode gate's two fields plus the
+ * three managed-OBS prefs. index.ts passes the full GladlogSettings; tests
+ * build the minimal shape. */
+export type AssemblySettings = Parameters<typeof isManagedActive>[0] &
+  ManagedObsPrefs;
+
 export function createManagedAssemblyState(): ManagedAssemblyState {
   return {
     running: false,
@@ -94,8 +105,10 @@ export interface AssembleManagedRecordingDeps {
   state: ManagedAssemblyState;
   /** Same settings shape isManagedActive() itself takes — the mode gate
    * (brief step 1) is done INSIDE this function via that shared predicate,
-   * never hand-copied (CLAUDE.md shared-predicate rule). */
-  getSettings: () => Parameters<typeof isManagedActive>[0];
+   * never hand-copied (CLAUDE.md shared-predicate rule) — plus the three
+   * managed-OBS prefs (2026-09-04), read fresh at assembly time so a restart
+   * after a prefs change picks up the new directory/devices. */
+  getSettings: () => AssemblySettings;
   /** Brief step 2 (password provisioning: `settings.managedWsPassword ??
    * generate 32 hex random → save`) is deliberately NOT done in here — it
    * needs `settings.save` (a persistence side effect this module has no
@@ -105,7 +118,13 @@ export interface AssembleManagedRecordingDeps {
    * installed-check, before writeObsConfig) but not before the mode gate —
    * see the `④ managedActive=false → 全程零调用` test. */
   getWsPassword: () => string;
-  recDir: string;
+  /** The app-default recording directory (userData/recordings). The
+   * EFFECTIVE directory is `resolveRecordingDir(defaultRecDir, settings)` —
+   * the user's `recordingDirectory` pref when set — computed once per
+   * assembly and handed to BOTH the config writer (basic.ini RecFilePath)
+   * and the backend (its first-chunk fallback scan), so they can never
+   * disagree. */
+  defaultRecDir: string;
   assets: Pick<ObsAssets, "root" | "installed">;
   writeObsConfig: (spec: ObsConfigSpec) => void;
   clearSentinels: (obsRoot: string) => void;
@@ -193,15 +212,18 @@ async function doAssemble(deps: AssembleManagedRecordingDeps): Promise<void> {
   deps.state.running = true; // before ANY await — see the re-entry-safety doc comment above
 
   let handle: ManagedObsHandle;
+  const recDir = resolveRecordingDir(deps.defaultRecDir, s);
   try {
     const wsPassword = deps.getWsPassword();
     // Step 4
     deps.writeObsConfig({
       obsRoot: deps.assets.root,
-      recDir: deps.recDir,
+      recDir,
       wsPort: MANAGED_WS_PORT,
       wsPassword,
       bitrateKbps: 8000,
+      desktopAudioDeviceId: s.managedDesktopAudioDevice,
+      micDeviceId: s.managedMicDevice,
     });
     deps.clearSentinels(deps.assets.root);
     handle = deps.spawnManagedObs({
@@ -217,7 +239,7 @@ async function doAssemble(deps: AssembleManagedRecordingDeps): Promise<void> {
         const ready = await handle.ready;
         return { wsUrl: ready.wsUrl, wsPassword };
       },
-      recDir: deps.recDir,
+      recDir,
     });
     deps.state.backend = backend;
     deps.setRecorderManagedBackend(backend);
@@ -346,6 +368,102 @@ export function reactToManagedToggle(
     return deps.teardown();
   }
   return Promise.resolve();
+}
+
+// -- Managed-OBS prefs restart (2026-09-04) ---------------------------------
+
+export interface ManagedRestartCoordinatorDeps {
+  /** Live recorder status: `recorder.getStatus().recording`. */
+  isRecording: () => boolean;
+  /** `ensureManagedTeardown` / `ensureManagedAssembly` from index.ts — the
+   * SAME wrappers the runtime toggle uses, closed over the same
+   * ManagedAssemblyState, so a restart serializes on `state.chain` with
+   * any in-flight toggle exactly like the toggle itself does. */
+  teardown: () => Promise<void>;
+  assemble: () => Promise<void>;
+}
+
+export interface ManagedRestartCoordinator {
+  /** settings:save hook (called BEFORE reactToManagedToggle for the same
+   * patch, so a disable cancels a pending restart before the teardown's
+   * status push could trigger it). Restarts the managed instance when any
+   * managed-OBS pref changed while managed was active before AND after the
+   * save; defers the restart to the end of the current recording when one
+   * is in progress. */
+  onSettingsSaved(
+    prev: AssemblySettings,
+    next: AssemblySettings,
+  ): Promise<void>;
+  /** Feed every `gladlog:recorder:status` push here: a deferred restart
+   * fires on the first push that says recording=false. */
+  onRecorderStatus(status: Pick<RecorderStatus, "recording">): void;
+  /** A restart is waiting for the current recording to end. */
+  restartPending(): boolean;
+}
+
+/**
+ * The user ruling (2026-09-04): "保存即生效,正在录制则等这场录完再重启". The
+ * three prefs are read by OBS at process start (RecFilePath from basic.ini,
+ * the audio devices from the scene collection JSON), so applying them means
+ * tearing the managed instance down and assembling it again — which
+ * rewrites the config from fresh settings (assembly step 4) and spawns a
+ * new process. Restarting mid-match would cut the recording, hence the
+ * deferral.
+ *
+ * Shape mirrors reactToManagedToggle: teardown is awaited (fast, no
+ * readiness wait), assembly is fire-and-forget (its ~30s readiness timeout
+ * must not block the settings:save IPC reply). Mutual exclusion with a
+ * concurrent toggle lives on `state.chain` inside the wrappers, not here.
+ *
+ * Cases where this deliberately does NOTHING:
+ * - prefs unchanged → nothing to apply;
+ * - managed not active after the save → nothing is (or should be) running;
+ *   the next assembly reads the new prefs anyway;
+ * - managed not active before the save → reactToManagedToggle's enable
+ *   branch is assembling right now from the same fresh settings.
+ */
+export function createManagedRestartCoordinator(
+  deps: ManagedRestartCoordinatorDeps,
+): ManagedRestartCoordinator {
+  let pending = false;
+
+  async function restart(): Promise<void> {
+    await deps.teardown();
+    void deps.assemble();
+  }
+
+  return {
+    async onSettingsSaved(prev, next) {
+      // Managed going (or staying) inactive cancels any deferred restart
+      // BEFORE the prefs check — agy review 2026-09-04 #3: a plain disable
+      // with a restart pending used to leave `pending` set, and the
+      // teardown's own recording=false status push then fired a phantom
+      // teardown+assemble (both no-ops, but queued on state.chain behind
+      // the disable). index.ts calls this ahead of reactToManagedToggle for
+      // the same reason.
+      if (!isManagedActive(next)) {
+        pending = false;
+        return;
+      }
+      if (!managedObsPrefsChanged(prev, next)) return;
+      if (!isManagedActive(prev)) {
+        pending = false; // the enable toggle assembles from fresh settings
+        return;
+      }
+      if (deps.isRecording()) {
+        pending = true;
+        return;
+      }
+      pending = false;
+      await restart();
+    },
+    onRecorderStatus(status) {
+      if (!pending || status.recording) return;
+      pending = false;
+      void restart();
+    },
+    restartPending: () => pending,
+  };
 }
 
 async function doTeardown(deps: TeardownManagedRecordingDeps): Promise<void> {

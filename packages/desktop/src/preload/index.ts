@@ -175,6 +175,11 @@ const api: GladlogApi = {
     onInstallProgress: sub("gladlog:recorder:installProgress"),
     getObsInstallState: () =>
       ipcRenderer.invoke("gladlog:recorder:obsInstallState"),
+    listAudioDevices: () =>
+      ipcRenderer.invoke("gladlog:recorder:listAudioDevices"),
+    importObsPrefs: () => ipcRenderer.invoke("gladlog:recorder:importObsPrefs"),
+    selectRecordingDirectory: () =>
+      ipcRenderer.invoke("gladlog:recorder:selectRecordingDirectory"),
   },
   icon: {
     get: (name) => ipcRenderer.invoke("gladlog:icon:get", name),

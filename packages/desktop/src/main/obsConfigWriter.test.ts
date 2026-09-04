@@ -30,6 +30,8 @@ beforeEach(() => {
     wsPort: 4466,
     wsPassword: "s3cr3t-pw",
     bitrateKbps: 8000,
+    desktopAudioDeviceId: "default",
+    micDeviceId: null,
   };
 });
 
@@ -205,6 +207,43 @@ describe("writeObsConfig", () => {
     ]);
     expect(parsed["current_scene"]).toBe("gladlog");
     expect(parsed["scene_order"]).toEqual([{ name: "gladlog" }]);
+  });
+
+  it("managed-OBS prefs: a specific desktop device id + a mic → both channel keys, verbatim ids", () => {
+    writeObsConfig({
+      ...spec,
+      desktopAudioDeviceId: "{0.0.0.00000000}.{out-guid}",
+      micDeviceId: "{0.0.1.00000000}.{mic-guid}",
+    });
+    const parsed = JSON.parse(
+      readFileSync(join(cfgRoot(), "basic", "scenes", "gladlog.json"), "utf-8"),
+    ) as Record<string, unknown>;
+    expect(parsed["DesktopAudioDevice1"]).toEqual({
+      name: "Desktop Audio",
+      id: "wasapi_output_capture",
+      settings: { device_id: "{0.0.0.00000000}.{out-guid}" },
+    });
+    expect(parsed["AuxAudioDevice1"]).toEqual({
+      name: "Mic/Aux",
+      id: "wasapi_input_capture",
+      settings: { device_id: "{0.0.1.00000000}.{mic-guid}" },
+    });
+  });
+
+  it("managed-OBS prefs: null desktop device → DesktopAudioDevice1 omitted (channel unassigned), mic can still be present", () => {
+    writeObsConfig({
+      ...spec,
+      desktopAudioDeviceId: null,
+      micDeviceId: "default",
+    });
+    const parsed = JSON.parse(
+      readFileSync(join(cfgRoot(), "basic", "scenes", "gladlog.json"), "utf-8"),
+    ) as Record<string, unknown>;
+    expect(parsed).not.toHaveProperty("DesktopAudioDevice1");
+    expect(parsed["AuxAudioDevice1"]).toMatchObject({
+      id: "wasapi_input_capture",
+      settings: { device_id: "default" },
+    });
   });
 
   it("is idempotent: writing twice produces byte-identical files", () => {

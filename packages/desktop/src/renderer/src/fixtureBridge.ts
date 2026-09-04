@@ -48,6 +48,9 @@ export function installFixtureBridge(): void {
     recordingMaxBytes: 80 * 1024 ** 3,
     recordingMode: "managed",
     managedWsPassword: null,
+    recordingDirectory: null,
+    managedDesktopAudioDevice: "default",
+    managedMicDevice: null,
     autoCheckUpdates: true,
     // Pinned to whatever app.getVersion() returns further down in this file
     // ("fixture"): equal values mean UpdateBanner renders no post-update
@@ -158,6 +161,20 @@ export function installFixtureBridge(): void {
       },
       async getObsInstallState() {
         return { installed: true, platformSupported: true };
+      },
+      // Managed-OBS prefs rows (2026-09-04): fixed device lists so the
+      // settings scene's visual baseline stays deterministic.
+      async listAudioDevices() {
+        return {
+          output: [{ id: "{fixture-out}", name: "Speakers (Fixture)" }],
+          input: [{ id: "{fixture-mic}", name: "Microphone (Fixture)" }],
+        };
+      },
+      async importObsPrefs() {
+        return { found: false };
+      },
+      async selectRecordingDirectory() {
+        return null;
       },
     },
     matches: {

@@ -36,6 +36,7 @@ function minimalDeps(readRawText: (id: string) => Promise<string | null>) {
     chat: {} as never,
     installObs: vi.fn(),
     getObsInstallState: () => ({ installed: false, platformSupported: false }),
+    listAudioDevices: async () => ({ output: [], input: [] }),
     icons: { get: vi.fn() },
     exportImage: vi.fn(),
   };

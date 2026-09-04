@@ -36,6 +36,14 @@ const baseSettings: Settings = {
   recordingMaxBytes: 80 * 1024 ** 3,
   recordingMode: "managed",
   managedWsPassword: null,
+  recordingDirectory: null,
+  managedDesktopAudioDevice: "default",
+  managedMicDevice: null,
+};
+
+type AudioDevices = {
+  output: Array<{ id: string; name: string }>;
+  input: Array<{ id: string; name: string }>;
 };
 
 function mountWith(opts: {
@@ -43,6 +51,11 @@ function mountWith(opts: {
   installState?: InstallState;
   installObs?: () => Promise<{ ok: boolean; error?: string }>;
   onInstallProgress?: (cb: (p: InstallProgress) => void) => () => void;
+  audioDevices?: AudioDevices;
+  importObsPrefs?: () => Promise<{
+    found: boolean;
+    applied?: Record<string, unknown>;
+  }>;
 }) {
   const settings: Settings = { ...baseSettings, ...opts.settings };
   const save = vi.fn(async (partial: Settings) => {
@@ -57,9 +70,13 @@ function mountWith(opts: {
       return () => {};
     });
   const installObs = opts.installObs ?? vi.fn(async () => ({ ok: true }));
+  const importObsPrefs =
+    opts.importObsPrefs ?? vi.fn(async () => ({ found: false }));
+  const selectRecordingDirectory = vi.fn(async () => null);
   (bridge as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
     settings: {
-      get: vi.fn().mockResolvedValue({ ...settings }),
+      // Reads the live object: the import flow re-fetches after main wrote.
+      get: vi.fn(async () => ({ ...settings })),
       save,
     },
     recorder: {
@@ -81,11 +98,23 @@ function mountWith(opts: {
         ),
       onInstallProgress,
       installObs,
+      listAudioDevices: vi
+        .fn()
+        .mockResolvedValue(opts.audioDevices ?? { output: [], input: [] }),
+      importObsPrefs,
+      selectRecordingDirectory,
     },
     app: { openExternal: vi.fn() },
   });
   const { container } = render(<SettingsPanel />);
-  return { save, installObs, getProgressCb: () => progressCb, container };
+  return {
+    save,
+    installObs,
+    importObsPrefs,
+    settings,
+    getProgressCb: () => progressCb,
+    container,
+  };
 }
 
 beforeEach(() => vi.clearAllMocks());
@@ -150,6 +179,134 @@ describe("SettingsPanel 录像模式(task-6)", () => {
     expect(screen.getByRole("button", { name: "重试" }).textContent).toBe(
       "重试",
     );
+  });
+
+  it("managed + 已安装 → 三行 prefs:设备下拉列出枚举到的设备 + 不录;目录行默认文案;external 模式不渲染", async () => {
+    mountWith({
+      installState: { installed: true, platformSupported: true },
+      audioDevices: {
+        output: [
+          { id: "default", name: "默认" },
+          { id: "{out}", name: "Speakers" },
+        ],
+        input: [{ id: "{mic}", name: "Blue Yeti" }],
+      },
+    });
+    const desktop = (await screen.findByLabelText(
+      "桌面声音设备",
+    )) as HTMLSelectElement;
+    await waitFor(() =>
+      expect(Array.from(desktop.options).map((o) => o.textContent)).toEqual([
+        "系统默认设备",
+        "Speakers",
+        "不录",
+      ]),
+    );
+    expect(desktop.value).toBe("default");
+    const mic = screen.getByLabelText("麦克风设备") as HTMLSelectElement;
+    await waitFor(() =>
+      expect(Array.from(mic.options).map((o) => o.textContent)).toEqual([
+        "系统默认设备",
+        "Blue Yeti",
+        "不录",
+      ]),
+    );
+    expect(mic.value).toBe("__none__");
+    expect(
+      screen.getByText(/默认\(应用数据目录下的 recordings 文件夹\)/),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "恢复默认" })).toBeNull();
+  });
+
+  it("external 模式 → prefs 行不渲染", async () => {
+    mountWith({
+      settings: { recordingMode: "external" },
+      installState: { installed: true, platformSupported: true },
+    });
+    await screen.findByLabelText("OBS WebSocket 地址");
+    expect(screen.queryByLabelText("桌面声音设备")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /从本机 OBS 导入/ }),
+    ).toBeNull();
+  });
+
+  it("改麦克风为具体设备 → save({managedMicDevice: id});改桌面声音为不录 → save(null);提示文案说明重启时机", async () => {
+    const { save } = mountWith({
+      installState: { installed: true, platformSupported: true },
+      audioDevices: { output: [], input: [{ id: "{mic}", name: "Blue Yeti" }] },
+    });
+    const mic = (await screen.findByLabelText(
+      "麦克风设备",
+    )) as HTMLSelectElement;
+    await waitFor(() => expect(mic.options.length).toBe(3));
+    fireEvent.change(mic, { target: { value: "{mic}" } });
+    await waitFor(() =>
+      expect(save).toHaveBeenCalledWith({ managedMicDevice: "{mic}" }),
+    );
+    const desktop = screen.getByLabelText("桌面声音设备") as HTMLSelectElement;
+    fireEvent.change(desktop, { target: { value: "__none__" } });
+    await waitFor(() =>
+      expect(save).toHaveBeenCalledWith({ managedDesktopAudioDevice: null }),
+    );
+    await screen.findByText(/托管 OBS 重启后生效/);
+  });
+
+  it("已保存的设备不在枚举列表里(托管 OBS 没在跑 / 设备拔了)→ 仍作为一项显示并保持选中", async () => {
+    mountWith({
+      settings: { managedDesktopAudioDevice: "{gone}" },
+      installState: { installed: true, platformSupported: true },
+      audioDevices: { output: [{ id: "{out}", name: "Speakers" }], input: [] },
+    });
+    const desktop = (await screen.findByLabelText(
+      "桌面声音设备",
+    )) as HTMLSelectElement;
+    await waitFor(() => expect(desktop.options.length).toBe(4));
+    expect(desktop.value).toBe("{gone}");
+    expect(desktop.selectedOptions[0]!.textContent).toMatch(/已保存的设备/);
+  });
+
+  it("目录已设置 → 显示路径 + 恢复默认;点恢复默认 → save({recordingDirectory: null})", async () => {
+    const { save } = mountWith({
+      settings: { recordingDirectory: "D:\\rec" },
+      installState: { installed: true, platformSupported: true },
+    });
+    await screen.findByText("D:\\rec");
+    fireEvent.click(screen.getByRole("button", { name: "恢复默认" }));
+    await waitFor(() =>
+      expect(save).toHaveBeenCalledWith({ recordingDirectory: null }),
+    );
+  });
+
+  it("从本机 OBS 导入:found → 重新读设置并列出导入项;未找到 → 提示", async () => {
+    const { settings, importObsPrefs } = mountWith({
+      installState: { installed: true, platformSupported: true },
+      importObsPrefs: vi.fn(async () => {
+        Object.assign(settings, {
+          recordingDirectory: "E:/obs",
+          managedMicDevice: "{mic}",
+        });
+        return {
+          found: true,
+          applied: { recordingDirectory: "E:/obs", managedMicDevice: "{mic}" },
+        };
+      }),
+    });
+    fireEvent.click(
+      await screen.findByRole("button", { name: /从本机 OBS 导入/ }),
+    );
+    await screen.findByText(/已导入 录像目录、麦克风/);
+    expect(importObsPrefs).toHaveBeenCalledTimes(1);
+    await screen.findByText("E:/obs");
+
+    mountWith({
+      installState: { installed: true, platformSupported: true },
+      importObsPrefs: vi.fn(async () => ({ found: false })),
+    });
+    const buttons = await screen.findAllByRole("button", {
+      name: /从本机 OBS 导入/,
+    });
+    fireEvent.click(buttons[buttons.length - 1]!);
+    await screen.findByText(/未找到本机 OBS 配置/);
   });
 
   it("非 win32:managed 选项禁用 + 说明文案;选中态落在 external,即便存储的默认值仍是 managed(复核 NEW-7)", async () => {

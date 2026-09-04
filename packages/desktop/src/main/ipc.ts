@@ -27,9 +27,12 @@ import type { UpdaterService } from "./updater";
 type CoachChatService = ReturnType<typeof createCoachChatService>;
 import {
   authUnknownHint,
+  detectObsRecordingPrefs,
   detectObsWebsocket,
+  importedPrefsPatch,
   resolveAutoConfigPassword,
 } from "./obsAutoConfig";
+import type { ObsAudioDevice } from "./managedObsBackend";
 import { vodUrl } from "../shared/vod";
 import type { ObsInstallProgress } from "./obsAssets";
 
@@ -66,6 +69,13 @@ export function registerIpc(deps: {
    * subscribed), so a fresh launch with OBS not yet installed showed 未连接
    * forever, never 待安装. */
   getObsInstallState: () => { installed: boolean; platformSupported: boolean };
+  /** Managed-OBS prefs (2026-09-04): device enumeration via the running
+   * managed instance's websocket; index.ts answers empty lists when no
+   * managed backend is assembled. */
+  listAudioDevices: () => Promise<{
+    output: ObsAudioDevice[];
+    input: ObsAudioDevice[];
+  }>;
   compare: CompareService;
   analysis: AnalysisService;
   learning: LearningService;
@@ -205,19 +215,27 @@ export function registerIpc(deps: {
   ipcMain.handle("gladlog:settings:get", () =>
     redactSettings(deps.settings.get()),
   );
+  /** The one settings write path: sanitize → save → the two post-save hooks.
+   * settings:save, the recording-directory picker and the OBS-prefs import
+   * all go through here, so a managed-OBS restart (onSettingsSaved) fires
+   * for every way a pref can change — not only the generic save. */
+  async function applySettingsPatch(
+    rawPartial: Partial<GladlogSettings>,
+  ): Promise<GladlogSettings> {
+    const partial = sanitizeSettingsPatch(rawPartial);
+    const prev = deps.settings.get();
+    const next = deps.settings.save(partial);
+    if ("wowDirectory" in partial) deps.onWowDirectoryChanged(next);
+    // Task-5b runtime toggle (复核 NEW-3): awaited, but (task 8 review fix)
+    // an enable no longer blocks this on the full assembly sequence -- see
+    // the `onSettingsSaved` doc comment above.
+    await deps.onSettingsSaved?.(prev, next);
+    return next;
+  }
   ipcMain.handle(
     "gladlog:settings:save",
-    async (_e, rawPartial: Partial<GladlogSettings>) => {
-      const partial = sanitizeSettingsPatch(rawPartial);
-      const prev = deps.settings.get();
-      const next = deps.settings.save(partial);
-      if ("wowDirectory" in partial) deps.onWowDirectoryChanged(next);
-      // Task-5b runtime toggle (复核 NEW-3): awaited, but (task 8 review fix)
-      // an enable no longer blocks this on the full assembly sequence -- see
-      // the `onSettingsSaved` doc comment above.
-      await deps.onSettingsSaved?.(prev, next);
-      return redactSettings(next);
-    },
+    async (_e, rawPartial: Partial<GladlogSettings>) =>
+      redactSettings(await applySettingsPatch(rawPartial)),
   );
   ipcMain.handle("gladlog:app:getVersion", () => app.getVersion());
   // Auto-update (2026-08-02, design doc §4.4). getState is the pull side: the
@@ -351,6 +369,31 @@ export function registerIpc(deps: {
   ipcMain.handle("gladlog:recorder:obsInstallState", () =>
     deps.getObsInstallState(),
   );
+  // -- Managed-OBS prefs (2026-09-04) --
+  ipcMain.handle("gladlog:recorder:listAudioDevices", () =>
+    deps.listAudioDevices(),
+  );
+  // Read-only on the user's OBS (same rule as autoConfig above); the patch
+  // goes through applySettingsPatch so the restart-on-change hook runs.
+  ipcMain.handle("gladlog:recorder:importObsPrefs", async () => {
+    const d = detectObsRecordingPrefs();
+    if (!d.found) return { found: false };
+    const applied = importedPrefsPatch(d);
+    await applySettingsPatch(applied);
+    return { found: true, configRoot: d.configRoot, applied };
+  });
+  ipcMain.handle("gladlog:recorder:selectRecordingDirectory", async () => {
+    const win = deps.getWindow();
+    if (!win) return null;
+    const r = await dialog.showOpenDialog(win, {
+      title: "选择录像保存目录",
+      properties: ["openDirectory", "createDirectory"],
+    });
+    if (r.canceled || r.filePaths.length === 0) return null;
+    const dirPath = r.filePaths[0]!;
+    await applySettingsPatch({ recordingDirectory: dirPath });
+    return dirPath;
+  });
   ipcMain.handle("gladlog:recorder:getForMatch", (_e, matchId: string) => {
     const r = deps.recorder.getForMatch(String(matchId));
     return r

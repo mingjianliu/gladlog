@@ -25,6 +25,15 @@ export interface ObsConfigSpec {
   wsPassword: string;
   /** Recording bitrate in kbps. Default 8000 per design doc U2. */
   bitrateKbps: number;
+  /** Desktop-audio (output) device to record on channel 1: a WASAPI endpoint
+   * id, `"default"` for the system default, or null to record no desktop
+   * audio (DesktopAudioDevice1 omitted from the scene collection). Feed it
+   * from settings.managedDesktopAudioDevice (shared/managedObsPrefs.ts). */
+  desktopAudioDeviceId: string | null;
+  /** Microphone (input) device to record on channel 3 (AuxAudioDevice1):
+   * same value space as desktopAudioDeviceId; null = no mic recorded, which
+   * is the product default (design doc U4). */
+  micDeviceId: string | null;
 }
 
 const PROFILE_NAME = "gladlog";
@@ -175,11 +184,29 @@ function writeRecordEncoder(spec: ObsConfigSpec): void {
  *   (volume 1.0, all 6 mixer tracks, enabled true), so no extra fields are
  *   required here.
  */
-function desktopAudioDeviceEntry(): Record<string, unknown> {
+/** Source names for the two global audio channels. Exported: the managed
+ * backend's device enumeration (listAudioDevices) creates its temporary
+ * probe inputs under names derived from these so they can never collide
+ * with the real channel sources. */
+export const DESKTOP_AUDIO_INPUT_NAME = "Desktop Audio";
+export const MIC_AUDIO_INPUT_NAME = "Mic/Aux";
+/** Source kinds (Windows only — matches managed OBS being win32-only). */
+export const DESKTOP_AUDIO_INPUT_KIND = "wasapi_output_capture";
+export const MIC_AUDIO_INPUT_KIND = "wasapi_input_capture";
+
+function desktopAudioDeviceEntry(deviceId: string): Record<string, unknown> {
   return {
-    name: "Desktop Audio",
-    id: "wasapi_output_capture",
-    settings: { device_id: "default" },
+    name: DESKTOP_AUDIO_INPUT_NAME,
+    id: DESKTOP_AUDIO_INPUT_KIND,
+    settings: { device_id: deviceId },
+  };
+}
+
+function micAudioDeviceEntry(deviceId: string): Record<string, unknown> {
+  return {
+    name: MIC_AUDIO_INPUT_NAME,
+    id: MIC_AUDIO_INPUT_KIND,
+    settings: { device_id: deviceId },
   };
 }
 
@@ -194,9 +221,21 @@ function writeSceneCollection(spec: ObsConfigSpec): void {
     // Empty scene: capture sources get added at runtime via websocket
     // (design doc §5.4), not written here.
     sources: [{ id: "scene", name: SCENE_NAME, settings: { items: [] } }],
-    // Desktop audio wired, mic/aux intentionally omitted — see
-    // desktopAudioDeviceEntry() doc comment above for the source citations.
-    DesktopAudioDevice1: desktopAudioDeviceEntry(),
+    // Audio channels: a null device id OMITS the key, which is exactly how
+    // OBS expresses "channel unassigned" (LoadAudioDevice no-ops on an
+    // absent key — see the doc comment above for the source citations).
+    // Product default (spec from MANAGED_OBS_PREF_DEFAULTS): desktop audio
+    // on the system default device, no mic.
+    ...(spec.desktopAudioDeviceId !== null
+      ? {
+          DesktopAudioDevice1: desktopAudioDeviceEntry(
+            spec.desktopAudioDeviceId,
+          ),
+        }
+      : {}),
+    ...(spec.micDeviceId !== null
+      ? { AuxAudioDevice1: micAudioDeviceEntry(spec.micDeviceId) }
+      : {}),
   });
 }
 

@@ -30,6 +30,7 @@ import {
   subscribeUpdateState,
 } from "../update/updateBridge";
 import { ImportButton } from "./ImportButton";
+import { ManagedObsPrefsRows } from "./ManagedObsPrefsRows";
 
 // 179MB (binary MiB rounding) -- matches the existing "179MB" copy used
 // elsewhere in this codebase (index.ts/obsAssets.ts comments); brief point 7.
@@ -500,8 +501,8 @@ export function SettingsPanel() {
               <option value="deepseek">DeepSeek API</option>
             </select>
             <span className="settings-note">
-              本地 CLI(Claude/agy/Codex/CodeBuddy)不走网络;DeepSeek 为官方 API,需 key
-              且数据出机
+              本地 CLI(Claude/agy/Codex/CodeBuddy)不走网络;DeepSeek 为官方
+              API,需 key 且数据出机
             </span>
           </span>
           <span />
@@ -595,7 +596,6 @@ export function SettingsPanel() {
               {settings.autoAnalyzeNew ? "停用" : "启用"}
             </button>
           </span>
-
         </div>
       </section>
 
@@ -810,6 +810,14 @@ export function SettingsPanel() {
                     已安装并自动管理,录制状态见上方状态行。
                   </span>
                   <span />
+                  <ManagedObsPrefsRows
+                    settings={settings}
+                    save={(partial, note) => save(partial, note, "recording")}
+                    reload={async () => {
+                      const next = await bridge().settings.get();
+                      setSettings(next);
+                    }}
+                  />
                 </>
               ) : (
                 <>

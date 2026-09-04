@@ -12,6 +12,7 @@ import {
   type ManagedAssemblyState,
   type TeardownManagedRecordingDeps,
 } from "./managedAssembly";
+import { MANAGED_OBS_PREF_DEFAULTS } from "../shared/managedObsPrefs";
 import { RecordingsStore } from "./recordingsStore";
 import type { CaptureBackend, CaptureChunk } from "./captureBackend";
 import type { ManagedObsBackend } from "./managedObsBackend";
@@ -81,6 +82,7 @@ function makeFakeBackend(): {
     shutdown: async () => {},
     configureSession: async () => {},
     captureProbe: async () => ({ shotPath: "", black: false }),
+    listAudioDevices: async () => ({ output: [], input: [] }),
   };
   return {
     backend,
@@ -107,6 +109,7 @@ function buildIntegration(dir: string) {
     recordingKeepCount: 0,
     recordingMaxBytes: Number.POSITIVE_INFINITY,
     recordingMode: "managed" as const,
+    ...MANAGED_OBS_PREF_DEFAULTS,
   };
   const managedRefs: {
     backend?: CaptureBackend;
@@ -139,7 +142,7 @@ function buildIntegration(dir: string) {
     state,
     getSettings: () => settings,
     getWsPassword: () => "deadbeef",
-    recDir: dir,
+    defaultRecDir: dir,
     assets: { root: "/tmp/gladlog-obs-root", installed: () => true },
     writeObsConfig: () => {},
     clearSentinels: () => {},

@@ -9,7 +9,11 @@ import type {
   CaptureBackend,
   CaptureChunk,
 } from "./captureBackend";
-import { SCENE_NAME } from "./obsConfigWriter";
+import {
+  DESKTOP_AUDIO_INPUT_KIND,
+  MIC_AUDIO_INPUT_KIND,
+  SCENE_NAME,
+} from "./obsConfigWriter";
 import type { ManagedObsWs } from "./managedObsClient";
 import { realManagedObsWs } from "./managedObsClient";
 
@@ -25,6 +29,11 @@ const FIRST_CHUNK_EVENT_TIMEOUT_MS = 5_000;
 /** 托管实例里 game_capture 输入的固定名字——不进场景 JSON(design doc §5.4:
  * "采集源不写进场景 JSON"),运行时用 CreateInput 现建。 */
 const GAME_CAPTURE_INPUT_NAME = "gladlog-capture";
+/** Throwaway inputs created by listAudioDevices() (one per audio input
+ * kind), removed again in the same call. Prefixed so they can never collide
+ * with the real channel sources (Desktop Audio / Mic/Aux) or the capture
+ * input above. */
+const AUDIO_PROBE_INPUT_PREFIX = "gladlog-audio-probe-";
 
 // 编码器 stage 1 PINNED(brief 规则 5:没有 websocket 编码器枚举 API,design doc
 // §2.5 源码级事实)。NVENC 选择是 stage 2 项。PINNED_ENCODER 定义在
@@ -127,9 +136,26 @@ export interface ManagedObsBackendDeps {
   now?: () => number;
 }
 
+/** One enumerable audio endpoint, as OBS reports it for a `device_id`
+ * property: `id` is what goes into the scene collection / settings, `name`
+ * is the human label the settings page shows. */
+export interface ObsAudioDevice {
+  id: string;
+  name: string;
+}
+
 export type ManagedObsBackend = CaptureBackend & {
   configureSession(): Promise<void>;
   captureProbe(): Promise<{ shotPath: string; black: boolean }>;
+  /** Managed-OBS prefs (2026-09-04): the devices the settings page can
+   * offer. `output` = desktop-audio candidates (wasapi_output_capture),
+   * `input` = microphone candidates (wasapi_input_capture). Empty lists
+   * when not connected or when a request fails — never throws, and never
+   * leaves a recording-status error behind (enumeration is not recording). */
+  listAudioDevices(): Promise<{
+    output: ObsAudioDevice[];
+    input: ObsAudioDevice[];
+  }>;
 };
 
 export function createManagedObsBackend(
@@ -618,6 +644,92 @@ export function createManagedObsBackend(
     return { shotPath, black: judgment.black };
   }
 
+  /**
+   * Device enumeration goes through obs-websocket's
+   * GetInputPropertiesListPropertyItems, which needs an EXISTING input of the
+   * right kind to ask about — so for each kind a throwaway probe input is
+   * created in the gladlog scene, queried, and removed. The probe is created
+   * with `sceneItemEnabled: false`: libobs only mixes audio from sources in
+   * the ACTIVE tree, and a hidden scene item holds no active reference on
+   * its source (obs-scene.c: `scene_enum_sources(active=true)` skips items
+   * whose `active_refs` is 0; `obs_sceneitem_set_visible(false)` drops that
+   * ref), so a hidden probe is silent. Belt-and-braces on top of that, the
+   * whole enumeration is refused while `continuousActive` — see below.
+   *
+   * Every call goes through `callQuiet`, not `callWithTimeout`: "could not
+   * list devices" is a settings-page fact, not a recording fault, and must
+   * neither show up on the recorder status row nor mask a real failure.
+   */
+  async function listAudioDevices(): Promise<{
+    output: ObsAudioDevice[];
+    input: ObsAudioDevice[];
+  }> {
+    const empty = { output: [], input: [] };
+    // Never while a recording is running (agy review #1): even a hidden
+    // probe input has to initialise the capture device, and the recording
+    // must not carry a trace of a microphone the user set to "不录". The
+    // settings page then offers 系统默认 / 不录 / the saved id only; prefs
+    // changed during a recording are applied after it ends anyway.
+    if (continuousActive) return empty;
+    const ok = await ensureConnected();
+    if (!ok) return empty;
+    const output = await enumerateAudioDevices(DESKTOP_AUDIO_INPUT_KIND);
+    const input = await enumerateAudioDevices(MIC_AUDIO_INPUT_KIND);
+    return { output, input };
+  }
+
+  /** callWithTimeout minus the lastError write: device enumeration is a
+   * settings-page fact, not a recording fault, and a snapshot/restore of
+   * lastError around it would clobber a genuine failure (websocket drop,
+   * split timeout) that lands mid-enumeration (agy review #4). */
+  async function callQuiet(
+    req: string,
+    data?: Record<string, unknown>,
+  ): Promise<Record<string, unknown> | null> {
+    if (!client) return null;
+    try {
+      return await withTimeout(client.call(req, data), CALL_TIMEOUT_MS, req);
+    } catch {
+      return null;
+    }
+  }
+
+  async function enumerateAudioDevices(
+    inputKind: string,
+  ): Promise<ObsAudioDevice[]> {
+    const inputName = `${AUDIO_PROBE_INPUT_PREFIX}${inputKind}`;
+    // A leftover probe from an earlier interrupted enumeration makes
+    // CreateInput fail with "already exists"; the query below works either
+    // way, so the create result is deliberately not gated on.
+    await callQuiet("CreateInput", {
+      sceneName: SCENE_NAME,
+      inputName,
+      inputKind,
+      inputSettings: {},
+      sceneItemEnabled: false,
+    });
+    try {
+      const r = await callQuiet("GetInputPropertiesListPropertyItems", {
+        inputName,
+        propertyName: "device_id",
+      });
+      const items = Array.isArray(r?.["propertyItems"])
+        ? (r["propertyItems"] as Array<Record<string, unknown>>)
+        : [];
+      const out: ObsAudioDevice[] = [];
+      for (const it of items) {
+        if (it["itemEnabled"] === false) continue;
+        const id = it["itemValue"];
+        const name = it["itemName"];
+        if (typeof id !== "string" || id === "") continue;
+        out.push({ id, name: typeof name === "string" && name ? name : id });
+      }
+      return out;
+    } finally {
+      await callQuiet("RemoveInput", { inputName });
+    }
+  }
+
   return {
     startContinuous,
     stopContinuous,
@@ -628,5 +740,6 @@ export function createManagedObsBackend(
     shutdown,
     configureSession,
     captureProbe,
+    listAudioDevices,
   };
 }

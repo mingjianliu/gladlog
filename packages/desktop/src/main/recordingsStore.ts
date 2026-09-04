@@ -123,6 +123,13 @@ export class RecordingsStore {
      * cleanup" (see the recorder.ts weStartedRecording lesson). No-op by
      * default; in production main/index.ts wires electron-log in here. */
     private log: (msg: string) => void = () => {},
+    /** Where OBS actually writes chunks (managed-OBS prefs, 2026-09-04: the
+     * user may point recording at another drive). The INDEX stays in `dir`
+     * regardless — entries carry absolute videoPaths, so moving the video
+     * folder never orphans earlier recordings. A getter (not a value) so a
+     * settings change takes effect on the next prune without rebuilding
+     * the store. Defaults to `dir`, the pre-feature layout. */
+    private getVideoDir: () => string = () => dir,
   ) {}
   private indexPath(): string {
     return join(this.dir, "recordings.ndjson");
@@ -300,9 +307,10 @@ export class RecordingsStore {
    * disconnection), leaving no positive evidence at all, is out of scope for
    * this fix and is honestly recorded here as a remaining gap. */
   private reportUnindexedFiles(entries: RecordingEntry[]): void {
+    const videoDir = this.getVideoDir();
     let names: string[];
     try {
-      names = readdirSync(this.dir);
+      names = readdirSync(videoDir);
     } catch {
       return;
     }
@@ -311,7 +319,7 @@ export class RecordingsStore {
     let bytes = 0;
     for (const name of names) {
       if (name === "recordings.ndjson" || name.endsWith(".tmp")) continue;
-      const p = resolve(join(this.dir, name));
+      const p = resolve(join(videoDir, name));
       if (indexed.has(p)) continue;
       try {
         const st = statSync(p);

@@ -79,3 +79,52 @@ describe("recording settings", () => {
     });
   });
 });
+
+describe("managed-OBS prefs (2026-09-04)", () => {
+  it("默认值:目录 null、桌面声音 default、麦克风 null", () => {
+    const dir = mkdtempSync(join(tmpdir(), "gl-settings-"));
+    const s = new SettingsStore(join(dir, "settings.json")).get();
+    expect(s.recordingDirectory).toBeNull();
+    expect(s.managedDesktopAudioDevice).toBe("default");
+    expect(s.managedMicDevice).toBeNull();
+  });
+
+  it("sanitize:非字符串非 null 丢弃;空白串归一成 null;正常值原样", () => {
+    expect(
+      sanitizeSettingsPatch({
+        recordingDirectory: 42 as unknown as string,
+      }),
+    ).not.toHaveProperty("recordingDirectory");
+    expect(sanitizeSettingsPatch({ managedMicDevice: "   " })).toEqual({
+      managedMicDevice: null,
+    });
+    expect(sanitizeSettingsPatch({ managedDesktopAudioDevice: null })).toEqual({
+      managedDesktopAudioDevice: null,
+    });
+    expect(
+      sanitizeSettingsPatch({
+        recordingDirectory: "D:\\rec",
+        managedDesktopAudioDevice: "{0.0.0.00000000}.{abc}",
+        managedMicDevice: "default",
+      }),
+    ).toEqual({
+      recordingDirectory: "D:\\rec",
+      managedDesktopAudioDevice: "{0.0.0.00000000}.{abc}",
+      managedMicDevice: "default",
+    });
+  });
+
+  it("往返:save 三字段后 get 原样读回", () => {
+    const dir = mkdtempSync(join(tmpdir(), "gl-settings-"));
+    const store = new SettingsStore(join(dir, "settings.json"));
+    store.save({
+      recordingDirectory: "D:\\rec",
+      managedDesktopAudioDevice: null,
+      managedMicDevice: "{mic}",
+    });
+    const s = store.get();
+    expect(s.recordingDirectory).toBe("D:\\rec");
+    expect(s.managedDesktopAudioDevice).toBeNull();
+    expect(s.managedMicDevice).toBe("{mic}");
+  });
+});

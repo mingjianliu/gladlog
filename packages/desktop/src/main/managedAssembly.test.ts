@@ -1,10 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import {
+  MANAGED_OBS_PREF_DEFAULTS,
+  type ManagedObsPrefs,
+} from "../shared/managedObsPrefs";
 import type { CaptureBackend, CaptureChunk } from "./captureBackend";
 import type { ManagedObsBackend } from "./managedObsBackend";
+import type { ObsConfigSpec } from "./obsConfigWriter";
 import type { RecorderStatus } from "./recorder";
 import {
   assembleManagedRecording,
+  createManagedRestartCoordinator,
   createManagedAssemblyState,
   reactToManagedToggle,
   teardownManagedRecording,
@@ -45,12 +51,14 @@ class Harness {
   onWowDownCalls = 0;
   handleStopCalls = 0;
   state = createManagedAssemblyState();
+  writtenSpec: ObsConfigSpec | null = null;
   deps: AssembleManagedRecordingDeps;
 
   constructor(opts?: {
     enabled?: boolean;
     mode?: "managed" | "external";
     installed?: boolean;
+    prefs?: Partial<ManagedObsPrefs>;
     configureSession?: () => Promise<void>;
     probe?: () => Promise<{
       ready: boolean;
@@ -84,6 +92,7 @@ class Harness {
           this.order.push("configureSession");
         }),
       captureProbe: async () => ({ shotPath: "", black: false }),
+      listAudioDevices: async () => ({ output: [], input: [] }),
     };
 
     this.deps = {
@@ -91,12 +100,14 @@ class Harness {
       getSettings: () => ({
         recordingEnabled: opts?.enabled ?? true,
         recordingMode: opts?.mode ?? "managed",
+        ...MANAGED_OBS_PREF_DEFAULTS,
+        ...opts?.prefs,
       }),
       getWsPassword: () => {
         this.order.push("getWsPassword");
         return "deadbeef";
       },
-      recDir: "/tmp/gladlog-recdir",
+      defaultRecDir: "/tmp/gladlog-recdir",
       assets: {
         root: "/tmp/gladlog-obs-root",
         installed: () => {
@@ -104,8 +115,9 @@ class Harness {
           return this.installed;
         },
       },
-      writeObsConfig: () => {
+      writeObsConfig: (spec) => {
         this.order.push("writeObsConfig");
+        this.writtenSpec = spec;
       },
       clearSentinels: () => {
         this.order.push("clearSentinels");
@@ -360,6 +372,135 @@ describe("teardownManagedRecording + toggle 序列 (复核 NEW-3)", () => {
     expect(h.order).toContain("spawnManagedObs");
     expect(h.watchStartCalls).toBe(2);
     expect(h.state.running).toBe(true);
+  });
+});
+
+describe("managed-OBS prefs → ObsConfigSpec (2026-09-04)", () => {
+  beforeEach(() => setPlatform("win32"));
+  afterEach(() => setPlatform(originalPlatform));
+
+  it("默认 prefs:recDir = 应用默认目录,桌面声音 default,麦克风 null", async () => {
+    const h = new Harness({ installed: true });
+    await assembleManagedRecording(h.deps);
+    expect(h.writtenSpec).toMatchObject({
+      recDir: "/tmp/gladlog-recdir",
+      desktopAudioDeviceId: "default",
+      micDeviceId: null,
+    });
+  });
+
+  it("用户 prefs:目录/两路设备原样进入 spec,并且 backend 拿到同一个 recDir(共享谓词)", async () => {
+    let backendRecDir: string | null = null;
+    const h = new Harness({
+      installed: true,
+      prefs: {
+        recordingDirectory: "D:\\rec",
+        managedDesktopAudioDevice: null,
+        managedMicDevice: "{mic}",
+      },
+    });
+    const inner = h.deps.createManagedObsBackend;
+    h.deps.createManagedObsBackend = (d) => {
+      backendRecDir = d.recDir;
+      return inner(d);
+    };
+    await assembleManagedRecording(h.deps);
+    expect(h.writtenSpec).toMatchObject({
+      recDir: "D:\\rec",
+      desktopAudioDeviceId: null,
+      micDeviceId: "{mic}",
+    });
+    expect(backendRecDir).toBe("D:\\rec");
+  });
+});
+
+describe("createManagedRestartCoordinator (2026-09-04 用户裁决:保存即生效,录制中等录完)", () => {
+  beforeEach(() => setPlatform("win32"));
+  afterEach(() => setPlatform(originalPlatform));
+
+  const active = {
+    recordingEnabled: true,
+    recordingMode: "managed" as const,
+    ...MANAGED_OBS_PREF_DEFAULTS,
+  };
+  const settle = () => new Promise((r) => setTimeout(r, 0));
+
+  function build(recording = false) {
+    const calls: string[] = [];
+    const rec = { recording };
+    const c = createManagedRestartCoordinator({
+      isRecording: () => rec.recording,
+      teardown: async () => {
+        calls.push("teardown");
+      },
+      assemble: async () => {
+        calls.push("assemble");
+      },
+    });
+    return { c, calls, rec };
+  }
+
+  it("prefs 未变 → 不动;变了且空闲 → teardown 后 assemble(顺序)", async () => {
+    const { c, calls } = build(false);
+    await c.onSettingsSaved(active, { ...active });
+    expect(calls).toEqual([]);
+    await c.onSettingsSaved(active, { ...active, managedMicDevice: "{mic}" });
+    await settle();
+    expect(calls).toEqual(["teardown", "assemble"]);
+    expect(c.restartPending()).toBe(false);
+  });
+
+  it("录制中 → 标记待重启,不打断;收到 recording=false 的状态推送后才重启,且只重启一次", async () => {
+    const { c, calls, rec } = build(true);
+    await c.onSettingsSaved(active, {
+      ...active,
+      recordingDirectory: "D:\\rec",
+    });
+    expect(calls).toEqual([]);
+    expect(c.restartPending()).toBe(true);
+    c.onRecorderStatus({ recording: true }); // still recording: nothing
+    expect(calls).toEqual([]);
+    rec.recording = false;
+    c.onRecorderStatus({ recording: false });
+    await settle();
+    expect(calls).toEqual(["teardown", "assemble"]);
+    expect(c.restartPending()).toBe(false);
+    c.onRecorderStatus({ recording: false }); // no second restart
+    await settle();
+    expect(calls).toEqual(["teardown", "assemble"]);
+  });
+
+  it("托管未激活(前或后)→ 不重启:开关本身的 reactToManagedToggle 负责,且清掉挂起的待重启", async () => {
+    const { c, calls, rec } = build(true);
+    await c.onSettingsSaved(active, { ...active, managedMicDevice: "{mic}" });
+    expect(c.restartPending()).toBe(true);
+    // user disables managed while a restart is pending
+    await c.onSettingsSaved(
+      { ...active, managedMicDevice: "{mic}" },
+      { ...active, managedMicDevice: "{mic}", recordingEnabled: false },
+    );
+    expect(calls).toEqual([]);
+    // (agy review #3) a plain disable — prefs untouched — must ALSO clear
+    // the pending restart, or the teardown's recording=false push would
+    // fire a phantom teardown+assemble behind the disable.
+    expect(c.restartPending()).toBe(false);
+    // prefs changed together with the disable → still nothing
+    await c.onSettingsSaved(
+      { ...active, managedMicDevice: "{mic}" },
+      { ...active, recordingEnabled: false, managedMicDevice: null },
+    );
+    expect(c.restartPending()).toBe(false);
+    rec.recording = false;
+    c.onRecorderStatus({ recording: false });
+    await settle();
+    expect(calls).toEqual([]);
+    // enabling + prefs in one patch: assembly from the toggle reads fresh
+    // settings, no extra restart
+    await c.onSettingsSaved(
+      { ...active, recordingEnabled: false },
+      { ...active, managedMicDevice: "{mic}" },
+    );
+    expect(calls).toEqual([]);
   });
 });
 

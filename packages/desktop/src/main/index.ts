@@ -29,6 +29,7 @@ import {
   createRecorderService,
   isManagedActive,
   type RecorderService,
+  type RecorderStatus,
 } from "./recorder";
 import { realObsClient } from "./obsClient";
 import { RecordingsStore } from "./recordingsStore";
@@ -47,9 +48,11 @@ import { createWowProcessWatch } from "./wowProcessWatch";
 import {
   assembleManagedRecording,
   createManagedAssemblyState,
+  createManagedRestartCoordinator,
   reactToManagedToggle,
   teardownManagedRecording,
 } from "./managedAssembly";
+import { resolveRecordingDir } from "../shared/managedObsPrefs";
 import type { CaptureBackend } from "./captureBackend";
 import {
   createUpdaterService,
@@ -104,6 +107,13 @@ const managedRefs: {
 // running) that survives app-lifetime settings toggles; see
 // managedAssembly.ts's own doc comment.
 const managedAssemblyState = createManagedAssemblyState();
+
+/** The app-default recording directory. The EFFECTIVE directory is
+ * `resolveRecordingDir(defaultRecordingsDir(), settings)` (managed-OBS prefs,
+ * 2026-09-04) — computed through that one shared function at every consumer
+ * (assembly → basic.ini RecFilePath + backend scan; RecordingsStore's
+ * video-dir scan), never re-derived by hand. */
+const defaultRecordingsDir = () => join(userData(), "recordings");
 
 // C2 fix: on exit we must wait for recorder.stop() (StopRecord's async round
 // trip) to finish before actually calling app.quit(), or OBS will very likely
@@ -174,7 +184,7 @@ async function ensureManagedAssembly(): Promise<void> {
     state: managedAssemblyState,
     getSettings: () => settings.get(),
     getWsPassword: resolveManagedWsPassword,
-    recDir: join(userData(), "recordings"),
+    defaultRecDir: defaultRecordingsDir(),
     assets: managedAssets,
     writeObsConfig,
     clearSentinels,
@@ -268,11 +278,26 @@ async function onManagedActiveMaybeChanged(
 ): Promise<void> {
   const before = isManagedActive(prev);
   const after = isManagedActive(next);
+  // Managed-OBS prefs (2026-09-04): a directory/audio-device change while
+  // managed stays active restarts the instance (deferred past a recording
+  // in progress). Ordered BEFORE the toggle: a disable must cancel a
+  // deferred restart before the teardown's own recording=false status push
+  // reaches the coordinator (agy review #3).
+  await managedRestart.onSettingsSaved(prev, next);
   await reactToManagedToggle(before, after, {
     assemble: ensureManagedAssembly,
     teardown: ensureManagedTeardown,
   });
 }
+
+/** Restart-on-prefs-change coordinator. Fed every recorder status push
+ * (see the `emit` wrapper at createRecorderService below) so a restart
+ * deferred by an in-progress recording fires the moment recording ends. */
+const managedRestart = createManagedRestartCoordinator({
+  isRecording: () => recorder?.getStatus().recording ?? false,
+  teardown: ensureManagedTeardown,
+  assemble: ensureManagedAssembly,
+});
 
 // Auto-update wiring (design doc §4.2/§4.4). The gate is evaluated
 // synchronously right here so getState() can answer correctly from the very
@@ -586,14 +611,19 @@ else {
       offline: process.env["GLADLOG_E2E"] === "1",
     });
     const recordings = new RecordingsStore(
-      join(userData(), "recordings"),
+      defaultRecordingsDir(), // the index always lives here
       (m) => log.info(m),
+      () => resolveRecordingDir(defaultRecordingsDir(), settings.get()),
     );
     recorder = createRecorderService({
       getSettings: () => settings.get(),
       recordings,
       clientFactory: realObsClient,
-      emit: (ch, payload) => win?.webContents.send(ch, payload),
+      emit: (ch, payload) => {
+        if (ch === "gladlog:recorder:status")
+          managedRestart.onRecorderStatus(payload as RecorderStatus);
+        win?.webContents.send(ch, payload);
+      },
       // Task-5b: read fresh from managedRefs on every access (never cached)
       // -- the assembly layer mutates managedRefs across repeated runtime
       // toggles, and recorder.ts's own doc comment on this field already
@@ -629,6 +659,9 @@ else {
       onSettingsSaved: (prev, next) => onManagedActiveMaybeChanged(prev, next),
       installObs,
       getObsInstallState,
+      listAudioDevices: () =>
+        managedAssemblyState.backend?.listAudioDevices() ??
+        Promise.resolve({ output: [], input: [] }),
       compare,
       analysis,
       learning,

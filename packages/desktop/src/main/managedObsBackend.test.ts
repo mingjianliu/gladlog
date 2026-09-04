@@ -623,3 +623,98 @@ describe("configureSession + captureProbe — 黑帧判定进 sourceActive", () 
     expect(health.lastError).toMatch(/GetInputSettings/);
   });
 });
+
+describe("listAudioDevices (managed-OBS prefs, 2026-09-04)", () => {
+  it("每种 kind:建禁用的探针输入 → 查 device_id 列表 → 删探针;禁用项与空 id 过滤", async () => {
+    fake.handlers.GetInputPropertiesListPropertyItems = async (data) => {
+      const name = String(data?.["inputName"]);
+      return name.endsWith("wasapi_output_capture")
+        ? {
+            propertyItems: [
+              { itemName: "默认", itemValue: "default", itemEnabled: true },
+              { itemName: "Speakers", itemValue: "{out}", itemEnabled: true },
+              { itemName: "Gone", itemValue: "{gone}", itemEnabled: false },
+            ],
+          }
+        : {
+            propertyItems: [
+              { itemName: "Mic", itemValue: "{mic}", itemEnabled: true },
+              { itemName: "Empty", itemValue: "", itemEnabled: true },
+            ],
+          };
+    };
+    fake.handlers.RemoveInput = async () => ({});
+    const b = makeBackend();
+    const r = await b.listAudioDevices();
+    expect(r).toEqual({
+      output: [
+        { id: "default", name: "默认" },
+        { id: "{out}", name: "Speakers" },
+      ],
+      input: [{ id: "{mic}", name: "Mic" }],
+    });
+    const probeCreates = fake.callLog.filter(
+      (c) =>
+        c.req === "CreateInput" &&
+        String(c.data?.["inputName"]).startsWith("gladlog-audio-probe-"),
+    );
+    expect(probeCreates).toHaveLength(2);
+    for (const c of probeCreates) {
+      expect(c.data).toMatchObject({
+        sceneName: "gladlog",
+        sceneItemEnabled: false,
+      });
+    }
+    const removes = fake.callLog.filter((c) => c.req === "RemoveInput");
+    expect(removes.map((c) => c.data?.["inputName"])).toEqual(
+      probeCreates.map((c) => c.data?.["inputName"]),
+    );
+  });
+
+  it("枚举失败 → 空列表,探针仍被删除,且不污染 probe().lastError", async () => {
+    fake.handlers.GetInputPropertiesListPropertyItems = async () => {
+      throw new Error("boom");
+    };
+    fake.handlers.RemoveInput = async () => ({});
+    const b = makeBackend();
+    await b.configureSession();
+    const before = (await b.probe()).lastError;
+    const r = await b.listAudioDevices();
+    expect(r).toEqual({ output: [], input: [] });
+    expect(fake.callLog.filter((c) => c.req === "RemoveInput")).toHaveLength(2);
+    expect((await b.probe()).lastError).toBe(before);
+  });
+
+  it("(agy #4) 枚举期间落下的真实失败不会被枚举收尾抹掉", async () => {
+    const b = makeBackend();
+    await b.configureSession();
+    fake.handlers.GetInputPropertiesListPropertyItems = async () => {
+      // A concurrent, lastError-bearing call fails while enumeration is in
+      // flight (captureProbe goes through callWithTimeout; markChapter is
+      // deliberately silent and would not exercise this).
+      fake.handlers.SaveSourceScreenshot = async () => {
+        throw new Error("shot boom");
+      };
+      await b.captureProbe();
+      return { propertyItems: [] };
+    };
+    fake.handlers.RemoveInput = async () => ({});
+    await b.listAudioDevices();
+    expect((await b.probe()).lastError).toMatch(/shot boom/);
+  });
+
+  it("(agy #1) 录制进行中 → 不建探针、不发任何 websocket 请求,直接空列表", async () => {
+    fake.handlers.StartRecord = async () => {
+      fake.emit("RecordStateChanged", {
+        outputState: "OBS_WEBSOCKET_OUTPUT_STARTED",
+        outputPath: "/rec/chunk1.mp4",
+      });
+      return {};
+    };
+    const b = makeBackend();
+    await b.startContinuous();
+    const callsBefore = fake.callLog.length;
+    expect(await b.listAudioDevices()).toEqual({ output: [], input: [] });
+    expect(fake.callLog.length).toBe(callsBefore);
+  });
+});

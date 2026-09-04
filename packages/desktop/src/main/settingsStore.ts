@@ -8,6 +8,11 @@ import {
   isKnownModel,
 } from "../shared/aiModels";
 import { atomicWriteFileSync } from "../shared/atomicWrite";
+import {
+  MANAGED_OBS_PREF_DEFAULTS,
+  MANAGED_OBS_PREF_KEYS,
+  type ManagedObsPrefs,
+} from "../shared/managedObsPrefs";
 import { clampUiZoom, UI_ZOOM_DEFAULT } from "../shared/uiZoom";
 
 export type { AiBackend, AiModelSelection };
@@ -66,6 +71,14 @@ export interface GladlogSettings {
    * obsWebsocketPassword 的既有形状处理,一条都不能少 —— 否则明文落盘 /
    * 明文过 IPC 进 renderer / 哨兵被当真密码回写。 */
   managedWsPassword: string | null;
+  /** Managed-OBS user prefs (2026-09-04): recording directory + the two
+   * audio devices. Shape, defaults and the "needs a restart" predicate live
+   * in shared/managedObsPrefs.ts; this interface only extends it so the
+   * three keys are ordinary GladlogSettings fields (settings:get/save, the
+   * settings page, the sanitizer). */
+  recordingDirectory: ManagedObsPrefs["recordingDirectory"];
+  managedDesktopAudioDevice: ManagedObsPrefs["managedDesktopAudioDevice"];
+  managedMicDevice: ManagedObsPrefs["managedMicDevice"];
   // -- Auto-update (2026-08-02, Windows NSIS installs only) --
   /** Escape hatch for the 30s/4h background check. Turning it off only stops
    * the scheduled polling: the "check for updates" button in settings still
@@ -102,6 +115,7 @@ const DEFAULTS: GladlogSettings = {
   recordingMaxBytes: 80 * 1024 ** 3,
   recordingMode: "managed",
   managedWsPassword: null,
+  ...MANAGED_OBS_PREF_DEFAULTS,
   autoCheckUpdates: true,
   lastSeenVersion: null,
   uiZoom: UI_ZOOM_DEFAULT,
@@ -189,6 +203,23 @@ export function sanitizeSettingsPatch(
   ) {
     const { recordingMaxBytes: _bad, ...rest } = out;
     out = rest;
+  }
+  // Managed-OBS prefs: each is `string | null`. A non-string non-null value
+  // (hand-edited JSON, an older/newer renderer) is dropped; a blank string
+  // is normalised to null so "cleared the box" and "never set" are the same
+  // stored fact (resolveRecordingDir treats both as the default anyway, and
+  // an empty device_id would be written into the scene collection verbatim
+  // — OBS has no such device).
+  for (const key of MANAGED_OBS_PREF_KEYS) {
+    const v = out[key];
+    if (v === undefined) continue;
+    if (v === null) continue;
+    if (typeof v !== "string") {
+      const { [key]: _bad, ...rest } = out;
+      out = rest;
+    } else if (v.trim() === "") {
+      out = { ...out, [key]: null };
+    }
   }
   // Reject an unknown aiBackend value rather than persisting garbage.
   if (out.aiBackend !== undefined && !AI_BACKENDS.includes(out.aiBackend)) {
