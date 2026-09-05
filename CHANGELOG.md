@@ -6,6 +6,44 @@ One section per release, listing every change and the commit behind it (on the
 `git log v<prev>..v<new>` basis; release and docs-only commits go under "Other").
 The release procedure is documented in `.claude/skills/release`.
 
+## v0.1.32 (2026-09-05)
+
+Managed-recording repair release, plus the season's official-data batch. Three symptoms came back from a real 4K Windows machine on the managed OBS recorder — no sound, only the top-left corner of the screen, and footage that starts outside the arena. Two were real bugs and are fixed here; the third turned out to be what a continuous recording's raw chunk files look like, and the in-app player was already right. Alongside that: the managed recorder gains user settings (where recordings go, which audio devices), the healer save-cooldown roster is now generated from official data instead of a hand-written list, and the game data behind cooldowns, durations and mitigation was refreshed and audited against the official tables.
+
+### Recording (managed OBS)
+
+- `e52761d2` **Recordings were only the top-left corner of the screen on any display above 1080p.** The capture source was placed in the scene with no transform at all, so OBS drew it at its native pixel size against a fixed 1920x1080 canvas — on a 4K screen that is exactly the top-left quarter of the picture. The capture is now scaled to fit the canvas, which also covers ultrawide screens and a resolution change mid-session
+- `e52761d2` **Recordings had no sound at all.** Two independent causes, both closed: the generated recording profile never named an audio encoder (one of that setting's legal values is literally "no audio"), and the desktop-audio device was only ever wired through a config file whose loading had never been verified — the recorder now asks OBS directly whether the channel came up and repairs it the same way the video source is created
+- `e52761d2` The real-machine gate check gains three rows that answer these directly: how much of the source actually lands inside the canvas, whether the desktop-audio channel has a source, and which audio track it records on
+- `9483dece` `0b7fd2e4` `6aa76697` New managed-recording settings: where recordings are saved, which desktop-audio device and which microphone to record (no mic by default), and a one-click import of those choices from your own OBS install. Changing any of them restarts the managed recorder so it takes effect immediately
+
+### AI coaching — official game data
+
+- `e1235284` `a19b637f` `83130c84` The healer save-cooldown roster is now generated from official data plus the archive instead of a hand-written catalogue, which had been missing 23 of 53 cooldowns. The full-archive impact scan (859,821 presses) decides what makes the list, and the timeline's cooldown table was rescanned against it
+- `4e6fb19d` `01686a29` `e2dd1241` `2fb26c15` New timeline context line: at what health the same cooldown is normally pressed by comparable players, so a save that came too late reads as too late. Kept after a targeted ablation probe measured no cue in the model's output — the line stays as a context fact, not as a claim
+- `1180346a` Kick lockout durations now read the official PvP duration, and every generated cooldown, duration and mitigation number is multiplied by the official PvP modifier — a value the generators had silently been dropping
+- `a4b3b7be` `63b1b684` Game data refreshed to build 12.1.0.69587, and live Blizzard hotfixes are now applied on top of the shipped tables instead of being invisible until the next patch
+- `a1926f5b` `f6109cdb` `52da8af6` Three audits against the official tables: an aura flag read as haste is actually movement speed, 12 combat racials the hand-written table never had, and the "usable while stunned" table now reads the named game flags rather than a guessed bit
+- `c69a5840` `95e92807` A kill window now counts any 20–99% damage wall the target still has in hand, not just a narrow list; Aura Mastery's mitigation corrected to 24%
+
+### Removed
+
+- `da2bbec2` `d00b7b0a` The critical-moments block is gone from the analysis prompt — a probe showed it only restated what the timeline already said
+- `612aa96f` `146669f6` Playstyle dimensions on the comparison view landed and were reverted the same day
+- `c04f98cf` Mana attribution is not being built (ruling recorded, issue closed)
+
+### Corpus archive
+
+- `8939cd46` `e061a736` 2v2 is no longer archived — collection policy is now separate from the brackets the server understands. Measured on the 2026-09-04 round: 2v2 was 34.8% of downloads but only 13.0% of the bytes
+
+### Desktop
+
+- `455bb975` A stale slot's placeholder no longer tears against the header status and Export button
+
+### Other (docs / ledger)
+
+- `15da8345` `adee6f88` Session practices consolidated into skills; a stale backlog line struck with the production corpus numbers
+
 ## v0.1.31 (2026-09-03)
 
 Coaching-signal value release. A week of work anchored on one question: is this signal worth existing, and could the player actually have acted? New: crisis-no-response for healers, backed by a corpus reference of what top-ranked players actually do in the same state; enemy-burst-window decision points; kill-window killability facts. Four signals whose skill gradient came back flat once normalised by opportunity were retired or demoted. CC durations now read official game data. Also in this release: the OBS phase-2 branch (managed portable OBS recording) merges to main for the first time, the parser labels incomplete matches instead of passing them off as whole games, and the long-standing flaky desktop test was root-caused.
