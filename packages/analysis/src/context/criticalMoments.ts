@@ -848,3 +848,33 @@ export function identifyCriticalMoments(
     constrainedTrade: constrainedTradePreceded,
   };
 }
+
+
+/**
+ * GH #51 probe renderer (2026-09-05): one block, one moment per entry, the
+ * fields as the engine wrote them. No adjectives added — the probe question
+ * is whether THESE facts move the model, not whether prose does.
+ */
+export function formatCriticalMomentsBlock(moments: CriticalMoment[]): string {
+  if (moments.length === 0) return "";
+  const out: string[] = ["<critical_moments>"];
+  for (const m of moments) {
+    const t = fmtTime(toRenderSecond(m.timeSeconds));
+    out.push(`- ${t} [${m.impactLabel}/${m.roleLabel}] ${m.title}`);
+    if (m.whatHappened) out.push(`    what: ${m.whatHappened}`);
+    if (m.enemyState) out.push(`    enemy: ${m.enemyState}`);
+    if (m.friendlyState) out.push(`    friendly: ${m.friendlyState}`);
+    for (const a of m.mechanicalAvailability ?? []) out.push(`    available: ${a}`);
+    for (const i of m.interpretation ?? []) out.push(`    interpretation: ${i}`);
+    if (m.tieredOptions) {
+      if (m.tieredOptions.realistic.length) out.push(`    realistic: ${m.tieredOptions.realistic.join("; ")}`);
+      if (m.tieredOptions.limited.length) out.push(`    limited: ${m.tieredOptions.limited.join("; ")}`);
+      if (m.tieredOptions.unavailable.length) out.push(`    unavailable: ${m.tieredOptions.unavailable.join("; ")}`);
+    }
+    for (const r of m.rootCauseTrace ?? []) out.push(`    trace: ${r}`);
+    for (const i of m.implication ?? []) out.push(`    implication: ${i}`);
+    if (m.uncertainty) out.push(`    uncertainty: ${m.uncertainty}`);
+  }
+  out.push("</critical_moments>");
+  return out.join("\n");
+}

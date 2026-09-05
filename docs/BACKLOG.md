@@ -1750,7 +1750,15 @@ feed 只保留 ~7 天,漏跑就永久少一天。
    用户看,通过了再谈工程。这个模块的四段结构(尤其"最终判断")正是那种
    "写反了就是一堆看着很像分析的废话"的形状。
 
-**Status**: logged,不动代码。模块保持原样,`DEATH_CC_LOOKBACK_S` 继续被 `death.ts` 消费。
+**2026-09-05 探针(用户要求「一个一个接线,测试并对 prompt 做 evaluation,看是帮助还是噪音」)**:先把六个函数的产出
+整块接上 —— `buildMatchContext` 加默认关闭的 `criticalMomentsBlock` 开关,渲染成 `<critical_moments>` 块
+(`formatCriticalMomentsBlock`,字段照引擎原样,不加形容词),`promptAblationProbe` 加 `augment` 模式
+(基线 vs 基线+块)。agy,24 回合 / 96 次调用:结论集合 Jaccard 0.781,噪声底 0.804±0.177(z −0.6)—— **在噪声带里**;
+加块后只出现在增强版、三次基线里都没有的结论 0.33 条/回合(cc-usage 2、peel 3、kill-window 1、healing-throughput 2,
+无死亡类新结论);引用时刻 16.3→17.2、长度 +1.4%。读法:块里的事实(死亡、治疗真空、恐慌交防御、重叠)时间线
+已经逐条有了,这套函数是第二套实现,模型拿到重复事实不改结论。整块为零 ⇒ 逐函数拆开不会出现整块没有的信号,
+未再分函数跑。**结论:既不帮忙也不加噪,是冗余**;开关留作探针基础设施,默认关。删或留仍是用户裁决(#51)。
+**Status**: logged,不动产品代码。模块保持原样,`DEATH_CC_LOOKBACK_S` 继续被 `death.ts` 消费。
 
 ---
 

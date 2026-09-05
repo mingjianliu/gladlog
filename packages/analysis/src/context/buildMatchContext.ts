@@ -27,7 +27,11 @@ import {
   isHealerSpec,
   specToString,
 } from "../utils/cooldowns";
-import { isMeleeSpec } from "../utils/cooldowns";
+import {
+  detectOverlappedDefensives,
+  detectPanicDefensives,
+  isMeleeSpec,
+} from "../utils/cooldowns";
 import {
   computeMissedExternalCounterfactuals,
   computeMitigationAudit,
@@ -87,6 +91,10 @@ import {
   formatSpecBaselines,
 } from "../utils/specBaselines";
 import { heroBuildGroupOf } from "../utils/talents";
+import {
+  formatCriticalMomentsBlock,
+  identifyCriticalMoments,
+} from "./criticalMoments";
 import { buildCriticalWindowSet } from "./criticalWindows";
 import {
   formatDecisiveCounterfactualLine,
@@ -107,7 +115,14 @@ export function buildMatchContext(
   combat: AtomicArenaCombat,
   friends: ICombatUnit[],
   enemies: ICombatUnit[],
-  options: { owner?: ICombatUnit } = {},
+  options: {
+    owner?: ICombatUnit;
+    /** GH #51 probe (2026-09-05): append a `<critical_moments>` block built
+     * from `identifyCriticalMoments` (the six zero-consumer exports). OFF by
+     * default — exists so the ablation/augment probe can measure whether the
+     * block helps or adds noise before any product wiring. */
+    criticalMomentsBlock?: boolean;
+  } = {},
 ): string {
   const durationSeconds = (combat.endTime - combat.startTime) / 1000;
 
@@ -705,6 +720,33 @@ export function buildMatchContext(
     }
   }
 
+  // GH #51 probe block — see options.criticalMomentsBlock.
+  let criticalMomentsText = "";
+  if (options.criticalMomentsBlock) {
+    try {
+      const panics = detectPanicDefensives(friends as ICombatUnit[], enemies as ICombatUnit[], combat);
+      const overlaps = detectOverlappedDefensives(friends as ICombatUnit[], combat);
+      const moments = identifyCriticalMoments(
+        healer,
+        cooldowns,
+        enemyCDTimeline,
+        friendlyDeaths,
+        healingGaps,
+        panics,
+        overlaps,
+        ccTrinketSummaries,
+        matchArchetype.peakDamagePressure5s,
+        durationSeconds,
+        friends as ICombatUnit[],
+        combat.startTime,
+        owner as ICombatUnit,
+      );
+      criticalMomentsText = formatCriticalMomentsBlock(moments.moments);
+    } catch {
+      criticalMomentsText = "";
+    }
+  }
+
   const timelineText = buildMatchTimeline({
     owner: owner as ICombatUnit,
     ownerSpec,
@@ -816,5 +858,6 @@ export function buildMatchContext(
     }
   }
 
+  if (criticalMomentsText) tLines.push("", criticalMomentsText);
   return tLines.join("\n");
 }
