@@ -11,8 +11,8 @@
  * replacement, built on the product's own predicates so it cannot drift from
  * what the prompt renders:
  *   - stun instances + DR level: analyzePlayerCCAndTrinket (ccTrinketAnalysis)
- *   - tier: killOpportunityAt — trinket state + STUN_USABLE_MIT_IDS in hand
- * Re-run whenever STUN_USABLE_MIT_IDS' inputs move (MITIGATION_TABLE or the
+ *   - tier: killOpportunityAt — trinket state + WALL_IN_HAND_MIT_IDS in hand
+ * Re-run whenever WALL_IN_HAND_MIT_IDS' inputs move (MITIGATION_TABLE or the
  * usable-while-stunned table — BACKLOG #41 (8) shrank the set 17 → 6).
  *
  * Usage:
@@ -23,7 +23,7 @@ import { ensureAnalysisData } from "@gladlog/analysis";
 import { analyzePlayerCCAndTrinket } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
 import {
   killOpportunityAt,
-  STUN_USABLE_MIT_IDS,
+  WALL_IN_HAND_MIT_IDS,
 } from "@gladlog/analysis/src/utils/killWindowTargetSelection";
 import { GladLogParser, type GladMatch } from "@gladlog/parser";
 import { type ICombatUnit, toLegacyMatch } from "@gladlog/parser-compat";
@@ -133,7 +133,7 @@ for (const f of files) {
           bump(byTierLevel, `${opp.tier}/${cc.drInfo.level}`, died);
           bump(byBracketTier, `${bracket}/${opp.tier}`, died);
           if (opp.tier === "gated")
-            for (const card of opp.stunMitReady) bump(gatedCards, card, died);
+            for (const card of opp.wallsInHand) bump(gatedCards, card, died);
         }
       }
     }
@@ -146,7 +146,7 @@ lines.push(
   `files=${files.length} rounds=${rounds} stun landings (Full/50%)=${total}`,
 );
 lines.push(
-  `STUN_USABLE_MIT_IDS in force: ${[...STUN_USABLE_MIT_IDS].sort((a, b) => Number(a) - Number(b)).join(",")} (${STUN_USABLE_MIT_IDS.size} ids)`,
+  `WALL_IN_HAND_MIT_IDS in force: ${[...WALL_IN_HAND_MIT_IDS].sort((a, b) => Number(a) - Number(b)).join(",")} (${WALL_IN_HAND_MIT_IDS.size} ids)`,
 );
 lines.push("");
 lines.push("| tier | n | died ≤10s | conversion |");

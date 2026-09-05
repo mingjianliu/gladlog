@@ -368,4 +368,8 @@
 //  Hands, …) stop being "usable while stunned"; Divine Shield / Ice Block /
 //  Icebound Fortitude re-ruled not usable. [RES] locked-out CD lists, the
 //  death candidates' usable_in_cc exemption and kill-window tiering all move.
-export const PROMPT_VERSION = 55;
+//  v56 (2026-09-04, BACKLOG #41 (8), user ruling "改吧"): kill-opportunity
+//  gated door = ANY 20–99 % wall in hand (was: stun-usable wall only) —
+//  [kill-opportunity: …] tags, [KILL ATTEMPTS] tier labels and the
+//  attempt-into-trinket legend change wording and membership.
+export const PROMPT_VERSION = 56;

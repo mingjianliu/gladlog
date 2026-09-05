@@ -145,7 +145,7 @@ function minimalTargetEval(
       defensivesUnavailable: [],
       trinketAvailable: true,
       tier: "locked",
-      stunMitReady: [],
+      wallsInHand: [],
     },
     otherTargets: [],
     betterTargetExists: false,

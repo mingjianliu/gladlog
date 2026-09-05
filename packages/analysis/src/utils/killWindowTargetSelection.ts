@@ -20,7 +20,6 @@ import {
   isHealerSpec,
   playerTalentIdSets,
   specToString,
-  USABLE_WHILE_CC_SPELL_IDS,
 } from "./cooldowns";
 import { IOffensiveWindow } from "./offensiveWindows";
 import { fmtTime } from "./renderGrid";
@@ -39,22 +38,32 @@ export const PVP_TRINKET_SPELL_IDS = new Set<string>([
 export const MIN_WINDOW_SECONDS = 5;
 
 /**
- * "Stun-usable self-mitigation": 20–99% damage reduction the target can pop
- * WHILE STUNNED (official stunned table ∩ official mitigation table).
- * Immunities (pct 100 — Divine Shield / Ice Block) are deliberately excluded:
- * user ruling 2026-08-18, "冰箱圣盾不管,交了也算我们赚" — baiting one out is a
- * win, not a reason to avoid the target.
+ * "Wall in hand": a 20–99 % damage-reduction cooldown the target has NOT yet
+ * spent (official mitigation table). Immunities (pct 100 — Divine Shield /
+ * Ice Block) are deliberately excluded: user ruling 2026-08-18, "冰箱圣盾不管,
+ * 交了也算我们赚" — baiting one out is a win, not a reason to avoid the target.
  *
- * This is the "gated" axis of the kill-opportunity tier. Corpus validation
- * (2026-08-18, 8,791 stun landings): a target with one of these IN HAND
- * converts to a kill at 0.8% vs 4.8% for a target with no out — the single
- * strongest prospective negative signal measured, 6x below prime.
+ * This is the "gated" axis of the kill-opportunity tier.
+ *
+ * History of the door: the 2026-08-18 model keyed it on "usable WHILE
+ * stunned" (mitigation ∩ the usable-while-stunned table), reasoning that a
+ * stunned target cannot press the other walls. On 2026-09-04 the
+ * usable-while-stunned table was corrected (named SpellMisc bits, BACKLOG #41
+ * (8)) and the intersection shrank 17 → 6 ids; the re-validation on 18,447
+ * stun landings (packages/eval/scripts/killTierValidationScan.ts) showed the
+ * 523 landings that thereby moved from gated to prime converted ONCE (0.2 %):
+ * Die by the Sword 0/115, Aura Mastery 0/109, Survival of the Fittest 0/102,
+ * Darkness 0/84, Icebound Fortitude 0/64, Fortifying Brew 1/54, Anti-Magic
+ * Zone 0/35, Obsidian Scales 0/25. A wall the stun blocks still comes the
+ * moment the stun ends, so what predicts non-conversion is the wall IN HAND,
+ * not its stun-usability. User ruling 2026-09-04 ("改吧"): the door is now
+ * every 20–99 % wall in hand. Tier conversion with this door is recorded in
+ * IEnemySnapshot.tier below.
  */
-export const STUN_USABLE_MIT_IDS: ReadonlySet<string> = new Set(
+export const WALL_IN_HAND_MIT_IDS: ReadonlySet<string> = new Set(
   Object.entries(MITIGATION_TABLE)
     .filter(([, e]) => e.pct >= 20 && e.pct < 100)
-    .map(([id]) => id)
-    .filter((id) => USABLE_WHILE_CC_SPELL_IDS.has(id)),
+    .map(([id]) => id),
 );
 
 // ---------------------------------------------------------------------------
@@ -75,11 +84,15 @@ export interface IEnemySnapshot {
    * start-of-match reset means it is ready), false = on cooldown. */
   trinketAvailable: boolean;
   /**
-   * Kill-opportunity tier (user-ruled model, 2026-08-18; corpus-validated the
-   * same day on 8,791 stun landings — 10s kill conversion per tier):
-   *   prime  (4.8%)  no trinket, no stun-usable mitigation in hand
-   *   locked (1.9%)  trinket still available
-   *   gated  (0.8%)  no trinket, but a 20–99% stun-usable self-mitigation in hand
+   * Kill-opportunity tier (user-ruled model, 2026-08-18; door re-ruled
+   * 2026-09-04 to "any 20–99 % wall in hand" — 10s kill conversion per tier,
+   * killTierValidationScan on the S2 archive every-30, 18,447 stun landings;
+   * the 08-18 numbers on 8,791 landings were prime 4.8 / locked 1.9 / gated 0.8):
+   *   prime   no trinket, no 20–99 % wall in hand
+   *   locked  trinket still available
+   *   gated   no trinket, but a 20–99 % wall (WALL_IN_HAND_MIT_IDS) in hand
+   * Conversion with the re-ruled door: see the WALL_IN_HAND_MIT_IDS comment /
+   * BACKLOG #41 (8) for the measured numbers.
    * Replaces the former continuous softnessScore
    * (50·(1−hp) + 50·defensivesFraction + trinket 15), whose defensives
    * denominator only counted spells the enemy had already cast this match —
@@ -89,12 +102,12 @@ export interface IEnemySnapshot {
    */
   tier: KillOpportunityTier;
   /**
-   * Display names of the stun-usable mitigations currently IN HAND (kit
-   * evidence: cast at least once this match — same gate as
-   * ccAvoidanceOptionsAt — and off cooldown). Non-empty exactly when the
-   * gated tier applies; rendered so the coach can say WHICH card to bait.
+   * Display names of the 20–99 % walls currently IN HAND (kit evidence: cast
+   * at least once this match — same gate as ccAvoidanceOptionsAt — and off
+   * cooldown). Non-empty exactly when the gated tier applies; rendered so the
+   * coach can say WHICH card to bait.
    */
-  stunMitReady: string[];
+  wallsInHand: string[];
 }
 
 /** See IEnemySnapshot.tier. Ordering claims are only made prime-vs-rest —
@@ -352,7 +365,7 @@ function snapshotEnemy(
     isHealerUnit,
   );
 
-  const { tier, stunMitReady } = killOpportunityAt(
+  const { tier, wallsInHand } = killOpportunityAt(
     enemy,
     windowStartSeconds,
     matchStartMs,
@@ -367,14 +380,14 @@ function snapshotEnemy(
     defensivesUnavailable: unavailable,
     trinketAvailable,
     tier,
-    stunMitReady,
+    wallsInHand,
   };
 }
 
 export interface IKillOpportunity {
   tier: KillOpportunityTier;
   trinketAvailable: boolean;
-  stunMitReady: string[];
+  wallsInHand: string[];
 }
 
 /**
@@ -395,25 +408,25 @@ export function killOpportunityAt(
     matchStartMs,
     isHealerSpec(enemy.spec),
   );
-  const stunMitReady = stunUsableMitReadyAt(enemy, atSeconds, matchStartMs);
+  const wallsInHand = wallsInHandAt(enemy, atSeconds, matchStartMs);
   const tier: KillOpportunityTier = trinketAvailable
     ? "locked"
-    : stunMitReady.length > 0
+    : wallsInHand.length > 0
       ? "gated"
       : "prime";
-  return { tier, trinketAvailable, stunMitReady };
+  return { tier, trinketAvailable, wallsInHand };
 }
 
 /**
- * Which STUN_USABLE_MIT_IDS the enemy has IN HAND at `atSeconds`: kit-evidence
+ * Which WALL_IN_HAND_MIT_IDS the enemy has IN HAND at `atSeconds`: kit-evidence
  * gate (a spell never cast this match is invisible — same reasoning as
  * ccAvoidanceOptionsAt: no cast, no proof they run it) + cdAvailableAt over
  * the observed casts. This asks a different question from
  * getDefensiveStateAtTime above ("is any major defensive up") — the id set is
- * the stun-usable 20–99% subset and the answer feeds the tier, so it gets its
- * own pass rather than filtering that function's name-keyed output.
+ * the 20–99 % wall subset and the answer feeds the tier, so it gets its own
+ * pass rather than filtering that function's name-keyed output.
  */
-function stunUsableMitReadyAt(
+function wallsInHandAt(
   enemy: ICombatUnit,
   atSeconds: number,
   matchStartMs: number,
@@ -422,7 +435,7 @@ function stunUsableMitReadyAt(
   for (const cast of enemy.spellCastEvents) {
     if (cast.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
     const { spellId } = cast;
-    if (!spellId || !STUN_USABLE_MIT_IDS.has(spellId)) continue;
+    if (!spellId || !WALL_IN_HAND_MIT_IDS.has(spellId)) continue;
     const arr = castsBySpell.get(spellId) ?? [];
     arr.push({
       timeSeconds: (cast.logLine.timestamp - matchStartMs) / 1000,
@@ -613,9 +626,9 @@ export function formatKillWindowTargetSelectionForContext(
 function fmtTier(snap: IEnemySnapshot): string {
   switch (snap.tier) {
     case "prime":
-      return "[kill-opportunity: PRIME — no trinket, no stun-usable defensive]";
+      return "[kill-opportunity: PRIME — no trinket, no 20-99% wall in hand]";
     case "gated":
-      return `[kill-opportunity: gated — ${snap.stunMitReady.join("/")} in hand]`;
+      return `[kill-opportunity: gated — ${snap.wallsInHand.join("/")} in hand]`;
     case "locked":
       return "[kill-opportunity: locked — trinket up]";
   }

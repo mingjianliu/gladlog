@@ -75,7 +75,7 @@ import {
   IKillOpportunity,
   killOpportunityAt,
   PVP_TRINKET_SPELL_IDS,
-  STUN_USABLE_MIT_IDS,
+  WALL_IN_HAND_MIT_IDS,
 } from "./killWindowTargetSelection";
 import { KW_BURST_MIN_DAMAGE } from "./offensiveWindows";
 import { fmtTime } from "./renderGrid";
@@ -442,9 +442,9 @@ export function formatKillAttemptsForContext(
     if (a.anchor === "burst") burstAnchored++;
     const opp =
       a.opportunity.tier === "prime"
-        ? "PRIME (no trinket, no stun-usable defensive)"
+        ? "PRIME (no trinket, no 20-99% wall in hand)"
         : a.opportunity.tier === "gated"
-          ? `gated (${a.opportunity.stunMitReady.join("/")} in hand)`
+          ? `gated (${a.opportunity.wallsInHand.join("/")} in hand)`
           : "locked (trinket up)";
     const outcome = a.killed
       ? "KILL"
@@ -570,11 +570,11 @@ function attributeFailure(
       continue;
     if (!aura.spellId || !inSpan(aura.logLine.timestamp)) continue;
     if (IMMUNITY_IDS.has(aura.spellId)) immunityBaited = true;
-    // The stun-usable subset is called out by name — those are the cards the
+    // The wall-in-hand subset is called out by name — those are the cards the
     // gated tier told the coach to bait; seeing one here closes that loop.
     if (
       (MITIGATION_AURA_IDS.has(aura.spellId) ||
-        STUN_USABLE_MIT_IDS.has(aura.spellId)) &&
+        WALL_IN_HAND_MIT_IDS.has(aura.spellId)) &&
       !poppedIds.has(aura.spellId)
     ) {
       poppedIds.add(aura.spellId);

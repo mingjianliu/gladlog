@@ -433,7 +433,7 @@ describe("extractKillAttempts — 大招锚定(v2)", () => {
       fromSeconds: 40,
       toSeconds: 50,
       stuns: [],
-      opportunity: { tier: "locked", stunMitReady: [] },
+      opportunity: { tier: "locked", wallsInHand: [] },
       teamDamageToTarget: 100_000,
       teamDamageTotal: 100_000,
       teamOnTargetPct: 100,

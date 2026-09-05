@@ -122,10 +122,11 @@ describe("cdAvailableAt — 充能感知(GH #22)", () => {
 
 /**
  * GH #22 guard for the one ledger adapter that does NOT carry `charges`:
- * `killWindowTargetSelection.ts` → `stunUsableMitReadyAt` hand-builds
+ * `killWindowTargetSelection.ts` → `wallsInHandAt` hand-builds
  * `{ casts, cooldownSeconds, neverUsed }` from raw casts and asks
  * `cdAvailableAt`, so it is charge-aware only if the official base data gives
- * one of STUN_USABLE_MIT_IDS more than one charge. None does today (14 ids,
+ * one of WALL_IN_HAND_MIT_IDS more than one charge. None does today (24 ids at
+ * the 2026-09-04 re-ruling; 14 ids when written,
  * verified 2026-08-20); if a data refresh changes that, this turns red and the
  * adapter must start passing `charges` — do not relax the assertion. Known
  * remaining gap, deliberately outside this guard: talent `extra_charge`
@@ -134,12 +135,12 @@ describe("cdAvailableAt — 充能感知(GH #22)", () => {
  * (Lives here rather than in killWindowTargetSelection.test.ts because that
  * file mocks spellEffectData with a 2-charge Pain Suppression.)
  */
-describe("STUN_USABLE_MIT_IDS — 官方基础数据无多充能条目(stunUsableMitReadyAt 单充能台账前提)", () => {
+describe("WALL_IN_HAND_MIT_IDS — 官方基础数据无多充能条目(wallsInHandAt 单充能台账前提)", () => {
   it("每个 id 的官方 charges 都 ≤ 1", async () => {
-    const { STUN_USABLE_MIT_IDS } =
+    const { WALL_IN_HAND_MIT_IDS } =
       await import("../src/utils/killWindowTargetSelection");
     const { spellEffectData } = await import("../src/data/spellEffectData");
-    const multi = [...STUN_USABLE_MIT_IDS].filter(
+    const multi = [...WALL_IN_HAND_MIT_IDS].filter(
       (id) => (spellEffectData[id]?.charges?.charges ?? 1) > 1,
     );
     expect(multi).toEqual([]);

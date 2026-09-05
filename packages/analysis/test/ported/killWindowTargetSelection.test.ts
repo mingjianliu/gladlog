@@ -21,8 +21,8 @@ vi.mock("../../src/data/spellEffectData", () => ({
       name: "Ice Block",
       cooldownSeconds: 240,
     },
-    // Barkskin: in the REAL STUN_USABLE_MIT_IDS (mitigationData ∩
-    // usable-while-stunned are not mocked); mocked here only for its cooldown.
+    // Barkskin: in the REAL WALL_IN_HAND_MIT_IDS (mitigationData is not
+    // mocked); mocked here only for its cooldown.
     "22812": {
       spellId: "22812",
       name: "Barkskin",
@@ -154,7 +154,7 @@ describe("killWindowTargetSelection — main analysis", () => {
         defensivesUnavailable: [],
         trinketAvailable: true,
         tier: "locked",
-        stunMitReady: [],
+        wallsInHand: [],
       },
       otherTargets: [],
       betterTargetExists: false,
@@ -246,7 +246,7 @@ describe("killWindowTargetSelection — main analysis", () => {
       makeCombat(),
     );
     expect(result[0].otherTargets[0].tier).toBe("gated");
-    expect(result[0].otherTargets[0].stunMitReady).toContain("Barkskin");
+    expect(result[0].otherTargets[0].wallsInHand).toContain("Barkskin");
     // gated is NOT flagged as a better target — the validated claim is
     // prime-vs-rest only.
     expect(result[0].betterTargetExists).toBe(false);
@@ -414,7 +414,7 @@ describe("formatKillWindowTargetSelectionForContext", () => {
         defensivesUnavailable: [],
         trinketAvailable: true,
         tier: "locked",
-        stunMitReady: [],
+        wallsInHand: [],
       },
       otherTargets: [
         {
@@ -425,7 +425,7 @@ describe("formatKillWindowTargetSelectionForContext", () => {
           defensivesUnavailable: ["Block"],
           trinketAvailable: false,
           tier: "prime",
-          stunMitReady: [],
+          wallsInHand: [],
         },
       ],
       betterTargetExists: true,
@@ -453,7 +453,7 @@ describe("formatKillWindowTargetSelectionForContext", () => {
         defensivesUnavailable: ["Block"],
         trinketAvailable: false,
         tier: "gated",
-        stunMitReady: ["Ice Barrier"],
+        wallsInHand: ["Ice Barrier"],
       },
       otherTargets: [
         {
@@ -464,7 +464,7 @@ describe("formatKillWindowTargetSelectionForContext", () => {
           defensivesUnavailable: [],
           trinketAvailable: true,
           tier: "locked",
-          stunMitReady: [],
+          wallsInHand: [],
         },
       ],
       betterTargetExists: false,
