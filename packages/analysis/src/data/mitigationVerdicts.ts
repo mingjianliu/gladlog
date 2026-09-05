@@ -81,7 +81,7 @@ export const MITIGATION_VERDICTS_SIGNED_ON = "2026-08-17";
 export const MITIGATION_VERDICTS: Record<string, IMitigationVerdict> = {
   "31821": {
     zh: "光环大师",
-    officialPct: 20,
+    officialPct: 24,
     verdict: "never",
     source:
       "两条裁定同日(2026-08-22):减伤值「光掌是大技能,20% 全团」,进攻侧「一般可以继续打」。" +

@@ -1,17 +1,17 @@
 import { ICombatUnit } from "@gladlog/parser-compat";
 
-import { getEnglishSpellName } from "../data/spellEffectData";
 import { IMitigationEntry, MITIGATION_TABLE } from "../data/mitigationData";
+import { getEnglishSpellName } from "../data/spellEffectData";
 import spellIdLists from "../data/spellIdLists";
 import { absorbContributionsInWindow } from "./absorbShields";
-import { buildAuraIntervals } from "./auraIntervals";
+import { buildAuraIntervals, IAuraInterval } from "./auraIntervals";
 import { binarySearchClosest } from "./binarySearch";
+import { IPlayerCCTrinketSummary } from "./ccTrinketAnalysis";
 import {
+  cdAvailableAt,
   HP_SAMPLE_RADIUS_MS,
   IMajorCooldownInfo,
-  cdAvailableAt,
 } from "./cooldowns";
-import { IPlayerCCTrinketSummary } from "./ccTrinketAnalysis";
 import {
   IMissedExternal,
   wasLockedOutThroughWindow,
@@ -145,7 +145,7 @@ function windowNetDamageAndMaxHp(
  * Total observed damage in the window matching schoolMask (absolute value;
  * `effectiveAmount` is already the post-mitigation amount actually taken).
  */
-function windowDamage(
+export function windowDamage(
   unit: ICombatUnit,
   fromS: number,
   toS: number,
@@ -199,6 +199,38 @@ export interface IMitigationAuditRow {
   absorbedPctMaxHp?: number;
 }
 
+/** A whitelisted aura interval clipped to the death window (both ends in
+ * relative seconds; `overlapTo > overlapFrom` is guaranteed). */
+export interface IWindowedAuraInterval extends IAuraInterval {
+  overlapFrom: number;
+  overlapTo: number;
+}
+
+/**
+ * The one predicate for "which whitelisted mitigation auras were active on
+ * the victim inside the death window": shape A iterates exactly this list, and
+ * `packages/eval/scripts/mitigationStackScan.ts` (BACKLOG #41 (6) — does the
+ * un-modelled stacking between entries matter?) measures overlap on the same
+ * list, so the probe can never disagree with the product about which auras
+ * count.
+ */
+export function whitelistedIntervalsInDeathWindow(
+  victim: ICombatUnit,
+  combat: { startTime: number; endTime: number },
+  deathS: number,
+): IWindowedAuraInterval[] {
+  const windowStartS = windowStartSecondsOf(deathS);
+  const out: IWindowedAuraInterval[] = [];
+  for (const iv of buildAuraIntervals(victim, combat)) {
+    if (!WHITELIST_IDS.has(iv.spellId)) continue;
+    const overlapFrom = Math.max(iv.fromS, windowStartS);
+    const overlapTo = Math.min(iv.toS, deathS);
+    if (overlapTo <= overlapFrom) continue; // no overlap, emit no row
+    out.push({ ...iv, overlapFrom, overlapTo });
+  }
+  return out;
+}
+
 /**
  * Shape A: entry-by-entry accounting of whitelisted mitigation active on the
  * victim inside the death window (independent measure; interaction between
@@ -217,7 +249,6 @@ export function computeMitigationAudit(
   netDamage: number | null;
   maxHp: number | null;
 } {
-  const windowStartS = windowStartSecondsOf(deathS);
   const { netDamage, maxHp } = windowNetDamageAndMaxHp(
     victim,
     combat.startTime,
@@ -225,15 +256,9 @@ export function computeMitigationAudit(
   );
 
   const rows: IMitigationAuditRow[] = [];
-  const intervals = buildAuraIntervals(victim, combat).filter((iv) =>
-    WHITELIST_IDS.has(iv.spellId),
-  );
 
-  for (const iv of intervals) {
-    const overlapFrom = Math.max(iv.fromS, windowStartS);
-    const overlapTo = Math.min(iv.toS, deathS);
-    if (overlapTo <= overlapFrom) continue; // no overlap, emit no row
-
+  for (const iv of whitelistedIntervalsInDeathWindow(victim, combat, deathS)) {
+    const { overlapFrom, overlapTo } = iv;
     const activeOverlapS = round1(overlapTo - overlapFrom);
     const spellName = getEnglishSpellName(iv.spellId, iv.spellName);
     const entry: IMitigationEntry | undefined = MITIGATION_TABLE[iv.spellId];

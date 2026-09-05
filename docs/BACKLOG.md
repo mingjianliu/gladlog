@@ -2492,7 +2492,8 @@ TrinityCore 15.7%;wago CSV 不含 hotfix(`hotfixes=` 参数被忽略,真言术�
   手工覆盖 AMZ 15→30、真言术:障 20→40;签字表 5 条 officialPct 随裁决改写、档位不动。abilityEffects 的
   healingReceivedPct / hastePct 无变化(带倍率的受治疗行全是负值,本就不收)。
   **留给用户看的一条**:光环掌握 31821 手工覆盖是用户 08-22 裁的 20%,当时官方链路只能推到 12%(3 + 9);按 PvP 倍率
-  官方链路现在推到 3 + 21 = 24%,与裁决值只差 4 个点——是否改按官方 24%,待裁,未动。
+  官方链路现在推到 3 + 21 = 24%,与裁决值只差 4 个点——**2026-09-04 用户裁定「光环掌握是我错了 是24」,已改 24**
+  (mitigationData 覆盖 + 签字表 officialPct + spellIdLists 注释)。
   **顺带发现**:`writeManifest.ts` 整体重写 manifest,会丢掉扫描脚本 emit-table 登记的条目(本次丢了
   syncWindowPrior / cdTriggerPrior 两条,已按 HEAD 版本合并回去;`datagenManifest.test.ts` 抓得到)。
   下次全量刷新(4)时要么把这两条登进 writeManifest,要么让它合并已有条目——另一会话正在改 cdTriggerPrior,先不动。
@@ -2533,5 +2534,12 @@ TrinityCore 15.7%;wago CSV 不含 hotfix(`hotfixes=` 参数被忽略,真言术�
 - (5) 文档纠错:update-wow-data.md「PvP modifiers not encoded in DB2」gotcha(09-04 已改)、predicate-index 两份登记。
 - (6) **减伤叠加公式进 counterfactual.ts**(TrinityCore:不同光环乘法叠加、同 SpellGroup 取最高)——先数语料里
   「死亡窗口内 ≥2 层减伤同时在」的样本量再决定。排在 (1) 之后。
+  **2026-09-04 探针已跑,结论:不建模。** `packages/eval/scripts/mitigationStackScan.ts`(与产品共用
+  `whitelistedIntervalsInDeathWindow` 谓词,S2 归档每 30 场 = 605 场 / 1,270 回合 / 1,560 名玩家死亡):416 个死亡(26.7%)
+  窗口内有百分比减伤在生效;**64 个(4.1% 的死亡、15.4% 的有减伤死亡)同一瞬间 ≥2 层**(≥3 层 10 个),重叠时长 p50 4.4 s。
+  现有逐条独立反推 vs TrinityCore 乘法规则的差:**现模型低估**挡伤总量,占满血 min −6.43 pp / p10 −3.23 / p50 −0.49 /
+  p90 −0.03;|Δ| ≥ 5 pp 只有 1 个死亡,≥ 15 pp(决定性档边际)0 个。最常见组合:天神下凡 + 防御姿态 33、防御姿态 +
+  剑在人在 7、天神下凡 + 剑在人在 6、天神下凡 + 铁木树皮 6。三档结论不会因此翻转,叠加刻意继续不建模;探针留作
+  常备脚本,赛季重跑同参数,数字变大再议。
 - (7) 记账不做:SimC 类模块对照 genTalentModifiers(仅 DPS)、SimC APL 档案给 rotation-study 当词表、
   TrinityCore DR 表当缴械/击退第二意见。估值模型 V(s) / 策略模型 π_r(Maia-2 式)是另一条大线,未立项。

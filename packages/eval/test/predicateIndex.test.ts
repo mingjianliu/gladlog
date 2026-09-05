@@ -558,6 +558,11 @@ const INDEX: PredicateRow[] = [
     mod: counterfactual,
   },
   {
+    file: `${A}/utils/counterfactual.ts`,
+    symbol: "whitelistedIntervalsInDeathWindow",
+    mod: counterfactual,
+  },
+  {
     file: `${A}/utils/cooldowns.ts`,
     symbol: "PRE_WALL_SECONDS",
     mod: cooldowns,

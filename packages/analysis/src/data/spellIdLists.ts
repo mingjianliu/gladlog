@@ -99,7 +99,7 @@ const spellIdLists = {
     "51052", // Anti-Magic Zone
     "357170", // Time Dilation
     "374227", // Zephyr
-    "31821", // Aura Mastery — 2026-08-22 用户裁定 20% 全团减伤(见 mitigationData.ts 该条注释的官方链路与语料实证);补登记到这里是因为减伤表有「无第三态」不变量:有减伤值的 id 必须已经是登记在册的防御技能
+    "31821", // Aura Mastery — 2026-08-22 用户裁定 20%、2026-09-04 改按官方 PvP 链路 24%(3 + 9 × 2.34)全团减伤(见 mitigationData.ts 该条注释的官方链路与语料实证);补登记到这里是因为减伤表有「无第三态」不变量:有减伤值的 id 必须已经是登记在册的防御技能
   ],
   // External or major personal defensives (the list above + the main personal
   // walls)
