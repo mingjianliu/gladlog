@@ -36,6 +36,15 @@ npx tsx packages/analysis/scripts/datagen/genSpellNames.ts
 npx tsx packages/analysis/scripts/datagen/genSpellNamesZh.ts
 # 3. Spell effects base layer (PvP duration prioritized; candidate set = curated catalogs ∪ talents ∪ PvpTalent)
 npx tsx packages/analysis/scripts/datagen/genSpellEffects.ts
+# 3b. Live hotfix overlay from SimulationCraft (BACKLOG #41 (3), 2026-09-04). wago cannot carry hotfixes;
+#     SimC's generated data lists them with old/new values. Writes hotfixOverlayGenerated.json, which every
+#     SpellEffect-reading generator below (6g / 6g2 / 6i abilityEffects / 5 talentModifiers) applies before
+#     deriving numbers. Self-verifies the SimC field→column mapping against DATAGEN_BUILD's CSV and fails
+#     below 50 % on PvpMultiplier / EffectBasePointsF. **Cadence: PvP tuning hotfixes ship weekly** — re-run
+#     this step plus 5 / 6g / 6g2 / 6i / 7 whenever the manifest's hotfixDate is older than the last PvP
+#     tuning post, not only at a client build; the season refresh alone leaves weeks of tuning invisible.
+#     SIMC_BRANCH overrides the GitHub default branch (the expansion branch, e.g. midnight).
+npx tsx packages/analysis/scripts/datagen/fetchSimcHotfixes.ts
 # 4. PvP trinket item ids
 npx tsx packages/analysis/scripts/datagen/genTrinketItemIds.ts
 # 5. Talent CD modifier extraction

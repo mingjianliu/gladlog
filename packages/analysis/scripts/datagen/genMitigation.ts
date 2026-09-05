@@ -2,6 +2,11 @@ import spellIdLists from "../../src/data/spellIdLists";
 import { writeArtifact } from "./lib/emit";
 import { PVP_MULTIPLIER_COLUMN, pvpBasePoints } from "./lib/pvpMultiplier";
 import {
+  applyHotfixOverlay,
+  dataDirOf,
+  loadHotfixOverlay,
+} from "./lib/simcHotfix";
+import {
   assertColumns,
   assertMinRows,
   fetchLatestBuild,
@@ -85,6 +90,13 @@ export async function main(): Promise<void> {
   const build = process.env.DATAGEN_BUILD ?? (await fetchLatestBuild());
   const csv = await fetchTable("SpellEffect", build, process.env.DATAGEN_CACHE);
   const parsed = parseCsv(csv);
+  // Live hotfixes on top of the client build (BACKLOG #41 (3)): the arena
+  // number is base points × PvpMultiplier AFTER Blizzard's weekly tuning.
+  const hf = applyHotfixOverlay(
+    parsed.rows,
+    loadHotfixOverlay(dataDirOf(import.meta.url)),
+  );
+  console.log(`hotfix overlay: ${hf.applied} writes on ${hf.rowsTouched} rows`);
   // Truncation guard: Task 1 of this plan actually hit a read that happened
   // before the background download finished (113999/628107 rows, an 18% stub)
   // — a hard lower bound on row count makes a truncated table blow up instead

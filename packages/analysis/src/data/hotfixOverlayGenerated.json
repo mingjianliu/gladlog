@@ -1,0 +1,985 @@
+{
+  "meta": {
+    "source": "simulationcraft",
+    "branch": "midnight",
+    "commit": "ca042f5a13892b2eeecc31399570f76847a99380",
+    "clientBuild": "12.1.0.69587",
+    "hotfixDate": "2026-09-02",
+    "hotfixBuild": "69587",
+    "hotfixHash": "4613cf248fb54e75d8cc9f07a3c5ff3ab12f6f3a884b51ba8dab5def4eadd6a4",
+    "fetchedAt": "2026-09-05T00:02:22.371Z",
+    "fieldColumns": {
+      "5": "EffectAura",
+      "10": "BonusCoefficientFromAP",
+      "14": "EffectBasePointsF",
+      "24": "ImplicitTarget_0",
+      "27": "PvpMultiplier",
+      "29": "EffectAttributes"
+    }
+  },
+  "effects": {
+    "13": {
+      "spellId": 17,
+      "columns": {
+        "PvpMultiplier": 1.15
+      },
+      "unmapped": []
+    },
+    "1859": {
+      "spellId": 5221,
+      "columns": {
+        "BonusCoefficientFromAP": 2.6048
+      },
+      "unmapped": []
+    },
+    "4830": {
+      "spellId": 11426,
+      "columns": {
+        "PvpMultiplier": 0.75
+      },
+      "unmapped": []
+    },
+    "10065": {
+      "spellId": 18562,
+      "columns": {
+        "PvpMultiplier": 1
+      },
+      "unmapped": []
+    },
+    "12790": {
+      "spellId": 22568,
+      "columns": {
+        "BonusCoefficientFromAP": 1.452
+      },
+      "unmapped": []
+    },
+    "18680": {
+      "spellId": 29166,
+      "columns": {
+        "PvpMultiplier": 0.8
+      },
+      "unmapped": []
+    },
+    "21915": {
+      "spellId": 32175,
+      "columns": {
+        "PvpMultiplier": 1.92
+      },
+      "unmapped": []
+    },
+    "21916": {
+      "spellId": 32176,
+      "columns": {
+        "PvpMultiplier": 1.92
+      },
+      "unmapped": []
+    },
+    "41295": {
+      "spellId": 49184,
+      "columns": {
+        "BonusCoefficientFromAP": 0.506819
+      },
+      "unmapped": []
+    },
+    "53784": {
+      "spellId": 60103,
+      "columns": {
+        "PvpMultiplier": 1.1
+      },
+      "unmapped": []
+    },
+    "60368": {
+      "spellId": 66196,
+      "columns": {
+        "BonusCoefficientFromAP": 1.39308
+      },
+      "unmapped": []
+    },
+    "60372": {
+      "spellId": 66198,
+      "columns": {
+        "BonusCoefficientFromAP": 0.714221
+      },
+      "unmapped": []
+    },
+    "135203": {
+      "spellId": 81749,
+      "columns": {
+        "PvpMultiplier": 1.39
+      },
+      "unmapped": []
+    },
+    "179694": {
+      "spellId": 137011,
+      "columns": {
+        "EffectBasePointsF": 70
+      },
+      "unmapped": []
+    },
+    "179695": {
+      "spellId": 137012,
+      "columns": {
+        "EffectBasePointsF": 4
+      },
+      "unmapped": []
+    },
+    "179696": {
+      "spellId": 137013,
+      "columns": {
+        "EffectBasePointsF": 52
+      },
+      "unmapped": []
+    },
+    "179698": {
+      "spellId": 137015,
+      "columns": {
+        "EffectBasePointsF": 8,
+        "PvpMultiplier": -0.46
+      },
+      "unmapped": []
+    },
+    "179700": {
+      "spellId": 137017,
+      "columns": {
+        "EffectBasePointsF": 11
+      },
+      "unmapped": []
+    },
+    "179702": {
+      "spellId": 137019,
+      "columns": {
+        "EffectBasePointsF": 23
+      },
+      "unmapped": []
+    },
+    "179703": {
+      "spellId": 137020,
+      "columns": {
+        "EffectBasePointsF": 19
+      },
+      "unmapped": []
+    },
+    "179708": {
+      "spellId": 137024,
+      "columns": {
+        "EffectBasePointsF": -10
+      },
+      "unmapped": []
+    },
+    "179709": {
+      "spellId": 137025,
+      "columns": {
+        "EffectBasePointsF": -6
+      },
+      "unmapped": []
+    },
+    "191100": {
+      "spellId": 137025,
+      "columns": {
+        "EffectBasePointsF": -6
+      },
+      "unmapped": []
+    },
+    "191104": {
+      "spellId": 137024,
+      "columns": {
+        "EffectBasePointsF": -10
+      },
+      "unmapped": []
+    },
+    "191121": {
+      "spellId": 137020,
+      "columns": {
+        "EffectBasePointsF": 19
+      },
+      "unmapped": []
+    },
+    "191122": {
+      "spellId": 137020,
+      "columns": {
+        "EffectBasePointsF": 19
+      },
+      "unmapped": []
+    },
+    "191123": {
+      "spellId": 137020,
+      "columns": {
+        "EffectBasePointsF": 19
+      },
+      "unmapped": []
+    },
+    "191125": {
+      "spellId": 137019,
+      "columns": {
+        "EffectBasePointsF": 23
+      },
+      "unmapped": []
+    },
+    "191126": {
+      "spellId": 137019,
+      "columns": {
+        "EffectBasePointsF": 23
+      },
+      "unmapped": []
+    },
+    "191127": {
+      "spellId": 137019,
+      "columns": {
+        "EffectBasePointsF": 23
+      },
+      "unmapped": []
+    },
+    "191130": {
+      "spellId": 137017,
+      "columns": {
+        "EffectBasePointsF": 11
+      },
+      "unmapped": []
+    },
+    "191131": {
+      "spellId": 137017,
+      "columns": {
+        "EffectBasePointsF": 11
+      },
+      "unmapped": []
+    },
+    "191132": {
+      "spellId": 137017,
+      "columns": {
+        "EffectBasePointsF": 11
+      },
+      "unmapped": []
+    },
+    "191133": {
+      "spellId": 137017,
+      "columns": {
+        "EffectBasePointsF": 274
+      },
+      "unmapped": []
+    },
+    "191138": {
+      "spellId": 137015,
+      "columns": {
+        "EffectBasePointsF": 8,
+        "PvpMultiplier": -0.46
+      },
+      "unmapped": []
+    },
+    "191139": {
+      "spellId": 137015,
+      "columns": {
+        "EffectBasePointsF": 8,
+        "PvpMultiplier": -1.12
+      },
+      "unmapped": []
+    },
+    "191140": {
+      "spellId": 137015,
+      "columns": {
+        "EffectBasePointsF": 8,
+        "PvpMultiplier": -1.12
+      },
+      "unmapped": []
+    },
+    "191146": {
+      "spellId": 137013,
+      "columns": {
+        "EffectBasePointsF": 52
+      },
+      "unmapped": []
+    },
+    "191147": {
+      "spellId": 137013,
+      "columns": {
+        "EffectBasePointsF": 52
+      },
+      "unmapped": []
+    },
+    "191148": {
+      "spellId": 137013,
+      "columns": {
+        "EffectBasePointsF": 52
+      },
+      "unmapped": []
+    },
+    "191150": {
+      "spellId": 137012,
+      "columns": {
+        "EffectBasePointsF": 4
+      },
+      "unmapped": []
+    },
+    "191154": {
+      "spellId": 137011,
+      "columns": {
+        "EffectBasePointsF": 70
+      },
+      "unmapped": []
+    },
+    "191155": {
+      "spellId": 137011,
+      "columns": {
+        "EffectBasePointsF": 70
+      },
+      "unmapped": []
+    },
+    "191156": {
+      "spellId": 137011,
+      "columns": {
+        "EffectBasePointsF": 70
+      },
+      "unmapped": []
+    },
+    "191157": {
+      "spellId": 137011,
+      "columns": {
+        "EffectBasePointsF": 560
+      },
+      "unmapped": []
+    },
+    "300162": {
+      "spellId": 203513,
+      "columns": {
+        "EffectBasePointsF": -15
+      },
+      "unmapped": []
+    },
+    "314433": {
+      "spellId": 212106,
+      "columns": {
+        "BonusCoefficientFromAP": 5.625
+      },
+      "unmapped": []
+    },
+    "315235": {
+      "spellId": 212612,
+      "columns": {
+        "EffectBasePointsF": 31
+      },
+      "unmapped": []
+    },
+    "315236": {
+      "spellId": 212612,
+      "columns": {
+        "EffectBasePointsF": 31
+      },
+      "unmapped": []
+    },
+    "315237": {
+      "spellId": 212612,
+      "columns": {
+        "EffectBasePointsF": 31
+      },
+      "unmapped": []
+    },
+    "315238": {
+      "spellId": 212612,
+      "columns": {
+        "EffectBasePointsF": 31
+      },
+      "unmapped": []
+    },
+    "315239": {
+      "spellId": 212612,
+      "columns": {
+        "EffectBasePointsF": 381
+      },
+      "unmapped": []
+    },
+    "331344": {
+      "spellId": 222024,
+      "columns": {
+        "BonusCoefficientFromAP": 0.714221
+      },
+      "unmapped": []
+    },
+    "331347": {
+      "spellId": 222026,
+      "columns": {
+        "BonusCoefficientFromAP": 1.39308
+      },
+      "unmapped": []
+    },
+    "355674": {
+      "spellId": 235313,
+      "columns": {
+        "PvpMultiplier": 0.75
+      },
+      "unmapped": []
+    },
+    "355844": {
+      "spellId": 235450,
+      "columns": {
+        "PvpMultiplier": 0.75
+      },
+      "unmapped": []
+    },
+    "809300": {
+      "spellId": 321538,
+      "columns": {
+        "PvpMultiplier": 0.75
+      },
+      "unmapped": []
+    },
+    "815754": {
+      "spellId": 325461,
+      "columns": {
+        "BonusCoefficientFromAP": 1.05731
+      },
+      "unmapped": []
+    },
+    "815761": {
+      "spellId": 325464,
+      "columns": {
+        "BonusCoefficientFromAP": 1.98089
+      },
+      "unmapped": []
+    },
+    "869057": {
+      "spellId": 344572,
+      "columns": {
+        "PvpMultiplier": 0.9
+      },
+      "unmapped": []
+    },
+    "869186": {
+      "spellId": 49184,
+      "columns": {
+        "EffectBasePointsF": 15
+      },
+      "unmapped": []
+    },
+    "872124": {
+      "spellId": 203513,
+      "columns": {
+        "EffectBasePointsF": -15
+      },
+      "unmapped": []
+    },
+    "1028369": {
+      "spellId": 247456,
+      "columns": {
+        "EffectBasePointsF": -6
+      },
+      "unmapped": []
+    },
+    "1028405": {
+      "spellId": 268175,
+      "columns": {
+        "EffectBasePointsF": -6
+      },
+      "unmapped": []
+    },
+    "1030500": {
+      "spellId": 392356,
+      "columns": {
+        "PvpMultiplier": 0.8
+      },
+      "unmapped": []
+    },
+    "1052714": {
+      "spellId": 137006,
+      "columns": {
+        "EffectBasePointsF": 363
+      },
+      "unmapped": []
+    },
+    "1071179": {
+      "spellId": 137028,
+      "columns": {
+        "EffectBasePointsF": 15
+      },
+      "unmapped": []
+    },
+    "1110533": {
+      "spellId": 428200,
+      "columns": {
+        "EffectBasePointsF": -15
+      },
+      "unmapped": []
+    },
+    "1117928": {
+      "spellId": 428076,
+      "columns": {
+        "EffectBasePointsF": -15
+      },
+      "unmapped": []
+    },
+    "1136153": {
+      "spellId": 441591,
+      "columns": {
+        "BonusCoefficientFromAP": 2.0416,
+        "PvpMultiplier": 1
+      },
+      "unmapped": []
+    },
+    "1177797": {
+      "spellId": 443442,
+      "columns": {
+        "EffectBasePointsF": 25
+      },
+      "unmapped": []
+    },
+    "1196253": {
+      "spellId": 1214207,
+      "columns": {
+        "EffectBasePointsF": -6
+      },
+      "unmapped": []
+    },
+    "1202502": {
+      "spellId": 137028,
+      "columns": {
+        "EffectBasePointsF": 303
+      },
+      "unmapped": []
+    },
+    "1210529": {
+      "spellId": 1222923,
+      "columns": {
+        "EffectBasePointsF": -7
+      },
+      "unmapped": []
+    },
+    "1219457": {
+      "spellId": 1228443,
+      "columns": {
+        "BonusCoefficientFromAP": 0.719863
+      },
+      "unmapped": []
+    },
+    "1239729": {
+      "spellId": 1240996,
+      "columns": {
+        "ImplicitTarget_0": 6,
+        "EffectAttributes": 2048
+      },
+      "unmapped": []
+    },
+    "1239730": {
+      "spellId": 1240996,
+      "columns": {
+        "ImplicitTarget_0": 6,
+        "EffectAttributes": 2048
+      },
+      "unmapped": []
+    },
+    "1239731": {
+      "spellId": 1240996,
+      "columns": {
+        "ImplicitTarget_0": 6,
+        "EffectAttributes": 2048
+      },
+      "unmapped": []
+    },
+    "1244557": {
+      "spellId": 1244025,
+      "columns": {
+        "PvpMultiplier": 0.5
+      },
+      "unmapped": []
+    },
+    "1259452": {
+      "spellId": 1253593,
+      "columns": {
+        "PvpMultiplier": 1.15
+      },
+      "unmapped": []
+    },
+    "1264664": {
+      "spellId": 1256911,
+      "columns": {
+        "EffectBasePointsF": -9.0644
+      },
+      "unmapped": []
+    },
+    "1264706": {
+      "spellId": 1256941,
+      "columns": {
+        "EffectBasePointsF": 1
+      },
+      "unmapped": []
+    },
+    "1264716": {
+      "spellId": 1256955,
+      "columns": {
+        "EffectBasePointsF": -4
+      },
+      "unmapped": []
+    },
+    "1264720": {
+      "spellId": 1256964,
+      "columns": {
+        "EffectBasePointsF": 7
+      },
+      "unmapped": []
+    },
+    "1264726": {
+      "spellId": 1256992,
+      "columns": {
+        "EffectBasePointsF": -12
+      },
+      "unmapped": []
+    },
+    "1264731": {
+      "spellId": 1256996,
+      "columns": {
+        "EffectBasePointsF": -20
+      },
+      "unmapped": []
+    },
+    "1264774": {
+      "spellId": 1238052,
+      "columns": {
+        "EffectBasePointsF": -15
+      },
+      "unmapped": []
+    },
+    "1264807": {
+      "spellId": 1256903,
+      "columns": {
+        "EffectBasePointsF": -15
+      },
+      "unmapped": []
+    },
+    "1264855": {
+      "spellId": 1256911,
+      "columns": {
+        "EffectBasePointsF": -9.0644
+      },
+      "unmapped": []
+    },
+    "1266380": {
+      "spellId": 1256941,
+      "columns": {
+        "EffectBasePointsF": 1
+      },
+      "unmapped": []
+    },
+    "1266397": {
+      "spellId": 1231772,
+      "columns": {
+        "EffectBasePointsF": 81
+      },
+      "unmapped": []
+    },
+    "1266433": {
+      "spellId": 1256945,
+      "columns": {
+        "EffectBasePointsF": -15
+      },
+      "unmapped": []
+    },
+    "1266448": {
+      "spellId": 1256944,
+      "columns": {
+        "EffectBasePointsF": -15
+      },
+      "unmapped": []
+    },
+    "1266459": {
+      "spellId": 1256943,
+      "columns": {
+        "EffectAura": 649,
+        "EffectBasePointsF": 34
+      },
+      "unmapped": [
+        {
+          "field": 15,
+          "old": 0,
+          "new": 5
+        },
+        {
+          "field": 16,
+          "old": 0,
+          "new": 7155
+        }
+      ]
+    },
+    "1266563": {
+      "spellId": 1256955,
+      "columns": {
+        "EffectBasePointsF": -4
+      },
+      "unmapped": []
+    },
+    "1266631": {
+      "spellId": 1256964,
+      "columns": {
+        "EffectBasePointsF": 7
+      },
+      "unmapped": []
+    },
+    "1266729": {
+      "spellId": 1256947,
+      "columns": {
+        "EffectBasePointsF": 10
+      },
+      "unmapped": []
+    },
+    "1266733": {
+      "spellId": 1256992,
+      "columns": {
+        "EffectBasePointsF": -12
+      },
+      "unmapped": []
+    },
+    "1266735": {
+      "spellId": 1256996,
+      "columns": {
+        "EffectBasePointsF": -20
+      },
+      "unmapped": []
+    },
+    "1266740": {
+      "spellId": 1256995,
+      "columns": {
+        "EffectBasePointsF": -15
+      },
+      "unmapped": []
+    },
+    "1266878": {
+      "spellId": 1222923,
+      "columns": {
+        "EffectBasePointsF": -7
+      },
+      "unmapped": []
+    },
+    "1273895": {
+      "spellId": 389985,
+      "columns": {
+        "EffectBasePointsF": -6
+      },
+      "unmapped": []
+    },
+    "1275166": {
+      "spellId": 1264082,
+      "columns": {
+        "BonusCoefficientFromAP": 0.714221
+      },
+      "unmapped": []
+    },
+    "1275169": {
+      "spellId": 1264083,
+      "columns": {
+        "BonusCoefficientFromAP": 0.714221
+      },
+      "unmapped": []
+    },
+    "1275170": {
+      "spellId": 1264084,
+      "columns": {
+        "BonusCoefficientFromAP": 1.05731
+      },
+      "unmapped": []
+    },
+    "1275546": {
+      "spellId": 444088,
+      "columns": {
+        "PvpMultiplier": 1.33333
+      },
+      "unmapped": []
+    },
+    "1275665": {
+      "spellId": 1264355,
+      "columns": {
+        "EffectAttributes": 133120
+      },
+      "unmapped": []
+    },
+    "1280950": {
+      "spellId": 1269224,
+      "columns": {
+        "BonusCoefficientFromAP": 5
+      },
+      "unmapped": []
+    },
+    "1293034": {
+      "spellId": 429420,
+      "columns": {
+        "PvpMultiplier": 0.666667
+      },
+      "unmapped": []
+    },
+    "1319289": {
+      "spellId": 1296620,
+      "columns": {
+        "EffectBasePointsF": 25
+      },
+      "unmapped": []
+    },
+    "1337273": {
+      "spellId": 1308653,
+      "columns": {
+        "ImplicitTarget_0": 120
+      },
+      "unmapped": []
+    },
+    "1352853": {
+      "spellId": 1256943,
+      "columns": {},
+      "unmapped": [
+        {
+          "field": 4294967295,
+          "old": 0,
+          "new": 0
+        }
+      ]
+    },
+    "1352856": {
+      "spellId": 1256992,
+      "columns": {},
+      "unmapped": [
+        {
+          "field": 4294967295,
+          "old": 0,
+          "new": 0
+        }
+      ]
+    },
+    "1352907": {
+      "spellId": 1256919,
+      "columns": {},
+      "unmapped": [
+        {
+          "field": 4294967295,
+          "old": 0,
+          "new": 0
+        }
+      ]
+    },
+    "1352908": {
+      "spellId": 1257520,
+      "columns": {},
+      "unmapped": [
+        {
+          "field": 4294967295,
+          "old": 0,
+          "new": 0
+        }
+      ]
+    },
+    "1352912": {
+      "spellId": 1256939,
+      "columns": {},
+      "unmapped": [
+        {
+          "field": 4294967295,
+          "old": 0,
+          "new": 0
+        }
+      ]
+    },
+    "1352920": {
+      "spellId": 1256913,
+      "columns": {},
+      "unmapped": [
+        {
+          "field": 4294967295,
+          "old": 0,
+          "new": 0
+        }
+      ]
+    },
+    "1352928": {
+      "spellId": 1256911,
+      "columns": {},
+      "unmapped": [
+        {
+          "field": 4294967295,
+          "old": 0,
+          "new": 0
+        }
+      ]
+    },
+    "1352929": {
+      "spellId": 1256909,
+      "columns": {},
+      "unmapped": [
+        {
+          "field": 4294967295,
+          "old": 0,
+          "new": 0
+        }
+      ]
+    },
+    "1353090": {
+      "spellId": 1231772,
+      "columns": {},
+      "unmapped": [
+        {
+          "field": 4294967295,
+          "old": 0,
+          "new": 0
+        }
+      ]
+    },
+    "1353103": {
+      "spellId": 1231772,
+      "columns": {},
+      "unmapped": [
+        {
+          "field": 4294967295,
+          "old": 0,
+          "new": 0
+        }
+      ]
+    },
+    "1353104": {
+      "spellId": 1231772,
+      "columns": {},
+      "unmapped": [
+        {
+          "field": 4294967295,
+          "old": 0,
+          "new": 0
+        }
+      ]
+    },
+    "1353105": {
+      "spellId": 1231772,
+      "columns": {},
+      "unmapped": [
+        {
+          "field": 4294967295,
+          "old": 0,
+          "new": 0
+        }
+      ]
+    }
+  },
+  "spellHotfixIds": [
+    212106,
+    227847,
+    382424,
+    446035,
+    1241167,
+    1241171,
+    1244341,
+    1244918,
+    1256913,
+    1295123,
+    1297908,
+    1308653
+  ],
+  "powerHotfixes": [
+    {
+      "id": 10191,
+      "field": 8,
+      "old": 5,
+      "new": 4
+    },
+    {
+      "id": 314874,
+      "field": 4294967295,
+      "old": 0,
+      "new": 0
+    },
+    {
+      "id": 314875,
+      "field": 4294967295,
+      "old": 0,
+      "new": 0
+    }
+  ]
+}

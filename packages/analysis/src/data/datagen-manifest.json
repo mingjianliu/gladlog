@@ -1,6 +1,6 @@
 {
   "build": "12.1.0.69404",
-  "generatedAt": "2026-09-04T23:34:01.055Z",
+  "generatedAt": "2026-09-05T00:02:44.429Z",
   "artifacts": {
     "talentIdMap.json": {
       "specs": 40
@@ -121,6 +121,14 @@
       "bytes": 2546,
       "generator": "packages/eval/scripts/kickLockoutScan.ts",
       "consumer": "data/spellEffectData.ts kickLockoutSeconds — verification gate, official DB2 PvP duration first (GH #62, 2026-09-04)"
+    },
+    "hotfixOverlayGenerated.json": {
+      "effects": 123,
+      "spells": 77,
+      "clientBuild": "12.1.0.69587",
+      "hotfixDate": "2026-09-02",
+      "simc": "midnight@ca042f5a1389",
+      "generator": "scripts/datagen/fetchSimcHotfixes.ts"
     },
     "syncWindowPriorGenerated.json": {
       "entries": 3,

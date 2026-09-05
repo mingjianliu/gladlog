@@ -53,6 +53,11 @@ import { ALLY_IMPLICIT_TARGETS } from "./lib/allyTargets";
 import { writeArtifact } from "./lib/emit";
 import { PVP_MULTIPLIER_COLUMN, pvpBasePoints } from "./lib/pvpMultiplier";
 import {
+  applyHotfixOverlay,
+  dataDirOf,
+  loadHotfixOverlay,
+} from "./lib/simcHotfix";
+import {
   assertColumns,
   assertMinRows,
   fetchTable,
@@ -177,6 +182,12 @@ async function main(): Promise<void> {
   ]);
 
   const parsed = parseCsv(await fetchTable("SpellEffect", build, cacheDir));
+  // Live hotfixes on top of the client build (BACKLOG #41 (3)).
+  const hf = applyHotfixOverlay(
+    parsed.rows,
+    loadHotfixOverlay(dataDirOf(import.meta.url)),
+  );
+  console.log(`hotfix overlay: ${hf.applied} writes on ${hf.rowsTouched} rows`);
   assertColumns(
     parsed.header,
     [

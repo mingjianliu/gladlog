@@ -3,7 +3,7 @@
  * artifact, so the update-wow-data workflow can decide whether an update is
  * needed.
  */
-import { readFileSync, statSync } from "fs";
+import { existsSync, readFileSync, statSync } from "fs";
 
 import { writeArtifact } from "./lib/emit";
 import { fetchLatestBuild } from "./lib/wagoCsv";
@@ -281,8 +281,44 @@ export async function main(): Promise<void> {
         consumer:
           "data/spellEffectData.ts kickLockoutSeconds — verification gate, official DB2 PvP duration first (GH #62, 2026-09-04)",
       },
+      // Live hotfix overlay from SimulationCraft's generated data (BACKLOG #41
+      // (3), 2026-09-04): not a wago artifact — the client build's CSV cannot
+      // carry hotfixes. Applied at generation time by every SpellEffect-reading
+      // generator (genMitigation / genTalentMitigation / genAbilityEffects /
+      // genTalentModifiers); the hotfix date is the freshness stamp.
+      "hotfixOverlayGenerated.json": {
+        effects: Object.keys(readJson("hotfixOverlayGenerated.json").effects)
+          .length,
+        spells: new Set(
+          Object.values(
+            readJson("hotfixOverlayGenerated.json").effects as Record<
+              string,
+              { spellId: number }
+            >,
+          ).map((e) => e.spellId),
+        ).size,
+        clientBuild: readJson("hotfixOverlayGenerated.json").meta.clientBuild,
+        hotfixDate: readJson("hotfixOverlayGenerated.json").meta.hotfixDate,
+        simc: `${readJson("hotfixOverlayGenerated.json").meta.branch}@${String(readJson("hotfixOverlayGenerated.json").meta.commit).slice(0, 12)}`,
+        generator: "scripts/datagen/fetchSimcHotfixes.ts",
+      },
     },
   };
+
+  // Entries this script does not build itself — the eval scans' `emit-table`
+  // registrations (syncWindowPrior, cdTriggerPrior, …) — are carried over from
+  // the previous manifest instead of being dropped by the rewrite (2026-09-04:
+  // a full regeneration silently lost two of them; datagenManifest.test.ts
+  // caught it).
+  const manifestPath = dataDir + "datagen-manifest.json";
+  if (existsSync(manifestPath)) {
+    const prev = JSON.parse(readFileSync(manifestPath, "utf8")) as {
+      artifacts?: Record<string, unknown>;
+    };
+    for (const [k, v] of Object.entries(prev.artifacts ?? {}))
+      if (!(k in manifest.artifacts))
+        (manifest.artifacts as Record<string, unknown>)[k] = v;
+  }
 
   writeArtifact(
     dataDir + "datagen-manifest.json",

@@ -70,6 +70,11 @@ import { PVP_TALENT_POOL_GENERATED } from "../../src/data/pvpTalentPoolGenerated
 import { writeArtifact } from "./lib/emit";
 import { PVP_MULTIPLIER_COLUMN, pvpBasePoints } from "./lib/pvpMultiplier";
 import {
+  applyHotfixOverlay,
+  dataDirOf,
+  loadHotfixOverlay,
+} from "./lib/simcHotfix";
+import {
   assertColumns,
   assertMinRows,
   fetchLatestBuild,
@@ -286,6 +291,12 @@ export async function main(): Promise<void> {
     process.env.DATAGEN_CACHE,
   );
   const effectParsed = parseCsv(effectCsv);
+  // Live hotfixes on top of the client build (BACKLOG #41 (3)).
+  const hf = applyHotfixOverlay(
+    effectParsed.rows,
+    loadHotfixOverlay(dataDirOf(import.meta.url)),
+  );
+  console.log(`hotfix overlay: ${hf.applied} writes on ${hf.rowsTouched} rows`);
   // Same truncation guard as genMitigation: a partial download must blow up.
   assertMinRows(effectParsed.rows, 500000, "SpellEffect");
   assertColumns(

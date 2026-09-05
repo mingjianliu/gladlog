@@ -2507,6 +2507,14 @@ TrinityCore 15.7%;wago CSV 不含 hotfix(`hotfixes=` 参数被忽略,真言术�
 - (3) **hotfix 叠加层** —— 新增 datagen 步骤拉 SimC `midnight` 分支的 sc_spell_data.inc,解析三张热修数组
   (field 27 = PvpMultiplier、10 = 系数、14 = 基础值)成 hotfixOverlayGenerated.json,生成器读 SpellEffect 行时叠加;
   manifest 记 hotfix 日期与哈希。依赖 (1)。
+  **2026-09-04 已做**:`scripts/datagen/fetchSimcHotfixes.ts` + `lib/simcHotfix.ts`(解析三张热修数组、effect→spell 映射、
+  字段号→列名实证映射并每次自校验:PvpMultiplier 20/22、EffectBasePointsF 61/73 与 69404 CSV 旧值相等,低于 50% 即失败),
+  产出 `hotfixOverlayGenerated.json`(SimC midnight@ca042f5a,客户端 69587,热修 2026-09-02:123 条效果热修 / 77 个技能 /
+  12 条 spell 标志位 / 3 条资源),四个读 SpellEffect 的生成器在派生前先 `applyHotfixOverlay`(120 次写入 / 111 行)。
+  **实测效应:在 69404 上叠加后四张产物零变化**——当前热修里落在手工表上的 5 条全是吸收/治疗类技能的 PvP 倍率,
+  而 abilityEffects 对它们只记布尔;aura87 减伤行没有被热修。机制就位,今天没有可见增量,价值在下一次 PvP 周调数。
+  节奏写进 update-wow-data.md 3b:manifest 的 hotfixDate 晚于最近一次 PvP 调数公告就重跑 3b + 5/6g/6g2/6i/7。
+  `writeManifest.ts` 同时改为保留前一版 manifest 里自己不认识的条目(emit-table 登记不再被整体重写丢掉)。
 - (4) **数据刷新 69404 → 69587**(最新 retail 2026-09-01),按 update-wow-data.md 全流程 + §7b 三扫描。
 - (5) 文档纠错:update-wow-data.md「PvP modifiers not encoded in DB2」gotcha(09-04 已改)、predicate-index 两份登记。
 - (6) **减伤叠加公式进 counterfactual.ts**(TrinityCore:不同光环乘法叠加、同 SpellGroup 取最高)——先数语料里

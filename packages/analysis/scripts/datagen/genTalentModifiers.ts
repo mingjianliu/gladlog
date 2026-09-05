@@ -1,15 +1,18 @@
-/* eslint-disable no-console */
-import { parseCsv, resolveBuild, fetchTable } from "./lib/wagoCsv";
-import { writeArtifact } from "./lib/emit";
-import talentIdMap from "../../src/data/talentIdMap.json";
-import { CUSTOM_TALENT_MODIFIERS } from "./customTalentModifiers";
-
 import { classMetadata } from "../../src/data/classSpells";
-import spellIdLists from "../../src/data/spellIdLists";
-import { SPELL_CATEGORIES } from "../../src/data/spellCategories";
-import observedSpellIds from "../../src/data/observedSpellIdsGenerated.json";
 import { spellClassMap } from "../../src/data/drCategories";
+import observedSpellIds from "../../src/data/observedSpellIdsGenerated.json";
+import { SPELL_CATEGORIES } from "../../src/data/spellCategories";
+import spellIdLists from "../../src/data/spellIdLists";
+import talentIdMap from "../../src/data/talentIdMap.json";
 import { TEAM_HEAL_CD_IDS } from "../../src/utils/cooldowns";
+import { CUSTOM_TALENT_MODIFIERS } from "./customTalentModifiers";
+import { writeArtifact } from "./lib/emit";
+import {
+  applyHotfixOverlay,
+  dataDirOf,
+  loadHotfixOverlay,
+} from "./lib/simcHotfix";
+import { fetchTable, parseCsv, resolveBuild } from "./lib/wagoCsv";
 
 const EFFECT_MOD_CHARGES = 121;
 const EFFECT_MOD_COOLDOWN = 148;
@@ -367,6 +370,13 @@ export async function main(): Promise<void> {
   ]);
 
   const spellEffectRows = parseCsv(spellEffectRaw).rows;
+  // Live hotfixes on top of the client build (BACKLOG #41 (3)): cooldown /
+  // charge modifiers are EffectBasePointsF too, and Blizzard tunes them.
+  const hf = applyHotfixOverlay(
+    spellEffectRows,
+    loadHotfixOverlay(dataDirOf(import.meta.url)),
+  );
+  console.log(`hotfix overlay: ${hf.applied} writes on ${hf.rowsTouched} rows`);
   const spellClassOptionsRows = parseCsv(spellClassOptionsRaw).rows;
   const spellCategoriesRows = parseCsv(spellCategoriesRaw).rows;
   const spellNameRows = parseCsv(spellNameRaw).rows;
