@@ -1,12 +1,12 @@
 {
   "meta": {
-    "generatedAt": "2026-09-04",
+    "generatedAt": "2026-09-05",
     "corpus": "1814 archived files (12.1+ rounds only)",
     "command": "npx tsx packages/eval/scripts/healerSaveCdScan.ts emit-table --in <counts.json> --out <file.json>",
     "minShare": 0.02,
     "minCooldownSeconds": 30,
     "criterion": "pressed in >= minShare of the spec's rounds AND official cooldown >= minCooldownSeconds AND (official ability profile can save (ally: mitigation/absorb/heals-others/healing-received/damage-school immunity via official targeting; self: mitigation/absorb/immunity/self-heal) OR user-signed throughput_role/save_role) AND NOT user-signed not_save_role AND the impact door: n >= 100 and (Δ >= 10 pp or death-contrast >= 5 pp)",
-    "impact": "impact.jsonl"
+    "impact": "impact-full.jsonl"
   },
   "specs": {
     "Discipline Priest": {
@@ -23,7 +23,7 @@
           "savesSelf": false,
           "why": [
             "save-role (user-signed, 2026-09-04)",
-            "door: n=1251 Δ8.7pp death-contrast 2.2pp"
+            "door: n=14282 Δ8.9pp death-contrast 3.5pp"
           ]
         },
         {
@@ -37,7 +37,7 @@
           "savesSelf": false,
           "why": [
             "ally: mitigation",
-            "door: n=1293 Δ8.8pp death-contrast 9.6pp"
+            "door: n=14115 Δ9.2pp death-contrast 9.5pp"
           ]
         },
         {
@@ -51,7 +51,7 @@
           "savesSelf": true,
           "why": [
             "self: absorb",
-            "door: n=387 Δ30.0pp death-contrast 8.3pp"
+            "door: n=4242 Δ30.7pp death-contrast 7.7pp"
           ]
         },
         {
@@ -65,7 +65,7 @@
           "savesSelf": true,
           "why": [
             "self: self-heal",
-            "door: n=151 Δ11.9pp death-contrast 7.9pp"
+            "door: n=1682 Δ12.1pp death-contrast 5.6pp"
           ]
         }
       ],
@@ -96,7 +96,7 @@
           "why": [
             "ally: absorb",
             "save-role (user-signed, 2026-09-04)",
-            "door: n=961 Δ9.8pp death-contrast 3.9pp"
+            "door: n=9204 Δ9.3pp death-contrast 4.9pp"
           ]
         },
         {
@@ -111,7 +111,7 @@
           "why": [
             "ally: mitigation",
             "save-role (user-signed, 2026-09-04)",
-            "door: n=901 Δ9.9pp death-contrast 4.2pp"
+            "door: n=8158 Δ10.9pp death-contrast 4.8pp"
           ]
         },
         {
@@ -125,7 +125,7 @@
           "savesSelf": false,
           "why": [
             "throughput-role (user-signed save)",
-            "door: n=1275 Δ17.0pp death-contrast 3.1pp"
+            "door: n=11515 Δ14.4pp death-contrast 3.2pp"
           ]
         },
         {
@@ -139,7 +139,7 @@
           "savesSelf": false,
           "why": [
             "ally: heals-others",
-            "door: n=718 Δ61.0pp death-contrast 23.3pp"
+            "door: n=6859 Δ63.0pp death-contrast 26.4pp"
           ]
         },
         {
@@ -153,7 +153,7 @@
           "savesSelf": true,
           "why": [
             "self: mitigation+immunity+self-heal",
-            "door: n=666 Δ12.0pp death-contrast 13.8pp"
+            "door: n=6076 Δ14.4pp death-contrast 12.2pp"
           ]
         },
         {
@@ -167,7 +167,7 @@
           "savesSelf": false,
           "why": [
             "save-role (user-signed, 2026-09-04)",
-            "door: n=456 Δ21.3pp death-contrast 2.7pp"
+            "door: n=4155 Δ22.0pp death-contrast 4.3pp"
           ]
         },
         {
@@ -181,7 +181,7 @@
           "savesSelf": false,
           "why": [
             "ally: mitigation+immunity",
-            "door: n=310 Δ10.8pp death-contrast 11.8pp"
+            "door: n=2925 Δ12.0pp death-contrast 11.5pp"
           ]
         },
         {
@@ -195,7 +195,7 @@
           "savesSelf": false,
           "why": [
             "save-role (user-signed, 2026-09-04)",
-            "door: n=878 Δ13.4pp death-contrast 2.6pp"
+            "door: n=8271 Δ14.7pp death-contrast 3.3pp"
           ]
         },
         {
@@ -209,7 +209,7 @@
           "savesSelf": false,
           "why": [
             "ally: mitigation+immunity",
-            "door: n=279 Δ5.0pp death-contrast 7.4pp"
+            "door: n=2416 Δ5.0pp death-contrast 9.7pp"
           ]
         },
         {
@@ -223,7 +223,21 @@
           "savesSelf": false,
           "why": [
             "ally: absorb",
-            "door: n=142 Δ0.3pp death-contrast 8.4pp"
+            "door: n=827 Δ1.9pp death-contrast 10.0pp"
+          ]
+        },
+        {
+          "spellId": "633",
+          "name": "Lay on Hands",
+          "cooldownSeconds": 600,
+          "share": 0.041,
+          "rounds": 48,
+          "casts": 49,
+          "savesAlly": true,
+          "savesSelf": false,
+          "why": [
+            "ally: heals-others",
+            "door: n=183 Δ39.7pp death-contrast 17.3pp"
           ]
         }
       ],
@@ -239,6 +253,7 @@
         "432472",
         "498",
         "59752",
+        "6262",
         "853"
       ]
     },
@@ -256,7 +271,7 @@
           "savesSelf": false,
           "why": [
             "ally: healing-received",
-            "door: n=3318 Δ44.8pp death-contrast 15.4pp"
+            "door: n=30736 Δ45.7pp death-contrast 13.7pp"
           ]
         },
         {
@@ -270,7 +285,7 @@
           "savesSelf": true,
           "why": [
             "self: mitigation",
-            "door: n=2495 Δ12.1pp death-contrast 4.8pp"
+            "door: n=23948 Δ13.8pp death-contrast 3.5pp"
           ]
         },
         {
@@ -284,7 +299,7 @@
           "savesSelf": true,
           "why": [
             "self: absorb",
-            "door: n=1766 Δ23.6pp death-contrast 6.4pp"
+            "door: n=16101 Δ25.1pp death-contrast 6.2pp"
           ]
         },
         {
@@ -298,7 +313,7 @@
           "savesSelf": false,
           "why": [
             "throughput-role (user-signed save)",
-            "door: n=1726 Δ29.2pp death-contrast 7.6pp"
+            "door: n=16002 Δ32.2pp death-contrast 8.4pp"
           ]
         },
         {
@@ -312,7 +327,7 @@
           "savesSelf": false,
           "why": [
             "ally: heals-others+healing-received",
-            "door: n=1365 Δ23.6pp death-contrast 6.1pp"
+            "door: n=12341 Δ23.7pp death-contrast 5.1pp"
           ]
         },
         {
@@ -326,7 +341,7 @@
           "savesSelf": true,
           "why": [
             "self: self-heal",
-            "door: n=311 Δ19.2pp death-contrast 5.5pp"
+            "door: n=2949 Δ23.1pp death-contrast 6.6pp"
           ]
         }
       ],
@@ -358,7 +373,7 @@
           "savesSelf": false,
           "why": [
             "ally: absorb+healing-received",
-            "door: n=484 Δ33.7pp death-contrast 18.4pp"
+            "door: n=4897 Δ36.0pp death-contrast 19.0pp"
           ]
         },
         {
@@ -372,7 +387,7 @@
           "savesSelf": false,
           "why": [
             "ally: team-heal (registered)",
-            "door: n=316 Δ21.7pp death-contrast 5.9pp"
+            "door: n=3507 Δ20.0pp death-contrast 7.1pp"
           ]
         },
         {
@@ -386,7 +401,7 @@
           "savesSelf": false,
           "why": [
             "ally: heals-others",
-            "door: n=277 Δ18.1pp death-contrast 11.6pp"
+            "door: n=3212 Δ18.9pp death-contrast 12.4pp"
           ]
         },
         {
@@ -400,7 +415,8 @@
           "savesSelf": true,
           "why": [
             "self: mitigation",
-            "door: n=158 Δ11.2pp death-contrast 3.2pp"
+            "save-role (user-signed, 2026-09-04)",
+            "door: n=1570 Δ8.9pp death-contrast 4.6pp"
           ]
         },
         {
@@ -415,7 +431,7 @@
           "why": [
             "self: self-heal",
             "save-role (user-signed, 2026-09-04)",
-            "door: n=45 Δ25.6pp death-contrast 3.3pp"
+            "door: n=459 Δ21.4pp death-contrast 7.4pp"
           ]
         },
         {
@@ -430,7 +446,7 @@
           "why": [
             "ally: heals-others",
             "save-role (user-signed, 2026-09-04)",
-            "door: n=36 Δ28.8pp death-contrast 4.7pp"
+            "door: n=335 Δ20.1pp death-contrast 11.6pp"
           ]
         }
       ],
@@ -469,7 +485,7 @@
           "savesSelf": false,
           "why": [
             "save-role (user-signed, 2026-09-04)",
-            "door: n=283 Δ20.3pp death-contrast 5.8pp"
+            "door: n=2545 Δ16.3pp death-contrast 6.3pp"
           ]
         },
         {
@@ -483,7 +499,7 @@
           "savesSelf": false,
           "why": [
             "ally: mitigation+absorb",
-            "door: n=915 Δ38.4pp death-contrast 12.3pp"
+            "door: n=8811 Δ38.9pp death-contrast 11.9pp"
           ]
         },
         {
@@ -497,7 +513,7 @@
           "savesSelf": false,
           "why": [
             "save-role (user-signed, 2026-09-04)",
-            "door: n=286 Δ18.3pp death-contrast 7.6pp"
+            "door: n=2629 Δ17.4pp death-contrast 6.3pp"
           ]
         },
         {
@@ -511,7 +527,7 @@
           "savesSelf": true,
           "why": [
             "self: self-heal",
-            "door: n=254 Δ64.6pp death-contrast 22.0pp"
+            "door: n=2522 Δ66.7pp death-contrast 19.1pp"
           ]
         },
         {
@@ -525,7 +541,7 @@
           "savesSelf": true,
           "why": [
             "self: mitigation",
-            "door: n=330 Δ17.5pp death-contrast 4.0pp"
+            "door: n=3379 Δ18.6pp death-contrast 8.7pp"
           ]
         },
         {
@@ -539,7 +555,7 @@
           "savesSelf": false,
           "why": [
             "ally: heals-others",
-            "door: n=217 Δ39.8pp death-contrast 18.1pp"
+            "door: n=2178 Δ46.7pp death-contrast 17.1pp"
           ]
         },
         {
@@ -553,7 +569,7 @@
           "savesSelf": false,
           "why": [
             "ally: heals-others",
-            "door: n=133 Δ19.8pp death-contrast 9.7pp"
+            "door: n=1192 Δ16.0pp death-contrast 7.0pp"
           ]
         }
       ],
@@ -590,7 +606,7 @@
           "savesSelf": false,
           "why": [
             "save-role (user-signed, 2026-09-04)",
-            "door: n=678 Δ1.8pp death-contrast 0.2pp"
+            "door: n=7241 Δ1.9pp death-contrast 1.5pp"
           ]
         },
         {
@@ -604,7 +620,7 @@
           "savesSelf": false,
           "why": [
             "ally: mitigation",
-            "door: n=1059 Δ23.2pp death-contrast 4.3pp"
+            "door: n=11445 Δ23.8pp death-contrast 6.0pp"
           ]
         },
         {
@@ -618,7 +634,7 @@
           "savesSelf": false,
           "why": [
             "ally: absorb+heals-others",
-            "door: n=221 Δ16.1pp death-contrast -1.7pp"
+            "door: n=2615 Δ19.2pp death-contrast 4.1pp"
           ]
         },
         {
@@ -632,7 +648,7 @@
           "savesSelf": false,
           "why": [
             "save-role (user-signed, 2026-09-04)",
-            "door: n=181 Δ11.3pp death-contrast -0.7pp"
+            "door: n=1845 Δ10.9pp death-contrast 3.1pp"
           ]
         },
         {
@@ -647,7 +663,7 @@
           "why": [
             "self: mitigation",
             "save-role (user-signed, 2026-09-04)",
-            "door: n=99 Δ8.5pp death-contrast 2.2pp"
+            "door: n=1232 Δ9.7pp death-contrast 3.3pp"
           ]
         }
       ],
@@ -664,6 +680,7 @@
         "33891",
         "5211",
         "58984",
+        "6262",
         "77764",
         "99"
       ]
@@ -682,7 +699,7 @@
           "savesSelf": false,
           "why": [
             "ally: team-heal (registered)",
-            "door: n=870 Δ19.1pp death-contrast 4.4pp"
+            "door: n=8714 Δ19.9pp death-contrast 5.4pp"
           ]
         },
         {
@@ -696,7 +713,7 @@
           "savesSelf": false,
           "why": [
             "save-role (user-signed, 2026-09-04)",
-            "door: n=1055 Δ19.5pp death-contrast 4.5pp"
+            "door: n=10523 Δ20.3pp death-contrast 4.6pp"
           ]
         },
         {
@@ -710,7 +727,7 @@
           "savesSelf": false,
           "why": [
             "ally: mitigation",
-            "door: n=454 Δ38.6pp death-contrast 11.4pp"
+            "door: n=4591 Δ41.1pp death-contrast 18.5pp"
           ]
         },
         {
@@ -724,7 +741,7 @@
           "savesSelf": true,
           "why": [
             "self: mitigation",
-            "door: n=231 Δ14.9pp death-contrast 4.9pp"
+            "door: n=2153 Δ12.9pp death-contrast 4.7pp"
           ]
         }
       ],
@@ -746,6 +763,7 @@
         "51485",
         "51514",
         "58875",
+        "59547",
         "79206",
         "8143"
       ]
@@ -772,7 +790,7 @@
         "name": "Fade",
         "cooldownSeconds": 30,
         "share": 0.712,
-        "reason": "below the door: n=839 Δ0.0pp death-contrast 1.3pp"
+        "reason": "below the door: n=9242 Δ0.3pp death-contrast 1.2pp"
       },
       {
         "spellId": "336126",
@@ -851,7 +869,7 @@
         "name": "Divine Protection",
         "cooldownSeconds": 60,
         "share": 0.592,
-        "reason": "below the door: n=922 Δ0.9pp death-contrast 0.5pp"
+        "reason": "below the door: n=8676 Δ4.2pp death-contrast 2.2pp"
       },
       {
         "spellId": "115750",
@@ -879,14 +897,7 @@
         "name": "Healthstone",
         "cooldownSeconds": 60,
         "share": 0.051,
-        "reason": "below the door: n=54 Δ-2.4pp death-contrast 0.0pp"
-      },
-      {
-        "spellId": "633",
-        "name": "Lay on Hands",
-        "cooldownSeconds": 600,
-        "share": 0.041,
-        "reason": "below the door: n=44 Δ41.0pp death-contrast 16.3pp"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
       }
     ],
     "Holy Priest": [
@@ -1174,7 +1185,7 @@
         "name": "Barkskin",
         "cooldownSeconds": 60,
         "share": 0.487,
-        "reason": "below the door: n=427 Δ2.3pp death-contrast 1.7pp"
+        "reason": "below the door: n=4682 Δ5.3pp death-contrast 2.5pp"
       },
       {
         "spellId": "22570",
@@ -1223,7 +1234,7 @@
         "name": "Frenzied Regeneration",
         "cooldownSeconds": 36,
         "share": 0.214,
-        "reason": "below the door: n=242 Δ-2.2pp death-contrast -0.6pp"
+        "reason": "below the door: n=2481 Δ-2.3pp death-contrast 0.8pp"
       },
       {
         "spellId": "77764",
@@ -1245,13 +1256,6 @@
         "cooldownSeconds": 120,
         "share": 0.1,
         "reason": "official profile silent (reachesAlly=true, hitsEnemy=false, dealsDamage=false, haste=60)"
-      },
-      {
-        "spellId": "6262",
-        "name": "Healthstone",
-        "cooldownSeconds": 60,
-        "share": 0.021,
-        "reason": "below the door: n=19 Δ-10.8pp death-contrast 4.9pp"
       }
     ],
     "Restoration Shaman": [
@@ -1365,7 +1369,7 @@
         "name": "Gift of the Naaru",
         "cooldownSeconds": 120,
         "share": 0.056,
-        "reason": "below the door: n=41 Δ13.9pp death-contrast -3.6pp"
+        "reason": "official profile silent (reachesAlly=true, hitsEnemy=false, dealsDamage=false, haste=-)"
       }
     ]
   }

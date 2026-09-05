@@ -56,7 +56,7 @@ import {
   toLegacyMatch,
   toLegacyShuffle,
 } from "@gladlog/parser-compat";
-import { appendFileSync, readFileSync } from "fs";
+import { appendFileSync, closeSync, openSync, readFileSync, readSync } from "fs";
 import { basename } from "path";
 import { gunzipSync } from "zlib";
 
@@ -274,6 +274,42 @@ function scan(): void {
   console.error(`done: ${scanned} files, ${rows} presses → ${out}`);
 }
 
+/** Stream the rows file: the full-archive run is 860k rows / >512 MB, past
+ * Node's single-string limit, so `readFileSync` cannot be used here. */
+function readRowsSync(inPath: string, keep: (r: Row) => boolean = () => true): Row[] {
+  const rows: Row[] = [];
+  const fd = openSync(inPath, "r");
+  const buf = Buffer.alloc(1 << 24);
+  let rest = "";
+  for (;;) {
+    const n = readSync(fd, buf, 0, buf.length, null);
+    if (n <= 0) break;
+    rest += buf.toString("utf8", 0, n);
+    let i;
+    while ((i = rest.indexOf("\n")) >= 0) {
+      const l = rest.slice(0, i);
+      rest = rest.slice(i + 1);
+      if (!l.trim()) continue;
+      try {
+        const r = JSON.parse(l) as Row;
+        if (keep(r)) rows.push(r);
+      } catch {
+        /* torn */
+      }
+    }
+  }
+  closeSync(fd);
+  if (rest.trim()) {
+    try {
+      const r = JSON.parse(rest) as Row;
+      if (keep(r)) rows.push(r);
+    } catch {
+      /* torn */
+    }
+  }
+  return rows;
+}
+
 const median = (xs: number[]): number => {
   const s = [...xs].sort((a, b) => a - b);
   if (!s.length) return NaN;
@@ -288,15 +324,7 @@ function report(): void {
     process.exit(1);
   }
   const minN = num("--min-n", 30);
-  const rows: Row[] = [];
-  for (const l of readFileSync(inPath, "utf8").split("\n")) {
-    if (!l.trim()) continue;
-    try {
-      rows.push(JSON.parse(l));
-    } catch {
-      /* torn */
-    }
-  }
+  const rows: Row[] = readRowsSync(inPath);
   const groups = new Map<string, Row[]>();
   for (const r of rows) {
     const k = `${r.spec}|${r.spellName} (${r.spellId})`;
@@ -351,16 +379,10 @@ function talents(): void {
   }
   const minN = num("--min-n", 100);
   const top = num("--top", 4);
-  const rows: Row[] = [];
-  for (const l of readFileSync(inPath, "utf8").split("\n")) {
-    if (!l.trim()) continue;
-    try {
-      const r = JSON.parse(l);
-      if (Array.isArray(r.talents)) rows.push(r);
-    } catch {
-      /* torn */
-    }
-  }
+  /** --entry <id2>: always print this talent entry's split (e.g. Hand of
+   * Divinity 133501 for Avenging Crusader), even if it is not a top shift. */
+  const forced = flag("--entry") ? Number(flag("--entry")) : null;
+  const rows: Row[] = readRowsSync(inPath, (r) => Array.isArray(r.talents));
   const groups = new Map<string, Row[]>();
   for (const r of rows) {
     const k = `${r.spec}|${r.spellName} (${r.spellId})`;
@@ -398,7 +420,12 @@ function talents(): void {
       .map(([t, rs]) => `${t}: Δ${delta(rs).toFixed(1)} (n=${rs.length})`)
       .join("; ");
     if (treeNote) console.log(`| ${spec} | ${spell} | ${g.length} | ${all.toFixed(1)} | hero tree | — | — | — | ${treeNote} |`);
-    for (const sh of shifts.slice(0, top))
+    const shown = shifts.slice(0, top);
+    if (forced !== null) {
+      const f = shifts.find((x) => x.id === forced);
+      if (f && !shown.includes(f)) shown.push(f);
+    }
+    for (const sh of shown)
       console.log(
         `| ${spec} | ${spell} | ${g.length} | ${all.toFixed(1)} | ${names.get(sh.id) ?? "?"} (${sh.id}) | ${sh.nWith} / ${sh.nWithout} | ${sh.dWith.toFixed(1)} | ${sh.dWithout.toFixed(1)} | ${(sh.dWith - sh.dWithout).toFixed(1)} |`,
       );

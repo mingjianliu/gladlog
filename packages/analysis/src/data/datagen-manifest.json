@@ -141,7 +141,7 @@
       "producer": "packages/eval/scripts/cdTriggerPriorScan.ts emit-table"
     },
     "healerSaveCdGenerated.json": {
-      "entries": 42,
+      "entries": 43,
       "producer": "packages/eval/scripts/healerSaveCdScan.ts emit-table"
     }
   }

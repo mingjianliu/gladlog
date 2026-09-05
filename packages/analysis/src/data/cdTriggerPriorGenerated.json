@@ -1,11 +1,11 @@
 {
   "meta": {
-    "generatedAt": "2026-09-04",
-    "corpus": "wowarenalogs archive 2026-09-04 (12.1+, 18,134-file manifest; roster v2 = healerSaveCdGenerated 42 spells)",
+    "generatedAt": "2026-09-05",
+    "corpus": "wowarenalogs archive 2026-09-04 (12.1+, 18,134-file manifest; roster v3 = healerSaveCdGenerated 43 spells on full-archive impact rows, data 12.1.0.69587)",
     "command": "npx tsx packages/eval/scripts/cdTriggerPriorScan.ts emit-table --in <scan.jsonl> --out <file.json>",
     "cohort": "all",
     "cohortRule": "all 12.1+ healer rounds in the archive",
-    "rows": 299722,
+    "rows": 286082,
     "nFloor": 50,
     "predicateVersion": 1
   },
@@ -125,10 +125,10 @@
       "medianHpPct": 28,
       "spellName": "Lay on Hands"
     },
-    "Holy Paladin|*|498": {
-      "n": 8677,
-      "medianHpPct": 53,
-      "spellName": "Divine Protection"
+    "Holy Paladin|*|633": {
+      "n": 7043,
+      "medianHpPct": 28,
+      "spellName": "Lay on Hands"
     },
     "Holy Paladin|*|642": {
       "n": 6077,
@@ -180,10 +180,10 @@
       "medianHpPct": 28,
       "spellName": "Lay on Hands"
     },
-    "Holy Paladin|Herald of the Sun|498": {
-      "n": 2860,
-      "medianHpPct": 55,
-      "spellName": "Divine Protection"
+    "Holy Paladin|Herald of the Sun|633": {
+      "n": 2257,
+      "medianHpPct": 28,
+      "spellName": "Lay on Hands"
     },
     "Holy Paladin|Herald of the Sun|642": {
       "n": 2068,
@@ -230,10 +230,10 @@
       "medianHpPct": 29,
       "spellName": "Lay on Hands"
     },
-    "Holy Paladin|Lightsmith|498": {
-      "n": 5817,
-      "medianHpPct": 53,
-      "spellName": "Divine Protection"
+    "Holy Paladin|Lightsmith|633": {
+      "n": 4786,
+      "medianHpPct": 29,
+      "spellName": "Lay on Hands"
     },
     "Holy Paladin|Lightsmith|642": {
       "n": 4009,
@@ -550,11 +550,6 @@
       "medianHpPct": 54,
       "spellName": "Nature's Swiftness"
     },
-    "Restoration Druid|*|22812": {
-      "n": 4682,
-      "medianHpPct": 54,
-      "spellName": "Barkskin"
-    },
     "Restoration Druid|*|391528": {
       "n": 1845,
       "medianHpPct": 52,
@@ -580,11 +575,6 @@
       "medianHpPct": 53,
       "spellName": "Nature's Swiftness"
     },
-    "Restoration Druid|Keeper of the Grove|22812": {
-      "n": 3288,
-      "medianHpPct": 54,
-      "spellName": "Barkskin"
-    },
     "Restoration Druid|Keeper of the Grove|391528": {
       "n": 688,
       "medianHpPct": 52,
@@ -609,11 +599,6 @@
       "n": 1975,
       "medianHpPct": 54,
       "spellName": "Nature's Swiftness"
-    },
-    "Restoration Druid|Wildstalker|22812": {
-      "n": 1394,
-      "medianHpPct": 54,
-      "spellName": "Barkskin"
     },
     "Restoration Druid|Wildstalker|391528": {
       "n": 1157,
@@ -645,16 +630,6 @@
       "medianHpPct": 52,
       "spellName": "Nature's Swiftness"
     },
-    "Restoration Shaman|*|58875": {
-      "n": 1938,
-      "medianHpPct": 56,
-      "spellName": "Spirit Walk"
-    },
-    "Restoration Shaman|*|79206": {
-      "n": 5386,
-      "medianHpPct": 52,
-      "spellName": "Spiritwalker's Grace"
-    },
     "Restoration Shaman|*|98008": {
       "n": 4591,
       "medianHpPct": 31,
@@ -669,16 +644,6 @@
       "n": 2324,
       "medianHpPct": 53,
       "spellName": "Healing Tide Totem"
-    },
-    "Restoration Shaman|Farseer|58875": {
-      "n": 519,
-      "medianHpPct": 55,
-      "spellName": "Spirit Walk"
-    },
-    "Restoration Shaman|Farseer|79206": {
-      "n": 1597,
-      "medianHpPct": 51,
-      "spellName": "Spiritwalker's Grace"
     },
     "Restoration Shaman|Farseer|98008": {
       "n": 1199,
@@ -699,16 +664,6 @@
       "n": 10526,
       "medianHpPct": 52,
       "spellName": "Nature's Swiftness"
-    },
-    "Restoration Shaman|Totemic|58875": {
-      "n": 1419,
-      "medianHpPct": 56,
-      "spellName": "Spirit Walk"
-    },
-    "Restoration Shaman|Totemic|79206": {
-      "n": 3789,
-      "medianHpPct": 53,
-      "spellName": "Spiritwalker's Grace"
     },
     "Restoration Shaman|Totemic|98008": {
       "n": 3392,

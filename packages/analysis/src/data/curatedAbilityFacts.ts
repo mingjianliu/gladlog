@@ -172,6 +172,13 @@ export const CURATED_ABILITY_FACTS: ICuratedAbilityFact[] = [
     approved: "2026-09-04 user",
   },
   {
+    id: "115203",
+    claim: "壮胆酒(Fortifying Brew,织雾):360 秒自保减伤;全量语料 n=1,570 Δ 8.9 / 阵亡差 4.6pp 差门一线(每 10 取 1 时曾过门),用户裁定签进。",
+    kind: "save_role",
+    source: "用户裁定 2026-09-04(GH #63,「好的 进」);全量扫描阵亡 6.2% vs 10.8%",
+    approved: "2026-09-04 user",
+  },
+  {
     id: "443454",
     claim: "先祖迅捷(Ancestral Swiftness,奶萨 Farseer):12.x 是 30 秒冷却,按「30 秒核心治疗不算救人牌」的裁决拿掉;Δ +22 过门,可翻。",
     kind: "not_save_role",

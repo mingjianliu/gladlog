@@ -31,6 +31,7 @@
 import { ensureAnalysisData, isHealerSpec, specToString } from "@gladlog/analysis";
 import { abilityProfile } from "@gladlog/analysis/src/data/abilityProfile";
 import { CURATED_ABILITY_FACTS } from "@gladlog/analysis/src/data/curatedAbilityFacts";
+import { RACIAL_ABILITIES } from "@gladlog/analysis/src/data/racialAbilities";
 import { getEnglishSpellName, spellEffectData } from "@gladlog/analysis/src/data/spellEffectData";
 import { MIN_CD_SECONDS, TEAM_HEAL_CD_IDS } from "@gladlog/analysis/src/utils/cooldowns";
 import { PATCH_121_GOLIVE_EPOCH_MS } from "@gladlog/analysis/src/utils/drAnalysis";
@@ -41,7 +42,16 @@ import {
   toLegacyMatch,
   toLegacyShuffle,
 } from "@gladlog/parser-compat";
-import { copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
+import {
+  closeSync,
+  copyFileSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  readSync,
+  rmSync,
+  writeFileSync,
+} from "fs";
 import { basename, dirname, join } from "path";
 import { gunzipSync } from "zlib";
 
@@ -82,6 +92,28 @@ const NOT_SAVE_ROLE_IDS = new Set(
   CURATED_ABILITY_FACTS.filter((f) => f.kind === "not_save_role").map((f) => f.id),
 );
 
+/**
+ * "Is this spell part of the healer's own kit" — decided from the corpus,
+ * not a table: a spell pressed by healers of MORE THAN ONE class (Healthstone
+ * by everyone, Gift of the Naaru by Draenei of any class, Blood Fury by
+ * Orcs) is an item or a racial, not the class kit, and the coach must not
+ * hold a healer to it. A class's own spells only ever appear under that
+ * class (Discipline and Holy Priest are the same class). Talent-tree /
+ * catalog membership was tried first and rejected: talent entries carry a
+ * different spellId than the cast for several saves (Avenging Crusader
+ * 394088 vs 216331, Emerald Communion 370984 vs 370960) and baseline spells
+ * (Divine Shield) sit in no tree. User-signed save_role bypasses this too.
+ */
+function multiClassSpells(counts: Counts): Set<string> {
+  const classesBySpell = new Map<string, Set<string>>();
+  for (const [spec, s] of Object.entries(counts.specs)) {
+    const cls = spec.split(" ").slice(1).join(" ");
+    for (const id of Object.keys(s.spells))
+      (classesBySpell.get(id) ?? classesBySpell.set(id, new Set()).get(id)!).add(cls);
+  }
+  return new Set([...classesBySpell.entries()].filter(([, c]) => c.size > 1).map(([id]) => id));
+}
+
 interface ImpactCell {
   n: number;
   deltaPp: number;
@@ -94,16 +126,34 @@ const med = (xs: number[]): number => {
 };
 function loadImpact(path: string): Map<string, ImpactCell> {
   const groups = new Map<string, any[]>();
-  for (const l of readFileSync(path, "utf8").split("\n")) {
-    if (!l.trim()) continue;
+  // streamed: the full-archive rows file is >512 MB (Node string limit)
+  const fd = openSync(path, "r");
+  const buf = Buffer.alloc(1 << 24);
+  let rest = "";
+  const take = (l: string) => {
+    if (!l.trim()) return;
     try {
       const r = JSON.parse(l);
       const k = `${r.spec}|${r.spellId}`;
-      (groups.get(k) ?? groups.set(k, []).get(k)!).push(r);
+      // keep only what the door needs — 860k full rows would not fit in memory
+      const slim = { press: { protectionPct: r.press.protectionPct, died10: r.press.died10 }, control: r.control ? { protectionPct: r.control.protectionPct, died10: r.control.died10 } : null };
+      (groups.get(k) ?? groups.set(k, []).get(k)!).push(slim);
     } catch {
       /* torn */
     }
+  };
+  for (;;) {
+    const n = readSync(fd, buf, 0, buf.length, null);
+    if (n <= 0) break;
+    rest += buf.toString("utf8", 0, n);
+    let i;
+    while ((i = rest.indexOf("\n")) >= 0) {
+      take(rest.slice(0, i));
+      rest = rest.slice(i + 1);
+    }
   }
+  closeSync(fd);
+  take(rest);
   const out = new Map<string, ImpactCell>();
   for (const [k, g] of groups) {
     const withCtrl = g.filter((r) => r.control);
@@ -220,6 +270,7 @@ async function emitTable(): Promise<void> {
   const impact = impactPath ? loadImpact(impactPath) : null;
   const specs: Record<string, { rounds: number; spells: HealerSaveCdEntry[]; stripDefensive: string[] }> = {};
   const rejected: Record<string, Array<{ spellId: string; name: string; cooldownSeconds: number; share: number; reason: string }>> = {};
+  const notKit = multiClassSpells(counts);
   for (const [spec, s] of Object.entries(counts.specs).sort()) {
     const roster: HealerSaveCdEntry[] = [];
     const rej: (typeof rejected)[string] = [];
@@ -265,7 +316,13 @@ async function emitTable(): Promise<void> {
       if (savesSelf) why.push(`self: ${selfEffect.join("+")}`);
       if (p.throughputRole) why.push("throughput-role (user-signed save)");
       if (SAVE_ROLE_IDS.has(id)) why.push("save-role (user-signed, 2026-09-04)");
-      const eligible = savesAlly || savesSelf || p.throughputRole || SAVE_ROLE_IDS.has(id);
+      // Racials come from the registered racial table (racialAbilities.ts —
+      // the corpus rule alone misses a racial only one healer class happened
+      // to press in the sample: Gift of the Naaru, Shaman-only in the slice).
+      const isRacial = Object.prototype.hasOwnProperty.call(RACIAL_ABILITIES, id);
+      const inKit = (!notKit.has(id) && !isRacial) || SAVE_ROLE_IDS.has(id);
+      if (!inKit) why.push(isRacial ? "racial (racialAbilities.ts)" : "pressed by healers of more than one class (item)");
+      const eligible = inKit && (savesAlly || savesSelf || p.throughputRole || SAVE_ROLE_IDS.has(id));
       const cell = impact?.get(`${spec}|${id}`);
       if (impact && eligible) {
         if (cell) why.push(`door: n=${cell.n} Δ${cell.deltaPp.toFixed(1)}pp death-contrast ${cell.deathContrastPp.toFixed(1)}pp`);
@@ -294,7 +351,7 @@ async function emitTable(): Promise<void> {
       else if (eligible && impact) {
         rej.push({ spellId: id, name, cooldownSeconds: cd, share: entry.share, reason: cell ? `below the door: n=${cell.n} Δ${cell.deltaPp.toFixed(1)}pp death-contrast ${cell.deathContrastPp.toFixed(1)}pp` : "no impact rows (n < door)" });
         if (cell && cell.n >= SAVE_CD_DOOR_MIN_N) strip.add(id); // measured negative
-      } else if (!eligible) strip.add(id); // profile says never a save (CC relief, mobility)
+      } else if (!eligible) strip.add(id); // profile says never a save (CC relief, mobility, item, racial)
       if (!eligible && share >= REVIEW_MIN_SHARE)
         rej.push({
           spellId: id,
