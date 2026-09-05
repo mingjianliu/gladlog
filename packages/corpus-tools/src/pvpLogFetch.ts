@@ -22,10 +22,15 @@ export function isKnownBracket(value: string): value is Bracket {
  * every round. Deliberately **not** KNOWN_BRACKETS, and nobody should "unify"
  * the two: KNOWN_BRACKETS is a fact about the server (the three values its feed
  * accepts, so a typo raises instead of silently querying empty), while this is
- * our own collection policy. 2v2 was dropped by user ruling on 2026-09-04 — it
- * is roughly a third of each round's downloads and Drive bytes, and the corpus
- * work it fed had already ruled it out (review-bench value-by-mode found no
- * 2v2 impact; the rotation study dropped it on 2026-08-29).
+ * our own collection policy. 2v2 was dropped by user ruling on 2026-09-04; the
+ * corpus work it fed had already ruled it out (review-bench value-by-mode found
+ * no 2v2 impact; the rotation study dropped it on 2026-08-29). Measured on the
+ * 2026-09-04 round (7,937 matches over the three day shards it created): 2v2 is
+ * **34.8% of the downloads but only 13.0% of the bytes**, so the saving is
+ * wall-clock, not Drive runway — a round costs one DOWNLOAD_SLEEP_MS per match
+ * regardless of its size. Rated Solo Shuffle is the opposite shape (16.4% of
+ * matches, 50.2% of bytes); bracket counts and bracket bytes are not
+ * interchangeable when sizing either.
  *
  * The `readonly Bracket[]` annotation is the structural coupling rather than a
  * comment: a bracket the server does not recognize will not compile here.

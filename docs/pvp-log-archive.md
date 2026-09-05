@@ -14,10 +14,25 @@ rationale and the measured numbers behind every parameter:
 ## Which brackets get archived
 
 `ARCHIVED_BRACKETS` (`src/pvpLogFetch.ts`) — **3v3 and Rated Solo Shuffle.
-2v2 is not archived**, by user ruling on 2026-09-04: it was roughly a third
-of every round's downloads and Drive bytes, and the corpus work it fed had
-already ruled it out (the review bench found no value impact by mode for
+2v2 is not archived**, by user ruling on 2026-09-04. The corpus work it fed
+had already ruled it out (the review bench found no value impact by mode for
 2v2; the rotation study dropped it on 2026-08-29).
+
+What that saves, measured on the 2026-09-04 round (7,937 matches over the
+three day shards it created, 5.38 GB):
+
+| Bracket            | Matches | Share | Bytes   | Share |
+| ------------------ | ------- | ----- | ------- | ----- |
+| 2v2                | 2,765   | 34.8% | 0.70 GB | 13.0% |
+| 3v3                | 3,872   | 48.8% | 1.98 GB | 36.8% |
+| Rated Solo Shuffle | 1,300   | 16.4% | 2.70 GB | 50.2% |
+
+The saving is **wall-clock, not Drive runway**: a round costs one
+`DOWNLOAD_SLEEP_MS` per match no matter how big that match is, so dropping
+34.8% of the matches drops about a third of the run time while returning only
+13% of the bytes. Rated Solo Shuffle is the opposite shape — a sixth of the
+matches, half the bytes — so bracket counts and bracket bytes are **not**
+interchangeable when sizing either one.
 
 It is a **separate constant from `KNOWN_BRACKETS`, and the two must not be
 merged**. `KNOWN_BRACKETS` states a fact about the server — the three values
