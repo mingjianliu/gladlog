@@ -778,6 +778,14 @@ describe("recorderService 托管循环 (task-5 brief 5c, Step 3)", () => {
     mode?: "managed" | "external";
     backendOverrides?: Partial<CaptureBackend>;
     managedProcessStop?: () => Promise<void>;
+    /** Freeze the clock. The default advances 1s PER CALL, which is fine for
+     * everything that only needs monotonic timestamps -- but the match-open
+     * split's gate is `now() - info.startTime`, so under the advancing clock
+     * the measured lag depends on how many now() calls happened to precede
+     * segmentOpen, i.e. it lands on whichever side of
+     * MATCH_OPEN_SPLIT_MAX_LAG_MS by accident. The ③a-③d cases freeze it so
+     * the lag is exactly `T0 - startTime`. */
+    now?: () => number;
   }) {
     const dir = mkdtempSync(join(tmpdir(), "gladlog-recorder-managed-"));
     const recordings = new RecordingsStore(dir);
@@ -818,7 +826,7 @@ describe("recorderService 托管循环 (task-5 brief 5c, Step 3)", () => {
       recordings,
       clientFactory: () => bypassClient,
       emit: (_ch, p) => statuses.push(p),
-      now: () => (t += 1000),
+      now: opts?.now ?? (() => (t += 1000)),
       managedBackend: fb.backend,
       managedProcessStop: opts?.managedProcessStop,
     });
@@ -873,9 +881,101 @@ describe("recorderService 托管循环 (task-5 brief 5c, Step 3)", () => {
         startedAt: T0,
         stoppedAt: null,
       });
-      svc.onSegmentOpen({ startTime: T0, bracket: "3v3" });
+      // STALE startTime on purpose: this test is about the TIMER-driven
+      // splits never firing inside a match window, so the match-open split
+      // (2026-09-05 ruling) must be out of the picture -- a log lag well past
+      // MATCH_OPEN_SPLIT_MAX_LAG_MS declines it. Its own cases are ③a-③d below.
+      svc.onSegmentOpen({ startTime: T0 - 60_000, bracket: "3v3" });
       await vi.advanceTimersByTimeAsync(11 * 60_000); // past the idle window
       expect(fb.calls.filter((c) => c === "splitChunk")).toHaveLength(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // --- 开局分片(用户裁决 2026-09-05「开局也切」,选项 C)-------------------
+  // 判据是「日志滞后」= now() - info.startTime。setupManaged 的 now 每调用一次
+  // 前进 1s,所以用 startTime 相对 T0 的偏移来把滞后放到闸门的哪一侧。
+
+  /** 冻结时钟 = 滞后完全由 startTime 决定,见 setupManaged 的 now 注释。 */
+  const frozen = () => ({ now: () => T0 });
+  const marked = (calls: string[]) =>
+    calls.filter((c) => c.startsWith("markChapter:"));
+
+  it("③a 日志跟得上(滞后 0)→ 开局切一刀,且切在 markChapter 之前(章节落在对局自己的分片里)", async () => {
+    const { svc, fb } = setupManaged(frozen());
+    svc.onWowUp();
+    await settle();
+    fb.triggerChunkOpened({
+      videoPath: "/tmp/lobby.mp4",
+      startedAt: T0,
+      stoppedAt: null,
+    });
+    svc.onSegmentOpen({ startTime: T0, bracket: "3v3" });
+    await settle();
+    const split = fb.calls.indexOf("splitChunk");
+    const chapter = fb.calls.findIndex((c) => c.startsWith("markChapter:"));
+    expect(split).toBeGreaterThanOrEqual(0);
+    expect(chapter).toBeGreaterThan(split);
+  });
+
+  it("③a2 滞后恰好等于阈值 3s → 仍然切(闸门是闭区间)", async () => {
+    const { svc, fb } = setupManaged(frozen());
+    svc.onWowUp();
+    await settle();
+    fb.triggerChunkOpened({
+      videoPath: "/tmp/lobby.mp4",
+      startedAt: T0,
+      stoppedAt: null,
+    });
+    svc.onSegmentOpen({ startTime: T0 - 3_000, bracket: "3v3" });
+    await settle();
+    expect(fb.calls.filter((c) => c === "splitChunk")).toHaveLength(1);
+  });
+
+  it("③b 日志滞后超阈值(3.001s 就够)→ 不切(开手绝不留在上一个文件里),但 markChapter 照常", async () => {
+    const { svc, fb } = setupManaged(frozen());
+    svc.onWowUp();
+    await settle();
+    fb.triggerChunkOpened({
+      videoPath: "/tmp/lobby.mp4",
+      startedAt: T0,
+      stoppedAt: null,
+    });
+    svc.onSegmentOpen({ startTime: T0 - 3_001, bracket: "3v3" });
+    await settle();
+    expect(fb.calls.filter((c) => c === "splitChunk")).toHaveLength(0);
+    expect(marked(fb.calls)).toHaveLength(1);
+  });
+
+  it("③c 滞后为负(日志时间戳与墙钟不一致,如时区解析漂移)→ 一律不切,退化成连续录制而不是切错地方", async () => {
+    const { svc, fb } = setupManaged(frozen());
+    svc.onWowUp();
+    await settle();
+    fb.triggerChunkOpened({
+      videoPath: "/tmp/lobby.mp4",
+      startedAt: T0,
+      stoppedAt: null,
+    });
+    svc.onSegmentOpen({ startTime: T0 + 3_600_000, bracket: "3v3" });
+    await settle();
+    expect(fb.calls.filter((c) => c === "splitChunk")).toHaveLength(0);
+  });
+
+  it("③d 开局切之后,这一场里不再有第二次 split(开局那一刀是斗内唯一的例外,缩短到 60s 的空闲窗也咬不动)", async () => {
+    vi.useFakeTimers();
+    try {
+      const { svc, fb } = setupManaged(frozen());
+      svc.onWowUp();
+      await vi.advanceTimersByTimeAsync(10);
+      fb.triggerChunkOpened({
+        videoPath: "/tmp/lobby.mp4",
+        startedAt: T0,
+        stoppedAt: null,
+      });
+      svc.onSegmentOpen({ startTime: T0, bracket: "3v3" });
+      await vi.advanceTimersByTimeAsync(11 * 60_000); // 远超缩短后的 60s 空闲窗
+      expect(fb.calls.filter((c) => c === "splitChunk")).toHaveLength(1);
     } finally {
       vi.useRealTimers();
     }
@@ -891,7 +991,11 @@ describe("recorderService 托管循环 (task-5 brief 5c, Step 3)", () => {
       startedAt: T0,
       stoppedAt: null,
     });
-    svc.onSegmentOpen({ startTime: T0, bracket: "3v3" });
+    // Stale startTime: this test is about the match-END split, so the
+    // match-OPEN one (③a-③d) must be out of the picture -- otherwise the
+    // advancing test clock decides by accident which side of
+    // MATCH_OPEN_SPLIT_MAX_LAG_MS this lands on.
+    svc.onSegmentOpen({ startTime: T0 - 60_000, bracket: "3v3" });
     await settle();
     fb.backend.splitChunk = async () => {
       fb.calls.push("splitChunk");
@@ -1004,8 +1108,10 @@ describe("recorderService 托管循环 (task-5 brief 5c, Step 3)", () => {
         stoppedAt: null,
       });
       // The lobby (one continuous solo-shuffle match) starts before the
-      // 40-minute mark and is still running when it elapses.
-      svc.onSegmentOpen({ startTime: T0, bracket: "3v3" });
+      // 40-minute mark and is still running when it elapses. Stale startTime
+      // for the same reason as ③ -- the match-open split is not what this
+      // test is measuring.
+      svc.onSegmentOpen({ startTime: T0 - 60_000, bracket: "3v3" });
       await vi.advanceTimersByTimeAsync(40 * 60_000 + 100);
       expect(fb.calls.filter((c) => c === "splitChunk")).toHaveLength(0);
     } finally {
@@ -1024,7 +1130,7 @@ describe("recorderService 托管循环 (task-5 brief 5c, Step 3)", () => {
         startedAt: T0,
         stoppedAt: null,
       });
-      svc.onSegmentOpen({ startTime: T0, bracket: "3v3" });
+      svc.onSegmentOpen({ startTime: T0 - 60_000, bracket: "3v3" }); // stale: no match-open split (see ③)
       await vi.advanceTimersByTimeAsync(40 * 60_000 + 100); // deferred here, per ⑦b
       fb.backend.splitChunk = async () => {
         fb.calls.push("splitChunk");
@@ -1060,7 +1166,7 @@ describe("recorderService 托管循环 (task-5 brief 5c, Step 3)", () => {
         startedAt: T0,
         stoppedAt: null,
       });
-      svc.onSegmentOpen({ startTime: T0, bracket: "3v3" });
+      svc.onSegmentOpen({ startTime: T0 - 60_000, bracket: "3v3" }); // stale: no match-open split (see ③)
       fb.backend.splitChunk = async () => {
         fb.calls.push("splitChunk");
         return {
@@ -1112,7 +1218,7 @@ describe("recorderService 托管循环 (task-5 brief 5c, Step 3)", () => {
     expect(svc.getStatus().recording).toBe(false);
     // markChapter's failure is silent per CaptureBackend's own contract --
     // must not throw and must not even touch lastError.
-    svc.onSegmentOpen({ startTime: T0, bracket: "3v3" });
+    svc.onSegmentOpen({ startTime: T0 - 60_000, bracket: "3v3" }); // stale: no match-open split (see ③)
     await settle();
     svc.onSegmentClose({ endTime: T0 + 1, aborted: false });
     await settle();

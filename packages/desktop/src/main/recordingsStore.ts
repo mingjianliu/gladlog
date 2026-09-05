@@ -34,10 +34,16 @@ const ORPHAN_KEEP_CAP = 2;
  * ORPHAN_KEEP_CAP=2 and get pruned before associate() ever gets to it. Any
  * orphan whose stoppedAt is within this grace window is ALWAYS kept and does
  * NOT consume an ORPHAN_KEEP_CAP slot -- only orphans that have been sitting
- * unclaimed longer than this compete for the fixed cap. 10 minutes mirrors
- * the managed idle-split cadence (recorder.ts's IDLE_SPLIT_MS) -- long enough
- * to comfortably outlast normal associate() latency, short enough that a
- * truly abandoned orphan still ages out and falls under the cap eventually. */
+ * unclaimed longer than this compete for the fixed cap.
+ *
+ * This used to be described as mirroring the managed idle-split cadence
+ * (recorder.ts's IDLE_SPLIT_MS), which was also 10 minutes. It is NOT that
+ * fact and must not be re-derived from it: IDLE_SPLIT_MS dropped to 60s on
+ * 2026-09-05 (user ruling) while this window's job is unchanged -- outlast
+ * normal associate() latency comfortably, and still let a truly abandoned
+ * orphan age out and fall under the cap. The shorter cadence only means more
+ * orphans sit inside the grace window at once (~10 lobby chunks rather than
+ * ~1), which is what the window is for. Deliberately NOT shared. */
 export const ORPHAN_GRACE_MS = 10 * 60_000;
 
 /** Current on-disk schema version for a recordings.ndjson line. */

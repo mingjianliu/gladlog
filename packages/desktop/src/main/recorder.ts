@@ -13,12 +13,54 @@ export { DEFAULT_OBS_WS_URL };
 /** Safety valve for a segment that stays open and never sees close (worker died / log stream stalled). */
 const SAFETY_STOP_MS = 40 * 60_000;
 const META_BUFFER_CAP = 20;
-/** Managed-mode idle-split cadence (design doc §5.5): while continuously
- * recording outside a match window, cut a fresh chunk every 10 minutes so a
- * long play session doesn't accumulate into one unbounded file. Paused the
- * moment a match opens and restarted only after the post-close split -- the
- * hard invariant is "never split during a match" (task-5 brief). */
-const IDLE_SPLIT_MS = 10 * 60_000;
+/**
+ * Managed-mode idle-split cadence (design doc §5.5): while continuously
+ * recording outside a match window, cut a fresh chunk this often so a long
+ * play session doesn't accumulate into one unbounded file. Paused the moment
+ * a match opens and restarted only after the post-close split -- the hard
+ * invariant is "never split during a match" (task-5 brief).
+ *
+ * 10 minutes -> 60s (user ruling 2026-09-05). This constant is what actually
+ * bounds how much pre-match lobby footage sits at the head of a match's file:
+ * the chunk carrying a match starts at the previous split, so at ten minutes
+ * a match's video could open with ten minutes of queue. The ruling asked for
+ * "one file, one match"; the honest half of that is bounding this number,
+ * because the other half -- cutting at the match's own start -- can only ever
+ * be as punctual as the combat log is (see MATCH_OPEN_SPLIT_MAX_LAG_MS).
+ *
+ * Cost of the shorter cadence is file COUNT, not bytes: the recorder was
+ * already writing continuously either way. Unclaimed lobby chunks are pruned
+ * by recordingsStore's orphan cap once they age past ORPHAN_GRACE_MS, and
+ * pruneNow() runs on every split, i.e. now once a minute while idle.
+ */
+const IDLE_SPLIT_MS = 60_000;
+/**
+ * How stale the log may be for the match-OPEN split to be worth taking
+ * (user ruling 2026-09-05, "开局也切", option C).
+ *
+ * The ruling wants one file per match. We only learn a match started when
+ * `ARENA_MATCH_START` reaches us, and that is late by the combat log's own
+ * lag — a >=2s batch flush on top of WoW's write lag, "可达 20s+"
+ * (`docs/plans/2026-08-02-obs-phase2-design.md:166`). Splitting the moment we
+ * hear about it therefore puts the first `lag` seconds of the match — the
+ * opener, the first CC chain, the first burst — into the PREVIOUS file, and
+ * pushes `headroom = source.startTime - chunk.startedAt` negative, which is
+ * exactly the phase-1 defect phase 2's continuous recording was built to
+ * remove (design doc §5.5 / §9.1 acceptance).
+ *
+ * So the split is gated on the lag we actually measured for THIS match: cut
+ * when the log kept up (the loss is sub-second and the file really is just
+ * the match), and decline when it did not — that match falls back to the
+ * continuous-recording behaviour, whose head is now bounded by the shortened
+ * IDLE_SPLIT_MS above rather than by ten minutes.
+ *
+ * A negative lag can only mean the log timestamp and the wall clock disagree
+ * (a timezone/parse skew — see the parser's own timestamp traps), and we then
+ * have no idea where "now" sits inside the match, so it declines too. Every
+ * failure mode of this gate degrades to "don't split", never to "split in the
+ * wrong place".
+ */
+const MATCH_OPEN_SPLIT_MAX_LAG_MS = 3_000;
 /** Managed-mode per-chunk ceiling (design doc §5.5, 复核 I4 -- this is
  * SAFETY_STOP_MS's managed-mode reincarnation, but kept as its own constant:
  * SAFETY_STOP_MS stops the bypass recording outright on timeout, whereas this
@@ -469,7 +511,7 @@ export function createRecorderService(deps: {
    * time out under rapid retries) by logging and re-arming both timers for
    * another attempt later, rather than retrying in a tight loop. */
   async function managedSplit(
-    reason: "idle" | "max-chunk" | "match-end" | "stuck-match",
+    reason: "idle" | "max-chunk" | "match-end" | "match-open" | "stuck-match",
   ): Promise<void> {
     // Deliberately gated on backend presence alone, not isManagedActive(): by
     // the time this runs, a managed session is already under way (its timers
@@ -804,7 +846,26 @@ export function createRecorderService(deps: {
         // mid-match.
         managedInMatch = true;
         clearManagedIdleTimer();
+        // The match-OPEN split (user ruling 2026-09-05 "开局也切", option C).
+        // This is the ONE split taken inside a match window, and it does not
+        // violate the invariant above: it lands on the match's own opening
+        // instant, not in its middle -- but only when the log was punctual
+        // enough for "now" to still BE that instant. See
+        // MATCH_OPEN_SPLIT_MAX_LAG_MS for why the gate exists and why every
+        // way it can fail lands on "don't split".
+        const logLagMs = now() - info.startTime;
+        const splitAtOpen =
+          logLagMs >= 0 && logLagMs <= MATCH_OPEN_SPLIT_MAX_LAG_MS;
+        if (!splitAtOpen) {
+          console.warn(
+            `[recorder] 开局分片跳过:日志滞后 ${Math.round(logLagMs)}ms 超出 ${MATCH_OPEN_SPLIT_MAX_LAG_MS}ms —— ` +
+              `此刻切会把开场前 ${Math.round(logLagMs)}ms 的开手留在上一个文件里,本场按连续录制处理(头部场外不超过 ${IDLE_SPLIT_MS / 1000}s)`,
+          );
+        }
         runManaged(async () => {
+          // Order matters: split FIRST so the chapter marker lands at ~0s of
+          // the match's own chunk rather than at the tail of the lobby's.
+          if (splitAtOpen) await managedSplit("match-open");
           try {
             // U3: hybrid_mp4 chapter marker -- pure enhancement, failure is
             // silent by CaptureBackend's own contract and must never touch
