@@ -2,7 +2,8 @@
 
 > 独立主线,不依赖其它 HANDOFF。本文档自含:所有路径、数字、裁定都能直接落地,新 session 不需要旧对话。
 > 语料、脚本、证据帧全部在 `~/code/gladlog/tmp/skillcapped-vod/`(**gitignore 内**,约 5MB;转写与教练原话只存在这里,永不进仓库)。
-> **产品代码一行没动。** 唯一的代码改动在仓库外:`~/.claude/skills/wow-frame-read/SKILL.md` 补了三处(见 §七)。
+> **产品代码(`packages/`)一行没动。** 仓库内新增了工具与入口:`tools/coach-corpus/`(Python,npm workspace 之外)与 `docs/commands/ingest-coach-corpus.md`(runbook);仓库外补了 `~/.claude/skills/wow-frame-read/SKILL.md` 三处(见 §七)。
+> 两份可视化报告(用户私有 artifact):**教练判决语料**(VoD 线第二版结论)https://claude.ai/code/artifact/12c050e4-db37-4e89-8628-9af97a07ec25 · **教练规则全录**(4015 条逐条可筛)https://claude.ai/code/artifact/3abc7a80-8b94-4f5b-9713-51d3a5269212;本地副本在 `tmp/skillcapped-vod/evidence/`。
 > Monolingual Chinese, not yet in bilingual pairs; request an English version at any time.
 
 ## 〇、这条线在做什么
@@ -34,8 +35,13 @@
 | 盲态两段式偏差探针(8 条)           | `tmp/skillcapped-vod/verdicts_blind/`                                                                           | 见 §四·bug 2                              |
 | 35 簇分类法 + 2058 标签分配        | `tmp/skillcapped-vod/taxonomy.json`                                                                             | —                                         |
 | 页面用汇总(v2,含 12.0/12.1 分列)   | `tmp/skillcapped-vod/summary_v2.json`                                                                           | —                                         |
-| 映射器拿到的谓词定义               | `tmp/skillcapped-vod/type_definitions.json`                                                                     | 26 条来自 `buildFindingsPrompt.ts`        |
 | 证据帧与裁切(DH 追踪示例)          | `tmp/skillcapped-vod/evidence/`                                                                                 | 见 §三·追踪示例                           |
+| 教程范围配置 | `tools/coach-corpus/courses_tier1.json`(副本亦在 tmp) | 16 门 Must Watch/通用课 + ROAD TO GLADIATOR 非 POV 集 |
+| 教程转写 | `tmp/skillcapped-vod/transcripts_courses/<uuid>.json` | 155 条目 / **154 唯一视频**(`5jjhzdfxn4` 被两门课共用)/ 10.1 h,**含原话,不进仓库** |
+| 教程规则 v1(Opus-high;4 个类型仍是薄 gloss、三分边界松) | `tmp/skillcapped-vod/rules_opus/` | 1914 条规则 |
+| **教程规则 v2(只重跑映射:真谓词 + 派生边界,以此为准)** | `tmp/skillcapped-vod/rules_opus_v2/` | 同 1914 条,`*_v1` 字段保留 |
+| 教程验证课(默认模型、旧三分定义,仅历史参照) | `tmp/skillcapped-vod/rules/` | 9 课 95 条 |
+| **类型真实谓词(由源码生成,映射器唯一输入)** | `tools/coach-corpus/type_definitions.json` | 31 条 = 26 来自 `buildFindingsPrompt.ts` + 5 手写(出处见生成器 `HAND`) |
 | 已发布的可视化报告(第二版)         | https://claude.ai/code/artifact/12c050e4-db37-4e89-8628-9af97a07ec25 (本地副本 `evidence/coach-corpus-v2.html`) | —                                         |
 
 **取流机制**(2026-09-04 实测,从干净 shell 用 curl 验证,不带 cookie):
@@ -64,6 +70,10 @@ bitrate ∈ {500(480p), 1500(720p), 2500(1080p), 4500(1080p)}
 | 09-05 | `talent-build` / `comp-gameplan` 簇归**外部知识层**,后者中可测的部分(「有没有续控制链」)回收       |
 | 09-05 | 先修映射(喂真实定义)再做任何下游                                                                   |
 | 09-05 | skill 化只做 `wow-frame-read` 补丁;通用方法论**不做成 skill**(三个基线 agent 自行推导出了全部方法) |
+| 09-05 | 教程线范围:Tier 1(16 门)+ ROAD TO GLADIATOR 规则集数,共 154 视频 / 10.1 h;各专精手法课 43.9 h 属 B 层,不进第一刀 |
+| 09-05 | 教程线全量抽取用 **claude-opus-5 --effort high**(用户依另一 session 的 A/B 判 Opus-high 精度更高;本线为纯文本任务,该结论的迁移性见 §四认知 4) |
+| 09-05 | **不记 `claude -p` 收据**(cost/turns/cache)—— 用户裁定不需要 |
+| 09-05 | 固化为**仓库内工具 + `docs/commands` runbook**,不写 skill;代码放 `tools/coach-corpus/`(gladlog 侧,因 `type_definitions.json` 由 gladlog 源码生成) |
 
 **版权约定**(沿用 2026-07-27 arenacoach batch1 的既有规矩):只入库结构化判决与转述,**一句教练原话都不进仓库**。转写留在 gitignore 的 tmp 里。
 
@@ -127,6 +137,20 @@ v1 4 → v2 42(4 high)。第一版「教练几乎不提 ⇒ 佐证退役」是 s
 
 `talent-build`(48,100% unmapped)→ 外部知识层(日志看得见你点了什么,「构筑错」需要外部的「什么是对的」);`comp-gameplan`(42,98%)→ 外部知识层,但「有没有续控制链」这类可测的回收;`overall-verdict`(62,98%)→ 跨对局汇总层的**输出风格参照**(gladlog 教练输出目前没有任何参照物)。
 
+### 3.4b 教程线(courses):三分与它真正产出的东西
+
+**语料**:17 门课 / 154 视频 / 1914 条规则 → **1306 条 decision**(381 条 mechanic-fact、227 条 mindset 分开计,不入三分分母)。抽取 Opus-high 两段式;映射阶段重跑一次(真谓词 + 派生边界),v2 为准。
+
+**三分(仅 decision,v2)**:日志能判 **443 (34%)** / 需新数据 **724 (55%)** / 结构不可判 **139 (11%)**。映射 unmapped 765 (59%),严格匹配(已映射且 high)85。
+
+**v1→v2**:日志能判 60%→34%,360 条挪去「需新数据」,结构不可判持平 —— 收紧只切在「日志里有 vs gladlog 派生了」这条线上。映射器点名的缺失派生量全是真实的:uptime/时长指标(减速、近战、time-on-target)、坐标派生的距离/LoS 模型、光环「被消耗 vs 空过期」追踪、爆发窗口内 peel 覆盖比例。
+
+**日志能判且无类型 = 93 条**(v1 同口径 249):ENEMY BUFF KNOWLEDGE 31、COUNTER EVERY MELEE 10、COUNTER EVERY RANGED 10、ROAD TO GLADIATOR 10。**大头是法术级反制规则行**(踢 X、晕时上沉默让他按不出 IBF、Wraith Walk 后再定身)—— 形状是 arenacoach 21 条 / `DISPEL_PENALTY_SPELLS` 那种手维表,**受 CLAUDE.md Curated-List Completeness Rule 管辖**,教练语料可作这类表完整性对账的外部来源。真正的新类型只剩 **setup 族**(RTG EP.1:全员瞬发控制同刻落下、一人锁一个对手、控制别放在击杀目标上),形状可判:`Δt 内 ≥2 硬控落在不同敌人`;与 VoD 发现②同向,**三个独立来源指向同一缺口**。
+
+**4 个手写类型 0 命中 = 内容,不是定义**:换真谓词后 cd-waste 3 / missed-kick 8 / missed-purge-kill-window 5 / questionable-external 4,与 v1 持平。`OFFENSIVE DISPELS` 仍 missed-purge-kill-window=0、missed-purge=9:真谓词要求「与己方击杀窗口重叠」,教程规则是无条件的「该 purge X」,映射到退役的 `missed-purge` **是对的**;`CASTER SOLO SHUFFLE` missed-kick=0 同理(教练说「踢 X」,不说「你踢空了」)。
+
+**一般性观察(比任何百分比重要)**:教程规则是**处方形**(do X),gladlog 谓词是**失误形**(you did X wrong)。VoD 判决天然贴谓词;教程线的产出主要是**规则表行**与**缺失派生量清单**,而不是新候选类型。
+
 ### 3.5 三个已实测的取材常数
 
 - **720p 不够,HUD 必须 1080p**:同一时刻两个档位,`Round/Time Remaining` 在 720p 放大 7× 仍糊,1080p 清晰;敌方框架、施法条 720p 可读。不需要整片高码率——单帧 1.5s。
@@ -141,20 +165,26 @@ v1 4 → v2 42(4 high)。第一版「教练几乎不提 ⇒ 佐证退役」是 s
 
 **bug 3:视频时间 ≠ 回合时间。** 见 3.2。任何时间锚点必须逐帧读 HUD 时钟;更稳的是锚定 HUD 状态 + 日志第 N 个 `ARENA_MATCH_START`(基线 agent 提出,比逐帧 OCR 好,未实施)。
 
+**bug 4:用量上限会让 `claude -p` 静默全灭。** 09-05 映射重跑中途撞上限,后续 103 次调用全部 `rc=1 stdout=60B stderr=''`;我当时的错误文本只记 stdout **长度**,看不见内容,分类器保守地拒绝重放(正确)。修法已固化在 `tools/coach-corpus/common.py::claude_call`:错误文本带 stdout 前 120 字。**看到限额字样再 `/limit-reset`、原命令重放;没看错误文本前不要重放。**
+
 **认知问题 1:教练关心 ≠ 有判别力。** 教练讲的是**可教**的事;gladlog 判别力测的是**是否预测输赢**。一件事可以被反复教、同时在该分段与胜率零相关。第一版把 325 条 CC/爆发判决当成了「gladlog 的 −4.4 测量是错的」的证据——滑步。语料只能证明「这是公认关注点」。
 
 **认知问题 2:`coaching-grounding-audit.md` 落后于代码。** 截至 09-04 至少三行过期:`position-mistake`(仍写「等 #16 接地 85/15/35」,实际 08-20 已接地为 35 单线)、`missed-sync-window`(仍写「−4.4 反向、74%」,那是已死的旧谓词,09-02 新谓词 +4.5~+7.7pp)、`unsynced-burst`(round2 报告发现的可行性缺陷 08-22 当天已修)。另 `death-unused-defensive` 08-29 退役(GH #58)。**引用审计任何一行前先 `git log -S`。**
+
+**认知问题 4:三分对模型不敏感,对定义敏感。** 验证课上 Opus-high 判 60% 日志能判、默认模型 34%,看似模型差 18pp;把三分边界从「日志携带该事实」写死成「gladlog 现有代码已派生该事实」后,Opus-high 也收敛到 34%。另一 session 的 A/B 结论(Opus-high 精度更高)是在**读图**任务上像素级核实的;本线是纯文本,该结论不直接迁移。**配对模型比较目前被 prompt 版本混淆**(`rules/` 用旧三分定义):要干净的单变量比较需用 v2 prompt 重跑默认模型那 9 集的映射,未做。
 
 **认知问题 3:「slug 假象」会同时朝两个方向骗。** 它让 `position-mistake` 虚高(吞下站位一切),也让 `cc-locked` 虚低(名字不像教练用语)。所以第一版基于映射分布做的每一条推论——包括看起来「反向佐证」的——都得重来。
 
 ## 五、剩余工作(按价值排序,都还没做)
 
-1. **把 1483 条 unmapped 按簇三分**:日志能判 / 需要新数据 / 结构上判不了。**35 个簇 35 个判断,不是 1483 个。** 三个最大候选:② 的「做出窗口/可行性」、⑥ 的「逼出对方 CD」记账、① 的站位过深与柱子/视野。每个判定附一句「缺的是什么」(例:站位过深——日志有坐标,缺「相对敌方的安全线」这个预期值)。
+1. **VoD 线的 1483 条 unmapped 按簇三分**(35 个判断,不是 1483 个)。教程线已从规则侧做完三分(§3.4b),VoD 侧可直接复用同一套「gladlog 已派生」边界与 `tools/coach-corpus/extract_rules.py` 里的 MAP 三分段;三个最大候选:② 的「做出窗口/可行性」(setup 族,三源同向)、⑥ 的「逼出对方 CD」记账、① 的站位过深与柱子/视野。
+1b. **把教程线 93 条「日志能判且无类型」分两堆**:法术级规则行(→ 现有手维表的完整性对账,按 Curated-List Completeness Rule 走 `curatedIdRegistry`)vs 真新类型(setup 族)。纯读文件,零 token。
 2. **用 88 条 high 匹配当 Value-Gate 目标句**,逐条对照 gladlog 在同类事件上的实际输出措辞。这是唯一不需要新谓词就能立刻做的事;按 CLAUDE.md Value-Gate Rule,任何新信号动工前必须先手写目标结论句——这 88 条是现成的。
 3. **09-02 的 `missed-sync-window` 新谓词从未对照过专家判决**:`healer-lockdown` 簇 76 条(v2 `unsynced-burst` 16 + `cc-held` 10)是它的对照集。
 4. **修审计文档的三行**(认知问题 2)。小活,但不修会继续误导下一个读者。
 5. **读帧**(1344 条 `needs_frame=true`):成本最高,等 1–3 落定、明确要验证什么之后再做。`evidence/` 里的 DH 示例是读帧的模板。
-6. B 层(12.1 meta 知识:`talent-build` / `comp-gameplan` 90 条)——用户批准过 A+B 一起,但 B 尚未开始;按 Value-Gate 先手写目标句。
+6. B 层(12.1 meta 知识:`talent-build` / `comp-gameplan` 90 条 + 教程线 43.9 h 专精手法课)——用户批准过 A+B 一起,但 B 尚未开始;按 Value-Gate 先手写目标句。
+7. 干净的模型配对比较(认知 4):用 v2 prompt 重跑 `rules/` 那 9 集的映射(默认模型,便宜),再与 `rules_opus_v2/` 比。只有还想知道「Opus 比默认强在哪」时才值。
 
 ## 六、还没做的分析方向
 
@@ -164,17 +194,18 @@ v1 4 → v2 42(4 high)。第一版「教练几乎不提 ⇒ 佐证退役」是 s
 
 ## 七、跑法与坑
 
-```bash
-cd ~/code/gladlog/tmp/skillcapped-vod
-PY=~/.local/pipx/venvs/claude-real-video/bin/python     # faster_whisper 在这个 venv
+**入口是 runbook `docs/commands/ingest-coach-corpus.md`,工具在 `tools/coach-corpus/`**(09-05 从 tmp 里的散脚本固化而来;tmp 里的旧脚本仍在,只作历史复现,新工作一律用 `tools/`)。速查:
 
-$PY fetch_transcribe.py 0 <shard> <nshard>   # 抽音频 + 转写;已处理 uuid 跳过;3 分片并行约 0.35× 实时
-python3 extract_verdicts.py <shard> <nshard>  # v1 抽取(slug 映射)——保留只为可复现,新工作别用它的映射
-python3 remap.py <shard> <nshard>             # v2 映射:只换映射阶段,读 verdicts/ 写 verdicts_remap/
-python3 cluster.py                            # 归纳 35 簇 + 分配 2058 标签(约 45 分钟,单进程)
-VERD_DIR=verdicts_remap python3 aggregate.py [12.0|12.1]   # 汇总;小样本自动打警告横幅
-python3 compare_remap.py                      # v1 vs v2 逐类型与迁移流
+```bash
+python3 tools/coach-corpus/gen_type_definitions.py --selftest    # 步骤 0,改过 buildFindingsPrompt.ts/mistakes.ts 后必跑
+$PY tools/coach-corpus/fetch_transcribe.py --kind vod|course --shard i n     # $PY = crv 的 venv python
+python3 tools/coach-corpus/extract_verdicts.py --shard i n --out verdicts    --model claude-opus-5 --effort high
+python3 tools/coach-corpus/extract_rules.py    --shard i n --out rules_opus  --model claude-opus-5 --effort high
+python3 tools/coach-corpus/extract_rules.py    --remap-from rules_opus --out rules_opus_v3 ...   # 只重跑映射
+python3 tools/coach-corpus/cluster.py --in verdicts
+python3 tools/coach-corpus/aggregate.py --line vod|course ;  python3 tools/coach-corpus/compare.py --line course --a rules_opus --b rules_opus_v2
 ```
+两段式(盲抽 → 真定义映射)是默认,v1 那种单 prompt 不再存在。固化时用新工具对现有数据重跑了全部报告,数字与本文一致(71% / 4.2% / 34-55-11 / 60→34 / 三分一致 69%)。
 
 坑:
 
@@ -186,4 +217,4 @@ python3 compare_remap.py                      # v1 vs v2 逐类型与迁移流
 
 ## 八、已挂账到产品 BACKLOG
 
-**未挂账。** 本 HANDOFF 未改 `docs/BACKLOG.md`。建议接手 session 在 BACKLOG #18(arenacoach 吸收 batch 2)之后新开一条「Skill Capped 教练语料 batch 3」,内容即 §五 1–4;是否挂账由用户裁定。
+**未挂账。** 本 HANDOFF 未改 `docs/BACKLOG.md`。建议接手 session 在 BACKLOG #18(arenacoach 吸收 batch 2)之后新开一条「Skill Capped 教练语料 batch 3」,内容即 §五 1、1b、2、4;另开一条「`coaching-grounding-audit.md` 与代码漂移」(§四认知 2)。是否挂账由用户裁定。

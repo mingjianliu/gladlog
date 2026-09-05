@@ -1,0 +1,83 @@
+{
+ "_meta": {
+  "generated_from": {
+   "buildFindingsPrompt.ts": "c69a5840 2026-09-04",
+   "mistakes.ts": "1b345750 2026-09-01"
+  },
+  "hand_written": [
+   "cd-waste",
+   "death",
+   "missed-kick",
+   "missed-purge-kill-window",
+   "questionable-external"
+  ],
+  "active": [
+   "attempt-into-trinket",
+   "burst-into-mitigation",
+   "cd-waste",
+   "missed-kick",
+   "missed-purge-kill-window",
+   "crisis-no-response",
+   "external-unused",
+   "questionable-external",
+   "healing-gap",
+   "position-mistake",
+   "cc-held",
+   "cc-avoidable",
+   "slow-defensive-response",
+   "missed-sync-window",
+   "unsynced-burst",
+   "cd-hoarded",
+   "cd-spent-idle"
+  ],
+  "retired": [
+   "death",
+   "death-setup",
+   "juked-kick",
+   "missed-cleanse",
+   "missed-purge",
+   "cc-locked",
+   "kick-eaten",
+   "wasted-trinket",
+   "death-unused-defensive",
+   "dr-clipped-cc",
+   "burst-into-immunity",
+   "md-cyclone-window",
+   "off-target-in-window",
+   "unconverted-burst"
+  ]
+ },
+ "definitions": {
+  "attempt-into-trinket": "- \"attempt-into-trinket\": your team opened a stun-anchored kill attempt (facts.stun x facts.stunsN stuns, facts.dmgM M team damage, facts.focusPct% of team damage on the target) on facts.target while their PvP trinket was still available, and facts.primeAlt had neither trinket nor any 20-99% wall in hand at that same moment; facts.failedBy is why it failed. Coach opening on the trinket-less target or forcing the trinket before committing — do NOT claim the attempt on facts.target could never have worked. Corpus reference (n=facts.refN kill attempts): the target died within 15 s facts.refKillTrinketDown% of the time when its trinket was already down at the start vs facts.refKillTrinketUp% when it was up — a descriptive contrast, not causal proof; cite the numbers, do not invent others.",
+  "burst-into-immunity": "- \"burst-into-immunity\": you opened offensive cooldowns (facts.spell) while the target had a full immunity running (facts.immunity, active facts.overlap seconds of the burst). Coach burst timing or a target swap.",
+  "burst-into-mitigation": "- \"burst-into-mitigation\": you opened offensive cooldowns (facts.spell) into facts.target while they had facts.mitSpell (facts.mitPct% damage reduction) running, and facts.betterTarget was a softer target available at that same moment. State only that the mitigation was up and the alternative existed — do NOT assert the burst therefore failed or that swapping would certainly have gotten a kill. Coach target selection at the moment of opening.",
+  "cc-avoidable": "- \"cc-avoidable\": the player ate hard CC facts.spell for facts.durationS seconds at full effect, and the enemy was VISIBLY CASTING it beforehand (facts.castBarSeen) — so there was a cast bar to react to. Before it landed, facts.avoidableWith was available — can be used to avoid this kind of control. Coach reacting with one of these tools next time, or note that holding it for a bigger threat may have been the right call — never assert that using it would certainly have prevented what followed.",
+  "cc-held": "- \"cc-held\": the player's control cooldown facts.spell sat AVAILABLE and unused for facts.heldS continuous seconds (facts.t to facts.windowEndT) — this is an uptime fact, not a claim that pressing it would have changed the outcome. Coach whether that stretch had a target worth using it on, or note that holding it may have been the correct call — never assert it \"cost\" anything.",
+  "cc-locked": "- \"cc-locked\": you sat in hard CC (facts.cc from facts.source) for facts.duration seconds taking facts.damageTakenK k damage. facts.trinketState matters: \"available_unused\" = trinket was in hand the whole time (coach trinket decision); \"on_cooldown\" = coach positioning/spacing so the chain could not start. Do not coach \"use your trinket\" when trinketState is on_cooldown.",
+  "cd-hoarded": "- \"cd-hoarded\": at facts.t facts.crisisUnit fell to facts.crisisHpPct% while taking facts.dmg2sPct% of max HP in the prior 2 s (facts.own=\"yes\" means it was the player's own HP crossing; \"no\" means a teammate's) — the player had a usable major defensive cooldown ready (facts.readyCds) and spent none of them within 5 seconds. Corpus reference (n=facts.refN friendly crises with a ready defensive): the crisis unit died within 10 s facts.refDeathHeld% of the time when the ready cooldown was held vs facts.refDeathSpent% when it was spent within 5 s. This is a descriptive contrast, not causal proof, and it does not identify WHICH cooldown mattered — cite the numbers, do not prescribe a specific button.${ATTEMPTED_LEGEND_NOTE}",
+  "cd-spent-idle": "- \"cd-spent-idle\": facts.spell was cast at facts.t with no active enemy threat at that instant — spent into dead air instead of held for the next real window. This type only ever appears in matches with at least medium overall threat, so idle time in an otherwise-calm match is never flagged here. Coach holding survival cooldowns for genuine pressure.${COST_NORM_LEGEND_NOTE}",
+  "cd-waste": "- \"cd-waste\" (保命 CD 整场未用; candidateFindings.ts cdWasteEvents): fires only if the owner's HP fell below CD_WASTE_PRESSURE_HP_PCT=60% at some point in the round (real pressure existed); then, for each major cooldown that is Defensive-tagged, not throughput, not proc-only, and was NEVER pressed the whole match. Cost-norm abilities (Divine Shield / Ice Block) carry a guard: usable but too costly to coach as a routine reaction. The event is \"a defensive you had all match and never used, in a round where you were actually under pressure\".",
+  "crisis-no-response": "- \"crisis-no-response\": at facts.t the player's own HP fell to facts.hpPct% while taking facts.dmg2sPct% of max HP in the prior 2 s from facts.attackers attacker(s) (enemy burst cooldown active: facts.burst), and for the next 3 seconds did NOTHING to answer it — no self-heal ≥15%, no personal wall, no external, no CC/root/interrupt on an enemy, no kiting. The player was free (not CC'd, not locked out, alive through the window). Outcome reference for this bracket and damage level (cell facts.cellKey; fellBack=yes means a coarser bracket-wide cell; facts.refOutcome names the outcome that was counted (in Solo Shuffle it is \"a teammate (or the healer) died within 15 s\", because the kill target is often a teammate; elsewhere \"this player died within 10 s\") — write that outcome in words, never as a code token). For DPS the counted outcome is always \"this player died within 10 s\" (DPS are the kill target); for healers in Solo Shuffle it is a teammate's death within 15 s. Players of the same role in this bracket who did NOT respond within 3 s saw that outcome facts.refDeathNoResp% of the time (n=facts.refNNoResp); players of the same role who DID respond saw it facts.refDeathResp% of the time (n=facts.refNResp). Among players of the same role who DID respond here, the most common answers were facts.refTop. These are descriptive contrasts, not causal proof — responding players may have been in easier spots. CITE the numbers; do NOT turn them into \"you should have pressed <ability>\".",
+  "death": "- \"death\": the log owner died. Neutral anchoring fact, not an accusation; map here only when the verdict is literally \"you died here\" with no further judgement.",
+  "death-setup": "- \"death-setup\": a precursor moment tied to a later friendly death at facts.deathT (facts.kind: \"healer-locked\" = the healer was CC'd through the kill window; \"trinket-early\" = the victim's trinket was spent at facts.t and still down when they died in CC; \"defensive-early\" = a major defensive was spent early per the timing audit and unavailable at death). For a chain finding, anchor on the death-setup event id(s) ALONE — their facts already carry both {{t}} (the setup moment) and {{deathT}} (the death); do NOT also reference the death event id, whose own t differs and would make {{t}} ambiguous. Describe the sequence neutrally — \"at {{t}}s X happened; at {{deathT}}s the death followed\" — and suggest what to do differently at the setup moment. The no-causation hard rule still applies: never write that the setup \"led to\"/\"caused\"/\"resulted in\" the death.",
+  "death-unused-defensive": "- \"death-unused-defensive\": the player died at facts.t while major defensive(s) facts.walls were OFF cooldown. facts.free explains why pressing was possible: \"yes\" = not in CC; \"trinket_in_hand\" = CC'd but trinket was available to break out first; \"usable_in_cc\" = the listed ability works while CC'd. Coach pressing defensives earlier when taking heavy damage; do not invent which damage killed them.${COST_NORM_LEGEND_NOTE}${ATTEMPTED_LEGEND_NOTE}",
+  "dr-clipped-cc": "- \"dr-clipped-cc\": your CC (facts.spell) landed on facts.target at facts.dr diminishing returns (only facts.duration seconds). Coach CC sequencing with your team.",
+  "external-unused": "- \"external-unused\": teammate facts.victim died at facts.t while the player (facts.owner) had external defensive facts.external off cooldown and was free of CC for facts.freeGapS seconds in the final window. Coach external usage priorities; never claim the external would certainly have saved them.",
+  "healing-gap": "- \"healing-gap\": the healer produced no heals or casts for facts.durationS seconds starting at facts.t (the gap runs facts.t → facts.t+facts.durationS; facts.freeS of that was free of CC — time they COULD have cast), while facts.pressured (facts.pressuredSpec) took real damage and a teammate sat at facts.lowestAllyHp% HP during the gap — that crisis HP is why this gap was reported, not the gap length by itself. Coach healing rotation/triage awareness during that stretch.",
+  "juked-kick": "- \"juked-kick\": your interrupt (facts.kick) was baited out by a fake cast (facts.fake) — the enemy cancelled and you kicked air. Coach kick patience/holding for the real cast.",
+  "kick-eaten": "- \"kick-eaten\": your hardcast (facts.interrupted) was interrupted by facts.source's facts.kick, locking the school for facts.lockout seconds. Coach fake-casting / juking the kick.",
+  "md-cyclone-window": "- \"md-cyclone-window\": an enemy cyclone CHAIN (facts.cycloneHits landings on facts.targets, facts.windowFromT–facts.windowToT s) locked your teammates under real pressure (facts.pressure) while your Mass Dispel sat ready and its strategic targets were moot (facts.strategicImmunities). This is a LOW-severity \"window worth considering\", NOT a mistake claim: holding Mass Dispel is often correct, and the facts only establish this particular window had no strategic reason left to hold. Phrase as \"this was a candidate moment for Mass Dispel on the cyclone chain\" — never \"you should have\"/\"this cost you\".",
+  "missed-cleanse": "- \"missed-cleanse\": a high-value enemy CC (facts.cc, facts.priority) sat on ally facts.target for facts.duration seconds without a friendly dispel while a cleanse was available; the target ate facts.postCcDamageK k damage right after it landed. Coach dispel priority/awareness. When facts.ownerCanDispel is present (\"no\"): the log owner's own class CANNOT remove this debuff type (facts.eligibleDispellers names the teammates who can, by spec) — phrase the finding only as a call-out/communication suggestion (\"call for a dispel\"/\"ask X to cleanse it\"), NEVER as \"you should have dispelled it\" or \"use your cleanse/purify\" — the owner has no such ability for this debuff type.",
+  "missed-kick": "- \"missed-kick\" (打断空放; utils/kickAudit.ts analyzeKickAudit result=\"missed\"): the player CAST an interrupt and no SPELL_INTERRUPT paired with it within 1 s (it did not land), cast-start data is present, and the target had NOT just cancelled a cast (that would be \"juked\", retired). The event is \"you pressed your kick and it hit air with nothing kickable\". It is NOT \"you should have kicked\" — an unspent interrupt is a different (currently untyped) event.",
+  "missed-purge": "- \"missed-purge\": enemy facts.enemy kept a high-value buff (facts.buff, facts.priority) running facts.duration seconds without being purged while a purge was available (facts.inKillWindow says it overlapped your team's kill window). Coach offensive dispel usage.",
+  "missed-purge-kill-window": "- \"missed-purge-kill-window\" (击杀窗口内漏 purge; reconstructDispelSummary.missedPurgeWindows × annotateMissedPurgesWithKillWindows × computeOffensiveWindows, consumed in desktop derive/mistakes.ts): an enemy buff that the owner's available purge/offensive dispel could have removed stayed up, AND that window overlapped a friendly offensive kill window (duringKillWindow). Timed at the instant. Generic \"you should purge X\" outside a kill window is the retired `missed-purge`, not this.",
+  "missed-sync-window": "- \"missed-sync-window\": the enemy healer facts.healer sat in hard CC (facts.cc) for facts.durationS seconds (facts.t–facts.windowEndT) while your team had facts.readyCds ready and none entered the window (a press up to 2 s before the lock counts as entering). Syncing with the lock is the trigger — facts.enemyMinHpPct, when present, is only an accelerator fact; do NOT require low enemy HP before recommending the burst. Corpus reference (n=facts.refN eligible healer-lock windows in this bracket): an enemy died within 15 s of the window opening facts.refKillEntered% of the time when an offensive cooldown entered it vs facts.refKillUnentered% when none did — descriptive contrast, not causal proof; cite the numbers, do not invent others. Coach pressing offensive cooldowns the moment a hard-CC lock on the healer opens.",
+  "off-target-in-window": "- \"off-target-in-window\": during a kill window on facts.target, only facts.onTargetPct percent of your damage landed on that target (facts.offTarget absorbed the most). Coach target discipline.",
+  "position-mistake": "- \"position-mistake\": the log owner's own movement (facts.kind). \"stayed-in\" = stood in a threat and took an HP drop (facts.hpStart% → facts.hpMin%, facts.enemy names the nearest threat when known); \"missed-push\" = drifted facts.dist yards from facts.enemy when pressure was needed; \"cd-out-of-range\" = fired facts.spell with no valid target in range. Coach the movement decision, not just cooldown usage.",
+  "questionable-external": "- \"questionable-external\" (无压力窗口交出外减; candidates/death.ts, consumer of annotateDefensiveTimings tier \"Unnecessary\"): the owner cast an ally-castable external (EXTERNAL_DEFENSIVE_IDS) onto a teammate in a no-pressure window — target at high HP AND no damage spike AND no alignment with an enemy burst window (all three required). The event is \"you spent an external when nothing was happening to the target\".",
+  "slow-defensive-response": "- \"slow-defensive-response\": at facts.t the enemy opened facts.leadCd (+facts.extras): no friendly answered within 8 s although a tool was ready (wall/external/healing CD/control on the caster/kite); facts.pressured fell to facts.pressuredHpPct% inside the window. Corpus reference (n=facts.refN facts.leadCd burst windows): a friendly died inside the window facts.refDeathResp% of the time when answered within 8 s vs facts.refDeathNoResp% when not — descriptive contrast, not causal proof; cite the numbers, do not invent others.",
+  "unconverted-burst": "- \"unconverted-burst\": your offensive cooldowns (facts.spell) put facts.damageM M damage on facts.target but it did NOT convert — target survived with HP facts.hpStart% → facts.hpEnd% (facts.defensive names a damage reduction that was up, if any; facts.allyAligned says whether an ally offensive CD overlapped). Coach setup: pair the burst with CC on the healer, align with ally CDs, or pick a target without a defensive ready.",
+  "unsynced-burst": "- \"unsynced-burst\": you opened facts.spell at facts.t with zero hard CC on the enemy healer anywhere in its effect window (facts.t–facts.windowEndT) — the healer was free to answer. Same rule as missed-sync-window: syncing with a healer lock is the trigger, never a low-HP threshold. Coach lining the cooldown up with CC on the healer next time.",
+  "wasted-trinket": "- \"wasted-trinket\": the player used their PvP trinket at facts.t in a neutral state (team minimum HP facts.teamMinHpPct%, healer free, no enemy offensive cooldowns active). Coach saving trinket for kill windows or breaking lethal CC."
+ }
+}
