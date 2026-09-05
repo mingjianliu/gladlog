@@ -235,7 +235,8 @@ npx tsx packages/analysis/scripts/datagen/genSpellSchools.ts
 #      受治疗增益 / aura31 加速。消费方 data/abilityProfile.ts。非零退出 = 正反
 #      对照组不匹配(如自由祝福的 0 点 aura31 死槽又被当成加速),按实测改规则,
 #      不要放宽断言。)
-#      healingReceivedPct / hastePct PvP-scaled through lib/pvpMultiplier.ts (2026-09-04).
+#      healingReceivedPct / moveSpeedPct PvP-scaled through lib/pvpMultiplier.ts (2026-09-04). moveSpeedPct was
+#      called hastePct until 2026-09-04: aura 31 is A_MOD_INCREASE_SPEED (SimC data_enums.hh), movement, never haste.
 npx tsx packages/analysis/scripts/datagen/genAbilityEffects.ts
 # 6l–6n. Three manifest-tracked artifacts this runbook had never listed (found by the 2026-09-04 69587 refresh —
 #      the manifest records artifacts, only this file drives regeneration, same trap as 6g2 in 69382):

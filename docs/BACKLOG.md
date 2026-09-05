@@ -2570,3 +2570,12 @@ TrinityCore 15.7%;wago CSV 不含 hotfix(`hotfixes=` 参数被忽略,真言术�
   gated 里握牌的死亡率:树皮术 4/186、星界转移 2/131、铁木树皮 2/58、圣佑术 1/169、不灭决心 1/111、壮胆酒 1/54,其余 11 张 0。
   验收(基线 = 命名位表落地后的采集):attempt-into-trinket dps 2010 → 1798、healer 1005 → 899(−318;相对本批开始前的 1848/924 净 −75),burst-into-mitigation
   131 → 143,其余逐类不变。机制:握着任何大墙的目标回到 gated,不再被算作 prime 上的攻击尝试。
+- (9) **SimC 枚举名表审计(2026-09-04,已做)。** 用 `data_enums.hh` 的 aura / effect 名表核对 datagen 手写的全部编号:
+  87 = A_MOD_DAMAGE_PERCENT_TAKEN、69 = A_SCHOOL_ABSORB、118/259 = 受治疗、39/77 = 免疫、10/136 = 治疗、3 = 周期伤害等全部对上,
+  **只有 aura 31 错标**:它是 A_MOD_INCREASE_SPEED(移动速度),项目一直叫 `hastePct`(消散 +50%、和风 +30% 其实都是移速);
+  已改名 `moveSpeedPct`(生成器 / abilityProfile / 索引),无 prompt 消费方,是事实表纠错不是行为变化。
+  用 `racial_spells.inc`(166 条官方种族技能,按种族掩码解码)核对 RACIAL_ABILITIES:语料观测到 59 条,表里缺 20 条;
+  12 条有战斗效果的按官方效果事实定 kind 后补入(火箭弹幕 / 艾泽里特涌动 / 荆棘绽放 → offensive;食尸 / 纳鲁的赐福 ×3 /
+  超有机光源 / 静思 → utility;滑翔 / 翱翔 / 根行 / 翼手龙俯冲 → mobility),8 条纯形态 / 坐骑切换刻意不收。
+  验收:findings 哈希与逐类计数全部不变,只有 context 哈希变化(新收的进攻种族技能——火箭弹幕 / 艾泽里特涌动 / 荆棘绽放——按施放证据进台账行);
+  [KILL 行零变化。

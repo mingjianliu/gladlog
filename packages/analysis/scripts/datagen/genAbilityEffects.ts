@@ -1,7 +1,7 @@
 /**
  * Ability effect facts (GH #29 stage 2 foundation) — the官方 half of a
  * cooldown's functional profile that no existing generator covers yet:
- * absorb, healing (self vs others), healing-received amplification, and haste.
+ * absorb, healing (self vs others), healing-received amplification, and movement speed (aura 31).
  *
  * Why these four: the stage-1 audit classified all 48 Defensive-tagged
  * cooldowns and found **11 of them (22.9%) have no damage reduction, absorb or
@@ -18,7 +18,7 @@
  *   · reaches an ally           → spellTargetingGenerated (GH #28)
  *   · school / immunity masks   → spellSchoolsGenerated   (GH #29 stage 1)
  *   · damage reduction %        → mitigationGenerated + curated overrides
- *   · **this file**             → absorb / heal / healing-received / haste
+ *   · **this file**             → absorb / heal / healing-received / movement speed
  * What stays human-signed is documented in `curatedAbilityFacts.ts`
  * (`throughput_role`): "this cooldown empowers your own output" has no DB2
  * field — only a dozen different modifier auras whose meaning hides in a
@@ -40,10 +40,15 @@
  *                       their ally healing in 64844/157982.
  *   · healingReceived — `EffectAura` 118 (MOD_HEALING_PCT received) or 259,
  *                       points > 0.
- *   · haste           — `EffectAura = 31`, points > 0. The `> 0` guard is load
- *                       bearing: Blessing of Freedom carries an aura-31 row
- *                       with 0 points (a dead slot) and would otherwise read
- *                       as a haste cooldown.
+ *   · moveSpeed       — `EffectAura = 31` = A_MOD_INCREASE_SPEED (SimC
+ *                       data_enums.hh / TrinityCore SPELL_AURA_MOD_INCREASE_SPEED),
+ *                       points > 0. This field was called `hastePct` until
+ *                       2026-09-04 — aura 31 is MOVEMENT speed, not haste
+ *                       (Dispersion +50 % and Zephyr +30 % are run-speed
+ *                       buffs; haste auras are 138/193/216). The `> 0` guard is
+ *                       load bearing: Blessing of Freedom carries an aura-31
+ *                       row with 0 points (a dead slot) — consistent with a
+ *                       movement aura, not a haste one.
  */
 import fs from "fs-extra";
 
@@ -72,7 +77,8 @@ const HEAL_EFFECTS = new Set(["10", "136"]);
 const HEAL_AURAS = new Set(["8", "20"]);
 const AURA_ABSORB = "69";
 const AURA_HEALING_RECEIVED = new Set(["118", "259"]);
-const AURA_HASTE = "31";
+/** A_MOD_INCREASE_SPEED — movement speed (was mislabelled haste until 2026-09-04). */
+const AURA_MOVE_SPEED = "31";
 /** Effect = 2 SCHOOL_DAMAGE(直接伤害);aura 3 = PERIODIC_DAMAGE。 */
 const DAMAGE_EFFECTS = new Set(["2"]);
 const DAMAGE_AURAS = new Set(["3"]);
@@ -105,8 +111,8 @@ export type AbilityEffectFacts = {
   healsOthers?: true;
   /** % increase to healing RECEIVED (Guardian Spirit 60, Life Cocoon 50). */
   healingReceivedPct?: number;
-  /** % haste (Dispersion 50, Zephyr 30). */
-  hastePct?: number;
+  /** % movement-speed increase (Dispersion 50, Zephyr 30) — aura 31 = A_MOD_INCREASE_SPEED. */
+  moveSpeedPct?: number;
 };
 
 /** [spellId, field, expected, why] — asserted before writing. */
@@ -140,15 +146,15 @@ const CONTROLS: Array<[string, keyof AbilityEffectFacts, boolean, string]> = [
   ["118", "dealsDamage", false, "变形术 —— 纯控制,不造成伤害"],
 ];
 const NUMERIC_CONTROLS: Array<
-  [string, "healingReceivedPct" | "hastePct", number, string]
+  [string, "healingReceivedPct" | "moveSpeedPct", number, string]
 > = [
   ["47788", "healingReceivedPct", 60, "守护之魂 —— 受治疗 +60%"],
   ["55233", "healingReceivedPct", 30, "鲜血之力 —— 受治疗 +30%"],
-  ["47585", "hastePct", 50, "消散 —— 加速 50%"],
+  ["47585", "moveSpeedPct", 50, "消散 —— 移动速度 +50%(aura 31 = A_MOD_INCREASE_SPEED,不是加速)"],
 ];
 /** 反向:这些**不许**有对应字段(1044 的 aura31 是 0 点死槽)。 */
 const NEGATIVE_NUMERIC: Array<[string, keyof AbilityEffectFacts, string]> = [
-  ["1044", "hastePct", "自由祝福 —— aura31 但 0 点,是死槽不是加速"],
+  ["1044", "moveSpeedPct", "自由祝福 —— aura31 但 0 点,是死槽不是移速"],
   ["33206", "healingReceivedPct", "苦修 —— 减伤,不改受治疗量"],
 ];
 
@@ -217,7 +223,7 @@ async function main(): Promise<void> {
     effect: r.Effect,
     aura: r.EffectAura,
     trigger: r.EffectTriggerSpell,
-    // PvP-scaled (lib/pvpMultiplier.ts): healingReceivedPct / hastePct are
+    // PvP-scaled (lib/pvpMultiplier.ts): healingReceivedPct / moveSpeedPct are
     // arena numbers; the boolean facts only look at the sign / non-zero.
     points: pvpBasePoints(r),
     targets: [r.ImplicitTarget_0, r.ImplicitTarget_1].filter(
@@ -272,8 +278,11 @@ async function main(): Promise<void> {
           facts.healingReceivedPct ?? 0,
           Math.round(row.points),
         );
-      if (row.aura === AURA_HASTE && row.points > 0)
-        facts.hastePct = Math.max(facts.hastePct ?? 0, Math.round(row.points));
+      if (row.aura === AURA_MOVE_SPEED && row.points > 0)
+        facts.moveSpeedPct = Math.max(
+          facts.moveSpeedPct ?? 0,
+          Math.round(row.points),
+        );
       if (hitsEnemyRow(row)) {
         facts.hitsEnemy = true;
         if (row.targets.some((t) => ENEMY_AREA_TARGETS.has(t)))
@@ -344,13 +353,13 @@ async function main(): Promise<void> {
       ` * Build: ${build}\n` +
       ` * Source: DB2 SpellEffect — aura 69 (absorb), Effect 10/136 + aura 8/20\n` +
       ` *   (healing, split self vs ally by ImplicitTarget), aura 118/259\n` +
-      ` *   (healing received %), aura 31 (haste %). One EffectTriggerSpell hop,\n` +
+      ` *   (healing received %), aura 31 (movement speed %). One EffectTriggerSpell hop,\n` +
       ` *   dummy rows ignored unless they are all the spell has.\n` +
       ` *   See scripts/datagen/genAbilityEffects.ts for the rules and controls.\n` +
       ` * Absent field = the official rows do not show that effect. Treat as\n` +
       ` *   "not known to do this", never as proof of absence for a spell whose\n` +
       ` *   implementation is a dummy row + server script.\n` +
-      ` * ids: ${Object.keys(out).length} — absorb ${count((f) => !!f.absorbs)}, heals self ${count((f) => !!f.healsSelf)}, heals others ${count((f) => !!f.healsOthers)}, healing-received ${count((f) => f.healingReceivedPct !== undefined)}, haste ${count((f) => f.hastePct !== undefined)}, hits enemy ${count((f) => !!f.hitsEnemy)}, enemy AoE ${count((f) => !!f.enemyAoE)}, deals damage ${count((f) => !!f.dealsDamage)}\n` +
+      ` * ids: ${Object.keys(out).length} — absorb ${count((f) => !!f.absorbs)}, heals self ${count((f) => !!f.healsSelf)}, heals others ${count((f) => !!f.healsOthers)}, healing-received ${count((f) => f.healingReceivedPct !== undefined)}, moveSpeed ${count((f) => f.moveSpeedPct !== undefined)}, hits enemy ${count((f) => !!f.hitsEnemy)}, enemy AoE ${count((f) => !!f.enemyAoE)}, deals damage ${count((f) => !!f.dealsDamage)}\n` +
       ` * The data lives in the .json of the same name (vite json.stringify ->\n` +
       ` * JSON.parse loading — the big-JSON lesson).\n` +
       ` */\n\n` +
@@ -365,7 +374,7 @@ async function main(): Promise<void> {
       `  healsSelf?: true;\n` +
       `  healsOthers?: true;\n` +
       `  healingReceivedPct?: number;\n` +
-      `  hastePct?: number;\n` +
+      `  moveSpeedPct?: number;\n` +
       `  hitsEnemy?: true;\n` +
       `  enemyAoE?: true;\n` +
       `  dealsDamage?: true;\n` +
@@ -374,7 +383,7 @@ async function main(): Promise<void> {
       `  raw as Record<string, AbilityEffectFacts>;\n`,
   );
   console.log(
-    `abilityEffectsGenerated: ${Object.keys(out).length} ids — absorb ${count((f) => !!f.absorbs)}, healsSelf ${count((f) => !!f.healsSelf)}, healsOthers ${count((f) => !!f.healsOthers)}, healingReceived ${count((f) => f.healingReceivedPct !== undefined)}, haste ${count((f) => f.hastePct !== undefined)}, hitsEnemy ${count((f) => !!f.hitsEnemy)}, enemyAoE ${count((f) => !!f.enemyAoE)}, dealsDamage ${count((f) => !!f.dealsDamage)} (build ${build})`,
+    `abilityEffectsGenerated: ${Object.keys(out).length} ids — absorb ${count((f) => !!f.absorbs)}, healsSelf ${count((f) => !!f.healsSelf)}, healsOthers ${count((f) => !!f.healsOthers)}, healingReceived ${count((f) => f.healingReceivedPct !== undefined)}, moveSpeed ${count((f) => f.moveSpeedPct !== undefined)}, hitsEnemy ${count((f) => !!f.hitsEnemy)}, enemyAoE ${count((f) => !!f.enemyAoE)}, dealsDamage ${count((f) => !!f.dealsDamage)} (build ${build})`,
   );
 }
 

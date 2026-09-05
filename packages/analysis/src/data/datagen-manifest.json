@@ -1,6 +1,6 @@
 {
   "build": "12.1.0.69587",
-  "generatedAt": "2026-09-05T01:39:42.549Z",
+  "generatedAt": "2026-09-05T03:29:43.017Z",
   "artifacts": {
     "talentIdMap.json": {
       "specs": 40
@@ -50,7 +50,7 @@
       "absorbs": 109,
       "healsOthers": 264,
       "hitsEnemy": 1638,
-      "bytes": 93501
+      "bytes": 93781
     },
     "spellSchoolsGenerated.ts": {
       "entries": 6447,

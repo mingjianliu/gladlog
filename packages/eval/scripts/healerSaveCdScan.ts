@@ -301,7 +301,7 @@ async function emitTable(): Promise<void> {
           name,
           cooldownSeconds: cd,
           share: entry.share,
-          reason: `official profile silent (reachesAlly=${p.reachesAlly}, hitsEnemy=${p.hitsEnemy}, dealsDamage=${p.dealsDamage}, haste=${p.hastePct ?? "-"})`,
+          reason: `official profile silent (reachesAlly=${p.reachesAlly}, hitsEnemy=${p.hitsEnemy}, dealsDamage=${p.dealsDamage}, moveSpeed=${p.moveSpeedPct ?? "-"})`,
         });
     }
     roster.sort((a, b) => b.share - a.share);

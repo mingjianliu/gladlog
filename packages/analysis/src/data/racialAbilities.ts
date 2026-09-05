@@ -19,6 +19,20 @@
  * absent. Racials for races nobody in the corpus played are still listed: with
  * a purely passive predicate an unused entry can never fire a false positive,
  * and it makes the table complete when such a player does show up.
+ *
+ * 2026-09-04 completeness pass (BACKLOG #41 (9)) against SimulationCraft's
+ * official race-granted roster (`engine/dbc/generated/racial_spells.inc`, 166
+ * spells at 12.1.0.69587, race decoded from its race mask): 59 of them occur
+ * in the observed corpus, 20 were missing here. The 12 with a combat effect
+ * were added below with their kind read off the official effect facts
+ * (abilityEffectsGenerated: dealsDamage → offensive, heals → utility,
+ * movement → mobility). The 8 left out on purpose have NO combat effect and
+ * would only add noise to the passive predicate: Make Camp 312370, Visage
+ * 351239 / Chosen Identity 360022 / Battle Visage 1289789 (Dracthyr form
+ * toggles), Calm the Wolf 406087 / Two Forms 68996 / Running Wild 87840
+ * (Worgen form / mount). The two ids here that SimC does not list — Tail Swipe
+ * 368970 and Spatial Rift's follow-up 257040 — are secondary ids of listed
+ * racials, kept.
  */
 
 export type RacialKind =
@@ -60,6 +74,10 @@ export const RACIAL_ABILITIES: Record<string, RacialAbility> = {
   },
   "260364": { name: "Arcane Pulse", kind: "offensive", race: "Nightborne" },
   "312411": { name: "Bag of Tricks", kind: "offensive", race: "Vulpera" },
+  // 2026-09-04 SimC roster pass (see header)
+  "69041": { name: "Rocket Barrage", kind: "offensive", race: "Goblin" },
+  "436344": { name: "Azerite Surge", kind: "offensive", race: "Earthen" },
+  "1237885": { name: "Thorn Bloom", kind: "offensive", race: "Haranir" },
   // --- cc ---
   // DR membership is NOT assumed here: the official DB2 SpellCategories
   // DiminishType was probed for every id below (build 12.1.0.69273) and only
@@ -79,6 +97,15 @@ export const RACIAL_ABILITIES: Record<string, RacialAbility> = {
   "69070": { name: "Rocket Jump", kind: "mobility", race: "Goblin" },
   "256948": { name: "Spatial Rift", kind: "mobility", race: "Void Elf" },
   "257040": { name: "Spatial Rift", kind: "mobility", race: "Void Elf" },
+  // 2026-09-04 SimC roster pass (see header)
+  "358733": { name: "Glide", kind: "mobility", race: "Dracthyr" },
+  "369536": { name: "Soar", kind: "mobility", race: "Dracthyr" },
+  "1238686": { name: "Rootwalking", kind: "mobility", race: "Haranir" },
+  "281954": {
+    name: "Pterrordax Swoop",
+    kind: "mobility",
+    race: "Zandalari Troll",
+  },
   // --- utility ---
   "28730": { name: "Arcane Torrent", kind: "utility", race: "Blood Elf" },
   "25046": { name: "Arcane Torrent", kind: "utility", race: "Blood Elf" },
@@ -97,6 +124,21 @@ export const RACIAL_ABILITIES: Record<string, RacialAbility> = {
   "59548": { name: "Gift of the Naaru", kind: "utility", race: "Draenei" },
   "121093": { name: "Gift of the Naaru", kind: "utility", race: "Draenei" },
   "291944": { name: "Regeneratin'", kind: "utility", race: "Zandalari Troll" },
+  // 2026-09-04 SimC roster pass (see header)
+  "20577": { name: "Cannibalize", kind: "utility", race: "Undead" },
+  "28880": { name: "Gift of the Naaru", kind: "utility", race: "Draenei" },
+  "370626": { name: "Gift of the Naaru", kind: "utility", race: "Draenei" },
+  "416250": { name: "Gift of the Naaru", kind: "utility", race: "Draenei" },
+  "312924": {
+    name: "Hyper Organic Light Originator",
+    kind: "utility",
+    race: "Mechagnome",
+  },
+  "461063": {
+    name: "Quiet Contemplation",
+    kind: "utility",
+    race: "Earthen",
+  },
 };
 
 const idsOfKind = (kind: RacialKind): Set<string> =>

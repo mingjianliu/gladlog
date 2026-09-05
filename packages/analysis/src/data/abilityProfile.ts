@@ -53,7 +53,8 @@ export interface AbilityProfile {
   /** 提高**受到**的治疗量 %(守护之魂 60、复苏之茧 50)。 */
   healingReceivedPct?: number;
   /** 加速 %。 */
-  hastePct?: number;
+  /** % movement-speed increase (aura 31 = A_MOD_INCREASE_SPEED; called hastePct until 2026-09-04 — it never was haste). */
+  moveSpeedPct?: number;
   /** 效果指向敌人(官方 ImplicitTarget:指定/范围/锥形敌人)。 */
   hitsEnemy: boolean;
   /** 指向敌人且是范围/锥形,不是指定单体。 */
@@ -94,7 +95,7 @@ export function abilityProfile(spellId: string): AbilityProfile {
     healsSelf: effects?.healsSelf === true,
     healsOthers: effects?.healsOthers === true,
     healingReceivedPct: effects?.healingReceivedPct,
-    hastePct: effects?.hastePct,
+    moveSpeedPct: effects?.moveSpeedPct,
     hitsEnemy: effects?.hitsEnemy === true,
     enemyAoE: effects?.enemyAoE === true,
     dealsDamage: effects?.dealsDamage === true,
