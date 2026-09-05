@@ -4,12 +4,43 @@
 
 `scripts/archivePvpLogs.ts` (in `packages/corpus-tools`) scans the
 wowarenalogs.com public feed every 6 hours and archives every newly-seen
-public match to Google Drive as **raw gzip bytes**, sorted into per-day
-directories. It is collection-only: no parsing, no derived data, nothing
-that changes the source bytes. Compliance basis (data source, terms,
+public match **in the archived brackets** to Google Drive as **raw gzip
+bytes**, sorted into per-day directories. It is collection-only: no
+parsing, no derived data, nothing that changes the source bytes. Compliance basis (data source, terms,
 collection discipline): [DATA-COMPLIANCE.md](DATA-COMPLIANCE.md). Design
 rationale and the measured numbers behind every parameter:
 `docs/superpowers/specs/2026-08-01-pvp-log-archive-design.md`.
+
+## Which brackets get archived
+
+`ARCHIVED_BRACKETS` (`src/pvpLogFetch.ts`) — **3v3 and Rated Solo Shuffle.
+2v2 is not archived**, by user ruling on 2026-09-04: it was roughly a third
+of every round's downloads and Drive bytes, and the corpus work it fed had
+already ruled it out (the review bench found no value impact by mode for
+2v2; the rotation study dropped it on 2026-08-29).
+
+It is a **separate constant from `KNOWN_BRACKETS`, and the two must not be
+merged**. `KNOWN_BRACKETS` states a fact about the server — the three values
+its feed accepts — so that a typo raises instead of silently querying an
+empty result set; `ARCHIVED_BRACKETS` states our collection policy.
+Narrowing `KNOWN_BRACKETS` instead would make an explicit, human-initiated
+`BRACKET=2v2 npm run logs:fetch-public` throw, which is a separate on-demand
+pull nobody asked to remove. The subset relation is enforced by the
+`readonly Bracket[]` annotation on the constant (a bracket the server does
+not recognize will not compile) plus a runtime test in
+`src/pvpLogFetch.test.ts`.
+
+Each run prints the bracket set it covers, derived from the two constants —
+so that the "did every bracket stop on the consecutive-known threshold"
+audit below knows how many stop-page lines to expect, and a deliberately
+skipped bracket never reads as a truncated one:
+
+```
+本轮 bracket:3v3 / Rated Solo Shuffle(按采集策略不归档:2v2)
+```
+
+Already-archived 2v2 days stay on Drive untouched — this changes what is
+collected from here on, not what was collected before.
 
 ## Credentials
 
@@ -207,7 +238,9 @@ upload failures)**:
   accumulating to the end.
 - **The 200-consecutive-known page-stop threshold.** All three brackets
   stopped this way — 2v2 at 237 consecutive known, 3v3 at 204, Rated Solo
-  Shuffle at 207. This is also the line to read first in any run log:
+  Shuffle at 207. (That run predates the 2026-09-04 ruling above; runs from
+  then on sweep two brackets, so expect two such lines, not three.) This is
+  also the line to read first in any run log:
   stopping on the known-threshold means the run caught up, whereas
   stopping on `queryLimitReached` means deep pagination was truncated and
   the round may have a collection gap.

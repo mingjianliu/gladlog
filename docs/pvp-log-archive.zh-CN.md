@@ -3,11 +3,36 @@
 [English](pvp-log-archive.md) · **中文**
 
 `packages/corpus-tools` 下的 `scripts/archivePvpLogs.ts` 每 6 小时扫一次
-wowarenalogs.com 公共 feed,把新出现的公开对局以**原始 gzip 字节**下载并归档到
-Google Drive,按天分目录存放。只采集不加工——不解析、不算指标、不改动原始字节。
+wowarenalogs.com 公共 feed,把**归档 bracket 内**新出现的公开对局以**原始 gzip
+字节**下载并归档到 Google Drive,按天分目录存放。只采集不加工——不解析、不算指标、不改动原始字节。
 合规依据(数据源、条款、采集自律)见 [DATA-COMPLIANCE.zh-CN.md](DATA-COMPLIANCE.zh-CN.md);
 设计与每个参数背后的实测数字见
 `docs/superpowers/specs/2026-08-01-pvp-log-archive-design.md`。
+
+## 归档哪些 bracket
+
+`ARCHIVED_BRACKETS`(`src/pvpLogFetch.ts`)—— **3v3 与 Rated Solo Shuffle;
+2v2 不归档**,这是 2026-09-04 的用户裁决:2v2 约占每轮下载量与 Drive 字节的三
+分之一,而它喂养的语料工作此前已经把它排除了(盲评真值回路按模式分,2v2 无价值
+影响;rotation study 2026-08-29 去掉了 2v2)。
+
+它是**独立于 `KNOWN_BRACKETS` 的常量,两者不能合并**。`KNOWN_BRACKETS` 陈述的是
+服务端的事实 —— feed 只认这三个值 —— 所以拼错会直接报错,而不是静默查出空结果;
+`ARCHIVED_BRACKETS` 陈述的是我们自己的采集策略。改窄 `KNOWN_BRACKETS` 会让显式
+的、人工发起的 `BRACKET=2v2 npm run logs:fetch-public` 直接抛错,而那是另一条按
+需拉取的路径,没人要求取消。子集关系由常量上的 `readonly Bracket[]` 类型标注保证
+(服务端不认的 bracket 编译不过),外加 `src/pvpLogFetch.test.ts` 里的运行时用例。
+
+每轮开跑会打印本轮覆盖的 bracket 集合,由这两个常量推导得出 —— 这样下面「每个
+bracket 是不是都停在连续已知阈值上」的核对才知道该期待几行停页,被策略跳过的
+bracket 也不会被读成被截断的:
+
+```
+本轮 bracket:3v3 / Rated Solo Shuffle(按采集策略不归档:2v2)
+```
+
+已经归档过的 2v2 日目录原样留在 Drive 上 —— 这条改的是**此后采集什么**,不是
+已经采集过什么。
 
 ## 凭据
 
@@ -170,8 +195,9 @@ Drive 上看到 115 个文件 = 114 个 `.txt.gz` + 1 个 `index.jsonl`)。
 - **分批冲刷。** 全程观察到本地暂存涨到约 200 个文件又排空、如此反复,而不是
   一路堆到最后才传。
 - **200 连续已知的停止翻页阈值。** 三个 bracket 全部以这种方式停页 —— 2v2 在
-  237 连续已知、3v3 在 204、Rated Solo Shuffle 在 207。这也是读任何一份运行
-  日志时该先看的一行:停在**已知阈值**上说明本轮追平了,而停在
+  237 连续已知、3v3 在 204、Rated Solo Shuffle 在 207。(那一轮早于上面
+  2026-09-04 的裁决;此后每轮只扫两个 bracket,该期待两行而不是三行。)这也是
+  读任何一份运行日志时该先看的一行:停在**已知阈值**上说明本轮追平了,而停在
   `queryLimitReached` 上说明深翻页被截断、这一轮可能有收集缺口。
 - **`classifyIndexFetch` 的「ok」分支。** `rclone cat` 对真实云端索引
   (`2026/08/23/index.jsonl`,1653 行)读取并解析成功。

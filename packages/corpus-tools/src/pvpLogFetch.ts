@@ -18,6 +18,27 @@ export function isKnownBracket(value: string): value is Bracket {
 }
 
 /**
+ * Which brackets the unattended archiver (`scripts/archivePvpLogs.ts`) sweeps
+ * every round. Deliberately **not** KNOWN_BRACKETS, and nobody should "unify"
+ * the two: KNOWN_BRACKETS is a fact about the server (the three values its feed
+ * accepts, so a typo raises instead of silently querying empty), while this is
+ * our own collection policy. 2v2 was dropped by user ruling on 2026-09-04 — it
+ * is roughly a third of each round's downloads and Drive bytes, and the corpus
+ * work it fed had already ruled it out (review-bench value-by-mode found no
+ * 2v2 impact; the rotation study dropped it on 2026-08-29).
+ *
+ * The `readonly Bracket[]` annotation is the structural coupling rather than a
+ * comment: a bracket the server does not recognize will not compile here.
+ * Narrowing KNOWN_BRACKETS instead would have made an explicit, human-initiated
+ * `BRACKET=2v2 npm run logs:fetch-public` throw — a separate on-demand pull
+ * that nobody asked to remove.
+ */
+export const ARCHIVED_BRACKETS: readonly Bracket[] = [
+  "3v3",
+  "Rated Solo Shuffle",
+];
+
+/**
  * Paging throttle predicate: should we pause before fetching this page (see
  * the politeness note on PAGE_SLEEP_MS at the top of fetchPvpLogs.ts). The
  * first page (page===0) needs no wait -- there is no earlier request to space

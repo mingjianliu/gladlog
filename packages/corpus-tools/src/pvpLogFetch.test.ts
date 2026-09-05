@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { DetailedMatchStub } from "./feedClient";
 import {
+  ARCHIVED_BRACKETS,
   buildCompQueryString,
   buildGcsMeta,
   checkDecompressedPayload,
@@ -102,6 +103,26 @@ describe("isKnownBracket", () => {
     expect(isKnownBracket("Ratad Solo Shuffle")).toBe(false);
     expect(isKnownBracket("2V2")).toBe(false);
     expect(isKnownBracket("")).toBe(false);
+  });
+});
+
+describe("ARCHIVED_BRACKETS", () => {
+  it("excludes 2v2 (user ruling 2026-09-04: stop archiving it)", () => {
+    expect(ARCHIVED_BRACKETS).not.toContain("2v2");
+  });
+  it("still sweeps 3v3 and Rated Solo Shuffle", () => {
+    expect(ARCHIVED_BRACKETS).toContain("3v3");
+    expect(ARCHIVED_BRACKETS).toContain("Rated Solo Shuffle");
+  });
+  it("is a non-empty subset of the server-recognized brackets", () => {
+    // Empty would archive nothing while the run still exits 0 -- and the
+    // "0 new matches" warning would then read as a feed outage rather than a
+    // policy that swept no brackets. Not-a-subset would query a value the feed
+    // does not recognize, which returns 0 rows *silently* (the trap
+    // isKnownBracket exists for); the `readonly Bracket[]` annotation on the
+    // constant is the compile-time half of this, and this is the runtime half.
+    expect(ARCHIVED_BRACKETS.length).toBeGreaterThan(0);
+    for (const b of ARCHIVED_BRACKETS) expect(isKnownBracket(b)).toBe(true);
   });
 });
 

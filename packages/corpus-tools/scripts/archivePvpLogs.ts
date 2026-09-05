@@ -3,6 +3,7 @@
 // Compliance: docs/DATA-COMPLIANCE.md
 //
 // Usage: npx tsx scripts/archivePvpLogs.ts
+// Brackets swept: ARCHIVED_BRACKETS (src/pvpLogFetch.ts) — 2v2 excluded since 2026-09-04.
 // Env vars: ARCHIVE_ROOT / RCLONE_REMOTE / DOWNLOAD_SLEEP_MS / MAX_PAGES / DRY_RUN
 import { spawnSync } from "child_process";
 import fs from "fs-extra";
@@ -54,6 +55,7 @@ import {
 } from "../src/feedClient";
 // Import each module only once (eslint no-duplicate-imports)
 import {
+  ARCHIVED_BRACKETS,
   buildGcsMeta,
   dedupeByLogObject,
   KNOWN_BRACKETS,
@@ -338,12 +340,27 @@ async function main() {
   console.log(
     `账本已知 ${known.size} 场(最近 ${LEDGER_WINDOW_DAYS} 天;其中暂存待传 ${stagedIds.size} 场)`,
   );
+  // Print the bracket set this round covers, derived rather than hand-written.
+  // The first thing anyone reads a run log for is "did every bracket stop on
+  // the consecutive-known threshold" — that audit needs to know how many
+  // stop-page lines to expect, otherwise a deliberately skipped bracket reads
+  // as a truncated one (and vice versa, silently).
+  const skippedBrackets = KNOWN_BRACKETS.filter(
+    (b) => !ARCHIVED_BRACKETS.includes(b),
+  );
+  console.log(
+    `本轮 bracket:${ARCHIVED_BRACKETS.join(" / ")}${
+      skippedBrackets.length > 0
+        ? `(按采集策略不归档:${skippedBrackets.join(" / ")})`
+        : ""
+    }`,
+  );
 
   let downloads = 0;
   let consecutiveFailures = 0;
   let metaMissing = 0;
   let aborted = false;
-  for (const bracket of KNOWN_BRACKETS) {
+  for (const bracket of ARCHIVED_BRACKETS) {
     if (aborted) break;
     let consecutiveKnown = 0;
     let limitReached = false;
