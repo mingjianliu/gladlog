@@ -5,7 +5,7 @@
  * (previously hand-computed availableWindows hits), timelineHelpers'
  * [DEFENSIVE AVAILABLE] (previously a hand-computed readyAt),
  * candidateFindings' death-unused-defensive / external-unused (already
- * consuming cdAvailableAt), three spots in criticalMoments'
+ * consuming cdAvailableAt), (criticalMoments' three spots — module deleted 2026-09-05, GH #51)
  * buildKillMomentFields (mechanical availability / spentCDs /
  * allDefensivesSpent, each previously hand-computing readyAt), and the
  * spentAtEnd in matchNarrative's buildMatchFlow (previously a hand-computed
@@ -27,7 +27,6 @@ import { CombatUnitReaction, CombatUnitSpec } from "@gladlog/parser-compat";
 import { describe, expect, it } from "vitest";
 
 import { deathUnusedDefensiveEvents } from "../src/analysis/candidateFindings";
-import { buildKillMomentFields } from "../src/context/criticalMoments";
 import { buildMatchFlow } from "../src/context/matchNarrative";
 import { emitFriendlyDeathEntries } from "../src/context/matchTimelineSections";
 import { buildKillSequenceBlock } from "../src/context/timelineHelpers";
@@ -127,33 +126,6 @@ function candidateFlagsUnused(cd: IMajorCooldownInfo): boolean {
   return String(events[0].facts.walls).includes(SPELL_NAME);
 }
 
-/**
- * All three spots in buildKillMomentFields (mechanicalAvailability's "on CD"
- * wording / interpretation's "Major defensives spent" /
- * tieredOptions.unavailable's allDefensivesSpent) decide "unavailable at
- * death" — with a single-cooldown input all three must track !cdAvailableAt
- * exactly. constrainedTradePreceded is pinned to false, otherwise the spentCDs
- * and allDefensivesSpent branches are short-circuited and the target code is
- * never reached.
- */
-function killMomentFlagsUnavailable(cd: IMajorCooldownInfo): {
-  onCD: boolean;
-  spentListed: boolean;
-  allSpentUnavailable: boolean;
-} {
-  const { mechanicalAvailability, interpretation, tieredOptions } =
-    buildKillMomentFields(DEATH_T, [cd], undefined, false, null);
-  return {
-    onCD: mechanicalAvailability.some(
-      (l) => l.startsWith(SPELL_NAME) && l.includes("on CD"),
-    ),
-    spentListed: interpretation.some(
-      (l) => l.includes("Major defensives spent") && l.includes(SPELL_NAME),
-    ),
-    allSpentUnavailable: tieredOptions.unavailable.length > 0,
-  };
-}
-
 /** Whether the "spentAtEnd" of matchNarrative's buildMatchFlow lists Ironbark
  * under "on cooldown". */
 function matchFlowFlagsSpent(cd: IMajorCooldownInfo): boolean {
@@ -206,10 +178,6 @@ describe("cdAvailableAt 消费点防漂移一致性(BACKLOG #18 Minor #3 + 追�
     expect(killSeqFlagsAvailable(cd)).toBe(expected);
     expect(candidateFlagsUnused(cd)).toBe(expected);
 
-    const killMoment = killMomentFlagsUnavailable(cd);
-    expect(killMoment.onCD).toBe(!expected);
-    expect(killMoment.spentListed).toBe(!expected);
-    expect(killMoment.allSpentUnavailable).toBe(!expected);
 
     expect(matchFlowFlagsSpent(cd)).toBe(!expected);
   });

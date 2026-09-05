@@ -150,7 +150,7 @@ Batch 1 (DEATH-001/003 + TRINKET-001) already merged (plan `docs/plans/2026-07-2
 corpus incidence rates 63.6%/14.1%/15.6%, n=1245). Full rule directory landscape and absorption assessment in that day's session conclusion;
 batch 2 candidates sorted by whitelist cost:
 
-1. **DEATH-002 immunity available at death**: needs immunity sub-table + Hypothermia-class shared debuff ledger
+1. ~~**DEATH-002 immunity available at death**~~ **不做(用户 2026-09-05,「太明显了」)**:事实已在每份 prompt 的 DEATHS WITH MISSED OPTIONS 段(本地 309 份里自身免疫 9 行 / 队友外放 80 行),不再升级成指控;原 needs immunity sub-table + Hypothermia-class shared debuff ledger
    (Forbearance has precedent via `FORBEARANCE_GATED_IDS`/`selfForbearanceActiveAt`).
 2. ✅ **COOLDOWN-001 CC held >90s**: offensive version of cd-waste, criteria already exist (`availableWindows` ×
    `ccSpellIds`). Merged in 2026-08-06 signal expansion batch 1 (candidate type `cc-held`, threshold set by corpus empirical evidence from
@@ -186,7 +186,7 @@ batch 2 candidates sorted by whitelist cost:
 4. ✅ **DISPEL late/failed tiering**: merged 2026-08-06, but in a different form than originally envisioned — empirical evidence showed late
    dispels (≥3s) only account for 7.1% (69/972) of total dispels, volume can't support an independent candidate type, changed to field
    dimensionality upgrade on `missed-cleanse` (`latencySeconds`, only carried by late-dispel entries), no new type, no cap change. Same batch, same design doc.
-5. **OFFENSIVE-001 cone ability whiff**: needs cone spell table + geometric determination, still an open item.
+5. ~~**OFFENSIVE-001 cone ability whiff**~~ **不做(用户 2026-09-05)**:needs cone spell table + geometric determination.
    ✅ **OFFENSIVE-002 bursting into major mitigation when should switch targets**: merged 2026-08-11 (candidate type
    `burst-into-mitigation`, reuses `MITIGATION_TABLE` (#17) + `analyzeBurstLedger`'s
    dominantTarget.defensivesHit (non-immunity) + `analyzeKillWindowTargetSelection`'s
@@ -1758,7 +1758,7 @@ feed 只保留 ~7 天,漏跑就永久少一天。
 无死亡类新结论);引用时刻 16.3→17.2、长度 +1.4%。读法:块里的事实(死亡、治疗真空、恐慌交防御、重叠)时间线
 已经逐条有了,这套函数是第二套实现,模型拿到重复事实不改结论。整块为零 ⇒ 逐函数拆开不会出现整块没有的信号,
 未再分函数跑。**结论:既不帮忙也不加噪,是冗余**;开关留作探针基础设施,默认关。删或留仍是用户裁决(#51)。
-**Status**: logged,不动产品代码。模块保持原样,`DEATH_CC_LOOKBACK_S` 继续被 `death.ts` 消费。
+**Status(2026-09-05)**:用户裁定「不要了」,模块与其测试已删除,`DEATH_CC_LOOKBACK_S` 搬进唯一消费者 `candidates/death.ts`。GH #51 关。
 
 ---
 

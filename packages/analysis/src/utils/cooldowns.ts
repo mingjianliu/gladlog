@@ -1847,7 +1847,7 @@ export interface IEnemyCDTimelineForTiming {
 //   step-3 casts (before > 50 k): ±3 s n=258, p50 2.35, 64 % exceed 1.75; ±2 s 67 %,
 //   ±5 s 54 % — mildly window-sensitive. These labels reach the desktop key-moments
 //   card and two predicates (death.ts Early gate, healerMetrics), NOT the single-shot
-//   prompt (criticalMoments has no consumers; the SPEC BASELINES aggregate line was
+//   prompt (criticalMoments deleted 2026-09-05; the SPEC BASELINES aggregate line was
 //   measured inert, 120 agy calls). Re-run the distribution script before moving any.
 export const PRE_WALL_SECONDS = 5;
 /** How many seconds after a burst window ends before a defensive is classified "Late" */

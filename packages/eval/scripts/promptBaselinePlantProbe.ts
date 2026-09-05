@@ -2,7 +2,7 @@
  * SPEC BASELINES 聚合行植入探针 —— GH #36 第 1 项 ②(a):
  * 「`Defensive timing: Optimal X% | … | Late Y% | …` 这行每场百分比,能撬动教练吗?」
  *
- * 逐施法的 Optimal/Late 判词并不进单轮 prompt(criticalMoments 零消费者,实测
+ * 逐施法的 Optimal/Late 判词并不进单轮 prompt(criticalMoments 已删,实测
  * 0/1127),标签唯一进 prompt 的通道是 SPEC BASELINES 这一行聚合数字。本探针把
  * 同一局跑三份:基线 / Late 抬到 45%(Optimal 等量下调)/ Late 压到 0%(Optimal
  * 等量上调),其余一字不改。

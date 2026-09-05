@@ -27,7 +27,7 @@ export function buildMatchContext(
 
 ## 七个子目录
 
-- **`context/`**(12 个文件)—— 顶层拼装器。`buildMatchContext.ts` 拉进几乎每一个 `utils/*` 模块和每一张相关的 `data/*` 表,渲染出面向 AI 的 prompt 字符串。`matchTimeline.ts` / `matchTimelineSections.ts` 构建 `[STATE]`/`[DMG SPIKE]`/`[CD]` 渲染时间线行 —— 这是门规谓词共享规则里「渲染值」的那一端(见下文)。`criticalMoments.ts` / `criticalWindows.ts` 决定哪些秒数要更密的采样。`matchNarrative.ts` 构建叙事文本;`resourceSnapshot.ts` 构建资源(法力/怒气等)快照;`timelineHelpers.ts` 装跨文件共用的工具函数。
+- **`context/`**(10 个文件)—— 顶层拼装器。`buildMatchContext.ts` 拉进几乎每一个 `utils/*` 模块和每一张相关的 `data/*` 表,渲染出面向 AI 的 prompt 字符串。`matchTimeline.ts` / `matchTimelineSections.ts` 构建 `[STATE]`/`[DMG SPIKE]`/`[CD]` 渲染时间线行 —— 这是门规谓词共享规则里「渲染值」的那一端(见下文)。`criticalMoments.ts` / `criticalWindows.ts` 决定哪些秒数要更密的采样。`matchNarrative.ts` 构建叙事文本;`resourceSnapshot.ts` 构建资源(法力/怒气等)快照;`timelineHelpers.ts` 装跨文件共用的工具函数。
 
 - **`analysis/`**(18 个文件)—— 面向 AI 的 finding/prompt 管线,分三段:
   1. `candidateFindings.ts` —— 确定性。`extractCandidateFindings` 加约 16 个按类型分的 `xEvents` 函数,把原始分析输出转成 `CandidateEvent[]`(一个 `type`、一个确定性 `id`、一个 `facts: Record<string,string>` —— 模型唯一能引用的数值)。

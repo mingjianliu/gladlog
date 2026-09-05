@@ -18,17 +18,6 @@ export {
   type IEnemyBuffInterval,
 } from './timelineHelpers';
 
-export {
-  buildDeathRootCauseTrace,
-  buildKillMomentFields,
-  findContributingDeath,
-  getEnemyStateAtTime,
-  getOwnerCDsAvailable,
-  identifyCriticalMoments,
-  type CriticalMoment,
-  type MomentRole,
-} from './criticalMoments';
-
 export { buildMatchArc, buildMatchFlow } from './matchNarrative';
 
 export {

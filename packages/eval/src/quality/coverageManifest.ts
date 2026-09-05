@@ -3,7 +3,7 @@
  *
  * Ground-truth coverage manifest for a parsed combat, computed ONLY from raw
  * parser event arrays plus static spell tables (spellTags). It must never call
- * the prompt-building/analysis utilities (buildMatchContext, criticalMoments,
+ * the prompt-building/analysis utilities (buildMatchContext,
  * reconstructEnemyCDTimeline, …): the manifest exists to check the prompt
  * builder's output from the outside, and sharing code with the builder would
  * make the check circular — a builder bug that drops events would silently

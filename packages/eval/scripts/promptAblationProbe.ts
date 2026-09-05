@@ -112,7 +112,7 @@ function collectPrompts(limit: number): Array<{ id: string; prompt: string }> {
     .trim()
     .split("\n")
     .filter(Boolean);
-  const out: Array<{ id: string; prompt: string; augmented?: string }> = [];
+  const out: Array<{ id: string; prompt: string }> = [];
   for (const f of files) {
     if (out.length >= limit) break;
     let text = "";
@@ -142,7 +142,6 @@ function collectPrompts(limit: number): Array<{ id: string; prompt: string }> {
       const dur = (c.legacy.endTime - c.legacy.startTime) / 1000;
       if (!owner || dur < 120) continue;
       let prompt = "";
-      let augmented = "";
       try {
         prompt = buildMatchContext(
           c.legacy as never,
@@ -150,25 +149,13 @@ function collectPrompts(limit: number): Array<{ id: string; prompt: string }> {
           enemies as never,
           { owner } as never,
         );
-        // augment mode (GH #51, 2026-09-05): the same prompt with the
-        // critical-moments block appended; compared against the baseline
-        // exactly like an ablation, sign reversed.
-        if (mode === "augment")
-          augmented = buildMatchContext(
-            c.legacy as never,
-            friends as never,
-            enemies as never,
-            { owner, criticalMomentsBlock: true } as never,
-          );
       } catch {
         continue;
       }
       if (!prompt.includes("[STATE]")) continue;
-      if (mode === "augment" && augmented === prompt) continue; // no moments → nothing to test
       out.push({
         id: `${f.split("/").pop()?.slice(0, 8)}-${out.length}`,
         prompt,
-        augmented,
       });
     }
   }
@@ -186,9 +173,7 @@ for (const m of matches) {
   for (const k of seen) typeCounts.set(k, (typeCounts.get(k) ?? 0) + 1);
 }
 const types =
-  mode === "augment"
-    ? ["+critical_moments"]
-    : typeFilter ??
+  typeFilter ??
   [...typeCounts.entries()]
     .filter(([k, n]) => ABLATABLE(k) && n >= matches.length / 2)
     .map(([k]) => k);
@@ -207,16 +192,11 @@ const rows: Row[] = [];
 let done = 0;
 let total = 0; // 待跑数,pending 算出来后赋值
 
-async function runOne(
-  match: { id: string; prompt: string; augmented?: string },
-  variant: string,
-) {
+async function runOne(match: { id: string; prompt: string }, variant: string) {
   const text =
     variant === "baseline"
       ? match.prompt
-      : variant === "+critical_moments"
-        ? match.augmented!
-        : ablateLineType(match.prompt, variant);
+      : ablateLineType(match.prompt, variant);
   let answer = "";
   try {
     const msgs = buildResponderMessages(text);

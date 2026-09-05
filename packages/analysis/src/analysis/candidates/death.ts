@@ -9,7 +9,6 @@
 import { CombatUnitClass } from "@gladlog/parser-compat";
 import { spellEffectData } from "../../data/spellEffectData";
 import { immunitySchoolMask } from "../../data/spellSchools";
-import { DEATH_CC_LOOKBACK_S } from "../../context/criticalMoments";
 import { lastCastBefore } from "../../context/timelineHelpers";
 import { costNormPhrase } from "../../data/curatedAbilityFacts";
 import {
@@ -187,6 +186,15 @@ export function enemyHoldsImmunityBreakerAt(
     return !br.castTimesS.some((c) => c <= tSeconds && tSeconds - c < cd);
   });
 }
+
+/**
+ * CC look-back window (seconds) for the death chain: "CC inside the death
+ * window" is judged over the 12 s before the death. Lived in
+ * context/criticalMoments.ts until that module was deleted (2026-09-05,
+ * GH #51 — six zero-consumer exports, probe showed the block restates the
+ * timeline); this was its only live consumer, so the constant moved here.
+ */
+export const DEATH_CC_LOOKBACK_S = 12;
 
 export function deathSetupEvents(parts: DeathSetupParts): CandidateEvent[] {
   const { deathT, victim } = parts;

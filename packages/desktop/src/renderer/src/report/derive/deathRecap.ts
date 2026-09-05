@@ -23,7 +23,7 @@ import type { ReportSource } from "./types";
 
 /** Look-back window before death (seconds). The same fact as analysis's
  * counterfactual window — aliased, not re-declared (issue #11 window
- * unification; `criticalMoments.ts`'s kill-window span consumes the same
+ * unification; (criticalMoments.ts, deleted 2026-09-05, used to consume the same
  * constant). Registered under COUNTERFACTUAL_WINDOW_S in
  * docs/predicate-index.md. */
 export const DEATH_RECAP_WINDOW_S = COUNTERFACTUAL_WINDOW_S;

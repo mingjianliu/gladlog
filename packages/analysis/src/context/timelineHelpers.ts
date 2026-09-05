@@ -32,7 +32,7 @@ export { PASSIVE_SPELL_BLOCKLIST };
 /** Most recent cast at or before the rendered instant — reads casts through
  * CD_INSTANT_SLACK_S like every other "available at t" predicate (GH #61), so
  * the "on CD since / ready since" copy built from it agrees with cdAvailableAt
- * and the [RES] ledger. Consumers: criticalMoments, matchNarrative,
+ * and the [RES] ledger. Consumers: matchNarrative,
  * candidates/death. */
 export function lastCastBefore(cd: IMajorCooldownInfo, timeSeconds: number) {
   return cd.casts

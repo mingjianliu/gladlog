@@ -27,7 +27,7 @@ export function buildMatchContext(
 
 ## The seven subdirectories
 
-- **`context/`** (12 files) — the top-level assembler. `buildMatchContext.ts` pulls in nearly every `utils/*` module and every relevant `data/*` table and renders the AI-facing prompt string. `matchTimeline.ts` / `matchTimelineSections.ts` build the `[STATE]`/`[DMG SPIKE]`/`[CD]` rendered timeline lines — this is the "rendered value" side of the shared-predicate rule (see below). `criticalMoments.ts` / `criticalWindows.ts` decide which seconds get denser sampling. `matchNarrative.ts` builds narrative text; `resourceSnapshot.ts` builds resource (mana/rage/etc.) snapshots; `timelineHelpers.ts` holds cross-cutting helpers.
+- **`context/`** (10 files) — the top-level assembler. `buildMatchContext.ts` pulls in nearly every `utils/*` module and every relevant `data/*` table and renders the AI-facing prompt string. `matchTimeline.ts` / `matchTimelineSections.ts` build the `[STATE]`/`[DMG SPIKE]`/`[CD]` rendered timeline lines — this is the "rendered value" side of the shared-predicate rule (see below). `criticalMoments.ts` / `criticalWindows.ts` decide which seconds get denser sampling. `matchNarrative.ts` builds narrative text; `resourceSnapshot.ts` builds resource (mana/rage/etc.) snapshots; `timelineHelpers.ts` holds cross-cutting helpers.
 
 - **`analysis/`** (18 files) — the AI-facing finding/prompt pipeline, in three stages:
   1. `candidateFindings.ts` — deterministic. `extractCandidateFindings` plus ~16 per-type `xEvents` functions turn raw analysis output into `CandidateEvent[]` (a `type`, a deterministic `id`, and a `facts: Record<string,string>` — the only values the model may cite).
