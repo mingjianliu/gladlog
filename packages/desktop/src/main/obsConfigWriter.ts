@@ -37,6 +37,19 @@ export interface ObsConfigSpec {
 }
 
 const PROFILE_NAME = "gladlog";
+/**
+ * The managed canvas. Exported because TWO consumers must agree on this one
+ * fact (shared-predicate rule, CLAUDE.md): the profile's Base/Output
+ * resolution written into basic.ini here, and the bounding box
+ * `managedObsBackend.fitCaptureToCanvas()` scales the game capture into. They
+ * used to disagree by construction — the canvas was 1920x1080 and the capture
+ * source had no transform at all, so anything above 1080p was recorded as its
+ * top-left 1920x1080 crop (真机症状 2026-09-05, 4K 显示器:录像只剩左上角
+ * 1/4 面积). The backend prefers the LIVE canvas from GetVideoSettings and
+ * only falls back to this constant, so a profile that drifted still gets a
+ * correct fit.
+ */
+export const MANAGED_CANVAS = { width: 1920, height: 1080 } as const;
 /** Exported: managedObsBackend.ts's configureSession() creates the
  * game_capture input inside this scene via CreateInput({sceneName}) — same
  * fact, shared-predicate rule (CLAUDE.md), not a second "gladlog" literal. */
@@ -116,7 +129,6 @@ function writeBasicIni(spec: ObsConfigSpec): void {
       RecFilePath: toForwardSlashes(spec.recDir),
       RecFormat2: "hybrid_mp4",
       RecEncoder: PINNED_ENCODER,
-      RecTracks: "1",
       RecSplitFile: "true",
       RecSplitFileType: "Manual",
       // The one hard invariant of the whole recording design (复核 I8): both
@@ -126,17 +138,37 @@ function writeBasicIni(spec: ObsConfigSpec): void {
       // would silently cut a match mid-fight.
       RecSplitFileTime: "0",
       RecSplitFileSize: "0",
+      // 真机症状(2026-09-05):录像完全没有声音。Since OBS 30 the advanced
+      // output's RECORDING audio encoder is its own config key, and one of
+      // its legal values is literally "none" (= record no audio at all); we
+      // had never written it, leaving the entire audio side of a generated,
+      // fully-owned portable profile riding on OBS's built-in defaults. A
+      // generated config must not bet on defaults it never asserts — the
+      // encoder, the track bitmask and that track's bitrate are all written
+      // explicitly now. (RecTracks is a BITMASK, "1" = track 1 only.)
+      RecAudioEncoder: "aac",
+      RecTracks: "1",
+      Track1Bitrate: "160",
+      Track1Name: "Track1",
     },
     Video: {
-      BaseCX: "1920",
-      BaseCY: "1080",
-      OutputCX: "1920",
-      OutputCY: "1080",
+      BaseCX: String(MANAGED_CANVAS.width),
+      BaseCY: String(MANAGED_CANVAS.height),
+      OutputCX: String(MANAGED_CANVAS.width),
+      OutputCY: String(MANAGED_CANVAS.height),
       FPSType: "0",
       FPSCommon: "60",
       // OBS silently renames files after the fact otherwise, with no
       // completion event we could hook (real-machine finding, 2026-08-04).
       AutoRemux: "false",
+    },
+    // Same reasoning as RecAudioEncoder above: assert the audio pipeline
+    // instead of inheriting it. 48kHz stereo is OBS's own default; writing it
+    // down makes the profile self-describing and removes one more way a
+    // future OBS default change can silently mute every recording.
+    Audio: {
+      SampleRate: "48000",
+      ChannelSetup: "Stereo",
     },
   });
   writeFileSync(join(dir, "basic.ini"), txt);

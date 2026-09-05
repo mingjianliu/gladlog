@@ -118,6 +118,7 @@ import * as reportTimeRange from "../../desktop/src/renderer/src/report/derive/t
 // desktop's package.json also restricts deep imports via `exports`, so this
 // goes by relative path too, same as corpus-tools above.
 import * as obsAsset from "../../desktop/src/shared/obsAsset";
+import * as obsConfigWriter from "../../desktop/src/main/obsConfigWriter";
 import * as videoTime from "../../desktop/src/shared/videoTime";
 // log-pipeline is deliberately dependency-free (that is what lets it deploy
 // standalone on the gaming machine), so corpus-tools cannot import it. The
@@ -1036,6 +1037,11 @@ const INDEX: PredicateRow[] = [
     file: `${DS}/shared/obsAsset.ts`,
     symbol: "PINNED_ENCODER",
     mod: obsAsset,
+  },
+  {
+    file: `${DS}/main/obsConfigWriter.ts`,
+    symbol: "MANAGED_CANVAS",
+    mod: obsConfigWriter,
   },
   {
     file: `${DS}/shared/videoTime.ts`,

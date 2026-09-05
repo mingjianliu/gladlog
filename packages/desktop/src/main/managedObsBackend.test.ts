@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createManagedObsBackend } from "./managedObsBackend";
 import type { ManagedObsWs } from "./managedObsClient";
+import { MANAGED_CANVAS } from "./obsConfigWriter";
 
 /** POISON marker: task-4 brief rule 1 — StopRecord.outputPath keeps
  * returning the FIRST chunk after any split and must NEVER be read by the
@@ -88,6 +89,14 @@ class FakeManagedObsWs implements ManagedObsWs {
     SaveSourceScreenshot: async () => ({}),
     GetInputSettings: async () => ({ inputSettings: {} }),
     SetInputSettings: async () => ({}),
+    // configureSession's fit/audio steps (2026-09-05 真机三症状). Defaults
+    // describe a HEALTHY instance: 1920x1080 canvas, the capture item
+    // present, and channel 1 already carrying the scene collection's desktop
+    // audio source -- so these are no-ops unless a test says otherwise.
+    GetVideoSettings: async () => ({ baseWidth: 1920, baseHeight: 1080 }),
+    GetSceneItemId: async () => ({ sceneItemId: 7 }),
+    SetSceneItemTransform: async () => ({}),
+    GetSpecialInputs: async () => ({ desktop1: "Desktop Audio", mic1: null }),
   };
 
   async connect(url: string, password: string): Promise<void> {
@@ -516,6 +525,186 @@ describe("onChunkOpened — 退订生效", () => {
     };
     await backend.splitChunk();
     expect(opened).toEqual(["/rec/chunk1.mp4"]); // unchanged — no chunk2 entry
+  });
+});
+
+describe("configureSession — 画面适配画布(4K 裁剪修复)", () => {
+  /** 真机 2026-09-05:4K 显示器上录像只有左上角 1/4。CreateInput 建出来的场景项
+   * 没有 transform,OBS 按原始像素摆在 (0,0) 不缩放,1920x1080 画布把
+   * 3840x2160 裁成左上角。 */
+  it("sets a SCALE_INNER bounding box the size of the live canvas on the capture item", async () => {
+    const backend = makeBackend();
+    fake.handlers.SaveSourceScreenshot = async (data) => {
+      writeSolidBmp(data!.imageFilePath as string, 4, 4, 180);
+      return {};
+    };
+    await backend.configureSession();
+
+    const fit = fake.callLog.find((c) => c.req === "SetSceneItemTransform");
+    expect(fit?.data).toMatchObject({
+      sceneName: "gladlog",
+      sceneItemId: 7,
+      sceneItemTransform: {
+        boundsType: "OBS_BOUNDS_SCALE_INNER",
+        boundsWidth: 1920,
+        boundsHeight: 1080,
+        positionX: 0,
+        positionY: 0,
+        cropLeft: 0,
+        cropTop: 0,
+      },
+    });
+  });
+
+  it("uses the LIVE canvas from GetVideoSettings, not the config-writer constant", async () => {
+    const backend = makeBackend();
+    fake.handlers.GetVideoSettings = async () => ({
+      baseWidth: 2560,
+      baseHeight: 1440,
+    });
+    fake.handlers.SaveSourceScreenshot = async (data) => {
+      writeSolidBmp(data!.imageFilePath as string, 4, 4, 180);
+      return {};
+    };
+    await backend.configureSession();
+
+    const fit = fake.callLog.find((c) => c.req === "SetSceneItemTransform");
+    expect(fit?.data).toMatchObject({
+      sceneItemTransform: { boundsWidth: 2560, boundsHeight: 1440 },
+    });
+  });
+
+  it("falls back to the shared canvas constants when GetVideoSettings fails, and still fits", async () => {
+    const backend = makeBackend();
+    fake.handlers.GetVideoSettings = async () => {
+      throw new Error("boom");
+    };
+    fake.handlers.SaveSourceScreenshot = async (data) => {
+      writeSolidBmp(data!.imageFilePath as string, 4, 4, 180);
+      return {};
+    };
+    await backend.configureSession();
+
+    const fit = fake.callLog.find((c) => c.req === "SetSceneItemTransform");
+    expect(fit?.data).toMatchObject({
+      sceneItemTransform: {
+        boundsWidth: MANAGED_CANVAS.width,
+        boundsHeight: MANAGED_CANVAS.height,
+      },
+    });
+  });
+
+  it("a failing transform does not block the session (encoder still pinned)", async () => {
+    const backend = makeBackend();
+    fake.handlers.SetSceneItemTransform = async () => {
+      throw new Error("nope");
+    };
+    fake.handlers.SaveSourceScreenshot = async (data) => {
+      writeSolidBmp(data!.imageFilePath as string, 4, 4, 180);
+      return {};
+    };
+    await backend.configureSession();
+    const health = await backend.probe();
+    expect(health.encoder).toBe("obs_x264");
+  });
+});
+
+describe("configureSession — 音频通道兜底(没声音修复)", () => {
+  function makeAudioBackend(
+    desktopAudioDeviceId: string | null,
+    micDeviceId: string | null = null,
+  ) {
+    return createManagedObsBackend({
+      ensureProcess,
+      recDir,
+      clientFactory: () => fake,
+      now,
+      desktopAudioDeviceId,
+      micDeviceId,
+    });
+  }
+  function brightShot() {
+    fake.handlers.SaveSourceScreenshot = async (data) => {
+      writeSolidBmp(data!.imageFilePath as string, 4, 4, 180);
+      return {};
+    };
+  }
+
+  it("channel 1 already wired by the scene collection → creates NO extra audio input (no double audio)", async () => {
+    brightShot();
+    await makeAudioBackend("default").configureSession();
+    const audioCreates = fake.callLog.filter(
+      (c) =>
+        c.req === "CreateInput" &&
+        c.data?.["inputKind"] === "wasapi_output_capture",
+    );
+    expect(audioCreates).toHaveLength(0);
+  });
+
+  it("channel 1 EMPTY → repairs it by creating the desktop-audio input the same way the game capture is created", async () => {
+    brightShot();
+    fake.handlers.GetSpecialInputs = async () => ({ desktop1: null });
+    await makeAudioBackend("default").configureSession();
+    const audioCreate = fake.callLog.find(
+      (c) =>
+        c.req === "CreateInput" &&
+        c.data?.["inputKind"] === "wasapi_output_capture",
+    );
+    expect(audioCreate?.data).toMatchObject({
+      sceneName: "gladlog",
+      inputSettings: { device_id: "default" },
+    });
+    // 必须可见:libobs 只混活跃树里的源,隐藏的场景项是静音的。
+    expect(audioCreate?.data?.["sceneItemEnabled"]).toBeUndefined();
+  });
+
+  it("desktop audio set to 不录 (null) → never repairs, even with an empty channel", async () => {
+    brightShot();
+    fake.handlers.GetSpecialInputs = async () => ({ desktop1: null });
+    await makeAudioBackend(null).configureSession();
+    const audioCreates = fake.callLog.filter(
+      (c) =>
+        c.req === "CreateInput" &&
+        c.data?.["inputKind"] === "wasapi_output_capture",
+    );
+    expect(audioCreates).toHaveLength(0);
+  });
+
+  it("mic requested but channel 3 empty → repairs the mic input too", async () => {
+    brightShot();
+    fake.handlers.GetSpecialInputs = async () => ({
+      desktop1: "Desktop Audio",
+      mic1: null,
+    });
+    await makeAudioBackend("default", "mic-endpoint-id").configureSession();
+    const micCreate = fake.callLog.find(
+      (c) =>
+        c.req === "CreateInput" &&
+        c.data?.["inputKind"] === "wasapi_input_capture",
+    );
+    expect(micCreate?.data).toMatchObject({
+      inputSettings: { device_id: "mic-endpoint-id" },
+    });
+  });
+
+  it("GetSpecialInputs unanswerable → does NOT guess (creates nothing)", async () => {
+    brightShot();
+    fake.handlers.GetSpecialInputs = async () => {
+      throw new Error("boom");
+    };
+    await makeAudioBackend("default").configureSession();
+    const audioCreates = fake.callLog.filter(
+      (c) =>
+        c.req === "CreateInput" &&
+        c.data?.["inputKind"] === "wasapi_output_capture",
+    );
+    expect(audioCreates).toHaveLength(0);
+  });
+
+  it("caller that predates the prefs (undefined) keeps the old behaviour: no GetSpecialInputs at all", async () => {
+    brightShot();
+    await makeBackend().configureSession();
+    expect(fake.callLog.some((c) => c.req === "GetSpecialInputs")).toBe(false);
   });
 });
 

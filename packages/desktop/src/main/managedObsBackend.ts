@@ -11,6 +11,7 @@ import type {
 } from "./captureBackend";
 import {
   DESKTOP_AUDIO_INPUT_KIND,
+  MANAGED_CANVAS,
   MIC_AUDIO_INPUT_KIND,
   SCENE_NAME,
 } from "./obsConfigWriter";
@@ -34,6 +35,17 @@ const GAME_CAPTURE_INPUT_NAME = "gladlog-capture";
  * with the real channel sources (Desktop Audio / Mic/Aux) or the capture
  * input above. */
 const AUDIO_PROBE_INPUT_PREFIX = "gladlog-audio-probe-";
+/** Repair inputs created by `ensureAudioWired()` when the scene collection's
+ * global audio channels came up empty — see that function's doc comment. */
+const DESKTOP_AUDIO_FALLBACK_INPUT_NAME = "gladlog-desktop-audio";
+const MIC_AUDIO_FALLBACK_INPUT_NAME = "gladlog-mic-audio";
+
+/** OBS_ALIGN_LEFT (1) | OBS_ALIGN_TOP (4) — where the scene item's position
+ * point sits on the item. `libobs/obs-defs.h`. */
+const OBS_ALIGN_TOP_LEFT = 5;
+/** OBS_ALIGN_CENTER (0) — how the source is placed INSIDE its bounding box,
+ * which is a different axis from `alignment` above. */
+const OBS_ALIGN_CENTER = 0;
 
 // 编码器 stage 1 PINNED(brief 规则 5:没有 websocket 编码器枚举 API,design doc
 // §2.5 源码级事实)。NVENC 选择是 stage 2 项。PINNED_ENCODER 定义在
@@ -132,6 +144,16 @@ function decodeBmpLuminance(buf: Buffer): number[] {
 export interface ManagedObsBackendDeps {
   ensureProcess: () => Promise<{ wsUrl: string; wsPassword: string }>;
   recDir: string;
+  /** The SAME two device ids handed to `writeObsConfig` (assembly reads both
+   * from one settings snapshot). The config writer puts them in the scene
+   * collection's global audio channels; `ensureAudioWired()` re-checks at
+   * runtime that OBS actually came up with those channels populated, and
+   * repairs them from these values if it did not — so the two sides can
+   * never disagree about which device is supposed to be recording.
+   * `undefined` (not `null`) = caller predates this field and wants the old
+   * "trust the scene collection" behaviour with no repair. */
+  desktopAudioDeviceId?: string | null;
+  micDeviceId?: string | null;
   clientFactory?: () => ManagedObsWs;
   now?: () => number;
 }
@@ -610,9 +632,134 @@ export function createManagedObsBackend(
         inputSettings: gameCaptureSettings,
       });
     }
+    await fitCaptureToCanvas();
+    await ensureAudioWired();
     sessionConfigured = true;
     encoder = PINNED_ENCODER;
     await captureProbe();
+  }
+
+  /**
+   * 真机症状(2026-09-05,4K 显示器):录像里只有游戏画面左上角的一小块。
+   *
+   * 根因是构造性的,不是偶发:`CreateInput` 建出来的场景项**没有任何
+   * transform**,OBS 于是按源的原始像素尺寸把它摆在 (0,0) 且不缩放,而画布被
+   * basic.ini 固定成 MANAGED_CANVAS。3840×2160 的游戏画面因此被
+   * 画布裁掉,只剩左上角 1920×1080 —— 正好是 1/4 面积。1080p 显示器上这个 bug
+   * 完全不可见,所以之前的真机 gate 没抓到。
+   *
+   * 修法是给场景项设**边界框**而不是去猜显示器尺寸:`OBS_BOUNDS_SCALE_INNER`
+   * 让 OBS 自己把源等比缩放到塞进这个框。这对任何游戏分辨率都成立,包括玩家
+   * 中途改分辨率(源尺寸变了,bounds 不变,OBS 重新算缩放),也包括带鱼屏
+   * (等比缩放后上下留黑边,而不是裁掉两侧)。
+   *
+   * 画布尺寸取 `GetVideoSettings` 的实测值,只有拿不到时才回落到
+   * MANAGED_CANVAS 常量 —— 同一个事实两个消费者,取值单源(CLAUDE.md
+   * 共享谓词规则),而实测值还能兜住"profile 漂了"的情况。
+   *
+   * 失败不致命:transform 设不上只是画面还是老样子,不该让整个 session 判死
+   * (与 configureSession 里 SetInputSettings 的处置一致)。
+   */
+  async function fitCaptureToCanvas(): Promise<void> {
+    const video = await callWithTimeout("GetVideoSettings");
+    const baseW = video?.["baseWidth"];
+    const baseH = video?.["baseHeight"];
+    const canvasW =
+      typeof baseW === "number" && baseW > 0 ? baseW : MANAGED_CANVAS.width;
+    const canvasH =
+      typeof baseH === "number" && baseH > 0 ? baseH : MANAGED_CANVAS.height;
+    const item = await callWithTimeout("GetSceneItemId", {
+      sceneName: SCENE_NAME,
+      sourceName: GAME_CAPTURE_INPUT_NAME,
+    });
+    const sceneItemId = item?.["sceneItemId"];
+    if (typeof sceneItemId !== "number") return;
+    await callWithTimeout("SetSceneItemTransform", {
+      sceneName: SCENE_NAME,
+      sceneItemId,
+      sceneItemTransform: {
+        positionX: 0,
+        positionY: 0,
+        alignment: OBS_ALIGN_TOP_LEFT,
+        boundsType: "OBS_BOUNDS_SCALE_INNER",
+        boundsAlignment: OBS_ALIGN_CENTER,
+        boundsWidth: canvasW,
+        boundsHeight: canvasH,
+        // Reset any crop a previous version / stray edit left on the item:
+        // a stale crop would survive the bounds fit and re-crop the frame.
+        cropLeft: 0,
+        cropRight: 0,
+        cropTop: 0,
+        cropBottom: 0,
+      },
+    });
+  }
+
+  /**
+   * 真机症状(2026-09-05):录像完全没有声音。
+   *
+   * 音频有两条独立的失效链,这个函数只管第二条:
+   *   (1) profile 侧压根没有录制音频编码器 —— 见 obsConfigWriter 的
+   *       `RecAudioEncoder`,那是配置层的修法;
+   *   (2) 场景集合 JSON 里的全局音频通道(DesktopAudioDevice1 / AuxAudioDevice1)
+   *       没被 OBS 真的装上。视频那条链是运行时 `CreateInput` 建的,已被真机
+   *       证明可用;音频那条链全靠"OBS 会正确加载我们手写的 JSON 顶层键"这个
+   *       从未在真机上验证过的假设。
+   *
+   * 所以这里不再假设,而是**问一遍再修**:`GetSpecialInputs` 直接回答通道
+   * 1/3 上到底有没有源。有 → 什么都不做(绝不能重复建,否则同一设备被采两次,
+   * 音量翻倍带回声)。没有 → 用与游戏画面完全相同的机制(`CreateInput` 建进
+   * 场景)补一个,设备 id 用 assembly 交下来的那一个。
+   *
+   * 场景项必须是**可见的**:libobs 只混活跃树里的源,隐藏的场景项不持有
+   * active 引用因而是静音的(见 `enumerateAudioDevices` 里对同一事实的引用)。
+   * 所以这里刻意不传 `sceneItemEnabled: false`。
+   */
+  async function ensureAudioWired(): Promise<void> {
+    // undefined = 调用方没提供设备口径(老调用方/测试),没有可信的修复值,
+    // 保持旧行为不动。null 是有意义的取值("这一路不录"),不触发修复。
+    if (deps.desktopAudioDeviceId === undefined) return;
+    const special = await callWithTimeout("GetSpecialInputs");
+    if (special === null) return; // 问不到就别猜,更别重复建
+    await ensureAudioChannel(
+      special["desktop1"],
+      deps.desktopAudioDeviceId,
+      DESKTOP_AUDIO_FALLBACK_INPUT_NAME,
+      DESKTOP_AUDIO_INPUT_KIND,
+    );
+    await ensureAudioChannel(
+      special["mic1"],
+      deps.micDeviceId ?? null,
+      MIC_AUDIO_FALLBACK_INPUT_NAME,
+      MIC_AUDIO_INPUT_KIND,
+    );
+  }
+
+  /** One channel's worth of ensureAudioWired(). `channelSource` is what
+   * GetSpecialInputs reported for that channel (an input name, or null/absent
+   * when the channel is unassigned). */
+  async function ensureAudioChannel(
+    channelSource: unknown,
+    wantDeviceId: string | null,
+    fallbackInputName: string,
+    inputKind: string,
+  ): Promise<void> {
+    if (wantDeviceId === null) return; // 用户就是不想录这一路
+    if (typeof channelSource === "string" && channelSource !== "") return;
+    // 通道空着但用户要录 —— 场景集合那条路没生效,补建。已存在(上一次
+    // 会话建过、进程比 websocket 会话活得长)时 CreateInput 会以
+    // "already exists" 失败,那正是我们想要的状态,静默即可。
+    await callQuiet("CreateInput", {
+      sceneName: SCENE_NAME,
+      inputName: fallbackInputName,
+      inputKind,
+      inputSettings: { device_id: wantDeviceId },
+    });
+    // 已存在时上面那次 create 不会更新设备,补一次 set;新建时是幂等重写。
+    await callQuiet("SetInputSettings", {
+      inputName: fallbackInputName,
+      inputSettings: { device_id: wantDeviceId },
+    });
   }
 
   async function captureProbe(): Promise<{ shotPath: string; black: boolean }> {

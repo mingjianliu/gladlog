@@ -240,6 +240,13 @@ async function doAssemble(deps: AssembleManagedRecordingDeps): Promise<void> {
         return { wsUrl: ready.wsUrl, wsPassword };
       },
       recDir,
+      // Same settings snapshot the config writer just consumed — the backend
+      // re-checks at runtime that OBS actually came up with these channels
+      // wired and repairs them if not (ensureAudioWired). Passing them from
+      // here rather than re-reading settings keeps writer and backend on one
+      // snapshot, so a save landing mid-assembly cannot split them.
+      desktopAudioDeviceId: s.managedDesktopAudioDevice,
+      micDeviceId: s.managedMicDevice,
     });
     deps.state.backend = backend;
     deps.setRecorderManagedBackend(backend);

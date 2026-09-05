@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  MANAGED_CANVAS,
   clearSentinels,
   writeObsConfig,
   type ObsConfigSpec,
@@ -115,6 +116,36 @@ describe("writeObsConfig", () => {
     // and cut a match mid-fight.
     expect(txt).toMatch(/RecSplitFileTime=0/);
     expect(txt).toMatch(/RecSplitFileSize=0/);
+  });
+
+  it("writes the recording audio pipeline explicitly, never inheriting OBS defaults", () => {
+    // 真机症状 2026-09-05:录像完全没有声音。Advanced 输出的录制音频编码器是
+    // 一个独立的键,而且合法取值里就有 "none"(= 不录音频);profile 是我们
+    // 全权生成的,不能有任何一段靠 OBS 内建默认值撑着。
+    writeObsConfig(spec);
+    const txt = readFileSync(
+      join(cfgRoot(), "basic", "profiles", "gladlog", "basic.ini"),
+      "utf-8",
+    );
+    expect(txt).toMatch(/RecAudioEncoder=aac/);
+    expect(txt).not.toMatch(/RecAudioEncoder=none/);
+    expect(txt).toMatch(/RecTracks=1/);
+    expect(txt).toMatch(/Track1Bitrate=160/);
+    expect(txt).toMatch(/\[Audio\]/);
+    expect(txt).toMatch(/SampleRate=48000/);
+    expect(txt).toMatch(/ChannelSetup=Stereo/);
+  });
+
+  it("[Video] Base/Output resolution comes from the exported canvas constants (one source with the backend's bounds fit)", () => {
+    writeObsConfig(spec);
+    const txt = readFileSync(
+      join(cfgRoot(), "basic", "profiles", "gladlog", "basic.ini"),
+      "utf-8",
+    );
+    expect(txt).toMatch(new RegExp(`BaseCX=${MANAGED_CANVAS.width}\\b`));
+    expect(txt).toMatch(new RegExp(`BaseCY=${MANAGED_CANVAS.height}\\b`));
+    expect(txt).toMatch(new RegExp(`OutputCX=${MANAGED_CANVAS.width}\\b`));
+    expect(txt).toMatch(new RegExp(`OutputCY=${MANAGED_CANVAS.height}\\b`));
   });
 
   it("writes RecFilePath with forward slashes even from a backslash-shaped recDir", () => {

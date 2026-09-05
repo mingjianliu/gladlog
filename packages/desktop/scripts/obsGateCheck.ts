@@ -483,6 +483,113 @@ async function main(): Promise<void> {
       row("gc-input", `CreateInput 失败/超时:${String(createOutcome.error)}`);
     }
     await sleep(5000); // give the hook time to attach
+
+    // ---- 2026-09-05 真机三症状的判据行 ----------------------------------
+    // 症状 2「录像只有画面左上角一小块」和症状 1「完全没有声音」都是这一段
+    // 之前从来没问过的事实。裸看 mp4 判断不了原因,这三行直接问 OBS 本人。
+    const videoOutcome = await guardedCall(
+      "GetVideoSettings",
+      obs.call("GetVideoSettings"),
+      CALL_TIMEOUT_MS,
+    );
+    const canvasW = videoOutcome.ok
+      ? (videoOutcome.value.baseWidth as number)
+      : 0;
+    const canvasH = videoOutcome.ok
+      ? (videoOutcome.value.baseHeight as number)
+      : 0;
+    const itemOutcome = await guardedCall(
+      "GetSceneItemId",
+      obs.call("GetSceneItemId", { sceneName: "gladlog", sourceName: "gc" }),
+      CALL_TIMEOUT_MS,
+    );
+    if (itemOutcome.ok) {
+      const sceneItemId = itemOutcome.value.sceneItemId as number;
+      const xformOutcome = await guardedCall(
+        "GetSceneItemTransform",
+        obs.call("GetSceneItemTransform", {
+          sceneName: "gladlog",
+          sceneItemId,
+        }),
+        CALL_TIMEOUT_MS,
+      );
+      if (!xformOutcome.ok) {
+        row(
+          "fit",
+          `GetSceneItemTransform 失败/超时:${String(xformOutcome.error)}`,
+        );
+      } else {
+        const t = xformOutcome.value.sceneItemTransform as Record<
+          string,
+          unknown
+        >;
+        const srcW = Number(t.sourceWidth ?? 0);
+        const srcH = Number(t.sourceHeight ?? 0);
+        const outW = Number(t.width ?? 0);
+        const outH = Number(t.height ?? 0);
+        // 判据:源在画布上实际占的矩形,必须覆盖画布(等比缩放后至少一边贴边),
+        // 而不是超出画布被裁。裁掉的面积比例是那句「只有左上角一小块」的数字化。
+        const shownFrac =
+          srcW > 0 && srcH > 0
+            ? (Math.min(outW, canvasW) * Math.min(outH, canvasH)) /
+              (outW * outH || 1)
+            : 0;
+        row(
+          "fit",
+          `画布 ${canvasW}x${canvasH};源 ${srcW}x${srcH};上画布后 ${outW}x${outH};` +
+            `boundsType=${String(t.boundsType)};入镜面积 ${(shownFrac * 100).toFixed(1)}%` +
+            (shownFrac > 0.999
+              ? " OK"
+              : " —— 被画布裁了,这就是「只有左上角一块」"),
+        );
+      }
+    } else {
+      row("fit", `GetSceneItemId 失败/超时:${String(itemOutcome.error)}`);
+    }
+
+    const specialOutcome = await guardedCall(
+      "GetSpecialInputs",
+      obs.call("GetSpecialInputs"),
+      CALL_TIMEOUT_MS,
+    );
+    if (!specialOutcome.ok) {
+      row(
+        "audio-ch",
+        `GetSpecialInputs 失败/超时:${String(specialOutcome.error)}`,
+      );
+    } else {
+      const desktop1 = specialOutcome.value.desktop1;
+      row(
+        "audio-ch",
+        typeof desktop1 === "string" && desktop1
+          ? `OK 通道1 = ${desktop1}(场景集合的 DesktopAudioDevice1 装上了)`
+          : "通道1 空 —— 场景集合里的桌面音频没被 OBS 装上,录出来必然没声音",
+      );
+      if (typeof desktop1 === "string" && desktop1) {
+        const tracksOutcome = await guardedCall(
+          "GetInputAudioTracks",
+          obs.call("GetInputAudioTracks", { inputName: desktop1 }),
+          CALL_TIMEOUT_MS,
+        );
+        const muteOutcome = await guardedCall(
+          "GetInputMute",
+          obs.call("GetInputMute", { inputName: desktop1 }),
+          CALL_TIMEOUT_MS,
+        );
+        row(
+          "audio-track",
+          !tracksOutcome.ok
+            ? `GetInputAudioTracks 失败/超时:${String(tracksOutcome.error)}`
+            : `轨道 ${JSON.stringify(tracksOutcome.value.inputAudioTracks)};` +
+                (muteOutcome.ok
+                  ? `muted=${String(muteOutcome.value.inputMuted)}`
+                  : "muted=?") +
+                ' —— basic.ini 的 RecTracks=1 只录轨道1,这里 "1":true 才有声',
+        );
+      }
+    }
+    // --------------------------------------------------------------------
+
     const shotPath = join(root, "shot.png");
     const shotOutcome = await guardedCall(
       "SaveSourceScreenshot",
