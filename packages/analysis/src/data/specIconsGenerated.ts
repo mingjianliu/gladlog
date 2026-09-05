@@ -1,6 +1,6 @@
 // GENERATED — do not hand-edit. Produced by
 // packages/analysis/scripts/datagen/genSpecIcons.ts.
-// build: 12.1.0.69273
+// build: 12.1.0.69587
 // specId -> icon base name (the naming shared by zamimg / wow.tools).
 
 export const SPEC_ICONS: Record<string, string> = {

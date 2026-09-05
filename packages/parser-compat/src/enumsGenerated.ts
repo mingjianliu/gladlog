@@ -1,7 +1,7 @@
 // GENERATED — do not hand-edit. Produced by
 // packages/analysis/scripts/datagen/genCombatUnitEnums.ts from Blizzard DB2
 // (ChrSpecialization / ChrClasses).
-// build: 12.1.0.69273
+// build: 12.1.0.69587
 //
 // Both the specId and classId values are Blizzard game-data facts; see the
 // generator's doc comment for the member naming rules.

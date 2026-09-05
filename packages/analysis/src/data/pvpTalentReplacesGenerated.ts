@@ -1,6 +1,6 @@
 /**
- * Generated at: 2026-08-19T03:18:13.592Z
- * Build: 12.1.0.69382
+ * Generated at: 2026-09-05T00:11:49.298Z
+ * Build: 12.1.0.69587
  * Source: DB2 PvpTalent.OverridesSpellID (the official replacement relation)
  *   plus a same-name id bridge through classSpells
  * Pairs: 17

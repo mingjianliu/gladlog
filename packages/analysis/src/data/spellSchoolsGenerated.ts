@@ -1,6 +1,6 @@
 /**
- * Generated at: 2026-08-23T05:46:15.290Z
- * Build: 12.1.0.69404
+ * Generated at: 2026-09-05T00:12:16.291Z
+ * Build: 12.1.0.69587
  * Source: DB2 SpellMisc.SchoolMask (what school the spell IS) +
  *   SpellEffect aura 39 / 77 (which schools / mechanics it makes you
  *   immune to), one EffectTriggerSpell hop, dummy rows ignored unless

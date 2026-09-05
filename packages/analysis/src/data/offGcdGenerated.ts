@@ -1,6 +1,6 @@
 /**
- * Generated at: 2026-08-22T09:42:57.368Z
- * Build: 12.1.0.69404
+ * Generated at: 2026-09-05T00:11:56.533Z
+ * Build: 12.1.0.69587
  * Source: SpellCooldowns has a row and StartRecoveryTime==0 (off-GCD player-
  *   activated abilities), restricted to the observed universe
  * ids: 422

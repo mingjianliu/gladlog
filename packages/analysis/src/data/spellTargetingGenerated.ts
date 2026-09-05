@@ -1,6 +1,6 @@
 /**
- * Generated at: 2026-08-23T05:45:57.561Z
- * Build: 12.1.0.69404
+ * Generated at: 2026-09-05T00:12:12.455Z
+ * Build: 12.1.0.69587
  * Source: DB2 SpellEffect.ImplicitTarget_0/_1 (DifficultyID 0), dummy
  *   effects ignored unless they are all the spell has, one
  *   EffectTriggerSpell hop followed. See scripts/datagen/genSpellTargeting.ts

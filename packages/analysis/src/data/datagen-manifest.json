@@ -1,29 +1,29 @@
 {
-  "build": "12.1.0.69404",
-  "generatedAt": "2026-09-05T00:02:44.429Z",
+  "build": "12.1.0.69587",
+  "generatedAt": "2026-09-05T00:12:26.704Z",
   "artifacts": {
     "talentIdMap.json": {
       "specs": 40
     },
     "spellNames.json": {
-      "entries": 413940,
-      "bytes": 12241022
+      "entries": 413984,
+      "bytes": 12242355
     },
     "spellNamesZhGenerated.json": {
-      "entries": 41359,
-      "bytes": 1006256
+      "entries": 41361,
+      "bytes": 1006300
     },
     "spellEffectGenerated.ts": {
       "entries": 9613,
-      "bytes": 654256
+      "bytes": 654294
     },
     "spellClassMapGenerated.ts": {
       "entries": 250
     },
     "spellIconsGenerated.ts": {
-      "entries": 43401,
-      "distinctIcons": 7709,
-      "bytes": 822489
+      "entries": 43403,
+      "distinctIcons": 7710,
+      "bytes": 822537
     },
     "trinketItemIds.json": {
       "adaptation": 28,
@@ -40,7 +40,7 @@
     "talentMitigationGenerated.json": {
       "entries": 59,
       "pendingRuling": 0,
-      "bytes": 14816
+      "bytes": 14814
     },
     "offGcdGenerated.ts": {
       "entries": 422
@@ -50,7 +50,7 @@
       "absorbs": 109,
       "healsOthers": 264,
       "hitsEnemy": 1638,
-      "bytes": 93485
+      "bytes": 93501
     },
     "spellSchoolsGenerated.ts": {
       "entries": 6447,
@@ -66,7 +66,7 @@
     "drCategoriesGenerated.ts": {
       "byCategory": {
         "disorient": 225,
-        "incapacitate": 324,
+        "incapacitate": 325,
         "root": 139,
         "silence": 61,
         "stun": 649

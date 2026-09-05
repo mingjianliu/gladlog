@@ -1,7 +1,7 @@
 {
   "_meta": {
-    "generatedAt": "2026-09-05T00:02:30.611Z",
-    "build": "12.1.0.69404",
+    "generatedAt": "2026-09-05T00:12:07.777Z",
+    "build": "12.1.0.69587",
     "source": "zhCN Spell.Description_lang tooltip predicate over the talent spell universe (talentIdMap class/spec/hero nodes ∪ PvpTalent pool); percentage resolved through the placeholder the tooltip points at",
     "universeSize": 3491,
     "tooltipHits": 67,
@@ -198,10 +198,10 @@
       ]
     },
     "205411": {
-      "pct": 10,
+      "pct": 5,
       "auraSpellId": "205411",
       "zh": "绝望本能",
-      "via": "self s2 (aura 4) = 10",
+      "via": "self s2 (aura 4) = 5",
       "beneficiary": "self",
       "source": "spec",
       "specIds": [
@@ -257,10 +257,10 @@
       ]
     },
     "354489": {
-      "pct": 25,
+      "pct": 20,
       "auraSpellId": "354489",
       "zh": "转瞬即逝",
-      "via": "self s1 (aura 4) = 25",
+      "via": "self s1 (aura 4) = 20",
       "beneficiary": "self",
       "source": "pvp",
       "specIds": [

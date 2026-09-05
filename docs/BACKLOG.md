@@ -2516,6 +2516,15 @@ TrinityCore 15.7%;wago CSV 不含 hotfix(`hotfixes=` 参数被忽略,真言术�
   节奏写进 update-wow-data.md 3b:manifest 的 hotfixDate 晚于最近一次 PvP 调数公告就重跑 3b + 5/6g/6g2/6i/7。
   `writeManifest.ts` 同时改为保留前一版 manifest 里自己不认识的条目(emit-table 登记不再被整体重写丢掉)。
 - (4) **数据刷新 69404 → 69587**(最新 retail 2026-09-01),按 update-wow-data.md 全流程 + §7b 三扫描。
+  **2026-09-04 已做**:24 个 DB2 生成器(手册序 + 手册漏列的 manaCost / combatUnitEnums / specIcons 三个,已补进手册 6l–6n)
+  + validateCatalogs 通过。实质变化:天赋减伤 205411 绝望本能 10→5、354489 转瞬即逝 25→20;DR 表 +1 致盲类
+  (202274 Hot Trub);天赋图标补全;spellEffect 条目数 9613 不变。热修映射在同 build 上 PvpMultiplier 22/22、
+  EffectBasePointsF 73/73、AP 系数 16/16 全对(69404 上的差异全是 build 差)。数据门测试 11 文件 77/77 绿
+  (踢技校验门 / ccFullDuration / 签字漂移 / manifest)。§7b:curatedRotScan 66/1234 未观测(无新增)、drGapScan 55 条
+  已知集合、ccLifetimeScan 仅混沌新星 / 虚空新星两条已裁 FLAG。**验收:同代码、刷新前 vs 刷新后 605 场,findings 与 context
+  哈希完全相同,逐类计数零变化**——本次 build 差对现有 prompt 无影响。after1→after4 曾见 healer cd-hoarded 1082→1118、
+  cd-waste 234→318,隔离对照证明那是 rebase 进来的 GH #63 名单效应,不是刷新。语料驱动的先验表(behaviorPrior /
+  burstWindow / syncWindow / cdTriggerPrior / healerSaveCd / observedSpellIds)按赛季与谓词变化重跑,本次未动。
 - (5) 文档纠错:update-wow-data.md「PvP modifiers not encoded in DB2」gotcha(09-04 已改)、predicate-index 两份登记。
 - (6) **减伤叠加公式进 counterfactual.ts**(TrinityCore:不同光环乘法叠加、同 SpellGroup 取最高)——先数语料里
   「死亡窗口内 ≥2 层减伤同时在」的样本量再决定。排在 (1) 之后。

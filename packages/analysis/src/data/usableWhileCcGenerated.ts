@@ -1,6 +1,6 @@
 /**
- * Generated at: 2026-08-22T09:43:10.799Z
- * Build: 12.1.0.69404
+ * Generated at: 2026-09-05T00:12:09.921Z
+ * Build: 12.1.0.69587
  * Source: DB2 SpellMisc.Attributes_0..16, <=2-bit OR-union search anchored
  *   against UWC_ANCHORS (13 user-signed anchors, see
  *   scripts/datagen/usableWhileCcAnchors.ts). Winning bit combo(s):

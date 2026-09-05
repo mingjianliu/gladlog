@@ -238,6 +238,12 @@ npx tsx packages/analysis/scripts/datagen/genSpellSchools.ts
 #      不要放宽断言。)
 #      healingReceivedPct / hastePct PvP-scaled through lib/pvpMultiplier.ts (2026-09-04).
 npx tsx packages/analysis/scripts/datagen/genAbilityEffects.ts
+# 6l–6n. Three manifest-tracked artifacts this runbook had never listed (found by the 2026-09-04 69587 refresh —
+#      the manifest records artifacts, only this file drives regeneration, same trap as 6g2 in 69382):
+#      spell mana cost ([MANA] context), the parser-compat spec/class enums, and the spec icon table.
+npx tsx packages/analysis/scripts/datagen/genSpellManaCost.ts
+npx tsx packages/analysis/scripts/datagen/genCombatUnitEnums.ts
+npx tsx packages/analysis/scripts/datagen/genSpecIcons.ts
 # 7. Manifest summary
 npx tsx packages/analysis/scripts/datagen/writeManifest.ts
 ```

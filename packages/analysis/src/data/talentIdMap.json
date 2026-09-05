@@ -53311,7 +53311,7 @@
             "type": "active",
             "name": "Aimed Shot",
             "spellId": 19434,
-            "icon": "",
+            "icon": "inv121_ability_hunter_aimedshot",
             "index": 100
           }
         ]
@@ -71963,7 +71963,7 @@
             "type": "active",
             "name": "Ascendance",
             "spellId": 114050,
-            "icon": "",
+            "icon": "inv121_ability_shaman_ascendance_fire",
             "index": 100
           }
         ]
@@ -75776,7 +75776,7 @@
             "type": "active",
             "name": "Ascendance",
             "spellId": 114051,
-            "icon": "",
+            "icon": "inv121_ability_shaman_ascendance_air",
             "index": 200
           }
         ]
@@ -78555,7 +78555,7 @@
             "type": "active",
             "name": "Ascendance",
             "spellId": 114052,
-            "icon": "",
+            "icon": "inv121_ability_shaman_ascendance_water",
             "index": 100
           },
           {
@@ -103909,7 +103909,7 @@
             "type": "passive",
             "name": "Javelineer",
             "spellId": 1271948,
-            "icon": "",
+            "icon": "inv121_ability_warrior_javelineer",
             "index": 100
           }
         ]
@@ -107255,7 +107255,7 @@
             "type": "passive",
             "name": "Javelineer",
             "spellId": 1271948,
-            "icon": "",
+            "icon": "inv121_ability_warrior_javelineer",
             "index": 100
           }
         ]
@@ -110626,7 +110626,7 @@
             "type": "passive",
             "name": "Javelineer",
             "spellId": 1271948,
-            "icon": "",
+            "icon": "inv121_ability_warrior_javelineer",
             "index": 100
           }
         ]

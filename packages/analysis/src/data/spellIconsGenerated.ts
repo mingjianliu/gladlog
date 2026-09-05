@@ -1,7 +1,7 @@
 /**
- * Generated at: 2026-08-22T09:42:52.292Z
- * Build: 12.1.0.69382
- * Mined: 43401 (universe = corpus-attested u SpellCooldowns u candidates)
+ * Generated at: 2026-09-05T00:11:43.532Z
+ * Build: 12.1.0.69587
+ * Mined: 43403 (universe = corpus-attested u SpellCooldowns u candidates)
  * The data lives in the .json of the same name (vite json.stringify ->
  * JSON.parse loading — the big-JSON lesson).
  * That .json is dictionary-encoded {names, ids}: icon names repeat heavily, so
