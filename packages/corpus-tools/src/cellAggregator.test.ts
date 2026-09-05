@@ -22,10 +22,6 @@ function rec(archetype: string, offensiveIndex: number): PerMatchRecord {
       healingGapCount: 0,
       ccAvoidedCount: 1,
       ccLandedCount: 1,
-      dispelsPerMin: 1,
-      kicksPerMin: 0,
-      castsPerMin: 30,
-      overhealPct: 0.3,
     },
     crisisEvents: [`[0:10] crisis ${offensiveIndex}`],
   };

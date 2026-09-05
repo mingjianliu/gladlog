@@ -4,8 +4,6 @@ import {
   IShuffleRound,
   LogEvent,
 } from "@gladlog/parser-compat";
-
-import { SPELL_CATEGORIES } from "../data/spellCategories";
 import { ccSpellIds } from "../data/spellTags";
 import { analyzePlayerCCAndTrinket } from "./ccTrinketAnalysis";
 import {
@@ -15,11 +13,6 @@ import {
   IMajorCooldownInfo,
   MAJOR_DEFENSIVE_IDS,
 } from "./cooldowns";
-import {
-  buildCastMatchIndex,
-  classifyDispel,
-  isDeliberateDispel,
-} from "./dispelKind";
 import { reconstructEnemyCDTimeline } from "./enemyCDs";
 import { detectHealingGaps } from "./healingGaps";
 import { medianFinite } from "./stats";
@@ -73,20 +66,6 @@ export interface IHealerMetrics {
   healingGapCount: number;
   ccAvoidedCount: number;
   ccLandedCount: number;
-  /** Playstyle dimensions (GH #64, BACKLOG #36 (f), 2026-09-05): the
-   * per-match "how you play" attributes the healer corpus study found to
-   * carry a rating gradient — tool-key rates rise with rating while healing
-   * keys do not; cast density / overheal are stable personal attributes
-   * (ICC 0.73–0.85). All per-minute of round duration or bounded ratios, so
-   * they enter the cohort cells like `ccDensity` (the precedent). */
-  /** SPELL_DISPEL events sourced by this healer (own `actionOut`), per minute */
-  dispelsPerMin: number;
-  /** SPELL_CAST_SUCCESS of interrupt-category spells, per minute */
-  kicksPerMin: number;
-  /** every SPELL_CAST_SUCCESS, per minute — cast density */
-  castsPerMin: number;
-  /** 1 − effective / raw healing over healOut (0–1); null when no healing */
-  overhealPct: number | null;
 }
 
 export function computeHealerMetrics(
@@ -131,45 +110,6 @@ export function computeHealerMetrics(
   const durationSeconds = (combat.endTime - combat.startTime) / 1000;
   const ccDensity =
     durationSeconds > 0 ? (ccCasts.length / durationSeconds) * 60 : 0;
-  const perMin = (n: number): number =>
-    durationSeconds > 0 ? (n / durationSeconds) * 60 : 0;
-  const allSuccessCasts = healerUnit.spellCastEvents.filter(
-    (e: any) => e.logLine.event === "SPELL_CAST_SUCCESS",
-  );
-  const kickCasts = allSuccessCasts.filter((e: any) => {
-    const cat = SPELL_CATEGORIES[String(e.spellId)];
-    return cat?.type === "interrupts";
-  });
-  // Deliberate dispels only — the same `classifyDispel` predicate the
-  // dispel dashboard and the prompt's MINOR DISPELS fold read (a Cleanse the
-  // Weak proc is not a key press; Holy Paladin p90 read 13.5/min raw).
-  const castIndex = buildCastMatchIndex([healerUnit]);
-  const dispelEvents = (healerUnit.actionOut ?? []).filter(
-    (a: any) =>
-      a.logLine?.event === "SPELL_DISPEL" &&
-      a.extraSpellId !== undefined &&
-      isDeliberateDispel(
-        classifyDispel(castIndex, {
-          srcUnitId: a.srcUnitId || healerUnit.id,
-          spellId: a.spellId,
-          spellName: a.spellName,
-          timestamp: a.timestamp,
-        }),
-      ),
-  );
-  const rawHealOut = healerUnit.healOut.reduce(
-    (sum: number, a: any) => sum + Math.abs(a.amount ?? a.effectiveAmount ?? 0),
-    0,
-  );
-  const effectiveHealOnly = healerUnit.healOut.reduce(
-    (sum: number, a: any) => sum + Math.abs(a.effectiveAmount ?? 0),
-    0,
-  );
-  const dispelsPerMin = perMin(dispelEvents.length);
-  const kicksPerMin = perMin(kickCasts.length);
-  const castsPerMin = perMin(allSuccessCasts.length);
-  const overhealPct =
-    rawHealOut > 0 ? Math.max(0, 1 - effectiveHealOnly / rawHealOut) : null;
 
   const friends = allUnits.filter(
     (u) =>
@@ -254,10 +194,6 @@ export function computeHealerMetrics(
   return {
     offensiveIndex,
     ccDensity,
-    dispelsPerMin,
-    kicksPerMin,
-    castsPerMin,
-    overhealPct,
     reactionLatency,
     burstResponseCoverage,
     defensiveOverlapRatio,

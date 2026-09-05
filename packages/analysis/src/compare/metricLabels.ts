@@ -17,10 +17,6 @@ export const METRIC_LABELS: Record<string, { en: string; zh: string }> = {
     zh: "减伤重叠浪费率",
   },
   effectiveCastRatio: { en: "Effective cast ratio", zh: "有效施法占比" },
-  dispelsPerMin: { en: "Dispels per minute", zh: "每分钟驱散次数" },
-  kicksPerMin: { en: "Interrupt casts per minute", zh: "每分钟打断次数" },
-  castsPerMin: { en: "Casts per minute", zh: "每分钟施法次数" },
-  overhealPct: { en: "Overheal share", zh: "溢出治疗占比" },
   ccAvoidanceRate: { en: "CC avoidance rate", zh: "躲控成功率" },
   // dps
   burstCount: { en: "Burst windows", zh: "爆发窗口数" },

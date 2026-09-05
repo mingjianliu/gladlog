@@ -65,10 +65,6 @@ export function verifiedComparison(
     // No cohort samples for this dim → the p10/p50/p90 are all 0 (empty pool),
     // so any comparison is bogus. Skip it rather than show a fake percentile.
     if (!dist || dist.n === 0) continue;
-    // A cell with no spread (p10 === p90 — e.g. a tool key this spec does
-    // not have, so every round is 0) cannot rank anybody; a "50th percentile
-    // — in line with your cohort" verdict there would be vacuous. Skip.
-    if (dist.p10 === dist.p90) continue;
     const percentile = Math.round(percentileRank(value, dist));
     const verdict = verdictFor(percentile);
     dims.push({
