@@ -1600,7 +1600,7 @@ The meaningful signal per BACKLOG #26's user closeout criteria is **causal attri
 
 **Architecture direction (user-ruled 2026-08-16, same-day refinement)**: the attribution engine is **deterministic fixed logic producing conclusion sentences** (divergence point of both healers' mana curves, forced-vs-unforced spend decomposition per pressure window, drink-opportunity ledger, efficiency measured on unforced windows only) — NOT a fact pack fed to the LLM. Rationale: exposing raw facts to the model invites noisy/false attribution (the "rich context bypasses candidate gates" failure class); the LLM only performs multi-angle attribution/back-inference at explicit deep-dive escalation (existing multi-round infra). **Exposure ruling: add NOTHING now — no UI, no candidate, no prompt lines — until the attribution engine exists and is validated; the exposure surface gets decided then.**
 
-**Status**: Logged, NOT started — needs its own spec cycle with user before implementation begins. No flag, no branch, full test coverage deferred.
+**Status(2026-09-05)**: **不做**(用户裁定「49 也不做」),GH #49 关;#26 那两条未上线的法力候选维持退役。
 
 **Rationale**: #26's unshipped candidates revealed a structural limitation: mana-as-a-resource coaching cannot be evaluated in isolation from game context — "spent too much" only becomes actionable when paired with "you didn't have to because team could have CC'd / pre-mitigated / drunk earlier" or vice versa. The raw numbers themselves are correct; the narrative is incomplete without causal framing.
 
