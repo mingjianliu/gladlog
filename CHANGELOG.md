@@ -8,10 +8,11 @@ The release procedure is documented in `.claude/skills/release`.
 
 ## v0.1.32 (2026-09-05)
 
-Managed-recording repair release, plus the season's official-data batch. Three symptoms came back from a real 4K Windows machine on the managed OBS recorder — no sound, only the top-left corner of the screen, and footage that starts outside the arena. Two were real bugs and are fixed here; the third turned out to be what a continuous recording's raw chunk files look like, and the in-app player was already right. Alongside that: the managed recorder gains user settings (where recordings go, which audio devices), the healer save-cooldown roster is now generated from official data instead of a hand-written list, and the game data behind cooldowns, durations and mitigation was refreshed and audited against the official tables.
+Managed-recording repair release, plus the season's official-data batch. Three symptoms came back from a real 4K Windows machine on the managed OBS recorder — no sound, only the top-left corner of the screen, and footage that starts outside the arena. The first two were real bugs and are fixed here. The third turned out to be what a continuous recording's raw chunk files look like (the in-app player was already correct), but the raw files are now cut closer to the match anyway. Alongside that: the managed recorder gains user settings (where recordings go, which audio devices), the healer save-cooldown roster is now generated from official data instead of a hand-written list, and the game data behind cooldowns, durations and mitigation was refreshed and audited against the official tables.
 
 ### Recording (managed OBS)
 
+- `08dde677` **A match's video file now starts much closer to the match.** Recording is continuous while WoW is up, so the file carrying a match used to open with up to ten minutes of queue. Two changes: a fresh file is cut at the match's own start whenever the combat log was punctual enough for that instant to still be _now_, and the idle cadence that bounds the rest dropped from ten minutes to one. When the log is running late the cut is declined rather than taken — cutting then would leave the opener in the previous file, which is the one thing continuous recording exists to prevent
 - `e52761d2` **Recordings were only the top-left corner of the screen on any display above 1080p.** The capture source was placed in the scene with no transform at all, so OBS drew it at its native pixel size against a fixed 1920x1080 canvas — on a 4K screen that is exactly the top-left quarter of the picture. The capture is now scaled to fit the canvas, which also covers ultrawide screens and a resolution change mid-session
 - `e52761d2` **Recordings had no sound at all.** Two independent causes, both closed: the generated recording profile never named an audio encoder (one of that setting's legal values is literally "no audio"), and the desktop-audio device was only ever wired through a config file whose loading had never been verified — the recorder now asks OBS directly whether the channel came up and repairs it the same way the video source is created
 - `e52761d2` The real-machine gate check gains three rows that answer these directly: how much of the source actually lands inside the canvas, whether the desktop-audio channel has a source, and which audio track it records on
@@ -43,6 +44,8 @@ Managed-recording repair release, plus the season's official-data batch. Three s
 ### Other (docs / ledger)
 
 - `15da8345` `adee6f88` Session practices consolidated into skills; a stale backlog line struck with the production corpus numbers
+- `7a481c9a` Handoff notes for the Skill Capped coaching-verdict corpus (68 VoDs / 2101 verdicts; 71% of the v2 verdicts map to no predicate the product actually computes)
+- `00725d13` Release commit (version bump and this changelog)
 
 ## v0.1.31 (2026-09-03)
 
