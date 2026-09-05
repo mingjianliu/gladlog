@@ -280,7 +280,10 @@ export const USABLE_WHILE_CC_SPELL_IDS = new Set<string>([
  * gated spell id. Signed record for every entry lives in
  * curatedAbilityFacts.ts (kind "usable_while_cc_conditional").
  *
- * - "119996" Transcendence: Transfer (Monk) — gated on Mistweaver PvP talent
+ * - "119996" Transcendence: Transfer (Monk) — user re-confirmed 2026-09-04
+ *   ("真气转移本身的确不能晕里用 需要pvp天赋") even though the base spell
+ *   carries the named bit 378 at 12.1; genUsableWhileCc withholds it from
+ *   the unconditional set for that reason. Gated on Mistweaver PvP talent
  *   "Eminence" (353584): wowhead's "Allow While Stunned by Stun Mechanic" +
  *   "Allow While Stunned By Horror Mechanic" flags, Icy Veins' Mistweaver PvP
  *   guide text, and Blizzard's 9.1.0 (2021-06-29) patch note all describe the

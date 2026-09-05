@@ -51,9 +51,12 @@
  *   - ids in `USABLE_WHILE_CC_CONDITIONAL` (cooldowns.ts) are withheld from
  *     the unconditional stunned set even when the base spell carries a bit:
  *     119996 Transcendence: Transfer carries 378 on the base spell at 12.1,
- *     which contradicts the user-signed "Eminence-gated" research of
- *     2026-08-14 — recorded as an open question in BACKLOG #41 (8), the
- *     signed layer wins until re-ruled.
+ *     yet the user ruled 2026-09-04 ("真气转移本身的确不能晕里用 需要pvp天赋")
+ *     that the base spell is NOT usable while stunned and Eminence is
+ *     required — so for this id the bit is not the whole truth (the client
+ *     gates it through the PvP talent) and the signed conditional layer is
+ *     authoritative. A named bit is evidence, not a verdict, when a signed
+ *     ruling and the game disagree with it.
  *
  * Usage: `DATAGEN_BUILD=<build> DATAGEN_CACHE=<dir> npx tsx
  *   packages/analysis/scripts/datagen/genUsableWhileCc.ts`
