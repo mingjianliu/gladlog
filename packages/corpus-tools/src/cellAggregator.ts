@@ -69,6 +69,12 @@ const SCALAR_METRICS: string[] = [
   "defensiveOverlapRatio",
   "effectiveCastRatio",
   "ccAvoidanceRate",
+  // playstyle (GH #64, 2026-09-05): per-minute tool-key rates, cast
+  // density, overheal — the study's rating-graded "how you play" axes
+  "dispelsPerMin",
+  "kicksPerMin",
+  "castsPerMin",
+  "overhealPct",
   // dps (pro-comparison P1; the predicate is the burst-ledger trio)
   "burstConversionRate",
   "burstIntoDefensiveRatio",
