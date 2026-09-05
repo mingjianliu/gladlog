@@ -3,6 +3,11 @@
 // null→true;33206/1022 feared 维持 false,矛盾语料记录在案,详见各自条目
 // rationale 与 task-E-report.md 附录)。
 /**
+ * **2026-09-04 更正(BACKLOG #41 (8))**:本文件头「重要先验」段落把「No Client Fail While Stunned, Fleeing,
+ * Confused」(SimC 属性表 244 / SPELL_ATTR7_NO_CLIENT_FAIL_WHILE_STUNNED_FLEEING_CONFUSED)当成真正的被控可用位,
+ * 这是错的——按 TrinityCore 命名它只抑制客户端报错文案。真正的位是 163 / 378 / 177 / 178(见 genUsableWhileCc.ts 头)。
+ * 依据这个先验签的三个锚点(642 / 45438 / 48792)已由用户 2026-09-04 改裁为 false,原记录保留在各条 rationale 里。
+ *
  * 「被控(晕/恐惧/混乱)下能否主动施放」锚定清单 —— 技能事实地基 Task 2。
  * 状态:已用户签字批准(2026-08-14,逐条裁决记录见 task-2-report.md 附录;
  * 2026-08-15 就恐惧维度补签一批,见上方注记与 task-E-report.md 附录)。
@@ -121,11 +126,11 @@ export const UWC_ANCHORS: UwcAnchor[] = [
   {
     spellId: "642",
     name: "圣盾术",
-    stunned: true,
-    feared: true,
-    confused: true,
+    stunned: false,
+    feared: false,
+    confused: false,
     rationale:
-      "已裁:手写表収录机制上正确。用户 2026-08-14 澄清此前「圣盾晕中开不出」是误记(语音记录里「生存树」实指圣盾术,当时记录有误);用户核实后确认圣盾术机制上任何被控状态下都能按下,三维度改判 true。wowhead flags 栏的「No Client Fail While Stunned, Fleeing, Confused」与此吻合,应视为真正的被控可用位而非仅抑制报错文案(见文件头「重要先验」)。教练规范补充:5 分钟大招不该拿来当常规挡控手段,代价太大,仅在别无选择时使用——该规范判断归 Task 6 签字册,不影响本条的机制判定。",
+      "**2026-09-04 用户改裁:三维度全部 false。**命名位(SimC/TrinityCore:163 Allow While Stunned、378 by Stun Mechanic、177 Fleeing、178 Confused)一个都没有;它带的「No Client Fail While Stunned, Fleeing, Confused」(244)按 TrinityCore 命名只是抑制客户端报错文案,不授予任何可用性;1028 场语料晕中施放 1 次。08-14 的 true 锚点正是把位搜索逼向 10#13(遭遇战结束重置冷却)的原因。以下为 08-14 原记录:已裁:手写表収录机制上正确。用户 2026-08-14 澄清此前「圣盾晕中开不出」是误记(语音记录里「生存树」实指圣盾术,当时记录有误);用户核实后确认圣盾术机制上任何被控状态下都能按下,三维度改判 true。wowhead flags 栏的「No Client Fail While Stunned, Fleeing, Confused」与此吻合,应视为真正的被控可用位而非仅抑制报错文案(见文件头「重要先验」)。教练规范补充:5 分钟大招不该拿来当常规挡控手段,代价太大,仅在别无选择时使用——该规范判断归 Task 6 签字册,不影响本条的机制判定。",
     source:
       "手写表(cooldowns.ts:131,已裁机制収录正确)+ 用户 2026-08-14 澄清(此前「晕中开不出」为误记,真实意见是代价规范)+ wowhead.com/spell=642 Flags 栏(2026-08-14 抓取)",
   },
@@ -143,11 +148,11 @@ export const UWC_ANCHORS: UwcAnchor[] = [
   {
     spellId: "48792",
     name: "冰封之韧",
-    stunned: true,
+    stunned: false,
     feared: null,
     confused: null,
     rationale:
-      "用户 2026-08-14 裁决「昏迷的时候可以用,其他时候好像不行」—— stunned 按裁决改判 true;feared/confused 用户自己用「好像」表述,置信度不足,不作锚定(宁 null 勿猜)。",
+      "**2026-09-04 用户改裁:stunned=false**(命名位 163/378 全无;1028 场语料晕中施放 0 次)。以下为 08-14 原记录:用户 2026-08-14 裁决「昏迷的时候可以用,其他时候好像不行」—— stunned 按裁决改判 true;feared/confused 用户自己用「好像」表述,置信度不足,不作锚定(宁 null 勿猜)。",
     source: "用户 2026-08-14 裁决(昏迷可用,其余不确定)+ cooldowns.ts:133",
   },
 
@@ -207,7 +212,7 @@ export const UWC_ANCHORS: UwcAnchor[] = [
     feared: true,
     confused: null,
     rationale:
-      "「不灭意志类」第二条(种族技能,亡灵专属)。草案抓取 wowhead flags 只看到它授予的免疫光环效果(Fleeing/Asleep/Charmed/Turned 四种免疫),未见与勋章同款的「usable while feared」旗标,曾判 null;用户 2026-08-14 确认 feared=true(与技能设计意图/玩家共识一致:恐惧中可按下用来解控)。stunned/confused 证据仍不足,维持 null。",
+      "**2026-09-04 注**:命名位 177 (Allow While Fleeing) 为否——解控类种族技能的可用性不走属性位;该锚点作为 genUsableWhileCc 的 ANCHOR_HAND_EXEMPTIONS 豁免,真值进 cooldowns.ts USABLE_WHILE_FEARED_GAP_IDS 手工层(curatedAbilityFacts 有签字记录)。「不灭意志类」第二条(种族技能,亡灵专属)。草案抓取 wowhead flags 只看到它授予的免疫光环效果(Fleeing/Asleep/Charmed/Turned 四种免疫),未见与勋章同款的「usable while feared」旗标,曾判 null;用户 2026-08-14 确认 feared=true(与技能设计意图/玩家共识一致:恐惧中可按下用来解控)。stunned/confused 证据仍不足,维持 null。",
     source:
       "玩家共识/技能设计意图 + wowhead.com/spell=7744 Flags 栏完整核对(2026-08-14 抓取,未见相关旗标)+ 用户 2026-08-14 裁决(feared=true)",
   },
@@ -216,11 +221,11 @@ export const UWC_ANCHORS: UwcAnchor[] = [
   {
     spellId: "45438",
     name: "寒冰屏障",
-    stunned: true,
-    feared: true,
-    confused: true,
+    stunned: false,
+    feared: false,
+    confused: false,
     rationale:
-      "用户 2026-08-14 裁决「都可以用」,从草案原判的反例翻转为正例(原判断依据的「晕中开不出」是一般 PvP 印象,被用户一手证词推翻)。寒冰屏障与圣盾术 flags 栏一模一样,都只有「No Client Fail While Stunned, Fleeing, Confused」;两条独立用户证词(642+45438)汇合到同一旗标上,说明它很可能就是真正的被控可用位,而不是仅抑制报错文案的无关位 —— 这是 Task 3 位搜索的重要先验(见文件头)。教练规范补充:代价太大,仅在别无选择时使用,不推荐作为常规挡控手段(用户 2026-08-14,归 Task 6 签字册)。",
+      "**2026-09-04 用户改裁:三维度全部 false**(同 642:命名位全无,只有 244 报错抑制位;1028 场语料晕中施放 0 次)。以下为 08-14 原记录:用户 2026-08-14 裁决「都可以用」,从草案原判的反例翻转为正例(原判断依据的「晕中开不出」是一般 PvP 印象,被用户一手证词推翻)。寒冰屏障与圣盾术 flags 栏一模一样,都只有「No Client Fail While Stunned, Fleeing, Confused」;两条独立用户证词(642+45438)汇合到同一旗标上,说明它很可能就是真正的被控可用位,而不是仅抑制报错文案的无关位 —— 这是 Task 3 位搜索的重要先验(见文件头)。教练规范补充:代价太大,仅在别无选择时使用,不推荐作为常规挡控手段(用户 2026-08-14,归 Task 6 签字册)。",
     source:
       "用户 2026-08-14 裁决(都可以用;教练规范另记归 Task 6)+ wowhead.com/spell=45438 Flags 栏(与 642 同款「No Client Fail」旗标)",
   },

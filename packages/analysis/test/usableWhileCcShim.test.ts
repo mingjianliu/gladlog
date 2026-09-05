@@ -3,16 +3,18 @@ import { describe, expect, it } from "vitest";
 import { USABLE_WHILE_CC_GENERATED } from "../src/data/usableWhileCcGenerated";
 import {
   USABLE_WHILE_CC_CONDITIONAL,
+  USABLE_WHILE_CC_GAP_IDS,
   USABLE_WHILE_CC_SPELL_IDS,
   usableWhileStunned,
 } from "../src/utils/cooldowns";
 
 // Task 5 (2026-08-14): USABLE_WHILE_CC_SPELL_IDS stopped being a fully
 // hand-written 6-entry list and became a shim: the official generated
-// "stunned" table (USABLE_WHILE_CC_GENERATED.stunned, 468 ids from DB2
-// SpellMisc.Attributes) unioned with a small unconditional hand-written gap
-// layer for known-usable spells the generated table hasn't captured yet.
-// Style mirrors drCategories.ts (generated spread + hand gap + doc comments).
+// "stunned" table unioned with a hand-written gap layer.
+// 2026-09-04 (BACKLOG #41 (8)): the generated table now reads the NAMED bits
+// 163 ∪ 378; the gap layer's three ids are covered by 378 and the layer is
+// empty; Divine Shield 642 / Icebound Fortitude 48792 were re-ruled NOT
+// usable while stunned by the user.
 describe("USABLE_WHILE_CC_SPELL_IDS shim", () => {
   it("is a superset of the generated stunned table (union semantics)", () => {
     for (const id of USABLE_WHILE_CC_GENERATED.stunned) {
@@ -20,26 +22,33 @@ describe("USABLE_WHILE_CC_SPELL_IDS shim", () => {
     }
   });
 
-  it("contains the unconditional gap-layer entry: Divine Protection 498/403876 (wowhead flag + 748 corpus casts-in-stun + user's own-class confirmation, 2026-08-14)", () => {
-    expect(USABLE_WHILE_CC_SPELL_IDS.has("498")).toBe(true);
-    expect(USABLE_WHILE_CC_SPELL_IDS.has("403876")).toBe(true);
+  it("Divine Protection 498/403876 and Thunderstorm 51490 — the former hand gap layer — now come from the generated table (named bit 378), and the gap layer is empty", () => {
+    for (const id of ["498", "403876", "51490"]) {
+      expect(USABLE_WHILE_CC_GENERATED.stunned.has(id), id).toBe(true);
+      expect(USABLE_WHILE_CC_SPELL_IDS.has(id), id).toBe(true);
+    }
+    expect(USABLE_WHILE_CC_GAP_IDS.size).toBe(0);
   });
 
-  it("contains the unconditional gap-layer entry: Thunderstorm 51490 (wowhead flag on the base spell + 321 corpus casts-in-stun + negative-result gating-talent search, Task 6 2026-08-14 user sign-off)", () => {
-    expect(USABLE_WHILE_CC_SPELL_IDS.has("51490")).toBe(true);
-  });
-
-  // Old hand-written 6-entry list, per user's 2026-08-14 final ruling: 5 of 6
-  // are confirmed IN the generated 468 and must survive the shim unchanged.
+  // Old hand-written 6-entry list: three carry the named bit and stay in.
   it.each([
-    ["642", "Divine Shield"],
     ["33206", "Pain Suppression"],
     ["22812", "Barkskin"],
     ["47585", "Dispersion"],
-    ["48792", "Icebound Fortitude"],
   ])("keeps old member %s (%s) usable while stunned", (id) => {
     expect(USABLE_WHILE_CC_GENERATED.stunned.has(id), id).toBe(true);
     expect(USABLE_WHILE_CC_SPELL_IDS.has(id), id).toBe(true);
+  });
+
+  // User ruling 2026-09-04: Divine Shield / Icebound Fortitude carry no named
+  // stun bit (only the client-error-suppression flag 244) and show 1 / 0
+  // casts-in-stun in 1028 matches — NOT usable while stunned.
+  it.each([
+    ["642", "Divine Shield"],
+    ["48792", "Icebound Fortitude"],
+  ])("old member %s (%s) is NOT usable while stunned (re-ruled 2026-09-04)", (id) => {
+    expect(USABLE_WHILE_CC_GENERATED.stunned.has(id), id).toBe(false);
+    expect(USABLE_WHILE_CC_SPELL_IDS.has(id), id).toBe(false);
   });
 
   // User ruling 2026-08-14: 55233 Vampiric Blood is NOT usable while stunned
@@ -53,10 +62,10 @@ describe("USABLE_WHILE_CC_SPELL_IDS shim", () => {
 
 describe("usableWhileStunned", () => {
   it("returns true for an unconditional (generated) member, no talent context needed", () => {
-    expect(usableWhileStunned("642")).toBe(true);
+    expect(usableWhileStunned("33206")).toBe(true);
   });
 
-  it("returns true for an unconditional gap-layer member, no talent context needed", () => {
+  it("returns true for Divine Protection 498 (named bit 378), no talent context needed", () => {
     expect(usableWhileStunned("498")).toBe(true);
   });
 
@@ -65,7 +74,7 @@ describe("usableWhileStunned", () => {
     expect(usableWhileStunned("55233", new Set(["119996"]))).toBe(false);
   });
 
-  it("returns true for the unconditional gap-layer member 51490 (Thunderstorm), no talent context needed", () => {
+  it("returns true for Thunderstorm 51490 (named bit 378), no talent context needed", () => {
     expect(usableWhileStunned("51490")).toBe(true);
   });
 

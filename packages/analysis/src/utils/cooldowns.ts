@@ -222,9 +222,35 @@ const DEFENSIVE_CLASS_IDS = new Set<string>([
  *   Shim total: 470 → 471.
  */
 export const USABLE_WHILE_CC_GAP_IDS = new Set<string>([
-  "498",
-  "403876",
-  "51490",
+  // 2026-09-04 (BACKLOG #41 (8)): EMPTY. 498 / 403876 / 51490 are now covered
+  // by the named bit 378 "Allow While Stunned by Stun Mechanic" that the
+  // generator reads directly; the signed usable_while_cc_gap facts remain as
+  // the record and curatedFacts.test.ts now pins them INSIDE the generated
+  // set instead of inside this layer. Kept as an (empty) export so a future
+  // genuine gap has a place to live with the same wiring test.
+]);
+
+/**
+ * Hand gap layer for the FEARED dimension: break-out abilities the attribute
+ * system does not express — Will of the Forsaken removes fear and is
+ * castable while feared, but carries no 177 "Allow While Fleeing". Each entry
+ * needs a signed record in curatedAbilityFacts.ts (kind
+ * "usable_while_feared_gap"); genUsableWhileCc exempts the same ids from its
+ * anchor gate (ANCHOR_HAND_EXEMPTIONS). No pipeline consumer yet — the
+ * feared / confused dimensions exist as data since 2026-09-04, wiring them
+ * into an accusation is a value-gate question (BACKLOG #41 (8)).
+ */
+export const USABLE_WHILE_FEARED_GAP_IDS = new Set<string>(["7744"]);
+
+/** Usable while feared: named bit 177 over the observed corpus ∪ hand gap. */
+export const USABLE_WHILE_FEARED_SPELL_IDS = new Set<string>([
+  ...USABLE_WHILE_CC_GENERATED.feared,
+  ...USABLE_WHILE_FEARED_GAP_IDS,
+]);
+
+/** Usable while confused (disoriented): named bit 178 over the observed corpus. */
+export const USABLE_WHILE_CONFUSED_SPELL_IDS = new Set<string>([
+  ...USABLE_WHILE_CC_GENERATED.confused,
 ]);
 
 /**
@@ -232,13 +258,15 @@ export const USABLE_WHILE_CC_GAP_IDS = new Set<string>([
  * blaming players for "unused" defensives when they were locked out.
  *
  * Made official 2026-08-14 (Task 5): generated ∪ gap-layer union, same shape
- * as drCategories.ts. The previous fully hand-written 6-entry list is now
- * absorbed: 5 of 6 (642 Divine Shield, 33206 Pain Suppression, 22812
- * Barkskin, 47585 Dispersion, 48792 Icebound Fortitude) are confirmed IN the
- * generated 468-id "stunned" table. The 6th, 55233 Vampiric Blood, is
- * user-ruled NOT usable while stunned (2026-08-14: "都不行", corroborated by
- * 0 casts-in-stun in the corpus) — the old list's inclusion of it was wrong,
- * and that error is deliberately NOT carried into the gap layer.
+ * as drCategories.ts. 2026-09-04 (BACKLOG #41 (8)): the generated table now
+ * reads the NAMED bits 163 ∪ 378 instead of the searched 5#3 ∪ 10#13 — the
+ * latter's second bit was "Reset Cooldown on Encounter End" and had admitted
+ * 213 observed long cooldowns (Bloodlust, Tranquility, Rebirth, Innervate, Lay
+ * on Hands, …) that are not usable while stunned. Of the old hand list, 33206
+ * Pain Suppression / 22812 Barkskin / 47585 Dispersion stay in; 642 Divine
+ * Shield and 48792 Icebound Fortitude were re-ruled NOT usable while stunned
+ * by the user on 2026-09-04 (no named bit, 1 / 0 casts-in-stun in 1028
+ * matches); 55233 Vampiric Blood stays out (2026-08-14 "都不行").
  */
 export const USABLE_WHILE_CC_SPELL_IDS = new Set<string>([
   ...USABLE_WHILE_CC_GENERATED.stunned,

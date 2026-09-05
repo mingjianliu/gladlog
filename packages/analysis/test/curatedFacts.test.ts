@@ -1,18 +1,21 @@
 import { readdirSync, readFileSync, statSync } from "fs";
 import path from "path";
 import { beforeAll, describe, expect, it } from "vitest";
-import { ensureAnalysisData } from "../src/data/ensure";
 
 import {
   costNormPhrase,
   CURATED_ABILITY_FACTS,
   PROPOSED_FACTS,
 } from "../src/data/curatedAbilityFacts";
+import { ensureAnalysisData } from "../src/data/ensure";
 import {
   canHelpAnotherUnit,
   THROUGHPUT_EMPOWER_DEFENSIVE_IDS,
   USABLE_WHILE_CC_CONDITIONAL,
   USABLE_WHILE_CC_GAP_IDS,
+  USABLE_WHILE_CC_SPELL_IDS,
+  USABLE_WHILE_FEARED_GAP_IDS,
+  USABLE_WHILE_FEARED_SPELL_IDS,
 } from "../src/utils/cooldowns";
 
 // 官方技能事实(targeting / schools / abilityEffects)自 2026-08-22 起动态载入
@@ -84,34 +87,56 @@ describe("requiresTalent stays equal across curatedAbilityFacts.ts and cooldowns
 });
 
 /**
- * Cross-file equality: cooldowns.ts' USABLE_WHILE_CC_GAP_IDS and
- * curatedAbilityFacts.ts' "usable_while_cc_gap" entries are two independent
- * hard-coded copies of the same fact set (finding #2, 2026-08-14 final
- * review) — the sign-off book promises every gap-layer id has a signed
- * record (cooldowns.ts's own doc comment), but a bare set literal can drift
- * from that promise silently. Generic over the current entries, both
- * directions checked (same shape as the conditional-layer test above).
+ * Cross-file wiring for the usable-while-CC hand layers (finding #2,
+ * 2026-08-14 final review; reshaped 2026-09-04, BACKLOG #41 (8)): every id a
+ * hand gap layer carries must have a signed record, and every signed record
+ * must be honoured by the predicate consumers read. Since the generator reads
+ * the NAMED bits, the stunned gap layer is empty and its signed facts (498 /
+ * 403876 / 51490) are honoured by the GENERATED set instead — the test pins
+ * "signed ⇒ in USABLE_WHILE_CC_SPELL_IDS", not "signed ⇒ in the gap layer".
  */
-describe("USABLE_WHILE_CC_GAP_IDS stays inside the signed usable_while_cc_gap set (cooldowns.ts <-> curatedAbilityFacts.ts)", () => {
-  const gapCurated = CURATED_ABILITY_FACTS.filter(
+describe("usable-while-CC hand layers <-> signed facts (cooldowns.ts <-> curatedAbilityFacts.ts)", () => {
+  const stunGap = CURATED_ABILITY_FACTS.filter(
     (f) => f.kind === "usable_while_cc_gap",
   );
-  const gapCuratedIds = new Set(gapCurated.map((f) => f.id));
+  const stunGapIds = new Set(stunGap.map((f) => f.id));
+  const fearGap = CURATED_ABILITY_FACTS.filter(
+    (f) => f.kind === "usable_while_feared_gap",
+  );
+  const fearGapIds = new Set(fearGap.map((f) => f.id));
 
   it("every id in USABLE_WHILE_CC_GAP_IDS has a signed usable_while_cc_gap entry", () => {
     for (const id of USABLE_WHILE_CC_GAP_IDS) {
       expect(
-        gapCuratedIds.has(id),
+        stunGapIds.has(id),
         `${id} is in cooldowns.ts USABLE_WHILE_CC_GAP_IDS but not signed off`,
       ).toBe(true);
     }
   });
 
-  it("every signed usable_while_cc_gap entry is wired into USABLE_WHILE_CC_GAP_IDS (reverse direction)", () => {
-    for (const f of gapCurated) {
+  it("every signed usable_while_cc_gap entry is honoured by USABLE_WHILE_CC_SPELL_IDS (generated named bits ∪ gap layer)", () => {
+    for (const f of stunGap) {
       expect(
-        USABLE_WHILE_CC_GAP_IDS.has(f.id),
-        `${f.id} (${f.claim}) is signed off but not wired in cooldowns.ts`,
+        USABLE_WHILE_CC_SPELL_IDS.has(f.id),
+        `${f.id} (${f.claim}) is signed off but not usable-while-stunned in cooldowns.ts`,
+      ).toBe(true);
+    }
+  });
+
+  it("every id in USABLE_WHILE_FEARED_GAP_IDS has a signed usable_while_feared_gap entry", () => {
+    for (const id of USABLE_WHILE_FEARED_GAP_IDS) {
+      expect(
+        fearGapIds.has(id),
+        `${id} is in cooldowns.ts USABLE_WHILE_FEARED_GAP_IDS but not signed off`,
+      ).toBe(true);
+    }
+  });
+
+  it("every signed usable_while_feared_gap entry is honoured by USABLE_WHILE_FEARED_SPELL_IDS (generated named bit 177 ∪ gap layer)", () => {
+    for (const f of fearGap) {
+      expect(
+        USABLE_WHILE_FEARED_SPELL_IDS.has(f.id),
+        `${f.id} (${f.claim}) is signed off but not usable-while-feared in cooldowns.ts`,
       ).toBe(true);
     }
   });

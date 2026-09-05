@@ -233,9 +233,16 @@ export async function main(): Promise<void> {
       // feared/disorient/incapacitate lockouts by CC type instead (finding
       // #1, 2026-08-14 final review) rather than consulting this table. Only
       // stunned is counted here.
-      "usableWhileCcGenerated.ts": {
-        stunned: countQuotedIds("usableWhileCcGenerated.ts"),
-      },
+      // 2026-09-04: three dimensions from the NAMED SpellMisc bits (BACKLOG
+      // #41 (8)); counted per `<dim>: new Set([...])` block.
+      "usableWhileCcGenerated.ts": (() => {
+        const t = readFileSync(dataDir + "usableWhileCcGenerated.ts", "utf-8");
+        const count = (dim: string) => {
+          const m = t.match(new RegExp(`${dim}: new Set\\(\\s*(\\[[^\\]]*\\])`));
+          return m ? (JSON.parse(m[1]!) as string[]).length : 0;
+        };
+        return { stunned: count("stunned"), feared: count("feared"), confused: count("confused") };
+      })(),
       // BACKLOG #26 Task 4 (raw-streams plan): per-spell mana cost table
       // (genSpellManaCost.ts), scoped to observedSpellIdsGenerated's
       // mana-type (PowerType=0) spells. Entries with spec-conditional rows

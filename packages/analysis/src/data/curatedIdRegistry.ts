@@ -59,6 +59,7 @@ import {
   THROUGHPUT_EMPOWER_DEFENSIVE_IDS,
   USABLE_WHILE_CC_CONDITIONAL,
   USABLE_WHILE_CC_GAP_IDS,
+  USABLE_WHILE_FEARED_GAP_IDS,
 } from "../utils/cooldowns";
 import {
   EXTERNAL_DEFENSIVE_SPELLS,
@@ -237,8 +238,13 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   t("ADDITIONAL_OVERLAP_DEFENSIVE_IDS", "utils/cooldowns.ts", "cast", () =>
     set(ADDITIONAL_OVERLAP_DEFENSIVE_IDS),
   ),
+  // EMPTY since 2026-09-04 (its three ids are covered by the named bit 378);
+  // stays registered and is named in the test's DELIBERATELY_EMPTY list.
   t("USABLE_WHILE_CC_GAP_IDS", "utils/cooldowns.ts", "cast", () =>
     set(USABLE_WHILE_CC_GAP_IDS),
+  ),
+  t("USABLE_WHILE_FEARED_GAP_IDS", "utils/cooldowns.ts", "cast", () =>
+    set(USABLE_WHILE_FEARED_GAP_IDS),
   ),
   t("USABLE_WHILE_CC_CONDITIONAL", "utils/cooldowns.ts", "cast", () =>
     keys(USABLE_WHILE_CC_CONDITIONAL),

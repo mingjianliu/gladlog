@@ -206,15 +206,14 @@ npx tsx packages/analysis/scripts/datagen/genMitigation.ts
 #      the line — the manifest records artifacts, only this file drives regeneration.)
 #      Percentages PvP-scaled through lib/pvpMultiplier.ts too (Roar of Sacrifice 15 → 25, 百战之创 5 → 3).
 npx tsx packages/analysis/scripts/datagen/genTalentMitigation.ts
-# 6h. Usable while CC'd table (B1; SpellMisc.Attributes bitwise union search, anchored to usableWhileCcAnchors.ts;
-#     only stunned dimension converges to a unique bit combination; feared/confused are known gaps — see generated file header
-#     comments and task-3-report.md. 2026-08-14 correction: cooldowns.ts USABLE_WHILE_CC_SPELL_IDS
-#     has migrated since Task 5 to "stunned generated set ∪ unconditional manual gap layer"; the overall semantics are stunned-
-#     specific, no longer the old model of "handwritten layer backstopping feared/confused" — feared/confused currently have no
-#     ground-truth layer; consumers (wasLockedOutByStunOnly, etc.) handle each CC type separately: only query this table during pure stunned
-#     lockout windows; non-stun hard CCs (fear/disorient/incap) are unconditionally forgiven and must not be evaluated against
-#     the stunned table. Non-zero exit = stunned no longer converges; rerun anchoring/bit search from scratch,
-#     do not relax criteria to force table generation)
+# 6h. Usable while CC'd table (SpellMisc NAMED attribute bits since 2026-09-04, BACKLOG #41 (8): stunned = 163 ∪ 378,
+#     feared = 177, confused = 178 — names from SimulationCraft's sc_spell_info.cpp attribute table / TrinityCore
+#     SharedDefines.h; the 2026-08-14 bit SEARCH had picked 10#13 "Reset Cooldown on Encounter End" as the second stun
+#     bit and admitted 213 observed long cooldowns). usableWhileCcAnchors.ts is the verification gate: a non-null anchor
+#     that disagrees with the bits aborts the run — re-rule the anchor or the bit table, never relax the gate. Emits all
+#     three dimensions over the observed corpus; cooldowns.ts consumes stunned (USABLE_WHILE_CC_SPELL_IDS) and exposes
+#     feared / confused (no pipeline consumer yet — wiring them into an accusation is a value-gate question). Non-stun
+#     hard CC is still forgiven unconditionally by every consumer (wasLockedOutByStunOnly etc.).
 npx tsx packages/analysis/scripts/datagen/genUsableWhileCc.ts
 # 6i. Official targeting flags (GH #28; SpellEffect.ImplicitTarget over the mined universe —
 #      "does pressing this reach a friendly unit other than the caster". Consumed by

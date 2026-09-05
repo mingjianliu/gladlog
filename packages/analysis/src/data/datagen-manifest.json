@@ -1,6 +1,6 @@
 {
   "build": "12.1.0.69587",
-  "generatedAt": "2026-09-05T00:12:26.704Z",
+  "generatedAt": "2026-09-05T01:39:42.549Z",
   "artifacts": {
     "talentIdMap.json": {
       "specs": 40
@@ -98,7 +98,9 @@
       "producer": "packages/eval/scripts/burstWindowScan.ts emit-table"
     },
     "usableWhileCcGenerated.ts": {
-      "stunned": 642
+      "stunned": 437,
+      "feared": 403,
+      "confused": 405
     },
     "spellManaCostGenerated.json": {
       "entries": 344,

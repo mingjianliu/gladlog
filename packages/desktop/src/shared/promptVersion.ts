@@ -362,4 +362,10 @@
 //  multiplied by SpellEffect.PvpMultiplier (Divine Protection 20 → 35 %,
 //  AMZ 15 → 30 %, PW:Barrier 20 → 40 %, …); (3) SimC hotfix overlay. One
 //  bump for the whole batch.
-export const PROMPT_VERSION = 54;
+//  v55 (2026-09-04, BACKLOG #41 (8), user rulings): usable-while-stunned table
+//  reads the NAMED SpellMisc bits (163 ∪ 378) instead of the searched
+//  5#3 ∪ 10#13 — 213 observed long cooldowns (Bloodlust, Tranquility, Lay on
+//  Hands, …) stop being "usable while stunned"; Divine Shield / Ice Block /
+//  Icebound Fortitude re-ruled not usable. [RES] locked-out CD lists, the
+//  death candidates' usable_in_cc exemption and kill-window tiering all move.
+export const PROMPT_VERSION = 55;

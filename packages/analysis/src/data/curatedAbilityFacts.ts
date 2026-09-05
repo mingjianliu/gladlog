@@ -351,6 +351,18 @@ export const CURATED_ABILITY_FACTS: ICuratedAbilityFact[] = [
     approved: "2026-08-14 user",
   },
   {
+    id: "7744",
+    claim:
+      "被遗忘者的意志(Will of the Forsaken,亡灵种族技能):恐惧中可施放(解控用途)——" +
+      "但 SpellMisc 命名位 177「Allow While Fleeing」为否,解控类种族技能的可用性不走属性位," +
+      "所以进 cooldowns.ts USABLE_WHILE_FEARED_GAP_IDS 手工层,并作为 genUsableWhileCc 锚点门的豁免",
+    kind: "usable_while_feared_gap",
+    source:
+      "用户 2026-08-14 裁决 feared=true(usableWhileCcAnchors.ts 7744 条,玩家共识/技能设计意图)+ " +
+      "2026-09-04 命名位核对(SimC sc_spell_info.cpp 177 / TrinityCore SPELL_ATTR5_ALLOW_WHILE_FLEEING:未置位)。",
+    approved: "2026-08-14 user",
+  },
+  {
     id: "22812",
     claim: "树皮术(Barkskin,德鲁伊)可在恐惧类硬控(disorient 类 CC)中施放",
     kind: "usable_while_feared_gap",

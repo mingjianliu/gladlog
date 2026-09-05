@@ -14,6 +14,10 @@ const DELIBERATELY_EMPTY: Record<string, string> = {
   // 是根本偷不掉(归档 400 文件:上身 440 次、被偷 0 次),连同上游白名单一起摘掉,
   // 于是这张豁免表空了。下次 DB2 刷新出新的「查不到 dispelType」条目时会重新长出来。
   PURGE_WHITELIST_DATA_BLOCKED: "2026-08-23 燃烧摘除后清空",
+  // 2026-09-04 BACKLOG #41 (8):生成器改读命名位后,378「Allow While Stunned by Stun
+  // Mechanic」直接覆盖了这层的三条(498 / 403876 / 51490),手工层清空;下次真出现
+  // 官方位表达不了的晕中可用技能时会重新长出来(签字记录仍在 curatedAbilityFacts)。
+  USABLE_WHILE_CC_GAP_IDS: "2026-09-04 命名位 378 覆盖后清空",
 };
 
 describe("CURATED_ID_TABLES", () => {
