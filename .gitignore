@@ -13,3 +13,7 @@ tmp/
 # 带出他人 name/rating 的 manifest.json + 原始 log。
 **/downloads/
 .worktrees
+
+# python bytecode (tools/ is outside the npm workspace)
+__pycache__/
+*.pyc
