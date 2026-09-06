@@ -14,3 +14,5 @@ Runbook：`docs/commands/ingest-coach-corpus.md`。结论与逐环追踪示例�
 | 5 | `aggregate.py --line vod\|course` · `compare.py` | 报告；簇级百分比带 ±10pp 噪声 |
 
 步骤 2 的解释器：`~/.local/pipx/venvs/claude-real-video/bin/python`。其余都用 `python3`。
+
+`translations_zh/`（`translate_zh.py` 写、只有 `build_listing.py` 读）是「教练规则全录」页面的**展示用中文旁车**。**语料本体保持英文** —— AI 读的是本体。

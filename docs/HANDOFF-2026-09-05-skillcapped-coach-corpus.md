@@ -40,6 +40,7 @@
 | 教程转写 | `tmp/skillcapped-vod/transcripts_courses/<uuid>.json` | 155 条目 / **154 唯一视频**(`5jjhzdfxn4` 被两门课共用)/ 10.1 h,**含原话,不进仓库** |
 | 教程规则 v1(Opus-high;4 个类型仍是薄 gloss、三分边界松) | `tmp/skillcapped-vod/rules_opus/` | 1914 条规则 |
 | **教程规则 v2(只重跑映射:真谓词 + 派生边界,以此为准)** | `tmp/skillcapped-vod/rules_opus_v2/` | 同 1914 条,`*_v1` 字段保留 |
+| 中文旁车(**仅供「教练规则全录」页面渲染;AI 读数据时忽略,数据本体全为英文**) | `tmp/skillcapped-vod/translations_zh/<uuid>.json` | 与 v2 文件一一对应,只含译文 |
 | 教程验证课(默认模型、旧三分定义,仅历史参照) | `tmp/skillcapped-vod/rules/` | 9 课 95 条 |
 | **类型真实谓词(由源码生成,映射器唯一输入)** | `tools/coach-corpus/type_definitions.json` | 31 条 = 26 来自 `buildFindingsPrompt.ts` + 5 手写(出处见生成器 `HAND`) |
 | 已发布的可视化报告(第二版)         | https://claude.ai/code/artifact/12c050e4-db37-4e89-8628-9af97a07ec25 (本地副本 `evidence/coach-corpus-v2.html`) | —                                         |

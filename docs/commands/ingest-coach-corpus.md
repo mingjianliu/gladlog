@@ -64,6 +64,8 @@ python3 tools/coach-corpus/compare.py  --line course --a rules_opus --b rules_op
 ```
 读数规矩：语料级合计站得住；**簇级百分比带 ±10pp 跑间噪声**（n≈25 时二项 SD 即 10pp）。`compare.py` 比的是形状不是准确度 —— 没有规则级 ground truth；两臂 prompt 版本不同时比较被混淆，写结论要注明。
 
+可选：`python3 tools/coach-corpus/translate_zh.py --shard i n` 生成中文旁车 `translations_zh/`，`python3 tools/coach-corpus/build_listing.py` 重建「教练规则全录」页面（默认中文、可切英文）。**旁车只供页面；语料本体保持英文，AI 读本体。**
+
 ## 已知坑（都踩过）
 
 - **视频时间 ≠ 回合时间。** 教练会暂停，105 秒视频只走了 54 秒回合。读画面时逐帧读 HUD 时钟；更稳的是锚定 HUD 状态 + 日志第 N 个 `ARENA_MATCH_START`。

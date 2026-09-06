@@ -17,3 +17,5 @@ Runbook: `docs/commands/ingest-coach-corpus.md`. Findings and the traced example
 | 5 | `aggregate.py --line vod\|course` · `compare.py` | reports; cluster % carry ±10pp noise |
 
 Interpreter for step 2: `~/.local/pipx/venvs/claude-real-video/bin/python`. Everything else runs on `python3`.
+
+`translations_zh/` (written by `translate_zh.py`, read only by `build_listing.py`) is a display-only Chinese sidecar for the listing page. **The corpus itself stays English** — that is what an agent should read.
