@@ -230,6 +230,19 @@ export const CC_DURATION_TALENT_MODIFIERS: Record<
  * reaches `extractOwnerCDBuffExpiry` today: they are exact facts waiting for
  * their consumers to become caster-aware, not a live output change.
  *
+ * RANKS ARE NOT UNIFORM IN DB2, AND THE TABLE CANNOT ASSUME THEY ARE.
+ * `addSeconds`/`pct` are stated PER RANK and multiplied by `talentRankOf`,
+ * which is right for Timeless Magic (the corpus separates Time Dilation at
+ * 0 / 1 / 2 ranks: 8.0 / 9.0 / 10.5 s) and for Pain and Suffering — and WRONG
+ * for Divine Wrath, Extended Flight and Rampaging Berserker, whose DB2 value
+ * turns out to be the TOTAL at max rank (2 ranks buy +4 s, +4 s and +50 %
+ * respectively, not double that). All three were registered per-rank on
+ * 2026-09-07 and were wrong by a factor of two within the hour, caught only by
+ * going back and reading the ranks out of the loadouts instead of inferring
+ * them from the arithmetic. So: READ THE RANK FROM COMBATANT_INFO, never
+ * infer it, and record the observed rank in the note. `buffDuration.test.ts`
+ * pins every multi-rank entry at the rank the corpus actually shows.
+ *
  * TWO SEARCH GAPS, both found by a user question on 2026-09-07 ("did you
  * actually read all the talents?") — the sweep above answers "which talent
  * LENGTHENS this spell", and that question is too narrow twice over:
@@ -364,8 +377,8 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
       talentSpellId: "406872",
       specs: ["70"], // Paladin_Retribution
       untalentedBaseSeconds: 20,
-      addSeconds: 4,
-      note: "Divine Wrath — DB2 aura 107 +4000 ms per rank, Paladin/Retribution (maxRanks 2), mask covers the spell; corpus 72 of 74 caster-cells at 24.0 s hold it at rank 1 vs 0 % of the Holy 30 s group; 20 + 4 = 24",
+      addSeconds: 2,
+      note: "Divine Wrath — DB2 aura 107 +4000 ms per rank, Paladin/Retribution (maxRanks 2), mask covers the spell; corpus 72 of 74 caster-cells at 24.0 s hold it AT RANK 2 vs 0 % of the Holy 30 s group, so two ranks buy +4 s in TOTAL (20 + 2×2 = 24). DB2 states 4000 ms and it is NOT per rank here — unlike Timeless Magic, which the corpus separates cleanly at 0 / 1 / 2 ranks (8.0 / 9.0 / 10.5). Rank 1 is unobserved and priced at +2 s",
     },
   ],
   "216331": [
@@ -381,17 +394,17 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
     {
       talentSpellId: "375517",
       untalentedBaseSeconds: 6,
-      addSeconds: 4,
-      note: "Extended Flight — DB2 aura 107 +4000 ms per rank, Evoker class tree (maxRanks 2), mask covers the spell; corpus 219 caster-cells at 10.0 s hold it 100 % (6 + 4 = 10, i.e. everyone buys one rank) with no untalented control group at all — the same shape as Improved Barkskin. Open: 6 Augmentation cells sit at 10.5 s.",
+      addSeconds: 2,
+      note: "Extended Flight — DB2 aura 107 +4000 ms per rank, Evoker class tree (maxRanks 2), mask covers the spell; corpus 219 caster-cells at 10.0 s hold it AT RANK 2, so two ranks buy +4 s in TOTAL (6 + 2×2 = 10); DB2 states 4000 ms and it is not per rank here either. No untalented control group at all — the same shape as Improved Barkskin. Open: 6 Augmentation cells sit at 10.5 s.",
     },
   ],
   "1719": [
     {
       talentSpellId: "1269310",
-      specs: ["72"],
+      specs: ["72"], // Warrior_Fury
       untalentedBaseSeconds: 12,
-      pct: 50,
-      note: "Rampaging Berserker — DB2 aura 108 +50 %, Warrior/Fury spec tree (maxRanks 1), mask covers the spell; corpus 31 of 31 caster-cells at 18.0 s hold it; 12 × 1.5 = 18. NOTE the base: DB2 says 12 while the hand override said 16, which is neither the base nor the talented value — running the arithmetic against that override is what made this look unexplainable for two rounds. The override now carries the talented 18.",
+      pct: 25,
+      note: "Rampaging Berserker — DB2 aura 108 +50 %, Warrior/Fury spec tree (maxRanks 1), mask covers the spell; corpus 31 of 31 caster-cells at 18.0 s hold it AT RANK 2, so two ranks buy +50 % in TOTAL (12 × (1 + 0.25×2) = 18); DB2 states 50 and it is not per rank here. NOTE the base: DB2 says 12 while the hand override said 16, which is neither the base nor the talented value — running the arithmetic against that override is what made this look unexplainable for two rounds. The override now carries the talented 18.",
     },
   ],
   "264735": [

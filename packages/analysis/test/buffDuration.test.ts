@@ -64,7 +64,7 @@ describe("buffFullDurationForCaster — 天赋条件的增益时长", () => {
       "22812": 1, // Improved Barkskin, maxRanks 1
       "47788": 1, // Foreseen Circumstances, maxRanks 1
       "357170": 2, // Timeless Magic, maxRanks 2 —— 语料 143/155 格是 2 级
-      "1719": 1, // Rampaging Berserker —— 语料 31/31 格持有,典型值 12×1.5=18
+      "1719": 2, // Rampaging Berserker —— 语料 31/31 格是 2 级,12×(1+0.25×2)=18
     };
     for (const [spellId, mods] of Object.entries(
       BUFF_DURATION_TALENT_MODIFIERS,
@@ -99,9 +99,9 @@ describe("buffFullDurationForCaster — 天赋条件的增益时长", () => {
       spec: CombatUnitSpec.Warrior_Fury,
       info: { talents: [INVIGORATING_FURY], pvpTalents: [] },
     });
-    expect(buffFullDurationForCaster(ENRAGED_REGENERATION, warrior)).toBeCloseTo(
-      11,
-    );
+    expect(
+      buffFullDurationForCaster(ENRAGED_REGENERATION, warrior),
+    ).toBeCloseTo(11);
   });
 
   it("按级数生效:时间膨胀 0/1/2 级 = 8 / 9.2 / 10.4s", () => {
@@ -109,7 +109,10 @@ describe("buffFullDurationForCaster — 天赋条件的增益时长", () => {
       spec: CombatUnitSpec.Evoker_Preservation,
       // 一个真实可解析、但不是 Timeless Magic 的节点(回响)——空数组会被判成
       // 「没数据」而不是「没点」,那是 unknown 不是 no。
-      info: { talents: [{ id1: 93339, id2: 115653, count: 1 }], pvpTalents: [] },
+      info: {
+        talents: [{ id1: 93339, id2: 115653, count: 1 }],
+        pvpTalents: [],
+      },
     });
     // 已知施法者且确认没点 → 用无天赋基础值 8,而不是「典型值」10.4
     expect(buffFullDurationForCaster(TIME_DILATION, noTalent)).toBe(8);
@@ -154,7 +157,8 @@ describe("buffFullDurationForCaster — 天赋条件的增益时长", () => {
     expect(talentOwnershipOf(holy, "53376")).toBe("yes");
     expect(buffFullDurationForCaster("31884", holy)).toBeCloseTo(30);
     expect(buffFullDurationForCaster("216331", holy)).toBeCloseTo(22.5);
-    const DIVINE_WRATH = { id1: 93160, id2: 115439, count: 1 };
+    // 语料里惩戒骑普遍是 2 级(72/74 格),两级共 +4s
+    const DIVINE_WRATH = { id1: 93160, id2: 115439, count: 2 };
     const ret = makeUnit("r1", {
       spec: CombatUnitSpec.Paladin_Retribution,
       info: { talents: [DIVINE_WRATH], pvpTalents: [] },
@@ -162,6 +166,75 @@ describe("buffFullDurationForCaster — 天赋条件的增益时长", () => {
     // 惩戒:神骑那条被专精门挡掉,不会短路
     expect(talentOwnershipOf(ret, "406872")).toBe("yes");
     expect(buffFullDurationForCaster("31884", ret)).toBeCloseTo(24);
+  });
+
+  it("多级天赋:按**语料实际观测到的级数**复现观测时长", () => {
+    // DB2 的多级语义不统一,这一条是唯一的护栏:Timeless Magic 确实是每级
+    // (语料 0/1/2 级三档 8.0 / 9.0 / 10.5 都有样本),而 Divine Wrath /
+    // Extended Flight / Rampaging Berserker 的 DB2 值是**满级总值**,按每级
+    // 乘会多算一倍。下表的级数与秒数全部直接来自 227 文件语料的分组统计。
+    const CASES: Array<{
+      spellId: string;
+      spec: CombatUnitSpec;
+      talent: { id1: number; id2: number; count: number };
+      seconds: number;
+      cells: number;
+    }> = [
+      // Timeless Magic —— 唯一被语料证实「确实按级数」的一条
+      {
+        spellId: "357170",
+        spec: CombatUnitSpec.Evoker_Preservation,
+        talent: { id1: 93263, id2: 115568, count: 1 },
+        seconds: 9.2,
+        cells: 5,
+      },
+      {
+        spellId: "357170",
+        spec: CombatUnitSpec.Evoker_Preservation,
+        talent: { id1: 93263, id2: 115568, count: 2 },
+        seconds: 10.4,
+        cells: 143,
+      },
+      // Pain and Suffering —— 2 级共 +4s
+      {
+        spellId: "589",
+        spec: CombatUnitSpec.Priest_Discipline,
+        talent: { id1: 82578, id2: 103703, count: 2 },
+        seconds: 20,
+        cells: 57,
+      },
+      // Extended Flight —— 2 级共 +4s(不是每级 +4)
+      {
+        spellId: "358267",
+        spec: CombatUnitSpec.Evoker_Preservation,
+        talent: { id1: 93349, id2: 115664, count: 2 },
+        seconds: 10,
+        cells: 219,
+      },
+      // Divine Wrath —— 2 级共 +4s
+      {
+        spellId: "31884",
+        spec: CombatUnitSpec.Paladin_Retribution,
+        talent: { id1: 93160, id2: 115439, count: 2 },
+        seconds: 24,
+        cells: 72,
+      },
+      // Rampaging Berserker —— 2 级共 +50%
+      {
+        spellId: "1719",
+        spec: CombatUnitSpec.Warrior_Fury,
+        talent: { id1: 110412, id2: 137002, count: 2 },
+        seconds: 18,
+        cells: 31,
+      },
+    ];
+    for (const c of CASES) {
+      const u = makeUnit(`u-${c.spellId}-${c.talent.count}`, {
+        spec: c.spec,
+        info: { talents: [c.talent], pvpTalents: [] },
+      });
+      expect(buffFullDurationForCaster(c.spellId, u)).toBeCloseTo(c.seconds, 1);
+    }
   });
 
   it("读不到天赋(unknown)绝不加长 —— 与 CC 侧同一条纪律", () => {
@@ -177,7 +250,10 @@ describe("buffFullDurationForCaster — 天赋条件的增益时长", () => {
       spec: CombatUnitSpec.Druid_Restoration,
       // a real, resolvable Restoration Druid node (Rejuvenation) that is NOT
       // Improved Barkskin — so the loadout parses and the verdict is a real "no"
-      info: { talents: [{ id1: 82217, id2: 103295, count: 1 }], pvpTalents: [] },
+      info: {
+        talents: [{ id1: 82217, id2: 103295, count: 1 }],
+        pvpTalents: [],
+      },
     });
     expect(talentOwnershipOf(definitelyNot, "327993")).toBe("no");
     expect(buffFullDurationForCaster(BARKSKIN, definitelyNot)).toBe(8);
