@@ -77,6 +77,14 @@ interface SpecRow {
   unknown: number;
   idle: number;
   acted: number;
+  /** `acted` renders "waited out the lockout", but `acted` is the FALLBACK
+   * bucket: `switched` needs BOTH the interrupted spell's school mask AND a
+   * cast's mask to be known and disjoint, so any unknown silently lands
+   * here. Only `actedSameSchool` is an actual observation of "same school";
+   * the other two are unknowns being rendered as a claim. */
+  actedLockedMaskUnknown: number;
+  actedCastMasksUnknown: number;
+  actedSameSchool: number;
 }
 
 export async function collect(limit: number): Promise<{
@@ -125,7 +133,18 @@ export async function collect(limit: number): Promise<{
     const spec = specToString(owner.spec) || String(owner.spec ?? "Unknown");
     const row =
       bySpec.get(spec) ??
-      { switched: 0, hard: 0, empowered: 0, instant: 0, unknown: 0, idle: 0, acted: 0 };
+      {
+        switched: 0,
+        hard: 0,
+        empowered: 0,
+        instant: 0,
+        unknown: 0,
+        idle: 0,
+        acted: 0,
+        actedLockedMaskUnknown: 0,
+        actedCastMasksUnknown: 0,
+        actedSameSchool: 0,
+      };
 
     const startMs = legacy.startTime;
     // castStartEvents is OPTIONAL — absent on old archives. Absence is
@@ -160,7 +179,19 @@ export async function collect(limit: number): Promise<{
 
     for (const inst of insts) {
       if (inst.postKick === "idle") { row.idle++; continue; }
-      if (inst.postKick === "acted") { row.acted++; continue; }
+      if (inst.postKick === "acted") {
+        row.acted++;
+        // Why did it land in the fallback bucket?
+        const lm = spellSchoolMask(inst.interruptedSpellId);
+        const inWindow = casts.filter(
+          (c) => c.t > inst.atSeconds && c.t <= inst.atSeconds + WINDOW_S,
+        );
+        if (lm === undefined) row.actedLockedMaskUnknown++;
+        else if (inWindow.every((c) => spellSchoolMask(c.spellId) === undefined))
+          row.actedCastMasksUnknown++;
+        else row.actedSameSchool++;
+        continue;
+      }
       row.switched++;
       // Which cast made production say "switched"? Production's own rule,
       // production's own mask function — re-asked here only to NAME the cast,
@@ -355,9 +386,13 @@ async function main(): Promise<void> {
   );
 
   let S = 0, H = 0, E = 0, I = 0, U = 0, ID = 0, AC = 0;
+  let ALU = 0, ACU = 0, ASS = 0;
   for (const v of r.bySpec.values()) {
     S += v.switched; H += v.hard; E += v.empowered; I += v.instant;
     U += v.unknown; ID += v.idle; AC += v.acted;
+    ALU += v.actedLockedMaskUnknown;
+    ACU += v.actedCastMasksUnknown;
+    ASS += v.actedSameSchool;
   }
   const known = H + E + I;
   console.log(`\nTOTAL  idle ${ID}  acted ${AC}  switched ${S}`);
@@ -366,6 +401,20 @@ async function main(): Promise<void> {
   );
   console.log(
     `  among the ${known} classifiable: **${pct(I, known)} were an INSTANT**; ${pct(H + E, known)} a real held/hard cast`,
+  );
+
+  console.log(
+    `\nthe "acted" bucket — it renders "waited out the lockout", but it is the FALLBACK:`,
+  );
+  console.log(`  total acted                              ${AC}`);
+  console.log(
+    `    interrupted spell's school mask UNKNOWN ${ALU}  (${pct(ALU, AC)})  <- every cast falls here regardless`,
+  );
+  console.log(
+    `    all casts' masks UNKNOWN               ${ACU}  (${pct(ACU, AC)})`,
+  );
+  console.log(
+    `    genuinely SAME school (a real observation) ${ASS}  (${pct(ASS, AC)})`,
   );
 
   console.log(`\nby owner spec (specs with >= 5 switched):`);
