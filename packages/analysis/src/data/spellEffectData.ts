@@ -286,6 +286,11 @@ export const CC_DURATION_TALENT_MODIFIERS: Record<
  *    Tea −50 %) and both talents were held by ~100 % of the group, but
  *    neither modifier's class mask covers the spell. Rejected BY the mask
  *    check, kept here as the worked example of why it exists.
+ * Everything still open from this round is tracked in GH #65 (empower-scaled
+ * durations, Marksmanship's Survival of the Fittest, Shadow Blades, the 34
+ * weak-evidence ids, and the GAP list's shorter-direction cases).
+ *
+ * NOT registered, continued:
  *  · The other 76 of the 88 durations that disagree with the corpus: no
  *    talent with a SPELLMOD_DURATION row reconciles them at all (Rip,
  *    Rejuvenation, Hover, Divine Steed, Avenging Crusader, Recklessness …).

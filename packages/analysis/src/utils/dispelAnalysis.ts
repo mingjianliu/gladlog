@@ -1,4 +1,3 @@
-import { buffFullDurationForCaster } from "./buffDuration";
 import { CombatUnitSpec, ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import { dispelVerdictOf } from "../data/dispelVerdicts";
@@ -637,8 +636,6 @@ export interface IMissedPurgeWindow {
   timeSeconds: number;
   /** How long the buff sat uncontested; capped at match duration if never removed */
   durationSeconds: number;
-  /** How long the buff was expected to last per spellEffectData; undefined if no duration data */
-  expectedBuffDurationSeconds?: number;
   enemyName: string;
   enemySpec: string;
   spellName: string;
@@ -1965,14 +1962,6 @@ export function reconstructDispelSummary(
               );
             if (!allPurgersBlocked) {
               // Expected buff duration from spell data
-              // 单一谓词(2026-09-06):这里按 spellId 聚合,拿不到施法者,
-              // 所以传 undefined —— 与直读 spellEffectData 同值,但覆盖层和
-              // 以后的时长订正会自动到达。
-              const expectedBuffDurationSeconds = buffFullDurationForCaster(
-                spellId,
-                undefined,
-              );
-
               // Purge CD state: look back at ourPurges for each eligible purger.
               // Only meaningful for CD-gated purgers (Evoker 10s, DH/Warlock/Priest 8s).
               // Free-purge specs (Shaman, Mage) never have their CD "burned" — skip them.
@@ -2037,7 +2026,6 @@ export function reconstructDispelSummary(
               missedPurgeWindows.push({
                 timeSeconds: applyRelative,
                 durationSeconds,
-                expectedBuffDurationSeconds,
                 enemyName: enemy.name,
                 enemySpec: specToString(enemy.spec),
                 spellName,
