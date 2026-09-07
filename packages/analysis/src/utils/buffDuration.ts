@@ -4,7 +4,7 @@ import {
   BUFF_DURATION_TALENT_MODIFIERS,
   spellEffectData,
 } from "../data/spellEffectData";
-import { talentRankOf } from "./talentOwnership";
+import { talentOwnershipOf, talentRankOf } from "./talentOwnership";
 
 /**
  * Hand corrections to `spellEffectData[id].durationSeconds` for buffs whose DB2
@@ -40,18 +40,35 @@ export function buffFullDurationForCaster(
   spellId: string,
   caster: Pick<ICombatUnit, "spec" | "info" | "spellCastEvents"> | undefined,
 ): number | undefined {
-  const base =
+  const noCasterValue =
     SPELL_DURATION_OVERRIDES[spellId] ??
     spellEffectData[spellId]?.durationSeconds;
-  if (base === undefined || !caster) return base;
+  const mods = BUFF_DURATION_TALENT_MODIFIERS[spellId];
+  if (!caster || mods === undefined || mods.length === 0) return noCasterValue;
 
-  let flat = 0;
+  // With a caster we can price the talents exactly, so we start from the
+  // UNTALENTED base rather than from `noCasterValue` — the latter already
+  // carries the typical caster's talent (Barkskin 12, not 8) and would double
+  // it.
+  //
+  // Three-state, and note the asymmetry with the CC side: there, "unknown"
+  // means "do not lengthen", because the base IS the official duration and
+  // lengthening is the claim needing evidence. Here the no-caster value is
+  // ALREADY the talented one, so falling back to the untalented base on
+  // unknown would be an equally unevidenced claim in the other direction —
+  // and a worse one, since ~100 % of observed casters hold these talents. So:
+  // a definite "no" prices the base; anything we cannot read (no
+  // COMBATANT_INFO, an unresolvable loadout, or a "yes" that carries no rank —
+  // cast evidence / PvP slot / baseline) falls back to the typical value,
+  // exactly what this call site got before the talent layer existed.
+  let seconds = mods[0]!.untalentedBaseSeconds;
   let mult = 1;
-  for (const m of BUFF_DURATION_TALENT_MODIFIERS[spellId] ?? []) {
+  for (const m of mods) {
+    if (talentOwnershipOf(caster, m.talentSpellId) === "no") continue;
     const rank = talentRankOf(caster, m.talentSpellId);
-    if (rank <= 0) continue;
-    if (m.addSeconds !== undefined) flat += m.addSeconds * rank;
+    if (rank <= 0) return noCasterValue;
+    if (m.addSeconds !== undefined) seconds += m.addSeconds * rank;
     if (m.pct !== undefined) mult += (m.pct / 100) * rank;
   }
-  return (base + flat) * mult;
+  return seconds * mult;
 }

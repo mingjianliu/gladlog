@@ -227,6 +227,17 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
   string,
   ReadonlyArray<{
     talentSpellId: string;
+    /**
+     * The buff's duration with NONE of these talents — the DB2 value, which is
+     * NOT always what `spellEffectData[id].durationSeconds` answers. That
+     * accessor has no caster and therefore cannot know the rank, so for these
+     * ids it deliberately keeps the value a TYPICAL caster gets (Barkskin 12,
+     * not 8: ~100 % of the corpus's 280 caster-cells hold Improved Barkskin,
+     * so the base would be wrong far more often than the talented value is).
+     * The talent layer must start from this number instead, or it would add
+     * the talent a second time. Pinned by `test/buffDuration.test.ts`.
+     */
+    untalentedBaseSeconds: number;
     /** Seconds added per rank (DB2 aura 107, EffectBasePointsF in ms). */
     addSeconds?: number;
     /** Percent added per rank (DB2 aura 108). Applied AFTER `addSeconds`. */
@@ -237,6 +248,7 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
   "22812": [
     {
       talentSpellId: "327993",
+      untalentedBaseSeconds: 8,
       addSeconds: 4,
       note: "Improved Barkskin — DB2 aura 107 +4000 ms, Druid class tree (all 4 specs), maxRanks 1; corpus 12.0 s in 278 caster-cells (Resto 104 / Feral 91 / Balance 83) holding it 100 % vs 0 % of the 2 cells at 8.0 s; 8 + 4 = 12",
     },
@@ -244,6 +256,7 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
   "47788": [
     {
       talentSpellId: "440738",
+      untalentedBaseSeconds: 10,
       addSeconds: 2,
       note: "Foreseen Circumstances — DB2 aura 107 +2000 ms, Priest HERO tree (Discipline + Holy), maxRanks 1; corpus 12.0 s in 141 caster-cells (Holy 138 / Disc 3) holding it 99 % vs 0 % of the 1 cell at 10.0 s; 10 + 2 = 12",
     },
@@ -251,6 +264,7 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
   "184364": [
     {
       talentSpellId: "383468",
+      untalentedBaseSeconds: 8,
       addSeconds: 3,
       note: "Invigorating Fury — DB2 aura 107 +3000 ms, Fury spec tree, maxRanks 1; corpus 11.0 s in 27 caster-cells holding it 100 % vs 0 % of the 14 cells at 8.0 s; 8 + 3 = 11",
     },
@@ -258,6 +272,7 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
   "357170": [
     {
       talentSpellId: "376240",
+      untalentedBaseSeconds: 8,
       pct: 15,
       note: "Timeless Magic — DB2 aura 108 +15 % PER RANK, Preservation spec tree, maxRanks 2; corpus shows all three tiers of Time Dilation: 8.0 s × 7 cells (0 ranks, talent held by 0 %), 9.0 s × 5 (rank 1 → 8 × 1.15 = 9.2), 10.5 s × 143 (rank 2 → 8 × 1.30 = 10.4, talent held by 100 %)",
     },

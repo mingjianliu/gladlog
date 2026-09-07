@@ -22,6 +22,7 @@ import spellIdListsData from "../data/spellIdLists";
 import { reachesAlly } from "../data/spellTargeting";
 import { SpellTag } from "../data/spellTypes";
 import { USABLE_WHILE_CC_GENERATED } from "../data/usableWhileCcGenerated";
+import { buffFullDurationForCaster } from "./buffDuration";
 import { binarySearchClosest } from "./binarySearch";
 import { COPY_CAST_IDS } from "./castPress";
 import { incomingPressureEvents } from "./incomingPressure";
@@ -2407,9 +2408,15 @@ export function detectOverlappedDefensives(
     for (let j = i + 1; j < casts.length; j++) {
       const second = casts[j];
       const gapSeconds = second.timeSeconds - first.timeSeconds;
+      // Caster-aware (2026-09-06): a defensive the caster's talents lengthen
+      // (Barkskin 8 → 12 with Improved Barkskin) overlaps for longer than the
+      // table alone says. `buffFullDurationForCaster` answers the table value
+      // when the loadout is unreadable, so this cannot get worse than before.
       const firstDuration =
-        spellEffectData[first.spellId]?.durationSeconds ||
-        OVERLAP_ASSUME_DURATION_S;
+        buffFullDurationForCaster(
+          first.spellId,
+          unitMap.get(first.casterUnitId),
+        ) || OVERLAP_ASSUME_DURATION_S;
       const maxGap = firstDuration - MIN_SIMULTANEOUS_SECONDS;
       if (gapSeconds > maxGap) break;
       if (first.targetUnitId !== second.targetUnitId) continue;

@@ -35,7 +35,7 @@ export const SPELL_EFFECT_OVERRIDES: Record<string, IMinedSpell> =
       e("31224", "Cloak of Shadows", 120, 5),
       e("5277", "Evasion", 120, 10),
       e("33206", "Pain Suppression", 180, 8),
-      e("47788", "Guardian Spirit", 180, 10), // 2026-09-06: back to the DB2 base — the 12 s came from Foreseen Circumstances (+2 s, Priest hero tree), now applied per-caster by BUFF_DURATION_TALENT_MODIFIERS
+      e("47788", "Guardian Spirit", 180, 12), // 12 = 10 (DB2) + Foreseen Circumstances, held by 99 % of casters — see BUFF_DURATION_TALENT_MODIFIERS
       // GH #34 ③ (2026-08-29): official read — the cast spell 97462 has DurationIndex 0 in DB2,
       // the buff 97463 is SpellDuration 1 = 10000 ms; without this entry the kill-window
       // builder fell back to DEFAULT_BUFF_DURATION_S = 8 for every Rallying Cry (2 s short).
@@ -44,7 +44,7 @@ export const SPELL_EFFECT_OVERRIDES: Record<string, IMinedSpell> =
       e("98008", "Spirit Link Totem", 180, 6),
       e("102342", "Ironbark", 90, 12),
       e("740", "Tranquility", 180, 8),
-      e("22812", "Barkskin", 60, 8), // 2026-09-06: back to the DB2 base — the 12 s came from Improved Barkskin (+4 s, Druid class tree), now applied per-caster by BUFF_DURATION_TALENT_MODIFIERS
+      e("22812", "Barkskin", 60, 12), // 12 = 8 (DB2) + Improved Barkskin, held by ~100 % of casters — see BUFF_DURATION_TALENT_MODIFIERS
       e("61336", "Survival Instincts", 180, 6),
       e("871", "Shield Wall", 210, 8),
       e("118038", "Die by the Sword", 120, 8),
@@ -66,7 +66,7 @@ export const SPELL_EFFECT_OVERRIDES: Record<string, IMinedSpell> =
       e("109304", "Exhilaration", 120),
       e("363916", "Obsidian Scales", 90, 12),
       e("374348", "Renewing Blaze", 90, 8),
-      e("357170", "Time Dilation", 60, 8), // GH #34 ① patched this to a flat 10.4 (corpus lifetime, n=703); 2026-09-06 found the cause — Timeless Magic +15 %/rank on a maxRanks=2 node — so the base returns to DB2 8 and BUFF_DURATION_TALENT_MODIFIERS reproduces 8 / 9.2 / 10.4 at 0 / 1 / 2 ranks instead of charging everyone the 2-rank price
+      e("357170", "Time Dilation", 60, 10.4), // GH #34 ①: corpus lifetime 10.4 s (n=703, p10=p90). 2026-09-06 identified the cause — Timeless Magic +15 %/rank, maxRanks 2 — so this stays as the 2-rank value every caller without a caster gets, while BUFF_DURATION_TALENT_MODIFIERS prices a known caster at 8 / 9.2 / 10.4
       // ── Major offensive CDs (durationSeconds drives enemyCDs expiry tracking) ──
       // Added by the 2026-07-14 full audit: major burst CDs missing from the
       // generated layer (paired with new spellCategories classifications)
