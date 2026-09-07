@@ -428,7 +428,7 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
       specs: ["254"],
       untalentedBaseSeconds: 6,
       specBaseSeconds: 3,
-      note: "Marksmanship runs its own 3.0 s (108 caster-cells) and Lone Survivor does not lift it — 107 of those 108 hold the talent. KNOWN OUTLIER: an out-of-sample run of buffDurationScan found 9 further Marksmanship cells at 8.0 s, so the spec is not uniformly 3 s and something still unidentified separates them; 3 s is the modal answer (108 vs 9) and beats the pre-2026-09-07 answer of 6 s for both groups, but the scan will keep FLAGging this until the split is explained.",
+      note: "Marksmanship runs its own 3.0 s (108 caster-cells) and Lone Survivor does not lift it — 107 of those 108 hold the talent. KNOWN OUTLIER, chased and still open: an out-of-sample buffDurationScan run finds 9 further Marksmanship cells at 8.0 s. Ruled out so far — (a) it is not the pet copy: splitting 21,065 corpus events by target shows self and pet with the SAME three tiers (8.0 s 67–71 %, 3.0 s 16–19 %, 6.0 s 10 %), where 6.0 s is the untalented base and 8.0 s is base + Lone Survivor; (b) it is not a duration modifier: Lone Survivor is the ONLY spell in DB2 whose SPELLMOD_DURATION mask reaches this spell; (c) it is not the hero tree: the talents that separate the two Marksmanship groups 89 %/0 % are hero-tree markers, but Beast Mastery hunters on the SAME hero tree sit at 8.0 s. 3 s is the modal Marksmanship answer (108 vs 9) and beats the pre-2026-09-07 answer of 6 s for both groups; the scan keeps FLAGging it on purpose.",
     },
     {
       talentSpellId: "388039",
@@ -443,7 +443,13 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
       talentSpellId: "424742",
       untalentedBaseSeconds: 10,
       addSeconds: 3,
-      note: "Battlefield Commander — DB2 aura 107 +3000 ms, Warrior class tree (maxRanks 1), mask covers the spell; corpus 221 caster-cells at 13.0 s hold it 100 % vs 8 at 10.0 s holding it 12 % (10 + 3 = 13). Open: 29 further cells sit at 15.5 s while also holding it (mostly Fury) — unexplained, and they are priced at 13 s here, still closer than the table's 10.",
+      note: "Battlefield Commander — DB2 aura 107 +3000 ms, Warrior class tree (maxRanks 1), mask covers the spell; corpus 221 caster-cells at 13.0 s hold it 100 % vs 8 at 10.0 s holding it 12 % (10 + 3 = 13).",
+    },
+    {
+      talentSpellId: "1243660",
+      untalentedBaseSeconds: 10,
+      pct: 20,
+      note: "Resonant Voice — the 15.5 s tier buffDurationScan kept FLAGging. DB2 aura 108 +20 %, Warrior class tree (maxRanks 1), mask covers Rallying Cry as well as Intimidating Shout; corpus 29 of 29 caster-cells at 15.5 s hold it against 0 of 221 at 13.0 s, and (10 + 3) × 1.2 = 15.6. Same talent and same value as the CC table's only entry — an independent cross-check of both.",
     },
   ],
   "221883": [
@@ -451,13 +457,19 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
       specs: ["70"],
       untalentedBaseSeconds: 3,
       specBaseSeconds: 6,
-      note: "Divine Steed's own duration is spec-dependent and the DB2 3 s matches no spec: Retribution runs 6 s (254 caster-cells, 0 % holding any reachable modifier) and Holy/Protection 5 s (162 cells, likewise 0 %). Unrelenting Charger then adds +2 s on top of the Retribution base, which is the third observed tier at 8 s (11 cells, 91 % holding it at rank 1). The eight ids are mount-model variants of one ability and every one of them is used by BOTH specs, so a flat corpus patch could only ever be right for one. KNOWN OUTLIER: buffDurationScan finds a third Retribution tier at 3.5 s (7 of 101 cells out of sample) that no modifier explains — it will keep FLAGging until identified.",
+      note: "Divine Steed's own duration is spec-dependent and the DB2 3 s matches no spec: Retribution runs 6 s (254 caster-cells, 0 % holding any reachable modifier) and Holy/Protection 5 s (162 cells, likewise 0 %). Unrelenting Charger then adds +2 s on top of the Retribution base, which is the third observed tier at 8 s (11 cells, 91 % holding it at rank 1). The eight ids are mount-model variants of one ability and every one of them is used by BOTH specs, so a flat corpus patch could only ever be right for one. The third tier buffDurationScan first FLAGged (3.5 s Retribution) turned out to be Divine Spurs — registered below, and the scan is clean on this id since.",
     },
     {
       specs: ["65", "66"],
       untalentedBaseSeconds: 3,
       specBaseSeconds: 5,
       note: "Divine Steed — Holy/Protection run 5 s (162 caster-cells at 0 % modifier holding).",
+    },
+    {
+      talentSpellId: "469409",
+      untalentedBaseSeconds: 3,
+      pct: -40,
+      note: "Divine Spurs — the 3.5 s tier buffDurationScan FLAGged. DB2 aura 108 −40 %, Paladin class tree all three specs (maxRanks 1), mask covers the spell; corpus separates it 100 %/0 % on every tier that has it: Retribution 3.5 s ×3 (6 × 0.6 = 3.6), Holy 3.0 s ×2 and Protection 3.0 s ×1 (5 × 0.6 = 3.0), Protection 4.0 s ×1 with Unrelenting Charger too ((5 + 2) × 0.6 = 4.2) — and 0 % across the 254 + 162 + 11 cells of the untouched tiers. Small n per tier, but the split is exact and one-sided.",
     },
     {
       talentSpellId: "432990",
@@ -481,6 +493,12 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
       note: "Divine Steed — Holy/Protection run 5 s (162 caster-cells at 0 % modifier holding).",
     },
     {
+      talentSpellId: "469409",
+      untalentedBaseSeconds: 3,
+      pct: -40,
+      note: "Divine Spurs — the 3.5 s tier buffDurationScan FLAGged. DB2 aura 108 −40 %, Paladin class tree all three specs (maxRanks 1), mask covers the spell; corpus separates it 100 %/0 % on every tier that has it: Retribution 3.5 s ×3 (6 × 0.6 = 3.6), Holy 3.0 s ×2 and Protection 3.0 s ×1 (5 × 0.6 = 3.0), Protection 4.0 s ×1 with Unrelenting Charger too ((5 + 2) × 0.6 = 4.2) — and 0 % across the 254 + 162 + 11 cells of the untouched tiers. Small n per tier, but the split is exact and one-sided.",
+    },
+    {
       talentSpellId: "432990",
       specs: ["70", "66"],
       untalentedBaseSeconds: 3,
@@ -500,6 +518,12 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
       untalentedBaseSeconds: 3,
       specBaseSeconds: 5,
       note: "Divine Steed — Holy/Protection run 5 s (162 caster-cells at 0 % modifier holding).",
+    },
+    {
+      talentSpellId: "469409",
+      untalentedBaseSeconds: 3,
+      pct: -40,
+      note: "Divine Spurs — the 3.5 s tier buffDurationScan FLAGged. DB2 aura 108 −40 %, Paladin class tree all three specs (maxRanks 1), mask covers the spell; corpus separates it 100 %/0 % on every tier that has it: Retribution 3.5 s ×3 (6 × 0.6 = 3.6), Holy 3.0 s ×2 and Protection 3.0 s ×1 (5 × 0.6 = 3.0), Protection 4.0 s ×1 with Unrelenting Charger too ((5 + 2) × 0.6 = 4.2) — and 0 % across the 254 + 162 + 11 cells of the untouched tiers. Small n per tier, but the split is exact and one-sided.",
     },
     {
       talentSpellId: "432990",
@@ -523,6 +547,12 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
       note: "Divine Steed — Holy/Protection run 5 s (162 caster-cells at 0 % modifier holding).",
     },
     {
+      talentSpellId: "469409",
+      untalentedBaseSeconds: 3,
+      pct: -40,
+      note: "Divine Spurs — the 3.5 s tier buffDurationScan FLAGged. DB2 aura 108 −40 %, Paladin class tree all three specs (maxRanks 1), mask covers the spell; corpus separates it 100 %/0 % on every tier that has it: Retribution 3.5 s ×3 (6 × 0.6 = 3.6), Holy 3.0 s ×2 and Protection 3.0 s ×1 (5 × 0.6 = 3.0), Protection 4.0 s ×1 with Unrelenting Charger too ((5 + 2) × 0.6 = 4.2) — and 0 % across the 254 + 162 + 11 cells of the untouched tiers. Small n per tier, but the split is exact and one-sided.",
+    },
+    {
       talentSpellId: "432990",
       specs: ["70", "66"],
       untalentedBaseSeconds: 3,
@@ -542,6 +572,12 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
       untalentedBaseSeconds: 3,
       specBaseSeconds: 5,
       note: "Divine Steed — Holy/Protection run 5 s (162 caster-cells at 0 % modifier holding).",
+    },
+    {
+      talentSpellId: "469409",
+      untalentedBaseSeconds: 3,
+      pct: -40,
+      note: "Divine Spurs — the 3.5 s tier buffDurationScan FLAGged. DB2 aura 108 −40 %, Paladin class tree all three specs (maxRanks 1), mask covers the spell; corpus separates it 100 %/0 % on every tier that has it: Retribution 3.5 s ×3 (6 × 0.6 = 3.6), Holy 3.0 s ×2 and Protection 3.0 s ×1 (5 × 0.6 = 3.0), Protection 4.0 s ×1 with Unrelenting Charger too ((5 + 2) × 0.6 = 4.2) — and 0 % across the 254 + 162 + 11 cells of the untouched tiers. Small n per tier, but the split is exact and one-sided.",
     },
     {
       talentSpellId: "432990",
@@ -565,6 +601,12 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
       note: "Divine Steed — Holy/Protection run 5 s (162 caster-cells at 0 % modifier holding).",
     },
     {
+      talentSpellId: "469409",
+      untalentedBaseSeconds: 3,
+      pct: -40,
+      note: "Divine Spurs — the 3.5 s tier buffDurationScan FLAGged. DB2 aura 108 −40 %, Paladin class tree all three specs (maxRanks 1), mask covers the spell; corpus separates it 100 %/0 % on every tier that has it: Retribution 3.5 s ×3 (6 × 0.6 = 3.6), Holy 3.0 s ×2 and Protection 3.0 s ×1 (5 × 0.6 = 3.0), Protection 4.0 s ×1 with Unrelenting Charger too ((5 + 2) × 0.6 = 4.2) — and 0 % across the 254 + 162 + 11 cells of the untouched tiers. Small n per tier, but the split is exact and one-sided.",
+    },
+    {
       talentSpellId: "432990",
       specs: ["70", "66"],
       untalentedBaseSeconds: 3,
@@ -586,6 +628,12 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
       note: "Divine Steed — Holy/Protection run 5 s (162 caster-cells at 0 % modifier holding).",
     },
     {
+      talentSpellId: "469409",
+      untalentedBaseSeconds: 3,
+      pct: -40,
+      note: "Divine Spurs — the 3.5 s tier buffDurationScan FLAGged. DB2 aura 108 −40 %, Paladin class tree all three specs (maxRanks 1), mask covers the spell; corpus separates it 100 %/0 % on every tier that has it: Retribution 3.5 s ×3 (6 × 0.6 = 3.6), Holy 3.0 s ×2 and Protection 3.0 s ×1 (5 × 0.6 = 3.0), Protection 4.0 s ×1 with Unrelenting Charger too ((5 + 2) × 0.6 = 4.2) — and 0 % across the 254 + 162 + 11 cells of the untouched tiers. Small n per tier, but the split is exact and one-sided.",
+    },
+    {
       talentSpellId: "432990",
       specs: ["70", "66"],
       untalentedBaseSeconds: 3,
@@ -605,6 +653,12 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
       untalentedBaseSeconds: 3,
       specBaseSeconds: 5,
       note: "Divine Steed — Holy/Protection run 5 s (162 caster-cells at 0 % modifier holding).",
+    },
+    {
+      talentSpellId: "469409",
+      untalentedBaseSeconds: 3,
+      pct: -40,
+      note: "Divine Spurs — the 3.5 s tier buffDurationScan FLAGged. DB2 aura 108 −40 %, Paladin class tree all three specs (maxRanks 1), mask covers the spell; corpus separates it 100 %/0 % on every tier that has it: Retribution 3.5 s ×3 (6 × 0.6 = 3.6), Holy 3.0 s ×2 and Protection 3.0 s ×1 (5 × 0.6 = 3.0), Protection 4.0 s ×1 with Unrelenting Charger too ((5 + 2) × 0.6 = 4.2) — and 0 % across the 254 + 162 + 11 cells of the untouched tiers. Small n per tier, but the split is exact and one-sided.",
     },
     {
       talentSpellId: "432990",

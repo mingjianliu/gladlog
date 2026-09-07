@@ -299,6 +299,39 @@ describe("buffFullDurationForCaster — 天赋条件的增益时长", () => {
     expect(talentRankOf(without, STEED_OF_GLORY)).toBe(0);
   });
 
+  it("扫描 FLAG 追回来的两条:集结呐喊 ×1.2 / 神圣马驹 ×0.6", () => {
+    // 两条都是 buffDurationScan 在**建表时没用过的样本**上报出来的偏差,
+    // 追下去各自有 100%/0% 的天赋分组 + 掩码覆盖 + 算术自洽。
+    const BATTLEFIELD_COMMANDER = { id1: 108544, id2: 134033, count: 1 };
+    const RESONANT_VOICE = { id1: 108685, id2: 134225, count: 1 };
+    const warriorBC = makeUnit("w-bc", {
+      spec: CombatUnitSpec.Warrior_Arms,
+      info: { talents: [BATTLEFIELD_COMMANDER], pvpTalents: [] },
+    });
+    expect(buffFullDurationForCaster("97463", warriorBC)).toBeCloseTo(13);
+    const warriorBoth = makeUnit("w-both", {
+      spec: CombatUnitSpec.Warrior_Arms,
+      info: {
+        talents: [BATTLEFIELD_COMMANDER, RESONANT_VOICE],
+        pvpTalents: [],
+      },
+    });
+    // 先加秒后乘百分比:(10 + 3) × 1.2
+    expect(buffFullDurationForCaster("97463", warriorBoth)).toBeCloseTo(15.6);
+
+    const DIVINE_SPURS = { id1: 103857, id2: 128253, count: 1 };
+    const retSpurs = makeUnit("p-spurs", {
+      spec: CombatUnitSpec.Paladin_Retribution,
+      info: { talents: [DIVINE_SPURS], pvpTalents: [] },
+    });
+    expect(buffFullDurationForCaster("221883", retSpurs)).toBeCloseTo(3.6);
+    const holySpurs = makeUnit("p-spurs-h", {
+      spec: CombatUnitSpec.Paladin_Holy,
+      info: { talents: [DIVINE_SPURS], pvpTalents: [] },
+    });
+    expect(buffFullDurationForCaster("221883", holySpurs)).toBeCloseTo(3);
+  });
+
   it("读不到天赋(unknown)绝不加长 —— 与 CC 侧同一条纪律", () => {
     const noInfo = makeUnit("d2", { spec: CombatUnitSpec.Druid_Restoration });
     expect(talentOwnershipOf(noInfo, "327993")).toBe("unknown");
