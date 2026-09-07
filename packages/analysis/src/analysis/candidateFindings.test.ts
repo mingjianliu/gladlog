@@ -1562,6 +1562,9 @@ describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
       sourceName: "Rogue",
       postKick,
       firstActionDelayS: delay,
+      switchSpellName: postKick === "switched" ? "Flash Heal" : null,
+      switchDelayS: postKick === "switched" ? delay : null,
+      switchWasHardCast: postKick === "switched" ? true : null,
     });
     // switched 在时间上最早,但 idle 必须排最前 —— 旧排序键(锁定时长)已被
     // 实测判无信息(840 条全落 3–4s),postKick 是它的接任者。
@@ -1577,23 +1580,53 @@ describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
     expect(evts[1]!.facts["postKick"]).toContain("4.1s");
   });
 
-  it("kick-eaten:switched 的 facts 说明打穿了锁定", () => {
-    const evts = kickEatenEvents(
-      [
-        {
-          atSeconds: 10,
-          lockoutDurationSeconds: 4,
-          kickSpellName: "Kick",
-          interruptedSpellName: "Chain Heal",
-          sourceName: "Rogue",
-          postKick: "switched" as const,
-          firstActionDelayS: 0.9,
-        },
-      ],
-      { id: "P1", name: "Me" },
-    );
-    expect(evts[0]!.facts["postKick"]).toContain("other school");
-    expect(evts[0]!.facts["postKick"]).toContain("0.9s");
+  // 2026-09-06(postKickSwitchAudit):这一行以前断言 "kept playing through
+  // the lockout",而 `switched` 只要求学派掩码不重叠、不要求硬读条 —— 语料
+  // 276/292 是瞬发(猫形态 / 悬空 / 生存意志 / 甚至 PvP 徽章)。分类不变,
+  // 只改这行能声称什么;三态限定词各钉一条。
+  const switchedInst = (over: Record<string, unknown> = {}) => ({
+    atSeconds: 10,
+    lockoutDurationSeconds: 4,
+    kickSpellName: "Kick",
+    interruptedSpellName: "Chain Heal",
+    sourceName: "Rogue",
+    postKick: "switched" as const,
+    // 故意与 switchDelayS 不同:旧文案把「窗口内第一发」的延迟和「异学派
+    // 那一发」的学派声称缝在一起(实测 825ca842:0.5s vs 2.0s),这条
+    // 断言就是那个 bug 的回归钉。
+    firstActionDelayS: 0.5,
+    switchSpellName: "Cat Form",
+    switchDelayS: 2.0,
+    switchWasHardCast: false as boolean | null,
+    ...over,
+  });
+
+  it("kick-eaten:switched 引用触发那一发自己的延迟,不是窗口第一发", () => {
+    const evts = kickEatenEvents([switchedInst()], { id: "P1", name: "Me" });
+    expect(evts[0]!.facts["postKick"]).toContain("2.0s");
+    expect(evts[0]!.facts["postKick"]).not.toContain("0.5s");
+  });
+
+  it("kick-eaten:switched 点名技能且不再声称「打穿了锁定」", () => {
+    const evts = kickEatenEvents([switchedInst()], { id: "P1", name: "Me" });
+    const f = evts[0]!.facts["postKick"]!;
+    expect(f).toContain("Cat Form");
+    expect(f).not.toContain("kept playing");
+  });
+
+  it("kick-eaten:switched 硬读条/瞬发/未知 三态各自的限定词", () => {
+    const of = (v: boolean | null) =>
+      kickEatenEvents([switchedInst({ switchWasHardCast: v })], {
+        id: "P1",
+        name: "Me",
+      })[0]!.facts["postKick"]!;
+    expect(of(true)).toContain("hard cast");
+    expect(of(false)).toContain("instant or channel");
+    // null = 没有 cast-start 数据(旧归档),不许猜 —— 只点名技能。
+    const unknown = of(null);
+    expect(unknown).toContain("Cat Form");
+    expect(unknown).not.toContain("hard cast");
+    expect(unknown).not.toContain("instant");
   });
 });
 

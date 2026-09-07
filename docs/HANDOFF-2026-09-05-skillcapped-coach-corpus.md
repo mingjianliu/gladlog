@@ -327,7 +327,33 @@ v1 4 → v2 42(4 high)。第一版「教练几乎不提 ⇒ 佐证退役」是 s
    2. 渲染文本与谓词不一致 —— 正是 CLAUDE.md 共享谓词规则的形状(「锚定到渲染值」)。`firstActionDelayS` 取 `after[0]`,同样可能是瞬发,所以那个秒数也一起失真。
    3. **「退役 `switched`」打错了靶子,撤回。** 它排最不可教,于是一个被彻底打断、只按了个瞬发的玩家反而拿到「你没事,继续打了」的标签 —— 这类事件是**更**该教的。删掉整桶会连这部分一起删。
 
-   **建议的最小修法(纯渲染,不动谓词,零新数据,待裁决)**:把那句话改成如实叙述 ——点名那一发是什么、什么时候(例:`acted on another school 1.5s later (Echo)`),而不是断言 `kept playing through the lockout`。谓词不变,声称变真,模型拿到能自己判断的事实。严重度该不该继续把它排最后,等事实诚实之后才谈得上。
+   **✅ 已落地(2026-09-06,用户批准「就按你说的做」)—— 最小修法,纯渲染,分类一行没动。**
+   `candidateFindings.ts` 的 `postKick` 事实由
+   `kept playing through the lockout (other school, first cast Xs later)` 改为
+   `acted on another school {触发那一发自己的延迟}s later ({技能名}[, hard cast|, instant or channel])`。
+   `ccTrinketAnalysis.ts` 新增三个字段记录触发那一发(`switchSpellName` / `switchDelayS` /
+   `switchWasHardCast`),写在一处、读在一处,无其它消费者。
+   分类判据未变:原先的 `after.some(p)` 改为 `after.find(p)` —— `some(p)` 为真当且仅当
+   `find(p)` 有值,只是顺带**点名**了那一发。语料回归:`switched` 菜单条数改前改后同为 174。
+
+   **顺带修掉一个此前没人发现的缺陷:旧文案把两个不同的施法缝在一句话里。** 延迟取自
+   `firstActionDelayS`(窗口内第一发),而「异学派」的声称来自第一发**掩码不重叠**的施法 ——
+   两者常常不是同一发。实测 `825ca842`:旧文案写 `first cast 0.5s later`,而真正触发判定的
+   `Will to Survive` 在 **2.0s**。现已引用触发那一发自己的延迟,并钉了回归测试。
+
+   **`switchWasHardCast` 是三态,不许猜**:`true` 找到 CAST_START;`false` 有数据但没找到
+   (瞬发**或引导** —— parser-compat 没有 channel 事件,分不开,所以文案只说 「instant or channel」);
+   `null` 该单位没有 cast-start 数据(旧归档),**只点名技能、不加任何限定词**。
+
+   **两项加强当时明确不做**(用户只批了纯文案):① 把窗口内全部施法列进事实行;
+   ② 改 `POST_KICK_SEVERITY` 排序。②「例 ③ 排最不可教明显是反的」这个观察仍然成立,
+   但它动排序与 cap、影响面大得多,**等文案变真之后单独立项**。
+
+   **同批发现、按批准范围没做的第三项(未测,别当结论)**:`acted` 分支仍写 `waited out the lockout (first cast Xs later)`,而 `acted` 是个**兜底桶** —— 分类要求 `switched` 同时满足「被锁法术掩码已知」与「该次施法掩码已知」且不重叠,
+   所以**被打断法术的掩码未知时,窗口内所有施法都会落进 `acted`**,那句「waited out」就成了假设而非观测。
+   `switched` 那条的教训(名字/文案与谓词漂移)在这里可能同构。**频率没测**,下一步先跑一遍「`lockedMask === undefined` 占多少」再决定要不要改。
+
+   ~~建议的最小修法(纯渲染,不动谓词,零新数据,待裁决)~~:把那句话改成如实叙述 ——点名那一发是什么、什么时候(例:`acted on another school 1.5s later (Echo)`),而不是断言 `kept playing through the lockout`。谓词不变,声称变真,模型拿到能自己判断的事实。严重度该不该继续把它排最后,等事实诚实之后才谈得上。
    真正按「有没有继续读条」重新分类需要先补 channel 事件(解析层缺口),**是另一个项目,不要在这里顺手做**。
    **验收门槛(gpt-6-astra 2026-09-06 预设,工程决策门槛不是统计显著性):**
    同一批回合、相同排序与 cap 下重放开门前后的菜单,记 `原菜单条数 N / 被移除数 D / 其中确属不值得批评数 U`,

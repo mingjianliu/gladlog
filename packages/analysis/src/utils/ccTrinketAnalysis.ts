@@ -380,10 +380,25 @@ export interface IRootInstance {
  * corpus kicks all land in 3–4s — modern school lockouts are fixed), so the
  * teachable severity axis is the BEHAVIOR while locked:
  *   - "switched": cast something whose official school mask shares no bits
- *     with the interrupted spell's — kept playing through the lockout
+ *     with the interrupted spell's
  *   - "acted": cast something, but same/unknown school (waited the lockout
  *     out, or masks unavailable — three-state data, never guessed)
  *   - "idle": zero casts for the whole window — the paralysis case
+ *
+ * ⚠ **"switched" is NOT "kept playing through the lockout"** — that reading
+ * was in this comment until 2026-09-06 and it is wrong. The test is a school
+ * mask, not a hardcast, so ANY cast qualifies: measured over 400 corpus
+ * rounds, only 16/292 switches had their own `SPELL_CAST_START`; the rest
+ * were instants — Cat Form, Hover, Will to Survive, even the PvP trinket
+ * (`packages/eval/scripts/postKickSwitchAudit.ts`). Downstream text must
+ * therefore name the cast and qualify it (`switchSpellName` /
+ * `switchWasHardCast`) rather than assert the player kept casting.
+ *
+ * The same correction applies to the corpus anchor below: what it measured
+ * is the rate of pressing ANY off-school ability, not of casting through a
+ * lockout, so **it does not support a severity ordering on its own**. Left
+ * here because the rate itself is real and reproducible.
+ *
  * Corpus anchor (500 matches, healer-study school_probe): switch rates track
  * spec kit ceilings (Disc 76–80% vs Holy Paladin 8%), so cross-spec
  * comparison is kit × skill; within-spec, the idle rate is the coachable
@@ -402,6 +417,32 @@ export interface IInterruptInstance {
   postKick: PostKickBehavior;
   /** Seconds until the first cast after the kick; null when idle. */
   firstActionDelayS: number | null;
+  /** `switched` only: the cast that actually made the classification
+   * "switched" — the first one in the window on a disjoint school. It is NOT
+   * always `firstActionDelayS`'s cast: a same-school cast can come first
+   * (measured 2026-09-06 on match 825ca842 — first cast 0.5s, the disjoint
+   * one 2.0s), so the rendered line must pair the school claim with THIS
+   * cast's own delay or it welds two different casts into one sentence. */
+  switchSpellName: string | null;
+  /** Seconds from the kick to `switchSpellName`'s cast. */
+  switchDelayS: number | null;
+  /** Whether that cast had its own `SPELL_CAST_START` — i.e. it was a real
+   * hardcast rather than an instant.
+   *
+   * **Three-state on purpose.** `castStartEvents` is optional on archived
+   * docs (`parser-compat/src/types.ts`), and `parser-compat` exposes NO
+   * channel events at all, so a channelled cast is indistinguishable from an
+   * instant. `true` = a CAST_START was found; `false` = the field was
+   * populated and no CAST_START matched (instant OR channel); `null` = no
+   * cast-start data for this unit, nothing may be claimed either way.
+   *
+   * Why this exists (2026-09-06 audit, packages/eval/scripts/
+   * postKickSwitchAudit.ts): the `switched` classification only requires a
+   * disjoint school mask, not a hardcast, so 276/292 corpus switches were
+   * triggered by an instant — Cat Form, Hover, Will to Survive, even the PvP
+   * trinket — while the prompt asserted "kept playing through the lockout".
+   * The classification itself is unchanged; only what the line may CLAIM is. */
+  switchWasHardCast: boolean | null;
 }
 
 export interface ICCAvoidedInstance {
@@ -419,6 +460,13 @@ export interface ICCAvoidedInstance {
  * straddles the fixed 3–4s lockout, so "idle" is damning — nothing was cast
  * even once the lockout ended. */
 export const POST_KICK_WINDOW_S = 5;
+
+/** How far before a `SPELL_CAST_SUCCESS` its own `SPELL_CAST_START` may sit
+ * when deciding `switchWasHardCast`. The longest arena hardcasts are ~3s;
+ * 6s is deliberately generous, so the only error this can make is calling an
+ * instant a hardcast — the conservative direction for a line whose whole
+ * point is not to over-claim "kept casting". */
+export const CAST_START_LOOKBACK_S = 6;
 
 export interface IPlayerCCTrinketSummary {
   playerName: string;
@@ -923,6 +971,9 @@ export function analyzePlayerCCAndTrinket(
       atSeconds: (action.timestamp - matchStartMs) / 1000,
       lockoutDurationSeconds,
       postKick: "idle",
+      switchSpellName: null,
+      switchDelayS: null,
+      switchWasHardCast: null,
       firstActionDelayS: null,
       kickSpellId,
       kickSpellName: getEnglishSpellName(kickSpellId, action.spellName),
@@ -946,8 +997,18 @@ export function analyzePlayerCCAndTrinket(
       .map((e) => ({
         t: (e.logLine.timestamp - matchStartMs) / 1000,
         spellId: e.spellId ?? "",
+        spellName: getEnglishSpellName(e.spellId ?? "", e.spellName),
       }))
       .sort((a, b) => a.t - b.t);
+    // Optional field: absent on old archives. Absence is "unknown", never
+    // "instant" — see IInterruptInstance.switchWasHardCast.
+    const rawCastStarts = player.castStartEvents;
+    const haveCastStarts =
+      Array.isArray(rawCastStarts) && rawCastStarts.length > 0;
+    const castStarts = (rawCastStarts ?? []).map((e) => ({
+      t: (e.logLine.timestamp - matchStartMs) / 1000,
+      spellId: e.spellId ?? "",
+    }));
     for (const inst of interruptInstances) {
       const after = castTimes.filter(
         (c) =>
@@ -960,13 +1021,29 @@ export function analyzePlayerCCAndTrinket(
       }
       inst.firstActionDelayS = after[0]!.t - inst.atSeconds;
       const lockedMask = spellSchoolMask(inst.interruptedSpellId);
-      const switched =
-        lockedMask !== undefined &&
-        after.some((c) => {
-          const m = spellSchoolMask(c.spellId);
-          return m !== undefined && (m & lockedMask) === 0;
-        });
-      inst.postKick = switched ? "switched" : "acted";
+      // `find` where this used to read `some`: identical predicate (some(p)
+      // is true iff find(p) is defined), but it also NAMES the cast so the
+      // rendered line can cite the one it is actually talking about.
+      const switchCast =
+        lockedMask === undefined
+          ? undefined
+          : after.find((c) => {
+              const m = spellSchoolMask(c.spellId);
+              return m !== undefined && (m & lockedMask) === 0;
+            });
+      inst.postKick = switchCast !== undefined ? "switched" : "acted";
+      if (switchCast !== undefined) {
+        inst.switchSpellName = switchCast.spellName;
+        inst.switchDelayS = switchCast.t - inst.atSeconds;
+        inst.switchWasHardCast = haveCastStarts
+          ? castStarts.some(
+              (st) =>
+                st.spellId === switchCast.spellId &&
+                st.t <= switchCast.t &&
+                st.t >= switchCast.t - CAST_START_LOOKBACK_S,
+            )
+          : null;
+      }
     }
   }
 

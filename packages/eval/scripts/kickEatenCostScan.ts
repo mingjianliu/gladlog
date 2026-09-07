@@ -127,7 +127,7 @@ export async function collect(
       const raw = k.facts?.postKick ?? "";
       const pk = raw.startsWith("no cast for")
         ? "idle"
-        : raw.startsWith("kept playing through")
+        : raw.startsWith("acted on another school")
           ? "switched"
           : raw.startsWith("waited out")
             ? "acted"
@@ -163,7 +163,7 @@ export async function collect(
       const raw = k.facts?.postKick ?? "";
       return raw.startsWith("no cast for")
         ? "idle"
-        : raw.startsWith("kept playing through")
+        : raw.startsWith("acted on another school")
           ? "switched"
           : "acted";
     });

@@ -64,6 +64,7 @@ import * as syncWindowPrior from "@gladlog/analysis/src/data/syncWindowPrior";
 import * as auraIntervals from "@gladlog/analysis/src/utils/auraIntervals";
 import * as bracketKey from "@gladlog/analysis/src/utils/bracketKey";
 import * as cannotCastIntervals from "@gladlog/analysis/src/utils/cannotCastIntervals";
+import * as ccTrinketAnalysis from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
 import * as cooldowns from "@gladlog/analysis/src/utils/cooldowns";
 import * as counterfactual from "@gladlog/analysis/src/utils/counterfactual";
 import * as deathOutcomeAnalysis from "@gladlog/analysis/src/utils/deathOutcomeAnalysis";
@@ -108,6 +109,7 @@ import * as archivePlan from "../../corpus-tools/src/archivePlan";
 import * as driveSync from "../../corpus-tools/src/driveSync";
 import * as ownLogArchive from "../../corpus-tools/src/ownLogArchive";
 import * as pvpLogFetch from "../../corpus-tools/src/pvpLogFetch";
+import * as obsConfigWriter from "../../desktop/src/main/obsConfigWriter";
 import * as dashboard from "../../desktop/src/renderer/src/components/dashboard";
 import * as analysisInput from "../../desktop/src/renderer/src/report/derive/analysisInput";
 import * as flowSeries from "../../desktop/src/renderer/src/report/derive/flowSeries";
@@ -118,7 +120,6 @@ import * as reportTimeRange from "../../desktop/src/renderer/src/report/derive/t
 // desktop's package.json also restricts deep imports via `exports`, so this
 // goes by relative path too, same as corpus-tools above.
 import * as obsAsset from "../../desktop/src/shared/obsAsset";
-import * as obsConfigWriter from "../../desktop/src/main/obsConfigWriter";
 import * as videoTime from "../../desktop/src/shared/videoTime";
 // log-pipeline is deliberately dependency-free (that is what lets it deploy
 // standalone on the gaming machine), so corpus-tools cannot import it. The
@@ -478,6 +479,11 @@ const INDEX: PredicateRow[] = [
     file: `${A}/data/spellEffectData.ts`,
     symbol: "kickLockoutSeconds",
     mod: spellEffectData,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "CAST_START_LOOKBACK_S",
+    mod: ccTrinketAnalysis,
   },
   {
     file: `${A}/data/spellEffectData.ts`,

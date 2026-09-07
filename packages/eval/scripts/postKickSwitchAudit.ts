@@ -27,10 +27,19 @@
  *
  * 用法:
  *   npx tsx packages/eval/scripts/postKickSwitchAudit.ts [--n 400] [--json]
+ *   npx tsx packages/eval/scripts/postKickSwitchAudit.ts --examples 8 [--n 200]
+ *
+ * `--examples` 打印**真实 prompt 里那一行的原文**(由 production 的
+ * `buildFindingsPrompt` 生成后按 id 抓出,不是本脚本拼的字符串),
+ * 连同触发切换的那一发是什么、有没有 CAST_START,以及建议改法的对照行。
  */
 import { ensureAnalysisData, specToString } from "@gladlog/analysis";
+import { buildFindingsPrompt, extractCandidateFindings } from "@gladlog/analysis";
 import { spellSchoolMask } from "@gladlog/analysis/src/data/spellSchools";
-import { analyzePlayerCCAndTrinket } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
+import {
+  analyzePlayerCCAndTrinket,
+  CAST_START_LOOKBACK_S,
+} from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
 import { LogEvent } from "@gladlog/parser-compat";
 
 import {
@@ -43,10 +52,11 @@ import {
 
 /** Same window production classifies in (`POST_KICK_WINDOW_S`). */
 const WINDOW_S = 5;
-/** How far before a SPELL_CAST_SUCCESS its own SPELL_CAST_START may sit.
- * Longest hard casts in PvP are ~3s; 6s is generous and only ever risks
- * calling an instant a hard cast (conservative for this audit's claim). */
-const CAST_START_LOOKBACK_S = 6;
+// CAST_START_LOOKBACK_S is IMPORTED, never redeclared: production's
+// `switchWasHardCast` now decides hard-cast-ness with this same number
+// (ccTrinketAnalysis.ts), and this audit exists to check that field. Two
+// copies would let the audit and the thing it audits drift apart —
+// CLAUDE.md shared-predicate rule.
 
 function argOf(flag: string, dflt: number): number {
   const i = process.argv.indexOf(flag);
@@ -200,7 +210,113 @@ export async function collect(limit: number): Promise<{
   };
 }
 
+/** 真实 prompt 前后对照:菜单行原文由 production 的 buildFindingsPrompt 产出,
+ * 本脚本只按候选 id 把它抓出来 —— 绝不自己拼菜单字符串。 */
+async function examples(limit: number, want: number): Promise<void> {
+  await ensureAnalysisData();
+  const rows = pickRows(loadIndex(DEFAULT_MATCH_DIR), { minDurationS: 60 }).slice(
+    0,
+    limit,
+  );
+  let shown = 0;
+  for (const meta of rows) {
+    if (shown >= want) break;
+    let legacy;
+    try {
+      ({ legacy } = loadLegacyRound(DEFAULT_MATCH_DIR, meta.id));
+    } catch {
+      continue;
+    }
+    const { enemies, owner } = splitTeams(legacy);
+    if (!owner) continue;
+    let cands, summary;
+    try {
+      cands = extractCandidateFindings(legacy, owner.id);
+      summary = analyzePlayerCCAndTrinket(owner, enemies, legacy, []);
+    } catch {
+      continue;
+    }
+    const kicks = cands.filter((c) => c.type === "kick-eaten");
+    if (kicks.length === 0) continue;
+
+    // The REAL prompt text, from production's own builder.
+    const prompt = buildFindingsPrompt(cands, "", specToString(owner.spec) || "?");
+    const promptLines = prompt.split("\n");
+
+    const startMs = legacy.startTime;
+    const rawStarts = (
+      owner as { castStartEvents?: Array<{ spellId?: string; logLine: { timestamp: number } }> }
+    ).castStartEvents;
+    const starts = (rawStarts ?? []).map((e) => ({
+      t: (e.logLine.timestamp - startMs) / 1000,
+      spellId: e.spellId ?? "",
+    }));
+    const casts = owner.spellCastEvents
+      .filter((e) => e.logLine.event === LogEvent.SPELL_CAST_SUCCESS)
+      .map((e) => ({
+        t: (e.logLine.timestamp - startMs) / 1000,
+        spellId: e.spellId ?? "",
+        spellName: e.spellName ?? e.spellId ?? "?",
+      }))
+      .sort((a, b) => a.t - b.t);
+
+    for (const k of kicks) {
+      if (shown >= want) break;
+      if (!String(k.facts?.postKick ?? "").startsWith("acted on another school")) continue;
+      const line = promptLines.find((l) => l.includes(`id=${k.id} `));
+      if (!line) continue;
+      const inst = summary.interruptInstances.find(
+        (i) => Math.abs(i.atSeconds - k.t) < 1.5 && i.postKick === "switched",
+      );
+      if (!inst) continue;
+      const lockedMask = spellSchoolMask(inst.interruptedSpellId);
+      const trigger = casts.find(
+        (c) =>
+          c.t > inst.atSeconds &&
+          c.t <= inst.atSeconds + WINDOW_S &&
+          lockedMask !== undefined &&
+          spellSchoolMask(c.spellId) !== undefined &&
+          (spellSchoolMask(c.spellId)! & lockedMask) === 0,
+      );
+      if (!trigger) continue;
+      const isHard = starts.some(
+        (st) =>
+          st.spellId === trigger.spellId &&
+          st.t <= trigger.t &&
+          st.t >= trigger.t - CAST_START_LOOKBACK_S,
+      );
+      shown++;
+      console.log(`\n${"=".repeat(78)}`);
+      console.log(`#${shown}  match ${meta.id}  owner ${specToString(owner.spec)}`);
+      console.log(`\nThe real menu line in the prompt (production buildFindingsPrompt):`);
+      console.log(line.trimEnd());
+      console.log(`\nWHAT ACTUALLY HAPPENED in that 5s window:`);
+      console.log(
+        `  the cast that made it "switched" = ${trigger.spellName} (id ${trigger.spellId}) at t=${trigger.t.toFixed(1)}s`,
+      );
+      console.log(
+        `  SPELL_CAST_START for it?  ${isHard ? "YES — a real hard cast" : "NO — instant or channel"}`,
+      );
+      const others = casts
+        .filter((c) => c.t > inst.atSeconds && c.t <= inst.atSeconds + WINDOW_S)
+        .map((c) => `${c.spellName}@${c.t.toFixed(1)}s`);
+      console.log(`  every cast in the window: ${others.join(", ") || "(none)"}`);
+      console.log(
+        `  ^ the line above must name THIS spell and this delay. Before` +
+          ` 2026-09-06 it said "kept playing through the lockout" and took the` +
+          ` delay from the window's FIRST cast, which is often a different one.`,
+      );
+    }
+  }
+  if (shown === 0) console.log("no switched kick-eaten examples found in range");
+}
+
 async function main(): Promise<void> {
+  const exIdx = process.argv.indexOf("--examples");
+  if (exIdx >= 0) {
+    await examples(argOf("--n", 200), argOf("--examples", 6));
+    return;
+  }
   const r = await collect(argOf("--n", 400));
   if (process.argv.includes("--json")) {
     console.log(

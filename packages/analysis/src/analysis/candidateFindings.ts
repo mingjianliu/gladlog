@@ -853,6 +853,9 @@ export function kickEatenEvents(
     | "sourceName"
     | "postKick"
     | "firstActionDelayS"
+    | "switchSpellName"
+    | "switchDelayS"
+    | "switchWasHardCast"
   >[],
   owner: { id: string; name: string },
 ): CandidateEvent[] {
@@ -883,11 +886,42 @@ export function kickEatenEvents(
         source: k.sourceName,
         lockout: k.lockoutDurationSeconds.toFixed(1),
         // BACKLOG #36(b): the behavior fact the model can actually coach on.
+        // 2026-09-06: the `switched` wording used to assert "kept playing
+        // through the lockout (other school, first cast Xs later)". Two
+        // things were wrong with that sentence and BOTH are fixed here —
+        // the CLASSIFICATION is untouched, only what the line may claim.
+        //
+        //  (a) It welded two different casts together. The delay came from
+        //      `firstActionDelayS` (the first cast of any kind) while the
+        //      "other school" claim came from the first DISJOINT-school cast,
+        //      which can be a later, different spell (match 825ca842: first
+        //      cast 0.5s, the disjoint one — Will to Survive — 2.0s). The
+        //      line now cites the switching cast's own delay.
+        //  (b) "kept playing" over-claimed. `switched` only requires a
+        //      disjoint school mask, not a hardcast: 276/292 corpus switches
+        //      were instants — Cat Form, Hover, Will to Survive, the PvP
+        //      trinket — and read to the model as "the lockout cost nothing"
+        //      (packages/eval/scripts/postKickSwitchAudit.ts). Naming the
+        //      spell lets the model tell "Cat Form + Wild Charge" (a
+        //      disengage) from "Flash Heal" (really kept casting); the old
+        //      text rendered those two identically.
+        //
+        // `switchWasHardCast` is three-state: null (no cast-start data, or
+        // an old archive) prints no qualifier at all rather than guessing,
+        // and `false` says "instant or channel" because parser-compat
+        // exposes no channel events — a channel cannot be told from an
+        // instant here, so the line must not claim it is one.
         postKick:
           k.postKick === "idle"
             ? "no cast for 5s after the kick"
             : k.postKick === "switched"
-              ? `kept playing through the lockout (other school, first cast ${k.firstActionDelayS?.toFixed(1) ?? "?"}s later)`
+              ? `acted on another school ${k.switchDelayS?.toFixed(1) ?? "?"}s later (${k.switchSpellName ?? "?"}${
+                  k.switchWasHardCast === true
+                    ? ", hard cast"
+                    : k.switchWasHardCast === false
+                      ? ", instant or channel"
+                      : ""
+                })`
               : `waited out the lockout (first cast ${k.firstActionDelayS?.toFixed(1) ?? "?"}s later)`,
       },
     }));
