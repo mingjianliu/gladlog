@@ -38,7 +38,10 @@
  */
 import { CombatUnitClass } from "@gladlog/parser-compat";
 
-import { spellEffectData } from "../../data/spellEffectData";
+import {
+  ccFullDurationSeconds,
+  spellEffectData,
+} from "../../data/spellEffectData";
 import { toRenderSecond } from "../../utils/renderGrid";
 import { CandidateEvent } from "../types";
 import { CD_HOARD_CRISIS_HP_PCT, type ICrisisMoment } from "./cooldownTiming";
@@ -61,8 +64,11 @@ const MD_CYCLONE_CAP = 1;
  * fallbacks restate the same official values in case a data refresh drops a
  * field — they must never be edited independently of the data. */
 const MD_COOLDOWN_S = spellEffectData[MD_SPELL_ID]?.cooldownSeconds ?? 120;
-const CYCLONE_DURATION_S =
-  spellEffectData[CYCLONE_SPELL_ID]?.durationSeconds ?? 5;
+// 2026-09-06: 龙卷风是控制,该走 CC 那条谓词(`ccFullDurationSeconds`,识别
+// PvPDurationIndex + 叠加 spellEffectOverrides / CORPUS_DURATION_PATCHES),
+// 而不是直读 spellEffectData —— 当前两者对龙卷风同值,接过去是零差改动,
+// 但以后 CC 侧的订正会自动到达这里。
+const CYCLONE_DURATION_S = ccFullDurationSeconds(CYCLONE_SPELL_ID) ?? 5;
 const ICE_BLOCK_CD_S =
   spellEffectData[ICE_BLOCK_SPELL_ID]?.charges?.chargeCooldownSeconds ?? 240;
 const DIVINE_SHIELD_CD_S =

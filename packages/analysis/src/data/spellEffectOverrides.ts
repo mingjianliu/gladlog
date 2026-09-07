@@ -51,11 +51,11 @@ export const SPELL_EFFECT_OVERRIDES: Record<string, IMinedSpell> =
       e("184364", "Enraged Regeneration", 120, 8),
       e("48792", "Icebound Fortitude", 120, 8),
       e("55233", "Vampiric Blood", 90, 10),
-      e("31850", "Ardent Defender", 120, 8),
+      e("31850", "Ardent Defender", 120, 12), // 2026-09-06: hand 8 shadowed the official DB2 12; corpus 12.0 s in 94 % of 81 lifetimes
       e("86659", "Guardian of Ancient Kings", 300, 8),
       e("6940", "Blessing of Sacrifice", 120, 12),
       e("1022", "Blessing of Protection", 300, 10),
-      e("204018", "Blessing of Spellwarding", 180, 10),
+      e("204018", "Blessing of Spellwarding", 180, 6), // 2026-09-06: hand 10 was the PvE number and shadowed the official PvP one — SpellMisc.PvPDurationIndex 32 → 6 s; corpus 6.0 s in 91 % of 659 lifetimes
       e("116849", "Life Cocoon", 120, 12),
       e("115203", "Fortifying Brew", 360, 15),
       e("122470", "Touch of Karma", 90, 10),
@@ -85,7 +85,7 @@ export const SPELL_EFFECT_OVERRIDES: Record<string, IMinedSpell> =
       // (id appears only in loadouts), unfalsifiable either way — revisit on
       // the first 12.1 cast (BACKLOG #24-2), where DB2 now says dur 8 not 3.
       e("360194", "Deathmark", 120, 16),
-      e("13750", "Adrenaline Rush", 180, 20),
+      e("13750", "Adrenaline Rush", 180, 15), // 2026-09-06: hand 20 shadowed the official DB2 15; corpus 15.0 s in 86 % of 1,041 lifetimes
       e("121471", "Shadow Blades", 90, 20),
       e("190319", "Combustion", 120, 10),
       e("365350", "Arcane Surge", 90, 15),
@@ -101,7 +101,7 @@ export const SPELL_EFFECT_OVERRIDES: Record<string, IMinedSpell> =
       e("275699", "Apocalypse", 90, 15),
       e("207289", "Unholy Assault", 90, 20),
       e("106951", "Berserk", 180, 20),
-      e("102560", "Incarnation: Chosen of Elune", 180, 30),
+      e("102560", "Incarnation: Chosen of Elune", 180, 20), // 2026-09-06: hand 30 shadowed the official DB2 20; corpus 20.0 s in 88 % of 1,147 lifetimes
       e("194223", "Celestial Alignment", 180, 20),
       e("323764", "Convoke the Spirits", 120, 4),
       e("288613", "Trueshot", 120, 15),

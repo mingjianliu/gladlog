@@ -8,8 +8,8 @@
  * angles — was this button pressed at the moment the team's window wanted it —
  * which is why the shared window predicates live here with them.
  */
+import { buffFullDurationForCaster } from "../../utils/buffDuration";
 import { costNormPhrase } from "../../data/curatedAbilityFacts";
-import { spellEffectData } from "../../data/spellEffectData";
 import { reachesAlly } from "../../data/spellTargeting";
 import {
   syncRefClearsMinContrast,
@@ -405,9 +405,11 @@ export function unsyncedBurstEvents(
       castTimeSeconds: cast.castTimeSeconds,
       cooldownSeconds: cast.cooldownSeconds,
       availableAgainAtSeconds: cast.castTimeSeconds + cast.cooldownSeconds,
+      // 单一谓词(2026-09-06):`casts` 是队伍的进攻施放清单,不带单位,
+      // 所以拿不到施法者;传 undefined 与原先直读同值。
       buffEndSeconds:
         cast.castTimeSeconds +
-        (spellEffectData[cast.spellId]?.durationSeconds ?? 0),
+        (buffFullDurationForCaster(cast.spellId, undefined) ?? 0),
     });
     // 2026-08-23 用户裁定「重复吧」:这条指控印的是「**你的**爆发 CD 出去时对面
     // 治疗没被控」,而一个**给出去的** buff 不是施法者自己的爆发 —— 能量灌注是牧师

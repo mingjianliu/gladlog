@@ -17,8 +17,14 @@
  */
 import { CombatUnitSpec } from "@gladlog/parser-compat";
 
-import { BUFF_DURATION_TALENT_MODIFIERS } from "../src/data/spellEffectData";
-import { buffFullDurationForCaster } from "../src/utils/buffDuration";
+import {
+  BUFF_DURATION_TALENT_MODIFIERS,
+  spellEffectData,
+} from "../src/data/spellEffectData";
+import {
+  buffFullDurationForCaster,
+  SPELL_DURATION_OVERRIDES,
+} from "../src/utils/buffDuration";
 import { talentOwnershipOf, talentRankOf } from "../src/utils/talentOwnership";
 import { makeUnit } from "./ported/testHelpers";
 
@@ -136,6 +142,30 @@ describe("buffFullDurationForCaster — 天赋条件的增益时长", () => {
     });
     expect(talentOwnershipOf(definitelyNot, "327993")).toBe("no");
     expect(buffFullDurationForCaster(BARKSKIN, definitelyNot)).toBe(8);
+  });
+
+  it("零差值不变量:无施法者的回答 === 直读 spellEffectData(收敛的安全前提)", () => {
+    // 2026-09-06 把 auraIntervals / dispelAnalysis / cooldownTiming / massDispel
+    // 从直读 spellEffectData 换成本谓词时,依据就是这条:没有施法者时两者逐值
+    // 相同,所以那几处是零差改动。任何人以后往 SPELL_DURATION_OVERRIDES 里加一
+    // 条与 DB2 不同的值,都会在这里变红 —— 那正是他必须先想清楚「这几个消费点
+    // 也会跟着变」的时刻。
+    const exempt = new Set(Object.keys(SPELL_DURATION_OVERRIDES));
+    let checked = 0;
+    for (const [id, mined] of Object.entries(spellEffectData)) {
+      if (exempt.has(id)) continue;
+      expect(buffFullDurationForCaster(id, undefined)).toBe(
+        mined.durationSeconds,
+      );
+      checked++;
+    }
+    expect(checked).toBeGreaterThan(3000);
+    // 唯一的一条覆盖(终极苦修 6.5)如今与 DB2 同值 —— 它已经冗余,所以今天
+    // 连豁免项都没有实际差异。
+    for (const id of exempt)
+      expect(buffFullDurationForCaster(id, undefined)).toBe(
+        spellEffectData[id]?.durationSeconds,
+      );
   });
 
   it("未登记的技能不受影响;每条只用一种量纲", () => {

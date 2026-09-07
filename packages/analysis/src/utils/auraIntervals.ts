@@ -1,6 +1,6 @@
+import { buffFullDurationForCaster } from "./buffDuration";
 import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
-import { spellEffectData } from "../data/spellEffectData";
 
 /**
  * auraIntervals.ts -- aura interval sets (phase 4 item 4, the WoWAnalyzer Auras
@@ -78,9 +78,19 @@ const OPEN_EVENTS = new Set<string>([
   "SPELL_AURA_APPLIED_DOSE",
 ]);
 
-/** Official aura duration in seconds; no data -> null (no cap). */
+/**
+ * Official aura duration in seconds; no data -> null (no cap).
+ *
+ * Goes through `buffFullDurationForCaster` (2026-09-06) rather than reading
+ * `spellEffectData` directly, so the override layer and any later correction
+ * reach this cap too — "one fact, one predicate". The caster is deliberately
+ * not threaded: an interval here knows its source only by NAME, and the cap
+ * only ever bites an aura whose SPELL_AURA_REMOVED went missing, so the
+ * no-caster answer (the typical caster's duration) is the right one and this
+ * is a zero-delta change today.
+ */
 function officialDurationS(spellId: string): number | null {
-  const d = spellEffectData[spellId]?.durationSeconds;
+  const d = buffFullDurationForCaster(spellId, undefined);
   return typeof d === "number" && d > 0 ? d : null;
 }
 

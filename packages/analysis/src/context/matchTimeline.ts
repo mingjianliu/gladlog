@@ -9,6 +9,7 @@ import {
 import { type BurstWindowDecisionPoint } from "../analysis/burstWindowDecisionPoints";
 import type { CdPriorHoldEpisode } from "../analysis/cdTriggerPrior";
 import { DISPEL_FEATURE_FLAGS } from "../data/dispelFeatureFlags";
+import { buffFullDurationForCaster } from "../utils/buffDuration";
 import { getEnglishSpellName, spellEffectData } from "../data/spellEffectData";
 import { ccSpellIds } from "../data/spellTags";
 import { COPY_CAST_IDS } from "../utils/castPress";
@@ -380,7 +381,8 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     targetName: string | undefined,
   ): string | null {
     if (!MANA_COOLDOWN_SPELL_IDS.has(spellId)) return null;
-    const duration = spellEffectData[spellId]?.durationSeconds;
+    // Caster-aware: the owner cast it, so their talents price its length.
+    const duration = buffFullDurationForCaster(spellId, owner);
     if (!duration) return null;
     const target =
       (targetName
@@ -966,7 +968,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   const healingEmissionTimes = new Map<string, Set<number>>();
   for (const cd of ownerCDs) {
     if (!HEALING_AMPLIFIER_SPELL_IDS.has(cd.spellId)) continue;
-    const duration = spellEffectData[cd.spellId]?.durationSeconds;
+    const duration = buffFullDurationForCaster(cd.spellId, owner);
     if (!duration) continue;
     const eligible: { timeSeconds: number; score: number }[] = [];
     for (const cast of cd.casts) {
@@ -1109,7 +1111,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
         HEALING_AMPLIFIER_SPELL_IDS.has(cd.spellId) &&
         healingEmissionTimes.get(cd.spellId)?.has(cast.timeSeconds)
       ) {
-        const duration = spellEffectData[cd.spellId]?.durationSeconds;
+        const duration = buffFullDurationForCaster(cd.spellId, owner);
         if (duration) {
           const fromMs = matchStartMs + cast.timeSeconds * 1000;
           const toMs = fromMs + duration * 1000;
