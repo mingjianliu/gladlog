@@ -54,26 +54,29 @@ describe("buffFullDurationForCaster — 天赋条件的增益时长", () => {
     expect(buffFullDurationForCaster(ENRAGED_REGENERATION, undefined)).toBe(8);
   });
 
-  it("无施法者值 = 无天赋基础值 + 语料众数级数的天赋(两个数不许各自漂移)", () => {
-    const MODAL_RANK: Record<string, number> = {
+  it("每条登记项的无施法者值都与 untalentedBaseSeconds 自洽", () => {
+    // 两类条目,不许混:
+    //  · TYPICAL_IS_TALENTED —— 表里存的是**带天赋的典型值**(语料里约 100%
+    //    的施法者都点了,所以拿不到施法者时它比基础值更接近事实)。这三条必须
+    //    满足 基础值 + 该级数的天赋 == 表值。
+    //  · 其余 —— 表里存的就是无天赋基础值,两者必须相等。
+    const TYPICAL_IS_TALENTED: Record<string, number> = {
       "22812": 1, // Improved Barkskin, maxRanks 1
       "47788": 1, // Foreseen Circumstances, maxRanks 1
       "357170": 2, // Timeless Magic, maxRanks 2 —— 语料 143/155 格是 2 级
-      "184364": 0, // 狂怒回复没有覆盖值,典型值就是无天赋值
     };
     for (const [spellId, mods] of Object.entries(
       BUFF_DURATION_TALENT_MODIFIERS,
     )) {
-      const rank = MODAL_RANK[spellId]!;
+      const noCaster = buffFullDurationForCaster(spellId, undefined);
+      const rank = TYPICAL_IS_TALENTED[spellId] ?? 0;
       let seconds = mods[0]!.untalentedBaseSeconds;
       let mult = 1;
       for (const m of mods) {
         if (m.addSeconds !== undefined) seconds += m.addSeconds * rank;
         if (m.pct !== undefined) mult += (m.pct / 100) * rank;
       }
-      expect(buffFullDurationForCaster(spellId, undefined)).toBeCloseTo(
-        seconds * mult,
-      );
+      expect(noCaster).toBeCloseTo(seconds * mult);
     }
   });
 

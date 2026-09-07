@@ -100,8 +100,14 @@ function auraPriority(spellId: string): 0 | 1 | 2 {
  * before the cap so a hard-CC or major/immunity aura is never displaced by
  * cosmetic buffs.
  */
-export function aurasActiveAt(unit: any, combat: any, t: number): string[] {
-  return buildAuraIntervals(unit, combat)
+export function aurasActiveAt(
+  unit: any,
+  combat: any,
+  t: number,
+  /** 可选:按 unitId 找光环的施法者,用于天赋加长的时长封顶(见 auraIntervals)。 */
+  castersById?: ReadonlyMap<string, any>,
+): string[] {
+  return buildAuraIntervals(unit, combat, castersById)
     .filter((iv) => iv.fromS <= t && t <= iv.toS)
     .sort((a, b) => auraPriority(a.spellId) - auraPriority(b.spellId))
     .map((iv) => iv.spellName)
@@ -236,8 +242,11 @@ export function buildMomentSnapshotItems(
   }
 
   // aura-snap: every player, skipped when nothing is up at the midpoint.
+  // 传入全场名册:光环封顶要按**施法者**的天赋算(auraIntervals 里 11% 的上身
+  // 等不到 REMOVED,全靠封顶收口)。
+  const castersById = new Map(players.map((u: any) => [u.id, u]));
   for (const u of players) {
-    const auras = aurasActiveAt(u, combat, midT);
+    const auras = aurasActiveAt(u, combat, midT, castersById);
     if (auras.length === 0) continue;
     raw.push({
       kind: "aura-snap",

@@ -207,6 +207,29 @@ export const CC_DURATION_TALENT_MODIFIERS: Record<
  * Entries below reconcile exactly. DB2 rows read from the locally cached
  * SpellEffect 12.1.0.69404.
  *
+ * THE MASK CHECK IS NOT OPTIONAL. A first pass that only required "a talent
+ * with a SPELLMOD_DURATION row, held by ~all of the long group, whose value
+ * makes the arithmetic work" produced 23 candidates and most were nonsense —
+ * Tiger's Fury attributed to Improved Barkskin, Argus Domination to Demon
+ * Skin — because a talent held by ~100 % of a class carries no discriminating
+ * power and a free-floating base value can absorb any modifier. Constraining
+ * the base to the table's own value cut it to 12; requiring
+ * `SpellClassOptions.SpellClassMask` (fetched at the same build) to actually
+ * cover the target spell cut it to 10, killing exactly the two the reviewer
+ * had flagged by eye (Improved Garrote ← Razor Wire, and Way of the Crane
+ * ← Thunder Focus Tea — a BASELINE ability every Mistweaver has, so its
+ * "100 % of the long group holds it" meant nothing). The four pre-existing
+ * entries were run through the same mask check as a negative control and all
+ * four pass.
+ *
+ * Note the two shapes of `untalentedBaseSeconds` vs what `spellEffectData`
+ * answers with no caster: for Barkskin / Guardian Spirit / Time Dilation the
+ * table value is the TALENTED one (see above), while for every entry added on
+ * 2026-09-06 the table value IS the untalented base, so those change nothing
+ * for a caster-less caller. None of the ten is in `classMetadata`, so none
+ * reaches `extractOwnerCDBuffExpiry` today: they are exact facts waiting for
+ * their consumers to become caster-aware, not a live output change.
+ *
  * NOT registered, evidence incomplete (do not add without closing the gap):
  *  · Avenging Crusader 216331 — Sanctified Wrath 53376 is aura 108 +25 % and
  *    100 % of the 102 caster-cells at 22.5 s hold it vs 40 % of the 5 at
@@ -222,6 +245,16 @@ export const CC_DURATION_TALENT_MODIFIERS: Record<
  *  · Ascendance 114052 — 6.0 s in 135 of 135 Restoration Shaman cells against
  *    a DB2 15 s, i.e. SHORTER than official with no modifier of any sign; a
  *    base-value/spec problem, not a talent one.
+ *  · Improved Garrote 392401 (6 → 12 s) and Way of the Crane 451084
+ *    (10 → 5 s) — the arithmetic worked (Razor Wire +6000 ms; Thunder Focus
+ *    Tea −50 %) and both talents were held by ~100 % of the group, but
+ *    neither modifier's class mask covers the spell. Rejected BY the mask
+ *    check, kept here as the worked example of why it exists.
+ *  · The other 76 of the 88 durations that disagree with the corpus: no
+ *    talent with a SPELLMOD_DURATION row reconciles them at all (Rip,
+ *    Rejuvenation, Hover, Divine Steed, Avenging Crusader, Recklessness …).
+ *    Whatever moves those is not a talent duration modifier, so they are not
+ *    this table's problem — do not force them in.
  */
 export const BUFF_DURATION_TALENT_MODIFIERS: Record<
   string,
@@ -275,6 +308,86 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
       untalentedBaseSeconds: 8,
       pct: 15,
       note: "Timeless Magic — DB2 aura 108 +15 % PER RANK, Preservation spec tree, maxRanks 2; corpus shows all three tiers of Time Dilation: 8.0 s × 7 cells (0 ranks, talent held by 0 %), 9.0 s × 5 (rank 1 → 8 × 1.15 = 9.2), 10.5 s × 143 (rank 2 → 8 × 1.30 = 10.4, talent held by 100 %)",
+    },
+  ],
+  "589": [
+    {
+      talentSpellId: "390689",
+      untalentedBaseSeconds: 16,
+      addSeconds: 2,
+      note: "Pain and Suffering — DB2 aura 107 +2000 ms, Priest/Discipline[spec] (maxRanks 2), mask covers the spell; 61 caster-cells at 20.0 s hold it 93 %, 34 at 16.0 s hold it 0 %; 16 + 2 × 2 = 20",
+    },
+  ],
+  "262115": [
+    {
+      talentSpellId: "383154",
+      untalentedBaseSeconds: 6,
+      pct: 33,
+      note: "Bloodletting — DB2 aura 108 +33 %, Warrior/Arms[spec] (maxRanks 1), mask covers the spell; 245 caster-cells at 8.0 s hold it 100 %, 63 at 6.0 s hold it 0 %; 6 × (1 + 33% × 1) = 8",
+    },
+  ],
+  "2983": [
+    {
+      talentSpellId: "423683",
+      untalentedBaseSeconds: 8,
+      addSeconds: 4,
+      note: "Featherfoot — DB2 aura 107 +4000 ms, Rogue/Assassination[class],Rogue/Outlaw[class],Rogue/Subtlety[class] (maxRanks 1), mask covers the spell; 154 caster-cells at 12.0 s hold it 100 %, 15 at 8.0 s hold it 0 %; 8 + 4 × 1 = 12",
+    },
+  ],
+  "215769": [
+    {
+      talentSpellId: "196707",
+      untalentedBaseSeconds: 6,
+      pct: 50,
+      note: "Afterlife — DB2 aura 108 +50 %, Priest/Holy[spec] (maxRanks 1), mask covers the spell; 132 caster-cells at 9.0 s hold it 98 %, 2 at 6.0 s hold it 0 %; 6 × (1 + 50% × 1) = 9",
+    },
+  ],
+  "49039": [
+    {
+      talentSpellId: "389682",
+      untalentedBaseSeconds: 10,
+      addSeconds: 2,
+      note: "Unholy Endurance — DB2 aura 107 +2000 ms, Death Knight/Blood[class],Death Knight/Frost[class],Death Knight/Unholy[class] (maxRanks 1), mask covers the spell; 108 caster-cells at 12.0 s hold it 100 %, 1 at 10.0 s hold it 0 %; 10 + 2 × 1 = 12",
+    },
+  ],
+  "217200": [
+    {
+      talentSpellId: "424557",
+      untalentedBaseSeconds: 12,
+      addSeconds: 2,
+      note: "Savagery — DB2 aura 107 +2000 ms, Hunter/Beast Mastery[spec] (maxRanks 1), mask covers the spell; 114 caster-cells at 14.0 s hold it 99 %, 2 at 12.0 s hold it 0 %; 12 + 2 × 1 = 14",
+    },
+  ],
+  "5217": [
+    {
+      talentSpellId: "202021",
+      untalentedBaseSeconds: 10,
+      addSeconds: 5,
+      note: "Predator — DB2 aura 107 +5000 ms, Druid/Feral[spec] (maxRanks 1), mask covers the spell; 96 caster-cells at 15.0 s hold it 100 % (no control group in the corpus); 10 + 5 × 1 = 15",
+    },
+  ],
+  "1250646": [
+    {
+      talentSpellId: "1253830",
+      untalentedBaseSeconds: 8,
+      addSeconds: 2,
+      note: "Can't Miss, Won't Miss — DB2 aura 107 +2000 ms, Hunter/Marksmanship[hero],Hunter/Survival[hero] (maxRanks 1), mask covers the spell; 65 caster-cells at 10.0 s hold it 100 %, 13 at 8.0 s hold it 15 %; 8 + 2 × 1 = 10",
+    },
+  ],
+  "155777": [
+    {
+      talentSpellId: "231040",
+      untalentedBaseSeconds: 12,
+      addSeconds: 3,
+      note: "Lingering Healing — DB2 aura 107 +3000 ms, Druid/Balance[class],Druid/Feral[class],Druid/Guardian[class],Druid/Restoration[class] (maxRanks 1), mask covers the spell; 14 caster-cells at 15.0 s hold it 100 %, 2 at 14.0 s hold it 0 %; 12 + 3 × 1 = 15",
+    },
+  ],
+  "367364": [
+    {
+      talentSpellId: "376240",
+      untalentedBaseSeconds: 12,
+      pct: 15,
+      note: "Timeless Magic — DB2 aura 108 +15 %, Evoker/Preservation[spec] (maxRanks 2), mask covers the spell; 8 caster-cells at 15.5 s hold it 100 %, 4 at 17.5 s hold it 0 %; 12 × (1 + 15% × 2) = 15.5",
     },
   ],
 };

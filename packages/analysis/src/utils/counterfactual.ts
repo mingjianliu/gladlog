@@ -221,7 +221,12 @@ export function whitelistedIntervalsInDeathWindow(
 ): IWindowedAuraInterval[] {
   const windowStartS = windowStartSecondsOf(deathS);
   const out: IWindowedAuraInterval[] = [];
-  for (const iv of buildAuraIntervals(victim, combat)) {
+  // 白名单里的减伤绝大多数是**自施**(树皮术、洞察之眼…),所以受害者自己就是
+  // 施法者 —— 不用改签名就能让天赋加长的时长参与封顶(auraIntervals:11% 的上身
+  // 等不到 REMOVED)。外置减伤(守护之魂等)的施法者不在这里,按无施法者取值,
+  // 即接线前的行为。
+  const selfCaster = new Map([[victim.id, victim]]);
+  for (const iv of buildAuraIntervals(victim, combat, selfCaster)) {
     if (!WHITELIST_IDS.has(iv.spellId)) continue;
     const overlapFrom = Math.max(iv.fromS, windowStartS);
     const overlapTo = Math.min(iv.toS, deathS);

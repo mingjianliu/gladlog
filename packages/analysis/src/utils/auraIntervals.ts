@@ -79,18 +79,23 @@ const OPEN_EVENTS = new Set<string>([
 ]);
 
 /**
- * Official aura duration in seconds; no data -> null (no cap).
+ * Official aura duration in seconds AS CAST BY `caster`; no data -> null (no
+ * cap). Single predicate (`buffFullDurationForCaster`, 2026-09-06) so the
+ * override layer and the caster's talent ranks reach this cap too.
  *
- * Goes through `buffFullDurationForCaster` (2026-09-06) rather than reading
- * `spellEffectData` directly, so the override layer and any later correction
- * reach this cap too — "one fact, one predicate". The caster is deliberately
- * not threaded: an interval here knows its source only by NAME, and the cap
- * only ever bites an aura whose SPELL_AURA_REMOVED went missing, so the
- * no-caster answer (the typical caster's duration) is the right one and this
- * is a zero-delta change today.
+ * This cap is not a rare path: measured over the 227-file log archive, **11.0 %
+ * of all applications of the currently-registered ids never produce a
+ * SPELL_AURA_REMOVED** (91,045 applications, 9,986 unclosed) — Shadow Word:
+ * Pain 13.7 %, Deep Wounds 11.3 %, Tiger's Fury 16.9 %. Every one of those
+ * intervals is closed by this number, so a caster whose talents lengthen the
+ * aura had it truncated (SW:P capped at 16 s instead of 20 s on 4,162
+ * intervals). Passing no `castersById` keeps the previous no-caster answer.
  */
-function officialDurationS(spellId: string): number | null {
-  const d = buffFullDurationForCaster(spellId, undefined);
+function officialDurationS(
+  spellId: string,
+  caster: Pick<ICombatUnit, "spec" | "info" | "spellCastEvents"> | undefined,
+): number | null {
+  const d = buffFullDurationForCaster(spellId, caster);
   return typeof d === "number" && d > 0 ? d : null;
 }
 
@@ -108,7 +113,18 @@ export const DUPLICATE_CLOSE_WINDOW_S = 1;
 export function buildAuraIntervals(
   unit: ICombatUnit,
   combat: { startTime: number; endTime: number },
+  /**
+   * Optional unitId → unit lookup for the aura's SOURCE, used only to price
+   * talent-lengthened durations at the cap above. Omit it and every cap falls
+   * back to the no-caster duration, i.e. the behaviour before 2026-09-06.
+   */
+  castersById?: ReadonlyMap<
+    string,
+    Pick<ICombatUnit, "spec" | "info" | "spellCastEvents">
+  >,
 ): IAuraInterval[] {
+  const casterOf = (srcUnitId: string | undefined) =>
+    srcUnitId ? castersById?.get(srcUnitId) : undefined;
   const durationS = (combat.endTime - combat.startTime) / 1000;
   const rel = (ts: number) =>
     Math.min(durationS, Math.max(0, (ts - combat.startTime) / 1000));
@@ -148,7 +164,7 @@ export function buildAuraIntervals(
         // 修复前后来的 REMOVED 会配给最初的 APPLIED —— 实测一个 REMOVED
         // 缺失 + 重新施放的 5s 暗影斗篷被拼成 130s 区间。DOSE 是叠层、
         // REFRESH 是续时,都不重开 —— 只挪封顶锚(lastSeenS)。
-        const d = officialDurationS(id);
+        const d = officialDurationS(id, casterOf(a.srcUnitId));
         out.push({
           spellId: id,
           spellName: existing.spellName,
@@ -184,7 +200,7 @@ export function buildAuraIntervals(
       } else {
         // Already up but no APPLIED was seen: back up by at most the official
         // duration
-        const d = officialDurationS(id);
+        const d = officialDurationS(id, casterOf(a.srcUnitId));
         open.set(key, {
           fromS: d === null ? 0 : Math.max(0, t - d),
           lastSeenS: t,
@@ -236,7 +252,7 @@ export function buildAuraIntervals(
           priorCloseToS !== undefined &&
           t - priorCloseToS <= DUPLICATE_CLOSE_WINDOW_S;
         if (!isDuplicateReport) {
-          const d = officialDurationS(id);
+          const d = officialDurationS(id, casterOf(a.srcUnitId));
           out.push({
             spellId: id,
             spellName: a.spellName ?? "",
@@ -254,10 +270,11 @@ export function buildAuraIntervals(
 
   for (const [key, o] of open) {
     const id = key.slice(0, key.indexOf(":"));
+    const srcUnitId = key.slice(key.indexOf(":") + 1);
     // No REMOVED seen: extend by at most the official duration (short auras no
     // longer stay dashed all the way to the end of the match). 封顶锚在
     // lastSeenS(REFRESH/DOSE 续时后从最后一次活动起算,2026-08-21)。
-    const d = officialDurationS(id);
+    const d = officialDurationS(id, casterOf(srcUnitId));
     out.push({
       spellId: id,
       spellName: o.spellName,
