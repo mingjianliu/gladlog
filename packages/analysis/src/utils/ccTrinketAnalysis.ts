@@ -405,6 +405,42 @@ export interface IRootInstance {
  * half. */
 export type PostKickBehavior = "switched" | "acted" | "idle";
 
+/**
+ * How coachable a post-kick behaviour is — **lower sorts first** (most
+ * coachable), consumed by `kickEatenEvents`' cap selection.
+ *
+ * Replaces the flat `idle 0 / acted 1 / switched 2` table (2026-09-06). That
+ * table asserted "switched is the least coachable", and the assertion is
+ * only supported for the switches that were a real hardcast: measured over
+ * 400 rounds, that is **16 of 292**. For the other 95% — an off-school
+ * instant — the old rank had no evidence behind it at all, and the concrete
+ * cost was that a player who was shut down and pressed one instant heal
+ * (Holy Priest 1bad0a5c t=15.4, the whole 5 s window is that single cast)
+ * sorted BELOW someone who cast normally after the lockout expired.
+ *
+ * The three tiers are exactly what the data supports, no more:
+ *  - `0` **idle** — zero casts for the whole window. The paralysis case.
+ *  - `1` **acted, or switched-by-instant** — did something, but nothing here
+ *    says whether it helped. An off-school instant can be a good disengage
+ *    (Cat Form + Wild Charge) or near-paralysis (one instant heal), and this
+ *    module **cannot tell those apart** — so they are not ranked against
+ *    each other or against `acted`. Deliberately a tie.
+ *  - `2` **switched by a real hardcast** — demonstrably kept casting through
+ *    the lockout. The only group the "least coachable" claim was ever true
+ *    of.
+ *
+ * `switchWasHardCast === null` (no cast-start data, old archive) stays in
+ * tier 1: absence of evidence must not promote a line into the
+ * "demonstrably fine" tier.
+ */
+export function postKickSeverityRank(
+  inst: Pick<IInterruptInstance, "postKick" | "switchWasHardCast">,
+): number {
+  if (inst.postKick === "idle") return 0;
+  if (inst.postKick === "switched" && inst.switchWasHardCast === true) return 2;
+  return 1;
+}
+
 export interface IInterruptInstance {
   atSeconds: number;
   lockoutDurationSeconds: number;

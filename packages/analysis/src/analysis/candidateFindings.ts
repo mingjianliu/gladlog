@@ -25,6 +25,7 @@ import {
   applicableCCAvoidanceIds,
   CC_AVOIDANCE_BUFF_SPELLS,
   type ICCInstance,
+  postKickSeverityRank,
   REPOSITIONING_SPELL_IDS,
   trinketStateFact,
 } from "../utils/ccTrinketAnalysis";
@@ -837,11 +838,6 @@ export function ccLockedEvents(
  * 最该教)排最前,acted(动了但没换学派)次之,switched(换学派打穿
  * 锁定,几乎不用教)最后;同档内按时间。语料锚:切换率跟专精能力上限走
  * (戒律 76–80% vs 神骑 8%),同专精内 idle 率才是可教的那一半。 */
-const POST_KICK_SEVERITY: Record<string, number> = {
-  idle: 0,
-  acted: 1,
-  switched: 2,
-};
 
 export function kickEatenEvents(
   instances: Pick<
@@ -856,14 +852,18 @@ export function kickEatenEvents(
     | "switchSpellName"
     | "switchDelayS"
     | "switchWasHardCast"
+    | "postKick"
   >[],
   owner: { id: string; name: string },
 ): CandidateEvent[] {
   return instances
     .sort(
       (a, b) =>
-        (POST_KICK_SEVERITY[a.postKick] ?? 3) -
-          (POST_KICK_SEVERITY[b.postKick] ?? 3) || a.atSeconds - b.atSeconds,
+        // Shared rank (ccTrinketAnalysis.ts) — never a second severity table
+        // here: the cap decides which kicks the model ever sees, so the
+        // ordering and the field it reads must not be able to drift apart.
+        postKickSeverityRank(a) - postKickSeverityRank(b) ||
+        a.atSeconds - b.atSeconds,
     )
     .slice(0, KICK_EATEN_CAP)
     .map((k) => ({

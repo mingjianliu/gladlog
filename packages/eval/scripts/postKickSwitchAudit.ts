@@ -39,6 +39,8 @@ import { spellSchoolMask } from "@gladlog/analysis/src/data/spellSchools";
 import {
   analyzePlayerCCAndTrinket,
   CAST_START_LOOKBACK_S,
+  type IInterruptInstance,
+  postKickSeverityRank,
 } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
 import { LogEvent } from "@gladlog/parser-compat";
 
@@ -342,7 +344,104 @@ async function examples(limit: number, want: number): Promise<void> {
   if (shown === 0) console.log("no switched kick-eaten examples found in range");
 }
 
+/** The RETIRED flat table (idle 0 / acted 1 / switched 2), kept here and
+ * ONLY here purely to measure what replacing it changed. Never import this
+ * shape into production — `postKickSeverityRank` is the live one. */
+const RETIRED_RANK: Record<string, number> = { idle: 0, acted: 1, switched: 2 };
+
+/** `kickEatenEvents` caps at 2 after sorting; mirrored here to compare the
+ * two orderings' SELECTIONS, which is what the model actually sees. */
+const CAP = 2;
+
+function pick(
+  insts: IInterruptInstance[],
+  rank: (i: IInterruptInstance) => number,
+): number[] {
+  return [...insts]
+    .sort((a, b) => rank(a) - rank(b) || a.atSeconds - b.atSeconds)
+    .slice(0, CAP)
+    .map((i) => i.atSeconds);
+}
+
+async function rerank(limit: number, want: number): Promise<void> {
+  await ensureAnalysisData();
+  const rows = pickRows(loadIndex(DEFAULT_MATCH_DIR), { minDurationS: 60 }).slice(
+    0,
+    limit,
+  );
+  let firing = 0;
+  let overCap = 0;
+  // Two very different things, deliberately not pooled: which kicks the
+  // model SEES at all (set), vs the order it sees them in. kickEatenEvents
+  // does not re-sort after the cap, so severity order IS emission order —
+  // order matters, but far less than a kick disappearing from the menu.
+  let setChanged = 0;
+  let orderOnly = 0;
+  let shown = 0;
+  for (const meta of rows) {
+    let legacy;
+    try {
+      ({ legacy } = loadLegacyRound(DEFAULT_MATCH_DIR, meta.id));
+    } catch {
+      continue;
+    }
+    const { enemies, owner } = splitTeams(legacy);
+    if (!owner) continue;
+    let summary;
+    try {
+      summary = analyzePlayerCCAndTrinket(owner, enemies, legacy, []);
+    } catch {
+      continue;
+    }
+    const insts = summary.interruptInstances;
+    if (insts.length === 0) continue;
+    firing++;
+    if (insts.length > CAP) overCap++;
+    const before = pick(insts, (i) => RETIRED_RANK[i.postKick] ?? 3);
+    const after = pick(insts, postKickSeverityRank);
+    const sameSet =
+      JSON.stringify([...before].sort()) === JSON.stringify([...after].sort());
+    if (sameSet && JSON.stringify(before) === JSON.stringify(after)) continue;
+    if (sameSet) orderOnly++;
+    else setChanged++;
+    if (shown >= want) continue;
+    shown++;
+    const desc = (t: number) => {
+      const i = insts.find((x) => x.atSeconds === t)!;
+      const q =
+        i.postKick !== "switched"
+          ? ""
+          : i.switchWasHardCast === true
+            ? " hard cast"
+            : i.switchWasHardCast === false
+              ? " instant/channel"
+              : " unknown";
+      return `t=${t.toFixed(1)}s ${i.postKick}${q}${i.switchSpellName ? ` (${i.switchSpellName})` : ""}`;
+    };
+    console.log(`\n${"=".repeat(74)}`);
+    console.log(`${meta.id}  ${specToString(owner.spec)}  (${insts.length} kicks, cap ${CAP})`);
+    console.log(`  all: ${insts.map((i) => desc(i.atSeconds)).join("\n       ")}`);
+    console.log(`  BEFORE picked: ${before.map(desc).join("  |  ")}`);
+    console.log(`  AFTER  picked: ${after.map(desc).join("  |  ")}`);
+  }
+  const p = (a: number, b: number) => (b === 0 ? "n/a" : `${((a / b) * 100).toFixed(1)}%`);
+  console.log(`\n${"-".repeat(74)}`);
+  console.log(`rounds firing kick-eaten        ${firing}`);
+  console.log(`  of which more kicks than cap  ${overCap}  (${p(overCap, firing)}) <- only these can change`);
+  console.log(
+    `  SET changed (a kick enters/leaves the menu) ${setChanged}  (${p(setChanged, firing)} of firing, ${p(setChanged, overCap)} of over-cap)`,
+  );
+  console.log(
+    `  order only (same two kicks, different order) ${orderOnly}  (${p(orderOnly, firing)} of firing)`,
+  );
+}
+
 async function main(): Promise<void> {
+  const rrIdx = process.argv.indexOf("--rerank");
+  if (rrIdx >= 0) {
+    await rerank(argOf("--n", 400), argOf("--rerank", 6));
+    return;
+  }
   const exIdx = process.argv.indexOf("--examples");
   if (exIdx >= 0) {
     await examples(argOf("--n", 200), argOf("--examples", 6));
