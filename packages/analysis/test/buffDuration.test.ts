@@ -237,6 +237,37 @@ describe("buffFullDurationForCaster — 天赋条件的增益时长", () => {
     }
   });
 
+  it("专精基础值:神圣马驹惩戒 6s / 神圣 5s / 惩戒+冲锋天赋 8s,DB2 的 3s 对谁都不对", () => {
+    const STEED = "221883";
+    const ret = makeUnit("p-ret", {
+      spec: CombatUnitSpec.Paladin_Retribution,
+      info: { talents: [{ id1: 93160, id2: 115439, count: 2 }], pvpTalents: [] },
+    });
+    expect(buffFullDurationForCaster(STEED, ret)).toBeCloseTo(6);
+    const holy = makeUnit("p-holy", {
+      spec: CombatUnitSpec.Paladin_Holy,
+      info: { talents: [{ id1: 81592, id2: 102578, count: 1 }], pvpTalents: [] },
+    });
+    expect(buffFullDurationForCaster(STEED, holy)).toBeCloseTo(5);
+    const charger = makeUnit("p-ret2", {
+      spec: CombatUnitSpec.Paladin_Retribution,
+      info: { talents: [{ id1: 95181, id2: 117858, count: 1 }], pvpTalents: [] },
+    });
+    expect(talentOwnershipOf(charger, "432990")).toBe("yes");
+    expect(buffFullDurationForCaster(STEED, charger)).toBeCloseTo(8);
+    // loadout 读不到时退到**专精**基础值,而不是 DB2 的 3s
+    const unknownRet = makeUnit("p-ret3", {
+      spec: CombatUnitSpec.Paladin_Retribution,
+    });
+    expect(buffFullDurationForCaster(STEED, unknownRet)).toBeCloseTo(6);
+    // 射击猎的优胜劣汰同理:自己的 3.0s,天赋抬不动
+    const mm = makeUnit("h-mm", {
+      spec: CombatUnitSpec.Hunter_Marksmanship,
+      info: { talents: [{ id1: 102391, id2: 126454, count: 1 }], pvpTalents: [] },
+    });
+    expect(buffFullDurationForCaster("264735", mm)).toBeCloseTo(3);
+  });
+
   it("读不到天赋(unknown)绝不加长 —— 与 CC 侧同一条纪律", () => {
     const noInfo = makeUnit("d2", { spec: CombatUnitSpec.Druid_Restoration });
     expect(talentOwnershipOf(noInfo, "327993")).toBe("unknown");
@@ -292,13 +323,21 @@ describe("buffFullDurationForCaster — 天赋条件的增益时长", () => {
     expect(buffFullDurationForCaster("61336", druid)).toBe(
       buffFullDurationForCaster("61336", undefined),
     );
-    // 每条恰好用一种量纲:加秒 / 加百分比 / 整个替换(proc)
+    // 每条恰好用一种量纲:加秒 / 加百分比 / 整个替换(proc) / 纯专精基础值。
+    // 纯专精基础值那种没有 talentSpellId,也不带任何修正量纲。
     for (const mods of Object.values(BUFF_DURATION_TALENT_MODIFIERS))
-      for (const m of mods)
-        expect(
-          [m.addSeconds, m.pct, m.replaceSeconds].filter(
-            (v) => v !== undefined,
-          ),
-        ).toHaveLength(1);
+      for (const m of mods) {
+        const dims = [m.addSeconds, m.pct, m.replaceSeconds].filter(
+          (v) => v !== undefined,
+        );
+        if (m.talentSpellId === undefined) {
+          // 纯 specBaseSeconds 行:必须有专精门,且不带修正
+          expect(m.specBaseSeconds).toBeDefined();
+          expect(m.specs).toBeDefined();
+          expect(dims).toHaveLength(0);
+        } else {
+          expect(dims).toHaveLength(1);
+        }
+      }
   });
 });

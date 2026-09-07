@@ -195,6 +195,84 @@ export const CORPUS_DURATION_PATCHES: Record<string, number> = {
   // S2 605-file sample, n=2290 lifetimes: 3.0 s ×1084 (full-duration cluster),
   // 1.5 s ×309 (the 50 % DR cluster), p90 3.1 s. GH #44 tail, 2026-09-02.
   "117526": 3,
+
+  // ── 2026-09-07 batch ─────────────────────────────────────────
+  // Auras whose observed lifetime is LONGER than their DB2 duration and which
+  // no talent explains — the PRODUCING ability sets the length, not the aura's
+  // own row (Rend is applied by Thunder Clap 60 % of the time, Earthliving by
+  // Chain Heal / Riptide, the Evoker breaths scale with empower level).
+  // The direction is the safety argument: an aura cannot outlive its duration,
+  // so a longer observation cannot be an early-removal artifact, while a
+  // SHORTER one can — nothing is patched downward here.
+  // Stack-refresh was excluded by re-measuring with SPELL_AURA_APPLIED_DOSE
+  // tracked separately; it changed exactly one id (Argus Domination), which is
+  // therefore absent. Bar: the modal clean lifetime holds >= 60 % of >= 100
+  // samples. Deliberately NOT patched: Dream Breath 355941 (mode only 57 % of
+  // 12,745 — it genuinely varies with empower level) and Frostbrood 1265630
+  // (51 %). Nothing in the DR/CC tables is touched: Winds of Destruction
+  // 466772 qualified on the numbers and was dropped for being in
+  // SPELL_CATEGORIES, per the standing ruling that control keeps its official
+  // number and takes its truth from the observed break/dispel instead.
+  // Earthliving Weapon: DB2 6 s vs 9 s ×79 % of 13254 clean lifetimes (227-file archive,
+  // APPLIED→REMOVED with no refresh and no stack, 2026-09-07).
+  "382024": 9,
+  // Healing Stream: DB2 15 s vs 21.5 s ×64 % of 9090 clean lifetimes (227-file archive,
+  // APPLIED→REMOVED with no refresh and no stack, 2026-09-07).
+  "5672": 21.5,
+  // Dream Breath: DB2 2 s vs 16 s ×77 % of 6031 clean lifetimes (227-file archive,
+  // APPLIED→REMOVED with no refresh and no stack, 2026-09-07).
+  "376788": 16,
+  // Immolation Aura: DB2 6 s vs 10 s ×92 % of 3767 clean lifetimes (227-file archive,
+  // APPLIED→REMOVED with no refresh and no stack, 2026-09-07).
+  "258920": 10,
+  // Stormstream Totem: DB2 15 s vs 21.5 s ×65 % of 2914 clean lifetimes (227-file archive,
+  // APPLIED→REMOVED with no refresh and no stack, 2026-09-07).
+  "1267765": 21.5,
+  // Improved Garrote: DB2 6 s vs 12 s ×81 % of 2285 clean lifetimes (227-file archive,
+  // APPLIED→REMOVED with no refresh and no stack, 2026-09-07).
+  "392401": 12,
+  // Withering Fire: DB2 10 s vs 15 s ×85 % of 1233 clean lifetimes (227-file archive,
+  // APPLIED→REMOVED with no refresh and no stack, 2026-09-07).
+  "466991": 15,
+  // Manifested Demonic Soul: DB2 9 s vs 14 s ×89 % of 1030 clean lifetimes (227-file archive,
+  // APPLIED→REMOVED with no refresh and no stack, 2026-09-07).
+  "1269042": 14,
+  // Executioner: DB2 12 s vs 18 s ×76 % of 934 clean lifetimes (227-file archive,
+  // APPLIED→REMOVED with no refresh and no stack, 2026-09-07).
+  "445584": 18,
+  // Thing from Beyond: DB2 20 s vs 24 s ×79 % of 610 clean lifetimes (227-file archive,
+  // APPLIED→REMOVED with no refresh and no stack, 2026-09-07).
+  "373277": 24,
+  // Undisputed Ruling: DB2 6 s vs 10 s ×72 % of 563 clean lifetimes (227-file archive,
+  // APPLIED→REMOVED with no refresh and no stack, 2026-09-07).
+  "432629": 10,
+  // Immolation Aura: DB2 6 s vs 10 s ×92 % of 538 clean lifetimes (227-file archive,
+  // APPLIED→REMOVED with no refresh and no stack, 2026-09-07).
+  "427912": 10,
+  // Healing Rain: DB2 18 s vs 25 s ×87 % of 520 clean lifetimes (227-file archive,
+  // APPLIED→REMOVED with no refresh and no stack, 2026-09-07).
+  "1307888": 25,
+  // Risen Fury: DB2 4 s vs 20 s ×69 % of 364 clean lifetimes (227-file archive,
+  // APPLIED→REMOVED with no refresh and no stack, 2026-09-07).
+  "1271799": 20,
+  // Beast Cleave: DB2 4 s vs 8 s ×78 % of 291 clean lifetimes (227-file archive,
+  // APPLIED→REMOVED with no refresh and no stack, 2026-09-07).
+  "268877": 8,
+  // Dominion of Argus: Lady Sacrolash: DB2 10 s vs 14 s ×90 % of 260 clean lifetimes (227-file archive,
+  // APPLIED→REMOVED with no refresh and no stack, 2026-09-07).
+  "1282501": 14,
+  // Dominion of Argus: Grand Warlock Alythess: DB2 10 s vs 14 s ×88 % of 244 clean lifetimes (227-file archive,
+  // APPLIED→REMOVED with no refresh and no stack, 2026-09-07).
+  "1282502": 14,
+  // Abyssal Dominion: DB2 15 s vs 20 s ×78 % of 141 clean lifetimes (227-file archive,
+  // APPLIED→REMOVED with no refresh and no stack, 2026-09-07).
+  "456323": 20,
+  // Immolation Aura: DB2 6 s vs 10 s ×85 % of 131 clean lifetimes (227-file archive,
+  // APPLIED→REMOVED with no refresh and no stack, 2026-09-07).
+  "427913": 10,
+  // Lunar Beam: DB2 8.5 s vs 11.5 s ×85 % of 124 clean lifetimes (227-file archive,
+  // APPLIED→REMOVED with no refresh and no stack, 2026-09-07).
+  "204066": 11.5,
 };
 for (const [id, durationSeconds] of Object.entries(CORPUS_DURATION_PATCHES)) {
   const cur = SPELL_EFFECT_OVERRIDES[id];

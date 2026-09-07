@@ -61,15 +61,30 @@ export function buffFullDurationForCaster(
   // COMBATANT_INFO, an unresolvable loadout, or a "yes" that carries no rank —
   // cast evidence / PvP slot / baseline) falls back to the typical value,
   // exactly what this call site got before the talent layer existed.
+  const inSpec = (m: { specs?: readonly string[] }) =>
+    m.specs === undefined || m.specs.includes(caster.spec);
+
+  // Pass 1: this spec's own base, when the spell has one (Divine Steed runs
+  // 6 s for Retribution and 5 s for Holy against a DB2 3 s).
   let seconds = mods[0]!.untalentedBaseSeconds;
+  let specBase: number | undefined;
+  for (const m of mods)
+    if (m.specBaseSeconds !== undefined && inSpec(m)) specBase = m.specBaseSeconds;
+  if (specBase !== undefined) seconds = specBase;
+
   let mult = 1;
   for (const m of mods) {
+    if (m.talentSpellId === undefined) continue; // pure spec-base row
     // Spec gate first: a modifier for another spec must not even reach the
     // rank-0 fallback below, or it would short-circuit this caster's own one.
-    if (m.specs !== undefined && !m.specs.includes(caster.spec)) continue;
+    if (!inSpec(m)) continue;
     if (talentOwnershipOf(caster, m.talentSpellId) === "no") continue;
     const rank = talentRankOf(caster, m.talentSpellId);
-    if (rank <= 0) return noCasterValue;
+    // Cannot price this talent. Fall back to the most specific thing still
+    // known: this spec's own base when the spell has one (a Retribution
+    // paladin with an unreadable loadout is 6 s, not the DB2 3 s), otherwise
+    // the typical caster value this call site got before the talent layer.
+    if (rank <= 0) return specBase ?? noCasterValue;
     // A proc-producing talent replaces the duration outright and does not
     // compose with anything (see `replaceSeconds`).
     if (m.replaceSeconds !== undefined) return m.replaceSeconds;

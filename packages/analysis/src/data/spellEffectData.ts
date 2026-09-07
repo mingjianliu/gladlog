@@ -295,7 +295,23 @@ export const CC_DURATION_TALENT_MODIFIERS: Record<
 export const BUFF_DURATION_TALENT_MODIFIERS: Record<
   string,
   ReadonlyArray<{
-    talentSpellId: string;
+    /**
+     * The talent that carries the modifier. Omitted only by a pure
+     * `specBaseSeconds` row, which states a spec's own duration and gates on
+     * nothing else.
+     */
+    talentSpellId?: string;
+    /**
+     * This spec's own untamented base, replacing `untalentedBaseSeconds` when
+     * the spec gate matches — for spells whose DB2 duration is right for
+     * nobody because each spec runs its own number. Divine Steed is the worked
+     * example: DB2 says 3 s, Retribution runs 6 s and Holy/Protection 5 s with
+     * NO talent held by either group (254 and 162 caster-cells at 0 %), and
+     * Unrelenting Charger's +2 s then lands on top of the Retribution 6 to
+     * give the third observed tier at 8 s (11 cells, 91 % holding). Composes
+     * with talent rows; `replaceSeconds` does not.
+     */
+    specBaseSeconds?: number;
     /**
      * Restrict this modifier to these specs (`CombatUnitSpec` values). Needed
      * whenever a spell is shared by specs that modify it differently:
@@ -409,6 +425,12 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
   ],
   "264735": [
     {
+      specs: ["254"],
+      untalentedBaseSeconds: 6,
+      specBaseSeconds: 3,
+      note: "Marksmanship runs its own 3.0 s (108 caster-cells) and Lone Survivor does not lift it — 107 of those 108 hold the talent. Recorded here rather than left open, now that a spec base can be stated.",
+    },
+    {
       talentSpellId: "388039",
       specs: ["253", "255"],
       untalentedBaseSeconds: 6,
@@ -422,6 +444,183 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
       untalentedBaseSeconds: 10,
       addSeconds: 3,
       note: "Battlefield Commander — DB2 aura 107 +3000 ms, Warrior class tree (maxRanks 1), mask covers the spell; corpus 221 caster-cells at 13.0 s hold it 100 % vs 8 at 10.0 s holding it 12 % (10 + 3 = 13). Open: 29 further cells sit at 15.5 s while also holding it (mostly Fury) — unexplained, and they are priced at 13 s here, still closer than the table's 10.",
+    },
+  ],
+  "221883": [
+    {
+      specs: ["70"],
+      untalentedBaseSeconds: 3,
+      specBaseSeconds: 6,
+      note: "Divine Steed's own duration is spec-dependent and the DB2 3 s matches no spec: Retribution runs 6 s (254 caster-cells, 0 % holding any reachable modifier) and Holy/Protection 5 s (162 cells, likewise 0 %). Unrelenting Charger then adds +2 s on top of the Retribution base, which is the third observed tier at 8 s (11 cells, 91 % holding it at rank 1). The eight ids are mount-model variants of one ability and every one of them is used by BOTH specs, so a flat corpus patch could only ever be right for one.",
+    },
+    {
+      specs: ["65", "66"],
+      untalentedBaseSeconds: 3,
+      specBaseSeconds: 5,
+      note: "Divine Steed — Holy/Protection run 5 s (162 caster-cells at 0 % modifier holding).",
+    },
+    {
+      talentSpellId: "432990",
+      specs: ["70", "66"],
+      untalentedBaseSeconds: 3,
+      addSeconds: 2,
+      note: "Unrelenting Charger — DB2 aura 107 +2000 ms, Paladin hero tree (maxRanks 1), mask covers the spell; 11 caster-cells at 8.0 s hold it at rank 1 on top of the Retribution 6 s base (91 %) against 0 % of the 254 at 6.0 s.",
+    },
+  ],
+  "221885": [
+    {
+      specs: ["70"],
+      untalentedBaseSeconds: 3,
+      specBaseSeconds: 6,
+      note: "Divine Steed mount-model variant — measurement on 221883.",
+    },
+    {
+      specs: ["65", "66"],
+      untalentedBaseSeconds: 3,
+      specBaseSeconds: 5,
+      note: "Divine Steed — Holy/Protection run 5 s (162 caster-cells at 0 % modifier holding).",
+    },
+    {
+      talentSpellId: "432990",
+      specs: ["70", "66"],
+      untalentedBaseSeconds: 3,
+      addSeconds: 2,
+      note: "Unrelenting Charger — DB2 aura 107 +2000 ms, Paladin hero tree (maxRanks 1), mask covers the spell; 11 caster-cells at 8.0 s hold it at rank 1 on top of the Retribution 6 s base (91 %) against 0 % of the 254 at 6.0 s.",
+    },
+  ],
+  "221886": [
+    {
+      specs: ["70"],
+      untalentedBaseSeconds: 3,
+      specBaseSeconds: 6,
+      note: "Divine Steed mount-model variant — measurement on 221883.",
+    },
+    {
+      specs: ["65", "66"],
+      untalentedBaseSeconds: 3,
+      specBaseSeconds: 5,
+      note: "Divine Steed — Holy/Protection run 5 s (162 caster-cells at 0 % modifier holding).",
+    },
+    {
+      talentSpellId: "432990",
+      specs: ["70", "66"],
+      untalentedBaseSeconds: 3,
+      addSeconds: 2,
+      note: "Unrelenting Charger — DB2 aura 107 +2000 ms, Paladin hero tree (maxRanks 1), mask covers the spell; 11 caster-cells at 8.0 s hold it at rank 1 on top of the Retribution 6 s base (91 %) against 0 % of the 254 at 6.0 s.",
+    },
+  ],
+  "221887": [
+    {
+      specs: ["70"],
+      untalentedBaseSeconds: 3,
+      specBaseSeconds: 6,
+      note: "Divine Steed mount-model variant — measurement on 221883.",
+    },
+    {
+      specs: ["65", "66"],
+      untalentedBaseSeconds: 3,
+      specBaseSeconds: 5,
+      note: "Divine Steed — Holy/Protection run 5 s (162 caster-cells at 0 % modifier holding).",
+    },
+    {
+      talentSpellId: "432990",
+      specs: ["70", "66"],
+      untalentedBaseSeconds: 3,
+      addSeconds: 2,
+      note: "Unrelenting Charger — DB2 aura 107 +2000 ms, Paladin hero tree (maxRanks 1), mask covers the spell; 11 caster-cells at 8.0 s hold it at rank 1 on top of the Retribution 6 s base (91 %) against 0 % of the 254 at 6.0 s.",
+    },
+  ],
+  "254472": [
+    {
+      specs: ["70"],
+      untalentedBaseSeconds: 3,
+      specBaseSeconds: 6,
+      note: "Divine Steed mount-model variant — measurement on 221883.",
+    },
+    {
+      specs: ["65", "66"],
+      untalentedBaseSeconds: 3,
+      specBaseSeconds: 5,
+      note: "Divine Steed — Holy/Protection run 5 s (162 caster-cells at 0 % modifier holding).",
+    },
+    {
+      talentSpellId: "432990",
+      specs: ["70", "66"],
+      untalentedBaseSeconds: 3,
+      addSeconds: 2,
+      note: "Unrelenting Charger — DB2 aura 107 +2000 ms, Paladin hero tree (maxRanks 1), mask covers the spell; 11 caster-cells at 8.0 s hold it at rank 1 on top of the Retribution 6 s base (91 %) against 0 % of the 254 at 6.0 s.",
+    },
+  ],
+  "254474": [
+    {
+      specs: ["70"],
+      untalentedBaseSeconds: 3,
+      specBaseSeconds: 6,
+      note: "Divine Steed mount-model variant — measurement on 221883.",
+    },
+    {
+      specs: ["65", "66"],
+      untalentedBaseSeconds: 3,
+      specBaseSeconds: 5,
+      note: "Divine Steed — Holy/Protection run 5 s (162 caster-cells at 0 % modifier holding).",
+    },
+    {
+      talentSpellId: "432990",
+      specs: ["70", "66"],
+      untalentedBaseSeconds: 3,
+      addSeconds: 2,
+      note: "Unrelenting Charger — DB2 aura 107 +2000 ms, Paladin hero tree (maxRanks 1), mask covers the spell; 11 caster-cells at 8.0 s hold it at rank 1 on top of the Retribution 6 s base (91 %) against 0 % of the 254 at 6.0 s.",
+    },
+  ],
+  "276111": [
+    {
+      specs: ["70"],
+      untalentedBaseSeconds: 3,
+      specBaseSeconds: 6,
+      note: "Divine Steed mount-model variant — measurement on 221883.",
+    },
+    {
+      specs: ["65", "66"],
+      untalentedBaseSeconds: 3,
+      specBaseSeconds: 5,
+      note: "Divine Steed — Holy/Protection run 5 s (162 caster-cells at 0 % modifier holding).",
+    },
+    {
+      talentSpellId: "432990",
+      specs: ["70", "66"],
+      untalentedBaseSeconds: 3,
+      addSeconds: 2,
+      note: "Unrelenting Charger — DB2 aura 107 +2000 ms, Paladin hero tree (maxRanks 1), mask covers the spell; 11 caster-cells at 8.0 s hold it at rank 1 on top of the Retribution 6 s base (91 %) against 0 % of the 254 at 6.0 s.",
+    },
+  ],
+  "276112": [
+    {
+      specs: ["70"],
+      untalentedBaseSeconds: 3,
+      specBaseSeconds: 6,
+      note: "Divine Steed mount-model variant — measurement on 221883.",
+    },
+    {
+      specs: ["65", "66"],
+      untalentedBaseSeconds: 3,
+      specBaseSeconds: 5,
+      note: "Divine Steed — Holy/Protection run 5 s (162 caster-cells at 0 % modifier holding).",
+    },
+    {
+      talentSpellId: "432990",
+      specs: ["70", "66"],
+      untalentedBaseSeconds: 3,
+      addSeconds: 2,
+      note: "Unrelenting Charger — DB2 aura 107 +2000 ms, Paladin hero tree (maxRanks 1), mask covers the spell; 11 caster-cells at 8.0 s hold it at rank 1 on top of the Retribution 6 s base (91 %) against 0 % of the 254 at 6.0 s.",
+    },
+  ],
+  "454351": [
+    {
+      talentSpellId: "406872",
+      specs: ["70"],
+      untalentedBaseSeconds: 8,
+      addSeconds: 2,
+      note: "Divine Wrath on the Retribution-only Avenging Wrath id — corpus 225 of 226 caster-cells at 12.0 s hold it AT RANK 2 (8 + 2×2 = 12), all Retribution; same two-ranks-buy-+4 s semantics as 31884.",
     },
   ],
   "357170": [

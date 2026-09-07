@@ -20,7 +20,11 @@
  *    and are NOT pinned, so nobody reads this test as blessing them.
  */
 import { SPELL_EFFECTS_GENERATED } from "../src/data/spellEffectGenerated";
-import { SPELL_EFFECT_OVERRIDES } from "../src/data/spellEffectOverrides";
+import {
+  CORPUS_DURATION_PATCHES,
+  SPELL_EFFECT_OVERRIDES,
+} from "../src/data/spellEffectOverrides";
+import { spellEffectData } from "../src/data/spellEffectData";
 
 const gen = SPELL_EFFECTS_GENERATED as Record<
   string,
@@ -46,6 +50,20 @@ describe("spellEffectOverrides 的时长不许静默偏离官方值", () => {
   it.each(OFFICIAL_WINS)("%s:手工值 === 官方 DB2 值", (id) => {
     expect(gen[id]?.durationSeconds).toBeDefined();
     expect(ov[id]?.durationSeconds).toBe(gen[id]!.durationSeconds);
+  });
+
+  it("语料补丁真的到达了合并后的表(层叠没有被遮蔽)", () => {
+    // 这张表的历史教训就是「整对象展开会静默吞掉字段」——补丁必须层叠在生成
+    // 条目之上,而不是替换它。这里逐条验合并后的值,顺带保证补丁没被别处覆盖。
+    const ids = Object.keys(CORPUS_DURATION_PATCHES);
+    expect(ids.length).toBeGreaterThan(15);
+    for (const id of ids) {
+      expect(spellEffectData[id]?.durationSeconds).toBe(
+        CORPUS_DURATION_PATCHES[id],
+      );
+      // 层叠而非替换:名字这类生成字段必须还在
+      expect(spellEffectData[id]?.name).toBeTruthy();
+    }
   });
 
   it.each(Object.keys(DELIBERATELY_TALENTED))(
