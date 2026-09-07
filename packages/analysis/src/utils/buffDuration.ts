@@ -67,6 +67,9 @@ export function buffFullDurationForCaster(
     if (talentOwnershipOf(caster, m.talentSpellId) === "no") continue;
     const rank = talentRankOf(caster, m.talentSpellId);
     if (rank <= 0) return noCasterValue;
+    // A proc-producing talent replaces the duration outright and does not
+    // compose with anything (see `replaceSeconds`).
+    if (m.replaceSeconds !== undefined) return m.replaceSeconds;
     if (m.addSeconds !== undefined) seconds += m.addSeconds * rank;
     if (m.pct !== undefined) mult += (m.pct / 100) * rank;
   }

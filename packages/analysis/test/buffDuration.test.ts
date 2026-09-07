@@ -128,6 +128,20 @@ describe("buffFullDurationForCaster — 天赋条件的增益时长", () => {
     expect(buffFullDurationForCaster(TIME_DILATION, rank2)).toBeCloseTo(10.4);
   });
 
+  it("proc 型:持有 Deeply Rooted Elements → 升腾按 6s,不是官方的 15s", () => {
+    // 语料里 1684 次上身对 18 次施放 —— 这个光环几乎只由 DRE 触发,而触发方
+    // 自带时长。所以这里不是「加长」而是「替换」。
+    const DRE = { id1: 81051, id2: 101937, count: 1 };
+    const resto = makeUnit("s1", {
+      spec: CombatUnitSpec.Shaman_Restoration,
+      info: { talents: [DRE], pvpTalents: [] },
+    });
+    expect(talentOwnershipOf(resto, "378270")).toBe("yes");
+    expect(buffFullDurationForCaster("114052", resto)).toBe(6);
+    // 拿不到施法者仍是官方 15s(硬读版本的时长),与接线前一致
+    expect(buffFullDurationForCaster("114052", undefined)).toBe(15);
+  });
+
   it("读不到天赋(unknown)绝不加长 —— 与 CC 侧同一条纪律", () => {
     const noInfo = makeUnit("d2", { spec: CombatUnitSpec.Druid_Restoration });
     expect(talentOwnershipOf(noInfo, "327993")).toBe("unknown");
@@ -180,10 +194,13 @@ describe("buffFullDurationForCaster — 天赋条件的增益时长", () => {
     expect(buffFullDurationForCaster("61336", druid)).toBe(
       buffFullDurationForCaster("61336", undefined),
     );
+    // 每条恰好用一种量纲:加秒 / 加百分比 / 整个替换(proc)
     for (const mods of Object.values(BUFF_DURATION_TALENT_MODIFIERS))
       for (const m of mods)
         expect(
-          (m.addSeconds === undefined) !== (m.pct === undefined),
-        ).toBe(true);
+          [m.addSeconds, m.pct, m.replaceSeconds].filter(
+            (v) => v !== undefined,
+          ),
+        ).toHaveLength(1);
   });
 });

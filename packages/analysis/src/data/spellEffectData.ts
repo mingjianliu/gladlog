@@ -230,11 +230,41 @@ export const CC_DURATION_TALENT_MODIFIERS: Record<
  * reaches `extractOwnerCDBuffExpiry` today: they are exact facts waiting for
  * their consumers to become caster-aware, not a live output change.
  *
+ * TWO SEARCH GAPS, both found by a user question on 2026-09-07 ("did you
+ * actually read all the talents?") — the sweep above answers "which talent
+ * LENGTHENS this spell", and that question is too narrow twice over:
+ *
+ *  1. A talent can PRODUCE the spell instead of lengthening it. Ascendance
+ *     114052 was written off as "6 s observed vs DB2 15 s, a base-value
+ *     problem" until the cast/application ratio was checked: 18 casts against
+ *     1,684 applications. It is a Deeply Rooted Elements proc, and the proc
+ *     carries its own duration — a mechanism no SPELLMOD_DURATION scan can
+ *     see. `replaceSeconds` exists for this shape. Standing check before
+ *     calling a duration mismatch unexplained: COUNT THE CASTS.
+ *  2. Requiring the short group to NOT hold the talent silently discards
+ *     every universally-taken talent. That filter is what hid Hover ←
+ *     Extended Flight (6 + 4 = 10) and Recklessness ← Rampaging Berserker
+ *     (DB2 12 × 1.5 = 18 — the hand override's 16 was ALSO wrong, so the
+ *     arithmetic was being run against the wrong base). Ask DB2 first —
+ *     "which modifiers' class masks can legally reach this spell" is a
+ *     complete, small list — and use the corpus to choose among them, not to
+ *     nominate them.
+ *
+ * That second query also closed Avenging Wrath's Holy half: 31884 is covered
+ * by TWO +25 % rows (the talent 53376 and the spec passive 171648), so Holy
+ * runs 20 × 1.5 = 30 s (42/42 caster-cells) while Retribution gets Divine
+ * Wrath's +4 s (24 s, 72/74). It is still unregistered only because 171648 is
+ * not in any talent tree, so `talentOwnershipOf` would answer "yes" for a
+ * Retribution paladin too and double-count — the entry needs spec gating this
+ * table does not have yet.
+ *
  * NOT registered, evidence incomplete (do not add without closing the gap):
- *  · Avenging Crusader 216331 — Sanctified Wrath 53376 is aura 108 +25 % and
- *    100 % of the 102 caster-cells at 22.5 s hold it vs 40 % of the 5 at
- *    15 s, but 15 × 1.25 = 18.75 ≠ 22.5 (the observed ratio is exactly 1.5)
- *    and the node is maxRanks=1, so a second +25 % source is unaccounted for.
+ *  · Avenging Crusader 216331 — the corpus half is as strong as it gets
+ *    (102 of 102 caster-cells at 22.5 s hold Sanctified Wrath 53376; the 15 s
+ *    group holds it 2/5), but DB2 only reaches 18.75: unlike Avenging Wrath,
+ *    the second +25 % row (171648) does NOT cover it — 216331's class mask is
+ *    0/0/0/64 and 171648's modifier mask is 0/256/0/0. The observed ratio is
+ *    exactly 1.5 and the missing +25 % has no source, so it stays out.
  *  · Avenging Wrath 31884 — Retribution reconciles (Divine Wrath 406872,
  *    +4000 ms, 97 % of 72 cells at 24 s vs 0 % at 30 s: 20 + 4 = 24), but
  *    Holy sits at exactly 30 s (42 cells) with no modifier explaining
@@ -242,9 +272,6 @@ export const CC_DURATION_TALENT_MODIFIERS: Record<
  *    only the Retribution half would leave Holy silently wrong.
  *  · Shadow Blades 121471 (18 s in 65 of 75 cells) — NO talent with a
  *    SPELLMOD_DURATION row separates the groups at all (best +3 pp).
- *  · Ascendance 114052 — 6.0 s in 135 of 135 Restoration Shaman cells against
- *    a DB2 15 s, i.e. SHORTER than official with no modifier of any sign; a
- *    base-value/spec problem, not a talent one.
  *  · Improved Garrote 392401 (6 → 12 s) and Way of the Crane 451084
  *    (10 → 5 s) — the arithmetic worked (Razor Wire +6000 ms; Thunder Focus
  *    Tea −50 %) and both talents were held by ~100 % of the group, but
@@ -271,6 +298,16 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
      * the talent a second time. Pinned by `test/buffDuration.test.ts`.
      */
     untalentedBaseSeconds: number;
+    /**
+     * Absolute duration when the caster holds the talent — for the case where
+     * the talent does not LENGTHEN the spell but PRODUCES it: a proc whose
+     * trigger carries its own duration, so the spell's own DB2 duration
+     * describes only the (rare) hard-cast version. Mutually exclusive with
+     * `addSeconds`/`pct`; the aura-107/108 evidence rule does not apply to
+     * these entries, which need the proc evidence instead (cast count vs
+     * application count, and the trigger's own DB2 value).
+     */
+    replaceSeconds?: number;
     /** Seconds added per rank (DB2 aura 107, EffectBasePointsF in ms). */
     addSeconds?: number;
     /** Percent added per rank (DB2 aura 108). Applied AFTER `addSeconds`. */
@@ -300,6 +337,14 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
       untalentedBaseSeconds: 8,
       addSeconds: 3,
       note: "Invigorating Fury — DB2 aura 107 +3000 ms, Fury spec tree, maxRanks 1; corpus 11.0 s in 27 caster-cells holding it 100 % vs 0 % of the 14 cells at 8.0 s; 8 + 3 = 11",
+    },
+  ],
+  "114052": [
+    {
+      talentSpellId: "378270",
+      untalentedBaseSeconds: 15,
+      replaceSeconds: 6,
+      note: "Deeply Rooted Elements — NOT a duration modifier: the Restoration Shaman capstone PROCS Ascendance, and the proc carries its own length, so the spell's DB2 15 s (SpellMisc DurationIndex 8, no PvP variant) describes only the hard cast. Corpus: 1,684 aura applications against 18 casts of 114052, i.e. ~99 % are procs; 1,614 of 1,667 proc lifetimes are exactly 6.0 s; 162 of 162 caster-cells hold the talent. DRE's own DB2 effects carry dummy base points 6000 / 11.6 / 6 / 7 — the 6 is Restoration's (Enhancement 114051 is a normal cast, 672 casts vs 695 applications, 15.0 s, and stays on the base value).",
     },
   ],
   "357170": [
