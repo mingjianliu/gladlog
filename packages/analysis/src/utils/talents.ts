@@ -125,6 +125,52 @@ export function getPlayerTalentedSpellInfo(
 }
 
 /**
+ * Purchased rank (`count` in COMBATANT_INFO), per talented spell id — the same
+ * node walk as `getPlayerTalentedSpellInfo`, keeping the rank instead of
+ * discarding it. Needed by modifiers whose value is stated PER RANK: the DB2
+ * SpellEffect row carries one rank's worth, so a maxRanks=2 node applies it
+ * twice. Worked example (`BUFF_DURATION_TALENT_MODIFIERS`): Timeless Magic is
+ * +15 % duration per rank on a maxRanks=2 node, and the corpus shows all three
+ * tiers of Time Dilation cleanly separated — 8.0 s / 9.2 s / 10.4 s at 0 / 1 /
+ * 2 ranks.
+ * Returns null if talent data is unavailable (no judgement should be made).
+ */
+export function getPlayerTalentRanks(
+  specId: number,
+  talents: ({ id1: number; id2: number; count: number } | null)[],
+): Map<string, number> | null {
+  const specData = nodeMaps[specId];
+  if (!specData) return null;
+
+  const result = new Map<string, number>();
+
+  for (const talent of talents) {
+    if (!talent || talent.count === 0) continue;
+
+    const node =
+      specData.classNodeMap[talent.id1] ??
+      specData.specNodeMap[talent.id1] ??
+      specData.heroNodeMap[talent.id1];
+
+    if (!node) continue;
+
+    const entries =
+      (node.type === "choice" || node.type === "subtree") && talent.id2 > 0
+        ? node.entries.filter((e) => e.id === talent.id2)
+        : node.entries;
+
+    for (const entry of entries) {
+      if ("spellId" in entry && entry.spellId) {
+        const key = entry.spellId.toString();
+        result.set(key, Math.max(result.get(key) ?? 0, talent.count));
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
  * Returns the set of spell IDs the player actually has from their talent tree.
  * @deprecated Use getPlayerTalentedSpellInfo for richer metadata.
  */

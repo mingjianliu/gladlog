@@ -2,6 +2,7 @@ import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import {
   getPlayerTalentedSpellInfo,
+  getPlayerTalentRanks,
   getSpecFreeOrEntrySpellIds,
   getSpecTalentTreeSpellInfo,
   isLoadoutFullyResolved,
@@ -148,4 +149,30 @@ export function talentOwnershipOf(
   )
     return "yes";
   return talentOwnershipFromTables(unit, spellId);
+}
+
+/**
+ * Purchased rank of a talent, for modifiers whose DB2 value is stated PER RANK
+ * (`BUFF_DURATION_TALENT_MODIFIERS`). Returns 0 when the talent is not held,
+ * and — deliberately — also when it IS held but the loadout carries no
+ * readable rank.
+ *
+ * That second case extends `ccFullDurationForCaster`'s "unknown never
+ * lengthens" rule down to ranks: the three `talentOwnershipOf` "yes" paths
+ * that are not a parsed tree selection (cast evidence this round, a slotted
+ * PvP talent, baseline-by-elimination) carry no rank, so a caster whose
+ * loadout we cannot read never has a longer buff attributed to them. A claim
+ * that someone's Barkskin lasted 12 s instead of 8 s must rest on evidence
+ * they bought the rank.
+ */
+export function talentRankOf(
+  unit: Pick<ICombatUnit, "spec" | "info" | "spellCastEvents">,
+  talentSpellId: string,
+): number {
+  if (talentOwnershipOf(unit, talentSpellId) !== "yes") return 0;
+  const specId = parseInt(unit.spec, 10);
+  if (Number.isNaN(specId)) return 0;
+  const talents = unit.info?.talents;
+  if (!talents || talents.length === 0) return 0;
+  return getPlayerTalentRanks(specId, talents)?.get(talentSpellId) ?? 0;
 }

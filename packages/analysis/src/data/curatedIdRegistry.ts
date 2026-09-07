@@ -31,8 +31,8 @@ import {
   HEALER_CAST_SPELL_ID_TO_NAME,
   HEALING_AMPLIFIER_SPELL_IDS,
   MANA_COOLDOWN_SPELL_IDS,
-  SPELL_DURATION_OVERRIDES,
 } from "../context/timelineHelpers";
+import { SPELL_DURATION_OVERRIDES } from "../utils/buffDuration";
 import { COPY_CAST_IDS } from "../utils/castPress";
 import {
   BREAKABLE_CC_SPELL_IDS,
@@ -100,6 +100,7 @@ import {
 } from "./racialAbilities";
 import { SPELL_CATEGORIES } from "./spellCategories";
 import {
+  BUFF_DURATION_TALENT_MODIFIERS,
   CC_DURATION_TALENT_MODIFIERS,
   OPPRESSING_ROAR_SPELL_ID,
 } from "./spellEffectData";
@@ -355,7 +356,7 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   t("CHANNELED_CD_SPELL_IDS", "context/timelineHelpers.ts", "cast", () =>
     set(CHANNELED_CD_SPELL_IDS),
   ),
-  t("SPELL_DURATION_OVERRIDES", "context/timelineHelpers.ts", "mixed", () =>
+  t("SPELL_DURATION_OVERRIDES", "utils/buffDuration.ts", "mixed", () =>
     keys(SPELL_DURATION_OVERRIDES),
   ),
   t("HEALING_AMPLIFIER_SPELL_IDS", "context/timelineHelpers.ts", "aura", () =>
@@ -438,6 +439,16 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   t("CC_DURATION_TALENT_MODIFIERS", "data/spellEffectData.ts", "mixed", () => [
     ...keys(CC_DURATION_TALENT_MODIFIERS),
     ...Object.values(CC_DURATION_TALENT_MODIFIERS).flatMap((mods) =>
+      mods.map((m) => m.talentSpellId),
+    ),
+  ]),
+  // Same shape as its CC twin above: buff aura ids + the talent spell ids that
+  // lengthen them. A renumbered talent id would silently stop lengthening the
+  // buff and the expiry line would quietly go back to being wrong, which is
+  // exactly what this table was created to fix — so both sets are scanned.
+  t("BUFF_DURATION_TALENT_MODIFIERS", "data/spellEffectData.ts", "mixed", () => [
+    ...keys(BUFF_DURATION_TALENT_MODIFIERS),
+    ...Object.values(BUFF_DURATION_TALENT_MODIFIERS).flatMap((mods) =>
       mods.map((m) => m.talentSpellId),
     ),
   ]),

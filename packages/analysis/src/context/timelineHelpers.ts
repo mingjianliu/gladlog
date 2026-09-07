@@ -7,7 +7,8 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
-import { getEnglishSpellName, spellEffectData } from "../data/spellEffectData";
+import { getEnglishSpellName } from "../data/spellEffectData";
+import { buffFullDurationForCaster } from "../utils/buffDuration";
 import { IPlayerCCTrinketSummary } from "../utils/ccTrinketAnalysis";
 import {
   canHelpAnotherUnit,
@@ -275,10 +276,6 @@ export const CHANNELED_CD_SPELL_IDS = new Set<string>([
   "421453", // Ultimate Penitence (Priest)
 ]);
 
-export const SPELL_DURATION_OVERRIDES: Record<string, number> = {
-  "421453": 6.5, // Ultimate Penitence
-};
-
 // M-b: a real aura removal arrives at ~nominal duration plus minor server-tick/latency slack;
 // a removal more than a couple seconds past nominal duration almost certainly belongs to a
 // different (later) cast, not this one.
@@ -292,7 +289,14 @@ export const SPELL_DURATION_OVERRIDES: Record<string, number> = {
 // Time Dilation 8 → 10.4 s (100 % "estimated"), Power Infusion 20 → 15.0 s (100 % "ended
 // early"), Avenging Wrath 20 → 30 s, Guardian Spirit 10 → 12 s, Divine Hymn 8 → 3.6 s
 // (channel), Tranquility 6 → shorter (72/72 "ended early"). Those need per-spell duration
-// corrections (SPELL_DURATION_OVERRIDES below), not wider tolerances — do not widen these.
+// corrections, not wider tolerances — do not widen these.
+//
+// 2026-09-06 follow-up: the corrections landed, and the cause was NOT a wrong table —
+// it was a missing talent layer. Time Dilation and Guardian Spirit are now resolved by
+// `utils/buffDuration.ts` → `buffFullDurationForCaster` (Timeless Magic +15 %/rank,
+// Foreseen Circumstances +2 s); Power Infusion's DB2 duration is now 15 s and matches the
+// corpus exactly. Avenging Wrath's Holy 30 s and the two channels remain open — see the
+// "NOT registered" list on BUFF_DURATION_TALENT_MODIFIERS.
 const BUFF_EXPIRY_PAIRING_TOLERANCE_S = 2;
 
 // B129: a removal within this slack of the natural end still counts as a normal expiry (server-tick
@@ -302,14 +306,27 @@ const BUFF_FADE_EARLY_TOLERANCE_S = 1.5;
 /**
  * For each owner CD cast, finds when the buff actually expired by matching to the
  * chronologically-next SPELL_AURA_REMOVED event (cast by `ownerId`) across all
- * friendly units.  Falls back to `cast.timeSeconds + spellEffectData[spellId].durationSeconds`
- * when no aura event is present.  Skips CDs with no durationSeconds in spellEffectData.
+ * friendly units.  Falls back to `cast.timeSeconds + buffFullDurationForCaster(...)`
+ * when no aura event is present.  Skips CDs that predicate cannot price.
+ *
+ * The duration comes from `buffFullDurationForCaster` (base + overrides +
+ * caster's talent ranks), NOT from `spellEffectData` directly: the pairing
+ * tolerance below is ±2 s, so a buff the caster's talents lengthen by more
+ * than that had its REAL removal event rejected as "belongs to a different
+ * cast" and fell back to an estimate at the wrong time.
  */
 export function extractOwnerCDBuffExpiry(
   ownerCDs: IMajorCooldownInfo[],
   ownerId: string,
   friends: ICombatUnit[],
   matchStartMs: number,
+  /**
+   * The owner unit itself — the CASTER of every cd in `ownerCDs`. Passed
+   * explicitly rather than looked up in `friends` so a roster that does not
+   * contain the owner degrades loudly at the call site instead of silently
+   * dropping every talent-lengthened duration back to its base value.
+   */
+  owner?: Pick<ICombatUnit, "spec" | "info" | "spellCastEvents">,
 ): ICDExpiryEvent[] {
   const result: ICDExpiryEvent[] = [];
 
@@ -339,9 +356,7 @@ export function extractOwnerCDBuffExpiry(
       ),
     );
     if (!seenOnFriendly) continue;
-    const duration =
-      SPELL_DURATION_OVERRIDES[cd.spellId] ||
-      spellEffectData[cd.spellId]?.durationSeconds;
+    const duration = buffFullDurationForCaster(cd.spellId, owner);
     if (!duration || duration <= 0) continue;
 
     // Collect all SPELL_AURA_REMOVED timestamps for this spell cast by the owner,

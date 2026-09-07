@@ -64,6 +64,7 @@ import * as syncWindowPrior from "@gladlog/analysis/src/data/syncWindowPrior";
 import * as auraIntervals from "@gladlog/analysis/src/utils/auraIntervals";
 import * as bracketKey from "@gladlog/analysis/src/utils/bracketKey";
 import * as cannotCastIntervals from "@gladlog/analysis/src/utils/cannotCastIntervals";
+import * as buffDuration from "@gladlog/analysis/src/utils/buffDuration";
 import * as ccTrinketAnalysis from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
 import * as cooldowns from "@gladlog/analysis/src/utils/cooldowns";
 import * as counterfactual from "@gladlog/analysis/src/utils/counterfactual";
@@ -489,6 +490,11 @@ const INDEX: PredicateRow[] = [
     file: `${A}/data/spellEffectData.ts`,
     symbol: "ccFullDurationSeconds",
     mod: spellEffectData,
+  },
+  {
+    file: `${A}/utils/buffDuration.ts`,
+    symbol: "buffFullDurationForCaster",
+    mod: buffDuration,
   },
   {
     file: "packages/analysis/scripts/datagen/lib/pvpMultiplier.ts",

@@ -1002,6 +1002,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     owner.id,
     friends,
     matchStartMs,
+    owner,
   );
 
   // H13: computed once — used to confirm early-ended channels were a real kick/CC, not a

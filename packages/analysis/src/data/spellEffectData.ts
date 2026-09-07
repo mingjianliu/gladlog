@@ -181,6 +181,89 @@ export const CC_DURATION_TALENT_MODIFIERS: Record<
   ],
 };
 
+/**
+ * Talent-conditional duration modifiers for NON-CC buffs — the buff/CD twin of
+ * `CC_DURATION_TALENT_MODIFIERS`, applied by `utils/buffDuration.ts` →
+ * `buffFullDurationForCaster`. Same evidence bar as the CC table: every entry
+ * needs the DB2 modifier row (aura 107 SPELL_AURA_ADD_FLAT_MODIFIER or 108
+ * ADD_PCT_MODIFIER with EffectMiscValue_0 = 1 = SPELLMOD_DURATION) AND a
+ * corpus split of casters at the extended vs the base lifetime — plus, here,
+ * the two must RECONCILE ARITHMETICALLY (base + modifier === the observed
+ * plateau). Values are PER RANK: the DB2 row carries one rank's worth, so
+ * `talentRankOf` multiplies it.
+ *
+ * Why it exists (2026-09-06): `spellEffectGenerated.json` stores the DB2 base
+ * (PvP-duration-aware) duration and nothing consumed a talent layer, so
+ * `extractOwnerCDBuffExpiry` computed `cast + base` for buffs the game runs
+ * longer. Measured on the local 227-file / 23 GB log archive by pairing each
+ * SPELL_AURA_APPLIED with its SPELL_AURA_REMOVED (refresh in between = the
+ * sample is discarded), then taking each (match, caster) cell's modal
+ * lifetime: the official value was essentially ABSENT from the corpus —
+ * Barkskin's 8 s appeared in 2 of 280 caster-cells, Guardian Spirit's 10 s in
+ * 1 of 142. A per-player split alone cannot see a talent this popular (there
+ * is no control group), which is why the DB2 half of the evidence is what
+ * identified the cause; a flat correction would have been wrong.
+ *
+ * Entries below reconcile exactly. DB2 rows read from the locally cached
+ * SpellEffect 12.1.0.69404.
+ *
+ * NOT registered, evidence incomplete (do not add without closing the gap):
+ *  · Avenging Crusader 216331 — Sanctified Wrath 53376 is aura 108 +25 % and
+ *    100 % of the 102 caster-cells at 22.5 s hold it vs 40 % of the 5 at
+ *    15 s, but 15 × 1.25 = 18.75 ≠ 22.5 (the observed ratio is exactly 1.5)
+ *    and the node is maxRanks=1, so a second +25 % source is unaccounted for.
+ *  · Avenging Wrath 31884 — Retribution reconciles (Divine Wrath 406872,
+ *    +4000 ms, 97 % of 72 cells at 24 s vs 0 % at 30 s: 20 + 4 = 24), but
+ *    Holy sits at exactly 30 s (42 cells) with no modifier explaining
+ *    20 → 30, the same unexplained ×1.5 as Avenging Crusader. Registering
+ *    only the Retribution half would leave Holy silently wrong.
+ *  · Shadow Blades 121471 (18 s in 65 of 75 cells) — NO talent with a
+ *    SPELLMOD_DURATION row separates the groups at all (best +3 pp).
+ *  · Ascendance 114052 — 6.0 s in 135 of 135 Restoration Shaman cells against
+ *    a DB2 15 s, i.e. SHORTER than official with no modifier of any sign; a
+ *    base-value/spec problem, not a talent one.
+ */
+export const BUFF_DURATION_TALENT_MODIFIERS: Record<
+  string,
+  ReadonlyArray<{
+    talentSpellId: string;
+    /** Seconds added per rank (DB2 aura 107, EffectBasePointsF in ms). */
+    addSeconds?: number;
+    /** Percent added per rank (DB2 aura 108). Applied AFTER `addSeconds`. */
+    pct?: number;
+    note: string;
+  }>
+> = {
+  "22812": [
+    {
+      talentSpellId: "327993",
+      addSeconds: 4,
+      note: "Improved Barkskin — DB2 aura 107 +4000 ms, Druid class tree (all 4 specs), maxRanks 1; corpus 12.0 s in 278 caster-cells (Resto 104 / Feral 91 / Balance 83) holding it 100 % vs 0 % of the 2 cells at 8.0 s; 8 + 4 = 12",
+    },
+  ],
+  "47788": [
+    {
+      talentSpellId: "440738",
+      addSeconds: 2,
+      note: "Foreseen Circumstances — DB2 aura 107 +2000 ms, Priest HERO tree (Discipline + Holy), maxRanks 1; corpus 12.0 s in 141 caster-cells (Holy 138 / Disc 3) holding it 99 % vs 0 % of the 1 cell at 10.0 s; 10 + 2 = 12",
+    },
+  ],
+  "184364": [
+    {
+      talentSpellId: "383468",
+      addSeconds: 3,
+      note: "Invigorating Fury — DB2 aura 107 +3000 ms, Fury spec tree, maxRanks 1; corpus 11.0 s in 27 caster-cells holding it 100 % vs 0 % of the 14 cells at 8.0 s; 8 + 3 = 11",
+    },
+  ],
+  "357170": [
+    {
+      talentSpellId: "376240",
+      pct: 15,
+      note: "Timeless Magic — DB2 aura 108 +15 % PER RANK, Preservation spec tree, maxRanks 2; corpus shows all three tiers of Time Dilation: 8.0 s × 7 cells (0 ranks, talent held by 0 %), 9.0 s × 5 (rank 1 → 8 × 1.15 = 9.2), 10.5 s × 143 (rank 2 → 8 × 1.30 = 10.4, talent held by 100 %)",
+    },
+  ],
+};
+
 // Loaded in the background rather than via a top-level await: TLA would make
 // the entire module graph (including the renderer's first paint) serialize
 // behind the 12MB table finishing its load — and the first screen (the match
