@@ -11,19 +11,41 @@ REPO = Path(__file__).resolve().parents[2]
 DATA = Path(os.environ.get("COACH_CORPUS_DATA", REPO / "tmp" / "skillcapped-vod"))
 TYPE_DEFS = Path(__file__).resolve().parent / "type_definitions.json"
 
-# Declared candidate types as of 2026-09-05 (mistakes.ts MISTAKE_RULES + IGNORED_CANDIDATE_TYPES,
-# plus two retired types that only survive in buildFindingsPrompt.ts). gen_type_definitions.py
-# --selftest fails if any of these lacks a definition or if mistakes.ts declares a type not here.
-ACTIVE = ["attempt-into-trinket","burst-into-mitigation","cd-waste","missed-kick","missed-purge-kill-window",
+# The two sets `mistakes.ts` declares: MISTAKE_RULES (rendered as a mistake row in the
+# desktop report) and IGNORED_CANDIDATE_TYPES (deliberately not rendered).
+#
+# ⚠ 2026-09-06: these were named ACTIVE/RETIRED, which reads as "does gladlog still fire
+# it". **It does not mean that**, and for 8 of the 31 the two answers disagree — measured
+# by `npx tsx packages/eval/scripts/candidateDiagnostics.ts --n 400 --json` (400 rounds):
+#   labelled RETIRED, yet firing:  kick-eaten 44.2% · death 43.0% · death-setup 30.8% ·
+#                                  missed-cleanse 15.8% · md-cyclone-window 1.8%
+#   labelled ACTIVE, flag=false:   cc-held · cd-spent-idle · unsynced-burst
+#                                  (candidateTypeFlags.ts — confirmed by the flag, not by silence)
+# Three more are silent here for reasons that are NOT defects: burst-into-mitigation is an
+# offensive type and this library is healer-heavy, while missed-kick and
+# missed-purge-kill-window are not candidate types at all — mistakes.ts builds them from the
+# kick audit / dispel summary (`MistakeRule.source` is "candidate" | "kick" | "dispel").
+#
+# So the rename below is the whole point: three different axes were riding on one pair of
+# names — (1) does the candidate menu emit it, (2) does the desktop render it as a mistake
+# row, (3) which source produces it. This pair only ever answered (2).
+#
+# **Deliberately NOT adding a "currently ships" list here.** That would be one more hand
+# roster to rot (CLAUDE.md's Curated-List Completeness Rule). The answer to "does it fire"
+# comes from observed corpus truth — the candidateDiagnostics command above.
+#
+# gen_type_definitions.py --selftest fails if any of these lacks a definition, or if
+# mistakes.ts declares a type not listed here.
+DESKTOP_MISTAKE_TYPES = ["attempt-into-trinket","burst-into-mitigation","cd-waste","missed-kick","missed-purge-kill-window",
           "crisis-no-response","external-unused","questionable-external","healing-gap","position-mistake",
           "cc-held","cc-avoidable","slow-defensive-response","missed-sync-window","unsynced-burst","cd-hoarded","cd-spent-idle"]
-RETIRED = ["death","death-setup","juked-kick","missed-cleanse","missed-purge","cc-locked","kick-eaten","wasted-trinket",
+DESKTOP_IGNORED_TYPES = ["death","death-setup","juked-kick","missed-cleanse","missed-purge","cc-locked","kick-eaten","wasted-trinket",
            "death-unused-defensive","dr-clipped-cc","burst-into-immunity","md-cyclone-window","off-target-in-window","unconverted-burst"]
 
 def load_type_defs():
     d = json.loads(TYPE_DEFS.read_text())
     defs = d["definitions"] if "definitions" in d else d
-    missing = [t for t in ACTIVE + RETIRED if t not in defs]
+    missing = [t for t in DESKTOP_MISTAKE_TYPES + DESKTOP_IGNORED_TYPES if t not in defs]
     if missing:
         raise SystemExit(f"type_definitions.json lacks {missing}; run gen_type_definitions.py")
     return defs

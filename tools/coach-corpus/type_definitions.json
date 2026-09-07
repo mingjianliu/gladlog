@@ -11,7 +11,7 @@
    "missed-purge-kill-window",
    "questionable-external"
   ],
-  "active": [
+  "desktop_mistake_row": [
    "attempt-into-trinket",
    "burst-into-mitigation",
    "cd-waste",
@@ -30,7 +30,7 @@
    "cd-hoarded",
    "cd-spent-idle"
   ],
-  "retired": [
+  "desktop_ignored": [
    "death",
    "death-setup",
    "juked-kick",

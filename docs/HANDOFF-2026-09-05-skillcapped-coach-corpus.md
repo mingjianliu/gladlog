@@ -396,7 +396,43 @@ v1 4 → v2 42(4 high)。第一版「教练几乎不提 ⇒ 佐证退役」是 s
 
 1. **VoD 线的 1483 条 unmapped 按簇三分**(35 个判断,不是 1483 个)。教程线已从规则侧做完三分(§3.4b),VoD 侧可直接复用同一套「gladlog 已派生」边界与 `tools/coach-corpus/extract_rules.py` 里的 MAP 三分段;三个最大候选:② 的「做出窗口/可行性」(setup 族,三源同向)、⑥ 的「逼出对方 CD」记账、① 的站位过深与柱子/视野。
 1b. **把教程线 93 条「日志能判且无类型」分两堆**:法术级规则行(→ 现有手维表的完整性对账,按 Curated-List Completeness Rule 走 `curatedIdRegistry`)vs 真新类型(setup 族)。纯读文件,零 token。
-2. **用 high 匹配当 Value-Gate 目标句**,逐条对照 gladlog 在同类事件上的实际输出措辞。按 CLAUDE.md Value-Gate Rule,任何新信号动工前必须先手写目标结论句。**2026-09-06 更正:可用的是 41 条不是 88 条** —— 88 →(去 10 条表扬/更优解极性,谓词只在失误上发射)78 →(去 37 条映到不发射的谓词:开关 false 的 33 条 + 已摘除接线的 `cc-locked` 2 与 `wasted-trinket` 2)**41**。按谓词:`dr-clipped-cc` 14 / `kick-eaten` 9 / `burst-into-mitigation` 5 / `external-unused` 3 / `missed-sync-window` 3 / `questionable-external` 3 / `cc-avoidable` 2 / `missed-kick` 1 / `missed-cleanse` 1。注意 high 是模型自评,且 79 条仍标 `needs_frame`;「high」≠「教练与产品建议一致」,逐条要分开标「事件一致 / 建议一致 / 前提齐全 / 产品当前是否发射」四项。
+2. **用 high 匹配当 Value-Gate 目标句**,逐条对照 gladlog 在同类事件上的实际输出措辞。按 CLAUDE.md Value-Gate Rule,任何新信号动工前必须先手写目标结论句。**2026-09-06 两次更正,最终是 21 条(不是 88,也不是我中途报的 41)** —— 88 →(去 10 条表扬/更优解极性,谓词只在失误上发射)78 →(去掉映到不发射的谓词)**21**。
+   ⚠ 中途报过 **41**,那个数是错的,更正过程本身是本文档最该记住的一条:
+   41 是我**手工枚举**「不发射的类型」得出的(开关 false + 手查到的 `cc-locked` / `wasted-trinket`),
+   漏掉了 **`dr-clipped-cc`(14 条,占那 41 的三分之一)** —— 它 2026-08-20 已随 GH #17 用户裁定
+   退役(`candidateFindings.ts:2242`),只有图例还留在 `buildFindingsPrompt.ts` 供旧缓存渲染。
+   **我是在写「手工清单会腐烂」的同一个会话里手搓了一份清单,并且漏了一条。**
+   改用观测真值后数就对了:`npx tsx packages/eval/scripts/candidateDiagnostics.ts --n 400 --json`
+   给出实际发射的 16 个类型,拿它当筛选条件。**判断类型在不在产,永远跑一遍语料,别读清单。**按谓词(21 条):`kick-eaten` 9 / `external-unused` 3 / `missed-sync-window` 3 / `questionable-external` 3 / `cc-avoidable` 2 / `missed-cleanse` 1。
+   另有 6 条**边界情况,单独列出不并进 21**:`burst-into-mitigation` 5 —— 已接线但在本库沉默,它是进攻类型而本库以治疗视角为主,**沉默是抽样不是退役**,需换 DPS 语料再判;`missed-kick` 1 —— 它根本不是候选菜单类型,由桌面端从 kick 审计派生(`MistakeRule.source` 有 candidate/kick/dispel 三种),是有效目标句但走另一条链路。注意 high 是模型自评,且 79 条仍标 `needs_frame`;「high」≠「教练与产品建议一致」,逐条要分开标「事件一致 / 建议一致 / 前提齐全 / 产品当前是否发射」四项。
+2b. **✅ 第 2 项已实测(2026-09-06)—— 6 个谓词里 5 个通过,`kick-eaten` 是唯一指错方向的。**
+   做法:21 条目标句按谓词分组,把教练的转述与 `type_definitions.json` 里 gladlog 的图例并排读。
+   零模型调用、零代码改动。
+
+   | 谓词 | n | 结论 |
+   | --- | ---: | --- |
+   | `external-unused` | 3 | ✅ 全是「队友死了而外减还在手上」;图例的 「never claim the external would certainly have saved them」分寸正好 |
+   | `missed-sync-window` | 3 | ✅ 全是「治疗被控、冷却在手、没人开」 |
+   | `questionable-external` | 3 | ✅ 全是「没压力时把外减扔出去」 |
+   | `cc-avoidable` | 2 | ✅ 全是「有读条可反应 + 你有躲的工具」 |
+   | `missed-cleanse` | 1 | ✅ 「有空档、自己没被控,却继续读惩击」 |
+   | **`kick-eaten`** | **9** | ❌ **图例指向教练教得最少的那条** |
+
+   **`kick-eaten` 的错位(池中样本最多的一类,9/21,不是边角料)**:图例写的是 `Coach fake-casting / juking the kick`(教骗读条),而 9 条教练目标句里按建议轴分:
+   **站位与打断距离 6 条**(「站在敌人头上读条」「往右挪就出了 DK 的踢技距离」
+   「三个人都能打断,读这个必挨断」)· 骗读条 1–2 条 · 干脆别读/时机 2 条 · 引导点读技术 1 条。
+   而 `kick-eaten` 给模型的事实(被断法术 / 踢技 / 来源 / 锁定时长 / postKick)
+   **既没有位置,也没有「施法瞬间有几个敌人在打断射程内」**。
+   这条直接接回 §3.3·① —— gladlog **有**位置数据(`positionSampling` / LoS 几何),
+   「读条瞬间几个敌人在打断射程内」是算得出来的。
+   归类是我读 9 条转述做的判断(n=9、以 Keator 为主),**当定性信号,不当统计**。
+
+   **顺带的小缺口**:`missed-sync-window` 的事实里没有 **DR 状态**,而教练两次拿它当开团判据
+   (「脱离晕递减」「everyone off DR」)。
+
+   **未做,故意**:没有改 `kick-eaten` 的图例。那会改 prompt 措辞、影响所有该类输出,
+   按本次会话的节奏应当先出真实前后对照再定。
+
 3. **09-02 的 `missed-sync-window` 新谓词从未对照过专家判决**:`healer-lockdown` 簇 76 条(v2 `unsynced-burst` 16 + `cc-held` 10)是它的对照集。
 4. **修审计文档的三行**(认知问题 2)。小活,但不修会继续误导下一个读者。
 5. **读帧**(1344 条 `needs_frame=true`):成本最高,等 1–3 落定、明确要验证什么之后再做。`evidence/` 里的 DH 示例是读帧的模板。

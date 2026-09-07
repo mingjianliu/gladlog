@@ -8,7 +8,7 @@ derives the fact, not merely that the raw event is in the log. Denominator for t
 kind == "decision" only (aggregate.py enforces it).
 """
 import argparse, time
-from common import DATA, ACTIVE, RETIRED, load_type_defs, def_block, claude_call, read_json, write_json, shard, transcript_body, SECURITY
+from common import DATA, DESKTOP_MISTAKE_TYPES, DESKTOP_IGNORED_TYPES, load_type_defs, def_block, claude_call, read_json, write_json, shard, transcript_body, SECURITY
 
 EXTRACT = """You are extracting coaching RULES from a scripted World of Warcraft arena tutorial.
 
@@ -40,9 +40,10 @@ the rule's *violation* is the SAME event the predicate fires on — not the same
 "unmapped". Confidence: high = predicate fires on exactly this; medium = same event family; low =
 topical resemblance only.
 
-DECLARED TYPES — ACTIVE
+DECLARED TYPES — the desktop report renders these as a mistake row
 {active}
-DECLARED TYPES — RETIRED (still valid targets)
+DECLARED TYPES — the desktop report does NOT render these as a mistake row
+(equally valid mapping targets; the grouping says nothing about whether a type ships)
 {retired}
 
 (2) Log-decidability. gladlog reads WoW advanced combat logs: every cast, aura apply/remove,
@@ -82,7 +83,7 @@ Output one JSON object, no fence:
 def map_stage(rules, defs, model, effort):
     if not rules: return
     items = "\n".join(f'{i}. [{r.get("role_scope","?")}/{r.get("kind","?")}] {r["rule"]}  || trigger: {r.get("trigger")}  || vs: {r.get("comp_scope")}' for i, r in enumerate(rules))
-    m = claude_call(MAP.format(active=def_block(defs, ACTIVE, "active"), retired=def_block(defs, RETIRED, "retired"), items=items), model, effort).get("map", {})
+    m = claude_call(MAP.format(active=def_block(defs, DESKTOP_MISTAKE_TYPES, "desktop-mistake-row"), retired=def_block(defs, DESKTOP_IGNORED_TYPES, "desktop-ignores"), items=items), model, effort).get("map", {})
     for i, r in enumerate(rules):
         e = m.get(str(i)) or {}
         r["gladlog_type"] = e.get("gladlog_type", "unmapped"); r["map_confidence"] = e.get("map_confidence", "low")

@@ -6,11 +6,11 @@ Sources
   * packages/analysis/src/analysis/buildFindingsPrompt.ts — prompt-facing definition per type
   * four types with no prompt entry, transcribed from their emitting code (paths recorded below);
     re-read those files when they change — this block is the hand-maintained part.
---selftest: every ACTIVE/RETIRED type has a definition, and every type mistakes.ts declares is in
+--selftest: every DESKTOP_MISTAKE_TYPES/DESKTOP_IGNORED_TYPES type has a definition, and every type mistakes.ts declares is in
 the roster (drift detector, per CLAUDE.md's Curated-List Completeness Rule).
 """
 import re, subprocess, sys
-from common import REPO, TYPE_DEFS, ACTIVE, RETIRED, write_json
+from common import REPO, TYPE_DEFS, DESKTOP_MISTAKE_TYPES, DESKTOP_IGNORED_TYPES, write_json
 
 PROMPT_TS = REPO / "packages/analysis/src/analysis/buildFindingsPrompt.ts"
 MISTAKES_TS = REPO / "packages/desktop/src/renderer/src/report/derive/mistakes.ts"
@@ -43,10 +43,13 @@ def git_rev(path):
 
 def main():
     defs = from_prompt_ts(); defs.update(HAND)
-    roster = set(ACTIVE + RETIRED)
+    roster = set(DESKTOP_MISTAKE_TYPES + DESKTOP_IGNORED_TYPES)
     missing = sorted(roster - set(defs)); extra_declared = sorted(declared_in_mistakes() - roster)
     meta = {"generated_from": {"buildFindingsPrompt.ts": git_rev(PROMPT_TS), "mistakes.ts": git_rev(MISTAKES_TS)},
-            "hand_written": sorted(HAND), "active": ACTIVE, "retired": RETIRED}
+            "hand_written": sorted(HAND),
+            # Keys renamed 2026-09-06 with the rosters: "active"/"retired" asserted a
+            # shipping status these sets never carried (see common.py).
+            "desktop_mistake_row": DESKTOP_MISTAKE_TYPES, "desktop_ignored": DESKTOP_IGNORED_TYPES}
     if "--selftest" in sys.argv:
         ok = not missing and not extra_declared
         print(f"definitions: {len(defs)} · roster: {len(roster)} · missing: {missing or 'none'} · declared-but-not-in-roster: {extra_declared or 'none'}")
@@ -56,7 +59,7 @@ def main():
     write_json(TYPE_DEFS, {"_meta": meta, "definitions": {k: defs[k] for k in sorted(defs)}})
     print(f"wrote {TYPE_DEFS.name}: {len(defs)} definitions ({len(HAND)} hand-written) · sources {meta['generated_from']}")
     if extra_declared:
-        print(f"WARNING mistakes.ts declares types not in roster: {extra_declared} — update common.ACTIVE/RETIRED")
+        print(f"WARNING mistakes.ts declares types not in roster: {extra_declared} — update common.DESKTOP_MISTAKE_TYPES/DESKTOP_IGNORED_TYPES")
 
 if __name__ == "__main__":
     main()

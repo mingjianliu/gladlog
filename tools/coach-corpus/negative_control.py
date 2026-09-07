@@ -5,7 +5,7 @@ The corpus reports "71% of coach verdicts have no gladlog predicate for the same
 That number is only meaningful if the mapper reliably maps IN-SCOPE events back. Nothing in
 the pipeline ever tested that — this does.
 
-  stage 1 (agy/Gemini, a different model family): for each ACTIVE type, rewrite its real
+  stage 1 (agy/Gemini, a different model family): for each desktop-mistake-row type, rewrite its real
           predicate into N coach-voice phrasings — coach vocabulary, not definition vocabulary
   stage 2 (production mapper, same prompt/model as the corpus run): map the shuffled,
           unlabelled mix of those + known out-of-scope real verdicts
@@ -16,7 +16,7 @@ the pipeline ever tested that — this does.
 """
 import argparse, collections, json, random, subprocess, time
 from pathlib import Path
-from common import DATA, ACTIVE, RETIRED, load_type_defs, def_block, claude_call, parse_json_object, read_json, write_json
+from common import DATA, DESKTOP_MISTAKE_TYPES, DESKTOP_IGNORED_TYPES, load_type_defs, def_block, claude_call, parse_json_object, read_json, write_json
 
 AGY = Path.home() / ".claude/skills/agy/scripts/agy-run.mjs"
 OUT = DATA / "negative_control"
@@ -46,10 +46,14 @@ Each type below carries its REAL operational definition — the predicate the to
 Map a verdict to a type only when the coach's judgement is the SAME event the predicate describes,
 not merely the same topic. "Topic overlap" is not a match.
 
-DECLARED TYPES — ACTIVE
+DECLARED TYPES — the desktop report renders these as a mistake row
 {active}
 
-DECLARED TYPES — RETIRED (still valid mapping targets; the tool once fired them)
+DECLARED TYPES — the desktop report does NOT render these as a mistake row.
+Equally valid mapping targets: several of them DO still fire into the coaching prompt
+(measured 2026-09-06: kick-eaten 44%, death 43%, death-setup 31%, missed-cleanse 16%).
+Whether a type ships is NOT what these two groups distinguish — do not use the grouping
+as evidence either way when mapping.
 {retired}
 
 If no predicate describes the verdict's event, answer "unmapped". Use it freely and honestly —
@@ -96,7 +100,7 @@ def main():
         gen = read_json(gen_path)["gen"]; print(f"generated cached: {sum(len(v) for v in gen.values())} items", flush=True)
     else:
         t0 = time.time()
-        gen = agy_call(GEN.format(n=len(ACTIVE), k=a.per_type, defs=def_block(defs, ACTIVE, "active")))["gen"]
+        gen = agy_call(GEN.format(n=len(DESKTOP_MISTAKE_TYPES), k=a.per_type, defs=def_block(defs, DESKTOP_MISTAKE_TYPES, "desktop-mistake-row")))["gen"]
         write_json(gen_path, {"gen": gen, "per_type": a.per_type, "generator": "agy/flash"})
         print(f"generated {sum(len(v) for v in gen.values())} coach-voice items for {len(gen)} types in {time.time()-t0:.0f}s", flush=True)
 
@@ -109,7 +113,7 @@ def main():
         chunk = items[k:k+a.batch]
         if all("pred" in c for c in chunk): continue
         body = "\n".join(f"{i}. {c['text']}" for i, c in enumerate(chunk))
-        m = claude_call(MAP.format(active=def_block(defs, ACTIVE, "active"), retired=def_block(defs, RETIRED, "retired"), items=body), a.model, a.effort).get("map", {})
+        m = claude_call(MAP.format(active=def_block(defs, DESKTOP_MISTAKE_TYPES, "desktop-mistake-row"), retired=def_block(defs, DESKTOP_IGNORED_TYPES, "desktop-ignores"), items=body), a.model, a.effort).get("map", {})
         for i, c in enumerate(chunk):
             e = m.get(str(i)) or {}
             c["pred"] = e.get("gladlog_type", "unmapped"); c["conf"] = e.get("map_confidence", "low")

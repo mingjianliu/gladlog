@@ -9,7 +9,7 @@ Historical dirs in the data root: verdicts/ = 2026-09-05 single-prompt v1 (slug 
 verdicts_remap/ = v2 (stage 2 rerun with real definitions; the numbers in the HANDOFF).
 """
 import argparse, time
-from common import DATA, ACTIVE, RETIRED, load_type_defs, def_block, claude_call, read_json, write_json, shard, transcript_body, SECURITY
+from common import DATA, DESKTOP_MISTAKE_TYPES, DESKTOP_IGNORED_TYPES, load_type_defs, def_block, claude_call, read_json, write_json, shard, transcript_body, SECURITY
 
 OPEN = """You are open-coding a World of Warcraft arena VoD review.
 
@@ -42,10 +42,14 @@ Each type below carries its REAL operational definition — the predicate the to
 Map a verdict to a type only when the coach's judgement is the SAME event the predicate describes,
 not merely the same topic. "Topic overlap" is not a match.
 
-DECLARED TYPES — ACTIVE
+DECLARED TYPES — the desktop report renders these as a mistake row
 {active}
 
-DECLARED TYPES — RETIRED (still valid mapping targets; the tool once fired them)
+DECLARED TYPES — the desktop report does NOT render these as a mistake row.
+Equally valid mapping targets: several of them DO still fire into the coaching prompt
+(measured 2026-09-06: kick-eaten 44%, death 43%, death-setup 31%, missed-cleanse 16%).
+Whether a type ships is NOT what these two groups distinguish — do not use the grouping
+as evidence either way when mapping.
 {retired}
 
 If no predicate describes the verdict's event, answer "unmapped". Use it freely and honestly —
@@ -64,7 +68,7 @@ Output one JSON object, no fence:
 def map_stage(vs, defs, model, effort):
     if not vs: return
     items = "\n".join(f'{i}. [{v.get("semantic","?")}] {v.get("paraphrase","")}' for i, v in enumerate(vs))
-    m = claude_call(MAP.format(active=def_block(defs, ACTIVE, "active"), retired=def_block(defs, RETIRED, "retired"), items=items), model, effort).get("map", {})
+    m = claude_call(MAP.format(active=def_block(defs, DESKTOP_MISTAKE_TYPES, "desktop-mistake-row"), retired=def_block(defs, DESKTOP_IGNORED_TYPES, "desktop-ignores"), items=items), model, effort).get("map", {})
     for i, v in enumerate(vs):
         e = m.get(str(i)) or {}
         v["gladlog_type"] = e.get("gladlog_type", "unmapped"); v["map_confidence"] = e.get("map_confidence", "low")
