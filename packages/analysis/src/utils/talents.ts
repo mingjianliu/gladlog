@@ -95,7 +95,12 @@ export function getPlayerTalentedSpellInfo(
     const node =
       specData.classNodeMap[talent.id1] ??
       specData.specNodeMap[talent.id1] ??
-      specData.heroNodeMap[talent.id1];
+      specData.heroNodeMap[talent.id1] ??
+      // 2026-09-07: 与 isLoadoutFullyResolved 对齐,它一直查四张表。今天
+      // subTreeNodes 的条目不带 spellId 所以无差别,但两边查得不一样,就意味着
+      // 一旦某个 build 给 subtree 条目加了 spellId,loadout 仍算「解析全」而这里
+      // 解析不出来 —— 那会对一个玩家真有的天赋断言 "no"。
+      specData.subtreeNodeMap[talent.id1];
 
     if (!node) continue;
 
@@ -150,7 +155,12 @@ export function getPlayerTalentRanks(
     const node =
       specData.classNodeMap[talent.id1] ??
       specData.specNodeMap[talent.id1] ??
-      specData.heroNodeMap[talent.id1];
+      specData.heroNodeMap[talent.id1] ??
+      // 2026-09-07: 与 isLoadoutFullyResolved 对齐,它一直查四张表。今天
+      // subTreeNodes 的条目不带 spellId 所以无差别,但两边查得不一样,就意味着
+      // 一旦某个 build 给 subtree 条目加了 spellId,loadout 仍算「解析全」而这里
+      // 解析不出来 —— 那会对一个玩家真有的天赋断言 "no"。
+      specData.subtreeNodeMap[talent.id1];
 
     if (!node) continue;
 

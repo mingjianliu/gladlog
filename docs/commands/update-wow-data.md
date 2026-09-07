@@ -320,6 +320,14 @@ npx tsx packages/eval/scripts/curatedRotScan.ts \
 #    ground truth vs getDispelType (the awk extraction from the Notes below, over .gz via gzip -dc).
 npx tsx packages/eval/scripts/drGapScan.ts $GLADLOG_EVAL_HOME/corpus/observedSpellIds-S<n>-archive-<date>.json
 npx tsx packages/eval/scripts/dispelCompletenessScan.ts <dispel-counts.txt>
+# 4. Buff durations: the two hand tables that assert how long a buff LASTS
+#    (BUFF_DURATION_TALENT_MODIFIERS, CORPUS_DURATION_PATCHES) re-measured against
+#    the season's own corpus. ROT = a registered entry no longer reproduces the
+#    observed lifetime; GAP = an unregistered aura whose observation disagrees with
+#    the predicate. Nothing here is auto-applied: the DB2 half of the evidence
+#    (SpellClassOptions mask) is still a manual check, see the table's header.
+npx tsx packages/eval/scripts/buffDurationScan.ts \
+  --manifest $GLADLOG_EVAL_HOME/corpus/manifest-archive-<date>.txt --every 120 --gap
 # 4. Official durations vs the game (GH #44 tail, 2026-09-02): every CC / root id's observed aura lifetime
 #    (APPLIED→REMOVED, 0.5 s-bin mode) against ccFullDurationSeconds (DB2 PvP duration + CORPUS_DURATION_PATCHES).
 #    ~1 min on every 30th archive file. A FLAG row is a ruling question — DB2 wins unless the corpus contradicts it

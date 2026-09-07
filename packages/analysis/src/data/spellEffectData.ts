@@ -428,7 +428,7 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
       specs: ["254"],
       untalentedBaseSeconds: 6,
       specBaseSeconds: 3,
-      note: "Marksmanship runs its own 3.0 s (108 caster-cells) and Lone Survivor does not lift it — 107 of those 108 hold the talent. Recorded here rather than left open, now that a spec base can be stated.",
+      note: "Marksmanship runs its own 3.0 s (108 caster-cells) and Lone Survivor does not lift it — 107 of those 108 hold the talent. KNOWN OUTLIER: an out-of-sample run of buffDurationScan found 9 further Marksmanship cells at 8.0 s, so the spec is not uniformly 3 s and something still unidentified separates them; 3 s is the modal answer (108 vs 9) and beats the pre-2026-09-07 answer of 6 s for both groups, but the scan will keep FLAGging this until the split is explained.",
     },
     {
       talentSpellId: "388039",
@@ -451,7 +451,7 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
       specs: ["70"],
       untalentedBaseSeconds: 3,
       specBaseSeconds: 6,
-      note: "Divine Steed's own duration is spec-dependent and the DB2 3 s matches no spec: Retribution runs 6 s (254 caster-cells, 0 % holding any reachable modifier) and Holy/Protection 5 s (162 cells, likewise 0 %). Unrelenting Charger then adds +2 s on top of the Retribution base, which is the third observed tier at 8 s (11 cells, 91 % holding it at rank 1). The eight ids are mount-model variants of one ability and every one of them is used by BOTH specs, so a flat corpus patch could only ever be right for one.",
+      note: "Divine Steed's own duration is spec-dependent and the DB2 3 s matches no spec: Retribution runs 6 s (254 caster-cells, 0 % holding any reachable modifier) and Holy/Protection 5 s (162 cells, likewise 0 %). Unrelenting Charger then adds +2 s on top of the Retribution base, which is the third observed tier at 8 s (11 cells, 91 % holding it at rank 1). The eight ids are mount-model variants of one ability and every one of them is used by BOTH specs, so a flat corpus patch could only ever be right for one. KNOWN OUTLIER: buffDurationScan finds a third Retribution tier at 3.5 s (7 of 101 cells out of sample) that no modifier explains — it will keep FLAGging until identified.",
     },
     {
       specs: ["65", "66"],

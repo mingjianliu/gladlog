@@ -170,6 +170,19 @@ export function talentRankOf(
   talentSpellId: string,
 ): number {
   if (talentOwnershipOf(unit, talentSpellId) !== "yes") return 0;
+
+  // PvP talents are slotted, not ranked — a slotted one is rank 1 by
+  // construction, and it never appears in the talent-tree arrays. Without this
+  // the rank lookup below returns 0 and the caller falls back as if the talent
+  // could not be read, which would make every duration modifier carried by a
+  // PvP talent permanently inert (Steed of Glory +2 s and Soul-Touched Spurs
+  // +3 s on Divine Steed are exactly that shape). Both the direct id and the
+  // distinct ActionBar carrier count, mirroring talentOwnershipFromTables.
+  const pvpTalents = unit.info?.pvpTalents;
+  if (pvpTalents?.includes(talentSpellId)) return 1;
+  const carrier = PVP_TALENT_POOL_GENERATED[unit.spec]?.[talentSpellId];
+  if (carrier !== undefined && pvpTalents?.includes(carrier)) return 1;
+
   const specId = parseInt(unit.spec, 10);
   if (Number.isNaN(specId)) return 0;
   const talents = unit.info?.talents;

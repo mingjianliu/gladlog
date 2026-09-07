@@ -241,17 +241,26 @@ describe("buffFullDurationForCaster — 天赋条件的增益时长", () => {
     const STEED = "221883";
     const ret = makeUnit("p-ret", {
       spec: CombatUnitSpec.Paladin_Retribution,
-      info: { talents: [{ id1: 93160, id2: 115439, count: 2 }], pvpTalents: [] },
+      info: {
+        talents: [{ id1: 93160, id2: 115439, count: 2 }],
+        pvpTalents: [],
+      },
     });
     expect(buffFullDurationForCaster(STEED, ret)).toBeCloseTo(6);
     const holy = makeUnit("p-holy", {
       spec: CombatUnitSpec.Paladin_Holy,
-      info: { talents: [{ id1: 81592, id2: 102578, count: 1 }], pvpTalents: [] },
+      info: {
+        talents: [{ id1: 81592, id2: 102578, count: 1 }],
+        pvpTalents: [],
+      },
     });
     expect(buffFullDurationForCaster(STEED, holy)).toBeCloseTo(5);
     const charger = makeUnit("p-ret2", {
       spec: CombatUnitSpec.Paladin_Retribution,
-      info: { talents: [{ id1: 95181, id2: 117858, count: 1 }], pvpTalents: [] },
+      info: {
+        talents: [{ id1: 95181, id2: 117858, count: 1 }],
+        pvpTalents: [],
+      },
     });
     expect(talentOwnershipOf(charger, "432990")).toBe("yes");
     expect(buffFullDurationForCaster(STEED, charger)).toBeCloseTo(8);
@@ -263,9 +272,31 @@ describe("buffFullDurationForCaster — 天赋条件的增益时长", () => {
     // 射击猎的优胜劣汰同理:自己的 3.0s,天赋抬不动
     const mm = makeUnit("h-mm", {
       spec: CombatUnitSpec.Hunter_Marksmanship,
-      info: { talents: [{ id1: 102391, id2: 126454, count: 1 }], pvpTalents: [] },
+      info: {
+        talents: [{ id1: 102391, id2: 126454, count: 1 }],
+        pvpTalents: [],
+      },
     });
     expect(buffFullDurationForCaster("264735", mm)).toBeCloseTo(3);
+  });
+
+  it("PvP 天赋算 1 级 —— 否则它携带的时长修正永远失效", () => {
+    // PvP 天赋是「装上/不装」不是「点几级」,天赋树数组里根本没有它。
+    // 修之前 talentRankOf 一律返回 0,谓词走 rank<=0 的回退,于是任何由 PvP
+    // 天赋携带的时长修正都永远生效不了(神圣马驹的 Steed of Glory +2s /
+    // Soul-Touched Spurs +3s 就是这个形状)。
+    const STEED_OF_GLORY = "199542";
+    const withPvp = makeUnit("p-pvp", {
+      spec: CombatUnitSpec.Paladin_Protection,
+      info: { talents: [], pvpTalents: [STEED_OF_GLORY] },
+    });
+    expect(talentOwnershipOf(withPvp, STEED_OF_GLORY)).toBe("yes");
+    expect(talentRankOf(withPvp, STEED_OF_GLORY)).toBe(1);
+    const without = makeUnit("p-nopvp", {
+      spec: CombatUnitSpec.Paladin_Protection,
+      info: { talents: [], pvpTalents: [] },
+    });
+    expect(talentRankOf(without, STEED_OF_GLORY)).toBe(0);
   });
 
   it("读不到天赋(unknown)绝不加长 —— 与 CC 侧同一条纪律", () => {
