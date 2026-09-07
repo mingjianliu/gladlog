@@ -259,19 +259,15 @@ export const CC_DURATION_TALENT_MODIFIERS: Record<
  * table does not have yet.
  *
  * NOT registered, evidence incomplete (do not add without closing the gap):
- *  · Avenging Crusader 216331 — the corpus half is as strong as it gets
- *    (102 of 102 caster-cells at 22.5 s hold Sanctified Wrath 53376; the 15 s
- *    group holds it 2/5), but DB2 only reaches 18.75: unlike Avenging Wrath,
- *    the second +25 % row (171648) does NOT cover it — 216331's class mask is
- *    0/0/0/64 and 171648's modifier mask is 0/256/0/0. The observed ratio is
- *    exactly 1.5 and the missing +25 % has no source, so it stays out.
- *  · Avenging Wrath 31884 — Retribution reconciles (Divine Wrath 406872,
- *    +4000 ms, 97 % of 72 cells at 24 s vs 0 % at 30 s: 20 + 4 = 24), but
- *    Holy sits at exactly 30 s (42 cells) with no modifier explaining
- *    20 → 30, the same unexplained ×1.5 as Avenging Crusader. Registering
- *    only the Retribution half would leave Holy silently wrong.
  *  · Shadow Blades 121471 (18 s in 65 of 75 cells) — NO talent with a
  *    SPELLMOD_DURATION row separates the groups at all (best +3 pp).
+ *  · Survival of the Fittest 264735 for MARKSMANSHIP only — 108 caster-cells
+ *    at 3.0 s that hold Lone Survivor 99 % and are plainly unaffected by it,
+ *    against 6 s for the other two specs. Registered for BM/Survival, left
+ *    alone for MM: the spec's own base is what disagrees, not a talent.
+ *  · Rallying Cry 97463's second tier — 29 caster-cells at 15.5 s that hold
+ *    Battlefield Commander like the 13 s group does; no second modifier
+ *    reaches the spell. Priced at 13 s, which is still nearer than 10.
  *  · Improved Garrote 392401 (6 → 12 s) and Way of the Crane 451084
  *    (10 → 5 s) — the arithmetic worked (Razor Wire +6000 ms; Thunder Focus
  *    Tea −50 %) and both talents were held by ~100 % of the group, but
@@ -287,6 +283,15 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
   string,
   ReadonlyArray<{
     talentSpellId: string;
+    /**
+     * Restrict this modifier to these specs (`CombatUnitSpec` values). Needed
+     * whenever a spell is shared by specs that modify it differently:
+     * Avenging Wrath is Sanctified Wrath ×1.5 for Holy and Divine Wrath +4 s
+     * for Retribution, and without the gate the Holy entry short-circuits a
+     * Retribution caster on its rank-0 path before Divine Wrath is reached.
+     * Omit when the modifier applies wherever the talent can be taken.
+     */
+    specs?: readonly string[];
     /**
      * The buff's duration with NONE of these talents — the DB2 value, which is
      * NOT always what `spellEffectData[id].durationSeconds` answers. That
@@ -345,6 +350,65 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
       untalentedBaseSeconds: 15,
       replaceSeconds: 6,
       note: "Deeply Rooted Elements — NOT a duration modifier: the Restoration Shaman capstone PROCS Ascendance, and the proc carries its own length, so the spell's DB2 15 s (SpellMisc DurationIndex 8, no PvP variant) describes only the hard cast. Corpus: 1,684 aura applications against 18 casts of 114052, i.e. ~99 % are procs; 1,614 of 1,667 proc lifetimes are exactly 6.0 s; 162 of 162 caster-cells hold the talent. DRE's own DB2 effects carry dummy base points 6000 / 11.6 / 6 / 7 — the 6 is Restoration's (Enhancement 114051 is a normal cast, 672 casts vs 695 applications, 15.0 s, and stays on the base value).",
+    },
+  ],
+  "31884": [
+    {
+      talentSpellId: "53376",
+      specs: ["65"], // Paladin_Holy
+      untalentedBaseSeconds: 20,
+      pct: 50,
+      note: "Sanctified Wrath — DB2 puts +25 % on the talent itself (53376) AND +25 % on the spec passive 171648, BOTH masks covering Avenging Wrath, so the talent is worth +50 % here; corpus agrees exactly: 42 of 42 caster-cells at 30.0 s hold it and 0 of the 4 at 20.0 s do (20 × 1.5 = 30)",
+    },
+    {
+      talentSpellId: "406872",
+      specs: ["70"], // Paladin_Retribution
+      untalentedBaseSeconds: 20,
+      addSeconds: 4,
+      note: "Divine Wrath — DB2 aura 107 +4000 ms per rank, Paladin/Retribution (maxRanks 2), mask covers the spell; corpus 72 of 74 caster-cells at 24.0 s hold it at rank 1 vs 0 % of the Holy 30 s group; 20 + 4 = 24",
+    },
+  ],
+  "216331": [
+    {
+      talentSpellId: "53376",
+      specs: ["65"], // Paladin_Holy
+      untalentedBaseSeconds: 15,
+      pct: 50,
+      note: "Sanctified Wrath — corpus is unambiguous and matches Avenging Wrath's ×1.5 exactly: 102 of 102 caster-cells at 22.5 s hold it, the 15 s group 2 of 5 (15 × 1.5 = 22.5). DB2 only accounts for HALF of it here — 216331's class mask is 0/0/0/64 and the second +25 % row (171648) carries 0/256/0/0, so only the talent's own +25 % legally reaches it. Registered on corpus evidence with DB2 partially disagreeing, the same standing as CORPUS_DURATION_PATCHES' Binding Shot 2 → 3 s; if a future build's mask data lines up, fold it back to two +25 % rows.",
+    },
+  ],
+  "358267": [
+    {
+      talentSpellId: "375517",
+      untalentedBaseSeconds: 6,
+      addSeconds: 4,
+      note: "Extended Flight — DB2 aura 107 +4000 ms per rank, Evoker class tree (maxRanks 2), mask covers the spell; corpus 219 caster-cells at 10.0 s hold it 100 % (6 + 4 = 10, i.e. everyone buys one rank) with no untalented control group at all — the same shape as Improved Barkskin. Open: 6 Augmentation cells sit at 10.5 s.",
+    },
+  ],
+  "1719": [
+    {
+      talentSpellId: "1269310",
+      specs: ["72"],
+      untalentedBaseSeconds: 12,
+      pct: 50,
+      note: "Rampaging Berserker — DB2 aura 108 +50 %, Warrior/Fury spec tree (maxRanks 1), mask covers the spell; corpus 31 of 31 caster-cells at 18.0 s hold it; 12 × 1.5 = 18. NOTE the base: DB2 says 12 while the hand override said 16, which is neither the base nor the talented value — running the arithmetic against that override is what made this look unexplainable for two rounds. The override now carries the talented 18.",
+    },
+  ],
+  "264735": [
+    {
+      talentSpellId: "388039",
+      specs: ["253", "255"],
+      untalentedBaseSeconds: 6,
+      addSeconds: 2,
+      note: "Lone Survivor — DB2 aura 107 +2000 ms, Hunter class tree (maxRanks 1), mask covers the spell; corpus 254 caster-cells at 8.0 s hold it 100 % vs 29 at 6.0 s holding it 0 % (6 + 2 = 8). Spec-gated because Marksmanship is a THIRD group entirely: 108 cells at 3.0 s that hold the talent 99 % and are unaffected by it — that spec's own duration is unexplained and stays on the table value.",
+    },
+  ],
+  "97463": [
+    {
+      talentSpellId: "424742",
+      untalentedBaseSeconds: 10,
+      addSeconds: 3,
+      note: "Battlefield Commander — DB2 aura 107 +3000 ms, Warrior class tree (maxRanks 1), mask covers the spell; corpus 221 caster-cells at 13.0 s hold it 100 % vs 8 at 10.0 s holding it 12 % (10 + 3 = 13). Open: 29 further cells sit at 15.5 s while also holding it (mostly Fury) — unexplained, and they are priced at 13 s here, still closer than the table's 10.",
     },
   ],
   "357170": [

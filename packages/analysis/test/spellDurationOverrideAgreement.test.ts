@@ -39,6 +39,7 @@ const DELIBERATELY_TALENTED: Record<string, number> = {
   "22812": 12, // 8 + Improved Barkskin
   "47788": 12, // 10 + Foreseen Circumstances
   "357170": 10.4, // 8 × (1 + 0.15 × 2), Timeless Magic rank 2
+  "1719": 18, // 12 × 1.5, Rampaging Berserker
 };
 
 describe("spellEffectOverrides 的时长不许静默偏离官方值", () => {

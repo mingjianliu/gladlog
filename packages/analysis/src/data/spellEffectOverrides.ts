@@ -89,7 +89,7 @@ export const SPELL_EFFECT_OVERRIDES: Record<string, IMinedSpell> =
       e("121471", "Shadow Blades", 90, 20),
       e("190319", "Combustion", 120, 10),
       e("365350", "Arcane Surge", 90, 15),
-      e("1719", "Recklessness", 90, 16),
+      e("1719", "Recklessness", 90, 18), // 2026-09-07: 16 was neither the DB2 base (12) nor the talented value; ~100 % of Fury casters hold Rampaging Berserker → 12 × 1.5 = 18, which is what the corpus shows (31/31 cells)
       e("107574", "Avatar", 90, 20),
       e("227847", "Bladestorm", 90, 6),
       e("47585", "Dispersion", 120, 6),

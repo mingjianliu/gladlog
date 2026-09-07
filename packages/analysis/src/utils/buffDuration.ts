@@ -64,6 +64,9 @@ export function buffFullDurationForCaster(
   let seconds = mods[0]!.untalentedBaseSeconds;
   let mult = 1;
   for (const m of mods) {
+    // Spec gate first: a modifier for another spec must not even reach the
+    // rank-0 fallback below, or it would short-circuit this caster's own one.
+    if (m.specs !== undefined && !m.specs.includes(caster.spec)) continue;
     if (talentOwnershipOf(caster, m.talentSpellId) === "no") continue;
     const rank = talentRankOf(caster, m.talentSpellId);
     if (rank <= 0) return noCasterValue;

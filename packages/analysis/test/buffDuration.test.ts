@@ -64,6 +64,7 @@ describe("buffFullDurationForCaster — 天赋条件的增益时长", () => {
       "22812": 1, // Improved Barkskin, maxRanks 1
       "47788": 1, // Foreseen Circumstances, maxRanks 1
       "357170": 2, // Timeless Magic, maxRanks 2 —— 语料 143/155 格是 2 级
+      "1719": 1, // Rampaging Berserker —— 语料 31/31 格持有,典型值 12×1.5=18
     };
     for (const [spellId, mods] of Object.entries(
       BUFF_DURATION_TALENT_MODIFIERS,
@@ -140,6 +141,27 @@ describe("buffFullDurationForCaster — 天赋条件的增益时长", () => {
     expect(buffFullDurationForCaster("114052", resto)).toBe(6);
     // 拿不到施法者仍是官方 15s(硬读版本的时长),与接线前一致
     expect(buffFullDurationForCaster("114052", undefined)).toBe(15);
+  });
+
+  it("专精门:同一个法术,神骑走 ×1.5、惩戒走 +4s,互不串台", () => {
+    // 没有专精门时,惩戒骑会在 Sanctified Wrath 那条上走到「yes 但读不到级数」
+    // 的提前返回,拿不到自己的 Divine Wrath +4s。
+    const SANCTIFIED_WRATH = { id1: 81592, id2: 102578, count: 1 };
+    const holy = makeUnit("h1", {
+      spec: CombatUnitSpec.Paladin_Holy,
+      info: { talents: [SANCTIFIED_WRATH], pvpTalents: [] },
+    });
+    expect(talentOwnershipOf(holy, "53376")).toBe("yes");
+    expect(buffFullDurationForCaster("31884", holy)).toBeCloseTo(30);
+    expect(buffFullDurationForCaster("216331", holy)).toBeCloseTo(22.5);
+    const DIVINE_WRATH = { id1: 93160, id2: 115439, count: 1 };
+    const ret = makeUnit("r1", {
+      spec: CombatUnitSpec.Paladin_Retribution,
+      info: { talents: [DIVINE_WRATH], pvpTalents: [] },
+    });
+    // 惩戒:神骑那条被专精门挡掉,不会短路
+    expect(talentOwnershipOf(ret, "406872")).toBe("yes");
+    expect(buffFullDurationForCaster("31884", ret)).toBeCloseTo(24);
   });
 
   it("读不到天赋(unknown)绝不加长 —— 与 CC 侧同一条纪律", () => {
