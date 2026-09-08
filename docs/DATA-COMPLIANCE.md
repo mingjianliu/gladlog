@@ -85,8 +85,9 @@ taken later.
 The feed only retains about 7 days (GCS objects about 30), so accumulating a
 corpus means polling over time rather than one burst.
 
-**As of 2026-08-01 this is a standing scheduled job**, so the paragraph that
-used to say "revisit this section if it ever becomes one" is now cashed in.
+**As of 2026-08-01 this is built as a standing scheduled job**, so the
+paragraph that used to say "revisit this section if it ever becomes one" is now
+cashed in. (Built, not enabled — see the last bullet below.)
 `scripts/archivePvpLogs.ts` sweeps the whole feed and archives every new public
 match; `packages/corpus-tools/ops/app.gladlog.pvp-archive.plist` runs it under
 launchd **4 times a day, every 6 hours** (01:00 / 07:00 / 13:00 / 19:00 local).
@@ -104,13 +105,73 @@ What that means in numbers, and why we consider it acceptable:
   rates, billed to a volunteer project. The user is aware of this figure and
   accepts it. If we ever want to reduce it, the lever is frequency, not
   compression — we already store exactly the bytes they serve.
-- **It is not running yet.** Committing the plist does nothing; nobody has
-  loaded it. The plan is to enable it at the start of the next competitive
-  season, late August 2026. Enable/disable instructions and operational notes:
+- **It was never put on the schedule.** Committing the plist does nothing and
+  nobody ever loaded it — the ruling of 2026-08-23 was to run the archiver by
+  hand instead. So every number in the three bullets above is a *projection* of
+  a cadence that never ran. What actually happened is measured below.
+  Enable/disable instructions and operational notes:
   [pvp-log-archive.md](pvp-log-archive.md).
 
 If the cadence rises above every 6 hours, or the archiver stops being the only
 scheduled consumer, revisit this section and §1.
+
+### What we actually took, and what it cost them — measured 2026-09-08
+
+**On 2026-09-08 the upstream discontinued match search, and we have stopped
+collecting.** `latestMatches` now answers every query — with or without a
+bracket — with **HTTP 200 plus a GraphQL error** carrying
+`extensions.code = SEARCH_DISABLED`:
+
+> Automated scraping of search results has driven our hosting costs up sharply,
+> so match search is discontinued until we can find a way to prevent it. Your
+> own uploaded matches and any match shared with you by link are still
+> available.
+
+The user's ruling the same day was to stop: no retries, no alternate entry
+point, no schedule. Note the shape of the failure for whoever debugs this next
+— a GraphQL error does not travel in the HTTP status code, so `fetchWithRetry`
+neither retries nor warns, and the archiver surfaces it only as the generic
+`feed-detailed: empty latestMatches response`. Read the raw response body
+before concluding anything.
+
+The archiver ran by hand from **2026-08-13 to 2026-09-05** — 24 consecutive day
+shards, no gaps. Measured off the archive itself, not projected:
+
+| What                    | Amount                                                        |
+| ----------------------- | ------------------------------------------------------------- |
+| Matches downloaded      | 63,309                                                        |
+| Bytes taken off their bucket | 41.96 GiB — raw gzip, exactly the bytes they serve        |
+| Feed pages requested    | roughly 1,200–1,500, at 50 stubs per page                     |
+
+What that costs them at published GCP list prices (North America → internet):
+
+| Line item                            | Quantity        | Rate            | Estimate  |
+| ------------------------------------ | --------------- | --------------- | --------- |
+| GCS egress                           | 41.96 GiB       | ~$0.12/GiB      | **~$5.0** |
+| GCS class B operations (object GET)  | 63,309          | $0.004/10k      | $0.03     |
+| Firestore document reads (feed)      | ~1.5–2.5M       | $0.06/100k      | ~$1–1.5   |
+| API compute and egress               | ~1.4k requests  | —               | <$0.5     |
+
+**Roughly $7–10, and under $20** once the scattered pulls made before the
+archiver existed are counted. Two things this table does not say on its own:
+
+- **Our paging is the pathological kind.** `archivePvpLogs.ts` pages with
+  `offset: page * 50, count: 50`, and Firestore bills for documents an
+  `offset()` **skips**. Paging P pages costs `50 × P(P+1)/2` reads, not
+  `50 × P` — the 2026-09-04 round alone (11,872 new matches) is about 530k
+  reads instead of 24k. The Firestore row above is already the amplified
+  figure; it would be lower if their resolver does not pass the offset
+  straight through. Anyone reviving this collector should switch to
+  cursor-based paging first — it is a straight cost saving for them and costs
+  us nothing.
+- **A small dollar figure can still be a large share.** wowarenalogs users read
+  parsed matches in a browser; almost nobody pulls the raw gzip objects. Over
+  three and a half weeks, from one client, 41.96 GiB was plausibly a leading
+  share of that bucket's raw-object egress. "We only cost them about ten
+  dollars" and "we were a main driver of that cost line" are both true.
+
+Their notice names *search results*, i.e. the query path rather than the
+download path — which is precisely where our offset paging was worst.
 
 ## 4. Personal data in the logs
 
@@ -218,11 +279,13 @@ flag set from `GLADLOG_E2E=1`.
 
 ## Open items
 
-- **Scheduled polling** (BACKLOG #19). Decision of 2026-08-01 is to proceed
-  without contacting the maintainers, keeping frequency low. The archiver and
-  its every-6-hours schedule are now built; the cadence, volume, and the
-  cost it puts on the upstream project are written down in §3. If the cadence
-  ever rises materially, revisit §1 and §3.
+- **Scheduled polling** (BACKLOG #19) — **closed by the upstream on
+  2026-09-08**, which discontinued match search for everyone. Collection has
+  stopped; what we took and what it cost them is measured in §3. The schedule
+  was never loaded, so there is nothing to disable. The 2026-08-01 decision not
+  to contact the maintainers still stands and has not been revisited; if that
+  changes, §3 now carries the concrete figures (63,309 matches, 41.96 GiB) to
+  open with.
 - **Spell and spec icons** are still fetched from Wowhead's CDN
   (`wow.zamimg.com`) at runtime, cached to disk. That art is Blizzard's and is
   not licensed to us; it rests on Blizzard's general tolerance of fan tools.
