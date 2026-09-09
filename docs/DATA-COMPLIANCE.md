@@ -103,8 +103,11 @@ What that means in numbers, and why we consider it acceptable:
   accumulates to roughly **860 GB/year** stored (gzip, as served).
 - **What it costs them:** roughly **$100–200/year** at published GCS egress
   rates, billed to a volunteer project. The user is aware of this figure and
-  accepts it. If we ever want to reduce it, the lever is frequency, not
-  compression — we already store exactly the bytes they serve.
+  accepts it. If we ever want to reduce it, the lever is **coverage**, not
+  frequency and not compression: we already store exactly the bytes they serve,
+  and polling less often does not save a single byte as long as the same
+  objects are eventually downloaded — it only saves bytes when it makes us
+  *miss* matches. (This bullet said "frequency" until 2026-09-09; it was wrong.)
 - **It was never put on the schedule.** Committing the plist does nothing and
   nobody ever loaded it — the ruling of 2026-08-23 was to run the archiver by
   hand instead. So every number in the three bullets above is a *projection* of
@@ -145,25 +148,47 @@ shards, no gaps. Measured off the archive itself, not projected:
 
 What that costs them at published GCP list prices (North America → internet):
 
-| Line item                            | Quantity        | Rate            | Estimate  |
-| ------------------------------------ | --------------- | --------------- | --------- |
-| GCS egress                           | 41.96 GiB       | ~$0.12/GiB      | **~$5.0** |
-| GCS class B operations (object GET)  | 63,309          | $0.004/10k      | $0.03     |
-| Firestore document reads (feed)      | ~1.5–2.5M       | $0.06/100k      | ~$1–1.5   |
-| API compute and egress               | ~1.4k requests  | —               | <$0.5     |
+| Line item                            | Quantity        | Rate            | Estimate    |
+| ------------------------------------ | --------------- | --------------- | ----------- |
+| GCS egress                           | 41.96 GiB       | ~$0.12/GiB      | **~$5.0**   |
+| GCS class B operations (object GET)  | 63,309          | $0.004/10k      | $0.03       |
+| Firestore document reads (feed)      | ~2M–46M         | $0.06/100k      | **$1.5–27** |
+| API compute and egress               | ~1.4k requests  | —               | <$0.5       |
 
-**Roughly $7–10, and under $20** once the scattered pulls made before the
-archiver existed are counted. Two things this table does not say on its own:
+**Somewhere between $7 and $35.** The Firestore row is the whole width of that
+range, and it is wide for a reason given below — an earlier version of this
+section quoted "$7–10" by leaving the first full sweep out of the read count.
+Two things this table does not say on its own:
 
-- **Our paging is the pathological kind.** `archivePvpLogs.ts` pages with
-  `offset: page * 50, count: 50`, and Firestore bills for documents an
-  `offset()` **skips**. Paging P pages costs `50 × P(P+1)/2` reads, not
-  `50 × P` — the 2026-09-04 round alone (11,872 new matches) is about 530k
-  reads instead of 24k. The Firestore row above is already the amplified
-  figure; it would be lower if their resolver does not pass the offset
-  straight through. Anyone reviving this collector should switch to
-  cursor-based paging first — it is a straight cost saving for them and costs
-  us nothing.
+- **Our paging is the pathological kind, and the cost is in depth, not
+  frequency.** Every round restarts at `page = 0` (`archivePvpLogs.ts:374`)
+  with `offset: page * 50, count: 50` — no cursor, no resume — and Firestore
+  bills for documents an `offset()` **skips**. Walking P pages costs
+  `50 × P(P+1)/2` reads instead of `50 × P`, so the amplification factor is
+  `(P+1)/2` and grows with how deep a round has to go:
+
+  | Round shape                                    | Pages | Reads      | Amplification |
+  | ---------------------------------------------- | ----: | ---------: | ------------: |
+  | Idle (nothing new; only the 200-known tail)     |     4 |        500 |          2.5x |
+  | Catch-up after a few days                       |    84 |    178,500 |         42.5x |
+  | First full sweep (~39,000-stub window)          |   780 | 15,200,000 |        390.5x |
+
+  So **rare deep rounds are far worse than frequent shallow ones** — eight
+  14-page rounds cost 42,000 reads against 178,500 for one 84-page round, a
+  factor of 4.25 for the same data. This inverts the usual "polling less often
+  is more polite" instinct, and only for the read bill: it changes egress not
+  at all.
+
+  The upper end of the Firestore row is the first full sweep across three
+  brackets (~45.7M reads). **We cannot pin what it actually was**: the run log
+  prints the stop reason but never the page count, and the first round's log is
+  gone. Treat 46M as a bound, not a measurement — and if this collector is ever
+  revived, **log the page count per bracket per round**, which is the cheap fix
+  that would have made this section a fact instead of a range. It would also be
+  lower if their resolver does not pass the offset straight through to
+  Firestore. Anyone reviving it should switch to cursor paging first — but note
+  that cursors remove only this quadratic term: they do not reduce the number
+  of requests, and they do not save a byte of egress.
 - **A small dollar figure can still be a large share.** wowarenalogs users read
   parsed matches in a browser; almost nobody pulls the raw gzip objects. Over
   three and a half weeks, from one client, 41.96 GiB was plausibly a leading
