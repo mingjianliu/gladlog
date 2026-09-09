@@ -79,7 +79,14 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
 
 /** 目录下最新的 mp4 —— 首分片路径的兜底(brief 规则 1)。目录只有我们写,取最新
  * mtime 是安全的(design doc §5.5)。 */
-function scanNewestMp4(dir: string): string | null {
+/**
+ * 兜底:STARTED 事件没带路径时,从录制目录里挑最新的 mp4。
+ *
+ * `minMtimeMs` 是本次 StartRecord 的时刻:只有在那之后写过的文件才可能是这次
+ * 录制的产物。没有这个下界时,一个上一场遗留的旧分片(它就是目录里最新的
+ * mp4)会被当成"当前分片"报上去 —— 那比报不出分片更坏,因为它看起来是成功的。
+ */
+function scanNewestMp4(dir: string, minMtimeMs: number): string | null {
   let entries: string[];
   try {
     entries = readdirSync(dir);
@@ -96,6 +103,7 @@ function scanNewestMp4(dir: string): string | null {
     } catch {
       continue;
     }
+    if (mtimeMs < minMtimeMs) continue;
     if (!newest || mtimeMs > newest.mtimeMs) newest = { path: p, mtimeMs };
   }
   return newest ? newest.path : null;
@@ -446,6 +454,7 @@ export function createManagedObsBackend(
     const firstChunkWait = currentChunk
       ? null
       : waitForFirstChunkEvent(FIRST_CHUNK_EVENT_TIMEOUT_MS);
+    const startedAtMs = nowFn();
     const result = await callWithTimeout("StartRecord");
     if (result === null) {
       firstChunkWait?.cancel();
@@ -456,11 +465,29 @@ export function createManagedObsBackend(
     if (firstChunkWait) {
       await firstChunkWait.promise;
       if (!currentChunk) {
-        const scanned = scanNewestMp4(deps.recDir);
+        // 真机症状 2026-09-09:OBS 弹出"启动录像失败"的模态框,而这里什么都
+        // 没察觉 —— obs-websocket 的 StartRecord 只是转调
+        // obs_frontend_recording_start() 就立刻回 200,输出起没起来它不等
+        // (RequestHandler::StartRecord 里那句 "TODO: Call signal directly to
+        // perform blocking wait")。所以 StartRecord 成功 + 没有 STARTED 事件
+        // 有两种完全不同的解释:事件迟到,或者输出压根没起来。分辨它们只要一
+        // 次 GetRecordStatus —— 不问,就会把后者当成前者,继续往下走兜底扫描。
+        const status = await callWithTimeout("GetRecordStatus");
+        if (status !== null && status["outputActive"] !== true) {
+          continuousActive = false;
+          lastError =
+            "OBS 没有真正开始录制(StartRecord 已返回,但 GetRecordStatus 报告输出未激活)——" +
+            "多半是输出启动失败(编码器/录制目录/磁盘),OBS 日志里有确切原因";
+          return;
+        }
+        // 兜底扫描只认这次 StartRecord 之后写过的文件:上一场遗留的 mp4 是
+        // 目录里最新的那个,无门限地捡起来会把一个跟本次录制毫无关系的旧分片
+        // 当成"当前分片"报上去(比没有分片更坏 —— 它看起来是成功的)。
+        const scanned = scanNewestMp4(deps.recDir, startedAtMs);
         if (scanned) {
           openFirstChunk(scanned);
         } else {
-          lastError = `首个分片路径未知:STARTED 事件未带 outputPath 且 ${deps.recDir} 下没有 mp4 文件`;
+          lastError = `首个分片路径未知:STARTED 事件未带 outputPath 且 ${deps.recDir} 下没有本次录制写出的 mp4 文件`;
         }
       }
     }

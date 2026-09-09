@@ -10,6 +10,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  OBS_API_VERSION,
+  PINNED_AUDIO_ENCODER,
+  makeSemanticVersion,
+} from "../shared/obsAsset";
+import {
   MANAGED_CANVAS,
   clearSentinels,
   writeObsConfig,
@@ -64,11 +69,28 @@ describe("writeObsConfig", () => {
     expect(txt).toMatch(/SceneCollectionFile=gladlog/);
   });
 
-  it("writes global.ini with LastVersion", () => {
+  it("writes global.ini with a LastVersion OBS's own reader accepts as post-31", () => {
+    // 真机症状 2026-09-09 ①:这里曾写 "32.2.1",而 OBS 用 config_get_int 读它
+    // (strtoll → 32),于是每次启动都判定"配置早于 OBS 31"、尝试把 global.ini
+    // 迁移成 user.ini,撞上我们自己写的 user.ini,弹出阻塞式英文错误框。
+    //
+    // 因此这条断言不去 pin 我们写了什么字面量(那正是当初那条测试的做法,它
+    // 把 bug 一起 pin 住了),而是复刻 OBS 侧的读法,断言读出来的数 ≥
+    // MAKE_SEMANTIC_VERSION(31,0,0) —— 让 OBSApp::InitGlobalConfig 的 pre-31
+    // 分支根本进不去。
     writeObsConfig(spec);
     const txt = readFileSync(join(cfgRoot(), "global.ini"), "utf-8");
     expect(txt).toMatch(/\[General\]/);
-    expect(txt).toMatch(/LastVersion=32\.2\.1/);
+    const raw = /^LastVersion=(.*)$/m.exec(txt)?.[1];
+    expect(raw).toBeDefined();
+    // libobs config_get_int == strtoll(value, NULL, 10): leading integer only,
+    // 0 when there isn't one.
+    const asObsReadsIt = Number.parseInt(raw ?? "", 10) || 0;
+    expect(asObsReadsIt).toBe(OBS_API_VERSION);
+    expect(asObsReadsIt).toBeGreaterThanOrEqual(
+      makeSemanticVersion(31, 0, 0), // the migration branch's threshold
+    );
+    expect(asObsReadsIt).toBe(makeSemanticVersion(32, 2, 1)); // == OBS_VERSION
   });
 
   it("writes obs-websocket config.json with exact keys", () => {
@@ -127,7 +149,33 @@ describe("writeObsConfig", () => {
       join(cfgRoot(), "basic", "profiles", "gladlog", "basic.ini"),
       "utf-8",
     );
-    expect(txt).toMatch(/RecAudioEncoder=aac/);
+    // 真机症状 2026-09-09 ②:这里曾写 "aac"。在 [AdvOut] 段里这个值是直接喂给
+    // obs_audio_encoder_create 的**编码器 id**(裸编解码器名只在 [SimpleOutput]
+    // 段才会过 FindAudioEncoderFromCodec),没有任何编码器注册成 "aac";而
+    // create_encoder 对未知 id 会返回一个占位对象而不是 NULL,所以创建阶段不
+    // 报错,直到点下录制才在 obs_output_start 里失败 —— 就是那个"启动输出失败,
+    // 请检查日志"的模态框。同样地,这条断言不 pin 字面量,而是断言它落在
+    // OBS 32.2.1 真正注册过的音频编码器 id 集合里。
+    const REGISTERED_AUDIO_ENCODER_IDS = [
+      // plugins/obs-ffmpeg/obs-ffmpeg-audio-encoders.c:466-558 @ tag 32.2.1
+      "ffmpeg_aac",
+      "ffmpeg_opus",
+      "ffmpeg_pcm_s16le",
+      "ffmpeg_pcm_s24le",
+      "ffmpeg_pcm_f32le",
+      "ffmpeg_alac",
+      "ffmpeg_flac",
+      // Optional/platform encoders OBS itself only picks after an
+      // EncoderAvailable() probe (frontend/widgets/OBSBasic.cpp:891-896) —
+      // listed so a future deliberate switch stays inside the vetted set.
+      "CoreAudio_AAC",
+      "libfdk_aac",
+    ];
+    const recAudioEncoder = /^RecAudioEncoder=(.*)$/m.exec(txt)?.[1];
+    expect(REGISTERED_AUDIO_ENCODER_IDS).toContain(recAudioEncoder);
+    expect(recAudioEncoder).toBe(PINNED_AUDIO_ENCODER);
+    // "none" in this key means "same as the stream encoder", not "no audio"
+    // (AdvancedOutput.cpp:75) — either way it must never be what we write.
     expect(txt).not.toMatch(/RecAudioEncoder=none/);
     expect(txt).toMatch(/RecTracks=1/);
     expect(txt).toMatch(/Track1Bitrate=160/);

@@ -1051,6 +1051,16 @@ const INDEX: PredicateRow[] = [
     mod: obsAsset,
   },
   {
+    file: `${DS}/shared/obsAsset.ts`,
+    symbol: "PINNED_AUDIO_ENCODER",
+    mod: obsAsset,
+  },
+  {
+    file: `${DS}/shared/obsAsset.ts`,
+    symbol: "OBS_API_VERSION",
+    mod: obsAsset,
+  },
+  {
     file: `${DS}/main/obsConfigWriter.ts`,
     symbol: "MANAGED_CANVAS",
     mod: obsConfigWriter,

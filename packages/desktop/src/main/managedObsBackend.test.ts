@@ -81,6 +81,9 @@ class FakeManagedObsWs implements ManagedObsWs {
     (data?: Record<string, unknown>) => Promise<Record<string, unknown>>
   > = {
     StartRecord: async () => ({}),
+    /** 默认是"输出真的起来了"。startContinuous 在没等到 STARTED 事件时会问这
+     * 一句来分辨"事件迟到"和"输出压根没起来"(真机症状 2026-09-09)。 */
+    GetRecordStatus: async () => ({ outputActive: true }),
     StopRecord: async () =>
       poisonOutputPath() as unknown as Record<string, unknown>,
     SplitRecordFile: async () => ({}),
@@ -229,6 +232,55 @@ describe("startContinuous — 监听顺序 + 首分片", () => {
 
     expect(opened).toHaveLength(1);
     expect(opened[0]!.videoPath).toBe(join(recDir, "newest.mp4"));
+  });
+
+  it("StartRecord 返回成功但输出并没起来时:报错、不认领任何分片、也不停留在 recording 态", async () => {
+    // 真机症状 2026-09-09:OBS 弹了"启动录像失败"的模态框,而 StartRecord 照样
+    // 回 200(obs-websocket 转调 obs_frontend_recording_start() 就立刻返回,不
+    // 等输出真的起来)。此前这里会当成"STARTED 事件迟到",转去扫目录。
+    fake.handlers.GetRecordStatus = async () => ({ outputActive: false });
+    writeFileSync(join(recDir, "leftover.mp4"), "上一场遗留");
+
+    vi.useFakeTimers();
+    const backend = makeBackend();
+    const opened: Array<{ videoPath: string }> = [];
+    backend.onChunkOpened((c) => opened.push(c));
+    const p = backend.startContinuous();
+    await vi.runAllTimersAsync();
+    await p;
+
+    expect(opened).toHaveLength(0);
+    const health = await backend.probe();
+    expect(health.lastError).toMatch(/没有真正开始录制/);
+    // continuousActive 必须复位,否则重试会被幂等守卫吞掉。
+    const p2 = backend.startContinuous();
+    await vi.runAllTimersAsync();
+    await p2;
+    expect(fake.callLog.filter((c) => c.req === "StartRecord")).toHaveLength(2);
+  });
+
+  it("兜底扫描不认领本次 StartRecord 之前就存在的 mp4(上一场的遗留分片)", async () => {
+    // 目录里最新的 mp4 也可能跟这次录制毫无关系。认领它比报不出分片更坏 ——
+    // 它看起来是成功的。
+    nowMs = Date.now();
+    writeFileSync(join(recDir, "leftover.mp4"), "上一场遗留");
+    utimesSync(
+      join(recDir, "leftover.mp4"),
+      new Date(nowMs - 60_000),
+      new Date(nowMs - 60_000),
+    );
+
+    vi.useFakeTimers();
+    const backend = makeBackend();
+    const opened: Array<{ videoPath: string }> = [];
+    backend.onChunkOpened((c) => opened.push(c));
+    const p = backend.startContinuous();
+    await vi.runAllTimersAsync();
+    await p;
+
+    expect(opened).toHaveLength(0);
+    const health = await backend.probe();
+    expect(health.lastError).toMatch(/首个分片路径未知/);
   });
 
   it("is idempotent: calling startContinuous twice only calls StartRecord once", async () => {

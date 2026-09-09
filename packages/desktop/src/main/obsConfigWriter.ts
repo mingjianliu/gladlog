@@ -6,7 +6,11 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import { OBS_VERSION, PINNED_ENCODER } from "../shared/obsAsset";
+import {
+  OBS_API_VERSION,
+  PINNED_AUDIO_ENCODER,
+  PINNED_ENCODER,
+} from "../shared/obsAsset";
 
 /** Spec for the entire portable-OBS config tree we own (design doc §5.2:
  * "我们写自己的,永不碰用户的" — this writes OUR managed instance's config,
@@ -100,7 +104,11 @@ function writeUserIni(obsRoot: string): void {
 
 function writeGlobalIni(obsRoot: string): void {
   const txt = renderIni({
-    General: { LastVersion: OBS_VERSION },
+    // INTEGER, not "32.2.1" — OBS reads this key with config_get_int, and a
+    // dotted string parses to its leading number (32), which reads as "config
+    // predates OBS 31" and pops a blocking migration error box on every
+    // launch. Full trace in OBS_API_VERSION's doc comment (shared/obsAsset.ts).
+    General: { LastVersion: String(OBS_API_VERSION) },
   });
   writeFileSync(join(cfgRoot(obsRoot), "global.ini"), txt);
 }
@@ -138,15 +146,20 @@ function writeBasicIni(spec: ObsConfigSpec): void {
       // would silently cut a match mid-fight.
       RecSplitFileTime: "0",
       RecSplitFileSize: "0",
-      // 真机症状(2026-09-05):录像完全没有声音。Since OBS 30 the advanced
-      // output's RECORDING audio encoder is its own config key, and one of
-      // its legal values is literally "none" (= record no audio at all); we
-      // had never written it, leaving the entire audio side of a generated,
-      // fully-owned portable profile riding on OBS's built-in defaults. A
-      // generated config must not bet on defaults it never asserts — the
-      // encoder, the track bitmask and that track's bitrate are all written
-      // explicitly now. (RecTracks is a BITMASK, "1" = track 1 only.)
-      RecAudioEncoder: "aac",
+      // 真机症状(2026-09-05):录像完全没有声音。The advanced output's
+      // RECORDING audio encoder is its own config key, which we had never
+      // written — leaving the entire audio side of a generated, fully-owned
+      // portable profile riding on OBS's built-in defaults. A generated
+      // config must not bet on defaults it never asserts, so the encoder, the
+      // track bitmask and that track's bitrate are all written explicitly
+      // now. (RecTracks is a BITMASK, "1" = track 1 only.)
+      //
+      // 真机症状(2026-09-09):写成 "aac" 让整个录制输出起不来。In THIS
+      // section the value is an encoder id, not a codec name — see
+      // PINNED_AUDIO_ENCODER for why the wrong one fails silently until Start
+      // Recording. ("none" here would mean "same as the stream encoder", not
+      // "no audio": AdvancedOutput.cpp:75 `useStreamAudioEncoder`.)
+      RecAudioEncoder: PINNED_AUDIO_ENCODER,
       RecTracks: "1",
       Track1Bitrate: "160",
       Track1Name: "Track1",

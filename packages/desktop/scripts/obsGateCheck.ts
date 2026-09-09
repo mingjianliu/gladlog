@@ -621,6 +621,27 @@ async function main(): Promise<void> {
         "record-start",
         `StartRecord 失败/超时:${String(startOutcome.error)}`,
       );
+    } else {
+      // StartRecord 回 200 不代表输出起来了:obs-websocket 只是转调
+      // obs_frontend_recording_start() 就立刻返回。输出启动失败时 OBS 弹自己的
+      // 模态框("启动录像失败"),websocket 这边一声不吭 —— 真机症状
+      // 2026-09-09 就是这么被漏过去的,直到最后 bytes 那行是 0。问一句
+      // GetRecordStatus 就能把它变成一行确定的判据。
+      await sleep(1500);
+      const statusOutcome = await guardedCall(
+        "GetRecordStatus",
+        obs.call("GetRecordStatus"),
+        CALL_TIMEOUT_MS,
+      );
+      row(
+        "record-start",
+        !statusOutcome.ok
+          ? `GetRecordStatus 失败/超时:${String(statusOutcome.error)}`
+          : statusOutcome.value.outputActive === true
+            ? "OK 输出已激活(录制真的开始了)"
+            : "输出未激活 —— StartRecord 成功但录制没起来,去 OBS 日志找原因" +
+              "(典型:basic.ini 里的编码器 id 在这个 OBS 里没注册,日志会有 \"Encoder ID '…' not found\")",
+      );
     }
     await sleep(20_000);
     const splitOutcome = await guardedCall(
