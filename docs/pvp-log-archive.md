@@ -21,11 +21,11 @@ had already ruled it out (the review bench found no value impact by mode for
 What that saves, measured on the 2026-09-04 round (7,937 matches over the
 three day shards it created, 5.38 GB):
 
-| Bracket            | Matches | Share | Bytes   | Share |
-| ------------------ | ------- | ----- | ------- | ----- |
-| 2v2                | 2,765   | 34.8% | 0.70 GB | 13.0% |
-| 3v3                | 3,872   | 48.8% | 1.98 GB | 36.8% |
-| Rated Solo Shuffle | 1,300   | 16.4% | 2.70 GB | 50.2% |
+| Bracket            | Matches | Share | Bytes   | Share | Feed reads | Share |
+| ------------------ | ------- | ----- | ------- | ----- | ---------- | ----- |
+| 2v2                | 2,765   | 34.8% | 0.70 GB | 13.0% | 91,500     | 10.0% |
+| 3v3                | 3,872   | 48.8% | 1.98 GB | 36.8% | 174,300    | 19.0% |
+| Rated Solo Shuffle | 1,300   | 16.4% | 2.70 GB | 50.2% | 652,050    | 71.0% |
 
 The saving is **wall-clock, not Drive runway**: a round costs one
 `DOWNLOAD_SLEEP_MS` per match no matter how big that match is, so dropping
@@ -33,6 +33,19 @@ The saving is **wall-clock, not Drive runway**: a round costs one
 13% of the bytes. Rated Solo Shuffle is the opposite shape — a sixth of the
 matches, half the bytes — so bracket counts and bracket bytes are **not**
 interchangeable when sizing either one.
+
+**There is a third quantity, and it is the one that surprises** (added
+2026-09-09, computed on the same round): what a bracket costs the upstream in
+feed reads. The feed returns **one stub per Solo Shuffle round**, while the six
+rounds share a single GCS object — that is what `dedupeByLogObject` exists for.
+So collecting 1,300 shuffle objects means paging **7,800** stubs, six times as
+deep as the object count suggests, and because deep paging is billed
+quadratically (`50 × P(P+1)/2` — see DATA-COMPLIANCE.md §3), Solo Shuffle
+accounts for **71% of the round's feed reads off 16.4% of its objects**. It is
+the most expensive bracket on two of the three axes at once. Any future
+sizing decision needs all three columns, not the first two — and a bracket's
+stub-to-object multiplier is what turns a modest object count into a deep,
+quadratically-priced walk.
 
 It is a **separate constant from `KNOWN_BRACKETS`, and the two must not be
 merged**. `KNOWN_BRACKETS` states a fact about the server — the three values

@@ -195,6 +195,29 @@ Two things this table does not say on its own:
   share of that bucket's raw-object egress. "We only cost them about ten
   dollars" and "we were a main driver of that cost line" are both true.
 
+**A worked example — what a single round cost them.** The 2026-09-04 round was
+the largest: 11,872 objects across four day shards, about 12 hours of wall
+clock (`run-2026-09-04.log`, and the ledger mtimes that bracket it).
+
+| Line item                     | Quantity                       | Cost            |
+| ----------------------------- | ------------------------------ | --------------- |
+| GCS egress                    | 8.90 GiB (786 KB/object, measured) | **$1.07**   |
+| GCS class B operations        | 11,872 GETs                    | $0.005          |
+| Feed reads, offset billing    | 3,103,450                      | $1.86           |
+| Feed reads, if cursor-paged   | 25,850                         | $0.02           |
+| **Total**                     |                                | **$1.09–$2.94** |
+
+Two readings worth keeping. First, **84% of that round's reads were Solo
+Shuffle** — 322 of the 517 pages — because the feed returns one stub per round
+while six rounds share one object, so a bracket that is 22% of the objects
+pages six times as deep and is then billed quadratically for it (see
+[pvp-log-archive.md](pvp-log-archive.md) for the three-axis table). Second,
+**the 12 hours were our own throttle, not the data**: 11,872 downloads at
+`DOWNLOAD_SLEEP_MS = 2000` is 6.6 hours on its own, 55% of the run, and 8.90
+GiB transfers in 15–50 minutes at any plausible bandwidth. Run length tracks
+object count, not bytes — which is also why it is not the quantity to optimise
+for their sake.
+
 Their notice names *search results*, i.e. the query path rather than the
 download path — which is precisely where our offset paging was worst.
 
