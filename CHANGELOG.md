@@ -6,6 +6,40 @@ One section per release, listing every change and the commit behind it (on the
 `git log v<prev>..v<new>` basis; release and docs-only commits go under "Other").
 The release procedure is documented in `.claude/skills/release`.
 
+## v0.1.33 (2026-09-09)
+
+A fix release. The managed OBS recorder came back from the real machine unusable — a blocking error box on every launch, and then a "failed to start recording" dialog — and both turned out to be values in the config we generate that OBS reads differently than we wrote them. Alongside that, the batch behind buff durations landed: talents now feed the durations the coaching reasons about, and a hand-written duration table stopped shadowing official values.
+
+### Recording (managed OBS)
+
+- `2adfc09c` **The managed recorder popped a blocking error box on every launch, and then could not start recording at all.** Two independent defects, both in the config we generate for our own copy of OBS. The version marker was written as `32.2.1`, but OBS reads that key as a number — it saw "32", concluded the configuration predated OBS 31, and tried to migrate it on every single launch, before the recorder was even reachable. And the recording audio encoder was named by codec where that setting wants an encoder id, which OBS accepts without complaint and only fails on at the moment recording starts, as its generic "starting the output failed" message that blames video drivers. Both values now come from constants that a test re-parses exactly the way OBS itself does, so a value OBS cannot use fails the build instead of the recording
+- `2adfc09c` The recorder no longer reports a recording that never started. Whether recording actually began is now confirmed against OBS's own status rather than assumed from the request having succeeded, and the fallback that locates the video file can no longer adopt a leftover file from an earlier session
+- `2adfc09c` The real-machine gate check gains a row that answers "is the output actually running" directly
+
+### AI coaching — durations and talents
+
+- `b441214f` `ed5cd50a` `36f8241e` `ac23129e` **Buff durations now account for the caster's talents.** The stored durations were the untalented values, so anything a talent lengthened by more than two seconds had its real expiry thrown away as belonging to a different cast — measured on the archive, real removal events pair 582/620 to 618/620. The talent table grew to 21 entries, gated by specialization where two specs change the same spell differently, and the evidence bar for adding one is now three-way: the official modifier row, its class mask actually covering the spell, and an archive split that reconciles arithmetically
+- `a25bacf1` **Duration changes carried by PvP talents never took effect at all.** PvP talents do not live in the talent tree the rank lookup walked, so every one of them read as "not taken"
+- `ca199da1` Three duration entries shipped wrong by a factor of two: the official values are per-rank for some talents and totals-at-max-rank for others, and the rank cannot be inferred from a number that happens to fit
+- `5c122ce7` Some spells simply have a different base duration per specialization, which the tables could not express before; 20 durations were corrected against the archive, and only ever upward — an aura cannot outlive its own duration, so a longer observation is evidence while a shorter one may just be an early removal
+- `78974390` Ascendance was not a wrong duration but a proc: 18 casts against 1,684 applications, nearly all of them produced by a talent that carries its own duration
+- `3bb67622` **Four hand-written durations were shadowing official values** — the hand table silently replaces generated entries, so nobody would ever see the disagreement. The archive settled all four, and the duration predicate now lives in one place instead of three
+- `5e56f564` The duration scan's first run on unused samples reported three disagreements; two were closed with the talent behind them, the third documented as a deliberate exclusion
+- `7db858eb` A duration field that was computed and stored on every missed-purge window but never read is gone
+
+### AI coaching — signals
+
+- `3ede44b0` **"You got kicked" findings are ranked by whether the player actually cast anything through the lockout.** The old ordering asserted that switching schools was the least teachable outcome, which is only true when a real cast went through — measured at 16 of 292 rounds. A priest who ate the interrupt and got one instant heal out in five seconds used to rank below someone who simply waited the lockout out
+- `faed3c7c` The same findings no longer tell the model the player "kept playing through the lockout" when all they pressed was an off-school instant
+
+### Other (docs / tools / eval)
+
+- `e60a8df7` `237d8480` `9cab0bf8` `b55abed3` A pipeline for reconciling coaching-video verdicts against what gladlog computes, with its runbook and a Chinese counterpart
+- `29347de7` `58db8d3d` `63c4182d` `c698121d` `232e024c` Cross-AI review corrected the headline numbers of that reconciliation — three "gladlog does not have this" claims were disproven from source, and two layers of the coverage figure were inflated; the gap itself held up
+- `1046b087` `509f5263` `689a67fa` `71076c13` `e646a7e8` Signal probes: the kick-eaten severity axis was measured on the wrong quantity, the catch-all bucket held no misclassifications, a position-based feasibility check for kick-eaten is a go but blocked on official range data, the missed-sync-window claim passed while the "is it worth shipping" premises did not, and the case for retiring unsynced-burst was re-checked and stands
+- `f74b244d` `427037c1` `39301b5b` Data-compliance notes updated with what the archive actually takes and what it costs, after the upstream match search shut down
+- `d045b6ea` A stray `__pycache__` removed from the tree, with an ignore rule
+
 ## v0.1.32 (2026-09-05)
 
 Managed-recording repair release, plus the season's official-data batch. Three symptoms came back from a real 4K Windows machine on the managed OBS recorder — no sound, only the top-left corner of the screen, and footage that starts outside the arena. The first two were real bugs and are fixed here. The third turned out to be what a continuous recording's raw chunk files look like (the in-app player was already correct), but the raw files are now cut closer to the match anyway. Alongside that: the managed recorder gains user settings (where recordings go, which audio devices), the healer save-cooldown roster is now generated from official data instead of a hand-written list, and the game data behind cooldowns, durations and mitigation was refreshed and audited against the official tables.
