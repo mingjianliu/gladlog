@@ -81,6 +81,11 @@ async function main(): Promise<void> {
   // teammate clash. Window comes from production (16 s pre-12.1 / 20 s from
   // 12.1), never a local constant.
   let outsideWindow = 0;
+  // Incidence — "share of rounds firing at least once" — is the unit every
+  // shipped candidate type is measured in (candidateDiagnostics). Reporting
+  // only a per-round count makes this signal incomparable to the live ones,
+  // which is how an invented threshold gets adopted.
+  const roundsWithClash = new Set<string>();
   const clashes: Clash[] = [];
   const byCategory = new Map<string, { cross: number; self: number }>();
 
@@ -132,6 +137,7 @@ async function main(): Promise<void> {
             bucket.self++;
           } else {
             bucket.cross++;
+            roundsWithClash.add(meta.id);
             clashes.push({
               matchId: meta.id,
               target: chain.targetName,
@@ -166,6 +172,23 @@ async function main(): Promise<void> {
   console.log(
     `    prior application OUTSIDE the DR reset window ${outsideWindow}  (${pct(outsideWindow, diminished)})  <- NOT attributable to it; excluded from both counts above`,
   );
+
+  console.log(
+    `\nINCIDENCE (the unit every shipped type is measured in):`,
+  );
+  console.log(
+    `  rounds with >= 1 teammate clash  ${roundsWithClash.size}/${rounds} = ${pct(roundsWithClash.size, rounds)}`,
+  );
+  console.log(
+    `  live-signal incidences for comparison: attempt-into-trinket 64.5% · cd-hoarded 63.5% ·`,
+  );
+  console.log(
+    `  missed-sync-window 33.5% · cd-waste 28.0% · cc-avoidable 13.8% · slow-defensive-response 10.0% ·`,
+  );
+  console.log(
+    `  external-unused 7.2% · healing-gap 3.8% · crisis-no-response 2.8% · questionable-external 1.8% ·`,
+  );
+  console.log(`  position-mistake 1.5%`);
 
   console.log(`\nby DR category:`);
   for (const [c, v] of [...byCategory].sort(
