@@ -623,6 +623,11 @@ async function scan(): Promise<void> {
 }
 
 function report(): void {
+  // Rating-bucket splits are OFF by default — user ruling 2026-09-11: future
+  // corpora will be far smaller than this season's, and rating buckets drift
+  // across a season (inflation), so a bucket table is not a stable axis.
+  // Role (dps/healer) and bracket splits stay. `--buckets` re-enables them.
+  const showBuckets = argv.includes("--buckets");
   const inPath = flag("--in");
   if (!inPath) {
     console.error("usage: report --in <file.jsonl>");
@@ -654,6 +659,7 @@ function report(): void {
     `records (player-perspectives) ${recs.length} | rounds ${roundsSet.size} | dps ${dps.length} healer ${heal.length}`,
   );
   const bucketRows = (rs: Rec[]) => {
+    if (!showBuckets) return new Map<string, Rec[]>();
     const m = new Map<string, Rec[]>();
     for (const r of rs) {
       const b = bucketOf(r.rating);
@@ -674,8 +680,7 @@ function report(): void {
   console.log(
     `  dps: ${pct(dps.filter((r) => r.ccMajors > 0 && r.ccForfeit > 0).length, dps.filter((r) => r.ccMajors > 0).length)} | healer: ${pct(heal.filter((r) => r.ccMajors > 0 && r.ccForfeit > 0).length, heal.filter((r) => r.ccMajors > 0).length)}`,
   );
-  console.log(
-    "by rating bucket (3v3 + solo, per bracket separately — bar 2: top must forfeit >=25% fewer per round than bottom):",
+  if (showBuckets) console.log("by rating bucket (3v3 + solo, per bracket separately — bar 2: top must forfeit >=25% fewer per round than bottom):",
   );
   for (const br of ["3v3", "solo"]) {
     const m = bucketRows(withCc.filter((r) => r.bracket === br));
@@ -729,7 +734,7 @@ function report(): void {
       heal.reduce((s, r) => s + r.ccCasts, 0),
     )}`,
   );
-  console.log("by rating bucket (3v3 + solo), BOTH share of CC casts:");
+  if (showBuckets) console.log("by rating bucket (3v3 + solo), BOTH share of CC casts:");
   for (const br of ["3v3", "solo"]) {
     const m = bucketRows(recs.filter((r) => r.bracket === br));
     for (const b of RATING_BUCKETS) {
@@ -806,8 +811,7 @@ function report(): void {
     console.log(
       `  ${k.padEnd(8)} n ${xs.length}  median ${(median(xs) * 100).toFixed(0)}%  <25% share ${pct(xs.filter((x) => x < 0.25).length, xs.length)}`,
     );
-  console.log(
-    "by rating bucket (3v3 + solo): median depth and <25% (reflex) share:",
+  if (showBuckets) console.log("by rating bucket (3v3 + solo): median depth and <25% (reflex) share:",
   );
   for (const br of ["3v3", "solo"]) {
     const m = bucketRows(recs.filter((r) => r.bracket === br));
@@ -859,7 +863,7 @@ function report(): void {
   console.log(
     `dispels ${dsp} | cleanse ${cl} | purge ${pu} | backlash ${bl} (${pct(bl, dsp)}) | backlash per perspective-round ${(bl / recs.length).toFixed(3)} | per healer-round ${(heal.reduce((s, r) => s + r.backlash, 0) / Math.max(heal.length, 1)).toFixed(3)}`,
   );
-  console.log("backlash by rating bucket (3v3 + solo), per perspective-round:");
+  if (showBuckets) console.log("backlash by rating bucket (3v3 + solo), per perspective-round:");
   for (const br of ["3v3", "solo"]) {
     const m = bucketRows(recs.filter((r) => r.bracket === br));
     for (const b of RATING_BUCKETS) {
@@ -890,7 +894,7 @@ function report(): void {
   console.log(
     `  dps only: forfeited>=1 ${pct(withOff.filter((r) => !r.healer && r.offForfeit > 0).length, withOff.filter((r) => !r.healer).length)}`,
   );
-  console.log("by rating bucket (3v3 + solo), dps, forfeited>=1:");
+  if (showBuckets) console.log("by rating bucket (3v3 + solo), dps, forfeited>=1:");
   for (const br of ["3v3", "solo"]) {
     const m = bucketRows(withOff.filter((r) => !r.healer && r.bracket === br));
     for (const b of RATING_BUCKETS) {
@@ -917,7 +921,7 @@ function report(): void {
   console.log(
     `all ${spm(recs).toFixed(2)}/min | dps ${spm(dps).toFixed(2)}/min | healer ${spm(heal).toFixed(2)}/min`,
   );
-  console.log("dps by rating bucket (3v3 + solo):");
+  if (showBuckets) console.log("dps by rating bucket (3v3 + solo):");
   for (const br of ["3v3", "solo"]) {
     const m = bucketRows(dps.filter((r) => r.bracket === br));
     for (const b of RATING_BUCKETS) {
