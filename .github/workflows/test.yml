@@ -23,8 +23,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
+# `npm run presubmit` 仍是这里 static + unit 两个 job 的并集(frontend-qa 除外);
+# CI 只是把它摊到并行的 runner 上。
 jobs:
-  test:
+  static:
+    name: lint · typecheck · vision · bundle
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -42,9 +45,6 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Unit tests (all workspaces)
-        run: npm test
-
       - name: Data-faithfulness (verify:vision)
         run: npm -w @gladlog/desktop run verify:vision
 
@@ -53,7 +53,48 @@ jobs:
       - name: Production bundle (electron-vite build)
         run: npm -w @gladlog/desktop run build
 
-  # 前端质检:视觉回归 + 无障碍。与 test job 并行,不拖慢快反馈。
+  # 全 workspace 单测,拆到并行 runner 上。串行时这一步 8–9.6 分钟,而且几乎全是
+  # 每个测试文件的 setup(导入 @gladlog/analysis + ensureAnalysisData):
+  # 2026-09-12 run 34715621863 实测 desktop 262s 墙钟 / 测试本体 79s,
+  # analysis 143s / 4.5s,eval 51s / 2.4s。runner 只有 4 核,单机内 vitest 已经
+  # 吃满,只能横向拆。desktop 最慢,按文件再分两片。
+  unit:
+    name: unit (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      # 一片红了其他片照样跑完,一次看全所有失败
+      fail-fast: false
+      matrix:
+        include:
+          - name: desktop 1/2
+            run: npm -w @gladlog/desktop run test -- --shard=1/2
+          - name: desktop 2/2
+            run: npm -w @gladlog/desktop run test -- --shard=2/2
+          - name: analysis
+            run: npm -w @gladlog/analysis run test
+          # 其余 workspace 从 npm 的 workspace 列表里减出来,不手写名单:
+          # 新加的包自动落在这一片,不会因为没人登记而静默不跑。
+          # 反方向也安全 —— 上面两个包若改名,grep 排除不掉,只会多跑一遍。
+          - name: rest
+            run: |
+              set -euo pipefail
+              ws=$(npm query .workspace | jq -r '.[].name' | grep -vxE '@gladlog/(desktop|analysis)')
+              echo "workspaces: $ws"
+              for w in $ws; do npm -w "$w" run test --if-present; done
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Unit tests
+        run: ${{ matrix.run }}
+
+  # 前端质检:视觉回归 + 无障碍。与 static / unit 并行,不拖慢快反馈。
   # 截图基线是 linux 单源 —— CI 既是生产者(visual-baseline.yml)也是判定者。
   frontend-qa:
     runs-on: ubuntu-latest

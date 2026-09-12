@@ -46,7 +46,7 @@ description: gladlog desktop(Electron)改代码的工程约定与坑。改 packa
 npm run presubmit    # = lint + typecheck + 全 workspace test + verify:vision + electron-vite build
 ```
 
-这一条覆盖 CI `test` job 的全部 5 步。**别再手敲那三件套**(旧清单只有
+这一条覆盖 CI `test` workflow 里 `static` + `unit` 两个 job 的全部 5 步(CI 把单测拆到并行 runner 上跑)。**别再手敲那三件套**(旧清单只有
 test/typecheck/lint,漏掉后两步):
 
 - `npm test` 必须是**全 workspace**,不能只 `--workspace=packages/desktop`
