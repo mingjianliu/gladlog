@@ -24,6 +24,19 @@
  *   npx tsx packages/eval/scripts/candidateDiagnostics.ts [--n 400] [--json]
  *
  * 读的是本机对局库(storeAccess 的 DEFAULT_MATCH_DIR),不写任何文件。
+ *
+ * **This scan is also the authoritative answer to "is candidate type X live?"**
+ * (GH #76, registered in docs/predicate-index.md). A type can be dead five
+ * different ways — `CANDIDATE_TYPE_FLAGS` false, emitter kept but no longer
+ * called from the assembly, emitter deleted, `BRACKET_TYPE_ALLOWLIST`, or the
+ * desktop's `IGNORED_CANDIDATE_TYPES` — and none of those places lists the
+ * other four. Four independent code-reading counts of "how many types are
+ * live" came out 49 → 47 → 37 → 31, each missing a different mechanism; the
+ * observed set from `scanCandidateIncidence` (16 types on 400 rounds,
+ * 2026-09-06) was the only correct one. Consumers that need the live set read
+ * this scan's `--json` output, never a hand roster: the coach-corpus negative
+ * control (`tools/coach-corpus/negative_control.py --universe <file>`, GH #74)
+ * is the first.
  */
 import {
   ensureAnalysisData,
@@ -47,13 +60,14 @@ const DISCRIMINATION_PP = 3;
 /** 不是指控、不参与复核标记的类型(`death` 是中性事实,见 candidateFindings 的注释)。 */
 const NOT_AN_ACCUSATION: ReadonlySet<string> = new Set(["death"]);
 
-interface Row {
+export interface IncidenceRow {
   type: string;
   wonRounds: number;
   lostRounds: number;
   incidencePct: number;
   deltaPp: number;
 }
+type Row = IncidenceRow;
 
 function argOf(flag: string, dflt: number): number {
   const i = process.argv.indexOf(flag);
@@ -62,7 +76,12 @@ function argOf(flag: string, dflt: number): number {
   return Number.isFinite(v) && v > 0 ? v : dflt;
 }
 
-export async function collect(limit: number): Promise<{
+/**
+ * Observed candidate incidence over the first `limit` library rounds (≥ 60 s,
+ * decided win/loss). A type appears in `rows` iff it fired at least once —
+ * that presence IS the "live" predicate the index row points at.
+ */
+export async function scanCandidateIncidence(limit: number): Promise<{
   rows: Row[];
   won: number;
   lost: number;
@@ -138,7 +157,7 @@ export async function collect(limit: number): Promise<{
 
 async function main(): Promise<void> {
   const limit = argOf("--n", 400);
-  const { rows, won, lost, span } = await collect(limit);
+  const { rows, won, lost, span } = await scanCandidateIncidence(limit);
 
   if (process.argv.includes("--json")) {
     console.log(JSON.stringify({ won, lost, span, rows }, null, 1));

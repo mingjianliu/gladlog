@@ -1,4 +1,39 @@
 /**
+ * ⚠ THIS FILE DOES NOT ANSWER "IS CANDIDATE TYPE X LIVE?" (GH #76).
+ *
+ * A candidate type can be dead **five** different ways, and this file is only
+ * mechanism 1. Reading it as "the list of what's off" shows 5 of the 14
+ * retirements (2026-09-11 inventory in GH #76):
+ *
+ *   1. flag `false` here                          (`CANDIDATE_TYPE_FLAGS`)
+ *   2. emitter kept, assembly no longer calls it  (`candidateFindings.ts`:
+ *      cc-locked, wasted-trinket, death-unused-defensive, mana-*)
+ *   3. emitter deleted, legend text kept           (`candidateFindings.ts` /
+ *      `buildFindingsPrompt.ts`: juked-kick, dr-clipped-cc,
+ *      burst-into-immunity, off-target-in-window, unconverted-burst)
+ *   4. bracket allow-list                          (`BRACKET_TYPE_ALLOWLIST`
+ *      below — 2v2 keeps only cd-hoarded / missed-cleanse)
+ *   5. desktop layer ignores it                    (`packages/desktop/.../derive/
+ *      mistakes.ts` → `IGNORED_CANDIDATE_TYPES`: fires into the LLM prompt,
+ *      never renders as a mistake card — and that set mixes "retired" with
+ *      "menu-only by design", e.g. kick-eaten / md-cyclone-window)
+ *
+ * Four types are double-killed (flag + desktop ignore, or unwired + desktop
+ * ignore): flipping one switch back silently does nothing and looks like "the
+ * signal has no data" — the Curated-List failure shape. `missedPurge: true`
+ * below would reach the LLM and still never reach a card.
+ *
+ * **The authoritative answer is the corpus scan, not any of the five places:**
+ * `npx tsx packages/eval/scripts/candidateDiagnostics.ts --n 400 --json`
+ * (`scanCandidateIncidence`, registered in docs/predicate-index.md). Four
+ * code-reading counts of the live set came out 49 → 47 → 37 → 31, each missing
+ * a different mechanism; the scan (16 types observed firing) was the only
+ * correct one. A single registry that the five places derive from is the open
+ * proposal in GH #76 — user ruling pending, because the "menu-only vs retired"
+ * split is a product stance.
+ *
+ * ---
+ *
  * P1/P2 起爆候选类型开关(2026-08-15,distillation Task 4;2026-08-15 Task 9
  * 全部翻 true,用户裁决全量上线)。
  *

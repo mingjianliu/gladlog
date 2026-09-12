@@ -134,6 +134,10 @@ import * as collectLogs from "../../log-pipeline/src/collectLogs";
 // and should not grow one. Both modules are leaf-safe to import — flowSeries
 // pulls only `import type`, timeRange pulls nothing — so listing them here adds
 // no runtime weight to the eval suite.
+// The "is this candidate type live?" predicate is a corpus SCAN, not a table
+// (GH #76): the script is import-safe (its main() runs only when invoked as
+// argv[1]) and pulls nothing beyond storeAccess + analysis.
+import * as candidateDiagnostics from "../scripts/candidateDiagnostics";
 import * as abCompareStats from "../src/ab/abCompareStats";
 import * as baselineFindings from "../src/explore/baselineFindings";
 import * as matchExplore from "../src/explore/matchExplore";
@@ -1044,6 +1048,13 @@ const INDEX: PredicateRow[] = [
     file: `${E}/explore/baselineFindings.ts`,
     symbol: "candidateEvidence",
     mod: baselineFindings,
+  },
+  // "Is this candidate type live?" — a scan, not a roster (GH #76): five
+  // retirement mechanisms, four hand counts wrong in a row (49→47→37→31).
+  {
+    file: "packages/eval/scripts/candidateDiagnostics.ts",
+    symbol: "scanCandidateIncidence",
+    mod: candidateDiagnostics,
   },
   {
     file: `${E}/explore/baselineFindings.ts`,

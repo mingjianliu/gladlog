@@ -257,7 +257,23 @@ export const MISTAKE_RULES: readonly MistakeRule[] = [
  * 94.5% of emitted events were the healer breaking CC on THEMSELVES — the
  * healerInCCAt-always-false blind spot made "trinketing at high team HP"
  * itself the accusation — and the waste-share of presses ran REVERSE, 12.0%
- * win vs 10.4% loss). Entry kept for cached rounds, same as the two above. */
+ * win vs 10.4% loss). Entry kept for cached rounds, same as the two above.
+ *
+ * ⚠ THIS SET IS NOT "RETIRED TYPES" AND NOT "TYPES THAT DON'T FIRE" (GH #76).
+ * It answers exactly one question — does the desktop render this type as a
+ * mistake card — and it conflates two reasons for "no": retired (cc-locked,
+ * wasted-trinket, …) and menu-only by design (kick-eaten, md-cyclone-window,
+ * death*, missed-cleanse — the LLM coaches them, the card list does not).
+ * Measured 2026-09-06 on 400 library rounds, five members of this set are
+ * the most-fired types in the corpus (kick-eaten 44 %, death 43 %,
+ * death-setup 31 %, missed-cleanse 16 %, md-cyclone-window 2 %). It is
+ * mechanism 5 of the five ways a candidate type can be dead; the other four
+ * are listed at the top of `packages/analysis/src/data/candidateTypeFlags.ts`,
+ * and the authoritative "is it live" answer is the corpus scan
+ * `packages/eval/scripts/candidateDiagnostics.ts` (docs/predicate-index.md,
+ * Gate side). Do not repurpose this set as a liveness roster — the
+ * coach-corpus tooling did (`ACTIVE`/`RETIRED`, fixed in 9cab0bf8) and its
+ * negative control skipped the corpus's most-fired type as a result (GH #74). */
 export const IGNORED_CANDIDATE_TYPES: ReadonlySet<string> = new Set([
   "death",
   "death-setup",
