@@ -152,13 +152,13 @@ cat "$GLADLOG_EVAL_HOME/review-sessions/<name>.answers.json"   # Raw item-by-ite
 
 The conclusions of this layer **cannot** be used to rule "deep dive won / lost" — it is just to leave some circumstantial evidence for the ledger in Step 5. The true ruling power lies in your hands (the blind review in Step 3).
 
-**agy/Gemini independently reviews the deep dive findings once** (checks if the evidence chain holds up, without looking at your annotations):
+**A second AI independently reviews the deep dive findings once** (checks if the evidence chain holds up, without looking at your annotations) — codex gpt-6-astra, falling back to agy only when codex is out of quota; the output's header line records which backend actually ran:
 
 ```bash
-node ~/.claude/skills/agy/scripts/agy-run.mjs review --model flash \
+node ~/.claude/skills/cross-ai/scripts/cross-run.mjs review \
   --files "$GLADLOG_EVAL_HOME/review-sessions/<name>.deep.json" \
   "Check item-by-item whether the evidence for these claims actually supports the claim (instead of citing line-of-sight while the conclusion is about distance, etc.), and mark the items where you think the evidence is insufficient or over-inferred." \
-  > "$GLADLOG_EVAL_HOME/review-sessions/<name>.agy-review.txt" 2>&1
+  > "$GLADLOG_EVAL_HOME/review-sessions/<name>.xai-review.txt" 2>&1
 ```
 
 **Seven-dimension judge runs as usual** (Treats the deep dive findings as a "reply", applying the 3-pass scoring method from Step 3 of `docs/commands/eval-baseline.md`, using only the `accuracy`/`inferenceScaffolding` dimensions as reference — sufficiency / noise / labelBias / outcomeAlignment / focusCalibration were designed for a coach reply style, and are meaningless when applied to a set of discrete claims, do not force-fill them). This step is an optional re-anchoring and can be skipped if short-handed; it does not affect the blind review results of Step 3.
