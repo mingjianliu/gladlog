@@ -5,21 +5,49 @@ The corpus reports "71% of coach verdicts have no gladlog predicate for the same
 That number is only meaningful if the mapper reliably maps IN-SCOPE events back. Nothing in
 the pipeline ever tested that — this does.
 
-  stage 1 (agy/Gemini, a different model family): for each desktop-mistake-row type, rewrite its real
-          predicate into N coach-voice phrasings — coach vocabulary, not definition vocabulary
+  stage 1 (agy/Gemini, a different model family): for each type OBSERVED FIRING in the corpus,
+          rewrite its real predicate into N coach-voice phrasings — coach vocabulary, not
+          definition vocabulary
   stage 2 (production mapper, same prompt/model as the corpus run): map the shuffled,
           unlabelled mix of those + known out-of-scope real verdicts
   report: recall (in-scope mapped back to source type), false-mapping rate on out-of-scope,
           and the confidence distribution of both
 
-  negative_control.py [--per-type 4] [--distractors 30] [--model claude-opus-5 --effort high]
+  negative_control.py --universe <candidate_incidence.json> [--per-type 4] [--distractors 30]
+                      [--model claude-opus-5 --effort high] [--out negative_control]
+
+The generation universe (GH #74, 2026-09-12): the set of types the mapper can be shown a real
+firing of is OBSERVED corpus truth, never a hand roster —
+    npx tsx packages/eval/scripts/candidateDiagnostics.ts --n 400 --json > <DATA>/candidate_incidence.json
+Until 2026-09-12 the universe was DESKTOP_MISTAKE_TYPES ("does the desktop render a mistake
+row"), which spent 6/17 of the budget on types that never fire (cc-held / cd-spent-idle /
+unsynced-burst are flag-false; missed-kick / missed-purge-kill-window are desktop-derived rows,
+not candidates; burst-into-mitigation is silent on the healer slice) and skipped the 5 that do —
+kick-eaten 44 % (the single most-fired type, and where both shipped fixes came from), death 43 %,
+death-setup 31 %, missed-cleanse 16 %, md-cyclone-window 2 %. The two desktop rosters stay in the
+MAPPING prompt for what they legitimately answer (render / don't render); only the generation
+universe changed. `generated.json` is keyed to its universe — a different universe regenerates.
 """
 import argparse, collections, json, random, subprocess, time
 from pathlib import Path
 from common import DATA, DESKTOP_MISTAKE_TYPES, DESKTOP_IGNORED_TYPES, load_type_defs, def_block, claude_call, parse_json_object, read_json, write_json
 
 AGY = Path.home() / ".claude/skills/agy/scripts/agy-run.mjs"
-OUT = DATA / "negative_control"
+
+def observed_universe(path, defs):
+    """Types observed firing in `candidateDiagnostics.ts --json` output (rows[].type, incidence > 0).
+
+    Sorted for a stable prompt. Every observed type must have a definition — a type that fires but
+    has no definition is exactly the hole this control exists to find, so it is an error, not a skip."""
+    rows = read_json(path)["rows"]
+    types = sorted(r["type"] for r in rows if r.get("incidencePct", 0) > 0)
+    if not types:
+        raise SystemExit(f"{path}: no observed types — did candidateDiagnostics run on an empty library?")
+    missing = [t for t in types if t not in defs]
+    if missing:
+        raise SystemExit(f"observed types without a definition: {missing}; run gen_type_definitions.py "
+                         f"(and add them to a roster in common.py — the desktop rosters, not a 'live' list)")
+    return types
 
 GEN = """You write like a World of Warcraft arena coach reviewing a student's match.
 
@@ -91,17 +119,29 @@ def distractors(n, seed=11):
 def main():
     ap = argparse.ArgumentParser(); ap.add_argument("--per-type", type=int, default=4)
     ap.add_argument("--distractors", type=int, default=30); ap.add_argument("--model", default="claude-opus-5"); ap.add_argument("--effort", default="high")
-    ap.add_argument("--batch", type=int, default=25); a = ap.parse_args()
+    ap.add_argument("--batch", type=int, default=25)
+    ap.add_argument("--universe", default=str(DATA / "candidate_incidence.json"),
+                    help="candidateDiagnostics.ts --json output; the generation universe is its observed types")
+    ap.add_argument("--out", default="negative_control", help="output dir under DATA")
+    a = ap.parse_args()
+    OUT = DATA / a.out
     OUT.mkdir(parents=True, exist_ok=True)
     defs = load_type_defs()
+    universe = observed_universe(a.universe, defs)
+    print(f"generation universe = {len(universe)} observed types from {a.universe}: {universe}", flush=True)
 
     gen_path = OUT / "generated.json"
+    gen = None
     if gen_path.exists():
-        gen = read_json(gen_path)["gen"]; print(f"generated cached: {sum(len(v) for v in gen.values())} items", flush=True)
-    else:
+        cached = read_json(gen_path)
+        if sorted(cached["gen"]) == universe:
+            gen = cached["gen"]; print(f"generated cached: {sum(len(v) for v in gen.values())} items", flush=True)
+        else:
+            print(f"generated.json covers {sorted(cached['gen'])}, not the current universe — regenerating", flush=True)
+    if gen is None:
         t0 = time.time()
-        gen = agy_call(GEN.format(n=len(DESKTOP_MISTAKE_TYPES), k=a.per_type, defs=def_block(defs, DESKTOP_MISTAKE_TYPES, "desktop-mistake-row")))["gen"]
-        write_json(gen_path, {"gen": gen, "per_type": a.per_type, "generator": "agy/flash"})
+        gen = agy_call(GEN.format(n=len(universe), k=a.per_type, defs=def_block(defs, universe, "observed-firing")))["gen"]
+        write_json(gen_path, {"gen": gen, "per_type": a.per_type, "generator": "agy/flash", "universe": a.universe})
         print(f"generated {sum(len(v) for v in gen.values())} coach-voice items for {len(gen)} types in {time.time()-t0:.0f}s", flush=True)
 
     items = [{"text": t, "truth": ty} for ty, ts in gen.items() for t in ts]
@@ -118,7 +158,7 @@ def main():
             e = m.get(str(i)) or {}
             c["pred"] = e.get("gladlog_type", "unmapped"); c["conf"] = e.get("map_confidence", "low")
         print(f"  mapped {min(k+a.batch, len(items))}/{len(items)}", flush=True)
-    write_json(OUT / "results.json", {"items": items, "mapper": {"model": a.model, "effort": a.effort}})
+    write_json(OUT / "results.json", {"items": items, "mapper": {"model": a.model, "effort": a.effort}, "universe": {"file": a.universe, "types": universe}})
 
     ins = [c for c in items if c["truth"] != "OUT-OF-SCOPE"]; outs = [c for c in items if c["truth"] == "OUT-OF-SCOPE"]
     exact = sum(1 for c in ins if c["pred"] == c["truth"]); anymap = sum(1 for c in ins if c["pred"] != "unmapped")

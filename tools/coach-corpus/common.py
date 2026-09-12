@@ -32,7 +32,12 @@ TYPE_DEFS = Path(__file__).resolve().parent / "type_definitions.json"
 #
 # **Deliberately NOT adding a "currently ships" list here.** That would be one more hand
 # roster to rot (CLAUDE.md's Curated-List Completeness Rule). The answer to "does it fire"
-# comes from observed corpus truth — the candidateDiagnostics command above.
+# comes from observed corpus truth — the candidateDiagnostics command above. Since 2026-09-12
+# (GH #74) `negative_control.py` reads that command's `--json` output as its generation
+# universe (`--universe`, default `<DATA>/candidate_incidence.json`) instead of
+# DESKTOP_MISTAKE_TYPES; the two rosters below are used only in the MAPPING prompt, as the
+# "renders / does not render a mistake row" grouping they actually are. The full five-way
+# retirement inventory is at the top of packages/analysis/src/data/candidateTypeFlags.ts (GH #76).
 #
 # gen_type_definitions.py --selftest fails if any of these lacks a definition, or if
 # mistakes.ts declares a type not listed here.
