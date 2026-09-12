@@ -342,11 +342,21 @@ async function main(): Promise<void> {
       if (!f.info) continue;
       const byBucket = new Map<number, Map<string, number>>();
       for (const d of f.damageOut) {
-        if (!enemyPlayerIds.has(d.destUnitId) || d.effectiveAmount <= 0)
+        // SIGN BUG FIXED 2026-09-12 (codex review of GH #85): in the legacy
+        // shape real damage is NEGATIVE (convert.ts: effectiveAmount =
+        // -(effective - absorbed)) and SPELL_ABSORBED rows are POSITIVE. The
+        // original `<= 0` filter therefore kept absorbs and dropped damage —
+        // on 10 library rounds 5,497 of 5,675 retained rows were absorbs.
+        // Every swap number posted on GH #85 before this date is invalid.
+        if (
+          !enemyPlayerIds.has(d.destUnitId) ||
+          d.logLine.event === "SPELL_ABSORBED" ||
+          d.effectiveAmount >= 0
+        )
           continue;
         const b = Math.floor((d.logLine.timestamp - startMs) / 3000);
         const m = byBucket.get(b) ?? new Map<string, number>();
-        bump(m, d.destUnitId, d.effectiveAmount);
+        bump(m, d.destUnitId, -d.effectiveAmount);
         byBucket.set(b, m);
       }
       if (byBucket.size === 0) continue;
