@@ -41,12 +41,30 @@ TYPE_DEFS = Path(__file__).resolve().parent / "type_definitions.json"
 #
 # gen_type_definitions.py --selftest fails if any of these lacks a definition, or if
 # mistakes.ts declares a type not listed here.
-DESKTOP_MISTAKE_TYPES = ["attempt-into-trinket","burst-into-mitigation","cd-waste","missed-kick","missed-purge-kill-window",
-          "crisis-no-response","external-unused","questionable-external","healing-gap","position-mistake",
-          "cc-held","cc-avoidable","slow-defensive-response","missed-sync-window","unsynced-burst","cd-hoarded","cd-spent-idle",
-          "backlash-dispel","backlash-dispel-window"]
-DESKTOP_IGNORED_TYPES = ["death","death-setup","juked-kick","missed-cleanse","missed-purge","cc-locked","kick-eaten","wasted-trinket",
-           "death-unused-defensive","dr-clipped-cc","burst-into-immunity","md-cyclone-window","off-target-in-window","unconverted-burst"]
+#
+# 2026-09-12 (GH #76, user ruling): both rosters are DERIVED from the analysis package's
+# candidate type registry (packages/analysis/src/data/candidateTypeRegistry.ts) via
+# printCandidateTypeRegistry.ts — not hand-copied from mistakes.ts any more. Same meaning as
+# before: DESKTOP_MISTAKE_TYPES = the registry's CARD_TYPES (renders as a mistake row);
+# DESKTOP_IGNORED_TYPES = every other registered type string (menu-only or retired/deleted).
+# CANDIDATE_TYPE_REGISTRY carries status / surface / since / issue / reason per type if a
+# script needs more than the two rosters.
+def _load_registry():
+    import functools
+    @functools.lru_cache(maxsize=1)
+    def go():
+        p = subprocess.run(["npx", "tsx", str(REPO / "packages/analysis/scripts/printCandidateTypeRegistry.ts")],
+                           capture_output=True, text=True, cwd=REPO, timeout=120)
+        if p.returncode != 0 or not p.stdout.strip():
+            raise SystemExit(f"printCandidateTypeRegistry.ts failed rc={p.returncode}: {p.stderr[-400:]!r}")
+        return json.loads(p.stdout)
+    return go()
+
+_REG = _load_registry()
+CANDIDATE_TYPE_REGISTRY = _REG["registry"]
+DESKTOP_MISTAKE_TYPES = _REG["cardTypes"]
+DESKTOP_IGNORED_TYPES = sorted(t for t, e in CANDIDATE_TYPE_REGISTRY.items()
+                               if not e.get("virtual") and t not in set(DESKTOP_MISTAKE_TYPES))
 
 def load_type_defs():
     d = json.loads(TYPE_DEFS.read_text())

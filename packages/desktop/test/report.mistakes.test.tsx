@@ -1,5 +1,10 @@
 // @vitest-environment jsdom
-import { extractCandidateFindings } from "@gladlog/analysis";
+import {
+  CANDIDATE_TYPE_REGISTRY,
+  CARD_TYPES,
+  extractCandidateFindings,
+  MENU_ONLY_TYPES,
+} from "@gladlog/analysis";
 import { render, screen } from "@testing-library/react";
 
 import { MatchReport } from "../src/renderer/src/report/components/MatchReport";
@@ -109,6 +114,27 @@ describe("失误引擎(第四阶段③ / backlog #8)— 规则表防腐", () => 
     );
   });
 
+  it("规则表 == 登记表的 CARD_TYPES(GH #76:失误卡名单从 candidateTypeRegistry 派生,规则行是手写的标签/严重度,所以只能断言相等)", () => {
+    // Resurrect a card type: set status "live" in the registry AND add its
+    // MISTAKE_RULES row — this test names whichever half is missing.
+    const rules = MISTAKE_RULES.map((r) => r.type).sort();
+    expect(rules).toEqual([...CARD_TYPES].sort());
+    // The two "no card" meanings are disjoint from the card set and from each other only
+    // where the registry says so (missed-purge is both retired and menu-only by design).
+    for (const t of rules) expect(IGNORED_CANDIDATE_TYPES.has(t)).toBe(false);
+    for (const t of MENU_ONLY_TYPES) expect(rules).not.toContain(t);
+    // Origin "desktop" rows must be exactly the kick/dispel-sourced rules.
+    const desktopOrigin = Object.entries(CANDIDATE_TYPE_REGISTRY)
+      .filter(([, e]) => e.origin === "desktop")
+      .map(([t]) => t)
+      .sort();
+    expect(
+      MISTAKE_RULES.filter((r) => r.source !== "candidate")
+        .map((r) => r.type)
+        .sort(),
+    ).toEqual(desktopOrigin);
+  });
+
   it("上游 candidateFindings 的每个产出类型,必须在规则表或豁免表里表态", () => {
     const legacy = toLegacySafe(m);
     const ruleTypes = new Set(
@@ -129,7 +155,7 @@ describe("失误引擎(第四阶段③ / backlog #8)— 规则表防腐", () => 
     );
     expect(
       untriaged,
-      "candidateFindings 新增了类型,请在 MISTAKE_RULES 或 IGNORED_CANDIDATE_TYPES 表态",
+      "candidateFindings 新增了类型,请在 packages/analysis/src/data/candidateTypeRegistry.ts 登记(surface 为 card 的还要加 MISTAKE_RULES 行)",
     ).toEqual([]);
     void friendlies;
   });

@@ -47,8 +47,8 @@ import * as arenaGeometry from "@gladlog/analysis/src/data/arenaGeometry";
 import * as backlashDispelPrior from "@gladlog/analysis/src/data/backlashDispelPrior";
 import * as behaviorPrior from "@gladlog/analysis/src/data/behaviorPrior";
 import * as burstWindowPrior from "@gladlog/analysis/src/data/burstWindowPrior";
-import * as candidateTypeFlags from "@gladlog/analysis/src/data/candidateTypeFlags";
 import { CANDIDATE_TYPE_FLAGS } from "@gladlog/analysis/src/data/candidateTypeFlags";
+import * as candidateTypeRegistry from "@gladlog/analysis/src/data/candidateTypeRegistry";
 import * as cdTriggerPriorData from "@gladlog/analysis/src/data/cdTriggerPrior";
 import { DISPEL_FEATURE_FLAGS } from "@gladlog/analysis/src/data/dispelFeatureFlags";
 import * as dispelObservedGenerated from "@gladlog/analysis/src/data/dispelObservedGenerated";
@@ -424,9 +424,16 @@ const INDEX: PredicateRow[] = [
     mod: bracketKey,
   },
   {
-    file: `${A}/data/candidateTypeFlags.ts`,
+    file: `${A}/data/candidateTypeRegistry.ts`,
     symbol: "BRACKET_TYPE_ALLOWLIST",
-    mod: candidateTypeFlags,
+    mod: candidateTypeRegistry,
+  },
+  // The candidate type registry (GH #76, 2026-09-12): status / surface per
+  // type; flags, the desktop ignore set and the coach-corpus rosters derive.
+  {
+    file: `${A}/data/candidateTypeRegistry.ts`,
+    symbol: "CANDIDATE_TYPE_REGISTRY",
+    mod: candidateTypeRegistry,
   },
   {
     file: `${A}/analysis/candidates/death.ts`,

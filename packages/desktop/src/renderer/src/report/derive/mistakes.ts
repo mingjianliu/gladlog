@@ -2,9 +2,12 @@ import {
   analyzeKickAudit,
   annotateMissedPurgesWithKillWindows,
   type CandidateEvent,
+  CARD_TYPES,
   computeOffensiveWindows,
   extractCandidateFindings,
+  MENU_ONLY_TYPES,
   reconstructDispelSummary,
+  RETIRED_TYPES,
 } from "@gladlog/analysis";
 import { CombatUnitReaction } from "@gladlog/parser-compat";
 
@@ -20,8 +23,10 @@ import type { ReportSource } from "./types";
  * (candidateFindings / kickAudit / dispelSummary) and go straight to the UI
  * without an LLM.
  * Anti-rot: when upstream candidateFindings adds a new type, it must be
- * declared in either MISTAKE_RULES or IGNORED_CANDIDATE_TYPES — see the
- * inventory test in report.mistakes.test.
+ * registered in `packages/analysis/src/data/candidateTypeRegistry.ts`
+ * (status / surface / ruling) and, if its surface is "card", get a
+ * MISTAKE_RULES row here — report.mistakes.test asserts the rule table equals
+ * the registry's CARD_TYPES and that every emitted type is triaged.
  */
 
 export type MistakeSeverity = "minor" | "average" | "major";
@@ -259,43 +264,27 @@ export const MISTAKE_RULES: readonly MistakeRule[] = [
  * itself the accusation — and the waste-share of presses ran REVERSE, 12.0%
  * win vs 10.4% loss). Entry kept for cached rounds, same as the two above.
  *
- * ⚠ THIS SET IS NOT "RETIRED TYPES" AND NOT "TYPES THAT DON'T FIRE" (GH #76).
- * It answers exactly one question — does the desktop render this type as a
- * mistake card — and it conflates two reasons for "no": retired (cc-locked,
- * wasted-trinket, …) and menu-only by design (kick-eaten, md-cyclone-window,
- * death*, missed-cleanse — the LLM coaches them, the card list does not).
- * Measured 2026-09-06 on 400 library rounds, five members of this set are
- * the most-fired types in the corpus (kick-eaten 44 %, death 43 %,
- * death-setup 31 %, missed-cleanse 16 %, md-cyclone-window 2 %). It is
- * mechanism 5 of the five ways a candidate type can be dead; the other four
- * are listed at the top of `packages/analysis/src/data/candidateTypeFlags.ts`,
- * and the authoritative "is it live" answer is the corpus scan
- * `packages/eval/scripts/candidateDiagnostics.ts` (docs/predicate-index.md,
- * Gate side). Do not repurpose this set as a liveness roster — the
- * coach-corpus tooling did (`ACTIVE`/`RETIRED`, fixed in 9cab0bf8) and its
- * negative control skipped the corpus's most-fired type as a result (GH #74). */
-export const IGNORED_CANDIDATE_TYPES: ReadonlySet<string> = new Set([
-  "death",
-  "death-setup",
-  "juked-kick",
-  "missed-cleanse",
-  "missed-purge",
-  "cc-locked",
-  "kick-eaten",
-  "wasted-trinket",
-  // death-unused-defensive retired 2026-08-29 (GH #58) — superseded by
-  // crisis-no-response; entry kept for cached rounds.
-  "death-unused-defensive",
-  // dr-clipped-cc retired 2026-08-20 (GH #17) — entry kept for cached rounds,
-  // same as the retirees above.
-  "dr-clipped-cc",
-  // burst-into-immunity retired 2026-08-20 (GH #17) — same treatment.
-  "burst-into-immunity",
-  // md-cyclone-window (GH #25 MD 特例, 2026-08-21): user-ruled menu-only —
-  // a strategic "window worth considering" must never render as a mistake
-  // card; the LLM menu legend carries the no-accusation wording.
-  "md-cyclone-window",
-]);
+ * ⚠ DERIVED, NOT EDITED HERE (GH #76, user ruling 2026-09-12). This set used
+ * to be a hand list that conflated two reasons for "no card": retired
+ * (cc-locked, wasted-trinket, …) and menu-only by design (kick-eaten,
+ * md-cyclone-window, death*, missed-cleanse — the LLM coaches them, the card
+ * list does not). Five of its members are the corpus's most-fired types
+ * (kick-eaten 44 %, death 43 %, death-setup 31 %, missed-cleanse 16 %,
+ * md-cyclone-window 2 %, 400 library rounds 2026-09-06), and the coach-corpus
+ * tooling once read it as a retirement list (GH #74).
+ *
+ * Now the two meanings are two exports of
+ * `packages/analysis/src/data/candidateTypeRegistry.ts`:
+ *   `MENU_ONLY_TYPES` — surface "menu-only": in the prompt, never a card;
+ *   `RETIRED_TYPES`   — status retired | deleted: off entirely.
+ * This set is their union MINUS `CARD_TYPES` (flag-retired card types keep
+ * their MISTAKE_RULES row so an A/B flag flip renders without a code change —
+ * cc-held / unsynced-burst / cd-spent-idle), which is exactly the hand list it
+ * replaced, member for member (pinned in report.mistakes.test). Its only
+ * consumer is that inventory test; the renderer never reads it. */
+export const IGNORED_CANDIDATE_TYPES: ReadonlySet<string> = new Set(
+  [...MENU_ONLY_TYPES, ...RETIRED_TYPES].filter((t) => !CARD_TYPES.has(t)),
+);
 
 export interface Mistake {
   tS: number;

@@ -4,10 +4,10 @@
 // (a concession from the 4a spec debate).
 export * from "./context/buildMatchContext";
 export { classMetadata } from "./data/classSpells";
-export type { CuratedIdKind,CuratedIdTable } from "./data/curatedIdRegistry";
+export type { CuratedIdKind, CuratedIdTable } from "./data/curatedIdRegistry";
 export { CURATED_ID_TABLES } from "./data/curatedIdRegistry";
 export { spellClassMap } from "./data/drCategories";
-export { analysisDataReady,ensureAnalysisData } from "./data/ensure";
+export { analysisDataReady, ensureAnalysisData } from "./data/ensure";
 export {
   HEALING_VERDICTS,
   type HealingVerdict,
@@ -113,6 +113,18 @@ export {
   verdictLabel,
 } from "./compare/metricLabels";
 export { CANDIDATE_TYPE_FLAGS } from "./data/candidateTypeFlags";
+// The candidate type registry (GH #76): one table, every liveness consumer
+// derives from it — the desktop's mistake-card exemptions included.
+export {
+  CANDIDATE_TYPE_REGISTRY,
+  CANDIDATE_TYPE_STRINGS,
+  CARD_TYPES,
+  MENU_ONLY_TYPES,
+  RETIRED_TYPES,
+  type CandidateTypeEntry,
+  type CandidateTypeStatus,
+  type CandidateTypeSurface,
+} from "./data/candidateTypeRegistry";
 export { OFF_GCD_SPELL_IDS } from "./data/offGcdGenerated";
 // Lane pressure/exposure (backlog #4): the damage-spike threshold shared by
 // the prompt and the lanes (single-source, see context/timelineHelpers.ts).

@@ -23,6 +23,10 @@ HAND = {
  "missed-purge-kill-window": '- "missed-purge-kill-window" (击杀窗口内漏 purge; reconstructDispelSummary.missedPurgeWindows × annotateMissedPurgesWithKillWindows × computeOffensiveWindows, consumed in desktop derive/mistakes.ts): an enemy buff that the owner\'s available purge/offensive dispel could have removed stayed up, AND that window overlapped a friendly offensive kill window (duringKillWindow). Timed at the instant. Generic "you should purge X" outside a kill window is the retired `missed-purge`, not this.',
  "questionable-external": '- "questionable-external" (无压力窗口交出外减; candidates/death.ts, consumer of annotateDefensiveTimings tier "Unnecessary"): the owner cast an ally-castable external (EXTERNAL_DEFENSIVE_IDS) onto a teammate in a no-pressure window — target at high HP AND no damage spike AND no alignment with an enemy burst window (all three required). The event is "you spent an external when nothing was happening to the target".',
  "death": '- "death": the log owner died. Neutral anchoring fact, not an accusation; map here only when the verdict is literally "you died here" with no further judgement.',
+ # Both mana types are retired (registry status "retired", unwired 2026-08-21, value-gate kill 2026-08-16);
+ # their legends left buildFindingsPrompt.ts with the wiring, so the definitions come from candidates/mana.ts.
+ "mana-pressure": '- "mana-pressure" (RETIRED; candidates/mana.ts manaPressureEvents): the friendly healer sat in a contiguous OOM window — mana% below the floor for a run of samples — while the team was under damage; "you ran out of mana at a moment that mattered". Killed at the value gate 2026-08-16: detached from whether enemy burst forced the spending.',
+ "mana-efficiency": '- "mana-efficiency" (RETIRED; candidates/mana.ts manaEfficiencyEvents): the healer\'s mana spent per effective healing over a window fell below the corpus band — "you spent mana inefficiently here". Killed at the value gate 2026-08-16 together with mana-pressure; successor project BACKLOG #33 (deterministic attribution, not a candidate).',
 }
 
 def from_prompt_ts():
