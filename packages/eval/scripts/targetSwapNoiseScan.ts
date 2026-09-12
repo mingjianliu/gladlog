@@ -152,12 +152,18 @@ function* archiveSides(
   manifestPath: string,
   every: number,
   limit: number,
+  shard: { k: number; n: number } | null,
   progress: (files: number) => void,
 ): Generator<Side> {
   let files = readFileSync(manifestPath, "utf8")
     .split("\n")
     .map((s) => s.trim())
     .filter(Boolean);
+  // `--shard k/n`: file i goes to shard i % n. One process parses ~1.5 files/s
+  // (the full 63k-file archive is ~12 h single-threaded), so a handful of
+  // shards run side by side and the JSON outputs are merged by weighting
+  // `swaps` and `minutes` (both totals are in the table rows for that reason).
+  if (shard) files = files.filter((_, i) => i % shard.n === shard.k);
   if (every > 1) files = files.filter((_, i) => i % every === 0);
   if (limit) files = files.slice(0, limit);
   let n = 0;
@@ -215,6 +221,25 @@ async function main(): Promise<void> {
     : undefined;
   const every = argOf("--every", 1);
   const fileLimit = argOf("--limit", 0);
+  const shardArg = process.argv.includes("--shard")
+    ? process.argv[process.argv.indexOf("--shard") + 1]
+    : undefined;
+  const shard = shardArg
+    ? (() => {
+        const [k, n] = shardArg.split("/").map(Number);
+        if (
+          !Number.isInteger(k) ||
+          !Number.isInteger(n) ||
+          n < 1 ||
+          k < 0 ||
+          k >= n
+        )
+          throw new Error(
+            `--shard must be k/n with 0 ≤ k < n, got ${shardArg}`,
+          );
+        return { k: k!, n: n! };
+      })()
+    : null;
   type Acc = { players: number; minutes: number; swaps: number[] };
   const acc = new Map<string, Acc>(); // key = filter|role|k
   const events = new Map<Filter, Map<string, number>>(
@@ -222,7 +247,7 @@ async function main(): Promise<void> {
   );
   let rounds = 0;
   const sides = manifest
-    ? archiveSides(manifest, every, fileLimit, (n) =>
+    ? archiveSides(manifest, every, fileLimit, shard, (n) =>
         console.error(`… ${n} files`),
       )
     : librarySides(limit);
@@ -258,6 +283,8 @@ async function main(): Promise<void> {
       role,
       persistence: Number(k),
       playerRounds: a.players,
+      swaps: total,
+      minutes: a.minutes,
       swapsPerMin: total / a.minutes,
     };
   });
