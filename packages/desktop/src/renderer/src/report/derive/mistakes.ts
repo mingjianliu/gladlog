@@ -102,6 +102,27 @@ export const MISTAKE_RULES: readonly MistakeRule[] = [
     severity: "major",
     source: "candidate",
   },
+  // GH #80 (2026-09-12, user approval): the owner dispelled Unstable
+  // Affliction / Vampiric Touch in the archive-measured net-negative stratum
+  // (UA ≤ 2 stacks at ≥ 60 % target HP: net ≈ −200k HP + 1.4 s unanswerable
+  // CC per dispel; VT at ≥ 80 %: net ≈ −78k). "average": a real, per-event
+  // cost (the dispeller's own 4 s numbers are in the facts), but the
+  // discrimination has not been measured yet — not "major".
+  {
+    type: "backlash-dispel",
+    label: "解反噬 DoT 得不偿失",
+    severity: "average",
+    source: "candidate",
+  },
+  // The mirror: a window where dispelling was worth it (VT at 40–60 % with
+  // 3+ DoTs, or the owner was immune to the backlash) and nobody dispelled.
+  // An alternative-line suggestion, so the lowest tier.
+  {
+    type: "backlash-dispel-window",
+    label: "可解的反噬 DoT 没解",
+    severity: "minor",
+    source: "candidate",
+  },
   {
     type: "external-unused",
     label: "队友阵亡时外减可用未给",
@@ -364,6 +385,12 @@ export function candidateDetail(c: CandidateEvent): string {
       return `${f.crisisUnit ?? ""} 在 ${f.t ?? "?"}s 掉到 ${f.crisisHpPct ?? "?"}%${f.own === "yes" ? "(自己)" : ""}时,${f.readyCds ?? ""} 均可用却 5 秒内未按`;
     case "cd-spent-idle":
       return `${f.spell ?? ""} 在无威胁时段打出`;
+    case "backlash-dispel":
+      return `${f.t ?? "?"}s 给 ${f.targetHpPct ?? "?"}% 血的 ${f.target ?? ""} 解掉 ${f.debuff ?? ""}${f.stacks && f.stacks !== "1" ? `×${f.stacks}` : ""},自己吃 ${f.backlash ?? ""},4 秒内承伤 ${f.selfDmgBeforeK ?? "?"}k→${f.selfDmgAfterK ?? "?"}k、治疗 ${f.healBeforeK ?? "?"}k→${f.healAfterK ?? "?"}k${f.cdCcSpell ? `;驱散 CD 里 ${f.cdCcTarget ?? ""} 吃了 ${f.cdCcDurationS ?? "?"}s ${f.cdCcSpell} 无人能解` : ""}`;
+    case "backlash-dispel-window":
+      return f.reason === "immune"
+        ? `${f.t ?? "?"}s ${f.target ?? ""}(${f.targetHpPct ?? "?"}%)身上的 ${f.debuff ?? ""} 可解:你当时有 ${f.immuneBuff ?? ""},反噬控制无效`
+        : `${f.t ?? "?"}s ${f.target ?? ""}(${f.targetHpPct ?? "?"}%,${f.dots ?? "?"} 个 DoT)身上的 ${f.debuff ?? ""} 值得解,之后 15 秒又吃了 ${f.casterDmgAfterK ?? "?"}k`;
     default:
       return "";
   }

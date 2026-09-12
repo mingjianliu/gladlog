@@ -96,7 +96,7 @@ const POST_CC_PRESSURE_WINDOW_S = 5;
 /** @internal exported for data/curatedIdRegistry (corpus rot scan) */
 export const DISPEL_PENALTY_SPELLS = new Map<string, string>([
   ["1259790", "Silences & damages the dispeller (Unstable Affliction)"],
-  ["34914", "Horrifies the dispeller (Vampiric Touch)"],
+  ["34914", "Horrifies the dispeller for 3 s (Vampiric Touch → Sin and Punishment)"],
 ]);
 
 // The aura the dispeller eats. 196364 is corpus-established, not assumed:
@@ -111,7 +111,12 @@ export const BACKLASH_CC_SPELL_IDS = new Map<
   string,
   { backlashSpellId: string }
 >([
-  ["34914", { backlashSpellId: "34914" }],
+  // 2026-09-12 (GH #80 model run): the aura that lands on a Vampiric Touch
+  // dispeller is 87204 Sin and Punishment (Magic, 3.0 s observed ×151), NOT
+  // 34914 itself — archive 1/3 subset, 7,971 VT dispels: 87204 within 3 s
+  // 88.3 %, 34914 0.4 %. The old row was the same shape as the GH #23 UA
+  // rot: it looked authoritative and never matched.
+  ["34914", { backlashSpellId: "87204" }],
   ["1259790", { backlashSpellId: "196364" }],
 ]);
 

@@ -41,7 +41,8 @@ export const CANDIDATE_TYPE_FLAGS: Record<
   | "mdCycloneWindow"
   | "missedPurge"
   | "ccHeld"
-  | "killReview",
+  | "killReview"
+  | "backlashDispel",
   boolean
 > = {
   // 下架 2026-08-19(GH #13,用户裁定)。判别力实测为负(−4.4pp)的根因
@@ -99,6 +100,14 @@ export const CANDIDATE_TYPE_FLAGS: Record<
   // 其中一张用户直接质疑因果(「伤害不够还是没打出来」)。击杀事实照旧进时间线,
   // 只撤掉这条候选;side=friendly 的死亡不受影响。
   killReview: false,
+  // backlash-dispel / backlash-dispel-window (GH #80, 2026-09-12, user
+  // approval after the archive cost/benefit model — 180k opportunities:
+  // UA dispel net ≈ −200k HP + 1.4 s unanswerable CC unless it co-removed a
+  // CC; VT net-negative at ≥ 80 % target HP, net-positive at 40–60 % × 3+
+  // DoTs). Both producers live in candidates/backlashDispel.ts; the flag
+  // gates them together. Validation (real-model smoke + acceptance capture)
+  // pending — flip to false to retire without touching the emitters.
+  backlashDispel: true,
 };
 
 /**

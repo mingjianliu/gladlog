@@ -143,6 +143,10 @@
     "healerSaveCdGenerated.json": {
       "entries": 43,
       "producer": "packages/eval/scripts/healerSaveCdScan.ts emit-table"
+    },
+    "backlashDispelPriorGenerated.json": {
+      "entries": 20,
+      "producer": "packages/eval/scripts/backlashDispelOutcomeProbe.ts emit-table"
     }
   }
 }

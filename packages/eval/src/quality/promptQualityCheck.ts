@@ -30,6 +30,10 @@
 
 import { ensureAnalysisData } from "@gladlog/analysis";
 import {
+  lookupBacklashPrior,
+  lookupBacklashWorth,
+} from "@gladlog/analysis/src/data/backlashDispelPrior";
+import {
   lookupBehaviorPrior,
   outcomePhrase,
 } from "@gladlog/analysis/src/data/behaviorPrior";
@@ -822,6 +826,83 @@ export function checkCdPriorRefConsistency(lines: string[]): string[] {
   return failures;
 }
 
+/**
+ * 16th hardFailure class (GH #80, 2026-09-12): a `backlash-dispel` /
+ * `backlash-dispel-window` menu line quotes corpus reference numbers from
+ * data/backlashDispelPrior.ts; re-check every rendered ref* fact against the
+ * table the producer read, keyed by facts.refKey. Same shape as
+ * checkSyncWindowRefConsistency.
+ */
+export function checkBacklashRefConsistency(lines: string[]): string[] {
+  const failures: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+    const isDispel = line.includes("type=backlash-dispel ");
+    const isWindow = line.includes("type=backlash-dispel-window ");
+    if (!isDispel && !isWindow) continue;
+    const m = line.match(/facts=\{(.*)\}\s*$/);
+    if (!m) {
+      failures.push(`line ${i + 1}: backlash-dispel 行无 facts`);
+      continue;
+    }
+    const f = parseFactsBlock(m[1]!);
+    const refKey = f.refKey ?? "";
+    if (!refKey) {
+      failures.push(`line ${i + 1}: backlash-dispel 缺 refKey,无法核对语料参照`);
+      continue;
+    }
+    let expect: Record<string, string>;
+    const windowKind = refKey.endsWith(":worth")
+      ? "worth"
+      : refKey.endsWith(":immune")
+        ? "immune"
+        : null;
+    if (windowKind) {
+      const ref = lookupBacklashWorth(
+        refKey.slice(0, -(windowKind.length + 1)),
+        windowKind,
+      );
+      if (!ref) {
+        failures.push(`line ${i + 1}: backlash-dispel-window 引用了表里查不到/不够样本的单元格 ${refKey}`);
+        continue;
+      }
+      expect = {
+        refND: String(ref.nD),
+        refNL: String(ref.nL),
+        refDeathDispelled: String(ref.deathDPct),
+        refDeathLeft: String(ref.deathLPct),
+        refNetK: String(ref.netK),
+      };
+    } else {
+      const ref = lookupBacklashPrior(refKey);
+      if (!ref) {
+        failures.push(`line ${i + 1}: backlash-dispel 引用了表里查不到/不够样本的单元格 ${refKey}`);
+        continue;
+      }
+      expect = isDispel
+        ? {
+            refN: String(ref.n),
+            refRemovedK: String(ref.removedK),
+            refHealLostK: String(ref.healLostK),
+            refBacklashDmgK: String(ref.backlashDmgK),
+            refCcExposureS: String(ref.ccExposureS),
+            backlash: `${ref.backlashKind} ${ref.backlashS}s`,
+          }
+        : {
+            refN: String(ref.n),
+            refRemovedK: String(ref.removedK),
+            refCcExposureS: String(ref.ccExposureS),
+            backlash: `${ref.backlashKind} ${ref.backlashS}s`,
+          };
+    }
+    for (const [key, want] of Object.entries(expect)) {
+      if (f[key] !== want)
+        failures.push(`line ${i + 1}: backlash-dispel ${key}=${f[key] ?? "(缺)"} ≠ 表值 ${want}(${refKey})`);
+    }
+  }
+  return failures;
+}
+
 export function checkSyncWindowRefConsistency(lines: string[]): string[] {
   const failures: string[] = [];
   for (let i = 0; i < lines.length; i++) {
@@ -1448,6 +1529,7 @@ export function checkMatch(
   hardFailures.push(...checkBehaviorPriorConsistency(lines));
   hardFailures.push(...checkBurstWindowRefConsistency(lines));
   hardFailures.push(...checkSyncWindowRefConsistency(lines));
+  hardFailures.push(...checkBacklashRefConsistency(lines));
   hardFailures.push(...checkCdPriorRefConsistency(lines));
   hardFailures.push(...checkCrisisHpStateConsistency(lines));
   hardFailures.push(...checkOutcomeRefConsistency(lines));

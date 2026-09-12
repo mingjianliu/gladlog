@@ -372,4 +372,8 @@
 //  gated door = ANY 20–99 % wall in hand (was: stun-usable wall only) —
 //  [kill-opportunity: …] tags, [KILL ATTEMPTS] tier labels and the
 //  attempt-into-trinket legend change wording and membership.
-export const PROMPT_VERSION = 56;
+//  v57 (2026-09-12, GH #80, user approval): new candidate types
+//  backlash-dispel / backlash-dispel-window with their legends; the [DISPEL]
+//  annotations for a Vampiric Touch dispel now pair the real backlash aura
+//  (87204 Sin and Punishment) instead of the stale 34914.
+export const PROMPT_VERSION = 57;

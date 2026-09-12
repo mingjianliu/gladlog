@@ -106,6 +106,15 @@ import {
   MD_SPELL_ID,
   mdCycloneWindowEvents,
 } from "./candidates/massDispel";
+import {
+  lookupBacklashPrior,
+  lookupBacklashWorth,
+} from "../data/backlashDispelPrior";
+import {
+  backlashDispelDecisionPoints,
+  backlashDispelEvents,
+  backlashDispelWindowEvents,
+} from "./candidates/backlashDispel";
 import { CRISIS_HP_PCT, crisisDecisionPoints } from "./crisisDecisionPoints";
 import { fmtFactNum as fmt, fmtFactTime } from "./factFormat";
 import type { CandidateEvent } from "./types";
@@ -1564,6 +1573,35 @@ function teamPlayEvents(
       );
     } catch {
       /* same degradation policy as the other team-play sources */
+    }
+  }
+
+  // GH #80 (2026-09-12, user approval "做出来看看是否对游戏建议有真正的帮助"):
+  // backlash-dispel (the owner dispelled UA/VT in the archive-measured
+  // net-negative stratum) and backlash-dispel-window (the owner could have
+  // dispelled in a net-positive / immune stratum and did not). One decision
+  // point list, two producers; the corpus reference comes from
+  // data/backlashDispelPrior.ts and checkBacklashRefConsistency re-checks it.
+  if (CANDIDATE_TYPE_FLAGS.backlashDispel) {
+    try {
+      const points = backlashDispelDecisionPoints(
+        friends,
+        enemies,
+        combat,
+        friendlyPets,
+        enemyPets,
+      );
+      out.push(
+        ...backlashDispelEvents(points, owner, { lookup: lookupBacklashPrior }),
+      );
+      out.push(
+        ...backlashDispelWindowEvents(points, owner, {
+          lookup: lookupBacklashPrior,
+          lookupWorth: lookupBacklashWorth,
+        }),
+      );
+    } catch {
+      /* backlash-dispel not computable → types absent */
     }
   }
 

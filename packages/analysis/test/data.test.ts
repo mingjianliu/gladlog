@@ -56,6 +56,8 @@ describe("data layer", () => {
       missedPurge: false,
       ccHeld: false,
       killReview: false,
+      // 2026-09-12 上线(GH #80,用户裁决「做出来看看是否对游戏建议有真正的帮助」)
+      backlashDispel: true,
     });
   });
 });

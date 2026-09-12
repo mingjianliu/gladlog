@@ -1,0 +1,74 @@
+{
+ "meta": {
+  "corpus": "wowarenalogs archive 12.1 new season, every-3rd file (21,101 of 63,303), scanned 2026-09-12 with the product predicate backlashDispelDecisionPoints",
+  "generatedAt": "2026-09-12T10:01:49.732Z",
+  "files": 21101,
+  "opportunities": 231948,
+  "generator": "backlashDispelOutcomeProbe.ts emit-table",
+  "nFloor": 50
+ },
+ "cells": {
+  "34914": {
+   "n": 4228,
+   "nLeft": 62113,
+   "removedK": 66,
+   "healLostK": 72,
+   "backlashDmgK": 19,
+   "ccExposureS": 0.74,
+   "backlashKind": "horror",
+   "backlashS": 3
+  },
+  "1259790": {
+   "n": 4681,
+   "nLeft": 30014,
+   "removedK": 106,
+   "healLostK": 131,
+   "backlashDmgK": 214,
+   "ccExposureS": 0.94,
+   "backlashKind": "silence",
+   "backlashS": 4
+  },
+  "1259790:immune": {
+   "nD": 1520,
+   "nL": 1459,
+   "deathDPct": 2,
+   "deathLPct": 4,
+   "netK": -36
+  },
+  "34914:worth": {
+   "nD": 587,
+   "nL": 12495,
+   "deathDPct": 5,
+   "deathLPct": 10,
+   "netK": -36
+  },
+  "34914:immune": {
+   "nD": 769,
+   "nL": 4522,
+   "deathDPct": 1,
+   "deathLPct": 2,
+   "netK": -14
+  }
+ },
+ "immunity": {
+  "34914": [
+   "1246965",
+   "215769",
+   "377362",
+   "378464",
+   "473909",
+   "642"
+  ],
+  "1259790": [
+   "209584",
+   "215769",
+   "289655",
+   "353319",
+   "363916",
+   "377362",
+   "378078",
+   "473909",
+   "642"
+  ]
+ }
+}

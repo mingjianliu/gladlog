@@ -24,6 +24,7 @@
 import { ensureAnalysisData } from "@gladlog/analysis";
 import * as burstWindowDecisionPoints from "@gladlog/analysis/src/analysis/burstWindowDecisionPoints";
 import * as candidateFindings from "@gladlog/analysis/src/analysis/candidateFindings";
+import * as backlashDispel from "@gladlog/analysis/src/analysis/candidates/backlashDispel";
 import * as burstWindowResponse from "@gladlog/analysis/src/analysis/candidates/burstWindowResponse";
 import * as cooldownTiming from "@gladlog/analysis/src/analysis/candidates/cooldownTiming";
 import * as death from "@gladlog/analysis/src/analysis/candidates/death";
@@ -43,6 +44,7 @@ import * as matchTimelineSections from "@gladlog/analysis/src/context/matchTimel
 import * as timelineHelpers from "@gladlog/analysis/src/context/timelineHelpers";
 import * as abilityProfileMod from "@gladlog/analysis/src/data/abilityProfile";
 import * as arenaGeometry from "@gladlog/analysis/src/data/arenaGeometry";
+import * as backlashDispelPrior from "@gladlog/analysis/src/data/backlashDispelPrior";
 import * as behaviorPrior from "@gladlog/analysis/src/data/behaviorPrior";
 import * as burstWindowPrior from "@gladlog/analysis/src/data/burstWindowPrior";
 import * as candidateTypeFlags from "@gladlog/analysis/src/data/candidateTypeFlags";
@@ -63,8 +65,8 @@ import * as spellTargeting from "@gladlog/analysis/src/data/spellTargeting";
 import * as syncWindowPrior from "@gladlog/analysis/src/data/syncWindowPrior";
 import * as auraIntervals from "@gladlog/analysis/src/utils/auraIntervals";
 import * as bracketKey from "@gladlog/analysis/src/utils/bracketKey";
-import * as cannotCastIntervals from "@gladlog/analysis/src/utils/cannotCastIntervals";
 import * as buffDuration from "@gladlog/analysis/src/utils/buffDuration";
+import * as cannotCastIntervals from "@gladlog/analysis/src/utils/cannotCastIntervals";
 import * as ccTrinketAnalysis from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
 import * as cooldowns from "@gladlog/analysis/src/utils/cooldowns";
 import * as counterfactual from "@gladlog/analysis/src/utils/counterfactual";
@@ -690,6 +692,41 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/dpsMetrics.ts`,
     symbol: "isBurstConverted",
     mod: dpsMetrics,
+  },
+  {
+    file: `${A}/analysis/candidates/backlashDispel.ts`,
+    symbol: "backlashDispelDecisionPoints",
+    mod: backlashDispel,
+  },
+  {
+    file: `${A}/analysis/candidates/backlashDispel.ts`,
+    symbol: "isAccusableBacklashDispel",
+    mod: backlashDispel,
+  },
+  {
+    file: `${A}/analysis/candidates/backlashDispel.ts`,
+    symbol: "isWorthWindow",
+    mod: backlashDispel,
+  },
+  {
+    file: `${A}/analysis/candidates/backlashDispel.ts`,
+    symbol: "isImmuneWindow",
+    mod: backlashDispel,
+  },
+  {
+    file: `${A}/data/backlashDispelPrior.ts`,
+    symbol: "lookupBacklashPrior",
+    mod: backlashDispelPrior,
+  },
+  {
+    file: `${A}/data/backlashDispelPrior.ts`,
+    symbol: "lookupBacklashWorth",
+    mod: backlashDispelPrior,
+  },
+  {
+    file: `${A}/data/backlashDispelPrior.ts`,
+    symbol: "backlashImmunityIds",
+    mod: backlashDispelPrior,
   },
   {
     file: `${A}/analysis/crisisDecisionPoints.ts`,

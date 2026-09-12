@@ -38,7 +38,8 @@ TYPE_DEFS = Path(__file__).resolve().parent / "type_definitions.json"
 # mistakes.ts declares a type not listed here.
 DESKTOP_MISTAKE_TYPES = ["attempt-into-trinket","burst-into-mitigation","cd-waste","missed-kick","missed-purge-kill-window",
           "crisis-no-response","external-unused","questionable-external","healing-gap","position-mistake",
-          "cc-held","cc-avoidable","slow-defensive-response","missed-sync-window","unsynced-burst","cd-hoarded","cd-spent-idle"]
+          "cc-held","cc-avoidable","slow-defensive-response","missed-sync-window","unsynced-burst","cd-hoarded","cd-spent-idle",
+          "backlash-dispel","backlash-dispel-window"]
 DESKTOP_IGNORED_TYPES = ["death","death-setup","juked-kick","missed-cleanse","missed-purge","cc-locked","kick-eaten","wasted-trinket",
            "death-unused-defensive","dr-clipped-cc","burst-into-immunity","md-cyclone-window","off-target-in-window","unconverted-burst"]
 

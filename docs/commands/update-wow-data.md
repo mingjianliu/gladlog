@@ -84,6 +84,23 @@ npx tsx packages/eval/scripts/behaviorPriorScan.ts emit-table --in $R/opportunit
 #   packages/eval/scripts/kwDefAdmitScan.ts (face admissions beyond the roster, intersect with live
 #   enemy casts via kwDefDiagScan.ts) and judge each hit by hand — 2026-09-02 run found Ancient of
 #   Lore 473909 genuinely missing (added) while correctly rejecting Ice Barrier-class minors.
+# 6b-pre-5. Backlash-dispel reference table + immunity sets (GH #80, 2026-09-12): per backlash
+#   debuff (Unstable Affliction / Vampiric Touch), what dispelling it in the accused stratum cost
+#   and saved over the archive, plus the corpus-MINED buff sets under which the backlash does not
+#   land on the dispeller. Corpus-driven, NOT DB2. Regenerate at season start and whenever
+#   packages/analysis/src/analysis/candidates/backlashDispel.ts (backlashDispelDecisionPoints or the
+#   three strata predicates) changes — backlash-dispel / backlash-dispel-window quote these numbers
+#   and checkBacklashRefConsistency re-checks them, so a stale table is a red CI. ~1 h over a 1/3
+#   archive subset with 6 shards (the decision point runs reconstructDispelSummary per team);
+#   the scan is resumable per --out file. Write temp-then-cp — never `>` into the imported json.
+# R=$GLADLOG_EVAL_HOME/reports/backlash-dispel-$(date +%F); mkdir -p $R
+# for i in 0 1 2 3 4 5; do nice -n 10 npx tsx packages/eval/scripts/backlashDispelOutcomeProbe.ts scan \
+#   --manifest <newseason manifest> --out $R/shard$i.jsonl --every 3 --offset $((i*N)) --limit N > $R/shard$i.log 2>&1 & done; wait
+# cat $R/shard*.jsonl > $R/all.jsonl
+# npx tsx packages/eval/scripts/backlashDispelOutcomeProbe.ts emit-table --in $R/all.jsonl \
+#   --corpus "wowarenalogs archive $(date +%F)" > $R/table.json \
+#   && cp $R/table.json packages/analysis/src/data/backlashDispelPriorGenerated.json
+# npx tsx packages/eval/scripts/backlashDispelOutcomeProbe.ts report --in $R/all.jsonl   # sanity: strata + mined immunity
 # 6b-pre-4. Sync-window reference table (GH #13 resurrection, 2026-09-02): per bracket, the share of
 #   eligible enemy-healer hard-CC windows in which an enemy died within 15 s, split by whether a
 #   friendly canonical offensive CD entered the window. Corpus-driven, NOT DB2.
