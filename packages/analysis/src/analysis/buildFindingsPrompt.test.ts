@@ -344,7 +344,8 @@ describe("P1/P2 起爆候选图例(Task 4,2026-08-15,特性开关接线;Task 9 �
   });
 
   it("单开 missedSyncWindow(其余三个显式关闭,隔离验证)→ 只有 missed-sync-window 的图例出现,同同步是门/血线是加速器不要求低血", () => {
-    // 2026-08-19 下架后默认 false —— 本用例是纯函数隔离验证,显式开。
+    // 2026-09-02 复活后默认 true(2026-08-19 至 09-02 曾默认 false)—— 本用例是纯函数隔离验证,四个开关都显式设,不依赖默认值。
+    const savedFlags = { ...CANDIDATE_TYPE_FLAGS };
     CANDIDATE_TYPE_FLAGS.missedSyncWindow = true;
     CANDIDATE_TYPE_FLAGS.unsyncedBurst = false;
     CANDIDATE_TYPE_FLAGS.cdHoarded = false;
@@ -362,14 +363,12 @@ describe("P1/P2 起爆候选图例(Task 4,2026-08-15,特性开关接线;Task 9 �
       expect(p).not.toMatch(/"unsynced-burst"/);
       expect(p).not.toMatch(/"cd-spent-idle"/);
     } finally {
-      CANDIDATE_TYPE_FLAGS.missedSyncWindow = false;
-      CANDIDATE_TYPE_FLAGS.unsyncedBurst = false; // default since 2026-08-29 (GH #50)
-      CANDIDATE_TYPE_FLAGS.cdHoarded = true;
-      CANDIDATE_TYPE_FLAGS.cdSpentIdle = false; // default since 2026-08-30 (signal outcome probe)
+      Object.assign(CANDIDATE_TYPE_FLAGS, savedFlags);
     }
   });
 
   it("单开 cdHoarded(其余三个显式关闭,隔离验证)→ 只有 cd-hoarded 的图例出现,且带 costNorm 联动措辞", () => {
+    const savedFlags = { ...CANDIDATE_TYPE_FLAGS };
     CANDIDATE_TYPE_FLAGS.missedSyncWindow = false;
     CANDIDATE_TYPE_FLAGS.unsyncedBurst = false;
     CANDIDATE_TYPE_FLAGS.cdSpentIdle = false;
@@ -385,13 +384,12 @@ describe("P1/P2 起爆候选图例(Task 4,2026-08-15,特性开关接线;Task 9 �
       expect(p).not.toMatch(/"unsynced-burst"/);
       expect(p).not.toMatch(/"cd-spent-idle"/);
     } finally {
-      CANDIDATE_TYPE_FLAGS.missedSyncWindow = true;
-      CANDIDATE_TYPE_FLAGS.unsyncedBurst = false; // default since 2026-08-29 (GH #50)
-      CANDIDATE_TYPE_FLAGS.cdSpentIdle = false; // default since 2026-08-30 (signal outcome probe)
+      Object.assign(CANDIDATE_TYPE_FLAGS, savedFlags);
     }
   });
 
   it("cdSpentIdle 图例说明它只在中/高威胁对局里出现(2026-08-30 起默认关,显式开验证图例文案本身仍在)", () => {
+    const savedFlags = { ...CANDIDATE_TYPE_FLAGS };
     CANDIDATE_TYPE_FLAGS.cdSpentIdle = true;
     try {
       const p = buildFindingsPrompt(
@@ -412,17 +410,18 @@ describe("P1/P2 起爆候选图例(Task 4,2026-08-15,特性开关接线;Task 9 �
       expect(p).toMatch(/"cd-spent-idle"/);
       expect(p).toMatch(/at least medium overall threat/);
     } finally {
-      CANDIDATE_TYPE_FLAGS.cdSpentIdle = false;
+      Object.assign(CANDIDATE_TYPE_FLAGS, savedFlags);
     }
   });
 
   it("显式关闭 missedSyncWindow,菜单里没有该类型的事件 → 图例仍不出现(presence 依旧把关,与既有类型同规则,避免白占 prompt 字节)", () => {
+    const savedFlags = { ...CANDIDATE_TYPE_FLAGS };
     CANDIDATE_TYPE_FLAGS.missedSyncWindow = false;
     try {
       const p = buildFindingsPrompt(candidates, "", "Discipline Priest");
       expect(p).not.toMatch(/"missed-sync-window"/);
     } finally {
-      CANDIDATE_TYPE_FLAGS.missedSyncWindow = true;
+      Object.assign(CANDIDATE_TYPE_FLAGS, savedFlags);
     }
   });
 });

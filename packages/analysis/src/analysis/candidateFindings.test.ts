@@ -99,6 +99,7 @@ describe("extractCandidateFindings", () => {
     expect(evts.find((e) => e.id === "death:b:45")).toBeUndefined();
   });
   it("tags each death friendly/enemy so the LLM knows a kill from a loss (killReview flipped on)", () => {
+    const savedFlags = { ...CANDIDATE_TYPE_FLAGS };
     CANDIDATE_TYPE_FLAGS.killReview = true;
     try {
       const evts = extractCandidateFindings(combat());
@@ -107,7 +108,7 @@ describe("extractCandidateFindings", () => {
       expect(mine!.facts["side"]).toBe("friendly");
       expect(theirs!.facts["side"]).toBe("enemy");
     } finally {
-      CANDIDATE_TYPE_FLAGS.killReview = false;
+      Object.assign(CANDIDATE_TYPE_FLAGS, savedFlags);
     }
   });
   it("2v2 allow-list (GH #18 ruling (a)): only cd-hoarded / missed-cleanse survive; 3v3 untouched", () => {
@@ -136,12 +137,13 @@ describe("extractCandidateFindings", () => {
       spellCastEvents: [],
       advancedActions: [],
     };
+    const savedFlags = { ...CANDIDATE_TYPE_FLAGS };
     CANDIDATE_TYPE_FLAGS.killReview = true; // both player deaths visible for the count below
     let evts: ReturnType<typeof extractCandidateFindings>;
     try {
       evts = extractCandidateFindings(c);
     } finally {
-      CANDIDATE_TYPE_FLAGS.killReview = false;
+      Object.assign(CANDIDATE_TYPE_FLAGS, savedFlags);
     }
     expect(evts.some((e) => e.unitNames.includes("Gzaadym"))).toBe(false);
     // The two real player deaths are still present.
@@ -3287,12 +3289,13 @@ describe("missed-sync-window / unsynced-burst 接线(extractCandidateFindings,20
   });
 
   it("显式开 flag → unsynced-burst 仍可产出(纯函数与接线保留,只是默认关,GH #50)", () => {
+    const savedFlags = { ...CANDIDATE_TYPE_FLAGS };
     CANDIDATE_TYPE_FLAGS.unsyncedBurst = true;
     try {
       const evts = extractCandidateFindings(syncFixture(), "h");
       expect(evts.some((e) => e.type === "unsynced-burst")).toBe(true);
     } finally {
-      CANDIDATE_TYPE_FLAGS.unsyncedBurst = false;
+      Object.assign(CANDIDATE_TYPE_FLAGS, savedFlags);
     }
   });
 
@@ -3368,13 +3371,14 @@ describe("missed-sync-window / unsynced-burst 接线(extractCandidateFindings,20
   });
 
   it("只开 unsyncedBurst → 只有 unsynced-burst 产出,missed-sync-window 不出现", () => {
+    const savedFlags = { ...CANDIDATE_TYPE_FLAGS };
     CANDIDATE_TYPE_FLAGS.unsyncedBurst = true;
     try {
       const evts = extractCandidateFindings(syncFixture(), "h");
       expect(evts.some((e) => e.type === "unsynced-burst")).toBe(true);
       expect(evts.some((e) => e.type === "missed-sync-window")).toBe(false);
     } finally {
-      CANDIDATE_TYPE_FLAGS.unsyncedBurst = false;
+      Object.assign(CANDIDATE_TYPE_FLAGS, savedFlags);
     }
   });
 });
@@ -3580,24 +3584,26 @@ describe("cd-hoarded / cd-spent-idle 接线(extractCandidateFindings,2026-08-15,
   // (条数取决于两个 CD 互相产生的窗口叠加,细节见实现者报告)。finally 里
   // 复位开关回默认值,防止状态泄漏。
   it("CANDIDATE_TYPE_FLAGS.cdHoarded=false(cd-spent-idle 保持默认 false)→ 两者都不产出", () => {
+    const savedFlags = { ...CANDIDATE_TYPE_FLAGS };
     CANDIDATE_TYPE_FLAGS.cdHoarded = false;
     try {
       const evts = extractCandidateFindings(p2Fixture(), "h");
       expect(evts.some((e) => e.type === "cd-hoarded")).toBe(false);
       expect(evts.some((e) => e.type === "cd-spent-idle")).toBe(false);
     } finally {
-      CANDIDATE_TYPE_FLAGS.cdHoarded = true;
+      Object.assign(CANDIDATE_TYPE_FLAGS, savedFlags);
     }
   });
 
   it("显式开 CANDIDATE_TYPE_FLAGS.cdSpentIdle → cd-spent-idle 仍可产出(纯函数与接线保留,只是默认关);cd-hoarded 默认 true 不受影响", () => {
+    const savedFlags = { ...CANDIDATE_TYPE_FLAGS };
     CANDIDATE_TYPE_FLAGS.cdSpentIdle = true;
     try {
       const evts = extractCandidateFindings(p2Fixture(), "h");
       expect(evts.some((e) => e.type === "cd-spent-idle")).toBe(true);
       expect(evts.some((e) => e.type === "cd-hoarded")).toBe(true);
     } finally {
-      CANDIDATE_TYPE_FLAGS.cdSpentIdle = false;
+      Object.assign(CANDIDATE_TYPE_FLAGS, savedFlags);
     }
   });
 });

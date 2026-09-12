@@ -372,11 +372,12 @@ describe("attemptIntoTrinketEvents(候选 mapper)", () => {
         (c) => c.type === "attempt-into-trinket",
       );
     expect(has()).toBe(true);
+    const savedFlags = { ...CANDIDATE_TYPE_FLAGS };
     CANDIDATE_TYPE_FLAGS.attemptIntoTrinket = false;
     try {
       expect(has()).toBe(false);
     } finally {
-      CANDIDATE_TYPE_FLAGS.attemptIntoTrinket = true;
+      Object.assign(CANDIDATE_TYPE_FLAGS, savedFlags);
     }
   });
 });

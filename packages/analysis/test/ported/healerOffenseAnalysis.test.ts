@@ -1103,6 +1103,7 @@ describe("F193 V2 — contested trade facts", () => {
       ],
     });
 
+    const savedFlags = { ...HEALER_OFFENSE_FLAGS };
     HEALER_OFFENSE_FLAGS.V2_CONTESTED_TRADES = false;
     try {
       const summary = buildHealerOffenseSummary(
@@ -1122,7 +1123,7 @@ describe("F193 V2 — contested trade facts", () => {
       const text = lines.join("\n");
       expect(text).not.toContain("[CONTESTED]");
     } finally {
-      HEALER_OFFENSE_FLAGS.V2_CONTESTED_TRADES = true;
+      Object.assign(HEALER_OFFENSE_FLAGS, savedFlags);
     }
   });
 

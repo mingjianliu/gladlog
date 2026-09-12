@@ -57,6 +57,7 @@ description: 改 packages/analysis 的任何东西之前读这个 —— 谓词�
 - 两项改动混在一批:临时禁用一项(`?? undefined` 那种一行改),再采一份,三份两两相减归因;恢复后 grep 确认。
 - 台账 / 候选 / 死亡行三方比对:同 manifest `buildCorpus` 建前后两个 run,跑 `qualityCheck.ts`,逐 prompt diff,
   只允许目标类失败数和 approxTokens 动。
+- **新测试文件默认隔离运行**(本地混合隔离,fail-closed):不改模块 / 全局 / 进程状态的测试,顺手把路径加进 `packages/<pkg>/vitest.shared.json`(保持排序),本地 presubmit 才会变快;用了 `vi.mock` / `spyOn` / 写 `process.env` 的别加,加了也会被检测器否决。改 `*_FLAGS` 开关单例必须 `const savedFlags = { ...X }` + `finally { Object.assign(X, savedFlags) }`,写死值还原会被守卫判红。只在本地红的失败先 `GLADLOG_TEST_ISOLATE=all` 重跑区分状态泄漏。
 - `npm run presubmit`;跑单包测试用 `npx vitest run --root packages/analysis <子串>`(`cd` 进去反而 "no tests",
   zsh glob 不匹配整条命令失败,`grep --include=*.ts` 也要加引号);scratchpad 脚本用 `npx tsx` 从仓库根跑、绝对路径 import。
 - 提交信息:前后数字、哪些 delta 不是自己的、用户裁决原话和日期。
