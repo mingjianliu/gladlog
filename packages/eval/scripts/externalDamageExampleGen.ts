@@ -28,6 +28,7 @@ import {
   HP_SAMPLE_RADIUS_MS,
   MITIGATION_TABLE,
   NO_MITIGATION_IDS,
+  specToString,
 } from "@gladlog/analysis";
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
 import { buildAuraIntervals } from "@gladlog/analysis/src/utils/auraIntervals";
@@ -170,7 +171,7 @@ function observe(
         const base = {
           matchId,
           ally: ally.name,
-          allySpec: String(ally.spec ?? "?"),
+          allySpec: ally.spec ? specToString(ally.spec) : "?",
           target: target.name,
           mit: getEnglishSpellName(iv.spellId, iv.spellName),
           mitPct: mit.pct,
@@ -210,8 +211,8 @@ function render(o: Obs): string {
   const x = o.X == null ? "n/a" : `${o.X.toFixed(0)} %`;
   return [
     `# ${o.matchId}  ${o.ally} (${o.allySpec}) → ${o.target}  [${o.kind}]`,
-    `${fmtTime(o.wFrom)}  [STATE]        ${o.target} ${hp(o.targetHpFrom)}`,
     `${fmtTime(o.applyS)}  [EXTERNAL]     ${o.mit} (${o.mitPct} %) by ${o.src} on ${o.target}; ${o.ally} had hit them ${k(o.preDirect)} in the 3 s before`,
+    `${fmtTime(o.wFrom)}  [STATE]        ${o.target} ${hp(o.targetHpFrom)}`,
     `${fmtTime(o.wFrom)}–${fmtTime(o.wTo)}  [DURING EXTERNAL] ${o.ally}: ${k(o.nDirect + o.nPeriodic)} on ${o.target} (${x} of their damage on enemy players; direct ${k(o.nDirect)} / periodic ${k(o.nPeriodic)}); damage in ${o.K} of ${o.M} s, longest gap ${o.G} s`,
     `${fmtTime(o.wTo)}  [STATE]        ${o.target} ${hp(o.targetHpTo)}`,
   ].join("\n");
