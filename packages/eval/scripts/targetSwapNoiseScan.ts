@@ -17,7 +17,9 @@
  * future estimator; they do not validate one.
  *
  * Usage:
- *   npx tsx packages/eval/scripts/targetSwapNoiseScan.ts [--n 400] [--json]
+ *   npx tsx packages/eval/scripts/targetSwapNoiseScan.ts [--n 400] [--json]          # local library
+ *   npx tsx packages/eval/scripts/targetSwapNoiseScan.ts --manifest <file> [--every N] [--limit N] [--json]
+ *                                                        # archive: both teams per round are perspectives
  *
  * Columns: `buggy` = the old filter reproduced verbatim; `all` = every real
  * damage row (direct + periodic, pets already merged into the owner by
@@ -26,7 +28,11 @@
  * non-empty buckets on both sides to count as a swap (k=1 is the raw count).
  */
 import { ensureAnalysisData, isHealerSpec } from "@gladlog/analysis";
+import { GladLogParser } from "@gladlog/parser";
 import type { ICombatUnit } from "@gladlog/parser-compat";
+import { toLegacyMatch, toLegacyShuffle } from "@gladlog/parser-compat";
+import { readFileSync } from "fs";
+import { gunzipSync } from "zlib";
 
 import {
   DEFAULT_MATCH_DIR,
@@ -109,18 +115,19 @@ function swapsWithPersistence(seq: string[], k: number): number {
   return swaps;
 }
 
-async function main(): Promise<void> {
-  await ensureAnalysisData();
-  const limit = argOf("--n", 400);
+/** One (perspective team, enemy team) pair to score. */
+interface Side {
+  friends: ICombatUnit[];
+  enemyIds: Set<string>;
+  startMs: number;
+  durMin: number;
+}
+
+/** Local library rounds: the logging player's team is `friends`, once per round. */
+function* librarySides(limit: number): Generator<Side> {
   const rows = pickRows(loadIndex(DEFAULT_MATCH_DIR), {
     minDurationS: 60,
   }).slice(0, limit);
-  type Acc = { players: number; minutes: number; swaps: number[] };
-  const acc = new Map<string, Acc>(); // key = filter|role|k
-  const events = new Map<Filter, Map<string, number>>(
-    FILTERS.map((f) => [f, new Map()]),
-  );
-  let rounds = 0;
   for (const meta of rows) {
     let legacy;
     try {
@@ -129,9 +136,98 @@ async function main(): Promise<void> {
       continue;
     }
     const { friends, enemies } = splitTeams(legacy);
-    const enemyIds = new Set(enemies.map((e) => e.id));
-    const startMs = legacy.startTime;
-    const durMin = Math.max((legacy.endTime - legacy.startTime) / 60000, 0.5);
+    yield {
+      friends,
+      enemyIds: new Set(enemies.map((e) => e.id)),
+      startMs: legacy.startTime,
+      durMin: Math.max((legacy.endTime - legacy.startTime) / 60000, 0.5),
+    };
+  }
+}
+
+/** Archive files (same loader as coachCorpusArchiveProbe.ts): every round,
+ * BOTH teams taken as the perspective team in turn — the archive has full data
+ * for both sides. Enemy ids = the other team's PLAYERS (pets are not targets). */
+function* archiveSides(
+  manifestPath: string,
+  every: number,
+  limit: number,
+  progress: (files: number) => void,
+): Generator<Side> {
+  let files = readFileSync(manifestPath, "utf8")
+    .split("\n")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (every > 1) files = files.filter((_, i) => i % every === 0);
+  if (limit) files = files.slice(0, limit);
+  let n = 0;
+  for (const path of files) {
+    let text: string;
+    try {
+      const raw = readFileSync(path);
+      text = (path.endsWith(".gz") ? gunzipSync(raw) : raw).toString("utf8");
+    } catch {
+      continue;
+    }
+    const combats: any[] = [];
+    try {
+      const parser = new GladLogParser();
+      parser.on("match", (m: any) => combats.push(toLegacyMatch(m)));
+      parser.on("shuffle", (sh: any) => {
+        for (const r of toLegacyShuffle(sh).rounds ?? []) combats.push(r);
+      });
+      for (const line of text.split("\n")) parser.push(line);
+      parser.end();
+    } catch {
+      continue;
+    }
+    n++;
+    if (n % 500 === 0) progress(n);
+    for (const legacy of combats) {
+      const units: ICombatUnit[] = Object.values(legacy.units ?? {});
+      const players = units.filter((u) => u.info);
+      const byTeam = new Map<string, ICombatUnit[]>();
+      for (const p of players) {
+        const tid = String(p.info?.teamId ?? "?");
+        byTeam.set(tid, [...(byTeam.get(tid) ?? []), p]);
+      }
+      if (byTeam.size !== 2) continue;
+      const durMin = Math.max((legacy.endTime - legacy.startTime) / 60000, 0.5);
+      if (durMin < 1) continue; // same ≥ 60 s floor as the library path
+      for (const [tid, team] of byTeam) {
+        const other = [...byTeam.entries()].find(([k]) => k !== tid)![1];
+        yield {
+          friends: team,
+          enemyIds: new Set(other.map((o) => o.id)),
+          startMs: legacy.startTime,
+          durMin,
+        };
+      }
+    }
+  }
+}
+
+async function main(): Promise<void> {
+  await ensureAnalysisData();
+  const limit = argOf("--n", 400);
+  const manifest = process.argv.includes("--manifest")
+    ? process.argv[process.argv.indexOf("--manifest") + 1]
+    : undefined;
+  const every = argOf("--every", 1);
+  const fileLimit = argOf("--limit", 0);
+  type Acc = { players: number; minutes: number; swaps: number[] };
+  const acc = new Map<string, Acc>(); // key = filter|role|k
+  const events = new Map<Filter, Map<string, number>>(
+    FILTERS.map((f) => [f, new Map()]),
+  );
+  let rounds = 0;
+  const sides = manifest
+    ? archiveSides(manifest, every, fileLimit, (n) =>
+        console.error(`… ${n} files`),
+      )
+    : librarySides(limit);
+  for (const side of sides) {
+    const { friends, enemyIds, startMs, durMin } = side;
     rounds++;
     for (const f of friends) {
       const role = isHealerSpec(f.spec) ? "healer" : "dps";
