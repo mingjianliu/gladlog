@@ -21,9 +21,15 @@
  * 治疗与减伤生态,跨版本读这些数字要当心。脚本会打印所用样本的时间范围。
  *
  * 用法:
- *   npx tsx packages/eval/scripts/candidateDiagnostics.ts [--n 400] [--json]
+ *   npx tsx packages/eval/scripts/candidateDiagnostics.ts [--n 400] [--json] [--owner logger|dps|healer|all]
  *
  * 读的是本机对局库(storeAccess 的 DEFAULT_MATCH_DIR),不写任何文件。
+ *
+ * `--owner`(GH #75,2026-09-12):默认 `logger` = 记录者视角(老口径,数字逐字节
+ * 不变);`dps` / `healer` / `all` 按角色枚举友方单位,每个 (回合, owner) 算一个
+ * 视角回合。本机库是一个治疗的日志,所以 `logger` ≈ `healer`,进攻侧类型
+ * (burst-into-mitigation 在 candidateFindings.ts 里是 "DPS owner only")只有
+ * `dps` 视角才可能触发 —— 「400 回合沉默」在 2026-09-12 之前全是治疗视角的沉默。
  *
  * **This scan is also the authoritative answer to "is candidate type X live?"**
  * (GH #76, registered in docs/predicate-index.md). A type can be dead five
@@ -41,13 +47,16 @@
 import {
   ensureAnalysisData,
   extractCandidateFindings,
+  isHealerSpec,
 } from "@gladlog/analysis";
+import type { ICombatUnit } from "@gladlog/parser-compat";
 
 import {
   DEFAULT_MATCH_DIR,
   loadIndex,
   loadLegacyRound,
   pickRows,
+  splitTeams,
 } from "../src/explore/storeAccess";
 
 /** `CombatResult`(packages/parser-compat/src/enums.ts):其余值(未知/平局)丢弃。 */
@@ -81,11 +90,36 @@ function argOf(flag: string, dflt: number): number {
  * decided win/loss). A type appears in `rows` iff it fired at least once —
  * that presence IS the "live" predicate the index row points at.
  */
-export async function scanCandidateIncidence(limit: number): Promise<{
+/**
+ * Whose perspective the candidate builders run from (GH #75). `logger` is the
+ * historical default — the logging player, else the first unit with a spec —
+ * and keeps every earlier number byte-identical. `dps` / `healer` / `all`
+ * enumerate FRIENDLY units by role and treat each (round, owner) pair as one
+ * perspective-round; win/loss follows the round. The library is one healer's
+ * logs, so `logger` ≈ `healer`, and offensive-side types (burst-into-mitigation
+ * is "DPS owner only" in candidateFindings.ts) can only fire under `dps`.
+ */
+export type OwnerMode = "logger" | "dps" | "healer" | "all";
+
+/** Per-perspective availability of the optional per-unit streams a non-owner
+ * may lack: absence is "unknown", never "zero" (2026-09-06 lesson). */
+export interface PerspectiveCoverage {
+  perspectives: number;
+  withCastStarts: number;
+  withPositions: number;
+}
+
+export async function scanCandidateIncidence(
+  limit: number,
+  mode: OwnerMode = "logger",
+): Promise<{
   rows: Row[];
   won: number;
   lost: number;
   span: string;
+  mode: OwnerMode;
+  rounds: number;
+  coverage: PerspectiveCoverage;
 }> {
   await ensureAnalysisData();
   const indexRows = pickRows(loadIndex(DEFAULT_MATCH_DIR), {
@@ -98,6 +132,12 @@ export async function scanCandidateIncidence(limit: number): Promise<{
   const firedLost = new Map<string, number>();
   let won = 0;
   let lost = 0;
+  let rounds = 0;
+  const coverage: PerspectiveCoverage = {
+    perspectives: 0,
+    withCastStarts: 0,
+    withPositions: 0,
+  };
 
   for (const meta of indexRows) {
     let legacy;
@@ -109,29 +149,47 @@ export async function scanCandidateIncidence(limit: number): Promise<{
     const result = (legacy as { result?: number }).result;
     if (result !== RESULT_WIN && result !== RESULT_LOSE) continue;
 
-    const units = Object.values(legacy.units).filter((u) => u.name && u.spec);
-    const owner = units.find((u) => u.id === legacy.playerId) ?? units[0];
-    if (!owner) continue;
-
-    let candidates: { type: string }[];
-    try {
-      candidates = extractCandidateFindings(legacy, owner.id);
-    } catch {
-      continue;
+    let owners: ICombatUnit[];
+    if (mode === "logger") {
+      const units = Object.values(legacy.units).filter((u) => u.name && u.spec);
+      const owner = units.find((u) => u.id === legacy.playerId) ?? units[0];
+      owners = owner ? [owner] : [];
+    } else {
+      const { friends } = splitTeams(legacy);
+      owners = friends.filter((u) =>
+        mode === "all" ? true : isHealerSpec(u.spec) === (mode === "healer"),
+      );
     }
+    if (owners.length === 0) continue;
 
-    const t = legacy.startTime;
-    if (t) {
-      if (t < minT) minT = t;
-      if (t > maxT) maxT = t;
-    }
+    let counted = false;
     const isWin = result === RESULT_WIN;
-    if (isWin) won++;
-    else lost++;
-    const bucket = isWin ? firedWon : firedLost;
-    // 「触发」= 该回合至少出现一次;不看条数,避免被每类上限影响。
-    for (const type of new Set(candidates.map((c) => c.type))) {
-      bucket.set(type, (bucket.get(type) ?? 0) + 1);
+    for (const owner of owners) {
+      let candidates: { type: string }[];
+      try {
+        candidates = extractCandidateFindings(legacy, owner.id);
+      } catch {
+        continue;
+      }
+      if (!counted) {
+        counted = true;
+        rounds++;
+        const t = legacy.startTime;
+        if (t) {
+          if (t < minT) minT = t;
+          if (t > maxT) maxT = t;
+        }
+      }
+      if (isWin) won++;
+      else lost++;
+      coverage.perspectives++;
+      if ((owner.castStartEvents?.length ?? 0) > 0) coverage.withCastStarts++;
+      if ((owner.advancedActions?.length ?? 0) > 0) coverage.withPositions++;
+      const bucket = isWin ? firedWon : firedLost;
+      // 「触发」= 该视角回合至少出现一次;不看条数,避免被每类上限影响。
+      for (const type of new Set(candidates.map((c) => c.type))) {
+        bucket.set(type, (bucket.get(type) ?? 0) + 1);
+      }
     }
   }
 
@@ -152,20 +210,46 @@ export async function scanCandidateIncidence(limit: number): Promise<{
   rows.sort((a, b) => b.deltaPp - a.deltaPp);
   const iso = (t: number) =>
     Number.isFinite(t) && t > 0 ? new Date(t).toISOString().slice(0, 10) : "?";
-  return { rows, won, lost, span: `${iso(minT)} … ${iso(maxT)}` };
+  return {
+    rows,
+    won,
+    lost,
+    span: `${iso(minT)} … ${iso(maxT)}`,
+    mode,
+    rounds,
+    coverage,
+  };
+}
+
+function ownerModeArg(): OwnerMode {
+  const i = process.argv.indexOf("--owner");
+  const v = i < 0 ? "logger" : process.argv[i + 1];
+  if (v === "logger" || v === "dps" || v === "healer" || v === "all") return v;
+  throw new Error(`--owner must be logger|dps|healer|all, got ${v}`);
 }
 
 async function main(): Promise<void> {
   const limit = argOf("--n", 400);
-  const { rows, won, lost, span } = await scanCandidateIncidence(limit);
+  const mode = ownerModeArg();
+  const { rows, won, lost, span, rounds, coverage } =
+    await scanCandidateIncidence(limit, mode);
 
   if (process.argv.includes("--json")) {
-    console.log(JSON.stringify({ won, lost, span, rows }, null, 1));
+    console.log(
+      JSON.stringify(
+        { mode, rounds, coverage, won, lost, span, rows },
+        null,
+        1,
+      ),
+    );
     return;
   }
 
   console.log(
-    `回合 ${won + lost}(胜 ${won} / 负 ${lost});判别力 = 输的回合触发率 − 赢的回合触发率`,
+    `视角 ${mode}:${rounds} 回合 / ${won + lost} 视角回合(胜 ${won} / 负 ${lost});判别力 = 输的视角回合触发率 − 赢的视角回合触发率`,
+  );
+  console.log(
+    `可选字段覆盖:castStartEvents ${coverage.withCastStarts}/${coverage.perspectives},advancedActions ${coverage.withPositions}/${coverage.perspectives}(缺 = 未知,不是零)`,
   );
   console.log(`样本时间范围 ${span}\n`);
   console.log(
