@@ -20,6 +20,7 @@ import {
   CANDIDATE_TYPE_FLAGS,
 } from "./candidateTypeFlags";
 import {
+  CANDIDATE_TYPE_FLAG_KEYS,
   CANDIDATE_TYPE_REGISTRY,
   CANDIDATE_TYPE_STRINGS,
   CARD_TYPES,
@@ -31,19 +32,30 @@ import {
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ANALYSIS_DIR = join(HERE, "..", "analysis");
 
-/** Emitter sources: candidateFindings.ts + candidates/*.ts + the one mapper
- * that builds a CandidateEvent outside them (utils/killAttempts.ts →
- * attempt-into-trinket), tests excluded. */
+/** Emitter sources: every non-test .ts under packages/analysis/src that
+ * mentions `CandidateEvent` — a producer anywhere in the tree (utils/,
+ * nested dirs) is discovered, not nominated (codex review 2026-09-12: the
+ * first version listed one file, one directory and one hand-picked utility,
+ * which is the curated-list failure shape this registry exists to end). */
 function emitterSources(): string[] {
-  const files = [
-    join(ANALYSIS_DIR, "candidateFindings.ts"),
-    join(HERE, "..", "utils", "killAttempts.ts"),
-  ];
-  const dir = join(ANALYSIS_DIR, "candidates");
-  for (const f of readdirSync(dir)) {
-    if (f.endsWith(".ts") && !f.endsWith(".test.ts")) files.push(join(dir, f));
-  }
-  return files.map((f) => readFileSync(f, "utf8"));
+  const SRC = join(HERE, "..");
+  const out: string[] = [];
+  const walk = (dir: string): void => {
+    for (const ent of readdirSync(dir, { withFileTypes: true })) {
+      const p = join(dir, ent.name);
+      if (ent.isDirectory()) walk(p);
+      else if (
+        ent.name.endsWith(".ts") &&
+        !ent.name.endsWith(".test.ts") &&
+        !ent.name.endsWith(".d.ts")
+      ) {
+        const src = readFileSync(p, "utf8");
+        if (src.includes("CandidateEvent")) out.push(src);
+      }
+    }
+  };
+  walk(SRC);
+  return out;
 }
 
 /** Every `type: "kebab-case"` literal in the emitter sources. */
@@ -208,13 +220,16 @@ describe("candidateTypeRegistry: registry ⇄ code", () => {
     expect(unknown).toEqual([]);
   });
 
-  it("every flag key in the type union is carried by at least one entry, and shared flags agree", () => {
-    const flags = new Set(
+  it("every key in CANDIDATE_TYPE_FLAG_KEYS is carried by at least one entry (checked against the const list, not a registry-derived object), every entry flag is in the list, and shared flags agree", () => {
+    const carried = new Set(
       Object.values(CANDIDATE_TYPE_REGISTRY)
         .map((e) => e.flag)
         .filter((f): f is NonNullable<typeof f> => f !== undefined),
     );
-    expect([...flags].sort()).toEqual(Object.keys(CANDIDATE_TYPE_FLAGS).sort());
+    expect([...carried].sort()).toEqual([...CANDIDATE_TYPE_FLAG_KEYS].sort());
+    expect(Object.keys(CANDIDATE_TYPE_FLAGS).sort()).toEqual(
+      [...CANDIDATE_TYPE_FLAG_KEYS].sort(),
+    );
     expect(() => deriveCandidateTypeFlags()).not.toThrow();
   });
 

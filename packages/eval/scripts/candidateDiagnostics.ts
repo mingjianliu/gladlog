@@ -31,18 +31,27 @@
  * (burst-into-mitigation 在 candidateFindings.ts 里是 "DPS owner only")只有
  * `dps` 视角才可能触发 —— 「400 回合沉默」在 2026-09-12 之前全是治疗视角的沉默。
  *
- * **This scan is also the authoritative answer to "is candidate type X live?"**
- * (GH #76, registered in docs/predicate-index.md). A type can be dead five
- * different ways — `CANDIDATE_TYPE_FLAGS` false, emitter kept but no longer
- * called from the assembly, emitter deleted, `BRACKET_TYPE_ALLOWLIST`, or the
- * desktop's `IGNORED_CANDIDATE_TYPES` — and none of those places lists the
- * other four. Four independent code-reading counts of "how many types are
- * live" came out 49 → 47 → 37 → 31, each missing a different mechanism; the
- * observed set from `scanCandidateIncidence` (16 types on 400 rounds,
- * 2026-09-06) was the only correct one. Consumers that need the live set read
- * this scan's `--json` output, never a hand roster: the coach-corpus negative
- * control (`tools/coach-corpus/negative_control.py --universe <file>`, GH #74)
- * is the first.
+ * **What this scan IS (GH #76, registered in docs/predicate-index.md):
+ * observed candidate-MENU incidence for one sample and one owner mode.**
+ * A type appearing in `rows` proves it fired; a type absent proves nothing —
+ * absence in 400 logger perspectives is not non-liveness (burst-into-mitigation
+ * was 0 under `logger` and 90 under `--owner dps` with no product change,
+ * GH #75). It only calls `extractCandidateFindings`, so the two desktop-derived
+ * mistake rows (missed-kick / missed-purge-kill-window) are invisible to it by
+ * construction, and it never consults the desktop ignore set (that set is not
+ * a runtime filter). Declared liveness lives in
+ * `packages/analysis/src/data/candidateTypeRegistry.ts`; this scan is the
+ * observational cross-check — "does what the table calls live actually fire" —
+ * and `--owner all` is the widest candidate-menu control. History: four
+ * code-reading counts of the live set came out 49 → 47 → 37 → 31, each missing
+ * a retirement mechanism; this scan (16 types on 400 rounds, 2026-09-06) was
+ * the only correct count, which is why consumers that need the OBSERVED set read
+ * its `--json` output rather than a hand roster (first consumer: the coach-corpus
+ * negative control, `tools/coach-corpus/negative_control.py --universe`, GH #74).
+ *
+ * Compatibility promise of the default mode: `rows` / `won` / `lost` / `span`
+ * are unchanged from before `--owner` existed; the JSON gained `mode` /
+ * `rounds` / `coverage` and the text header changed (2026-09-12).
  */
 import {
   ensureAnalysisData,
@@ -101,8 +110,14 @@ function argOf(flag: string, dflt: number): number {
  */
 export type OwnerMode = "logger" | "dps" | "healer" | "all";
 
-/** Per-perspective availability of the optional per-unit streams a non-owner
- * may lack: absence is "unknown", never "zero" (2026-09-06 lesson). */
+/** Per-perspective presence of the optional per-unit streams a non-owner may
+ * lack — counted as "≥ 1 recorded event for this unit in this round". It says
+ * the stream was recorded at all; it does NOT say a given predicate's inputs
+ * were observable at the instants it samples (the converter turns missing
+ * historical castStarts into [], so empty and unavailable look alike, and
+ * cc-avoidable reads the ENEMY's cast starts, not the owner's). Use it as a
+ * denominator caveat, never to dismiss a coverage explanation. Absence is
+ * "unknown", never "zero" (2026-09-06 lesson). */
 export interface PerspectiveCoverage {
   perspectives: number;
   withCastStarts: number;

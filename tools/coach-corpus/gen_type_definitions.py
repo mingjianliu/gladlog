@@ -25,8 +25,9 @@ HAND = {
  "death": '- "death": the log owner died. Neutral anchoring fact, not an accusation; map here only when the verdict is literally "you died here" with no further judgement.',
  # Both mana types are retired (registry status "retired", unwired 2026-08-21, value-gate kill 2026-08-16);
  # their legends left buildFindingsPrompt.ts with the wiring, so the definitions come from candidates/mana.ts.
- "mana-pressure": '- "mana-pressure" (RETIRED; candidates/mana.ts manaPressureEvents): the friendly healer sat in a contiguous OOM window — mana% below the floor for a run of samples — while the team was under damage; "you ran out of mana at a moment that mattered". Killed at the value gate 2026-08-16: detached from whether enemy burst forced the spending.',
- "mana-efficiency": '- "mana-efficiency" (RETIRED; candidates/mana.ts manaEfficiencyEvents): the healer\'s mana spent per effective healing over a window fell below the corpus band — "you spent mana inefficiently here". Killed at the value gate 2026-08-16 together with mana-pressure; successor project BACKLOG #33 (deterministic attribution, not a candidate).',
+ # Transcribed from candidates/mana.ts on 2026-09-12 (codex review caught the first paraphrase inverting both):
+ "mana-pressure": '- "mana-pressure" (RETIRED; candidates/mana.ts manaPressureEvents): the friendly healer\'s mana sat below 15 % for a contiguous window of at least 5 rendered seconds AND at least 3 of their casts were rejected (SPELL_CAST_FAILED, e.g. 法力值不足) inside that window. Whether enemy threat was active during the window is reported as a fact on the event, not required. Killed at the value gate 2026-08-16: the sentence "you ran out of mana here" is detached from whether the enemy burst forced the spending.',
+ "mana-efficiency": '- "mana-efficiency" (RETIRED; candidates/mana.ts manaEfficiencyEvents): per healing spell with at least 8 casts, compare its share of the healer\'s effective (non-overheal, non-absorbed) healing to its share of mana spent; the spell with the lowest heal-share ÷ mana-share ratio is accused when that ratio is below 0.5 — "this spell ate mana out of proportion to what it healed". No corpus band, no window. Killed at the value gate 2026-08-16 together with mana-pressure; successor project BACKLOG #33 (deterministic attribution, not a candidate).',
 }
 
 def from_prompt_ts():

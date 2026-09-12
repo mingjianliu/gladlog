@@ -49,27 +49,52 @@ TYPE_DEFS = Path(__file__).resolve().parent / "type_definitions.json"
 # DESKTOP_IGNORED_TYPES = every other registered type string (menu-only or retired/deleted).
 # CANDIDATE_TYPE_REGISTRY carries status / surface / since / issue / reason per type if a
 # script needs more than the two rosters.
-def _load_registry():
-    import functools
-    @functools.lru_cache(maxsize=1)
-    def go():
-        p = subprocess.run(["npx", "tsx", str(REPO / "packages/analysis/scripts/printCandidateTypeRegistry.ts")],
-                           capture_output=True, text=True, cwd=REPO, timeout=120)
-        if p.returncode != 0 or not p.stdout.strip():
-            raise SystemExit(f"printCandidateTypeRegistry.ts failed rc={p.returncode}: {p.stderr[-400:]!r}")
-        return json.loads(p.stdout)
-    return go()
+_REG_CACHE = None
 
-_REG = _load_registry()
-CANDIDATE_TYPE_REGISTRY = _REG["registry"]
-DESKTOP_MISTAKE_TYPES = _REG["cardTypes"]
-DESKTOP_IGNORED_TYPES = sorted(t for t, e in CANDIDATE_TYPE_REGISTRY.items()
-                               if not e.get("virtual") and t not in set(DESKTOP_MISTAKE_TYPES))
+def _load_registry():
+    """Run the TS bridge once per process. Lazy (PEP 562 `__getattr__` below) so that scripts which
+    only import DATA / read_json never need Node at all (codex review 2026-09-12); uses the repo's
+    installed tsx binary, never `npx` package acquisition; every failure mode is named."""
+    global _REG_CACHE
+    if _REG_CACHE is not None:
+        return _REG_CACHE
+    tsx = REPO / "node_modules" / ".bin" / "tsx"
+    script = REPO / "packages/analysis/scripts/printCandidateTypeRegistry.ts"
+    if not tsx.exists():
+        raise SystemExit(f"{tsx} missing — run `npm install` at the repo root (the registry bridge needs it)")
+    try:
+        p = subprocess.run([str(tsx), str(script)], capture_output=True, text=True, cwd=REPO, timeout=120)
+    except subprocess.TimeoutExpired:
+        raise SystemExit(f"{script.name} timed out after 120s")
+    if p.returncode != 0 or not p.stdout.strip():
+        raise SystemExit(f"{script.name} failed rc={p.returncode}: {p.stderr[-400:]!r}")
+    try:
+        reg = json.loads(p.stdout)
+    except json.JSONDecodeError as e:
+        raise SystemExit(f"{script.name} printed non-JSON ({e}): {p.stdout[:200]!r}")
+    for k in ("registry", "cardTypes"):
+        if k not in reg:
+            raise SystemExit(f"{script.name} output lacks {k!r}")
+    _REG_CACHE = reg
+    return reg
+
+def __getattr__(name):
+    if name == "CANDIDATE_TYPE_REGISTRY":
+        return _load_registry()["registry"]
+    if name == "DESKTOP_MISTAKE_TYPES":
+        return list(_load_registry()["cardTypes"])
+    if name == "DESKTOP_IGNORED_TYPES":
+        reg = _load_registry()
+        card = set(reg["cardTypes"])
+        return sorted(t for t, e in reg["registry"].items() if not e.get("virtual") and t not in card)
+    raise AttributeError(name)
 
 def load_type_defs():
     d = json.loads(TYPE_DEFS.read_text())
     defs = d["definitions"] if "definitions" in d else d
-    missing = [t for t in DESKTOP_MISTAKE_TYPES + DESKTOP_IGNORED_TYPES if t not in defs]
+    # Bare names inside this module do not go through __getattr__; fetch explicitly.
+    roster = __getattr__("DESKTOP_MISTAKE_TYPES") + __getattr__("DESKTOP_IGNORED_TYPES")
+    missing = [t for t in roster if t not in defs]
     if missing:
         raise SystemExit(f"type_definitions.json lacks {missing}; run gen_type_definitions.py")
     return defs

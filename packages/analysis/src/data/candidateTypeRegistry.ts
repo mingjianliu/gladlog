@@ -42,10 +42,24 @@
  * (`packages/eval/scripts/candidateDiagnostics.ts` → `scanCandidateIncidence`)
  * remains the observational truth of what actually fires.
  *
- * To resurrect a type: set `status: "live"`, re-add its MISTAKE_RULES row if
- * `surface: "card"` (the desktop test names the missing row), re-add the
- * legend if it was deleted. To retire: set `status: "retired"` with the date,
- * issue and the numbers. Nothing else to touch.
+ * What a status change DOES and DOES NOT do (codex review 2026-09-12 — the
+ * first draft of this paragraph over-promised):
+ *
+ *   - Entries with a `flag`: the status IS the switch. `retired` → the derived
+ *     flag turns false and the assembly skips the emitter; `live` → it fires.
+ *     Plus the MISTAKE_RULES row if `surface: "card"` (the desktop test names
+ *     the missing / surplus row). Nothing else to touch.
+ *   - Entries WITHOUT a `flag` (cd-waste, death, healing-gap, …): the status is
+ *     a RECORD, not a switch. Their emitters are assembled unconditionally, so
+ *     retiring one means also unwiring or deleting the emitter in
+ *     candidateFindings.ts — and the tests here cannot prove you did (a
+ *     `status: "retired"` row whose emitter still fires passes every test in
+ *     candidateTypeRegistry.test.ts; only the corpus scan shows it). The
+ *     reverse holds for `retired` unwired types (cc-locked, wasted-trinket):
+ *     flipping to `live` reconnects nothing until the assembly calls the
+ *     producer again.
+ *   - `deleted` is enforced: the test fails if a `type: "…"` literal is still
+ *     produced anywhere a CandidateEvent is built.
  */
 
 export type CandidateTypeStatus = "live" | "retired" | "deleted";
@@ -53,18 +67,23 @@ export type CandidateTypeSurface = "card" | "menu-only";
 export type CandidateTypeOrigin = "candidate" | "desktop";
 export type BracketKey = "2v2" | "3v3" | "solo";
 
-export type CandidateTypeFlagKey =
-  | "missedSyncWindow"
-  | "unsyncedBurst"
-  | "cdHoarded"
-  | "cdSpentIdle"
-  | "attemptIntoTrinket"
-  | "mdCycloneWindow"
-  | "missedPurge"
-  | "ccHeld"
-  | "killReview"
-  | "backlashDispel"
-  | "kickPriority";
+/** The exhaustive flag-key list. The type is derived from it so the test can
+ * check "every key has a registry entry" against a runtime value rather than
+ * against another registry-derived object (codex review 2026-09-12). */
+export const CANDIDATE_TYPE_FLAG_KEYS = [
+  "missedSyncWindow",
+  "unsyncedBurst",
+  "cdHoarded",
+  "cdSpentIdle",
+  "attemptIntoTrinket",
+  "mdCycloneWindow",
+  "missedPurge",
+  "ccHeld",
+  "killReview",
+  "backlashDispel",
+  "kickPriority",
+] as const;
+export type CandidateTypeFlagKey = (typeof CANDIDATE_TYPE_FLAG_KEYS)[number];
 
 export interface CandidateTypeEntry {
   status: CandidateTypeStatus;
@@ -172,8 +191,8 @@ export const CANDIDATE_TYPE_REGISTRY: Readonly<
     status: "live",
     surface: "card",
     origin: "candidate",
-    since: "2026-08-05",
-    issue: "29fec9e4",
+    since: "2026-08-07",
+    issue: "8cc944ff (候选菜单扩容第一批)",
     reason:
       "Owner healer idle on GCDs while a teammate's HP fell. Signal outcome probe 2026-08-30: looks at HP, not seconds — kept.",
   },
@@ -289,8 +308,8 @@ export const CANDIDATE_TYPE_REGISTRY: Readonly<
     status: "live",
     surface: "menu-only",
     origin: "candidate",
-    since: "2026-07-18",
-    issue: "backlog #6 (death recap)",
+    since: "2026-07-12",
+    issue: "e867e507 (SP-A T1 candidate-event types); death recap backlog #6",
     reason:
       "Neutral anchoring fact, not an accusation; the death recap panel renders it, a candidate card would double count. The side=enemy half (kill review) is the `kill-review` row below.",
   },
@@ -544,6 +563,13 @@ export function deriveCandidateTypeFlags(): Record<
       );
     }
     out[e.flag] = live;
+  }
+  for (const key of CANDIDATE_TYPE_FLAG_KEYS) {
+    if (out[key] === undefined) {
+      throw new Error(
+        `candidateTypeRegistry: flag ${key} is in CANDIDATE_TYPE_FLAG_KEYS but no registry entry carries it`,
+      );
+    }
   }
   return out as Record<CandidateTypeFlagKey, boolean>;
 }

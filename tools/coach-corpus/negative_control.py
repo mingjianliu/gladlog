@@ -34,6 +34,20 @@ from common import DATA, DESKTOP_MISTAKE_TYPES, DESKTOP_IGNORED_TYPES, load_type
 
 AGY = Path.home() / ".claude/skills/agy/scripts/agy-run.mjs"
 
+def check_generated(gen, universe, per_type):
+    """The generator must cover the requested universe exactly, k nonempty strings per type. A
+    generator that drops a hard type would otherwise raise the aggregate score unnoticed."""
+    if not isinstance(gen, dict):
+        raise SystemExit(f"generator output is not an object: {type(gen).__name__}")
+    keys = sorted(gen)
+    if keys != universe:
+        raise SystemExit(f"generator keys != universe: missing {sorted(set(universe)-set(keys))}, extra {sorted(set(keys)-set(universe))}")
+    bad = {t: v for t, v in gen.items()
+           if not isinstance(v, list) or len(v) != per_type or not all(isinstance(s, str) and s.strip() for s in v)}
+    if bad:
+        raise SystemExit(f"generator returned wrong item count/shape (want {per_type} nonempty strings each): "
+                         f"{ {t: (len(v) if isinstance(v, list) else type(v).__name__) for t, v in bad.items()} }")
+
 def observed_universe(path, defs):
     """Types observed firing in `candidateDiagnostics.ts --json` output (rows[].type, incidence > 0).
 
@@ -134,15 +148,20 @@ def main():
     gen = None
     if gen_path.exists():
         cached = read_json(gen_path)
-        if sorted(cached["gen"]) == universe:
+        # Cache identity = universe AND per-type count (codex review 2026-09-12: a key-only check
+        # silently reused 4 cached items when 40 were requested).
+        if sorted(cached["gen"]) == universe and cached.get("per_type") == a.per_type:
             gen = cached["gen"]; print(f"generated cached: {sum(len(v) for v in gen.values())} items", flush=True)
         else:
-            print(f"generated.json covers {sorted(cached['gen'])}, not the current universe — regenerating", flush=True)
+            print(f"generated.json is for {sorted(cached['gen'])} × {cached.get('per_type')}, not {len(universe)} types × {a.per_type} — regenerating", flush=True)
     if gen is None:
         t0 = time.time()
         gen = agy_call(GEN.format(n=len(universe), k=a.per_type, defs=def_block(defs, universe, "observed-firing")))["gen"]
+        check_generated(gen, universe, a.per_type)
         write_json(gen_path, {"gen": gen, "per_type": a.per_type, "generator": "agy/flash", "universe": a.universe})
         print(f"generated {sum(len(v) for v in gen.values())} coach-voice items for {len(gen)} types in {time.time()-t0:.0f}s", flush=True)
+    else:
+        check_generated(gen, universe, a.per_type)
 
     items = [{"text": t, "truth": ty} for ty, ts in gen.items() for t in ts]
     items += [{"text": t, "truth": "OUT-OF-SCOPE"} for t in distractors(a.distractors)]

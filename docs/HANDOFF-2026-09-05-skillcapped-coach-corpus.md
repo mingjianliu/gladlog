@@ -266,7 +266,10 @@ v1 4 → v2 42(4 high)。第一版「教练几乎不提 ⇒ 佐证退役」是 s
 > **单排 265 / 3v3 126 / 2v2 8 / 无 1** —— 2v2 只占 **2%**,392 个回合不受限,
 > 所以它**解释不了任何类型在 400 回合里全程沉默**。(2026-09-12 补:能解释的是**视角** ——
 > `candidateDiagnostics --owner dps` 同一 400 回合换成 792 个 DPS 视角回合后,
-> `burst-into-mitigation` 从 0 变成 11.4%(90 次),六个治疗专属类型反过来归零,GH #75。)
+> `burst-into-mitigation` 从 0 变成 11.4%(90 次);反过来六个类型在 DPS 视角归零,但原因不一样:
+> cc-avoidable / healing-gap / slow-defensive-response 是代码里的治疗门,crisis-no-response 是
+> DPS 分支缺参照表格子(`behaviorPriorGenerated.json` 无 `|dps|`),md-cyclone-window(牧师类门)与
+> backlash-dispel(按驱散者身份)只是本样本里没出现,GH #75。)
 > 记这一条是因为:机制存在 ≠ 机制在起作用,两者要分开验;而且赛季/语料构成一变(例如重新收 2v2),
 > 这个惰性结论就要重跑。
 >
