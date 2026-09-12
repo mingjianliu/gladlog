@@ -37,10 +37,36 @@ WOW_PATCH=<当前 retail build> MIN_RATING=2300 PER_BRACKET=<每 bracket 采样�
 | `WOW_PATCH`   | `unknown` | 当前 retail build 版本戳。取自 `packages/analysis/src/data/datagen-manifest.json` 的 `build` 字段(游戏数据管线已拉的当前版本)。让 SP-B2 能判语料是否过期。 |
 | `MIN_RATING`  | `2300`    | feed 服务端评分下限(群体 = 高分段)。                                                                                                                       |
 | `PER_BRACKET` | `1200`    | 每 bracket 采样场数。见下方"配额与 N_floor"。                                                                                                              |
+| `ARCHIVE_LEDGER` | _(未设)_ | 归档账本 `*.jsonl` 所在目录。与 `ARCHIVE_ROOT` 一起设置即改为从我们自己的归档建库,不走 feed —— 见下方"feed 已死"。                                          |
+| `ARCHIVE_ROOT`   | _(未设)_ | 存放 `<matchId>.txt.gz` 的目录(按日期分层)。仅在同时设了 `ARCHIVE_LEDGER` 时生效。                                                                          |
 
 `NODE_OPTIONS=--max-old-space-size=4096`:单场 Solo Shuffle 日志可达 ~30MB(6 轮整局),逐场解析后丢弃,但需抬高堆上限避免 OOM。
 
 **输出**:各 bracket stub 数、总 cell 数、体积;`validateCorpus` 0 违规;写出 `data/reference_vectors.json`。验证失败(1.5 哨兵未清零 / 非 ASCII 技能名 / N_floor 标记不一致 / 版本戳缺失)则**在写文件前** `exit 1`,不产半成品。
+
+## feed 已死 —— 改从归档重建(2026-09-11)
+
+上游 2026-09-08 关停 match search:`latestMatches` 对所有查询在 HTTP 200 里回一个
+GraphQL `SEARCH_DISABLED` 错误,当天的裁定是停止再问(`docs/DATA-COMPLIANCE.md`)。
+所以上面那条 feed 路径已经重建不了任何东西,而且**是静默失败** —— 零 stub、不报错。
+
+剩下的来源是我们自己的归档。把 builder 指过去:
+
+```bash
+ARCHIVE_LEDGER=$GLADLOG_EVAL_HOME/archive/ledger \
+ARCHIVE_ROOT=$GLADLOG_EVAL_HOME/corpus/archive-gz \
+WOW_PATCH=<build> MIN_RATING=2300 PER_BRACKET=1200 OUT=/tmp/rv.json \
+  npx tsx scripts/buildCorpus.ts
+```
+
+账本里每场都带 `bracket` 与 `playerTeamRating`,正是 feed 当初在服务端做的那层过滤,
+所以群体定义的形状不变。
+
+**归档做不到的事**:按生产语料自己的门槛复现它。2026-09-11 实测 63,309 场归档 ——
+`MIN_RATING=2300` 只有单排 **518** / 3v3 **50** / 2v2 **550**,而 50 场 3v3 会让每个
+3v3 cell 都掉到 `N_floor` 以下。降到 2100 则是 1,624 / 620 / 2,378 —— 是一份能用的语料,
+但它**改变了"对照组是谁"**,这是用户裁定,不是默认值。先建到临时 `OUT`、与线上文件
+逐项比 cell 数,再决定要不要替换生产数据。
 
 ## 配额与 N_floor(产线 vs 冒烟)
 

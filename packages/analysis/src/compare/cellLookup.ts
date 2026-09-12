@@ -27,6 +27,36 @@ export function assignBuildGroup(
  * dashboard small-N work; registered in docs/predicate-index.md). */
 export const REFERENCE_CELL_N_FLOOR = 30;
 
+/**
+ * Does the corpus actually carry a usable cell for this build group? — the
+ * question the read side has to answer BEFORE `lookupCell`, when it picks
+ * which build group to ask for (hero tree vs keystone gate, user ruling
+ * 2026-09-11).
+ *
+ * It lives here, next to `lookupCell`, because it must accept exactly what
+ * `lookupCell` accepts: same spec AND bracket, a real build cell (not a comp
+ * cell), not `insufficient`, and at or above the floor. A looser copy in the
+ * caller would pick a group `lookupCell` then cannot honour, and the answer
+ * would silently degrade to the build-agnostic cell — the exact failure this
+ * predicate exists to prevent.
+ */
+export function corpusHasBuildGroup(
+  corpus: ReferenceCorpus,
+  sel: { spec: string; bracket: string; buildGroup: string },
+  nFloor: number,
+): boolean {
+  if (sel.buildGroup === "*") return false;
+  return corpus.cells.some(
+    (c) =>
+      c.spec === sel.spec &&
+      c.bracket === sel.bracket &&
+      c.buildGroup === sel.buildGroup &&
+      !c.enemyComp &&
+      !c.insufficient &&
+      c.sampleN >= nFloor,
+  );
+}
+
 export function lookupCell(
   corpus: ReferenceCorpus,
   sel: {

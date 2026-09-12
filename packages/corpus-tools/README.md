@@ -37,10 +37,39 @@ WOW_PATCH=<current retail build> MIN_RATING=2300 PER_BRACKET=<samples per bracke
 | `WOW_PATCH`   | `unknown` | Current retail build version stamp. Taken from the `build` field of `packages/analysis/src/data/datagen-manifest.json` (the version the game-data pipeline already pulled). Lets SP-B2 judge whether the corpus is stale. |
 | `MIN_RATING`  | `2300`    | Server-side rating floor for the feed (cohort = high brackets).                                                                                                                                                           |
 | `PER_BRACKET` | `1200`    | Matches sampled per bracket. See "Quota and N_floor" below.                                                                                                                                                               |
+| `ARCHIVE_LEDGER` | _(unset)_ | Directory of archive ledger `*.jsonl`. Set together with `ARCHIVE_ROOT` to build from our own archive instead of the feed — see "The feed is gone" below.                                                             |
+| `ARCHIVE_ROOT`   | _(unset)_ | Directory holding `<matchId>.txt.gz`, nested by date. Only used when `ARCHIVE_LEDGER` is also set.                                                                                                                    |
 
 `NODE_OPTIONS=--max-old-space-size=4096`: a single Solo Shuffle log can reach ~30MB (6 rounds, full match); each match is parsed then discarded, but the heap ceiling must be raised to avoid OOM.
 
 **Output**: stub counts per bracket, total cell count, size; `validateCorpus` with 0 violations; `data/reference_vectors.json` written. On validation failure (uncleared 1.5 sentinel / non-ASCII spell names / inconsistent N_floor flags / missing version stamp) it exits 1 **before writing the file** — no half-built artifact.
+
+## The feed is gone — rebuild from the archive (2026-09-11)
+
+The upstream discontinued match search on 2026-09-08: `latestMatches` answers every
+query with a GraphQL `SEARCH_DISABLED` error inside an HTTP 200, and the ruling that day
+was to stop asking (`docs/DATA-COMPLIANCE.md`). The feed path above therefore cannot
+rebuild anything any more, and it fails **silently** — zero stubs, no error.
+
+Our own archive is what remains. Point the builder at it:
+
+```bash
+ARCHIVE_LEDGER=$GLADLOG_EVAL_HOME/archive/ledger \
+ARCHIVE_ROOT=$GLADLOG_EVAL_HOME/corpus/archive-gz \
+WOW_PATCH=<build> MIN_RATING=2300 PER_BRACKET=1200 OUT=/tmp/rv.json \
+  npx tsx scripts/buildCorpus.ts
+```
+
+The ledger carries `bracket` and `playerTeamRating` per match, i.e. exactly the filter the
+feed used to apply server-side, so the cohort definition is unchanged in shape.
+
+**What the archive cannot do**: reproduce the production corpus at its own floor. Measured
+2026-09-11 over 63,309 archived matches — at `MIN_RATING=2300` it holds **518** Solo
+Shuffle / **50** 3v3 / **550** 2v2, and 50 3v3 matches put every 3v3 cell under
+`N_floor`. Lowering `MIN_RATING` to 2100 gives 1,624 / 620 / 2,378 — a usable corpus, but
+it redefines who "the reference cohort" is, which is a user call, not a default. Build to
+a scratch `OUT`, compare cell counts against the live file, and decide before replacing
+production data.
 
 ## Quota and N_floor (production vs smoke)
 

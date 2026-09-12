@@ -13,6 +13,7 @@ import { join } from "path";
 // be dragged into main through index.ts, and none of them are used here.
 import {
   assignBuildGroup,
+  corpusHasBuildGroup,
   lookupCell,
   REFERENCE_CELL_N_FLOOR,
 } from "@gladlog/analysis/src/compare/cellLookup";
@@ -254,15 +255,32 @@ export function createCompareService(deps: {
     const decl = corpus.buildGroups[input.spec];
     const staleCorpus =
       major(corpus.wowPatchVersion) !== major(deps.gameBuild());
+    // #37 缺口二 + 用户裁定 2026-09-11: hero tree FIRST, keystone gate second.
+    // Precedence must match the corpus builder (perMatchRecord.combatToRecords).
+    //
+    // …but the two sides do not have to agree about which corpus is loaded, and
+    // that is the case that bites: a corpus built BEFORE the ruling keys
+    // Discipline cells as offensive/standard, so asking it for "Oracle" finds
+    // nothing and degrades all the way to the build-agnostic cell — strictly
+    // worse than what that corpus can actually answer. So the candidates are
+    // tried in ruling order against what the corpus REALLY carries, and only a
+    // group with a usable cell for this spec is used. New corpus → hero group;
+    // old corpus → its gate group; neither → "*", exactly as before.
     let buildGroup = "*";
-    // #37 缺口二 + 用户裁定 2026-09-11: hero tree FIRST, keystone gate as the
-    // fallback for loadouts whose hero tree cannot be resolved. Precedence must
-    // match the corpus builder exactly (perMatchRecord.combatToRecords) — the
-    // two sides key the same cell, so a disagreement here is a silent miss.
-    if (!staleCorpus && input.heroGroup && input.heroGroup !== "*")
-      buildGroup = input.heroGroup;
-    if (buildGroup === "*" && decl && !staleCorpus)
-      buildGroup = assignBuildGroup(input.talents, decl);
+    if (!staleCorpus) {
+      const candidates = [
+        input.heroGroup ?? "*",
+        decl ? assignBuildGroup(input.talents, decl) : "*",
+      ];
+      buildGroup =
+        candidates.find((g) =>
+          corpusHasBuildGroup(
+            corpus,
+            { spec: input.spec, bracket: input.bracket, buildGroup: g },
+            REFERENCE_CELL_N_FLOOR,
+          ),
+        ) ?? "*";
+    }
 
     const { cell, fellBackTo } = lookupCell(
       corpus,

@@ -47,7 +47,12 @@ const corpus: ReferenceCorpus = {
 
 function svc(
   streamText: string,
-  opts?: { apiKey?: string | null; build?: string; dir?: string },
+  opts?: {
+    apiKey?: string | null;
+    build?: string;
+    dir?: string;
+    corpus?: ReferenceCorpus;
+  },
 ) {
   const emitted: Array<{ ch: string; p: any }> = [];
   const s = createCompareService({
@@ -61,7 +66,7 @@ function svc(
         yield { delta: streamText };
       },
     }),
-    loadCorpus: () => corpus,
+    loadCorpus: () => opts?.corpus ?? corpus,
     gameBuild: () => opts?.build ?? "12.1.0.68629",
     matchesDir: opts?.dir ?? "/tmp/nonexistent-" + Math.random(),
     emit: (ch, p) => emitted.push({ ch, p }),
@@ -169,6 +174,44 @@ describe("createCompareService", () => {
     const done = emitted.find((e) => e.ch === "gladlog:compare:done")!;
     expect(done.p.result.report).toBe("You hit 0.31 vs 0.49.");
     expect(done.p.result.droppedReason).toBeNull();
+    expect(done.p.result.cellMeta.buildGroup).toBe("offensive");
+  });
+
+  // 用户裁定 2026-09-11: hero tree outranks the keystone gate. The corpus on
+  // disk decides which of the two it can actually answer, so the candidates are
+  // tried in ruling order against the cells that exist.
+  it("hero group wins when the corpus carries it", async () => {
+    const heroCorpus: ReferenceCorpus = {
+      ...corpus,
+      cells: [
+        {
+          spec: "Discipline Priest",
+          bracket: "3v3",
+          archetype: "hybrid",
+          buildGroup: "Oracle",
+          sampleN: 40,
+          insufficient: false,
+          metrics: { offensiveIndex: { p10: 0.2, p50: 0.55, p90: 0.7, n: 40 } },
+          exemplarCrises: [],
+        },
+        ...corpus.cells,
+      ],
+    };
+    const { s, emitted } = svc("{{offensiveIndex.cohortMedian}}", {
+      corpus: heroCorpus,
+    });
+    await s.run({ ...input, heroGroup: "Oracle" });
+    const done = emitted.find((e) => e.ch === "gladlog:compare:done")!;
+    expect(done.p.result.cellMeta.buildGroup).toBe("Oracle");
+  });
+
+  it("a corpus built before the ruling keeps its gate group instead of degrading", async () => {
+    // The live reference_vectors still keys Discipline as offensive/standard.
+    // Asking it for "Oracle" would find nothing; falling straight through to
+    // "*" would answer with LESS than that corpus actually knows.
+    const { s, emitted } = svc("{{offensiveIndex.cohortMedian}}");
+    await s.run({ ...input, heroGroup: "Oracle" });
+    const done = emitted.find((e) => e.ch === "gladlog:compare:done")!;
     expect(done.p.result.cellMeta.buildGroup).toBe("offensive");
   });
   it("drops prose and returns numbers-only when BOTH attempts violate claimChecker", async () => {
