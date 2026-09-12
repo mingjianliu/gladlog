@@ -64,9 +64,34 @@ WOW_PATCH=<build> MIN_RATING=2300 PER_BRACKET=1200 OUT=/tmp/rv.json \
 
 **归档做不到的事**:按生产语料自己的门槛复现它。2026-09-11 实测 63,309 场归档 ——
 `MIN_RATING=2300` 只有单排 **518** / 3v3 **50** / 2v2 **550**,而 50 场 3v3 会让每个
-3v3 cell 都掉到 `N_floor` 以下。降到 2100 则是 1,624 / 620 / 2,378 —— 是一份能用的语料,
-但它**改变了"对照组是谁"**,这是用户裁定,不是默认值。先建到临时 `OUT`、与线上文件
-逐项比 cell 数,再决定要不要替换生产数据。
+3v3 cell 都掉到 `N_floor` 以下。按那个门槛真建了一份,结果在每个维度上都劣于线上
+(可用 cell 285 → 207、可用 3v3 cell 17 → 1、治疗 cell 104 → 67),而且戒律照样拆不出
+英雄树。
+
+**门槛自 2026-09-11 起为 2100(用户裁定)。**归档在这个门槛有 1,624 / 620 / 2,378 场,
+这是 3v3 能存在、以及英雄树拆分能够到 `N_floor` 的原因。裁定接受的代价:"对照组"
+从 2300+ 变成 2100+ —— 依然是强群体,但不再是最顶端。UI 与 prompt 里没有任何地方
+写着这个门槛,它只是语料上的出处元数据(`sourceFloor`)。
+
+### 机器装不下整跑时怎么建
+
+`buildCorpus` 会把整跑的每场记录都攒在内存里再聚合,2100 档三赛制整跑在本机被系统
+杀过两次(单排日志 ~30MB/场)。cell 不跨赛制,所以一个赛制一个进程建、最后合并:
+
+```bash
+for b in "3v3" "2v2" "Rated Solo Shuffle"; do
+  BRACKETS="$b" OUT=/tmp/rv_"${b// /_}".json \
+  ARCHIVE_LEDGER=$GLADLOG_EVAL_HOME/archive/ledger \
+  ARCHIVE_ROOT=$GLADLOG_EVAL_HOME/corpus/archive-gz \
+  WOW_PATCH=<build> MIN_RATING=2100 PER_BRACKET=1200 \
+  NODE_OPTIONS=--max-old-space-size=4096 \
+    npx tsx scripts/buildCorpus.ts
+done
+npx tsx scripts/mergeCorpora.ts --out data/reference_vectors.json /tmp/rv_*.json
+```
+
+`mergeCorpora` 会拒绝 build 或评分门槛不一致的输入,也拒绝赛制重叠的输入 ——
+这正是合并能静默污染出处的两种方式。
 
 ## 配额与 N_floor(产线 vs 冒烟)
 

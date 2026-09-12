@@ -139,6 +139,40 @@ describe("aggregateCells build-split", () => {
     expect(keys).not.toContain("hybrid|offensive");
     expect(c.buildGroups["Discipline Priest"]).toBeUndefined();
   });
+  // 用户裁定 2026-09-11: 英雄树优先于 keystone 声明。于是**有 gate 声明的专精**,
+  // 记录里带的却是英雄树名 —— 分支必须按记录实际带的分组选,不能按"有没有声明"选。
+  // 按声明选的后果实测过:2100 档建库里戒律每个赛制都塌成 build-agnostic
+  // (pair 规则去数 offensive/standard,数到 0 和 0),比它本要改进的那份语料还差,
+  // 而且下游分辨不出这是"拆不动"还是"标签对不上"。
+  it("a gate-declared spec whose records carry HERO groups splits by them", () => {
+    const recs: any[] = [];
+    for (let i = 0; i < 40; i++)
+      recs.push(rec2("Discipline Priest", "hybrid", "Oracle", 0.49));
+    for (let i = 0; i < 35; i++)
+      recs.push(rec2("Discipline Priest", "hybrid", "Voidweaver", 0.2));
+    const c = aggregateCells(recs, 30, {}, [gate]);
+    const keys = c.cells.map((x) => `${x.archetype}|${x.buildGroup}`);
+    expect(keys).toContain("hybrid|Oracle");
+    expect(keys).toContain("hybrid|Voidweaver");
+    expect(keys).toContain("*|Oracle");
+    // The header keeps recording the DECLARATION (that bookkeeping is gate-only
+    // and says a gate exists for the spec); what changed is which groups the
+    // CELLS carry. validateCorpus checks the two against each other.
+    expect(c.buildGroups["Discipline Priest"]).toBeDefined();
+    expect(keys).not.toContain("hybrid|offensive");
+  });
+  it("still applies the gate pair rule when the records ARE gate-labelled", () => {
+    // one side under the floor → pool, exactly as before the 2026-09-11 change
+    const recs: any[] = [];
+    for (let i = 0; i < 40; i++)
+      recs.push(rec2("Discipline Priest", "hybrid", "offensive", 0.49));
+    for (let i = 0; i < 5; i++)
+      recs.push(rec2("Discipline Priest", "hybrid", "standard", 0.2));
+    const c = aggregateCells(recs, 30, {}, [gate]);
+    const keys = c.cells.map((x) => `${x.archetype}|${x.buildGroup}`);
+    expect(keys).toContain("hybrid|*");
+    expect(keys).not.toContain("hybrid|offensive");
+  });
   it("leaves non-gated specs exactly as SP-B1 (archetype×* and *×*)", () => {
     const recs: any[] = [];
     for (let i = 0; i < 40; i++)

@@ -47,15 +47,29 @@ export function validateCorpus(corpus: Corpus, nFloor: number): string[] {
     //     groups into `buildGroups`; the read side matches them via
     //     CompareInput.heroGroup), so the name must come from the same
     //     talentIdMap the emission side (heroBuildGroupOf) resolves through.
-    if (c.buildGroup !== "*" && !corpus.buildGroups?.[c.spec]) {
-      if (!heroNames.has(c.buildGroup))
-        v.push(
-          `${tag}: buildGroup "${c.buildGroup}" is neither gate-declared nor a hero tree name`,
-        );
-      // Mirror of the gated post-hoc guard assertion: a surviving hero split
-      // means the viability guard held, so every build parent meets the floor.
-      else if (c.archetype === "*" && c.sampleN < nFloor)
-        v.push(`${tag}: hero build-parent below N_floor (${c.sampleN})`);
+    // 2026-09-11: the test is "is THIS cell's group one the declaration names",
+    // not "does the spec have a declaration". Since the hero tree outranks the
+    // keystone gate (user ruling), a declared spec — Discipline is the only one
+    // — now carries hero-named cells while keeping its declaration in the
+    // header. Keying on the declaration's mere existence skipped BOTH checks
+    // for exactly those cells, so a misspelled hero name on the one spec that
+    // has a gate would have validated clean.
+    if (c.buildGroup !== "*") {
+      const decl = corpus.buildGroups?.[c.spec];
+      const isDeclaredGroup =
+        !!decl &&
+        (c.buildGroup === decl.groupPresent ||
+          c.buildGroup === decl.groupAbsent);
+      if (!isDeclaredGroup) {
+        if (!heroNames.has(c.buildGroup))
+          v.push(
+            `${tag}: buildGroup "${c.buildGroup}" is neither gate-declared nor a hero tree name`,
+          );
+        // Mirror of the gated post-hoc guard assertion: a surviving hero split
+        // means the viability guard held, so every build parent meets the floor.
+        else if (c.archetype === "*" && c.sampleN < nFloor)
+          v.push(`${tag}: hero build-parent below N_floor (${c.sampleN})`);
+      }
     }
   }
   for (const [spec, d] of Object.entries(corpus.buildGroups ?? {})) {

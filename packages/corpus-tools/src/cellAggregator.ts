@@ -217,13 +217,22 @@ export function aggregateCells(
     const sb = `${r.spec}|${r.bracket}`;
     if (deactivated.has(sb)) continue;
     const g = gateBySpec.get(r.spec);
-    if (g) {
-      const nPresent =
-        buildParentCount.get(`${sb}|${g.groupPresent}`) ?? 0;
+    const groups = groupsBySb.get(sb) ?? new Set<string>();
+    // 2026-09-11: pick the branch by what the RECORDS carry, not by whether a
+    // declaration exists. Since the hero tree outranks the keystone gate
+    // (user ruling), a gate-declared spec's records now arrive labelled with
+    // hero trees — and the pair rule below then counts `offensive`/`standard`,
+    // finds 0 and 0, and pools the whole bracket. Measured before this fix:
+    // Discipline came out build-agnostic in every bracket of a 2100-floor
+    // build, i.e. WORSE than the corpus it was meant to improve, and nothing
+    // downstream could tell that apart from "the split wasn't viable".
+    const gateLabelled =
+      !!g && (groups.has(g.groupPresent) || groups.has(g.groupAbsent));
+    if (g && gateLabelled) {
+      const nPresent = buildParentCount.get(`${sb}|${g.groupPresent}`) ?? 0;
       const nAbsent = buildParentCount.get(`${sb}|${g.groupAbsent}`) ?? 0;
       if (nPresent < nFloor || nAbsent < nFloor) deactivated.add(sb);
     } else {
-      const groups = groupsBySb.get(sb) ?? new Set<string>();
       const viable =
         groups.size >= 2 &&
         [...groups].every(

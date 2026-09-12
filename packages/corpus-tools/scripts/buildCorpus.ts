@@ -13,7 +13,19 @@ import { loadGateTable } from "../src/keystoneGates";
 import { buildPerMatchRecords } from "../src/perMatchRecord";
 import { validateCorpus } from "../src/validateCorpus";
 
-const BRACKETS = ["Rated Solo Shuffle", "2v2", "3v3"];
+/**
+ * Brackets to build, comma-separated. The point of the override is memory: the
+ * builder holds every per-match record of the whole run before aggregating, and
+ * a full three-bracket 2100-floor pass was killed twice by the OS on a 64GB
+ * laptop (Solo Shuffle logs run ~30MB each). Cells are keyed BY bracket and
+ * never interact across brackets, so building one bracket per process and
+ * concatenating the `cells` arrays is equivalent to one big run — that is what
+ * `mergeCorpora.ts` does.
+ */
+const BRACKETS = (process.env.BRACKETS ?? "Rated Solo Shuffle,2v2,3v3")
+  .split(",")
+  .map((b) => b.trim())
+  .filter(Boolean);
 const MIN_RATING = Number(process.env.MIN_RATING ?? 2300);
 const PER_BRACKET = Number(process.env.PER_BRACKET ?? 1200); // enough for mainstream archetypes to clear N_floor
 // The floor is the read side's predicate (cellLookup.ts) — imported, not copied.

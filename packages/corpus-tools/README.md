@@ -66,10 +66,36 @@ feed used to apply server-side, so the cohort definition is unchanged in shape.
 **What the archive cannot do**: reproduce the production corpus at its own floor. Measured
 2026-09-11 over 63,309 archived matches — at `MIN_RATING=2300` it holds **518** Solo
 Shuffle / **50** 3v3 / **550** 2v2, and 50 3v3 matches put every 3v3 cell under
-`N_floor`. Lowering `MIN_RATING` to 2100 gives 1,624 / 620 / 2,378 — a usable corpus, but
-it redefines who "the reference cohort" is, which is a user call, not a default. Build to
-a scratch `OUT`, compare cell counts against the live file, and decide before replacing
-production data.
+`N_floor`. A build at that floor came out strictly worse than the live corpus on every
+axis (usable cells 285 → 207, usable 3v3 cells 17 → 1, healer cells 104 → 67) and still
+could not split Discipline by hero tree.
+
+**The floor is 2100 as of 2026-09-11 (user ruling).** The archive holds 1,624 / 620 /
+2,378 matches there, which is what makes 3v3 exist at all and what lets the hero-tree
+split reach `N_floor`. The trade the ruling accepts: "the reference cohort" now means
+2100+ rather than 2300+ — a strong cohort, but no longer the very top. Nothing in the UI
+or the prompt names the floor; it is provenance metadata on the corpus (`sourceFloor`).
+
+### Building it on a machine that cannot hold the whole run
+
+`buildCorpus` keeps every per-match record of the run in memory before aggregating, and a
+full three-bracket 2100-floor pass was killed twice by the OS (Solo Shuffle logs are
+~30MB each). Cells never span brackets, so build one bracket per process and merge:
+
+```bash
+for b in "3v3" "2v2" "Rated Solo Shuffle"; do
+  BRACKETS="$b" OUT=/tmp/rv_"${b// /_}".json \
+  ARCHIVE_LEDGER=$GLADLOG_EVAL_HOME/archive/ledger \
+  ARCHIVE_ROOT=$GLADLOG_EVAL_HOME/corpus/archive-gz \
+  WOW_PATCH=<build> MIN_RATING=2100 PER_BRACKET=1200 \
+  NODE_OPTIONS=--max-old-space-size=4096 \
+    npx tsx scripts/buildCorpus.ts
+done
+npx tsx scripts/mergeCorpora.ts --out data/reference_vectors.json /tmp/rv_*.json
+```
+
+`mergeCorpora` refuses inputs that disagree on build or rating floor, and refuses
+overlapping brackets — the two ways a merge can silently corrupt provenance.
 
 ## Quota and N_floor (production vs smoke)
 
