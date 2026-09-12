@@ -72,9 +72,17 @@ could not split Discipline by hero tree.
 
 **The floor is 2100 as of 2026-09-11 (user ruling).** The archive holds 1,624 / 620 /
 2,378 matches there, which is what makes 3v3 exist at all and what lets the hero-tree
-split reach `N_floor`. The trade the ruling accepts: "the reference cohort" now means
-2100+ rather than 2300+ — a strong cohort, but no longer the very top. Nothing in the UI
-or the prompt names the floor; it is provenance metadata on the corpus (`sourceFloor`).
+split reach `N_floor`.
+
+This is **not** a coverage-for-representativeness trade, which is how it was first written
+up here — the user corrected that: in this season Rank 1 tops out around **2400**, and
+above roughly 2300 there is essentially no queue. So 2100+ *is* the top of this ladder,
+and the old 2300 floor was sampling a nearly empty tail — which is exactly what the
+archive shows (518 Solo Shuffle / 50 3v3 / 550 2v2 above 2300, out of 63,309 matches).
+Re-read that number as a fact about the ladder, not about our collection.
+
+Nothing in the UI or the prompt names the floor; it is provenance metadata on the corpus
+(`sourceFloor`). Revisit the floor when the ladder's own top moves.
 
 ### Building it on a machine that cannot hold the whole run
 
