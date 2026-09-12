@@ -128,6 +128,25 @@ export const MISTAKE_RULES: readonly MistakeRule[] = [
     severity: "minor",
     source: "candidate",
   },
+  // GH #78 (2026-09-12, user rulings): the heal on the ≤ 50 % kill target
+  // inside a kill window that the owner could have kicked (cooldown, lockout
+  // and range all checked) and did not. Archive contrast +24 pp on the kill
+  // target's death within 10 s — a real, target-referenced cost. "average"
+  // until its discrimination is measured.
+  {
+    type: "kick-priority-missed",
+    label: "该踢的治疗没踢",
+    severity: "average",
+    source: "candidate",
+  },
+  // The team form: the owner could not, a teammate (in range) could. A
+  // call-out, so the lowest tier.
+  {
+    type: "kick-priority-team",
+    label: "队友能踢的治疗没人踢",
+    severity: "minor",
+    source: "candidate",
+  },
   {
     type: "external-unused",
     label: "队友阵亡时外减可用未给",
@@ -392,6 +411,10 @@ export function candidateDetail(c: CandidateEvent): string {
       return `${f.spell ?? ""} 在无威胁时段打出`;
     case "backlash-dispel":
       return `${f.t ?? "?"}s 给 ${f.targetHpPct ?? "?"}% 血的 ${f.target ?? ""} 解掉 ${f.debuff ?? ""}${f.stacks && f.stacks !== "1" ? `×${f.stacks}` : ""},自己吃 ${f.backlash ?? ""},4 秒内承伤 ${f.selfDmgBeforeK ?? "?"}k→${f.selfDmgAfterK ?? "?"}k、治疗 ${f.healBeforeK ?? "?"}k→${f.healAfterK ?? "?"}k${f.cdCcSpell ? `;驱散 CD 里 ${f.cdCcTarget ?? ""} 吃了 ${f.cdCcDurationS ?? "?"}s ${f.cdCcSpell} 无人能解` : ""}`;
+    case "kick-priority-missed":
+      return `${f.t ?? "?"}s ${f.healer ?? ""} 读 ${f.castS ?? "?"}s ${f.heal ?? ""} 奶 ${f.targetHpPct ?? "?"}% 血的击杀目标 ${f.target ?? ""}(+${f.healK ?? "?"}k),你的 ${f.kick ?? ""} 空着、${f.distanceYd ?? "?"} 码内,没踢${f.othersFeasible && f.othersFeasible !== "none" ? `;${f.othersFeasible} 也能踢` : ""}`;
+    case "kick-priority-team":
+      return `${f.t ?? "?"}s ${f.healer ?? ""} 读 ${f.castS ?? "?"}s ${f.heal ?? ""} 奶 ${f.targetHpPct ?? "?"}% 血的击杀目标 ${f.target ?? ""}(+${f.healK ?? "?"}k),你踢不了(${f.ownerWhy ?? ""}),${f.teammates ?? ""} 能踢,没人踢`;
     case "backlash-dispel-window":
       return f.reason === "immune"
         ? `${f.t ?? "?"}s ${f.target ?? ""}(${f.targetHpPct ?? "?"}%)身上的 ${f.debuff ?? ""} 可解:你当时有 ${f.immuneBuff ?? ""},反噬控制无效`

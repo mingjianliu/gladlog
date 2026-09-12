@@ -977,7 +977,13 @@ describe("F193 V2 — contested trade facts", () => {
     expect(fact.teamMinHpPct).toBe(75);
     expect(fact.ccSpellName).toBe("Psychic Scream");
     expect(fact.enemyHealerTrinket).toBe("available"); // never observed being used → presumed available by the match-start reset (ruling 2026-07-22)
-    expect(fact.enemyInterruptsReady).toBe(1); // Warrior interrupt is ready
+    // 2 since 2026-09-12 (GH #78 official interrupt kit): the Warrior's Pummel
+    // (class baseline) AND the Restoration Shaman healer's Wind Shear — a
+    // spec-tree talent, counted as available because the fixture carries no
+    // COMBATANT_INFO talent list (explicit degradation; 56.7 % of Resto
+    // Shaman archive rounds cast it). The old hand table keyed on class only
+    // and this fixture's healer has no class set, so it used to count 0.
+    expect(fact.enemyInterruptsReady).toBe(2);
 
     const lines = formatHealerOffenseForContext(summary);
     const text = lines.join("\n");

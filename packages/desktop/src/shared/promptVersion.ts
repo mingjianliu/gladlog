@@ -383,4 +383,8 @@
 //  mitigation stops firing on the ally copy, [KILL ATTEMPTS] stops reporting
 //  it as "popped Obsidian Scales", the death-window mitigation audit backs
 //  out 15/85 instead of 30/70.
-export const PROMPT_VERSION = 58;
+//  v59 (2026-09-12, GH #78, user rulings): kick-priority-missed /
+//  kick-priority-team candidate types + legends; the interrupt kit behind
+//  [ENEMY KICK] is now the official per-player table (a Holy Paladin no
+//  longer shows Rebuke, a Retribution Paladin only when the node is taken).
+export const PROMPT_VERSION = 59;

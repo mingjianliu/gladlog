@@ -84,6 +84,8 @@ describe("candidateTypeRegistry: the 2026-09-12 derivation is a no-op", () => {
       ccHeld: false,
       killReview: false,
       backlashDispel: true,
+      // + kick-priority (GH #78, 2026-09-12) — the first flag added AFTER the derivation
+      kickPriority: true,
     });
   });
 
@@ -134,7 +136,7 @@ describe("candidateTypeRegistry: the 2026-09-12 derivation is a no-op", () => {
     );
   });
 
-  it("CARD_TYPES equals the desktop MISTAKE_RULES roster as of 99cad7af (19 types)", () => {
+  it("CARD_TYPES equals the desktop MISTAKE_RULES roster as of 99cad7af (19 types) + kick-priority-missed/-team (GH #78)", () => {
     expect([...CARD_TYPES].sort()).toEqual(
       [
         "attempt-into-trinket",
@@ -145,6 +147,8 @@ describe("candidateTypeRegistry: the 2026-09-12 derivation is a no-op", () => {
         "crisis-no-response",
         "backlash-dispel",
         "backlash-dispel-window",
+        "kick-priority-missed",
+        "kick-priority-team",
         "external-unused",
         "questionable-external",
         "healing-gap",

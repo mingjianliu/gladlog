@@ -76,7 +76,6 @@ import {
 } from "../utils/dispelAnalysis";
 import { MOVEMENT_ROOT_BREAK_DISPEL_IDS } from "../utils/dispelKind";
 import { AOE_CC_SPELL_IDS } from "../utils/drAnalysis";
-import { CLASS_INTERRUPTS } from "../utils/enemyInterrupts";
 import { HEALER_AVOIDANCE_SPELLS } from "../utils/healerExposureAnalysis";
 import { PVP_TRINKET_SPELL_IDS } from "../utils/killWindowTargetSelection";
 import {
@@ -405,9 +404,10 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   t("EXTERNAL_DEFENSIVE_SPELLS", "utils/deathOutcomeAnalysis.ts", "cast", () =>
     keys(EXTERNAL_DEFENSIVE_SPELLS),
   ),
-  t("CLASS_INTERRUPTS", "utils/enemyInterrupts.ts", "cast", () =>
-    Object.values(CLASS_INTERRUPTS).map((d) => d?.spellId),
-  ),
+  // CLASS_INTERRUPTS (hand table, class-wide) was replaced 2026-09-12 by the
+  // generated data/interruptKitGenerated.json (DB2 SkillLineAbility +
+  // SpecializationSpells + talent trees) — its id universe is SPELL_CATEGORIES
+  // type "interrupts", already registered above.
   t("PVP_TRINKET_SPELL_IDS", "utils/killWindowTargetSelection.ts", "cast", () =>
     set(PVP_TRINKET_SPELL_IDS),
   ),

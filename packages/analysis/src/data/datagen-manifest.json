@@ -116,7 +116,8 @@
       "spells": 15,
       "bytes": 2463,
       "generator": "scripts/datagen/genSpellReach.ts",
-      "consumer": "utils/deathOutcomeAnalysis.ts externalReachYards (GH #34 ②)"
+      "consumer": "utils/deathOutcomeAnalysis.ts externalReachYards (GH #34 ②)",
+      "entries": 38
     },
     "kickLockoutObservedGenerated.json": {
       "kicks": 17,
@@ -147,6 +148,14 @@
     "backlashDispelPriorGenerated.json": {
       "entries": 20,
       "producer": "packages/eval/scripts/backlashDispelOutcomeProbe.ts emit-table"
+    },
+    "interruptKitGenerated.json": {
+      "entries": 23,
+      "producer": "packages/analysis/scripts/datagen/genInterruptKit.ts"
+    },
+    "kickPriorityPriorGenerated.json": {
+      "entries": 1,
+      "producer": "packages/eval/scripts/kickPriorityOutcomeProbe.ts emit-table"
     }
   }
 }

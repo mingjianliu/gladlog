@@ -28,6 +28,7 @@ import * as backlashDispel from "@gladlog/analysis/src/analysis/candidates/backl
 import * as burstWindowResponse from "@gladlog/analysis/src/analysis/candidates/burstWindowResponse";
 import * as cooldownTiming from "@gladlog/analysis/src/analysis/candidates/cooldownTiming";
 import * as death from "@gladlog/analysis/src/analysis/candidates/death";
+import * as kickPriority from "@gladlog/analysis/src/analysis/candidates/kickPriority";
 import * as candidatesShared from "@gladlog/analysis/src/analysis/candidates/shared";
 import * as cdTriggerPrior from "@gladlog/analysis/src/analysis/cdTriggerPrior";
 import * as crisisDecisionPoints from "@gladlog/analysis/src/analysis/crisisDecisionPoints";
@@ -55,11 +56,13 @@ import * as dispelObservedGenerated from "@gladlog/analysis/src/data/dispelObser
 import * as dispelVerdicts from "@gladlog/analysis/src/data/dispelVerdicts";
 import * as healerSaveCd from "@gladlog/analysis/src/data/healerSaveCd";
 import * as healingVerdicts from "@gladlog/analysis/src/data/healingVerdicts";
+import * as kickPriorityPrior from "@gladlog/analysis/src/data/kickPriorityPrior";
 import * as mitigationData from "@gladlog/analysis/src/data/mitigationData";
 import * as outcomeRefs from "@gladlog/analysis/src/data/outcomeRefs";
 import * as racialAbilities from "@gladlog/analysis/src/data/racialAbilities";
 import * as spellCategories from "@gladlog/analysis/src/data/spellCategories";
 import * as spellEffectData from "@gladlog/analysis/src/data/spellEffectData";
+import * as spellReach from "@gladlog/analysis/src/data/spellReach";
 import * as spellSchools from "@gladlog/analysis/src/data/spellSchools";
 import * as spellTags from "@gladlog/analysis/src/data/spellTags";
 import * as spellTargeting from "@gladlog/analysis/src/data/spellTargeting";
@@ -77,6 +80,7 @@ import * as dispelKind from "@gladlog/analysis/src/utils/dispelKind";
 import * as dpsMetrics from "@gladlog/analysis/src/utils/dpsMetrics";
 import * as drAnalysis from "@gladlog/analysis/src/utils/drAnalysis";
 import * as enemyCDs from "@gladlog/analysis/src/utils/enemyCDs";
+import * as enemyInterrupts from "@gladlog/analysis/src/utils/enemyInterrupts";
 import { HEALER_OFFENSE_FLAGS } from "@gladlog/analysis/src/utils/healerOffenseAnalysis";
 import * as incomingPressure from "@gladlog/analysis/src/utils/incomingPressure";
 import * as killWindowFactsMod from "@gladlog/analysis/src/utils/killWindowFacts";
@@ -744,6 +748,41 @@ const INDEX: PredicateRow[] = [
     file: `${A}/data/backlashDispelPrior.ts`,
     symbol: "backlashImmunityIds",
     mod: backlashDispelPrior,
+  },
+  {
+    file: `${A}/analysis/candidates/kickPriority.ts`,
+    symbol: "kickPriorityDecisionPoints",
+    mod: kickPriority,
+  },
+  {
+    file: `${A}/analysis/candidates/kickPriority.ts`,
+    symbol: "isOwnerMissedKick",
+    mod: kickPriority,
+  },
+  {
+    file: `${A}/analysis/candidates/kickPriority.ts`,
+    symbol: "KICK_PRIORITY_TARGET_HP_PCT",
+    mod: kickPriority,
+  },
+  {
+    file: `${A}/analysis/candidates/kickPriority.ts`,
+    symbol: "KICK_MELEE_REACH_YD",
+    mod: kickPriority,
+  },
+  {
+    file: `${A}/data/kickPriorityPrior.ts`,
+    symbol: "lookupKickPriorityPrior",
+    mod: kickPriorityPrior,
+  },
+  {
+    file: `${A}/data/spellReach.ts`,
+    symbol: "spellRangeYards",
+    mod: spellReach,
+  },
+  {
+    file: `${A}/utils/enemyInterrupts.ts`,
+    symbol: "interruptForUnit",
+    mod: enemyInterrupts,
   },
   {
     file: `${A}/analysis/crisisDecisionPoints.ts`,

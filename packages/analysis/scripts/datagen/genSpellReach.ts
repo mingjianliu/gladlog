@@ -20,8 +20,9 @@
  * Zephyr 374227 radius 20 — the hand assumption "all are 40-yard targeted
  * spells" was false for 6 of 15.
  */
-import { writeArtifact } from "./lib/emit";
 import spellIdLists from "../../src/data/spellIdLists";
+import { INTERRUPT_SPELL_IDS } from "../../src/utils/enemyInterrupts";
+import { writeArtifact } from "./lib/emit";
 import {
   assertColumns,
   fetchTable,
@@ -73,8 +74,20 @@ async function main() {
     }
   }
 
-  const ids = (spellIdLists as { externalDefensiveSpellIds: string[] })
-    .externalDefensiveSpellIds;
+  // Universe = the ally-castable externals deathOutcomeAnalysis walks ∪ every
+  // interrupt the kit table can assign (GH #78 / #88, 2026-09-12: kick range
+  // is the feasibility gate of the kick-priority decision point, and it has
+  // to come from SpellRange, not from memory — Skull Bash is 13 yd, Quell 25,
+  // Wind Shear 30, the melee kicks share the 5 yd combat range).
+  const ids = [
+    ...(spellIdLists as { externalDefensiveSpellIds: string[] })
+      .externalDefensiveSpellIds,
+    ...INTERRUPT_SPELL_IDS.filter(
+      (id) =>
+        !(spellIdLists as { externalDefensiveSpellIds: string[] })
+          .externalDefensiveSpellIds.includes(id),
+    ),
+  ];
   const out: Record<
     string,
     {

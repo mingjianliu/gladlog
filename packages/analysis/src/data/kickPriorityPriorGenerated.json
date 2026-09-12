@@ -1,0 +1,19 @@
+{
+ "meta": {
+  "corpus": "wowarenalogs archive 12.1 new season, every-3rd file (21,101 of 63,303), scanned 2026-09-12 with kickPriorityDecisionPoints (official interrupt kit, melee reach 20 yd)",
+  "generatedAt": "2026-09-12T19:25:11.532Z",
+  "files": 21101,
+  "points": 41182,
+  "hpGate": 50,
+  "generator": "kickPriorityOutcomeProbe.ts emit-table",
+  "nFloor": 50
+ },
+ "cells": {
+  "all": {
+   "nCompleted": 5180,
+   "nInterrupted": 1036,
+   "deathCompletedPct": 13,
+   "deathInterruptedPct": 36
+  }
+ }
+}

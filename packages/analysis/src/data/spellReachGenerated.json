@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-05T00:11:55.938Z",
+  "generatedAt": "2026-09-12T17:27:58.955Z",
   "build": "12.1.0.69587",
   "spells": {
     "1022": {
@@ -8,7 +8,37 @@
       "reachYards": 40,
       "source": "SpellMisc/SpellRange + SpellEffect/SpellRadius"
     },
+    "1766": {
+      "rangeYards": 5,
+      "radiusYards": 0,
+      "reachYards": 5,
+      "source": "SpellMisc/SpellRange + SpellEffect/SpellRadius"
+    },
+    "2139": {
+      "rangeYards": 40,
+      "radiusYards": 0,
+      "reachYards": 40,
+      "source": "SpellMisc/SpellRange + SpellEffect/SpellRadius"
+    },
+    "6552": {
+      "rangeYards": 5,
+      "radiusYards": 0,
+      "reachYards": 5,
+      "source": "SpellMisc/SpellRange + SpellEffect/SpellRadius"
+    },
     "6940": {
+      "rangeYards": 40,
+      "radiusYards": 0,
+      "reachYards": 40,
+      "source": "SpellMisc/SpellRange + SpellEffect/SpellRadius"
+    },
+    "15487": {
+      "rangeYards": 40,
+      "radiusYards": 0,
+      "reachYards": 40,
+      "source": "SpellMisc/SpellRange + SpellEffect/SpellRadius"
+    },
+    "19647": {
       "rangeYards": 40,
       "radiusYards": 0,
       "reachYards": 40,
@@ -20,10 +50,22 @@
       "reachYards": 40,
       "source": "radius from linked spell 465"
     },
+    "31935": {
+      "rangeYards": 30,
+      "radiusYards": 0,
+      "reachYards": 30,
+      "source": "SpellMisc/SpellRange + SpellEffect/SpellRadius"
+    },
     "33206": {
       "rangeYards": 40,
       "radiusYards": 0,
       "reachYards": 40,
+      "source": "SpellMisc/SpellRange + SpellEffect/SpellRadius"
+    },
+    "47528": {
+      "rangeYards": 15,
+      "radiusYards": 0,
+      "reachYards": 15,
       "source": "SpellMisc/SpellRange + SpellEffect/SpellRadius"
     },
     "47788": {
@@ -38,16 +80,52 @@
       "reachYards": 38,
       "source": "SpellMisc/SpellRange + SpellEffect/SpellRadius"
     },
+    "57994": {
+      "rangeYards": 30,
+      "radiusYards": 0,
+      "reachYards": 30,
+      "source": "SpellMisc/SpellRange + SpellEffect/SpellRadius"
+    },
     "62618": {
       "rangeYards": 40,
       "radiusYards": 8,
       "reachYards": 48,
       "source": "SpellMisc/SpellRange + SpellEffect/SpellRadius"
     },
+    "78675": {
+      "rangeYards": 40,
+      "radiusYards": 0,
+      "reachYards": 40,
+      "source": "SpellMisc/SpellRange + SpellEffect/SpellRadius"
+    },
+    "91807": {
+      "rangeYards": 30,
+      "radiusYards": 0,
+      "reachYards": 30,
+      "source": "SpellMisc/SpellRange + SpellEffect/SpellRadius"
+    },
+    "93985": {
+      "rangeYards": 100,
+      "radiusYards": 0,
+      "reachYards": 100,
+      "source": "SpellMisc/SpellRange + SpellEffect/SpellRadius"
+    },
+    "96231": {
+      "rangeYards": 5,
+      "radiusYards": 0,
+      "reachYards": 5,
+      "source": "SpellMisc/SpellRange + SpellEffect/SpellRadius"
+    },
     "97462": {
       "rangeYards": 0,
       "radiusYards": 40,
       "reachYards": 40,
+      "source": "SpellMisc/SpellRange + SpellEffect/SpellRadius"
+    },
+    "97547": {
+      "rangeYards": 100,
+      "radiusYards": 0,
+      "reachYards": 100,
       "source": "SpellMisc/SpellRange + SpellEffect/SpellRadius"
     },
     "98008": {
@@ -62,10 +140,52 @@
       "reachYards": 40,
       "source": "SpellMisc/SpellRange + SpellEffect/SpellRadius"
     },
+    "106839": {
+      "rangeYards": 13,
+      "radiusYards": 0,
+      "reachYards": 13,
+      "source": "SpellMisc/SpellRange + SpellEffect/SpellRadius"
+    },
+    "116705": {
+      "rangeYards": 5,
+      "radiusYards": 0,
+      "reachYards": 5,
+      "source": "SpellMisc/SpellRange + SpellEffect/SpellRadius"
+    },
     "116849": {
       "rangeYards": 40,
       "radiusYards": 0,
       "reachYards": 40,
+      "source": "SpellMisc/SpellRange + SpellEffect/SpellRadius"
+    },
+    "119910": {
+      "rangeYards": 50000,
+      "radiusYards": 0,
+      "reachYards": 50000,
+      "source": "SpellMisc/SpellRange + SpellEffect/SpellRadius"
+    },
+    "132409": {
+      "rangeYards": 40,
+      "radiusYards": 0,
+      "reachYards": 40,
+      "source": "SpellMisc/SpellRange + SpellEffect/SpellRadius"
+    },
+    "147362": {
+      "rangeYards": 40,
+      "radiusYards": 0,
+      "reachYards": 40,
+      "source": "SpellMisc/SpellRange + SpellEffect/SpellRadius"
+    },
+    "183752": {
+      "rangeYards": 5,
+      "radiusYards": 0,
+      "reachYards": 5,
+      "source": "SpellMisc/SpellRange + SpellEffect/SpellRadius"
+    },
+    "187707": {
+      "rangeYards": 5,
+      "radiusYards": 0,
+      "reachYards": 5,
       "source": "SpellMisc/SpellRange + SpellEffect/SpellRadius"
     },
     "196718": {
@@ -78,6 +198,24 @@
       "rangeYards": 40,
       "radiusYards": 0,
       "reachYards": 40,
+      "source": "SpellMisc/SpellRange + SpellEffect/SpellRadius"
+    },
+    "217824": {
+      "rangeYards": 50000,
+      "radiusYards": 8,
+      "reachYards": 50008,
+      "source": "SpellMisc/SpellRange + SpellEffect/SpellRadius"
+    },
+    "347008": {
+      "rangeYards": 30,
+      "radiusYards": 0,
+      "reachYards": 30,
+      "source": "SpellMisc/SpellRange + SpellEffect/SpellRadius"
+    },
+    "351338": {
+      "rangeYards": 25,
+      "radiusYards": 0,
+      "reachYards": 25,
       "source": "SpellMisc/SpellRange + SpellEffect/SpellRadius"
     },
     "357170": {

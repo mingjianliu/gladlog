@@ -6,6 +6,7 @@ import {
   isHealerSpec,
   specToString,
 } from "@gladlog/analysis";
+import { CANDIDATE_TYPE_FLAGS } from "@gladlog/analysis/src/data/candidateTypeFlags";
 import { GladLogParser } from "@gladlog/parser";
 import {
   CombatUnitReaction,
@@ -138,6 +139,19 @@ export async function buildCorpus(opts: {
         // for any A/B whose change lives in the candidate menu — with the bare
         // context both arms are byte-identical and eval-ab correctly aborts
         // (2026-08-30: five candidate-menu A/Bs hit exactly that).
+        // GLADLOG_CANDIDATE_FLAGS_OFF=backlashDispel,kickPriority builds a
+        // control arm on the SAME code with the named CANDIDATE_TYPE_FLAGS
+        // forced false (the harness precedent: flags are flipped by direct
+        // assignment). Same commit both arms → the only prompt delta is the
+        // candidate lines the flags gate, which is exactly the A/B question.
+        for (const key of (process.env.GLADLOG_CANDIDATE_FLAGS_OFF ?? "")
+          .split(",")
+          .map((k) => k.trim())
+          .filter(Boolean)) {
+          if (key in CANDIDATE_TYPE_FLAGS)
+            (CANDIDATE_TYPE_FLAGS as Record<string, boolean>)[key] = false;
+          else throw new Error(`GLADLOG_CANDIDATE_FLAGS_OFF: unknown flag ${key}`);
+        }
         const prompt =
           process.env.GLADLOG_CORPUS_PROMPT === "findings"
             ? buildFindingsPrompt(

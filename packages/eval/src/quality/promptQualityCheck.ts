@@ -45,6 +45,7 @@ import {
 } from "@gladlog/analysis/src/data/burstWindowPrior";
 import { lookupCdTriggerPrior } from "@gladlog/analysis/src/data/cdTriggerPrior";
 import { classMetadata } from "@gladlog/analysis/src/data/classSpells";
+import { lookupKickPriorityPrior } from "@gladlog/analysis/src/data/kickPriorityPrior";
 import { ATTEMPT_INTO_TRINKET_OUTCOME_REF } from "@gladlog/analysis/src/data/outcomeRefs";
 import {
   lookupSyncWindowPrior,
@@ -833,6 +834,32 @@ export function checkCdPriorRefConsistency(lines: string[]): string[] {
  * table the producer read, keyed by facts.refKey. Same shape as
  * checkSyncWindowRefConsistency.
  */
+/**
+ * 17th hardFailure class (GH #78, 2026-09-12): `kick-priority-missed` /
+ * `kick-priority-team` lines quote the one corpus cell of
+ * data/kickPriorityPrior.ts; re-check the four rendered ref* facts.
+ */
+export function checkKickPriorityRefConsistency(lines: string[]): string[] {
+  const failures: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+    if (!line.includes("type=kick-priority-missed ") && !line.includes("type=kick-priority-team ")) continue;
+    const m = line.match(/facts=\{(.*)\}\s*$/);
+    if (!m) { failures.push(`line ${i + 1}: kick-priority 行无 facts`); continue; }
+    const f = parseFactsBlock(m[1]!);
+    const ref = lookupKickPriorityPrior();
+    if (!ref) { failures.push(`line ${i + 1}: kick-priority 出面但参照表为空/不够样本 —— 生产者本不该发`); continue; }
+    const expect: Record<string, string> = {
+      refNCompleted: String(ref.nCompleted),
+      refNInterrupted: String(ref.nInterrupted),
+      refDeathCompleted: String(ref.deathCompletedPct),
+      refDeathInterrupted: String(ref.deathInterruptedPct),
+    };
+    for (const [key, want] of Object.entries(expect)) if (f[key] !== want) failures.push(`line ${i + 1}: kick-priority ${key}=${f[key] ?? "(缺)"} ≠ 表值 ${want}`);
+  }
+  return failures;
+}
+
 export function checkBacklashRefConsistency(lines: string[]): string[] {
   const failures: string[] = [];
   for (let i = 0; i < lines.length; i++) {
@@ -1530,6 +1557,7 @@ export function checkMatch(
   hardFailures.push(...checkBurstWindowRefConsistency(lines));
   hardFailures.push(...checkSyncWindowRefConsistency(lines));
   hardFailures.push(...checkBacklashRefConsistency(lines));
+  hardFailures.push(...checkKickPriorityRefConsistency(lines));
   hardFailures.push(...checkCdPriorRefConsistency(lines));
   hardFailures.push(...checkCrisisHpStateConsistency(lines));
   hardFailures.push(...checkOutcomeRefConsistency(lines));

@@ -63,7 +63,8 @@ export type CandidateTypeFlagKey =
   | "missedPurge"
   | "ccHeld"
   | "killReview"
-  | "backlashDispel";
+  | "backlashDispel"
+  | "kickPriority";
 
 export interface CandidateTypeEntry {
   status: CandidateTypeStatus;
@@ -222,6 +223,26 @@ export const CANDIDATE_TYPE_REGISTRY: Readonly<
     issue: "GH #80",
     reason:
       "Same flag as backlash-dispel. Wired but table-guarded silent: the product predicate's three positive cells all carry negative HP accounts (−36/−36/−14k), only the death-rate favours dispelling (selection bias).",
+  },
+  "kick-priority-missed": {
+    status: "live",
+    surface: "card",
+    origin: "candidate",
+    flag: "kickPriority",
+    since: "2026-09-12",
+    issue: "GH #78 (+ #88 range half)",
+    reason:
+      "User rulings 1/2/3 (sentence useful / 50 % HP gate / team form with distance). Enemy healer heal on our ≤ 50 % kill target inside a kill window while the owner's interrupt (official per-player kit) was off cooldown, unlocked and in range (melee 20 yd corpus-calibrated, ranged official + LoS). Archive 21k files: kicked → target dead 10 s 36 % vs completed 13 % (+23 pp, every bracket +22…+24); ~16 % of such heals get kicked. Validated 2026-09-12 (real-model smoke ×2, acceptance capture).",
+  },
+  "kick-priority-team": {
+    status: "live",
+    surface: "card",
+    origin: "candidate",
+    flag: "kickPriority",
+    since: "2026-09-12",
+    issue: "GH #78",
+    reason:
+      "Same flag and reference as kick-priority-missed; fires only when the owner could NOT kick and a teammate could (same feasibility predicate, distance included). Legend forces call-out phrasing.",
   },
   // desktop-derived mistake rows: not CandidateEvents, but the desktop's
   // MISTAKE_RULES and the coach-corpus roster both need them in the same table.

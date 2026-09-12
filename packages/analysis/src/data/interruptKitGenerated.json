@@ -1,0 +1,263 @@
+{
+  "generatedAt": "2026-09-12T17:25:47.749Z",
+  "build": "12.1.0.69587",
+  "interrupts": {
+    "1766": {
+      "name": "Kick",
+      "classBaseline": [
+        4
+      ],
+      "specBaseline": [],
+      "talent": {},
+      "pet": false
+    },
+    "2139": {
+      "name": "Counterspell",
+      "classBaseline": [
+        8
+      ],
+      "specBaseline": [],
+      "talent": {},
+      "pet": false
+    },
+    "6552": {
+      "name": "Pummel",
+      "classBaseline": [
+        1
+      ],
+      "specBaseline": [],
+      "talent": {},
+      "pet": false
+    },
+    "15487": {
+      "name": "Silence",
+      "classBaseline": [],
+      "specBaseline": [
+        258
+      ],
+      "talent": {},
+      "pet": false
+    },
+    "19647": {
+      "name": "Spell Lock",
+      "classBaseline": [],
+      "specBaseline": [],
+      "talent": {},
+      "pet": true
+    },
+    "31935": {
+      "name": "Avenger's Shield",
+      "classBaseline": [],
+      "specBaseline": [],
+      "talent": {
+        "66": {
+          "nodeId": 81502,
+          "entryId": 102471
+        }
+      },
+      "pet": false
+    },
+    "47528": {
+      "name": "Mind Freeze",
+      "classBaseline": [],
+      "specBaseline": [],
+      "talent": {
+        "250": {
+          "nodeId": 76084,
+          "entryId": 96213
+        },
+        "251": {
+          "nodeId": 76084,
+          "entryId": 96213
+        },
+        "252": {
+          "nodeId": 76084,
+          "entryId": 96213
+        }
+      },
+      "pet": false
+    },
+    "57994": {
+      "name": "Wind Shear",
+      "classBaseline": [],
+      "specBaseline": [],
+      "talent": {
+        "262": {
+          "nodeId": 103615,
+          "entryId": 127892
+        },
+        "263": {
+          "nodeId": 103615,
+          "entryId": 127892
+        },
+        "264": {
+          "nodeId": 103615,
+          "entryId": 127892
+        }
+      },
+      "pet": false
+    },
+    "78675": {
+      "name": "Solar Beam",
+      "classBaseline": [],
+      "specBaseline": [],
+      "talent": {
+        "102": {
+          "nodeId": 88231,
+          "entryId": 109867
+        }
+      },
+      "pet": false
+    },
+    "91807": {
+      "name": "Shambling Rush",
+      "classBaseline": [],
+      "specBaseline": [],
+      "talent": {},
+      "pet": false
+    },
+    "93985": {
+      "name": "Skull Bash",
+      "classBaseline": [],
+      "specBaseline": [],
+      "talent": {},
+      "pet": false
+    },
+    "96231": {
+      "name": "Rebuke",
+      "classBaseline": [],
+      "specBaseline": [],
+      "talent": {
+        "66": {
+          "nodeId": 81604,
+          "entryId": 102591
+        },
+        "70": {
+          "nodeId": 110093,
+          "entryId": 136594
+        }
+      },
+      "pet": false
+    },
+    "97547": {
+      "name": "Solar Beam",
+      "classBaseline": [],
+      "specBaseline": [],
+      "talent": {},
+      "pet": false
+    },
+    "106839": {
+      "name": "Skull Bash",
+      "classBaseline": [],
+      "specBaseline": [],
+      "talent": {
+        "103": {
+          "nodeId": 82242,
+          "entryId": 103322
+        },
+        "104": {
+          "nodeId": 82242,
+          "entryId": 103322
+        }
+      },
+      "pet": false
+    },
+    "116705": {
+      "name": "Spear Hand Strike",
+      "classBaseline": [],
+      "specBaseline": [],
+      "talent": {
+        "268": {
+          "nodeId": 101152,
+          "entryId": 124943
+        },
+        "269": {
+          "nodeId": 110098,
+          "entryId": 136599
+        }
+      },
+      "pet": false
+    },
+    "119910": {
+      "name": "Spell Lock",
+      "classBaseline": [],
+      "specBaseline": [],
+      "talent": {},
+      "pet": false
+    },
+    "132409": {
+      "name": "Spell Lock",
+      "classBaseline": [],
+      "specBaseline": [],
+      "talent": {},
+      "pet": false
+    },
+    "147362": {
+      "name": "Counter Shot",
+      "classBaseline": [],
+      "specBaseline": [],
+      "talent": {
+        "253": {
+          "nodeId": 102292,
+          "entryId": 126352
+        },
+        "254": {
+          "nodeId": 102402,
+          "entryId": 126466
+        }
+      },
+      "pet": false
+    },
+    "183752": {
+      "name": "Disrupt",
+      "classBaseline": [
+        12
+      ],
+      "specBaseline": [],
+      "talent": {},
+      "pet": false
+    },
+    "187707": {
+      "name": "Muzzle",
+      "classBaseline": [],
+      "specBaseline": [],
+      "talent": {
+        "255": {
+          "nodeId": 79837,
+          "entryId": 100543
+        }
+      },
+      "pet": false
+    },
+    "217824": {
+      "name": "Shield of Virtue",
+      "classBaseline": [],
+      "specBaseline": [],
+      "talent": {},
+      "pet": false
+    },
+    "347008": {
+      "name": "Axe Toss",
+      "classBaseline": [],
+      "specBaseline": [],
+      "talent": {},
+      "pet": false
+    },
+    "351338": {
+      "name": "Quell",
+      "classBaseline": [],
+      "specBaseline": [],
+      "talent": {
+        "1467": {
+          "nodeId": 93332,
+          "entryId": 115645
+        },
+        "1473": {
+          "nodeId": 93199,
+          "entryId": 115690
+        }
+      },
+      "pet": false
+    }
+  }
+}

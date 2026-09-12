@@ -79,6 +79,9 @@ const TYPE_LABEL: Record<string, string> = {
   // GH #80 (2026-09-12).
   "backlash-dispel": "解反噬 DoT",
   "backlash-dispel-window": "可解未解",
+  // GH #78 (2026-09-12).
+  "kick-priority-missed": "该踢没踢",
+  "kick-priority-team": "队友能踢",
 };
 
 const MAX_LABEL = 12;

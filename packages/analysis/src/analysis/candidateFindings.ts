@@ -5,6 +5,10 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
+import {
+  lookupBacklashPrior,
+  lookupBacklashWorth,
+} from "../data/backlashDispelPrior";
 import { lookupBehaviorPrior } from "../data/behaviorPrior";
 import { lookupBurstWindowPrior } from "../data/burstWindowPrior";
 import {
@@ -13,6 +17,7 @@ import {
 } from "../data/candidateTypeFlags";
 import { costNormPhrase } from "../data/curatedAbilityFacts";
 import { CORPUS_OBSERVED_DISPEL_IDS } from "../data/dispelObservedGenerated";
+import { lookupKickPriorityPrior } from "../data/kickPriorityPrior";
 import { MITIGATION_TABLE, mitigationPctFor } from "../data/mitigationData";
 import { spellEffectData } from "../data/spellEffectData";
 import { ccSpellIds } from "../data/spellTags";
@@ -79,6 +84,11 @@ import { OFFENSIVE_CD_SPELL_IDS } from "../utils/spellDanger";
 import { getTalentAvoidanceTriggers } from "../utils/talentBehaviors";
 import { matchThreatLevel, threatActiveAt } from "../utils/threatAssessment";
 import { burstWindowDecisionPoints } from "./burstWindowDecisionPoints";
+import {
+  backlashDispelDecisionPoints,
+  backlashDispelEvents,
+  backlashDispelWindowEvents,
+} from "./candidates/backlashDispel";
 import { burstWindowResponseEvents } from "./candidates/burstWindowResponse";
 import {
   cdHoardedEvents,
@@ -99,6 +109,11 @@ import {
   questionableExternalEvents,
 } from "./candidates/death";
 import {
+  kickPriorityDecisionPoints,
+  kickPriorityMissedEvents,
+  kickPriorityTeamEvents,
+} from "./candidates/kickPriority";
+import {
   CYCLONE_SPELL_ID,
   DIVINE_SHIELD_SPELL_ID,
   ICE_BLOCK_SPELL_ID,
@@ -106,15 +121,6 @@ import {
   MD_SPELL_ID,
   mdCycloneWindowEvents,
 } from "./candidates/massDispel";
-import {
-  lookupBacklashPrior,
-  lookupBacklashWorth,
-} from "../data/backlashDispelPrior";
-import {
-  backlashDispelDecisionPoints,
-  backlashDispelEvents,
-  backlashDispelWindowEvents,
-} from "./candidates/backlashDispel";
 import { CRISIS_HP_PCT, crisisDecisionPoints } from "./crisisDecisionPoints";
 import { fmtFactNum as fmt, fmtFactTime } from "./factFormat";
 import type { CandidateEvent } from "./types";
@@ -1582,6 +1588,20 @@ function teamPlayEvents(
   // dispelled in a net-positive / immune stratum and did not). One decision
   // point list, two producers; the corpus reference comes from
   // data/backlashDispelPrior.ts and checkBacklashRefConsistency re-checks it.
+  // GH #78 (2026-09-12, user rulings 1/2/3): kick-priority-missed (the owner
+  // could have kicked the heal on the low kill target and did not) and
+  // kick-priority-team (a teammate could — range included — call it out).
+  if (CANDIDATE_TYPE_FLAGS.kickPriority) {
+    try {
+      const points = kickPriorityDecisionPoints(friends, enemies, combat);
+      const probes = { lookup: lookupKickPriorityPrior };
+      out.push(...kickPriorityMissedEvents(points, owner, probes));
+      out.push(...kickPriorityTeamEvents(points, owner, probes));
+    } catch {
+      /* kick-priority not computable → types absent */
+    }
+  }
+
   if (CANDIDATE_TYPE_FLAGS.backlashDispel) {
     try {
       const points = backlashDispelDecisionPoints(

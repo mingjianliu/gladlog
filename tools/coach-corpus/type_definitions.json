@@ -1,8 +1,8 @@
 {
  "_meta": {
   "generated_from": {
-   "buildFindingsPrompt.ts": "2f955048 2026-09-12",
-   "mistakes.ts": "53ca82c1 2026-09-12"
+   "buildFindingsPrompt.ts": "81626446 2026-09-12",
+   "mistakes.ts": "81626446 2026-09-12"
   },
   "hand_written": [
    "cd-waste",
@@ -26,6 +26,8 @@
    "crisis-no-response",
    "external-unused",
    "healing-gap",
+   "kick-priority-missed",
+   "kick-priority-team",
    "missed-kick",
    "missed-purge-kill-window",
    "missed-sync-window",
@@ -74,6 +76,8 @@
   "healing-gap": "- \"healing-gap\": the healer produced no heals or casts for facts.durationS seconds starting at facts.t (the gap runs facts.t → facts.t+facts.durationS; facts.freeS of that was free of CC — time they COULD have cast), while facts.pressured (facts.pressuredSpec) took real damage and a teammate sat at facts.lowestAllyHp% HP during the gap — that crisis HP is why this gap was reported, not the gap length by itself. Coach healing rotation/triage awareness during that stretch.",
   "juked-kick": "- \"juked-kick\": your interrupt (facts.kick) was baited out by a fake cast (facts.fake) — the enemy cancelled and you kicked air. Coach kick patience/holding for the real cast.",
   "kick-eaten": "- \"kick-eaten\": your hardcast (facts.interrupted) was interrupted by facts.source's facts.kick, locking the school for facts.lockout seconds. Coach fake-casting / juking the kick.",
+  "kick-priority-missed": "- \"kick-priority-missed\": at facts.t the enemy healer facts.healer hardcast facts.heal (facts.castS s) on facts.target — the player's kill target, sitting at facts.targetHpPct% HP inside an active kill window — and it landed for facts.healK k. The player's interrupt facts.kick was off cooldown, the player was not locked out and was in range (facts.distanceYd yd), and nobody kicked it (facts.othersFeasible names teammates who could also have; \"none\" otherwise). Corpus reference (n=facts.refNCompleted completed / facts.refNInterrupted kicked casts in this state): the kill target died within 10 s facts.refDeathInterrupted% of the time when the heal was kicked vs facts.refDeathCompleted% when it completed. This is the heal that mattered — coach kick PRIORITY (save the kick for the heal on your kill target), cite the contrast as descriptive, never claim this specific kick would have killed them.",
+  "kick-priority-team": "- \"kick-priority-team\": at facts.t the enemy healer facts.healer hardcast facts.heal (facts.castS s) on facts.target — the kill target at facts.targetHpPct% HP inside a kill window — and it landed for facts.healK k. The player could NOT kick it (facts.ownerWhy), but a teammate could — facts.teammates lists who, with their interrupt and distance at cast start — and nobody did. Same corpus reference as kick-priority-missed (facts.refDeathInterrupted% vs facts.refDeathCompleted%). Phrase ONLY as communication (\"call the kick\", \"ask X to save the kick for that heal\"), never as something the player should have pressed.",
   "mana-efficiency": "- \"mana-efficiency\" (RETIRED; candidates/mana.ts manaEfficiencyEvents): the healer's mana spent per effective healing over a window fell below the corpus band — \"you spent mana inefficiently here\". Killed at the value gate 2026-08-16 together with mana-pressure; successor project BACKLOG #33 (deterministic attribution, not a candidate).",
   "mana-pressure": "- \"mana-pressure\" (RETIRED; candidates/mana.ts manaPressureEvents): the friendly healer sat in a contiguous OOM window — mana% below the floor for a run of samples — while the team was under damage; \"you ran out of mana at a moment that mattered\". Killed at the value gate 2026-08-16: detached from whether enemy burst forced the spending.",
   "md-cyclone-window": "- \"md-cyclone-window\": an enemy cyclone CHAIN (facts.cycloneHits landings on facts.targets, facts.windowFromT–facts.windowToT s) locked your teammates under real pressure (facts.pressure) while your Mass Dispel sat ready and its strategic targets were moot (facts.strategicImmunities). This is a LOW-severity \"window worth considering\", NOT a mistake claim: holding Mass Dispel is often correct, and the facts only establish this particular window had no strategic reason left to hold. Phrase as \"this was a candidate moment for Mass Dispel on the cyclone chain\" — never \"you should have\"/\"this cost you\".",

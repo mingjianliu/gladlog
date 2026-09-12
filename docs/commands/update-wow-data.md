@@ -84,6 +84,20 @@ npx tsx packages/eval/scripts/behaviorPriorScan.ts emit-table --in $R/opportunit
 #   packages/eval/scripts/kwDefAdmitScan.ts (face admissions beyond the roster, intersect with live
 #   enemy casts via kwDefDiagScan.ts) and judge each hit by hand — 2026-09-02 run found Ancient of
 #   Lore 473909 genuinely missing (added) while correctly rejecting Ice Barrier-class minors.
+# 6b-pre-6. Kick-priority reference (GH #78, 2026-09-12): kill target ≤ 50 % inside a kill window, enemy
+#   healer hardcast that healed them, ≥ 1 friendly feasible (cooldown / lockout / range) — target dead
+#   within 10 s when the heal was kicked vs completed. Corpus-driven, NOT DB2. Regenerate at season start,
+#   after genInterruptKit.ts, and whenever candidates/kickPriority.ts changes; the same run re-measures the
+#   melee reach calibration (landed melee kicks, distance at cast start) — read the report before trusting
+#   KICK_MELEE_REACH_YD. ~1 h over a 1/3 archive subset with 6 shards.
+# R=$GLADLOG_EVAL_HOME/reports/kick-priority-$(date +%F); mkdir -p $R
+# for i in 0 1 2 3 4 5; do nice -n 10 npx tsx packages/eval/scripts/kickPriorityOutcomeProbe.ts scan \
+#   --manifest <newseason manifest> --out $R/shard$i.jsonl --every 3 --offset $((i*N)) --limit N > $R/shard$i.log 2>&1 & done; wait
+# cat $R/shard*.jsonl > $R/all.jsonl
+# npx tsx packages/eval/scripts/kickPriorityOutcomeProbe.ts emit-table --in $R/all.jsonl \
+#   --corpus "wowarenalogs archive $(date +%F)" > $R/table.json \
+#   && cp $R/table.json packages/analysis/src/data/kickPriorityPriorGenerated.json
+# npx tsx packages/eval/scripts/kickPriorityOutcomeProbe.ts report --in $R/all.jsonl
 # 6b-pre-5. Backlash-dispel reference table + immunity sets (GH #80, 2026-09-12): per backlash
 #   debuff (Unstable Affliction / Vampiric Touch), what dispelling it in the accused stratum cost
 #   and saved over the archive, plus the corpus-MINED buff sets under which the backlash does not
@@ -209,6 +223,10 @@ npx tsx packages/analysis/scripts/datagen/genDrCategories.ts
 # distance check; id universe = externalDefensiveSpellIds. Darkness 196718 has
 # no radius in DB2 (stays on the hand fallback in code).
 npx tsx packages/analysis/scripts/datagen/genSpellReach.ts
+# Interrupt kit per spec (GH #78, 2026-09-12): SkillLineAbility class baseline + SpecializationSpells +
+# the talent trees (talentIdMap.json) → interruptKitGenerated.json. Rerun after fetchTalents.ts as well —
+# a moved talent node changes who can kick. Corpus cross-check: every spec with no entry casts none.
+npx tsx packages/analysis/scripts/datagen/genInterruptKit.ts
 # 6f. off-GCD active abilities table (SpellCooldowns StartRecoveryTime==0; consumed by swimlane folding)
 npx tsx packages/analysis/scripts/datagen/genOffGcd.ts
 # 6g. Damage mitigation table (#17 foundation; whitelist = big ∪ external 35 items, curated overrides in mitigationData.ts).
