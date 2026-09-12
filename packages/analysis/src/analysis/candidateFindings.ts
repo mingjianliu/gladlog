@@ -13,7 +13,7 @@ import {
 } from "../data/candidateTypeFlags";
 import { costNormPhrase } from "../data/curatedAbilityFacts";
 import { CORPUS_OBSERVED_DISPEL_IDS } from "../data/dispelObservedGenerated";
-import { MITIGATION_TABLE } from "../data/mitigationData";
+import { MITIGATION_TABLE, mitigationPctFor } from "../data/mitigationData";
 import { spellEffectData } from "../data/spellEffectData";
 import { ccSpellIds } from "../data/spellTags";
 import { lookupSyncWindowPrior } from "../data/syncWindowPrior";
@@ -2199,16 +2199,26 @@ function dpsOwnerEvents(
     for (const b of ledger) {
       const t = b.dominantTarget;
       if (!t) continue;
+      // Priced on the unit that CARRIES the aura: a Flameshaper's Obsidian
+      // Scales is 30 % on the Evoker and 15 % on the ally it was cast on, and
+      // the ally's copy sat exactly on this door until 2026-09-12.
       const hits = t.defensivesHit
         .filter((d) => !d.isImmunity)
-        .map((d) => ({ d, entry: MITIGATION_TABLE[d.spellId] }))
+        .map((d) => {
+          const entry = MITIGATION_TABLE[d.spellId];
+          return {
+            d,
+            entry,
+            pct: entry ? mitigationPctFor(entry, !d.appliedByOther) : 0,
+          };
+        })
         .filter(
-          ({ entry }) =>
+          ({ entry, pct }) =>
             !!entry &&
             !entry.positional &&
-            entry.pct >= BURST_INTO_MITIGATION_MIN_PCT,
+            pct >= BURST_INTO_MITIGATION_MIN_PCT,
         )
-        .sort((a, c) => c.entry!.pct - a.entry!.pct);
+        .sort((a, c) => c.pct - a.pct);
       const hit = hits[0];
       if (!hit) continue;
       const evals = analyzeKillWindowTargetSelection(
@@ -2229,7 +2239,7 @@ function dpsOwnerEvents(
         b,
         t,
         mitSpell: hit.d.spellName,
-        mitPct: hit.entry!.pct,
+        mitPct: hit.pct,
         betterTargetName: ev.betterTargetName,
       });
     }

@@ -1,16 +1,16 @@
 import { ICombatUnit } from "@gladlog/parser-compat";
 import { describe, expect, test } from "vitest";
 
+import { IPlayerCCTrinketSummary } from "../src/utils/ccTrinketAnalysis";
+import { IMajorCooldownInfo } from "../src/utils/cooldowns";
 import {
-  COUNTERFACTUAL_WINDOW_S,
-  DECISIVE_MARGIN_PCT,
   computeMissedExternalCounterfactuals,
   computeMitigationAudit,
   computeUnusedSelfCounterfactuals,
+  COUNTERFACTUAL_WINDOW_S,
   counterfactualTier,
+  DECISIVE_MARGIN_PCT,
 } from "../src/utils/counterfactual";
-import { IMajorCooldownInfo } from "../src/utils/cooldowns";
-import { IPlayerCCTrinketSummary } from "../src/utils/ccTrinketAnalysis";
 import { IMissedExternal } from "../src/utils/deathOutcomeAnalysis";
 
 // ---------------------------------------------------------------------------
@@ -396,5 +396,29 @@ describe("computeMissedExternalCounterfactuals(B)", () => {
       60,
     );
     expect(hits).toEqual([]);
+  });
+});
+
+describe("A 形态 × pctOnOthers:黑曜鳞片按「谁身上」定价(2026-09-12)", () => {
+  // 100k physical at 55s inside the aura interval [52,58]; death at 60.
+  const spec = () => [{ atS: 55, amount: 100_000, school: "0x1" }];
+  const aura = () => [
+    { spellId: "363916", spellName: "Obsidian Scales", fromS: 52, toS: 58 },
+  ];
+  test("受害者身上是别人(奶龙)给的黑曜鳞片 → 15%:100k × 15/85", () => {
+    // mkVictim stamps srcUnitName "Caster" ≠ the victim's name → ally-applied
+    const victim = mkVictim("v3", spec(), aura());
+    const { rows } = computeMitigationAudit(victim, combatOf(), 60);
+    const os = rows.find((r) => r.spellId === "363916")!;
+    expect(os.kind).toBe("arith");
+    expect(os.blockedAmount).toBe(Math.round((100_000 * 15) / 85));
+  });
+  test("受害者自己开的黑曜鳞片 → 30%:100k × 30/70", () => {
+    const victim = mkVictim("v4", spec(), aura());
+    for (const a of (victim as unknown as { auraEvents: Array<{ srcUnitName: string }> }).auraEvents)
+      a.srcUnitName = "v4";
+    const { rows } = computeMitigationAudit(victim, combatOf(), 60);
+    const os = rows.find((r) => r.spellId === "363916")!;
+    expect(os.blockedAmount).toBe(Math.round((100_000 * 30) / 70));
   });
 });

@@ -376,4 +376,11 @@
 //  backlash-dispel / backlash-dispel-window with their legends; the [DISPEL]
 //  annotations for a Vampiric Touch dispel now pair the real backlash aura
 //  (87204 Sin and Punishment) instead of the stale 34914.
-export const PROMPT_VERSION = 57;
+//  v58 (2026-09-12, EliteDamit claim audit, user ruling "第一条可以按你说的做"):
+//  talent-shared personal walls are priced on the unit that CARRIES the aura
+//  (`IMitigationEntry.pctOnOthers` / `mitigationPctFor`): a Flameshaper's
+//  Obsidian Scales on an ally is 15 %, not the caster's 30 % — burst-into-
+//  mitigation stops firing on the ally copy, [KILL ATTEMPTS] stops reporting
+//  it as "popped Obsidian Scales", the death-window mitigation audit backs
+//  out 15/85 instead of 30/70.
+export const PROMPT_VERSION = 58;

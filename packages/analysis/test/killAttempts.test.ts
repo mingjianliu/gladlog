@@ -274,6 +274,42 @@ describe("extractKillAttempts", () => {
       "popped Ancient of Lore",
     );
   });
+
+  it("别人给目标上的黑曜鳞片(塑焰者共享,15%)不算目标「交了减伤」;目标自己开的(30%)才算", () => {
+    const os = (src: string, atS: number, event: LogEvent): any => ({
+      spellId: "363916",
+      spellName: "Obsidian Scales",
+      srcUnitId: src,
+      srcUnitName: src,
+      destUnitId: "e1",
+      destUnitName: "e1",
+      timestamp: ms(atS),
+      logLine: { event, timestamp: ms(atS), parameters: [] },
+      auraType: "BUFF",
+    });
+    const f1 = () =>
+      unit("f1", { reaction: 1, damageOut: [dmg("f1", "e1", 12, 50_000)] });
+
+    const byAlly = unit("e1", {
+      auraEvents: [
+        ...stunAuras("e1", KIDNEY, 10, 5),
+        os("e2", 11, LogEvent.SPELL_AURA_APPLIED),
+        os("e2", 23, LogEvent.SPELL_AURA_REMOVED),
+      ],
+    });
+    const a1 = extractKillAttempts([f1()], [byAlly], makeCombat(f1(), byAlly))[0];
+    expect(a1.attribution?.defensivePopped).toEqual([]);
+
+    const bySelf = unit("e1", {
+      auraEvents: [
+        ...stunAuras("e1", KIDNEY, 10, 5),
+        os("e1", 11, LogEvent.SPELL_AURA_APPLIED),
+        os("e1", 23, LogEvent.SPELL_AURA_REMOVED),
+      ],
+    });
+    const a2 = extractKillAttempts([f1()], [bySelf], makeCombat(f1(), bySelf))[0];
+    expect(a2.attribution?.defensivePopped).toEqual(["Obsidian Scales"]);
+  });
 });
 
 describe("attemptIntoTrinketEvents(候选 mapper)", () => {

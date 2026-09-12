@@ -1,11 +1,13 @@
 import { describe, expect, test } from "vitest";
+
 import {
   MITIGATION_OVERRIDES,
   MITIGATION_TABLE,
+  mitigationPctFor,
   NO_MITIGATION_IDS,
 } from "../src/data/mitigationData";
-import spellIdLists from "../src/data/spellIdLists";
 import generatedJson from "../src/data/mitigationGenerated.json";
+import spellIdLists from "../src/data/spellIdLists";
 
 const WL = new Set([
   ...spellIdLists.bigDefensiveSpellIds,
@@ -81,5 +83,38 @@ describe("锚点(游戏事实,2026-07 人审后钉死)", () => {
       schoolMask: 0x7f,
       positional: true,
     });
+  });
+});
+
+describe("pctOnOthers(天赋共享的个人墙:一个 id、两个值,2026-09-12)", () => {
+  test("generated 层永不产出 pctOnOthers(仅 OVERRIDES 允许)", () => {
+    const gen = (generatedJson as { entries: Record<string, object> }).entries;
+    for (const [id, e] of Object.entries(gen))
+      expect("pctOnOthers" in e, id).toBe(false);
+  });
+
+  test("值域:pctOnOthers ∈ (0, pct)", () => {
+    for (const [id, e] of Object.entries(MITIGATION_TABLE)) {
+      if (e.pctOnOthers === undefined) continue;
+      expect(e.pctOnOthers, id).toBeGreaterThan(0);
+      expect(e.pctOnOthers, id).toBeLessThan(e.pct);
+    }
+  });
+
+  test("锚点:黑曜鳞片 363916 = 自己 30% / 队友 15%(塑焰者共享,语料 48.9% 上在别人身上)", () => {
+    expect(MITIGATION_TABLE["363916"]).toEqual({
+      pct: 30,
+      schoolMask: 0x7f,
+      pctOnOthers: 15,
+    });
+  });
+
+  test("mitigationPctFor:施法者自己 → pct,别人身上 → pctOnOthers,没登记的 id 两边都是 pct", () => {
+    const os = MITIGATION_TABLE["363916"]!;
+    expect(mitigationPctFor(os, true)).toBe(30);
+    expect(mitigationPctFor(os, false)).toBe(15);
+    const bark = MITIGATION_TABLE["22812"]!;
+    expect(mitigationPctFor(bark, true)).toBe(bark.pct);
+    expect(mitigationPctFor(bark, false)).toBe(bark.pct);
   });
 });

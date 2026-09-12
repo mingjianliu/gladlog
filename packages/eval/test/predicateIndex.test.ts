@@ -55,6 +55,7 @@ import * as dispelObservedGenerated from "@gladlog/analysis/src/data/dispelObser
 import * as dispelVerdicts from "@gladlog/analysis/src/data/dispelVerdicts";
 import * as healerSaveCd from "@gladlog/analysis/src/data/healerSaveCd";
 import * as healingVerdicts from "@gladlog/analysis/src/data/healingVerdicts";
+import * as mitigationData from "@gladlog/analysis/src/data/mitigationData";
 import * as outcomeRefs from "@gladlog/analysis/src/data/outcomeRefs";
 import * as racialAbilities from "@gladlog/analysis/src/data/racialAbilities";
 import * as spellCategories from "@gladlog/analysis/src/data/spellCategories";
@@ -591,6 +592,11 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/counterfactual.ts`,
     symbol: "whitelistedIntervalsInDeathWindow",
     mod: counterfactual,
+  },
+  {
+    file: `${A}/data/mitigationData.ts`,
+    symbol: "mitigationPctFor",
+    mod: mitigationData,
   },
   {
     file: `${A}/utils/cooldowns.ts`,

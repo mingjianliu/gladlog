@@ -12,6 +12,15 @@ export interface IMitigationEntry {
    * this mitigation — without that check it must not be counted.
    */
   positional?: true;
+  /**
+   * Damage-reduction percentage the SAME aura is worth when it sits on a unit
+   * other than its caster. Only for spells a talent lets the caster share with
+   * an ally at reduced effectiveness (Flameshaper Obsidian Scales: 30 % on the
+   * Evoker, 15 % on the ally it was cast on). Absent = the aura is worth `pct`
+   * on whoever carries it. Read through `mitigationPctFor` — never directly —
+   * so every consumer that prices an aura found ON a unit agrees.
+   */
+  pctOnOthers?: number;
 }
 
 /**
@@ -50,7 +59,8 @@ export const MITIGATION_OVERRIDES: Record<string, IMitigationEntry> = {
   "115203": { pct: 20, schoolMask: 0x7f }, // Fortifying Brew: the cast id's dummy effect is ±20 (wowhead currently shows -20 too); the actual buff 120954 has aura87 base value 0 filled in by script, and a separate -15 variant exists (243435, not observed). 2026-07-30 user decision: take 20%
   "357170": { pct: 50, schoolMask: 0x7f }, // Time Dilation: mechanic = proportional absorb (aura69 all schools + dummy points=50); the absorbed 50% is re-settled ~10s later (time shift) so total damage is unchanged, but on a death/burst-window basis it is equivalent to 50% mitigation. 2026-07-30 user decision: adopt that basis (the strict total-damage no-mitigation alternative was presented and rejected)
 
-  // —— Multi-row cast ids the generation layer cannot resolve (a real row plus a dead 0 slot) ——
+  // —— Talent-shared personal walls: one aura id, two values depending on who carries it ——
+  "363916": { pct: 30, schoolMask: 0x7f, pctOnOthers: 15 }, // Obsidian Scales: generated layer has the caster's 30 % (DB2 aura87 on the cast id); the Flameshaper hero tree lets the Evoker cast it ON an ally at 15 % with a reduced Renewing Blaze (EliteDamit 2026-08-22 06:30, A-tier tooltip `hi/t402.jpg`). Corpus 2026-09-12 (7,533 archive matches / 7,783 Preservation caster-cells): Flameshaper 14,179 casts → 45,205 SPELL_AURA_APPLIED (3.19 per cast), **48.9 % on a unit other than the caster**; Chronowarden 5,495 casts → 9,561 applications, 1.4 % on others. The log shape is a SPELL_CAST_SUCCESS whose dest is the ally plus an APPLIED on the caster and one on the ally at the same instant (match 4a7858a1, 14:09:19.995). Before this field every consumer priced the ally's copy at 30 % — exactly the burst-into-mitigation door (BURST_INTO_MITIGATION_MIN_PCT = 30), so bursting into a 15 % ally-copy was reported as bursting into a 30 % wall. The node is Lifecinders (444322, Flameshaper hero choice vs Draconic Instincts 445958): 1,500-file split, 512 Flameshaper cells holding Lifecinders put 48.9 % of their applications on others, the 6 holding Draconic Instincts 0 % (12/12 self) — no talent gate is needed here because the log itself says who carries the aura (dest ≠ caster), the split is recorded as the Game-Behaviour Rule's corpus evidence. Verified on the S2 archive every-30 (605 matches): dps:burst-into-mitigation 143 → 141, context lines naming Obsidian Scales 3,349 → 3,320 (kill-attempt "popped Obsidian Scales" on ally copies gone; mitigation-audit rows re-priced 30/70 → 15/85), every other candidate count unchanged.
   "386208": { pct: 15, schoolMask: 0x7f }, // Defensive Stance: DB2 aura87 on the cast id itself is -15/127, alongside a 0/126 dead slot — the generator rejects the pair as "multiple-conflicting-87-rows", the same dead-slot pattern already documented for Blessing of Protection and Cloak of Shadows (2026-08-12 audit)
 
   // —— Modifier-delivered mitigation (the cast id modifies another aura's value; there is no readable id) ——
@@ -96,3 +106,19 @@ export const MITIGATION_TABLE: Record<string, IMitigationEntry> = {
   ...gen,
   ...MITIGATION_OVERRIDES,
 };
+
+/**
+ * The percentage an aura is worth on the unit that carries it — the single
+ * predicate for pricing a mitigation aura found ON a unit (burst ledger
+ * `defensivesHit`, the kill-attempt "popped a defensive" attribution, the
+ * death-window mitigation audit). A cooldown IN HAND is always the caster's
+ * own value (`entry.pct`); only an aura observed on somebody else can be the
+ * shared copy, and only entries that declare `pctOnOthers` have one.
+ */
+export function mitigationPctFor(
+  entry: IMitigationEntry,
+  appliedToCaster: boolean,
+): number {
+  if (appliedToCaster || entry.pctOnOthers === undefined) return entry.pct;
+  return entry.pctOnOthers;
+}

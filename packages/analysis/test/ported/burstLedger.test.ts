@@ -172,6 +172,55 @@ describe("burstLedger — burst grouping and audit", () => {
     expect(hits[0].overlapSeconds).toBeCloseTo(6, 0);
   });
 
+  it("appliedByOther:别人给目标上的墙(塑焰者黑曜鳞片给队友)和目标自己开的墙分开标记", () => {
+    const mkPlayer = () =>
+      makeUnit("p1", {
+        name: "Ret",
+        spec: CombatUnitSpec.Paladin_Retribution,
+        info,
+        spellCastEvents: [
+          makeSpellCastEvent(
+            "31884",
+            MATCH_START + 10_000,
+            "p1",
+            "Self",
+            "p1",
+            "Ret",
+            0,
+            "Avenging Wrath",
+          ),
+        ],
+        damageOut: [dmgOut(MATCH_START + 12_000, -50_000, "e1")],
+      } as any);
+    // makeAuraEvent stamps srcUnitName "Source" — not the target's name "Pally"
+    // — so this is the ally-applied shape (the Evoker cast it ON the Pally).
+    const byAlly = makeUnit("e1", {
+      name: "Pally",
+      info,
+      auraEvents: [
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "363916", MATCH_START + 11_000, "evoker", "e1", "BUFF"),
+        makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, "363916", MATCH_START + 17_000, "evoker", "e1", "BUFF"),
+      ],
+    } as any);
+    const hitsAlly = analyzeBurstLedger(mkPlayer(), [], [byAlly], makeCombat())[0]
+      .dominantTarget?.defensivesHit ?? [];
+    expect(hitsAlly).toHaveLength(1);
+    expect(hitsAlly[0].appliedByOther).toBe(true);
+
+    const bySelf = makeUnit("e1", {
+      name: "Pally",
+      info,
+      auraEvents: [
+        { ...makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "363916", MATCH_START + 11_000, "e1", "e1", "BUFF"), srcUnitName: "Pally" },
+        { ...makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, "363916", MATCH_START + 17_000, "e1", "e1", "BUFF"), srcUnitName: "Pally" },
+      ],
+    } as any);
+    const hitsSelf = analyzeBurstLedger(mkPlayer(), [], [bySelf], makeCombat())[0]
+      .dominantTarget?.defensivesHit ?? [];
+    expect(hitsSelf).toHaveLength(1);
+    expect(hitsSelf[0].appliedByOther).toBe(false);
+  });
+
   it("reports ally CD overlap and target death credit (D1-B4)", () => {
     const player = makeUnit("p1", {
       name: "Ret",

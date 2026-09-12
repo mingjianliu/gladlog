@@ -294,6 +294,25 @@ describe("burst-into-mitigation(OFFENSIVE-002,2026-08-11 信号扩容批 2)", ()
     expect(events.some((e) => e.type === "burst-into-mitigation")).toBe(false);
   });
 
+  it("塑焰者给队友的黑曜鳞片(15%,别人施加)不算「打进 30% 墙」:不产出", () => {
+    // makeAuraEvent stamps srcUnitName "Source" ≠ e1's name "Tank" → the aura
+    // was applied ON the target by somebody else → mitigationPctFor → 15 < 30.
+    const { combat } = buildMitigationCombat({ mitSpellId: "363916" });
+    const events = extractCandidateFindings(combat, "p1");
+    expect(events.some((e) => e.type === "burst-into-mitigation")).toBe(false);
+  });
+
+  it("目标自己开的黑曜鳞片(30%)照旧产出,mitPct 是施法者自己的值", () => {
+    const { combat } = buildMitigationCombat({ mitSpellId: "363916" });
+    for (const a of (combat.units.e1 as { auraEvents: Array<{ srcUnitName: string }> }).auraEvents)
+      a.srcUnitName = "Tank";
+    const events = extractCandidateFindings(combat, "p1");
+    const found = events.find((e) => e.type === "burst-into-mitigation");
+    expect(found).toBeTruthy();
+    expect(found!.facts.mitSpell).toBe("Obsidian Scales");
+    expect(found!.facts.mitPct).toBe("30");
+  });
+
   it("减伤百分比低于门槛(<30%):不产出", () => {
     // Barkskin: 20% per MITIGATION_TABLE — below BURST_INTO_MITIGATION_MIN_PCT
     // (Anti-Magic Zone used to be the example at 15%; since 2026-09-04 it is the

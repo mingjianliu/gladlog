@@ -1,6 +1,10 @@
 import { ICombatUnit } from "@gladlog/parser-compat";
 
-import { IMitigationEntry, MITIGATION_TABLE } from "../data/mitigationData";
+import {
+  IMitigationEntry,
+  MITIGATION_TABLE,
+  mitigationPctFor,
+} from "../data/mitigationData";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import spellIdLists from "../data/spellIdLists";
 import { absorbContributionsInWindow } from "./absorbShields";
@@ -302,6 +306,10 @@ export function computeMitigationAudit(
     }
     if (entry.positional) continue; // Darkness class: positional conditions are not modelled this round, skip without a row
 
+    // Priced on the carrier: an ally-applied Flameshaper Obsidian Scales is
+    // 15 %, the Evoker's own is 30 % (one aura id, `pctOnOthers`).
+    const pct = mitigationPctFor(entry, iv.srcUnitName === victim.name);
+
     const observed = windowDamage(
       victim,
       overlapFrom,
@@ -310,7 +318,7 @@ export function computeMitigationAudit(
       combat.startTime,
     );
 
-    if (entry.pct >= 100) {
+    if (pct >= 100) {
       // Immunity: the divisor is zero — never back-compute; report the coverage
       // seconds and the damage observed during it, as-is.
       rows.push({
@@ -323,9 +331,7 @@ export function computeMitigationAudit(
       continue;
     }
 
-    const blockedAmount = Math.round(
-      (observed * entry.pct) / (100 - entry.pct),
-    );
+    const blockedAmount = Math.round((observed * pct) / (100 - pct));
     rows.push({
       spellId: iv.spellId,
       spellName,

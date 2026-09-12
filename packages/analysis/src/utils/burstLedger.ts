@@ -54,6 +54,11 @@ export interface IBurstDefensiveHit {
   overlapSeconds: number;
   /** true = full immunity (Divine Shield / Turtle class); false = major damage reduction. */
   isImmunity: boolean;
+  /** true = the aura was applied by a unit OTHER than the target (a talent-shared
+   * wall such as Flameshaper Obsidian Scales on an ally). Consumers price it
+   * through `mitigationPctFor(entry, !appliedByOther)`. Optional so hand-built
+   * fixtures stay valid; absent means "the target's own". */
+  appliedByOther?: boolean;
 }
 
 export interface IBurstTargetDamage {
@@ -202,6 +207,7 @@ export function analyzeBurstLedger(
           spellName: getEnglishSpellName(iv.spellId, iv.spellName),
           overlapSeconds: Math.round(overlapMs / 100) / 10,
           isImmunity: SPELLS[iv.spellId]?.type === "immunities",
+          appliedByOther: iv.srcUnitName !== target.name,
         });
       }
       defensivesHit.sort((a, b) => b.overlapSeconds - a.overlapSeconds);

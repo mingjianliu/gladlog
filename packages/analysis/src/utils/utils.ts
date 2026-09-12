@@ -60,6 +60,9 @@ export const SIGNIFICANT_DAMAGE_HEAL_THRESHOLD = 10000;
 export interface IAuraInterval {
   spellId: string;
   spellName: string;
+  /** Raw log source name of the aura (who applied it) — needed to price a
+   * talent-shared wall found on somebody other than its caster. */
+  srcUnitName: string;
   startMs: number;
   endMs: number;
 }
@@ -86,6 +89,7 @@ export function buildFilteredAuraIntervals(
     .map((iv) => ({
       spellId: iv.spellId,
       spellName: iv.spellName,
+      srcUnitName: iv.srcUnitName,
       startMs: combat.startTime + iv.fromS * 1000,
       endMs: combat.startTime + iv.toS * 1000,
     }))
