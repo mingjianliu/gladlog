@@ -23,7 +23,7 @@ Spot check: take any ordinal, diff between the two arm prompts should only diffe
 
 Execute according to the responsible party protocol in docs/commands/eval-baseline.md Step 2, differing only in paths:
 Read control/prompts/NNN-*.txt, write control/responses/<ordinal 3-digit>.txt,
-include the first-line MATCHID: <matchId> header as required. sonnet subagents, one agent per item, ≤8 concurrency.
+include the first-line MATCHID: <matchId> header as required. Opus 5 subagents (`model: "opus"`), one agent per item, ≤8 concurrency.
 
 After completion:
 
@@ -44,7 +44,7 @@ Expected: Blind pool: 200 items (100 pairs).
 ## 4. Blind Evaluation (200 items)
 
 Execute according to docs/commands/eval-ab.md Step 5; contract and anti-unblinding iron rules apply verbatim:
-One judge per item (sonnet); judge only reads blind/items/item-NN/{prompt.txt,response.txt};
+One judge per item (Opus 5); judge only reads blind/items/item-NN/{prompt.txt,response.txt};
 Seven dimensions 1–5 integers according to docs/commands/eval-baseline.md rubric; write score JSON to
 blind/scores/item-NN.json, filling matchId with blindId as a placeholder.
 The orchestrator does not read mapping/items/scores before Step 5.

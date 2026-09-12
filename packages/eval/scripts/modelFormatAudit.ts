@@ -159,12 +159,14 @@ async function main() {
     (await import("../../desktop/src/main/localAiBackends")) as typeof import("../../desktop/src/main/localAiBackends");
   const { buildCoachSystemPrompt } =
     (await import("../../desktop/src/main/ai")) as typeof import("../../desktop/src/main/ai");
+  const { AI_DEFAULT_MODEL } =
+    (await import("../../desktop/src/shared/aiModels")) as typeof import("../../desktop/src/shared/aiModels");
 
   const client =
     backend === "agy"
       ? agyClientFactory({})
       : claudeCliClientFactory({ cmd: "claude" });
-  const model = backend === "agy" ? "flash" : "claude-sonnet-5";
+  const model = backend === "agy" ? "flash" : AI_DEFAULT_MODEL.claudeCli;
 
   const files = (await requireCorpusLogs(logDir, "modelFormatAudit.ts")).sort();
 

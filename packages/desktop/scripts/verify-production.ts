@@ -29,6 +29,7 @@ import { resolveOwner } from "../src/renderer/src/report/derive/analysisInput";
 import { toLegacySafe } from "../src/renderer/src/report/derive/legacySource";
 import { buildCoachSystemPrompt } from "../src/main/ai";
 import { claudeCliClientFactory } from "../src/main/localAiBackends";
+import { AI_DEFAULT_MODEL } from "../src/shared/aiModels";
 
 const MATCH_DIR = join(
   homedir(),
@@ -96,7 +97,7 @@ async function main() {
       const callOnce = async () => {
         let raw = "";
         for await (const ev of client.stream({
-          model: "claude-sonnet-5",
+          model: AI_DEFAULT_MODEL.claudeCli,
           max_tokens: 8192,
           system: buildCoachSystemPrompt("zh"),
           messages: [{ role: "user", content: prompt }],

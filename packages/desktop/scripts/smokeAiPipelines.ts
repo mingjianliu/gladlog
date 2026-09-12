@@ -7,7 +7,7 @@
  * Run it yourself (so the key never leaves your shell):
  *   ! cd packages/desktop && ANTHROPIC_API_KEY=sk-... npx tsx scripts/smokeAiPipelines.ts
  *
- * Optional: ANTHROPIC_MODEL (default claude-sonnet-5), LOG_PATH (use a local raw
+ * Optional: ANTHROPIC_MODEL (default: the product default, AI_DEFAULT_MODEL.anthropic), LOG_PATH (use a local raw
  * combat log instead of the feed).
  */
 import { readFileSync, writeFileSync, mkdirSync } from "fs";
@@ -34,11 +34,11 @@ import {
   loadBundledCorpus,
   gameBuildFromManifest,
 } from "../src/main/corpusLoader";
-import type { AiBackend } from "../src/shared/aiModels";
+import { AI_DEFAULT_MODEL, type AiBackend } from "../src/shared/aiModels";
 
 const __dirname = join(fileURLToPath(import.meta.url), "..");
 const KEY = process.env.ANTHROPIC_API_KEY ?? null;
-const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-5";
+const MODEL = process.env.ANTHROPIC_MODEL ?? AI_DEFAULT_MODEL.anthropic;
 const MODE = process.env.MODE ?? (KEY ? "live" : "dump");
 const DIR = process.env.DUMP_DIR ?? "/tmp/smoke-replay";
 

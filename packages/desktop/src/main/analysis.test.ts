@@ -1208,13 +1208,13 @@ describe("分槽落盘(多模型对比)", () => {
     const st = await s.getState("m1");
     expect(st.slots.map((x) => x.key).sort()).toEqual([
       "anthropic:claude-opus-4-8",
-      "anthropic:claude-sonnet-5",
+      "anthropic:claude-opus-5",
     ]);
     expect(st.activeKey).toBe("anthropic:claude-opus-4-8");
     expect(st.slots.every((x) => x.stale === false)).toBe(true);
-    const oldSlot = await s.getCached("m1", "anthropic:claude-sonnet-5");
+    const oldSlot = await s.getCached("m1", "anthropic:claude-opus-5");
     expect(oldSlot).not.toBeNull();
-    expect(oldSlot!.findings[0]!.title).toBe("Death(claude-sonnet-5)");
+    expect(oldSlot!.findings[0]!.title).toBe("Death(claude-opus-5)");
     const newSlot = await s.getCached("m1", "anthropic:claude-opus-4-8");
     expect(newSlot!.findings[0]!.title).toBe("Death(claude-opus-4-8)");
   });
@@ -1241,7 +1241,7 @@ describe("分槽落盘(多模型对比)", () => {
       readFileSync(join(dir, "m1", "analysis-v2.zh.json"), "utf-8"),
     );
     expect(raw.schemaVersion).toBe(2);
-    expect(Object.keys(raw.slots)).toEqual(["anthropic:claude-sonnet-5"]);
+    expect(Object.keys(raw.slots)).toEqual(["anthropic:claude-opus-5"]);
     expect(await s.getCached("m1")).not.toBeNull();
   });
 
@@ -1292,11 +1292,11 @@ describe("分槽落盘(多模型对比)", () => {
     // override key (this new analysis)
     expect(Object.keys(raw.slots).sort()).toEqual([
       "anthropic:claude-opus-4-8",
-      "anthropic:claude-sonnet-5",
+      "anthropic:claude-opus-5",
     ]);
     expect(raw.lastSlotKey).toBe("anthropic:claude-opus-4-8");
     expect(
-      raw.slots["anthropic:claude-sonnet-5"].result.findings[0].title,
+      raw.slots["anthropic:claude-opus-5"].result.findings[0].title,
     ).toBe("v1旧分析"); // not overwritten
     expect(
       raw.slots["anthropic:claude-opus-4-8"].result.findings[0].title,
@@ -1305,7 +1305,7 @@ describe("分槽落盘(多模型对比)", () => {
       "Death(claude-opus-4-8)",
     );
     expect(
-      (await s.getCached("m1", "anthropic:claude-sonnet-5"))!.findings[0]!
+      (await s.getCached("m1", "anthropic:claude-opus-5"))!.findings[0]!
         .title,
     ).toBe("v1旧分析");
   });
@@ -1336,18 +1336,18 @@ describe("分槽落盘(多模型对比)", () => {
       spec: "s",
     });
     const active = await s.getCached("m1", "anthropic:claude-opus-4-8");
-    const other = await s.getCached("m1", "anthropic:claude-sonnet-5");
+    const other = await s.getCached("m1", "anthropic:claude-opus-5");
     expect(active!.deepened).toBe(true);
     expect(active!.findings[0]!.title).toBe("深挖后");
     expect(other!.deepened).toBeFalsy(); // the other slot is untouched
-    expect(other!.findings[0]!.title).toBe("Death(claude-sonnet-5)");
+    expect(other!.findings[0]!.title).toBe("Death(claude-opus-5)");
   });
 
   // Final review I-1: after an override round, the automatic deep dive used to
   // call the model with the *global default* backend/model from settings while
   // writing into the override slot — cross-model contamination that breaks slot
   // isolation (spec §1). This case fails before the fix (streamCalls records the
-  // global default "claude-sonnet-5" instead of the override slot's
+  // global default "claude-opus-5" instead of the override slot's
   // "claude-opus-4-8") and goes green after it.
   it("deepen 跟随 override 槽的 backend/model,不用全局默认(复核 I-1)", async () => {
     const dir = mkdtempSync(join(tmpdir(), "gl-slot-deepen-model-"));
@@ -1478,8 +1478,8 @@ describe("分槽落盘(多模型对比)", () => {
       spec: "s",
     });
     expect(warnSpy).toHaveBeenCalled();
-    // settings has no aiBackend/aiModels → defaults to anthropic:claude-sonnet-5
-    expect(streamCalls).toEqual([{ model: "claude-sonnet-5" }]);
+    // settings has no aiBackend/aiModels → defaults to anthropic:claude-opus-5
+    expect(streamCalls).toEqual([{ model: "claude-opus-5" }]);
     warnSpy.mockRestore();
   });
 
@@ -1606,7 +1606,7 @@ describe("getState 原子查询(周度复核 P2#5)", () => {
       runningMeta: {
         since: expect.any(Number),
         backend: "anthropic",
-        model: "claude-sonnet-5",
+        model: "claude-opus-5",
         retrying: false,
       },
       slots: [],
@@ -1901,7 +1901,7 @@ describe("analyzeWindow(#16 选段分析)", () => {
     expect(
       JSON.parse(
         readFileSync(join(dir, "m1", "windowAnalysis.zh.json"), "utf-8"),
-      )["anthropic:claude-sonnet-5:30-60"].entries[0].text,
+      )["anthropic:claude-opus-5:30-60"].entries[0].text,
     ).toContain("At 40s");
     const r2 = await s.analyzeWindow(input(dir));
     expect(r2.status).toBe("ok");
@@ -1956,7 +1956,7 @@ describe("analyzeWindow(#16 选段分析)", () => {
     }
     const onDisk = JSON.parse(
       readFileSync(join(dir, "m1", "windowAnalysis.zh.json"), "utf-8"),
-    )["anthropic:claude-sonnet-5:30-60"];
+    )["anthropic:claude-opus-5:30-60"];
     expect(onDisk.entries).toHaveLength(2);
     expect(onDisk.entries.map((e: { title: string }) => e.title)).toEqual([
       "控制窗口",
@@ -2009,7 +2009,7 @@ describe("analyzeWindow(#16 选段分析)", () => {
     const cachePath = join(dir, "m1", "windowAnalysis.zh.json");
     expect(existsSync(cachePath)).toBe(true);
     const cached = JSON.parse(readFileSync(cachePath, "utf-8"))[
-      "anthropic:claude-sonnet-5:30-60"
+      "anthropic:claude-opus-5:30-60"
     ];
     expect(cached).toMatchObject({ status: "empty" });
     expect(cached.entries).toBeUndefined(); // an empty terminal state must not carry a "fake" entries list
@@ -2080,8 +2080,8 @@ describe("analyzeWindow(#16 选段分析)", () => {
     // without force hit this freshly written cache as usual.
     const cachePath = join(dir, "m1", "windowAnalysis.zh.json");
     const cache = JSON.parse(readFileSync(cachePath, "utf-8"));
-    expect(Object.keys(cache)).toEqual(["anthropic:claude-sonnet-5:30-60"]);
-    expect(cache["anthropic:claude-sonnet-5:30-60"]).toMatchObject({
+    expect(Object.keys(cache)).toEqual(["anthropic:claude-opus-5:30-60"]);
+    expect(cache["anthropic:claude-opus-5:30-60"]).toMatchObject({
       status: "empty",
     });
     const r4 = await s.analyzeWindow(input(dir));
@@ -2139,8 +2139,8 @@ describe("analyzeWindow(#16 选段分析)", () => {
       );
       const keys = Object.keys(cache);
       expect(keys).toHaveLength(20);
-      expect(cache["anthropic:claude-sonnet-5:0-30"]).toBeUndefined(); // oldest (the 1st) evicted
-      expect(cache["anthropic:claude-sonnet-5:2000-2030"]).toBeDefined(); // newest (the 21st) present
+      expect(cache["anthropic:claude-opus-5:0-30"]).toBeUndefined(); // oldest (the 1st) evicted
+      expect(cache["anthropic:claude-opus-5:2000-2030"]).toBeDefined(); // newest (the 21st) present
     } finally {
       dateSpy.mockRestore();
     }
@@ -2233,8 +2233,8 @@ describe("analyzeWindow(#16 选段分析)", () => {
     );
     // Both entries present: B's write-back did not clobber the one A wrote first
     expect(Object.keys(cache).sort()).toEqual([
-      "anthropic:claude-sonnet-5:200-230",
-      "anthropic:claude-sonnet-5:30-60",
+      "anthropic:claude-opus-5:200-230",
+      "anthropic:claude-opus-5:30-60",
     ]);
   });
 
@@ -2271,7 +2271,7 @@ describe("analyzeWindow(#16 选段分析)", () => {
     const dir = mkdtempSync(join(tmpdir(), "gl-win-ver-"));
     mkdirSync(join(dir, "m1"), { recursive: true });
     const path = join(dir, "m1", "windowAnalysis.zh.json");
-    const key = "anthropic:claude-sonnet-5:30-60";
+    const key = "anthropic:claude-opus-5:30-60";
     writeFileSync(
       path,
       JSON.stringify({
@@ -2334,7 +2334,7 @@ describe("analyzeWindow(#16 选段分析)", () => {
       matchesDir: dir,
       emit: () => {},
     });
-    const r1 = await s.analyzeWindow(input(dir)); // default model claude-sonnet-5
+    const r1 = await s.analyzeWindow(input(dir)); // default model claude-opus-5
     expect(r1.status).toBe("ok");
     if (r1.status === "ok") expect(r1.fromCache).toBe(false);
     expect(calls).toBe(1);
@@ -2350,7 +2350,7 @@ describe("analyzeWindow(#16 选段分析)", () => {
     );
     expect(Object.keys(cache).sort()).toEqual([
       "anthropic:claude-opus-4-8:30-60",
-      "anthropic:claude-sonnet-5:30-60",
+      "anthropic:claude-opus-5:30-60",
     ]);
 
     // Switch back to the old model → hits that model's cache entry, no client call
@@ -2396,8 +2396,8 @@ describe("analyzeWindow(#16 选段分析)", () => {
       readFileSync(join(dir, "m1", "windowAnalysis.zh.json"), "utf-8"),
     );
     expect(Object.keys(cache).sort()).toEqual([
-      "anthropic:claude-sonnet-5:30.1-60",
-      "anthropic:claude-sonnet-5:30.8-60",
+      "anthropic:claude-opus-5:30.1-60",
+      "anthropic:claude-opus-5:30.8-60",
     ]);
     // Requesting the very same window at 0.1s precision still hits
     const r3 = await s.analyzeWindow(mk(30.1));

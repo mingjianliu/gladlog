@@ -753,12 +753,13 @@ describe("split 箭头:选用其他模型分析(Task 4)", () => {
     const menu = await screen.findByTestId("analysis-model-menu");
 
     // Global default = settings.aiBackend("anthropic") + that backend's default
-    // model (aiModels unset → AI_DEFAULT_MODEL.anthropic = claude-sonnet-5).
+    // model (aiModels unset → AI_DEFAULT_MODEL.anthropic = claude-opus-5).
     expect(
-      within(menu).getByText("Claude API · Claude Sonnet 5 (默认)"),
+      within(menu).getByText("Claude API · Claude Opus 5 (默认)"),
     ).toBeTruthy();
     // other models of the same backend appear, without the default marker
     expect(within(menu).getByText("Claude API · Claude Opus 4.8")).toBeTruthy();
+    expect(within(menu).getByText("Claude API · Claude Sonnet 5")).toBeTruthy();
     // agy's CLI path was detected → all its models appear; a non-default
     // backend carries no marker
     expect(within(menu).getByText(slotLabel("agy:flash"))).toBeTruthy();

@@ -46,6 +46,7 @@ export interface AiModelOption {
  */
 export const AI_MODELS: Record<AiBackend, AiModelOption[]> = {
   anthropic: [
+    { id: "claude-opus-5", label: "Claude Opus 5" },
     { id: "claude-opus-4-8", label: "Claude Opus 4.8" },
     { id: "claude-sonnet-5", label: "Claude Sonnet 5" },
     { id: "claude-haiku-4-5", label: "Claude Haiku 4.5" },
@@ -126,10 +127,14 @@ export const AI_MODELS: Record<AiBackend, AiModelOption[]> = {
   ],
 };
 
-/** Per-backend default when no model has been explicitly selected. */
+/** Per-backend default when no model has been explicitly selected.
+ * Anthropic backends default to Opus 5 since 2026-09-12 (user ruling: Sonnet no
+ * longer holds up). Changing a default does not re-analyze anything: the cache
+ * shows `lastSlotKey`'s slot and batch/auto-analyze skip on that, so existing
+ * Sonnet results stay visible and only new analyses land in the Opus 5 slot. */
 export const AI_DEFAULT_MODEL: Record<AiBackend, string> = {
-  anthropic: "claude-sonnet-5",
-  claudeCli: "claude-sonnet-5",
+  anthropic: "claude-opus-5",
+  claudeCli: "claude-opus-5",
   agy: "pro",
   codex: "gpt-5.5",
   codebuddy: "deepseek-v4-flash",
@@ -190,7 +195,7 @@ export function isKnownModel(backend: AiBackend, id: string): boolean {
 /**
  * The model currently in effect. All three call paths — analysis, comparison
  * and local CLI — go through here; do not write scattered defaults like
- * `settings.anthropicModel ?? "claude-sonnet-5"` again.
+ * `settings.anthropicModel ?? "<some model id>"` again.
  * If an unknown id is stored (hand-edited config file, downgrade fallback), we
  * fall back to that backend's default.
  */

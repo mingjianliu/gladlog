@@ -76,7 +76,7 @@ Writes `runs/<runId>/quality-report.json` (per-match coverage: friendly deaths/C
 
 ## Step 2: Generate Responses (Parallel Subagents)
 
-> **Execution model:** Launch subagents using in-session Agent tools; no external API keys, no new scripts created. If Agent tools are unavailable, generate per match yourself — you are an AI, do not write wrapper scripts calling external APIs.
+> **Execution model:** Launch subagents using in-session Agent tools; no external API keys, no new scripts created. Responder and judge subagents run on **Opus 5** (pass `model: "opus"` explicitly), the same model as the product's default coach (`AI_DEFAULT_MODEL`); record it in `judgeModel`. Runs before 2026-09-12 used Sonnet — do not compare scores across that switch without a fresh `/calibrate-judge`. If Agent tools are unavailable, generate per match yourself — you are an AI, do not write wrapper scripts calling external APIs.
 
 For each entry in the index, launch a **background subagent** (prompt is self-contained, substituting actual values item by item):
 

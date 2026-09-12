@@ -90,7 +90,7 @@ CI 的 `tsc -p` 包含 test 文件、且有独立 Lint 步 —— 本地 vitest 
 - **/eval-ab** —— 受控 A/B 验证某个 prompt 构建器改动(同语料、盲评、bootstrap CI)。注意 worktree 必须 `npm ci`(符号链接会静默用回主仓代码)。
 - **/calibrate-judge** —— 信任判官分数之前先校准判官。
 
-已知测量事实:单轮 accuracy Δ≲0.6 属噪声(test-retest 实测);批量 responder/judge 子代理一律用 sonnet(与产品 coach 同模型)。
+已知测量事实:单轮 accuracy Δ≲0.6 属噪声(test-retest 实测);批量 responder/judge 子代理用 Opus 5(`claude-opus-5`),与产品 coach 默认模型(`AI_DEFAULT_MODEL`)一致。2026-09-12 之前两者都是 Sonnet:在那之前记录的噪声底、判官校准和基线都是用 Sonnet responder/judge 测的,不能直接跨切换比较 —— 跨切换比较前先重跑 `/calibrate-judge` 和一轮新基线。
 
 ## 游戏数据管线
 

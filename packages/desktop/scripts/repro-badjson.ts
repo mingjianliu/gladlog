@@ -27,6 +27,7 @@ import { CombatUnitReaction } from "@gladlog/parser-compat";
 import { toLegacySafe } from "../src/renderer/src/report/derive/legacySource";
 
 import { buildCoachSystemPrompt } from "../src/main/ai";
+import { AI_DEFAULT_MODEL } from "../src/shared/aiModels";
 import {
   agyClientFactory,
   claudeCliClientFactory,
@@ -95,7 +96,7 @@ function classify(raw: string): string {
 async function main() {
   const backend = (process.argv[2] ?? "claudeCli") as "claudeCli" | "agy";
   const rounds = Number(process.argv[3] ?? 2);
-  const model = backend === "agy" ? "flash" : "claude-sonnet-5";
+  const model = backend === "agy" ? "flash" : AI_DEFAULT_MODEL.claudeCli;
   const client =
     backend === "agy"
       ? agyClientFactory({})

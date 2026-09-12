@@ -86,7 +86,7 @@ Three workflows (`docs/commands/`), with output landing in the private repo at `
 - **/eval-ab** — controlled A/B validation of a prompt-builder change (same corpus, blind scoring, bootstrap CI). Note that the worktree must run `npm ci` — symlinks will silently fall back to the main checkout's code.
 - **/calibrate-judge** — calibrate the judge before trusting its scores.
 
-Known measurement facts: a single-round accuracy Δ of ≲0.6 is noise (measured by test-retest); batch responder/judge subagents always use sonnet (the same model as the product coach).
+Known measurement facts: a single-round accuracy Δ of ≲0.6 is noise (measured by test-retest); batch responder/judge subagents use Opus 5 (`claude-opus-5`), the same model as the product coach default (`AI_DEFAULT_MODEL`). Before 2026-09-12 both were Sonnet: noise floors, judge calibrations and baselines recorded before that date were measured with a Sonnet responder/judge and are not directly comparable — re-run `/calibrate-judge` and a fresh baseline before comparing across the switch.
 
 ## Game data pipeline
 

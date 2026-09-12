@@ -26,9 +26,9 @@ describe("aiModels catalog", () => {
 
 describe("resolveAiModel", () => {
   it("无设置时按后端取默认值", () => {
-    expect(resolveAiModel({})).toBe("claude-sonnet-5");
+    expect(resolveAiModel({})).toBe("claude-opus-5");
     expect(resolveAiModel({ aiBackend: "agy" })).toBe("pro");
-    expect(resolveAiModel({ aiBackend: "claudeCli" })).toBe("claude-sonnet-5");
+    expect(resolveAiModel({ aiBackend: "claudeCli" })).toBe("claude-opus-5");
   });
 
   it("取当前后端那一格,不串用别的后端的选择", () => {
@@ -40,7 +40,7 @@ describe("resolveAiModel", () => {
     // Nothing stored in the claudeCli slot -> the default, not a borrowed
     // anthropic value
     expect(resolveAiModel({ aiBackend: "claudeCli", aiModels })).toBe(
-      "claude-sonnet-5",
+      "claude-opus-5",
     );
   });
 
@@ -51,11 +51,11 @@ describe("resolveAiModel", () => {
         aiBackend: "anthropic",
         aiModels: { anthropic: "pro" },
       }),
-    ).toBe("claude-sonnet-5");
+    ).toBe("claude-opus-5");
     expect(
       resolveAiModel({
         aiBackend: "agy",
-        aiModels: { agy: "claude-sonnet-5" },
+        aiModels: { agy: "claude-opus-5" },
       }),
     ).toBe("pro");
   });
