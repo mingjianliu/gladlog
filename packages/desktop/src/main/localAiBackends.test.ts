@@ -15,6 +15,7 @@ import {
   AGY_PROMPT_SPILL_DIR,
   agyClientFactory,
   assertNoWindowsCmdMetacharacters,
+  CLAUDE_CLI_ISOLATION_ARGS,
   claudeCliClientFactory,
   codexClientFactory,
   CODEBUDDY_SAFETY_ARGS,
@@ -349,6 +350,7 @@ describe("local AI backends", () => {
       "--verbose",
       "stream-json",
       "--include-partial-messages",
+      ...CLAUDE_CLI_ISOLATION_ARGS,
     ]) {
       expect(gotArgs).toContain(flag);
     }
@@ -400,6 +402,10 @@ describe("local AI backends", () => {
     expect(calls[0]).toContain("stream-json");
     expect(calls[1]).toContain("text");
     expect(calls[1]).not.toContain("stream-json");
+    // the legacy fallback exists for CLIs too old for newer flags — it must not
+    // carry the isolation args either
+    for (const flag of CLAUDE_CLI_ISOLATION_ARGS)
+      expect(calls[1]).not.toContain(flag);
   });
 
   it("claudeCli:用户 abort 不触发回退重试,原样抛 aborted", async () => {
@@ -1226,6 +1232,9 @@ describe("continueCliChat", () => {
       "claude-sonnet-5",
       "--resume",
       "sid-1",
+      "--tools=",
+      "--strict-mcp-config",
+      "--disable-slash-commands",
     ]);
     expect(calls[0]!.stdin).toBe("为什么该开减伤?");
   });

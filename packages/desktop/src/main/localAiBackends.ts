@@ -513,6 +513,7 @@ export function claudeCliClientFactory(opts?: {
               "--model",
               params.model,
               ...sessionArgs,
+              ...CLAUDE_CLI_ISOLATION_ARGS,
             ],
             prompt,
             { signal: params.signal, onStdoutLine },
@@ -792,6 +793,32 @@ export function parseCodebuddyJsonEnvelope(stdout: string): {
  *    content_block_delta/text_delta),实时流式需要单独写解析器;对比面板不
  *    需要中途 delta(显示「对比中…」,完成后整段替换),text 模式更简单可靠。
  */
+/**
+ * claude CLI isolation args — **single source**, used by the analysis stream call
+ * (claudeCliClientFactory) and the coach-chat resume (continueCliChat).
+ *
+ * `claude -p` otherwise loads the user's whole Claude Code environment into every
+ * coach analysis: measured 2026-09-12 on a dev machine, 105 tools (72 of them from
+ * 6 MCP servers — Gmail, Slack, Drive, Calendar…), 50 skills, 4 plugins, in
+ * permission mode `auto`. That is ~24k tokens of fixed per-call overhead vs ~7.7k
+ * with these args (haiku probe, trivial prompt), and it hands a combat log — whose
+ * player names are arbitrary third-party text — a set of tools that can send mail.
+ * gladlog is single-turn Q&A with the whole match in the prompt; it needs none.
+ *
+ * `--tools=` (not `--tools ""`): same effect (0 tools, verified), and no empty argv
+ * element, which is the Windows cmd-shim hazard documented on CODEBUDDY_SAFETY_ARGS.
+ * `--setting-sources` is deliberately NOT narrowed: it would also drop plugins and
+ * hooks, but user settings are where some users configure apiKeyHelper / proxy env,
+ * so it could break their auth.
+ * Not added to the legacy text-mode fallback, which exists for CLIs too old to know
+ * newer flags.
+ */
+export const CLAUDE_CLI_ISOLATION_ARGS = [
+  "--tools=",
+  "--strict-mcp-config",
+  "--disable-slash-commands",
+] as const;
+
 /**
  * codebuddy 专属安全参数 —— **单源**,factory 与 `continueCliChat` 两个调用点
  * 共用(PR #35 review #2:安全相关事实不允许两处手写,漂移是静默的)。
@@ -1169,6 +1196,7 @@ export async function continueCliChat(input: {
             input.model,
             "--resume",
             input.sessionId,
+            ...CLAUDE_CLI_ISOLATION_ARGS,
           ],
           input.question,
           opts,

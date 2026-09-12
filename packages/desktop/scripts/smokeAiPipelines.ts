@@ -120,7 +120,10 @@ function collector() {
 
 const corpusPath = () =>
   join(__dirname, "../../corpus-tools/data/reference_vectors.json");
-const loadCorpus = loadBundledCorpus(corpusPath);
+// loadBundledCorpus takes a resolver of candidate PATHS (string[]); passing the
+// single-path resolver made it iterate the path string character by character,
+// so the compare smoke always reported NO_CORPUS.
+const loadCorpus = loadBundledCorpus(() => [corpusPath()]);
 function manifestBuild(): string {
   try {
     return gameBuildFromManifest(
