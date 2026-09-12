@@ -49,6 +49,7 @@ import { STASIS_STORABLE_HEAL_IDS } from "../utils/combatStates";
 import {
   ADDITIONAL_OVERLAP_DEFENSIVE_IDS,
   AURA_ONLY_ACTIVATION_IDS,
+  PASSIVE_PROC_CAST_IDS,
   CD_ROLE_TAGS,
   FORBEARANCE_GATED_IDS,
   NON_SUBSTITUTE_DEFENSIVE_IDS,
@@ -232,6 +233,13 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   ),
   t("trinketSpellIds", "data/spellTags.ts", "cast", () => trinketSpellIds),
   // utils/cooldowns.ts
+  // 2026-09-11: this table was invisible to the rot scans for its whole life —
+  // it existed only as eight ENGLISH NAMES (PASSIVE_SPELL_BLOCKLIST), and the
+  // registry indexes id tables. Being name-keyed it also silently matched
+  // nothing on non-English clients (23.4% of Reclamation's casts).
+  t("PASSIVE_PROC_CAST_IDS", "utils/cooldowns.ts", "cast", () => [
+    ...PASSIVE_PROC_CAST_IDS.keys(),
+  ]),
   t("CD_ROLE_TAGS", "utils/cooldowns.ts", "cast", () => keys(CD_ROLE_TAGS)),
   t("TEAM_HEAL_CD_IDS", "utils/cooldowns.ts", "cast", () =>
     set(TEAM_HEAL_CD_IDS),

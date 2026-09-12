@@ -3,7 +3,7 @@ import {
   CombatUnitType,
   ICombatUnit,
 } from "@gladlog/parser-compat";
-import { PASSIVE_SPELL_BLOCKLIST, specToString } from "./cooldowns";
+import { isPassiveProcCast, specToString } from "./cooldowns";
 import { filterRealPresses } from "./castPress";
 import { getEnglishSpellName } from "../data/spellEffectData";
 
@@ -26,7 +26,7 @@ export function extractRotations(
       (e) =>
         e.spellName &&
         e.logLine?.event === "SPELL_CAST_SUCCESS" &&
-        !PASSIVE_SPELL_BLOCKLIST.has(e.spellName),
+        !isPassiveProcCast(e),
     ),
   )
     .map((e) => ({

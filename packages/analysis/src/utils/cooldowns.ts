@@ -390,9 +390,74 @@ const OFFENSIVE_SPELL_IDS = OFFENSIVE_CD_SPELL_IDS;
 // one fact ("what counts as a major cooldown"), one predicate.
 export const MIN_CD_SECONDS = 30;
 
+export const GUARDIAN_SPIRIT_SPELL_ID = "47788";
+/** Guardian Angel — the talent that makes Guardian Spirit's recovery depend on
+ * what happened. Held by 98-100% of Holy Priests in the S2 corpus. */
+export const GUARDIAN_ANGEL_TALENT_ID = "200209";
+/** The save heal — the log's only evidence that Guardian Spirit prevented a
+ * death instead of expiring. */
+export const GUARDIAN_SPIRIT_SAVE_HEAL_ID = "48153";
+/** How long after the press a save heal still belongs to it: the buff's own
+ * 12s duration (spellEffectOverrides) plus 3s of slack. */
+export const GUARDIAN_SPIRIT_SAVE_WINDOW_S = 15;
+
 /**
- * Passive proc spells that emit SPELL_CAST_SUCCESS but are not intentional player casts.
- * Filtering these removes noise from the [YOU] [CAST] timeline.
+ * Did this Guardian Spirit press actually save someone? The answer decides
+ * which cooldown it recovers on (see `CUSTOM_TALENT_MODIFIERS["47788"]`), so
+ * it is a predicate, not an inline check — the ledger stamps
+ * `ICooldownCast.cooldownSecondsOverride` from it and any gate that wants to
+ * re-derive availability must use the same rule.
+ */
+export function guardianSpiritSaved(
+  unit: Pick<ICombatUnit, "healOut">,
+  castTimeSeconds: number,
+  matchStartMs: number,
+): boolean {
+  return (unit.healOut ?? []).some((h) => {
+    if (h.spellId !== GUARDIAN_SPIRIT_SAVE_HEAL_ID) return false;
+    const t = (h.timestamp - matchStartMs) / 1000;
+    return (
+      t >= castTimeSeconds &&
+      t <= castTimeSeconds + GUARDIAN_SPIRIT_SAVE_WINDOW_S
+    );
+  });
+}
+
+/**
+ * Passive proc spells that emit SPELL_CAST_SUCCESS but are not intentional
+ * player casts. Filtering them removes noise from the [YOU] [CAST] timeline,
+ * from the cooldown ledger's cast list, and from `extractRotations` (which
+ * feeds the corpus reference_vectors).
+ *
+ * **Id-keyed since 2026-09-11.** This list used to hold eight ENGLISH NAMES,
+ * and all three consumers compared them against the raw log's `spellName` —
+ * which is CLIENT-LOCALISED, so on a non-English client the list matched
+ * nothing at all and every proc sailed through. Measured on 300 S2 archive
+ * logs: Reclamation emits 3,604 SPELL_CAST_SUCCESS, of which **844 (23.4%)
+ * are logged as 回收复用 / Rückgewinnung**. Spell ids are language-independent;
+ * `PASSIVE_SPELL_BLOCKLIST` below survives only as a fallback layer for procs
+ * whose id is not pinned.
+ *
+ * Reverse direction, same measurement (Curated-List Completeness Rule): of the
+ * eight names, only Reclamation still emits any cast at all — the resolved ids
+ * of the other seven produce **zero** SPELL_CAST_SUCCESS in those 300 logs,
+ * and three of them (Nature's Vigor, Resounding Voice, Eminence) no longer
+ * resolve to any id the corpus has ever observed. They stay in the name
+ * fallback so an English log cannot regress, but they are deliberately NOT in
+ * the id table: a zero-occurrence row there is exactly what `curatedRotScan`
+ * exists to flag.
+ */
+export const PASSIVE_PROC_CAST_IDS: ReadonlyMap<string, string> = new Map([
+  [
+    "415388",
+    "Reclamation (Holy Paladin) — passive proc; 3,604 casts over 300 S2 logs, ~24% of the spec's raw cast count (healer-study passive_ids.json)",
+  ],
+]);
+
+/**
+ * Language-dependent fallback for the passive procs whose id is not pinned.
+ * Do not consume directly — call `isPassiveProcCast`, which checks the id
+ * table first. Kept non-empty so English logs keep their old behaviour.
  */
 export const PASSIVE_SPELL_BLOCKLIST = new Set([
   "Reclamation",
@@ -404,6 +469,19 @@ export const PASSIVE_SPELL_BLOCKLIST = new Set([
   "Awakening",
   "Divine Purpose",
 ]);
+
+/**
+ * "Is this SPELL_CAST_SUCCESS a passive proc rather than a button press" — the
+ * single predicate for all three consumers (cooldown ledger, [YOU] [CAST]
+ * timeline, `extractRotations`). Id first, raw localized name second.
+ */
+export function isPassiveProcCast(e: {
+  spellId?: string;
+  spellName?: string;
+}): boolean {
+  if (e.spellId && PASSIVE_PROC_CAST_IDS.has(e.spellId)) return true;
+  return !!e.spellName && PASSIVE_SPELL_BLOCKLIST.has(e.spellName);
+}
 
 /**
  * Spec-exclusive spells: if a spell ID appears here, it is only valid for the listed specs.
@@ -540,6 +618,15 @@ export type DefensiveTimingLabel =
 
 export interface ICooldownCast {
   timeSeconds: number;
+  /**
+   * Per-cast cooldown in seconds, when THIS press recovers differently from
+   * the entry's `cooldownSeconds`. Only Guardian Angel needs it today: the
+   * Guardian Spirit press that actually saved someone keeps the official 180s
+   * while the one that expired comes back in 60 (see
+   * `guardianSpiritSaved`). Absent on every other cast — consumers fall back
+   * to the entry-level value.
+   */
+  cooldownSecondsOverride?: number;
   /** Timing classification relative to enemy burst activity. Only set for Defensive/External CDs. */
   timingLabel?: DefensiveTimingLabel;
   /** One-line reason for the timing label */
@@ -864,7 +951,8 @@ export function cdAvailableAt(
   const last = [...cd.casts].filter((c) => c.timeSeconds <= t).pop();
   return isCooldownAvailableFromLastUse(
     last ? last.timeSeconds : null,
-    cd.cooldownSeconds,
+    // Per-cast override wins (Guardian Angel's outcome-conditional branch).
+    last?.cooldownSecondsOverride ?? cd.cooldownSeconds,
     t,
   );
 }
@@ -1498,7 +1586,8 @@ export function extractMajorCooldowns(
     const strip = healerSaveCdStripDefensive(specToString(unit.spec));
     for (let i = majorSpells.length - 1; i >= 0; i--) {
       const sp = majorSpells[i]!;
-      if (!strip.has(sp.spellId) || !sp.tags.includes(SpellTag.Defensive)) continue;
+      if (!strip.has(sp.spellId) || !sp.tags.includes(SpellTag.Defensive))
+        continue;
       const tags = sp.tags.filter((t) => t !== SpellTag.Defensive);
       if (tags.length === 0) majorSpells.splice(i, 1);
       else majorSpells[i] = { ...sp, tags };
@@ -1576,7 +1665,7 @@ export function extractMajorCooldowns(
     const reachesSomeoneElse = reachesAlly(spell.spellId);
 
     const castRawCasts: ICooldownCast[] = castEvents
-      .filter((e) => !e.spellName || !PASSIVE_SPELL_BLOCKLIST.has(e.spellName))
+      .filter((e) => !isPassiveProcCast(e))
       // #36(a): an echo copy (Dream Breath 355941 etc.) is not a press — as a
       // ledger cast it would fabricate cooldown usage and corrupt
       // cdAvailableAt/chargesAvailableAt for the real spell's variants.
@@ -1634,6 +1723,20 @@ export function extractMajorCooldowns(
       }
     }
 
+    // Guardian Angel's slow branch (see CUSTOM_TALENT_MODIFIERS["47788"]): the
+    // entry-level cooldown is the fast one, so the press that actually saved
+    // somebody gets the untouched official value back, per cast.
+    if (
+      spell.spellId === GUARDIAN_SPIRIT_SPELL_ID &&
+      talentedSpellIds?.has(GUARDIAN_ANGEL_TALENT_ID)
+    ) {
+      for (const c of casts) {
+        if (guardianSpiritSaved(unit, c.timeSeconds, matchStartMs)) {
+          c.cooldownSecondsOverride = baseCooldownSeconds;
+        }
+      }
+    }
+
     const availableWindows: IAvailableWindow[] = [];
 
     const pushWindow = (from: number, to: number) => {
@@ -1657,7 +1760,9 @@ export function extractMajorCooldowns(
       }
       // Windows between casts (and from last cast to match end)
       for (let i = 0; i < casts.length; i++) {
-        const cdReadyAt = casts[i].timeSeconds + cooldownSeconds;
+        const cdReadyAt =
+          casts[i].timeSeconds +
+          (casts[i].cooldownSecondsOverride ?? cooldownSeconds);
         const nextCastAt =
           i + 1 < casts.length
             ? casts[i + 1].timeSeconds
@@ -1672,7 +1777,8 @@ export function extractMajorCooldowns(
     // the player must have had at least 2 charges (e.g. double Pain Suppression via PvP talent).
     let maxChargesDetected = Math.max(1, baselineCharges);
     for (let i = 1; i < casts.length; i++) {
-      if (casts[i].timeSeconds - casts[i - 1].timeSeconds < cooldownSeconds) {
+      const prevCd = casts[i - 1].cooldownSecondsOverride ?? cooldownSeconds;
+      if (casts[i].timeSeconds - casts[i - 1].timeSeconds < prevCd) {
         maxChargesDetected = Math.max(maxChargesDetected, 2);
       }
     }

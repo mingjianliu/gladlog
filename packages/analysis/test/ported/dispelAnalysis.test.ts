@@ -174,6 +174,20 @@ describe("dispelAnalysis — summary reconstruction", () => {
       },
     );
     (healer as any).actionOut = [firstCleanse];
+    // A real cleanse is a PRESS: production logs SPELL_CAST_SUCCESS alongside
+    // the SPELL_DISPEL (dispelKind.ts measured every cleanse/purge spell at
+    // 99–100% cast-matched). Without it `classifyDispel` calls this a proc, and
+    // procs no longer burn the cleanse cooldown — the fixture used to pin a
+    // shape production cannot produce.
+    (healer as any).spellCastEvents = [
+      {
+        logLine: { event: LogEvent.SPELL_CAST_SUCCESS },
+        srcUnitId: "h",
+        spellId: "123",
+        spellName: "Test",
+        timestamp: MATCH_START + 10_000,
+      },
+    ];
 
     const ccApply = makeAuraEvent(
       LogEvent.SPELL_AURA_APPLIED,
@@ -200,6 +214,129 @@ describe("dispelAnalysis — summary reconstruction", () => {
     );
     expect(res.missedCleanseWindows).toHaveLength(1);
     expect(res.missedCleanseWindows[0].cleanseWasOnCD).toBe(true);
+  });
+
+  it("a rider/proc dispel does not burn the cleanse cooldown (2026-09-11)", () => {
+    // Cleanse the Weak's second-ally strip logs a SPELL_DISPEL (199427) with no
+    // press behind it — 484 such events per 250 S2 logs. Counting it as a burned
+    // 8s cleanse cooldown told the gate "their cleanse was down" and suppressed
+    // real missed-cleanse findings. `dispelKind` (proc) is the shared predicate.
+    const healer = makeUnit("h", {
+      name: "Healer",
+      spec: CombatUnitSpec.Priest_Holy,
+    });
+    (healer as any).id = "h";
+    const target = makeUnit("t", {
+      name: "Target",
+      spec: CombatUnitSpec.Warrior_Arms,
+    });
+    (target as any).id = "t";
+    (healer as any).actionOut = [
+      makeExtraAction(MATCH_START + 10_000, LogEvent.SPELL_DISPEL, {
+        spellId: "199427",
+        spellName: "Cleanse the Weak",
+        extraSpellId: "118",
+        destUnitId: "t",
+        destUnitName: "Target",
+        srcUnitId: "h",
+      }),
+    ];
+    // deliberately NO matching SPELL_CAST_SUCCESS — that is what makes it a proc
+    (target as any).auraEvents = [
+      makeAuraEvent(
+        LogEvent.SPELL_AURA_APPLIED,
+        "118",
+        MATCH_START + 15_000,
+        "e1",
+        "t",
+      ),
+      makeAuraEvent(
+        LogEvent.SPELL_AURA_REMOVED,
+        "118",
+        MATCH_START + 25_000,
+        "e1",
+        "t",
+      ),
+    ];
+    const enemy = makeUnit("e1", { reaction: CombatUnitReaction.Hostile });
+
+    const res = reconstructDispelSummary(
+      [healer, target] as any,
+      [enemy] as any,
+      makeCombat(),
+    );
+    expect(res.missedCleanseWindows).toHaveLength(1);
+    expect(res.missedCleanseWindows[0].cleanseWasOnCD).toBe(false);
+  });
+
+  it("Purification's second charge keeps the cleanse available (2026-09-11)", () => {
+    // 19% of consecutive Purify pairs in the corpus are closer than the
+    // single-charge 8s — that is the PvP talent's second charge. The modifier
+    // comes from the generated DB2 table (527 <- 196439 extra_charge 1), not
+    // from a hand list here.
+    const mk = (pvpTalents: string[], cleanseTimes: number[]) => {
+      const healer = makeUnit("h", {
+        name: "Healer",
+        spec: CombatUnitSpec.Priest_Holy,
+      });
+      (healer as any).id = "h";
+      (healer as any).info = { pvpTalents };
+      (healer as any).actionOut = cleanseTimes.map((t) =>
+        makeExtraAction(MATCH_START + t, LogEvent.SPELL_DISPEL, {
+          spellId: "527",
+          spellName: "Purify",
+          extraSpellId: "118",
+          destUnitId: "t",
+          destUnitName: "Target",
+          srcUnitId: "h",
+        }),
+      );
+      (healer as any).spellCastEvents = cleanseTimes.map((t) => ({
+        logLine: { event: LogEvent.SPELL_CAST_SUCCESS },
+        srcUnitId: "h",
+        spellId: "527",
+        spellName: "Purify",
+        timestamp: MATCH_START + t,
+      }));
+      const target = makeUnit("t", {
+        name: "Target",
+        spec: CombatUnitSpec.Warrior_Arms,
+      });
+      (target as any).id = "t";
+      (target as any).auraEvents = [
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          "118",
+          MATCH_START + 15_000,
+          "e1",
+          "t",
+        ),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_REMOVED,
+          "118",
+          MATCH_START + 25_000,
+          "e1",
+          "t",
+        ),
+      ];
+      const enemy = makeUnit("e1", { reaction: CombatUnitReaction.Hostile });
+      return reconstructDispelSummary(
+        [healer, target] as any,
+        [enemy] as any,
+        makeCombat(),
+      );
+    };
+
+    // One Purify 5s before the CC: without the talent that is a lockout…
+    expect(mk([], [10_000]).missedCleanseWindows[0].cleanseWasOnCD).toBe(true);
+    // …with Purification a charge is still in hand.
+    expect(
+      mk(["196439"], [10_000]).missedCleanseWindows[0].cleanseWasOnCD,
+    ).toBe(false);
+    // Both charges spent inside the window locks it out again.
+    expect(
+      mk(["196439"], [10_000, 12_000]).missedCleanseWindows[0].cleanseWasOnCD,
+    ).toBe(true);
   });
 
   describe("DISPEL-002: 落地→驱散延迟(2026-08-06,信号扩容批 1)", () => {
@@ -344,6 +481,16 @@ describe("dispelAnalysis — summary reconstruction", () => {
       },
     );
     (healer as any).actionOut = [firstCleanse];
+    // The matching press — see the note in B58 above.
+    (healer as any).spellCastEvents = [
+      {
+        logLine: { event: LogEvent.SPELL_CAST_SUCCESS },
+        srcUnitId: "h",
+        spellId: "374251",
+        spellName: "Cauterizing Flame",
+        timestamp: MATCH_START + 5_000,
+      },
+    ];
 
     // CC applied at 10s (within 60s window)
     const ccApply = makeAuraEvent(

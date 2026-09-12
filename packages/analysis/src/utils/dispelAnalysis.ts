@@ -1,13 +1,12 @@
 import { CombatUnitSpec, ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import { dispelVerdictOf } from "../data/dispelVerdicts";
-import {
-  SPELL_CATEGORIES as spellsData,
-} from "../data/spellCategories";
+import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
 import { getEnglishSpellName, spellEffectData } from "../data/spellEffectData";
 import spellIdListsData from "../data/spellIdLists";
 import { buildCannotCastIntervals } from "./cannotCastIntervals";
 import {
+  applyCdTalentModifiers,
   getPressureThreshold,
   isHealerSpec,
   isMeleeSpec,
@@ -161,6 +160,50 @@ export const DISPEL_COOLDOWNS_BY_SPELL = new Map<string, number>([
   ["475", 0], // Remove Curse (Mage)
   ["2782", 0], // Remove Corruption (Druid)
 ]);
+
+/** What a cleanse press costs when the table above has no entry. */
+export const DEFAULT_CLEANSE_CD_S = 8;
+
+/**
+ * How long the caster's cleanse is actually gone for, and how many presses
+ * they had in hand — the single predicate behind the missed-cleanse
+ * feasibility gate ("was their cleanse even up?").
+ *
+ * The PvP-talent layer is NOT a hand table here: it goes through the same
+ * generated DB2 modifiers the cooldown ledger uses (`applyCdTalentModifiers`
+ * -> `talentModifiers.json`), which since 2026-09-11 includes the PvP talent
+ * pool. That table carries exactly the two cases this gate used to get wrong:
+ *   - `4987 Cleanse <- 199330 Cleanse the Weak, reduce_cd -4` — a NEGATIVE
+ *     reduction, i.e. +4s. Measured on 250 S2 archive logs, round-segmented:
+ *     177 consecutive Cleanse pairs, 23 (13%) closer together than 12s, which
+ *     is why this must stay talent-gated rather than applied flat (the talent
+ *     itself is picked by ~11–20% of Holy Paladins).
+ *   - `527 Purify <- 196439 Purification, extra_charge 1`. Same logs: 813
+ *     consecutive Purify pairs, **155 (19%) closer than the single-charge
+ *     8s**, 39 of them inside one second — that is the second charge. Calling
+ *     the priest locked out while a charge was in hand SUPPRESSES real
+ *     missed-cleanse findings.
+ *
+ * `talentedSpellIds` is null on purpose: this call site knows the dispeller's
+ * PvP talents (COMBATANT_INFO) and nothing else. The ids live in the generated
+ * table, not here — naming them again locally is how the two copies drift.
+ */
+export function cleanseRecoveryOf(
+  dispelSpellId: string,
+  casterPvpTalentIds?: ReadonlySet<string>,
+): { cooldownSeconds: number; charges: number } {
+  const base =
+    DISPEL_COOLDOWNS_BY_SPELL.get(dispelSpellId) ?? DEFAULT_CLEANSE_CD_S;
+  if (base === 0 || !casterPvpTalentIds?.size)
+    return { cooldownSeconds: base, charges: 1 };
+  return applyCdTalentModifiers(
+    dispelSpellId,
+    base,
+    1,
+    null,
+    new Set(casterPvpTalentIds),
+  );
+}
 
 // Static spec → dispel-type maps. These represent specs whose cleanse ability is treated as
 // baseline (virtually always present in arena). A few cleanses are technically talent-gated
@@ -1792,19 +1835,61 @@ export function reconstructDispelSummary(
               activeDispellers.map((u) => u.name),
             );
             const applyRelative = (applyTs - combat.startTime) / 1000;
+            const pvpTalentsByName = new Map<string, ReadonlySet<string>>(
+              activeDispellers.map((u) => [
+                u.name,
+                new Set((u.info?.pvpTalents ?? []).map(String)),
+              ]),
+            );
             // Look back dynamically based on the spell ID of each dispel event
             const recentCleanses = allyCleanse.filter((c) => {
               if (!activeDispellerNames.has(c.sourceName)) return false;
               if (c.timeSeconds >= applyRelative) return false;
-              const cd = DISPEL_FEATURE_FLAGS.F131_F132_CLEANSE_COOLDOWNS
-                ? (DISPEL_COOLDOWNS_BY_SPELL.get(c.dispelSpellId) ?? 8)
-                : 8;
-              if (cd === 0) return false;
-              return c.timeSeconds + cd > applyRelative;
+              if (!DISPEL_FEATURE_FLAGS.F131_F132_CLEANSE_COOLDOWNS)
+                return c.timeSeconds + DEFAULT_CLEANSE_CD_S > applyRelative;
+              // A rider/proc dispel costs the caster nothing, so it can never be
+              // the reason their cleanse was unavailable. `dispelKind` already
+              // decides this (dispelKind.ts) — reuse it instead of a second list.
+              // Measured: Cleanse the Weak's second-ally strip (199427, classified
+              // `proc`, 484 events per 250 logs) used to count here as a burned
+              // 8s cleanse cooldown and suppressed real missed-cleanse findings.
+              if (c.dispelKind !== "deliberate") return false;
+              const { cooldownSeconds } = cleanseRecoveryOf(
+                c.dispelSpellId,
+                pvpTalentsByName.get(c.sourceName),
+              );
+              if (cooldownSeconds === 0) return false;
+              return c.timeSeconds + cooldownSeconds > applyRelative;
             });
 
+            // Charges: one recent press does not lock out a two-charge cleanse
+            // (Purification — 19% of consecutive Purify pairs are closer than
+            // the single-charge cooldown). Count per dispeller, compare with
+            // what that dispeller actually holds.
+            const recentByName = new Map<string, number>();
+            const chargesByName = new Map<string, number>();
+            for (const c of recentCleanses) {
+              recentByName.set(
+                c.sourceName,
+                (recentByName.get(c.sourceName) ?? 0) + 1,
+              );
+              const { charges } = cleanseRecoveryOf(
+                c.dispelSpellId,
+                pvpTalentsByName.get(c.sourceName),
+              );
+              chargesByName.set(
+                c.sourceName,
+                Math.max(chargesByName.get(c.sourceName) ?? 1, charges),
+              );
+            }
             const dispellersWhoUsedCD = new Set(
-              recentCleanses.map((c) => c.sourceName),
+              [...recentByName]
+                .filter(
+                  ([name, n]) =>
+                    !DISPEL_FEATURE_FLAGS.F131_F132_CLEANSE_COOLDOWNS ||
+                    n >= (chargesByName.get(name) ?? 1),
+                )
+                .map(([name]) => name),
             );
 
             // If every active dispeller who wasn't CC'd had used their cleanse recently...

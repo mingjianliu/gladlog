@@ -11,6 +11,7 @@ import {
   annotateDefensiveTimings,
   canHelpAnotherUnit,
   CD_ROLE_TAGS,
+  cdAvailableAt,
   cdRoleTag,
   computePressureWindows,
   detectOverlappedDefensives,
@@ -18,12 +19,15 @@ import {
   extractMajorCooldowns,
   findCheaperDefensiveAlternatives,
   getPressureThreshold,
+  GUARDIAN_SPIRIT_SAVE_HEAL_ID,
+  guardianSpiritSaved,
   getUnitHpAtTimestamp,
   getUnitManaAtTimestamp,
   IEnemyCDTimelineForTiming,
   IMajorCooldownInfo,
   isHealerSpec,
   isMeleeSpec,
+  isPassiveProcCast,
   isSelfOnlyDefensive,
   isTeamHealCD,
   MAJOR_DEFENSIVE_IDS,
@@ -1657,6 +1661,81 @@ describe("extractMajorCooldowns", () => {
     const erw = cds.find((c) => c.spellId === "47568");
     expect(erw).toBeDefined();
     expect(erw?.casts).toHaveLength(0); // Filtered out by name
+  });
+
+  describe("isPassiveProcCast (2026-09-11: id-keyed passive procs)", () => {
+    it("matches on spell id, so a non-English log filters the same as an English one", () => {
+      // The whole point of the change: the blocklist used to hold English
+      // NAMES and compare them with the raw log's localized spellName. On 300
+      // S2 archive logs, 844 of Reclamation's 3,604 casts (23.4%) are logged
+      // as 回收复用 / Rückgewinnung and used to sail straight through.
+      expect(
+        isPassiveProcCast({ spellId: "415388", spellName: "回收复用" }),
+      ).toBe(true);
+      expect(
+        isPassiveProcCast({ spellId: "415388", spellName: "Rückgewinnung" }),
+      ).toBe(true);
+      expect(
+        isPassiveProcCast({ spellId: "415388", spellName: "Reclamation" }),
+      ).toBe(true);
+    });
+
+    it("keeps the English-name fallback for procs whose id is not pinned", () => {
+      expect(
+        isPassiveProcCast({ spellId: "47568", spellName: "Divine Purpose" }),
+      ).toBe(true);
+      // …and documents what the fallback still cannot do: an unpinned proc on
+      // a localized client. Pin its id (with corpus evidence) to fix that one.
+      expect(
+        isPassiveProcCast({ spellId: "47568", spellName: "神圣目的" }),
+      ).toBe(false);
+    });
+
+    it("leaves a real press alone", () => {
+      expect(
+        isPassiveProcCast({ spellId: "47788", spellName: "Guardian Spirit" }),
+      ).toBe(false);
+    });
+  });
+
+  describe("Guardian Angel is outcome-conditional (2026-09-11)", () => {
+    const priest = (healOut: any[]) => ({ healOut }) as any;
+
+    it("guardianSpiritSaved only fires for the save heal inside the window", () => {
+      const saved = priest([
+        { spellId: GUARDIAN_SPIRIT_SAVE_HEAL_ID, timestamp: T0 + 12_000 },
+      ]);
+      expect(guardianSpiritSaved(saved, 5, T0)).toBe(true);
+      // 15s window (12s buff + 3s slack): a heal long after the buff expired
+      // belongs to a later press, not this one.
+      expect(guardianSpiritSaved(saved, 5, T0 - 10_000)).toBe(false);
+      // A normal heal is not evidence of a save.
+      expect(
+        guardianSpiritSaved(
+          priest([{ spellId: "2061", timestamp: T0 + 6_000 }]),
+          5,
+          T0,
+        ),
+      ).toBe(false);
+    });
+
+    it("cdAvailableAt honours a per-cast cooldown override", () => {
+      const fast = {
+        casts: [{ timeSeconds: 10 }],
+        cooldownSeconds: 60,
+        neverUsed: false,
+        charges: 1,
+      };
+      expect(cdAvailableAt(fast, 71)).toBe(true);
+      expect(cdAvailableAt(fast, 40)).toBe(false);
+      // The press that actually saved someone keeps the official 180s.
+      const slow = {
+        ...fast,
+        casts: [{ timeSeconds: 10, cooldownSecondsOverride: 180 }],
+      };
+      expect(cdAvailableAt(slow, 71)).toBe(false);
+      expect(cdAvailableAt(slow, 191)).toBe(true);
+    });
   });
 
   describe("getUnitHpAtTimestamp (optimized with binary search)", () => {

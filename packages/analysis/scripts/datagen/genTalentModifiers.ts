@@ -1,6 +1,7 @@
 import { classMetadata } from "../../src/data/classSpells";
 import { spellClassMap } from "../../src/data/drCategories";
 import observedSpellIds from "../../src/data/observedSpellIdsGenerated.json";
+import { PVP_TALENT_POOL_GENERATED } from "../../src/data/pvpTalentPoolGenerated";
 import { SPELL_CATEGORIES } from "../../src/data/spellCategories";
 import spellIdLists from "../../src/data/spellIdLists";
 import talentIdMap from "../../src/data/talentIdMap.json";
@@ -109,6 +110,38 @@ export function extractTalentModifiers(
           talentClassMap.set(spellId, classId);
         }
       }
+    }
+  }
+
+  // 1b. PvP talents are NOT in the node tree, so the SpellEffect scan below
+  // never even looked at them: `talentClassMap.get(row.SpellID)` misses and the
+  // row is skipped. Every PvP-talent cooldown modifier was therefore silently
+  // absent from the output — the SAME universe gap `genTalentMitigation` closed
+  // for its own table ("PvP talents are NOT in the node tree — without this
+  // half the 473909 positive control is missed entirely", that file's step 2),
+  // and exactly the shape CLAUDE.md's Curated-List Completeness Rule describes:
+  // the list that decides WHICH ids the official lookup runs on is part of the
+  // predicate, and its completeness has to be checked separately.
+  //
+  // Runtime already supports these: `applyCdModifiers` (cooldowns.ts) checks
+  // `pvpTalentIds` alongside talent-tree ids — it just never had data.
+  // ⚠ The ids here are DB2 `PvpTalent.SpellID` (granted) and its
+  // ActionBarSpellID (carrier). They differ for a handful of talents (Holy
+  // Priest's Spirit of Redemption 215769 is carried by 215982); a modifier is
+  // emitted under whichever id DB2 hangs the SpellEffect row on, and matches at
+  // runtime only if COMBATANT_INFO reports that same id in `pvpTalents`.
+  const classIdOfSpec = new Map<number, number>();
+  for (const tree of talentIdMap) {
+    classIdOfSpec.set(tree.specId as number, tree.classId as number);
+  }
+  for (const [specId, granted] of Object.entries(PVP_TALENT_POOL_GENERATED)) {
+    const classId = classIdOfSpec.get(Number(specId));
+    if (classId === undefined) continue;
+    for (const [grantedId, carrierId] of Object.entries(granted)) {
+      if (grantedId && grantedId !== "0")
+        talentClassMap.set(grantedId, classId);
+      if (carrierId && carrierId !== "0")
+        talentClassMap.set(carrierId, classId);
     }
   }
 

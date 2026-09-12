@@ -61,6 +61,13 @@
       "value": 445468
     }
   ],
+  "339": [
+    {
+      "talentSpellId": "202226",
+      "effect": "reduce_cd",
+      "value": -6
+    }
+  ],
   "348": [
     {
       "talentSpellId": "445465",
@@ -73,6 +80,13 @@
       "talentSpellId": "114154",
       "effect": "reduce_cd_pct",
       "value": 30
+    }
+  ],
+  "527": [
+    {
+      "talentSpellId": "196439",
+      "effect": "extra_charge",
+      "value": 1
     }
   ],
   "586": [
@@ -168,6 +182,13 @@
       "value": 30
     }
   ],
+  "1160": [
+    {
+      "talentSpellId": "199023",
+      "effect": "reduce_cd",
+      "value": 15
+    }
+  ],
   "1784": [
     {
       "talentSpellId": "108208",
@@ -240,7 +261,19 @@
       "value": 10
     }
   ],
+  "2825": [
+    {
+      "talentSpellId": "193876",
+      "effect": "replace_spell",
+      "value": 8
+    }
+  ],
   "2983": [
+    {
+      "talentSpellId": "197000",
+      "effect": "reduce_cd_pct",
+      "value": 50
+    },
     {
       "talentSpellId": "231691",
       "effect": "reduce_cd",
@@ -252,6 +285,23 @@
       "talentSpellId": "391271",
       "effect": "reduce_cd_pct",
       "value": 10
+    },
+    {
+      "talentSpellId": "424654",
+      "effect": "extra_charge",
+      "value": 1
+    },
+    {
+      "talentSpellId": "424654",
+      "effect": "reduce_cd",
+      "value": -10
+    }
+  ],
+  "4987": [
+    {
+      "talentSpellId": "199330",
+      "effect": "reduce_cd",
+      "value": -4
     }
   ],
   "5246": [
@@ -360,6 +410,16 @@
     }
   ],
   "6940": [
+    {
+      "talentSpellId": "199452",
+      "effect": "replace_spell",
+      "value": 199448
+    },
+    {
+      "talentSpellId": "216853",
+      "effect": "reduce_cd_pct",
+      "value": 33
+    },
     {
       "talentSpellId": "384820",
       "effect": "reduce_cd",
@@ -513,6 +573,11 @@
       "talentSpellId": "391271",
       "effect": "reduce_cd_pct",
       "value": 10
+    },
+    {
+      "talentSpellId": "213915",
+      "effect": "reduce_cd",
+      "value": -10
     }
   ],
   "24275": [
@@ -550,6 +615,11 @@
   ],
   "31821": [
     {
+      "talentSpellId": "199324",
+      "effect": "reduce_cd",
+      "value": 30
+    },
+    {
       "talentSpellId": "392911",
       "effect": "reduce_cd",
       "value": 30
@@ -579,11 +649,32 @@
       "value": 30
     }
   ],
+  "32182": [
+    {
+      "talentSpellId": "193876",
+      "effect": "replace_spell",
+      "value": 8
+    }
+  ],
+  "32375": [
+    {
+      "talentSpellId": "426438",
+      "effect": "reduce_cd",
+      "value": 60
+    }
+  ],
   "32379": [
     {
       "talentSpellId": "1272326",
       "effect": "reduce_cd",
       "value": 3
+    }
+  ],
+  "32592": [
+    {
+      "talentSpellId": "426438",
+      "effect": "reduce_cd",
+      "value": 60
     }
   ],
   "33076": [
@@ -643,6 +734,11 @@
   ],
   "34477": [
     {
+      "talentSpellId": "248518",
+      "effect": "reduce_cd",
+      "value": -15
+    },
+    {
       "talentSpellId": "459546",
       "effect": "reduce_cd",
       "value": 5
@@ -692,6 +788,13 @@
       "talentSpellId": "454433",
       "effect": "reduce_cd",
       "value": -5
+    }
+  ],
+  "39897": [
+    {
+      "talentSpellId": "426438",
+      "effect": "reduce_cd",
+      "value": 60
     }
   ],
   "43265": [
@@ -779,7 +882,7 @@
     {
       "talentSpellId": "200209",
       "effect": "reduce_cd",
-      "value": 60,
+      "value": 120,
       "isConditional": true
     }
   ],
@@ -797,6 +900,11 @@
   ],
   "48438": [
     {
+      "talentSpellId": "473909",
+      "effect": "replace_spell",
+      "value": 474149
+    },
+    {
       "talentSpellId": "428937",
       "effect": "reduce_cd",
       "value": 1
@@ -807,6 +915,11 @@
       "talentSpellId": "205727",
       "effect": "reduce_cd",
       "value": 20
+    },
+    {
+      "talentSpellId": "410320",
+      "effect": "reduce_cd",
+      "value": 10
     },
     {
       "talentSpellId": "457574",
@@ -822,6 +935,11 @@
     }
   ],
   "49028": [
+    {
+      "talentSpellId": "233412",
+      "effect": "reduce_cd_pct",
+      "value": 50
+    },
     {
       "talentSpellId": "377637",
       "effect": "reduce_cd",
@@ -852,6 +970,13 @@
       "talentSpellId": "374383",
       "effect": "reduce_cd",
       "value": 60
+    }
+  ],
+  "51271": [
+    {
+      "talentSpellId": "1218603",
+      "effect": "reduce_cd",
+      "value": -15
     }
   ],
   "51505": [
@@ -892,6 +1017,13 @@
       "talentSpellId": "202163",
       "effect": "reduce_cd",
       "value": 15
+    }
+  ],
+  "53271": [
+    {
+      "talentSpellId": "356962",
+      "effect": "reduce_cd_pct",
+      "value": 50
     }
   ],
   "53351": [
@@ -970,6 +1102,13 @@
       "value": 5
     }
   ],
+  "64382": [
+    {
+      "talentSpellId": "329033",
+      "effect": "reduce_cd_pct",
+      "value": 50
+    }
+  ],
   "64843": [
     {
       "talentSpellId": "419110",
@@ -1024,6 +1163,13 @@
       "value": 30
     }
   ],
+  "80240": [
+    {
+      "talentSpellId": "461917",
+      "effect": "replace_spell",
+      "value": 200546
+    }
+  ],
   "82691": [
     {
       "talentSpellId": "387807",
@@ -1034,6 +1180,13 @@
       "talentSpellId": "431067",
       "effect": "reduce_cd_pct",
       "value": 30
+    }
+  ],
+  "84714": [
+    {
+      "talentSpellId": "198148",
+      "effect": "replace_spell",
+      "value": 198149
     }
   ],
   "85288": [
@@ -1065,6 +1218,20 @@
       "talentSpellId": "1272359",
       "effect": "reduce_cd",
       "value": 5
+    }
+  ],
+  "97462": [
+    {
+      "talentSpellId": "235941",
+      "effect": "reduce_cd",
+      "value": 120
+    }
+  ],
+  "97463": [
+    {
+      "talentSpellId": "235941",
+      "effect": "reduce_cd",
+      "value": 120
     }
   ],
   "102342": [
@@ -1358,6 +1525,11 @@
   ],
   "115310": [
     {
+      "talentSpellId": "353313",
+      "effect": "reduce_cd",
+      "value": 30
+    },
+    {
       "talentSpellId": "388551",
       "effect": "reduce_cd",
       "value": 30
@@ -1412,6 +1584,13 @@
       "value": 1
     }
   ],
+  "121471": [
+    {
+      "talentSpellId": "354825",
+      "effect": "reduce_cd_pct",
+      "value": 20
+    }
+  ],
   "132157": [
     {
       "talentSpellId": "1246549",
@@ -1424,6 +1603,11 @@
       "talentSpellId": "382550",
       "effect": "reduce_cd",
       "value": 15
+    },
+    {
+      "talentSpellId": "1246126",
+      "effect": "reduce_cd",
+      "value": -30
     }
   ],
   "132168": [
@@ -1591,6 +1775,11 @@
   ],
   "186257": [
     {
+      "talentSpellId": "203235",
+      "effect": "reduce_cd_pct",
+      "value": 50
+    },
+    {
       "talentSpellId": "266921",
       "effect": "reduce_cd",
       "value": 15
@@ -1607,6 +1796,11 @@
     }
   ],
   "186258": [
+    {
+      "talentSpellId": "203235",
+      "effect": "reduce_cd_pct",
+      "value": 50
+    },
     {
       "talentSpellId": "266921",
       "effect": "reduce_cd",
@@ -1787,6 +1981,13 @@
       "value": 4
     }
   ],
+  "198149": [
+    {
+      "talentSpellId": "198148",
+      "effect": "replace_spell",
+      "value": 198149
+    }
+  ],
   "198589": [
     {
       "talentSpellId": "1266307",
@@ -1803,9 +2004,26 @@
   ],
   "199448": [
     {
+      "talentSpellId": "199452",
+      "effect": "replace_spell",
+      "value": 199448
+    },
+    {
+      "talentSpellId": "216853",
+      "effect": "reduce_cd_pct",
+      "value": 33
+    },
+    {
       "talentSpellId": "384820",
       "effect": "reduce_cd",
       "value": 60
+    }
+  ],
+  "199507": [
+    {
+      "talentSpellId": "199330",
+      "effect": "reduce_cd",
+      "value": -4
     }
   ],
   "200196": [
@@ -1848,6 +2066,11 @@
   ],
   "204018": [
     {
+      "talentSpellId": "216853",
+      "effect": "reduce_cd_pct",
+      "value": 33
+    },
+    {
       "talentSpellId": "384909",
       "effect": "reduce_cd",
       "value": 60
@@ -1882,6 +2105,20 @@
       "value": 1
     }
   ],
+  "204361": [
+    {
+      "talentSpellId": "193876",
+      "effect": "replace_spell",
+      "value": 8
+    }
+  ],
+  "204362": [
+    {
+      "talentSpellId": "193876",
+      "effect": "replace_spell",
+      "value": 8
+    }
+  ],
   "205021": [
     {
       "talentSpellId": "1263249",
@@ -1894,6 +2131,13 @@
       "talentSpellId": "387230",
       "effect": "reduce_cd",
       "value": 1
+    }
+  ],
+  "205630": [
+    {
+      "talentSpellId": "205630",
+      "effect": "replace_spell",
+      "value": 208173
     }
   ],
   "205644": [
@@ -1920,6 +2164,18 @@
       "talentSpellId": "320418",
       "effect": "reduce_cd",
       "value": 30
+    },
+    {
+      "talentSpellId": "1235091",
+      "effect": "extra_charge",
+      "value": 1
+    }
+  ],
+  "208770": [
+    {
+      "talentSpellId": "199330",
+      "effect": "reduce_cd",
+      "value": -4
     }
   ],
   "210873": [
@@ -1967,6 +2223,20 @@
       "talentSpellId": "1244031",
       "effect": "extra_charge",
       "value": 1
+    }
+  ],
+  "213634": [
+    {
+      "talentSpellId": "196439",
+      "effect": "extra_charge",
+      "value": 1
+    }
+  ],
+  "213644": [
+    {
+      "talentSpellId": "199330",
+      "effect": "reduce_cd",
+      "value": -4
     }
   ],
   "216331": [
@@ -2058,6 +2328,13 @@
       "value": 1
     }
   ],
+  "235963": [
+    {
+      "talentSpellId": "202226",
+      "effect": "reduce_cd",
+      "value": -6
+    }
+  ],
   "258920": [
     {
       "talentSpellId": "427775",
@@ -2126,6 +2403,20 @@
       "value": 1241871
     }
   ],
+  "272678": [
+    {
+      "talentSpellId": "356962",
+      "effect": "reduce_cd_pct",
+      "value": 50
+    }
+  ],
+  "272682": [
+    {
+      "talentSpellId": "356962",
+      "effect": "reduce_cd_pct",
+      "value": 50
+    }
+  ],
   "274837": [
     {
       "talentSpellId": "1244544",
@@ -2190,6 +2481,13 @@
       "talentSpellId": "204268",
       "effect": "reduce_cd",
       "value": 15
+    }
+  ],
+  "279043": [
+    {
+      "talentSpellId": "354825",
+      "effect": "reduce_cd_pct",
+      "value": 20
     }
   ],
   "280735": [
@@ -2301,6 +2599,13 @@
       "value": 50
     }
   ],
+  "330873": [
+    {
+      "talentSpellId": "202226",
+      "effect": "reduce_cd",
+      "value": -6
+    }
+  ],
   "333889": [
     {
       "talentSpellId": "386113",
@@ -2388,6 +2693,11 @@
     }
   ],
   "356781": [
+    {
+      "talentSpellId": "203235",
+      "effect": "reduce_cd_pct",
+      "value": 50
+    },
     {
       "talentSpellId": "266921",
       "effect": "reduce_cd",
@@ -2504,6 +2814,13 @@
       "value": 15
     }
   ],
+  "378081": [
+    {
+      "talentSpellId": "1246131",
+      "effect": "reduce_cd",
+      "value": -30
+    }
+  ],
   "382266": [
     {
       "talentSpellId": "1264269",
@@ -2557,6 +2874,13 @@
       "value": 50
     }
   ],
+  "384110": [
+    {
+      "talentSpellId": "329033",
+      "effect": "reduce_cd_pct",
+      "value": 50
+    }
+  ],
   "385174": [
     {
       "talentSpellId": "391271",
@@ -2579,6 +2903,11 @@
     }
   ],
   "388615": [
+    {
+      "talentSpellId": "353313",
+      "effect": "reduce_cd",
+      "value": 30
+    },
     {
       "talentSpellId": "388551",
       "effect": "reduce_cd",
@@ -2636,6 +2965,20 @@
       "talentSpellId": "394121",
       "effect": "reduce_cd",
       "value": 15
+    }
+  ],
+  "394352": [
+    {
+      "talentSpellId": "329033",
+      "effect": "reduce_cd_pct",
+      "value": 50
+    }
+  ],
+  "394354": [
+    {
+      "talentSpellId": "329033",
+      "effect": "reduce_cd_pct",
+      "value": 50
     }
   ],
   "396286": [
@@ -2704,6 +3047,11 @@
       "value": 20
     },
     {
+      "talentSpellId": "410320",
+      "effect": "reduce_cd",
+      "value": 10
+    },
+    {
       "talentSpellId": "457574",
       "effect": "reduce_cd",
       "value": -20
@@ -2729,6 +3077,13 @@
       "talentSpellId": "1265517",
       "effect": "reduce_cd",
       "value": 30
+    }
+  ],
+  "414664": [
+    {
+      "talentSpellId": "415945",
+      "effect": "reduce_cd",
+      "value": 180
     }
   ],
   "427114": [
@@ -2814,6 +3169,20 @@
       "value": 15
     }
   ],
+  "440006": [
+    {
+      "talentSpellId": "196439",
+      "effect": "extra_charge",
+      "value": 1
+    }
+  ],
+  "440013": [
+    {
+      "talentSpellId": "199330",
+      "effect": "reduce_cd",
+      "value": -4
+    }
+  ],
   "441668": [
     {
       "talentSpellId": "440992",
@@ -2826,6 +3195,13 @@
       "talentSpellId": "440057",
       "effect": "replace_spell",
       "value": 442804
+    }
+  ],
+  "443454": [
+    {
+      "talentSpellId": "1246131",
+      "effect": "reduce_cd",
+      "value": -30
     }
   ],
   "443609": [
@@ -2849,6 +3225,11 @@
       "value": 20
     },
     {
+      "talentSpellId": "410320",
+      "effect": "reduce_cd",
+      "value": 10
+    },
+    {
       "talentSpellId": "457574",
       "effect": "reduce_cd",
       "value": -20
@@ -2859,6 +3240,11 @@
       "talentSpellId": "205727",
       "effect": "reduce_cd",
       "value": 20
+    },
+    {
+      "talentSpellId": "410320",
+      "effect": "reduce_cd",
+      "value": 10
     },
     {
       "talentSpellId": "457574",
@@ -2932,6 +3318,11 @@
       "value": 20
     },
     {
+      "talentSpellId": "410320",
+      "effect": "reduce_cd",
+      "value": 10
+    },
+    {
       "talentSpellId": "457574",
       "effect": "reduce_cd",
       "value": -20
@@ -2971,6 +3362,20 @@
       "talentSpellId": "427775",
       "effect": "reduce_cd",
       "value": 6
+    }
+  ],
+  "460614": [
+    {
+      "talentSpellId": "202226",
+      "effect": "reduce_cd",
+      "value": -6
+    }
+  ],
+  "466904": [
+    {
+      "talentSpellId": "356962",
+      "effect": "reduce_cd_pct",
+      "value": 50
     }
   ],
   "466930": [
@@ -3021,6 +3426,13 @@
       "value": 471195
     }
   ],
+  "472433": [
+    {
+      "talentSpellId": "236499",
+      "effect": "reduce_cd",
+      "value": 45
+    }
+  ],
   "473290": [
     {
       "talentSpellId": "387807",
@@ -3045,6 +3457,11 @@
       "talentSpellId": "391174",
       "effect": "reduce_cd",
       "value": 60
+    },
+    {
+      "talentSpellId": "473909",
+      "effect": "replace_spell",
+      "value": 473919
     }
   ],
   "474421": [
@@ -3137,6 +3554,11 @@
   ],
   "1237128": [
     {
+      "talentSpellId": "233412",
+      "effect": "reduce_cd_pct",
+      "value": 50
+    },
+    {
       "talentSpellId": "377637",
       "effect": "reduce_cd",
       "value": 30
@@ -3159,6 +3581,13 @@
       "talentSpellId": "405461",
       "effect": "extra_charge",
       "value": 1
+    }
+  ],
+  "1241871": [
+    {
+      "talentSpellId": "356962",
+      "effect": "reduce_cd_pct",
+      "value": 50
     }
   ],
   "1241937": [
@@ -3192,6 +3621,16 @@
       "talentSpellId": "391271",
       "effect": "reduce_cd_pct",
       "value": 10
+    },
+    {
+      "talentSpellId": "424654",
+      "effect": "extra_charge",
+      "value": 1
+    },
+    {
+      "talentSpellId": "424654",
+      "effect": "reduce_cd",
+      "value": -10
     }
   ],
   "1244091": [

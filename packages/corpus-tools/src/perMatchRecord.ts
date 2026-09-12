@@ -67,12 +67,28 @@ export function combatToRecords(
     const talents = (unit.info?.talents ?? [])
       .map((t: any) => t.id1)
       .filter(Boolean);
-    // #37 缺口二: a gate-declared grouping (keystoneGates.json) wins where a
-    // spec declares one; otherwise the hero tree IS the default build
-    // dimension — same predicate as the user side (CompareInput.heroGroup).
-    const buildGroup = gate
-      ? assignBuildGroup(talents, gate)
-      : heroBuildGroupOf(unit.info?.talents);
+    // #37 缺口二 + 用户裁定 2026-09-11: the hero tree is the default build
+    // dimension and now takes PRECEDENCE over a keystone declaration; the gate
+    // is the FALLBACK for loadouts whose hero tree cannot be resolved (old
+    // builds, missing COMBATANT_INFO talents).
+    //
+    // Why the order flipped: Discipline Priest was the only spec with a gate,
+    // so it was the only healer NOT split by hero tree — contradicting the
+    // 2026-08-23 ruling (「一切按英雄天赋分层,适用于所有治疗」). The two Disc
+    // trees really are two builds: Shadow Mend is held by 72–79% of Oracle and
+    // 41–57% of Voidweaver (healer-study corpus rows, early S2).
+    //
+    // ⚠ Takes effect only after `reference_vectors.json` is rebuilt: cells
+    // built before this carry `offensive`/`standard` for Disc, so the read side
+    // asks for `Oracle` and degrades through lookupCell's normal chain to the
+    // build-agnostic cell until the rebuild lands.
+    const heroGroup = heroBuildGroupOf(unit.info?.talents);
+    const buildGroup =
+      heroGroup !== "*"
+        ? heroGroup
+        : gate
+          ? assignBuildGroup(talents, gate)
+          : "*";
     out.push({
       spec,
       bracket: combat.startInfo?.bracket ?? "unknown",

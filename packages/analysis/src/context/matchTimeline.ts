@@ -102,7 +102,7 @@ import {
   HEALING_WINDOW_MIN_HPS,
   isCriticalNonPlayerUnit,
   MANA_COOLDOWN_SPELL_IDS,
-  PASSIVE_SPELL_BLOCKLIST,
+  isPassiveProcCast,
 } from "./timelineHelpers";
 
 interface DeferredSnapshot {
@@ -1444,7 +1444,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       if (e.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
       if (!e.spellId) continue;
       const englishName = getEnglishSpellName(e.spellId, e.spellName);
-      if (e.spellName && PASSIVE_SPELL_BLOCKLIST.has(e.spellName)) continue;
+      if (isPassiveProcCast(e)) continue;
       // #36(a): echo copies / set procs / channel ticks under their own id are
       // not presses; rendering them doubles the apparent APM of the specs that
       // have them (Preservation Evoker nearly 2×).

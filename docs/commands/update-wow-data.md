@@ -401,6 +401,17 @@ Both lists now include `observedSpellIdsGenerated.json` (corpus-observed ids) as
 when adding a new generator of this shape, include it from the start. See CLAUDE.md's **Curated-List Completeness
 Rule** for the measured cost (76.5% of all corpus dispels were invisible).
 
+**A second universe on the same generator (2026-09-11).** `genTalentModifiers` also has a *talent-side* universe —
+`talentClassMap`, built from `talentIdMap.json` — and the SpellEffect scan skips any row whose SpellID is not in it.
+PvP talents are not in the node tree, so every PvP-talent cooldown modifier was silently absent for the file's whole
+life, even though the runtime (`applyCdModifiers`) has always checked `pvpTalentIds`. `genTalentMitigation` had already
+hit and fixed exactly this ("PvP talents are NOT in the node tree — without this half the 473909 positive control is
+missed entirely"); the two generators simply disagreed. `PVP_TALENT_POOL_GENERATED` is now a source here too:
+tracked spells 360 → 402, +70 mined rows (Aura Mastery −30 s from Divine Vision, Evangelism −45 s from Ultimate
+Radiance, Cleanse +4 s from Cleanse the Weak as a NEGATIVE `reduce_cd`, Purify +1 charge from Purification …).
+When adding any generator that mines "what a talent does", check BOTH universes: which targets it may write, and
+which talents it is willing to look at.
+
 **The completeness check** (re-run it whenever a list changes): pull the ground truth out of raw.txt and ask what the
 official path fails to explain, e.g. for dispels —
 

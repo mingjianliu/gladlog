@@ -255,12 +255,14 @@ export function createCompareService(deps: {
     const staleCorpus =
       major(corpus.wowPatchVersion) !== major(deps.gameBuild());
     let buildGroup = "*";
-    if (decl && !staleCorpus)
-      buildGroup = assignBuildGroup(input.talents, decl);
-    // #37 缺口二: no gate declared for this spec → the hero tree is the
-    // default grouping (same predicate as the corpus builder).
-    if (buildGroup === "*" && !staleCorpus && input.heroGroup)
+    // #37 缺口二 + 用户裁定 2026-09-11: hero tree FIRST, keystone gate as the
+    // fallback for loadouts whose hero tree cannot be resolved. Precedence must
+    // match the corpus builder exactly (perMatchRecord.combatToRecords) — the
+    // two sides key the same cell, so a disagreement here is a silent miss.
+    if (!staleCorpus && input.heroGroup && input.heroGroup !== "*")
       buildGroup = input.heroGroup;
+    if (buildGroup === "*" && decl && !staleCorpus)
+      buildGroup = assignBuildGroup(input.talents, decl);
 
     const { cell, fellBackTo } = lookupCell(
       corpus,

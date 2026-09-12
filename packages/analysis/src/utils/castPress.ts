@@ -7,9 +7,14 @@
  *
  *   1. Echo copies / set procs — a cast that only ever fires alongside the
  *      real press (research: 1265980 Twin Flames is 100% same-instant with
- *      Disintegrate; 360995 Verdant Embrace echo 86% same-instant with
- *      361195). Without the cut a Preservation Evoker's per-round cast count
- *      nearly doubles.
+ *      Disintegrate — re-measured 2026-09-11 at 0% standalone over 400 logs,
+ *      the entry holds). Without the cut a Preservation Evoker's per-round
+ *      cast count nearly doubles.
+ *      ⚠ "Always accompanied" identifies the PAIR, never which half is the
+ *      press. Verdant Embrace was registered backwards for exactly that
+ *      reason (see the COPY_CAST_IDS entry); the discriminators that do
+ *      answer it are standalone rate, self-adjacency, and which id the
+ *      talent-trigger aura rides.
  *   2. Channel ticks under their own cast id — Divine Hymn ticks (64844)
  *      arrive at 1.00s spacing, 5–6 per round, inflating the "press" count
  *      5× (18,504 → 3,583 real presses corpus-wide); the press is 64843.
@@ -34,8 +39,35 @@
  * with its per-id evidence; registered in curatedIdRegistry so the corpus rot
  * scans watch it. */
 export const COPY_CAST_IDS: ReadonlyMap<string, string> = new Map([
-  ["360995", "Verdant Embrace echo (86% same-instant with 361195)"],
-  ["355941", "Dream Breath echo copy"],
+  // 2026-09-11: the Verdant Embrace pair was registered THE WRONG WAY ROUND.
+  // The research entry read "360995 is the echo, 86% same-instant with
+  // 361195" — but "always accompanied" does not say WHICH of the two is the
+  // press, and both are ~equally accompanied. Three discriminators on 400 S2
+  // archive logs (802 × 360995 / 986 × 361195) all point the same way:
+  //   · standalone rate — 360995 alone 0.9%, 361195 alone 18.4% (a copy is
+  //     what fires without a partner; the 181 lone 361195 are the Echo copies);
+  //   · self-adjacency — 360995 never lands within 1.05s of another 360995
+  //     (0 of 802), 361195 does 23 times, i.e. press + copy on one target;
+  //   · Nullifying Shroud (378464, "Verdant Embrace triggers it" — user ruling
+  //     2026-08-18) applies same-instant with 360995 86% of the time and with
+  //     361195 17% — the buff rides the PRESS.
+  // Keeping 361195 and dropping 360995 therefore deleted the real press and
+  // counted the copies: VE presses came out 20.6% high (1530 vs 1269 over 600
+  // round-segmented logs) and the ledger never saw the press id at all.
+  [
+    "361195",
+    "Verdant Embrace arrival/echo (18.4% standalone, 23 self-adjacent; the press is 360995)",
+  ],
+  // 355941 is NOT a same-instant copy of the 355936 press (measured: 0.8%
+  // paired, not 86%) — it is the HoT/heal component id, which occasionally
+  // also logs a CAST_SUCCESS. Census over the same 400 logs: 355936 = 411
+  // casts + 375 SPELL_EMPOWER_END (the empower press); 355941 = 124 casts but
+  // 1,417 SPELL_HEAL + 13,778 SPELL_PERIODIC_HEAL. Verdict unchanged (not a
+  // press), evidence corrected.
+  [
+    "355941",
+    "Dream Breath HoT/heal component (124 casts vs 13,778 periodic heals; the press is 355936, which carries EMPOWER_END)",
+  ],
   ["361509", "Living Flame proc copy (75% same-instant with Chrono Flames)"],
   ["1265980", "Twin Flames set proc (100% same-instant with Disintegrate)"],
   ["1265991", "Twin Flames set proc (0.1% standalone)"],

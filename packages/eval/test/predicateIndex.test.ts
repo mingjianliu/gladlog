@@ -249,6 +249,21 @@ const INDEX: PredicateRow[] = [
   { file: `${A}/utils/cooldowns.ts`, symbol: "cdAvailableAt", mod: cooldowns },
   {
     file: `${A}/utils/cooldowns.ts`,
+    symbol: "isPassiveProcCast",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "guardianSpiritSaved",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/dispelAnalysis.ts`,
+    symbol: "cleanseRecoveryOf",
+    mod: dispelAnalysis,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
     symbol: "chargesAvailableAt",
     mod: cooldowns,
   },

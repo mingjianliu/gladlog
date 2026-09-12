@@ -16,6 +16,7 @@ import {
   cdAvailableAt,
   IMajorCooldownInfo,
   isHealerSpec,
+  isPassiveProcCast,
   PASSIVE_SPELL_BLOCKLIST,
   specToString,
 } from "../utils/cooldowns";
@@ -25,7 +26,7 @@ import { getHpPercentAtTime } from "../utils/killWindowTargetSelection";
 import { fmtTime } from "../utils/renderGrid";
 import { getSpellSchoolName } from "../utils/spellSchools";
 
-export { PASSIVE_SPELL_BLOCKLIST };
+export { isPassiveProcCast, PASSIVE_SPELL_BLOCKLIST };
 
 // ── Shared helpers ─────────────────────────────────────────────────────────
 

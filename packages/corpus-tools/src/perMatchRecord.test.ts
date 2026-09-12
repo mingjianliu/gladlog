@@ -1,6 +1,8 @@
 import { CombatUnitReaction, CombatUnitSpec } from "@gladlog/parser-compat";
 import { describe, expect, it } from "vitest";
 
+import { ensureHeroTalents } from "@gladlog/analysis";
+
 import type { KeystoneGate } from "./keystoneGates";
 import { combatToRecords } from "./perMatchRecord";
 
@@ -151,5 +153,20 @@ describe("combatToRecords buildGroup", () => {
   it("assigns '*' when the spec is not gated", () => {
     const recs = combatToRecords(combatWithDiscTalents([82585]), []);
     expect(recs[0].buildGroup).toBe("*");
+  });
+
+  // User ruling 2026-09-11: the hero tree is the default dimension for EVERY
+  // healer, so a keystone declaration no longer outranks it. Discipline was the
+  // only gated spec and therefore the only healer not split by hero tree, while
+  // its two trees are measurably two builds (Shadow Mend 72–79% of Oracle vs
+  // 41–57% of Voidweaver). The gate stays as the fallback for loadouts whose
+  // hero tree cannot be resolved — that is what the three tests above pin.
+  it("hero tree outranks a keystone declaration (2026-09-11)", async () => {
+    await ensureHeroTalents();
+    const combat = combatWithDiscTalents([82585]);
+    // 123290 = Oracle's subtree entry id, the shape COMBATANT_INFO really has.
+    combat.units.h1.info.talents.push({ id1: 90000, id2: 123290, count: 1 });
+    const recs = combatToRecords(combat, [discGate]);
+    expect(recs[0].buildGroup).toBe("Oracle");
   });
 });
