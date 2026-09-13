@@ -52,7 +52,7 @@ export const AI_MODELS: Record<AiBackend, AiModelOption[]> = {
     { id: "claude-haiku-4-5", label: "Claude Haiku 4.5" },
   ],
   claudeCli: [
-    { id: "claude-fable-5", label: "Claude Fable 5" },
+    { id: "claude-fable-5-1", label: "Claude Fable 5.1" },
     { id: "claude-opus-5", label: "Claude Opus 5" },
     { id: "claude-sonnet-5", label: "Claude Sonnet 5" },
     { id: "claude-haiku-4-5", label: "Claude Haiku 4.5" },
@@ -180,7 +180,12 @@ export type AiModelSelection = Partial<Record<AiBackend, string>>;
  * localAiBackends.ts's `CliChatBackend` is now an alias of this type (the
  * public name is unchanged, so consumers' imports need no edits).
  */
-export const CLI_AI_BACKENDS = ["claudeCli", "agy", "codex", "codebuddy"] as const;
+export const CLI_AI_BACKENDS = [
+  "claudeCli",
+  "agy",
+  "codex",
+  "codebuddy",
+] as const;
 export type CliAiBackend = (typeof CLI_AI_BACKENDS)[number];
 
 /** Type-narrowing predicate: whether `backend` is in CLI_AI_BACKENDS. */
