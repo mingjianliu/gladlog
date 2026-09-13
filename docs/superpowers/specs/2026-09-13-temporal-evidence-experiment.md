@@ -195,6 +195,17 @@ player as round 1, so the rounds are not independent. n stays 20.
   unused answer.
 - **0 unsupported positive feasibility claims.**
 
+**Procedure change during round 2 (2026-09-13, before any card reached the full evidence and
+before the lock).** The baseline pass is removed. User, on the live page: the product's four facts
+alone "cannot be judged at all", and the greyed "see full evidence" button gave no reason (it
+required a two-character reason). db state at the change: one card had a baseline verdict, zero
+cards had a full-evidence verdict, nothing was locked or revealed. Consequences, recorded rather
+than reinterpreted: the ≥ 8 criterion is scored as "the full-evidence reason cites an evidence
+group the product's candidate facts do not carry" (the baseline card is a fixed list, so no per-card
+baseline judgement is needed for it); the ≥ 4 criterion reverts to round 1's comparator — the
+full-evidence verdict disagrees with the product's own `responded` verdict, or is a justified
+abstention — scored only after the lock. A reason is now required to be non-empty (one character).
+
 **Kill and afterwards.** Stop and do not score on any cutoff leakage or reveal contamination.
 Fail if either yield threshold is missed or a feasibility claim is unsupported; missing evidence
 is reported, cards are never replaced. After a failure the experiment closes: no automatic round
