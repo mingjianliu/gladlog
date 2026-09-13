@@ -39,6 +39,10 @@
  *    the Fittest + Pain Suppression 0.373 (mult 0.381, add 0.249, max 0.53).
  *    Pairs with a non-reducing side (Avatar, Time Dilation) cannot tell the
  *    rules apart and are excluded from that count.
+ *  - Cloak of Shadows, physical hits with Cloak the only table aura up, split
+ *    by talentOwnershipOf(457034 Bait and Switch): holders 0.813 (n 367),
+ *    non-holders 0.965 (n 2,928) → the hero talent's 20 % is real; the
+ *    table's magic-only Cloak entry misses it for holders.
  *
  * Usage:
  *   npx tsx packages/eval/scripts/mitigationStackPairScan.ts \

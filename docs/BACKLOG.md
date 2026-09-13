@@ -2811,6 +2811,9 @@ TrinityCore 15.7%;wago CSV 不含 hotfix(`hotfixes=` 参数被忽略,真言术�
   (防御姿态 0.85、铁木 0.80、圣佑术 0.65、消散 0.25;天赋强化的树皮/不灭决心/痛苦压制实测更强)。**同一玩家身上**
   A 单独/B 单独/A+B 三组中位数,只取两边都有可测减伤的 51 组 311 人:乘法最接近 190 人、相加 70、取高 51;中位误差
   0.026/0.096/0.126。TrinityCore 规则在日志上成立;「同 SpellGroup 取最高」本次没有可测样本。
+  同次顺带:暗影斗篷的物理减伤来自英雄天赋 Bait and Switch(457034,aura107 SpellModOp 23 −20,掩码覆盖斗篷
+  第 3 条效果 aura87 物理 base 0)。斗篷期间物理伤害按天赋持有分组:有 0.813(n 367)/ 无 0.965(n 2,928)。
+  `MITIGATION_OVERRIDES` 的 31224 只登记了法术免疫,持有者的 20% 物理减伤**未登记**(待裁:按天赋加 `pctPhysical` 类字段)。
 - (7) 记账不做:SimC 类模块对照 genTalentModifiers(仅 DPS)、SimC APL 档案给 rotation-study 当词表、
   TrinityCore DR 表当缴械/击退第二意见。估值模型 V(s) / 策略模型 π_r(Maia-2 式)是另一条大线,未立项。
 - (8) **「被控可用」表改读命名属性位(2026-09-04 用户裁决,已做)。** 借自 SimC `sc_spell_info.cpp` 的属性名表(全局序号 =
