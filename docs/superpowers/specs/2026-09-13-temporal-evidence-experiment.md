@@ -128,6 +128,80 @@ threshold or score; a universal state service or candidate migration; new spell-
 mining or shield-capacity reconstruction; cooldown-feasibility catalogues or "should have"
 wording; corpus reselection, scans, models, rating, action-outcome comparisons.
 
+## Round-1 result (2026-09-13)
+
+Step 3 on anchors #1–20 failed: better interpretation or justified abstention 2/20 against a bar
+of ≥ 4; 4 verdicts changed after the outcome was revealed, 3 of them towards "answered". Full
+scoring on GH #94. Round 1 stays recorded as a failure.
+
+## Amendment 2 — round 2 (2026-09-13, recorded BEFORE round 2 runs)
+
+**Disclosure.** Designed after round-1 outcomes and the reader's written reasons were seen. User
+rulings 2026-09-13: leave kit-in-hand out ("hard to compute, fine to skip"); add line of sight
+("sometimes more useful than distance, especially against ranged"); keep after-window information
+out, but add whether the enemy had burst open ("we only looked at how much damage, not whether
+they opened burst"). Scope ruling: codex, same day. This authorises **one** bounded second
+attempt, not batches until one passes. It is a second development batch, not an independent
+confirmation.
+
+**Anchors.** Positions #21–40 of the round-1 selection order (same pool of 62 eligible rounds,
+same rule, same sha1 ordering, frozen in the step-1 ledger). Same reader and the same logging
+player as round 1, so the rounds are not independent. n stays 20.
+
+**Question.** Unchanged: answered / unanswered / insufficient evidence, holistic.
+
+**Evidence added** (same structural cutoffs; nothing after `t` in at-t facts, nothing after
+`t + 3 s` in window facts):
+
+- _Enemy offensive effect active at t_: auras active at t on each identified attacker, and auras on
+  the owner sourced by an identified attacker, whose spell is in `OFFENSIVE_CD_SPELL_IDS`
+  (`utils/spellDanger.ts`, offensive buffs and debuffs) — source, recipient, seconds since
+  applied, observation status. **Remaining duration is not rendered** (a truncated interval end is
+  not a modelled expiry; talents and procs change durations).
+- _Enemy offensive cooldown cast in the prior 8 s_ (`ENEMY_BURST_LOOKBACK_MS`), labelled
+  separately: a recent cast does not establish that the effect is still running.
+- _Window_: offensive cooldowns cast by any enemy in `(t, t + 3 s]`, shown as enemy activity, not
+  as "burst at you".
+- _Line of sight and distance for every identified attacker_, at t and at t + 3 s:
+  `hasLineOfSight` on raw samples (`getUnitRawPositionAtTime`, `LOS_SWEEP_GAP_MS`) from the
+  truncated rounds, distance from the interpolated sampler as before. No melee / ranged gating.
+  Every LoS result is labelled estimated geometry; on the four zones GH #83 records as traced from
+  minimaps (Mugambala, Tol'viron, Robodrome, Enigma Crucible) it is labelled "minimap-derived,
+  accuracy unvalidated". Two instants are endpoint estimates only: no claim about continuous
+  coverage, duration of a break, or who caused it. Blocked LoS does not mean damage was impossible.
+- Out of scope: kit in hand, remaining-duration estimates, LoS sweeps, anything after t + 3 s.
+
+**Scoring procedure (changed before execution).** For each of the 20 cards, in order:
+
+1. **Baseline pass** — only the facts the product's candidate carries today at that moment
+   (HP at the crossing, damage in the prior 2 s, attacker count, enemy offensive cast in the prior
+   8 s). The reader records a verdict and a reason. No outcome, no product verdict.
+2. **Expanded pass** — the full evidence card. The reader records a verdict, a reason, and which
+   evidence groups the judgement rested on (at least one).
+3. Corrections are allowed before the lock and every correction is kept in history.
+4. **All 20 cards are locked together before any product verdict or outcome is revealed.**
+   Outcome-driven revisions after the lock cannot count.
+
+**Acceptance (bar unchanged).** Zero cutoff-invariance violations on the 20 anchors, then:
+
+- **≥ 8 / 20 material fact gains**: the expanded reason cites an evidence group absent from the
+  baseline card, and that group on the card actually contains the cited fact (verified by me
+  against the ledger).
+- **≥ 4 / 20 better interpretation or justified abstention**: the expanded verdict differs from the
+  baseline verdict, and the expanded reason rests on at least one evidence group absent from the
+  baseline card. Known weakness, recorded before running: the baseline card is thin, so moving
+  from "insufficient" to a decisive call may be common, which makes this bar easier to meet than
+  in round 1; a reason that has to invoke kit-in-hand must say that limitation rather than infer an
+  unused answer.
+- **0 unsupported positive feasibility claims.**
+
+**Kill and afterwards.** Stop and do not score on any cutoff leakage or reveal contamination.
+Fail if either yield threshold is missed or a feasibility claim is unsupported; missing evidence
+is reported, cards are never replaced. After a failure the experiment closes: no automatic round
+3 — another attempt needs an explicitly authorised, distinct hypothesis. After a pass, step 4
+(the bounded prediction probe) becomes eligible; a pass does not validate advice, causation or
+a shipping migration.
+
 ## Tooling
 
 `packages/eval/scripts/crisisEvidenceProbe.ts` — selects and renders; no model calls; reuses
