@@ -601,6 +601,14 @@
     s.expanded.verdict &&
     (s.expanded.reason || "").trim().length >= 1 &&
     s.expanded.groups.length > 0;
+  const missingText = (s) => {
+    const miss = [
+      !s.expanded.verdict && "判断",
+      (s.expanded.reason || "").trim().length < 1 && "理由",
+      !s.expanded.groups.length && "依据",
+    ].filter(Boolean);
+    return miss.length ? `还差：${miss.join("、")}` : "";
+  };
   const chips = (arr, fn, empty) =>
     arr.length ? arr.map(fn).join("") : `<span class="none">${empty}</span>`;
 
@@ -731,7 +739,7 @@
           ([k, l]) =>
             `<label><input type="checkbox" id="g-${k}" data-g="${k}" ${s.expanded.groups.includes(k) ? "checked" : ""} ${locked ? "disabled" : ""}> ${l}</label>`,
         ).join("")}</div></div>
-        ${!locked && !complete(s) ? `<span class="hint warn">还差：${[!s.expanded.verdict && "判断", (s.expanded.reason || "").trim().length < 1 && "理由", !s.expanded.groups.length && "依据"].filter(Boolean).join("、")}</span>` : ""}
+        ${!locked ? `<span class="hint warn" id="missing">${missingText(s)}</span>` : ""}
         ${locked ? `<div class="reveal"><span class="l">揭晓</span><span>产品现在判：${c.product.responded ? "有反应（" + esc(c.product.via.join("+") || "?") + "）" : "没反应"}</span><span>10 秒内：${c.died ? "死了" : "没死"}</span></div>` : ""}
         <div class="nav"><button class="navbtn" type="button" id="prev" ${cur === 0 ? "disabled" : ""}>上一张</button>
         <button class="navbtn primary" type="button" id="next" ${cur === CARDS.length - 1 ? "disabled" : ""}>下一张</button></div></div>`;
@@ -759,11 +767,17 @@
     if (rb) rb.addEventListener("change", () => save(c.id, "baseline-reason"));
     const re = document.getElementById("reason-expanded");
     if (re)
-      re.addEventListener("change", (e) => {
+      re.addEventListener("input", (e) => {
+        // No re-render while typing or on blur: rebuilding the card on the
+        // textarea's change event swallowed the click that caused the blur
+        // (a checkbox or verdict button). Save on change, update the hint and
+        // progress in place.
         s.expanded.reason = e.target.value;
-        save(c.id, "expanded-reason");
-        render();
+        const warn = document.getElementById("missing");
+        if (warn) warn.textContent = missingText(s);
+        renderTop();
       });
+    if (re) re.addEventListener("change", () => save(c.id, "expanded-reason"));
     for (const cb of document.querySelectorAll("[data-g]"))
       cb.addEventListener("change", () => {
         const g = cb.dataset.g;
@@ -914,7 +928,17 @@
           lockedAt = data.lockedAt || lockedAt;
           continue;
         }
-        state[d.id] = { ...st(d.id), ...data };
+        // Snapshot data is frozen: a shallow spread kept the nested
+        // `expanded` object frozen, so later verdict / group writes on that
+        // card failed silently (card 1, the only card with server data).
+        const copy = JSON.parse(JSON.stringify(data));
+        state[d.id] = {
+          ...st(d.id),
+          ...copy,
+          baseline: copy.baseline ?? {},
+          expanded: { groups: [], ...(copy.expanded ?? {}) },
+          history: copy.history ?? [],
+        };
       }
       setSave("判断会自动保存到服务器");
       render();
