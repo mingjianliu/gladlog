@@ -221,6 +221,32 @@ is reported, cards are never replaced. After a failure the experiment closes: no
 (the bounded prediction probe) becomes eligible; a pass does not validate advice, causation or
 a shipping migration.
 
+## Round-2 result (2026-09-13) — experiment closed
+
+Locked 2026-09-13T07:19:00Z with 20/20 verdicts (15 answered, 5 unanswered, 0 insufficient); no
+verdict edited after the lock. Agreement with the product's `responded`: 17/20.
+
+- **Material fact gain (≥ 8): 18/20, met.** 18 cards tick a group the product's candidate facts
+  do not carry (mostly the owner's casts, then movement and LoS); the two cards with no group count
+  as none.
+- **Better interpretation or justified abstention (≥ 4): 3/20 by the mechanical rule, missed.**
+  The three disagreements are #4 (Holy Paladin; judged answered, product unanswered, died), #6
+  (Restoration Shaman; judged unanswered, product answered via teammate control, survived) and
+  #16 (Restoration Druid; judged unanswered, product answered via self-heal 18 % plus teammate
+  control, died).
+- **User review after the reveal:** the product was right on #4 and #6, and #16 was not a better
+  reading but missing evidence: "16不怪我 我看不到队友控制 其他你说的对". Under that review the count
+  is 0/20. The miss does not depend on it.
+- **Evidence gap found on #16:** the product's peel predicate counts teammate casts from
+  `ccSpellIds ∪ rootSpellIds ∪ INTERRUPT_IDS`, while the card's `cc-on-attacker` item only counts
+  CC auras applied to attackers. The teammate action was an interrupt (Counter Shot on an attacker
+  at t + 1.1 s), which applies no aura, so the card omitted it. The product's `responded` on #16
+  rests on the self-heal alone; peel is rendered, never credited.
+
+Per amendment 2 the experiment closes: no round 3. Extra facts reach the judge on almost every
+card, but they did not change a crisis verdict for the better on four. Any further attempt needs
+an explicitly authorised, distinct hypothesis (for example, teammate crises).
+
 ## Tooling
 
 `packages/eval/scripts/crisisEvidenceProbe.ts` — selects and renders; no model calls; reuses
