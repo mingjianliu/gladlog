@@ -71,6 +71,63 @@ marked, changes what a reader concludes.
   current candidate facts; ≥ 4 gain a materially better interpretation or a justified abstention;
   0 unsupported positive feasibility claims. Below that: stop, report, do not generalise.
 
+## Amendment 1 (2026-09-13, recorded BEFORE step 2 executed)
+
+**Disclosure.** This amendment was made after step 1 rendered all 20 frozen moments with their
+outcomes and the user reviewed one witness (round e9ea8a0c). From here the experiment is a
+disclosed development experiment, not an untouched confirmatory test: passing step 3 supports
+further development, not general effectiveness. The 20 anchors do not change.
+
+**Question, amended (user ruling 2026-09-13: "putting them together is right, separating doesn't
+mean much — look at it as a whole").** At this healer crisis, **was the situation answered —
+by everything active on the player plus anything done in the window — or not, or is the evidence
+insufficient?** Existing protection and new actions are the same kind of thing. The output never
+splits them into categories; timestamps and provenance are kept on every item because they
+establish what was present, whom it affected and whether hindsight supplied it.
+
+**Evidence rules (codex ruling S2/S3, 2026-09-13).**
+
+- One evidence list per crisis, two cutoffs: facts _at t_ read only observations `≤ t`; facts
+  _in the window_ read only observations `≤ t + 3 s`. The outcome is never evidence.
+- Admitted: mitigation auras (`MITIGATION_TABLE`, priced with `mitigationPctFor` on the
+  recipient), immunities and absorbs and healing-received modifiers (`abilityProfile`; absorb
+  capacity stays unknown), HoTs (an aura active at t whose periodic heal on the owner was already
+  observed before t — never classified by a tick after t), CC on the owner (`ccSpellIds`), healing
+  received in the window from **any** caster (effective amount, spell, source, event kind),
+  absorbed damage in the window, auras applied to the owner in the window, owner casts in the
+  window with their official function, CC landed on an identified attacker in the window, and
+  owner displacement vs attacker displacement from fresh position samples (enemy retreat is not
+  the owner moving; no "kite" label).
+- Unclassified auras are one uncertainty note with ids kept in the ledger; unclassified is not
+  irrelevant. The "never observed — readiness unknown" cooldown catalogue is removed.
+- No threshold, weight or score for "answered". The reader judges answered / unanswered /
+  insufficient evidence **before** revealing the outcome; "answered" never means "survived".
+- The 42 % / 11 % comparison sentence is dropped: its arms were built with the non-holistic
+  definition and are not comparable. Rendered instead: "No corpus comparison is available for
+  this combined assessment." The step-1 ledger is kept intact; the product's current verdict is
+  stored as baseline metadata for scoring only.
+
+**Step 2 acceptance (unchanged in substance).** Exact equality of every at-t field when all
+events after t are removed or adversarially changed, and of every window field when events after
+t + 3 s are; every supporting timestamp within its cutoff; unit fixtures for a pre-cast wall
+counted as protection, retreating attackers not counted as owner movement, a future aura removal
+not changing the at-t view, samples after t not establishing the at-t HP or position, and a
+non-periodic heal without a linked cast not rendered as a new healing cast. On the 20 real
+anchors: 0 invariance violations.
+
+**Step 3 acceptance (numbers unchanged, definitions sharpened).** ≥ 8/20 gain a verified,
+material fact absent from the current candidate evidence — not merely an additional aura name;
+≥ 4/20 gain a substantively better holistic interpretation or a justified abstention (the
+answered/unanswered call may stay the same, but the added evidence must correct an unsupported
+inference or materially qualify it; style does not count); 0 unsupported positive feasibility
+claims. Agreement with today's verdict is neither success nor failure. If the combined evidence
+changes nothing material, stop generalising.
+
+**Out of scope for step 2.** Shipping predicate, reference tables, `PROMPT_VERSION`, #93; any
+threshold or score; a universal state service or candidate migration; new spell-id lists, effect
+mining or shield-capacity reconstruction; cooldown-feasibility catalogues or "should have"
+wording; corpus reselection, scans, models, rating, action-outcome comparisons.
+
 ## Tooling
 
 `packages/eval/scripts/crisisEvidenceProbe.ts` — selects and renders; no model calls; reuses
