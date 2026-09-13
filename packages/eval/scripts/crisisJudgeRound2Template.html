@@ -598,14 +598,13 @@
   const BASELINE_PASS = false;
   const complete = (s) =>
     (BASELINE_PASS ? s.sealed : true) &&
-    s.expanded.verdict &&
-    (s.expanded.reason || "").trim().length >= 1 &&
-    s.expanded.groups.length > 0;
+    // 2026-09-13: reason and evidence groups became optional (user chose not
+    // to write reasons); a card with no group ticked is scored as citing no
+    // new evidence — the conservative direction.
+    !!s.expanded.verdict;
   const missingText = (s) => {
     const miss = [
       !s.expanded.verdict && "判断",
-      (s.expanded.reason || "").trim().length < 1 && "理由",
-      !s.expanded.groups.length && "依据",
     ].filter(Boolean);
     return miss.length ? `还差：${miss.join("、")}` : "";
   };
@@ -726,7 +725,7 @@
         s.baseline.verdict && (s.baseline.reason || "").trim().length >= 1;
       body += `<div style="padding:0 20px 8px"><span class="stage">第 ① 步 · 产品现有事实</span></div>${baselineBlock(c)}
       <div class="judge"><h2>只看上面这几条，你怎么判？</h2>${choiceButtons("baseline", s.baseline.verdict, locked)}
-        <textarea id="reason-baseline" placeholder="理由（必填），比如「只知道掉血，看不出他做了什么」" ${locked ? "disabled" : ""}>${esc(s.baseline.reason || "")}</textarea>
+        <textarea id="reason-baseline" placeholder="理由（选填），比如「只知道掉血，看不出他做了什么」" ${locked ? "disabled" : ""}>${esc(s.baseline.reason || "")}</textarea>
         <div class="nav"><button class="navbtn" type="button" id="prev" ${cur === 0 ? "disabled" : ""}>上一张</button>
         <button class="navbtn primary" type="button" id="seal" ${ok && !locked ? "" : "disabled"}>看完整证据</button></div>
         <span class="hint">点「看完整证据」之后，这一步的判断就不能再改。</span></div>`;
@@ -734,8 +733,8 @@
       body += `
       ${expandedBlock(c)}
       <div class="judge"><h2>看完整证据后，你怎么判？</h2>${choiceButtons("expanded", s.expanded.verdict, locked)}
-        <textarea id="reason-expanded" placeholder="理由（必填），比如「对面开着天神下凡，他 3 秒内只回了 5%」" ${locked ? "disabled" : ""}>${esc(s.expanded.reason || "")}</textarea>
-        <div><span class="hint">判断主要依据（至少勾一项）：</span><div class="groups">${GROUPS.map(
+        <textarea id="reason-expanded" placeholder="理由（选填），比如「对面开着天神下凡，他 3 秒内只回了 5%」" ${locked ? "disabled" : ""}>${esc(s.expanded.reason || "")}</textarea>
+        <div><span class="hint">判断主要依据（选填，建议勾：没勾的卡按「没用到新证据」算）：</span><div class="groups">${GROUPS.map(
           ([k, l]) =>
             `<label><input type="checkbox" id="g-${k}" data-g="${k}" ${s.expanded.groups.includes(k) ? "checked" : ""} ${locked ? "disabled" : ""}> ${l}</label>`,
         ).join("")}</div></div>
@@ -835,7 +834,7 @@
       bar.innerHTML = `已锁定（${new Date(lockedAt).toLocaleString()}），每张卡底部可以看揭晓。`;
     } else if (done < CARDS.length) {
       bar.className = "lockbar";
-      bar.innerHTML = `20 张两步都判完后，在这里锁定。锁定前任何卡都不揭晓产品判定和结果。`;
+      bar.innerHTML = `20 张都选了判断后，在这里锁定。锁定前任何卡都不揭晓产品判定和结果。`;
     } else if (!confirmLock) {
       bar.className = "lockbar";
       bar.innerHTML = `20 张都判完了。<button class="navbtn primary" type="button" id="lock">锁定全部并揭晓</button>`;

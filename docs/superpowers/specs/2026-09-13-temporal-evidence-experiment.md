@@ -206,6 +206,14 @@ baseline judgement is needed for it); the ≥ 4 criterion reverts to round 1's c
 full-evidence verdict disagrees with the product's own `responded` verdict, or is a justified
 abstention — scored only after the lock. A reason is now required to be non-empty (one character).
 
+**Second procedure change during round 2 (2026-09-13, after all verdicts, before the lock and
+before any reveal).** Reasons and evidence groups become optional; only the verdict is required to
+lock. User: "4补上了 我懒得填理由了" — they chose not to write reasons. db state at the change: 20/20
+full-evidence verdicts, 1 non-empty reason, 18/20 cards with at least one evidence group ticked, no
+lock document. Consequence for scoring: the ticked evidence groups stand in for the reason's cited
+evidence in both criteria, and a card with no group ticked counts as citing no new evidence (the
+direction that can only lower the yield, never raise it).
+
 **Kill and afterwards.** Stop and do not score on any cutoff leakage or reveal contamination.
 Fail if either yield threshold is missed or a feasibility claim is unsupported; missing evidence
 is reported, cards are never replaced. After a failure the experiment closes: no automatic round
