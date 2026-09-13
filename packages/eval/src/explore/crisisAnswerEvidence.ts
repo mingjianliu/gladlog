@@ -67,6 +67,8 @@ export interface EvidenceItem {
   spellId?: string;
   srcName?: string;
   amount?: number;
+  /** Structured fields for renderers that must not parse `text`. */
+  detail?: Record<string, unknown>;
 }
 
 export interface CrisisAnswerEvidence {
@@ -199,6 +201,11 @@ export function buildCrisisAnswerEvidence(
       status: "known",
       text: `HP ${Math.round((100 * last.advancedActorCurrentHp) / last.advancedActorMaxHp)}% (latest sample ${((tMs - last.timestamp) / 1000).toFixed(1)} s before t)`,
       atMs: [last.timestamp],
+      detail: {
+        hpPct: Math.round(
+          (100 * last.advancedActorCurrentHp) / last.advancedActorMaxHp,
+        ),
+      },
       source: "advancedActions (latest sample ≤ t)",
     });
   } else {
@@ -231,6 +238,13 @@ export function buildCrisisAnswerEvidence(
     status: "known",
     text: `${k(dmgTotal)} damage taken in the 2 s before t${maxHp ? ` (${Math.round((100 * dmgTotal) / maxHp)}% of max HP)` : ""} from ${[...attackers.entries()].map(([id, v]) => `${nameById.get(id) ?? id} ${k(v)}`).join(", ") || "no identified enemy player"}`,
     atMs: priorDmg.map((d) => d.timestamp),
+    detail: {
+      dmgPct: maxHp ? Math.round((100 * dmgTotal) / maxHp) : null,
+      attackers: [...attackers.entries()].map(([id, v]) => ({
+        name: nameById.get(id) ?? id,
+        amount: v,
+      })),
+    },
     source: "damageIn [t − 2 s, t], pets folded to owners",
   });
 
@@ -396,6 +410,10 @@ export function buildCrisisAnswerEvidence(
             status: "known",
             amount: total,
             atMs: small.flatMap((g) => g.ts),
+            detail: {
+              collapsedSources: small.length,
+              pctMaxHp: Math.round((100 * total) / maxHp),
+            },
             text: `${k(total)} more healing from ${small.length} smaller sources, each under ${SMALL_HEAL_SHARE * 100}% of max HP (${Math.round((100 * total) / maxHp)}% of max HP combined)`,
             source: "healIn (t, t + 3 s], effective amount",
           };
@@ -411,6 +429,11 @@ export function buildCrisisAnswerEvidence(
       spellId: g.spellId,
       srcName: g.src,
       atMs: g.ts,
+      detail: {
+        periodic: g.periodic,
+        pctMaxHp: maxHp ? Math.round((100 * g.amount) / maxHp) : null,
+        self: g.src === ownerWin.name,
+      },
       text: `${k(g.amount)} ${g.periodic ? "periodic" : "non-periodic"} healing from ${nameOf(g.spellId, "")} by ${g.src === ownerWin.name ? "self" : g.src} (${g.n} event(s))${maxHp ? `, ${Math.round((100 * g.amount) / maxHp)}% of max HP` : ""}`,
       source: "healIn (t, t + 3 s], effective amount",
     });
@@ -459,6 +482,7 @@ export function buildCrisisAnswerEvidence(
       spellId: a.spellId,
       srcName: a.srcUnitName,
       atMs: [a.timestamp],
+      detail: { functions: f, self: a.srcUnitName === ownerWin.name },
       text: `${nameOf(a.spellId, a.spellName)} (${f.join(", ")}) applied by ${a.srcUnitName === ownerWin.name ? "self" : a.srcUnitName} at ${relS(win.round, a.timestamp)}`,
       source: "auraEvents SPELL_AURA_APPLIED (t, t + 3 s]",
     });
@@ -479,6 +503,15 @@ export function buildCrisisAnswerEvidence(
       status: "known",
       spellId: c.spellId,
       atMs: [c.timestamp],
+      detail: {
+        functions: f,
+        target:
+          c.destUnitName && c.destUnitName !== "nil"
+            ? c.destUnitId === ownerId
+              ? "self"
+              : c.destUnitName
+            : null,
+      },
       text: `cast ${nameOf(c.spellId, c.spellName)}${tgt} at ${relS(win.round, c.timestamp)}${f.length ? ` [${f.join(", ")}]` : " [no official function recorded]"}`,
       source:
         "spellCastEvents SPELL_CAST_SUCCESS (t, t + 3 s] + abilityProfile",
@@ -504,6 +537,7 @@ export function buildCrisisAnswerEvidence(
         spellId: a.spellId,
         srcName: a.srcUnitName,
         atMs: [a.timestamp],
+        detail: { target: au.name, self: a.srcUnitName === ownerWin.name },
         text: `${nameOf(a.spellId, a.spellName)} landed on attacker ${au.name} by ${a.srcUnitName === ownerWin.name ? "self" : a.srcUnitName} at ${relS(win.round, a.timestamp)}`,
         source: "auraEvents on attackers, ccSpellIds",
       });
@@ -527,16 +561,24 @@ export function buildCrisisAnswerEvidence(
   } else {
     const ownerMoved = Math.hypot(o1.x - o0.x, o1.y - o0.y);
     const parts: string[] = [];
+    const attackerMoves: Array<Record<string, unknown>> = [];
     for (const aid of attackers.keys()) {
       const a0 = posAt(atT.round.units[aid], tMs);
       const a1 = posAt(win.round.units[aid], windowEndMs);
       if (!a0 || !a1) {
         parts.push(`${nameById.get(aid) ?? aid}: position unknown`);
+        attackerMoves.push({ name: nameById.get(aid) ?? aid, unknown: true });
         continue;
       }
       const d0 = Math.hypot(a0.x - o0.x, a0.y - o0.y);
       const d1 = Math.hypot(a1.x - o1.x, a1.y - o1.y);
       const aMoved = Math.hypot(a1.x - a0.x, a1.y - a0.y);
+      attackerMoves.push({
+        name: nameById.get(aid) ?? aid,
+        d0: Math.round(d0),
+        d1: Math.round(d1),
+        moved: Math.round(aMoved),
+      });
       parts.push(
         `${nameById.get(aid) ?? aid}: distance ${d0.toFixed(0)} → ${d1.toFixed(0)} yd, attacker moved ${aMoved.toFixed(0)} yd`,
       );
@@ -547,6 +589,7 @@ export function buildCrisisAnswerEvidence(
       status: "estimated",
       amount: ownerMoved,
       atMs: [],
+      detail: { ownerMoved: Math.round(ownerMoved), attackers: attackerMoves },
       text: `owner moved ${ownerMoved.toFixed(0)} yd between t and t + 3 s${parts.length ? `; ${parts.join("; ")}` : ""}`,
       source: `getUnitPositionAtTime (freshness ${INTERP_MAX_GAP_MS} ms) on the truncated rounds`,
     });
