@@ -12,6 +12,11 @@
  * Spec: docs/superpowers/specs/2026-08-29-crisis-no-response-design.md.
  */
 import { type BehaviorPriorRef, outcomePhrase } from "../../data/behaviorPrior";
+import {
+  type DecisionRecord,
+  isDecisionTraceActive,
+  traceDecision,
+} from "../../facts/decisionTrace";
 import type { DecisionPoint } from "../crisisDecisionPoints";
 import { fmtFactNum as fmt } from "../factFormat";
 import type { CandidateEvent } from "../types";
@@ -36,10 +41,88 @@ export function crisisNoResponseEvents(
       b.attackers2s - a.attackers2s ||
       b.dmg2s - a.dmg2s,
   );
+  // GH #96 D6 decision trace: every decision point is an opportunity.
+  const tracing = isDecisionTraceActive();
+  const trace: DecisionRecord[] = [];
+  const oppId = (p: DecisionPoint) =>
+    `crisis-no-response:${owner.id}:${Math.round(p.tSec)}`;
+  const facts = (p: DecisionPoint) => ({
+    tSec: p.tSec,
+    hpPct: p.hpPct,
+    dmg2s: p.dmg2s,
+    inCC: p.inCC,
+    lockedOut: p.lockedOut,
+    diedInWindow: p.diedInWindow,
+    hasTool: p.hasTool,
+    responses: p.responses,
+  });
+  if (tracing) {
+    for (const p of points) {
+      if (!p.dangerous || !p.feasible)
+        trace.push({
+          type: "crisis-no-response",
+          opportunityId: oppId(p),
+          ownerId: owner.id,
+          verdict: "ineligible",
+          reason: !p.dangerous
+            ? "not-dangerous"
+            : p.inCC
+              ? "owner-in-cc"
+              : p.lockedOut
+                ? "owner-locked-out"
+                : p.diedInWindow
+                  ? "died-in-window"
+                  : "no-tool",
+          facts: facts(p),
+          candidateIds: [],
+        });
+      else if (p.responded)
+        trace.push({
+          type: "crisis-no-response",
+          opportunityId: oppId(p),
+          ownerId: owner.id,
+          verdict: "suppressed",
+          reason: "responded",
+          facts: facts(p),
+          candidateIds: [],
+        });
+    }
+    for (const p of ranked.slice(cap))
+      trace.push({
+        type: "crisis-no-response",
+        opportunityId: oppId(p),
+        ownerId: owner.id,
+        verdict: "suppressed",
+        reason: "capped",
+        facts: facts(p),
+        candidateIds: [],
+      });
+  }
   const out: CandidateEvent[] = [];
   for (const p of ranked.slice(0, cap)) {
     const ref = probes.lookup(p.dmg2s);
-    if (!ref) continue; // no baseline → no accusation
+    if (!ref) {
+      if (tracing)
+        trace.push({
+          type: "crisis-no-response",
+          opportunityId: oppId(p),
+          ownerId: owner.id,
+          verdict: "suppressed",
+          reason: "no-reference",
+          facts: facts(p),
+          candidateIds: [],
+        });
+      continue; // no baseline → no accusation
+    }
+    if (tracing)
+      trace.push({
+        type: "crisis-no-response",
+        opportunityId: oppId(p),
+        ownerId: owner.id,
+        verdict: "emitted",
+        facts: { ...facts(p), cellKey: ref.cellKey },
+        candidateIds: [oppId(p)],
+      });
     out.push({
       id: `crisis-no-response:${owner.id}:${Math.round(p.tSec)}`,
       type: "crisis-no-response",
@@ -67,5 +150,6 @@ export function crisisNoResponseEvents(
   // 2026-08-29 ruling: select by danger (cap), emit in time order — like
   // every sibling producer in candidates/ (spec §4). The danger sort above
   // only decides which ≤cap points survive; it is not the order reported.
+  trace.forEach(traceDecision);
   return out.sort((a, b) => a.t - b.t);
 }

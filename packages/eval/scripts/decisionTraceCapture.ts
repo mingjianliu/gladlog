@@ -55,17 +55,42 @@ const out = createWriteStream(outPath);
 out.write(`${JSON.stringify({ _config: config })}\n`);
 
 let current = { input: "", spec: "", bracket: "" };
-setDecisionSink((r: DecisionRecord) => {
-  out.write(
-    `${JSON.stringify({
-      ...r,
-      opportunityId: `${current.input}|${r.opportunityId}`,
-      input: current.input,
-      spec: current.spec,
-      bracket: current.bracket,
-    })}\n`,
-  );
-});
+// Records are buffered per input and reconciled with the FINAL candidate list:
+// extractCandidateFindings applies a per-bracket allow-list after every
+// producer ran (GH #18 ruling 2026-08-30), so a producer's "emitted" can still
+// be dropped. The trace must report what the product actually emits.
+let buffer: DecisionRecord[] = [];
+setDecisionSink((r: DecisionRecord) => buffer.push(r));
+const TRACED_TYPES = new Set<string>();
+let inconsistencies = 0;
+const flush = (finalIds: Set<string> | null) => {
+  for (const r of buffer) {
+    TRACED_TYPES.add(r.type);
+    let rec = r;
+    if (finalIds && r.verdict === "emitted") {
+      const kept = r.candidateIds.filter((id) => finalIds.has(id));
+      if (kept.length === 0)
+        rec = {
+          ...r,
+          verdict: "suppressed",
+          reason: "post-filter",
+          candidateIds: [],
+        };
+      else if (kept.length !== r.candidateIds.length)
+        rec = { ...r, candidateIds: kept };
+    }
+    out.write(
+      `${JSON.stringify({
+        ...rec,
+        opportunityId: `${current.input}|${rec.opportunityId}`,
+        input: current.input,
+        spec: current.spec,
+        bracket: current.bracket,
+      })}\n`,
+    );
+  }
+  buffer = [];
+};
 
 const files = readFileSync(manifest, "utf8")
   .split("\n")
@@ -108,8 +133,37 @@ for (const f of files) {
         bracket,
       };
       try {
-        extractCandidateFindings(legacy, owner.id);
+        const cands = extractCandidateFindings(legacy, owner.id);
+        const finalIds = new Set(cands.map((c) => c.id));
+        // consistency: every final candidate of a traced type must come from
+        // a traced "emitted" opportunity, else the instrumentation drifted
+        const tracedEmitted = new Set(
+          buffer
+            .filter((r) => r.verdict === "emitted")
+            .flatMap((r) => r.candidateIds),
+        );
+        const tracedTypes = new Set(buffer.map((r) => r.type));
+        for (const c of cands)
+          if (tracedTypes.has(c.type) && !tracedEmitted.has(c.id)) {
+            inconsistencies++;
+            out.write(
+              `${JSON.stringify({
+                opportunityId: `${current.input}|untraced:${c.id}`,
+                input: current.input,
+                type: c.type,
+                ownerId: owner.id,
+                spec: current.spec,
+                bracket,
+                verdict: "evaluation-error",
+                reason: "candidate-without-traced-opportunity",
+                facts: {},
+                candidateIds: [c.id],
+              })}\n`,
+            );
+          }
+        flush(finalIds);
       } catch (e) {
+        buffer = [];
         errors++;
         out.write(
           `${JSON.stringify({
@@ -131,5 +185,14 @@ for (const f of files) {
 }
 setDecisionSink(null);
 out.end(() =>
-  console.log(JSON.stringify({ files: files.length, owners, errors, config })),
+  console.log(
+    JSON.stringify({
+      files: files.length,
+      owners,
+      errors,
+      inconsistencies,
+      tracedTypes: [...TRACED_TYPES],
+      config,
+    }),
+  ),
 );

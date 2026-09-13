@@ -27,6 +27,11 @@
  */
 import type { BurstWindowPriorRef } from "../../data/burstWindowPrior";
 import { burstRefClearsMinContrast } from "../../data/burstWindowPrior";
+import {
+  type DecisionRecord,
+  isDecisionTraceActive,
+  traceDecision,
+} from "../../facts/decisionTrace";
 import type { BurstWindowDecisionPoint } from "../burstWindowDecisionPoints";
 import { BURST_RESPONSE_WINDOW_SEC } from "../burstWindowDecisionPoints";
 import { fmtFactTime } from "../factFormat";
@@ -94,6 +99,75 @@ export function burstWindowResponseEvents(
       Number(b.p.anyFriendlyDeath) - Number(a.p.anyFriendlyDeath) ||
       (a.p.pressured!.minHpPct ?? 101) - (b.p.pressured!.minHpPct ?? 101),
   );
+  // GH #96 D6 decision trace: every bounded burst window is an opportunity.
+  if (isDecisionTraceActive()) {
+    const trace: DecisionRecord[] = [];
+    const oppId = (p: BurstWindowDecisionPoint) =>
+      `slow-defensive-response:${owner.id}:${p.tSec}`;
+    const facts = (p: BurstWindowDecisionPoint) => ({
+      tSec: p.tSec,
+      leadCdId: p.leadCd.spellId,
+      durationSec: p.durationSec,
+      feasible: p.feasible,
+      feasibleUnits: p.feasibleUnits,
+      triaged: p.triaged,
+      responses: p.responses,
+      pressured: p.pressured?.unitId ?? null,
+      pressuredMinHp: p.pressured?.minHpPct ?? null,
+    });
+    const kept = new Set(ranked.slice(0, cap).map((e) => e.p));
+    const inEligible = new Set(eligible.map((e) => e.p));
+    for (const p of points) {
+      const base = {
+        type: "slow-defensive-response",
+        opportunityId: oppId(p),
+        ownerId: owner.id,
+        facts: facts(p),
+      };
+      if (!p.feasible || !p.triaged || p.pressured === null)
+        trace.push({
+          ...base,
+          verdict: "ineligible",
+          reason: !p.feasible
+            ? "not-feasible"
+            : p.pressured === null
+              ? "no-pressured-friendly"
+              : "not-triaged",
+          candidateIds: [],
+        });
+      else if (p.responded)
+        trace.push({
+          ...base,
+          verdict: "suppressed",
+          reason: "responded",
+          candidateIds: [],
+        });
+      else if (p.durationSec < BURST_WINDOW_MIN_JUDGED_S)
+        trace.push({
+          ...base,
+          verdict: "ineligible",
+          reason: "window-shorter-than-judged",
+          candidateIds: [],
+        });
+      else if (!inEligible.has(p))
+        trace.push({
+          ...base,
+          verdict: "suppressed",
+          reason: "no-reference-or-flat-contrast",
+          candidateIds: [],
+        });
+      else if (!kept.has(p))
+        trace.push({
+          ...base,
+          verdict: "suppressed",
+          reason: "capped",
+          candidateIds: [],
+        });
+      else
+        trace.push({ ...base, verdict: "emitted", candidateIds: [oppId(p)] });
+    }
+    trace.forEach(traceDecision);
+  }
   const out: CandidateEvent[] = [];
   for (const { p, ref } of ranked.slice(0, cap)) {
     // Only the CDs that landed inside the 8 s this sentence judges: a CD cast

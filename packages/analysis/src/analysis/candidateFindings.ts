@@ -19,6 +19,11 @@ import { costNormPhrase } from "../data/curatedAbilityFacts";
 import { CORPUS_OBSERVED_DISPEL_IDS } from "../data/dispelObservedGenerated";
 import { lookupKickPriorityPrior } from "../data/kickPriorityPrior";
 import { MITIGATION_TABLE, mitigationPctFor } from "../data/mitigationData";
+import {
+  type DecisionRecord,
+  isDecisionTraceActive,
+  traceDecision,
+} from "../facts/decisionTrace";
 import { spellEffectData } from "../data/spellEffectData";
 import { ccSpellIds } from "../data/spellTags";
 import { lookupSyncWindowPrior } from "../data/syncWindowPrior";
@@ -2216,9 +2221,26 @@ function dpsOwnerEvents(
       mitPct: number;
       betterTargetName: string;
     }> = [];
+    // GH #96 D6 decision trace: every burst in the ledger is an opportunity.
+    const bimTracing = isDecisionTraceActive();
+    const bimTrace = new Map<BurstEntry, DecisionRecord>();
+    const bimOpp = (b: BurstEntry) =>
+      `burst-into-mitigation:${owner.id}:${Math.round(b.fromSeconds)}`;
     for (const b of ledger) {
       const t = b.dominantTarget;
-      if (!t) continue;
+      if (!t) {
+        if (bimTracing)
+          bimTrace.set(b, {
+            type: "burst-into-mitigation",
+            opportunityId: bimOpp(b),
+            ownerId: owner.id,
+            verdict: "ineligible",
+            reason: "no-dominant-target",
+            facts: { fromSeconds: b.fromSeconds },
+            candidateIds: [],
+          });
+        continue;
+      }
       // Priced on the unit that CARRIES the aura: a Flameshaper's Obsidian
       // Scales is 30 % on the Evoker and 15 % on the ally it was cast on, and
       // the ally's copy sat exactly on this door until 2026-09-12.
@@ -2240,7 +2262,32 @@ function dpsOwnerEvents(
         )
         .sort((a, c) => c.pct - a.pct);
       const hit = hits[0];
-      if (!hit) continue;
+      const bimFacts = () => ({
+        fromSeconds: b.fromSeconds,
+        target: t.unitId,
+        defensivesHit: t.defensivesHit.map((d) => {
+          const entry = MITIGATION_TABLE[d.spellId];
+          return {
+            spellId: d.spellId,
+            isImmunity: d.isImmunity,
+            appliedByOther: !!d.appliedByOther,
+            pct: entry ? mitigationPctFor(entry, !d.appliedByOther) : null,
+          };
+        }),
+      });
+      if (!hit) {
+        if (bimTracing)
+          bimTrace.set(b, {
+            type: "burst-into-mitigation",
+            opportunityId: bimOpp(b),
+            ownerId: owner.id,
+            verdict: "suppressed",
+            reason: "no-mitigation-over-door",
+            facts: bimFacts(),
+            candidateIds: [],
+          });
+        continue;
+      }
       const evals = analyzeKillWindowTargetSelection(
         [
           {
@@ -2254,7 +2301,29 @@ function dpsOwnerEvents(
         combat,
       );
       const ev = evals[0];
-      if (!ev?.betterTargetExists || !ev.betterTargetName) continue;
+      if (!ev?.betterTargetExists || !ev.betterTargetName) {
+        if (bimTracing)
+          bimTrace.set(b, {
+            type: "burst-into-mitigation",
+            opportunityId: bimOpp(b),
+            ownerId: owner.id,
+            verdict: "suppressed",
+            reason: "no-better-target",
+            facts: bimFacts(),
+            candidateIds: [],
+          });
+        continue;
+      }
+      if (bimTracing)
+        bimTrace.set(b, {
+          type: "burst-into-mitigation",
+          opportunityId: bimOpp(b),
+          ownerId: owner.id,
+          verdict: "suppressed",
+          reason: "capped",
+          facts: { ...bimFacts(), mitSpellId: hit.d.spellId, mitPct: hit.pct },
+          candidateIds: [],
+        });
       mitCandidates.push({
         b,
         t,
@@ -2266,6 +2335,12 @@ function dpsOwnerEvents(
     for (const { b, t, mitSpell, mitPct, betterTargetName } of mitCandidates
       .sort((a, c) => c.t.damage - a.t.damage)
       .slice(0, BURST_INTO_MITIGATION_CAP)) {
+      const rec = bimTrace.get(b);
+      if (rec) {
+        rec.verdict = "emitted";
+        delete rec.reason;
+        rec.candidateIds = [bimOpp(b)];
+      }
       out.push({
         id: `burst-into-mitigation:${owner.id}:${Math.round(b.fromSeconds)}`,
         type: "burst-into-mitigation",
@@ -2283,6 +2358,7 @@ function dpsOwnerEvents(
         },
       });
     }
+    bimTrace.forEach((rec) => traceDecision(rec));
   }
 
   // off-target-in-window: RETIRED from the menu 2026-08-19 (user ruling
