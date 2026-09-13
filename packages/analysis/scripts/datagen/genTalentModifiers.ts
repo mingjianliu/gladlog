@@ -6,495 +6,68 @@ import { SPELL_CATEGORIES } from "../../src/data/spellCategories";
 import spellIdLists from "../../src/data/spellIdLists";
 import talentIdMap from "../../src/data/talentIdMap.json";
 import { TEAM_HEAL_CD_IDS } from "../../src/utils/cooldowns";
-import { CUSTOM_TALENT_MODIFIERS } from "./customTalentModifiers";
 import { writeArtifact } from "./lib/emit";
 import {
   applyHotfixOverlay,
   dataDirOf,
   loadHotfixOverlay,
 } from "./lib/simcHotfix";
+import {
+  buildTalentInventory,
+  CLASS_ID_TO_FAMILY_FALLBACK,
+  compileCooldownModifiers,
+  deriveClassFamilies,
+  type ICDModifier,
+  serializeTalentInventory,
+  talentClassMapOf,
+} from "./lib/talentInventory";
 import { fetchTable, parseCsv, resolveBuild } from "./lib/wagoCsv";
 
-const EFFECT_MOD_CHARGES = 121;
-const EFFECT_MOD_COOLDOWN = 148;
-const EFFECT_APPLY_AURA = 6;
-
-const AURA_MOD_MAX_CHARGES = 411;
-// 107/108 are TrinityCore's SPELL_AURA_ADD_FLAT_MODIFIER / SPELL_AURA_ADD_PCT_MODIFIER —
-// generic "apply a SpellMod" auras, NOT dedicated cooldown auras. Which spell property
-// they touch (cooldown, cast time, one numbered effect's value, ...) is selected by
-// EffectMiscValue_0 acting as a SpellModOp code; only SPELLMOD_COOLDOWN (11) legitimately
-// reduces a cooldown timer. Blindly treating every 107/108 hit as a cooldown reduction
-// misclassified e.g. spellId 265187's Master Summoner modifier (MiscValue_0=10,
-// SPELLMOD_CASTING_TIME — a 0.5s cast-time cut, not a CD cut) and spellId 1719's Reckless
-// Abandon modifier (MiscValue_0=23, SPELLMOD_EFFECT3 — modifies Recklessness's rage-gain
-// effect, not its CD) as ~500 *seconds* of cooldown reduction, driving cooldownSeconds
-// negative (BACKLOG §29a). Gated below on `miscValue0 === SPELLMOD_COOLDOWN`.
-const AURA_ADD_FLAT_MODIFIER = 107;
-const AURA_ADD_PCT_MODIFIER = 108;
-const SPELLMOD_COOLDOWN = 11; // TrinityCore SpellModOp code for "this SpellMod targets cooldown"
-const AURA_CHARGE_RECOVERY_MULTIPLIER = 454; // charge recovery rate %, MiscValue_0 = ChargeCategory (Path B)
-const AURA_MOD_CATEGORY_COOLDOWN = 453; // SPELL_AURA_CHARGE_RECOVERY_MOD — dedicated, MiscValue_0 is a ChargeCategory id (Path B below), not a SpellModOp code
-const AURA_OVERRIDE_ACTION_SPELL = 332; // Replaces base spell with another
-
-// Mapping of ClassID to SpellFamilyName (SpellClassSet)
-const CLASS_ID_TO_FAMILY: Record<number, number> = {
-  1: 4, // Warrior
-  2: 10, // Paladin
-  3: 9, // Hunter
-  4: 8, // Rogue
-  5: 6, // Priest
-  6: 15, // Death Knight
-  7: 11, // Shaman
-  8: 3, // Mage
-  9: 5, // Warlock
-  // 2026-09-13: Monk/Demon Hunter/Evoker were 126/127/128, which no DB2 row
-  // carries — every class-mask (Path A) cooldown modifier for those three
-  // classes was silently dropped (e.g. 迅疾豪胆 −30 s Fortifying Brew, 止戈古训
-  // −15 s Paralysis, 天神之赐 −60 s Xuen). Values read off
-  // SpellClassOptions@12.1.0.69587: Paralysis 115078 = 53, Blur 198589 = 107,
-  // Obsidian Scales 363916 = 224. Only Path B (charge categories) survived.
-  10: 53, // Monk
-  11: 7, // Druid
-  12: 107, // Demon Hunter
-  13: 224, // Evoker
-};
+/** Re-exported from the inventory module (GH #96 M1): one definition. */
+export type { ICDModifier } from "./lib/talentInventory";
 
 function toInt(value: string): number {
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-export interface ICDModifier {
-  talentSpellId: string;
-  // `reduce_cd` is a flat-seconds subtraction; `reduce_cd_pct` is a percentage
-  // multiplier (`value: 30` means -30%, applied as `base *= (1 - 30/100)`).
-  // The two must never be conflated: DB2 aura 108 (SPELL_AURA_ADD_PCT_MODIFIER)
-  // stores a plain percentage in EffectBasePointsF, not a flat second count —
-  // review of 2d5993c caught this being subtracted as flat seconds, wrong by
-  // roughly an order of magnitude on long CDs (fix-29a-review.md finding #1).
-  effect: "extra_charge" | "reduce_cd" | "reduce_cd_pct" | "replace_spell";
-  value: number;
-  isConditional?: boolean;
-  /**
-   * DB2 SpellEffect.ID the modifier was read from (2026-09-13, codex astra
-   * GH #96 ruling 7). Identity, not magnitude, decides "same real modifier":
-   * one row rediscovered through two match paths collapses; two distinct rows
-   * that happen to carry the same value are both kept and stacked by
-   * `applyCdModifiers`. Absent for CUSTOM_TALENT_MODIFIERS and for synthetic
-   * test rows without an ID — those keep the old value-based collapse.
-   */
-  sourceRowId?: string;
-}
-
+/**
+ * Cooldown / charge talent modifiers for the tracked spells.
+ *
+ * GH #96 M1 (2026-09-13): a thin wrapper over the shared talent evidence
+ * inventory (`lib/talentInventory.ts` → `buildTalentInventory`) and its
+ * cooldown compiler (`compileCooldownModifiers`). Every rule that used to live
+ * here — Path A class mask, Path B charge category (category effects only),
+ * Path C direct id, SPELLMOD_COOLDOWN gating, aura 454, temporary-carrier
+ * exclusion, row-identity dedup, one-effect-two-mechanisms reconciliation,
+ * custom modifiers, tracked filter — moved there unchanged; the tests in
+ * test/datagen/talentModifiers.test.ts exercise it through this signature.
+ */
 export function extractTalentModifiers(
   spellEffectRows: Record<string, string>[],
   spellClassOptionsRows: Record<string, string>[],
   spellCategoriesRows: Record<string, string>[],
-  spellNameRows: Record<string, string>[],
+  _spellNameRows: Record<string, string>[],
   trackedSpellIds: Set<string>,
   /**
-   * Source spells that are TEMPORARY buffs (finite DB2 duration): their
-   * cooldown / charge SpellMods only apply while the buff is up, so emitting
-   * them as permanent talent modifiers is wrong. 2026-09-13 audit: Berserk
-   * 50334 recorded "Frenzied Regeneration −100 %" and Avatar 107574 "Thunder
-   * Clap −50 %" as if held all match (20 such rows before the fix). Optional
-   * so synthetic-row tests keep their old behaviour; `main` always passes it.
-   * `replace_spell` rows are kept — they describe which button exists.
+   * Finite-duration carrier spells: their cooldown / charge SpellMods only
+   * apply while the buff is up (Berserk 50334 "Frenzied Regeneration −100 %",
+   * Avatar 107574 "Thunder Clap −50 %"), so they emit no permanent modifier.
+   * `replace_spell` rows are kept. Optional so synthetic-row tests keep their
+   * old behaviour; `main` always passes it.
    */
   temporarySourceIds: ReadonlySet<string> = new Set(),
 ): Record<string, ICDModifier[]> {
-  const spellNames = new Map<string, string>();
-  for (const row of spellNameRows) {
-    spellNames.set(row.ID, row.Name_lang || "");
-  }
-
-  // 1. Index all player talent spell IDs and their class IDs
-  const talentClassMap = new Map<string, number>();
-  for (const tree of talentIdMap) {
-    const classId = tree.classId as number;
-    // heroNodes/subTreeNodes included 2026-08-18: they were missing, so every
-    // HERO talent's cooldown/charge modifier was dropped before the effect
-    // scan even looked at it — e.g. Warp (429483, Chronowarden) carries
-    // `Aura=453 MiscValue_0=1948 BasePoints=-5000`, i.e. "Hover's cooldown is
-    // also reduced by 5 sec" (murlok.io), and never reached the output. Build
-    // 12.1.0.69273 has 695 hero/subTree talents carrying 44 CD/charge effect
-    // rows between them. `collectCandidateIds` (lib/candidates.ts, source 6)
-    // already walked all four node kinds — the two files disagreed, and this
-    // one was the wrong side.
-    const allNodes = [
-      ...(tree.classNodes || []),
-      ...(tree.specNodes || []),
-      ...((tree as { heroNodes?: unknown[] }).heroNodes || []),
-      ...((tree as { subTreeNodes?: unknown[] }).subTreeNodes || []),
-    ];
-    for (const node of allNodes) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      for (const entry of (node as any).entries || []) {
-        const spellId = String(entry.spellId || entry.visibleSpellId || "");
-        if (spellId && spellId !== "0") {
-          talentClassMap.set(spellId, classId);
-        }
-      }
-    }
-  }
-
-  // 1b. PvP talents are NOT in the node tree, so the SpellEffect scan below
-  // never even looked at them: `talentClassMap.get(row.SpellID)` misses and the
-  // row is skipped. Every PvP-talent cooldown modifier was therefore silently
-  // absent from the output — the SAME universe gap `genTalentMitigation` closed
-  // for its own table ("PvP talents are NOT in the node tree — without this
-  // half the 473909 positive control is missed entirely", that file's step 2),
-  // and exactly the shape CLAUDE.md's Curated-List Completeness Rule describes:
-  // the list that decides WHICH ids the official lookup runs on is part of the
-  // predicate, and its completeness has to be checked separately.
-  //
-  // Runtime already supports these: `applyCdModifiers` (cooldowns.ts) checks
-  // `pvpTalentIds` alongside talent-tree ids — it just never had data.
-  // ⚠ The ids here are DB2 `PvpTalent.SpellID` (granted) and its
-  // ActionBarSpellID (carrier). They differ for a handful of talents (Holy
-  // Priest's Spirit of Redemption 215769 is carried by 215982); a modifier is
-  // emitted under whichever id DB2 hangs the SpellEffect row on, and matches at
-  // runtime only if COMBATANT_INFO reports that same id in `pvpTalents`.
-  const classIdOfSpec = new Map<number, number>();
-  for (const tree of talentIdMap) {
-    classIdOfSpec.set(tree.specId as number, tree.classId as number);
-  }
-  for (const [specId, granted] of Object.entries(PVP_TALENT_POOL_GENERATED)) {
-    const classId = classIdOfSpec.get(Number(specId));
-    if (classId === undefined) continue;
-    for (const [grantedId, carrierId] of Object.entries(granted)) {
-      if (grantedId && grantedId !== "0")
-        talentClassMap.set(grantedId, classId);
-      if (carrierId && carrierId !== "0")
-        talentClassMap.set(carrierId, classId);
-    }
-  }
-
-  // 2. Index target spells by their class mask
-  const targetSpellMasks = new Map<
-    string,
-    { family: number; masks: number[] }
-  >();
-  for (const row of spellClassOptionsRows) {
-    const spellId = row.SpellID;
-    if (!spellId || spellId === "0") continue;
-    targetSpellMasks.set(spellId, {
-      family: toInt(row.SpellClassSet),
-      masks: [
-        toInt(row.SpellClassMask_0),
-        toInt(row.SpellClassMask_1),
-        toInt(row.SpellClassMask_2),
-        toInt(row.SpellClassMask_3),
-      ],
-    });
-  }
-
-  // 3. Index target spells by their ChargeCategory
-  const chargeCategorySpells = new Map<number, string[]>();
-  for (const row of spellCategoriesRows) {
-    const spellId = row.SpellID;
-    const chargeCategory = toInt(row.ChargeCategory);
-    if (!spellId || chargeCategory === 0) continue;
-
-    if (!chargeCategorySpells.has(chargeCategory)) {
-      chargeCategorySpells.set(chargeCategory, []);
-    }
-    const categoryTargets = chargeCategorySpells.get(chargeCategory);
-    if (categoryTargets) {
-      categoryTargets.push(spellId);
-    }
-  }
-
-  const results: Record<string, ICDModifier[]> = {};
-  /** Recovery mechanism a scanned modifier acts on: a SpellMod cooldown
-   * (107/108 op 11, effect 148) or a charge-category recovery aura (453/454).
-   * Kept off the emitted object — only the step-4b reconciliation reads it. */
-  const mechanismOf = new WeakMap<ICDModifier, "cooldown" | "charge">();
-  const chargedSpellIds = new Set<string>(
-    [...chargeCategorySpells.values()].flat(),
-  );
-
-  function addModifier(
-    targetSpellId: string,
-    mod: ICDModifier,
-    mechanism?: "cooldown" | "charge",
-  ) {
-    if (mechanism) mechanismOf.set(mod, mechanism);
-    if (!results[targetSpellId]) {
-      results[targetSpellId] = [];
-    }
-    // A talent can hit a target spell via more than one matched CSV row
-    // (Path A classmask, Path B chargeCategory, Path C direct id, or two
-    // different EffectIndex rows on the same talent). Two matched rows for
-    // the same (talentSpellId, effect) pair are one of two things:
-    //   (a) the SAME real DB2 SpellEffect row, rediscovered through a second
-    //       match path — identified by identical `value`. Collapsing to one
-    //       entry is correct; keeping both would double-count a single
-    //       real-world modifier.
-    //   (b) genuinely DISTINCT SpellEffect rows on the same talent spell that
-    //       both target this spell with the same effect kind but different
-    //       magnitudes — real WoW stacks these rather than picking one. Per
-    //       TrinityCore `Player::GetSpellModValues`/`ApplySpellMod`
-    //       (Player.cpp:22773-22860, `TrinityCore/TrinityCore@master`,
-    //       verified 2026-08-15): every matching SPELLMOD_FLAT mod is summed
-    //       (`*flat += value`) and every matching SPELLMOD_PCT mod is
-    //       multiplied (`*pct *= 1 + value/100`) — `basevalue = (base +
-    //       totalflat) * totalmul`. `cooldowns.ts`'s `applyCdTalentModifiers`
-    //       already implements exactly this (sums every `reduce_cd` entry,
-    //       multiplies every `reduce_cd_pct` entry it finds for a
-    //       talentedSpellId) — it does not assume one entry per
-    //       (talentSpellId, effect), so the fix here is purely "stop dropping
-    //       distinct-value rows and let the existing consumer stack them",
-    //       not a second place doing the arithmetic.
-    // "First CSV row wins" (pre-2026-08-15) silently dropped case (b) rows —
-    // order-dependent and not a principled choice (BACKLOG: review finding #3
-    // of fix-29a-review.md). Fixed: (a) still collapses (order-independent,
-    // since the values are identical by definition); (b) now emits both.
-    const identical = results[targetSpellId].find(
-      (m) =>
-        m.talentSpellId === mod.talentSpellId &&
-        m.effect === mod.effect &&
-        (mod.sourceRowId !== undefined && m.sourceRowId !== undefined
-          ? m.sourceRowId === mod.sourceRowId
-          : m.value === mod.value),
-    );
-    if (identical) {
-      // Same value re-matched via a second path — same real modifier.
-      // `isConditional` is never set by the DB2 scan (only by
-      // CUSTOM_TALENT_MODIFIERS), so this only fires if a future custom
-      // entry collides with a scanned row that disagrees on conditionality —
-      // a genuinely unexpected shape worth a loud warning, not a guess.
-      if (!!identical.isConditional !== !!mod.isConditional) {
-        console.warn(
-          `[genTalentModifiers] same-value modifier re-matched with conflicting isConditional: ` +
-            `target=${targetSpellId} talent=${mod.talentSpellId} effect=${mod.effect} value=${mod.value} ` +
-            `kept.isConditional=${!!identical.isConditional} new.isConditional=${!!mod.isConditional}`,
-        );
-      }
-      return;
-    }
-    // Distinct value for the same (talentSpellId, effect): a second real
-    // SpellMod row on this talent. Keep it — applyCdTalentModifiers stacks it.
-    results[targetSpellId].push(mod);
-  }
-
-  // 4. Scan SpellEffect for modifiers
-  for (const row of spellEffectRows) {
-    const talentSpellId = row.SpellID;
-    const talentClassInfo = talentClassMap.get(talentSpellId);
-    if (!talentClassInfo) continue;
-
-    const classId = talentClassInfo;
-    const familyId = CLASS_ID_TO_FAMILY[classId];
-    if (familyId === undefined) continue;
-
-    const effect = toInt(row.Effect);
-    const aura = toInt(row.EffectAura);
-    const miscValue0 = toInt(row.EffectMiscValue_0);
-
-    let modifierType:
-      "extra_charge" | "reduce_cd" | "reduce_cd_pct" | "replace_spell" | null =
-      null;
-    let value = toInt(row.EffectBasePointsF);
-
-    if (
-      effect === EFFECT_MOD_CHARGES ||
-      (effect === EFFECT_APPLY_AURA && aura === AURA_MOD_MAX_CHARGES)
-    ) {
-      modifierType = "extra_charge";
-      value = Math.abs(value);
-    } else if (
-      effect === EFFECT_APPLY_AURA &&
-      aura === AURA_ADD_PCT_MODIFIER &&
-      miscValue0 === SPELLMOD_COOLDOWN
-    ) {
-      // Percentage SpellMod (e.g. Unbreakable Spirit -30%, Righteous Protector
-      // -50%). DB2 stores this as a plain percentage integer in
-      // EffectBasePointsF (confirmed against real rows: 114154 → -30,
-      // 204074 → -50, 391271 → -10 — no ms scaling, unlike the flat case
-      // below) — applying the >500-implies-ms heuristic to it would be
-      // wrong on its own terms even before considering unit; skip it.
-      modifierType = "reduce_cd_pct";
-      value = Math.abs(value);
-    } else if (
-      effect === EFFECT_APPLY_AURA &&
-      aura === AURA_CHARGE_RECOVERY_MULTIPLIER
-    ) {
-      // 2026-09-13: aura 454 (charge recovery rate %, MiscValue_0 = the
-      // ChargeCategory, matched by Path B) was not read at all — 优胜劣汰 −12 %
-      // Survival Instincts, 乌瑟尔的劝谏 −10 % Blessing of Protection /
-      // Spellwarding, 丝缕交织 −10 % Obsidian Scales, PvP 神圣职责 −33 % Blessing
-      // of Protection, PvP 窃贼的交易 −20 % Feint. Sign kept: a negative DB2
-      // value is a reduction, so `-value` yields the positive reduction
-      // `applyCdModifiers` expects and an increase rides through negative.
-      modifierType = "reduce_cd_pct";
-      value = -value;
-    } else if (
-      effect === EFFECT_MOD_COOLDOWN ||
-      (effect === EFFECT_APPLY_AURA && aura === AURA_MOD_CATEGORY_COOLDOWN) ||
-      (effect === EFFECT_APPLY_AURA &&
-        aura === AURA_ADD_FLAT_MODIFIER &&
-        miscValue0 === SPELLMOD_COOLDOWN)
-    ) {
-      modifierType = "reduce_cd";
-      // Sign is MEANINGFUL and must survive (2026-08-18). DB2 stores a
-      // cooldown REDUCTION as a negative EffectBasePointsF and an INCREASE as
-      // a positive one — verified on this build: Celerity (115173) → -5000
-      // (Roll −5s), Lighter Than Air (449582) → +2000 ("but the cooldown of
-      // Roll is increased by 2 sec", murlok.io). The old `Math.abs` collapsed
-      // both into "reduce by |v|", so every cooldown-INCREASING talent was
-      // recorded as an equal-magnitude reduction — a 2× error in the wrong
-      // direction (8 such rows in build 12.1.0.69273, magnitudes up to 60s).
-      // Negating instead keeps `reduce_cd`'s "positive value = seconds
-      // removed" contract intact for the common case AND lets an increase
-      // ride through as a negative reduction, which `applyCdModifiers`'
-      // `base - flatReduceSeconds` already handles correctly with no consumer
-      // change. This is the other half of the BACKLOG §29a class of bug (that
-      // fix gated on MiscValue_0 but left the sign stripped).
-      value = -value;
-      // DB2 stores some CD effects in ms and others in seconds with no unit
-      // flag. Heuristic: no real talent moves a cooldown by >500s, so any
-      // magnitude >500 is assumed to be milliseconds. Applied to the
-      // magnitude so it holds for increases too.
-      if (Math.abs(value) > 500) {
-        value = Math.round(value / 1000);
-      }
-    } else if (
-      effect === EFFECT_APPLY_AURA &&
-      aura === AURA_OVERRIDE_ACTION_SPELL
-    ) {
-      modifierType = "replace_spell";
-      // Replacement ID is in value
-    }
-
-    if (!modifierType) continue;
-    if (
-      modifierType !== "replace_spell" &&
-      temporarySourceIds.has(talentSpellId)
-    )
-      continue;
-
-    const effectMasks = [
-      toInt(row.EffectSpellClassMask_0),
-      toInt(row.EffectSpellClassMask_1),
-      toInt(row.EffectSpellClassMask_2),
-      toInt(row.EffectSpellClassMask_3),
-    ];
-
-    const hasMask = effectMasks.some((m) => m !== 0);
-
-    // Path A: Match via bitmask
-    if (hasMask) {
-      for (const [targetId, targetInfo] of targetSpellMasks.entries()) {
-        if (targetInfo.family !== familyId) continue;
-
-        const intersects =
-          (effectMasks[0] & targetInfo.masks[0]) !== 0 ||
-          (effectMasks[1] & targetInfo.masks[1]) !== 0 ||
-          (effectMasks[2] & targetInfo.masks[2]) !== 0 ||
-          (effectMasks[3] & targetInfo.masks[3]) !== 0;
-
-        if (intersects) {
-          addModifier(
-            targetId,
-            {
-              talentSpellId,
-              effect: modifierType,
-              value,
-              ...(row.ID ? { sourceRowId: String(row.ID) } : {}),
-            },
-            "cooldown",
-          );
-        }
-      }
-    }
-
-    // Path B: Match via ChargeCategory (stored in MiscValue_0)
-    // Only charge-category effects carry a ChargeCategory in MiscValue_0
-    // (2026-09-13, codex astra GH #96 ruling 7): on a 107/108 row the same
-    // field is the SpellModOp code, so category 11 would otherwise catch every
-    // cooldown SpellMod in the game.
-    const isCategoryEffect =
-      effect === EFFECT_MOD_CHARGES ||
-      effect === EFFECT_MOD_COOLDOWN ||
-      aura === AURA_MOD_MAX_CHARGES ||
-      aura === AURA_MOD_CATEGORY_COOLDOWN ||
-      aura === AURA_CHARGE_RECOVERY_MULTIPLIER;
-    const chargeTargets = isCategoryEffect
-      ? chargeCategorySpells.get(miscValue0)
-      : undefined;
-    if (miscValue0 > 0 && chargeTargets) {
-      for (const targetId of chargeTargets) {
-        addModifier(
-          targetId,
-          {
-            talentSpellId,
-            effect: modifierType,
-            value,
-            ...(row.ID ? { sourceRowId: String(row.ID) } : {}),
-          },
-          "charge",
-        );
-      }
-    }
-
-    // Path C: Direct Target Spell ID (stored in MiscValue_0)
-    // Used for Effect 332 overrides (e.g. Ice Block -> Ice Cold)
-    if (miscValue0 > 0 && !chargeCategorySpells.has(miscValue0)) {
-      addModifier(
-        String(miscValue0),
-        {
-          talentSpellId,
-          effect: modifierType,
-          value,
-          ...(row.ID ? { sourceRowId: String(row.ID) } : {}),
-        },
-        "cooldown",
-      );
-    }
-  }
-
-  // 4b. One talent, one effect, two mechanisms (2026-09-13). DB2 often writes
-  // the same reduction twice — a SpellMod cooldown row (class mask) AND a
-  // charge-recovery row (charge category) — because a spell recovers through
-  // exactly one of them: 神圣职责 216853 is −33 % as aura 108 op 11 AND as aura
-  // 454 on Blessing of Spellwarding's category. Once dedup keys on row identity
-  // both survive and `applyCdModifiers` would stack them (33 % → 55 %). Keep
-  // the row matching how the target recovers: charge-category targets keep the
-  // charge row, everything else keeps the cooldown row.
-  for (const [targetId, mods] of Object.entries(results)) {
-    const charged = chargedSpellIds.has(targetId);
-    const drop = new Set<ICDModifier>();
-    for (const a of mods) {
-      if (mechanismOf.get(a) !== "cooldown") continue;
-      for (const b of mods) {
-        if (mechanismOf.get(b) !== "charge") continue;
-        if (
-          a.talentSpellId === b.talentSpellId &&
-          a.effect === b.effect &&
-          a.value === b.value
-        )
-          drop.add(charged ? a : b);
-      }
-    }
-    if (drop.size) results[targetId] = mods.filter((m) => !drop.has(m));
-  }
-
-  // 5. Merge Custom Modifiers
-  for (const [targetId, mods] of Object.entries(CUSTOM_TALENT_MODIFIERS)) {
-    mods.forEach((mod) => addModifier(targetId, mod));
-  }
-
-  // 6. Sanity filter: Only include modifiers for spells that are "important" enough to be tracked.
-  const filteredResults: Record<string, ICDModifier[]> = {};
-  for (const [targetId, mods] of Object.entries(results)) {
-    if (trackedSpellIds.has(targetId)) {
-      filteredResults[targetId] = mods;
-    }
-  }
-
-  return filteredResults;
+  const inventory = buildTalentInventory({
+    talentTrees: talentIdMap as never,
+    pvpPool: PVP_TALENT_POOL_GENERATED,
+    spellEffectRows,
+    spellClassOptionsRows,
+    spellCategoriesRows,
+    temporarySpellIds: temporarySourceIds,
+    trackedSpellIds,
+  });
+  return compileCooldownModifiers(inventory, trackedSpellIds);
 }
 
 export async function main(): Promise<void> {
@@ -626,6 +199,20 @@ export async function main(): Promise<void> {
       temporarySourceIds.add(row.SpellID);
   }
 
+  // DB2-derived class families must agree with the verified constants on real
+  // data — a disagreement means either a class set moved or the derivation
+  // broke, and both must stop the run (the 126/127/128 bug hid for weeks).
+  const { derived } = deriveClassFamilies(
+    talentClassMapOf(talentIdMap as never, PVP_TALENT_POOL_GENERATED),
+    spellClassOptionsRows,
+  );
+  for (const [classId, fam] of Object.entries(CLASS_ID_TO_FAMILY_FALLBACK)) {
+    if (derived[Number(classId)] !== fam)
+      throw new Error(
+        `class family mismatch for classId ${classId}: DB2 mode ${derived[Number(classId)]} vs verified ${fam}`,
+      );
+  }
+
   const filteredResults = extractTalentModifiers(
     spellEffectRows,
     spellClassOptionsRows,
@@ -646,6 +233,31 @@ export async function main(): Promise<void> {
 
   writeArtifact(outputPath, `${JSON.stringify(filteredResults, null, 2)}\n`);
   console.log(`Wrote generated talent modifiers to ${outputPath}`);
+
+  // GH #96 M1: the shared talent evidence inventory itself. Not imported by the
+  // product; the later duration / mitigation compilers and eval scans read it.
+  const spellMiscRows = parseCsv(spellMiscRaw).rows;
+  const knownDurationSpellIds = new Set(
+    spellMiscRows.filter((r) => r.DifficultyID === "0").map((r) => r.SpellID),
+  );
+  const inventory = buildTalentInventory({
+    talentTrees: talentIdMap as never,
+    pvpPool: PVP_TALENT_POOL_GENERATED,
+    spellEffectRows,
+    spellClassOptionsRows,
+    spellCategoriesRows,
+    temporarySpellIds: temporarySourceIds,
+    knownDurationSpellIds,
+    trackedSpellIds,
+  });
+  const inventoryPath = new URL(
+    "../../src/data/talentEffectInventoryGenerated.json",
+    import.meta.url,
+  ).pathname;
+  writeArtifact(inventoryPath, serializeTalentInventory(inventory, build));
+  console.log(
+    `Wrote talent inventory: ${inventory.rows.length} rows, ${inventory.edges.length} edges, ${inventory.meta.truncatedTriggerEdges} trigger edges truncated`,
+  );
 }
 
 if (
