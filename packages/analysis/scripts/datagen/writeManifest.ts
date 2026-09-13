@@ -105,6 +105,18 @@ export async function main(): Promise<void> {
       "talentModifiers.json": {
         trackedSpells: Object.keys(readJson("talentModifiers.json")).length,
       },
+      // GH #96 M1 (2026-09-13): the shared talent evidence inventory that
+      // genTalentModifiers writes next to talentModifiers.json. `edges` and
+      // `truncatedTriggerEdges` are tracked beside `rows` because a talent
+      // universe or trigger-walk regression shrinks reachability without
+      // necessarily moving the row count.
+      "talentEffectInventoryGenerated.json": {
+        rows: readJson("talentEffectInventoryGenerated.json").rows.length,
+        edges: readJson("talentEffectInventoryGenerated.json").edges.length,
+        truncatedTriggerEdges: readJson("talentEffectInventoryGenerated.json")
+          ._meta.truncatedTriggerEdges,
+        bytes: statSync(dataDir + "talentEffectInventoryGenerated.json").size,
+      },
       "mitigationGenerated.json": {
         entries: Object.keys(readJson("mitigationGenerated.json").entries)
           .length,
@@ -238,10 +250,16 @@ export async function main(): Promise<void> {
       "usableWhileCcGenerated.ts": (() => {
         const t = readFileSync(dataDir + "usableWhileCcGenerated.ts", "utf-8");
         const count = (dim: string) => {
-          const m = t.match(new RegExp(`${dim}: new Set\\(\\s*(\\[[^\\]]*\\])`));
+          const m = t.match(
+            new RegExp(`${dim}: new Set\\(\\s*(\\[[^\\]]*\\])`),
+          );
           return m ? (JSON.parse(m[1]!) as string[]).length : 0;
         };
-        return { stunned: count("stunned"), feared: count("feared"), confused: count("confused") };
+        return {
+          stunned: count("stunned"),
+          feared: count("feared"),
+          confused: count("confused"),
+        };
       })(),
       // BACKLOG #26 Task 4 (raw-streams plan): per-spell mana cost table
       // (genSpellManaCost.ts), scoped to observedSpellIdsGenerated's

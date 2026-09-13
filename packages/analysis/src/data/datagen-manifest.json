@@ -30,7 +30,7 @@
       "relentless": 10
     },
     "talentModifiers.json": {
-      "trackedSpells": 402
+      "trackedSpells": 438
     },
     "mitigationGenerated.json": {
       "entries": 19,
@@ -156,6 +156,12 @@
     "kickPriorityPriorGenerated.json": {
       "entries": 1,
       "producer": "packages/eval/scripts/kickPriorityOutcomeProbe.ts emit-table"
+    },
+    "talentEffectInventoryGenerated.json": {
+      "rows": 8225,
+      "edges": 4037,
+      "truncatedTriggerEdges": 7,
+      "bytes": 2369929
     }
   }
 }
