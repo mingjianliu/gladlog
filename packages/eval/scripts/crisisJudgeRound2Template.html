@@ -1,0 +1,924 @@
+<title>第二轮危机判读</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link
+  rel="stylesheet"
+  href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap"
+/>
+<style>
+  :root {
+    --bg: #eef0f6;
+    --surface: #ffffff;
+    --surface-2: #f5f6fb;
+    --hairline: #d9dbe6;
+    --ink: #1b1d2a;
+    --ink-2: #4a4e63;
+    --mute: #7c8096;
+    --accent: #5d50b3;
+    --accent-fill: #ebe8fb;
+    --gold: #b07f14;
+    --gold-soft: #f3e3bd;
+    --foe: #b84b4b;
+    --foe-fill: #f8e1e1;
+    --win: #2f8f63;
+    --win-fill: #dff2e8;
+    --loss: #b84b4b;
+    --loss-fill: #f8e1e1;
+    --unk: #6b6f86;
+    --unk-fill: #e7e8ef;
+    --shadow:
+      0 1px 2px rgba(20, 22, 40, 0.06), 0 8px 24px rgba(20, 22, 40, 0.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #161826;
+      --surface: #1b1e2c;
+      --surface-2: #12141f;
+      --hairline: #33364a;
+      --ink: #e9e9ed;
+      --ink-2: #b2b6ca;
+      --mute: #7e8297;
+      --accent: #9184d9;
+      --accent-fill: #2b2741;
+      --gold: #d9a842;
+      --gold-soft: #3a3120;
+      --foe: #e08585;
+      --foe-fill: #3a2426;
+      --win: #7ac9a3;
+      --win-fill: #1f3329;
+      --loss: #e08585;
+      --loss-fill: #3a2426;
+      --unk: #a4a8bd;
+      --unk-fill: #2a2d3d;
+      --shadow: none;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #161826;
+    --surface: #1b1e2c;
+    --surface-2: #12141f;
+    --hairline: #33364a;
+    --ink: #e9e9ed;
+    --ink-2: #b2b6ca;
+    --mute: #7e8297;
+    --accent: #9184d9;
+    --accent-fill: #2b2741;
+    --gold: #d9a842;
+    --gold-soft: #3a3120;
+    --foe: #e08585;
+    --foe-fill: #3a2426;
+    --win: #7ac9a3;
+    --win-fill: #1f3329;
+    --loss: #e08585;
+    --loss-fill: #3a2426;
+    --unk: #a4a8bd;
+    --unk-fill: #2a2d3d;
+    --shadow: none;
+  }
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family:
+      "Inter",
+      "Noto Sans SC",
+      -apple-system,
+      "PingFang SC",
+      "Microsoft YaHei",
+      sans-serif;
+    font-size: 15px;
+    line-height: 1.55;
+    padding-inline: 16px;
+    padding-block: 20px 48px;
+    font-variant-numeric: tabular-nums;
+  }
+  .wrap {
+    max-width: 740px;
+    margin: 0 auto;
+    display: grid;
+    gap: 16px;
+  }
+  h1 {
+    font-size: 20px;
+    font-weight: 700;
+    margin: 0;
+    text-wrap: balance;
+  }
+  .ask {
+    margin: 0;
+    color: var(--ink-2);
+    max-width: 64ch;
+  }
+  .ask b {
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .steps {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+    font-size: 13px;
+    color: var(--mute);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .steps li::before {
+    content: attr(data-n) " ";
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .pips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+  }
+  .pip {
+    width: 26px;
+    height: 26px;
+    border-radius: 6px;
+    border: 1px solid var(--hairline);
+    background: var(--surface);
+    color: var(--mute);
+    font:
+      600 11px/1 "Inter",
+      sans-serif;
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    padding: 0;
+  }
+  .pip.half {
+    background: linear-gradient(
+      135deg,
+      var(--accent-fill) 50%,
+      var(--surface) 50%
+    );
+    color: var(--accent);
+  }
+  .pip.answered {
+    background: var(--win-fill);
+    border-color: var(--win);
+    color: var(--win);
+  }
+  .pip.unanswered {
+    background: var(--loss-fill);
+    border-color: var(--loss);
+    color: var(--loss);
+  }
+  .pip.insufficient {
+    background: var(--unk-fill);
+    border-color: var(--unk);
+    color: var(--unk);
+  }
+  .pip.current {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .count {
+    color: var(--mute);
+    font-size: 13px;
+    margin-left: 6px;
+  }
+  .save {
+    font-size: 12px;
+    color: var(--mute);
+  }
+  .lockbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    align-items: center;
+    padding: 10px 14px;
+    border: 1px dashed var(--hairline);
+    border-radius: 10px;
+    background: var(--surface);
+    font-size: 14px;
+  }
+  .lockbar.done {
+    border-style: solid;
+    border-color: var(--accent);
+  }
+  button:focus-visible,
+  textarea:focus-visible,
+  input:focus-visible,
+  .pip:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .card-head {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 6px 16px;
+    padding: 16px 20px 12px;
+  }
+  .who {
+    font-size: 18px;
+    font-weight: 700;
+  }
+  .meta {
+    color: var(--mute);
+    font-size: 13px;
+  }
+  .stage {
+    display: inline-block;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--accent-fill);
+    color: var(--accent);
+  }
+  .hp {
+    padding: 0 20px 16px;
+    display: grid;
+    gap: 6px;
+  }
+  .hpbar {
+    position: relative;
+    height: 14px;
+    border-radius: 4px;
+    background: var(--surface-2);
+    border: 1px solid var(--hairline);
+    overflow: hidden;
+  }
+  .hpbar .now {
+    position: absolute;
+    inset: 0 auto 0 0;
+    background: var(--gold);
+  }
+  .hpbar .lost {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    background: repeating-linear-gradient(
+      135deg,
+      var(--gold-soft) 0 5px,
+      transparent 5px 9px
+    );
+    border-left: 1px solid var(--gold);
+  }
+  .hpline {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 14px;
+    font-size: 14px;
+    color: var(--ink-2);
+  }
+  .hpline strong {
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .facts {
+    border-top: 1px solid var(--hairline);
+    display: grid;
+  }
+  .row {
+    display: grid;
+    grid-template-columns: 96px 1fr;
+    gap: 12px;
+    padding: 11px 20px;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .row:last-child {
+    border-bottom: 0;
+  }
+  .row .k {
+    color: var(--mute);
+    font-size: 13px;
+    padding-top: 2px;
+  }
+  .row.new .k {
+    color: var(--foe);
+    font-weight: 600;
+  }
+  .row .v {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: baseline;
+  }
+  .sub {
+    flex-basis: 100%;
+    font-size: 12.5px;
+    color: var(--mute);
+    margin-top: 2px;
+  }
+  .chip {
+    display: inline-flex;
+    gap: 6px;
+    align-items: baseline;
+    padding: 2px 9px;
+    border-radius: 999px;
+    background: var(--surface-2);
+    border: 1px solid var(--hairline);
+    font-size: 13.5px;
+    white-space: nowrap;
+  }
+  .chip .t {
+    color: var(--mute);
+    font-size: 12px;
+  }
+  .chip.prot {
+    background: var(--accent-fill);
+    border-color: transparent;
+  }
+  .chip.foe {
+    background: var(--foe-fill);
+    border-color: transparent;
+  }
+  .chip.est {
+    border-style: dashed;
+    border-color: var(--mute);
+  }
+  .none {
+    color: var(--mute);
+    font-size: 13.5px;
+  }
+  .note {
+    color: var(--mute);
+    font-size: 12.5px;
+    flex-basis: 100%;
+  }
+  .big {
+    font-weight: 700;
+    font-size: 16px;
+    margin-right: 4px;
+  }
+  .baseline-facts {
+    padding: 4px 20px 16px;
+    display: grid;
+    gap: 6px;
+  }
+  .baseline-facts dl {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 6px 16px;
+    margin: 0;
+  }
+  .baseline-facts dt {
+    color: var(--mute);
+    font-size: 13px;
+  }
+  .baseline-facts dd {
+    margin: 0;
+    font-weight: 600;
+  }
+
+  .judge {
+    padding: 16px 20px 18px;
+    border-top: 1px solid var(--hairline);
+    background: var(--surface-2);
+    display: grid;
+    gap: 12px;
+  }
+  .judge h2 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .choices {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+  .choice {
+    font: inherit;
+    font-weight: 600;
+    padding: 10px 8px;
+    border-radius: 8px;
+    cursor: pointer;
+    background: var(--surface);
+    color: var(--ink);
+    border: 1px solid var(--hairline);
+  }
+  .choice kbd {
+    font:
+      500 11px/1 "Inter",
+      sans-serif;
+    color: var(--mute);
+    border: 1px solid var(--hairline);
+    border-radius: 4px;
+    padding: 2px 5px;
+    margin-left: 6px;
+  }
+  .choice[data-v="answered"][aria-pressed="true"] {
+    background: var(--win-fill);
+    border-color: var(--win);
+    color: var(--win);
+  }
+  .choice[data-v="unanswered"][aria-pressed="true"] {
+    background: var(--loss-fill);
+    border-color: var(--loss);
+    color: var(--loss);
+  }
+  .choice[data-v="insufficient"][aria-pressed="true"] {
+    background: var(--unk-fill);
+    border-color: var(--unk);
+    color: var(--unk);
+  }
+  .choice:disabled {
+    cursor: default;
+    opacity: 0.8;
+  }
+  textarea {
+    font: inherit;
+    width: 100%;
+    min-height: 58px;
+    resize: vertical;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--hairline);
+    background: var(--surface);
+    color: var(--ink);
+  }
+  textarea:disabled {
+    opacity: 0.8;
+  }
+  .groups {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+    font-size: 13.5px;
+  }
+  .groups label {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+    cursor: pointer;
+  }
+  .hint {
+    font-size: 12.5px;
+    color: var(--mute);
+  }
+  .hint.warn {
+    color: var(--foe);
+  }
+  .sealed {
+    font-size: 13.5px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+  }
+  .sealed .l {
+    color: var(--mute);
+    font-size: 12px;
+  }
+  .reveal {
+    border-radius: 8px;
+    padding: 10px 12px;
+    background: var(--surface);
+    border: 1px solid var(--accent);
+    display: grid;
+    gap: 2px;
+    font-size: 14px;
+  }
+  .reveal .l {
+    color: var(--mute);
+    font-size: 12.5px;
+  }
+  .nav {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .navbtn {
+    font: inherit;
+    padding: 8px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--hairline);
+    background: var(--surface);
+    color: var(--ink);
+    cursor: pointer;
+  }
+  .navbtn.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+    font-weight: 600;
+  }
+  .navbtn:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+  @media (max-width: 480px) {
+    .row {
+      grid-template-columns: 1fr;
+      gap: 4px;
+    }
+    .choices {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+
+<div class="wrap">
+  <header style="display: grid; gap: 10px">
+    <h1>第二轮危机判读</h1>
+    <p class="ask">
+      20 张新卡，都是治疗血线跌破 40%
+      的那一刻。<b>只判断这一刻的危机有没有被应对</b>，算上身上已开的保护、之后
+      3 秒发生的事、他和队友做的事。活没活下来不算数。
+    </p>
+    <ol class="steps">
+      <li data-n="①">先看产品现有的几条事实，判一次，写理由</li>
+      <li data-n="②">再看完整证据，判一次，写理由，勾选依据</li>
+      <li data-n="③">20 张都判完后一起锁定，锁定后才揭晓</li>
+    </ol>
+    <div class="pips" id="pips" aria-label="进度"></div>
+    <div class="lockbar" id="lockbar"></div>
+    <div class="save" id="save">正在连接保存…</div>
+  </header>
+  <section class="card" id="card" aria-live="polite"></section>
+  <p class="hint">
+    虚线框 = 起始时间是推断的。键盘：1 应对了 · 2 没应对 · 3 证据不足 · ← →
+    翻页。
+  </p>
+</div>
+
+<script>
+  const CARDS = __CARDS__;
+  const COLL = "round2";
+  const LS_KEY = "gladlog-crisis-judge-round2-v1";
+  const LABEL = {
+    answered: "应对了",
+    unanswered: "没应对",
+    insufficient: "证据不足",
+  };
+  const GROUPS = [
+    ["protection", "身上已有"],
+    ["healing", "3 秒内回血"],
+    ["casts", "他自己按了"],
+    ["newProtection", "新挂的保护"],
+    ["ccOnAttackers", "控到攻击者"],
+    ["move", "走位"],
+    ["enemyBurst", "对面爆发"],
+    ["los", "视线"],
+  ];
+  let db = null;
+  let state = {}; // id -> { baseline, expanded, sealed, history }
+  let lockedAt = null;
+  let cur = 0;
+  let confirmLock = false;
+  try {
+    const s = JSON.parse(localStorage.getItem(LS_KEY) || "{}");
+    state = s.state || {};
+    lockedAt = s.lockedAt || null;
+  } catch (e) {}
+
+  const esc = (s) =>
+    String(s ?? "").replace(
+      /[&<>"]/g,
+      (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c],
+    );
+  const st = (id) =>
+    (state[id] ||= {
+      baseline: {},
+      expanded: { groups: [] },
+      sealed: false,
+      history: [],
+    });
+  const complete = (s) =>
+    s.sealed &&
+    s.expanded.verdict &&
+    (s.expanded.reason || "").trim().length >= 2 &&
+    s.expanded.groups.length > 0;
+  const chips = (arr, fn, empty) =>
+    arr.length ? arr.map(fn).join("") : `<span class="none">${empty}</span>`;
+
+  function baselineBlock(c) {
+    const f = c.candidateFacts || {};
+    return `<div class="baseline-facts"><dl>
+    <dt>血量</dt><dd>${f.hpPct ?? "?"}%</dd>
+    <dt>前 2 秒掉了</dt><dd>${f.dmg2sPct ?? "?"}% 最大血量</dd>
+    <dt>在打他</dt><dd>${f.attackers2s ?? "?"} 个人</dd>
+    <dt>前 8 秒对面开过进攻大招</dt><dd>${f.enemyBurst ? "是" : "否"}</dd>
+  </dl><span class="note">这是产品现在交给模型的全部事实。</span></div>`;
+  }
+
+  function losChips(list) {
+    return (
+      list
+        .map(
+          (l) =>
+            `<span class="chip${l.los === false ? " foe" : ""}">${esc(l.attacker)} <span class="t">视线${l.los === null ? "未知" : l.los ? "通" : "被挡"} · ${l.distance === null ? "距离未知" : l.distance + " 码"}</span></span>`,
+        )
+        .join("") || `<span class="none">无</span>`
+    );
+  }
+
+  function expandedBlock(c) {
+    const hp = c.hp ?? 0;
+    const lost = Math.min(100 - hp, c.dmgPct ?? 0);
+    const prodHp = c.candidateFacts?.hpPct;
+    const hpNote =
+      prodHp != null && Math.abs(prodHp - hp) >= 3
+        ? `<span class="note">产品给的是 ${prodHp}%：它取时刻附近最近的采样，可能是之后的数据；这里只用那一刻之前最后一次采样。</span>`
+        : "";
+    const move = c.move
+      ? `<span>自己移动 <span class="big">${c.move.owner}</span>码</span>` +
+        c.move.attackers
+          .map((a) =>
+            a.unknown
+              ? `<span class="chip">${esc(a.name)} <span class="t">位置未知</span></span>`
+              : `<span class="chip">${esc(a.name)} <span class="t">距离 ${a.d0}→${a.d1} 码 · 他动了 ${a.moved} 码</span></span>`,
+          )
+          .join("")
+      : `<span class="none">位置采样不够，未知</span>`;
+    const heals =
+      c.healTop
+        .map(
+          (h) =>
+            `<span class="chip">${esc(h.name)} <span class="t">${h.pct ?? "?"}% · ${esc(h.who)}${h.periodic ? " · 持续" : ""}</span></span>`,
+        )
+        .join("") +
+      (c.healRestN
+        ? `<span class="chip"><span class="t">其余 ${c.healRestN} 个小来源共 ${c.healRestPct}%</span></span>`
+        : "") +
+      c.absorbed
+        .map(
+          (a) =>
+            `<span class="chip">${esc(a.name)} <span class="t">吸收 ${a.k}k</span></span>`,
+        )
+        .join("");
+    const zone =
+      c.los.zoneNote === "minimap-derived geometry, accuracy unvalidated"
+        ? "这张图的几何是照小地图描的，准确度未验证"
+        : c.los.zoneNote === "no zone id"
+          ? "没有地图信息"
+          : "视线是按地图几何估计的";
+    return `
+    <div class="hp">
+      <div class="hpbar" role="img" aria-label="血量 ${hp}%，前 2 秒掉了 ${c.dmgPct}%"><div class="now" style="width:${hp}%"></div><div class="lost" style="left:${hp}%;width:${lost}%"></div></div>
+      <div class="hpline"><span>血量 <strong>${hp}%</strong></span><span>前 2 秒掉了 <strong>${c.dmgPct ?? "?"}%</strong></span><span>在打他：<strong>${c.attackers.map(esc).join("、") || "未识别"}</strong></span>${hpNote}</div>
+    </div>
+    <div class="facts">
+      <div class="row new"><div class="k">对面爆发</div><div class="v">
+        ${chips(c.enemyActive, (a) => `<span class="chip foe${a.estimated ? " est" : ""}">${esc(a.name)} <span class="t">${esc(a.on)} · 来自 ${esc(a.source)} · 开了 ${a.ageS ?? "?"} 秒</span></span>`, "那一刻没有识别到开着的进攻效果")}
+        ${c.enemyCastsBefore.length ? `<span class="sub">前 8 秒按过（不代表还开着）：</span>` + c.enemyCastsBefore.map((x) => `<span class="chip">${esc(x.name)} <span class="t">${esc(x.source)}${x.attacker ? "（在打他）" : ""} · ${x.ageS} 秒前</span></span>`).join("") : ""}
+        ${c.enemyCastsWindow.length ? `<span class="sub">之后 3 秒内对面又按了：</span>` + c.enemyCastsWindow.map((x) => `<span class="chip">${esc(x.name)} <span class="t">${esc(x.source)}${x.attacker ? "（在打他）" : ""} · 第 ${x.atS} 秒</span></span>`).join("") : ""}
+        <span class="note">剩余时长不显示：技能时长会被天赋改，不可靠。</span>
+      </div></div>
+      <div class="row new"><div class="k">视线</div><div class="v">
+        <span class="sub">那一刻：</span>${losChips(c.los.at)}
+        <span class="sub">3 秒后：</span>${losChips(c.los.end)}
+        <span class="note">${zone}。只是两个时刻的估计，不代表中间一直这样；视线被挡也可能挨持续伤害。</span>
+      </div></div>
+      <div class="row"><div class="k">身上已有</div><div class="v">
+        ${chips(c.protection, (p) => `<span class="chip prot${p.estimated ? " est" : ""}">${esc(p.name)} <span class="t">${esc(p.tag)} · ${esc(p.who)}</span></span>`, "没有识别到保护")}
+        ${c.ccOnOwner.map((x) => `<span class="chip">被控：${esc(x.name)} <span class="t">${esc(x.who)}</span></span>`).join("")}
+        ${c.unclassified ? `<span class="note">另有 ${c.unclassified} 个光环没识别，未计入</span>` : ""}
+      </div></div>
+      <div class="row"><div class="k">3 秒内回血</div><div class="v"><span class="big">${c.healPct}%</span><span class="t" style="color:var(--mute);font-size:13px;margin-right:6px">最大血量</span>${heals}</div></div>
+      <div class="row"><div class="k">他自己按了</div><div class="v">${chips(c.casts, (x) => `<span class="chip">${esc(x.name)} <span class="t">${x.fn.length ? esc(x.fn.join("、")) : "无官方功能记录"}${x.target ? " → " + esc(x.target) : ""}</span></span>`, "3 秒内没有成功施法")}</div></div>
+      <div class="row"><div class="k">新挂的保护</div><div class="v">${chips(c.newProtection, (x) => `<span class="chip prot">${esc(x.name)} <span class="t">${esc(x.fn.join("、"))} · ${esc(x.who)}</span></span>`, "无")}</div></div>
+      <div class="row"><div class="k">控到攻击者</div><div class="v">${chips(c.ccOnAttackers, (x) => `<span class="chip">${esc(x.who)} 的 ${esc(x.name)} <span class="t">→ ${esc(x.target)}</span></span>`, "无")}</div></div>
+      <div class="row"><div class="k">走位</div><div class="v">${move}</div></div>
+    </div>`;
+  }
+
+  function choiceButtons(pass, verdict, disabled) {
+    return `<div class="choices" role="group" aria-label="判断">${[
+      "answered",
+      "unanswered",
+      "insufficient",
+    ]
+      .map(
+        (v, i) =>
+          `<button class="choice" type="button" id="choice-${pass}-${v}" data-pass="${pass}" data-v="${v}" aria-pressed="${verdict === v}" ${disabled ? "disabled" : ""}>${LABEL[v]}<kbd>${i + 1}</kbd></button>`,
+      )
+      .join("")}</div>`;
+  }
+
+  function render() {
+    const c = CARDS[cur];
+    const s = st(c.id);
+    const locked = !!lockedAt;
+    let body = `<div class="card-head"><span class="who">${esc(c.spec)}</span><span class="meta">${esc(c.bracket)} · 第 ${esc(c.time)} · 回合 ${esc(c.id)} · ${cur + 1}/${CARDS.length}</span></div>`;
+    if (!s.sealed) {
+      const ok =
+        s.baseline.verdict && (s.baseline.reason || "").trim().length >= 2;
+      body += `<div style="padding:0 20px 8px"><span class="stage">第 ① 步 · 产品现有事实</span></div>${baselineBlock(c)}
+      <div class="judge"><h2>只看上面这几条，你怎么判？</h2>${choiceButtons("baseline", s.baseline.verdict, locked)}
+        <textarea id="reason-baseline" placeholder="理由（必填），比如「只知道掉血，看不出他做了什么」" ${locked ? "disabled" : ""}>${esc(s.baseline.reason || "")}</textarea>
+        <div class="nav"><button class="navbtn" type="button" id="prev" ${cur === 0 ? "disabled" : ""}>上一张</button>
+        <button class="navbtn primary" type="button" id="seal" ${ok && !locked ? "" : "disabled"}>看完整证据</button></div>
+        <span class="hint">点「看完整证据」之后，这一步的判断就不能再改。</span></div>`;
+    } else {
+      body += `<div style="padding:0 20px 8px"><span class="stage">第 ② 步 · 完整证据</span></div>
+      <div style="padding:0 20px 12px"><div class="sealed"><span class="l">第 ① 步你判的是</span> <b>${LABEL[s.baseline.verdict]}</b> · ${esc(s.baseline.reason)}</div></div>
+      ${expandedBlock(c)}
+      <div class="judge"><h2>看完整证据后，你怎么判？</h2>${choiceButtons("expanded", s.expanded.verdict, locked)}
+        <textarea id="reason-expanded" placeholder="理由（必填），比如「对面开着天神下凡，他 3 秒内只回了 5%」" ${locked ? "disabled" : ""}>${esc(s.expanded.reason || "")}</textarea>
+        <div><span class="hint">判断主要依据（至少勾一项）：</span><div class="groups">${GROUPS.map(
+          ([k, l]) =>
+            `<label><input type="checkbox" id="g-${k}" data-g="${k}" ${s.expanded.groups.includes(k) ? "checked" : ""} ${locked ? "disabled" : ""}> ${l}</label>`,
+        ).join("")}</div></div>
+        ${!locked && !complete(s) ? `<span class="hint warn">还差：${[!s.expanded.verdict && "判断", (s.expanded.reason || "").trim().length < 2 && "理由", !s.expanded.groups.length && "依据"].filter(Boolean).join("、")}</span>` : ""}
+        ${locked ? `<div class="reveal"><span class="l">揭晓</span><span>产品现在判：${c.product.responded ? "有反应（" + esc(c.product.via.join("+") || "?") + "）" : "没反应"}</span><span>10 秒内：${c.died ? "死了" : "没死"}</span></div>` : ""}
+        <div class="nav"><button class="navbtn" type="button" id="prev" ${cur === 0 ? "disabled" : ""}>上一张</button>
+        <button class="navbtn primary" type="button" id="next" ${cur === CARDS.length - 1 ? "disabled" : ""}>下一张</button></div></div>`;
+    }
+    document.getElementById("card").innerHTML = body;
+    wire(c, s);
+    renderTop();
+  }
+
+  function wire(c, s) {
+    for (const b of document.querySelectorAll(".choice"))
+      b.addEventListener("click", () =>
+        setVerdict(b.dataset.pass, b.dataset.v),
+      );
+    const rb = document.getElementById("reason-baseline");
+    if (rb)
+      rb.addEventListener("input", (e) => {
+        s.baseline.reason = e.target.value;
+        const sealBtn = document.getElementById("seal");
+        if (sealBtn)
+          sealBtn.disabled = !(
+            s.baseline.verdict && e.target.value.trim().length >= 2
+          );
+      });
+    if (rb) rb.addEventListener("change", () => save(c.id, "baseline-reason"));
+    const re = document.getElementById("reason-expanded");
+    if (re)
+      re.addEventListener("change", (e) => {
+        s.expanded.reason = e.target.value;
+        save(c.id, "expanded-reason");
+        render();
+      });
+    for (const cb of document.querySelectorAll("[data-g]"))
+      cb.addEventListener("change", () => {
+        const g = cb.dataset.g;
+        s.expanded.groups = cb.checked
+          ? [...new Set([...s.expanded.groups, g])]
+          : s.expanded.groups.filter((x) => x !== g);
+        save(c.id, "groups");
+        render();
+      });
+    document.getElementById("seal")?.addEventListener("click", () => {
+      s.baseline.reason = document.getElementById("reason-baseline").value;
+      s.sealed = true;
+      s.sealedAt = new Date().toISOString();
+      save(c.id, "seal-baseline");
+      render();
+    });
+    document
+      .getElementById("prev")
+      ?.addEventListener("click", () => go(cur - 1));
+    document
+      .getElementById("next")
+      ?.addEventListener("click", () => go(cur + 1));
+  }
+
+  function setVerdict(pass, v) {
+    if (lockedAt) return;
+    const c = CARDS[cur];
+    const s = st(c.id);
+    if (pass === "baseline" && s.sealed) return;
+    const box = document.getElementById(`reason-${pass}`);
+    if (box) s[pass].reason = box.value;
+    s[pass].verdict = v;
+    s[pass].at = new Date().toISOString();
+    save(c.id, `${pass}-verdict`);
+    render();
+  }
+
+  function renderTop() {
+    const done = CARDS.filter((c) => complete(st(c.id))).length;
+    document.getElementById("pips").innerHTML =
+      CARDS.map((c, i) => {
+        const s = st(c.id);
+        const cls = complete(s)
+          ? s.expanded.verdict
+          : s.sealed || s.baseline.verdict
+            ? "half"
+            : "";
+        return `<button type="button" class="pip ${cls} ${i === cur ? "current" : ""}" id="pip-${i}" aria-label="第 ${i + 1} 张">${i + 1}</button>`;
+      }).join("") + `<span class="count">完成 ${done}/${CARDS.length}</span>`;
+    for (const [i, el] of [...document.querySelectorAll(".pip")].entries())
+      el.addEventListener("click", () => go(i));
+    const bar = document.getElementById("lockbar");
+    if (lockedAt) {
+      bar.className = "lockbar done";
+      bar.innerHTML = `已锁定（${new Date(lockedAt).toLocaleString()}），每张卡底部可以看揭晓。`;
+    } else if (done < CARDS.length) {
+      bar.className = "lockbar";
+      bar.innerHTML = `20 张两步都判完后，在这里锁定。锁定前任何卡都不揭晓产品判定和结果。`;
+    } else if (!confirmLock) {
+      bar.className = "lockbar";
+      bar.innerHTML = `20 张都判完了。<button class="navbtn primary" type="button" id="lock">锁定全部并揭晓</button>`;
+      document.getElementById("lock").addEventListener("click", () => {
+        confirmLock = true;
+        renderTop();
+      });
+    } else {
+      bar.className = "lockbar";
+      bar.innerHTML = `锁定后所有判断都不能再改。确定？<button class="navbtn primary" type="button" id="lock-yes">确定锁定</button><button class="navbtn" type="button" id="lock-no">再看看</button>`;
+      document.getElementById("lock-yes").addEventListener("click", lockAll);
+      document.getElementById("lock-no").addEventListener("click", () => {
+        confirmLock = false;
+        renderTop();
+      });
+    }
+  }
+
+  function go(i) {
+    if (i < 0 || i >= CARDS.length) return;
+    cur = i;
+    render();
+  }
+
+  async function save(id, what) {
+    const s = st(id);
+    s.history.push({
+      what,
+      at: new Date().toISOString(),
+      baseline: { ...s.baseline },
+      expanded: { ...s.expanded, groups: [...s.expanded.groups] },
+      sealed: s.sealed,
+    });
+    try {
+      localStorage.setItem(LS_KEY, JSON.stringify({ state, lockedAt }));
+    } catch (e) {}
+    if (!db) return;
+    try {
+      await db.doc(`${COLL}/${id}`).set(JSON.parse(JSON.stringify(s)));
+      setSave(`已保存到服务器 · ${new Date().toLocaleTimeString()}`);
+    } catch (e) {
+      setSave(`保存失败（${e?.code || "未知错误"}），先存在本机浏览器里`);
+    }
+  }
+
+  async function lockAll() {
+    lockedAt = new Date().toISOString();
+    try {
+      localStorage.setItem(LS_KEY, JSON.stringify({ state, lockedAt }));
+    } catch (e) {}
+    if (db) {
+      try {
+        await db.doc(`${COLL}/_lock`).set({ lockedAt, cards: CARDS.length });
+      } catch (e) {
+        setSave(`锁定写入失败（${e?.code || "未知错误"}）`);
+      }
+    }
+    confirmLock = false;
+    render();
+  }
+  function setSave(t) {
+    document.getElementById("save").textContent = t;
+  }
+
+  document.addEventListener("keydown", (e) => {
+    if (e.target.tagName === "TEXTAREA" || e.target.tagName === "INPUT") return;
+    const s = st(CARDS[cur].id);
+    const pass = s.sealed ? "expanded" : "baseline";
+    if (e.key === "1") setVerdict(pass, "answered");
+    else if (e.key === "2") setVerdict(pass, "unanswered");
+    else if (e.key === "3") setVerdict(pass, "insufficient");
+    else if (e.key === "ArrowRight") go(cur + 1);
+    else if (e.key === "ArrowLeft") go(cur - 1);
+  });
+
+  render();
+
+  (async () => {
+    db = await window.claude?.use?.("db");
+    if (!db) {
+      setSave("没连上服务器保存，判断只存在这台浏览器里");
+      return;
+    }
+    try {
+      const snap = await db.collection(COLL).get();
+      for (const d of snap.docs ?? []) {
+        const data = typeof d.data === "function" ? d.data() : d.data;
+        if (!data) continue;
+        if (d.id === "_lock") {
+          lockedAt = data.lockedAt || lockedAt;
+          continue;
+        }
+        state[d.id] = { ...st(d.id), ...data };
+      }
+      setSave("判断会自动保存到服务器");
+      render();
+    } catch (e) {
+      setSave(
+        `读取服务器保存失败（${e?.code || "未知错误"}），判断先存在本机浏览器里`,
+      );
+    }
+  })();
+</script>

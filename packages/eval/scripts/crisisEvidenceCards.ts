@@ -173,6 +173,44 @@ const cards = ledger.rows.map((row: any) => {
     ).values(),
   ];
 
+  // ── round 2 (amendment 2): enemy offensive state and line of sight ────────
+  const enemyActive = at
+    .filter((i) => i.kind === "enemy-offensive-active")
+    .map((i) => ({
+      name: zh(i.spellId, i.text.split(" active on ")[0]!),
+      on:
+        i.detail?.recipient === owner(row)
+          ? "你身上"
+          : `${shortName(i.detail?.recipient)} 身上`,
+      source: shortName(i.detail?.source),
+      ageS: i.detail?.ageS ?? null,
+      estimated: i.status !== "known",
+    }));
+  const castLine = (i: Item) => ({
+    name: zh(i.spellId, i.text.match(/ cast (.+?) (?:at t|\d)/)?.[1] ?? "?"),
+    source: shortName(i.detail?.source),
+    attacker: !!i.detail?.isAttacker,
+    ageS: i.detail?.ageS ?? null,
+    atS: i.detail?.atS ?? null,
+  });
+  const enemyCastsBefore = at
+    .filter((i) => i.kind === "enemy-offensive-cast")
+    .map(castLine);
+  const enemyCastsWindow = win
+    .filter((i) => i.kind === "enemy-offensive-cast")
+    .map(castLine);
+  const losLine = (i: Item) => ({
+    attacker: shortName(i.detail?.attacker),
+    los: i.detail?.los ?? null,
+    distance: i.detail?.distance ?? null,
+  });
+  const losAll = items.filter((i) => i.kind === "los");
+  const los = {
+    at: losAll.filter((i) => i.phase === "at-t").map(losLine),
+    end: losAll.filter((i) => i.phase === "window").map(losLine),
+    zoneNote: losAll[0]?.detail?.zoneNote ?? null,
+  };
+
   const mv = win.find((i) => i.kind === "movement");
   const move =
     mv && mv.status !== "unknown"
@@ -227,6 +265,11 @@ const cards = ledger.rows.map((row: any) => {
     newProtection,
     ccOnAttackers: ccDedup,
     move,
+    enemyActive,
+    enemyCastsBefore,
+    enemyCastsWindow,
+    los,
+    candidateFacts: row.candidateFacts ?? null,
     product: { responded: !!row.baseline.responded, via },
     died: !!row.outcome.diedWithin10s,
   };

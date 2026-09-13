@@ -5,6 +5,7 @@
  * get the same invariance check inside crisisEvidenceProbe.ts.
  */
 import { ensureAnalysisData } from "@gladlog/analysis";
+import { OFFENSIVE_CD_SPELL_IDS } from "@gladlog/analysis/src/utils/spellDanger";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import {
@@ -355,5 +356,93 @@ describe("crisisAnswerEvidence: counterexample fixtures", () => {
     const e = evidence(r);
     expect(e.items.some((i) => i.kind === "hot")).toBe(false);
     expect(e.unclassifiedAuraIds).toContain("774");
+  });
+});
+
+describe("crisisAnswerEvidence: round 2 — enemy offensive state and line of sight (amendment 2)", () => {
+  const OFF = [...OFFENSIVE_CD_SPELL_IDS][0]!;
+
+  it("an offensive aura on an attacker at t is evidence, with no remaining duration, and a removal after t does not change it", () => {
+    const withRemoval = (removeMs: number) => {
+      const r = baseRound();
+      r.units[FOE].auraEvents.push(
+        ev("SPELL_AURA_APPLIED", T - 1000, {
+          src: FOE,
+          dest: FOE,
+          spellId: OFF,
+          auraType: "BUFF",
+        }),
+        ev("SPELL_AURA_REMOVED", removeMs, {
+          src: FOE,
+          dest: FOE,
+          spellId: OFF,
+          auraType: "BUFF",
+        }),
+      );
+      return r;
+    };
+    const early = evidence(withRemoval(T + 500));
+    const active = early.items.find((i) => i.kind === "enemy-offensive-active");
+    expect(active).toBeDefined();
+    expect(active!.phase).toBe("at-t");
+    expect(active!.detail?.remaining).toBeNull();
+    expect(active!.text).toContain("remaining duration not rendered");
+    expect(atT(withRemoval(T + 9000))).toEqual(atT(withRemoval(T + 500)));
+  });
+
+  it("our own team's offensive debuff on an attacker is NOT enemy burst", () => {
+    const r = baseRound();
+    r.units[FOE].auraEvents.push(
+      ev("SPELL_AURA_APPLIED", T - 1000, {
+        src: MATE,
+        dest: FOE,
+        spellId: OFF,
+        auraType: "DEBUFF",
+      }),
+    );
+    expect(
+      evidence(r).items.some((i) => i.kind === "enemy-offensive-active"),
+    ).toBe(false);
+  });
+
+  it("an offensive debuff on the owner from an identified attacker counts", () => {
+    const r = baseRound();
+    r.units[OWNER].auraEvents.push(
+      ev("SPELL_AURA_APPLIED", T - 1000, {
+        src: FOE,
+        dest: OWNER,
+        spellId: OFF,
+        auraType: "DEBUFF",
+      }),
+    );
+    const item = evidence(r).items.find(
+      (i) => i.kind === "enemy-offensive-active",
+    );
+    expect(item?.detail?.recipient).toBe(OWNER);
+  });
+
+  it("an offensive cast before t is an at-t cast (not proof it is running); one after t is window activity only", () => {
+    const r = baseRound();
+    r.units[FOE].spellCastEvents.push(
+      ev("SPELL_CAST_SUCCESS", T - 5000, { src: FOE, dest: FOE, spellId: OFF }),
+      ev("SPELL_CAST_SUCCESS", T + 1000, { src: FOE, dest: FOE, spellId: OFF }),
+    );
+    const e = evidence(r);
+    const casts = e.items.filter((i) => i.kind === "enemy-offensive-cast");
+    expect(casts.map((c) => c.phase).sort()).toEqual(["at-t", "window"]);
+    expect(casts.find((c) => c.phase === "at-t")!.text).toContain(
+      "not proof the effect is still running",
+    );
+    expect(cutoffViolations(e)).toEqual([]);
+  });
+
+  it("line of sight is shown for every attacker; with no zone geometry it is unknown, never open", () => {
+    const los = evidence(baseRound()).items.filter((i) => i.kind === "los");
+    expect(los.map((l) => l.phase).sort()).toEqual(["at-t", "window"]);
+    for (const l of los) {
+      expect(l.detail?.los).toBeNull();
+      expect(l.text).toContain("line of sight unknown");
+    }
+    expect(los.find((l) => l.phase === "at-t")!.detail?.distance).toBe(5);
   });
 });

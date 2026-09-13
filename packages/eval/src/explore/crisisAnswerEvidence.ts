@@ -30,8 +30,17 @@ import {
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
 import { ccSpellIds } from "@gladlog/analysis/src/data/spellTags";
 import { buildAuraIntervals } from "@gladlog/analysis/src/utils/auraIntervals";
-import { getUnitPositionAtTime } from "@gladlog/analysis/src/utils/losAnalysis";
-import { INTERP_MAX_GAP_MS } from "@gladlog/analysis/src/utils/positionSampling";
+import { ENEMY_BURST_LOOKBACK_MS } from "@gladlog/analysis/src/analysis/crisisDecisionPoints";
+import {
+  getUnitPositionAtTime,
+  getUnitRawPositionAtTime,
+  hasLineOfSight,
+} from "@gladlog/analysis/src/utils/losAnalysis";
+import {
+  INTERP_MAX_GAP_MS,
+  LOS_SWEEP_GAP_MS,
+} from "@gladlog/analysis/src/utils/positionSampling";
+import { OFFENSIVE_CD_SPELL_IDS } from "@gladlog/analysis/src/utils/spellDanger";
 import type { ICombatUnit } from "@gladlog/parser-compat";
 
 export const WINDOW_MS = 3000;
@@ -53,7 +62,18 @@ export type EvidenceKind =
   | "cast"
   | "cc-on-attacker"
   | "movement"
-  | "unclassified";
+  | "unclassified"
+  | "enemy-offensive-active"
+  | "enemy-offensive-cast"
+  | "los";
+
+/** Zones GH #83 records as traced from minimaps, never void-analysis calibrated. */
+const MINIMAP_TRACED_ZONES: ReadonlySet<string> = new Set([
+  "1911", // Mugambala
+  "980", // Tol'viron
+  "2167", // Robodrome
+  "2547", // Enigma Crucible
+]);
 
 export interface EvidenceItem {
   phase: EvidencePhase;
@@ -360,6 +380,133 @@ export function buildCrisisAnswerEvidence(
       source: "auraIntervals",
     });
 
+  // ── at t: enemy offensive state (amendment 2) ─────────────────────────────
+  const attackerIds = [...attackers.keys()];
+  const attackerNameSet = new Set(attackerIds.map((id) => nameById.get(id)));
+  const seenOff = new Set<string>();
+  const pushOffensive = (
+    iv: ReturnType<typeof buildAuraIntervals>[number],
+    recipient: string,
+  ) => {
+    if (!OFFENSIVE_CD_SPELL_IDS.has(iv.spellId)) return;
+    if (!(iv.fromS <= tRel && iv.toS >= tRel)) return;
+    const key = `${iv.spellId}|${iv.srcUnitName}|${recipient}`;
+    if (seenOff.has(key)) return;
+    seenOff.add(key);
+    const appliedMs = atT.round.startTime + iv.fromS * 1000;
+    const ageS = Math.round((tMs - appliedMs) / 100) / 10;
+    items.push({
+      phase: "at-t",
+      kind: "enemy-offensive-active",
+      status: iv.inferredStart ? "estimated" : "known",
+      spellId: iv.spellId,
+      srcName: iv.srcUnitName,
+      atMs: [appliedMs],
+      detail: { recipient, source: iv.srcUnitName, ageS, remaining: null },
+      text: `${nameOf(iv.spellId, iv.spellName)} active on ${recipient === ownerAtT.name ? "the owner" : recipient} (from ${iv.srcUnitName}), applied ${ageS} s before t; remaining duration not rendered`,
+      source: "auraIntervals (truncated at t) ∩ OFFENSIVE_CD_SPELL_IDS",
+    });
+  };
+  // Only the ENEMY team's own offensive effects on an attacker: our side's
+  // offensive debuffs on them (Curse of Weakness, Deathmark…) are in the same
+  // canonical union and must not read as "the enemy had burst open".
+  const enemyTeamNames = new Set(
+    Object.values(fullRound.units)
+      .filter((u) => enemyIds.has(playerOf(u.id)))
+      .map((u) => u.name),
+  );
+  for (const aid of attackerIds) {
+    const au = atT.round.units[aid];
+    if (!au) continue;
+    for (const iv of buildAuraIntervals(au, atT.round))
+      if (enemyTeamNames.has(iv.srcUnitName)) pushOffensive(iv, au.name);
+  }
+  for (const iv of buildAuraIntervals(ownerAtT, atT.round)) {
+    if (attackerNameSet.has(iv.srcUnitName)) pushOffensive(iv, ownerAtT.name);
+  }
+  const offensiveCasts = (
+    round: Round,
+    fromMs: number,
+    toMs: number,
+    phase: EvidencePhase,
+  ) => {
+    for (const eid of enemyIds) {
+      const eu = round.units[eid];
+      if (!eu) continue;
+      for (const c of eu.spellCastEvents ?? []) {
+        if (
+          c.logLine.event !== "SPELL_CAST_SUCCESS" ||
+          !OFFENSIVE_CD_SPELL_IDS.has(c.spellId)
+        )
+          continue;
+        if (!(c.timestamp > fromMs && c.timestamp <= toMs)) continue;
+        const isAttacker = attackers.has(eid);
+        items.push({
+          phase,
+          kind: "enemy-offensive-cast",
+          status: "known",
+          spellId: c.spellId,
+          srcName: eu.name,
+          atMs: [c.timestamp],
+          detail: {
+            source: eu.name,
+            isAttacker,
+            ageS:
+              phase === "at-t"
+                ? Math.round((tMs - c.timestamp) / 100) / 10
+                : null,
+            atS:
+              phase === "window"
+                ? Math.round((c.timestamp - tMs) / 100) / 10
+                : null,
+          },
+          text:
+            phase === "at-t"
+              ? `${eu.name}${isAttacker ? " (attacker)" : ""} cast ${nameOf(c.spellId, c.spellName)} ${Math.round((tMs - c.timestamp) / 100) / 10} s before t — a cast, not proof the effect is still running`
+              : `${eu.name}${isAttacker ? " (attacker)" : ""} cast ${nameOf(c.spellId, c.spellName)} at t + ${Math.round((c.timestamp - tMs) / 100) / 10} s — enemy activity, not necessarily aimed at the owner`,
+          source: `spellCastEvents SPELL_CAST_SUCCESS ∩ OFFENSIVE_CD_SPELL_IDS (${phase === "at-t" ? "[t − 8 s, t]" : "(t, t + 3 s]"})`,
+        });
+      }
+    }
+  };
+  offensiveCasts(atT.round, tMs - ENEMY_BURST_LOOKBACK_MS - 1, tMs, "at-t");
+
+  // ── line of sight + distance per identified attacker (amendment 2) ────────
+  const zoneId = String(fullRound.startInfo?.zoneId ?? "");
+  const zoneNote = !zoneId
+    ? "no zone id"
+    : MINIMAP_TRACED_ZONES.has(zoneId)
+      ? "minimap-derived geometry, accuracy unvalidated"
+      : "estimated geometry";
+  const losAt = (round: Round, ms: number, phase: EvidencePhase) => {
+    const ou = round.units[ownerId]!;
+    const oRaw = getUnitRawPositionAtTime(ou, ms, LOS_SWEEP_GAP_MS);
+    const oPos = getUnitPositionAtTime(ou, ms, INTERP_MAX_GAP_MS);
+    for (const aid of attackerIds) {
+      const au = round.units[aid];
+      if (!au) continue;
+      const aRaw = getUnitRawPositionAtTime(au, ms, LOS_SWEEP_GAP_MS);
+      const aPos = getUnitPositionAtTime(au, ms, INTERP_MAX_GAP_MS);
+      const los =
+        zoneId && oRaw && aRaw ? hasLineOfSight(zoneId, aRaw, oRaw) : null;
+      const distance =
+        oPos && aPos
+          ? Math.round(Math.hypot(aPos.x - oPos.x, aPos.y - oPos.y))
+          : null;
+      items.push({
+        phase,
+        kind: "los",
+        status: los === null && distance === null ? "unknown" : "estimated",
+        srcName: au.name,
+        atMs: [],
+        detail: { attacker: au.name, los, distance, zoneNote },
+        text: `${au.name} → owner at ${phase === "at-t" ? "t" : "t + 3 s"}: line of sight ${los === null ? "unknown" : los ? "open" : "blocked"} (${zoneNote}), distance ${distance === null ? "unknown" : `${distance} yd`}`,
+        source: `hasLineOfSight on getUnitRawPositionAtTime (${LOS_SWEEP_GAP_MS} ms) + getUnitPositionAtTime; round truncated at ${phase === "at-t" ? "t" : "t + 3 s"}`,
+      });
+    }
+  };
+  losAt(atT.round, tMs, "at-t");
+
   // ── window: healing received (any caster) ─────────────────────────────────
   const inWin = (ts: number) => ts > tMs && ts <= windowEndMs;
   const healGroups = new Map<
@@ -543,6 +690,10 @@ export function buildCrisisAnswerEvidence(
       });
     }
   }
+
+  // ── window: enemy offensive casts and LoS at t + 3 s (amendment 2) ─────────
+  offensiveCasts(win.round, tMs, windowEndMs, "window");
+  losAt(win.round, windowEndMs, "window");
 
   // ── window: owner displacement vs attacker displacement ───────────────────
   const posAt = (u: ICombatUnit | undefined, ms: number) =>

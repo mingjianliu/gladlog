@@ -438,13 +438,33 @@ async function step2(): Promise<void> {
       "reports/temporal-evidence-2026-09-13",
     );
   const step1 = JSON.parse(readFileSync(join(base, "ledger.json"), "utf8"));
-  const anchors: Array<{ roundId: string; tSec: number; baseline: any }> =
-    step1.moments.map((m: any) => ({
+  // Round 2 (spec amendment 2): positions #21–40 of the frozen selection
+  // order, crossing re-derived with the SAME rule as round 1 (earliest
+  // dangerous crossing not in CC / lockout). Round 1: the step-1 moments.
+  const round = argOf("--round", 1);
+  let anchors: Array<{ roundId: string; tSec: number; baseline: any }>;
+  if (round === 2) {
+    anchors = [];
+    for (const o of step1.selection.order.slice(20, 40)) {
+      const { legacy } = loadLegacyRound(DEFAULT_MATCH_DIR, o.roundId);
+      const { owner } = splitTeams(legacy);
+      const first = crisisDecisionPoints(owner!, legacy, "healer")
+        .filter((p) => p.dangerous && !p.inCC && !p.lockedOut)
+        .sort((a, b) => a.tSec - b.tSec)[0];
+      if (!first)
+        throw new Error(
+          `round-2 anchor ${o.roundId} has no eligible crossing — selection drifted`,
+        );
+      anchors.push({ roundId: o.roundId, tSec: first.tSec, baseline: first });
+    }
+  } else {
+    anchors = step1.moments.map((m: any) => ({
       roundId: m.roundId,
       tSec: m.point.tSec,
       baseline: m.point,
     }));
-  const outDir = join(base, "step2");
+  }
+  const outDir = join(base, round === 2 ? "step2-round2" : "step2");
   mkdirSync(outDir, { recursive: true });
   const rows: any[] = [];
   let violations = 0;
@@ -495,6 +515,14 @@ async function step2(): Promise<void> {
         responses: a.baseline.responses,
         feasible: a.baseline.feasible,
         selfHealPct: a.baseline.selfHealPct,
+      },
+      // The facts the product's candidate carries at this moment — the
+      // round-2 baseline card (amendment 2 scoring procedure, pass 1).
+      candidateFacts: {
+        hpPct: a.baseline.hpPct,
+        dmg2sPct: Math.round((a.baseline.dmg2s ?? 0) * 100),
+        attackers2s: a.baseline.attackers2s,
+        enemyBurst: a.baseline.enemyBurst,
       },
       outcome: { diedWithin10s: a.baseline.diedWithin10s },
     });
