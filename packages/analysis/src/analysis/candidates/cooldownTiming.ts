@@ -33,6 +33,11 @@ import {
   DR_CATEGORY_MAP,
 } from "../../utils/drAnalysis";
 import { castFailedInWindow, type RawStreams } from "../../utils/rawStreams";
+import {
+  type DecisionRecord,
+  isDecisionTraceActive,
+  traceDecision,
+} from "../../facts/decisionTrace";
 import { renderedWindowSeconds, toRenderSecond } from "../../utils/renderGrid";
 import { type MatchThreatLevel } from "../../utils/threatAssessment";
 import { type DecisionPoint, RESPONSE_PRE_MS } from "../crisisDecisionPoints";
@@ -224,7 +229,12 @@ export function missedSyncWindowEvents(
   >[],
   offensiveCds: Pick<
     IMajorCooldownInfo,
-    "spellId" | "spellName" | "casts" | "cooldownSeconds" | "neverUsed" | "charges"
+    | "spellId"
+    | "spellName"
+    | "casts"
+    | "cooldownSeconds"
+    | "neverUsed"
+    | "charges"
   >[],
   probes: {
     /** Wired to enemyMinHpPctInWindow in production. Accelerator-only, see
@@ -253,11 +263,7 @@ export function missedSyncWindowEvents(
     const t = toRenderSecond(w.fromSeconds);
     if (t < SYNC_WINDOW_MIN_T_S) continue;
     if (toRenderSecond(w.toSeconds) - t < SYNC_WINDOW_MIN_DUR_S) continue;
-    if (
-      probes.enemyDeathS.some(
-        (d) => d >= w.fromSeconds && d <= w.toSeconds,
-      )
-    )
+    if (probes.enemyDeathS.some((d) => d >= w.fromSeconds && d <= w.toSeconds))
       continue;
     const ready = offensiveCds
       .filter((cd) => cdAvailableAt(cd, w.fromSeconds))
@@ -688,6 +694,27 @@ export function cdHoardedEvents(
     point: ICdHoardedCrisisSource["points"][number];
     ready: CdHoardCandidateCd[];
   }> = [];
+  // GH #96 D6 decision trace: every crisis point is an opportunity, recorded
+  // before emission (inert unless an eval harness installed a sink).
+  const tracing = isDecisionTraceActive();
+  const trace: DecisionRecord[] = [];
+  const opportunity = (
+    crisisUnitId: string,
+    p: ICdHoardedCrisisSource["points"][number],
+  ) => `cd-hoarded:${owner.id}:${crisisUnitId}:${toRenderSecond(p.tSec)}`;
+  const pointFacts = (
+    own: boolean,
+    p: ICdHoardedCrisisSource["points"][number],
+    ready?: CdHoardCandidateCd[],
+  ) => ({
+    own,
+    tSec: toRenderSecond(p.tSec),
+    hpPct: p.hpPct,
+    dmg2s: p.dmg2s,
+    dangerous: p.dangerous,
+    inCC: p.inCC,
+    ...(ready ? { readyCds: ready.map((cd) => cd.spellId) } : {}),
+  });
   for (const src of sources) {
     for (const p of src.points) {
       // "only dangerous && !inCC points" (spec 2026-08-30): dangerous is
@@ -698,13 +725,37 @@ export function cdHoardedEvents(
       // and `hasTool` answers a different question (could the crisis unit
       // help THEMSELF) than the one this predicate asks (did the OWNER have
       // a ready cooldown for THEM).
-      if (!p.dangerous || p.inCC) continue;
+      if (!p.dangerous || p.inCC) {
+        if (tracing)
+          trace.push({
+            type: "cd-hoarded",
+            opportunityId: opportunity(src.crisisUnit.id, p),
+            ownerId: owner.id,
+            verdict: "ineligible",
+            reason: !p.dangerous ? "not-dangerous" : "crisis-unit-in-cc",
+            facts: pointFacts(src.own, p),
+            candidateIds: [],
+          });
+        continue;
+      }
       const ready = readyDefensiveCds(ownerCds, p.tSec, (cd) =>
         src.own
           ? !SELF_CAST_NOOP_EXTERNAL_IDS.has(cd.spellId)
           : canHelpAnotherUnit(cd.spellId, cd.tag),
       );
-      if (ready.length === 0) continue;
+      if (ready.length === 0) {
+        if (tracing)
+          trace.push({
+            type: "cd-hoarded",
+            opportunityId: opportunity(src.crisisUnit.id, p),
+            ownerId: owner.id,
+            verdict: "suppressed",
+            reason: "no-ready-cd",
+            facts: pointFacts(src.own, p, ready),
+            candidateIds: [],
+          });
+        continue;
+      }
       const spent = ready.some((cd) =>
         cd.casts.some(
           (c) =>
@@ -712,7 +763,19 @@ export function cdHoardedEvents(
             c.timeSeconds <= p.tSec + CD_HOARD_RESPONSE_S,
         ),
       );
-      if (spent) continue;
+      if (spent) {
+        if (tracing)
+          trace.push({
+            type: "cd-hoarded",
+            opportunityId: opportunity(src.crisisUnit.id, p),
+            ownerId: owner.id,
+            verdict: "suppressed",
+            reason: "ready-cd-spent",
+            facts: pointFacts(src.own, p, ready),
+            candidateIds: [],
+          });
+        continue;
+      }
       candidates.push({
         crisisUnit: src.crisisUnit,
         own: src.own,
@@ -721,14 +784,33 @@ export function cdHoardedEvents(
       });
     }
   }
-  return candidates
-    .sort(
-      (a, b) =>
-        Number(b.point.enemyBurst) - Number(a.point.enemyBurst) ||
-        b.point.attackers2s - a.point.attackers2s ||
-        b.point.dmg2s - a.point.dmg2s,
-    )
-    .slice(0, cap)
+  const ranked = candidates.sort(
+    (a, b) =>
+      Number(b.point.enemyBurst) - Number(a.point.enemyBurst) ||
+      b.point.attackers2s - a.point.attackers2s ||
+      b.point.dmg2s - a.point.dmg2s,
+  );
+  const kept = ranked.slice(0, cap);
+  if (tracing) {
+    for (const c of ranked) {
+      const isKept = kept.includes(c);
+      trace.push({
+        type: "cd-hoarded",
+        opportunityId: opportunity(c.crisisUnit.id, c.point),
+        ownerId: owner.id,
+        verdict: isKept ? "emitted" : "suppressed",
+        ...(isKept ? {} : { reason: "capped" }),
+        facts: pointFacts(c.own, c.point, c.ready),
+        candidateIds: isKept
+          ? [
+              `cd-hoarded:${owner.id}:${c.crisisUnit.id}:${toRenderSecond(c.point.tSec)}`,
+            ]
+          : [],
+      });
+    }
+    trace.forEach(traceDecision);
+  }
+  return kept
     .map(({ crisisUnit, own, point, ready }) => {
       const t = toRenderSecond(point.tSec);
       const windowFromS = point.tSec - RESPONSE_PRE_MS / 1000;
