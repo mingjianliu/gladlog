@@ -116,7 +116,7 @@ function renderMoment(m: Moment, i: number): string {
   out.push(`Next ${RESPONSE_S} s (revealed after selection):`);
   for (const l of m.followUp) out.push(`  [${l.status}] ${l.text}`);
   out.push(
-    `Product today: responses={selfHeal:${p.responses.selfHeal} wall:${p.responses.wall} external:${p.responses.external} control:${p.responses.control} peel:${p.responses.peel} kite:${p.responses.kite}} → responded=${p.responded} (selfHealPct ${pct(p.selfHealPct)}), feasible=${p.feasible}`,
+    `Product today: responses={selfHeal:${p.responses.selfHeal} wall:${p.responses.wall} external:${p.responses.external} control:${p.responses.control} peel:${p.responses.peel} kite:${p.responses.kite}} → responded=${p.responded} (own healing in 3 s = ${p.selfHealPct} % of max, threshold 15 %), feasible=${p.feasible}`,
   );
   out.push(`Comparison: ${m.comparison}`);
   out.push(
@@ -220,7 +220,11 @@ function momentFor(
   } catch {
     cds = [];
   }
+  const seenCd = new Set<string>();
   for (const cd of cds) {
+    // Two ids can share a name (talent variants); one line per name.
+    if (seenCd.has(cd.spellName)) continue;
+    seenCd.add(cd.spellName);
     if (cd.neverUsed) {
       options.push({
         status: "unknown",
@@ -333,18 +337,10 @@ async function main(): Promise<void> {
   const rows = pickRows(loadIndex(DEFAULT_MATCH_DIR), {
     minDurationS: 60,
   }).slice(0, limit);
-  // Selection pass: pre-action facts only.
-  const candidates: Array<{ roundId: string; hash: string }> = [];
-  const cache = new Map<
-    string,
-    {
-      legacy: any;
-      owner: ICombatUnit;
-      friends: ICombatUnit[];
-      enemies: ICombatUnit[];
-      p: DecisionPoint;
-    }
-  >();
+  // Pass 1 — selection on pre-action facts only. Keeps ids + hashes + tSec,
+  // never the round data (holding every eligible round's legacy doc in memory
+  // OOMed the first run — the 2026-09-11 lesson: two streaming passes).
+  const candidates: Array<{ roundId: string; hash: string; tSec: number }> = [];
   let healerRounds = 0;
   for (const meta of rows) {
     let legacy;
@@ -353,7 +349,7 @@ async function main(): Promise<void> {
     } catch {
       continue;
     }
-    const { friends, enemies, owner } = splitTeams(legacy);
+    const { owner } = splitTeams(legacy);
     if (!owner || owner.id !== legacy.playerId || !isHealerSpec(owner.spec))
       continue;
     healerRounds++;
@@ -367,16 +363,26 @@ async function main(): Promise<void> {
       .filter((p) => p.dangerous && !p.inCC && !p.lockedOut)
       .sort((a, b) => a.tSec - b.tSec)[0];
     if (!first) continue;
-    const hash = createHash("sha1").update(meta.id).digest("hex");
-    candidates.push({ roundId: meta.id, hash });
-    cache.set(meta.id, { legacy, owner, friends, enemies, p: first });
+    candidates.push({
+      roundId: meta.id,
+      hash: createHash("sha1").update(meta.id).digest("hex"),
+      tSec: first.tSec,
+    });
   }
   candidates.sort((a, b) => (a.hash < b.hash ? -1 : 1));
   const frozen = candidates.slice(0, take);
-  const moments = frozen.map((c) => {
-    const e = cache.get(c.roundId)!;
-    return momentFor(c.roundId, e.legacy, e.owner, e.friends, e.enemies, e.p);
-  });
+  // Pass 2 — reload only the frozen rounds and render.
+  const moments: Moment[] = [];
+  for (const c of frozen) {
+    const { legacy } = loadLegacyRound(DEFAULT_MATCH_DIR, c.roundId);
+    const { friends, enemies, owner } = splitTeams(legacy);
+    const p = crisisDecisionPoints(owner!, legacy, "healer").find(
+      (x) => x.tSec === c.tSec,
+    );
+    if (!p)
+      throw new Error(`frozen crossing ${c.roundId}@${c.tSec} not reproduced`);
+    moments.push(momentFor(c.roundId, legacy, owner!, friends, enemies, p));
+  }
 
   mkdirSync(outDir, { recursive: true });
   const ledger = {
