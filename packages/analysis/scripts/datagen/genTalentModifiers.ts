@@ -33,6 +33,7 @@ const AURA_MOD_MAX_CHARGES = 411;
 const AURA_ADD_FLAT_MODIFIER = 107;
 const AURA_ADD_PCT_MODIFIER = 108;
 const SPELLMOD_COOLDOWN = 11; // TrinityCore SpellModOp code for "this SpellMod targets cooldown"
+const AURA_CHARGE_RECOVERY_MULTIPLIER = 454; // charge recovery rate %, MiscValue_0 = ChargeCategory (Path B)
 const AURA_MOD_CATEGORY_COOLDOWN = 453; // SPELL_AURA_CHARGE_RECOVERY_MOD — dedicated, MiscValue_0 is a ChargeCategory id (Path B below), not a SpellModOp code
 const AURA_OVERRIDE_ACTION_SPELL = 332; // Replaces base spell with another
 
@@ -47,10 +48,16 @@ const CLASS_ID_TO_FAMILY: Record<number, number> = {
   7: 11, // Shaman
   8: 3, // Mage
   9: 5, // Warlock
-  10: 126, // Monk
+  // 2026-09-13: Monk/Demon Hunter/Evoker were 126/127/128, which no DB2 row
+  // carries — every class-mask (Path A) cooldown modifier for those three
+  // classes was silently dropped (e.g. 迅疾豪胆 −30 s Fortifying Brew, 止戈古训
+  // −15 s Paralysis, 天神之赐 −60 s Xuen). Values read off
+  // SpellClassOptions@12.1.0.69587: Paralysis 115078 = 53, Blur 198589 = 107,
+  // Obsidian Scales 363916 = 224. Only Path B (charge categories) survived.
+  10: 53, // Monk
   11: 7, // Druid
-  12: 127, // Demon Hunter
-  13: 128, // Evoker
+  12: 107, // Demon Hunter
+  13: 224, // Evoker
 };
 
 function toInt(value: string): number {
@@ -69,6 +76,15 @@ export interface ICDModifier {
   effect: "extra_charge" | "reduce_cd" | "reduce_cd_pct" | "replace_spell";
   value: number;
   isConditional?: boolean;
+  /**
+   * DB2 SpellEffect.ID the modifier was read from (2026-09-13, codex astra
+   * GH #96 ruling 7). Identity, not magnitude, decides "same real modifier":
+   * one row rediscovered through two match paths collapses; two distinct rows
+   * that happen to carry the same value are both kept and stacked by
+   * `applyCdModifiers`. Absent for CUSTOM_TALENT_MODIFIERS and for synthetic
+   * test rows without an ID — those keep the old value-based collapse.
+   */
+  sourceRowId?: string;
 }
 
 export function extractTalentModifiers(
@@ -77,6 +93,16 @@ export function extractTalentModifiers(
   spellCategoriesRows: Record<string, string>[],
   spellNameRows: Record<string, string>[],
   trackedSpellIds: Set<string>,
+  /**
+   * Source spells that are TEMPORARY buffs (finite DB2 duration): their
+   * cooldown / charge SpellMods only apply while the buff is up, so emitting
+   * them as permanent talent modifiers is wrong. 2026-09-13 audit: Berserk
+   * 50334 recorded "Frenzied Regeneration −100 %" and Avatar 107574 "Thunder
+   * Clap −50 %" as if held all match (20 such rows before the fix). Optional
+   * so synthetic-row tests keep their old behaviour; `main` always passes it.
+   * `replace_spell` rows are kept — they describe which button exists.
+   */
+  temporarySourceIds: ReadonlySet<string> = new Set(),
 ): Record<string, ICDModifier[]> {
   const spellNames = new Map<string, string>();
   for (const row of spellNameRows) {
@@ -181,8 +207,20 @@ export function extractTalentModifiers(
   }
 
   const results: Record<string, ICDModifier[]> = {};
+  /** Recovery mechanism a scanned modifier acts on: a SpellMod cooldown
+   * (107/108 op 11, effect 148) or a charge-category recovery aura (453/454).
+   * Kept off the emitted object — only the step-4b reconciliation reads it. */
+  const mechanismOf = new WeakMap<ICDModifier, "cooldown" | "charge">();
+  const chargedSpellIds = new Set<string>(
+    [...chargeCategorySpells.values()].flat(),
+  );
 
-  function addModifier(targetSpellId: string, mod: ICDModifier) {
+  function addModifier(
+    targetSpellId: string,
+    mod: ICDModifier,
+    mechanism?: "cooldown" | "charge",
+  ) {
+    if (mechanism) mechanismOf.set(mod, mechanism);
     if (!results[targetSpellId]) {
       results[targetSpellId] = [];
     }
@@ -217,7 +255,9 @@ export function extractTalentModifiers(
       (m) =>
         m.talentSpellId === mod.talentSpellId &&
         m.effect === mod.effect &&
-        m.value === mod.value,
+        (mod.sourceRowId !== undefined && m.sourceRowId !== undefined
+          ? m.sourceRowId === mod.sourceRowId
+          : m.value === mod.value),
     );
     if (identical) {
       // Same value re-matched via a second path — same real modifier.
@@ -278,6 +318,19 @@ export function extractTalentModifiers(
       modifierType = "reduce_cd_pct";
       value = Math.abs(value);
     } else if (
+      effect === EFFECT_APPLY_AURA &&
+      aura === AURA_CHARGE_RECOVERY_MULTIPLIER
+    ) {
+      // 2026-09-13: aura 454 (charge recovery rate %, MiscValue_0 = the
+      // ChargeCategory, matched by Path B) was not read at all — 优胜劣汰 −12 %
+      // Survival Instincts, 乌瑟尔的劝谏 −10 % Blessing of Protection /
+      // Spellwarding, 丝缕交织 −10 % Obsidian Scales, PvP 神圣职责 −33 % Blessing
+      // of Protection, PvP 窃贼的交易 −20 % Feint. Sign kept: a negative DB2
+      // value is a reduction, so `-value` yields the positive reduction
+      // `applyCdModifiers` expects and an increase rides through negative.
+      modifierType = "reduce_cd_pct";
+      value = -value;
+    } else if (
       effect === EFFECT_MOD_COOLDOWN ||
       (effect === EFFECT_APPLY_AURA && aura === AURA_MOD_CATEGORY_COOLDOWN) ||
       (effect === EFFECT_APPLY_AURA &&
@@ -316,6 +369,11 @@ export function extractTalentModifiers(
     }
 
     if (!modifierType) continue;
+    if (
+      modifierType !== "replace_spell" &&
+      temporarySourceIds.has(talentSpellId)
+    )
+      continue;
 
     const effectMasks = [
       toInt(row.EffectSpellClassMask_0),
@@ -338,36 +396,89 @@ export function extractTalentModifiers(
           (effectMasks[3] & targetInfo.masks[3]) !== 0;
 
         if (intersects) {
-          addModifier(targetId, {
-            talentSpellId,
-            effect: modifierType,
-            value,
-          });
+          addModifier(
+            targetId,
+            {
+              talentSpellId,
+              effect: modifierType,
+              value,
+              ...(row.ID ? { sourceRowId: String(row.ID) } : {}),
+            },
+            "cooldown",
+          );
         }
       }
     }
 
     // Path B: Match via ChargeCategory (stored in MiscValue_0)
-    const chargeTargets = chargeCategorySpells.get(miscValue0);
+    // Only charge-category effects carry a ChargeCategory in MiscValue_0
+    // (2026-09-13, codex astra GH #96 ruling 7): on a 107/108 row the same
+    // field is the SpellModOp code, so category 11 would otherwise catch every
+    // cooldown SpellMod in the game.
+    const isCategoryEffect =
+      effect === EFFECT_MOD_CHARGES ||
+      effect === EFFECT_MOD_COOLDOWN ||
+      aura === AURA_MOD_MAX_CHARGES ||
+      aura === AURA_MOD_CATEGORY_COOLDOWN ||
+      aura === AURA_CHARGE_RECOVERY_MULTIPLIER;
+    const chargeTargets = isCategoryEffect
+      ? chargeCategorySpells.get(miscValue0)
+      : undefined;
     if (miscValue0 > 0 && chargeTargets) {
       for (const targetId of chargeTargets) {
-        addModifier(targetId, {
-          talentSpellId,
-          effect: modifierType,
-          value,
-        });
+        addModifier(
+          targetId,
+          {
+            talentSpellId,
+            effect: modifierType,
+            value,
+            ...(row.ID ? { sourceRowId: String(row.ID) } : {}),
+          },
+          "charge",
+        );
       }
     }
 
     // Path C: Direct Target Spell ID (stored in MiscValue_0)
     // Used for Effect 332 overrides (e.g. Ice Block -> Ice Cold)
     if (miscValue0 > 0 && !chargeCategorySpells.has(miscValue0)) {
-      addModifier(String(miscValue0), {
-        talentSpellId,
-        effect: modifierType,
-        value,
-      });
+      addModifier(
+        String(miscValue0),
+        {
+          talentSpellId,
+          effect: modifierType,
+          value,
+          ...(row.ID ? { sourceRowId: String(row.ID) } : {}),
+        },
+        "cooldown",
+      );
     }
+  }
+
+  // 4b. One talent, one effect, two mechanisms (2026-09-13). DB2 often writes
+  // the same reduction twice — a SpellMod cooldown row (class mask) AND a
+  // charge-recovery row (charge category) — because a spell recovers through
+  // exactly one of them: 神圣职责 216853 is −33 % as aura 108 op 11 AND as aura
+  // 454 on Blessing of Spellwarding's category. Once dedup keys on row identity
+  // both survive and `applyCdModifiers` would stack them (33 % → 55 %). Keep
+  // the row matching how the target recovers: charge-category targets keep the
+  // charge row, everything else keeps the cooldown row.
+  for (const [targetId, mods] of Object.entries(results)) {
+    const charged = chargedSpellIds.has(targetId);
+    const drop = new Set<ICDModifier>();
+    for (const a of mods) {
+      if (mechanismOf.get(a) !== "cooldown") continue;
+      for (const b of mods) {
+        if (mechanismOf.get(b) !== "charge") continue;
+        if (
+          a.talentSpellId === b.talentSpellId &&
+          a.effect === b.effect &&
+          a.value === b.value
+        )
+          drop.add(charged ? a : b);
+      }
+    }
+    if (drop.size) results[targetId] = mods.filter((m) => !drop.has(m));
   }
 
   // 5. Merge Custom Modifiers
@@ -395,11 +506,15 @@ export async function main(): Promise<void> {
     spellClassOptionsRaw,
     spellCategoriesRaw,
     spellNameRaw,
+    spellMiscRaw,
+    spellDurationRaw,
   ] = await Promise.all([
     fetchTable("SpellEffect", build, cacheDir),
     fetchTable("SpellClassOptions", build, cacheDir),
     fetchTable("SpellCategories", build, cacheDir),
     fetchTable("SpellName", build, cacheDir),
+    fetchTable("SpellMisc", build, cacheDir),
+    fetchTable("SpellDuration", build, cacheDir),
   ]);
 
   const spellEffectRows = parseCsv(spellEffectRaw).rows;
@@ -499,12 +614,25 @@ export async function main(): Promise<void> {
     trackedSpellIds.add(id);
   }
 
+  // Temporary-buff sources: a finite SpellDuration (> 0 ms). Passive talents
+  // carry DurationIndex 0 or an infinite (-1) duration and stay eligible.
+  const durationMs = new Map<string, number>();
+  for (const row of parseCsv(spellDurationRaw).rows)
+    durationMs.set(row.ID, toInt(row.Duration));
+  const temporarySourceIds = new Set<string>();
+  for (const row of parseCsv(spellMiscRaw).rows) {
+    if (row.DifficultyID !== "0") continue;
+    if ((durationMs.get(row.DurationIndex) ?? 0) > 0)
+      temporarySourceIds.add(row.SpellID);
+  }
+
   const filteredResults = extractTalentModifiers(
     spellEffectRows,
     spellClassOptionsRows,
     spellCategoriesRows,
     spellNameRows,
     trackedSpellIds,
+    temporarySourceIds,
   );
 
   console.log(

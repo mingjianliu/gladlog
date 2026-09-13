@@ -3,879 +3,1004 @@
     {
       "talentSpellId": "440681",
       "effect": "reduce_cd",
-      "value": 2
+      "value": 2,
+      "sourceRowId": "1248561"
     }
   ],
   "66": [
     {
       "talentSpellId": "210476",
       "effect": "reduce_cd",
-      "value": 60
+      "value": 60,
+      "sourceRowId": "311684"
     }
   ],
   "100": [
     {
       "talentSpellId": "103827",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "166913"
     },
     {
       "talentSpellId": "103827",
       "effect": "reduce_cd",
-      "value": 3
+      "value": 3,
+      "sourceRowId": "320495"
     }
   ],
   "120": [
     {
       "talentSpellId": "387807",
       "effect": "reduce_cd",
-      "value": 5
+      "value": 5,
+      "sourceRowId": "1022851"
     },
     {
       "talentSpellId": "431067",
       "effect": "reduce_cd_pct",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "1118575"
     }
   ],
   "122": [
     {
       "talentSpellId": "205036",
       "effect": "extra_charge",
-      "value": 1
-    },
-    {
-      "talentSpellId": "387807",
-      "effect": "reduce_cd",
-      "value": 5
+      "value": 1,
+      "sourceRowId": "302663"
     },
     {
       "talentSpellId": "431067",
       "effect": "reduce_cd_pct",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "1163206"
+    },
+    {
+      "talentSpellId": "387807",
+      "effect": "reduce_cd",
+      "value": 5,
+      "sourceRowId": "1292698"
     }
   ],
   "172": [
     {
       "talentSpellId": "445465",
       "effect": "replace_spell",
-      "value": 445468
+      "value": 445468,
+      "sourceRowId": "1264873"
     }
   ],
   "339": [
     {
       "talentSpellId": "202226",
       "effect": "reduce_cd",
-      "value": -6
+      "value": -6,
+      "sourceRowId": "298051"
     }
   ],
   "348": [
     {
       "talentSpellId": "445465",
       "effect": "replace_spell",
-      "value": 445468
+      "value": 445468,
+      "sourceRowId": "1142346"
     }
   ],
   "498": [
     {
       "talentSpellId": "114154",
       "effect": "reduce_cd_pct",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "127297"
     }
   ],
   "527": [
     {
       "talentSpellId": "196439",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1091850"
     }
   ],
   "586": [
     {
       "talentSpellId": "390670",
       "effect": "reduce_cd",
-      "value": 5
+      "value": 5,
+      "sourceRowId": "1027663"
     }
   ],
   "633": [
     {
       "talentSpellId": "114154",
       "effect": "reduce_cd_pct",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "127297"
     },
     {
       "talentSpellId": "378425",
       "effect": "reduce_cd_pct",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "1006821"
     },
     {
       "talentSpellId": "414720",
       "effect": "reduce_cd_pct",
-      "value": 40
+      "value": 40,
+      "sourceRowId": "1084066"
     },
     {
       "talentSpellId": "387791",
       "effect": "replace_spell",
-      "value": 471195
+      "value": 471195,
+      "sourceRowId": "1187299"
     }
   ],
   "642": [
     {
       "talentSpellId": "114154",
       "effect": "reduce_cd_pct",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "127297"
     },
     {
       "talentSpellId": "378425",
       "effect": "reduce_cd_pct",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "1006821"
     }
   ],
   "686": [
     {
       "talentSpellId": "388667",
       "effect": "replace_spell",
-      "value": 198590
+      "value": 198590,
+      "sourceRowId": "1024496"
     }
   ],
   "702": [
     {
       "talentSpellId": "440057",
       "effect": "replace_spell",
-      "value": 442804
+      "value": 442804,
+      "sourceRowId": "1133719"
     }
   ],
   "853": [
     {
       "talentSpellId": "234299",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "353965"
     }
   ],
   "871": [
     {
-      "talentSpellId": "391271",
-      "effect": "reduce_cd_pct",
-      "value": 10
-    },
-    {
       "talentSpellId": "397103",
       "effect": "reduce_cd",
-      "value": 60
+      "value": 60,
+      "sourceRowId": "1039070"
     },
     {
       "talentSpellId": "397103",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1039071"
+    },
+    {
+      "talentSpellId": "391271",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1170203"
     }
   ],
   "1022": [
     {
+      "talentSpellId": "216853",
+      "effect": "reduce_cd_pct",
+      "value": 33,
+      "sourceRowId": "324434"
+    },
+    {
+      "talentSpellId": "378425",
+      "effect": "reduce_cd_pct",
+      "value": 15,
+      "sourceRowId": "1012224"
+    },
+    {
       "talentSpellId": "384909",
       "effect": "reduce_cd",
-      "value": 60
+      "value": 60,
+      "sourceRowId": "1017827"
     }
   ],
   "1122": [
     {
       "talentSpellId": "1280483",
       "effect": "reduce_cd",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "1293411"
     }
   ],
   "1160": [
     {
       "talentSpellId": "199023",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "344340"
     }
   ],
   "1784": [
     {
       "talentSpellId": "108208",
       "effect": "replace_spell",
-      "value": 115191
+      "value": 115191,
+      "sourceRowId": "119248"
     }
   ],
   "1856": [
     {
       "talentSpellId": "382513",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1013894"
+    },
+    {
+      "talentSpellId": "354825",
+      "effect": "reduce_cd_pct",
+      "value": 20,
+      "sourceRowId": "1082485"
     }
   ],
   "1953": [
     {
       "talentSpellId": "382268",
       "effect": "reduce_cd",
-      "value": 3
+      "value": 3,
+      "sourceRowId": "1013563"
     },
     {
       "talentSpellId": "1244031",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1244564"
     },
     {
       "talentSpellId": "1244340",
       "effect": "reduce_cd",
-      "value": 2
+      "value": 2,
+      "sourceRowId": "1245044"
     }
   ],
   "1966": [
     {
       "talentSpellId": "423647",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1099803"
+    },
+    {
+      "talentSpellId": "354825",
+      "effect": "reduce_cd_pct",
+      "value": 20,
+      "sourceRowId": "1123667"
     }
   ],
   "2050": [
     {
       "talentSpellId": "235587",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "356036"
     },
     {
       "talentSpellId": "1215275",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "1198132"
     },
     {
       "talentSpellId": "1272359",
       "effect": "reduce_cd",
-      "value": 5
+      "value": 5,
+      "sourceRowId": "1285557"
     }
   ],
   "2094": [
     {
       "talentSpellId": "200733",
       "effect": "reduce_cd_pct",
-      "value": 50
+      "value": 50,
+      "sourceRowId": "295581"
     },
     {
       "talentSpellId": "256165",
       "effect": "reduce_cd_pct",
-      "value": 25
+      "value": 25,
+      "sourceRowId": "478576"
     },
     {
       "talentSpellId": "441415",
       "effect": "reduce_cd_pct",
-      "value": 10
+      "value": 10,
+      "sourceRowId": "1135856"
     }
   ],
   "2825": [
     {
       "talentSpellId": "193876",
       "effect": "replace_spell",
-      "value": 8
+      "value": 8,
+      "sourceRowId": "301624"
     }
   ],
   "2983": [
     {
       "talentSpellId": "197000",
       "effect": "reduce_cd_pct",
-      "value": 50
+      "value": 50,
+      "sourceRowId": "289273"
     },
     {
       "talentSpellId": "231691",
       "effect": "reduce_cd",
-      "value": 60
+      "value": 60,
+      "sourceRowId": "349535"
     }
   ],
   "3411": [
     {
-      "talentSpellId": "391271",
-      "effect": "reduce_cd_pct",
-      "value": 10
-    },
-    {
       "talentSpellId": "424654",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1101810"
     },
     {
       "talentSpellId": "424654",
       "effect": "reduce_cd",
-      "value": -10
+      "value": -10,
+      "sourceRowId": "1101811"
+    },
+    {
+      "talentSpellId": "391271",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1170201"
     }
   ],
   "4987": [
     {
       "talentSpellId": "199330",
       "effect": "reduce_cd",
-      "value": -4
+      "value": -4,
+      "sourceRowId": "1091852"
     }
   ],
   "5246": [
     {
       "talentSpellId": "424742",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "1101944"
     }
   ],
   "5308": [
     {
       "talentSpellId": "206315",
       "effect": "replace_spell",
-      "value": 280735
+      "value": 280735,
+      "sourceRowId": "305084"
     },
     {
       "talentSpellId": "316405",
       "effect": "reduce_cd_pct",
-      "value": 100
+      "value": 100,
+      "sourceRowId": "800884"
     }
   ],
   "5384": [
     {
       "talentSpellId": "1258486",
       "effect": "reduce_cd",
-      "value": 5
+      "value": 5,
+      "sourceRowId": "1267168"
     }
   ],
   "5394": [
     {
       "talentSpellId": "382030",
       "effect": "reduce_cd",
-      "value": 5
+      "value": 5,
+      "sourceRowId": "1013223"
     },
     {
       "talentSpellId": "381867",
       "effect": "reduce_cd",
-      "value": 5
+      "value": 5,
+      "sourceRowId": "1014666"
     },
     {
       "talentSpellId": "392915",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1031470"
     },
     {
       "talentSpellId": "392916",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1031472"
     },
     {
       "talentSpellId": "1260644",
       "effect": "reduce_cd",
-      "value": 3
+      "value": 3,
+      "sourceRowId": "1282760"
     }
   ],
   "5484": [
     {
       "talentSpellId": "429072",
       "effect": "reduce_cd",
-      "value": 10
+      "value": 10,
+      "sourceRowId": "1112983"
     },
     {
       "talentSpellId": "1270255",
       "effect": "reduce_cd",
-      "value": 5
+      "value": 5,
+      "sourceRowId": "1282171"
     }
   ],
   "5938": [
     {
       "talentSpellId": "1267182",
       "effect": "reduce_cd",
-      "value": 15
-    }
-  ],
-  "6343": [
-    {
-      "talentSpellId": "107574",
-      "effect": "reduce_cd_pct",
-      "value": 50
+      "value": 15,
+      "sourceRowId": "1280029"
     }
   ],
   "6544": [
     {
       "talentSpellId": "202163",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "297945"
     }
   ],
   "6552": [
     {
       "talentSpellId": "391271",
       "effect": "reduce_cd_pct",
-      "value": 10
-    }
-  ],
-  "6795": [
-    {
-      "talentSpellId": "50334",
-      "effect": "reduce_cd_pct",
-      "value": 50
-    },
-    {
-      "talentSpellId": "102558",
-      "effect": "reduce_cd_pct",
-      "value": 50
+      "value": 10,
+      "sourceRowId": "1028651"
     }
   ],
   "6940": [
     {
       "talentSpellId": "199452",
       "effect": "replace_spell",
-      "value": 199448
+      "value": 199448,
+      "sourceRowId": "293512"
     },
     {
       "talentSpellId": "216853",
       "effect": "reduce_cd_pct",
-      "value": 33
+      "value": 33,
+      "sourceRowId": "347670"
     },
     {
       "talentSpellId": "384820",
       "effect": "reduce_cd",
-      "value": 60
+      "value": 60,
+      "sourceRowId": "1017694"
     }
   ],
   "7384": [
     {
       "talentSpellId": "385571",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1132927"
     }
   ],
   "8092": [
     {
       "talentSpellId": "406788",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1055979"
     }
   ],
   "8122": [
     {
       "talentSpellId": "196704",
       "effect": "reduce_cd",
-      "value": 10
+      "value": 10,
+      "sourceRowId": "288790"
     }
   ],
   "11426": [
     {
       "talentSpellId": "1244069",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1244693"
     }
   ],
   "17364": [
     {
       "talentSpellId": "114051",
       "effect": "replace_spell",
-      "value": 115356
+      "value": 115356,
+      "sourceRowId": "1180317"
     },
     {
       "talentSpellId": "319930",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1185745"
     }
   ],
   "17962": [
     {
       "talentSpellId": "231793",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "349696"
     },
     {
       "talentSpellId": "388827",
       "effect": "reduce_cd",
-      "value": 2
+      "value": 2,
+      "sourceRowId": "1024755"
     }
   ],
   "18499": [
     {
       "talentSpellId": "1271925",
       "effect": "reduce_cd_pct",
-      "value": 50
+      "value": 50,
+      "sourceRowId": "1284932"
     }
   ],
   "18562": [
     {
       "talentSpellId": "200383",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "294998"
     },
     {
       "talentSpellId": "428937",
       "effect": "reduce_cd",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1112687"
     }
   ],
   "19574": [
     {
       "talentSpellId": "231548",
       "effect": "reduce_cd",
-      "value": 60
+      "value": 60,
+      "sourceRowId": "349261"
     }
   ],
   "19577": [
     {
       "talentSpellId": "459507",
       "effect": "reduce_cd",
-      "value": 20
+      "value": 20,
+      "sourceRowId": "1166370"
     }
   ],
   "20271": [
     {
       "talentSpellId": "204023",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "301061"
     },
     {
       "talentSpellId": "405461",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1053768"
     }
   ],
   "20473": [
     {
       "talentSpellId": "414073",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1082842"
     }
   ],
   "22703": [
     {
       "talentSpellId": "1280483",
       "effect": "reduce_cd",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "1293411"
     }
   ],
   "22812": [
     {
       "talentSpellId": "203965",
       "effect": "reduce_cd_pct",
-      "value": 12
+      "value": 12,
+      "sourceRowId": "300978"
     }
   ],
   "22842": [
     {
-      "talentSpellId": "102558",
-      "effect": "reduce_cd_pct",
-      "value": 50
-    },
-    {
-      "talentSpellId": "50334",
-      "effect": "reduce_cd_pct",
-      "value": 100
-    },
-    {
       "talentSpellId": "377811",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1017562"
     }
   ],
   "23881": [
     {
       "talentSpellId": "1719",
       "effect": "replace_spell",
-      "value": 335096
+      "value": 335096,
+      "sourceRowId": "1201495"
     }
   ],
   "23920": [
     {
-      "talentSpellId": "391271",
-      "effect": "reduce_cd_pct",
-      "value": 10
-    },
-    {
       "talentSpellId": "213915",
       "effect": "reduce_cd",
-      "value": -10
+      "value": -10,
+      "sourceRowId": "1071390"
+    },
+    {
+      "talentSpellId": "391271",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1170200"
     }
   ],
   "24275": [
     {
       "talentSpellId": "405461",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1258360"
     }
   ],
   "30283": [
     {
       "talentSpellId": "1270255",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "1282169"
     }
   ],
   "30449": [
     {
       "talentSpellId": "1270827",
       "effect": "reduce_cd",
-      "value": -4
+      "value": -4,
+      "sourceRowId": "1283189"
     }
   ],
   "31661": [
     {
       "talentSpellId": "387807",
       "effect": "reduce_cd",
-      "value": 5
+      "value": 5,
+      "sourceRowId": "1022851"
     },
     {
       "talentSpellId": "431067",
       "effect": "reduce_cd_pct",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "1118816"
     }
   ],
   "31821": [
     {
       "talentSpellId": "199324",
       "effect": "reduce_cd",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "880958"
     },
     {
       "talentSpellId": "392911",
       "effect": "reduce_cd",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "1031466"
     }
   ],
   "31850": [
     {
       "talentSpellId": "114154",
       "effect": "reduce_cd_pct",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "127297"
     }
   ],
   "31884": [
     {
       "talentSpellId": "204074",
       "effect": "reduce_cd_pct",
-      "value": 50
+      "value": 50,
+      "sourceRowId": "301163"
     },
     {
       "talentSpellId": "458359",
       "effect": "replace_spell",
-      "value": 462048
+      "value": 462048,
+      "sourceRowId": "1171273"
     },
     {
       "talentSpellId": "1241511",
       "effect": "reduce_cd",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "1240525"
     }
   ],
   "32182": [
     {
       "talentSpellId": "193876",
       "effect": "replace_spell",
-      "value": 8
+      "value": 8,
+      "sourceRowId": "301624"
     }
   ],
   "32375": [
     {
       "talentSpellId": "426438",
       "effect": "reduce_cd",
-      "value": 60
+      "value": 60,
+      "sourceRowId": "1104914"
     }
   ],
   "32379": [
     {
       "talentSpellId": "1272326",
       "effect": "reduce_cd",
-      "value": 3
+      "value": 3,
+      "sourceRowId": "1285514"
     }
   ],
   "32592": [
     {
       "talentSpellId": "426438",
       "effect": "reduce_cd",
-      "value": 60
+      "value": 60,
+      "sourceRowId": "1104914"
     }
   ],
   "33076": [
     {
       "talentSpellId": "440681",
       "effect": "reduce_cd",
-      "value": 2
+      "value": 2,
+      "sourceRowId": "1134726"
     },
     {
       "talentSpellId": "1248423",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1251343"
     }
   ],
   "33206": [
     {
       "talentSpellId": "373035",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1045218"
     }
   ],
   "33891": [
     {
       "talentSpellId": "390378",
       "effect": "replace_spell",
-      "value": 390414
+      "value": 390414,
+      "sourceRowId": "1027228"
     },
     {
       "talentSpellId": "391174",
       "effect": "reduce_cd",
-      "value": 60
+      "value": 60,
+      "sourceRowId": "1028503"
     }
   ],
   "33917": [
     {
-      "talentSpellId": "50334",
-      "effect": "reduce_cd_pct",
-      "value": 50
-    },
-    {
-      "talentSpellId": "102558",
-      "effect": "reduce_cd_pct",
-      "value": 50
-    },
-    {
       "talentSpellId": "1253035",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1262469"
     }
   ],
   "34026": [
     {
       "talentSpellId": "269737",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1025596"
     }
   ],
   "34477": [
     {
       "talentSpellId": "248518",
       "effect": "reduce_cd",
-      "value": -15
+      "value": -15,
+      "sourceRowId": "1072609"
     },
     {
       "talentSpellId": "459546",
       "effect": "reduce_cd",
-      "value": 5
+      "value": 5,
+      "sourceRowId": "1166443"
     }
   ],
   "34861": [
     {
       "talentSpellId": "235587",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1031547"
     },
     {
       "talentSpellId": "1215275",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "1198131"
     },
     {
       "talentSpellId": "1246517",
       "effect": "replace_spell",
-      "value": 1250548
+      "value": 1250548,
+      "sourceRowId": "1248107"
     },
     {
       "talentSpellId": "1272359",
       "effect": "reduce_cd",
-      "value": 5
+      "value": 5,
+      "sourceRowId": "1285558"
     }
   ],
   "35395": [
     {
       "talentSpellId": "383228",
       "effect": "reduce_cd",
-      "value": 2
+      "value": 2,
+      "sourceRowId": "1049616"
     },
     {
       "talentSpellId": "406646",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1073914"
     }
   ],
   "36554": [
     {
+      "talentSpellId": "382503",
+      "effect": "reduce_cd_pct",
+      "value": 20,
+      "sourceRowId": "1013871"
+    },
+    {
       "talentSpellId": "394931",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1034994"
     },
     {
       "talentSpellId": "454433",
       "effect": "reduce_cd",
-      "value": -5
+      "value": -5,
+      "sourceRowId": "1179470"
     }
   ],
   "39897": [
     {
       "talentSpellId": "426438",
       "effect": "reduce_cd",
-      "value": 60
+      "value": 60,
+      "sourceRowId": "1104914"
     }
   ],
   "43265": [
     {
       "talentSpellId": "356367",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "890190"
     },
     {
       "talentSpellId": "444099",
       "effect": "reduce_cd",
-      "value": 5
+      "value": 5,
+      "sourceRowId": "1140400"
     }
   ],
   "45438": [
     {
       "talentSpellId": "382424",
       "effect": "reduce_cd",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "1013746"
     },
     {
       "talentSpellId": "414659",
       "effect": "replace_spell",
-      "value": 414658
+      "value": 414658,
+      "sourceRowId": "1083954"
     },
     {
       "talentSpellId": "1244110",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1244686"
     },
     {
       "talentSpellId": "1244110",
       "effect": "reduce_cd",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "1244696"
     },
     {
       "talentSpellId": "1265517",
       "effect": "reduce_cd",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "1277318"
     }
   ],
   "45524": [
     {
       "talentSpellId": "454786",
       "effect": "reduce_cd",
-      "value": -12
+      "value": -12,
+      "sourceRowId": "1157675"
     }
   ],
   "46584": [
     {
       "talentSpellId": "437122",
       "effect": "reduce_cd",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "1128872"
     }
   ],
   "46585": [
     {
       "talentSpellId": "437122",
       "effect": "reduce_cd",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "1128872"
     }
   ],
   "46968": [
     {
       "talentSpellId": "440992",
       "effect": "reduce_cd",
-      "value": 5
+      "value": 5,
+      "sourceRowId": "1135201"
     }
   ],
   "47540": [
     {
       "talentSpellId": "1248423",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1251342"
     }
   ],
   "47585": [
     {
       "talentSpellId": "288733",
       "effect": "reduce_cd",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "752639"
     }
   ],
   "47788": [
@@ -890,2953 +1015,3926 @@
     {
       "talentSpellId": "356367",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "890197"
     },
     {
       "talentSpellId": "444010",
       "effect": "replace_spell",
-      "value": 444347
+      "value": 444347,
+      "sourceRowId": "1140259"
     }
   ],
   "48438": [
     {
       "talentSpellId": "473909",
       "effect": "replace_spell",
-      "value": 474149
+      "value": 474149,
+      "sourceRowId": "1193145"
     },
     {
       "talentSpellId": "428937",
       "effect": "reduce_cd",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1256778"
     }
   ],
   "48707": [
     {
       "talentSpellId": "205727",
       "effect": "reduce_cd",
-      "value": 20
+      "value": 20,
+      "sourceRowId": "303981"
     },
     {
       "talentSpellId": "410320",
       "effect": "reduce_cd",
-      "value": 10
+      "value": 10,
+      "sourceRowId": "1075856"
     },
     {
       "talentSpellId": "457574",
       "effect": "reduce_cd",
-      "value": -20
+      "value": -20,
+      "sourceRowId": "1162886"
     }
   ],
   "48743": [
     {
       "talentSpellId": "1266818",
       "effect": "reduce_cd",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "1279505"
     }
   ],
   "49028": [
     {
       "talentSpellId": "233412",
       "effect": "reduce_cd_pct",
-      "value": 50
+      "value": 50,
+      "sourceRowId": "352507"
     },
     {
       "talentSpellId": "377637",
       "effect": "reduce_cd",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "1005589"
     }
   ],
   "49039": [
     {
       "talentSpellId": "437122",
       "effect": "reduce_cd",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "1128872"
     },
     {
       "talentSpellId": "389682",
       "effect": "reduce_cd",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "1259894"
     }
   ],
   "49576": [
     {
       "talentSpellId": "356367",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "890191"
     }
   ],
   "51052": [
     {
       "talentSpellId": "374383",
       "effect": "reduce_cd",
-      "value": 60
+      "value": 60,
+      "sourceRowId": "1000205"
     }
   ],
   "51271": [
     {
       "talentSpellId": "1218603",
       "effect": "reduce_cd",
-      "value": -15
+      "value": -15,
+      "sourceRowId": "1205063"
     }
   ],
   "51505": [
     {
       "talentSpellId": "333919",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "829538"
     },
     {
       "talentSpellId": "443418",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1139295"
     }
   ],
   "51514": [
     {
       "talentSpellId": "204268",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "301483"
     }
   ],
   "51690": [
     {
       "talentSpellId": "441274",
       "effect": "reduce_cd_pct",
-      "value": 10
+      "value": 10,
+      "sourceRowId": "1135629"
     }
   ],
   "52150": [
     {
       "talentSpellId": "437122",
       "effect": "reduce_cd",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "1128872"
     }
   ],
   "52174": [
     {
       "talentSpellId": "202163",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "1196343"
     }
   ],
   "53271": [
     {
       "talentSpellId": "356962",
       "effect": "reduce_cd_pct",
-      "value": 50
+      "value": 50,
+      "sourceRowId": "891141"
     }
   ],
   "53351": [
     {
       "talentSpellId": "321460",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "809194"
     },
     {
       "talentSpellId": "321460",
       "effect": "reduce_cd",
-      "value": 2
+      "value": 2,
+      "sourceRowId": "1026383"
     },
     {
       "talentSpellId": "466932",
       "effect": "replace_spell",
-      "value": 466930
+      "value": 466930,
+      "sourceRowId": "1179821"
     }
   ],
   "55342": [
     {
       "talentSpellId": "1244025",
       "effect": "reduce_cd",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "1244557"
     }
   ],
   "57841": [
     {
       "talentSpellId": "441274",
       "effect": "reduce_cd_pct",
-      "value": 10
+      "value": 10,
+      "sourceRowId": "1135629"
     }
   ],
   "57842": [
     {
       "talentSpellId": "441274",
       "effect": "reduce_cd_pct",
-      "value": 10
+      "value": 10,
+      "sourceRowId": "1135629"
     }
   ],
   "57934": [
     {
       "talentSpellId": "441403",
       "effect": "replace_spell",
-      "value": 1224098
+      "value": 1224098,
+      "sourceRowId": "1212570"
     }
   ],
   "60103": [
     {
       "talentSpellId": "334033",
       "effect": "reduce_cd",
-      "value": 6
+      "value": 6,
+      "sourceRowId": "829716"
     }
   ],
   "61295": [
     {
       "talentSpellId": "333919",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1014099"
     },
     {
       "talentSpellId": "443418",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1144388"
     },
     {
       "talentSpellId": "1254251",
       "effect": "reduce_cd",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1260597"
+    }
+  ],
+  "61336": [
+    {
+      "talentSpellId": "203965",
+      "effect": "reduce_cd_pct",
+      "value": 12,
+      "sourceRowId": "301037"
     }
   ],
   "61391": [
     {
       "talentSpellId": "400140",
       "effect": "reduce_cd",
-      "value": 5
+      "value": 5,
+      "sourceRowId": "1044819"
     }
   ],
   "64382": [
     {
       "talentSpellId": "329033",
       "effect": "reduce_cd_pct",
-      "value": 50
+      "value": 50,
+      "sourceRowId": "821911"
     }
   ],
   "64843": [
     {
       "talentSpellId": "419110",
       "effect": "reduce_cd",
-      "value": 60
+      "value": 60,
+      "sourceRowId": "1091846"
     }
   ],
   "73325": [
     {
       "talentSpellId": "390620",
       "effect": "reduce_cd",
-      "value": 30
-    }
-  ],
-  "77758": [
-    {
-      "talentSpellId": "50334",
-      "effect": "reduce_cd_pct",
-      "value": 50
-    },
-    {
-      "talentSpellId": "102558",
-      "effect": "reduce_cd_pct",
-      "value": 50
+      "value": 30,
+      "sourceRowId": "1027575"
     }
   ],
   "77761": [
     {
       "talentSpellId": "288826",
       "effect": "reduce_cd",
-      "value": 60
+      "value": 60,
+      "sourceRowId": "752785"
     }
   ],
   "77764": [
     {
       "talentSpellId": "288826",
       "effect": "reduce_cd",
-      "value": 60
+      "value": 60,
+      "sourceRowId": "752785"
     }
   ],
   "78674": [
     {
       "talentSpellId": "451211",
       "effect": "reduce_cd",
-      "value": 4
+      "value": 4,
+      "sourceRowId": "1151653"
     }
   ],
   "79206": [
     {
       "talentSpellId": "192088",
       "effect": "reduce_cd",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "281779"
     }
   ],
   "80240": [
     {
       "talentSpellId": "461917",
       "effect": "replace_spell",
-      "value": 200546
+      "value": 200546,
+      "sourceRowId": "1170844"
     }
   ],
   "82691": [
     {
       "talentSpellId": "387807",
       "effect": "reduce_cd",
-      "value": 5
+      "value": 5,
+      "sourceRowId": "1022851"
     },
     {
       "talentSpellId": "431067",
       "effect": "reduce_cd_pct",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "1118575"
     }
   ],
   "84714": [
     {
       "talentSpellId": "198148",
       "effect": "replace_spell",
-      "value": 198149
+      "value": 198149,
+      "sourceRowId": "291215"
     }
   ],
   "85288": [
     {
       "talentSpellId": "383854",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1016031"
     },
     {
       "talentSpellId": "1719",
       "effect": "replace_spell",
-      "value": 335097
+      "value": 335097,
+      "sourceRowId": "1193953"
     }
   ],
   "86659": [
     {
       "talentSpellId": "1246481",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1248039"
     }
   ],
   "88625": [
     {
       "talentSpellId": "1215275",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "1198133"
     },
     {
       "talentSpellId": "1272359",
       "effect": "reduce_cd",
-      "value": 5
+      "value": 5,
+      "sourceRowId": "1285564"
     }
   ],
   "97462": [
     {
       "talentSpellId": "235941",
       "effect": "reduce_cd",
-      "value": 120
+      "value": 120,
+      "sourceRowId": "356642"
     }
   ],
   "97463": [
     {
       "talentSpellId": "235941",
       "effect": "reduce_cd",
-      "value": 120
+      "value": 120,
+      "sourceRowId": "356642"
+    }
+  ],
+  "100784": [
+    {
+      "talentSpellId": "387230",
+      "effect": "reduce_cd",
+      "value": 1,
+      "sourceRowId": "1021886"
     }
   ],
   "102342": [
     {
       "talentSpellId": "382552",
       "effect": "reduce_cd",
-      "value": 20
+      "value": 20,
+      "sourceRowId": "1013942"
     }
   ],
   "102401": [
     {
       "talentSpellId": "24858",
       "effect": "replace_spell",
-      "value": 102383
+      "value": 102383,
+      "sourceRowId": "281598"
     }
   ],
   "102543": [
     {
       "talentSpellId": "390378",
       "effect": "replace_spell",
-      "value": 390414
+      "value": 390414,
+      "sourceRowId": "1027228"
     },
     {
       "talentSpellId": "391174",
       "effect": "reduce_cd",
-      "value": 60
+      "value": 60,
+      "sourceRowId": "1028503"
     }
   ],
   "102558": [
     {
       "talentSpellId": "390378",
       "effect": "replace_spell",
-      "value": 390414
+      "value": 390414,
+      "sourceRowId": "1027228"
     },
     {
       "talentSpellId": "391174",
       "effect": "reduce_cd",
-      "value": 60
+      "value": 60,
+      "sourceRowId": "1028503"
     }
   ],
   "102560": [
     {
       "talentSpellId": "390378",
       "effect": "replace_spell",
-      "value": 390414
+      "value": 390414,
+      "sourceRowId": "1027228"
     },
     {
       "talentSpellId": "391174",
       "effect": "reduce_cd",
-      "value": 60
+      "value": 60,
+      "sourceRowId": "1028503"
     },
     {
       "talentSpellId": "390378",
       "effect": "reduce_cd",
-      "value": 60
+      "value": 60,
+      "sourceRowId": "1038807"
     },
     {
       "talentSpellId": "468743",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1182658"
     },
     {
       "talentSpellId": "468743",
       "effect": "reduce_cd",
-      "value": 60
+      "value": 60,
+      "sourceRowId": "1182659"
     }
   ],
   "104773": [
     {
       "talentSpellId": "386659",
       "effect": "reduce_cd",
-      "value": 45
+      "value": 45,
+      "sourceRowId": "1020893"
     }
   ],
   "106898": [
     {
       "talentSpellId": "288826",
       "effect": "reduce_cd",
-      "value": 60
+      "value": 60,
+      "sourceRowId": "752785"
     }
   ],
   "106951": [
     {
       "talentSpellId": "391174",
       "effect": "reduce_cd",
-      "value": 60
+      "value": 60,
+      "sourceRowId": "1028503"
     }
   ],
   "107428": [
     {
       "talentSpellId": "451485",
       "effect": "reduce_cd",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1152113"
     }
   ],
   "107570": [
     {
       "talentSpellId": "391271",
       "effect": "reduce_cd_pct",
-      "value": 10
+      "value": 10,
+      "sourceRowId": "1028651"
     },
     {
       "talentSpellId": "436162",
       "effect": "reduce_cd",
-      "value": -10
+      "value": -10,
+      "sourceRowId": "1166311"
     }
   ],
   "108271": [
     {
       "talentSpellId": "381647",
       "effect": "reduce_cd",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "1012616"
     }
   ],
   "108280": [
     {
       "talentSpellId": "462440",
       "effect": "reduce_cd",
-      "value": 60
+      "value": 60,
+      "sourceRowId": "1172216"
     }
   ],
   "108853": [
     {
       "talentSpellId": "205029",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "302656"
     },
     {
       "talentSpellId": "387044",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1021568"
     },
     {
       "talentSpellId": "431067",
       "effect": "reduce_cd_pct",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "1118816"
     },
     {
       "talentSpellId": "1260616",
       "effect": "reduce_cd",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1270118"
     },
     {
       "talentSpellId": "205029",
       "effect": "reduce_cd",
-      "value": 2
+      "value": 2,
+      "sourceRowId": "1283970"
     }
   ],
   "109132": [
     {
       "talentSpellId": "115173",
       "effect": "reduce_cd",
-      "value": 5
+      "value": 5,
+      "sourceRowId": "128868"
     },
     {
       "talentSpellId": "115173",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "135980"
     },
     {
       "talentSpellId": "449582",
       "effect": "reduce_cd",
-      "value": -2
+      "value": -2,
+      "sourceRowId": "1148858"
+    },
+    {
+      "talentSpellId": "1272844",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1286163"
     }
   ],
   "109304": [
     {
       "talentSpellId": "270581",
       "effect": "reduce_cd",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "720204"
     }
   ],
   "110959": [
     {
       "talentSpellId": "210476",
       "effect": "reduce_cd",
-      "value": 60
+      "value": 60,
+      "sourceRowId": "311684"
     }
   ],
   "113724": [
     {
       "talentSpellId": "387807",
       "effect": "reduce_cd",
-      "value": 5
+      "value": 5,
+      "sourceRowId": "1022851"
     },
     {
       "talentSpellId": "431067",
       "effect": "reduce_cd_pct",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "1118575"
     }
   ],
   "114018": [
     {
       "talentSpellId": "423662",
       "effect": "reduce_cd_pct",
-      "value": 50
+      "value": 50,
+      "sourceRowId": "1099824"
     },
     {
       "talentSpellId": "441415",
       "effect": "reduce_cd_pct",
-      "value": 10
+      "value": 10,
+      "sourceRowId": "1135856"
     }
   ],
   "114050": [
     {
       "talentSpellId": "462440",
       "effect": "reduce_cd",
-      "value": 60
+      "value": 60,
+      "sourceRowId": "1172216"
     },
     {
       "talentSpellId": "384444",
       "effect": "reduce_cd",
-      "value": 60
+      "value": 60,
+      "sourceRowId": "1273320"
     }
   ],
   "114051": [
     {
       "talentSpellId": "462440",
       "effect": "reduce_cd",
-      "value": 60
+      "value": 60,
+      "sourceRowId": "1172216"
     },
     {
       "talentSpellId": "384444",
       "effect": "reduce_cd",
-      "value": 60
+      "value": 60,
+      "sourceRowId": "1273320"
     }
   ],
   "114052": [
     {
       "talentSpellId": "462440",
       "effect": "reduce_cd",
-      "value": 60
+      "value": 60,
+      "sourceRowId": "1172216"
     },
     {
       "talentSpellId": "384444",
       "effect": "reduce_cd",
-      "value": 60
+      "value": 60,
+      "sourceRowId": "1273320"
     }
   ],
   "114165": [
     {
       "talentSpellId": "379391",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "1008310"
     }
   ],
   "114852": [
     {
       "talentSpellId": "379391",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "1008310"
     }
   ],
   "114871": [
     {
       "talentSpellId": "379391",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "1008310"
     }
   ],
   "115008": [
     {
       "talentSpellId": "115173",
       "effect": "reduce_cd",
-      "value": 5
+      "value": 5,
+      "sourceRowId": "128868"
     },
     {
       "talentSpellId": "115173",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "135980"
     },
     {
       "talentSpellId": "449582",
       "effect": "reduce_cd",
-      "value": -2
+      "value": -2,
+      "sourceRowId": "1148858"
+    },
+    {
+      "talentSpellId": "1272844",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1286163"
+    }
+  ],
+  "115078": [
+    {
+      "talentSpellId": "344359",
+      "effect": "reduce_cd",
+      "value": 15,
+      "sourceRowId": "868594"
     }
   ],
   "115151": [
     {
       "talentSpellId": "173841",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "247750"
     }
   ],
   "115191": [
     {
       "talentSpellId": "108208",
       "effect": "replace_spell",
-      "value": 115191
+      "value": 115191,
+      "sourceRowId": "119248"
+    }
+  ],
+  "115203": [
+    {
+      "talentSpellId": "202107",
+      "effect": "reduce_cd_pct",
+      "value": 50,
+      "sourceRowId": "297860"
+    },
+    {
+      "talentSpellId": "388813",
+      "effect": "reduce_cd",
+      "value": 30,
+      "sourceRowId": "1024732"
     }
   ],
   "115310": [
     {
       "talentSpellId": "353313",
       "effect": "reduce_cd",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "885012"
     },
     {
       "talentSpellId": "388551",
       "effect": "reduce_cd",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "1024308"
     }
   ],
   "115356": [
     {
       "talentSpellId": "319930",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1185745"
     }
   ],
   "115750": [
     {
       "talentSpellId": "469325",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "1183618"
     }
   ],
   "116680": [
     {
       "talentSpellId": "450892",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1151116"
+    }
+  ],
+  "116844": [
+    {
+      "talentSpellId": "450448",
+      "effect": "reduce_cd",
+      "value": 5,
+      "sourceRowId": "1150350"
     }
   ],
   "116849": [
     {
       "talentSpellId": "202424",
       "effect": "reduce_cd",
-      "value": 45
+      "value": 45,
+      "sourceRowId": "298412"
+    }
+  ],
+  "117952": [
+    {
+      "talentSpellId": "1262334",
+      "effect": "reduce_cd",
+      "value": -60,
+      "sourceRowId": "1272890"
     }
   ],
   "118038": [
     {
       "talentSpellId": "391271",
       "effect": "reduce_cd_pct",
-      "value": 10
+      "value": 10,
+      "sourceRowId": "1028651"
     }
   ],
   "118699": [
     {
       "talentSpellId": "56244",
       "effect": "replace_spell",
-      "value": 130616
+      "value": 130616,
+      "sourceRowId": "49271"
+    }
+  ],
+  "119381": [
+    {
+      "talentSpellId": "344359",
+      "effect": "reduce_cd",
+      "value": 10,
+      "sourceRowId": "1149952"
+    }
+  ],
+  "119582": [
+    {
+      "talentSpellId": "325093",
+      "effect": "reduce_cd_pct",
+      "value": 20,
+      "sourceRowId": "815148"
     }
   ],
   "121253": [
     {
       "talentSpellId": "383707",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1015784"
     }
   ],
   "121471": [
     {
       "talentSpellId": "354825",
       "effect": "reduce_cd_pct",
-      "value": 20
+      "value": 20,
+      "sourceRowId": "887522"
+    }
+  ],
+  "123904": [
+    {
+      "talentSpellId": "388212",
+      "effect": "reduce_cd",
+      "value": 60,
+      "sourceRowId": "1023740"
+    },
+    {
+      "talentSpellId": "392986",
+      "effect": "reduce_cd",
+      "value": 30,
+      "sourceRowId": "1031607"
+    },
+    {
+      "talentSpellId": "450989",
+      "effect": "reduce_cd",
+      "value": 25,
+      "sourceRowId": "1289290"
     }
   ],
   "132157": [
     {
       "talentSpellId": "1246549",
       "effect": "reduce_cd",
-      "value": -30
+      "value": -30,
+      "sourceRowId": "1248159"
     }
   ],
   "132158": [
     {
       "talentSpellId": "382550",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "1013940"
     },
     {
       "talentSpellId": "1246126",
       "effect": "reduce_cd",
-      "value": -30
+      "value": -30,
+      "sourceRowId": "1247559"
     }
   ],
   "132168": [
     {
       "talentSpellId": "440992",
       "effect": "reduce_cd",
-      "value": 5
+      "value": 5,
+      "sourceRowId": "1135201"
     }
   ],
   "132469": [
     {
       "talentSpellId": "400140",
       "effect": "reduce_cd",
-      "value": 5
+      "value": 5,
+      "sourceRowId": "1044819"
+    }
+  ],
+  "132578": [
+    {
+      "talentSpellId": "388212",
+      "effect": "reduce_cd",
+      "value": 60,
+      "sourceRowId": "1023740"
+    },
+    {
+      "talentSpellId": "392986",
+      "effect": "reduce_cd",
+      "value": 30,
+      "sourceRowId": "1031607"
+    },
+    {
+      "talentSpellId": "450989",
+      "effect": "reduce_cd",
+      "value": 25,
+      "sourceRowId": "1289290"
     }
   ],
   "137639": [
     {
       "talentSpellId": "280197",
       "effect": "reduce_cd",
-      "value": 20
+      "value": 20,
+      "sourceRowId": "737590"
     },
     {
       "talentSpellId": "450989",
       "effect": "reduce_cd",
-      "value": 10
+      "value": 10,
+      "sourceRowId": "1151638"
     }
   ],
   "145629": [
     {
       "talentSpellId": "374383",
       "effect": "reduce_cd",
-      "value": 60
+      "value": 60,
+      "sourceRowId": "1000205"
     }
   ],
   "147833": [
     {
       "talentSpellId": "391271",
       "effect": "reduce_cd_pct",
-      "value": 10
+      "value": 10,
+      "sourceRowId": "1028651"
+    }
+  ],
+  "152175": [
+    {
+      "talentSpellId": "451576",
+      "effect": "reduce_cd",
+      "value": 5,
+      "sourceRowId": "1152266"
     }
   ],
   "153561": [
     {
       "talentSpellId": "416719",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "1087759"
     }
   ],
   "153564": [
     {
       "talentSpellId": "416719",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "1087759"
     }
   ],
   "153626": [
     {
       "talentSpellId": "384651",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1017397"
     }
   ],
   "155158": [
     {
       "talentSpellId": "416719",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "1087759"
     }
   ],
   "157980": [
     {
       "talentSpellId": "387807",
       "effect": "reduce_cd",
-      "value": 5
+      "value": 5,
+      "sourceRowId": "1022851"
     }
   ],
   "157997": [
     {
       "talentSpellId": "387807",
       "effect": "reduce_cd",
-      "value": 5
+      "value": 5,
+      "sourceRowId": "1022851"
     },
     {
       "talentSpellId": "431067",
       "effect": "reduce_cd_pct",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "1118575"
+    }
+  ],
+  "158221": [
+    {
+      "talentSpellId": "451576",
+      "effect": "reduce_cd",
+      "value": 5,
+      "sourceRowId": "1152266"
     }
   ],
   "163201": [
     {
       "talentSpellId": "281001",
       "effect": "replace_spell",
-      "value": 281000
+      "value": 281000,
+      "sourceRowId": "738985"
     },
     {
       "talentSpellId": "316405",
       "effect": "reduce_cd_pct",
-      "value": 100
+      "value": 100,
+      "sourceRowId": "800884"
     }
   ],
   "184364": [
     {
       "talentSpellId": "391271",
       "effect": "reduce_cd_pct",
-      "value": 10
+      "value": 10,
+      "sourceRowId": "1028651"
     }
   ],
   "184575": [
     {
       "talentSpellId": "403745",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1050883"
     },
     {
       "talentSpellId": "404436",
       "effect": "reduce_cd",
-      "value": 2
+      "value": 2,
+      "sourceRowId": "1051972"
     }
   ],
   "184662": [
     {
       "talentSpellId": "114154",
       "effect": "reduce_cd_pct",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "127297"
     }
   ],
   "185123": [
     {
       "talentSpellId": "320387",
       "effect": "reduce_cd",
-      "value": 6
+      "value": 6,
+      "sourceRowId": "807429"
     },
     {
       "talentSpellId": "389763",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1028668"
     },
     {
       "talentSpellId": "429211",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1113270"
     }
   ],
   "185245": [
     {
       "talentSpellId": "1253402",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1259130"
     }
   ],
   "185313": [
     {
       "talentSpellId": "394930",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1034993"
     }
   ],
   "186254": [
     {
       "talentSpellId": "231548",
       "effect": "reduce_cd",
-      "value": 60
+      "value": 60,
+      "sourceRowId": "349261"
     }
   ],
   "186257": [
     {
       "talentSpellId": "203235",
       "effect": "reduce_cd_pct",
-      "value": 50
+      "value": 50,
+      "sourceRowId": "299696"
     },
     {
       "talentSpellId": "266921",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "713188"
     },
     {
       "talentSpellId": "1253887",
       "effect": "reduce_cd",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "1259993"
     },
     {
       "talentSpellId": "1258407",
       "effect": "reduce_cd",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "1267055"
     }
   ],
   "186258": [
     {
       "talentSpellId": "203235",
       "effect": "reduce_cd_pct",
-      "value": 50
+      "value": 50,
+      "sourceRowId": "299696"
     },
     {
       "talentSpellId": "266921",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "713188"
     },
     {
       "talentSpellId": "1253887",
       "effect": "reduce_cd",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "1259993"
     },
     {
       "talentSpellId": "1258407",
       "effect": "reduce_cd",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "1267055"
     }
   ],
   "186265": [
     {
       "talentSpellId": "266921",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "713188"
     },
     {
       "talentSpellId": "1258485",
       "effect": "reduce_cd",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "1267167"
     }
   ],
   "186289": [
     {
       "talentSpellId": "266921",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "713188"
     }
   ],
   "187650": [
     {
       "talentSpellId": "343247",
       "effect": "reduce_cd",
-      "value": 5
+      "value": 5,
+      "sourceRowId": "844890"
     }
   ],
   "187698": [
     {
       "talentSpellId": "343247",
       "effect": "reduce_cd",
-      "value": 5
+      "value": 5,
+      "sourceRowId": "844890"
     }
   ],
   "188389": [
     {
       "talentSpellId": "378266",
       "effect": "reduce_cd",
-      "value": 2
+      "value": 2,
+      "sourceRowId": "1020424"
+    }
+  ],
+  "188501": [
+    {
+      "talentSpellId": "389849",
+      "effect": "reduce_cd",
+      "value": 5,
+      "sourceRowId": "1026359"
     }
   ],
   "190319": [
     {
       "talentSpellId": "1254194",
       "effect": "reduce_cd",
-      "value": 60
+      "value": 60,
+      "sourceRowId": "1260514"
     }
   ],
   "190784": [
     {
       "talentSpellId": "230332",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "347617"
+    },
+    {
+      "talentSpellId": "469409",
+      "effect": "reduce_cd_pct",
+      "value": 20,
+      "sourceRowId": "1183756"
     }
   ],
   "191634": [
     {
       "talentSpellId": "454026",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "1156275"
     },
     {
       "talentSpellId": "468571",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "1182345"
     }
   ],
   "192058": [
     {
       "talentSpellId": "265046",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "708963"
     }
   ],
   "194223": [
     {
       "talentSpellId": "390378",
       "effect": "replace_spell",
-      "value": 383410
+      "value": 383410,
+      "sourceRowId": "1027150"
     },
     {
       "talentSpellId": "390378",
       "effect": "reduce_cd",
-      "value": 60
+      "value": 60,
+      "sourceRowId": "1038807"
     },
     {
       "talentSpellId": "468743",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1182658"
     },
     {
       "talentSpellId": "468743",
       "effect": "reduce_cd",
-      "value": 60
+      "value": 60,
+      "sourceRowId": "1182659"
     }
   ],
   "194509": [
     {
       "talentSpellId": "322115",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "810257"
     },
     {
       "talentSpellId": "390684",
       "effect": "reduce_cd",
-      "value": 3
+      "value": 3,
+      "sourceRowId": "1027690"
     }
   ],
   "195072": [
     {
       "talentSpellId": "320416",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "807464"
     },
     {
       "talentSpellId": "391397",
       "effect": "reduce_cd",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1028885"
     }
   ],
   "195457": [
     {
       "talentSpellId": "256188",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "478629"
     },
     {
       "talentSpellId": "454433",
       "effect": "reduce_cd",
-      "value": -5
+      "value": -5,
+      "sourceRowId": "1179471"
     },
     {
       "talentSpellId": "394931",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1184073"
+    }
+  ],
+  "196718": [
+    {
+      "talentSpellId": "389783",
+      "effect": "reduce_cd",
+      "value": 120,
+      "sourceRowId": "1026251"
     }
   ],
   "196840": [
     {
       "talentSpellId": "462762",
       "effect": "reduce_cd",
-      "value": -15
+      "value": -15,
+      "sourceRowId": "1172881"
     }
   ],
   "196910": [
     {
       "talentSpellId": "437122",
       "effect": "reduce_cd",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "1128872"
     }
   ],
   "196942": [
     {
       "talentSpellId": "204268",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "301483"
     }
   ],
   "197626": [
     {
       "talentSpellId": "451211",
       "effect": "reduce_cd",
-      "value": 4
+      "value": 4,
+      "sourceRowId": "1151653"
     }
   ],
   "198149": [
     {
       "talentSpellId": "198148",
       "effect": "replace_spell",
-      "value": 198149
+      "value": 198149,
+      "sourceRowId": "291215"
     }
   ],
   "198589": [
     {
       "talentSpellId": "1266307",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1278663"
     }
   ],
   "198793": [
     {
       "talentSpellId": "389688",
       "effect": "reduce_cd",
-      "value": 5
+      "value": 5,
+      "sourceRowId": "1026088"
     }
   ],
   "199448": [
     {
       "talentSpellId": "199452",
       "effect": "replace_spell",
-      "value": 199448
+      "value": 199448,
+      "sourceRowId": "293512"
     },
     {
       "talentSpellId": "216853",
       "effect": "reduce_cd_pct",
-      "value": 33
+      "value": 33,
+      "sourceRowId": "347670"
     },
     {
       "talentSpellId": "384820",
       "effect": "reduce_cd",
-      "value": 60
+      "value": 60,
+      "sourceRowId": "1017694"
     }
   ],
   "199507": [
     {
       "talentSpellId": "199330",
       "effect": "reduce_cd",
-      "value": -4
+      "value": -4,
+      "sourceRowId": "1091852"
     }
   ],
   "200196": [
     {
       "talentSpellId": "1215275",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "1198133"
     },
     {
       "talentSpellId": "1272359",
       "effect": "reduce_cd",
-      "value": 5
+      "value": 5,
+      "sourceRowId": "1285564"
     }
   ],
   "200200": [
     {
       "talentSpellId": "1215275",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "1198133"
     },
     {
       "talentSpellId": "1272359",
       "effect": "reduce_cd",
-      "value": 5
+      "value": 5,
+      "sourceRowId": "1285564"
+    }
+  ],
+  "202138": [
+    {
+      "talentSpellId": "209281",
+      "effect": "reduce_cd_pct",
+      "value": 0,
+      "sourceRowId": "309815"
+    },
+    {
+      "talentSpellId": "211489",
+      "effect": "reduce_cd_pct",
+      "value": 25,
+      "sourceRowId": "337978"
+    },
+    {
+      "talentSpellId": "389718",
+      "effect": "reduce_cd_pct",
+      "value": 15,
+      "sourceRowId": "1277788"
     }
   ],
   "202770": [
     {
       "talentSpellId": "394121",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "1033526"
     }
   ],
   "203720": [
     {
       "talentSpellId": "1266307",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1279237"
     }
   ],
   "204018": [
     {
       "talentSpellId": "216853",
       "effect": "reduce_cd_pct",
-      "value": 33
+      "value": 33,
+      "sourceRowId": "324434"
+    },
+    {
+      "talentSpellId": "378425",
+      "effect": "reduce_cd_pct",
+      "value": 15,
+      "sourceRowId": "1012224"
     },
     {
       "talentSpellId": "384909",
       "effect": "reduce_cd",
-      "value": 60
+      "value": 60,
+      "sourceRowId": "1017827"
     }
   ],
   "204021": [
     {
       "talentSpellId": "389732",
       "effect": "reduce_cd",
-      "value": 12
+      "value": 12,
+      "sourceRowId": "1026172"
     },
     {
       "talentSpellId": "389732",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1033067"
     }
   ],
   "204157": [
     {
       "talentSpellId": "320387",
       "effect": "reduce_cd",
-      "value": 6
+      "value": 6,
+      "sourceRowId": "807429"
     },
     {
       "talentSpellId": "389763",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1028668"
     },
     {
       "talentSpellId": "429211",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1113270"
     }
   ],
   "204361": [
     {
       "talentSpellId": "193876",
       "effect": "replace_spell",
-      "value": 8
+      "value": 8,
+      "sourceRowId": "301624"
     }
   ],
   "204362": [
     {
       "talentSpellId": "193876",
       "effect": "replace_spell",
-      "value": 8
+      "value": 8,
+      "sourceRowId": "301624"
+    }
+  ],
+  "204596": [
+    {
+      "talentSpellId": "211489",
+      "effect": "reduce_cd_pct",
+      "value": 25,
+      "sourceRowId": "337979"
+    },
+    {
+      "talentSpellId": "389718",
+      "effect": "reduce_cd_pct",
+      "value": 15,
+      "sourceRowId": "1026143"
+    },
+    {
+      "talentSpellId": "209281",
+      "effect": "reduce_cd_pct",
+      "value": 0,
+      "sourceRowId": "1109502"
     }
   ],
   "205021": [
     {
       "talentSpellId": "1263249",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1273787"
     }
   ],
   "205523": [
     {
       "talentSpellId": "387230",
       "effect": "reduce_cd",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1021887"
     }
   ],
   "205630": [
     {
       "talentSpellId": "205630",
       "effect": "replace_spell",
-      "value": 208173
-    }
-  ],
-  "205644": [
-    {
-      "talentSpellId": "50334",
-      "effect": "reduce_cd_pct",
-      "value": 50
-    },
-    {
-      "talentSpellId": "102558",
-      "effect": "reduce_cd_pct",
-      "value": 50
+      "value": 208173,
+      "sourceRowId": "307986"
     }
   ],
   "206572": [
     {
       "talentSpellId": "202163",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "297945"
     }
   ],
   "207684": [
     {
+      "talentSpellId": "211489",
+      "effect": "reduce_cd_pct",
+      "value": 25,
+      "sourceRowId": "337980"
+    },
+    {
       "talentSpellId": "320418",
       "effect": "reduce_cd",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "807466"
+    },
+    {
+      "talentSpellId": "209281",
+      "effect": "reduce_cd_pct",
+      "value": 0,
+      "sourceRowId": "1109503"
     },
     {
       "talentSpellId": "1235091",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1229896"
+    },
+    {
+      "talentSpellId": "389718",
+      "effect": "reduce_cd_pct",
+      "value": 15,
+      "sourceRowId": "1277786"
     }
   ],
   "208770": [
     {
       "talentSpellId": "199330",
       "effect": "reduce_cd",
-      "value": -4
+      "value": -4,
+      "sourceRowId": "1091852"
     }
   ],
   "210873": [
     {
       "talentSpellId": "204268",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "301483"
     }
   ],
   "211004": [
     {
       "talentSpellId": "204268",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "301483"
     }
   ],
   "211010": [
     {
       "talentSpellId": "204268",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "301483"
     }
   ],
   "211015": [
     {
       "talentSpellId": "204268",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "301483"
     }
   ],
   "211545": [
     {
       "talentSpellId": "394121",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "1033526"
     }
   ],
   "212653": [
     {
       "talentSpellId": "382268",
       "effect": "reduce_cd",
-      "value": 3
+      "value": 3,
+      "sourceRowId": "1013564"
     },
     {
       "talentSpellId": "1244031",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1244565"
     }
   ],
   "213634": [
     {
       "talentSpellId": "196439",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1091850"
     }
   ],
   "213644": [
     {
       "talentSpellId": "199330",
       "effect": "reduce_cd",
-      "value": -4
+      "value": -4,
+      "sourceRowId": "1091852"
     }
   ],
   "216331": [
     {
       "talentSpellId": "1241511",
       "effect": "reduce_cd",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "1240527"
+    }
+  ],
+  "217832": [
+    {
+      "talentSpellId": "205596",
+      "effect": "replace_spell",
+      "value": 221527,
+      "sourceRowId": "303788"
+    },
+    {
+      "talentSpellId": "205596",
+      "effect": "reduce_cd",
+      "value": 0,
+      "sourceRowId": "741042"
     }
   ],
   "219215": [
     {
       "talentSpellId": "204268",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "301483"
     }
   ],
   "219216": [
     {
       "talentSpellId": "204268",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "301483"
     }
   ],
   "219217": [
     {
       "talentSpellId": "204268",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "301483"
     }
   ],
   "219218": [
     {
       "talentSpellId": "204268",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "301483"
     }
   ],
   "219219": [
     {
       "talentSpellId": "204268",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "301483"
+    }
+  ],
+  "221527": [
+    {
+      "talentSpellId": "205596",
+      "effect": "replace_spell",
+      "value": 221527,
+      "sourceRowId": "303788"
+    },
+    {
+      "talentSpellId": "205596",
+      "effect": "reduce_cd",
+      "value": 0,
+      "sourceRowId": "741042"
     }
   ],
   "227847": [
     {
       "talentSpellId": "444780",
       "effect": "replace_spell",
-      "value": 446035
+      "value": 446035,
+      "sourceRowId": "1160105"
     }
   ],
   "228049": [
     {
       "talentSpellId": "1246481",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1351590"
+    }
+  ],
+  "228649": [
+    {
+      "talentSpellId": "387230",
+      "effect": "reduce_cd",
+      "value": 1,
+      "sourceRowId": "1021886"
     }
   ],
   "231895": [
     {
       "talentSpellId": "458359",
       "effect": "replace_spell",
-      "value": 454353
+      "value": 454353,
+      "sourceRowId": "1164292"
     }
   ],
   "235235": [
     {
       "talentSpellId": "387807",
       "effect": "reduce_cd",
-      "value": 5
+      "value": 5,
+      "sourceRowId": "1022851"
     },
     {
       "talentSpellId": "431067",
       "effect": "reduce_cd_pct",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "1118575"
     }
   ],
   "235313": [
     {
       "talentSpellId": "321708",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1244667"
     }
   ],
   "235450": [
     {
       "talentSpellId": "321745",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1300826"
     }
   ],
   "235963": [
     {
       "talentSpellId": "202226",
       "effect": "reduce_cd",
-      "value": -6
+      "value": -6,
+      "sourceRowId": "298051"
     }
   ],
   "258920": [
     {
       "talentSpellId": "427775",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1107525"
     },
     {
       "talentSpellId": "427775",
       "effect": "reduce_cd",
-      "value": 6
+      "value": 6,
+      "sourceRowId": "1107803"
     }
   ],
   "259489": [
     {
       "talentSpellId": "269737",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "718193"
     }
   ],
   "259495": [
     {
       "talentSpellId": "264332",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "707688"
     }
   ],
   "263642": [
     {
       "talentSpellId": "320387",
       "effect": "reduce_cd",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1277676"
     }
   ],
   "264735": [
     {
       "talentSpellId": "459450",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1166242"
     }
   ],
   "268475": [
     {
       "talentSpellId": "431067",
       "effect": "reduce_cd_pct",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "1118816"
     }
   ],
   "269352": [
     {
       "talentSpellId": "204268",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "301483"
     }
   ],
   "269355": [
     {
       "talentSpellId": "204268",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "301483"
     }
   ],
   "272651": [
     {
       "talentSpellId": "474440",
       "effect": "replace_spell",
-      "value": 1241871
+      "value": 1241871,
+      "sourceRowId": "1194112"
     }
   ],
   "272678": [
     {
       "talentSpellId": "356962",
       "effect": "reduce_cd_pct",
-      "value": 50
+      "value": 50,
+      "sourceRowId": "891141"
     }
   ],
   "272682": [
     {
       "talentSpellId": "356962",
       "effect": "reduce_cd_pct",
-      "value": 50
+      "value": 50,
+      "sourceRowId": "891141"
     }
   ],
   "274837": [
     {
       "talentSpellId": "1244544",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "1245408"
     }
   ],
   "274838": [
     {
       "talentSpellId": "1244544",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "1245408"
     }
   ],
   "275773": [
     {
       "talentSpellId": "204023",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "301061"
     },
     {
       "talentSpellId": "405461",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1053768"
     }
   ],
   "275779": [
     {
       "talentSpellId": "204023",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "301061"
     },
     {
       "talentSpellId": "405461",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1053768"
     }
   ],
   "277778": [
     {
       "talentSpellId": "204268",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "301483"
     }
   ],
   "277780": [
     {
       "talentSpellId": "204268",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "301483"
     }
   ],
   "277784": [
     {
       "talentSpellId": "204268",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "301483"
     }
   ],
   "277785": [
     {
       "talentSpellId": "204268",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "301483"
     }
   ],
   "279043": [
     {
       "talentSpellId": "354825",
       "effect": "reduce_cd_pct",
-      "value": 20
+      "value": 20,
+      "sourceRowId": "887522"
+    }
+  ],
+  "280719": [
+    {
+      "talentSpellId": "441274",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1304361"
     }
   ],
   "280735": [
     {
       "talentSpellId": "316405",
       "effect": "reduce_cd_pct",
-      "value": 100
+      "value": 100,
+      "sourceRowId": "800884"
     }
   ],
   "281000": [
     {
       "talentSpellId": "316405",
       "effect": "reduce_cd_pct",
-      "value": 100
+      "value": 100,
+      "sourceRowId": "800884"
     }
   ],
   "281871": [
     {
       "talentSpellId": "394121",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "1033526"
     }
   ],
   "288613": [
     {
       "talentSpellId": "260404",
       "effect": "reduce_cd",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "485543"
     }
   ],
   "309328": [
     {
       "talentSpellId": "204268",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "301483"
     }
   ],
   "309329": [
     {
       "talentSpellId": "204268",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "301483"
     }
   ],
   "315341": [
     {
       "talentSpellId": "1259480",
       "effect": "reduce_cd",
-      "value": 8
+      "value": 8,
+      "sourceRowId": "1268613"
     }
   ],
   "316531": [
     {
       "talentSpellId": "391271",
       "effect": "reduce_cd_pct",
-      "value": 10
+      "value": 10,
+      "sourceRowId": "1028651"
     }
   ],
   "319836": [
     {
       "talentSpellId": "205029",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "302656"
     },
     {
       "talentSpellId": "387044",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1021568"
     },
     {
       "talentSpellId": "431067",
       "effect": "reduce_cd_pct",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "1118816"
     },
     {
       "talentSpellId": "1260616",
       "effect": "reduce_cd",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1270118"
     },
     {
       "talentSpellId": "205029",
       "effect": "reduce_cd",
-      "value": 2
+      "value": 2,
+      "sourceRowId": "1283970"
     }
   ],
   "321538": [
     {
       "talentSpellId": "231548",
       "effect": "reduce_cd",
-      "value": 60
+      "value": 60,
+      "sourceRowId": "349261"
+    }
+  ],
+  "322109": [
+    {
+      "talentSpellId": "391330",
+      "effect": "reduce_cd",
+      "value": 45,
+      "sourceRowId": "1028781"
+    },
+    {
+      "talentSpellId": "394123",
+      "effect": "reduce_cd",
+      "value": 90,
+      "sourceRowId": "1033529"
+    }
+  ],
+  "322118": [
+    {
+      "talentSpellId": "388212",
+      "effect": "reduce_cd",
+      "value": 60,
+      "sourceRowId": "1023740"
+    },
+    {
+      "talentSpellId": "392986",
+      "effect": "reduce_cd",
+      "value": 30,
+      "sourceRowId": "1031607"
+    },
+    {
+      "talentSpellId": "450989",
+      "effect": "reduce_cd",
+      "value": 25,
+      "sourceRowId": "1289290"
     }
   ],
   "322507": [
     {
+      "talentSpellId": "325093",
+      "effect": "reduce_cd_pct",
+      "value": 20,
+      "sourceRowId": "815149"
+    },
+    {
       "talentSpellId": "450892",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1153986"
     }
   ],
   "323764": [
     {
       "talentSpellId": "393414",
       "effect": "reduce_cd_pct",
-      "value": 50
+      "value": 50,
+      "sourceRowId": "1032331"
     },
     {
       "talentSpellId": "393991",
       "effect": "reduce_cd_pct",
-      "value": 50
+      "value": 50,
+      "sourceRowId": "1033285"
+    }
+  ],
+  "325197": [
+    {
+      "talentSpellId": "388212",
+      "effect": "reduce_cd",
+      "value": 60,
+      "sourceRowId": "1023740"
+    },
+    {
+      "talentSpellId": "392986",
+      "effect": "reduce_cd",
+      "value": 30,
+      "sourceRowId": "1031607"
+    },
+    {
+      "talentSpellId": "450989",
+      "effect": "reduce_cd",
+      "value": 25,
+      "sourceRowId": "1289290"
     }
   ],
   "330873": [
     {
       "talentSpellId": "202226",
       "effect": "reduce_cd",
-      "value": -6
+      "value": -6,
+      "sourceRowId": "298051"
+    }
+  ],
+  "332544": [
+    {
+      "talentSpellId": "205596",
+      "effect": "replace_spell",
+      "value": 221527,
+      "sourceRowId": "303788"
+    },
+    {
+      "talentSpellId": "205596",
+      "effect": "reduce_cd",
+      "value": 0,
+      "sourceRowId": "741042"
     }
   ],
   "333889": [
     {
       "talentSpellId": "386113",
       "effect": "reduce_cd",
-      "value": 60
+      "value": 60,
+      "sourceRowId": "1019960"
     },
     {
       "talentSpellId": "449707",
       "effect": "reduce_cd",
-      "value": 90
+      "value": 90,
+      "sourceRowId": "1149142"
     }
   ],
   "335097": [
     {
       "talentSpellId": "383854",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1016031"
     }
   ],
   "344548": [
     {
       "talentSpellId": "462440",
       "effect": "reduce_cd",
-      "value": 60
+      "value": 60,
+      "sourceRowId": "1172216"
     },
     {
       "talentSpellId": "384444",
       "effect": "reduce_cd",
-      "value": 60
+      "value": 60,
+      "sourceRowId": "1273320"
     }
   ],
   "344572": [
     {
       "talentSpellId": "231548",
       "effect": "reduce_cd",
-      "value": 60
+      "value": 60,
+      "sourceRowId": "349261"
     }
   ],
   "344865": [
     {
       "talentSpellId": "320416",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "807464"
     },
     {
       "talentSpellId": "391397",
       "effect": "reduce_cd",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1028885"
     }
   ],
   "351140": [
     {
       "talentSpellId": "416719",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "1087759"
     }
   ],
   "353082": [
     {
       "talentSpellId": "387807",
       "effect": "reduce_cd",
-      "value": 5
+      "value": 5,
+      "sourceRowId": "1022851"
     },
     {
       "talentSpellId": "431067",
       "effect": "reduce_cd_pct",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "1118816"
+    }
+  ],
+  "355913": [
+    {
+      "talentSpellId": "414969",
+      "effect": "reduce_cd_pct",
+      "value": 100,
+      "sourceRowId": "1084506"
     }
   ],
   "355936": [
     {
       "talentSpellId": "376150",
       "effect": "reduce_cd",
-      "value": 6
+      "value": 6,
+      "sourceRowId": "1003006"
     },
     {
       "talentSpellId": "375783",
       "effect": "replace_spell",
-      "value": 382614
+      "value": 382614,
+      "sourceRowId": "1013727"
     },
     {
       "talentSpellId": "1264269",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1275513"
     }
   ],
   "356781": [
     {
       "talentSpellId": "203235",
       "effect": "reduce_cd_pct",
-      "value": 50
+      "value": 50,
+      "sourceRowId": "299696"
     },
     {
       "talentSpellId": "266921",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "713188"
     },
     {
       "talentSpellId": "1253887",
       "effect": "reduce_cd",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "1259993"
     },
     {
       "talentSpellId": "1258407",
       "effect": "reduce_cd",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "1267055"
     }
   ],
   "357170": [
     {
       "talentSpellId": "376204",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1003091"
     },
     {
       "talentSpellId": "376204",
       "effect": "reduce_cd",
-      "value": 10
+      "value": 10,
+      "sourceRowId": "1237458"
     }
   ],
   "357208": [
     {
       "talentSpellId": "375783",
       "effect": "replace_spell",
-      "value": 382266
+      "value": 382266,
+      "sourceRowId": "1002399"
     },
     {
       "talentSpellId": "408083",
       "effect": "replace_spell",
-      "value": 382266
+      "value": 382266,
+      "sourceRowId": "1072001"
     },
     {
       "talentSpellId": "411212",
       "effect": "replace_spell",
-      "value": 382266
+      "value": 382266,
+      "sourceRowId": "1077606"
     },
     {
       "talentSpellId": "1264269",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1275511"
     },
     {
       "talentSpellId": "1264365",
       "effect": "reduce_cd",
-      "value": 5
+      "value": 5,
+      "sourceRowId": "1275679"
+    },
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1294448"
     }
   ],
   "357210": [
     {
       "talentSpellId": "386348",
       "effect": "reduce_cd",
-      "value": 60
+      "value": 60,
+      "sourceRowId": "1020352"
+    }
+  ],
+  "357768": [
+    {
+      "talentSpellId": "344359",
+      "effect": "reduce_cd",
+      "value": 15,
+      "sourceRowId": "868594"
     }
   ],
   "358267": [
     {
       "talentSpellId": "365933",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "907194"
+    },
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080329"
     },
     {
       "talentSpellId": "429483",
       "effect": "reduce_cd",
-      "value": 5
+      "value": 5,
+      "sourceRowId": "1113740"
+    }
+  ],
+  "358385": [
+    {
+      "talentSpellId": "375528",
+      "effect": "reduce_cd",
+      "value": 30,
+      "sourceRowId": "1001987"
+    },
+    {
+      "talentSpellId": "408543",
+      "effect": "reduce_cd",
+      "value": 15,
+      "sourceRowId": "1204857"
     }
   ],
   "359073": [
     {
+      "talentSpellId": "411164",
+      "effect": "reduce_cd",
+      "value": 3,
+      "sourceRowId": "1077537"
+    },
+    {
       "talentSpellId": "411212",
       "effect": "replace_spell",
-      "value": 382411
+      "value": 382411,
+      "sourceRowId": "1077607"
     }
   ],
   "360995": [
     {
       "talentSpellId": "1241704",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1240843"
+    }
+  ],
+  "361469": [
+    {
+      "talentSpellId": "431442",
+      "effect": "replace_spell",
+      "value": 431443,
+      "sourceRowId": "1119505"
     }
   ],
   "363534": [
     {
       "talentSpellId": "381922",
       "effect": "reduce_cd",
-      "value": 60
+      "value": 60,
+      "sourceRowId": "1013058"
     }
   ],
   "363916": [
     {
       "talentSpellId": "375406",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1001807"
+    },
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080330"
+    }
+  ],
+  "370553": [
+    {
+      "talentSpellId": "1260484",
+      "effect": "reduce_cd",
+      "value": 30,
+      "sourceRowId": "1269936"
     }
   ],
   "372048": [
     {
       "talentSpellId": "374346",
       "effect": "replace_spell",
-      "value": 406971
+      "value": 406971,
+      "sourceRowId": "1070153"
+    },
+    {
+      "talentSpellId": "374346",
+      "effect": "reduce_cd",
+      "value": 30,
+      "sourceRowId": "1164770"
+    }
+  ],
+  "373861": [
+    {
+      "talentSpellId": "431715",
+      "effect": "reduce_cd",
+      "value": 4,
+      "sourceRowId": "1119662"
+    }
+  ],
+  "373862": [
+    {
+      "talentSpellId": "431715",
+      "effect": "reduce_cd",
+      "value": 4,
+      "sourceRowId": "1119662"
     }
   ],
   "375576": [
     {
       "talentSpellId": "379391",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "1008310"
     }
   ],
   "378081": [
     {
       "talentSpellId": "1246131",
       "effect": "reduce_cd",
-      "value": -30
+      "value": -30,
+      "sourceRowId": "1247572"
     }
   ],
   "382266": [
     {
       "talentSpellId": "1264269",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1275511"
     },
     {
       "talentSpellId": "1264365",
       "effect": "reduce_cd",
-      "value": 5
+      "value": 5,
+      "sourceRowId": "1275679"
+    },
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1294448"
+    }
+  ],
+  "382411": [
+    {
+      "talentSpellId": "411164",
+      "effect": "reduce_cd",
+      "value": 3,
+      "sourceRowId": "1077537"
     }
   ],
   "382614": [
     {
       "talentSpellId": "376150",
       "effect": "reduce_cd",
-      "value": 6
+      "value": 6,
+      "sourceRowId": "1003006"
     },
     {
       "talentSpellId": "1264269",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1275513"
     }
   ],
   "383410": [
     {
       "talentSpellId": "390378",
       "effect": "replace_spell",
-      "value": 383410
+      "value": 383410,
+      "sourceRowId": "1027150"
     },
     {
       "talentSpellId": "390378",
       "effect": "reduce_cd",
-      "value": 60
+      "value": 60,
+      "sourceRowId": "1038807"
     },
     {
       "talentSpellId": "468743",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1182658"
     },
     {
       "talentSpellId": "468743",
       "effect": "reduce_cd",
-      "value": 60
+      "value": 60,
+      "sourceRowId": "1182659"
     }
   ],
   "384100": [
     {
       "talentSpellId": "1271925",
       "effect": "reduce_cd_pct",
-      "value": 50
+      "value": 50,
+      "sourceRowId": "1284932"
     }
   ],
   "384110": [
     {
       "talentSpellId": "329033",
       "effect": "reduce_cd_pct",
-      "value": 50
+      "value": 50,
+      "sourceRowId": "821911"
     }
   ],
   "385174": [
     {
       "talentSpellId": "391271",
       "effect": "reduce_cd_pct",
-      "value": 10
+      "value": 10,
+      "sourceRowId": "1028651"
     }
   ],
   "385391": [
     {
       "talentSpellId": "391271",
       "effect": "reduce_cd_pct",
-      "value": 10
+      "value": 10,
+      "sourceRowId": "1028651"
     }
   ],
   "386731": [
     {
       "talentSpellId": "379391",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "1008310"
     }
   ],
   "388615": [
     {
       "talentSpellId": "353313",
       "effect": "reduce_cd",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "885012"
     },
     {
       "talentSpellId": "388551",
       "effect": "reduce_cd",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "1024308"
     }
   ],
   "389539": [
     {
       "talentSpellId": "204074",
       "effect": "reduce_cd_pct",
-      "value": 50
+      "value": 50,
+      "sourceRowId": "301163"
+    }
+  ],
+  "390163": [
+    {
+      "talentSpellId": "211489",
+      "effect": "reduce_cd_pct",
+      "value": 25,
+      "sourceRowId": "1153436"
+    },
+    {
+      "talentSpellId": "389718",
+      "effect": "reduce_cd_pct",
+      "value": 15,
+      "sourceRowId": "1277789"
     }
   ],
   "390414": [
     {
       "talentSpellId": "390378",
       "effect": "replace_spell",
-      "value": 390414
+      "value": 390414,
+      "sourceRowId": "1027228"
     },
     {
       "talentSpellId": "391174",
       "effect": "reduce_cd",
-      "value": 60
+      "value": 60,
+      "sourceRowId": "1028503"
     },
     {
       "talentSpellId": "390378",
       "effect": "reduce_cd",
-      "value": 60
+      "value": 60,
+      "sourceRowId": "1038807"
     },
     {
       "talentSpellId": "468743",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1182658"
     },
     {
       "talentSpellId": "468743",
       "effect": "reduce_cd",
-      "value": 60
+      "value": 60,
+      "sourceRowId": "1182659"
     }
   ],
   "391528": [
     {
       "talentSpellId": "393414",
       "effect": "reduce_cd_pct",
-      "value": 50
+      "value": 50,
+      "sourceRowId": "1032331"
     },
     {
       "talentSpellId": "393991",
       "effect": "reduce_cd_pct",
-      "value": 50
+      "value": 50,
+      "sourceRowId": "1033285"
+    }
+  ],
+  "392983": [
+    {
+      "talentSpellId": "451576",
+      "effect": "reduce_cd",
+      "value": 5,
+      "sourceRowId": "1152266"
     }
   ],
   "394111": [
     {
       "talentSpellId": "394121",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "1033526"
     }
   ],
   "394352": [
     {
       "talentSpellId": "329033",
       "effect": "reduce_cd_pct",
-      "value": 50
+      "value": 50,
+      "sourceRowId": "821911"
     }
   ],
   "394354": [
     {
       "talentSpellId": "329033",
       "effect": "reduce_cd_pct",
-      "value": 50
+      "value": 50,
+      "sourceRowId": "821911"
+    }
+  ],
+  "395519": [
+    {
+      "talentSpellId": "451576",
+      "effect": "reduce_cd",
+      "value": 5,
+      "sourceRowId": "1152266"
+    }
+  ],
+  "395521": [
+    {
+      "talentSpellId": "451576",
+      "effect": "reduce_cd",
+      "value": 5,
+      "sourceRowId": "1152266"
     }
   ],
   "396286": [
     {
       "talentSpellId": "408083",
       "effect": "replace_spell",
-      "value": 408092
+      "value": 408092,
+      "sourceRowId": "1072002"
     }
   ],
   "403876": [
     {
       "talentSpellId": "114154",
       "effect": "reduce_cd_pct",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "127297"
     }
   ],
   "405397": [
     {
       "talentSpellId": "234299",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "353965"
     }
   ],
   "406957": [
     {
       "talentSpellId": "204023",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "301061"
     },
     {
       "talentSpellId": "405461",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1053768"
+    }
+  ],
+  "406971": [
+    {
+      "talentSpellId": "374346",
+      "effect": "reduce_cd",
+      "value": 30,
+      "sourceRowId": "1164770"
     }
   ],
   "407480": [
     {
       "talentSpellId": "383228",
       "effect": "reduce_cd",
-      "value": 2
+      "value": 2,
+      "sourceRowId": "1049616"
     },
     {
       "talentSpellId": "406646",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1073914"
     }
   ],
   "409311": [
     {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1113202"
+    },
+    {
       "talentSpellId": "431715",
       "effect": "reduce_cd",
-      "value": 2
+      "value": 2,
+      "sourceRowId": "1283897"
     }
   ],
   "410126": [
     {
       "talentSpellId": "469325",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "1183618"
     }
   ],
   "410358": [
     {
       "talentSpellId": "205727",
       "effect": "reduce_cd",
-      "value": 20
+      "value": 20,
+      "sourceRowId": "303981"
     },
     {
       "talentSpellId": "410320",
       "effect": "reduce_cd",
-      "value": 10
+      "value": 10,
+      "sourceRowId": "1075856"
     },
     {
       "talentSpellId": "457574",
       "effect": "reduce_cd",
-      "value": -20
+      "value": -20,
+      "sourceRowId": "1162886"
     }
   ],
   "414658": [
     {
       "talentSpellId": "382424",
       "effect": "reduce_cd",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "1013746"
     },
     {
       "talentSpellId": "1244110",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1244686"
     },
     {
       "talentSpellId": "1244110",
       "effect": "reduce_cd",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "1244696"
     },
     {
       "talentSpellId": "1265517",
       "effect": "reduce_cd",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "1277318"
     }
   ],
   "414664": [
     {
       "talentSpellId": "415945",
       "effect": "reduce_cd",
-      "value": 180
+      "value": 180,
+      "sourceRowId": "1086063"
     }
   ],
   "427114": [
     {
       "talentSpellId": "391271",
       "effect": "reduce_cd_pct",
-      "value": 10
+      "value": 10,
+      "sourceRowId": "1028651"
     },
     {
       "talentSpellId": "436162",
       "effect": "reduce_cd",
-      "value": -10
+      "value": -10,
+      "sourceRowId": "1166311"
     }
   ],
   "427773": [
     {
       "talentSpellId": "200733",
       "effect": "reduce_cd_pct",
-      "value": 50
+      "value": 50,
+      "sourceRowId": "295581"
     },
     {
       "talentSpellId": "256165",
       "effect": "reduce_cd_pct",
-      "value": 25
+      "value": 25,
+      "sourceRowId": "478576"
     },
     {
       "talentSpellId": "441415",
       "effect": "reduce_cd_pct",
-      "value": 10
+      "value": 10,
+      "sourceRowId": "1135856"
     }
   ],
   "427917": [
     {
       "talentSpellId": "427775",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1107525"
     },
     {
       "talentSpellId": "427775",
       "effect": "reduce_cd",
-      "value": 6
+      "value": 6,
+      "sourceRowId": "1107803"
+    }
+  ],
+  "431443": [
+    {
+      "talentSpellId": "431442",
+      "effect": "replace_spell",
+      "value": 431443,
+      "sourceRowId": "1119505"
     }
   ],
   "432459": [
     {
+      "talentSpellId": "432804",
+      "effect": "reduce_cd_pct",
+      "value": 20,
+      "sourceRowId": "1121752"
+    },
+    {
       "talentSpellId": "379391",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "1240965"
     }
   ],
   "432472": [
     {
+      "talentSpellId": "432804",
+      "effect": "reduce_cd_pct",
+      "value": 20,
+      "sourceRowId": "1121752"
+    },
+    {
       "talentSpellId": "379391",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "1240965"
     }
   ],
   "433874": [
     {
       "talentSpellId": "386348",
       "effect": "reduce_cd",
-      "value": 60
-    }
-  ],
-  "435222": [
-    {
-      "talentSpellId": "107574",
-      "effect": "reduce_cd_pct",
-      "value": 50
+      "value": 60,
+      "sourceRowId": "1020352"
     }
   ],
   "438607": [
     {
       "talentSpellId": "416719",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "1087759"
     }
   ],
   "438608": [
     {
       "talentSpellId": "416719",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "1087759"
     }
   ],
   "440006": [
     {
       "talentSpellId": "196439",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1091850"
     }
   ],
   "440013": [
     {
       "talentSpellId": "199330",
       "effect": "reduce_cd",
-      "value": -4
+      "value": -4,
+      "sourceRowId": "1091852"
     }
   ],
   "441668": [
     {
       "talentSpellId": "440992",
       "effect": "reduce_cd",
-      "value": 5
+      "value": 5,
+      "sourceRowId": "1135201"
     }
   ],
   "442804": [
     {
       "talentSpellId": "440057",
       "effect": "replace_spell",
-      "value": 442804
+      "value": 442804,
+      "sourceRowId": "1133719"
     }
   ],
   "443454": [
     {
       "talentSpellId": "1246131",
       "effect": "reduce_cd",
-      "value": -30
+      "value": -30,
+      "sourceRowId": "1247572"
     }
   ],
   "443609": [
     {
       "talentSpellId": "1266818",
       "effect": "reduce_cd",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "1279505"
     }
   ],
   "444347": [
     {
       "talentSpellId": "356367",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "890197"
     }
   ],
   "444740": [
     {
       "talentSpellId": "205727",
       "effect": "reduce_cd",
-      "value": 20
+      "value": 20,
+      "sourceRowId": "303981"
     },
     {
       "talentSpellId": "410320",
       "effect": "reduce_cd",
-      "value": 10
+      "value": 10,
+      "sourceRowId": "1075856"
     },
     {
       "talentSpellId": "457574",
       "effect": "reduce_cd",
-      "value": -20
+      "value": -20,
+      "sourceRowId": "1162886"
     }
   ],
   "444741": [
     {
       "talentSpellId": "205727",
       "effect": "reduce_cd",
-      "value": 20
+      "value": 20,
+      "sourceRowId": "303981"
     },
     {
       "talentSpellId": "410320",
       "effect": "reduce_cd",
-      "value": 10
+      "value": 10,
+      "sourceRowId": "1075856"
     },
     {
       "talentSpellId": "457574",
       "effect": "reduce_cd",
-      "value": -20
+      "value": -20,
+      "sourceRowId": "1162886"
     }
   ],
   "449560": [
     {
       "talentSpellId": "416719",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "1087759"
     }
   ],
   "449569": [
     {
       "talentSpellId": "416719",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "1087759"
     }
   ],
   "449700": [
     {
       "talentSpellId": "387807",
       "effect": "reduce_cd",
-      "value": 5
+      "value": 5,
+      "sourceRowId": "1022851"
     }
   ],
   "450983": [
     {
       "talentSpellId": "406788",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1055979"
+    }
+  ],
+  "451767": [
+    {
+      "talentSpellId": "451576",
+      "effect": "reduce_cd",
+      "value": 5,
+      "sourceRowId": "1152266"
     }
   ],
   "452201": [
     {
       "talentSpellId": "381647",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "1016010"
     }
   ],
   "452487": [
     {
       "talentSpellId": "427775",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1107525"
     },
     {
       "talentSpellId": "427775",
       "effect": "reduce_cd",
-      "value": 6
+      "value": 6,
+      "sourceRowId": "1107803"
     }
   ],
   "454351": [
     {
       "talentSpellId": "204074",
       "effect": "reduce_cd_pct",
-      "value": 50
+      "value": 50,
+      "sourceRowId": "301163"
     },
     {
       "talentSpellId": "1241511",
       "effect": "reduce_cd",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "1240525"
     }
   ],
   "454863": [
     {
       "talentSpellId": "205727",
       "effect": "reduce_cd",
-      "value": 20
+      "value": 20,
+      "sourceRowId": "303981"
     },
     {
       "talentSpellId": "410320",
       "effect": "reduce_cd",
-      "value": 10
+      "value": 10,
+      "sourceRowId": "1075856"
     },
     {
       "talentSpellId": "457574",
       "effect": "reduce_cd",
-      "value": -20
+      "value": -20,
+      "sourceRowId": "1162886"
     }
   ],
   "455465": [
     {
       "talentSpellId": "455449",
       "effect": "replace_spell",
-      "value": 455465
+      "value": 455465,
+      "sourceRowId": "1158894"
     },
     {
       "talentSpellId": "455450",
       "effect": "replace_spell",
-      "value": 455476
+      "value": 455476,
+      "sourceRowId": "1158895"
     }
   ],
   "455476": [
     {
       "talentSpellId": "455449",
       "effect": "replace_spell",
-      "value": 455465
+      "value": 455465,
+      "sourceRowId": "1158894"
     },
     {
       "talentSpellId": "455450",
       "effect": "replace_spell",
-      "value": 455476
+      "value": 455476,
+      "sourceRowId": "1158895"
     }
   ],
   "456640": [
     {
       "talentSpellId": "427775",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1107525"
     },
     {
       "talentSpellId": "427775",
       "effect": "reduce_cd",
-      "value": 6
+      "value": 6,
+      "sourceRowId": "1107803"
     }
   ],
   "460614": [
     {
       "talentSpellId": "202226",
       "effect": "reduce_cd",
-      "value": -6
+      "value": -6,
+      "sourceRowId": "298051"
     }
   ],
   "466904": [
     {
       "talentSpellId": "356962",
       "effect": "reduce_cd_pct",
-      "value": 50
+      "value": 50,
+      "sourceRowId": "891141"
     }
   ],
   "466930": [
     {
       "talentSpellId": "321460",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "809194"
     },
     {
       "talentSpellId": "321460",
       "effect": "reduce_cd",
-      "value": 2
+      "value": 2,
+      "sourceRowId": "1026383"
     }
   ],
   "467307": [
     {
       "talentSpellId": "451485",
       "effect": "reduce_cd",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1152113"
     }
   ],
   "470411": [
     {
       "talentSpellId": "378266",
       "effect": "reduce_cd",
-      "value": 2
+      "value": 2,
+      "sourceRowId": "1020424"
     }
   ],
   "471195": [
     {
       "talentSpellId": "114154",
       "effect": "reduce_cd_pct",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "127297"
     },
     {
       "talentSpellId": "378425",
       "effect": "reduce_cd_pct",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "1006821"
     },
     {
       "talentSpellId": "414720",
       "effect": "reduce_cd_pct",
-      "value": 40
+      "value": 40,
+      "sourceRowId": "1084066"
     },
     {
       "talentSpellId": "387791",
       "effect": "replace_spell",
-      "value": 471195
+      "value": 471195,
+      "sourceRowId": "1187299"
     }
   ],
   "472433": [
     {
       "talentSpellId": "236499",
       "effect": "reduce_cd",
-      "value": 45
+      "value": 45,
+      "sourceRowId": "357702"
     }
   ],
   "473290": [
     {
       "talentSpellId": "387807",
       "effect": "reduce_cd",
-      "value": 5
+      "value": 5,
+      "sourceRowId": "1022851"
     }
   ],
   "473291": [
     {
       "talentSpellId": "387807",
       "effect": "reduce_cd",
-      "value": 5
+      "value": 5,
+      "sourceRowId": "1022851"
+    }
+  ],
+  "473728": [
+    {
+      "talentSpellId": "1244220",
+      "effect": "reduce_cd",
+      "value": 2,
+      "sourceRowId": "1244852"
     }
   ],
   "473909": [
     {
       "talentSpellId": "390378",
       "effect": "replace_spell",
-      "value": 390414
+      "value": 390414,
+      "sourceRowId": "1027228"
     },
     {
       "talentSpellId": "391174",
       "effect": "reduce_cd",
-      "value": 60
+      "value": 60,
+      "sourceRowId": "1028503"
     },
     {
       "talentSpellId": "473909",
       "effect": "replace_spell",
-      "value": 473919
+      "value": 473919,
+      "sourceRowId": "1193213"
     }
   ],
   "474421": [
     {
       "talentSpellId": "459507",
       "effect": "reduce_cd",
-      "value": 20
+      "value": 20,
+      "sourceRowId": "1166370"
     }
   ],
   "1219480": [
     {
       "talentSpellId": "462440",
       "effect": "reduce_cd",
-      "value": 60
+      "value": 60,
+      "sourceRowId": "1172216"
     },
     {
       "talentSpellId": "384444",
       "effect": "reduce_cd",
-      "value": 60
+      "value": 60,
+      "sourceRowId": "1273320"
     }
   ],
   "1224098": [
     {
       "talentSpellId": "441403",
       "effect": "replace_spell",
-      "value": 1224098
+      "value": 1224098,
+      "sourceRowId": "1212570"
     }
   ],
   "1226019": [
     {
       "talentSpellId": "1239537",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1237374"
     }
   ],
   "1231112": [
     {
       "talentSpellId": "1270827",
       "effect": "reduce_cd",
-      "value": -4
+      "value": -4,
+      "sourceRowId": "1283189"
     }
   ],
   "1233272": [
     {
       "talentSpellId": "1240188",
       "effect": "reduce_cd",
-      "value": 3
+      "value": 3,
+      "sourceRowId": "1238362"
     },
     {
       "talentSpellId": "1240906",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1239539"
     }
   ],
   "1233346": [
     {
       "talentSpellId": "1240188",
       "effect": "reduce_cd",
-      "value": 3
+      "value": 3,
+      "sourceRowId": "1238362"
     },
     {
       "talentSpellId": "1240906",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1239539"
     }
   ],
   "1234796": [
     {
       "talentSpellId": "1253402",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1263819"
     },
     {
       "talentSpellId": "320416",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1269406"
     },
     {
       "talentSpellId": "391397",
       "effect": "reduce_cd",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1278703"
     }
   ],
   "1235074": [
     {
       "talentSpellId": "441274",
       "effect": "reduce_cd_pct",
-      "value": 10
+      "value": 10,
+      "sourceRowId": "1135629"
     }
   ],
   "1237128": [
     {
       "talentSpellId": "233412",
       "effect": "reduce_cd_pct",
-      "value": 50
+      "value": 50,
+      "sourceRowId": "352507"
     },
     {
       "talentSpellId": "377637",
       "effect": "reduce_cd",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "1005589"
     }
   ],
   "1241059": [
     {
+      "talentSpellId": "325093",
+      "effect": "reduce_cd_pct",
+      "value": 20,
+      "sourceRowId": "815149"
+    },
+    {
       "talentSpellId": "450892",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1153986"
     }
   ],
   "1241413": [
     {
       "talentSpellId": "204023",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "301061"
     },
     {
       "talentSpellId": "405461",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1053768"
     }
   ],
   "1241871": [
     {
       "talentSpellId": "356962",
       "effect": "reduce_cd_pct",
-      "value": 50
+      "value": 50,
+      "sourceRowId": "891141"
     }
   ],
   "1241937": [
     {
       "talentSpellId": "1246555",
       "effect": "reduce_cd",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "1248169"
     },
     {
       "talentSpellId": "1246555",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1268555"
     }
   ],
   "1243807": [
     {
       "talentSpellId": "1244544",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "1245408"
     }
   ],
   "1244079": [
     {
       "talentSpellId": "1244544",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "1245408"
     }
   ],
   "1244088": [
     {
-      "talentSpellId": "391271",
-      "effect": "reduce_cd_pct",
-      "value": 10
-    },
-    {
       "talentSpellId": "424654",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1101810"
     },
     {
       "talentSpellId": "424654",
       "effect": "reduce_cd",
-      "value": -10
+      "value": -10,
+      "sourceRowId": "1101811"
+    },
+    {
+      "talentSpellId": "391271",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1170201"
     }
   ],
   "1244091": [
     {
       "talentSpellId": "391271",
       "effect": "reduce_cd_pct",
-      "value": 10
+      "value": 10,
+      "sourceRowId": "1028651"
     }
   ],
   "1245453": [
     {
       "talentSpellId": "1239537",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1237374"
     }
   ],
   "1246033": [
     {
       "talentSpellId": "431067",
       "effect": "reduce_cd_pct",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "1118816"
     }
   ],
   "1246768": [
     {
       "talentSpellId": "440681",
       "effect": "reduce_cd",
-      "value": 2
+      "value": 2,
+      "sourceRowId": "1248561"
     }
   ],
   "1247378": [
     {
       "talentSpellId": "377580",
       "effect": "extra_charge",
-      "value": 2
+      "value": 2,
+      "sourceRowId": "1005502"
     }
   ],
   "1249625": [
     {
       "talentSpellId": "280197",
       "effect": "reduce_cd",
-      "value": 20
+      "value": 20,
+      "sourceRowId": "737590"
     },
     {
       "talentSpellId": "450989",
       "effect": "reduce_cd",
-      "value": 10
+      "value": 10,
+      "sourceRowId": "1151638"
     },
     {
       "talentSpellId": "1249625",
       "effect": "replace_spell",
-      "value": 1272696
+      "value": 1272696,
+      "sourceRowId": "1310823"
     }
   ],
   "1250646": [
     {
       "talentSpellId": "1251790",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "1256590"
+    }
+  ],
+  "1251417": [
+    {
+      "talentSpellId": "389849",
+      "effect": "reduce_cd",
+      "value": 5,
+      "sourceRowId": "1026359"
     }
   ],
   "1251781": [
     {
       "talentSpellId": "455449",
       "effect": "replace_spell",
-      "value": 455465
+      "value": 455465,
+      "sourceRowId": "1158894"
     },
     {
       "talentSpellId": "455450",
       "effect": "replace_spell",
-      "value": 455476
-    }
-  ],
-  "1253489": [
-    {
-      "talentSpellId": "50334",
-      "effect": "reduce_cd_pct",
-      "value": 50
-    },
-    {
-      "talentSpellId": "102558",
-      "effect": "reduce_cd_pct",
-      "value": 50
+      "value": 455476,
+      "sourceRowId": "1158895"
     }
   ],
   "1253593": [
     {
       "talentSpellId": "440681",
       "effect": "reduce_cd",
-      "value": 2
+      "value": 2,
+      "sourceRowId": "1248561"
     }
   ],
   "1253859": [
     {
       "talentSpellId": "1251790",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "1256590"
     }
   ],
   "1253862": [
     {
       "talentSpellId": "1251790",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "1256590"
     }
   ],
   "1261193": [
     {
       "talentSpellId": "1272136",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "1285213"
     }
   ],
   "1261215": [
     {
       "talentSpellId": "1272136",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "1285213"
     }
   ],
   "1261559": [
     {
       "talentSpellId": "114154",
       "effect": "reduce_cd_pct",
-      "value": 30
+      "value": 30,
+      "sourceRowId": "127297"
     }
   ],
   "1261867": [
     {
       "talentSpellId": "24858",
       "effect": "replace_spell",
-      "value": 1261870
+      "value": 1261870,
+      "sourceRowId": "1271777"
     }
   ],
   "1267068": [
     {
       "talentSpellId": "382030",
       "effect": "reduce_cd",
-      "value": 5
+      "value": 5,
+      "sourceRowId": "1013223"
     },
     {
       "talentSpellId": "381867",
       "effect": "reduce_cd",
-      "value": 5
+      "value": 5,
+      "sourceRowId": "1014666"
     },
     {
       "talentSpellId": "392915",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1031470"
     },
     {
       "talentSpellId": "392916",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1031472"
     },
     {
       "talentSpellId": "1260644",
       "effect": "reduce_cd",
-      "value": 3
+      "value": 3,
+      "sourceRowId": "1282760"
     }
   ],
   "1271222": [
     {
       "talentSpellId": "451211",
       "effect": "reduce_cd",
-      "value": 4
+      "value": 4,
+      "sourceRowId": "1151653"
     }
   ],
   "1278969": [
     {
       "talentSpellId": "1244544",
       "effect": "reduce_cd",
-      "value": 15
+      "value": 15,
+      "sourceRowId": "1245408"
     }
   ],
   "1279187": [
     {
       "talentSpellId": "383228",
       "effect": "reduce_cd",
-      "value": 2
+      "value": 2,
+      "sourceRowId": "1049616"
     },
     {
       "talentSpellId": "406646",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1073914"
+    }
+  ],
+  "1291636": [
+    {
+      "talentSpellId": "431715",
+      "effect": "reduce_cd",
+      "value": 4,
+      "sourceRowId": "1119662"
     }
   ],
   "1291678": [
     {
       "talentSpellId": "405461",
       "effect": "extra_charge",
-      "value": 1
+      "value": 1,
+      "sourceRowId": "1258360"
     }
   ],
   "1300008": [
     {
       "talentSpellId": "440681",
       "effect": "reduce_cd",
-      "value": 2
+      "value": 2,
+      "sourceRowId": "1248561"
     }
   ],
   "1300009": [
     {
       "talentSpellId": "440681",
       "effect": "reduce_cd",
-      "value": 2
+      "value": 2,
+      "sourceRowId": "1248561"
     }
   ]
 }

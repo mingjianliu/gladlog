@@ -17,6 +17,9 @@ export interface ICDModifier {
   effect: "extra_charge" | "reduce_cd" | "reduce_cd_pct" | "replace_spell";
   value: number;
   isConditional?: boolean;
+  /** DB2 SpellEffect.ID the generator read this from (identity for dedup;
+   * not read at runtime). */
+  sourceRowId?: string;
 }
 
 export const CD_TALENT_MODIFIERS: Record<string, ICDModifier[]> =

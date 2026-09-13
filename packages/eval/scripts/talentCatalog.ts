@@ -348,8 +348,15 @@ async function main(): Promise<void> {
       ms: Number(r.ChargeRecoveryTime || 0),
     });
   const cooldown = new Map<string, { s: number; charges: number }>();
+  /** ChargeCategory → spells in it (aura 411 / 453 / 454 target a category) */
+  const spellsByChargeCat = new Map<string, string[]>();
   for (const r of await load("SpellCategories")) {
     if (r.DifficultyID && r.DifficultyID !== "0") continue;
+    if (r.ChargeCategory && r.ChargeCategory !== "0") {
+      const l = spellsByChargeCat.get(r.ChargeCategory) ?? [];
+      l.push(r.SpellID);
+      spellsByChargeCat.set(r.ChargeCategory, l);
+    }
     const c = chargeCat.get(r.ChargeCategory);
     if (c && c.ms > 0)
       cooldown.set(r.SpellID, { s: c.ms / 1000, charges: c.charges });
@@ -668,6 +675,26 @@ async function main(): Promise<void> {
     classOpts.get(x)?.mask.some((m) => m),
   );
 
+  /** ClassID → SpellClassSet, same mapping genTalentModifiers uses; a talent
+   * spell without its own SpellClassOptions row gets its class's set instead
+   * of matching every class's mask. */
+  const FAMILY_BY_CLASS: Record<string, number> = {
+    Warrior: 4,
+    Paladin: 10,
+    Hunter: 9,
+    Rogue: 8,
+    Priest: 6,
+    "Death Knight": 15,
+    Shaman: 11,
+    Mage: 3,
+    Warlock: 5,
+    Monk: 53,
+    Druid: 7,
+    "Demon Hunter": 107,
+    Evoker: 224,
+  };
+  const reachSet = new Set(reachPool);
+
   const rows: any[] = [];
   for (const [id, src] of universe) {
     const n = node.get(id);
@@ -677,6 +704,17 @@ async function main(): Promise<void> {
     const linked = linkedOf.get(id) ?? [];
     const allIds = [id, ...linked];
     const effectLines: string[] = [];
+    const className = classOfSpec.get(src.specIds[0]!) ?? "?";
+    /** machine-readable, uncapped: every (talent effect → target spell) pair */
+    const modsRaw: Array<{
+      via: string;
+      effectIndex: number;
+      aura: string;
+      op: string | null;
+      base: number;
+      pvp: number;
+      targets: string[];
+    }> = [];
     const modifies: Array<{
       spell: string;
       name: string;
@@ -709,8 +747,26 @@ async function main(): Promise<void> {
         effectLines.push(
           `${s === id ? "本体" : zh(s) + "(" + s + ")"} #${e.idx + 1} ${kind}${op}${val}${who}${trig}`,
         );
+        if (["411", "453", "454"].includes(e.aura) && e.misc0 !== "0") {
+          const targets = (spellsByChargeCat.get(e.misc0) ?? []).filter((x) =>
+            reachSet.has(x),
+          );
+          if (targets.length)
+            modsRaw.push({
+              via: s,
+              effectIndex: e.idx,
+              aura: e.aura,
+              op: null,
+              base: e.base,
+              pvp: e.pvp,
+              targets,
+            });
+        }
         if ((e.aura === "107" || e.aura === "108") && e.mask.some((m) => m)) {
-          const set = classOpts.get(s)?.set ?? classOpts.get(id)?.set;
+          const set =
+            classOpts.get(s)?.set ??
+            classOpts.get(id)?.set ??
+            FAMILY_BY_CLASS[className];
           const hits = reachPool.filter((x) => {
             const o = classOpts.get(x)!;
             return (
@@ -718,6 +774,16 @@ async function main(): Promise<void> {
               o.mask.some((m, i) => (m & e.mask[i]!) !== 0)
             );
           });
+          if (hits.length)
+            modsRaw.push({
+              via: s,
+              effectIndex: e.idx,
+              aura: e.aura,
+              op: e.misc0,
+              base: e.base,
+              pvp: e.pvp,
+              targets: hits,
+            });
           for (const h of hits.slice(0, 12))
             modifies.push({
               spell: h,
@@ -742,7 +808,9 @@ async function main(): Promise<void> {
       id,
       zh: zh(id),
       en: n?.en ?? enName.get(id) ?? "",
-      className: classOfSpec.get(src.specIds[0]!) ?? "?",
+      className,
+      specIds: src.specIds,
+      modsRaw,
       specs: src.specIds.map((s) => specZh.get(s) ?? String(s)),
       source: src.source,
       hero: n?.hero ?? null,

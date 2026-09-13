@@ -387,4 +387,12 @@
 //  kick-priority-team candidate types + legends; the interrupt kit behind
 //  [ENEMY KICK] is now the official per-player table (a Holy Paladin no
 //  longer shows Rebuke, a Retribution Paladin only when the node is taken).
-export const PROMPT_VERSION = 59;
+//  v60 (2026-09-13, GH #96 M0, user "有相应消费但没有引用的地方要补上"):
+//  talent cooldown modifiers — Monk / Demon Hunter / Evoker class-mask
+//  SpellMods now match (class set 53/107/224, was 126/127/128), aura 454
+//  charge-recovery % is read, temporary-buff sources (Berserk, Incarnation,
+//  Avatar) no longer apply permanently. <cooldowns> values move (Darkness
+//  300 → 180 s, Paralysis 45 → 30 s, Leg Sweep 60 → 50 s, Oppressing Roar
+//  120 → 90 s, Tip the Scales 120 → 90 s …) and false "2 Charges" inferred
+//  from casts shorter than the old wrong cooldown disappear.
+export const PROMPT_VERSION = 60;

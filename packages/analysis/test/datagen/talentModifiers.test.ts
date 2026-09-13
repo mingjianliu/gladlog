@@ -541,3 +541,165 @@ describe("real collision regression — target spellId 11 (2026-08-15, pre-fix l
     expect(result["11"]).toHaveLength(8);
   });
 });
+
+// 2026-09-13 talent-integration audit (talentCatalog.ts × talentModifiers.json):
+// three generator defects, each pinned with a synthetic row on a REAL talent id
+// so it passes the talentClassMap gate.
+describe("extractTalentModifiers — 2026-09-13 audit fixes", () => {
+  const spellNameRows: Record<string, string>[] = [];
+  const row = (
+    spellId: string,
+    aura: string,
+    basePoints: string,
+    misc0: string,
+    mask0: string,
+  ): Record<string, string> => ({
+    SpellID: spellId,
+    Effect: "6",
+    EffectAura: aura,
+    EffectBasePointsF: basePoints,
+    EffectMiscValue_0: misc0,
+    EffectSpellClassMask_0: mask0,
+    EffectSpellClassMask_1: "0",
+    EffectSpellClassMask_2: "0",
+    EffectSpellClassMask_3: "0",
+  });
+  const classOpt = (spellId: string, set: string, mask0: string) => ({
+    SpellID: spellId,
+    SpellClassSet: set,
+    SpellClassMask_0: mask0,
+    SpellClassMask_1: "0",
+    SpellClassMask_2: "0",
+    SpellClassMask_3: "0",
+  });
+
+  it("a Monk class-mask modifier matches SpellClassSet 53 (was keyed on 126 and matched nothing)", () => {
+    // Ancient Arts 344359 is a Brewmaster talent.
+    const result = extractTalentModifiers(
+      [row("344359", "107", "-15000", "11", "4")],
+      [classOpt("900053", "53", "4")],
+      [],
+      spellNameRows,
+      new Set(["900053"]),
+    );
+    expect(result["900053"]).toEqual([
+      { talentSpellId: "344359", effect: "reduce_cd", value: 15 },
+    ]);
+  });
+
+  it("aura 454 (charge recovery %) becomes reduce_cd_pct through the charge category, sign kept", () => {
+    const result = extractTalentModifiers(
+      [row("344359", "454", "-12", "7777", "0")],
+      [],
+      [{ SpellID: "900454", ChargeCategory: "7777" }],
+      spellNameRows,
+      new Set(["900454"]),
+    );
+    expect(result["900454"]).toEqual([
+      { talentSpellId: "344359", effect: "reduce_cd_pct", value: 12 },
+    ]);
+  });
+
+  it("row identity decides dedup: two distinct DB2 rows with equal values are both kept", () => {
+    const withId = (id: string) => ({
+      ...row("344359", "107", "-15000", "11", "4"),
+      ID: id,
+    });
+    const result = extractTalentModifiers(
+      [withId("5001"), withId("5002"), withId("5001")],
+      [classOpt("900053", "53", "4")],
+      [],
+      spellNameRows,
+      new Set(["900053"]),
+    );
+    expect(result["900053"]).toEqual([
+      {
+        talentSpellId: "344359",
+        effect: "reduce_cd",
+        value: 15,
+        sourceRowId: "5001",
+      },
+      {
+        talentSpellId: "344359",
+        effect: "reduce_cd",
+        value: 15,
+        sourceRowId: "5002",
+      },
+    ]);
+  });
+
+  it("one talent writing the same reduction as a cooldown SpellMod AND a charge-recovery aura counts once, on the target's own mechanism", () => {
+    // 神圣职责 216853 shape: aura 108 op 11 −33 % by class mask + aura 454 −33 %
+    // on a charge category. A charged target keeps the charge row; a target
+    // reached only by the mask keeps the cooldown row.
+    const result = extractTalentModifiers(
+      [
+        { ...row("344359", "108", "-33", "11", "4"), ID: "7001" },
+        { ...row("344359", "454", "-33", "1392", "0"), ID: "7002" },
+      ],
+      [classOpt("900100", "53", "4"), classOpt("900200", "53", "4")],
+      [{ SpellID: "900100", ChargeCategory: "1392" }],
+      spellNameRows,
+      new Set(["900100", "900200"]),
+    );
+    expect(result["900100"]).toEqual([
+      {
+        talentSpellId: "344359",
+        effect: "reduce_cd_pct",
+        value: 33,
+        sourceRowId: "7002",
+      },
+    ]);
+    expect(result["900200"]).toEqual([
+      {
+        talentSpellId: "344359",
+        effect: "reduce_cd_pct",
+        value: 33,
+        sourceRowId: "7001",
+      },
+    ]);
+  });
+
+  it("a SpellMod row's MiscValue_0 (op 11) is never read as ChargeCategory 11", () => {
+    const result = extractTalentModifiers(
+      [row("344359", "107", "-15000", "11", "0")],
+      [],
+      [{ SpellID: "900011", ChargeCategory: "11" }],
+      spellNameRows,
+      new Set(["900011"]),
+    );
+    expect(result["900011"]).toBeUndefined();
+  });
+
+  it("a temporary-buff source emits no cooldown modifier but keeps replace_spell", () => {
+    // Berserk 50334: its −100 % Frenzied Regeneration only holds while Berserk is up.
+    const rows = [
+      row("50334", "108", "-100", "11", "1"),
+      row("50334", "332", "900999", "900007", "0"),
+    ];
+    const opts = [classOpt("900007", "7", "1")];
+    const gated = extractTalentModifiers(
+      rows,
+      opts,
+      [],
+      spellNameRows,
+      new Set(["900007"]),
+      new Set(["50334"]),
+    );
+    expect(gated["900007"]).toEqual([
+      { talentSpellId: "50334", effect: "replace_spell", value: 900999 },
+    ]);
+    const ungated = extractTalentModifiers(
+      rows,
+      opts,
+      [],
+      spellNameRows,
+      new Set(["900007"]),
+    );
+    expect(ungated["900007"]).toEqual(
+      expect.arrayContaining([
+        { talentSpellId: "50334", effect: "reduce_cd_pct", value: 100 },
+      ]),
+    );
+  });
+});
