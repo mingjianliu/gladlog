@@ -39,9 +39,15 @@ import {
 } from "@gladlog/analysis/src/utils/losAnalysis";
 import type { ICombatUnit } from "@gladlog/parser-compat";
 import { createHash } from "crypto";
-import { mkdirSync, writeFileSync } from "fs";
+import { mkdirSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 
+import {
+  buildCrisisAnswerEvidence,
+  cutoffViolations,
+  renderEvidence,
+  truncateRound,
+} from "../src/explore/crisisAnswerEvidence";
 import {
   DEFAULT_MATCH_DIR,
   loadIndex,
@@ -412,9 +418,131 @@ async function main(): Promise<void> {
   console.log(`\nledger → ${join(outDir, "ledger.json")}`);
 }
 
+/**
+ * Step 2 (`--step2`, spec amendment 1): reload the 20 anchors frozen in the
+ * step-1 ledger — never reselect — and render the holistic evidence list from
+ * `buildCrisisAnswerEvidence`. The product's current verdict goes to the ledger
+ * as baseline metadata only. For every anchor the cutoffs are re-proved on real
+ * data: evidence on the full round == evidence on the round truncated at
+ * t + 3 s, at-t items == at-t items on the round truncated at t, and no
+ * supporting timestamp beyond its phase cutoff. Outcomes are written after the
+ * judgement slot so the reader judges first.
+ */
+async function step2(): Promise<void> {
+  await ensureAnalysisData();
+  const base =
+    argStr("--out") ??
+    join(
+      process.env.GLADLOG_EVAL_HOME ??
+        join(process.env.HOME ?? "", "code/gladlog-eval-private"),
+      "reports/temporal-evidence-2026-09-13",
+    );
+  const step1 = JSON.parse(readFileSync(join(base, "ledger.json"), "utf8"));
+  const anchors: Array<{ roundId: string; tSec: number; baseline: any }> =
+    step1.moments.map((m: any) => ({
+      roundId: m.roundId,
+      tSec: m.point.tSec,
+      baseline: m.point,
+    }));
+  const outDir = join(base, "step2");
+  mkdirSync(outDir, { recursive: true });
+  const rows: any[] = [];
+  let violations = 0;
+  const md: string[] = [
+    `# Temporal-evidence experiment — step 2 evidence lists (${anchors.length} frozen anchors)`,
+    "",
+    'For each crisis: read the evidence, write **answered / unanswered / insufficient evidence** and one line of reasoning in the Judgement slot, THEN open the outcome. "Answered" never means "survived".',
+    "",
+  ];
+  for (const [i, a] of anchors.entries()) {
+    const { legacy } = loadLegacyRound(DEFAULT_MATCH_DIR, a.roundId);
+    const { friends, enemies, owner } = splitTeams(legacy);
+    const teams = {
+      friendIds: friends.map((f) => f.id),
+      enemyIds: enemies.map((e) => e.id),
+    };
+    const ev = buildCrisisAnswerEvidence(legacy, owner!.id, a.tSec, teams);
+    // Cutoff invariance on real data.
+    const trWin = truncateRound(legacy, ev.windowEndMs).round;
+    const trT = truncateRound(legacy, ev.tMs).round;
+    const evWin = buildCrisisAnswerEvidence(trWin, owner!.id, a.tSec, teams);
+    const evT = buildCrisisAnswerEvidence(trT, owner!.id, a.tSec, teams);
+    const atTItems = (x: typeof ev) =>
+      x.items.filter((it) => it.phase === "at-t");
+    const problems: string[] = [];
+    if (JSON.stringify(evWin) !== JSON.stringify(ev))
+      problems.push("full != truncated at t+3s");
+    if (JSON.stringify(atTItems(evT)) !== JSON.stringify(atTItems(ev)))
+      problems.push("at-t items differ when truncated at t");
+    const late = cutoffViolations(ev);
+    if (late.length)
+      problems.push(`${late.length} item(s) cite timestamps past their cutoff`);
+    if (ev.untimedStreams.length)
+      problems.push(`untimed streams: ${ev.untimedStreams.join(", ")}`);
+    violations += problems.length;
+    const bracket = bracketKey(legacy.startInfo?.bracket ?? "") ?? "?";
+    rows.push({
+      index: i + 1,
+      roundId: a.roundId,
+      tSec: a.tSec,
+      bracket,
+      ownerSpec: specToString(owner!.spec),
+      evidence: ev,
+      invariance: problems,
+      judgement: { verdict: null, reasoning: null },
+      baseline: {
+        responded: a.baseline.responded,
+        responses: a.baseline.responses,
+        feasible: a.baseline.feasible,
+        selfHealPct: a.baseline.selfHealPct,
+      },
+      outcome: { diedWithin10s: a.baseline.diedWithin10s },
+    });
+    md.push(
+      `## ${i + 1}. round ${a.roundId} · ${bracket} · ${specToString(owner!.spec)} · ${fmtTime(a.tSec)}`,
+      renderEvidence(ev),
+      `Cutoff checks: ${problems.length ? problems.join("; ") : "pass"}`,
+      "",
+      "**Judgement:** _answered / unanswered / insufficient evidence — reason:_",
+      "",
+      `<details><summary>Product today and outcome (open after judging)</summary>\n\nresponded=${a.baseline.responded} via ${
+        Object.entries(a.baseline.responses)
+          .filter(([, v]) => v)
+          .map(([k2]) => k2)
+          .join("+") || "nothing"
+      }; died within 10 s = ${a.baseline.diedWithin10s ? "yes" : "no"}\n\n</details>`,
+      "",
+    );
+  }
+  md.splice(
+    3,
+    0,
+    `Real-data cutoff checks: ${violations} violation(s) across ${anchors.length} anchors.`,
+    "",
+  );
+  writeFileSync(
+    join(outDir, "ledger.json"),
+    JSON.stringify(
+      {
+        spec: "docs/superpowers/specs/2026-09-13-temporal-evidence-experiment.md#amendment-1",
+        anchorsFrom: join(base, "ledger.json"),
+        invarianceViolations: violations,
+        rows,
+      },
+      null,
+      1,
+    ),
+  );
+  writeFileSync(join(outDir, "moments.md"), md.join("\n"));
+  console.log(md.join("\n"));
+  console.log(
+    `\nstep-2 ledger → ${join(outDir, "ledger.json")} · invariance violations ${violations}`,
+  );
+}
+
 if (
   process.argv[1] &&
   import.meta.url.endsWith(process.argv[1].split("/").pop() ?? "")
 ) {
-  void main();
+  void (process.argv.includes("--step2") ? step2() : main());
 }
