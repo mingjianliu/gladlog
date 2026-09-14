@@ -457,6 +457,15 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
       note: "Lone Survivor — DB2 aura 107 +2000 ms, Hunter class tree (maxRanks 1), mask covers the spell; corpus 254 caster-cells at 8.0 s hold it 100 % vs 29 at 6.0 s holding it 0 % (6 + 2 = 8). Spec-gated because Marksmanship is a THIRD group entirely: 108 cells at 3.0 s that hold the talent 99 % and are unaffected by it — that spec's own duration is unexplained and stays on the table value.",
     },
   ],
+  "102342": [
+    {
+      talentSpellId: "392116",
+      specs: ["105"],
+      untalentedBaseSeconds: 12,
+      addSeconds: 4,
+      note: "Regenerative Heartwood — DB2 aura 107 +4000 ms on Ironbark, Restoration spec tree (maxRanks 1); durationTalentScan (GH #96 M5) over the FULL new-season archive (63,303 files, sharded, same predeclared rule): 56 of 56 holder cells at 16.0 s against 3,966 of 3,968 non-holder cells at 12.0 s; 12 + 4 = 16. Did not reach 20 holder cells on the every-5 slice (4).",
+    },
+  ],
   "288613": [
     {
       talentSpellId: "1253830",
