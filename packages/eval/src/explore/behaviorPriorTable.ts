@@ -86,6 +86,7 @@ export interface BehaviorPriorTable {
 const RESPONSE_KEYS = [
   "selfHeal",
   "wall",
+  "protective",
   "external",
   "control",
   "kite",

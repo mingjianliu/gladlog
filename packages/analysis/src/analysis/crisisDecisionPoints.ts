@@ -88,6 +88,9 @@ const ATTACKER_POS_TOLERANCE_MS = 2500;
 export interface DecisionPointResponses {
   selfHeal: boolean;
   wall: boolean;
+  /** the owner pressed a protective ability outside the wall / external lists
+   * that the user ruled counts as an answer (`CRISIS_PROTECTIVE_ANSWER_IDS`) */
+  protective: boolean;
   external: boolean;
   control: boolean;
   peel: boolean;
@@ -139,6 +142,24 @@ export interface DecisionPoint {
 const PERSONAL_WALL_IDS = new Set<string>(
   spellIdLists.bigDefensiveSpellIds.map(String),
 );
+/**
+ * Healer crisis answers outside the wall / external lists — USER RULING
+ * 2026-09-14 (GH #96 M4): "这 5 个技能我觉得都算是". Found by
+ * packages/eval/scripts/crisisUnlistedDefensiveProbe.ts: 16 of 149 accusable
+ * healer crisis points (S2 every 30) carried one of them, plus Power Word:
+ * Shield on 10 more points the probe's pressable test missed. Only the owner's
+ * own SPELL_CAST_SUCCESS inside the response window counts, like a wall.
+ * Registered in curatedIdRegistry.
+ */
+export const CRISIS_PROTECTIVE_ANSWER_IDS: ReadonlySet<string> = new Set([
+  "17", // Power Word: Shield
+  "1253593", // Void Shield — Power Word: Shield upgraded by Master the Darkness (same button)
+  "586", // Fade
+  "215769", // Spirit of Redemption (PvP talent, pressed)
+  "366155", // Reversion
+  "64843", // Divine Hymn
+  "64844", // Divine Hymn (channel id the log also reports as a cast)
+]);
 const EXTERNAL_IDS = new Set<string>(
   spellIdLists.externalDefensiveSpellIds.map(String),
 );
@@ -490,6 +511,7 @@ export function crisisDecisionPoints(
     const responses: DecisionPointResponses = {
       selfHeal: selfHeal >= SELF_HEAL_BIG,
       wall: castsIn.some((c) => PERSONAL_WALL_IDS.has(c.id)),
+      protective: castsIn.some((c) => CRISIS_PROTECTIVE_ANSWER_IDS.has(c.id)),
       external: castsIn.some((c) => EXTERNAL_IDS.has(c.id)),
       control: castsIn.some(
         (c) => CONTROL_IDS.has(c.id) && c.dest && !friendIds.has(c.dest),
@@ -518,6 +540,7 @@ export function crisisDecisionPoints(
     const responded =
       responses.selfHeal ||
       responses.wall ||
+      responses.protective ||
       responses.external ||
       responses.control ||
       responses.kite;

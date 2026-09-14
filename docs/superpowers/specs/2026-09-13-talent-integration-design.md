@@ -217,3 +217,18 @@ Every other type is unchanged.
 | Invoke the White Tiger | 120 s  | 90 s  | 18    |
 
 "2 Charges" disappearing on some lines is the charge **inference** (`maxChargesDetected`: two casts closer than the old, wrong cooldown) no longer firing.
+
+## M4 / M5 / M6 results (2026-09-13 → 14)
+
+**M4 — owner protective answers (crisis-no-response).**
+
+- Probe `crisisUnlistedDefensiveProbe.ts` (S2 every 30): 16 of 149 accusable healer crisis points carried an unlisted protective owner cast (Fade 11, Spirit of Redemption 3, Reversion 2, Divine Hymn 2); Power Word: Shield sat on 10 more.
+- **User ruling 2026-09-14:** "这 5 个技能我觉得都算是" — Power Word: Shield, Fade, Spirit of Redemption, Reversion, Divine Hymn count as **responded** (not indeterminate). Implemented as `CRISIS_PROTECTIVE_ANSWER_IDS` + `responses.protective` in `crisisDecisionPoints`, registered in curatedIdRegistry; the same-button variants Divine Hymn 64844 and Void Shield 1253593 (Power Word: Shield after Master the Darkness) are included.
+- The user then asked whether the data was complete. It was not (1/30 slice, accused points only, narrow protective test, pressable test that dropped PW:S). `crisisResponseCompletenessScan.ts` answers the complete question — every uncredited owner cast in every dangerous feasible crisis window, labelled by DB2 SpellEffect: S2 every 5 (3,627 files, 3,156 points, 988 unresponded). Ruling list on GH #96 (Gladiator's Medallion 31, Bear Form 20, Blessing of Freedom 16, …; small self-heals are a threshold question; dispels / mobility a semantics question). Full-archive rerun queued.
+- The behaviour-prior reference table is regenerated over the full new-season archive (63,303 files, not the 18,134-file 08-28 manifest) with both variants from one scan (the "old" table recomputes responded without the protective category) for attribution.
+
+**M5 — duration modifiers:** see the M5 commit (f80dd8a3) and the review table above. Full-archive rerun (sharded) queued.
+
+**M6 — scripted-talent triage (`talentScriptedTriage.ts`).** 1,190 talents with no SpellMod row and no code reference, keyword-queued on the zhCN description (a queue, not a verdict): protection 100 (51 at ≥ 50 % pick, 22 observable in logs), cc 54, cooldown 107, duration 48, dispel 23, mobility 40, healing/damage/resource/stat 503. The protection queue is mostly always-taken flat reductions (no discriminating power for "should they have pressed"); the ones that change a crisis judgement are low-HP procs (Well-Honed Instincts, Guided Prayer, Last Resort). Per D4 they never change owner-response classification; they belong to a later adequacy question.
+
+**burst-into-mitigation overlap (found while reviewing real examples of the talentMitigation switch).** `burstMitigationOverlapProbe.ts`, switch on, S2 every 30, 210 candidates: the cited wall covers < 25 % of the burst in 46 (22 %), where the target still lost a median 18 HP points during the burst, versus ≥ 50 % coverage in 72, median 2 points. The ledger admits any overlap ≥ 0.5 s and the door only checks wall strength — a pre-existing gap that talent pricing makes more visible. Coverage door awaits a user ruling; recommended order: coverage door first, then the switch default.

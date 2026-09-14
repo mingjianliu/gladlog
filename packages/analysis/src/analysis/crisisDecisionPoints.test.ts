@@ -138,6 +138,18 @@ describe("crisisDecisionPoints", () => {
     expect(crisisDecisionPoints(no, combat(no))[0]!.responses.wall).toBe(false);
   });
 
+  it("protective response (user ruling 2026-09-14): Divine Hymn / Power Word: Shield count as answered, not as a wall", () => {
+    for (const id of ["64843", "17", "586", "215769", "366155"]) {
+      const o = unit({
+        spellCastEvents: [{ timestamp: T0 + 2500, spellId: id }],
+      });
+      const p = crisisDecisionPoints(o, combat(o))[0]!;
+      expect(p.responses.protective).toBe(true);
+      expect(p.responses.wall).toBe(false);
+      expect(p.responded).toBe(true);
+    }
+  });
+
   it("control response: owner casts a CC / root / interrupt on an enemy", () => {
     const o = unit({
       spellCastEvents: [

@@ -22,6 +22,7 @@ const pt = (over: Partial<DecisionPoint> = {}): DecisionPoint => ({
     external: false,
     control: false,
     peel: false,
+    protective: false,
     kite: false,
   },
   responded: false,

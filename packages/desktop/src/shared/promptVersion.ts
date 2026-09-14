@@ -395,4 +395,11 @@
 //  300 → 180 s, Paralysis 45 → 30 s, Leg Sweep 60 → 50 s, Oppressing Roar
 //  120 → 90 s, Tip the Scales 120 → 90 s …) and false "2 Charges" inferred
 //  from casts shorter than the old wrong cooldown disappear.
-export const PROMPT_VERSION = 60;
+//  v61 (2026-09-14, GH #96 M4/M5): crisis-no-response credits a healer's own
+//  Power Word: Shield / Void Shield, Fade, Spirit of Redemption, Reversion and
+//  Divine Hymn as a response (user ruling "这 5 个技能我觉得都算是"), and its
+//  reference table is rebuilt over the full new-season archive (63,303 files)
+//  with the new "protective" category; talent duration modifiers Trueshot +2 s,
+//  Demonic Tyrant +5 s and Boneshaker Shockwave stun +1 s change [BUFF FADED]
+//  expiry labels and CC-break remaining time.
+export const PROMPT_VERSION = 61;
