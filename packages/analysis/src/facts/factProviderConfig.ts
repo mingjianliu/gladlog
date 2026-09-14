@@ -29,8 +29,10 @@
 export type FactProviderConfig = Readonly<Record<string, boolean>>;
 
 export const PRODUCTION_FACT_CONFIG: FactProviderConfig = Object.freeze({
-  /** M3b: talent value-modifiers on mitigation auras (mitigationComponents.ts) */
-  talentMitigation: false,
+  /** M3b: talent value-modifiers on mitigation auras (mitigationComponents.ts).
+   * ON since 2026-09-14 — user ruling "天赋那边可以打开", after the real-example
+   * review and the burst-into-mitigation coverage door. */
+  talentMitigation: true,
 });
 
 let configured: FactProviderConfig | null = null;

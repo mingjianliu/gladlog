@@ -308,7 +308,7 @@ export function computeMitigationAudit(
     }
     if (res.positional) continue; // Darkness class: positional conditions are not modelled this round, skip without a row
 
-    for (const comp of res.components) {
+    for (const [compIndex, comp] of res.components.entries()) {
       // Shape A backs ACTIVE mitigation out of what landed: observed × p / (1 − p).
       // M3a: one component per entry, so this loop runs once and is identical to
       // the table read; the lower bound is the conservative "blocked" claim.
@@ -336,6 +336,12 @@ export function computeMitigationAudit(
       }
 
       const blockedAmount = Math.round((observed * pct) / (100 - pct));
+      // A talent-added component on a school the window barely hit (Blessing of
+      // Protection's magic 15 %, Cloak's physical 20 %) renders as "blocked ~0k"
+      // — a line with no information. Skip it when it rounds to 0k on the
+      // render grid (formatMitigationAuditLine's Math.round(/1000)); the entry's
+      // own first component always keeps its row. GH #96, 2026-09-14.
+      if (compIndex > 0 && Math.round(blockedAmount / 1000) === 0) continue;
       rows.push({
         spellId: iv.spellId,
         spellName,

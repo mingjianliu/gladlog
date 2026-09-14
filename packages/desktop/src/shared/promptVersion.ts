@@ -402,4 +402,11 @@
 //  with the new "protective" category; talent duration modifiers Trueshot +2 s,
 //  Demonic Tyrant +5 s and Boneshaker Shockwave stun +1 s change [BUFF FADED]
 //  expiry labels and CC-break remaining time.
-export const PROMPT_VERSION = 61;
+//  v62 (2026-09-14, GH #96, user rulings "天赋那边可以打开" / "30% 左右"):
+//  talent mitigation ON — Barkskin + Oakskin 30 %, Unending Resolve + Strength
+//  of Will 40 %, Pain Suppression 50 %, Obsidian Scales 40 %, Astral Shift 60 %,
+//  Cloak physical 20 %, Blessing of Protection magic 15 % priced for holders;
+//  death-window "Mitigation audit" amounts grow accordingly; burst-into-
+//  mitigation requires the wall to cover >= 30 % of the burst (provisional,
+//  BACKLOG #42).
+export const PROMPT_VERSION = 62;

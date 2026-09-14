@@ -1,14 +1,25 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
   resolveMitigation,
   strongestComponentPct,
 } from "../src/data/mitigationComponents";
 import { MITIGATION_TABLE, mitigationPctFor } from "../src/data/mitigationData";
+import {
+  __resetFactConfigForTests,
+  configureFacts,
+} from "../src/facts/factProviderConfig";
 
 // GH #96 M3a — the component resolver must reproduce the table read exactly
 // (representation change only; product output byte-identical).
 describe("mitigation component resolver (M3a parity)", () => {
+  // parity is a statement about the table alone: talent components off
+  beforeEach(() => {
+    __resetFactConfigForTests();
+    configureFacts({ talentMitigation: false });
+  });
+  afterEach(() => __resetFactConfigForTests());
+
   it("every table entry resolves to one component priced exactly like mitigationPctFor, both carriers", () => {
     for (const [id, entry] of Object.entries(MITIGATION_TABLE)) {
       for (const carrierIsCaster of [true, false]) {

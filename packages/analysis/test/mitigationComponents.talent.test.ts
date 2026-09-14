@@ -62,7 +62,8 @@ const holder = (talentSpellId: string) => ({ held: [talentSpellId] }) as never;
 describe("mitigation resolver talent components (M3b)", () => {
   afterEach(() => __resetFactConfigForTests());
 
-  it("switch off: talents change nothing (production default)", () => {
+  it("switch off: talents change nothing", () => {
+    configureFacts({ talentMitigation: false });
     const res = resolveMitigation("22812", {
       carrierIsCaster: true,
       caster: holder("900001"),

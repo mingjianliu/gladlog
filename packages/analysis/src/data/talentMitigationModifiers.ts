@@ -102,9 +102,9 @@ export const TALENT_MITIGATION_MODIFIERS: readonly ITalentMitigationModifier[] =
       talentSpellId: "457034",
       schoolMask: 1,
       modPct: 20,
-      validation: "unvalidated",
+      validation: "promoted",
       evidence:
-        "Cloak of Shadows physical + Bait and Switch: holders 0.707 (0.657–0.800), 23 units, non-holders 0.989 (222), expected 0.80 — interval wider than ±0.04; S2 archive every 30, run 2 2026-09-13",
+        "Cloak of Shadows physical + Bait and Switch: holders 0.707 (0.657–0.800), 23 units, non-holders 0.989 (222), expected 0.80 — interval wider than ±0.04 on S2 every 30 (run 2). PROMOTED on the full new-season archive 2026-09-14 (63,303 files, sharded, same band): holders 0.800 (0.795–0.800), 2,395 units / 1,811 players, non-holders 0.988 (14,793 units)",
     },
     {
       auraSpellId: "1022",

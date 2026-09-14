@@ -580,6 +580,18 @@ const CC_AVOIDABLE_CAP = 2;
  * 34.4% of raw hits — not a monoculture).
  */
 const BURST_INTO_MITIGATION_MIN_PCT = 30;
+/**
+ * The cited wall must cover at least this share of the burst span — USER
+ * RULING 2026-09-14 ("30% 左右比较合适"), GH #96. The ledger keeps any
+ * defensive overlapping >= 0.5 s, so a 20 s Avatar + Recklessness was accused
+ * of going "into" a Barkskin it overlapped for 0.7 s. Measured before the
+ * ruling (burstMitigationOverlapProbe.ts, talentMitigation on, S2 every 30,
+ * 210 candidates): coverage >= 30 % keeps 148 (target HP drop median 10 points,
+ * 13 deaths); the 62 below lost a median 21 points — the burst was not "into"
+ * the wall. PROVISIONAL: the user called 30 % a guess and may prefer 35 %
+ * (docs/BACKLOG.md #42 has the 25–50 % table) — not a validated value.
+ */
+const BURST_INTO_MITIGATION_MIN_COVERAGE = 0.3;
 // at-cap 体检(2026-08-26):2/20(10%),惰性。
 const BURST_INTO_MITIGATION_CAP = 2;
 
@@ -2272,7 +2284,13 @@ function dpsOwnerEvents(
             !!res && !res.positional && pct >= BURST_INTO_MITIGATION_MIN_PCT,
         )
         .sort((a, c) => c.pct - a.pct);
-      const hit = hits[0];
+      const spanS = b.toSeconds - b.fromSeconds;
+      const covered = hits.filter(
+        ({ d }) =>
+          spanS > 0 &&
+          d.overlapSeconds / spanS >= BURST_INTO_MITIGATION_MIN_COVERAGE,
+      );
+      const hit = covered[0];
       const bimFacts = () => ({
         fromSeconds: b.fromSeconds,
         target: t.unitId,
@@ -2299,7 +2317,9 @@ function dpsOwnerEvents(
             opportunityId: bimOpp(b),
             ownerId: owner.id,
             verdict: "suppressed",
-            reason: "no-mitigation-over-door",
+            reason: hits.length
+              ? "wall-covers-too-little"
+              : "no-mitigation-over-door",
             facts: bimFacts(),
             candidateIds: [],
           });
