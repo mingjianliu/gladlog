@@ -270,6 +270,8 @@ export function computeMitigationAudit(
     // an ally-applied Flameshaper Obsidian Scales is 15 %, the Evoker's own 30 %.
     const res = resolveMitigation(iv.spellId, {
       carrierIsCaster: iv.srcUnitName === victim.name,
+      // M3b: talents are attributable only to a self-cast here (no roster)
+      caster: iv.srcUnitName === victim.name ? victim : undefined,
     });
 
     if (!res) {
@@ -438,7 +440,10 @@ export function computeUnusedSelfCounterfactuals(
     if (!cdAvailableAt(cd, deathS)) continue;
     // GH #96 M3a: hypothetical ADDED protection: observed × p per component
     // (own cooldown → the victim carries it). Lower bound: "would have saved".
-    const res = resolveMitigation(cd.spellId, { carrierIsCaster: true });
+    const res = resolveMitigation(cd.spellId, {
+      carrierIsCaster: true,
+      caster: victim,
+    });
     if (!res || res.positional) continue;
 
     const saved = savedByComponents(res, victim, windowStartS, deathS, combat);

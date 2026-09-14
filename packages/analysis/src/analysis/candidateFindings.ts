@@ -2256,6 +2256,7 @@ function dpsOwnerEvents(
           // ledger's own exclusion).
           const res = resolveMitigation(d.spellId, {
             carrierIsCaster: !d.appliedByOther,
+            caster: players.find((u) => u.name === d.casterName),
           });
           const strongest = res
             ? strongestComponentPct(res, { includeImmunity: true })
@@ -2278,6 +2279,7 @@ function dpsOwnerEvents(
         defensivesHit: t.defensivesHit.map((d) => {
           const res = resolveMitigation(d.spellId, {
             carrierIsCaster: !d.appliedByOther,
+            caster: players.find((u) => u.name === d.casterName),
           });
           return {
             spellId: d.spellId,

@@ -593,6 +593,8 @@ function attributeFailure(
       (strongestComponentPct(
         resolveMitigation(aura.spellId, {
           carrierIsCaster: aura.srcUnitId === target.id,
+          // M3b: talents are attributable only to a self-cast here (no roster)
+          caster: aura.srcUnitId === target.id ? target : undefined,
         })!,
         { includeImmunity: true },
       )?.pctMin ?? 0) >= MITIGATION_AURA_MIN_PCT

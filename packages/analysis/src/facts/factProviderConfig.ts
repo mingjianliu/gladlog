@@ -28,7 +28,10 @@
 
 export type FactProviderConfig = Readonly<Record<string, boolean>>;
 
-export const PRODUCTION_FACT_CONFIG: FactProviderConfig = Object.freeze({});
+export const PRODUCTION_FACT_CONFIG: FactProviderConfig = Object.freeze({
+  /** M3b: talent value-modifiers on mitigation auras (mitigationComponents.ts) */
+  talentMitigation: false,
+});
 
 let configured: FactProviderConfig | null = null;
 let locked = false;

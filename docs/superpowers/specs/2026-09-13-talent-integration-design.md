@@ -137,6 +137,26 @@ Fixtures:
 - **Failure:** the row stays unvalidated; the resolver may only widen its range with it (pctMax), never raise pctMin.
 - **Non-holders** are reported when present but are never required.
 
+**M3b run 1 was void (ownership predicate, not the band).** It split holders with `talentOwnershipOf`. That predicate's step 6 treats "not in this spec's trees or PvP pool" as a baseline ability, so it reads another spec's talent as held. Both Barkskin talents showed the same 302 "holder" units, 0 non-holders, although Reinforced Fur is Guardian-only; the 236 Divine Protection "holders" of the Retribution-only Shield of Vengeance were Holy paladins. The band was not changed. The scan and the resolver now share `talentModifierOwnershipOf` (a talent outside the caster's spec trees and pool is `no`), and run 2 is the record. Run 1's output is kept for the audit trail.
+
+**M3b run 2 (the record; S2 archive every 30, 605 files / 1,270 rounds).** Pass-through = unit medians; "non" = non-holders, reported, never required.
+
+| Aura + talent                                             | Expected | Holders (90 % interval) | Holder units | Non-holders (units) | Verdict                |
+| --------------------------------------------------------- | -------- | ----------------------- | ------------ | ------------------- | ---------------------- |
+| Barkskin + Oakskin                                        | 0.70     | 0.688 (0.682–0.697)     | 302          | — (0)               | promoted               |
+| Barkskin + Reinforced Fur (Guardian)                      | 0.70     | —                       | 0            | 0.688 (302)         | unvalidated            |
+| Divine Protection 498 + Shield of Vengeance (Retribution) | 0.55     | —                       | 0            | 0.649 (236)         | unvalidated            |
+| Pain Suppression + 洞悉大局                               | 0.50     | 0.500 (0.500–0.500)     | 205          | 0.600 (70)          | promoted               |
+| Survival of the Fittest + Shell Cover                     | 0.65     | 0.667 (0.667–0.667)     | 230          | 0.752 (217)         | promoted               |
+| Obsidian Scales + Hardened Scales                         | 0.60     | 0.600 (0.600–0.612)     | 42           | 0.701 (102)         | promoted               |
+| Unending Resolve + Strength of Will                       | 0.60     | 0.600 (0.600–0.604)     | 229          | 0.750 (27)          | promoted               |
+| Cloak of Shadows physical + Bait and Switch               | 0.80     | 0.707 (0.657–0.800)     | 23           | 0.989 (222)         | unvalidated (interval) |
+| Blessing of Protection magic + Echoing Blessings          | 0.85     | 0.845 (0.814–0.875)     | 23           | 0.983 (135)         | promoted               |
+| Astral Shift + Astral Bulwark                             | 0.40     | 0.400 (0.398–0.409)     | 34           | 0.600 (171)         | promoted               |
+| Aspect of the Turtle + 甲壳壁垒                           | 0.50     | —                       | 1            | 0.716 (154)         | unvalidated            |
+
+Recorded in `packages/analysis/src/data/talentMitigationModifiers.ts`. Resolver behind `talentMitigation` (default off): promoted + held for certain + not an ally copy priced separately (`pctOnOthers`) raises pctMin and pctMax; everything else raises pctMax only and names the reason in `unresolved`. Caster attribution today: burst-into-mitigation (roster lookup), killAttempts and counterfactual shape A (self-cast only), the narrow gate (victim). Shape B (missed external) and `abilityProfile` pass no caster, so they only widen. Switch off: S2 every 30 findings `6e3d8b37…` / context `3963531d…`, byte-identical to M3a.
+
 ## Milestones
 
 |            | Scope                                                                                                                                                                                                                                                                                                                                     | Acceptance                                                                                                                                                                                                                                 |

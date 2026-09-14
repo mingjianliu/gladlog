@@ -67,6 +67,7 @@ import * as spellSchools from "@gladlog/analysis/src/data/spellSchools";
 import * as spellTags from "@gladlog/analysis/src/data/spellTags";
 import * as spellTargeting from "@gladlog/analysis/src/data/spellTargeting";
 import * as syncWindowPrior from "@gladlog/analysis/src/data/syncWindowPrior";
+import { PRODUCTION_FACT_CONFIG } from "@gladlog/analysis/src/facts/factProviderConfig";
 import * as auraIntervals from "@gladlog/analysis/src/utils/auraIntervals";
 import * as bracketKey from "@gladlog/analysis/src/utils/bracketKey";
 import * as buffDuration from "@gladlog/analysis/src/utils/buffDuration";
@@ -388,6 +389,11 @@ const INDEX: PredicateRow[] = [
   {
     file: `${A}/utils/talentOwnership.ts`,
     symbol: "talentOwnershipOf",
+    mod: talentOwnership,
+  },
+  {
+    file: `${A}/utils/talentOwnership.ts`,
+    symbol: "talentModifierOwnershipOf",
     mod: talentOwnership,
   },
   {
@@ -1913,6 +1919,7 @@ const FLAG_REGISTRIES: Record<string, Record<string, boolean>> = {
   CANDIDATE_TYPE_FLAGS,
   DISPEL_FEATURE_FLAGS,
   HEALER_OFFENSE_FLAGS,
+  PRODUCTION_FACT_CONFIG,
 };
 
 const FLAG_BEGIN = "<!-- flag-state:begin -->";

@@ -25,7 +25,7 @@
 import { ensureAnalysisData } from "@gladlog/analysis";
 import { MITIGATION_TABLE } from "@gladlog/analysis/src/data/mitigationData";
 import { buildAuraIntervals } from "@gladlog/analysis/src/utils/auraIntervals";
-import { talentOwnershipOf } from "@gladlog/analysis/src/utils/talentOwnership";
+import { talentModifierOwnershipOf } from "@gladlog/analysis/src/utils/talentOwnership";
 import { GladLogParser, type GladMatch, parseLine } from "@gladlog/parser";
 import { type ICombatUnit, toLegacyMatch } from "@gladlog/parser-compat";
 import { mkdirSync, readFileSync, writeFileSync } from "fs";
@@ -282,7 +282,9 @@ for (const f of files) {
           if (c.aura !== ids[0] || (c.school & r.school) === 0) continue;
           const iv = act[0]!;
           const caster = byName.get(iv.srcUnitName) ?? u;
-          const own = talentOwnershipOf(caster, c.talent);
+          // the resolver's own predicate (shared-predicate rule); the plain
+          // talentOwnershipOf reads other specs' talents as baseline (run 1)
+          const own = talentModifierOwnershipOf(caster, c.talent);
           const key = `${c.aura}|${c.talent}`;
           const bk = buckets.get(key) ?? {
             yes: new Map(),

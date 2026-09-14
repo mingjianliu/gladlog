@@ -110,6 +110,7 @@ import {
   SPELL_EFFECT_OVERRIDES,
 } from "./spellEffectOverrides";
 import spellIdLists from "./spellIdLists";
+import { TALENT_MITIGATION_MODIFIERS } from "./talentMitigationModifiers";
 import { trinketSpellIds } from "./spellTags";
 
 /** What kind of id the list holds — decides which corpus event stream can vouch for it. */
@@ -454,10 +455,28 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   // lengthen them. A renumbered talent id would silently stop lengthening the
   // buff and the expiry line would quietly go back to being wrong, which is
   // exactly what this table was created to fix — so both sets are scanned.
-  t("BUFF_DURATION_TALENT_MODIFIERS", "data/spellEffectData.ts", "mixed", () => [
-    ...keys(BUFF_DURATION_TALENT_MODIFIERS),
-    ...Object.values(BUFF_DURATION_TALENT_MODIFIERS).flatMap((mods) =>
-      mods.map((m) => m.talentSpellId),
-    ),
-  ]),
+  t(
+    "BUFF_DURATION_TALENT_MODIFIERS",
+    "data/spellEffectData.ts",
+    "mixed",
+    () => [
+      ...keys(BUFF_DURATION_TALENT_MODIFIERS),
+      ...Object.values(BUFF_DURATION_TALENT_MODIFIERS).flatMap((mods) =>
+        mods.map((m) => m.talentSpellId),
+      ),
+    ],
+  ),
+  // GH #96 M3b: mitigation aura ids + the talent ids that strengthen them. A
+  // talent never "occurs" in a log on its own (passives are not cast), so the
+  // talent half shows up as zero-occurrence by construction — the aura half is
+  // what rot scanning can check.
+  t(
+    "TALENT_MITIGATION_MODIFIERS",
+    "data/talentMitigationModifiers.ts",
+    "mixed",
+    () => [
+      ...TALENT_MITIGATION_MODIFIERS.map((m) => m.auraSpellId),
+      ...TALENT_MITIGATION_MODIFIERS.map((m) => m.talentSpellId),
+    ],
+  ),
 ];

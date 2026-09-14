@@ -152,6 +152,35 @@ export function talentOwnershipOf(
 }
 
 /**
+ * Ownership of a TALENT MODIFIER (a passive that changes another spell), for
+ * callers that have no spec-keyed whitelist in front of them — GH #96 M3b.
+ *
+ * `talentOwnershipFromTables` step 6 reads "in neither this spec's trees nor
+ * its PvP pool" as a baseline ability → yes. That is right for a spell the
+ * caller already knows belongs to the spec, and wrong for a talent of another
+ * spec: measured 2026-09-13, every one of 302 Barkskin casters (Resto and
+ * Balance included) "held" the Guardian-only Reinforced Fur, and 236 Divine
+ * Protection casters (Holy) "held" the Retribution-only Shield of Vengeance.
+ * A talent is never a baseline ability, so here "not in the spec's trees or
+ * pool" is `no` once the spec's tree is loaded.
+ */
+export function talentModifierOwnershipOf(
+  unit: Pick<ICombatUnit, "spec" | "info" | "spellCastEvents">,
+  talentSpellId: string,
+): TalentOwnership {
+  const specId = parseInt(unit.spec, 10);
+  if (Number.isNaN(specId)) return "unknown";
+  const specTree = getSpecTalentTreeSpellInfo(specId);
+  if (specTree.size === 0) return "unknown";
+  if (
+    !specTree.has(talentSpellId) &&
+    PVP_TALENT_POOL_GENERATED[unit.spec]?.[talentSpellId] === undefined
+  )
+    return "no";
+  return talentOwnershipOf(unit, talentSpellId);
+}
+
+/**
  * Purchased rank of a talent, for modifiers whose DB2 value is stated PER RANK
  * (`BUFF_DURATION_TALENT_MODIFIERS`). Returns 0 when the talent is not held,
  * and — deliberately — also when it IS held but the loadout carries no

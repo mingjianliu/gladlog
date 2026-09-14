@@ -59,6 +59,9 @@ export interface IBurstDefensiveHit {
    * through `resolveMitigation(id, { carrierIsCaster: !appliedByOther })`. Optional so hand-built
    * fixtures stay valid; absent means "the target's own". */
   appliedByOther?: boolean;
+  /** name of the unit that cast the aura (GH #96 M3b: talents belong to the
+   * caster). Optional for hand-built fixtures. */
+  casterName?: string;
 }
 
 export interface IBurstTargetDamage {
@@ -208,6 +211,7 @@ export function analyzeBurstLedger(
           overlapSeconds: Math.round(overlapMs / 100) / 10,
           isImmunity: SPELLS[iv.spellId]?.type === "immunities",
           appliedByOther: iv.srcUnitName !== target.name,
+          casterName: iv.srcUnitName,
         });
       }
       defensivesHit.sort((a, b) => b.overlapSeconds - a.overlapSeconds);
