@@ -16,7 +16,7 @@
  * packages/eval/test/crisisAnswerEvidence.test.ts mutates events after each
  * cutoff and requires field-by-field equality).
  *
- * Sources are the shared predicates only: MITIGATION_TABLE + mitigationPctFor,
+ * Sources are the shared predicates only: resolveMitigation (MITIGATION_TABLE components),
  * abilityProfile (absorbs / immunity / healing-received), ccSpellIds,
  * buildAuraIntervals, getUnitPositionAtTime with the INTERP_MAX_GAP_MS freshness
  * bound. Nothing here is a new spell list; an aura none of them classifies is
@@ -24,9 +24,9 @@
  */
 import { abilityProfile } from "@gladlog/analysis/src/data/abilityProfile";
 import {
-  MITIGATION_TABLE,
-  mitigationPctFor,
-} from "@gladlog/analysis/src/data/mitigationData";
+  resolveMitigation,
+  strongestComponentPct,
+} from "@gladlog/analysis/src/data/mitigationComponents";
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
 import { ccSpellIds } from "@gladlog/analysis/src/data/spellTags";
 import { buildAuraIntervals } from "@gladlog/analysis/src/utils/auraIntervals";
@@ -164,8 +164,11 @@ const nameOf = (id: string, raw: string): string =>
 function functionOf(spellId: string): string[] {
   const p = abilityProfile(spellId);
   const f: string[] = [];
-  if (MITIGATION_TABLE[spellId])
-    f.push(`${MITIGATION_TABLE[spellId]!.pct}% mitigation`);
+  const selfRes = resolveMitigation(spellId, { carrierIsCaster: true });
+  if (selfRes)
+    f.push(
+      `${strongestComponentPct(selfRes, { includeImmunity: true })!.pctMin}% mitigation`,
+    );
   // Target-side immunity flags on enemy-directed spells (Cyclone immunes its
   // victim) are not protection for the caster — abilityProfile records that
   // semantic trap itself.
@@ -291,7 +294,7 @@ export function buildCrisisAnswerEvidence(
       spellId: iv.spellId,
       srcName: src,
     };
-    const mit = MITIGATION_TABLE[iv.spellId];
+    const mit = resolveMitigation(iv.spellId, { carrierIsCaster: fromSelf });
     const prof = abilityProfile(iv.spellId);
     const srcIsEnemy = [...enemyIds].some((id) => nameById.get(id) === src);
     if (
@@ -308,13 +311,13 @@ export function buildCrisisAnswerEvidence(
       continue;
     }
     if (!srcIsEnemy && mit) {
-      const pct = mitigationPctFor(mit, fromSelf);
+      const pct = strongestComponentPct(mit, { includeImmunity: true })!.pctMin;
       items.push({
         ...base,
         kind: "mitigation",
         amount: pct,
         text: `${nm} (${pct}% mitigation) from ${who}, applied ${relS(atT.round, appliedMs)}`,
-        source: "MITIGATION_TABLE + mitigationPctFor",
+        source: "resolveMitigation (MITIGATION_TABLE components)",
       });
       continue;
     }

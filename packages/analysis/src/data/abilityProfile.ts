@@ -29,7 +29,10 @@
  * 那是必须逐处量化的改动面,不是一次性替换。
  */
 import { ABILITY_EFFECTS_GENERATED } from "./abilityEffectsGenerated";
-import { MITIGATION_TABLE } from "./mitigationData";
+import {
+  resolveMitigation,
+  strongestComponentPct,
+} from "./mitigationComponents";
 import {
   immunityMechanics,
   immunitySchoolMask,
@@ -82,7 +85,14 @@ const THROUGHPUT_ROLE_IDS = new Set<string>(
 
 export function abilityProfile(spellId: string): AbilityProfile {
   const effects = ABILITY_EFFECTS_GENERATED[spellId];
-  const mitigation = MITIGATION_TABLE[spellId];
+  // GH #96 M3a: through the component resolver (self-cast profile).
+  const mitigationRes = resolveMitigation(spellId, { carrierIsCaster: true });
+  const mitigation = mitigationRes
+    ? {
+        pct: strongestComponentPct(mitigationRes, { includeImmunity: true })!
+          .pctMin,
+      }
+    : undefined;
   return {
     school: spellSchoolMask(spellId),
     reachesAlly: reachesAlly(spellId),
@@ -146,11 +156,13 @@ export function isSurvivalWall(spellId: string): boolean {
  * runtime predicate. Same lesson as official-data-over-heuristics: official
  * fields must be measured before trusted.
  */
-export const KW_MAJOR_DEFENSIVE_IDS: ReadonlySet<string> = new Set([
-  ...((spellIdListsData as { externalOrBigDefensiveSpellIds?: string[] })
-    .externalOrBigDefensiveSpellIds ?? []),
-  "473909", // Ancient of Lore (GH #44: official 30%)
-].filter((id) => id !== "200183")); // Apotheosis dropped
+export const KW_MAJOR_DEFENSIVE_IDS: ReadonlySet<string> = new Set(
+  [
+    ...((spellIdListsData as { externalOrBigDefensiveSpellIds?: string[] })
+      .externalOrBigDefensiveSpellIds ?? []),
+    "473909", // Ancient of Lore (GH #44: official 30%)
+  ].filter((id) => id !== "200183"),
+); // Apotheosis dropped
 
 /** Same floor the kill-window state machine has always applied — hoisted from
  * offensiveWindows.ts's literal so scan/product/gate share one number. */

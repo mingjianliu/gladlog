@@ -1,10 +1,6 @@
 import { ICombatUnit } from "@gladlog/parser-compat";
 
-import {
-  IMitigationEntry,
-  MITIGATION_TABLE,
-  mitigationPctFor,
-} from "../data/mitigationData";
+import { resolveMitigation } from "../data/mitigationComponents";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import spellIdLists from "../data/spellIdLists";
 import { absorbContributionsInWindow } from "./absorbShields";
@@ -270,9 +266,13 @@ export function computeMitigationAudit(
     const { overlapFrom, overlapTo } = iv;
     const activeOverlapS = round1(overlapTo - overlapFrom);
     const spellName = getEnglishSpellName(iv.spellId, iv.spellName);
-    const entry: IMitigationEntry | undefined = MITIGATION_TABLE[iv.spellId];
+    // GH #96 M3a: every pricing goes through the component resolver; carrier =
+    // an ally-applied Flameshaper Obsidian Scales is 15 %, the Evoker's own 30 %.
+    const res = resolveMitigation(iv.spellId, {
+      carrierIsCaster: iv.srcUnitName === victim.name,
+    });
 
-    if (!entry) {
+    if (!res) {
       // Off-table (including NO_MITIGATION_IDS; the two are mutually
       // exclusive). Absorb shields are the one off-table class that CAN be
       // measured rather than guessed: the log records what each shield actually
@@ -304,48 +304,73 @@ export function computeMitigationAudit(
       });
       continue;
     }
-    if (entry.positional) continue; // Darkness class: positional conditions are not modelled this round, skip without a row
+    if (res.positional) continue; // Darkness class: positional conditions are not modelled this round, skip without a row
 
-    // Priced on the carrier: an ally-applied Flameshaper Obsidian Scales is
-    // 15 %, the Evoker's own is 30 % (one aura id, `pctOnOthers`).
-    const pct = mitigationPctFor(entry, iv.srcUnitName === victim.name);
+    for (const comp of res.components) {
+      // Shape A backs ACTIVE mitigation out of what landed: observed × p / (1 − p).
+      // M3a: one component per entry, so this loop runs once and is identical to
+      // the table read; the lower bound is the conservative "blocked" claim.
+      const pct = comp.pctMin;
 
-    const observed = windowDamage(
-      victim,
-      overlapFrom,
-      overlapTo,
-      entry.schoolMask,
-      combat.startTime,
-    );
+      const observed = windowDamage(
+        victim,
+        overlapFrom,
+        overlapTo,
+        comp.schoolMask,
+        combat.startTime,
+      );
 
-    if (pct >= 100) {
-      // Immunity: the divisor is zero — never back-compute; report the coverage
-      // seconds and the damage observed during it, as-is.
+      if (pct >= 100) {
+        // Immunity: the divisor is zero — never back-compute; report the coverage
+        // seconds and the damage observed during it, as-is.
+        rows.push({
+          spellId: iv.spellId,
+          spellName,
+          kind: "immunity",
+          activeOverlapS,
+          damageTakenDuringImmunity: observed,
+        });
+        continue;
+      }
+
+      const blockedAmount = Math.round((observed * pct) / (100 - pct));
       rows.push({
         spellId: iv.spellId,
         spellName,
-        kind: "immunity",
+        kind: "arith",
         activeOverlapS,
-        damageTakenDuringImmunity: observed,
+        blockedAmount,
+        blockedPctMaxHp:
+          maxHp !== null && maxHp > 0
+            ? round1((blockedAmount / maxHp) * 100)
+            : undefined,
       });
-      continue;
     }
-
-    const blockedAmount = Math.round((observed * pct) / (100 - pct));
-    rows.push({
-      spellId: iv.spellId,
-      spellName,
-      kind: "arith",
-      activeOverlapS,
-      blockedAmount,
-      blockedPctMaxHp:
-        maxHp !== null && maxHp > 0
-          ? round1((blockedAmount / maxHp) * 100)
-          : undefined,
-    });
   }
 
   return { rows, netDamage, maxHp };
+}
+
+/** Shape B / narrow gate arithmetic, per component: Σ observed(school) × pctMin. */
+function savedByComponents(
+  res: NonNullable<ReturnType<typeof resolveMitigation>>,
+  victim: ICombatUnit,
+  windowStartS: number,
+  deathS: number,
+  combat: { startTime: number },
+): number {
+  let saved = 0;
+  for (const comp of res.components) {
+    const observed = windowDamage(
+      victim,
+      windowStartS,
+      deathS,
+      comp.schoolMask,
+      combat.startTime,
+    );
+    saved += (observed * comp.pctMin) / 100;
+  }
+  return Math.round(saved);
 }
 
 export interface ICounterfactualHit {
@@ -411,17 +436,12 @@ export function computeUnusedSelfCounterfactuals(
   const hits: ICounterfactualHit[] = [];
   for (const cd of victimCds) {
     if (!cdAvailableAt(cd, deathS)) continue;
-    const entry = MITIGATION_TABLE[cd.spellId];
-    if (!entry || entry.positional) continue;
+    // GH #96 M3a: hypothetical ADDED protection: observed × p per component
+    // (own cooldown → the victim carries it). Lower bound: "would have saved".
+    const res = resolveMitigation(cd.spellId, { carrierIsCaster: true });
+    if (!res || res.positional) continue;
 
-    const observed = windowDamage(
-      victim,
-      windowStartS,
-      deathS,
-      entry.schoolMask,
-      combat.startTime,
-    );
-    const saved = Math.round((observed * entry.pct) / 100);
+    const saved = savedByComponents(res, victim, windowStartS, deathS, combat);
     const hit = decisiveHitFor(
       cd.spellId,
       cd.spellName,
@@ -452,17 +472,13 @@ export function computeMissedExternalCounterfactuals(
 
   const hits: ICounterfactualHit[] = [];
   for (const m of missedExternals) {
-    const entry = MITIGATION_TABLE[m.spellId];
-    if (!entry || entry.positional) continue; // skip off-table / positional
+    // GH #96 M3a: an external is carried by the victim but cast by somebody
+    // else. Before M3a this path read `entry.pct` raw (ignoring pctOnOthers);
+    // no entry with pctOnOthers is an external today, so output is unchanged.
+    const res = resolveMitigation(m.spellId, { carrierIsCaster: false });
+    if (!res || res.positional) continue; // skip off-table / positional
 
-    const observed = windowDamage(
-      victim,
-      windowStartS,
-      deathS,
-      entry.schoolMask,
-      combat.startTime,
-    );
-    const saved = Math.round((observed * entry.pct) / 100);
+    const saved = savedByComponents(res, victim, windowStartS, deathS, combat);
     const hit = decisiveHitFor(
       m.spellId,
       m.spellName,

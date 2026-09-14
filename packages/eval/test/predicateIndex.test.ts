@@ -57,7 +57,7 @@ import * as dispelVerdicts from "@gladlog/analysis/src/data/dispelVerdicts";
 import * as healerSaveCd from "@gladlog/analysis/src/data/healerSaveCd";
 import * as healingVerdicts from "@gladlog/analysis/src/data/healingVerdicts";
 import * as kickPriorityPrior from "@gladlog/analysis/src/data/kickPriorityPrior";
-import * as mitigationData from "@gladlog/analysis/src/data/mitigationData";
+import * as mitigationComponents from "@gladlog/analysis/src/data/mitigationComponents";
 import * as outcomeRefs from "@gladlog/analysis/src/data/outcomeRefs";
 import * as racialAbilities from "@gladlog/analysis/src/data/racialAbilities";
 import * as spellCategories from "@gladlog/analysis/src/data/spellCategories";
@@ -609,9 +609,9 @@ const INDEX: PredicateRow[] = [
     mod: counterfactual,
   },
   {
-    file: `${A}/data/mitigationData.ts`,
-    symbol: "mitigationPctFor",
-    mod: mitigationData,
+    file: `${A}/data/mitigationComponents.ts`,
+    symbol: "resolveMitigation",
+    mod: mitigationComponents,
   },
   {
     file: `${A}/utils/cooldowns.ts`,

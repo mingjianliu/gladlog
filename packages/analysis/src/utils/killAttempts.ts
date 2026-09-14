@@ -64,11 +64,15 @@ import {
 } from "@gladlog/parser-compat";
 
 import { CandidateEvent } from "../analysis/types";
-import { MITIGATION_TABLE, mitigationPctFor } from "../data/mitigationData";
+import {
+  resolveMitigation,
+  strongestComponentPct,
+} from "../data/mitigationComponents";
+import { MITIGATION_TABLE } from "../data/mitigationData";
 import { ATTEMPT_INTO_TRINKET_OUTCOME_REF } from "../data/outcomeRefs";
 import spellIdListsData from "../data/spellIdLists";
 import { burstCastSpan, KILL_CREDIT_SLACK_S } from "./burstLedger";
-import { analyzeOutgoingCCChains, DRLevel,drResetMsAt } from "./drAnalysis";
+import { analyzeOutgoingCCChains, DRLevel, drResetMsAt } from "./drAnalysis";
 import { reconstructEnemyCDTimeline } from "./enemyCDs";
 import {
   getHpPercentAtTime,
@@ -96,7 +100,7 @@ const IMMUNITY_IDS = new Set<string>(
 
 /** Floor for "a real defensive": the same 20 % door as the kill-opportunity
  * gated tier (WALL_IN_HAND_MIT_IDS). Applied twice — to the table value when
- * building MITIGATION_AURA_IDS, and again per aura through `mitigationPctFor`
+ * building MITIGATION_AURA_IDS, and again per aura through `resolveMitigation`
  * so a talent-shared copy on an ally (Obsidian Scales 15 %) does not count as
  * the target having popped a 30 % wall. */
 const MITIGATION_AURA_MIN_PCT = 20;
@@ -585,10 +589,13 @@ function attributeFailure(
       !poppedIds.has(aura.spellId) &&
       // A wall applied ON the target by somebody else (Flameshaper Obsidian
       // Scales on an ally, 15 %) is not the target popping a defensive.
-      mitigationPctFor(
-        MITIGATION_TABLE[aura.spellId]!,
-        aura.srcUnitId === target.id,
-      ) >= MITIGATION_AURA_MIN_PCT
+      // GH #96 M3a: priced through the component resolver (lower bound).
+      (strongestComponentPct(
+        resolveMitigation(aura.spellId, {
+          carrierIsCaster: aura.srcUnitId === target.id,
+        })!,
+        { includeImmunity: true },
+      )?.pctMin ?? 0) >= MITIGATION_AURA_MIN_PCT
     ) {
       poppedIds.add(aura.spellId);
       defensivePopped.push(aura.spellName ?? aura.spellId);

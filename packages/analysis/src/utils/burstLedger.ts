@@ -56,7 +56,7 @@ export interface IBurstDefensiveHit {
   isImmunity: boolean;
   /** true = the aura was applied by a unit OTHER than the target (a talent-shared
    * wall such as Flameshaper Obsidian Scales on an ally). Consumers price it
-   * through `mitigationPctFor(entry, !appliedByOther)`. Optional so hand-built
+   * through `resolveMitigation(id, { carrierIsCaster: !appliedByOther })`. Optional so hand-built
    * fixtures stay valid; absent means "the target's own". */
   appliedByOther?: boolean;
 }

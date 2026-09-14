@@ -18,7 +18,10 @@ import {
 import { costNormPhrase } from "../data/curatedAbilityFacts";
 import { CORPUS_OBSERVED_DISPEL_IDS } from "../data/dispelObservedGenerated";
 import { lookupKickPriorityPrior } from "../data/kickPriorityPrior";
-import { MITIGATION_TABLE, mitigationPctFor } from "../data/mitigationData";
+import {
+  resolveMitigation,
+  strongestComponentPct,
+} from "../data/mitigationComponents";
 import {
   type DecisionRecord,
   isDecisionTraceActive,
@@ -2247,18 +2250,25 @@ function dpsOwnerEvents(
       const hits = t.defensivesHit
         .filter((d) => !d.isImmunity)
         .map((d) => {
-          const entry = MITIGATION_TABLE[d.spellId];
+          // GH #96 M3a: priced through the component resolver (door = the
+          // strongest component's lower bound; immunity components included,
+          // exactly as the table read did — `isImmunity` above is the
+          // ledger's own exclusion).
+          const res = resolveMitigation(d.spellId, {
+            carrierIsCaster: !d.appliedByOther,
+          });
+          const strongest = res
+            ? strongestComponentPct(res, { includeImmunity: true })
+            : undefined;
           return {
             d,
-            entry,
-            pct: entry ? mitigationPctFor(entry, !d.appliedByOther) : 0,
+            res,
+            pct: strongest?.pctMin ?? 0,
           };
         })
         .filter(
-          ({ entry, pct }) =>
-            !!entry &&
-            !entry.positional &&
-            pct >= BURST_INTO_MITIGATION_MIN_PCT,
+          ({ res, pct }) =>
+            !!res && !res.positional && pct >= BURST_INTO_MITIGATION_MIN_PCT,
         )
         .sort((a, c) => c.pct - a.pct);
       const hit = hits[0];
@@ -2266,12 +2276,17 @@ function dpsOwnerEvents(
         fromSeconds: b.fromSeconds,
         target: t.unitId,
         defensivesHit: t.defensivesHit.map((d) => {
-          const entry = MITIGATION_TABLE[d.spellId];
+          const res = resolveMitigation(d.spellId, {
+            carrierIsCaster: !d.appliedByOther,
+          });
           return {
             spellId: d.spellId,
             isImmunity: d.isImmunity,
             appliedByOther: !!d.appliedByOther,
-            pct: entry ? mitigationPctFor(entry, !d.appliedByOther) : null,
+            pct: res
+              ? (strongestComponentPct(res, { includeImmunity: true })
+                  ?.pctMin ?? null)
+              : null,
           };
         }),
       });
