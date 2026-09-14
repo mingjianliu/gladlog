@@ -170,9 +170,11 @@ const files = readFileSync(manifest, "utf8")
   .filter(Boolean)
   .filter((_, i) => i % every === 0);
 
+/** candidate → ownership → unit (match|round|caster) → normalised ratios */
+type UnitHits = Map<string, number[]>;
 const buckets = new Map<
   string,
-  { yes: number[]; no: number[]; unknown: number[] }
+  { yes: UnitHits; no: UnitHits; unknown: UnitHits }
 >();
 let rounds = 0;
 for (const f of files) {
@@ -282,8 +284,15 @@ for (const f of files) {
           const caster = byName.get(iv.srcUnitName) ?? u;
           const own = talentOwnershipOf(caster, c.talent);
           const key = `${c.aura}|${c.talent}`;
-          const bk = buckets.get(key) ?? { yes: [], no: [], unknown: [] };
-          bk[own].push(r.ratio / b);
+          const bk = buckets.get(key) ?? {
+            yes: new Map(),
+            no: new Map(),
+            unknown: new Map(),
+          };
+          const unit = `${f}|${rounds}|${caster.id}`;
+          const hits = bk[own].get(unit) ?? [];
+          hits.push(r.ratio / b);
+          bk[own].set(unit, hits);
           buckets.set(key, bk);
         }
       }
@@ -291,20 +300,60 @@ for (const f of files) {
   }
 }
 
+// Predeclared D7 band (design doc, written before this run): unit = match /
+// round / caster with >= 3 hits, value = unit median; estimate = median of unit
+// values with a 90 % percentile bootstrap (1,000 resamples, fixed seed);
+// promote iff the whole interval is within +-0.04 of expected and n >= 20.
+const MIN_UNIT_HITS = 3;
+const MIN_UNITS = 20;
+const BAND = 0.04;
+let seed = 20260913;
+const rand = () => {
+  seed = (seed * 1664525 + 1013904223) % 4294967296;
+  return seed / 4294967296;
+};
+const unitValues = (m: UnitHits) =>
+  [...m.values()].filter((h) => h.length >= MIN_UNIT_HITS).map(median);
+const bootstrap = (xs: number[]) => {
+  if (xs.length < 2) return null;
+  const ms: number[] = [];
+  for (let i = 0; i < 1000; i++) {
+    const sample = xs.map(() => xs[Math.floor(rand() * xs.length)]!);
+    ms.push(median(sample));
+  }
+  ms.sort((x, y) => x - y);
+  return { lo: ms[49]!, hi: ms[949]! };
+};
+const r3 = (x: number) => Math.round(x * 1000) / 1000;
 const out = CANDIDATES.map((c) => {
   const bk = buckets.get(`${c.aura}|${c.talent}`) ?? {
-    yes: [],
-    no: [],
-    unknown: [],
+    yes: new Map(),
+    no: new Map(),
+    unknown: new Map(),
   };
-  const r3 = (x: number) => Math.round(x * 1000) / 1000;
+  const expectedWith = 1 - (c.basePct + c.modPct) / 100;
+  const holders = unitValues(bk.yes);
+  const ci = bootstrap(holders);
+  const promoted =
+    holders.length >= MIN_UNITS &&
+    ci !== null &&
+    ci.lo >= expectedWith - BAND &&
+    ci.hi <= expectedWith + BAND;
+  const summary = (xs: number[]) => ({
+    units: xs.length,
+    median: xs.length ? r3(median(xs)) : null,
+  });
   return {
     ...c,
-    expectedWith: r3(1 - (c.basePct + c.modPct) / 100),
+    expectedWith: r3(expectedWith),
     expectedWithout: r3(1 - c.basePct / 100),
-    holders: { n: bk.yes.length, median: r3(median(bk.yes)) },
-    nonHolders: { n: bk.no.length, median: r3(median(bk.no)) },
-    unknown: { n: bk.unknown.length, median: r3(median(bk.unknown)) },
+    holders: {
+      ...summary(holders),
+      ci90: ci ? { lo: r3(ci.lo), hi: r3(ci.hi) } : null,
+    },
+    nonHolders: summary(unitValues(bk.no)),
+    unknown: summary(unitValues(bk.unknown)),
+    promoted,
   };
 });
 const dir = join(
@@ -319,5 +368,5 @@ writeFileSync(
 );
 for (const r of out)
   console.log(
-    `${r.name.padEnd(34)} +${r.talentName.padEnd(18)} expect with ${r.expectedWith} / without ${r.expectedWithout} | holders ${r.holders.median} (n ${r.holders.n}) non ${r.nonHolders.median} (n ${r.nonHolders.n}) unknown ${r.unknown.median} (n ${r.unknown.n})`,
+    `${r.name.padEnd(34)} +${r.talentName.padEnd(18)} expect ${r.expectedWith} (without ${r.expectedWithout}) | holders ${r.holders.median} ci90 ${r.holders.ci90 ? `${r.holders.ci90.lo}-${r.holders.ci90.hi}` : "-"} units ${r.holders.units} | non ${r.nonHolders.median} units ${r.nonHolders.units} | unknown ${r.unknown.median} units ${r.unknown.units} | ${r.promoted ? "PROMOTE" : "stay unvalidated"}`,
   );

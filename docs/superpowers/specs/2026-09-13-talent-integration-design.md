@@ -127,6 +127,16 @@ Fixtures:
 - **Thresholds:** decision uncertainty near a coaching threshold is handled by withholding the claim, never by the validation tolerance.
 - **Unvalidated rows** stay in the inventory and only widen ranges.
 
+**Predeclared band for M3b mitigation modifiers (written 2026-09-13, before `mitigationTalentScan` runs):**
+
+- **Quantity:** the per-hit pass-through ratio (amount + absorbed + blocked) / baseAmount, normalised by the same target's median over no-table-aura hits in the same round and school class. Non-crit hits only, with the candidate aura as the only table aura up.
+- **Unit:** one (match, round, caster of the aura) with ≥ 3 qualifying hits; the unit's value is its median. Repeated hits from one unit are never counted as independent samples.
+- **Estimate:** median of holder unit values, with a 90 % percentile bootstrap interval (1,000 resamples over units, fixed seed).
+- **Expected value for holders:** 1 − (base % + modifier %) / 100, where the modifier adds percentage points to the component it targets.
+- **Promotion:** the whole interval lies within ± 0.04 of the expected value, n ≥ 20 holder units, and the rank / activation for the talent are resolved (all 12 candidates are single-rank passives in the inventory).
+- **Failure:** the row stays unvalidated; the resolver may only widen its range with it (pctMax), never raise pctMin.
+- **Non-holders** are reported when present but are never required.
+
 ## Milestones
 
 |            | Scope                                                                                                                                                                                                                                                                                                                                     | Acceptance                                                                                                                                                                                                                                 |
