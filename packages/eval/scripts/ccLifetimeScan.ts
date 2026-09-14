@@ -193,7 +193,10 @@ for (const id of [...tracked].sort(
   const talentExplained =
     rawDisagree &&
     (CC_DURATION_TALENT_MODIFIERS[id] ?? []).some(
-      (m) => Math.abs(mode! - predicate! * (1 + m.pct / 100)) < BIN_S,
+      (m) =>
+        Math.abs(
+          mode! - (predicate! + (m.addSeconds ?? 0)) * (1 + (m.pct ?? 0) / 100),
+        ) < BIN_S,
     );
   const disagree = rawDisagree && !talentExplained;
   const blank = db2 === undefined;

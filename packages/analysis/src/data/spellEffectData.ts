@@ -170,8 +170,22 @@ export function kickLockoutSeconds(kickSpellId: string): number {
  */
 export const CC_DURATION_TALENT_MODIFIERS: Record<
   string,
-  ReadonlyArray<{ talentSpellId: string; pct: number; note: string }>
+  ReadonlyArray<{
+    talentSpellId: string;
+    /** DB2 aura 108 (percent) */
+    pct?: number;
+    /** DB2 aura 107 (flat ms) in seconds, added before percentages */
+    addSeconds?: number;
+    note: string;
+  }>
 > = {
+  "132168": [
+    {
+      talentSpellId: "429639",
+      addSeconds: 1,
+      note: "Boneshaker — DB2 aura 107 +1000 ms on Shockwave (46968 / stun aura 132168), Warrior hero tree for Arms and Protection (choice node, maxRanks 1); durationTalentScan (GH #96 M5, rule predeclared a76aabda), S2 archive every 5: 3,627 files / 7,387 rounds: 76 of 97 holder cells at 3.0 s against 891 of 1,065 non-holder cells at 2.0 s; 2 + 1 = 3.",
+    },
+  ],
   "5246": [
     {
       talentSpellId: "1243660",
@@ -441,6 +455,24 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
       untalentedBaseSeconds: 6,
       addSeconds: 2,
       note: "Lone Survivor — DB2 aura 107 +2000 ms, Hunter class tree (maxRanks 1), mask covers the spell; corpus 254 caster-cells at 8.0 s hold it 100 % vs 29 at 6.0 s holding it 0 % (6 + 2 = 8). Spec-gated because Marksmanship is a THIRD group entirely: 108 cells at 3.0 s that hold the talent 99 % and are unaffected by it — that spec's own duration is unexplained and stays on the table value.",
+    },
+  ],
+  "288613": [
+    {
+      talentSpellId: "1253830",
+      specs: ["254"],
+      untalentedBaseSeconds: 15,
+      addSeconds: 2,
+      note: "Can't Miss, Won't Miss — DB2 aura 107 +2000 ms on Trueshot (effect 2; effect 3 is the Takedown row already registered), Hunter hero tree (maxRanks 1); durationTalentScan (GH #96 M5, rule predeclared a76aabda), S2 archive every 5: 3,627 files / 7,387 rounds: 58 of 58 holder cells at 17.0 s, non-holders 27 cells at 15.0 s; 15 + 2 = 17.",
+    },
+  ],
+  "265187": [
+    {
+      talentSpellId: "1276748",
+      specs: ["266"],
+      untalentedBaseSeconds: 15,
+      addSeconds: 5,
+      note: "Reign of Tyranny — DB2 aura 107 +5000 ms, Demonology spec tree (maxRanks 1); durationTalentScan (GH #96 M5, rule predeclared a76aabda), S2 archive every 5: 3,627 files / 7,387 rounds: 40 of 40 holder cells at 20.0 s, non-holders 76 cells at 15.0 s; 15 + 5 = 20.",
     },
   ],
   "97463": [

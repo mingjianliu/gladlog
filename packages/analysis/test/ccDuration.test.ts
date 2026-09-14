@@ -49,4 +49,36 @@ describe("ccFullDurationForCaster — 天赋条件时长", () => {
     });
     expect(ccFullDurationForCaster("118", talented)).toBe(6); // Polymorph: no modifier
   });
+
+  // GH #96 M5: Boneshaker 429639 — flat +1 s on the Shockwave stun (DB2 aura
+  // 107), a hero talent Arms / Protection can take and Fury cannot.
+  const SHOCKWAVE_STUN = "132168";
+  const BONESHAKER = "429639";
+
+  it("Boneshaker 持有者:震荡波眩晕 2s + 1s = 3s(平值秒数先加)", () => {
+    const arms = makeUnit("w4", {
+      spec: CombatUnitSpec.Warrior_Arms,
+      info: { talents: [RESONANT_VOICE_TALENT], pvpTalents: [] },
+      // cast evidence is the ownership predicate's first rule; it stands in for
+      // a hero-tree loadout here so the test pins the arithmetic, not the tree
+      spellCastEvents: [
+        {
+          spellId: BONESHAKER,
+          timestamp: 0,
+          logLine: { event: "SPELL_CAST_SUCCESS" },
+        },
+      ],
+    });
+    expect(ccFullDurationForCaster(SHOCKWAVE_STUN, arms)).toBe(3);
+  });
+
+  it("狂怒战士:Boneshaker 不在狂怒天赋树里 → 不延长(原谓词会误判为 yes)", () => {
+    const fury = makeUnit("w5", {
+      spec: CombatUnitSpec.Warrior_Fury,
+      info: { talents: [RESONANT_VOICE_TALENT], pvpTalents: [] },
+    });
+    // the trap: baseline-by-elimination
+    expect(talentOwnershipOf(fury, BONESHAKER)).toBe("yes");
+    expect(ccFullDurationForCaster(SHOCKWAVE_STUN, fury)).toBe(2);
+  });
 });

@@ -30,6 +30,13 @@
  *    official number regardless);
  *  - otherwise: NOT PROMOTED, with the reason (few holders / holders at base /
  *    holders elsewhere / reduction / value 0 = scripted amount).
+ * Cast → aura alias (added after run 1, before run 2; the rule above is
+ * unchanged): 13 targets are CAST ids whose aura carries a different id
+ * (Rallying Cry 97462 → 97463, Darkness 196718 → 209426), so run 1 saw no
+ * cells for them. When the target id itself yields no cells, the scan measures
+ * the aura the caster applies within 300 ms after casting the target, if one
+ * aura holds ≥ 80 % of those co-applications. The alias is printed.
+ *
  * A promotion is a candidate for the hand table; it still needs the rank
  * semantics read from COMBATANT_INFO (rule 4) before an entry is written.
  *
@@ -78,12 +85,14 @@ const CANDIDATES: Candidate[] = (
 const TARGETS = new Set(CANDIDATES.map((c) => c.target));
 
 type Own = "yes" | "no" | "unknown";
-/** candidate index → ownership → cell values */
-const cells = CANDIDATES.map(() => ({
-  yes: [] as number[],
-  no: [] as number[],
-  unknown: [] as number[],
-}));
+/** aura id → cells, each with the caster's ownership of every candidate talent */
+const cellsByAura = new Map<
+  string,
+  Array<{ v: number; own: Record<string, Own> }>
+>();
+/** target cast id → aura id applied by the same caster within 300 ms → count */
+const coApplied = new Map<string, Map<string, number>>();
+const TALENTS = [...new Set(CANDIDATES.map((c) => c.talent))];
 
 function modeOf(h: Map<number, number>): number | null {
   let best = -1;
@@ -131,11 +140,43 @@ for (const f of files) {
     }
     rounds++;
     const hist = new Map<string, Map<number, number>>();
+    // casts of a target id, per caster, for the alias pass
+    const targetCasts = new Map<string, Array<{ t: number; id: string }>>();
+    for (const unit of Object.values(legacy.units) as any[]) {
+      for (const c of unit.spellCastEvents ?? []) {
+        if (c.logLine?.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
+        if (!TARGETS.has(String(c.spellId))) continue;
+        const list = targetCasts.get(unit.id) ?? [];
+        list.push({ t: c.timestamp, id: String(c.spellId) });
+        targetCasts.set(unit.id, list);
+      }
+    }
+    const aliasAuras = new Set<string>();
+    for (const unit of Object.values(legacy.units) as any[]) {
+      for (const e of unit.auraEvents ?? []) {
+        if (e.logLine.event !== LogEvent.SPELL_AURA_APPLIED) continue;
+        if (!e.spellId || e.destUnitId !== unit.id) continue;
+        const casts = targetCasts.get(e.srcUnitId ?? "");
+        if (!casts) continue;
+        const t = e.logLine.timestamp as number;
+        for (const c of casts) {
+          if (t < c.t || t > c.t + 300) continue;
+          const m = coApplied.get(c.id) ?? new Map<string, number>();
+          m.set(e.spellId, (m.get(e.spellId) ?? 0) + 1);
+          coApplied.set(c.id, m);
+          aliasAuras.add(e.spellId);
+        }
+      }
+    }
     for (const unit of Object.values(legacy.units) as any[]) {
       const open = new Map<string, { t: number; clean: boolean }>();
       for (const e of unit.auraEvents ?? []) {
         const spellId = e.spellId;
-        if (!spellId || !TARGETS.has(spellId) || e.destUnitId !== unit.id)
+        if (
+          !spellId ||
+          !(TARGETS.has(spellId) || aliasAuras.has(spellId)) ||
+          e.destUnitId !== unit.id
+        )
           continue;
         const key = `${e.srcUnitId ?? ""}|${spellId}`;
         const ev = e.logLine.event as string;
@@ -167,11 +208,11 @@ for (const f of files) {
       const [srcId, spellId] = key.split("|") as [string, string];
       const caster = legacy.units[srcId];
       if (!caster?.info) continue;
-      CANDIDATES.forEach((c, i) => {
-        if (c.target !== spellId) return;
-        const own: Own = talentModifierOwnershipOf(caster, c.talent);
-        cells[i]![own].push(v);
-      });
+      const own: Record<string, Own> = {};
+      for (const t of TALENTS) own[t] = talentModifierOwnershipOf(caster, t);
+      const list = cellsByAura.get(spellId) ?? [];
+      list.push({ v, own });
+      cellsByAura.set(spellId, list);
     }
   }
 }
@@ -181,13 +222,28 @@ const modal = (xs: number[]) => {
   for (const x of xs) h.set(x, (h.get(x) ?? 0) + 1);
   return [...h].sort((p, q) => q[1] - p[1]);
 };
-const out = CANDIDATES.map((c, i) => {
-  const b = cells[i]!;
+function auraFor(target: string): string | null {
+  if (cellsByAura.get(target)?.length) return target;
+  const m = coApplied.get(target);
+  if (!m) return null;
+  const total = [...m.values()].reduce((x, y) => x + y, 0);
+  const [best, n] = [...m].sort((p, q) => q[1] - p[1])[0] ?? ["", 0];
+  return best && n / total >= 0.8 ? best : null;
+}
+const out = CANDIDATES.map((c) => {
+  const measuredAura = auraFor(c.target);
+  const b = {
+    yes: [] as number[],
+    no: [] as number[],
+    unknown: [] as number[],
+  };
+  for (const cell of measuredAura ? (cellsByAura.get(measuredAura) ?? []) : [])
+    b[cell.own[c.talent]!].push(cell.v);
   const nonModal = modal(b.no)[0];
   const base =
     b.no.length >= 10 && nonModal
       ? nonModal[0]
-      : buffFullDurationForCaster(c.target, undefined);
+      : buffFullDurationForCaster(measuredAura ?? c.target, undefined);
   const expected =
     base === undefined
       ? undefined
@@ -216,6 +272,7 @@ const out = CANDIDATES.map((c, i) => {
   return {
     ...c,
     targetEn: getEnglishSpellName(c.target, ""),
+    measuredAura,
     base,
     expected,
     holders: { cells: b.yes.length, near, top: modal(b.yes).slice(0, 3) },
@@ -234,5 +291,5 @@ writeFileSync(
 console.log(`files ${files.length} rounds ${rounds}`);
 for (const r of out)
   console.log(
-    `${r.verdict.padEnd(48)} ${r.targetEn || r.targetZh} ${r.target} ← ${r.talentZh} ${r.talent} (${r.aura === "107" ? `${r.value / 1000}s` : `${r.value}%`}) base ${r.base} exp ${r.expected} | holders ${r.holders.cells} near ${r.holders.near} top ${JSON.stringify(r.holders.top)} | non ${r.nonHolders.cells} top ${JSON.stringify(r.nonHolders.top)} | unknown ${r.unknown}`,
+    `${r.verdict.padEnd(48)} ${r.targetEn || r.targetZh} ${r.target}${r.measuredAura && r.measuredAura !== r.target ? `→aura ${r.measuredAura}` : ""} ← ${r.talentZh} ${r.talent} (${r.aura === "107" ? `${r.value / 1000}s` : `${r.value}%`}) base ${r.base} exp ${r.expected} | holders ${r.holders.cells} near ${r.holders.near} top ${JSON.stringify(r.holders.top)} | non ${r.nonHolders.cells} top ${JSON.stringify(r.nonHolders.top)} | unknown ${r.unknown}`,
   );
