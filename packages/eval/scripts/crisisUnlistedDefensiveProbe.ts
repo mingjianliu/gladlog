@@ -28,6 +28,11 @@
  *    none of those. A baseline ability outside `classMetadata` is missed
  *    (stated limitation, counted as "not pressable" in the output).
  *
+ * Review follow-up (codex astra, 2026-09-13): D4 says "relevant" owner
+ * response, and a healer's Reversion on a teammate protects the teammate, not
+ * the endangered healer. The headline now counts only casts on the owner or
+ * with no unit target; casts on another unit are reported separately.
+ *
  * Usage:
  *   npx tsx packages/eval/scripts/crisisUnlistedDefensiveProbe.ts \
  *     --manifest $GLADLOG_EVAL_HOME/corpus/manifest-archive-2026-08-28-newseason.txt [--every 30]
@@ -113,6 +118,7 @@ let rounds = 0;
 let accusable = 0;
 let withUnlisted = 0;
 let withUnpressable = 0;
+let withUnlistedOnOthersOnly = 0;
 const bySpell = new Map<
   string,
   { reason: string; points: number; players: Set<string>; specs: Set<string> }
@@ -152,6 +158,7 @@ for (const f of files) {
         const w0 = p.tMs - RESPONSE_PRE_MS;
         const w1 = p.tMs + RESPONSE_WINDOW_MS;
         const hits = new Map<string, string>();
+        let onOthers = false;
         let sawUnpressable = false;
         for (const c of (owner.spellCastEvents ?? []) as any[]) {
           if (c.logLine?.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
@@ -165,8 +172,16 @@ for (const f of files) {
             unpressable.set(id, (unpressable.get(id) ?? 0) + 1);
             continue;
           }
+          const dest = String(c.destUnitId ?? "");
+          const onOwner =
+            !dest || dest === owner.id || /^0+$/.test(dest) || dest === "nil";
+          if (!onOwner) {
+            onOthers = true;
+            continue;
+          }
           hits.set(id, reason);
         }
+        if (onOthers && !hits.size) withUnlistedOnOthersOnly++;
         if (sawUnpressable && !hits.size) withUnpressable++;
         if (!hits.size) continue;
         withUnlisted++;
@@ -216,6 +231,7 @@ const summary = {
   accusablePoints: accusable,
   withUnlistedProtectiveCast: withUnlisted,
   onlyUnpressableProtectiveCast: withUnpressable,
+  onlyOnAnotherUnit: withUnlistedOnOthersOnly,
   list,
   unpressable: [...unpressable]
     .map(([id, n]) => ({ spellId: id, name: getEnglishSpellName(id, ""), n }))
@@ -233,7 +249,7 @@ writeFileSync(
   JSON.stringify(summary, null, 1),
 );
 console.log(
-  `files ${files.length} rounds ${rounds} accusable ${accusable} with-unlisted-protective ${withUnlisted} only-unpressable ${withUnpressable}`,
+  `files ${files.length} rounds ${rounds} accusable ${accusable} with-unlisted-protective ${withUnlisted} only-unpressable ${withUnpressable} only-on-another-unit ${withUnlistedOnOthersOnly}`,
 );
 for (const r of list)
   console.log(

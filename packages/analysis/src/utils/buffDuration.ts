@@ -4,7 +4,7 @@ import {
   BUFF_DURATION_TALENT_MODIFIERS,
   spellEffectData,
 } from "../data/spellEffectData";
-import { talentOwnershipOf, talentRankOf } from "./talentOwnership";
+import { talentModifierOwnershipOf, talentRankOf } from "./talentOwnership";
 
 /**
  * Hand corrections to `spellEffectData[id].durationSeconds` for buffs whose DB2
@@ -69,7 +69,8 @@ export function buffFullDurationForCaster(
   let seconds = mods[0]!.untalentedBaseSeconds;
   let specBase: number | undefined;
   for (const m of mods)
-    if (m.specBaseSeconds !== undefined && inSpec(m)) specBase = m.specBaseSeconds;
+    if (m.specBaseSeconds !== undefined && inSpec(m))
+      specBase = m.specBaseSeconds;
   if (specBase !== undefined) seconds = specBase;
 
   let mult = 1;
@@ -78,7 +79,10 @@ export function buffFullDurationForCaster(
     // Spec gate first: a modifier for another spec must not even reach the
     // rank-0 fallback below, or it would short-circuit this caster's own one.
     if (!inSpec(m)) continue;
-    if (talentOwnershipOf(caster, m.talentSpellId) === "no") continue;
+    // modifier predicate (GH #96 review): the plain one reads another spec's
+    // talent as baseline "yes", whose rank-0 path below then returns early and
+    // skips this caster's own later modifiers
+    if (talentModifierOwnershipOf(caster, m.talentSpellId) === "no") continue;
     const rank = talentRankOf(caster, m.talentSpellId);
     // Cannot price this talent. Fall back to the most specific thing still
     // known: this spec's own base when the spell has one (a Retribution

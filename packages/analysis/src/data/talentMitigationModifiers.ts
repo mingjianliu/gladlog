@@ -75,9 +75,9 @@ export const TALENT_MITIGATION_MODIFIERS: readonly ITalentMitigationModifier[] =
       talentSpellId: "472707",
       schoolMask: 127,
       modPct: 10,
-      validation: "promoted",
+      validation: "unvalidated",
       evidence:
-        "Survival of the Fittest + Shell Cover: holders 0.667 (0.667–0.667), 230 units, non-holders 0.752 (217), expected 0.65; S2 archive every 30, run 2 2026-09-13",
+        "Survival of the Fittest + Shell Cover: holders 0.667 (0.667–0.667), 230 units, non-holders 0.752 (217), expected 0.65; S2 archive every 30, run 2 2026-09-13. Passed the ±0.04 band but DEMOTED after review (codex astra + agy, 2026-09-13): a zero-width interval at 0.667 that excludes 0.650 says the talent is worth ~8.3 points, not 10, and pricing 35 % can cross a counterfactual decision boundary that 33.3 % does not. Unexplained until the arithmetic reconciles (PvP scaling? a second effect index on the pet?).",
     },
     {
       auraSpellId: "363916",

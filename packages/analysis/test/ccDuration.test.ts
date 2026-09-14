@@ -50,6 +50,24 @@ describe("ccFullDurationForCaster — 天赋条件时长", () => {
     expect(ccFullDurationForCaster("118", talented)).toBe(6); // Polymorph: no modifier
   });
 
+  // GH #96 review (agy): ccFullDurationForCaster applies a modifier once, not
+  // per rank. That is only right while every registered talent is single-rank —
+  // a maxRanks > 1 entry must add rank handling first (buffDuration has it).
+  it("登记的控制时长天赋全部是单级节点(否则要先按级数计价)", async () => {
+    const map = (await import("../src/data/talentIdMap.json")).default as any[];
+    const maxRanks = new Map<string, number>();
+    for (const spec of map)
+      for (const node of [
+        ...(spec.classNodes ?? []),
+        ...(spec.specNodes ?? []),
+        ...(spec.heroNodes ?? []),
+      ])
+        for (const e of node.entries ?? [])
+          if (e.spellId) maxRanks.set(String(e.spellId), node.maxRanks);
+    for (const mods of Object.values(CC_DURATION_TALENT_MODIFIERS))
+      for (const m of mods) expect(maxRanks.get(m.talentSpellId)).toBe(1);
+  });
+
   // GH #96 M5: Boneshaker 429639 — flat +1 s on the Shockwave stun (DB2 aura
   // 107), a hero talent Arms / Protection can take and Fury cannot.
   const SHOCKWAVE_STUN = "132168";

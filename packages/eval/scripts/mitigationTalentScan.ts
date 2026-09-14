@@ -316,6 +316,42 @@ const rand = () => {
 };
 const unitValues = (m: UnitHits) =>
   [...m.values()].filter((h) => h.length >= MIN_UNIT_HITS).map(median);
+/**
+ * Sensitivity check added after review (codex astra / agy, 2026-09-13), NOT
+ * part of the predeclared promotion rule: one Solo Shuffle player contributes
+ * up to six round-units with the same loadout, so resample PLAYERS (file +
+ * caster id) and pool their unit values. Reported beside the declared interval.
+ */
+const clusterValues = (m: UnitHits) => {
+  const byPlayer = new Map<string, number[]>();
+  for (const [unit, hits] of m) {
+    if (hits.length < MIN_UNIT_HITS) continue;
+    const [file, , caster] = unit.split("|");
+    const key = `${file}|${caster}`;
+    const list = byPlayer.get(key) ?? [];
+    list.push(median(hits));
+    byPlayer.set(key, list);
+  }
+  return [...byPlayer.values()];
+};
+// separate stream, so the declared bootstrap's draws stay exactly as committed
+let clusterSeed = 913;
+const clusterRand = () => {
+  clusterSeed = (clusterSeed * 1664525 + 1013904223) % 4294967296;
+  return clusterSeed / 4294967296;
+};
+const clusteredBootstrap = (clusters: number[][]) => {
+  if (clusters.length < 2) return null;
+  const ms: number[] = [];
+  for (let i = 0; i < 1000; i++) {
+    const pooled: number[] = [];
+    for (let j = 0; j < clusters.length; j++)
+      pooled.push(...clusters[Math.floor(clusterRand() * clusters.length)]!);
+    ms.push(median(pooled));
+  }
+  ms.sort((x, y) => x - y);
+  return { lo: ms[49]!, hi: ms[949]! };
+};
 const bootstrap = (xs: number[]) => {
   if (xs.length < 2) return null;
   const ms: number[] = [];
@@ -336,6 +372,8 @@ const out = CANDIDATES.map((c) => {
   const expectedWith = 1 - (c.basePct + c.modPct) / 100;
   const holders = unitValues(bk.yes);
   const ci = bootstrap(holders);
+  const players = clusterValues(bk.yes);
+  const ciPlayers = clusteredBootstrap(players);
   const promoted =
     holders.length >= MIN_UNITS &&
     ci !== null &&
@@ -352,6 +390,14 @@ const out = CANDIDATES.map((c) => {
     holders: {
       ...summary(holders),
       ci90: ci ? { lo: r3(ci.lo), hi: r3(ci.hi) } : null,
+      players: players.length,
+      ci90Players: ciPlayers
+        ? { lo: r3(ciPlayers.lo), hi: r3(ciPlayers.hi) }
+        : null,
+      playerSensitivityInBand:
+        ciPlayers !== null &&
+        ciPlayers.lo >= expectedWith - BAND &&
+        ciPlayers.hi <= expectedWith + BAND,
     },
     nonHolders: summary(unitValues(bk.no)),
     unknown: summary(unitValues(bk.unknown)),
@@ -370,5 +416,5 @@ writeFileSync(
 );
 for (const r of out)
   console.log(
-    `${r.name.padEnd(34)} +${r.talentName.padEnd(18)} expect ${r.expectedWith} (without ${r.expectedWithout}) | holders ${r.holders.median} ci90 ${r.holders.ci90 ? `${r.holders.ci90.lo}-${r.holders.ci90.hi}` : "-"} units ${r.holders.units} | non ${r.nonHolders.median} units ${r.nonHolders.units} | unknown ${r.unknown.median} units ${r.unknown.units} | ${r.promoted ? "PROMOTE" : "stay unvalidated"}`,
+    `${r.name.padEnd(34)} +${r.talentName.padEnd(18)} expect ${r.expectedWith} (without ${r.expectedWithout}) | holders ${r.holders.median} ci90 ${r.holders.ci90 ? `${r.holders.ci90.lo}-${r.holders.ci90.hi}` : "-"} units ${r.holders.units} players ${r.holders.players} ci90-players ${r.holders.ci90Players ? `${r.holders.ci90Players.lo}-${r.holders.ci90Players.hi}` : "-"} ${r.holders.playerSensitivityInBand ? "(in band)" : "(OUT of band)"} | non ${r.nonHolders.median} units ${r.nonHolders.units} | unknown ${r.unknown.median} units ${r.unknown.units} | ${r.promoted ? "PROMOTE" : "stay unvalidated"}`,
   );

@@ -130,6 +130,43 @@ export function getPlayerTalentedSpellInfo(
 }
 
 /**
+ * Is the player's selection on the choice / subtree node that grants
+ * `spellId` actually readable? `getPlayerTalentedSpellInfo` treats a choice
+ * node listed with `id2: 0` as "all entries active", and an `id2` matching no
+ * entry as "none" — both are fine for a kit list and both overclaim for a
+ * modifier that strengthens a fact (GH #96 review, codex astra: an Arms loadout
+ * `{id1: 94789, id2: 0}` read as holding Boneshaker AND Earthquaker).
+ *
+ * Returns false only when the spell sits on a choice / subtree node that the
+ * loadout lists with an entry id that selects no single entry. A spell on a
+ * single node, or a node the loadout does not list at all, returns true (the
+ * ordinary tree verdict applies).
+ */
+export function choiceSelectionResolved(
+  specId: number,
+  talents: ({ id1: number; id2: number; count: number } | null)[],
+  spellId: string,
+): boolean {
+  const specData = nodeMaps[specId];
+  if (!specData) return true;
+  for (const talent of talents) {
+    if (!talent || talent.count === 0) continue;
+    const node =
+      specData.classNodeMap[talent.id1] ??
+      specData.specNodeMap[talent.id1] ??
+      specData.heroNodeMap[talent.id1] ??
+      specData.subtreeNodeMap[talent.id1];
+    if (!node || (node.type !== "choice" && node.type !== "subtree")) continue;
+    const grants = node.entries.some(
+      (e) => "spellId" in e && String(e.spellId) === spellId,
+    );
+    if (!grants) continue;
+    if (!node.entries.some((e) => e.id === talent.id2)) return false;
+  }
+  return true;
+}
+
+/**
  * Purchased rank (`count` in COMBATANT_INFO), per talented spell id — the same
  * node walk as `getPlayerTalentedSpellInfo`, keeping the rank instead of
  * discarding it. Needed by modifiers whose value is stated PER RANK: the DB2

@@ -1,6 +1,7 @@
 import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import {
+  choiceSelectionResolved,
   getPlayerTalentedSpellInfo,
   getPlayerTalentRanks,
   getSpecFreeOrEntrySpellIds,
@@ -177,7 +178,21 @@ export function talentModifierOwnershipOf(
     PVP_TALENT_POOL_GENERATED[unit.spec]?.[talentSpellId] === undefined
   )
     return "no";
-  return talentOwnershipOf(unit, talentSpellId);
+  const verdict = talentOwnershipOf(unit, talentSpellId);
+  // an unreadable choice selection proves neither yes nor no (GH #96 review);
+  // cast evidence this round still wins
+  const cast = (unit.spellCastEvents ?? []).some(
+    (e) =>
+      e.spellId === talentSpellId &&
+      e.logLine.event === LogEvent.SPELL_CAST_SUCCESS,
+  );
+  if (
+    !cast &&
+    unit.info?.talents?.length &&
+    !choiceSelectionResolved(specId, unit.info.talents, talentSpellId)
+  )
+    return "unknown";
+  return verdict;
 }
 
 /**

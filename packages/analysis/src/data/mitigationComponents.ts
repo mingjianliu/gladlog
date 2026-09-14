@@ -133,8 +133,14 @@ function applyTalentModifiers(
       target = { kind: "pct", schoolMask: m.schoolMask, pctMin: 0, pctMax: 0 };
       components.push(target);
     }
-    target.pctMax = Math.min(99, target.pctMax + m.modPct);
-    if (certain) target.pctMin = Math.min(99, target.pctMin + m.modPct);
+    // an uncertain modifier widens the range in its own direction only: a
+    // strengthening one raises pctMax, a weakening one lowers pctMin (GH #96
+    // review, agy — no row is negative today)
+    const clamp = (x: number) => Math.max(0, Math.min(99, x));
+    if (m.modPct >= 0 || certain)
+      target.pctMax = clamp(target.pctMax + m.modPct);
+    if (m.modPct < 0 || certain)
+      target.pctMin = clamp(target.pctMin + m.modPct);
   }
 }
 

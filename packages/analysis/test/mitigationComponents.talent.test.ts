@@ -103,6 +103,24 @@ describe("mitigation resolver talent components (M3b)", () => {
     expect(res.unresolved).toEqual(["talent 900002 on 31224: unvalidated"]);
   });
 
+  it("an uncertain weakening modifier lowers pctMin only (bounds stay ordered)", async () => {
+    configureFacts({ talentMitigation: true });
+    const mod = await import("../src/data/talentMitigationModifiers");
+    (mod.TALENT_MITIGATION_MODIFIERS as unknown as object[]).push({
+      auraSpellId: "108271",
+      talentSpellId: "900004",
+      schoolMask: 127,
+      modPct: -10,
+      validation: "unvalidated",
+      evidence: "fixture",
+    });
+    const res = resolveMitigation("108271", {
+      carrierIsCaster: true,
+      caster: holder("900004"),
+    })!;
+    expect(strongestComponentPct(res)).toEqual({ pctMin: 30, pctMax: 40 });
+  });
+
   it("ally-carried Obsidian Scales copy: modifier reach is unmeasured, upper bound only", () => {
     configureFacts({ talentMitigation: true });
     const self = resolveMitigation("363916", {

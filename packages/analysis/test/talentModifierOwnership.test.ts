@@ -34,6 +34,24 @@ describe("talentModifierOwnershipOf", () => {
     expect(talentModifierOwnershipOf(guardian, REINFORCED_FUR)).not.toBe("yes");
   });
 
+  // GH #96 review (codex astra): a choice node listed with id2 0 reads as
+  // "every entry chosen" in the kit walk — for a modifier that is unknown
+  it("a choice node whose entry id selects nothing is unknown, not yes", () => {
+    const arms = {
+      spec: CombatUnitSpec.Warrior_Arms,
+      info: { talents: [{ id1: 94789, id2: 0, count: 1 }], pvpTalents: [] },
+      spellCastEvents: [],
+    } as never;
+    expect(talentOwnershipOf(arms, "429639")).toBe("yes"); // the kit walk's reading
+    expect(talentModifierOwnershipOf(arms, "429639")).toBe("unknown");
+    const holy = {
+      spec: CombatUnitSpec.Paladin_Holy,
+      info: { talents: [{ id1: 93520, id2: 0, count: 1 }], pvpTalents: [] },
+      spellCastEvents: [],
+    } as never;
+    expect(talentModifierOwnershipOf(holy, "387801")).toBe("unknown");
+  });
+
   it("an unparseable spec stays unknown", () => {
     expect(talentModifierOwnershipOf(unit("0x"), REINFORCED_FUR)).toBe(
       "unknown",
