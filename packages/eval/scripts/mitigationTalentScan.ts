@@ -156,6 +156,17 @@ const arg = (k: string, d: string) => {
 };
 const manifest = arg("--manifest", "");
 const every = Number(arg("--every", "30"));
+// Sharding (added 2026-09-14 to cover the full 63k-file archive overnight):
+// `--shard i --shards n` scans every n-th file of the slice, `--dump <file>`
+// writes the raw per-shard state instead of reporting, and `--from-dumps a,b,c`
+// merges shard dumps and runs the unchanged reporting below. `--tag` names the
+// output file so a sharded run does not overwrite the recorded run.
+const shard = Number(arg("--shard", "0"));
+const shards = Number(arg("--shards", "1"));
+const dumpTo = arg("--dump", "");
+const fromDumps = arg("--from-dumps", "").split(",").filter(Boolean);
+const tag = arg("--tag", "");
+
 const median = (xs: number[]) => {
   if (!xs.length) return NaN;
   const s = [...xs].sort((x, y) => x - y);
@@ -168,7 +179,9 @@ const files = readFileSync(manifest, "utf8")
   .split("\n")
   .map((s) => s.trim())
   .filter(Boolean)
-  .filter((_, i) => i % every === 0);
+  .filter((_, i) => i % every === 0)
+  .filter((_, i) => i % shards === shard)
+  .filter(() => fromDumps.length === 0);
 
 /** candidate → ownership → unit (match|round|caster) → normalised ratios */
 type UnitHits = Map<string, number[]>;
@@ -218,7 +231,7 @@ for (const f of files) {
     );
   }
   parser.end();
-  for (const m of items) {
+  for (const [roundInFile, m] of items.entries()) {
     let legacy: ReturnType<typeof toLegacyMatch>;
     try {
       legacy = toLegacyMatch({ ...m, rawLines: [] } as GladMatch);
@@ -291,7 +304,7 @@ for (const f of files) {
             no: new Map(),
             unknown: new Map(),
           };
-          const unit = `${f}|${rounds}|${caster.id}`;
+          const unit = `${f}|${roundInFile}|${caster.id}`;
           const hits = bk[own].get(unit) ?? [];
           hits.push(r.ratio / b);
           bk[own].set(unit, hits);
@@ -299,6 +312,44 @@ for (const f of files) {
         }
       }
     }
+  }
+}
+
+type Dump = {
+  files: number;
+  rounds: number;
+  buckets: Record<
+    string,
+    Record<"yes" | "no" | "unknown", Record<string, number[]>>
+  >;
+};
+let scannedFiles = files.length;
+if (dumpTo) {
+  const d: Dump = { files: files.length, rounds, buckets: {} };
+  for (const [k, v] of buckets)
+    d.buckets[k] = {
+      yes: Object.fromEntries(v.yes),
+      no: Object.fromEntries(v.no),
+      unknown: Object.fromEntries(v.unknown),
+    };
+  writeFileSync(dumpTo, JSON.stringify(d));
+  console.log(`dumped ${files.length} files / ${rounds} rounds to ${dumpTo}`);
+  process.exit(0);
+}
+for (const path of fromDumps) {
+  const d = JSON.parse(readFileSync(path, "utf8")) as Dump;
+  scannedFiles += d.files;
+  rounds += d.rounds;
+  for (const [k, v] of Object.entries(d.buckets)) {
+    const bk = buckets.get(k) ?? {
+      yes: new Map(),
+      no: new Map(),
+      unknown: new Map(),
+    };
+    for (const own of ["yes", "no", "unknown"] as const)
+      for (const [unit, hits] of Object.entries(v[own]))
+        bk[own].set(unit, hits);
+    buckets.set(k, bk);
   }
 }
 
@@ -315,7 +366,13 @@ const rand = () => {
   return seed / 4294967296;
 };
 const unitValues = (m: UnitHits) =>
-  [...m.values()].filter((h) => h.length >= MIN_UNIT_HITS).map(median);
+  // sorted by unit key so a sharded + merged run draws the same bootstrap as a
+  // direct one (2026-09-14; run 2 used insertion order)
+  [...m]
+    .sort((p, q) => (p[0] < q[0] ? -1 : p[0] > q[0] ? 1 : 0))
+    .map(([, h]) => h)
+    .filter((h) => h.length >= MIN_UNIT_HITS)
+    .map(median);
 /**
  * Sensitivity check added after review (codex astra / agy, 2026-09-13), NOT
  * part of the predeclared promotion rule: one Solo Shuffle player contributes
@@ -324,7 +381,9 @@ const unitValues = (m: UnitHits) =>
  */
 const clusterValues = (m: UnitHits) => {
   const byPlayer = new Map<string, number[]>();
-  for (const [unit, hits] of m) {
+  for (const [unit, hits] of [...m].sort((p, q) =>
+    p[0] < q[0] ? -1 : p[0] > q[0] ? 1 : 0,
+  )) {
     if (hits.length < MIN_UNIT_HITS) continue;
     const [file, , caster] = unit.split("|");
     const key = `${file}|${caster}`;
@@ -411,8 +470,8 @@ const dir = join(
 );
 mkdirSync(dir, { recursive: true });
 writeFileSync(
-  join(dir, "mitigationTalent.json"),
-  JSON.stringify({ files: files.length, rounds, candidates: out }, null, 1),
+  join(dir, `mitigationTalent${tag ? `.${tag}` : ""}.json`),
+  JSON.stringify({ files: scannedFiles, rounds, candidates: out }, null, 1),
 );
 for (const r of out)
   console.log(

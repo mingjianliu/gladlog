@@ -62,6 +62,17 @@ const arg = (k: string, d: string) => {
 };
 const manifest = arg("--manifest", "");
 const every = Number(arg("--every", "30"));
+// Sharding (added 2026-09-14 to cover the full 63k-file archive overnight):
+// `--shard i --shards n` scans every n-th file of the slice, `--dump <file>`
+// writes the raw per-shard state instead of reporting, and `--from-dumps a,b,c`
+// merges shard dumps and runs the unchanged reporting below. `--tag` names the
+// output file so a sharded run does not overwrite the recorded run.
+const shard = Number(arg("--shard", "0"));
+const shards = Number(arg("--shards", "1"));
+const dumpTo = arg("--dump", "");
+const fromDumps = arg("--from-dumps", "").split(",").filter(Boolean);
+const tag = arg("--tag", "");
+
 const home =
   process.env.GLADLOG_EVAL_HOME ??
   join(process.env.HOME ?? "", "code/gladlog-eval-private");
@@ -114,7 +125,9 @@ const files = readFileSync(manifest, "utf8")
   .split("\n")
   .map((s) => s.trim())
   .filter(Boolean)
-  .filter((_, i) => i % every === 0);
+  .filter((_, i) => i % every === 0)
+  .filter((_, i) => i % shards === shard)
+  .filter(() => fromDumps.length === 0);
 
 let rounds = 0;
 for (const f of files) {
@@ -220,14 +233,50 @@ for (const f of files) {
 const modal = (xs: number[]) => {
   const h = new Map<number, number>();
   for (const x of xs) h.set(x, (h.get(x) ?? 0) + 1);
-  return [...h].sort((p, q) => q[1] - p[1]);
+  return [...h].sort((p, q) => q[1] - p[1] || p[0] - q[0]);
 };
+type Dump = {
+  files: number;
+  rounds: number;
+  cellsByAura: Record<string, Array<{ v: number; own: Record<string, Own> }>>;
+  coApplied: Record<string, Record<string, number>>;
+};
+let scannedFiles = files.length;
+if (dumpTo) {
+  const d: Dump = {
+    files: files.length,
+    rounds,
+    cellsByAura: Object.fromEntries(cellsByAura),
+    coApplied: Object.fromEntries(
+      [...coApplied].map(([k, m]) => [k, Object.fromEntries(m)]),
+    ),
+  };
+  writeFileSync(dumpTo, JSON.stringify(d));
+  console.log(`dumped ${files.length} files / ${rounds} rounds to ${dumpTo}`);
+  process.exit(0);
+}
+for (const path of fromDumps) {
+  const d = JSON.parse(readFileSync(path, "utf8")) as Dump;
+  scannedFiles += d.files;
+  rounds += d.rounds;
+  for (const [aura, cells] of Object.entries(d.cellsByAura))
+    cellsByAura.set(aura, [...(cellsByAura.get(aura) ?? []), ...cells]);
+  for (const [t, m] of Object.entries(d.coApplied)) {
+    const cur = coApplied.get(t) ?? new Map<string, number>();
+    for (const [aura, n] of Object.entries(m))
+      cur.set(aura, (cur.get(aura) ?? 0) + n);
+    coApplied.set(t, cur);
+  }
+}
+
 function auraFor(target: string): string | null {
   if (cellsByAura.get(target)?.length) return target;
   const m = coApplied.get(target);
   if (!m) return null;
   const total = [...m.values()].reduce((x, y) => x + y, 0);
-  const [best, n] = [...m].sort((p, q) => q[1] - p[1])[0] ?? ["", 0];
+  const [best, n] = [...m].sort(
+    (p, q) => q[1] - p[1] || (p[0] < q[0] ? -1 : 1),
+  )[0] ?? ["", 0];
   return best && n / total >= 0.8 ? best : null;
 }
 const out = CANDIDATES.map((c) => {
@@ -285,10 +334,10 @@ const out = CANDIDATES.map((c) => {
 const outDir = join(home, "reports/talent-integration-2026-09-13");
 mkdirSync(outDir, { recursive: true });
 writeFileSync(
-  join(outDir, "durationTalent.json"),
-  JSON.stringify({ files: files.length, rounds, rows: out }, null, 1),
+  join(outDir, `durationTalent${tag ? `.${tag}` : ""}.json`),
+  JSON.stringify({ files: scannedFiles, rounds, rows: out }, null, 1),
 );
-console.log(`files ${files.length} rounds ${rounds}`);
+console.log(`files ${scannedFiles} rounds ${rounds}`);
 for (const r of out)
   console.log(
     `${r.verdict.padEnd(48)} ${r.targetEn || r.targetZh} ${r.target}${r.measuredAura && r.measuredAura !== r.target ? `→aura ${r.measuredAura}` : ""} ← ${r.talentZh} ${r.talent} (${r.aura === "107" ? `${r.value / 1000}s` : `${r.value}%`}) base ${r.base} exp ${r.expected} | holders ${r.holders.cells} near ${r.holders.near} top ${JSON.stringify(r.holders.top)} | non ${r.nonHolders.cells} top ${JSON.stringify(r.nonHolders.top)} | unknown ${r.unknown}`,
