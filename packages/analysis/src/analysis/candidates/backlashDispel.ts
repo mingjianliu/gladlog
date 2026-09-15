@@ -506,6 +506,14 @@ export function isImmuneWindow(p: IBacklashDispelPoint): boolean {
 
 const joinNames = (xs: string[]) => xs.join("; ");
 const k = (x: number) => String(Math.round(x / 1000));
+/** "rose 181k -> 222k" / "fell 280k -> 164k" / "flat at 40k": the direction is
+ * rendered by the producer so the model copies it instead of guessing. */
+const trendK = (before: number, after: number): string => {
+  const b = k(before);
+  const a = k(after);
+  if (b === a) return `flat at ${a}k`;
+  return `${after > before ? "rose" : "fell"} ${b}k -> ${a}k`;
+};
 
 /**
  * backlash-dispel: the owner dispelled a backlash debuff in the net-negative
@@ -545,6 +553,11 @@ export function backlashDispelEvents(
         selfDmgAfterK: k(p.dispellerDmgAfter ?? 0),
         healBeforeK: k(p.healerHealBefore),
         healAfterK: k(p.healerHealAfter),
+        // Direction pre-worded (n=78 A/B, 2026-09-12): 2 of 20 backlash
+        // citations called a 181k->222k / 189k->278k healing change a
+        // "drop" — the model inferred a direction the numbers contradict.
+        healTrend: trendK(p.healerHealBefore, p.healerHealAfter),
+        selfDmgTrend: trendK(p.dispellerDmgBefore ?? 0, p.dispellerDmgAfter ?? 0),
         coRemoved: p.coRemoved.length
           ? joinNames(p.coRemoved.map((c) => c.spellName))
           : "none",

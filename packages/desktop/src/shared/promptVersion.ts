@@ -421,4 +421,16 @@
 //  The Hunt 90 → 75 s, Totemic Surge totems −5 s, Counterspell −5 s …; a false
 //  "Dark Pact 2 Charges" inferred from casts faster than the old cooldown
 //  disappears.
-export const PROMPT_VERSION = 64;
+//  v65 (2026-09-12/15, GH #78 / #80, codex rounds 1–2 + n=78 pre-registered
+//  A/B ab/2026-09-12-backlash-kick-n100): kick-priority eligibility from the
+//  corpus hardcast-heal table (outcome-independent; nominal cast length for
+//  feasibility, longest continuous castable stretch for reach / lockout);
+//  direction pre-worded facts `healTrend` / `selfDmgTrend` (backlash) and the
+//  copy-able `refContrast` sentence (kick-priority) — 10 of the treatment
+//  arm's 19 refuted claims were models inverting a direction the numbers
+//  stated; kick legends no longer say the heal was "on your kill target"
+//  (`healedWhom` is the only recipient claim), backlash legend words the
+//  corpus cells as observed differences; VT accusations silenced by the
+//  symmetric ledger guard; interrupt kit → official table; auditFindings drops
+//  a finding without eventIds instead of crashing.
+export const PROMPT_VERSION = 65;

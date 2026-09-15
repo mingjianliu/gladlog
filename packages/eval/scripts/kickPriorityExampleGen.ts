@@ -48,7 +48,7 @@ async function main(): Promise<void> {
       shown++;
       const others = p.friends.filter((f) => f.id !== owner.id && f.feasible).map((f) => f.name);
       console.log(`\n=== ${meta.id} ${meta.bracket} | owner ${specToString(owner.spec)} ===`);
-      console.log(`${fmtTime(p.castStartS)} ${p.healerName} 读了 ${p.durationS.toFixed(1)}s 的 ${p.spellName} 给 ${p.targetHpPct}% 血的 ${p.targetName}(你的击杀目标,窗口 ${fmtTime(p.windowFromS)}–${fmtTime(p.windowToS)}),奶了 ${Math.round(p.healAmount / 1000)}k;你的 ${me!.kickSpellName} 空着${me!.neverObserved ? "(整场没按过)" : ""}、距离 ${me!.distanceYd == null ? "?" : Math.round(me!.distanceYd)} 码,没踢${others.length ? `;${others.join("、")} 也能踢` : ""}`);
+      console.log(`${fmtTime(p.castStartS)} ${p.healerName} 硬读了 ${p.durationS.toFixed(1)}s 的 ${p.spellName},当时你的击杀目标 ${p.targetName} ${p.targetHpPct}% 血(窗口 ${fmtTime(p.windowFromS)}–${fmtTime(p.windowToS)}),落在击杀目标身上 ${Math.round(p.healAmount / 1000)}k${p.healAmount === 0 ? (p.healOtherName ? `(实际奶了 ${p.healOtherName} ${Math.round(p.healOtherAmount / 1000)}k)` : "(没有任何治疗落地)") : ""};你的 ${me!.kickSpellName} 空着${me!.neverObserved ? "(整场没按过)" : ""}、距离 ${me!.distanceYd == null ? "?" : Math.round(me!.distanceYd)} 码,没踢${others.length ? `;${others.join("、")} 也能踢` : ""}`);
       console.log(`  friends: ${p.friends.map((f) => `${f.name}[${f.kickSpellName} cd${f.cdRemainingS.toFixed(0)} ${f.locked ? "locked" : "free"} ${f.distanceYd == null ? "?" : Math.round(f.distanceYd)}yd ${f.inRange === null ? "range?" : f.inRange ? "inRange" : "outOfRange"}]`).join(" ")}`);
     }
   }

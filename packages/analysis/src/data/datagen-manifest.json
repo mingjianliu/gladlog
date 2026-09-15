@@ -162,6 +162,10 @@
       "edges": 4037,
       "truncatedTriggerEdges": 7,
       "bytes": 2369929
+    },
+    "kickPriorityHealSpellsGenerated.json": {
+      "entries": 9,
+      "producer": "packages/eval/scripts/kickPriorityOutcomeProbe.ts emit-heal-spells"
     }
   }
 }

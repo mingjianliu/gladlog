@@ -772,4 +772,17 @@ describe("agy 复核采纳(2026-07-25)", () => {
       expect(c.facts["walls"]).toBeTruthy();
     }
   });
+
+  it("a finding without eventIds (model used its own schema) is dropped, not a crash (n=100 A/B, 2026-09-12)", () => {
+    const bad = {
+      severity: "high",
+      category: "x",
+      title: "t",
+      explanation: "e",
+    } as unknown as RawFinding;
+    const res = auditFindings([bad], candidates);
+    expect(res.findings).toHaveLength(0);
+    expect(res.dropped).toHaveLength(1);
+    expect(res.dropped[0]!.reason).toBe("grounding: missing eventIds");
+  });
 });

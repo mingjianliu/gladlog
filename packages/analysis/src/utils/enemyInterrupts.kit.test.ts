@@ -50,3 +50,14 @@ describe("interruptForUnit — official kit (GH #78, user correction 2026-09-12)
     expect(interruptForUnit(unit(CombatUnitClass.Warlock, CombatUnitSpec.Warlock_Affliction, { petSpellCastEvents: [{ spellId: "19647", logLine: { event: "SPELL_CAST_SUCCESS", timestamp: 1 } }] as never }))?.name).toBe("Spell Lock");
   });
 });
+
+describe("interruptForUnit — `confirmed` provenance (codex round-1, 2026-09-12)", () => {
+  it("baseline kits and talents present in the log are confirmed; tree-availability fallback and pets are not", () => {
+    expect(interruptForUnit(unit(CombatUnitClass.Warrior, CombatUnitSpec.Warrior_Arms))?.confirmed).toBe(true);
+    expect(interruptForUnit(unit(CombatUnitClass.Priest, CombatUnitSpec.Priest_Shadow))?.confirmed).toBe(true);
+    const ret = CombatUnitSpec.Paladin_Retribution;
+    expect(interruptForUnit(unit(CombatUnitClass.Paladin, ret, { info: { talents: taken("96231", ret) } as never }))?.confirmed).toBe(true);
+    expect(interruptForUnit(unit(CombatUnitClass.Paladin, ret))?.confirmed).toBe(false);
+    expect(interruptForUnit(unit(CombatUnitClass.Warlock, CombatUnitSpec.Warlock_Affliction, { petSpellCastEvents: [{ spellId: "19647", logLine: { event: "SPELL_CAST_SUCCESS", timestamp: 1 } }] as never }))?.confirmed).toBe(false);
+  });
+});

@@ -107,6 +107,14 @@ export function lookupBacklashPrior(spellId: string): BacklashPriorRef | null {
     return null;
   if (c.n < BACKLASH_PRIOR_N_FLOOR || c.nLeft < BACKLASH_PRIOR_N_FLOOR)
     return null;
+  // Symmetric guard (codex round-1, conceded): an accusation needs its
+  // negative evidence to survive the weakest reading. The healing-lost term
+  // is the confounded one (a healer who just topped the team heals less
+  // after for reasons other than the silence), so the cell must be net
+  // negative BOTH with it and without it. UA: 106 − 214 = −108k passes;
+  // VT: 66 − 19 = +47k fails and stays silent until a table says otherwise.
+  if (c.removedK - c.healLostK - c.backlashDmgK >= 0) return null;
+  if (c.removedK - c.backlashDmgK >= 0) return null;
   return {
     spellId,
     n: c.n,

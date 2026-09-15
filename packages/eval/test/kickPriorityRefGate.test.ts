@@ -17,7 +17,7 @@ describe("checkKickPriorityRefConsistency (17th hardFailure class, GH #78)", () 
       expect(checkKickPriorityRefConsistency([line("t=1:40, refNCompleted=1")])).toHaveLength(1);
       return;
     }
-    const ok = `t=1:40, refNCompleted=${ref.nCompleted}, refNInterrupted=${ref.nInterrupted}, refDeathCompleted=${ref.deathCompletedPct}, refDeathInterrupted=${ref.deathInterruptedPct}`;
+    const ok = `t=1:40, refNCompleted=${ref.nCompleted}, refNInterrupted=${ref.nInterrupted}, refDeathCompleted=${ref.deathCompletedPct}, refDeathInterrupted=${ref.deathInterruptedPct}, refContrast=kill target died within 10 s in ${ref.deathInterruptedPct}% of kicked casts vs ${ref.deathCompletedPct}% of completed casts`;
     expect(checkKickPriorityRefConsistency([line(ok), line(ok, "kick-priority-team")])).toHaveLength(0);
     expect(checkKickPriorityRefConsistency([line(ok.replace(`refDeathInterrupted=${ref.deathInterruptedPct}`, `refDeathInterrupted=${ref.deathInterruptedPct + 1}`))])).toHaveLength(1);
   });

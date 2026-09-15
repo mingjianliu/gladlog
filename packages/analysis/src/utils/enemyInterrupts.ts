@@ -35,6 +35,13 @@ import { specToString } from "./cooldowns";
 interface InterruptDef {
   spellId: string;
   name: string;
+  /** Provenance of the possession claim: `true` = class/spec baseline, or a
+   * talent node the player's COMBATANT_INFO shows taken; `false` = a
+   * tree-availability fallback (no talent list in the log) or a pet ability
+   * (observed, but its position is not the owner's). Feasibility gates that
+   * need certainty (kick-priority) treat unconfirmed kits as
+   * observed-or-nothing. */
+  confirmed: boolean;
 }
 interface KitEntry {
   name: string;
@@ -49,6 +56,28 @@ const KIT = (kitRaw as unknown as { interrupts: Record<string, KitEntry> })
  * resolves official cast ranges for. */
 export const INTERRUPT_SPELL_IDS: readonly string[] = Object.keys(KIT);
 
+/** Exact ms of cooldown left on `spellId` for this unit at `atMs` (0 = ready),
+ * from its most recent successful cast (own or pet) and the official
+ * cooldown. The one predicate behind both the timeline's whole-second display
+ * and kick-priority's feasibility. */
+export function interruptCooldownRemainingMs(
+  unit: ICombatUnit,
+  spellId: string,
+  atMs: number,
+): number {
+  const cooldownSeconds = spellEffectData[spellId]?.cooldownSeconds ?? 15;
+  let lastCastMs = -Infinity;
+  for (const e of [...unit.spellCastEvents, ...(unit.petSpellCastEvents ?? [])]) {
+    if (e.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
+    if (e.spellId !== spellId) continue;
+    const ts = e.logLine.timestamp;
+    if (ts <= atMs && ts > lastCastMs) lastCastMs = ts;
+  }
+  return lastCastMs === -Infinity
+    ? 0
+    : Math.max(0, cooldownSeconds * 1000 - (atMs - lastCastMs));
+}
+
 /** The interrupt this unit has, or null (Holy Paladin, Preservation Evoker,
  * Restoration Druid, Mistweaver, Disc/Holy Priest, a Retribution Paladin who
  * did not take Rebuke …). Baseline before talent, talent before pet. */
@@ -60,21 +89,26 @@ export function interruptForUnit(unit: ICombatUnit): InterruptDef | null {
   let pet: InterruptDef | null = null;
   let talentPick: InterruptDef | null = null;
   for (const [spellId, e] of Object.entries(KIT)) {
-    const def = { spellId, name: e.name };
-    if (e.classBaseline.includes(classId) || e.specBaseline.includes(Number(specId)))
-      return def;
+    if (
+      e.classBaseline.includes(classId) ||
+      e.specBaseline.includes(Number(specId))
+    )
+      return { spellId, name: e.name, confirmed: true };
     const node = e.talent[specId];
     if (node && !talentPick) {
       const taken = hasTalentData
         ? talents.some((t) => t.id1 === node.nodeId && t.id2 === node.entryId)
-        : true; // no talent list in the log → tree availability
-      if (taken) talentPick = def;
+        : true; // no talent list in the log → tree availability (unconfirmed)
+      if (taken)
+        talentPick = { spellId, name: e.name, confirmed: hasTalentData };
     }
     if (e.pet && !pet) {
       const observed = (unit.petSpellCastEvents ?? []).some(
-        (c) => c.spellId === spellId && c.logLine.event === LogEvent.SPELL_CAST_SUCCESS,
+        (c) =>
+          c.spellId === spellId &&
+          c.logLine.event === LogEvent.SPELL_CAST_SUCCESS,
       );
-      if (observed) pet = def;
+      if (observed) pet = { spellId, name: e.name, confirmed: false };
     }
   }
   return talentPick ?? pet;
@@ -101,25 +135,12 @@ export function computeEnemyInterruptAvailability(
   for (const enemy of enemies) {
     const def = interruptForUnit(enemy);
     if (!def) continue;
-    const cooldownSeconds = spellEffectData[def.spellId]?.cooldownSeconds ?? 15;
-
-    // Most recent successful cast of this interrupt at or before atMs.
-    let lastCastMs = -Infinity;
-    const allCasts = [
-      ...enemy.spellCastEvents,
-      ...(enemy.petSpellCastEvents ?? []),
-    ];
-    for (const e of allCasts) {
-      if (e.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
-      if (e.spellId !== def.spellId) continue;
-      const ts = e.logLine.timestamp;
-      if (ts <= atMs && ts > lastCastMs) lastCastMs = ts;
-    }
-
-    const cdRemainingSeconds =
-      lastCastMs === -Infinity
-        ? 0
-        : Math.max(0, Math.round(cooldownSeconds - (atMs - lastCastMs) / 1000));
+    // whole-second for the timeline's display; the exact value lives in
+    // interruptCooldownRemainingMs (kick-priority reads that one — 0.4 s left
+    // is NOT ready)
+    const cdRemainingSeconds = Math.round(
+      interruptCooldownRemainingMs(enemy, def.spellId, atMs) / 1000,
+    );
     result.push({
       enemyName: enemy.name,
       spec: specToString(enemy.spec),

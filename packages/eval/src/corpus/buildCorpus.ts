@@ -30,6 +30,46 @@ export interface IndexEntry {
   ownerName?: string;
 }
 
+/** The owner a corpus prompt is written for. `healer` = the friendly healer,
+ * `recorder` = the unit that wrote the log (`combat.playerId`), `dps` = the
+ * friendly non-healer with the most damage (deterministic; ties → first
+ * iterated), otherwise the first player. One predicate for buildCorpus and
+ * `scripts/abPairSelect.ts` (the differing-prompt pre-selection for A/Bs). */
+export function selectCorpusOwner(
+  players: any[],
+  combat: { playerId?: string },
+  ownerFilter: "healer" | "dps" | "recorder" | undefined,
+): any | null {
+  if (ownerFilter === "healer") {
+    return (
+      players.find(
+        (u) =>
+          isHealerSpec(u.spec) && u.reaction === CombatUnitReaction.Friendly,
+      ) ?? null
+    );
+  }
+  if (ownerFilter === "recorder")
+    return players.find((u) => u.id === combat.playerId) ?? null;
+  if (ownerFilter === "dps") {
+    let best: any = null;
+    let bestDmg = -1;
+    for (const u of players) {
+      if (u.reaction !== CombatUnitReaction.Friendly) continue;
+      if (isHealerSpec(u.spec)) continue;
+      const dmg = (u.damageOut ?? []).reduce(
+        (sum: number, e: any) => sum + Math.abs(e.effectiveAmount ?? 0),
+        0,
+      );
+      if (dmg > bestDmg) {
+        bestDmg = dmg;
+        best = u;
+      }
+    }
+    return best;
+  }
+  return players[0] ?? null;
+}
+
 export async function buildCorpus(opts: {
   logPaths: string[];
   outDir: string;
@@ -83,45 +123,10 @@ export async function buildCorpus(opts: {
         const units: any[] = Object.values(combat.units);
         const players = units.filter((u) => u.info);
 
-        // Select owner based on filter
-        let owner: any = null;
-        if (ownerFilter === "healer") {
-          owner = players.find(
-            (u) =>
-              isHealerSpec(u.spec) &&
-              u.reaction === CombatUnitReaction.Friendly,
-          );
-          if (!owner) {
-            // Skip this combat if no healer found when ownerFilter is "healer"
-            continue;
-          }
-        } else if (ownerFilter === "recorder") {
-          owner = players.find((u) => u.id === combat.playerId);
-          if (!owner) continue;
-        } else if (ownerFilter === "dps") {
-          // The friendly non-healer with the highest total damage
-          // (deterministic; ties go to the first one iterated)
-          let best: any = null;
-          let bestDmg = -1;
-          for (const u of players) {
-            if (u.reaction !== CombatUnitReaction.Friendly) continue;
-            if (isHealerSpec(u.spec)) continue;
-            const dmg = (u.damageOut ?? []).reduce(
-              (sum: number, e: any) => sum + Math.abs(e.effectiveAmount ?? 0),
-              0,
-            );
-            if (dmg > bestDmg) {
-              bestDmg = dmg;
-              best = u;
-            }
-          }
-          owner = best;
-          if (!owner) continue;
-        } else {
-          // Default: use first player
-          owner = players[0];
-          if (!owner) continue;
-        }
+        // Select owner based on filter (shared with abPairSelect.ts so the
+        // pair-selection pass and the corpus build agree on the owner)
+        const owner: any = selectCorpusOwner(players, combat, ownerFilter);
+        if (!owner) continue;
 
         // Separate friends and enemies
         const friends = players.filter((u) => u.reaction === owner.reaction);

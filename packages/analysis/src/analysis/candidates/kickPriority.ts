@@ -26,10 +26,11 @@
  */
 import { getEnglishSpellName } from "../../data/spellEffectData";
 import { MELEE_RANGE_YD,spellRangeYards } from "../../data/spellReach";
+import { hardcastHealSpell } from "../../data/kickPriorityHealSpells";
 import { buildCannotCastIntervals } from "../../utils/cannotCastIntervals";
 import { gridHpPct, isHealerSpec } from "../../utils/cooldowns";
 import {
-  computeEnemyInterruptAvailability,
+  interruptCooldownRemainingMs,
   interruptForUnit,
 } from "../../utils/enemyInterrupts";
 import {
@@ -65,6 +66,17 @@ export const KICK_PRIORITY_MAX_CAST_S = 4;
  * kicks keep their official range (their p90s sit at 0.9× the SpellRange
  * value, i.e. sample staleness only). */
 export const KICK_MELEE_REACH_YD = 20;
+/** Codex round-1 (2026-09-12, conceded): a fixed 20 yd licenses accusing a
+ * melee who could not have arrived inside a 1 s cast. Reach is therefore
+ * scaled by the cast: base envelope + run speed × cast duration, capped at
+ * KICK_MELEE_REACH_YD (gap closers beyond that are not demonstrated).
+ * Base 8 yd = the p50 of landed melee kicks (model centres + hitbox). */
+export const KICK_MELEE_BASE_YD = 8;
+export const KICK_RUN_SPEED_YD_S = 7;
+/** The kicker must have been free to act for at least this long inside the
+ * cast (not the whole cast): a lockout that expires 50 ms before the heal
+ * lands is not an opportunity (codex round-1). */
+export const KICK_MIN_FREE_S = 0.5;
 /** A cast that neither completed nor was interrupted within this is a
  * cancel / fake-cast, not a decision point. */
 const CAST_PAIR_MAX_MS = 10_000;
@@ -82,7 +94,8 @@ export interface KickPriorityFriend {
   /** The friendly never cast this interrupt before the cast (#88: "ready"
    * here is an assumption, not an observation). */
   neverObserved: boolean;
-  /** The friendly could not cast for the whole [start, end] of the cast. */
+  /** The friendly had less than KICK_MIN_FREE_S of castable time inside the
+   * cast (cannot-cast intervals subtracted). */
   locked: boolean;
   distanceYd: number | null;
   /** In official range (melee: + slack; ranged: with line of sight); null =
@@ -106,8 +119,16 @@ export interface IKickPriorityPoint {
   targetName: string;
   /** gridHpPct of the kill target at the rendered second of the cast start. */
   targetHpPct: number;
-  /** Completed only: the SPELL_HEAL the healer landed on the target. */
+  /** Completed only: SPELL_HEAL of this cast that landed on the kill target
+   * (0 when it healed someone else or was fully overhealed — a fact, not an
+   * inclusion rule: SPELL_CAST_START carries no destination in the log, so
+   * neither arm can be conditioned on the heal's target). */
   healAmount: number;
+  /** Completed only: who received this cast when it was not the kill target
+   * (largest SPELL_HEAL recipient), null when it landed on the target or
+   * nothing landed. */
+  healOtherName: string | null;
+  healOtherAmount: number;
   windowFromS: number;
   windowToS: number;
   friends: KickPriorityFriend[];
@@ -135,7 +156,15 @@ export function kickPriorityDecisionPoints(
     startInfo?: { zoneId?: string };
     units?: Record<string, any>;
   },
-  overrides?: { targetHpPct?: number },
+  overrides?: {
+    targetHpPct?: number;
+    /** "table" (product): a cast qualifies iff its spell is in
+     * data/kickPriorityHealSpellsGenerated.json; "bootstrap" (the archive probe
+     * that GENERATES that table): the outcome-dependent per-round rule — a
+     * spell this healer completed ≥ 1 s somewhere in the round with a
+     * SPELL_HEAL landing. Never use bootstrap for a product or A/B build. */
+    eligibility?: "table" | "bootstrap";
+  },
 ): IKickPriorityPoint[] {
   const out: IKickPriorityPoint[] = [];
   const hpGate = overrides?.targetHpPct ?? KICK_PRIORITY_TARGET_HP_PCT;
@@ -172,7 +201,12 @@ export function kickPriorityDecisionPoints(
   const enemyById = new Map(enemyPlayers.map((e) => [e.id, e]));
   const healers = enemyPlayers.filter((e) => isHealerSpec(e.spec as never));
   const lockedCache = new Map<string, Array<{ from: number; to: number }>>();
-  const lockedDuring = (f: UnitLike, a: number, b: number): boolean => {
+  /** The LONGEST CONTINUOUS stretch of seconds inside [a, b] during which the
+   * unit could cast (cannot-cast intervals subtracted, overlaps merged).
+   * Codex round-2 (2026-09-12): summing fragments let a 1.5 s stun inside a
+   * 2 s cast count as "0.5 s free" while the reach budget still assumed 2 s
+   * of running — reach and lockout now both key on this one number. */
+  const longestFreeSeconds = (f: UnitLike, a: number, b: number): number => {
     let iv = lockedCache.get(f.id);
     if (!iv) {
       try {
@@ -182,7 +216,72 @@ export function kickPriorityDecisionPoints(
       }
       lockedCache.set(f.id, iv);
     }
-    return iv.some((x) => x.from <= a && x.to >= b);
+    const clipped = iv
+      .map((x) => [Math.max(x.from, a), Math.min(x.to, b)] as [number, number])
+      .filter(([x, y]) => y > x)
+      .sort((p, q) => p[0] - q[0]);
+    // merge, then walk the gaps between merged blocked intervals
+    const merged: Array<[number, number]> = [];
+    for (const [x, y] of clipped) {
+      const last = merged[merged.length - 1];
+      if (last && x <= last[1]) last[1] = Math.max(last[1], y);
+      else merged.push([x, y]);
+    }
+    let best = 0;
+    let cursor = a;
+    for (const [x, y] of merged) {
+      best = Math.max(best, x - cursor);
+      cursor = Math.max(cursor, y);
+    }
+    best = Math.max(best, b - cursor);
+    return Math.max(0, best / 1000);
+  };
+  const eligibility = overrides?.eligibility ?? "table";
+  /** BOOTSTRAP ONLY (see overrides.eligibility): the old per-round rule, kept
+   * so the archive probe can generate the corpus table without importing it. */
+  const perRoundCache = new Map<string, Map<string, number>>();
+  const perRoundSpells = (h: UnitLike): Map<string, number> => {
+    let set = perRoundCache.get(h.id);
+    if (set) return set;
+    set = new Map<string, number>();
+    const st = (h.castStartEvents ?? []).filter(
+      (e) => e.logLine.event === "SPELL_CAST_START",
+    );
+    const su = h.spellCastEvents.filter(
+      (e) => e.logLine.event === "SPELL_CAST_SUCCESS",
+    );
+    const healingIds = new Set<string>(
+      (h.healOut ?? [])
+        .filter((x) => x.logLine.event === "SPELL_HEAL")
+        .map((x) => String(x.spellId)),
+    );
+    for (let j = 0; j < st.length; j++) {
+      const a = st[j];
+      const nx = st[j + 1]?.logLine.timestamp ?? Infinity;
+      const d = su.find(
+        (c) =>
+          c.spellId === a.spellId &&
+          c.logLine.timestamp >= a.logLine.timestamp &&
+          c.logLine.timestamp <= Math.min(nx, a.logLine.timestamp + CAST_PAIR_MAX_MS),
+      );
+      if (!d) continue;
+      const dur = (d.logLine.timestamp - a.logLine.timestamp) / 1000;
+      if (
+        dur >= KICK_PRIORITY_MIN_CAST_S &&
+        dur <= KICK_PRIORITY_MAX_CAST_S &&
+        healingIds.has(String(a.spellId))
+      )
+        set.set(String(a.spellId), dur);
+    }
+    perRoundCache.set(h.id, set);
+    return set;
+  };
+  /** Nominal cast seconds for feasibility, or null when the spell is not an
+   * eligible hardcast heal. Product path = the corpus table (outcome-
+   * independent per round); bootstrap = per-round observation. */
+  const nominalCastS = (healer: UnitLike, sid: string): number | null => {
+    if (eligibility === "bootstrap") return perRoundSpells(healer).get(sid) ?? null;
+    return hardcastHealSpell(sid)?.medianCastS ?? null;
   };
 
   for (const healer of healers) {
@@ -241,48 +340,64 @@ export function kickPriorityDecisionPoints(
       );
       if (hp == null || hp > hpGate) continue;
 
-      // The cast has to be a HEAL that landed on the kill target: the
-      // SPELL_HEAL the healer put on the target right after the cast, same
-      // spell id (a Mind Blast / Smite hardcast is not a kick-priority point;
-      // the tutorial rule is about the heal). effectiveAmount excludes
-      // overheal, so a fully-overhealed cast is not "the heal that mattered".
+      // Both arms: eligibility comes from the corpus table (or the bootstrap
+      // rule for the probe that builds it) — never from what this cast or this
+      // round went on to do. No target condition on either arm; where the
+      // completed cast landed is a rendered fact (healK / healedWhom).
+      const nominalS = nominalCastS(healer, sid);
+      if (nominalS == null) continue;
+      const nominalEndMs = sMs + nominalS * 1000;
       let healAmount = 0;
+      let healOtherName: string | null = null;
+      let healOtherAmount = 0;
       if (outcome === "completed") {
+        const byDest = new Map<string, number>();
         for (const h of healer.healOut ?? []) {
           const t = h.logLine.timestamp;
           if (
-            h.destUnitId !== target.id ||
             h.spellId !== sid ||
             t < endMs ||
-            t > endMs + HEAL_LAND_PAIR_MS
+            t > endMs + HEAL_LAND_PAIR_MS ||
+            h.logLine.event !== "SPELL_HEAL"
           )
             continue;
-          if (h.logLine.event !== "SPELL_HEAL") continue;
-          healAmount += Math.abs(h.effectiveAmount);
+          const amt = Math.abs(h.effectiveAmount);
+          if (h.destUnitId === target.id) healAmount += amt;
+          else byDest.set(h.destUnitId, (byDest.get(h.destUnitId) ?? 0) + amt);
         }
-        if (healAmount <= 0) continue;
-      } else {
-        // an interrupted cast: it must at least be a spell this healer heals
-        // with somewhere in the round (observed, not a table)
-        const healsWith = (healer.healOut ?? []).some(
-          (h) => h.spellId === sid && h.logLine.event === "SPELL_HEAL",
-        );
-        if (!healsWith) continue;
+        if (healAmount === 0 && byDest.size > 0) {
+          const [id, amt] = [...byDest.entries()].sort((a, b) => b[1] - a[1])[0];
+          healOtherName =
+            units.find((u) => u.id === id)?.name ??
+            enemyById.get(id)?.name ??
+            id;
+          healOtherAmount = amt;
+        }
       }
 
       const friendsOut: KickPriorityFriend[] = [];
       for (const f of friendPlayers) {
         const kit = interruptForUnit(f as never);
         if (!kit) continue;
-        const avail = computeEnemyInterruptAvailability([f as never], sMs)[0];
-        const cdRemainingS = avail?.cdRemainingSeconds ?? 0;
+        // exact ms — 0.4 s left is not ready (codex round-1)
+        const cdRemainingS =
+          interruptCooldownRemainingMs(f as never, kit.spellId, sMs) / 1000;
         const neverObserved = !f.spellCastEvents.some(
           (e) =>
             e.spellId === kit.spellId &&
             e.logLine.event === "SPELL_CAST_SUCCESS" &&
             e.logLine.timestamp < sMs,
         );
-        const locked = lockedDuring(f, sMs, endMs);
+        // an unconfirmed kit (tree-availability fallback, pet) is
+        // observed-or-nothing; a confirmed one (baseline / talent in the log)
+        // needs no prior cast — codex round-1: the prior-cast rule was
+        // silently selecting players who already kick
+        const kitOk = kit.confirmed || !neverObserved;
+        // Feasibility is judged on the NOMINAL cast (same for a kicked and a
+        // completed cast of the same spell), on the longest continuous
+        // castable stretch inside it.
+        const freeS = longestFreeSeconds(f, sMs, nominalEndMs);
+        const locked = freeS < Math.min(KICK_MIN_FREE_S, nominalS);
         const pos = getUnitPositionAtTime(f as never, sMs, LOS_SWEEP_GAP_MS);
         const hpos = getUnitPositionAtTime(
           healer as never,
@@ -292,14 +407,20 @@ export function kickPriorityDecisionPoints(
         const distanceYd = pos && hpos ? distanceBetween(pos, hpos) : null;
         const range = spellRangeYards(kit.spellId);
         let inRange: boolean | null = null;
-        if (pos && range != null) {
+        if (pos && range != null && kit.confirmed !== false) {
           const melee = range <= MELEE_RANGE_YD;
+          // run budget = the castable stretch, not the cast length: a
+          // friendly stunned for 1.5 s of a 2 s cast can run for 0.5 s
+          const meleeReach = Math.min(
+            KICK_MELEE_REACH_YD,
+            KICK_MELEE_BASE_YD + KICK_RUN_SPEED_YD_S * freeS,
+          );
           inRange = canReachTargetAt(
             pos,
             healer as never,
             sMs,
             zoneId,
-            melee ? KICK_MELEE_REACH_YD : range,
+            melee ? meleeReach : range,
             !melee,
           );
         }
@@ -316,8 +437,7 @@ export function kickPriorityDecisionPoints(
           // 2026-09-12 user correction ("奶龙和奶骑是没有打断的"): the kit table
           // is class-wide and stale; a kick this player NEVER cast in the
           // round is not evidence of a kick at all. Observed-or-nothing.
-          feasible:
-            !neverObserved && cdRemainingS <= 0 && !locked && inRange === true,
+          feasible: kitOk && cdRemainingS <= 0 && !locked && inRange === true,
         });
       }
 
@@ -344,6 +464,8 @@ export function kickPriorityDecisionPoints(
         targetName: target.name,
         targetHpPct: hp,
         healAmount,
+        healOtherName,
+        healOtherAmount,
         windowFromS: w.fromSeconds,
         windowToS: w.toSeconds,
         friends: friendsOut,
@@ -372,6 +494,20 @@ export interface KickPriorityRef {
 }
 
 const k = (x: number) => String(Math.round(x / 1000));
+/** The corpus contrast as one copy-able sentence. n=78 A/B (2026-09-12): 2 of
+ * 63 kick-priority citations inverted the two percentages into "survives
+ * 11% vs 32%" — both are DEATH rates and the kicked figure is the higher one,
+ * so the producer words it and the legend says to copy it. */
+const refContrast = (ref: KickPriorityRef): string =>
+  `kill target died within 10 s in ${ref.deathInterruptedPct}% of kicked casts vs ${ref.deathCompletedPct}% of completed casts`;
+/** Rendered recipient of a completed cast: the kill target, another unit
+ * (with its amount), or nothing (fully overhealed / absorbed). */
+const healedWhom = (p: IKickPriorityPoint): string =>
+  p.healAmount > 0
+    ? "target"
+    : p.healOtherName
+      ? `${p.healOtherName} (${k(p.healOtherAmount)}k)`
+      : "none";
 
 export function kickPriorityMissedEvents(
   points: IKickPriorityPoint[],
@@ -403,6 +539,7 @@ export function kickPriorityMissedEvents(
         target: p.targetName,
         targetHpPct: String(p.targetHpPct),
         healK: k(p.healAmount),
+        healedWhom: healedWhom(p),
         kick: me.kickSpellName,
         kickNeverUsed: me.neverObserved ? "yes" : "no",
         distanceYd:
@@ -412,6 +549,7 @@ export function kickPriorityMissedEvents(
         refNInterrupted: String(ref.nInterrupted),
         refDeathCompleted: String(ref.deathCompletedPct),
         refDeathInterrupted: String(ref.deathInterruptedPct),
+        refContrast: refContrast(ref),
       },
     };
   });
@@ -465,6 +603,7 @@ export function kickPriorityTeamEvents(
         target: p.targetName,
         targetHpPct: String(p.targetHpPct),
         healK: k(p.healAmount),
+        healedWhom: healedWhom(p),
         ownerWhy,
         teammates: mates
           .map((f) => `${f.name} (${f.kickSpellName}, ${f.distanceYd == null ? "?" : Math.round(f.distanceYd)} yd)`)
@@ -473,6 +612,7 @@ export function kickPriorityTeamEvents(
         refNInterrupted: String(ref.nInterrupted),
         refDeathCompleted: String(ref.deathCompletedPct),
         refDeathInterrupted: String(ref.deathInterruptedPct),
+        refContrast: refContrast(ref),
       },
     });
   }

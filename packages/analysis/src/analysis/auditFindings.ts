@@ -58,11 +58,21 @@ export function auditFindings(
   for (const f of raw) {
     // Layer 1: grounding — the finding must anchor to >=1 event, and every
     // eventId must resolve. (Empty eventIds is unanchored → drop.)
-    const refs = f.eventIds.map((id) => byId.get(id));
-    if (f.eventIds.length === 0 || refs.some((r) => !r)) {
+    // The model's JSON is untrusted input: a finding that omits `eventIds`
+    // (or emits a non-array) is dropped like any other unanchored finding —
+    // measured 2026-09-12 in the n=100 A/B, one sonnet reply used its own
+    // schema for all 6 findings and `.map` on undefined killed the whole
+    // interpolation pass instead of dropping that reply's findings.
+    const ids = Array.isArray(f.eventIds)
+      ? f.eventIds.filter((id): id is string => typeof id === "string")
+      : [];
+    const refs = ids.map((id) => byId.get(id));
+    if (ids.length === 0 || refs.some((r) => !r)) {
       dropped.push({
         finding: f,
-        reason: "grounding: unanchored / unknown eventId",
+        reason: Array.isArray(f.eventIds)
+          ? "grounding: unanchored / unknown eventId"
+          : "grounding: missing eventIds",
       });
       continue;
     }
@@ -175,7 +185,7 @@ export function auditFindings(
     // unrelated-type event onto an earlier anchor as if it were foreseeable
     // at the time (spec 2026-08-06-hindsight-predicate). The predicate's
     // returned strings already carry the "hindsight: " prefix.
-    const hv = hindsightViolations(f.eventIds, byId);
+    const hv = hindsightViolations(ids, byId);
     if (hv.length > 0) {
       dropped.push({ finding: f, reason: hv.join("; ") });
       continue;

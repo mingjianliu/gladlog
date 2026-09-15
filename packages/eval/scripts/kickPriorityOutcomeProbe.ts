@@ -14,6 +14,8 @@
  *   npx tsx packages/eval/scripts/kickPriorityOutcomeProbe.ts scan \
  *       --manifest <file> --out <file.jsonl> [--every N] [--offset N] [--limit N]
  *   npx tsx packages/eval/scripts/kickPriorityOutcomeProbe.ts report --in <file.jsonl>
+ *   npx tsx packages/eval/scripts/kickPriorityOutcomeProbe.ts emit-heal-spells --in <file.jsonl> \
+ *       > /tmp/heal.json && cp /tmp/heal.json packages/analysis/src/data/kickPriorityHealSpellsGenerated.json
  *   npx tsx packages/eval/scripts/kickPriorityOutcomeProbe.ts emit-table --in <file.jsonl> \
  *       --corpus "<label>" > /tmp/table.json && cp /tmp/table.json packages/analysis/src/data/kickPriorityPriorGenerated.json
  */
@@ -99,14 +101,19 @@ function scanRound(
     const enemies = [...byTeam.entries()].find(([kk]) => kk !== tid)![1];
     let points: IKickPriorityPoint[];
     try {
+      // bootstrap: the scan is what GENERATES the corpus heal-spell table, so
+      // it must not read it (per-round rule here; product/A-B use the table)
       points = kickPriorityDecisionPoints(friends, enemies, legacy, {
         targetHpPct: KICK_SCAN_HP_GATE,
+        eligibility: "bootstrap",
       });
     } catch {
       continue;
     }
     for (const p of points) {
-      const endMs = startMs + p.castEndS * 1000;
+      // common observation clock for both arms (codex round-1): the window
+      // opens at the CAST START, not at the kick/completion the arm decides
+      const endMs = startMs + p.castStartS * 1000;
       const target = enemies.find((e) => e.id === p.targetId);
       const deadIn = (u: ICombatUnit | undefined) =>
         Boolean(
@@ -372,6 +379,52 @@ async function report(): Promise<void> {
     );
 }
 
+/** `emit-heal-spells --in <scan.jsonl> [--min-n 50]` → data/kickPriorityHealSpellsGenerated.json:
+ * every spell whose COMPLETED hardcasts (1–4 s, SPELL_HEAL landed — the scan's
+ * bootstrap rule) reach the n floor, with the median cast length. Outcome-
+ * independent per round because it is computed once over the archive. */
+async function emitHealSpells(): Promise<void> {
+  const inPath = flag("--in");
+  if (!inPath) {
+    console.error("usage: emit-heal-spells --in <file.jsonl> [--min-n 50] [--corpus <label>]");
+    process.exit(1);
+  }
+  const minN = Number(flag("--min-n") ?? 50);
+  const { recs, files } = await load(inPath);
+  const durs = new Map<string, { name: string; d: number[] }>();
+  for (const r of recs) {
+    if (r.p.outcome !== "completed") continue;
+    const sid = String(r.p.spellId);
+    const e = durs.get(sid) ?? { name: r.p.spellName, d: [] };
+    e.d.push(r.p.durationS);
+    durs.set(sid, e);
+  }
+  const spells: Record<string, { name: string; n: number; medianCastS: number }> = {};
+  for (const [sid, e] of [...durs.entries()].sort((a, b) => b[1].d.length - a[1].d.length)) {
+    if (e.d.length < minN) continue;
+    const sorted = [...e.d].sort((a, b) => a - b);
+    const mid = sorted.length >> 1;
+    const median = sorted.length % 2 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
+    spells[sid] = { name: e.name, n: e.d.length, medianCastS: Math.round(median * 100) / 100 };
+  }
+  console.log(
+    JSON.stringify(
+      {
+        meta: {
+          corpus: flag("--corpus") ?? "unlabelled",
+          generatedAt: new Date().toISOString(),
+          files,
+          nFloor: minN,
+          generator: "kickPriorityOutcomeProbe.ts emit-heal-spells",
+        },
+        spells,
+      },
+      null,
+      1,
+    ),
+  );
+}
+
 async function emitTable(): Promise<void> {
   const inPath = flag("--in");
   if (!inPath) {
@@ -413,6 +466,11 @@ if (cmd === "scan")
   });
 else if (cmd === "report")
   report().catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });
+else if (cmd === "emit-heal-spells")
+  emitHealSpells().catch((e) => {
     console.error(e);
     process.exit(1);
   });

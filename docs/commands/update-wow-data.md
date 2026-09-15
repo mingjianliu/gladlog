@@ -94,6 +94,12 @@ npx tsx packages/eval/scripts/behaviorPriorScan.ts emit-table --in $R/opportunit
 # for i in 0 1 2 3 4 5; do nice -n 10 npx tsx packages/eval/scripts/kickPriorityOutcomeProbe.ts scan \
 #   --manifest <newseason manifest> --out $R/shard$i.jsonl --every 3 --offset $((i*N)) --limit N > $R/shard$i.log 2>&1 & done; wait
 # cat $R/shard*.jsonl > $R/all.jsonl
+# npx tsx packages/eval/scripts/kickPriorityOutcomeProbe.ts emit-heal-spells --in $R/all.jsonl \
+#   --corpus "wowarenalogs archive $(date +%F)" > $R/heal.json \
+#   && cp $R/heal.json packages/analysis/src/data/kickPriorityHealSpellsGenerated.json
+#   (the hardcast-heal spell table: which spells qualify + nominal cast length. The scan runs with
+#    eligibility=bootstrap — it must NOT read this table — the product does; codex round-2 2026-09-12:
+#    the per-round rule was outcome-dependent. Install heal.json BEFORE emit-table if you re-derive both.)
 # npx tsx packages/eval/scripts/kickPriorityOutcomeProbe.ts emit-table --in $R/all.jsonl \
 #   --corpus "wowarenalogs archive $(date +%F)" > $R/table.json \
 #   && cp $R/table.json packages/analysis/src/data/kickPriorityPriorGenerated.json

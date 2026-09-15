@@ -1,0 +1,55 @@
+{
+ "meta": {
+  "corpus": "S2 archive 2026-08-13..09-11, 21101 files, kick-priority v6 completed hardcast heals (START->SUCCESS 1-4 s, SPELL_HEAL landed)",
+  "generatedAt": "2026-09-12",
+  "nFloor": 50,
+  "generator": "kickPriorityOutcomeProbe.ts emit-heal-spells (derived from all-v6.jsonl)"
+ },
+ "spells": {
+  "77472": {
+   "name": "Healing Wave",
+   "n": 9800,
+   "medianCastS": 1.35
+  },
+  "8936": {
+   "name": "Regrowth",
+   "n": 2391,
+   "medianCastS": 1.24
+  },
+  "82326": {
+   "name": "Holy Light",
+   "n": 3983,
+   "medianCastS": 1.59
+  },
+  "19750": {
+   "name": "Flash of Light",
+   "n": 552,
+   "medianCastS": 1.38
+  },
+  "186263": {
+   "name": "Shadow Mend",
+   "n": 2600,
+   "medianCastS": 1.2
+  },
+  "1262763": {
+   "name": "Benediction",
+   "n": 13831,
+   "medianCastS": 1.17
+  },
+  "2061": {
+   "name": "Flash Heal",
+   "n": 11985,
+   "medianCastS": 1.17
+  },
+  "194509": {
+   "name": "Power Word: Radiance",
+   "n": 364,
+   "medianCastS": 1.53
+  },
+  "1064": {
+   "name": "Chain Heal",
+   "n": 74,
+   "medianCastS": 1.44
+  }
+ }
+}

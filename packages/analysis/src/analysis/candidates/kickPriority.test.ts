@@ -37,6 +37,8 @@ const point = (over: Partial<IKickPriorityPoint> = {}): IKickPriorityPoint => ({
   targetName: "Mage",
   targetHpPct: 32,
   healAmount: 900_000,
+  healOtherName: null,
+  healOtherAmount: 0,
   windowFromS: 95,
   windowToS: 110,
   friends: [friend()],
@@ -56,6 +58,19 @@ describe("isOwnerMissedKick", () => {
     expect(isOwnerMissedKick(point({ friends: [friend({ locked: true, feasible: false })] }), owner.id)).toBe(false);
     expect(isOwnerMissedKick(point({ friends: [friend({ inRange: false, feasible: false })] }), owner.id)).toBe(false);
     expect(isOwnerMissedKick(point({ friends: [friend({ inRange: null, feasible: false })] }), owner.id)).toBe(false);
+  });
+});
+
+describe("healedWhom (the log has no cast target; where the heal landed is a rendered fact)", () => {
+  it("target / another unit with amount / none", () => {
+    const f = (over: Partial<IKickPriorityPoint>) =>
+      kickPriorityMissedEvents([point(over)], owner, probes)[0]!.facts;
+    expect(f({}).healedWhom).toBe("target");
+    expect(f({ healAmount: 0, healOtherName: "Warrior", healOtherAmount: 640_000 }).healedWhom).toBe("Warrior (640k)");
+    expect(f({ healAmount: 0, healOtherName: "Warrior", healOtherAmount: 640_000 }).healK).toBe("0");
+    expect(f({ healAmount: 0 }).healedWhom).toBe("none");
+    // a completed heal that went elsewhere is still an owner accusation (symmetric arms)
+    expect(isOwnerMissedKick(point({ healAmount: 0, healOtherName: "Warrior", healOtherAmount: 1 }), owner.id)).toBe(true);
   });
 });
 
