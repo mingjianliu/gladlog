@@ -50,7 +50,7 @@ SPEC=Shaman_Restoration MIN_RATING=2100 npx tsx scripts/fetchPvpLogs.ts
 | `MIN_RATING`      | 0(不过滤)                                                 | **只有 1400/1800/2100/2400 四档生效**(服务端按场均 MMR 分档;传 2700 等效 2400)                                    |
 | `SPEC`            | 空(不过滤)                                                | 逗号分隔,数字 specId 或 `CombatUnitSpec` 枚举名(如 `Shaman_Restoration,105`)。多 spec = 同一队同时含这些专精      |
 | `SPEC_ROLE`       | `recorder`                                                | `recorder`=上传者本人是该专精(advanced logging 视角最优,做该专精分析用这个);`any`=场上任意玩家(敌我不限,样本量大) |
-| `LIMIT`           | 15                                                        | 本次运行**新下**的场数上限;真正的硬闸是服务端计数,到了就停                                                          |
+| `LIMIT`           | 15                                                        | 本次运行**新下**的场数上限;真正的硬闸是服务端计数,到了就停;同日已满则零请求退出                                        |
 | `OUT_DIR`         | `$GLADLOG_EVAL_HOME/downloads/<bracket>-<rating>-<spec>/` | 落盘目录                                                                                                          |
 | `MAX_PAGES`       | 40                                                        | 翻页兜底(spec 的 recorder 细筛在客户端,冷门条件别无限翻——翻页读费记在志愿者项目账上)                                |
 
@@ -61,6 +61,28 @@ SPEC=Shaman_Restoration MIN_RATING=2100 npx tsx scripts/fetchPvpLogs.ts
 
 专精 id 速查(治疗):105 奶德 / 270 奶僧 / 65 奶骑 / 256 戒律 / 257 神牧 / 264 奶萨 / 1468 奶龙。
 全表见 `packages/parser-compat/src/enums.ts` 的 `CombatUnitSpec`。
+
+## 每日定额拉取(用户裁定 2026-09-15)
+
+每天把额度用在**过滤能到的最高档 2100+、3v3、任意专精、任意上传者**上,翻页尽量少:
+
+```bash
+cd packages/corpus-tools && npm run logs:daily
+# = BRACKET=3v3 MIN_RATING=2100 LIMIT=15 MAX_PAGES=3 tsx scripts/fetchPvpLogs.ts
+```
+
+落在 `$GLADLOG_EVAL_HOME/downloads/3v3-r2100-allspecs/`,manifest 断点续传。「小心」由脚本
+自己保证,不靠人记:
+
+- 额度状态记在 `$GLADLOG_EVAL_HOME/downloads/wal-quota-state.json`(按账号不按过滤条件),
+  **同一 UTC 日额度已满时再次启动零请求直接退出**;跨日自动作废。
+- 每页 50 个 stub 通常一页就够 15 个新场;只有新场不足才翻下一页,上限 3 页。
+- 下载间隔 2s、页间隔 500ms、串行;服务端计数是硬闸,本地只是提前刹车。
+- 用的是操作者自己的账号看别人上传的公开对局;`SPEC_ROLE`/`SPEC` 不设,不筛上传者。
+
+要挂 launchd 每天跑一次的话,照 `docs/pvp-log-archive.md` 的 plist 形状改成
+`npm run logs:daily --workspace=packages/corpus-tools`,`StartCalendarInterval` 选 UTC 0 点
+之后(多伦多夏令时 20:00 后)——用户目前的决定是手动起,同归档器当年一样。
 
 ## 已知坑
 

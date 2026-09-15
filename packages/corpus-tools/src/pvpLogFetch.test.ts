@@ -17,10 +17,12 @@ import {
   matchesSpecFilter,
   nextUtcMidnight,
   parseSpecArg,
+  quotaAlreadySpent,
   shouldSleepBeforeDownload,
   shouldSleepBeforePage,
   stubToManifestEntry,
   upsertManifestEntry,
+  utcDayKey,
 } from "./pvpLogFetch";
 
 function stub(over: Partial<DetailedMatchStub> = {}): DetailedMatchStub {
@@ -373,5 +375,43 @@ describe("nextUtcMidnight", () => {
     expect(nextUtcMidnight(atMidnight).toISOString()).toBe(
       "2026-09-16T00:00:00.000Z",
     );
+  });
+});
+
+describe("quotaAlreadySpent", () => {
+  const now = new Date("2026-09-15T18:30:00Z");
+  it("is true when today's recorded usage already reached the quota", () => {
+    expect(
+      quotaAlreadySpent(
+        { utcDay: "2026-09-15", downloadsUsedToday: 15, downloadsQuota: 15 },
+        now,
+      ),
+    ).toBe(true);
+  });
+  it("is false when usage is below quota today", () => {
+    expect(
+      quotaAlreadySpent(
+        { utcDay: "2026-09-15", downloadsUsedToday: 3, downloadsQuota: 15 },
+        now,
+      ),
+    ).toBe(false);
+  });
+  it("is false once the UTC day has rolled over, whatever yesterday said", () => {
+    expect(
+      quotaAlreadySpent(
+        { utcDay: "2026-09-14", downloadsUsedToday: 15, downloadsQuota: 15 },
+        now,
+      ),
+    ).toBe(false);
+  });
+  it("is false with no recorded state", () => {
+    expect(quotaAlreadySpent(undefined, now)).toBe(false);
+  });
+});
+
+describe("utcDayKey", () => {
+  it("formats the UTC calendar day (the upstream's quota key)", () => {
+    expect(utcDayKey(new Date("2026-09-15T23:59:59Z"))).toBe("2026-09-15");
+    expect(utcDayKey(new Date("2026-09-15T20:00:00-05:00"))).toBe("2026-09-16");
   });
 });

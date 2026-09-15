@@ -33,11 +33,14 @@ import {
   matchesSpecFilter,
   nextUtcMidnight,
   parseSpecArg,
+  quotaAlreadySpent,
+  type QuotaState,
   shouldSleepBeforeDownload,
   shouldSleepBeforePage,
   type SpecRole,
   stubToManifestEntry,
   upsertManifestEntry,
+  utcDayKey,
 } from "../src/pvpLogFetch";
 
 const BRACKET = process.env.BRACKET ?? "3v3"; // "2v2" | "3v3" | "Rated Solo Shuffle"
@@ -119,6 +122,15 @@ const slug = [
 // override).
 const OUT_DIR = process.env.OUT_DIR ?? path.join(EVAL_HOME, "downloads", slug);
 const MANIFEST = path.join(OUT_DIR, "manifest.json");
+// The quota is per account per UTC day, not per filter, so its record lives
+// above every OUT_DIR: a second run the same day — any bracket, any spec —
+// must be able to see that the day is spent and exit without one request.
+const QUOTA_STATE = path.join(EVAL_HOME, "downloads", "wal-quota-state.json");
+
+async function saveQuotaState(state: QuotaState): Promise<void> {
+  await fs.ensureDir(path.dirname(QUOTA_STATE));
+  await fs.writeJson(QUOTA_STATE, state, { spaces: 2 });
+}
 
 async function downloadWithMeta(
   url: string,
@@ -146,6 +158,15 @@ async function downloadWithMeta(
 
 async function main() {
   const cookie = loadSessionCookie();
+  const prior: QuotaState | undefined = (await fs.pathExists(QUOTA_STATE))
+    ? await fs.readJson(QUOTA_STATE)
+    : undefined;
+  if (quotaAlreadySpent(prior)) {
+    console.log(
+      `today's upstream quota is already spent (${prior!.downloadsUsedToday}/${prior!.downloadsQuota}, UTC ${prior!.utcDay}); no request made. Resets ${nextUtcMidnight().toISOString()}.`,
+    );
+    return;
+  }
   await fs.ensureDir(OUT_DIR);
   // Resume support: skip matches already in the manifest whose file is on disk
   const manifest: ManifestEntry[] = (await fs.pathExists(MANIFEST))
@@ -171,6 +192,9 @@ async function main() {
   let downloadsAttempted = 0;
   let lastGrant: LogDownloadGrant | undefined;
   let quotaHit: LogQuotaExceededError | undefined;
+  // Either way the day is over: the server refused, or its counter reached the quota.
+  const quotaReached = () =>
+    quotaHit !== undefined || (lastGrant !== undefined && grantsRemaining(lastGrant) === 0);
   pages: for (let page = 0; page < MAX_PAGES && fresh < LIMIT; page++) {
     // No need to wait before the first page (there is no earlier request to
     // space out from); every page after that sleeps PAGE_SLEEP_MS first.
@@ -230,11 +254,21 @@ async function main() {
       } catch (e) {
         if (e instanceof LogQuotaExceededError) {
           quotaHit = e;
+          await saveQuotaState({
+            utcDay: utcDayKey(),
+            downloadsUsedToday: e.usedToday,
+            downloadsQuota: e.quota,
+          });
           break pages;
         }
         throw e;
       }
       lastGrant = grant;
+      await saveQuotaState({
+        utcDay: utcDayKey(),
+        downloadsUsedToday: grant.downloadsUsedToday,
+        downloadsQuota: grant.downloadsQuota,
+      });
       downloadsAttempted++;
       const { text, meta, rawCheck } = await downloadWithMeta(
         grant.url,
@@ -289,7 +323,7 @@ async function main() {
       `quota: ${lastGrant.downloadsUsedToday}/${lastGrant.downloadsQuota} distinct logs used today (${grantsRemaining(lastGrant)} left; resets ${nextUtcMidnight().toISOString()})`,
     );
   }
-  if (fresh < LIMIT && !quotaHit) {
+  if (fresh < LIMIT && !quotaReached()) {
     console.log(
       `note: feed 只覆盖最近约 7 天(且最近 1 小时内的场次不可见);没凑满 LIMIT 说明该过滤条件下近期就这么多,过几天再跑会有新场次(断点续传自动跳过已下载)。`,
     );

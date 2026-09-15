@@ -121,7 +121,8 @@ WAL_COOKIE=<Battle.net 会话 token> SPEC=Shaman_Restoration MIN_RATING=2100 npx
 recorder/any 客户端细筛)下载原始 log 到 `$GLADLOG_EVAL_HOME/downloads/`,
 带 manifest(评分/MMR/全员 spec/GCS 时区 meta)与断点续传。2026-09-13 起每个日志
 经 `logDownloadUrl` grant 取得,上游允许**每账号每 UTC 日 15 个不同日志**;脚本每场
-之后打印服务端计数,被拒即停。会话 cookie、参数、评分档位语义、7 天窗口等坑见
+之后打印服务端计数,被拒即停,并记住当日用量 —— 同一 UTC 日再跑零请求退出。每日例行是
+`npm run logs:daily`(3v3、2100+、最多 15 场、最多翻 3 页)。会话 cookie、参数、评分档位语义、7 天窗口等坑见
 `.claude/skills/fetch-pvp-logs`。
 
 ## 冒烟门(go/no-go)

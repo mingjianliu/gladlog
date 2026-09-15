@@ -389,3 +389,31 @@ export function nextUtcMidnight(now: Date = new Date()): Date {
     Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1),
   );
 }
+
+/** The upstream's quota key: the UTC calendar day. */
+export function utcDayKey(now: Date = new Date()): string {
+  return now.toISOString().slice(0, 10);
+}
+
+/** What fetchPvpLogs persists after every grant, so the next start can decide without a request. */
+export interface QuotaState {
+  utcDay: string;
+  downloadsUsedToday: number;
+  downloadsQuota: number;
+}
+
+/**
+ * "Do not even page": the previous run on the same UTC day already saw the
+ * server refuse or reach the quota. A rerun the same day would otherwise cost
+ * a feed page plus one refused grant before learning nothing new. Any other
+ * state (older day, below quota, no state) lets the run proceed and the
+ * server's own counter remains the hard stop.
+ */
+export function quotaAlreadySpent(
+  state: QuotaState | undefined,
+  now: Date = new Date(),
+): boolean {
+  if (!state) return false;
+  if (state.utcDay !== utcDayKey(now)) return false;
+  return state.downloadsUsedToday >= state.downloadsQuota;
+}
