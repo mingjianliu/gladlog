@@ -417,3 +417,17 @@ export function quotaAlreadySpent(
   if (state.utcDay !== utcDayKey(now)) return false;
   return state.downloadsUsedToday >= state.downloadsQuota;
 }
+
+/**
+ * Grants still available today by the last recorded state: the full quota on
+ * a new UTC day or with no state, else quota minus used, floored at zero. The
+ * server's recorded quota wins over the caller's default when both exist.
+ */
+export function remainingGrantsToday(
+  state: QuotaState | undefined,
+  now: Date = new Date(),
+  defaultQuota: number,
+): number {
+  if (!state || state.utcDay !== utcDayKey(now)) return defaultQuota;
+  return Math.max(0, state.downloadsQuota - state.downloadsUsedToday);
+}

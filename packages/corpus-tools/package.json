@@ -6,7 +6,8 @@
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "logs:daily": "BRACKET=3v3 MIN_RATING=2100 LIMIT=15 MAX_PAGES=3 tsx scripts/fetchPvpLogs.ts"
+    "logs:daily": "tsx scripts/dailyPull.ts",
+    "logs:daily:status": "tsx scripts/dailyPullStatus.ts"
   },
   "dependencies": {
     "@gladlog/analysis": "0.0.1",

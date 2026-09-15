@@ -62,27 +62,40 @@ SPEC=Shaman_Restoration MIN_RATING=2100 npx tsx scripts/fetchPvpLogs.ts
 专精 id 速查(治疗):105 奶德 / 270 奶僧 / 65 奶骑 / 256 戒律 / 257 神牧 / 264 奶萨 / 1468 奶龙。
 全表见 `packages/parser-compat/src/enums.ts` 的 `CombatUnitSpec`。
 
-## 每日定额拉取(用户裁定 2026-09-15)
+## 每日定额拉取(用户裁定 2026-09-15,launchd 已装)
 
-每天把额度用在**过滤能到的最高档 2100+、3v3、任意专精、任意上传者**上,翻页尽量少:
+每天把 15 个额度用在**过滤能到的最高档 2100+、任意专精、任意上传者**上:先 **Solo Shuffle 5 盘**
+(一盘 = 6 轮 = 1 个额度,实测),再 **3v3 补满剩下的**(shuffle 没凑够 5 时 3v3 多拿)。
+专精抓取时不筛,事后按 manifest 的 `players[].spec` 筛(用户不用 wowarenalogs,
+`SPEC_ROLE` 的 recorder 语义与用户本人无关)。
 
 ```bash
-cd packages/corpus-tools && npm run logs:daily
-# = BRACKET=3v3 MIN_RATING=2100 LIMIT=15 MAX_PAGES=3 tsx scripts/fetchPvpLogs.ts
+cd packages/corpus-tools
+npm run logs:daily          # 驱动:scripts/dailyPull.ts → 每步一次 fetchPvpLogs.ts
+npm run logs:daily:status   # 最近 7 次运行 + 今日额度 + cookie 写入时间
 ```
 
-落在 `$GLADLOG_EVAL_HOME/downloads/3v3-r2100-allspecs/`,manifest 断点续传。「小心」由脚本
-自己保证,不靠人记:
+落盘:`$GLADLOG_EVAL_HOME/downloads/RatedSoloShuffle-r2100-allspecs/` 与 `3v3-r2100-allspecs/`
+(各自 manifest 断点续传);运行记录 `downloads/daily-pull/runs.jsonl`(每次一行:各步
+bracket/limit/fresh/exit、结束时额度、状态 ok / auth-expired / error)。
 
-- 额度状态记在 `$GLADLOG_EVAL_HOME/downloads/wal-quota-state.json`(按账号不按过滤条件),
-  **同一 UTC 日额度已满时再次启动零请求直接退出**;跨日自动作废。
-- 每页 50 个 stub 通常一页就够 15 个新场;只有新场不足才翻下一页,上限 3 页。
-- 下载间隔 2s、页间隔 500ms、串行;服务端计数是硬闸,本地只是提前刹车。
-- 用的是操作者自己的账号看别人上传的公开对局;`SPEC_ROLE`/`SPEC` 不设,不筛上传者。
+「小心」由脚本自己保证,不靠人记:
 
-要挂 launchd 每天跑一次的话,照 `docs/pvp-log-archive.md` 的 plist 形状改成
-`npm run logs:daily --workspace=packages/corpus-tools`,`StartCalendarInterval` 选 UTC 0 点
-之后(多伦多夏令时 20:00 后)——用户目前的决定是手动起,同归档器当年一样。
+- 额度状态记在 `downloads/wal-quota-state.json`(按账号不按过滤条件),
+  **同一 UTC 日额度已满时再次启动零请求直接退出**;跨日自动作废。驱动每步之后从这个
+  状态重新规划,不会多要一个。
+- 每页 50 个 stub 通常一页就够;只有新场不足才翻下一页,每步上限 3 页;步骤严格串行。
+- 下载间隔 2s、页间隔 500ms;服务端计数是硬闸,本地只是提前刹车。
+
+**cookie 到期**:fetchPvpLogs 以退出码 3 报「无可用会话」,驱动记 `auth-expired` 并弹 macOS
+通知「登录已过期」;`logs:daily:status` 末行也会提示。处理 = 浏览器重新登录、把新的
+`__Secure-next-auth.session-token` 写回 `~/.gladlog/wal-session-cookie`。next-auth 会话
+30 天滚动续期,每天跑一次正常不会过期。
+
+**launchd**(2026-09-15 已装载):`ops/app.gladlog.daily-pull.plist` → `~/Library/LaunchAgents/`,
+每天本地 21:00(UTC 0 点重置后,冬夏令时都过了),合盖错过的在唤醒后补跑。
+stdout/stderr 在 `downloads/daily-pull/launchd.log`。
+重装:`launchctl bootout gui/$(id -u)/app.gladlog.daily-pull; launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/app.gladlog.daily-pull.plist`。
 
 ## 已知坑
 

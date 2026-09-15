@@ -19,6 +19,7 @@ import {
   requestLogGrant,
   sessionCookieHeader,
 } from "../src/feedClient";
+import { EXIT_AUTH } from "../src/dailyPull";
 import {
   buildCompQueryString,
   buildGcsMeta,
@@ -88,7 +89,9 @@ function loadSessionCookie(): string {
     return sessionCookieHeader(fs.readFileSync(COOKIE_FILE, "utf8"));
   }
   console.error(COOKIE_HELP);
-  process.exit(1);
+  // Distinct exit code so the daily driver can tell "cookie problem" from
+  // any other failure and notify the operator to re-login.
+  process.exit(EXIT_AUTH);
 }
 
 if (!isKnownBracket(BRACKET)) {
@@ -222,7 +225,7 @@ async function main() {
     } catch (e) {
       if (e instanceof FeedError && e.code === "UNAUTHENTICATED") {
         console.error(`session rejected (${e.message}) — the cookie is stale or wrong.\n${COOKIE_HELP}`);
-        process.exit(1);
+        process.exit(EXIT_AUTH);
       }
       throw e;
     }

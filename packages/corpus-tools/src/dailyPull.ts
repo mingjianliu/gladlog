@@ -1,0 +1,71 @@
+// Planning for the daily quota pull (scripts/dailyPull.ts). Pure functions
+// only; the driver spawns fetchPvpLogs.ts per step.
+//
+// User ruling 2026-09-15: spend the upstream's 15 distinct logs per UTC day on
+// 2100+ (the highest reachable filter tier), any spec, any uploader — 5 Solo
+// Shuffle matches (one shuffle object = six rounds for one quota unit) and
+// 3v3 for the rest. Be very careful with paging and every other request.
+import { type QuotaState, remainingGrantsToday } from "./pvpLogFetch";
+
+/** The upstream's flat daily quota (their accessLimits.ts, 2026-09-13). */
+export const DAILY_QUOTA = 15;
+/** Solo Shuffle objects to take first each day; 3v3 gets the remainder. */
+export const DAILY_SHUFFLE_SHARE = 5;
+/** Highest filter tier the server indexes (1400/1800/2100/2400; 2400 is empty this season). */
+export const DAILY_MIN_RATING = 2100;
+/** Feed pages per step at most — one page (50 stubs) normally covers a step. */
+export const DAILY_MAX_PAGES = 3;
+/** fetchPvpLogs exit code for "no usable Battle.net session" (missing/stale cookie). */
+export const EXIT_AUTH = 3;
+
+export interface PullStep {
+  bracket: "Rated Solo Shuffle" | "3v3";
+  limit: number;
+}
+
+/** Grants still available today according to the last recorded state. */
+export function remainingToday(
+  state: QuotaState | undefined,
+  now: Date = new Date(),
+  quota: number = DAILY_QUOTA,
+): number {
+  return remainingGrantsToday(state, now, quota);
+}
+
+/** Shuffle share first, 3v3 the rest; a step with nothing to take is omitted. */
+export function planSteps(
+  remaining: number,
+  shuffleShare: number = DAILY_SHUFFLE_SHARE,
+): PullStep[] {
+  const ss = Math.max(0, Math.min(shuffleShare, remaining));
+  const threes = Math.max(0, remaining - ss);
+  const steps: PullStep[] = [];
+  if (ss > 0) steps.push({ bracket: "Rated Solo Shuffle", limit: ss });
+  if (threes > 0) steps.push({ bracket: "3v3", limit: threes });
+  return steps;
+}
+
+/** The `done: N new logs` line fetchPvpLogs prints; 0 when it never got there. */
+export function parseFreshCount(stdout: string): number {
+  const m = /done: (\d+) new logs/.exec(stdout);
+  return m ? Number(m[1]) : 0;
+}
+
+export type RunStatus = "ok" | "auth-expired" | "error";
+
+export function classifyExit(code: number | null): RunStatus {
+  if (code === 0) return "ok";
+  if (code === EXIT_AUTH) return "auth-expired";
+  return "error";
+}
+
+/** One line of downloads/daily-pull/runs.jsonl. */
+export interface RunRecord {
+  startedAt: string;
+  finishedAt: string;
+  utcDay: string;
+  status: RunStatus;
+  steps: { bracket: string; limit: number; fresh: number; exit: number | null }[];
+  quotaAfter: QuotaState | null;
+  note?: string;
+}
