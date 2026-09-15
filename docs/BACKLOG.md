@@ -2814,6 +2814,8 @@ TrinityCore 15.7%;wago CSV 不含 hotfix(`hotfixes=` 参数被忽略,真言术�
   同次顺带:暗影斗篷的物理减伤来自英雄天赋 Bait and Switch(457034,aura107 SpellModOp 23 −20,掩码覆盖斗篷
   第 3 条效果 aura87 物理 base 0)。斗篷期间物理伤害按天赋持有分组:有 0.813(n 367)/ 无 0.965(n 2,928)。
   `MITIGATION_OVERRIDES` 的 31224 只登记了法术免疫,持有者的 20% 物理减伤**未登记**(待裁:按天赋加 `pctPhysical` 类字段)。
+  **✅ 2026-09-14 已由 GH #96 天赋整合解决**:减伤改为分量表示(`mitigationComponents.ts`),斗篷 = 法术免疫分量 + 物理 20% 天赋分量
+  (`talentMitigationModifiers.ts`,全量新赛季 63,303 文件验证:点了的 0.800,区间 0.795–0.800,2,395 单元),开关 `talentMitigation` 已默认打开(84b5d748)。
 - (7) 记账不做:SimC 类模块对照 genTalentModifiers(仅 DPS)、SimC APL 档案给 rotation-study 当词表、
   TrinityCore DR 表当缴械/击退第二意见。估值模型 V(s) / 策略模型 π_r(Maia-2 式)是另一条大线,未立项。
 - (8) **「被控可用」表改读命名属性位(2026-09-04 用户裁决,已做)。** 借自 SimC `sc_spell_info.cpp` 的属性名表(全局序号 =
