@@ -16,6 +16,7 @@ import { LogEvent } from "@gladlog/parser-compat";
 import { type CrisisRole } from "../data/behaviorPrior";
 import { classMetadata } from "../data/classSpells";
 import { spellClassMap } from "../data/drCategories";
+import { BREAK_RACIAL_SPELL_IDS } from "../data/racialAbilities";
 import spellIdLists from "../data/spellIdLists";
 import {
   ccSpellIds,
@@ -37,6 +38,7 @@ import {
   isDeadAtRenderSecond,
   isProcOnlyActivation,
 } from "../utils/cooldowns";
+import { PVP_TRINKET_SPELL_IDS } from "../utils/killWindowTargetSelection";
 import { buildFilteredAuraIntervals } from "../utils/utils";
 
 /** Re-exported from data/behaviorPrior.ts (the non-cyclic home for this
@@ -143,8 +145,8 @@ const PERSONAL_WALL_IDS = new Set<string>(
   spellIdLists.bigDefensiveSpellIds.map(String),
 );
 /**
- * Healer crisis answers outside the wall / external lists — USER RULING
- * 2026-09-14 (GH #96 M4): "这 5 个技能我觉得都算是". Found by
+ * Healer crisis answers outside the wall / external lists — USER RULINGS
+ * 2026-09-14 (GH #96 M4): "这 5 个技能我觉得都算是", then the second group below. Found by
  * packages/eval/scripts/crisisUnlistedDefensiveProbe.ts: 16 of 149 accusable
  * healer crisis points (S2 every 30) carried one of them, plus Power Word:
  * Shield on 10 more points the probe's pressable test missed. Only the owner's
@@ -159,6 +161,44 @@ export const CRISIS_PROTECTIVE_ANSWER_IDS: ReadonlySet<string> = new Set([
   "366155", // Reversion
   "64843", // Divine Hymn
   "64844", // Divine Hymn (channel id the log also reports as a cast)
+  // second ruling 2026-09-14 ("一里的都算,二里的都不算"), from the
+  // full-archive completeness scan: the damage-reduction / absorb /
+  // big-cooldown group counts; Sanctified Ground (289655) does not
+  "33891", // Incarnation: Tree of Life ("树肯定算,是大技能")
+  "5487", // Bear Form
+  "473909", // Ancient of Lore
+  "421453", // Ultimate Penitence
+  "740", // Tranquility
+]);
+/**
+ * Presses that are not an answer on their own but OPEN one — USER RULING
+ * 2026-09-14 (GH #96 M4): "交了徽章或者种族技能的话,后续有没有其他动作?如果只交徽章,
+ * 什么都不干的话,不是有反应" and "给位移或者自由祝福的话,看有没有拉开距离".
+ * A press inside the response window gets its own RESPONSE_WINDOW_MS to pay
+ * off: a CC break (PvP trinket / break racial) counts when a credited action
+ * follows within it; a mobility press counts when `kitedAway` holds from the
+ * press to press + RESPONSE_WINDOW_MS. Measured before the change
+ * (crisisFollowUpProbe.ts, 1/5 of the 63,303-file archive, 2,960 accusable
+ * healer points): break presses at 75 points, 22 followed up only after the
+ * window closed; mobility presses at 147, 38 opened distance only after it.
+ * Registered in curatedIdRegistry.
+ */
+export const CRISIS_MOBILITY_PRESS_IDS: ReadonlySet<string> = new Set([
+  "1044", // Blessing of Freedom (on self only)
+  "115008", // Chi Torpedo
+  "109132", // Roll
+  "58875", // Spirit Walk
+  "768", // Cat Form
+  "210053", // Mount Form
+  "190784", // Divine Steed
+  "121536", // Angelic Feather
+  "1850", // Dash
+  "252216", // Tiger Dash
+  "358267", // Hover
+]);
+const CRISIS_BREAK_PRESS_IDS = new Set<string>([
+  ...PVP_TRINKET_SPELL_IDS,
+  ...BREAK_RACIAL_SPELL_IDS,
 ]);
 const EXTERNAL_IDS = new Set<string>(
   spellIdLists.externalDefensiveSpellIds.map(String),
@@ -508,16 +548,65 @@ export function crisisDecisionPoints(
       w1,
     );
 
+    // User ruling 2026-09-14: a break or mobility press inside the window gets
+    // its own RESPONSE_WINDOW_MS to pay off (see CRISIS_MOBILITY_PRESS_IDS).
+    const credited = (c: { id: string; dest?: string }) => ({
+      wall: PERSONAL_WALL_IDS.has(c.id),
+      protective: CRISIS_PROTECTIVE_ANSWER_IDS.has(c.id),
+      external: EXTERNAL_IDS.has(c.id),
+      control: CONTROL_IDS.has(c.id) && !!c.dest && !friendIds.has(c.dest),
+    });
+    const followUp = {
+      selfHeal: false,
+      wall: false,
+      protective: false,
+      external: false,
+      control: false,
+      kite: false,
+    };
+    for (const press of castsIn) {
+      const p1 = press.t + RESPONSE_WINDOW_MS;
+      if (CRISIS_BREAK_PRESS_IDS.has(press.id)) {
+        for (const c of ownerCasts) {
+          if (c.t <= press.t || c.t > p1) continue;
+          const k = credited(c);
+          followUp.wall ||= k.wall;
+          followUp.protective ||= k.protective;
+          followUp.external ||= k.external;
+          followUp.control ||= k.control;
+        }
+        const heal =
+          healIn
+            .filter((h) => h.t > press.t && h.t <= p1 && h.src === owner.id)
+            .reduce((n, h) => n + h.a, 0) / x.max;
+        followUp.selfHeal ||= heal >= SELF_HEAL_BIG;
+      }
+      if (
+        CRISIS_MOBILITY_PRESS_IDS.has(press.id) &&
+        !(press.id === "1044" && press.dest && press.dest !== owner.id)
+      )
+        followUp.kite ||= kitedAway(
+          owner,
+          [...attackers].map((id) => unitById.get(id)),
+          press.t,
+          p1,
+        );
+    }
+
     const responses: DecisionPointResponses = {
-      selfHeal: selfHeal >= SELF_HEAL_BIG,
-      wall: castsIn.some((c) => PERSONAL_WALL_IDS.has(c.id)),
-      protective: castsIn.some((c) => CRISIS_PROTECTIVE_ANSWER_IDS.has(c.id)),
-      external: castsIn.some((c) => EXTERNAL_IDS.has(c.id)),
-      control: castsIn.some(
-        (c) => CONTROL_IDS.has(c.id) && c.dest && !friendIds.has(c.dest),
-      ),
+      selfHeal: selfHeal >= SELF_HEAL_BIG || followUp.selfHeal,
+      wall: castsIn.some((c) => PERSONAL_WALL_IDS.has(c.id)) || followUp.wall,
+      protective:
+        castsIn.some((c) => CRISIS_PROTECTIVE_ANSWER_IDS.has(c.id)) ||
+        followUp.protective,
+      external:
+        castsIn.some((c) => EXTERNAL_IDS.has(c.id)) || followUp.external,
+      control:
+        castsIn.some(
+          (c) => CONTROL_IDS.has(c.id) && c.dest && !friendIds.has(c.dest),
+        ) || followUp.control,
       peel: friendControlCasts.some((c) => inWin(c.t) && attackers.has(c.dest)),
-      kite,
+      kite: kite || followUp.kite,
     };
     const inCC = cc.some((i) => i.startMs <= t && i.endMs >= t);
     const lockedOut =

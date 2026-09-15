@@ -409,4 +409,10 @@
 //  death-window "Mitigation audit" amounts grow accordingly; burst-into-
 //  mitigation requires the wall to cover >= 30 % of the burst (provisional,
 //  BACKLOG #42).
-export const PROMPT_VERSION = 62;
+//  v63 (2026-09-14, GH #96 M4 second ruling "一里的都算,二里的都不算" + follow-up
+//  rules): crisis-no-response also credits Tree of Life, Bear Form, Ancient of
+//  Lore, Ultimate Penitence, Tranquility; a trinket / break racial counts only
+//  when a credited action follows within 3 s of the press, mobility / Blessing
+//  of Freedom only when distance opens within 3 s of the press. Reference
+//  table rebuilt over the full archive.
+export const PROMPT_VERSION = 63;

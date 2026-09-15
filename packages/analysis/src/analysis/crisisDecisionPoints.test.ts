@@ -193,6 +193,58 @@ describe("crisisDecisionPoints", () => {
     );
   });
 
+  // user ruling 2026-09-14: a trinket alone is no answer; a trinket that opens
+  // a credited action within RESPONSE_WINDOW_MS of the press is, even when the
+  // action lands after the crisis window (t + 3 s) closes
+  it("trinket alone is not a response; trinket + wall within 3 s of the press is, even past the window", () => {
+    const alone = unit({
+      spellCastEvents: [
+        {
+          timestamp: T0 + 4500,
+          spellId: "336126",
+          logLine: { event: "SPELL_CAST_SUCCESS" },
+        },
+      ],
+    });
+    expect(crisisDecisionPoints(alone, combat(alone))[0]!.responded).toBe(
+      false,
+    );
+    const followed = unit({
+      spellCastEvents: [
+        { timestamp: T0 + 4500, spellId: "336126" },
+        // crossing at t = 2 s → window ends at 5 s; the wall lands at 6.5 s
+        { timestamp: T0 + 6500, spellId: "19236" },
+      ],
+    });
+    const p = crisisDecisionPoints(followed, combat(followed))[0]!;
+    expect(p.responses.wall).toBe(true);
+    expect(p.responded).toBe(true);
+  });
+
+  it("mobility press late in the window counts when distance opens within 3 s of the press", () => {
+    const o = unit({
+      advancedActions: [
+        hp(0, 100, 100, 0, 0),
+        hp(1000, 70, 100, 0, 0),
+        hp(2000, 38, 100, 0, 0),
+        hp(4500, 36, 100, 0, 0),
+        hp(5000, 35, 100, 0, 0),
+        hp(7500, 35, 100, 12, 0),
+      ],
+      spellCastEvents: [{ timestamp: T0 + 4500, spellId: "190784" }],
+    });
+    const e = enemy("E1", {
+      advancedActions: [
+        hp(2000, 100, 100, 1, 0),
+        hp(4500, 100, 100, 1, 0),
+        hp(5000, 100, 100, 1, 0),
+        hp(7500, 100, 100, 1, 0),
+      ],
+    });
+    const p = crisisDecisionPoints(o, combat(o, [e]))[0]!;
+    expect(p.responses.kite).toBe(true);
+  });
+
   it("gate 1: crossing inside enemy hard CC → inCC=true, feasible=false", () => {
     const o = unit({
       auraEvents: [

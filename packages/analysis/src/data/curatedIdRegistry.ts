@@ -86,7 +86,10 @@ import {
   OFFENSIVE_PURGE_TALENT_IDS,
   TALENT_BEHAVIORS,
 } from "../utils/talentBehaviors";
-import { CRISIS_PROTECTIVE_ANSWER_IDS } from "../analysis/crisisDecisionPoints";
+import {
+  CRISIS_MOBILITY_PRESS_IDS,
+  CRISIS_PROTECTIVE_ANSWER_IDS,
+} from "../analysis/crisisDecisionPoints";
 import { KW_MAJOR_DEFENSIVE_IDS } from "./abilityProfile";
 import { classMetadata } from "./classSpells";
 import { CURATED_ABILITY_FACTS } from "./curatedAbilityFacts";
@@ -474,6 +477,12 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
     "analysis/crisisDecisionPoints.ts",
     "cast",
     () => [...CRISIS_PROTECTIVE_ANSWER_IDS],
+  ),
+  t(
+    "CRISIS_MOBILITY_PRESS_IDS",
+    "analysis/crisisDecisionPoints.ts",
+    "cast",
+    () => [...CRISIS_MOBILITY_PRESS_IDS],
   ),
   // GH #96 M3b: mitigation aura ids + the talent ids that strengthen them. A
   // talent never "occurs" in a log on its own (passives are not cast), so the

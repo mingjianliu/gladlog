@@ -1,117 +1,117 @@
 {
   "meta": {
-    "generatedAt": "2026-09-14",
-    "corpus": "wowarenalogs archive 2026-08-11..2026-09-05 new season, full archive 63,303 files, 43,005 healer crisis points (healer rescan 2026-09-14, GH #96 M4 user ruling: Power Word: Shield / Void Shield, Fade, Spirit of Redemption, Reversion, Divine Hymn count as responded). dps cells deliberately NOT published — GH #59 ruling 2026-08-30",
+    "generatedAt": "2026-09-15",
+    "corpus": "wowarenalogs archive 2026-08-11..2026-09-05 new season, full archive 63,303 files, 43,005 healer crisis points (healer rescan 2026-09-14, GH #96 M4 user rulings: protective answers — Power Word: Shield / Void Shield, Fade, Spirit of Redemption, Reversion, Divine Hymn, Tree of Life, Bear Form, Ancient of Lore, Ultimate Penitence, Tranquility; a trinket / break racial counts only with a follow-up, mobility only when distance opens). dps cells deliberately NOT published — GH #59 ruling 2026-08-30",
     "weeks": ["2026-W33", "2026-W34", "2026-W35", "2026-W36"],
     "command": "npx tsx packages/eval/scripts/behaviorPriorScan.ts emit-table --in <scan.jsonl>",
     "predicateVersion": 1
   },
   "cells": {
     "2v2|healer|*": {
-      "nNoResp": 3465,
-      "deathNoResp": 0.31,
-      "nResp": 8229,
+      "nNoResp": 3255,
+      "deathNoResp": 0.32,
+      "nResp": 8439,
       "deathResp": 0.08,
       "top": [
-        ["selfHeal", 0.56],
-        ["protective", 0.22],
-        ["wall", 0.22]
+        ["selfHeal", 0.55],
+        ["protective", 0.28],
+        ["wall", 0.21]
       ],
       "outcome": "ownDeath10s"
     },
     "2v2|healer|10-20%": {
-      "nNoResp": 1889,
-      "deathNoResp": 0.27,
-      "nResp": 3812,
+      "nNoResp": 1771,
+      "deathNoResp": 0.28,
+      "nResp": 3930,
       "deathResp": 0.08,
       "top": [
-        ["selfHeal", 0.51],
-        ["protective", 0.24],
-        ["control", 0.2]
+        ["selfHeal", 0.5],
+        ["protective", 0.29],
+        ["kite", 0.2]
       ],
       "outcome": "ownDeath10s"
     },
     "2v2|healer|>=20%": {
-      "nNoResp": 1576,
-      "deathNoResp": 0.35,
-      "nResp": 4417,
+      "nNoResp": 1484,
+      "deathNoResp": 0.36,
+      "nResp": 4509,
       "deathResp": 0.09,
       "top": [
         ["selfHeal", 0.6],
-        ["wall", 0.25],
-        ["external", 0.21]
+        ["protective", 0.27],
+        ["wall", 0.24]
       ],
       "outcome": "ownDeath10s"
     },
     "3v3|healer|*": {
-      "nNoResp": 1840,
+      "nNoResp": 1781,
       "deathNoResp": 0.37,
-      "nResp": 4539,
+      "nResp": 4598,
       "deathResp": 0.1,
       "top": [
         ["selfHeal", 0.83],
         ["wall", 0.25],
-        ["kite", 0.16]
+        ["protective", 0.19]
       ],
       "outcome": "ownDeath10s"
     },
     "3v3|healer|10-20%": {
-      "nNoResp": 581,
-      "deathNoResp": 0.35,
-      "nResp": 1143,
+      "nNoResp": 557,
+      "deathNoResp": 0.36,
+      "nResp": 1167,
       "deathResp": 0.08,
       "top": [
-        ["selfHeal", 0.78],
+        ["selfHeal", 0.76],
         ["wall", 0.2],
-        ["kite", 0.17]
+        ["protective", 0.19]
       ],
       "outcome": "ownDeath10s"
     },
     "3v3|healer|>=20%": {
-      "nNoResp": 1259,
+      "nNoResp": 1224,
       "deathNoResp": 0.38,
-      "nResp": 3396,
+      "nResp": 3431,
       "deathResp": 0.1,
       "top": [
-        ["selfHeal", 0.86],
-        ["wall", 0.27],
-        ["kite", 0.15]
+        ["selfHeal", 0.85],
+        ["wall", 0.26],
+        ["protective", 0.19]
       ],
       "outcome": "ownDeath10s"
     },
     "Rated Solo Shuffle|healer|*": {
-      "nNoResp": 1338,
+      "nNoResp": 1252,
       "deathNoResp": 0.34,
-      "nResp": 5789,
+      "nResp": 5875,
       "deathResp": 0.15,
       "top": [
-        ["selfHeal", 0.71],
-        ["wall", 0.31],
-        ["kite", 0.17]
+        ["selfHeal", 0.7],
+        ["wall", 0.3],
+        ["protective", 0.21]
       ],
       "outcome": "teamDeath15s"
     },
     "Rated Solo Shuffle|healer|10-20%": {
-      "nNoResp": 707,
+      "nNoResp": 662,
       "deathNoResp": 0.34,
-      "nResp": 2121,
+      "nResp": 2166,
       "deathResp": 0.16,
       "top": [
-        ["selfHeal", 0.63],
+        ["selfHeal", 0.62],
         ["wall", 0.28],
-        ["kite", 0.17]
+        ["protective", 0.2]
       ],
       "outcome": "teamDeath15s"
     },
     "Rated Solo Shuffle|healer|>=20%": {
-      "nNoResp": 631,
+      "nNoResp": 590,
       "deathNoResp": 0.34,
-      "nResp": 3668,
-      "deathResp": 0.14,
+      "nResp": 3709,
+      "deathResp": 0.15,
       "top": [
         ["selfHeal", 0.75],
         ["wall", 0.32],
-        ["external", 0.16]
+        ["protective", 0.22]
       ],
       "outcome": "teamDeath15s"
     }
