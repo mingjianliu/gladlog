@@ -905,4 +905,20 @@ describe("check-doc-commands CLI", () => {
       );
     });
   });
+
+  describe("Contract (10): Root package.json integration", () => {
+    it("wires verify:doc-commands script and presubmit invocation in repository root package.json", () => {
+      const rootPkgPath = path.resolve(import.meta.dirname, "..", "package.json");
+      const rootPkg = JSON.parse(fs.readFileSync(rootPkgPath, "utf8"));
+
+      assert.strictEqual(
+        rootPkg.scripts?.["verify:doc-commands"],
+        "node --test scripts/check-doc-commands.test.mjs && node scripts/check-doc-commands.mjs --root .",
+      );
+      assert.match(
+        rootPkg.scripts?.presubmit ?? "",
+        /\bnpm run verify:doc-commands\b/,
+      );
+    });
+  });
 });
