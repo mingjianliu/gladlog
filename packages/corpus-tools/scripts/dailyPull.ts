@@ -1,4 +1,4 @@
-// Daily quota pull driver: 5 Solo Shuffle objects, then 3v3 for the rest of
+// Daily quota pull driver: 10 Solo Shuffle objects, then 3v3 for the rest of
 // the day's 15, all at 2100+, any spec, any uploader (user ruling 2026-09-15).
 // Runs fetchPvpLogs.ts once per step, records every run to
 // downloads/daily-pull/runs.jsonl, and raises a macOS notification when the

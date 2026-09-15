@@ -64,8 +64,9 @@ SPEC=Shaman_Restoration MIN_RATING=2100 npx tsx scripts/fetchPvpLogs.ts
 
 ## 每日定额拉取(用户裁定 2026-09-15,launchd 已装)
 
-每天把 15 个额度用在**过滤能到的最高档 2100+、任意专精、任意上传者**上:先 **Solo Shuffle 5 盘**
-(一盘 = 6 轮 = 1 个额度,实测),再 **3v3 补满剩下的**(shuffle 没凑够 5 时 3v3 多拿)。
+每天把 15 个额度用在**过滤能到的最高档 2100+、任意专精、任意上传者**上:先 **Solo Shuffle 10 盘**
+(一盘 = 6 轮 = 1 个额度,实测),再 **3v3 补满剩下的 5**(shuffle 没凑够 10 时 3v3 多拿;
+09-15 当天从 5/10 改成 10/5)。
 专精抓取时不筛,事后按 manifest 的 `players[].spec` 筛(用户不用 wowarenalogs,
 `SPEC_ROLE` 的 recorder 语义与用户本人无关)。
 

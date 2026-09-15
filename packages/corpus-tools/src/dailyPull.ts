@@ -2,15 +2,15 @@
 // only; the driver spawns fetchPvpLogs.ts per step.
 //
 // User ruling 2026-09-15: spend the upstream's 15 distinct logs per UTC day on
-// 2100+ (the highest reachable filter tier), any spec, any uploader — 5 Solo
-// Shuffle matches (one shuffle object = six rounds for one quota unit) and
-// 3v3 for the rest. Be very careful with paging and every other request.
+// 2100+ (the highest reachable filter tier), any spec, any uploader — 10 Solo
+// Shuffle matches (one shuffle object = six rounds for one quota unit; revised
+// from 5 the same day) and 3v3 for the rest. Be very careful with paging and every other request.
 import { type QuotaState, remainingGrantsToday } from "./pvpLogFetch";
 
 /** The upstream's flat daily quota (their accessLimits.ts, 2026-09-13). */
 export const DAILY_QUOTA = 15;
 /** Solo Shuffle objects to take first each day; 3v3 gets the remainder. */
-export const DAILY_SHUFFLE_SHARE = 5;
+export const DAILY_SHUFFLE_SHARE = 10;
 /** Highest filter tier the server indexes (1400/1800/2100/2400; 2400 is empty this season). */
 export const DAILY_MIN_RATING = 2100;
 /** Feed pages per step at most — one page (50 stubs) normally covers a step. */

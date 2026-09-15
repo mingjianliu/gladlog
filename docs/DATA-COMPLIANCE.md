@@ -264,7 +264,7 @@ Two consequences, both settled on 2026-09-15:
   count locally, the server's counter is the predicate. Fifteen a day is what
   a spec/rating sample needs and nothing like a corpus, which is the right
   size. The daily routine (`npm run logs:daily`, launchd, once a day at 21:00
-  local) takes 5 Solo Shuffle objects and 3v3 for the rest, all at 2100+, and
+  local) takes 10 Solo Shuffle objects and 3v3 for the rest, all at 2100+, and
   a rerun on a day whose quota is spent makes no request at all. The session cookie is a credential and lives outside every repo
   (`~/.gladlog/wal-session-cookie` by default).
 

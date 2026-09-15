@@ -214,7 +214,7 @@ scraping reason in the daily log limit message」;2026-09-15 对线上 API 实�
   `downloadsUsedToday / downloadsQuota`,服务端一拒(`LOG_QUOTA_EXCEEDED`)就停 ——
   从不在本地自己猜计数,服务端的计数器就是谓词。一天十五场够做专精/分数抽样,离语料
   差得远,这个尺寸是对的。每日例行(`npm run logs:daily`,launchd 每天本地 21:00 一次)
-  先拿 5 盘 Solo Shuffle,3v3 补满剩下的,全部 2100+;当天额度已满再起一次不发任何请求。会话 cookie 是凭据,放在所有仓库之外(默认
+  先拿 10 盘 Solo Shuffle,3v3 补满剩下的,全部 2100+;当天额度已满再起一次不发任何请求。会话 cookie 是凭据,放在所有仓库之外(默认
   `~/.gladlog/wal-session-cookie`)。
 
 2026-09-08 的裁定(「不重试、不找别的入口、不挂调度」)对十五场以上的一切仍然有效。

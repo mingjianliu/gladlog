@@ -49,17 +49,17 @@ describe("remainingToday", () => {
 });
 
 describe("planSteps", () => {
-  it("gives Solo Shuffle its share first and 3v3 the rest (user ruling 2026-09-15: 5 + 10)", () => {
+  it("gives Solo Shuffle its share first and 3v3 the rest (user ruling 2026-09-15: 10 + 5)", () => {
     expect(planSteps(15)).toEqual([
       { bracket: "Rated Solo Shuffle", limit: DAILY_SHUFFLE_SHARE },
       { bracket: "3v3", limit: 15 - DAILY_SHUFFLE_SHARE },
     ]);
-    expect(DAILY_SHUFFLE_SHARE).toBe(5);
+    expect(DAILY_SHUFFLE_SHARE).toBe(10);
   });
   it("shrinks the shuffle share when little is left and drops empty steps", () => {
     expect(planSteps(3)).toEqual([{ bracket: "Rated Solo Shuffle", limit: 3 }]);
-    expect(planSteps(7)).toEqual([
-      { bracket: "Rated Solo Shuffle", limit: 5 },
+    expect(planSteps(12)).toEqual([
+      { bracket: "Rated Solo Shuffle", limit: 10 },
       { bracket: "3v3", limit: 2 },
     ]);
     expect(planSteps(0)).toEqual([]);
