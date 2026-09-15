@@ -59,12 +59,12 @@ V4 签名地址,并**从每账号每 UTC 日 15 个不同日志的额度里扣�
   一场 Solo Shuffle 可达 ~30MB。页间隔 500ms,下载间隔 2s(`DOWNLOAD_SLEEP_MS`),
   串行,绝不并发。下载计数器计的是**尝试**而非成功 —— 被丢弃的不完整下载同样
   已经消耗了对方带宽。
-- **有界翻页**,但两个脚本干的活不同,上限也不同:`scripts/fetchPvpLogs.ts`
-  (按专精/分数定向取样)的 `MAX_PAGES` 默认 **40**;`scripts/archivePvpLogs.ts`
+- **有界翻页**,但两个脚本干的活不同,上限也不同:`packages/corpus-tools/scripts/fetchPvpLogs.ts`
+  (按专精/分数定向取样)的 `MAX_PAGES` 默认 **40**;`packages/corpus-tools/scripts/archivePvpLogs.ts`
   (顺序全量扫整个 feed)默认 **2000** —— 它必须能翻到约 39,000 条 stub 那个窗口的
   尽头才停。两者都会在短页、空页时提前停。服务端回 `queryLimitReached` 目前只有
-  归档器处理(`scripts/archivePvpLogs.ts:342`):收到即 warn,处理完本页后就停止
-  该 bracket 的翻页。`scripts/fetchPvpLogs.ts:134` 仍会整个丢弃这个标志
+  归档器处理(`packages/corpus-tools/scripts/archivePvpLogs.ts:396`):收到即 warn,处理完本页后就停止
+  该 bracket 的翻页。`packages/corpus-tools/scripts/fetchPvpLogs.ts:213` 仍会整个丢弃这个标志
   (`const { stubs } = await fetchDetailedStubs(...)`)——不是疏漏而是尚未接入:
   它是维护者手动跑的一次性工具,`MAX_PAGES=40` 已经兜住了深翻页的上限。归档器
   另外还会在连续 200 场已知时停止。
@@ -76,7 +76,7 @@ V4 签名地址,并**从每账号每 UTC 日 15 个不同日志的额度里扣�
 feed 只留约 7 天(GCS 对象约 30 天),所以攒语料靠的是长期轮询,不是一次猛拉。
 
 **2026-08-01 起,它已按常驻定时任务建成** —— 原先那句「哪天变成常驻定时任务就回来
-重看本节」的支票现在兑现。(建成,不等于启用 —— 见下面最后一条。)`scripts/archivePvpLogs.ts` 顺序全量扫 feed、归档每一场新出现的
+重看本节」的支票现在兑现。(建成,不等于启用 —— 见下面最后一条。)`packages/corpus-tools/scripts/archivePvpLogs.ts` 顺序全量扫 feed、归档每一场新出现的
 公开对局;`packages/corpus-tools/ops/app.gladlog.pvp-archive.plist` 用 launchd
 **每 6 小时跑一次、一天 4 次**(本机时间 01:00 / 07:00 / 13:00 / 19:00)。
 具体数字,以及我们为什么认为可接受:
@@ -209,7 +209,7 @@ scraping reason in the daily log limit message」;2026-09-15 对线上 API 实�
   —— 都是在绕一个上游专门因为批量抓取而设的限制,不在选项里。Drive 上的归档
   (63,309 场,2026-08-13 → 2026-09-05)冻结,参考语料从它构建
   (`packages/corpus-tools/README.zh-CN.md`「feed 已死」)。
-- **定向抽样在额度内、单个登录账号上继续。** `scripts/fetchPvpLogs.ts` 现在用操作者
+- **定向抽样在额度内、单个登录账号上继续。** `packages/corpus-tools/scripts/fetchPvpLogs.ts` 现在用操作者
   自己的会话 cookie,每次下载前一刻才申请 grant,每场之后打印服务端返回的
   `downloadsUsedToday / downloadsQuota`,服务端一拒(`LOG_QUOTA_EXCEEDED`)就停 ——
   从不在本地自己猜计数,服务端的计数器就是谓词。一天十五场够做专精/分数抽样,离语料

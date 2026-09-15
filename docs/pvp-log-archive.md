@@ -12,7 +12,7 @@
 > inside the quota: `.claude/skills/fetch-pvp-logs`. Everything below is the
 > record of how it ran.
 
-`scripts/archivePvpLogs.ts` (in `packages/corpus-tools`) scans the
+`packages/corpus-tools/scripts/archivePvpLogs.ts` scans the
 wowarenalogs.com public feed every 6 hours and archives every newly-seen
 public match **in the archived brackets** to Google Drive as **raw gzip
 bytes**, sorted into per-day directories. It is collection-only: no

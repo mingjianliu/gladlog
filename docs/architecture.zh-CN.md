@@ -330,7 +330,6 @@ analysis 的函数要的是旧的 `ICombatUnit` 形状。`parser-compat` 导出�
 | `timelineHelpers.ts`              | 924     | 共享渲染助手;导出 `DMG_SPIKE_THRESHOLD`,renderer 的承压泳道 import 它,以保证泳道数=prompt 行数。 |
 | `matchTimelineSections.ts`        | 820     | `[STATE]` 等各 section 的渲染器。                                                                |
 | `resourceSnapshot.ts`             | 818     | 配装、就绪充能、冷却中的名字,以及 JSON 局势快照。                                                |
-| `criticalMoments.ts`              | 813     | 死亡根因追溯、击杀时刻字段、关键时刻识别。                                                       |
 | `matchNarrative.ts`               | 431     | 「Match Flow」叙事,按爆发窗口而非时间片切段,以保住因果顺序。                                     |
 | `criticalWindows.ts` / `utils.ts` | 70 / 52 | 窗口助手。                                                                                       |
 

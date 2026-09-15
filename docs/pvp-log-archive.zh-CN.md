@@ -9,7 +9,7 @@
 > [DATA-COMPLIANCE.zh-CN.md](DATA-COMPLIANCE.zh-CN.md) §3。额度内的定向抽样:
 > `.claude/skills/fetch-pvp-logs`。下面全部是它当时怎么跑的记录。
 
-`packages/corpus-tools` 下的 `scripts/archivePvpLogs.ts` 每 6 小时扫一次
+`packages/corpus-tools/scripts/archivePvpLogs.ts` 每 6 小时扫一次
 wowarenalogs.com 公共 feed,把**归档 bracket 内**新出现的公开对局以**原始 gzip
 字节**下载并归档到 Google Drive,按天分目录存放。只采集不加工——不解析、不算指标、不改动原始字节。
 合规依据(数据源、条款、采集自律)见 [DATA-COMPLIANCE.zh-CN.md](DATA-COMPLIANCE.zh-CN.md);

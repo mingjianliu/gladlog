@@ -330,7 +330,6 @@ This is where analysis output becomes the text a model sees. There is no single 
 | `timelineHelpers.ts`              |     924 | Shared rendering helpers; exports `DMG_SPIKE_THRESHOLD`, which the renderer's pressure lanes import so lane count equals prompt line count. |
 | `matchTimelineSections.ts`        |     820 | The `[STATE]` / section renderers.                                                                                                          |
 | `resourceSnapshot.ts`             |     818 | Loadout, charges-ready, on-cooldown names, and the JSON situation snapshot.                                                                 |
-| `criticalMoments.ts`              |     813 | Death root-cause traces, kill-moment fields, critical-moment identification.                                                                |
 | `matchNarrative.ts`               |     431 | The "Match Flow" narrative, segmented by burst windows rather than time slices, so causal order survives.                                   |
 | `criticalWindows.ts` / `utils.ts` | 70 / 52 | Window helpers.                                                                                                                             |
 

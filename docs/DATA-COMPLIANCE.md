@@ -73,14 +73,14 @@ taken later.
   never concurrent. The download counter counts _attempts_, not successes — a
   discarded incomplete download still consumed their bandwidth.
 - **Bounded paging**, with a different bound per script because they do
-  different jobs: `scripts/fetchPvpLogs.ts` (targeted spec/rating sampling)
-  defaults `MAX_PAGES` to **40**, while `scripts/archivePvpLogs.ts` (sequential
+  different jobs: `packages/corpus-tools/scripts/fetchPvpLogs.ts` (targeted spec/rating sampling)
+  defaults `MAX_PAGES` to **40**, while `packages/corpus-tools/scripts/archivePvpLogs.ts` (sequential
   full sweep of the whole feed) defaults it to **2000** — it has to reach the
   far end of a ~39,000-stub window before it stops. Both stop early on a short
   page or an empty page. `queryLimitReached` from the server is currently
-  handled only by the archiver (`scripts/archivePvpLogs.ts:342`): it warns and
+  handled only by the archiver (`packages/corpus-tools/scripts/archivePvpLogs.ts:396`): it warns and
   stops paging that bracket after finishing the current page.
-  `scripts/fetchPvpLogs.ts:134` still discards the flag entirely
+  `packages/corpus-tools/scripts/fetchPvpLogs.ts:213` still discards the flag entirely
   (`const { stubs } = await fetchDetailedStubs(...)`) — not wired up on
   purpose, since it's a maintainer-run one-off tool and its `MAX_PAGES=40`
   bound already caps how deep a run can go. The archiver additionally stops
@@ -97,7 +97,7 @@ corpus means polling over time rather than one burst.
 **As of 2026-08-01 this is built as a standing scheduled job**, so the
 paragraph that used to say "revisit this section if it ever becomes one" is now
 cashed in. (Built, not enabled — see the last bullet below.)
-`scripts/archivePvpLogs.ts` sweeps the whole feed and archives every new public
+`packages/corpus-tools/scripts/archivePvpLogs.ts` sweeps the whole feed and archives every new public
 match; `packages/corpus-tools/ops/app.gladlog.pvp-archive.plist` runs it under
 launchd **4 times a day, every 6 hours** (01:00 / 07:00 / 13:00 / 19:00 local).
 What that means in numbers, and why we consider it acceptable:
@@ -257,7 +257,7 @@ Two consequences, both settled on 2026-09-15:
   2026-08-13 → 2026-09-05) is frozen and is what the reference corpus is
   built from (`packages/corpus-tools/README.md`, "The feed is gone").
 - **Targeted sampling continues inside the quota, on one signed-in account.**
-  `scripts/fetchPvpLogs.ts` now takes the operator's own session cookie,
+  `packages/corpus-tools/scripts/fetchPvpLogs.ts` now takes the operator's own session cookie,
   requests a grant immediately before each download, prints the server's
   `downloadsUsedToday / downloadsQuota` after every match, and stops the
   moment the server refuses (`LOG_QUOTA_EXCEEDED`) — it never guesses the
