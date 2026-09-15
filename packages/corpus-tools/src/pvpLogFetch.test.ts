@@ -9,10 +9,13 @@ import {
   checkRawPayloadBytes,
   dedupeByLogObject,
   expectedByteLength,
+  grantsRemaining,
   isKnownBracket,
   KNOWN_BRACKETS,
+  logObjectIdFromUrl,
   type ManifestEntry,
   matchesSpecFilter,
+  nextUtcMidnight,
   parseSpecArg,
   shouldSleepBeforeDownload,
   shouldSleepBeforePage,
@@ -331,5 +334,44 @@ describe("upsertManifestEntry", () => {
     const returned = upsertManifestEntry(manifest, entry("m1", "m1.txt"));
     expect(returned).toBe(manifest);
     expect(manifest).toHaveLength(1);
+  });
+});
+
+// ── Signed-in grant path (upstream 2026-09-13) ──
+
+describe("logObjectIdFromUrl", () => {
+  it("returns the GCS object name — the id the grant must be requested for", () => {
+    expect(
+      logObjectIdFromUrl(
+        "https://storage.googleapis.com/wowarenalogs-log-files-prod/ffa35b93ed23443ed6837505612ff7ca",
+      ),
+    ).toBe("ffa35b93ed23443ed6837505612ff7ca");
+  });
+  it("ignores a query string (a stale signed URL still names the object)", () => {
+    expect(
+      logObjectIdFromUrl("https://storage.googleapis.com/b/abc?X-Goog-Signature=x"),
+    ).toBe("abc");
+  });
+  it("throws on an empty url rather than requesting a grant for ''", () => {
+    expect(() => logObjectIdFromUrl("")).toThrow(/logObjectUrl/);
+  });
+});
+
+describe("grantsRemaining", () => {
+  it("is quota minus used, floored at zero", () => {
+    expect(grantsRemaining({ downloadsUsedToday: 3, downloadsQuota: 15 })).toBe(12);
+    expect(grantsRemaining({ downloadsUsedToday: 15, downloadsQuota: 15 })).toBe(0);
+    expect(grantsRemaining({ downloadsUsedToday: 16, downloadsQuota: 15 })).toBe(0);
+  });
+});
+
+describe("nextUtcMidnight", () => {
+  it("returns the next 00:00 UTC strictly after now", () => {
+    const now = new Date("2026-09-15T18:30:00Z");
+    expect(nextUtcMidnight(now).toISOString()).toBe("2026-09-16T00:00:00.000Z");
+    const atMidnight = new Date("2026-09-15T00:00:00Z");
+    expect(nextUtcMidnight(atMidnight).toISOString()).toBe(
+      "2026-09-16T00:00:00.000Z",
+    );
   });
 });

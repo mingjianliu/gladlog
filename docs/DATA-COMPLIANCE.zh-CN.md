@@ -31,9 +31,14 @@ Kirkland WA;联络 `privacy@wowarenalogs.com`;维护者渠道为其
 ## 2. 我们用的接口,以及拒绝使用的那个
 
 **使用 —— 公开 GraphQL feed。** `POST https://wowarenalogs.com/api/graphql`,
-匿名,`latestMatches(...)` 带服务端 `bracket` / `minRating` / `compQueryString`
-过滤,分页 cap 50;随后对返回的 `logObjectUrl` 做一次普通 GET。这就是他们自己
-的前端在用的接口。
+带 Battle.net 登录态 cookie(2026-09-13 起),`latestMatches(...)` 带服务端
+`bracket` / `minRating` / `compQueryString` 过滤,分页 cap 50,最近 1 小时的场次
+不可见;随后通过 `logDownloadUrl(matchId)` 取原始日志 —— 它返回一个 10 分钟有效的
+V4 签名地址,并**从每账号每 UTC 日 15 个不同日志的额度里扣一个**(他们的
+`accessLimits.ts`:固定值,无分档;`admin` 标签豁免,`blocked` 标签全拒)。这就是
+他们自己的前端在用的接口,额度也是他们定的 —— 我们按对方给的用,单账号,服务端说停
+就停。2026-09-08 之前同一个 feed 是匿名的、`logObjectUrl` 可以直接公开 GET;那个
+面已经不存在了(桶已私有,403),我们经由它拿走了多少见 §3。
 
 **拒绝 —— bucket 列举。** GCS bucket `wowarenalogs-log-files-prod` 把
 `storage.objects.list` 授予了 `allUsers`,于是
@@ -182,6 +187,38 @@ bracket 要翻六倍深的页,再按平方计费(三个轴的对照表见
 对方公告里说的是 *search results*,即查询路径而不是下载路径 —— 而那恰恰是我们的
 offset 翻页最糟糕的地方。
 
+### 2026-09-13:搜索在登录后重开、原始日志计量 —— 我们现在怎么做
+
+五天后上游把搜索开回来了,改成把下载这一侧关上(他们的提交 `fb81eba`「Meter raw
+log access per signed-in user; require sign-in for search」、`4e735ec`「Flat log
+quota: 15 distinct logs per user per day, no tiers」、`ee2809d`「Explain the
+scraping reason in the daily log limit message」;2026-09-15 对线上 API 实测):
+
+| 界面                               | 2026-09-08 之前              | 现在                                                                         |
+| ---------------------------------- | ---------------------------- | ---------------------------------------------------------------------------- |
+| `latestMatches`(搜索 / 翻页)      | 匿名                         | 必须 Battle.net 登录(否则 `UNAUTHENTICATED`);1 小时禁运期;不计量但按用户记日志 |
+| 原始日志                           | 对 `logObjectUrl` 公开 GET    | 桶已私有(403);`logDownloadUrl(matchId)` → 10 分钟签名地址                   |
+| 额度                               | 无                           | **每账号每 UTC 日 15 个不同日志**,固定值,在 Firestore 事务里校验;同日重开同一个 id 不扣 |
+| 拒绝文案                           | —                            | "You've reached today's limit of 15 matches. This limit exists because bots have been scraping combat logs in bulk and driving up our hosting costs. It resets at midnight UTC." |
+
+两条后果,均于 2026-09-15 定下:
+
+- **归档器是彻底退役,不是暂停。** 全量扫一天要拿几千场,接口现在给十五场。
+  `archivePvpLogs.ts` 没有任何一种配置能塞进去,脚本现在直接拒绝启动(exit 2 并打印
+  原因)。任何能把旧量级找回来的做法 —— 多账号、共享会话、任何带「轮换」两个字的
+  —— 都是在绕一个上游专门因为批量抓取而设的限制,不在选项里。Drive 上的归档
+  (63,309 场,2026-08-13 → 2026-09-05)冻结,参考语料从它构建
+  (`packages/corpus-tools/README.zh-CN.md`「feed 已死」)。
+- **定向抽样在额度内、单个登录账号上继续。** `scripts/fetchPvpLogs.ts` 现在用操作者
+  自己的会话 cookie,每次下载前一刻才申请 grant,每场之后打印服务端返回的
+  `downloadsUsedToday / downloadsQuota`,服务端一拒(`LOG_QUOTA_EXCEEDED`)就停 ——
+  从不在本地自己猜计数,服务端的计数器就是谓词。一天十五场够做专精/分数抽样,离语料
+  差得远,这个尺寸是对的。会话 cookie 是凭据,放在所有仓库之外(默认
+  `~/.gladlog/wal-session-cookie`)。
+
+2026-09-08 的裁定(「不重试、不找别的入口、不挂调度」)对十五场以上的一切仍然有效。
+按上游自己定的速率走登录路径不是「别的入口」,它就是那个入口。
+
 ## 4. 日志里的个人数据
 
 战斗日志含角色名、服务器,以及 `Player-realmID-hexID` 形式的 GUID。GUID 跨角色
@@ -265,8 +302,9 @@ gladlog 是 MIT。wowarenalogs 的代码是 **CC BY-NC-ND 4.0**,既禁商用**�
 ## 待决事项
 
 - **定时轮询**(BACKLOG #19)—— **2026-09-08 被上游关停**,对方对所有人停掉了
-  match search。采集已停止;我们拿走了多少、让对方花了多少,实测数字写在 §3。调度
-  从来没有装载过,所以没有什么需要停用。2026-08-01「不联系维护者」的决定仍然有效、
+  match search;2026-09-13 搜索在 Battle.net 登录后重开、原始日志按每账号每天 15 个
+  计量;2026-09-15 归档器彻底退役(§3)。我们拿走了多少、让对方花了多少,实测数字
+  写在 §3。调度从来没有装载过,所以没有什么需要停用。2026-08-01「不联系维护者」的决定仍然有效、
   未重新审议;若哪天改主意,§3 里已经备好了可以直接摆出来的具体数字(63,309 场、
   41.96 GiB)。
 - **技能与专精图标**仍在运行时取自 Wowhead 的 CDN(`wow.zamimg.com`),落盘缓存。

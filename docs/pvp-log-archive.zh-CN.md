@@ -2,6 +2,13 @@
 
 [English](pvp-log-archive.md) · **中文**
 
+> **已退役。** 上游 2026-09-08 停掉了匿名搜索,2026-09-13 在 Battle.net 登录后重开,
+> 并把原始日志按**每账号每 UTC 日 15 个不同日志**计量 —— 全量扫已经不是对方提供的
+> 接口,脚本现在直接拒绝启动(exit 2)。它建起来的归档(63,309 场,2026-08-13 →
+> 2026-09-05,在 Drive 上)冻结,参考语料从它构建。我们拿走了多少、让对方花了多少:
+> [DATA-COMPLIANCE.zh-CN.md](DATA-COMPLIANCE.zh-CN.md) §3。额度内的定向抽样:
+> `.claude/skills/fetch-pvp-logs`。下面全部是它当时怎么跑的记录。
+
 `packages/corpus-tools` 下的 `scripts/archivePvpLogs.ts` 每 6 小时扫一次
 wowarenalogs.com 公共 feed,把**归档 bracket 内**新出现的公开对局以**原始 gzip
 字节**下载并归档到 Google Drive,按天分目录存放。只采集不加工——不解析、不算指标、不改动原始字节。

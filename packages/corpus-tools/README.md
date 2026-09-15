@@ -51,6 +51,12 @@ query with a GraphQL `SEARCH_DISABLED` error inside an HTTP 200, and the ruling 
 was to stop asking (`docs/DATA-COMPLIANCE.md`). The feed path above therefore cannot
 rebuild anything any more, and it fails **silently** — zero stubs, no error.
 
+On 2026-09-13 the upstream reopened search behind Battle.net sign-in and put raw logs
+behind `logDownloadUrl` — a 10-minute signed URL charged against **15 distinct logs per
+user per UTC day**. That is a sampling budget, not a corpus one, so the archive mode below
+stays the way the reference corpus is built; the feed mode of `buildCorpus.ts` is not
+being taught the signed-in path.
+
 Our own archive is what remains. Point the builder at it:
 
 ```bash
@@ -115,10 +121,10 @@ The archetype dimension is only worth having when every archetype-cell can reach
 ## Downloading other players' logs by spec/rating (fetch-pvp-logs)
 
 ```bash
-SPEC=Shaman_Restoration MIN_RATING=2100 LIMIT=20 npx tsx scripts/fetchPvpLogs.ts
+WAL_COOKIE=<Battle.net session token> SPEC=Shaman_Restoration MIN_RATING=2100 npx tsx scripts/fetchPvpLogs.ts
 ```
 
-Bulk-downloads raw logs from the same feed by bracket/rating tier (server-side) + spec (compQueryString server-side pre-filter + recorder/any client-side refinement) into `$GLADLOG_EVAL_HOME/downloads/`, with a manifest (rating/MMR/everyone's spec/GCS timezone meta) and resumable downloads. Parameters, rating-tier semantics, the 7-day retention window and other pitfalls: see `.claude/skills/fetch-pvp-logs`.
+Downloads raw logs from the signed-in feed by bracket/rating tier (server-side) + spec (compQueryString server-side pre-filter + recorder/any client-side refinement) into `$GLADLOG_EVAL_HOME/downloads/`, with a manifest (rating/MMR/everyone's spec/GCS timezone meta) and resumable downloads. Since 2026-09-13 each log is fetched through a `logDownloadUrl` grant and the upstream allows **15 distinct logs per user per UTC day**; the script prints the server's counter after every match and stops when it refuses. Session cookie, parameters, rating-tier semantics, the 7-day window and other pitfalls: see `.claude/skills/fetch-pvp-logs`.
 
 ## Smoke gate (go/no-go)
 

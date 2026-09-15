@@ -314,6 +314,14 @@ eliminating "only collected popular specs / high brackets / certain days" corpus
 Compliance note: WAL's logs are voluntarily publicly uploaded by players, but the **code** fork is CC BY-NC-ND;
 review data-side compliance separately before using data for training/commercial purposes — don't conflate with code license.
 
+**2026-09-15 status.** Form 1 is over: the upstream discontinued anonymous search on 2026-09-08 (user ruling the same
+day: stop, no workaround), and on 2026-09-13 reopened it behind Battle.net sign-in with raw logs metered at **15 distinct
+logs per user per UTC day** (flat, no tiers — verified in their source, `accessLimits.ts`). `archivePvpLogs.ts` is retired
+and refuses to start; the 63,309-match Drive archive (2026-08-13 → 2026-09-05) is frozen and feeds the reference corpus.
+`fetchPvpLogs.ts` was moved to the signed-in grant path and stops on the server's counter — targeted sampling only.
+Details and the compliance reasoning: `docs/DATA-COMPLIANCE.md` §3. Forms 2 and 3 are unaffected and remain the only
+route to volume.
+
 ## 21. 2026-07-31 full-week audit P2 deferred items
 
 This week's full-repo audit (desktop services/main/IPC + analysis + corpus-tools) Important fixes already committed

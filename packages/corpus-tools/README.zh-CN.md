@@ -50,6 +50,11 @@ WOW_PATCH=<当前 retail build> MIN_RATING=2300 PER_BRACKET=<每 bracket 采样�
 GraphQL `SEARCH_DISABLED` 错误,当天的裁定是停止再问(`docs/DATA-COMPLIANCE.zh-CN.md`)。
 所以上面那条 feed 路径已经重建不了任何东西,而且**是静默失败** —— 零 stub、不报错。
 
+2026-09-13 上游把搜索在 Battle.net 登录后重开,原始日志改走 `logDownloadUrl` ——
+10 分钟签名地址,从**每账号每 UTC 日 15 个不同日志**的额度里扣。那是抽样预算,不是
+语料预算,所以下面的归档模式仍然是参考语料的构建方式;`buildCorpus.ts` 的 feed 模式
+不会去学登录路径。
+
 剩下的来源是我们自己的归档。把 builder 指过去:
 
 ```bash
@@ -109,13 +114,15 @@ archetype 维度只有当每个 archetype-cell 都能凑够 `N_floor=30` 才有�
 ## 按专精/分数下载他人 log(fetch-pvp-logs)
 
 ```bash
-SPEC=Shaman_Restoration MIN_RATING=2100 LIMIT=20 npx tsx scripts/fetchPvpLogs.ts
+WAL_COOKIE=<Battle.net 会话 token> SPEC=Shaman_Restoration MIN_RATING=2100 npx tsx scripts/fetchPvpLogs.ts
 ```
 
-从同一 feed 按 bracket/评分档(服务端)+ 专精(compQueryString 服务端预筛 +
-recorder/any 客户端细筛)批量下载原始 log 到 `$GLADLOG_EVAL_HOME/downloads/`,
-带 manifest(评分/MMR/全员 spec/GCS 时区 meta)与断点续传。参数、评分档位语义、
-7 天保留期等坑见 `.claude/skills/fetch-pvp-logs`。
+从登录态 feed 按 bracket/评分档(服务端)+ 专精(compQueryString 服务端预筛 +
+recorder/any 客户端细筛)下载原始 log 到 `$GLADLOG_EVAL_HOME/downloads/`,
+带 manifest(评分/MMR/全员 spec/GCS 时区 meta)与断点续传。2026-09-13 起每个日志
+经 `logDownloadUrl` grant 取得,上游允许**每账号每 UTC 日 15 个不同日志**;脚本每场
+之后打印服务端计数,被拒即停。会话 cookie、参数、评分档位语义、7 天窗口等坑见
+`.claude/skills/fetch-pvp-logs`。
 
 ## 冒烟门(go/no-go)
 

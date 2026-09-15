@@ -2,6 +2,13 @@
 // Design: docs/superpowers/specs/2026-08-01-pvp-log-archive-design.md
 // Compliance: docs/DATA-COMPLIANCE.md
 //
+// RETIRED 2026-09-08 (user ruling), made structural 2026-09-15: the upstream
+// took the feed behind Battle.net sign-in and meters raw logs at 15 distinct
+// logs per user per day — a full sweep (thousands a day) is not something
+// their interface offers any more, and we do not go around it. The script is
+// kept for the ledger/Drive tooling and the record; it refuses to run.
+// Targeted sampling within the quota: scripts/fetchPvpLogs.ts.
+//
 // Usage: npx tsx scripts/archivePvpLogs.ts
 // Brackets swept: ARCHIVED_BRACKETS (src/pvpLogFetch.ts) — 2v2 excluded since 2026-09-04.
 // Env vars: ARCHIVE_ROOT / RCLONE_REMOTE / DOWNLOAD_SLEEP_MS / MAX_PAGES / DRY_RUN
@@ -63,6 +70,14 @@ import {
   shouldSleepBeforePage,
 } from "../src/pvpLogFetch";
 import { isLockStale, parseLock, serializeLock } from "../src/runLock";
+
+console.error(
+  "archivePvpLogs is retired (2026-09-08): the upstream feed now requires sign-in and " +
+    "meters raw logs at 15/user/day, so a full sweep is no longer an offered interface. " +
+    "See docs/DATA-COMPLIANCE.md §3 and docs/pvp-log-archive.md. " +
+    "For targeted sampling within the quota use scripts/fetchPvpLogs.ts.",
+);
+process.exit(2);
 
 const ARCHIVE_ROOT =
   process.env.ARCHIVE_ROOT ??

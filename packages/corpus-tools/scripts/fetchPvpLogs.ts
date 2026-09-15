@@ -1,7 +1,10 @@
-// Bulk-download other players' raw PvP combat logs (wowarenalogs feed),
-// filtered by spec/rating.
+// Download other players' raw PvP combat logs (wowarenalogs, signed in),
+// filtered by spec/rating. Since 2026-09-13 the upstream requires a Battle.net
+// session for search and hands out each raw log as a 10-minute signed URL
+// charged against a flat quota of 15 distinct logs per user per UTC day —
+// this is a targeted-sampling tool, not a corpus collector.
 // See .claude/skills/fetch-pvp-logs for usage; typical invocation:
-//   SPEC=Shaman_Restoration MIN_RATING=2100 LIMIT=20 npx tsx scripts/fetchPvpLogs.ts
+//   WAL_COOKIE=<session token> SPEC=Shaman_Restoration MIN_RATING=2100 npx tsx scripts/fetchPvpLogs.ts
 import fs from "fs-extra";
 import os from "os";
 import path from "path";
@@ -9,7 +12,12 @@ import path from "path";
 import {
   decodeRawPayload,
   downloadRaw,
+  FeedError,
   fetchDetailedStubs,
+  type LogDownloadGrant,
+  LogQuotaExceededError,
+  requestLogGrant,
+  sessionCookieHeader,
 } from "../src/feedClient";
 import {
   buildCompQueryString,
@@ -17,10 +25,13 @@ import {
   checkDecompressedPayload,
   checkRawPayloadBytes,
   dedupeByLogObject,
+  grantsRemaining,
   isKnownBracket,
   KNOWN_BRACKETS,
+  logObjectIdFromUrl,
   type ManifestEntry,
   matchesSpecFilter,
+  nextUtcMidnight,
   parseSpecArg,
   shouldSleepBeforeDownload,
   shouldSleepBeforePage,
@@ -35,7 +46,9 @@ const BRACKET = process.env.BRACKET ?? "3v3"; // "2v2" | "3v3" | "Rated Solo Shu
 const MIN_RATING = Number(process.env.MIN_RATING ?? 0);
 const SPEC = process.env.SPEC ?? ""; // Comma separated, numeric id or enum name
 const SPEC_ROLE = (process.env.SPEC_ROLE ?? "recorder") as SpecRole;
-const LIMIT = Number(process.env.LIMIT ?? 20);
+// Default = the upstream's whole daily quota; the server's own counter is the
+// hard stop regardless of what is asked for here.
+const LIMIT = Number(process.env.LIMIT ?? 15);
 // The feed only keeps the last ~7 days, and deep paging bills their Firestore
 // -- a backstop so we do not page forever
 const MAX_PAGES = Number(process.env.MAX_PAGES ?? 40);
@@ -54,6 +67,26 @@ const DOWNLOAD_SLEEP_MS = Number(process.env.DOWNLOAD_SLEEP_MS ?? 2000);
 const EVAL_HOME =
   process.env.GLADLOG_EVAL_HOME ??
   path.join(os.homedir(), "code/gladlog-eval-private");
+// Battle.net session: WAL_COOKIE inline, or a file holding it. The default
+// file lives outside every repo on purpose — a session token is a credential,
+// and eval-private is still a git repo.
+const COOKIE_FILE =
+  process.env.WAL_COOKIE_FILE ??
+  path.join(os.homedir(), ".gladlog", "wal-session-cookie");
+const COOKIE_HELP = `no Battle.net session. Sign in at https://wowarenalogs.com in Chrome, then
+DevTools → Application → Cookies → https://wowarenalogs.com → copy the value of
+__Secure-next-auth.session-token and either export WAL_COOKIE=<value> or write it
+to ${COOKIE_FILE} (chmod 600). Details: .claude/skills/fetch-pvp-logs`;
+
+function loadSessionCookie(): string {
+  const inline = process.env.WAL_COOKIE?.trim();
+  if (inline) return sessionCookieHeader(inline);
+  if (fs.pathExistsSync(COOKIE_FILE)) {
+    return sessionCookieHeader(fs.readFileSync(COOKIE_FILE, "utf8"));
+  }
+  console.error(COOKIE_HELP);
+  process.exit(1);
+}
 
 if (!isKnownBracket(BRACKET)) {
   console.error(
@@ -112,6 +145,7 @@ async function downloadWithMeta(
 }
 
 async function main() {
+  const cookie = loadSessionCookie();
   await fs.ensureDir(OUT_DIR);
   // Resume support: skip matches already in the manifest whose file is on disk
   const manifest: ManifestEntry[] = (await fs.pathExists(MANIFEST))
@@ -135,7 +169,9 @@ async function main() {
   let scanned = 0;
   let pagesFetched = 0;
   let downloadsAttempted = 0;
-  for (let page = 0; page < MAX_PAGES && fresh < LIMIT; page++) {
+  let lastGrant: LogDownloadGrant | undefined;
+  let quotaHit: LogQuotaExceededError | undefined;
+  pages: for (let page = 0; page < MAX_PAGES && fresh < LIMIT; page++) {
     // No need to wait before the first page (there is no earlier request to
     // space out from); every page after that sleeps PAGE_SLEEP_MS first.
     // The "should we sleep" predicate (shouldSleepBeforePage) has unit test
@@ -145,17 +181,27 @@ async function main() {
     // the real setTimeout loop is not covered by an extra test -- if it ever
     // breaks, the page intervals in a real run's log will show it.
     if (shouldSleepBeforePage(page)) await sleep(PAGE_SLEEP_MS);
-    const { stubs } = await fetchDetailedStubs({
-      bracket: BRACKET,
-      minRating: MIN_RATING > 0 ? MIN_RATING : undefined,
-      // Server-side comp pre-filter (some team contains these specs); the
-      // recorder semantics are refined client-side
-      compQueryString: specIds.length
-        ? buildCompQueryString(specIds)
-        : undefined,
-      offset: page * 50,
-      count: 50,
-    });
+    let stubs;
+    try {
+      ({ stubs } = await fetchDetailedStubs({
+        bracket: BRACKET,
+        minRating: MIN_RATING > 0 ? MIN_RATING : undefined,
+        // Server-side comp pre-filter (some team contains these specs); the
+        // recorder semantics are refined client-side
+        compQueryString: specIds.length
+          ? buildCompQueryString(specIds)
+          : undefined,
+        offset: page * 50,
+        count: 50,
+        cookie,
+      }));
+    } catch (e) {
+      if (e instanceof FeedError && e.code === "UNAUTHENTICATED") {
+        console.error(`session rejected (${e.message}) — the cookie is stale or wrong.\n${COOKIE_HELP}`);
+        process.exit(1);
+      }
+      throw e;
+    }
     if (stubs.length === 0) break;
     pagesFetched++;
     scanned += stubs.length;
@@ -175,10 +221,24 @@ async function main() {
       // from the interval just because we threw the result away.
       if (shouldSleepBeforeDownload(downloadsAttempted))
         await sleep(DOWNLOAD_SLEEP_MS);
+      // The grant is charged against the daily quota *here*; request it
+      // right before the download so the 10-minute URL is never left to age.
+      const objectId = logObjectIdFromUrl(stub.logObjectUrl);
+      let grant: LogDownloadGrant;
+      try {
+        grant = await requestLogGrant({ matchId: objectId, cookie });
+      } catch (e) {
+        if (e instanceof LogQuotaExceededError) {
+          quotaHit = e;
+          break pages;
+        }
+        throw e;
+      }
+      lastGrant = grant;
       downloadsAttempted++;
       const { text, meta, rawCheck } = await downloadWithMeta(
-        stub.logObjectUrl,
-        stub.id,
+        grant.url,
+        objectId,
       );
       const completeness = rawCheck.ok
         ? checkDecompressedPayload(text)
@@ -205,8 +265,14 @@ async function main() {
       haveLogs.add(stub.logObjectUrl);
       fresh++;
       console.log(
-        `  [${fresh}/${LIMIT}] ${stub.id} ${stub.bracket} teamRating=${stub.playerTeamRating} recorderSpec=${stub.units.find((u) => u.id === stub.playerId)?.spec ?? "?"} ${Math.round(text.length / 1024)}KB`,
+        `  [${fresh}/${LIMIT}] ${stub.id} ${stub.bracket} teamRating=${stub.playerTeamRating} recorderSpec=${stub.units.find((u) => u.id === stub.playerId)?.spec ?? "?"} ${Math.round(text.length / 1024)}KB  quota ${grant.downloadsUsedToday}/${grant.downloadsQuota}`,
       );
+      if (grantsRemaining(grant) === 0) {
+        console.log(
+          `  daily quota reached (${grant.downloadsUsedToday}/${grant.downloadsQuota}); resets ${nextUtcMidnight().toISOString()}`,
+        );
+        break pages;
+      }
     }
     if (stubs.length < 50) break; // A short page = end of the feed
   }
@@ -214,9 +280,18 @@ async function main() {
   console.log(
     `done: ${fresh} new logs (scanned ${scanned} stubs over ${pagesFetched} pages), manifest ${manifest.length} entries`,
   );
-  if (fresh < LIMIT) {
+  if (quotaHit) {
     console.log(
-      `note: feed 只覆盖最近约 7 天;没凑满 LIMIT 说明该过滤条件下近期就这么多,过几天再跑会有新场次(断点续传自动跳过已下载)。`,
+      `stopped: upstream daily log quota spent (${quotaHit.usedToday}/${quotaHit.quota}) — "${quotaHit.message}"; resets ${nextUtcMidnight().toISOString()}`,
+    );
+  } else if (lastGrant) {
+    console.log(
+      `quota: ${lastGrant.downloadsUsedToday}/${lastGrant.downloadsQuota} distinct logs used today (${grantsRemaining(lastGrant)} left; resets ${nextUtcMidnight().toISOString()})`,
+    );
+  }
+  if (fresh < LIMIT && !quotaHit) {
+    console.log(
+      `note: feed 只覆盖最近约 7 天(且最近 1 小时内的场次不可见);没凑满 LIMIT 说明该过滤条件下近期就这么多,过几天再跑会有新场次(断点续传自动跳过已下载)。`,
     );
   }
 }

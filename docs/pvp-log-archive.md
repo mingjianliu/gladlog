@@ -2,6 +2,16 @@
 
 **English** · [Chinese](pvp-log-archive.zh-CN.md)
 
+> **Retired.** The upstream discontinued anonymous search on 2026-09-08 and on
+> 2026-09-13 reopened it behind Battle.net sign-in with raw logs metered at
+> **15 distinct logs per user per UTC day** — a full sweep is not an interface
+> they offer any more, and the script now refuses to start (exit 2). The
+> archive it built (63,309 matches, 2026-08-13 → 2026-09-05, on Drive) is
+> frozen and is what the reference corpus is built from. What we took and what
+> it cost them: [DATA-COMPLIANCE.md](DATA-COMPLIANCE.md) §3. Targeted sampling
+> inside the quota: `.claude/skills/fetch-pvp-logs`. Everything below is the
+> record of how it ran.
+
 `scripts/archivePvpLogs.ts` (in `packages/corpus-tools`) scans the
 wowarenalogs.com public feed every 6 hours and archives every newly-seen
 public match **in the archived brackets** to Google Drive as **raw gzip

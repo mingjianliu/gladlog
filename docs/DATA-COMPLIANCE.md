@@ -33,10 +33,19 @@ Our restraint is a choice, not a compliance obligation.
 
 ## 2. Interfaces we use, and the one we refuse
 
-**Used — the public GraphQL feed.** `POST https://wowarenalogs.com/api/graphql`,
-anonymous, `latestMatches(...)` with server-side `bracket` / `minRating` /
-`compQueryString` filters, page size capped at 50. Then a plain GET of the
-returned `logObjectUrl`. This is the interface their own web client uses.
+**Used — the GraphQL feed, signed in (since 2026-09-13).** `POST
+https://wowarenalogs.com/api/graphql` with a Battle.net session cookie,
+`latestMatches(...)` with server-side `bracket` / `minRating` /
+`compQueryString` filters, page size capped at 50, matches from the last hour
+embargoed. A raw log is then obtained through `logDownloadUrl(matchId)`, which
+returns a 10-minute V4 signed URL and **charges one of 15 distinct logs per
+user per UTC day** (their `accessLimits.ts`: flat, no tiers; an `admin`
+profile tag is exempt, a `blocked` tag refuses everything). This is the
+interface their own web client uses, and the quota is theirs to set — we
+consume it as offered, one account, and stop when the server says stop.
+Until 2026-09-08 the same feed was anonymous and `logObjectUrl` was a plain
+public GET; that surface no longer exists (bucket private, 403), and the
+history of what we took through it is in §3.
 
 **Refused — bucket enumeration.** The GCS bucket `wowarenalogs-log-files-prod`
 grants `storage.objects.list` to `allUsers`, so
@@ -221,6 +230,47 @@ for their sake.
 Their notice names *search results*, i.e. the query path rather than the
 download path — which is precisely where our offset paging was worst.
 
+### 2026-09-13: search back on behind sign-in, raw logs metered — what we do now
+
+Five days later the upstream reopened search and closed the download side
+instead (their commits `fb81eba` "Meter raw log access per signed-in user;
+require sign-in for search", `4e735ec` "Flat log quota: 15 distinct logs per
+user per day, no tiers", `ee2809d` "Explain the scraping reason in the daily
+log limit message"; measured against the live API on 2026-09-15):
+
+| Surface                                    | Before 2026-09-08         | Now                                                                 |
+| ------------------------------------------ | ------------------------- | ------------------------------------------------------------------- |
+| `latestMatches` (search / paging)          | anonymous                 | Battle.net session required (`UNAUTHENTICATED` otherwise); 1 h embargo; unmetered but logged per user |
+| raw log                                    | public GET on `logObjectUrl` | bucket private (403); `logDownloadUrl(matchId)` → 10-minute signed URL |
+| quota                                      | none                      | **15 distinct logs per user per UTC day**, flat, checked in a Firestore transaction; re-opening the same id the same day is free |
+| refusal text                               | —                         | "You've reached today's limit of 15 matches. This limit exists because bots have been scraping combat logs in bulk and driving up our hosting costs. It resets at midnight UTC." |
+
+Two consequences, both settled on 2026-09-15:
+
+- **The archiver is retired for good, not paused.** A full sweep took
+  thousands of logs a day; the interface now offers fifteen. There is no
+  configuration of `archivePvpLogs.ts` that fits, and the script refuses to
+  start (exit 2 with the reason). Anything that would restore the old volume
+  — several accounts, sharing sessions, anything with the word "rotate" in it
+  — is going around a limit the upstream put there specifically because of
+  bulk scraping, and is off the table. The Drive archive (63,309 matches,
+  2026-08-13 → 2026-09-05) is frozen and is what the reference corpus is
+  built from (`packages/corpus-tools/README.md`, "The feed is gone").
+- **Targeted sampling continues inside the quota, on one signed-in account.**
+  `scripts/fetchPvpLogs.ts` now takes the operator's own session cookie,
+  requests a grant immediately before each download, prints the server's
+  `downloadsUsedToday / downloadsQuota` after every match, and stops the
+  moment the server refuses (`LOG_QUOTA_EXCEEDED`) — it never guesses the
+  count locally, the server's counter is the predicate. Fifteen a day is what
+  a spec/rating sample needs and nothing like a corpus, which is the right
+  size. The session cookie is a credential and lives outside every repo
+  (`~/.gladlog/wal-session-cookie` by default).
+
+The 2026-09-08 ruling ("no retries, no alternate entry point, no schedule")
+still governs everything above fifteen a day. Using the signed-in path at
+the rate the upstream itself set is not an alternate entry point; it is the
+entry point.
+
 ## 4. Personal data in the logs
 
 Combat logs contain character names, realms, and `Player-realmID-hexID` GUIDs.
@@ -328,10 +378,12 @@ flag set from `GLADLOG_E2E=1`.
 ## Open items
 
 - **Scheduled polling** (BACKLOG #19) — **closed by the upstream on
-  2026-09-08**, which discontinued match search for everyone. Collection has
-  stopped; what we took and what it cost them is measured in §3. The schedule
-  was never loaded, so there is nothing to disable. The 2026-08-01 decision not
-  to contact the maintainers still stands and has not been revisited; if that
+  2026-09-08**, which discontinued match search for everyone; on 2026-09-13
+  search came back behind Battle.net sign-in with raw logs metered at 15 per
+  user per day, and on 2026-09-15 the archiver was retired outright (§3). What
+  we took and what it cost them is measured in §3. The schedule was never
+  loaded, so there is nothing to disable. The 2026-08-01 decision not to
+  contact the maintainers still stands and has not been revisited; if that
   changes, §3 now carries the concrete figures (63,309 matches, 41.96 GiB) to
   open with.
 - **Spell and spec icons** are still fetched from Wowhead's CDN

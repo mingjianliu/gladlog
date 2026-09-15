@@ -3,9 +3,15 @@ import { describe, expect, it, vi } from "vitest";
 import {
   downloadRaw,
   DOWNLOAD_RETRIES,
+  fetchDetailedStubs,
   fetchMatchStubs,
   fetchWithRetry,
+  firstGraphqlError,
+  LogQuotaExceededError,
+  requestLogGrant,
+  sessionCookieHeader,
   USER_AGENT,
+  WAL_SESSION_COOKIE_NAME,
   withUserAgent,
 } from "./feedClient";
 
@@ -296,5 +302,140 @@ describe("downloadRaw(不解压,原始字节)", () => {
     });
     await downloadRaw("https://x/y", "probe", fake as any);
     expect(fake.mock.calls[0][1].headers["accept-encoding"]).toBe("gzip");
+  });
+});
+
+// ── Signed-in feed (upstream 2026-09-13: sign-in + 15 distinct logs/user/day) ──
+
+describe("firstGraphqlError", () => {
+  it("returns code+message from the first GraphQL error inside an HTTP 200", () => {
+    const json = {
+      errors: [
+        {
+          message: "Sign in with Battle.net to view matches.",
+          extensions: { code: "UNAUTHENTICATED" },
+        },
+      ],
+      data: null,
+    };
+    expect(firstGraphqlError(json)).toEqual({
+      code: "UNAUTHENTICATED",
+      message: "Sign in with Battle.net to view matches.",
+      extensions: { code: "UNAUTHENTICATED" },
+    });
+  });
+  it("returns null when there are no errors", () => {
+    expect(firstGraphqlError({ data: { latestMatches: {} } })).toBeNull();
+    expect(firstGraphqlError(undefined)).toBeNull();
+  });
+  it("falls back to UNKNOWN when the error carries no extensions.code", () => {
+    expect(firstGraphqlError({ errors: [{ message: "boom" }] })?.code).toBe(
+      "UNKNOWN",
+    );
+  });
+});
+
+describe("sessionCookieHeader", () => {
+  it("wraps a bare token in the next-auth secure cookie name", () => {
+    expect(sessionCookieHeader("  abc123  ")).toBe(
+      `${WAL_SESSION_COOKIE_NAME}=abc123`,
+    );
+  });
+  it("passes a full cookie header through untouched", () => {
+    const full = `${WAL_SESSION_COOKIE_NAME}=abc; other=1`;
+    expect(sessionCookieHeader(full)).toBe(full);
+  });
+  it("rejects an empty value instead of sending an anonymous request", () => {
+    expect(() => sessionCookieHeader("")).toThrow(/cookie/i);
+    expect(() => sessionCookieHeader("   \n")).toThrow(/cookie/i);
+  });
+});
+
+describe("fetchDetailedStubs (signed in)", () => {
+  it("sends the session cookie and surfaces a GraphQL error by code", async () => {
+    const fakeFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        errors: [
+          {
+            message: "Sign in with Battle.net to view matches.",
+            extensions: { code: "UNAUTHENTICATED" },
+          },
+        ],
+        data: null,
+      }),
+    });
+    await expect(
+      fetchDetailedStubs(
+        { bracket: "3v3", cookie: "tok" },
+        fakeFetch as any,
+      ),
+    ).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
+    const init = fakeFetch.mock.calls[0][1] as any;
+    expect(init.headers.cookie).toBe(`${WAL_SESSION_COOKIE_NAME}=tok`);
+  });
+  it("still names the empty-response case when the server returns no data and no error", async () => {
+    const fakeFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: {} }),
+    });
+    await expect(
+      fetchDetailedStubs({ bracket: "3v3" }, fakeFetch as any),
+    ).rejects.toThrow(/empty latestMatches/);
+  });
+});
+
+describe("requestLogGrant", () => {
+  const grant = {
+    url: "https://storage.googleapis.com/b/m1?X-Goog-Signature=sig",
+    expiresAt: 1_700_000_000_000,
+    downloadsUsedToday: 3,
+    downloadsQuota: 15,
+  };
+  it("POSTs logDownloadUrl(matchId) with the cookie and returns the grant", async () => {
+    const fakeFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: { logDownloadUrl: grant } }),
+    });
+    const got = await requestLogGrant(
+      { matchId: "m1", cookie: "tok" },
+      fakeFetch as any,
+    );
+    expect(got).toEqual(grant);
+    const [, init] = fakeFetch.mock.calls[0] as any[];
+    const body = JSON.parse(init.body);
+    expect(body.variables.matchId).toBe("m1");
+    expect(body.query).toMatch(/logDownloadUrl\(matchId: \$matchId\)/);
+    expect(init.headers.cookie).toBe(`${WAL_SESSION_COOKIE_NAME}=tok`);
+  });
+  it("throws LogQuotaExceededError carrying usedToday/quota on LOG_QUOTA_EXCEEDED", async () => {
+    const fakeFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        errors: [
+          {
+            message: "You've reached today's limit of 15 matches.",
+            extensions: { code: "LOG_QUOTA_EXCEEDED", usedToday: 15, quota: 15 },
+          },
+        ],
+        data: null,
+      }),
+    });
+    const err = await requestLogGrant(
+      { matchId: "m1", cookie: "tok" },
+      fakeFetch as any,
+    ).catch((e) => e);
+    expect(err).toBeInstanceOf(LogQuotaExceededError);
+    expect(err.usedToday).toBe(15);
+    expect(err.quota).toBe(15);
+    // A quota refusal is a 200 with a GraphQL error: exactly one request, no retry.
+    expect(fakeFetch).toHaveBeenCalledTimes(1);
+  });
+  it("refuses a match id containing a slash before touching the network", async () => {
+    const fakeFetch = vi.fn();
+    await expect(
+      requestLogGrant({ matchId: "a/b", cookie: "tok" }, fakeFetch as any),
+    ).rejects.toThrow(/match id/i);
+    expect(fakeFetch).not.toHaveBeenCalled();
   });
 });

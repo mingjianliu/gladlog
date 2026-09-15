@@ -358,3 +358,34 @@ export function stubToManifestEntry(
     players,
   };
 }
+
+// ── Signed-in grant path (upstream 2026-09-13) ─────────────────────────────
+
+/**
+ * The GCS object name a stub's log lives under — what `requestLogGrant` must
+ * be asked for. Six Solo Shuffle round stubs share one object, so the round
+ * `id` is the wrong key: the grant resolver does `bucket.file(matchId)` and
+ * would sign a URL for an object that does not exist. Query strings (a stale
+ * signed URL) are ignored.
+ */
+export function logObjectIdFromUrl(logObjectUrl: string): string {
+  const path = (logObjectUrl ?? "").split("?")[0];
+  const id = path.split("/").filter(Boolean).pop() ?? "";
+  if (!id) throw new Error(`logObjectUrl has no object name: "${logObjectUrl}"`);
+  return id;
+}
+
+/** Distinct logs still grantable today, from the last grant's counters. */
+export function grantsRemaining(g: {
+  downloadsUsedToday: number;
+  downloadsQuota: number;
+}): number {
+  return Math.max(0, g.downloadsQuota - g.downloadsUsedToday);
+}
+
+/** When the upstream's per-UTC-day quota next resets: the first 00:00 UTC strictly after `now`. */
+export function nextUtcMidnight(now: Date = new Date()): Date {
+  return new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1),
+  );
+}

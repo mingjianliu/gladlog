@@ -223,6 +223,165 @@ export async function downloadLogText(
   return await (res as any).text();
 }
 
+// ── Signed-in access (upstream change of 2026-09-08 / 2026-09-13) ──────────
+// The upstream no longer serves the feed anonymously: `latestMatches` needs a
+// Battle.net session ("Sign in with Battle.net to view matches."), the log
+// bucket is private, and raw logs are handed out through `logDownloadUrl`
+// as a 10-minute V4 signed URL charged against a flat quota of 15 distinct
+// logs per user per UTC day (their `accessLimits.ts`; admins exempt, a
+// `blocked` profile tag refuses everything). This is the interface their own
+// web client uses — we consume it as offered and never around it:
+// docs/DATA-COMPLIANCE.md §2.
+
+/** next-auth v4 database-session cookie on an https origin. */
+export const WAL_SESSION_COOKIE_NAME = "__Secure-next-auth.session-token";
+
+/**
+ * Normalise what the operator pasted into a Cookie header value. A bare token
+ * (copied from DevTools → Application → Cookies → wowarenalogs.com) gets the
+ * next-auth cookie name; a full `name=value; ...` header passes through.
+ * Empty input throws rather than silently sending an anonymous request that
+ * the server would refuse one round-trip later.
+ */
+export function sessionCookieHeader(raw: string): string {
+  const v = (raw ?? "").trim();
+  if (!v) {
+    throw new Error(
+      "session cookie is empty — set WAL_COOKIE (or WAL_COOKIE_FILE); see .claude/skills/fetch-pvp-logs",
+    );
+  }
+  return v.includes("=") ? v : `${WAL_SESSION_COOKIE_NAME}=${v}`;
+}
+
+export interface GraphqlErrorInfo {
+  code: string;
+  message: string;
+  extensions: Record<string, unknown>;
+}
+
+/**
+ * GraphQL errors travel inside an HTTP 200, so `fetchWithRetry` neither
+ * retries nor warns on them — the 2026-09-08 shutdown surfaced only as the
+ * generic "empty latestMatches response" until someone printed the body.
+ * Every feed call must classify the body before reading `data`.
+ */
+export function firstGraphqlError(json: any): GraphqlErrorInfo | null {
+  const e = json?.errors?.[0];
+  if (!e) return null;
+  const extensions = (e.extensions ?? {}) as Record<string, unknown>;
+  return {
+    code: String(extensions.code ?? "UNKNOWN"),
+    message: String(e.message ?? ""),
+    extensions,
+  };
+}
+
+/** A GraphQL-level refusal, with the upstream's own code and wording. */
+export class FeedError extends Error {
+  constructor(
+    label: string,
+    public readonly code: string,
+    message: string,
+  ) {
+    super(`${label}: ${code}: ${message}`);
+    this.name = "FeedError";
+  }
+}
+
+/** The daily distinct-log quota is spent; resets at 00:00 UTC. */
+export class LogQuotaExceededError extends FeedError {
+  public readonly usedToday: number;
+  public readonly quota: number;
+  constructor(label: string, message: string, usedToday: number, quota: number) {
+    super(label, "LOG_QUOTA_EXCEEDED", message);
+    this.name = "LogQuotaExceededError";
+    this.usedToday = usedToday;
+    this.quota = quota;
+  }
+}
+
+function throwOnGraphqlError(label: string, json: any): void {
+  const err = firstGraphqlError(json);
+  if (!err) return;
+  if (err.code === "LOG_QUOTA_EXCEEDED") {
+    throw new LogQuotaExceededError(
+      label,
+      err.message,
+      Number(err.extensions.usedToday ?? NaN),
+      Number(err.extensions.quota ?? NaN),
+    );
+  }
+  throw new FeedError(label, err.code, err.message);
+}
+
+function graphqlHeaders(cookie?: string): Record<string, string> {
+  const h: Record<string, string> = { "content-type": "application/json" };
+  if (cookie) h.cookie = sessionCookieHeader(cookie);
+  return h;
+}
+
+/** Mirrors the upstream `LogDownloadGrant` type (their `accessGuard.ts`). */
+export interface LogDownloadGrant {
+  /** V4 signed URL for the raw gzip object; valid until `expiresAt`. */
+  url: string;
+  /** Epoch ms; 10 minutes from issue. Treat the URL as a short-lived credential. */
+  expiresAt: number;
+  /** Distinct logs charged to this user today, after this grant. */
+  downloadsUsedToday: number;
+  /** The flat daily quota (15 as of 2026-09-13). */
+  downloadsQuota: number;
+}
+
+const LOG_GRANT_QUERY = `query GetLogDownloadUrl($matchId: String!) {
+  logDownloadUrl(matchId: $matchId) { url expiresAt downloadsUsedToday downloadsQuota }
+}`;
+
+/**
+ * Ask for a signed download URL. **The quota is charged here, not at
+ * download time**: a grant whose download then fails has still cost one of
+ * the day's 15 (re-requesting the same id the same day is free, so the
+ * retry is cheap — but do request the grant immediately before downloading,
+ * never in a batch ahead of time; the URL dies in 10 minutes).
+ *
+ * `matchId` is the **GCS object name**, i.e. the last path segment of the
+ * stub's `logObjectUrl` — for a Solo Shuffle that is the shared per-match
+ * object, not one of the six round stub ids (see `logObjectIdFromUrl`).
+ */
+export async function requestLogGrant(
+  opts: { matchId: string; cookie: string },
+  fetchImpl?: FetchLike,
+): Promise<LogDownloadGrant> {
+  if (!opts.matchId || opts.matchId.includes("/")) {
+    throw new Error(`invalid match id for log grant: "${opts.matchId}"`);
+  }
+  const f: FetchLike =
+    fetchImpl ?? ((await import("node-fetch")).default as any);
+  const label = `log grant for ${opts.matchId}`;
+  const res = await fetchWithRetry(
+    f,
+    FEED_ENDPOINT,
+    {
+      method: "POST",
+      headers: graphqlHeaders(opts.cookie),
+      body: JSON.stringify({
+        query: LOG_GRANT_QUERY,
+        variables: { matchId: opts.matchId },
+      }),
+    },
+    label,
+  );
+  const json = await res.json();
+  throwOnGraphqlError(label, json);
+  const g = json?.data?.logDownloadUrl;
+  if (!g?.url) throw new Error(`${label}: empty logDownloadUrl response`);
+  return {
+    url: String(g.url),
+    expiresAt: Number(g.expiresAt),
+    downloadsUsedToday: Number(g.downloadsUsedToday),
+    downloadsQuota: Number(g.downloadsQuota),
+  };
+}
+
 // ── Detailed stubs (for fetch-public corpus harvesting) ────────────────────
 // Same endpoint / paging / retry as STUBS_QUERY; a superset of fields:
 // identifies the recorder and advanced logging.
@@ -295,6 +454,8 @@ export async function fetchDetailedStubs(
     offset?: number;
     count?: number;
     compQueryString?: string;
+    /** Battle.net session (bare token or full Cookie header); required since 2026-09-13. */
+    cookie?: string;
   },
   fetchImpl?: FetchLike,
 ): Promise<{ stubs: DetailedMatchStub[]; queryLimitReached: boolean }> {
@@ -310,7 +471,7 @@ export async function fetchDetailedStubs(
     FEED_ENDPOINT,
     {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: graphqlHeaders(opts.cookie),
       body: JSON.stringify({
         query: DETAILED_STUBS_QUERY,
         variables: {
@@ -326,7 +487,9 @@ export async function fetchDetailedStubs(
     },
     "feed-detailed",
   );
-  const data = (await res.json())?.data?.latestMatches;
+  const json = await res.json();
+  throwOnGraphqlError("feed-detailed", json);
+  const data = json?.data?.latestMatches;
   if (!data) throw new Error("feed-detailed: empty latestMatches response");
   const stubs: DetailedMatchStub[] = (data.combats ?? []).map((c: any) => ({
     typename: c.__typename ?? "",
