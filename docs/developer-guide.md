@@ -53,8 +53,8 @@ recurring bug is the same fact computed two slightly different ways.
 
 ```bash
 npm ci
-npm run dev                         # real Electron (VITE_FIXTURE_MODE=1 npm run dev = preview without real data)
-cd packages/desktop && npm run dev:ui   # browser-only report UI test bed, HMR, http://localhost:5199
+npm -w @gladlog/desktop run dev                         # real Electron (VITE_FIXTURE_MODE=1 npm -w @gladlog/desktop run dev = preview without real data)
+npm -w @gladlog/desktop run dev:ui   # browser-only report UI test bed, HMR, http://localhost:5199
 npm run typecheck                   # whole repo (never tsc -b — it emits .js into src)
 npm test --workspaces
 ```

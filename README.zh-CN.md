@@ -36,8 +36,8 @@ AI 分析需要在「设置」里选一个后端:填 API key(Anthropic 或 DeepS
 
 ```bash
 npm ci
-npm run dev            # Electron 开发模式
-npm run dev:ui         # 纯浏览器 report UI 测试台(最快的 UI 迭代环)
+npm -w @gladlog/desktop run dev            # Electron 开发模式
+npm -w @gladlog/desktop run dev:ui         # 纯浏览器 report UI 测试台(最快的 UI 迭代环)
 npm test --workspaces  # 全部测试
 ```
 

@@ -36,8 +36,8 @@ All match data lives on your machine, in the app data folder. Only when you acti
 
 ```bash
 npm ci
-npm run dev            # Electron development mode
-npm run dev:ui         # browser-only report UI test bed (the fastest UI iteration loop)
+npm -w @gladlog/desktop run dev            # Electron development mode
+npm -w @gladlog/desktop run dev:ui         # browser-only report UI test bed (the fastest UI iteration loop)
 npm test --workspaces  # all tests
 ```
 

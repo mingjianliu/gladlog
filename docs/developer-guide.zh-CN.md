@@ -55,8 +55,8 @@ desktop renderer       report/derive/*(纯函数,吃 doc)→ 三视图 UI
 
 ```bash
 npm ci
-npm run dev                         # 真 Electron(VITE_FIXTURE_MODE=1 npm run dev = 免真数据预览)
-cd packages/desktop && npm run dev:ui   # 纯浏览器 report UI 测试台,HMR,http://localhost:5199
+npm -w @gladlog/desktop run dev                         # 真 Electron(VITE_FIXTURE_MODE=1 npm -w @gladlog/desktop run dev = 免真数据预览)
+npm -w @gladlog/desktop run dev:ui   # 纯浏览器 report UI 测试台,HMR,http://localhost:5199
 npm run typecheck                   # 全仓(绝不 tsc -b,会往 src 吐 .js)
 npm test --workspaces
 ```
