@@ -137,7 +137,7 @@ feed 只留约 7 天(GCS 对象约 30 天),所以攒语料靠的是长期轮询,
 有两件事是这张表本身说不出来的:
 
 - **我们的翻页方式恰好是最伤的那种,而且贵在「深」不贵在「勤」。** 每一轮都从
-  `page = 0` 重新开始(`archivePvpLogs.ts:374`),`offset: page * 50, count: 50`,
+  `page = 0` 重新开始(`packages/corpus-tools/scripts/archivePvpLogs.ts:384`),`offset: page * 50, count: 50`,
   没有游标也没有断点续传;而 Firestore 对 `offset()` **跳过的**文档照样计费。
   翻 P 页的读数是 `50 × P(P+1)/2` 而不是 `50 × P`,放大倍数就是 `(P+1)/2`,
   随一轮要翻多深而增长:

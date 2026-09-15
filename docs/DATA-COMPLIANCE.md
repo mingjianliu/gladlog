@@ -170,7 +170,7 @@ section quoted "$7–10" by leaving the first full sweep out of the read count.
 Two things this table does not say on its own:
 
 - **Our paging is the pathological kind, and the cost is in depth, not
-  frequency.** Every round restarts at `page = 0` (`archivePvpLogs.ts:374`)
+  frequency.** Every round restarts at `page = 0` (`packages/corpus-tools/scripts/archivePvpLogs.ts:384`)
   with `offset: page * 50, count: 50` — no cursor, no resume — and Firestore
   bills for documents an `offset()` **skips**. Walking P pages costs
   `50 × P(P+1)/2` reads instead of `50 × P`, so the amplification factor is
