@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { extractCandidateFindings } from "../src/analysis/candidateFindings";
 import { CANDIDATE_TYPE_FLAGS } from "../src/data/candidateTypeFlags";
+import { ensureAnalysisData } from "../src/data/ensure";
 import {
   attemptIntoTrinketEvents,
   extractKillAttempts,
@@ -297,7 +298,11 @@ describe("extractKillAttempts", () => {
         os("e2", 23, LogEvent.SPELL_AURA_REMOVED),
       ],
     });
-    const a1 = extractKillAttempts([f1()], [byAlly], makeCombat(f1(), byAlly))[0];
+    const a1 = extractKillAttempts(
+      [f1()],
+      [byAlly],
+      makeCombat(f1(), byAlly),
+    )[0];
     expect(a1.attribution?.defensivePopped).toEqual([]);
 
     const bySelf = unit("e1", {
@@ -307,7 +312,11 @@ describe("extractKillAttempts", () => {
         os("e1", 23, LogEvent.SPELL_AURA_REMOVED),
       ],
     });
-    const a2 = extractKillAttempts([f1()], [bySelf], makeCombat(f1(), bySelf))[0];
+    const a2 = extractKillAttempts(
+      [f1()],
+      [bySelf],
+      makeCombat(f1(), bySelf),
+    )[0];
     expect(a2.attribution?.defensivePopped).toEqual(["Obsidian Scales"]);
   });
 });
@@ -353,8 +362,14 @@ describe("attemptIntoTrinketEvents(候选 mapper)", () => {
       reaction: 1,
       damageOut: [dmg("f1", "e1", 12, 50_000)],
     });
-    const attempts = extractKillAttempts([f1], [e1, e2], makeCombat(f1, e1, [e2]));
-    expect(attemptIntoTrinketEvents(attempts, [e1, e2], MATCH_START)).toHaveLength(0);
+    const attempts = extractKillAttempts(
+      [f1],
+      [e1, e2],
+      makeCombat(f1, e1, [e2]),
+    );
+    expect(
+      attemptIntoTrinketEvents(attempts, [e1, e2], MATCH_START),
+    ).toHaveLength(0);
   });
 
   it("尝试成功(击杀)→ 不指控", () => {
@@ -362,7 +377,9 @@ describe("attemptIntoTrinketEvents(候选 mapper)", () => {
     e1.deathRecords = [{ timestamp: ms(16) }];
     const combat = makeCombat(f1, e1, [e2]);
     const attempts = extractKillAttempts([f1], [e1, e2], combat);
-    expect(attemptIntoTrinketEvents(attempts, [e1, e2], MATCH_START)).toHaveLength(0);
+    expect(
+      attemptIntoTrinketEvents(attempts, [e1, e2], MATCH_START),
+    ).toHaveLength(0);
   });
 
   it("开关负控:flag=false 时 extractCandidateFindings 零产出该类型", () => {
@@ -477,7 +494,9 @@ describe("extractKillAttempts — 大招锚定(v2)", () => {
       killed: false,
       attribution: { primary: "trinketed" },
     };
-    expect(attemptIntoTrinketEvents([burstAttempt], [e1, e2], MATCH_START)).toHaveLength(0);
+    expect(
+      attemptIntoTrinketEvents([burstAttempt], [e1, e2], MATCH_START),
+    ).toHaveLength(0);
   });
 
   it("formatter:burst 行带「burst (no stun)」,Summary 报锚定拆分", () => {
@@ -493,5 +512,42 @@ describe("extractKillAttempts — 大招锚定(v2)", () => {
     expect(text).toContain("Recklessness burst (no stun)");
     expect(text).toContain("0 stun-anchored, 1 burst-anchored");
     expect(text).not.toMatch(/\(\d+s\)/);
+  });
+
+  // 2026-09-15 Opus baseline: 230/309 prompts carried a client-locale name,
+  // 328 runs from `popped …` and 93 from `saved by external (…)` — both
+  // printed the logged aura/cast name raw instead of resolving it.
+  it("popped / external names render in English even when the log is zh-client", async () => {
+    await ensureAnalysisData();
+    const ASTRAL_SHIFT = "108271";
+    const e1 = unit("e1", {
+      auraEvents: [
+        ...stunAuras("e1", KIDNEY, 10, 5),
+        {
+          spellId: ASTRAL_SHIFT,
+          spellName: "星界转移",
+          srcUnitId: "e1",
+          srcUnitName: "e1",
+          destUnitId: "e1",
+          destUnitName: "e1",
+          timestamp: ms(12),
+          logLine: {
+            event: LogEvent.SPELL_AURA_APPLIED,
+            timestamp: ms(12),
+            parameters: [],
+          },
+          auraType: "BUFF",
+        },
+      ],
+    });
+    const f1 = unit("f1", {
+      reaction: 1,
+      damageOut: [dmg("f1", "e1", 12, 50_000)],
+    });
+    const a = extractKillAttempts([f1], [e1], makeCombat(f1, e1))[0];
+    expect(a.attribution?.primary).toBe("defensive");
+    const text = formatKillAttemptsForContext([a]).join("\n");
+    expect(text).toContain("popped Astral Shift");
+    expect(text).not.toContain("星界转移");
   });
 });

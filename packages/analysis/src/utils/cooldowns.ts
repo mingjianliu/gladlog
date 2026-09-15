@@ -756,6 +756,39 @@ export function gridHpPct(unit: ICombatUnit, tMs: number): number | null {
 }
 
 /**
+ * The lowest `[STATE]`-grid reading of a unit inside a rendered window —
+ * `gridHpPct` at every whole second of `[fromSec, toSec]`, stopping at the
+ * unit's death (a `[STATE]` tick prints `unit:dead` from that second on, so
+ * there is no number there to be lower than).
+ *
+ * Why this exists (2026-09-15 Opus baseline, 73/309 prompts): a `[DMG SPIKE]`
+ * line summarised the window by its two endpoints only — `81% -> 87% HP —
+ * healed through` while the same unit's own `[STATE]` tick three lines down
+ * read 37%. The endpoints and the trough must come from the same sampler,
+ * otherwise the line and the tick it sits next to contradict each other.
+ * Consumers: `context/matchTimelineSections.ts`'s `[DMG SPIKE]` renderer;
+ * the gate `checkHealedThroughConsistency` re-derives the same minimum from
+ * the rendered `[STATE]` ticks (a sparse subset of this grid — every tick IS
+ * one of these samples, so a tick below the printed trough is a contradiction
+ * and a tick at the crisis line with no trough printed is one too).
+ */
+export function gridHpMinInWindow(
+  unit: ICombatUnit,
+  matchStartMs: number,
+  fromSec: number,
+  toSec: number,
+): { pct: number; atSec: number } | null {
+  let best: { pct: number; atSec: number } | null = null;
+  for (let s = fromSec; s <= toSec; s++) {
+    if (isDeadAtRenderSecond(unit, matchStartMs, s)) break;
+    const pct = gridHpPct(unit, matchStartMs + s * 1000);
+    if (pct === null) continue;
+    if (best === null || pct < best.pct) best = { pct, atSec: s };
+  }
+  return best;
+}
+
+/**
  * The `[STATE]` tick's death predicate — the companion to `gridHpPct`, and
  * the second half of "what does the prompt show for this unit at this
  * rendered second". `[STATE]` prints `unit:dead` (never a number) from the

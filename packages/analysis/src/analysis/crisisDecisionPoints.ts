@@ -299,6 +299,30 @@ function samplesOf(u: any): Sample[] {
  * the crisis line") against the SAME `gridHpPct` samples, so it must ask it
  * with this number, not a second `Math.round(CRISIS_HP_PCT * 100)`. */
 export const CRISIS_HP_PCT_RENDERED = Math.round(CRISIS_HP_PCT * 100);
+
+/**
+ * Whether a `[DMG SPIKE]` window whose endpoints read `hpFrom% -> hpTo%`
+ * hid a trough at `minPct` worth printing: the unit touched the crisis line
+ * inside the window AND that reading is below both endpoints (a window that
+ * starts or ends at its own minimum has nothing hidden).
+ *
+ * One predicate, two sides (CLAUDE.md Shared-Predicate Rule): the renderer
+ * decides `, low N% @m:ss` vs `— healed through` with it, and the eval gate
+ * `checkHealedThroughConsistency` asks the same question of every rendered
+ * `[STATE]` tick inside the window. The crisis line is `CRISIS_HP_PCT_RENDERED`
+ * — the same number every other "was this unit in danger" fact renders with —
+ * rather than a second, spike-specific threshold (2026-09-15; measured on the
+ * 309-prompt Opus baseline: 64 of 276 `healed through` lines had a visible
+ * tick at or under it, 82 would have tripped a ≥25pp relative rule, the two
+ * disagreeing only on troughs that never reached crisis).
+ */
+export function isDmgSpikeTrough(
+  hpFrom: number,
+  hpTo: number,
+  minPct: number,
+): boolean {
+  return minPct <= CRISIS_HP_PCT_RENDERED && minPct < Math.min(hpFrom, hpTo);
+}
 /** How many whole seconds forward the grid re-anchor may search from the
  * crossing's own second. Derived from `CRISIS_WINDOW_GAP_MS` — anything
  * further away would already be a separate crisis by the merge rule. */

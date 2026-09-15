@@ -730,6 +730,16 @@ export function getTopDamageSourcesInWindow(
       } else {
         srcName = cleanSrcName;
       }
+      // A summon flagged NPC rather than Pet/Guardian (a Death Knight's
+      // ghoul logs as 0xa28) slipped past the B24 relabel and printed its
+      // client-locale name — 9 of the 309 prompts in the 2026-09-15 Opus
+      // baseline (`次级食尸鬼 — Death Order`). Same last resort as
+      // `actorLabel` / `rootSourceLabel`: not a player, not ASCII → [pet].
+      if (
+        !/^\d+$/.test(srcName) &&
+        [...srcName].some((c) => c.charCodeAt(0) > 127)
+      )
+        srcName = "[pet]";
     } else if (isPet) {
       srcName = "[pet]";
     }

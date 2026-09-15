@@ -698,7 +698,11 @@ export function buildMatchContext(
   if (healer) {
     try {
       cdPriorEpisodes = cdPriorHoldEpisodes(owner, combat, (spellId) =>
-        lookupCdTriggerPrior(cdPriorCohort.spec, cdPriorCohort.heroTree, spellId),
+        lookupCdTriggerPrior(
+          cdPriorCohort.spec,
+          cdPriorCohort.heroTree,
+          spellId,
+        ),
       );
     } catch {
       /* no cohort reference → no [CD PRIOR] lines */
@@ -752,10 +756,11 @@ export function buildMatchContext(
   let rootInserts: Array<{ atSeconds: number; line: string }> = [];
   try {
     rootInserts = formatRootReachabilityEntries(
-      computeRootReachability(combat, [
-        ...(friends as ICombatUnit[]),
-        ...(enemies as ICombatUnit[]),
-      ]),
+      computeRootReachability(
+        combat,
+        [...(friends as ICombatUnit[]), ...(enemies as ICombatUnit[])],
+        Object.values(combat.units) as ICombatUnit[],
+      ),
       owner.id,
     ).map((entry) => ({
       atSeconds: entry.atSeconds,

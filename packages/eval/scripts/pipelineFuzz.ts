@@ -1,4 +1,3 @@
- 
 /**
  * CLI: full-pipeline health check (fuzz/audit) over a thousand wild matches.
  *
@@ -42,8 +41,9 @@ import {
   requireCorpusLogs,
 } from "../src/corpus/requireCorpusLogs";
 import { resolveEvalHome } from "../src/evalHome";
-
-const CJK = /[一-鿿぀-ヿ가-힯]/;
+// One predicate for "a client-locale name leaked": the production gate
+// (checkCjkLeak, hardFailure) and this invariant test the same regex.
+import { CJK_LEAK as CJK } from "../src/quality/promptQualityCheck";
 
 function parseArgs() {
   const a = process.argv.slice(2);

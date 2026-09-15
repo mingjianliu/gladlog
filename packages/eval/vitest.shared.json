@@ -18,6 +18,7 @@
     "test/calibration.test.ts",
     "test/ccCoverGate.test.ts",
     "test/cdPriorRefGate.test.ts",
+    "test/cjkLeakGate.test.ts",
     "test/coverageManifest.test.ts",
     "test/crisisHpStateGate.test.ts",
     "test/deepseekDriver.test.ts",

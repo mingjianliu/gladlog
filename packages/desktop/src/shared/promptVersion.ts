@@ -439,4 +439,10 @@
 //  render as "name distance" without the interrupt's name — healer treatment
 //  responses audited 2.37 claims per finding vs 1.83 in control on an
 //  unchanged old-line error rate, so the new lines' surface is cut.
-export const PROMPT_VERSION = 66;
+//  v67 (2026-09-15, first Opus 5 baseline, run 2026-09-15-baseline): a
+//  [DMG SPIKE] whose endpoints hide a crisis-line trough prints `, low N%
+//  @m:ss` instead of `— healed through` (73/309 prompts); KILL ATTEMPTS
+//  `popped …` / `saved by external (…)` and the [ROOT] `(from …)` caster no
+//  longer print client-locale (CJK) names (230/309 prompts); the HEALER
+//  OFFENSE [KILL WINDOW] list is chronological (112/309 were not).
+export const PROMPT_VERSION = 67;

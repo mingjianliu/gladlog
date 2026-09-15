@@ -68,7 +68,10 @@ export interface IRootInstance {
   rootedName: string;
   rootedIsFriendly: boolean;
   rootedRole: RootedRole;
+  /** raw logged name of the caster unit (kept for consumers keyed on it) */
   sourceName: string;
+  /** what the prompt prints for the caster — see `rootSourceLabel` */
+  sourceLabel: string;
   spellId: string;
   spellName: string;
   /** whole seconds (render grid) in which the rooted player's targets were unreachable */
@@ -122,6 +125,32 @@ export function canReachTargetAt(
   return los !== false; // LoS not disproven counts as reachable
 }
 
+/**
+ * The `(from …)` label of a `[ROOT]` line. A player casts under their own
+ * name; a totem / pet casts under a **client-locale** unit name (Earthgrab
+ * Totem logs as "陷地图腾" on a zh client — 53 `[ROOT]` lines across 42 of
+ * the 309 prompts in the 2026-09-15 Opus baseline), so a summon is labelled
+ * through its owner instead: `<owner>'s pet`, or `[pet]` when no owner can
+ * be resolved and the name is not ASCII. Same rule as `actorLabel` on the
+ * `[CC]` lines (2026-07-17 fuzz, Intimidation ×72).
+ */
+export function rootSourceLabel(
+  srcUnitName: string,
+  players: ICombatUnit[],
+  allUnits: ICombatUnit[],
+): string {
+  if (players.some((p) => p.name === srcUnitName)) return srcUnitName;
+  const summon = allUnits.find(
+    (u) => u.name === srcUnitName && u.ownerId.length > 0,
+  );
+  const owner = summon
+    ? players.find((p) => p.id === summon.ownerId)
+    : undefined;
+  if (owner) return `${owner.name.split("-")[0]}'s pet`;
+  const short = srcUnitName.split("-")[0];
+  return [...short].some((c) => c.charCodeAt(0) > 127) ? "[pet]" : short;
+}
+
 export function computeRootReachability(
   combat: {
     startTime: number;
@@ -129,6 +158,9 @@ export function computeRootReachability(
     startInfo?: { zoneId?: string };
   },
   players: ICombatUnit[],
+  /** every unit of the match (summons included) — for `rootSourceLabel`;
+   * defaults to `players`, which labels an unowned summon `[pet]`. */
+  allUnits: ICombatUnit[] = players,
 ): IRootInstance[] {
   const zoneId = combat.startInfo?.zoneId;
   const out: IRootInstance[] = [];
@@ -194,6 +226,7 @@ export function computeRootReachability(
         rootedIsFriendly: X.reaction === CombatUnitReaction.Friendly,
         rootedRole: role,
         sourceName: iv.srcUnitName,
+        sourceLabel: rootSourceLabel(iv.srcUnitName, players, allUnits),
         spellId: iv.spellId,
         spellName: getEnglishSpellName(iv.spellId, iv.spellName),
         unreachableSeconds: unreachable,
@@ -219,7 +252,7 @@ export function formatRootReachabilityEntries(
       const who =
         r.rootedId === ownerId ? `[YOU] ${r.rootedName}` : r.rootedName;
       const side = r.rootedIsFriendly ? "friendly" : "enemy";
-      const head = `${r.spellName} (from ${r.sourceName}) rooted ${side} ${who} (${r.rootedRole}) for ${r.durationSeconds.toFixed(1)}s`;
+      const head = `${r.spellName} (from ${r.sourceLabel}) rooted ${side} ${who} (${r.rootedRole}) for ${r.durationSeconds.toFixed(1)}s`;
       let why: string;
       if (r.rootedRole === "melee")
         why = `nearest enemy beyond ${CLOSE_RANGE_YARDS}yd for ${r.unreachableSeconds}s — could not attack; this stretch worked like hard CC`;

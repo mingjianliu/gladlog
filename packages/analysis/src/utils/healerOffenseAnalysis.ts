@@ -619,11 +619,18 @@ export function computeWindowContributions(
     };
   };
 
-  return offensiveWindows.flatMap((w) =>
-    w.bursts.length > 0
-      ? w.bursts.map((b) => evalSpan(w, b.fromSeconds, b.toSeconds, false))
-      : [evalSpan(w, w.fromSeconds, w.toSeconds, true)],
-  );
+  // Chronological. The spans arrive grouped per target, so without this the
+  // rendered [KILL WINDOW] list jumped back in time whenever a second target
+  // had earlier windows (2026-09-15 Opus baseline: 112/309 prompts, e.g.
+  // 0:56 / 1:21 / 2:14 / 2:35 / 1:52 / 2:20 — and the line cap below keeps
+  // "printed chronologically" only if the input already is).
+  return offensiveWindows
+    .flatMap((w) =>
+      w.bursts.length > 0
+        ? w.bursts.map((b) => evalSpan(w, b.fromSeconds, b.toSeconds, false))
+        : [evalSpan(w, w.fromSeconds, w.toSeconds, true)],
+    )
+    .sort((a, b) => a.fromSeconds - b.fromSeconds || a.toSeconds - b.toSeconds);
 }
 
 // ── Task 3: Window-creation opportunity facts ──────────────────────────────

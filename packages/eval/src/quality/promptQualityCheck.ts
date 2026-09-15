@@ -29,6 +29,7 @@
  */
 
 import { ensureAnalysisData } from "@gladlog/analysis";
+import { isDmgSpikeTrough } from "@gladlog/analysis/src/analysis/crisisDecisionPoints";
 import {
   lookupBacklashPrior,
   lookupBacklashWorth,
@@ -591,24 +592,129 @@ export function checkDmgSpikeCcCoverConsistency(lines: string[]): string[] {
  * drift as a stray word on a negative one). Lines without the HP pair are
  * out of scope (the render site emits neither).
  */
+/**
+ * Trough half (2026-09-15, first Opus 5 baseline — 73/309 prompts read
+ * `81% -> 87% HP — healed through` while the unit's own `[STATE]` tick inside
+ * the window read 37%): the renderer now prints `, low N% @m:ss` instead of
+ * the word whenever `isDmgSpikeTrough(A, B, min)` holds for the window's
+ * `gridHpMinInWindow`. Every rendered `[STATE]` tick is one sample of that
+ * same grid (same sampler, same clamp), so the text alone certifies:
+ *   - a printed `low N%` must satisfy the predicate, sit inside the window,
+ *     and no tick inside the window may read below N;
+ *   - with no `low` printed, no tick inside the window may satisfy the
+ *     predicate (the renderer would have seen at least that sample).
+ * The reverse ("a trough exists at a second no tick shows") is invisible in
+ * the text by construction and is not adjudicated here. The word ⟺ Δ ≥ 0
+ * half above now also requires "and no trough".
+ */
+const SPIKE_OUTCOME =
+  /^(\d+):(\d+)–(\d+):(\d+)\s+\[DMG SPIKE\]\s+(\S+)\s.*?\((\d+)% -> (\d+)% HP([^)]*)\)/;
+const SPIKE_LOW = /, low (\d+)% @(\d+):(\d+)/;
 export function checkHealedThroughConsistency(lines: string[]): string[] {
+  const ticks: Array<{ s: number; hp: Map<number, number> }> = [];
+  for (const line of lines) {
+    const st = line.match(STATE_LINE);
+    if (!st) continue;
+    const hp = new Map<number, number>();
+    for (const tok of st[3]!.matchAll(STATE_TOKEN)) {
+      const v = tok[2]!;
+      if (v !== "dead" && v !== "ghost") hp.set(Number(tok[1]), Number(v));
+    }
+    ticks.push({ s: Number(st[1]) * 60 + Number(st[2]), hp });
+  }
+
   const failures: string[] = [];
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (!line.includes("[DMG SPIKE]")) continue;
-    const m = line.match(/\((\d+)% -> (\d+)% HP/);
-    if (!m) continue;
-    const delta = Number(m[2]) - Number(m[1]);
-    const hasWord = line.includes("\u2014 healed through");
+  lines.forEach((line, i) => {
+    if (!line.includes("[DMG SPIKE]")) return;
+    const pair = line.match(/\((\d+)% -> (\d+)% HP([^)]*)\)/);
+    if (!pair) return;
+    const A = Number(pair[1]);
+    const B = Number(pair[2]);
+    const tail = pair[3]!;
+    const delta = B - A;
+    // Whole line, not just the HP tail: a stray word anywhere on the line is
+    // the drift this gate exists for (and what its pre-trough tests pin).
+    const hasWord = line.includes("— healed through");
+    const low = tail.match(SPIKE_LOW);
+    const at = `line ${i + 1}: [DMG SPIKE]`;
     if (hasWord && delta < 0)
       failures.push(
-        `line ${i + 1}: [DMG SPIKE] 标注「healed through」但同行 HP ${m[1]}% -> ${m[2]}%(Δ${delta} < 0)`,
+        `${at} 标注「healed through」但同行 HP ${A}% -> ${B}%(Δ${delta} < 0)`,
       );
-    else if (!hasWord && delta >= 0)
+    if (hasWord && low)
+      failures.push(`${at} 同时标注「healed through」和 low ${low[1]}%`);
+    if (!hasWord && !low && delta >= 0)
       failures.push(
-        `line ${i + 1}: [DMG SPIKE] 同行 HP ${m[1]}% -> ${m[2]}%(Δ${delta} ≥ 0)却没有「healed through」标注`,
+        `${at} 同行 HP ${A}% -> ${B}%(Δ${delta} ≥ 0)却没有「healed through」标注`,
       );
+
+    // Legacy shape without the window prefix / unit token stops here.
+    const m = line.match(SPIKE_OUTCOME);
+    const unitId = m ? Number(m[5]!.match(/^\d+/)?.[0]) : NaN;
+    if (!m || Number.isNaN(unitId)) return;
+    const from = Number(m[1]) * 60 + Number(m[2]);
+    const to = Number(m[3]) * 60 + Number(m[4]);
+    const inWindow = ticks.filter(
+      (t) => t.s >= from && t.s <= to && t.hp.has(unitId),
+    );
+    if (low) {
+      const L = Number(low[1]);
+      const lowS = Number(low[2]) * 60 + Number(low[3]);
+      if (!isDmgSpikeTrough(A, B, L))
+        failures.push(`${at} low ${L}% 不满足低谷判据(${A}% -> ${B}%)`);
+      if (lowS < from || lowS > to)
+        failures.push(
+          `${at} low @${fmtTime(lowS)} 落在窗口 ${fmtTime(from)}–${fmtTime(to)} 之外`,
+        );
+      for (const t of inWindow)
+        if (t.hp.get(unitId)! < L)
+          failures.push(
+            `${at} 标注 low ${L}% 但 ${fmtTime(t.s)} [STATE] 报 ${t.hp.get(unitId)}%`,
+          );
+    } else {
+      const tick = inWindow.find((t) =>
+        isDmgSpikeTrough(A, B, t.hp.get(unitId)!),
+      );
+      if (tick)
+        failures.push(
+          `${at} ${A}% -> ${B}% 未标注低谷,但 ${fmtTime(tick.s)} [STATE] 报 ${tick.hp.get(unitId)}%`,
+        );
+    }
+  });
+  return failures;
+}
+
+/**
+ * Untranslated (client-locale) spell / unit names. The prompt is English by
+ * contract, so a CJK run is a renderer printing a logged name instead of
+ * resolving it. Player names are the one legitimate source of non-ASCII
+ * (CN/TW realms): every roster name (`<unit … name="…">`, full and
+ * realm-stripped) is removed from a line before the test.
+ *
+ * Why a hardFailure and not the 2026-07 audit gate that once read 0/1245:
+ * that was a one-off script, and the KILL ATTEMPTS block (v25) shipped after
+ * it printing `aura.spellName` raw — 230 of 309 prompts in the 2026-09-15
+ * Opus baseline carried CJK, unnoticed for two months. Shared with
+ * `scripts/pipelineFuzz.ts`'s invariant (same regex object).
+ */
+export const CJK_LEAK = /[一-鿿぀-ヿ가-힯]/;
+export function checkCjkLeak(lines: string[]): string[] {
+  const names = new Set<string>();
+  for (const line of lines) {
+    const m = line.match(UNIT_ROSTER_LINE);
+    if (!m) continue;
+    names.add(m[2]!);
+    names.add(m[2]!.split("-")[0]!);
   }
+  const failures: string[] = [];
+  lines.forEach((line, i) => {
+    let scrubbed = line;
+    for (const n of names) if (n) scrubbed = scrubbed.split(n).join("");
+    if (CJK_LEAK.test(scrubbed))
+      failures.push(
+        `line ${i + 1}: 未翻译的名字(CJK)—— ${line.trim().slice(0, 140)}`,
+      );
+  });
   return failures;
 }
 
@@ -791,7 +897,9 @@ export function checkCdPriorRefConsistency(lines: string[]): string[] {
     const ref = line.match(/\[ref=([^\]]+)\]\s*$/);
     const nums = line.match(/median lowest-friendly HP of (\d+)% \(n=(\d+)\)/);
     if (!ref || !nums) {
-      failures.push(`line ${i + 1}: [CD PRIOR] 行缺 [ref=…] 或参照数字,无法核对语料参照`);
+      failures.push(
+        `line ${i + 1}: [CD PRIOR] 行缺 [ref=…] 或参照数字,无法核对语料参照`,
+      );
       continue;
     }
     const cellKey = ref[1]!;
@@ -817,7 +925,9 @@ export function checkCdPriorRefConsistency(lines: string[]): string[] {
         `line ${i + 1}: [CD PRIOR] 渲染中位血线 ${nums[1]}% ≠ 表 ${found.medianHpPct}%`,
       );
     if (Number(nums[2]) !== found.n)
-      failures.push(`line ${i + 1}: [CD PRIOR] 渲染 n=${nums[2]} ≠ 表 n=${found.n}`);
+      failures.push(
+        `line ${i + 1}: [CD PRIOR] 渲染 n=${nums[2]} ≠ 表 n=${found.n}`,
+      );
     const saysSpecWide = line.includes("(spec-wide) cohort");
     if (saysSpecWide !== (tree === "*"))
       failures.push(
@@ -843,19 +953,35 @@ export function checkKickPriorityRefConsistency(lines: string[]): string[] {
   const failures: string[] = [];
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!;
-    if (!line.includes("type=kick-priority-missed ") && !line.includes("type=kick-priority-team ")) continue;
+    if (
+      !line.includes("type=kick-priority-missed ") &&
+      !line.includes("type=kick-priority-team ")
+    )
+      continue;
     const m = line.match(/facts=\{(.*)\}\s*$/);
-    if (!m) { failures.push(`line ${i + 1}: kick-priority 行无 facts`); continue; }
+    if (!m) {
+      failures.push(`line ${i + 1}: kick-priority 行无 facts`);
+      continue;
+    }
     const f = parseFactsBlock(m[1]!);
     const ref = lookupKickPriorityPrior();
-    if (!ref) { failures.push(`line ${i + 1}: kick-priority 出面但参照表为空/不够样本 —— 生产者本不该发`); continue; }
+    if (!ref) {
+      failures.push(
+        `line ${i + 1}: kick-priority 出面但参照表为空/不够样本 —— 生产者本不该发`,
+      );
+      continue;
+    }
     const expect: Record<string, string> = {
       refNCompleted: String(ref.nCompleted),
       refNInterrupted: String(ref.nInterrupted),
       refDeathCompleted: String(ref.deathCompletedPct),
       refDeathInterrupted: String(ref.deathInterruptedPct),
     };
-    for (const [key, want] of Object.entries(expect)) if (f[key] !== want) failures.push(`line ${i + 1}: kick-priority ${key}=${f[key] ?? "(缺)"} ≠ 表值 ${want}`);
+    for (const [key, want] of Object.entries(expect))
+      if (f[key] !== want)
+        failures.push(
+          `line ${i + 1}: kick-priority ${key}=${f[key] ?? "(缺)"} ≠ 表值 ${want}`,
+        );
   }
   return failures;
 }
@@ -875,7 +1001,9 @@ export function checkBacklashRefConsistency(lines: string[]): string[] {
     const f = parseFactsBlock(m[1]!);
     const refKey = f.refKey ?? "";
     if (!refKey) {
-      failures.push(`line ${i + 1}: backlash-dispel 缺 refKey,无法核对语料参照`);
+      failures.push(
+        `line ${i + 1}: backlash-dispel 缺 refKey,无法核对语料参照`,
+      );
       continue;
     }
     let expect: Record<string, string>;
@@ -890,7 +1018,9 @@ export function checkBacklashRefConsistency(lines: string[]): string[] {
         windowKind,
       );
       if (!ref) {
-        failures.push(`line ${i + 1}: backlash-dispel-window 引用了表里查不到/不够样本的单元格 ${refKey}`);
+        failures.push(
+          `line ${i + 1}: backlash-dispel-window 引用了表里查不到/不够样本的单元格 ${refKey}`,
+        );
         continue;
       }
       expect = {
@@ -903,7 +1033,9 @@ export function checkBacklashRefConsistency(lines: string[]): string[] {
     } else {
       const ref = lookupBacklashPrior(refKey);
       if (!ref) {
-        failures.push(`line ${i + 1}: backlash-dispel 引用了表里查不到/不够样本的单元格 ${refKey}`);
+        failures.push(
+          `line ${i + 1}: backlash-dispel 引用了表里查不到/不够样本的单元格 ${refKey}`,
+        );
         continue;
       }
       expect = isDispel
@@ -924,7 +1056,9 @@ export function checkBacklashRefConsistency(lines: string[]): string[] {
     }
     for (const [key, want] of Object.entries(expect)) {
       if (f[key] !== want)
-        failures.push(`line ${i + 1}: backlash-dispel ${key}=${f[key] ?? "(缺)"} ≠ 表值 ${want}(${refKey})`);
+        failures.push(
+          `line ${i + 1}: backlash-dispel ${key}=${f[key] ?? "(缺)"} ≠ 表值 ${want}(${refKey})`,
+        );
     }
   }
   return failures;
@@ -1562,6 +1696,7 @@ export function checkMatch(
   hardFailures.push(...checkCrisisHpStateConsistency(lines));
   hardFailures.push(...checkOutcomeRefConsistency(lines));
   hardFailures.push(...checkMenuTRenderGrid(lines));
+  hardFailures.push(...checkCjkLeak(lines));
 
   return {
     ordinal: entry.ordinal,

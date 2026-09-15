@@ -1,6 +1,7 @@
 import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import { CD_WASTE_PRESSURE_HP_PCT } from "../analysis/candidateFindings";
+import { isDmgSpikeTrough } from "../analysis/crisisDecisionPoints";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { IPlayerCCTrinketSummary } from "../utils/ccTrinketAnalysis";
 import {
@@ -9,6 +10,7 @@ import {
   FORBEARANCE_GATED_IDS,
   getUnitHpAtTimestamp,
   getUnitManaAtTimestamp,
+  gridHpMinInWindow,
   HP_SAMPLE_RADIUS_MS,
   IDamageBucket,
   IMajorCooldownInfo,
@@ -347,8 +349,23 @@ export function emitDmgSpikeEntries(params: {
       // whose target ends the window at equal-or-higher HP reads as a severity
       // verdict on a non-event. Keep the tag and the percent format (the
       // Layer-A HP gate parses them) but state the outcome explicitly.
-      const outcomeTag = hpDelta >= 0 ? " — healed through" : "";
-      hpStr = ` (${hpFrom}% -> ${hpTo}% HP, ${sign}${hpVelocity.toFixed(0)}%/s${outcomeTag})`;
+      //
+      // …unless the endpoints hide a trough (2026-09-15 Opus baseline: 73/309
+      // prompts read `81% -> 87% — healed through` over a window whose own
+      // [STATE] tick showed 37%). The minimum comes from the [STATE] tick's
+      // sampler (gridHpMinInWindow) and the "worth printing" question from
+      // isDmgSpikeTrough — the eval gate re-asks both on the rendered ticks.
+      const low = targetUnit
+        ? gridHpMinInWindow(targetUnit, matchStartMs, fromSec, toSec)
+        : null;
+      const trough =
+        low !== null && isDmgSpikeTrough(hpFrom, hpTo, low.pct) ? low : null;
+      const troughTag = trough
+        ? `, low ${trough.pct}% @${fmtTime(trough.atSec)}`
+        : "";
+      const outcomeTag =
+        hpDelta >= 0 && trough === null ? " — healed through" : "";
+      hpStr = ` (${hpFrom}% -> ${hpTo}% HP, ${sign}${hpVelocity.toFixed(0)}%/s${troughTag}${outcomeTag})`;
     }
 
     const benchmarkKey = targetUnit ? specToBenchmarkKey(targetUnit.spec) : "";

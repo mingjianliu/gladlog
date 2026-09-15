@@ -70,6 +70,7 @@ import {
 } from "../data/mitigationComponents";
 import { MITIGATION_TABLE } from "../data/mitigationData";
 import { ATTEMPT_INTO_TRINKET_OUTCOME_REF } from "../data/outcomeRefs";
+import { getEnglishSpellName } from "../data/spellEffectData";
 import spellIdListsData from "../data/spellIdLists";
 import { burstCastSpan, KILL_CREDIT_SLACK_S } from "./burstLedger";
 import { analyzeOutgoingCCChains, DRLevel, drResetMsAt } from "./drAnalysis";
@@ -600,7 +601,12 @@ function attributeFailure(
       )?.pctMin ?? 0) >= MITIGATION_AURA_MIN_PCT
     ) {
       poppedIds.add(aura.spellId);
-      defensivePopped.push(aura.spellName ?? aura.spellId);
+      // The logged name is client-locale text ("树皮术" on a zh client); the
+      // prompt is English everywhere else, so resolve it the way every other
+      // renderer does. 2026-09-15 Opus baseline: 230/309 prompts carried a
+      // CJK name, 328 of the runs came from this line and 93 from the
+      // external one below.
+      defensivePopped.push(getEnglishSpellName(aura.spellId, aura.spellName));
     }
   }
 
@@ -612,7 +618,9 @@ function attributeFailure(
       if (!cast.spellId || !EXTERNAL_DEF_IDS.has(cast.spellId)) continue;
       if (cast.destUnitId !== target.id) continue;
       if (inSpan(cast.logLine.timestamp)) {
-        externalReceived.push(cast.spellName ?? cast.spellId);
+        externalReceived.push(
+          getEnglishSpellName(cast.spellId, cast.spellName),
+        );
       }
     }
   }
