@@ -47,7 +47,7 @@ WOW_PATCH=<当前 retail build> MIN_RATING=2300 PER_BRACKET=<每 bracket 采样�
 ## feed 已死 —— 改从归档重建(2026-09-11)
 
 上游 2026-09-08 关停 match search:`latestMatches` 对所有查询在 HTTP 200 里回一个
-GraphQL `SEARCH_DISABLED` 错误,当天的裁定是停止再问(`docs/DATA-COMPLIANCE.md`)。
+GraphQL `SEARCH_DISABLED` 错误,当天的裁定是停止再问(`docs/DATA-COMPLIANCE.zh-CN.md`)。
 所以上面那条 feed 路径已经重建不了任何东西,而且**是静默失败** —— 零 stub、不报错。
 
 剩下的来源是我们自己的归档。把 builder 指过去:

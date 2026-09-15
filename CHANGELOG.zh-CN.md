@@ -28,8 +28,7 @@
 - `7db858eb` 一个在每个「漏净化窗口」上都算了都存了、却从来没人读的时长字段被删掉
 
 ### AI 分析 —— 信号
-
-- `3ede44b0` **「你被打断了」这类结论改按「锁定期间到底有没有真读出东西」排序。** 旧排序断言换学派施法最不可教,而这只对真读了条的样本成立 —— 400 回合实测 16/292。一个吃满打断、五秒里只按出一发瞬发治疗的神牧,过去排在「干脆等锁定过期」的人后面
+- `3ede44b0` **「你被打断了」这类结论改按「锁定期间到底有没有真读出东西」排序。** 旧排序断言换学派施法最不可教,而这只对真读了条的样本成立 —— 实测仅 16/292 回合。一个吃满打断、五秒里只按出一发瞬发治疗的牧师,过去排在「干脆等锁定过期」的人后面
 - `faed3c7c` 同一类结论不再在玩家只按了个异学派瞬发时,告诉模型他「打穿了锁定继续输出」
 
 ### 其他(文档 / 工具 / 评测)
@@ -663,7 +662,7 @@
 
 ### 设置与安全(safeStorage/密钥)
 
-- `1748ee5` API 密钥落盘改用 Electron safeStorage 加密(此前明文存在配置文件里);`afa63d3` 保存设置时只对本次改动命中的密钥字段加解密,避免保存无关设置时把已保存的密钥抹掉;`bbf4a04` agy 本地后端在 Windows 上改走 .cmd 安全路径,消灭把 prompt 内容拼进命令行参数的本地命令注入隐患;`cf27f44` agy 落盘目录收窄到专用子目录 + 补崩溃后遗留文件清理
+- `1748ee5` API 密钥落盘改用 Electron safeStorage 加密(此前明文存在配置文件里);`afa63d3` 保存设置时只对本次改动命中的密钥字段加解密,避免保存无关设置时把已保存的密钥抹掉;`bbf4a04` agy 本地后端在 Windows 上改走 `.cmd` 安全路径,消灭把 prompt 内容拼进命令行参数的本地命令注入隐患;`cf27f44` agy 落盘目录收窄到专用子目录 + 补崩溃后遗留文件清理
 
 ### 数据与工具(corpus-tools,不进产品包但影响数据质量)
 
@@ -739,9 +738,9 @@ DeepSeek 后端测试预发布,基于 v0.1.15。真模型 smoke(填 key 跑一�
 
 ### 分析与基础设施(另)
 
-- `c62f905` `562c988` 「死亡时可用未按」三份异源实现收敛到 cdAvailableAt 单源(BACKLOG #18)
-- `e32f095` F170 [ENEMY HARD CAST] 接通 castStartEvents(0/208 → 28/208 场)
-- `c837f73` `ce267ac` SP-B2.1:reference_vectors.json 支持 userData 覆盖热更 + 复审两修
+- `c62f905` `562c988` 「死亡时可用未按」三份异源实现收敛到 `cdAvailableAt` 单源(BACKLOG #18)
+- `e32f095` F170 `[ENEMY HARD CAST]` 接通 castStartEvents(0/208 → 28/208 场)
+- `c837f73` `ce267ac` SP-B2.1:`reference_vectors.json` 支持 userData 覆盖热更 + 复审两修
 - `6eb3715` fetch-pvp-logs 语料工具(corpus-tools,不进产品包);`bb545a3` 合规更正与 backlog #19
 
 ### 其他
@@ -926,7 +925,7 @@ OBS 录像一期(外控 obs-websocket)的**功能测试预发布**,出自
 - `477f473` `64011c6` `460c3ee` `f5d3055` `3df3e1e` `b359bf9` 测试覆盖专项:
   analysis 上下文四文件与 eval 审计器补测(criticalMoments 7.61%→83%、
   timelineSections 53%→98%、resourceSnapshot 58%→92%、judgeSpotAudit 0→100%),
-  并落地 coverage 度量基建(npm run coverage)。
+  并落地 coverage 度量基建(`npm run coverage`)。
 - `fec622d` `7b003b9` `2dee06f` 视觉基线随死亡回顾改版两轮重录(均已人审);
   E2E 导航定位改精确匹配,修掉与回顾卡按钮子串撞名的竞态。
 - `8fb4869` `eb7c43c` `c19bf25` `ab2f1d7` `f56e6b6` 文档:覆盖提升计划收官
@@ -952,7 +951,7 @@ category 枚举化独立任务。
   小字行;同类同侧连发(≤5s)折叠为「{类} ×N」;条目 >40 收「+N 次要时刻」
   阀门;图标统一文本字形(禁 emoji);severity 中文映射(高/中/低);证据
   chip 补事件名短标签。
-- `877c77d` category 从模型自由 string 收敛为八 slug 英文枚举(prompt 约束 +
+- `877c77d` `category` 从模型自由 string 收敛为八 slug 英文枚举(prompt 约束 +
   审计层归一 + 聚合按归一键),渲染侧中文词表(生存/冷却使用/站位/目标选择/
   控制/打断/驱散/进攻)。真模型 smoke:枚举合规率 9% → 100%(6 场 sonnet
   中文回复)。错题本跨场聚合从此稳定。
@@ -1112,7 +1111,7 @@ category 枚举化独立任务。
 - `751f6bc` fix(eval): 校准特异性检查豁免构造性耦合维度 + 报告点名漂移维
 - `92f96d2` fix(analysis): 死亡下的 [RES] 快照锚定到死亡时刻,不再取 T-3s
 - `4997308` fix(eval): 冷却台账门规改为带归属判定 —— 消掉 67% 假阳性
-- `2967959` fix(analysis): [HEALER CC] 施放者标签改用共享谓词 actorLabel
+- `2967959` fix(analysis): [HEALER CC] 施放者标签改用共享谓词 `actorLabel`
 
 ## v0.0.16(2026-07-20)
 
@@ -1146,7 +1145,7 @@ category 枚举化独立任务。
 - `9b8e40d` chore(qa): 重生成 report-replay / settings 视觉基线
 - `18d5fad` chore(qa): presubmit 一键门禁 + 模型输出形态审计工具
 - `43c6e2e` feat(report): 纯地图档高度可调 + finding chip 技能图标
-- `132b3da` feat(ai): 模型下拉 + 本地后端透传 --model;修围栏输出被误判 bad-json
+- `132b3da` feat(ai): 模型下拉 + 本地后端透传 `--model`;修围栏输出被误判 bad-json
 - `2159889` fix(replay): 开局位置盲窗标成「位置未知」,不再当确定位置画
 
 ## v0.0.15(2026-07-20)
@@ -1164,8 +1163,8 @@ category 枚举化独立任务。
 - `76778b5` fix(e2e): 补 resolveJumpTarget 单测 + openAiView 提到公共助手
 - `5ac8c92` feat(main): GLADLOG_E2E userData 重定向 —— E2E 跑在临时状态上
 - `4ac00ae` feat(replay): 地图与 GCD 泳道之间可拖分隔条
-- `884f28e` fix(parser): 删掉 synthArenaLog 未实现的 rounds 参数
-- `f483483` fix(fixture): 补 analysis.getState —— AI 视图在 fixture 下真的渲染 finding
+- `884f28e` fix(parser): 删掉 synthArenaLog 未实现的 `rounds` 参数
+- `f483483` fix(fixture): 补 `analysis.getState` —— AI 视图在 fixture 下真的渲染 finding
 - `165a178` feat(replay): 三档布局(补纯 GCD),解除地图 560px 硬顶
 - `e3aa811` fix(replay-zoom): 清理孤儿 CSS + 补测试覆盖
 - `6698482` fix(visual): per-test 超时提到 120s + 端口真正单源
@@ -1173,7 +1172,7 @@ category 枚举化独立任务。
 - `4b56c7c` fix(replay): 已进入缩放态后裸滚轮也接管地图缩放
 - `0c67fa0` feat(replay): 分栏比例状态与 clampSplitRatio
 - `f07d7d9` feat(dev-ui): 仪表盘/设置/列表场景 —— app-shell 也进视觉回归
-- `c7c07ba` feat(dev-ui): ?scene= 场景路由 —— 视觉回归的确定性入口
+- `c7c07ba` feat(dev-ui): `?scene=` 场景路由 —— 视觉回归的确定性入口
 - `c72563c` feat(report): MatchReport 支持 initialView —— 视图可被 URL 直达
 - `43f4b65` fix(deepdive): STAYED_IN 需付出真实代价才开深挖门 —— 判据与 formatter 同源
 - `90a1e36` fix(desktop): getFlags 补 cancelled 守卫 —— 切场时旧场标记不再串台
@@ -1210,7 +1209,7 @@ category 枚举化独立任务。
 - `10c5112` test(eval): 逐 spec 信号分解 —— 诊断过门率差异根因(结构性 vs 覆盖缺口)
 - `e66fe81` test(eval): 深挖大样本鲁棒性扫描 + prompt A/B 工具
 - `f379503` feat(analysis): 深挖修 1+2 —— 可教信号门(防御Early/Late/≥3s硬控该交没交/驱散撞敌CD,门移到调用方)+ owner 锚定与 role 标签 + 干净窗口留白;PROMPT_VERSION 10
-- `cf1ccfd` fix(analysis): 深挖 prompt 纪律修正(eval 驱动)—— 去 units 幽灵字段 + HP 拆逐检查点占位符 + facts 短名去 realm 数字;PROMPT_VERSION 9
+- `cf1ccfd` fix(analysis): 深挖 prompt 纪律修正(eval 驱动)—— 去 `units` 幽灵字段 + HP 拆逐检查点占位符 + facts 短名去 realm 数字;PROMPT_VERSION 9
 - `59a75be` test(eval): 深挖轮量化脚本 —— 证据产出量(模型无关)+ 纪律 smoke(生成/审计两段)
 - `858c46f` feat(analysis+desktop): 深挖轮(自动追问)—— 高严重度 finding 确定性证据包扩容([锚点-30,+10] 受控/防御/敌CD/HP轨迹/驱散)+ 第二轮叙述经 claimChecker+causalLint 审计 + 证据 chips 可跳回放;PROMPT_VERSION 7
 - `cdb28cb` feat(analysis): death-setup 死因链候选 —— 死亡回溯前因事件(healer-locked/trinket-early/defensive-early,谓词镜像 death-trace)+ prompt 链条图例与死亡锚定上限 + max_tokens 4096 + PROMPT_VERSION 6
@@ -1298,7 +1297,7 @@ category 枚举化独立任务。
 - `b1ac13c` docs(plans): 超长对局加载优化设计 —— 主进程同步 parse 三重成本 trace + 方案 A
 - `c9d6f0f` fix(analysis): benchmarks 千场重算 + 修活死键 SPEC BASELINES(第 15 例谓词分裂)
 - `77c1b57` fix(analysis): [OFFENSIVE WINDOW] CD 带施放时刻 + 第 7 个失明 CC(agy 交叉复核)
-- `5f16de9` fix(eval): rotScan 未用变量 —— CI lint 含 scripts,本地 --quiet 输出被截断漏看
+- `5f16de9` fix(eval): rotScan 未用变量 —— CI lint 含 scripts,本地 `--quiet` 输出被截断漏看
 - `cd0dc4b` feat(desktop): UI 压测样本池 —— 野生边界 fixture 生成/按需加载/headless 冒烟
 - `41baa6c` fix(analysis): CC 白名单光环 id 腐烂 —— 千场语料实证补全 6 个失明 CC
 - `601c959` fix(analysis): 覆盖尾巴清零 —— owner 无CD CC 上时间轴 + 双侧宠物驱散 + 敌方饰品行
@@ -1312,7 +1311,7 @@ category 枚举化独立任务。
 - `edd394f` fix(desktop): 缩放测试 className 类型(CI workspace tsc 含 test 文件)
 - `6217aa5` fix(desktop): 缩放 handler prefer-const(lint)
 - `dd431a5` feat(desktop): 回放缩放 + 战绩角色区分 + Windows 本地 CLI 后端
-- `110bfff` refactor(logs): 日志收集工具整合 —— 共享 wowarenalogs 客户端 + 统一 logs:* 入口
+- `110bfff` refactor(logs): 日志收集工具整合 —— 共享 wowarenalogs 客户端 + 统一 `logs:*` 入口
 - `753b674` ci: test workflow 加 electron-vite build 步 —— renderer 值引入 main 只有生产打包能抓
 
 ## v0.0.4(2026-07-16)
@@ -1324,8 +1323,8 @@ category 枚举化独立任务。
 - `9836b74` feat(eval): 公开对局抓取器 —— 真 DPS 视角语料管线(D2 收尾)
 - `1ac01b8` feat(desktop): 本场目标卡(D3 教练闭环)—— 「还在犯」分类进 AI 视图开场
 - `d0c7089` fix(analysis): 爆发账本减伤行写明主语 —— 冒烟实测 responder 误读为己方外置
-- `e3ee234` fix(eval): DPS 语料支持 —— --owner dps + 门规主语解析三修
-- `0545421` feat(analysis+desktop): D2 —— AI 复盘 owner 视角泛化,DPS 记录者获 <burst_ledger> 与四类新事件
+- `e3ee234` fix(eval): DPS 语料支持 —— `--owner dps` + 门规主语解析三修
+- `0545421` feat(analysis+desktop): D2 —— AI 复盘 owner 视角泛化,DPS 记录者获 `<burst_ledger>` 与四类新事件
 - `c83ba7a` feat(desktop): 回放爆发红光脉冲 + 同秒集火高亮(DPS D1 收官)
 - `b9910a6` feat(desktop): DPS 爆发账本卡(D1)—— 爆发对齐/窗口目标纪律/打断审计
 - `558359e` fix(analysis,eval): DR 图例消歧 + responder 聚焦句(baseline Top-2/3 issue)

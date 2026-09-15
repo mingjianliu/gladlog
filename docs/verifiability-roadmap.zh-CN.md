@@ -98,7 +98,7 @@ brainstorm → spec → plan → 实现 的循环。
 - **B3. 容错解析 + eval 覆盖** ✅ _(2026-07-24 完成,release/0.1)_ ——
   容错解析半边 2026-07-20 已单源落地(`parseModelJsonArray`,eval 三个审计脚本与
   产品 `analysis.ts` 同谓词);eval 覆盖半边:`/eval-baseline` Step 1 改为**优先消费
-  A3 覆盖清单** `corpus/manifest-coverage.txt`(贪心集覆盖保证 7 治疗专精 × 3 括号 ×
+  A3 覆盖清单** `corpus/manifest-coverage.txt`(贪心集覆盖保证 7 治疗专精 × 3 个赛制 ×
   4 边角在场,先 `coverageCorpus.ts --check` 验漂移),`manifest.txt` 仅作复现旧口径
   的回退。
 
@@ -119,7 +119,7 @@ brainstorm → spec → plan → 实现 的循环。
   `docs/specs/2026-07-12-vision-data-faithfulness-design.md`,方案
   `docs/superpowers/plans/2026-07-12-vision-data-faithfulness.md`。
 - **C2. 视觉回归** ✅ _(2026-07-19 完成)_ —— Playwright 截图 7 个 URL 可直达的场景
-  (战报/回放/AI/合成/仪表盘/设置/列表),基线是 **linux 单源**、由 CI 生成与判定、
+  (战报/回放/AI/对比/仪表盘/设置/列表),基线是 **linux 单源**、由 CI 生成与判定、
   由人审后提交;同一批加载顺带跑 axe(WCAG 2.1 AA,违规必须 ⊆ 显式豁免清单)。
   附带落地:`_electron` 驱动的 E2E 三条核心链路(导入→报告 / 证据链跳转 /
   教练闭环+重启持久化),以及 measure-then-lock 的三项性能预算(解析/首渲/冷启动)。

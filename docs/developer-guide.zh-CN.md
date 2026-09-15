@@ -100,7 +100,7 @@ CI 的 `tsc -p` 包含 test 文件、且有独立 Lint 步 —— 本地 vitest 
 
 ## 发布
 
-GitHub Actions 在 tag 上原生构建 Windows x64 / macOS 安装包(免 Wine)。electron-builder 的坑(pin electronVersion、别加 files、extraResources、mac ad-hoc 签名)见 `docs/BUILD-WINDOWS.zh-CN.md` 与提交历史。
+GitHub Actions 在 tag 上原生构建 Windows x64 / macOS 安装包(免 Wine)。electron-builder 的坑(pin electronVersion、别加 `files`、`extraResources`、mac ad-hoc 签名)见 `docs/BUILD-WINDOWS.zh-CN.md` 与提交历史。
 
 ## 从哪里开始读代码
 
