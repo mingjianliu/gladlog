@@ -152,3 +152,112 @@ describe("talent evidence inventory (GH #96 M1)", () => {
     );
   });
 });
+
+// GH #96 M6 (2026-09-14): SpellMods keyed by SpellCategories.Category (aura 341)
+// and by SpellLabel (aura 218 / 219) — Angel's Mercy / Frequent Donor shapes.
+describe("category-cooldown and label SpellMods (GH #96 M6)", () => {
+  const base = {
+    talentTrees: [tree(5, 256, ["810001", "810002", "810003"])],
+    pvpPool: {},
+    spellClassOptionsRows: [],
+    trackedSpellIds: new Set(["19236", "108416", "900002"]),
+  };
+
+  it("aura 341 reduces the cooldown of every spell in the SpellCategories Category", () => {
+    const inv = buildTalentInventory({
+      ...base,
+      spellEffectRows: [
+        effect("810001", "11", {
+          EffectAura: "341",
+          EffectMiscValue_0: "671",
+          EffectBasePointsF: "-20000",
+          EffectSpellClassMask_0: "0",
+        }),
+      ],
+      spellCategoriesRows: [
+        {
+          SpellID: "19236",
+          Category: "671",
+          ChargeCategory: "0",
+          DifficultyID: "0",
+        },
+      ],
+    });
+    expect(compileCooldownModifiers(inv, base.trackedSpellIds)).toEqual({
+      "19236": [
+        {
+          talentSpellId: "810001",
+          effect: "reduce_cd",
+          value: 20,
+          sourceRowId: "11",
+        },
+      ],
+    });
+  });
+
+  it("aura 219 op 11 (flat) and aura 218 op 11 (pct) resolve their targets through SpellLabel", () => {
+    const inv = buildTalentInventory({
+      ...base,
+      spellEffectRows: [
+        effect("810002", "12", {
+          EffectAura: "219",
+          EffectMiscValue_0: "11",
+          EffectMiscValue_1: "3001",
+          EffectBasePointsF: "-15000",
+          EffectSpellClassMask_0: "0",
+        }),
+        effect("810003", "13", {
+          EffectAura: "218",
+          EffectMiscValue_0: "11",
+          EffectMiscValue_1: "3002",
+          EffectBasePointsF: "-10",
+          EffectSpellClassMask_0: "0",
+        }),
+      ],
+      spellCategoriesRows: [],
+      spellLabelRows: [
+        { SpellID: "108416", LabelID: "3001" },
+        { SpellID: "900002", LabelID: "3002" },
+      ],
+    });
+    const out = compileCooldownModifiers(inv, base.trackedSpellIds);
+    expect(out["108416"]).toEqual([
+      {
+        talentSpellId: "810002",
+        effect: "reduce_cd",
+        value: 15,
+        sourceRowId: "12",
+      },
+    ]);
+    expect(out["900002"]).toEqual([
+      {
+        talentSpellId: "810003",
+        effect: "reduce_cd_pct",
+        value: 10,
+        sourceRowId: "13",
+      },
+    ]);
+    // a label id or category id is never read as a spell id
+    expect(
+      inv.rows.flatMap((r) => r.targets).some((t) => t.via === "direct"),
+    ).toBe(false);
+  });
+
+  it("a label row with an op other than 11 compiles no cooldown modifier", () => {
+    const inv = buildTalentInventory({
+      ...base,
+      spellEffectRows: [
+        effect("810002", "14", {
+          EffectAura: "219",
+          EffectMiscValue_0: "1",
+          EffectMiscValue_1: "3001",
+          EffectBasePointsF: "2000",
+          EffectSpellClassMask_0: "0",
+        }),
+      ],
+      spellCategoriesRows: [],
+      spellLabelRows: [{ SpellID: "108416", LabelID: "3001" }],
+    });
+    expect(compileCooldownModifiers(inv, base.trackedSpellIds)).toEqual({});
+  });
+});

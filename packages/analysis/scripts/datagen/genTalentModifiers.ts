@@ -57,6 +57,8 @@ export function extractTalentModifiers(
    * old behaviour; `main` always passes it.
    */
   temporarySourceIds: ReadonlySet<string> = new Set(),
+  /** SpellLabel rows for the label-keyed SpellMods (aura 218 / 219) */
+  spellLabelRows: Record<string, string>[] = [],
 ): Record<string, ICDModifier[]> {
   const inventory = buildTalentInventory({
     talentTrees: talentIdMap as never,
@@ -64,6 +66,7 @@ export function extractTalentModifiers(
     spellEffectRows,
     spellClassOptionsRows,
     spellCategoriesRows,
+    spellLabelRows,
     temporarySpellIds: temporarySourceIds,
     trackedSpellIds,
   });
@@ -81,6 +84,7 @@ export async function main(): Promise<void> {
     spellNameRaw,
     spellMiscRaw,
     spellDurationRaw,
+    spellLabelRaw,
   ] = await Promise.all([
     fetchTable("SpellEffect", build, cacheDir),
     fetchTable("SpellClassOptions", build, cacheDir),
@@ -88,7 +92,9 @@ export async function main(): Promise<void> {
     fetchTable("SpellName", build, cacheDir),
     fetchTable("SpellMisc", build, cacheDir),
     fetchTable("SpellDuration", build, cacheDir),
+    fetchTable("SpellLabel", build, cacheDir),
   ]);
+  const spellLabelRows = parseCsv(spellLabelRaw).rows;
 
   const spellEffectRows = parseCsv(spellEffectRaw).rows;
   // Live hotfixes on top of the client build (BACKLOG #41 (3)): cooldown /
@@ -220,6 +226,7 @@ export async function main(): Promise<void> {
     spellNameRows,
     trackedSpellIds,
     temporarySourceIds,
+    spellLabelRows,
   );
 
   console.log(
@@ -246,6 +253,7 @@ export async function main(): Promise<void> {
     spellEffectRows,
     spellClassOptionsRows,
     spellCategoriesRows,
+    spellLabelRows,
     temporarySpellIds: temporarySourceIds,
     knownDurationSpellIds,
     trackedSpellIds,

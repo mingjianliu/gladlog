@@ -34,6 +34,18 @@ export const SPELLMOD_COOLDOWN = 11;
 export const AURA_CHARGE_RECOVERY_MULTIPLIER = 454;
 export const AURA_MOD_CATEGORY_COOLDOWN = 453;
 export const AURA_OVERRIDE_ACTION_SPELL = 332;
+/**
+ * GH #96 M6 (2026-09-14): two SpellMod encodings the class-mask path never
+ * sees. Aura 341 changes the cooldown of every spell in a SpellCategories
+ * `Category` (misc0 = category, points in ms) — Angel's Mercy: Desperate
+ * Prayer −20 s, Eternal Hunt: The Hunt −15 s. Auras 218 / 219 are the pct /
+ * flat SpellMod keyed by SpellLabel (misc0 = SpellModOp, misc1 = LabelID) —
+ * Frequent Donor: Dark Pact −15 s. Found through the scripted-talent queue:
+ * the talents looked script-driven only because no compiler read these rows.
+ */
+export const AURA_MOD_SPELL_CATEGORY_COOLDOWN = 341;
+export const AURA_ADD_PCT_MODIFIER_BY_LABEL = 218;
+export const AURA_ADD_FLAT_MODIFIER_BY_LABEL = 219;
 export const MAX_TRIGGER_HOPS = 2;
 
 /**
@@ -67,7 +79,8 @@ export interface ICDModifier {
   sourceRowId?: string;
 }
 
-export type TargetVia = "mask" | "chargeCategory" | "direct";
+export type TargetVia =
+  "mask" | "chargeCategory" | "cooldownCategory" | "label" | "direct";
 
 export interface IInventoryRow {
   rowId?: string;
@@ -186,6 +199,8 @@ export function buildTalentInventory(input: {
   spellEffectRows: Record<string, string>[];
   spellClassOptionsRows: Record<string, string>[];
   spellCategoriesRows: Record<string, string>[];
+  /** SpellLabel rows (LabelID → SpellID) for aura 218 / 219; omitted → no label targets */
+  spellLabelRows?: Record<string, string>[];
   /** finite-duration carrier spells; omitted → every carrier is "unknown" */
   temporarySpellIds?: ReadonlySet<string>;
   /** spells SpellMisc covers (activation "passive" when not temporary) */
@@ -230,6 +245,23 @@ export function buildTalentInventory(input: {
     const l = chargeCategorySpells.get(cat) ?? [];
     l.push(r.SpellID);
     chargeCategorySpells.set(cat, l);
+  }
+  const cooldownCategorySpells = new Map<number, string[]>();
+  for (const r of input.spellCategoriesRows) {
+    const cat = toInt(r.Category);
+    if (!r.SpellID || cat === 0) continue;
+    if (r.DifficultyID && r.DifficultyID !== "0") continue;
+    const l = cooldownCategorySpells.get(cat) ?? [];
+    if (!l.includes(r.SpellID)) l.push(r.SpellID);
+    cooldownCategorySpells.set(cat, l);
+  }
+  const labelSpells = new Map<number, string[]>();
+  for (const r of input.spellLabelRows ?? []) {
+    const label = toInt(r.LabelID);
+    if (!r.SpellID || label === 0) continue;
+    const l = labelSpells.get(label) ?? [];
+    if (!l.includes(r.SpellID)) l.push(r.SpellID);
+    labelSpells.set(label, l);
   }
   const tracked = input.trackedSpellIds;
   const keep = (id: string) => !tracked || tracked.has(id);
@@ -304,7 +336,30 @@ export function buildTalentInventory(input: {
     if (misc0 > 0 && catTargets)
       for (const t of catTargets)
         if (keep(t)) targets.push({ spellId: t, via: "chargeCategory" });
-    if (misc0 > 0 && !chargeCategorySpells.has(misc0) && keep(String(misc0)))
+    const isLabelOrCooldownCategory =
+      effect === EFFECT_APPLY_AURA &&
+      (aura === AURA_MOD_SPELL_CATEGORY_COOLDOWN ||
+        aura === AURA_ADD_PCT_MODIFIER_BY_LABEL ||
+        aura === AURA_ADD_FLAT_MODIFIER_BY_LABEL);
+    if (
+      effect === EFFECT_APPLY_AURA &&
+      aura === AURA_MOD_SPELL_CATEGORY_COOLDOWN
+    )
+      for (const t of cooldownCategorySpells.get(misc0) ?? [])
+        if (keep(t)) targets.push({ spellId: t, via: "cooldownCategory" });
+    if (
+      effect === EFFECT_APPLY_AURA &&
+      (aura === AURA_ADD_PCT_MODIFIER_BY_LABEL ||
+        aura === AURA_ADD_FLAT_MODIFIER_BY_LABEL)
+    )
+      for (const t of labelSpells.get(toInt(r.EffectMiscValue_1)) ?? [])
+        if (keep(t)) targets.push({ spellId: t, via: "label" });
+    if (
+      misc0 > 0 &&
+      !isLabelOrCooldownCategory &&
+      !chargeCategorySpells.has(misc0) &&
+      keep(String(misc0))
+    )
       targets.push({ spellId: String(misc0), via: "direct" });
     rows.push({
       ...(r.ID ? { rowId: String(r.ID) } : {}),
@@ -395,7 +450,8 @@ export function compileCooldownModifiers(
       value = Math.abs(value);
     } else if (
       effect === EFFECT_APPLY_AURA &&
-      aura === AURA_ADD_PCT_MODIFIER &&
+      (aura === AURA_ADD_PCT_MODIFIER ||
+        aura === AURA_ADD_PCT_MODIFIER_BY_LABEL) &&
       misc0 === SPELLMOD_COOLDOWN
     ) {
       type = "reduce_cd_pct";
@@ -410,7 +466,10 @@ export function compileCooldownModifiers(
       effect === EFFECT_MOD_COOLDOWN ||
       (effect === EFFECT_APPLY_AURA && aura === AURA_MOD_CATEGORY_COOLDOWN) ||
       (effect === EFFECT_APPLY_AURA &&
-        aura === AURA_ADD_FLAT_MODIFIER &&
+        aura === AURA_MOD_SPELL_CATEGORY_COOLDOWN) ||
+      (effect === EFFECT_APPLY_AURA &&
+        (aura === AURA_ADD_FLAT_MODIFIER ||
+          aura === AURA_ADD_FLAT_MODIFIER_BY_LABEL) &&
         misc0 === SPELLMOD_COOLDOWN)
     ) {
       type = "reduce_cd";

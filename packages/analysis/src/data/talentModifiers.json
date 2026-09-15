@@ -87,6 +87,14 @@
       "sourceRowId": "1142346"
     }
   ],
+  "475": [
+    {
+      "talentSpellId": "1270847",
+      "effect": "reduce_cd",
+      "value": -20,
+      "sourceRowId": "1283221"
+    }
+  ],
   "498": [
     {
       "talentSpellId": "114154",
@@ -327,6 +335,22 @@
       "sourceRowId": "1135856"
     }
   ],
+  "2139": [
+    {
+      "talentSpellId": "382297",
+      "effect": "reduce_cd",
+      "value": 5,
+      "sourceRowId": "1013600"
+    }
+  ],
+  "2484": [
+    {
+      "talentSpellId": "381867",
+      "effect": "reduce_cd",
+      "value": 5,
+      "sourceRowId": "1012979"
+    }
+  ],
   "2825": [
     {
       "talentSpellId": "193876",
@@ -461,6 +485,14 @@
       "sourceRowId": "1280029"
     }
   ],
+  "6358": [
+    {
+      "talentSpellId": "385881",
+      "effect": "reduce_cd",
+      "value": 10,
+      "sourceRowId": "1021267"
+    }
+  ],
   "6544": [
     {
       "talentSpellId": "202163",
@@ -470,6 +502,12 @@
     }
   ],
   "6552": [
+    {
+      "talentSpellId": "382297",
+      "effect": "reduce_cd",
+      "value": 5,
+      "sourceRowId": "1013600"
+    },
     {
       "talentSpellId": "391271",
       "effect": "reduce_cd_pct",
@@ -521,6 +559,14 @@
       "sourceRowId": "288790"
     }
   ],
+  "8143": [
+    {
+      "talentSpellId": "381867",
+      "effect": "reduce_cd",
+      "value": 5,
+      "sourceRowId": "1012979"
+    }
+  ],
   "11426": [
     {
       "talentSpellId": "1244069",
@@ -543,6 +589,14 @@
       "sourceRowId": "1185745"
     }
   ],
+  "17767": [
+    {
+      "talentSpellId": "385881",
+      "effect": "reduce_cd",
+      "value": 30,
+      "sourceRowId": "1021257"
+    }
+  ],
   "17962": [
     {
       "talentSpellId": "231793",
@@ -555,6 +609,14 @@
       "effect": "reduce_cd",
       "value": 2,
       "sourceRowId": "1024755"
+    }
+  ],
+  "18278": [
+    {
+      "talentSpellId": "382297",
+      "effect": "reduce_cd",
+      "value": 5,
+      "sourceRowId": "1013600"
     }
   ],
   "18499": [
@@ -579,6 +641,22 @@
       "sourceRowId": "1112687"
     }
   ],
+  "19236": [
+    {
+      "talentSpellId": "238100",
+      "effect": "reduce_cd",
+      "value": 20,
+      "sourceRowId": "360785"
+    }
+  ],
+  "19505": [
+    {
+      "talentSpellId": "385881",
+      "effect": "reduce_cd",
+      "value": 5,
+      "sourceRowId": "1021264"
+    }
+  ],
   "19574": [
     {
       "talentSpellId": "231548",
@@ -593,6 +671,14 @@
       "effect": "reduce_cd",
       "value": 20,
       "sourceRowId": "1166370"
+    }
+  ],
+  "19647": [
+    {
+      "talentSpellId": "382297",
+      "effect": "reduce_cd",
+      "value": 5,
+      "sourceRowId": "1013600"
     }
   ],
   "20271": [
@@ -669,6 +755,14 @@
       "effect": "extra_charge",
       "value": 1,
       "sourceRowId": "1258360"
+    }
+  ],
+  "30151": [
+    {
+      "talentSpellId": "385881",
+      "effect": "reduce_cd",
+      "value": 5,
+      "sourceRowId": "1021280"
     }
   ],
   "30283": [
@@ -987,6 +1081,14 @@
       "sourceRowId": "1135201"
     }
   ],
+  "47528": [
+    {
+      "talentSpellId": "382297",
+      "effect": "reduce_cd",
+      "value": 5,
+      "sourceRowId": "1013600"
+    }
+  ],
   "47540": [
     {
       "talentSpellId": "1248423",
@@ -1117,6 +1219,14 @@
       "effect": "reduce_cd",
       "value": -15,
       "sourceRowId": "1205063"
+    }
+  ],
+  "51485": [
+    {
+      "talentSpellId": "381867",
+      "effect": "reduce_cd",
+      "value": 5,
+      "sourceRowId": "1012979"
     }
   ],
   "51505": [
@@ -1391,6 +1501,30 @@
       "sourceRowId": "1285564"
     }
   ],
+  "89751": [
+    {
+      "talentSpellId": "1263935",
+      "effect": "reduce_cd",
+      "value": 10,
+      "sourceRowId": "1311804"
+    }
+  ],
+  "89753": [
+    {
+      "talentSpellId": "1263935",
+      "effect": "reduce_cd",
+      "value": 10,
+      "sourceRowId": "1311804"
+    }
+  ],
+  "96231": [
+    {
+      "talentSpellId": "382297",
+      "effect": "reduce_cd",
+      "value": 5,
+      "sourceRowId": "1013600"
+    }
+  ],
   "97462": [
     {
       "talentSpellId": "235941",
@@ -1551,6 +1685,14 @@
       "effect": "reduce_cd",
       "value": 60,
       "sourceRowId": "1172216"
+    }
+  ],
+  "108416": [
+    {
+      "talentSpellId": "386686",
+      "effect": "reduce_cd",
+      "value": 15,
+      "sourceRowId": "1020935"
     }
   ],
   "108853": [
@@ -1879,6 +2021,22 @@
       "sourceRowId": "815148"
     }
   ],
+  "119907": [
+    {
+      "talentSpellId": "385881",
+      "effect": "reduce_cd",
+      "value": 30,
+      "sourceRowId": "1021257"
+    }
+  ],
+  "119909": [
+    {
+      "talentSpellId": "385881",
+      "effect": "reduce_cd",
+      "value": 10,
+      "sourceRowId": "1021267"
+    }
+  ],
   "121253": [
     {
       "talentSpellId": "383707",
@@ -1943,6 +2101,22 @@
       "effect": "reduce_cd",
       "value": 5,
       "sourceRowId": "1135201"
+    }
+  ],
+  "132409": [
+    {
+      "talentSpellId": "382297",
+      "effect": "reduce_cd",
+      "value": 5,
+      "sourceRowId": "1013600"
+    }
+  ],
+  "132413": [
+    {
+      "talentSpellId": "385881",
+      "effect": "reduce_cd",
+      "value": 30,
+      "sourceRowId": "1021257"
     }
   ],
   "132469": [
@@ -2085,6 +2259,14 @@
       "effect": "reduce_cd_pct",
       "value": 100,
       "sourceRowId": "800884"
+    }
+  ],
+  "183752": [
+    {
+      "talentSpellId": "382297",
+      "effect": "reduce_cd",
+      "value": 5,
+      "sourceRowId": "1013600"
     }
   ],
   "184364": [
@@ -2251,6 +2433,14 @@
       "sourceRowId": "844890"
     }
   ],
+  "187707": [
+    {
+      "talentSpellId": "382297",
+      "effect": "reduce_cd",
+      "value": 5,
+      "sourceRowId": "1013600"
+    }
+  ],
   "188389": [
     {
       "talentSpellId": "378266",
@@ -2309,6 +2499,20 @@
       "effect": "reduce_cd",
       "value": 15,
       "sourceRowId": "708963"
+    },
+    {
+      "talentSpellId": "381867",
+      "effect": "reduce_cd",
+      "value": 5,
+      "sourceRowId": "1012979"
+    }
+  ],
+  "192077": [
+    {
+      "talentSpellId": "462791",
+      "effect": "reduce_cd",
+      "value": 30,
+      "sourceRowId": "1172940"
     }
   ],
   "194223": [
@@ -2575,6 +2779,14 @@
       "sourceRowId": "1033067"
     }
   ],
+  "204066": [
+    {
+      "talentSpellId": "429539",
+      "effect": "reduce_cd",
+      "value": 20,
+      "sourceRowId": "1134391"
+    }
+  ],
   "204157": [
     {
       "talentSpellId": "320387",
@@ -2593,6 +2805,22 @@
       "effect": "extra_charge",
       "value": 1,
       "sourceRowId": "1113270"
+    }
+  ],
+  "204331": [
+    {
+      "talentSpellId": "381867",
+      "effect": "reduce_cd",
+      "value": 5,
+      "sourceRowId": "1012979"
+    }
+  ],
+  "204336": [
+    {
+      "talentSpellId": "381867",
+      "effect": "reduce_cd",
+      "value": 5,
+      "sourceRowId": "1012979"
     }
   ],
   "204361": [
@@ -2653,6 +2881,14 @@
       "effect": "replace_spell",
       "value": 208173,
       "sourceRowId": "307986"
+    }
+  ],
+  "205636": [
+    {
+      "talentSpellId": "428937",
+      "effect": "reduce_cd",
+      "value": 15,
+      "sourceRowId": "1112686"
     }
   ],
   "206572": [
@@ -3335,6 +3571,20 @@
       "sourceRowId": "1016031"
     }
   ],
+  "342245": [
+    {
+      "talentSpellId": "342249",
+      "effect": "reduce_cd",
+      "value": 5,
+      "sourceRowId": "843174"
+    },
+    {
+      "talentSpellId": "1255166",
+      "effect": "reduce_cd",
+      "value": 10,
+      "sourceRowId": "1261855"
+    }
+  ],
   "344548": [
     {
       "talentSpellId": "462440",
@@ -3379,6 +3629,22 @@
       "sourceRowId": "1087759"
     }
   ],
+  "351338": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "352278": [
+    {
+      "talentSpellId": "431067",
+      "effect": "reduce_cd_pct",
+      "value": 30,
+      "sourceRowId": "1186283"
+    }
+  ],
   "353082": [
     {
       "talentSpellId": "387807",
@@ -3393,12 +3659,42 @@
       "sourceRowId": "1118816"
     }
   ],
+  "353759": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "355689": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
   "355913": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    },
     {
       "talentSpellId": "414969",
       "effect": "reduce_cd_pct",
       "value": 100,
       "sourceRowId": "1084506"
+    }
+  ],
+  "355916": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
     }
   ],
   "355936": [
@@ -3415,10 +3711,24 @@
       "sourceRowId": "1013727"
     },
     {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    },
+    {
       "talentSpellId": "1264269",
       "effect": "extra_charge",
       "value": 1,
       "sourceRowId": "1275513"
+    }
+  ],
+  "355941": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
     }
   ],
   "356781": [
@@ -3447,12 +3757,26 @@
       "sourceRowId": "1267055"
     }
   ],
+  "356995": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
   "357170": [
     {
       "talentSpellId": "376204",
       "effect": "extra_charge",
       "value": 1,
       "sourceRowId": "1003091"
+    },
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
     },
     {
       "talentSpellId": "376204",
@@ -3499,12 +3823,56 @@
       "sourceRowId": "1294448"
     }
   ],
+  "357209": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
   "357210": [
     {
       "talentSpellId": "386348",
       "effect": "reduce_cd",
       "value": 60,
       "sourceRowId": "1020352"
+    },
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "357211": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "357212": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "357214": [
+    {
+      "talentSpellId": "368838",
+      "effect": "reduce_cd",
+      "value": 120,
+      "sourceRowId": "913547"
+    },
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080803"
     }
   ],
   "357768": [
@@ -3543,6 +3911,12 @@
       "sourceRowId": "1001987"
     },
     {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    },
+    {
       "talentSpellId": "408543",
       "effect": "reduce_cd",
       "value": 15,
@@ -3561,9 +3935,77 @@
       "effect": "replace_spell",
       "value": 382411,
       "sourceRowId": "1077607"
+    },
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "359077": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "359618": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "359816": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "360806": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "360823": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "360827": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "360828": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
     }
   ],
   "360995": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    },
     {
       "talentSpellId": "1241704",
       "effect": "extra_charge",
@@ -3571,12 +4013,98 @@
       "sourceRowId": "1240843"
     }
   ],
+  "361021": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "361029": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "361195": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "361361": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
   "361469": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    },
     {
       "talentSpellId": "431442",
       "effect": "replace_spell",
       "value": 431443,
       "sourceRowId": "1119505"
+    }
+  ],
+  "361500": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "361509": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "362361": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "362877": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "362969": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "363502": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
     }
   ],
   "363534": [
@@ -3585,6 +4113,12 @@
       "effect": "reduce_cd",
       "value": 60,
       "sourceRowId": "1013058"
+    },
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
     }
   ],
   "363916": [
@@ -3601,12 +4135,248 @@
       "sourceRowId": "1080330"
     }
   ],
+  "364342": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "364343": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "365585": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "366155": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "367364": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "368415": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "368970": [
+    {
+      "talentSpellId": "375443",
+      "effect": "reduce_cd",
+      "value": 120,
+      "sourceRowId": "1001855"
+    },
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080804"
+    }
+  ],
+  "369299": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "369374": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "369459": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "369536": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080805"
+    }
+  ],
+  "370454": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "370537": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
   "370553": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    },
     {
       "talentSpellId": "1260484",
       "effect": "reduce_cd",
       "value": 30,
       "sourceRowId": "1269936"
+    }
+  ],
+  "370562": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "370564": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "370665": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "370666": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "370667": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "370840": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "370889": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "370898": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "370901": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "370960": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "370965": [
+    {
+      "talentSpellId": "1270900",
+      "effect": "reduce_cd",
+      "value": 15,
+      "sourceRowId": "1283315"
+    }
+  ],
+  "370984": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "371441": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "371807": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "371838": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
     }
   ],
   "372048": [
@@ -3617,13 +4387,73 @@
       "sourceRowId": "1070153"
     },
     {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    },
+    {
       "talentSpellId": "374346",
       "effect": "reduce_cd",
       "value": 30,
       "sourceRowId": "1164770"
     }
   ],
+  "372234": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "372245": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "372470": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "372571": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "373267": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "373268": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
   "373861": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    },
     {
       "talentSpellId": "431715",
       "effect": "reduce_cd",
@@ -3633,10 +4463,168 @@
   ],
   "373862": [
     {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    },
+    {
       "talentSpellId": "431715",
       "effect": "reduce_cd",
       "value": 4,
       "sourceRowId": "1119662"
+    }
+  ],
+  "374227": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "374251": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "374348": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "374349": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "374968": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "375087": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "375226": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "375229": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "375230": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "375234": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "375238": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "375240": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "375252": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "375253": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "375254": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "375255": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "375256": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "375257": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "375258": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
     }
   ],
   "375576": [
@@ -3647,12 +4635,220 @@
       "sourceRowId": "1008310"
     }
   ],
+  "375583": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "375802": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "376788": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "376850": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "377102": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "377509": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "377913": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "378001": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
   "378081": [
     {
       "talentSpellId": "1246131",
       "effect": "reduce_cd",
       "value": -30,
       "sourceRowId": "1247572"
+    }
+  ],
+  "378105": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "378213": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "378441": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "378464": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "381414": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "381732": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "381741": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "381746": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "381748": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "381749": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "381750": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "381751": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "381752": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "381753": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "381754": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "381756": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "381757": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "381758": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
     }
   ],
   "382266": [
@@ -3681,6 +4877,12 @@
       "effect": "reduce_cd",
       "value": 3,
       "sourceRowId": "1077537"
+    },
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
     }
   ],
   "382614": [
@@ -3691,10 +4893,40 @@
       "sourceRowId": "1003006"
     },
     {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    },
+    {
       "talentSpellId": "1264269",
       "effect": "extra_charge",
       "value": 1,
       "sourceRowId": "1275513"
+    }
+  ],
+  "383005": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "383013": [
+    {
+      "talentSpellId": "381867",
+      "effect": "reduce_cd",
+      "value": 5,
+      "sourceRowId": "1012979"
+    }
+  ],
+  "383332": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
     }
   ],
   "383410": [
@@ -3755,12 +4987,52 @@
       "sourceRowId": "1028651"
     }
   ],
+  "386353": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "386399": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
   "386731": [
     {
       "talentSpellId": "379391",
       "effect": "reduce_cd",
       "value": 15,
       "sourceRowId": "1008310"
+    }
+  ],
+  "387350": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "387763": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "388215": [
+    {
+      "talentSpellId": "385881",
+      "effect": "reduce_cd",
+      "value": 5,
+      "sourceRowId": "1021264"
     }
   ],
   "388615": [
@@ -3777,12 +5049,28 @@
       "sourceRowId": "1024308"
     }
   ],
+  "388973": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
   "389539": [
     {
       "talentSpellId": "204074",
       "effect": "reduce_cd_pct",
       "value": 50,
       "sourceRowId": "301163"
+    }
+  ],
+  "390148": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
     }
   ],
   "390163": [
@@ -3797,6 +5085,14 @@
       "effect": "reduce_cd_pct",
       "value": 15,
       "sourceRowId": "1277789"
+    }
+  ],
+  "390386": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
     }
   ],
   "390414": [
@@ -3845,6 +5141,14 @@
       "sourceRowId": "1033285"
     }
   ],
+  "392268": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
   "392983": [
     {
       "talentSpellId": "451576",
@@ -3877,6 +5181,30 @@
       "sourceRowId": "821911"
     }
   ],
+  "395152": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "395160": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "395296": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
   "395519": [
     {
       "talentSpellId": "451576",
@@ -3899,6 +5227,84 @@
       "effect": "replace_spell",
       "value": 408092,
       "sourceRowId": "1072002"
+    },
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "396288": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "397744": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "401382": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "403264": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "403265": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "403295": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "403296": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "403631": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "403760": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
     }
   ],
   "403876": [
@@ -3909,12 +5315,84 @@
       "sourceRowId": "127297"
     }
   ],
+  "404369": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "404381": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "404908": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "404977": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
   "405397": [
     {
       "talentSpellId": "234299",
       "effect": "reduce_cd",
       "value": 15,
       "sourceRowId": "353965"
+    }
+  ],
+  "405874": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "406043": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "406054": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "406732": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "406789": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
     }
   ],
   "406957": [
@@ -3933,10 +5411,32 @@
   ],
   "406971": [
     {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    },
+    {
       "talentSpellId": "374346",
       "effect": "reduce_cd",
       "value": 30,
       "sourceRowId": "1164770"
+    }
+  ],
+  "407244": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "407254": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
     }
   ],
   "407480": [
@@ -3953,6 +5453,38 @@
       "sourceRowId": "1073914"
     }
   ],
+  "408005": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "408233": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "408234": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "408544": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
   "409311": [
     {
       "talentSpellId": "412713",
@@ -3967,12 +5499,100 @@
       "sourceRowId": "1283897"
     }
   ],
+  "409438": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "409560": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "409632": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "409678": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "409722": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "409895": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "410089": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
   "410126": [
     {
       "talentSpellId": "469325",
       "effect": "reduce_cd",
       "value": 15,
       "sourceRowId": "1183618"
+    }
+  ],
+  "410256": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "410263": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "410265": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "410355": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
     }
   ],
   "410358": [
@@ -3993,6 +5613,70 @@
       "effect": "reduce_cd",
       "value": -20,
       "sourceRowId": "1162886"
+    }
+  ],
+  "410651": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "410686": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "411055": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "411288": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "411932": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "413786": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "413924": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "413984": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
     }
   ],
   "414658": [
@@ -4027,6 +5711,30 @@
       "effect": "reduce_cd",
       "value": 180,
       "sourceRowId": "1086063"
+    }
+  ],
+  "415516": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "415649": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "420217": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
     }
   ],
   "427114": [
@@ -4079,10 +5787,56 @@
   ],
   "431443": [
     {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    },
+    {
       "talentSpellId": "431442",
       "effect": "replace_spell",
       "value": 431443,
       "sourceRowId": "1119505"
+    }
+  ],
+  "431483": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "431582": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "431583": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "431584": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "431620": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
     }
   ],
   "432459": [
@@ -4119,6 +5873,12 @@
       "effect": "reduce_cd",
       "value": 60,
       "sourceRowId": "1020352"
+    },
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
     }
   ],
   "438607": [
@@ -4137,6 +5897,30 @@
       "sourceRowId": "1087759"
     }
   ],
+  "438653": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "439606": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "439843": [
+    {
+      "talentSpellId": "469870",
+      "effect": "reduce_cd",
+      "value": 15,
+      "sourceRowId": "1184516"
+    }
+  ],
   "440006": [
     {
       "talentSpellId": "196439",
@@ -4153,12 +5937,28 @@
       "sourceRowId": "1091852"
     }
   ],
+  "441172": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
   "441668": [
     {
       "talentSpellId": "440992",
       "effect": "reduce_cd",
       "value": 5,
       "sourceRowId": "1135201"
+    }
+  ],
+  "442204": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
     }
   ],
   "442804": [
@@ -4183,6 +5983,22 @@
       "effect": "reduce_cd",
       "value": 30,
       "sourceRowId": "1279505"
+    }
+  ],
+  "444017": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "444089": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
     }
   ],
   "444347": [
@@ -4231,6 +6047,38 @@
       "effect": "reduce_cd",
       "value": -20,
       "sourceRowId": "1162886"
+    }
+  ],
+  "445134": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "445495": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "445740": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "445959": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
     }
   ],
   "449560": [
@@ -4357,6 +6205,14 @@
       "sourceRowId": "1158895"
     }
   ],
+  "455962": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
   "456640": [
     {
       "talentSpellId": "427775",
@@ -4371,12 +6227,36 @@
       "sourceRowId": "1107803"
     }
   ],
+  "459152": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "459574": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
   "460614": [
     {
       "talentSpellId": "202226",
       "effect": "reduce_cd",
       "value": -6,
       "sourceRowId": "298051"
+    }
+  ],
+  "460688": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
     }
   ],
   "466904": [
@@ -4407,6 +6287,20 @@
       "effect": "reduce_cd",
       "value": 1,
       "sourceRowId": "1152113"
+    }
+  ],
+  "470057": [
+    {
+      "talentSpellId": "378266",
+      "effect": "reduce_cd",
+      "value": 2,
+      "sourceRowId": "1268048"
+    },
+    {
+      "talentSpellId": "1269215",
+      "effect": "reduce_cd",
+      "value": 3,
+      "sourceRowId": "1280934"
     }
   ],
   "470411": [
@@ -4597,6 +6491,22 @@
       "sourceRowId": "1135629"
     }
   ],
+  "1236943": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "1236970": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
   "1237128": [
     {
       "talentSpellId": "233412",
@@ -4609,6 +6519,14 @@
       "effect": "reduce_cd",
       "value": 30,
       "sourceRowId": "1005589"
+    }
+  ],
+  "1239574": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
     }
   ],
   "1241059": [
@@ -4659,6 +6577,30 @@
       "effect": "extra_charge",
       "value": 1,
       "sourceRowId": "1268555"
+    }
+  ],
+  "1242507": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "1242747": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "1242759": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
     }
   ],
   "1243807": [
@@ -4719,6 +6661,14 @@
       "effect": "reduce_cd_pct",
       "value": 30,
       "sourceRowId": "1118816"
+    }
+  ],
+  "1246167": [
+    {
+      "talentSpellId": "1270900",
+      "effect": "reduce_cd",
+      "value": 15,
+      "sourceRowId": "1283315"
     }
   ],
   "1246768": [
@@ -4795,6 +6745,14 @@
       "sourceRowId": "1248561"
     }
   ],
+  "1253799": [
+    {
+      "talentSpellId": "441846",
+      "effect": "reduce_cd",
+      "value": 15,
+      "sourceRowId": "1136587"
+    }
+  ],
   "1253859": [
     {
       "talentSpellId": "1251790",
@@ -4809,6 +6767,68 @@
       "effect": "reduce_cd",
       "value": 15,
       "sourceRowId": "1256590"
+    }
+  ],
+  "1256579": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "1256581": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "1256688": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "1259101": [
+    {
+      "talentSpellId": "378266",
+      "effect": "reduce_cd",
+      "value": 2,
+      "sourceRowId": "1268048"
+    },
+    {
+      "talentSpellId": "1269215",
+      "effect": "reduce_cd",
+      "value": 3,
+      "sourceRowId": "1280934"
+    }
+  ],
+  "1259171": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "1259172": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "1259431": [
+    {
+      "talentSpellId": "1270900",
+      "effect": "reduce_cd",
+      "value": 15,
+      "sourceRowId": "1283315"
     }
   ],
   "1261193": [
@@ -4841,6 +6861,62 @@
       "effect": "replace_spell",
       "value": 1261870,
       "sourceRowId": "1271777"
+    }
+  ],
+  "1264379": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "1265804": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "1265871": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "1265872": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "1265980": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "1265991": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "1266165": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
     }
   ],
   "1267068": [
@@ -4883,6 +6959,22 @@
       "sourceRowId": "1151653"
     }
   ],
+  "1271783": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "1271799": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
   "1278969": [
     {
       "talentSpellId": "1244544",
@@ -4905,7 +6997,29 @@
       "sourceRowId": "1073914"
     }
   ],
+  "1289650": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "1289789": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
   "1291636": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    },
     {
       "talentSpellId": "431715",
       "effect": "reduce_cd",
@@ -4919,6 +7033,30 @@
       "effect": "extra_charge",
       "value": 1,
       "sourceRowId": "1258360"
+    }
+  ],
+  "1292321": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "1292322": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
+    }
+  ],
+  "1292323": [
+    {
+      "talentSpellId": "412713",
+      "effect": "reduce_cd_pct",
+      "value": 10,
+      "sourceRowId": "1080328"
     }
   ],
   "1300008": [

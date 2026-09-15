@@ -415,4 +415,10 @@
 //  when a credited action follows within 3 s of the press, mobility / Blessing
 //  of Freedom only when distance opens within 3 s of the press. Reference
 //  table rebuilt over the full archive.
-export const PROMPT_VERSION = 63;
+//  v64 (2026-09-14, GH #96 M6): cooldown SpellMods keyed by SpellCategory
+//  (aura 341) and SpellLabel (aura 218 / 219) are compiled — <cooldowns> and
+//  [RES] move for holders: Desperate Prayer 90 → 70 s, Dark Pact 60 → 45 s,
+//  The Hunt 90 → 75 s, Totemic Surge totems −5 s, Counterspell −5 s …; a false
+//  "Dark Pact 2 Charges" inferred from casts faster than the old cooldown
+//  disappears.
+export const PROMPT_VERSION = 64;
