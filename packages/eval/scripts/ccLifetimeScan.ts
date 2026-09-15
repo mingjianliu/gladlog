@@ -195,7 +195,10 @@ for (const id of [...tracked].sort(
     (CC_DURATION_TALENT_MODIFIERS[id] ?? []).some(
       (m) =>
         Math.abs(
-          mode! - (predicate! + (m.addSeconds ?? 0)) * (1 + (m.pct ?? 0) / 100),
+          mode! -
+            (m.includedInBase
+              ? predicate! - (m.addSeconds ?? 0)
+              : (predicate! + (m.addSeconds ?? 0)) * (1 + (m.pct ?? 0) / 100)),
         ) < BIN_S,
     );
   const disagree = rawDisagree && !talentExplained;

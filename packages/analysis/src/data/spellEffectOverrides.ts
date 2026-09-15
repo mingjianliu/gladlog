@@ -194,6 +194,10 @@ export const CORPUS_DURATION_PATCHES: Record<string, number> = {
   // Binding Shot stun: DB2 SpellDuration says 2 s, the 12.1 archive says 3 s —
   // S2 605-file sample, n=2290 lifetimes: 3.0 s ×1084 (full-duration cluster),
   // 1.5 s ×309 (the 50 % DR cluster), p90 3.1 s. GH #44 tail, 2026-09-02.
+  // Mechanism found 2026-09-15 (GH #96 M6): Tar-Coated Bindings 459460 +1 s,
+  // taken by ~91 % of casters — holders 3,790 cells at 3.0 s vs non-holders 410
+  // at 2.0 s. The 3 s stays as the TYPICAL value callers without a caster get;
+  // CC_DURATION_TALENT_MODIFIERS prices a definite non-holder at 2 s.
   "117526": 3,
 
   // ── 2026-09-07 batch ─────────────────────────────────────────

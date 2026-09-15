@@ -176,9 +176,23 @@ export const CC_DURATION_TALENT_MODIFIERS: Record<
     pct?: number;
     /** DB2 aura 107 (flat ms) in seconds, added before percentages */
     addSeconds?: number;
+    /**
+     * The base duration (a CORPUS_DURATION_PATCHES value) already includes this
+     * modifier because nearly every caster holds the talent. Holders and
+     * unknowns get the base; only a definite non-holder gets base − addSeconds.
+     */
+    includedInBase?: boolean;
     note: string;
   }>
 > = {
+  "117526": [
+    {
+      talentSpellId: "459460",
+      addSeconds: 1,
+      includedInBase: true,
+      note: "Tar-Coated Bindings — Binding Shot stun +1 s, taken by ~91 % of Hunters; durationTalentScan (GH #96 M6, rule predeclared a76aabda) over 1/3 of the full new-season archive (21,101 files): holders 3,790 of 4,818 cells at 3.0 s, non-holders 410 of 473 at 2.0 s = DB2 2 s. The corpus patch keeps 3 s as the typical value; a definite non-holder is priced at 2 s.",
+    },
+  ],
   "132168": [
     {
       talentSpellId: "429639",

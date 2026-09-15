@@ -85,13 +85,18 @@ interface Candidate {
   aura: "107" | "108";
   value: number;
 }
+// `--candidates <file.json>` (2026-09-15): an explicit candidate list in the
+// same shape — for modifiers found outside the gap audit (M6 scripted queue:
+// Tar-Coated Bindings, Focused Ire). The promotion rule is unchanged.
+const candidatesPath = arg("--candidates", "");
 const CANDIDATES: Candidate[] = (
   JSON.parse(
     readFileSync(
-      join(home, "reports/talent-catalog-2026-09-13/gapAudit.json"),
+      candidatesPath ||
+        join(home, "reports/talent-catalog-2026-09-13/gapAudit.json"),
       "utf8",
     ),
-  ).duration as Candidate[]
+  )[candidatesPath ? "candidates" : "duration"] as Candidate[]
 ).map((c) => ({ ...c, aura: String(c.aura) as "107" | "108" }));
 const TARGETS = new Set(CANDIDATES.map((c) => c.target));
 

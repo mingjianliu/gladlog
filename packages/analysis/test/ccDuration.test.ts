@@ -68,6 +68,20 @@ describe("ccFullDurationForCaster — 天赋条件时长", () => {
       for (const m of mods) expect(maxRanks.get(m.talentSpellId)).toBe(1);
   });
 
+  // GH #96 M6: Binding Shot's corpus patch (3 s) already carries Tar-Coated
+  // Bindings (~91 % of casters) — only a definite non-holder is 2 s.
+  it("束缚射击:基础 3 秒已含焦油缚链;确定没点的猎人才是 2 秒,未知仍是 3 秒", () => {
+    const unknown = makeUnit("h1", { spec: CombatUnitSpec.Hunter_Survival });
+    expect(ccFullDurationForCaster("117526", unknown)).toBe(3);
+    expect(ccFullDurationForCaster("117526", undefined)).toBe(3);
+    // a Priest cannot hold a Hunter talent → definite "no"
+    const priest = makeUnit("p1", {
+      spec: CombatUnitSpec.Priest_Discipline,
+      info: { talents: [RESONANT_VOICE_TALENT], pvpTalents: [] },
+    });
+    expect(ccFullDurationForCaster("117526", priest)).toBe(2);
+  });
+
   // GH #96 M5: Boneshaker 429639 — flat +1 s on the Shockwave stun (DB2 aura
   // 107), a hero talent Arms / Protection can take and Fury cannot.
   const SHOCKWAVE_STUN = "132168";

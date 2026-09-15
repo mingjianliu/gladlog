@@ -30,10 +30,17 @@ export function ccFullDurationForCaster(
   // talentModifierOwnershipOf, not talentOwnershipOf: a hero talent such as
   // Boneshaker is outside the Fury tree, and the plain predicate's baseline
   // step would call every Fury warrior a holder (GH #96 M3b run 1)
-  for (const m of CC_DURATION_TALENT_MODIFIERS[spellId] ?? [])
-    if (talentModifierOwnershipOf(caster, m.talentSpellId) === "yes") {
+  for (const m of CC_DURATION_TALENT_MODIFIERS[spellId] ?? []) {
+    const own = talentModifierOwnershipOf(caster, m.talentSpellId);
+    if (m.includedInBase) {
+      // the typical base already carries it: only a definite "no" shortens
+      if (own === "no") add -= m.addSeconds ?? 0;
+      continue;
+    }
+    if (own === "yes") {
       add += m.addSeconds ?? 0;
       mult *= 1 + (m.pct ?? 0) / 100;
     }
+  }
   return (base + add) * mult;
 }
