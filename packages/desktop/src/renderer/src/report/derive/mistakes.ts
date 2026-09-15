@@ -410,7 +410,7 @@ export function candidateDetail(c: CandidateEvent): string {
     case "cd-spent-idle":
       return `${f.spell ?? ""} 在无威胁时段打出`;
     case "backlash-dispel":
-      return `${f.t ?? "?"}s 给 ${f.targetHpPct ?? "?"}% 血的 ${f.target ?? ""} 解掉 ${f.debuff ?? ""}${f.stacks && f.stacks !== "1" ? `×${f.stacks}` : ""},自己吃 ${f.backlash ?? ""},4 秒内承伤 ${f.selfDmgBeforeK ?? "?"}k→${f.selfDmgAfterK ?? "?"}k、治疗 ${f.healBeforeK ?? "?"}k→${f.healAfterK ?? "?"}k${f.cdCcSpell ? `;驱散 CD 里 ${f.cdCcTarget ?? ""} 吃了 ${f.cdCcDurationS ?? "?"}s ${f.cdCcSpell} 无人能解` : ""}`;
+      return `${f.t ?? "?"}s 给 ${f.targetHpPct ?? "?"}% 血的 ${f.target ?? ""} 解掉 ${f.debuff ?? ""}${f.stacks && f.stacks !== "1" ? `×${f.stacks}` : ""},自己吃 ${f.backlash ?? ""},4 秒内承伤 ${f.selfDmgTrend ?? "?"}、治疗 ${f.healTrend ?? "?"}${f.cdCcSpell ? `;驱散 CD 里 ${f.cdCcTarget ?? ""} 吃了 ${f.cdCcDurationS ?? "?"}s ${f.cdCcSpell} 无人能解` : ""}`;
     case "kick-priority-missed":
       return `${f.t ?? "?"}s ${f.healer ?? ""} 读 ${f.castS ?? "?"}s ${f.heal ?? ""} 奶 ${f.targetHpPct ?? "?"}% 血的击杀目标 ${f.target ?? ""}(+${f.healK ?? "?"}k),你的 ${f.kick ?? ""} 空着、${f.distanceYd ?? "?"} 码内,没踢${f.othersFeasible && f.othersFeasible !== "none" ? `;${f.othersFeasible} 也能踢` : ""}`;
     case "kick-priority-team":

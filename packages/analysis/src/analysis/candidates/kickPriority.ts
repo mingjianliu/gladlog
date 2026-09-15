@@ -606,7 +606,10 @@ export function kickPriorityTeamEvents(
         healedWhom: healedWhom(p),
         ownerWhy,
         teammates: mates
-          .map((f) => `${f.name} (${f.kickSpellName}, ${f.distanceYd == null ? "?" : Math.round(f.distanceYd)} yd)`)
+          // name + distance only (user ruling 2026-09-15): the interrupt's
+          // name was one more audited token per teammate and the coaching
+          // line is "call the kick", not "call Counterspell"
+          .map((f) => `${f.name} ${f.distanceYd == null ? "?" : Math.round(f.distanceYd)} yd`)
           .join("; "),
         refNCompleted: String(ref.nCompleted),
         refNInterrupted: String(ref.nInterrupted),

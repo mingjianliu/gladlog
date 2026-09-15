@@ -433,4 +433,10 @@
 //  corpus cells as observed differences; VT accusations silenced by the
 //  symmetric ledger guard; interrupt kit → official table; auditFindings drops
 //  a finding without eventIds instead of crashing.
-export const PROMPT_VERSION = 65;
+//  v66 (2026-09-15, GH #78 / #80, user ruling after the n=78 healer breakdown
+//  "可以,都可以"): backlash-dispel no longer renders the four raw before/after
+//  numbers (the two trend strings carry them), kick-priority-team teammates
+//  render as "name distance" without the interrupt's name — healer treatment
+//  responses audited 2.37 claims per finding vs 1.83 in control on an
+//  unchanged old-line error rate, so the new lines' surface is cut.
+export const PROMPT_VERSION = 66;

@@ -110,7 +110,7 @@ describe("kickPriorityTeamEvents (user ruling 3: teammate form, distance include
     const ev = kickPriorityTeamEvents(pts, owner, probes);
     expect(ev).toHaveLength(1);
     expect(ev[0]!.type).toBe("kick-priority-team");
-    expect(ev[0]!.facts).toMatchObject({ ownerWhy: "on cooldown (6s)", teammates: "Mage2 (Counterspell, 31 yd)", refDeathInterrupted: "31" });
+    expect(ev[0]!.facts).toMatchObject({ ownerWhy: "on cooldown (6s)", teammates: "Mage2 31 yd", refDeathInterrupted: "31" });
     // owner feasible → the owner form owns it, no team card
     expect(kickPriorityTeamEvents([point({ friends: [friend(), mate] })], owner, probes)).toHaveLength(0);
     // teammate out of range → nothing (range is part of the predicate)

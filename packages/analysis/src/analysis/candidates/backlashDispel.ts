@@ -549,13 +549,14 @@ export function backlashDispelEvents(
         targetHpPct: String(p.targetHpPct),
         backlash: kind ? `${kind.kind} ${kind.seconds}s` : "unknown",
         backlashLanded: p.backlashLanded ? "yes" : "no",
-        selfDmgBeforeK: k(p.dispellerDmgBefore ?? 0),
-        selfDmgAfterK: k(p.dispellerDmgAfter ?? 0),
-        healBeforeK: k(p.healerHealBefore),
-        healAfterK: k(p.healerHealAfter),
         // Direction pre-worded (n=78 A/B, 2026-09-12): 2 of 20 backlash
         // citations called a 181k->222k / 189k->278k healing change a
         // "drop" — the model inferred a direction the numbers contradict.
+        // The raw before/after numbers are NOT rendered separately any more
+        // (user ruling 2026-09-15): the trend string carries both, and every
+        // extra number on this line is another audited claim — healer
+        // responses in the A/B carried 2.37 audited claims per finding vs
+        // 1.83 in control, on the same old-line error rate.
         healTrend: trendK(p.healerHealBefore, p.healerHealAfter),
         selfDmgTrend: trendK(p.dispellerDmgBefore ?? 0, p.dispellerDmgAfter ?? 0),
         coRemoved: p.coRemoved.length
