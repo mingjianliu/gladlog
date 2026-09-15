@@ -1,28 +1,28 @@
 {
   "meta": {
-    "corpus": "wowarenalogs archive 2026-09-13",
-    "generatedAt": "2026-09-13",
-    "windows": 30015,
+    "corpus": "wowarenalogs archive 2026-09-14",
+    "generatedAt": "2026-09-15",
+    "windows": 84877,
     "predicate": "eligible window: enemyHealerCcWindows, rendered dur>=3s, rendered t>=30s, no enemy death in-window, >=1 canonical OFFENSIVE_CD_SPELL_IDS ready at window start; entered = canonical offensive CD cast in [from-2s, to]; kill15 = enemy death in (from, from+15s]"
   },
   "cells": {
     "Rated Solo Shuffle": {
-      "nEntered": 5638,
-      "killEntered": 0.10624334870521461,
-      "nUnentered": 11091,
-      "killUnentered": 0.06185195203318006
+      "nEntered": 13838,
+      "killEntered": 0.12443994796935974,
+      "nUnentered": 25748,
+      "killUnentered": 0.06256796644399565
     },
     "2v2": {
-      "nEntered": 1985,
-      "killEntered": 0.1340050377833753,
-      "nUnentered": 3333,
-      "killUnentered": 0.060006000600060005
+      "nEntered": 5395,
+      "killEntered": 0.12103799814643189,
+      "nUnentered": 8604,
+      "killUnentered": 0.05543933054393305
     },
     "3v3": {
-      "nEntered": 3538,
-      "killEntered": 0.11616732617297909,
-      "nUnentered": 4430,
-      "killUnentered": 0.05756207674943566
+      "nEntered": 14230,
+      "killEntered": 0.11784961349262123,
+      "nUnentered": 17062,
+      "killUnentered": 0.05749619036455281
     }
   }
 }
