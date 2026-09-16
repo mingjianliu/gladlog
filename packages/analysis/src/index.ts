@@ -129,3 +129,4 @@ export { OFF_GCD_SPELL_IDS } from "./data/offGcdGenerated";
 // Lane pressure/exposure (backlog #4): the damage-spike threshold shared by
 // the prompt and the lanes (single-source, see context/timelineHelpers.ts).
 export { DMG_SPIKE_THRESHOLD } from "./context/timelineHelpers";
+export * from "./context/peakSpikePlacement";

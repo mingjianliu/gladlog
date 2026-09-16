@@ -85,6 +85,18 @@ import {
   emitRotPressureEntries,
 } from "./matchTimelineSections";
 import {
+  PEAK_SPIKE_MARKERS,
+  peakSpikeMarker,
+  peakSpikePlacement,
+  type PeakSpikePlacement,
+} from "./peakSpikePlacement";
+export {
+  PEAK_SPIKE_MARKERS,
+  peakSpikeMarker,
+  peakSpikePlacement,
+  type PeakSpikePlacement,
+};
+import {
   buildResourceSnapshot,
   computeOnCDDisplayNames,
   computeReadyNames,
@@ -878,6 +890,12 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     const cdNames = burst.activeCDs
       .map((c) => `${c.spellName}@${fmtTime(c.castSeconds)}`)
       .join(" + ");
+    const placement = peakSpikePlacement(
+      burst.toSeconds,
+      overlappingSpike.fromSeconds,
+      overlappingSpike.toSeconds,
+    );
+    const marker = PEAK_SPIKE_MARKERS[placement];
     addEntry(
       burst.fromSeconds,
       // The damage number is the total of **that DMG SPIKE window**, not the
@@ -886,7 +904,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       // number as "damage during this window" (class I: the ord 017 responder
       // drew a wrong conclusion from exactly this). Label the window the damage
       // belongs to explicitly so number and interval line up.
-      `${fmtTime(burst.fromSeconds)}  [OFFENSIVE WINDOW]   ${fmtTime(burst.fromSeconds)}–${fmtTime(burst.toSeconds)} | peak spike ${dmgM}M on ${pid(overlappingSpike.targetName)} (${overlappingSpike.targetSpec}) over ${fmtTime(overlappingSpike.fromSeconds)}–${fmtTime(overlappingSpike.toSeconds)} | CDs: ${cdNames}`,
+      `${fmtTime(burst.fromSeconds)}  [OFFENSIVE WINDOW]   ${fmtTime(burst.fromSeconds)}–${fmtTime(burst.toSeconds)} | peak spike ${dmgM}M on ${pid(overlappingSpike.targetName)} (${overlappingSpike.targetSpec}) over ${fmtTime(overlappingSpike.fromSeconds)}–${fmtTime(overlappingSpike.toSeconds)}${marker} | CDs: ${cdNames}`,
     );
   }
 
@@ -2934,7 +2952,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     "    ally out of range/LoS; ranged: no enemy in range/LoS) for the stated seconds — only such roots are listed; roots",
     "    that changed nothing are omitted. Roots have no DR tier and are not hard CC (the rooted player can still cast).",
     "  [OFFENSIVE WINDOW] `X on <unit>` = damage DEALT TO that unit (it is the victim, not the dealer);",
-    "    its `peak spike` figure covers the spike's own sub-window, printed after it — not the whole offensive window.",
+    "    its `peak spike` figure covers the spike's own sub-window, printed after it — not the whole offensive window; a marker means the spike's sub-window extends past the offensive window (the +5 s allowance).",
     ...(TIMELINE_LINE_FLAGS.enemyDef === "timeline"
       ? [
           "  [ENEMY DEF] = an enemy pressed a defensive at that second: `(N%, Ts)` = official damage reduction and the",

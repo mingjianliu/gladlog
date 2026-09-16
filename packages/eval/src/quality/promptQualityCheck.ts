@@ -28,7 +28,11 @@
  * Expects under BASE_DIR: prompts/, manifests/, index.json.
  */
 
-import { ensureAnalysisData } from "@gladlog/analysis";
+import {
+  ensureAnalysisData,
+  PEAK_SPIKE_MARKERS,
+  peakSpikePlacement,
+} from "@gladlog/analysis";
 import { isDmgSpikeTrough } from "@gladlog/analysis/src/analysis/crisisDecisionPoints";
 import {
   lookupBacklashPrior,
@@ -929,6 +933,66 @@ export function checkBurstWindowRefConsistency(lines: string[]): string[] {
   return failures;
 }
 
+const OFFENSIVE_WINDOW_LINE =
+  /\[OFFENSIVE WINDOW\]\s+(\d+):(\d+)–(\d+):(\d+)\s+\|\s+peak spike\s+.*?over\s+(\d+):(\d+)–(\d+):(\d+)(.*?)\s+\|\s+CDs:/;
+
+/**
+ * HardFailure class (GH #99 item 4): verifies that each [OFFENSIVE WINDOW] line's
+ * peak spike placement marker matches the spike's placement relative to the window
+ * on the prompt's render grid.
+ *
+ * Imports `peakSpikePlacement` and `PEAK_SPIKE_MARKERS` from `@gladlog/analysis`.
+ */
+export function checkOffensiveWindowSpikeMarker(lines: string[]): string[] {
+  const failures: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+    if (!line.includes("[OFFENSIVE WINDOW]") || !line.includes("| peak spike")) {
+      continue;
+    }
+    const m = line.match(OFFENSIVE_WINDOW_LINE);
+    if (!m) {
+      failures.push(
+        `line ${i + 1}: [OFFENSIVE WINDOW] 无法解析 window / peak spike 区间`,
+      );
+      continue;
+    }
+    const windowToSeconds = Number(m[3]) * 60 + Number(m[4]);
+    const spikeFromSeconds = Number(m[5]) * 60 + Number(m[6]);
+    const spikeToSeconds = Number(m[7]) * 60 + Number(m[8]);
+
+    const placement = peakSpikePlacement(
+      windowToSeconds,
+      spikeFromSeconds,
+      spikeToSeconds,
+    );
+    const requiredMarker = PEAK_SPIKE_MARKERS[placement].trim();
+    const rawMarker = m[9] ?? "";
+    const presentMarker = rawMarker.trim();
+
+    if (presentMarker !== requiredMarker) {
+      if (requiredMarker === "") {
+        failures.push(
+          `line ${i + 1}: [OFFENSIVE WINDOW] peak spike 区间 ${m[5]}:${m[6]}–${m[7]}:${m[8]} 位于窗口 ${m[1]}:${m[2]}–${m[3]}:${m[4]} 内,不应有标注 ${presentMarker}`,
+        );
+      } else if (presentMarker === "") {
+        failures.push(
+          `line ${i + 1}: [OFFENSIVE WINDOW] peak spike 区间 ${m[5]}:${m[6]}–${m[7]}:${m[8]} 相对窗口 ${m[1]}:${m[2]}–${m[3]}:${m[4]} 为 ${placement},缺少标注 ${requiredMarker}`,
+        );
+      } else {
+        failures.push(
+          `line ${i + 1}: [OFFENSIVE WINDOW] peak spike 区间 ${m[5]}:${m[6]}–${m[7]}:${m[8]} 相对窗口 ${m[1]}:${m[2]}–${m[3]}:${m[4]} 为 ${placement},标注应为 ${requiredMarker},实为 ${presentMarker}`,
+        );
+      }
+    } else if (requiredMarker !== "" && !rawMarker.startsWith(" ")) {
+      failures.push(
+        `line ${i + 1}: [OFFENSIVE WINDOW] 标注 ${presentMarker} 前缺少空格`,
+      );
+    }
+  }
+  return failures;
+}
+
 /** missed-sync-window (GH #13 resurrection, 2026-09-02): every rendered line
  * must quote exactly the bracket cell syncWindowPrior.ts holds, and the
  * quoted contrast must clear the same min-contrast door the producer used —
@@ -1747,6 +1811,7 @@ export function checkMatch(
   hardFailures.push(...checkHealedThroughConsistency(lines));
   hardFailures.push(...checkBehaviorPriorConsistency(lines));
   hardFailures.push(...checkBurstWindowRefConsistency(lines));
+  hardFailures.push(...checkOffensiveWindowSpikeMarker(lines));
   hardFailures.push(...checkSyncWindowRefConsistency(lines));
   hardFailures.push(...checkBacklashRefConsistency(lines));
   hardFailures.push(...checkKickPriorityRefConsistency(lines));

@@ -1050,6 +1050,11 @@ const INDEX: PredicateRow[] = [
   },
   {
     file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkOffensiveWindowSpikeMarker",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
     symbol: "checkCdPriorRefConsistency",
     mod: promptQualityCheck,
   },
