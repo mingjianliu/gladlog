@@ -56,6 +56,7 @@ import {
   PROC_ONLY_ACTIVATION_IDS,
   SELF_CAST_NOOP_EXTERNAL_IDS,
   SPEC_EXCLUSIVE_SPELLS,
+  SPELL_CANONICAL_IDS,
   TEAM_HEAL_CD_IDS,
   THROUGHPUT_EMPOWER_DEFENSIVE_IDS,
   USABLE_WHILE_CC_CONDITIONAL,
@@ -262,6 +263,10 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   t("USABLE_WHILE_CC_CONDITIONAL", "utils/cooldowns.ts", "cast", () =>
     keys(USABLE_WHILE_CC_CONDITIONAL),
   ),
+  t("SPELL_CANONICAL_IDS", "utils/cooldowns.ts", "mixed", () => [
+    ...keys(SPELL_CANONICAL_IDS),
+    ...Object.values(SPELL_CANONICAL_IDS),
+  ]),
   t("FORBEARANCE_GATED_IDS", "utils/cooldowns.ts", "cast", () =>
     set(FORBEARANCE_GATED_IDS),
   ),

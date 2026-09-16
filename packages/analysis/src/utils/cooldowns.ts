@@ -343,9 +343,15 @@ export const FORBEARANCE_SECONDS =
 export const FORBEARANCE_GATED_IDS = new Set<string>([
   "642",
   "633",
+  "471195", // Lay on Hands, live 12.x cast id (633 is its pre-12.x alias, see SPELL_CANONICAL_IDS)
   "1022",
   "204018",
-]); // DivineShield, LayOnHands, BoP, Spellwarding
+]); // DivineShield, LayOnHands (both ids), BoP, Spellwarding
+// GH #99 (2026-09-16): the kit entry for Lay on Hands is keyed by its observed
+// id since the double-id dedupe; with only 633 here the gate silently stopped
+// covering it and two of 309 prompts accused a paladin who had just cast Divine
+// Shield of leaving Lay on Hands "Unused" at death. `cooldowns.layOnHands.test.ts`
+// pins that every alias of a gated id is gated.
 export function selfForbearanceActiveAt(
   unit: ICombatUnit,
   allUnits: ICombatUnit[],
@@ -1023,6 +1029,38 @@ export const PVP_TALENT_REPLACES: Record<string, string[]> =
   PVP_TALENT_REPLACES_GENERATED;
 
 /**
+ * Canonical id for cooldown spells the roster/kit sources know under more
+ * than one id (GH #99 item 1, 2026-09-16). Without this, `extractMajorCooldowns`
+ * built one kit entry per id and every consumer rendered the spell twice:
+ * the `<cooldowns>` loadout, the `[RES] rdy:` ledger and the `[YOU] [CD]`
+ * timeline line (45/309 baseline prompts, all Holy Paladin). Measured on the
+ * 17-log manifest-ab-newseason corpus before adding each row: Lay on Hands
+ * casts as 471195 (32) and never as 633 (0); Holy Bulwark casts as 432459 (16)
+ * while 432496 / 432607 are aura-only (0 casts, 38 / 271 SPELL_AURA_APPLIED).
+ * Registered in `curatedIdRegistry.ts` (kind "mixed"); a cast under any alias
+ * still counts as evidence for the one kit entry.
+ */
+export const SPELL_CANONICAL_IDS: Record<string, string> = {
+  "633": "471195", // Lay on Hands: 633 is the pre-12.x id, 471195 the live cast id
+  "432496": "432459", // Holy Bulwark: buff aura ID -> 432459 cast ID
+  "432607": "432459", // Holy Bulwark: buff aura ID -> 432459 cast ID
+};
+
+export function canonicalSpellId(spellId: string): string {
+  return SPELL_CANONICAL_IDS[spellId] ?? spellId;
+}
+
+/** All known spell IDs representing the same ability (including itself). */
+export function spellAliasIds(spellId: string): string[] {
+  const canon = canonicalSpellId(spellId);
+  const aliases = [canon];
+  for (const [alias, target] of Object.entries(SPELL_CANONICAL_IDS)) {
+    if (target === canon && alias !== canon) aliases.push(alias);
+  }
+  return aliases;
+}
+
+/**
  * Spells whose activation can produce ZERO SPELL_CAST_SUCCESS evidence for a
  * *particular* application — the only on-log evidence for that occurrence is
  * a self-applied buff aura, sometimes under the spell's own id and sometimes
@@ -1627,14 +1665,21 @@ export function extractMajorCooldowns(
     }
     for (const [spellId, entry] of saveRoster) {
       if (replacedByPvpTalent.has(spellId)) continue;
+      const aliases = spellAliasIds(spellId);
       const evidence =
-        castSpellIds.has(spellId) ||
-        pvpTalentIds.has(spellId) ||
-        (talentedSpellIds !== null && talentedSpellIds.has(spellId));
+        aliases.some((id) => castSpellIds.has(id)) ||
+        aliases.some((id) => pvpTalentIds.has(id)) ||
+        (talentedSpellIds !== null &&
+          aliases.some((id) => talentedSpellIds.has(id)));
       if (!evidence) continue;
-      const idx = majorSpells.findIndex((s) => s.spellId === spellId);
+      const canonId = canonicalSpellId(spellId);
+      const idx = majorSpells.findIndex(
+        (s) => canonicalSpellId(s.spellId) === canonId,
+      );
+      const observedId = aliases.find((id) => castSpellIds.has(id));
       if (idx >= 0) {
         const existing = majorSpells[idx]!;
+        if (observedId) existing.spellId = observedId;
         majorSpells[idx] = {
           ...existing,
           tags: [
@@ -1645,17 +1690,47 @@ export function extractMajorCooldowns(
           ],
         };
       } else {
+        const preferredId = observedId ?? canonId;
         majorSpells.push({
-          spellId,
-          name: spellEffectData[spellId]?.name ?? entry.name,
+          spellId: preferredId,
+          name: spellEffectData[preferredId]?.name ?? entry.name,
           tags: [SpellTag.Defensive],
         });
-        seen.add(spellId);
+        for (const a of aliases) seen.add(a);
       }
     }
   }
 
-  return majorSpells.flatMap((spell) => {
+  // Deduplicate majorSpells by canonical id so one spell -> one kit entry (GH #99).
+  // When multiple entries share a canonical id, keep the one that was observed (cast)
+  // in this match, or the canonical id, merging tags.
+  const dedupedMajorSpells: typeof majorSpells = [];
+  const seenCanonical = new Set<string>();
+  for (let i = 0; i < majorSpells.length; i++) {
+    const sp = majorSpells[i]!;
+    const cid = canonicalSpellId(sp.spellId);
+    if (seenCanonical.has(cid)) continue;
+    seenCanonical.add(cid);
+
+    const siblings = majorSpells.filter(
+      (s) => canonicalSpellId(s.spellId) === cid,
+    );
+    if (siblings.length === 1) {
+      dedupedMajorSpells.push(sp);
+    } else {
+      const observedSibling =
+        siblings.find((s) => castSpellIds.has(s.spellId)) ??
+        siblings.find((s) => s.spellId === cid) ??
+        sp;
+      const allTags = Array.from(new Set(siblings.flatMap((s) => s.tags)));
+      dedupedMajorSpells.push({
+        ...observedSibling,
+        tags: allTags,
+      });
+    }
+  }
+
+  return dedupedMajorSpells.flatMap((spell) => {
     const effectData = spellEffectData[spell.spellId];
     if (!effectData) return [];
 
@@ -1679,6 +1754,8 @@ export function extractMajorCooldowns(
       (e) =>
         e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
         (e.spellId === spell.spellId ||
+          (!!e.spellId &&
+            canonicalSpellId(e.spellId) === canonicalSpellId(spell.spellId)) ||
           // Variant cast ids (form-specific Stampeding Roar, talent-modified
           // Blessing of Sacrifice / Oppressing Roar, …) log a different id
           // with the same English name. Exact-id matching stamped 15/1245
