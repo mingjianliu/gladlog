@@ -40,13 +40,21 @@ describe("causalLint (enforces the no-strong-causal-claim policy)", () => {
       causalLint("Consider saving the trinket for the first swap."),
     ).toEqual([]);
   });
-  it("does not false-drop resource-cost observations or positive reinforcement (narrowed patterns)", () => {
+  it("does not false-drop resource-cost observations (narrowed cost pattern)", () => {
     expect(causalLint("It cost you nothing to try the early swap.")).toEqual(
       [],
     );
+  });
+  it("positive outcomes are attributed the same way as losses (user ruling 2026-09-16, GH #98)", () => {
+    // Until 2026-09-16 this exact sentence was pinned as NOT flagged
+    // (positive-reinforcement exemption). Ruling: 一视同仁 — one word list.
     expect(
-      causalLint("Great peel — which is why you survived the go."),
-    ).toEqual([]);
+      causalLint("Great peel — which is why you survived the go.").length,
+    ).toBeGreaterThan(0);
+    expect(causalLint("You won because you held the trinket.").length).toBeGreaterThan(0);
+    // still allowed: a suggestion, not an outcome
+    expect(causalLint("That's why I'd hold the trinket for the second swap.")).toEqual([]);
+    expect(causalLint("The kill window opened at 2:10.")).toEqual([]);
   });
   it("does not bridge a gap across ! / ? (NOT_SENT tightening applies to English too, not just zh)", () => {
     // Pre-2026-07-31 the gap class was ASCII-"."-only, so this DID match
@@ -141,13 +149,11 @@ describe("causalLint zh causal-certainty patterns (agy-sim-2026-07-31, 8 labeled
     expect(causalLint("本局你被击杀两次，分别在 1:23 和 2:45。")).toEqual([]);
   });
 
-  it("does not flag positive-valence 是...的直接原因 (attributing a WIN, not a loss/death)", () => {
-    // Real corpus phrasing (463f8b04.0). zh-shi-direct-reason requires a
-    // ZH_OUTCOME (negative) word in the gap precisely so this stays
-    // unflagged — mirrors English's explicit allowance for "which is why
-    // you survived". Pinned here so a future ZH_OUTCOME/gap-width edit
-    // can't silently regress it back to matching.
-    expect(causalLint("这也是你们获胜的直接原因。")).toEqual([]);
+  it("flags positive-valence 是...的直接原因 too (user ruling 2026-09-16: 一视同仁)", () => {
+    // Real corpus phrasing (463f8b04.0). Pinned as NOT flagged until
+    // 2026-09-16; ZH_OUTCOME now carries the positive words as well, so the
+    // zh side stays symmetric with English's OUTCOME.
+    expect(causalLint("这也是你们获胜的直接原因。").length).toBeGreaterThan(0);
   });
 
   it("dedicated fixture: zh-outcome-because only (outcome word BEFORE 因为, no 导致/造成/致使, no 是...的直接原因)", () => {
@@ -408,14 +414,12 @@ describe("causalLint verdict forms (GH #98, first Opus 5 baseline 2026-09-15)", 
     ])
       expect(causalLint(s), s).toEqual([]);
   });
-  it("standing policy pin: positive-reinforcement `which is why …` stays exempt", () => {
-    // Deliberately NOT flagged — the narrowed thats-why pattern requires a
-    // negative outcome. Recorded here so the exemption is a decision, not a gap.
+  it("positive verdicts flag too (user ruling 2026-09-16) — the baseline's last two sentences", () => {
     expect(
-      causalLint("That spent the immunity before the 2:34 go, which is why the kill went through."),
-    ).toEqual([]);
+      causalLint("That spent the immunity before the 2:34 go, which is why the kill went through.").length,
+    ).toBeGreaterThan(0);
     expect(
-      causalLint("Your team got through all three enemy Incarnation goes with nobody dying, and that is why you won."),
-    ).toEqual([]);
+      causalLint("Your team got through all three enemy Incarnation goes with nobody dying, and that is why you won.").length,
+    ).toBeGreaterThan(0);
   });
 });

@@ -6,8 +6,13 @@
 // Single source consumed by auditFindings.ts (f.explanation), deepDive.ts
 // (entry.deepDive, a 3-5 sentence paragraph — see buildDeepDivePrompt), and
 // distillRules.ts (description/advice) — do not fork a second pattern list.
+// Outcome words are direction-agnostic since 2026-09-16 (user ruling on GH
+// #98: "一视同仁,要不然维护成本有点高") — "which is why you survived / won"
+// is the same unverifiable attribution as "which is why you died", only
+// pleasanter. Before that date the positive words were deliberately absent
+// (positive-reinforcement exemption); tests pin the new behaviour.
 const OUTCOME =
-  "(died|death|dies|die|lost|loss|lose|loses|wiped|wipe|killed|defeat)";
+  "(died|death|dies|die|lost|loss|lose|loses|wiped|wipe|killed|defeat|won|win|wins|survived|survive|survives|lived|kill (?:went through|landed|connected))";
 
 // Sentence-boundary proxy for the "<connective> ... <outcome>" gap patterns
 // below. Must exclude BOTH ascii "." (English sentences) and the CJK
@@ -147,7 +152,7 @@ const EN_HEDGE_GUARD = `(?<!\\b${EN_HEDGE}\\b${EN_NOT_CLAUSE}*)`;
 // false positives — see causalLint.test.ts for the legal-possibility
 // negative fixtures, e.g. 可能/或许/大概率/有机会 + 活, that must NOT match).
 const ZH_OUTCOME =
-  "(死亡|阵亡|猝死|战败|团灭|输了|输掉|落败|崩盘|崩溃|失利|失败|告负)";
+  "(死亡|阵亡|猝死|战败|团灭|输了|输掉|落败|崩盘|崩溃|失利|失败|告负|获胜|赢了|赢下|取胜|胜利|活下来|存活)";
 const ZH_SURVIVE = "(死不了|不会死|可以存活|活下来|能活下来|存活下来)";
 const ZH_CERTAINTY_ADV = "(绝对|完全|肯定|必然)";
 
@@ -182,13 +187,13 @@ const PATTERNS: Array<[string, RegExp]> = [
       "i",
     ),
   ],
-  // "that's/which is why <negative outcome>" — a causal explanation of a loss.
-  // Narrowed to require a negative outcome so positive reinforcement ("which is
-  // why you survived") is not dropped.
+  // "that's/which is why <outcome>" — a causal explanation of the result.
+  // Requires an OUTCOME word so "that's why I suggest …" is not dropped; since
+  // 2026-09-16 the outcome may be positive too (see OUTCOME).
   [
     "thats-why-outcome",
     new RegExp(
-      `${EN_HEDGE_GUARD}\\b(that'?s|this is|which is) why\\b${NOT_SENT}*\\b${OUTCOME}\\b`,
+      `${EN_HEDGE_GUARD}\\b(that'?s|that is|this is|which is) why\\b${NOT_SENT}*\\b${OUTCOME}\\b`,
       "i",
     ),
   ],
