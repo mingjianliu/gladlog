@@ -590,7 +590,9 @@ describe('healerExposureAnalysis — compact per-window entries', () => {
       makeExposure({ exposureLabel: 'Critical', trinketState: 'on_cooldown', trinketAvailableAtSeconds: 40 }),
     ]);
     expect(entries[0].line).toContain('healer trinket on CD (back 0:40)');
-    expect(entries[0].line).toContain('⚠ CRITICAL');
+    expect(entries[0].line).toContain('exposure: Full DR, trinket on CD');
+    expect(entries[0].line).not.toContain('⚠');
+    expect(entries[0].line).not.toContain('CRITICAL');
     expect(entries[0].line).toContain('| → healer has no trinket available while Full-DR CC is in LoS');
   });
 });
@@ -619,7 +621,9 @@ describe('healerExposureAnalysis — formatting', () => {
     expect(lines[1]).toBe(
       '  ENEMY CC KIT (threats to you): Frost Mage (M1): Polymorph [Incapacitate]; Arms Warrior (W1): Intimidating Shout [Disorient]',
     );
-    expect(text).toContain('⚠ CRITICAL');
+    expect(text).toContain('exposure: Full DR, trinket on CD');
+    expect(text).not.toContain('⚠');
+    expect(text).not.toContain('CRITICAL');
     expect(text).toContain('healer trinket on CD (back 0:40)');
     // Per-window line is compact: spec-only refs, no per-window kit re-enumeration
     const windowLines = lines.filter((l) => l.startsWith('  [0:10]'));

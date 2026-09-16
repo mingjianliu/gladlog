@@ -491,12 +491,17 @@ export function formatHealerExposureEntries(
           ? "healer trinket passive"
           : `healer trinket on CD${e.trinketAvailableAtSeconds !== null ? ` (back ${fmtTime(e.trinketAvailableAtSeconds)})` : ""}`;
 
+    const trinketUnavailable = e.trinketState === "on_cooldown";
     const labelStr =
       e.exposureLabel === "Critical"
-        ? "⚠ CRITICAL"
+        ? "exposure: Full DR, trinket on CD"
         : e.exposureLabel === "Exposed"
-          ? "⚠ Exposed"
-          : e.exposureLabel;
+          ? trinketUnavailable
+            ? "exposure: 50% DR, trinket on CD"
+            : "exposure: Full DR, trinket ready"
+          : e.exposureLabel === "Pressured"
+            ? "exposure: 50% DR, trinket ready"
+            : e.exposureLabel;
 
     // Actionable pillar hint: only on dangerous windows, only when a verified LoS-breaking
     // spot is within realistic repositioning distance (~30yd).

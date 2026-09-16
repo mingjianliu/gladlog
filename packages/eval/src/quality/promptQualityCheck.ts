@@ -85,6 +85,13 @@ const BIAS_LEXICON = [
   "inexcusable",
   "panicked",
   "huge mistake",
+  // GH #99 item 2 (2026-09-16): the retired verdict labels, as literal strings —
+  // a bare "critical" would also match the "Critical burst" tier and never read 0.
+  "⚠ CRITICAL",
+  "⚠ Exposed",
+  "Severe dampening",
+  "severely compromised",
+  "meaningfully impaired",
 ];
 
 // The row shape of index.json is defined by buildCorpus (which writes that

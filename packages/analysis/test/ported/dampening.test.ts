@@ -161,7 +161,11 @@ describe("dampening — formatting", () => {
       MATCH_START + 120_000,
     );
     expect(res[0]).toContain("started at 10%, ended at 45%");
-    expect(res[1]).toContain("Severe dampening (45%)");
+    expect(res[1]).toContain(
+      "Dampening 45% at match end (≥40% bracket: healing received reduced by 45%).",
+    );
+    expect(res[1]).not.toContain("⚠");
+    expect(res[1]).not.toContain("CRITICAL");
   });
 
   it("labels late game note (B79)", () => {
@@ -181,6 +185,8 @@ describe("dampening — formatting", () => {
       MATCH_START,
       MATCH_START + 120_000,
     );
-    expect(res[1]).toContain("Reached 25% dampening");
+    expect(res[1]).toContain("Dampening 25% at match end (≥20% bracket).");
+    expect(res[1]).not.toContain("⚠");
+    expect(res[1]).not.toContain("CRITICAL");
   });
 });

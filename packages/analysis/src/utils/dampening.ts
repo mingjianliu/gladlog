@@ -245,11 +245,11 @@ export function formatDampeningForContext(
 
   if (finalDamp >= 0.4) {
     lines.push(
-      `  ⚠ Severe dampening (${fmtDampening(finalDamp)}) — sustained healing was severely compromised; kill windows in the final phase required significantly less setup.`,
+      `  Dampening ${fmtDampening(finalDamp)} at match end (≥40% bracket: healing received reduced by ${fmtDampening(finalDamp)}).`,
     );
   } else if (finalDamp >= 0.2) {
     lines.push(
-      `  Note: Reached ${fmtDampening(finalDamp)} dampening — healing was meaningfully impaired in the late game.`,
+      `  Dampening ${fmtDampening(finalDamp)} at match end (≥20% bracket).`,
     );
   }
 
