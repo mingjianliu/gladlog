@@ -24,10 +24,10 @@ All artifacts land in the private eval repository (`$GLADLOG_EVAL_HOME`, default
 > reflects 12.1 spell ids, DR windows, or candidate types. For anything whose conclusion is about
 > the **current** season, use the new-season equivalents:
 >
-> | Purpose | Pre-12.1 (2026-06) | New season (12.1) |
-> | --- | --- | --- |
-> | Sampled / A/B corpus | `corpus/manifest-coverage.txt` (1 log) · `corpus/manifest.txt` (8) | **`corpus/manifest-ab-newseason.txt`** — 17 logs → 309 prompts |
-> | Full-corpus audit | `corpus/manifest-fullscale.txt` (70 logs) | **`corpus/manifest-archive-2026-08-28-newseason.txt`** — the PvP archive manifest (18,134 `.gz` entries) |
+> | Purpose              | Pre-12.1 (2026-06)                                                 | New season (12.1)                                                                                        |
+> | -------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
+> | Sampled / A/B corpus | `corpus/manifest-coverage.txt` (1 log) · `corpus/manifest.txt` (8) | **`corpus/manifest-ab-newseason.txt`** — 17 logs → 309 prompts                                           |
+> | Full-corpus audit    | `corpus/manifest-fullscale.txt` (70 logs)                          | **`corpus/manifest-archive-2026-08-28-newseason.txt`** — the PvP archive manifest (18,134 `.gz` entries) |
 >
 > Say which one a run used, in the ledger row and in the report — "70 matches" means two different
 > things before and after the season boundary.
@@ -41,7 +41,7 @@ All artifacts land in the private eval repository (`$GLADLOG_EVAL_HOME`, default
 > skill gradient** (`packages/eval/src/explore/signalSkillGradient.ts`, stratified by rating
 > bracket — never pooled). The provenance of every signal's grounding lives in
 > [`docs/coaching-grounding-audit.md`](../coaching-grounding-audit.md). Use this seven-dimension
-> baseline when you want to know *how good the prompt/response text is*; do not use it to
+> baseline when you want to know _how good the prompt/response text is_; do not use it to
 > adjudicate whether a signal earns its place — see CLAUDE.md's Value-Gate Rule, points 4 and 5.
 
 ## Step 1: Build Corpus (New Mode)
@@ -102,6 +102,11 @@ For each entry in the index, launch a **background subagent** (prompt is self-co
 > named on that prompt line, not just its timestamp and value. In dense multi-unit fights
 > it is easy to attribute a cast, cooldown, or kill to a plausible-sounding but wrong unit —
 > treat unit identity as a fact to check, same as the timestamp and the number.
+>
+> QUOTING DISCIPLINE (mandatory): window bounds (`m:ss–m:ss`), timestamps and HP readings are
+> quoted exactly as printed on the prompt line you rely on — never rounded, merged, extended or
+> re-cut. Write a range only when the prompt prints that exact range on one line; otherwise name
+> the printed instants separately ("the 2:44 spike … the 2:58 death"), never an invented range.
 >
 > FOCUS DISCIPLINE: structure the response around the 2-3 windows that actually
 > decided the match; give each secondary observation at most one line, and label
