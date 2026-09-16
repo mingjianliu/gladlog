@@ -366,3 +366,56 @@ describe("causalLint hedge exemption (BACKLOG gap #2, symmetric zh/en)", () => {
     ).toBeGreaterThan(0);
   });
 });
+
+describe("causalLint verdict forms (GH #98, first Opus 5 baseline 2026-09-15)", () => {
+  // The 7 causal-hardening sentences the baseline's fact audit marked
+  // `unsupported`. Before this block only the two `because` sentences hit;
+  // the rest pass judgement without a connective the older patterns knew.
+  it("flags the baseline's verdict sentences (5 shapes)", () => {
+    for (const s of [
+      "Even so, the round was decided by one thing: you pressed no major defensive during the whole go.",
+      "The match was decided by how your resources lined up with the last two: Blessing of Sacrifice sat unused through the 1:34–1:48 go.",
+      "The deciding mistake: at 1:00, two seconds before the death, you spent a GCD on an offensive stun on the Shaman.",
+      "It worked because the kill landed at 0:50.",
+      "The kill came from a CC chain on you at 52-60% dampening.",
+      "Your healing output didn't lose this. The order you spent cooldowns in did, across three windows between 1:08 and 2:20.",
+      "A 6s Full-DR fear at over 50% dampening, with no big cooldowns, is what lost this round.",
+      "Your cooldown timing on the Rogue is what won it.",
+      "Your death is what decided this match.",
+    ])
+      expect(causalLint(s), s).not.toEqual([]);
+  });
+  it("does not flag the baseline's non-causal `unsupported` sentences (precision)", () => {
+    for (const s of [
+      "Cyclones at 1:08 and 2:41 did not land while your Grounding Totem was up.",
+      "Two of those stuns led straight into spending a Pain Suppression charge.",
+      "Ultimate Penitence at 1:47 did heal the Shaman from 64% to 99%, but it came between the enemy's pushes, so it was gone for both later ones.",
+      "It did put Forbearance on him until about 1:19, though.",
+      "For the whole 0:53–1:05 Bladestorm dive, BoP could not go on him, and Sacrifice was still on cooldown from the opener.",
+      "Apotheosis at 2:05 during the hunter's 1:55–2:05 spike brought him back from 44% (2:03) to 70% (2:14).",
+      "Your Frost Mage died at 2:11 with dampening at 41%.",
+      "The kill came at 2:00 during their cooldowns.",
+      "You decided to trinket the fear at 1:31.",
+    ])
+      expect(causalLint(s), s).toEqual([]);
+  });
+  it("denial and hedge exempt the verdict forms (polarity guard, same as zh)", () => {
+    for (const s of [
+      "Offense wasn't the deciding factor here — you converted CC in most kill windows.",
+      "The round was not decided by dampening.",
+      "This was likely decided by the opener, but the log cannot show it.",
+      "It may have worked because Ironbark was up.",
+    ])
+      expect(causalLint(s), s).toEqual([]);
+  });
+  it("standing policy pin: positive-reinforcement `which is why …` stays exempt", () => {
+    // Deliberately NOT flagged — the narrowed thats-why pattern requires a
+    // negative outcome. Recorded here so the exemption is a decision, not a gap.
+    expect(
+      causalLint("That spent the immunity before the 2:34 go, which is why the kill went through."),
+    ).toEqual([]);
+    expect(
+      causalLint("Your team got through all three enemy Incarnation goes with nobody dying, and that is why you won."),
+    ).toEqual([]);
+  });
+});

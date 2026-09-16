@@ -123,6 +123,10 @@ const EN_NOT_CLAUSE = `(?:(?!${EN_CLAUSE_BOUND})${NOT_SENT})`;
 
 const ZH_HEDGE = "(可能|或许|大概|也许|似乎|恐怕)";
 const ZH_HEDGE_GUARD = `(?<!${ZH_HEDGE}${ZH_NOT_CLAUSE}*)`;
+/** English denial immediately before a verdict form: "wasn't decided by",
+ * "not the deciding factor", "never decided by" (GH #98). */
+const EN_NEG_LOOKBEHIND =
+  "(?<!\\bwasn'?t )(?<!\\bweren'?t )(?<!\\bisn'?t )(?<!\\bnot )(?<!\\bnever )(?<!\\bhardly )";
 const EN_HEDGE = "(?:possibly|perhaps|likely|may have|might have|could have)";
 const EN_HEDGE_GUARD = `(?<!\\b${EN_HEDGE}\\b${EN_NOT_CLAUSE}*)`;
 
@@ -192,6 +196,65 @@ const PATTERNS: Array<[string, RegExp]> = [
     "led-to",
     new RegExp(
       `${EN_HEDGE_GUARD}\\b(led to|resulted in|caused)\\b${NOT_SENT}*\\b${OUTCOME}\\b`,
+      "i",
+    ),
+  ],
+  // --- verdict forms (GH #98, 2026-09-16). The first Opus 5 baseline's 7
+  // causal-hardening sentences were all outside the connectives above: the
+  // model does not write "because" when it passes judgement, it writes
+  // "the round was decided by …", "the deciding mistake: …", "it worked
+  // because …", "the kill came from …", "X didn't lose this. Y did." These
+  // attribute the outcome to one cause as a verdict, whichever way the
+  // outcome went, so they are direction-agnostic on purpose (a verdict about
+  // a win is as unverifiable as one about a loss). "which is why you
+  // survived/won" stays exempt (positive reinforcement, see the narrowed
+  // thats-why pattern) — a standing policy, not an oversight.
+  // "wasn't decided by" / "not the deciding factor" deny the verdict — same
+  // polarity flip the zh NEG_LOOKBEHIND handles (corpus: "Offense wasn't the
+  // deciding factor here").
+  [
+    "decided-by",
+    new RegExp(
+      `${EN_HEDGE_GUARD}${EN_NEG_LOOKBEHIND}\\b(was|were|is|got|gets) decided by\\b`,
+      "i",
+    ),
+  ],
+  [
+    "deciding-x",
+    new RegExp(
+      `${EN_HEDGE_GUARD}${EN_NEG_LOOKBEHIND}\\bthe deciding (mistake|factor|moment|error|call|decision|play|window)\\b`,
+      "i",
+    ),
+  ],
+  [
+    "came-from",
+    new RegExp(
+      `${EN_HEDGE_GUARD}\\b(kill|death|loss|wipe|win) came (straight |directly )?from\\b`,
+      "i",
+    ),
+  ],
+  [
+    "is-what-verdict",
+    new RegExp(
+      `${EN_HEDGE_GUARD}\\b(is|was) what (won|lost|decided|cost|pushed|killed|ended|forced)\\b`,
+      "i",
+    ),
+  ],
+  [
+    "worked-because",
+    new RegExp(
+      `${EN_HEDGE_GUARD}\\b(it|that|this|the (?:go|swap|plan|call|trade)) (worked|failed) because\\b`,
+      "i",
+    ),
+  ],
+  // "Your healing output didn't lose this. The order you spent cooldowns in
+  // did." — a two-sentence contrast that re-assigns the verdict; the second
+  // sentence alone ("… did.") carries nothing, so the pattern spans exactly
+  // one sentence boundary and no further.
+  [
+    "didnt-lose-x-did",
+    new RegExp(
+      `${EN_HEDGE_GUARD}\\b(didn'?t|did not) (lose|win) (this|it|the (?:round|match|game))\\b${NOT_SENT}*[.!?]\\s*${NOT_SENT}{0,120}\\bdid\\b`,
       "i",
     ),
   ],
