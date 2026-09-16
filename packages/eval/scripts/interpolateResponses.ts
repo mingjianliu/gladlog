@@ -27,6 +27,8 @@ import {
 } from "fs";
 import { join } from "path";
 
+import { parseFactsBlock } from "../src/quality/promptQualityCheck";
+
 const argv = process.argv.slice(2);
 const arm = argv[argv.indexOf("--arm") + 1];
 if (!arm) {
@@ -42,11 +44,9 @@ function menuOf(prompt: string): CandidateEvent[] {
   for (const line of prompt.split("\n")) {
     const m = line.match(MENU_LINE);
     if (!m) continue;
-    const facts: Record<string, string> = {};
-    for (const kv of m[5]!.split(", ")) {
-      const j = kv.indexOf("=");
-      if (j > 0) facts[kv.slice(0, j)] = kv.slice(j + 1);
-    }
+    // The gate's parser, not a second copy: the ", " split is the same
+    // predicate `checkFactsBlockIntegrity` enforces on the producers.
+    const facts = parseFactsBlock(m[5]!);
     const tRaw = m[3]!;
     const t = tRaw === "whole-round" ? 0 : Number(tRaw.replace(/s$/, "")) || 0;
     out.push({

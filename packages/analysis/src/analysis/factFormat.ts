@@ -49,3 +49,26 @@ export const fmtFactNum = (n: number): string =>
  */
 export const fmtFactTime = (seconds: number): string =>
   fmtFactNum(Math.floor(seconds * 10) / 10);
+
+/**
+ * The ONE place a facts object becomes `facts={k=v, …}` prompt text (candidate
+ * menu lines in `buildFindingsPrompt.ts`, deep-dive snapshot lines in
+ * `deepDive.ts`). Every text-side reader splits that block on ", " — the eval
+ * gate's `parseFactsBlock`, the A/B renderer `interpolateResponses.ts`,
+ * `baselineFindings.ts` — so a literal ", " inside a VALUE is cut off at the
+ * first parser and the placeholder renders truncated (2026-09-16 A/B:
+ * `postKick` "(Fade, instant or channel)" → "(Fade" in 13/40 prompts,
+ * `ownerCastingSpells` "Mind Control, Mind Blast" → "Mind Control" in 2/40,
+ * both arms; 2 of 13 judge-refuted claims were this artifact). Producers now
+ * join enumerations with "、" and qualifiers with "; ", but a spell NAME can
+ * carry the comma itself ("Invoke Chi-Ji, the Red Crane" — 6/288 prompts of
+ * the rebuilt arm), so the serializer is the backstop: a ", " inside a value
+ * becomes ",\u00a0" (comma + no-break space), visually identical, never split.
+ * The product UI interpolates from the facts OBJECT, so it never sees this.
+ * Gate: `promptQualityCheck.ts` → `checkFactsBlockIntegrity` (18th class).
+ */
+export const FACTS_BLOCK_SEP = ", ";
+export const serializeFactsBlock = (facts: Record<string, unknown>): string =>
+  Object.entries(facts)
+    .map(([k, v]) => `${k}=${String(v).replace(/, /g, ",\u00a0")}`)
+    .join(FACTS_BLOCK_SEP);

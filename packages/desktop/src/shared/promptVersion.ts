@@ -453,4 +453,16 @@
 //  crisis-no-response / slow-defensive-response counts do not move; the
 //  reference tables' response mix does (2v2 selfHeal 0.55 → 0.24 + carriedHeal
 //  0.31), and those shares are quoted in the candidate line.
-export const PROMPT_VERSION = 69;
+//  v70 (2026-09-16, confirmatory A/B ab/2026-09-16-backlash-kick-confirm, n=40
+//  Opus): two candidate-menu facts stop carrying a literal ", " — kick-eaten
+//  `postKick` qualifier "(Fade; instant or channel)" (was ", "), missed-cleanse
+//  `ownerCastingSpells` "Mind Control、Mind Blast" (was ", ") — because every
+//  text-side facts parser splits on ", " and truncated them (13 + 2 of 40
+//  prompts, both arms); `checkFactsBlockIntegrity` (18th hardFailure class)
+//  now enforces the invariant, and `serializeFactsBlock` (the one facts→text
+//  serializer) turns any remaining ", " inside a value — spell names such as
+//  "Invoke Chi-Ji, the Red Crane", 6/288 prompts — into comma + no-break space.
+//  The backlash-dispel `refCcExposureS` gate check
+//  compares on the producer's `fmtFactNum` grid (was raw String → 34 + 15
+//  false hard failures across the two runs). No candidate counts move.
+export const PROMPT_VERSION = 70;

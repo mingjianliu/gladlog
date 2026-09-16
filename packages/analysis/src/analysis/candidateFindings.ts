@@ -762,7 +762,12 @@ export function missedCleanseEvents(
 function joinSpellCounts(names: string[]): string {
   const counts = new Map<string, number>();
   for (const n of names) counts.set(n, (counts.get(n) ?? 0) + 1);
-  return [...counts].map(([n, c]) => (c > 1 ? `${n}×${c}` : n)).join(", ");
+  // "、", never ", ": a facts block is a ", "-joined k=v list and every
+  // text-side parser (the eval gate's `parseFactsBlock`, `interpolateResponses`)
+  // splits on ", " — a comma inside a value truncates it (2026-09-16 A/B:
+  // `ownerCastingSpells=Mind Control, Mind Blast` rendered as "Mind Control"
+  // in both arms). `checkFactsBlockIntegrity` is the gate for this invariant.
+  return [...counts].map(([n, c]) => (c > 1 ? `${n}×${c}` : n)).join("、");
 }
 
 /** missed-purge mapping (pure function): a high-value enemy buff ran its full
@@ -945,16 +950,18 @@ export function kickEatenEvents(
         // an old archive) prints no qualifier at all rather than guessing,
         // and `false` says "instant or channel" because parser-compat
         // exposes no channel events — a channel cannot be told from an
-        // instant here, so the line must not claim it is one.
+        // instant here, so the line must not claim it is one. The qualifier
+        // is joined with "; " not ", ": a ", " inside a facts value is cut off
+        // by every text-side facts parser (`checkFactsBlockIntegrity`).
         postKick:
           k.postKick === "idle"
             ? "no cast for 5s after the kick"
             : k.postKick === "switched"
               ? `acted on another school ${k.switchDelayS?.toFixed(1) ?? "?"}s later (${k.switchSpellName ?? "?"}${
                   k.switchWasHardCast === true
-                    ? ", hard cast"
+                    ? "; hard cast"
                     : k.switchWasHardCast === false
-                      ? ", instant or channel"
+                      ? "; instant or channel"
                       : ""
                 })`
               : `waited out the lockout (first cast ${k.firstActionDelayS?.toFixed(1) ?? "?"}s later)`,

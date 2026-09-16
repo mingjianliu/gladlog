@@ -1,5 +1,6 @@
 import { CANDIDATE_TYPE_FLAGS } from "../data/candidateTypeFlags";
 import { LEGACY_TOPIC_TYPES } from "./candidateFindings";
+import { serializeFactsBlock } from "./factFormat";
 import { FINDING_CATEGORIES } from "./findingCategories";
 import type { CandidateEvent } from "./types";
 
@@ -191,9 +192,7 @@ export function buildFindingsPrompt(
         c.facts.t !== undefined ? `t=${c.facts.t}s` : `t=whole-round`;
       return (
         `  - id=${c.id} type=${c.type} ${when} units=${c.unitNames.join("/")}` +
-        ` facts={${Object.entries(c.facts)
-          .map(([k, v]) => `${k}=${v}`)
-          .join(", ")}}`
+        ` facts={${serializeFactsBlock(c.facts)}}`
       );
     })
     .join("\n");

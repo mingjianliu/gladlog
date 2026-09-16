@@ -14,7 +14,6 @@ import {
   trinketStateFact,
 } from "../utils/ccTrinketAnalysis";
 import { annotateDefensiveTimings, DEFENSIVE_TAGS, extractMajorCooldowns, type IMajorCooldownInfo, isHealerSpec, isMeleeSpec } from "../utils/cooldowns";
-import { fmtTime } from "../utils/renderGrid";
 import { buildDeathOutcomeSummary } from "../utils/deathOutcomeAnalysis";
 import { reconstructDispelSummary } from "../utils/dispelAnalysis";
 import {
@@ -28,8 +27,9 @@ import {
   POSITION_MISTAKES,
   stayedInHadRealCost,
 } from "../utils/positionAnalysis";
+import { fmtTime } from "../utils/renderGrid";
 import { causalLint } from "./causalLint";
-import { fmtFactNum as fmt } from "./factFormat";
+import { fmtFactNum as fmt, serializeFactsBlock } from "./factFormat";
 import { repairSpellNameZh } from "./spellNameZhLint";
 import type { CandidateEvent, Finding } from "./types";
 
@@ -929,9 +929,7 @@ export function buildDeepDivePrompt(
         // deep-dive discipline smoke test: all 3/6 failures were the phantom
         // .units field).
         (it) =>
-          `  - key=${it.key} kind=${it.kind} facts={${Object.entries(it.facts)
-            .map(([k, v]) => `${k}=${v}`)
-            .join(", ")}}`,
+          `  - key=${it.key} kind=${it.kind} facts={${serializeFactsBlock(it.facts)}}`,
       )
       .join("\n");
     const base =

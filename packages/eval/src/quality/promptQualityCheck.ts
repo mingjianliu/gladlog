@@ -34,6 +34,7 @@ import {
   peakSpikePlacement,
 } from "@gladlog/analysis";
 import { isDmgSpikeTrough } from "@gladlog/analysis/src/analysis/crisisDecisionPoints";
+import { fmtFactNum } from "@gladlog/analysis/src/analysis/factFormat";
 import {
   lookupBacklashPrior,
   lookupBacklashWorth,
@@ -479,6 +480,35 @@ export function parseFactsBlock(raw: string): Record<string, string> {
     out[token.slice(0, eq)] = token.slice(eq + 1);
   }
   return out;
+}
+
+/**
+ * 18th hardFailure class (2026-09-16, confirmatory A/B of GH #78/#80): the
+ * `facts={k=v, …}` invariant stated above — no value may contain a literal
+ * ", " — is enforced, not assumed. Every text-side consumer of a menu or
+ * snapshot line (this gate's `parseFactsBlock`, `interpolateResponses.ts`,
+ * `baselineFindings.ts`) splits on ", ", so a comma inside a value is silently
+ * cut off at the first parser and the placeholder renders truncated. Measured
+ * before the producers were fixed: `kick-eaten` `postKick` 13/40 prompts
+ * ("(Fade, instant or channel)" → "(Fade") and `missed-cleanse`
+ * `ownerCastingSpells` 2/40 ("Mind Control, Mind Blast" → "Mind Control"),
+ * identical in both arms — two of the run's 13 judge-refuted claims were this
+ * artifact, not responder errors. A token without "=" after the split is the
+ * fingerprint of the defect, so that is what is flagged.
+ */
+export function checkFactsBlockIntegrity(lines: string[]): string[] {
+  const failures: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i]!.match(/facts=\{(.*)\}\s*$/);
+    if (!m) continue;
+    for (const token of m[1]!.split(", ")) {
+      if (/^[A-Za-z_][\w$]*=/.test(token)) continue;
+      failures.push(
+        `line ${i + 1}: facts 值内含 ", "(文本侧解析会截断)—— 碎片 "${token}"`,
+      );
+    }
+  }
+  return failures;
 }
 
 function parseSnapshotItems(lines: string[]): SnapshotItem[] {
@@ -1173,13 +1203,13 @@ export function checkBacklashRefConsistency(lines: string[]): string[] {
             refRemovedK: String(ref.removedK),
             refHealLostK: String(ref.healLostK),
             refBacklashDmgK: String(ref.backlashDmgK),
-            refCcExposureS: String(ref.ccExposureS),
+            refCcExposureS: fmtFactNum(ref.ccExposureS),
             backlash: `${ref.backlashKind} ${ref.backlashS}s`,
           }
         : {
             refN: String(ref.n),
             refRemovedK: String(ref.removedK),
-            refCcExposureS: String(ref.ccExposureS),
+            refCcExposureS: fmtFactNum(ref.ccExposureS),
             backlash: `${ref.backlashKind} ${ref.backlashS}s`,
           };
     }
@@ -1828,6 +1858,7 @@ export function checkMatch(
   hardFailures.push(...checkMenuTRenderGrid(lines));
   hardFailures.push(...checkCjkLeak(lines));
   hardFailures.push(...checkEnemyDefRefConsistency(lines));
+  hardFailures.push(...checkFactsBlockIntegrity(lines));
 
   return {
     ordinal: entry.ordinal,

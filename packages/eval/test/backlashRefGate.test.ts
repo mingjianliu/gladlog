@@ -1,3 +1,4 @@
+import { fmtFactNum } from "@gladlog/analysis/src/analysis/factFormat";
 import { lookupBacklashPrior } from "@gladlog/analysis/src/data/backlashDispelPrior";
 import { describe, expect, it } from "vitest";
 
@@ -28,10 +29,26 @@ describe("checkBacklashRefConsistency (16th hardFailure class, GH #80)", () => {
   it("a rendered reference that matches the table passes; one digit off fails (only when the table has the UA cell)", () => {
     const ref = lookupBacklashPrior("1259790");
     if (!ref) return; // placeholder table — the producer would not have emitted either
-    const ok = `t=1:05, refKey=1259790, refN=${ref.n}, refRemovedK=${ref.removedK}, refHealLostK=${ref.healLostK}, refBacklashDmgK=${ref.backlashDmgK}, refCcExposureS=${ref.ccExposureS}, backlash=${ref.backlashKind} ${ref.backlashS}s`;
+    const ok = `t=1:05, refKey=1259790, refN=${ref.n}, refRemovedK=${ref.removedK}, refHealLostK=${ref.healLostK}, refBacklashDmgK=${ref.backlashDmgK}, refCcExposureS=${fmtFactNum(ref.ccExposureS)}, backlash=${ref.backlashKind} ${ref.backlashS}s`;
     expect(checkBacklashRefConsistency([line(ok)])).toHaveLength(0);
     expect(
       checkBacklashRefConsistency([line(ok.replace(`refN=${ref.n}`, `refN=${ref.n + 1}`))]),
     ).toHaveLength(1);
+  });
+  it("refCcExposureS is compared on the producer's render grid (fmtFactNum), not the raw table value", () => {
+    // 2026-09-16: the gate compared String(0.94) against the rendered "0.9" and
+    // flagged every backlash-dispel line in two A/B runs (34 + 15 lines) — one
+    // fact, two formatters. Both sides now import fmtFactNum.
+    const ref = lookupBacklashPrior("1259790");
+    if (!ref) return;
+    const rendered = `t=1:05, refKey=1259790, refN=${ref.n}, refRemovedK=${ref.removedK}, refHealLostK=${ref.healLostK}, refBacklashDmgK=${ref.backlashDmgK}, refCcExposureS=${fmtFactNum(ref.ccExposureS)}, backlash=${ref.backlashKind} ${ref.backlashS}s`;
+    expect(checkBacklashRefConsistency([line(rendered)])).toHaveLength(0);
+    if (String(ref.ccExposureS) !== fmtFactNum(ref.ccExposureS)) {
+      expect(
+        checkBacklashRefConsistency([
+          line(rendered.replace(`refCcExposureS=${fmtFactNum(ref.ccExposureS)}`, `refCcExposureS=${ref.ccExposureS}`)),
+        ]),
+      ).toHaveLength(1);
+    }
   });
 });

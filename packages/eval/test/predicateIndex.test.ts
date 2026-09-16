@@ -1006,6 +1006,11 @@ const INDEX: PredicateRow[] = [
     symbol: "fmtFactNum",
     mod: factFormat,
   },
+  {
+    file: `${A}/analysis/factFormat.ts`,
+    symbol: "serializeFactsBlock",
+    mod: factFormat,
+  },
   // Moment snapshot (deep dive, SDD 2026-08-05 Task 1/2/3)
   {
     file: `${A}/utils/auraIntervals.ts`,
@@ -1076,6 +1081,11 @@ const INDEX: PredicateRow[] = [
   {
     file: `${E}/quality/promptQualityCheck.ts`,
     symbol: "checkEnemyDefRefConsistency",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkFactsBlockIntegrity",
     mod: promptQualityCheck,
   },
   {
