@@ -68,13 +68,18 @@ import {
   resolveMitigation,
   strongestComponentPct,
 } from "../data/mitigationComponents";
-import { MITIGATION_TABLE } from "../data/mitigationData";
 import { ATTEMPT_INTO_TRINKET_OUTCOME_REF } from "../data/outcomeRefs";
 import { getEnglishSpellName } from "../data/spellEffectData";
-import spellIdListsData from "../data/spellIdLists";
+import { TIMELINE_LINE_FLAGS } from "../data/timelineLineFlags";
 import { burstCastSpan, KILL_CREDIT_SLACK_S } from "./burstLedger";
 import { analyzeOutgoingCCChains, DRLevel, drResetMsAt } from "./drAnalysis";
 import { reconstructEnemyCDTimeline } from "./enemyCDs";
+import {
+  EXTERNAL_DEF_IDS,
+  IMMUNITY_IDS,
+  MITIGATION_AURA_IDS,
+  MITIGATION_AURA_MIN_PCT,
+} from "./enemyDefensives";
 import {
   getHpPercentAtTime,
   IKillOpportunity,
@@ -85,34 +90,9 @@ import {
 import { KW_BURST_MIN_DAMAGE } from "./offensiveWindows";
 import { fmtTime } from "./renderGrid";
 
-const EXTERNAL_DEF_IDS = new Set<string>(
-  (spellIdListsData as unknown as { externalDefensiveSpellIds?: string[] })
-    .externalDefensiveSpellIds ?? [],
-);
-
-/** Immunities in the official table are recorded as pct 100 (spec decision in
- * mitigationData.ts). Baiting one out is a WIN per the user ruling ("冰箱圣盾
- * 不管,交了也算我们赚") — so it is its own attribution, never a reproach. */
-const IMMUNITY_IDS = new Set<string>(
-  Object.entries(MITIGATION_TABLE)
-    .filter(([, e]) => e.pct === 100)
-    .map(([id]) => id),
-);
-
-/** Floor for "a real defensive": the same 20 % door as the kill-opportunity
- * gated tier (WALL_IN_HAND_MIT_IDS). Applied twice — to the table value when
- * building MITIGATION_AURA_IDS, and again per aura through `resolveMitigation`
- * so a talent-shared copy on an ally (Obsidian Scales 15 %) does not count as
- * the target having popped a 30 % wall. */
-const MITIGATION_AURA_MIN_PCT = 20;
-
-/** 20–99% self-mitigation aura ids (the non-immune official table slice) —
- * "the target popped a real defensive during the attempt". */
-const MITIGATION_AURA_IDS = new Set<string>(
-  Object.entries(MITIGATION_TABLE)
-    .filter(([, e]) => e.pct >= MITIGATION_AURA_MIN_PCT && e.pct < 100)
-    .map(([id]) => id),
-);
+// The defensive sets live in enemyDefensives.ts since GH #97 (2026-09-15):
+// the timeline's [ENEMY DEF] line and this attribution must agree on what a
+// wall is, so both import the same objects.
 
 export interface IKillAttemptStun {
   atSeconds: number;
@@ -130,7 +110,11 @@ export interface IKillAttemptAttribution {
   trinketed: boolean;
   immunityBaited: boolean;
   defensivePopped: string[];
+  /** round seconds of each `defensivePopped` entry's aura start (parallel array) */
+  defensivePoppedAtS: number[];
   externalReceived: string[];
+  /** round seconds of each `externalReceived` cast (parallel array) */
+  externalReceivedAtS: number[];
   outhealed: boolean;
   primary:
     | "trinketed"
@@ -290,6 +274,7 @@ export function extractKillAttempts(
           enemies,
           spanFromMs,
           spanToMs,
+          matchStartMs,
         );
       }
       attempts.push(attempt);
@@ -398,6 +383,7 @@ export function extractKillAttempts(
           enemies,
           spanFromMs,
           spanToMs,
+          matchStartMs,
         );
       }
       attempts.push(attempt);
@@ -406,6 +392,16 @@ export function extractKillAttempts(
 
   attempts.sort((a, b) => a.fromSeconds - b.fromSeconds);
   return attempts;
+}
+
+/** GH #97 cheap alternative to the [ENEMY DEF] timeline line: the summary
+ * names WHEN the wall went up (`popped Barkskin@2:17`) instead of a timeline
+ * line. Only one of the two renders (TIMELINE_LINE_FLAGS.enemyDef). */
+function stampNames(names: string[], atS: number[]): string {
+  if (TIMELINE_LINE_FLAGS.enemyDef !== "stamp") return names.join("/");
+  return names
+    .map((n, i) => (atS[i] !== undefined ? `${n}@${fmtTime(atS[i]!)}` : n))
+    .join("/");
 }
 
 /** Short English cause for prompt/facts rendering. immunity-baited is worded
@@ -417,9 +413,9 @@ function failureText(attr: IKillAttemptAttribution): string {
     case "immunity-baited":
       return "forced a full immunity (a win — re-open after it drops)";
     case "defensive":
-      return `popped ${attr.defensivePopped.join("/")}`;
+      return `popped ${stampNames(attr.defensivePopped, attr.defensivePoppedAtS)}`;
     case "external":
-      return `saved by external (${attr.externalReceived.join("/")})`;
+      return `saved by external (${stampNames(attr.externalReceived, attr.externalReceivedAtS)})`;
     case "outhealed":
       return "healed through";
     case "pressure":
@@ -554,8 +550,10 @@ function attributeFailure(
   enemies: ICombatUnit[],
   spanFromMs: number,
   spanToMs: number,
+  matchStartMs: number,
 ): IKillAttemptAttribution {
   const inSpan = (ts: number): boolean => ts >= spanFromMs && ts <= spanToMs;
+  const secondsOf = (ts: number): number => (ts - matchStartMs) / 1000;
 
   let trinketed = false;
   for (const cast of target.spellCastEvents) {
@@ -569,6 +567,7 @@ function attributeFailure(
 
   let immunityBaited = false;
   const defensivePopped: string[] = [];
+  const defensivePoppedAtS: number[] = [];
   // One name per spell: a shapeshift-type defensive re-applies its aura
   // whenever the form refreshes (Ancient of Lore 473909 in S2 archive match
   // ad329f4a: 3 casts, 23 SPELL_AURA_APPLIED, same-millisecond REMOVED+APPLIED
@@ -607,10 +606,12 @@ function attributeFailure(
       // CJK name, 328 of the runs came from this line and 93 from the
       // external one below.
       defensivePopped.push(getEnglishSpellName(aura.spellId, aura.spellName));
+      defensivePoppedAtS.push(secondsOf(aura.logLine.timestamp));
     }
   }
 
   const externalReceived: string[] = [];
+  const externalReceivedAtS: number[] = [];
   for (const mate of enemies) {
     if (mate.id === target.id) continue;
     for (const cast of mate.spellCastEvents) {
@@ -621,6 +622,7 @@ function attributeFailure(
         externalReceived.push(
           getEnglishSpellName(cast.spellId, cast.spellName),
         );
+        externalReceivedAtS.push(secondsOf(cast.logLine.timestamp));
       }
     }
   }
@@ -651,7 +653,9 @@ function attributeFailure(
     trinketed,
     immunityBaited,
     defensivePopped,
+    defensivePoppedAtS,
     externalReceived,
+    externalReceivedAtS,
     outhealed,
     primary,
   };

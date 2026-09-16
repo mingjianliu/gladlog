@@ -56,18 +56,19 @@ import * as dispelObservedGenerated from "@gladlog/analysis/src/data/dispelObser
 import * as dispelVerdicts from "@gladlog/analysis/src/data/dispelVerdicts";
 import * as healerSaveCd from "@gladlog/analysis/src/data/healerSaveCd";
 import * as healingVerdicts from "@gladlog/analysis/src/data/healingVerdicts";
+import * as kickPriorityHealSpells from "@gladlog/analysis/src/data/kickPriorityHealSpells";
 import * as kickPriorityPrior from "@gladlog/analysis/src/data/kickPriorityPrior";
 import * as mitigationComponents from "@gladlog/analysis/src/data/mitigationComponents";
 import * as outcomeRefs from "@gladlog/analysis/src/data/outcomeRefs";
 import * as racialAbilities from "@gladlog/analysis/src/data/racialAbilities";
 import * as spellCategories from "@gladlog/analysis/src/data/spellCategories";
 import * as spellEffectData from "@gladlog/analysis/src/data/spellEffectData";
-import * as kickPriorityHealSpells from "@gladlog/analysis/src/data/kickPriorityHealSpells";
 import * as spellReach from "@gladlog/analysis/src/data/spellReach";
 import * as spellSchools from "@gladlog/analysis/src/data/spellSchools";
 import * as spellTags from "@gladlog/analysis/src/data/spellTags";
 import * as spellTargeting from "@gladlog/analysis/src/data/spellTargeting";
 import * as syncWindowPrior from "@gladlog/analysis/src/data/syncWindowPrior";
+import { TIMELINE_LINE_FLAGS } from "@gladlog/analysis/src/data/timelineLineFlags";
 import { PRODUCTION_FACT_CONFIG } from "@gladlog/analysis/src/facts/factProviderConfig";
 import * as auraIntervals from "@gladlog/analysis/src/utils/auraIntervals";
 import * as bracketKey from "@gladlog/analysis/src/utils/bracketKey";
@@ -82,6 +83,7 @@ import * as dispelKind from "@gladlog/analysis/src/utils/dispelKind";
 import * as dpsMetrics from "@gladlog/analysis/src/utils/dpsMetrics";
 import * as drAnalysis from "@gladlog/analysis/src/utils/drAnalysis";
 import * as enemyCDs from "@gladlog/analysis/src/utils/enemyCDs";
+import * as enemyDefensives from "@gladlog/analysis/src/utils/enemyDefensives";
 import * as enemyInterrupts from "@gladlog/analysis/src/utils/enemyInterrupts";
 import { HEALER_OFFENSE_FLAGS } from "@gladlog/analysis/src/utils/healerOffenseAnalysis";
 import * as incomingPressure from "@gladlog/analysis/src/utils/incomingPressure";
@@ -252,6 +254,11 @@ const INDEX: PredicateRow[] = [
     file: `${A}/analysis/crisisDecisionPoints.ts`,
     symbol: "isDmgSpikeTrough",
     mod: crisisDecisionPoints,
+  },
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "enemyDefensiveEvents",
+    mod: enemyDefensives,
   },
   {
     file: `${A}/utils/cooldowns.ts`,
@@ -1059,6 +1066,11 @@ const INDEX: PredicateRow[] = [
   {
     file: `${E}/quality/promptQualityCheck.ts`,
     symbol: "checkSnapshotFactsConsistency",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkEnemyDefRefConsistency",
     mod: promptQualityCheck,
   },
   {
@@ -1931,23 +1943,26 @@ describe("谓词索引:分析产出 X ⇄ 门规验证 X", () => {
 // synonyms slip through, the Chinese doc cannot match an English pattern, and
 // a prose matcher stops matching exactly when the wording is edited.
 
-const FLAG_REGISTRIES: Record<string, Record<string, boolean>> = {
+// String-valued flags (`TIMELINE_LINE_FLAGS`, GH #97) are listed with their
+// value in double quotes: `\`"timeline"\``.
+const FLAG_REGISTRIES: Record<string, Record<string, boolean | string>> = {
   CANDIDATE_TYPE_FLAGS,
   DISPEL_FEATURE_FLAGS,
   HEALER_OFFENSE_FLAGS,
   PRODUCTION_FACT_CONFIG,
+  TIMELINE_LINE_FLAGS,
 };
 
 const FLAG_BEGIN = "<!-- flag-state:begin -->";
 const FLAG_END = "<!-- flag-state:end -->";
-/** `| \`REGISTRY.key\` | \`true|false\` |` — the first two columns only. */
+/** `| \`REGISTRY.key\` | \`true|false|"str"\` |` — the first two columns only. */
 const FLAG_ROW =
-  /^\|\s*`([A-Z_][A-Z0-9_]*)\.([A-Za-z_$][\w$]*)`\s*\|\s*`(true|false)`\s*\|/gm;
+  /^\|\s*`([A-Z_][A-Z0-9_]*)\.([A-Za-z_$][\w$]*)`\s*\|\s*`(true|false|"[^"`]*")`\s*\|/gm;
 
 interface FlagRow {
   registry: string;
   key: string;
-  expected: boolean;
+  expected: boolean | string;
 }
 
 function docFlagRows(docPath: string): FlagRow[] {
@@ -1961,7 +1976,8 @@ function docFlagRows(docPath: string): FlagRow[] {
   return [...body.matchAll(FLAG_ROW)].map((m) => ({
     registry: m[1]!,
     key: m[2]!,
-    expected: m[3] === "true",
+    expected:
+      m[3] === "true" ? true : m[3] === "false" ? false : m[3]!.slice(1, -1),
   }));
 }
 

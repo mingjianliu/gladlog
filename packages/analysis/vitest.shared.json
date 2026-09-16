@@ -114,6 +114,7 @@
     "test/dispelVerdicts.test.ts",
     "test/drCategoryIds.test.ts",
     "test/drOutgoingCCReverse.test.ts",
+    "test/enemyDefensives.test.ts",
     "test/externalReach.test.ts",
     "test/forbearance.test.ts",
     "test/healerAvoidance.test.ts",

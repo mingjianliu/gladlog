@@ -445,4 +445,4 @@
 //  `popped …` / `saved by external (…)` and the [ROOT] `(from …)` caster no
 //  longer print client-locale (CJK) names (230/309 prompts); the HEALER
 //  OFFENSE [KILL WINDOW] list is chronological (112/309 were not).
-export const PROMPT_VERSION = 67;
+export const PROMPT_VERSION = 68;

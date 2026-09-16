@@ -11,6 +11,11 @@ import type { CdPriorHoldEpisode } from "../analysis/cdTriggerPrior";
 import { DISPEL_FEATURE_FLAGS } from "../data/dispelFeatureFlags";
 import { buffFullDurationForCaster } from "../utils/buffDuration";
 import { getEnglishSpellName, spellEffectData } from "../data/spellEffectData";
+import {
+  DEATH_WINDOW_S,
+  DEATH_WINDOW_UNFOLD_CAP,
+  TIMELINE_LINE_FLAGS,
+} from "../data/timelineLineFlags";
 import { ccSpellIds } from "../data/spellTags";
 import { COPY_CAST_IDS } from "../utils/castPress";
 import type { ICcBreakEvent } from "../utils/ccBreakAnalysis";
@@ -58,6 +63,7 @@ import {
   wasRemovedByAllyDispel,
 } from "../utils/dispelAnalysis";
 import { extractAoeCCEvents, IOutgoingCCChain } from "../utils/drAnalysis";
+import { enemyDefensiveEvents } from "../utils/enemyDefensives";
 import { IEnemyCDTimeline } from "../utils/enemyCDs";
 import { computeEnemyInterruptAvailability } from "../utils/enemyInterrupts";
 import { IHealingGap } from "../utils/healingGaps";
@@ -1383,6 +1389,42 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     // its start second renders chronologically).
     const SPAM_FOLD_THRESHOLD = 12;
     const SPAM_FOLD_MAX_GAP_SECONDS = 30;
+    // GH #97: friendly-death windows (death − DEATH_WINDOW_S … death) where
+    // the spam fold steps aside, the per-window unfold budget, and the
+    // target-HP tag a per-cast line carries — the [STATE] tick's sampler at
+    // the rendered second, exactly what getCDTargetAndVelocityPart queries.
+    const deathWindows = friendlyDeaths
+      .map((d) => ({
+        fromSeconds: Math.max(0, d.atSeconds - DEATH_WINDOW_S),
+        toSeconds: d.atSeconds,
+      }))
+      .sort((a, b) => a.fromSeconds - b.fromSeconds);
+    const deathWindowAt = (t: number) =>
+      deathWindows.find((w) => t >= w.fromSeconds && t <= w.toSeconds) ?? null;
+    const deathWindowUnfolded = new Map<
+      (typeof deathWindows)[number],
+      number
+    >();
+    const castTargetHpTag = (
+      destUnitName: string | undefined,
+      rawTimeSeconds: number,
+    ): string => {
+      const isSelf =
+        !destUnitName ||
+        destUnitName === "nil" ||
+        destUnitName === owner.name ||
+        destUnitName.split("-")[0] === owner.name.split("-")[0];
+      const unit = isSelf
+        ? owner
+        : _allUnits.find((u) => u.name === destUnitName);
+      if (!unit) return "";
+      const hp = gridHpPct(
+        unit,
+        matchStartMs + toRenderSecond(rawTimeSeconds) * 1000,
+      );
+      return hp === null ? "" : ` (${hp}% HP)`;
+    };
+
     const ownerCastCountByName = new Map<string, number>();
     for (const e of owner.spellCastEvents ?? []) {
       if (e.logLine.event !== LogEvent.SPELL_CAST_SUCCESS || !e.spellId)
@@ -1652,6 +1694,34 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       // a spell hit ≥12×/match carry no per-instance signal, only tokens.
       // Annotated casts still render individually (the annotation is the
       // signal) without breaking the running fold.
+      //
+      // GH #97 exception: inside a friendly-death window those per-instance
+      // lines ARE the signal (which heal went where in the last seconds —
+      // 18/50 Opus-baseline judges, 17/50 coach responses hedged "check the
+      // VOD" there), so the fold steps aside for up to DEATH_WINDOW_UNFOLD_CAP
+      // casts per window and each cast carries the target's HP at that
+      // rendered second — the [STATE] sampler at toRenderSecond, the same
+      // query the [YOU] [CD] line makes (class C stays pinned).
+      const deathWindow =
+        TIMELINE_LINE_FLAGS.deathWindowUnfold === "perCast"
+          ? deathWindowAt(timeSeconds)
+          : null;
+      if (
+        !hasAnnotation &&
+        (ownerCastCountByName.get(displayName) ?? 0) >= SPAM_FOLD_THRESHOLD &&
+        deathWindow !== null &&
+        (deathWindowUnfolded.get(deathWindow) ?? 0) < DEATH_WINDOW_UNFOLD_CAP
+      ) {
+        deathWindowUnfolded.set(
+          deathWindow,
+          (deathWindowUnfolded.get(deathWindow) ?? 0) + 1,
+        );
+        addEntry(
+          timeSeconds,
+          `${fmtTime(timeSeconds)}  [YOU] [CAST]   ${displayName}${targetPart}${castTargetHpTag(e.destUnitName, timeSeconds)}`,
+        );
+        continue;
+      }
       if (
         !hasAnnotation &&
         (ownerCastCountByName.get(displayName) ?? 0) >= SPAM_FOLD_THRESHOLD
@@ -1696,9 +1766,18 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
         }
       } else {
         flushFold();
+        // GH #97: inside a friendly-death window every owner cast carries
+        // the target's HP, not only the ones the spam fold released — a
+        // half-annotated window reads as if the un-annotated casts hit a
+        // full-HP target.
+        const windowHpTag =
+          TIMELINE_LINE_FLAGS.deathWindowUnfold === "perCast" &&
+          deathWindowAt(timeSeconds) !== null
+            ? castTargetHpTag(e.destUnitName, timeSeconds)
+            : "";
         addEntry(
           timeSeconds,
-          `${fmtTime(timeSeconds)}  [YOU] [CAST]   ${displayName}${targetPart}${totemNote}${orderNote}${purgeNote}${empowerNote}`,
+          `${fmtTime(timeSeconds)}  [YOU] [CAST]   ${displayName}${targetPart}${windowHpTag}${totemNote}${orderNote}${purgeNote}${empowerNote}`,
         );
       }
     }
@@ -1706,6 +1785,34 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     // Flush any remaining active folds at loop end
     flushFold();
     for (const name of [...spamFolds.keys()]) flushSpamFold(name);
+
+    // GH #97 cheap alternative to the per-cast unfold: one line per
+    // friendly-death window with the owner's casts counted by spell and
+    // target. Measured against "perCast" by the fact-retrieval probe; only
+    // one of the two renders.
+    if (TIMELINE_LINE_FLAGS.deathWindowUnfold === "summary") {
+      for (const w of deathWindows) {
+        const counts = new Map<string, number>();
+        for (const e of owner.spellCastEvents ?? []) {
+          if (e.logLine.event !== LogEvent.SPELL_CAST_SUCCESS || !e.spellId)
+            continue;
+          if (isPassiveProcCast(e)) continue;
+          const t = (e.timestamp - matchStartMs) / 1000;
+          if (t < w.fromSeconds || t > w.toSeconds) continue;
+          const label = resolveTarget(e.destUnitName);
+          const key = `${getEnglishSpellName(e.spellId, e.spellName)}${label ? ` → ${label}` : ""}`;
+          counts.set(key, (counts.get(key) ?? 0) + 1);
+        }
+        if (counts.size === 0) continue;
+        const parts = [...counts.entries()]
+          .sort((a, b) => b[1] - a[1])
+          .map(([k, n]) => (n > 1 ? k.replace(/( → |$)/, ` ×${n}$1`) : k));
+        addEntry(
+          w.fromSeconds,
+          `${fmtTime(w.fromSeconds)}–${fmtTime(w.toSeconds)}  [YOU] [HEALS]   ${parts.join(", ")}`,
+        );
+      }
+    }
   }
 
   // ── [TEAM] [CD] events ────────────────────────────────────────────────────
@@ -1815,6 +1922,43 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
         cd.castTimeSeconds,
         `${fmtTime(cd.castTimeSeconds)}  [ENEMY CD]   ${enemyPid(player.playerName)} (${player.specName}): ${cd.spellName}${seqAnnotation}`,
       );
+    }
+  }
+
+  // ── [ENEMY DEF] events (GH #97, 2026-09-15) ────────────────────────────────
+  // Enemy defensives used to exist only in the KILL ATTEMPTS summary
+  // ("FAILED: popped Barkskin"), with no timestamped line — 13/50 Opus-
+  // baseline judges, and the main reason sufficiency stopped at 4. The set is
+  // the one killAttempts.ts attributes with (enemyDefensives.ts), the
+  // duration is the OBSERVED aura interval (a static tooltip duration is
+  // falsified by every dispel; agy round 1), and `— removed early` is the
+  // coaching pivot. Separate tag on purpose: [ENEMY CD] feeds the burst-window
+  // builder, and a wall must never read as an opener there.
+  if (TIMELINE_LINE_FLAGS.enemyDef === "timeline") {
+    const combatSpan = {
+      startTime: matchStartMs,
+      endTime: matchStartMs + matchEndSeconds * 1000,
+    };
+    for (const enemy of enemies ?? []) {
+      for (const d of enemyDefensiveEvents(enemy, enemies ?? [], combatSpan)) {
+        if (d.atSeconds < 0 || d.atSeconds > matchEndSeconds) continue;
+        const who = `${enemyPid(enemy.name)} (${specToString(enemy.spec)})`;
+        const dur =
+          d.observedSeconds !== undefined
+            ? `${d.observedSeconds.toFixed(1)}s${d.removedEarly ? " — removed early" : ""}`
+            : "";
+        let line: string;
+        if (d.kind === "external") {
+          line = `${d.spellName} → ${enemyPid(d.recipientName ?? "")}${dur ? ` (${dur})` : ""}`;
+        } else {
+          const strength = d.kind === "immune" ? "immune" : `${d.pct}%`;
+          line = `${d.spellName} (${strength}${dur ? `, ${dur}` : ""})`;
+        }
+        addEntry(
+          d.atSeconds,
+          `${fmtTime(d.atSeconds)}  [ENEMY DEF]   ${who}: ${line}`,
+        );
+      }
     }
   }
 
@@ -2791,6 +2935,24 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     "    that changed nothing are omitted. Roots have no DR tier and are not hard CC (the rooted player can still cast).",
     "  [OFFENSIVE WINDOW] `X on <unit>` = damage DEALT TO that unit (it is the victim, not the dealer);",
     "    its `peak spike` figure covers the spike's own sub-window, printed after it — not the whole offensive window.",
+    ...(TIMELINE_LINE_FLAGS.enemyDef === "timeline"
+      ? [
+          "  [ENEMY DEF] = an enemy pressed a defensive at that second: `(N%, Ts)` = official damage reduction and the",
+          "    OBSERVED duration in this round; `immune` = full immunity; `— removed early` = it ended before its full",
+          "    duration (dispelled, broken or cancelled); `X → unit` = an external put on that unit. Absent = not pressed.",
+        ]
+      : []),
+    ...(TIMELINE_LINE_FLAGS.deathWindowUnfold === "perCast"
+      ? [
+          `  [YOU] [CAST] lines inside the ${DEATH_WINDOW_S}s before a friendly death are printed per cast with the target's HP`,
+          "    at that second, even for spells that are folded `(xN over Ns)` elsewhere; the fold still counts them.",
+        ]
+      : []),
+    ...(TIMELINE_LINE_FLAGS.deathWindowUnfold === "summary"
+      ? [
+          `  [YOU] [HEALS] = every cast you made in the ${DEATH_WINDOW_S}s before a friendly death, counted by spell and target.`,
+        ]
+      : []),
     // Conditional: a round with no such line pays no tokens for its legend.
     ...(burstAnsweredEntries.length > 0 ? BURST_ANSWERED_LEGEND : []),
     ...(cdPriorEntries.length > 0 ? CD_PRIOR_LEGEND : []),

@@ -54,6 +54,7 @@ import {
   syncRefClearsMinContrast,
   syncRefContrastPp,
 } from "@gladlog/analysis/src/data/syncWindowPrior";
+import { KILL_CREDIT_SLACK_S } from "@gladlog/analysis/src/utils/burstLedger";
 import { canHelpAnotherUnit } from "@gladlog/analysis/src/utils/cooldowns";
 import { fmtTime } from "@gladlog/analysis/src/utils/renderGrid";
 import fs from "fs-extra";
@@ -714,6 +715,63 @@ export function checkCjkLeak(lines: string[]): string[] {
       failures.push(
         `line ${i + 1}: 未翻译的名字(CJK)—— ${line.trim().slice(0, 140)}`,
       );
+  });
+  return failures;
+}
+
+/** The KILL ATTEMPTS legend line that only renders while
+ * `TIMELINE_LINE_FLAGS.enemyDef === "timeline"` — the gate keys on it so a
+ * prompt built with the line off is not accused of missing it. */
+const ENEMY_DEF_LEGEND = /^\s*\[ENEMY DEF\] = /;
+/** `  [m:ss–m:ss] on <unit> — … | FAILED: popped A/B` or
+ * `… | FAILED: saved by external (A/B)`; names may carry `@m:ss` (stamp mode). */
+const KILL_ATTEMPT_DEFENSIVE =
+  /^\s*\[(\d+):(\d\d)–(\d+):(\d\d)\] on .*\| FAILED: (?:popped |saved by external \()([^|()]+?)\)?\s*$/;
+/** `m:ss  [ENEMY DEF]   <pid> (<spec>): <Spell> (…)` / `: <Spell> → <pid> (…)` */
+const ENEMY_DEF_LINE =
+  /^(\d+):(\d\d) {2}\[ENEMY DEF\] {3}[^:]+: (.+?)(?: \(| → |$)/;
+/** The aura APPLIED that KILL ATTEMPTS attributes and the `[ENEMY DEF]` line
+ * both render from the same log instant, but one is floored from the aura
+ * event and the other from a paired cast ≤ 1.5 s away (externals), so the
+ * gate allows that pairing radius on either side of the attribution span. */
+const ENEMY_DEF_PAIR_SLACK_S = 2;
+
+/**
+ * KILL ATTEMPTS `popped X` / `saved by external (X)` ⇒ a `[ENEMY DEF]` line
+ * naming X inside the attribution span (`[from, to + KILL_CREDIT_SLACK_S]`,
+ * the same window killAttempts.ts attributes over — imported, not copied).
+ * Both sides render from `enemyDefensives.ts`'s one predicate (GH #97), so a
+ * miss here is a producer bug: the summary claims a wall the timeline never
+ * showed, and the model is back to "check the VOD".
+ */
+export function checkEnemyDefRefConsistency(lines: string[]): string[] {
+  if (!lines.some((l) => ENEMY_DEF_LEGEND.test(l))) return [];
+  const defs: Array<{ atS: number; spell: string }> = [];
+  for (const line of lines) {
+    const m = ENEMY_DEF_LINE.exec(line);
+    if (m) defs.push({ atS: Number(m[1]) * 60 + Number(m[2]), spell: m[3]! });
+  }
+  const failures: string[] = [];
+  lines.forEach((line, i) => {
+    const m = KILL_ATTEMPT_DEFENSIVE.exec(line);
+    if (!m) return;
+    const fromS = Number(m[1]) * 60 + Number(m[2]) - ENEMY_DEF_PAIR_SLACK_S;
+    const toS =
+      Number(m[3]) * 60 +
+      Number(m[4]) +
+      KILL_CREDIT_SLACK_S +
+      ENEMY_DEF_PAIR_SLACK_S;
+    for (const raw of m[5]!.split("/")) {
+      const spell = raw.replace(/@\d+:\d\d$/, "").trim();
+      if (!spell) continue;
+      const hit = defs.some(
+        (d) => d.spell === spell && d.atS >= fromS && d.atS <= toS,
+      );
+      if (!hit)
+        failures.push(
+          `line ${i + 1}: KILL ATTEMPTS attributes "${spell}" in [${fmtTime(fromS + ENEMY_DEF_PAIR_SLACK_S)}–${fmtTime(toS - ENEMY_DEF_PAIR_SLACK_S)}] but no [ENEMY DEF] line names it there: "${line.trim()}"`,
+        );
+    }
   });
   return failures;
 }
@@ -1697,6 +1755,7 @@ export function checkMatch(
   hardFailures.push(...checkOutcomeRefConsistency(lines));
   hardFailures.push(...checkMenuTRenderGrid(lines));
   hardFailures.push(...checkCjkLeak(lines));
+  hardFailures.push(...checkEnemyDefRefConsistency(lines));
 
   return {
     ordinal: entry.ordinal,
