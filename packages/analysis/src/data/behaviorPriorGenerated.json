@@ -1,7 +1,7 @@
 {
   "meta": {
-    "generatedAt": "2026-09-15",
-    "corpus": "wowarenalogs archive 2026-08-11..2026-09-05 new season, full archive 63,303 files, 43,005 healer crisis points (healer rescan 2026-09-14, GH #96 M4 user rulings: protective answers — Power Word: Shield / Void Shield, Fade, Spirit of Redemption, Reversion, Divine Hymn, Tree of Life, Bear Form, Ancient of Lore, Ultimate Penitence, Tranquility; a trinket / break racial counts only with a follow-up, mobility only when distance opens). dps cells deliberately NOT published — GH #59 ruling 2026-08-30",
+    "generatedAt": "2026-09-16",
+    "corpus": "wowarenalogs archive 2026-08-11..2026-09-05 new season, full archive 63,303 files (healer rescan 2026-09-15, GH #96 M4 rulings + GH #93 split: carriedHeal = healing from spells pressed before the window, attackerMoved = distance opened by the attackers). dps cells deliberately NOT published — GH #59 ruling 2026-08-30",
     "weeks": ["2026-W33", "2026-W34", "2026-W35", "2026-W36"],
     "command": "npx tsx packages/eval/scripts/behaviorPriorScan.ts emit-table --in <scan.jsonl>",
     "predicateVersion": 1
@@ -13,9 +13,9 @@
       "nResp": 8439,
       "deathResp": 0.08,
       "top": [
-        ["selfHeal", 0.55],
+        ["carriedHeal", 0.31],
         ["protective", 0.28],
-        ["wall", 0.21]
+        ["selfHeal", 0.24]
       ],
       "outcome": "ownDeath10s"
     },
@@ -25,9 +25,9 @@
       "nResp": 3930,
       "deathResp": 0.08,
       "top": [
-        ["selfHeal", 0.5],
+        ["carriedHeal", 0.3],
         ["protective", 0.29],
-        ["kite", 0.2]
+        ["selfHeal", 0.2]
       ],
       "outcome": "ownDeath10s"
     },
@@ -37,9 +37,9 @@
       "nResp": 4509,
       "deathResp": 0.09,
       "top": [
-        ["selfHeal", 0.6],
-        ["protective", 0.27],
-        ["wall", 0.24]
+        ["carriedHeal", 0.32],
+        ["selfHeal", 0.28],
+        ["protective", 0.27]
       ],
       "outcome": "ownDeath10s"
     },
@@ -49,9 +49,9 @@
       "nResp": 4598,
       "deathResp": 0.1,
       "top": [
-        ["selfHeal", 0.83],
-        ["wall", 0.25],
-        ["protective", 0.19]
+        ["selfHeal", 0.52],
+        ["carriedHeal", 0.31],
+        ["wall", 0.25]
       ],
       "outcome": "ownDeath10s"
     },
@@ -61,9 +61,9 @@
       "nResp": 1167,
       "deathResp": 0.08,
       "top": [
-        ["selfHeal", 0.76],
-        ["wall", 0.2],
-        ["protective", 0.19]
+        ["selfHeal", 0.43],
+        ["carriedHeal", 0.33],
+        ["wall", 0.2]
       ],
       "outcome": "ownDeath10s"
     },
@@ -73,9 +73,9 @@
       "nResp": 3431,
       "deathResp": 0.1,
       "top": [
-        ["selfHeal", 0.85],
-        ["wall", 0.26],
-        ["protective", 0.19]
+        ["selfHeal", 0.55],
+        ["carriedHeal", 0.3],
+        ["wall", 0.26]
       ],
       "outcome": "ownDeath10s"
     },
@@ -85,9 +85,9 @@
       "nResp": 5875,
       "deathResp": 0.15,
       "top": [
-        ["selfHeal", 0.7],
+        ["selfHeal", 0.41],
         ["wall", 0.3],
-        ["protective", 0.21]
+        ["carriedHeal", 0.29]
       ],
       "outcome": "teamDeath15s"
     },
@@ -97,9 +97,9 @@
       "nResp": 2166,
       "deathResp": 0.16,
       "top": [
-        ["selfHeal", 0.62],
-        ["wall", 0.28],
-        ["protective", 0.2]
+        ["selfHeal", 0.33],
+        ["carriedHeal", 0.29],
+        ["wall", 0.28]
       ],
       "outcome": "teamDeath15s"
     },
@@ -109,9 +109,9 @@
       "nResp": 3709,
       "deathResp": 0.15,
       "top": [
-        ["selfHeal", 0.75],
+        ["selfHeal", 0.46],
         ["wall", 0.32],
-        ["protective", 0.22]
+        ["carriedHeal", 0.29]
       ],
       "outcome": "teamDeath15s"
     }

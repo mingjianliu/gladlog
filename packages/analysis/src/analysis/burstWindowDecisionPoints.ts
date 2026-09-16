@@ -61,7 +61,12 @@ import { LOS_SWEEP_GAP_MS } from "../utils/positionSampling";
 import { canReachTargetAt } from "../utils/rootReachability";
 import { isOffensiveSpell, spellDangerWeight } from "../utils/spellDanger";
 import { buildFilteredAuraIntervals } from "../utils/utils";
-import { CRISIS_HP_PCT_RENDERED, kitedAway } from "./crisisDecisionPoints";
+import {
+  CRISIS_HP_PCT_RENDERED,
+  KITE_GAIN_YARDS,
+  kiteAttribution,
+  kitedAway,
+} from "./crisisDecisionPoints";
 
 /** How long after the window start any friendly may answer and still count
  * (GH #60's agreed shape: "response = within 8 s of window start, by ANY
@@ -223,6 +228,10 @@ export interface BurstWindowResponses {
   /** the most-pressured friendly opened `KITE_GAIN_YARDS` on the nearest
    * burst caster across the response window */
   kite: boolean;
+  /** GH #93: the distance gain was the burst's casters walking away
+   * (kiteAttribution), not the pressured friendly moving — still answered,
+   * never described as a kite */
+  attackerMoved: boolean;
 }
 
 export interface BurstCdRef {
@@ -935,28 +944,34 @@ export function burstWindowDecisionPoints(
       const pressuredUnit = pressured
         ? (friendlies.find((f) => f.id === pressured.unitId) ?? null)
         : null;
-      const kite =
+      const casterUnits = casterIds.map((id) => units.find((u) => u.id === id));
+      const kiteGain =
         pressuredUnit != null &&
         (dmgByUnitId.get(pressuredUnit.id) ?? 0) > 0 &&
-        kitedAway(
-          pressuredUnit,
-          casterIds.map((id) => units.find((u) => u.id === id)),
-          tMs,
-          w1,
-        );
+        kitedAway(pressuredUnit, casterUnits, tMs, w1);
+      const kiteWho = kiteGain
+        ? kiteAttribution(pressuredUnit, casterUnits, tMs, w1)
+        : null;
+      const attackerMoved =
+        !!kiteWho &&
+        kiteWho.ownerGain < KITE_GAIN_YARDS &&
+        kiteWho.attackerGain >= KITE_GAIN_YARDS;
+      const kite = kiteGain && !attackerMoved;
       const responses: BurstWindowResponses = {
         wall: responseCasts.some((r) => r.category === "wall"),
         external: responseCasts.some((r) => r.category === "external"),
         healCd: responseCasts.some((r) => r.category === "healCd"),
         control: responseCasts.some((r) => r.category === "control"),
         kite,
+        attackerMoved,
       };
       const responded =
         responses.wall ||
         responses.external ||
         responses.healCd ||
         responses.control ||
-        responses.kite;
+        responses.kite ||
+        responses.attackerMoved;
       const firstResponseSec = responseCasts.length
         ? Math.min(...responseCasts.map((r) => r.latencySec))
         : null;
@@ -1055,8 +1070,7 @@ export function burstWindowDecisionPoints(
             casterId: c.unitId,
             casterName: c.unitName,
             tSec: Math.floor((c.tMs - start) / 1000),
-            cooldownSeconds:
-              cdSecByUnit.get(c.unitId)?.get(c.spellId) ?? 0,
+            cooldownSeconds: cdSecByUnit.get(c.unitId)?.get(c.spellId) ?? 0,
           });
         }
       }

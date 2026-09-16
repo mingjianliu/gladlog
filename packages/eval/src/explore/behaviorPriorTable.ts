@@ -90,6 +90,8 @@ const RESPONSE_KEYS = [
   "external",
   "control",
   "kite",
+  "carriedHeal",
+  "attackerMoved",
 ] as const;
 
 export { dmgBinOf };

@@ -445,4 +445,12 @@
 //  `popped …` / `saved by external (…)` and the [ROOT] `(from …)` caster no
 //  longer print client-locale (CJK) names (230/309 prompts); the HEALER
 //  OFFENSE [KILL WINDOW] list is chronological (112/309 were not).
-export const PROMPT_VERSION = 68;
+//  v69 (2026-09-15, GH #93, user ruling 2026-09-15): the crisis response
+//  taxonomy splits what was one "selfHeal" arm into selfHeal (healing from
+//  spells pressed INSIDE the window) and carriedHeal (a HoT pressed earlier),
+//  and one "kite" arm into kite and attackerMoved (the attackers walked away).
+//  Both new arms still count as answered — no new accusations — so
+//  crisis-no-response / slow-defensive-response counts do not move; the
+//  reference tables' response mix does (2v2 selfHeal 0.55 → 0.24 + carriedHeal
+//  0.31), and those shares are quoted in the candidate line.
+export const PROMPT_VERSION = 69;

@@ -504,7 +504,8 @@ function report(): void {
       return ref ? burstRefContrastPp(ref) : null;
     });
     const good = fires.filter(
-      (_, i) => contrasts[i] !== null && contrasts[i]! >= BURST_REF_MIN_CONTRAST_PP,
+      (_, i) =>
+        contrasts[i] !== null && contrasts[i]! >= BURST_REF_MIN_CONTRAST_PP,
     );
     const cv = contrasts.filter((v): v is number => v !== null);
     lines.push(
@@ -567,7 +568,14 @@ function report(): void {
     );
 
   lines.push(`\n## response mix (feasible windows)\n`);
-  const KEYS = ["wall", "external", "healCd", "control", "kite"] as const;
+  const KEYS = [
+    "wall",
+    "external",
+    "healCd",
+    "control",
+    "kite",
+    "attackerMoved",
+  ] as const;
   lines.push(`| response | share of feasible windows |`);
   lines.push(`|---|---|`);
   for (const k of KEYS)
@@ -758,7 +766,6 @@ async function examples(): Promise<void> {
   console.error(`${out.length} example windows`);
 }
 
-
 // ─────────────────────────────────────────────────────────── overreact ─────
 /**
  * PROBE ONLY — nothing here is wired into the product, no candidate reads it
@@ -864,8 +871,7 @@ function buildProbeWindows(rows: Row[]): ProbeWindow[] {
             (!o.point.responded || o.point.anyFriendlyDeath) &&
             withCd.some((c) => c.tSec + c.cooldownSeconds > o.point.tSec),
         );
-      const isBad = (o: Row) =>
-        !o.point.responded || o.point.anyFriendlyDeath;
+      const isBad = (o: Row) => !o.point.responded || o.point.anyFriendlyDeath;
       const inShadow = (o: Row) =>
         withCd.some((c) => c.tSec + c.cooldownSeconds > o.point.tSec);
       const shadow = laterFeasible.filter(inShadow);
@@ -878,8 +884,7 @@ function buildProbeWindows(rows: Row[]): ProbeWindow[] {
         win: r.win,
         tSec: p.tSec,
         band: bandOf(minHp),
-        responsesCount:
-          p.responseCasts.length + (p.responses.kite ? 1 : 0),
+        responsesCount: p.responseCasts.length + (p.responses.kite ? 1 : 0),
         majorsSpent: spend.length,
         spentIds: spend.map((c) => c.spellId),
         spendWeightS: withCd.reduce((n, c) => n + c.cooldownSeconds, 0),
@@ -954,13 +959,9 @@ function overreact(): void {
   const spent = all.filter((w) => w.majorsSpent >= 1);
   const punishable = all.filter((w) => w.punishable);
   L.push(`## the denominator\n`);
-  L.push(
-    `| population | windows | share | later-punishment rate |`,
-  );
+  L.push(`| population | windows | share | later-punishment rate |`);
   L.push(`|---|---|---|---|`);
-  L.push(
-    `| all bounded windows | ${all.length} | 100% | ${rateStr(all)} |`,
-  );
+  L.push(`| all bounded windows | ${all.length} | 100% | ${rateStr(all)} |`);
   L.push(
     `| spent ≥ 1 major inside the window | ${spent.length} | ${((100 * spent.length) / Math.max(1, all.length)).toFixed(1)}% | ${rateStr(spent)} |`,
   );
@@ -1067,7 +1068,11 @@ function overreact(): void {
         "trigger",
         trig.filter((w) => w.bracket === b),
       );
-      const c = pairRow(b, "control", ctrl.filter((w) => w.bracket === b));
+      const c = pairRow(
+        b,
+        "control",
+        ctrl.filter((w) => w.bracket === b),
+      );
       if (!isNaN(t) && !isNaN(c)) pairedDeltas.push({ b, d: t - c });
     }
     // The deciding statistic is the DIFFERENCE IN DIFFERENCES: an exhausted
@@ -1105,10 +1110,24 @@ function overreact(): void {
       (x) => x.b !== "ALL" && x.d >= 3,
     ).length;
     L.push(
-      `\nraw outcome (task definition): ${teeth >= 2 ? `≥3 pp in ${teeth} brackets (${deltas.filter((x) => x.d >= 3).map((x) => `${x.b} ${x.d.toFixed(1)}`).join(", ")})` : `≥3 pp in ${teeth} bracket(s)`}`,
+      `\nraw outcome (task definition): ${
+        teeth >= 2
+          ? `≥3 pp in ${teeth} brackets (${deltas
+              .filter((x) => x.d >= 3)
+              .map((x) => `${x.b} ${x.d.toFixed(1)}`)
+              .join(", ")})`
+          : `≥3 pp in ${teeth} bracket(s)`
+      }`,
     );
     L.push(
-      `confound-controlled (within-round paired, difference in differences): ${pairedTeeth >= 2 ? `≥3 pp in ${pairedTeeth} brackets (${pairedDeltas.filter((x) => x.b !== "ALL" && x.d >= 3).map((x) => `${x.b} ${x.d.toFixed(1)}`).join(", ")})` : `≥3 pp in ${pairedTeeth} bracket(s)`}`,
+      `confound-controlled (within-round paired, difference in differences): ${
+        pairedTeeth >= 2
+          ? `≥3 pp in ${pairedTeeth} brackets (${pairedDeltas
+              .filter((x) => x.b !== "ALL" && x.d >= 3)
+              .map((x) => `${x.b} ${x.d.toFixed(1)}`)
+              .join(", ")})`
+          : `≥3 pp in ${pairedTeeth} bracket(s)`
+      }`,
     );
     L.push(
       `\n**verdict: ${pairedTeeth >= 2 ? "HAS TEETH" : "FLAT"}** — the confound-controlled column is the one that decides, because the raw one is mechanically satisfied by cooldown LENGTH.\n`,
@@ -1167,7 +1186,6 @@ function overreact(): void {
   } else process.stdout.write(text);
 }
 
-
 // ────────────────────────────────────────────────────────────── gradient ───
 /**
  * Skill gradient for `slow-defensive-response` on its OWN denominator
@@ -1200,7 +1218,9 @@ function gradient(): void {
   const inPath = flag("--in");
   const ledgerDir = flag("--ledger");
   if (!inPath || !ledgerDir) {
-    console.error("usage: gradient --in <file.jsonl> --ledger <dir> [--md <out>]");
+    console.error(
+      "usage: gradient --in <file.jsonl> --ledger <dir> [--md <out>]",
+    );
     process.exit(1);
   }
   const { rows, rounds } = readRows(inPath);
@@ -1235,7 +1255,9 @@ function gradient(): void {
   }
 
   const L: string[] = [];
-  L.push(`# slow-defensive-response — skill gradient on the NEW denominator (2026-09-02)\n`);
+  L.push(
+    `# slow-defensive-response — skill gradient on the NEW denominator (2026-09-02)\n`,
+  );
   L.push(
     `Denominator: feasible ∧ triaged ∧ ≥ ${BURST_WINDOW_MIN_JUDGED_S}s ∧ contrast-door windows (the candidate's own opportunity population). Trigger: unanswered within 8 s. Rate per window. Rank: rating percentile within (bracket, ISO week).\n`,
   );
@@ -1249,7 +1271,9 @@ function gradient(): void {
   for (const b of ["ALL", ...brackets]) {
     const os = b === "ALL" ? opps : opps.filter((o) => o.bracket === b);
     if (!os.length) continue;
-    L.push(`## ${b}${b === "ALL" ? " (pooled — context only, never the verdict)" : ""} — ${os.length} opportunity windows, ${new Set(os.map((o) => o.roundKey)).size} rounds\n`);
+    L.push(
+      `## ${b}${b === "ALL" ? " (pooled — context only, never the verdict)" : ""} — ${os.length} opportunity windows, ${new Set(os.map((o) => o.roundKey)).size} rounds\n`,
+    );
     L.push(`| band | opportunity windows | unanswered | rate | 95% CI |`);
     L.push(`|---|---|---|---|---|`);
     const rate = new Map<string, number>();

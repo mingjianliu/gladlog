@@ -23,6 +23,8 @@ const pt = (over: Partial<DecisionPoint> = {}): DecisionPoint => ({
     control: false,
     peel: false,
     protective: false,
+    carriedHeal: false,
+    attackerMoved: false,
     kite: false,
   },
   responded: false,

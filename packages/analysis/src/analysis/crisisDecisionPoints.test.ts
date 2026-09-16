@@ -108,12 +108,14 @@ describe("crisisDecisionPoints", () => {
     expect(crisisDecisionPoints(o, combat(o))).toHaveLength(2);
   });
 
-  it("selfHeal response: owner heals self ≥15% maxHP inside the window", () => {
+  it("selfHeal response: owner heals self ≥15% maxHP inside the window with a spell cast in the window", () => {
     const o = unit({
+      spellCastEvents: [{ timestamp: T0 + 2400, spellId: "2061" }],
       healIn: [
         {
           timestamp: T0 + 2500,
           srcUnitId: "H",
+          spellId: "2061",
           amount: 20,
           effectiveAmount: 20,
         },
@@ -121,7 +123,29 @@ describe("crisisDecisionPoints", () => {
     });
     const p = crisisDecisionPoints(o, combat(o))[0]!;
     expect(p.responses.selfHeal).toBe(true);
+    expect(p.responses.carriedHeal).toBe(false);
     expect(p.selfHealPct).toBe(20);
+    expect(p.responded).toBe(true);
+  });
+
+  // GH #93 (user ruling 2026-09-15): a HoT pressed before the window still
+  // answers the crisis but is not a press
+  it("carried heal: ≥15% from a HoT cast before the window is carriedHeal, not selfHeal, still responded", () => {
+    const o = unit({
+      spellCastEvents: [{ timestamp: T0 - 5000, spellId: "774" }],
+      healIn: [
+        {
+          timestamp: T0 + 2500,
+          srcUnitId: "H",
+          spellId: "774",
+          amount: 20,
+          effectiveAmount: 20,
+        },
+      ],
+    });
+    const p = crisisDecisionPoints(o, combat(o))[0]!;
+    expect(p.responses.selfHeal).toBe(false);
+    expect(p.responses.carriedHeal).toBe(true);
     expect(p.responded).toBe(true);
   });
 
@@ -191,6 +215,26 @@ describe("crisisDecisionPoints", () => {
     expect(crisisDecisionPoints(o, combat(o, [e]))[0]!.responses.kite).toBe(
       true,
     );
+  });
+
+  // GH #93: the same distance gain opened by the ATTACKER walking away is
+  // attackerMoved, not kite — still answered, never described as a kite
+  it("attacker moving away: kitedAway holds but the owner stood still → attackerMoved, not kite", () => {
+    const o = unit({
+      advancedActions: [
+        hp(0, 100, 100, 0, 0),
+        hp(1000, 70, 100, 0, 0),
+        hp(2000, 38, 100, 0, 0),
+        hp(5000, 35, 100, 0, 0),
+      ],
+    });
+    const e = enemy("E1", {
+      advancedActions: [hp(2000, 100, 100, 1, 0), hp(5000, 100, 100, 13, 0)],
+    });
+    const p = crisisDecisionPoints(o, combat(o, [e]))[0]!;
+    expect(p.responses.kite).toBe(false);
+    expect(p.responses.attackerMoved).toBe(true);
+    expect(p.responded).toBe(true);
   });
 
   // user ruling 2026-09-14: a trinket alone is no answer; a trinket that opens

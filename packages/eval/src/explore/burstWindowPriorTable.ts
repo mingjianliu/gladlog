@@ -51,6 +51,7 @@ const RESPONSE_KEYS = [
   "healCd",
   "control",
   "kite",
+  "attackerMoved",
 ] as const;
 const r2 = (x: number) => Math.round(x * 100) / 100;
 

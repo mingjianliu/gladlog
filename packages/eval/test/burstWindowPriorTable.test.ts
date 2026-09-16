@@ -37,6 +37,7 @@ function point(over: Record<string, unknown> = {}): any {
       healCd: false,
       control: false,
       kite: false,
+      attackerMoved: false,
     },
     responded: false,
     firstResponseSec: null,

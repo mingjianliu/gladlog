@@ -88,7 +88,18 @@ const POS_TOLERANCE_MS = 1500;
 const ATTACKER_POS_TOLERANCE_MS = 2500;
 
 export interface DecisionPointResponses {
+  /** the owner's own healing from spells CAST inside the response window
+   * reached SELF_HEAL_BIG (GH #93: an earlier HoT no longer counts here) */
   selfHeal: boolean;
+  /** GH #93 (user ruling 2026-09-15, same shape as BACKLOG #43's procs): the
+   * owner's healing only reached SELF_HEAL_BIG with heals from spells pressed
+   * BEFORE the window (a ticking HoT). Still counts as answered — never an
+   * accusation — but it is not a press and must not be described as one. */
+  carriedHeal: boolean;
+  /** GH #93: the distance gain kitedAway saw is explained by the ATTACKERS
+   * moving away (kiteAttribution), not by the owner. Counts as answered,
+   * never described as the owner kiting. */
+  attackerMoved: boolean;
   wall: boolean;
   /** the owner pressed a protective ability outside the wall / external lists
    * that the user ruled counts as an answer (`CRISIS_PROTECTIVE_ANSWER_IDS`) */
@@ -414,6 +425,43 @@ export function kitedAway(
   return isFinite(d0) && isFinite(d1) && d1 - d0 >= KITE_GAIN_YARDS;
 }
 
+/**
+ * GH #93 measurement helper: who moved? Same sampler and tolerances as
+ * `kitedAway`. Taking the attacker nearest at `t0Ms`, split the distance change
+ * into the part the target's own movement explains (target at t1 vs attacker
+ * at t0) and the part the attacker's movement explains (target at t0 vs
+ * attacker at t1). Null when either endpoint lacks a position.
+ */
+export function kiteAttribution(
+  target: any,
+  attackers: any[],
+  t0Ms: number,
+  t1Ms: number,
+): { gain: number; ownerGain: number; attackerGain: number } | null {
+  const samples = samplesOf(target);
+  const p0 = nearestSample(samples, t0Ms, POS_TOLERANCE_MS);
+  const p1 = nearestSample(samples, t1Ms, POS_TOLERANCE_MS);
+  if (p0?.x == null || p1?.x == null) return null;
+  let best: { q0: Sample; q1: Sample; d0: number } | null = null;
+  for (const u of attackers) {
+    if (!u) continue;
+    const s = samplesOf(u);
+    const q0 = nearestSample(s, t0Ms, ATTACKER_POS_TOLERANCE_MS);
+    const q1 = nearestSample(s, t1Ms, ATTACKER_POS_TOLERANCE_MS);
+    if (q0?.x == null || q1?.x == null) continue;
+    const d0 = Math.hypot(p0.x - q0.x, p0.y! - q0.y!);
+    if (!best || d0 < best.d0) best = { q0, q1, d0 };
+  }
+  if (!best) return null;
+  const { q0, q1, d0 } = best;
+  const d = (a: Sample, b: Sample) => Math.hypot(a.x! - b.x!, a.y! - b.y!);
+  return {
+    gain: d(p1, q1) - d0,
+    ownerGain: d(p1, q0) - d0,
+    attackerGain: d(p0, q1) - d0,
+  };
+}
+
 export function crisisDecisionPoints(
   owner: any,
   combat: any,
@@ -461,6 +509,7 @@ export function crisisDecisionPoints(
   const healIn = ((owner.healIn ?? []) as any[]).map((h) => ({
     t: h.timestamp,
     src: h.srcUnitId,
+    id: String(h.spellId ?? ""),
     a: Math.abs(h.effectiveAmount ?? h.amount ?? 0),
   }));
   const ownerCasts = ((owner.spellCastEvents ?? []) as any[]).map((c) => ({
@@ -559,18 +608,31 @@ export function crisisDecisionPoints(
     const dmg2sRounded = Math.round(dmg2s * 100) / 100;
     const dangerous = dmg2sRounded >= CRISIS_MIN_DMG2S;
     const castsIn = ownerCasts.filter((c) => inWin(c.t));
-    const selfHeal =
-      healIn
-        .filter((h) => h.t > t && h.t <= w1 && h.src === owner.id)
+    const ownHealInWin = healIn.filter(
+      (h) => h.t > t && h.t <= w1 && h.src === owner.id,
+    );
+    const selfHeal = ownHealInWin.reduce((n, h) => n + h.a, 0) / x.max;
+    // GH #93: only heals from spells the owner cast inside the window are a
+    // press; the rest was already ticking
+    const castIdsInWin = new Set(castsIn.map((c) => c.id));
+    const selfHealFresh =
+      ownHealInWin
+        .filter((h) => castIdsInWin.has(h.id))
         .reduce((n, h) => n + h.a, 0) / x.max;
 
     // one kite predicate, shared with burstWindowDecisionPoints (see kitedAway)
-    const kite = kitedAway(
-      owner,
-      [...attackers].map((id) => unitById.get(id)),
-      t,
-      w1,
-    );
+    const attackerUnits = [...attackers].map((id) => unitById.get(id));
+    const kiteGain = kitedAway(owner, attackerUnits, t, w1);
+    const kiteWho = kiteGain
+      ? kiteAttribution(owner, attackerUnits, t, w1)
+      : null;
+    // GH #93: attacker-explained only when the attackers' own movement opens
+    // the gain and the owner's does not; unknown or mixed stays "kite"
+    const attackerMoved =
+      !!kiteWho &&
+      kiteWho.ownerGain < KITE_GAIN_YARDS &&
+      kiteWho.attackerGain >= KITE_GAIN_YARDS;
+    const kite = kiteGain && !attackerMoved;
 
     // User ruling 2026-09-14: a break or mobility press inside the window gets
     // its own RESPONSE_WINDOW_MS to pay off (see CRISIS_MOBILITY_PRESS_IDS).
@@ -617,8 +679,11 @@ export function crisisDecisionPoints(
         );
     }
 
+    const freshSelfHeal = selfHealFresh >= SELF_HEAL_BIG || followUp.selfHeal;
     const responses: DecisionPointResponses = {
-      selfHeal: selfHeal >= SELF_HEAL_BIG || followUp.selfHeal,
+      selfHeal: freshSelfHeal,
+      carriedHeal: !freshSelfHeal && selfHeal >= SELF_HEAL_BIG,
+      attackerMoved: attackerMoved && !followUp.kite,
       wall: castsIn.some((c) => PERSONAL_WALL_IDS.has(c.id)) || followUp.wall,
       protective:
         castsIn.some((c) => CRISIS_PROTECTIVE_ANSWER_IDS.has(c.id)) ||
@@ -652,6 +717,8 @@ export function crisisDecisionPoints(
     );
     const responded =
       responses.selfHeal ||
+      responses.carriedHeal ||
+      responses.attackerMoved ||
       responses.wall ||
       responses.protective ||
       responses.external ||
