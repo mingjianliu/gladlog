@@ -18,6 +18,7 @@ import {
 import { PVP_TALENT_REPLACES_GENERATED } from "../data/pvpTalentReplacesGenerated";
 import { OFFENSIVE_RACIAL_SPELL_IDS } from "../data/racialAbilities";
 import { getEnglishSpellName, spellEffectData } from "../data/spellEffectData";
+import { CORPUS_COOLDOWN_PATCHES } from "../data/spellEffectOverrides";
 import spellIdListsData from "../data/spellIdLists";
 import { reachesAlly } from "../data/spellTargeting";
 import { SpellTag } from "../data/spellTypes";
@@ -1458,6 +1459,19 @@ export function applyCdTalentModifiers(
   talentedSpellIds: Set<string> | null,
   pvpTalentIds: Set<string>,
 ): { cooldownSeconds: number; charges: number } {
+  // BACKLOG #45: a corpus cooldown patch whose number already contains the
+  // talents (The Hunt 60 s) must not have the DB2 talent rows stacked on top.
+  const patch = CORPUS_COOLDOWN_PATCHES[spellId];
+  if (patch?.talentsIncluded)
+    return applyCdModifiers(
+      (CD_TALENT_MODIFIERS[spellId] ?? []).filter(
+        (m) => m.effect === "extra_charge",
+      ),
+      baseCooldownSeconds,
+      baseCharges,
+      talentedSpellIds,
+      pvpTalentIds,
+    );
   return applyCdModifiers(
     CD_TALENT_MODIFIERS[spellId],
     baseCooldownSeconds,

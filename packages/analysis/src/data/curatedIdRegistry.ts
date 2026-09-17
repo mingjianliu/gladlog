@@ -89,6 +89,7 @@ import {
 } from "../utils/talentBehaviors";
 import {
   CRISIS_MOBILITY_PRESS_IDS,
+  CRISIS_PROC_ANSWERS,
   CRISIS_PROTECTIVE_ANSWER_IDS,
 } from "../analysis/crisisDecisionPoints";
 import { KW_MAJOR_DEFENSIVE_IDS } from "./abilityProfile";
@@ -110,6 +111,7 @@ import {
   OPPRESSING_ROAR_SPELL_ID,
 } from "./spellEffectData";
 import {
+  CORPUS_COOLDOWN_PATCHES,
   CORPUS_DURATION_PATCHES,
   DISPEL_TYPES,
   SPELL_EFFECT_OVERRIDES,
@@ -447,6 +449,10 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   t("CORPUS_DURATION_PATCHES", "data/spellEffectOverrides.ts", "aura", () =>
     keys(CORPUS_DURATION_PATCHES),
   ),
+  // BACKLOG #45 (2026-09-17): corpus-corrected arena cooldowns (The Hunt 60 s).
+  t("CORPUS_COOLDOWN_PATCHES", "data/spellEffectOverrides.ts", "cast", () =>
+    keys(CORPUS_COOLDOWN_PATCHES),
+  ),
   t("OPPRESSING_ROAR_SPELL_ID", "data/spellEffectData.ts", "aura", () => [
     OPPRESSING_ROAR_SPELL_ID,
   ]),
@@ -483,6 +489,11 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
     "cast",
     () => [...CRISIS_PROTECTIVE_ANSWER_IDS],
   ),
+  // BACKLOG #43 (2026-09-17): low-HP proc marker auras + the casts they make.
+  t("CRISIS_PROC_ANSWERS", "analysis/crisisDecisionPoints.ts", "mixed", () => [
+    ...CRISIS_PROC_ANSWERS.keys(),
+    ...[...CRISIS_PROC_ANSWERS.values()].flatMap((v) => [...v.triggers]),
+  ]),
   t(
     "CRISIS_MOBILITY_PRESS_IDS",
     "analysis/crisisDecisionPoints.ts",

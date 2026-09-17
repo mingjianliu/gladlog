@@ -128,6 +128,47 @@ describe("crisisDecisionPoints", () => {
     expect(p.responded).toBe(true);
   });
 
+  // BACKLOG #43 (user ruling 2026-09-14/17): a low-HP talent proc answers the
+  // crisis on its own; the cast it made is the proc's, not the owner's press
+  it("proc: Well-Honed Instincts marker + its Frenzied Regeneration cast in the window → proc, not selfHeal, responded", () => {
+    const o = unit({
+      auraEvents: [
+        {
+          timestamp: T0 + 2100,
+          spellId: "382912",
+          srcUnitId: "H",
+          destUnitId: "H",
+          logLine: { event: LogEvent.SPELL_AURA_APPLIED, timestamp: T0 + 2100 },
+        },
+      ],
+      spellCastEvents: [{ timestamp: T0 + 2100, spellId: "22842" }],
+      healIn: [
+        {
+          timestamp: T0 + 2500,
+          srcUnitId: "H",
+          spellId: "22842",
+          amount: 20,
+          effectiveAmount: 20,
+        },
+      ],
+    });
+    const p = crisisDecisionPoints(o, combat(o))[0]!;
+    expect(p.responses.proc).toBe(true);
+    expect(p.responses.selfHeal).toBe(false);
+    expect(p.responses.carriedHeal).toBe(false);
+    expect(p.procNames).toEqual(["Well-Honed Instincts"]);
+    expect(p.responded).toBe(true);
+    // the same cast WITHOUT the marker is the owner's own press
+    const pressed = unit({
+      spellCastEvents: [{ timestamp: T0 + 2100, spellId: "22842" }],
+      healIn: o.healIn,
+    });
+    const q = crisisDecisionPoints(pressed, combat(pressed))[0]!;
+    expect(q.responses.proc).toBe(false);
+    expect(q.responses.selfHeal).toBe(true);
+    expect(q.procNames).toEqual([]);
+  });
+
   // GH #93 (user ruling 2026-09-15): a HoT pressed before the window still
   // answers the crisis but is not a press
   it("carried heal: ≥15% from a HoT cast before the window is carriedHeal, not selfHeal, still responded", () => {

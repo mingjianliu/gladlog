@@ -292,3 +292,41 @@ for (const [id, durationSeconds] of Object.entries(CORPUS_DURATION_PATCHES)) {
       durationSeconds,
     } as IMinedSpell;
 }
+
+// ── Corpus-corrected COOLDOWNS (BACKLOG #45, user ruling 2026-09-17 「60秒」) ──
+// Same discipline as the duration patches above, opposite safety direction:
+// a shorter cooldown makes "it was already off cooldown" judgements MORE
+// frequent, so nothing enters here without a hard floor in the recast-gap
+// histogram AND a user ruling. `talentsIncluded` = the observed value is
+// the FINAL arena cooldown; `applyCdTalentModifiers` skips the DB2 talent
+// rows for such an id (they would stack on top of a number that already
+// contains them and undershoot the floor). Registered in curatedIdRegistry.
+export interface CorpusCooldownPatch {
+  cooldownSeconds: number;
+  talentsIncluded: boolean;
+}
+export const CORPUS_COOLDOWN_PATCHES: Record<string, CorpusCooldownPatch> = {
+  // The Hunt (Havoc): DB2 SpellCooldowns 90 s, Eternal Hunt −15 s → 75 s, but
+  // the full-archive 1/10 recast-gap histogram (recastGapHistogram.ts,
+  // 2026-09-15) has a hard floor at 60 s (58 s ×1, 60 s ×108, 61 s ×366,
+  // 62 s ×331 …) and no data-side source for the last 15 s (no category /
+  // label / class-mask SpellMod, no PvP rule spell, no hotfix). 75 × 0.8 = 60
+  // matches a "−20 % in PvP" server rule nobody can show. User ruling
+  // 2026-09-17: patch to 60 s, talents included.
+  "370965": { cooldownSeconds: 60, talentsIncluded: true },
+};
+for (const [id, patch] of Object.entries(CORPUS_COOLDOWN_PATCHES)) {
+  const cur = SPELL_EFFECT_OVERRIDES[id];
+  if (cur)
+    (cur as { cooldownSeconds?: number }).cooldownSeconds =
+      patch.cooldownSeconds;
+  else
+    SPELL_EFFECT_OVERRIDES[id] = {
+      ...(SPELL_EFFECTS_GENERATED as Record<string, IMinedSpell>)[id],
+      spellId: id,
+      name:
+        (SPELL_EFFECTS_GENERATED as Record<string, IMinedSpell>)[id]?.name ??
+        id,
+      cooldownSeconds: patch.cooldownSeconds,
+    } as IMinedSpell;
+}

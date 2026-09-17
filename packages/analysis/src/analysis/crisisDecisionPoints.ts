@@ -108,6 +108,13 @@ export interface DecisionPointResponses {
   control: boolean;
   peel: boolean;
   kite: boolean;
+  /** BACKLOG #43 (user ruling 2026-09-14/17): a low-HP protection talent
+   * TRIGGERED on its own inside the window (`CRISIS_PROC_ANSWERS` marker aura
+   * applied to the owner). Counts as answered — "你自动触发了 X,这一波不需要再
+   * 交别的" — but it is not a press and must never be described as one; the
+   * spell the proc cast (Frenzied Regeneration, Regrowth) is subtracted from
+   * the owner's own presses so it cannot double as `selfHeal` / `wall`. */
+  proc: boolean;
 }
 export interface DecisionPoint {
   /** the crossing re-anchored onto the prompt's render grid — always
@@ -131,6 +138,9 @@ export interface DecisionPoint {
   /** owner's own active answer: selfHeal ∨ wall ∨ external ∨ control ∨ kite
    * (peel is a teammate's action — rendered, never credited to the owner) */
   responded: boolean;
+  /** the low-HP procs that fired in the window (BACKLOG #43), by talent
+   * name — for the "you auto-triggered X" phrasing; empty when none */
+  procNames: string[];
   selfHealPct: number;
   /** gate 3, "has a tool" (spec §1d, GH #59): trivially true for a healer
    * (self-heal always exists). For a DPS owner: `!rooted || wallReady ||
@@ -471,6 +481,39 @@ export function kiteAttribution(
  * kicked when the teammate dropped must never be told they did nothing.
  * Registered as a shared predicate — same id sets, same lookback constant.
  */
+/**
+ * Low-HP protection procs (BACKLOG #43, user ruling 2026-09-14 "自动 proc 可以
+ * 算进去,但话术要变" and 2026-09-17 "可以做一下"). Keyed by the proc's MARKER
+ * aura — the internal-cooldown buff the game applies to the owner the instant
+ * the talent fires — with the spell(s) the proc casts, so those casts can be
+ * subtracted from the owner's own presses. Only talents whose marker is
+ * actually observed in the archive as a self-applied low-HP trigger are
+ * listed (crisisProcMarkerProbe.ts, 1/40 archive, 2026-09-17):
+ *  - Well-Honed Instincts 382912: 1,039 applications, 1,039 self-sourced,
+ *    985 at ≤ 49 % [STATE] HP (364 at ≤ 40 %, 621 in 40–49 % — the 1 s grid
+ *    reads the crossing late). The proc's Frenzied Regeneration is almost
+ *    never logged as a SPELL_CAST_SUCCESS (25 within 1 s, 92 within 3 s,
+ *    922 none) — only its heal events carry 22842, which is why the trigger
+ *    id is subtracted from the HEAL side too, not just the cast side.
+ *  - Dream Guide 1278914 is NOT a proc marker: 153 applications, only 22
+ *    self-sourced, 88 at ≥ 80 % HP — it is the buff the talent hands out,
+ *    so it is deliberately absent.
+ *  - Guided Prayer 404357 and Last Resort 209258 have no observable sibling
+ *    id at all. An undetectable proc must not be guessed from a cast
+ *    (BACKLOG #43 待做 1: "逐个用日志核实,不要猜").
+ * Registered in curatedIdRegistry.
+ */
+export const CRISIS_PROC_ANSWERS: ReadonlyMap<
+  string,
+  { name: string; triggers: ReadonlySet<string> }
+> = new Map([
+  // Well-Honed Instincts (Druid class talent, ~100 % pick): below 40 % HP,
+  // casts Frenzied Regeneration 22842 once per 120 s; 382912 = the 120 s marker.
+  ["382912", { name: "Well-Honed Instincts", triggers: new Set(["22842"]) }],
+]);
+/** a triggered cast this close to the marker application belongs to the proc */
+export const CRISIS_PROC_TRIGGER_TOL_MS = 1500;
+
 /** The three id sets above, exported under crisis-prefixed names for
  * `analysis/teammateCrisis.ts` (GH #95, 2026-09-17): a healer's answer TOWARD a
  * teammate is judged against the same external / control / enemy-burst sets
@@ -614,6 +657,20 @@ export function crisisDecisionPoints(
     }
   }
 
+  // BACKLOG #43: proc marker auras applied to the owner (self-sourced)
+  const procMarkers = ((owner.auraEvents ?? []) as any[])
+    .filter(
+      (a) =>
+        a.logLine?.event === LogEvent.SPELL_AURA_APPLIED &&
+        a.destUnitId === owner.id &&
+        a.srcUnitId === owner.id &&
+        CRISIS_PROC_ANSWERS.has(String(a.spellId ?? "")),
+    )
+    .map((a) => ({
+      t: a.timestamp as number,
+      ...CRISIS_PROC_ANSWERS.get(String(a.spellId))!,
+    }));
+
   const out: DecisionPoint[] = [];
   const emittedSeconds = new Set<number>();
   for (const x of crossings) {
@@ -647,17 +704,32 @@ export function crisisDecisionPoints(
     // gets rendered (facts.dmg2sPct), so `dangerous` must agree with it.
     const dmg2sRounded = Math.round(dmg2s * 100) / 100;
     const dangerous = dmg2sRounded >= CRISIS_MIN_DMG2S;
-    const castsIn = ownerCasts.filter((c) => inWin(c.t));
+    // BACKLOG #43: a proc that fired in the window, and the cast(s) it made —
+    // those casts are the proc's, not the owner's press
+    const procsIn = procMarkers.filter((m) => inWin(m.t));
+    const procTriggered = (c: { t: number; id: string }) =>
+      procsIn.some(
+        (m) =>
+          m.triggers.has(c.id) &&
+          Math.abs(c.t - m.t) <= CRISIS_PROC_TRIGGER_TOL_MS,
+      );
+    const castsIn = ownerCasts.filter((c) => inWin(c.t) && !procTriggered(c));
     const ownHealInWin = healIn.filter(
       (h) => h.t > t && h.t <= w1 && h.src === owner.id,
     );
+    const procHealIds = new Set(procsIn.flatMap((m) => [...m.triggers]));
     const selfHeal = ownHealInWin.reduce((n, h) => n + h.a, 0) / x.max;
+    // healing the proc produced is neither a press nor a carried HoT
+    const selfHealOwn =
+      ownHealInWin
+        .filter((h) => !procHealIds.has(h.id))
+        .reduce((n, h) => n + h.a, 0) / x.max;
     // GH #93: only heals from spells the owner cast inside the window are a
     // press; the rest was already ticking
     const castIdsInWin = new Set(castsIn.map((c) => c.id));
     const selfHealFresh =
       ownHealInWin
-        .filter((h) => castIdsInWin.has(h.id))
+        .filter((h) => castIdsInWin.has(h.id) && !procHealIds.has(h.id))
         .reduce((n, h) => n + h.a, 0) / x.max;
 
     // one kite predicate, shared with burstWindowDecisionPoints (see kitedAway)
@@ -722,7 +794,8 @@ export function crisisDecisionPoints(
     const freshSelfHeal = selfHealFresh >= SELF_HEAL_BIG || followUp.selfHeal;
     const responses: DecisionPointResponses = {
       selfHeal: freshSelfHeal,
-      carriedHeal: !freshSelfHeal && selfHeal >= SELF_HEAL_BIG,
+      carriedHeal: !freshSelfHeal && selfHealOwn >= SELF_HEAL_BIG,
+      proc: procsIn.length > 0,
       attackerMoved: attackerMoved && !followUp.kite,
       wall: castsIn.some((c) => PERSONAL_WALL_IDS.has(c.id)) || followUp.wall,
       protective:
@@ -763,7 +836,8 @@ export function crisisDecisionPoints(
       responses.protective ||
       responses.external ||
       responses.control ||
-      responses.kite;
+      responses.kite ||
+      responses.proc;
     const tSec = anchor.tSec;
     // Gate 3 (spec §1d): trivially true for a healer (self-heal is always a
     // tool). For a DPS owner, `!rooted` alone already satisfies it — being
@@ -793,6 +867,7 @@ export function crisisDecisionPoints(
       friendDiedWithin15s,
       responses,
       responded,
+      procNames: [...new Set(procsIn.map((m) => m.name))],
       selfHealPct: Math.round(selfHeal * 100),
       hasTool,
       feasible: !inCC && !lockedOut && !diedInWindow && hasTool,

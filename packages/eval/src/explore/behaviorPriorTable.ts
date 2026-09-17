@@ -92,6 +92,8 @@ const RESPONSE_KEYS = [
   "kite",
   "carriedHeal",
   "attackerMoved",
+  // BACKLOG #43 (2026-09-17): a low-HP talent proc answered the crisis
+  "proc",
 ] as const;
 
 export { dmgBinOf };

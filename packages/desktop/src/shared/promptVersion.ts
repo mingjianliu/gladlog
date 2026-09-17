@@ -483,4 +483,12 @@
 //  sufficed" claim). New hardFailure class checkTeammateCrisisRefConsistency.
 //  Enemy burst on the new card is a cue only when the press was ≥2 s before
 //  the drop (facts.burstCue), never a counterfactual.
-export const PROMPT_VERSION = 72;
+//  v73 (2026-09-17, BACKLOG #43 + #45, user rulings 2026-09-17): the crisis
+//  response taxonomy gains `proc` — a low-HP talent that fired on its own
+//  (Well-Honed Instincts 382912 → Frenzied Regeneration, detected by its
+//  marker aura; Dream Guide 1278914 turned out to be a hand-out buff, not a
+//  marker, and stays out) answers the crisis, its cast / heal is subtracted
+//  from the owner's presses, and the crisis-no-response legend explains the
+//  "proc" / "carriedHeal" refTop tokens. The Hunt's arena
+//  cooldown is patched to 60 s (CORPUS_COOLDOWN_PATCHES, talents included).
+export const PROMPT_VERSION = 73;

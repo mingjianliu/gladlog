@@ -386,7 +386,7 @@ logged but not scheduled:
 
 ## 22. Temporary rate limiting: dispel/trinket-type candidates per-round cap (logged 2026-08-06; **TEMPORARY status ended 2026-08-20 — kept long-term by user ruling**, see the closing note at the end of this entry)
 
-*Archived to [BACKLOG-archive.md#22-temporary-rate-limiting-dispeltrinket-type-candidates-per-round-cap-logged-2026-08-06-temporary-status-ended-2026-08-20--kept-long-term-by-user-ruling-see-the-closing-note-at-the-end-of-this-entry](BACKLOG-archive.md#22-temporary-rate-limiting-dispeltrinket-type-candidates-per-round-cap-logged-2026-08-06-temporary-status-ended-2026-08-20--kept-long-term-by-user-ruling-see-the-closing-note-at-the-end-of-this-entry).*
+_Archived to [BACKLOG-archive.md#22-temporary-rate-limiting-dispeltrinket-type-candidates-per-round-cap-logged-2026-08-06-temporary-status-ended-2026-08-20--kept-long-term-by-user-ruling-see-the-closing-note-at-the-end-of-this-entry](BACKLOG-archive.md#22-temporary-rate-limiting-dispeltrinket-type-candidates-per-round-cap-logged-2026-08-06-temporary-status-ended-2026-08-20--kept-long-term-by-user-ruling-see-the-closing-note-at-the-end-of-this-entry)._
 
 ## 14. eval / QA system residuals (logged 2026-07-20)
 
@@ -612,7 +612,7 @@ leak arm assignment, real matchId aggregation always goes through `blind/mapping
 
 ## 23. GitHub issues batch 1 (logged 2026-08-11, 4 issues opened by users on GH)
 
-*Archived to [BACKLOG-archive.md#23-github-issues-batch-1-logged-2026-08-11-4-issues-opened-by-users-on-gh](BACKLOG-archive.md#23-github-issues-batch-1-logged-2026-08-11-4-issues-opened-by-users-on-gh).*
+_Archived to [BACKLOG-archive.md#23-github-issues-batch-1-logged-2026-08-11-4-issues-opened-by-users-on-gh](BACKLOG-archive.md#23-github-issues-batch-1-logged-2026-08-11-4-issues-opened-by-users-on-gh)._
 
 ---
 
@@ -860,7 +860,7 @@ New season log collection/archival (launchd loading etc.) see #19, user-managed,
 
 ## 24. `dr` reverse query always empty — `analyzeOutgoingCCChains` target side hardcoded Hostile
 
-*Archived to [BACKLOG-archive.md#24-dr-reverse-query-always-empty--analyzeoutgoingccchains-target-side-hardcoded-hostile](BACKLOG-archive.md#24-dr-reverse-query-always-empty--analyzeoutgoingccchains-target-side-hardcoded-hostile).*
+_Archived to [BACKLOG-archive.md#24-dr-reverse-query-always-empty--analyzeoutgoingccchains-target-side-hardcoded-hostile](BACKLOG-archive.md#24-dr-reverse-query-always-empty--analyzeoutgoingccchains-target-side-hardcoded-hostile)._
 
 ## 25. Two cases of mechanistic misuse in product suggestions (caught by deep dive experiment first-match blind review, match 60ab1e8f)
 
@@ -920,15 +920,15 @@ per-card annotations, answers contains reviewer's verbatim notes).
 
 ## 26. Two high-value streams discarded by the parsing layer from raw logs: mana values + SPELL_CAST_FAILED
 
-*Archived to [BACKLOG-archive.md#26-two-high-value-streams-discarded-by-the-parsing-layer-from-raw-logs-mana-values--spell_cast_failed](BACKLOG-archive.md#26-two-high-value-streams-discarded-by-the-parsing-layer-from-raw-logs-mana-values--spell_cast_failed).*
+_Archived to [BACKLOG-archive.md#26-two-high-value-streams-discarded-by-the-parsing-layer-from-raw-logs-mana-values--spell_cast_failed](BACKLOG-archive.md#26-two-high-value-streams-discarded-by-the-parsing-layer-from-raw-logs-mana-values--spell_cast_failed)._
 
 ## 27. `aurasActiveAt`'s slice(0,10) truncation can hide critical auras (hard CC pushed out by cosmetic auras)
 
-*Archived to [BACKLOG-archive.md#27-aurasactiveats-slice010-truncation-can-hide-critical-auras-hard-cc-pushed-out-by-cosmetic-auras](BACKLOG-archive.md#27-aurasactiveats-slice010-truncation-can-hide-critical-auras-hard-cc-pushed-out-by-cosmetic-auras).*
+_Archived to [BACKLOG-archive.md#27-aurasactiveats-slice010-truncation-can-hide-critical-auras-hard-cc-pushed-out-by-cosmetic-auras](BACKLOG-archive.md#27-aurasactiveats-slice010-truncation-can-hide-critical-auras-hard-cc-pushed-out-by-cosmetic-auras)._
 
 ## 28. `buildAuraIntervals` dual-close-event race fabricates phantom interval (logged 2026-08-14, root-caused by reviewer from #27 replay)
 
-*Archived to [BACKLOG-archive.md#28-buildauraintervals-dual-close-event-race-fabricates-phantom-interval-logged-2026-08-14-root-caused-by-reviewer-from-27-replay](BACKLOG-archive.md#28-buildauraintervals-dual-close-event-race-fabricates-phantom-interval-logged-2026-08-14-root-caused-by-reviewer-from-27-replay).*
+_Archived to [BACKLOG-archive.md#28-buildauraintervals-dual-close-event-race-fabricates-phantom-interval-logged-2026-08-14-root-caused-by-reviewer-from-27-replay](BACKLOG-archive.md#28-buildauraintervals-dual-close-event-race-fabricates-phantom-interval-logged-2026-08-14-root-caused-by-reviewer-from-27-replay)._
 
 ## 30. P1/P2 distillation final-review debt (logged 2026-08-15, `final-review.md`) — renumbered from the original "## 29" to make way for the cooldown-ledger t=0 blind spot entry below, which now legitimately occupies "## 29"
 
@@ -1108,7 +1108,7 @@ copy-pasted into a second call site. No consumer needs this yet; revisit if/when
 
 ## 32. `mana-pressure`'s OOM windows are not scoped to the reporting round — cross-round contamination in Solo Shuffle (logged 2026-08-16, surfaced by #26 Task 7's A/B batch, BLOCKING for shipping the flag) — **FIXED 2026-08-16**
 
-*Archived to [BACKLOG-archive.md#32-mana-pressures-oom-windows-are-not-scoped-to-the-reporting-round--cross-round-contamination-in-solo-shuffle-logged-2026-08-16-surfaced-by-26-task-7s-ab-batch-blocking-for-shipping-the-flag--fixed-2026-08-16](BACKLOG-archive.md#32-mana-pressures-oom-windows-are-not-scoped-to-the-reporting-round--cross-round-contamination-in-solo-shuffle-logged-2026-08-16-surfaced-by-26-task-7s-ab-batch-blocking-for-shipping-the-flag--fixed-2026-08-16).*
+_Archived to [BACKLOG-archive.md#32-mana-pressures-oom-windows-are-not-scoped-to-the-reporting-round--cross-round-contamination-in-solo-shuffle-logged-2026-08-16-surfaced-by-26-task-7s-ab-batch-blocking-for-shipping-the-flag--fixed-2026-08-16](BACKLOG-archive.md#32-mana-pressures-oom-windows-are-not-scoped-to-the-reporting-round--cross-round-contamination-in-solo-shuffle-logged-2026-08-16-surfaced-by-26-task-7s-ab-batch-blocking-for-shipping-the-flag--fixed-2026-08-16)._
 
 ## 33. Mana attribution conditioned on healing-deficit avoidability (successor to #26's two unshipped candidates)
 
@@ -2068,11 +2068,11 @@ free 5.1 → 2.1),7 个空档的光环覆盖因边界修正而变。踢锁定的
 
 ## 39. getPriority 的分档是先验,不看实际后果(logged 2026-08-23,用户拍板单独立项;#34(b2) 顺带发现)
 
-*Archived to [BACKLOG-archive.md#39-getpriority-的分档是先验不看实际后果logged-2026-08-23用户拍板单独立项34b2-顺带发现](BACKLOG-archive.md#39-getpriority-的分档是先验不看实际后果logged-2026-08-23用户拍板单独立项34b2-顺带发现).*
+_Archived to [BACKLOG-archive.md#39-getpriority-的分档是先验不看实际后果logged-2026-08-23用户拍板单独立项34b2-顺带发现](BACKLOG-archive.md#39-getpriority-的分档是先验不看实际后果logged-2026-08-23用户拍板单独立项34b2-顺带发现)._
 
 ## 40. 八类"从没读过的日志事件"逐条核对产品侧 + 五条已读进解析层(logged 2026-08-23)
 
-*Archived to [BACKLOG-archive.md#40-八类从没读过的日志事件逐条核对产品侧--五条已读进解析层logged-2026-08-23](BACKLOG-archive.md#40-八类从没读过的日志事件逐条核对产品侧--五条已读进解析层logged-2026-08-23).*
+_Archived to [BACKLOG-archive.md#40-八类从没读过的日志事件逐条核对产品侧--五条已读进解析层logged-2026-08-23](BACKLOG-archive.md#40-八类从没读过的日志事件逐条核对产品侧--五条已读进解析层logged-2026-08-23)._
 
 ## 41. 外部数据源借用清单:PvpMultiplier / hotfix / 踢技锁定官方化 / 数据刷新(logged 2026-09-04,用户裁决顺序 2→1→3→4)
 
@@ -2204,13 +2204,13 @@ TrinityCore 15.7%;wago CSV 不含 hotfix(`hotfixes=` 参数被忽略,真言术�
 
 门槛前后数据(`burstMitigationOverlapProbe.ts`,天赋开关打开,S2 每 30 场,210 条候选;「掉血」= 目标在爆发期间血量下降的百分点中位数):
 
-| 覆盖门槛 | 保留 | 保留组掉血 | 保留组阵亡 | 去掉 | 去掉组掉血 | 去掉组阵亡 |
-|---|---|---|---|---|---|---|
-| 25% | 164 | 11 | 14 | 46 | 18 | 2 |
-| **30%(当前)** | 148 | 10 | 13 | 62 | 21 | 3 |
-| 35% | 132 | 8 | 11 | 78 | 18 | 5 |
-| 40% | 117 | 5 | 11 | 93 | 18 | 5 |
-| 50% | 72 | 2 | 8 | 138 | 17 | 8 |
+| 覆盖门槛      | 保留 | 保留组掉血 | 保留组阵亡 | 去掉 | 去掉组掉血 | 去掉组阵亡 |
+| ------------- | ---- | ---------- | ---------- | ---- | ---------- | ---------- |
+| 25%           | 164  | 11         | 14         | 46   | 18         | 2          |
+| **30%(当前)** | 148  | 10         | 13         | 62   | 21         | 3          |
+| 35%           | 132  | 8          | 11         | 78   | 18         | 5          |
+| 40%           | 117  | 5          | 11         | 93   | 18         | 5          |
+| 50%           | 72   | 2          | 8          | 138  | 17         | 8          |
 
 待做:这张表只看目标掉血,没看「换目标是否更好」,也只是 1/30 样本。定值前可在全量上重跑同一探针,并按门槛分档抽真实例子让用户看。改值只动一个常量,但要 bump PROMPT_VERSION。
 
@@ -2225,10 +2225,18 @@ TrinityCore 15.7%;wago CSV 不含 hotfix(`hotfixes=` 参数被忽略,真言术�
 **候选(来自 M6 脚本型天赋分类,`reports/talent-integration-2026-09-13/scriptedTriage.md`)**:低血自动触发类——精确本能(生命值低于 40% 自动狂暴回复)、向善祷言(低于 25% 自动免费荣耀圣令)、最后一搏(受到致命伤害变恶魔形态)、梦境向导(低于 40% 自动愈合)等。
 
 **待做**:
+
 1. 语料里怎么认出「这是触发不是主动按」:触发往往没有对应的 SPELL_CAST_SUCCESS,或者是天赋专属的光环 id。逐个用日志核实,不要猜。
 2. 危机判定里加一个独立的「proc 兜底」类别(和 `responses.protective` 并列,不并进去),`crisis-no-response` 遇到它时不指控;模型拿到的事实里要单独标出「自动触发」。
 3. 话术只在呈现层区分;参照表要不要单列这一类,改的时候一起定。
-改共享谓词会连带重建参照表(全量约 4 小时)并 bump PROMPT_VERSION。
+   改共享谓词会连带重建参照表(全量约 4 小时)并 bump PROMPT_VERSION。
+
+**2026-09-17 用户裁「可以做一下」,已落地(PROMPT_VERSION 73):**
+
+1. 日志核实(`packages/eval/scripts/crisisProcMarkerProbe.ts`,1/40 全量 2,993 回合):**精确本能**触发时游戏给玩家挂内置冷却标记光环 382912(1,039 次全部自施、985 次在 ≤49% 血量),触发出的狂暴回复**几乎不记成施法**(1 秒内 25、3 秒内 92、没有 922)、只在治疗事件里带 22842 → 判定从治疗侧也扣掉它;**梦境向导** 1278914 不是标记(153 次只有 22 次自施、88 次在 ≥80% 血量,是发给别人的 buff)不登记;向善祷言 404357、最后一搏 209258 **没有任何可观测的兄弟 id**,按「不要猜」不登记。只登记精确本能一条。
+2. `crisisDecisionPoints` 新增 `responses.proc`(`CRISIS_PROC_ANSWERS`,已登记 curatedIdRegistry):窗口内标记光环挂上 = 应对了;触发出的施法在 ±1.5 s 内从玩家自己的按键里扣掉,不能再算 selfHeal / wall;它的治疗也不算 carriedHeal。`crisis-no-response` 因此不指控;`procNames` 给呈现层。
+3. 参照表键加 `proc`,crisis-no-response 图例解释 `proc` / `carriedHeal` 两个 refTop 记号。**行为参照表要重扫**(排在 GH #95 全量扫描之后)。
+4. 没动的:`cd-hoarded`(它看的是「握着就绪的减伤」,没读 responses)—— 要不要「proc 了就不指控握牌」待裁。
 
 ## 44. 持续时间天赋:全量验证后仍没进表的 31 条(logged 2026-09-14,GH #96 M5)
 
@@ -2236,14 +2244,14 @@ TrinityCore 15.7%;wago CSV 不含 hotfix(`hotfixes=` 参数被忽略,真言术�
 
 **(a) 数字完全对得上,但点了天赋的样本不到 20 个(预先定的门槛)**——最可能进表,等数据:
 
-| 天赋 | 效果 | 点了的 | 没点的 |
-|---|---|---|---|
-| 强效升变 453729 | 消散 6 → 8 秒 | 12/12 在 8 秒 | 93 在 6 秒 |
-| 虚渺斗篷 457022 | 暗影斗篷 5 → 7 秒 | 15/15 在 7 秒 | 590 在 5 秒 |
-| 乌索尔的坚韧 393611 | 树皮术 12 → 14 秒 | 13/13 在 14 秒 | 6,831 在 12 秒 |
+| 天赋                 | 效果                | 点了的         | 没点的         |
+| -------------------- | ------------------- | -------------- | -------------- |
+| 强效升变 453729      | 消散 6 → 8 秒       | 12/12 在 8 秒  | 93 在 6 秒     |
+| 虚渺斗篷 457022      | 暗影斗篷 5 → 7 秒   | 15/15 在 7 秒  | 590 在 5 秒    |
+| 乌索尔的坚韧 393611  | 树皮术 12 → 14 秒   | 13/13 在 14 秒 | 6,831 在 12 秒 |
 | 召唤黑眼契约 1279521 | 召唤黑眼 20 → 25 秒 | 11/11 在 25 秒 | 1,291 在 20 秒 |
-| 亢奋之血 1259465 | 冲动 15 → 19 秒 | 8/8 在 19 秒 | 927 在 15 秒 |
-| 愤怒锁链 389715 | 悲苦咒符 3 → 4 秒 | 3/3 在 4 秒 | 2,361 在 3 秒 |
+| 亢奋之血 1259465     | 冲动 15 → 19 秒     | 8/8 在 19 秒   | 927 在 15 秒   |
+| 愤怒锁链 389715      | 悲苦咒符 3 → 4 秒   | 3/3 在 4 秒    | 2,361 在 3 秒  |
 
 **用户 2026-09-14:「这些是不是本来也没人用啊」——对。** 选取率(COMBATANT_INFO 全量天赋):强效升变 神牧 0.4% / 暗牧 11%;虚渺斗篷 刺杀 0.2% / 敏锐 6%;邪眼契约 痛苦 1.1%;亢奋之血 狂徒 0%(90 套);乌索尔的坚韧只有 4 套守护德、愤怒锁链只有 1 套复仇 DH。进表对产品输出几乎没有影响 → **维持 20 个门槛,优先级最低**。
 
@@ -2254,6 +2262,7 @@ TrinityCore 15.7%;wago CSV 不含 hotfix(`hotfixes=` 参数被忽略,真言术�
 **(c) DB2 数值为 0,效果写在服务器脚本里(5 条)**——旋荡星辰(超凡之盟 / 化身 / 知识古树)、侵蚀之影(暗影之舞)、法术火焰宝珠(燃烧)。燃烧实测点了的人落在 15.5 / 14.5 / 16.5 秒(不是固定加值,像是按事件延长),靠静态加值建不了模。**做法**:按 BACKLOG #43 同类思路,逐个看日志机制再决定;归入 M6 脚本型天赋队列。
 
 **(d) 语料里看不到或判不了**——
+
 - 施法 id 和光环 id 不一致、别名规则也没接上:黑暗(196718,长夜 +3 秒 / 黑暗遮蔽 +2 秒)、反魔法领域(同化 +2 秒)、升腾(飞升卓越 +3 秒)、第一支舞(暗影之舞)。黑暗的光环是 209426,施法者之外的人身上才有,别名规则按「施法者 300 毫秒内施加」没抓到。**做法**:给这几个补光环 id 映射(官方 SpellEffect 触发链或语料),再重跑。
 - 冰霜新星(强化冰霜新星 +2 秒):点了的人 214 格里只有 67 格在 8 秒,其余提前断(定身被伤害打断)——这是控制类,寿命被打断污染,**做法**:改用「没有伤害打断的定身段」重测。
 - 全量里点了的人为 0:苦痛之焰(灵魂献祭 +50%,没点的 5,924 格全在 5 秒)。割碎(生死循环)没有基础时长数据。
@@ -2267,20 +2276,22 @@ TrinityCore 15.7%;wago CSV 不含 hotfix(`hotfixes=` 参数被忽略,真言术�
 - **成立(8 行)**:绝望祷言 −20 秒(天使之慈;点了的最快 70 秒,没点的最快 90 秒)、黑暗契约 −15 秒(契约供体;44 / 59.9 秒)、法术反制 −5 秒(慧心灵性)、寒冰墙 −30%、图腾之涌对陷地图腾 / 根基图腾 / 反击图腾 / 清毒图腾 −5 秒。
 - **点了的人比「天赋后的冷却」还快**——官方这条减少是真的,但还有别的东西让冷却更短,产品现在的数字仍偏长(方向安全:只会少说「当时技能已经好了」,不会多说):
 
-| 技能 ← 天赋 | 官方基础 | 天赋后 | 点了的实测最快 | 违例格 / 点了的格 |
-|---|---|---|---|---|
-| 猎杀 ← 永恒狩猎 | 90 秒 | 75 秒 | 58.5 秒 | 2,644 / 2,953 |
-| 操控时间 ← 时间大师 / 扭转时光 | 60 秒 | 55 / 50 秒 | 40 秒 | 1,696 / 4,049、785 / 1,636 |
-| 电能图腾 ← 图腾之涌 | 60 秒 | 55 秒 | 28.2 秒 | 917 / 4,645 |
-| 自然之力 ← 早春 | 60 秒 | 45 秒 | 30 秒 | 1,658 / 1,940 |
-| 振翼 / 甩尾 ← 沉重振翅 / 横扫 | 180 秒 | 60 秒 | 39.4 / 58.3 秒 | 18 / 422、1 / 20 |
+| 技能 ← 天赋                    | 官方基础 | 天赋后     | 点了的实测最快 | 违例格 / 点了的格          |
+| ------------------------------ | -------- | ---------- | -------------- | -------------------------- |
+| 猎杀 ← 永恒狩猎                | 90 秒    | 75 秒      | 58.5 秒        | 2,644 / 2,953              |
+| 操控时间 ← 时间大师 / 扭转时光 | 60 秒    | 55 / 50 秒 | 40 秒          | 1,696 / 4,049、785 / 1,636 |
+| 电能图腾 ← 图腾之涌            | 60 秒    | 55 秒      | 28.2 秒        | 917 / 4,645                |
+| 自然之力 ← 早春                | 60 秒    | 45 秒      | 30 秒          | 1,658 / 1,940              |
+| 振翼 / 甩尾 ← 沉重振翅 / 横扫  | 180 秒   | 60 秒      | 39.4 / 58.3 秒 | 18 / 422、1 / 20           |
 
 **待做**:逐个找额外的冷却来源——候选是 PvP 天赋、按事件减冷却的脚本型天赋(比如电能图腾「每控到一个敌人缩短冷却」)、官方热修复没进覆盖层。找到后按同一扫描复验再补。猎杀基础 90 秒而实测几乎全员 60 秒左右,优先查它是不是基础值本身就错(赛季改动)。
 
 **2026-09-15 查证(`recastGapHistogram.ts` 全量 1/10,`probeSpellCooldown.ts`)**:
+
 - **猎杀(浩劫)是固定的 60 秒**:两次施放间隔的分布在 60 秒处有一道硬底(58 秒 1 次、60 秒 108 次、61 秒 366 次、62 秒 331 次……),不是随事件缩短。但官方数据里找不到来源:SpellCooldowns 类别冷却 90 秒;按类别(2427)、标签(16 / 66 / 292)、职业掩码能影响它冷却的只有永恒狩猎 −15 秒(另有一个非 PvP 物品 Stalker Sling −30 秒);无职业的 PvP 规则法术、热修复覆盖层里都没有。75 × 0.8 = 60 正好吻合「PvP 里冷却 −20%」这种服务器规则,但没有数据证明。**需要用户裁**:是否按语料补一个「猎杀 PvP 冷却 60 秒」的语料补丁(把冷却改短会让「当时技能已经好了」的判断变多,属于有风险的方向,按游戏行为规则没有机制证据时不自己改)。
 - **操控时间(火法 / 冰法)、电能图腾、自然之力是动态缩短**:间隔从 30–40 秒一直均匀铺到基础值,没有硬底——是按事件缩短冷却的脚本型效果(比如电能图腾每控住一人缩短),静态表达不了。现状偏长、方向安全,**不处理**。
 
+- **2026-09-17 用户裁「60 秒」,已落地**:`CORPUS_COOLDOWN_PATCHES`(spellEffectOverrides.ts,已登记 curatedIdRegistry)猎杀 370965 = 60 s、`talentsIncluded`,`applyCdTalentModifiers` 对这类 id 不再叠 DB2 天赋行(永恒狩猎 −15 会把 60 压成 45)。验证 `ledgerImpossibleCastProbe.ts`(1/20 全量,5,876 回合,988 个带猎杀的台账,1,401 个相邻施放间隔):台账说在冷却却放出来了的次数 **75 秒口径 1,196 / 90 秒口径 1,355 → 60 秒口径 0**,最短间隔 60.4 秒。
 - **样本不够**:增辉唤魔的交织之线(「你的法术冷却 −10%」)几乎所有技能点了的人都是 0–13 个;咒符 / 月光束 / 风之疾步图腾等少于 20 个。等数据。
 
 ## 46. M6 脚本型天赋剩余项(logged 2026-09-15,GH #96)
