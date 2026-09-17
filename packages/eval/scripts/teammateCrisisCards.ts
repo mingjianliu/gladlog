@@ -36,7 +36,6 @@ import {
   ENEMY_BURST_LOOKBACK_MS,
   RESPONSE_PRE_MS,
   RESPONSE_WINDOW_MS,
-  SELF_HEAL_BIG,
 } from "@gladlog/analysis/src/analysis/crisisDecisionPoints";
 import {
   resolveMitigation,
