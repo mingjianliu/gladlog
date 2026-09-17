@@ -1,6 +1,6 @@
 # Teammate crisis — design (GH #95)
 
-Status: measured, awaiting user ruling. 2026-09-16.
+Status: measured through two codex rounds, awaiting user ruling. 2026-09-17.
 
 ## Rulings so far
 
@@ -67,12 +67,36 @@ Hand-read cards: the first is usually the target's own wall (Cloak / IBF / Obsid
 
 Outcome caveat (Value-Gate rule 4): stacking two defensives has the LOWEST death rate of every shape; a "wasted" claim rests on the second cooldown's marginal value and cost, never on the outcome.
 
+**After codex R1 (2026-09-16, absorbs attributed by spell id, B also priced over its FULL duration):** priced 4,024; B's contribution over the overlap p50 5.1 % max HP, over B's full run p50 9 % (p75 16.9 %, p90 26.8 %) — 702 of 3,756 priced pairs have B blocking ≥ 20 % of max HP after A expired. So the overlap-only number understates B by about half: codex finding 5 confirmed. "One sufficed" is therefore not a defensible counterfactual.
+
+**User ruling 2026-09-16:** "我觉得我们是不是有点还是'技能给得太重了'?…一个人给了大技能的话,另外一个人其实给个小技能,或者稍微规避一下位置,也许就能错开…第二个技能还能挡致命伤。或者说,我们甚至有可能算错了" — **给重了 is a FACT card only, never an accusation.** Render: A by whom, B by whom, overlap seconds, B's blocked damage over the overlap AND over its full run where priceable (immunity / Sacrifice / Guardian Spirit: no number), and the alternatives the second caster had at that moment (a minor defensive off cooldown, or repositioning). The player judges; the product does not.
+
+## After codex R1 (2026-09-16): the recorded rule
+
+codex astra R1 was OPPOSE (7 findings, verified against the code; conversation codex:01a0ad30-2695-7852-8944-22bbb570699a). Adopted: (1) healer feasibility over the whole window (blocked at t, t+1, t+2, t+3 s → out; a cast started before the window with no success = channelling → out; LoS from `hasLineOfSight`, false → out; a missing position sample is unknown, never "did not move"); (2) a HoT the healer placed earlier COUNTS as answered (the user's 2026-09-15 ruling, which the first probe contradicted), and a fresh heal must come from a spell cast ON THIS TEAMMATE inside the window; (3) clean-idle vs healer-answered deaths stratified by bracket × 2 s damage; (4) no teammate-side feasibility gate (a stunned teammate is a reason to act; excluding 3 s deaths selects on survival); (5) double-defensive priced over B's full run; (6) absorbs attributed by spell id. Not adopted as an accusation: (7) timing — see below.
+
+Same 1/10 slice, 11,536 rounds: 60,413 dangerous teammate crossings (teammate died within 3 s 3,681, teammate in CC 5,932 — both kept). Healer removed: blocked at t 18,959, blocked later in the window 7,954, channelling 101, out of reach 2,228, LoS blocked 1,246. **Accusable 29,925.**
+
+Healer answered (fresh heal on the teammate / external / protective / peel / earlier HoT ticking): 29,753. Earlier-HoT-only answers: 23,192 — the single biggest category; without the user's ruling these would have been accusations.
+
+**Nobody answered: 172** (0.015 / round). Of those, healer casting on someone else 54; idle 118; idle minus a cast start in the window 0 minus a ≥ 8 yd move 4 → **79 clean idle points, 0.0068 / round (one in ~150 rounds), teammate death 78 %**; healer-answered death 10–16 % in every bracket × severity stratum. 71 of the 79 are 3v3 (20 / 22 / 29 across 10–20 / 20–30 / ≥ 30 % damage, death 90 / 77 / 72 %); Solo Shuffle 4, 2v2 4. 93 of the 172 coincide with no existing candidate (cd-hoarded is the usual overlap).
+
+Reading: once the healer's own earlier HoTs count and the whole window is checked, "the healer did nothing while a teammate dropped" is rare and almost always fatal. The contrast survives stratification, but it is a descriptive association (codex 3): access and competing danger are only partly observed.
+
+## After codex R2 (2026-09-17): the recorded rule
+
+codex R2 was OPPOSE with three conditions, all verified in code and adopted: (1) unknown LoS no longer passes (it had been counted and admitted); healer mana at t from the advanced-actor power samples, < 10 % = no usable action; a long inactive stretch (no cast for ≥ 15 s on either side of the window) is a healer who is not playing — disconnected / AFK — reported separately, never an accusation; absorbs attributed by spell AND caster; (2) the answered comparator now enters the stratum only after the same feasibility / reach / LoS exclusions as clean idle (it had been counted before them); (3) the 3v3 concentration is not an exclusion artifact — raw idle is 106 in 3v3 vs 8 in Solo Shuffle vs 4 in 2v2 before any position filter, on 19,853 / 31,277 / 9,283 opportunities — and the position-missing cases are round-end cases (33 of 35 within 3 s of the round's end), which the "unknown ≠ did not move" rule already excludes.
+
+Same slice, final: nobody answered 172 → idle 118 → minus round-end position gaps 35, moved 4, out of mana 6, inactive stretch 17 (14 of those teammates died — the disconnected-healer class) → **60 clean idle points, 0.0052 / round (one in ~190 rounds), teammate death 77 %**, against 7–13 % for healers who answered under the SAME filters, in every stratum with a sample: 3v3 10–20 % 18 idle (89 %) vs 1,605 answered (9 %); 20–30 % 16 (75 %) vs 2,604 (12 %); ≥ 30 % 24 (75 %) vs 4,760 (13 %). 58 of the 60 are 3v3.
+
+Hand-read cards under this rule (6): every teammate died within 10 s; the healer had an external off cooldown in 4 of 6, was 7–34 yd away, had no HoT on the teammate, cast nothing for 4.5 s. What the log cannot show: whether the healer was under pressure elsewhere on screen, drinking, or simply not reacting. This is a descriptive association (codex 3), rare, and almost always fatal.
+
 ## Proposed product shapes (for the user)
 
-1. **`teammate-crisis-idle` — accuse.** Owner = healer; a teammate crossing (shipped predicate, dangerous, feasible for the teammate); healer not blocked (`actionBlockedAt`), within 40 yd, no cast success, no cast start, no ≥ 8 yd move in [t − 1.5 s, t + 3 s]; no answer toward the teammate (GH #93 fresh-heal rule). Facts rendered: teammate HP and 2 s damage, attackers, externals off cooldown, carried HoT healing ("your earlier HoTs restored N %"). Phrasing per the user: "如果提前开了也许能规避;出现这个情况以后,你会开什么技能补救?" Reference table: teammate death ≤ 10 s, idle vs answered, per bracket. Expected ~0.024 / round.
+1. **`teammate-crisis-idle` — accuse (rare, ~1 in 190 rounds) or render as an observation — codex still opposes an accusation; user's call.** Owner = healer; a teammate crossing (shipped predicate, dangerous); healer not blocked at any second of the window (`actionBlockedAt`), no channel in progress, within 40 yd with LoS, no cast success, no cast start, no ≥ 8 yd move in [t − 1.5 s, t + 3 s], positions known; no answer toward the teammate — fresh heal cast on them, external, protective, peel, OR an earlier HoT still ticking on them. Facts rendered: teammate HP and 2 s damage, attackers, externals off cooldown, carried HoT healing ("your earlier HoTs restored N %"). Phrasing per the user: "如果提前开了也许能规避;出现这个情况以后,你会开什么技能补救?" Reference table: teammate death ≤ 10 s, idle vs answered, per bracket. Expected ~0.024 / round.
 2. **"casting elsewhere" — fact, not accusation.** 2,303 of the 2,723 nobody-answered points had the healer casting on someone else; that is triage. Render "[TEAMMATE CRISIS] X at 35 %, you were casting on Y" as context; no candidate.
-3. **`double-defensive` — fact, or a low-cap candidate — user's call.** Two majors from two casters, target in crisis, second's contribution added back keeps the target above 40 %, second is a major cooldown (never Fade / PW:S). Render "队友已交 A,你又给了 B,B 多挡了约 N %". Unpriced pairs (immunity / Sacrifice / Guardian Spirit) render without a number. Expected ~0.05 / round.
-4. **Timing** folds into shape 1's phrasing; no separate predicate (a pre-emptive rule needs a burst-start fact the log only gives after the fact).
+3. **`double-defensive` — fact only (user ruling 2026-09-16, above).** Two majors from two casters, target in crisis, second's contribution added back keeps the target above 40 %, second is a major cooldown (never Fade / PW:S). Render "队友已交 A,你又给了 B,B 多挡了约 N %". Unpriced pairs (immunity / Sacrifice / Guardian Spirit) render without a number. Expected ~0.05 / round.
+4. **Timing** — no predicate. codex R1 (7): a post-crossing inactivity test cannot establish an earlier warning cue, so "如果提前开了也许能规避" is not supported by evidence; the question form "出现这个情况以后,你会开什么技能补救?" is. **Whether the pre-emptive sentence stays is the user's call.**
 
 Overlap with existing signals: 1,682 of the 2,723 nobody-answered points coincide with a cd-hoarded / healing-gap / slow-defensive-response / external-unused candidate within 3 s; the user ruled overlap is not a reason to skip. Dedup at the menu (one crisis, one card) is an implementation question.
 

@@ -72,6 +72,8 @@ const t = {
   bothNeeded: 0,
   bothNeededDied: 0,
   secondContribPct: [] as number[],
+  /** B's contribution over its FULL duration (not only the overlap), % max HP */
+  secondFullContribPct: [] as number[],
   pairKinds: {} as Record<string, number>,
   /** was the target actually in crisis (<= 40 % at some point from 3 s before
    * the second aura to the end of the overlap) or was the stack pre-emptive? */
@@ -176,11 +178,14 @@ for (const f of files) {
               (n, d) => n + Math.abs(d.effectiveAmount ?? d.amount ?? 0),
               0,
             );
+          // codex R1: attribute absorbs by the absorbing SPELL, not the caster (a
+          // second shield from the same caster must not be credited to B)
           const absorbed = ((target.absorbsIn ?? []) as any[])
             .filter(
               (e) =>
                 e.timestamp >= fromMs &&
                 e.timestamp <= toMs &&
+                String(e.spellId) === second.spellId &&
                 (e.srcUnitName === second.srcUnitName ||
                   e.srcUnitId === caster2?.id),
             )
@@ -209,6 +214,14 @@ for (const f of files) {
             t.unpricedReason["positional-or-zero"] =
               (t.unpricedReason["positional-or-zero"] ?? 0) + 1;
           }
+          // codex R1: B may matter most AFTER A expires — price B over its full run too
+          const bToMs = legacy.startTime + second.toS * 1000;
+          const dmgFull = ((target.damageIn ?? []) as any[])
+            .filter((d) => d.timestamp >= fromMs && d.timestamp <= bToMs)
+            .reduce(
+              (n, d) => n + Math.abs(d.effectiveAmount ?? d.amount ?? 0),
+              0,
+            );
           const died = deaths.some((d) => d > fromMs && d <= toMs + 10_000);
           if (contrib === null) {
             t.unpriced++;
@@ -216,6 +229,12 @@ for (const f of files) {
           }
           t.priced++;
           const contribPct = contrib / maxHp;
+          if (how.startsWith("pct")) {
+            const bb = pct!.pctMin / 100;
+            t.secondFullContribPct.push(
+              Math.round(((dmgFull * bb) / (1 - bb) / maxHp) * 1000) / 10,
+            );
+          }
           t.secondContribPct.push(Math.round(contribPct * 1000) / 10);
           const inOverlap = samples.filter((s) => s.t >= fromMs && s.t <= toMs);
           const minHp = inOverlap.length

@@ -59,6 +59,7 @@ import {
 } from "@gladlog/analysis/src/utils/cooldowns";
 import { ccSpellIds, rootSpellIds } from "@gladlog/analysis/src/data/spellTags";
 import { isHealerSpec } from "@gladlog/analysis/src/utils/cooldowns";
+import { hasLineOfSight } from "@gladlog/analysis/src/utils/losAnalysis";
 import {
   resolveMitigation,
   strongestComponentPct,
@@ -111,7 +112,16 @@ const t = {
   healerBlockedLockedOut: 0,
   healerBlockedDead: 0,
   outOfReach: 0,
+  /** codex R1 (2026-09-16): feasibility must hold over the whole window, not
+   * the crossing instant — blocked at t, t+1 s, t+2 s or t+3 s; a channel that
+   * started before the window and never completed; LoS false or unknown */
+  healerBlockedLater: 0,
+  healerChannelling: 0,
+  losBlocked: 0,
+  losUnknown: 0,
   accusable: 0,
+  teammateDiedInWindow: 0,
+  teammateInCC: 0,
   double: 0,
   healerOnly: 0,
   teammateOnly: 0,
@@ -154,6 +164,34 @@ const t = {
   idleMovedFar: 0,
   idleClean: 0,
   idleCleanDied: 0,
+  idleOutOfMana: 0,
+  /** hand-read idle cards (2026-09-16): 6/6 teammate deaths, healer with
+   * nothing to show — the innocent explanation codex predicted is a healer who
+   * is not playing at all (disconnected / AFK / dead-in-spirit). An idle window
+   * inside a longer stretch with no cast for ≥ 15 s on either side is
+   * "inactive", reported separately and never an accusation. */
+  idleInactiveStretch: 0,
+  idleInactiveStretchDied: 0,
+  /** codex R2 condition 3: for idle points whose endpoint position is missing,
+   * how close was the round's end? (a Shuffle round that ends 0.2 s after the
+   * crossing cannot supply a t + 3 s sample) */
+  posUnknownNearRoundEnd: 0,
+  posUnknownFarFromRoundEnd: 0,
+  idleExclusionByBracket: {} as Record<
+    string,
+    {
+      idle: number;
+      castStart: number;
+      posUnknown: number;
+      moved: number;
+      clean: number;
+    }
+  >,
+  /** codex R1: clean-idle vs healer-answered deaths by bracket × severity */
+  strata: {} as Record<
+    string,
+    { idle: number; idleDied: number; answered: number; answeredDied: number }
+  >,
   overlapAny: 0,
   overlapByType: {} as Record<string, number>,
   neitherOverlapAny: 0,
@@ -238,8 +276,14 @@ for (const f of files) {
         const role = isHealerSpec(mate.spec) ? "healer" : "dps";
         for (const p of crisisDecisionPoints(mate, legacy, role as never)) {
           t.teammatePoints++;
-          if (!(p.feasible && p.dangerous)) continue;
+          // codex R1: the teammate's own feasibility (in CC, locked out, died within
+          // 3 s) is not a reason to drop the HEALER's opportunity — a stunned
+          // teammate is the strongest reason to act, and excluding 3 s deaths
+          // selects on survival. Keep the danger floor only; report the rest.
+          if (!p.dangerous) continue;
           t.dangerousFeasible++;
+          if (p.diedInWindow) t.teammateDiedInWindow++;
+          if (p.inCC) t.teammateInCC++;
           const b = (t.byBracket[bracket] ??= {
             points: 0,
             neither: 0,
@@ -290,9 +334,12 @@ for (const f of files) {
           // heals whose spell the healer cast INSIDE the window count as the
           // healer answering; a window whose only healing is carried ticks is
           // reported separately and never counts as an answer.
+          // fresh = the heal's spell was cast ON THIS TEAMMATE inside the window
+          // (codex R1: spellId alone lets a HoT recast on someone else make an old
+          // tick on this teammate look fresh)
           const castIdsInWin = new Set(
             ownerCasts
-              .filter((c) => inWin(c.timestamp))
+              .filter((c) => inWin(c.timestamp) && c.destUnitId === mate.id)
               .map((c) => String(c.spellId ?? "")),
           );
           const healEvents = ((mate.healIn ?? []) as any[]).filter(
@@ -303,10 +350,22 @@ for (const f of files) {
             castIdsInWin.has(String(h.spellId ?? "")),
           );
           if (freshHeals.length) kinds.push("freshHeal");
-          else if (healEvents.length) t.carriedHealOnly++;
+          else if (healEvents.length) {
+            // user ruling 2026-09-15 (GH #93): a HoT placed earlier still ANSWERS
+            // the crisis — it is not a press, and never an accusation
+            t.carriedHealOnly++;
+            kinds.push("carriedHeal");
+          }
           if (healed >= SELF_HEAL_BIG && freshHeals.length)
             kinds.push("bigHeal");
           const healerAnswered = kinds.length > 0;
+          const stratumKey = `${bracket}|${p.dmg2s >= 0.3 ? ">=30%" : p.dmg2s >= 0.2 ? "20-30%" : "10-20%"}`;
+          const stratum = (t.strata[stratumKey] ??= {
+            idle: 0,
+            idleDied: 0,
+            answered: 0,
+            answeredDied: 0,
+          });
           for (const k of new Set(kinds))
             t.healerAnswerKind[k] = (t.healerAnswerKind[k] ?? 0) + 1;
           const pos1 = posOf(owner, p.tMs);
@@ -315,6 +374,28 @@ for (const f of files) {
             pos1 && pos2 ? Math.hypot(pos1.x - pos2.x, pos1.y - pos2.y) : null;
           if (dist !== null && dist <= 40) t.inReach40++;
           const blocked = actionBlockedAt(owner, legacy, p.tMs);
+          const blockedLater = [1000, 2000, 3000].some(
+            (dt) => actionBlockedAt(owner, legacy, p.tMs + dt).blocked,
+          );
+          const starts = (owner.castStartEvents ?? []) as any[];
+          const successes = ownerCasts;
+          // a cast started before the window with no success after it = channelling / interrupted-in-progress
+          const channelling = starts.some(
+            (c) =>
+              c.timestamp < w0 &&
+              c.timestamp >= w0 - 5000 &&
+              !successes.some(
+                (x) => x.timestamp >= c.timestamp && x.timestamp <= w1,
+              ),
+          );
+          if (!blocked.blocked && blockedLater) {
+            t.healerBlockedLater++;
+            continue;
+          }
+          if (!blocked.blocked && channelling) {
+            t.healerChannelling++;
+            continue;
+          }
           if (blocked.blocked) {
             t.healerBlocked++;
             if (blocked.inCC) t.healerBlockedInCC++;
@@ -326,7 +407,27 @@ for (const f of files) {
             t.outOfReach++;
             continue;
           }
+          const los = hasLineOfSight(
+            String(legacy.zoneId ?? legacy.startInfo?.zoneId ?? ""),
+            pos1!,
+            pos2!,
+          );
+          if (los === false) {
+            t.losBlocked++;
+            continue;
+          }
+          if (los === null) {
+            // codex R2: unknown access cannot justify an accusation
+            t.losUnknown++;
+            continue;
+          }
           t.accusable++;
+          // codex R2 condition 2: the answered comparator enters the stratum ONLY
+          // after the same feasibility / reach / LoS exclusions as clean idle
+          if (healerAnswered) {
+            stratum.answered++;
+            if (p.diedWithin10s) stratum.answeredDied++;
+          }
           const overlaps = cands.filter(
             (c) =>
               OVERLAP_TYPES.has(c.type) &&
@@ -467,9 +568,64 @@ for (const f of files) {
                 !!pA && !!pB && Math.hypot(pA.x - pB.x, pA.y - pB.y) >= 8;
               if (castStart) t.idleCastStartInWindow++;
               if (moved) t.idleMovedFar++;
-              if (!castStart && !moved) {
+              // codex R1: a missing position at either end is "unknown", not "did not move"
+              const posKnown = !!pA && !!pB;
+              if (!posKnown) {
+                if (legacy.endTime - w1 < 3000) t.posUnknownNearRoundEnd++;
+                else t.posUnknownFarFromRoundEnd++;
+              }
+              const manaSample = ((owner.advancedActions ?? []) as any[])
+                .filter((x) => Math.abs(x.timestamp - p.tMs) <= 1500)
+                .flatMap((x) => (x.advancedActorPowers ?? []) as any[])
+                .find((pw) => Number(pw.type) === 0 && (pw.max ?? 0) > 0);
+              const manaPct = manaSample
+                ? (manaSample.current / manaSample.max) * 100
+                : null;
+              const outOfMana = manaPct !== null && manaPct < 10;
+              if (outOfMana) t.idleOutOfMana++;
+              // bracket split of the idle exclusions — is the 3v3 skew of clean
+              // idle real, or do Shuffle / 2v2 idle points fall out here?
+              const ex = (t.idleExclusionByBracket[bracket] ??= {
+                idle: 0,
+                castStart: 0,
+                posUnknown: 0,
+                moved: 0,
+                clean: 0,
+              });
+              ex.idle++;
+              if (castStart) ex.castStart++;
+              else if (!posKnown) ex.posUnknown++;
+              else if (moved) ex.moved++;
+              else ex.clean++;
+              const lastBefore = Math.max(
+                -Infinity,
+                ...ownerCasts
+                  .filter((c) => c.timestamp < w0)
+                  .map((c) => c.timestamp),
+              );
+              const nextAfter = Math.min(
+                Infinity,
+                ...ownerCasts
+                  .filter((c) => c.timestamp > w1)
+                  .map((c) => c.timestamp),
+              );
+              const inactiveStretch =
+                w0 - lastBefore >= 15000 && nextAfter - w1 >= 15000;
+              if (inactiveStretch) {
+                t.idleInactiveStretch++;
+                if (p.diedWithin10s) t.idleInactiveStretchDied++;
+              }
+              if (
+                !castStart &&
+                posKnown &&
+                !moved &&
+                !outOfMana &&
+                !inactiveStretch
+              ) {
                 t.idleClean++;
                 if (p.diedWithin10s) t.idleCleanDied++;
+                stratum.idle++;
+                if (p.diedWithin10s) stratum.idleDied++;
               }
             }
             const sliceKey = `${busy ? "busy" : "idle"}|${externalReady ? "externalReady" : "noExternal"}`;

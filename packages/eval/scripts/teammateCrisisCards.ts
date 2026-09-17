@@ -42,6 +42,7 @@ import {
   strongestComponentPct,
 } from "@gladlog/analysis/src/data/mitigationComponents";
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
+import { hasLineOfSight } from "@gladlog/analysis/src/utils/losAnalysis";
 import { buildAuraIntervals } from "@gladlog/analysis/src/utils/auraIntervals";
 import spellIdLists from "@gladlog/analysis/src/data/spellIdLists";
 import { ccSpellIds, rootSpellIds } from "@gladlog/analysis/src/data/spellTags";
@@ -149,13 +150,24 @@ for (const f of files) {
         );
         const role = isHealerSpec(mate.spec) ? "healer" : "dps";
         for (const p of crisisDecisionPoints(mate, legacy, role as never)) {
-          if (!(p.feasible && p.dangerous)) continue;
-          if (actionBlockedAt(owner, legacy, p.tMs).blocked) continue;
+          // codex R1: keep the danger floor only (teammate-side feasibility is not
+          // a reason to drop the healer's opportunity); healer must be free over
+          // the WHOLE window, not just at t; a channel started before the window
+          // with no success counts as busy
+          if (!p.dangerous) continue;
+          if (
+            [0, 1000, 2000, 3000].some(
+              (dt) => actionBlockedAt(owner, legacy, p.tMs + dt).blocked,
+            )
+          )
+            continue;
           const pos1 = posOf(owner, p.tMs);
           const pos2 = posOf(mate, p.tMs);
           const dist =
             pos1 && pos2 ? Math.hypot(pos1.x - pos2.x, pos1.y - pos2.y) : null;
           if (dist === null || dist > 40) continue;
+          const los = hasLineOfSight(String(legacy.zoneId ?? ""), pos1!, pos2!);
+          if (los === false) continue;
 
           const w0 = p.tMs - RESPONSE_PRE_MS;
           const w1 = p.tMs + RESPONSE_WINDOW_MS;
@@ -195,7 +207,12 @@ for (const f of files) {
           // healer answering; ticks of an earlier HoT are shown separately
           const castIdsInWin = new Set(
             ownerCasts
-              .filter((c) => c.timestamp >= w0 && c.timestamp <= w1)
+              .filter(
+                (c) =>
+                  c.timestamp >= w0 &&
+                  c.timestamp <= w1 &&
+                  c.destUnitId === mate.id,
+              )
               .map((c) => String(c.spellId ?? "")),
           );
           const healEvents = ((mate.healIn ?? []) as any[]).filter(
@@ -221,6 +238,11 @@ for (const f of files) {
               ].join(", ")})`,
             );
           const carriedPct = Math.round(sum(carried) * 100);
+          // user ruling 2026-09-15: a HoT placed earlier still answers the crisis
+          if (!freshHeals.length && carried.length)
+            healerActs.push(
+              `earlier HoTs restored ${carriedPct}% max HP (not a press)`,
+            );
           const healerAnswered = healerActs.length > 0;
 
           // the teammate's own answer, from the shipped taxonomy
@@ -237,9 +259,20 @@ for (const f of files) {
             )
             .map((cd: any) => nameOf(String(cd.spellId)));
 
-          const healerIdle = !ownerCasts.some(
-            (c) => c.timestamp >= w0 && c.timestamp <= w1,
+          const startedBefore = ((owner.castStartEvents ?? []) as any[]).some(
+            (c) =>
+              c.timestamp < w0 &&
+              c.timestamp >= w0 - 5000 &&
+              !ownerCasts.some(
+                (x) => x.timestamp >= c.timestamp && x.timestamp <= w1,
+              ),
           );
+          const healerIdle =
+            !startedBefore &&
+            !ownerCasts.some((c) => c.timestamp >= w0 && c.timestamp <= w1) &&
+            !((owner.castStartEvents ?? []) as any[]).some(
+              (c) => c.timestamp >= w0 && c.timestamp <= w1,
+            );
           const mateSpentDefensive =
             p.responses.wall || p.responses.protective || p.responses.external;
           const healerSpentDefensive = healerActs.some(
