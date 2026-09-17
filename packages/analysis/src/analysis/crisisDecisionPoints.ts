@@ -462,6 +462,38 @@ export function kiteAttribution(
   };
 }
 
+/**
+ * "Could this player have acted at this instant?" — the same three blockers
+ * crisisDecisionPoints gates its own crossings on (gate 1 hard CC, gate 2
+ * interrupt lockout / silence, gate 4 dead), exposed for consumers that ask
+ * the question about SOMEONE ELSE at an arbitrary time. GH #95 needs it for
+ * the healer while a TEAMMATE is the one crossing: a healer who was stunned or
+ * kicked when the teammate dropped must never be told they did nothing.
+ * Registered as a shared predicate — same id sets, same lookback constant.
+ */
+export function actionBlockedAt(
+  unit: any,
+  combat: any,
+  tMs: number,
+): { inCC: boolean; lockedOut: boolean; dead: boolean; blocked: boolean } {
+  const cc = buildFilteredAuraIntervals(unit, ccSpellIds, combat);
+  const silence = buildFilteredAuraIntervals(unit, SILENCE_IDS, combat);
+  const inCC = cc.some((i) => i.startMs <= tMs && i.endMs >= tMs);
+  const interrupted = ((unit?.actionIn ?? []) as any[])
+    .filter((a) => a.logLine?.event === LogEvent.SPELL_INTERRUPT)
+    .some(
+      (a) =>
+        (a.timestamp as number) >= tMs - LOCKOUT_LOOKBACK_MS &&
+        (a.timestamp as number) <= tMs,
+    );
+  const lockedOut =
+    interrupted || silence.some((i) => i.startMs <= tMs && i.endMs >= tMs);
+  const dead = ((unit?.deathRecords ?? []) as any[]).some(
+    (d) => (d.timestamp as number) <= tMs,
+  );
+  return { inCC, lockedOut, dead, blocked: inCC || lockedOut || dead };
+}
+
 export function crisisDecisionPoints(
   owner: any,
   combat: any,
