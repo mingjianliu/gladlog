@@ -465,4 +465,11 @@
 //  The backlash-dispel `refCcExposureS` gate check
 //  compares on the producer's `fmtFactNum` grid (was raw String → 34 + 15
 //  false hard failures across the two runs). No candidate counts move.
-export const PROMPT_VERSION = 70;
+//  v71 (2026-09-16, GH #99): timeline deduplication / noise reduction —
+//  covers GH #99 items 1, 2, 4 (already landed 2026-09-16: Lay on Hands
+//  dedupe, verdict labels → conditions, [OFFENSIVE WINDOW] marker) and item 3
+//  (timeline event folding: [CC CAST] folds full target list into cast line;
+//  self-buff [ENEMY BUFF] folds into [ENEMY CD]; [MISSED PURGE OPPORTUNITY]
+//  folds unpurged duration and feasibility exemption into [ENEMY BUFF] or
+//  chained [ENEMY CD]).
+export const PROMPT_VERSION = 71;

@@ -60,11 +60,16 @@ import {
   formatMissedPurgeExemption,
   IDispelEvent,
   IDispelSummary,
+  IMissedPurgeWindow,
   wasRemovedByAllyDispel,
 } from "../utils/dispelAnalysis";
-import { extractAoeCCEvents, IOutgoingCCChain } from "../utils/drAnalysis";
+import {
+  extractAoeCCEvents,
+  IAoeCCEvent,
+  IOutgoingCCChain,
+} from "../utils/drAnalysis";
 import { enemyDefensiveEvents } from "../utils/enemyDefensives";
-import { IEnemyCDTimeline } from "../utils/enemyCDs";
+import { IEnemyCDCast, IEnemyCDTimeline } from "../utils/enemyCDs";
 import { computeEnemyInterruptAvailability } from "../utils/enemyInterrupts";
 import { IHealingGap } from "../utils/healingGaps";
 import { sumIncomingPressure } from "../utils/incomingPressure";
@@ -110,6 +115,7 @@ import {
   CRITICAL_NON_PLAYER_NPC_NAMES,
   DMG_SPIKE_THRESHOLD,
   extractEnemyMajorBuffIntervals,
+  IEnemyBuffInterval,
   extractOwnerCDBuffExpiry,
   getNpcIdFromGuid,
   getTopDamageSourcesInWindow,
@@ -199,7 +205,8 @@ export interface BuildMatchTimelineParams {
   enemyIdMap?: Map<string, number>;
   /**
    * AoE CC chains cast by friendly players on enemies. When provided,
-   * [CC CAST] events are emitted for AoE spells (non-single-target spells).
+   * AoE targets fold into the friendly cast line, or [CC CAST] events
+   * are emitted if no matching cast line exists.
    */
   outgoingCCChains?: IOutgoingCCChain[];
   allUnits?: ICombatUnit[];
@@ -554,6 +561,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       for (const app of chain.applications) {
         if (app.spellId !== spellId) continue;
         if (toRenderSecond(app.atSeconds) !== t) continue;
+        if (!app.drInfo) continue;
         return ` [DR: ${app.drInfo.category} ${app.drInfo.level}]`;
       }
     }
@@ -798,6 +806,64 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       bypassDebounce,
       id: nextPlaceholderId++,
     };
+  }
+
+  // ── GH #99 item 3 (Rule A): AoE CC folding into friendly cast lines ─────────
+  const aoeCCEvents =
+    outgoingCCChains && outgoingCCChains.length > 0
+      ? extractAoeCCEvents(outgoingCCChains)
+      : [];
+  const consumedAoeEvents = new Set<IAoeCCEvent>();
+
+  function findAndConsumeAoeCC(
+    castTimeSeconds: number,
+    casterName: string,
+    spellName: string,
+    isOwnerCast: boolean,
+  ): IAoeCCEvent | undefined {
+    const castSec = toRenderSecond(castTimeSeconds);
+    for (const aoe of aoeCCEvents) {
+      if (consumedAoeEvents.has(aoe)) continue;
+      if (toRenderSecond(aoe.atSeconds) !== castSec) continue;
+      if (aoe.spellName !== spellName) continue;
+      const aoeIsOwner =
+        aoe.casterName === owner.name ||
+        aoe.casterName.split("-")[0] === owner.name.split("-")[0] ||
+        pid(aoe.casterName) === pid(owner.name);
+      if (isOwnerCast) {
+        if (!aoeIsOwner) continue;
+      } else {
+        if (aoeIsOwner) continue;
+        const matchCaster =
+          aoe.casterName === casterName ||
+          aoe.casterName.split("-")[0] === casterName.split("-")[0] ||
+          pid(aoe.casterName) === pid(casterName);
+        if (!matchCaster) continue;
+      }
+      consumedAoeEvents.add(aoe);
+      return aoe;
+    }
+    return undefined;
+  }
+
+  // The cast line keeps its own target part verbatim (primary target plus any
+  // HP / velocity note) and the AoE landing list is appended after it; the
+  // primary target stays first even when it is absent from the landed list
+  // (immune / missed — 2/309 prompts on the first fold, both Intimidating
+  // Shout), so no (second, caster, spell, target) fact is lost by folding.
+  function formatAoeTargetPart(
+    aoe: IAoeCCEvent,
+    existingTargetPart: string,
+  ): string {
+    const labels = aoe.targets.map((t) => enemyPid(t.name));
+    const primary = existingTargetPart.match(/→ (\S+)/)?.[1] ?? "";
+    const others = primary ? labels.filter((l) => l !== primary) : labels;
+    const total =
+      primary && !labels.includes(primary) ? labels.length + 1 : labels.length;
+    const countNote = total > 1 ? ` [${total} enemies]` : "";
+    if (!existingTargetPart) return ` → ${others.join(", ")}${countNote}`;
+    if (others.length === 0) return `${existingTargetPart}${countNote}`;
+    return `${existingTargetPart}, ${others.join(", ")}${countNote}`;
   }
 
   const entries: Array<{
@@ -1164,6 +1230,18 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       if (manaNote) extraLines.push(manaNote);
 
       const prefix = ccSpellIds.has(cd.spellId) ? "[YOU] [CC]" : "[YOU] [CD]";
+      let effectiveTargetPart = targetPart;
+      if (isCC) {
+        const matchingAoe = findAndConsumeAoeCC(
+          cast.timeSeconds,
+          owner.name,
+          cd.spellName,
+          true,
+        );
+        if (matchingAoe) {
+          effectiveTargetPart = formatAoeTargetPart(matchingAoe, targetPart);
+        }
+      }
       // Class F (2026-07-20 eval): [CC ON TEAM] carries [DR: category level]
       // while CC the player casts did not — an asymmetric information gap that
       // led the model to transfer the semantics of enemy lines onto its own.
@@ -1314,7 +1392,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
 
       addEntry(
         cast.timeSeconds,
-        `${fmtTime(cast.timeSeconds)}  ${prefix}   ${displayNameWithChannel}${targetPart}${outgoingDrNote}${immuneNote}${empowerNote}${dampeningNote}${cheaperNote}${groundingNote}${interruptNote}${ownerHardCcTagAt(cast.timeSeconds)}${unnecessaryNote}`,
+        `${fmtTime(cast.timeSeconds)}  ${prefix}   ${displayNameWithChannel}${effectiveTargetPart}${outgoingDrNote}${immuneNote}${empowerNote}${dampeningNote}${cheaperNote}${groundingNote}${interruptNote}${ownerHardCcTagAt(cast.timeSeconds)}${unnecessaryNote}`,
         ...extraLines,
       );
     }
@@ -1654,9 +1732,19 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       // F95: Offensive CC casts should carry a CC annotation or use an [YOU] [CC] prefix.
       if (ccSpellIds.has(e.spellId)) {
         flushFold();
+        let effectiveTargetPart = targetPart;
+        const matchingAoe = findAndConsumeAoeCC(
+          timeSeconds,
+          owner.name,
+          displayName,
+          true,
+        );
+        if (matchingAoe) {
+          effectiveTargetPart = formatAoeTargetPart(matchingAoe, targetPart);
+        }
         addEntry(
           timeSeconds,
-          `${fmtTime(timeSeconds)}  [YOU] [CC]   ${displayName}${targetPart}${totemNote}${orderNote}${purgeNote}${ownerCcImmuneTag(e.spellId, timeSeconds)}`,
+          `${fmtTime(timeSeconds)}  [YOU] [CC]   ${displayName}${effectiveTargetPart}${totemNote}${orderNote}${purgeNote}${ownerCcImmuneTag(e.spellId, timeSeconds)}`,
           requestSnapshotPlaceholder(timeSeconds),
         );
         continue;
@@ -1871,7 +1959,17 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
             tgtLabel && ![...tgtLabel].some((c) => c.charCodeAt(0) > 127)
               ? ` → ${tgtLabel}`
               : "";
-          line = `${fmtTime(cast.timeSeconds)}  [TEAM] [CC]   ${pid(player.name)} (${spec}) cast ${cd.spellName}${tgt}${groundingNote}${unnecessaryNote}`;
+          let effectiveTgt = tgt;
+          const matchingAoe = findAndConsumeAoeCC(
+            cast.timeSeconds,
+            player.name,
+            cd.spellName,
+            false,
+          );
+          if (matchingAoe) {
+            effectiveTgt = formatAoeTargetPart(matchingAoe, tgt);
+          }
+          line = `${fmtTime(cast.timeSeconds)}  [TEAM] [CC]   ${pid(player.name)} (${spec}) cast ${cd.spellName}${effectiveTgt}${groundingNote}${unnecessaryNote}`;
         } else {
           line = `${fmtTime(cast.timeSeconds)}  [TEAM] [CD]   ${pid(player.name)} (${spec}): ${cd.spellName}${groundingNote}${unnecessaryNote}`;
         }
@@ -1886,8 +1984,9 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
 
   // ── [CC CAST] events — AoE CC cast by friendly players on enemies ──────────
 
-  if (outgoingCCChains && outgoingCCChains.length > 0) {
-    for (const event of extractAoeCCEvents(outgoingCCChains)) {
+  if (aoeCCEvents.length > 0) {
+    for (const event of aoeCCEvents) {
+      if (consumedAoeEvents.has(event)) continue;
       const casterLabel = pid(event.casterName);
       const targetLabels = event.targets
         .map((t) => enemyPid(t.name))
@@ -1901,19 +2000,110 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     }
   }
 
+  // ── GH #99 item 3 (Rules B & C): ENEMY BUFF, ENEMY CD, and MISSED PURGE folding ──
+
+  function sameEnemyUnit(name1: string, name2: string): boolean {
+    if (name1 === name2) return true;
+    if (name1.split("-")[0] === name2.split("-")[0]) return true;
+    if (enemyPid(name1) === enemyPid(name2)) return true;
+    return false;
+  }
+
+  const qualifyingMissedPurges =
+    DISPEL_FEATURE_FLAGS.F152_MISSED_PURGES_TIMELINE && canOffensivePurge(owner)
+      ? dispelSummary.missedPurgeWindows.filter((m) =>
+          HIGH_VALUE_PURGEABLE_BUFFS.has(m.spellId),
+        )
+      : [];
+
+  function formatPurgeAnnotationWithMiss(miss: IMissedPurgeWindow): string {
+    const rawExemption = formatMissedPurgeExemption(miss);
+    const exemptionPart = rawExemption
+      ? rawExemption.replace(/^\s*\|\s*/, "").replace(/\s*\|\s*/g, "; ")
+      : "";
+    const exemptionSuffix = exemptionPart ? `; ${exemptionPart}` : "";
+    return ` (purgeable; unpurged for ${Math.round(miss.durationSeconds)}s${exemptionSuffix})`;
+  }
+
+  const droppedBuffIntervals = new Set<IEnemyBuffInterval>();
+  const buffPurgeAnnotations = new Map<IEnemyBuffInterval, string>();
+  const cdPurgeAnnotations = new Map<IEnemyCDCast, string>();
+  const consumedMissedPurges = new Set<IMissedPurgeWindow>();
+
+  for (const [enemyName, intervals] of enemyBuffIntervals) {
+    for (const interval of intervals) {
+      // Step 1: Check if there is a matching missed purge window for this buff (Rule C)
+      let matchedMiss: IMissedPurgeWindow | undefined;
+      for (const miss of qualifyingMissedPurges) {
+        if (consumedMissedPurges.has(miss)) continue;
+        if (
+          toRenderSecond(miss.timeSeconds) !==
+          toRenderSecond(interval.startSeconds)
+        )
+          continue;
+        if (!sameEnemyUnit(miss.enemyName, enemyName)) continue;
+        if (
+          miss.spellName !== interval.spellName &&
+          miss.spellId !== interval.spellId
+        )
+          continue;
+        matchedMiss = miss;
+        consumedMissedPurges.add(miss);
+        break;
+      }
+
+      const purgeAnnotation = matchedMiss
+        ? formatPurgeAnnotationWithMiss(matchedMiss)
+        : interval.purgeable && canOffensivePurge(owner)
+          ? " (purgeable)"
+          : "";
+
+      // Step 2: Check if there is a matching [ENEMY CD] line for the SAME unit and SAME spell (Rule B)
+      let matchedCd: IEnemyCDCast | undefined;
+      for (const player of enemyCDTimeline.players) {
+        if (!sameEnemyUnit(player.playerName, enemyName)) continue;
+        for (const cd of player.offensiveCDs) {
+          if (
+            toRenderSecond(cd.castTimeSeconds) !==
+            toRenderSecond(interval.startSeconds)
+          )
+            continue;
+          if (
+            cd.spellName !== interval.spellName &&
+            cd.spellId !== interval.spellId
+          )
+            continue;
+          matchedCd = cd;
+          break;
+        }
+        if (matchedCd) break;
+      }
+
+      if (matchedCd) {
+        // Self-buff: fold [ENEMY BUFF] start line into [ENEMY CD]
+        droppedBuffIntervals.add(interval);
+        if (purgeAnnotation) {
+          cdPurgeAnnotations.set(matchedCd, purgeAnnotation);
+        }
+      } else {
+        if (purgeAnnotation) {
+          buffPurgeAnnotations.set(interval, purgeAnnotation);
+        }
+      }
+    }
+  }
+
   // ── [ENEMY BUFF] / [ENEMY BUFF END] events (F67b) ─────────────────────────
 
   for (const [enemyName, intervals] of enemyBuffIntervals) {
     for (const interval of intervals) {
-      // B117: keep the [ENEMY BUFF] itself (it is useful enemy-burst context) but only tag it
-      // "(purgeable)" when the log owner can actually purge — otherwise it invites a non-actionable
-      // "you should have purged" finding on a spec with no purge tool.
-      const purgeNote =
-        interval.purgeable && canOffensivePurge(owner) ? " (purgeable)" : "";
-      addEntry(
-        interval.startSeconds,
-        `${fmtTime(interval.startSeconds)}  [ENEMY BUFF]   ${enemyPid(enemyName)}: ${interval.spellName}${purgeNote}`,
-      );
+      if (!droppedBuffIntervals.has(interval)) {
+        const purgeNote = buffPurgeAnnotations.get(interval) ?? "";
+        addEntry(
+          interval.startSeconds,
+          `${fmtTime(interval.startSeconds)}  [ENEMY BUFF]   ${enemyPid(enemyName)}: ${interval.spellName}${purgeNote}`,
+        );
+      }
       addEntry(
         interval.endSeconds,
         `${fmtTime(interval.endSeconds)}  [ENEMY BUFF END]   ${enemyPid(enemyName)}: ${interval.spellName}`,
@@ -1936,9 +2126,10 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       const seq = (seqBySpell.get(cd.spellName) ?? 0) + 1;
       seqBySpell.set(cd.spellName, seq);
       const seqAnnotation = total > 1 ? ` [${seq}/${total}]` : "";
+      const purgeNote = cdPurgeAnnotations.get(cd) ?? "";
       addEntry(
         cd.castTimeSeconds,
-        `${fmtTime(cd.castTimeSeconds)}  [ENEMY CD]   ${enemyPid(player.playerName)} (${player.specName}): ${cd.spellName}${seqAnnotation}`,
+        `${fmtTime(cd.castTimeSeconds)}  [ENEMY CD]   ${enemyPid(player.playerName)} (${player.specName}): ${cd.spellName}${seqAnnotation}${purgeNote}`,
       );
     }
   }
@@ -2168,6 +2359,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     canOffensivePurge(owner)
   ) {
     for (const miss of dispelSummary.missedPurgeWindows) {
+      if (consumedMissedPurges.has(miss)) continue;
       if (HIGH_VALUE_PURGEABLE_BUFFS.has(miss.spellId)) {
         addEntry(
           miss.timeSeconds,
