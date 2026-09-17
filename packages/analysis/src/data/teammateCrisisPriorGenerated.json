@@ -1,11 +1,84 @@
 {
   "meta": {
     "generatedAt": "2026-09-17",
-    "corpus": "placeholder — no cells; regenerate with teammateCrisisPriorScan.ts",
-    "command": "npx tsx packages/eval/scripts/teammateCrisisPriorScan.ts emit-table --in <scan.jsonl> --out <file.json>",
-    "rows": 0,
+    "corpus": "wowarenalogs archive 2026-09-14 (12.1+, 63,303-file manifest, 116,063 rounds)",
+    "command": "npx tsx packages/eval/scripts/teammateCrisisPriorScan.ts emit-table --in <rows.jsonl> --out <file.json>",
+    "rows": 604392,
     "nFloor": 50,
     "predicateVersion": 1
   },
-  "cells": {}
+  "cells": {
+    "2v2|*": {
+      "nIdle": 6,
+      "deathIdlePct": 83,
+      "nAnswered": 46489,
+      "deathAnsweredPct": 8
+    },
+    "2v2|10-20%": {
+      "nIdle": 5,
+      "deathIdlePct": 80,
+      "nAnswered": 19290,
+      "deathAnsweredPct": 7
+    },
+    "2v2|20-30%": {
+      "nIdle": 0,
+      "deathIdlePct": 0,
+      "nAnswered": 16065,
+      "deathAnsweredPct": 8
+    },
+    "2v2|>=30%": {
+      "nIdle": 1,
+      "deathIdlePct": 100,
+      "nAnswered": 11134,
+      "deathAnsweredPct": 11
+    },
+    "3v3|*": {
+      "nIdle": 490,
+      "deathIdlePct": 86,
+      "nAnswered": 86959,
+      "deathAnsweredPct": 11
+    },
+    "3v3|10-20%": {
+      "nIdle": 133,
+      "deathIdlePct": 86,
+      "nAnswered": 16071,
+      "deathAnsweredPct": 9
+    },
+    "3v3|20-30%": {
+      "nIdle": 187,
+      "deathIdlePct": 84,
+      "nAnswered": 24494,
+      "deathAnsweredPct": 11
+    },
+    "3v3|>=30%": {
+      "nIdle": 170,
+      "deathIdlePct": 86,
+      "nAnswered": 46394,
+      "deathAnsweredPct": 12
+    },
+    "Rated Solo Shuffle|*": {
+      "nIdle": 38,
+      "deathIdlePct": 45,
+      "nAnswered": 158479,
+      "deathAnsweredPct": 10
+    },
+    "Rated Solo Shuffle|10-20%": {
+      "nIdle": 24,
+      "deathIdlePct": 33,
+      "nAnswered": 38827,
+      "deathAnsweredPct": 9
+    },
+    "Rated Solo Shuffle|20-30%": {
+      "nIdle": 9,
+      "deathIdlePct": 67,
+      "nAnswered": 49213,
+      "deathAnsweredPct": 10
+    },
+    "Rated Solo Shuffle|>=30%": {
+      "nIdle": 5,
+      "deathIdlePct": 60,
+      "nAnswered": 70439,
+      "deathAnsweredPct": 11
+    }
+  }
 }

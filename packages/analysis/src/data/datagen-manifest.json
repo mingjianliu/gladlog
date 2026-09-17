@@ -142,7 +142,7 @@
       "producer": "packages/eval/scripts/cdTriggerPriorScan.ts emit-table"
     },
     "teammateCrisisPriorGenerated.json": {
-      "entries": 0,
+      "entries": 12,
       "producer": "packages/eval/scripts/teammateCrisisPriorScan.ts emit-table"
     },
     "healerSaveCdGenerated.json": {
