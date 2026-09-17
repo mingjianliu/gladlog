@@ -108,6 +108,8 @@ import {
   unsyncedBurstEvents,
 } from "./candidates/cooldownTiming";
 import { crisisNoResponseEvents } from "./candidates/crisisNoResponse";
+import { teammateCrisisIdleEvents } from "./candidates/teammateCrisisIdle";
+import { teammateCrisisPoints } from "./teammateCrisis";
 import {
   deathSetupEvents,
   type DeathSetupParts,
@@ -1976,6 +1978,23 @@ function teamPlayEvents(
       );
     } catch {
       /* decision points not computable → type absent */
+    }
+    // teammate-crisis-idle (GH #95, 2026-09-17): the healer-side twin — a
+    // TEAMMATE's crossing (same crisisDecisionPoints, run on the teammate),
+    // judged on what the healer did toward them; same predicate the eval
+    // reference scan uses (teammateCrisisPriorScan.ts), same lookup as the
+    // gate (lookupTeammateCrisisPriorByBin).
+    try {
+      const bracket: string = combat?.startInfo?.bracket ?? "";
+      out.push(
+        ...teammateCrisisIdleEvents(
+          teammateCrisisPoints(owner, combat),
+          owner,
+          bracket,
+        ),
+      );
+    } catch {
+      /* teammate points not computable → type absent */
     }
   } else {
     // DPS side of the same signal (spec §1d): until the DPS behavior-prior

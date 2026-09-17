@@ -2292,3 +2292,14 @@ M6 已做完的:1,190 个脚本型天赋分队列 → 118 个点名了产品追�
 3. **凝神之怒**(混乱新星 / 虚空新星主目标 +1 秒):全量 1/3 没通过——点了的 1,093 格众数仍是 3 秒,只加主目标、和副目标混在一起。要测需按「主目标」拆光环,**待做**。
 4. **驱散副作用**:正义保护(牺牲祝福移除中毒 / 疾病,选取率 46%)、紧急药膏(灵龟 / 假死移除中毒 / 疾病,14%)——查它们会不会让「漏驱散」判定误报,**待查**。
 5. **自动触发保命天赋** → #43;**猎杀 60 秒硬底** → #45。
+
+## 47. GH #95 队友危机:指控 + 叠加事实行(logged 2026-09-17)
+
+用户 2026-09-17 裁决(推翻 codex R3 的「只做观察卡」):**做指控**(「我们基本上不做指控,这个东西可以做一下,价值挺高」)。已落地:治疗候选 `teammate-crisis-idle`(`analysis/teammateCrisis.ts` 共享判定 + `candidates/teammateCrisisIdle.ts`)、`[STACKED DEFENSIVES]` 上下文事实行、第 19 类硬失败 `checkTeammateCrisisRefConsistency`、PROMPT_VERSION 72、参照表 `teammateCrisisPriorGenerated.json`(全量 63,303 场扫描)。计时句按用户「可以严格一点,插件能看到开大」改成 `facts.burstCue`:对面开大在穿越前 ≥2 s 才算提示,绝不写「本可规避」。
+
+**待做 / 待裁:**
+
+1. **「治疗在救别人」(问题 4)**:用户要先看另一个队友当时危不危险。判定已记 `busyOn` / `busyOnInCrisis`,`teammateCrisisPriorScan.ts report` 分开数;全量数字出来后给用户看,再定要不要做成事实行 / 卡片。1/200 小样本:busy 4 个,对方在危机 0、不在 3、未知 1。
+2. **真实例子过价值门**:表落地后从 clean-idle 点抽 2–3 场渲染完整卡片(菜单行 + 时间线)给用户看,再决定要不要开 A/B(判官噪声底 |Δ|<0.4 测不出,采纳以确定性证据为准)。
+3. **单排 / 2v2 参照格样本**:全量下 clean idle 预计 ~330 个,58/60 在 3v3;2v2、单排格大概率不过 50 的样本门 → 只有 3v3 会渲染,属预期,不要为了让它渲染而降门槛。
+4. `teammateCrisisAnswerProbe.ts` / `teammateCrisisCards.ts` / `doubleDefensiveProbe.ts` 三个探针留作历史(它们内联了一份规则,和产品判定可能漂移);以后再量一律走 `teammateCrisisPriorScan.ts`。

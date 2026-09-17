@@ -169,6 +169,15 @@ export const CANDIDATE_TYPE_REGISTRY: Readonly<
     reason:
       "Healer v1: incoming ≥10 % watershed + outcome reference, no rating line. Replaces death-unused-defensive.",
   },
+  "teammate-crisis-idle": {
+    status: "live",
+    surface: "card",
+    origin: "candidate",
+    since: "2026-09-17",
+    issue: "GH #95",
+    reason:
+      'Healer-side twin of crisis-no-response: a TEAMMATE crossed the crisis line, the healer was free through the window (actionBlockedAt at t..t+3 s, no channel in flight, ≤40 yd, LoS true, mana ≥10 %), cast nothing, no carried HoT ticking, teammate did not answer either. User 2026-09-17: an accusation ("这个东西可以做一下指控"), overruling codex R3\'s observation-only ruling on the strength of the feasibility door — 60 clean-idle points / 11,536 rounds (0.0052 per round, teammate death 77 % vs 7–13 % answered under identical exclusions).',
+  },
   "external-unused": {
     status: "live",
     surface: "card",
@@ -231,7 +240,7 @@ export const CANDIDATE_TYPE_REGISTRY: Readonly<
     since: "2026-09-12",
     issue: "GH #80",
     reason:
-      "User approval after the archive cost/benefit model (180k opportunities): UA dispel at ≤ 2 stacks / ≥ 60 % target HP nets ≈ −200k HP and +1.4 s unanswerable CC unless it co-removed a CC; VT net-negative at ≥ 80 % target HP. Validation (real-model smoke + acceptance capture) done 2026-09-12; confirmatory A/B 2026-09-16 (n=40 fresh pairs, Opus 5, pre-registered −0.2 noninferiority): accuracy +0.07 [−0.10, +0.25], focus +0.35, outcome +0.33, 0/160 new-line claims refuted → ADOPT (user \"ok 好 adopt\"). Monitor: backlash stratum focus −0.33 / noise −0.42 (n=12).",
+      'User approval after the archive cost/benefit model (180k opportunities): UA dispel at ≤ 2 stacks / ≥ 60 % target HP nets ≈ −200k HP and +1.4 s unanswerable CC unless it co-removed a CC; VT net-negative at ≥ 80 % target HP. Validation (real-model smoke + acceptance capture) done 2026-09-12; confirmatory A/B 2026-09-16 (n=40 fresh pairs, Opus 5, pre-registered −0.2 noninferiority): accuracy +0.07 [−0.10, +0.25], focus +0.35, outcome +0.33, 0/160 new-line claims refuted → ADOPT (user "ok 好 adopt"). Monitor: backlash stratum focus −0.33 / noise −0.42 (n=12).',
   },
   "backlash-dispel-window": {
     status: "live",
@@ -251,7 +260,7 @@ export const CANDIDATE_TYPE_REGISTRY: Readonly<
     since: "2026-09-12",
     issue: "GH #78 (+ #88 range half)",
     reason:
-      "User rulings 1/2/3 (sentence useful / 50 % HP gate / team form with distance). Enemy healer heal on our ≤ 50 % kill target inside a kill window while the owner's interrupt (official per-player kit) was off cooldown, unlocked and in range (melee 20 yd corpus-calibrated, ranged official + LoS). Archive 21k files: kicked → target dead 10 s 36 % vs completed 13 % (+23 pp, every bracket +22…+24); ~16 % of such heals get kicked. Validated 2026-09-12 (real-model smoke ×2, acceptance capture); n=78 A/B 2026-09-12 ITERATE (accuracy −0.06 [−0.24, +0.13]) → direction pre-worded facts (v65) + surface cut (v66); confirmatory A/B 2026-09-16 (n=40 fresh pairs, Opus 5): accuracy +0.07 [−0.10, +0.25], healer owners +0.12 [−0.12, +0.39], focus +0.35, outcome +0.33 → ADOPT (user \"ok 好 adopt\").",
+      'User rulings 1/2/3 (sentence useful / 50 % HP gate / team form with distance). Enemy healer heal on our ≤ 50 % kill target inside a kill window while the owner\'s interrupt (official per-player kit) was off cooldown, unlocked and in range (melee 20 yd corpus-calibrated, ranged official + LoS). Archive 21k files: kicked → target dead 10 s 36 % vs completed 13 % (+23 pp, every bracket +22…+24); ~16 % of such heals get kicked. Validated 2026-09-12 (real-model smoke ×2, acceptance capture); n=78 A/B 2026-09-12 ITERATE (accuracy −0.06 [−0.24, +0.13]) → direction pre-worded facts (v65) + surface cut (v66); confirmatory A/B 2026-09-16 (n=40 fresh pairs, Opus 5): accuracy +0.07 [−0.10, +0.25], healer owners +0.12 [−0.12, +0.39], focus +0.35, outcome +0.33 → ADOPT (user "ok 好 adopt").',
   },
   "kick-priority-team": {
     status: "live",

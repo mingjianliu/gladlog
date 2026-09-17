@@ -40,7 +40,12 @@ import * as buildExemplarLedPrompt from "@gladlog/analysis/src/compare/buildExem
 import * as cellLookup from "@gladlog/analysis/src/compare/cellLookup";
 import * as claimChecker from "@gladlog/analysis/src/compare/claimChecker";
 import * as burstAnswered from "@gladlog/analysis/src/context/burstAnswered";
+import * as teammateCrisisIdle from "@gladlog/analysis/src/analysis/candidates/teammateCrisisIdle";
+import * as stackedDefensives from "@gladlog/analysis/src/analysis/stackedDefensives";
+import * as teammateCrisis from "@gladlog/analysis/src/analysis/teammateCrisis";
 import * as cdPrior from "@gladlog/analysis/src/context/cdPrior";
+import * as stackedDefensivesContext from "@gladlog/analysis/src/context/stackedDefensives";
+import * as teammateCrisisPriorData from "@gladlog/analysis/src/data/teammateCrisisPrior";
 import * as matchTimelineSections from "@gladlog/analysis/src/context/matchTimelineSections";
 import * as timelineHelpers from "@gladlog/analysis/src/context/timelineHelpers";
 import * as abilityProfileMod from "@gladlog/analysis/src/data/abilityProfile";
@@ -990,6 +995,52 @@ const INDEX: PredicateRow[] = [
     symbol: "CD_PRIOR_CAP",
     mod: cdPrior,
   },
+  // GH #95 (2026-09-17): teammate crisis (healer side) + stacked defensives
+  {
+    file: `${A}/analysis/teammateCrisis.ts`,
+    symbol: "teammateCrisisPoints",
+    mod: teammateCrisis,
+  },
+  {
+    file: `${A}/analysis/teammateCrisis.ts`,
+    symbol: "TEAMMATE_CRISIS_REACH_YARDS",
+    mod: teammateCrisis,
+  },
+  {
+    file: `${A}/analysis/teammateCrisis.ts`,
+    symbol: "TEAMMATE_CRISIS_CUE_MIN_S",
+    mod: teammateCrisis,
+  },
+  {
+    file: `${A}/data/teammateCrisisPrior.ts`,
+    symbol: "lookupTeammateCrisisPriorByBin",
+    mod: teammateCrisisPriorData,
+  },
+  {
+    file: `${A}/data/teammateCrisisPrior.ts`,
+    symbol: "teammateCrisisDmgBinOf",
+    mod: teammateCrisisPriorData,
+  },
+  {
+    file: `${A}/analysis/candidates/teammateCrisisIdle.ts`,
+    symbol: "teammateCrisisIdleEvents",
+    mod: teammateCrisisIdle,
+  },
+  {
+    file: `${A}/analysis/stackedDefensives.ts`,
+    symbol: "stackedDefensivePairs",
+    mod: stackedDefensives,
+  },
+  {
+    file: `${A}/context/stackedDefensives.ts`,
+    symbol: "formatStackedDefensiveLines",
+    mod: stackedDefensivesContext,
+  },
+  {
+    file: `${A}/context/stackedDefensives.ts`,
+    symbol: "STACKED_DEFENSIVES_CAP",
+    mod: stackedDefensivesContext,
+  },
   // Formatting and notation
   {
     file: `${A}/compare/claimChecker.ts`,
@@ -1061,6 +1112,11 @@ const INDEX: PredicateRow[] = [
   {
     file: `${E}/quality/promptQualityCheck.ts`,
     symbol: "checkCdPriorRefConsistency",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkTeammateCrisisRefConsistency",
     mod: promptQualityCheck,
   },
   {

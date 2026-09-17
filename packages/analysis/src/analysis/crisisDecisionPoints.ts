@@ -471,6 +471,14 @@ export function kiteAttribution(
  * kicked when the teammate dropped must never be told they did nothing.
  * Registered as a shared predicate — same id sets, same lookback constant.
  */
+/** The three id sets above, exported under crisis-prefixed names for
+ * `analysis/teammateCrisis.ts` (GH #95, 2026-09-17): a healer's answer TOWARD a
+ * teammate is judged against the same external / control / enemy-burst sets
+ * the teammate's own crossing was judged with. */
+export const CRISIS_EXTERNAL_IDS: ReadonlySet<string> = EXTERNAL_IDS;
+export const CRISIS_CONTROL_IDS: ReadonlySet<string> = CONTROL_IDS;
+export const CRISIS_OFFENSIVE_CD_IDS: ReadonlySet<string> = OFFENSIVE_CD_IDS;
+
 export function actionBlockedAt(
   unit: any,
   combat: any,

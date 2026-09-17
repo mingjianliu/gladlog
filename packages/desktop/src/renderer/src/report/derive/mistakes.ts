@@ -107,6 +107,17 @@ export const MISTAKE_RULES: readonly MistakeRule[] = [
     severity: "major",
     source: "candidate",
   },
+  {
+    // GH #95 (2026-09-17, user ruling "做一下指控"): a TEAMMATE crossed the
+    // crisis line, the healer was free / in reach / in LoS / with mana through
+    // the window and cast nothing, no carried HoT ticking. Same tier as
+    // crisis-no-response — the feasibility door makes it a real-consequence
+    // fact (teammate death 77 % vs 7–13 % answered on the archive).
+    type: "teammate-crisis-idle",
+    label: "队友危机未出手",
+    severity: "major",
+    source: "candidate",
+  },
   // GH #80 (2026-09-12, user approval): the owner dispelled Unstable
   // Affliction / Vampiric Touch in the archive-measured net-negative stratum
   // (UA ≤ 2 stacks at ≥ 60 % target HP: net ≈ −200k HP + 1.4 s unanswerable
@@ -386,6 +397,10 @@ export function candidateDetail(c: CandidateEvent): string {
           : `此状态下无应对者 ${f.refDeathNoResp ?? "?"}% 十秒内死亡,有应对者 ${f.refDeathResp ?? "?"}%`;
       return `血量 ${f.hpPct ?? "?"}% 后 3 秒无应对(${outcomeClause},出手者常见应对:${f.refTop ?? ""})`;
     }
+    case "teammate-crisis-idle":
+      // GH #95: facts.externalsReady / facts.attackers are "; "-joined lists
+      // (", " is the facts separator); render them as-is.
+      return `${f.mate ?? ""} 掉到 ${f.mateHpPct ?? "?"}%(2 秒内承伤 ${f.dmg2sPct ?? "?"}%),你 ${f.windowFrom ?? ""}–${f.windowTo ?? ""} 什么都没放(距 ${f.distanceYd ?? "?"} 码,可用外置:${f.externalsReady ?? "none"};同类时刻治疗没出手 ${f.refDeathIdle ?? "?"}% 队友十秒内阵亡,出手了 ${f.refDeathAnswered ?? "?"}%)`;
     case "external-unused":
       return `${f.victim ?? ""} 阵亡时 ${f.external ?? ""} 可用`;
     case "wasted-trinket":

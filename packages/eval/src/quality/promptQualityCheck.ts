@@ -50,6 +50,11 @@ import {
   lookupBurstWindowPrior,
 } from "@gladlog/analysis/src/data/burstWindowPrior";
 import { lookupCdTriggerPrior } from "@gladlog/analysis/src/data/cdTriggerPrior";
+import {
+  lookupTeammateCrisisPriorByBin,
+  type TeammateCrisisDmgBin,
+  teammateCrisisDmgBinOf,
+} from "@gladlog/analysis/src/data/teammateCrisisPrior";
 import { classMetadata } from "@gladlog/analysis/src/data/classSpells";
 import { lookupKickPriorityPrior } from "@gladlog/analysis/src/data/kickPriorityPrior";
 import { ATTEMPT_INTO_TRINKET_OUTCOME_REF } from "@gladlog/analysis/src/data/outcomeRefs";
@@ -984,7 +989,10 @@ export function checkOffensiveWindowSpikeMarker(lines: string[]): string[] {
   const failures: string[] = [];
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!;
-    if (!line.includes("[OFFENSIVE WINDOW]") || !line.includes("| peak spike")) {
+    if (
+      !line.includes("[OFFENSIVE WINDOW]") ||
+      !line.includes("| peak spike")
+    ) {
       continue;
     }
     const m = line.match(OFFENSIVE_WINDOW_LINE);
@@ -1092,6 +1100,74 @@ export function checkCdPriorRefConsistency(lines: string[]): string[] {
       failures.push(
         `line ${i + 1}: [CD PRIOR] 「spec-wide」措辞与 cellKey 的树 ${tree} 不一致`,
       );
+  }
+  return failures;
+}
+
+/**
+ * teammate-crisis-idle (GH #95, 2026-09-17): the healer-side twin of
+ * `checkBehaviorPriorConsistency`, same shape and same reason — the producer
+ * (`candidates/teammateCrisisIdle.ts`) renders the reference from
+ * `lookupTeammateCrisisPriorByBin(bracket, bin)`; this gate re-parses the
+ * menu line's facts and demands the SAME lookup return the SAME integers.
+ * The bin is re-derived from the rendered `dmg2sPct` through the SAME
+ * `teammateCrisisDmgBinOf`, and must also equal the bin inside `cellKey`
+ * unless the line fell back to the bracket-wide `*` cell. Fails closed.
+ */
+export function checkTeammateCrisisRefConsistency(lines: string[]): string[] {
+  const failures: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+    if (!line.includes("type=teammate-crisis-idle")) continue;
+    const m = line.match(/facts=\{(.*)\}\s*$/);
+    if (!m) {
+      failures.push(`line ${i + 1}: teammate-crisis-idle 行无 facts`);
+      continue;
+    }
+    const f = parseFactsBlock(m[1]!);
+    const dmg2s = Number(f.dmg2sPct);
+    if (!Number.isFinite(dmg2s)) {
+      failures.push(`line ${i + 1}: teammate-crisis-idle 行缺 dmg2sPct`);
+      continue;
+    }
+    const parts = (f.cellKey ?? "").split("|");
+    if (parts.length !== 2) {
+      failures.push(
+        `line ${i + 1}: teammate-crisis-idle 的 cellKey 形状不对 ${f.cellKey ?? ""}`,
+      );
+      continue;
+    }
+    const [bracket, keyBin] = parts as [string, string];
+    const bin = teammateCrisisDmgBinOf(dmg2s / 100);
+    if (keyBin !== "*" && keyBin !== bin) {
+      failures.push(
+        `line ${i + 1}: teammate-crisis-idle cellKey 的档位 ${keyBin} 与 dmg2sPct=${dmg2s} 推出的 ${bin} 不一致`,
+      );
+      continue;
+    }
+    const ref = lookupTeammateCrisisPriorByBin(
+      bracket,
+      bin as TeammateCrisisDmgBin,
+    );
+    if (!ref) {
+      failures.push(
+        `line ${i + 1}: teammate-crisis-idle 引用了表里查不到/不够样本的单元格 ${f.cellKey}`,
+      );
+      continue;
+    }
+    const expect: Record<string, string> = {
+      cellKey: ref.cellKey,
+      refNIdle: String(ref.nIdle),
+      refDeathIdle: String(ref.deathIdlePct),
+      refNAnswered: String(ref.nAnswered),
+      refDeathAnswered: String(ref.deathAnsweredPct),
+      fellBack: ref.fellBack ? "yes" : "no",
+    };
+    for (const [k, v] of Object.entries(expect))
+      if (f[k] !== v)
+        failures.push(
+          `line ${i + 1}: teammate-crisis-idle ${k}=${f[k]} 与参照表 ${v} 不一致(${ref.cellKey})`,
+        );
   }
   return failures;
 }
@@ -1853,6 +1929,7 @@ export function checkMatch(
   hardFailures.push(...checkBacklashRefConsistency(lines));
   hardFailures.push(...checkKickPriorityRefConsistency(lines));
   hardFailures.push(...checkCdPriorRefConsistency(lines));
+  hardFailures.push(...checkTeammateCrisisRefConsistency(lines));
   hardFailures.push(...checkCrisisHpStateConsistency(lines));
   hardFailures.push(...checkOutcomeRefConsistency(lines));
   hardFailures.push(...checkMenuTRenderGrid(lines));

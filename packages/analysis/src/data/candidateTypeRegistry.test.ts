@@ -148,7 +148,7 @@ describe("candidateTypeRegistry: the 2026-09-12 derivation is a no-op", () => {
     );
   });
 
-  it("CARD_TYPES equals the desktop MISTAKE_RULES roster as of 99cad7af (19 types) + kick-priority-missed/-team (GH #78)", () => {
+  it("CARD_TYPES equals the desktop MISTAKE_RULES roster as of 99cad7af (19 types) + kick-priority-missed/-team (GH #78) + teammate-crisis-idle (GH #95)", () => {
     expect([...CARD_TYPES].sort()).toEqual(
       [
         "attempt-into-trinket",
@@ -157,6 +157,7 @@ describe("candidateTypeRegistry: the 2026-09-12 derivation is a no-op", () => {
         "missed-kick",
         "missed-purge-kill-window",
         "crisis-no-response",
+        "teammate-crisis-idle",
         "backlash-dispel",
         "backlash-dispel-window",
         "kick-priority-missed",

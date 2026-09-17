@@ -8,6 +8,7 @@ import {
 
 import { type BurstWindowDecisionPoint } from "../analysis/burstWindowDecisionPoints";
 import type { CdPriorHoldEpisode } from "../analysis/cdTriggerPrior";
+import type { StackedDefensivePair } from "../analysis/stackedDefensives";
 import { DISPEL_FEATURE_FLAGS } from "../data/dispelFeatureFlags";
 import { buffFullDurationForCaster } from "../utils/buffDuration";
 import { getEnglishSpellName, spellEffectData } from "../data/spellEffectData";
@@ -82,6 +83,10 @@ import {
   formatBurstAnsweredLines,
 } from "./burstAnswered";
 import { CD_PRIOR_LEGEND, formatCdPriorLines } from "./cdPrior";
+import {
+  formatStackedDefensiveLines,
+  STACKED_DEFENSIVES_LEGEND,
+} from "./stackedDefensives";
 import {
   emitDmgSpikeEntries,
   emitEnemyDeathEntries,
@@ -253,6 +258,10 @@ export interface BuildMatchTimelineParams {
    * here so the lines share the time-sorted stream. */
   cdPriorEpisodes?: CdPriorHoldEpisode[];
   cdPriorCohort?: { spec: string; heroTree: string };
+  /** [STACKED DEFENSIVES] pairs (context/stackedDefensives.ts, GH #95) —
+   * computed in buildMatchContext, rendered here into the time-sorted
+   * stream; absent ⇒ no such lines and no legend. */
+  stackedDefensives?: StackedDefensivePair[];
 }
 
 /**
@@ -340,6 +349,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     burstWindows,
     cdPriorEpisodes,
     cdPriorCohort,
+    stackedDefensives,
   } = params;
 
   const matchDurationS = (matchEndMs - matchStartMs) / 1000;
@@ -2689,6 +2699,17 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     addEntry(e.atSeconds, `${fmtTime(e.atSeconds)}  ${e.line}`);
   }
 
+  // ── [STACKED DEFENSIVES] context lines (GH #95) ───────────────────────────
+  // Two major defensives from two players on one friendly — a fact about the
+  // stack, NOT a candidate; see context/stackedDefensives.ts. Same
+  // render-vs-legend discipline as [CD PRIOR].
+  const stackedDefensiveEntries = formatStackedDefensiveLines(
+    stackedDefensives ?? [],
+  ).filter((e) => e.atSeconds <= matchEndSeconds);
+  for (const e of stackedDefensiveEntries) {
+    addEntry(e.atSeconds, `${fmtTime(e.atSeconds)}  ${e.line}`);
+  }
+
   // ── [HEALER INACTIVITY] events (healer only) ────────────────────────────────────
 
   if (isHealer) {
@@ -3166,6 +3187,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     // Conditional: a round with no such line pays no tokens for its legend.
     ...(burstAnsweredEntries.length > 0 ? BURST_ANSWERED_LEGEND : []),
     ...(cdPriorEntries.length > 0 ? CD_PRIOR_LEGEND : []),
+    ...(stackedDefensiveEntries.length > 0 ? STACKED_DEFENSIVES_LEGEND : []),
     "",
     `[PERSPECTIVE: Log Owner - ${ownerSpec}]`,
     `(You are the ${ownerSpec} in this match. Your actions are marked with [YOU].)`,

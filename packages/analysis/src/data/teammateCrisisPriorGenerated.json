@@ -1,0 +1,11 @@
+{
+  "meta": {
+    "generatedAt": "2026-09-17",
+    "corpus": "placeholder — no cells; regenerate with teammateCrisisPriorScan.ts",
+    "command": "npx tsx packages/eval/scripts/teammateCrisisPriorScan.ts emit-table --in <scan.jsonl> --out <file.json>",
+    "rows": 0,
+    "nFloor": 50,
+    "predicateVersion": 1
+  },
+  "cells": {}
+}

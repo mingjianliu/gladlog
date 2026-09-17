@@ -76,6 +76,8 @@ const TYPE_LABEL: Record<string, string> = {
   "slow-defensive-response": "敌方开大应对迟缓",
   // Task 5 (spec 2026-08-29, healer-only crisis threshold).
   "crisis-no-response": "危机无应对",
+  // GH #95 (2026-09-17).
+  "teammate-crisis-idle": "队友危机未出手",
   // GH #80 (2026-09-12).
   "backlash-dispel": "解反噬 DoT",
   "backlash-dispel-window": "可解未解",

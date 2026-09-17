@@ -8,6 +8,10 @@ import {
   type CdPriorHoldEpisode,
   cdPriorHoldEpisodes,
 } from "../analysis/cdTriggerPrior";
+import {
+  type StackedDefensivePair,
+  stackedDefensivePairs,
+} from "../analysis/stackedDefensives";
 import { lookupCdTriggerPrior } from "../data/cdTriggerPrior";
 import { zoneMetadata } from "../data/zoneMetadata";
 import { buildArchetypeInjectionHeader } from "../utils/archetypeInjection";
@@ -709,6 +713,16 @@ export function buildMatchContext(
     }
   }
 
+  // [STACKED DEFENSIVES] fact lines (GH #95, 2026-09-17): two major
+  // defensives from two players on one friendly, owner-anchored. Fails
+  // silently like the two producers above.
+  let stackedDefensives: StackedDefensivePair[] = [];
+  try {
+    stackedDefensives = stackedDefensivePairs(owner, combat);
+  } catch {
+    /* no aura intervals → no [STACKED DEFENSIVES] lines */
+  }
+
   const timelineText = buildMatchTimeline({
     owner: owner as ICombatUnit,
     ownerSpec,
@@ -740,6 +754,7 @@ export function buildMatchContext(
     burstWindows,
     cdPriorEpisodes,
     cdPriorCohort,
+    stackedDefensives,
   } as BuildMatchTimelineParams);
 
   // Merge each per-window exposure entry into the timeline at its timestamp so the

@@ -107,3 +107,14 @@ Overlap with existing signals: 1,682 of the 2,723 nobody-answered points coincid
 ## Costs
 
 New shared predicate (`teammateCrisisDecisionPoints` on top of `crisisDecisionPoints` + `actionBlockedAt` + `kiteAttribution`), one new reference table over the full archive (~4 h), gate class in `promptQualityCheck`, `PROMPT_VERSION`, predicate-index rows (en + zh-CN), curatedIdRegistry if any new id list.
+
+## User rulings 2026-09-17 and what shipped
+
+The user answered the four questions above, then overruled codex R3 on the shape:
+
+1. **Shape 1 is an ACCUSATION, not an observation card** — 「另外我发现我们基本上不做指控,我觉得这个东西可以做一下指控,我觉得价值其实挺高的」. Shipped as the healer candidate **`teammate-crisis-idle`** (`analysis/teammateCrisis.ts` predicate + `candidates/teammateCrisisIdle.ts` producer), same discipline as `crisis-no-response`: outcome reference, producer never reads `diedWithin10s`, cite-not-prescribe legend. The feasibility door is what makes the accusation defensible (every codex R1/R2 exclusion is inside the predicate; the answered comparator is filtered identically).
+2. **Timing sentence — a strict version is allowed**: 「我觉得我们可以严格一点,开大技能现在玩家有插件监视的,只要说的靠谱就行」. Shipped as `facts.burstCue=yes` when the enemy's offensive-cooldown press came ≥ `TEAMMATE_CRISIS_CUE_MIN_S` (2 s) before the crossing — the legend tells the model to state it as a cooldown-tracker cue, never as "you would have avoided it" (codex R3 condition 2 still holds for the counterfactual).
+3. **给重了 fact card** — approved as proposed; shipped as the `[STACKED DEFENSIVES]` context line (`analysis/stackedDefensives.ts` + `context/stackedDefensives.ts`): who cast A / B, overlap on the grid, B's blocked % over the overlap and over its full run (pct auras) or the absorbs credited to B's spell AND caster; no "one would have sufficed".
+4. **"casting elsewhere" — measure whether the OTHER teammate was in danger first**: 「4 要看一下另外一个队友是否危险」. The predicate now records `busyOn` (first in-window recipient and their `gridHpPct` at the cast) and `busyOnInCrisis` (any in-window cast to a friendly at ≤ 40 %); `teammateCrisisPriorScan.ts report` splits the busy points by it. Not built as a card until the numbers are in.
+
+Smoke run (1/200 archive, 317 files, 567 rounds, predicate as shipped): 2,932 dangerous teammate points; excluded — healer blocked 1,299, out of reach 98, LoS blocked 54, out of mana 24, channelling 10; comparator 1,447 of which answered 1,438 (died 135 = 9 %), clean idle 1 (died), busy elsewhere 4 (other in crisis 0 / not in crisis 3 / unknown 1), inactive stretch 2, position unknown 2. Full-archive scan (63,303 files) running 2026-09-17 → `teammateCrisisPriorGenerated.json`.

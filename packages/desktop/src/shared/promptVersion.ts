@@ -472,4 +472,15 @@
 //  self-buff [ENEMY BUFF] folds into [ENEMY CD]; [MISSED PURGE OPPORTUNITY]
 //  folds unpurged duration and feasibility exemption into [ENEMY BUFF] or
 //  chained [ENEMY CD]).
-export const PROMPT_VERSION = 71;
+//  v72 (2026-09-17, GH #95, user rulings 2026-09-13/16/17): new healer
+//  candidate `teammate-crisis-idle` (a TEAMMATE crossed the crisis line while
+//  the healer was free through the window, ≤40 yd, in LoS, with mana, and
+//  cast nothing; carried HoT ticks count as answered; reference table
+//  teammateCrisisPriorGenerated.json, same exclusions on both populations —
+//  codex R2) with its legend, and a new `[STACKED DEFENSIVES]` context line
+//  (two major defensives from two players on one friendly: who cast each,
+//  overlap seconds, what the later one blocked — a fact, no "one would have
+//  sufficed" claim). New hardFailure class checkTeammateCrisisRefConsistency.
+//  Enemy burst on the new card is a cue only when the press was ≥2 s before
+//  the drop (facts.burstCue), never a counterfactual.
+export const PROMPT_VERSION = 72;
