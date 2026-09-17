@@ -169,6 +169,58 @@ describe("crisisDecisionPoints", () => {
     expect(q.procNames).toEqual([]);
   });
 
+  it("a heal-shaped marker (Nature's Guardian 31616 self→self) is a proc, not a carried heal; a cheat-death marker (Cauterize 87023) is cheatDeath", () => {
+    const ng = unit({
+      healIn: [
+        {
+          timestamp: T0 + 2500,
+          srcUnitId: "H",
+          spellId: "31616",
+          amount: 40,
+          effectiveAmount: 40,
+        },
+      ],
+    });
+    const p = crisisDecisionPoints(ng, combat(ng))[0]!;
+    expect(p.responses.proc).toBe(true);
+    expect(p.responses.cheatDeath).toBe(false);
+    expect(p.responses.carriedHeal).toBe(false);
+    expect(p.responses.selfHeal).toBe(false);
+    expect(p.procNames).toEqual(["Nature's Guardian"]);
+    // the same heal from someone else is not the owner's proc
+    const other = unit({
+      healIn: [
+        {
+          timestamp: T0 + 2500,
+          srcUnitId: "X",
+          spellId: "31616",
+          amount: 40,
+          effectiveAmount: 40,
+        },
+      ],
+    });
+    expect(crisisDecisionPoints(other, combat(other))[0]!.responses.proc).toBe(
+      false,
+    );
+
+    const cz = unit({
+      auraEvents: [
+        {
+          timestamp: T0 + 2100,
+          spellId: "87023",
+          srcUnitId: "H",
+          destUnitId: "H",
+          logLine: { event: LogEvent.SPELL_AURA_APPLIED, timestamp: T0 + 2100 },
+        },
+      ],
+    });
+    const c = crisisDecisionPoints(cz, combat(cz))[0]!;
+    expect(c.responses.cheatDeath).toBe(true);
+    expect(c.responses.proc).toBe(false);
+    expect(c.responded).toBe(true);
+    expect(c.procNames).toEqual(["Cauterize"]);
+  });
+
   // GH #93 (user ruling 2026-09-15): a HoT pressed before the window still
   // answers the crisis but is not a press
   it("carried heal: ≥15% from a HoT cast before the window is carriedHeal, not selfHeal, still responded", () => {

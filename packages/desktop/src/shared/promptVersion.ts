@@ -491,4 +491,13 @@
 //  from the owner's presses, and the crisis-no-response legend explains the
 //  "proc" / "carriedHeal" refTop tokens. The Hunt's arena
 //  cooldown is patched to 60 s (CORPUS_COOLDOWN_PATCHES, talents included).
-export const PROMPT_VERSION = 73;
+//  v74 (2026-09-17, BACKLOG #43 second pass, user 「好 可以 看看效果」): the
+//  proc arm grows from one marker to six after a per-id archive check
+//  (Blood Draw, Nature's Guardian, Veteran Vitality, Golden Val'kyr join
+//  Well-Honed Instincts as `proc`; Cauterize and Cheat Death form the new
+//  `cheatDeath` arm — a killing blow converted, phrased as the talent saving
+//  the player, never "nothing else needed"); heal-shaped markers supported;
+//  the crisis-no-response legend names both tokens. Defy Fate / Purgatory /
+//  Last Resort / Battle-Scarred Veteran / Elixir / Whirling Steel rejected
+//  (0–15 archive events or the wrong HP shape).
+export const PROMPT_VERSION = 74;

@@ -115,6 +115,11 @@ export interface DecisionPointResponses {
    * spell the proc cast (Frenzied Regeneration, Regrowth) is subtracted from
    * the owner's own presses so it cannot double as `selfHeal` / `wall`. */
   proc: boolean;
+  /** same mechanism, `kind: "cheatDeath"` (Cauterize, Purgatory, Defy Fate,
+   * Last Resort, Cheat Death): a killing blow was converted into survival.
+   * Counts as answered; phrased as "X saved you from a killing blow", never
+   * as "nothing else needed" — the crisis reached the death line. */
+  cheatDeath: boolean;
 }
 export interface DecisionPoint {
   /** the crossing re-anchored onto the prompt's render grid — always
@@ -503,14 +508,113 @@ export function kiteAttribution(
  *    (BACKLOG #43 待做 1: "逐个用日志核实,不要猜").
  * Registered in curatedIdRegistry.
  */
-export const CRISIS_PROC_ANSWERS: ReadonlyMap<
-  string,
-  { name: string; triggers: ReadonlySet<string> }
-> = new Map([
-  // Well-Honed Instincts (Druid class talent, ~100 % pick): below 40 % HP,
-  // casts Frenzied Regeneration 22842 once per 120 s; 382912 = the 120 s marker.
-  ["382912", { name: "Well-Honed Instincts", triggers: new Set(["22842"]) }],
-]);
+export interface CrisisProcAnswer {
+  name: string;
+  /** `proc` = a low-HP auto-protection (heals / shields / reduces on its
+   * own); `cheatDeath` = a lethal hit was converted into survival — the
+   * crisis went all the way to the death line, so the phrasing differs
+   * ("X saved you from a killing blow") */
+  kind: "proc" | "cheatDeath";
+  /** how the marker shows in the log: an aura APPLIED self→self, or a heal
+   * event self→self carrying the marker id */
+  via: "aura" | "heal";
+  /** spells the proc casts / heals with, subtracted from the owner's presses */
+  triggers: ReadonlySet<string>;
+}
+// Second probe run 2026-09-17 (user: 「好 可以 看看效果」), 1/40 archive =
+// 2,993 rounds, every candidate sibling id of every automatic protection
+// talent; the bar is self-sourced ≈ 100 % AND low HP at the instant (the
+// [STATE] grid reads the SAME second, so an instant heal shows post-heal HP):
+//   Blood Draw 454871       aura 318/318 self, 317 ≤ 40 %          → proc
+//   Nature's Guardian 31616 heal 771/771 self (40 % instant heal, HP read
+//                           after it: 193 in the 30s, 165/176 in 50s/60s) → proc
+//   Veteran Vitality 441387 aura 55 + heal 165, 220/220 self, 189 ≤ 50 %   → proc
+//   Golden Val'kyr 393108   aura 6/6 self, 6 ≤ 40 % (Prot only, 2 units)   → proc
+//   Cauterize 87023         aura 251/251 self, 244 ≤ 40 % (HP set to 35 %) → cheatDeath
+//   Cheat Death 45182       aura 25/25 self, 23 in the 0s bucket (7 % HP)  → cheatDeath
+// Rejected: Defy Fate (8 events, 1 unit, heals allies too), Purgatory (1),
+// Last Resort 209261 (0), Battle-Scarred Veteran (0), Elixir of Determination
+// (2), Whirling Steel (15, only 2 ≤ 40 %), Dream Guide (hand-out buff),
+// Guided Prayer (no sibling id).
+export const CRISIS_PROC_ANSWERS: ReadonlyMap<string, CrisisProcAnswer> =
+  new Map<string, CrisisProcAnswer>([
+    // Well-Honed Instincts (Druid class talent, ~100 % pick): below 40 % HP,
+    // casts Frenzied Regeneration 22842 once per 120 s; 382912 = the 120 s marker.
+    [
+      "382912",
+      {
+        name: "Well-Honed Instincts",
+        kind: "proc",
+        via: "aura",
+        triggers: new Set(["22842"]),
+      },
+    ],
+    // Blood Draw (DK class, 96 %): below 30 % drains nearby enemies (heal id
+    // 374606) and takes 10 % less damage for 8 s; 454871 = the buff.
+    [
+      "454871",
+      {
+        name: "Blood Draw",
+        kind: "proc",
+        via: "aura",
+        triggers: new Set(["374606"]),
+      },
+    ],
+    // Nature's Guardian (Shaman class, 100 %): below 35 % heals 40 % max HP
+    // instantly; the heal event itself (31616) is the only trace.
+    [
+      "31616",
+      {
+        name: "Nature's Guardian",
+        kind: "proc",
+        via: "heal",
+        triggers: new Set(["31616"]),
+      },
+    ],
+    // Veteran Vitality (Warrior hero, 7 %): at 35 % heals 12 % over 2 s.
+    [
+      "441387",
+      {
+        name: "Veteran Vitality",
+        kind: "proc",
+        via: "aura",
+        triggers: new Set(["441387"]),
+      },
+    ],
+    // Gift of the Golden Val'kyr (Prot Paladin, 97 %): below 30 % grants
+    // Guardian of Ancient Kings for 4 s (393879 = the guardian aura).
+    [
+      "393108",
+      {
+        name: "Gift of the Golden Val'kyr",
+        kind: "proc",
+        via: "aura",
+        triggers: new Set(["393879"]),
+      },
+    ],
+    // Cauterize (Mage, 100 %): a killing blow leaves the mage at 35 % and
+    // burning 28 % over 6 s; 87023 = the burn, 108843 = the speed buff.
+    [
+      "87023",
+      {
+        name: "Cauterize",
+        kind: "cheatDeath",
+        via: "aura",
+        triggers: new Set(["87023", "108843"]),
+      },
+    ],
+    // Cheat Death (Rogue, 5 %): a killing blow leaves the rogue at 7 % with
+    // 85 % damage reduction for 3 s; 45182 = that reduction.
+    [
+      "45182",
+      {
+        name: "Cheat Death",
+        kind: "cheatDeath",
+        via: "aura",
+        triggers: new Set(["45182"]),
+      },
+    ],
+  ]);
 /** a triggered cast this close to the marker application belongs to the proc */
 export const CRISIS_PROC_TRIGGER_TOL_MS = 1500;
 
@@ -658,18 +762,22 @@ export function crisisDecisionPoints(
   }
 
   // BACKLOG #43: proc marker auras applied to the owner (self-sourced)
-  const procMarkers = ((owner.auraEvents ?? []) as any[])
-    .filter(
-      (a) =>
-        a.logLine?.event === LogEvent.SPELL_AURA_APPLIED &&
-        a.destUnitId === owner.id &&
-        a.srcUnitId === owner.id &&
-        CRISIS_PROC_ANSWERS.has(String(a.spellId ?? "")),
+  const procMarkers: Array<CrisisProcAnswer & { t: number }> = [];
+  for (const a of (owner.auraEvents ?? []) as any[]) {
+    const def = CRISIS_PROC_ANSWERS.get(String(a.spellId ?? ""));
+    if (
+      def?.via === "aura" &&
+      a.logLine?.event === LogEvent.SPELL_AURA_APPLIED &&
+      a.destUnitId === owner.id &&
+      a.srcUnitId === owner.id
     )
-    .map((a) => ({
-      t: a.timestamp as number,
-      ...CRISIS_PROC_ANSWERS.get(String(a.spellId))!,
-    }));
+      procMarkers.push({ t: a.timestamp as number, ...def });
+  }
+  for (const h of (owner.healIn ?? []) as any[]) {
+    const def = CRISIS_PROC_ANSWERS.get(String(h.spellId ?? ""));
+    if (def?.via === "heal" && h.srcUnitId === owner.id)
+      procMarkers.push({ t: h.timestamp as number, ...def });
+  }
 
   const out: DecisionPoint[] = [];
   const emittedSeconds = new Set<number>();
@@ -795,7 +903,8 @@ export function crisisDecisionPoints(
     const responses: DecisionPointResponses = {
       selfHeal: freshSelfHeal,
       carriedHeal: !freshSelfHeal && selfHealOwn >= SELF_HEAL_BIG,
-      proc: procsIn.length > 0,
+      proc: procsIn.some((m) => m.kind === "proc"),
+      cheatDeath: procsIn.some((m) => m.kind === "cheatDeath"),
       attackerMoved: attackerMoved && !followUp.kite,
       wall: castsIn.some((c) => PERSONAL_WALL_IDS.has(c.id)) || followUp.wall,
       protective:
@@ -837,7 +946,8 @@ export function crisisDecisionPoints(
       responses.external ||
       responses.control ||
       responses.kite ||
-      responses.proc;
+      responses.proc ||
+      responses.cheatDeath;
     const tSec = anchor.tSec;
     // Gate 3 (spec §1d): trivially true for a healer (self-heal is always a
     // tool). For a DPS owner, `!rooted` alone already satisfies it — being
