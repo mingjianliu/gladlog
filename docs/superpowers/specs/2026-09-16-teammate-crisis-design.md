@@ -91,6 +91,10 @@ Same slice, final: nobody answered 172 → idle 118 → minus round-end position
 
 Hand-read cards under this rule (6): every teammate died within 10 s; the healer had an external off cooldown in 4 of 6, was 7–34 yd away, had no HoT on the teammate, cast nothing for 4.5 s. What the log cannot show: whether the healer was under pressure elsewhere on screen, drinking, or simply not reacting. This is a descriptive association (codex 3), rare, and almost always fatal.
 
+## codex R3 ruling (2026-09-17, ruling only, no code read)
+
+OPPOSE an accusation; **approves an observation card** with two conditions: (1) render the documented facts and ask "出现这个情况以后,你会开什么技能补救?" with no blame, no mistake score, no claim that a rescue was available — the question must stay open to "no usable response"; (2) drop "如果提前开了也许能规避" (no timing predicate supports it); any mortality reference stays explicitly observational. Conceded: unknown-LoS and comparator fixes; the 3v3 concentration is real. Remaining objection: attribution — 77 % mortality makes the moment worth reviewing, it does not establish an avoidable mistake. No further measurement needed for the observation-only version.
+
 ## Proposed product shapes (for the user)
 
 1. **`teammate-crisis-idle` — accuse (rare, ~1 in 190 rounds) or render as an observation — codex still opposes an accusation; user's call.** Owner = healer; a teammate crossing (shipped predicate, dangerous); healer not blocked at any second of the window (`actionBlockedAt`), no channel in progress, within 40 yd with LoS, no cast success, no cast start, no ≥ 8 yd move in [t − 1.5 s, t + 3 s], positions known; no answer toward the teammate — fresh heal cast on them, external, protective, peel, OR an earlier HoT still ticking on them. Facts rendered: teammate HP and 2 s damage, attackers, externals off cooldown, carried HoT healing ("your earlier HoTs restored N %"). Phrasing per the user: "如果提前开了也许能规避;出现这个情况以后,你会开什么技能补救?" Reference table: teammate death ≤ 10 s, idle vs answered, per bracket. Expected ~0.024 / round.
