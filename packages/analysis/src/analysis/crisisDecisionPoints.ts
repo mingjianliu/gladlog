@@ -14,7 +14,6 @@
 import { LogEvent } from "@gladlog/parser-compat";
 
 import { type CrisisRole } from "../data/behaviorPrior";
-import { classMetadata } from "../data/classSpells";
 import { spellClassMap } from "../data/drCategories";
 import { BREAK_RACIAL_SPELL_IDS } from "../data/racialAbilities";
 import spellIdLists from "../data/spellIdLists";
@@ -23,7 +22,6 @@ import {
   rootSpellIds,
   spells as spellMeta,
 } from "../data/spellTags";
-import { SpellTag } from "../data/spellTypes";
 import {
   cdAvailableAt,
   extractMajorCooldowns,
@@ -39,6 +37,7 @@ import {
   isProcOnlyActivation,
 } from "../utils/cooldowns";
 import { PVP_TRINKET_SPELL_IDS } from "../utils/killWindowTargetSelection";
+import { OFFENSIVE_CD_SPELL_IDS } from "../utils/spellDanger";
 import { buildFilteredAuraIntervals } from "../utils/utils";
 
 /** Re-exported from data/behaviorPrior.ts (the non-cyclic home for this
@@ -229,13 +228,13 @@ const CRISIS_BREAK_PRESS_IDS = new Set<string>([
 const EXTERNAL_IDS = new Set<string>(
   spellIdLists.externalDefensiveSpellIds.map(String),
 );
-const OFFENSIVE_CD_IDS = new Set<string>(
-  classMetadata.flatMap((c: any) =>
-    (c.abilities ?? [])
-      .filter((a: any) => (a.tags ?? []).includes(SpellTag.Offensive))
-      .map((a: any) => String(a.spellId)),
-  ),
-);
+// 2026-09-17 (GH #95 hand-read): this module still built its OWN 34-id
+// offensive-cooldown set from classMetadata's Offensive tag, so `enemyBurst`
+// was false on 12/12 teammate-crisis-idle cards while the enemy had pressed
+// real cooldowns. The predicate index closed that divergence for every other
+// consumer on 2026-09-02 (GH #60 tail) — this was the fourth consumer it
+// missed. One table: the canonical 47-id `OFFENSIVE_CD_SPELL_IDS`.
+const OFFENSIVE_CD_IDS: ReadonlySet<string> = OFFENSIVE_CD_SPELL_IDS;
 /** hand-typed `interrupts` set (spellTags) — shared by CONTROL_IDS ("owner
  * used an interrupt on an enemy") and SILENCE_IDS ("owner is silenced") so
  * the filter is computed once, not twice. */

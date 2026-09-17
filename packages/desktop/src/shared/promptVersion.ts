@@ -500,4 +500,11 @@
 //  the crisis-no-response legend names both tokens. Defy Fate / Purgatory /
 //  Last Resort / Battle-Scarred Veteran / Elixir / Whirling Steel rejected
 //  (0–15 archive events or the wrong HP shape).
-export const PROMPT_VERSION = 74;
+//  v75 (2026-09-17, GH #95 hand-read): crisisDecisionPoints' `enemyBurst`
+//  now reads the canonical 47-id OFFENSIVE_CD_SPELL_IDS instead of its own
+//  34-id classMetadata set (the fourth consumer the 2026-09-02 unification
+//  missed) — crisis-no-response `facts.burst` and the teammate-crisis-idle
+//  `burst` / `burstCue` facts flip to "yes" where the enemy really pressed a
+//  cooldown; crisis-no-response's danger ordering (enemyBurst first) can
+//  reorder which ≤2 points survive the cap. Reference cells do not key on it.
+export const PROMPT_VERSION = 75;

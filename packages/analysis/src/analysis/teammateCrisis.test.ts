@@ -16,7 +16,9 @@ import {
   CRISIS_EXTERNAL_IDS,
   CRISIS_OFFENSIVE_CD_IDS,
 } from "./crisisDecisionPoints";
+import { spellEffectData } from "../data/spellEffectData";
 import {
+  TEAMMATE_CRISIS_BURST_MIN_CD_S,
   TEAMMATE_CRISIS_CUE_MIN_S,
   TEAMMATE_CRISIS_REACH_YARDS,
   teammateCrisisPoints,
@@ -27,7 +29,19 @@ const T0 = 1_000_000;
 const X = -2050;
 const Y = 6650;
 const EXTERNAL = [...CRISIS_EXTERNAL_IDS][0]!;
-const BURST = [...CRISIS_OFFENSIVE_CD_IDS][0]!;
+// the burst FACT needs a real cooldown (TEAMMATE_CRISIS_BURST_MIN_CD_S) —
+// pick one from the canonical set rather than the first entry, which may be
+// a debuffs_offensive row with no cooldown (Curse of Weakness)
+const BURST = [...CRISIS_OFFENSIVE_CD_IDS].find(
+  (id) =>
+    (spellEffectData[id]?.cooldownSeconds ?? 0) >=
+    TEAMMATE_CRISIS_BURST_MIN_CD_S,
+)!;
+const NO_CD_BURST = [...CRISIS_OFFENSIVE_CD_IDS].find(
+  (id) =>
+    !spellEffectData[id]?.cooldownSeconds &&
+    !spellEffectData[id]?.charges?.chargeCooldownSeconds,
+);
 
 const sample = (
   actorId: string,
@@ -299,6 +313,15 @@ describe("teammateCrisisPoints", () => {
     expect(p!.externalsReady).toEqual([
       { spellId: EXTERNAL, spellName: "Ext" },
     ]);
+    // a canonical-table entry WITHOUT a cooldown (a curse / DoT) is not a
+    // burst fact — nothing on a cooldown tracker shows it
+    if (NO_CD_BURST) {
+      const e2 = enemy({ spellCastEvents: [cast(-1000, NO_CD_BURST, "M")] });
+      const h2 = healer();
+      expect(
+        teammateCrisisPoints(h2, combat([h2, mate(), e2]), [])[0]!.enemyBurst,
+      ).toBeNull();
+    }
   });
 
   it("a non-healer owner yields nothing", () => {

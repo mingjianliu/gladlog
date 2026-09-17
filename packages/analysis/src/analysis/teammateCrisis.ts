@@ -7,13 +7,15 @@
  * (`crisisDecisionPoints(teammate, …)`) and asks, per crossing, what the
  * healer did toward that teammate and whether the healer could act at all.
  *
- * It feeds ONE context fact, the `[MATE CRISIS]` observation card
- * (`context/teammateCrisis.ts`), and ONE reference table
+ * It feeds ONE candidate, `teammate-crisis-idle`
+ * (`candidates/teammateCrisisIdle.ts`), and ONE reference table
  * (`data/teammateCrisisPriorGenerated.json`, built by
  * `packages/eval/scripts/teammateCrisisPriorScan.ts` through this same
- * function). codex R3 ruling 2026-09-17 (astra, three rounds): an observation
- * card, never an accusation — the card lists facts and asks a question; the
- * corpus numbers are observed death rates, not proof a rescue existed.
+ * function). codex R3 (astra, three rounds, 2026-09-17) ruled for an
+ * observation card only; the user overruled the same day — "这个东西可以做一下
+ * 指控" — on the strength of the feasibility door below, so the candidate is
+ * an accusation with the crisis-no-response discipline (outcome reference
+ * cited, never "you should have pressed X").
  *
  * Definitions (each one was a codex objection or a user ruling; the
  * measurement history is in docs/superpowers/specs/2026-09-16-teammate-crisis-design.md):
@@ -48,7 +50,7 @@
  */
 import { LogEvent } from "@gladlog/parser-compat";
 
-import { getEnglishSpellName } from "../data/spellEffectData";
+import { getEnglishSpellName, spellEffectData } from "../data/spellEffectData";
 import {
   cdAvailableAt,
   extractMajorCooldowns,
@@ -100,6 +102,18 @@ export const TEAMMATE_CRISIS_SAMPLE_TOL_MS = 1500;
  * fact with no cue wording. Never "had you opened earlier you would have
  * avoided it" (codex R3 condition 2 stands for the counterfactual). */
 export const TEAMMATE_CRISIS_CUE_MIN_S = 2;
+/** The burst FACT on the card names a press "visible on a cooldown tracker",
+ * so it must be a cooldown: the canonical `OFFENSIVE_CD_SPELL_IDS` also admits
+ * `debuffs_offensive` rows with no cooldown at all (Curse of Weakness 702,
+ * Curse of Tongues 1714, Ignite 12654 — the first re-dump after the
+ * 2026-09-17 unification rendered "opened Curse of Weakness 6s earlier").
+ * Official cooldown (or charge recharge) at or above this many seconds. */
+export const TEAMMATE_CRISIS_BURST_MIN_CD_S = 30;
+function isTrackableCooldown(spellId: string): boolean {
+  const e = spellEffectData[spellId];
+  const cd = e?.cooldownSeconds ?? e?.charges?.chargeCooldownSeconds ?? 0;
+  return cd >= TEAMMATE_CRISIS_BURST_MIN_CD_S;
+}
 
 export type TeammateCrisisHealerAnswer =
   "external" | "protective" | "freshHeal" | "carriedHeal" | "peel";
@@ -257,7 +271,7 @@ export function teammateCrisisPoints(
   for (const e of enemies) {
     for (const c of (e.spellCastEvents ?? []) as any[]) {
       const sid = String(c.spellId ?? "");
-      if (CRISIS_OFFENSIVE_CD_IDS.has(sid))
+      if (CRISIS_OFFENSIVE_CD_IDS.has(sid) && isTrackableCooldown(sid))
         enemyBurstCasts.push({
           t: c.timestamp,
           casterName: e.name,
