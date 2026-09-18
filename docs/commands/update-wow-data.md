@@ -375,6 +375,20 @@ npx tsx packages/eval/scripts/buffDurationScan.ts \
 #    this clearly (Binding Shot 2 s vs 3.0 s ×1084 was the one that did); fix goes into CORPUS_DURATION_PATCHES.
 npx tsx packages/eval/scripts/ccLifetimeScan.ts \
   --manifest $GLADLOG_EVAL_HOME/corpus/manifest-archive-<date>.txt --every 30
+# 5. Offensive cooldowns, FORWARD (2026-09-18): which >= 45 s buttons DPS players press lift their own damage
+#    like the registered OFFENSIVE_CD_SPELL_IDS do, yet are not in the table. The pair of step 2 for that table:
+#    rot found 137639 dead, nothing could find that its successor Zenith was never listed. ~25 min on every 20th
+#    file. `report` prints the registered cooldowns' own lift distribution as the yardstick; there is NO baked-in
+#    cut — read a high lift together with `coPressed` (rides along with a registered cooldown) and the profile
+#    column (items / racials / CC pressed during a go). Additions are a ruling, never automatic. Also read the
+#    REGISTERED block bottom-up: a registered id with a tiny share next to an unregistered twin of the same name
+#    is a renumber (Bladestorm 227847 5 % vs 446035 93 %). `--min-rating 0`: the lift is within-player,
+#    within-round, and 2100+ alone leaves most specs under n = 30.
+npx tsx packages/eval/scripts/offensiveCdGapScan.ts scan \
+  --manifest $GLADLOG_EVAL_HOME/corpus/manifest-archive-<date>.txt --every 20 --min-rating 0 \
+  --out $GLADLOG_EVAL_HOME/reports/offensive-cd-gap-<date>/cells.json
+npx tsx packages/eval/scripts/offensiveCdGapScan.ts report \
+  --in $GLADLOG_EVAL_HOME/reports/offensive-cd-gap-<date>/cells.json --min-n 50 --min-share 0.1
 ```
 
 npm aliases for the same three (identical flags): `npm run -w @gladlog/eval scan:rot` ·
