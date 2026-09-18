@@ -6,6 +6,67 @@ One section per release, listing every change and the commit behind it (on the
 `git log v<prev>..v<new>` basis; release and docs-only commits go under "Other").
 The release procedure is documented in `.claude/skills/release`.
 
+## v0.1.34 (2026-09-18)
+
+A coaching release. The healer's crisis signal now covers the teammate who is being killed, not only the healer's own HP — two new cards, each with a full-archive reference — and the crisis machinery learned three things it had been getting wrong: a talent that fires on its own is an answer, a HoT that was already ticking is not a press, and "the enemy opened a cooldown" is one predicate everywhere. Underneath, the talent-integration project (GH #96) landed end to end: cooldown, duration and mitigation modifiers compiled from the game data, validated against the archive under rules written down before each scan ran, and switched on. Two more signals joined the menu after confirmatory A/B (kick priority, backlash dispel), the timeline lost several duplicate lines, and the reference corpus moved to the 2100+ archive.
+
+### AI coaching — crises and teammates
+
+- `61475d5a` **A new healer card: the teammate crossed the crisis line and you cast nothing.** `teammate-crisis-idle` fires only when the healer was free for the whole window (not CC'd, kicked, silenced or dead at any second of it), had no cast in flight, was within 40 yd with line of sight, had mana, cast nothing and started nothing, did not reposition, was not in a disconnected stretch, and no HoT of theirs was ticking on the teammate — and the teammate did not answer either. The same commit adds a `[STACKED DEFENSIVES]` fact line: two major defensives from two players on one friendly, who cast each, how long they overlapped and what the later one blocked — a fact, with no "one would have been enough" claim
+- `5e55bea8` The reference behind that card, from 116,063 archive rounds: 534 such moments (one in ~220 rounds), the teammate died within 10 s in 83 % of them against 10 % when the healer answered, both populations under identical filters. Only 3v3 clears the sample floor today
+- `9e0e019f` **Second card: the healer spent the crisis window healing the wrong person.** `teammate-crisis-triage` — same feasibility door, but the healer was casting on a friendly whose HP was above the crisis line while the crossing teammate got nothing. Reference: the teammate died 44 % of the time when the healer's target was not in crisis vs 21 % when they were (Solo Shuffle; 3v3 is under the floor and stays silent). The same commit: `cd-hoarded` no longer accuses a held defensive when a low-HP talent proc or a cheat-death answered the crisis and the player survived the window; and "the enemy opened a cooldown" is now one predicate for the enemy-CD windows, the crisis fact and the teammate cards — a cooldown, not a curse or a DoT
+- `5a249db7` The crisis fact "enemy burst cooldown active" was reading a private 34-spell list instead of the canonical 47-spell offensive table the rest of the product had unified on; on the same archive slice, dangerous crisis moments with an enemy cooldown up went from 30 % to 45 % in 3v3. Also the scripts that print the real cards and trace one card event by event, so a new signal is read before it is trusted
+- `989c7d7e` **A talent that fires on its own now answers a crisis.** Well-Honed Instincts' automatic Frenzied Regeneration is recognised from its marker aura, counts as a response, and its heal is no longer mistaken for a press or a carried HoT; the legend tells the model to say "a talent fired" rather than "you pressed". Separately, The Hunt's arena cooldown is patched to 60 s: the official 90 s (75 with Eternal Hunt) was contradicted by a hard floor at 60 s across 1,401 consecutive casts, and the ledger's "cast while still on cooldown" count on a 1/20 slice went from 1,196 to 0
+- `8875557f` Every automatic protection talent in the game went through the same archive check; six have a verifiable marker — Well-Honed Instincts, Blood Draw, Nature's Guardian, Veteran Vitality, Gift of the Golden Val'kyr as procs, Cauterize and Cheat Death as a separate "cheat death" answer whose wording is "the talent converted a killing blow", never "nothing else was needed". Dream Guide turned out to be a hand-out buff, Defy Fate / Purgatory / Last Resort / Battle-Scarred Veteran too rare to verify — all left out rather than guessed
+- `bf99e320` `872d682a` The crisis reference table rebuilt with those two arms: the "no response" populations shrink (2v2 3,255 → 2,883, 3v3 1,781 → 1,652), and the share previously credited to a carried HoT drops by ~0.06 in every cell — a large part of it had been Well-Honed Instincts
+- `0ba3ed1e` **A HoT placed before the crisis is no longer described as a self-heal press, and an attacker walking away is no longer called kiting.** Both still count as answered — the populations are identical — but the response mix is re-attributed (2v2 self-heal 0.55 → 0.24 plus carried HoT 0.31)
+- `7f5ce6d9` `23ca7de7` A healer's own Power Word: Shield / Void Shield, Fade, Spirit of Redemption, Reversion, Divine Hymn, Tree of Life, Bear Form, Ancient of Lore, Ultimate Penitence and Tranquility count as answering a crisis; a trinket or racial press counts only when a real action follows it, and a mobility press only when distance actually opens — the reference table rebuilt over the full archive to match
+- `077c501e` `7351ed28` `80fc353c` `6c1e0d09` `39e7cb68` `c4dac85e` `4dcbe4e5` `c07796b5` `1b396751` The probes and three codex review rounds behind the teammate cards: the funnel and hand review that killed the first "did nothing" shape, timing shapes on burst windows, the measurement that two percentage reductions stack multiplicatively, Cloak of Shadows' physical reduction traced to Bait and Switch, and the design record with the reviewer's rulings
+
+### AI coaching — talents (GH #96)
+
+- `69096f6d` `6916e677` `af45c9ba` **Cooldown talent modifiers compiled from the game data instead of hand-typed**: Monk / Demon Hunter / Evoker class sets, charge-recovery percentages, temporary buffs and row identity fixed; a shared talent evidence inventory feeds a cooldown rule compiler with row-for-row parity against the old generator; reference tables regenerated
+- `76c51425` `fe04a713` Every crisis / burst / mitigation decision the coaching makes can be traced — which opportunities existed, which were suppressed and why — with an immutable fact-switch configuration and a decision-level diff harness
+- `c7241ff9` `2a23b9da` `94b4d2ed` `84b5d748` **Mitigation is priced through one resolver, talent-aware.** Every consumer of "how much did that wall block" reads the same components (percentage, immunity, school, carrier); talent modifiers to those percentages were promoted only where the archive split fell inside a band declared before the scan ran (7 of 11), and the switch is on. Cloak of Shadows' 20 % physical reduction promoted on the full archive; `burst-into-mitigation` now requires the wall to cover at least 30 % of the burst (provisional)
+- `cae735ae` Review findings applied: unresolved choice nodes no longer count as "taken", Survival of the Fittest demoted, player-cluster sensitivity reported, the M4 recipient filter fixed
+- `a76aabda` `f80dd8a3` `7304c5cb` Duration modifiers validated the same way: Trueshot +2 s, Demonic Tyrant +5 s, Boneshaker's Shockwave stun +1 s, Ironbark +4 s from Regenerative Heartwood — each passing a rule predeclared before the first run
+- `5325c993` `d0b35723` `b8ec1198` `dbb680f9` `7bf52f28` The cooldown compiler was missing two encodings (by spell category and by spell label) — 274 rows recovered, burst-window and sync-window references rebuilt; Tar-Coated Bindings explains Binding Shot's 3 s; The Hunt's 60 s floor found with no data-side source; the scripted-talent review recorded with what is deliberately not modelled
+- `1d71f897` `fd094a77` `68931658` `89613ac0` The catalog of all 3,491 talents with resolved descriptions and code references, a scan for every talent that adds protection, the crisis response completeness scan and sharded talent scans; BACKLOG #41(6) closed by the mitigation components
+- `31d356ae` Talent-shared walls are priced on the unit carrying the aura — Flameshaper's Obsidian Scales is 30 % on the caster and 15 % on an ally
+
+### AI coaching — new signals and the prompt
+
+- `82bf961c` **Kick priority**: the enemy healer hardcast a heal on your low kill target, your interrupt was ready and in range, nobody kicked — built on the official per-player interrupt kit
+- `2f955048` `26cec7bf` **Backlash dispel**: dispelling Unstable Affliction / Vampiric Touch off a safe target is net-negative on the archive; the card mirrors the corpus cost/benefit model and is table-guarded
+- `96217226` `4959f9b7` `3fe53d32` `7a9cd396` Both went through a pre-registered A/B: the first n=78 round said iterate (review fixes applied, audited surface cut), the confirmatory n=40 round on Opus adopted them. The same round closed a defect that had been truncating any fact value containing a comma — a new hard-failure gate and one serializer
+- `5622560b` `[ENEMY DEF]` lines and per-cast unfolding inside death windows (GH #97)
+- `f123004b` `[DMG SPIKE]` lines annotate the trough, client-locale (CJK) names can no longer leak into the prompt, the kill-window list is chronological
+- `4f9e4e61` `481fd5d6` `26eeddb9` `1f94e24b` One line owns each event — CC casts, self-buffs and missed-purge opportunities fold into the line they belong to; Lay on Hands / Holy Bulwark no longer render twice; verdict labels become the condition that was met; an offensive-window peak outside the window carries a marker (GH #99)
+- `af785348` `d3b8ba97` `469514b2` The causal-language lint treats "which is why you won" exactly like a loss verdict and recognises the English verdict forms; the evaluation responder quotes window bounds, timestamps and HP as printed (GH #98)
+- `51aebfb9` Six measurable correctness gaps found by reading the coaching against a season-2 strategy guide, fixed
+
+### Candidate registry, reference corpus, experiments
+
+- `4c5816c0` `53ca82c1` `99cad7af` `64f31820` `5ddd3d0a` **One registry decides whether a candidate type is live** — flags, bracket lists, the desktop ignore set and the coach-corpus rosters all derive from it; the negative control generates from observed corpus truth; a DPS-perspective diagnostics slice (`burst-into-mitigation` 0 → 11.4 % on the same rounds)
+- `db19aded` `2c735351` `24a9a927` `baaca696` The production reference corpus is the 2100+ archive — the top of this season's ladder, not a representativeness trade — and Discipline finally splits by hero tree; the read side degrades to the groups the corpus actually holds, and the corpus build runs in archive mode
+- `8b2ed2f0` `dd3dfb32` "The target's state at the moment of the press" investigated and recorded as a negative result — too situational for even a fact line
+- `0890ab3b` `105bdb4c` `5f65d7f4` `451d1675` `38973f99` `ff424eba` `fd6a089b` `a46ec48f` `9ef775bc` `e9303973` `c0948192` `678d8345` The temporal-evidence experiment (GH #94): would a richer, holistic evidence list change the verdicts on 20 frozen crisis moments? Two pre-registered rounds, judged by hand — material facts gained 18/20, better interpretation 3/20 against a bar of 4. Closed as failed, with the record
+- `d9731f62` `46a9d675` `dc6434f1` `20869d0f` `db3881a1` `d3231d82` `1e872be5` `4695fdf9` `c68d573e` `c338bafc` `1426b9d9` Coach-corpus probes over the archive (every player as owner, ledger rating, rating buckets off by default), the weekend batches behind GH #67/#72/#79/#80/#81/#85/#87/#88, the GH #71 admission audit, target-swap noise scans and rule-171 example generation
+
+### Desktop
+
+- `79e8bced` `990025ff` `eb301504` The default Anthropic model is Claude Opus 5 (the evaluation responder and judge follow); the Claude CLI model list offers Fable 5.1
+- `e880089a` Claude CLI calls no longer load the user's own tools, MCP servers and skills into the analysis session
+
+### Corpus tools
+
+- `cb43596e` `4257ad9e` `26dd2717` `68c2d81b` wowarenalogs moved behind sign-in with 15 logs per user per day: the fetcher takes the grant path, the old archiver is retired, and a daily driver pulls 10 Solo Shuffle plus 5 3v3 logs at 2100+, remembers the day's quota, keeps a run log and notifies when the session expires
+
+### Other
+
+- `403c7296` `0ce5d70d` Local analysis / eval tests share a module cache for an allow-listed set (146 s → 52 s) while CI stays fully isolated and fans the unit tests across parallel runners
+- `5432c28b` `7838e9f2` `4e9e635c` `9d975345` `5b16ca8f` `f14cd08b` `75c4b3eb` `8045ea6b` Documented commands and Markdown links are verified in presubmit, stale source references removed, Chinese documentation reconciled, nine backlog entries archived, the cross-AI review skill routed to codex first
+
 ## v0.1.33 (2026-09-09)
 
 A fix release. The managed OBS recorder came back from the real machine unusable — a blocking error box on every launch, and then a "failed to start recording" dialog — and both turned out to be values in the config we generate that OBS reads differently than we wrote them. Alongside that, the batch behind buff durations landed: talents now feed the durations the coaching reasons about, and a hand-written duration table stopped shadowing official values.
