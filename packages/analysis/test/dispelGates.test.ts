@@ -140,9 +140,10 @@ describe("门 b+c 无法施法(硬控∪踢锁,自由时间 < 3s 反应阈值)",
     expect(kickLockoutSeconds("999999")).toBe(3);
     // GH #62 (2026-09-02) → 2026-09-04: known kicks read the official DB2 PvP
     // duration (corpus scan = verification gate) —
-    // before it every kick answered the fallback. Counterspell 5, Wind Shear 2,
+    // before it every kick answered the fallback. Counterspell 6 (user ruling
+    // 2026-09-18 over the official 5), Wind Shear 2,
     // Spell Lock (felhunter) 5, Quell 4, melee kicks 3 (12.1 archive, 605 files).
-    expect(kickLockoutSeconds("2139")).toBe(5);
+    expect(kickLockoutSeconds("2139")).toBe(6);
     expect(kickLockoutSeconds("57994")).toBe(2);
     expect(kickLockoutSeconds("19647")).toBe(5);
     expect(kickLockoutSeconds("351338")).toBe(4);

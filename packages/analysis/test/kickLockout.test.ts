@@ -9,10 +9,11 @@
  *      back to the corpus-observed table / hand duration / 3 s where DB2 is
  *      blank;
  *   2. official and corpus agree: for every kick the S2 scan saw ≥ 100 times,
- *      |official − observed p25| ≤ 0.5 s. p25, not the bin mode — the mode
- *      can sit one bin late (Counterspell mode 6, p25 5.04, official 5). A
- *      DB2 refresh that breaks this turns CI red instead of silently moving
- *      the cannot-cast exemption.
+ *      |official − observed p25| ≤ 0.5 s. A DB2 refresh that breaks this
+ *      turns CI red instead of silently moving the cannot-cast exemption.
+ *   3. a user-ruled lockout (RULED_LOCKOUTS) is an explicit override, and is
+ *      gated against the corpus MODE instead of p25 — so a ruled value still
+ *      has to reproduce in the scan, it just answers to the other statistic.
  */
 import { KICK_LOCKOUT_OBSERVED } from "../src/data/kickLockoutObservedGenerated";
 import { SPELL_CATEGORIES } from "../src/data/spellCategories";
@@ -23,10 +24,14 @@ import {
 
 const GATE_MIN_N = 100;
 const GATE_TOLERANCE_S = 0.5;
+// User ruling 2026-09-18: Counterspell 6 s (DB2 PvP duration 5; corpus mode 6,
+// p50 6.10, p25 5.04 — the only kick whose p50 sits > 1 s above its official
+// value). The mechanism for the sixth second is not identified yet.
+const RULED_LOCKOUTS: Record<string, number> = { "2139": 6 };
 
 describe("kickLockoutSeconds — 官方 PvP 锁定时长单源", () => {
-  it("2026-09-04 裁决值:法术反制 5(语料众数 6 是分箱伪影)、脚踢/拳击/心灵冰冻 3、风剪 2、压制 4、法术封锁 5", () => {
-    expect(kickLockoutSeconds("2139")).toBe(5); // Counterspell
+  it("裁决值:法术反制 6(2026-09-18 用户裁决,覆盖官方 5)、脚踢/拳击/心灵冰冻 3、风剪 2、压制 4、法术封锁 5", () => {
+    expect(kickLockoutSeconds("2139")).toBe(6); // Counterspell
     expect(kickLockoutSeconds("1766")).toBe(3); // Kick
     expect(kickLockoutSeconds("6552")).toBe(3); // Pummel
     expect(kickLockoutSeconds("47528")).toBe(3); // Mind Freeze
@@ -48,7 +53,7 @@ describe("kickLockoutSeconds — 官方 PvP 锁定时长单源", () => {
     expect(kickLockoutSeconds("0")).toBe(3);
   });
 
-  it("校验门:语料 n ≥ 100 的每个踢技,官方值都存在且 |官方 − p25| ≤ 0.5 s", () => {
+  it("校验门:语料 n ≥ 100 的每个踢技,官方值都存在且 |官方 − p25| ≤ 0.5 s(裁决值对众数)", () => {
     const gated = Object.entries(KICK_LOCKOUT_OBSERVED).filter(
       ([, e]) => e.n >= GATE_MIN_N,
     );
@@ -56,6 +61,14 @@ describe("kickLockoutSeconds — 官方 PvP 锁定时长单源", () => {
     for (const [id, e] of gated) {
       const official = kickLockoutOfficialSeconds(id);
       expect(official, `${e.name} ${id}: DB2 duration missing`).toBeDefined();
+      if (id in RULED_LOCKOUTS) {
+        expect(official).toBe(RULED_LOCKOUTS[id]);
+        expect(
+          Math.abs(official! - e.lockoutSeconds),
+          `${e.name} ${id}: ruled ${official} vs corpus mode ${e.lockoutSeconds}`,
+        ).toBeLessThanOrEqual(GATE_TOLERANCE_S);
+        continue;
+      }
       expect(
         Math.abs(official! - e.p25),
         `${e.name} ${id}: official ${official} vs corpus p25 ${e.p25}`,

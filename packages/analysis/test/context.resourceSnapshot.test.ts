@@ -513,10 +513,10 @@ describe("context.resourceSnapshot unit tests", () => {
       // Verify the enemy CD information
       expect(resText).toContain("enemy:Combustion/Fire Mage");
       // Verify the CC information
-      // Counterspell locks for 5 s (official DB2 PvP duration, 2026-09-04;
-      // the corpus bin mode had said 6, the old 3 s fallback rendered "-1s"
-      // here for the same fixture)
-      expect(resText).toContain("cc:1/Counterspell-3s[kick]");
+      // Counterspell locks for 6 s (user ruling 2026-09-18 over the official
+      // DB2 PvP 5 s, which rendered "-3s" here; the old 3 s fallback rendered
+      // "-1s" for the same fixture)
+      expect(resText).toContain("cc:1/Counterspell-4s[kick]");
       expect(resText).toContain("2/Rake-1s[stun]");
     });
 

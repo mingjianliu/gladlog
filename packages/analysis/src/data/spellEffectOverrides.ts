@@ -121,7 +121,15 @@ export const SPELL_EFFECT_OVERRIDES: Record<string, IMinedSpell> =
       e("359844", "Call of the Wild", 180, 20),
       // ── Interrupts (enemyInterrupts: cooldownSeconds ?? 15) ──
       e("1766", "Kick", 15),
-      e("2139", "Counterspell", 24),
+      // Lockout 6 s — user ruling 2026-09-18 ("法术反只改成6秒"). DB2's PvP
+      // duration says 5, but Counterspell is the one kick whose corpus shape
+      // disagrees with its official value: mode 6, p50 6.10 against a p25 of
+      // 5.04, where every other kick's p50 sits 0.2–0.9 s above its lockout
+      // (kickLockoutObservedGenerated.json). An explicit override duration is
+      // how `kickLockoutOfficialSeconds` is patched; the mechanism behind the
+      // extra second (a mage-side modifier is the likely one) is NOT yet
+      // identified — see test/kickLockout.test.ts RULED_LOCKOUTS.
+      e("2139", "Counterspell", 24, 6),
       e("6552", "Pummel", 15),
       e("47528", "Mind Freeze", 15),
       e("57994", "Wind Shear", 12),

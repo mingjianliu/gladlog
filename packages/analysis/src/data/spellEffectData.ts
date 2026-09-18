@@ -120,6 +120,13 @@ export function ccFullDurationSeconds(spellId: string): number | undefined {
  * Direction of the change: Counterspell 6 → 5 s = one second less cannot-cast
  * exemption for its victims.
  *
+ * 2026-09-18 (user ruling): Counterspell back to 6 s, as an explicit override
+ * duration in `SPELL_EFFECT_OVERRIDES`. The "bin artifact" reading above does
+ * not survive a look at all 17 kicks side by side: every other kick has
+ * p25 ≈ lockout and p50 = lockout + 0.2–0.9 s, Counterspell alone has
+ * p50 = 6.10 against an official 5 — a second population at 6 s, not a late
+ * bin. The test gates the ruled value against the corpus MODE instead of p25.
+ *
  * Why the official value is read field-by-field and not through the merged
  * `spellEffectData`: the override layer lists most kicks for their COOLDOWN
  * (`e("1766", "Kick", 15)`), and the whole-object spread in the merge then

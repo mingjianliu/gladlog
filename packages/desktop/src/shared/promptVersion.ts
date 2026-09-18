@@ -517,4 +517,10 @@
 //  / cheat-death answered the crisis and the crisis unit was still alive
 //  CD_HOARD_RESPONSE_S later. teammateCrisisPriorGenerated.json gains the
 //  triage cells (same 116,063-round scan, no re-scan).
-export const PROMPT_VERSION = 76;
+//  v77 (2026-09-18, user ruling "法术反只改成6秒"): Counterspell school
+//  lockout 5 → 6 s as an explicit override over the DB2 PvP duration (corpus
+//  mode 6, p50 6.10; the only kick whose p50 sits > 1 s above its official
+//  value) — the [RES] `-Ns[kick]` field, the kick-eaten lockout fact and the
+//  cannot-cast exemptions (dispel locked-out gate, healing-gap free time)
+//  gain one second for Counterspell victims. No other kick moves.
+export const PROMPT_VERSION = 77;
