@@ -2316,3 +2316,7 @@ M6 已做完的:1,190 个脚本型天赋分队列 → 118 个点名了产品追�
 3. **单排 / 2v2 参照格样本**:全量下 clean idle 预计 ~330 个,58/60 在 3v3;2v2、单排格大概率不过 50 的样本门 → 只有 3v3 会渲染,属预期,不要为了让它渲染而降门槛。
 4. `teammateCrisisAnswerProbe.ts` / `teammateCrisisCards.ts` / `doubleDefensiveProbe.ts` 三个探针留作历史(它们内联了一份规则,和产品判定可能漂移);以后再量一律走 `teammateCrisisPriorScan.ts`。
 5. **手读顺带抓到的共享谓词漏洞(2026-09-17 已修)**:`crisisDecisionPoints` 的「对面 8 秒内开过大」还在用自己从 classMetadata 拼的 34 条表,不是 2026-09-02 统一的 47 条 `OFFENSIVE_CD_SPELL_IDS`(索引说「三个消费者都读它」,漏了第四个)。改读正典后同一 1/60 切片(1,946 回合)危险点里 burst=yes:3v3 1,083→1,644 / 3,616、单排 1,720→2,508 / 5,637、2v2 488→787 / 2,257(`crisisBurstShareProbe.ts`)。**另一个发现待裁**:正典表经 `debuffs_offensive` 收了三条**没有冷却**的东西(虚弱诅咒 702、语言诅咒 1714、点燃 12654)——第一次重打卡片就渲染出「对面 6 秒前开了虚弱诅咒」;队友卡的 burst 事实已加官方冷却 ≥30 s 的门(`TEAMMATE_CRISIS_BURST_MIN_CD_S`),用户问「这是干嘛用的」→ 查证:正典表是三处消费者的「对面开了大」判据,其中敌方 CD 窗口构建器(`reconstructEnemyCDTimeline`)本来就再加一道官方冷却 30–360 s 的界,所以这三条从来开不出窗口;只有两个危机消费者(`enemyBurst`、队友卡)没这道界。处置(同日):把那道界抽成 `utils/enemyCDs.ts` → `isEnemyCdWindowSpell`,三处共用;正典表本身不动(它还给 `hasOffensiveSpellActive` 的光环证据用,那边看的是 buff 在不在,不是冷却)。
+
+## 48. 待裁清单 2026-09-18(logged 2026-09-18)
+
+用户要一份可以慢慢看的裁决清单:`docs/rulings-pending-2026-09-18.md`(A 一句话:#42 覆盖门 / 队友卡回合末 / triage 只单排 / 关 #77 #89 #78 #80 #93 #95;B 定形状:#66 #67 #82 #79 #72 #73 #87 #88 #81;C 立项:#68 #69 #70 #83 #84–#86)。裁完写回对应 issue / BACKLOG 条目。
