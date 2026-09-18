@@ -543,4 +543,20 @@
 //  where the type fired: missed-sync-window 417 → 450, position-mistake
 //  158 → 177, slow-defensive-response 42 → 54, burst-into-mitigation
 //  91 → 102, missed-cleanse 134 → 133; the other 16 types unchanged.
-export const PROMPT_VERSION = 79;
+//  v80 (2026-09-18, codex astra review of v77–v79, 5 findings all adopted):
+//  (1) one `effectiveCooldownSeconds` = max(cooldown, charge recharge)
+//  replaces eleven inlined `cooldownSeconds ?? recharge` reads — Zenith
+//  (16 / 90), Ravager, Guardian of the Forgotten Queen failed every 30 s gate,
+//  so v78's claim that enemy-CD windows see Zenith was FALSE until now
+//  (enemy-timeline entries on 400 library rounds: Zenith 0 → 75); (2) cast
+//  ids with no DB2 duration get their effect aura's official duration
+//  (Voidform 20, Colossus Smash 10, Touch of the Magi 12, Doom Winds 8, Force
+//  of Nature 10 — zero-length windows before), Voidform aura 194249
+//  registered for the aura-side consumers, Predator's Wake withdrawn (2 s,
+//  no effect aura identified). Rounds where the type fired, 1,192
+//  perspectives, v76 → v79 → v80: missed-sync-window 417 → 450 → 462,
+//  position-mistake 158 → 177 → 179, slow-defensive-response 42 → 54 → 54,
+//  burst-into-mitigation 91 → 102 → 100, death-setup 369 → 369 → 366.
+//  syncWindowPriorGenerated.json is STALE against this membership until the
+//  archive re-scan lands.
+export const PROMPT_VERSION = 80;

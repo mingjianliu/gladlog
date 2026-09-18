@@ -67,6 +67,17 @@ describe("kickLockoutSeconds — 官方 PvP 锁定时长单源", () => {
           Math.abs(official! - e.lockoutSeconds),
           `${e.name} ${id}: ruled ${official} vs corpus mode ${e.lockoutSeconds}`,
         ).toBeLessThanOrEqual(GATE_TOLERANCE_S);
+        // The mode alone is a weak gate (codex astra review 2026-09-18): a
+        // refreshed distribution can keep mode 6 while its body moves. The
+        // ruled value must also sit within tolerance of the MEDIAN, and the
+        // lower quartile must not fall below the official value it overrides
+        // (p25 5.04 vs official 5 — the 5 s population is real, that is the
+        // open question; below it would be a different regression).
+        expect(
+          Math.abs(official! - e.p50),
+          `${e.name} ${id}: ruled ${official} vs corpus p50 ${e.p50}`,
+        ).toBeLessThanOrEqual(GATE_TOLERANCE_S);
+        expect(e.p25).toBeGreaterThanOrEqual(5 - GATE_TOLERANCE_S);
         continue;
       }
       expect(

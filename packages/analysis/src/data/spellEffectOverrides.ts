@@ -119,6 +119,19 @@ export const SPELL_EFFECT_OVERRIDES: Record<string, IMinedSpell> =
       e("191427", "Metamorphosis", 240, 24),
       e("370965", "The Hunt", 90, 6),
       e("359844", "Call of the Wild", 180, 20),
+      // ── Cast id → effect duration (codex astra review 2026-09-18) ──
+      // These cast ids carry NO duration in DB2 — the length lives on a
+      // separate aura id — so the enemy-CD timeline built a zero-length
+      // window ([10,10]) and [RES] guessed "3s left". Durations are the
+      // OFFICIAL ones of the effect aura each cast applies (generated table,
+      // all five aura ids present in the corpus), not hand estimates:
+      // Voidform 194249 = 20, Colossus Smash 208086 = 10, Touch of the Magi
+      // 210824 = 12, Doom Winds 466772 = 8, Force of Nature 248280 = 10.
+      e("228260", "Voidform", 120, 20),
+      e("167105", "Colossus Smash", 45, 10),
+      e("321507", "Touch of the Magi", 45, 12),
+      e("384352", "Doom Winds", 60, 8),
+      e("205636", "Force of Nature", 60, 10),
       // ── Interrupts (enemyInterrupts: cooldownSeconds ?? 15) ──
       e("1766", "Kick", 15),
       // Lockout 6 s — user ruling 2026-09-18 ("法术反只改成6秒"). DB2's PvP

@@ -11,7 +11,10 @@ import type { CdPriorHoldEpisode } from "../analysis/cdTriggerPrior";
 import type { StackedDefensivePair } from "../analysis/stackedDefensives";
 import { DISPEL_FEATURE_FLAGS } from "../data/dispelFeatureFlags";
 import { buffFullDurationForCaster } from "../utils/buffDuration";
-import { getEnglishSpellName, spellEffectData } from "../data/spellEffectData";
+import {
+  effectiveCooldownSeconds,
+  getEnglishSpellName,
+} from "../data/spellEffectData";
 import {
   DEATH_WINDOW_S,
   DEATH_WINDOW_UNFOLD_CAP,
@@ -1763,11 +1766,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       // B38: promote major-CD spells (CD ≥ 30s) to [YOU] [CD] format when extractMajorCooldowns
       // missed them (e.g. missing talent data). This keeps Avenging Crusader etc. from appearing
       // as filler casts when they are significant cooldown activations.
-      const effectData = spellEffectData[e.spellId];
-      const cdSeconds =
-        effectData?.cooldownSeconds ??
-        effectData?.charges?.chargeCooldownSeconds ??
-        0;
+      const cdSeconds = effectiveCooldownSeconds(e.spellId) ?? 0;
       if (cdSeconds >= 30) {
         flushFold();
         // B112/B127: apply the same self-only override here (this promotion path is where MW/Evoker

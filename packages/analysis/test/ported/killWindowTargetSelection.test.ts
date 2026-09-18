@@ -8,8 +8,16 @@ vi.mock("../../src/data/spellIdLists", () => ({
   },
 }));
 
-vi.mock("../../src/data/spellEffectData", () => ({
-  spellEffectData: {
+vi.mock("../../src/data/spellEffectData", () => {
+  const spellEffectData: Record<
+    string,
+    {
+      spellId: string;
+      name: string;
+      cooldownSeconds?: number;
+      charges?: { charges?: number; chargeCooldownSeconds?: number };
+    }
+  > = {
     "33206": {
       spellId: "33206",
       name: "Pain Suppression",
@@ -28,8 +36,20 @@ vi.mock("../../src/data/spellEffectData", () => ({
       name: "Barkskin",
       cooldownSeconds: 60,
     },
-  },
-}));
+  };
+  return {
+    spellEffectData,
+    // Same arithmetic as the real predicate, over the mocked table (the mock
+    // replaces the whole module, so the shared accessor has to come along).
+    effectiveCooldownSeconds: (id: string): number | undefined => {
+      const e = spellEffectData[id];
+      if (!e) return undefined;
+      const cd = e.cooldownSeconds;
+      const rc = e.charges?.chargeCooldownSeconds;
+      return cd == null && rc == null ? undefined : Math.max(cd ?? 0, rc ?? 0);
+    },
+  };
+});
 
 import { CombatUnitSpec } from "@gladlog/parser-compat";
 
@@ -199,9 +219,7 @@ describe("killWindowTargetSelection — main analysis", () => {
       name: "Mage",
       spec: CombatUnitSpec.Mage_Frost,
       advancedActions: [makeAdvancedAction(MATCH_START, 0, 0, 100, 30)],
-      spellCastEvents: [
-        makeSpellCastEvent("336126", MATCH_START + 500, "e2"),
-      ],
+      spellCastEvents: [makeSpellCastEvent("336126", MATCH_START + 500, "e2")],
     });
 
     const windows = [
@@ -479,4 +497,3 @@ describe("formatKillWindowTargetSelectionForContext", () => {
     expect(text).toContain("locked — trinket up");
   });
 });
-

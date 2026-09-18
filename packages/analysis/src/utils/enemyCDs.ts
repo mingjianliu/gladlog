@@ -4,7 +4,10 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
-import { spellEffectData } from "../data/spellEffectData";
+import {
+  effectiveCooldownSeconds,
+  spellEffectData,
+} from "../data/spellEffectData";
 import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
 import {
   getUnitHpAtTimestamp,
@@ -113,10 +116,7 @@ export function isEnemyCdWindowSpell(spellId: string): boolean {
   if (!isOffensiveSpell(spellId)) return false;
   const effectData = spellEffectData[spellId];
   if (!effectData) return false;
-  const cooldownSeconds =
-    effectData.cooldownSeconds ??
-    effectData.charges?.chargeCooldownSeconds ??
-    0;
+  const cooldownSeconds = effectiveCooldownSeconds(spellId) ?? 0;
   return (
     cooldownSeconds >= MIN_CD_SECONDS && cooldownSeconds <= ENEMY_CD_MAX_SECONDS
   );
@@ -147,10 +147,7 @@ export function reconstructEnemyCDTimeline(
       if (!spellId) continue;
       if (!isEnemyCdWindowSpell(spellId)) continue;
       const effectData = spellEffectData[spellId]!;
-      const cooldownSeconds =
-        effectData.cooldownSeconds ??
-        effectData.charges?.chargeCooldownSeconds ??
-        0;
+      const cooldownSeconds = effectiveCooldownSeconds(spellId) ?? 0;
 
       const castTimeSeconds = (cast.logLine.timestamp - matchStartMs) / 1000;
       const buffDuration = effectData.durationSeconds ?? 0;

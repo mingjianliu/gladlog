@@ -304,6 +304,11 @@ export const SPELL_CATEGORIES: Record<string, ISpellCategoryEntry> = {
   // standalone SPELL_CAST_SUCCESS (469270 is the per-attack proc cast, median
   // interval 1s), so a cast-based tracker cannot follow it -- the remaining
   // none-tracked share is expected.
+  // Voidform: 228260 is the cast, 194249 the 20 s aura on the priest — the
+  // aura-side consumers (hasOffensiveSpellActive / threatActiveAt) key on
+  // what sits on the caster, so the cast id alone left them blind
+  // (codex astra review 2026-09-18).
+  "194249": { type: "buffs_offensive" }, // Voidform (Shadow, aura id)
   "466772": { type: "buffs_offensive" }, // Doom Winds buff id (aura only, for spellDanger)
   "1122": { type: "buffs_offensive" }, // Summon Infernal (Destruction, 120s; cast id, 111685 is the aura id)
   "6353": { type: "debuffs_offensive" }, // Soul Fire (Destruction, 45s nuke)

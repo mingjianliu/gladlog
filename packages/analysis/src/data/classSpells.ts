@@ -248,7 +248,6 @@ export const classMetadata: IClassSpellMetadata[] = [
       // offensiveCdGapScan 2026-09-18 (S2 every-20th, 5,464 rounds; lift =
       // own dps in the cast window / rest of the round; registered yardstick
       // p25 1.67 · p50 2.04) — user delegated the ruling ("你自己决定吧").
-      a("1259431", "Predator's Wake", O), // Devourer, lift 2.26, coPressed 3 %
       a("198589", "Blur", D),
       a("187827", "Metamorphosis", D),
       a("191427", "Metamorphosis", O),

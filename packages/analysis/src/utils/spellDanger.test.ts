@@ -62,7 +62,7 @@ describe("OFFENSIVE_CD_SPELL_IDS — canonical membership", () => {
     }
   });
 
-  it("union-minus-dead arithmetic: 41 ∪ 47 (overlap 19) − 9 dead = 60 (2026-09-18: + Zenith, + 12 from offensiveCdGapScan)", () => {
+  it("union-minus-dead arithmetic: 42 ∪ 46 (overlap 19) − 9 dead = 60 (2026-09-18: + Zenith, + 10 casts and the Voidform aura id from offensiveCdGapScan)", () => {
     expect(OFFENSIVE_CD_SPELL_IDS.size).toBe(60);
     // live renumber of a registered spell, and the Shadow successor
     expect(OFFENSIVE_CD_SPELL_IDS.has("446035")).toBe(true);

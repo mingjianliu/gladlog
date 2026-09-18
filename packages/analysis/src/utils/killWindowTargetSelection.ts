@@ -10,7 +10,10 @@ import {
 // GH #31 ② (2026-09-02): shared official-face predicate replaces the hand set.
 import { isKillWindowMajorDefensive } from "../data/abilityProfile";
 import { MITIGATION_TABLE } from "../data/mitigationData";
-import { spellEffectData } from "../data/spellEffectData";
+import {
+  effectiveCooldownSeconds,
+  spellEffectData,
+} from "../data/spellEffectData";
 import {
   applyCdTalentModifiers,
   cdAvailableAt,
@@ -221,10 +224,7 @@ function getDefensiveStateAtTime(
 
     const effectData = spellEffectData[spellId];
     if (!effectData) continue;
-    const cdSeconds =
-      effectData.cooldownSeconds ??
-      effectData.charges?.chargeCooldownSeconds ??
-      0;
+    const cdSeconds = effectiveCooldownSeconds(spellId) ?? 0;
     if (cdSeconds < 30) continue;
 
     const spellName = effectData.name;
@@ -261,9 +261,7 @@ function getDefensiveStateAtTime(
     const { cooldownSeconds: cdSeconds, charges: maxCharges } =
       applyCdTalentModifiers(
         spellId,
-        effectData.cooldownSeconds ??
-          effectData.charges?.chargeCooldownSeconds ??
-          0,
+        effectiveCooldownSeconds(spellId) ?? 0,
         effectData.charges?.charges ?? 1,
         talentedSpellIds,
         pvpTalentIds,
@@ -445,10 +443,7 @@ function wallsInHandAt(
   const ready: string[] = [];
   for (const [spellId, casts] of castsBySpell) {
     const effectData = spellEffectData[spellId];
-    const cdSeconds =
-      effectData?.cooldownSeconds ??
-      effectData?.charges?.chargeCooldownSeconds ??
-      0;
+    const cdSeconds = effectiveCooldownSeconds(spellId) ?? 0;
     if (cdSeconds < 30) continue;
     if (
       cdAvailableAt(

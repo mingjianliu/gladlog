@@ -75,7 +75,7 @@ export interface AbilityProfile {
 /** 用户签字的产出强化册(kind `throughput_role`),经 cooldowns 派生。
  *  这里用文件路径直接读签字册,避免 data → utils 的反向依赖。 */
 import { CURATED_ABILITY_FACTS } from "./curatedAbilityFacts";
-import { spellEffectData } from "./spellEffectData";
+import { effectiveCooldownSeconds } from "./spellEffectData";
 import spellIdListsData from "./spellIdLists";
 const THROUGHPUT_ROLE_IDS = new Set<string>(
   CURATED_ABILITY_FACTS.filter((f) => f.kind === "throughput_role").map(
@@ -172,8 +172,7 @@ export const KW_MAJOR_DEF_MIN_CD_S = 30;
  * official field, single-sourced here so the predicate and the span state
  * machine can never disagree on it. */
 export function kwCooldownSeconds(spellId: string): number {
-  const eff = (spellEffectData as Record<string, any>)[spellId];
-  return eff?.cooldownSeconds ?? eff?.charges?.chargeCooldownSeconds ?? 0;
+  return effectiveCooldownSeconds(spellId) ?? 0;
 }
 
 /**

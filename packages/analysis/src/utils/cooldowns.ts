@@ -17,7 +17,11 @@ import {
 } from "../data/healerSaveCd";
 import { PVP_TALENT_REPLACES_GENERATED } from "../data/pvpTalentReplacesGenerated";
 import { OFFENSIVE_RACIAL_SPELL_IDS } from "../data/racialAbilities";
-import { getEnglishSpellName, spellEffectData } from "../data/spellEffectData";
+import {
+  effectiveCooldownSeconds,
+  getEnglishSpellName,
+  spellEffectData,
+} from "../data/spellEffectData";
 import { CORPUS_COOLDOWN_PATCHES } from "../data/spellEffectOverrides";
 import spellIdListsData from "../data/spellIdLists";
 import { reachesAlly } from "../data/spellTargeting";
@@ -1539,10 +1543,7 @@ export function extractMajorCooldowns(
     if (spell.tags.length === 0) return false;
     const effectData = spellEffectData[spell.spellId];
     if (!effectData) return false;
-    const cd =
-      effectData.cooldownSeconds ??
-      effectData.charges?.chargeCooldownSeconds ??
-      0;
+    const cd = effectiveCooldownSeconds(spell.spellId) ?? 0;
     if (cd < MIN_CD_SECONDS) return false;
     const allowedSpecs = SPEC_EXCLUSIVE_SPELLS[spell.spellId];
     if (allowedSpecs && !allowedSpecs.includes(unit.spec)) return false;
@@ -1595,10 +1596,7 @@ export function extractMajorCooldowns(
     if (!castSpellIds.has(spellId)) continue;
     const effectData = spellEffectData[spellId];
     if (!effectData) continue;
-    const cd =
-      effectData.cooldownSeconds ??
-      effectData.charges?.chargeCooldownSeconds ??
-      0;
+    const cd = effectiveCooldownSeconds(spellId) ?? 0;
     if (cd < MIN_CD_SECONDS) continue;
     majorSpells.push({
       spellId,
@@ -1622,10 +1620,7 @@ export function extractMajorCooldowns(
       const effectData = spellEffectData[spellId];
       if (!effectData) continue;
 
-      const cd =
-        effectData.cooldownSeconds ??
-        effectData.charges?.chargeCooldownSeconds ??
-        0;
+      const cd = effectiveCooldownSeconds(spellId) ?? 0;
       if (cd >= MIN_CD_SECONDS) {
         // Intelligent tagging based on name pattern rules
         const name = effectData.name.toLowerCase();
@@ -1748,10 +1743,7 @@ export function extractMajorCooldowns(
     const effectData = spellEffectData[spell.spellId];
     if (!effectData) return [];
 
-    const baseCooldownSeconds =
-      effectData.cooldownSeconds ??
-      effectData.charges?.chargeCooldownSeconds ??
-      0;
+    const baseCooldownSeconds = effectiveCooldownSeconds(spell.spellId) ?? 0;
     const baseCharges = effectData.charges?.charges ?? 1;
 
     // Apply talent-based modifications if the player's talents are known

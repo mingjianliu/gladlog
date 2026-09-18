@@ -27,7 +27,10 @@ import {
   isDecisionTraceActive,
   traceDecision,
 } from "../facts/decisionTrace";
-import { spellEffectData } from "../data/spellEffectData";
+import {
+  effectiveCooldownSeconds,
+  spellEffectData,
+} from "../data/spellEffectData";
 import { ccSpellIds } from "../data/spellTags";
 import { lookupSyncWindowPrior } from "../data/syncWindowPrior";
 import { buildAuraIntervals } from "../utils/auraIntervals";
@@ -1334,8 +1337,7 @@ export function ccAvoidanceOptionsAt(
     let available = false;
     for (const rid of resolvedIds) {
       const eff = spellEffectData[rid];
-      const baseCd =
-        eff?.cooldownSeconds ?? eff?.charges?.chargeCooldownSeconds ?? null;
+      const baseCd = effectiveCooldownSeconds(rid) ?? null;
       if (baseCd === null) continue; // unknown CD, don't guess
       const { cooldownSeconds, charges } = applyCdTalentModifiers(
         rid,

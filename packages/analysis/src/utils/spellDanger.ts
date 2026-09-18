@@ -76,7 +76,8 @@ export const OFFENSIVE_CD_DEAD_IDS: ReadonlySet<string> = new Set([
  * (34 ids, cast ids) — minus `OFFENSIVE_CD_DEAD_IDS`: 41 ∪ 34 = 56 (overlap
  * 19) − 9 dead = 47 on 2026-09-02; 48 since 2026-09-18 (Zenith 1249625 added
  * to classMetadata — the successor of the dead 137639 had never been listed);
- * 60 since the first `offensiveCdGapScan` run the same day (+12, the evidence
+ * 60 since the first `offensiveCdGapScan` run the same day (+11 casts and
+ * the Voidform aura id 194249, the evidence
  * sits beside each entry in classSpells.ts).
  *
  * Deliberately NOT added by that run, so nobody "completes" them later:
@@ -88,12 +89,21 @@ export const OFFENSIVE_CD_DEAD_IDS: ReadonlySet<string> = new Set([
  *     nukes. Every consumer renders a table member as a WINDOW ("Meteor/Fire
  *     Mage (7 s left)" in [RES] — caught by the real-fixture test); a nuke
  *     that has already landed is not a window to defend through.
+ *   - Predator's Wake 1259431 (Devourer, lift 2.26): official duration 2 s
+ *     and no identified effect aura — added, then removed the same day; a
+ *     window cannot be stated from official data, and a hand-guessed one is
+ *     what the Game-Behaviour Rule forbids.
  *   - Gladiator's Badge 345228 / Blood Fury / Berserking: item and racials,
  *     coPressed 47–98 % (they ride a class cooldown); racials have their own
  *     table.
  *   - Reaper's Mark, Goremaw's Bite, Execution Sentence, Tip the Scales,
  *     Champion's Spear: coPressed 67–90 % or lift < 1.5 — the scan cannot
  *     separate them from the cooldown they are pressed with.
+ * KNOWN SPLIT, not fixable by membership: Colossus Smash, Touch of the Magi
+ * and Kingsbane put their aura on the TARGET. Cast-side consumers (enemy-CD
+ * timeline, [RES]) see them; aura-on-caster consumers
+ * (`hasOffensiveSpellActive` → `threatActiveAt`) cannot. Same fact, two
+ * answers — recorded here rather than papered over.
  * FLAGged, kept: Soul Immolation 1241937 measures lift 0.62 (damage in its
  * window is LOWER than the rest of the round) — a hand entry calls it the
  * Devourer's main burst; one statistic is not a mechanism, so it stays until

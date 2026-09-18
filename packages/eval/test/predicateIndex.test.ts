@@ -544,6 +544,11 @@ const INDEX: PredicateRow[] = [
     mod: spellEffectData,
   },
   {
+    file: `${A}/data/spellEffectData.ts`,
+    symbol: "effectiveCooldownSeconds",
+    mod: spellEffectData,
+  },
+  {
     file: `${A}/utils/ccTrinketAnalysis.ts`,
     symbol: "CAST_START_LOOKBACK_S",
     mod: ccTrinketAnalysis,

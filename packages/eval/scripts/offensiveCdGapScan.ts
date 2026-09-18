@@ -24,8 +24,9 @@
  *      shares the id is visible (Game-Behaviour Rule 6);
  *   3. effect (corpus): LIFT = the presser's damage per second inside
  *      [cast, cast + window] over their damage per second in the rest of
- *      the SAME round (own pets / guardians included — Xuen's damage is the
- *      guardian's, not the monk's). A within-player, within-round ratio, so
+ *      the SAME round, the round ending for that player at their death
+ *      (pets / guardians are already folded into the owner by the legacy
+ *      converter — do not add them again). A within-player, within-round ratio, so
  *      rating and bracket composition cannot manufacture it. It is a
  *      screening statistic, NOT a causal claim about winning.
  *
@@ -33,7 +34,10 @@
  * minor button macro'd into the go inherits the go's lift. `coPressed` is
  * the share of its casts within CO_PRESS_S of a REGISTERED offensive
  * cooldown by the same player; read a high lift with a high coPressed as
- * "rides along", not as "is one".
+ * "rides along", not as "is one". (It is a cast within +-CO_PRESS_S of
+ * another registered cast — it does NOT see a burst that was already
+ * running for longer than that.) Still uncorrected: time spent in CC
+ * outside the windows deflates the outside rate the same way death did.
  *
  * No threshold is baked in: `report` prints the registered cooldowns' own
  * lift distribution as the yardstick and lists every unregistered spell
@@ -203,14 +207,24 @@ async function scan(): Promise<void> {
         s.rounds++;
         s.byBracket[bracket] = (s.byBracket[bracket] ?? 0) + 1;
 
-        // the presser's damage stream, own pets / guardians included
+        // The presser's damage stream. toLegacyMatch / toLegacyShuffle already
+        // fold pet / guardian damage into the owner (convert.ts mergePetEvents,
+        // GH #57) — adding the pet rows again double-counted every summon
+        // window (codex astra review 2026-09-18: 2.0 reported as 3.0).
+        // A dead player deals 0: the round ends, for this unit, at its death,
+        // or "outside" fills with zero-dps time and ANY button pressed while
+        // alive shows a lift (same review: 2.5x for an inert button).
+        const deathTs = (u.deathRecords ?? [])
+          .map((d: any) => d.timestamp)
+          .filter((t: number) => t > t0)
+          .sort((x: number, y: number) => x - y)[0];
+        const uEnd = Math.min(t1, deathTs ?? t1);
         const dmg: Array<[number, number]> = [];
-        for (const src of [u, ...all.filter((p) => p.ownerId === u.id)])
-          for (const d of src.damageOut ?? [])
-            dmg.push([
-              d.timestamp ?? d.logLine?.timestamp,
-              Math.abs(d.effectiveAmount ?? d.amount ?? 0),
-            ]);
+        for (const d of u.damageOut ?? []) {
+          const ts = d.timestamp ?? d.logLine?.timestamp;
+          if (ts <= uEnd)
+            dmg.push([ts, Math.abs(d.effectiveAmount ?? d.amount ?? 0)]);
+        }
         const total = dmg.reduce((a, d) => a + d[1], 0);
 
         const castsBySpell = new Map<string, number[]>();
@@ -260,8 +274,10 @@ async function scan(): Promise<void> {
           const w = windowOf(id) * 1000;
           const iv = ts
             .map(
-              (t) => [Math.max(t, t0), Math.min(t + w, t1)] as [number, number],
+              (t) =>
+                [Math.max(t, t0), Math.min(t + w, uEnd)] as [number, number],
             )
+            .filter((x) => x[1] > x[0])
             .sort((a, b) => a[0] - b[0]);
           const merged: Array<[number, number]> = [];
           for (const x of iv) {
@@ -270,7 +286,7 @@ async function scan(): Promise<void> {
             else merged.push([x[0], x[1]]);
           }
           const inS = merged.reduce((a, x) => a + (x[1] - x[0]), 0) / 1000;
-          const outS = (t1 - t0) / 1000 - inS;
+          const outS = (uEnd - t0) / 1000 - inS;
           if (inS < 1 || outS < MIN_OUTSIDE_S) continue;
           const inDmg = dmg.reduce(
             (a, d) =>
@@ -293,6 +309,14 @@ async function scan(): Promise<void> {
   console.error(
     `done: ${cells.meta.files} files, ${cells.meta.rounds} rounds → ${out}`,
   );
+}
+
+/** "Havoc Demon Hunter" and "Beast Mastery Hunter" must not both be "Hunter"
+ * (codex astra review 2026-09-18) — match the two-word classes first. */
+function classOfSpec(spec: string): string {
+  for (const c of ["Death Knight", "Demon Hunter"])
+    if (spec.endsWith(c)) return c;
+  return spec.split(" ").slice(-1)[0]!;
 }
 
 const q = (xs: number[], p: number): number => {
@@ -334,7 +358,7 @@ async function report(): Promise<void> {
   // (same corpus rule as healerSaveCdScan's multiClassSpells)
   const classesBySpell = new Map<string, Set<string>>();
   for (const [spec, s] of Object.entries(cells.specs)) {
-    const cls = spec.split(" ").slice(-1)[0]!;
+    const cls = classOfSpec(spec);
     for (const id of Object.keys(s.spells))
       (
         classesBySpell.get(id) ?? classesBySpell.set(id, new Set()).get(id)!

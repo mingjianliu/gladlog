@@ -51,6 +51,31 @@ export const spellEffectData = (() => {
   return merged;
 })();
 
+// ── Effective cooldown: one predicate ───────────────────────────────────────
+/**
+ * "How long until this button can be pressed again once it is spent" — the
+ * fact every `>= 30 s` major-cooldown gate and every availability ledger
+ * rests on. For a charge spell DB2 carries TWO numbers: the charge RECHARGE
+ * (`charges.chargeCooldownSeconds`) and a short `cooldownSeconds` that only
+ * spaces consecutive presses. The idiom this replaces —
+ * `cooldownSeconds ?? chargeCooldownSeconds ?? 0`, inlined in eleven places —
+ * answers the spacing number whenever both exist, so Zenith (16 / 90),
+ * Ravager (8 / 90) and Guardian of the Forgotten Queen (6 / 240) failed every
+ * 30 s gate: no enemy-CD window, no owner ledger entry. Found by the codex
+ * astra review of 2026-09-18 — Zenith had just been "added" to
+ * OFFENSIVE_CD_SPELL_IDS and the enemy timeline still could not see it.
+ * In the merged table exactly those three observed spells flip a 30 s gate
+ * (Shadow Dance 6 / 20 changes value, not gate).
+ */
+export function effectiveCooldownSeconds(spellId: string): number | undefined {
+  const eff = spellEffectData[spellId];
+  if (!eff) return undefined;
+  const cd = eff.cooldownSeconds;
+  const recharge = eff.charges?.chargeCooldownSeconds;
+  if (cd == null && recharge == null) return undefined;
+  return Math.max(cd ?? 0, recharge ?? 0);
+}
+
 // ── CC full duration: one predicate ─────────────────────────────────────────
 /**
  * Oppressing Roar (Evoker), the one effect that lengthens CC in arena: aura
