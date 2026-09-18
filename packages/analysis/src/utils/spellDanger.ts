@@ -75,7 +75,30 @@ export const OFFENSIVE_CD_DEAD_IDS: ReadonlySet<string> = new Set([
  * mostly aura/buff ids) and `classMetadata`'s `SpellTag.Offensive` abilities
  * (34 ids, cast ids) — minus `OFFENSIVE_CD_DEAD_IDS`: 41 ∪ 34 = 56 (overlap
  * 19) − 9 dead = 47 on 2026-09-02; 48 since 2026-09-18 (Zenith 1249625 added
- * to classMetadata — the successor of the dead 137639 had never been listed).
+ * to classMetadata — the successor of the dead 137639 had never been listed);
+ * 60 since the first `offensiveCdGapScan` run the same day (+12, the evidence
+ * sits beside each entry in classSpells.ts).
+ *
+ * Deliberately NOT added by that run, so nobody "completes" them later:
+ *   - Divine Toll 375576 (Ret lift 2.03, coPressed 5 %): the table keys on the
+ *     spell id with no spec gate, and Holy Paladins press the same id as a
+ *     heal — it would open a fake "enemy burst" window on every enemy Holy
+ *     Paladin. Needs a spec-aware table first.
+ *   - Meteor 153561 (lift 2.54), Frostwyrm's Fury 279302 (2.65): instant
+ *     nukes. Every consumer renders a table member as a WINDOW ("Meteor/Fire
+ *     Mage (7 s left)" in [RES] — caught by the real-fixture test); a nuke
+ *     that has already landed is not a window to defend through.
+ *   - Gladiator's Badge 345228 / Blood Fury / Berserking: item and racials,
+ *     coPressed 47–98 % (they ride a class cooldown); racials have their own
+ *     table.
+ *   - Reaper's Mark, Goremaw's Bite, Execution Sentence, Tip the Scales,
+ *     Champion's Spear: coPressed 67–90 % or lift < 1.5 — the scan cannot
+ *     separate them from the cooldown they are pressed with.
+ * FLAGged, kept: Soul Immolation 1241937 measures lift 0.62 (damage in its
+ * window is LOWER than the rest of the round) — a hand entry calls it the
+ * Devourer's main burst; one statistic is not a mechanism, so it stays until
+ * someone explains it. Power Infusion / Summon Infernal 1.39, Darkglare 1.53
+ * sit low because a DoT spec's payoff outlasts the measured window.
  *
  * Both former consumers now read THIS set: `isOffensiveSpell` (the enemy-CD
  * window builder `reconstructEnemyCDTimeline` and everything downstream of
@@ -107,7 +130,7 @@ export const OFFENSIVE_CD_SPELL_IDS: ReadonlySet<string> = new Set(
  * Returns true if the canonical offensive-cooldown table holds this spell.
  * (The pre-2026-09-02 comment claimed "covers all 120 tagged offensive
  * spells" — that was wrong on both counts; the real membership is
- * `OFFENSIVE_CD_SPELL_IDS`, 48 ids.)
+ * `OFFENSIVE_CD_SPELL_IDS`, 60 ids.)
  */
 export function isOffensiveSpell(spellId: string): boolean {
   return OFFENSIVE_CD_SPELL_IDS.has(spellId);

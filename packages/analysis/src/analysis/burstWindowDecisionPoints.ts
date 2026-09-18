@@ -134,7 +134,7 @@ export const BURST_LAPSE_DMG_PCT_PER_S = 0.03;
  * **Unified 2026-09-02 (GH #60 tail).** `isOffensiveSpell` now reads the ONE
  * canonical table `spellDanger.ts`'s `OFFENSIVE_CD_SPELL_IDS` — the union of
  * the two former tables minus the 9 corpus-dead classMetadata ids (see
- * `OFFENSIVE_CD_DEAD_IDS` for the names and the deadness evidence), 48 ids,
+ * `OFFENSIVE_CD_DEAD_IDS` for the names and the deadness evidence), 60 ids,
  * registered in `curatedIdRegistry`. The forward gap is closed: the 6 live
  * ids that used to sit only in the classMetadata table (Empower Rune Weapon
  * 47568, Ascendance 114050, Invoke Xuen 123904, Metamorphosis 191427,

@@ -172,9 +172,12 @@ describe("VideoTab 自定义控制条(按轮 clamp)", () => {
 describe("VideoTab AI 结果进 feed/strip", () => {
   // A candidate event from the real fixture (derived from
   // test/fixtures/real-match-sample.json): buildAnalysisInput builds candidates
-  // from it and facts.t is always present (timed).
-  const TIMED_EVENT_ID = "missed-cleanse:Player6-Test:61";
-  const TIMED_T = 60.703;
+  // from it and facts.t is always present (timed). Was
+  // "missed-cleanse:Player6-Test:61" until 2026-09-18: Kingsbane / Volley
+  // joined OFFENSIVE_CD_SPELL_IDS, the fixture's enemies press both, and that
+  // cleanse is now exempt under the no-calm-second threat gate.
+  const TIMED_EVENT_ID = "cd-hoarded:Player-1-00000003:Player-1-00000001:58";
+  const TIMED_T = 58;
 
   it("时间轴 finding(与 splitFindings 同一谓词)映射为 chip,连同 deepDive chips 一起画进标记条", async () => {
     const getCached = vi.fn().mockResolvedValue({
@@ -562,8 +565,8 @@ describe("VideoTab:录像晚于开场(缺头,一期生产上的常态)", () => {
   // above (TIMED_EVENT_ID/TIMED_T are scoped there, so redeclared here) to
   // reach that tab's rows without depending on it.
   it("点击「AI 发现」tab 某行:同一 onSeek 落点公式(seekTargetS),不是重新内联的旧公式", async () => {
-    const TIMED_EVENT_ID = "missed-cleanse:Player6-Test:61";
-    const TIMED_T = 60.703;
+    const TIMED_EVENT_ID = "cd-hoarded:Player-1-00000003:Player-1-00000001:58";
+    const TIMED_T = 58;
     const getCached = vi.fn().mockResolvedValue({
       findings: [
         {

@@ -532,4 +532,15 @@
 //  with an enemy Zenith (331 casts): candidate menu 519 → 515, the whole diff
 //  being 4 missed-cleanse accusations that fell entirely inside a Zenith and
 //  are now exempt under the existing no-calm-second gate.
-export const PROMPT_VERSION = 78;
+//  v79 (2026-09-18, offensiveCdGapScan first run, ruling delegated by the
+//  user): OFFENSIVE_CD_SPELL_IDS 48 → 60 — Voidform (live successor of the
+//  dead Dark Ascension), Bladestorm 446035 (the live id; 227847 is 5 % of
+//  Arms rounds), Colossus Smash, Kingsbane, Volley, Breath of Sindragosa,
+//  Doom Winds, Touch of the Magi, Grimoire: Imp Lord, Force of Nature, Fury
+//  of Elune, Predator's Wake. Enemy-CD windows, [RES] `enemy:` field, burst
+//  windows and threatActiveAt see them; owner-side they are tracked major
+//  cooldowns. Library, 400 rounds × all owners (1,192 perspectives), rounds
+//  where the type fired: missed-sync-window 417 → 450, position-mistake
+//  158 → 177, slow-defensive-response 42 → 54, burst-into-mitigation
+//  91 → 102, missed-cleanse 134 → 133; the other 16 types unchanged.
+export const PROMPT_VERSION = 79;

@@ -36,6 +36,11 @@ export const classMetadata: IClassSpellMetadata[] = [
   {
     unitClass: CombatUnitClass.Warrior,
     abilities: [
+      // offensiveCdGapScan 2026-09-18 (S2 every-20th, 5,464 rounds; lift =
+      // own dps in the cast window / rest of the round; registered yardstick
+      // p25 1.67 · p50 2.04) — user delegated the ruling ("你自己决定吧").
+      a("446035", "Bladestorm", O), // live id: 93 % of Arms rounds, lift 2.47 (227847 above: 5 %)
+      a("167105", "Colossus Smash", O), // 45 s, lift 2.07, n 1,935
       a("871", "Shield Wall", D),
       a("118038", "Die by the Sword", D),
       a("184364", "Enraged Regeneration", D),
@@ -68,6 +73,10 @@ export const classMetadata: IClassSpellMetadata[] = [
   {
     unitClass: CombatUnitClass.Hunter,
     abilities: [
+      // offensiveCdGapScan 2026-09-18 (S2 every-20th, 5,464 rounds; lift =
+      // own dps in the cast window / rest of the round; registered yardstick
+      // p25 1.67 · p50 2.04) — user delegated the ruling ("你自己决定吧").
+      a("260243", "Volley", O), // 45 s, lift 2.24, coPressed 9 %
       a("186265", "Aspect of the Turtle", D),
       a("109304", "Exhilaration", D),
       a("19574", "Bestial Wrath", O),
@@ -83,6 +92,10 @@ export const classMetadata: IClassSpellMetadata[] = [
   {
     unitClass: CombatUnitClass.Rogue,
     abilities: [
+      // offensiveCdGapScan 2026-09-18 (S2 every-20th, 5,464 rounds; lift =
+      // own dps in the cast window / rest of the round; registered yardstick
+      // p25 1.67 · p50 2.04) — user delegated the ruling ("你自己决定吧").
+      a("385627", "Kingsbane", O), // lift 2.28, n 1,605
       a("31224", "Cloak of Shadows", D),
       a("5277", "Evasion", D),
       a("1966", "Feint", D),
@@ -99,6 +112,10 @@ export const classMetadata: IClassSpellMetadata[] = [
   {
     unitClass: CombatUnitClass.Priest,
     abilities: [
+      // offensiveCdGapScan 2026-09-18 (S2 every-20th, 5,464 rounds; lift =
+      // own dps in the cast window / rest of the round; registered yardstick
+      // p25 1.67 · p50 2.04) — user delegated the ruling ("你自己决定吧").
+      a("228260", "Voidform", O), // 100 % of Shadow rounds, lift 1.69 — the live successor of the dead Dark Ascension 391109
       a("33206", "Pain Suppression", D),
       a("47788", "Guardian Spirit", D),
       a("62618", "Power Word: Barrier", D),
@@ -116,6 +133,10 @@ export const classMetadata: IClassSpellMetadata[] = [
   {
     unitClass: CombatUnitClass.DeathKnight,
     abilities: [
+      // offensiveCdGapScan 2026-09-18 (S2 every-20th, 5,464 rounds; lift =
+      // own dps in the cast window / rest of the round; registered yardstick
+      // p25 1.67 · p50 2.04) — user delegated the ruling ("你自己决定吧").
+      a("1249658", "Breath of Sindragosa", O), // lift 2.91 (coPressed 89 % with Pillar — part of the same go)
       a("48792", "Icebound Fortitude", D),
       a("55233", "Vampiric Blood", D),
       a("48707", "Anti-Magic Shell", D),
@@ -132,6 +153,10 @@ export const classMetadata: IClassSpellMetadata[] = [
   {
     unitClass: CombatUnitClass.Shaman,
     abilities: [
+      // offensiveCdGapScan 2026-09-18 (S2 every-20th, 5,464 rounds; lift =
+      // own dps in the cast window / rest of the round; registered yardstick
+      // p25 1.67 · p50 2.04) — user delegated the ruling ("你自己决定吧").
+      a("384352", "Doom Winds", O), // talent choice (15 % of Enhancement rounds), lift 2.83
       a("108271", "Astral Shift", D),
       a("98008", "Spirit Link Totem", D),
       a("114050", "Ascendance", O),
@@ -143,6 +168,10 @@ export const classMetadata: IClassSpellMetadata[] = [
   {
     unitClass: CombatUnitClass.Mage,
     abilities: [
+      // offensiveCdGapScan 2026-09-18 (S2 every-20th, 5,464 rounds; lift =
+      // own dps in the cast window / rest of the round; registered yardstick
+      // p25 1.67 · p50 2.04) — user delegated the ruling ("你自己决定吧").
+      a("321507", "Touch of the Magi", O), // 45 s, lift 1.80
       a("45438", "Ice Block", D),
       a("11426", "Ice Barrier", D),
       a("190319", "Combustion", O),
@@ -155,6 +184,10 @@ export const classMetadata: IClassSpellMetadata[] = [
   {
     unitClass: CombatUnitClass.Warlock,
     abilities: [
+      // offensiveCdGapScan 2026-09-18 (S2 every-20th, 5,464 rounds; lift =
+      // own dps in the cast window / rest of the round; registered yardstick
+      // p25 1.67 · p50 2.04) — user delegated the ruling ("你自己决定吧").
+      a("1276452", "Grimoire: Imp Lord", O), // lift 1.69, coPressed 18 %
       a("104773", "Unending Resolve", D),
       a("108416", "Dark Pact", D),
       a("205180", "Summon Darkglare", O),
@@ -190,6 +223,11 @@ export const classMetadata: IClassSpellMetadata[] = [
   {
     unitClass: CombatUnitClass.Druid,
     abilities: [
+      // offensiveCdGapScan 2026-09-18 (S2 every-20th, 5,464 rounds; lift =
+      // own dps in the cast window / rest of the round; registered yardstick
+      // p25 1.67 · p50 2.04) — user delegated the ruling ("你自己决定吧").
+      a("205636", "Force of Nature", O), // lift 2.30
+      a("202770", "Fury of Elune", O), // talent choice (15 %), lift 2.23
       a("22812", "Barkskin", D),
       a("61336", "Survival Instincts", D),
       a("102342", "Ironbark", D),
@@ -207,6 +245,10 @@ export const classMetadata: IClassSpellMetadata[] = [
   {
     unitClass: CombatUnitClass.DemonHunter,
     abilities: [
+      // offensiveCdGapScan 2026-09-18 (S2 every-20th, 5,464 rounds; lift =
+      // own dps in the cast window / rest of the round; registered yardstick
+      // p25 1.67 · p50 2.04) — user delegated the ruling ("你自己决定吧").
+      a("1259431", "Predator's Wake", O), // Devourer, lift 2.26, coPressed 3 %
       a("198589", "Blur", D),
       a("187827", "Metamorphosis", D),
       a("191427", "Metamorphosis", O),

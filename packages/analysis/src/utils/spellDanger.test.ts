@@ -62,8 +62,15 @@ describe("OFFENSIVE_CD_SPELL_IDS — canonical membership", () => {
     }
   });
 
-  it("union-minus-dead arithmetic: 41 ∪ 35 (overlap 19) − 9 dead = 48 (2026-09-18: + Zenith)", () => {
-    expect(OFFENSIVE_CD_SPELL_IDS.size).toBe(48);
+  it("union-minus-dead arithmetic: 41 ∪ 47 (overlap 19) − 9 dead = 60 (2026-09-18: + Zenith, + 12 from offensiveCdGapScan)", () => {
+    expect(OFFENSIVE_CD_SPELL_IDS.size).toBe(60);
+    // live renumber of a registered spell, and the Shadow successor
+    expect(OFFENSIVE_CD_SPELL_IDS.has("446035")).toBe(true);
+    expect(OFFENSIVE_CD_SPELL_IDS.has("228260")).toBe(true);
+    // deliberately excluded: no spec gate, Holy presses the same id as a heal
+    expect(OFFENSIVE_CD_SPELL_IDS.has("375576")).toBe(false);
+    // deliberately excluded: instant nuke, not a window
+    expect(OFFENSIVE_CD_SPELL_IDS.has("153561")).toBe(false);
     // The Windwalker burst that replaced the dead Storm, Earth, and Fire.
     expect(OFFENSIVE_CD_SPELL_IDS.has("1249625")).toBe(true);
     expect(OFFENSIVE_CD_SPELL_IDS.has("137639")).toBe(false);
