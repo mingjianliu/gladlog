@@ -177,6 +177,12 @@ export const classMetadata: IClassSpellMetadata[] = [
       a("116849", "Life Cocoon", D),
       a("137639", "Storm, Earth, and Fire", O),
       a("123904", "Invoke Xuen, the White Tiger", O),
+      // 12.x Windwalker burst — took Storm, Earth, and Fire's slot (137639 is
+      // in OFFENSIVE_CD_DEAD_IDS and the successor was never listed). Cast id
+      // = aura id: S2 archive every-60th × 300 files, 303 SPELL_CAST_SUCCESS /
+      // 306 SPELL_AURA_APPLIED on 1249625, 0 events on 137639. DB2: 15 s,
+      // 2 charges, 90 s recharge.
+      a("1249625", "Zenith", O),
       a("119381", "Leg Sweep", C),
       a("115078", "Paralysis", C),
     ],

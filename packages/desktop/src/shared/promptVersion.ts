@@ -523,4 +523,13 @@
 //  value) — the [RES] `-Ns[kick]` field, the kick-eaten lockout fact and the
 //  cannot-cast exemptions (dispel locked-out gate, healing-gap free time)
 //  gain one second for Counterspell victims. No other kick moves.
-export const PROMPT_VERSION = 77;
+//  v78 (2026-09-18, Curated-List gap): Zenith 1249625 — the Windwalker burst
+//  that took Storm, Earth, and Fire's slot (137639 sits in
+//  OFFENSIVE_CD_DEAD_IDS; the successor had never been listed) — joins the
+//  canonical OFFENSIVE_CD_SPELL_IDS (47 → 48). Every consumer of "the enemy
+//  opened a cooldown" now sees a Windwalker's go: enemy-CD windows, burst
+//  windows, threatActiveAt, crisis `burst` facts. Local library, 88 rounds
+//  with an enemy Zenith (331 casts): candidate menu 519 → 515, the whole diff
+//  being 4 missed-cleanse accusations that fell entirely inside a Zenith and
+//  are now exempt under the existing no-calm-second gate.
+export const PROMPT_VERSION = 78;

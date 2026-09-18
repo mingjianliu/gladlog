@@ -74,7 +74,8 @@ export const OFFENSIVE_CD_DEAD_IDS: ReadonlySet<string> = new Set([
  * carry — the `SPELL_CATEGORIES` offensive types (41 ids, via `spellTags`,
  * mostly aura/buff ids) and `classMetadata`'s `SpellTag.Offensive` abilities
  * (34 ids, cast ids) — minus `OFFENSIVE_CD_DEAD_IDS`: 41 ∪ 34 = 56 (overlap
- * 19) − 9 dead = 47.
+ * 19) − 9 dead = 47 on 2026-09-02; 48 since 2026-09-18 (Zenith 1249625 added
+ * to classMetadata — the successor of the dead 137639 had never been listed).
  *
  * Both former consumers now read THIS set: `isOffensiveSpell` (the enemy-CD
  * window builder `reconstructEnemyCDTimeline` and everything downstream of
@@ -106,7 +107,7 @@ export const OFFENSIVE_CD_SPELL_IDS: ReadonlySet<string> = new Set(
  * Returns true if the canonical offensive-cooldown table holds this spell.
  * (The pre-2026-09-02 comment claimed "covers all 120 tagged offensive
  * spells" — that was wrong on both counts; the real membership is
- * `OFFENSIVE_CD_SPELL_IDS`, 47 ids.)
+ * `OFFENSIVE_CD_SPELL_IDS`, 48 ids.)
  */
 export function isOffensiveSpell(spellId: string): boolean {
   return OFFENSIVE_CD_SPELL_IDS.has(spellId);

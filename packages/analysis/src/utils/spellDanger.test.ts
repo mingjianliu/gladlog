@@ -62,8 +62,11 @@ describe("OFFENSIVE_CD_SPELL_IDS — canonical membership", () => {
     }
   });
 
-  it("union-minus-dead arithmetic: 41 ∪ 34 (overlap 19) − 9 dead = 47", () => {
-    expect(OFFENSIVE_CD_SPELL_IDS.size).toBe(47);
+  it("union-minus-dead arithmetic: 41 ∪ 35 (overlap 19) − 9 dead = 48 (2026-09-18: + Zenith)", () => {
+    expect(OFFENSIVE_CD_SPELL_IDS.size).toBe(48);
+    // The Windwalker burst that replaced the dead Storm, Earth, and Fire.
+    expect(OFFENSIVE_CD_SPELL_IDS.has("1249625")).toBe(true);
+    expect(OFFENSIVE_CD_SPELL_IDS.has("137639")).toBe(false);
   });
 
   it("isOffensiveSpell IS the set — no second membership rule", () => {
