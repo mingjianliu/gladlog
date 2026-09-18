@@ -32,13 +32,23 @@ export function remainingToday(
   return remainingGrantsToday(state, now, quota);
 }
 
-/** Shuffle share first, 3v3 the rest; a step with nothing to take is omitted. */
+/**
+ * Shuffle share first, 3v3 the rest; a step with nothing to take is omitted.
+ * `done` lists the brackets this run has already stepped through: a finished
+ * bracket takes nothing more, and whatever it left (it found fewer matches
+ * than its share, or simply took its share) goes to 3v3. The driver re-plans
+ * from the recorded quota after every step, so without `done` the shuffle
+ * share was re-issued to a finished bracket and 3v3 never ran (2026-09-16..18:
+ * three days of 10/15).
+ */
 export function planSteps(
   remaining: number,
+  done: PullStep["bracket"][] = [],
   shuffleShare: number = DAILY_SHUFFLE_SHARE,
 ): PullStep[] {
-  const ss = Math.max(0, Math.min(shuffleShare, remaining));
-  const threes = Math.max(0, remaining - ss);
+  const shuffleDone = done.includes("Rated Solo Shuffle");
+  const ss = shuffleDone ? 0 : Math.max(0, Math.min(shuffleShare, remaining));
+  const threes = done.includes("3v3") ? 0 : Math.max(0, remaining - ss);
   const steps: PullStep[] = [];
   if (ss > 0) steps.push({ bracket: "Rated Solo Shuffle", limit: ss });
   if (threes > 0) steps.push({ bracket: "3v3", limit: threes });

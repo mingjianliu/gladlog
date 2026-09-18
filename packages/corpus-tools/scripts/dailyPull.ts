@@ -22,6 +22,7 @@ import {
   DAILY_MIN_RATING,
   parseFreshCount,
   planSteps,
+  type PullStep,
   remainingToday,
   type RunRecord,
   type RunStatus,
@@ -39,6 +40,23 @@ const FETCH_SCRIPT = path.join(__dirname, "fetchPvpLogs.ts");
 
 function readState(): QuotaState | null {
   return fs.pathExistsSync(QUOTA_STATE) ? fs.readJsonSync(QUOTA_STATE) : null;
+}
+
+/**
+ * Brackets already stepped through today by earlier runs (a same-day rerun or a
+ * post-wake catch-up), so their share is not re-issued: the plan is per UTC day,
+ * not per process.
+ */
+function bracketsDoneToday(utcDay: string): PullStep["bracket"][] {
+  if (!fs.pathExistsSync(RUN_LOG)) return [];
+  const done = new Set<PullStep["bracket"]>();
+  for (const line of fs.readFileSync(RUN_LOG, "utf8").split("\n")) {
+    if (!line.trim()) continue;
+    const rec = JSON.parse(line) as RunRecord;
+    if (rec.utcDay !== utcDay) continue;
+    for (const s of rec.steps) if (s.exit === 0) done.add(s.bracket as PullStep["bracket"]);
+  }
+  return [...done];
 }
 
 function notify(title: string, body: string): void {
@@ -80,14 +98,17 @@ async function main() {
     quotaAfter: null,
   };
   let status: RunStatus = "ok";
+  const doneEarlier = bracketsDoneToday(record.utcDay);
+  if (doneEarlier.length) console.log(`already done today: ${doneEarlier.join(", ")}`);
   try {
     // Re-plan after every step from the recorded state: a step that found
     // fewer new matches than its share leaves the rest to the next bracket.
     for (;;) {
       const remaining = remainingToday(readState() ?? undefined);
-      const [step] = planSteps(remaining).filter(
-        (s) => !record.steps.some((done) => done.bracket === s.bracket),
-      );
+      const [step] = planSteps(remaining, [
+        ...doneEarlier,
+        ...record.steps.map((s) => s.bracket as PullStep["bracket"]),
+      ]);
       if (!step) break;
       console.log(`\n== daily pull: ${step.bracket} × ${step.limit} (remaining ${remaining})`);
       const { exit, fresh } = runStep(step.bracket, step.limit);

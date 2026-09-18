@@ -64,6 +64,15 @@ describe("planSteps", () => {
     ]);
     expect(planSteps(0)).toEqual([]);
   });
+  it("hands everything left to 3v3 once the shuffle step is done (2026-09-16..18: 3v3 never ran)", () => {
+    // The driver re-plans after every step. Shuffle took its 10, 5 remain:
+    // the old planner gave those 5 to shuffle again, which was filtered out as done.
+    expect(planSteps(5, ["Rated Solo Shuffle"])).toEqual([{ bracket: "3v3", limit: 5 }]);
+    // Shuffle found only 7 new matches: 3v3 takes the other 8, not just 5.
+    expect(planSteps(8, ["Rated Solo Shuffle"])).toEqual([{ bracket: "3v3", limit: 8 }]);
+    expect(planSteps(0, ["Rated Solo Shuffle"])).toEqual([]);
+    expect(planSteps(4, ["Rated Solo Shuffle", "3v3"])).toEqual([]);
+  });
 });
 
 describe("parseFreshCount", () => {
