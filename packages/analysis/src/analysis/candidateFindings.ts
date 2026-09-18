@@ -108,7 +108,10 @@ import {
   unsyncedBurstEvents,
 } from "./candidates/cooldownTiming";
 import { crisisNoResponseEvents } from "./candidates/crisisNoResponse";
-import { teammateCrisisIdleEvents } from "./candidates/teammateCrisisIdle";
+import {
+  teammateCrisisIdleEvents,
+  teammateCrisisTriageEvents,
+} from "./candidates/teammateCrisisIdle";
 import { teammateCrisisPoints } from "./teammateCrisis";
 import {
   deathSetupEvents,
@@ -1755,11 +1758,18 @@ function teamPlayEvents(
   // cd-spent-idle below.
   if (CANDIDATE_TYPE_FLAGS.cdHoarded) {
     try {
+      // BACKLOG #43 proc exemption needs the crisis unit's death instants, in
+      // the same re-based seconds every tSec fact uses
+      const deathSecondsOf = (u: any): number[] =>
+        ((u.deathRecords ?? []) as any[]).map(
+          (d) => (d.timestamp - combat.startTime) / 1000,
+        );
       const cdHoardSources = [
         {
           crisisUnit: { id: owner.id, name: owner.name },
           own: true,
           points: crisisDecisionPoints(owner, combat),
+          deathSeconds: deathSecondsOf(owner),
         },
         ...friends
           .filter((f: any) => f.id !== owner.id)
@@ -1767,6 +1777,7 @@ function teamPlayEvents(
             crisisUnit: { id: f.id, name: f.name },
             own: false,
             points: crisisDecisionPoints(f, combat),
+            deathSeconds: deathSecondsOf(f),
           })),
       ];
       out.push(
@@ -1986,12 +1997,12 @@ function teamPlayEvents(
     // gate (lookupTeammateCrisisPriorByBin).
     try {
       const bracket: string = combat?.startInfo?.bracket ?? "";
+      const teammatePoints = teammateCrisisPoints(owner, combat);
       out.push(
-        ...teammateCrisisIdleEvents(
-          teammateCrisisPoints(owner, combat),
-          owner,
-          bracket,
-        ),
+        ...teammateCrisisIdleEvents(teammatePoints, owner, bracket),
+        // teammate-crisis-triage (user ruling 2026-09-17): the healer spent
+        // the window on a friendly who was NOT in crisis
+        ...teammateCrisisTriageEvents(teammatePoints, owner, bracket),
       );
     } catch {
       /* teammate points not computable → type absent */

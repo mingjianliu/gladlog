@@ -22,8 +22,10 @@
  */
 import {
   lookupTeammateCrisisPriorByBin,
+  lookupTeammateCrisisTriageByBin,
   teammateCrisisDmgBinOf,
   type TeammateCrisisPriorRef,
+  type TeammateCrisisTriageRef,
 } from "../../data/teammateCrisisPrior";
 import {
   type DecisionRecord,
@@ -181,6 +183,138 @@ export function teammateCrisisIdleEvents(
     });
   }
   // select by danger (cap), emit in time order — like every sibling producer
+  trace.forEach(traceDecision);
+  return out.sort((a, b) => a.t - b.t);
+}
+
+export const TEAMMATE_CRISIS_TRIAGE_CAP = 1;
+
+/**
+ * teammate-crisis-triage (user ruling 2026-09-17 「1 我觉得可以」): the healer
+ * was free, in reach and in LoS, answered neither this teammate nor — and
+ * spent the window casting on ANOTHER friendly whose [STATE] HP was above
+ * the crisis line, while the teammate who crossed did not answer either.
+ * Reference: at comparable moments, the teammate died within 10 s X % when
+ * the other recipient was NOT in crisis vs Y % when they WERE (Solo Shuffle
+ * 44 % vs 21 % on the full archive; 3v3 has 36 / 14 points and falls under
+ * the floor, so nothing renders there yet). Same discipline as the twin —
+ * cite, never prescribe.
+ */
+export function teammateCrisisTriageEvents(
+  points: TeammateCrisisPoint[],
+  owner: { id: string; name: string },
+  bracket: string,
+  probes: {
+    lookup: (
+      bin: ReturnType<typeof teammateCrisisDmgBinOf>,
+    ) => TeammateCrisisTriageRef | null;
+  } = { lookup: (bin) => lookupTeammateCrisisTriageByBin(bracket, bin) },
+  overrides?: { cap?: number },
+): CandidateEvent[] {
+  const cap = overrides?.cap ?? TEAMMATE_CRISIS_TRIAGE_CAP;
+  const eligible = points.filter((p) => p.misprioritized && p.busyOn);
+  const ranked = [...eligible].sort(
+    (a, b) => b.dmg2s - a.dmg2s || a.tSec - b.tSec,
+  );
+  const tracing = isDecisionTraceActive();
+  const trace: DecisionRecord[] = [];
+  const oppId = (p: TeammateCrisisPoint) =>
+    `teammate-crisis-triage:${owner.id}:${p.mateId}:${Math.round(p.tSec)}`;
+  const facts = (p: TeammateCrisisPoint) => ({
+    tSec: p.tSec,
+    mate: p.mateName,
+    hpPct: p.hpPct,
+    dmg2s: p.dmg2s,
+    excluded: p.excluded,
+    idleReason: p.idleReason,
+    busyOn: p.busyOn,
+    busyOnInCrisis: p.busyOnInCrisis,
+  });
+  if (tracing) {
+    for (const p of points)
+      if (!p.misprioritized)
+        trace.push({
+          type: "teammate-crisis-triage",
+          opportunityId: oppId(p),
+          ownerId: owner.id,
+          verdict: p.excluded ? "ineligible" : "suppressed",
+          reason: p.excluded
+            ? p.excluded
+            : p.healerAnswered
+              ? "healer-answered"
+              : p.idleReason !== "busyElsewhere"
+                ? "not-busy-elsewhere"
+                : p.busyOnInCrisis
+                  ? "other-recipient-in-crisis"
+                  : "recipient-hp-unknown",
+          facts: facts(p),
+          candidateIds: [],
+        });
+    for (const p of ranked.slice(cap))
+      trace.push({
+        type: "teammate-crisis-triage",
+        opportunityId: oppId(p),
+        ownerId: owner.id,
+        verdict: "suppressed",
+        reason: "capped",
+        facts: facts(p),
+        candidateIds: [],
+      });
+  }
+  const out: CandidateEvent[] = [];
+  for (const p of ranked.slice(0, cap)) {
+    const bin = teammateCrisisDmgBinOf(p.dmg2s);
+    const ref = probes.lookup(bin);
+    if (!ref) {
+      if (tracing)
+        trace.push({
+          type: "teammate-crisis-triage",
+          opportunityId: oppId(p),
+          ownerId: owner.id,
+          verdict: "suppressed",
+          reason: "no-reference",
+          facts: facts(p),
+          candidateIds: [],
+        });
+      continue;
+    }
+    if (tracing)
+      trace.push({
+        type: "teammate-crisis-triage",
+        opportunityId: oppId(p),
+        ownerId: owner.id,
+        verdict: "emitted",
+        facts: { ...facts(p), cellKey: ref.cellKey },
+        candidateIds: [oppId(p)],
+      });
+    const w = teammateCrisisWindowSeconds(p.tSec);
+    out.push({
+      id: oppId(p),
+      type: "teammate-crisis-triage",
+      t: p.tSec,
+      unitNames: [owner.name, p.mateName, p.busyOn!.name],
+      facts: {
+        t: fmt(p.tSec),
+        unit: owner.name,
+        mate: p.mateName,
+        mateHpPct: String(p.hpPct),
+        dmg2sPct: String(Math.round(p.dmg2s * 100)),
+        attackers: p.attackerNames.length ? p.attackerNames.join("; ") : "none",
+        windowFrom: fmtTime(w.from),
+        windowTo: fmtTime(w.to),
+        castOn: p.busyOn!.name,
+        castOnHpPct: String(p.busyOn!.hpPct),
+        castSpell: p.busyOn!.spellName,
+        distanceYd: p.distanceYd === null ? "?" : String(p.distanceYd),
+        refNWrong: String(ref.nTriageWrong),
+        refDeathWrong: String(ref.deathTriageWrongPct),
+        refNOther: String(ref.nTriageOther),
+        refDeathOther: String(ref.deathTriageOtherPct),
+        cellKey: ref.cellKey,
+        fellBack: ref.fellBack ? "yes" : "no",
+      },
+    });
+  }
   trace.forEach(traceDecision);
   return out.sort((a, b) => a.t - b.t);
 }

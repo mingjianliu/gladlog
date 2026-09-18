@@ -78,6 +78,7 @@ const TYPE_LABEL: Record<string, string> = {
   "crisis-no-response": "危机无应对",
   // GH #95 (2026-09-17).
   "teammate-crisis-idle": "队友危机未出手",
+  "teammate-crisis-triage": "队友危机救错人",
   // GH #80 (2026-09-12).
   "backlash-dispel": "解反噬 DoT",
   "backlash-dispel-window": "可解未解",

@@ -35,6 +35,24 @@ export interface TeammateCrisisPriorCell {
   deathIdlePct: number;
   nAnswered: number;
   deathAnsweredPct: number;
+  /** `teammate-crisis-triage` (user ruling 2026-09-17): comparator points
+   * where the healer answered neither this teammate nor... — cast on ANOTHER
+   * friendly instead — split by whether that recipient was in crisis. Absent
+   * in a table emitted before 2026-09-17 (the triage lookup then returns
+   * null and the card stays silent). */
+  nTriageWrong?: number;
+  deathTriageWrongPct?: number;
+  nTriageOther?: number;
+  deathTriageOtherPct?: number;
+}
+/** the triage card's reference: the four triage fields, all present */
+export interface TeammateCrisisTriageRef {
+  cellKey: string;
+  fellBack: boolean;
+  nTriageWrong: number;
+  deathTriageWrongPct: number;
+  nTriageOther: number;
+  deathTriageOtherPct: number;
 }
 
 const CELLS = (
@@ -88,6 +106,43 @@ export function lookupTeammateCrisisPriorByBin(
       c.nAnswered >= TEAMMATE_CRISIS_PRIOR_N_FLOOR
     )
       return { cellKey: key, fellBack, ...c };
+    return null;
+  };
+  if (bin !== "*") {
+    const fine = tryKey(teammateCrisisPriorKey(bracket, bin), false);
+    if (fine) return fine;
+  }
+  return tryKey(teammateCrisisPriorKey(bracket, "*"), bin !== "*");
+}
+
+/**
+ * Same resolution for the `teammate-crisis-triage` reference: both triage
+ * populations (cast on a friendly NOT in crisis / cast on one who WAS) must
+ * clear the floor. Same bin-keyed contract so the gate can redo it.
+ */
+export function lookupTeammateCrisisTriageByBin(
+  bracket: string,
+  bin: TeammateCrisisDmgBin | "*",
+): TeammateCrisisTriageRef | null {
+  const tryKey = (key: string, fellBack: boolean) => {
+    const c = CELLS[key];
+    if (
+      !!c &&
+      Number.isInteger(c.nTriageWrong) &&
+      Number.isInteger(c.nTriageOther) &&
+      Number.isInteger(c.deathTriageWrongPct) &&
+      Number.isInteger(c.deathTriageOtherPct) &&
+      c.nTriageWrong! >= TEAMMATE_CRISIS_PRIOR_N_FLOOR &&
+      c.nTriageOther! >= TEAMMATE_CRISIS_PRIOR_N_FLOOR
+    )
+      return {
+        cellKey: key,
+        fellBack,
+        nTriageWrong: c.nTriageWrong!,
+        deathTriageWrongPct: c.deathTriageWrongPct!,
+        nTriageOther: c.nTriageOther!,
+        deathTriageOtherPct: c.deathTriageOtherPct!,
+      };
     return null;
   };
   if (bin !== "*") {

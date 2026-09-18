@@ -507,4 +507,14 @@
 //  `burst` / `burstCue` facts flip to "yes" where the enemy really pressed a
 //  cooldown; crisis-no-response's danger ordering (enemyBurst first) can
 //  reorder which ≤2 points survive the cap. Reference cells do not key on it.
-export const PROMPT_VERSION = 75;
+//  v76 (2026-09-17, GH #95 question 4 + BACKLOG #43, user rulings 「1 我觉得
+//  可以」「2 可以免 如果人没死的话」): new healer candidate
+//  `teammate-crisis-triage` (the healer spent the crisis window casting on a
+//  friendly who was NOT in crisis; reference = teammate death when the
+//  recipient was not in crisis vs was, same feasibility door as the idle
+//  twin; only Solo Shuffle clears the 50 floor today) with legend, desktop
+//  card and the shared gate; cd-hoarded no longer accuses when a low-HP proc
+//  / cheat-death answered the crisis and the crisis unit was still alive
+//  CD_HOARD_RESPONSE_S later. teammateCrisisPriorGenerated.json gains the
+//  triage cells (same 116,063-round scan, no re-scan).
+export const PROMPT_VERSION = 76;

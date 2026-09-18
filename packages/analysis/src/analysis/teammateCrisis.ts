@@ -50,7 +50,7 @@
  */
 import { LogEvent } from "@gladlog/parser-compat";
 
-import { getEnglishSpellName, spellEffectData } from "../data/spellEffectData";
+import { getEnglishSpellName } from "../data/spellEffectData";
 import {
   cdAvailableAt,
   extractMajorCooldowns,
@@ -58,13 +58,13 @@ import {
   type IMajorCooldownInfo,
   isHealerSpec,
 } from "../utils/cooldowns";
+import { isEnemyCdWindowSpell } from "../utils/enemyCDs";
 import { hasLineOfSight } from "../utils/losAnalysis";
 import {
   actionBlockedAt,
   CRISIS_CONTROL_IDS,
   CRISIS_EXTERNAL_IDS,
   CRISIS_HP_PCT_RENDERED,
-  CRISIS_OFFENSIVE_CD_IDS,
   CRISIS_PROTECTIVE_ANSWER_IDS,
   crisisDecisionPoints,
   DMG_WINDOW_MS,
@@ -102,18 +102,6 @@ export const TEAMMATE_CRISIS_SAMPLE_TOL_MS = 1500;
  * fact with no cue wording. Never "had you opened earlier you would have
  * avoided it" (codex R3 condition 2 stands for the counterfactual). */
 export const TEAMMATE_CRISIS_CUE_MIN_S = 2;
-/** The burst FACT on the card names a press "visible on a cooldown tracker",
- * so it must be a cooldown: the canonical `OFFENSIVE_CD_SPELL_IDS` also admits
- * `debuffs_offensive` rows with no cooldown at all (Curse of Weakness 702,
- * Curse of Tongues 1714, Ignite 12654 — the first re-dump after the
- * 2026-09-17 unification rendered "opened Curse of Weakness 6s earlier").
- * Official cooldown (or charge recharge) at or above this many seconds. */
-export const TEAMMATE_CRISIS_BURST_MIN_CD_S = 30;
-function isTrackableCooldown(spellId: string): boolean {
-  const e = spellEffectData[spellId];
-  const cd = e?.cooldownSeconds ?? e?.charges?.chargeCooldownSeconds ?? 0;
-  return cd >= TEAMMATE_CRISIS_BURST_MIN_CD_S;
-}
 
 export type TeammateCrisisHealerAnswer =
   "external" | "protective" | "freshHeal" | "carriedHeal" | "peel";
@@ -178,11 +166,18 @@ export interface TeammateCrisisPoint {
    * with the [STATE] reading at that cast, and whether ANY in-window cast
    * went to a friendly at or under the crisis line. null when no in-window
    * cast targeted another friendly. */
-  busyOn: { name: string; hpPct: number | null } | null;
+  busyOn: { name: string; hpPct: number | null; spellName: string } | null;
   busyOnInCrisis: boolean;
   /** the card population: comparator ∧ healerIdle ∧ !mateResponded ∧ no idle
    * reason */
   cleanIdle: boolean;
+  /** user ruling 2026-09-17 ("1 我觉得可以") — the `teammate-crisis-triage`
+   * population: comparator, healer did not answer THIS teammate, the
+   * teammate did not answer either, and every in-window cast the healer made
+   * went to a friendly whose [STATE] HP was above the crisis line (the
+   * recipient's HP known). Full-archive: 305 such points, teammate died 35 %,
+   * vs 215 where the other recipient WAS in crisis, 18 %. */
+  misprioritized: boolean;
   /** OUTCOME — for the reference table only. The producer must never read
    * this field. */
   diedWithin10s: boolean;
@@ -271,7 +266,10 @@ export function teammateCrisisPoints(
   for (const e of enemies) {
     for (const c of (e.spellCastEvents ?? []) as any[]) {
       const sid = String(c.spellId ?? "");
-      if (CRISIS_OFFENSIVE_CD_IDS.has(sid) && isTrackableCooldown(sid))
+      // one predicate with the enemy-CD window builder and crisisDecisionPoints'
+      // enemyBurst (utils/enemyCDs.ts): canonical offensive table AND a real
+      // cooldown — never a curse / Ignite the table admits without one
+      if (isEnemyCdWindowSpell(sid))
         enemyBurstCasts.push({
           t: c.timestamp,
           casterName: e.name,
@@ -433,11 +431,26 @@ export function teammateCrisisPoints(
           if (!dest?.info || dest.id === mate.id) continue;
           if (dest.reaction !== owner.reaction) continue;
           const hpAtCast = gridHpPct(dest, c.timestamp);
-          if (!busyOn) busyOn = { name: dest.name, hpPct: hpAtCast };
+          if (!busyOn)
+            busyOn = {
+              name: dest.name,
+              hpPct: hpAtCast,
+              spellName:
+                getEnglishSpellName(String(c.spellId ?? ""), "") ||
+                String(c.spellId ?? ""),
+            };
           if (hpAtCast !== null && hpAtCast <= CRISIS_HP_PCT_RENDERED)
             busyOnInCrisis = true;
         }
       }
+      const misprioritized =
+        excluded === null &&
+        !healerAnswered &&
+        !p.responded &&
+        idleReason === "busyElsewhere" &&
+        busyOn !== null &&
+        busyOn.hpPct !== null &&
+        !busyOnInCrisis;
 
       let burst: TeammateCrisisPoint["enemyBurst"] = null;
       for (const b of enemyBurstCasts) {
@@ -478,6 +491,7 @@ export function teammateCrisisPoints(
         cleanIdle,
         busyOn,
         busyOnInCrisis,
+        misprioritized,
         diedWithin10s: p.diedWithin10s,
       });
     }

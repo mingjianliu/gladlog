@@ -158,6 +158,7 @@ describe("candidateTypeRegistry: the 2026-09-12 derivation is a no-op", () => {
         "missed-purge-kill-window",
         "crisis-no-response",
         "teammate-crisis-idle",
+        "teammate-crisis-triage",
         "backlash-dispel",
         "backlash-dispel-window",
         "kick-priority-missed",

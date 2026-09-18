@@ -37,6 +37,7 @@ import {
   isProcOnlyActivation,
 } from "../utils/cooldowns";
 import { PVP_TRINKET_SPELL_IDS } from "../utils/killWindowTargetSelection";
+import { isEnemyCdWindowSpell } from "../utils/enemyCDs";
 import { OFFENSIVE_CD_SPELL_IDS } from "../utils/spellDanger";
 import { buildFilteredAuraIntervals } from "../utils/utils";
 
@@ -753,7 +754,7 @@ export function crisisDecisionPoints(
   for (const u of players) {
     for (const c of (u.spellCastEvents ?? []) as any[]) {
       const sid = String(c.spellId ?? "");
-      if (!friendIds.has(u.id) && OFFENSIVE_CD_IDS.has(sid))
+      if (!friendIds.has(u.id) && isEnemyCdWindowSpell(sid))
         enemyBurstCasts.push(c.timestamp);
       if (friendIds.has(u.id) && u.id !== owner.id && CONTROL_IDS.has(sid))
         friendControlCasts.push({ t: c.timestamp, dest: c.destUnitId });

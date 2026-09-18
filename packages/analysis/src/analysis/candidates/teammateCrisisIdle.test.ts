@@ -4,6 +4,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { TeammateCrisisPoint } from "../teammateCrisis";
+import { teammateCrisisTriageEvents } from "./teammateCrisisIdle";
 import {
   TEAMMATE_CRISIS_IDLE_CAP,
   teammateCrisisIdleEvents,
@@ -39,9 +40,18 @@ const point = (
   cleanIdle: true,
   busyOn: null,
   busyOnInCrisis: false,
+  misprioritized: false,
   diedWithin10s: true,
   ...over,
 });
+const triageRef = {
+  cellKey: "Rated Solo Shuffle|*",
+  fellBack: true,
+  nTriageWrong: 85,
+  deathTriageWrongPct: 44,
+  nTriageOther: 73,
+  deathTriageOtherPct: 21,
+};
 const owner = { id: "H", name: "Heals-R" };
 const ref = {
   cellKey: "3v3|20-30%",
@@ -142,5 +152,67 @@ describe("teammateCrisisIdleEvents", () => {
     );
     expect(out).toHaveLength(TEAMMATE_CRISIS_IDLE_CAP);
     expect(out.map((e) => e.t)).toEqual([10, 60]);
+  });
+});
+
+describe("teammateCrisisTriageEvents", () => {
+  const triage = point({
+    cleanIdle: false,
+    healerIdle: false,
+    idleReason: "busyElsewhere",
+    busyOn: { name: "Friend-R", hpPct: 71, spellName: "Rejuvenation" },
+    misprioritized: true,
+  });
+
+  it("renders the recipient, their HP, the spell and the triage reference verbatim", () => {
+    const [e] = teammateCrisisTriageEvents(
+      [triage],
+      owner,
+      "Rated Solo Shuffle",
+      {
+        lookup: () => triageRef,
+      },
+    );
+    expect(e).toBeDefined();
+    expect(e!.type).toBe("teammate-crisis-triage");
+    expect(e!.unitNames).toEqual(["Heals-R", "Mate-R", "Friend-R"]);
+    expect(e!.facts).toMatchObject({
+      mate: "Mate-R",
+      mateHpPct: "38",
+      castOn: "Friend-R",
+      castOnHpPct: "71",
+      castSpell: "Rejuvenation",
+      refNWrong: "85",
+      refDeathWrong: "44",
+      refNOther: "73",
+      refDeathOther: "21",
+      cellKey: "Rated Solo Shuffle|*",
+      fellBack: "yes",
+    });
+    for (const v of Object.values(e!.facts ?? {}))
+      expect(String(v)).not.toContain(", ");
+  });
+
+  it("only misprioritized points qualify; no reference → nothing; cap 1 keeps the biggest hit", () => {
+    expect(
+      teammateCrisisTriageEvents([point()], owner, "3v3", {
+        lookup: () => triageRef,
+      }),
+    ).toEqual([]);
+    expect(
+      teammateCrisisTriageEvents([triage], owner, "3v3", {
+        lookup: () => null,
+      }),
+    ).toEqual([]);
+    const out = teammateCrisisTriageEvents(
+      [
+        { ...triage, tSec: 20, dmg2s: 0.12 },
+        { ...triage, tSec: 50, dmg2s: 0.4 },
+      ],
+      owner,
+      "Rated Solo Shuffle",
+      { lookup: () => triageRef },
+    );
+    expect(out.map((e) => e.t)).toEqual([50]);
   });
 });

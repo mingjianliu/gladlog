@@ -95,6 +95,33 @@ export interface IEnemyCDTimeline {
   alignedBurstWindows: IAlignedBurstWindow[];
 }
 
+/** Max CD to consider a "real" cooldown (filters out 999.999s passive procs) */
+export const ENEMY_CD_MAX_SECONDS = 360;
+
+/**
+ * "The enemy opened a cooldown" — ONE predicate for every consumer that
+ * turns an enemy cast into a burst / threat fact: this builder's enemy-CD
+ * windows, `crisisDecisionPoints`' `enemyBurst` and the teammate-crisis
+ * cards' burst fact (2026-09-17, GH #95 hand-read). Membership in the
+ * canonical `OFFENSIVE_CD_SPELL_IDS` is necessary but not sufficient — that
+ * table also admits `debuffs_offensive` rows with no cooldown at all (Curse
+ * of Weakness 702, Curse of Tongues 1714, Ignite 12654), which are not
+ * something a cooldown tracker shows. Official cooldown (or charge recharge)
+ * inside [MIN_CD_SECONDS, ENEMY_CD_MAX_SECONDS].
+ */
+export function isEnemyCdWindowSpell(spellId: string): boolean {
+  if (!isOffensiveSpell(spellId)) return false;
+  const effectData = spellEffectData[spellId];
+  if (!effectData) return false;
+  const cooldownSeconds =
+    effectData.cooldownSeconds ??
+    effectData.charges?.chargeCooldownSeconds ??
+    0;
+  return (
+    cooldownSeconds >= MIN_CD_SECONDS && cooldownSeconds <= ENEMY_CD_MAX_SECONDS
+  );
+}
+
 /**
  * For each enemy player, reconstruct when their offensive cooldowns (>= 30s) were cast
  * and when each CD will be available again. Also identifies aligned burst windows where
@@ -111,9 +138,6 @@ export function reconstructEnemyCDTimeline(
 
   const players: IEnemyPlayerTimeline[] = [];
 
-  // Max CD to consider a "real" cooldown (filters out 999.999s passive procs)
-  const MAX_CD_SECONDS = 360;
-
   for (const enemy of enemies) {
     const offensiveCDs: IEnemyCDCast[] = [];
 
@@ -121,15 +145,12 @@ export function reconstructEnemyCDTimeline(
       if (cast.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
       const { spellId } = cast;
       if (!spellId) continue;
-      if (!isOffensiveSpell(spellId)) continue;
-      const effectData = spellEffectData[spellId];
-      if (!effectData) continue;
+      if (!isEnemyCdWindowSpell(spellId)) continue;
+      const effectData = spellEffectData[spellId]!;
       const cooldownSeconds =
         effectData.cooldownSeconds ??
         effectData.charges?.chargeCooldownSeconds ??
         0;
-      if (cooldownSeconds < MIN_CD_SECONDS || cooldownSeconds > MAX_CD_SECONDS)
-        continue;
 
       const castTimeSeconds = (cast.logLine.timestamp - matchStartMs) / 1000;
       const buffDuration = effectData.durationSeconds ?? 0;

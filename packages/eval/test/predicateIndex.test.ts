@@ -1026,6 +1026,27 @@ const INDEX: PredicateRow[] = [
     symbol: "teammateCrisisIdleEvents",
     mod: teammateCrisisIdle,
   },
+  // GH #95 question 4 / BACKLOG #43 (2026-09-17): triage twin + burst window predicate
+  {
+    file: `${A}/analysis/candidates/teammateCrisisIdle.ts`,
+    symbol: "teammateCrisisTriageEvents",
+    mod: teammateCrisisIdle,
+  },
+  {
+    file: `${A}/data/teammateCrisisPrior.ts`,
+    symbol: "lookupTeammateCrisisTriageByBin",
+    mod: teammateCrisisPriorData,
+  },
+  {
+    file: `${A}/utils/enemyCDs.ts`,
+    symbol: "isEnemyCdWindowSpell",
+    mod: enemyCDs,
+  },
+  {
+    file: `${A}/utils/enemyCDs.ts`,
+    symbol: "ENEMY_CD_MAX_SECONDS",
+    mod: enemyCDs,
+  },
   {
     file: `${A}/analysis/stackedDefensives.ts`,
     symbol: "stackedDefensivePairs",

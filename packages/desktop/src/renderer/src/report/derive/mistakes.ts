@@ -118,6 +118,14 @@ export const MISTAKE_RULES: readonly MistakeRule[] = [
     severity: "major",
     source: "candidate",
   },
+  {
+    // GH #95 question 4 (2026-09-17, user 「1 我觉得可以」): the healer spent
+    // the crisis window on a friendly who was NOT in crisis.
+    type: "teammate-crisis-triage",
+    label: "队友危机救错人",
+    severity: "major",
+    source: "candidate",
+  },
   // GH #80 (2026-09-12, user approval): the owner dispelled Unstable
   // Affliction / Vampiric Touch in the archive-measured net-negative stratum
   // (UA ≤ 2 stacks at ≥ 60 % target HP: net ≈ −200k HP + 1.4 s unanswerable
@@ -397,6 +405,8 @@ export function candidateDetail(c: CandidateEvent): string {
           : `此状态下无应对者 ${f.refDeathNoResp ?? "?"}% 十秒内死亡,有应对者 ${f.refDeathResp ?? "?"}%`;
       return `血量 ${f.hpPct ?? "?"}% 后 3 秒无应对(${outcomeClause},出手者常见应对:${f.refTop ?? ""})`;
     }
+    case "teammate-crisis-triage":
+      return `${f.mate ?? ""} 掉到 ${f.mateHpPct ?? "?"}%(2 秒内承伤 ${f.dmg2sPct ?? "?"}%)时,你 ${f.windowFrom ?? ""}–${f.windowTo ?? ""} 在给 ${f.castOn ?? ""}(${f.castOnHpPct ?? "?"}% 血)放 ${f.castSpell ?? ""}(同类时刻目标不在危机 ${f.refDeathWrong ?? "?"}% 队友十秒内阵亡,目标也在危机 ${f.refDeathOther ?? "?"}%)`;
     case "teammate-crisis-idle":
       // GH #95: facts.externalsReady / facts.attackers are "; "-joined lists
       // (", " is the facts separator); render them as-is.

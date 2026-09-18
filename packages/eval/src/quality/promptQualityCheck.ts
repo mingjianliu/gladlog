@@ -52,6 +52,7 @@ import {
 import { lookupCdTriggerPrior } from "@gladlog/analysis/src/data/cdTriggerPrior";
 import {
   lookupTeammateCrisisPriorByBin,
+  lookupTeammateCrisisTriageByBin,
   type TeammateCrisisDmgBin,
   teammateCrisisDmgBinOf,
 } from "@gladlog/analysis/src/data/teammateCrisisPrior";
@@ -1118,22 +1119,30 @@ export function checkTeammateCrisisRefConsistency(lines: string[]): string[] {
   const failures: string[] = [];
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!;
-    if (!line.includes("type=teammate-crisis-idle")) continue;
+    // two producers, one table: the idle twin quotes the idle/answered
+    // populations, the triage twin (user ruling 2026-09-17) the two triage
+    // populations — each re-done through its own bin-keyed lookup
+    const kind = line.includes("type=teammate-crisis-idle")
+      ? "teammate-crisis-idle"
+      : line.includes("type=teammate-crisis-triage")
+        ? "teammate-crisis-triage"
+        : null;
+    if (!kind) continue;
     const m = line.match(/facts=\{(.*)\}\s*$/);
     if (!m) {
-      failures.push(`line ${i + 1}: teammate-crisis-idle 行无 facts`);
+      failures.push(`line ${i + 1}: ${kind} 行无 facts`);
       continue;
     }
     const f = parseFactsBlock(m[1]!);
     const dmg2s = Number(f.dmg2sPct);
     if (!Number.isFinite(dmg2s)) {
-      failures.push(`line ${i + 1}: teammate-crisis-idle 行缺 dmg2sPct`);
+      failures.push(`line ${i + 1}: ${kind} 行缺 dmg2sPct`);
       continue;
     }
     const parts = (f.cellKey ?? "").split("|");
     if (parts.length !== 2) {
       failures.push(
-        `line ${i + 1}: teammate-crisis-idle 的 cellKey 形状不对 ${f.cellKey ?? ""}`,
+        `line ${i + 1}: ${kind} 的 cellKey 形状不对 ${f.cellKey ?? ""}`,
       );
       continue;
     }
@@ -1141,32 +1150,55 @@ export function checkTeammateCrisisRefConsistency(lines: string[]): string[] {
     const bin = teammateCrisisDmgBinOf(dmg2s / 100);
     if (keyBin !== "*" && keyBin !== bin) {
       failures.push(
-        `line ${i + 1}: teammate-crisis-idle cellKey 的档位 ${keyBin} 与 dmg2sPct=${dmg2s} 推出的 ${bin} 不一致`,
+        `line ${i + 1}: ${kind} cellKey 的档位 ${keyBin} 与 dmg2sPct=${dmg2s} 推出的 ${bin} 不一致`,
       );
       continue;
     }
-    const ref = lookupTeammateCrisisPriorByBin(
-      bracket,
-      bin as TeammateCrisisDmgBin,
-    );
-    if (!ref) {
+    let expect: Record<string, string> | null = null;
+    let resolvedKey = "";
+    if (kind === "teammate-crisis-idle") {
+      const ref = lookupTeammateCrisisPriorByBin(
+        bracket,
+        bin as TeammateCrisisDmgBin,
+      );
+      if (ref) {
+        resolvedKey = ref.cellKey;
+        expect = {
+          cellKey: ref.cellKey,
+          refNIdle: String(ref.nIdle),
+          refDeathIdle: String(ref.deathIdlePct),
+          refNAnswered: String(ref.nAnswered),
+          refDeathAnswered: String(ref.deathAnsweredPct),
+          fellBack: ref.fellBack ? "yes" : "no",
+        };
+      }
+    } else {
+      const ref = lookupTeammateCrisisTriageByBin(
+        bracket,
+        bin as TeammateCrisisDmgBin,
+      );
+      if (ref) {
+        resolvedKey = ref.cellKey;
+        expect = {
+          cellKey: ref.cellKey,
+          refNWrong: String(ref.nTriageWrong),
+          refDeathWrong: String(ref.deathTriageWrongPct),
+          refNOther: String(ref.nTriageOther),
+          refDeathOther: String(ref.deathTriageOtherPct),
+          fellBack: ref.fellBack ? "yes" : "no",
+        };
+      }
+    }
+    if (!expect) {
       failures.push(
-        `line ${i + 1}: teammate-crisis-idle 引用了表里查不到/不够样本的单元格 ${f.cellKey}`,
+        `line ${i + 1}: ${kind} 引用了表里查不到/不够样本的单元格 ${f.cellKey}`,
       );
       continue;
     }
-    const expect: Record<string, string> = {
-      cellKey: ref.cellKey,
-      refNIdle: String(ref.nIdle),
-      refDeathIdle: String(ref.deathIdlePct),
-      refNAnswered: String(ref.nAnswered),
-      refDeathAnswered: String(ref.deathAnsweredPct),
-      fellBack: ref.fellBack ? "yes" : "no",
-    };
     for (const [k, v] of Object.entries(expect))
       if (f[k] !== v)
         failures.push(
-          `line ${i + 1}: teammate-crisis-idle ${k}=${f[k]} 与参照表 ${v} 不一致(${ref.cellKey})`,
+          `line ${i + 1}: ${kind} ${k}=${f[k]} 与参照表 ${v} 不一致(${resolvedKey})`,
         );
   }
   return failures;

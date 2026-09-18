@@ -178,6 +178,15 @@ export const CANDIDATE_TYPE_REGISTRY: Readonly<
     reason:
       'Healer-side twin of crisis-no-response: a TEAMMATE crossed the crisis line, the healer was free through the window (actionBlockedAt at t..t+3 s, no channel in flight, ≤40 yd, LoS true, mana ≥10 %), cast nothing, no carried HoT ticking, teammate did not answer either. User 2026-09-17: an accusation ("这个东西可以做一下指控"), overruling codex R3\'s observation-only ruling on the strength of the feasibility door — 60 clean-idle points / 11,536 rounds (0.0052 per round, teammate death 77 % vs 7–13 % answered under identical exclusions).',
   },
+  "teammate-crisis-triage": {
+    status: "live",
+    surface: "card",
+    origin: "candidate",
+    since: "2026-09-17",
+    issue: "GH #95 (question 4)",
+    reason:
+      "Healer free / in reach / in LoS, answered neither the crossing teammate nor…, and spent the window casting on a friendly whose HP was above the crisis line while the crossing teammate did not answer either. User 2026-09-17 「1 我觉得可以」. Full archive: teammate died 35 % when the other recipient was not in crisis vs 18 % when they were; with the teammate-did-not-answer condition only Solo Shuffle clears the 50 floor (85 / 73: 44 % vs 21 %), 3v3 has 36 / 14 and stays silent.",
+  },
   "external-unused": {
     status: "live",
     surface: "card",

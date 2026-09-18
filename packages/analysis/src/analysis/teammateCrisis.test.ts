@@ -16,9 +16,8 @@ import {
   CRISIS_EXTERNAL_IDS,
   CRISIS_OFFENSIVE_CD_IDS,
 } from "./crisisDecisionPoints";
-import { spellEffectData } from "../data/spellEffectData";
+import { isEnemyCdWindowSpell } from "../utils/enemyCDs";
 import {
-  TEAMMATE_CRISIS_BURST_MIN_CD_S,
   TEAMMATE_CRISIS_CUE_MIN_S,
   TEAMMATE_CRISIS_REACH_YARDS,
   teammateCrisisPoints,
@@ -32,16 +31,8 @@ const EXTERNAL = [...CRISIS_EXTERNAL_IDS][0]!;
 // the burst FACT needs a real cooldown (TEAMMATE_CRISIS_BURST_MIN_CD_S) —
 // pick one from the canonical set rather than the first entry, which may be
 // a debuffs_offensive row with no cooldown (Curse of Weakness)
-const BURST = [...CRISIS_OFFENSIVE_CD_IDS].find(
-  (id) =>
-    (spellEffectData[id]?.cooldownSeconds ?? 0) >=
-    TEAMMATE_CRISIS_BURST_MIN_CD_S,
-)!;
-const NO_CD_BURST = [...CRISIS_OFFENSIVE_CD_IDS].find(
-  (id) =>
-    !spellEffectData[id]?.cooldownSeconds &&
-    !spellEffectData[id]?.charges?.chargeCooldownSeconds,
-);
+const BURST = [...CRISIS_OFFENSIVE_CD_IDS].find((id) => isEnemyCdWindowSpell(id))!;
+const NO_CD_BURST = [...CRISIS_OFFENSIVE_CD_IDS].find((id) => !isEnemyCdWindowSpell(id));
 
 const sample = (
   actorId: string,
@@ -205,8 +196,33 @@ describe("teammateCrisisPoints", () => {
     expect(q!.cleanIdle).toBe(false);
     // user question 4 (2026-09-17): whom was the healer casting on, and were
     // they in crisis themselves? Friend-R sat at 30 % → yes.
-    expect(q!.busyOn).toEqual({ name: "Friend-R", hpPct: 30 });
+    expect(q!.busyOn).toEqual({
+      name: "Friend-R",
+      hpPct: 30,
+      spellName: "999",
+    });
+    expect(q!.misprioritized).toBe(false);
     expect(q!.busyOnInCrisis).toBe(true);
+    // the same cast on a friendly at 80 % is the triage population
+    // (user ruling 2026-09-17): healer busy on someone NOT in crisis
+    const healthy = { ...other };
+    healthy.advancedActions = [
+      sample("F", 0, 100),
+      sample("F", 2000, 80),
+      sample("F", 4000, 80),
+    ];
+    const [r] = teammateCrisisPoints(
+      h2,
+      combat([h2, mate(), healthy, enemy()]),
+      [],
+    );
+    expect(r!.busyOn).toEqual({
+      name: "Friend-R",
+      hpPct: 80,
+      spellName: "999",
+    });
+    expect(r!.busyOnInCrisis).toBe(false);
+    expect(r!.misprioritized).toBe(true);
   });
 
   it("a HoT placed before the window whose ticks land in it answers as carriedHeal (user ruling 2026-09-15); a tick of a spell cast on the mate in the window is a fresh heal", () => {

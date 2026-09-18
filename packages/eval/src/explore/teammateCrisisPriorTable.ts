@@ -25,6 +25,12 @@ export interface TeammateCrisisPriorRow {
   healerAnswered: boolean;
   cleanIdle: boolean;
   diedWithin10s: boolean;
+  /** triage populations (user ruling 2026-09-17 "1 我觉得可以"): present on
+   * rows scanned since 2026-09-17; older rows simply add nothing here */
+  idleReason?: string | null;
+  mateResponded?: boolean;
+  busyOnInCrisis?: boolean;
+  busyOnHpPct?: number | null;
 }
 
 export interface TeammateCrisisPriorTable {
@@ -44,6 +50,26 @@ interface Acc {
   idleDied: number;
   answered: number;
   answeredDied: number;
+  /** cast on another friendly who was NOT in crisis (HP known, > line) */
+  triageWrong: number;
+  triageWrongDied: number;
+  /** cast on another friendly who WAS in crisis */
+  triageOther: number;
+  triageOtherDied: number;
+}
+
+/** the `misprioritized` half of `teammateCrisisPoints`, re-derived from the
+ * scan row's fields so the table and the card share one definition:
+ * comparator, healer answered neither, cast on a friendly whose HP was known
+ * and above the crisis line (and no in-window cast reached one at/under it) */
+export function triageKindOf(
+  r: TeammateCrisisPriorRow,
+): "wrong" | "other" | null {
+  if (r.excluded !== null || r.healerAnswered || r.mateResponded) return null;
+  if (r.idleReason !== "busyElsewhere") return null;
+  if (r.busyOnInCrisis) return "other";
+  if (r.busyOnHpPct === null || r.busyOnHpPct === undefined) return null;
+  return "wrong";
 }
 
 const pct = (num: number, den: number) =>
@@ -56,7 +82,8 @@ export function buildTeammateCrisisPriorTable(
   const acc = new Map<string, Acc>();
   for (const r of rows) {
     if (r.excluded !== null) continue;
-    if (!r.cleanIdle && !r.healerAnswered) continue;
+    const triage = triageKindOf(r);
+    if (!r.cleanIdle && !r.healerAnswered && !triage) continue;
     for (const key of [
       `${r.bracket}|${teammateCrisisDmgBinOf(r.dmg2s)}`,
       `${r.bracket}|*`,
@@ -64,14 +91,30 @@ export function buildTeammateCrisisPriorTable(
       const a =
         acc.get(key) ??
         acc
-          .set(key, { idle: 0, idleDied: 0, answered: 0, answeredDied: 0 })
+          .set(key, {
+            idle: 0,
+            idleDied: 0,
+            answered: 0,
+            answeredDied: 0,
+            triageWrong: 0,
+            triageWrongDied: 0,
+            triageOther: 0,
+            triageOtherDied: 0,
+          })
           .get(key)!;
       if (r.cleanIdle) {
         a.idle++;
         if (r.diedWithin10s) a.idleDied++;
-      } else {
+      } else if (r.healerAnswered) {
         a.answered++;
         if (r.diedWithin10s) a.answeredDied++;
+      }
+      if (triage === "wrong") {
+        a.triageWrong++;
+        if (r.diedWithin10s) a.triageWrongDied++;
+      } else if (triage === "other") {
+        a.triageOther++;
+        if (r.diedWithin10s) a.triageOtherDied++;
       }
     }
   }
@@ -83,6 +126,10 @@ export function buildTeammateCrisisPriorTable(
       deathIdlePct: pct(a.idleDied, a.idle),
       nAnswered: a.answered,
       deathAnsweredPct: pct(a.answeredDied, a.answered),
+      nTriageWrong: a.triageWrong,
+      deathTriageWrongPct: pct(a.triageWrongDied, a.triageWrong),
+      nTriageOther: a.triageOther,
+      deathTriageOtherPct: pct(a.triageOtherDied, a.triageOther),
     };
   }
   return { meta, cells };

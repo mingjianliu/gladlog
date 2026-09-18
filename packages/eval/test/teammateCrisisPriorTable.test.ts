@@ -32,23 +32,54 @@ describe("buildTeammateCrisisPriorTable", () => {
       row({ dmg2s: 0.12, cleanIdle: false, healerAnswered: true }),
     ];
     const t = buildTeammateCrisisPriorTable(rows, meta);
-    expect(t.cells["3v3|20-30%"]).toEqual({
+    expect(t.cells["3v3|20-30%"]).toMatchObject({
       nIdle: 3,
       deathIdlePct: 67,
       nAnswered: 2,
       deathAnsweredPct: 50,
     });
-    expect(t.cells["3v3|10-20%"]).toEqual({
+    expect(t.cells["3v3|10-20%"]).toMatchObject({
       nIdle: 0,
       deathIdlePct: 0,
       nAnswered: 1,
       deathAnsweredPct: 0,
     });
-    expect(t.cells["3v3|*"]).toEqual({
+    expect(t.cells["3v3|*"]).toMatchObject({
       nIdle: 3,
       deathIdlePct: 67,
       nAnswered: 3,
       deathAnsweredPct: 33,
+    });
+  });
+
+  it("triage populations (user ruling 2026-09-17): cast on a friendly not in crisis vs one in crisis, teammate did not answer", () => {
+    const busy = (over: Record<string, unknown>) =>
+      row({
+        cleanIdle: false,
+        healerAnswered: false,
+        mateResponded: false,
+        idleReason: "busyElsewhere",
+        ...over,
+      });
+    const t = buildTeammateCrisisPriorTable(
+      [
+        busy({ busyOnInCrisis: false, busyOnHpPct: 80, diedWithin10s: true }),
+        busy({ busyOnInCrisis: false, busyOnHpPct: 65 }),
+        busy({ busyOnInCrisis: true, busyOnHpPct: 30 }),
+        // recipient HP unknown → neither population
+        busy({ busyOnInCrisis: false, busyOnHpPct: null }),
+        // the teammate answered themselves → not a triage point
+        busy({ busyOnInCrisis: false, busyOnHpPct: 80, mateResponded: true }),
+      ],
+      meta,
+    );
+    expect(t.cells["3v3|*"]).toMatchObject({
+      nTriageWrong: 2,
+      deathTriageWrongPct: 50,
+      nTriageOther: 1,
+      deathTriageOtherPct: 0,
+      nIdle: 0,
+      nAnswered: 0,
     });
   });
 

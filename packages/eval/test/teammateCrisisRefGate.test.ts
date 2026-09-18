@@ -9,6 +9,7 @@
  */
 import {
   lookupTeammateCrisisPriorByBin,
+  lookupTeammateCrisisTriageByBin,
   type TeammateCrisisDmgBin,
 } from "@gladlog/analysis/src/data/teammateCrisisPrior";
 import RAW from "@gladlog/analysis/src/data/teammateCrisisPriorGenerated.json";
@@ -116,6 +117,68 @@ describe("checkTeammateCrisisRefConsistency", () => {
       expect(
         checkTeammateCrisisRefConsistency([
           line({ cellKey: `${REF!.bracket}|${otherBin}` }),
+        ]),
+      ).toHaveLength(1);
+    },
+  );
+
+  // teammate-crisis-triage (user ruling 2026-09-17): same gate, its own lookup
+  const triageKey = Object.keys(CELLS).find((k) => {
+    const [b, bin] = k.split("|") as [string, string];
+    const r = lookupTeammateCrisisTriageByBin(
+      b,
+      bin as TeammateCrisisDmgBin | "*",
+    );
+    return r !== null && r.cellKey === k;
+  });
+  const TREF = triageKey
+    ? (() => {
+        const [b, bin] = triageKey.split("|") as [
+          string,
+          TeammateCrisisDmgBin | "*",
+        ];
+        return { bracket: b, bin, ...lookupTeammateCrisisTriageByBin(b, bin)! };
+      })()
+    : null;
+  const triageLine = (over: Record<string, string> = {}) => {
+    const r = TREF!;
+    const f: Record<string, string> = {
+      t: "47",
+      unit: "Heals-R",
+      mate: "Mate-R",
+      mateHpPct: "38",
+      dmg2sPct: r.bin === "*" ? "25" : String(dmgFor(r.bin)),
+      castOn: "Friend-R",
+      castOnHpPct: "71",
+      castSpell: "Rejuvenation",
+      refNWrong: String(r.nTriageWrong),
+      refDeathWrong: String(r.deathTriageWrongPct),
+      refNOther: String(r.nTriageOther),
+      refDeathOther: String(r.deathTriageOtherPct),
+      cellKey: r.cellKey,
+      fellBack: r.bin === "*" || r.fellBack ? "yes" : "no",
+      ...over,
+    };
+    const facts = Object.entries(f)
+      .map(([k, v]) => `${k}=${v}`)
+      .join(", ");
+    return `  - id=teammate-crisis-triage:H:M:47 type=teammate-crisis-triage t=47 facts={${facts}}`;
+  };
+  const withTriage = TREF ? it : it.skip;
+  withTriage(
+    "a triage line rendered from its lookup passes; a drifted triage number fails; a triage line quoting idle fields fails",
+    () => {
+      // the bracket-wide cell can be resolved from any bin's dmg2sPct; when the
+      // fine cell exists the line must carry that bin's dmg2sPct
+      expect(checkTeammateCrisisRefConsistency([triageLine()])).toHaveLength(0);
+      expect(
+        checkTeammateCrisisRefConsistency([
+          triageLine({ refDeathWrong: String(TREF!.deathTriageWrongPct + 1) }),
+        ]),
+      ).toHaveLength(1);
+      expect(
+        checkTeammateCrisisRefConsistency([
+          triageLine({ refNOther: String(TREF!.nTriageOther + 1) }),
         ]),
       ).toHaveLength(1);
     },

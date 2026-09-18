@@ -562,7 +562,7 @@ export interface ICdHoardedCrisisSource {
   crisisUnit: { id: string; name: string };
   /** true when crisisUnit IS the cd-hoarded owner (their own crisis). */
   own: boolean;
-  points: Pick<
+  points: (Pick<
     DecisionPoint,
     | "tSec"
     | "hpPct"
@@ -571,7 +571,12 @@ export interface ICdHoardedCrisisSource {
     | "enemyBurst"
     | "inCC"
     | "dangerous"
-  >[];
+  > &
+    Partial<Pick<DecisionPoint, "responses">>)[];
+  /** the crisis unit's death instants (seconds since round start), for the
+   * BACKLOG #43 proc exemption — a proc that fired while they still died
+   * inside CD_HOARD_RESPONSE_S does not lift the accusation */
+  deathSeconds?: number[];
 }
 
 /** The shape `cdHoardedEvents` needs from each of the owner's cooldowns —
@@ -751,6 +756,28 @@ export function cdHoardedEvents(
             ownerId: owner.id,
             verdict: "suppressed",
             reason: "no-ready-cd",
+            facts: pointFacts(src.own, p, ready),
+            candidateIds: [],
+          });
+        continue;
+      }
+      // BACKLOG #43, user ruling 2026-09-17 「可以免,如果人没死的话」: a low-HP
+      // talent proc / cheat-death fired for the crisis unit AND they were still
+      // alive CD_HOARD_RESPONSE_S later — the proc did the job, holding the
+      // cooldown is not hoarding. If they died anyway the accusation stands.
+      const procAnswered =
+        !!(p.responses?.proc || p.responses?.cheatDeath) &&
+        !(src.deathSeconds ?? []).some(
+          (d) => d > p.tSec && d <= p.tSec + CD_HOARD_RESPONSE_S,
+        );
+      if (procAnswered) {
+        if (tracing)
+          trace.push({
+            type: "cd-hoarded",
+            opportunityId: opportunity(src.crisisUnit.id, p),
+            ownerId: owner.id,
+            verdict: "suppressed",
+            reason: "proc-answered-survived",
             facts: pointFacts(src.own, p, ready),
             candidateIds: [],
           });
