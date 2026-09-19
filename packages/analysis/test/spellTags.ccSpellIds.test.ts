@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import { DR_CATEGORIES_GENERATED } from "../src/data/drCategoriesGenerated";
-import { ccSpellIds, rootSpellIds } from "../src/data/spellTags";
+import {
+  ccSpellIds,
+  disarmSpellIds,
+  rootSpellIds,
+  trinketSpellIds,
+} from "../src/data/spellTags";
 
 // 2026-08-21 S2 archive (10,682 matches): 63 official-DR hard-CC ids were live
 // in play and invisible to [CC] labels / cc-cooldown candidates because
@@ -20,5 +25,24 @@ describe("ccSpellIds = hand cc ∪ official hard-CC DR categories", () => {
   it("does not fold silences or roots into cc", () => {
     expect(ccSpellIds.has("47476")).toBe(false); // Strangulate — silence
     for (const id of rootSpellIds) expect(ccSpellIds.has(id), `root ${id}`).toBe(false);
+  });
+});
+
+describe("disarmSpellIds", () => {
+  it("contains canonical PvP disarms", () => {
+    expect(disarmSpellIds.has("236077")).toBe(true); // Disarm (Warrior)
+    expect(disarmSpellIds.has("233759")).toBe(true); // Grapple Weapon
+    expect(disarmSpellIds.has("207777")).toBe(true); // Dismantle (Rogue PvP)
+  });
+
+  it("does not contain stuns or silences", () => {
+    expect(disarmSpellIds.has("408")).toBe(false); // Kidney Shot
+    expect(disarmSpellIds.has("15487")).toBe(false); // Silence
+  });
+});
+
+describe("trinketSpellIds", () => {
+  it("holds canonical Gladiator's Medallion 336126", () => {
+    expect(trinketSpellIds).toEqual(["336126"]);
   });
 });

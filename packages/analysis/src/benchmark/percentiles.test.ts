@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { toSortedFinite } from "../utils/stats";
+import { medianFinite, toSortedFinite } from "../utils/stats";
 import { toPercentiles } from "./metrics";
 
 /**
@@ -87,6 +87,25 @@ describe("toPercentiles:单调不减是硬约束", () => {
 
   it("空样本 → 全零", () => {
     expect(toPercentiles([])).toEqual({ p50: 0, p75: 0, p90: 0, p95: 0 });
+  });
+});
+
+describe("medianFinite:基于 toSortedFinite 的中位数", () => {
+  it("奇数个元素返回正中间的元素", () => {
+    expect(medianFinite([3, 1, 2])).toBe(2);
+  });
+
+  it("偶数个元素返回中间两个元素的均值", () => {
+    expect(medianFinite([1, 2, 3, 4])).toBe(2.5);
+  });
+
+  it("过滤非有限值后计算中位数", () => {
+    expect(medianFinite([NaN, 10, Infinity, 20, 30, -Infinity])).toBe(20);
+  });
+
+  it("无有限元素返回 0", () => {
+    expect(medianFinite([])).toBe(0);
+    expect(medianFinite([NaN, Infinity, -Infinity])).toBe(0);
   });
 });
 

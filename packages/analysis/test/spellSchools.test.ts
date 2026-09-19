@@ -5,11 +5,12 @@
  * 祝福的 SCHOOL_IMMUNITY 掩码是 1(仅物理),Sleep Walk 是 8(自然系魔法)。
  * 原规则只有「魔法免疫 × 物理控」一个方向,没有反向,所以拦不住。
  */
-import { ensureAnalysisData } from "../src/data/ensure";
 import { beforeAll, describe, expect, it } from "vitest";
 
+import { ensureAnalysisData } from "../src/data/ensure";
 import {
   immunityCoversSpell,
+  immunityMechanics,
   immunitySchoolMask,
   isPhysicalSpell,
   spellSchoolMask,
@@ -49,6 +50,21 @@ describe("官方学派事实", () => {
     expect(spellSchoolMask("179057")).toBe(124);
     expect(immunityCoversSpell("204018", "179057")).toBe(true);
     expect(immunityCoversSpell("1022", "179057")).toBe(false);
+  });
+
+  it("immunityMechanics: 官方机制免疫(EffectAura 77)", () => {
+    // 冰封之韧: 机制 12 = 昏迷 (Stun)
+    expect(immunityMechanics("48792")).toEqual([12]);
+    // 自由祝福: 机制 7 = 减速 (Snare), 11 = 定身 (Root)
+    expect(immunityMechanics("1044")).toEqual([7, 11]);
+    // 狂暴之怒: 机制 5, 14, 23, 30
+    expect(immunityMechanics("18499")).toEqual([5, 14, 23, 30]);
+    // 猎豹形态: 机制 17 = 变形 (Polymorph)
+    expect(immunityMechanics("768")).toEqual([17]);
+    // 圣盾术: 机制免疫为空(它走的是全学派免疫 immuneSchools 127)
+    expect(immunityMechanics("642")).toBeUndefined();
+    // 未知技能返回 undefined
+    expect(immunityMechanics("99999999")).toBeUndefined();
   });
 });
 
