@@ -5,7 +5,11 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
-import { computeDpsMetrics } from "../../src/utils/dpsMetrics";
+import {
+  computeDpsMetrics,
+  CONVERTED_HP_DROP_PT,
+  isBurstConverted,
+} from "../../src/utils/dpsMetrics";
 import {
   makeAdvancedAction,
   makeAuraEvent,
@@ -99,3 +103,38 @@ describe("computeDpsMetrics(pro-comparison P1)", () => {
     expect(computeDpsMetrics(combat, "Nobody").burstCount).toBe(0);
   });
 });
+
+describe("isBurstConverted — single-source burst conversion predicate", () => {
+  it("pins CONVERTED_HP_DROP_PT to 20 percentage points", () => {
+    expect(CONVERTED_HP_DROP_PT).toBe(20);
+  });
+
+  it("returns true whenever target died inside the window", () => {
+    expect(isBurstConverted({ died: true, hpStartPct: null, hpEndPct: null })).toBe(true);
+    expect(isBurstConverted({ died: true, hpStartPct: 100, hpEndPct: 100 })).toBe(true);
+    expect(isBurstConverted({ died: true, hpStartPct: 50, hpEndPct: 10 })).toBe(true);
+  });
+
+  it("returns true when net HP drop >= 20 percentage points", () => {
+    // Exact threshold boundary
+    expect(isBurstConverted({ died: false, hpStartPct: 100, hpEndPct: 80 })).toBe(true);
+    // Well above threshold
+    expect(isBurstConverted({ died: false, hpStartPct: 90, hpEndPct: 35 })).toBe(true);
+  });
+
+  it("returns false when net HP drop < 20 percentage points", () => {
+    // 19 points drop
+    expect(isBurstConverted({ died: false, hpStartPct: 100, hpEndPct: 81 })).toBe(false);
+    // Flat
+    expect(isBurstConverted({ died: false, hpStartPct: 70, hpEndPct: 70 })).toBe(false);
+    // Healed during burst
+    expect(isBurstConverted({ died: false, hpStartPct: 40, hpEndPct: 60 })).toBe(false);
+  });
+
+  it("returns false when either HP reading is null without death", () => {
+    expect(isBurstConverted({ died: false, hpStartPct: null, hpEndPct: 50 })).toBe(false);
+    expect(isBurstConverted({ died: false, hpStartPct: 80, hpEndPct: null })).toBe(false);
+    expect(isBurstConverted({ died: false, hpStartPct: null, hpEndPct: null })).toBe(false);
+  });
+});
+
