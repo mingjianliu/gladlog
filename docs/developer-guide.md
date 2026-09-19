@@ -59,13 +59,13 @@ npm run typecheck                   # whole repo (never tsc -b — it emits .js 
 npm test --workspaces
 ```
 
-**Before pushing desktop changes** (CI and local are not equivalent — this has broken the build three times in a row):
+**Before pushing changes** (run `npm run presubmit` — do not hand-type the old three-piece):
 
 ```bash
-npm test --workspace=packages/desktop && npm run typecheck && npx eslint packages/desktop/src --quiet
+npm run presubmit
 ```
 
-CI's `tsc -p` includes test files and there is a separate Lint step — local vitest covers neither. After pushing, watch it go green with `gh run watch <explicit run id> --exit-status`.
+`npm run presubmit` is the union of the CI `test` workflow's `static` and `unit` jobs (`eslint .` from repo root + `verify:doc-commands` + `typecheck` + all-workspace tests + `verify:vision` + `electron-vite build`). Do **not** hand-type the old three-piece (`npm test --workspace=packages/desktop && npm run typecheck && npx eslint .`): it skips `verify:vision` and the production build, and the build step is the only local check that catches a renderer value-importing `src/main/*` — dev and vitest both let that through until the packaged app dies. After pushing, watch it go green with `gh run watch <explicit run id> --exit-status`.
 
 **Local test isolation in `analysis` and `eval`.** Locally, `npm test` in these two packages runs in two passes: test files listed in the package's `vitest.shared.json` share one module cache per worker (the big data tables load once instead of once per file — `npm test` for analysis + eval went 146 s → 52 s, median of 3 interleaved runs on 2026-09-12, with lower peak memory), and every other file runs isolated as before. CI always runs fully isolated. Admission is fail-closed: a new test file is isolated until you add it to `vitest.shared.json`, which you should do only if it does not mutate module, global or process state; a listed file that starts to (`vi.mock`, `vi.spyOn`, `process.env` writes, …) is vetoed automatically. Flag singletons (`CANDIDATE_TYPE_FLAGS`, `DISPEL_FEATURE_FLAGS`, `HEALER_OFFENSE_FLAGS`) must be restored with a saved copy — a guard fails any test that leaves them changed. If a failure appears only locally, rerun with `GLADLOG_TEST_ISOLATE=all npm test --workspace=packages/analysis` to tell a state leak from a real bug. Details: `packages/analysis/test/support/testIsolation.ts`.
 
@@ -76,7 +76,7 @@ CI's `tsc -p` includes test files and there is a separate Lint step — local vi
 ## Test map
 
 - `packages/parser/test` — L1/L2/L3 unit tests over synthetic lines, plus fixtures.
-- `packages/analysis/test` — 546+ cases: analysis predicates, prompt construction, gate consistency.
+- `packages/analysis/test` — 600+ cases: analysis predicates, prompt construction, gate consistency.
 - `packages/desktop` (`test/` plus `*.test.tsx` beside the source) — derive pure functions, component rendering (jsdom), and a real anonymized fixture (`test/fixtures/real-match-sample.json`, trimmed to the first 90s with no player deaths — to test death-related paths, clone it and inject synthetic events).
 - `packages/eval` — unit tests for the coverage gates and the scoring contract.
 

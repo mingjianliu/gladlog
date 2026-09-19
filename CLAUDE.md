@@ -81,7 +81,7 @@ The following 12 documents have **English as the canonical version with a `.zh-C
 `docs/DATA-COMPLIANCE.md` · `docs/pvp-log-archive.md` ·
 `docs/architecture.md` · `docs/predicate-index.md`
 
-**Package-level READMEs follow the same rule**: wherever `packages/<pkg>/README.zh-CN.md` exists, `README.md` is the canonical version and both must be equivalent (currently: `analysis`, `desktop`, `corpus-tools` — the last converted from its Chinese-only single version on 2026-08-21).
+**Package-level READMEs follow the same rule**: wherever `packages/<pkg>/README.zh-CN.md` exists, `README.md` is the canonical version and both must be equivalent (currently: `analysis`, `desktop`, `corpus-tools`, `parser`, `eval`).
 
 Each document has a language bar on the line immediately below the H1 heading (current language bolded without a link, the other language as a link); cross-links stay **within the same language** — English docs point to English files, Chinese docs point to `.zh-CN.md` files, never cross-language. New user-facing docs follow this pattern as well.
 

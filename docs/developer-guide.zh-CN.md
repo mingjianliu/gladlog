@@ -61,13 +61,13 @@ npm run typecheck                   # 全仓(绝不 tsc -b,会往 src 吐 .js)
 npm test --workspaces
 ```
 
-**desktop push 前**(CI 与本地不等价,连挂过三次):
+**push 前统一校验**（运行 `npm run presubmit` —— 切勿手敲旧版三件套）：
 
 ```bash
-npm test --workspace=packages/desktop && npm run typecheck && npx eslint packages/desktop/src --quiet
+npm run presubmit
 ```
 
-CI 的 `tsc -p` 包含 test 文件、且有独立 Lint 步 —— 本地 vitest 都不覆盖。push 后用 `gh run watch <显式 run id> --exit-status` 盯绿。
+`npm run presubmit` 是 CI `test` 工作流中 `static` 和 `unit` 任务的合集（根目录 `eslint .` + `verify:doc-commands` + `typecheck` + 全工作区单测 + `verify:vision` + `electron-vite build`）。**切勿手敲旧版三件套**（`npm test --workspace=packages/desktop && npm run typecheck && npx eslint .`）：它会跳过 `verify:vision` 和生产构建，而生产构建是本地唯一能拦截 renderer 误从 `src/main/*` 导入值的手段（开发模式和 vitest 都会放行直到打包崩溃）。push 后用 `gh run watch <显式 run id> --exit-status` 盯绿。
 
 **`analysis` 与 `eval` 的本地测试隔离。** 本地在这两个包里跑 `npm test` 分两遍:列在包内 `vitest.shared.json` 里的测试文件在每个 worker 里共用一份模块缓存(大数据表只加载一次而不是每个文件一次 —— 2026-09-12 交替实测三轮,analysis + eval 的 `npm test` 中位数 146 s → 52 s,内存峰值也更低),其余文件照旧隔离运行。CI 始终全量隔离。准入是 fail-closed:新测试文件在加进 `vitest.shared.json` 之前都隔离运行,只有它不改模块、全局或进程状态时才应加入;已在名单里的文件一旦开始这么做(`vi.mock`、`vi.spyOn`、写 `process.env` ……)会被自动否决。开关单例(`CANDIDATE_TYPE_FLAGS`、`DISPEL_FEATURE_FLAGS`、`HEALER_OFFENSE_FLAGS`)必须用保存的副本还原 —— 守卫会让任何没还原的测试失败。某个失败只在本地出现时,用 `GLADLOG_TEST_ISOLATE=all npm test --workspace=packages/analysis` 重跑,区分状态泄漏和真 bug。细节见 `packages/analysis/test/support/testIsolation.ts`。
 
@@ -78,7 +78,7 @@ CI 的 `tsc -p` 包含 test 文件、且有独立 Lint 步 —— 本地 vitest 
 ## 测试地图
 
 - `packages/parser/test` —— L1/L2/L3 合成行单测 + fixtures。
-- `packages/analysis/test` —— 546+ 用例:分析谓词、prompt 构建、门规一致性。
+- `packages/analysis/test` —— 600+ 用例:分析谓词、prompt 构建、门规一致性。
 - `packages/desktop`(`test/` + 源内 `*.test.tsx`)—— derive 纯函数、组件渲染(jsdom)、
   真实匿名 fixture(`test/fixtures/real-match-sample.json`,裁前 90s、无玩家死亡 ——
   测死亡类路径用克隆 + 注入合成事件)。
