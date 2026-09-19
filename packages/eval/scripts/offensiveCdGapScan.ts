@@ -59,6 +59,7 @@ import {
 } from "@gladlog/analysis/src/data/abilityProfile";
 import { RACIAL_ABILITIES } from "@gladlog/analysis/src/data/racialAbilities";
 import {
+  effectiveCooldownSeconds,
   getEnglishSpellName,
   spellEffectData,
 } from "@gladlog/analysis/src/data/spellEffectData";
@@ -118,11 +119,7 @@ interface Cells {
 }
 
 function cdOf(id: string): number {
-  const eff = (spellEffectData as Record<string, any>)[id];
-  return Math.max(
-    eff?.cooldownSeconds ?? 0,
-    eff?.charges?.chargeCooldownSeconds ?? 0,
-  );
+  return effectiveCooldownSeconds(id) ?? 0;
 }
 function windowOf(id: string): number {
   const d = (spellEffectData as Record<string, any>)[id]?.durationSeconds;

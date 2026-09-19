@@ -40,6 +40,7 @@ import { CombatUnitClass } from "@gladlog/parser-compat";
 
 import {
   ccFullDurationSeconds,
+  effectiveCooldownSeconds,
   spellEffectData,
 } from "../../data/spellEffectData";
 import { toRenderSecond } from "../../utils/renderGrid";
@@ -60,19 +61,20 @@ export const MD_FOLLOWUP_GRACE_S = 15;
  * uses in 161 S2 matches); two in one round would be noise by construction. */
 const MD_CYCLONE_CAP = 1;
 
-/** Official seconds, single-sourced from spellEffectGenerated. The `?? n`
- * fallbacks restate the same official values in case a data refresh drops a
- * field — they must never be edited independently of the data. */
-const MD_COOLDOWN_S = spellEffectData[MD_SPELL_ID]?.cooldownSeconds ?? 120;
+/** Official seconds, single-sourced from spellEffectGenerated via
+ * `effectiveCooldownSeconds`. The `?? n` fallbacks restate the same official
+ * values in case a data refresh drops a field — they must never be edited
+ * independently of the data. */
+const MD_COOLDOWN_S = effectiveCooldownSeconds(MD_SPELL_ID) ?? 120;
 // 2026-09-06: 龙卷风是控制,该走 CC 那条谓词(`ccFullDurationSeconds`,识别
 // PvPDurationIndex + 叠加 spellEffectOverrides / CORPUS_DURATION_PATCHES),
 // 而不是直读 spellEffectData —— 当前两者对龙卷风同值,接过去是零差改动,
 // 但以后 CC 侧的订正会自动到达这里。
 const CYCLONE_DURATION_S = ccFullDurationSeconds(CYCLONE_SPELL_ID) ?? 5;
-const ICE_BLOCK_CD_S =
-  spellEffectData[ICE_BLOCK_SPELL_ID]?.charges?.chargeCooldownSeconds ?? 240;
+// 2026-09-18: 走统一的 `effectiveCooldownSeconds` 谓词,不再直读 charges 或 cooldown
+const ICE_BLOCK_CD_S = effectiveCooldownSeconds(ICE_BLOCK_SPELL_ID) ?? 240;
 const DIVINE_SHIELD_CD_S =
-  spellEffectData[DIVINE_SHIELD_SPELL_ID]?.cooldownSeconds ?? 300;
+  effectiveCooldownSeconds(DIVINE_SHIELD_SPELL_ID) ?? 300;
 
 /** One enemy cyclone landing on a friendly (interval start from
  * `buildAuraIntervals`, seconds from combat start). */
