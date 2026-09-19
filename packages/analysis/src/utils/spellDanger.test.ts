@@ -76,6 +76,27 @@ describe("OFFENSIVE_CD_SPELL_IDS — canonical membership", () => {
     expect(OFFENSIVE_CD_SPELL_IDS.has("137639")).toBe(false);
   });
 
+  it("every newly added 2026-09-18 burst cooldown is a member of the canonical set", () => {
+    for (const id of [
+      "1249625", // Zenith
+      "446035", // Bladestorm live
+      "167105", // Colossus Smash
+      "260243", // Volley
+      "385627", // Kingsbane
+      "228260", // Voidform (Void Eruption)
+      "194249", // Voidform (buff aura)
+      "1249658", // Breath of Sindragosa
+      "384352", // Doom Winds
+      "321507", // Touch of the Magi
+      "1276452", // Grimoire: Imp Lord
+      "205636", // Force of Nature
+      "202770", // Fury of Elune
+    ]) {
+      expect(OFFENSIVE_CD_SPELL_IDS.has(id)).toBe(true);
+      expect(isOffensiveSpell(id)).toBe(true);
+    }
+  });
+
   it("isOffensiveSpell IS the set — no second membership rule", () => {
     for (const id of OFFENSIVE_CD_SPELL_IDS) expect(isOffensiveSpell(id)).toBe(true);
     expect(isOffensiveSpell("8936")).toBe(false); // Regrowth, never offensive

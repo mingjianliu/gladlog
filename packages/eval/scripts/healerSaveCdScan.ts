@@ -32,7 +32,11 @@ import { ensureAnalysisData, isHealerSpec, specToString } from "@gladlog/analysi
 import { abilityProfile } from "@gladlog/analysis/src/data/abilityProfile";
 import { CURATED_ABILITY_FACTS } from "@gladlog/analysis/src/data/curatedAbilityFacts";
 import { RACIAL_ABILITIES } from "@gladlog/analysis/src/data/racialAbilities";
-import { getEnglishSpellName, spellEffectData } from "@gladlog/analysis/src/data/spellEffectData";
+import {
+  effectiveCooldownSeconds,
+  getEnglishSpellName,
+  spellEffectData,
+} from "@gladlog/analysis/src/data/spellEffectData";
 import { MIN_CD_SECONDS, TEAM_HEAL_CD_IDS } from "@gladlog/analysis/src/utils/cooldowns";
 import { PATCH_121_GOLIVE_EPOCH_MS } from "@gladlog/analysis/src/utils/drAnalysis";
 import { GladLogParser } from "@gladlog/parser";
@@ -284,7 +288,7 @@ async function emitTable(): Promise<void> {
       const share = sp.rounds / s.rounds;
       if (share < HEALER_SAVE_CD_MIN_SHARE) continue;
       const eff = (spellEffectData as Record<string, any>)[id];
-      const cd = eff?.cooldownSeconds ?? eff?.charges?.chargeCooldownSeconds ?? 0;
+      const cd = effectiveCooldownSeconds(id) ?? 0;
       const name = getEnglishSpellName(id, eff?.name ?? id);
       if (cd < MIN_CD_SECONDS) continue;
       const p = abilityProfile(id);

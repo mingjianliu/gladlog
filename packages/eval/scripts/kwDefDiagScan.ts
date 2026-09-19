@@ -1,6 +1,9 @@
 import { ensureAnalysisData } from "@gladlog/analysis";
 import { isKillWindowMajorDefensive } from "@gladlog/analysis/src/data/abilityProfile";
-import { spellEffectData } from "@gladlog/analysis/src/data/spellEffectData";
+import {
+  effectiveCooldownSeconds,
+  spellEffectData,
+} from "@gladlog/analysis/src/data/spellEffectData";
 import spellIdListsData from "@gladlog/analysis/src/data/spellIdLists";
 import { GladLogParser } from "@gladlog/parser";
 import { CombatUnitReaction, toLegacyMatch, toLegacyShuffle } from "@gladlog/parser-compat";
@@ -37,7 +40,7 @@ async function main() {
   console.log(`beyond-hand admitted ids observed in enemy casts: ${rows.length}`);
   for (const [id, n] of rows.slice(0, 20)) {
     const eff = (spellEffectData as Record<string, any>)[id];
-    console.log(`  ${id} ${eff?.name ?? "?"} casts=${n} cd=${eff?.cooldownSeconds ?? eff?.charges?.chargeCooldownSeconds ?? 0}`);
+    console.log(`  ${id} ${eff?.name ?? "?"} casts=${n} cd=${effectiveCooldownSeconds(id) ?? 0}`);
   }
 }
 main().catch(e => { console.error(e); process.exit(1); });

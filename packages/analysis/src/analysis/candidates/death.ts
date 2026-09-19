@@ -7,7 +7,7 @@
  * free-to-act predicates, which is why they travel together.
  */
 import { CombatUnitClass } from "@gladlog/parser-compat";
-import { spellEffectData } from "../../data/spellEffectData";
+import { effectiveCooldownSeconds } from "../../data/spellEffectData";
 import { immunitySchoolMask } from "../../data/spellSchools";
 import { lastCastBefore } from "../../context/timelineHelpers";
 import { costNormPhrase } from "../../data/curatedAbilityFacts";
@@ -150,7 +150,7 @@ export const IMMUNITY_BREAKERS: ReadonlyArray<{
 ];
 
 function breakerCooldownS(b: (typeof IMMUNITY_BREAKERS)[number]): number {
-  return spellEffectData[b.spellId]?.cooldownSeconds ?? b.fallbackCooldownS;
+  return effectiveCooldownSeconds(b.spellId) ?? b.fallbackCooldownS;
 }
 
 /** Enemy players' breakers with cast times (seconds from match start). */

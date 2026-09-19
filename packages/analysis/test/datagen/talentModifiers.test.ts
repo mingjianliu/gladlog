@@ -1,25 +1,23 @@
+import { describe, expect, it } from "vitest";
 import { extractTalentModifiers } from "../../scripts/datagen/genTalentModifiers";
 import {
   applyCdTalentModifiers,
   applyCdModifiers,
 } from "../../src/utils/cooldowns";
-import { spellEffectData } from "../../src/data/spellEffectData";
+import {
+  effectiveCooldownSeconds,
+  spellEffectData,
+} from "../../src/data/spellEffectData";
 import { CD_TALENT_MODIFIERS } from "../../src/utils/talentModifiers";
 
-// Mirrors cooldowns.ts's own base-cooldown derivation
-// (`effectData.cooldownSeconds ?? effectData.charges?.chargeCooldownSeconds ?? 0`,
-// repeated at cooldowns.ts:899-902/955-958/982-985/1010-1013) and its
-// MIN_CD_SECONDS=30 majorSpells-inclusion gate (cooldowns.ts:263,903) — a
+// Uses the canonical effectiveCooldownSeconds predicate (unified 2026-09-18) and
+// the MIN_CD_SECONDS=30 majorSpells-inclusion gate (cooldowns.ts:263,903) — a
 // spell whose *base* cd is below that gate never reaches the talent-modifier
 // step in production, so it must not be counted as a false invariant failure
-// here either. This is a trivial 3-line lookup (not the modifier-application
-// arithmetic itself — see `applyCdTalentModifiers` below, which the rest of
-// this file calls rather than reimplementing), so it stays local to the test.
+// here either.
 const MIN_CD_SECONDS = 30;
 function effectiveBaseCooldown(spellId: string): number | undefined {
-  const eff = spellEffectData[spellId];
-  if (!eff) return undefined;
-  return eff.cooldownSeconds ?? eff.charges?.chargeCooldownSeconds ?? 0;
+  return effectiveCooldownSeconds(spellId);
 }
 function effectiveBaseCharges(spellId: string): number {
   return spellEffectData[spellId]?.charges?.charges ?? 1;

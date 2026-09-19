@@ -24,6 +24,13 @@ describe("effectiveCooldownSeconds", () => {
     expect(effectiveCooldownSeconds("no-such-spell")).toBeUndefined();
   });
 
+  it("关键减伤、驱散与破无敌技能返回正典冷却时长", () => {
+    expect(effectiveCooldownSeconds("32375")).toBe(120); // Mass Dispel
+    expect(effectiveCooldownSeconds("45438")).toBe(240); // Ice Block
+    expect(effectiveCooldownSeconds("642")).toBe(300); // Divine Shield
+    expect(effectiveCooldownSeconds("64382")).toBe(180); // Shattering Throw
+  });
+
   it("Zenith 真的进得了敌方大招窗口(成员资格 ≠ 可见)", () => {
     expect(OFFENSIVE_CD_SPELL_IDS.has("1249625")).toBe(true);
     expect(isEnemyCdWindowSpell("1249625")).toBe(true);

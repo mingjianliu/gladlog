@@ -2,7 +2,10 @@
  * (+cd>=30s) admit as major defensives that the 39-id hand list lacks? */
 import { ensureAnalysisData } from "@gladlog/analysis";
 import { abilityProfile, isSurvivalWall } from "@gladlog/analysis/src/data/abilityProfile";
-import { spellEffectData } from "@gladlog/analysis/src/data/spellEffectData";
+import {
+  effectiveCooldownSeconds,
+  spellEffectData,
+} from "@gladlog/analysis/src/data/spellEffectData";
 import spellIdListsData from "@gladlog/analysis/src/data/spellIdLists";
 import observed from "@gladlog/analysis/src/data/observedSpellIdsGenerated.json";
 async function main() {
@@ -15,7 +18,7 @@ async function main() {
   const admitted: string[] = [];
   for (const [id, eff] of Object.entries(spellEffectData as Record<string, any>)) {
     if (hand.has(id)) continue;
-    const cd = eff.cooldownSeconds ?? eff.charges?.chargeCooldownSeconds ?? 0;
+    const cd = effectiveCooldownSeconds(id) ?? 0;
     if (cd < 30) continue;
     const p = abilityProfile(id);
     if (p.throughputRole) continue;
