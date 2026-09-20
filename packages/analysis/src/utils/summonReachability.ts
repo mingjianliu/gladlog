@@ -63,6 +63,9 @@ export function summonReach(
   const fromMs = summonEvent.logLine.timestamp;
   const toMs = Math.min(fromMs + durationS * 1000, combat.endTime);
   const seconds: number[] = [];
+  // Note: This samples at 1-second intervals and checks if the sample POINT falls inside a CC
+  // interval. A CC lasting 0.9s could fall entirely between two sample points. The 1s grid is
+  // shared with position sampling and cannot be independently refined.
   for (let t = fromMs; t + 1000 <= toMs; t += 1000) seconds.push(t + 500);
   if (seconds.length === 0) return null;
   if (!seconds.some((t) => getUnitPositionAtTime(summon, t, LOS_SWEEP_GAP_MS)))

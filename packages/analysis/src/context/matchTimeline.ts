@@ -410,7 +410,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
               ? {
                   spellName: getEnglishSpellName(
                     absorb.attackSpellId,
-                    absorb.attackSpellName ?? "",
+                    absorb.attackSpellName ?? null,
                   ),
                 }
               : {}),

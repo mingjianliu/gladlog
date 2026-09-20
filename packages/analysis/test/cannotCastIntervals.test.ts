@@ -147,6 +147,17 @@ describe("cannotCastIntervals — coveredMsWithin", () => {
     expect(coveredMsWithin(intervals, 5_000, 25_000)).toBe(8_000);
   });
 
+  it("correctly merges adjacent intervals touching at boundary", () => {
+    // Two adjacent intervals: [0, 5_000] and [5_000, 10_000] touch at 5_000 ms.
+    // In coveredMsWithin, `w.from <= cur.to` merges them into [0, 10_000] = 10_000 ms.
+    const intervals = [
+      { from: 0, to: 5_000 },
+      { from: 5_000, to: 10_000 },
+    ];
+    expect(coveredMsWithin(intervals, 0, 10_000)).toBe(10_000);
+    expect(coveredMsWithin(intervals, 0, 15_000)).toBe(10_000);
+  });
+
   it("correctly sums disjoint intervals within the window", () => {
     const intervals = [
       { from: 10_000, to: 12_000 }, // 2_000 ms
