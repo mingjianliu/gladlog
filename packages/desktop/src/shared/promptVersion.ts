@@ -604,4 +604,15 @@
 //  already up when the fear landed is deliberately not credited. Same
 //  605-match acceptance set: 0 → 71 notes in 15 matches, [CC ON TEAM] line
 //  count unchanged (69,508), findings hash and every candidate count identical.
-export const PROMPT_VERSION = 85;
+//  v86 (2026-09-20, user ruling 「我觉得可以偶尔指控 另外 不指控 但是战栗 根基也可以打
+//  看情况」, GH #100 / BACKLOG #51 — the FACT layer; the accusation is not built):
+//  new `[ENEMY SUMMON]` line for an enemy Psyfiend / Spirit Link Totem that was
+//  NOT killed (`not killed: 0 hits from your team` | `hit N× by …`); no lifetime
+//  is claimed — the log has no despawn event. Tremor "depending on the
+//  situation" = only when it did something: `[CC ON ENEMY]` gains `| enemy
+//  Tremor Totem from N ended this CC after Ns`, and an owner fear ended that
+//  way keeps its per-target line. Same 605-match acceptance set:
+//  [ENEMY SUMMON] 0 → 406 lines in 52 matches (0 hits 359, hit-not-killed 47);
+//  enemy tremor notes 0 → 124; [CC ON ENEMY] 61,812 → 61,854; findings hash
+//  and every candidate count identical.
+export const PROMPT_VERSION = 86;

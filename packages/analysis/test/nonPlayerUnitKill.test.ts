@@ -1,9 +1,16 @@
-import type { ICombatUnit } from "@gladlog/parser-compat";
+import {
+  CombatUnitReaction,
+  type ICombatUnit,
+  LogEvent,
+} from "@gladlog/parser-compat";
 import { describe, expect, it } from "vitest";
 
 import {
+  CONTESTABLE_ENEMY_SUMMON_NPC_IDS,
   CRITICAL_NON_PLAYER_NPC_IDS,
   nonPlayerUnitKill,
+  opposingHitsOnUnit,
+  summonedAtMs,
 } from "../src/context/timelineHelpers";
 
 type Hit = ICombatUnit["damageIn"][number];
@@ -68,5 +75,50 @@ describe("CRITICAL_NON_PLAYER_NPC_IDS", () => {
       "179193",
     ])
       expect(CRITICAL_NON_PLAYER_NPC_IDS.has(dead)).toBe(false);
+  });
+});
+
+describe("contestable enemy summons (BACKLOG #51, user ruling 2026-09-20)", () => {
+  it("is a subset of the critical NPC table, so it rides on the same rot check", () => {
+    for (const id of CONTESTABLE_ENEMY_SUMMON_NPC_IDS)
+      expect(CRITICAL_NON_PLAYER_NPC_IDS.has(id)).toBe(true);
+    // deliberately NOT here: 85 % / 72 % of these are never touched
+    expect(CONTESTABLE_ENEMY_SUMMON_NPC_IDS.has("5913")).toBe(false); // Tremor
+    expect(CONTESTABLE_ENEMY_SUMMON_NPC_IDS.has("5925")).toBe(false); // Grounding
+  });
+
+  it("summonedAtMs reads the unit's own SPELL_SUMMON, else null", () => {
+    const u = {
+      actionIn: [
+        { logLine: { event: LogEvent.SPELL_AURA_APPLIED, timestamp: 900 } },
+        { logLine: { event: LogEvent.SPELL_SUMMON, timestamp: 1000 } },
+      ],
+    } as unknown as ICombatUnit;
+    expect(summonedAtMs(u)).toBe(1000);
+    expect(summonedAtMs({ actionIn: [] } as unknown as ICombatUnit)).toBeNull();
+  });
+
+  it("opposingHitsOnUnit counts only the other side's damage events", () => {
+    const FRIENDLY = 0x511;
+    const HOSTILE = 0x548;
+    const d = (srcUnitId: string, srcUnitFlags: number) =>
+      ({ srcUnitId, srcUnitFlags }) as unknown as Hit;
+    const psyfiend = {
+      damageIn: [
+        d("A", FRIENDLY),
+        d("A", FRIENDLY),
+        d("B", FRIENDLY),
+        d("E", HOSTILE),
+      ],
+    } as unknown as ICombatUnit;
+    const r = opposingHitsOnUnit(psyfiend, CombatUnitReaction.Hostile);
+    expect(r.hits).toBe(3);
+    expect(r.hitters).toEqual(["A", "B"]);
+    expect(
+      opposingHitsOnUnit(
+        { damageIn: [] } as unknown as ICombatUnit,
+        CombatUnitReaction.Hostile,
+      ).hits,
+    ).toBe(0);
   });
 });

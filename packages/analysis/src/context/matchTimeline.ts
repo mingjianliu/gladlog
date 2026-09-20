@@ -136,6 +136,9 @@ import {
   isCriticalNonPlayerUnit,
   nonPlayerUnitKill,
   damageEventLabel,
+  CONTESTABLE_ENEMY_SUMMON_NPC_IDS,
+  opposingHitsOnUnit,
+  summonedAtMs,
   MANA_COOLDOWN_SPELL_IDS,
   isPassiveProcCast,
 } from "./timelineHelpers";
@@ -1043,7 +1046,41 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     for (const unit of allUnits) {
       if (!isCriticalNonPlayerUnit(unit)) continue;
       const kill = nonPlayerUnitKill(unit);
-      if (!kill) continue;
+      if (!kill) {
+        // GH #100 / BACKLOG #51 (user ruling 2026-09-20): an ENEMY summon a
+        // team is expected to kill, that was NOT killed — say how much the
+        // owner's team hit it. A fact; no lifetime is claimed (the log has no
+        // despawn event) and nothing here says anyone should have done more.
+        const npcId = getNpcIdFromGuid(unit.id) ?? "";
+        if (!CONTESTABLE_ENEMY_SUMMON_NPC_IDS.has(npcId)) continue;
+        const summonerSide = allUnits.find(
+          (u) => u.id === unit.ownerId,
+        )?.reaction;
+        const unitSide =
+          unit.reaction === CombatUnitReaction.Hostile ||
+          unit.reaction === CombatUnitReaction.Friendly
+            ? unit.reaction
+            : summonerSide;
+        if (unitSide !== CombatUnitReaction.Hostile) continue;
+        const summonMs = summonedAtMs(unit);
+        if (summonMs === null) continue;
+        const summonS = (summonMs - matchStartMs) / 1000;
+        if (summonS < 0 || summonS > durationS) continue;
+        const summoner = allUnits.find((u) => u.id === unit.ownerId);
+        const by = summoner ? ` (by ${enemyPid(summoner.name)})` : "";
+        const { hits, hitters } = opposingHitsOnUnit(unit, unitSide);
+        const who = hitters
+          .map((id) => allUnits.find((u) => u.id === id))
+          .map((u) => (u ? actorLabel(u.name, "friendly") : "unknown"));
+        addEntry(
+          summonS,
+          `${fmtTime(summonS)}  [ENEMY SUMMON]   ${CRITICAL_NON_PLAYER_NPC_NAMES[npcId]}${by} — not killed: ` +
+            (hits === 0
+              ? "0 hits from your team"
+              : `hit ${hits}× by ${[...new Set(who)].join(", ")}`),
+        );
+        continue;
+      }
       const atSeconds = (kill.timestamp - matchStartMs) / 1000;
       if (atSeconds < 0 || atSeconds > durationS) continue; // Match End cleanup suppression
       // A totem's own flags are sometimes neutral (20 of 3,076 lines rendered
@@ -2375,9 +2412,22 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
         );
       }
       for (const cc of summary.ccInstances) {
-        if (cc.sourceName === owner.name && ownerRenderedCcIds.has(cc.spellId))
+        // Mirror of the [CC ON TEAM] tremor note (user 2026-09-20: Tremor
+        // "depending on the situation" — i.e. when it did something): the
+        // ENEMY dropped Tremor Totem mid-fear and our fear ended that instant.
+        const enemyTremor = tremorTotemBreak(cc, matchStartMs, enemies ?? []);
+        // The owner's own tracked CC normally renders on its [YOU] [CC] cast
+        // line only; that line is per cast, not per target, so a tremor break
+        // keeps this per-target line.
+        if (
+          cc.sourceName === owner.name &&
+          ownerRenderedCcIds.has(cc.spellId) &&
+          !enemyTremor
+        )
           continue;
-        const durStr = ` (${cc.durationSeconds.toFixed(0)}s)`;
+        const durStr = enemyTremor
+          ? ` | enemy Tremor Totem from ${enemyPid(enemyTremor.shamanName)} ended this CC after ${cc.durationSeconds.toFixed(0)}s (cut short — it had not expired)`
+          : ` (${cc.durationSeconds.toFixed(0)}s)`;
         addEntry(
           cc.atSeconds,
           `${fmtTime(cc.atSeconds)}  [CC ON ENEMY]   ${enemyPid(summary.playerName)} ← ${cc.spellName} (by ${actorLabel(cc.sourceName, "friendly")})${durStr}`,

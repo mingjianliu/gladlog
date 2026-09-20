@@ -634,6 +634,16 @@ const INDEX: PredicateRow[] = [
     mod: timelineHelpers,
   },
   {
+    file: `${A}/context/timelineHelpers.ts`,
+    symbol: "CONTESTABLE_ENEMY_SUMMON_NPC_IDS",
+    mod: timelineHelpers,
+  },
+  {
+    file: `${A}/context/timelineHelpers.ts`,
+    symbol: "opposingHitsOnUnit",
+    mod: timelineHelpers,
+  },
+  {
     file: `${A}/utils/ccTrinketAnalysis.ts`,
     symbol: "tremorTotemBreak",
     mod: ccTrinketAnalysis,

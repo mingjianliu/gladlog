@@ -102,6 +102,23 @@ export const CRITICAL_NON_PLAYER_NPC_NAMES: Record<string, string> = {
   "27829": "Gargoyle",
 };
 
+/**
+ * Summons a team is generally expected to answer by killing them (user ruling
+ * 2026-09-20, BACKLOG #51: "the most dangerous target is sometimes an NPC").
+ * A subset of the table above, so it rides on the same rot check. When one of
+ * these on the ENEMY side is NOT killed, the prompt states how much the
+ * owner's team hit it — a fact, not an accusation. Measured on 300 files:
+ * Psyfiend 47 % killed / 13 % hit, not killed / 40 % untouched; Spirit Link
+ * Totem 32 % / 11 % / 57 %. Tremor and Grounding Totems are deliberately NOT
+ * here (85 % / 72 % are never touched — a line per totem would be noise);
+ * they surface only when they did something: `enemyTremorNote` on
+ * `[CC ON ENEMY]`, `[absorbed: Grounding Totem]` on the eaten cast.
+ */
+export const CONTESTABLE_ENEMY_SUMMON_NPC_IDS = new Set<string>([
+  "101398", // Psyfiend
+  "53006", // Spirit Link Totem
+]);
+
 export const CRITICAL_NON_PLAYER_NPC_IDS = new Set<string>(
   Object.keys(CRITICAL_NON_PLAYER_NPC_NAMES),
 );
@@ -750,6 +767,43 @@ export function damageEventLabel(
     : baseSpellLabel;
 
   return `${srcName} — ${spellLabel}`;
+}
+
+/** When the unit was summoned (its own SPELL_SUMMON), or null. */
+export function summonedAtMs(unit: ICombatUnit): number | null {
+  const e = unit.actionIn.find(
+    (a) => a.logLine.event === LogEvent.SPELL_SUMMON,
+  );
+  return e ? e.logLine.timestamp : null;
+}
+
+/**
+ * Damage events on `unit` from the side opposing `unitSide` — "did the other
+ * team hit it". Counts events, and distinct source units. Says nothing about
+ * how long the unit lived: 12.x logs carry no despawn event, so an unkilled
+ * summon's end is unknown and no duration is claimed.
+ */
+export function opposingHitsOnUnit(
+  unit: ICombatUnit,
+  unitSide: CombatUnitReaction,
+): {
+  hits: number;
+  hitters: string[];
+  firstHit?: ICombatUnit["damageIn"][number];
+} {
+  const mine = unit.damageIn.filter((d) => {
+    const side = getUnitReaction(d.srcUnitFlags);
+    return (
+      (side === CombatUnitReaction.Friendly ||
+        side === CombatUnitReaction.Hostile) &&
+      side !== unitSide
+    );
+  });
+  return {
+    hits: mine.length,
+    hitters: [...new Set(mine.map((d) => d.srcUnitId))],
+    firstHit: mine[0],
+  };
 }
 
 /** How a non-player unit's death is known. */
