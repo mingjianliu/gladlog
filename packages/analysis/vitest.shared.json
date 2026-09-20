@@ -129,6 +129,7 @@
     "test/matchTimeline.spectag.test.ts",
     "test/mitigationData.test.ts",
     "test/mitigationVerdicts.test.ts",
+    "test/nonPlayerUnitKill.test.ts",
     "test/ported/archetypeInference.test.ts",
     "test/ported/auraIntervals.test.ts",
     "test/ported/binarySearch.test.ts",

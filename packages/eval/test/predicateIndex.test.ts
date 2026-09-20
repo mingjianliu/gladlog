@@ -627,6 +627,12 @@ const INDEX: PredicateRow[] = [
     symbol: "DMG_SPIKE_THRESHOLD",
     mod: timelineHelpers,
   },
+  // GH #100: kill evidence for totems / guardians (12.x logs carry no UNIT_DIED)
+  {
+    file: `${A}/context/timelineHelpers.ts`,
+    symbol: "nonPlayerUnitKill",
+    mod: timelineHelpers,
+  },
   {
     file: `${A}/utils/counterfactual.ts`,
     symbol: "COUNTERFACTUAL_WINDOW_S",

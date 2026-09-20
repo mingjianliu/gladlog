@@ -62,36 +62,41 @@ export const GROUNDING_TOTEM_NPC_ID = "5925";
 /** Critical non-player units by npcId, with canonical English display names —
  * unit.name in the log is client-localized (地狱火爪牙 etc.), so renderers must
  * print these names, never the logged one (locale-leak audit 2026-07-14). */
+/* Rot check: `packages/eval/scripts/npcRosterScan.ts` (runbook §7b) — this is a
+ * hand id list the spell-id based curatedIdRegistry cannot hold. 2026-09-20
+ * pass on 600 12.1 files (user ruling: "probably from earlier versions, gone"):
+ * removed Earthen Wall 100943, Mana Tide 10467, Stone Bulwark 108270, Lightwell
+ * 189820 and Fel Obelisk 179193 — zero summons, zero casts and zero damage
+ * events under ANY id; renumbered Psyfiend and Pit Lord; renamed 105427. Static
+ * Field 179867 was absent from that slice but present in another sample, which
+ * is why absence alone is a lead, not a verdict. */
 export const CRITICAL_NON_PLAYER_NPC_NAMES: Record<string, string> = {
   // Shaman Totems
   "3527": "Healing Stream Totem",
   "59764": "Healing Tide Totem",
-  "100943": "Earthen Wall Totem",
   "53006": "Spirit Link Totem",
   [GROUNDING_TOTEM_NPC_ID]: "Grounding Totem",
   "5913": "Tremor Totem",
-  "105427": "Skyfury Totem",
-  "10467": "Mana Tide Totem",
+  "105427": "Totem of Wrath", // listed as "Skyfury Totem" until 2026-09-20; the log and spell 204330 both say Totem of Wrath
   "61245": "Capacitor Totem",
   "60561": "Earthgrab Totem",
   "179867": "Static Field Totem",
   "225409": "Surging Totem",
-  "108270": "Stone Bulwark Totem",
   // Priest
   "62982": "Mindbender",
   "19668": "Shadowfiend",
-  "121111": "Psyfiend",
+  // Live id. The list carried 121111 until 2026-09-20: 0 occurrences in 600
+  // 12.1 files while 101398 was summoned 305× and killed 146× (GH #100).
+  "101398": "Psyfiend",
   "224466": "Voidwraith",
-  "189820": "Lightwell",
   "198236": "Divine Image",
   // Monk
   "63508": "Xuen",
   // Warlock
   "103673": "Darkglare",
   "135002": "Demonic Tyrant",
-  "179193": "Fel Obelisk",
   "107024": "Fel Lord",
-  "196111": "Pit Lord",
+  "228574": "Pit Lord", // live id; 196111 occurs 0 times in 600 12.1 files, 228574 was summoned 21 times (spell 434400)
   "89": "Infernal",
   // Death Knight
   "27829": "Gargoyle",
@@ -689,6 +694,99 @@ export function computeHealingInWindow(
 }
 
 /**
+ * "source — spell [school]" for one damage event: numeric player ids through
+ * the two id maps, `[pet]` for pets/guardians and for any non-ASCII summon
+ * name, English spell name. The ONE label behind `killed by:` on death blocks
+ * and the `[UNIT DESTROYED]` final blow — two renderers of "who hit this unit
+ * with what" must not drift.
+ */
+export function damageEventLabel(
+  d: ICombatUnit["damageIn"][number],
+  playerIdMap?: Map<string, number>,
+  enemyIdMap?: Map<string, number>,
+): string {
+  // B24: pet/guardian units may have localized (non-ASCII) names from non-en-US clients;
+  // replace with "[pet]" to keep attribution readable without localization noise.
+  const srcType = getUnitType(d.srcUnitFlags);
+  const isPet =
+    srcType === CombatUnitType.Pet || srcType === CombatUnitType.Guardian;
+
+  let srcName = "Unknown";
+  if (!isPet && d.srcUnitName) {
+    const cleanSrcName = d.srcUnitName.split("-")[0];
+    const isSrcFriendly =
+      getUnitReaction(d.srcUnitFlags) === CombatUnitReaction.Friendly;
+    if (isSrcFriendly && playerIdMap) {
+      const id =
+        playerIdMap.get(d.srcUnitName) ?? playerIdMap.get(cleanSrcName);
+      srcName = id !== undefined ? String(id) : cleanSrcName;
+    } else if (!isSrcFriendly && enemyIdMap) {
+      const id = enemyIdMap.get(d.srcUnitName) ?? enemyIdMap.get(cleanSrcName);
+      srcName = id !== undefined ? String(id) : cleanSrcName;
+    } else {
+      srcName = cleanSrcName;
+    }
+    // A summon flagged NPC rather than Pet/Guardian (a Death Knight's
+    // ghoul logs as 0xa28) slipped past the B24 relabel and printed its
+    // client-locale name — 9 of the 309 prompts in the 2026-09-15 Opus
+    // baseline (`次级食尸鬼 — Death Order`). Same last resort as
+    // `actorLabel` / `rootSourceLabel`: not a player, not ASCII → [pet].
+    if (
+      !/^\d+$/.test(srcName) &&
+      [...srcName].some((c) => c.charCodeAt(0) > 127)
+    )
+      srcName = "[pet]";
+  } else if (isPet) {
+    srcName = "[pet]";
+  }
+
+  const baseSpellLabel = d.spellId
+    ? getEnglishSpellName(d.spellId, d.spellName)
+    : (d.spellName ?? "melee");
+
+  const schoolName = getSpellSchoolName(d.spellSchoolId);
+  const spellLabel = schoolName
+    ? `${baseSpellLabel} [${schoolName}]`
+    : baseSpellLabel;
+
+  return `${srcName} — ${spellLabel}`;
+}
+
+/** How a non-player unit's death is known. */
+export interface INonPlayerUnitKill {
+  timestamp: number;
+  /** The killing blow, when the evidence is a damage event (absent when the
+   * log only gave a bare `UNIT_DIED`). */
+  finalBlow?: ICombatUnit["damageIn"][number];
+}
+
+/**
+ * When — and by what — a non-player unit was killed, or null when its end is
+ * UNKNOWN (expired, replaced, owner died, despawned: the log does not say, and
+ * "no kill evidence" must never be read as "survived").
+ *
+ * Evidence, earliest wins, at most one per unit (a GUID dies once):
+ *  - a damage event with `overkill > 0` — the only evidence 12.x logs carry for
+ *    totems and guardians (`UNIT_DIED` on 5 of 13,439 listed summoned units;
+ *    `PARTY_KILL` is a strict subset of overkill, same millisecond, 134/134 —
+ *    docs/log-observability-audit.md direction 4). This is a unit being
+ *    ATTACKED; a spell a Grounding Totem eats is a separate SPELL_ABSORBED and
+ *    is not a kill;
+ *  - a `UNIT_DIED` death record, still honoured for the units that get one.
+ */
+export function nonPlayerUnitKill(
+  unit: ICombatUnit,
+): INonPlayerUnitKill | null {
+  const finalBlow = unit.damageIn.find((d) => (d.overkill ?? 0) > 0);
+  const died = unit.deathRecords?.[0]?.timestamp;
+  if (finalBlow && (died === undefined || finalBlow.timestamp <= died))
+    return { timestamp: finalBlow.timestamp, finalBlow };
+  if (died !== undefined)
+    return { timestamp: died, ...(finalBlow ? { finalBlow } : {}) };
+  return null;
+}
+
+/**
  * Extracts the top-N damage sources that hit `unit` within the `windowMs` window
  * ending at `deathMs`. Returns an array of formatted "source — spell (Xk)" strings.
  */
@@ -708,52 +806,7 @@ export function getTopDamageSourcesInWindow(
     if (dmg <= 0) continue;
     // B20: exclude same-team sources (e.g. Time Dilation from Preservation Evoker buff)
     if (getUnitReaction(d.srcUnitFlags) === unit.reaction) continue;
-    // B24: pet/guardian units may have localized (non-ASCII) names from non-en-US clients;
-    // replace with "[pet]" to keep attribution readable without localization noise.
-    const srcType = getUnitType(d.srcUnitFlags);
-    const isPet =
-      srcType === CombatUnitType.Pet || srcType === CombatUnitType.Guardian;
-
-    let srcName = "Unknown";
-    if (!isPet && d.srcUnitName) {
-      const cleanSrcName = d.srcUnitName.split("-")[0];
-      const isSrcFriendly =
-        getUnitReaction(d.srcUnitFlags) === CombatUnitReaction.Friendly;
-      if (isSrcFriendly && playerIdMap) {
-        const id =
-          playerIdMap.get(d.srcUnitName) ?? playerIdMap.get(cleanSrcName);
-        srcName = id !== undefined ? String(id) : cleanSrcName;
-      } else if (!isSrcFriendly && enemyIdMap) {
-        const id =
-          enemyIdMap.get(d.srcUnitName) ?? enemyIdMap.get(cleanSrcName);
-        srcName = id !== undefined ? String(id) : cleanSrcName;
-      } else {
-        srcName = cleanSrcName;
-      }
-      // A summon flagged NPC rather than Pet/Guardian (a Death Knight's
-      // ghoul logs as 0xa28) slipped past the B24 relabel and printed its
-      // client-locale name — 9 of the 309 prompts in the 2026-09-15 Opus
-      // baseline (`次级食尸鬼 — Death Order`). Same last resort as
-      // `actorLabel` / `rootSourceLabel`: not a player, not ASCII → [pet].
-      if (
-        !/^\d+$/.test(srcName) &&
-        [...srcName].some((c) => c.charCodeAt(0) > 127)
-      )
-        srcName = "[pet]";
-    } else if (isPet) {
-      srcName = "[pet]";
-    }
-
-    const baseSpellLabel = d.spellId
-      ? getEnglishSpellName(d.spellId, d.spellName)
-      : (d.spellName ?? "melee");
-
-    const schoolName = getSpellSchoolName(d.spellSchoolId);
-    const spellLabel = schoolName
-      ? `${baseSpellLabel} [${schoolName}]`
-      : baseSpellLabel;
-
-    const key = `${srcName} — ${spellLabel}`;
+    const key = damageEventLabel(d, playerIdMap, enemyIdMap);
     buckets.set(key, (buckets.get(key) ?? 0) + dmg);
   }
   return [...buckets.entries()]

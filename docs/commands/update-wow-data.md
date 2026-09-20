@@ -400,6 +400,18 @@ log as events (talent ids, passives). A table at 100% stale is the GH #23 case. 
 of spell ids anywhere in `packages/analysis`, register it in `curatedIdRegistry.ts` — the registry is the
 index, and the rule was never the missing piece.
 
+For non-player units (`CRITICAL_NON_PLAYER_NPC_NAMES` in `packages/analysis/src/context/timelineHelpers.ts`, the hand list of npcIds behind the `[UNIT DESTROYED]` prompt line and the English names of totem/guardian targets), `npcRosterScan.ts` checks the hand-maintained id list against the current season's corpus in both directions (a check `curatedRotScan` cannot perform because `curatedIdRegistry.ts` and `observedSpellIdsGenerated.json` are spell-id based):
+
+```sh
+# The --out file must not already exist
+npx tsx packages/eval/scripts/npcRosterScan.ts \
+  --manifest $GLADLOG_EVAL_HOME/corpus/manifest-archive-<date>-newseason.txt \
+  --offset 3000 --limit 600 \
+  --out $GLADLOG_EVAL_HOME/reports/npc-roster-<date>.json
+```
+
+In the reverse direction, inspect `reverse_listedButNeverSummoned` (listed npcIds with zero `SPELL_SUMMON` in the slice) as a lead rather than a verdict: look for the same unit name under a different npcId in `forward_unlistedAttacked` before deleting anything (e.g. on 2026-09-20, Psyfiend was listed as 121111 with 0 occurrences while the live 101398 was summoned 305 times and killed 146 times; Static Field Totem 179867 was absent from the 600-file slice but present in another sample, so absence alone was not proof). In the forward direction, review `forward_unlistedAttacked` sorted by `killedByOverkill`: an unlisted unit that enemy players actually kill is a candidate for the list, whereas one merely hit incidentally (damage guardians, `killedByOverkillShare` around 0.01) is not. For kill evidence, 12.x logs write no `UNIT_DIED` for totems/guardians; a kill is a damage event with `overkill > 0` (see `nonPlayerUnitKill`), and a summon with neither is `END UNKNOWN`, never 'survived'.
+
 ### 7c. Standing Prompt-Level Scans (Shared-Predicate Audits)
 
 Steps 7/7b audit the **id tables**. These three audit the **rendered prompt** and are equally standing

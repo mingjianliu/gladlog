@@ -37,6 +37,15 @@ export interface IHpEvent extends ICombatEvent {
   amount: number;
   effectiveAmount: number;
   spellSchoolId?: string;
+  /**
+   * Damage past the target's remaining health (positive), present ONLY when
+   * > 0 — i.e. this event is a killing blow. Needed as its own field because
+   * `effectiveAmount` is zeroed for pet/guardian targets, which erases the
+   * `amount − effectiveAmount` difference exactly on the units whose death has
+   * no other evidence: 12.x logs write `UNIT_DIED` for 5 of 13,439 summoned
+   * totems/guardians (GH #100, docs/log-observability-audit.md direction 4).
+   */
+  overkill?: number;
 }
 
 export interface IAbsorbEvent extends ICombatEvent {

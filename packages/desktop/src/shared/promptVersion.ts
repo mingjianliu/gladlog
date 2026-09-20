@@ -581,4 +581,18 @@
 //  teammate-crisis-triage retired behind one registry flag (teammateCrisis).
 //  The only card still rendering was triage in Solo Shuffle; both reasons and
 //  the numbers are in candidateTypeRegistry.ts. [STACKED DEFENSIVES] stays.
-export const PROMPT_VERSION = 83;
+//  v84 (2026-09-20, user ruling 「修 这个功能很有帮助 图腾也可以写 … 尤其是战栗
+//  链接和根基」, GH #100 direction 4): [UNIT DESTROYED] was dead on 12.x logs —
+//  it keyed on UNIT_DIED, which the client writes for 5 of 13,439 listed
+//  summoned units. It now keys on nonPlayerUnitKill (first damage event with
+//  overkill > 0, else a bare UNIT_DIED) and names the killer from the final
+//  blow. Same 605-match acceptance set: 24 lines (all Xuen / Darkglare, zero
+//  totems) → 3,076, every one with a `killed by:`; 0 with an Unknown side. Also: the Grounding Totem
+//  note on the owner's cast now renders at all (it was wired into the ledger
+//  loop only, Grounding renders through the B38 promotion path) and reads
+//  `[ABSORBED spells from: <caster>]` instead of printing the shield's own
+//  name; NPC list: Psyfiend 121111 → 101398, Pit Lord 196111 → 228574,
+//  105427 renamed Totem of Wrath, five units gone from the game removed.
+//  Grounding note: 0 of 470 cast lines → 277. Candidate menu untouched
+//  (findings hash and every per-type count identical).
+export const PROMPT_VERSION = 84;

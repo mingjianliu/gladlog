@@ -133,6 +133,8 @@ import {
   HEALING_WINDOW_EARLY_CD_SECONDS,
   HEALING_WINDOW_MIN_HPS,
   isCriticalNonPlayerUnit,
+  nonPlayerUnitKill,
+  damageEventLabel,
   MANA_COOLDOWN_SPELL_IDS,
   isPassiveProcCast,
 } from "./timelineHelpers";
@@ -366,10 +368,17 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   // buildCriticalWindowSet and passed in — deliberately not built here, or the
   // [CD] / death blocks would not share the same set.
 
-  // F143: Pre-calculate Grounding Totem absorbs
+  // F143: Pre-calculate Grounding Totem absorbs.
+  // What the log keeps of a grounded spell is WHO cast it, not WHAT it was: a
+  // SPELL_ABSORBED event's spellId is the SHIELD (Grounding Totem itself) and
+  // the attacking spell sits in params the archive slimmer clears. The note
+  // used to print that shield id, so once it rendered at all it read
+  // `[ABSORBED: Grounding Totem]` on 277 of 298 lines (GH #100). It now names
+  // the attacker. A totem killed by direct damage is a different fact and has
+  // its own `[UNIT DESTROYED]` line — a final blow is NOT an eaten spell.
   const groundingAbsorbs: Array<{
     timeSeconds: number;
-    spellName: string;
+    attackerId: string;
     totemOwnerId: string;
   }> = [];
   if (allUnits) {
@@ -381,12 +390,10 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
         unit.ownerId
       ) {
         for (const absorb of unit.absorbsIn) {
+          if (!absorb.attackerId) continue;
           groundingAbsorbs.push({
             timeSeconds: (absorb.timestamp - matchStartMs) / 1000,
-            spellName: getEnglishSpellName(
-              absorb.spellId ?? "",
-              absorb.spellName ?? "Unknown",
-            ),
+            attackerId: absorb.attackerId,
             totemOwnerId: unit.ownerId,
           });
         }
@@ -394,10 +401,6 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     }
   }
 
-  // F143: returns " [ABSORBED: x, y]" for a Grounding Totem cast by `totemOwnerId` near
-  // `castSeconds`, or '' when nothing was absorbed. Matching by spell ID (204336) keeps this
-  // locale-independent; the name check is a fallback for logs without a resolved cd.spellId.
-  // The 3.5s window covers the totem's short lifetime.
   /**
    * A mana cooldown is answered with resource, not throughput. Innervate sat in
    * HEALING_AMPLIFIER_SPELL_IDS until 2026-08-23 and got the HPS/overheal
@@ -443,16 +446,24 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   ): string => {
     if (spellId !== GROUNDING_TOTEM_SPELL_ID && spellName !== "Grounding Totem")
       return "";
-    const absorbs = groundingAbsorbs
+    const casters = groundingAbsorbs
       .filter(
         (a) =>
           a.totemOwnerId === totemOwnerId &&
           a.timeSeconds >= castSeconds &&
           a.timeSeconds <= castSeconds + 3.5,
       )
-      .map((a) => a.spellName);
-    if (absorbs.length === 0) return "";
-    return ` [ABSORBED: ${Array.from(new Set(absorbs)).join(", ")}]`;
+      .map((a) => {
+        const attacker = allUnits?.find((u) => u.id === a.attackerId);
+        if (!attacker) return "unknown";
+        const ownerIsFriendly = friends.some((f) => f.id === totemOwnerId);
+        return actorLabel(
+          attacker.name,
+          ownerIsFriendly ? "enemy" : "friendly",
+        );
+      });
+    if (casters.length === 0) return "";
+    return ` [ABSORBED spells from: ${Array.from(new Set(casters)).join(", ")}]`;
   };
 
   // A/B cycle-1 accuracy regression fix: bare numeric ids forced the responder
@@ -1022,43 +1033,50 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
 
   // ── [UNIT DESTROYED] Non-Player Deaths ────────────────────────────────────
 
+  // Keyed on nonPlayerUnitKill, not on deathRecords: 12.x logs write no
+  // UNIT_DIED for totems/guardians, so the deathRecords form of this block
+  // rendered 24 lines in 3,520 prompts — every one Xuen or Darkglare, zero
+  // totems (GH #100; user ruling 2026-09-20: restore it, Grounding included).
   if (allUnits) {
+    const durationS = (matchEndMs - matchStartMs) / 1000;
     for (const unit of allUnits) {
-      if (
-        unit.deathRecords &&
-        unit.deathRecords.length > 0 &&
-        isCriticalNonPlayerUnit(unit)
-      ) {
-        const reactionStr =
-          unit.reaction === CombatUnitReaction.Friendly
-            ? "Friendly"
-            : unit.reaction === CombatUnitReaction.Hostile
-              ? "Enemy"
-              : "Unknown";
-        for (const deathRecord of unit.deathRecords) {
-          const atSeconds = (deathRecord.timestamp - matchStartMs) / 1000;
-          const durationS = (matchEndMs - matchStartMs) / 1000;
-          if (atSeconds > durationS) continue; // Match End cleanup suppression
-
-          const deathLines: string[] = [
-            `${fmtTime(atSeconds)}  [UNIT DESTROYED]   ${CRITICAL_NON_PLAYER_NPC_NAMES[getNpcIdFromGuid(unit.id) ?? ""] ?? unit.name} (${reactionStr})`,
-          ];
-
-          const topSources = getTopDamageSourcesInWindow(
-            unit,
-            deathRecord.timestamp,
-            10_000,
-            2,
-            playerIdMap,
-            enemyIdMap,
-          );
-          if (topSources.length > 0) {
-            deathLines[0] += ` killed by: ${topSources.join(", ")}`;
-          }
-
-          addEntry(atSeconds, ...deathLines);
-        }
+      if (!isCriticalNonPlayerUnit(unit)) continue;
+      const kill = nonPlayerUnitKill(unit);
+      if (!kill) continue;
+      const atSeconds = (kill.timestamp - matchStartMs) / 1000;
+      if (atSeconds < 0 || atSeconds > durationS) continue; // Match End cleanup suppression
+      // A totem's own flags are sometimes neutral (20 of 3,076 lines rendered
+      // "Unknown" on the 605-match acceptance set); its summoner's side is not.
+      const side =
+        unit.reaction === CombatUnitReaction.Friendly ||
+        unit.reaction === CombatUnitReaction.Hostile
+          ? unit.reaction
+          : allUnits.find((u) => u.id === unit.ownerId)?.reaction;
+      const reactionStr =
+        side === CombatUnitReaction.Friendly
+          ? "Friendly"
+          : side === CombatUnitReaction.Hostile
+            ? "Enemy"
+            : "Unknown";
+      let line = `${fmtTime(atSeconds)}  [UNIT DESTROYED]   ${CRITICAL_NON_PLAYER_NPC_NAMES[getNpcIdFromGuid(unit.id) ?? ""] ?? unit.name} (${reactionStr})`;
+      // The final blow names the killer exactly. The 10 s top-sources window
+      // stays as the fallback for a bare UNIT_DIED; it cannot serve totems,
+      // whose damageIn effectiveAmount is zeroed (pet/guardian target).
+      if (kill.finalBlow) {
+        line += ` killed by: ${damageEventLabel(kill.finalBlow, playerIdMap, enemyIdMap)}`;
+      } else {
+        const topSources = getTopDamageSourcesInWindow(
+          unit,
+          kill.timestamp,
+          10_000,
+          2,
+          playerIdMap,
+          enemyIdMap,
+        );
+        if (topSources.length > 0)
+          line += ` killed by: ${topSources.join(", ")}`;
       }
+      addEntry(atSeconds, line);
     }
   }
 
@@ -1787,9 +1805,19 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
           timeSeconds,
           e.destUnitName,
         );
+        // Grounding Totem is normally ABSENT from extractMajorCooldowns, so
+        // production renders it HERE, not in the ownerCDs loop — the same trap
+        // manaCooldownNote documents. Wired into the ledger loop only, the
+        // note appeared on 0 of 374 owner Grounding casts (GH #100).
+        const promotedGroundingNote = groundingAbsorbNote(
+          e.spellId,
+          displayName,
+          owner.id,
+          timeSeconds,
+        );
         addEntry(
           timeSeconds,
-          `${fmtTime(timeSeconds)}  [YOU] [CD]   ${promotedDisplayName}${promotedTargetPart}${totemNote}${purgeNote}${empowerNote}${ownerHardCcTagAt(timeSeconds)}`,
+          `${fmtTime(timeSeconds)}  [YOU] [CD]   ${promotedDisplayName}${promotedTargetPart}${totemNote}${promotedGroundingNote}${purgeNote}${empowerNote}${ownerHardCcTagAt(timeSeconds)}`,
           // T3: delta form (same as the ownerCDs path; full snapshots are reserved
           // for death snapshots and the periodic 60s refresh)
           requestSnapshotPlaceholder(timeSeconds),

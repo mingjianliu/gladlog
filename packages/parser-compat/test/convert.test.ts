@@ -556,3 +556,40 @@ describe("mergePetEvents merges by SUMMON relationship (GH #57, user ruling 2026
     expect(Math.abs(fromGhoul[0]!.effectiveAmount)).toBe(4321);
   });
 });
+
+describe("overkill is carried on killing blows only (GH #100)", () => {
+  // 12.x logs write no UNIT_DIED for totems/guardians; a killing damage event
+  // is the only kill evidence, and effectiveAmount is zeroed on pet/guardian
+  // targets, so the amount − effectiveAmount difference needs its own field.
+  const KILL = DMG("Player-1-A", "Alice-X", "Player-2-B", "Bob-Y").replace(
+    ",100,120,-1,",
+    ",100,120,30,",
+  );
+  const { matches } = parseLines([
+    "ARENA_MATCH_START,1825,41,3v3,1",
+    CI("Player-1-A", 0, 257, 2400),
+    CI("Player-2-B", 1, 71, 2380),
+    DMG("Player-1-A", "Alice-X", "Player-2-B", "Bob-Y"),
+    KILL,
+    "ARENA_MATCH_END,0,30,1500,1501",
+  ]);
+  const legacy = toLegacyMatch(matches[0]!);
+
+  it("the fixture really differs (guards a silent no-op replace)", () => {
+    expect(KILL).toContain(",100,120,30,");
+  });
+
+  it("damageIn and damageOut both carry overkill = 30 on the killing row", () => {
+    for (const rows of [
+      legacy.units["Player-2-B"]!.damageIn,
+      legacy.units["Player-1-A"]!.damageOut,
+    ]) {
+      const dmg = rows.filter((e) => e.logLine.event === LogEvent.SPELL_DAMAGE);
+      expect(dmg).toHaveLength(2);
+      expect("overkill" in dmg[0]!).toBe(false);
+      expect(dmg[1]!.overkill).toBe(30);
+      expect(dmg[1]!.amount).toBe(-100);
+      expect(dmg[1]!.effectiveAmount).toBe(-70);
+    }
+  });
+});

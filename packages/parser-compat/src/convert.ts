@@ -131,6 +131,16 @@ function convertCombatantInfo(
   };
 }
 
+/** L3 stores `effectiveAmount = amount − overkill` (l1/decoders decodeDamage),
+ * so the difference IS the overkill; carried only on a killing blow. */
+function overkillField(event: {
+  amount: number;
+  effectiveAmount: number;
+}): { overkill?: number } {
+  const overkill = event.amount - event.effectiveAmount;
+  return overkill > 0 ? { overkill } : {};
+}
+
 function isPetOrGuardian(
   destId: string | undefined,
   allUnits: Record<string, GladUnit> | undefined,
@@ -280,6 +290,7 @@ function convertUnit(
         effectiveAmount: isPetDest
           ? -0
           : -(event.effectiveAmount - (event.absorbed ?? 0)),
+        ...overkillField(event),
         spellSchoolId: getSpellSchoolId(event.eventName, event.params),
         logLine: {
           event: event.eventName as LogEvent,
@@ -329,6 +340,7 @@ function convertUnit(
         effectiveAmount: isPetDest
           ? -0
           : -(event.effectiveAmount - (event.absorbed ?? 0)),
+        ...overkillField(event),
         spellSchoolId: getSpellSchoolId(event.eventName, event.params),
         logLine: {
           event: event.eventName as LogEvent,
