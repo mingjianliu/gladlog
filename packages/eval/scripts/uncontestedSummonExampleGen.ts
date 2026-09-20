@@ -26,7 +26,19 @@ const flag = (f: string): string | undefined => {
 const fmtTime = (s: number): string =>
   `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
-const files = readFileSync(flag("--manifest")!, "utf8")
+const manifestPath = flag("--manifest");
+if (!manifestPath) {
+  throw new Error("missing required --manifest <path>");
+}
+let manifestRaw: string;
+try {
+  manifestRaw = readFileSync(manifestPath, "utf8");
+} catch (err) {
+  throw new Error(
+    `failed to read manifest ${manifestPath}: ${err instanceof Error ? err.message : String(err)}`,
+  );
+}
+const files = manifestRaw
   .split("\n")
   .map((s) => s.trim())
   .filter(Boolean)
@@ -53,7 +65,10 @@ for (const path of files) {
   try {
     const raw = readFileSync(path);
     text = (path.endsWith(".gz") ? gunzipSync(raw) : raw).toString("utf8");
-  } catch {
+  } catch (err) {
+    process.stderr.write(
+      `[warn] failed to read ${path}: ${err instanceof Error ? err.message : String(err)}, skipping\n`,
+    );
     continue;
   }
   let start = 0;

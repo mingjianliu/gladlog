@@ -64,7 +64,16 @@ const files: Array<{
   summonedGuids: number;
 }> = [];
 for (const path of selected) {
-  const raw = gunzipSync(readFileSync(path)).toString("utf8");
+  let raw: string;
+  try {
+    const buf = readFileSync(path);
+    raw = (path.endsWith(".gz") ? gunzipSync(buf) : buf).toString("utf8");
+  } catch (err) {
+    process.stderr.write(
+      `[warn] failed to read ${path}: ${err instanceof Error ? err.message : String(err)}, skipping\n`,
+    );
+    continue;
+  }
   const rows = raw.split(/\r?\n/).filter(Boolean),
     seen = new Set<string>(),
     summons = new Map<string, string>(),

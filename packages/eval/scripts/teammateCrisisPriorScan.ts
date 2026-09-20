@@ -84,7 +84,10 @@ async function scan(): Promise<void> {
     try {
       const raw = readFileSync(resolve(f));
       text = (f.endsWith(".gz") ? gunzipSync(raw) : raw).toString("utf8");
-    } catch {
+    } catch (err) {
+      process.stderr.write(
+        `[warn] failed to read ${f}: ${err instanceof Error ? err.message : String(err)}, skipping\n`,
+      );
       continue;
     }
     for (const line of text.split("\n")) parser.push(line);

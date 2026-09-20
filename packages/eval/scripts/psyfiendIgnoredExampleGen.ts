@@ -57,7 +57,19 @@ const KILL_HP_PCT = 35;
 
 async function main(): Promise<void> {
   await ensureAnalysisData();
-  const files = readFileSync(flag("--manifest")!, "utf8")
+  const manifestPath = flag("--manifest");
+  if (!manifestPath) {
+    throw new Error("missing required --manifest <path>");
+  }
+  let manifestRaw: string;
+  try {
+    manifestRaw = readFileSync(manifestPath, "utf8");
+  } catch (err) {
+    throw new Error(
+      `failed to read manifest ${manifestPath}: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+  const files = manifestRaw
     .split("\n")
     .map((s) => s.trim())
     .filter(Boolean)
@@ -81,7 +93,10 @@ async function main(): Promise<void> {
     try {
       const raw = readFileSync(path);
       text = (path.endsWith(".gz") ? gunzipSync(raw) : raw).toString("utf8");
-    } catch {
+    } catch (err) {
+      process.stderr.write(
+        `[warn] failed to read ${path}: ${err instanceof Error ? err.message : String(err)}, skipping\n`,
+      );
       continue;
     }
     const combats: any[] = [];
@@ -93,7 +108,10 @@ async function main(): Promise<void> {
       });
       for (const line of text.split(/\r?\n/)) parser.push(line);
       parser.end();
-    } catch {
+    } catch (err) {
+      process.stderr.write(
+        `[warn] failed to parse ${path}: ${err instanceof Error ? err.message : String(err)}, skipping\n`,
+      );
       continue;
     }
     for (const combat of combats) {

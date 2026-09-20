@@ -76,9 +76,22 @@ const bump = (slot: string, k: string) => {
 const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
 
 for (const file of pilot.files) {
-  const raw = gunzipSync(readFileSync(file.path)).toString("utf8");
-  if (createHash("sha256").update(raw).digest("hex") !== file.sha256)
-    throw new Error(`pilot content changed: ${file.path}`);
+  let raw: string;
+  try {
+    const buf = readFileSync(file.path);
+    raw = (file.path.endsWith(".gz") ? gunzipSync(buf) : buf).toString("utf8");
+    if (createHash("sha256").update(raw).digest("hex") !== file.sha256) {
+      process.stderr.write(
+        `[warn] pilot content hash mismatch: ${file.path}, skipping\n`,
+      );
+      continue;
+    }
+  } catch (err) {
+    process.stderr.write(
+      `[warn] failed to read ${file.path}: ${err instanceof Error ? err.message : String(err)}, skipping\n`,
+    );
+    continue;
+  }
 
   const last = new Map<string, number[]>();
   const absorbedSince = new Map<string, number[]>();

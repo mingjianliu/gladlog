@@ -31,7 +31,19 @@ const NAMES: Record<string, string> = {
   "101398": "Psyfiend",
 };
 
-const files = readFileSync(flag("--manifest")!, "utf8")
+const manifestPath = flag("--manifest");
+if (!manifestPath) {
+  throw new Error("missing required --manifest <path>");
+}
+let manifestRaw: string;
+try {
+  manifestRaw = readFileSync(manifestPath, "utf8");
+} catch (err) {
+  throw new Error(
+    `failed to read manifest ${manifestPath}: ${err instanceof Error ? err.message : String(err)}`,
+  );
+}
+const files = manifestRaw
   .split("\n")
   .map((s) => s.trim())
   .filter(Boolean)
@@ -50,7 +62,10 @@ for (const path of files) {
   try {
     const raw = readFileSync(path);
     text = (path.endsWith(".gz") ? gunzipSync(raw) : raw).toString("utf8");
-  } catch {
+  } catch (err) {
+    process.stderr.write(
+      `[warn] failed to read ${path}: ${err instanceof Error ? err.message : String(err)}, skipping\n`,
+    );
     continue;
   }
   const lines = text.split(/\r?\n/);
@@ -63,7 +78,10 @@ for (const path of files) {
     });
     for (const line of lines) parser.push(line);
     parser.end();
-  } catch {
+  } catch (err) {
+    process.stderr.write(
+      `[warn] failed to parse ${path}: ${err instanceof Error ? err.message : String(err)}, skipping\n`,
+    );
     continue;
   }
   const kills: Array<{ t: number; dest: string; src: string; spell: string }> =
