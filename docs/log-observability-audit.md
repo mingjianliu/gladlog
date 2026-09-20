@@ -79,7 +79,39 @@ There are 194,566 actor/timestamp groups, 21,503 with multiple records; 15 have 
 
 Across 194,350 adjacent sample pairs (not weighted by elapsed time/player), gaps are p50 0.077s, p90 0.375s, p99 1.204s; 1,078 exceed 1.5s, 228 exceed 3s, maximum 29.005s. This is not a claim that 99% of combat time is observable: idle/stealthed periods, missing round boundaries, deaths and uneven actor activity require separate denominators.
 
-**Current conclusion:** preserving the actor's observed orientation with timestamp/provenance is a credible data-layer direction. “Facing target X”, continuous facing, camera direction and tactical judgements remain unapproved/unvalidated. Outstanding checks are independent axis/unit calibration, the 15 third-actor casts, same-ms discrepancies, and round/player/time-weighted gap coverage. No product changes were made.
+**Current conclusion:** preserving the actor's observed orientation with timestamp/provenance is a credible data-layer direction. “Facing target X”, continuous facing, camera direction and tactical judgements remain unapproved/unvalidated. The checks outstanding after this first pass — independent axis/unit calibration, the 15 third-actor casts, same-ms discrepancies, and round/player/time-weighted gap coverage — were closed by the calibration pass below. No product changes were made.
+
+### Direction 1: calibration pass
+
+Run `npx tsx packages/eval/scripts/facingCalibrationScan.ts <pilot.json> <new-output.json>` on the same pilot output. Same 24 hash-checked files, 39 segments: 24 closed by `ARENA_MATCH_END`, 15 closed by the next `ARENA_MATCH_START` (a Solo Shuffle lobby logs a single END) and ended at their first roster death. This is still the exploration sample: it establishes a convention and a mechanism, not season rates.
+
+**Actor ownership.** The 15 actor-neither rows are one mechanism. All are sourceless `SPELL_CAST_SUCCESS` 145629 (the Anti-Magic Zone area aura landing on a player). In 15/15 the advanced actor is a roster Player on the destination's team; its logged position is within 1.5 yd of that actor's **own** previous sample in 15/15 (maximum 1.31 yd) and within 1.5 yd of the destination's in 0/15. In 11/15 the actor cast 51052 (the Anti-Magic Zone ability itself) in the preceding 1.2 s; the other 4 are later re-entries into a standing zone. The advanced block is therefore the zone owner's own state — not the destination's, not a ground coordinate, not a parser bug. Consequence: a facing sample is keyed on `advanced.actorGuid` alone, never on the event's source or destination.
+
+**Angle convention.** All eight axis/sign conventions competed on two independent sources: same-millisecond `SWING_DAMAGE` (attacker sample) paired with `SWING_DAMAGE_LANDED` (target sample), pairs under 1 yd apart skipped; and displacement of at least 1.5 yd at 5–12 yd/s within 0.5 s while facing held steady to 0.1 rad.
+
+| Convention (angle of a logged displacement) | Melee bearing within 90° / 30° (n = 2,038) | Movement heading within 90° / 30° (n = 7,938) |
+| ------------------------------------------- | -----------------------------------------: | --------------------------------------------: |
+| `atan2(dy, dx)`                             |                           97.25 % / 67.6 % |                               78.9 % / 38.4 % |
+| `atan2(-dy, -dx)` (its opposite)            |                             2.75 % / 0.5 % |                                21.2 % / 0.9 % |
+| the other six                               |                        48.0–52.0 % / ≤18 % |                           48.8–51.3 % / ≤20 % |
+
+So the field is in radians and θ points along `(cos θ, sin θ)` in the **logged** x/y: 0 is +x, π/2 is +y. Movement agrees only partially by construction — players strafe and backpedal. Not established here: how logged x/y maps onto a rendered map image (the replay's transform is a separate fact), and what the 2.75 % of swings with the target behind the attacker are (not examined; the two samples not being truly simultaneous is one candidate).
+
+**Same-millisecond discrepancies.** 20 differing groups (4 facing only, 5 position only, 11 both), on the order of 1 in 10,000 actor/timestamp groups. Of the 14 with a next sample within 100 ms, the later log line is closer to it in 7 and the earlier line in 7. Line order inside one millisecond therefore carries no usable time order: these are unordered same-timestamp observations. At this rate any deterministic tie-break is harmless provided it is not described as “latest”.
+
+**Coverage, time-weighted per player-round** (span = the player's first sample to their own death or the segment end):
+
+|                                                 |           END-closed |    next-START-closed |
+| ----------------------------------------------- | -------------------: | -------------------: |
+| Player-rounds / player-seconds                  |         126 / 20,540 |          90 / 10,181 |
+| Time inside gaps ≤ 1.5 s                        |               91.3 % |               91.4 % |
+| Time inside gaps ≤ 3 s                          |               95.8 % |               97.6 % |
+| Per player-round share ≤ 1.5 s: p50 / p10 / min | 92.2 / 77.6 / 54.6 % | 92.3 / 72.1 / 54.5 % |
+| Longest gap per player-round: p50 / p90 / max   |   4.2 / 9.2 / 23.0 s |   2.5 / 6.9 / 11.3 s |
+
+No roster player had fewer than two samples. A gap means “no advanced record named this actor”, not “the player did nothing”; stealth, line of sight and idle time are not separated out.
+
+**Direction 1 result.** What can be preserved as an observed fact: per `advanced.actorGuid`, the tuple (timestamp, x, y, facing in radians along `(cos θ, sin θ)` of the logged axes), existing only where some advanced record names that actor. What must stay unknown: facing between samples (the median player-round contains a hole of 2.5–4.2 s, and about 8.7 % of player-time sits in gaps over 1.5 s), camera direction, intended target, and anything about the gaps themselves. “Was unit X inside the actor's front arc at a sample time” is now computable geometry when both positions exist at that time. Whether L3 stores facing, and whether anything consumes it, are two separate user decisions; neither is made here. No product changes were made.
 
 Proceed one direction at a time; report a concrete evidence-backed result before widening scope:
 
@@ -101,15 +133,15 @@ Changes to product facts require deterministic before/after verification; new co
 
 **Git checkpoint:** `bd3d7924` records the pilot, `98d044f2` records the facing pass. Both were verified on remote main on 2026-09-19: remote/local main were `087be204745e94a51e80814b27e885eddc7827e2`, worktree clean. Another session committed and published the intervening teammate-crisis retirement; do not undo it or assume the earlier product-status discussion reflects that later change. The earlier “not pushed” issue comment is superseded by this check.
 
-**Last follow-up, not yet classified:** inspecting the 15 actor-neither-endpoint rows found that all are `SPELL_CAST_SUCCESS`, spell **145629 / Anti-Magic Zone**, source GUID `0000000000000000`, with a Player advanced actor different from the Player destination. They occur in two sampled files. This identifies a concentrated event shape, not a proven parser bug, ground-target coordinate, or ownership explanation. The next agent should inspect surrounding events and actor roster membership before deciding how to interpret it.
+**Last follow-up (since classified — see “Direction 1: calibration pass”; it is the zone owner's own state):** inspecting the 15 actor-neither-endpoint rows found that all are `SPELL_CAST_SUCCESS`, spell **145629 / Anti-Magic Zone**, source GUID `0000000000000000`, with a Player advanced actor different from the Player destination. They occur in two sampled files. This identifies a concentrated event shape, not a proven parser bug, ground-target coordinate, or ownership explanation. The next agent should inspect surrounding events and actor roster membership before deciding how to interpret it.
 
 **Private artifacts:** `$GLADLOG_EVAL_HOME/reports/log-observability-2026-09-19/` contains `pilot.json`, `committed-script-replay.json` (deep-equal across every field and content hash), `facing-round-bounded.json` (canonical facing results cited above), the initial report and a saved diagnostic `facing-anomalies.ts`. `facing-pilot.json` is the earlier file-local prototype: it did not break pairs at round boundaries and must not supply the current gap numbers. The diagnostic script uses this machine's absolute paths; the two committed scripts are the supported rerun entry points. Keep source paths, GUIDs and raw logs private.
 
 **Next steps, in order:**
 
 1. Read this document, repository instructions and current Git status. Do not rerun the original inventory or the whole archive merely to regain context.
-2. Finish direction 1: inspect the concentrated AMZ rows, same-ms discrepancies and actor membership; calibrate angle units/axis using independent evidence. Measure sampling coverage per round/player/time, not just event-pair quantiles. Use the same recorded file set first, without overwriting artifacts.
-3. Report whether facing can be preserved as an observed fact and what must remain unknown. Do not implement a tactical-facing accusation or assume camera/target intent. A decision to store a field is separate from a decision to coach on it.
+2. **Done later on 2026-09-19** (calibration pass above; private outputs `facing-calibration.json`, `amz-neighbours.log`, and the superseded first draft `facing-direction1.json`, whose coverage omitted the 15 shuffle segments). Originally: finish direction 1: inspect the concentrated AMZ rows, same-ms discrepancies and actor membership; calibrate angle units/axis using independent evidence. Measure sampling coverage per round/player/time, not just event-pair quantiles. Use the same recorded file set first, without overwriting artifacts.
+3. **Reported** in “Direction 1 result”; the store/consume decisions are the user's and still open. Originally: report whether facing can be preserved as an observed fact and what must remain unknown. Do not implement a tactical-facing accusation or assume camera/target intent. A decision to store a field is separate from a decision to coach on it.
 4. Then proceed to skipped state fields, resource flows, NPC lifecycle, equipment/dynamic talents one direction at a time. Larger scans follow explicit definitions and stable denominators; no per-match model calls.
 
 **Prior direction decisions remain in GitHub:** #70 describes observed consequences without unsupported causation; #68 alternative-play suggestions approved in principle but deferred; #69 broader positive feedback approved but low priority; #77 conservative whole-round usage statistics and death-review control-as-peel options, without claiming the control would save the victim; #82 stays open and, if pursued, must become more conservative. #66 trinket decision design was introduced but **not ruled on**. The user then replaced that coaching-decision queue with this data-layer audit. Do not resume that old queue by default.
