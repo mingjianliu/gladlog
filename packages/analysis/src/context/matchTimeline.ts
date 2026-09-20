@@ -22,6 +22,7 @@ import {
 } from "../data/timelineLineFlags";
 import { ccSpellIds } from "../data/spellTags";
 import { COPY_CAST_IDS } from "../utils/castPress";
+import { SUMMON_REACH_MIN_S, summonReach } from "../utils/summonReachability";
 import type { ICcBreakEvent } from "../utils/ccBreakAnalysis";
 import {
   CC_AVOIDANCE_BUFF_SPELLS,
@@ -224,6 +225,8 @@ export interface BuildMatchTimelineParams {
    */
   outgoingCCChains?: IOutgoingCCChain[];
   allUnits?: ICombatUnit[];
+  /** Arena zone id — the line-of-sight check of `summonReach` needs the map. */
+  zoneId?: string;
   stasisEvents?: IStasisEvent[];
   shapeshiftIntervals?: Array<{
     player: ICombatUnit;
@@ -1072,12 +1075,28 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
         const who = hitters
           .map((id) => allUnits.find((u) => u.id === id))
           .map((u) => (u ? actorLabel(u.name, "friendly") : "unknown"));
+        // Feasibility travels with the fact (user-approved 2026-09-20, in
+        // place of a separate accusation candidate): who could have hit it,
+        // and for how much of its official duration. Absent when nobody had
+        // SUMMON_REACH_MIN_S in reach and free — the bare fact then accuses
+        // no one.
+        const reach = summonReach(
+          unit,
+          { endTime: matchEndMs, startInfo: { zoneId: params.zoneId } },
+          friends,
+          enemies ?? [],
+        );
+        const reachStr =
+          reach?.best && reach.best.seconds >= SUMMON_REACH_MIN_S
+            ? `; ${pid(reach.best.unit.name)} was in range and free to act for ${reach.best.seconds}s of its ${reach.windowSeconds}s`
+            : "";
         addEntry(
           summonS,
           `${fmtTime(summonS)}  [ENEMY SUMMON]   ${CRITICAL_NON_PLAYER_NPC_NAMES[npcId]}${by} — not killed: ` +
             (hits === 0
               ? "0 hits from your team"
-              : `hit ${hits}× by ${[...new Set(who)].join(", ")}`),
+              : `hit ${hits}× by ${[...new Set(who)].join(", ")}`) +
+            reachStr,
         );
         continue;
       }

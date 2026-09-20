@@ -101,6 +101,7 @@ import * as rawStreams from "@gladlog/analysis/src/utils/rawStreams";
 import * as renderGrid from "@gladlog/analysis/src/utils/renderGrid";
 import * as rootReachability from "@gladlog/analysis/src/utils/rootReachability";
 import * as spellDanger from "@gladlog/analysis/src/utils/spellDanger";
+import * as summonReachability from "@gladlog/analysis/src/utils/summonReachability";
 import * as stats from "@gladlog/analysis/src/utils/stats";
 import * as talentBehaviors from "@gladlog/analysis/src/utils/talentBehaviors";
 import * as talentOwnership from "@gladlog/analysis/src/utils/talentOwnership";
@@ -642,6 +643,11 @@ const INDEX: PredicateRow[] = [
     file: `${A}/context/timelineHelpers.ts`,
     symbol: "opposingHitsOnUnit",
     mod: timelineHelpers,
+  },
+  {
+    file: `${A}/utils/summonReachability.ts`,
+    symbol: "summonReach",
+    mod: summonReachability,
   },
   {
     file: `${A}/utils/ccTrinketAnalysis.ts`,

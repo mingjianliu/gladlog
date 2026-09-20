@@ -615,4 +615,13 @@
 //  [ENEMY SUMMON] 0 → 406 lines in 52 matches (0 hits 359, hit-not-killed 47);
 //  enemy tremor notes 0 → 124; [CC ON ENEMY] 61,812 → 61,854; findings hash
 //  and every candidate count identical.
-export const PROMPT_VERSION = 86;
+//  v87 (2026-09-20, user-approved IN PLACE OF a separate accusation candidate):
+//  `[ENEMY SUMMON]` carries its own feasibility — `; N was in range and free to
+//  act for Xs of its Ys` (summonReach: official DB2 duration of the summoning
+//  spell, canReachTargetAt, buildCannotCastIntervals; healers never named;
+//  only when the best teammate has >= 3 s). The judgement stays with the
+//  reader. A candidate was measured first and declined: strict form 2 of 695
+//  rounds, loose form 8 and mostly thin. Same 605-match acceptance set: 406
+//  lines before and after, 332 now carry the clause (0-hit lines 288/359, hit
+//  lines 44/47); findings hash and every candidate count identical.
+export const PROMPT_VERSION = 87;

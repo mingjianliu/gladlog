@@ -161,6 +161,7 @@
     "test/spellSchools.test.ts",
     "test/spellTags.ccSpellIds.test.ts",
     "test/spellTargeting.test.ts",
+    "test/summonReachability.test.ts",
     "test/talentNames.test.ts",
     "test/talentOwnership.test.ts",
     "test/talentWhitelistClassification.test.ts",

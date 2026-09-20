@@ -741,6 +741,7 @@ export function buildMatchContext(
     friends: friends as ICombatUnit[],
     enemies: enemies as ICombatUnit[],
     allUnits: Object.values(combat.units),
+    zoneId: combat.startInfo?.zoneId,
     matchStartMs: combat.startTime,
     matchEndMs: combat.endTime,
     isHealer: healer,

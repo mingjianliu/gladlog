@@ -29,21 +29,11 @@ import {
   opposingHitsOnUnit,
   summonedAtMs,
 } from "@gladlog/analysis/src/context/timelineHelpers";
-import { spellEffectData } from "@gladlog/analysis/src/data/spellEffectData";
-import { buildCannotCastIntervals } from "@gladlog/analysis/src/utils/cannotCastIntervals";
-import {
-  gridHpPct,
-  isHealerSpec,
-  isMeleeSpec,
-  specToString,
-} from "@gladlog/analysis/src/utils/cooldowns";
-import { getUnitPositionAtTime } from "@gladlog/analysis/src/utils/losAnalysis";
-import { CLOSE_RANGE_YARDS } from "@gladlog/analysis/src/utils/positionAnalysis";
-import { canReachTargetAt } from "@gladlog/analysis/src/utils/rootReachability";
+import { gridHpPct, specToString } from "@gladlog/analysis/src/utils/cooldowns";
+import { summonReach } from "@gladlog/analysis/src/utils/summonReachability";
 import { GladLogParser } from "@gladlog/parser";
 import {
   CombatUnitReaction,
-  LogEvent,
   toLegacyMatch,
   toLegacyShuffle,
 } from "@gladlog/parser-compat";
@@ -59,7 +49,6 @@ const fmtTime = (s: number): string =>
   `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
 const PSYFIEND_NPC = "101398";
-const RANGED_YARDS = 40;
 /** Seconds of the window a player must be both in reach and free. A probe
  * value, reported as a sensitivity row — not a product constant. */
 const REACH_MIN_S = [3, 5];
@@ -117,8 +106,6 @@ async function main(): Promise<void> {
       const enemies = players.filter(
         (u) => u.reaction === CombatUnitReaction.Hostile,
       );
-      const enemyIds = new Set<string>(enemies.map((u) => u.id));
-      const zoneId: string | undefined = combat.startInfo?.zoneId;
       for (const unit of all) {
         if (unit.info || unit.id.split("-")[5] !== PSYFIEND_NPC) continue;
         const owner = all.find((u) => u.id === unit.ownerId);
@@ -131,19 +118,14 @@ async function main(): Promise<void> {
         funnel.zeroHits++;
         const t0 = summonedAtMs(unit);
         if (t0 === null) continue;
-        const summonSpell = unit.actionIn.find(
-          (a: any) => a.logLine.event === LogEvent.SPELL_SUMMON,
-        )?.spellId;
-        const durS = spellEffectData[String(summonSpell)]?.durationSeconds;
-        if (!durS) continue;
-        const t1 = Math.min(t0 + durS * 1000, combat.endTime);
-        // whole seconds of the window
-        const seconds: number[] = [];
-        for (let t = t0 + 1000; t <= t1; t += 1000) seconds.push(t);
-        if (!seconds.some((t) => getUnitPositionAtTime(unit, t, 3000)))
-          continue;
+        const result = summonReach(unit, combat, friends, enemies);
+        if (!result) continue;
         funnel.hasPosition++;
 
+        const seconds: number[] = [];
+        for (let k = 0; k < result.windowSeconds; k++) {
+          seconds.push(t0 + 500 + k * 1000);
+        }
         const betterToDo = seconds.some(
           (t) =>
             enemies.some((e) => {
@@ -155,48 +137,21 @@ async function main(): Promise<void> {
               return hp !== null && hp > 0 && hp <= CRISIS_HP_PCT * 100;
             }),
         );
-        let best: {
-          name: string;
-          spec: string;
-          s: number;
-          melee: boolean;
-        } | null = null;
-        for (const f of friends) {
-          if (isHealerSpec(f.spec)) continue;
-          const blocked = buildCannotCastIntervals(f, enemyIds);
-          const melee = isMeleeSpec(f.spec);
-          let ok = 0;
-          for (const t of seconds) {
-            const from = getUnitPositionAtTime(f, t, 3000);
-            if (!from) continue;
-            if (blocked.some((b) => t >= b.from && t <= b.to)) continue;
-            const reach = canReachTargetAt(
-              from,
-              unit,
-              t,
-              zoneId,
-              melee ? CLOSE_RANGE_YARDS : RANGED_YARDS,
-              !melee,
-            );
-            if (reach === true) ok++;
-          }
-          if (!best || ok > best.s)
-            best = { name: f.name, spec: specToString(f.spec), s: ok, melee };
-        }
+        const best = result.best;
         for (const min of REACH_MIN_S) {
-          if (!best || best.s < min) continue;
+          if (!best || best.seconds < min) continue;
           funnel[`reachable+free>=${min}s`]++;
           if (!betterToDo) funnel[`…and nothing better to do (>=${min}s)`]++;
         }
         if (
           best &&
-          best.s >= REACH_MIN_S[0] &&
+          best.seconds >= REACH_MIN_S[0] &&
           !betterToDo &&
           examples.length < Number(flag("--show") ?? 6)
         )
           examples.push(
-            `${fmtTime((t0 - combat.startTime) / 1000)}  [candidate: psyfiend-ignored]   Enemy Psyfiend (by ${specToString(owner.spec)}) stood its full ${durS}s with 0 damage from your team. ` +
-              `${best.spec} was ${best.melee ? "within melee reach" : "within 40 yd with line of sight"} of it and free to act for ${best.s}s of those ${seconds.length}; ` +
+            `${fmtTime((t0 - combat.startTime) / 1000)}  [candidate: psyfiend-ignored]   Enemy Psyfiend (by ${specToString(owner.spec)}) stood its full ${result.windowSeconds}s with 0 damage from your team. ` +
+              `${specToString(best.unit.spec)} was ${best.melee ? "within melee reach" : "within 40 yd with line of sight"} of it and free to act for ${best.seconds}s of those ${result.windowSeconds}; ` +
               `no enemy was at or below ${KILL_HP_PCT}% and no teammate at or below ${CRISIS_HP_PCT * 100}% in that window.`,
           );
       }
