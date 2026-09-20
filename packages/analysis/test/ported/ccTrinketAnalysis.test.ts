@@ -466,6 +466,31 @@ describe("analyzePlayerCCAndTrinket — root/disarm/interrupt tracking", () => {
       makeCombat(),
     );
     expect(resNoData.interruptInstances[0].kickDepthPct).toBeNull();
+
+    // Case 4 (Codex P2): Interrupted hardcast followed by instant proc of same spell
+    // must NOT contaminate completed-duration samples
+    const lbKicks = [10.5, 30.5].map((t) =>
+      makeInterruptEvent("1766", "Kick", "51505", "Lava Burst", MATCH_START + t * 1000),
+    );
+    const lbStarts = [10, 30].map((t) => ({
+      spellId: "51505",
+      logLine: { event: LogEvent.SPELL_CAST_START, timestamp: MATCH_START + t * 1000 },
+    }));
+    const playerWithInstantProc = makeUnit("player-1", {
+      actionIn: lbKicks,
+      castStartEvents: lbStarts as any,
+      spellCastEvents: [
+        {
+          spellId: "51505",
+          logLine: { event: LogEvent.SPELL_CAST_SUCCESS, timestamp: MATCH_START + 15_000 },
+        },
+      ] as any,
+    });
+    const resProc = analyzePlayerCCAndTrinket(playerWithInstantProc, [enemy], makeCombat());
+    // Neither kick should have a depth percentage because the cast was interrupted,
+    // not completed at 15s
+    expect(resProc.interruptInstances[0].kickDepthPct).toBeNull();
+    expect(resProc.interruptInstances[1].kickDepthPct).toBeNull();
   });
 });
 

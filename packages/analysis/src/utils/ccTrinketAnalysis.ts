@@ -1071,17 +1071,48 @@ export function analyzePlayerCCAndTrinket(
       playerCompletedMedians.set(spellId, null);
       return null;
     }
+    const playerInterrupts = player.actionIn.filter(
+      (a) => a.logLine.event === LogEvent.SPELL_INTERRUPT,
+    );
+    const allStarts = (player.castStartEvents ?? []).sort(
+      (a, b) => a.logLine.timestamp - b.logLine.timestamp,
+    );
+
     const durations: number[] = [];
     for (let i = 0; i < starts.length; i++) {
       const sMs = starts[i].logLine.timestamp;
-      const nextStartMs = starts[i + 1]?.logLine.timestamp ?? Infinity;
-      const maxMs = Math.min(nextStartMs, sMs + 10_000);
+      // Any subsequent cast start of ANY spell ends the previous hardcast
+      const nextAnyStartMs =
+        allStarts.find((e) => e.logLine.timestamp > sMs)?.logLine.timestamp ??
+        Infinity;
+      const maxMs = Math.min(nextAnyStartMs, sMs + 6_000);
       const match = successes.find(
         (c) => c.logLine.timestamp >= sMs && c.logLine.timestamp <= maxMs,
       );
       if (match) {
+        // Codex review P2: Reject start/success pairs crossed by an interruption
+        // on this spell, so an instant proc or later cast does not contaminate the median.
+        const wasInterrupted = playerInterrupts.some(
+          (a) =>
+            a.timestamp >= sMs &&
+            a.timestamp <= match.logLine.timestamp &&
+            (a as unknown as CombatExtraSpellAction).extraSpellId === spellId,
+        );
+        if (wasInterrupted) continue;
+
+        // An intervening cast success of any other spell also proves the hardcast was broken
+        const hadInterveningCast = player.spellCastEvents.some(
+          (c) =>
+            c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+            c.logLine.timestamp > sMs &&
+            c.logLine.timestamp < match.logLine.timestamp,
+        );
+        if (hadInterveningCast) continue;
+
         const durS = (match.logLine.timestamp - sMs) / 1000;
-        if (durS > 0) durations.push(durS);
+        if (durS >= 0.5 && durS <= 6.0) {
+          durations.push(durS);
+        }
       }
     }
     const med = medianFinite(durations);
