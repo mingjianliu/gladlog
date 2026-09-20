@@ -209,7 +209,7 @@ export function collectEvents(
         ...(record.absorbed.attackSpellId !== null
           ? {
               attackSpellId: record.absorbed.attackSpellId,
-              attackSpellName: record.absorbed.attackSpellName ?? "",
+              attackSpellName: record.absorbed.attackSpellName || undefined,
             }
           : {}),
         params: record.params,
