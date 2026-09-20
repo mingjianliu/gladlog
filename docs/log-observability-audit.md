@@ -144,7 +144,15 @@ Run `npx tsx packages/eval/scripts/advancedSlotScan.ts <pilot.json> <new-output.
 
 What the +9 residuals say about snapshot timing: of the 4,967 non-exact intervals, 3,566 show the slot unchanged and 945 equal a prefix or suffix of the interval's absorbs, so 95.5 % of all tested intervals are explained by the sample being taken before or after some of the same-instant `SPELL_ABSORBED` lines. 456 (4.5 %) are not: 284 dropped by less than was absorbed, 129 by more, 43 rose with no aura event. Consequence: the slot reads as “remaining absorb ≈ N at this sample”, **not** as a ledger that can be reconciled hit by hit, and its order relative to same-instant damage is not fixed.
 
-**Direction 2 result so far.** Three of six slots have a verified meaning, one is constant, two remain unknown. L1 decodes none of them and L3 stores none. The absorb slot is the only one that is a changing combat state; whether anything should consume it (for example effective health = hp + remaining absorb wherever the product reasons about how close someone was to dying) is a user decision that, per the Value-Gate rule, starts from one complete real-match example, not from this table. Not examined yet: non-Player actors, whether +9 includes heal-absorb effects (it should not move on `SPELL_HEAL_ABSORBED` if it is damage absorb only), and the unverified +4 / +7.
+**Direction 2 result so far.** Three of six slots have a verified meaning, one is constant, two remain unknown. L1 decodes none of them and L3 stores none. The absorb slot is the only one that is a changing combat state; whether anything should consume it (for example effective health = hp + remaining absorb wherever the product reasons about how close someone was to dying) is a user decision that, per the Value-Gate rule, starts from one complete real-match example, not from this table.
+
+**Wrap-up checks (same script, same sample).**
+
+- **+9 is damage absorb only.** Over 3,891 clean Player intervals that contain `SPELL_HEAL_ABSORBED` and no `SPELL_ABSORBED`, the slot is unchanged in 3,859 (99.2 %) and moves by the heal-absorbed amount in 0.
+- **Pets and creatures carry the same six slots**, and their last slot reconciles more cleanly than a player's: Pet 7,326 / 7,834 exact (93.5 %), Creature 617 / 629 (98.1 %) — fewer same-instant events, less snapshot-ordering ambiguity. Non-zero on 29.6 % of Pet records and 5.3 % of Creature records.
+- **+7 tracks `COMBATANT_INFO[20..22]`** (three equal scalars, versatility in the published layout) at a ratio of 1.8513, within 1 % for 75 % of players. That is co-variation, not identification: the ratio is unexplained and a quarter of players deviate. It stays unnamed.
+- **+4 tracks nothing**: its best ratio (to `COMBATANT_INFO[5]`) is within 1 % for 13 % of players. It stays unverified.
+- Two records in the sample decode an advanced “actor” that is a bare number rather than a GUID — a mis-located block on some event shape, not examined.
 
 Proceed one direction at a time; report a concrete evidence-backed result before widening scope:
 

@@ -12,6 +12,12 @@
  *  - quiet test: same kind of interval with no absorb at all — unchanged?
  *  - COMBATANT_INFO test: a Player's first in-round slot value vs each raw
  *    COMBATANT_INFO scalar (zeros ignored — a zero matches any zero stat).
+ *  - heal-absorb test: clean interval with SPELL_HEAL_ABSORBED on the Player
+ *    and no SPELL_ABSORBED — does the winning absorb slot move?
+ *  - other actor kinds (Pet/Creature): slot count and the same absorb test on
+ *    their last slot.
+ *  - ratio test for slots no scalar equals: slot / scalar across players, the
+ *    scalars whose ratio is most nearly constant.
  *
  * Diagnostic only, same pilot sample: establishes meaning, not season rates.
  * Usage: npx tsx packages/eval/scripts/advancedSlotScan.ts <pilot.json> <new-output.json>
@@ -48,6 +54,18 @@ const absorbTest: Record<string, { n: number; exact: number }> = {};
 const quietTest: Record<string, { n: number; unchanged: number }> = {};
 const ciMatch: Record<string, Record<string, number>> = {};
 let ciPlayers = 0;
+const healAbsorbTest = { n: 0, lastSlotUnchanged: 0, movedByMinusSum: 0 };
+const otherKinds: Record<
+  string,
+  {
+    records: number;
+    slotCountHist: Record<string, number>;
+    lastSlotNonZero: number;
+    absorbTestN: number;
+    absorbExact: number;
+  }
+> = {};
+const ratios: Record<string, Record<string, number[]>> = {};
 // Residual classes for the slot that wins the absorb test, filled per slot and
 // reported for all so nothing is presumed.
 const residual: Record<string, Record<string, number>> = {};
@@ -64,6 +82,7 @@ for (const file of pilot.files) {
 
   const last = new Map<string, number[]>();
   const absorbedSince = new Map<string, number[]>();
+  const healAbsorbedSince = new Map<string, number>();
   const auraSince = new Set<string>();
   const combatantInfo = new Map<string, string[]>();
   const firstSlots = new Map<string, number[]>();
@@ -74,6 +93,13 @@ for (const file of pilot.files) {
       ciPlayers++;
       slots.forEach((v, k) => {
         if (v === 0) return;
+        for (let j = CI_FIRST; j <= CI_LAST; j++) {
+          const scalar = Number(ci[j]);
+          if (scalar > 0)
+            ((ratios[`slot+${k + 4}`] ??= {})[`ci[${j}]`] ??= []).push(
+              v / scalar,
+            );
+        }
         for (let j = CI_FIRST; j <= CI_LAST; j++)
           if (Number(ci[j]) === v) {
             const m = (ciMatch[`slot+${k + 4}`] ??= {});
@@ -95,6 +121,7 @@ for (const file of pilot.files) {
       flushCombatantInfo();
       last.clear();
       absorbedSince.clear();
+      healAbsorbedSince.clear();
       auraSince.clear();
       continue;
     }
@@ -108,11 +135,18 @@ for (const file of pilot.files) {
       list.push(p.absorbed.absorbedAmount);
       absorbedSince.set(v, list);
     }
+    if (p.eventName === "SPELL_HEAL_ABSORBED" && p.healAbsorbed) {
+      const v = p.healAbsorbed.victimGuid;
+      healAbsorbedSince.set(
+        v,
+        (healAbsorbedSince.get(v) ?? 0) + p.healAbsorbed.absorbedAmount,
+      );
+    }
     if (p.eventName.startsWith("SPELL_AURA_") && p.base)
       auraSince.add(p.base.destGuid);
 
     const a = p.advanced;
-    if (!a || !a.actorGuid.startsWith("Player-")) continue;
+    if (!a || !/^(Player|Pet|Creature)-/.test(a.actorGuid)) continue;
     // Locate the block and the coordinates the way decodeAdvanced does.
     const at = p.params.indexOf(a.actorGuid, 8);
     if (at < 0) continue;
@@ -125,6 +159,35 @@ for (const file of pilot.files) {
     if (xIdx < 0) continue;
     // powerType/currentPower/maxPower/powerCost are the four before x.
     const slots = p.params.slice(at + 4, xIdx - 4).map(Number);
+    if (!a.actorGuid.startsWith("Player-")) {
+      const kind = (otherKinds[a.actorGuid.split("-")[0]] ??= {
+        records: 0,
+        slotCountHist: {},
+        lastSlotNonZero: 0,
+        absorbTestN: 0,
+        absorbExact: 0,
+      });
+      kind.records++;
+      kind.slotCountHist[slots.length] =
+        (kind.slotCountHist[slots.length] ?? 0) + 1;
+      const v = slots[slots.length - 1];
+      if (v > 0) kind.lastSlotNonZero++;
+      const before = last.get(a.actorGuid);
+      const list = absorbedSince.get(a.actorGuid) ?? [];
+      if (
+        before &&
+        before.length === slots.length &&
+        !auraSince.has(a.actorGuid) &&
+        list.length
+      ) {
+        kind.absorbTestN++;
+        if (v - before[before.length - 1] === -sum(list)) kind.absorbExact++;
+      }
+      last.set(a.actorGuid, slots);
+      absorbedSince.delete(a.actorGuid);
+      auraSince.delete(a.actorGuid);
+      continue;
+    }
     slotCountHist[slots.length] = (slotCountHist[slots.length] ?? 0) + 1;
     if (!firstSlots.has(a.actorGuid)) firstSlots.set(a.actorGuid, slots);
 
@@ -132,6 +195,13 @@ for (const file of pilot.files) {
     const absorbs = absorbedSince.get(a.actorGuid) ?? [];
     const clean =
       prev && prev.length === slots.length && !auraSince.has(a.actorGuid);
+    const healAbsorbed = healAbsorbedSince.get(a.actorGuid) ?? 0;
+    if (clean && !absorbs.length && healAbsorbed > 0) {
+      const d = slots[slots.length - 1] - prev[prev.length - 1];
+      healAbsorbTest.n++;
+      if (d === 0) healAbsorbTest.lastSlotUnchanged++;
+      else if (d === -healAbsorbed) healAbsorbTest.movedByMinusSum++;
+    }
     slots.forEach((v, k) => {
       const key = `slot+${k + 4}`;
       const pr = (profile[key] ??= {
@@ -175,11 +245,35 @@ for (const file of pilot.files) {
     });
     last.set(a.actorGuid, slots);
     absorbedSince.delete(a.actorGuid);
+    healAbsorbedSince.delete(a.actorGuid);
     auraSince.delete(a.actorGuid);
   }
   flushCombatantInfo();
 }
 
+const median = (xs: number[]) =>
+  [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
+const ratioTest = Object.fromEntries(
+  Object.entries(ratios)
+    .filter(([slot]) => !ciMatch[slot])
+    .map(([slot, byScalar]) => [
+      slot,
+      Object.entries(byScalar)
+        .map(([scalar, xs]) => {
+          const m = median(xs);
+          return {
+            scalar,
+            players: xs.length,
+            medianRatio: +m.toFixed(4),
+            within1pct: +(
+              xs.filter((x) => Math.abs(x / m - 1) <= 0.01).length / xs.length
+            ).toFixed(3),
+          };
+        })
+        .sort((a, b) => b.within1pct - a.within1pct)
+        .slice(0, 4),
+    ]),
+);
 const result = {
   manifestSha256: pilot.manifestSha256,
   sampledFiles: pilot.files.length,
@@ -192,6 +286,9 @@ const result = {
   quietTest,
   ciPlayers,
   ciMatch,
+  ratioTest,
+  healAbsorbTest,
+  otherKinds,
 };
 writeFileSync(output, JSON.stringify(result, null, 2), { flag: "wx" });
 console.log(JSON.stringify(result, null, 2));
