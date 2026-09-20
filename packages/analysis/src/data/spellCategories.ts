@@ -133,7 +133,6 @@ export const SPELL_CATEGORIES: Record<string, ISpellCategoryEntry> = {
   "217832": cc(), // Imprison
   "179057": cc(), // Chaos Nova
   "221562": cc(), // Asphyxiate
-  "108194": cc(), // Asphyxiate (Unholy)
   "207167": cc(), // Blinding Sleet
   "3355": cc(), // Freezing Trap
   "24394": cc(), // Intimidation

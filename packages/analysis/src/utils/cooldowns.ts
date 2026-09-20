@@ -547,8 +547,6 @@ export const SPEC_EXCLUSIVE_SPELLS: Record<string, CombatUnitSpec[]> = {
   "47788": [CombatUnitSpec.Priest_Holy], // Guardian Spirit
   "64843": [CombatUnitSpec.Priest_Holy], // Divine Hymn
   "47585": [CombatUnitSpec.Priest_Shadow], // Dispersion
-  // Warlock
-  "113860": [CombatUnitSpec.Warlock_Affliction], // Dark Soul: Misery
   // Rogue
   "5277": [CombatUnitSpec.Rogue_Assassination], // Evasion
   "36554": [CombatUnitSpec.Rogue_Assassination], // Shadowstep
@@ -574,7 +572,6 @@ export const SPEC_EXCLUSIVE_SPELLS: Record<string, CombatUnitSpec[]> = {
     CombatUnitSpec.Shaman_Restoration,
   ], // Grounding Totem
   // Mage
-  "12042": [CombatUnitSpec.Mage_Arcane], // Arcane Power
   "205025": [CombatUnitSpec.Mage_Arcane], // Presence of Mind
   "190319": [CombatUnitSpec.Mage_Fire], // Combustion
   // Hunter
@@ -588,7 +585,11 @@ export const SPEC_EXCLUSIVE_SPELLS: Record<string, CombatUnitSpec[]> = {
   "55233": [CombatUnitSpec.DeathKnight_Blood], // Vampiric Blood
   "49028": [CombatUnitSpec.DeathKnight_Blood], // Dancing Rune Weapon
   "108199": [CombatUnitSpec.DeathKnight_Blood], // Gorefiend's Grasp
-  "221562": [CombatUnitSpec.DeathKnight_Blood], // Asphyxiate (Blood)
+  "221562": [
+    CombatUnitSpec.DeathKnight_Blood,
+    CombatUnitSpec.DeathKnight_Frost,
+    CombatUnitSpec.DeathKnight_Unholy,
+  ], // Asphyxiate
   "51271": [CombatUnitSpec.DeathKnight_Frost], // Pillar of Frost
   "47568": [CombatUnitSpec.DeathKnight_Frost], // Empower Rune Weapon
   "279302": [CombatUnitSpec.DeathKnight_Frost], // Frostwyrm's Fury
@@ -597,7 +598,6 @@ export const SPEC_EXCLUSIVE_SPELLS: Record<string, CombatUnitSpec[]> = {
   "42650": [CombatUnitSpec.DeathKnight_Unholy], // Army of the Dead
   "49206": [CombatUnitSpec.DeathKnight_Unholy], // Summon Gargoyle
   "220143": [CombatUnitSpec.DeathKnight_Unholy], // Apocalypse
-  "108194": [CombatUnitSpec.DeathKnight_Unholy], // Asphyxiate (Unholy)
   // Evoker
   "375087": [CombatUnitSpec.Evoker_Devastation], // Dragonrage
   "363916": [

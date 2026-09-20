@@ -103,11 +103,10 @@ export const SPELL_EFFECT_OVERRIDES: Record<string, IMinedSpell> =
       e("106951", "Berserk", 180, 20),
       e("102560", "Incarnation: Chosen of Elune", 180, 20), // 2026-09-06: hand 30 shadowed the official DB2 20; corpus 20.0 s in 88 % of 1,147 lifetimes
       e("194223", "Celestial Alignment", 180, 20),
-      e("323764", "Convoke the Spirits", 120, 4),
+      e("391528", "Convoke the Spirits", 120, 4),
       e("288613", "Trueshot", 120, 15),
       e("19574", "Bestial Wrath", 90, 15),
       e("266779", "Coordinated Assault", 120, 20),
-      e("137639", "Storm, Earth, and Fire", 90, 15),
       e("123904", "Invoke Xuen, the White Tiger", 120, 20),
       e("31884", "Avenging Wrath", 120, 20), // GH #34 ①: corpus lifetime 20–30 s (p25 24, p50 27, p75 30 — talent-extended); base kept, the pairing now accepts the longer removal
       e("231895", "Crusade", 120, 25),
@@ -115,7 +114,6 @@ export const SPELL_EFFECT_OVERRIDES: Record<string, IMinedSpell> =
       e("114051", "Ascendance", 180, 15),
       e("205180", "Summon Darkglare", 120, 20),
       e("265187", "Summon Demonic Tyrant", 90, 15),
-      e("113860", "Dark Soul: Misery", 120, 20),
       e("191427", "Metamorphosis", 240, 24),
       e("370965", "The Hunt", 90, 6),
       e("359844", "Call of the Wild", 180, 20),

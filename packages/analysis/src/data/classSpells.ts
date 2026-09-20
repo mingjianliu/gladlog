@@ -146,7 +146,6 @@ export const classMetadata: IClassSpellMetadata[] = [
       a("275699", "Apocalypse", O),
       a("207289", "Unholy Assault", O),
       a("221562", "Asphyxiate", C),
-      a("108194", "Asphyxiate", C),
       a("207167", "Blinding Sleet", C),
     ],
   },
@@ -192,7 +191,6 @@ export const classMetadata: IClassSpellMetadata[] = [
       a("108416", "Dark Pact", D),
       a("205180", "Summon Darkglare", O),
       a("265187", "Summon Demonic Tyrant", O),
-      a("113860", "Dark Soul: Misery", O),
       a("5782", "Fear", C),
       a("30283", "Shadowfury", C),
       a("6789", "Mortal Coil", C),
@@ -208,7 +206,6 @@ export const classMetadata: IClassSpellMetadata[] = [
       a("115203", "Fortifying Brew", D),
       a("122470", "Touch of Karma", D),
       a("116849", "Life Cocoon", D),
-      a("137639", "Storm, Earth, and Fire", O),
       a("123904", "Invoke Xuen, the White Tiger", O),
       // 12.x Windwalker burst — took Storm, Earth, and Fire's slot (137639 is
       // in OFFENSIVE_CD_DEAD_IDS and the successor was never listed). Cast id
@@ -235,7 +232,7 @@ export const classMetadata: IClassSpellMetadata[] = [
       a("106951", "Berserk", O),
       a("102560", "Incarnation: Chosen of Elune", O),
       a("194223", "Celestial Alignment", O),
-      a("323764", "Convoke the Spirits", O),
+      a("391528", "Convoke the Spirits", O),
       a("33786", "Cyclone", C),
       a("99", "Incapacitating Roar", C),
       a("5211", "Mighty Bash", C),

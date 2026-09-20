@@ -46,14 +46,15 @@ import {
 export const DOT_SPELL_IDS = new Set<string>([
   "980",
   "172",
-  "30108",
+  "31117",
+  "196364",
   "461531",
   "63106",
   "205179",
   "361695", // Warlock
   "589",
   "34914",
-  "2944",
+  "335467",
   "390978", // Priest
   "164812",
   "8921",
@@ -79,7 +80,7 @@ export const DOT_SPELL_IDS = new Set<string>([
   "118253",
   "217200", // Hunter
   "12654", // Mage
-  "115767",
+  "262115",
   "84617", // Warrior
   "357209", // Evoker
 ]);
