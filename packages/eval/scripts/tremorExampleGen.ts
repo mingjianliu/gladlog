@@ -10,9 +10,9 @@
  *
  * Usage: npx tsx packages/eval/scripts/tremorExampleGen.ts --manifest <txt> [--offset 3000] [--limit 200] [--show 4]
  */
-import { TREMOR_BREAKABLE_CC_IDS } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
-import { ccFullDurationSeconds } from "@gladlog/analysis/src/data/spellEffectData";
 import { ensureAnalysisData } from "@gladlog/analysis";
+import { ccFullDurationSeconds } from "@gladlog/analysis/src/data/spellEffectData";
+import { TREMOR_BREAKABLE_CC_IDS } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
 import { parseLine } from "@gladlog/parser";
 import { readFileSync } from "fs";
 import { gunzipSync } from "zlib";
