@@ -34,6 +34,8 @@ const player = (
   spec: CombatUnitSpec,
   pos: ReturnType<typeof at>,
   auraEvents: unknown[] = [],
+  actionIn: unknown[] = [],
+  deathRecords: unknown[] = [],
 ): ICombatUnit =>
   ({
     id,
@@ -41,8 +43,8 @@ const player = (
     spec,
     advancedActions: pos,
     auraEvents,
-    actionIn: [],
-    deathRecords: [],
+    actionIn,
+    deathRecords,
   }) as unknown as ICombatUnit;
 const combat = { endTime: T0 + 60_000 };
 
@@ -111,5 +113,80 @@ describe("summonReach (GH #100: feasibility travels with the [ENEMY SUMMON] fact
     expect(
       summonReach(psyfiend("199824", []), combat, [hunter], []),
     ).toBeNull();
+  });
+
+  it("sub-second CC (e.g. 0.4s) that does not cover the sample midpoint is blocked via interval intersection (W0b)", () => {
+    // CC from T0 + 50 to T0 + 450 (400ms duration). Midpoint of [T0, T0+1000] is T0 + 500.
+    // Point sampling at T0 + 500 would miss it; interval intersection correctly catches it.
+    const enemy = player("Enemy1", CombatUnitSpec.Priest_Shadow, at(0, 0));
+    const stunAuras = [
+      {
+        spellId: "853", // Hammer of Justice (Stun)
+        timestamp: T0 + 50,
+        srcUnitId: "Enemy1",
+        logLine: { event: LogEvent.SPELL_AURA_APPLIED, timestamp: T0 + 50, parameters: [] },
+      },
+      {
+        spellId: "853",
+        timestamp: T0 + 450,
+        srcUnitId: "Enemy1",
+        logLine: { event: LogEvent.SPELL_AURA_REMOVED, timestamp: T0 + 450, parameters: [] },
+      },
+    ];
+    const hunter = player(
+      "Hunter",
+      CombatUnitSpec.Hunter_Marksmanship,
+      at(30, 0),
+      stunAuras,
+    );
+    const r = summonReach(psyfiend(), combat, [hunter], [enemy]);
+    // 12s total window, second 0 is blocked, remaining 11s are free
+    expect(r?.windowSeconds).toBe(12);
+    expect(r?.best?.seconds).toBe(11);
+  });
+
+  it("sub-second CC spanning across the 1-second boundary blocks both seconds (W0b)", () => {
+    // CC from T0 + 600 to T0 + 1500 (900ms duration).
+    // Midpoints are T0 + 500 and T0 + 1500.
+    // Interval intersection detects that both [T0, T0+1000] and [T0+1000, T0+2000] overlap the CC.
+    const enemy = player("Enemy1", CombatUnitSpec.Priest_Shadow, at(0, 0));
+    const stunAuras = [
+      {
+        spellId: "853",
+        timestamp: T0 + 600,
+        srcUnitId: "Enemy1",
+        logLine: { event: LogEvent.SPELL_AURA_APPLIED, timestamp: T0 + 600, parameters: [] },
+      },
+      {
+        spellId: "853",
+        timestamp: T0 + 1500,
+        srcUnitId: "Enemy1",
+        logLine: { event: LogEvent.SPELL_AURA_REMOVED, timestamp: T0 + 1500, parameters: [] },
+      },
+    ];
+    const hunter = player(
+      "Hunter",
+      CombatUnitSpec.Hunter_Marksmanship,
+      at(30, 0),
+      stunAuras,
+    );
+    const r = summonReach(psyfiend(), combat, [hunter], [enemy]);
+    // 12s total window, seconds 0 and 1 are blocked, remaining 10s are free
+    expect(r?.windowSeconds).toBe(12);
+    expect(r?.best?.seconds).toBe(10);
+  });
+
+  it("death during the window excludes subsequent seconds", () => {
+    const hunter = player(
+      "Hunter",
+      CombatUnitSpec.Hunter_Marksmanship,
+      at(30, 0),
+      [],
+      [],
+      [{ timestamp: T0 + 4_000 }], // dies at 4s
+    );
+    const r = summonReach(psyfiend(), combat, [hunter], []);
+    // Only seconds where secEnd <= death timestamp count (4s: [0,1], [1,2], [2,3], [3,4])
+    expect(r?.best?.seconds).toBe(4);
   });
 });

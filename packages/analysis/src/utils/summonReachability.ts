@@ -62,13 +62,12 @@ export function summonReach(
   if (!durationS) return null;
   const fromMs = summonEvent.logLine.timestamp;
   const toMs = Math.min(fromMs + durationS * 1000, combat.endTime);
-  const seconds: number[] = [];
-  // Note: This samples at 1-second intervals and checks if the sample POINT falls inside a CC
-  // interval. A CC lasting 0.9s could fall entirely between two sample points. The 1s grid is
-  // shared with position sampling and cannot be independently refined.
-  for (let t = fromMs; t + 1000 <= toMs; t += 1000) seconds.push(t + 500);
-  if (seconds.length === 0) return null;
-  if (!seconds.some((t) => getUnitPositionAtTime(summon, t, LOS_SWEEP_GAP_MS)))
+  const windows: Array<{ secStart: number; secEnd: number; t: number }> = [];
+  for (let t = fromMs; t + 1000 <= toMs; t += 1000) {
+    windows.push({ secStart: t, secEnd: t + 1000, t: t + 500 });
+  }
+  if (windows.length === 0) return null;
+  if (!windows.some((w) => getUnitPositionAtTime(summon, w.t, LOS_SWEEP_GAP_MS)))
     return null;
 
   const enemyIds = new Set(enemies.map((e) => e.id));
@@ -79,16 +78,17 @@ export function summonReach(
     const melee = isMeleeSpec(f.spec);
     const blocked = buildCannotCastIntervals(f, enemyIds);
     let ok = 0;
-    for (const t of seconds) {
-      if (isDeadAt(f, t)) continue;
-      if (blocked.some((b) => t >= b.from && t <= b.to)) continue;
-      const from = getUnitPositionAtTime(f, t, LOS_SWEEP_GAP_MS);
+    for (const w of windows) {
+      if (isDeadAt(f, w.t)) continue;
+      // Interval intersection (W0b): unit was unable to cast at any point during [secStart, secEnd]
+      if (blocked.some((b) => b.from < w.secEnd && b.to > w.secStart)) continue;
+      const from = getUnitPositionAtTime(f, w.t, LOS_SWEEP_GAP_MS);
       if (!from) continue;
       if (
         canReachTargetAt(
           from,
           summon,
-          t,
+          w.t,
           zoneId,
           melee ? CLOSE_RANGE_YARDS : KW_REACH_YARDS,
           !melee,
@@ -98,5 +98,5 @@ export function summonReach(
     }
     if (ok > (best?.seconds ?? 0)) best = { unit: f, seconds: ok, melee };
   }
-  return { windowSeconds: seconds.length, best };
+  return { windowSeconds: windows.length, best };
 }
