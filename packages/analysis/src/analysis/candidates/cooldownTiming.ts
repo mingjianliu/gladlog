@@ -228,7 +228,12 @@ export const SYNC_ENTER_LEAD_S = 2;
 export function missedSyncWindowEvents(
   ccWindows: Pick<
     IEnemyHealerCcWindow,
-    "fromSeconds" | "toSeconds" | "spellName" | "spellId" | "healerName"
+    | "fromSeconds"
+    | "toSeconds"
+    | "spellName"
+    | "spellId"
+    | "healerName"
+    | "drLevel"
   >[],
   offensiveCds: Pick<
     IMajorCooldownInfo,

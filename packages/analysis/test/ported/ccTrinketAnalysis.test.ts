@@ -270,7 +270,7 @@ describe("analyzePlayerCCAndTrinket — root/disarm/interrupt tracking", () => {
     expect(result.interruptInstances).toHaveLength(0);
   });
 
-  it("computes nearestKickerDistYd and kickersInRange when position data exists (GH #73, B6)", () => {
+  it("computes nearestKickerDistYd and kickersInRange when position data exists at cast start (GH #73, B6)", () => {
     const kick = makeInterruptEvent(
       "1766",
       "Kick",
@@ -282,9 +282,18 @@ describe("analyzePlayerCCAndTrinket — root/disarm/interrupt tracking", () => {
     );
     const player = makeUnit("player-1", {
       actionIn: [kick],
+      castStartEvents: [
+        {
+          spellId: "116",
+          logLine: {
+            event: LogEvent.SPELL_CAST_START,
+            timestamp: MATCH_START + 18_500,
+          },
+        },
+      ] as any,
       advancedActions: [
         {
-          timestamp: MATCH_START + 20_000,
+          timestamp: MATCH_START + 18_500,
           advancedActorPositionX: 0,
           advancedActorPositionY: 0,
         },
@@ -297,7 +306,7 @@ describe("analyzePlayerCCAndTrinket — root/disarm/interrupt tracking", () => {
       spec: CombatUnitSpec.Rogue_Assassination,
       advancedActions: [
         {
-          timestamp: MATCH_START + 20_000,
+          timestamp: MATCH_START + 18_500,
           advancedActorPositionX: 3,
           advancedActorPositionY: 4,
         },
@@ -308,6 +317,76 @@ describe("analyzePlayerCCAndTrinket — root/disarm/interrupt tracking", () => {
     expect(result.interruptInstances).toHaveLength(1);
     expect(result.interruptInstances[0].nearestKickerDistYd).toBe(5);
     expect(result.interruptInstances[0].kickersInRange).toBe(1);
+  });
+
+  it("omits nearestKickerDistYd when castStartEvents is missing or enemy has unconfirmed pet kit (Codex P2)", () => {
+    const kick = makeInterruptEvent(
+      "19647",
+      "Spell Lock",
+      "116",
+      "Frostbolt",
+      MATCH_START + 20_000,
+      "enemy-lock",
+      "WarlockEnemy",
+    );
+    // Case 1: No cast-start event -> no mixed-time fallback, remains null
+    const playerNoStart = makeUnit("player-1", {
+      actionIn: [kick],
+      advancedActions: [
+        {
+          timestamp: MATCH_START + 20_000,
+          advancedActorPositionX: 0,
+          advancedActorPositionY: 0,
+        },
+      ] as any,
+    });
+    const enemyLock = makeUnit("enemy-lock", {
+      name: "WarlockEnemy",
+      reaction: CombatUnitReaction.Hostile,
+      class: CombatUnitClass.Warlock,
+      spec: CombatUnitSpec.Warlock_Affliction,
+      petSpellCastEvents: [
+        {
+          spellId: "19647",
+          logLine: { event: LogEvent.SPELL_CAST_SUCCESS, timestamp: 1 },
+        },
+      ] as any,
+      advancedActions: [
+        {
+          timestamp: MATCH_START + 20_000,
+          advancedActorPositionX: 3,
+          advancedActorPositionY: 4,
+        },
+      ] as any,
+    });
+
+    const res1 = analyzePlayerCCAndTrinket(playerNoStart, [enemyLock], makeCombat());
+    expect(res1.interruptInstances[0].nearestKickerDistYd).toBeNull();
+    expect(res1.interruptInstances[0].kickersInRange).toBeNull();
+
+    // Case 2: Cast-start exists, but enemy interrupt is pet-derived (kit.confirmed === false) -> omitted
+    const playerWithStart = makeUnit("player-1", {
+      actionIn: [kick],
+      castStartEvents: [
+        {
+          spellId: "116",
+          logLine: {
+            event: LogEvent.SPELL_CAST_START,
+            timestamp: MATCH_START + 18_500,
+          },
+        },
+      ] as any,
+      advancedActions: [
+        {
+          timestamp: MATCH_START + 18_500,
+          advancedActorPositionX: 0,
+          advancedActorPositionY: 0,
+        },
+      ] as any,
+    });
+    const res2 = analyzePlayerCCAndTrinket(playerWithStart, [enemyLock], makeCombat());
+    expect(res2.interruptInstances[0].nearestKickerDistYd).toBeNull();
+    expect(res2.interruptInstances[0].kickersInRange).toBeNull();
   });
 });
 

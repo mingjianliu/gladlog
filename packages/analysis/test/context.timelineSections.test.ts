@@ -1861,6 +1861,11 @@ describe("buildMatchTimeline — [UNNECESSARY] defensive-timing annotation (17c)
           } as any,
         ],
         trinketUseTimes: [],
+        missedTrinketWindows: [],
+        rootInstances: [],
+        disarmInstances: [],
+        interruptInstances: [],
+        ccAvoidedInstances: [],
       },
     ];
 

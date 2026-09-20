@@ -534,9 +534,9 @@ export interface IInterruptInstance {
    * The classification itself is unchanged; only what the line may CLAIM is. */
   switchWasHardCast: boolean | null;
   /** Distance in yards to the nearest enemy kicker at cast start (GH #73, B6). */
-  nearestKickerDistYd: number | null;
+  nearestKickerDistYd?: number | null;
   /** Number of enemy kickers in kick range with interrupt available at cast start (GH #73, B6). */
-  kickersInRange: number | null;
+  kickersInRange?: number | null;
 }
 
 export interface ICCAvoidedInstance {
@@ -1072,42 +1072,55 @@ export function analyzePlayerCCAndTrinket(
           e.logLine.timestamp >= action.timestamp - 10_000,
       )
       .sort((a, b) => b.logLine.timestamp - a.logLine.timestamp)[0];
-    const castStartMs = castStartEvent?.logLine.timestamp ?? action.timestamp;
 
     let nearestKickerDistYd: number | null = null;
     let kickersInRange: number | null = null;
-    const playerPos =
-      getUnitPositionAtTime(player, castStartMs, LOS_SWEEP_GAP_MS) ??
-      getUnitPositionAtTime(player, action.timestamp, LOS_SWEEP_GAP_MS);
 
-    if (playerPos) {
-      let countInRange = 0;
-      let minDist = Infinity;
-      for (const enemy of enemies) {
-        const kit = interruptForUnit(enemy);
-        if (!kit) continue;
-        const cdLeft = interruptCooldownRemainingMs(
-          enemy,
-          kit.spellId,
-          castStartMs,
-        );
-        if (cdLeft > 0) continue; // kick was on CD at cast start
-        const enemyPos =
-          getUnitPositionAtTime(enemy, castStartMs, LOS_SWEEP_GAP_MS) ??
-          getUnitPositionAtTime(enemy, action.timestamp, LOS_SWEEP_GAP_MS);
-        if (!enemyPos) continue;
-        const dist = distanceBetween(playerPos, enemyPos);
-        if (dist < minDist) {
-          minDist = dist;
+    if (castStartEvent) {
+      const castStartMs = castStartEvent.logLine.timestamp;
+      // Codex review P2: sample strictly at cast start — do not substitute interruption
+      // timestamp when cast-start position is missing, to avoid mixed-time calculations.
+      const playerPos = getUnitPositionAtTime(
+        player,
+        castStartMs,
+        LOS_SWEEP_GAP_MS,
+      );
+
+      if (playerPos) {
+        let countInRange = 0;
+        let minDist = Infinity;
+        for (const enemy of enemies) {
+          const kit = interruptForUnit(enemy);
+          if (!kit) continue;
+          // Codex review P2: pet interrupts (Spell Lock, Axe Toss) come from the pet,
+          // not the owner; unconfirmed kits (kit.confirmed === false) are pet abilities
+          // or unobserved fallbacks whose range cannot be reliably judged from owner pos.
+          if (kit.confirmed === false) continue;
+          const cdLeft = interruptCooldownRemainingMs(
+            enemy,
+            kit.spellId,
+            castStartMs,
+          );
+          if (cdLeft > 0) continue; // kick was on CD at cast start
+          const enemyPos = getUnitPositionAtTime(
+            enemy,
+            castStartMs,
+            LOS_SWEEP_GAP_MS,
+          );
+          if (!enemyPos) continue;
+          const dist = distanceBetween(playerPos, enemyPos);
+          if (dist < minDist) {
+            minDist = dist;
+          }
+          const range = spellRangeYards(kit.spellId) ?? 5;
+          if (dist <= range) {
+            countInRange++;
+          }
         }
-        const range = spellRangeYards(kit.spellId) ?? 5;
-        if (dist <= range) {
-          countInRange++;
+        if (minDist !== Infinity) {
+          nearestKickerDistYd = Math.round(minDist * 10) / 10;
+          kickersInRange = countInRange;
         }
-      }
-      if (minDist !== Infinity) {
-        nearestKickerDistYd = Math.round(minDist * 10) / 10;
-        kickersInRange = countInRange;
       }
     }
 

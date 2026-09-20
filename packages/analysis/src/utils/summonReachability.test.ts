@@ -35,7 +35,7 @@ const mockCanReachTargetAt = canReachTargetAt as any;
 const mockBuildCannotCastIntervals = buildCannotCastIntervals as any;
 
 describe("summonReach", () => {
-  const createUnit = (id: string, spec: CombatUnitSpec = CombatUnitSpec.None_None, actionIn: any[] = []): ICombatUnit =>
+  const createUnit = (id: string, spec: CombatUnitSpec = CombatUnitSpec.None, actionIn: any[] = []): ICombatUnit =>
     ({ id, spec, actionIn } as unknown as ICombatUnit);
 
   beforeEach(() => {
@@ -46,19 +46,19 @@ describe("summonReach", () => {
   });
 
   it("returns null when unit has no SPELL_SUMMON event", () => {
-    const summon = createUnit("s1", CombatUnitSpec.None_None, []);
+    const summon = createUnit("s1", CombatUnitSpec.None, []);
     expect(summonReach(summon, { endTime: 10000 }, [], [])).toBeNull();
   });
 
   it("returns null when spell has no known duration in spellEffectData", () => {
-    const summon = createUnit("s1", CombatUnitSpec.None_None, [
+    const summon = createUnit("s1", CombatUnitSpec.None, [
       { logLine: { event: LogEvent.SPELL_SUMMON, timestamp: 0 }, spellId: 999 },
     ]);
     expect(summonReach(summon, { endTime: 10000 }, [], [])).toBeNull();
   });
 
   it("returns null when no position samples exist for the summon", () => {
-    const summon = createUnit("s1", CombatUnitSpec.None_None, [
+    const summon = createUnit("s1", CombatUnitSpec.None, [
       { logLine: { event: LogEvent.SPELL_SUMMON, timestamp: 0 }, spellId: 123 },
     ]);
     mockGetUnitPositionAtTime.mockReturnValue(null);
@@ -66,7 +66,7 @@ describe("summonReach", () => {
   });
 
   it("returns best: null when no friend is in range (all friends are healers, filtered out)", () => {
-    const summon = createUnit("s1", CombatUnitSpec.None_None, [
+    const summon = createUnit("s1", CombatUnitSpec.None, [
       { logLine: { event: LogEvent.SPELL_SUMMON, timestamp: 0 }, spellId: 123 },
     ]);
     const friend = createUnit("f1", CombatUnitSpec.Priest_Discipline);
@@ -76,7 +76,7 @@ describe("summonReach", () => {
   });
 
   it("returns correct windowSeconds based on duration clipped to combat end", () => {
-    const summon = createUnit("s1", CombatUnitSpec.None_None, [
+    const summon = createUnit("s1", CombatUnitSpec.None, [
       { logLine: { event: LogEvent.SPELL_SUMMON, timestamp: 0 }, spellId: 123 },
     ]); // Duration is 5s
     const friend = createUnit("f1", CombatUnitSpec.Rogue_Assassination);
@@ -92,7 +92,7 @@ describe("summonReach", () => {
   });
 
   it("factors in cannotCastIntervals correctly (friend blocked)", () => {
-    const summon = createUnit("s1", CombatUnitSpec.None_None, [
+    const summon = createUnit("s1", CombatUnitSpec.None, [
       { logLine: { event: LogEvent.SPELL_SUMMON, timestamp: 0 }, spellId: 123 },
     ]);
     const friend = createUnit("f1", CombatUnitSpec.Rogue_Assassination);
@@ -106,7 +106,7 @@ describe("summonReach", () => {
   });
 
   it("excludes dead teammates", () => {
-    const summon = createUnit("s1", CombatUnitSpec.None_None, [
+    const summon = createUnit("s1", CombatUnitSpec.None, [
       { logLine: { event: LogEvent.SPELL_SUMMON, timestamp: 0 }, spellId: 123 },
     ]);
     const friend = createUnit("f1", CombatUnitSpec.Rogue_Assassination);
