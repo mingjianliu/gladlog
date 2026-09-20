@@ -203,6 +203,20 @@ Run `npx tsx packages/eval/scripts/npcRosterScan.ts --manifest <txt> --offset 30
 
 **Forward direction — unlisted.** 61 unlisted npcIds were hit by enemy players at least five times. Most are damage guardians that are attacked incidentally and never killed (Dire Beast, Treants, Wild Imps: 1 % killed). Beyond Psyfiend, the ones that are actually killed: Denizen of the Dream 66 (19 %), Mirror Image 31, Counterstrike Totem 20 (33 %), Stormstream Totem 14 of 1,080.
 
+**Kill evidence cross-check.** `PARTY_KILL` can name a totem as its destination, but it is a strict subset of overkill: over 200 files, 134 listed units have both, at the same millisecond (lag p50 0 ms, range −1 to 7), and **0** have a `PARTY_KILL` without an overkill; 146 more have overkill alone. `PARTY_KILL` is only written when the killer is in the recorder's party. It therefore validates “overkill > 0 = killed” and adds nothing to it.
+
+**What else the prompt already says about totems** (checked on the first 3,000 saved prompts containing `[STATE]` — a truncated sample, not a random one): `[absorbed: Grounding Totem]` on the owner's own eaten cast is alive (180 files). `[ABSORBED: <spells>]` on the owner's own Grounding Totem cast is **dead** — 0 of 1,817 such cast lines carry it — for the same root cause: it reads the totem's absorb events, while 12.x logs record a grounded spell as a killing damage event on the totem. The killing blow's spell is what the totem ate. `[CC AVOIDED?] … did not land; Tremor Totem active` exists for a shaman owner only.
+
+**Tremor Totem removing fear — the facts** (300 files; Fear 5782, Psychic Scream 8122, Howl of Terror 5484 on players; the totem itself sources **no** log event of any kind):
+
+| Friendly Tremor Totem                                                                       | Fears | Actual duration p50 |                                                                                                      Ended within 1.5 s |
+| ------------------------------------------------------------------------------------------- | ----: | ------------------: | ----------------------------------------------------------------------------------------------------------------------: |
+| none                                                                                        | 2,814 |              1.77 s |                                                                                                                  44.8 % |
+| already up when the fear landed (summoned ≤ 10 s earlier — nominal lifetime, an assumption) |    91 |              0.65 s |                                                                                                                  86.8 % |
+| **dropped during the fear**                                                                 |    50 |                   — | removal lag after the summon: **p50 0 s, p90 0.02 s, 49 / 50 within 1.5 s**; all 50 victims are teammates of the shaman |
+
+“Totem dropped mid-fear → the fear ends the same instant” is a deterministic signature and can be stated as a fact. “Totem was already up” cannot: fear also breaks on damage, so a short fear under a standing totem is strongly suggestive, not attributable. User, 2026-09-20: establish the facts first, adding a line is a later decision (“most likely yes”).
+
 **Lifecycle honesty.** With no `UNIT_DIED`, a summon that was not overkilled has an **unknown** end — expiry, replacement, owner death and despawn are indistinguishable, and the last event naming a unit is not its end. Only “killed by an enemy player's damage” is an observable fact.
 
 **Value-gate example** — `npx tsx packages/eval/scripts/unitDestroyedExampleGen.ts --manifest <txt> --offset 3000 --limit 60` renders today's lines next to overkill-keyed lines for real matches, in the product's own format: 130 rounds, **0 lines today, 106 proposed, in 27 rounds (21 %)**. A median round (spec ids replaced by names):
