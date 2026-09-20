@@ -94,3 +94,24 @@ The deliverable is a field-level chain: **raw → L1 → L3 → compat → analy
 After validating definitions, use at most 600 files for stratified exploration (version/date, bracket, map, spec, recorder and advanced-log coverage). Deduplicate lobby/round identities and keep rare-mechanism targeted samples separate. Then run a programmatic, sequential full-manifest census with event/unit/round denominators and explicit missing/error counts. No per-match LLM calls. More observations cannot identify missing intent, camera state or unrecorded inputs.
 
 Changes to product facts require deterministic before/after verification; new coaching conclusions still require a complete real-match example and user review.
+
+## Agent handoff — 2026-09-19
+
+**Stop point:** user requested a wrap-up and handoff, not further exploration. The pilot and first facing pass are complete; direction 1 is **not** fully validated. No product changes, 600-file scan or full-archive scan were made. All scans and both Claude calls launched by this task have exited; there is no process/session to babysit.
+
+**Git checkpoint:** `bd3d7924` records the pilot, `98d044f2` records the facing pass. Both were verified on remote main on 2026-09-19: remote/local main were `087be204745e94a51e80814b27e885eddc7827e2`, worktree clean. Another session committed and published the intervening teammate-crisis retirement; do not undo it or assume the earlier product-status discussion reflects that later change. The earlier “not pushed” issue comment is superseded by this check.
+
+**Last follow-up, not yet classified:** inspecting the 15 actor-neither-endpoint rows found that all are `SPELL_CAST_SUCCESS`, spell **145629 / Anti-Magic Zone**, source GUID `0000000000000000`, with a Player advanced actor different from the Player destination. They occur in two sampled files. This identifies a concentrated event shape, not a proven parser bug, ground-target coordinate, or ownership explanation. The next agent should inspect surrounding events and actor roster membership before deciding how to interpret it.
+
+**Private artifacts:** `$GLADLOG_EVAL_HOME/reports/log-observability-2026-09-19/` contains `pilot.json`, `committed-script-replay.json` (deep-equal across every field and content hash), `facing-round-bounded.json` (canonical facing results cited above), the initial report and a saved diagnostic `facing-anomalies.ts`. `facing-pilot.json` is the earlier file-local prototype: it did not break pairs at round boundaries and must not supply the current gap numbers. The diagnostic script uses this machine's absolute paths; the two committed scripts are the supported rerun entry points. Keep source paths, GUIDs and raw logs private.
+
+**Next steps, in order:**
+
+1. Read this document, repository instructions and current Git status. Do not rerun the original inventory or the whole archive merely to regain context.
+2. Finish direction 1: inspect the concentrated AMZ rows, same-ms discrepancies and actor membership; calibrate angle units/axis using independent evidence. Measure sampling coverage per round/player/time, not just event-pair quantiles. Use the same recorded file set first, without overwriting artifacts.
+3. Report whether facing can be preserved as an observed fact and what must remain unknown. Do not implement a tactical-facing accusation or assume camera/target intent. A decision to store a field is separate from a decision to coach on it.
+4. Then proceed to skipped state fields, resource flows, NPC lifecycle, equipment/dynamic talents one direction at a time. Larger scans follow explicit definitions and stable denominators; no per-match model calls.
+
+**Prior direction decisions remain in GitHub:** #70 describes observed consequences without unsupported causation; #68 alternative-play suggestions approved in principle but deferred; #69 broader positive feedback approved but low priority; #77 conservative whole-round usage statistics and death-review control-as-peel options, without claiming the control would save the victim; #82 stays open and, if pursued, must become more conservative. #66 trinket decision design was introduced but **not ruled on**. The user then replaced that coaching-decision queue with this data-layer audit. Do not resume that old queue by default.
+
+**Verification already performed:** original/reusable pilot JSON deep equality; all-workspace typecheck after the inventory script; eval typecheck and lint after the facing script; whitespace checks. At handoff, full `npm run presubmit` also passed (lint with warnings, doc-command checks, workspace typechecks/tests, verify:vision with zero divergences, production build). This does not certify comprehensive corpus correctness. To discuss with the same Claude again, session `3ec89cdd-5b66-45d5-8135-25782e4f777f` was the local Opus 5 session, but its agreed findings and rejected claims are already recorded above; resuming it is optional.
