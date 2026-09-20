@@ -30,6 +30,7 @@ import {
   loadLegacyRound,
   splitTeams,
 } from "../src/explore/storeAccess";
+import { checkPetCreditSide } from "../src/quality/promptQualityCheck";
 
 const N_MATCHES = process.argv[2] !== undefined ? Number(process.argv[2]) : 200;
 
@@ -105,16 +106,15 @@ for (const row of picked) {
               : "raw unit name (unresolved)";
         shapes.set(shape, (shapes.get(shape) ?? 0) + 1);
       }
-      const m = PET_RE.exec(line);
-      if (!m) continue;
-      petCredits++;
-      const want = m[1] === "CC ON TEAM" ? "enemy" : "friendly";
-      const got = side.get(m[2]!);
-      if (got !== undefined && got !== want) {
-        wrongSide++;
-        wrongRounds.add(`${row.id}:${r.seq ?? ""}`);
-        if (examples.length < 8)
-          examples.push(`${row.id}:${r.seq ?? ""} ${line.trim()}`);
+      if (PET_RE.test(line)) petCredits++;
+    }
+
+    const wrong = checkPetCreditSide(ctx.split("\n"));
+    if (wrong.length > 0) {
+      wrongSide += wrong.length;
+      wrongRounds.add(`${row.id}:${r.seq ?? ""}`);
+      for (const w of wrong) {
+        if (examples.length < 8) examples.push(`${row.id}:${r.seq ?? ""} ${w}`);
       }
     }
   }
