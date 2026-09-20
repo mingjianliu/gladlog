@@ -18,6 +18,15 @@ const COOKIE_FILE =
   path.join(os.homedir(), ".gladlog", "wal-session-cookie");
 const N = Number(process.env.N ?? 7);
 
+/** Renders both record shapes: `archives` (current) and the single-step
+ * `driveSync` written on 2026-09-20 before the own-logs archive was added. */
+function archiveSummary(r: RunRecord): string {
+  const steps = r.archives ?? (r.driveSync ? [{ name: "pvp-downloads", ...r.driveSync }] : []);
+  if (!steps.length) return "drive -";
+  const bad = steps.filter((s) => s.exit !== 0);
+  return bad.length ? `drive FAILED(${bad.map((s) => s.name).join(",")})` : `drive ok(${steps.length})`;
+}
+
 const state: QuotaState | undefined = fs.pathExistsSync(QUOTA_STATE)
   ? fs.readJsonSync(QUOTA_STATE)
   : undefined;
@@ -41,12 +50,15 @@ for (const line of lines.slice(-N)) {
   const fresh = r.steps.reduce((n, s) => n + s.fresh, 0);
   const steps = r.steps.map((s) => `${s.bracket} ${s.fresh}/${s.limit}`).join(", ") || r.note || "-";
   const q = r.quotaAfter ? `${r.quotaAfter.downloadsUsedToday}/${r.quotaAfter.downloadsQuota}` : "?";
-  const drive = r.driveSync ? (r.driveSync.exit === 0 ? "drive ok" : "drive FAILED") : "drive -";
+  const drive = archiveSummary(r);
   console.log(`  ${r.startedAt.slice(0, 16)}Z  ${r.status.padEnd(12)} ${String(fresh).padStart(2)} new  quota ${q}  ${drive.padEnd(12)}  ${steps}`);
 }
 const last = lines.length ? (JSON.parse(lines[lines.length - 1]) as RunRecord) : undefined;
-if (last?.driveSync && last.driveSync.exit !== 0) {
-  console.log("\n⚠ the last run did not reach Google Drive — rerun `npx tsx scripts/syncPvpLogsToDrive.ts` (incremental).");
+const lastBad = (last?.archives ?? []).filter((a) => a.exit !== 0);
+if (lastBad.length || (last?.driveSync && last.driveSync.exit !== 0)) {
+  console.log(
+    `\n⚠ the last run did not reach Google Drive (${lastBad.map((a) => a.name).join(", ") || "pvp-downloads"}) — rerun \`npm run logs:archive-own\` / \`npm run logs:sync-drive\` (both incremental).`,
+  );
 }
 if (last?.status === "auth-expired") {
   console.log("\n⚠ the last run found the Battle.net session expired — re-login and update the cookie file.");

@@ -7,7 +7,9 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "logs:daily": "tsx scripts/dailyPull.ts",
-    "logs:daily:status": "tsx scripts/dailyPullStatus.ts"
+    "logs:daily:status": "tsx scripts/dailyPullStatus.ts",
+    "logs:archive-own": "tsx scripts/archiveOwnLogs.ts",
+    "logs:sync-drive": "tsx scripts/syncPvpLogsToDrive.ts"
   },
   "dependencies": {
     "@gladlog/analysis": "0.0.1",

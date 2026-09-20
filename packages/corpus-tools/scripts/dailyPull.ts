@@ -3,8 +3,14 @@
 // Runs fetchPvpLogs.ts once per step, records every run to
 // downloads/daily-pull/runs.jsonl, and raises a macOS notification when the
 // Battle.net session has expired so the operator knows to re-login. Every run
-// then archives downloads/ to Google Drive (syncPvpLogsToDrive.ts, incremental),
-// including runs that pulled nothing, so a failed upload is retried the next day.
+// then makes Google Drive whole, whether or not it pulled anything, so a failed
+// upload is simply retried the next day. Two archives, both incremental:
+//   downloads/          -> gdrive:gladlog-pvp-logs   (other players' logs)
+//   ~/gladlog-sync/logs -> gdrive:gladlog-own-logs   (our own, via the collector)
+// The standing requirement is the user's, 2026-09-20: everything we hold ends
+// up with at least one copy on Drive. Both had been manual, and manual meant
+// never: 205 downloaded files had never gone up, and archiveOwnLogs' documented
+// `npm run logs:archive-own` did not exist as a script at all.
 //
 //   npm run logs:daily            (this)
 //   npm run logs:daily:status     (last runs + today's quota + cookie age)
@@ -39,7 +45,10 @@ const DOWNLOADS = path.join(EVAL_HOME, "downloads");
 const QUOTA_STATE = path.join(DOWNLOADS, "wal-quota-state.json");
 const RUN_LOG = path.join(DOWNLOADS, "daily-pull", "runs.jsonl");
 const FETCH_SCRIPT = path.join(__dirname, "fetchPvpLogs.ts");
-const DRIVE_SYNC_SCRIPT = path.join(__dirname, "syncPvpLogsToDrive.ts");
+const ARCHIVE_SCRIPTS: { name: string; script: string }[] = [
+  { name: "pvp-downloads", script: path.join(__dirname, "syncPvpLogsToDrive.ts") },
+  { name: "own-logs", script: path.join(__dirname, "archiveOwnLogs.ts") },
+];
 
 function readState(): QuotaState | null {
   return fs.pathExistsSync(QUOTA_STATE) ? fs.readJsonSync(QUOTA_STATE) : null;
@@ -90,13 +99,20 @@ function runStep(bracket: string, limit: number) {
   return { exit: r.status, fresh: parseFreshCount(r.stdout ?? "") };
 }
 
-function runDriveSync(): NonNullable<RunRecord["driveSync"]> {
-  const t0 = Date.now();
-  const r = spawnSync("npx", ["tsx", DRIVE_SYNC_SCRIPT], {
-    cwd: path.join(__dirname, ".."),
-    stdio: ["ignore", "inherit", "inherit"],
-  });
-  return { exit: r.status, seconds: Math.round((Date.now() - t0) / 1000) };
+/** Every archive runs even if an earlier one failed: they cover different
+ * directories, so a broken one must not hide the other from Drive. */
+function runArchives(): NonNullable<RunRecord["archives"]> {
+  const out: NonNullable<RunRecord["archives"]> = [];
+  for (const { name, script } of ARCHIVE_SCRIPTS) {
+    console.log(`\n== daily pull: archive ${name} to Google Drive`);
+    const t0 = Date.now();
+    const r = spawnSync("npx", ["tsx", script], {
+      cwd: path.join(__dirname, ".."),
+      stdio: ["ignore", "inherit", "inherit"],
+    });
+    out.push({ name, exit: r.status, seconds: Math.round((Date.now() - t0) / 1000) });
+  }
+  return out;
 }
 
 async function main() {
@@ -140,18 +156,15 @@ async function main() {
   }
   record.status = status;
   record.quotaAfter = readState();
-  if (process.env.DAILY_SKIP_DRIVE_SYNC !== "1") {
-    console.log("\n== daily pull: archive to Google Drive");
-    record.driveSync = runDriveSync();
-  }
-  const driveFailed = record.driveSync != null && record.driveSync.exit !== 0;
+  if (process.env.DAILY_SKIP_DRIVE_SYNC !== "1") record.archives = runArchives();
+  const failedArchives = (record.archives ?? []).filter((a) => a.exit !== 0);
   record.finishedAt = new Date().toISOString();
   await fs.ensureDir(path.dirname(RUN_LOG));
   await fs.appendFile(RUN_LOG, JSON.stringify(record) + "\n");
   const fresh = record.steps.reduce((n, s) => n + s.fresh, 0);
   const q = record.quotaAfter;
   console.log(
-    `\ndaily pull ${status}: ${fresh} new logs (${record.steps.map((s) => `${s.bracket} ${s.fresh}/${s.limit}`).join(", ") || "no step"}), quota ${q ? `${q.downloadsUsedToday}/${q.downloadsQuota}` : "?"}; drive ${record.driveSync ? (driveFailed ? `FAILED (exit ${record.driveSync.exit})` : "synced") : "skipped"}; log ${RUN_LOG}`,
+    `\ndaily pull ${status}: ${fresh} new logs (${record.steps.map((s) => `${s.bracket} ${s.fresh}/${s.limit}`).join(", ") || "no step"}), quota ${q ? `${q.downloadsUsedToday}/${q.downloadsQuota}` : "?"}; drive ${record.archives ? (failedArchives.length ? `FAILED: ${failedArchives.map((a) => a.name).join(", ")}` : "all archived") : "skipped"}; log ${RUN_LOG}`,
   );
   if (status === "auth-expired") {
     notify(
@@ -161,10 +174,13 @@ async function main() {
   } else if (status === "error") {
     notify("gladlog daily pull: 失败", `见 ${RUN_LOG}`);
   }
-  if (driveFailed) {
-    notify("gladlog daily pull: Drive 同步失败", `日志已下载但没传上 Google Drive,见 ${RUN_LOG}`);
+  if (failedArchives.length) {
+    notify(
+      "gladlog daily pull: Drive 归档失败",
+      `${failedArchives.map((a) => a.name).join(", ")} 没传上 Google Drive,见 ${RUN_LOG}`,
+    );
   }
-  process.exit(status === "ok" && !driveFailed ? 0 : 1);
+  process.exit(status === "ok" && failedArchives.length === 0 ? 0 : 1);
 }
 
 main();

@@ -77,8 +77,11 @@ export interface RunRecord {
   status: RunStatus;
   steps: { bracket: string; limit: number; fresh: number; exit: number | null }[];
   quotaAfter: QuotaState | null;
-  /** The Drive archive step that follows the pull. Absent on records written
-   * before 2026-09-20 (the step did not exist) and when DAILY_SKIP_DRIVE_SYNC=1. */
+  /** The Drive archive steps that follow the pull, in order. Absent on records
+   * written before 2026-09-20 (no archive step existed) and when
+   * DAILY_SKIP_DRIVE_SYNC=1. `driveSync` is the first-generation single-step
+   * shape, kept so old runs.jsonl lines still render. */
+  archives?: { name: string; exit: number | null; seconds: number }[];
   driveSync?: { exit: number | null; seconds: number };
   note?: string;
 }
