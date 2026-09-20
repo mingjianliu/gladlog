@@ -67,6 +67,20 @@ Further limits retained by Codex: recorder-only coverage of failed casts must be
 
 ## Exploration queue and acceptance
 
+### Direction 1: facing, first evidence pass
+
+Run `npx tsx packages/eval/scripts/facingObservabilityScan.ts <pilot.json> <new-output.json>` on the pilot output. The scan verifies input file hashes and resets gap pairing at observed arena start/end events and file boundaries. It is diagnostic only, not a production facing predicate.
+
+On the same 24 files, 223,516 finite Player-actor samples divide into 62,772 actor=source, 160,729 actor=destination, and 15 actor=neither (all SPELL_CAST_SUCCESS). Self-targeted events count in the source bucket. Therefore attaching facing to the spell caster instead of advanced.actorGuid is demonstrably wrong for many records.
+
+Observed facing range is 0–6.2832, compatible with a rounded radian representation but **not proof** of units, zero-axis, rotation direction or world-to-map transform. One value is just above mathematical 2π; do not call that a bad sample without checking precision.
+
+There are 194,566 actor/timestamp groups, 21,503 with multiple records; 15 have differing facing values and 16 differing positions. This does not establish corruption: event ordering and within-millisecond changes need inspection. The scan excludes these ambiguous groups from the stationary-pair diagnostic. Of 57,528 consecutive pairs at exactly the same recorded x/y and within 1.5 seconds, 10,650 change facing. This rejects treating the field as merely movement direction; rounded positions do not prove the actor was physically motionless.
+
+Across 194,350 adjacent sample pairs (not weighted by elapsed time/player), gaps are p50 0.077s, p90 0.375s, p99 1.204s; 1,078 exceed 1.5s, 228 exceed 3s, maximum 29.005s. This is not a claim that 99% of combat time is observable: idle/stealthed periods, missing round boundaries, deaths and uneven actor activity require separate denominators.
+
+**Current conclusion:** preserving the actor's observed orientation with timestamp/provenance is a credible data-layer direction. “Facing target X”, continuous facing, camera direction and tactical judgements remain unapproved/unvalidated. Outstanding checks are independent axis/unit calibration, the 15 third-actor casts, same-ms discrepancies, and round/player/time-weighted gap coverage. No product changes were made.
+
 Proceed one direction at a time; report a concrete evidence-backed result before widening scope:
 
 1. **Facing:** verify actor ownership, angle units/range, sampling gaps and same-actor same-time consistency. Determine what can be preserved; do not infer camera direction or tactical intent.
