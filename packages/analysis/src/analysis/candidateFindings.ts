@@ -1997,18 +1997,21 @@ function teamPlayEvents(
     // judged on what the healer did toward them; same predicate the eval
     // reference scan uses (teammateCrisisPriorScan.ts), same lookup as the
     // gate (lookupTeammateCrisisPriorByBin).
-    try {
-      const bracket: string = combat?.startInfo?.bracket ?? "";
-      const teammatePoints = teammateCrisisPoints(owner, combat);
-      out.push(
-        ...teammateCrisisIdleEvents(teammatePoints, owner, bracket),
-        // teammate-crisis-triage (user ruling 2026-09-17): the healer spent
-        // the window on a friendly who was NOT in crisis
-        ...teammateCrisisTriageEvents(teammatePoints, owner, bracket),
-      );
-    } catch {
-      /* teammate points not computable → type absent */
-    }
+    // Both accusations retired 2026-09-19 (user ruling; registry rows carry
+    // the numbers) — one flag, the predicate and producers stay.
+    if (CANDIDATE_TYPE_FLAGS.teammateCrisis)
+      try {
+        const bracket: string = combat?.startInfo?.bracket ?? "";
+        const teammatePoints = teammateCrisisPoints(owner, combat);
+        out.push(
+          ...teammateCrisisIdleEvents(teammatePoints, owner, bracket),
+          // teammate-crisis-triage (user ruling 2026-09-17): the healer spent
+          // the window on a friendly who was NOT in crisis
+          ...teammateCrisisTriageEvents(teammatePoints, owner, bracket),
+        );
+      } catch {
+        /* teammate points not computable → type absent */
+      }
   } else {
     // DPS side of the same signal (spec §1d): until the DPS behavior-prior
     // scan lands, behaviorPriorGenerated.json carries no `|dps|` cells, so

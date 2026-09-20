@@ -173,6 +173,8 @@ const NEW_CANDIDATE_TYPE_FLAG_KEY: Record<
   "backlash-dispel-window": "backlashDispel",
   "kick-priority-missed": "kickPriority",
   "kick-priority-team": "kickPriority",
+  "teammate-crisis-idle": "teammateCrisis",
+  "teammate-crisis-triage": "teammateCrisis",
 };
 
 function newCandidateLegendLines(candidates: CandidateEvent[]): string[] {

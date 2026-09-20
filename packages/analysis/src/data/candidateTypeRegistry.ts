@@ -82,6 +82,7 @@ export const CANDIDATE_TYPE_FLAG_KEYS = [
   "killReview",
   "backlashDispel",
   "kickPriority",
+  "teammateCrisis",
 ] as const;
 export type CandidateTypeFlagKey = (typeof CANDIDATE_TYPE_FLAG_KEYS)[number];
 
@@ -168,24 +169,6 @@ export const CANDIDATE_TYPE_REGISTRY: Readonly<
     issue: "GH #58 (successor of death-unused-defensive)",
     reason:
       "Healer v1: incoming ≥10 % watershed + outcome reference, no rating line. Replaces death-unused-defensive.",
-  },
-  "teammate-crisis-idle": {
-    status: "live",
-    surface: "card",
-    origin: "candidate",
-    since: "2026-09-17",
-    issue: "GH #95",
-    reason:
-      'Healer-side twin of crisis-no-response: a TEAMMATE crossed the crisis line, the healer was free through the window (actionBlockedAt at t..t+3 s, no channel in flight, ≤40 yd, LoS true, mana ≥10 %), cast nothing, no carried HoT ticking, teammate did not answer either. User 2026-09-17: an accusation ("这个东西可以做一下指控"), overruling codex R3\'s observation-only ruling on the strength of the feasibility door — 60 clean-idle points / 11,536 rounds (0.0052 per round, teammate death 77 % vs 7–13 % answered under identical exclusions).',
-  },
-  "teammate-crisis-triage": {
-    status: "live",
-    surface: "card",
-    origin: "candidate",
-    since: "2026-09-17",
-    issue: "GH #95 (question 4)",
-    reason:
-      "Healer free / in reach / in LoS, answered neither the crossing teammate nor…, and spent the window casting on a friendly whose HP was above the crisis line while the crossing teammate did not answer either. User 2026-09-17 「1 我觉得可以」. Full archive: teammate died 35 % when the other recipient was not in crisis vs 18 % when they were; with the teammate-did-not-answer condition only Solo Shuffle clears the 50 floor (85 / 73: 44 % vs 21 %), 3v3 has 36 / 14 and stays silent.",
   },
   "external-unused": {
     status: "live",
@@ -381,6 +364,26 @@ export const CANDIDATE_TYPE_REGISTRY: Readonly<
       "GH #50 (d) / GH #77 (normalised form re-tested 2026-09-11, still retired)",
     reason:
       "用户裁定「梯度仍平则下架」。机会归一化后的技能梯度(12.1 首周归档 10,682 场 / 23,056 回合;分母=我方对齐爆发开启时自己的控场大招可用,cdAvailableAt):转化率各分段 20–25%,单排未转化率 82.8→88.2% 随分数上升,胜负差 +2–4pp、2400+ 反转;前置窗口变体 [−10,+5]s 每段一致 +6pp、梯度依旧平。GH #77 的 casts-forfeited 口径预注册门 <50% 失败(79.5% 回合弃投)。纯函数 ccHeldEvents 保留。",
+  },
+  "teammate-crisis-idle": {
+    status: "retired",
+    surface: "card",
+    origin: "candidate",
+    flag: "teammateCrisis",
+    since: "2026-09-19",
+    issue: "GH #95",
+    reason:
+      "用户 2026-09-19「这个指控感觉有一点太难定义了,现在暂时也不做了吧」。当天先按用户裁决加 priorDeath 排除(已有人阵亡不提示):全量 63,303 场干净空闲 534 → 39(3v3 490 → 1;被砍的 469 个在己方减员之后 —— 这张卡原来说的是「2v3 之后治疗不操作了」),没有格过 50 的样本门。随后 codex astra 两轮辩论(逐条核过):有应对对照组不要求「队友也没应对」而空闲组要求(对称后单排 10% → 15%);可行性门只在 t 取距离 / 视线、被控只抽查 0/1/2/3 s、无蓝量读数算通过、不要求手上有可用的救人技能 —— 只能说「没发现做不到的理由」。09-17 落地时的数字(60 个 / 11,536 回合,阵亡 77% vs 7–13%)是 priorDeath 伪影。teammateCrisisPoints、纯函数 teammateCrisisIdleEvents、参照表与第 19 类门规都保留;用户 09-13 要的「时机」形态(晚了几秒 / 提前交)未进产品。",
+  },
+  "teammate-crisis-triage": {
+    status: "retired",
+    surface: "card",
+    origin: "candidate",
+    flag: "teammateCrisis",
+    since: "2026-09-19",
+    issue: "GH #95 (question 4)",
+    reason:
+      "与 teammate-crisis-idle 同一裁决、同一开关。codex astra 2026-09-19:「救错人 vs 救对人」两臂都要求治疗没应对这个队友,差别只是另一个被治疗者当时血量 —— 比的是局面(集火一人 vs 伤害分摊)不是决策,且结果只看这一个队友死没死;治疗自己被集火时 45% 自疗、给 70% 队友驱散控制都会进「救错人」;只要求第一个被治疗者血量已知。priorDeath 后单排 71 / 60(52% vs 23%,按承伤档重加权仍差 ≈25pp,但竞争威胁 / 已有保护 / 存活时间都没控制);20–30% 档 43% vs 44%;3v3 26 / 10、2v2 21 / 10 不过门。用户:要把伤情和已有保护结合起来看,现在没有这个判断。降级成不带阵亡对比的事实行 = 待价值门(先给真实例子)。",
   },
   "missed-purge": {
     status: "retired",

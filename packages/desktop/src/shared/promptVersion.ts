@@ -576,4 +576,9 @@
 //  (user confirmed on the numbers). teammate-crisis-triage still renders in
 //  Solo Shuffle only: 85 / 73 (44 % vs 21 %) → 71 / 60 (52 % vs 23 %).
 //  teammateCrisisPriorGenerated.json re-scanned, predicateVersion 2.
-export const PROMPT_VERSION = 82;
+//  v83 (2026-09-19, user ruling 「这个指控感觉有一点太难定义了 … 现在暂时也不做了吧」
+//  after a two-round codex astra debate): teammate-crisis-idle and
+//  teammate-crisis-triage retired behind one registry flag (teammateCrisis).
+//  The only card still rendering was triage in Solo Shuffle; both reasons and
+//  the numbers are in candidateTypeRegistry.ts. [STACKED DEFENSIVES] stays.
+export const PROMPT_VERSION = 83;

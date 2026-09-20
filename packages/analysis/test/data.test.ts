@@ -60,6 +60,7 @@ describe("data layer", () => {
       backlashDispel: true,
       // 2026-09-12 上线(GH #78,用户裁决 1 有用 / 2 门 50% / 3 队友版带距离)
       kickPriority: true,
+      teammateCrisis: false,
     });
   });
 });

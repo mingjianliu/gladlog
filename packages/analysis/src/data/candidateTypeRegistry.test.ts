@@ -98,6 +98,8 @@ describe("candidateTypeRegistry: the 2026-09-12 derivation is a no-op", () => {
       backlashDispel: true,
       // + kick-priority (GH #78, 2026-09-12) — the first flag added AFTER the derivation
       kickPriority: true,
+      // + teammate-crisis (GH #95) — added 2026-09-19 already retired (user ruling)
+      teammateCrisis: false,
     });
   });
 
