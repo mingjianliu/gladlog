@@ -256,6 +256,19 @@ NPC list, user ruling “probably from earlier versions, gone”: Earthen Wall, 
 
 Overkill holds as kill evidence for pets too: kills with a `UNIT_DIED` come back no slower than overkill-only ones (hunter median 3.6 s vs 9.8 s, warlock 18.7 s vs 28.3 s). The very short hunter outages are consistent with Call Pet being instant (another pet from the stable), which the log cannot distinguish from a revive. **Reading:** rare for both (about 1 round in 20). For a hunter the outage is short. For a warlock the user's intuition holds — half the time the pet never returns, and with it go the interrupt, the dispel and Soul Link. A `[PET DOWN]` context line is renderable from the same `nonPlayerUnitKill` predicate (the script prints examples with `--show N`); **not proposed until the user asks for it in the prompt** — the ruling on Counterstrike Totem (“as long as we can parse it correctly”) applies here as well.
 
+### Direction 5: equipment and dynamic talents — mini-probe, closed
+
+Scoped by the user's yardstick from direction 3 (“rotation-level detail does not affect the big picture”): the numeric side of `COMBATANT_INFO` — stat scalars, enchant / gem / bonus-id lists — is the same kind of thing as mana and secondary resources and was not pursued. The one big-picture question here is whether the product can describe the WRONG loadout. `npx tsx packages/eval/scripts/loadoutChangeScan.ts <manifest.txt> 400`, 107 Solo Shuffle lobbies, 642 player-lobbies:
+
+| Changed between rounds of one lobby |                                                             Player-lobbies |
+| ----------------------------------- | -------------------------------------------------------------------------: |
+| anything                            |                                                               227 (35.4 %) |
+| PvP talents                         |                                                               151 (23.5 %) |
+| class / spec talents                | 138 (21.5 %), median 2 talent entries, spread evenly over rounds 1→2 … 5→6 |
+| equipment                           |                                                                  8 (1.2 %) |
+
+**No defect:** `l3/compose.ts` `buildShuffleRound` builds every round's `info` from that round's own `COMBATANT_INFO`, so talent-aware analysis already reads the right loadout per round; the `rounds[0]` reads in `matchStore.ts` feed index metadata only. Loadouts cannot change inside a round, so there is no “dynamic talent” state to replay. The observable fact — a third of players re-spec between shuffle rounds, mostly PvP talents — is recorded; “the enemy swapped a PvP talent against you in round 4” would be a new context fact and is **not proposed** here.
+
 Proceed one direction at a time; report a concrete evidence-backed result before widening scope:
 
 1. **Facing:** verify actor ownership, angle units/range, sampling gaps and same-actor same-time consistency. Determine what can be preserved; do not infer camera direction or tactical intent.
