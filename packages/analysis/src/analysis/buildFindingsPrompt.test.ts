@@ -304,6 +304,7 @@ describe("P1/P2 起爆候选图例(Task 4,2026-08-15,特性开关接线;Task 9 �
       windowEndT: "447",
       healer: "Enemy-Healer",
       cc: "Polymorph",
+      dr: "Full",
       durationS: "8",
       readyCds: "Avenging Wrath",
     },

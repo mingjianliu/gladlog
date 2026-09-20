@@ -3307,6 +3307,7 @@ describe("missed-sync-window / unsynced-burst 接线(extractCandidateFindings,20
     expect(msw).toHaveLength(1);
     expect(msw[0]!.facts["cellKey"]).toBe("3v3");
     expect(msw[0]!.facts["refN"]).toBeTruthy();
+    expect(msw[0]!.facts["dr"]).toBe("Full");
   });
 
   it("同一 fixture 直调纯函数(用真实 analyzeOutgoingCCChains/extractMajorCooldowns 数据,不是手搭 fixture)仍产出两条——证明数据条件本身没坏,菜单接线已按「退役到零件」摘除", () => {

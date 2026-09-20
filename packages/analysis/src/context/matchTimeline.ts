@@ -1489,7 +1489,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
           );
           const upKicks = states.filter((s) => s.cdRemainingSeconds === 0);
           if (upKicks.length > 0) {
-            interruptNote = ` | enemy interrupts UP: ${upKicks.map((s) => `${s.spellName}/${s.spec}`).join(", ")}`;
+            interruptNote = ` | enemy interrupts UP: ${upKicks.map((s) => s.assumedReady ? `${s.spellName}/${s.spec} (assumed)` : `${s.spellName}/${s.spec}`).join(", ")}`;
           } else if (states.length > 0) {
             interruptNote = " | no enemy interrupt available (all on CD)";
           }

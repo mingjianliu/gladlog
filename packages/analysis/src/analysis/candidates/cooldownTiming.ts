@@ -31,6 +31,7 @@ import {
 import {
   analyzeOutgoingCCChains,
   DR_CATEGORY_MAP,
+  type DRLevel,
 } from "../../utils/drAnalysis";
 import { castFailedInWindow, type RawStreams } from "../../utils/rawStreams";
 import {
@@ -78,6 +79,7 @@ export interface IEnemyHealerCcWindow {
   spellName: string;
   spellId: string;
   healerName: string;
+  drLevel?: DRLevel;
 }
 
 /**
@@ -120,6 +122,7 @@ export function enemyHealerCcWindows(
         spellName: app.spellName,
         spellId: app.spellId,
         healerName: chain.targetName,
+        drLevel: app.drInfo.level,
       });
     }
   }
@@ -311,6 +314,7 @@ export function missedSyncWindowEvents(
           windowEndT: String(windowEndT),
           healer: w.healerName,
           cc: w.spellName,
+          dr: w.drLevel ?? "Full",
           // Render-grid anchoring (CLAUDE.md 门规谓词即规范): derived from the
           // ALREADY-floored t/windowEndT, not the raw fractional seconds.
           durationS: String(windowEndT - t),

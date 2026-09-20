@@ -1,8 +1,16 @@
-import { CombatUnitClass, CombatUnitSpec, type ICombatUnit } from "@gladlog/parser-compat";
+import {
+  CombatUnitClass,
+  CombatUnitSpec,
+  type ICombatUnit,
+  LogEvent,
+} from "@gladlog/parser-compat";
 import { describe, expect, it } from "vitest";
 
 import kitRaw from "../data/interruptKitGenerated.json";
-import { interruptForUnit } from "./enemyInterrupts";
+import {
+  computeEnemyInterruptAvailability,
+  interruptForUnit,
+} from "./enemyInterrupts";
 
 const KIT = (kitRaw as unknown as { interrupts: Record<string, { talent: Record<string, { nodeId: number; entryId: number }> }> }).interrupts;
 const unit = (cls: CombatUnitClass, spec: CombatUnitSpec, over: Partial<ICombatUnit> = {}): ICombatUnit =>
@@ -59,5 +67,62 @@ describe("interruptForUnit — `confirmed` provenance (codex round-1, 2026-09-12
     expect(interruptForUnit(unit(CombatUnitClass.Paladin, ret, { info: { talents: taken("96231", ret) } as never }))?.confirmed).toBe(true);
     expect(interruptForUnit(unit(CombatUnitClass.Paladin, ret))?.confirmed).toBe(false);
     expect(interruptForUnit(unit(CombatUnitClass.Warlock, CombatUnitSpec.Warlock_Affliction, { petSpellCastEvents: [{ spellId: "19647", logLine: { event: "SPELL_CAST_SUCCESS", timestamp: 1 } }] as never }))?.confirmed).toBe(false);
+  });
+});
+
+describe("computeEnemyInterruptAvailability — seen & assumedReady tracking (GH #88, B8)", () => {
+  it("marks interrupt as assumedReady: true and seen: false when enemy never cast it at/before atMs", () => {
+    const warrior = unit(CombatUnitClass.Warrior, CombatUnitSpec.Warrior_Arms, { name: "Warrior" });
+    const states = computeEnemyInterruptAvailability([warrior], 30_000);
+    expect(states).toHaveLength(1);
+    expect(states[0]).toMatchObject({
+      enemyName: "Warrior",
+      spellName: "Pummel",
+      cdRemainingSeconds: 0,
+      seen: false,
+      assumedReady: true,
+    });
+  });
+
+  it("marks interrupt as seen: true and assumedReady: false when on cooldown", () => {
+    const warrior = unit(CombatUnitClass.Warrior, CombatUnitSpec.Warrior_Arms, {
+      name: "Warrior",
+      spellCastEvents: [
+        {
+          spellId: "6552", // Pummel (15s CD)
+          logLine: { event: LogEvent.SPELL_CAST_SUCCESS, timestamp: 25_000 },
+        } as never,
+      ],
+    });
+    const states = computeEnemyInterruptAvailability([warrior], 30_000); // 5s after cast -> 10s left
+    expect(states).toHaveLength(1);
+    expect(states[0]).toMatchObject({
+      enemyName: "Warrior",
+      spellName: "Pummel",
+      cdRemainingSeconds: 10,
+      seen: true,
+      assumedReady: false,
+    });
+  });
+
+  it("marks interrupt as seen: true and assumedReady: false when cast previously and ready again", () => {
+    const warrior = unit(CombatUnitClass.Warrior, CombatUnitSpec.Warrior_Arms, {
+      name: "Warrior",
+      spellCastEvents: [
+        {
+          spellId: "6552", // Pummel (15s CD)
+          logLine: { event: LogEvent.SPELL_CAST_SUCCESS, timestamp: 10_000 },
+        } as never,
+      ],
+    });
+    const states = computeEnemyInterruptAvailability([warrior], 30_000); // 20s after cast -> ready
+    expect(states).toHaveLength(1);
+    expect(states[0]).toMatchObject({
+      enemyName: "Warrior",
+      spellName: "Pummel",
+      cdRemainingSeconds: 0,
+      seen: true,
+      assumedReady: false,
+    });
   });
 });

@@ -120,12 +120,17 @@ export interface IEnemyInterruptState {
   spellName: string;
   /** Seconds until the interrupt is available again; 0 = ready now. */
   cdRemainingSeconds: number;
+  /** Whether the enemy has been observed casting this interrupt at or before atMs (GH #88, B8). */
+  seen: boolean;
+  /** Whether this interrupt is assumed ready (ready on cooldown, but never yet observed cast in this match at or before atMs). */
+  assumedReady: boolean;
 }
 
 /**
- * B128: for each enemy that has an interrupt, its ready/on-cooldown state at atMs. An interrupt is on
- * cooldown when the enemy cast it within its cooldown window; otherwise it is ready (including when it
- * was never cast). This lets the timeline show whether an owner channel could have been kicked.
+ * B128 / GH #88 (B8): for each enemy that has an interrupt, its ready/on-cooldown/assumed-ready state at atMs.
+ * An interrupt is on cooldown when the enemy cast it within its cooldown window; otherwise it is ready.
+ * If it has never yet been cast at or before atMs, it is marked as `assumedReady: true` and `seen: false`,
+ * preventing consumers from falsely accusing the player of hardcasting in range when the enemy never kicks.
  */
 export function computeEnemyInterruptAvailability(
   enemies: ICombatUnit[],
@@ -141,11 +146,22 @@ export function computeEnemyInterruptAvailability(
     const cdRemainingSeconds = Math.round(
       interruptCooldownRemainingMs(enemy, def.spellId, atMs) / 1000,
     );
+    const seen = [
+      ...(enemy.spellCastEvents ?? []),
+      ...(enemy.petSpellCastEvents ?? []),
+    ].some(
+      (e) =>
+        e.spellId === def.spellId &&
+        e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+        e.logLine.timestamp <= atMs,
+    );
     result.push({
       enemyName: enemy.name,
       spec: specToString(enemy.spec),
       spellName: def.name,
       cdRemainingSeconds,
+      seen,
+      assumedReady: cdRemainingSeconds === 0 && !seen,
     });
   }
   return result;
