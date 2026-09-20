@@ -269,6 +269,46 @@ describe("analyzePlayerCCAndTrinket — root/disarm/interrupt tracking", () => {
 
     expect(result.interruptInstances).toHaveLength(0);
   });
+
+  it("computes nearestKickerDistYd and kickersInRange when position data exists (GH #73, B6)", () => {
+    const kick = makeInterruptEvent(
+      "1766",
+      "Kick",
+      "116",
+      "Frostbolt",
+      MATCH_START + 20_000,
+      "enemy-1",
+      "EnemyA",
+    );
+    const player = makeUnit("player-1", {
+      actionIn: [kick],
+      advancedActions: [
+        {
+          timestamp: MATCH_START + 20_000,
+          advancedActorPositionX: 0,
+          advancedActorPositionY: 0,
+        },
+      ] as any,
+    });
+    const enemy = makeUnit("enemy-1", {
+      name: "EnemyA",
+      reaction: CombatUnitReaction.Hostile,
+      class: CombatUnitClass.Rogue,
+      spec: CombatUnitSpec.Rogue_Assassination,
+      advancedActions: [
+        {
+          timestamp: MATCH_START + 20_000,
+          advancedActorPositionX: 3,
+          advancedActorPositionY: 4,
+        },
+      ] as any,
+    });
+
+    const result = analyzePlayerCCAndTrinket(player, [enemy], makeCombat());
+    expect(result.interruptInstances).toHaveLength(1);
+    expect(result.interruptInstances[0].nearestKickerDistYd).toBe(5);
+    expect(result.interruptInstances[0].kickersInRange).toBe(1);
+  });
 });
 
 describe("analyzePlayerCCAndTrinket — trinketCDSecondsLeft", () => {

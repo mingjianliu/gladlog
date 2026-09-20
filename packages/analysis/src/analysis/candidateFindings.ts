@@ -900,6 +900,8 @@ export function kickEatenEvents(
     | "switchSpellName"
     | "switchDelayS"
     | "switchWasHardCast"
+    | "nearestKickerDistYd"
+    | "kickersInRange"
     | "postKick"
   >[],
   owner: { id: string; name: string },
@@ -933,6 +935,12 @@ export function kickEatenEvents(
         kick: k.kickSpellName,
         source: k.sourceName,
         lockout: k.lockoutDurationSeconds.toFixed(1),
+        ...(k.nearestKickerDistYd != null
+          ? { nearestKickerDistYd: k.nearestKickerDistYd.toFixed(1) }
+          : {}),
+        ...(k.kickersInRange != null
+          ? { kickersInRange: String(k.kickersInRange) }
+          : {}),
         // BACKLOG #36(b): the behavior fact the model can actually coach on.
         // 2026-09-06: the `switched` wording used to assert "kept playing
         // through the lockout (other school, first cast Xs later)". Two

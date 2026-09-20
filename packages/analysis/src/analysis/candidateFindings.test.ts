@@ -1630,6 +1630,20 @@ describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
     expect(unknown).not.toContain("hard cast");
     expect(unknown).not.toContain("instant");
   });
+
+  it("kick-eaten: carries nearestKickerDistYd and kickersInRange facts when present (GH #73, B6)", () => {
+    const evts = kickEatenEvents(
+      [
+        switchedInst({
+          nearestKickerDistYd: 4.2,
+          kickersInRange: 2,
+        }),
+      ],
+      { id: "P1", name: "Me" },
+    );
+    expect(evts[0]!.facts["nearestKickerDistYd"]).toBe("4.2");
+    expect(evts[0]!.facts["kickersInRange"]).toBe("2");
+  });
 });
 
 describe("healingGapEvents(HEAL-001,2026-08-30 HP-crisis 门 change 1/5)", () => {

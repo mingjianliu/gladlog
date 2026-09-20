@@ -30,8 +30,14 @@ import {
   hasLineOfSight,
 } from "./losAnalysis";
 import {
+  interruptCooldownRemainingMs,
+  interruptForUnit,
+} from "./enemyInterrupts";
+import { spellRangeYards } from "../data/spellReach";
+import {
   CC_MAX_PLAUSIBLE_RANGE_YARDS,
   INTERP_MAX_GAP_MS,
+  LOS_SWEEP_GAP_MS,
 } from "./positionSampling";
 import { fmtTime } from "./renderGrid";
 import { getTalentAvoidanceBuffs } from "./talentBehaviors";
@@ -527,6 +533,10 @@ export interface IInterruptInstance {
    * trinket — while the prompt asserted "kept playing through the lockout".
    * The classification itself is unchanged; only what the line may CLAIM is. */
   switchWasHardCast: boolean | null;
+  /** Distance in yards to the nearest enemy kicker at cast start (GH #73, B6). */
+  nearestKickerDistYd: number | null;
+  /** Number of enemy kickers in kick range with interrupt available at cast start (GH #73, B6). */
+  kickersInRange: number | null;
 }
 
 export interface ICCAvoidedInstance {
@@ -1051,6 +1061,56 @@ export function analyzePlayerCCAndTrinket(
     // same table and the same fallback — inlining it on each side is a breeding
     // ground for divergence.
     const lockoutDurationSeconds = kickLockoutSeconds(kickSpellId);
+    const interruptedSpellId = extraAction.extraSpellId ?? "";
+
+    // B6: Find cast start to measure positioning/spacing at cast start
+    const castStartEvent = (player.castStartEvents ?? [])
+      .filter(
+        (e) =>
+          e.spellId === interruptedSpellId &&
+          e.logLine.timestamp <= action.timestamp &&
+          e.logLine.timestamp >= action.timestamp - 10_000,
+      )
+      .sort((a, b) => b.logLine.timestamp - a.logLine.timestamp)[0];
+    const castStartMs = castStartEvent?.logLine.timestamp ?? action.timestamp;
+
+    let nearestKickerDistYd: number | null = null;
+    let kickersInRange: number | null = null;
+    const playerPos =
+      getUnitPositionAtTime(player, castStartMs, LOS_SWEEP_GAP_MS) ??
+      getUnitPositionAtTime(player, action.timestamp, LOS_SWEEP_GAP_MS);
+
+    if (playerPos) {
+      let countInRange = 0;
+      let minDist = Infinity;
+      for (const enemy of enemies) {
+        const kit = interruptForUnit(enemy);
+        if (!kit) continue;
+        const cdLeft = interruptCooldownRemainingMs(
+          enemy,
+          kit.spellId,
+          castStartMs,
+        );
+        if (cdLeft > 0) continue; // kick was on CD at cast start
+        const enemyPos =
+          getUnitPositionAtTime(enemy, castStartMs, LOS_SWEEP_GAP_MS) ??
+          getUnitPositionAtTime(enemy, action.timestamp, LOS_SWEEP_GAP_MS);
+        if (!enemyPos) continue;
+        const dist = distanceBetween(playerPos, enemyPos);
+        if (dist < minDist) {
+          minDist = dist;
+        }
+        const range = spellRangeYards(kit.spellId) ?? 5;
+        if (dist <= range) {
+          countInRange++;
+        }
+      }
+      if (minDist !== Infinity) {
+        nearestKickerDistYd = Math.round(minDist * 10) / 10;
+        kickersInRange = countInRange;
+      }
+    }
+
     interruptInstances.push({
       atSeconds: (action.timestamp - matchStartMs) / 1000,
       lockoutDurationSeconds,
@@ -1058,12 +1118,14 @@ export function analyzePlayerCCAndTrinket(
       switchSpellName: null,
       switchDelayS: null,
       switchWasHardCast: null,
+      nearestKickerDistYd,
+      kickersInRange,
       firstActionDelayS: null,
       kickSpellId,
       kickSpellName: getEnglishSpellName(kickSpellId, action.spellName),
-      interruptedSpellId: extraAction.extraSpellId ?? "",
+      interruptedSpellId,
       interruptedSpellName: getEnglishSpellName(
-        extraAction.extraSpellId ?? "",
+        interruptedSpellId,
         extraAction.extraSpellName,
       ),
       sourceName: action.srcUnitName,
