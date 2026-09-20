@@ -42,6 +42,8 @@ describe("classifyKickedSpell — GH #79 interrupted spell classification", () =
     expect(classifyKickedSpell("34914")).toBe("damage"); // Vampiric Touch
     expect(classifyKickedSpell("263165")).toBe("damage"); // Void Torrent
     expect(classifyKickedSpell("30451")).toBe("damage"); // Arcane Blast
+    expect(classifyKickedSpell("2812")).toBe("damage"); // Denounce (mixed flags in DB2, offensive cast)
+    expect(classifyKickedSpell("323673")).toBe("damage"); // Mindgames (mixed flags in DB2, offensive cast)
   });
 
   it("classifies utility/dispel as 'other'", () => {

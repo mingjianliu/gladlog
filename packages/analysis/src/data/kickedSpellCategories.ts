@@ -43,6 +43,8 @@ export const KICKED_CONTROL_OVERRIDE_IDS = new Set<string>([
 ]);
 
 export const KICKED_DAMAGE_OVERRIDE_IDS = new Set<string>([
+  "2812", // Denounce (Holy Paladin offensive cast with mixed heal/damage flags)
+  "323673", // Mindgames (Priest offensive cast with mixed heal/damage flags)
   "191634", // Stormkeeper (Elemental Shaman burst cast)
   "228260", // Voidform (Shadow Priest burst cast)
   "265187", // Summon Demonic Tyrant (Warlock burst cast)
