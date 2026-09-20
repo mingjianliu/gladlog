@@ -70,9 +70,11 @@ import {
   wasRemovedByAllyDispel,
 } from "../utils/dispelAnalysis";
 import {
+  detectTeammateDrClashes,
   extractAoeCCEvents,
   IAoeCCEvent,
   IOutgoingCCChain,
+  ITeammateDrClash,
 } from "../utils/drAnalysis";
 import { enemyDefensiveEvents } from "../utils/enemyDefensives";
 import { IEnemyCDCast, IEnemyCDTimeline } from "../utils/enemyCDs";
@@ -162,6 +164,11 @@ function isDeferredSnapshot(line: unknown): line is DeferredSnapshot {
 }
 
 // ── buildMatchTimeline ─────────────────────────────────────────────────────
+
+export const DR_CLASH_LEGEND = [
+  "  [DR CLASH] = a friendly CC landed at diminished DR (50% or Immune) because another teammate",
+  "    used a CC in the same category within the reset window — a timing note about DR conflict, not a verdict.",
+];
 
 export interface BuildMatchTimelineParams {
   owner: ICombatUnit;
@@ -2841,6 +2848,33 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     addEntry(e.atSeconds, `${fmtTime(e.atSeconds)}  ${e.line}`);
   }
 
+  // ── [DR CLASH] context lines (GH #67 S3) ──────────────────────────────────
+  // A friendly CC landed at diminished DR because another teammate put the
+  // target on DR earlier within the reset window.
+  const teammateDrClashes: ITeammateDrClash[] =
+    outgoingCCChains && outgoingCCChains.length > 0
+      ? detectTeammateDrClashes(outgoingCCChains, matchStartMs)
+      : [];
+
+  const DR_CLASH_CAP = 3;
+  const drClashEntries: Array<{ atSeconds: number; line: string }> = [];
+  for (const clash of teammateDrClashes) {
+    if (clash.atSeconds > matchEndSeconds) continue;
+    if (drClashEntries.length >= DR_CLASH_CAP) break;
+    const victimWho =
+      clash.diminishedCasterName === owner.name
+        ? "your"
+        : `${pid(clash.diminishedCasterName)}'s`;
+    const priorWho =
+      clash.priorCasterName === owner.name
+        ? "your"
+        : `${pid(clash.priorCasterName)}'s`;
+    const target = pid(clash.targetName);
+    const line = `[DR CLASH]   ${victimWho} ${clash.diminishedSpellName} on ${target} landed at ${clash.level} DR (${clash.category}) — ${priorWho} ${clash.priorSpellName} ${clash.gapSeconds}s earlier put them on DR`;
+    drClashEntries.push({ atSeconds: clash.atSeconds, line });
+    addEntry(clash.atSeconds, `${fmtTime(clash.atSeconds)}  ${line}`);
+  }
+
   // ── [HEALER INACTIVITY] events (healer only) ────────────────────────────────────
 
   if (isHealer) {
@@ -3319,6 +3353,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     ...(burstAnsweredEntries.length > 0 ? BURST_ANSWERED_LEGEND : []),
     ...(cdPriorEntries.length > 0 ? CD_PRIOR_LEGEND : []),
     ...(stackedDefensiveEntries.length > 0 ? STACKED_DEFENSIVES_LEGEND : []),
+    ...(drClashEntries.length > 0 ? DR_CLASH_LEGEND : []),
     "",
     `[PERSPECTIVE: Log Owner - ${ownerSpec}]`,
     `(You are the ${ownerSpec} in this match. Your actions are marked with [YOU].)`,

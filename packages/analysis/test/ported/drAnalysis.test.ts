@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 import {
   computeIncomingDR,
+  detectTeammateDrClashes,
   DR_RESET_CUTOVER_EPOCH_MS,
   DR_RESET_MS_121,
   DR_RESET_MS_PRE_121,
@@ -971,5 +972,148 @@ describe("formatOutgoingCCChainsForContext", () => {
       "## CC Chains",
       "  Retribution Paladin (RetPal): 4 CC — 4× Cyclone | 2 reduced",
     ]);
+  });
+});
+
+describe("detectTeammateDrClashes", () => {
+  const matchStartMs = Date.UTC(2026, 8, 1, 0, 0, 0); // 12.1 era (20s reset)
+
+  it("detects cross-teammate DR clash when Teammate B lands diminished CC after Teammate A", () => {
+    const chains: IOutgoingCCChain[] = [
+      {
+        targetName: "EnemyHealer",
+        targetSpec: "Restoration Shaman",
+        applications: [
+          {
+            atSeconds: 10,
+            durationSeconds: 4,
+            spellId: "1776",
+            spellName: "Gouge",
+            casterName: "RoguePlayer",
+            casterSpec: "Subtlety Rogue",
+            drInfo: { category: "Incapacitate", level: "Full", sequenceIndex: 0 },
+          },
+          {
+            atSeconds: 20,
+            durationSeconds: 3,
+            spellId: "3355",
+            spellName: "Freezing Trap",
+            casterName: "HunterPlayer",
+            casterSpec: "Survival Hunter",
+            drInfo: { category: "Incapacitate", level: "50%", sequenceIndex: 1 },
+          },
+        ],
+      },
+    ];
+
+    const clashes = detectTeammateDrClashes(chains, matchStartMs);
+    expect(clashes).toHaveLength(1);
+    expect(clashes[0]).toMatchObject({
+      targetName: "EnemyHealer",
+      category: "Incapacitate",
+      level: "50%",
+      atSeconds: 20,
+      priorCasterName: "RoguePlayer",
+      priorSpellName: "Gouge",
+      diminishedCasterName: "HunterPlayer",
+      diminishedSpellName: "Freezing Trap",
+      gapSeconds: 10,
+    });
+  });
+
+  it("ignores self-inflicted DR (same caster)", () => {
+    const chains: IOutgoingCCChain[] = [
+      {
+        targetName: "EnemyHealer",
+        targetSpec: "Restoration Shaman",
+        applications: [
+          {
+            atSeconds: 10,
+            durationSeconds: 4,
+            spellId: "1776",
+            spellName: "Gouge",
+            casterName: "RoguePlayer",
+            casterSpec: "Subtlety Rogue",
+            drInfo: { category: "Incapacitate", level: "Full", sequenceIndex: 0 },
+          },
+          {
+            atSeconds: 18,
+            durationSeconds: 2,
+            spellId: "1776",
+            spellName: "Gouge",
+            casterName: "RoguePlayer",
+            casterSpec: "Subtlety Rogue",
+            drInfo: { category: "Incapacitate", level: "50%", sequenceIndex: 1 },
+          },
+        ],
+      },
+    ];
+
+    const clashes = detectTeammateDrClashes(chains, matchStartMs);
+    expect(clashes).toHaveLength(0);
+  });
+
+  it("ignores applications where reset window has already elapsed", () => {
+    const chains: IOutgoingCCChain[] = [
+      {
+        targetName: "EnemyHealer",
+        targetSpec: "Restoration Shaman",
+        applications: [
+          {
+            atSeconds: 10,
+            durationSeconds: 4, // ends at 14s. Reset is 20s -> 34s
+            spellId: "1776",
+            spellName: "Gouge",
+            casterName: "RoguePlayer",
+            casterSpec: "Subtlety Rogue",
+            drInfo: { category: "Incapacitate", level: "Full", sequenceIndex: 0 },
+          },
+          {
+            atSeconds: 36, // > 14 + 20 = 34s
+            durationSeconds: 3,
+            spellId: "3355",
+            spellName: "Freezing Trap",
+            casterName: "HunterPlayer",
+            casterSpec: "Survival Hunter",
+            drInfo: { category: "Incapacitate", level: "50%", sequenceIndex: 1 },
+          },
+        ],
+      },
+    ];
+
+    const clashes = detectTeammateDrClashes(chains, matchStartMs);
+    expect(clashes).toHaveLength(0);
+  });
+
+  it("separates different DR categories (Stun vs Incapacitate do not clash)", () => {
+    const chains: IOutgoingCCChain[] = [
+      {
+        targetName: "EnemyHealer",
+        targetSpec: "Restoration Shaman",
+        applications: [
+          {
+            atSeconds: 10,
+            durationSeconds: 4,
+            spellId: "408",
+            spellName: "Kidney Shot",
+            casterName: "RoguePlayer",
+            casterSpec: "Subtlety Rogue",
+            drInfo: { category: "Stun", level: "Full", sequenceIndex: 0 },
+          },
+          {
+            atSeconds: 15,
+            durationSeconds: 6,
+            spellId: "3355",
+            spellName: "Freezing Trap",
+            casterName: "HunterPlayer",
+            casterSpec: "Survival Hunter",
+            drInfo: { category: "Incapacitate", level: "Full", sequenceIndex: 0 },
+          },
+        ],
+      },
+    ];
+
+    const clashes = detectTeammateDrClashes(chains, matchStartMs);
+    expect(clashes).toHaveLength(0);
   });
 });

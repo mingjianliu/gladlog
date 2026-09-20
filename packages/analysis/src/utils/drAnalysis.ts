@@ -599,6 +599,92 @@ export function analyzeOutgoingCCChains(
     .filter((chain) => chain.applications.length > 0);
 }
 
+export interface ITeammateDrClash {
+  targetName: string;
+  targetSpec: string;
+  category: string;
+  level: DRLevel;
+  atSeconds: number;
+  priorCasterName: string;
+  priorCasterSpec: string;
+  priorSpellId: string;
+  priorSpellName: string;
+  priorAtSeconds: number;
+  priorDurationSeconds: number;
+  diminishedCasterName: string;
+  diminishedCasterSpec: string;
+  diminishedSpellId: string;
+  diminishedSpellName: string;
+  gapSeconds: number;
+}
+
+/**
+ * Detects instances where a friendly CC landed at diminished DR (50% or Immune)
+ * because a DIFFERENT friendly player applied a CC in the same DR category
+ * within the reset window (GH #67 S3, rulings-pending-2026-09-18).
+ *
+ * Attribution rule:
+ * - Only within the DR reset window (drResetMsAt(matchStartMs)). Beyond that,
+ *   the DR has expired and any diminishment is not caused by that prior application.
+ * - Only between different friendly casters (self-inflicted DR is a cadence issue,
+ *   not a team resource conflict).
+ */
+export function detectTeammateDrClashes(
+  chains: IOutgoingCCChain[],
+  matchStartMs: number,
+): ITeammateDrClash[] {
+  const clashes: ITeammateDrClash[] = [];
+  const resetS = drResetMsAt(matchStartMs) / 1000;
+
+  for (const chain of chains) {
+    const byCat = new Map<string, IOutgoingCCApplication[]>();
+    for (const a of chain.applications) {
+      const c = a.drInfo?.category;
+      if (!c || c === "Unknown" || c.startsWith("spell:")) continue;
+      byCat.set(c, [...(byCat.get(c) ?? []), a]);
+    }
+
+    for (const [cat, list] of byCat) {
+      const ordered = [...list].sort((x, y) => x.atSeconds - y.atSeconds);
+      for (let i = 1; i < ordered.length; i++) {
+        const a = ordered[i]!;
+        // Only real diminished tier in outgoing chains: 25% was removed in 12.0,
+        // and Immune in outgoing chains is a reconstruction artifact (landed aura
+        // events never hit true immunity; see IOutgoingCCChain comment).
+        if (a.drInfo.level !== "50%") continue;
+        const prev = ordered[i - 1]!;
+        // Chain semantics: the reset clock runs from the previous CC's END.
+        if (a.atSeconds - (prev.atSeconds + prev.durationSeconds) > resetS) {
+          continue;
+        }
+        if (prev.casterName !== a.casterName) {
+          clashes.push({
+            targetName: chain.targetName,
+            targetSpec: chain.targetSpec,
+            category: cat,
+            level: a.drInfo.level,
+            atSeconds: a.atSeconds,
+            priorCasterName: prev.casterName,
+            priorCasterSpec: prev.casterSpec,
+            priorSpellId: prev.spellId,
+            priorSpellName: prev.spellName,
+            priorAtSeconds: prev.atSeconds,
+            priorDurationSeconds: prev.durationSeconds,
+            diminishedCasterName: a.casterName,
+            diminishedCasterSpec: a.casterSpec,
+            diminishedSpellId: a.spellId,
+            diminishedSpellName: a.spellName,
+            gapSeconds: Math.round((a.atSeconds - prev.atSeconds) * 10) / 10,
+          });
+        }
+      }
+    }
+  }
+
+  clashes.sort((a, b) => a.atSeconds - b.atSeconds);
+  return clashes;
+}
+
 // ── Formatters ────────────────────────────────────────────────────────────────
 
 export const DR_LEVEL_LABEL: Record<DRLevel, string> = {

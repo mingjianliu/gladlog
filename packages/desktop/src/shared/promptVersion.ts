@@ -633,4 +633,10 @@
 //  caster-only `[ABSORBED spells from: …]`. Same 605-match acceptance set: 277
 //  notes, caster-only 277 → 0, spell-named 0 → 277, no other line changed;
 //  findings hash and every candidate count identical.
-export const PROMPT_VERSION = 88;
+//  v89 (2026-09-20, GH #67 S3 / BACKLOG B2, user approved): teammate DR clash
+//  context lines and conditional timeline legend — `[DR CLASH]` surfaces when
+//  a friendly CC landed at diminished DR (50%) within the DR reset window
+//  (drResetMsAt, 16s/20s) because a teammate previously put the same target on
+//  DR in that category. Capped at 3 per round; non-accusatory timing fact.
+//  Synthetic Immune events excluded; candidate menu untouched.
+export const PROMPT_VERSION = 89;
