@@ -146,6 +146,17 @@ What the +9 residuals say about snapshot timing: of the 4,967 non-exact interval
 
 **Direction 2 result so far.** Three of six slots have a verified meaning, one is constant, two remain unknown. L1 decodes none of them and L3 stores none. The absorb slot is the only one that is a changing combat state; whether anything should consume it (for example effective health = hp + remaining absorb wherever the product reasons about how close someone was to dying) is a user decision that, per the Value-Gate rule, starts from one complete real-match example, not from this table.
 
+**Value probe on the absorb slot — negative (2026-09-20).** `npx tsx packages/eval/scripts/shieldAtCrisisExampleGen.ts --manifest <txt> --offset 3000 --limit 600` takes the product's own crisis decision points (`crisisDecisionPoints`, the predicate behind `crisis-no-response`: HP at or below 40 %, at least 10 % of max HP taken in 2 s, a response was feasible) and reads the remaining absorb from the sample nearest the crossing (every point had one within 1 s). The product already counts what a shield **ate** as effective HP after the fact (`absorbShields.ts`, `incomingPressure.ts`); the only new information in this slot is the **unconsumed remainder**, so the question was whether that remainder changes any accusation.
+
+| 600 files                                                     | Points | Remaining absorb = 0 | under 10 % of max HP | 10 % or more |
+| ------------------------------------------------------------- | -----: | -------------------: | -------------------: | -----------: |
+| Healer, dangerous and feasible                                |    334 |                  278 |                   48 |    8 (2.4 %) |
+| Healer, **accused** (no response in 3 s) — the live candidate |     73 |                   63 |                   10 |        **0** |
+| DPS, dangerous and feasible                                   |  2,886 |                2,445 |                  365 |   76 (2.6 %) |
+| DPS, accused — built, not shipped (#59)                       |  1,184 |                  992 |                  157 |   35 (3.0 %) |
+
+By the time someone is under 40 % and still being hit, the shield is gone: it is the first thing the damage ate. On the one accusation that ships, the remainder never reached 10 % of max HP. On the unshipped DPS form it did in 3.0 % of accusations, and those died within 10 s at 4 / 35 against 150 / 1,149 for the rest — no visible difference at this size. Striking single moments exist (17 % HP under an 84 % shield), but none sits under a live accusation. **Recorded as a negative result: no consumer proposed, nothing stored.** This is a 600-file slice, not the full manifest; it is enough to decline a proposal, and would not be enough to ship one. If the DPS crisis form is ever revived, re-run this first.
+
 **Wrap-up checks (same script, same sample).**
 
 - **+9 is damage absorb only.** Over 3,891 clean Player intervals that contain `SPELL_HEAL_ABSORBED` and no `SPELL_ABSORBED`, the slot is unchanged in 3,859 (99.2 %) and moves by the heal-absorbed amount in 0.
