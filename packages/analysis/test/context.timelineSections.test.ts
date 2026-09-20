@@ -11,6 +11,7 @@ import {
 } from "../src/context/matchTimelineSections";
 import { buildMatchTimeline } from "../src/context/matchTimeline";
 import {
+  CombatUnitClass,
   CombatUnitReaction,
   CombatUnitSpec,
   CombatUnitPowerType,
@@ -1817,5 +1818,71 @@ describe("buildMatchTimeline — [UNNECESSARY] defensive-timing annotation (17c)
     );
     expect(teamLine).toBeDefined();
     expect(teamLine).toContain(`[UNNECESSARY — ${UNNECESSARY_CONTEXT}]`);
+  });
+
+  it("[CC ON TEAM]: renders Tremor Totem note even when trinket is on cooldown", () => {
+    const owner = makeUnit("PlayerYou", {
+      name: "PlayerYou",
+      spec: CombatUnitSpec.Warrior_Fury,
+    });
+    const shaman = makeUnit("Shaman1", {
+      name: "Shaman1",
+      class: CombatUnitClass.Shaman,
+      spec: CombatUnitSpec.Shaman_Restoration,
+      spellCastEvents: [
+        {
+          spellId: "8143",
+          logLine: {
+            event: LogEvent.SPELL_CAST_SUCCESS,
+            timestamp: 10_200,
+          },
+        } as any,
+      ],
+    });
+
+    const ccTrinketSummaries: IPlayerCCTrinketSummary[] = [
+      {
+        playerName: "PlayerYou",
+        playerSpec: "Fury Warrior",
+        trinketType: "Gladiator",
+        trinketCooldownSeconds: 120,
+        ccInstances: [
+          {
+            spellId: "5782",
+            spellName: "Fear",
+            atSeconds: 10,
+            durationSeconds: 0.3,
+            sourceName: "EnemyWarlock",
+            sourceSpec: "Affliction Warlock",
+            trinketState: "on_cooldown",
+            trinketCDSecondsLeft: 45,
+            distanceYards: null,
+            losBlocked: null,
+          } as any,
+        ],
+        trinketUseTimes: [],
+      },
+    ];
+
+    const timelineText = buildMatchTimeline({
+      ...baseParams,
+      owner,
+      ownerSpec: "Fury Warrior",
+      ownerCDs: [],
+      teammateCDs: [],
+      friends: [owner, shaman],
+      allUnits: [owner, shaman],
+      ccTrinketSummaries,
+    });
+
+    const lines = timelineText.split("\n");
+    const fearLine = lines.find(
+      (l) => l.includes("[CC ON TEAM]") && l.includes("Fear"),
+    );
+    expect(fearLine).toBeDefined();
+    expect(fearLine).toContain("trinket: ON CD (45s left)");
+    expect(fearLine).toContain(
+      "Tremor Totem from Shaman1 ended this CC after 0s (cut short — it had not expired)",
+    );
   });
 });

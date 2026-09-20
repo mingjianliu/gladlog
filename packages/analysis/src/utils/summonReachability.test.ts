@@ -104,4 +104,16 @@ describe("summonReach", () => {
     expect(result?.windowSeconds).toBe(5);
     expect(result?.best?.seconds).toBe(4); // 5 total, 1 blocked
   });
+
+  it("excludes dead teammates", () => {
+    const summon = createUnit("s1", CombatUnitSpec.None_None, [
+      { logLine: { event: LogEvent.SPELL_SUMMON, timestamp: 0 }, spellId: 123 },
+    ]);
+    const friend = createUnit("f1", CombatUnitSpec.Rogue_Assassination);
+    (friend as any).deathRecords = [{ timestamp: 0 }];
+
+    const result = summonReach(summon, { endTime: 5000 }, [friend], []);
+    expect(result?.windowSeconds).toBe(5);
+    expect(result?.best).toBeNull();
+  });
 });

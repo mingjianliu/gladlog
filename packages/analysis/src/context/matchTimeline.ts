@@ -2367,8 +2367,10 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       // ends it the same instant — the one tremor fact the log supports.
       // Same "cut short" wording and duration handling as the trinket break
       // (B111): the logged length is the endured time, not the CC's length.
+      const trinketBroke =
+        cc.trinketState === "used" || cc.trinketState === "racial_break";
       const tremor =
-        trinketNote === "" && !isCleansed
+        !trinketBroke && !isCleansed
           ? tremorTotemBreak(cc, matchStartMs, friends)
           : null;
       const tremorNote = tremor

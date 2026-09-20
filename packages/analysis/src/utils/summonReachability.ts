@@ -26,7 +26,7 @@ import { buildCannotCastIntervals } from "./cannotCastIntervals";
 import { isHealerSpec, isMeleeSpec } from "./cooldowns";
 import { KW_REACH_YARDS } from "./killWindowFacts";
 import { getUnitPositionAtTime } from "./losAnalysis";
-import { CLOSE_RANGE_YARDS } from "./positionAnalysis";
+import { CLOSE_RANGE_YARDS, isDeadAt } from "./positionAnalysis";
 import { LOS_SWEEP_GAP_MS } from "./positionSampling";
 import { canReachTargetAt } from "./rootReachability";
 
@@ -80,6 +80,7 @@ export function summonReach(
     const blocked = buildCannotCastIntervals(f, enemyIds);
     let ok = 0;
     for (const t of seconds) {
+      if (isDeadAt(f, t)) continue;
       if (blocked.some((b) => t >= b.from && t <= b.to)) continue;
       const from = getUnitPositionAtTime(f, t, LOS_SWEEP_GAP_MS);
       if (!from) continue;
