@@ -119,6 +119,9 @@ const segments = {
   rosterPlayersWithUnder2Samples: 0,
 };
 
+const skippedFiles: Array<{ path: string; reason: string }> = [];
+let sampledFiles = 0;
+
 for (const file of pilot.files) {
   let raw: string;
   try {
@@ -128,14 +131,18 @@ for (const file of pilot.files) {
       process.stderr.write(
         `[warn] pilot content hash mismatch: ${file.path}, skipping\n`,
       );
+      skippedFiles.push({ path: file.path, reason: "sha256_mismatch" });
       continue;
     }
   } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
     process.stderr.write(
-      `[warn] failed to read ${file.path}: ${err instanceof Error ? err.message : String(err)}, skipping\n`,
+      `[warn] failed to read ${file.path}: ${reason}, skipping\n`,
     );
+    skippedFiles.push({ path: file.path, reason });
     continue;
   }
+  sampledFiles++;
   const parsed = raw.split(/\r?\n/).map((l) => parseLine(l));
 
   // Segments: START→END, or START→next START (Solo Shuffle logs one END per
@@ -391,7 +398,8 @@ const finishCoverage = (cs: Coverage[]) => {
 };
 const result = {
   manifestSha256: pilot.manifestSha256,
-  sampledFiles: pilot.files.length,
+  sampledFiles,
+  ...(skippedFiles.length > 0 ? { skippedFiles } : {}),
   scope:
     "Player actors only, same pilot sample. Exploration sample: establishes convention and mechanism, does not estimate season rates. Coverage = share of a roster player's first-sample→death/segment-end span lying in sample gaps ≤1.5 s / ≤3 s; stealth, LoS and idle time are not separated out.",
   segments,

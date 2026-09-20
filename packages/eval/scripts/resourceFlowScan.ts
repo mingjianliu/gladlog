@@ -80,6 +80,9 @@ type Snap = {
   powers: Map<number, { current: number; max: number }>;
 };
 
+const skippedFiles: Array<{ path: string; reason: string }> = [];
+let sampledFiles = 0;
+
 for (const file of pilot.files) {
   let raw: string;
   try {
@@ -89,14 +92,18 @@ for (const file of pilot.files) {
       process.stderr.write(
         `[warn] pilot content hash mismatch: ${file.path}, skipping\n`,
       );
+      skippedFiles.push({ path: file.path, reason: "sha256_mismatch" });
       continue;
     }
   } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
     process.stderr.write(
-      `[warn] failed to read ${file.path}: ${err instanceof Error ? err.message : String(err)}, skipping\n`,
+      `[warn] failed to read ${file.path}: ${reason}, skipping\n`,
     );
+    skippedFiles.push({ path: file.path, reason });
     continue;
   }
+  sampledFiles++;
 
   const lastSnap = new Map<string, Snap>();
   const lastSpend = new Map<
@@ -284,7 +291,8 @@ for (const file of pilot.files) {
 
 const result = {
   manifestSha256: pilot.manifestSha256,
-  sampledFiles: pilot.files.length,
+  sampledFiles,
+  ...(skippedFiles.length > 0 ? { skippedFiles } : {}),
   scope:
     "Same pilot sample. Tail read as the last four params (amount, over, powerType, maxPower). Timing pairs: same actor, within 1.5 s, discrete power types only for exact tests; mana uses closest-of-two because it regenerates.",
   inventory,

@@ -75,6 +75,9 @@ const bump = (slot: string, k: string) => {
 };
 const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
 
+const skippedFiles: Array<{ path: string; reason: string }> = [];
+let sampledFiles = 0;
+
 for (const file of pilot.files) {
   let raw: string;
   try {
@@ -84,14 +87,18 @@ for (const file of pilot.files) {
       process.stderr.write(
         `[warn] pilot content hash mismatch: ${file.path}, skipping\n`,
       );
+      skippedFiles.push({ path: file.path, reason: "sha256_mismatch" });
       continue;
     }
   } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
     process.stderr.write(
-      `[warn] failed to read ${file.path}: ${err instanceof Error ? err.message : String(err)}, skipping\n`,
+      `[warn] failed to read ${file.path}: ${reason}, skipping\n`,
     );
+    skippedFiles.push({ path: file.path, reason });
     continue;
   }
+  sampledFiles++;
 
   const last = new Map<string, number[]>();
   const absorbedSince = new Map<string, number[]>();
@@ -289,7 +296,8 @@ const ratioTest = Object.fromEntries(
 );
 const result = {
   manifestSha256: pilot.manifestSha256,
-  sampledFiles: pilot.files.length,
+  sampledFiles,
+  ...(skippedFiles.length > 0 ? { skippedFiles } : {}),
   scope:
     "Player actors only, same pilot sample. slot+N = params[advancedBlockStart + N]. Intervals are line-ordered between two samples of one Player; 'clean' = no SPELL_AURA_* event on that Player in between.",
   slotCountHist,

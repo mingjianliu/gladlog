@@ -82,6 +82,9 @@ function flush() {
   }
   actors.clear();
 }
+const skippedFiles: Array<{ path: string; reason: string }> = [];
+let sampledFiles = 0;
+
 for (const file of pilot.files) {
   let raw: string;
   try {
@@ -91,14 +94,18 @@ for (const file of pilot.files) {
       process.stderr.write(
         `[warn] pilot content hash mismatch: ${file.path}, skipping\n`,
       );
+      skippedFiles.push({ path: file.path, reason: "sha256_mismatch" });
       continue;
     }
   } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
     process.stderr.write(
-      `[warn] failed to read ${file.path}: ${err instanceof Error ? err.message : String(err)}, skipping\n`,
+      `[warn] failed to read ${file.path}: ${reason}, skipping\n`,
     );
+    skippedFiles.push({ path: file.path, reason });
     continue;
   }
+  sampledFiles++;
   for (const row of raw.split(/\r?\n/)) {
     const p = parseLine(row);
     if (!p) continue;
@@ -143,7 +150,8 @@ const quantile = (xs: number[], q: number) =>
   xs.length ? xs[Math.floor((xs.length - 1) * q)] : null;
 const result = {
   manifestSha256: pilot.manifestSha256,
-  sampledFiles: pilot.files.length,
+  sampledFiles,
+  ...(skippedFiles.length > 0 ? { skippedFiles } : {}),
   scope:
     "Player actors only; reset at observed start/end and file boundaries; not independently validated round segmentation. Exact same-ms differences need interpretation, not automatic error classification. Gaps are sample-pair weighted, not time or player weighted.",
   totals,
