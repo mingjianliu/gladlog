@@ -144,6 +144,7 @@ import {
   summonedAtMs,
   MANA_COOLDOWN_SPELL_IDS,
   isPassiveProcCast,
+  resolveSummonOwner,
 } from "./timelineHelpers";
 
 interface DeferredSnapshot {
@@ -484,7 +485,11 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     const casterOf = (attackerId: string): string => {
       const attacker = allUnits?.find((u) => u.id === attackerId);
       return attacker
-        ? actorLabel(attacker.name, ownerIsFriendly ? "enemy" : "friendly")
+        ? actorLabel(
+            attacker.name,
+            ownerIsFriendly ? "enemy" : "friendly",
+            attacker.id,
+          )
         : "unknown";
     };
     // Every eaten spell is known → name them; otherwise (an older stored
@@ -549,16 +554,30 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
    * Same rule as resolveKicker on [KICK] lines — 2026-07-17 thousand-match fuzz:
    * hunter pet Intimidation leaked a CJK pet name in "(by …)" ×72.
    */
-  function actorLabel(name: string, side: "friendly" | "enemy"): string {
+  function actorLabel(
+    name: string,
+    side: "friendly" | "enemy",
+    sourceId?: string,
+  ): string {
     const primary = side === "friendly" ? pid(name) : enemyPid(name);
     if (/^\d/.test(primary)) return primary; // hit the player map (player names never start with a digit)
-    const petUnit = allUnits?.find(
-      (u) => u.name === name && u.ownerId.length > 0,
-    );
-    const roster = [...friends, ...(enemies ?? [])];
-    const ownerUnit = petUnit
-      ? roster.find((u) => u.id === petUnit.ownerId)
-      : undefined;
+    // GH #99: resolve the summon by the event's OWN source GUID. Matching on
+    // the NAME collided whenever both teams fielded a same-named summon (two
+    // shamans → two units called "Capacitor Totem"): `find` returned whichever
+    // one the unit table held first, so 48 lines of the 2026-09-15 baseline
+    // credited the wrong side — including `3(EShaman) ← Capacitor Totem (by
+    // 3(EShaman)'s pet)`, a teammate rendered as stunning his own team. The id
+    // is ground truth, so the owner it resolves to wins over the caller's
+    // `side`; `side` now only narrows the name fallback used by documents that
+    // carry no source id.
+    const ownerUnit = resolveSummonOwner({
+      allUnits,
+      friends,
+      enemies,
+      name,
+      sourceId,
+      side,
+    });
     if (ownerUnit) {
       const label = friends.some((f) => f.id === ownerUnit.id)
         ? pid(ownerUnit.name)
@@ -1097,9 +1116,24 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
         const summoner = allUnits.find((u) => u.id === unit.ownerId);
         const by = summoner ? ` (by ${enemyPid(summoner.name)})` : "";
         const { hits, hitters } = opposingHitsOnUnit(unit, unitSide);
-        const who = hitters
-          .map((id) => allUnits.find((u) => u.id === id))
-          .map((u) => (u ? actorLabel(u.name, "friendly") : "unknown"));
+        const resolveHitterLabel = (id: string): string => {
+          const u = allUnits?.find((x) => x.id === id);
+          if (!u) return "[pet]";
+          if (friends.some((f) => f.id === u.id)) return pid(u.name);
+          const ownerUnit = resolveSummonOwner({
+            allUnits,
+            friends,
+            enemies,
+            name: u.name,
+            sourceId: u.id,
+            side: "friendly",
+          });
+          if (ownerUnit && friends.some((f) => f.id === ownerUnit.id)) {
+            return pid(ownerUnit.name);
+          }
+          return "[pet]";
+        };
+        const who = hitters.map(resolveHitterLabel);
         // Feasibility travels with the fact (user-approved 2026-09-20, in
         // place of a separate accusation candidate): who could have hit it,
         // and for how much of its official duration. Absent when nobody had
@@ -2419,7 +2453,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       addEntry(
         cc.atSeconds,
         // B112: "(by N)" not "(N)" — the bare "(6)" caster-id was misread as a "6s" duration.
-        `${fmtTime(cc.atSeconds)}  [CC ON TEAM]   ${pid(summary.playerName)} ← ${cc.spellName} (by ${actorLabel(cc.sourceName, "enemy")})${durStr}${drStr}${backlashStr}${posStr}${trinketNote}${tremorNote}${cleansedNote}`,
+        `${fmtTime(cc.atSeconds)}  [CC ON TEAM]   ${pid(summary.playerName)} ← ${cc.spellName} (by ${actorLabel(cc.sourceName, "enemy", cc.sourceId)})${durStr}${drStr}${backlashStr}${posStr}${trinketNote}${tremorNote}${cleansedNote}`,
       );
     }
 
@@ -2429,7 +2463,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
           avoided.atSeconds,
           // M-g: state the observed facts (CC cast did not land; avoidance ability present),
           // not a causal verdict. Let the model infer whether the ability caused the avoidance.
-          `${fmtTime(avoided.atSeconds)}  [CC AVOIDED?]   ${pid(summary.playerName)}: ${avoided.spellName} (by ${actorLabel(avoided.sourceName, "enemy")}) did not land; ${avoided.avoidanceSpellName} active`,
+          `${fmtTime(avoided.atSeconds)}  [CC AVOIDED?]   ${pid(summary.playerName)}: ${avoided.spellName} (by ${actorLabel(avoided.sourceName, "enemy", avoided.sourceId)}) did not land; ${avoided.avoidanceSpellName} active`,
         );
       }
     }
@@ -2476,7 +2510,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
           : ` (${cc.durationSeconds.toFixed(0)}s)`;
         addEntry(
           cc.atSeconds,
-          `${fmtTime(cc.atSeconds)}  [CC ON ENEMY]   ${enemyPid(summary.playerName)} ← ${cc.spellName} (by ${actorLabel(cc.sourceName, "friendly")})${durStr}`,
+          `${fmtTime(cc.atSeconds)}  [CC ON ENEMY]   ${enemyPid(summary.playerName)} ← ${cc.spellName} (by ${actorLabel(cc.sourceName, "friendly", cc.sourceId)})${durStr}`,
         );
       }
     }
@@ -2730,19 +2764,21 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   {
     const friendlyNames = new Set(friends.map((f) => f.name));
     const enemyNames = new Set((enemies ?? []).map((e) => e.name));
-    const playerById = new Map(
-      [...friends, ...(enemies ?? [])].map((u) => [u.id, u]),
-    );
     // Pet kicks (ghoul Shambling Rush, felhunter Spell Lock, …) log the pet as
     // the source; attribute them to the owning player so the model doesn't
     // have to guess whose pet an unknown name belongs to (F134-adjacent).
-    const resolveKicker = (name: string): string => {
+    const resolveKicker = (name: string, unitId?: string): string => {
       if (friendlyNames.has(name)) return pid(name);
       if (enemyNames.has(name)) return enemyPid(name);
-      const petUnit = allUnits?.find(
-        (u) => u.name === name && u.ownerId.length > 0,
-      );
-      const petOwner = petUnit ? playerById.get(petUnit.ownerId) : undefined;
+      // Same name collision as actorLabel (GH #99) — the kick line has no side
+      // to fall back on, so the source GUID is the only exact key here.
+      const petOwner = resolveSummonOwner({
+        allUnits,
+        friends,
+        enemies,
+        name,
+        sourceId: unitId,
+      });
       if (petOwner) {
         const ownerLabel = friendlyNames.has(petOwner.name)
           ? pid(petOwner.name)
@@ -2769,10 +2805,10 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
         seenKicks.add(key);
         const atSeconds = (action.timestamp - matchStartMs) / 1000;
         if (atSeconds < 0) continue;
-        const kicker = resolveKicker(action.srcUnitName);
+        const kicker = resolveKicker(action.srcUnitName, action.srcUnitId);
         // Victims get the same resolution as kickers: players → pid, pets →
         // owner attribution ("N's pet"), localized NPC names suppressed.
-        const victim = resolveKicker(action.destUnitName);
+        const victim = resolveKicker(action.destUnitName, action.destUnitId);
         const kickSpell = getEnglishSpellName(
           action.spellId ?? "",
           action.spellName ?? "interrupt",

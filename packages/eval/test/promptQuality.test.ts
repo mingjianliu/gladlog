@@ -10,6 +10,7 @@ import type { CoverageManifest } from "../src/quality/coverageManifest";
 import {
   checkBehaviorPriorConsistency,
   checkMatch,
+  checkPetCreditSide,
   checkSelfOnlyDefensiveClaims,
   checkSnapshotFactsConsistency,
 } from "../src/quality/promptQualityCheck";
@@ -405,5 +406,51 @@ describe("checkBehaviorPriorConsistency", () => {
     const out = checkBehaviorPriorConsistency([line({ dmg2sPct: "n/a" })]);
     expect(out).toHaveLength(1);
     expect(out[0]).toMatch(/缺 dmg2sPct/);
+  });
+});
+
+describe("checkPetCreditSide — a summon-cast CC credited to the wrong side (GH #99)", () => {
+  const roster = [
+    '  <unit id="1" name="Me-Realm" spec="Restoration Shaman" role="log owner">',
+    '  <unit id="3" name="Mate-Realm" spec="Enhancement Shaman" role="teammate">',
+    '  <unit id="6" name="Enemy-Realm" spec="Restoration Shaman" role="enemy">',
+  ];
+
+  it("flags a [CC ON TEAM] line crediting a teammate's summon", () => {
+    // The exact 2026-09-15 baseline shape: a teammate rendered as stunning his
+    // own team, because both shamans' totems carry the same unit name.
+    const out = checkPetCreditSide([
+      ...roster,
+      "0:32  [CC ON TEAM]   1(RShaman) ← Capacitor Totem (by 3(EShaman)'s pet) | 3s [DR: Stun Full]",
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toContain("CC ON TEAM");
+  });
+
+  it("flags a [CC ON ENEMY] line credited to an enemy's summon", () => {
+    const out = checkPetCreditSide([
+      ...roster,
+      "1:40  [CC ON ENEMY]   6(RShaman) ← Capacitor Totem (by 6(RShaman)'s pet) (1s)",
+    ]);
+    expect(out).toHaveLength(1);
+  });
+
+  it("passes when each side credits the other", () => {
+    expect(
+      checkPetCreditSide([
+        ...roster,
+        "0:32  [CC ON TEAM]   1(RShaman) ← Capacitor Totem (by 6(RShaman)'s pet) | 3s",
+        "1:40  [CC ON ENEMY]   6(RShaman) ← Capacitor Totem (by 3(EShaman)'s pet) (1s)",
+      ]),
+    ).toEqual([]);
+  });
+
+  it("says nothing about a credit that never resolved to an id", () => {
+    expect(
+      checkPetCreditSide([
+        ...roster,
+        "0:32  [CC ON TEAM]   1(RShaman) ← Capacitor Totem (by [pet]) | 3s",
+      ]),
+    ).toEqual([]);
   });
 });

@@ -50,6 +50,7 @@ function ccInstance(
     spellId: "1",
     spellName: "Test Stun",
     sourceName: "Enemy1-Test",
+    sourceId: "Player-Enemy1",
     sourceSpec: "",
     damageTakenDuring: 0,
     trinketState: "available_unused",

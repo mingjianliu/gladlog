@@ -386,6 +386,13 @@ export interface ICCInstance {
   spellId: string;
   spellName: string;
   sourceName: string;
+  /**
+   * The source unit's GUID (GH #99). `sourceName` alone cannot identify a
+   * summon: both teams field same-named totems/pets, so a name lookup returns
+   * whichever one the unit table holds first and the rendered line credits the
+   * wrong side. Consumers that need the owning player must resolve THIS.
+   */
+  sourceId: string;
   sourceSpec: string;
   damageTakenDuring: number;
   /**
@@ -428,6 +435,13 @@ export interface IRootInstance {
   spellId: string;
   spellName: string;
   sourceName: string;
+  /**
+   * The source unit's GUID (GH #99). `sourceName` alone cannot identify a
+   * summon: both teams field same-named totems/pets, so a name lookup returns
+   * whichever one the unit table holds first and the rendered line credits the
+   * wrong side. Consumers that need the owning player must resolve THIS.
+   */
+  sourceId: string;
   sourceSpec: string;
 }
 
@@ -505,6 +519,13 @@ export interface IInterruptInstance {
   interruptedSpellId: string;
   interruptedSpellName: string;
   sourceName: string;
+  /**
+   * The source unit's GUID (GH #99). `sourceName` alone cannot identify a
+   * summon: both teams field same-named totems/pets, so a name lookup returns
+   * whichever one the unit table holds first and the rendered line credits the
+   * wrong side. Consumers that need the owning player must resolve THIS.
+   */
+  sourceId: string;
   sourceSpec: string;
   postKick: PostKickBehavior;
   /** Seconds until the first cast after the kick; null when idle. */
@@ -550,6 +571,13 @@ export interface ICCAvoidedInstance {
   avoidanceSpellName: string;
   avoidanceSpellId: string;
   sourceName: string;
+  /**
+   * The source unit's GUID (GH #99). `sourceName` alone cannot identify a
+   * summon: both teams field same-named totems/pets, so a name lookup returns
+   * whichever one the unit table holds first and the rendered line credits the
+   * wrong side. Consumers that need the owning player must resolve THIS.
+   */
+  sourceId: string;
   sourceSpec: string;
 }
 
@@ -1000,6 +1028,7 @@ export function analyzePlayerCCAndTrinket(
         spellId: w.spellId,
         spellName: w.spellName,
         sourceName: w.srcName,
+        sourceId: w.srcUnitId,
         sourceSpec: enemySpecMap.get(w.srcUnitId) ?? "Unknown",
         damageTakenDuring,
         trinketState,
@@ -1032,6 +1061,7 @@ export function analyzePlayerCCAndTrinket(
       spellId: w.spellId,
       spellName: w.spellName,
       sourceName: w.srcName,
+      sourceId: w.srcId,
       sourceSpec: enemySpecMap.get(w.srcId) ?? "Unknown",
     }))
     .sort((a, b) => a.atSeconds - b.atSeconds);
@@ -1043,6 +1073,7 @@ export function analyzePlayerCCAndTrinket(
       spellId: w.spellId,
       spellName: w.spellName,
       sourceName: w.srcName,
+      sourceId: w.srcId,
       sourceSpec: enemySpecMap.get(w.srcId) ?? "Unknown",
     }))
     .sort((a, b) => a.atSeconds - b.atSeconds);
@@ -1233,6 +1264,7 @@ export function analyzePlayerCCAndTrinket(
         extraAction.extraSpellName,
       ),
       sourceName: action.srcUnitName,
+      sourceId: action.srcUnitId,
       sourceSpec: enemySpecMap.get(action.srcUnitId) ?? "Unknown",
     });
   }
@@ -1440,6 +1472,9 @@ export function analyzePlayerCCAndTrinket(
               avoidanceSpellName: activeBuff.name,
               avoidanceSpellId: activeBuff.spellId,
               sourceName: enemy.name,
+              // The avoided sweep already attributes a pet cast to its owning
+              // player (F134), so the owner's own id is the right source here.
+              sourceId: enemy.id,
               sourceSpec: enemySpecMap.get(enemy.id) ?? "Unknown",
             });
             continue; // Avoid double counting
@@ -1466,6 +1501,9 @@ export function analyzePlayerCCAndTrinket(
                 REPOSITIONING_SPELL_IDS.get(mobilityCast.spellId) ?? "",
               avoidanceSpellId: mobilityCast.spellId,
               sourceName: enemy.name,
+              // The avoided sweep already attributes a pet cast to its owning
+              // player (F134), so the owner's own id is the right source here.
+              sourceId: enemy.id,
               sourceSpec: enemySpecMap.get(enemy.id) ?? "Unknown",
             });
           }
@@ -1495,6 +1533,7 @@ export function analyzePlayerCCAndTrinket(
             avoidanceSpellName: "Grounding Totem",
             avoidanceSpellId: GROUNDING_TOTEM_SPELL_ID,
             sourceName: enemy.name,
+            sourceId: enemy.id,
             sourceSpec: enemySpecMap.get(enemy.id) ?? "Unknown",
           });
         }
@@ -1532,6 +1571,7 @@ export function analyzePlayerCCAndTrinket(
             avoidanceSpellName: "Blessing of Sacrifice",
             avoidanceSpellId: sacrificeCast.spellId || "6940",
             sourceName: cc.sourceName,
+            sourceId: cc.sourceId,
             sourceSpec: cc.sourceSpec,
           });
         }
@@ -1559,6 +1599,7 @@ export function analyzePlayerCCAndTrinket(
             avoidanceSpellName: "Shadow Word: Death",
             avoidanceSpellId: SHADOW_WORD_DEATH_SPELL_ID,
             sourceName: cc.sourceName,
+            sourceId: cc.sourceId,
             sourceSpec: cc.sourceSpec,
           });
         }
@@ -1589,6 +1630,7 @@ export function analyzePlayerCCAndTrinket(
             avoidanceSpellName: "Tremor Totem",
             avoidanceSpellId: TREMOR_TOTEM_CAST_SPELL_ID,
             sourceName: cc.sourceName,
+            sourceId: cc.sourceId,
             sourceSpec: cc.sourceSpec,
           });
         }

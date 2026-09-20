@@ -702,6 +702,16 @@ const INDEX: PredicateRow[] = [
     mod: healingVerdicts,
   },
   {
+    file: `${A}/context/timelineHelpers.ts`,
+    symbol: "resolveSummonOwner",
+    mod: timelineHelpers,
+  },
+  {
+    file: "packages/eval/src/quality/promptQualityCheck.ts",
+    symbol: "checkPetCreditSide",
+    mod: promptQualityCheck,
+  },
+  {
     file: `${A}/context/matchTimelineSections.ts`,
     symbol: "emitDmgSpikeEntries",
     mod: matchTimelineSections,

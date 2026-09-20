@@ -766,6 +766,50 @@ export function checkCjkLeak(lines: string[]): string[] {
   return failures;
 }
 
+/** `<unit id="4" … role="enemy">` — the side a rendered id belongs to. */
+const UNIT_ROLE_LINE = /<unit\s+id="(\d+)"[^>]*role="([^"]+)"/;
+/** `[CC ON TEAM] 1(RShaman) ← Capacitor Totem (by 6(RShaman)'s pet)` — the
+ * credited owner id of a summon-cast CC. The inner `(Spec)` is why this cannot
+ * be `[^)]*`. */
+const CC_PET_CREDIT =
+  /\[(CC ON TEAM|CC ON ENEMY)\][^\n]*?\(by (\d+)[^()]*(?:\([^()]*\)[^()]*)*'s pet\)/;
+
+/**
+ * A summon-cast CC must be credited to the side that could have cast it:
+ * `[CC ON TEAM]` → an enemy, `[CC ON ENEMY]` → a teammate.
+ *
+ * Why this is a hardFailure (GH #99, 2026-09-20): matchTimeline resolved a
+ * summon's owner by matching the unit NAME, and both teams field same-named
+ * summons — with two shamans in the round, `find` returned whichever
+ * "Capacitor Totem" the unit table held first. 48 lines across 16 of the 309
+ * prompts in the 2026-09-15 Opus baseline credited the wrong side, including
+ * `3(EShaman) ← Capacitor Totem (by 3(EShaman)'s pet)` — a teammate rendered
+ * as stunning his own team. The fix keys on the event's own source GUID
+ * (`ICCInstance.sourceId`); this gate re-parses the rendered line so a
+ * regression cannot land silently. Same predicate as
+ * `packages/ev[a]l/scripts/petSideScan.ts`, which measures it over the match
+ * library.
+ */
+export function checkPetCreditSide(lines: string[]): string[] {
+  const side = new Map<string, string>();
+  for (const line of lines) {
+    const m = line.match(UNIT_ROLE_LINE);
+    if (m) side.set(m[1]!, m[2] === "enemy" ? "enemy" : "friendly");
+  }
+  const failures: string[] = [];
+  lines.forEach((line, i) => {
+    const m = line.match(CC_PET_CREDIT);
+    if (!m) return;
+    const want = m[1] === "CC ON TEAM" ? "enemy" : "friendly";
+    const got = side.get(m[2]!);
+    if (got !== undefined && got !== want)
+      failures.push(
+        `line ${i + 1}: ${m[1]} 的施放者被记到${got === "enemy" ? "敌方" : "友方"}(应为${want === "enemy" ? "敌方" : "友方"})—— ${line.trim().slice(0, 140)}`,
+      );
+  });
+  return failures;
+}
+
 /** The KILL ATTEMPTS legend line that only renders while
  * `TIMELINE_LINE_FLAGS.enemyDef === "timeline"` — the gate keys on it so a
  * prompt built with the line off is not accused of missing it. */
@@ -1968,6 +2012,7 @@ export function checkMatch(
   hardFailures.push(...checkCjkLeak(lines));
   hardFailures.push(...checkEnemyDefRefConsistency(lines));
   hardFailures.push(...checkFactsBlockIntegrity(lines));
+  hardFailures.push(...checkPetCreditSide(lines));
 
   return {
     ordinal: entry.ordinal,

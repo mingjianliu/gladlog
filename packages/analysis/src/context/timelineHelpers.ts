@@ -1183,3 +1183,51 @@ export function buildKillSequenceBlock(params: {
 
   return lines;
 }
+
+/**
+ * The owning player of a summon (totem / pet / guardian) that produced an
+ * event — **the one predicate** behind every `(by X's pet)` credit the prompt
+ * renders (GH #99, 2026-09-20).
+ *
+ * `sourceId` (the event's own source GUID) is the key. Resolving by the unit
+ * NAME cannot work: both teams field same-named summons, so with a shaman on
+ * each side `find` returned whichever "Capacitor Totem" the unit table held
+ * first — 48 lines across 16 of the 309 prompts in the 2026-09-15 Opus
+ * baseline credited the wrong side, including `3(EShaman) ← Capacitor Totem
+ * (by 3(EShaman)'s pet)`, a teammate rendered as stunning his own team.
+ *
+ * The name path survives only for documents stored without a source id, and
+ * then only under `side`: a CC that landed on our team can only have come from
+ * an enemy-owned summon, so the same-side filter is what keeps the fallback
+ * from reproducing the bug. Callers with no side (the `[KICK]` lines) pass
+ * none and accept either roster — for them the GUID is the only exact key.
+ */
+export function resolveSummonOwner(params: {
+  allUnits?: ICombatUnit[];
+  friends: ICombatUnit[];
+  enemies?: ICombatUnit[];
+  /** The summon's unit name, used only by the no-id fallback. */
+  name: string;
+  sourceId?: string;
+  /** Restrict the name fallback to the side that could have cast it. */
+  side?: "friendly" | "enemy";
+}): ICombatUnit | undefined {
+  const { allUnits, friends, enemies, name, sourceId, side } = params;
+  const roster = [...friends, ...(enemies ?? [])];
+  const byId = sourceId
+    ? allUnits?.find((u) => u.id === sourceId && u.ownerId.length > 0)
+    : undefined;
+  if (byId) return roster.find((u) => u.id === byId.ownerId);
+  const allowed =
+    side === undefined
+      ? roster
+      : side === "friendly"
+        ? friends
+        : (enemies ?? []);
+  for (const pet of allUnits ?? []) {
+    if (pet.name !== name || pet.ownerId.length === 0) continue;
+    const owner = allowed.find((u) => u.id === pet.ownerId);
+    if (owner) return owner;
+  }
+  return undefined;
+}

@@ -639,4 +639,17 @@
 //  (drResetMsAt, 16s/20s) because a teammate previously put the same target on
 //  DR in that category. Capped at 3 per round; non-accusatory timing fact.
 //  Synthetic Immune events excluded; candidate menu untouched.
-export const PROMPT_VERSION = 89;
+//  v90 (2026-09-20, GH #99 item "Capacitor Totem stuns credited to a friendly
+//  pet"): a summon-cast CC is attributed by the event's own source GUID
+//  (ICCInstance/IRootInstance/IInterruptInstance/ICCAvoidedInstance now carry
+//  `sourceId`), not by matching the unit NAME. Both teams field same-named
+//  summons, so with a shaman on each side the name lookup returned whichever
+//  "Capacitor Totem" the unit table held first: 48 lines across 16 of the 309
+//  prompts of the 2026-09-15 Opus baseline credited the wrong side, including
+//  `3(EShaman) ← Capacitor Totem (by 3(EShaman)'s pet)`. Library measurement
+//  (60 matches / 195 rounds, petSideScan.ts): wrong-side credits 33 → 0;
+//  pet-credited CC lines 583 → 622, exactly the 36 raw-name + 3 `[pet]`
+//  credits the name path could not resolve at all; `(by N…)` player credits
+//  7805 → 7805 and total credited lines 8427 → 8427 (no line gained or lost).
+//  Gated by checkPetCreditSide.
+export const PROMPT_VERSION = 90;
