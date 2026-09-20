@@ -634,6 +634,11 @@ const INDEX: PredicateRow[] = [
     mod: timelineHelpers,
   },
   {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "tremorTotemBreak",
+    mod: ccTrinketAnalysis,
+  },
+  {
     file: `${A}/utils/counterfactual.ts`,
     symbol: "COUNTERFACTUAL_WINDOW_S",
     mod: counterfactual,

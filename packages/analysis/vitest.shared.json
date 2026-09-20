@@ -165,6 +165,7 @@
     "test/talentOwnership.test.ts",
     "test/talentWhitelistClassification.test.ts",
     "test/threatAssessment.test.ts",
+    "test/tremorTotemBreak.test.ts",
     "test/usableWhileCcShim.test.ts"
   ]
 }

@@ -11,7 +11,10 @@ import {
   SHARED_CD_RACIAL_SPELL_IDS,
   TRINKET_RACIAL_SHARED_LOCKOUT_MS,
 } from "../data/racialAbilities";
-import { getEnglishSpellName, kickLockoutSeconds } from "../data/spellEffectData";
+import {
+  getEnglishSpellName,
+  kickLockoutSeconds,
+} from "../data/spellEffectData";
 import {
   immunityCoversSpell,
   isPhysicalSpell,
@@ -252,6 +255,51 @@ export const TREMOR_BREAKABLE_CC_IDS = new Set<string>([
   "8122", // Psychic Scream
   "5484", // Howl of Terror
 ]);
+
+/** The shaman's Tremor Totem cast. */
+export const TREMOR_TOTEM_CAST_SPELL_ID = "8143";
+/** A fear ending this soon after a friendly Tremor Totem lands was ended BY it.
+ * Measured (GH #100, 300 files, 50 fears with a totem dropped mid-fear): removal
+ * lag after the summon p50 0 s, p90 0.02 s, 49/50 within 1.5 s. */
+export const TREMOR_BREAK_MAX_LAG_MS = 500;
+
+/**
+ * The friendly Tremor Totem cast that ended this CC, or null.
+ *
+ * The totem sources NO log event of its own, so this is the only tremor fact
+ * the log supports deterministically: the totem was dropped WHILE the fear was
+ * running and the fear ended the same instant. A totem that was already up
+ * when the fear landed is deliberately not credited — fear also breaks on
+ * damage (44.8 % of fears end within 1.5 s with no totem at all), so a short
+ * fear under a standing totem is suggestive, never attributable.
+ */
+export function tremorTotemBreak(
+  cc: Pick<ICCInstance, "spellId" | "atSeconds" | "durationSeconds">,
+  matchStartMs: number,
+  teammates: Pick<ICombatUnit, "name" | "class" | "spellCastEvents">[],
+): { shamanName: string; castMs: number } | null {
+  if (!TREMOR_BREAKABLE_CC_IDS.has(cc.spellId)) return null;
+  const appliedMs = matchStartMs + cc.atSeconds * 1000;
+  const endedMs = appliedMs + cc.durationSeconds * 1000;
+  for (const mate of teammates) {
+    if (mate.class !== CombatUnitClass.Shaman) continue;
+    for (const e of mate.spellCastEvents) {
+      if (
+        e.spellId !== TREMOR_TOTEM_CAST_SPELL_ID ||
+        e.logLine.event !== LogEvent.SPELL_CAST_SUCCESS
+      )
+        continue;
+      const castMs = e.logLine.timestamp;
+      if (
+        castMs > appliedMs &&
+        endedMs >= castMs &&
+        endedMs - castMs <= TREMOR_BREAK_MAX_LAG_MS
+      )
+        return { shamanName: mate.name, castMs };
+    }
+  }
+  return null;
+}
 
 /**
  * DEFENSIVE-001 (cc-avoidable, 2026-08-07, BACKLOG #18 second batch): pure
@@ -1362,7 +1410,7 @@ export function analyzePlayerCCAndTrinket(
       ) {
         const tremorCast = player.spellCastEvents.find(
           (e) =>
-            e.spellId === "8143" &&
+            e.spellId === TREMOR_TOTEM_CAST_SPELL_ID &&
             e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
             ccAppliedTimeMs >= e.logLine.timestamp &&
             ccAppliedTimeMs - e.logLine.timestamp <= 10000,
@@ -1373,7 +1421,7 @@ export function analyzePlayerCCAndTrinket(
             spellId: cc.spellId,
             spellName: cc.spellName,
             avoidanceSpellName: "Tremor Totem",
-            avoidanceSpellId: "8143",
+            avoidanceSpellId: TREMOR_TOTEM_CAST_SPELL_ID,
             sourceName: cc.sourceName,
             sourceSpec: cc.sourceSpec,
           });

@@ -595,4 +595,13 @@
 //  105427 renamed Totem of Wrath, five units gone from the game removed.
 //  Grounding note: 0 of 470 cast lines → 277. Candidate menu untouched
 //  (findings hash and every per-type count identical).
-export const PROMPT_VERSION = 84;
+//  v85 (2026-09-20, user-approved after the real-match example, GH #100):
+//  `[CC ON TEAM]` lines gain `| Tremor Totem from N ended this CC after Ns
+//  (cut short — it had not expired)` when a friendly Tremor Totem was cast
+//  WHILE a fear was running and the fear ended within 500 ms of the cast
+//  (tremorTotemBreak). The totem sources no log event; this is the one tremor
+//  fact the log supports (removal lag p50 0 s, p90 0.02 s, 49/50). A totem
+//  already up when the fear landed is deliberately not credited. Same
+//  605-match acceptance set: 0 → 71 notes in 15 matches, [CC ON TEAM] line
+//  count unchanged (69,508), findings hash and every candidate count identical.
+export const PROMPT_VERSION = 85;

@@ -26,6 +26,7 @@ import type { ICcBreakEvent } from "../utils/ccBreakAnalysis";
 import {
   CC_AVOIDANCE_BUFF_SPELLS,
   IPlayerCCTrinketSummary,
+  tremorTotemBreak,
 } from "../utils/ccTrinketAnalysis";
 import {
   IFormInterval,
@@ -2288,6 +2289,18 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       );
       const cleansedNote = isCleansed ? " [CLEANSED]" : "";
 
+      // GH #100 (user 2026-09-20): a friendly Tremor Totem dropped mid-fear
+      // ends it the same instant — the one tremor fact the log supports.
+      // Same "cut short" wording and duration handling as the trinket break
+      // (B111): the logged length is the endured time, not the CC's length.
+      const tremor =
+        trinketNote === "" && !isCleansed
+          ? tremorTotemBreak(cc, matchStartMs, friends)
+          : null;
+      const tremorNote = tremor
+        ? ` | Tremor Totem from ${pid(tremor.shamanName)} ended this CC after ${cc.durationSeconds.toFixed(0)}s (cut short — it had not expired)`
+        : "";
+
       const drStr =
         DISPEL_FEATURE_FLAGS.F124_ENHANCED_CC_ANNOTATIONS &&
         cc.drInfo &&
@@ -2304,7 +2317,9 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       // natural length; suppress the standalone "| Ns" (the trinket note carries the endured time) so it
       // is not misread as the CC's trivial full duration.
       const durStr =
-        cc.trinketState === "used" || cc.trinketState === "racial_break"
+        cc.trinketState === "used" ||
+        cc.trinketState === "racial_break" ||
+        tremor
           ? ""
           : ` | ${cc.durationSeconds.toFixed(0)}s`;
 
@@ -2321,7 +2336,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       addEntry(
         cc.atSeconds,
         // B112: "(by N)" not "(N)" — the bare "(6)" caster-id was misread as a "6s" duration.
-        `${fmtTime(cc.atSeconds)}  [CC ON TEAM]   ${pid(summary.playerName)} ← ${cc.spellName} (by ${actorLabel(cc.sourceName, "enemy")})${durStr}${drStr}${backlashStr}${posStr}${trinketNote}${cleansedNote}`,
+        `${fmtTime(cc.atSeconds)}  [CC ON TEAM]   ${pid(summary.playerName)} ← ${cc.spellName} (by ${actorLabel(cc.sourceName, "enemy")})${durStr}${drStr}${backlashStr}${posStr}${trinketNote}${tremorNote}${cleansedNote}`,
       );
     }
 
