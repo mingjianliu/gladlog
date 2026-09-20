@@ -62,21 +62,21 @@ describe("OFFENSIVE_CD_SPELL_IDS — canonical membership", () => {
     }
   });
 
-  it("union-minus-dead arithmetic: 42 ∪ 46 (overlap 19) − 9 dead = 61 (2026-09-18: + Zenith, + 10 casts and the Voidform aura id from offensiveCdGapScan; 2026-09-20: + live Convoke 391528)", () => {
-    expect(OFFENSIVE_CD_SPELL_IDS.size).toBe(61);
+  it("union-minus-dead arithmetic: 42 ∪ 46 (overlap 19) − 9 dead = 60 (2026-09-18: + Zenith, + 10 casts and the Voidform aura id from offensiveCdGapScan)", () => {
+    expect(OFFENSIVE_CD_SPELL_IDS.size).toBe(60);
     // live renumber of a registered spell, and the Shadow successor
     expect(OFFENSIVE_CD_SPELL_IDS.has("446035")).toBe(true);
     expect(OFFENSIVE_CD_SPELL_IDS.has("228260")).toBe(true);
     // deliberately excluded: no spec gate, Holy presses the same id as a heal
     expect(OFFENSIVE_CD_SPELL_IDS.has("375576")).toBe(false);
+    // deliberately excluded: no spec gate, Resto Druids press the same id as a heal channel
+    expect(OFFENSIVE_CD_SPELL_IDS.has("391528")).toBe(false);
+    expect(OFFENSIVE_CD_SPELL_IDS.has("323764")).toBe(false);
     // deliberately excluded: instant nuke, not a window
     expect(OFFENSIVE_CD_SPELL_IDS.has("153561")).toBe(false);
     // The Windwalker burst that replaced the dead Storm, Earth, and Fire.
     expect(OFFENSIVE_CD_SPELL_IDS.has("1249625")).toBe(true);
     expect(OFFENSIVE_CD_SPELL_IDS.has("137639")).toBe(false);
-    // Convoke the Spirits live vs dead
-    expect(OFFENSIVE_CD_SPELL_IDS.has("391528")).toBe(true);
-    expect(OFFENSIVE_CD_SPELL_IDS.has("323764")).toBe(false);
   });
 
   it("every newly added 2026-09-18 burst cooldown is a member of the canonical set", () => {

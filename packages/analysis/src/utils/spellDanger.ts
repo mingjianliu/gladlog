@@ -73,17 +73,19 @@ export const OFFENSIVE_CD_DEAD_IDS: ReadonlySet<string> = new Set([
  * "Not yet unified" divergence). Union of the two tables the repo used to
  * carry — the `SPELL_CATEGORIES` offensive types (41 ids, via `spellTags`,
  * mostly aura/buff ids) and `classMetadata`'s `SpellTag.Offensive` abilities
- * (34 ids, cast ids) — minus `OFFENSIVE_CD_DEAD_IDS`: 41 ∪ 34 = 56 (overlap 19) − 9 dead = 47 on 2026-09-02; 48 since 2026-09-18 (Zenith 1249625 added
+ * 41 ∪ 34 = 56 (overlap 19) − 9 dead = 47 on 2026-09-02; 48 since 2026-09-18 (Zenith 1249625 added
  * to classMetadata — the successor of the dead 137639 had never been listed);
  * 60 since the first `offensiveCdGapScan` run the same day (+11 casts and
- * the Voidform aura id 194249, the evidence sits beside each entry in classSpells.ts);
- * 61 since 2026-09-20 (Convoke the Spirits updated to live id 391528).
+ * the Voidform aura id 194249, the evidence sits beside each entry in classSpells.ts).
  *
  * Deliberately NOT added by that run, so nobody "completes" them later:
  *   - Divine Toll 375576 (Ret lift 2.03, coPressed 5 %): the table keys on the
  *     spell id with no spec gate, and Holy Paladins press the same id as a
  *     heal — it would open a fake "enemy burst" window on every enemy Holy
  *     Paladin. Needs a spec-aware table first.
+ *   - Convoke the Spirits 391528: similarly, Restoration Druids press the same
+ *     id as a major healing channel (Regrowth, Rejuvenation, Swiftmend, Wild
+ *     Growth). Needs a spec-aware table first.
  *   - Meteor 153561 (lift 2.54), Frostwyrm's Fury 279302 (2.65): instant
  *     nukes. Every consumer renders a table member as a WINDOW ("Meteor/Fire
  *     Mage (7 s left)" in [RES] — caught by the real-fixture test); a nuke
@@ -139,7 +141,7 @@ export const OFFENSIVE_CD_SPELL_IDS: ReadonlySet<string> = new Set(
  * Returns true if the canonical offensive-cooldown table holds this spell.
  * (The pre-2026-09-02 comment claimed "covers all 120 tagged offensive
  * spells" — that was wrong on both counts; the real membership is
- * `OFFENSIVE_CD_SPELL_IDS`, 61 ids.)
+ * `OFFENSIVE_CD_SPELL_IDS`, 60 ids.)
  */
 export function isOffensiveSpell(spellId: string): boolean {
   return OFFENSIVE_CD_SPELL_IDS.has(spellId);

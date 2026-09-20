@@ -232,7 +232,9 @@ export const classMetadata: IClassSpellMetadata[] = [
       a("106951", "Berserk", O),
       a("102560", "Incarnation: Chosen of Elune", O),
       a("194223", "Celestial Alignment", O),
-      a("391528", "Convoke the Spirits", O),
+      // Convoke the Spirits 391528 deliberately excluded: no spec gate in
+      // OFFENSIVE_CD_SPELL_IDS, and Restoration Druids cast the same id as
+      // a healing channel (same reason as Divine Toll 375576).
       a("33786", "Cyclone", C),
       a("99", "Incapacitating Roar", C),
       a("5211", "Mighty Bash", C),
