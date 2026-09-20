@@ -28,7 +28,11 @@
  *
  *   npx tsx packages/eval/scripts/coachCorpusWeekendProbe2.ts [--n N]
  */
-import { ensureAnalysisData, extractMajorCooldowns } from "@gladlog/analysis";
+import {
+  classifyKickedSpell,
+  ensureAnalysisData,
+  extractMajorCooldowns,
+} from "@gladlog/analysis";
 import { enemyHealerCcWindows } from "@gladlog/analysis/src/analysis/candidates/cooldownTiming";
 import { SPELL_CATEGORIES } from "@gladlog/analysis/src/data/spellCategories";
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
@@ -241,7 +245,7 @@ async function main(): Promise<void> {
         const stoppedName = en(stopped, a.extraSpellName ?? stopped);
         // (F)
         fLanded++;
-        bump(fByType, SPELLS[stopped]?.type ?? "unlisted");
+        bump(fByType, classifyKickedSpell(stopped));
         bump(fBySpell, stoppedName);
         if (healerNames.has(victim.name)) {
           fOnHealer++;

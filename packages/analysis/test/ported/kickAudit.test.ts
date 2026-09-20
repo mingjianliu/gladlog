@@ -78,6 +78,7 @@ describe("kickAudit", () => {
     expect(entries).toHaveLength(1);
     expect(entries[0].result).toBe("landed");
     expect(entries[0].interruptedSpellName).toBe("Frostbolt");
+    expect(entries[0].interruptedCategory).toBe("damage");
     expect(entries[0].atSeconds).toBe(20);
   });
 

@@ -7,6 +7,10 @@ import {
 
 import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
 import { getEnglishSpellName } from "../data/spellEffectData";
+import {
+  classifyKickedSpell,
+  type KickedSpellCategory,
+} from "../data/kickedSpellCategories";
 
 type SpellEntry = { type: string };
 const SPELLS = spellsData as Record<string, SpellEntry>;
@@ -34,6 +38,8 @@ export interface IKickAuditEntry {
   result: "landed" | "juked" | "missed" | "unknown";
   /** landed: what was interrupted. */
   interruptedSpellName?: string;
+  /** landed: category of what was interrupted (GH #79). */
+  interruptedCategory?: KickedSpellCategory;
   /** juked: the cast that was faked. */
   jukedBySpellName?: string;
 }
@@ -113,6 +119,7 @@ export function analyzeKickAudit(
           extra.extraSpellId ?? "",
           extra.extraSpellName ?? "",
         ),
+        interruptedCategory: classifyKickedSpell(extra.extraSpellId ?? ""),
         kickSpellName: getEnglishSpellName(
           landed.spellId ?? base.kickSpellId,
           landed.spellName ?? base.kickSpellName,

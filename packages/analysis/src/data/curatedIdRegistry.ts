@@ -116,6 +116,12 @@ import {
   DISPEL_TYPES,
   SPELL_EFFECT_OVERRIDES,
 } from "./spellEffectOverrides";
+import {
+  KICKED_CONTROL_OVERRIDE_IDS,
+  KICKED_DAMAGE_OVERRIDE_IDS,
+  KICKED_HEAL_OVERRIDE_IDS,
+  KICKED_OTHER_OVERRIDE_IDS,
+} from "./kickedSpellCategories";
 import spellIdLists from "./spellIdLists";
 import { TALENT_MITIGATION_MODIFIERS } from "./talentMitigationModifiers";
 import { trinketSpellIds } from "./spellTags";
@@ -511,6 +517,18 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
     () => [
       ...TALENT_MITIGATION_MODIFIERS.map((m) => m.auraSpellId),
       ...TALENT_MITIGATION_MODIFIERS.map((m) => m.talentSpellId),
+    ],
+  ),
+  // GH #79 / B4: classification overrides for interrupted spells.
+  t(
+    "KICKED_SPELL_OVERRIDES",
+    "data/kickedSpellCategories.ts",
+    "cast",
+    () => [
+      ...KICKED_HEAL_OVERRIDE_IDS,
+      ...KICKED_CONTROL_OVERRIDE_IDS,
+      ...KICKED_DAMAGE_OVERRIDE_IDS,
+      ...KICKED_OTHER_OVERRIDE_IDS,
     ],
   ),
 ];

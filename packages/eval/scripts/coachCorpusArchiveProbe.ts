@@ -29,6 +29,7 @@
  */
 import {
   cdAvailableAt,
+  classifyKickedSpell,
   computeOffensiveWindows,
   ensureAnalysisData,
   extractMajorCooldowns,
@@ -323,7 +324,7 @@ function perspective(
       const stopped = a.extraSpellId ?? "";
       const nm = en(stopped, a.extraSpellName ?? stopped);
       r.landed++;
-      const ty = SPELLS[stopped]?.type ?? "unlisted";
+      const ty = classifyKickedSpell(stopped);
       r.landedType[ty] = (r.landedType[ty] ?? 0) + 1;
       r.landedSpell[nm] = (r.landedSpell[nm] ?? 0) + 1;
       if (healerNames.has(victim.name)) r.landedOnHealer++;
