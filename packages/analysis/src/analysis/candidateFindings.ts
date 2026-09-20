@@ -902,7 +902,7 @@ export function kickEatenEvents(
     | "switchWasHardCast"
     | "nearestKickerDistYd"
     | "kickersInRange"
-    | "postKick"
+    | "kickDepthPct"
   >[],
   owner: { id: string; name: string },
 ): CandidateEvent[] {
@@ -940,6 +940,9 @@ export function kickEatenEvents(
           : {}),
         ...(k.kickersInRange != null
           ? { kickersInRange: String(k.kickersInRange) }
+          : {}),
+        ...(k.kickDepthPct != null
+          ? { kickDepthPct: String(k.kickDepthPct) }
           : {}),
         // BACKLOG #36(b): the behavior fact the model can actually coach on.
         // 2026-09-06: the `switched` wording used to assert "kept playing

@@ -41,6 +41,8 @@ import {
 } from "./positionSampling";
 import { fmtTime } from "./renderGrid";
 import { getTalentAvoidanceBuffs } from "./talentBehaviors";
+import { hardcastHealSpell } from "../data/kickPriorityHealSpells";
+import { medianFinite } from "./stats";
 import { DPS_TRINKET_CD_S, HEALER_TRINKET_CD_S } from "./trinketCooldown";
 
 // ---------------------------------------------------------------------------
@@ -537,6 +539,8 @@ export interface IInterruptInstance {
   nearestKickerDistYd?: number | null;
   /** Number of enemy kickers in kick range with interrupt available at cast start (GH #73, B6). */
   kickersInRange?: number | null;
+  /** Percentage of nominal cast elapsed before interruption (GH #87, B7). */
+  kickDepthPct?: number | null;
 }
 
 export interface ICCAvoidedInstance {
@@ -1043,6 +1047,49 @@ export function analyzePlayerCCAndTrinket(
     }))
     .sort((a, b) => a.atSeconds - b.atSeconds);
 
+  const playerCompletedMedians = new Map<string, number | null>();
+  const getPlayerCompletedMedian = (spellId: string): number | null => {
+    if (!spellId) return null;
+    if (playerCompletedMedians.has(spellId)) {
+      return playerCompletedMedians.get(spellId)!;
+    }
+    const starts = (player.castStartEvents ?? [])
+      .filter((e) => e.spellId === spellId)
+      .sort((a, b) => a.logLine.timestamp - b.logLine.timestamp);
+    if (starts.length === 0) {
+      playerCompletedMedians.set(spellId, null);
+      return null;
+    }
+    const successes = player.spellCastEvents
+      .filter(
+        (e) =>
+          e.spellId === spellId &&
+          e.logLine.event === LogEvent.SPELL_CAST_SUCCESS,
+      )
+      .sort((a, b) => a.logLine.timestamp - b.logLine.timestamp);
+    if (successes.length === 0) {
+      playerCompletedMedians.set(spellId, null);
+      return null;
+    }
+    const durations: number[] = [];
+    for (let i = 0; i < starts.length; i++) {
+      const sMs = starts[i].logLine.timestamp;
+      const nextStartMs = starts[i + 1]?.logLine.timestamp ?? Infinity;
+      const maxMs = Math.min(nextStartMs, sMs + 10_000);
+      const match = successes.find(
+        (c) => c.logLine.timestamp >= sMs && c.logLine.timestamp <= maxMs,
+      );
+      if (match) {
+        const durS = (match.logLine.timestamp - sMs) / 1000;
+        if (durS > 0) durations.push(durS);
+      }
+    }
+    const med = medianFinite(durations);
+    const result = med > 0 ? med : null;
+    playerCompletedMedians.set(spellId, result);
+    return result;
+  };
+
   const interruptInstances: IInterruptInstance[] = [];
   for (const action of player.actionIn) {
     if (action.logLine.event !== LogEvent.SPELL_INTERRUPT) continue;
@@ -1075,9 +1122,21 @@ export function analyzePlayerCCAndTrinket(
 
     let nearestKickerDistYd: number | null = null;
     let kickersInRange: number | null = null;
+    let kickDepthPct: number | null = null;
 
     if (castStartEvent) {
       const castStartMs = castStartEvent.logLine.timestamp;
+      const elapsedS = Math.max(0, (action.timestamp - castStartMs) / 1000);
+      const nominalS =
+        hardcastHealSpell(interruptedSpellId)?.medianCastS ??
+        getPlayerCompletedMedian(interruptedSpellId);
+      if (nominalS != null && nominalS > 0) {
+        kickDepthPct = Math.max(
+          0,
+          Math.min(100, Math.round((elapsedS / nominalS) * 100)),
+        );
+      }
+
       // Codex review P2: sample strictly at cast start — do not substitute interruption
       // timestamp when cast-start position is missing, to avoid mixed-time calculations.
       const playerPos = getUnitPositionAtTime(
@@ -1133,6 +1192,7 @@ export function analyzePlayerCCAndTrinket(
       switchWasHardCast: null,
       nearestKickerDistYd,
       kickersInRange,
+      kickDepthPct,
       firstActionDelayS: null,
       kickSpellId,
       kickSpellName: getEnglishSpellName(kickSpellId, action.spellName),

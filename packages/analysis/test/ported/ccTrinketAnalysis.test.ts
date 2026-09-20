@@ -388,6 +388,85 @@ describe("analyzePlayerCCAndTrinket — root/disarm/interrupt tracking", () => {
     expect(res2.interruptInstances[0].nearestKickerDistYd).toBeNull();
     expect(res2.interruptInstances[0].kickersInRange).toBeNull();
   });
+
+  it("computes kickDepthPct from hardcastHealSpell table or completed cast median (GH #87, B7)", () => {
+    // Case 1: Interrupted heal spell from hardcastHealSpell table (e.g. Flash Heal 2061)
+    const healKick = makeInterruptEvent(
+      "1766",
+      "Kick",
+      "2061",
+      "Flash Heal",
+      MATCH_START + 20_000,
+      "enemy-1",
+      "EnemyA",
+    );
+    const playerHeal = makeUnit("player-1", {
+      actionIn: [healKick],
+      castStartEvents: [
+        {
+          spellId: "2061",
+          logLine: {
+            event: LogEvent.SPELL_CAST_START,
+            timestamp: MATCH_START + 19_500, // 0.5s elapsed
+          },
+        },
+      ] as any,
+    });
+    const enemy = makeEnemy("enemy-1", "EnemyA");
+    const resHeal = analyzePlayerCCAndTrinket(playerHeal, [enemy], makeCombat());
+    // Flash Heal nominal = 1.17s -> Math.round((0.5 / 1.17) * 100) = 43%
+    expect(resHeal.interruptInstances[0].kickDepthPct).toBe(43);
+
+    // Case 2: Non-heal spell with completed cast in match
+    const frostKick = makeInterruptEvent(
+      "1766",
+      "Kick",
+      "116",
+      "Frostbolt",
+      MATCH_START + 30_000,
+      "enemy-1",
+      "EnemyA",
+    );
+    const playerDps = makeUnit("player-1", {
+      actionIn: [frostKick],
+      castStartEvents: [
+        {
+          spellId: "116",
+          logLine: {
+            event: LogEvent.SPELL_CAST_START,
+            timestamp: MATCH_START + 10_000,
+          },
+        },
+        {
+          spellId: "116",
+          logLine: {
+            event: LogEvent.SPELL_CAST_START,
+            timestamp: MATCH_START + 29_500, // 0.5s elapsed into kick
+          },
+        },
+      ] as any,
+      spellCastEvents: [
+        {
+          spellId: "116",
+          logLine: {
+            event: LogEvent.SPELL_CAST_SUCCESS,
+            timestamp: MATCH_START + 12_000, // 2.0s duration completed
+          },
+        },
+      ] as any,
+    });
+    const resDps = analyzePlayerCCAndTrinket(playerDps, [enemy], makeCombat());
+    // Completed cast = 2.0s -> Math.round((0.5 / 2.0) * 100) = 25%
+    expect(resDps.interruptInstances[0].kickDepthPct).toBe(25);
+
+    // Case 3: Unknown spell with no completed casts and no start event -> null
+    const resNoData = analyzePlayerCCAndTrinket(
+      makeUnit("player-1", { actionIn: [frostKick] }),
+      [enemy],
+      makeCombat(),
+    );
+    expect(resNoData.interruptInstances[0].kickDepthPct).toBeNull();
+  });
 });
 
 describe("analyzePlayerCCAndTrinket — trinketCDSecondsLeft", () => {
