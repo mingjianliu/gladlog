@@ -593,6 +593,12 @@ export class MatchStore {
         data,
       }),
     );
+    // Retention invariant (GH #100, docs/log-observability-audit.md "Raw-log
+    // retention invariant"): raw.txt is the ONLY copy of what match.json does
+    // not materialise — slim.ts trims params 13+, and L3 keeps no facing, no
+    // periodic-energize, no enchant events, no undecoded advanced fields. Do
+    // not drop, truncate or lossily replace it until every audit-listed field
+    // has a verified lossless replacement.
     writeFileSync(join(tmpDir, "raw.txt"), item.rawLines.join("\n") + "\n");
     rmSync(finalDir, { recursive: true, force: true });
     renameWithRetrySync(tmpDir, finalDir);

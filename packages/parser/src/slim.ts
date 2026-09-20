@@ -5,8 +5,10 @@ import type { GladMatchBase, GladUnit } from "./l3/model";
  * Doc-slimming predicate (single source, 2026-07-25 memory incident):
  * positions 13+ of an event's params are the advanced-logging tail
  * (GUID/health/coordinates/item level). Parsing already materializes them into
- * fields such as advancedSamples / hp / crit, so persisting them is pure
- * duplication — measured on a single 442MB shuffle doc, params accounted for
+ * fields such as advancedSamples / hp / crit, so persisting them is almost
+ * pure duplication (NOT entirely: facing and the undecoded advanced fields
+ * are in that tail and in no L3 field — the stored raw.txt is their only copy,
+ * see the retention invariant in docs/log-observability-audit.md) — measured on a single 442MB shuffle doc, params accounted for
  * 53%. The only consumer of 13+ in the whole chain is crit statistics
  * (decodeHpTail), which the materialized GladHpEvent.crit field takes over.
  *
