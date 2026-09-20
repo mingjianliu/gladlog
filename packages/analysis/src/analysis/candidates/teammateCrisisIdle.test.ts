@@ -35,6 +35,7 @@ const point = (
   externalsReady: [{ spellId: "33206", spellName: "Pain Suppression" }],
   manaPct: 60,
   excluded: null,
+  priorDeathSide: null,
   healerIdle: true,
   idleReason: null,
   cleanIdle: true,

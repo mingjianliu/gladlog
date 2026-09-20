@@ -33,6 +33,9 @@
  *    `TEAMMATE_CRISIS_REACH_YARDS` of the teammate at t; line of sight TRUE
  *    (unknown is excluded — unknown access cannot justify a card); mana at or
  *    above `TEAMMATE_CRISIS_MANA_FLOOR_PCT` when a reading exists.
+ *  - everybody is still alive at t (user ruling 2026-09-19, `priorDeath`):
+ *    once any player on either side has died, the point is neither a card
+ *    nor a table row.
  *  - clean idle = healer did not answer, the teammate did not answer either
  *    (`responded`), the healer cast nothing and started nothing in the
  *    window, did not move `TEAMMATE_CRISIS_MOVE_YARDS` across it (both
@@ -114,7 +117,16 @@ export type TeammateCrisisExclusion =
   | "outOfReach"
   | "losBlocked"
   | "losUnknown"
-  | "outOfMana";
+  | "outOfMana"
+  | "priorDeath";
+
+/** Which side had already lost a player when the teammate crossed. User
+ * ruling 2026-09-19 ("如果已经有人死了 就不要提示;其他时候可以出"): once anybody
+ * is dead the round is a different game (a 2v3 is mostly decided, a 3v2 is
+ * mostly won) and "you cast nothing" stops being the lesson. The side is
+ * recorded so the table rows can re-derive a narrower reading (friendly
+ * deaths only) without another archive scan. */
+export type TeammateCrisisPriorDeathSide = "friendly" | "enemy" | "both";
 
 /** Why an un-answered comparator point is still not CLEAN idle. */
 export type TeammateCrisisIdleReason =
@@ -157,6 +169,10 @@ export interface TeammateCrisisPoint {
   /** healer mana at t, integer %, null when the log carried no reading */
   manaPct: number | null;
   excluded: TeammateCrisisExclusion | null;
+  /** a player's death at or before t, by side; null when everyone was alive.
+   * Non-null ⇒ `excluded` is set (to `priorDeath` unless an earlier reason
+   * already applied). */
+  priorDeathSide: TeammateCrisisPriorDeathSide | null;
   /** healer did not answer AND cast nothing in the window */
   healerIdle: boolean;
   idleReason: TeammateCrisisIdleReason | null;
@@ -258,6 +274,13 @@ export function teammateCrisisPoints(
     (c) => c.logLine?.event === LogEvent.SPELL_CAST_SUCCESS,
   );
   const ownerStarts = (owner.castStartEvents ?? []) as any[];
+  const friendlyDeaths: number[] = [];
+  const enemyDeaths: number[] = [];
+  for (const u of players)
+    for (const d of (u.deathRecords ?? []) as any[])
+      (u.reaction === owner.reaction ? friendlyDeaths : enemyDeaths).push(
+        d.timestamp as number,
+      );
   const enemyBurstCasts: {
     t: number;
     casterName: string;
@@ -386,6 +409,18 @@ export function teammateCrisisPoints(
         else if (manaPct !== null && manaPct < TEAMMATE_CRISIS_MANA_FLOOR_PCT)
           excluded = "outOfMana";
       }
+      // evaluated last so the older reasons keep their labels in the rows
+      const friendlyDown = friendlyDeaths.some((ms) => ms <= t);
+      const enemyDown = enemyDeaths.some((ms) => ms <= t);
+      const priorDeathSide: TeammateCrisisPriorDeathSide | null =
+        friendlyDown && enemyDown
+          ? "both"
+          : friendlyDown
+            ? "friendly"
+            : enemyDown
+              ? "enemy"
+              : null;
+      if (excluded === null && priorDeathSide !== null) excluded = "priorDeath";
 
       // ── idle and its innocent explanations ───────────────────────────────
       const busy = ownerCasts.some((c) => inWin(c.timestamp));
@@ -486,6 +521,7 @@ export function teammateCrisisPoints(
           })),
         manaPct,
         excluded,
+        priorDeathSide,
         healerIdle,
         idleReason,
         cleanIdle,

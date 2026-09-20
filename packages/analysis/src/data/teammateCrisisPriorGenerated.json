@@ -1,27 +1,27 @@
 {
   "meta": {
-    "generatedAt": "2026-09-17",
-    "corpus": "wowarenalogs archive 2026-09-14 (12.1+, 63,303-file manifest, 116,063 rounds; triage fields 2026-09-17)",
+    "generatedAt": "2026-09-20",
+    "corpus": "wowarenalogs archive 2026-09-14 (12.1+, 63,303-file manifest; priorDeath exclusion 2026-09-19)",
     "command": "npx tsx packages/eval/scripts/teammateCrisisPriorScan.ts emit-table --in <rows.jsonl> --out <file.json>",
     "rows": 604392,
     "nFloor": 50,
-    "predicateVersion": 1
+    "predicateVersion": 2
   },
   "cells": {
     "2v2|*": {
       "nIdle": 6,
       "deathIdlePct": 83,
-      "nAnswered": 46489,
-      "deathAnsweredPct": 8,
-      "nTriageWrong": 22,
-      "deathTriageWrongPct": 68,
+      "nAnswered": 46002,
+      "deathAnsweredPct": 9,
+      "nTriageWrong": 21,
+      "deathTriageWrongPct": 71,
       "nTriageOther": 10,
       "deathTriageOtherPct": 20
     },
     "2v2|10-20%": {
       "nIdle": 5,
       "deathIdlePct": 80,
-      "nAnswered": 19290,
+      "nAnswered": 19059,
       "deathAnsweredPct": 7,
       "nTriageWrong": 7,
       "deathTriageWrongPct": 43,
@@ -31,17 +31,17 @@
     "2v2|20-30%": {
       "nIdle": 0,
       "deathIdlePct": 0,
-      "nAnswered": 16065,
+      "nAnswered": 15895,
       "deathAnsweredPct": 8,
-      "nTriageWrong": 12,
-      "deathTriageWrongPct": 75,
+      "nTriageWrong": 11,
+      "deathTriageWrongPct": 82,
       "nTriageOther": 3,
       "deathTriageOtherPct": 0
     },
     "2v2|>=30%": {
       "nIdle": 1,
       "deathIdlePct": 100,
-      "nAnswered": 11134,
+      "nAnswered": 11048,
       "deathAnsweredPct": 11,
       "nTriageWrong": 3,
       "deathTriageWrongPct": 100,
@@ -49,84 +49,84 @@
       "deathTriageOtherPct": 0
     },
     "3v3|*": {
-      "nIdle": 490,
-      "deathIdlePct": 86,
-      "nAnswered": 86959,
-      "deathAnsweredPct": 11,
-      "nTriageWrong": 36,
-      "deathTriageWrongPct": 56,
-      "nTriageOther": 14,
-      "deathTriageOtherPct": 71
+      "nIdle": 1,
+      "deathIdlePct": 0,
+      "nAnswered": 78109,
+      "deathAnsweredPct": 6,
+      "nTriageWrong": 26,
+      "deathTriageWrongPct": 46,
+      "nTriageOther": 10,
+      "deathTriageOtherPct": 70
     },
     "3v3|10-20%": {
-      "nIdle": 133,
-      "deathIdlePct": 86,
-      "nAnswered": 16071,
-      "deathAnsweredPct": 9,
-      "nTriageWrong": 7,
-      "deathTriageWrongPct": 14,
-      "nTriageOther": 6,
-      "deathTriageOtherPct": 50
+      "nIdle": 1,
+      "deathIdlePct": 0,
+      "nAnswered": 14420,
+      "deathAnsweredPct": 5,
+      "nTriageWrong": 5,
+      "deathTriageWrongPct": 0,
+      "nTriageOther": 5,
+      "deathTriageOtherPct": 60
     },
     "3v3|20-30%": {
-      "nIdle": 187,
-      "deathIdlePct": 84,
-      "nAnswered": 24494,
-      "deathAnsweredPct": 11,
-      "nTriageWrong": 9,
-      "deathTriageWrongPct": 56,
-      "nTriageOther": 6,
-      "deathTriageOtherPct": 83
+      "nIdle": 0,
+      "deathIdlePct": 0,
+      "nAnswered": 21755,
+      "deathAnsweredPct": 6,
+      "nTriageWrong": 6,
+      "deathTriageWrongPct": 50,
+      "nTriageOther": 3,
+      "deathTriageOtherPct": 67
     },
     "3v3|>=30%": {
-      "nIdle": 170,
-      "deathIdlePct": 86,
-      "nAnswered": 46394,
-      "deathAnsweredPct": 12,
-      "nTriageWrong": 20,
-      "deathTriageWrongPct": 70,
+      "nIdle": 0,
+      "deathIdlePct": 0,
+      "nAnswered": 41934,
+      "deathAnsweredPct": 7,
+      "nTriageWrong": 15,
+      "deathTriageWrongPct": 60,
       "nTriageOther": 2,
       "deathTriageOtherPct": 100
     },
     "Rated Solo Shuffle|*": {
-      "nIdle": 38,
-      "deathIdlePct": 45,
-      "nAnswered": 158479,
+      "nIdle": 32,
+      "deathIdlePct": 53,
+      "nAnswered": 157388,
       "deathAnsweredPct": 10,
-      "nTriageWrong": 85,
-      "deathTriageWrongPct": 44,
-      "nTriageOther": 73,
-      "deathTriageOtherPct": 21
+      "nTriageWrong": 71,
+      "deathTriageWrongPct": 52,
+      "nTriageOther": 60,
+      "deathTriageOtherPct": 23
     },
     "Rated Solo Shuffle|10-20%": {
-      "nIdle": 24,
-      "deathIdlePct": 33,
-      "nAnswered": 38827,
+      "nIdle": 21,
+      "deathIdlePct": 38,
+      "nAnswered": 38434,
       "deathAnsweredPct": 9,
-      "nTriageWrong": 36,
-      "deathTriageWrongPct": 31,
-      "nTriageOther": 44,
-      "deathTriageOtherPct": 11
+      "nTriageWrong": 26,
+      "deathTriageWrongPct": 42,
+      "nTriageOther": 34,
+      "deathTriageOtherPct": 12
     },
     "Rated Solo Shuffle|20-30%": {
-      "nIdle": 9,
-      "deathIdlePct": 67,
-      "nAnswered": 49213,
+      "nIdle": 8,
+      "deathIdlePct": 75,
+      "nAnswered": 48853,
       "deathAnsweredPct": 10,
-      "nTriageWrong": 23,
-      "deathTriageWrongPct": 39,
-      "nTriageOther": 18,
-      "deathTriageOtherPct": 39
+      "nTriageWrong": 21,
+      "deathTriageWrongPct": 43,
+      "nTriageOther": 16,
+      "deathTriageOtherPct": 44
     },
     "Rated Solo Shuffle|>=30%": {
-      "nIdle": 5,
-      "deathIdlePct": 60,
-      "nAnswered": 70439,
+      "nIdle": 3,
+      "deathIdlePct": 100,
+      "nAnswered": 70101,
       "deathAnsweredPct": 11,
-      "nTriageWrong": 26,
-      "deathTriageWrongPct": 65,
-      "nTriageOther": 11,
-      "deathTriageOtherPct": 27
+      "nTriageWrong": 24,
+      "deathTriageWrongPct": 71,
+      "nTriageOther": 10,
+      "deathTriageOtherPct": 30
     }
   }
 }

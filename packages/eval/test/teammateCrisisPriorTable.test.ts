@@ -9,7 +9,7 @@ const meta = {
   command: "",
   rows: 0,
   nFloor: 50,
-  predicateVersion: 1,
+  predicateVersion: 2,
 };
 const row = (over: Record<string, unknown> = {}) => ({
   bracket: "3v3",

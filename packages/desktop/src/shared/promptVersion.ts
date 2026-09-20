@@ -566,4 +566,14 @@
 //  candidate quotes barely moves: kill within 15 s, entered vs not — Solo
 //  Shuffle 12.4 / 6.3 % → 12.1 / 6.6 %, 2v2 12.1 / 5.5 → 12.1 / 5.4, 3v3
 //  11.8 / 5.7 → 11.4 / 5.7. missed-sync-window's reference numbers change.
-export const PROMPT_VERSION = 81;
+//  v82 (2026-09-19, user ruling 「如果已经有人死了 就不要提示;其他时候可以出」):
+//  teammateCrisisPoints excludes any crossing where a player on either side
+//  was already dead (`priorDeath`). Full archive (63,303 files, 116,063
+//  rounds) clean idle 534 → 39: 3v3 490 → 1 (469 of the removed points sat
+//  behind a FRIENDLY death — the card had been describing a healer who
+//  stopped playing a 2v3), Solo Shuffle 38 → 32, 2v2 6 → 6. No idle cell
+//  clears the n ≥ 50 floor any more, so teammate-crisis-idle stops rendering
+//  (user confirmed on the numbers). teammate-crisis-triage still renders in
+//  Solo Shuffle only: 85 / 73 (44 % vs 21 %) → 71 / 60 (52 % vs 23 %).
+//  teammateCrisisPriorGenerated.json re-scanned, predicateVersion 2.
+export const PROMPT_VERSION = 82;

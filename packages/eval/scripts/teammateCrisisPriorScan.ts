@@ -48,6 +48,10 @@ interface ScanRow extends TeammateCrisisPriorRow {
   mateResponded: boolean;
   busyOnInCrisis: boolean;
   busyOnHpPct: number | null;
+  /** which side had already lost a player at t (rows scanned since
+   * 2026-09-19) — lets a narrower `priorDeath` reading be re-derived from the
+   * rows without another archive scan */
+  priorDeathSide?: string | null;
 }
 
 async function scan(): Promise<void> {
@@ -112,6 +116,7 @@ async function scan(): Promise<void> {
             tSec: p.tSec,
             dmg2s: p.dmg2s,
             excluded: p.excluded,
+            priorDeathSide: p.priorDeathSide,
             healerAnswered: p.healerAnswered,
             cleanIdle: p.cleanIdle,
             idleReason: p.idleReason,
@@ -178,6 +183,27 @@ function report(): void {
       rows.filter((r) => r.excluded !== null),
       (r) => r.excluded!,
     ),
+    /** user ruling 2026-09-19: what the `priorDeath` exclusion removed, by
+     * the side that was already a player down (points no OLDER exclusion
+     * had already taken) */
+    priorDeath: Object.fromEntries(
+      ["friendly", "enemy", "both"].map((side) => {
+        const xs = rows.filter(
+          (r) => r.excluded === "priorDeath" && r.priorDeathSide === side,
+        );
+        return [
+          side,
+          {
+            n: xs.length,
+            wouldBeCleanIdle: xs.filter(
+              (r) =>
+                !r.healerAnswered && !r.mateResponded && r.idleReason === null,
+            ).length,
+            wouldBeAnswered: xs.filter((r) => r.healerAnswered).length,
+          },
+        ];
+      }),
+    ),
     comparator: comparator.length,
     cleanIdle: { n: idle.length, died: died((r) => r.cleanIdle) },
     cleanIdlePerRound: rounds ? idle.length / rounds : null,
@@ -238,7 +264,7 @@ function report(): void {
       command: "",
       rows: rows.length,
       nFloor: 0,
-      predicateVersion: 1,
+      predicateVersion: 2,
     }).cells,
   };
   process.stdout.write(JSON.stringify(summary, null, 2) + "\n");
@@ -261,7 +287,7 @@ function emitTable(): void {
       "npx tsx packages/eval/scripts/teammateCrisisPriorScan.ts emit-table --in <rows.jsonl> --out <file.json>",
     rows: rows.length,
     nFloor: 50,
-    predicateVersion: 1,
+    predicateVersion: 2,
   });
   // write to the given path (never straight over the json the analysis
   // package imports while a script that imports it is running)

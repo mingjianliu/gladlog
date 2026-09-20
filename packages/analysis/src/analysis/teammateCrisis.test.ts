@@ -296,6 +296,37 @@ describe("teammateCrisisPoints", () => {
     expect(o!.manaPct).toBe(5);
   });
 
+  it("anybody already dead at the crossing → priorDeath, never a card or a table row (user ruling 2026-09-19); a death AFTER it changes nothing", () => {
+    const h = healer();
+    const third = {
+      ...mate({ advancedActions: [], damageIn: [] }),
+      id: "M2",
+      name: "Third-R",
+    };
+    const run = (units: any[]) =>
+      teammateCrisisPoints(h, combat([h, mate(), ...units]), [])[0]!;
+
+    const friendly = run([
+      { ...third, deathRecords: [{ timestamp: T0 + 500 }] },
+      enemy(),
+    ]);
+    expect(friendly.excluded).toBe("priorDeath");
+    expect(friendly.priorDeathSide).toBe("friendly");
+    expect(friendly.cleanIdle).toBe(false);
+
+    const foe = run([enemy({ deathRecords: [{ timestamp: T0 + 500 }] })]);
+    expect(foe.excluded).toBe("priorDeath");
+    expect(foe.priorDeathSide).toBe("enemy");
+
+    const later = run([
+      { ...third, deathRecords: [{ timestamp: T0 + 9000 }] },
+      enemy(),
+    ]);
+    expect(later.excluded).toBeNull();
+    expect(later.priorDeathSide).toBeNull();
+    expect(later.cleanIdle).toBe(true);
+  });
+
   it("a healer with no cast for 15 s on either side is an inactive stretch, never clean idle", () => {
     const h = healer({ spellCastEvents: [] });
     const [p] = teammateCrisisPoints(h, combat([h, mate(), enemy()]), []);
