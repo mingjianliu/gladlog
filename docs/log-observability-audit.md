@@ -183,6 +183,41 @@ What L3 loses by skipping the block on these events: 19,895 Player blocks (4,080
 
 **User ruling, 2026-09-20: resources are closed as a coaching direction.** Mana “does not matter — or rather means little as guidance”; secondary resources belong to the damage/healing rotation and “do not affect the big picture much either”. Do not propose mana or secondary-resource signals from this audit; the verified layouts above stay on record as parser facts only.
 
+### Direction 4: NPC roster and lifecycle
+
+Run `npx tsx packages/eval/scripts/npcRosterScan.ts --manifest <txt> --offset 3000 --limit 600 --out <new.json>`. The product's only NPC knowledge is `CRITICAL_NON_PLAYER_NPC_NAMES` (`timelineHelpers.ts`, 27 hand entries): it supplies English names for localized targets and decides which non-player deaths print as `[UNIT DESTROYED] … killed by: …`. It is a hand-maintained id list that is **not** in `curatedIdRegistry.ts` (the registry is spell-id based), so neither rot scan has ever seen it. 600 files, 116 distinct summoned npcIds.
+
+**The `[UNIT DESTROYED]` line is dead.** It keys on `deathRecords`, which come from `UNIT_DIED`. 12.x logs emit no `UNIT_DESTROYED` at all and emit `UNIT_DIED` for almost no summoned unit: of **13,439** listed units summoned, **5** have one (all Xuen); in the 24-file pilot it is 0 of 345, and `UNIT_DIED` on creatures is confined to death-knight minions that are not listed. Product-side confirmation: 0 of 3,000 saved prompt files in the private eval repo contain the line. The only kill evidence the log still carries is a damage event with overkill > 0: **886** listed units took one from an enemy player.
+
+| Listed unit                                                      |    Summoned | Hit by an enemy player |                                                                               Killed (overkill > 0) |
+| ---------------------------------------------------------------- | ----------: | ---------------------: | --------------------------------------------------------------------------------------------------: |
+| Grounding Totem                                                  |       1,343 |                   27 % | 359 (27 %) — mostly the totem doing its job; the prompt already marks `[absorbed: Grounding Totem]` |
+| Earthgrab Totem                                                  |       1,691 |                   19 % |                                                                                          255 (15 %) |
+| Tremor Totem                                                     |         436 |                   20 % |                                                                                           86 (20 %) |
+| Spirit Link Totem                                                |         186 |                   44 % |                                                                                           67 (36 %) |
+| Capacitor Totem                                                  |         994 |                    8 % |                                                                                            46 (5 %) |
+| Healing Stream / Healing Tide Totem                              | 2,653 / 407 |              7 % / 8 % |                                                                                              29 / 3 |
+| Mindbender, Shadowfiend, Darkglare, Infernal, Tyrant, Voidwraith |       2,023 |                58–96 % |                                                       14 — attacked constantly, almost never killed |
+
+**Reverse direction — stale ids.** Eight listed ids never occur in 600 files. One is proven stale: **Psyfiend is listed as 121111 (0 occurrences) while the live 101398 was summoned 305 times and killed 146 times (48 %)** — the most-killed summon in the slice, invisible by a renumber. Static Field Totem (179867) is absent from this slice but present in the pilot (9 units), so “absent from 600 files” is a lead, not a verdict; Earthen Wall, Stone Bulwark, Mana Tide, Lightwell, Fel Obelisk and Pit Lord are unresolved.
+
+**Forward direction — unlisted.** 61 unlisted npcIds were hit by enemy players at least five times. Most are damage guardians that are attacked incidentally and never killed (Dire Beast, Treants, Wild Imps: 1 % killed). Beyond Psyfiend, the ones that are actually killed: Denizen of the Dream 66 (19 %), Mirror Image 31, Counterstrike Totem 20 (33 %), Stormstream Totem 14 of 1,080.
+
+**Lifecycle honesty.** With no `UNIT_DIED`, a summon that was not overkilled has an **unknown** end — expiry, replacement, owner death and despawn are indistinguishable, and the last event naming a unit is not its end. Only “killed by an enemy player's damage” is an observable fact.
+
+**Value-gate example** — `npx tsx packages/eval/scripts/unitDestroyedExampleGen.ts --manifest <txt> --offset 3000 --limit 60` renders today's lines next to overkill-keyed lines for real matches, in the product's own format: 130 rounds, **0 lines today, 106 proposed, in 27 rounds (21 %)**. A median round (spec ids replaced by names):
+
+```
+TODAY     0 [UNIT DESTROYED] line(s)
+PROPOSED
+  0:09  [UNIT DESTROYED]   Grounding Totem (Friendly) killed by: Enemy Shadow Priest
+  0:14  [UNIT DESTROYED]   Tremor Totem (Friendly) killed by: Enemy Arcane Mage
+  1:31  [UNIT DESTROYED]   Psyfiend (Enemy) killed by: Friendly Enhancement Shaman
+  2:05  [UNIT DESTROYED]   Earthgrab Totem (Friendly) killed by: Enemy Arcane Mage
+```
+
+**Status: put to the user; no product change made.** Restoring the line changes prompt content (overkill-keyed deaths, the Psyfiend id, whether Grounding Totem kills are printed at all) and needs a before/after line count plus a `PROMPT_VERSION` bump.
+
 Proceed one direction at a time; report a concrete evidence-backed result before widening scope:
 
 1. **Facing:** verify actor ownership, angle units/range, sampling gaps and same-actor same-time consistency. Determine what can be preserved; do not infer camera direction or tactical intent.
