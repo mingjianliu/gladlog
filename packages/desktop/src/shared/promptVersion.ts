@@ -624,4 +624,13 @@
 //  rounds, loose form 8 and mostly thin. Same 605-match acceptance set: 406
 //  lines before and after, 332 now carry the clause (0-hit lines 288/359, hit
 //  lines 44/47); findings hash and every candidate count identical.
-export const PROMPT_VERSION = 87;
+//  v88 (2026-09-20, user: 「哪怕不用,也应该知道这个图腾吃掉了什么法术,所以做一下吧」):
+//  the parser materialises the ATTACKER's spell on absorb events
+//  (GladAbsorbEvent.attackSpellId/Name → IAbsorbEvent; spell-form only — the
+//  event's own spellId is the shield, and slimming clears the raw params), so
+//  the Grounding note names what was eaten: `[ABSORBED: Lava Burst (4(EShaman)),
+//  …]`. Documents stored before this carry no such field and keep the
+//  caster-only `[ABSORBED spells from: …]`. Same 605-match acceptance set: 277
+//  notes, caster-only 277 → 0, spell-named 0 → 277, no other line changed;
+//  findings hash and every candidate count identical.
+export const PROMPT_VERSION = 88;

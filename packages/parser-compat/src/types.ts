@@ -54,6 +54,10 @@ export interface IAbsorbEvent extends ICombatEvent {
   /** Who threw the punch the shield ate. On `absorbsIn` (victim-keyed) srcUnit
    * is the shield's OWNER, so the attacker needs its own field. */
   attackerId?: string;
+  /** The attacker's spell that the shield ate (`spellId` is the SHIELD).
+   * Absent on swing absorbs and on documents stored before 2026-09-20. */
+  attackSpellId?: string;
+  attackSpellName?: string;
 }
 
 /**

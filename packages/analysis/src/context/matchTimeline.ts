@@ -376,16 +376,21 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   // [CD] / death blocks would not share the same set.
 
   // F143: Pre-calculate Grounding Totem absorbs.
-  // What the log keeps of a grounded spell is WHO cast it, not WHAT it was: a
-  // SPELL_ABSORBED event's spellId is the SHIELD (Grounding Totem itself) and
-  // the attacking spell sits in params the archive slimmer clears. The note
-  // used to print that shield id, so once it rendered at all it read
-  // `[ABSORBED: Grounding Totem]` on 277 of 298 lines (GH #100). It now names
-  // the attacker. A totem killed by direct damage is a different fact and has
-  // its own `[UNIT DESTROYED]` line — a final blow is NOT an eaten spell.
+  // A SPELL_ABSORBED event's own spellId is the SHIELD (Grounding Totem
+  // itself); the note used to print that, so once it rendered at all it read
+  // `[ABSORBED: Grounding Totem]` on 277 of 298 lines (GH #100). The eaten
+  // spell is the ATTACKER's, which the parser materialises as
+  // `attackSpellId/Name` since 2026-09-20 (user: "even if we don't use it, we
+  // should know what the totem ate"). Documents stored before that do not
+  // carry it — the archive slimmer had cleared those params — so the note
+  // falls back to naming the caster only. A totem killed by direct damage is a
+  // different fact with its own `[UNIT DESTROYED]` line: a final blow is NOT
+  // an eaten spell.
   const groundingAbsorbs: Array<{
     timeSeconds: number;
     attackerId: string;
+    /** English name of the eaten spell; undefined on pre-2026-09-20 documents */
+    spellName?: string;
     totemOwnerId: string;
   }> = [];
   if (allUnits) {
@@ -401,6 +406,14 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
           groundingAbsorbs.push({
             timeSeconds: (absorb.timestamp - matchStartMs) / 1000,
             attackerId: absorb.attackerId,
+            ...(absorb.attackSpellId
+              ? {
+                  spellName: getEnglishSpellName(
+                    absorb.attackSpellId,
+                    absorb.attackSpellName ?? "",
+                  ),
+                }
+              : {}),
             totemOwnerId: unit.ownerId,
           });
         }
@@ -453,24 +466,29 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   ): string => {
     if (spellId !== GROUNDING_TOTEM_SPELL_ID && spellName !== "Grounding Totem")
       return "";
-    const casters = groundingAbsorbs
-      .filter(
-        (a) =>
-          a.totemOwnerId === totemOwnerId &&
-          a.timeSeconds >= castSeconds &&
-          a.timeSeconds <= castSeconds + 3.5,
-      )
-      .map((a) => {
-        const attacker = allUnits?.find((u) => u.id === a.attackerId);
-        if (!attacker) return "unknown";
-        const ownerIsFriendly = friends.some((f) => f.id === totemOwnerId);
-        return actorLabel(
-          attacker.name,
-          ownerIsFriendly ? "enemy" : "friendly",
-        );
-      });
-    if (casters.length === 0) return "";
-    return ` [ABSORBED spells from: ${Array.from(new Set(casters)).join(", ")}]`;
+    const eaten = groundingAbsorbs.filter(
+      (a) =>
+        a.totemOwnerId === totemOwnerId &&
+        a.timeSeconds >= castSeconds &&
+        a.timeSeconds <= castSeconds + 3.5,
+    );
+    if (eaten.length === 0) return "";
+    const ownerIsFriendly = friends.some((f) => f.id === totemOwnerId);
+    const casterOf = (attackerId: string): string => {
+      const attacker = allUnits?.find((u) => u.id === attackerId);
+      return attacker
+        ? actorLabel(attacker.name, ownerIsFriendly ? "enemy" : "friendly")
+        : "unknown";
+    };
+    // Every eaten spell is known → name them; otherwise (an older stored
+    // document) say only who cast them. Never a mix that reads as complete.
+    if (eaten.every((a) => a.spellName))
+      return ` [ABSORBED: ${Array.from(
+        new Set(eaten.map((a) => `${a.spellName} (${casterOf(a.attackerId)})`)),
+      ).join(", ")}]`;
+    return ` [ABSORBED spells from: ${Array.from(
+      new Set(eaten.map((a) => casterOf(a.attackerId))),
+    ).join(", ")}]`;
   };
 
   // A/B cycle-1 accuracy regression fix: bare numeric ids forced the responder

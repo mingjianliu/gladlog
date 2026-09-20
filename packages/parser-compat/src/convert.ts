@@ -131,12 +131,25 @@ function convertCombatantInfo(
   };
 }
 
+/** The attacker's spell on an absorb, when the document carries it (spell-form
+ * absorbs parsed on or after 2026-09-20). */
+function attackSpellFields(event: {
+  attackSpellId?: number;
+  attackSpellName?: string;
+}): { attackSpellId?: string; attackSpellName?: string } {
+  return event.attackSpellId !== undefined
+    ? {
+        attackSpellId: String(event.attackSpellId),
+        attackSpellName: event.attackSpellName ?? "",
+      }
+    : {};
+}
+
 /** L3 stores `effectiveAmount = amount − overkill` (l1/decoders decodeDamage),
  * so the difference IS the overkill; carried only on a killing blow. */
-function overkillField(event: {
-  amount: number;
-  effectiveAmount: number;
-}): { overkill?: number } {
+function overkillField(event: { amount: number; effectiveAmount: number }): {
+  overkill?: number;
+} {
   const overkill = event.amount - event.effectiveAmount;
   return overkill > 0 ? { overkill } : {};
 }
@@ -406,6 +419,7 @@ function convertUnit(
     destUnitId: event.destId,
     destUnitName: event.destName,
     absorbedAmount: event.absorbedAmount,
+    ...attackSpellFields(event),
     logLine: {
       event: event.eventName as LogEvent,
       timestamp: event.timestamp,
@@ -509,6 +523,7 @@ function convertUnit(
       destUnitName: unit.name,
       absorbedAmount: event.absorbedAmount,
       attackerId: event.attackerId,
+      ...attackSpellFields(event),
       logLine: {
         event: event.eventName as LogEvent,
         timestamp: event.timestamp,

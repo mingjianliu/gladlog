@@ -206,6 +206,12 @@ export function collectEvents(
         absorbedAmount: record.absorbed.absorbedAmount,
         attackerId: record.absorbed.attackerGuid,
         victimId: record.absorbed.victimGuid,
+        ...(record.absorbed.attackSpellId !== null
+          ? {
+              attackSpellId: record.absorbed.attackSpellId,
+              attackSpellName: record.absorbed.attackSpellName ?? "",
+            }
+          : {}),
         params: record.params,
         lineIndex: record.lineIndex,
       };

@@ -48,6 +48,11 @@ export interface GladAbsorbEvent extends GladEventBase {
    * victim has to travel on the event itself. Params slimming clears
    * `params[4]`, so re-deriving it downstream is not possible. */
   victimId: string;
+  /** The ATTACKER's spell that was absorbed (the event's own `spellId` is the
+   * SHIELD). Present only on spell-form absorbs; absent on swing absorbs and
+   * on documents stored before 2026-09-20 — absent means unknown. */
+  attackSpellId?: number;
+  attackSpellName?: string;
 }
 
 export interface GladSpellEvent extends GladEventBase {}

@@ -593,3 +593,39 @@ describe("overkill is carried on killing blows only (GH #100)", () => {
     }
   });
 });
+
+describe("absorbs carry the ATTACKER's spell (GH #100: what did the shield eat)", () => {
+  // The event's own spellId is the SHIELD. Before 2026-09-20 nothing kept the
+  // attacking spell, and the archive slimmer clears those params, so "what did
+  // the Grounding Totem eat" was unanswerable from a stored document.
+  const SPELL_FORM = `SPELL_ABSORBED,Player-1-A,"Alice-X",0x511,0x80000000,Player-2-B,"Bob-Y",0x548,0x80000000,50622,"Bladestorm",0x1,Player-2-B,"Bob-Y",0x548,0x80000000,17,"Power Word: Shield",0x2,40,140,nil`;
+  const SWING_FORM = `SPELL_ABSORBED,Player-1-A,"Alice-X",0x511,0x80000000,Player-2-B,"Bob-Y",0x548,0x80000000,Player-2-B,"Bob-Y",0x548,0x80000000,17,"Power Word: Shield",0x2,25,90,nil`;
+  const { matches } = parseLines([
+    "ARENA_MATCH_START,1825,41,3v3,1",
+    CI("Player-1-A", 0, 257, 2400),
+    CI("Player-2-B", 1, 71, 2380),
+    SPELL_FORM,
+    SWING_FORM,
+    "ARENA_MATCH_END,0,30,1500,1501",
+  ]);
+  const legacy = toLegacyMatch(matches[0]!);
+  const absorbs = legacy.units["Player-2-B"]!.absorbsIn;
+
+  it("spell form: attackSpellId/Name = the attacker's spell, spellId stays the shield", () => {
+    expect(absorbs).toHaveLength(2);
+    expect(absorbs[0]!.spellId).toBe("17");
+    expect(absorbs[0]!.attackSpellId).toBe("50622");
+    expect(absorbs[0]!.attackSpellName).toBe("Bladestorm");
+  });
+
+  it("swing form has no spell — the keys are absent, not empty", () => {
+    expect(absorbs[1]!.absorbedAmount).toBe(25);
+    expect("attackSpellId" in absorbs[1]!).toBe(false);
+    expect("attackSpellName" in absorbs[1]!).toBe(false);
+  });
+
+  it("the shield owner's absorbsOut carries it too", () => {
+    const out = legacy.units["Player-2-B"]!.absorbsOut;
+    expect(out[0]!.attackSpellId).toBe("50622");
+  });
+});

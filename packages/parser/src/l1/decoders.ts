@@ -357,6 +357,13 @@ export function decodeAbsorbed(params: string[]): {
   absorbedAmount: number;
   totalAmount: number;
   critical: boolean;
+  /** The spell that was absorbed — the ATTACKER's spell, not the shield. Only
+   * the spell form carries it; a swing absorb (18 params) has no spell triple.
+   * Nothing downstream could answer "what did the Grounding Totem eat" without
+   * it: the event's own spellId is the shield, and the archive slimmer clears
+   * these params (GH #100). */
+  attackSpellId: number | null;
+  attackSpellName: string | null;
 } {
   const attackerGuid = params[0] ?? "";
   const victimGuid = params[4] ?? "";
@@ -368,6 +375,8 @@ export function decodeAbsorbed(params: string[]): {
   let absorbedAmount = NaN;
   let totalAmount = NaN;
   let critical = false;
+  let attackSpellId: number | null = null;
+  let attackSpellName: string | null = null;
 
   if (params.length === 18) {
     shieldOwnerGuid = params[8] ?? "";
@@ -378,6 +387,11 @@ export function decodeAbsorbed(params: string[]): {
     totalAmount = parseInt10(params[16]);
     critical = decodeCritical(params[17]);
   } else {
+    const id = parseInt10(params[8]);
+    if (!Number.isNaN(id)) {
+      attackSpellId = id;
+      attackSpellName = params[9] ?? null;
+    }
     shieldOwnerGuid = params[11] ?? "";
     shieldOwnerNameRaw = params[12];
     shieldSpellId = parseInt10(params[15]);
@@ -402,6 +416,8 @@ export function decodeAbsorbed(params: string[]): {
     absorbedAmount,
     totalAmount,
     critical,
+    attackSpellId,
+    attackSpellName,
   };
 }
 
