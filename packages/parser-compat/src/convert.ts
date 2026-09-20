@@ -140,7 +140,7 @@ function attackSpellFields(event: {
   return event.attackSpellId !== undefined
     ? {
         attackSpellId: String(event.attackSpellId),
-        attackSpellName: event.attackSpellName ?? "",
+        attackSpellName: event.attackSpellName || undefined,
       }
     : {};
 }
