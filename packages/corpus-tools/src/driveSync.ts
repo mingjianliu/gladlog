@@ -8,6 +8,9 @@ export interface DriveSyncConfig {
   remote: string;
   dest: string;
   dryRun: boolean;
+  /** Live progress meter. Off for unattended runs: without a TTY rclone prints
+   * a full stats block every second, which floods the launchd log. */
+  progress?: boolean;
 }
 
 /** A bare copy (size+modtime incremental) rather than --ignore-existing: logs
@@ -18,7 +21,7 @@ export function buildRcloneCopyArgs(cfg: DriveSyncConfig): string[] {
     "copy",
     cfg.src,
     `${cfg.remote}:${cfg.dest}`,
-    "--progress",
+    ...(cfg.progress === false ? [] : ["--progress"]),
     "--transfers",
     "4",
     "--checkers",

@@ -41,9 +41,13 @@ for (const line of lines.slice(-N)) {
   const fresh = r.steps.reduce((n, s) => n + s.fresh, 0);
   const steps = r.steps.map((s) => `${s.bracket} ${s.fresh}/${s.limit}`).join(", ") || r.note || "-";
   const q = r.quotaAfter ? `${r.quotaAfter.downloadsUsedToday}/${r.quotaAfter.downloadsQuota}` : "?";
-  console.log(`  ${r.startedAt.slice(0, 16)}Z  ${r.status.padEnd(12)} ${String(fresh).padStart(2)} new  quota ${q}  ${steps}`);
+  const drive = r.driveSync ? (r.driveSync.exit === 0 ? "drive ok" : "drive FAILED") : "drive -";
+  console.log(`  ${r.startedAt.slice(0, 16)}Z  ${r.status.padEnd(12)} ${String(fresh).padStart(2)} new  quota ${q}  ${drive.padEnd(12)}  ${steps}`);
 }
 const last = lines.length ? (JSON.parse(lines[lines.length - 1]) as RunRecord) : undefined;
+if (last?.driveSync && last.driveSync.exit !== 0) {
+  console.log("\n⚠ the last run did not reach Google Drive — rerun `npx tsx scripts/syncPvpLogsToDrive.ts` (incremental).");
+}
 if (last?.status === "auth-expired") {
   console.log("\n⚠ the last run found the Battle.net session expired — re-login and update the cookie file.");
 }

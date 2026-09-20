@@ -2,7 +2,9 @@
 // the day's 15, all at 2100+, any spec, any uploader (user ruling 2026-09-15).
 // Runs fetchPvpLogs.ts once per step, records every run to
 // downloads/daily-pull/runs.jsonl, and raises a macOS notification when the
-// Battle.net session has expired so the operator knows to re-login.
+// Battle.net session has expired so the operator knows to re-login. Every run
+// then archives downloads/ to Google Drive (syncPvpLogsToDrive.ts, incremental),
+// including runs that pulled nothing, so a failed upload is retried the next day.
 //
 //   npm run logs:daily            (this)
 //   npm run logs:daily:status     (last runs + today's quota + cookie age)
@@ -37,6 +39,7 @@ const DOWNLOADS = path.join(EVAL_HOME, "downloads");
 const QUOTA_STATE = path.join(DOWNLOADS, "wal-quota-state.json");
 const RUN_LOG = path.join(DOWNLOADS, "daily-pull", "runs.jsonl");
 const FETCH_SCRIPT = path.join(__dirname, "fetchPvpLogs.ts");
+const DRIVE_SYNC_SCRIPT = path.join(__dirname, "syncPvpLogsToDrive.ts");
 
 function readState(): QuotaState | null {
   return fs.pathExistsSync(QUOTA_STATE) ? fs.readJsonSync(QUOTA_STATE) : null;
@@ -87,6 +90,15 @@ function runStep(bracket: string, limit: number) {
   return { exit: r.status, fresh: parseFreshCount(r.stdout ?? "") };
 }
 
+function runDriveSync(): NonNullable<RunRecord["driveSync"]> {
+  const t0 = Date.now();
+  const r = spawnSync("npx", ["tsx", DRIVE_SYNC_SCRIPT], {
+    cwd: path.join(__dirname, ".."),
+    stdio: ["ignore", "inherit", "inherit"],
+  });
+  return { exit: r.status, seconds: Math.round((Date.now() - t0) / 1000) };
+}
+
 async function main() {
   const startedAt = new Date();
   const record: RunRecord = {
@@ -128,13 +140,18 @@ async function main() {
   }
   record.status = status;
   record.quotaAfter = readState();
+  if (process.env.DAILY_SKIP_DRIVE_SYNC !== "1") {
+    console.log("\n== daily pull: archive to Google Drive");
+    record.driveSync = runDriveSync();
+  }
+  const driveFailed = record.driveSync != null && record.driveSync.exit !== 0;
   record.finishedAt = new Date().toISOString();
   await fs.ensureDir(path.dirname(RUN_LOG));
   await fs.appendFile(RUN_LOG, JSON.stringify(record) + "\n");
   const fresh = record.steps.reduce((n, s) => n + s.fresh, 0);
   const q = record.quotaAfter;
   console.log(
-    `\ndaily pull ${status}: ${fresh} new logs (${record.steps.map((s) => `${s.bracket} ${s.fresh}/${s.limit}`).join(", ") || "no step"}), quota ${q ? `${q.downloadsUsedToday}/${q.downloadsQuota}` : "?"}; log ${RUN_LOG}`,
+    `\ndaily pull ${status}: ${fresh} new logs (${record.steps.map((s) => `${s.bracket} ${s.fresh}/${s.limit}`).join(", ") || "no step"}), quota ${q ? `${q.downloadsUsedToday}/${q.downloadsQuota}` : "?"}; drive ${record.driveSync ? (driveFailed ? `FAILED (exit ${record.driveSync.exit})` : "synced") : "skipped"}; log ${RUN_LOG}`,
   );
   if (status === "auth-expired") {
     notify(
@@ -144,7 +161,10 @@ async function main() {
   } else if (status === "error") {
     notify("gladlog daily pull: 失败", `见 ${RUN_LOG}`);
   }
-  process.exit(status === "ok" ? 0 : 1);
+  if (driveFailed) {
+    notify("gladlog daily pull: Drive 同步失败", `日志已下载但没传上 Google Drive,见 ${RUN_LOG}`);
+  }
+  process.exit(status === "ok" && !driveFailed ? 0 : 1);
 }
 
 main();

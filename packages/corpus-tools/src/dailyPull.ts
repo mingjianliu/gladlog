@@ -77,5 +77,8 @@ export interface RunRecord {
   status: RunStatus;
   steps: { bracket: string; limit: number; fresh: number; exit: number | null }[];
   quotaAfter: QuotaState | null;
+  /** The Drive archive step that follows the pull. Absent on records written
+   * before 2026-09-20 (the step did not exist) and when DAILY_SKIP_DRIVE_SYNC=1. */
+  driveSync?: { exit: number | null; seconds: number };
   note?: string;
 }

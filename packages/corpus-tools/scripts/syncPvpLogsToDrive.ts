@@ -69,6 +69,7 @@ const cp = spawnSync(
     remote: REMOTE,
     dest: DEST,
     dryRun: DRY_RUN,
+    progress: process.stdout.isTTY === true,
   }),
   { stdio: "inherit" },
 );

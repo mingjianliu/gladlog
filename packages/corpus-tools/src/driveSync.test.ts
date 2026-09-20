@@ -25,6 +25,17 @@ describe("buildRcloneCopyArgs", () => {
       }),
     ).toContain("--dry-run");
   });
+
+  it("progress 缺省开(交互);无人值守显式 false 才去掉 --progress", () => {
+    const cfg = { src: "/x", remote: "g", dest: "d", dryRun: false };
+    expect(buildRcloneCopyArgs(cfg)).toContain("--progress");
+    expect(buildRcloneCopyArgs({ ...cfg, progress: true })).toContain(
+      "--progress",
+    );
+    expect(buildRcloneCopyArgs({ ...cfg, progress: false })).not.toContain(
+      "--progress",
+    );
+  });
 });
 
 describe("parseListRemotes", () => {

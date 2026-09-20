@@ -19,12 +19,12 @@ gladlog parser 直接可解析。
 `packages/shared/src/utils/accessLimits.ts`、`graphql-server/utils/accessGuard.ts`,
 2026-09-15 对线上 API 实测):
 
-| 面                              | 现在                                                                                       |
-| ------------------------------- | ------------------------------------------------------------------------------------------ |
-| 搜索 `latestMatches`            | 必须带 Battle.net 登录态;匿名 → `UNAUTHENTICATED`;最近 1 小时的场次不可见;翻页不计量但按用户记日志 |
-| 原始日志                        | 桶已私有(裸 `logObjectUrl` 403);走 `logDownloadUrl(matchId)` 拿 **10 分钟**签名地址        |
-| 额度                            | **每账号每 UTC 日 15 个不同日志**,固定值无分档、无付费档;同日重开同一 id 不扣;`admin` 豁免、`blocked` 全拒 |
-| 拒绝                            | HTTP 200 + GraphQL error `LOG_QUOTA_EXCEEDED`,原话 "You've reached today's limit of 15 matches … resets at midnight UTC." |
+| 面                   | 现在                                                                                                                      |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| 搜索 `latestMatches` | 必须带 Battle.net 登录态;匿名 → `UNAUTHENTICATED`;最近 1 小时的场次不可见;翻页不计量但按用户记日志                        |
+| 原始日志             | 桶已私有(裸 `logObjectUrl` 403);走 `logDownloadUrl(matchId)` 拿 **10 分钟**签名地址                                       |
+| 额度                 | **每账号每 UTC 日 15 个不同日志**,固定值无分档、无付费档;同日重开同一 id 不扣;`admin` 豁免、`blocked` 全拒                |
+| 拒绝                 | HTTP 200 + GraphQL error `LOG_QUOTA_EXCEEDED`,原话 "You've reached today's limit of 15 matches … resets at midnight UTC." |
 
 **这条额度是对方专门为了挡批量抓取设的,我们按它给的用:一个账号、服务端说停就停。**
 多账号 / 共享会话 / 换 UA / 任何找回旧量级的做法都不做(`docs/DATA-COMPLIANCE.md` §3)。
@@ -45,14 +45,14 @@ SPEC=Shaman_Restoration MIN_RATING=2100 npx tsx scripts/fetchPvpLogs.ts
 | 环境变量          | 默认                                                      | 说明                                                                                                              |
 | ----------------- | --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | `WAL_COOKIE`      | 空                                                        | 会话 token(裸值或完整 Cookie 头);为空则读 `WAL_COOKIE_FILE`                                                       |
-| `WAL_COOKIE_FILE` | `~/.gladlog/wal-session-cookie`                           | 存 token 的文件;两者都没有则直接退出并打印取法                                                                       |
+| `WAL_COOKIE_FILE` | `~/.gladlog/wal-session-cookie`                           | 存 token 的文件;两者都没有则直接退出并打印取法                                                                    |
 | `BRACKET`         | `3v3`                                                     | `2v2` / `3v3` / `Rated Solo Shuffle`                                                                              |
 | `MIN_RATING`      | 0(不过滤)                                                 | **只有 1400/1800/2100/2400 四档生效**(服务端按场均 MMR 分档;传 2700 等效 2400)                                    |
 | `SPEC`            | 空(不过滤)                                                | 逗号分隔,数字 specId 或 `CombatUnitSpec` 枚举名(如 `Shaman_Restoration,105`)。多 spec = 同一队同时含这些专精      |
 | `SPEC_ROLE`       | `recorder`                                                | `recorder`=上传者本人是该专精(advanced logging 视角最优,做该专精分析用这个);`any`=场上任意玩家(敌我不限,样本量大) |
-| `LIMIT`           | 15                                                        | 本次运行**新下**的场数上限;真正的硬闸是服务端计数,到了就停;同日已满则零请求退出                                        |
+| `LIMIT`           | 15                                                        | 本次运行**新下**的场数上限;真正的硬闸是服务端计数,到了就停;同日已满则零请求退出                                   |
 | `OUT_DIR`         | `$GLADLOG_EVAL_HOME/downloads/<bracket>-<rating>-<spec>/` | 落盘目录                                                                                                          |
-| `MAX_PAGES`       | 40                                                        | 翻页兜底(spec 的 recorder 细筛在客户端,冷门条件别无限翻——翻页读费记在志愿者项目账上)                                |
+| `MAX_PAGES`       | 40                                                        | 翻页兜底(spec 的 recorder 细筛在客户端,冷门条件别无限翻——翻页读费记在志愿者项目账上)                              |
 
 产物:每场 `<matchId>.txt` + `manifest.json`(bracket、`playerTeamRating`、双方 MMR、
 胜负、时长、记录者与全员的 spec/个人 CR、GCS meta 时区/年份——log 内时间戳无年份
@@ -78,7 +78,14 @@ npm run logs:daily:status   # 最近 7 次运行 + 今日额度 + cookie 写入�
 
 落盘:`$GLADLOG_EVAL_HOME/downloads/RatedSoloShuffle-r2100-allspecs/` 与 `3v3-r2100-allspecs/`
 (各自 manifest 断点续传);运行记录 `downloads/daily-pull/runs.jsonl`(每次一行:各步
-bracket/limit/fresh/exit、结束时额度、状态 ok / auth-expired / error)。
+bracket/limit/fresh/exit、结束时额度、状态 ok / auth-expired / error、`driveSync`)。
+
+**拉完自动归档到 Drive(2026-09-20 接线)**:每次运行末尾跑一遍
+`syncPvpLogsToDrive.ts`(增量,见下节),失败弹通知 + 退出码非零,`logs:daily:status`
+每行有 `drive ok / FAILED / -`(`-` = 2026-09-20 之前的旧记录,那时没有这一步)。
+零下载的日子也同步,所以某天传失败第二天自动重试。`DAILY_SKIP_DRIVE_SYNC=1` 可跳过。
+接线之前这一步全靠人记,结果 9/15 起每日采集一场都没上云、8 月那批也只传上去 1/4
+(2026-09-20 用户问起才发现,补传 205 个文件 2.5 GiB)——**「某步骤要人定期手跑」= 它不会被跑**。
 
 「小心」由脚本自己保证,不靠人记:
 
@@ -140,7 +147,7 @@ feed 只留 ~7 天、每天只能拿 15 场,下载物要长期留存 → 同步�
 `rclone config` 新建名为 `gdrive` 的 Google Drive remote(client id 留空用内置,
 浏览器授权一次)。
 
-日常两条:
+每日定额那条链路已自动调用本脚本;手工抓取(`SPEC=`/`MIN_RATING=` 那种)之后要自己补一次:
 
 ```bash
 cd packages/corpus-tools
@@ -148,7 +155,9 @@ SPEC=... MIN_RATING=... npx tsx scripts/fetchPvpLogs.ts   # 攒
 npx tsx scripts/syncPvpLogsToDrive.ts                     # 归档(增量)
 ```
 
-`DRY_RUN=1` 先看清单;`REMOTE=`/`SRC=`/`DEST=` 可改。增量语义是裸 `rclone copy`
+`DRY_RUN=1` 先看清单(也是查「有没有欠账」的快法:待传数 = 没上云的文件数);
+`REMOTE=`/`SRC=`/`DEST=` 可改。非 TTY 下自动去掉 `--progress`,否则 rclone 每秒
+吐一整块统计,把 launchd.log 撑爆。增量语义是裸 `rclone copy`
 (size+modtime):log 不可变天然跳过,`manifest.json` 每次变大会重传——**别**改成
 `--ignore-existing`,manifest 会在云端变陈旧。
 
