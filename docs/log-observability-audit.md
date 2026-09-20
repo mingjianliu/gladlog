@@ -181,6 +181,8 @@ What L3 loses by skipping the block on these events: 19,895 Player blocks (4,080
 
 **Direction 3 result.** The gain tail and the cost field are verified, with their snapshot timing (gain: after; cast: before). Combo points and holy power can be reconstructed as an exact ledger from the log alone; chi, soul shards and essence cannot; primary resources are already sampled. The product reads mana only as a percentage change across a window (`resourceDeltaPct`), where a one-cast before/after offset is below anything it reports, so nothing here is a product defect. **No consumer is proposed**: “you sat on five holy power” is an accusation with no evidence base and would need the full value probe first. Nothing stored.
 
+**User ruling, 2026-09-20: resources are closed as a coaching direction.** Mana “does not matter — or rather means little as guidance”; secondary resources belong to the damage/healing rotation and “do not affect the big picture much either”. Do not propose mana or secondary-resource signals from this audit; the verified layouts above stay on record as parser facts only.
+
 Proceed one direction at a time; report a concrete evidence-backed result before widening scope:
 
 1. **Facing:** verify actor ownership, angle units/range, sampling gaps and same-actor same-time consistency. Determine what can be preserved; do not infer camera direction or tactical intent.
