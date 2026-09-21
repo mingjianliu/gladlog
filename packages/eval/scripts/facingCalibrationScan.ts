@@ -24,10 +24,18 @@ import { parseLine } from "@gladlog/parser";
 const [input, output] = process.argv.slice(2);
 if (!input || !output)
   throw new Error("expected pilot.json and new-output.json");
-const pilot = JSON.parse(readFileSync(input, "utf8")) as {
+let pilot: {
   manifestSha256: string;
   files: Array<{ path: string; sha256: string }>;
 };
+try {
+  pilot = JSON.parse(readFileSync(input, "utf8"));
+} catch (err) {
+  process.stderr.write(
+    `[error] failed to read or parse pilot file ${input}: ${err instanceof Error ? err.message : String(err)}\n`,
+  );
+  throw err;
+}
 
 const TAU = 2 * Math.PI;
 const wrap = (a: number) => {
