@@ -38,6 +38,20 @@ export function classifyPromptLine(line: string): string {
 }
 
 /**
+ * GH #99 item 5 的探针键:`[RES]` 行里**冷却台账没有变化**的那些
+ * (`rdy:Δ` 后面没有任何技能名、`cd:—`)。
+ *
+ * 为什么要单独成键:这类行占全部 `[RES]` 行的 32.9%(2026-09-16 实测,309 份
+ * prompt;本机 82 份复现 954/3033 = 31.5%),但**「没变化」只对 rdy/cd 成立** ——
+ * 96.4% 仍带 `focus:`、36.6% 带实时 `cc:`。整类删 `[RES]` 测的是另一个问题;
+ * 要回答「这些行值不值得占 1.9% 的 prompt 字符」,只能单独消融这一子集。
+ */
+export const RES_NO_CHANGE_KEY = "[RES:no-change]";
+export function isNoChangeResLine(line: string): boolean {
+  return /\[RES\]\s+rdy:Δ\s+cd:—/.test(line);
+}
+
+/**
  * 消融时把某一类整体从 prompt 里删掉。
  *
  * `(section-header)` / `(xml)` / `(prose)` 这三类**不提供**消融:删掉它们会破坏
@@ -47,9 +61,13 @@ export const ABLATABLE = (key: string): boolean =>
   key.startsWith("[") || key === "(timestamped-untagged)";
 
 export function ablateLineType(promptText: string, key: string): string {
+  const drop =
+    key === RES_NO_CHANGE_KEY
+      ? isNoChangeResLine
+      : (l: string) => classifyPromptLine(l) === key;
   return promptText
     .split("\n")
-    .filter((l) => classifyPromptLine(l) !== key)
+    .filter((l) => !drop(l))
     .join("\n");
 }
 
