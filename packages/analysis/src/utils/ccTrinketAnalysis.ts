@@ -315,6 +315,64 @@ export function tremorTotemBreak(
   return null;
 }
 
+/** Maximum lookback window (ms) for a pre-placed Tremor Totem to count as avoiding a short fear. */
+export const TREMOR_AVOIDANCE_LOOKBACK_MS = 10_000;
+/** Maximum CC duration (seconds) to count as avoided under a pre-placed Tremor Totem. */
+export const TREMOR_AVOIDANCE_MAX_DURATION_S = 2.0;
+
+/**
+ * Extracts CC avoidance instances where a Shaman's pre-placed Tremor Totem
+ * (cast within 10s prior to CC application) ended a fear within 2.0s.
+ */
+export function extractTremorAvoidedInstances(
+  player: Pick<ICombatUnit, "class" | "spellCastEvents">,
+  ccInstances: ICCInstance[],
+  matchStartMs: number,
+): ICCAvoidedInstance[] {
+  if (player.class !== CombatUnitClass.Shaman) return [];
+
+  const breakable = ccInstances.filter(
+    (cc) =>
+      TREMOR_BREAKABLE_CC_IDS.has(cc.spellId) &&
+      cc.durationSeconds <= TREMOR_AVOIDANCE_MAX_DURATION_S,
+  );
+  if (breakable.length === 0) return [];
+
+  const tremorCastTimestamps: number[] = [];
+  for (const e of player.spellCastEvents) {
+    if (
+      e.spellId === TREMOR_TOTEM_CAST_SPELL_ID &&
+      e.logLine.event === LogEvent.SPELL_CAST_SUCCESS
+    ) {
+      tremorCastTimestamps.push(e.logLine.timestamp);
+    }
+  }
+  if (tremorCastTimestamps.length === 0) return [];
+
+  const avoided: ICCAvoidedInstance[] = [];
+  for (const cc of breakable) {
+    const ccAppliedTimeMs = cc.atSeconds * 1000 + matchStartMs;
+    const hasRecentTremor = tremorCastTimestamps.some(
+      (ts) =>
+        ccAppliedTimeMs >= ts &&
+        ccAppliedTimeMs - ts <= TREMOR_AVOIDANCE_LOOKBACK_MS,
+    );
+    if (hasRecentTremor) {
+      avoided.push({
+        atSeconds: cc.atSeconds,
+        spellId: cc.spellId,
+        spellName: cc.spellName,
+        avoidanceSpellName: "Tremor Totem",
+        avoidanceSpellId: TREMOR_TOTEM_CAST_SPELL_ID,
+        sourceName: cc.sourceName,
+        sourceId: cc.sourceId,
+        sourceSpec: cc.sourceSpec,
+      });
+    }
+  }
+  return avoided;
+}
+
 /**
  * DEFENSIVE-001 (cc-avoidable, 2026-08-07, BACKLOG #18 second batch): pure
  * derivation of "which avoidance spell ids would explain dodging this CC
@@ -1640,35 +1698,9 @@ export function analyzePlayerCCAndTrinket(
   }
 
   // 6. Tremor Totem Breaks (only Shaman players)
-  if (player.class === CombatUnitClass.Shaman) {
-    for (const cc of ccInstances) {
-      const ccAppliedTimeMs = cc.atSeconds * 1000 + matchStartMs;
-      if (
-        TREMOR_BREAKABLE_CC_IDS.has(cc.spellId) &&
-        cc.durationSeconds <= 2.0
-      ) {
-        const tremorCast = player.spellCastEvents.find(
-          (e) =>
-            e.spellId === TREMOR_TOTEM_CAST_SPELL_ID &&
-            e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
-            ccAppliedTimeMs >= e.logLine.timestamp &&
-            ccAppliedTimeMs - e.logLine.timestamp <= 10000,
-        );
-        if (tremorCast) {
-          ccAvoidedInstances.push({
-            atSeconds: cc.atSeconds,
-            spellId: cc.spellId,
-            spellName: cc.spellName,
-            avoidanceSpellName: "Tremor Totem",
-            avoidanceSpellId: TREMOR_TOTEM_CAST_SPELL_ID,
-            sourceName: cc.sourceName,
-            sourceId: cc.sourceId,
-            sourceSpec: cc.sourceSpec,
-          });
-        }
-      }
-    }
-  }
+  ccAvoidedInstances.push(
+    ...extractTremorAvoidedInstances(player, ccInstances, matchStartMs),
+  );
 
   ccAvoidedInstances.sort((a, b) => a.atSeconds - b.atSeconds);
 
