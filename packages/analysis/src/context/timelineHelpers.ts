@@ -1215,7 +1215,7 @@ export function resolveSummonOwner(params: {
   const { allUnits, friends, enemies, name, sourceId, side } = params;
   const roster = [...friends, ...(enemies ?? [])];
   const byId = sourceId
-    ? allUnits?.find((u) => u.id === sourceId && u.ownerId.length > 0)
+    ? allUnits?.find((u) => u.id === sourceId && Boolean(u.ownerId))
     : undefined;
   if (byId) return roster.find((u) => u.id === byId.ownerId);
   const allowed =
@@ -1225,7 +1225,7 @@ export function resolveSummonOwner(params: {
         ? friends
         : (enemies ?? []);
   for (const pet of allUnits ?? []) {
-    if (pet.name !== name || pet.ownerId.length === 0) continue;
+    if (pet.name !== name || !pet.ownerId) continue;
     const owner = allowed.find((u) => u.id === pet.ownerId);
     if (owner) return owner;
   }

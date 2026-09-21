@@ -417,17 +417,23 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       ) {
         for (const absorb of unit.absorbsIn) {
           if (!absorb.attackerId) continue;
+          let spellName: string | undefined;
+          if (absorb.attackSpellId) {
+            const raw = getEnglishSpellName(
+              absorb.attackSpellId,
+              absorb.attackSpellName?.trim() || null,
+            );
+            spellName =
+              raw.trim() ||
+              absorb.attackSpellName?.trim() ||
+              absorb.attackSpellId;
+          } else if (absorb.attackSpellName?.trim()) {
+            spellName = absorb.attackSpellName.trim();
+          }
           groundingAbsorbs.push({
             timeSeconds: (absorb.timestamp - matchStartMs) / 1000,
             attackerId: absorb.attackerId,
-            ...(absorb.attackSpellId
-              ? {
-                  spellName: getEnglishSpellName(
-                    absorb.attackSpellId,
-                    absorb.attackSpellName ?? null,
-                  ),
-                }
-              : {}),
+            ...(spellName ? { spellName } : {}),
             totemOwnerId: unit.ownerId,
           });
         }
@@ -500,7 +506,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     };
     // Every eaten spell is known → name them; otherwise (an older stored
     // document) say only who cast them. Never a mix that reads as complete.
-    if (eaten.every((a) => a.spellName))
+    if (eaten.every((a) => Boolean(a.spellName?.trim())))
       return ` [ABSORBED: ${Array.from(
         new Set(eaten.map((a) => `${a.spellName} (${casterOf(a.attackerId)})`)),
       ).join(", ")}]`;

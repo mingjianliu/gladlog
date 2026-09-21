@@ -81,6 +81,7 @@
     "test/cdWasteGate.test.ts",
     "test/chargeAvailability.test.ts",
     "test/consequenceGate.test.ts",
+    "test/context.groundingAbsorb.test.ts",
     "test/context.matchNarrative.test.ts",
     "test/context.resourceSnapshot.test.ts",
     "test/context.test.ts",
