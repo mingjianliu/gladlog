@@ -2313,7 +2313,10 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
             : "";
         const tSec = toRenderSecond(d.atSeconds);
         const tMs = matchStartMs + tSec * 1000;
-        const hasBurst = friends.some((f) => hasOffensiveSpellActive(f, tMs, null));
+        const friendlyIds = new Set(friends.map((f) => f.id));
+        const hasBurst =
+          friends.some((f) => hasOffensiveSpellActive(f, tMs, friendlyIds)) ||
+          (enemies ?? []).some((e) => hasOffensiveSpellActive(e, tMs, friendlyIds));
         const burstStr = hasBurst ? " [friendly offensive CD active]" : "";
         const targetUnit =
           d.kind === "external"
@@ -2512,7 +2515,10 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
         const ccPart = brokenCC
           ? ` out of ${brokenCC.spellName} (by ${actorLabel(brokenCC.sourceName, "friendly", brokenCC.sourceId)})`
           : "";
-        const hasBurst = friends.some((f) => hasOffensiveSpellActive(f, tMs, null));
+        const friendlyIds = new Set(friends.map((f) => f.id));
+        const hasBurst =
+          friends.some((f) => hasOffensiveSpellActive(f, tMs, friendlyIds)) ||
+          (enemies ?? []).some((e) => hasOffensiveSpellActive(e, tMs, friendlyIds));
         const burstPart = hasBurst ? " [friendly offensive CD active]" : "";
         const enemyUnit = enemies?.find((e) => e.name === summary.playerName);
         const hpPct = enemyUnit ? getHpPercentAtTime(enemyUnit, tSec, matchStartMs) : null;
