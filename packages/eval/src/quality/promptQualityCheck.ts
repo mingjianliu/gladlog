@@ -274,6 +274,15 @@ const SPIKE_HP =
 // "0:15  [YOU] [CD]   Holy Word: Chastise → 6(RPaladin) (68% HP)" — the
 // class-C inline HP form
 const INLINE_HP = /^(\d+):(\d+)\s+.*?→\s*(\S+)\s*\((\d+)%\s*HP/;
+// "1:20  [ENEMY DEF]   2(ERogue) (Subtlety Rogue): Cloak of Shadows (immune) (at 28% HP)"
+const ENEMY_DEF_SELF_HP =
+  /^(\d+):(\d+)\s+\[ENEMY DEF\]\s+(\S+)(?:\s+\([^)]*\))?:.*?\(at\s+(\d+)%\s*HP/;
+// "1:20  [ENEMY DEF]   3(HPriest) (Holy Priest): Pain Suppression → 2(ERogue) (target at 24% HP)"
+const ENEMY_DEF_EXT_HP =
+  /^(\d+):(\d+)\s+\[ENEMY DEF\]\s+.*?:.*?(?:→|->)\s*(\S+).*?\(target at\s+(\d+)%\s*HP/;
+// "1:20  [ENEMY TRINKET]   2(ERogue) used PvP trinket ... (target at 31% HP)"
+const ENEMY_TRINKET_HP =
+  /^(\d+):(\d+)\s+\[ENEMY TRINKET\]\s+(\S+)\s+used PvP trinket.*?\(target at\s+(\d+)%\s*HP/;
 // "0:21  [STATE]   friends 1(HPriest):99 2(SHunter):76 / enemies 4(AWarrior):90"
 const STATE_LINE = /^(\d+):(\d+)\s+\[STATE\]\s+(.*)$/;
 /** Benign sampling jitter allowed, in percentage points. Anything above this is
@@ -307,9 +316,25 @@ export function checkSameSecondHpConsistency(lines: string[]): string[] {
   lines.forEach((line, i) => {
     // [DMG SPIKE]'s "X% -> Y% HP" (class A) and the inline "→ target (X% HP)"
     // (class C) are two rendered forms of the same invariant and share one
-    // criterion.
-    const isSpike = line.includes("[DMG SPIKE]");
-    const m = isSpike ? line.match(SPIKE_HP) : line.match(INLINE_HP);
+    // criterion. Extended to check HP claims from [ENEMY DEF] (self/external)
+    // and [ENEMY TRINKET].
+    let m: RegExpMatchArray | null = null;
+    let label = "行内嵌";
+    if (line.includes("[DMG SPIKE]")) {
+      m = line.match(SPIKE_HP);
+      label = "[DMG SPIKE]";
+    } else if (line.includes("[ENEMY DEF]")) {
+      m = line.includes("→") || line.includes("->")
+        ? line.match(ENEMY_DEF_EXT_HP)
+        : line.match(ENEMY_DEF_SELF_HP);
+      label = "[ENEMY DEF]";
+    } else if (line.includes("[ENEMY TRINKET]")) {
+      m = line.match(ENEMY_TRINKET_HP);
+      label = "[ENEMY TRINKET]";
+    } else {
+      m = line.match(INLINE_HP);
+      label = "行内嵌";
+    }
     if (!m) return;
     const t = Number(m[1]) * 60 + Number(m[2]);
     const stateHp = stateAt.get(t)?.get(m[3]);
@@ -318,7 +343,7 @@ export function checkSameSecondHpConsistency(lines: string[]): string[] {
     const delta = Math.abs(stateHp - claimed);
     if (delta > HP_AGREEMENT_TOLERANCE_PP) {
       violations.push(
-        `line ${i + 1}: ${m[1]}:${m[2]} ${m[3]} — ${isSpike ? "[DMG SPIKE]" : "行内嵌"} 报 ${claimed}% 而同秒 [STATE] 报 ${stateHp}%(Δ${delta}pp)`,
+        `line ${i + 1}: ${m[1]}:${m[2]} ${m[3]} — ${label} 报 ${claimed}% 而同秒 [STATE] 报 ${stateHp}%(Δ${delta}pp)`,
       );
     }
   });
@@ -817,11 +842,11 @@ const UNIT_ROLE_LINE = /<unit\s+id="(\d+)"[^>]*role="([^"]+)"/;
  * credited owner id of a summon-cast CC. The inner `(Spec)` is why this cannot
  * be `[^)]*`. */
 const CC_PET_CREDIT =
-  /\[(CC ON TEAM|CC ON ENEMY)\][^\n]*?\(by (\d+)[^()]*(?:\([^()]*\)[^()]*)*'s pet\)/;
+  /\[(CC ON TEAM|CC ON ENEMY|ENEMY TRINKET)\][^\n]*?\(by (\d+)[^()]*(?:\([^()]*\)[^()]*)*'s pet\)/;
 
 /**
  * A summon-cast CC must be credited to the side that could have cast it:
- * `[CC ON TEAM]` → an enemy, `[CC ON ENEMY]` → a teammate.
+ * `[CC ON TEAM]` → an enemy, `[CC ON ENEMY]` → a teammate, `[ENEMY TRINKET]` → friendly.
  *
  * Why this is a hardFailure (GH #99, 2026-09-20): matchTimeline resolved a
  * summon's owner by matching the unit NAME, and both teams field same-named
@@ -847,10 +872,17 @@ export function checkPetCreditSide(lines: string[]): string[] {
     if (!m) return;
     const want = m[1] === "CC ON TEAM" ? "enemy" : "friendly";
     const got = side.get(m[2]!);
-    if (got !== undefined && got !== want)
-      failures.push(
-        `line ${i + 1}: ${m[1]} 的施放者被记到${got === "enemy" ? "敌方" : "友方"}(应为${want === "enemy" ? "敌方" : "友方"})—— ${line.trim().slice(0, 140)}`,
-      );
+    if (got !== undefined && got !== want) {
+      if (m[1] === "ENEMY TRINKET") {
+        failures.push(
+          `line ${i + 1}: [ENEMY TRINKET] credits enemy pet ${m[2]!}, must be friendly`,
+        );
+      } else {
+        failures.push(
+          `line ${i + 1}: ${m[1]} 的施放者被记到${got === "enemy" ? "敌方" : "友方"}(应为${want === "enemy" ? "敌方" : "友方"})—— ${line.trim().slice(0, 140)}`,
+        );
+      }
+    }
   });
   return failures;
 }

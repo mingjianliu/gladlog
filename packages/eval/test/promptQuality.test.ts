@@ -12,6 +12,7 @@ import {
   checkMatch,
   checkHeaderHpPromise,
   checkPetCreditSide,
+  checkSameSecondHpConsistency,
   checkSelfOnlyDefensiveClaims,
   checkSnapshotFactsConsistency,
 } from "../src/quality/promptQualityCheck";
@@ -454,6 +455,26 @@ describe("checkPetCreditSide — a summon-cast CC credited to the wrong side (GH
       ]),
     ).toEqual([]);
   });
+
+  it("flags an [ENEMY TRINKET] line crediting an enemy's pet", () => {
+    const out = checkPetCreditSide([
+      ...roster,
+      "0:45  [ENEMY TRINKET]   6(RShaman) used PvP trinket out of Capacitor Totem (by 6(RShaman)'s pet) (target at 31% HP)",
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toBe(
+      "line 4: [ENEMY TRINKET] credits enemy pet 6, must be friendly",
+    );
+  });
+
+  it("passes an [ENEMY TRINKET] line crediting a teammate's pet", () => {
+    expect(
+      checkPetCreditSide([
+        ...roster,
+        "0:45  [ENEMY TRINKET]   6(RShaman) used PvP trinket out of Capacitor Totem (by 3(EShaman)'s pet) (target at 31% HP)",
+      ]),
+    ).toEqual([]);
+  });
 });
 
 describe("checkHeaderHpPromise — an HP floor promised in a header binds the lines under it (GH #99)", () => {
@@ -488,5 +509,58 @@ describe("checkHeaderHpPromise — an HP floor promised in a header binds the li
         killWindow,
       ]),
     ).toEqual([]);
+  });
+});
+
+describe("checkSameSecondHpConsistency", () => {
+  it("flags external-recipient HP contradiction on [ENEMY DEF]", () => {
+    const lines = [
+      "0:15  [STATE]   friends 1(HPriest):99 / enemies 2(ERogue):80",
+      "0:15  [ENEMY DEF]   3(HPriest) (Holy Priest): Pain Suppression → 2(ERogue) (target at 24% HP)",
+    ];
+    const out = checkSameSecondHpConsistency(lines);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toContain("[ENEMY DEF]");
+    expect(out[0]).toContain("2(ERogue)");
+    expect(out[0]).toContain("24%");
+    expect(out[0]).toContain("80%");
+  });
+
+  it("flags self-defensive HP contradiction on [ENEMY DEF]", () => {
+    const lines = [
+      "0:20  [STATE]   friends 1(HPriest):99 / enemies 2(ERogue):70",
+      "0:20  [ENEMY DEF]   2(ERogue) (Subtlety Rogue): Cloak of Shadows (immune) (at 28% HP)",
+    ];
+    const out = checkSameSecondHpConsistency(lines);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toContain("[ENEMY DEF]");
+    expect(out[0]).toContain("2(ERogue)");
+    expect(out[0]).toContain("28%");
+    expect(out[0]).toContain("70%");
+  });
+
+  it("flags enemy trinket HP contradiction on [ENEMY TRINKET]", () => {
+    const lines = [
+      "0:25  [STATE]   friends 1(HPriest):99 / enemies 2(ERogue):90",
+      "0:25  [ENEMY TRINKET]   2(ERogue) used PvP trinket (target at 31% HP)",
+    ];
+    const out = checkSameSecondHpConsistency(lines);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toContain("[ENEMY TRINKET]");
+    expect(out[0]).toContain("2(ERogue)");
+    expect(out[0]).toContain("31%");
+    expect(out[0]).toContain("90%");
+  });
+
+  it("passes when HP values agree within 3pp", () => {
+    const lines = [
+      "0:15  [STATE]   friends 1(HPriest):99 / enemies 2(ERogue):25",
+      "0:15  [ENEMY DEF]   3(HPriest) (Holy Priest): Pain Suppression → 2(ERogue) (target at 24% HP)",
+      "0:20  [STATE]   friends 1(HPriest):99 / enemies 2(ERogue):30",
+      "0:20  [ENEMY DEF]   2(ERogue) (Subtlety Rogue): Cloak of Shadows (immune) (at 28% HP)",
+      "0:25  [STATE]   friends 1(HPriest):99 / enemies 2(ERogue):33",
+      "0:25  [ENEMY TRINKET]   2(ERogue) used PvP trinket (target at 31% HP)",
+    ];
+    expect(checkSameSecondHpConsistency(lines)).toEqual([]);
   });
 });
