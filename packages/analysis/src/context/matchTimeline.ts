@@ -26,6 +26,7 @@ import { SUMMON_REACH_MIN_S, summonReach } from "../utils/summonReachability";
 import type { ICcBreakEvent } from "../utils/ccBreakAnalysis";
 import {
   CC_AVOIDANCE_BUFF_SPELLS,
+  findBrokenCC,
   IPlayerCCTrinketSummary,
   tremorTotemBreak,
 } from "../utils/ccTrinketAnalysis";
@@ -43,6 +44,7 @@ import {
   // displayed second is the same number this loop prints there (CLAUDE.md
   // Shared-Predicate Rule) — see gridHpPct's doc comment in cooldowns.ts.
   gridHpPct,
+  hasOffensiveSpellActive,
   HP_SAMPLE_RADIUS_MS,
   IDamageBucket,
   IMajorCooldownInfo,
@@ -2309,12 +2311,27 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
           d.observedSeconds !== undefined
             ? `${d.observedSeconds.toFixed(1)}s${d.removedEarly ? " — removed early" : ""}`
             : "";
+        const tSec = toRenderSecond(d.atSeconds);
+        const tMs = matchStartMs + tSec * 1000;
+        const hasBurst = friends.some((f) => hasOffensiveSpellActive(f, tMs, null));
+        const burstStr = hasBurst ? " [friendly offensive CD active]" : "";
+        const targetUnit =
+          d.kind === "external"
+            ? (enemies?.find((e) => e.id === d.recipientId) ??
+              enemies?.find((e) => e.name === d.recipientName))
+            : enemy;
+        const hpPct = targetUnit
+          ? getHpPercentAtTime(targetUnit, tSec, matchStartMs)
+          : null;
         let line: string;
         if (d.kind === "external") {
-          line = `${d.spellName} → ${enemyPid(d.recipientName ?? "")}${dur ? ` (${dur})` : ""}`;
+          const hpStr =
+            hpPct !== null ? ` (target at ${hpPct.toFixed(0)}% HP)` : "";
+          line = `${d.spellName} → ${enemyPid(d.recipientName ?? "")}${dur ? ` (${dur})` : ""}${burstStr}${hpStr}`;
         } else {
           const strength = d.kind === "immune" ? "immune" : `${d.pct}%`;
-          line = `${d.spellName} (${strength}${dur ? `, ${dur}` : ""})`;
+          const hpStr = hpPct !== null ? ` (at ${hpPct.toFixed(0)}% HP)` : "";
+          line = `${d.spellName} (${strength}${dur ? `, ${dur}` : ""})${burstStr}${hpStr}`;
         }
         addEntry(
           d.atSeconds,
@@ -2478,6 +2495,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   const ownerRenderedCcIds = new Set(
     ownerCDs.filter((cd) => ccSpellIds.has(cd.spellId)).map((cd) => cd.spellId),
   );
+  let enemyTrinketCount = 0;
   if (enemyCCSummaries) {
     for (const summary of enemyCCSummaries) {
       // Enemy trinket usage was previously not rendered at all (60-match wild
@@ -2486,9 +2504,22 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       // audit, and without it the coach can only downgrade confidence with
       // "trinket state never observed".
       for (const t of summary.trinketUseTimes) {
+        enemyTrinketCount++;
+        const tSec = toRenderSecond(t);
+        const tMs = matchStartMs + tSec * 1000;
+        const rawCastMs = matchStartMs + Math.round(t * 1000);
+        const brokenCC = findBrokenCC(summary.ccInstances, matchStartMs, rawCastMs);
+        const ccPart = brokenCC
+          ? ` out of ${brokenCC.spellName} (by ${actorLabel(brokenCC.sourceName, "friendly", brokenCC.sourceId)})`
+          : "";
+        const hasBurst = friends.some((f) => hasOffensiveSpellActive(f, tMs, null));
+        const burstPart = hasBurst ? " [friendly offensive CD active]" : "";
+        const enemyUnit = enemies?.find((e) => e.name === summary.playerName);
+        const hpPct = enemyUnit ? getHpPercentAtTime(enemyUnit, tSec, matchStartMs) : null;
+        const hpPart = hpPct !== null ? ` (target at ${hpPct.toFixed(0)}% HP)` : "";
         addEntry(
           t,
-          `${fmtTime(t)}  [ENEMY TRINKET]   ${enemyPid(summary.playerName)} used PvP trinket`,
+          `${fmtTime(t)}  [ENEMY TRINKET]   ${enemyPid(summary.playerName)} used PvP trinket${ccPart}${burstPart}${hpPart}`,
         );
       }
       for (const cc of summary.ccInstances) {
@@ -3372,6 +3403,15 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
           "  [ENEMY DEF] = an enemy pressed a defensive at that second: `(N%, Ts)` = official damage reduction and the",
           "    OBSERVED duration in this round; `immune` = full immunity; `— removed early` = it ended before its full",
           "    duration (dispelled, broken or cancelled); `X → unit` = an external put on that unit. Absent = not pressed.",
+          "    `[friendly offensive CD active]` indicates at least one friendly offensive cooldown was active at that displayed second.",
+          "    `(at N% HP)` / `(target at N% HP)` reflects the target's HP at the displayed second.",
+        ]
+      : []),
+    ...(enemyTrinketCount > 0
+      ? [
+          "  [ENEMY TRINKET] = an enemy used PvP trinket; `out of <spell> (by <source>)` indicates breaking out of that CC.",
+          "    `[friendly offensive CD active]` indicates at least one friendly offensive cooldown was active at that displayed second.",
+          "    `(target at N% HP)` reflects the target's HP at the displayed second.",
         ]
       : []),
     ...(TIMELINE_LINE_FLAGS.deathWindowUnfold === "perCast"
