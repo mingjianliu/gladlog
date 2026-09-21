@@ -90,6 +90,12 @@ const TRINKET_RESPONSE_WINDOW_MS = 5000;
  */
 const SIGNIFICANT_CC_DAMAGE = 30_000;
 
+/**
+ * B111: tolerance window in ms for binding a trinket or racial break cast to an
+ * active CC window (applyMs - toleranceMs <= castTs <= removeMs + toleranceMs).
+ */
+export const TRINKET_BREAK_TOLERANCE_MS = 250;
+
 // Position snapshots are event-driven; beyond this gap to the nearest snapshot
 // the interpolated position is fabricated (unit idle/stealthed — worst in openers).
 // T3 grounding guard: 8s allowed linear interpolation through the middle of a
@@ -427,6 +433,50 @@ export interface ICCInstance {
    * null when arena geometry is not mapped or advanced logging is absent.
    */
   losBlocked: boolean | null;
+}
+
+export interface ICCBreakableWindow {
+  applyMs: number;
+  removeMs: number;
+}
+
+/**
+ * Generic CC break attribution binder (B111).
+ * Given a list of breakable windows and a break cast timestamp, binds the cast to the
+ * longest-duration active CC window within toleranceMs.
+ */
+export function bindBreakToWindow<T extends ICCBreakableWindow>(
+  windows: T[],
+  castTs: number,
+  toleranceMs = TRINKET_BREAK_TOLERANCE_MS,
+): T | undefined {
+  let primary: T | undefined;
+  let primaryDurationMs = -1;
+  for (const w of windows) {
+    const activeAtCast =
+      castTs >= w.applyMs - toleranceMs &&
+      castTs <= w.removeMs + toleranceMs;
+    if (!activeAtCast) continue;
+    const durationMs = w.removeMs - w.applyMs;
+    if (durationMs > primaryDurationMs) {
+      primaryDurationMs = durationMs;
+      primary = w;
+    }
+  }
+  return primary;
+}
+
+export function findBrokenCC(
+  instances: ICCInstance[],
+  matchStartMs: number,
+  castTsMs: number,
+): ICCInstance | undefined {
+  const breakable = instances.map((cc) => ({
+    cc,
+    applyMs: matchStartMs + Math.round(cc.atSeconds * 1000),
+    removeMs: matchStartMs + Math.round((cc.atSeconds + cc.durationSeconds) * 1000),
+  }));
+  return bindBreakToWindow(breakable, castTsMs)?.cc;
 }
 
 export interface IRootInstance {
@@ -908,29 +958,11 @@ export function analyzePlayerCCAndTrinket(
   // the cast instant (applyMs ≤ castTs ≤ removeMs). The old window mis-tagged CCs that had
   // already expired before the trinket press, so the coach blamed a trivial / DR'd-to-0 CC
   // rather than the real one. When several CCs are active at once, credit the longest-active.
-  const TRINKET_BREAK_TOLERANCE_MS = 250;
-  /** Bind one break cast to the single CC it broke (shared by the trinket and
-   * the racial pass, so the two can never drift apart). */
-  const bindBreakToWindow = (castTs: number): number => {
-    let primaryIdx = -1;
-    let primaryDurationMs = -1;
-    filteredCCWindows.forEach((w, idx) => {
-      const activeAtCast =
-        castTs >= w.applyMs - TRINKET_BREAK_TOLERANCE_MS &&
-        castTs <= w.removeMs + TRINKET_BREAK_TOLERANCE_MS;
-      if (!activeAtCast) return;
-      const durationMs = w.removeMs - w.applyMs;
-      if (durationMs > primaryDurationMs) {
-        primaryDurationMs = durationMs;
-        primaryIdx = idx;
-      }
-    });
-    return primaryIdx;
-  };
+  const indexedCCWindows = filteredCCWindows.map((w, idx) => ({ ...w, idx }));
   const trinketBrokenWindowIdx = new Set<number>();
   for (const trinketTs of trinketCastTimestamps) {
-    const idx = bindBreakToWindow(trinketTs);
-    if (idx >= 0) trinketBrokenWindowIdx.add(idx);
+    const bound = bindBreakToWindow(indexedCCWindows, trinketTs);
+    if (bound !== undefined) trinketBrokenWindowIdx.add(bound.idx);
   }
 
   // Racial breaks (2026-08-12): the log has no race field, so ownership is
@@ -947,11 +979,11 @@ export function analyzePlayerCCAndTrinket(
     if (id && SHARED_CD_RACIAL_SPELL_IDS.has(id))
       racialLockTimestamps.push(e.logLine.timestamp);
     if (!id || !BREAK_RACIAL_SPELL_IDS.has(id)) continue;
-    const idx = bindBreakToWindow(e.logLine.timestamp);
+    const bound = bindBreakToWindow(indexedCCWindows, e.logLine.timestamp);
     // The trinket wins the label when both were pressed on the same CC: the
     // trinket ledger's whole subject is the trinket.
-    if (idx >= 0 && !trinketBrokenWindowIdx.has(idx))
-      racialBrokenWindow.set(idx, racialName(id) ?? id);
+    if (bound !== undefined && !trinketBrokenWindowIdx.has(bound.idx))
+      racialBrokenWindow.set(bound.idx, racialName(id) ?? id);
   }
 
   // Defensive: the remaining-time scan assumes ascending order, and
