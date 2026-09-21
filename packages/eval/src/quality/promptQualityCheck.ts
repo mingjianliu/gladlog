@@ -766,6 +766,51 @@ export function checkCjkLeak(lines: string[]): string[] {
   return failures;
 }
 
+/** A section header that promises a team-HP floor, e.g. the pre-GH-#99
+ * `HEALER OFFENSE (slack-gated facts — team ≥85% HP, …)`. */
+const HP_PROMISE_HEADER = /^[A-Z][A-Z ]+\(.*team ≥(\d+)% HP/;
+/** A fact line reporting the team's minimum HP over its own span. */
+const TEAM_MIN_HP = /team min HP (\d+)%/;
+
+/**
+ * A team-HP floor promised in a section header binds every line under it.
+ *
+ * Why (GH #99, 2026-09-20): `HEALER OFFENSE` opened with "slack-gated facts —
+ * team ≥85% HP, no enemy offensive CDs active, you un-CC-d" and only the
+ * `[SLACK]` lines are gated that way. `[KILL WINDOW]` / `[VULNERABLE]` are
+ * enemy-vulnerability spans with no own-team HP gate, and `[CONTESTED]` is by
+ * construction the 70–85% band, so the header contradicted 1028/1109,
+ * 72/77 and 91/91 of those lines respectively — 288 of the 309 prompts in the
+ * 2026-09-15 Opus baseline. The header now promises nothing and each family
+ * carries its own condition (rendered from `SLACK_TEAM_HP_THRESHOLD`); this
+ * gate is what keeps a blanket promise from being re-added over facts that do
+ * not honour it. A line may still state its own floor — the gate keys on the
+ * HEADER.
+ */
+export function checkHeaderHpPromise(lines: string[]): string[] {
+  const failures: string[] = [];
+  let promise: { pct: number; header: string; line: number } | null = null;
+  lines.forEach((line, i) => {
+    const h = line.trim().match(HP_PROMISE_HEADER);
+    if (h) {
+      promise = { pct: Number(h[1]), header: line.trim(), line: i + 1 };
+      return;
+    }
+    // A blank line ends the block the header opened.
+    if (line.trim() === "") {
+      promise = null;
+      return;
+    }
+    if (!promise) return;
+    const m = line.match(TEAM_MIN_HP);
+    if (m && Number(m[1]) < promise.pct)
+      failures.push(
+        `line ${i + 1}: 段首(第 ${promise.line} 行)承诺 team ≥${promise.pct}% HP,本行却报 team min HP ${m[1]}% —— ${line.trim().slice(0, 140)}`,
+      );
+  });
+  return failures;
+}
+
 /** `<unit id="4" … role="enemy">` — the side a rendered id belongs to. */
 const UNIT_ROLE_LINE = /<unit\s+id="(\d+)"[^>]*role="([^"]+)"/;
 /** `[CC ON TEAM] 1(RShaman) ← Capacitor Totem (by 6(RShaman)'s pet)` — the
@@ -2013,6 +2058,7 @@ export function checkMatch(
   hardFailures.push(...checkEnemyDefRefConsistency(lines));
   hardFailures.push(...checkFactsBlockIntegrity(lines));
   hardFailures.push(...checkPetCreditSide(lines));
+  hardFailures.push(...checkHeaderHpPromise(lines));
 
   return {
     ordinal: entry.ordinal,

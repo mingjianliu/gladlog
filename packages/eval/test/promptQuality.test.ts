@@ -10,6 +10,7 @@ import type { CoverageManifest } from "../src/quality/coverageManifest";
 import {
   checkBehaviorPriorConsistency,
   checkMatch,
+  checkHeaderHpPromise,
   checkPetCreditSide,
   checkSelfOnlyDefensiveClaims,
   checkSnapshotFactsConsistency,
@@ -450,6 +451,41 @@ describe("checkPetCreditSide — a summon-cast CC credited to the wrong side (GH
       checkPetCreditSide([
         ...roster,
         "0:32  [CC ON TEAM]   1(RShaman) ← Capacitor Totem (by [pet]) | 3s",
+      ]),
+    ).toEqual([]);
+  });
+});
+
+describe("checkHeaderHpPromise — an HP floor promised in a header binds the lines under it (GH #99)", () => {
+  const killWindow =
+    "  [KILL WINDOW] 1:29–1:47 on Fury Warrior (Todory-MoonGuard-US): you cast no CC; your damage 480k; free 15s of 18s, team min HP 32%.";
+
+  it("flags the pre-fix header over a window that reports 32%", () => {
+    const out = checkHeaderHpPromise([
+      "HEALER OFFENSE (slack-gated facts — team ≥85% HP, no enemy offensive CDs active, you un-CC-d):",
+      killWindow,
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toContain("team min HP 32%");
+  });
+
+  it("passes under the header that promises nothing", () => {
+    expect(
+      checkHeaderHpPromise([
+        "HEALER OFFENSE (each line states the condition it holds under):",
+        "  Slack time (team ≥85% HP, no enemy offensive CDs active, you un-CC-d): 21s across 2 segment(s); 0s with zero offensive output.",
+        killWindow,
+      ]),
+    ).toEqual([]);
+  });
+
+  it("a blank line ends the block a header opened", () => {
+    expect(
+      checkHeaderHpPromise([
+        "HEALER OFFENSE (slack-gated facts — team ≥85% HP, no enemy offensive CDs active, you un-CC-d):",
+        "  Slack time: 21s across 2 segment(s).",
+        "",
+        killWindow,
       ]),
     ).toEqual([]);
   });

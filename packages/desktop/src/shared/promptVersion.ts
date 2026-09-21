@@ -652,4 +652,17 @@
 //  credits the name path could not resolve at all; `(by N…)` player credits
 //  7805 → 7805 and total credited lines 8427 → 8427 (no line gained or lost).
 //  Gated by checkPetCreditSide.
-export const PROMPT_VERSION = 90;
+//  v91 (2026-09-20, GH #99, second unverified contradiction — user picked
+//  option A): the HEALER OFFENSE header no longer promises the slack gate for
+//  the whole section. `[KILL WINDOW]` / `[VULNERABLE]` are enemy-vulnerability
+//  spans with no own-team HP gate and `[CONTESTED]` is by construction the
+//  70–85% band, so "slack-gated facts — team ≥85% HP …" was false for
+//  1028/1109, 72/77 and 91/91 of those lines (288 of the 309 prompts in the
+//  2026-09-15 baseline; 0/147 `[SLACK]` lines). The header now reads "each
+//  line states the condition it holds under" and the gate moved onto the
+//  `Slack time (team ≥85% HP, no enemy offensive CDs active, you un-CC-d):`
+//  line itself, rendered from SLACK_TEAM_HP_THRESHOLD. 82-prompt local
+//  rebuild: 82/82 prompts changed, the ONLY differing line shapes are those
+//  two, all 370 `team min HP` tokens byte-identical; the new gate
+//  checkHeaderHpPromise 335 violations / 73 prompts → 0.
+export const PROMPT_VERSION = 91;

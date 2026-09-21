@@ -836,9 +836,16 @@ export function formatHealerOffenseForContext(
     return [];
 
   const lines: string[] = [];
-  lines.push(
-    "HEALER OFFENSE (slack-gated facts — team ≥85% HP, no enemy offensive CDs active, you un-CC-d):",
-  );
+  // GH #99 (2026-09-20): the header used to promise "slack-gated facts — team
+  // ≥85% HP …" for the WHOLE section, and only the slack lines are gated that
+  // way. `[KILL WINDOW]` / `[VULNERABLE]` are enemy-vulnerability spans with no
+  // own-team HP gate at all, and `[CONTESTED]` is by construction the 70–85%
+  // band — the promise was false for them by design. Measured on the
+  // 2026-09-15 Opus baseline: 1028/1109 KILL WINDOW, 72/77 VULNERABLE and
+  // 91/91 CONTESTED lines printed a `team min HP` below the 85 the header
+  // claimed, in 288 of 309 prompts, while 0/147 SLACK lines did. Each family
+  // now states its own condition, so no fact inherits another's gate.
+  lines.push("HEALER OFFENSE (each line states the condition it holds under):");
 
   // Hoist the owner's static CC spell set once instead of repeating the name on every
   // [KILL WINDOW] line (~25 tok/match, 2026-07-09 week-eval tokens.md #5). Readiness and
@@ -868,7 +875,9 @@ export function formatHealerOffenseForContext(
     .reduce((s, seg) => s + seg.durationSeconds, 0);
   if (slackSegments.length > 0) {
     lines.push(
-      `  Slack time: ${totalSlack}s across ${slackSegments.length} segment(s); ${idleSlack}s with zero offensive output.`,
+      // The gate is rendered FROM the constant the sweep uses, so the claim
+      // cannot drift from `isSlackSecond` (shared-predicate rule).
+      `  Slack time (team ≥${SLACK_TEAM_HP_THRESHOLD}% HP, no enemy offensive CDs active, you un-CC-d): ${totalSlack}s across ${slackSegments.length} segment(s); ${idleSlack}s with zero offensive output.`,
     );
     for (const seg of idleSegs) {
       lines.push(

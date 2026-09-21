@@ -90,6 +90,7 @@ import * as drAnalysis from "@gladlog/analysis/src/utils/drAnalysis";
 import * as enemyCDs from "@gladlog/analysis/src/utils/enemyCDs";
 import * as enemyDefensives from "@gladlog/analysis/src/utils/enemyDefensives";
 import * as enemyInterrupts from "@gladlog/analysis/src/utils/enemyInterrupts";
+import * as healerOffenseAnalysis from "@gladlog/analysis/src/utils/healerOffenseAnalysis";
 import { HEALER_OFFENSE_FLAGS } from "@gladlog/analysis/src/utils/healerOffenseAnalysis";
 import * as incomingPressure from "@gladlog/analysis/src/utils/incomingPressure";
 import * as killWindowFactsMod from "@gladlog/analysis/src/utils/killWindowFacts";
@@ -709,6 +710,16 @@ const INDEX: PredicateRow[] = [
   {
     file: "packages/eval/src/quality/promptQualityCheck.ts",
     symbol: "checkPetCreditSide",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${A}/utils/healerOffenseAnalysis.ts`,
+    symbol: "SLACK_TEAM_HP_THRESHOLD",
+    mod: healerOffenseAnalysis,
+  },
+  {
+    file: "packages/eval/src/quality/promptQualityCheck.ts",
+    symbol: "checkHeaderHpPromise",
     mod: promptQualityCheck,
   },
   {
