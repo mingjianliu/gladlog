@@ -200,7 +200,7 @@ describe("GH #97 timeline flags", () => {
     TIMELINE_LINE_FLAGS.deathWindowUnfold = "off";
     const off = render();
     expect(off).not.toContain("0:55  [YOU] [CAST]   Riptide");
-    expect(off).not.toContain("% HP)");
+    expect(off).not.toMatch(/\[CAST\].*\(\d+% HP\)/);
     expect(off).not.toContain("[YOU] [HEALS]");
   });
 

@@ -665,4 +665,13 @@
 //  rebuild: 82/82 prompts changed, the ONLY differing line shapes are those
 //  two, all 370 `team min HP` tokens byte-identical; the new gate
 //  checkHeaderHpPromise 335 violations / 73 prompts → 0.
-export const PROMPT_VERSION = 91;
+//  v92 (2026-09-21, GH #69 / C2, user-approved): enriched [ENEMY DEF] and
+//  [ENEMY TRINKET] timeline lines with factual context — [ENEMY TRINKET]
+//  names broken CC via canonical bindBreakToWindow (±250ms tolerance,
+//  longest duration window) and actor attribution, [ENEMY DEF] external
+//  resolves recipient unit via recipientId, both report target HP% snapped to
+//  displayed second (toRenderSecond) and friendly offensive cooldown presence
+//  (requiredSourceIds = friendlyIds, debuffs filtered with isEnemyCdWindowSpell).
+//  Timeline legends updated. promptQualityCheck extended with
+//  checkSameSecondHpConsistency and checkPetCreditSide verification.
+export const PROMPT_VERSION = 92;

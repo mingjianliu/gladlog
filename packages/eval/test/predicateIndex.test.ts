@@ -656,6 +656,21 @@ const INDEX: PredicateRow[] = [
     mod: ccTrinketAnalysis,
   },
   {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "bindBreakToWindow",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "findBrokenCC",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "TRINKET_BREAK_TOLERANCE_MS",
+    mod: ccTrinketAnalysis,
+  },
+  {
     file: `${A}/utils/counterfactual.ts`,
     symbol: "COUNTERFACTUAL_WINDOW_S",
     mod: counterfactual,
