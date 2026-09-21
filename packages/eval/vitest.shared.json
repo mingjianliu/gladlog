@@ -32,6 +32,7 @@
     "test/explore.queries.test.ts",
     "test/explore.storeAccess.test.ts",
     "test/explore.uwcObserved.test.ts",
+    "test/facingCalibration.test.ts",
     "test/factAuditBounds.test.ts",
     "test/familyBias.test.ts",
     "test/healedThroughGate.test.ts",

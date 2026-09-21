@@ -21,29 +21,30 @@ import { gunzipSync } from "node:zlib";
 
 import { parseLine } from "@gladlog/parser";
 
-const [input, output] = process.argv.slice(2);
-if (!input || !output)
-  throw new Error("expected pilot.json and new-output.json");
-let pilot: {
-  manifestSha256: string;
-  files: Array<{ path: string; sha256: string }>;
-};
-try {
-  pilot = JSON.parse(readFileSync(input, "utf8"));
-} catch (err) {
-  process.stderr.write(
-    `[error] failed to read or parse pilot file ${input}: ${err instanceof Error ? err.message : String(err)}\n`,
-  );
-  throw err;
-}
-
-const TAU = 2 * Math.PI;
-const wrap = (a: number) => {
+export const TAU = 2 * Math.PI;
+export const wrap = (a: number) => {
   let d = a % TAU;
   if (d > Math.PI) d -= TAU;
   if (d <= -Math.PI) d += TAU;
   return d;
 };
+
+function runScan() {
+  const [input, output] = process.argv.slice(2);
+  if (!input || !output)
+    throw new Error("expected pilot.json and new-output.json");
+  let pilot: {
+    manifestSha256: string;
+    files: Array<{ path: string; sha256: string }>;
+  };
+  try {
+    pilot = JSON.parse(readFileSync(input, "utf8"));
+  } catch (err) {
+    process.stderr.write(
+      `[error] failed to read or parse pilot file ${input}: ${err instanceof Error ? err.message : String(err)}\n`,
+    );
+    throw err;
+  }
 // Candidate conventions: the angle a displacement (dx,dy) in LOGGED x/y would
 // have if facing were measured that way. All eight axis/sign choices compete;
 // nothing is presumed.
@@ -283,7 +284,9 @@ for (const file of pilot.files) {
         const first = list[i];
         const last = list[j - 1];
         const group = list.slice(i, j);
-        const fDiff = group.some((r) => r.facing !== first.facing);
+        const fDiff = group.some(
+          (r) => Math.abs(wrap(r.facing - first.facing)) > 1e-4,
+        );
         const pDiff = group.some((r) => r.x !== first.x || r.y !== first.y);
         if (fDiff || pDiff) {
           sameMs.differingGroups++;
@@ -369,9 +372,9 @@ const finishConv = (s: ConvStats) =>
       k,
       {
         n: v.n,
-        within30: round4(v.within30 / v.n),
-        within90: round4(v.within90 / v.n),
-        meanCos: round4(v.sumCos / v.n),
+        within30: v.n > 0 ? round4(v.within30 / v.n) : null,
+        within90: v.n > 0 ? round4(v.within90 / v.n) : null,
+        meanCos: v.n > 0 ? round4(v.sumCos / v.n) : null,
       },
     ]),
   );
@@ -422,3 +425,8 @@ const result = {
 };
 writeFileSync(output, JSON.stringify(result, null, 2), { flag: "wx" });
 console.log(JSON.stringify(result, null, 2));
+}
+
+if (process.argv[1]?.endsWith("facingCalibrationScan.ts")) {
+  runScan();
+}
