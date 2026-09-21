@@ -1,12 +1,14 @@
 /**
- * tremorExampleGen.ts — value-gate example generator (GH #100 direction 4,
+ * tremorExampleGen.ts — exploratory / historical value-gate generator (GH #100 direction 4,
  * user 2026-09-20: establish the facts first; a context line is "most likely
  * yes" but decided later). Renders, for real matches, the ONE tremor fact the
- * log supports deterministically: a friendly Tremor Totem dropped while a
- * teammate was feared, and the fear ending the same instant (300-file probe:
- * removal lag p50 0 s, p90 0.02 s, 49/50 within 1.5 s). The totem sources no
- * log event, so everything else ("it was already up") is not attributable and
- * is deliberately not rendered. No model calls, no product predicate yet.
+ * log supports: a friendly Tremor Totem dropped while a teammate was feared,
+ * and the fear ending the same instant.
+ *
+ * NOTE: Output is stdout JSON summary followed by example strings (not TSV).
+ * This diagnostic script uses SPELL_SUMMON + 500ms; the shipped production
+ * predicate uses tremorTotemBreak (ccTrinketAnalysis.ts) with SPELL_CAST_SUCCESS.
+ * Seconds cut represents nominal duration difference (full - lasted).
  *
  * Usage: npx tsx packages/eval/scripts/tremorExampleGen.ts --manifest <txt> [--offset 3000] [--limit 200] [--show 4]
  */
@@ -40,11 +42,25 @@ const SPEC: Record<number, string> = {
 };
 
 async function main(): Promise<void> {
-  await ensureAnalysisData();
   const manifestPath = flag("--manifest");
   if (!manifestPath) {
     throw new Error("missing required --manifest <path>");
   }
+  const parseNonNegativeInt = (name: string, defaultVal: number): number => {
+    const raw = flag(name);
+    if (raw === undefined) return defaultVal;
+    const val = Number(raw);
+    if (!Number.isInteger(val) || val < 0) {
+      throw new Error(`expected non-negative integer for ${name}, got: ${raw}`);
+    }
+    return val;
+  };
+  const offset = parseNonNegativeInt("--offset", 3000);
+  const limit = parseNonNegativeInt("--limit", 200);
+  const show = parseNonNegativeInt("--show", 4);
+
+  await ensureAnalysisData();
+
   let manifestRaw: string;
   try {
     manifestRaw = readFileSync(manifestPath, "utf8");
@@ -57,8 +73,9 @@ async function main(): Promise<void> {
     .split("\n")
     .map((s) => s.trim())
     .filter(Boolean)
-    .slice(Number(flag("--offset") ?? 3000))
-    .slice(0, Number(flag("--limit") ?? 200));
+    .slice(offset, offset + limit);
+  let readFiles = 0;
+  let skippedFiles = 0;
   let rounds = 0;
   let roundsWithTremor = 0;
   let lines = 0;
@@ -71,7 +88,9 @@ async function main(): Promise<void> {
     try {
       const raw = readFileSync(path);
       text = (path.endsWith(".gz") ? gunzipSync(raw) : raw).toString("utf8");
+      readFiles++;
     } catch (err) {
+      skippedFiles++;
       process.stderr.write(
         `[warn] failed to read ${path}: ${err instanceof Error ? err.message : String(err)}, skipping\n`,
       );
@@ -93,7 +112,7 @@ async function main(): Promise<void> {
       if (out.length) {
         roundsWithLine++;
         lines += out.length;
-        if (examples.length < Number(flag("--show") ?? 4))
+        if (examples.length < show)
           examples.push(out.join("\n"));
       }
     };
@@ -147,13 +166,17 @@ async function main(): Promise<void> {
         const o = open.get(key);
         if (!o) continue;
         open.delete(key);
-        const drop = drops.find(
-          (d) =>
-            team.get(d.owner) === team.get(o.victim) &&
+        const drop = drops.find((d) => {
+          const ownerTeam = team.get(d.owner);
+          const victimTeam = team.get(o.victim);
+          return (
+            Boolean(ownerTeam) &&
+            ownerTeam === victimTeam &&
             d.t > o.t &&
             p.timestamp >= d.t &&
-            p.timestamp - d.t <= SAME_INSTANT_MS,
-        );
+            p.timestamp - d.t <= SAME_INSTANT_MS
+          );
+        });
         if (!drop) continue;
         const lasted = (p.timestamp - o.t) / 1000;
         const full = ccFullDurationSeconds(o.spellId);
@@ -170,14 +193,16 @@ async function main(): Promise<void> {
   const s = [...savedSeconds].sort((a, b) => a - b);
   console.log(
     JSON.stringify({
-      files: files.length,
+      selectedFiles: files.length,
+      readFiles,
+      skippedFiles,
       rounds,
       roundsWithTremor,
       roundsWithLine,
       lines,
-      secondsOfFearCut: {
+      nominalSecondsOfFearCut: {
         n: s.length,
-        p50: s[Math.floor(s.length / 2)]?.toFixed(1),
+        p50: s.length > 0 ? s[Math.floor(s.length / 2)]?.toFixed(1) : null,
         total: Math.round(s.reduce((a, b) => a + b, 0)),
       },
     }),
