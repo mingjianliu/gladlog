@@ -79,7 +79,11 @@ import {
   ITeammateDrClash,
 } from "../utils/drAnalysis";
 import { enemyDefensiveEvents } from "../utils/enemyDefensives";
-import { IEnemyCDCast, IEnemyCDTimeline } from "../utils/enemyCDs";
+import {
+  IEnemyCDCast,
+  IEnemyCDTimeline,
+  isEnemyCdWindowSpell,
+} from "../utils/enemyCDs";
 import { computeEnemyInterruptAvailability } from "../utils/enemyInterrupts";
 import { IHealingGap } from "../utils/healingGaps";
 import { sumIncomingPressure } from "../utils/incomingPressure";
@@ -2316,7 +2320,9 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
         const friendlyIds = new Set(friends.map((f) => f.id));
         const hasBurst =
           friends.some((f) => hasOffensiveSpellActive(f, tMs, friendlyIds)) ||
-          (enemies ?? []).some((e) => hasOffensiveSpellActive(e, tMs, friendlyIds));
+          (enemies ?? []).some((e) =>
+            hasOffensiveSpellActive(e, tMs, friendlyIds, isEnemyCdWindowSpell),
+          );
         const burstStr = hasBurst ? " [friendly offensive CD active]" : "";
         const targetUnit =
           d.kind === "external"
@@ -2518,7 +2524,9 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
         const friendlyIds = new Set(friends.map((f) => f.id));
         const hasBurst =
           friends.some((f) => hasOffensiveSpellActive(f, tMs, friendlyIds)) ||
-          (enemies ?? []).some((e) => hasOffensiveSpellActive(e, tMs, friendlyIds));
+          (enemies ?? []).some((e) =>
+            hasOffensiveSpellActive(e, tMs, friendlyIds, isEnemyCdWindowSpell),
+          );
         const burstPart = hasBurst ? " [friendly offensive CD active]" : "";
         const enemyUnit = enemies?.find((e) => e.name === summary.playerName);
         const hpPct = enemyUnit ? getHpPercentAtTime(enemyUnit, tSec, matchStartMs) : null;

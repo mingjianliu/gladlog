@@ -885,4 +885,100 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
     // MUST contain [friendly offensive CD active] because friendly player applied Deathmark!
     expect(defLineB).toContain("[friendly offensive CD active]");
   });
+
+  it("10. Ordinary debuffs without cooldowns (Curse of Weakness 702, Curse of Tongues 1714, Ignite 12654) do NOT trigger [friendly offensive CD active]", () => {
+    TIMELINE_LINE_FLAGS.enemyDef = "timeline";
+    const cleanOwner = makeUnit({ id: "P1", name: "OwnerPlayer" });
+
+    for (const spellId of ["702", "1714", "12654"]) {
+      const enemy = makeUnit({
+        id: "E1",
+        name: "EnemyRogue",
+        reaction: CombatUnitReaction.Hostile,
+        spec: CombatUnitSpec.Rogue_Assassination,
+        auraEvents: [
+          {
+            spellId,
+            srcUnitId: "P1", // Friendly cast it
+            timestamp: T0 + 10_000,
+            logLine: {
+              event: LogEvent.SPELL_AURA_APPLIED,
+              timestamp: T0 + 10_000,
+              parameters: Array(12).fill("DEBUFF"),
+            },
+          },
+          {
+            spellId,
+            srcUnitId: "P1",
+            timestamp: T0 + 26_000,
+            logLine: {
+              event: LogEvent.SPELL_AURA_REMOVED,
+              timestamp: T0 + 26_000,
+              parameters: Array(12).fill("DEBUFF"),
+            },
+          },
+          {
+            spellId: "31224", // Cloak of Shadows (immune)
+            spellName: "Cloak of Shadows",
+            srcUnitId: "E1",
+            srcUnitName: "EnemyRogue",
+            destUnitId: "E1",
+            destUnitName: "EnemyRogue",
+            timestamp: T0 + 12_000,
+            logLine: {
+              event: LogEvent.SPELL_AURA_APPLIED,
+              timestamp: T0 + 12_000,
+              parameters: Array(12).fill("BUFF"),
+            },
+          },
+          {
+            spellId: "31224",
+            spellName: "Cloak of Shadows",
+            srcUnitId: "E1",
+            srcUnitName: "EnemyRogue",
+            destUnitId: "E1",
+            destUnitName: "EnemyRogue",
+            timestamp: T0 + 17_000,
+            logLine: {
+              event: LogEvent.SPELL_AURA_REMOVED,
+              timestamp: T0 + 17_000,
+              parameters: Array(12).fill("BUFF"),
+            },
+          },
+        ] as any,
+      });
+
+      const timeline = buildMatchTimeline({
+        owner: cleanOwner,
+        ownerSpec: "Assassination Rogue",
+        friends: [cleanOwner],
+        enemies: [enemy],
+        allUnits: [cleanOwner, enemy],
+        playerIdMap: new Map([["OwnerPlayer", 1]]),
+        enemyIdMap: new Map([["EnemyRogue", 2]]),
+        matchStartMs: T0,
+        matchEndMs: T0 + 60_000,
+        isHealer: false,
+        ownerCDs: [],
+        teammateCDs: [],
+        enemyCDTimeline: { players: [], alignedBurstWindows: [] },
+        ccTrinketSummaries: [],
+        enemyCCSummaries: [],
+        dispelSummary: emptyDispel as any,
+        enemyDispelSummary: emptyDispel as any,
+        pressureWindows: [],
+        healingGaps: [],
+        friendlyDeaths: [],
+        enemyDeaths: [],
+        criticalWindowSeconds: new Set(),
+        outgoingCCChains: [],
+      });
+
+      const defLine = timeline
+        .split("\n")
+        .find((l) => l.includes("[ENEMY DEF]   2(ARogue)"))!;
+      expect(defLine).toBeDefined();
+      expect(defLine).not.toContain("[friendly offensive CD active]");
+    }
+  });
 });

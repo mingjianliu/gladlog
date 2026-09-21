@@ -2769,6 +2769,7 @@ export function hasOffensiveSpellActive(
   unit: ICombatUnit,
   timestampMs: number,
   requiredSourceIds: Set<string> | null,
+  spellIdFilter?: (spellId: string) => boolean,
 ): boolean {
   const applied = new Map<string, number[]>();
   const removed = new Map<string, number[]>();
@@ -2778,6 +2779,7 @@ export function hasOffensiveSpellActive(
     if (!spellId || !OFFENSIVE_SPELL_IDS.has(spellId)) continue;
     if (requiredSourceIds !== null && !requiredSourceIds.has(aura.srcUnitId))
       continue;
+    if (spellIdFilter !== undefined && !spellIdFilter(spellId)) continue;
 
     if (aura.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
       const b = applied.get(spellId) ?? [];
