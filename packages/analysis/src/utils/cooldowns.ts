@@ -29,6 +29,7 @@ import { SpellTag } from "../data/spellTypes";
 import { USABLE_WHILE_CC_GENERATED } from "../data/usableWhileCcGenerated";
 import { buffFullDurationForCaster } from "./buffDuration";
 import { binarySearchClosest } from "./binarySearch";
+import { getSortedAdvancedActions } from "./advancedActions";
 import { COPY_CAST_IDS } from "./castPress";
 import { incomingPressureEvents } from "./incomingPressure";
 import { fmtTime, toRenderSecond } from "./renderGrid";
@@ -708,7 +709,7 @@ export function getUnitHpAtTimestamp(
   maxDtMs = HP_SAMPLE_RADIUS_MS,
 ): number | null {
   const closestAction = binarySearchClosest(
-    unit.advancedActions,
+    getSortedAdvancedActions(unit),
     timestampMs,
     (a) => a.logLine.timestamp,
   );
@@ -840,7 +841,7 @@ export function getUnitManaAtTimestamp(
   maxDtMs = HP_SAMPLE_RADIUS_MS,
 ): { current: number; max: number } | null {
   const closestAction = binarySearchClosest(
-    unit.advancedActions,
+    getSortedAdvancedActions(unit),
     timestampMs,
     (a) => a.logLine.timestamp,
   );

@@ -265,8 +265,9 @@ function convertUnit(
     lineIndex: death.lineIndex,
   }));
 
-  const advancedActions: IAdvancedAction[] = unit.advancedSamples.map(
-    (sample) => ({
+  const advancedActions: IAdvancedAction[] = [...unit.advancedSamples]
+    .sort((a, b) => a.timestamp - b.timestamp)
+    .map((sample) => ({
       advancedActorCurrentHp: sample.hp,
       advancedActorMaxHp: sample.maxHp,
       advancedActorPositionX: sample.x,

@@ -2,6 +2,7 @@ import { CombatUnitPowerType, ICombatUnit } from "@gladlog/parser-compat";
 
 import { binarySearchClosest } from "./binarySearch";
 import { HP_SAMPLE_RADIUS_MS } from "./cooldowns";
+import { getSortedAdvancedActions } from "./advancedActions";
 
 /**
  * resourceAt.ts — "what resource did this unit have at instant T".
@@ -43,7 +44,7 @@ export function getUnitResourceAtTimestamp(
   maxDtMs = HP_SAMPLE_RADIUS_MS,
 ): IResourceReading | null {
   const closest = binarySearchClosest(
-    unit.advancedActions ?? [],
+    getSortedAdvancedActions(unit),
     timestampMs,
     (a) => a.logLine.timestamp,
   );
