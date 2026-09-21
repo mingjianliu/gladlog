@@ -207,4 +207,22 @@ describe("enemyDefensiveEvents", () => {
     const evs = enemyDefensiveEvents(selfCast, [selfCast, pal], combat);
     expect(evs.map((e) => e.kind)).toEqual(["self"]);
   });
+
+  it("carries recipientId for external defensives", () => {
+    const druid = unit("druid", {
+      spellCastEvents: [cast(IRONBARK, "rogue", 10)],
+    });
+    const rogue = unit("rogue", {
+      auraEvents: [
+        applied(IRONBARK, "druid", "rogue", 10),
+        removed(IRONBARK, "druid", "rogue", 22),
+      ],
+    });
+    const events = enemyDefensiveEvents(druid, [druid, rogue], combat);
+    const ext = events.find((e) => e.kind === "external");
+    expect(ext).toBeDefined();
+    expect(ext?.recipientId).toBe("rogue");
+    expect(ext?.recipientName).toBe("rogue");
+  });
 });
+

@@ -61,6 +61,7 @@ export interface IEnemyDefensiveEvent {
   pct?: number;
   /** who received an external */
   recipientName?: string;
+  recipientId?: string;
   /** observed aura duration in seconds (from the aura interval); undefined when no interval could be paired */
   observedSeconds?: number;
   /** observed duration fell short of the caster's full duration by more than the slack */
@@ -134,6 +135,7 @@ export function enemyDefensiveEvents(
       spellName: getEnglishSpellName(cast.spellId, cast.spellName),
       casterName: enemy.name,
       kind: "external",
+      recipientId: recipient.id,
       recipientName: recipient.name,
       observedSeconds: observed,
       removedEarly:
