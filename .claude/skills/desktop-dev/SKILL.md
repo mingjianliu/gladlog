@@ -88,6 +88,11 @@ for f in /tmp/bl/scenes.spec.ts/*.png; do n=$(basename $f);   cmp -s "$f" packag
 - 确定性复现帮手 `test/support/untilDom.ts`:设 `IS_REACT_ACT_ENVIRONMENT=false`,用 `createRoot().render`
   挂载,在 MutationObserver 微任务里交互;范例 `test/devpanel.jsonTree.race.test.tsx`。
   同形状再红 = 还有第三个这样的 effect,按这个模式找。
+- **第二种形状:测试用真 `setTimeout` sleep 等一个按 `Date.now()` 判的阀**(`runtime.quietclose.test.ts`,
+  GH #38,2026-09-22 修)。负载下一次 `sleep(40)` 越过阈值,阀「正确地」触发,断言的是 runner 保证不了的性质。
+  修法 = `vi.useFakeTimers()` + `vi.advanceTimersByTimeAsync(ms)`(Date/interval/timeout 一起假),
+  前提是被测代码只有定时器 + 同步 fs。**机理验证不靠制造负载**:保留旧断言、假时钟里把一步 sleep 拉长过阈值,
+  必须打出和 CI 一字不差的失败;打不出说明根因猜错了。
 
 ## 大数据文件纪律(2026-07-25 图标事故)
 
