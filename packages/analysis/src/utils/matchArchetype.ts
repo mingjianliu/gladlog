@@ -114,7 +114,7 @@ export function computeMatchArchetype(
   enemies: ICombatUnit[],
   combat: AtomicArenaCombat,
   ccTrinketSummaries: IPlayerCCTrinketSummary[],
-  alignedBurstWindows: IAlignedBurstWindow[],
+  alignedBurstWindows: readonly IAlignedBurstWindow[],
   healerExposures: IHealerBurstExposure[],
 ): IMatchArchetypeMeasurements {
   const durationSeconds = (combat.endTime - combat.startTime) / 1000;

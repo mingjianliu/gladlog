@@ -2051,8 +2051,8 @@ interface ISingleEnemyCDCast {
   buffEndSeconds: number;
 }
 export interface IEnemyCDTimelineForTiming {
-  alignedBurstWindows: IBurstWindow[];
-  players: Array<{ offensiveCDs: ISingleEnemyCDCast[] }>;
+  alignedBurstWindows: readonly IBurstWindow[];
+  players: ReadonlyArray<{ readonly offensiveCDs: ReadonlyArray<ISingleEnemyCDCast> }>;
 }
 
 /** How many seconds before a burst window a defensive can be cast and still be

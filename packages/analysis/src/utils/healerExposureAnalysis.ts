@@ -222,7 +222,7 @@ function buildEnemyCCHistory(
 // ---------------------------------------------------------------------------
 
 export function analyzeHealerExposureAtBurst(
-  burstWindows: IAlignedBurstWindow[],
+  burstWindows: readonly IAlignedBurstWindow[],
   enemies: ICombatUnit[],
   healer: ICombatUnit,
   healerCCSummary: IPlayerCCTrinketSummary,
@@ -805,7 +805,7 @@ export function formatHealerCCReceivedForContext(
 // ─── Orchestrator (#4: pressure / exposure lanes) ─────────────────────────
 
 export interface IHealerExposurePre {
-  alignedBurstWindows: IAlignedBurstWindow[];
+  alignedBurstWindows: readonly IAlignedBurstWindow[];
   ccTrinketSummaries: IPlayerCCTrinketSummary[];
   healerUnit: ICombatUnit | undefined;
   /** The team sets the caller already resolved (#4 final review, Important #2):
@@ -846,7 +846,7 @@ export function computeHealerExposureEvents(
       : friends.find((p) => isHealerSpec(p.spec));
   if (!healerUnit) return [];
 
-  let alignedBurstWindows: IAlignedBurstWindow[];
+  let alignedBurstWindows: readonly IAlignedBurstWindow[];
   let ccTrinketSummaries: IPlayerCCTrinketSummary[];
   if (pre) {
     ({ alignedBurstWindows, ccTrinketSummaries } = pre);

@@ -238,7 +238,7 @@ export function computeOwnerPositionEvents(params: {
   owner: ICombatUnit;
   enemies: ICombatUnit[];
   combat: Pick<AtomicArenaCombat, "startTime" | "endTime">;
-  burstWindows: IAlignedBurstWindow[];
+  burstWindows: readonly IAlignedBurstWindow[];
   ownerCooldowns: IMajorCooldownInfo[];
   ownerCCSummary?: {
     ccInstances: Array<Pick<ICCInstance, "atSeconds" | "durationSeconds">>;

@@ -56,46 +56,46 @@ export interface IEnemyCDCast {
 }
 
 export interface IEnemyPlayerTimeline {
-  playerName: string;
-  specName: string;
-  offensiveCDs: IEnemyCDCast[];
+  readonly playerName: string;
+  readonly specName: string;
+  readonly offensiveCDs: readonly IEnemyCDCast[];
 }
 
 export interface IAlignedBurstWindow {
-  fromSeconds: number;
-  toSeconds: number;
-  activeCDs: Array<{
-    playerName: string;
-    spellName: string;
-    spellId: string;
+  readonly fromSeconds: number;
+  readonly toSeconds: number;
+  readonly activeCDs: ReadonlyArray<{
+    readonly playerName: string;
+    readonly spellName: string;
+    readonly spellId: string;
     /** The second at which this CD was actually cast inside the window --
      * rendering must include it, or the list reads as "everything popped at the
      * window start" (the 059 misreading). */
-    castSeconds: number;
+    readonly castSeconds: number;
   }>;
   /** Ex-ante threat from the stacked CDs alone (weights × alignment × dampening) — outcome-independent */
-  threatScore: number;
-  threatLabel: "Low" | "Moderate" | "High" | "Critical";
+  readonly threatScore: number;
+  readonly threatLabel: "Low" | "Moderate" | "High" | "Critical";
   /** Combined score including outcome factors (damage dealt, healer CC) — kept for existing consumers */
-  dangerScore: number;
-  dangerLabel: "Low" | "Moderate" | "High" | "Critical";
-  dampeningPct: number; // 0–1
-  damageInWindow: number;
-  damageRatio: number;
-  healerCCed: boolean;
+  readonly dangerScore: number;
+  readonly dangerLabel: "Low" | "Moderate" | "High" | "Critical";
+  readonly dampeningPct: number; // 0–1
+  readonly damageInWindow: number;
+  readonly damageRatio: number;
+  readonly healerCCed: boolean;
   /** HP% of the most-pressured friendly at window start, midpoint, and end */
-  mostPressuredTarget?: {
-    unitName: string;
-    startHpPct: number | null;
-    midHpPct: number | null;
-    endHpPct: number | null;
+  readonly mostPressuredTarget?: {
+    readonly unitName: string;
+    readonly startHpPct: number | null;
+    readonly midHpPct: number | null;
+    readonly endHpPct: number | null;
   };
 }
 
 export interface IEnemyCDTimeline {
-  players: IEnemyPlayerTimeline[];
+  readonly players: readonly IEnemyPlayerTimeline[];
   /** Windows where 2+ enemy offensive CDs were used within BURST_CLUSTER_SECONDS of each other */
-  alignedBurstWindows: IAlignedBurstWindow[];
+  readonly alignedBurstWindows: readonly IAlignedBurstWindow[];
 }
 
 /** Max CD to consider a "real" cooldown (filters out 999.999s passive procs) */
