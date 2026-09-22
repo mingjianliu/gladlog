@@ -559,9 +559,9 @@
 //  burst-into-mitigation 91 → 102 → 100, death-setup 369 → 369 → 366.
 //  syncWindowPriorGenerated.json is STALE against this membership until the
 //  archive re-scan lands.
-//  v81 (2026-09-19, codex review finding 4 closed): syncWindowPriorGenerated
+//  v81 (2026-09-19, commit 512470b0, codex review finding 4 closed): syncWindowPriorGenerated
 //  re-scanned over the same archive (63,303 files) under the 60-id
-//  OFFENSIVE_CD_SPELL_IDS + effectiveCooldownSeconds — eligible windows
+//  OFFENSIVE_CD_SPELL_IDS (48 → 60) + effectiveCooldownSeconds — eligible windows
 //  84,877 → 118,267 (more cooldowns count as "ready"), and the contrast the
 //  candidate quotes barely moves: kill within 15 s, entered vs not — Solo
 //  Shuffle 12.4 / 6.3 % → 12.1 / 6.6 %, 2v2 12.1 / 5.5 → 12.1 / 5.4, 3v3
