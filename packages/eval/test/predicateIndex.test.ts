@@ -903,6 +903,11 @@ const INDEX: PredicateRow[] = [
     mod: enemyInterrupts,
   },
   {
+    file: `${A}/utils/enemyInterrupts.ts`,
+    symbol: "computeEnemyInterruptAvailability",
+    mod: enemyInterrupts,
+  },
+  {
     file: `${A}/analysis/crisisDecisionPoints.ts`,
     symbol: "crisisDecisionPoints",
     mod: crisisDecisionPoints,
