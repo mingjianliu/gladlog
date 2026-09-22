@@ -296,6 +296,22 @@ export const CORPUS_DURATION_PATCHES: Record<string, number> = {
   // Lunar Beam: DB2 8.5 s vs 11.5 s ×85 % of 124 clean lifetimes (227-file archive,
   // APPLIED→REMOVED with no refresh and no stack, 2026-09-07).
   "204066": 11.5,
+
+  // ── 2026-09-22 re-measure (GH #65 item 4; every 30th file of the 63k
+  // archive = 2,111 files, `buffDurationScan --gap --dose-unclean`) ────────
+  // Same bar as the 09-07 batch, same direction rule. Of the batch above, the
+  // PATCH block reproduces 12 of the 15 with a sample; three no longer hold a
+  // clean majority and stay AS IS because nothing moves downward without a
+  // mechanism: Earthliving Weapon 382024 (9 s in 389 cells vs 6 s in 341,
+  // bimodal INSIDE each month, so not a hotfix — most likely the two
+  // producers, Riptide vs Chain Heal, apply different lengths, a shape this
+  // table cannot express), Dream Breath 376788 (the 16 s mode is now 24 % of
+  // 1,758 — it varies with empower level, GH #65 item 1), Thing from Beyond
+  // 373277 (24 s ×27 cells vs 20 s ×15, no modifier reaches it).
+  // Shadowfiend: DB2 5 s vs 6 s ×72 % of 842 clean lifetimes (2,111-file archive,
+  // APPLIED→REMOVED with no refresh and no stack, 2026-09-22); 41 of 49 detail
+  // cells at 6 s in both months; no DB2 duration modifier reaches 1280172.
+  "1280172": 6,
 };
 for (const [id, durationSeconds] of Object.entries(CORPUS_DURATION_PATCHES)) {
   const cur = SPELL_EFFECT_OVERRIDES[id];

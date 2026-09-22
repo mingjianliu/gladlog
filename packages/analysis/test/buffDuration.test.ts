@@ -332,6 +332,47 @@ describe("buffFullDurationForCaster — 天赋条件的增益时长", () => {
     expect(buffFullDurationForCaster("221883", holySpurs)).toBeCloseTo(3);
   });
 
+  it("2026-09-22 复扫追回的三条:雾之缠绕 +1 / 反魔法屏障 ×1.2 / 灵活机动 ×0.5(GH #65 第 4 项)", () => {
+    // 2,111 场重扫的 GAP 段过门的 5 个光环里,DB2 有时长修正且掩码可达的三条;
+    // 持有者拆分(detail,每 60 场取 1)全部单边:雾之缠绕 94/101 持有格 7s、
+    // 非持有 0/8;反魔法屏障 129/137 + 32/32 持有格 6s(人人必点,无对照组,
+    // 规则 3 不要求);灵活机动(PvP 天赋)8/8 持有格 6s、非持有 0/162。
+    const MIST_WRAP = { id1: 101093, id2: 124871, count: 1 };
+    const mwHolder = makeUnit("mw-1", {
+      spec: CombatUnitSpec.Monk_Mistweaver,
+      info: { talents: [MIST_WRAP], pvpTalents: [] },
+    });
+    expect(buffFullDurationForCaster("124682", mwHolder)).toBeCloseTo(7);
+    const mwNo = makeUnit("mw-0", {
+      spec: CombatUnitSpec.Monk_Mistweaver,
+      info: { talents: [], pvpTalents: [] },
+    });
+    expect(buffFullDurationForCaster("124682", mwNo)).toBeCloseTo(6);
+
+    const ANTI_MAGIC_BARRIER = { id1: 76046, id2: 96174, count: 1 };
+    const dk = makeUnit("dk-1", {
+      spec: CombatUnitSpec.DeathKnight_Unholy,
+      info: { talents: [ANTI_MAGIC_BARRIER], pvpTalents: [] },
+    });
+    // PvP 值 +20%(DB2 本体 +40% 经 PvpMultiplier),不是 +40%
+    expect(buffFullDurationForCaster("410358", dk)).toBeCloseTo(6);
+    expect(buffFullDurationForCaster("48707", dk)).toBeCloseTo(6);
+
+    const FEATHERFOOT = { id1: 101714, id2: 125615, count: 1 };
+    const MANEUVERABILITY = "197000";
+    const rogueBoth = makeUnit("r-both", {
+      spec: CombatUnitSpec.Rogue_Assassination,
+      info: { talents: [FEATHERFOOT], pvpTalents: [MANEUVERABILITY] },
+    });
+    // 先加秒后乘百分比:(8 + 4) × 0.5 —— 语料里 6s 格全是持有者
+    expect(buffFullDurationForCaster("2983", rogueBoth)).toBeCloseTo(6);
+    const rogueFeather = makeUnit("r-ff", {
+      spec: CombatUnitSpec.Rogue_Assassination,
+      info: { talents: [FEATHERFOOT], pvpTalents: [] },
+    });
+    expect(buffFullDurationForCaster("2983", rogueFeather)).toBeCloseTo(12);
+  });
+
   it("读不到天赋(unknown)绝不加长 —— 与 CC 侧同一条纪律", () => {
     const noInfo = makeUnit("d2", { spec: CombatUnitSpec.Druid_Restoration });
     expect(talentOwnershipOf(noInfo, "327993")).toBe("unknown");

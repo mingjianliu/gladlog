@@ -16,20 +16,29 @@
  * 就列出来并给出「长组持有 / 短组持有」差异最大的天赋,供人工按 DB2 掩码定夺。
  * 它只提名不定罪 —— 掩码那一半要人去 SpellClassOptions 里核(见表头注释)。
  *
+ * 第三段 PATCH(2026-09-22,GH #65 第 4 项):`CORPUS_DURATION_PATCHES` 也是断言游戏
+ * 行为的手工表,按 ROT 同一判据复现一遍;GAP 行同时打印补丁表的提名门(寿命众数
+ * 占 ≥60% 且 n ≥100、只认变长、控制类保持官方值)和判定,`--dose-unclean` 把
+ * SPELL_AURA_APPLIED_DOSE 也算脏段(09-07 批次排叠层伪影用的口径;默认关,
+ * 保持与 durationTalentScan 相同的格语义)。
+ *
  * 用法:
  *   npx tsx packages/eval/scripts/buffDurationScan.ts \
  *     --manifest $GLADLOG_EVAL_HOME/corpus/manifest-archive-<date>.txt [--every 60] \
- *     [--gap-min-cells 30] [--gap]
+ *     [--gap-min-cells 30] [--gap] [--dose-unclean] \
+ *     [--detail <aura>[:<talentSpellId>],…]   # 专精 × 月份 × 持有 拆分,见 detail 注释
  */
-import { ensureAnalysisData } from "@gladlog/analysis";
+import { ensureAnalysisData, specToString } from "@gladlog/analysis";
 import {
   BUFF_DURATION_TALENT_MODIFIERS,
   spellEffectData,
 } from "@gladlog/analysis/src/data/spellEffectData";
+import { CORPUS_DURATION_PATCHES } from "@gladlog/analysis/src/data/spellEffectOverrides";
+import { ccSpellIds } from "@gladlog/analysis/src/data/spellTags";
 import { buffFullDurationForCaster } from "@gladlog/analysis/src/utils/buffDuration";
 import { talentRankOf } from "@gladlog/analysis/src/utils/talentOwnership";
 import { GladLogParser, type GladMatch } from "@gladlog/parser";
-import { toLegacyMatch, LogEvent } from "@gladlog/parser-compat";
+import { LogEvent, toLegacyMatch } from "@gladlog/parser-compat";
 import { readFileSync } from "fs";
 import { resolve } from "path";
 import { gunzipSync } from "zlib";
@@ -42,6 +51,8 @@ function parseArgs() {
     archiveDir: "",
     gap: false,
     gapMinCells: 30,
+    doseUnclean: false,
+    detail: "",
   };
   for (let i = 0; i < a.length; i++) {
     if (a[i] === "--manifest") out.manifest = a[++i] ?? "";
@@ -49,10 +60,12 @@ function parseArgs() {
     else if (a[i] === "--archive-dir") out.archiveDir = a[++i] ?? "";
     else if (a[i] === "--gap") out.gap = true;
     else if (a[i] === "--gap-min-cells") out.gapMinCells = Number(a[++i]);
+    else if (a[i] === "--dose-unclean") out.doseUnclean = true;
+    else if (a[i] === "--detail") out.detail = a[++i] ?? "";
   }
   if (!out.manifest || !Number.isFinite(out.every) || out.every < 1) {
     console.error(
-      "usage: buffDurationScan.ts --manifest <path> [--every N] [--archive-dir <dir>] [--gap] [--gap-min-cells N]",
+      "usage: buffDurationScan.ts --manifest <path> [--every N] [--archive-dir <dir>] [--gap] [--gap-min-cells N] [--dose-unclean]",
     );
     process.exit(1);
   }
@@ -66,9 +79,38 @@ await ensureAnalysisData();
  * 定型后的施法者格。**每场结束就地定型、只留数字**:早先版本把 unit 对象存进
  * map 里等到最后再问天赋,等于把每一场的完整解析结果都留住,150 个文件就 OOM。
  */
-type Row = { spellId: string; observed: number; predicted: number; rank: number };
+type Row = {
+  spellId: string;
+  observed: number;
+  predicted: number;
+  rank: number;
+};
 const rows: Row[] = [];
 let cellCount = 0;
+/**
+ * Per-aura histogram of EVERY clean lifetime (0.5 s bins), not per cell — the
+ * CORPUS_DURATION_PATCHES promotion bar (2026-09-07 batch, spellEffectOverrides.ts)
+ * is "modal clean lifetime holds >= 60 % of >= 100 lifetimes", so the GAP half
+ * prints exactly that number next to the cell count (GH #65 item 4, 2026-09-22).
+ * Numbers only: ≤ 241 bins per aura, so a 63k-file scan cannot OOM on it.
+ */
+const lifetimes = new Map<string, Map<number, number>>();
+const PATCHED = new Set(Object.keys(CORPUS_DURATION_PATCHES));
+/**
+ * `--detail <aura>[:<talentSpellId>],…` — the third evidence leg for a
+ * nominated (talent → aura) pair, and the "why did this patch stop
+ * reproducing" question: per aura, the observed-duration distribution split
+ * by caster spec × log month × (holds the named talent, via talentRankOf).
+ * A patch that drifts by MONTH is a mid-season hotfix; one that splits by
+ * SPEC is a specBaseSeconds shape; one that splits by HOLDER is a modifier
+ * entry, not a flat patch.
+ */
+const detail = new Map<string, string | undefined>();
+for (const spec of args.detail.split(",").filter(Boolean)) {
+  const [aura, talent] = spec.split(":");
+  if (aura) detail.set(aura, talent || undefined);
+}
+const detailCells = new Map<string, Map<string, Map<number, number>>>();
 
 const REGISTERED = new Set(Object.keys(BUFF_DURATION_TALENT_MODIFIERS));
 
@@ -114,8 +156,18 @@ for (const f of files) {
         const key = `${a.srcUnitId ?? ""}|${spellId}`;
         const ev = a.logLine.event as string;
         const t = a.logLine.timestamp as number;
-        if (ev === LogEvent.SPELL_AURA_APPLIED) open.set(key, { t, clean: true });
+        if (ev === LogEvent.SPELL_AURA_APPLIED)
+          open.set(key, { t, clean: true });
         else if (ev === LogEvent.SPELL_AURA_REFRESH) {
+          const o = open.get(key);
+          if (o) o.clean = false;
+        } else if (
+          ev === LogEvent.SPELL_AURA_APPLIED_DOSE &&
+          args.doseUnclean
+        ) {
+          // Stack-refresh artefact guard (the 09-07 batch's re-measure): a
+          // stacking aura's lifetime is not its duration. Opt-in so the ROT
+          // half keeps the cell semantics durationTalentScan shares.
           const o = open.get(key);
           if (o) o.clean = false;
         } else if (
@@ -130,6 +182,9 @@ for (const f of files) {
           if (d < 0 || d > 120) continue;
           const src = legacy.units[a.srcUnitId ?? ""];
           if (!src?.info) continue;
+          const lh = lifetimes.get(spellId) ?? new Map<number, number>();
+          lh.set(d, (lh.get(d) ?? 0) + 1);
+          lifetimes.set(spellId, lh);
           const cellKey = `${spellId}|${a.srcUnitId}`;
           const hist = matchCells.get(cellKey) ?? new Map<number, number>();
           hist.set(d, (hist.get(d) ?? 0) + 1);
@@ -157,6 +212,21 @@ for (const f of files) {
         predicted,
         rank: talentId ? talentRankOf(caster as never, talentId) : 0,
       });
+      if (detail.has(spellId)) {
+        const dTalent = detail.get(spellId);
+        const holder = dTalent
+          ? talentRankOf(caster as never, dTalent) > 0
+            ? "holder"
+            : "non-holder"
+          : "-";
+        const month = new Date(legacy.startTime).toISOString().slice(0, 7);
+        const k = `${specToString(caster.spec as never)}|${month}|${holder}`;
+        const byKey = detailCells.get(spellId) ?? new Map();
+        const h = byKey.get(k) ?? new Map<number, number>();
+        h.set(observed, (h.get(observed) ?? 0) + 1);
+        byKey.set(k, h);
+        detailCells.set(spellId, byKey);
+      }
     }
   }
 }
@@ -189,10 +259,17 @@ console.log(
 );
 
 function group(list: Row[]) {
-  const g = new Map<string, { observed: number; predicted: number; n: number }>();
+  const g = new Map<
+    string,
+    { observed: number; predicted: number; n: number }
+  >();
   for (const r of list) {
     const k = `${r.observed}|${r.predicted}`;
-    const cur = g.get(k) ?? { observed: r.observed, predicted: r.predicted, n: 0 };
+    const cur = g.get(k) ?? {
+      observed: r.observed,
+      predicted: r.predicted,
+      n: 0,
+    };
     cur.n++;
     g.set(k, cur);
   }
@@ -205,7 +282,9 @@ for (const spellId of [...REGISTERED].sort()) {
   const rows = bySpell.get(spellId);
   const name = spellEffectData[spellId]?.name ?? spellId;
   if (!rows || rows.length < 5) {
-    console.log(`  SKIP  ${spellId} ${name}: 样本不足 (${rows?.length ?? 0} 格)`);
+    console.log(
+      `  SKIP  ${spellId} ${name}: 样本不足 (${rows?.length ?? 0} 格)`,
+    );
     continue;
   }
   const groups = group(rows);
@@ -216,8 +295,104 @@ for (const spellId of [...REGISTERED].sort()) {
   const okN = tot - bad.reduce((s, g) => s + g.n, 0);
   const verdict = bad.length === 0 ? "OK   " : "FLAG ";
   if (bad.length > 0) flags++;
+  // Rank breakdown of each disagreeing group (Game-Behaviour Rule 4: the
+  // rank is READ, so a tier the table does not price shows up here as a
+  // distinct rank rather than as unexplained rot — Recklessness 24 s is
+  // Rampaging Berserker's tiered node, 2026-09-22).
+  const rankOf = (g: { observed: number; predicted: number }) => {
+    const h = new Map<number, number>();
+    for (const r of rows)
+      if (r.observed === g.observed && r.predicted === g.predicted)
+        h.set(r.rank, (h.get(r.rank) ?? 0) + 1);
+    return [...h]
+      .sort((a, b) => b[1] - a[1])
+      .map(([rk, n]) => `r${rk}:${n}`)
+      .join(",");
+  };
   console.log(
     `  ${verdict} ${spellId} ${name}: ${okN}/${tot} 格复现` +
+      (bad.length
+        ? ` — 不符: ${bad
+            .map(
+              (g) =>
+                `观测${g.observed}s vs 谓词${g.predicted}s ×${g.n} [${rankOf(g)}]`,
+            )
+            .join("; ")}`
+        : ""),
+  );
+}
+console.log(`\nROT 结论: ${flags} 条登记项与语料不符`);
+
+if (detail.size > 0) {
+  console.log("\n=== DETAIL:按 专精 × 月份 × 持有 拆分的观测分布(格) ===");
+  for (const [aura, byKey] of detailCells) {
+    const talent = detail.get(aura);
+    console.log(
+      `  ${aura} ${spellEffectData[aura]?.name ?? ""}${talent ? ` (holder = talentRankOf ${talent} > 0)` : ""}`,
+    );
+    const lines = [...byKey]
+      .map(([k, h]) => {
+        const tot = [...h.values()].reduce((s, n) => s + n, 0);
+        const top = [...h]
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 3)
+          .map(([v, n]) => `${v}s×${n}`)
+          .join(" ");
+        return { k, tot, top };
+      })
+      .sort((a, b) => b.tot - a.tot);
+    for (const l of lines) {
+      console.log(
+        `    ${l.k.padEnd(44)} n=${String(l.tot).padStart(4)}  ${l.top}`,
+      );
+    }
+  }
+}
+
+/** All clean lifetimes of one aura: total, modal value, modal share. */
+function lifetimeMode(spellId: string) {
+  const h = lifetimes.get(spellId);
+  if (!h) return null;
+  let total = 0;
+  let best = -1;
+  let bestN = 0;
+  for (const [v, n] of h) {
+    total += n;
+    if (n > bestN) {
+      bestN = n;
+      best = v;
+    }
+  }
+  return { total, mode: best, share: total ? bestN / total : 0 };
+}
+
+// The corpus patches are hand assertions about the game too (Game-Behaviour
+// Rule 8): a patched value that no longer reproduces is ROT exactly like a
+// registered modifier. Same verdict rule as the ROT block above.
+console.log("\n=== PATCH:CORPUS_DURATION_PATCHES 能否复现观测 ===");
+let patchFlags = 0;
+for (const spellId of [...PATCHED].sort()) {
+  const rows = bySpell.get(spellId);
+  const name = spellEffectData[spellId]?.name ?? spellId;
+  if (!rows || rows.length < 5) {
+    console.log(
+      `  SKIP  ${spellId} ${name}: 样本不足 (${rows?.length ?? 0} 格)`,
+    );
+    continue;
+  }
+  const groups = group(rows);
+  const bad = groups.filter(
+    (g) => Math.abs(g.observed - g.predicted) > 0.6 && g.n >= 5,
+  );
+  const tot = rows.length;
+  const okN = tot - bad.reduce((s, g) => s + g.n, 0);
+  const lm = lifetimeMode(spellId);
+  if (bad.length > 0) patchFlags++;
+  console.log(
+    `  ${bad.length === 0 ? "OK   " : "FLAG "} ${spellId} ${name}: ${okN}/${tot} 格复现` +
+      (lm
+        ? `,寿命 n=${lm.total} 众数 ${lm.mode}s 占 ${(100 * lm.share).toFixed(0)}%`
+        : "") +
       (bad.length
         ? ` — 不符: ${bad
             .map((g) => `观测${g.observed}s vs 谓词${g.predicted}s ×${g.n}`)
@@ -225,22 +400,46 @@ for (const spellId of [...REGISTERED].sort()) {
         : ""),
   );
 }
-console.log(`\nROT 结论: ${flags} 条登记项与语料不符`);
+console.log(`\nPATCH 结论: ${patchFlags} 条补丁与语料不符`);
 
 if (args.gap) {
   console.log("\n=== GAP:未登记但观测与谓词不符的光环 ===");
+  console.log(
+    "  门 = 补丁表的提名门(2026-09-07):寿命众数占 ≥60% 且 n ≥100,且只认变长;控制类保持官方值。",
+  );
   const rowsOut: string[] = [];
+  let qualifying = 0;
   for (const [spellId, rows] of bySpell) {
-    if (REGISTERED.has(spellId)) continue;
+    if (REGISTERED.has(spellId) || PATCHED.has(spellId)) continue;
     const groups = group(rows);
     const top = groups[0];
     if (!top || top.n < args.gapMinCells) continue;
     if (Math.abs(top.observed - top.predicted) <= 0.6) continue;
+    const lm = lifetimeMode(spellId);
+    const longer = top.observed > top.predicted;
+    // Control keeps its official number (user ruling, ccFullDurationSeconds);
+    // ccSpellIds is the CC-typed subset of SPELL_CATEGORIES, not the whole
+    // table (Prayer of Mending is in the table and is not control).
+    const isCc = ccSpellIds.has(spellId);
+    const overBar = !!lm && lm.share >= 0.6 && lm.total >= 100;
+    const verdict = isCc
+      ? "CC-官方值"
+      : !longer
+        ? "变短-要机制"
+        : overBar
+          ? "候选"
+          : "证据不足";
+    if (verdict === "候选") qualifying++;
     rowsOut.push(
-      `  ${spellId} ${spellEffectData[spellId]?.name ?? ""}: 观测 ${top.observed}s ×${top.n} 格 vs 谓词 ${top.predicted}s`,
+      `  ${verdict.padEnd(8)} ${spellId} ${spellEffectData[spellId]?.name ?? ""}: 观测 ${top.observed}s ×${top.n} 格 vs 谓词 ${top.predicted}s` +
+        (lm
+          ? `;寿命 n=${lm.total} 众数 ${lm.mode}s 占 ${(100 * lm.share).toFixed(0)}%`
+          : ""),
     );
   }
   rowsOut.sort();
   console.log(rowsOut.join("\n") || "  (无)");
-  console.log(`\nGAP 结论: ${rowsOut.length} 个光环待定夺(掩码那一半需人工核 SpellClassOptions)`);
+  console.log(
+    `\nGAP 结论: ${rowsOut.length} 个光环待定夺,其中 ${qualifying} 个过提名门(掩码那一半需人工核 SpellClassOptions;补丁前还要数施放次数)`,
+  );
 }

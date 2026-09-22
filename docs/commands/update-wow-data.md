@@ -367,8 +367,20 @@ npx tsx packages/eval/scripts/dispelCompletenessScan.ts <dispel-counts.txt>
 #    observed lifetime; GAP = an unregistered aura whose observation disagrees with
 #    the predicate. Nothing here is auto-applied: the DB2 half of the evidence
 #    (SpellClassOptions mask) is still a manual check, see the table's header.
+#    Since 2026-09-22 (GH #65 item 4) it also re-measures every CORPUS_DURATION_PATCHES
+#    value (PATCH block, same verdict rule as ROT) and prints the patch table's own
+#    promotion bar on each GAP row (modal clean lifetime >= 60 % of >= 100 lifetimes,
+#    LONGER direction only, control keeps its official number). `--dose-unclean`
+#    counts SPELL_AURA_APPLIED_DOSE as a dirty segment — the stack-refresh guard the
+#    09-07 batch used; use it whenever the run feeds a patch decision. ~0.5 s per
+#    file: --every 120 ≈ 5 min, --every 30 (the GH #65 re-run, 2,110 files) ≈ 18 min.
+#    A FLAG or a GAP nomination is then chased with `--detail <aura>[:<talentSpellId>],…`:
+#    per aura, the observed distribution split by caster spec × log month × holder —
+#    month drift = hotfix, spec split = specBaseSeconds, holder split = a modifier entry
+#    (the third evidence leg; legs (a)+(b) come from the talent catalog's mask-resolved
+#    target lists, reports/talent-catalog-<date>/catalog.json `modsRaw` with op 1).
 npx tsx packages/eval/scripts/buffDurationScan.ts \
-  --manifest $GLADLOG_EVAL_HOME/corpus/manifest-archive-<date>.txt --every 120 --gap
+  --manifest $GLADLOG_EVAL_HOME/corpus/manifest-archive-<date>.txt --every 120 --gap --dose-unclean
 # 4. Official durations vs the game (GH #44 tail, 2026-09-02): every CC / root id's observed aura lifetime
 #    (APPLIED→REMOVED, 0.5 s-bin mode) against ccFullDurationSeconds (DB2 PvP duration + CORPUS_DURATION_PATCHES).
 #    ~1 min on every 30th archive file. A FLAG row is a ruling question — DB2 wins unless the corpus contradicts it
@@ -468,7 +480,7 @@ Both lists now include `observedSpellIdsGenerated.json` (corpus-observed ids) as
 when adding a new generator of this shape, include it from the start. See CLAUDE.md's **Curated-List Completeness
 Rule** for the measured cost (76.5% of all corpus dispels were invisible).
 
-**A second universe on the same generator (2026-09-11).** `genTalentModifiers` also has a *talent-side* universe —
+**A second universe on the same generator (2026-09-11).** `genTalentModifiers` also has a _talent-side_ universe —
 `talentClassMap`, built from `talentIdMap.json` — and the SpellEffect scan skips any row whose SpellID is not in it.
 PvP talents are not in the node tree, so every PvP-talent cooldown modifier was silently absent for the file's whole
 life, even though the runtime (`applyCdModifiers`) has always checked `pvpTalentIds`. `genTalentMitigation` had already

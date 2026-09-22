@@ -348,7 +348,15 @@ export const CC_DURATION_TALENT_MODIFIERS: Record<
  *    check, kept here as the worked example of why it exists.
  * Everything still open from this round is tracked in GH #65 (empower-scaled
  * durations, Marksmanship's Survival of the Fittest, Shadow Blades, the 34
- * weak-evidence ids, and the GAP list's shorter-direction cases).
+ * weak-evidence ids, and the GAP list's shorter-direction cases). The
+ * 2026-09-22 re-run on 2,111 files (GH #65 item 4) closed three of the
+ * weak-evidence ids as talent modifiers (Mist Wrap, Anti-Magic Barrier,
+ * Maneuverability — registered at the bottom of the table) and left 15
+ * LONGER-direction ids still under the bar: Rip / Rupture (combo-point
+ * scaled, DB2 4 s is the 0-point base — the same shape as empower), the
+ * Evoker breaths, Corruption, Garrote, Rejuvenation, the Eclipses …
+ * Recklessness' 24 s tier is Rampaging Berserker's TIERED node (maxRanks 4:
+ * 12 × 2 = 24) and is a rank-reading question, not rot.
  *
  * NOT registered, continued:
  *  · The other 76 of the 88 durations that disagree with the corpus: no
@@ -800,6 +808,12 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
       addSeconds: 4,
       note: "Featherfoot — DB2 aura 107 +4000 ms, Rogue/Assassination[class],Rogue/Outlaw[class],Rogue/Subtlety[class] (maxRanks 1), mask covers the spell; 154 caster-cells at 12.0 s hold it 100 %, 15 at 8.0 s hold it 0 %; 8 + 4 × 1 = 12",
     },
+    {
+      talentSpellId: "197000",
+      untalentedBaseSeconds: 8,
+      pct: -50,
+      note: "Maneuverability — the 6.0 s tier buffDurationScan FLAGged on the 2026-09-22 re-run (13 of 301 cells). PvP talent (equipped = rank 1), DB2 aura 108 −50 %, mask covers Sprint (09-13 catalog); corpus split is exact and one-sided: 8 of 8 holder caster-cells at 6.0 s (Assassination 4 / Outlaw 3 / Subtlety 1) against 0 of 162 non-holder cells, every one of which sits at 12.0 s or 8.0 s; (8 + 4) × 0.5 = 6. A reduction, registered because it carries its mechanism (Game-Behaviour Rule 7).",
+    },
   ],
   "215769": [
     {
@@ -855,6 +869,34 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
       untalentedBaseSeconds: 12,
       pct: 15,
       note: "Timeless Magic — DB2 aura 108 +15 %, Evoker/Preservation[spec] (maxRanks 2), mask covers the spell; 8 caster-cells at 15.5 s hold it 100 %, 4 at 17.5 s hold it 0 %; 12 × (1 + 15% × 2) = 15.5",
+    },
+  ],
+  // ── 2026-09-22 batch (GH #65 item 4): the three GAP nominations of the
+  // 2,111-file re-run that a DB2 duration modifier explains. Leg (a)+(b) from
+  // the 09-13 talent catalog's mask-resolved target lists, leg (c) from
+  // buffDurationScan --detail (holder × spec × month split, every 60th file).
+  "124682": [
+    {
+      talentSpellId: "197900",
+      untalentedBaseSeconds: 6,
+      addSeconds: 1,
+      note: "Mist Wrap — DB2 aura 107 +1000 ms, Monk/Mistweaver[spec] (maxRanks 1), mask covers Enveloping Mist; GAP row 2026-09-22: 7.0 s in 208 caster-cells vs the DB2 6 s, modal clean lifetime 7.0 s = 63 % of 2,758. Split: 94 of 101 holder cells at 7.0 s (the other 7 at 11 s) against 0 of 8 non-holder cells (6 s / 4 s); 6 + 1 = 7. KNOWN RESIDUAL: the 11 s tier (5 of 53 cells on the post-registration re-run, all holders) is the +4000 ms the Invoke Yu'lon / Chi-Ji rows (322118 / 325197 effect 4, same mask) put on Enveloping Mist WHILE THE CELESTIAL IS UP — state-conditional, no shape in this table; the scan keeps FLAGging it on purpose.",
+    },
+  ],
+  "410358": [
+    {
+      talentSpellId: "205727",
+      untalentedBaseSeconds: 5,
+      pct: 20,
+      note: "Anti-Magic Barrier — DB2 aura 108 +40 % with PvpMultiplier bringing it to +20 % in PvP (the PvP value is the official one, user ruling 2026-09-04), Death Knight class tree all three specs (maxRanks 1), mask covers both Anti-Magic Shell ids; GAP row 2026-09-22: 6.0 s in 247 caster-cells, modal lifetime 6.0 s = 69 % of 1,991. Split: 129 of 137 holder cells at 6.0 s across Unholy/Frost × Aug/Sep; NO non-holder cell exists — the talent is universally taken, and Rule 3 says a control group is not required; 5 × 1.2 = 6.",
+    },
+  ],
+  "48707": [
+    {
+      talentSpellId: "205727",
+      untalentedBaseSeconds: 5,
+      pct: 20,
+      note: "Anti-Magic Barrier on the second Anti-Magic Shell id — same DB2 row and mask as 410358; GAP row 2026-09-22: 6.0 s in 69 caster-cells, modal lifetime 6.0 s = 80 % of 541; 32 of 32 holder cells at 6.0 s, no non-holder cells; 5 × 1.2 = 6.",
     },
   ],
 };
