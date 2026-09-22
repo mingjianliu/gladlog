@@ -58,6 +58,8 @@ export function getNpcIdFromGuid(guid: string): string | null {
 }
 
 export const GROUNDING_TOTEM_NPC_ID = "5925";
+export const PSYFIEND_NPC_ID = "101398";
+export const SPIRIT_LINK_TOTEM_NPC_ID = "53006";
 
 /** Critical non-player units by npcId, with canonical English display names —
  * unit.name in the log is client-localized (地狱火爪牙 etc.), so renderers must
@@ -74,7 +76,7 @@ export const CRITICAL_NON_PLAYER_NPC_NAMES: Record<string, string> = {
   // Shaman Totems
   "3527": "Healing Stream Totem",
   "59764": "Healing Tide Totem",
-  "53006": "Spirit Link Totem",
+  [SPIRIT_LINK_TOTEM_NPC_ID]: "Spirit Link Totem",
   [GROUNDING_TOTEM_NPC_ID]: "Grounding Totem",
   "5913": "Tremor Totem",
   "105427": "Totem of Wrath", // listed as "Skyfury Totem" until 2026-09-20; the log and spell 204330 both say Totem of Wrath
@@ -87,7 +89,7 @@ export const CRITICAL_NON_PLAYER_NPC_NAMES: Record<string, string> = {
   "19668": "Shadowfiend",
   // Live id. The list carried 121111 until 2026-09-20: 0 occurrences in 600
   // 12.1 files while 101398 was summoned 305× and killed 146× (GH #100).
-  "101398": "Psyfiend",
+  [PSYFIEND_NPC_ID]: "Psyfiend",
   "224466": "Voidwraith",
   "198236": "Divine Image",
   // Monk
@@ -115,8 +117,8 @@ export const CRITICAL_NON_PLAYER_NPC_NAMES: Record<string, string> = {
  * `[CC ON ENEMY]`, `[absorbed: Grounding Totem]` on the eaten cast.
  */
 export const CONTESTABLE_ENEMY_SUMMON_NPC_IDS = new Set<string>([
-  "101398", // Psyfiend
-  "53006", // Spirit Link Totem
+  PSYFIEND_NPC_ID,
+  SPIRIT_LINK_TOTEM_NPC_ID,
 ]);
 
 export const CRITICAL_NON_PLAYER_NPC_IDS = new Set<string>(

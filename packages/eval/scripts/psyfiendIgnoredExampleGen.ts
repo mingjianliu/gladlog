@@ -27,6 +27,7 @@ import { CRISIS_HP_PCT } from "@gladlog/analysis/src/analysis/crisisDecisionPoin
 import {
   nonPlayerUnitKill,
   opposingHitsOnUnit,
+  PSYFIEND_NPC_ID,
   summonedAtMs,
 } from "@gladlog/analysis/src/context/timelineHelpers";
 import { gridHpPct, specToString } from "@gladlog/analysis/src/utils/cooldowns";
@@ -48,7 +49,7 @@ const flag = (f: string): string | undefined => {
 const fmtTime = (s: number): string =>
   `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
-const PSYFIEND_NPC = "101398";
+const PSYFIEND_NPC = PSYFIEND_NPC_ID;
 /** Seconds of the window a player must be both in reach and free. A probe
  * value, reported as a sensitivity row — not a product constant. */
 const REACH_MIN_S = [3, 5];
