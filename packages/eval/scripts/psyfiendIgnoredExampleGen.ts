@@ -20,6 +20,11 @@
  *                product's crisis line during the window — a team mid-kill or
  *                mid-rescue had something better to do
  *
+ * NOTE: Output is stdout JSON summary followed by example strings.
+ * REACH_MIN_S = [3, 5] and KILL_HP_PCT = 35 are diagnostic sensitivity probe
+ * thresholds, NOT production constants.
+ * Production crisis threshold is CRISIS_HP_PCT (0.30) from crisisDecisionPoints.ts.
+ *
  * Usage: npx tsx packages/eval/scripts/psyfiendIgnoredExampleGen.ts --manifest <txt> [--offset 3000] [--limit 300] [--show 6]
  */
 import { ensureAnalysisData } from "@gladlog/analysis";
@@ -46,6 +51,15 @@ const flag = (f: string): string | undefined => {
   const i = argv.indexOf(f);
   return i >= 0 ? argv[i + 1] : undefined;
 };
+const parseNonNegativeInt = (name: string, defaultVal: number): number => {
+  const raw = flag(name);
+  if (raw === undefined) return defaultVal;
+  const val = Number(raw);
+  if (!Number.isInteger(val) || val < 0) {
+    throw new Error(`expected non-negative integer for ${name}, got: ${raw}`);
+  }
+  return val;
+};
 const fmtTime = (s: number): string =>
   `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
@@ -57,11 +71,16 @@ const REACH_MIN_S = [3, 5];
 const KILL_HP_PCT = 35;
 
 async function main(): Promise<void> {
-  await ensureAnalysisData();
   const manifestPath = flag("--manifest");
   if (!manifestPath) {
     throw new Error("missing required --manifest <path>");
   }
+  const offset = parseNonNegativeInt("--offset", 3000);
+  const limit = parseNonNegativeInt("--limit", 300);
+  const show = parseNonNegativeInt("--show", 6);
+
+  await ensureAnalysisData();
+
   let manifestRaw: string;
   try {
     manifestRaw = readFileSync(manifestPath, "utf8");
@@ -74,8 +93,9 @@ async function main(): Promise<void> {
     .split("\n")
     .map((s) => s.trim())
     .filter(Boolean)
-    .slice(Number(flag("--offset") ?? 3000))
-    .slice(0, Number(flag("--limit") ?? 300));
+    .slice(offset, offset + limit);
+  let readFiles = 0;
+  let skippedFiles = 0;
   const funnel: Record<string, number> = {
     enemyPsyfiends: 0,
     notKilled: 0,
@@ -94,7 +114,9 @@ async function main(): Promise<void> {
     try {
       const raw = readFileSync(path);
       text = (path.endsWith(".gz") ? gunzipSync(raw) : raw).toString("utf8");
+      readFiles++;
     } catch (err) {
+      skippedFiles++;
       process.stderr.write(
         `[warn] failed to read ${path}: ${err instanceof Error ? err.message : String(err)}, skipping\n`,
       );
@@ -166,7 +188,7 @@ async function main(): Promise<void> {
           best &&
           best.seconds >= REACH_MIN_S[0] &&
           !betterToDo &&
-          examples.length < Number(flag("--show") ?? 6)
+          examples.length < show
         )
           examples.push(
             `${fmtTime((t0 - combat.startTime) / 1000)}  [candidate: psyfiend-ignored]   Enemy Psyfiend (by ${specToString(owner.spec)}) stood its full ${result.windowSeconds}s with 0 damage from your team. ` +
@@ -176,7 +198,19 @@ async function main(): Promise<void> {
       }
     }
   }
-  console.log(JSON.stringify({ files: files.length, rounds, funnel }, null, 1));
+  console.log(
+    JSON.stringify(
+      {
+        selectedFiles: files.length,
+        readFiles,
+        skippedFiles,
+        rounds,
+        funnel,
+      },
+      null,
+      1,
+    ),
+  );
   console.log("\n" + examples.join("\n\n"));
 }
 void main();

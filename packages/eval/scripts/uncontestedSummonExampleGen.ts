@@ -23,6 +23,15 @@ const flag = (f: string): string | undefined => {
   const i = argv.indexOf(f);
   return i >= 0 ? argv[i + 1] : undefined;
 };
+const parseNonNegativeInt = (name: string, defaultVal: number): number => {
+  const raw = flag(name);
+  if (raw === undefined) return defaultVal;
+  const val = Number(raw);
+  if (!Number.isInteger(val) || val < 0) {
+    throw new Error(`expected non-negative integer for ${name}, got: ${raw}`);
+  }
+  return val;
+};
 const fmtTime = (s: number): string =>
   `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
@@ -30,6 +39,10 @@ const manifestPath = flag("--manifest");
 if (!manifestPath) {
   throw new Error("missing required --manifest <path>");
 }
+const offset = parseNonNegativeInt("--offset", 3000);
+const limit = parseNonNegativeInt("--limit", 300);
+const show = parseNonNegativeInt("--show", 6);
+
 let manifestRaw: string;
 try {
   manifestRaw = readFileSync(manifestPath, "utf8");
@@ -42,8 +55,7 @@ const files = manifestRaw
   .split("\n")
   .map((s) => s.trim())
   .filter(Boolean)
-  .slice(Number(flag("--offset") ?? 3000))
-  .slice(0, Number(flag("--limit") ?? 300));
+  .slice(offset, offset + limit);
 
 type U = {
   npc: string;
@@ -59,13 +71,17 @@ const stats: Record<
 > = {};
 const examples: string[] = [];
 let rounds = 0;
+let readFiles = 0;
+let skippedFiles = 0;
 
 for (const path of files) {
   let text: string;
   try {
     const raw = readFileSync(path);
     text = (path.endsWith(".gz") ? gunzipSync(raw) : raw).toString("utf8");
+    readFiles++;
   } catch (err) {
+    skippedFiles++;
     process.stderr.write(
       `[warn] failed to read ${path}: ${err instanceof Error ? err.message : String(err)}, skipping\n`,
     );
@@ -100,7 +116,7 @@ for (const path of files) {
                 : `untouched: 0 hits from the other team`),
         );
     }
-    if (out.length >= 2 && examples.length < Number(flag("--show") ?? 6))
+    if (out.length >= 2 && examples.length < show)
       examples.push(out.join("\n"));
   };
   for (const row of text.split(/\r?\n/)) {
@@ -145,7 +161,8 @@ for (const path of files) {
     if (!u || !p.damage || !srcGuid.startsWith("Player-")) continue;
     const a = team.get(srcGuid);
     const b = team.get(u.owner);
-    if (a === undefined || b === undefined || a === b) continue;
+    const sameTeam = Boolean(a) && a === b;
+    if (!a || !b || sameTeam) continue;
     u.hits++;
     u.hitters.add(srcGuid);
     if ((p.damage.overkill ?? 0) > 0) u.killed = true;
@@ -153,7 +170,14 @@ for (const path of files) {
   flush();
 }
 
-console.log(JSON.stringify({ files: files.length, rounds }));
+console.log(
+  JSON.stringify({
+    selectedFiles: files.length,
+    readFiles,
+    skippedFiles,
+    rounds,
+  }),
+);
 for (const [name, s] of Object.entries(stats).sort(
   (a, b) => b[1].summoned - a[1].summoned,
 ))
