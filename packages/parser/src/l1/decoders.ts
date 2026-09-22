@@ -283,6 +283,44 @@ export function decodeMissed(
  * residual worse, 2.9% → 3.6%). What it adds is the missing fact of how much
  * healing was eaten, and by what.
  */
+/**
+ * Parameter offsets for SPELL_ABSORBED and SPELL_HEAL_ABSORBED events.
+ *
+ * In WoW combat logs:
+ * - Spell attack form (>= 21 params): prefix (0..7), attack/absorb spell triple (8..10),
+ *   shield/heal caster prefix (11..14), shield/heal spell triple (15..17), amounts (18..19), critical (20).
+ * - Swing attack form (18 params): prefix (0..7), shield caster prefix (8..11),
+ *   shield spell triple (12..14), amounts (15..16), critical (17).
+ */
+export const ABSORB_SPELL_OFFSETS = {
+  ATTACKER_GUID: 0,
+  ATTACKER_NAME: 1,
+  VICTIM_GUID: 4,
+  ATTACK_SPELL_ID: 8,
+  ATTACK_SPELL_NAME: 9,
+  ATTACK_SPELL_SCHOOL: 10,
+  SHIELD_OWNER_GUID: 11,
+  SHIELD_OWNER_NAME: 12,
+  SHIELD_SPELL_ID: 15,
+  SHIELD_SPELL_NAME: 16,
+  ABSORBED_AMOUNT: 18,
+  TOTAL_AMOUNT: 19,
+  CRITICAL: 20,
+} as const;
+
+export const ABSORB_SWING_OFFSETS = {
+  ATTACKER_GUID: 0,
+  ATTACKER_NAME: 1,
+  VICTIM_GUID: 4,
+  SHIELD_OWNER_GUID: 8,
+  SHIELD_OWNER_NAME: 9,
+  SHIELD_SPELL_ID: 12,
+  SHIELD_SPELL_NAME: 13,
+  ABSORBED_AMOUNT: 15,
+  TOTAL_AMOUNT: 16,
+  CRITICAL: 17,
+} as const;
+
 export function decodeHealAbsorbed(params: string[]): {
   absorbCasterGuid: string;
   absorbCasterName: string;
@@ -297,17 +335,17 @@ export function decodeHealAbsorbed(params: string[]): {
   totalAmount: number;
 } {
   return {
-    absorbCasterGuid: params[0] ?? "",
-    absorbCasterName: params[1] ?? "",
-    victimGuid: params[4] ?? "",
-    absorbSpellId: parseInt10(params[8]),
-    absorbSpellName: params[9] ?? "",
-    healerGuid: params[11] ?? "",
-    healerName: params[12] ?? "",
-    healSpellId: parseInt10(params[15]),
-    healSpellName: params[16] ?? "",
-    absorbedAmount: parseInt10(params[18]),
-    totalAmount: parseInt10(params[19]),
+    absorbCasterGuid: params[ABSORB_SPELL_OFFSETS.ATTACKER_GUID] ?? "",
+    absorbCasterName: params[ABSORB_SPELL_OFFSETS.ATTACKER_NAME] ?? "",
+    victimGuid: params[ABSORB_SPELL_OFFSETS.VICTIM_GUID] ?? "",
+    absorbSpellId: parseInt10(params[ABSORB_SPELL_OFFSETS.ATTACK_SPELL_ID]),
+    absorbSpellName: params[ABSORB_SPELL_OFFSETS.ATTACK_SPELL_NAME] ?? "",
+    healerGuid: params[ABSORB_SPELL_OFFSETS.SHIELD_OWNER_GUID] ?? "",
+    healerName: params[ABSORB_SPELL_OFFSETS.SHIELD_OWNER_NAME] ?? "",
+    healSpellId: parseInt10(params[ABSORB_SPELL_OFFSETS.SHIELD_SPELL_ID]),
+    healSpellName: params[ABSORB_SPELL_OFFSETS.SHIELD_SPELL_NAME] ?? "",
+    absorbedAmount: parseInt10(params[ABSORB_SPELL_OFFSETS.ABSORBED_AMOUNT]),
+    totalAmount: parseInt10(params[ABSORB_SPELL_OFFSETS.TOTAL_AMOUNT]),
   };
 }
 
@@ -365,8 +403,8 @@ export function decodeAbsorbed(params: string[]): {
   attackSpellId: number | null;
   attackSpellName: string | null;
 } {
-  const attackerGuid = params[0] ?? "";
-  const victimGuid = params[4] ?? "";
+  const attackerGuid = params[ABSORB_SPELL_OFFSETS.ATTACKER_GUID] ?? "";
+  const victimGuid = params[ABSORB_SPELL_OFFSETS.VICTIM_GUID] ?? "";
 
   let shieldOwnerGuid = "";
   let shieldOwnerNameRaw: string | undefined;
@@ -379,26 +417,26 @@ export function decodeAbsorbed(params: string[]): {
   let attackSpellName: string | null = null;
 
   if (params.length === 18) {
-    shieldOwnerGuid = params[8] ?? "";
-    shieldOwnerNameRaw = params[9];
-    shieldSpellId = parseInt10(params[12]);
-    shieldSpellName = params[13] ?? "";
-    absorbedAmount = parseInt10(params[15]);
-    totalAmount = parseInt10(params[16]);
-    critical = decodeCritical(params[17]);
+    shieldOwnerGuid = params[ABSORB_SWING_OFFSETS.SHIELD_OWNER_GUID] ?? "";
+    shieldOwnerNameRaw = params[ABSORB_SWING_OFFSETS.SHIELD_OWNER_NAME];
+    shieldSpellId = parseInt10(params[ABSORB_SWING_OFFSETS.SHIELD_SPELL_ID]);
+    shieldSpellName = params[ABSORB_SWING_OFFSETS.SHIELD_SPELL_NAME] ?? "";
+    absorbedAmount = parseInt10(params[ABSORB_SWING_OFFSETS.ABSORBED_AMOUNT]);
+    totalAmount = parseInt10(params[ABSORB_SWING_OFFSETS.TOTAL_AMOUNT]);
+    critical = decodeCritical(params[ABSORB_SWING_OFFSETS.CRITICAL]);
   } else {
-    const id = parseInt10(params[8]);
+    const id = parseInt10(params[ABSORB_SPELL_OFFSETS.ATTACK_SPELL_ID]);
     if (!Number.isNaN(id)) {
       attackSpellId = id;
-      attackSpellName = params[9] ?? null;
+      attackSpellName = params[ABSORB_SPELL_OFFSETS.ATTACK_SPELL_NAME] ?? null;
     }
-    shieldOwnerGuid = params[11] ?? "";
-    shieldOwnerNameRaw = params[12];
-    shieldSpellId = parseInt10(params[15]);
-    shieldSpellName = params[16] ?? "";
-    absorbedAmount = parseInt10(params[18]);
-    totalAmount = parseInt10(params[19]);
-    critical = decodeCritical(params[20]);
+    shieldOwnerGuid = params[ABSORB_SPELL_OFFSETS.SHIELD_OWNER_GUID] ?? "";
+    shieldOwnerNameRaw = params[ABSORB_SPELL_OFFSETS.SHIELD_OWNER_NAME];
+    shieldSpellId = parseInt10(params[ABSORB_SPELL_OFFSETS.SHIELD_SPELL_ID]);
+    shieldSpellName = params[ABSORB_SPELL_OFFSETS.SHIELD_SPELL_NAME] ?? "";
+    absorbedAmount = parseInt10(params[ABSORB_SPELL_OFFSETS.ABSORBED_AMOUNT]);
+    totalAmount = parseInt10(params[ABSORB_SPELL_OFFSETS.TOTAL_AMOUNT]);
+    critical = decodeCritical(params[ABSORB_SPELL_OFFSETS.CRITICAL]);
   }
 
   const shieldOwnerName =
