@@ -10,19 +10,18 @@ import { type BurstWindowDecisionPoint } from "../analysis/burstWindowDecisionPo
 import type { CdPriorHoldEpisode } from "../analysis/cdTriggerPrior";
 import type { StackedDefensivePair } from "../analysis/stackedDefensives";
 import { DISPEL_FEATURE_FLAGS } from "../data/dispelFeatureFlags";
-import { buffFullDurationForCaster } from "../utils/buffDuration";
 import {
   effectiveCooldownSeconds,
   getEnglishSpellName,
 } from "../data/spellEffectData";
+import { ccSpellIds } from "../data/spellTags";
 import {
   DEATH_WINDOW_S,
   DEATH_WINDOW_UNFOLD_CAP,
   TIMELINE_LINE_FLAGS,
 } from "../data/timelineLineFlags";
-import { ccSpellIds } from "../data/spellTags";
+import { buffFullDurationForCaster } from "../utils/buffDuration";
 import { COPY_CAST_IDS } from "../utils/castPress";
-import { SUMMON_REACH_MIN_S, summonReach } from "../utils/summonReachability";
 import type { ICcBreakEvent } from "../utils/ccBreakAnalysis";
 import {
   CC_AVOIDANCE_BUFF_SPELLS,
@@ -78,28 +77,25 @@ import {
   IOutgoingCCChain,
   ITeammateDrClash,
 } from "../utils/drAnalysis";
-import { enemyDefensiveEvents } from "../utils/enemyDefensives";
 import {
   IEnemyCDCast,
   IEnemyCDTimeline,
   isEnemyCdWindowSpell,
 } from "../utils/enemyCDs";
+import { enemyDefensiveEvents } from "../utils/enemyDefensives";
 import { computeEnemyInterruptAvailability } from "../utils/enemyInterrupts";
 import { IHealingGap } from "../utils/healingGaps";
 import { sumIncomingPressure } from "../utils/incomingPressure";
 import { getHpPercentAtTime } from "../utils/killWindowTargetSelection";
 import { fmtTime, toRenderSecond } from "../utils/renderGrid";
 import { resourceDeltaPct } from "../utils/resourceAt";
+import { SUMMON_REACH_MIN_S, summonReach } from "../utils/summonReachability";
 import { getInterruptImmunityConditions } from "../utils/talentBehaviors";
 import {
   BURST_ANSWERED_LEGEND,
   formatBurstAnsweredLines,
 } from "./burstAnswered";
 import { CD_PRIOR_LEGEND, formatCdPriorLines } from "./cdPrior";
-import {
-  formatStackedDefensiveLines,
-  STACKED_DEFENSIVES_LEGEND,
-} from "./stackedDefensives";
 import {
   emitDmgSpikeEntries,
   emitEnemyDeathEntries,
@@ -110,14 +106,19 @@ import {
 import {
   PEAK_SPIKE_MARKERS,
   peakSpikeMarker,
-  peakSpikePlacement,
   type PeakSpikePlacement,
+  peakSpikePlacement,
 } from "./peakSpikePlacement";
+import { pruneZeroLossResRows } from "./resLedgerPrune";
+import {
+  formatStackedDefensiveLines,
+  STACKED_DEFENSIVES_LEGEND,
+} from "./stackedDefensives";
 export {
   PEAK_SPIKE_MARKERS,
   peakSpikeMarker,
-  peakSpikePlacement,
   type PeakSpikePlacement,
+  peakSpikePlacement,
 };
 import {
   buildResourceSnapshot,
@@ -130,10 +131,11 @@ import {
   CHANNELED_CD_SPELL_IDS,
   channelWasInterrupted,
   computeHealingInWindow,
+  CONTESTABLE_ENEMY_SUMMON_NPC_IDS,
   CRITICAL_NON_PLAYER_NPC_NAMES,
+  damageEventLabel,
   DMG_SPIKE_THRESHOLD,
   extractEnemyMajorBuffIntervals,
-  IEnemyBuffInterval,
   extractOwnerCDBuffExpiry,
   getNpcIdFromGuid,
   getTopDamageSourcesInWindow,
@@ -142,15 +144,14 @@ import {
   HEALING_AMPLIFIER_SPELL_IDS,
   HEALING_WINDOW_EARLY_CD_SECONDS,
   HEALING_WINDOW_MIN_HPS,
+  IEnemyBuffInterval,
   isCriticalNonPlayerUnit,
-  nonPlayerUnitKill,
-  damageEventLabel,
-  CONTESTABLE_ENEMY_SUMMON_NPC_IDS,
-  opposingHitsOnUnit,
-  summonedAtMs,
-  MANA_COOLDOWN_SPELL_IDS,
   isPassiveProcCast,
+  MANA_COOLDOWN_SPELL_IDS,
+  nonPlayerUnitKill,
+  opposingHitsOnUnit,
   resolveSummonOwner,
+  summonedAtMs,
 } from "./timelineHelpers";
 
 interface DeferredSnapshot {
@@ -3423,6 +3424,12 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     "    is one this ledger does not track, NOT one that was unavailable. Other sections may still cite it.",
     "  [RES] rdy: = abilities READY at that instant. `rdy:Δ` = unchanged since the previous [RES];",
     "    a leading `-<spell>` marks one that just LEFT the ready set. `cd:<spell>(Ns)` = seconds until it returns.",
+    // GH #99 item 5: a bare `rdy:Δ  cd:—` row survives only when it states a
+    // fact no other line does (resLedgerPrune.ts); tell the reader so an
+    // absent ledger row is not misread as "nothing was tracked here".
+    "  A `rdy:Δ  cd:—` row is printed only when it carries a fact no other line states (a focus target no",
+    "    surviving [RES] shows, a CC no [CC ON …] line covers at that second, an enemy CD with no [ENEMY CD] line);",
+    "    a `rdy:Δ  cd:—` row whose facts are all stated elsewhere is omitted, so its absence means nothing changed.",
     "  [DMG SPIKE] `START–END` = the window's exact bounds; its `A% -> B% HP` maps directly to those two timestamps.",
     "  Window durations `(Ns)` are computed from the displayed start/end timestamps, so they always match what you see.",
     // GH #24 (2026-08-30): roots carry no DR and are not hard CC; a [ROOT]
@@ -3508,5 +3515,8 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     }),
   );
 
-  return outputLines.join("\n");
+  // GH #99 item 5 (user ruling 2026-09-22): drop the no-change [RES] rows
+  // whose every fact the surviving text already states — same predicate the
+  // eval gate `checkResNoChangeRowsPruned` re-applies to the rendered prompt.
+  return pruneZeroLossResRows(outputLines).join("\n");
 }

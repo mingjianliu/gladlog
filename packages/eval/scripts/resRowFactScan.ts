@@ -17,12 +17,25 @@
  *
  * 判据只认「存活文本里能不能重建这条事实」,不猜模型读不读 —— 读不读归消融探针管。
  *
+ * 2026-09-22(用户裁决,选项 1):判据搬进了 `packages/analysis/src/context/resLedgerPrune.ts`,
+ * 渲染器(`buildMatchTimeline` → `pruneZeroLossResRows`)与门规 `checkResNoChangeRowsPruned`
+ * 都 import 同一个 `classifyNoChangeResRows`;本脚本改为消费它,只负责统计与举例。
+ * 对照基线(82 份本地重建,改前):[RES] 3,033 / 无变化 954 / 零损失可删 717 / focus 独占 146 /
+ * cc 独占 103 / enemy 独占 0;改后:2,316 / 237 / 0 / 146 / 103 / 0。(本脚本 09-16 版用 `\S+`
+ * 截字段,多词技能名被截断,当时报 773 / 45;共享模块按双空格分隔符解析后才是上面的数。)
+ *
  * 用法:npx tsx packages/eval/scripts/resRowFactScan.ts <prompts 目录> [--examples N]
  *   例:npx tsx packages/eval/scripts/resRowFactScan.ts \
  *         $GLADLOG_EVAL_HOME/runs/gh99c-treat/prompts
  */
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+
+import {
+  classifyNoChangeResRows,
+  isNoChangeResLine,
+  isResRow,
+} from "@gladlog/analysis";
 
 const dir = process.argv[2];
 if (!dir) {
@@ -32,37 +45,13 @@ if (!dir) {
 const exIdx = process.argv.indexOf("--examples");
 const MAX_EXAMPLES = exIdx > 0 ? Number(process.argv[exIdx + 1]) : 8;
 
-/** 落地行的时长解析不出来时按这个兜底,并给覆盖判定留一点渲染取整的余量。 */
-const CC_FALLBACK_S = 3;
-const CC_SLACK_S = 1;
-
-const RES_ROW = /\[RES\]\s+rdy:/;
-const NO_CHANGE = /\[RES\]\s+rdy:Δ\s+cd:—/;
-const TIME_AT_START = /^\s*(\d{1,2}):([0-5]\d)/;
-const FOCUS = /\bfocus:(\S+)/;
-const CC_FIELD = /\bcc:(\S+)/;
-const ENEMY_FIELD = /\benemy:(\S+)/;
-/** `3/Wind Shear-1s[kick]` → 法术名。 */
-const CC_ENTRY = /^\d+\/(.+?)-\d/;
-/** `Trueshot/Marksmanship Hunter(6s left)` → 法术名。 */
-const CD_ENTRY = /^(.+?)\//;
-/** `… ← Polymorph (by 6(RShaman)) | 6s [DR: …]` → 时长秒数。 */
-const CC_LINE_DUR = /\|\s*(\d+(?:\.\d+)?)s\b/;
-
-const secondsOf = (line: string): number | null => {
-  const m = line.match(TIME_AT_START);
-  return m ? Number(m[1]) * 60 + Number(m[2]) : null;
-};
-
 let files = 0;
 let resRows = 0;
 let noChange = 0;
 let lostFocusEpisodes = 0;
-let ccEntries = 0;
 let ccLost = 0;
-let cdEntries = 0;
 let cdLost = 0;
-/** 删掉也不丢任何事实的行 —— 「只删这些」是零信息损失的中间档,本行数就是它的收益上限。 */
+/** 删掉也不丢任何事实的行 —— 渲染器现在就删这些;改后语料里应为 0。 */
 let safeToDrop = 0;
 const promptsWithLoss = new Set<string>();
 const examples: string[] = [];
@@ -70,95 +59,22 @@ const examples: string[] = [];
 for (const f of readdirSync(dir).filter((n) => n.endsWith(".txt"))) {
   files++;
   const lines = readFileSync(join(dir, f), "utf8").split("\n");
-
-  // 每行归到它之前最近的时间戳(`[RES]` 行自己不带时间)。
-  const at: Array<number | null> = [];
-  let last: number | null = null;
-  for (const l of lines) {
-    const s = secondsOf(l);
-    if (s !== null) last = s;
-    at.push(last);
-  }
-
-  // 同族参照行:CC 落地行与敌方 CD 行。
-  const ccLines: Array<{ t: number; text: string }> = [];
-  const cdLines: Array<{ t: number; text: string }> = [];
-  lines.forEach((l, i) => {
-    const t = at[i];
-    if (t === null) return;
-    if (/\[CC ON /.test(l)) ccLines.push({ t, text: l });
-    if (/\[ENEMY CD\]/.test(l)) cdLines.push({ t, text: l });
-  });
-
-  const rows = lines
-    .map((l, i) => ({ l, i }))
-    .filter(({ l }) => RES_ROW.test(l));
-  resRows += rows.length;
-
-  // focus:被删行独占的集火段 —— 上一条与下一条**存活**的 [RES] 都不是这个目标。
-  rows.forEach((row, k) => {
-    const dead = NO_CHANGE.test(row.l);
-    if (!dead) return;
-    noChange++;
-    let uniqueHere = false;
-    const focus = row.l.match(FOCUS)?.[1];
-    if (focus) {
-      const survivingNeighbour = (dir_: -1 | 1): string | undefined => {
-        for (let j = k + dir_; j >= 0 && j < rows.length; j += dir_) {
-          if (!NO_CHANGE.test(rows[j]!.l)) return rows[j]!.l.match(FOCUS)?.[1];
-        }
-        return undefined;
-      };
-      if (survivingNeighbour(-1) !== focus && survivingNeighbour(1) !== focus) {
-        lostFocusEpisodes++;
-        uniqueHere = true;
-        promptsWithLoss.add(f);
-        if (examples.length < MAX_EXAMPLES)
-          examples.push(`${f} focus=${focus} :: ${row.l.trim().slice(0, 120)}`);
-      }
+  resRows += lines.filter(isResRow).length;
+  noChange += lines.filter(isNoChangeResLine).length;
+  for (const v of classifyNoChangeResRows(lines)) {
+    if (v.uniqueFacts.length === 0) {
+      safeToDrop++;
+      continue;
     }
-
-    const t = at[row.i];
-    const cc = row.l.match(CC_FIELD)?.[1];
-    if (cc && t !== null)
-      for (const entry of cc.split(",")) {
-        const spell = entry.match(CC_ENTRY)?.[1];
-        if (!spell) continue;
-        ccEntries++;
-        // 落地行自带时长 → 它覆盖 [t0, t0+dur];落在里面就说明这条控制仍然可推。
-        const covered = ccLines.some((c) => {
-          if (!c.text.includes(spell)) return false;
-          const dur = Number(c.text.match(CC_LINE_DUR)?.[1] ?? CC_FALLBACK_S);
-          return t >= c.t - CC_SLACK_S && t <= c.t + dur + CC_SLACK_S;
-        });
-        if (!covered) {
-          ccLost++;
-          uniqueHere = true;
-          promptsWithLoss.add(f);
-          if (examples.length < MAX_EXAMPLES)
-            examples.push(
-              `${f} cc=${spell} @${t}s :: ${row.l.trim().slice(0, 120)}`,
-            );
-        }
-      }
-
-    const en = row.l.match(ENEMY_FIELD)?.[1];
-    if (en && t !== null)
-      for (const entry of en.split(",")) {
-        const spell = entry.match(CD_ENTRY)?.[1];
-        if (!spell) continue;
-        cdEntries++;
-        // 同名 [ENEMY CD] 行在这一秒之前出现过 → 剩余秒数可推(算一步),不算丢。
-        const covered = cdLines.some(
-          (c) => c.t <= t && c.text.includes(spell),
-        );
-        if (!covered) {
-          cdLost++;
-          uniqueHere = true;
-        }
-      }
-    if (!uniqueHere) safeToDrop++;
-  });
+    promptsWithLoss.add(f);
+    if (v.uniqueFacts.includes("focus")) lostFocusEpisodes++;
+    if (v.uniqueFacts.includes("cc")) ccLost++;
+    if (v.uniqueFacts.includes("enemy")) cdLost++;
+    if (examples.length < MAX_EXAMPLES)
+      examples.push(
+        `${f} unique=${v.uniqueFacts.join("+")} :: ${lines[v.index]!.trim().slice(0, 120)}`,
+      );
+  }
 }
 
 const pct = (a: number, b: number) =>
@@ -167,16 +83,16 @@ console.log(
   `prompts=${files}  [RES] rows=${resRows}  no-change=${noChange} (${pct(noChange, resRows)})`,
 );
 console.log(
-  `focus: 只存在于被删行的集火段  ${lostFocusEpisodes}  (${pct(lostFocusEpisodes, noChange)} of deleted rows)`,
+  `focus: 只存在于无变化行的集火段  ${lostFocusEpisodes}  (${pct(lostFocusEpisodes, noChange)} of no-change rows)`,
 );
 console.log(
-  `cc:    被删行上的控制  ${ccEntries},其中无任何同名 [CC ON …] 落地行覆盖到这一秒  ${ccLost} (${pct(ccLost, ccEntries)})`,
+  `cc:    无变化行上无任何同名 [CC ON …] 落地行覆盖到这一秒的控制  ${ccLost} rows`,
 );
 console.log(
-  `enemy: 被删行上的敌方 CD  ${cdEntries},其中整份 prompt 无同名 [ENEMY CD] 行  ${cdLost} (${pct(cdLost, cdEntries)})`,
+  `enemy: 无变化行上整份 prompt 无同名 [ENEMY CD] 行的敌方 CD  ${cdLost} rows`,
 );
 console.log(
-  `prompts with >=1 lost fact: ${promptsWithLoss.size}/${files} (${pct(promptsWithLoss.size, files)})`,
+  `prompts with >=1 unique fact on a no-change row: ${promptsWithLoss.size}/${files} (${pct(promptsWithLoss.size, files)})`,
 );
 console.log(
   `零信息损失可删的行: ${safeToDrop}/${noChange} (${pct(safeToDrop, noChange)} of no-change rows, ${pct(safeToDrop, resRows)} of all [RES] rows)`,

@@ -99,11 +99,11 @@ export * from "./utils/positionAnalysis";
 export * from "./analysis/auditFindings";
 export * from "./analysis/buildFindingsPrompt";
 export * from "./analysis/causalLint";
-export * from "./analysis/rosterLint";
 export * from "./analysis/deepDive";
 export * from "./analysis/findingCategories";
 export * from "./analysis/hindsightLint";
 export * from "./analysis/parseModelJson";
+export * from "./analysis/rosterLint";
 export * from "./analysis/spellNameZhLint";
 export {
   METRIC_LABELS,
@@ -119,16 +119,17 @@ export { CANDIDATE_TYPE_FLAGS } from "./data/candidateTypeFlags";
 export {
   CANDIDATE_TYPE_REGISTRY,
   CANDIDATE_TYPE_STRINGS,
-  CARD_TYPES,
-  MENU_ONLY_TYPES,
-  RETIRED_TYPES,
   type CandidateTypeEntry,
   type CandidateTypeStatus,
   type CandidateTypeSurface,
+  CARD_TYPES,
+  MENU_ONLY_TYPES,
+  RETIRED_TYPES,
 } from "./data/candidateTypeRegistry";
 export { OFF_GCD_SPELL_IDS } from "./data/offGcdGenerated";
 // Lane pressure/exposure (backlog #4): the damage-spike threshold shared by
 // the prompt and the lanes (single-source, see context/timelineHelpers.ts).
-export { DMG_SPIKE_THRESHOLD } from "./context/timelineHelpers";
 export * from "./context/peakSpikePlacement";
+export * from "./context/resLedgerPrune";
+export { DMG_SPIKE_THRESHOLD } from "./context/timelineHelpers";
 export * from "./data/kickedSpellCategories";

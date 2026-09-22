@@ -46,10 +46,12 @@ export function classifyPromptLine(line: string): string {
  * 96.4% 仍带 `focus:`、36.6% 带实时 `cc:`。整类删 `[RES]` 测的是另一个问题;
  * 要回答「这些行值不值得占 1.9% 的 prompt 字符」,只能单独消融这一子集。
  */
+import { isNoChangeResLine } from "@gladlog/analysis";
+
 export const RES_NO_CHANGE_KEY = "[RES:no-change]";
-export function isNoChangeResLine(line: string): boolean {
-  return /\[RES\]\s+rdy:Δ\s+cd:—/.test(line);
-}
+// Shared with the renderer's pruning predicate (resLedgerPrune.ts): one
+// definition of "no-change row" on both sides.
+export { isNoChangeResLine } from "@gladlog/analysis";
 
 /**
  * 消融时把某一类整体从 prompt 里删掉。

@@ -45,6 +45,7 @@ import * as claimChecker from "@gladlog/analysis/src/compare/claimChecker";
 import * as burstAnswered from "@gladlog/analysis/src/context/burstAnswered";
 import * as cdPrior from "@gladlog/analysis/src/context/cdPrior";
 import * as matchTimelineSections from "@gladlog/analysis/src/context/matchTimelineSections";
+import * as resLedgerPrune from "@gladlog/analysis/src/context/resLedgerPrune";
 import * as stackedDefensivesContext from "@gladlog/analysis/src/context/stackedDefensives";
 import * as timelineHelpers from "@gladlog/analysis/src/context/timelineHelpers";
 import * as abilityProfileMod from "@gladlog/analysis/src/data/abilityProfile";
@@ -1217,6 +1218,16 @@ const INDEX: PredicateRow[] = [
   {
     file: `${E}/quality/promptQualityCheck.ts`,
     symbol: "checkOffensiveWindowSpikeMarker",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${A}/context/resLedgerPrune.ts`,
+    symbol: "classifyNoChangeResRows",
+    mod: resLedgerPrune,
+  },
+  {
+    file: "packages/eval/src/quality/promptQualityCheck.ts",
+    symbol: "checkResNoChangeRowsPruned",
     mod: promptQualityCheck,
   },
   {

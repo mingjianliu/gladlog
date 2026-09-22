@@ -9,9 +9,10 @@ import { CombatUnitReaction } from "@gladlog/parser-compat";
 import type { CoverageManifest } from "../src/quality/coverageManifest";
 import {
   checkBehaviorPriorConsistency,
-  checkMatch,
   checkHeaderHpPromise,
+  checkMatch,
   checkPetCreditSide,
+  checkResNoChangeRowsPruned,
   checkSameSecondHpConsistency,
   checkSelfOnlyDefensiveClaims,
   checkSnapshotFactsConsistency,
@@ -562,5 +563,57 @@ describe("checkSameSecondHpConsistency", () => {
       "0:25  [ENEMY TRINKET]   2(ERogue) used PvP trinket (target at 31% HP)",
     ];
     expect(checkSameSecondHpConsistency(lines)).toEqual([]);
+  });
+});
+
+describe("checkResNoChangeRowsPruned — a zero-loss [RES] rdy:Δ cd:— row may not survive rendering (GH #99 item 5)", () => {
+  const stateA = "0:55  [STATE]   friends 1(MMonk):91 2(UDKnight):96 / enemies 4(BDruid):75";
+  const stateB = "0:58  [STATE]   friends 1(MMonk):88 2(UDKnight):68 / enemies 4(BDruid):70";
+  const full = "      [RES] rdy:Revival,Life Cocoon  cd:—  focus:2";
+
+  it("flags a no-change row whose focus the surviving neighbours already show", () => {
+    const out = checkResNoChangeRowsPruned([
+      stateA,
+      full,
+      stateB,
+      "      [RES] rdy:Δ  cd:—  focus:2",
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toContain("line 4");
+  });
+
+  it("passes when the row is the only place a focus switch exists", () => {
+    expect(
+      checkResNoChangeRowsPruned([
+        stateA,
+        full,
+        stateB,
+        "      [RES] rdy:Δ  cd:—  focus:3",
+      ]),
+    ).toEqual([]);
+  });
+
+  it("a cc: entry covered by its own landing line's duration is not a unique fact", () => {
+    const landing =
+      "0:56  [CC ON TEAM]   3(FMage) ← Incapacitating Roar (by 4(BDruid)) | 4s [DR: Disorient Full]";
+    expect(
+      checkResNoChangeRowsPruned([
+        stateA,
+        full,
+        landing,
+        stateB,
+        "      [RES] rdy:Δ  cd:—  focus:2  cc:3/Incapacitating Roar-2s[disorient]",
+      ]),
+    ).toHaveLength(1);
+    // Same row, but the landing line's 4 s ended before 0:58 → the CC state is unique, row stays.
+    expect(
+      checkResNoChangeRowsPruned([
+        stateA,
+        full,
+        "0:50  [CC ON TEAM]   3(FMage) ← Incapacitating Roar (by 4(BDruid)) | 4s [DR: Disorient Full]",
+        stateB,
+        "      [RES] rdy:Δ  cd:—  focus:2  cc:3/Incapacitating Roar-2s[disorient]",
+      ]),
+    ).toEqual([]);
   });
 });

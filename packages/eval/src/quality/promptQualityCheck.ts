@@ -29,6 +29,7 @@
  */
 
 import {
+  droppableNoChangeResRows,
   ensureAnalysisData,
   PEAK_SPIKE_MARKERS,
   peakSpikePlacement,
@@ -50,12 +51,6 @@ import {
   lookupBurstWindowPrior,
 } from "@gladlog/analysis/src/data/burstWindowPrior";
 import { lookupCdTriggerPrior } from "@gladlog/analysis/src/data/cdTriggerPrior";
-import {
-  lookupTeammateCrisisPriorByBin,
-  lookupTeammateCrisisTriageByBin,
-  type TeammateCrisisDmgBin,
-  teammateCrisisDmgBinOf,
-} from "@gladlog/analysis/src/data/teammateCrisisPrior";
 import { classMetadata } from "@gladlog/analysis/src/data/classSpells";
 import { lookupKickPriorityPrior } from "@gladlog/analysis/src/data/kickPriorityPrior";
 import { ATTEMPT_INTO_TRINKET_OUTCOME_REF } from "@gladlog/analysis/src/data/outcomeRefs";
@@ -65,6 +60,12 @@ import {
   syncRefClearsMinContrast,
   syncRefContrastPp,
 } from "@gladlog/analysis/src/data/syncWindowPrior";
+import {
+  lookupTeammateCrisisPriorByBin,
+  lookupTeammateCrisisTriageByBin,
+  type TeammateCrisisDmgBin,
+  teammateCrisisDmgBinOf,
+} from "@gladlog/analysis/src/data/teammateCrisisPrior";
 import { KILL_CREDIT_SLACK_S } from "@gladlog/analysis/src/utils/burstLedger";
 import { canHelpAnotherUnit } from "@gladlog/analysis/src/utils/cooldowns";
 import { fmtTime } from "@gladlog/analysis/src/utils/renderGrid";
@@ -833,6 +834,29 @@ export function checkHeaderHpPromise(lines: string[]): string[] {
         `line ${i + 1}: 段首(第 ${promise.line} 行)承诺 team ≥${promise.pct}% HP,本行却报 team min HP ${m[1]}% —— ${line.trim().slice(0, 140)}`,
       );
   });
+  return failures;
+}
+
+/**
+ * `[RES]` no-change rows (27th hardFailure class, GH #99 item 5, user ruling
+ * 2026-09-22): a `rdy:Δ  cd:—` row may survive in the rendered prompt only
+ * when it carries a fact the surviving text cannot reconstruct (a focus
+ * target no non-no-change `[RES]` neighbour shows, a CC no same-named
+ * `[CC ON …]` line covers at that second, an enemy CD with no earlier
+ * `[ENEMY CD]` line). The renderer prunes with `pruneZeroLossResRows`; this
+ * gate re-applies the same imported `droppableNoChangeResRows` to the
+ * rendered lines and fails on every droppable row still present — one
+ * predicate, two sides. Measured on the 82-prompt local rebuild: 717/954
+ * no-change rows droppable at control (77/82 prompts fail this gate) → 0
+ * after the renderer prunes, with the 146 focus episodes and 103 CC states
+ * that only the other 237 rows carry kept.
+ */
+export function checkResNoChangeRowsPruned(lines: string[]): string[] {
+  const failures: string[] = [];
+  for (const i of [...droppableNoChangeResRows(lines)].sort((a, b) => a - b))
+    failures.push(
+      `line ${i + 1}: 零信息损失的 [RES] rdy:Δ cd:— 行仍在 prompt 里(它的每个事实别处都有)—— ${lines[i]!.trim().slice(0, 140)}`,
+    );
   return failures;
 }
 
@@ -2126,6 +2150,7 @@ export function checkMatch(
   hardFailures.push(...checkPetCreditSide(lines));
   hardFailures.push(...checkHeaderHpPromise(lines));
   hardFailures.push(...checkKillAttemptFraming(lines));
+  hardFailures.push(...checkResNoChangeRowsPruned(lines));
 
   return {
     ordinal: entry.ordinal,

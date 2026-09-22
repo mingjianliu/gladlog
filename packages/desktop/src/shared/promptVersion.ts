@@ -684,4 +684,12 @@
 //  header carries the rule, and the summary counts only attempts with a
 //  softer alternative. `attempt-into-trinket` retired by flag. MATCH FACTS
 //  `My team` / `Enemy team` now carry each player's name next to the spec.
-export const PROMPT_VERSION = 93;
+//  v94 (2026-09-22, GH #99 item 5, user ruling): the timeline drops every
+//  `[RES] rdy:Δ  cd:—` row whose facts the surviving text already states
+//  (focus shown by a non-no-change neighbour, cc covered by its landing
+//  line's duration, enemy CD derivable from an earlier [ENEMY CD] line) —
+//  shared predicate resLedgerPrune.ts, re-checked by the 27th hardFailure
+//  class checkResNoChangeRowsPruned. 82-prompt local rebuild: 954 → 237
+//  no-change rows, 0 other lines lost, 146 focus / 103 CC unique facts kept.
+//  Legend gains three lines explaining an absent row.
+export const PROMPT_VERSION = 94;
