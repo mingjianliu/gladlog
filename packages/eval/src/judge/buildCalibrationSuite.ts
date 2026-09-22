@@ -16,8 +16,8 @@
  * checkJudgeCalibration.ts does.
  *
  * Usage:
- *   npm run -w @wowarenalogs/tools start:buildJudgeCalibrationSuite
- *   BASE_DIR=… CASE_SOURCE_COUNT=5 SEED=42 npm run -w @wowarenalogs/tools start:buildJudgeCalibrationSuite
+ *   tsx packages/eval/scripts/buildCalibration.ts --run <runId>
+ *   tsx packages/eval/scripts/buildCalibration.ts --run <runId> --source-count 5 --seed 42
  *
  * Requires BASE_DIR to contain prompts/, responses/, index.json (i.e. a
  * completed /eval-healer-prompts run). Output:

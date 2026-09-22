@@ -15,7 +15,7 @@
  * leak pairing information to the judge.
  *
  * Usage:
- *   npm run -w @wowarenalogs/tools start:blindAbPool
+ *   npm run -w @gladlog/eval ab:pool
  *   (expects packages/tools/local-batch/healer-eval/ab-test/{control,treatment}/)
  */
 

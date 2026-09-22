@@ -20,9 +20,9 @@
  * reads this tool's output instead of guessing sufficiency/noise on its own.
  *
  * Usage:
- *   npm run -w @wowarenalogs/tools start:promptQualityCheck
+ *   npm run -w @gladlog/eval quality
  *   BASE_DIR=packages/tools/local-batch/healer-eval/ab-test/treatment \
- *     npm run -w @wowarenalogs/tools start:promptQualityCheck
+ *     npm run -w @gladlog/eval quality
  *   STRICT=1 …   # exit 1 if any friendly death is missing from its prompt
  *
  * Expects under BASE_DIR: prompts/, manifests/, index.json.
