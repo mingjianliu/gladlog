@@ -90,7 +90,7 @@ describe("candidateTypeRegistry: the 2026-09-12 derivation is a no-op", () => {
       unsyncedBurst: false,
       cdHoarded: true,
       cdSpentIdle: false,
-      attemptIntoTrinket: true,
+      attemptIntoTrinket: false,
       mdCycloneWindow: true,
       missedPurge: false,
       ccHeld: false,

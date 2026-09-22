@@ -836,6 +836,40 @@ export function checkHeaderHpPromise(lines: string[]): string[] {
   return failures;
 }
 
+/** `  [m:ss–m:ss] on <unit> — … | opportunity: <tier …> | …` — the tier segment. */
+const KILL_ATTEMPT_OPPORTUNITY =
+  /^\s*\[\d+:\d\d–\d+:\d\d\] on .*\| opportunity: ([^|]+)\|/;
+/** The pre-v93 summary tail that counted every trinket-up opener as a mark. */
+const KILL_ATTEMPT_SUMMARY_TRINKET_UP = /^\s*Summary: .*trinket was still up/;
+
+/**
+ * [KILL ATTEMPTS] framing (26th hardFailure class, user ruling 2026-09-22):
+ * a trinket-up target is the default state at the gates and forcing the
+ * trinket with the opener is the play, so no attempt line may stamp its
+ * target `locked` and the summary may not count "opened while the target's
+ * trinket was still up". The block renders `trinket up (no softer target)`
+ * or names the softer alternative (`softerTargetAt`, shared with the retired
+ * attempt-into-trinket mapper); the model turned the old `locked (trinket
+ * up) … FAILED` at 0:05 into "you should not have opened on someone with a
+ * trinket". Structural check on the rendered text — the softer-target
+ * predicate itself is unit-tested in analysis.
+ */
+export function checkKillAttemptFraming(lines: string[]): string[] {
+  const failures: string[] = [];
+  lines.forEach((line, i) => {
+    const m = line.match(KILL_ATTEMPT_OPPORTUNITY);
+    if (m && /^locked\b/.test(m[1]!.trim()))
+      failures.push(
+        `line ${i + 1}: KILL ATTEMPTS 行把徽章在手的目标标成 locked(用户裁决 2026-09-22:徽章在手是默认态,不是失误;只能写 trinket up (no softer target) 或点名更软目标)—— ${line.trim().slice(0, 140)}`,
+      );
+    if (KILL_ATTEMPT_SUMMARY_TRINKET_UP.test(line))
+      failures.push(
+        `line ${i + 1}: KILL ATTEMPTS 汇总仍在统计「徽章在手时开的尝试」,只能统计存在更软目标的尝试 —— ${line.trim().slice(0, 140)}`,
+      );
+  });
+  return failures;
+}
+
 /** `<unit id="4" … role="enemy">` — the side a rendered id belongs to. */
 const UNIT_ROLE_LINE = /<unit\s+id="(\d+)"[^>]*role="([^"]+)"/;
 /** `[CC ON TEAM] 1(RShaman) ← Capacitor Totem (by 6(RShaman)'s pet)` — the
@@ -2091,6 +2125,7 @@ export function checkMatch(
   hardFailures.push(...checkFactsBlockIntegrity(lines));
   hardFailures.push(...checkPetCreditSide(lines));
   hardFailures.push(...checkHeaderHpPromise(lines));
+  hardFailures.push(...checkKillAttemptFraming(lines));
 
   return {
     ordinal: entry.ordinal,

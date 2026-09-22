@@ -11,7 +11,7 @@ import { checkEnemyDefRefConsistency } from "../src/quality/promptQualityCheck";
 const LEGEND =
   "  [ENEMY DEF] = an enemy pressed a defensive at that second: `(N%, Ts)` = official damage reduction and the";
 const ATTEMPT = (span: string, tail: string) =>
-  `  [${span}] on Osiklm-Archimonde-EU — Avatar burst (no stun) | opportunity: locked (trinket up) | team focus 55% (1.23M on target) | FAILED: ${tail}`;
+  `  [${span}] on Osiklm-Archimonde-EU — Avatar burst (no stun) | opportunity: trinket up (no softer target) | team focus 55% (1.23M on target) | FAILED: ${tail}`;
 
 describe("checkEnemyDefRefConsistency", () => {
   it("passes when the named wall / external has a line inside the span (+ kill-credit slack)", () => {

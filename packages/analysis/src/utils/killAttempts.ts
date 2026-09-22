@@ -84,6 +84,7 @@ import {
   getHpPercentAtTime,
   IKillOpportunity,
   killOpportunityAt,
+  KillOpportunityTier,
   PVP_TRINKET_SPELL_IDS,
   WALL_IN_HAND_MIT_IDS,
 } from "./killWindowTargetSelection";
@@ -125,6 +126,12 @@ export interface IKillAttemptAttribution {
     | "pressure";
 }
 
+export interface IKillAttemptSofterTarget {
+  name: string;
+  tier: Exclude<KillOpportunityTier, "locked">;
+  wallsInHand: string[];
+}
+
 export interface IKillAttempt {
   targetUnitId: string;
   targetName: string;
@@ -143,6 +150,12 @@ export interface IKillAttempt {
   /** Opportunity tier of the target when the attempt STARTED (prospective —
    * the corpus-validated model; see killOpportunityAt). */
   opportunity: IKillOpportunity;
+  /** The softest OTHER enemy alive at the attempt start, present only when
+   * its tier was strictly softer than the target's (see softerTargetAt).
+   * Absent = nobody was a softer target, which at a match opener is the
+   * normal state — every trinket is up — and therefore not a targeting
+   * question (user ruling 2026-09-22). */
+  softerTarget?: IKillAttemptSofterTarget;
   /** DR level of the opening stun (Full = the chain started clean).
    * Absent for burst-anchored attempts (no stun to grade). */
   openingDrLevel?: DRLevel;
@@ -162,6 +175,68 @@ interface StunApp {
   spellName: string;
   casterName: string;
   drLevel: DRLevel;
+}
+
+const TIER_RANK: Record<KillOpportunityTier, number> = {
+  prime: 0,
+  gated: 1,
+  locked: 2,
+};
+
+/**
+ * Among the OTHER enemies still alive at `atSeconds`, the one in a strictly
+ * softer tier than `target` (prime beats gated beats locked; ties break on
+ * lowest HP, the betterTargetExists rule). `null` when nobody was softer.
+ *
+ * Why this exists (user ruling 2026-09-22): the [KILL ATTEMPTS] block used
+ * to stamp every attempt on a trinket-up target `locked (trinket up)` and
+ * count them in its summary — including the 0:05 opener, where every enemy's
+ * trinket is up by definition (cooldowns reset at the gates). The model read
+ * that as "you should not have opened on someone with a trinket", an
+ * accusation the user called absurd: forcing the trinket with the opener IS
+ * the play. The tier only carries coaching information relative to the
+ * alternatives, so the block now names the softer alternative when one
+ * existed and says "no softer target" otherwise. Shared with the
+ * attempt-into-trinket mapper so the fact block and the (now retired)
+ * candidate can never disagree about who the softer target was.
+ */
+export function softerTargetAt(
+  target: ICombatUnit,
+  enemies: readonly ICombatUnit[],
+  atSeconds: number,
+  matchStartMs: number,
+): IKillAttemptSofterTarget | null {
+  const atMs = matchStartMs + atSeconds * 1000;
+  const targetRank =
+    TIER_RANK[killOpportunityAt(target, atSeconds, matchStartMs).tier];
+  let best: IKillAttemptSofterTarget | null = null;
+  let bestRank = targetRank;
+  let bestHp = Infinity;
+  for (const e of enemies) {
+    if (e.id === target.id) continue;
+    if (e.deathRecords.some((rec) => rec.timestamp <= atMs)) continue;
+    const opp = killOpportunityAt(e, atSeconds, matchStartMs);
+    if (opp.tier === "locked") continue;
+    const rank = TIER_RANK[opp.tier];
+    if (rank >= targetRank) continue; // not strictly softer than the target
+    if (best !== null && rank > bestRank) continue;
+    const hp = getHpPercentAtTime(e, atSeconds, matchStartMs) ?? Infinity;
+    if (best !== null && rank === bestRank && hp >= bestHp) continue;
+    best = { name: e.name, tier: opp.tier, wallsInHand: opp.wallsInHand };
+    bestRank = rank;
+    bestHp = hp;
+  }
+  return best;
+}
+
+function softerField(
+  target: ICombatUnit,
+  enemies: readonly ICombatUnit[],
+  atSeconds: number,
+  matchStartMs: number,
+): { softerTarget?: IKillAttemptSofterTarget } {
+  const softer = softerTargetAt(target, enemies, atSeconds, matchStartMs);
+  return softer ? { softerTarget: softer } : {};
 }
 
 /**
@@ -259,6 +334,7 @@ export function extractKillAttempts(
         toSeconds,
         stuns: group,
         opportunity: killOpportunityAt(target, fromSeconds, matchStartMs),
+        ...softerField(target, enemies, fromSeconds, matchStartMs),
         openingDrLevel: group[0].drLevel,
         teamDamageToTarget,
         teamDamageTotal,
@@ -369,6 +445,7 @@ export function extractKillAttempts(
         toSeconds,
         stuns: [],
         opportunity: killOpportunityAt(target, fromSeconds, matchStartMs),
+        ...softerField(target, enemies, fromSeconds, matchStartMs),
         teamDamageToTarget,
         teamDamageTotal,
         teamOnTargetPct:
@@ -439,21 +516,36 @@ export function formatKillAttemptsForContext(
   lines.push(
     "KILL ATTEMPTS — team kill attempts (a stun chain, or an offensive-cooldown burst, with real team damage behind it):",
   );
+  // User ruling 2026-09-22: a trinket-up target is the default state
+  // (cooldowns reset at the gates) and forcing the trinket with the opener is
+  // the play — the block must never read as "should not have opened on a
+  // trinket-up target". The tier is only a targeting question relative to the
+  // alternatives, so each line names the softer alternative or says none.
+  lines.push(
+    "  Trinket up is the default state (cooldowns reset at the gates): a stun on a trinket-up target is how the trinket gets forced, not a targeting error. Only a line naming a softer target raises a targeting question.",
+  );
   let kills = 0;
-  let onLocked = 0;
+  let withSofter = 0;
   let onPrime = 0;
   let burstAnchored = 0;
   for (const a of attempts) {
     if (a.killed) kills++;
-    if (a.opportunity.tier === "locked") onLocked++;
+    if (a.softerTarget) withSofter++;
     if (a.opportunity.tier === "prime") onPrime++;
     if (a.anchor === "burst") burstAnchored++;
+    const softer = a.softerTarget
+      ? `softer target then: ${a.softerTarget.name} — ${
+          a.softerTarget.tier === "prime"
+            ? "PRIME"
+            : `gated, ${a.softerTarget.wallsInHand.join("/")} in hand`
+        }`
+      : "no softer target";
     const opp =
       a.opportunity.tier === "prime"
         ? "PRIME (no trinket, no 20-99% wall in hand)"
         : a.opportunity.tier === "gated"
-          ? `gated (${a.opportunity.wallsInHand.join("/")} in hand)`
-          : "locked (trinket up)";
+          ? `gated (${a.opportunity.wallsInHand.join("/")} in hand; ${softer})`
+          : `trinket up (${softer})`;
     const outcome = a.killed
       ? "KILL"
       : `FAILED: ${failureText(a.attribution!)}`;
@@ -466,7 +558,7 @@ export function formatKillAttemptsForContext(
     );
   }
   lines.push(
-    `  Summary: ${attempts.length} attempts (${attempts.length - burstAnchored} stun-anchored, ${burstAnchored} burst-anchored; ${onPrime} on PRIME targets), ${kills} kill${kills === 1 ? "" : "s"}; ${onLocked} opened while the target's trinket was still up.`,
+    `  Summary: ${attempts.length} attempts (${attempts.length - burstAnchored} stun-anchored, ${burstAnchored} burst-anchored; ${onPrime} on PRIME targets), ${kills} kill${kills === 1 ? "" : "s"}; ${withSofter} opened while a softer target existed.`,
   );
   return lines;
 }
@@ -486,30 +578,23 @@ export const ATTEMPT_INTO_TRINKET_CAP = 2;
  */
 export function attemptIntoTrinketEvents(
   attempts: IKillAttempt[],
-  enemies: ICombatUnit[],
-  matchStartMs: number,
 ): CandidateEvent[] {
   const out: CandidateEvent[] = [];
   // 仅晕锚(2026-08-20 v2 落地时的刻意选择):三档机会模型的语料验证锚在
   // 晕落地时刻(8,791 次硬控),把它外推到大招起手时刻未经验证 —— 大招锚
   // 尝试只进 [KILL ATTEMPTS] 事实块,不喂本失误候选。
+  // The prime alternative is the attempt's own `softerTarget` (softerTargetAt,
+  // shared with the fact block since 2026-09-22) — one predicate for "who was
+  // the softer target", so the block and this candidate can never disagree.
   const candidates = attempts.filter(
-    (a) => a.anchor === "stun" && !a.killed && a.opportunity.tier === "locked",
+    (a) =>
+      a.anchor === "stun" &&
+      !a.killed &&
+      a.opportunity.tier === "locked" &&
+      a.softerTarget?.tier === "prime",
   );
   for (const a of candidates) {
-    let alt: ICombatUnit | null = null;
-    let altHp = Infinity;
-    for (const e of enemies) {
-      if (e.id === a.targetUnitId) continue;
-      if (killOpportunityAt(e, a.fromSeconds, matchStartMs).tier !== "prime")
-        continue;
-      const hp = getHpPercentAtTime(e, a.fromSeconds, matchStartMs) ?? Infinity;
-      if (alt === null || hp < altHp) {
-        alt = e;
-        altHp = hp;
-      }
-    }
-    if (!alt) continue;
+    const alt = a.softerTarget!;
     const t = Math.floor(a.fromSeconds);
     out.push({
       id: `attempt-into-trinket:${a.targetUnitId}:${t}`,

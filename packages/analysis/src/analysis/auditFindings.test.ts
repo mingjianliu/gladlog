@@ -27,6 +27,22 @@ describe("auditFindings", () => {
     expect(r.findings[0].explanation).toBe("You died at 30s.");
   });
 
+  it("roster lint(2026-09-22):点名阵容外职业的 finding 被丢弃,未传阵容时不检查", () => {
+    const wrong: RawFinding = {
+      ...base,
+      explanation: "对方圣骑士这一手几乎每次冷却好就往你脸上砸;你在 {{t}}s 倒下。",
+    };
+    const r = auditFindings([wrong], candidates, { rosterSpecs: ["257", "103"] });
+    expect(r.findings).toHaveLength(0);
+    expect(r.dropped[0].reason).toBe('roster: names Paladin ("圣骑") — not on the roster');
+    // 阵容里真有圣骑 → 保留
+    expect(
+      auditFindings([wrong], candidates, { rosterSpecs: ["65", "103"] }).findings,
+    ).toHaveLength(1);
+    // 没传阵容 → 老行为,不检查
+    expect(auditFindings([wrong], candidates).findings).toHaveLength(1);
+  });
+
   it("title 里的占位符同样解析(2026-08-18 真模型 smoke:{{target1}} 曾原样渲染进 UI)", () => {
     const r = auditFindings(
       [{ ...base, title: "{{unit}} died", explanation: "You died at {{t}}s." }],

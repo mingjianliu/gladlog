@@ -1618,8 +1618,6 @@ function teamPlayEvents(
       out.push(
         ...attemptIntoTrinketEvents(
           extractKillAttempts(friends, enemies, combat),
-          enemies,
-          combat.startTime,
         ),
       );
     } catch {

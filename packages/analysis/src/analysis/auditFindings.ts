@@ -3,6 +3,7 @@ import { ATTEMPTED_GUARD_TYPES, LEGACY_TOPIC_TYPES } from "./candidateFindings";
 import { causalLint } from "./causalLint";
 import { normalizeFindingCategory } from "./findingCategories";
 import { hindsightViolations } from "./hindsightLint";
+import { rosterClassViolations } from "./rosterLint";
 import { repairSpellNameZh } from "./spellNameZhLint";
 import type { AuditResult, CandidateEvent, Finding, RawFinding } from "./types";
 
@@ -40,9 +41,17 @@ const SEVERITY_DOWNGRADE: Record<
   low: "low",
 };
 
+export interface AuditOptions {
+  /** Spec ids (CombatUnitSpec strings) of every player on both teams. When
+   * given, a finding naming a class nobody plays is dropped (rosterLint);
+   * absent = the roster lint is skipped. */
+  rosterSpecs?: readonly string[];
+}
+
 export function auditFindings(
   raw: RawFinding[],
   candidates: CandidateEvent[],
+  options: AuditOptions = {},
 ): AuditResult {
   const byId = new Map(candidates.map((c) => [c.id, c]));
   // Diversity cap bookkeeping (2026-08-11): carried alongside each survivor
@@ -189,6 +198,23 @@ export function auditFindings(
     if (hv.length > 0) {
       dropped.push({ finding: f, reason: hv.join("; ") });
       continue;
+    }
+    // Layer 6: roster — a finding that names a class nobody on the roster
+    // plays is an identity error (2026-09-22 user report: an enemy Holy
+    // Priest called a Paladin). Checked on the raw title + explanation, so
+    // player names arriving through placeholders never trip it.
+    if (options.rosterSpecs) {
+      const rv = rosterClassViolations(
+        `${f.title ?? ""}\n${f.explanation ?? ""}`,
+        options.rosterSpecs,
+      );
+      if (rv.length > 0) {
+        dropped.push({
+          finding: f,
+          reason: `roster: names ${rv.join(", ")} — not on the roster`,
+        });
+        continue;
+      }
     }
     // Diversity cap classification: ANY referenced candidate whose type is in
     // the legacy group is enough to count the whole finding as legacy — from

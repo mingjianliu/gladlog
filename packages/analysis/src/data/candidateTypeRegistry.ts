@@ -113,15 +113,16 @@ export const CANDIDATE_TYPE_REGISTRY: Readonly<
   Record<string, CandidateTypeEntry>
 > = {
   // ─── live, card ──────────────────────────────────────────────────────────
+  // ─── retired by flag (emitter wired, flag false; card row kept for A/B) ──
   "attempt-into-trinket": {
-    status: "live",
+    status: "retired",
     surface: "card",
     origin: "candidate",
     flag: "attemptIntoTrinket",
-    since: "2026-08-18",
-    issue: "GH #16",
+    since: "2026-09-22",
+    issue: "user report 2026-09-22 (was GH #16, live 2026-08-18)",
     reason:
-      "击杀尝试重设计:打在有徽章目标上的失败尝试、且同刻存在 prime 目标(utils/killAttempts.ts)。用户当日拍板接线,三档模型 8,791 次晕落地验证在前 —— 判据本身即当日验证产物。",
+      "用户裁决 2026-09-22:「指控己方打对面的时候,会指责偷袭起手不应该打有饰品的人,这也太扯了」。徽章在手是开场默认态(进门冷却全重置),用起手晕逼徽章本身就是打法;语料参照也撑不起指控(48,335 次尝试:徽章已交时 15s 内击杀 6.8% vs 在手 3.8%,两边都是个位数)。同日 [KILL ATTEMPTS] 事实块改为只在存在更软目标时点名(softerTargetAt,与本 mapper 共用谓词),否则写 no softer target。发射器 attemptIntoTrinketEvents 与测试保留。",
   },
   "burst-into-mitigation": {
     status: "live",

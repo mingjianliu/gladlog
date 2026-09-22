@@ -50,6 +50,9 @@ export type AnalysisRunInput = {
   spec: string;
   ownerName: string;
   enemySpecs: number[];
+  /** Spec ids of every player on both teams — auditFindings' roster lint
+   * (a finding naming a class nobody plays is dropped). */
+  rosterSpecs: string[];
 };
 
 /**
@@ -99,6 +102,7 @@ export function buildAnalysisInput(
       spec,
       ownerName: owner.name,
       enemySpecs: enemies.map((u) => Number(u.spec)).filter((s) => s > 0),
+      rosterSpecs: players.map((u) => String(u.spec)),
     };
   } catch {
     return null;

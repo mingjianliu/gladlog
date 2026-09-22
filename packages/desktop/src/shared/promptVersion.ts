@@ -674,4 +674,14 @@
 //  (requiredSourceIds = friendlyIds, debuffs filtered with isEnemyCdWindowSpell).
 //  Timeline legends updated. promptQualityCheck extended with
 //  checkSameSecondHpConsistency and checkPetCreditSide verification.
-export const PROMPT_VERSION = 92;
+//  v93 (2026-09-22, user report): the [KILL ATTEMPTS] block no longer stamps
+//  every attempt on a trinket-up target `locked (trinket up)` nor counts them
+//  in its summary — at the 0:05 opener every trinket is up by definition and
+//  the model turned that into "you should not have opened on someone with a
+//  trinket" (user: absurd; forcing the trinket with the opener IS the play).
+//  Lines now read `trinket up (no softer target)` or `trinket up (softer
+//  target then: X — PRIME)` via the shared softerTargetAt predicate, the
+//  header carries the rule, and the summary counts only attempts with a
+//  softer alternative. `attempt-into-trinket` retired by flag. MATCH FACTS
+//  `My team` / `Enemy team` now carry each player's name next to the spec.
+export const PROMPT_VERSION = 93;

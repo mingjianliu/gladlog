@@ -99,6 +99,7 @@ export * from "./utils/positionAnalysis";
 export * from "./analysis/auditFindings";
 export * from "./analysis/buildFindingsPrompt";
 export * from "./analysis/causalLint";
+export * from "./analysis/rosterLint";
 export * from "./analysis/deepDive";
 export * from "./analysis/findingCategories";
 export * from "./analysis/hindsightLint";

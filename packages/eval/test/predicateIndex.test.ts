@@ -30,23 +30,22 @@ import * as cooldownTiming from "@gladlog/analysis/src/analysis/candidates/coold
 import * as death from "@gladlog/analysis/src/analysis/candidates/death";
 import * as kickPriority from "@gladlog/analysis/src/analysis/candidates/kickPriority";
 import * as candidatesShared from "@gladlog/analysis/src/analysis/candidates/shared";
+import * as teammateCrisisIdle from "@gladlog/analysis/src/analysis/candidates/teammateCrisisIdle";
 import * as cdTriggerPrior from "@gladlog/analysis/src/analysis/cdTriggerPrior";
 import * as crisisDecisionPoints from "@gladlog/analysis/src/analysis/crisisDecisionPoints";
 import * as factFormat from "@gladlog/analysis/src/analysis/factFormat";
 import * as findingCategories from "@gladlog/analysis/src/analysis/findingCategories";
 import * as hindsightLint from "@gladlog/analysis/src/analysis/hindsightLint";
 import * as momentSnapshot from "@gladlog/analysis/src/analysis/momentSnapshot";
+import * as stackedDefensives from "@gladlog/analysis/src/analysis/stackedDefensives";
+import * as teammateCrisis from "@gladlog/analysis/src/analysis/teammateCrisis";
 import * as buildExemplarLedPrompt from "@gladlog/analysis/src/compare/buildExemplarLedPrompt";
 import * as cellLookup from "@gladlog/analysis/src/compare/cellLookup";
 import * as claimChecker from "@gladlog/analysis/src/compare/claimChecker";
 import * as burstAnswered from "@gladlog/analysis/src/context/burstAnswered";
-import * as teammateCrisisIdle from "@gladlog/analysis/src/analysis/candidates/teammateCrisisIdle";
-import * as stackedDefensives from "@gladlog/analysis/src/analysis/stackedDefensives";
-import * as teammateCrisis from "@gladlog/analysis/src/analysis/teammateCrisis";
 import * as cdPrior from "@gladlog/analysis/src/context/cdPrior";
-import * as stackedDefensivesContext from "@gladlog/analysis/src/context/stackedDefensives";
-import * as teammateCrisisPriorData from "@gladlog/analysis/src/data/teammateCrisisPrior";
 import * as matchTimelineSections from "@gladlog/analysis/src/context/matchTimelineSections";
+import * as stackedDefensivesContext from "@gladlog/analysis/src/context/stackedDefensives";
 import * as timelineHelpers from "@gladlog/analysis/src/context/timelineHelpers";
 import * as abilityProfileMod from "@gladlog/analysis/src/data/abilityProfile";
 import * as arenaGeometry from "@gladlog/analysis/src/data/arenaGeometry";
@@ -73,6 +72,7 @@ import * as spellSchools from "@gladlog/analysis/src/data/spellSchools";
 import * as spellTags from "@gladlog/analysis/src/data/spellTags";
 import * as spellTargeting from "@gladlog/analysis/src/data/spellTargeting";
 import * as syncWindowPrior from "@gladlog/analysis/src/data/syncWindowPrior";
+import * as teammateCrisisPriorData from "@gladlog/analysis/src/data/teammateCrisisPrior";
 import { TIMELINE_LINE_FLAGS } from "@gladlog/analysis/src/data/timelineLineFlags";
 import { PRODUCTION_FACT_CONFIG } from "@gladlog/analysis/src/facts/factProviderConfig";
 import * as auraIntervals from "@gladlog/analysis/src/utils/auraIntervals";
@@ -93,6 +93,7 @@ import * as enemyInterrupts from "@gladlog/analysis/src/utils/enemyInterrupts";
 import * as healerOffenseAnalysis from "@gladlog/analysis/src/utils/healerOffenseAnalysis";
 import { HEALER_OFFENSE_FLAGS } from "@gladlog/analysis/src/utils/healerOffenseAnalysis";
 import * as incomingPressure from "@gladlog/analysis/src/utils/incomingPressure";
+import * as killAttempts from "@gladlog/analysis/src/utils/killAttempts";
 import * as killWindowFactsMod from "@gladlog/analysis/src/utils/killWindowFacts";
 import * as killWindowTargetSelection from "@gladlog/analysis/src/utils/killWindowTargetSelection";
 import * as losAnalysis from "@gladlog/analysis/src/utils/losAnalysis";
@@ -102,8 +103,8 @@ import * as rawStreams from "@gladlog/analysis/src/utils/rawStreams";
 import * as renderGrid from "@gladlog/analysis/src/utils/renderGrid";
 import * as rootReachability from "@gladlog/analysis/src/utils/rootReachability";
 import * as spellDanger from "@gladlog/analysis/src/utils/spellDanger";
-import * as summonReachability from "@gladlog/analysis/src/utils/summonReachability";
 import * as stats from "@gladlog/analysis/src/utils/stats";
+import * as summonReachability from "@gladlog/analysis/src/utils/summonReachability";
 import * as talentBehaviors from "@gladlog/analysis/src/utils/talentBehaviors";
 import * as talentOwnership from "@gladlog/analysis/src/utils/talentOwnership";
 import * as talents from "@gladlog/analysis/src/utils/talents";
@@ -452,6 +453,11 @@ const INDEX: PredicateRow[] = [
     symbol: "analyzeKillWindowTargetSelection",
     mod: killWindowTargetSelection,
   },
+  {
+    file: `${A}/utils/killAttempts.ts`,
+    symbol: "softerTargetAt",
+    mod: killAttempts,
+  },
   // Position and geometry
   {
     file: `${A}/utils/bracketKey.ts`,
@@ -735,6 +741,16 @@ const INDEX: PredicateRow[] = [
   {
     file: "packages/eval/src/quality/promptQualityCheck.ts",
     symbol: "checkHeaderHpPromise",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${A}/utils/killAttempts.ts`,
+    symbol: "formatKillAttemptsForContext",
+    mod: killAttempts,
+  },
+  {
+    file: "packages/eval/src/quality/promptQualityCheck.ts",
+    symbol: "checkKillAttemptFraming",
     mod: promptQualityCheck,
   },
   {

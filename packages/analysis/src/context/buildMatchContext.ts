@@ -125,8 +125,15 @@ export function buildMatchContext(
   const ownerSpec = specToString(owner.spec);
   const healer = isHealerSpec(owner.spec);
 
-  const myTeam = friends.map((p) => specToString(p.spec)).join(", ");
-  const enemyTeam = enemies.map((p) => specToString(p.spec)).join(", ");
+  // Spec + name on the same token (2026-09-22, user report: the model called
+  // an enemy Holy Priest a Paladin). Every later reference is by name/pid, so
+  // the roster is the one place the spec↔name binding is spelled out.
+  const myTeam = friends
+    .map((p) => `${specToString(p.spec)} (${p.name})`)
+    .join(", ");
+  const enemyTeam = enemies
+    .map((p) => `${specToString(p.spec)} (${p.name})`)
+    .join(", ");
 
   // Arena map name — lets the model apply its own knowledge of the map's pillar/LoS layout
   const zoneName = zoneMetadata[String(combat.startInfo?.zoneId)]?.name;

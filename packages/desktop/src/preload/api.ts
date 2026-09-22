@@ -182,6 +182,7 @@ export interface GladlogApi {
       candidates: any[];
       richContext: string;
       spec: string;
+      rosterSpecs?: string[];
       /** Multi-model comparison: explicitly pick which backend/model this run
        * uses instead of the current selection saved in settings. Results are
        * persisted into a slot keyed by slotKeyOf(backend, model) and never

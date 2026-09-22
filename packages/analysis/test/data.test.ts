@@ -49,7 +49,7 @@ describe("data layer", () => {
       // 2026-08-30 下架(信号结果探针,用户裁定)—— 见 candidateTypeFlags.ts 注
       cdSpentIdle: false,
       // 2026-08-18 击杀尝试重设计(GH #16):用户当日拍板接线,默认 true
-      attemptIntoTrinket: true,
+      attemptIntoTrinket: false,
       // 2026-08-21 MD 特例(GH #25):四门判据用户当日拍板,默认 true
       mdCycloneWindow: true,
       // 2026-08-29 降级为上下文事实(GH #50 (a),用户裁定);此前 missed-purge 无开关

@@ -99,6 +99,7 @@ async function main() {
         candidates,
         richContext,
         spec: specToString(owner.spec),
+        rosterSpecs: players.map((u) => String(u.spec)),
       });
       const lang = settings.aiLanguage ?? "zh";
       const cache = join(MATCH_DIR, matchId, `analysis-v2.${lang}.json`);

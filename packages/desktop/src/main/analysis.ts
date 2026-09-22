@@ -61,6 +61,9 @@ export type AnalysisInput = {
   candidates: CandidateEvent[];
   richContext: string;
   spec: string;
+  /** Spec ids of every player on both teams (auditFindings roster lint);
+   * optional so older callers/scripts keep working without it. */
+  rosterSpecs?: string[];
   /** Multi-model comparison (spec 2026-08-01): explicitly pick which
    * backend/model this run uses, ignoring the current selection saved in
    * settings. Persisted into a slot keyed by slotKeyOf(backend, model); it
@@ -589,7 +592,11 @@ export function createAnalysisService(deps: {
       if (!parsed) {
         return fallback("bad-json"); // invalid JSON → deterministic
       }
-      const audit = auditFindings(parsed, input.candidates);
+      const audit = auditFindings(
+        parsed,
+        input.candidates,
+        input.rosterSpecs ? { rosterSpecs: input.rosterSpecs } : {},
+      );
       finish(
         {
           findings: audit.findings,

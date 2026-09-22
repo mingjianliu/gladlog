@@ -347,7 +347,7 @@ describe("attemptIntoTrinketEvents(候选 mapper)", () => {
   it("locked 上的失败尝试 + 场上有 prime → 出候选,facts 可验证", () => {
     const { f1, e1, e2, combat } = lockedScenario();
     const attempts = extractKillAttempts([f1], [e1, e2], combat);
-    const events = attemptIntoTrinketEvents(attempts, [e1, e2], MATCH_START);
+    const events = attemptIntoTrinketEvents(attempts);
     expect(events).toHaveLength(1);
     expect(events[0].type).toBe("attempt-into-trinket");
     expect(events[0].facts.target).toBe("e1");
@@ -368,7 +368,7 @@ describe("attemptIntoTrinketEvents(候选 mapper)", () => {
       makeCombat(f1, e1, [e2]),
     );
     expect(
-      attemptIntoTrinketEvents(attempts, [e1, e2], MATCH_START),
+      attemptIntoTrinketEvents(attempts),
     ).toHaveLength(0);
   });
 
@@ -378,24 +378,91 @@ describe("attemptIntoTrinketEvents(候选 mapper)", () => {
     const combat = makeCombat(f1, e1, [e2]);
     const attempts = extractKillAttempts([f1], [e1, e2], combat);
     expect(
-      attemptIntoTrinketEvents(attempts, [e1, e2], MATCH_START),
+      attemptIntoTrinketEvents(attempts),
     ).toHaveLength(0);
   });
 
-  it("开关负控:flag=false 时 extractCandidateFindings 零产出该类型", () => {
+  it("开关:默认退役(flag=false,用户裁决 2026-09-22)零产出;flag=true 时发射器仍接线", () => {
     const { combat } = lockedScenario();
     const has = () =>
       extractCandidateFindings(combat, "f1").some(
         (c) => c.type === "attempt-into-trinket",
       );
-    expect(has()).toBe(true);
+    expect(CANDIDATE_TYPE_FLAGS.attemptIntoTrinket).toBe(false);
+    expect(has()).toBe(false);
     const savedFlags = { ...CANDIDATE_TYPE_FLAGS };
-    CANDIDATE_TYPE_FLAGS.attemptIntoTrinket = false;
+    CANDIDATE_TYPE_FLAGS.attemptIntoTrinket = true;
     try {
-      expect(has()).toBe(false);
+      expect(has()).toBe(true);
     } finally {
       Object.assign(CANDIDATE_TYPE_FLAGS, savedFlags);
     }
+  });
+
+  it("softerTarget 与候选共用一个谓词:prime 备选已阵亡 → 既不进事实块也不出候选", () => {
+    const { f1, e1, e2 } = lockedScenario();
+    e2.deathRecords = [{ timestamp: ms(5) }]; // 交过徽章,但 0:05 已倒
+    const combat = makeCombat(f1, e1, [e2]);
+    const attempts = extractKillAttempts([f1], [e1, e2], combat);
+    expect(attempts).toHaveLength(1);
+    expect(attempts[0].softerTarget).toBeUndefined();
+    expect(attemptIntoTrinketEvents(attempts)).toHaveLength(0);
+  });
+});
+
+describe("formatKillAttemptsForContext — 徽章在手不是失误(用户裁决 2026-09-22)", () => {
+  it("全员徽章在手(开场形状)→ 行写 no softer target、不出现 locked、汇总计 0", () => {
+    const e1 = unit("e1", { auraEvents: stunAuras("e1", KIDNEY, 5, 5) });
+    const e2 = unit("e2"); // 徽章还在
+    const f1 = unit("f1", {
+      reaction: 1,
+      damageOut: [dmg("f1", "e1", 7, 50_000)],
+    });
+    const attempts = extractKillAttempts(
+      [f1],
+      [e1, e2],
+      makeCombat(f1, e1, [e2]),
+    );
+    const text = formatKillAttemptsForContext(attempts).join("\n");
+    expect(text).toContain("opportunity: trinket up (no softer target)");
+    expect(text).not.toContain("locked");
+    expect(text).toContain("0 opened while a softer target existed.");
+    expect(text).toContain("not a targeting error");
+  });
+
+  it("存在 prime 备选 → 行点名 softer target、汇总计 1", () => {
+    const e1 = unit("e1", { auraEvents: stunAuras("e1", KIDNEY, 10, 5) });
+    const e2 = unit("e2", {
+      spellCastEvents: [
+        {
+          spellId: "336126",
+          logLine: {
+            event: LogEvent.SPELL_CAST_SUCCESS,
+            timestamp: ms(1),
+            parameters: [],
+          },
+        },
+      ],
+    });
+    const f1 = unit("f1", {
+      reaction: 1,
+      damageOut: [dmg("f1", "e1", 12, 50_000)],
+    });
+    const attempts = extractKillAttempts(
+      [f1],
+      [e1, e2],
+      makeCombat(f1, e1, [e2]),
+    );
+    expect(attempts[0].softerTarget).toEqual({
+      name: "e2",
+      tier: "prime",
+      wallsInHand: [],
+    });
+    const text = formatKillAttemptsForContext(attempts).join("\n");
+    expect(text).toContain(
+      "opportunity: trinket up (softer target then: e2 — PRIME)",
+    );
+    expect(text).toContain("1 opened while a softer target existed.");
   });
 });
 
@@ -477,8 +544,6 @@ describe("extractKillAttempts — 大招锚定(v2)", () => {
   });
 
   it("attemptIntoTrinketEvents 只吃晕锚:burst 锚的 locked 失败尝试不产失误候选(三档模型验证锚在晕落地)", () => {
-    const e1 = unit("e1");
-    const e2 = unit("e2");
     const burstAttempt: any = {
       targetUnitId: "e1",
       targetName: "e1",
@@ -495,7 +560,7 @@ describe("extractKillAttempts — 大招锚定(v2)", () => {
       attribution: { primary: "trinketed" },
     };
     expect(
-      attemptIntoTrinketEvents([burstAttempt], [e1, e2], MATCH_START),
+      attemptIntoTrinketEvents([burstAttempt]),
     ).toHaveLength(0);
   });
 
