@@ -1,9 +1,13 @@
 /**
  * externalDamageExampleGen.ts — GH #91 (rule 171, split from #85) value-gate
- * example generator. THROWAWAY in the offcdExampleGen.ts sense: it exists to
- * put three real, deterministically rendered examples in front of the user
- * before any product wiring, and to print the pre-registered measurement so
- * the numbers on the issue are reproducible.
+ * example generator and measurement report. Since 2026-09-22 (value gate
+ * passed, product wiring landed) the predicate lives in
+ * `packages/analysis/src/utils/externalDamage.ts` and this script only
+ * IMPORTS it — the `[ENEMY DEF] | during it:` annotation, the
+ * burst-into-mitigation `facts.duringExternal` and the eval gate all rest on
+ * the same arithmetic this report prints. Baseline (local library, 400
+ * rounds, 2026-09-12): 752 observations, continues 272 / empty 210 /
+ * periodic-only 74 / stops 196, X p25 0 · p50 20 · p75 65.
  *
  * Contract (pre-registered on GH #91; change the issue before changing this):
  *   eligible aura   = observed (no inferred endpoint), ally-applied (source ≠
@@ -24,14 +28,12 @@
  */
 import {
   ensureAnalysisData,
+  externalDamageObservations,
   getUnitHpAtTimestamp,
   HP_SAMPLE_RADIUS_MS,
-  MITIGATION_TABLE,
-  NO_MITIGATION_IDS,
+  type IExternalDamageObservation,
   specToString,
 } from "@gladlog/analysis";
-import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
-import { buildAuraIntervals } from "@gladlog/analysis/src/utils/auraIntervals";
 import type { ICombatUnit } from "@gladlog/parser-compat";
 
 import {
@@ -41,10 +43,6 @@ import {
   pickRows,
   splitTeams,
 } from "../src/explore/storeAccess";
-
-const PRE_HIT_S = 3;
-const DIRECT = new Set(["SPELL_DAMAGE", "SWING_DAMAGE", "RANGE_DAMAGE"]);
-const PERIODIC = "SPELL_PERIODIC_DAMAGE";
 
 function argOf(flag: string, dflt: number): number {
   const i = process.argv.indexOf(flag);
@@ -56,46 +54,12 @@ const fmtTime = (s: number): string =>
   `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 const k = (x: number): string => `${Math.round(x / 1000)}k`;
 
-function eligibleMitigation(spellId: string): { pct: number } | null {
-  if (NO_MITIGATION_IDS.has(spellId)) return null;
-  const e = (MITIGATION_TABLE as Record<string, any>)[spellId];
-  if (!e) return null;
-  if (e.positional) return null;
-  if (e.pct >= 100) return null; // immunity
-  if ((e.schoolMask & 0x7f) !== 0x7f) return null; // school-limited
-  return { pct: e.pct };
-}
-
-interface Obs {
+type Obs = IExternalDamageObservation & {
   matchId: string;
-  ally: string;
   allySpec: string;
-  target: string;
-  mit: string;
-  mitPct: number;
-  src: string;
-  applyS: number;
-  removeS: number;
-  wFrom: number;
-  wTo: number;
-  M: number;
-  K: number;
-  G: number;
-  nDirect: number;
-  nPeriodic: number;
-  dAll: number;
-  X: number | null;
-  preDirect: number;
   targetHpFrom: number | null;
   targetHpTo: number | null;
-  kind: "continues" | "stops" | "periodic-only" | "empty";
-}
-
-function classify(o: Omit<Obs, "kind">): Obs["kind"] {
-  if (o.nDirect === 0 && o.nPeriodic === 0) return "empty";
-  if (o.nDirect === 0) return "periodic-only";
-  return o.K / Math.max(o.M, 1) >= 0.5 ? "continues" : "stops";
-}
+};
 
 function observe(
   matchId: string,
@@ -103,104 +67,20 @@ function observe(
   friends: ICombatUnit[],
   enemies: ICombatUnit[],
 ): Obs[] {
-  const out: Obs[] = [];
   const startMs: number = legacy.startTime;
-  const endS = (legacy.endTime - startMs) / 1000;
-  const enemyIds = new Set(enemies.map((e) => e.id));
-  const deathS = (u: ICombatUnit): number | null => {
-    const d = u.deathRecords?.[0]?.timestamp;
-    return d ? (d - startMs) / 1000 : null;
-  };
+  const combat = { startTime: startMs, endTime: legacy.endTime };
+  const out: Obs[] = [];
   for (const target of enemies) {
     if (!target.info) continue;
-    for (const iv of buildAuraIntervals(target, legacy)) {
-      const mit = eligibleMitigation(iv.spellId);
-      if (!mit) continue;
-      if (iv.inferredStart || iv.inferredEnd) continue;
-      if (iv.srcUnitName === target.name) continue; // self-applied → not an external
-      const applyS = iv.fromS;
-      const removeS = iv.toS;
-      const tDeath = deathS(target);
-      const wToTarget = Math.floor(Math.min(removeS, endS, tDeath ?? Infinity));
-      const wFrom = Math.ceil(applyS);
-      if (wToTarget <= wFrom) continue;
-      for (const ally of friends) {
-        if (!ally.info) continue;
-        const aDeath = deathS(ally);
-        // Per-ally truncation (the ally's own death), never carried over to the
-        // next ally — `wToTarget` stays the target-side bound.
-        const wTo = Math.min(wToTarget, Math.floor(aDeath ?? Infinity));
-        if (wTo <= wFrom) continue;
-        let preDirect = 0;
-        let nDirect = 0;
-        let nPeriodic = 0;
-        let dAll = 0;
-        const bins = new Set<number>();
-        for (const d of ally.damageOut) {
-          const ev = d.logLine.event as string;
-          if (ev === "SPELL_ABSORBED" || d.effectiveAmount >= 0) continue;
-          if (!enemyIds.has(d.destUnitId)) continue;
-          const tS = (d.logLine.timestamp - startMs) / 1000;
-          const amt = -d.effectiveAmount;
-          const onTarget = d.destUnitId === target.id;
-          if (
-            onTarget &&
-            DIRECT.has(ev) &&
-            tS >= applyS - PRE_HIT_S &&
-            tS < applyS
-          ) {
-            preDirect += amt;
-          }
-          if (tS < wFrom || tS >= wTo) continue;
-          dAll += amt;
-          if (!onTarget) continue;
-          if (DIRECT.has(ev)) nDirect += amt;
-          else if (ev === PERIODIC) nPeriodic += amt;
-          else continue;
-          bins.add(Math.floor(tS));
-        }
-        if (preDirect <= 0) continue; // not a qualifying ally
-        const M = wTo - wFrom;
-        const K = bins.size;
-        let G = 0;
-        let run = 0;
-        for (let s = wFrom; s < wTo; s++) {
-          if (bins.has(s)) run = 0;
-          else G = Math.max(G, ++run);
-        }
-        const base = {
-          matchId,
-          ally: ally.name,
-          allySpec: ally.spec ? specToString(ally.spec) : "?",
-          target: target.name,
-          mit: getEnglishSpellName(iv.spellId, iv.spellName),
-          mitPct: mit.pct,
-          src: iv.srcUnitName,
-          applyS,
-          removeS,
-          wFrom,
-          wTo,
-          M,
-          K,
-          G,
-          nDirect,
-          nPeriodic,
-          dAll,
-          X: dAll > 0 ? (100 * (nDirect + nPeriodic)) / dAll : null,
-          preDirect,
-          targetHpFrom: getUnitHpAtTimestamp(
-            target,
-            startMs + wFrom * 1000,
-            HP_SAMPLE_RADIUS_MS,
-          ),
-          targetHpTo: getUnitHpAtTimestamp(
-            target,
-            startMs + wTo * 1000,
-            HP_SAMPLE_RADIUS_MS,
-          ),
-        };
-        out.push({ ...base, kind: classify(base) });
-      }
+    for (const o of externalDamageObservations(target, friends, enemies, combat)) {
+      const ally = friends.find((f) => f.id === o.allyId);
+      out.push({
+        ...o,
+        matchId,
+        allySpec: ally?.spec ? specToString(ally.spec) : "?",
+        targetHpFrom: getUnitHpAtTimestamp(target, startMs + o.wFrom * 1000, HP_SAMPLE_RADIUS_MS),
+        targetHpTo: getUnitHpAtTimestamp(target, startMs + o.wTo * 1000, HP_SAMPLE_RADIUS_MS),
+      });
     }
   }
   return out;
@@ -209,12 +89,13 @@ function observe(
 function render(o: Obs): string {
   const hp = (v: number | null) => (v == null ? "?" : `${Math.round(v)}%`);
   const x = o.X == null ? "n/a" : `${o.X.toFixed(0)} %`;
+  const abs = o.absorbed >= 500 ? ` (+${k(o.absorbed)} absorbed)` : "";
   return [
-    `# ${o.matchId}  ${o.ally} (${o.allySpec}) → ${o.target}  [${o.kind}]`,
-    `${fmtTime(o.applyS)}  [EXTERNAL]     ${o.mit} (${o.mitPct} %) by ${o.src} on ${o.target}; ${o.ally} had hit them ${k(o.preDirect)} in the 3 s before`,
-    `${fmtTime(o.wFrom)}  [STATE]        ${o.target} ${hp(o.targetHpFrom)}`,
-    `${fmtTime(o.wFrom)}–${fmtTime(o.wTo)}  [DURING EXTERNAL] ${o.ally}: ${k(o.nDirect + o.nPeriodic)} on ${o.target} (${x} of their damage on enemy players; direct ${k(o.nDirect)} / periodic ${k(o.nPeriodic)}); damage in ${o.K} of ${o.M} s, longest gap ${o.G} s`,
-    `${fmtTime(o.wTo)}  [STATE]        ${o.target} ${hp(o.targetHpTo)}`,
+    `# ${o.matchId}  ${o.allyName} (${o.allySpec}) → ${o.targetName}  [${o.kind}]`,
+    `${fmtTime(o.applyS)}  [EXTERNAL]     ${o.mitName} (${o.mitPct} %) by ${o.srcName} on ${o.targetName}; ${o.allyName} had hit them ${k(o.preDirect)} in the 3 s before`,
+    `${fmtTime(o.wFrom)}  [STATE]        ${o.targetName} ${hp(o.targetHpFrom)}`,
+    `${fmtTime(o.wFrom)}–${fmtTime(o.wTo)}  [DURING EXTERNAL] ${o.allyName}: ${k(o.nDirect + o.nPeriodic)} on ${o.targetName}${abs} (${x} of their damage on enemy players; direct ${k(o.nDirect)} / periodic ${k(o.nPeriodic)}); damage in ${o.K} of ${o.M} s, longest gap ${o.G} s`,
+    `${fmtTime(o.wTo)}  [STATE]        ${o.targetName} ${hp(o.targetHpTo)}`,
   ].join("\n");
 }
 
@@ -247,7 +128,7 @@ async function main(): Promise<void> {
       ? withX[Math.floor(p * (withX.length - 1))]!.toFixed(0)
       : "n/a";
   const byMit = new Map<string, number>();
-  for (const o of all) byMit.set(o.mit, (byMit.get(o.mit) ?? 0) + 1);
+  for (const o of all) byMit.set(o.mitName, (byMit.get(o.mitName) ?? 0) + 1);
   if (process.argv.includes("--json")) {
     console.log(
       JSON.stringify(

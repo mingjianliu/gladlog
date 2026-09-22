@@ -860,6 +860,54 @@ export function checkResNoChangeRowsPruned(lines: string[]): string[] {
   return failures;
 }
 
+/** `[ENEMY DEF] … X → 5(DDHunter) (11.0s …)` — the observed duration of an external. */
+const ENEMY_DEF_EXTERNAL_DUR = /\[ENEMY DEF\]\s+.*?→\s*\S+\s*\((\d+(?:\.\d+)?)s/;
+/** One `during it:` segment (segments are `; `-joined; fields ` · `-joined). */
+const DURING_SEG =
+  /^(\S+) (\d+)k on target(?: \(\+\d+k absorbed\))? · (\d+)% of their enemy-player damage · direct (\d+)k \/ periodic (\d+)k · damage in (\d+) of (\d+) s · longest gap (\d+) s$/;
+const DURING_EMPTY_SEG = /^(\S+) 0k on target · no damage on any enemy player · 0 of (\d+) s$/;
+
+/**
+ * `[ENEMY DEF] … | during it:` annotation consistency (28th hardFailure
+ * class, GH #91, value gate passed 2026-09-22). The annotation is rendered
+ * from `externalDamageForApplication` (`utils/externalDamage.ts`); this gate
+ * re-parses every segment and checks the arithmetic the renderer promised:
+ * direct + periodic = the on-target total (±1k rounding), K ≤ M, G ≤ M − K,
+ * 0 ≤ X ≤ 100, and M ≤ ⌈observed duration⌉ + 1 when the line carries one —
+ * the window can never be longer than the aura was seen on the target.
+ */
+export function checkDuringExternalConsistency(lines: string[]): string[] {
+  const failures: string[] = [];
+  lines.forEach((line, i) => {
+    if (!line.includes("[ENEMY DEF]")) return;
+    const at = line.indexOf("| during it: ");
+    if (at < 0) return;
+    const observed = line.match(ENEMY_DEF_EXTERNAL_DUR)?.[1];
+    const maxM = observed !== undefined ? Math.ceil(Number(observed)) + 1 : null;
+    const fail = (why: string) =>
+      failures.push(`line ${i + 1}: [ENEMY DEF] during-it 标注自相矛盾(${why})—— ${line.trim().slice(0, 160)}`);
+    for (const seg of line.slice(at + "| during it: ".length).split("; ")) {
+      const e = seg.match(DURING_EMPTY_SEG);
+      if (e) {
+        if (maxM !== null && Number(e[2]) > maxM) fail(`窗口 ${e[2]} s 长于观测时长 ${observed}s`);
+        continue;
+      }
+      const m = seg.match(DURING_SEG);
+      if (!m) {
+        fail(`段落格式不可解析:${seg.slice(0, 80)}`);
+        continue;
+      }
+      const [, , total, x, direct, periodic, K, M, G] = m.map(Number) as unknown as number[];
+      if (Math.abs(direct + periodic - total) > 1) fail(`direct ${direct}k + periodic ${periodic}k ≠ ${total}k`);
+      if (x < 0 || x > 100) fail(`份额 ${x}% 越界`);
+      if (K > M) fail(`有伤害秒数 ${K} > 窗口 ${M}`);
+      if (G > M - K) fail(`最长空档 ${G} > ${M - K}`);
+      if (maxM !== null && M > maxM) fail(`窗口 ${M} s 长于观测时长 ${observed}s`);
+    }
+  });
+  return failures;
+}
+
 /** `  [m:ss–m:ss] on <unit> — … | opportunity: <tier …> | …` — the tier segment. */
 const KILL_ATTEMPT_OPPORTUNITY =
   /^\s*\[\d+:\d\d–\d+:\d\d\] on .*\| opportunity: ([^|]+)\|/;
@@ -2151,6 +2199,7 @@ export function checkMatch(
   hardFailures.push(...checkHeaderHpPromise(lines));
   hardFailures.push(...checkKillAttemptFraming(lines));
   hardFailures.push(...checkResNoChangeRowsPruned(lines));
+  hardFailures.push(...checkDuringExternalConsistency(lines));
 
   return {
     ordinal: entry.ordinal,

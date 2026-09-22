@@ -23,16 +23,16 @@ import {
   strongestComponentPct,
 } from "../data/mitigationComponents";
 import {
-  type DecisionRecord,
-  isDecisionTraceActive,
-  traceDecision,
-} from "../facts/decisionTrace";
-import {
   effectiveCooldownSeconds,
   spellEffectData,
 } from "../data/spellEffectData";
 import { ccSpellIds } from "../data/spellTags";
 import { lookupSyncWindowPrior } from "../data/syncWindowPrior";
+import {
+  type DecisionRecord,
+  isDecisionTraceActive,
+  traceDecision,
+} from "../facts/decisionTrace";
 import { buildAuraIntervals } from "../utils/auraIntervals";
 import { bracketKey } from "../utils/bracketKey";
 import { analyzeBurstLedger } from "../utils/burstLedger";
@@ -73,6 +73,10 @@ import {
 } from "../utils/dispelAnalysis";
 import { drResetMsAt } from "../utils/drAnalysis";
 import { reconstructEnemyCDTimeline } from "../utils/enemyCDs";
+import {
+  externalDamageForApplication,
+  formatDuringExternalForOwner,
+} from "../utils/externalDamage";
 import { detectHealingGaps, type IHealingGap } from "../utils/healingGaps";
 import {
   attemptIntoTrinketEvents,
@@ -112,11 +116,6 @@ import {
 } from "./candidates/cooldownTiming";
 import { crisisNoResponseEvents } from "./candidates/crisisNoResponse";
 import {
-  teammateCrisisIdleEvents,
-  teammateCrisisTriageEvents,
-} from "./candidates/teammateCrisisIdle";
-import { teammateCrisisPoints } from "./teammateCrisis";
-import {
   deathSetupEvents,
   type DeathSetupParts,
   deathUnusedDefensiveEvents,
@@ -137,8 +136,13 @@ import {
   MD_SPELL_ID,
   mdCycloneWindowEvents,
 } from "./candidates/massDispel";
+import {
+  teammateCrisisIdleEvents,
+  teammateCrisisTriageEvents,
+} from "./candidates/teammateCrisisIdle";
 import { CRISIS_HP_PCT, crisisDecisionPoints } from "./crisisDecisionPoints";
 import { fmtFactNum as fmt, fmtFactTime } from "./factFormat";
+import { teammateCrisisPoints } from "./teammateCrisis";
 import type { CandidateEvent } from "./types";
 
 // Cooldown-timing producers moved to `candidates/cooldownTiming.ts` in the
@@ -2286,6 +2290,8 @@ function dpsOwnerEvents(
       mitSpell: string;
       mitPct: number;
       betterTargetName: string;
+      /** The covering wall itself (GH #91 attaches the during-external fact to it). */
+      hitDef: DominantTarget["defensivesHit"][number];
     }> = [];
     // GH #96 D6 decision trace: every burst in the ledger is an opportunity.
     const bimTracing = isDecisionTraceActive();
@@ -2418,9 +2424,17 @@ function dpsOwnerEvents(
         mitSpell: hit.d.spellName,
         mitPct: hit.pct,
         betterTargetName: ev.betterTargetName,
+        hitDef: hit.d,
       });
     }
-    for (const { b, t, mitSpell, mitPct, betterTargetName } of mitCandidates
+    for (const {
+      b,
+      t,
+      mitSpell,
+      mitPct,
+      betterTargetName,
+      hitDef,
+    } of mitCandidates
       .sort((a, c) => c.t.damage - a.t.damage)
       .slice(0, BURST_INTO_MITIGATION_CAP)) {
       const rec = bimTrace.get(b);
@@ -2429,6 +2443,32 @@ function dpsOwnerEvents(
         delete rec.reason;
         rec.candidateIds = [bimOpp(b)];
       }
+      // GH #91: when the wall was an ally-applied external, attach what the
+      // owner kept doing during THAT application — owner, target and the
+      // specific aura interval (spell + applier + overlap with this burst)
+      // must all coincide; otherwise no fact (the timeline's [ENEMY DEF]
+      // line still carries it for every qualifying friendly).
+      const duringExternal = (() => {
+        if (!hitDef.appliedByOther) return undefined;
+        const target = enemies.find((e) => e.id === t.unitId);
+        if (!target) return undefined;
+        const iv = buildAuraIntervals(target, combat).find(
+          (a) =>
+            a.spellId === hitDef.spellId &&
+            a.srcUnitName === hitDef.casterName &&
+            a.fromS <= b.toSeconds &&
+            a.toS >= b.fromSeconds,
+        );
+        if (!iv) return undefined;
+        const obs = externalDamageForApplication(
+          iv,
+          target,
+          [owner],
+          enemies,
+          combat,
+        )[0];
+        return obs ? formatDuringExternalForOwner(obs) : undefined;
+      })();
       out.push({
         id: `burst-into-mitigation:${owner.id}:${Math.round(b.fromSeconds)}`,
         type: "burst-into-mitigation",
@@ -2443,6 +2483,7 @@ function dpsOwnerEvents(
           mitSpell,
           mitPct: String(mitPct),
           betterTarget: betterTargetName,
+          ...(duringExternal ? { duringExternal } : {}),
         },
       });
     }

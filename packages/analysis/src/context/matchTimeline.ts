@@ -84,6 +84,10 @@ import {
 } from "../utils/enemyCDs";
 import { enemyDefensiveEvents } from "../utils/enemyDefensives";
 import { computeEnemyInterruptAvailability } from "../utils/enemyInterrupts";
+import {
+  externalDamageForApplication,
+  formatDuringExternal,
+} from "../utils/externalDamage";
 import { IHealingGap } from "../utils/healingGaps";
 import { sumIncomingPressure } from "../utils/incomingPressure";
 import { getHpPercentAtTime } from "../utils/killWindowTargetSelection";
@@ -2343,7 +2347,35 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
         if (d.kind === "external") {
           const hpStr =
             hpPct !== null ? ` (target at ${hpPct.toFixed(0)}% HP)` : "";
-          line = `${d.spellName} → ${enemyPid(d.recipientName ?? "")}${dur ? ` (${dur})` : ""}${burstStr}${hpStr}`;
+          // GH #91: the application line owns the "what did our attackers do
+          // during it" fact (GH #99 item 3 ownership rule); one shared
+          // predicate with the burst-into-mitigation fact and the eval gate.
+          let duringStr = "";
+          if (
+            TIMELINE_LINE_FLAGS.duringExternal === "annotate" &&
+            targetUnit &&
+            d.auraFromS !== undefined &&
+            d.auraToS !== undefined
+          ) {
+            const obs = externalDamageForApplication(
+              {
+                spellId: d.spellId,
+                spellName: d.spellName,
+                srcUnitName: d.auraSrcName ?? d.casterName,
+                fromS: d.auraFromS,
+                toS: d.auraToS,
+                inferredStart: !!d.auraInferredStart,
+                inferredEnd: !!d.auraInferredEnd,
+              },
+              targetUnit,
+              friends,
+              enemies ?? [],
+              combatSpan,
+            );
+            if (obs.length > 0)
+              duringStr = ` | during it: ${obs.map((o) => formatDuringExternal(o, pid)).join("; ")}`;
+          }
+          line = `${d.spellName} → ${enemyPid(d.recipientName ?? "")}${dur ? ` (${dur})` : ""}${burstStr}${hpStr}${duringStr}`;
         } else {
           const strength = d.kind === "immune" ? "immune" : `${d.pct}%`;
           const hpStr = hpPct !== null ? ` (at ${hpPct.toFixed(0)}% HP)` : "";
@@ -3446,6 +3478,14 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
           "    duration (dispelled, broken or cancelled); `X → unit` = an external put on that unit. Absent = not pressed.",
           "    `[friendly offensive CD active]` indicates at least one friendly offensive cooldown was active at that displayed second.",
           "    `(at N% HP)` / `(target at N% HP)` reflects the target's HP at the displayed second.",
+          ...(TIMELINE_LINE_FLAGS.duringExternal === "annotate"
+            ? [
+                "    `| during it: A Nk on target · X% of their enemy-player damage · direct/periodic · damage in K of M s` = what each",
+                "    friendly who had hit that unit in the 3 s before the external kept doing while it was up (damage on it, share of",
+                "    their damage on enemy players, seconds with damage). A measurement, not a verdict — the team's CC lines say",
+                "    whether they could act.",
+              ]
+            : []),
         ]
       : []),
     ...(enemyTrinketCount > 0

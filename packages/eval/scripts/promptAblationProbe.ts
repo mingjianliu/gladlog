@@ -36,6 +36,7 @@ import {
 } from "@gladlog/analysis";
 import { CombatUnitReaction } from "@gladlog/parser-compat";
 
+import { selectCorpusOwner } from "../src/corpus/buildCorpus";
 import { parseLogCombats } from "../src/corpus/candidateMenu";
 import { Breaker, callCli, type CliBackend } from "../src/explore/cliDriver";
 import {
@@ -62,7 +63,7 @@ const listPath = arg("--list");
 const outDir = arg("--out");
 if (!listPath || !outDir) {
   console.error(
-    "Usage: promptAblationProbe --list <files.txt> --out <dir> [--matches N] [--types a,b] [--concurrency K] [--mode ablate|baseline]",
+    "Usage: promptAblationProbe --list <files.txt> --out <dir> [--matches N] [--types a,b] [--concurrency K] [--mode ablate|baseline] [--owner healer|dps|recorder] [--require <substring>]",
   );
   process.exit(1);
 }
@@ -102,6 +103,13 @@ const temperature = tempArg === "default" ? undefined : Number(tempArg);
 const typeFilter = arg("--types")
   ?.split(",")
   .map((s) => s.trim());
+/** GH #91: `--owner dps` 取伤害最高的友方非治疗(与 buildCorpus 同一个谓词);
+ * `--require <子串>` 只保留 prompt 里含该子串的对局,免得消融一个本来就没有的段落。 */
+const ownerFilter = (arg("--owner", "healer") ?? "healer") as
+  | "healer"
+  | "dps"
+  | "recorder";
+const requireText = arg("--require");
 
 mkdirSync(outDir, { recursive: true });
 await ensureAnalysisData();
@@ -117,7 +125,10 @@ function collectPrompts(limit: number): Array<{ id: string; prompt: string }> {
     if (out.length >= limit) break;
     let text = "";
     try {
-      text = gunzipSync(readFileSync(f)).toString("utf8");
+      const raw = readFileSync(f);
+      text = f.endsWith(".gz")
+        ? gunzipSync(raw).toString("utf8")
+        : raw.toString("utf8");
     } catch {
       continue;
     }
@@ -138,7 +149,12 @@ function collectPrompts(limit: number): Array<{ id: string; prompt: string }> {
       const enemies = players.filter(
         (u) => u.reaction !== CombatUnitReaction.Friendly,
       );
-      const owner = friends.find((u) => isHealerSpec(u.spec));
+      const owner =
+        ownerFilter === "healer"
+          ? friends.find((u) => isHealerSpec(u.spec))
+          : (selectCorpusOwner(players as never[], c.legacy as never, ownerFilter) as
+              | (typeof friends)[number]
+              | null);
       const dur = (c.legacy.endTime - c.legacy.startTime) / 1000;
       if (!owner || dur < 120) continue;
       let prompt = "";
@@ -153,6 +169,7 @@ function collectPrompts(limit: number): Array<{ id: string; prompt: string }> {
         continue;
       }
       if (!prompt.includes("[STATE]")) continue;
+      if (requireText && !prompt.includes(requireText)) continue;
       out.push({
         id: `${f.split("/").pop()?.slice(0, 8)}-${out.length}`,
         prompt,

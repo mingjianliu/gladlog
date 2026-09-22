@@ -64,6 +64,14 @@ export interface IEnemyDefensiveEvent {
   recipientId?: string;
   /** observed aura duration in seconds (from the aura interval); undefined when no interval could be paired */
   observedSeconds?: number;
+  /** The paired aura interval of an external, so the `[ENEMY DEF]` line can
+   * compute what the attackers did during it (GH #91,
+   * `externalDamageForApplication`). Undefined when no interval was paired. */
+  auraFromS?: number;
+  auraToS?: number;
+  auraInferredStart?: boolean;
+  auraInferredEnd?: boolean;
+  auraSrcName?: string;
   /** observed duration fell short of the caster's full duration by more than the slack */
   removedEarly: boolean;
 }
@@ -138,6 +146,15 @@ export function enemyDefensiveEvents(
       recipientId: recipient.id,
       recipientName: recipient.name,
       observedSeconds: observed,
+      ...(paired
+        ? {
+            auraFromS: paired.fromS,
+            auraToS: paired.toS,
+            auraInferredStart: paired.inferredStart,
+            auraInferredEnd: paired.inferredEnd,
+            auraSrcName: paired.srcUnitName,
+          }
+        : {}),
       removedEarly:
         paired !== undefined &&
         !paired.inferredEnd &&

@@ -9,6 +9,7 @@ import { CombatUnitReaction } from "@gladlog/parser-compat";
 import type { CoverageManifest } from "../src/quality/coverageManifest";
 import {
   checkBehaviorPriorConsistency,
+  checkDuringExternalConsistency,
   checkHeaderHpPromise,
   checkMatch,
   checkPetCreditSide,
@@ -615,5 +616,29 @@ describe("checkResNoChangeRowsPruned — a zero-loss [RES] rdy:Δ cd:— row may
         "      [RES] rdy:Δ  cd:—  focus:2  cc:3/Incapacitating Roar-2s[disorient]",
       ]),
     ).toEqual([]);
+  });
+});
+
+describe("checkDuringExternalConsistency — the [ENEMY DEF] during-it annotation must agree with itself (GH #91)", () => {
+  const ok =
+    "0:54  [ENEMY DEF]   6(RDruid) (Restoration Druid): Ironbark → 5(DDHunter) (11.0s) (target at 21% HP) | during it: 3(SHunter) 13k on target · 15% of their enemy-player damage · direct 0k / periodic 13k · damage in 5 of 11 s · longest gap 6 s; 1(AWarrior) 0k on target · no damage on any enemy player · 0 of 11 s";
+  it("passes a consistent annotation", () => {
+    expect(checkDuringExternalConsistency([ok])).toEqual([]);
+  });
+  it("flags direct + periodic ≠ total, K > M, and a window longer than the observed aura", () => {
+    expect(checkDuringExternalConsistency([ok.replace("direct 0k / periodic 13k", "direct 5k / periodic 13k")])).toHaveLength(1);
+    // K > M, and with K = 12 the gap bound M − K is negative, so G = 6 fails too: two findings on one segment.
+    expect(checkDuringExternalConsistency([ok.replace("damage in 5 of 11 s", "damage in 12 of 11 s")])).toHaveLength(2);
+    expect(checkDuringExternalConsistency([ok.replace("(11.0s)", "(9.0s)")])).toHaveLength(2); // both segments' M=11 > 10
+  });
+  it("accepts the absorbed tag (Touch of Karma shape) as part of the total field", () => {
+    expect(
+      checkDuringExternalConsistency([
+        ok.replace("13k on target ·", "0k on target (+350k absorbed) ·").replace("direct 0k / periodic 13k", "direct 0k / periodic 0k"),
+      ]),
+    ).toEqual([]);
+  });
+  it("ignores [ENEMY DEF] lines without the annotation and lines of other kinds", () => {
+    expect(checkDuringExternalConsistency(["0:54  [ENEMY DEF]   6(RDruid) (Restoration Druid): Ironbark → 5(DDHunter) (11.0s)", "0:55  [STATE]   x"])).toEqual([]);
   });
 });

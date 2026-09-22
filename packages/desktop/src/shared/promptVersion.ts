@@ -692,4 +692,12 @@
 //  class checkResNoChangeRowsPruned. 82-prompt local rebuild: 954 → 237
 //  no-change rows, 0 other lines lost, 146 focus / 103 CC unique facts kept.
 //  Legend gains three lines explaining an absent row.
-export const PROMPT_VERSION = 94;
+//  v95 (2026-09-22, GH #91, user value gate 「先通过了看看」): the [ENEMY DEF]
+//  external line gains `| during it: …` — for every friendly who had hit the
+//  recipient in the 3 s before, their damage on it while the external was up,
+//  share of their enemy-player damage, direct/periodic split, seconds with
+//  damage; burst-into-mitigation carries the owner's own as
+//  facts.duringExternal when owner/target/aura interval coincide. Shared
+//  predicate utils/externalDamage.ts, 28th hardFailure class
+//  checkDuringExternalConsistency, flag TIMELINE_LINE_FLAGS.duringExternal.
+export const PROMPT_VERSION = 95;

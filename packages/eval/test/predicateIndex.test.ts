@@ -91,6 +91,7 @@ import * as drAnalysis from "@gladlog/analysis/src/utils/drAnalysis";
 import * as enemyCDs from "@gladlog/analysis/src/utils/enemyCDs";
 import * as enemyDefensives from "@gladlog/analysis/src/utils/enemyDefensives";
 import * as enemyInterrupts from "@gladlog/analysis/src/utils/enemyInterrupts";
+import * as externalDamage from "@gladlog/analysis/src/utils/externalDamage";
 import * as healerOffenseAnalysis from "@gladlog/analysis/src/utils/healerOffenseAnalysis";
 import { HEALER_OFFENSE_FLAGS } from "@gladlog/analysis/src/utils/healerOffenseAnalysis";
 import * as incomingPressure from "@gladlog/analysis/src/utils/incomingPressure";
@@ -1228,6 +1229,16 @@ const INDEX: PredicateRow[] = [
   {
     file: "packages/eval/src/quality/promptQualityCheck.ts",
     symbol: "checkResNoChangeRowsPruned",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${A}/utils/externalDamage.ts`,
+    symbol: "externalDamageForApplication",
+    mod: externalDamage,
+  },
+  {
+    file: "packages/eval/src/quality/promptQualityCheck.ts",
+    symbol: "checkDuringExternalConsistency",
     mod: promptQualityCheck,
   },
   {

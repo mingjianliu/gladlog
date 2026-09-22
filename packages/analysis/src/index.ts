@@ -131,5 +131,6 @@ export { OFF_GCD_SPELL_IDS } from "./data/offGcdGenerated";
 // the prompt and the lanes (single-source, see context/timelineHelpers.ts).
 export * from "./context/peakSpikePlacement";
 export * from "./context/resLedgerPrune";
+export * from "./utils/externalDamage";
 export { DMG_SPIKE_THRESHOLD } from "./context/timelineHelpers";
 export * from "./data/kickedSpellCategories";

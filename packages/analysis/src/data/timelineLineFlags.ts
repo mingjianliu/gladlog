@@ -35,6 +35,15 @@ export const TIMELINE_LINE_FLAGS = {
    *  - "off": the pre-#97 prompt (folded for the whole match).
    */
   deathWindowUnfold: "perCast" as "off" | "perCast" | "summary",
+  /**
+   * GH #91 (value gate passed 2026-09-22): what each friendly who had hit the
+   * recipient in the 3 s before an ally-applied external kept doing while it
+   * was up, appended to that `[ENEMY DEF]` line as `| during it: …`
+   * (`utils/externalDamage.ts`, the pre-registered contract).
+   *  - "annotate": the annotation is rendered.
+   *  - "off": the pre-#91 line.
+   */
+  duringExternal: "annotate" as "off" | "annotate",
 };
 
 /** Seconds before a friendly death that count as its window. */

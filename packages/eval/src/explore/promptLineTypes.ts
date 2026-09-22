@@ -49,6 +49,27 @@ export function classifyPromptLine(line: string): string {
 import { isNoChangeResLine } from "@gladlog/analysis";
 
 export const RES_NO_CHANGE_KEY = "[RES:no-change]";
+/**
+ * GH #91 消融键:只删 `[ENEMY DEF]` 外置行上的 `| during it: …` 尾段(行本身保留)、
+ * 图例里解释它的四行、候选事实块里的 `duringExternal=…`。删整行会把外置减伤这个
+ * 事实一起删掉,测出来的就不是「这段标注有没有用」。
+ */
+export const DURING_EXTERNAL_KEY = "[ENEMY DEF:during-it]";
+const DURING_LEGEND = [
+  "`| during it:",
+  "friendly who had hit that unit in the 3 s before the external",
+  "their damage on enemy players, seconds with damage",
+  "whether they could act.",
+];
+export function ablateDuringExternal(promptText: string): string {
+  return promptText
+    .split("\n")
+    .filter((l) => !(l.startsWith("    ") && DURING_LEGEND.some((k) => l.includes(k))))
+    .map((l) =>
+      l.includes("[ENEMY DEF]") ? l.replace(/ \| during it: .*$/, "") : l.replace(/, duringExternal=[^,}]*/, ""),
+    )
+    .join("\n");
+}
 // Shared with the renderer's pruning predicate (resLedgerPrune.ts): one
 // definition of "no-change row" on both sides.
 export { isNoChangeResLine } from "@gladlog/analysis";
@@ -63,6 +84,7 @@ export const ABLATABLE = (key: string): boolean =>
   key.startsWith("[") || key === "(timestamped-untagged)";
 
 export function ablateLineType(promptText: string, key: string): string {
+  if (key === DURING_EXTERNAL_KEY) return ablateDuringExternal(promptText);
   const drop =
     key === RES_NO_CHANGE_KEY
       ? isNoChangeResLine
