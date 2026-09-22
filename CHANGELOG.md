@@ -6,6 +6,56 @@ One section per release, listing every change and the commit behind it (on the
 `git log v<prev>..v<new>` basis; release and docs-only commits go under "Other").
 The release procedure is documented in `.claude/skills/release`.
 
+## v0.1.35 (2026-09-22)
+
+A fix release driven by two user reports and one week of prompt work. The kill-attempt facts no longer scold an opener for hitting a target whose trinket was up — at the gates everyone's trinket is up — and a coaching finding that names a class or spec nobody in the lobby plays is dropped before it reaches the report. Underneath, the enemy's defensives, trinkets and summons are described with their context (what they answered, who was in range to kill the totem, which spell the Grounding ate), pet and totem deaths are visible again on 12.x logs, and the offensive-cooldown table went through a completeness scan that found the burst the product had been blind to.
+
+### AI coaching — what the report says about you
+
+- `e00e31b6` **Opening on a trinket-up target is no longer framed as a mistake.** Every `[KILL ATTEMPTS]` line used to be stamped `locked (trinket up) … FAILED` and counted against you, the 0:05 opener included. Lines now read `trinket up (no softer target)` or name the softer target that existed at the time, and the summary only counts attempts where a softer target was available (locally, 1,241 rounds: lines stamped locked 6,269 → 0; the `attempt-into-trinket` card retired). The same commit binds each spec to a player name in the match facts, and a finding that names a class absent from the roster is dropped
+- `3bd1e3f8` The roster check pins Chinese nicknames and full spec phrases to the spec, not the class: a Holy Priest called 奶骑 (Holy Paladin) is dropped even when a Paladin is on the roster (the user's own response: 6 kept / 0 dropped → 5 / 1, the wrong one)
+- `087be204` `bde4c493` The two healer teammate-crisis cards shipped in v0.1.34 are retired behind one flag after a debate concluded the accusation could not be pinned down ("no card once anybody is dead" landed first, then both were switched off). The fact line `[STACKED DEFENSIVES]` stays
+- `8f3da9ae` `[KILL WINDOW]` / `[VULNERABLE]` / `[CONTESTED]` lines were printed under a header promising "team ≥85 % HP, no enemy cooldowns" that only the slack lines actually meet (288/309 prompts contradicted it); the promise now sits on the one line it governs (GH #99)
+- `536eec38` A totem or pet was credited to whichever team's same-named summon came first in the unit table — with a shaman on each side, a Capacitor Totem could stun "its own team" (48 lines across 16 of 309 prompts). Attribution goes by source GUID (GH #99)
+- `9108994d` `5e95eef1` `9a2764de` `b6addf7b` `kick-eaten` says how deep into the cast the kick landed (under 30 % is a juke opportunity), how far the nearest kicker stood and how many were in range; interrupted and contaminated casts excluded, pet kits and fixtures fixed on review (GH #73, #87)
+- `008bd981` `9de01dcd` An interrupted spell is classed as heal, control, damage or other — 100 % of the top 60 kicked spells resolve; Denounce and Mindgames count as damage (GH #79)
+- `16338aeb` `missed-sync-window` states the DR level the CC landed at, and enemy interrupts never seen in the round are listed as `(assumed)` ready rather than silently ready (GH #72, #88)
+- `b2034102` Counterspell's school lockout is 6 s (official 5, corpus mode 6.10 s, n=619 — user ruling); the mechanism for the sixth second is stated as unknown
+
+### AI coaching — enemy context on the timeline
+
+- `fa450f04` `4069d870` `91b8085c` `c24a1564` `82ebd83f` `a01b8049` `fbc6a890` `[ENEMY DEF]` and `[ENEMY TRINKET]` lines carry context: which CC the trinket broke out of, which of your burst it answered, the target's HP — offensive auras credited to the side that cast them and only real cooldowns counted (GH #69)
+- `ac784d37` `[DR CLASH]` says when a friendly CC landed at 50 % or Immune because a teammate had just put the target on DR, naming both casts and the gap (GH #67)
+- `c07bc37f` **Pet and totem deaths are back.** `[UNIT DESTROYED]` keyed on an event 12.x logs write for 5 of 13,439 summoned units; it now keys on the overkill the log still carries — 24 → 3,076 lines on the same slice, Tremor / Spirit Link / Grounding included (user ruling 2026-09-20)
+- `c6fef058` `e6ee732a` When an enemy Psyfiend or Spirit Link Totem was **not** killed, `[ENEMY SUMMON]` says how many hits it took and who on your team was in range and free to act for how long — a fact, in place of an accusation the funnel showed too thin to ship (8 of 695 rounds)
+- `a8d0eaf2` `f4163970` `700cc845` `fe6226b7` A friendly Tremor Totem that ended a fear is credited on the `[CC ON TEAM]` line (0 → 71 notes on the probe slice), and the enemy's Tremor ending your fear on `[CC ON ENEMY]` — never when the CC was actually broken by a trinket, a racial or a dispel
+- `58d7ffb2` `addfae20` `886c2926` `96d04a4d` `da533c3d` The Grounding Totem note names the spell it ate (user request 2026-09-20); an absorb whose attacking spell is unnamed no longer silently drops every name on the note
+- `130e69f4` Adaptation counts as a trinket
+
+### Cooldown tables
+
+- `b57d7a9b` `c573cf89` `613fef3b` `9ba54d3b` `cfe215ae` `fc6e51dc` `512470b0` **The offensive-cooldown table was missing the Windwalker's burst entirely.** Storm, Earth, and Fire had been retired as dead, and its successor Zenith never listed, so every "the enemy opened a cooldown" consumer was blind to it. A forward completeness scan (the pair of the rot scan, in-round damage lift as the yardstick) then added eleven more — Voidform, the live Bladestorm, Colossus Smash, Kingsbane, Volley, Breath of Sindragosa, Doom Winds, Touch of the Magi, Grimoire: Imp Lord, Force of Nature, Fury of Elune, Predator's Wake — 48 → 60. Review found Zenith still invisible behind an inlined "press-spacing vs recharge" cooldown read in eleven places, now one shared predicate; the sync-window reference regenerated under the wider table (its 2× contrast survives)
+- `c04a3fe5` `e803463d` Convoke deliberately stays out (no spec gate); dead spell ids pruned from the curated tables
+
+### Desktop
+
+- `79ffed05` Visual baselines regenerated for the larger offensive-cooldown table (the fixture match gained one teammate finding)
+
+### Corpus tools
+
+- `ee8647cb` `36e2fbee` `62d78afc` The daily log pull archives to Drive itself (205 files / 2.53 GiB had never left the machine), our own logs get a Drive copy too, and the 3v3 step that never ran since 2026-09-16 runs (10/15 → 15/15 verified live)
+
+### Evaluation and research (no product change)
+
+- `eb7701e4` `b7634b57` `511980b5` `f95067b5` `4841135a` `98d044f2` `bd3d7924` `ed44bd94` `dbd783b7` `343d9d92` `466c54eb` `31250fa3` `6a49bcc1` `67efeeac` `9f78aef8` `f87ee8da` `90c8ce7f` The log-observability audit (GH #100): what the raw log can still tell us — advanced-block slots identified (remaining absorb, facing calibrated in radians), the stale Psyfiend id found, hunter / warlock pet outages measured (a warlock's pet never returns in 46 % of cases), resources and facing closed as coaching directions by user ruling
+- `33896549` A probe to ablate the no-change `[RES]` rows: the model does not react to their removal (Jaccard 0.800 against a 0.802 noise floor) (GH #99)
+- `35986d0c` `9cacd681` `315fd394` `981cf045` `8d1fb58b` `13cca20c` `0eefa27b` `e1c6d941` `5f5e2394` `a1a8b6f2` `783de6f5` `3d317e12` `3701bb6d` `5974f6de` `0b28e96a` `79d296cc` `2575d994` Code-review batch: position samples sorted before sampling, Tremor scanning faster, critical NPC ids in one place, interval intersection for the cannot-cast check, and the eval scan scripts hardened (file tracking, error handling, CLI validation)
+- `8a5831da` `62248524` `3eb9a124` Coverage: recent burst / defensive cooldowns pinned, unit tests for resource, reach, cannot-cast, memoize, schools, offensive waste, spec baselines and DPS metrics
+
+### Other
+
+- `5a232e41` `a19ceb01` `5f70dce0` `77bf5910` `456ea3ac` `1193fb17` `d89d7a24` Prompt-version changelog links, comment paths updated, presubmit advice aligned with bilingual READMEs for parser and eval, the pending-rulings sheet, BACKLOG #49 (the four ceiling-raising levers, parked), and the design and plan behind the enemy-context lines
+
 ## v0.1.34 (2026-09-18)
 
 A coaching release. The healer's crisis signal now covers the teammate who is being killed, not only the healer's own HP — two new cards, each with a full-archive reference — and the crisis machinery learned three things it had been getting wrong: a talent that fires on its own is an answer, a HoT that was already ticking is not a press, and "the enemy opened a cooldown" is one predicate everywhere. Underneath, the talent-integration project (GH #96) landed end to end: cooldown, duration and mitigation modifiers compiled from the game data, validated against the archive under rules written down before each scan ran, and switched on. Two more signals joined the menu after confirmatory A/B (kick priority, backlash dispel), the timeline lost several duplicate lines, and the reference corpus moved to the 2100+ archive.
