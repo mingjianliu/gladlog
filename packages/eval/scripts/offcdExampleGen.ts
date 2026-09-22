@@ -32,7 +32,20 @@ const flag = (f: string): string | undefined => {
   const i = argv.indexOf(f);
   return i >= 0 ? argv[i + 1] : undefined;
 };
-const num = (f: string, d: number): number => Number(flag(f) ?? d);
+export const parseNonNegativeInt = (
+  name: string,
+  defaultVal: number,
+  argvList = argv,
+): number => {
+  const i = argvList.indexOf(name);
+  const raw = i >= 0 ? argvList[i + 1] : undefined;
+  if (raw === undefined) return defaultVal;
+  const val = Number(raw);
+  if (!Number.isInteger(val) || val < 0) {
+    throw new Error(`expected non-negative integer for ${name}, got: ${raw}`);
+  }
+  return val;
+};
 
 function loadLedger(dir: string): Map<string, any> {
   const out = new Map<string, any>();
@@ -53,10 +66,18 @@ const fmtTime = (s: number): string =>
   `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
 async function main(): Promise<void> {
-  const manifestPath = flag("--manifest")!;
-  const ledgerDir = flag("--ledger")!;
-  const offset = num("--offset", 0);
-  const limit = num("--limit", 40);
+  const manifestPath = flag("--manifest");
+  if (!manifestPath) {
+    console.error("missing required --manifest <path>");
+    process.exit(1);
+  }
+  const ledgerDir = flag("--ledger");
+  if (!ledgerDir) {
+    console.error("missing required --ledger <dir>");
+    process.exit(1);
+  }
+  const offset = parseNonNegativeInt("--offset", 0);
+  const limit = parseNonNegativeInt("--limit", 40);
   await ensureAnalysisData();
   const ledger = loadLedger(ledgerDir);
   let files = readFileSync(manifestPath, "utf8")
@@ -66,6 +87,8 @@ async function main(): Promise<void> {
   interface Ex { score: number; text: string }
   const examples: Ex[] = [];
   let scanned = 0;
+  let readFiles = 0;
+  let skippedFiles = 0;
 
   for (const path of files) {
     const matchId = basename(path).replace(/\.txt\.gz$|\.gz$|\.txt$/, "");
@@ -75,7 +98,13 @@ async function main(): Promise<void> {
     try {
       const raw = readFileSync(path);
       text = (path.endsWith(".gz") ? gunzipSync(raw) : raw).toString("utf8");
-    } catch { continue; }
+    } catch (err) {
+      skippedFiles++;
+      process.stderr.write(
+        `[warn] failed to read ${path}: ${err instanceof Error ? err.message : String(err)}, skipping\n`,
+      );
+      continue;
+    }
     const combats: any[] = [];
     try {
       const parser = new GladLogParser();
@@ -85,7 +114,14 @@ async function main(): Promise<void> {
       });
       for (const line of text.split("\n")) parser.push(line);
       parser.end();
-    } catch { continue; }
+    } catch (err) {
+      skippedFiles++;
+      process.stderr.write(
+        `[warn] failed to parse ${path}: ${err instanceof Error ? err.message : String(err)}, skipping\n`,
+      );
+      continue;
+    }
+    readFiles++;
     scanned++;
 
     for (const combat of combats) {
@@ -157,7 +193,14 @@ async function main(): Promise<void> {
     }
   }
   examples.sort((a, b) => b.score - a.score);
-  console.log(`scanned=${scanned} candidates=${examples.length}`);
+  console.log(
+    `scanned=${scanned} readFiles=${readFiles} skippedFiles=${skippedFiles} candidates=${examples.length}`,
+  );
   for (const e of examples.slice(0, 8)) console.log("\n" + e.text);
 }
-main().catch((e) => { console.error(e); process.exit(1); });
+if (process.argv[1]?.includes("offcdExampleGen")) {
+  main().catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });
+}
