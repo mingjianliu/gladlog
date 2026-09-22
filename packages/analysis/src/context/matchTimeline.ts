@@ -2546,7 +2546,11 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
         // Mirror of the [CC ON TEAM] tremor note (user 2026-09-20: Tremor
         // "depending on the situation" — i.e. when it did something): the
         // ENEMY dropped Tremor Totem mid-fear and our fear ended that instant.
-        const enemyTremor = tremorTotemBreak(cc, matchStartMs, enemies ?? []);
+        const trinketBroke =
+          cc.trinketState === "used" || cc.trinketState === "racial_break";
+        const enemyTremor = !trinketBroke
+          ? tremorTotemBreak(cc, matchStartMs, enemies ?? [])
+          : null;
         // The owner's own tracked CC normally renders on its [YOU] [CC] cast
         // line only; that line is per cast, not per target, so a tremor break
         // keeps this per-target line.

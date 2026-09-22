@@ -1,4 +1,5 @@
 import {
+  CombatUnitClass,
   CombatUnitReaction,
   CombatUnitSpec,
   CombatUnitType,
@@ -12,6 +13,7 @@ import { TIMELINE_LINE_FLAGS } from "../src/data/timelineLineFlags";
 import {
   ICCInstance,
   IPlayerCCTrinketSummary,
+  TREMOR_TOTEM_CAST_SPELL_ID,
 } from "../src/utils/ccTrinketAnalysis";
 
 const T0 = 1_000_000;
@@ -980,5 +982,102 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
       expect(defLine).toBeDefined();
       expect(defLine).not.toContain("[friendly offensive CD active]");
     }
+  });
+
+  describe("W3: [CC ON ENEMY] Tremor Totem attribution guard", () => {
+    it("suppresses enemy Tremor Totem attribution when enemy used trinket to break fear", () => {
+      const owner = makeUnit();
+      const enemyPriest = makeUnit({
+        id: "Enemy-1",
+        name: "EnemyPriest",
+        class: CombatUnitClass.Priest,
+        spec: CombatUnitSpec.Priest_Discipline,
+        reaction: CombatUnitReaction.Hostile,
+      });
+      const enemyShaman = makeUnit({
+        id: "Enemy-2",
+        name: "EnemyShaman",
+        class: CombatUnitClass.Shaman,
+        spec: CombatUnitSpec.Shaman_Restoration,
+        reaction: CombatUnitReaction.Hostile,
+        spellCastEvents: [
+          {
+            spellId: TREMOR_TOTEM_CAST_SPELL_ID,
+            spellName: "Tremor Totem",
+            timestamp: T0 + 10_500,
+            logLine: {
+              event: LogEvent.SPELL_CAST_SUCCESS,
+              timestamp: T0 + 10_500,
+            } as any,
+          } as any,
+        ],
+      });
+
+      // Fear applied at 10s, broke at 10.6s by trinket (within 500ms of Tremor at 10.5s)
+      const ccFear: ICCInstance = makeCCInstance({
+        spellId: "8122", // Psychic Scream
+        spellName: "Psychic Scream",
+        atSeconds: 10,
+        durationSeconds: 0.6,
+        sourceId: "P1",
+        sourceName: "OwnerPlayer",
+        trinketState: "used",
+      });
+
+      const enemyCCSummary: IPlayerCCTrinketSummary = {
+        playerName: "EnemyPriest",
+        playerSpec: "Discipline",
+        trinketType: "Gladiator",
+        trinketCooldownSeconds: 120,
+        ccInstances: [ccFear],
+        trinketUseTimes: [10.6],
+        missedTrinketWindows: [],
+        rootInstances: [],
+        disarmInstances: [],
+        interruptInstances: [],
+        ccAvoidedInstances: [],
+      };
+
+      const timeline = buildMatchTimeline({
+        owner,
+        ownerSpec: "Subtlety Rogue",
+        friends: [owner],
+        enemies: [enemyPriest, enemyShaman],
+        allUnits: [owner, enemyPriest, enemyShaman],
+        playerIdMap: new Map([["OwnerPlayer", 1]]),
+        enemyIdMap: new Map([
+          ["EnemyPriest", 2],
+          ["EnemyShaman", 3],
+        ]),
+        matchStartMs: T0,
+        matchEndMs: T0 + 60_000,
+        isHealer: false,
+        ownerCDs: [],
+        teammateCDs: [],
+        enemyCDTimeline: { players: [], alignedBurstWindows: [] },
+        ccTrinketSummaries: [],
+        enemyCCSummaries: [enemyCCSummary],
+        dispelSummary: emptyDispel as any,
+        enemyDispelSummary: emptyDispel as any,
+        pressureWindows: [],
+        healingGaps: [],
+        friendlyDeaths: [],
+        enemyDeaths: [],
+        criticalWindowSeconds: new Set(),
+        outgoingCCChains: [],
+      });
+
+      const lines = timeline.split("\n");
+      const trinketLine = lines.find(
+        (l) => l.includes("[ENEMY TRINKET]") && !l.includes(" = "),
+      );
+      expect(trinketLine).toBeDefined();
+      expect(trinketLine).toContain("out of Psychic Scream");
+
+      const ccLine = lines.find((l) => l.includes("[CC ON ENEMY]"));
+      expect(ccLine).toBeDefined();
+      expect(ccLine).toContain("Psychic Scream");
+      expect(ccLine).not.toContain("Tremor Totem");
+    });
   });
 });
