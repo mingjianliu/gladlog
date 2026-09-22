@@ -7,7 +7,12 @@
  * burst-into-mitigation `facts.duringExternal` and the eval gate all rest on
  * the same arithmetic this report prints. Baseline (local library, 400
  * rounds, 2026-09-12): 752 observations, continues 272 / empty 210 /
- * periodic-only 74 / stops 196, X p25 0 · p50 20 · p75 65.
+ * periodic-only 74 / stops 196, X p25 0 · p50 20 · p75 65. Round 2
+ * (2026-09-22): 999 observations (Life Cocoon 143, Spellwarding 56,
+ * Protection 48 added), but the LIBRARY store carries no `missesOut` /
+ * `absorbsIn` (40 rounds / 226 units: 0 / 0), so on this data the immune
+ * and absorbed fields are always empty and `empty` is inflated (414); the
+ * archive acceptance (fresh log parse) is where round 2 is measured.
  *
  * Contract (pre-registered on GH #91; change the issue before changing this):
  *   eligible aura   = observed (no inferred endpoint), ally-applied (source ≠

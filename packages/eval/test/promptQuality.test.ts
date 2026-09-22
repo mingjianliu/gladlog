@@ -638,6 +638,11 @@ describe("checkDuringExternalConsistency — the [ENEMY DEF] during-it annotatio
       ]),
     ).toEqual([]);
   });
+  it("round 2: accepts the in-school and immune fields, and flags in-school above the total", () => {
+    const r2 = ok.replace("direct 0k / periodic 13k", "direct 0k / periodic 13k · 9k (69%) of it in the wall's school · 2 hits immune");
+    expect(checkDuringExternalConsistency([r2])).toEqual([]);
+    expect(checkDuringExternalConsistency([r2.replace("9k (69%)", "40k (300%)")])).toHaveLength(1);
+  });
   it("ignores [ENEMY DEF] lines without the annotation and lines of other kinds", () => {
     expect(checkDuringExternalConsistency(["0:54  [ENEMY DEF]   6(RDruid) (Restoration Druid): Ironbark → 5(DDHunter) (11.0s)", "0:55  [STATE]   x"])).toEqual([]);
   });

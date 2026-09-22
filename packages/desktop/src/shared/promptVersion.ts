@@ -700,4 +700,9 @@
 //  facts.duringExternal when owner/target/aura interval coincide. Shared
 //  predicate utils/externalDamage.ts, 28th hardFailure class
 //  checkDuringExternalConsistency, flag TIMELINE_LINE_FLAGS.duringExternal.
-export const PROMPT_VERSION = 95;
+//  v96 (2026-09-22, GH #91 round 2, user 「开着 做第二轮」): the during-it
+//  contract admits school-limited walls (Anti-Magic Zone: `Nk (P%) of it in
+//  the wall's school`), immunities (Blessing of Protection / Spellwarding:
+//  `N hits immune`, counted as seconds) and Life Cocoon (absorbed field);
+//  legend extended.
+export const PROMPT_VERSION = 96;

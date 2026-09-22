@@ -864,7 +864,7 @@ export function checkResNoChangeRowsPruned(lines: string[]): string[] {
 const ENEMY_DEF_EXTERNAL_DUR = /\[ENEMY DEF\]\s+.*?→\s*\S+\s*\((\d+(?:\.\d+)?)s/;
 /** One `during it:` segment (segments are `; `-joined; fields ` · `-joined). */
 const DURING_SEG =
-  /^(\S+) (\d+)k on target(?: \(\+\d+k absorbed\))? · (\d+)% of their enemy-player damage · direct (\d+)k \/ periodic (\d+)k · damage in (\d+) of (\d+) s · longest gap (\d+) s$/;
+  /^(\S+) (\d+)k on target(?: \(\+\d+k absorbed\))? · (\d+)% of their enemy-player damage · direct (\d+)k \/ periodic (\d+)k(?: · (\d+)k \((\d+)%\) of it in the wall's school)?(?: · (\d+) hits? immune)? · damage in (\d+) of (\d+) s · longest gap (\d+) s$/;
 const DURING_EMPTY_SEG = /^(\S+) 0k on target · no damage on any enemy player · 0 of (\d+) s$/;
 
 /**
@@ -872,9 +872,10 @@ const DURING_EMPTY_SEG = /^(\S+) 0k on target · no damage on any enemy player �
  * class, GH #91, value gate passed 2026-09-22). The annotation is rendered
  * from `externalDamageForApplication` (`utils/externalDamage.ts`); this gate
  * re-parses every segment and checks the arithmetic the renderer promised:
- * direct + periodic = the on-target total (±1k rounding), K ≤ M, G ≤ M − K,
- * 0 ≤ X ≤ 100, and M ≤ ⌈observed duration⌉ + 1 when the line carries one —
- * the window can never be longer than the aura was seen on the target.
+ * direct + periodic = the on-target total (±1k rounding), the round-2
+ * in-school amount ≤ the total, K ≤ M, G ≤ M − K, 0 ≤ X ≤ 100, and
+ * M ≤ ⌈observed duration⌉ + 1 when the line carries one — the window can
+ * never be longer than the aura was seen on the target.
  */
 export function checkDuringExternalConsistency(lines: string[]): string[] {
   const failures: string[] = [];
@@ -897,8 +898,17 @@ export function checkDuringExternalConsistency(lines: string[]): string[] {
         fail(`段落格式不可解析:${seg.slice(0, 80)}`);
         continue;
       }
-      const [, , total, x, direct, periodic, K, M, G] = m.map(Number) as unknown as number[];
+      const num = (i: number) => (m[i] === undefined ? undefined : Number(m[i]));
+      const total = num(2)!;
+      const x = num(3)!;
+      const direct = num(4)!;
+      const periodic = num(5)!;
+      const inSchool = num(6);
+      const K = num(9)!;
+      const M = num(10)!;
+      const G = num(11)!;
       if (Math.abs(direct + periodic - total) > 1) fail(`direct ${direct}k + periodic ${periodic}k ≠ ${total}k`);
+      if (inSchool !== undefined && inSchool > total + 1) fail(`本学派 ${inSchool}k > 总量 ${total}k`);
       if (x < 0 || x > 100) fail(`份额 ${x}% 越界`);
       if (K > M) fail(`有伤害秒数 ${K} > 窗口 ${M}`);
       if (G > M - K) fail(`最长空档 ${G} > ${M - K}`);

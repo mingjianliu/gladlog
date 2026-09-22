@@ -62,11 +62,48 @@ describe("externalDamage — damage kept on a target under an ally-applied exter
     await ensureAnalysisData();
   });
 
-  it("eligibility follows the contract: pct mitigation, all-school, non-positional, not a transfer", () => {
-    expect(eligibleExternalMitigation(PAIN_SUPPRESSION)).toEqual({ pct: 40 });
+  it("eligibility follows the round-2 contract: % mitigation (any school), immunities, Life Cocoon; transfers and positional walls stay out", () => {
+    expect(eligibleExternalMitigation(PAIN_SUPPRESSION)).toEqual({ pct: 40, schoolMask: 0x7f, kind: "mitigation" });
+    expect(eligibleExternalMitigation("51052")).toEqual({ pct: 30, schoolMask: 0x7e, kind: "mitigation" }); // Anti-Magic Zone
+    expect(eligibleExternalMitigation("1022")).toEqual({ pct: 100, schoolMask: 0x1, kind: "immunity" }); // Blessing of Protection
+    expect(eligibleExternalMitigation("116849")).toEqual({ pct: 0, schoolMask: 0x7f, kind: "shield" }); // Life Cocoon
     expect(eligibleExternalMitigation(GUARDIAN_SPIRIT)).toBeNull(); // NO_MITIGATION_IDS
-    expect(eligibleExternalMitigation("642")).toBeNull(); // Divine Shield: immunity
+    expect(eligibleExternalMitigation("6940")).toBeNull(); // Blessing of Sacrifice
+    expect(eligibleExternalMitigation("196718")).toBeNull(); // Darkness: positional
     expect(eligibleExternalMitigation("0")).toBeNull();
+  });
+
+  it("round 2: immune hits on the target count as seconds and render; a school-limited wall reports the in-school share", () => {
+    const BOP = "1022";
+    const bop = enemy("E1", [
+      aura(BOP, "Blessing of Protection", "E2", "E1", 20, LogEvent.SPELL_AURA_APPLIED),
+      aura(BOP, "Blessing of Protection", "E2", "E1", 28, LogEvent.SPELL_AURA_REMOVED),
+    ]);
+    const miss = (atS: number): any => ({
+      spellId: "1", spellName: "x", destUnitId: "E1", destUnitName: "E1", missType: "IMMUNE", amount: 0,
+      timestamp: ms(atS), logLine: { event: LogEvent.SPELL_MISSED, timestamp: ms(atS), parameters: [] },
+    });
+    const warrior = { ...ally("A1", [dmg(LogEvent.SWING_DAMAGE, 19, "E1", 40_000), dmg(LogEvent.SPELL_DAMAGE, 25, "E3", 20_000)]), missesOut: [miss(21), miss(22.5), miss(26)] };
+    const [o] = externalDamageObservations(bop, [warrior], [bop, enemy("E3")], combat);
+    expect(o).toMatchObject({ wallKind: "immunity", immuneHits: 3, K: 3, nDirect: 0, dAll: 20_000, M: 8, kind: "stops" });
+    expect(formatDuringExternal(o!, (n) => n)).toBe(
+      "A1 0k on target · 0% of their enemy-player damage · direct 0k / periodic 0k · 3 hits immune · damage in 3 of 8 s · longest gap 3 s",
+    );
+    const AMZ = "51052";
+    const amz = enemy("E1", [
+      aura(AMZ, "Anti-Magic Zone", "E2", "E1", 20, LogEvent.SPELL_AURA_APPLIED),
+      aura(AMZ, "Anti-Magic Zone", "E2", "E1", 28, LogEvent.SPELL_AURA_REMOVED),
+    ]);
+    const mixed = ally("A1", [
+      dmg(LogEvent.SPELL_DAMAGE, 19, "E1", 40_000),
+      { ...dmg(LogEvent.SPELL_DAMAGE, 21, "E1", 30_000), spellSchoolId: "0x20" }, // shadow
+      { ...dmg(LogEvent.SWING_DAMAGE, 22, "E1", 10_000), spellSchoolId: "0x1" }, // physical
+    ]);
+    const [o2] = externalDamageObservations(amz, [mixed], [amz], combat);
+    expect(o2).toMatchObject({ wallKind: "mitigation", wallSchoolMask: 0x7e, inSchool: 30_000, nDirect: 40_000 });
+    expect(formatDuringExternal(o2!, (n) => n)).toBe(
+      "A1 40k on target · 100% of their enemy-player damage · direct 40k / periodic 0k · 30k (75%) of it in the wall's school · damage in 2 of 8 s · longest gap 5 s",
+    );
   });
 
   it("computes N / D / X / K / M / G on the render grid for a qualifying ally", () => {
@@ -157,7 +194,7 @@ describe("externalDamage — damage kept on a target under an ally-applied exter
     const [o] = externalDamageObservations(e1, [a1], [e1, enemy("E3")], combat);
     // The effective −1 residual at 21 s does not make a bin by itself (EXTERNAL_DAMAGE_BIN_MIN_HIT);
     // the two absorbed hits do → K = 2.
-    expect(o).toMatchObject({ nDirect: 1, nPeriodic: 0, dAll: 20_001, absorbed: 55_000, K: 2, M: 8 });
+    expect(o).toMatchObject({ nDirect: 1, nPeriodic: 0, dAll: 20_001, absorbed: 55_000, K: 2, M: 8, kind: "stops" });
     expect(formatDuringExternal(o!, (n) => n)).toBe(
       "A1 0k on target (+55k absorbed) · 0% of their enemy-player damage · direct 0k / periodic 0k · damage in 2 of 8 s · longest gap 4 s",
     );

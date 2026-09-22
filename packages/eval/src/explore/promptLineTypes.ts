@@ -59,6 +59,7 @@ const DURING_LEGEND = [
   "`| during it:",
   "friendly who had hit that unit in the 3 s before the external",
   "their damage on enemy players, seconds with damage",
+  "how much of it was in the wall's school",
   "whether they could act.",
 ];
 export function ablateDuringExternal(promptText: string): string {

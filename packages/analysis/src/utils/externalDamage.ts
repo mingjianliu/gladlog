@@ -17,11 +17,24 @@
  * Measurement contract (pre-registered on GH #91, codex R1 — change the
  * issue before changing this):
  *   eligible aura   = observed (no inferred endpoint), ally-applied
- *                     (source ≠ target), non-positional, all-school (0x7f),
- *                     percentage (pct < 100) entry of MITIGATION_TABLE;
- *                     NO_MITIGATION_IDS, shields, immunities excluded — on the
- *                     local library only Pain Suppression, Time Dilation and
- *                     Ironbark pass (400 rounds, 752 observations)
+ *                     (source ≠ target), non-positional. Round 1 (2026-09-12)
+ *                     took only all-school percentage entries of
+ *                     MITIGATION_TABLE (Pain Suppression, Time Dilation,
+ *                     Ironbark on the local library: 400 rounds, 752
+ *                     observations). Round 2 (user ruling 2026-09-22
+ *                     「开着 做第二轮」, contract amended on the issue first)
+ *                     adds school-limited mitigation (Anti-Magic Zone),
+ *                     immunities (Blessing of Protection / Spellwarding) and
+ *                     the shield Life Cocoon (EXTERNAL_DAMAGE_SHIELD_IDS).
+ *                     NO_MITIGATION_IDS transfers / cheat-deaths / HP buffs
+ *                     (Guardian Spirit, Blessing of Sacrifice, Rallying Cry,
+ *                     Zephyr) and positional walls (Darkness) stay out.
+ *   school / immune = for a wall whose mask is not all-school, the ally's
+ *                     on-target damage whose school the wall covers is
+ *                     reported (`Nk (P%) of it in the wall's school`, from
+ *                     each hit's spellSchoolId); the ally's SPELL_MISSED IMMUNE
+ *                     events on the target inside W are reported as
+ *                     `N hits immune` and count as seconds in K
  *   qualifying ally = landed a same-target DIRECT hit in the PRE_HIT_S before
  *                     the application (a sampling choice, not a reaction
  *                     standard)
@@ -71,19 +84,33 @@ const DIRECT_EVENTS = new Set<string>([
   LogEvent.RANGE_DAMAGE,
 ]);
 const PERIODIC_EVENT = LogEvent.SPELL_PERIODIC_DAMAGE as string;
-const ALL_SCHOOLS = 0x7f;
+export const ALL_SCHOOLS_MASK = 0x7f;
+
+/**
+ * Ally-applied absorb shields the contract admits (round 2). A hand list —
+ * registered in `curatedIdRegistry` — because the official table records
+ * Life Cocoon under NO_MITIGATION_IDS ("pure absorb, no percentage") and no
+ * generated set names external shields; the one member is the only shield in
+ * `EXTERNAL_DEF_IDS`.
+ */
+export const EXTERNAL_DAMAGE_SHIELD_IDS: ReadonlySet<string> = new Set([
+  "116849", // Life Cocoon
+]);
+
+export type ExternalWallKind = "mitigation" | "immunity" | "shield";
 
 /** Contract eligibility for the aura itself (ally-applied is checked per interval). */
 export function eligibleExternalMitigation(
   spellId: string,
-): { pct: number } | null {
+): { pct: number; schoolMask: number; kind: ExternalWallKind } | null {
+  if (EXTERNAL_DAMAGE_SHIELD_IDS.has(spellId))
+    return { pct: 0, schoolMask: ALL_SCHOOLS_MASK, kind: "shield" };
   if (NO_MITIGATION_IDS.has(spellId)) return null;
   const e = MITIGATION_TABLE[spellId];
   if (!e) return null;
   if (e.positional) return null;
-  if (e.pct >= 100) return null; // immunity
-  if ((e.schoolMask & ALL_SCHOOLS) !== ALL_SCHOOLS) return null; // school-limited
-  return { pct: e.pct };
+  if (e.pct >= 100) return { pct: 100, schoolMask: e.schoolMask, kind: "immunity" };
+  return { pct: e.pct, schoolMask: e.schoolMask, kind: "mitigation" };
 }
 
 export type ExternalDamageKind = "continues" | "stops" | "periodic-only" | "empty";
@@ -97,6 +124,14 @@ export interface IExternalDamageObservation {
   /** English mitigation name. */
   mitName: string;
   mitPct: number;
+  wallKind: ExternalWallKind;
+  /** The wall's school mask (0x7f = all schools). */
+  wallSchoolMask: number;
+  /** On-target effective damage whose school the wall covers (equals the
+   * on-target total for an all-school wall). */
+  inSchool: number;
+  /** The ally's SPELL_MISSED IMMUNE events on the target inside W. */
+  immuneHits: number;
   /** Who applied the external (log source name). */
   srcName: string;
   applyS: number;
@@ -124,10 +159,15 @@ export interface IExternalDamageObservation {
 }
 
 export function classifyExternalDamage(
-  o: Pick<IExternalDamageObservation, "nDirect" | "nPeriodic" | "K" | "M">,
+  o: Pick<
+    IExternalDamageObservation,
+    "nDirect" | "nPeriodic" | "K" | "M" | "absorbed" | "immuneHits"
+  >,
 ): ExternalDamageKind {
-  if (o.nDirect === 0 && o.nPeriodic === 0) return "empty";
-  if (o.nDirect === 0) return "periodic-only";
+  // Round 2: an absorbed or immune hit is still the ally attacking the target.
+  const attacked = o.nDirect > 0 || o.absorbed > 0 || o.immuneHits > 0;
+  if (!attacked && o.nPeriodic === 0) return "empty";
+  if (!attacked) return "periodic-only";
   return o.K / Math.max(o.M, 1) >= EXTERNAL_DAMAGE_CONTINUES_SHARE
     ? "continues"
     : "stops";
@@ -179,7 +219,16 @@ export function externalDamageForApplication(
     let nPeriodic = 0;
     let dAll = 0;
     let absorbed = 0;
+    let inSchool = 0;
+    let immuneHits = 0;
     const bins = new Set<number>();
+    for (const m of ally.missesOut ?? []) {
+      if (m.missType !== "IMMUNE" || m.destUnitId !== target.id) continue;
+      const tS = (m.logLine.timestamp - startMs) / 1000;
+      if (tS < wFrom || tS >= wTo) continue;
+      immuneHits++;
+      bins.add(Math.floor(tS));
+    }
     for (const a of target.absorbsIn ?? []) {
       if (a.attackerId !== ally.id) continue;
       const tS = (a.logLine.timestamp - startMs) / 1000;
@@ -207,6 +256,8 @@ export function externalDamageForApplication(
       if (DIRECT_EVENTS.has(ev)) nDirect += amt;
       else if (ev === PERIODIC_EVENT) nPeriodic += amt;
       else continue;
+      if ((Number(d.spellSchoolId ?? "0x0") & mit.schoolMask) !== 0)
+        inSchool += amt;
       if (amt >= EXTERNAL_DAMAGE_BIN_MIN_HIT) bins.add(Math.floor(tS));
     }
     if (preDirect <= 0) continue; // not a qualifying ally
@@ -225,6 +276,10 @@ export function externalDamageForApplication(
       spellId: iv.spellId,
       mitName: getEnglishSpellName(iv.spellId, iv.spellName),
       mitPct: mit.pct,
+      wallKind: mit.kind,
+      wallSchoolMask: mit.schoolMask,
+      inSchool,
+      immuneHits,
       srcName: iv.srcUnitName,
       applyS: iv.fromS,
       removeS: iv.toS,
@@ -262,6 +317,20 @@ const k = (x: number): string => `${Math.round(x / 1000)}k`;
 /** `(+Ak absorbed)` when the target's shields ate a material amount. */
 const absorbedTag = (o: IExternalDamageObservation): string =>
   o.absorbed >= 500 ? ` (+${k(o.absorbed)} absorbed)` : "";
+/** Round-2 fields: the in-school share for a school-limited wall, and immune hits. */
+const round2Tags = (o: IExternalDamageObservation): string => {
+  let s = "";
+  if (o.wallKind === "mitigation" && o.wallSchoolMask !== ALL_SCHOOLS_MASK) {
+    const onTarget = o.nDirect + o.nPeriodic;
+    const pct = onTarget > 0 ? Math.round((100 * o.inSchool) / onTarget) : 0;
+    s += ` · ${k(o.inSchool)} (${pct}%) of it in the wall's school`;
+  }
+  if (o.immuneHits > 0)
+    s += ` · ${o.immuneHits} hit${o.immuneHits === 1 ? "" : "s"} immune`;
+  return s;
+};
+const isEmpty = (o: IExternalDamageObservation): boolean =>
+  o.dAll <= 0 && o.absorbed <= 0 && o.immuneHits === 0;
 
 /**
  * The rendered fact for one observation, appended to the `[ENEMY DEF]`
@@ -277,10 +346,10 @@ export function formatDuringExternal(
 ): string {
   const who = label(o.allyName);
   const onTarget = o.nDirect + o.nPeriodic;
-  if (o.dAll <= 0 && o.absorbed <= 0)
+  if (isEmpty(o))
     return `${who} 0k on target · no damage on any enemy player · 0 of ${o.M} s`;
   const share = o.X === null ? "0%" : `${Math.round(o.X)}%`;
-  return `${who} ${k(onTarget)} on target${absorbedTag(o)} · ${share} of their enemy-player damage · direct ${k(o.nDirect)} / periodic ${k(o.nPeriodic)} · damage in ${o.K} of ${o.M} s · longest gap ${o.G} s`;
+  return `${who} ${k(onTarget)} on target${absorbedTag(o)} · ${share} of their enemy-player damage · direct ${k(o.nDirect)} / periodic ${k(o.nPeriodic)}${round2Tags(o)} · damage in ${o.K} of ${o.M} s · longest gap ${o.G} s`;
 }
 
 /** Same fact from the OWNER's own point of view (the candidate facts block). */
@@ -288,8 +357,8 @@ export function formatDuringExternalForOwner(
   o: IExternalDamageObservation,
 ): string {
   const onTarget = o.nDirect + o.nPeriodic;
-  if (o.dAll <= 0 && o.absorbed <= 0)
+  if (isEmpty(o))
     return `0k on target · no damage on any enemy player · 0 of ${o.M} s`;
   const share = o.X === null ? "0%" : `${Math.round(o.X)}%`;
-  return `${k(onTarget)} on target${absorbedTag(o)} · ${share} of your enemy-player damage · direct ${k(o.nDirect)} / periodic ${k(o.nPeriodic)} · damage in ${o.K} of ${o.M} s`;
+  return `${k(onTarget)} on target${absorbedTag(o)} · ${share} of your enemy-player damage · direct ${k(o.nDirect)} / periodic ${k(o.nPeriodic)}${round2Tags(o)} · damage in ${o.K} of ${o.M} s`;
 }

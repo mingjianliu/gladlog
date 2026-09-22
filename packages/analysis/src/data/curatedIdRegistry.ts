@@ -21,6 +21,11 @@
 import { BURST_LEAD_CD_EXCLUDED_IDS } from "../analysis/burstWindowDecisionPoints";
 import { IMMUNITY_BREAKERS } from "../analysis/candidates/death";
 import {
+  CRISIS_MOBILITY_PRESS_IDS,
+  CRISIS_PROC_ANSWERS,
+  CRISIS_PROTECTIVE_ANSWER_IDS,
+} from "../analysis/crisisDecisionPoints";
+import {
   HIGH_VALUE_PURGEABLE_BUFFS,
   PURGE_WHITELIST_DATA_BLOCKED,
 } from "../context/matchTimeline";
@@ -77,6 +82,7 @@ import {
 } from "../utils/dispelAnalysis";
 import { MOVEMENT_ROOT_BREAK_DISPEL_IDS } from "../utils/dispelKind";
 import { AOE_CC_SPELL_IDS } from "../utils/drAnalysis";
+import { EXTERNAL_DAMAGE_SHIELD_IDS } from "../utils/externalDamage";
 import { HEALER_AVOIDANCE_SPELLS } from "../utils/healerExposureAnalysis";
 import { PVP_TRINKET_SPELL_IDS } from "../utils/killWindowTargetSelection";
 import {
@@ -87,17 +93,18 @@ import {
   OFFENSIVE_PURGE_TALENT_IDS,
   TALENT_BEHAVIORS,
 } from "../utils/talentBehaviors";
-import {
-  CRISIS_MOBILITY_PRESS_IDS,
-  CRISIS_PROC_ANSWERS,
-  CRISIS_PROTECTIVE_ANSWER_IDS,
-} from "../analysis/crisisDecisionPoints";
 import { KW_MAJOR_DEFENSIVE_IDS } from "./abilityProfile";
 import { classMetadata } from "./classSpells";
 import { CURATED_ABILITY_FACTS } from "./curatedAbilityFacts";
 import { DISPEL_VERDICTS } from "./dispelVerdicts";
 import { spellClassMap } from "./drCategories";
 import { HEALING_VERDICTS, PROPOSED_HEALING_VERDICTS } from "./healingVerdicts";
+import {
+  KICKED_CONTROL_OVERRIDE_IDS,
+  KICKED_DAMAGE_OVERRIDE_IDS,
+  KICKED_HEAL_OVERRIDE_IDS,
+  KICKED_OTHER_OVERRIDE_IDS,
+} from "./kickedSpellCategories";
 import { MITIGATION_OVERRIDES, NO_MITIGATION_IDS } from "./mitigationData";
 import { MITIGATION_VERDICTS } from "./mitigationVerdicts";
 import {
@@ -116,15 +123,9 @@ import {
   DISPEL_TYPES,
   SPELL_EFFECT_OVERRIDES,
 } from "./spellEffectOverrides";
-import {
-  KICKED_CONTROL_OVERRIDE_IDS,
-  KICKED_DAMAGE_OVERRIDE_IDS,
-  KICKED_HEAL_OVERRIDE_IDS,
-  KICKED_OTHER_OVERRIDE_IDS,
-} from "./kickedSpellCategories";
 import spellIdLists from "./spellIdLists";
-import { TALENT_MITIGATION_MODIFIERS } from "./talentMitigationModifiers";
 import { trinketSpellIds } from "./spellTags";
+import { TALENT_MITIGATION_MODIFIERS } from "./talentMitigationModifiers";
 
 /** What kind of id the list holds — decides which corpus event stream can vouch for it. */
 export type CuratedIdKind = "cast" | "aura" | "talent" | "mixed";
@@ -190,6 +191,14 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
     "data/spellIdLists.ts",
     "cast",
     () => spellIdLists.externalDefensiveSpellIds,
+  ),
+  // GH #91 round 2 (2026-09-22): the ally-applied absorb shields the
+  // during-external contract admits (one member, Life Cocoon).
+  t(
+    "externalDamage.EXTERNAL_DAMAGE_SHIELD_IDS",
+    "utils/externalDamage.ts",
+    "aura",
+    () => [...EXTERNAL_DAMAGE_SHIELD_IDS],
   ),
   // GH #29 阶段 0(2026-08-22):这张并集表**过去不在登记里**,而它正是
   // `MAJOR_DEFENSIVE_IDS`(9 个生产消费者,含 candidateFindings / momentSnapshot)

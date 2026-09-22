@@ -3482,8 +3482,9 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
             ? [
                 "    `| during it: A Nk on target · X% of their enemy-player damage · direct/periodic · damage in K of M s` = what each",
                 "    friendly who had hit that unit in the 3 s before the external kept doing while it was up (damage on it, share of",
-                "    their damage on enemy players, seconds with damage). A measurement, not a verdict — the team's CC lines say",
-                "    whether they could act.",
+                "    their damage on enemy players, seconds with damage; `(+Ak absorbed)` = eaten by the target's shields; for a",
+                "    school-limited wall, how much of it was in the wall's school; `N hits immune` = hits the target was immune to).",
+                "    A measurement, not a verdict — the team's CC lines say whether they could act.",
               ]
             : []),
         ]
