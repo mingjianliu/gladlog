@@ -25,16 +25,24 @@ const flag = (f: string): string | undefined => {
 };
 const fmtTime = (s: number): string =>
   `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
-// The live Psyfiend npcId; the list carries 121111, which never occurs.
-const NAMES: Record<string, string> = {
-  ...CRITICAL_NON_PLAYER_NPC_NAMES,
-  "101398": "Psyfiend",
+const parseNonNegativeInt = (name: string, defaultVal: number): number => {
+  const raw = flag(name);
+  if (raw === undefined) return defaultVal;
+  const val = Number(raw);
+  if (!Number.isInteger(val) || val < 0) {
+    throw new Error(`expected non-negative integer for ${name}, got: ${raw}`);
+  }
+  return val;
 };
 
 const manifestPath = flag("--manifest");
 if (!manifestPath) {
   throw new Error("missing required --manifest <path>");
 }
+const offset = parseNonNegativeInt("--offset", 0);
+const limit = parseNonNegativeInt("--limit", 40);
+const show = parseNonNegativeInt("--show", 3);
+
 let manifestRaw: string;
 try {
   manifestRaw = readFileSync(manifestPath, "utf8");
@@ -47,22 +55,24 @@ const files = manifestRaw
   .split("\n")
   .map((s) => s.trim())
   .filter(Boolean)
-  .slice(Number(flag("--offset") ?? 0))
-  .slice(0, Number(flag("--limit") ?? 40));
-const show = Number(flag("--show") ?? 3);
+  .slice(offset, offset + limit);
 
 const blocks: Array<{ n: number; text: string }> = [];
 let rounds = 0;
 let roundsWithAny = 0;
 let totalToday = 0;
 let totalProposed = 0;
+let readFiles = 0;
+let skippedFiles = 0;
 
 for (const path of files) {
   let text: string;
   try {
     const raw = readFileSync(path);
     text = (path.endsWith(".gz") ? gunzipSync(raw) : raw).toString("utf8");
+    readFiles++;
   } catch (err) {
+    skippedFiles++;
     process.stderr.write(
       `[warn] failed to read ${path}: ${err instanceof Error ? err.message : String(err)}, skipping\n`,
     );
@@ -91,7 +101,8 @@ for (const path of files) {
     const p = parseLine(line);
     if (!p?.damage || !p.base || !((p.damage.overkill ?? 0) > 0)) continue;
     const parts = p.base.destGuid.split("-");
-    if (parts[0] !== "Creature" || !(parts[5] in NAMES)) continue;
+    if (parts[0] !== "Creature" || !(parts[5] in CRITICAL_NON_PLAYER_NPC_NAMES))
+      continue;
     if (!p.base.srcGuid.startsWith("Player-") || seen.has(p.base.destGuid))
       continue;
     seen.add(p.base.destGuid);
@@ -134,7 +145,7 @@ for (const path of files) {
           : owner?.reaction === CombatUnitReaction.Hostile
             ? "Enemy"
             : "Unknown";
-      return `    ${fmtTime((k.t - combat.startTime) / 1000)}  [UNIT DESTROYED]   ${NAMES[k.dest.split("-")[5]]} (${side}) killed by: ${label(k.src)} (${k.spell})`;
+      return `    ${fmtTime((k.t - combat.startTime) / 1000)}  [UNIT DESTROYED]   ${CRITICAL_NON_PLAYER_NPC_NAMES[k.dest.split("-")[5]]} (${side}) killed by: ${label(k.src)} (${k.spell})`;
     });
     blocks.push({
       n: mine.length,
@@ -147,7 +158,9 @@ for (const path of files) {
 }
 console.log(
   JSON.stringify({
-    files: files.length,
+    selectedFiles: files.length,
+    readFiles,
+    skippedFiles,
     rounds,
     roundsWithAny,
     totalToday,
