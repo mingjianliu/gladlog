@@ -63,22 +63,49 @@ a death / finding / burst window and jump to that moment in the video.
 
 ## Session follow-ups & hardening (smaller, not full features)
 
-- **SP-A.1** — LLM-judge causal audit + digit/constant refinement (deferred from
+- ~~**SP-A.1** — LLM-judge causal audit + digit/constant refinement (deferred from
   the SP-A honesty gate; causal/qualitative claims can't be verified
-  deterministically).
+  deterministically).~~ **Done 2026-07-23** (`473101d2`, verifiability roadmap
+  B1): the `causal-hardening` calibration perturbation, detection 50% → 80% after
+  the coupled-dimension + rubric fixes. This entry was never struck through —
+  accounting closed 2026-09-22 (GH #38).
 
-- **Timeline-prompt token compression** — the timeline-variant prompt is ~76%
+- **Timeline-prompt token compression** — ~~the timeline-variant prompt is ~76%
   larger than the sparse one; compress it (also helps the slow `claude -p` local
-  backend).
+  backend).~~ **Referent gone, awaiting ruling (2026-09-22, GH #38)**: the "+76%"
+  was the 2026-07-11 A/B (`ab/2026-07-11-timeline-variant`: sparse 2,851 vs
+  timeline 5,016 mean tokens), and the sparse branch was deleted as production
+  dead code on 2026-08-21 (`7c91140a`) — there is no smaller variant to compress
+  toward. Current size, PROMPT_VERSION 94, newest 30 library matches
+  (`packages/desktop/scripts/promptSizeProbe.ts`): mean 38.5k chars / 413 lines
+  (median 34.7k, 12.7k–79.0k; Solo Shuffle 34.5k, 2v2 30.1k, 3v3 49.5k), roughly
+  10k tokens. Largest buckets: timeline `[STATE]` ticks 15.4%, other timeline
+  rows 15.0%, the MATCH TIMELINE legend 8.9% (a constant ~3.4k chars in every
+  prompt), `[YOU]` rows 8.6%, HEALER OFFENSE 8.1%, `[CC ON TEAM]` 7.1%, KILL
+  ATTEMPTS 6.6%. Options for the user: (a) retire the entry — the size is the
+  cost of the timeline design adopted on 2026-07-11; (b) open a scoped item
+  (legend → system-prompt-side once per session, or `[STATE]` tick thinning),
+  which is a rendered-text change: PROMPT_VERSION bump, every gate re-parses the
+  prompt, and a blind A/B on Opus quota with the accuracy noise floor SD ≈ 1.3.
 
 - **CI code-signing / notarization** — wire macOS notarization + Windows signing
   secrets into `.github/workflows/build.yml` when certs exist, for zero-warning
   installs. See [[gladlog-packaging-gotchas]].
 
-- **MatchStore hardening (accepted-low-risk today)** — `safeName` id collision →
-  phantom duplicates; out-of-band `meta.json` edits go stale (index is a cache).
-  Fine for the app-private store now; revisit if the store ever lives in a synced
-  folder.
+- **MatchStore hardening (accepted-low-risk today)** — ~~`safeName` id collision →
+  phantom duplicates~~ **closed 2026-09-22 (GH #38)**: `safeName` is now injective
+  (`%xx` escapes instead of collapsing every unsafe character to `_`; a leading
+  `.`/`_` is escaped too so init()'s reconcile never skips the dir as hidden).
+  Production ids are 8-hex FNV-1a hashes and pass through verbatim — 1,095/1,095
+  library dirs unchanged. Pinned by three tests in `matchStore.test.ts`: before,
+  storing `x/y` then `x_y` left one dir and `readRawText("x/y")` returned the
+  other match's bytes; after, two dirs, both survive a cold `init()`. Still
+  accepted as-is: out-of-band `meta.json` edits go stale (index is a cache) —
+  nothing edits `meta.json` outside the app; revisit if the store ever lives in
+  a synced folder. Not touched: a 32-bit content-hash collision between two
+  different matches dedups the second as "already stored" (≈ n²/2³³, ~1% at
+  10k matches); changing the id scheme renumbers every library, so that is a
+  user ruling, not a hardening item.
 
 - **Residual items from archived entries (details in the corresponding sections of BACKLOG-archive.md)**: ~~#10 three non-blocking minors (dampening swim-lane dead zone / panic predicate typo / resolveOwner convergence)~~ **all three closed 2026-09-02 (GH #38)**: the dampening lane now draws pct=0 runs as opacity-0 rects so the pre-dampening stretch hovers "Dampening 0%" (SVG hit-testing ignores opacity; pinned by a Timeline test); `deathRecap.ts`'s `panicsHostile` renamed `panicsEnemy` to match the predicate's `friends`/`enemies` vocabulary; `keyMoments.ts` and `ProComparisonVerified.tsx` now call `resolveOwner` instead of their inline chains (`keyMoments` keeps the explicit POV `ownerId` override in front and `friends[0]` behind; S2 605-file parity probe in the commit message; index row "Who the report is about" lists both). Still open: #16 real-model filler smoke pending real machine. ~~Multi-model comparison stale slot placeholder state row and Export tearing~~ **closed 2026-09-04 (GH #38)**: while an invalidated slot is selected (placeholder note shown), the header status line now reads "旧版本槽 · 无可用结果" and the Copy Markdown export is hidden, instead of both reading the retained previous-slot `result` ("已缓存 · N 条 findings" + exporting the other slot's findings under this tab); pinned by the extended I-2 test in `StructuredAnalysisPanel.test.tsx`.
 

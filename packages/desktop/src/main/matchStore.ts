@@ -278,7 +278,31 @@ function structuralIssueCodes(
   return out;
 }
 
-const safeName = (id: string): string => id.replace(/[^A-Za-z0-9._-]/g, "_");
+/**
+ * id → on-disk directory name. Must be INJECTIVE (GH #38 hardening,
+ * 2026-09-22): the old `replace(/[^A-Za-z0-9._-]/g, "_")` collapsed distinct
+ * ids onto one directory, and store() of the second id rmSync'd the first
+ * match's files while the index kept both rows — a phantom duplicate whose
+ * raw.txt / match.json belonged to the other match.
+ *
+ * Production ids are 8-hex FNV-1a content hashes (parser `compose.ts`) and
+ * pass through verbatim — 1,095/1,095 directories of the local library — so
+ * the on-disk layout does not change. Only characters outside
+ * `[A-Za-z0-9._-]` are `%xx`-escaped (`%` itself included, so the mapping
+ * inverts; code units above 0xff as `%uXXXX`). A leading `.` or `_` is
+ * escaped too, because init()'s reconcile skips hidden and `_`-prefixed
+ * entries (`_index.ndjson`) and would otherwise never re-index such a match.
+ */
+const safeName = (id: string): string => {
+  const esc = (c: string): string => {
+    const code = c.charCodeAt(0);
+    return code > 0xff
+      ? `%u${code.toString(16).padStart(4, "0")}`
+      : `%${code.toString(16).padStart(2, "0")}`;
+  };
+  const body = id.replace(/[^A-Za-z0-9._-]/g, esc);
+  return /^[._]/.test(body) ? esc(body[0]!) + body.slice(1) : body;
+};
 
 interface RosterUnitLike {
   kind?: string;

@@ -214,3 +214,52 @@ describe("MatchStore.readRawText(BACKLOG #26 Task 2 意图守护:rawStreams 管�
     expect(await s.readRawText("sr1")).toBeNull();
   });
 });
+
+describe("MatchStore dir naming (GH #38 hardening: id → dir name must be injective)", () => {
+  // Before: safeName collapsed every unsafe character to "_", so two distinct
+  // ids could map to ONE directory; store() of the second rmSync'd the first
+  // match's files while the index kept both rows → a phantom duplicate whose
+  // raw.txt / match.json belong to the other match.
+  it("ids that the lossy escape collapsed get separate dirs; both survive a cold init", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "ms-coll-"));
+    const s = new MatchStore(dir);
+    const a = mkMatch("x/y", 100);
+    (a as unknown as { rawLines: string[] }).rawLines = ["A"];
+    const b = mkMatch("x_y", 200);
+    (b as unknown as { rawLines: string[] }).rawLines = ["B"];
+    expect(s.store(a).stored).toBe(true);
+    expect(s.store(b).stored).toBe(true);
+    expect(s.dirOf("x/y")).not.toBe(s.dirOf("x_y"));
+    expect(await s.readRawText("x/y")).toBe("A\n");
+    expect(await s.readRawText("x_y")).toBe("B\n");
+    const s2 = new MatchStore(dir);
+    expect(
+      s2
+        .init()
+        .map((m) => m.id)
+        .sort(),
+    ).toEqual(["x/y", "x_y"]);
+    expect(await s2.readRawText("x/y")).toBe("A\n");
+  });
+
+  it("production ids (8 hex chars, parser FNV-1a) keep their dir name verbatim — on-disk layout unchanged", () => {
+    const dir = mkdtempSync(join(tmpdir(), "ms-hex-"));
+    const s = new MatchStore(dir);
+    s.store(mkMatch("0a1b2c3d", 1));
+    expect(s.dirOf("0a1b2c3d")).toBe(join(dir, "0a1b2c3d"));
+  });
+
+  it("an id starting with '.' or '_' never yields a dir that init()'s reconcile skips as hidden", () => {
+    const dir = mkdtempSync(join(tmpdir(), "ms-lead-"));
+    const s = new MatchStore(dir);
+    s.store(mkMatch("_idx", 1));
+    s.store(mkMatch(".dot", 2));
+    rmSync(join(dir, "_index.ndjson"));
+    expect(
+      new MatchStore(dir)
+        .init()
+        .map((m) => m.id)
+        .sort(),
+    ).toEqual([".dot", "_idx"]);
+  });
+});
