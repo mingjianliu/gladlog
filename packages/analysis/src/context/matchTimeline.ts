@@ -2543,14 +2543,24 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
         );
       }
       for (const cc of summary.ccInstances) {
+        // F148: Cleanse Success Verification — check if this CC was removed by an enemy dispel
+        const isCleansed = enemyDispelSummary
+          ? wasRemovedByAllyDispel(
+              enemyDispelSummary.allyCleanse,
+              cc.spellId,
+              summary.playerName,
+              cc.atSeconds + cc.durationSeconds,
+            )
+          : false;
         // Mirror of the [CC ON TEAM] tremor note (user 2026-09-20: Tremor
         // "depending on the situation" — i.e. when it did something): the
         // ENEMY dropped Tremor Totem mid-fear and our fear ended that instant.
         const trinketBroke =
           cc.trinketState === "used" || cc.trinketState === "racial_break";
-        const enemyTremor = !trinketBroke
-          ? tremorTotemBreak(cc, matchStartMs, enemies ?? [])
-          : null;
+        const enemyTremor =
+          !trinketBroke && !isCleansed
+            ? tremorTotemBreak(cc, matchStartMs, enemies ?? [])
+            : null;
         // The owner's own tracked CC normally renders on its [YOU] [CC] cast
         // line only; that line is per cast, not per target, so a tremor break
         // keeps this per-target line.

@@ -1079,5 +1079,115 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
       expect(ccLine).toContain("Psychic Scream");
       expect(ccLine).not.toContain("Tremor Totem");
     });
+
+    it("suppresses enemy Tremor Totem attribution when enemy CC was cleansed by teammate", () => {
+      const owner = makeUnit();
+      const enemyPriest = makeUnit({
+        id: "Enemy-1",
+        name: "EnemyPriest",
+        class: CombatUnitClass.Priest,
+        spec: CombatUnitSpec.Priest_Discipline,
+        reaction: CombatUnitReaction.Hostile,
+      });
+      const enemyShaman = makeUnit({
+        id: "Enemy-2",
+        name: "EnemyShaman",
+        class: CombatUnitClass.Shaman,
+        spec: CombatUnitSpec.Shaman_Restoration,
+        reaction: CombatUnitReaction.Hostile,
+        spellCastEvents: [
+          {
+            spellId: TREMOR_TOTEM_CAST_SPELL_ID,
+            spellName: "Tremor Totem",
+            timestamp: T0 + 10_500,
+            logLine: {
+              event: LogEvent.SPELL_CAST_SUCCESS,
+              timestamp: T0 + 10_500,
+            } as any,
+          } as any,
+        ],
+      });
+
+      const ccFear: ICCInstance = makeCCInstance({
+        spellId: "8122", // Psychic Scream
+        spellName: "Psychic Scream",
+        atSeconds: 10,
+        durationSeconds: 0.6,
+        sourceId: "P1",
+        sourceName: "OwnerPlayer",
+        trinketState: "available_unused",
+      });
+
+      const enemyCCSummary: IPlayerCCTrinketSummary = {
+        playerName: "EnemyPriest",
+        playerSpec: "Discipline",
+        trinketType: "Gladiator",
+        trinketCooldownSeconds: 120,
+        ccInstances: [ccFear],
+        trinketUseTimes: [],
+        missedTrinketWindows: [],
+        rootInstances: [],
+        disarmInstances: [],
+        interruptInstances: [],
+        ccAvoidedInstances: [],
+      };
+
+      const enemyDispelSummary = {
+        ...emptyDispel,
+        allyCleanse: [
+          {
+            timeSeconds: 10.6,
+            dispelSpellId: "51886",
+            dispelSpellName: "Cleanse Spirit",
+            removedSpellId: "8122",
+            removedSpellName: "Psychic Scream",
+            sourceName: "EnemyShaman",
+            sourceSpec: "Restoration Shaman",
+            targetName: "EnemyPriest",
+            targetSpec: "Discipline Priest",
+            priority: "Critical",
+            hasDispelPenalty: false,
+            isSpellSteal: false,
+            isPetDispel: false,
+            dispelKind: "deliberate",
+            wasFatal: false,
+          },
+        ],
+      };
+
+      const timeline = buildMatchTimeline({
+        owner,
+        ownerSpec: "Subtlety Rogue",
+        friends: [owner],
+        enemies: [enemyPriest, enemyShaman],
+        allUnits: [owner, enemyPriest, enemyShaman],
+        playerIdMap: new Map([["OwnerPlayer", 1]]),
+        enemyIdMap: new Map([
+          ["EnemyPriest", 2],
+          ["EnemyShaman", 3],
+        ]),
+        matchStartMs: T0,
+        matchEndMs: T0 + 60_000,
+        isHealer: false,
+        ownerCDs: [],
+        teammateCDs: [],
+        enemyCDTimeline: { players: [], alignedBurstWindows: [] },
+        ccTrinketSummaries: [],
+        enemyCCSummaries: [enemyCCSummary],
+        dispelSummary: emptyDispel as any,
+        enemyDispelSummary: enemyDispelSummary as any,
+        pressureWindows: [],
+        healingGaps: [],
+        friendlyDeaths: [],
+        enemyDeaths: [],
+        criticalWindowSeconds: new Set(),
+        outgoingCCChains: [],
+      });
+
+      const ccLine = timeline.split("\n").find((l) => l.includes("[CC ON ENEMY]"));
+      expect(ccLine).toBeDefined();
+      expect(ccLine).toContain("Psychic Scream");
+      expect(ccLine).not.toContain("Tremor Totem");
+    });
   });
 });
