@@ -88,6 +88,14 @@ a death / finding / burst window and jump to that moment in the video.
   which is a rendered-text change: PROMPT_VERSION bump, every gate re-parses the
   prompt, and a blind A/B on Opus quota with the accuracy noise floor SD ≈ 1.3.
 
+- ~~**CI flake `runtime.quietclose.test.ts`** (filed on GH #38, 2026-09-05: the
+  segment quiet valve asserted on real wall-clock sleeps, so a loaded runner
+  could overshoot `closeMs` and the valve fired correctly).~~ **Closed
+  2026-09-22** (`fa651376`): the test drives the valve on vitest fake timers;
+  the mechanism was reproduced deterministically (old assertions + one sleep
+  stretched past the threshold → the exact CI error text), 10/10 local runs,
+  test body 1.2 s → 28 ms. Pattern recorded in `.claude/skills/desktop-dev`.
+
 - **CI code-signing / notarization** — wire macOS notarization + Windows signing
   secrets into `.github/workflows/build.yml` when certs exist, for zero-warning
   installs. See [[gladlog-packaging-gotchas]].
@@ -2350,6 +2358,8 @@ M6 已做完的:1,190 个脚本型天赋分队列 → 118 个点名了产品追�
 
 用户要一份可以慢慢看的裁决清单:`docs/rulings-pending-2026-09-18.md`(A 一句话:#42 覆盖门 / 队友卡回合末 / triage 只单排 / 关 #77 #89 #78 #80 #93 #95;B 定形状:#66 #67 #82 #79 #72 #73 #87 #88 #81;C 立项:#68 #69 #70 #83 #84–#86)。裁完写回对应 issue / BACKLOG 条目。
 
+**2026-09-22 裁决(已写回 issue 与该文档):** A5 关 #93(已关);B8 #88 选项①已落地(`16338aeb` / `4db3c3e0`,已关)。同日不在清单里的裁决:GH #99 item 5 `[RES] rdy:Δ cd:—` 行 → **选项 1 只删零损失行**(`294b9c61`,#99 已关);GH #92 → 不等 API key,本地 CLI 量 output token(`1018f1bf`,已关);GH #91 第 3 步 → **「先通过了看看」**,随后 **「开着 做第二轮」**(见第 52 条,已关)。清单里仍待裁:A1–A4 余项、B 组除 #88、C 组。
+
 ## 49. 抬上限的四个杠杆(logged 2026-09-18,用户裁「先 backlog,暂时没能力做」)
 
 2026-09-18 对话结论:逐条信号 + 语料参照 + 价值门这条路已近天花板(#94:多 18/20 条事实判断只好 3/20;价值门砍掉的比留下的多)。能抬上限的四个杠杆,按杠杆大小:
@@ -2402,3 +2412,14 @@ M6 已做完的:1,190 个脚本型天赋分队列 → 118 个点名了产品追�
 5. **宠物伤害口径**:游戏计分板不算对宠物 / NPC 的伤害,我们的伤害统计算不算、和计分板差多少——用户拿两边对账时会问。
 
 探针之后的候选形态(都要先过价值门,先出真实对局例子):上下文事实 `[ENEMY UNIT] Psyfiend up 0:42–0:54, 0 damage taken`;「关键 NPC 活满全程且无人攻击」的指控型候选要带可达性 + 当时是否有更该打的目标(对方开大 / 己方危机)两道可行性门。和 #50 的关系:灵能魔是 #50 里唯一**能被玩家动作消除**的减疗来源,两条一起设计。
+
+## 52. 外置减伤期间输出事实 `[ENEMY DEF] | during it:`(logged 2026-09-22,GH #91,已关)
+
+规则 171 / `burst-into-mitigation` 的持续版:对方吃到盟友外置减伤的那段时间里,落地前 3 秒内打过接收者的每个友方各做了什么。**形态是事实行,不指控**;用户价值门 2026-09-22「先通过了看看」,随后「开着 做第二轮」。
+
+- **谁拥有事实**:`[ENEMY DEF]` 外置行(#99 item 3 归属规则),每个合格友方一段 `2(FDruid) 271k on target · 86% of their enemy-player damage · direct 130k / periodic 141k · damage in 8 of 8 s · longest gap 0 s`;`burst-into-mitigation` 只在 owner / 目标 / 那次光环区间三者重合时带 `facts.duringExternal`(82 份 DPS 视角里 1 条)。共享谓词 `utils/externalDamage.ts`,第 28 类门规 `checkDuringExternalConsistency`,开关 `TIMELINE_LINE_FLAGS.duringExternal`(维持 `"annotate"`)。
+- **契约两次修订都先写 issue**:① absorbed 从受害者键 `absorbsIn` 单独报 `(+Ak absorbed)`,否则 Karma / 护盾下渲染成 `0k on target · damage in 6 of 8 s`;② 第二轮加免疫(`N hits immune`)、Life Cocoon(`EXTERNAL_DAMAGE_SHIELD_IDS`,已登记)、限学派墙(`Nk (P%) of it in the wall's school`,AMZ 实际从不落到单位身上,字段为 0)。仍排除:Guardian Spirit、Blessing of Sacrifice、Rallying Cry、Zephyr、Darkness。
+- **验收**(S2 every-30,1,270 回合):外置行 5,455 不变,获标注 1,397(第一轮)→ 2,103(第二轮);去掉追加段与对照逐字节同;候选计数全同。
+- **消费**(Opus 5,16 局 DPS 视角,48 次调用):结论集合 Jaccard 0.861 vs 噪声底 0.834±0.138(z +0.6)—— 判决不动;2/16 基线回答逐字引用标注数字、消融臂 0/16。改的是解释,不是判决。工具:`promptAblationProbe.ts --owner dps --require`、键 `[ENEMY DEF:during-it]`、`ablationVocabJoin.ts`。
+- **伪影记录**:本机库 store 没有 `missesOut` / `absorbsIn`,免疫 / 吸收只能在归档日志上量。
+- 通用主目标时间线仍挂 GH #85 不做。
