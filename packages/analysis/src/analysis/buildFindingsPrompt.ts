@@ -1,4 +1,5 @@
 import { CANDIDATE_TYPE_FLAGS } from "../data/candidateTypeFlags";
+import { CANDIDATE_TYPE_REGISTRY } from "../data/candidateTypeRegistry";
 import { LEGACY_TOPIC_TYPES } from "./candidateFindings";
 import { serializeFactsBlock } from "./factFormat";
 import { FINDING_CATEGORIES } from "./findingCategories";
@@ -156,35 +157,15 @@ const NEW_CANDIDATE_LEGENDS: Record<string, string> = {
   "cd-spent-idle": `- "cd-spent-idle": facts.spell was cast at facts.t with no active enemy threat at that instant — spent into dead air instead of held for the next real window. This type only ever appears in matches with at least medium overall threat, so idle time in an otherwise-calm match is never flagged here. Coach holding survival cooldowns for genuine pressure.${COST_NORM_LEGEND_NOTE}`,
 };
 
-/** Maps a `NEW_CANDIDATE_LEGENDS` key to the `CANDIDATE_TYPE_FLAGS` field that
- * must be on for it to render — the type-string ↔ camelCase-flag spelling
- * differs (kebab-case event type vs. camelCase flag field), so this is the
- * one place that correspondence is written down. */
-const NEW_CANDIDATE_TYPE_FLAG_KEY: Record<
-  string,
-  keyof typeof CANDIDATE_TYPE_FLAGS
-> = {
-  "attempt-into-trinket": "attemptIntoTrinket",
-  "missed-sync-window": "missedSyncWindow",
-  "unsynced-burst": "unsyncedBurst",
-  "cd-hoarded": "cdHoarded",
-  "cd-spent-idle": "cdSpentIdle",
-  "backlash-dispel": "backlashDispel",
-  "backlash-dispel-window": "backlashDispel",
-  "kick-priority-missed": "kickPriority",
-  "kick-priority-team": "kickPriority",
-  "teammate-crisis-idle": "teammateCrisis",
-  "teammate-crisis-triage": "teammateCrisis",
-};
-
 function newCandidateLegendLines(candidates: CandidateEvent[]): string[] {
   const present = new Set(candidates.map((c) => c.type));
   return Object.entries(NEW_CANDIDATE_LEGENDS)
-    .filter(
-      ([type]) =>
-        CANDIDATE_TYPE_FLAGS[NEW_CANDIDATE_TYPE_FLAG_KEY[type]] &&
-        present.has(type),
-    )
+    .filter(([type]) => {
+      if (!present.has(type)) return false;
+      const flag = CANDIDATE_TYPE_REGISTRY[type]?.flag;
+      if (flag && !CANDIDATE_TYPE_FLAGS[flag]) return false;
+      return true;
+    })
     .map(([, line]) => line);
 }
 
