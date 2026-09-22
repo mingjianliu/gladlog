@@ -83,6 +83,31 @@ const flag = (f: string): string | undefined => {
   return i >= 0 ? argv[i + 1] : undefined;
 };
 const num = (f: string, d: number): number => Number(flag(f) ?? d);
+export const parseNonNegativeInt = (
+  name: string,
+  defaultVal: number,
+  argvList = argv,
+): number => {
+  const i = argvList.indexOf(name);
+  const raw = i >= 0 ? argvList[i + 1] : undefined;
+  if (raw === undefined) return defaultVal;
+  const val = Number(raw);
+  if (!Number.isInteger(val) || val < 0) {
+    throw new Error(`expected non-negative integer for ${name}, got: ${raw}`);
+  }
+  return val;
+};
+export const parsePositiveInt = (
+  name: string,
+  defaultVal: number,
+  argvList = argv,
+): number => {
+  const val = parseNonNegativeInt(name, defaultVal, argvList);
+  if (val < 1) {
+    throw new Error(`expected positive integer (>= 1) for ${name}, got: ${val}`);
+  }
+  return val;
+};
 
 /** Shape floor — user ruling 2026-09-18 ("45-60秒的也可能是大招"). */
 export const MIN_CD_S = 45;
@@ -96,6 +121,25 @@ const MIN_ROUND_S = 45;
 /** A round's ratio needs this much time OUTSIDE the windows to be a rate. */
 const MIN_OUTSIDE_S = 15;
 
+/** Canonical union of time intervals [start, end], sorting and merging overlapping / touching segments. */
+export function mergeIntervals(
+  intervals: Array<[number, number]>,
+): Array<[number, number]> {
+  const valid = intervals
+    .filter((x) => x[1] > x[0])
+    .sort((a, b) => a[0] - b[0]);
+  const merged: Array<[number, number]> = [];
+  for (const [start, end] of valid) {
+    const last = merged[merged.length - 1];
+    if (last && start <= last[1]) {
+      last[1] = Math.max(last[1], end);
+    } else {
+      merged.push([start, end]);
+    }
+  }
+  return merged;
+}
+
 interface Cell {
   /** rounds (by this spec) in which the spell was pressed */
   rounds: number;
@@ -107,7 +151,15 @@ interface Cell {
   lifts: number[];
 }
 interface Cells {
-  meta: { files: number; rounds: number; minRating: number; startedAt: string };
+  meta: {
+    selectedFiles?: number;
+    files: number;
+    readFiles?: number;
+    skippedFiles?: number;
+    rounds: number;
+    minRating: number;
+    startedAt: string;
+  };
   specs: Record<
     string,
     {
@@ -138,20 +190,26 @@ async function scan(): Promise<void> {
     process.exit(1);
   }
   await ensureAnalysisData();
-  const minRating = num("--min-rating", 2100);
+  const minRating = parseNonNegativeInt("--min-rating", 2100);
   let files = readFileSync(manifest, "utf8")
     .split("\n")
     .map((l) => l.trim())
     .filter(Boolean);
-  const every = num("--every", 1);
-  const offset = num("--offset", 0);
-  const limit = num("--limit", 0);
+  const every = parsePositiveInt("--every", 1);
+  const offset = parseNonNegativeInt("--offset", 0);
+  const limit = parseNonNegativeInt("--limit", 0);
   if (offset) files = files.slice(offset);
   if (every > 1) files = files.filter((_, i) => i % every === 0);
   if (limit) files = files.slice(0, limit);
+  const selectedFiles = files.length;
+  let readFiles = 0;
+  let skippedFiles = 0;
   const cells: Cells = {
     meta: {
+      selectedFiles,
       files: 0,
+      readFiles: 0,
+      skippedFiles: 0,
       rounds: 0,
       minRating,
       startedAt: new Date().toISOString(),
@@ -163,7 +221,11 @@ async function scan(): Promise<void> {
     try {
       const raw = readFileSync(path);
       text = (path.endsWith(".gz") ? gunzipSync(raw) : raw).toString("utf8");
-    } catch {
+    } catch (err) {
+      skippedFiles++;
+      process.stderr.write(
+        `[warn] failed to read ${path}: ${err instanceof Error ? err.message : String(err)}, skipping\n`,
+      );
       continue;
     }
     const combats: any[] = [];
@@ -175,10 +237,17 @@ async function scan(): Promise<void> {
       });
       for (const line of text.split("\n")) parser.push(line);
       parser.end();
-    } catch {
+    } catch (err) {
+      skippedFiles++;
+      process.stderr.write(
+        `[warn] failed to parse ${path}: ${err instanceof Error ? err.message : String(err)}, skipping\n`,
+      );
       continue;
     }
-    cells.meta.files++;
+    readFiles++;
+    cells.meta.files = readFiles;
+    cells.meta.readFiles = readFiles;
+    cells.meta.skippedFiles = skippedFiles;
     for (const c of combats) {
       if ((c.startTime ?? 0) < PATCH_121_GOLIVE_EPOCH_MS) continue;
       const t0 = c.startTime as number;
@@ -269,19 +338,11 @@ async function scan(): Promise<void> {
               cell.coPressed++;
           // union of the windows, clipped to the round
           const w = windowOf(id) * 1000;
-          const iv = ts
-            .map(
-              (t) =>
-                [Math.max(t, t0), Math.min(t + w, uEnd)] as [number, number],
-            )
-            .filter((x) => x[1] > x[0])
-            .sort((a, b) => a[0] - b[0]);
-          const merged: Array<[number, number]> = [];
-          for (const x of iv) {
-            const last = merged[merged.length - 1];
-            if (last && x[0] <= last[1]) last[1] = Math.max(last[1], x[1]);
-            else merged.push([x[0], x[1]]);
-          }
+          const iv = ts.map(
+            (t) =>
+              [Math.max(t, t0), Math.min(t + w, uEnd)] as [number, number],
+          );
+          const merged = mergeIntervals(iv);
           const inS = merged.reduce((a, x) => a + (x[1] - x[0]), 0) / 1000;
           const outS = (uEnd - t0) / 1000 - inS;
           if (inS < 1 || outS < MIN_OUTSIDE_S) continue;
@@ -296,15 +357,15 @@ async function scan(): Promise<void> {
         }
       }
     }
-    if (cells.meta.files % 100 === 0)
+    if (readFiles % 100 === 0)
       console.error(
-        `scanned ${cells.meta.files} files, ${cells.meta.rounds} rounds`,
+        `scanned ${readFiles} files (${skippedFiles} skipped), ${cells.meta.rounds} rounds`,
       );
   }
   mkdirSync(dirname(out), { recursive: true });
   writeFileSync(out, JSON.stringify(cells) + "\n");
   console.error(
-    `done: ${cells.meta.files} files, ${cells.meta.rounds} rounds → ${out}`,
+    `done: ${readFiles} files (${skippedFiles} skipped), ${cells.meta.rounds} rounds → ${out}`,
   );
 }
 
@@ -347,7 +408,7 @@ async function report(): Promise<void> {
     process.exit(1);
   }
   await ensureAnalysisData();
-  const minN = num("--min-n", 30);
+  const minN = parseNonNegativeInt("--min-n", 30);
   const minShare = num("--min-share", 0.05);
   const cells = JSON.parse(readFileSync(inPath, "utf8")) as Cells;
 
@@ -435,9 +496,11 @@ async function report(): Promise<void> {
     );
 }
 
-if (cmd === "scan") void scan();
-else if (cmd === "report") void report();
-else {
-  console.error("usage: offensiveCdGapScan.ts scan|report …");
-  process.exit(1);
+if (process.argv[1]?.includes("offensiveCdGapScan")) {
+  if (cmd === "scan") void scan();
+  else if (cmd === "report") void report();
+  else {
+    console.error("usage: offensiveCdGapScan.ts scan|report …");
+    process.exit(1);
+  }
 }
