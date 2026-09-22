@@ -8,6 +8,7 @@ import {
   decodeAura,
   decodeExtraSpell,
   decodeAbsorbed,
+  decodeHealAbsorbed,
   decodeArenaStart,
   decodeArenaEnd,
 } from "../src/l1/decoders";
@@ -114,6 +115,56 @@ describe("decodeAbsorbed", () => {
     expect(a.shieldSpellName).toBe("Power Word: Shield");
     expect(a.shieldOwnerGuid).toBe("Player-3679-0D4BB9FB");
     expect(a.absorbedAmount).toBe(21986);
+  });
+});
+
+describe("decodeHealAbsorbed", () => {
+  const HEAL_ABSORBED =
+    '6/30/2026 19:10:45.1234  SPELL_HEAL_ABSORBED,Player-1,"DK",0x512,0x0,Player-2,"Victim",0x512,0x0,223707,"Necrotic Wound",0x20,Player-3,"Priest",0x512,0x0,33076,"Prayer of Mending",0x2,15000,50000';
+  const HEAL_ABSORBED_NIL =
+    '6/30/2026 19:10:45.1234  SPELL_HEAL_ABSORBED,Player-1,nil,0x512,0x0,Player-2,"Victim",0x512,0x0,223707,"Necrotic Wound",0x20,Player-3,nil,0x512,0x0,33076,"Prayer of Mending",0x2,15000,50000';
+
+  it("decodes all fields of a standard SPELL_HEAL_ABSORBED event", () => {
+    const h = decodeHealAbsorbed(p(HEAL_ABSORBED));
+    expect(h.absorbCasterGuid).toBe("Player-1");
+    expect(h.absorbCasterName).toBe("DK");
+    expect(h.victimGuid).toBe("Player-2");
+    expect(h.absorbSpellId).toBe(223707);
+    expect(h.absorbSpellName).toBe("Necrotic Wound");
+    expect(h.healerGuid).toBe("Player-3");
+    expect(h.healerName).toBe("Priest");
+    expect(h.healSpellId).toBe(33076);
+    expect(h.healSpellName).toBe("Prayer of Mending");
+    expect(h.absorbedAmount).toBe(15000);
+    expect(h.totalAmount).toBe(50000);
+  });
+
+  it("normalizes 'nil' caster and healer names to null", () => {
+    const h = decodeHealAbsorbed(p(HEAL_ABSORBED_NIL));
+    expect(h.absorbCasterName).toBeNull();
+    expect(h.healerName).toBeNull();
+  });
+
+  it("handles truncated/empty params gracefully without throwing", () => {
+    const h = decodeHealAbsorbed([]);
+    expect(h.absorbCasterGuid).toBe("");
+    expect(h.absorbCasterName).toBeNull();
+    expect(h.victimGuid).toBe("");
+    expect(Number.isNaN(h.absorbSpellId)).toBe(true);
+    expect(h.absorbSpellName).toBe("");
+    expect(h.healerGuid).toBe("");
+    expect(h.healerName).toBeNull();
+    expect(Number.isNaN(h.healSpellId)).toBe(true);
+    expect(h.healSpellName).toBe("");
+    expect(Number.isNaN(h.absorbedAmount)).toBe(true);
+    expect(Number.isNaN(h.totalAmount)).toBe(true);
+  });
+
+  it("yields NaN for non-numeric amounts", () => {
+    const params = p(HEAL_ABSORBED);
+    params[18] = "invalid";
+    const h = decodeHealAbsorbed(params);
+    expect(Number.isNaN(h.absorbedAmount)).toBe(true);
   });
 });
 

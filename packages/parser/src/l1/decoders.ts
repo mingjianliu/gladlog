@@ -323,25 +323,37 @@ export const ABSORB_SWING_OFFSETS = {
 
 export function decodeHealAbsorbed(params: string[]): {
   absorbCasterGuid: string;
-  absorbCasterName: string;
+  absorbCasterName: string | null;
   victimGuid: string;
   absorbSpellId: number;
   absorbSpellName: string;
   healerGuid: string;
-  healerName: string;
+  healerName: string | null;
   healSpellId: number;
   healSpellName: string;
   absorbedAmount: number;
   totalAmount: number;
 } {
+  const absorbCasterNameRaw = params[ABSORB_SPELL_OFFSETS.ATTACKER_NAME];
+  const absorbCasterName =
+    absorbCasterNameRaw === "nil" || absorbCasterNameRaw === undefined
+      ? null
+      : absorbCasterNameRaw;
+
+  const healerNameRaw = params[ABSORB_SPELL_OFFSETS.SHIELD_OWNER_NAME];
+  const healerName =
+    healerNameRaw === "nil" || healerNameRaw === undefined
+      ? null
+      : healerNameRaw;
+
   return {
     absorbCasterGuid: params[ABSORB_SPELL_OFFSETS.ATTACKER_GUID] ?? "",
-    absorbCasterName: params[ABSORB_SPELL_OFFSETS.ATTACKER_NAME] ?? "",
+    absorbCasterName,
     victimGuid: params[ABSORB_SPELL_OFFSETS.VICTIM_GUID] ?? "",
     absorbSpellId: parseInt10(params[ABSORB_SPELL_OFFSETS.ATTACK_SPELL_ID]),
     absorbSpellName: params[ABSORB_SPELL_OFFSETS.ATTACK_SPELL_NAME] ?? "",
     healerGuid: params[ABSORB_SPELL_OFFSETS.SHIELD_OWNER_GUID] ?? "",
-    healerName: params[ABSORB_SPELL_OFFSETS.SHIELD_OWNER_NAME] ?? "",
+    healerName,
     healSpellId: parseInt10(params[ABSORB_SPELL_OFFSETS.SHIELD_SPELL_ID]),
     healSpellName: params[ABSORB_SPELL_OFFSETS.SHIELD_SPELL_NAME] ?? "",
     absorbedAmount: parseInt10(params[ABSORB_SPELL_OFFSETS.ABSORBED_AMOUNT]),
