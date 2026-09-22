@@ -21,7 +21,7 @@ describe("rosterLint(2026-09-22 用户报告:对面明明是神牧,你确认定�
       'Paladin ("Paladin")',
     ]);
     expect(rosterClassViolations("奶骑交了圣盾", PRIEST_DRUID)).toEqual([
-      'Paladin ("奶骑")',
+      'Holy Paladin ("奶骑")',
     ]);
   });
 
@@ -38,6 +38,30 @@ describe("rosterLint(2026-09-22 用户报告:对面明明是神牧,你确认定�
     // 而真的猎人 / 骑士缺席时仍抓得到
     expect(rosterClassViolations("Demon Hunter and a Hunter", ["577"])).toEqual([
       'Hunter ("Hunter")',
+    ]);
+  });
+
+  it("专精级昵称:用户实例 —— 阵容里只有惩戒骑(己方)、对方是神牧,标题写「奶骑」→ 违规", () => {
+    // 2026-09-22 真实 lobby:戒律牧(owner)/惩戒骑/敏锐贼 vs 暗牧/神牧/痛苦术
+    const lobby = ["256", "70", "259", "258", "257", "265"];
+    expect(
+      rosterClassViolations("对饰品在手的奶骑开锤,而术士没有任何保命手段", lobby),
+    ).toEqual(['Holy Paladin ("奶骑")']);
+    expect(rosterClassViolations("the Holy Paladin got hammered", lobby)).toEqual([
+      'Holy Paladin ("Holy Paladin")',
+    ]);
+    // 同一 lobby 里写对的称呼全部放行:惩戒骑 / 神牧 / 暗牧 / 戒律牧 / 圣骑(职业泛称)
+    expect(
+      rosterClassViolations(
+        "惩戒骑的制裁之锤晕住了神牧;暗牧的吸血鬼之触;你作为戒律牧;圣骑的锤子",
+        lobby,
+      ),
+    ).toEqual([]);
+  });
+
+  it("专精级昵称先抹掉再查职业:神圣骑士不会再被当成骑士二次报告", () => {
+    expect(rosterClassViolations("对方神圣骑士开了圣盾", ["257", "103"])).toEqual([
+      'Holy Paladin ("神圣骑士")',
     ]);
   });
 
