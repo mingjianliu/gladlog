@@ -1,7 +1,8 @@
 import { appendFileSync, mkdtempSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
 import type { MainToWorker, WorkerToMain } from "../shared/protocol";
 import { createWorkerRuntime } from "./runtime";
 
@@ -10,7 +11,13 @@ function line(i: number, s: string): string {
   return `6/30/2026 12:00:${String(i).padStart(2, "0")}.000  ${s}\n`;
 }
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/** Advance the faked clock: every timer inside `ms` fires in order and the
+ * async `onFlush` chain behind each tick is awaited. The old test drove real
+ * wall-clock `setTimeout` sleeps, so on a loaded CI runner one `sleep(40)`
+ * could overshoot `closeMs` and the valve fired *correctly* -- a property the
+ * harness cannot guarantee (GH #38, run 33954837983). With fake timers
+ * `Date.now()` and every interval move only when the test says so. */
+const tick = (ms: number) => vi.advanceTimersByTimeAsync(ms);
 
 function setup(quiet: { closeMs: number; checkMs: number }) {
   const dir = mkdtempSync(join(tmpdir(), "gladlog-runtime-"));
@@ -59,6 +66,13 @@ function setup(quiet: { closeMs: number; checkMs: number }) {
 }
 
 describe("段静默超时(打完了 END 不落盘 → 录像只剩 40 分钟阀的修复)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("开着的段超过阈值无新字节 → 合成 aborted segmentClose,且不重复发", async () => {
     const t = setup({ closeMs: 80, checkMs: 20 });
     appendFileSync(t.file, line(0, "ARENA_MATCH_START,1825,41,3v3,1"));
@@ -66,12 +80,12 @@ describe("段静默超时(打完了 END 不落盘 → 录像只剩 40 分钟阀�
     expect(t.msgs.filter((m) => m.type === "segmentOpen")).toHaveLength(1);
     expect(t.closes()).toHaveLength(0);
 
-    await sleep(200); // silence exceeding the threshold
+    await tick(200); // silence exceeding the threshold
     expect(t.closes()).toEqual([
       expect.objectContaining({ endTime: null, aborted: true }),
     ]);
 
-    await sleep(150); // still silent: close must not be emitted repeatedly
+    await tick(150); // still silent: close must not be emitted repeatedly
     expect(t.closes()).toHaveLength(1);
     t.rt.dispose();
   });
@@ -82,20 +96,20 @@ describe("段静默超时(打完了 END 不落盘 → 录像只剩 40 分钟阀�
     t.configure();
     // Simulate a match in progress: new bytes land every 40ms (< closeMs)
     for (let i = 1; i <= 4; i++) {
-      await sleep(40);
+      await tick(40);
       appendFileSync(t.file, line(i, "SPELL_CAST_SUCCESS,x,y"));
       t.fsEvent("WoWCombatLog.txt");
-      await sleep(20); // wait for the flushIntervalMs tick to consume them
+      await tick(20); // wait for the flushIntervalMs tick to consume them
     }
     // while the file is growing, the silence valve stays out of it
     expect(t.closes()).toHaveLength(0);
 
     appendFileSync(t.file, line(9, "ARENA_MATCH_END,1,30,1500,1501"));
     t.fsEvent("WoWCombatLog.txt");
-    await sleep(40);
+    await tick(40);
     expect(t.closes()).toEqual([expect.objectContaining({ aborted: false })]);
 
-    await sleep(200); // segment already closed: the silence timer stays quiet
+    await tick(200); // segment already closed: the silence timer stays quiet
     expect(t.closes()).toHaveLength(1);
     t.rt.dispose();
   });
@@ -104,7 +118,7 @@ describe("段静默超时(打完了 END 不落盘 → 录像只剩 40 分钟阀�
     const t = setup({ closeMs: 60, checkMs: 15 });
     appendFileSync(t.file, line(0, "ARENA_MATCH_START,1825,41,3v3,1"));
     t.configure();
-    await sleep(150);
+    await tick(150);
     expect(t.closes()).toEqual([
       expect.objectContaining({ endTime: null, aborted: true }),
     ]);
@@ -113,7 +127,7 @@ describe("段静默超时(打完了 END 不落盘 → 录像只剩 40 分钟阀�
     // starts): the match must still be produced as usual
     appendFileSync(t.file, line(30, "ARENA_MATCH_END,1,30,1500,1501"));
     t.fsEvent("WoWCombatLog.txt");
-    await sleep(40);
+    await tick(40);
     expect(t.msgs.filter((m) => m.type === "match")).toHaveLength(1);
     // The real close is still emitted (the recorder already stopped, so it is
     // absorbed as a no-op)
