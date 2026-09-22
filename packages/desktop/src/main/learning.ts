@@ -6,22 +6,12 @@
  * which is lazily filled in on a later round — learning state never rolls back
  * because the model misbehaved.
  */
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  renameSync,
-  writeFileSync,
-} from "fs";
-import { join } from "path";
-
 import { normalizeFindingCategory } from "@gladlog/analysis/src/analysis/findingCategories";
 import { parseModelJsonArray } from "@gladlog/analysis/src/analysis/parseModelJson";
 import type {
   CandidateEvent,
   Finding,
 } from "@gladlog/analysis/src/analysis/types";
-import { resolveActiveSlot, toSlottedDoc } from "../shared/analysisCache";
 import {
   auditDistilledRules,
   buildDistillPrompt,
@@ -38,16 +28,27 @@ import type {
   RulesDoc,
   StablePattern,
 } from "@gladlog/analysis/src/learning/types";
-import { resolveAiModel, type AiModelSelection } from "../shared/aiModels";
-import { recordAiDebug } from "./aiDebugLog";
 import {
-  buildCoachSystemPrompt,
-  PROMPT_VERSION,
-  resolveAiClient,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  writeFileSync,
+} from "fs";
+import { join } from "path";
+
+import { type AiModelSelection,resolveAiModel } from "../shared/aiModels";
+import { resolveActiveSlot, toSlottedDoc } from "../shared/analysisCache";
+import {
   type AiBackend,
   type AiLanguage,
   type AnthropicLike,
+  buildCoachSystemPrompt,
+  PROMPT_VERSION,
+  resolveAiClient,
 } from "./ai";
+import { API_MAX_TOKENS } from "./aiBudgets";
+import { recordAiDebug } from "./aiDebugLog";
 import { createLearningLedger } from "./learningLedger";
 
 /** Auto-consolidate once the ledger has grown by at least this many matches
@@ -299,7 +300,7 @@ export function createLearningService(deps: {
           let raw = "";
           const stream = client.stream({
             model: resolveAiModel(settings),
-            max_tokens: 4096,
+            max_tokens: API_MAX_TOKENS.learning,
             system: buildCoachSystemPrompt(lang),
             messages: [{ role: "user", content: prompt }],
           });

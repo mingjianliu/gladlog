@@ -1,13 +1,8 @@
-import { recordAiDebug } from "./aiDebugLog";
-import { resolveAiModel, type AiModelSelection } from "../shared/aiModels";
 import {
-  writeFileSync,
-  readFileSync,
-  existsSync,
-  mkdirSync,
-  renameSync,
-} from "fs";
-import { join } from "path";
+  buildExemplarLedPrompt,
+  buildRetryPrompt,
+  COMPARE_PROMPT_VERSION,
+} from "@gladlog/analysis/src/compare/buildExemplarLedPrompt";
 // Deliberately bypassing the @gladlog/analysis barrel (the rationale is in the
 // comment at the top of analysis.ts): the top-level-await data modules would all
 // be dragged into main through index.ts, and none of them are used here.
@@ -18,27 +13,34 @@ import {
   REFERENCE_CELL_N_FLOOR,
 } from "@gladlog/analysis/src/compare/cellLookup";
 import {
-  verifiedComparison,
+  claimChecker,
+  interpolate,
+} from "@gladlog/analysis/src/compare/claimChecker";
+import type { ReferenceCorpus } from "@gladlog/analysis/src/compare/corpusTypes";
+import { verdictLabel } from "@gladlog/analysis/src/compare/metricLabels";
+import {
   type VerifiedComparison,
+  verifiedComparison,
 } from "@gladlog/analysis/src/compare/verifiedComparison";
 import {
-  buildExemplarLedPrompt,
-  buildRetryPrompt,
-  COMPARE_PROMPT_VERSION,
-} from "@gladlog/analysis/src/compare/buildExemplarLedPrompt";
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  writeFileSync,
+} from "fs";
+import { join } from "path";
+
+import { type AiModelSelection,resolveAiModel } from "../shared/aiModels";
 import {
-  interpolate,
-  claimChecker,
-} from "@gladlog/analysis/src/compare/claimChecker";
-import { verdictLabel } from "@gladlog/analysis/src/compare/metricLabels";
-import type { ReferenceCorpus } from "@gladlog/analysis/src/compare/corpusTypes";
-import {
-  buildCoachSystemPrompt,
-  resolveAiClient,
   type AiBackend,
   type AiLanguage,
   type AnthropicLike,
+  buildCoachSystemPrompt,
+  resolveAiClient,
 } from "./ai";
+import { API_MAX_TOKENS } from "./aiBudgets";
+import { recordAiDebug } from "./aiDebugLog";
 
 export type CompareInput = {
   matchId: string;
@@ -378,7 +380,7 @@ export function createCompareService(deps: {
       let raw = "";
       const stream = client.stream({
         model: resolveAiModel(settings),
-        max_tokens: 1500,
+        max_tokens: API_MAX_TOKENS.compare,
         // The commentary language follows the coach reply-language setting
         // (the system prompt used to be missed here, so it was always English)
         system: buildCoachSystemPrompt(lang),

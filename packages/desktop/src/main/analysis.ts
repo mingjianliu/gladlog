@@ -1,13 +1,5 @@
-import {
-  writeFileSync,
-  readFileSync,
-  readdirSync,
-  existsSync,
-  mkdirSync,
-  renameSync,
-} from "fs";
-import { randomUUID } from "crypto";
-import { recordAiDebug } from "./aiDebugLog";
+import { auditFindings } from "@gladlog/analysis/src/analysis/auditFindings";
+import { buildFindingsPrompt } from "@gladlog/analysis/src/analysis/buildFindingsPrompt";
 // Deliberately bypassing the @gladlog/analysis barrel: index.ts drags the
 // top-level awaits for spellNames (12MB) / talentIdMap (1.6MB) into main's
 // module graph -- top-level await defeats tree-shaking, so main pays 13.6MB
@@ -20,41 +12,51 @@ import type {
   DeepDivePack,
   DeepDiveResult,
 } from "@gladlog/analysis/src/analysis/deepDive";
-import { findingKey } from "../shared/findingKey";
 import { normalizeFindingCategory } from "@gladlog/analysis/src/analysis/findingCategories";
 import { parseModelJsonArray } from "@gladlog/analysis/src/analysis/parseModelJson";
-import {
-  AI_BACKENDS,
-  isCliAiBackend,
-  resolveAiModel,
-  type AiModelSelection,
-} from "../shared/aiModels";
-import { join } from "path";
-import { buildFindingsPrompt } from "@gladlog/analysis/src/analysis/buildFindingsPrompt";
-import { auditFindings } from "@gladlog/analysis/src/analysis/auditFindings";
 import type {
   CandidateEvent,
   Finding,
   RawFinding,
 } from "@gladlog/analysis/src/analysis/types";
+import { randomUUID } from "crypto";
 import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  writeFileSync,
+} from "fs";
+import { join } from "path";
+
+import {
+  AI_BACKENDS,
+  type AiModelSelection,
+  isCliAiBackend,
+  resolveAiModel,
+} from "../shared/aiModels";
+import {
+  type AnalysisCacheDocV2,
   analysisCachePath,
+  type AnalysisSlot,
   resolveActiveSlot,
   slotKeyOf,
   splitSlotKey,
   toSlottedDoc,
   upsertSlot,
-  type AnalysisCacheDocV2,
-  type AnalysisSlot,
 } from "../shared/analysisCache";
+import { findingKey } from "../shared/findingKey";
 import {
-  buildCoachSystemPrompt,
-  PROMPT_VERSION,
-  resolveAiClient,
   type AiBackend,
   type AiLanguage,
   type AnthropicLike,
+  buildCoachSystemPrompt,
+  PROMPT_VERSION,
+  resolveAiClient,
 } from "./ai";
+import { API_MAX_TOKENS } from "./aiBudgets";
+import { recordAiDebug } from "./aiDebugLog";
 
 export type AnalysisInput = {
   matchId: string;
@@ -517,8 +519,9 @@ export function createAnalysisService(deps: {
           model,
           // 4-8 findings (widened 2026-07-24) plus their explanations; 4096
           // was sized for 3-5 and hit truncation in production -> whole
-          // response fell back as bad-json.
-          max_tokens: 8192,
+          // response fell back as bad-json. Opus 5 thinking counts against
+          // this too (GH #92): budgets live in aiBudgets.ts.
+          max_tokens: API_MAX_TOKENS.findings,
           system: buildCoachSystemPrompt(lang),
           messages: [{ role: "user", content: prompt }],
           ...(isCliBackend && backend !== "claudeCli"
@@ -816,8 +819,8 @@ export function createAnalysisService(deps: {
         model,
         // Deep-dive output scales with the finding count (up to 8 × text +
         // chips since 2026-07-24); 2048 was sized for ~3 and would certainly
-        // truncate -> the deep dive silently disappears.
-        max_tokens: 4096,
+        // truncate -> the deep dive silently disappears. GH #92: aiBudgets.ts.
+        max_tokens: API_MAX_TOKENS.deepDive,
         system: buildCoachSystemPrompt(lang),
         messages: [{ role: "user", content: prompt }],
       });
@@ -860,7 +863,7 @@ export function createAnalysisService(deps: {
           let repairRaw = "";
           const repairStream = client.stream({
             model,
-            max_tokens: 4096,
+            max_tokens: API_MAX_TOKENS.deepDive,
             system: buildCoachSystemPrompt(lang),
             messages: [{ role: "user", content: repairPrompt }],
           });
@@ -1013,8 +1016,8 @@ export function createAnalysisService(deps: {
       let raw = "";
       const stream = client.stream({
         model: resolveAiModel(settings),
-        // one pack, one segment; deepen's 4096 is sized for 8 findings.
-        max_tokens: 2048,
+        // one pack, one segment (GH #92: aiBudgets.ts).
+        max_tokens: API_MAX_TOKENS.window,
         system: buildCoachSystemPrompt(lang),
         messages: [{ role: "user", content: prompt }],
       });
@@ -1052,7 +1055,7 @@ export function createAnalysisService(deps: {
           let repairRaw = "";
           const repairStream = client.stream({
             model: resolveAiModel(settings),
-            max_tokens: 2048,
+            max_tokens: API_MAX_TOKENS.window,
             system: buildCoachSystemPrompt(lang),
             messages: [{ role: "user", content: repairPrompt }],
           });

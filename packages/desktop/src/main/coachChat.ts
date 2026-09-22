@@ -19,6 +19,7 @@ import {
   type AnthropicLike,
   buildCoachSystemPrompt,
 } from "./ai";
+import { API_MAX_TOKENS } from "./aiBudgets";
 import type { AnalysisResult } from "./analysis";
 import {
   agyClientFactory,
@@ -212,7 +213,7 @@ export function createCoachChatService(deps: {
     let sessionId: string | undefined;
     for await (const ev of client.stream({
       model: p.model,
-      max_tokens: 4096,
+      max_tokens: API_MAX_TOKENS.coachChat,
       system: buildCoachSystemPrompt(p.lang),
       messages: [{ role: "user", content: prompt }],
       // Final review F1: stopping during the seeding phase used not to kill the
