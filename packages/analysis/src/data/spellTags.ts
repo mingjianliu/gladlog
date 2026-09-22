@@ -59,4 +59,4 @@ export const disarmSpellIds = new Set<string>(
   Object.keys(spells).filter((id) => spells[id].type === "disarms"),
 );
 
-export const trinketSpellIds = ["336126"]; // TODO: Add adaptation spell id here
+export const trinketSpellIds = ["336126", "195756"];

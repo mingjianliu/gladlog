@@ -42,7 +42,7 @@ describe("disarmSpellIds", () => {
 });
 
 describe("trinketSpellIds", () => {
-  it("holds canonical Gladiator's Medallion 336126", () => {
-    expect(trinketSpellIds).toEqual(["336126"]);
+  it("holds canonical Gladiator's Medallion 336126 and Adaptation 195756", () => {
+    expect(trinketSpellIds).toEqual(["336126", "195756"]);
   });
 });
