@@ -8,7 +8,7 @@
 
 用户方向（2026-09-19）：先探索收集到的日志里有哪些产品没用上的信息，再考虑新增启发式教练建议。区分观测事实、推断状态、有意不呈现和真正不可观测的信息。本审计不授权新增教练指控。
 
-首轮探针和与 Claude Opus 5 的两轮讨论已完成。首轮探针没有修改产品谓词;之后各方向的解析 / 分析修复记在各自小节,字段覆盖账(2026-09-23)修正了 `ENVIRONMENTAL_DAMAGE` 的解码。600 文件分层探索和全归档普查**尚未运行**。
+首轮探针和与 Claude Opus 5 的两轮讨论已完成。首轮探针没有修改产品谓词;之后各方向的解析 / 分析修复记在各自小节,字段覆盖账(2026-09-23)修正了 `ENVIRONMENTAL_DAMAGE` 的解码。全归档普查已于 2026-09-23 完成(见下文);单独的 600 文件分层探索并入普查(用户 2026-09-23 裁决)。
 
 ## 可复现探针
 
@@ -354,18 +354,22 @@ overkill 作为击杀证据对宠物同样成立：有 `UNIT_DIED` 的击杀回�
 
 ### L1 没解全的事件形态
 
-| 事件(探针计数)                                                     | 现状                                                                                                                                                                                                     | 分类                                                  |
-| ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
-| `SPELL_ENERGIZE`(18,912)、`SPELL_DRAIN`(45)                        | 兜底分支:只解 base + spell,进 `actionsOut`/`actionsIn`;获取尾段与高级块未解(布局已验证,方向 3)                                                                                                           | 未解;资源方向已收口(用户 2026-09-20 裁决)             |
-| `SPELL_PERIODIC_ENERGIZE`(1,207)、`ENCHANT_APPLIED`/`_REMOVED`(15) | `known: false`,不进任何 L3 数组                                                                                                                                                                          | 丢失                                                  |
-| `SPELL_CAST_FAILED`(8,805)                                         | 兜底 → `actionsOut`;原因在保留的 `[11]`,但产品是从 `raw.txt` 重读(`rawStreams.ts`)                                                                                                                       | 已消费(意图守护,经 raw)                               |
-| `SPELL_SUMMON`(3,301)                                              | 兜底 → actions + 名册                                                                                                                                                                                    | 已消费(prompt:召唤物存活时长,方向 4)                  |
-| `SPELL_CREATE`(57)、`SPELL_EXTRA_ATTACKS`(86)                      | 兜底;数值未解                                                                                                                                                                                            | 已解未用                                              |
-| `SPELL_DAMAGE_SUPPORT`(49)及其他 `_SUPPORT` 形态                   | 非周期的走兜底、数值未解;周期的 `known: false`。compat 的 `supportDamageIn` 等字段从未填充。`matchTimelineSections.ts` 在 `damageIn` 里判 `SPELL_PERIODIC_DAMAGE_SUPPORT`,它永远不会出现在那里 —— 死分支 | 已解未用(增辉归因;伤害本身已在主事件上)               |
-| `PARTY_KILL`(29)                                                   | 只解 base,不进 L3 数组                                                                                                                                                                                   | 丢失 —— 冗余:是 overkill 的严格子集(134 / 134,方向 4) |
-| `SWING_DAMAGE_LANDED`(13,870)                                      | 已解,刻意不进伤害数组(与 `SWING_DAMAGE` 重复),仍镜像进 actions                                                                                                                                           | 经 `SWING_DAMAGE` 已消费                              |
-| `ENVIRONMENTAL_DAMAGE`(2)                                          | **2026-09-23 已修**,见下                                                                                                                                                                                 | 已消费                                                |
-| 高级槽位 +4 … +9、施法资源消耗、`COMBATANT_INFO` 属性标量          | 未解;+9 = 剩余吸收(价值探针为负),+5 / +6 = `COMBATANT_INFO[5]` / `[23]`,+4 / +7 未验证,+8 常量;消耗已验证(方向 3)                                                                                        | 未解;+4 / +7 语义待核                                 |
+| 事件(探针计数)                                                                                                                                                                                       | 现状                                                                                                                                                                                                     | 分类                                                  |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| `SPELL_ENERGIZE`(18,912)、`SPELL_DRAIN`(45)                                                                                                                                                          | 兜底分支:只解 base + spell,进 `actionsOut`/`actionsIn`;获取尾段与高级块未解(布局已验证,方向 3)                                                                                                           | 未解;资源方向已收口(用户 2026-09-20 裁决)             |
+| `SPELL_PERIODIC_ENERGIZE`(1,207)、`ENCHANT_APPLIED`/`_REMOVED`(15)                                                                                                                                   | `known: false`,不进任何 L3 数组                                                                                                                                                                          | 丢失                                                  |
+| `SPELL_CAST_FAILED`(8,805)                                                                                                                                                                           | 兜底 → `actionsOut`;原因在保留的 `[11]`,但产品是从 `raw.txt` 重读(`rawStreams.ts`)                                                                                                                       | 已消费(意图守护,经 raw)                               |
+| `SPELL_SUMMON`(3,301)                                                                                                                                                                                | 兜底 → actions + 名册                                                                                                                                                                                    | 已消费(prompt:召唤物存活时长,方向 4)                  |
+| `SPELL_CREATE`(57)、`SPELL_EXTRA_ATTACKS`(86)                                                                                                                                                        | 兜底;数值未解                                                                                                                                                                                            | 已解未用                                              |
+| `SPELL_DAMAGE_SUPPORT`(49)及其他 `_SUPPORT` 形态                                                                                                                                                     | 非周期的走兜底、数值未解;周期的 `known: false`。compat 的 `supportDamageIn` 等字段从未填充。`matchTimelineSections.ts` 在 `damageIn` 里判 `SPELL_PERIODIC_DAMAGE_SUPPORT`,它永远不会出现在那里 —— 死分支 | 已解未用(增辉归因;伤害本身已在主事件上)               |
+| `PARTY_KILL`(29)                                                                                                                                                                                     | 只解 base,不进 L3 数组                                                                                                                                                                                   | 丢失 —— 冗余:是 overkill 的严格子集(134 / 134,方向 4) |
+| `SWING_DAMAGE_LANDED`(13,870)                                                                                                                                                                        | 已解,刻意不进伤害数组(与 `SWING_DAMAGE` 重复),仍镜像进 actions                                                                                                                                           | 经 `SWING_DAMAGE` 已消费                              |
+| `ENVIRONMENTAL_DAMAGE`(2)                                                                                                                                                                            | **2026-09-23 已修**,见下                                                                                                                                                                                 | 已消费                                                |
+| `SPELL_EMPOWER_INTERRUPT`(普查:17,842 行,10.0 % 的文件)                                                                                                                                              | 兜底 → actions;不进 `empowerEnds`,无读者                                                                                                                                                                 | 已解未用(普查发现;首轮探针里没有)                     |
+| 其他 `_SUPPORT` 形态(普查:`SPELL_PERIODIC_DAMAGE_SUPPORT` 111,869、`SPELL_ABSORBED_SUPPORT` 44,600、`SPELL_PERIODIC_HEAL_SUPPORT` 28,838、`SWING_DAMAGE_LANDED_SUPPORT` 24,175 行,各约 0.2 % 的文件) | `known: false`;`SPELL_HEAL_SUPPORT` / `RANGE_DAMAGE_SUPPORT` 走兜底                                                                                                                                      | 丢失(只涉及增辉归因)                                  |
+| `SPELL_INSTAKILL`(649)、`SPELL_RESURRECT`(15)                                                                                                                                                        | 兜底 → actions,无读者                                                                                                                                                                                    | 已解未用                                              |
+| `WORLD_MARKER_PLACED` / `_REMOVED`(5,241)、`STAGGER_CLEAR` / `_PREVENTED`(1,877)、`DAMAGE_SHIELD_MISSED`(426)、`ZONE_CHANGE`(337)、`DAMAGE_SHIELD`(13)、`SPELL_PERIODIC_LEECH`(2)、`MAP_CHANGE`(1)   | `known: false`                                                                                                                                                                                           | 丢失(就已核对的范围,都与竞技场教练无关;计数来自普查)  |
+| 高级槽位 +4 … +9、施法资源消耗、`COMBATANT_INFO` 属性标量                                                                                                                                            | 未解;+9 = 剩余吸收(价值探针为负),+5 / +6 = `COMBATANT_INFO[5]` / `[23]`,+4 / +7 未验证,+8 常量;消耗已验证(方向 3)                                                                                        | 未解;+4 / +7 语义待核                                 |
 
 ### 做账时发现的缺陷
 
@@ -374,6 +378,25 @@ overkill 作为击杀证据对宠物同样成立：有 `UNIT_DIED` 的击杀回�
 - **不变量扫描其实没在扫归档。** `parserInvariants.ts` 把 `.gz` 日志当文本读,解析出 0 场,然后打印「零违规」。补上 gzip 处理后立刻发现 23 个 `line-resolves` 误报(`healAbsorbsIn` 事件没有 `eventName`,检查拿 `undefined` 和原始行比),已在不变量里修正。新增不变量 `hp-amount-finite`:每个伤害 / 治疗事件的数值必须有限。
 
 <!-- field-ledger:end -->
+
+## 全归档普查 — 2026-09-23
+
+`packages/eval/scripts/logCensus.ts scan` 扫完整个赛季清单(`manifest-archive-2026-09-14-newseason.txt`),单进程,5 小时 29 分;`report` 汇总。逐文件行与完整报告留在 `$GLADLOG_EVAL_HOME/reports/log-census-2026-09-23/`(含文件路径与 GUID 衍生键)。
+
+| 分母                                       |                                             数量 |
+| ------------------------------------------ | -----------------------------------------------: |
+| 文件                                       |                    63,303(读不了 0,无完整回合 0) |
+| 非空行                                     |     1,913,961,319(`parseLine` 拒绝 0,丢弃段落 0) |
+| 回合,含重复录制                            |                                          116,063 |
+| 去重回合(同一局同一回合、不论谁录的都合并) |             108,060 —— 8,003 个(6.9 %)是重复录制 |
+| 按模式(去重)                               |            单排 62,370 · 3v3 23,461 · 2v2 22,229 |
+| 按周(去重)                                 | W33 3,644 · W34 34,021 · W35 37,715 · W36 32,680 |
+
+**去重回合 100 % 开了高级日志,99 % 的回合里每个玩家都有快照。** 这是这份归档(上传来源)的性质,不代表所有玩家:它不能说明产品用户里有多少人没开,本审计里所有依赖位置 / 血量的结论都带着这个前提。
+
+**全部 108,060 个去重回合上的解析不变量:** `hp-amount-finite` 0、`line-resolves` 0(两者本周刚修)。其他检查共标出 51 个回合(0.05 %):time-bounds 35、death-has-damage 7、hp-range 6、monotonic 2、start-before-end 1。对涉及的 24 个文件重跑:**43 个违规场次里 29 个的录制者来自同一个服务器 id(`1302`)**,几乎都是事件落在回合时间窗之外,另有一场开始时间晚于结束时间 —— 看起来是录制端的时钟 / 时间戳问题,不是解析错误。记为线索,未深挖。
+
+**首轮 24 个文件看不到的东西。** 按文件的出现率(各模式差异大的另注):`SPELL_PERIODIC_ENERGIZE` 71.5 %(首轮:17 / 24)、`SPELL_HEAL_ABSORBED` 24.4 %(2v2 15.2 %、单排 34.6 %)、`DAMAGE_SPLIT` 53.6 %、`ENVIRONMENTAL_DAMAGE` 2.6 %(1,617 个文件共 1,814 行 —— 2,110 文件切片的 2.7 % 成立)、`ENCHANT_*` 2.3 %(单排 9.1 %)、`SPELL_EMPOWER_*` 16.4 %。首轮里没有的事件类型已补进上面覆盖账的事件表;没有一种被解错,大多是 `known: false`,就已核对的范围都与竞技场教练无关。
 
 ## Agent 交接 — 2026-09-19
 
