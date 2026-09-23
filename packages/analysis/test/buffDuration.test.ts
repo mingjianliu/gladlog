@@ -65,10 +65,12 @@ describe("buffFullDurationForCaster — 天赋条件的增益时长", () => {
       "22812": 1, // Improved Barkskin, maxRanks 1
       "47788": 1, // Foreseen Circumstances, maxRanks 1
       "357170": 2, // Timeless Magic, maxRanks 2 —— 语料 143/155 格是 2 级
-      "1719": 2, // Rampaging Berserker —— 语料 31/31 格是 2 级,12×(1+0.25×2)=18
+      "1719": 1, // Rampaging Berserker —— 语料 59/89 格是 1 级, 12×(1+0.50×1)=18 (GH #102)
       "1269042": 1, // Eternal Hunger —— 20/20 持有,补丁 14 = 9 + 5 保留为典型值(2026-09-22)
       "445584": 1, // Deadly Focus —— 23/23 持有,补丁 18 = 12 + 6 保留为典型值(2026-09-22)
       "5672": 1, // 图腾专注 +3 与辅助灌魔 +3.5 —— 补丁 21.5 = 15 + 3 + 3.5 保留为典型值(2026-09-22)
+      "1282501": 1, // Dominion of Argus: Lady Sacrolash —— 补丁 14 = 10 + 4 保留为典型值(GH #102)
+      "1282502": 1, // Dominion of Argus: Grand Warlock Alythess —— 补丁 14 = 10 + 4 保留为典型值(GH #102)
     };
     for (const [spellId, mods] of Object.entries(
       BUFF_DURATION_TALENT_MODIFIERS,
@@ -227,13 +229,29 @@ describe("buffFullDurationForCaster — 天赋条件的增益时长", () => {
         seconds: 24,
         cells: 72,
       },
-      // Rampaging Berserker —— 2 级共 +50%
+      // Rampaging Berserker —— 1 级 +50% (entry 137002 maxRanks 1, GH #102)
       {
         spellId: "1719",
         spec: CombatUnitSpec.Warrior_Fury,
-        talent: { id1: 110412, id2: 137002, count: 2 },
+        talent: { id1: 110412, id2: 137002, count: 1 },
         seconds: 18,
         cells: 31,
+      },
+      // Dominion of Argus: Lady Sacrolash —— 1 级 +4s (entry 136978 maxRanks 1, GH #102)
+      {
+        spellId: "1282501",
+        spec: CombatUnitSpec.Warlock_Demonology,
+        talent: { id1: 110404, id2: 136978, count: 1 },
+        seconds: 14,
+        cells: 2,
+      },
+      // Dominion of Argus: Grand Warlock Alythess —— 1 级 +4s (entry 136978 maxRanks 1, GH #102)
+      {
+        spellId: "1282502",
+        spec: CombatUnitSpec.Warlock_Demonology,
+        talent: { id1: 110404, id2: 136978, count: 1 },
+        seconds: 14,
+        cells: 3,
       },
     ];
     for (const c of CASES) {
@@ -641,5 +659,50 @@ describe("buffFullDurationForCaster — 天赋条件的增益时长", () => {
           expect(dims).toHaveLength(1);
         }
       }
+  });
+
+  it("阶梯节点 (tiered nodes, maxRanks 4): 各 tier 按 entryId 独立读级数, 不会互相污染 (GH #102)", () => {
+    // 战士狂暴 Apex 节点 110412 (Rampaging Berserker)
+    // entry 137004 -> 1269308 (tier 1, count 1)
+    // entry 137003 -> 1269309 (tier 2, count 2)
+    // entry 137002 -> 1269310 (tier 3, count 1)
+    const warrior = makeUnit("w-tiered", {
+      spec: CombatUnitSpec.Warrior_Fury,
+      info: {
+        talents: [
+          { id1: 110412, id2: 137002, count: 1 },
+          { id1: 110412, id2: 137003, count: 2 },
+          { id1: 110412, id2: 137004, count: 1 },
+        ],
+        pvpTalents: [],
+      },
+    });
+    expect(talentRankOf(warrior, "1269308")).toBe(1);
+    expect(talentRankOf(warrior, "1269309")).toBe(2);
+    expect(talentRankOf(warrior, "1269310")).toBe(1);
+    // 鲁莽 12 * (1 + 0.50 * 1) = 18s
+    expect(buffFullDurationForCaster("1719", warrior)).toBeCloseTo(18);
+
+    // 术士恶魔 Apex 节点 110404 (Dominion of Argus)
+    // entry 136980 -> 1276163 (tier 1, count 1)
+    // entry 136979 -> 1276190 (tier 2, count 2)
+    // entry 136978 -> 1276222 (tier 3, count 1)
+    const warlock = makeUnit("wl-tiered", {
+      spec: CombatUnitSpec.Warlock_Demonology,
+      info: {
+        talents: [
+          { id1: 110404, id2: 136978, count: 1 },
+          { id1: 110404, id2: 136979, count: 2 },
+          { id1: 110404, id2: 136980, count: 1 },
+        ],
+        pvpTalents: [],
+      },
+    });
+    expect(talentRankOf(warlock, "1276163")).toBe(1);
+    expect(talentRankOf(warlock, "1276190")).toBe(2);
+    expect(talentRankOf(warlock, "1276222")).toBe(1);
+    // 阿古斯之治: 萨洛拉丝 / 艾瑞达双子 10 + 4 * 1 = 14s
+    expect(buffFullDurationForCaster("1282501", warlock)).toBeCloseTo(14);
+    expect(buffFullDurationForCaster("1282502", warlock)).toBeCloseTo(14);
   });
 });

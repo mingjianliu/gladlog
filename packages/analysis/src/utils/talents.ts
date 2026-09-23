@@ -104,8 +104,13 @@ export function getPlayerTalentedSpellInfo(
 
     if (!node) continue;
 
-    if ((node.type === "choice" || node.type === "subtree") && talent.id2 > 0) {
-      // Choice node — only the chosen entry is active
+    if (
+      (node.type === "choice" ||
+        node.type === "subtree" ||
+        node.type === "tiered") &&
+      talent.id2 > 0
+    ) {
+      // Choice / subtree / tiered node — only the chosen / purchased entry is active
       const entry = node.entries.find((e) => e.id === talent.id2);
       if (entry && "spellId" in entry && entry.spellId) {
         result.set(entry.spellId.toString(), {
@@ -202,7 +207,10 @@ export function getPlayerTalentRanks(
     if (!node) continue;
 
     const entries =
-      (node.type === "choice" || node.type === "subtree") && talent.id2 > 0
+      (node.type === "choice" ||
+        node.type === "subtree" ||
+        node.type === "tiered") &&
+      talent.id2 > 0
         ? node.entries.filter((e) => e.id === talent.id2)
         : node.entries;
 

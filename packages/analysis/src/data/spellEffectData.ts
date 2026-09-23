@@ -509,8 +509,8 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
       talentSpellId: "1269310",
       specs: ["72"], // Warrior_Fury
       untalentedBaseSeconds: 12,
-      pct: 25,
-      note: "Rampaging Berserker — DB2 aura 108 +50 %, Warrior/Fury spec tree (maxRanks 1), mask covers the spell; corpus 31 of 31 caster-cells at 18.0 s hold it AT RANK 2, so two ranks buy +50 % in TOTAL (12 × (1 + 0.25×2) = 18); DB2 states 50 and it is not per rank here. NOTE the base: DB2 says 12 while the hand override said 16, which is neither the base nor the talented value — running the arithmetic against that override is what made this look unexplainable for two rounds. The override now carries the talented 18.",
+      pct: 50,
+      note: "Rampaging Berserker — DB2 aura 108 +50 %, Warrior/Fury spec tree (tiered node 110412, entry 137002, maxRanks 1), mask covers the spell; corpus 59 of 89 caster-cells at 18.0 s hold it at rank 1 (12 × (1 + 0.50×1) = 18). DB2 states 50 % and it is rank 1; the earlier 25 % was compensating for talentRankOf overreading rank 2 across unsegmented tiered nodes (GH #102). KNOWN RESIDUAL: the 24.0 s tier (20 of 89 cells, identical loadout) is the Fury Season 2 2-piece tier set bonus ('During Recklessness, Raging Blow extends the duration of Recklessness by 2 sec, up to 6 sec' -> 18 + 6 = 24 s); state-conditional in-combat extension with no COMBATANT_INFO distinction, so the 18 s static baseline is kept. The 5 s tier (10 cells) is Enduring Rage (411764 PvP talent proc).",
     },
   ],
   // ── 2026-09-23 (GH #65 item 1): talent layers on the CAST-PARAMETER auras.
@@ -1179,6 +1179,22 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
       untalentedBaseSeconds: 12,
       pct: -25,
       note: "Ebon Fever — REDUCTION with mechanism: DB2 aura 218 −25 % keyed by SpellLabel, Death Knight/Unholy[spec] (maxRanks 1); corpus 31/31 holder cells at 9.0 s, no non-holder observed; 12 × 0.75 = 9. Was a 'shorter — needs a mechanism' GAP row.",
+    },
+  ],
+  "1282501": [
+    {
+      talentSpellId: "1276222",
+      untalentedBaseSeconds: 10,
+      addSeconds: 4,
+      note: "Dominion of Argus: Lady Sacrolash — DB2 aura 219 +4000 ms keyed by SpellLabel, Warlock tiered node 110404 entry 136978 (maxRanks 1); corpus 14 s matches 10 + 4 (GH #102). Patch stays in CORPUS_DURATION_PATCHES as fallback typical value.",
+    },
+  ],
+  "1282502": [
+    {
+      talentSpellId: "1276222",
+      untalentedBaseSeconds: 10,
+      addSeconds: 4,
+      note: "Dominion of Argus: Grand Warlock Alythess — DB2 aura 219 +4000 ms keyed by SpellLabel, Warlock tiered node 110404 entry 136978 (maxRanks 1); corpus 14 s matches 10 + 4 (GH #102). Patch stays in CORPUS_DURATION_PATCHES as fallback typical value.",
     },
   ],
 };
