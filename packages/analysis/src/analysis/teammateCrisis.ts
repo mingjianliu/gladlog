@@ -164,6 +164,12 @@ export interface TeammateCrisisPoint {
   /** healer → teammate distance at t, whole yards; null when either position
    * is missing */
   distanceYd: number | null;
+  /** line of sight healer → teammate at t through `hasLineOfSight`, computed
+   * whenever both positions exist — independent of `excluded`, which only
+   * tests LoS once the healer is free and in reach (GH #83: the reach fact
+   * needs it for every point). null when a position is missing or the map's
+   * geometry cannot answer. */
+  losClear: boolean | null;
   /** the healer's externals that were off cooldown at t */
   externalsReady: { spellId: string; spellName: string }[];
   /** healer mana at t, integer %, null when the log carried no reading */
@@ -397,13 +403,14 @@ export function teammateCrisisPoints(
       const distRaw =
         pos1 && pos2 ? Math.hypot(pos1.x - pos2.x, pos1.y - pos2.y) : null;
       const distanceYd = distRaw === null ? null : Math.round(distRaw);
+      const losClear = pos1 && pos2 ? hasLineOfSight(zoneId, pos1, pos2) : null;
       const manaPct = manaPctAt(owner, t);
       if (blocked) excluded = "healerBlocked";
       else if (channelling) excluded = "healerChannelling";
       else if (distRaw === null || distRaw > TEAMMATE_CRISIS_REACH_YARDS)
         excluded = "outOfReach";
       else {
-        const los = hasLineOfSight(zoneId, pos1!, pos2!);
+        const los = losClear;
         if (los === false) excluded = "losBlocked";
         else if (los === null) excluded = "losUnknown";
         else if (manaPct !== null && manaPct < TEAMMATE_CRISIS_MANA_FLOOR_PCT)
@@ -513,6 +520,7 @@ export function teammateCrisisPoints(
         healerAnswered,
         carriedHealPct: Math.round((carried / mateMax) * 100),
         distanceYd,
+        losClear,
         externalsReady: externalCds
           .filter((cd) => cdAvailableAt(cd, p.tSec))
           .map((cd) => ({
