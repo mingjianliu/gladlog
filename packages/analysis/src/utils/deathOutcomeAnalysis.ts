@@ -5,7 +5,6 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
-import spellReachGenerated from "../data/spellReachGenerated.json";
 import { IPlayerCCTrinketSummary } from "./ccTrinketAnalysis";
 import {
   auraOnlyActivationSeconds,
@@ -20,6 +19,7 @@ import {
   getUnitPositionAtTime,
   hasLineOfSight,
 } from "./losAnalysis";
+import { spellReachForCaster } from "./spellRange";
 import { talentOwnershipOf } from "./talentOwnership";
 
 interface IImmunitySpell {
@@ -536,15 +536,18 @@ const EXTERNAL_REACH_FALLBACK_YARDS = 40;
 const EXTERNAL_REACH_HAND_OVERRIDES: Record<string, number> = {
   "196718": 8, // Darkness — zone radius; not derivable from SpellEffect/SpellRadius
 };
-export function externalReachYards(spellId: string): number {
+// GH #83 (user ruling 2026-09-23, "戒律牧46码必须修 看天赋修"): the reach is
+// the CASTER's — the caster's range / radius talents applied through
+// `spellReachForCaster` (Phantom Reach: Pain Suppression / Guardian Spirit
+// 46 yd; Astral Influence: Ironbark 45). Without a caster the official
+// number stands, exactly as before.
+export function externalReachYards(
+  spellId: string,
+  caster?: Parameters<typeof spellReachForCaster>[0],
+): number {
   const hand = EXTERNAL_REACH_HAND_OVERRIDES[spellId];
   if (hand !== undefined) return hand;
-  const gen = (
-    spellReachGenerated as { spells: Record<string, { reachYards: number }> }
-  ).spells[spellId];
-  return gen && gen.reachYards > 0
-    ? gen.reachYards
-    : EXTERNAL_REACH_FALLBACK_YARDS;
+  return spellReachForCaster(caster, spellId) ?? EXTERNAL_REACH_FALLBACK_YARDS;
 }
 
 export function buildDeathOutcomeSummary(
@@ -667,7 +670,7 @@ export function buildDeathOutcomeSummary(
           if (!everCast && !spell.specs.includes(teammate.spec)) continue;
           if (
             casterDistance !== null &&
-            casterDistance > externalReachYards(spellId)
+            casterDistance > externalReachYards(spellId, teammate)
           )
             continue;
           // Talent-ownership gate (issue #8 / BACKLOG #23-1): PW:Barrier &co

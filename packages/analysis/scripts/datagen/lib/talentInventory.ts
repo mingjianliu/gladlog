@@ -31,6 +31,11 @@ export const AURA_MOD_MAX_CHARGES = 411;
 export const AURA_ADD_FLAT_MODIFIER = 107;
 export const AURA_ADD_PCT_MODIFIER = 108;
 export const SPELLMOD_COOLDOWN = 11;
+/** SpellModOp 5 / 6 — cast range and area radius (GH #83, 2026-09-23:
+ * Phantom Reach +15 % range on every priest heal is why Discipline reaches
+ * 46 yd; genSpellReach attaches these to the spells they reach). */
+export const SPELLMOD_RANGE = 5;
+export const SPELLMOD_RADIUS = 6;
 export const AURA_CHARGE_RECOVERY_MULTIPLIER = 454;
 export const AURA_MOD_CATEGORY_COOLDOWN = 453;
 export const AURA_OVERRIDE_ACTION_SPELL = 332;

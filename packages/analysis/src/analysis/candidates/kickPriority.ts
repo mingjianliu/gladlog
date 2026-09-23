@@ -25,7 +25,8 @@
  * the probe reports sensitivity; the product keys on the constants here.
  */
 import { getEnglishSpellName } from "../../data/spellEffectData";
-import { MELEE_RANGE_YD,spellRangeYards } from "../../data/spellReach";
+import { MELEE_RANGE_YD, spellRangeYards } from "../../data/spellReach";
+import { spellRangeForCaster } from "../../utils/spellRange";
 import { hardcastHealSpell } from "../../data/kickPriorityHealSpells";
 import { buildCannotCastIntervals } from "../../utils/cannotCastIntervals";
 import { gridHpPct, isHealerSpec } from "../../utils/cooldowns";
@@ -262,7 +263,8 @@ export function kickPriorityDecisionPoints(
         (c) =>
           c.spellId === a.spellId &&
           c.logLine.timestamp >= a.logLine.timestamp &&
-          c.logLine.timestamp <= Math.min(nx, a.logLine.timestamp + CAST_PAIR_MAX_MS),
+          c.logLine.timestamp <=
+            Math.min(nx, a.logLine.timestamp + CAST_PAIR_MAX_MS),
       );
       if (!d) continue;
       const dur = (d.logLine.timestamp - a.logLine.timestamp) / 1000;
@@ -280,7 +282,8 @@ export function kickPriorityDecisionPoints(
    * eligible hardcast heal. Product path = the corpus table (outcome-
    * independent per round); bootstrap = per-round observation. */
   const nominalCastS = (healer: UnitLike, sid: string): number | null => {
-    if (eligibility === "bootstrap") return perRoundSpells(healer).get(sid) ?? null;
+    if (eligibility === "bootstrap")
+      return perRoundSpells(healer).get(sid) ?? null;
     return hardcastHealSpell(sid)?.medianCastS ?? null;
   };
 
@@ -366,7 +369,9 @@ export function kickPriorityDecisionPoints(
           else byDest.set(h.destUnitId, (byDest.get(h.destUnitId) ?? 0) + amt);
         }
         if (healAmount === 0 && byDest.size > 0) {
-          const [id, amt] = [...byDest.entries()].sort((a, b) => b[1] - a[1])[0];
+          const [id, amt] = [...byDest.entries()].sort(
+            (a, b) => b[1] - a[1],
+          )[0];
           healOtherName =
             units.find((u) => u.id === id)?.name ??
             enemyById.get(id)?.name ??
@@ -405,16 +410,28 @@ export function kickPriorityDecisionPoints(
           LOS_SWEEP_GAP_MS,
         );
         const distanceYd = pos && hpos ? distanceBetween(pos, hpos) : null;
-        const range = spellRangeYards(kit.spellId);
+        const baseRange = spellRangeYards(kit.spellId);
+        // this kicker's range: official range + the range talents they hold
+        // (GH #83 — Improved Disrupt +5 yd, …)
+        const range = spellRangeForCaster(f as never, kit.spellId);
         let inRange: boolean | null = null;
-        if (pos && range != null && kit.confirmed !== false) {
-          const melee = range <= MELEE_RANGE_YD;
+        if (
+          pos &&
+          baseRange != null &&
+          range != null &&
+          kit.confirmed !== false
+        ) {
+          // melee is a property of the spell, not of the talented number: a
+          // talented melee kick still needs no line of sight
+          const melee = baseRange <= MELEE_RANGE_YD;
           // run budget = the castable stretch, not the cast length: a
           // friendly stunned for 1.5 s of a 2 s cast can run for 0.5 s
-          const meleeReach = Math.min(
-            KICK_MELEE_REACH_YD,
-            KICK_MELEE_BASE_YD + KICK_RUN_SPEED_YD_S * freeS,
-          );
+          const meleeReach =
+            Math.min(
+              KICK_MELEE_REACH_YD,
+              KICK_MELEE_BASE_YD + KICK_RUN_SPEED_YD_S * freeS,
+            ) +
+            (range - baseRange);
           inRange = canReachTargetAt(
             pos,
             healer as never,
@@ -609,7 +626,10 @@ export function kickPriorityTeamEvents(
           // name + distance only (user ruling 2026-09-15): the interrupt's
           // name was one more audited token per teammate and the coaching
           // line is "call the kick", not "call Counterspell"
-          .map((f) => `${f.name} ${f.distanceYd == null ? "?" : Math.round(f.distanceYd)} yd`)
+          .map(
+            (f) =>
+              `${f.name} ${f.distanceYd == null ? "?" : Math.round(f.distanceYd)} yd`,
+          )
           .join("; "),
         refNCompleted: String(ref.nCompleted),
         refNInterrupted: String(ref.nInterrupted),

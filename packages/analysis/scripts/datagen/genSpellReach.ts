@@ -19,10 +19,35 @@
  * 357170 and Anti-Magic Zone 51052 are 30 yd, Rallying Cry radius 40,
  * Zephyr 374227 radius 20 — the hand assumption "all are 40-yard targeted
  * spells" was false for 6 of 15.
+ *
+ * GH #83 (user ruling 2026-09-23: "戒律牧46码必须修 看天赋修 … 其他射程距离的
+ * 也修"): the universe now also takes every spell observed in the corpus
+ * (`observedSpellIdsGenerated.json`), and each entry carries the PASSIVE
+ * talents that change its range (SpellModOp 5) or radius (op 6), read off the
+ * M6 talent inventory — both the class-mask and the SpellLabel encodings,
+ * value × PvpMultiplier. Discipline reaches 46 yd because Phantom Reach
+ * 459559 is +15 % range on every priest heal; the game agrees (successful
+ * Discipline casts on a teammate: p99 47.0 yd, `healReachGroundTruth.ts`).
+ * Whether a given caster holds the talent is decided at runtime
+ * (`utils/spellRange.ts`). Buff-gated modifiers (activation ≠ passive, e.g.
+ * Spatial Paradox +100 %) are not attached; their count is printed.
+ *
+ * ORDER: reads `talentEffectInventoryGenerated.json`, so run it after
+ * genTalentModifiers.ts (docs/commands/update-wow-data.md).
  */
+import observedSpellIds from "../../src/data/observedSpellIdsGenerated.json";
 import spellIdLists from "../../src/data/spellIdLists";
+import inventory from "../../src/data/talentEffectInventoryGenerated.json";
 import { INTERRUPT_SPELL_IDS } from "../../src/utils/enemyInterrupts";
 import { writeArtifact } from "./lib/emit";
+import {
+  AURA_ADD_FLAT_MODIFIER,
+  AURA_ADD_FLAT_MODIFIER_BY_LABEL,
+  AURA_ADD_PCT_MODIFIER,
+  AURA_ADD_PCT_MODIFIER_BY_LABEL,
+  SPELLMOD_RADIUS,
+  SPELLMOD_RANGE,
+} from "./lib/talentInventory";
 import {
   assertColumns,
   fetchTable,
@@ -79,55 +104,131 @@ async function main() {
   // is the feasibility gate of the kick-priority decision point, and it has
   // to come from SpellRange, not from memory — Skull Bash is 13 yd, Quell 25,
   // Wind Shear 30, the melee kicks share the 5 yd combat range).
-  const ids = [
+  const curated = [
     ...(spellIdLists as { externalDefensiveSpellIds: string[] })
       .externalDefensiveSpellIds,
-    ...INTERRUPT_SPELL_IDS.filter(
-      (id) =>
-        !(spellIdLists as { externalDefensiveSpellIds: string[] })
-          .externalDefensiveSpellIds.includes(id),
-    ),
+    ...INTERRUPT_SPELL_IDS,
   ];
+  const ids = [
+    ...new Set([...curated, ...(observedSpellIds as number[]).map(String)]),
+  ];
+
+  // Passive range / radius SpellMods by target spell (GH #83).
+  type Mod = { talent: string; flat?: number; pct?: number };
+  const rangeMods = new Map<string, Mod[]>();
+  const radiusMods = new Map<string, Mod[]>();
+  let buffGated = 0;
+  for (const r of (
+    inventory as {
+      rows: {
+        spellId: string;
+        aura: number;
+        misc0: number;
+        basePoints: number;
+        pvpMultiplier: number;
+        activation: string;
+        targets: { spellId: string }[];
+      }[];
+    }
+  ).rows) {
+    const flat =
+      r.aura === AURA_ADD_FLAT_MODIFIER ||
+      r.aura === AURA_ADD_FLAT_MODIFIER_BY_LABEL;
+    const pct =
+      r.aura === AURA_ADD_PCT_MODIFIER ||
+      r.aura === AURA_ADD_PCT_MODIFIER_BY_LABEL;
+    if (!flat && !pct) continue;
+    const table =
+      r.misc0 === SPELLMOD_RANGE
+        ? rangeMods
+        : r.misc0 === SPELLMOD_RADIUS
+          ? radiusMods
+          : null;
+    if (!table || r.basePoints === 0) continue;
+    if (r.activation !== "passive") {
+      buffGated++;
+      continue;
+    }
+    const value = r.basePoints * (r.pvpMultiplier || 1);
+    const mod: Mod = flat
+      ? { talent: r.spellId, flat: value }
+      : { talent: r.spellId, pct: value };
+    for (const t of r.targets) {
+      const list = table.get(t.spellId) ?? [];
+      // the same talent reaching a spell through both encodings counts once
+      if (
+        !list.some(
+          (m) =>
+            m.talent === mod.talent && m.flat === mod.flat && m.pct === mod.pct,
+        )
+      )
+        list.push(mod);
+      table.set(t.spellId, list);
+    }
+  }
+
   const out: Record<
     string,
     {
       rangeYards: number;
       radiusYards: number;
       reachYards: number;
-      source: string;
+      source?: string;
+      rangeMods?: Mod[];
+      radiusMods?: Mod[];
     }
   > = {};
+  const curatedSet = new Set(curated);
   for (const id of ids) {
     const rangeYards = rangeBySpell.get(id) ?? 0;
     let radiusYards = radiusBySpell.get(id) ?? 0;
-    let source = "SpellMisc/SpellRange + SpellEffect/SpellRadius";
+    let source: string | undefined;
     if (radiusYards === 0 && LINKED_REACH_SPELL[id]) {
       radiusYards = radiusBySpell.get(LINKED_REACH_SPELL[id]!) ?? 0;
       source = `radius from linked spell ${LINKED_REACH_SPELL[id]}`;
     }
+    // an observed id with neither a range nor a radius carries no reach
+    // fact; curated ones are kept so their consumers can see the 0
+    if (rangeYards === 0 && radiusYards === 0 && !curatedSet.has(id)) continue;
     const reachYards =
       radiusYards > 0
         ? rangeYards > 0
           ? rangeYards + radiusYards
           : radiusYards
         : rangeYards;
-    out[id] = { rangeYards, radiusYards, reachYards, source };
+    out[id] = {
+      rangeYards,
+      radiusYards,
+      reachYards,
+      ...(source ? { source } : {}),
+      ...(rangeMods.has(id) && rangeYards > 0
+        ? { rangeMods: rangeMods.get(id) }
+        : {}),
+      ...(radiusMods.has(id) && radiusYards > 0
+        ? { radiusMods: radiusMods.get(id) }
+        : {}),
+    };
   }
   const outPath = new URL(
     "../../src/data/spellReachGenerated.json",
     import.meta.url,
   ).pathname;
+  // One spell per line: ~4k entries, and a review diff should still read
+  // spell by spell.
+  const body = Object.entries(out)
+    .map(([id, v]) => `    ${JSON.stringify(id)}: ${JSON.stringify(v)}`)
+    .join(",\n");
   writeArtifact(
     outPath,
-    JSON.stringify(
-      { generatedAt: new Date().toISOString(), build, spells: out },
-      null,
-      2,
-    ) + "\n",
+    `{\n  "generatedAt": ${JSON.stringify(new Date().toISOString())},\n  "build": ${JSON.stringify(build)},\n  "spells": {\n${body}\n  }\n}\n`,
   );
-  const zero = ids.filter((id) => out[id]!.reachYards === 0);
+  const zero = curated.filter((id) => out[id]!.reachYards === 0);
+  const withRangeMods = Object.values(out).filter((v) => v.rangeMods).length;
+  const withRadiusMods = Object.values(out).filter((v) => v.radiusMods).length;
   console.log(
-    `spellReachGenerated.json: ${ids.length} ids, reach 0 for ${zero.length}: ${zero.join(",")}`,
+    `spellReachGenerated.json: ${Object.keys(out).length} spells (${curated.length} curated, ${ids.length} candidates); ` +
+      `${withRangeMods} with range talents, ${withRadiusMods} with radius talents; ${buffGated} buff-gated modifier rows skipped; ` +
+      `curated reach 0: ${zero.join(",")}`,
   );
 }
 

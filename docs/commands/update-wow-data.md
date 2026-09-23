@@ -224,10 +224,16 @@ npx tsx packages/analysis/scripts/datagen/genPvpTalentReplaces.ts
 npx tsx packages/analysis/scripts/datagen/genPvpTalentPool.ts
 # 6e. DR category table (SpellCategories.DiminishType; consumed by drAnalysis, aura ID key)
 npx tsx packages/analysis/scripts/datagen/genDrCategories.ts
-# Per-spell reach (cast range / area radius) for the ally-castable defensives —
-# GH #34 ②: feeds deathOutcomeAnalysis's "could a teammate have thrown it"
-# distance check; id universe = externalDefensiveSpellIds. Darkness 196718 has
-# no radius in DB2 (stays on the hand fallback in code).
+# Per-spell reach (cast range / area radius) — GH #34 ② for the ally-castable
+# defensives, GH #83 (2026-09-23) for every corpus-observed spell PLUS the
+# passive range / radius talents that change it (SpellModOp 5 / 6, read off
+# talentEffectInventoryGenerated.json — so this step must run AFTER
+# genTalentModifiers.ts above, and after observedSpellIds). Read at runtime by
+# utils/spellRange.ts (spellRangeForCaster / healerReachYards): kicks,
+# externals, cleanse / purge reach, healer reach. Sanity: Flash Heal 2061 must
+# carry Phantom Reach 459559 +15 %; the eval check is
+# packages/eval/scripts/healReachGroundTruth.ts (successful casts vs the model).
+# Darkness 196718 has no radius in DB2 (stays on the hand fallback in code).
 npx tsx packages/analysis/scripts/datagen/genSpellReach.ts
 # Interrupt kit per spec (GH #78, 2026-09-12): SkillLineAbility class baseline + SpecializationSpells +
 # the talent trees (talentIdMap.json) → interruptKitGenerated.json. Rerun after fetchTalents.ts as well —

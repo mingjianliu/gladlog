@@ -1016,7 +1016,7 @@ export function burstWindowDecisionPoints(
               pressuredUnit,
               tMs,
               combat?.startInfo?.zoneId,
-              externalReachYards(cd.spellId),
+              externalReachYards(cd.spellId, u),
               true,
             ) !== false,
         );

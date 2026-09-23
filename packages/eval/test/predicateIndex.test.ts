@@ -70,6 +70,7 @@ import * as racialAbilities from "@gladlog/analysis/src/data/racialAbilities";
 import * as spellCategories from "@gladlog/analysis/src/data/spellCategories";
 import * as spellEffectData from "@gladlog/analysis/src/data/spellEffectData";
 import * as spellReach from "@gladlog/analysis/src/data/spellReach";
+import * as spellRange from "@gladlog/analysis/src/utils/spellRange";
 import * as spellSchools from "@gladlog/analysis/src/data/spellSchools";
 import * as spellTags from "@gladlog/analysis/src/data/spellTags";
 import * as spellTargeting from "@gladlog/analysis/src/data/spellTargeting";
@@ -939,6 +940,16 @@ const INDEX: PredicateRow[] = [
     file: `${A}/data/spellReach.ts`,
     symbol: "spellRangeYards",
     mod: spellReach,
+  },
+  {
+    file: `${A}/utils/spellRange.ts`,
+    symbol: "spellRangeForCaster",
+    mod: spellRange,
+  },
+  {
+    file: `${A}/utils/spellRange.ts`,
+    symbol: "healerReachYards",
+    mod: spellRange,
   },
   {
     file: `${A}/data/kickPriorityHealSpells.ts`,

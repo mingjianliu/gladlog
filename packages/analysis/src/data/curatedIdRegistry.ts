@@ -74,12 +74,15 @@ import {
 } from "../utils/deathOutcomeAnalysis";
 import {
   BACKLASH_CC_SPELL_IDS,
+  CLEANSE_SPELLS_BY_TYPE,
   COMP_DEPENDENT_PURGE_TARGETS,
   DISPEL_COOLDOWNS_BY_SPELL,
   DISPEL_PENALTY_SPELLS,
   PURGE_BLOCKLIST,
+  PURGE_SPELLS_BY_SPEC,
   STELLAR_PROTECTION_PENALIZED_SPELLS,
 } from "../utils/dispelAnalysis";
+import { HEALER_REACH_SPELLS } from "../utils/spellRange";
 import { MOVEMENT_ROOT_BREAK_DISPEL_IDS } from "../utils/dispelKind";
 import { AOE_CC_SPELL_IDS } from "../utils/drAnalysis";
 import { EXTERNAL_DAMAGE_SHIELD_IDS } from "../utils/externalDamage";
@@ -335,6 +338,20 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   ),
   t("PURGE_BLOCKLIST", "utils/dispelAnalysis.ts", "aura", () =>
     set(PURGE_BLOCKLIST),
+  ),
+  // GH #83: the spell each spec dispels with — its range is the reach gate
+  t("CLEANSE_SPELLS_BY_TYPE", "utils/dispelAnalysis.ts", "cast", () =>
+    set(
+      Object.values(CLEANSE_SPELLS_BY_TYPE).flatMap((bySpec) =>
+        Object.values(bySpec).flatMap((ids) => [...(ids ?? [])]),
+      ),
+    ),
+  ),
+  t("HEALER_REACH_SPELLS", "utils/spellRange.ts", "cast", () =>
+    set(Object.values(HEALER_REACH_SPELLS).flat()),
+  ),
+  t("PURGE_SPELLS_BY_SPEC", "utils/dispelAnalysis.ts", "cast", () =>
+    set(Object.values(PURGE_SPELLS_BY_SPEC).flatMap((ids) => [...(ids ?? [])])),
   ),
   // Dispelling-spell ids of movement/form riders (UI review 2026-08-21 #3;
   // moved here from eval's coverageManifest). "mixed": some (Cat Form) are

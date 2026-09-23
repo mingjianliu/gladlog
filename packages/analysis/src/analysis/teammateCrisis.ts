@@ -63,6 +63,7 @@ import {
 } from "../utils/cooldowns";
 import { isEnemyCdWindowSpell } from "../utils/enemyCDs";
 import { hasLineOfSight } from "../utils/losAnalysis";
+import { healerReachYards } from "../utils/spellRange";
 import {
   actionBlockedAt,
   CRISIS_CONTROL_IDS,
@@ -83,6 +84,8 @@ import {
  * kept at the generic figure here because the card only claims the healer
  * was "within reach", not that a specific spell was in range. */
 export const TEAMMATE_CRISIS_REACH_YARDS = 40;
+// ↑ Since GH #83 (2026-09-23) only the FALLBACK: the reach is the healer's own
+// (`healerReachYards` — Discipline with Phantom Reach 46, Preservation 30).
 /** feasibility is probed at these offsets from the crossing (codex R1:
  * "whole-window", not the crossing instant) */
 export const TEAMMATE_CRISIS_BLOCK_PROBE_MS: readonly number[] = [
@@ -264,6 +267,9 @@ export function teammateCrisisPoints(
   const enemies = players.filter((u) => u.reaction !== owner.reaction);
   const enemyIds = new Set(enemies.map((u) => u.id));
   const zoneId = String(combat.zoneId ?? combat.startInfo?.zoneId ?? "");
+  // GH #83: this healer's reach — their spec's core heals with the range
+  // talents they hold (Phantom Reach 46, Astral Influence 45, Preservation 30)
+  const healerReach = healerReachYards(owner, TEAMMATE_CRISIS_REACH_YARDS);
   let cds: IMajorCooldownInfo[];
   if (ledger) cds = ledger;
   else {
@@ -407,7 +413,7 @@ export function teammateCrisisPoints(
       const manaPct = manaPctAt(owner, t);
       if (blocked) excluded = "healerBlocked";
       else if (channelling) excluded = "healerChannelling";
-      else if (distRaw === null || distRaw > TEAMMATE_CRISIS_REACH_YARDS)
+      else if (distRaw === null || distRaw > healerReach)
         excluded = "outOfReach";
       else {
         const los = losClear;

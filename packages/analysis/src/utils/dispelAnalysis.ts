@@ -24,6 +24,7 @@ import {
   hasLineOfSight,
 } from "./losAnalysis";
 import { DISPEL_MAX_RANGE_YARDS, LOS_SWEEP_GAP_MS } from "./positionSampling";
+import { spellRangeForCaster } from "./spellRange";
 import { fmtTime } from "./renderGrid";
 import { hasOffensivePurgeTalent } from "./talentBehaviors";
 import {
@@ -96,7 +97,10 @@ const POST_CC_PRESSURE_WINDOW_S = 5;
 /** @internal exported for data/curatedIdRegistry (corpus rot scan) */
 export const DISPEL_PENALTY_SPELLS = new Map<string, string>([
   ["1259790", "Silences & damages the dispeller (Unstable Affliction)"],
-  ["34914", "Horrifies the dispeller for 3 s (Vampiric Touch → Sin and Punishment)"],
+  [
+    "34914",
+    "Horrifies the dispeller for 3 s (Vampiric Touch → Sin and Punishment)",
+  ],
 ]);
 
 // The backlash table (dispelled debuff → aura on the dispeller) lives in
@@ -286,6 +290,115 @@ const OFFENSIVE_PURGERS = new Set<CombatUnitSpec>([
   CombatUnitSpec.Warlock_Demonology, // Devour Magic (Felhunter)
   CombatUnitSpec.Warlock_Destruction, // Devour Magic (Felhunter)
 ]);
+
+/**
+ * GH #83 (user ruling 2026-09-23, "戒律牧46码必须修 看天赋修 … 其他射程距离的
+ * 也修"): the spell each spec removes each debuff type with, so the reach
+ * gate of a missed-cleanse / missed-purge blame is THAT spell's range for
+ * THIS dispeller (`spellRangeForCaster`: official DB2 range + the range
+ * talents they hold) instead of one 40 yd for everybody. Official ranges:
+ * Purify 40 (46 with Phantom Reach), Nature's Cure / Remove Corruption 40
+ * (45 with Astral Influence), Naturalize 30, Expunge and Cauterizing Flame 25
+ * (30 with Arcane Reach), Dispel Magic and Purge 30. The flat 40 blamed a
+ * Preservation Evoker 26–40 yd away for a cleanse it could not reach, and a
+ * purger 30–40 yd away for a purge. Every id observed in the corpus
+ * (checked 2026-09-23); registered in `data/curatedIdRegistry.ts`. A spec
+ * not listed keeps DISPEL_MAX_RANGE_YARDS — the Felhunter's Devour Magic in
+ * particular, whose range runs from the pet, not the warlock.
+ */
+export const CLEANSE_SPELLS_BY_TYPE: Readonly<
+  Record<DispelType, Readonly<Partial<Record<string, readonly string[]>>>>
+> = {
+  Magic: {
+    [CombatUnitSpec.Paladin_Holy]: ["4987"], // Cleanse
+    [CombatUnitSpec.Priest_Discipline]: ["527"], // Purify
+    [CombatUnitSpec.Priest_Holy]: ["527"],
+    [CombatUnitSpec.Druid_Restoration]: ["88423"], // Nature's Cure
+    [CombatUnitSpec.Shaman_Restoration]: ["77130"], // Purify Spirit
+    [CombatUnitSpec.Monk_Mistweaver]: ["115450"], // Detox
+    [CombatUnitSpec.Evoker_Preservation]: ["360823"], // Naturalize
+  },
+  Poison: {
+    [CombatUnitSpec.Paladin_Holy]: ["4987"],
+    [CombatUnitSpec.Paladin_Protection]: ["213644"], // Cleanse Toxins
+    [CombatUnitSpec.Paladin_Retribution]: ["213644"],
+    [CombatUnitSpec.Druid_Restoration]: ["88423"],
+    [CombatUnitSpec.Druid_Balance]: ["2782"], // Remove Corruption
+    [CombatUnitSpec.Druid_Feral]: ["2782"],
+    [CombatUnitSpec.Druid_Guardian]: ["2782"],
+    [CombatUnitSpec.Monk_Mistweaver]: ["115450"],
+    [CombatUnitSpec.Monk_Windwalker]: ["218164"], // Detox
+    [CombatUnitSpec.Monk_Brewmaster]: ["218164"],
+    // Naturalize / Expunge / Cauterizing Flame
+    [CombatUnitSpec.Evoker_Preservation]: ["360823", "365585", "374251"],
+    [CombatUnitSpec.Evoker_Devastation]: ["365585", "374251"],
+    [CombatUnitSpec.Evoker_Augmentation]: ["365585", "374251"],
+  },
+  Curse: {
+    [CombatUnitSpec.Druid_Restoration]: ["88423"],
+    [CombatUnitSpec.Druid_Balance]: ["2782"],
+    [CombatUnitSpec.Druid_Feral]: ["2782"],
+    [CombatUnitSpec.Druid_Guardian]: ["2782"],
+    [CombatUnitSpec.Mage_Arcane]: ["475"], // Remove Curse
+    [CombatUnitSpec.Mage_Fire]: ["475"],
+    [CombatUnitSpec.Mage_Frost]: ["475"],
+    [CombatUnitSpec.Shaman_Restoration]: ["77130"],
+    [CombatUnitSpec.Evoker_Preservation]: ["374251"], // Cauterizing Flame
+    [CombatUnitSpec.Evoker_Devastation]: ["374251"],
+    [CombatUnitSpec.Evoker_Augmentation]: ["374251"],
+  },
+  Disease: {
+    [CombatUnitSpec.Paladin_Holy]: ["4987"],
+    [CombatUnitSpec.Paladin_Protection]: ["213644"],
+    [CombatUnitSpec.Paladin_Retribution]: ["213644"],
+    [CombatUnitSpec.Priest_Discipline]: ["527"],
+    [CombatUnitSpec.Priest_Holy]: ["527"],
+    [CombatUnitSpec.Priest_Shadow]: ["213634"], // Purify Disease
+    [CombatUnitSpec.Monk_Mistweaver]: ["115450"],
+    [CombatUnitSpec.Monk_Windwalker]: ["218164"],
+    [CombatUnitSpec.Monk_Brewmaster]: ["218164"],
+    [CombatUnitSpec.Evoker_Preservation]: ["374251"],
+    [CombatUnitSpec.Evoker_Devastation]: ["374251"],
+    [CombatUnitSpec.Evoker_Augmentation]: ["374251"],
+  },
+  Bleed: {
+    [CombatUnitSpec.Evoker_Preservation]: ["374251"],
+    [CombatUnitSpec.Evoker_Devastation]: ["374251"],
+    [CombatUnitSpec.Evoker_Augmentation]: ["374251"],
+  },
+};
+
+/** Same rule for offensive purges (see CLEANSE_SPELLS_BY_TYPE). */
+export const PURGE_SPELLS_BY_SPEC: Readonly<
+  Partial<Record<string, readonly string[]>>
+> = {
+  [CombatUnitSpec.Priest_Discipline]: ["528"], // Dispel Magic
+  [CombatUnitSpec.Priest_Holy]: ["528"],
+  [CombatUnitSpec.Priest_Shadow]: ["528"],
+  [CombatUnitSpec.Shaman_Restoration]: ["370"], // Purge
+  [CombatUnitSpec.Shaman_Elemental]: ["370"],
+  [CombatUnitSpec.Shaman_Enhancement]: ["370"],
+  [CombatUnitSpec.Mage_Arcane]: ["30449"], // Spellsteal
+  [CombatUnitSpec.Mage_Fire]: ["30449"],
+  [CombatUnitSpec.Mage_Frost]: ["30449"],
+  [CombatUnitSpec.DemonHunter_Havoc]: ["278326"], // Consume Magic
+  [CombatUnitSpec.DemonHunter_Vengeance]: ["278326"],
+};
+
+/** A dispeller's reach with the spells it would use: the longest of their
+ * talent-applied ranges; DISPEL_MAX_RANGE_YARDS when the spec has no listed
+ * spell or the table knows no range for it. */
+export function dispelReachYards(
+  unit: ICombatUnit,
+  spellIds: readonly string[] | undefined,
+): number {
+  let best: number | null = null;
+  for (const id of spellIds ?? []) {
+    const r = spellRangeForCaster(unit, id);
+    if (r !== null && (best === null || r > best)) best = r;
+  }
+  return best ?? DISPEL_MAX_RANGE_YARDS;
+}
 
 // Purge specs whose purge ability has a meaningful cooldown (>= 8s).
 // For these, only flag Critical priority missed purges — they can't freely spam purge
@@ -1055,8 +1168,8 @@ function intersectIntervalSets(
 /**
  * Feasibility gate a (tri-state): sample the reaction window
  * [applyTs, applyTs+reactMs] on the whole-second grid. If at any second some
- * dispeller and the target both have a position, are within
- * DISPEL_MAX_RANGE_YARDS, and LoS is not false (no geometry → null → judge on
+ * dispeller and the target both have a position, are within that
+ * dispeller's `reachOf` (its dispel spell's range, talents included), and LoS is not false (no geometry → null → judge on
  * range alone) → true (reachable, the criticism stands). If the full sweep
  * yields samples but never a reachable pair → false (exempt). If no sample
  * pair exists at all → null (do not change the verdict; the tri-state rule —
@@ -1068,6 +1181,8 @@ function anyDispellerReachable(
   applyTs: number,
   reactMs: number,
   zoneId: string | undefined,
+  /** this dispeller's reach for the removal in question (GH #83) */
+  reachOf: (dispeller: ICombatUnit) => number,
 ): boolean | null {
   if (dispellers.length === 0) return null;
   // Anchored to the render grid: sweep on whole seconds (fmtTime floors to the
@@ -1082,7 +1197,7 @@ function anyDispellerReachable(
       const dPos = getUnitPositionAtTime(d, t, LOS_SWEEP_GAP_MS);
       if (!dPos) continue;
       sawSamplePair = true;
-      if (distanceBetween(dPos, targetPos) > DISPEL_MAX_RANGE_YARDS) continue;
+      if (distanceBetween(dPos, targetPos) > reachOf(d)) continue;
       const los = zoneId ? hasLineOfSight(zoneId, dPos, targetPos) : null;
       if (los !== false) return true; // in range and LoS not disproven
     }
@@ -1931,6 +2046,11 @@ export function reconstructDispelSummary(
               applyTs,
               MISSED_CLEANSE_THRESHOLD_S * 1000,
               combat.zoneId,
+              (d) =>
+                dispelReachYards(
+                  d,
+                  CLEANSE_SPELLS_BY_TYPE[windowDispelType][d.spec],
+                ),
             ),
             drChainRisk: computeDrChainRisk(
               unit,
@@ -2122,6 +2242,7 @@ export function reconstructDispelSummary(
                   applyTs,
                   MISSED_PURGE_THRESHOLD_S * 1000,
                   combat.zoneId,
+                  (d) => dispelReachYards(d, PURGE_SPELLS_BY_SPEC[d.spec]),
                 ),
               });
             }

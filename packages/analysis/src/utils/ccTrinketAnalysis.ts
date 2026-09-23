@@ -34,7 +34,7 @@ import {
   interruptCooldownRemainingMs,
   interruptForUnit,
 } from "./enemyInterrupts";
-import { spellRangeYards } from "../data/spellReach";
+import { spellRangeForCaster } from "./spellRange";
 import {
   CC_MAX_PLAUSIBLE_RANGE_YARDS,
   INTERP_MAX_GAP_MS,
@@ -1338,7 +1338,8 @@ export function analyzePlayerCCAndTrinket(
           if (dist < minDist) {
             minDist = dist;
           }
-          const range = spellRangeYards(kit.spellId) ?? 5;
+          // this kicker's range, range talents included (GH #83)
+          const range = spellRangeForCaster(enemy, kit.spellId) ?? 5;
           if (dist <= range) {
             countInRange++;
           }

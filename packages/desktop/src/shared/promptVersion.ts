@@ -775,4 +775,16 @@
 //  605 archive files: 235 → `CC'd Ns of Ms — team must peel (mostly could
 //  not self-reposition)`, 857 of 1,331 "no CC" lines were false → `CC'd Ns
 //  of Ms`, 474 genuinely no CC unchanged; no other line changed.
-export const PROMPT_VERSION = 103;
+//  v104 (2026-09-23, GH #83, user ruling "戒律牧46码必须修 看天赋修 … 其他射程
+//  距离的也修"): every "could this player reach" range is the caster's —
+//  official DB2 range + the range talents they hold (utils/spellRange.ts):
+//  kicks, externals, cleanse / purge reach, healer reach. 602 archive files
+//  (1,022 rounds, 2,827 owners), same code otherwise (measured on the v100 base, before GH #103's v101–v103 landed): 139 context lines gain
+//  "no purger/dispeller had range/line of sight — not actionable" (Purge and
+//  Dispel Magic are 30 yd, Preservation cleanses 25–30, not 40) and 5 lose it
+//  (Purify 46 with Phantom Reach, druid cleanses 45); missed-cleanse
+//  dps 269→267 / healer 260→257; kick-priority-missed dps 87→90,
+//  kick-priority-team dps 70→71 / healer 67→69 (kick range talents: Charging
+//  Bash, Improved Disrupt, Sniper's Advantage, …); 3 [BURST ANSWERED] lines
+//  (a Pain Suppression from 40–46 yd now counts as reachable).
+export const PROMPT_VERSION = 104;
