@@ -14,6 +14,7 @@
  */
 
 import fs from "fs-extra";
+import { gunzipSync } from "zlib";
 
 import {
   checkParserInvariants,
@@ -60,7 +61,12 @@ async function main() {
   };
 
   for (const logPath of logPaths) {
-    const content = await fs.readFile(logPath, "utf-8");
+    // Archive logs are .gz: read as utf-8 they parse to zero combats and the
+    // scan used to print "zero violations" over nothing (2026-09-23).
+    const bytes = await fs.readFile(logPath);
+    const content = (
+      logPath.endsWith(".gz") ? gunzipSync(bytes) : bytes
+    ).toString("utf-8");
     const parser = new GladLogParser();
     parser.on("match", (m) => record(m.id, m));
     parser.on("shuffle", (s) => {
@@ -73,6 +79,10 @@ async function main() {
   console.log(
     `A2 parser invariants — ${combats} combats from ${logPaths.length} logs`,
   );
+  if (combats === 0) {
+    console.error("no combats parsed — wrong manifest or unreadable logs");
+    process.exit(1);
+  }
   if (byCode.size === 0) {
     console.log("零违规:全部物性断言在全语料成立。");
     return;

@@ -17,6 +17,7 @@ export interface InvariantViolation {
     | "time-bounds"
     | "monotonic"
     | "hp-range"
+    | "hp-amount-finite"
     | "death-has-damage"
     | "pet-owner-resolves"
     | "start-before-end"
@@ -119,6 +120,25 @@ export function checkParserInvariants(m: GladMatchBase): InvariantViolation[] {
       }
     }
 
+    // Every damage/heal event carries finite amounts. One NaN in a unit's
+    // damageIn silently poisons every sum over it — ENVIRONMENTAL_DAMAGE read
+    // through the spell-damage offsets did exactly that (65 events in 57 of a
+    // 2,110-file archive slice; burst-tier labels drifted in 77 of 159 owner
+    // contexts), and no gate saw it because NaN never renders (GH #100).
+    for (const key of ["damageIn", "damageOut", "healIn", "healOut"] as const) {
+      const bad = (u[key] ?? []).find(
+        (e) =>
+          !Number.isFinite(e.amount) || !Number.isFinite(e.effectiveAmount),
+      );
+      if (bad) {
+        out.push({
+          code: "hp-amount-finite",
+          unitId: id,
+          detail: `${key} ${bad.eventName} amount=${bad.amount} effectiveAmount=${bad.effectiveAmount} @${bad.timestamp}`,
+        });
+      }
+    }
+
     if (u.ownerId && !unitIds.has(u.ownerId)) {
       out.push({
         code: "pet-owner-resolves",
@@ -156,15 +176,23 @@ export function checkParserInvariants(m: GladMatchBase): InvariantViolation[] {
       }
       const raw = m.rawLines[e.lineIndex];
       const reparsed = raw === undefined ? null : parseLine(raw);
+      // healAbsorbsIn stores decoded fields only, no eventName; its source line
+      // is always a SPELL_HEAL_ABSORBED. Without this the check compared
+      // undefined against the line and flagged every such unit (23 on a
+      // 57-file slice, 2026-09-23) — unnoticed because the scan read .gz
+      // archives as text and parsed nothing.
+      const eventName =
+        e.eventName ??
+        (key === "healAbsorbsIn" ? "SPELL_HEAL_ABSORBED" : undefined);
       if (
         !reparsed ||
-        reparsed.eventName !== e.eventName ||
+        reparsed.eventName !== eventName ||
         reparsed.timestamp !== e.timestamp
       ) {
         out.push({
           code: "line-resolves",
           unitId: id,
-          detail: `${key}[0] lineIndex=${e.lineIndex} 与 rawLines 不对齐(事件 ${e.eventName}@${e.timestamp} vs 行 ${reparsed?.eventName}@${reparsed?.timestamp})`,
+          detail: `${key}[0] lineIndex=${e.lineIndex} 与 rawLines 不对齐(事件 ${eventName}@${e.timestamp} vs 行 ${reparsed?.eventName}@${reparsed?.timestamp})`,
         });
       }
     }

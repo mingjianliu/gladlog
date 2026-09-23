@@ -27,6 +27,7 @@ export const DIAGNOSTIC_LEVEL: Record<string, DiagnosticLevel> = {
   monotonic: "warn",
   "time-bounds": "warn",
   "hp-range": "warn",
+  "hp-amount-finite": "warn",
   "pet-owner-resolves": "warn",
   "line-resolves": "warn",
   "death-has-damage": "warn",

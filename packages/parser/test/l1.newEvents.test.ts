@@ -105,3 +105,39 @@ describe("SPELL_HEAL_ABSORBED (#7)", () => {
     expect(parseLine(HEAL_ABSORBED)!.known).toBe(true);
   });
 });
+
+// Falling damage. No spell triple: the advanced block starts right after the
+// base units (actor = the victim), and the environment type precedes the
+// 10-field damage tail. Layout uniform on all 65 archive lines of a 2,110-file
+// slice (39 params, type 11 from the end, src = nil GUID).
+const ENV_FALLING =
+  '8/22/2026 17:16:02.3598  ENVIRONMENTAL_DAMAGE,0000000000000000,nil,0x80000000,0x80000000,Player-962-057E5E60,"Siberia-Plain-CN",0x511,0x80000000,Player-962-057E5E60,0000000000000000,1057609,1061660,3982,3829,3326,3415,0,0,0,269887,273000,0,1259.63,766.77,0,0.3360,334,Falling,4051,4051,0,1,0,0,0,nil,nil,nil';
+
+describe("ENVIRONMENTAL_DAMAGE (GH #100 field ledger)", () => {
+  it("decodes the damage tail after the environment type", () => {
+    const r = parseLine(ENV_FALLING)!;
+    expect(r.known).toBe(true);
+    expect(r.damage).toMatchObject({
+      amount: 4051,
+      baseAmount: 4051,
+      overkill: 0,
+      school: 1,
+      effectiveAmount: 4051,
+    });
+    expect(r.spell).toEqual({
+      spellId: 0,
+      spellName: "Falling",
+      spellSchool: 1,
+    });
+  });
+
+  it("reads the advanced block at 8 — the victim's own sample", () => {
+    const r = parseLine(ENV_FALLING)!;
+    expect(r.advanced).toMatchObject({
+      actorGuid: "Player-962-057E5E60",
+      hp: 1057609,
+      maxHp: 1061660,
+    });
+    expect(r.advanced!.x).toBeCloseTo(1259.63, 2);
+  });
+});

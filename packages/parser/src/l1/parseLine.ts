@@ -79,6 +79,24 @@ export function parseLine(
       result.advanced = decodeAdvanced(params, 8);
       const swingTail = hpTailSlice(eventName, params);
       if (swingTail) result.damage = decodeDamage(params, swingTail.offset);
+    } else if (eventName === "ENVIRONMENTAL_DAMAGE") {
+      // Falling damage and friends. No spell triple: the advanced block starts
+      // right after the base units (its actor is the victim), and the
+      // environment type ("Falling") sits just before the damage tail. Read
+      // through the _DAMAGE branch below, every field landed one or three
+      // slots off — amount NaN, spellId NaN, a bogus advanced actor — and the
+      // NaN event still reached the victim's damageIn (GH #100 field ledger).
+      result.base = decodeBaseUnits(params);
+      result.advanced = decodeAdvanced(params, 8);
+      const envTail = hpTailSlice(eventName, params);
+      if (envTail) {
+        result.damage = decodeDamage(params, envTail.offset);
+        result.spell = {
+          spellId: 0,
+          spellName: params[envTail.offset - 1] ?? "",
+          spellSchool: result.damage.school,
+        };
+      }
     } else if (eventName.endsWith("_DAMAGE") || eventName === "DAMAGE_SPLIT") {
       // DAMAGE_SPLIT (Blessing of Sacrifice, Soul Link, …) has the same shape.
       // Its src is NOT an attacker: measured on the 12.1 archive, src and dest

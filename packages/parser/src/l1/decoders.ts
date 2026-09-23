@@ -529,6 +529,12 @@ export function hpTailSlice(
     if (params.length < 5) return null;
     return { kind: "heal", offset: params.length - 5 };
   }
+  // ENVIRONMENTAL_DAMAGE: the environment type precedes a 10-field tail, so
+  // the "11 or 10 past the position block" rule below would land on the type.
+  if (eventName === "ENVIRONMENTAL_DAMAGE") {
+    if (params.length < 11) return null;
+    return { kind: "damage", offset: params.length - 10 };
+  }
   const isSwing =
     eventName === "SWING_DAMAGE" || eventName === "SWING_DAMAGE_LANDED";
   // DAMAGE_SPLIT carries the same spell + advanced + damage-tail shape as

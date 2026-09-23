@@ -44,6 +44,48 @@ describe("A2 parser 不变量", () => {
     expect(v.some((x) => x.code === "hp-range")).toBe(true);
   });
 
+  it("healAbsorbsIn (no eventName field) resolves to its SPELL_HEAL_ABSORBED line", () => {
+    const m = parseSynth();
+    const clone = JSON.parse(JSON.stringify(m)) as GladMatchBase;
+    const u = Object.values(clone.units).find((x) => x.kind === "Player")!;
+    const ts = clone.units[u.id]!.damageIn[0]?.timestamp ?? clone.startTime;
+    const d = new Date(ts);
+    const stamp = `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")}.${String(d.getMilliseconds()).padStart(3, "0")}0`;
+    clone.rawLines.push(
+      `${stamp}  SPELL_HEAL_ABSORBED,Player-1-A,"A-X",0x548,0x80000000,${u.id},"B-X",0x512,0x80000000,356528,"Necrotic Wound",0x20,Player-3-C,"C-X",0x512,0x80000000,33110,"Prayer of Mending",0x2,3130,39135`,
+    );
+    u.healAbsorbsIn = [
+      {
+        timestamp: ts,
+        absorbSpellId: 356528,
+        absorbSpellName: "Necrotic Wound",
+        absorbCasterId: "Player-1-A",
+        healerId: "Player-3-C",
+        healSpellId: 33110,
+        healSpellName: "Prayer of Mending",
+        absorbedAmount: 3130,
+        totalAmount: 39135,
+        lineIndex: clone.rawLines.length - 1,
+      },
+    ];
+    const v = checkParserInvariants(clone);
+    expect(v.filter((x) => x.code === "line-resolves")).toEqual([]);
+    // negative control: pointing it at a different line still fails
+    u.healAbsorbsIn[0]!.lineIndex = 0;
+    expect(
+      checkParserInvariants(clone).some((x) => x.code === "line-resolves"),
+    ).toBe(true);
+  });
+
+  it("non-finite damage amount → hp-amount-finite violation", () => {
+    const m = parseSynth();
+    const clone = JSON.parse(JSON.stringify(m)) as GladMatchBase;
+    const u = Object.values(clone.units).find((x) => x.damageIn.length > 0)!;
+    u.damageIn[0]!.amount = NaN;
+    const v = checkParserInvariants(clone);
+    expect(v.some((x) => x.code === "hp-amount-finite")).toBe(true);
+  });
+
   it("玩家死亡前 10s 无承伤 → death-has-damage 违规", () => {
     const m = parseSynth();
     const clone = JSON.parse(JSON.stringify(m)) as GladMatchBase;
