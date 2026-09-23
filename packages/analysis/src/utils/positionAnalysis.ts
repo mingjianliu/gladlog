@@ -158,6 +158,11 @@ export interface IPositionEvent {
   /** HEALER_TRAINED only: healer was hard-CC'd for most of the camp → could not
    *  self-reposition (team must peel), so don't advise "reposition". */
   ownerCcLocked?: boolean;
+  /** HEALER_TRAINED only: merged hard-CC seconds inside the camp window
+   *  (`ccOverlapSeconds`). GH #103: the line used to say "CC-locked through
+   *  this" whenever this was ≥ half the window, and the responder quoted it as
+   *  "CC-locked the whole time" beside the owner's own 1:08 Apotheosis. */
+  ownerCcSeconds?: number;
   /** CD_OUT_OF_RANGE only */
   spellName?: string;
   /** SPLIT_PUSH: melee DPS away from the push target; HEALER_TRAINED: the healer */
@@ -658,6 +663,7 @@ export function computeOwnerPositionEvents(params: {
             ownerCcLocked:
               ccOverlapSeconds(healerCC, runStart, endSeconds) >=
               (endSeconds - runStart) / 2,
+            ownerCcSeconds: ccOverlapSeconds(healerCC, runStart, endSeconds),
           });
           trainedCount++;
         }
@@ -875,9 +881,18 @@ export function formatPositionEventsForContext(
         ? "you were"
         : `your healer (${(e.playersInvolved ?? [])[0] ?? "healer"}) was`;
       // A healer CC-locked through the camp can't self-reposition \u2014 team must peel.
+      // The CC share is printed, not summarised: the lock predicate is "at
+      // least half the window", and "CC-locked through this" read as all of it.
+      const span = Math.round((e.toSeconds ?? e.atSeconds) - e.atSeconds);
+      const ccRaw = e.ownerCcSeconds ?? 0;
+      const ccS = ccRaw > 0 && ccRaw < 0.5 ? "<1" : String(Math.round(ccRaw));
+      // "no CC" only when there was none: a 3 s stun inside the camp used to
+      // render the same "no CC on the healer during this window" as zero.
       const advice = e.ownerCcLocked
-        ? "CC-locked through this \u2014 team must peel (could not self-reposition)"
-        : "no CC on the healer during this window";
+        ? `CC'd ${ccS}s of ${span}s \u2014 team must peel (mostly could not self-reposition)`
+        : ccRaw > 0
+          ? `CC'd ${ccS}s of ${span}s`
+          : "no CC on the healer during this window";
       lines.push(
         `    ${fmtTime(e.atSeconds)}\u2013${fmtTime(e.toSeconds ?? e.atSeconds)} ${subject} camped by ${e.nearestEnemyName} (closest ${e.startDistanceYards}yd) \u2014 ${advice}`,
       );

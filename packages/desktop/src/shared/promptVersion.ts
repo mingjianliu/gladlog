@@ -767,4 +767,12 @@
 //  responder only (50 matches, Opus 5.5, same regex + adjudication standard):
 //  universal sentences 32 → 8, prompt-contradicted 7 → 1. The findings-prompt
 //  copy is unmeasured (its explanations carry no digits and few such claims).
-export const PROMPT_VERSION = 102;
+//  v103 (2026-09-23, found re-adjudicating GH #103 class B): HEALER TRAINED
+//  lines print the healer's real CC share. "CC-locked through this" was
+//  rendered whenever CC covered ≥ half the camp (and got quoted as "CC-locked
+//  the whole time" beside the owner's own cast), and "no CC on the healer
+//  during this window" whenever it covered less — including 1–4 s stuns.
+//  605 archive files: 235 → `CC'd Ns of Ms — team must peel (mostly could
+//  not self-reposition)`, 857 of 1,331 "no CC" lines were false → `CC'd Ns
+//  of Ms`, 474 genuinely no CC unchanged; no other line changed.
+export const PROMPT_VERSION = 103;

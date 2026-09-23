@@ -52,3 +52,37 @@ describe("STAYED IN distance range (GH #103 A7)", () => {
     );
   });
 });
+
+describe("HEALER TRAINED CC share (GH #103, found in the class-B review)", () => {
+  const trained = (ccSeconds: number, locked: boolean): IPositionEvent => ({
+    type: "HEALER_TRAINED",
+    atSeconds: 60,
+    toSeconds: 70,
+    nearestEnemyName: "Kiddmurphy-Sargeras-US",
+    startDistanceYards: 0.9,
+    ownerIsSubject: true,
+    ownerCcLocked: locked,
+    ownerCcSeconds: ccSeconds,
+  });
+  const line = (e: IPositionEvent) =>
+    formatPositionEventsForContext([e]).find((l) =>
+      l.includes("were camped by"),
+    )!;
+
+  it("a lock (≥ half the window) prints the seconds, never 'through this'", () => {
+    const l = line(trained(6.4, true));
+    expect(l).toContain("CC'd 6s of 10s — team must peel");
+    expect(l).not.toContain("through this");
+  });
+
+  it("a short CC is not 'no CC'", () => {
+    expect(line(trained(3, false))).toContain("— CC'd 3s of 10s");
+    expect(line(trained(0.3, false))).toContain("— CC'd <1s of 10s");
+  });
+
+  it("zero CC keeps the old fact", () => {
+    expect(line(trained(0, false))).toContain(
+      "— no CC on the healer during this window",
+    );
+  });
+});
