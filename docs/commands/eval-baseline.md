@@ -131,6 +131,14 @@ Dispatch all in parallel at once. After receiving completion notifications, chec
 
 **Ordinal integrity check:** The `MATCHID:` header of each response file must match the `matchId` of the index entry with the same ordinal. Mismatch = file misplacement bug (incident 063/064 occurred upstream): exclude both ordinals from scoring and report. Strip the header line before passing to the judge.
 
+**Quoting metric (tracked, not a gate — GH #103 class C):** after the responses are in, run
+`BASE_DIR="$GLADLOG_EVAL_HOME/runs/<runId>" npx tsx packages/eval/scripts/responseQuoteScan.ts`.
+It prints ranges verbatim / re-cut (one endpoint of a printed window kept, the other moved) /
+free-form, and HP quotes unsupported by that second's lines, and writes `quote-report.json`. Record
+the re-cut rate in the run ledger so a regression in the QUOTING DISCIPLINE shows as a trend. First
+readings (2026-09-23, 50 responses each): Opus 5.5 baseline re-cut 43/316 (13.6 %), HP 1/432; the
+class-B rule run re-cut 65/325 (20.0 %), HP 3/355 — one run each, not yet separable from noise.
+
 ## Step 3: Per-Match Scoring (Three-Pass Method + Anchored Rubric)
 
 For each entry with a response: read prompt, read response (verify and strip `MATCHID:` header), note `result`, read the match's `quality-report.json` entry. Write score to `runs/<runId>/scores/NNN.json`.

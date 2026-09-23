@@ -47,6 +47,7 @@
     "test/promptLineTypes.test.ts",
     "test/promptQuality.test.ts",
     "test/provenance.test.ts",
+    "test/responseQuoteCheck.test.ts",
     "test/signalSkillGradient.test.ts",
     "test/smoke.test.ts",
     "test/sycophancy.test.ts"
