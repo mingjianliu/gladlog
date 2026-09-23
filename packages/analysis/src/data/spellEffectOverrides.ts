@@ -236,9 +236,9 @@ export const CORPUS_DURATION_PATCHES: Record<string, number> = {
   // 466772 qualified on the numbers and was dropped for being in
   // SPELL_CATEGORIES, per the standing ruling that control keeps its official
   // number and takes its truth from the observed break/dispel instead.
-  // Earthliving Weapon: DB2 6 s vs 9 s ×79 % of 13254 clean lifetimes (227-file archive,
-  // APPLIED→REMOVED with no refresh and no stack, 2026-09-07).
-  "382024": 9,
+  // Earthliving Weapon 382024 — REMOVED 2026-09-22: the 9 s was Imbuement Mastery
+  // (+3 s by SpellLabel), held by 58 % of casters; now a BUFF_DURATION_TALENT_MODIFIERS
+  // entry (257/257 holder cells at 9 s, 183/183 non-holders at 6 s = DB2).
   // Healing Stream: DB2 15 s vs 21.5 s ×64 % of 9090 clean lifetimes (227-file archive,
   // APPLIED→REMOVED with no refresh and no stack, 2026-09-07).
   "5672": 21.5,
@@ -258,14 +258,19 @@ export const CORPUS_DURATION_PATCHES: Record<string, number> = {
   // APPLIED→REMOVED with no refresh and no stack, 2026-09-07).
   "466991": 15,
   // Manifested Demonic Soul: DB2 9 s vs 14 s ×89 % of 1030 clean lifetimes (227-file archive,
-  // APPLIED→REMOVED with no refresh and no stack, 2026-09-07).
+  // APPLIED→REMOVED with no refresh and no stack, 2026-09-07). Mechanism found
+  // 2026-09-22: Eternal Hunger 1268903 +5 s (SpellLabel), 20/20 holder cells, no
+  // non-holder observed — kept as the TYPICAL value (Barkskin precedent), the
+  // talent entry prices a definite non-holder at 9 s.
   "1269042": 14,
   // Executioner: DB2 12 s vs 18 s ×76 % of 934 clean lifetimes (227-file archive,
-  // APPLIED→REMOVED with no refresh and no stack, 2026-09-07).
+  // APPLIED→REMOVED with no refresh and no stack, 2026-09-07). Mechanism found
+  // 2026-09-22: Deadly Focus 1270718 +6 s (SpellLabel), 23/23 holder cells, no
+  // non-holder observed — kept as the TYPICAL value, see 1269042.
   "445584": 18,
-  // Thing from Beyond: DB2 20 s vs 24 s ×79 % of 610 clean lifetimes (227-file archive,
-  // APPLIED→REMOVED with no refresh and no stack, 2026-09-07).
-  "373277": 24,
+  // Thing from Beyond 373277 — REMOVED 2026-09-22: the 24 s was Subservient
+  // Shadows +20 % (SpellLabel; 15/15 holder cells at 24 s, 8/8 non-holders at
+  // 20 s = DB2), 65 % of casters — a BUFF_DURATION_TALENT_MODIFIERS entry now.
   // Undisputed Ruling: DB2 6 s vs 10 s ×72 % of 563 clean lifetimes (227-file archive,
   // APPLIED→REMOVED with no refresh and no stack, 2026-09-07).
   "432629": 10,
@@ -299,19 +304,34 @@ export const CORPUS_DURATION_PATCHES: Record<string, number> = {
 
   // ── 2026-09-22 re-measure (GH #65 item 4; every 30th file of the 63k
   // archive = 2,111 files, `buffDurationScan --gap --dose-unclean`) ────────
-  // Same bar as the 09-07 batch, same direction rule. Of the batch above, the
-  // PATCH block reproduces 12 of the 15 with a sample; three no longer hold a
-  // clean majority and stay AS IS because nothing moves downward without a
-  // mechanism: Earthliving Weapon 382024 (9 s in 389 cells vs 6 s in 341,
-  // bimodal INSIDE each month, so not a hotfix — most likely the two
-  // producers, Riptide vs Chain Heal, apply different lengths, a shape this
-  // table cannot express), Dream Breath 376788 (the 16 s mode is now 24 % of
-  // 1,758 — it varies with empower level, GH #65 item 1), Thing from Beyond
-  // 373277 (24 s ×27 cells vs 20 s ×15, no modifier reaches it).
-  // Shadowfiend: DB2 5 s vs 6 s ×72 % of 842 clean lifetimes (2,111-file archive,
-  // APPLIED→REMOVED with no refresh and no stack, 2026-09-22); 41 of 49 detail
-  // cells at 6 s in both months; no DB2 duration modifier reaches 1280172.
-  "1280172": 6,
+  // The user's question "did you read the talent text?" reopened the "no
+  // talent explains" claim behind the 09-07 batch: it had been checked against
+  // the class-mask SpellMods (aura 107/108) only, while the M6 inventory
+  // (`talentEffectInventoryGenerated.json`) also resolves SpellLabel-keyed
+  // ones (aura 218/219) — 54 duration rows nobody had offered to the talent
+  // table. Run through durationTalentScan (`durationCandidatesFromInventory.ts`,
+  // every 60th file, 1,056 files): Earthliving, Thing from Beyond, and the
+  // day's own Shadowfiend patch were talent modifiers and moved to
+  // BUFF_DURATION_TALENT_MODIFIERS; Manifested Demonic Soul / Executioner keep
+  // the patch as the typical value with the modifier registered on top.
+  // Still flat, mechanism known but not splittable on this slice (0–3 holder
+  // cells — the aura ids may have moved in 12.1.5): Dominion of Argus 1282501 /
+  // 1282502 ← Dominion of Argus 1276222 +4 s (a TIERED node, maxRanks 4 — rank
+  // semantics unread), Lunar Beam 204066 ← The Eternal Moon 424113 +3 s, Healing
+  // Stream 5672 / Stormstream 1267765 ← Totemic Focus 382201 +3 s (15 + 3 = 18,
+  // not the 21.5 observed — a second factor is missing). Immolation Aura ←
+  // Agonizing Flames +50 % gives 9, not the observed 10, and the ownership
+  // predicate found 0 holders — unexplained, patch stays. Improved Garrote
+  // 392401: Subterfuge +3 s gives 9, observed 12 — unexplained, patch stays.
+  // Dream Breath 376788: the 16 s mode is now 24 % of 1,758 (empower level,
+  // GH #65 item 1) — stays as the best single number.
+  // Renewing Blaze: DB2 8 s, but the game runs 20 s — 25/26 caster-cells that do
+  // NOT hold Foci of Life sit at 20.0 s and 28/28 holders at 16.0 s (= 20 − 4;
+  // the talent is registered on top of this base). No inventory row adds the
+  // missing 12 s, so the base itself is a corpus fact (LONGER direction). The
+  // 2,111-file GAP row read "16 s mode, 42 %" only because the two tiers were
+  // pooled. 2026-09-22.
+  "374349": 20,
 };
 for (const [id, durationSeconds] of Object.entries(CORPUS_DURATION_PATCHES)) {
   const cur = SPELL_EFFECT_OVERRIDES[id];

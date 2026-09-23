@@ -364,6 +364,19 @@ export const CC_DURATION_TALENT_MODIFIERS: Record<
  *    Rejuvenation, Hover, Divine Steed, Avenging Crusader, Recklessness …).
  *    Whatever moves those is not a talent duration modifier, so they are not
  *    this table's problem — do not force them in.
+ *    ── CORRECTION 2026-09-22: that "no talent" verdict was reached against
+ *    the CLASS-MASK SpellMods only (aura 107/108). SpellMods keyed by
+ *    SpellLabel (aura 218 pct / 219 flat) are a second, equally official
+ *    encoding — the M6 inventory (`talentEffectInventoryGenerated.json`,
+ *    2026-09-14) resolves 54 duration rows of that kind, and the 09-13
+ *    catalog's `modsRaw` never listed them. Rejuvenation IS explained
+ *    (Lingering Healing, registered below); so were 7 of the 20 "no talent
+ *    explains" corpus patches of 2026-09-07. The user's question that found
+ *    it: "did you actually read the talent description?" — the tooltip
+ *    stated every one of them in one line. Standing rule: leg (a)+(b) of the
+ *    evidence is answered from the INVENTORY (both encodings), never from
+ *    the catalog's mask-only list; `durationCandidatesFromInventory.ts` +
+ *    `durationTalentScan --candidates` is the re-runnable path.
  */
 export const BUFF_DURATION_TALENT_MODIFIERS: Record<
   string,
@@ -897,6 +910,220 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
       untalentedBaseSeconds: 5,
       pct: 20,
       note: "Anti-Magic Barrier on the second Anti-Magic Shell id — same DB2 row and mask as 410358; GAP row 2026-09-22: 6.0 s in 69 caster-cells, modal lifetime 6.0 s = 80 % of 541; 32 of 32 holder cells at 6.0 s, no non-holder cells; 5 × 1.2 = 6.",
+    },
+  ],
+  // ── 2026-09-22 batch 2 (GH #65, user ruling "都把它改了"): every DB2
+  // duration SpellMod in the M6 inventory — class-mask (aura 107/108) AND
+  // SpellLabel-keyed (aura 218/219, the half the 09-13 catalog never listed)
+  // — run as (talent → aura) pairs through durationTalentScan's predeclared
+  // rule on every 60th archive file (1,056 files / 1,946 rounds;
+  // `durationCandidatesFromInventory.ts` → `--candidates`). PROMOTE rows below
+  // are increases; the REDUCTION rows carry their mechanism (row + mask/label
+  // + holder split on the arithmetic), which is what Rule 7 asks of a shorter
+  // number. Numbers are holder cells near expected / holder cells, then
+  // non-holder cells at base / non-holder cells.
+  "774": [
+    {
+      talentSpellId: "231040",
+      untalentedBaseSeconds: 12,
+      addSeconds: 3,
+      note: "Lingering Healing — DB2 aura 107 +3000 ms, Druid class tree (maxRanks 1), mask covers Rejuvenation; corpus 75/82 holder cells at 15.0 s (16 s ×2), 6/10 non-holders at 12.0 s; 12 + 3 = 15. Same talent as the Germination-Rejuvenation entry 155777.",
+    },
+  ],
+  "703": [
+    {
+      talentSpellId: "1249802",
+      untalentedBaseSeconds: 18,
+      addSeconds: 6,
+      note: "Razor Wire — DB2 aura 107 +6000 ms, Rogue/Assassination[spec] (maxRanks 1), mask covers Garrote; corpus 38/41 holder cells at 24.0 s, 5/5 non-holders at 18.0 s; 18 + 6 = 24. (The 09-07 note's 'Razor Wire rejected by the mask check' was about Improved Garrote 392401, which it does not reach; 392401's 12 s stays a corpus patch.)",
+    },
+  ],
+  "382024": [
+    {
+      talentSpellId: "445028",
+      untalentedBaseSeconds: 6,
+      addSeconds: 3,
+      note: "Imbuement Mastery — DB2 aura 219 +3000 ms keyed by SpellLabel (invisible to the class-mask sweep the 09-07 batch relied on, which is why this sat as a flat 9 s corpus patch), Shaman HERO tree Totemic (Enhancement + Restoration, maxRanks 1); corpus 257/257 holder cells at 9.0 s, 183/183 non-holder cells at 6.0 s = DB2, both months; 6 + 3 = 9. The talent tooltip says it in one line: 你的大地生命效果的持续时间延长3秒.",
+    },
+  ],
+  "212431": [
+    {
+      talentSpellId: "471369",
+      untalentedBaseSeconds: 3,
+      addSeconds: 1,
+      note: "Precision Detonation — DB2 aura 107 +1000 ms, Hunter/Marksmanship[spec] (maxRanks 1), mask covers Explosive Shot; corpus 172/172 holder cells within 0.5 s of 4.0 s (4.0 ×110, 4.5 ×62), 62 non-holders at 3.0 / 3.5 s; 3 + 1 = 4.",
+    },
+  ],
+  "1280172": [
+    {
+      talentSpellId: "1228516",
+      untalentedBaseSeconds: 5,
+      pct: 20,
+      note: "Subservient Shadows — DB2 aura 218 +20 % keyed by SpellLabel ('召唤的爪牙持续时间额外延长20%'), Priest/Shadow[spec] (maxRanks 1); corpus 41/42 holder cells at 6.0 s, 7/7 non-holders at 5.0 s = DB2; 5 × 1.2 = 6. Was a flat 5 → 6 corpus patch for a few hours on 2026-09-22 — the same 'no talent explains' mistake as Earthliving, caught the same day.",
+    },
+  ],
+  "373277": [
+    {
+      talentSpellId: "1228516",
+      untalentedBaseSeconds: 20,
+      pct: 20,
+      note: "Subservient Shadows on Thing from Beyond — same DB2 row/label as 1280172; corpus 15/15 holder cells at 24.0 s and 8/8 non-holders at 20.0 s = DB2 on the every-60 slice (under the scan's 20-cell rule, registered on the Divine Spurs precedent: exact and one-sided), and 27 cells at 24 s vs 15 at 20 s by value on the 2,111-file run; 20 × 1.2 = 24. Replaces the 09-07 flat 24 s patch.",
+    },
+  ],
+  "466772": [
+    {
+      talentSpellId: "384444",
+      untalentedBaseSeconds: 8,
+      addSeconds: 2,
+      note: "Thorim's Invocation — DB2 aura 219 +2000 ms keyed by SpellLabel, Shaman/Enhancement[spec] (maxRanks 1); corpus 46/46 holder cells at 10.0 s, 4/4 non-holders at 8.0 s = DB2; 8 + 2 = 10. The 09-07 batch dropped Doom Winds from the patch list by SPELL_CATEGORIES membership (it is buffs_offensive, not control) — moot now that the mechanism is a talent.",
+    },
+  ],
+  "1269042": [
+    {
+      talentSpellId: "1268903",
+      untalentedBaseSeconds: 9,
+      addSeconds: 5,
+      note: "Eternal Hunger — DB2 aura 219 +5000 ms keyed by SpellLabel, Warlock HERO tree Soul Harvester (Affliction + Demonology, maxRanks 1); corpus 20/20 holder cells at 14.0 s, no non-holder cell observed (Rule 3); 9 + 5 = 14. The 09-07 corpus patch 14 stays as the TYPICAL value (Barkskin shape, see buffDuration.test.ts TYPICAL_IS_TALENTED); a definite non-holder is priced at 9.",
+    },
+  ],
+  "445584": [
+    {
+      talentSpellId: "1270718",
+      untalentedBaseSeconds: 12,
+      addSeconds: 6,
+      note: "Deadly Focus — DB2 aura 219 +6000 ms keyed by SpellLabel, Warrior HERO tree Slayer (Arms + Fury, maxRanks 1); corpus 23/23 holder cells at 18.0 s, no non-holder observed; 12 + 6 = 18. Patch 18 stays as the TYPICAL value, see 1269042.",
+    },
+  ],
+  "374349": [
+    {
+      talentSpellId: "375574",
+      untalentedBaseSeconds: 20,
+      addSeconds: -4,
+      note: "Foci of Life — REDUCTION with mechanism: DB2 aura 107 −4000 ms, Evoker class tree (maxRanks 1), mask covers Renewing Blaze; corpus 28/28 holder cells at 16.0 s, 25/26 non-holders at 20.0 s = DB2; 20 − 4 = 16.",
+    },
+  ],
+  "155625": [
+    {
+      talentSpellId: "400320",
+      untalentedBaseSeconds: 18,
+      pct: -20,
+      note: "Circle of Life and Death — REDUCTION with mechanism: DB2 aura 108 −20 %, Druid/Feral[spec] (maxRanks 1), mask covers Feral Moonfire; corpus 57/59 holder cells at 14.5 s, 5/5 non-holders at 18.0 s; 18 × 0.8 = 14.4.",
+    },
+  ],
+  "439531": [
+    {
+      talentSpellId: "439880",
+      untalentedBaseSeconds: 6,
+      addSeconds: 2,
+      note: "Resilient Flourishing — DB2 aura 219 +2000 ms keyed by SpellLabel, Druid HERO tree Wildstalker (Feral + Restoration, maxRanks 1); TWO modifiers stack on Bloodseeker Vines and the single-talent scan could only see one at a time: cells holding Resilient Flourishing alone sit at 8.0 s (18), holding it plus Circle of Life and Death at 6.5 s (75; (6 + 2) × 0.8 = 6.4), holding neither at 6.0 s (6) = DB2.",
+    },
+    {
+      talentSpellId: "400320",
+      untalentedBaseSeconds: 6,
+      pct: -20,
+      note: "Circle of Life and Death on Bloodseeker Vines — REDUCTION with mechanism, DB2 aura 108 −20 %, mask covers the spell; applied after Resilient Flourishing's +2 s: 75/83 holder cells at 6.5 s ((6 + 2) × 0.8 = 6.4), 18/24 non-holders at 8.0 s.",
+    },
+  ],
+  "439530": [
+    {
+      talentSpellId: "439880",
+      untalentedBaseSeconds: 6,
+      addSeconds: 2,
+      note: "Resilient Flourishing on Symbiotic Blooms — same DB2 row/label as 439531; cells holding it alone at 8.0 s (47), plus Circle of Life and Death (Restoration row −15 %) at 7.0 s (49; (6 + 2) × 0.85 = 6.8), holding neither at 6.0 s (49) = DB2. Was a 'weak evidence' GAP row (8 s vs 6 s, mode 39 %) — the mix is these three tiers.",
+    },
+    {
+      talentSpellId: "400320",
+      untalentedBaseSeconds: 6,
+      pct: -15,
+      note: "Circle of Life and Death (Restoration row) on Symbiotic Blooms — REDUCTION with mechanism, DB2 aura 108 −15 %, mask covers the spell; 49 holder cells at 7.0 s on top of Resilient Flourishing ((6 + 2) × 0.85 = 6.8).",
+    },
+  ],
+  "1271863": [
+    {
+      talentSpellId: "400320",
+      untalentedBaseSeconds: 6,
+      pct: -20,
+      note: "Circle of Life and Death on Unseen Slash — same row; corpus 148/148 holder cells at 5.0 s, 5/5 non-holders at 6.0 s; 6 × 0.8 = 4.8.",
+    },
+  ],
+  "48438": [
+    {
+      talentSpellId: "400320",
+      untalentedBaseSeconds: 7,
+      pct: -15,
+      note: "Circle of Life and Death (the Restoration row, −15 %) on Wild Growth — DB2 aura 108 −15 %, mask covers the spell; corpus 51/52 holder cells at 6.0 s, 502/513 non-holders at 7.0 s = DB2; 7 × 0.85 = 5.95.",
+    },
+  ],
+  "450538": [
+    {
+      talentSpellId: "449634",
+      untalentedBaseSeconds: 10,
+      pct: -20,
+      note: "Quietus — REDUCTION with mechanism: DB2 aura 218 −20 % keyed by SpellLabel, Warlock HERO tree Soul Harvester (maxRanks 1); corpus 260/265 holder cells at 8.0 s, no non-holder observed; 10 × 0.8 = 8. Was a 'shorter — needs a mechanism' GAP row on the 2,111-file run.",
+    },
+  ],
+  "55095": [
+    {
+      talentSpellId: "441894",
+      untalentedBaseSeconds: 24,
+      pct: -50,
+      note: "Wither Away — REDUCTION with mechanism: DB2 aura 108 −50 %, Death Knight HERO tree Deathbringer (Blood + Frost, maxRanks 1), mask covers Frost Fever; corpus 55/60 holder cells at 12.0 s, no non-holder observed; 24 × 0.5 = 12.",
+    },
+  ],
+  "25771": [
+    {
+      talentSpellId: "469445",
+      untalentedBaseSeconds: 30,
+      addSeconds: -10,
+      note: "Holy Reprieve — REDUCTION with mechanism: DB2 aura 107 −10000 ms, Paladin class tree (maxRanks 1), mask covers Forbearance; corpus 81/81 holder cells at 20.0 s, 165/166 non-holders at 30.0 s = DB2; 30 − 10 = 20.",
+    },
+  ],
+  "11426": [
+    {
+      talentSpellId: "1220739",
+      untalentedBaseSeconds: 60,
+      addSeconds: -56,
+      note: "Overpowered Barrier — REDUCTION with mechanism: PvP talent (equipped = rank 1), DB2 aura 107 −56000 ms, mask covers the three Mage barriers; corpus 44/69 holder cells at 4.0 s (14 at 0.5 s, 6 at 0 s — consumed, not expired), 0/1 non-holders; 60 − 56 = 4.",
+    },
+  ],
+  "235313": [
+    {
+      talentSpellId: "1220739",
+      untalentedBaseSeconds: 60,
+      addSeconds: -56,
+      note: "Overpowered Barrier on Blazing Barrier — same row; corpus 147/160 holder cells at 4.0 s, no non-holder observed; 60 − 56 = 4.",
+    },
+  ],
+  "235450": [
+    {
+      talentSpellId: "1220739",
+      untalentedBaseSeconds: 60,
+      addSeconds: -56,
+      note: "Overpowered Barrier on Prismatic Barrier — same row; corpus 60/61 holder cells at 4.0 s, 3 non-holders scattered; 60 − 56 = 4.",
+    },
+  ],
+  "61295": [
+    {
+      talentSpellId: "381946",
+      untalentedBaseSeconds: 18,
+      addSeconds: 3,
+      note: "Wavespeaker's Blessing — DB2 aura 107 +6000 ms, Shaman/Restoration[spec] (maxRanks 2), mask covers Riptide. The rank READ from COMBATANT_INFO (Rule 4) says the DB2 6000 is the TOTAL at max rank, i.e. +3 s per rank: rank-2 cells 51/52 at 24.0 s, rank-1 cells 6/6 at 21.0 s, 217/220 non-holders at 18.0 s = DB2 (--detail rank split, 2026-09-22); 18 + 3 × 2 = 24.",
+    },
+  ],
+  "393831": [
+    {
+      talentSpellId: "203550",
+      untalentedBaseSeconds: 2,
+      pct: 10,
+      note: "Blind Fury — DB2 aura 108 +10 %, Demon Hunter/Havoc[spec] (maxRanks 2), mask covers Fel Devastation; PER RANK by the rank read: rank-2 cells 21/21 at 2.5 s (2 × 1.2 = 2.4), rank-1 cells 7/7 at 2.0 s (2.2 rounds down on the 0.5 s grid), 10/10 non-holders at 2.0 s = DB2. Small numbers on a 2 s channel — registered because the split is exact, no consumer depends on it.",
+    },
+  ],
+  "1241786": [
+    {
+      talentSpellId: "207269",
+      untalentedBaseSeconds: 12,
+      pct: -25,
+      note: "Ebon Fever — REDUCTION with mechanism: DB2 aura 218 −25 % keyed by SpellLabel, Death Knight/Unholy[spec] (maxRanks 1); corpus 31/31 holder cells at 9.0 s, no non-holder observed; 12 × 0.75 = 9. Was a 'shorter — needs a mechanism' GAP row.",
     },
   ],
 };

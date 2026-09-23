@@ -65,6 +65,8 @@ describe("buffFullDurationForCaster — 天赋条件的增益时长", () => {
       "47788": 1, // Foreseen Circumstances, maxRanks 1
       "357170": 2, // Timeless Magic, maxRanks 2 —— 语料 143/155 格是 2 级
       "1719": 2, // Rampaging Berserker —— 语料 31/31 格是 2 级,12×(1+0.25×2)=18
+      "1269042": 1, // Eternal Hunger —— 20/20 持有,补丁 14 = 9 + 5 保留为典型值(2026-09-22)
+      "445584": 1, // Deadly Focus —— 23/23 持有,补丁 18 = 12 + 6 保留为典型值(2026-09-22)
     };
     for (const [spellId, mods] of Object.entries(
       BUFF_DURATION_TALENT_MODIFIERS,
@@ -371,6 +373,170 @@ describe("buffFullDurationForCaster — 天赋条件的增益时长", () => {
       info: { talents: [FEATHERFOOT], pvpTalents: [] },
     });
     expect(buffFullDurationForCaster("2983", rogueFeather)).toBeCloseTo(12);
+  });
+
+  it("2026-09-22 第二批:inventory 里 label / 掩码时长修正逐对过语料后登记的条目(用户裁「都把它改了」)", () => {
+    // 每一条:DB2 行 + 目标可达(inventory)、持有者拆分单边、算术自洽;数字在表的 note 里。
+    const B2 = {
+      IMBUEMENT_MASTERY: { id1: 94871, id2: 117468, count: 1 },
+      SUBSERVIENT_SHADOWS: { id1: 82559, id2: 103682, count: 1 },
+      THORIMS_INVOCATION: { id1: 80949, id2: 101813, count: 1 },
+      LINGERING_HEALING: { id1: 82240, id2: 103319, count: 1 },
+      RAZOR_WIRE: { id1: 90780, id2: 112673, count: 1 },
+      PRECISION_DETONATION: { id1: 110574, id2: 137377, count: 1 },
+      FOCI_OF_LIFE: { id1: 93345, id2: 115660, count: 1 },
+      WITHER_AWAY: { id1: 95058, id2: 117655, count: 1 },
+      HOLY_REPRIEVE: { id1: 103860, id2: 128256, count: 1 },
+      RESILIENT_FLOURISHING: { id1: 94631, id2: 117234, count: 1 },
+      CIRCLE_OF_LIFE_AND_DEATH: { id1: 82092, id2: 103152, count: 1 },
+      ETERNAL_HUNGER: { id1: 109837, id2: 136096, count: 1 },
+      DEADLY_FOCUS: { id1: 109816, id2: 136075, count: 1 },
+      EBON_FEVER: { id1: 76197, id2: 96334, count: 1 },
+      QUIETUS: { id1: 94846, id2: 117443, count: 1 },
+    };
+    const OVERPOWERED_BARRIER = "1220739"; // PvP 天赋
+    const u = (
+      id: string,
+      spec: CombatUnitSpec,
+      talents: Array<{ id1: number; id2: number; count: number }>,
+      pvpTalents: string[] = [],
+    ) => makeUnit(id, { spec, info: { talents, pvpTalents } });
+    const d = (
+      spellId: string,
+      unit: ReturnType<typeof makeUnit> | undefined,
+    ) => buffFullDurationForCaster(spellId, unit);
+
+    // 大地生命武器:09-07 的 9 s 平补丁其实是灌魔精通(label +3 s)—— 补丁已删
+    const rsham = CombatUnitSpec.Shaman_Restoration;
+    expect(d("382024", u("s-im", rsham, [B2.IMBUEMENT_MASTERY]))).toBeCloseTo(
+      9,
+    );
+    expect(d("382024", u("s-no", rsham, []))).toBeCloseTo(6);
+    expect(d("382024", undefined)).toBeCloseTo(6);
+    // 暗影魔 / 彼岸之物 ← 卑微暗影 ×1.2(label)—— 两条平补丁都删了
+    const spriest = CombatUnitSpec.Priest_Shadow;
+    expect(
+      d("1280172", u("p-ss", spriest, [B2.SUBSERVIENT_SHADOWS])),
+    ).toBeCloseTo(6);
+    expect(
+      d("373277", u("p-ss2", spriest, [B2.SUBSERVIENT_SHADOWS])),
+    ).toBeCloseTo(24);
+    expect(d("1280172", u("p-no", spriest, []))).toBeCloseTo(5);
+    expect(d("373277", undefined)).toBeCloseTo(20);
+    // 狂风 ← 索里姆的召唤 +2(label):09-07 按表成员资格丢掉的那条,机制是天赋
+    expect(
+      d(
+        "466772",
+        u("s-ti", CombatUnitSpec.Shaman_Enhancement, [B2.THORIMS_INVOCATION]),
+      ),
+    ).toBeCloseTo(10);
+    // 回春术 ← 挥之不去的治疗 +3(掩码)
+    expect(
+      d(
+        "774",
+        u("d-lh", CombatUnitSpec.Druid_Restoration, [B2.LINGERING_HEALING]),
+      ),
+    ).toBeCloseTo(15);
+    expect(
+      d("774", u("d-no", CombatUnitSpec.Druid_Restoration, [])),
+    ).toBeCloseTo(12);
+    // 绞喉 ← 剃刀丝 +6 / 爆炸射击 ← 精准引爆 +1
+    expect(
+      d("703", u("r-rw", CombatUnitSpec.Rogue_Assassination, [B2.RAZOR_WIRE])),
+    ).toBeCloseTo(24);
+    expect(
+      d(
+        "212431",
+        u("h-pd", CombatUnitSpec.Hunter_Marksmanship, [
+          B2.PRECISION_DETONATION,
+        ]),
+      ),
+    ).toBeCloseTo(4);
+    // 减短带机制:活力烈焰 20 − 4、冰霜疫病 24 × 0.5、宽恕 30 − 10、冰霜屏障(PvP 天赋)60 − 56
+    const pres = CombatUnitSpec.Evoker_Preservation;
+    expect(d("374349", u("e-fl", pres, [B2.FOCI_OF_LIFE]))).toBeCloseTo(16);
+    expect(d("374349", u("e-no", pres, []))).toBeCloseTo(20);
+    expect(d("374349", undefined)).toBeCloseTo(20);
+    expect(
+      d(
+        "55095",
+        u("dk-wa", CombatUnitSpec.DeathKnight_Frost, [B2.WITHER_AWAY]),
+      ),
+    ).toBeCloseTo(12);
+    expect(
+      d(
+        "25771",
+        u("p-hr", CombatUnitSpec.Paladin_Retribution, [B2.HOLY_REPRIEVE]),
+      ),
+    ).toBeCloseTo(20);
+    expect(
+      d("25771", u("p-nohr", CombatUnitSpec.Paladin_Retribution, [])),
+    ).toBeCloseTo(30);
+    expect(
+      d(
+        "11426",
+        u("m-ob", CombatUnitSpec.Mage_Frost, [], [OVERPOWERED_BARRIER]),
+      ),
+    ).toBeCloseTo(4);
+    expect(d("11426", u("m-noob", CombatUnitSpec.Mage_Frost, []))).toBeCloseTo(
+      60,
+    );
+    // 觅血缠藤:两条修正叠加 —— 坚韧繁茂 +2 先加,生死循环 −20% 后乘
+    const feral = CombatUnitSpec.Druid_Feral;
+    expect(
+      d("439531", u("f-rf", feral, [B2.RESILIENT_FLOURISHING])),
+    ).toBeCloseTo(8);
+    expect(
+      d(
+        "439531",
+        u("f-both", feral, [
+          B2.RESILIENT_FLOURISHING,
+          B2.CIRCLE_OF_LIFE_AND_DEATH,
+        ]),
+      ),
+    ).toBeCloseTo(6.4);
+    expect(d("439531", u("f-none", feral, []))).toBeCloseTo(6);
+    // 补丁留作典型值 + 修正登记在上(Barkskin 形状):无施法者 14 / 18,明确未持有 9 / 12
+    const aff = CombatUnitSpec.Warlock_Affliction;
+    expect(d("1269042", undefined)).toBeCloseTo(14);
+    expect(d("1269042", u("w-eh", aff, [B2.ETERNAL_HUNGER]))).toBeCloseTo(14);
+    // 「明确未持有」要一个真实可解析、但不是该天赋的节点 —— 空数组是 unknown,
+    // 回退典型值(与时间膨胀那条同一纪律)
+    expect(d("1269042", u("w-no", aff, [B2.QUIETUS]))).toBeCloseTo(9);
+    expect(
+      d("445584", u("w-df", CombatUnitSpec.Warrior_Arms, [B2.DEADLY_FOCUS])),
+    ).toBeCloseTo(18);
+    const BATTLEFIELD_COMMANDER = { id1: 108544, id2: 134033, count: 1 };
+    expect(
+      d(
+        "445584",
+        u("w-nodf", CombatUnitSpec.Warrior_Arms, [BATTLEFIELD_COMMANDER]),
+      ),
+    ).toBeCloseTo(12);
+    // 两条多级天赋按**读出来的级数**:激流 ← 浪语者祝福 每级 +3(DB2 6000 是满级总值,
+    // r1 21 s ×6、r2 24 s ×51);邪能毁灭 ← 盲目怒火 每级 +10%(r2 2.5 s ×21)
+    const WAVESPEAKERS = (count: number) => ({
+      id1: 103427,
+      id2: 127671,
+      count,
+    });
+    expect(d("61295", u("s-wb1", rsham, [WAVESPEAKERS(1)]))).toBeCloseTo(21);
+    expect(d("61295", u("s-wb2", rsham, [WAVESPEAKERS(2)]))).toBeCloseTo(24);
+    const BLIND_FURY = (count: number) => ({ id1: 91026, id2: 112949, count });
+    expect(
+      d(
+        "393831",
+        u("dh-bf2", CombatUnitSpec.DemonHunter_Havoc, [BLIND_FURY(2)]),
+      ),
+    ).toBeCloseTo(2.4);
+    // 灵魂诅咒 ← 静默 ×0.8(label)/ 感染之爪 ← 黑檀热病 ×0.75(label)
+    expect(d("450538", u("w-q", aff, [B2.QUIETUS]))).toBeCloseTo(8);
+    expect(
+      d(
+        "1241786",
+        u("dk-ef", CombatUnitSpec.DeathKnight_Unholy, [B2.EBON_FEVER]),
+      ),
+    ).toBeCloseTo(9);
   });
 
   it("读不到天赋(unknown)绝不加长 —— 与 CC 侧同一条纪律", () => {

@@ -214,10 +214,12 @@ for (const f of files) {
       });
       if (detail.has(spellId)) {
         const dTalent = detail.get(spellId);
+        // Rank, not a boolean (Rule 4: read the rank from COMBATANT_INFO —
+        // a maxRanks-2 talent's per-rank vs total semantics is decided here).
         const holder = dTalent
-          ? talentRankOf(caster as never, dTalent) > 0
-            ? "holder"
-            : "non-holder"
+          ? ((r) => (r > 0 ? `holder r${r}` : "non-holder"))(
+              talentRankOf(caster as never, dTalent),
+            )
           : "-";
         const month = new Date(legacy.startTime).toISOString().slice(0, 7);
         const k = `${specToString(caster.spec as never)}|${month}|${holder}`;

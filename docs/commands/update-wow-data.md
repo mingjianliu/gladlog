@@ -377,8 +377,18 @@ npx tsx packages/eval/scripts/dispelCompletenessScan.ts <dispel-counts.txt>
 #    A FLAG or a GAP nomination is then chased with `--detail <aura>[:<talentSpellId>],…`:
 #    per aura, the observed distribution split by caster spec × log month × holder —
 #    month drift = hotfix, spec split = specBaseSeconds, holder split = a modifier entry
-#    (the third evidence leg; legs (a)+(b) come from the talent catalog's mask-resolved
-#    target lists, reports/talent-catalog-<date>/catalog.json `modsRaw` with op 1).
+#    (the third evidence leg). Legs (a)+(b) come from the M6 INVENTORY
+#    (packages/analysis/src/data/talentEffectInventoryGenerated.json: misc0 = SpellModOp, 1 = duration;
+#    targets[].via = mask OR label) — NOT from the talent catalog's `modsRaw`, which only lists the
+#    class-mask half (aura 107/108) and misses every SpellLabel-keyed row (aura 218/219; 54 duration
+#    rows, the 2026-09-22 lesson). The batch path: every inventory duration row as a (talent → aura)
+#    pair, corpus split + predeclared promotion rule in durationTalentScan:
+npx tsx packages/eval/scripts/durationCandidatesFromInventory.ts $GLADLOG_EVAL_HOME/reports/buff-duration-<date>/candidates.json
+npx tsx packages/eval/scripts/durationTalentScan.ts \
+  --manifest $GLADLOG_EVAL_HOME/corpus/manifest-archive-<date>.txt --every 60 \
+  --candidates $GLADLOG_EVAL_HOME/reports/buff-duration-<date>/candidates.json --tag inventory-<date>
+#    PROMOTE = an increase that reproduces; REDUCTION-CONFIRMED = a decrease with its mechanism; a
+#    multi-rank talent still needs the rank read (buffDurationScan --detail prints `holder rN`).
 npx tsx packages/eval/scripts/buffDurationScan.ts \
   --manifest $GLADLOG_EVAL_HOME/corpus/manifest-archive-<date>.txt --every 120 --gap --dose-unclean
 # 4. Official durations vs the game (GH #44 tail, 2026-09-02): every CC / root id's observed aura lifetime

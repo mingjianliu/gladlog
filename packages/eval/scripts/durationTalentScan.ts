@@ -47,6 +47,9 @@
  */
 import { ensureAnalysisData } from "@gladlog/analysis";
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
+// The raw DB2 mining, untouched by CORPUS_DURATION_PATCHES (imported as the
+// JSON: the extensionless specifier resolves to the .json, not the .ts wrapper).
+import SPELL_EFFECTS_GENERATED from "@gladlog/analysis/src/data/spellEffectGenerated.json";
 import { buffFullDurationForCaster } from "@gladlog/analysis/src/utils/buffDuration";
 import { talentModifierOwnershipOf } from "@gladlog/analysis/src/utils/talentOwnership";
 import { GladLogParser, type GladMatch } from "@gladlog/parser";
@@ -84,6 +87,8 @@ interface Candidate {
   targetZh: string;
   aura: "107" | "108";
   value: number;
+  /** "mask" (aura 107/108) or "label" (aura 218/219 → SpellLabel); informational */
+  via?: string;
 }
 // `--candidates <file.json>` (2026-09-15): an explicit candidate list in the
 // same shape — for modifiers found outside the gap audit (M6 scripted queue:
@@ -294,10 +299,21 @@ const out = CANDIDATES.map((c) => {
   for (const cell of measuredAura ? (cellsByAura.get(measuredAura) ?? []) : [])
     b[cell.own[c.talent]!].push(cell.v);
   const nonModal = modal(b.no)[0];
+  // Base fallback = the RAW DB2 value, not `buffFullDurationForCaster` (2026-09-22,
+  // Game-Behaviour Rule 5): that accessor already carries CORPUS_DURATION_PATCHES,
+  // and a patch that is itself the talented value (Earthliving 9 = 6 + Imbuement
+  // Mastery) made every holder look "at base" and the pair unpromotable.
+  const rawId = measuredAura ?? c.target;
   const base =
     b.no.length >= 10 && nonModal
       ? nonModal[0]
-      : buffFullDurationForCaster(measuredAura ?? c.target, undefined);
+      : ((
+          SPELL_EFFECTS_GENERATED as Record<
+            string,
+            { durationSeconds?: number }
+          >
+        )[rawId]?.durationSeconds ??
+        buffFullDurationForCaster(rawId, undefined));
   const expected =
     base === undefined
       ? undefined
@@ -312,9 +328,18 @@ const out = CANDIDATES.map((c) => {
   if (c.value === 0) verdict = "not promoted: value 0 (scripted amount)";
   else if (expected === undefined || base === undefined)
     verdict = "not promoted: no base duration";
-  else if (expected <= base)
-    verdict = "not promoted: reduction (lifetimes cannot promote)";
-  else if (b.yes.length < 20)
+  else if (expected <= base) {
+    // A reduction cannot be promoted from lifetimes ALONE (Rule 7) — but these
+    // candidates all carry their mechanism (a DB2 row whose mask / label
+    // reaches the target), so a holder split that lands on the arithmetic is
+    // reported under its own label (2026-09-22; precedent: Divine Spurs −40 %,
+    // Maneuverability −50 %). It is not "PROMOTE": the predeclared rule is
+    // untouched and the reader sees which kind each row is.
+    verdict =
+      b.yes.length >= 20 && near / b.yes.length >= 0.5
+        ? "REDUCTION-CONFIRMED (mechanism-backed)"
+        : `not promoted: reduction (holders ${b.yes.length}, near ${near})`;
+  } else if (b.yes.length < 20)
     verdict = `not promoted: ${b.yes.length} holder cells`;
   else if (near / b.yes.length >= 0.5) verdict = "PROMOTE";
   else if (
