@@ -130,15 +130,15 @@ export const AI_MODELS: Record<AiBackend, AiModelOption[]> = {
 };
 
 /** Per-backend default when no model has been explicitly selected.
- * Anthropic backends default to Opus 5 since 2026-09-12 (user ruling: Sonnet no
- * longer holds up). Changing a default does not re-analyze anything: the cache
- * shows `lastSlotKey`'s slot and batch/auto-analyze skip on that, so existing
- * Sonnet results stay visible and only new analyses land in the Opus 5 slot.
- * Opus 5.5 is selectable (2026-09-23) but deliberately not the default until
- * the Opus 5.0 vs 5.5 judge/responder comparison is in (GH #90 follow-up). */
+ * Anthropic backends default to Opus 5.5 since 2026-09-23 (user ruling after the
+ * 5.0 vs 5.5 judge comparison, GH #103: "直接换5.5就好"); Opus 5 from 2026-09-12,
+ * Sonnet 5 before that. The eval responder/judge follow the same model. Changing
+ * a default does not re-analyze anything: the cache shows `lastSlotKey`'s slot
+ * and batch/auto-analyze skip on that, so existing results stay visible and only
+ * new analyses land in the Opus 5.5 slot. */
 export const AI_DEFAULT_MODEL: Record<AiBackend, string> = {
-  anthropic: "claude-opus-5",
-  claudeCli: "claude-opus-5",
+  anthropic: "claude-opus-5-5",
+  claudeCli: "claude-opus-5-5",
   agy: "pro",
   codex: "gpt-5.5",
   codebuddy: "deepseek-v4-flash",

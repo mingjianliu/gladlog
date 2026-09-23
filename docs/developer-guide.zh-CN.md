@@ -92,7 +92,7 @@ npm run presubmit
 - **/eval-ab** —— 受控 A/B 验证某个 prompt 构建器改动(同语料、盲评、bootstrap CI)。注意 worktree 必须 `npm ci`(符号链接会静默用回主仓代码)。
 - **/calibrate-judge** —— 信任判官分数之前先校准判官。
 
-已知测量事实:在 Sonnet 下单轮 accuracy Δ≲0.6 属噪声(2026-07-20 test-retest 实测,配对 SD ≈ 1.3,n=50);在 Opus 5 下(2026-09-15 判官校准 7/7),A/B 实测配对 SD 为 accuracy 0.57、focusCalibration 0.92(n=40,2026-09-16 确认轮;正式 test-retest 待 Opus 5.0 对比 5.5 轮次)。批量 responder/judge 子代理用 Opus 5(`claude-opus-5`),与产品 coach 默认模型(`AI_DEFAULT_MODEL`)一致。2026-09-12 之前两者都是 Sonnet:在那之前记录的噪声底、判官校准和基线都是用 Sonnet responder/judge 测的,不能直接跨切换比较 —— 跨切换比较前先重跑 `/calibrate-judge` 和一轮新基线。
+已知测量事实:在 Sonnet 下单轮 accuracy Δ≲0.6 属噪声(2026-07-20 test-retest 实测,配对 SD ≈ 1.3,n=50);在 Opus 5.0 下(2026-09-15 判官校准 7/7),A/B 实测配对 SD 为 accuracy 0.57、focusCalibration 0.92(n=40,2026-09-16);在 Opus 5.5 下(2026-09-23 起的判官,校准 7/7),正式 test-retest(n=50)得 accuracy 配对 SD 0.65(MDE 0.18)、focusCalibration 0.40。批量 responder/judge 子代理用 Opus 5.5(`claude-opus-5-5`,2026-09-23 起),与产品 coach 默认模型(`AI_DEFAULT_MODEL`)一致。2026-09-12 至 2026-09-22 两者都是 Opus 5.0,更早是 Sonnet:噪声底、判官校准和基线都绑定测量它们的模型,不能直接跨切换比较 —— 跨切换比较前先重跑 `/calibrate-judge` 和一轮新基线。
 
 ## 游戏数据管线
 

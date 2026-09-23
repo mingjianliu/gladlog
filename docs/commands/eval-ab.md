@@ -223,7 +223,23 @@ SD of per-pair differences across dimensions (2026-07-20, 50 pairs, sonnet judge
 | sufficiency          | 0.65     | 38               | 0.18         |
 | **accuracy**         | **1.30** | **14**           | **0.36**     |
 
-### Opus 5 Noise Floor (2026-09-16 A/B-derived)
+### Opus 5.5 Noise Floor (2026-09-23 formal test–retest) — current judge
+
+Since 2026-09-23 the responder, the judge and the product default are Opus 5.5 (`claude-opus-5-5`). Judge calibration on the 80-case suite (`runs/2026-07-20-smoke`, seed 42): **7/7 PASS** — accuracy 10/10, noise 10/10, focusCalibration 9/10, labelBias 9/10, outcomeAlignment 9/10, inferenceScaffolding 8/10, sufficiency (det-gate) 6/6; judged dims 55/60 (Opus 5.0: 58/60), every miss a specificity drift of accuracy by 2 (4 of 5 from one source), sensitivity 60/60. Test–retest: the same 50 responses (`runs/2026-09-15-baseline` 001–050, Opus 5.0 responder) judged twice by independent `claude -p --model claude-opus-5-5` sessions (zero tools, rubric inlined; `runs/2026-09-23-judge-opus-compare`):
+
+| Dimension | Paired SD | Tied in 50 pairs | MDE for n=50 |
+|---|---|---|---|
+| sufficiency | 0.20 | 48 | 0.06 |
+| labelBias | 0.31 | 45 | 0.09 |
+| inferenceScaffolding | 0.32 | 45 | 0.09 |
+| focusCalibration | 0.40 | 42 | 0.11 |
+| outcomeAlignment | 0.47 | 38 | 0.13 |
+| noise | 0.61 | 32 | 0.17 |
+| **accuracy** | **0.65** | **32** | **0.18** |
+
+Harness caveat: the Sonnet table below came from Agent-tool subagents, this one from `claude -p`; the calibration above used Agent-tool subagents for both 5.0 and 5.5.
+
+### Opus 5.0 Noise Floor (2026-09-16 A/B-derived) — historical
 
 On 2026-09-12 the default model and judge were switched to Opus 5. Judge calibration passed 7/7 on 2026-09-15 (`runs/2026-09-15-calibration`).
 The paired SD numbers below are derived from the 2026-09-16 confirmatory A/B run (n=40 pairs, Opus 5 responder + judge; formal test–retest parked for the Opus 5.0 vs 5.5 comparison):

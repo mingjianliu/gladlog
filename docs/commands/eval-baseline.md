@@ -76,7 +76,7 @@ Writes `runs/<runId>/quality-report.json` (per-match coverage: friendly deaths/C
 
 ## Step 2: Generate Responses (Parallel Subagents)
 
-> **Execution model:** Launch subagents using in-session Agent tools; no external API keys, no new scripts created. Responder and judge subagents run on **Opus 5** (pass `model: "opus"` explicitly), the same model as the product's default coach (`AI_DEFAULT_MODEL`); record it in `judgeModel`. Runs before 2026-09-12 used Sonnet — do not compare scores across that switch without a fresh `/calibrate-judge`. If Agent tools are unavailable, generate per match yourself — you are an AI, do not write wrapper scripts calling external APIs.
+> **Execution model:** Launch subagents using in-session Agent tools; no external API keys, no new scripts created. Responder and judge subagents run on **Opus 5.5** (pass `model: "opus"` explicitly — verified 2026-09-23 to resolve to `claude-opus-5-5`; the alias tracks the newest Opus, so check the transcript's `model` field after an upgrade), the same model as the product's default coach (`AI_DEFAULT_MODEL`); record the actual id in `judgeModel`. To pin an older version the Agent tool cannot select, use `claude -p --model <id>` from a neutral cwd. Runs 2026-09-12 … 2026-09-22 used Opus 5.0 and runs before 2026-09-12 used Sonnet — do not compare scores across either switch without a fresh `/calibrate-judge`. If Agent tools are unavailable, generate per match yourself — you are an AI, do not write wrapper scripts calling external APIs.
 
 For each entry in the index, launch a **background subagent** (prompt is self-contained, substituting actual values item by item):
 
