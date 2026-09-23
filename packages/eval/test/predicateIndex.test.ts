@@ -80,6 +80,7 @@ import * as auraIntervals from "@gladlog/analysis/src/utils/auraIntervals";
 import * as bracketKey from "@gladlog/analysis/src/utils/bracketKey";
 import * as buffDuration from "@gladlog/analysis/src/utils/buffDuration";
 import * as cannotCastIntervals from "@gladlog/analysis/src/utils/cannotCastIntervals";
+import * as castParam from "@gladlog/analysis/src/utils/castParam";
 import * as ccTrinketAnalysis from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
 import * as cooldowns from "@gladlog/analysis/src/utils/cooldowns";
 import * as counterfactual from "@gladlog/analysis/src/utils/counterfactual";
@@ -107,12 +108,12 @@ import * as rootReachability from "@gladlog/analysis/src/utils/rootReachability"
 import * as spellDanger from "@gladlog/analysis/src/utils/spellDanger";
 import * as stats from "@gladlog/analysis/src/utils/stats";
 import * as summonReachability from "@gladlog/analysis/src/utils/summonReachability";
-import * as warlockPet from "@gladlog/analysis/src/utils/warlockPet";
 import * as talentBehaviors from "@gladlog/analysis/src/utils/talentBehaviors";
 import * as talentOwnership from "@gladlog/analysis/src/utils/talentOwnership";
 import * as talents from "@gladlog/analysis/src/utils/talents";
 import * as threatAssessment from "@gladlog/analysis/src/utils/threatAssessment";
 import * as trinketCooldown from "@gladlog/analysis/src/utils/trinketCooldown";
+import * as warlockPet from "@gladlog/analysis/src/utils/warlockPet";
 import {
   decodeAdvanced as parserDecodeAdvanced,
   parseTimestamp as parserParseTimestamp,
@@ -573,6 +574,12 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/buffDuration.ts`,
     symbol: "buffFullDurationForCaster",
     mod: buffDuration,
+  },
+  // GH #65 item 1 (2026-09-23): the producing cast's parameter
+  {
+    file: `${A}/utils/castParam.ts`,
+    symbol: "castParamAt",
+    mod: castParam,
   },
   {
     file: "packages/analysis/scripts/datagen/lib/pvpMultiplier.ts",

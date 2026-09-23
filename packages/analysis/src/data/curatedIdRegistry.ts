@@ -94,6 +94,7 @@ import {
   TALENT_BEHAVIORS,
 } from "../utils/talentBehaviors";
 import { KW_MAJOR_DEFENSIVE_IDS } from "./abilityProfile";
+import { CAST_PARAM_DURATIONS } from "./castParamDurations";
 import { classMetadata } from "./classSpells";
 import { CURATED_ABILITY_FACTS } from "./curatedAbilityFacts";
 import { DISPEL_VERDICTS } from "./dispelVerdicts";
@@ -470,6 +471,14 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   // hand-keyed ids a patch can renumber, so both sit under the rot scans.
   t("CORPUS_DURATION_PATCHES", "data/spellEffectOverrides.ts", "aura", () =>
     keys(CORPUS_DURATION_PATCHES),
+  ),
+  // GH #65 item 1 (2026-09-23): auras priced by their producing cast's
+  // parameter, and the casts that carry it.
+  t("CAST_PARAM_DURATIONS", "data/castParamDurations.ts", "aura", () =>
+    keys(CAST_PARAM_DURATIONS),
+  ),
+  t("CAST_PARAM_DURATIONS.castIds", "data/castParamDurations.ts", "cast", () =>
+    Object.values(CAST_PARAM_DURATIONS).flatMap((c) => c.castIds),
   ),
   // BACKLOG #45 (2026-09-17): corpus-corrected arena cooldowns (The Hunt 60 s).
   t("CORPUS_COOLDOWN_PATCHES", "data/spellEffectOverrides.ts", "cast", () =>

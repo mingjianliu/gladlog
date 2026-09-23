@@ -513,6 +513,50 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
       note: "Rampaging Berserker — DB2 aura 108 +50 %, Warrior/Fury spec tree (maxRanks 1), mask covers the spell; corpus 31 of 31 caster-cells at 18.0 s hold it AT RANK 2, so two ranks buy +50 % in TOTAL (12 × (1 + 0.25×2) = 18); DB2 states 50 and it is not per rank here. NOTE the base: DB2 says 12 while the hand override said 16, which is neither the base nor the talented value — running the arithmetic against that override is what made this look unexplainable for two rounds. The override now carries the talented 18.",
     },
   ],
+  // ── 2026-09-23 (GH #65 item 1): talent layers on the CAST-PARAMETER auras.
+  // Their base comes from `CAST_PARAM_DURATIONS` (empower level / combo points)
+  // when the producing cast is readable; `untalentedBaseSeconds` is the
+  // no-caster value (DB2's placeholder) so the no-caster path is unchanged.
+  "1079": [
+    {
+      talentSpellId: "400320",
+      specs: ["103"], // Druid_Feral
+      untalentedBaseSeconds: 4,
+      pct: -20,
+      note: "Circle of Life and Death on Rip — DB2 aura 108 −20 %, Feral (maxRanks 1), mask covers Rip; on the combo-point base: CP5 19.0 s ×105 = 24 × 0.8 (castParamDurationScan, 2026-09-23).",
+    },
+    {
+      talentSpellId: "391978",
+      specs: ["103"],
+      untalentedBaseSeconds: 4,
+      pct: 25,
+      note: "Veinripper — DB2 aura 108 +25 %, Feral choice node (maxRanks 1), mask covers Rip; holders 48/50 at 24.0 s = 24 × 0.8 × 1.25 with Circle of Life and Death — the pair MULTIPLIES (additive would be 25.2), non-holders 13/20 at 19.",
+    },
+  ],
+  "32645": [
+    {
+      talentSpellId: "1298812",
+      untalentedBaseSeconds: 0,
+      addSeconds: -2,
+      note: "Unstable Toxin — REDUCTION with mechanism: DB2 aura 107 −2000 ms, Assassination (maxRanks 1), mask covers Envenom; on the combo-point base: CP7 5.0 s ×111 = 7 − 2, holders 34/37 at 5 vs non-holders 110/132 at 7 (inventory scan, 2026-09-22). untalentedBaseSeconds 0: DB2 carries no Envenom duration, the base is always the combo-point formula.",
+    },
+  ],
+  "355941": [
+    {
+      talentSpellId: "1264321",
+      untalentedBaseSeconds: 2,
+      addSeconds: 6,
+      note: "Deep Exhalation — DB2 aura 107 +6000 ms, Evoker HERO tree Flameshaper (Devastation + Preservation, maxRanks 1), mask covers Dream Breath; on the empower base: L1 22.0 s ×257 = 16 + 6 (castParamDurationScan); holders 23/44 at 22 on the pooled inventory scan, the rest at other levels.",
+    },
+  ],
+  "376788": [
+    {
+      talentSpellId: "1264321",
+      untalentedBaseSeconds: 16,
+      addSeconds: 6,
+      note: "Deep Exhalation on the echo copy of Dream Breath — same row as 355941. untalentedBaseSeconds 16 = the 09-07 corpus patch (the L1 untalented value), which stays as the no-caster answer.",
+    },
+  ],
   "5672": [
     {
       talentSpellId: "382201",

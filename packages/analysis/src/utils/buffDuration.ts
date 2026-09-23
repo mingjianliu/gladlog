@@ -4,6 +4,7 @@ import {
   BUFF_DURATION_TALENT_MODIFIERS,
   spellEffectData,
 } from "../data/spellEffectData";
+import { castParamBaseSeconds,type CastParamCaster } from "./castParam";
 import { talentModifierOwnershipOf, talentRankOf } from "./talentOwnership";
 
 /**
@@ -35,16 +36,33 @@ export const SPELL_DURATION_OVERRIDES: Record<string, number> = {
  *
  * Without a caster it returns the plain base duration, which is what every
  * call site did for all of them before the talent layer existed.
+ *
+ * `atMs` (GH #65 item 1, 2026-09-23): the application time. For an aura whose
+ * length is set by its producing cast (`CAST_PARAM_DURATIONS` — empower level,
+ * combo points), the base is that cast's formula value when `castParamAt` can
+ * read the parameter; the talent layer then stacks on it. Omit `atMs`, or
+ * leave the parameter unreadable, and nothing changes.
+ *
+ * Percent modifiers MULTIPLY (2026-09-23): Rip under Circle of Life and Death
+ * −20 % and Veinripper +25 % runs 24 × 0.8 × 1.25 = 24, not 24 × 1.05 — the
+ * same multiplicative stacking measured for mitigation (80fc353c). Within one
+ * talent, ranks still add (+25 % × rank 2 = +50 %).
  */
 export function buffFullDurationForCaster(
   spellId: string,
-  caster: Pick<ICombatUnit, "spec" | "info" | "spellCastEvents"> | undefined,
+  caster:
+    | (Pick<ICombatUnit, "spec" | "info" | "spellCastEvents"> & CastParamCaster)
+    | undefined,
+  atMs?: number,
 ): number | undefined {
   const noCasterValue =
     SPELL_DURATION_OVERRIDES[spellId] ??
     spellEffectData[spellId]?.durationSeconds;
+  const paramBase =
+    atMs === undefined ? null : castParamBaseSeconds(caster, spellId, atMs);
   const mods = BUFF_DURATION_TALENT_MODIFIERS[spellId];
-  if (!caster || mods === undefined || mods.length === 0) return noCasterValue;
+  if (!caster || mods === undefined || mods.length === 0)
+    return paramBase ?? noCasterValue;
 
   // With a caster we can price the talents exactly, so we start from the
   // UNTALENTED base rather than from `noCasterValue` — the latter already
@@ -72,6 +90,7 @@ export function buffFullDurationForCaster(
     if (m.specBaseSeconds !== undefined && inSpec(m))
       specBase = m.specBaseSeconds;
   if (specBase !== undefined) seconds = specBase;
+  if (paramBase !== null) seconds = paramBase;
 
   let mult = 1;
   for (const m of mods) {
@@ -88,12 +107,12 @@ export function buffFullDurationForCaster(
     // known: this spec's own base when the spell has one (a Retribution
     // paladin with an unreadable loadout is 6 s, not the DB2 3 s), otherwise
     // the typical caster value this call site got before the talent layer.
-    if (rank <= 0) return specBase ?? noCasterValue;
+    if (rank <= 0) return paramBase ?? specBase ?? noCasterValue;
     // A proc-producing talent replaces the duration outright and does not
     // compose with anything (see `replaceSeconds`).
     if (m.replaceSeconds !== undefined) return m.replaceSeconds;
     if (m.addSeconds !== undefined) seconds += m.addSeconds * rank;
-    if (m.pct !== undefined) mult += (m.pct / 100) * rank;
+    if (m.pct !== undefined) mult *= 1 + (m.pct / 100) * rank;
   }
   return seconds * mult;
 }

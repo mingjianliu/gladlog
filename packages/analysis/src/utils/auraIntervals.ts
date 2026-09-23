@@ -1,5 +1,7 @@
-import { buffFullDurationForCaster } from "./buffDuration";
 import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
+
+import { buffFullDurationForCaster } from "./buffDuration";
+import type { CastParamCaster } from "./castParam";
 
 
 /**
@@ -93,9 +95,15 @@ const OPEN_EVENTS = new Set<string>([
  */
 function officialDurationS(
   spellId: string,
-  caster: Pick<ICombatUnit, "spec" | "info" | "spellCastEvents"> | undefined,
+  caster:
+    | (Pick<ICombatUnit, "spec" | "info" | "spellCastEvents"> &
+        CastParamCaster)
+    | undefined,
+  /** The cap's anchor time — lets a cast-parameter aura (empower level, combo
+   * points; GH #65 item 1) be priced by the cast that produced it. */
+  atMs?: number,
 ): number | null {
-  const d = buffFullDurationForCaster(spellId, caster);
+  const d = buffFullDurationForCaster(spellId, caster, atMs);
   return typeof d === "number" && d > 0 ? d : null;
 }
 
@@ -120,7 +128,7 @@ export function buildAuraIntervals(
    */
   castersById?: ReadonlyMap<
     string,
-    Pick<ICombatUnit, "spec" | "info" | "spellCastEvents">
+    Pick<ICombatUnit, "spec" | "info" | "spellCastEvents"> & CastParamCaster
   >,
 ): IAuraInterval[] {
   const casterOf = (srcUnitId: string | undefined) =>
@@ -164,7 +172,11 @@ export function buildAuraIntervals(
         // 修复前后来的 REMOVED 会配给最初的 APPLIED —— 实测一个 REMOVED
         // 缺失 + 重新施放的 5s 暗影斗篷被拼成 130s 区间。DOSE 是叠层、
         // REFRESH 是续时,都不重开 —— 只挪封顶锚(lastSeenS)。
-        const d = officialDurationS(id, casterOf(a.srcUnitId));
+        const d = officialDurationS(
+          id,
+          casterOf(a.srcUnitId),
+          combat.startTime + existing.lastSeenS * 1000,
+        );
         out.push({
           spellId: id,
           spellName: existing.spellName,
@@ -274,7 +286,11 @@ export function buildAuraIntervals(
     // No REMOVED seen: extend by at most the official duration (short auras no
     // longer stay dashed all the way to the end of the match). 封顶锚在
     // lastSeenS(REFRESH/DOSE 续时后从最后一次活动起算,2026-08-21)。
-    const d = officialDurationS(id, casterOf(srcUnitId));
+    const d = officialDurationS(
+      id,
+      casterOf(srcUnitId),
+      combat.startTime + o.lastSeenS * 1000,
+    );
     out.push({
       spellId: id,
       spellName: o.spellName,

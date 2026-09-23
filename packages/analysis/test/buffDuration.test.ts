@@ -17,6 +17,7 @@
  */
 import { CombatUnitSpec } from "@gladlog/parser-compat";
 
+import { CAST_PARAM_DURATIONS } from "../src/data/castParamDurations";
 import {
   BUFF_DURATION_TALENT_MODIFIERS,
   spellEffectData,
@@ -73,12 +74,16 @@ describe("buffFullDurationForCaster — 天赋条件的增益时长", () => {
       BUFF_DURATION_TALENT_MODIFIERS,
     )) {
       const noCaster = buffFullDurationForCaster(spellId, undefined);
+      // A cast-parameter aura with no DB2 duration (Envenom) has no no-caster
+      // value by design — its base is always the combo-point formula.
+      if (noCaster === undefined && CAST_PARAM_DURATIONS[spellId]) continue;
       const rank = TYPICAL_IS_TALENTED[spellId] ?? 0;
       let seconds = mods[0]!.untalentedBaseSeconds;
       let mult = 1;
       for (const m of mods) {
         if (m.addSeconds !== undefined) seconds += m.addSeconds * rank;
-        if (m.pct !== undefined) mult += (m.pct / 100) * rank;
+        // percent modifiers multiply (2026-09-23), ranks within one add
+        if (m.pct !== undefined) mult *= 1 + (m.pct / 100) * rank;
       }
       expect(noCaster).toBeCloseTo(seconds * mult);
     }
