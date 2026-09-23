@@ -223,6 +223,18 @@ SD of per-pair differences across dimensions (2026-07-20, 50 pairs, sonnet judge
 | sufficiency          | 0.65     | 38               | 0.18         |
 | **accuracy**         | **1.30** | **14**           | **0.36**     |
 
+### Opus 5 Noise Floor (2026-09-16 A/B-derived)
+
+On 2026-09-12 the default model and judge were switched to Opus 5. Judge calibration passed 7/7 on 2026-09-15 (`runs/2026-09-15-calibration`).
+The paired SD numbers below are derived from the 2026-09-16 confirmatory A/B run (n=40 pairs, Opus 5 responder + judge; formal test–retest parked for the Opus 5.0 vs 5.5 comparison):
+
+| Dimension | Paired SD | MDE for n=40 | Measurement Method |
+|---|---|---|---|
+| **accuracy** | **0.57** | **0.18** | A/B-derived (n=40, 2026-09-16) |
+| **focusCalibration** | **0.92** | **0.29** | A/B-derived (n=40, 2026-09-16) |
+
+*(Note: Prior Sonnet numbers above remain as historical reference for Sonnet-judged runs and must not be pooled or directly compared across the model switch.)*
+
 **accuracy is an outlier** — SD is 2x the second highest dimension and 9x the lowest, with 36 out of 50 pairs varying.
 When choosing it as the target dimension, `|Δ| < 0.36` is completely undetectable at n=50; detecting Δ=0.2 requires n≈331 pairs.
 
