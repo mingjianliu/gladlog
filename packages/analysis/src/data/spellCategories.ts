@@ -105,6 +105,16 @@ export const SPELL_CATEGORIES: Record<string, ISpellCategoryEntry> = {
   "391622": cc(), // Polymorph (glyph variant; DB2 SpellName carries no subtext)
   "460392": cc(), // Polymorph (glyph variant; DB2 SpellName carries no subtext)
   "51514": cc(), // Hex
+  // Hex glyph variants: 7 further ids of the same spell that the 12.1 archive logs as their own aura ids — all in
+  // DR_CATEGORIES_GENERATED (drGapScan) and observedSpellIdsGenerated. User ruling 2026-09-02 (GH #44):
+  // "变形变体和变形一模一样" — registered exactly like 51514 above. Duration: DB2 PvP duration 6 s.
+  "210873": cc(), // Hex (Comfy glyph variant)
+  "211004": cc(), // Hex (Spider glyph variant)
+  "211015": cc(), // Hex (Cockroach glyph variant)
+  "269352": cc(), // Hex (Skeletal Hatchling glyph variant)
+  "277778": cc(), // Hex (Zandalari Tendonstriker glyph variant)
+  "277784": cc(), // Hex (Wicker Mongrel glyph variant)
+  "309328": cc(), // Hex (Living Viper glyph variant)
   "5782": cc(6), // Fear
   "5484": cc(), // Howl of Terror
   "6789": cc(), // Mortal Coil (DR: Incapacitate)
@@ -160,6 +170,42 @@ export const SPELL_CATEGORIES: Record<string, ISpellCategoryEntry> = {
   "118905": cc(), // Static Charge (debuff)
   "192058": cc(), // Capacitor Totem
   "207685": cc(), // Sigil of Misery (disorient debuff aura id; duration is taken from measured log aura applied->removed. Found missing by the audit: DH fear was entirely outside CC coverage)
+  // -- S2 DR gap fill-ins (drGapScan: official DB2 DiminishType present in observedSpellIdsGenerated) --
+  // Disorients:
+  "1513": cc(), // Scare Beast (Hunter fear against beasts/druids/shamans)
+  "130616": cc(), // Fear (Warlock fear variant / aura)
+  "198909": cc(), // Song of Chi-Ji (Mistweaver Monk disorient)
+  // Incapacitates:
+  "88625": cc(), // Holy Word: Chastise (Priest incapacitate cast/aura)
+  "107079": cc(), // Quaking Palm (Pandaren racial incapacitate)
+  "200196": cc(), // Holy Word: Chastise (Priest incapacitate aura)
+  "202274": cc(), // Hot Trub (Brewmaster Monk PvP talent incapacitate)
+  "203337": cc(), // Freezing Trap (Hunter Freezing Trap incapacitate aura; cast 3355)
+  "221527": cc(), // Imprison (Demon Hunter Imprison incapacitate aura; cast 217832)
+  "353084": cc(), // Ring of Fire (Fire Mage PvP talent incapacitate)
+  "357768": cc(), // Paralysis (Monk Paralysis incapacitate aura; cast 115078)
+  "383121": cc(), // Mass Polymorph (Mage Mass Polymorph)
+  // Stuns:
+  "22570": cc(), // Maim (Feral Druid combo-point stun)
+  "91797": cc(), // Monstrous Blow (Unholy DK transformed ghoul stun)
+  "91800": cc(), // Gnaw (Unholy DK ghoul stun)
+  "118345": cc(), // Pulverize (Guardian Druid stun)
+  "200166": cc(), // Metamorphosis (Havoc DH landing stun)
+  "200200": cc(), // Holy Word: Chastise (Priest Censure stun talent aura)
+  "202244": cc(), // Overrun (Brewmaster Monk PvP talent stun)
+  "202346": cc(), // Double Barrel (Outlaw Rogue PvP talent stun)
+  "203123": cc(), // Maim (Feral Druid stun aura)
+  "205630": cc(), // Illidan's Grasp (Havoc DH PvP talent stun)
+  "210141": cc(), // Reanimation (Unholy DK PvP talent zombie explosion stun)
+  "255723": cc(), // Bull Rush (Highmountain Tauren racial stun)
+  "255941": cc(), // Wake of Ashes (Retribution Paladin demon/undead stun)
+  "287712": cc(), // Haymaker (Kul Tiran racial stun)
+  "305485": cc(), // Lightning Lasso (Elemental Shaman stun aura)
+  "357021": cc(), // Consecutive Concussion (Survival Hunter talent stun)
+  "377048": cc(), // Absolute Zero (Frost DK Frostwyrm stun)
+  "385954": cc(), // Shield Charge (Warrior Shield Charge stun aura)
+  "389831": cc(), // Snowdrift (Mistweaver Monk PvP talent stun)
+  "408544": cc(), // Seismic Slam (Warrior Mountain Thane stun)
   // -- Roots --
   "122": root(), // Frost Nova
   "355689": root(), // Landslide (Shaman totem root; official Magic/6 s; ×59 in the dispel corpus). Was the one dispellable root with no entry → priority Low → a missed cleanse on it could never be reported (registry rule). User 2026-08-30 (GH #24 tail): "same tier as Frost Nova".
@@ -167,6 +213,19 @@ export const SPELL_CATEGORIES: Record<string, ISpellCategoryEntry> = {
   "339": root(), // Entangling Roots
   "102359": root(), // Mass Entanglement
   "64695": root(), // Earthgrab Totem
+  // Roots (drGapScan S2 DR gap fill-ins: official DB2 DiminishType = root):
+  "114404": root(), // Void Tendrils (Shadow Priest root)
+  "116706": root(), // Disable (Monk root)
+  "170855": root(), // Entangling Roots (Druid variant)
+  "199042": root(), // Thunderstruck (Enhancement Shaman root)
+  "204085": root(), // Deathchill (Frost Mage root)
+  "212638": root(), // Tracker's Net (Survival Hunter PvP talent root)
+  "233395": root(), // Deathchill (Frost Mage root variant)
+  "370970": root(), // The Hunt (Demon Hunter root component)
+  "386770": root(), // Freezing Cold (Frost Mage Ice Nova root)
+  "454787": root(), // Ice Prison (Frost Mage root talent)
+  "460614": root(), // Entangling Roots (Druid variant)
+  "1258862": root(), // Encasing Cold (Frost Mage root)
   // Void Nova (Devourer DH). A STUN, not a root — reclassified 2026-08-19
   // after a user challenge (「治疗没法给自己驱散啊」) exposed 84 missed-cleanse
   // windows accusing a Void-Nova'd sole dispeller of not dispelling their own
@@ -345,6 +404,11 @@ export const SPELL_CATEGORIES: Record<string, ISpellCategoryEntry> = {
   "91807": { type: "interrupts" }, // Shambling Rush (DK ghoul, 25 hits)
   "217824": { type: "interrupts" }, // Shield of Virtue (Protection Paladin PvP talent)
   "31935": { type: "interrupts" }, // Avenger's Shield
+  // Silences (drGapScan S2 DR gap fill-ins, official DiminishType = silence):
+  "1330": { type: "interrupts" }, // Garrote - Silence (Rogue)
+  "47476": { type: "interrupts" }, // Strangulate (DK silence aura)
+  "356727": { type: "interrupts" }, // Spider Venom (Rogue PvP talent silence)
+  "374776": { type: "interrupts" }, // Tightening Grasp (DK silence talent)
   // -- Speed boosts --
   "2983": { type: "buffs_speed_boost" }, // Sprint
   "1850": { type: "buffs_speed_boost" }, // Dash

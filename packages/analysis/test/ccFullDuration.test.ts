@@ -36,6 +36,13 @@ describe("ccFullDurationSeconds — 官方时长单源", () => {
       "391622",
       "460392",
       "51514",
+      "210873",
+      "211004",
+      "211015",
+      "269352",
+      "277778",
+      "277784",
+      "309328",
     ])
       expect(ccFullDurationSeconds(id)).toBe(6);
   });
