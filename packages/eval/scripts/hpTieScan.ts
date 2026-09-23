@@ -16,8 +16,12 @@
  *
  * Baseline (57-file slice with falling damage, 62 rounds, players only):
  * 1,563 / 51,578 grid readings (3.03 %) ambiguous; spread median 1 pp,
- * p90 4 pp, 112 readings ≥ 5 pp, max 48 pp. Which reading should win is a
- * ruling (GH #100 comment), not decided here.
+ * p90 4 pp, 112 readings ≥ 5 pp, max 48 pp.
+ *
+ * Ruled 2026-09-23 (user): the last line of the instant wins —
+ * `binarySearchClosest` now resolves ties by rule. This scan still measures
+ * the data property (how many readings HAVE a disagreeing twin), which the
+ * rule does not change; it says how much the rule matters.
  *
  * Usage:
  *   npx tsx packages/eval/scripts/hpTieScan.ts <manifest.txt>

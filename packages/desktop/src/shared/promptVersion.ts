@@ -713,4 +713,11 @@
 //  (purge)]` (data/warlockPets.ts, predicate utils/warlockPet.ts). No new
 //  line kinds; Shadowfiend / Mindbender get no "not killed" line (81 % of
 //  casts on a 6 s pet would be noise — measured, GH #86).
-export const PROMPT_VERSION = 97;
+//  v98 (2026-09-23, GH #100, user ruling): equally near samples resolve by
+//  rule — same timestamp → the LAST line of that instant (the state after
+//  it), equal distance → the earlier timestamp (binarySearchClosest, every
+//  sampler). Before, array position decided and one extra sample anywhere
+//  flipped a reading. 300 archive files: 2.46 % of [STATE] unit readings
+//  change (median 1 pp, max 48 pp); candidate counts ±1–2. Same release:
+//  ENVIRONMENTAL_DAMAGE parsed at its own offsets (new imports only).
+export const PROMPT_VERSION = 98;
