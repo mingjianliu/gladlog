@@ -2474,6 +2474,15 @@ describe("missedSyncWindowEvents(P1 起爆-1,2026-08-15,纯函数)", () => {
     expect(e.facts["refKillEntered"]).toBe("18");
     expect(e.facts["refKillUnentered"]).toBe("8");
     expect(e.facts["cellKey"]).toBe("3v3");
+    // DR level label (GH #72 / B5): defaults to Full when unspecified
+    expect(e.facts["dr"]).toBe("Full");
+  });
+
+  it("facts 带 dr 字段(50% 细分,GH #72 / B5)", () => {
+    const halfCcWindow = { ...ccWindow, drLevel: "50%" as const };
+    const evts = missedSyncWindowEvents([halfCcWindow], [readyHammer], probes(42));
+    expect(evts).toHaveLength(1);
+    expect(evts[0]!.facts["dr"]).toBe("50%");
   });
 
   it("门:ref=null(bracket 无格/不够样本/对比不过门)→ 整轮静音", () => {

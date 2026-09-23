@@ -116,6 +116,7 @@ export function enemyHealerCcWindows(
     if (!healerNames.has(chain.targetName)) continue;
     for (const app of chain.applications) {
       if (!HARD_CC_CATEGORIES.has(app.drInfo.category)) continue;
+      if (app.drInfo.level === "Immune") continue;
       out.push({
         fromSeconds: app.atSeconds,
         toSeconds: app.atSeconds + app.durationSeconds,
