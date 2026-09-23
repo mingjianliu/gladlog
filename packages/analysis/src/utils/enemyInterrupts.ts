@@ -60,14 +60,25 @@ export const INTERRUPT_SPELL_IDS: readonly string[] = Object.keys(KIT);
  * from its most recent successful cast (own or pet) and the official
  * cooldown. The one predicate behind both the timeline's whole-second display
  * and kick-priority's feasibility. */
+/** An interrupt's cooldown from the official table, or undefined when the
+ * table has no row — shared by the availability ledger below (which falls
+ * back to 15 s) and the timeline's `[KICK] … back M:SS` suffix (which renders
+ * nothing rather than a guess). GH #103 A3. */
+export function interruptCooldownSeconds(spellId: string): number | undefined {
+  return spellEffectData[spellId]?.cooldownSeconds;
+}
+
 export function interruptCooldownRemainingMs(
   unit: ICombatUnit,
   spellId: string,
   atMs: number,
 ): number {
-  const cooldownSeconds = spellEffectData[spellId]?.cooldownSeconds ?? 15;
+  const cooldownSeconds = interruptCooldownSeconds(spellId) ?? 15;
   let lastCastMs = -Infinity;
-  for (const e of [...unit.spellCastEvents, ...(unit.petSpellCastEvents ?? [])]) {
+  for (const e of [
+    ...unit.spellCastEvents,
+    ...(unit.petSpellCastEvents ?? []),
+  ]) {
     if (e.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
     if (e.spellId !== spellId) continue;
     const ts = e.logLine.timestamp;

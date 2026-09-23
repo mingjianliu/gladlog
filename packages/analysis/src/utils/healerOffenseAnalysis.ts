@@ -75,11 +75,41 @@ export interface ISlackSegment {
   ownerKickCasts: number;
   /** True when the owner produced zero offensive output of any kind. */
   idle: boolean;
+  /** Lowest friendly HP% sampled on the render grid inside [from, to)
+   * (`teamMinHpPctOver`). GH #103 A4: `[SLACK]` lines print it, so "team ≥85%"
+   * is not paraphrased as "full HP" (the responder did, at 88%). */
+  teamMinHpPct: number;
 }
 
 export interface IContestedSegment extends ISlackSegment {
   ownerHealing: number;
-  teamMinHpPct: number;
+}
+
+/** Lowest friendly HP% over the whole seconds of [fromSeconds, toSeconds),
+ * sampled with `getHpPercentAtTime` — the same grid the slack / contested band
+ * predicates sweep, so the number can never fall below the band the section
+ * header promises. The segment is [from, to): toSeconds is the first second
+ * that FAILED the band predicate — sampling it would report a min below the
+ * floor. 100 when no friend has a reading. Shared by `[SLACK]` and
+ * `[CONTESTED]`. */
+export function teamMinHpPctOver(
+  friends: ICombatUnit[],
+  fromSeconds: number,
+  toSeconds: number,
+  matchStartMs: number,
+): number {
+  let min = 100;
+  let found = false;
+  for (const f of friends) {
+    for (let t = fromSeconds; t < toSeconds; t++) {
+      const hp = getHpPercentAtTime(f, t, matchStartMs);
+      if (hp !== null && (!found || hp < min)) {
+        min = hp;
+        found = true;
+      }
+    }
+  }
+  return Math.round(found ? min : 100);
 }
 
 type CCInterval = ReadonlyArray<{ atSeconds: number; durationSeconds: number }>;
@@ -205,6 +235,12 @@ export function computeSlackSegments(
         ownerPurgeCasts,
         ownerKickCasts,
         idle,
+        teamMinHpPct: teamMinHpPctOver(
+          friends,
+          s.fromSeconds,
+          s.toSeconds,
+          matchStartMs,
+        ),
       };
     });
 
@@ -304,22 +340,6 @@ export function computeContestedSegments(
         .filter((h) => inSeg(h.logLine.timestamp))
         .reduce((sum, h) => sum + Math.max(0, h.effectiveAmount), 0);
 
-      let teamMinHpPct = 100;
-      let foundHp = false;
-      for (const f of friends) {
-        // Segment is [from, to): toSeconds is the first second that FAILED the band
-        // predicate — sampling it would report a min below the 70% floor.
-        for (let t = s.fromSeconds; t < s.toSeconds; t++) {
-          const hp = getHpPercentAtTime(f, t, matchStartMs);
-          if (hp !== null) {
-            if (!foundHp || hp < teamMinHpPct) {
-              teamMinHpPct = hp;
-              foundHp = true;
-            }
-          }
-        }
-      }
-
       return {
         fromSeconds: s.fromSeconds,
         toSeconds: s.toSeconds,
@@ -330,7 +350,12 @@ export function computeContestedSegments(
         ownerKickCasts,
         idle,
         ownerHealing,
-        teamMinHpPct: Math.round(foundHp ? teamMinHpPct : 100),
+        teamMinHpPct: teamMinHpPctOver(
+          friends,
+          s.fromSeconds,
+          s.toSeconds,
+          matchStartMs,
+        ),
       };
     });
 
@@ -881,7 +906,7 @@ export function formatHealerOffenseForContext(
     );
     for (const seg of idleSegs) {
       lines.push(
-        `  [SLACK] ${fmtTime(seg.fromSeconds)}–${fmtTime(seg.toSeconds)} (${seg.durationSeconds}s): no damage, no CC, no purge, no kick.`,
+        `  [SLACK] ${fmtTime(seg.fromSeconds)}–${fmtTime(seg.toSeconds)} (${seg.durationSeconds}s, team min HP ${seg.teamMinHpPct}%): no damage, no CC, no purge, no kick.`,
       );
     }
   }

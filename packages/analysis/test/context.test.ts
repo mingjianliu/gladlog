@@ -6,6 +6,8 @@ import {
 } from "@gladlog/parser-compat";
 
 import { buildMatchContext } from "../src/context/buildMatchContext";
+import { interruptCooldownSeconds } from "../src/utils/enemyInterrupts";
+import { fmtTime } from "../src/utils/renderGrid";
 import { loadLegacyMatchFixture } from "./helpers/legacyFixture";
 import {
   makeAdvancedAction,
@@ -28,14 +30,71 @@ describe("buildMatchContext on real fixture", () => {
     expect(/dampening/i.test(ctx)).toBe(true);
   });
   it("timeline 模式同样可产出", () => {
-    const ctx = buildMatchContext(match, friends, enemies, {
-    });
+    const ctx = buildMatchContext(match, friends, enemies, {});
     expect(ctx.length).toBeGreaterThan(1000);
   });
 
+  it("GH #103 A1: every [DEATH] line carries the dampening at that instant", () => {
+    const ctx = buildMatchContext(match, friends, enemies, {});
+    const deaths = ctx.split("\n").filter((l) => l.includes("[DEATH]"));
+    expect(deaths.length).toBeGreaterThan(0);
+    for (const l of deaths) expect(l).toMatch(/ \| dampening: \d+%$/);
+  });
+
+  it("GH #103 A3: [KICK] lines print a back-time only for enemy kickers", () => {
+    // the fixture's only kick is friendly (2(FMage) Counterspell at 0:08)
+    const before = buildMatchContext(match, friends, enemies, {});
+    const friendlyKick = before.split("\n").find((l) => l.includes("[KICK]"));
+    expect(friendlyKick).toContain("(Counterspell)");
+    // mirror it as an ENEMY kick: an enemy Counterspells a friendly at 0:08
+    const kick = [...friends, ...enemies]
+      .flatMap((u) => [...(u.actionOut ?? []), ...(u.actionIn ?? [])])
+      .find((a) => a.logLine.event === "SPELL_INTERRUPT")!;
+    const mage = friends.find((u) => u.name === kick.srcUnitName)!;
+    const enemy = enemies[0]!;
+    const victim = friends.find((u) => u.id !== mage.id)!;
+    const saved = enemy.actionOut;
+    enemy.actionOut = [
+      ...(enemy.actionOut ?? []),
+      {
+        ...kick,
+        srcUnitName: enemy.name,
+        srcUnitId: enemy.id,
+        destUnitName: victim.name,
+        destUnitId: victim.id,
+      } as never,
+    ];
+    try {
+      const ctx = buildMatchContext(match, friends, enemies, {});
+      const cd = interruptCooldownSeconds(kick.spellId!)!;
+      expect(cd).toBeGreaterThan(0);
+      const t = (kick.timestamp - match.startTime) / 1000;
+      const enemyKick = ctx
+        .split("\n")
+        .find((l) => l.includes("[KICK]") && l.includes("; back "));
+      expect(enemyKick).toContain(`(Counterspell; back ${fmtTime(t + cd)})`);
+      // the friendly kick still has no back-time
+      expect(
+        ctx
+          .split("\n")
+          .filter((l) => l.includes("[KICK]") && !l.includes("; back ")),
+      ).toHaveLength(1);
+    } finally {
+      enemy.actionOut = saved;
+    }
+  });
+
+  it("GH #103 A5: Defensive loadout entries state how long the effect lasts", () => {
+    const ctx = buildMatchContext(match, friends, enemies, {});
+    expect(ctx).toContain("Pain Suppression [180s, 2 Charges, lasts 8s]");
+    expect(ctx).toContain("Ice Block [180s, lasts 10s]");
+    // offensive / control cooldowns keep the old shape
+    expect(ctx).toContain("Combustion [60s]");
+    expect(ctx).toContain("Psychic Scream [20s]");
+  });
+
   it("healer owner:timeline 上下文不含 <burst_ledger>(治疗 prompt 不变,D2)", () => {
-    const ctx = buildMatchContext(match, friends, enemies, {
-    });
+    const ctx = buildMatchContext(match, friends, enemies, {});
     expect(ctx).not.toContain("<burst_ledger>");
   });
 
@@ -178,8 +237,7 @@ describe("counterfactualOf 按 (name, atSeconds) 精确匹配(#17b Task4 复核 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any;
 
-    const ctx = buildMatchContext(combat, [victim], [], {
-    });
+    const ctx = buildMatchContext(combat, [victim], [], {});
 
     const idx1 = ctx.indexOf("[DEATH]");
     const idx2 = ctx.indexOf("[DEATH]", idx1 + 1);

@@ -86,7 +86,11 @@ import {
   isEnemyCdWindowSpell,
 } from "../utils/enemyCDs";
 import { enemyDefensiveEvents } from "../utils/enemyDefensives";
-import { computeEnemyInterruptAvailability } from "../utils/enemyInterrupts";
+import {
+  computeEnemyInterruptAvailability,
+  interruptCooldownSeconds,
+  interruptForUnit,
+} from "../utils/enemyInterrupts";
 import {
   externalDamageForApplication,
   formatDuringExternal,
@@ -393,6 +397,8 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     matchStartMs,
     matchEndMs,
   );
+
+  const _allUnits = allUnits ?? [...friends, ...(enemies ?? [])];
 
   // criticalWindowSet is built by the caller (buildMatchContext) via
   // buildCriticalWindowSet and passed in — deliberately not built here, or the
@@ -1099,6 +1105,12 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     playerIdMap,
     enemyIdMap,
     counterfactualOf,
+    dampeningAt: (atSeconds) =>
+      getDampeningPercentage(
+        params.bracket ?? "3v3",
+        _allUnits,
+        matchStartMs + atSeconds * 1000,
+      ),
     requestSnapshotPlaceholder,
     addEntry,
   });
@@ -1110,6 +1122,12 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     enemyPid,
     playerIdMap,
     enemyIdMap,
+    dampeningAt: (atSeconds) =>
+      getDampeningPercentage(
+        params.bracket ?? "3v3",
+        _allUnits,
+        matchStartMs + atSeconds * 1000,
+      ),
     requestSnapshotPlaceholder,
     addEntry,
   });
@@ -1269,8 +1287,6 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     }
     healingEmissionTimes.set(cd.spellId, emit);
   }
-
-  const _allUnits = allUnits ?? [...friends, ...(enemies ?? [])];
 
   const cdExpiryEvents = extractOwnerCDBuffExpiry(
     ownerCDs,
@@ -2917,6 +2933,43 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       const isLocalized = [...short].some((c) => c.charCodeAt(0) > 127);
       return isLocalized ? "[pet]" : short;
     };
+    /** The enemy player behind a kick (the kicker, or a pet's owner), or
+     * null for a friendly / unresolved kicker. */
+    const enemyKickerUnit = (
+      name: string,
+      unitId?: string,
+    ): ICombatUnit | null => {
+      const direct = (enemies ?? []).find((e) => e.name === name);
+      if (direct) return direct;
+      if (friendlyNames.has(name)) return null;
+      const petOwner = resolveSummonOwner({
+        allUnits,
+        friends,
+        enemies,
+        name,
+        sourceId: unitId,
+      });
+      return petOwner && enemyNames.has(petOwner.name)
+        ? ((enemies ?? []).find((e) => e.name === petOwner.name) ?? null)
+        : null;
+    };
+    /** Cooldown behind an enemy kick. SPELL_INTERRUPT carries the interrupt
+     * EFFECT id, which for some kits is not the cast id the cooldown lives on
+     * (Skull Bash 93985 vs 106839, Solar Beam 97547 vs 78675) — fall back to
+     * the kicker's kit entry (`interruptForUnit`, what the "enemy interrupts
+     * UP" ledger keys on) when it is the same spell by name. */
+    const enemyKickCooldown = (
+      unit: ICombatUnit,
+      spellId: string,
+      kickSpell: string,
+    ): number | undefined => {
+      const direct = interruptCooldownSeconds(spellId);
+      if (direct !== undefined) return direct;
+      const def = interruptForUnit(unit);
+      return def && getEnglishSpellName(def.spellId, def.name) === kickSpell
+        ? interruptCooldownSeconds(def.spellId)
+        : undefined;
+    };
     const seenKicks = new Set<string>();
     const allUnitsForKicks = friends ? [...friends] : [];
     if (enemies) {
@@ -2943,11 +2996,26 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
           action.extraSpellId !== undefined
             ? getEnglishSpellName(action.extraSpellId, action.extraSpellName)
             : "";
+        // GH #103 A3: an ENEMY kick says when it is back — the responder
+        // otherwise estimated the return ("Disrupt would have been coming back
+        // around the time you were free") from nothing. Official cooldown
+        // only (`interruptCooldownSeconds`, the same table the "enemy
+        // interrupts UP" ledger reads); no row → no suffix.
+        const enemyKicker = enemyKickerUnit(
+          action.srcUnitName,
+          action.srcUnitId,
+        );
+        const kickCd =
+          enemyKicker && action.spellId
+            ? enemyKickCooldown(enemyKicker, action.spellId, kickSpell)
+            : undefined;
+        const backSuffix =
+          kickCd !== undefined ? `; back ${fmtTime(atSeconds + kickCd)}` : "";
         addEntry(
           atSeconds,
           `${fmtTime(atSeconds)}  [KICK]   ${kicker} interrupted ${victim}${
             stoppedSpell ? `'s ${stoppedSpell}` : ""
-          } (${kickSpell})`,
+          } (${kickSpell}${backSuffix})`,
         );
       }
     }

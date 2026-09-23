@@ -131,6 +131,13 @@ export interface IPositionEvent {
   toSeconds?: number;
   startDistanceYards?: number;
   endDistanceYards?: number;
+  /** STAYED_IN only (GH #103 A7): nearest-enemy distance range over the
+   * window's whole-second samples plus both endpoints — the endpoints alone
+   * ("8→3.3yd") read as "stayed within 3.3–8yd" when the owner had been at
+   * 15yd mid-window. Nearest ENEMY, not the named one: the sweep asks who is
+   * closest at each second, and that can change. */
+  minDistanceYards?: number;
+  maxDistanceYards?: number;
   nearestEnemyName?: string;
   /** Burst window threat label for STAYED_IN / KITED */
   dangerLabel?: string;
@@ -332,6 +339,7 @@ export function computeOwnerPositionEvents(params: {
     // Sample every second across the window: hit-and-run kiting (out and back)
     // shows up as a mid-window peak that endpoint-only checks would miss.
     let maxDistance = Math.max(start.distanceYards, end.distanceYards);
+    let minDistance = Math.min(start.distanceYards, end.distanceYards);
     for (let t = Math.ceil(w.fromSeconds) + 1; t < evalEnd; t += 1) {
       const sample = nearestEnemyAt(
         enemies,
@@ -339,7 +347,10 @@ export function computeOwnerPositionEvents(params: {
         matchStartMs + t * 1000,
         owner,
       );
-      if (sample) maxDistance = Math.max(maxDistance, sample.distanceYards);
+      if (sample) {
+        maxDistance = Math.max(maxDistance, sample.distanceYards);
+        minDistance = Math.min(minDistance, sample.distanceYards);
+      }
     }
 
     const delta = end.distanceYards - start.distanceYards;
@@ -406,6 +417,8 @@ export function computeOwnerPositionEvents(params: {
         toSeconds: evalEnd,
         startDistanceYards: Math.round(start.distanceYards * 10) / 10,
         endDistanceYards: Math.round(end.distanceYards * 10) / 10,
+        minDistanceYards: Math.round(minDistance * 10) / 10,
+        maxDistanceYards: Math.round(maxDistance * 10) / 10,
         nearestEnemyName: start.enemyName,
         dangerLabel: w.dangerLabel,
         dampeningPct: w.dampeningPct,
@@ -706,6 +719,22 @@ export function computeOwnerPositionEvents(params: {
 
 // ─── Formatter ───────────────────────────────────────────────────────────────
 
+/** STAYED_IN's nearest-enemy range, only when the window left the endpoint
+ * span (GH #103 A7); `from <name>` stays adjacent to "yd" for the G4 gate. */
+function rangeStr(e: IPositionEvent): string {
+  if (
+    e.minDistanceYards === undefined ||
+    e.maxDistanceYards === undefined ||
+    e.startDistanceYards === undefined ||
+    e.endDistanceYards === undefined
+  )
+    return "";
+  const lo = Math.min(e.startDistanceYards, e.endDistanceYards);
+  const hi = Math.max(e.startDistanceYards, e.endDistanceYards);
+  if (e.minDistanceYards >= lo && e.maxDistanceYards <= hi) return "";
+  return ` (nearest enemy ${e.minDistanceYards}–${e.maxDistanceYards}yd over the window)`;
+}
+
 export function formatPositionEventsForContext(
   events: IPositionEvent[],
 ): string[] {
@@ -768,7 +797,7 @@ export function formatPositionEventsForContext(
           ? `${fmtTime(e.atSeconds)}–${fmtTime(e.toSeconds)}`
           : fmtTime(e.atSeconds);
       lines.push(
-        `    ${spanStr} [${e.dangerLabel} burst] ${e.startDistanceYards}→${e.endDistanceYards}yd from ${e.nearestEnemyName}${targetStr}${exposureStr}${hpStr}${defStr}`,
+        `    ${spanStr} [${e.dangerLabel} burst] ${e.startDistanceYards}→${e.endDistanceYards}yd from ${e.nearestEnemyName}${rangeStr(e)}${targetStr}${exposureStr}${hpStr}${defStr}`,
       );
     }
   }

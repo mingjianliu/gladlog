@@ -182,8 +182,12 @@ export function extractGeoClaims(promptText: string): GeoExtraction {
     }
 
     // G4: 0:17 [High burst] 5→3yd from Rockxtv-Illidan-US … / opened 4→18yd from …
+    // STAYED lines are span-stamped ("2:38–2:48 [High burst] 8→3.3yd from …");
+    // the pattern used to require a bare timestamp, so no STAYED line was ever
+    // checked (found 2026-09-23, GH #103 A7). The start distance still anchors
+    // on the span's first second.
     m = line.match(
-      /^ +(\d+:\d{2}) \[[^\]]+ burst\] (?:opened )?([\d.]+)→([\d.]+)yd from (\S+)/,
+      /^ +(\d+:\d{2})(?:–\d+:\d{2})? \[[^\]]+ burst\] (?:opened )?([\d.]+)→([\d.]+)yd from (\S+)/,
     );
     if (m) {
       claims.push({

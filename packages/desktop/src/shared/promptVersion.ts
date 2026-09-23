@@ -747,4 +747,16 @@
 //  DEATHS WITH MISSED OPTIONS, −2 [DEFENSIVE AVAILABLE]; cd-hoarded −4/−4,
 //  external-unused −3, cc-avoidable −1 (2 cap substitutions). 309-corpus
 //  qualityCheck hard failures 2 → 0.
-export const PROMPT_VERSION = 100;
+//  v101 (2026-09-23, GH #103 class A — facts the responder had to guess):
+//  A1 `[DEATH] … | dampening: N%` (same getter as the [CD] lines; the model
+//  quoted a neighbouring line's value); A3 an ENEMY `[KICK]` says `; back M:SS`
+//  (official cooldown via the kicker's kit entry, as the "enemy interrupts UP"
+//  ledger; no row → nothing); A4 `[SLACK] (…, team min HP N%)` via the shared
+//  `teamMinHpPctOver` ("team ≥85%" had been paraphrased as "full HP"); A5
+//  Defensive loadout entries `[…, lasts Ns]` (`buffFullDurationForCaster`;
+//  "Cocoon covers exactly 0:47–0:54" had no duration behind it); A7 STAYED IN
+//  lines add the nearest-enemy range when the window left the endpoint span.
+//  605 archive files / 3,520 owner contexts: death 4,266 lines (all), kick
+//  8,741, slack 618, loadout 18,334, stayed 1,780; 0 unexplained line
+//  changes; findings hash unchanged; prompts +0.56 % chars.
+export const PROMPT_VERSION = 101;

@@ -1,5 +1,6 @@
 import { ICombatUnit } from "@gladlog/parser-compat";
 
+import { buffFullDurationForCaster } from "../utils/buffDuration";
 import { IPlayerCCTrinketSummary } from "../utils/ccTrinketAnalysis";
 import {
   CD_INSTANT_SLACK_S,
@@ -105,8 +106,20 @@ export function buildPlayerLoadout(
   // 诱导模型」:候选层已经不再指控复苏烈焰,但只要这里还写着 [UNUSED],模型完全
   // 可以自己写出「你整局没用复苏烈焰」。实测这一行在归档 120 文件里出现 44 次
   // (治疗/DPS 两侧各 44)。用户 2026-08-23 裁定它是被动技能。
-  const fmtCDLabel = (cd: IMajorCooldownInfo) =>
-    `${cd.spellName} [${cd.cooldownSeconds}s${cd.maxChargesDetected > 1 ? `, ${cd.maxChargesDetected} Charges` : ""}]${
+  // GH #103 A5: a Defensive cooldown also states how long its effect lasts
+  // (`buffFullDurationForCaster`, the buff-duration single source, talents of
+  // the holder included). Without it the responder invented coverage — "Life
+  // Cocoon covers exactly the 0:47–0:54 lockout" with no duration anywhere in
+  // the prompt. No duration known → nothing rendered.
+  const lastsPart = (cd: IMajorCooldownInfo, caster?: ICombatUnit): string => {
+    if (cd.tag !== "Defensive") return "";
+    const d = buffFullDurationForCaster(cd.spellId, caster);
+    return d !== undefined && d > 0
+      ? `, lasts ${Math.round(d * 10) / 10}s`
+      : "";
+  };
+  const fmtCDLabel = (cd: IMajorCooldownInfo, caster?: ICombatUnit) =>
+    `${cd.spellName} [${cd.cooldownSeconds}s${cd.maxChargesDetected > 1 ? `, ${cd.maxChargesDetected} Charges` : ""}${lastsPart(cd, caster)}]${
       isProcOnlyActivation(cd.spellId)
         ? " [PASSIVE]"
         : cd.neverUsed
@@ -118,7 +131,9 @@ export function buildPlayerLoadout(
   friendlyIdMap.set(owner.name, ownerId);
   friendlyIdMap.set(owner.name.split("-")[0], ownerId);
   const ownerCDStr =
-    ownerCDs.length > 0 ? ownerCDs.map(fmtCDLabel).join(", ") : "none tracked";
+    ownerCDs.length > 0
+      ? ownerCDs.map((cd) => fmtCDLabel(cd, owner)).join(", ")
+      : "none tracked";
 
   lines.push(
     `  <unit id="${ownerId}" name="${owner.name}" spec="${ownerSpec}" role="log owner">`,
@@ -141,7 +156,9 @@ export function buildPlayerLoadout(
 
   for (const { player, spec, cds } of teammateCDs) {
     const cdStr =
-      cds.length > 0 ? cds.map(fmtCDLabel).join(", ") : "none tracked";
+      cds.length > 0
+        ? cds.map((cd) => fmtCDLabel(cd, player)).join(", ")
+        : "none tracked";
     const pid = nextId++;
     friendlyIdMap.set(player.name, pid);
     friendlyIdMap.set(player.name.split("-")[0], pid);
@@ -164,6 +181,10 @@ export function buildPlayerLoadout(
   }
   const enemyKitFor = (name: string): IMajorCooldownInfo[] | undefined =>
     enemyKitByName.get(name) ?? enemyKitByName.get(name.split("-")[0]);
+  const enemyUnitFor = (name: string): ICombatUnit | undefined =>
+    (enemies ?? []).find(
+      (e) => e.name === name || e.name.split("-")[0] === name.split("-")[0],
+    );
 
   for (const player of enemyCDTimeline.players) {
     const pid = nextId++;
@@ -190,7 +211,11 @@ export function buildPlayerLoadout(
       seen.add(cd.spellName);
       observedOnly.push(`${cd.spellName} [${cd.cooldownSeconds}s]`);
     }
-    const parts = [...(kit ?? []).map(fmtCDLabel), ...observedOnly];
+    const enemyUnit = enemyUnitFor(player.playerName);
+    const parts = [
+      ...(kit ?? []).map((cd) => fmtCDLabel(cd, enemyUnit)),
+      ...observedOnly,
+    ];
     const cdStr = parts.length > 0 ? parts.join(", ") : "none tracked";
     lines.push(
       `  <unit id="${pid}" name="${player.playerName}" spec="${player.specName}" role="enemy">`,
@@ -212,7 +237,7 @@ export function buildPlayerLoadout(
       `  <unit id="${pid}" name="${enemy.name}" spec="${specToString(enemy.spec)}" role="enemy">`,
     );
     lines.push(
-      `    <cooldowns>${kit ? kit.map(fmtCDLabel).join(", ") : "none tracked"}</cooldowns>`,
+      `    <cooldowns>${kit ? kit.map((cd) => fmtCDLabel(cd, enemy)).join(", ") : "none tracked"}</cooldowns>`,
     );
     lines.push("  </unit>");
   }

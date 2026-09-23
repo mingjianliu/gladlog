@@ -445,6 +445,7 @@ function slackSeg(fromSeconds: number, toSeconds: number): ISlackSegment {
     ownerPurgeCasts: 0,
     ownerKickCasts: 0,
     idle: true,
+    teamMinHpPct: 90,
   };
 }
 
@@ -705,6 +706,15 @@ describe("buildHealerOffenseSummary + formatHealerOffenseForContext", () => {
     // Note trimmed 2026-07-09 (week-eval tokens.md #4): redundant guidance lives in the system
     // prompt; only the load-bearing "outranks" rule remains in the block.
     expect(text).toContain("healing under pressure always outranks offense");
+    // GH #103 A4: every [SLACK] line states its own team min HP, which the
+    // slack band (team ≥ SLACK_TEAM_HP_THRESHOLD) can never undercut
+    const slackLines = lines.filter((l) => l.includes("[SLACK]"));
+    expect(slackLines.length).toBeGreaterThan(0);
+    for (const l of slackLines) {
+      const m = l.match(/team min HP (\d+)%/);
+      expect(m).not.toBeNull();
+      expect(Number(m![1])).toBeGreaterThanOrEqual(85);
+    }
   });
 });
 

@@ -156,6 +156,7 @@
     "test/ported/losAnalysis.test.ts",
     "test/ported/spellDanger.test.ts",
     "test/ported/talentBehaviors.test.ts",
+    "test/positionStayedRange.test.ts",
     "test/procOnlyActivation.test.ts",
     "test/questionableExternal.test.ts",
     "test/racialAbilities.test.ts",

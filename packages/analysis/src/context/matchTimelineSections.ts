@@ -552,6 +552,13 @@ export function emitManaMarkerEntries(params: {
 
 // ── [DEATH] events ──────────────────────────────────────────────────────────
 
+function dampeningSuffix(
+  dampeningAt: ((atSeconds: number) => number) | undefined,
+  atSeconds: number,
+): string {
+  return dampeningAt ? ` | dampening: ${dampeningAt(atSeconds)}%` : "";
+}
+
 /**
  * Low-pressure guard note (2026-08-01 production feedback: "damage taken ≈ 0
  * and it still scolded me for not using mitigation").
@@ -686,6 +693,11 @@ export function emitFriendlyDeathEntries<S>(params: {
   pid: (name: string) => string;
   playerIdMap?: Map<string, number>;
   enemyIdMap?: Map<string, number>;
+  /** GH #103 A1: the dampening at the death instant, same getter as the
+   * `[CD] … | dampening: N%` lines. Without it the responder quoted the value
+   * of a neighbouring line ("died at 3:15 at 66%" — 66% was 3:16's). Omitted
+   * → no suffix. */
+  dampeningAt?: (atSeconds: number) => number;
   /**
    * Mitigation audit / counterfactual (#17b Task4): given (victim name, death
    * instant), return a set of already-formatted lines (auditLines /
@@ -820,7 +832,7 @@ export function emitFriendlyDeathEntries<S>(params: {
     const trinketPart = trinketAvailable ? " (PvP Trinket available)" : "";
     const notePart = death.note ? ` [${death.note}]` : "";
     const deathLines: (string | S)[] = [
-      `${fmtTime(death.atSeconds)}  [DEATH]  ${pid(death.name)} (${death.spec} — friendly)${unusedDefensives}${trinketPart}${notePart}`,
+      `${fmtTime(death.atSeconds)}  [DEATH]  ${pid(death.name)} (${death.spec} — friendly)${unusedDefensives}${trinketPart}${notePart}${dampeningSuffix(params.dampeningAt, death.atSeconds)}`,
       // Anchored at the rendered instant: this [RES] sits directly under the
       // [DEATH] line above and carries no timestamp of its own, so a reader
       // (and the gate) can only read it as the same instant as the death.
@@ -911,6 +923,11 @@ export function emitEnemyDeathEntries<S>(params: {
   enemyPid: (name: string) => string;
   playerIdMap?: Map<string, number>;
   enemyIdMap?: Map<string, number>;
+  /** GH #103 A1 (see emitFriendlyDeathEntries): the dampening at the death instant, same getter as the
+   * `[CD] … | dampening: N%` lines. Without it the responder quoted the value
+   * of a neighbouring line ("died at 3:15 at 66%" — 66% was 3:16's). Omitted
+   * → no suffix. */
+  dampeningAt?: (atSeconds: number) => number;
   requestSnapshotPlaceholder: (
     timeSeconds: number,
     forceFull?: boolean,
@@ -925,6 +942,7 @@ export function emitEnemyDeathEntries<S>(params: {
     enemyPid,
     playerIdMap,
     enemyIdMap,
+    dampeningAt,
     requestSnapshotPlaceholder,
     addEntry,
   } = params;
@@ -932,7 +950,7 @@ export function emitEnemyDeathEntries<S>(params: {
   for (const death of enemyDeaths) {
     const dyingUnit = unitsByName.get(death.name);
     const deathLines: (string | S)[] = [
-      `${fmtTime(death.atSeconds)}  [DEATH]  ${enemyPid(death.name)} (${death.spec} — enemy)`,
+      `${fmtTime(death.atSeconds)}  [DEATH]  ${enemyPid(death.name)} (${death.spec} — enemy)${dampeningSuffix(dampeningAt, death.atSeconds)}`,
       `${fmtTime(death.atSeconds)}  [ROSTER]  enemy ${enemyPid(death.name)} removed (dead)`,
       // Anchored at the rendered instant: this [RES] sits directly under the
       // [DEATH] line above and carries no timestamp of its own, so a reader
