@@ -17,6 +17,10 @@
  *     --manifest $GLADLOG_EVAL_HOME/corpus/manifest-archive-<date>.txt [--every 30] \
  *     --needle "[CC BROKEN]" --lines-out /tmp/before-lines.txt > /tmp/before.txt
  *   manifest 行可以是绝对路径或相对 --archive-dir 的路径;--every 30 ≈ 600 场,单进程约 10 分钟。
+ *
+ * `--context-dir <dir>`(2026-09-23):把每个 owner 的完整 match context 逐个落盘
+ * (`<文件序号>-<回合序号>-<owner 序号>.txt`),前后两次 `diff -r` 就能把一个哈希变化
+ * 落到具体行上 —— GH #100 环境伤害修复时 context 哈希动了而 needle 没抓到,靠它定位。
  */
 import { createHash } from "node:crypto";
 
@@ -29,7 +33,7 @@ import {
 import { buildMatchContext } from "@gladlog/analysis/src/context/buildMatchContext";
 import { GladLogParser, type GladMatch } from "@gladlog/parser";
 import { toLegacyMatch } from "@gladlog/parser-compat";
-import { readFileSync, writeFileSync } from "fs";
+import { mkdirSync, readFileSync, writeFileSync } from "fs";
 import { resolve } from "path";
 import { gunzipSync } from "zlib";
 
@@ -43,6 +47,7 @@ function parseArgs() {
     archiveDir: "",
     needle: "",
     linesOut: "",
+    contextDir: "",
   };
   for (let i = 0; i < a.length; i++) {
     if (a[i] === "--manifest") out.manifest = a[++i] ?? "";
@@ -50,10 +55,11 @@ function parseArgs() {
     else if (a[i] === "--archive-dir") out.archiveDir = a[++i] ?? "";
     else if (a[i] === "--needle") out.needle = a[++i] ?? "";
     else if (a[i] === "--lines-out") out.linesOut = a[++i] ?? "";
+    else if (a[i] === "--context-dir") out.contextDir = a[++i] ?? "";
   }
   if (!out.manifest || !Number.isFinite(out.every) || out.every < 1) {
     console.error(
-      "usage: acceptanceCapture.ts --manifest <path> [--every N] [--archive-dir <dir>] [--needle <text> --lines-out <file>]",
+      "usage: acceptanceCapture.ts --manifest <path> [--every N] [--archive-dir <dir>] [--needle <text> --lines-out <file>] [--context-dir <dir>]",
     );
     process.exit(1);
   }
@@ -76,7 +82,9 @@ let owners = 0;
 let needleLines = 0;
 const out: string[] = [];
 
+let fileNo = 0;
 for (const f of files) {
+  fileNo++;
   const p = f.startsWith("/") ? f : resolve(args.archiveDir, f);
   const parser = new GladLogParser();
   const items: GladMatch[] = [];
@@ -131,6 +139,13 @@ for (const f of files) {
       }
       contextHash.update(`${f}:${idx}:${owner.id}\n`);
       contextHash.update(ctx);
+      if (args.contextDir) {
+        mkdirSync(args.contextDir, { recursive: true });
+        writeFileSync(
+          resolve(args.contextDir, `${fileNo}-${idx}-${owners}.txt`),
+          `${f}\n${owner.name}\n${ctx}`,
+        );
+      }
       // `--needle "a|b"`: several needles in one run (2026-09-22) — a change
       // that touches two line kinds no longer needs two 10-minute captures.
       const needles = args.needle.split("|").filter(Boolean);
