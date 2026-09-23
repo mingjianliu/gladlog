@@ -387,6 +387,11 @@ npx tsx packages/eval/scripts/durationCandidatesFromInventory.ts $GLADLOG_EVAL_H
 npx tsx packages/eval/scripts/durationTalentScan.ts \
   --manifest $GLADLOG_EVAL_HOME/corpus/manifest-archive-<date>.txt --every 60 \
   --candidates $GLADLOG_EVAL_HOME/reports/buff-duration-<date>/candidates.json --tag inventory-<date>
+#    When NO SpellMod in either encoding explains a tier, ask which ability PRODUCED the aura
+#    (Game-Behaviour Rule 6): auraProducerScan.ts --auras <ids> splits lifetimes by the caster's cast
+#    within 300 ms before each application (Survival of the Fittest's MM 3 s = Exhilaration via Smoke
+#    Screen; Trick Shots 6 s = Volley's own 6 s); totemLifetimeScan.ts measures a pulsing totem by its
+#    own last event, split by the owner's talent rank (Healing Stream 15 / 18 / 21.5).
 #    PROMOTE = an increase that reproduces; REDUCTION-CONFIRMED = a decrease with its mechanism; a
 #    multi-rank talent still needs the rank read (buffDurationScan --detail prints `holder rN`).
 npx tsx packages/eval/scripts/buffDurationScan.ts \
