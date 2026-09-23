@@ -759,4 +759,12 @@
 //  605 archive files / 3,520 owner contexts: death 4,266 lines (all), kick
 //  8,741, slack 618, loadout 18,334, stayed 1,780; 0 unexplained line
 //  changes; findings hash unchanged; prompts +0.56 % chars.
-export const PROMPT_VERSION = 101;
+//  v102 (2026-09-23, GH #103 class B): the findings prompt's HARD RULES gain
+//  "no exclusive or universal claims (\"the only cooldown left\", \"nothing
+//  left\", \"free the whole time\") unless the context shows nothing else
+//  ready and nothing breaking that span" — same rule as the eval responder's
+//  new EXCLUSIVITY DISCIPLINE (docs/commands/eval-baseline.md). Measured on the
+//  responder only (50 matches, Opus 5.5, same regex + adjudication standard):
+//  universal sentences 32 → 8, prompt-contradicted 7 → 1. The findings-prompt
+//  copy is unmeasured (its explanations carry no digits and few such claims).
+export const PROMPT_VERSION = 102;

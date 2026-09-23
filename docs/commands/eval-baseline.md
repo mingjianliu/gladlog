@@ -108,6 +108,15 @@ For each entry in the index, launch a **background subagent** (prompt is self-co
 > re-cut. Write a range only when the prompt prints that exact range on one line; otherwise name
 > the printed instants separately ("the 2:44 spike … the 2:58 death"), never an invented range.
 >
+> EXCLUSIVITY DISCIPLINE (mandatory): before writing an exclusive or universal claim — "the only
+> X left", "nothing / no defensives left", "every save was spent", "free / locked the whole time",
+> "throughout" — check the prompt for the exact span it covers: the `[RES]` ledger (`rdy:`) at
+> that second, the loadout, `DEATHS WITH MISSED OPTIONS`, and every `[CC …]` / `[KICK]` / cast
+> line inside the span. If anything else was ready, or anything breaks the span, either name it
+> ("Spirit Link, with Astral Shift and Nature's Swiftness also ready") or drop the universal
+> word. The ledger lists tracked cooldowns only — "no tracked cooldown was ready" is the most it
+> supports.
+>
 > FOCUS DISCIPLINE: structure the response around the 2-3 windows that actually
 > decided the match; give each secondary observation at most one line, and label
 > minor items as minor. Do not let "what went right" match the decisive analysis
