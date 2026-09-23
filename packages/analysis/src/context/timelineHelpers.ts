@@ -13,7 +13,7 @@ import { IPlayerCCTrinketSummary } from "../utils/ccTrinketAnalysis";
 import {
   canHelpAnotherUnit,
   CD_INSTANT_SLACK_S,
-  cdAvailableAt,
+  cdReadyInTimeAt,
   IMajorCooldownInfo,
   isHealerSpec,
   isPassiveProcCast,
@@ -1148,7 +1148,7 @@ export function buildKillSequenceBlock(params: {
             // judgement as matchTimelineSections' [DEATH] Unused and
             // candidateFindings' death-unused-defensive / external-unused; we
             // no longer compute readyAt by hand.
-            return cdAvailableAt(cd, deathTime);
+            return cdReadyInTimeAt(cd, deathTime);
           });
 
           if (unusedDefensives.length > 0) {

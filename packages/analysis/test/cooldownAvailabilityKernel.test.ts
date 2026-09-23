@@ -27,11 +27,15 @@ import { describe, expect, it } from "vitest";
 
 import {
   cdAvailableAt,
+  cdReadyInTimeAt,
   extractMajorCooldowns,
   IMajorCooldownInfo,
   isCooldownAvailableFromLastUse,
 } from "../src/utils/cooldowns";
-import { isAvailableAt } from "../src/utils/deathOutcomeAnalysis";
+import {
+  isAvailableAt,
+  isReadyInTimeAt,
+} from "../src/utils/deathOutcomeAnalysis";
 import {
   makeAuraEvent,
   makeSpellCastEvent,
@@ -139,6 +143,27 @@ describe("cdAvailableAt 与 isAvailableAt 在重叠语义上必须同判(断言�
       ),
     ).toBe(true);
   });
+
+  // Reaction-window twins (REACTION_WINDOW_S, user ruling 2026-09-23): the
+  // accusation gates on both paths must agree too, including across the 1 s
+  // boundary (back at 310: 310.9 no, 311.1 yes).
+  for (const { name, casts, atSeconds } of [
+    ...scenarios,
+    { name: "转好后 0.9s", casts: [10], atSeconds: 310.9 },
+    { name: "转好后 1.1s", casts: [10], atSeconds: 311.1 },
+  ]) {
+    it(`reaction window: ${name}(casts=${JSON.stringify(casts)}, t=${atSeconds}s)`, () => {
+      expect(
+        isReadyInTimeAt(
+          unitWith(casts),
+          SPELL_ID,
+          COOLDOWN_SECONDS,
+          atSeconds,
+          MATCH_START,
+        ),
+      ).toBe(cdReadyInTimeAt(cdWith(casts), atSeconds));
+    });
+  }
 
   for (const { name, casts, atSeconds } of scenarios) {
     it(`${name}(casts=${JSON.stringify(casts)}, t=${atSeconds}s)`, () => {

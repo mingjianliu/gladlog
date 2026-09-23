@@ -2084,14 +2084,16 @@ describe("ccAvoidanceOptionsAt(DEFENSIVE-001 wiring helper,2026-08-07)", () => {
     // Divine Shield cd=300s, CC at t=40s. 施放于 t=-260s(即 40-300)恰好
     // 到期 → 可用;施放于 t=-259s 差一秒 → 不可用。用 matchStartMs 平移到
     // 正时间轴上表达。
+    // 2026-09-23 reaction window (REACTION_WINDOW_S = 1, user ruling): back
+    // at t=300 s counts only from t=301 s — the boundary moved by exactly 1 s.
     const atExpiry = {
-      spellCastEvents: [cast("642", 0)], // t=0s,CC 在 t=300s
+      spellCastEvents: [cast("642", 0)], // t=0s,CC 在 t=301s
     };
     expect(
-      ccAvoidanceOptionsAt(atExpiry, { ...cc, atSeconds: 300 }, 0),
+      ccAvoidanceOptionsAt(atExpiry, { ...cc, atSeconds: 301 }, 0),
     ).toContain("Divine Shield");
     expect(
-      ccAvoidanceOptionsAt(atExpiry, { ...cc, atSeconds: 299.9 }, 0),
+      ccAvoidanceOptionsAt(atExpiry, { ...cc, atSeconds: 300.9 }, 0),
     ).not.toContain("Divine Shield");
   });
 

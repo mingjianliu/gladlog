@@ -8,7 +8,7 @@ import { buildAuraIntervals, IAuraInterval } from "./auraIntervals";
 import { binarySearchClosest } from "./binarySearch";
 import { IPlayerCCTrinketSummary } from "./ccTrinketAnalysis";
 import {
-  cdAvailableAt,
+  cdReadyInTimeAt,
   HP_SAMPLE_RADIUS_MS,
   IMajorCooldownInfo,
 } from "./cooldowns";
@@ -443,7 +443,7 @@ export function computeUnusedSelfCounterfactuals(
 
   const hits: ICounterfactualHit[] = [];
   for (const cd of victimCds) {
-    if (!cdAvailableAt(cd, deathS)) continue;
+    if (!cdReadyInTimeAt(cd, deathS)) continue;
     // GH #96 M3a: hypothetical ADDED protection: observed × p per component
     // (own cooldown → the victim carries it). Lower bound: "would have saved".
     const res = resolveMitigation(cd.spellId, {

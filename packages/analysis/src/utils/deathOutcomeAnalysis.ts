@@ -11,6 +11,7 @@ import {
   auraOnlyActivationSeconds,
   CD_INSTANT_SLACK_S,
   isCooldownAvailableFromLastUse,
+  REACTION_WINDOW_S,
   specToString,
 } from "./cooldowns";
 import { isStunCcInstance } from "./drAnalysis";
@@ -322,6 +323,38 @@ export function isAvailableAt(
   return false;
 }
 
+/** `isAvailableAt` under the reaction window — the same rule as cooldowns.ts
+ * `cdReadyInTimeAt` (REACTION_WINDOW_S, user ruling 2026-09-23): ready by
+ * t − 1 s and not pressed through t's rendered instant. Every "had X
+ * available" claim this module renders goes through here. */
+export function isReadyInTimeAt(
+  unit: ICombatUnit,
+  spellId: string,
+  cooldownSeconds: number,
+  atSeconds: number,
+  matchStartMs: number,
+  resetSpellIds?: string[],
+): boolean {
+  return (
+    isAvailableAt(
+      unit,
+      spellId,
+      cooldownSeconds,
+      atSeconds,
+      matchStartMs,
+      resetSpellIds,
+    ) &&
+    isAvailableAt(
+      unit,
+      spellId,
+      cooldownSeconds,
+      atSeconds - REACTION_WINDOW_S - CD_INSTANT_SLACK_S,
+      matchStartMs,
+      resetSpellIds,
+    )
+  );
+}
+
 /** Pre-computed lockout intervals: [fromSeconds, toSeconds] pairs sorted by fromSeconds. */
 type LockoutIntervals = [number, number][];
 
@@ -570,7 +603,7 @@ export function buildDeathOutcomeSummary(
         // rounds), see talentOwnershipOf's granularity contract.
         if (talentOwnershipOf(unit, spellId) === "no") continue;
         if (
-          !isAvailableAt(
+          !isReadyInTimeAt(
             unit,
             spellId,
             spell.cooldownSeconds,
@@ -650,7 +683,7 @@ export function buildDeathOutcomeSummary(
           // constant when it is unavailable. See the root-cause note at this
           // function's signature.
           if (
-            !isAvailableAt(
+            !isReadyInTimeAt(
               teammate,
               spellId,
               resolvedCooldownSeconds?.(teammate, spellId) ??

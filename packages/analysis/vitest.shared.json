@@ -160,6 +160,7 @@
     "test/questionableExternal.test.ts",
     "test/racialAbilities.test.ts",
     "test/rawStreams.test.ts",
+    "test/reactionWindow.test.ts",
     "test/resLedgerPrune.test.ts",
     "test/rootReachability.test.ts",
     "test/smoke.test.ts",

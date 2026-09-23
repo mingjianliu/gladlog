@@ -1022,6 +1022,42 @@ export function cdAvailableAt(
 export const CD_INSTANT_SLACK_S = 0.5;
 
 /**
+ * Reaction window for every "X was ready and you did not press it" claim —
+ * user ruling 2026-09-23 (GH #103, the #216/#253 hard failures): "if it came
+ * back within a second, the healer may not even have had the GCD — even ready
+ * it was too late; don't be that strict, ignore anything within 1 s (maybe
+ * 1.5 s later, but start with 1)". A cooldown only counts as usable at t when
+ * it was already ready at t − REACTION_WINDOW_S and was not pressed through
+ * t's rendered instant.
+ *
+ * This is a feasibility gate on ACCUSATIONS, not a state change:
+ * `cdAvailableAt` (and the `[RES]` ledger) still answer "is it off cooldown".
+ * It also closes the ledger-consistency hard failure by construction: the
+ * ledger renders the state at toRenderSecond(t) + CD_INSTANT_SLACK_S, which is
+ * never earlier than t − REACTION_WINDOW_S, so every claim this admits the
+ * ledger lists as ready. (#216: Ironbark back at 180.881 s, the death at
+ * 180.852 s, both render 3:00 — the death line said available, the ledger cd.)
+ */
+export const REACTION_WINDOW_S = 1;
+
+/** `cdAvailableAt` under the reaction window (REACTION_WINDOW_S): ready by
+ * t − 1 s (the inner call evaluates at (t − 1.5) + CD_INSTANT_SLACK_S) and
+ * not pressed through t's rendered instant. Charges: a charge was up at t − 1
+ * and one is still up after every cast through t + slack. */
+export function cdReadyInTimeAt(
+  cd: Pick<
+    IMajorCooldownInfo,
+    "casts" | "cooldownSeconds" | "neverUsed" | "charges"
+  >,
+  tSeconds: number,
+): boolean {
+  return (
+    cdAvailableAt(cd, tSeconds) &&
+    cdAvailableAt(cd, tSeconds - REACTION_WINDOW_S - CD_INSTANT_SLACK_S)
+  );
+}
+
+/**
  * For a given unit, return all class-tagged major cooldowns (>= 30s) with
  * cast times and idle availability windows derived from the combat log.
  */
@@ -2052,7 +2088,9 @@ interface ISingleEnemyCDCast {
 }
 export interface IEnemyCDTimelineForTiming {
   alignedBurstWindows: readonly IBurstWindow[];
-  players: ReadonlyArray<{ readonly offensiveCDs: ReadonlyArray<ISingleEnemyCDCast> }>;
+  players: ReadonlyArray<{
+    readonly offensiveCDs: ReadonlyArray<ISingleEnemyCDCast>;
+  }>;
 }
 
 /** How many seconds before a burst window a defensive can be cast and still be

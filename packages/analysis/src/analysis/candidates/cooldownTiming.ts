@@ -19,6 +19,7 @@ import { burstCastSpan } from "../../utils/burstLedger";
 import {
   canHelpAnotherUnit,
   cdAvailableAt,
+  cdReadyInTimeAt,
   DEFENSIVE_TAGS,
   getUnitHpAtTimestamp,
   HP_SAMPLE_RADIUS_MS,
@@ -753,11 +754,21 @@ export function cdHoardedEvents(
           });
         continue;
       }
-      const ready = readyDefensiveCds(ownerCds, p.tSec, (cd) =>
+      // Two sets on purpose (reaction window, user ruling 2026-09-23): the
+      // ACCUSATION names only cooldowns ready by t − REACTION_WINDOW_S
+      // (`cdReadyInTimeAt`), but "did they respond" (`spent` below) still
+      // counts a press of anything off cooldown at t. With one strict set, a
+      // cooldown that came back 0.4 s before the crisis and WAS pressed fell
+      // out of `spent`, and the other unpressed wall became a new accusation
+      // against a player who had answered — 8 new accusations on the S2
+      // archive every-30 before the split, 0 after (the 1 remaining addition is a
+      // CD_HOARD_CAP substitution).
+      const offCooldown = readyDefensiveCds(ownerCds, p.tSec, (cd) =>
         src.own
           ? !SELF_CAST_NOOP_EXTERNAL_IDS.has(cd.spellId)
           : canHelpAnotherUnit(cd.spellId, cd.tag),
       );
+      const ready = offCooldown.filter((cd) => cdReadyInTimeAt(cd, p.tSec));
       if (ready.length === 0) {
         if (tracing)
           trace.push({
@@ -793,7 +804,7 @@ export function cdHoardedEvents(
           });
         continue;
       }
-      const spent = ready.some((cd) =>
+      const spent = offCooldown.some((cd) =>
         cd.casts.some(
           (c) =>
             c.timeSeconds >= p.tSec - RESPONSE_PRE_MS / 1000 &&

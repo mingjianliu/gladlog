@@ -61,6 +61,7 @@ import {
   isMeleeSpec,
   isProcOnlyActivation,
   playerTalentIdSets,
+  REACTION_WINDOW_S,
   specToString,
 } from "../utils/cooldowns";
 import {
@@ -1376,9 +1377,17 @@ export function ccAvoidanceOptionsAt(
       // <= t" at one charge, so single-charge tools are unaffected; needed
       // because the talents that matter here are charge talents (Celerity +1
       // Roll, Aerial Mastery +1 Hover, Wings of Liberty +1 Verdant Embrace).
+      // Reaction window (REACTION_WINDOW_S, user ruling 2026-09-23): a tool
+      // that came back within 1 s of the CC was not a real option.
       if (
         chargesAvailableAt(castTimes, cooldownSeconds, charges, cc.atSeconds) >
-        0
+          0 &&
+        chargesAvailableAt(
+          castTimes,
+          cooldownSeconds,
+          charges,
+          cc.atSeconds - REACTION_WINDOW_S,
+        ) > 0
       ) {
         available = true;
         break;

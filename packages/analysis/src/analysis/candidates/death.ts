@@ -13,6 +13,7 @@ import { lastCastBefore } from "../../context/timelineHelpers";
 import { costNormPhrase } from "../../data/curatedAbilityFacts";
 import {
   cdAvailableAt,
+  cdReadyInTimeAt,
   FORBEARANCE_GATED_IDS,
   type IMajorCooldownInfo,
   isProcOnlyActivation,
@@ -395,7 +396,7 @@ export function deathUnusedDefensiveEvents(
     // 没有按键的能力不算「你本可以按却没按的墙」—— 不是难做到,是没有那个按钮
     // (`PROC_ONLY_ACTIVATION_IDS`,用户 2026-08-23 裁定复苏烈焰是被动技能)。
     if (isProcOnlyActivation(cd.spellId)) return false;
-    if (!cdAvailableAt(cd as IMajorCooldownInfo, deathT)) return false;
+    if (!cdReadyInTimeAt(cd as IMajorCooldownInfo, deathT)) return false;
     if (freeState === null) {
       if (!ccAtDeathIsStunOnly) return false;
       // 单源:问「被晕时能不能按」只能问 usableWhileStunned,不能直接 .has()
@@ -544,7 +545,7 @@ export function externalUnusedEvents(input: {
   maxGap = Math.max(maxGap, deathT - cursor);
   if (maxGap < EXTERNAL_FREE_MIN_GAP_S) return [];
 
-  const avail = input.ownerExternals.find((cd) => cdAvailableAt(cd, deathT));
+  const avail = input.ownerExternals.find((cd) => cdReadyInTimeAt(cd, deathT));
   if (!avail) return [];
   return [
     {

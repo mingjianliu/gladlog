@@ -336,6 +336,21 @@ const INDEX: PredicateRow[] = [
     mod: deathOutcomeAnalysis,
   },
   {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "cdReadyInTimeAt",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "REACTION_WINDOW_S",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/deathOutcomeAnalysis.ts`,
+    symbol: "isReadyInTimeAt",
+    mod: deathOutcomeAnalysis,
+  },
+  {
     file: `${A}/utils/killWindowTargetSelection.ts`,
     symbol: "matchMinHpPct",
     mod: killWindowTargetSelection,

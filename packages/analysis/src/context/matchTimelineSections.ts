@@ -5,7 +5,7 @@ import { isDmgSpikeTrough } from "../analysis/crisisDecisionPoints";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { IPlayerCCTrinketSummary } from "../utils/ccTrinketAnalysis";
 import {
-  cdAvailableAt,
+  cdReadyInTimeAt,
   DEFENSIVE_TAGS,
   FORBEARANCE_GATED_IDS,
   getUnitHpAtTimestamp,
@@ -788,7 +788,7 @@ export function emitFriendlyDeathEntries<S>(params: {
         // availableWindows (that table also applies GRACE_SECONDS short-window
         // trimming, which serves the "cheaper alternative" advice and does not
         // apply to a point-in-time death query).
-        .filter((cd) => cdAvailableAt(cd, death.atSeconds))
+        .filter((cd) => cdReadyInTimeAt(cd, death.atSeconds))
         // B12/C3: only flag if it was actually usable (not locked out through the lethal window, or
         // is a stunned-usable defensive AND the lockout window was stun-only — see finding #1 above).
         .filter(

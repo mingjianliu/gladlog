@@ -738,4 +738,13 @@
 //  teammate, 12 unknown — druid forms up at log start). The Grounding redirect
 //  credit now needs the shaman's own cast within the totem's life (DB2 3 s +
 //  0.5 s): 7 of 107 redirects were a teammate shaman's totem, −18 lines.
-export const PROMPT_VERSION = 99;
+//  v100 (2026-09-23, GH #103 #216/#253, user ruling "if it came back within
+//  a second the healer may not even have had the GCD — ignore anything
+//  within 1 s"): every "X was ready and not pressed" claim goes through
+//  cooldowns.ts `cdReadyInTimeAt` / deathOutcome `isReadyInTimeAt`
+//  (REACTION_WINDOW_S = 1) — ready by t − 1 s and not pressed through t.
+//  605 archive files: −35 `[DEATH] (Unused: …)` entries, −23 lines of
+//  DEATHS WITH MISSED OPTIONS, −2 [DEFENSIVE AVAILABLE]; cd-hoarded −4/−4,
+//  external-unused −3, cc-avoidable −1 (2 cap substitutions). 309-corpus
+//  qualityCheck hard failures 2 → 0.
+export const PROMPT_VERSION = 100;
