@@ -131,9 +131,12 @@ for (const f of files) {
       }
       contextHash.update(`${f}:${idx}:${owner.id}\n`);
       contextHash.update(ctx);
-      if (args.needle)
+      // `--needle "a|b"`: several needles in one run (2026-09-22) — a change
+      // that touches two line kinds no longer needs two 10-minute captures.
+      const needles = args.needle.split("|").filter(Boolean);
+      if (needles.length)
         for (const line of ctx.split("\n"))
-          if (line.includes(args.needle)) {
+          if (needles.some((n) => line.includes(n))) {
             needleLines++;
             out.push(`${f} ${owner.name}: ${line.trim()}`);
           }

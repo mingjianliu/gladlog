@@ -14,6 +14,17 @@
  * Usage: npx tsx packages/eval/scripts/npcRosterScan.ts --manifest <txt> [--offset 0] [--limit 600] --out <new.json>
  */
 import { CRITICAL_NON_PLAYER_NPC_NAMES } from "@gladlog/analysis/src/context/timelineHelpers";
+import { WARLOCK_PET_FUNCTION } from "@gladlog/analysis/src/data/warlockPets";
+
+/** Every hand-listed npcId: the critical-NPC table plus the warlock pet table
+ * (GH #86, 2026-09-22) — both are npcId lists the spell-id registry cannot
+ * hold, so this scan is their only rot check. */
+const LISTED_NPC_NAMES: Record<string, string> = {
+  ...CRITICAL_NON_PLAYER_NPC_NAMES,
+  ...Object.fromEntries(
+    Object.entries(WARLOCK_PET_FUNCTION).map(([id, f]) => [id, f.pet]),
+  ),
+};
 import { parseLine } from "@gladlog/parser";
 import { readFileSync, writeFileSync } from "fs";
 import { gunzipSync } from "zlib";
@@ -85,7 +96,7 @@ for (const path of files) {
         rows
           .set(npcId, {
             npcId,
-            listed: npcId in CRITICAL_NON_PLAYER_NPC_NAMES,
+            listed: npcId in LISTED_NPC_NAMES,
             name: p.params[5]?.replace(/"/g, "") ?? "",
             summons: 0,
             files: 0,
@@ -150,8 +161,8 @@ const result = {
   scope:
     "npcId = GUID field 6 of a SPELL_SUMMON destination. hitByEnemyShare = summoned units damaged at least once by a player on the other team from the summoner. diedShare = units with a UNIT_DIED; killedByOverkill = units that took enemy-player damage with overkill > 0 (the only kill evidence when no UNIT_DIED is logged); everything else is END UNKNOWN, not a survivor. Names are the recorder's client locale.",
   distinctNpcIds: all.length,
-  listedEntries: Object.keys(CRITICAL_NON_PLAYER_NPC_NAMES).length,
-  reverse_listedButNeverSummoned: Object.entries(CRITICAL_NON_PLAYER_NPC_NAMES)
+  listedEntries: Object.keys(LISTED_NPC_NAMES).length,
+  reverse_listedButNeverSummoned: Object.entries(LISTED_NPC_NAMES)
     .filter(([id]) => !rows.has(id))
     .map(([id, name]) => ({ npcId: id, name })),
   listedObserved: all

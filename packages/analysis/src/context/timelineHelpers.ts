@@ -843,6 +843,22 @@ export function nonPlayerUnitKill(
 }
 
 /**
+ * How long a non-player unit stood before the blow that killed it: its own
+ * SPELL_SUMMON to the kill, in seconds to one decimal; `null` when either end
+ * is unknown. GH #86, user wording rule 2026-09-22: say how long it stood and
+ * when it was killed — never an "expected" or "full" lifetime, which the log
+ * cannot observe (no despawn event on 12.x).
+ */
+export function summonLifetimeAtKillS(
+  unit: ICombatUnit,
+  kill: INonPlayerUnitKill,
+): number | null {
+  const summonMs = summonedAtMs(unit);
+  if (summonMs === null || kill.timestamp < summonMs) return null;
+  return Math.round(((kill.timestamp - summonMs) / 1000) * 10) / 10;
+}
+
+/**
  * Extracts the top-N damage sources that hit `unit` within the `windowMs` window
  * ending at `deathMs`. Returns an array of formatted "source — spell (Xk)" strings.
  */

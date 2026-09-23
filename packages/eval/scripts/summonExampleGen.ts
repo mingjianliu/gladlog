@@ -205,8 +205,6 @@ for (const f of files) {
             }),
           ),
         ].join(", ");
-        const exp =
-          expected !== undefined ? `expected ${r1(expected)} s` : "expected ?";
         const sAt = (summonMs - startMs) / 1000;
         if (kill && kill.timestamp <= endMs) {
           t.killed++;
@@ -225,24 +223,24 @@ for (const f of files) {
             const k = `${name}|r${rk}`;
             killedByRank.set(k, (killedByRank.get(k) ?? 0) + 1);
           }
-          // At or past the expected end the blow lands on a summon that was
-          // about to expire anyway — say so instead of claiming a kill.
-          const atEnd = expected !== undefined && lived >= expected - 0.5;
+          // User wording rule 2026-09-22: how long it stood and when it was
+          // killed — never an "expected" lifetime (the log cannot see one).
+          // The DB2 value stays internal, for the Totemic Focus split above.
           push(
             `${name} killed`,
-            `${tag} ${fmt(sAt)}  [ENEMY SUMMON]   ${name}${by} — killed at ${fmt((kill.timestamp - startMs) / 1000)} by ${who || "?"} after ${r1(lived)} s of its ${exp}${atEnd ? " (at its expected end)" : ""}`,
+            `${tag} ${fmt(sAt)}  [ENEMY SUMMON]   ${name}${by} — killed at ${fmt((kill.timestamp - startMs) / 1000)} by ${who || "?"}, ${r1(lived)} s after it was summoned`,
           );
         } else if (hits > 0) {
           t.hitNotKilled++;
           push(
             `${name} hit-not-killed`,
-            `${tag} ${fmt(sAt)}  [ENEMY SUMMON]   ${name}${by} — not killed: hit ${hits}× by ${who}; ${exp}`,
+            `${tag} ${fmt(sAt)}  [ENEMY SUMMON]   ${name}${by} — not killed: hit ${hits}× by ${who}`,
           );
         } else {
           t.untouched++;
           push(
             `${name} untouched`,
-            `${tag} ${fmt(sAt)}  [ENEMY SUMMON]   ${name}${by} — not killed: 0 hits from your team; ${exp}`,
+            `${tag} ${fmt(sAt)}  [ENEMY SUMMON]   ${name}${by} — not killed: 0 hits from your team`,
           );
         }
         tally.set(name, t);

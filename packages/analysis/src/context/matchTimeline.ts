@@ -156,6 +156,7 @@ import {
   opposingHitsOnUnit,
   resolveSummonOwner,
   summonedAtMs,
+  summonLifetimeAtKillS,
 } from "./timelineHelpers";
 
 interface DeferredSnapshot {
@@ -1209,6 +1210,10 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
         if (topSources.length > 0)
           line += ` killed by: ${topSources.join(", ")}`;
       }
+      // GH #86 (user 2026-09-22): how long it stood — summon to kill. Stated
+      // only when the summon is in the log; no "expected" lifetime, ever.
+      const stood = summonLifetimeAtKillS(unit, kill);
+      if (stood !== null) line += `, ${stood} s after it was summoned`;
       addEntry(atSeconds, line);
     }
   }
@@ -1547,7 +1552,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
           );
           const upKicks = states.filter((s) => s.cdRemainingSeconds === 0);
           if (upKicks.length > 0) {
-            interruptNote = ` | enemy interrupts UP: ${upKicks.map((s) => s.assumedReady ? `${s.spellName}/${s.spec} (assumed)` : `${s.spellName}/${s.spec}`).join(", ")}`;
+            interruptNote = ` | enemy interrupts UP: ${upKicks.map((s) => (s.assumedReady ? `${s.spellName}/${s.spec} (assumed)` : `${s.spellName}/${s.spec}`)).join(", ")}`;
           } else if (states.length > 0) {
             interruptNote = " | no enemy interrupt available (all on CD)";
           }
@@ -2556,7 +2561,11 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
         const tSec = toRenderSecond(t);
         const tMs = matchStartMs + tSec * 1000;
         const rawCastMs = matchStartMs + Math.round(t * 1000);
-        const brokenCC = findBrokenCC(summary.ccInstances, matchStartMs, rawCastMs);
+        const brokenCC = findBrokenCC(
+          summary.ccInstances,
+          matchStartMs,
+          rawCastMs,
+        );
         const ccPart = brokenCC
           ? ` out of ${brokenCC.spellName} (by ${actorLabel(brokenCC.sourceName, "friendly", brokenCC.sourceId)})`
           : "";
@@ -2568,8 +2577,11 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
           );
         const burstPart = hasBurst ? " [friendly offensive CD active]" : "";
         const enemyUnit = enemies?.find((e) => e.name === summary.playerName);
-        const hpPct = enemyUnit ? getHpPercentAtTime(enemyUnit, tSec, matchStartMs) : null;
-        const hpPart = hpPct !== null ? ` (target at ${hpPct.toFixed(0)}% HP)` : "";
+        const hpPct = enemyUnit
+          ? getHpPercentAtTime(enemyUnit, tSec, matchStartMs)
+          : null;
+        const hpPart =
+          hpPct !== null ? ` (target at ${hpPct.toFixed(0)}% HP)` : "";
         addEntry(
           t,
           `${fmtTime(t)}  [ENEMY TRINKET]   ${enemyPid(summary.playerName)} used PvP trinket${ccPart}${burstPart}${hpPart}`,

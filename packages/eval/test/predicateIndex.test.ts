@@ -107,6 +107,7 @@ import * as rootReachability from "@gladlog/analysis/src/utils/rootReachability"
 import * as spellDanger from "@gladlog/analysis/src/utils/spellDanger";
 import * as stats from "@gladlog/analysis/src/utils/stats";
 import * as summonReachability from "@gladlog/analysis/src/utils/summonReachability";
+import * as warlockPet from "@gladlog/analysis/src/utils/warlockPet";
 import * as talentBehaviors from "@gladlog/analysis/src/utils/talentBehaviors";
 import * as talentOwnership from "@gladlog/analysis/src/utils/talentOwnership";
 import * as talents from "@gladlog/analysis/src/utils/talents";
@@ -657,6 +658,18 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/summonReachability.ts`,
     symbol: "summonReach",
     mod: summonReachability,
+  },
+  // GH #86 (2026-09-22): summon → kill lifetime on [UNIT DESTROYED]; the
+  // warlock pet by function on the roster
+  {
+    file: `${A}/context/timelineHelpers.ts`,
+    symbol: "summonLifetimeAtKillS",
+    mod: timelineHelpers,
+  },
+  {
+    file: `${A}/utils/warlockPet.ts`,
+    symbol: "warlockPetFunction",
+    mod: warlockPet,
   },
   {
     file: `${A}/utils/ccTrinketAnalysis.ts`,

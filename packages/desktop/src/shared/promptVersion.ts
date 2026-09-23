@@ -705,4 +705,12 @@
 //  the wall's school`), immunities (Blessing of Protection / Spellwarding:
 //  `N hits immune`, counted as seconds) and Life Cocoon (absorbed field);
 //  legend extended.
-export const PROMPT_VERSION = 96;
+//  v97 (2026-09-22, GH #86, user rulings): summons narrowed to the functional
+//  ones — (A) every `[UNIT DESTROYED]` line states how long the unit stood,
+//  `, N s after it was summoned` (summon → kill; never an "expected"
+//  lifetime, the log has no despawn); (C) the roster names a warlock's pet
+//  by its function, `[pet: Felhunter — Spell Lock (kick), Devour Magic
+//  (purge)]` (data/warlockPets.ts, predicate utils/warlockPet.ts). No new
+//  line kinds; Shadowfiend / Mindbender get no "not killed" line (81 % of
+//  casts on a 6 s pet would be noise — measured, GH #86).
+export const PROMPT_VERSION = 97;

@@ -126,6 +126,7 @@ import {
 import spellIdLists from "./spellIdLists";
 import { trinketSpellIds } from "./spellTags";
 import { TALENT_MITIGATION_MODIFIERS } from "./talentMitigationModifiers";
+import { WARLOCK_PET_CAST_FUNCTION } from "./warlockPets";
 
 /** What kind of id the list holds — decides which corpus event stream can vouch for it. */
 export type CuratedIdKind = "cast" | "aura" | "talent" | "mixed";
@@ -170,6 +171,12 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   ),
   t("SPELL_EFFECT_OVERRIDES", "data/spellEffectOverrides.ts", "cast", () =>
     keys(SPELL_EFFECT_OVERRIDES),
+  ),
+  // GH #86 (2026-09-22): a warlock pet's signature casts, the fallback that
+  // names the pet when its npcId is not listed; the npcId half of the same
+  // table rides on npcRosterScan.ts like CRITICAL_NON_PLAYER_NPC_NAMES.
+  t("WARLOCK_PET_CAST_FUNCTION", "data/warlockPets.ts", "cast", () =>
+    keys(WARLOCK_PET_CAST_FUNCTION),
   ),
   t("DISPEL_TYPES", "data/spellEffectOverrides.ts", "aura", () =>
     keys(DISPEL_TYPES),
@@ -529,15 +536,10 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
     ],
   ),
   // GH #79 / B4: classification overrides for interrupted spells.
-  t(
-    "KICKED_SPELL_OVERRIDES",
-    "data/kickedSpellCategories.ts",
-    "cast",
-    () => [
-      ...KICKED_HEAL_OVERRIDE_IDS,
-      ...KICKED_CONTROL_OVERRIDE_IDS,
-      ...KICKED_DAMAGE_OVERRIDE_IDS,
-      ...KICKED_OTHER_OVERRIDE_IDS,
-    ],
-  ),
+  t("KICKED_SPELL_OVERRIDES", "data/kickedSpellCategories.ts", "cast", () => [
+    ...KICKED_HEAL_OVERRIDE_IDS,
+    ...KICKED_CONTROL_OVERRIDE_IDS,
+    ...KICKED_DAMAGE_OVERRIDE_IDS,
+    ...KICKED_OTHER_OVERRIDE_IDS,
+  ]),
 ];

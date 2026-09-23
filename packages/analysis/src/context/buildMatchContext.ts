@@ -91,6 +91,7 @@ import {
   formatSpecBaselines,
 } from "../utils/specBaselines";
 import { heroBuildGroupOf } from "../utils/talents";
+import { warlockPetFunction } from "../utils/warlockPet";
 import { buildCriticalWindowSet } from "./criticalWindows";
 import {
   formatDecisiveCounterfactualLine,
@@ -128,12 +129,16 @@ export function buildMatchContext(
   // Spec + name on the same token (2026-09-22, user report: the model called
   // an enemy Holy Priest a Paladin). Every later reference is by name/pid, so
   // the roster is the one place the spec↔name binding is spelled out.
-  const myTeam = friends
-    .map((p) => `${specToString(p.spec)} (${p.name})`)
-    .join(", ");
-  const enemyTeam = enemies
-    .map((p) => `${specToString(p.spec)} (${p.name})`)
-    .join(", ");
+  // GH #86 (user 2026-09-22): a warlock's pet is named by its FUNCTION on the
+  // roster — the one place the model learns whether a Spell Lock / Seduction
+  // / purge is on the table. Predicate: utils/warlockPet.ts.
+  const allUnitsForPets = Object.values(combat.units ?? {});
+  const rosterEntry = (p: ICombatUnit): string => {
+    const pet = warlockPetFunction(p, allUnitsForPets);
+    return `${specToString(p.spec)} (${p.name})${pet ? ` [pet: ${pet.pet} — ${pet.does}]` : ""}`;
+  };
+  const myTeam = friends.map(rosterEntry).join(", ");
+  const enemyTeam = enemies.map(rosterEntry).join(", ");
 
   // Arena map name — lets the model apply its own knowledge of the map's pillar/LoS layout
   const zoneName = zoneMetadata[String(combat.startInfo?.zoneId)]?.name;
