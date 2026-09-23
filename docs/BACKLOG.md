@@ -2456,6 +2456,8 @@ M6 已做完的:1,190 个脚本型天赋分队列 → 118 个点名了产品追�
 
 **F 当前代码的确定性门规硬失败(2026-09-23 新 5.5 基线 qualityCheck,PROMPT_VERSION 98,309 份)**:3/309 —— #216 `Ironbark` 被声称 available 但同时刻 `[RES]` 台账在 cd 里(冷却台账一致性类)、#272 `KILL ATTEMPTS … FAILED: popped Ironbark` 同段没有 `[ENEMY DEF]` 行(`checkEnemyDefRefConsistency`)——两条都是新的;#253 Aura Mastery 冷却台账是 09-15 起就有的旧账。
 
+**修复进度(2026-09-23 同日,PROMPT_VERSION 99)**:**F #272 已修**(只有受方光环、缺施法事件的敌方外置也出 `[ENEMY DEF]` 行;605 份归档 +442 行,findings 哈希不变)· **A2 已修**(反噬控制单表 `data/backlashCc.ts`;原硬编码把吸血鬼之触 DoT 34914 本身当控制 → 6,397 条假控制行全删 = `[CC ON TEAM] … [DISPEL BACKLASH CC]` 2,769 + `[CC ON ENEMY] … (0s)` 3,628;真反噬 87204 罪与罚此前看不见,+836 行;标签写出类型 `[DISPEL BACKLASH CC: silence|horror]`;候选 death-setup −12(全是 `ccAtDeath=Vampiric Touch` 的 trinket-early 假指控)+3(罪与罚 healer-locked)、position-mistake +1(假 4 s「控制」曾豁免它),58 场暗牧子集隔离对照逐条复现)· **A6 已修**(`[CC AVOIDED?]` 写出光环提供者 `(own)` / `(from <pid>)`:2,667 行中 own 2,586 / 队友 69 / 未知 12;Grounding 转移归功改为要求本人在图腾寿命内施放,107 次里 7 次原是队友萨满的图腾)。309 份 qualityCheck 硬失败 3 → 2,剩 #216/#253 待裁「渲染秒口径」。未动:A1/A3/A4/A5/A7、B、C、E。
+
 **(a) prompt 缺口 —— 代码问题,确定性修 + 前后计数**(codex 在 001–015 判出的 36 条事实错误里约 9 条,我手工粗分):
 1. `[CC AVOIDED?] … Grounding Totem active` 与 `[absorbed: Grounding Totem]` 不写图腾是谁的 → 回答写成「你的」(R002-S056 = 争议集 D03:玩家 Grounding 施放在 2:05 / 2:55,2:41 那个无从归属)或反向猜测。
 2. 被移除的定身不写来源(R002-S013:2:45 你的 Earthgrab,2:46 移除行无归属)。

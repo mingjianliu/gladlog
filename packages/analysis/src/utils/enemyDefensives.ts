@@ -82,7 +82,8 @@ export interface IEnemyDefensiveEvent {
  * from the enemy's OWN aura intervals (source = the enemy itself, so a
  * talent-shared copy applied by an ally is not "the target popped a wall");
  * externals from SPELL_CAST_SUCCESS onto another enemy, paired with the
- * recipient's aura interval when one starts within 1.5 s of the cast.
+ * recipient's aura interval when one starts within 1.5 s of the cast — plus
+ * externals seen only as the recipient's aura (cast event missing from the log).
  */
 export function enemyDefensiveEvents(
   enemy: ICombatUnit,
@@ -161,6 +162,48 @@ export function enemyDefensiveEvents(
         observed !== undefined &&
         removedEarly(cast.spellId, observed),
     });
+  }
+
+  // Aura-only externals (GH #103 class F, match 44f529e3): the log can carry the
+  // recipient's SPELL_AURA_APPLIED without the caster's SPELL_CAST_SUCCESS
+  // (Ironbark on an ally at 0:09, cast event absent — the caster was outside
+  // the recorder's logging range). KILL ATTEMPTS reads the aura and said
+  // "popped Ironbark" while no [ENEMY DEF] line existed for it. The aura is
+  // the evidence both sides can see, so an external interval this enemy
+  // applied to an ally with no cast already paired to it becomes an event too.
+  // Intervals whose start was inferred (up before the log saw it) are skipped
+  // — KILL ATTEMPTS only counts SPELL_AURA_APPLIED, and so does this.
+  for (const mate of enemies) {
+    if (mate.id === enemy.id) continue;
+    for (const iv of intervalsOf(mate)) {
+      if (iv.srcUnitName !== enemy.name) continue;
+      if (!EXTERNAL_DEF_IDS.has(iv.spellId) || iv.inferredStart) continue;
+      const paired = out.some(
+        (d) =>
+          d.kind === "external" &&
+          d.recipientId === mate.id &&
+          d.spellId === iv.spellId &&
+          Math.abs((d.auraFromS ?? d.atSeconds) - iv.fromS) <= 1.5,
+      );
+      if (paired) continue;
+      const observed = iv.toS - iv.fromS;
+      out.push({
+        atSeconds: iv.fromS,
+        spellId: iv.spellId,
+        spellName: getEnglishSpellName(iv.spellId, iv.spellName),
+        casterName: enemy.name,
+        kind: "external",
+        recipientId: mate.id,
+        recipientName: mate.name,
+        observedSeconds: observed,
+        auraFromS: iv.fromS,
+        auraToS: iv.toS,
+        auraInferredStart: iv.inferredStart,
+        auraInferredEnd: iv.inferredEnd,
+        auraSrcName: iv.srcUnitName,
+        removedEarly: !iv.inferredEnd && removedEarly(iv.spellId, observed),
+      });
+    }
   }
 
   return out.sort((a, b) => a.atSeconds - b.atSeconds);

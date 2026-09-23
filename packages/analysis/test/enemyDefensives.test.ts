@@ -208,6 +208,28 @@ describe("enemyDefensiveEvents", () => {
     expect(evs.map((e) => e.kind)).toEqual(["self"]);
   });
 
+  it("an external seen only as the recipient's aura (cast event missing) still lists — GH #103 F", () => {
+    // match 44f529e3: Ironbark applied on the ally at 9.724 s, no SPELL_CAST_SUCCESS
+    const druid = unit("e1");
+    const ally = unit("e2", {
+      auraEvents: [
+        applied(IRONBARK, "e1", "e2", 9.7),
+        removed(IRONBARK, "e1", "e2", 21.7),
+      ],
+    });
+    const [ev] = enemyDefensiveEvents(druid, [druid, ally], combat);
+    expect(ev).toMatchObject({
+      kind: "external",
+      spellId: IRONBARK,
+      recipientId: "e2",
+      atSeconds: 9.7,
+    });
+    expect(ev.observedSeconds).toBeCloseTo(12, 5);
+    // with the cast present it stays one event (cast-paired), not two
+    const withCast = unit("e1", { spellCastEvents: [cast(IRONBARK, "e2", 9.7)] });
+    expect(enemyDefensiveEvents(withCast, [withCast, ally], combat)).toHaveLength(1);
+  });
+
   it("carries recipientId for external defensives", () => {
     const druid = unit("druid", {
       spellCastEvents: [cast(IRONBARK, "rogue", 10)],

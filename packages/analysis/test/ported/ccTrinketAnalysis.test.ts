@@ -360,7 +360,11 @@ describe("analyzePlayerCCAndTrinket — root/disarm/interrupt tracking", () => {
       ] as any,
     });
 
-    const res1 = analyzePlayerCCAndTrinket(playerNoStart, [enemyLock], makeCombat());
+    const res1 = analyzePlayerCCAndTrinket(
+      playerNoStart,
+      [enemyLock],
+      makeCombat(),
+    );
     expect(res1.interruptInstances[0].nearestKickerDistYd).toBeNull();
     expect(res1.interruptInstances[0].kickersInRange).toBeNull();
 
@@ -384,7 +388,11 @@ describe("analyzePlayerCCAndTrinket — root/disarm/interrupt tracking", () => {
         },
       ] as any,
     });
-    const res2 = analyzePlayerCCAndTrinket(playerWithStart, [enemyLock], makeCombat());
+    const res2 = analyzePlayerCCAndTrinket(
+      playerWithStart,
+      [enemyLock],
+      makeCombat(),
+    );
     expect(res2.interruptInstances[0].nearestKickerDistYd).toBeNull();
     expect(res2.interruptInstances[0].kickersInRange).toBeNull();
   });
@@ -413,7 +421,11 @@ describe("analyzePlayerCCAndTrinket — root/disarm/interrupt tracking", () => {
       ] as any,
     });
     const enemy = makeEnemy("enemy-1", "EnemyA");
-    const resHeal = analyzePlayerCCAndTrinket(playerHeal, [enemy], makeCombat());
+    const resHeal = analyzePlayerCCAndTrinket(
+      playerHeal,
+      [enemy],
+      makeCombat(),
+    );
     // Flash Heal nominal = 1.17s -> Math.round((0.5 / 1.17) * 100) = 43%
     expect(resHeal.interruptInstances[0].kickDepthPct).toBe(43);
 
@@ -470,11 +482,20 @@ describe("analyzePlayerCCAndTrinket — root/disarm/interrupt tracking", () => {
     // Case 4 (Codex P2): Interrupted hardcast followed by instant proc of same spell
     // must NOT contaminate completed-duration samples
     const lbKicks = [10.5, 30.5].map((t) =>
-      makeInterruptEvent("1766", "Kick", "51505", "Lava Burst", MATCH_START + t * 1000),
+      makeInterruptEvent(
+        "1766",
+        "Kick",
+        "51505",
+        "Lava Burst",
+        MATCH_START + t * 1000,
+      ),
     );
     const lbStarts = [10, 30].map((t) => ({
       spellId: "51505",
-      logLine: { event: LogEvent.SPELL_CAST_START, timestamp: MATCH_START + t * 1000 },
+      logLine: {
+        event: LogEvent.SPELL_CAST_START,
+        timestamp: MATCH_START + t * 1000,
+      },
     }));
     const playerWithInstantProc = makeUnit("player-1", {
       actionIn: lbKicks,
@@ -482,11 +503,18 @@ describe("analyzePlayerCCAndTrinket — root/disarm/interrupt tracking", () => {
       spellCastEvents: [
         {
           spellId: "51505",
-          logLine: { event: LogEvent.SPELL_CAST_SUCCESS, timestamp: MATCH_START + 15_000 },
+          logLine: {
+            event: LogEvent.SPELL_CAST_SUCCESS,
+            timestamp: MATCH_START + 15_000,
+          },
         },
       ] as any,
     });
-    const resProc = analyzePlayerCCAndTrinket(playerWithInstantProc, [enemy], makeCombat());
+    const resProc = analyzePlayerCCAndTrinket(
+      playerWithInstantProc,
+      [enemy],
+      makeCombat(),
+    );
     // Neither kick should have a depth percentage because the cast was interrupted,
     // not completed at 15s
     expect(resProc.interruptInstances[0].kickDepthPct).toBeNull();
@@ -1485,6 +1513,10 @@ describe("analyzePlayerCCAndTrinket — CC Avoidance", () => {
     const player = makeUnit("player-1", {
       class: CombatUnitClass.Shaman,
       spec: CombatUnitSpec.Shaman_Restoration,
+      // the shaman's own Grounding Totem, 2 s before the redirect
+      spellCastEvents: [
+        makeSpellCastEvent("204336", MATCH_START + 10_000, "", "") as any,
+      ],
     });
     const enemy = makeEnemy("enemy-1", "EnemyA");
     enemy.spellCastEvents = [enemyCast as any];
@@ -1497,6 +1529,36 @@ describe("analyzePlayerCCAndTrinket — CC Avoidance", () => {
       "Grounding Totem",
     );
     expect(result.ccAvoidedInstances[0].avoidanceSpellId).toBe("204336");
+    expect(result.ccAvoidedInstances[0].avoidanceSourceName).toBe("player-1");
+  });
+
+  it("does not credit a teammate's Grounding Totem to this shaman (GH #103 A6)", () => {
+    // two-shaman team: the redirect lands 2 s after the OTHER shaman's totem;
+    // this shaman's last Grounding was 20 s earlier, long expired
+    const enemyCast = makeSpellCastEvent(
+      "118",
+      MATCH_START + 32_000,
+      "grounding-totem-id",
+      "Grounding Totem",
+      "enemy-1",
+      "EnemyA",
+    );
+    const player = makeUnit("player-1", {
+      class: CombatUnitClass.Shaman,
+      spec: CombatUnitSpec.Shaman_Restoration,
+      spellCastEvents: [
+        makeSpellCastEvent("204336", MATCH_START + 10_000, "", "") as any,
+      ],
+    });
+    const enemy = makeEnemy("enemy-1", "EnemyA");
+    enemy.spellCastEvents = [enemyCast as any];
+
+    const result = analyzePlayerCCAndTrinket(player, [enemy], makeCombat());
+    expect(
+      result.ccAvoidedInstances.filter(
+        (a) => a.avoidanceSpellName === "Grounding Totem",
+      ),
+    ).toHaveLength(0);
   });
 
   it("tracks SW:D self-damage breaks for Priests", () => {
@@ -1607,6 +1669,9 @@ describe("analyzePlayerCCAndTrinket — CC Avoidance", () => {
     const player = makeUnit("player-1", {
       class: CombatUnitClass.Shaman,
       spec: CombatUnitSpec.Shaman_Restoration,
+      spellCastEvents: [
+        makeSpellCastEvent("204336", MATCH_START + 9_000, "", "") as any,
+      ],
     });
     const enemy = makeEnemy("enemy-1", "EnemyA");
     enemy.spellCastEvents = [enemyCast as any];

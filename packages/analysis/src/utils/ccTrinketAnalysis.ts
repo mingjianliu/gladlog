@@ -5,6 +5,7 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
+import { BACKLASH_AURA_CC_TYPE } from "../data/backlashCc";
 import {
   BREAK_RACIAL_SPELL_IDS,
   racialName,
@@ -191,7 +192,17 @@ export const BREAKABLE_CC_SPELL_IDS = new Set([
 ]);
 
 /** Shaman Grounding Totem — redirects the first targeted hostile spell. */
-const GROUNDING_TOTEM_SPELL_ID = "204336"; // 2026-08-21: was 8177 (no DB2 name); 204336 = live Grounding Totem
+export const GROUNDING_TOTEM_SPELL_ID = "204336"; // 2026-08-21: was 8177 (no DB2 name); 204336 = live Grounding Totem
+/**
+ * How long after its cast a Grounding Totem can still eat a spell: DB2
+ * duration 3 s + 0.5 s log slack. Shared by the redirect credit below and the
+ * timeline's "ate: …" note (matchTimeline `groundingAbsorbNote`). GH #103 A6:
+ * the redirect credit used to accept ANY friendly totem, so with two shamans
+ * the teammate's totem was credited to this one — 7 of 107 redirects on the
+ * S2 archive every-30; the other 100 had the player's own cast in the window
+ * and none had no cast at all.
+ */
+export const GROUNDING_TOTEM_WINDOW_S = 3.5;
 
 /** Priest Shadow Word: Death — can break a freshly-applied breakable CC on the caster. */
 const SHADOW_WORD_DEATH_SPELL_ID = "32379";
@@ -325,7 +336,7 @@ export const TREMOR_AVOIDANCE_MAX_DURATION_S = 2.0;
  * (cast within 10s prior to CC application) ended a fear within 2.0s.
  */
 export function extractTremorAvoidedInstances(
-  player: Pick<ICombatUnit, "class" | "spellCastEvents">,
+  player: Pick<ICombatUnit, "class" | "name" | "spellCastEvents">,
   ccInstances: ICCInstance[],
   matchStartMs: number,
 ): ICCAvoidedInstance[] {
@@ -364,6 +375,7 @@ export function extractTremorAvoidedInstances(
         spellName: cc.spellName,
         avoidanceSpellName: "Tremor Totem",
         avoidanceSpellId: TREMOR_TOTEM_CAST_SPELL_ID,
+        avoidanceSourceName: player.name,
         sourceName: cc.sourceName,
         sourceId: cc.sourceId,
         sourceSpec: cc.sourceSpec,
@@ -512,8 +524,7 @@ export function bindBreakToWindow<T extends ICCBreakableWindow>(
   let primaryDurationMs = -1;
   for (const w of windows) {
     const activeAtCast =
-      castTs >= w.applyMs - toleranceMs &&
-      castTs <= w.removeMs + toleranceMs;
+      castTs >= w.applyMs - toleranceMs && castTs <= w.removeMs + toleranceMs;
     if (!activeAtCast) continue;
     const durationMs = w.removeMs - w.applyMs;
     if (durationMs > primaryDurationMs) {
@@ -532,7 +543,8 @@ export function findBrokenCC(
   const breakable = instances.map((cc) => ({
     cc,
     applyMs: matchStartMs + Math.round(cc.atSeconds * 1000),
-    removeMs: matchStartMs + Math.round((cc.atSeconds + cc.durationSeconds) * 1000),
+    removeMs:
+      matchStartMs + Math.round((cc.atSeconds + cc.durationSeconds) * 1000),
   }));
   return bindBreakToWindow(breakable, castTsMs)?.cc;
 }
@@ -678,6 +690,9 @@ export interface ICCAvoidedInstance {
   spellName: string;
   avoidanceSpellName: string;
   avoidanceSpellId: string;
+  /** Who applied the avoidance aura (a teammate's Grounding Totem vs your own);
+   * absent for mobility avoidance and for auras already up at log start. */
+  avoidanceSourceName?: string;
   sourceName: string;
   /**
    * The source unit's GUID (GH #99). `sourceName` alone cannot identify a
@@ -927,7 +942,9 @@ export function analyzePlayerCCAndTrinket(
       }
     }
 
-    const isBacklashPossible = spellId === "196364" || spellId === "34914"; // 2026-08-21: 196363 (dead) → 196364 live UA backlash silence
+    // Backlash auras from the one table (GH #103: the old hardcoded "34914" was
+    // the Vampiric Touch DoT itself, so every VT tick-refresh became a CC).
+    const isBacklashPossible = BACKLASH_AURA_CC_TYPE.has(spellId);
     if (!ccSpellIds.has(spellId) && !isBacklashPossible) continue;
 
     // FIX 2: key by spellId+caster so re-applications from the same caster don't
@@ -1002,13 +1019,11 @@ export function analyzePlayerCCAndTrinket(
   const zoneId = combat.startInfo.zoneId;
 
   // Build ICCInstance list (without drInfo — computed after sort)
-  const filteredCCWindows = ccWindows.filter((w) => {
-    if (w.spellId === "34914") {
-      const durationS = (w.removeMs - w.applyMs) / 1000;
-      return durationS <= 4; // Horror is 3s; DoT is 21s
-    }
-    return true;
-  });
+  // (GH #103: the old `spellId === "34914" && duration <= 4 s` filter lived
+  // here on the belief that the VT backlash horror carried the DoT's id; it is
+  // 87204, and the ≤4 s window was exactly the DoT's refresh gap — every VT
+  // re-application on a teammate became a 0 s CC. 34914 no longer enters.)
+  const filteredCCWindows = ccWindows;
 
   // B111: bind each trinket cast to the SINGLE CC it actually broke, instead of tagging
   // every CC that landed within 5s of the cast. An active PvP trinket (Gladiator's Medallion
@@ -1423,13 +1438,20 @@ export function analyzePlayerCCAndTrinket(
   const ccAvoidedInstances: ICCAvoidedInstance[] = [];
 
   // Track active buff intervals on the player
+  // srcName = who applied the avoidance aura (GH #103 A6: a teammate's Grounding
+  // Totem and your own read the same without it — "your Grounding" was written
+  // for a totem the other shaman dropped). "" when unknown (aura up at log start).
   const activeBuffs: Array<{
     spellId: string;
     name: string;
     applyMs: number;
     removeMs: number;
+    srcName: string;
   }> = [];
-  const pendingBuffs = new Map<string, { applyMs: number; name: string }>();
+  const pendingBuffs = new Map<
+    string,
+    { applyMs: number; name: string; srcName: string }
+  >();
 
   if (player.info?.interestingAurasJSON) {
     try {
@@ -1441,11 +1463,13 @@ export function analyzePlayerCCAndTrinket(
             pendingBuffs.set(spellIdStr, {
               applyMs: combat.startTime,
               name: CC_AVOIDANCE_BUFF_SPELLS.get(spellIdStr) ?? "",
+              srcName: "",
             });
           } else if (DRUID_FORM_BUFFS.has(spellIdStr)) {
             pendingBuffs.set(spellIdStr, {
               applyMs: combat.startTime,
               name: DRUID_FORM_BUFFS.get(spellIdStr) ?? "",
+              srcName: "",
             });
           }
         }
@@ -1475,6 +1499,7 @@ export function analyzePlayerCCAndTrinket(
           name: pending.name,
           applyMs: pending.applyMs,
           removeMs: aura.timestamp,
+          srcName: pending.srcName,
         });
       }
       pendingBuffs.set(spellId, {
@@ -1483,6 +1508,7 @@ export function analyzePlayerCCAndTrinket(
           CC_AVOIDANCE_BUFF_SPELLS.get(spellId) ??
           DRUID_FORM_BUFFS.get(spellId) ??
           "",
+        srcName: aura.srcUnitName ?? "",
       });
     } else if (event === LogEvent.SPELL_AURA_REMOVED) {
       const pending = pendingBuffs.get(spellId);
@@ -1492,6 +1518,7 @@ export function analyzePlayerCCAndTrinket(
           name: pending.name,
           applyMs: pending.applyMs,
           removeMs: aura.timestamp,
+          srcName: pending.srcName,
         });
         pendingBuffs.delete(spellId);
       }
@@ -1504,6 +1531,7 @@ export function analyzePlayerCCAndTrinket(
       name: pending.name,
       applyMs: pending.applyMs,
       removeMs: combat.endTime,
+      srcName: pending.srcName,
     });
   }
 
@@ -1561,6 +1589,7 @@ export function analyzePlayerCCAndTrinket(
               spellName: ccSpellName,
               avoidanceSpellName: activeBuff.name,
               avoidanceSpellId: activeBuff.spellId,
+              avoidanceSourceName: activeBuff.srcName || undefined,
               sourceName: enemy.name,
               // The avoided sweep already attributes a pet cast to its owning
               // player (F134), so the owner's own id is the right source here.
@@ -1590,6 +1619,7 @@ export function analyzePlayerCCAndTrinket(
               avoidanceSpellName:
                 REPOSITIONING_SPELL_IDS.get(mobilityCast.spellId) ?? "",
               avoidanceSpellId: mobilityCast.spellId,
+              avoidanceSourceName: player.name,
               sourceName: enemy.name,
               // The avoided sweep already attributes a pet cast to its owning
               // player (F134), so the owner's own id is the right source here.
@@ -1605,6 +1635,13 @@ export function analyzePlayerCCAndTrinket(
   // 2. Grounding Totem Redirects (only tracked on Shaman players to avoid multi-teammate duplication)
   if (player.class === CombatUnitClass.Shaman) {
     const groundingRedirects: ICCAvoidedInstance[] = [];
+    const ownGroundingCastsMs = player.spellCastEvents
+      .filter(
+        (e) =>
+          e.spellId === GROUNDING_TOTEM_SPELL_ID &&
+          e.logLine.event === LogEvent.SPELL_CAST_SUCCESS,
+      )
+      .map((e) => e.logLine.timestamp);
     for (const enemy of enemies) {
       for (const cast of enemy.spellCastEvents) {
         if (cast.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
@@ -1616,12 +1653,21 @@ export function analyzePlayerCCAndTrinket(
             cast.destUnitId.split("-")[5] === "5925");
         if (isGroundingTotem) {
           const castTimeMs = cast.logLine.timestamp;
+          if (
+            !ownGroundingCastsMs.some(
+              (ts) =>
+                ts <= castTimeMs &&
+                castTimeMs - ts <= GROUNDING_TOTEM_WINDOW_S * 1000,
+            )
+          )
+            continue; // a teammate's totem — credited on that shaman's summary
           groundingRedirects.push({
             atSeconds: (castTimeMs - matchStartMs) / 1000,
             spellId: cast.spellId,
             spellName: getEnglishSpellName(cast.spellId, cast.spellName),
             avoidanceSpellName: "Grounding Totem",
             avoidanceSpellId: GROUNDING_TOTEM_SPELL_ID,
+            avoidanceSourceName: player.name,
             sourceName: enemy.name,
             sourceId: enemy.id,
             sourceSpec: enemySpecMap.get(enemy.id) ?? "Unknown",
@@ -1660,6 +1706,7 @@ export function analyzePlayerCCAndTrinket(
             spellName: cc.spellName,
             avoidanceSpellName: "Blessing of Sacrifice",
             avoidanceSpellId: sacrificeCast.spellId || "6940",
+            avoidanceSourceName: player.name,
             sourceName: cc.sourceName,
             sourceId: cc.sourceId,
             sourceSpec: cc.sourceSpec,
@@ -1688,6 +1735,7 @@ export function analyzePlayerCCAndTrinket(
             spellName: cc.spellName,
             avoidanceSpellName: "Shadow Word: Death",
             avoidanceSpellId: SHADOW_WORD_DEATH_SPELL_ID,
+            avoidanceSourceName: player.name,
             sourceName: cc.sourceName,
             sourceId: cc.sourceId,
             sourceSpec: cc.sourceSpec,

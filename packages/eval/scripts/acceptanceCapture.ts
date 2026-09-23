@@ -47,6 +47,7 @@ function parseArgs() {
     archiveDir: "",
     needle: "",
     linesOut: "",
+    findingsDir: "",
     contextDir: "",
   };
   for (let i = 0; i < a.length; i++) {
@@ -55,11 +56,12 @@ function parseArgs() {
     else if (a[i] === "--archive-dir") out.archiveDir = a[++i] ?? "";
     else if (a[i] === "--needle") out.needle = a[++i] ?? "";
     else if (a[i] === "--lines-out") out.linesOut = a[++i] ?? "";
+    else if (a[i] === "--findings-dir") out.findingsDir = a[++i] ?? "";
     else if (a[i] === "--context-dir") out.contextDir = a[++i] ?? "";
   }
   if (!out.manifest || !Number.isFinite(out.every) || out.every < 1) {
     console.error(
-      "usage: acceptanceCapture.ts --manifest <path> [--every N] [--archive-dir <dir>] [--needle <text> --lines-out <file>] [--context-dir <dir>]",
+      "usage: acceptanceCapture.ts --manifest <path> [--every N] [--archive-dir <dir>] [--needle <text> --lines-out <file>] [--context-dir <dir>] [--findings-dir <dir>]",
     );
     process.exit(1);
   }
@@ -128,6 +130,15 @@ for (const f of files) {
         const prompt = buildFindingsPrompt(cands, "", owner.spec);
         findingsHash.update(`${f}:${idx}:${owner.id}\n`);
         findingsHash.update(prompt);
+        // `--findings-dir` (2026-09-23): per-owner findings prompt, so a
+        // candidate-count delta can be pinned to the rounds that moved.
+        if (args.findingsDir) {
+          mkdirSync(args.findingsDir, { recursive: true });
+          writeFileSync(
+            resolve(args.findingsDir, `${fileNo}-${idx}-${owners}.txt`),
+            `${f}\n${owner.name}\n${prompt}`,
+          );
+        }
       } catch {
         /* not buildable → excluded on both sides */
       }

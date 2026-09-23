@@ -50,6 +50,7 @@ import * as stackedDefensivesContext from "@gladlog/analysis/src/context/stacked
 import * as timelineHelpers from "@gladlog/analysis/src/context/timelineHelpers";
 import * as abilityProfileMod from "@gladlog/analysis/src/data/abilityProfile";
 import * as arenaGeometry from "@gladlog/analysis/src/data/arenaGeometry";
+import * as backlashCc from "@gladlog/analysis/src/data/backlashCc";
 import * as backlashDispelPrior from "@gladlog/analysis/src/data/backlashDispelPrior";
 import * as behaviorPrior from "@gladlog/analysis/src/data/behaviorPrior";
 import * as burstWindowPrior from "@gladlog/analysis/src/data/burstWindowPrior";
@@ -796,6 +797,11 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/dispelKind.ts`,
     symbol: "MOVEMENT_ROOT_BREAK_DISPEL_IDS",
     mod: dispelKind,
+  },
+  {
+    file: `${A}/data/backlashCc.ts`,
+    symbol: "BACKLASH_AURA_CC_TYPE",
+    mod: backlashCc,
   },
   {
     file: `${A}/data/dispelObservedGenerated.ts`,

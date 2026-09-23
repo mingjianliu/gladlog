@@ -320,7 +320,7 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   t("DISPEL_PENALTY_SPELLS", "utils/dispelAnalysis.ts", "aura", () =>
     set(DISPEL_PENALTY_SPELLS.keys()),
   ),
-  t("BACKLASH_CC_SPELL_IDS", "utils/dispelAnalysis.ts", "aura", () => [
+  t("BACKLASH_CC_SPELL_IDS", "data/backlashCc.ts", "aura", () => [
     ...BACKLASH_CC_SPELL_IDS.keys(),
     ...[...BACKLASH_CC_SPELL_IDS.values()].map((v) => v.backlashSpellId),
   ]),

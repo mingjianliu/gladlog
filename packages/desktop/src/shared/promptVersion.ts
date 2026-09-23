@@ -720,4 +720,22 @@
 //  flipped a reading. 300 archive files: 2.46 % of [STATE] unit readings
 //  change (median 1 pp, max 48 pp); candidate counts ±1–2. Same release:
 //  ENVIRONMENTAL_DAMAGE parsed at its own offsets (new imports only).
-export const PROMPT_VERSION = 98;
+//  v99 (2026-09-23, GH #103 class F): an enemy external seen only as the
+//  recipient's aura (the caster's SPELL_CAST_SUCCESS missing from the log) now
+//  gets its [ENEMY DEF] line, so KILL ATTEMPTS' "popped X" (which reads auras)
+//  always has the timestamped line the gate expects. 605 archive files / 3,520
+//  owner contexts: +442 [ENEMY DEF] lines, findings hash unchanged.
+//  Same release, GH #103 A2: the dispel-backlash CC reads one table
+//  (data/backlashCc.ts). The hardcoded "196364" || "34914" had made the
+//  Vampiric Touch DoT itself a CC — 6,397 false lines (2,769 `[CC ON TEAM] …
+//  [DISPEL BACKLASH CC]`, 3,628 `[CC ON ENEMY] … (0s)`) — and never saw the
+//  real backlash, 87204 Sin and Punishment (+836 lines, 426 tagged). The tag
+//  now names the CC: `[DISPEL BACKLASH CC: silence|horror]`. Candidates:
+//  death-setup −12 (every one `ccAtDeath=Vampiric Touch`) +3 (healer-locked
+//  on Sin and Punishment), position-mistake +1 (a fake 4 s VT "CC" had
+//  exempted it). GH #103 A6: `[CC AVOIDED?] … <aura> (own|from <pid>) active`
+//  names who provided the avoidance aura (2,667 lines: 2,586 own, 69 from a
+//  teammate, 12 unknown — druid forms up at log start). The Grounding redirect
+//  credit now needs the shaman's own cast within the totem's life (DB2 3 s +
+//  0.5 s): 7 of 107 redirects were a teammate shaman's totem, −18 lines.
+export const PROMPT_VERSION = 99;

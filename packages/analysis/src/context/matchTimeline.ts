@@ -6,6 +6,7 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
+import { BACKLASH_AURA_CC_TYPE } from "../data/backlashCc";
 import { type BurstWindowDecisionPoint } from "../analysis/burstWindowDecisionPoints";
 import type { CdPriorHoldEpisode } from "../analysis/cdTriggerPrior";
 import type { StackedDefensivePair } from "../analysis/stackedDefensives";
@@ -26,6 +27,8 @@ import type { ICcBreakEvent } from "../utils/ccBreakAnalysis";
 import {
   CC_AVOIDANCE_BUFF_SPELLS,
   findBrokenCC,
+  GROUNDING_TOTEM_SPELL_ID,
+  GROUNDING_TOTEM_WINDOW_S,
   IPlayerCCTrinketSummary,
   tremorTotemBreak,
 } from "../utils/ccTrinketAnalysis";
@@ -483,7 +486,6 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       : `      [MANA]       ${who}: no resource reading in this window`;
   }
 
-  const GROUNDING_TOTEM_SPELL_ID = "204336";
   const groundingAbsorbNote = (
     spellId: string,
     spellName: string,
@@ -496,7 +498,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       (a) =>
         a.totemOwnerId === totemOwnerId &&
         a.timeSeconds >= castSeconds &&
-        a.timeSeconds <= castSeconds + 3.5,
+        a.timeSeconds <= castSeconds + GROUNDING_TOTEM_WINDOW_S,
     );
     if (eaten.length === 0) return "";
     const ownerIsFriendly = friends.some((f) => f.id === totemOwnerId);
@@ -556,6 +558,18 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     if (!playerIdMap) return name.split("-")[0];
     const id = playerIdMap.get(name) ?? playerIdMap.get(name.split("-")[0]);
     return id !== undefined ? `${id}${tagFor(name)}` : name.split("-")[0];
+  }
+
+  /** GH #103 A6: who provided the avoidance aura on a `[CC AVOIDED?]` line —
+   * `(own)` for the CC'd player's own, `(from <pid>)` for a teammate's (the
+   * responder wrote "your Grounding" for a totem the other shaman dropped).
+   * Empty when unknown (mobility avoidance, aura up at log start). */
+  function avoidanceSourceTag(
+    sourceName: string | undefined,
+    targetName: string,
+  ): string {
+    if (!sourceName) return "";
+    return sourceName === targetName ? " (own)" : ` (from ${pid(sourceName)})`;
   }
 
   /** Returns the short numeric ID for an *enemy* player name, falling back to name. */
@@ -2494,10 +2508,12 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
         cc.drInfo.category !== "Unknown"
           ? ` [DR: ${cc.drInfo.category} ${cc.drInfo.level}]`
           : "";
-      const isBacklash = cc.spellId === "34914" || cc.spellId === "196364"; // 2026-08-21: 196363 (dead, "Eye Beam") → 196364 live UA backlash silence
+      // GH #103: the tag names the CC (the coach guessed "stun" for a silence)
+      // and reads the one backlash table (data/backlashCc.ts).
+      const backlashType = BACKLASH_AURA_CC_TYPE.get(cc.spellId);
       const backlashStr =
-        DISPEL_FEATURE_FLAGS.F124_ENHANCED_CC_ANNOTATIONS && isBacklash
-          ? " [DISPEL BACKLASH CC]"
+        DISPEL_FEATURE_FLAGS.F124_ENHANCED_CC_ANNOTATIONS && backlashType
+          ? ` [DISPEL BACKLASH CC: ${backlashType}]`
           : "";
 
       // B111: for a trinket-broken CC the logged duration is the truncated endured time, not the CC's
@@ -2533,7 +2549,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
           avoided.atSeconds,
           // M-g: state the observed facts (CC cast did not land; avoidance ability present),
           // not a causal verdict. Let the model infer whether the ability caused the avoidance.
-          `${fmtTime(avoided.atSeconds)}  [CC AVOIDED?]   ${pid(summary.playerName)}: ${avoided.spellName} (by ${actorLabel(avoided.sourceName, "enemy", avoided.sourceId)}) did not land; ${avoided.avoidanceSpellName} active`,
+          `${fmtTime(avoided.atSeconds)}  [CC AVOIDED?]   ${pid(summary.playerName)}: ${avoided.spellName} (by ${actorLabel(avoided.sourceName, "enemy", avoided.sourceId)}) did not land; ${avoided.avoidanceSpellName}${avoidanceSourceTag(avoided.avoidanceSourceName, summary.playerName)} active`,
         );
       }
     }

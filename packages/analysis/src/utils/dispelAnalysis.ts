@@ -99,26 +99,11 @@ export const DISPEL_PENALTY_SPELLS = new Map<string, string>([
   ["34914", "Horrifies the dispeller for 3 s (Vampiric Touch → Sin and Punishment)"],
 ]);
 
-// The aura the dispeller eats. 196364 is corpus-established, not assumed:
-// of 528 UA dispels, 406 (76.9%) put 196364 on the DISPELLER within 3s, and
-// wowhead confirms 196364 = Unstable Affliction, Shadow, `Apply Aura: Silence`,
-// 4s — matching the tooltip exactly. The pre-12.1 rows (316099/342938 →
-// 196363, which resolves to "Eye Beam" in our own name table) were deleted
-// 2026-08-21: S2 corpus scan, 0 occurrences of any of the three ids in 10,682
-// matches (eval-private/reports/s2-health-2026-08-21).
-/** @internal exported for data/curatedIdRegistry (corpus rot scan) */
-export const BACKLASH_CC_SPELL_IDS = new Map<
-  string,
-  { backlashSpellId: string }
->([
-  // 2026-09-12 (GH #80 model run): the aura that lands on a Vampiric Touch
-  // dispeller is 87204 Sin and Punishment (Magic, 3.0 s observed ×151), NOT
-  // 34914 itself — archive 1/3 subset, 7,971 VT dispels: 87204 within 3 s
-  // 88.3 %, 34914 0.4 %. The old row was the same shape as the GH #23 UA
-  // rot: it looked authoritative and never matched.
-  ["34914", { backlashSpellId: "87204" }],
-  ["1259790", { backlashSpellId: "196364" }],
-]);
+// The backlash table (dispelled debuff → aura on the dispeller) lives in
+// data/backlashCc.ts so ccTrinketAnalysis and the timeline read the same rows
+// (GH #103); re-exported here for existing importers.
+import { BACKLASH_CC_SPELL_IDS } from "../data/backlashCc";
+export { BACKLASH_CC_SPELL_IDS };
 
 // 12.1 Stellar Protection (1297521): baseline Balance passive (level 42) —
 // dispelling the druid's Moonfire/Sunfire re-applies Stellar Flare to the

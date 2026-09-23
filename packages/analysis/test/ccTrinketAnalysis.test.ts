@@ -346,6 +346,8 @@ describe("analyzePlayerCCAndTrinket — structured data contract (N4)", () => {
       spellName: "Polymorph",
       avoidanceSpellName: "Phase Shift",
       avoidanceSpellId: "408558",
+      // GH #103 A6: who applied the avoidance aura (fixture srcUnitName)
+      avoidanceSourceName: "Source",
       sourceName: "EnemyMage",
       sourceId: "enemy-1",
       sourceSpec: "Frost Mage",
