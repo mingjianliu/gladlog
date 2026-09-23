@@ -72,6 +72,8 @@ const CATALOG_FILES = [
   "spellEffectGenerated.json",
   "pvpTalentPoolGenerated.ts",
   "pvpTalentReplacesGenerated.ts",
+  "talentEffectInventoryGenerated.json",
+  "talentMitigationGenerated.json",
 ];
 const isCatalog = (f: string) => CATALOG_FILES.some((c) => f.includes(c));
 
@@ -125,6 +127,8 @@ const AURA: Record<string, string> = {
   "77": "机制免疫",
   "184": "近战命中减",
   "186": "法术命中减",
+  "218": "技能修改(标签百分比)",
+  "219": "技能修改(标签平值)",
 };
 const EFFECT: Record<string, string> = {
   "2": "学派伤害",
@@ -192,7 +196,9 @@ const fmt = (n: number) =>
 
 async function main(): Promise<void> {
   const build = process.env.DATAGEN_BUILD ?? "12.1.0.69587";
-  const cache = process.env.DATAGEN_CACHE;
+  const cache =
+    process.env.DATAGEN_CACHE ??
+    join(process.env.HOME ?? "", ".cache/gladlog-datagen");
   const load = async (t: string, loc?: string) =>
     parseCsv(await fetchTable(t, build, cache, loc)).rows;
 
@@ -274,6 +280,7 @@ async function main(): Promise<void> {
     base: number;
     pvp: number;
     misc0: string;
+    misc1: string;
     trigger: string;
     target: string;
     period: number;
@@ -297,6 +304,7 @@ async function main(): Promise<void> {
       base: Number(r.EffectBasePointsF),
       pvp: pvpBasePoints(r),
       misc0: r.EffectMiscValue_0,
+      misc1: r.EffectMiscValue_1,
       trigger: r.EffectTriggerSpell,
       target: r.ImplicitTarget_0,
       period: Number(r.EffectAuraPeriod || 0),
@@ -376,6 +384,13 @@ async function main(): Promise<void> {
       set: Number(r.SpellClassSet),
       mask: [0, 1, 2, 3].map((i) => Number(r[`SpellClassMask_${i}`]) >>> 0),
     });
+  const labelSpells = new Map<string, string[]>();
+  for (const r of await load("SpellLabel")) {
+    if (!r.SpellID || !r.LabelID || r.LabelID === "0") continue;
+    const l = labelSpells.get(r.LabelID) ?? [];
+    if (!l.includes(r.SpellID)) l.push(r.SpellID);
+    labelSpells.set(r.LabelID, l);
+  }
 
   const zh = (id: string) => zhNames[id] ?? enName.get(id) ?? id;
 
@@ -655,7 +670,7 @@ async function main(): Promise<void> {
         if (e.effect === "68") t.add("打断");
         if (e.effect === "38") t.add("驱散");
         if (e.effect === "30") t.add("资源");
-        if (e.aura === "107" || e.aura === "108") {
+        if (["107", "108", "218", "219"].includes(e.aura)) {
           const op = e.misc0;
           if (op === "11" || op === "21") t.add("改冷却");
           else if (op === "1") t.add("改持续");
@@ -671,7 +686,9 @@ async function main(): Promise<void> {
   };
 
   // candidate spells a modifier can reach: every talent/linked/observed spell
-  const reachPool = [...new Set([...needed, ...observed])].filter((x) =>
+  const candidatePool = [...new Set([...needed, ...observed])];
+  const candidateSet = new Set(candidatePool);
+  const reachPool = candidatePool.filter((x) =>
     classOpts.get(x)?.mask.some((m) => m),
   );
 
@@ -740,10 +757,9 @@ async function main(): Promise<void> {
           e.trigger && e.trigger !== "0"
             ? ` → ${zh(e.trigger)}(${e.trigger})`
             : "";
-        const op =
-          e.aura === "107" || e.aura === "108"
-            ? ` [${OP[e.misc0] ?? "op" + e.misc0}]`
-            : "";
+        const op = ["107", "108", "218", "219"].includes(e.aura)
+          ? ` [${OP[e.misc0] ?? "op" + e.misc0}]`
+          : "";
         effectLines.push(
           `${s === id ? "本体" : zh(s) + "(" + s + ")"} #${e.idx + 1} ${kind}${op}${val}${who}${trig}`,
         );
@@ -791,6 +807,28 @@ async function main(): Promise<void> {
               op: OP[e.misc0] ?? `op${e.misc0}`,
               value: e.pvp,
               via: s,
+            });
+        }
+        if (e.aura === "218" || e.aura === "219") {
+          const raw = labelSpells.get(e.misc1) ?? [];
+          const hits = raw.filter((x) => candidateSet.has(x));
+          if (hits.length)
+            modsRaw.push({
+              via: "label",
+              effectIndex: e.idx,
+              aura: e.aura,
+              op: e.misc0,
+              base: e.base,
+              pvp: e.pvp,
+              targets: hits,
+            });
+          for (const h of hits.slice(0, 12))
+            modifies.push({
+              spell: h,
+              name: zh(h),
+              op: OP[e.misc0] ?? `op${e.misc0}`,
+              value: e.pvp,
+              via: "label",
             });
         }
       }
