@@ -67,6 +67,7 @@ describe("buffFullDurationForCaster — 天赋条件的增益时长", () => {
       "1719": 2, // Rampaging Berserker —— 语料 31/31 格是 2 级,12×(1+0.25×2)=18
       "1269042": 1, // Eternal Hunger —— 20/20 持有,补丁 14 = 9 + 5 保留为典型值(2026-09-22)
       "445584": 1, // Deadly Focus —— 23/23 持有,补丁 18 = 12 + 6 保留为典型值(2026-09-22)
+      "5672": 1, // 图腾专注 +3 与辅助灌魔 +3.5 —— 补丁 21.5 = 15 + 3 + 3.5 保留为典型值(2026-09-22)
     };
     for (const [spellId, mods] of Object.entries(
       BUFF_DURATION_TALENT_MODIFIERS,
@@ -271,7 +272,10 @@ describe("buffFullDurationForCaster — 天赋条件的增益时长", () => {
       spec: CombatUnitSpec.Paladin_Retribution,
     });
     expect(buffFullDurationForCaster(STEED, unknownRet)).toBeCloseTo(6);
-    // 射击猎的优胜劣汰同理:自己的 3.0s,天赋抬不动
+    // 射击猎的优胜劣汰:主动施放的那份和另外两个专精一样是 6 + 2(孤狼)= 8。
+    // 2026-09-22 前这里断言 3 —— 那 3 秒是烟幕(黑暗游侠)让意气风发触发的
+    // 第二份,不是专精基础值(auraProducerScan:施放 320/353 格 8 s,意气风发
+    // 触发 50/51 格 3 s)。
     const mm = makeUnit("h-mm", {
       spec: CombatUnitSpec.Hunter_Marksmanship,
       info: {
@@ -279,7 +283,7 @@ describe("buffFullDurationForCaster — 天赋条件的增益时长", () => {
         pvpTalents: [],
       },
     });
-    expect(buffFullDurationForCaster("264735", mm)).toBeCloseTo(3);
+    expect(buffFullDurationForCaster("264735", mm)).toBeCloseTo(8);
   });
 
   it("PvP 天赋算 1 级 —— 否则它携带的时长修正永远失效", () => {
@@ -537,6 +541,28 @@ describe("buffFullDurationForCaster — 天赋条件的增益时长", () => {
         u("dk-ef", CombatUnitSpec.DeathKnight_Unholy, [B2.EBON_FEVER]),
       ),
     ).toBeCloseTo(9);
+  });
+
+  it("2026-09-22 第三批(GH #65 第 2/3/5 项 + §51):按施加者拆出来的时长", () => {
+    // 暗影之刃:手工 20 是移植值,施放那份 176/187 格 16 s = DB2
+    expect(buffFullDurationForCaster("121471", undefined)).toBe(16);
+    // 强化射击:由乱射施加,继承乱射的 6 s(501/510)
+    expect(buffFullDurationForCaster("257622", undefined)).toBe(6);
+    // 治疗之泉:15 / 18(图腾专注)/ 21.5(+ 辅助灌魔,语料值)
+    const rsham = CombatUnitSpec.Shaman_Restoration;
+    const TOTEMIC_FOCUS = { id1: 103625, id2: 127906, count: 1 };
+    const IMBUEMENT_MASTERY = { id1: 94871, id2: 117468, count: 1 };
+    const tf = makeUnit("s-tf", {
+      spec: rsham,
+      info: { talents: [TOTEMIC_FOCUS], pvpTalents: [] },
+    });
+    expect(buffFullDurationForCaster("5672", tf)).toBeCloseTo(18);
+    const neither = makeUnit("s-none", {
+      spec: rsham,
+      info: { talents: [IMBUEMENT_MASTERY], pvpTalents: [] },
+    });
+    expect(buffFullDurationForCaster("5672", neither)).toBeCloseTo(15);
+    expect(buffFullDurationForCaster("5672", undefined)).toBe(21.5);
   });
 
   it("读不到天赋(unknown)绝不加长 —— 与 CC 侧同一条纪律", () => {

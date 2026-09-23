@@ -334,10 +334,14 @@ export const CC_DURATION_TALENT_MODIFIERS: Record<
  * NOT registered, evidence incomplete (do not add without closing the gap):
  *  · Shadow Blades 121471 (18 s in 65 of 75 cells) — NO talent with a
  *    SPELLMOD_DURATION row separates the groups at all (best +3 pp).
+ *    RESOLVED 2026-09-22: cast copies run the DB2 16 s (176/187); the 18 s
+ *    did not reproduce and the hand override 20 was the stale value → 16.
  *  · Survival of the Fittest 264735 for MARKSMANSHIP only — 108 caster-cells
  *    at 3.0 s that hold Lone Survivor 99 % and are plainly unaffected by it,
  *    against 6 s for the other two specs. Registered for BM/Survival, left
  *    alone for MM: the spec's own base is what disagrees, not a talent.
+ *    RESOLVED 2026-09-22: not a spec base — a second producer (Smoke Screen:
+ *    Exhilaration grants 3 s of it). Cast copies are 8 s for every spec.
  *  · Rallying Cry 97463's second tier — 29 caster-cells at 15.5 s that hold
  *    Battlefield Commander like the 13 s group does; no second modifier
  *    reaches the spell. Priced at 13 s, which is still nearer than 10.
@@ -509,19 +513,26 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
       note: "Rampaging Berserker — DB2 aura 108 +50 %, Warrior/Fury spec tree (maxRanks 1), mask covers the spell; corpus 31 of 31 caster-cells at 18.0 s hold it AT RANK 2, so two ranks buy +50 % in TOTAL (12 × (1 + 0.25×2) = 18); DB2 states 50 and it is not per rank here. NOTE the base: DB2 says 12 while the hand override said 16, which is neither the base nor the talented value — running the arithmetic against that override is what made this look unexplainable for two rounds. The override now carries the talented 18.",
     },
   ],
-  "264735": [
+  "5672": [
     {
-      specs: ["254"],
-      untalentedBaseSeconds: 6,
-      specBaseSeconds: 3,
-      note: "Marksmanship runs its own 3.0 s (108 caster-cells) and Lone Survivor does not lift it — 107 of those 108 hold the talent. KNOWN OUTLIER, chased and still open: an out-of-sample buffDurationScan run finds 9 further Marksmanship cells at 8.0 s. Ruled out so far — (a) it is not the pet copy: splitting 21,065 corpus events by target shows self and pet with the SAME three tiers (8.0 s 67–71 %, 3.0 s 16–19 %, 6.0 s 10 %), where 6.0 s is the untalented base and 8.0 s is base + Lone Survivor; (b) it is not a duration modifier: Lone Survivor is the ONLY spell in DB2 whose SPELLMOD_DURATION mask reaches this spell; (c) it is not the hero tree: the talents that separate the two Marksmanship groups 89 %/0 % are hero-tree markers, but Beast Mastery hunters on the SAME hero tree sit at 8.0 s. 3 s is the modal Marksmanship answer (108 vs 9) and beats the pre-2026-09-07 answer of 6 s for both groups; the scan keeps FLAGging it on purpose.",
+      talentSpellId: "382201",
+      untalentedBaseSeconds: 15,
+      addSeconds: 3,
+      note: "Totemic Focus — DB2 aura 219 +3000 ms keyed by SpellLabel (Healing Stream / Tremor / Poison Cleansing / Wind Rush), Shaman class tree (maxRanks 1). Measured on the TOTEM (totemLifetimeScan: summon → the totem's own last heal, killed totems excluded, every 60th archive file, 2026-09-22): non-holders 15.0 s (111 + 38 at 14.5 of 162) = DB2, holders without Supportive Imbuements 18.0 s (1,149 + 334 at 17.5 of 1,742); 15 + 3 = 18. The 09-07 corpus patch 21.5 was these two talents together and stays as the typical value (TYPICAL_IS_TALENTED).",
     },
     {
+      talentSpellId: "445033",
+      untalentedBaseSeconds: 15,
+      addSeconds: 3.5,
+      note: "Supportive Imbuements — Totemic HERO tree (Restoration): teaches the Tidecaller's Guard imbue, 'your Healing Stream Totem lasts 3 s longer'. The extension is carried by the imbue (457481, a script dummy in DB2), so no SpellMod row exists in either encoding and the milliseconds cannot be read — the +3.5 is CORPUS-MEASURED: holders 21.5 s ×1,666 of 1,942 vs non-holders 18.0 s (Totemic Focus) / 15.0 s; 15 + 3 + 3.5 = 21.5, exactly the 09-07 patch. Same standing as Sanctified Wrath (registered on corpus evidence where DB2 only partially speaks); if a future build exposes the imbue's value, replace the 3.5 with it.",
+    },
+  ],
+  "264735": [
+    {
       talentSpellId: "388039",
-      specs: ["253", "255"],
       untalentedBaseSeconds: 6,
       addSeconds: 2,
-      note: "Lone Survivor — DB2 aura 107 +2000 ms, Hunter class tree (maxRanks 1), mask covers the spell; corpus 254 caster-cells at 8.0 s hold it 100 % vs 29 at 6.0 s holding it 0 % (6 + 2 = 8). Spec-gated because Marksmanship is a THIRD group entirely: 108 cells at 3.0 s that hold the talent 99 % and are unaffected by it — that spec's own duration is unexplained and stays on the table value.",
+      note: "Lone Survivor — DB2 aura 107 +2000 ms, Hunter class tree (maxRanks 1), mask covers the spell; every CAST copy of the buff, all three specs, runs 6 + 2 = 8: auraProducerScan (every 60th archive file, 2026-09-22) — casts of 264735 give 8.0 s for Beast Mastery 1,099/1,142, Marksmanship 320/353, Survival 273/349 (Survival's 6.0 s ×71 are non-holders). RESOLVED 2026-09-22 (GH #65 item 2): the Marksmanship 3.0 s tier this entry used to price as a 'spec base' is a SECOND PRODUCER — Smoke Screen 430709 (Dark Ranger hero talent, BM + MM): 'Exhilaration grants you 3 s of Survival of the Fittest'; Exhilaration-produced copies are 3.0 s ×50/51 on Marksmanship. That copy is not a cast of 264735, so no cast-keyed consumer prices it, and the interval cap at 8 s never cuts it (its REMOVED comes at 3). Game-Behaviour Rule 6 again — count the producers before calling a tier a base.",
     },
   ],
   "102342": [

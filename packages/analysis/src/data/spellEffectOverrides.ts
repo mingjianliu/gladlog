@@ -86,7 +86,7 @@ export const SPELL_EFFECT_OVERRIDES: Record<string, IMinedSpell> =
       // the first 12.1 cast (BACKLOG #24-2), where DB2 now says dur 8 not 3.
       e("360194", "Deathmark", 120, 16),
       e("13750", "Adrenaline Rush", 180, 15), // 2026-09-06: hand 20 shadowed the official DB2 15; corpus 15.0 s in 86 % of 1,041 lifetimes
-      e("121471", "Shadow Blades", 90, 20),
+      e("121471", "Shadow Blades", 90, 16), // 2026-09-22 (GH #65 item 3): the ported hand 20 (07-10, never measured) shadowed the official DB2 16 — same shape as Adrenaline Rush / Power Infusion; auraProducerScan: cast copies 16.0 s ×176/187, --detail 38/38 cells at 16 in both Aug and Sep. The 09-07 "18 s in 65 of 75 cells" did not reproduce (18 s ×5 now). No talent in either SpellMod encoding reaches its duration.
       e("190319", "Combustion", 120, 10),
       e("365350", "Arcane Surge", 90, 15),
       e("1719", "Recklessness", 90, 18), // 2026-09-07: 16 was neither the DB2 base (12) nor the talented value; ~100 % of Fury casters hold Rampaging Berserker → 12 × 1.5 = 18, which is what the corpus shows (31/31 cells)
@@ -332,6 +332,12 @@ export const CORPUS_DURATION_PATCHES: Record<string, number> = {
   // 2,111-file GAP row read "16 s mode, 42 %" only because the two tiers were
   // pooled. 2026-09-22.
   "374349": 20,
+  // Trick Shots 257622: DB2 20 s, but every copy is PRODUCED by Volley 260243
+  // (auraProducerScan: 501 of 510 clean lifetimes produced within 300 ms of a
+  // Volley cast, all at 6.0 s) and Volley's own DB2 duration is 6 s — the aura
+  // carries its producer's length (Game-Behaviour Rule 6). A SHORTER patch,
+  // allowed because it carries that mechanism (Rule 7), 2026-09-22 GH #65 item 5.
+  "257622": 6,
 };
 for (const [id, durationSeconds] of Object.entries(CORPUS_DURATION_PATCHES)) {
   const cur = SPELL_EFFECT_OVERRIDES[id];
