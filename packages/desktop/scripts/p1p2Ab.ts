@@ -229,7 +229,7 @@ function itemLabel(item: EvalItem): string {
   return `${item.matchId}-r${item.roundSeq ?? "na"}`;
 }
 
-function parseArgs(argv: string[]): Record<string, string> {
+export function parseArgs(argv: string[]): Record<string, string> {
   const out: Record<string, string> = {};
   for (const a of argv) {
     const m = /^--([^=]+)=(.*)$/.exec(a);
@@ -436,14 +436,14 @@ function loadItemInput(item: EvalItem, type?: PType) {
 // run
 // ---------------------------------------------------------------------------
 
-function looksLikeCallFailure(raw: string): boolean {
+export function looksLikeCallFailure(raw: string): boolean {
   const t = raw.trim();
   if (t === "") return true;
   if (t.length > 400) return false;
   return /rate[\s-]?limit|too many requests|quota exceeded|\b429\b/i.test(t);
 }
 
-async function callOnce(
+export async function callOnce(
   client: ReturnType<typeof claudeCliClientFactory>,
   model: string,
   system: string,

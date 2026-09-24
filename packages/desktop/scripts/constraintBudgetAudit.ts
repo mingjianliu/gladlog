@@ -70,6 +70,7 @@ import {
 } from "@gladlog/analysis";
 
 import { seededShuffle } from "../../eval/src/explore/buildSession";
+import { loadIndex } from "../../eval/src/explore/storeAccess";
 import {
   checkCooldownLedgerConsistency,
   checkPercentileMonotonicity,
@@ -83,7 +84,13 @@ import { AI_DEFAULT_MODEL } from "../src/shared/aiModels";
 import { findingKey } from "../src/shared/findingKey";
 // Reused verbatim (see header comment) — exported from p1p2Ab.ts for this
 // purpose, not re-derived.
-import { buildInput, pickSource } from "./p1p2Ab";
+import {
+  buildInput,
+  callOnce,
+  looksLikeCallFailure,
+  parseArgs,
+  pickSource,
+} from "./p1p2Ab";
 
 const MATCH_DIR =
   process.env.GLADLOG_MATCH_DIR ||
@@ -101,15 +108,6 @@ const resultsPath = (arm: Arm) => join(armDir(arm), "results.jsonl");
 const processedPath = (arm: Arm) => join(armDir(arm), "processed.txt");
 const itemDir = (arm: Arm, matchId: string) =>
   join(armDir(arm), "items", matchId);
-
-function parseArgs(argv: string[]): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const a of argv) {
-    const m = /^--([^=]+)=(.*)$/.exec(a);
-    if (m) out[m[1]!] = m[2]!;
-  }
-  return out;
-}
 
 // ---------------------------------------------------------------------------
 // select
@@ -139,14 +137,8 @@ function cmdSelect(args: Record<string, string>): void {
   const seed = args.seed ?? "constraint-budget-audit-2026-08-15";
   const n = args.n ? Number(args.n) : 40;
 
-  const index = readFileSync(join(MATCH_DIR, "_index.ndjson"), "utf8")
-    .trim()
-    .split("\n")
-    .map((l) => JSON.parse(l) as { id: string });
-  // Dedupe by id (last occurrence wins, same convention as
-  // storeAccess.ts's loadIndex — a re-touched match can appear twice).
-  const byId = new Map(index.map((r) => [r.id, r]));
-  const ids = [...byId.keys()];
+  // Deduped by id (last occurrence wins; a re-touched match can appear twice).
+  const ids = loadIndex(MATCH_DIR).map((r) => r.id);
   const shuffled = seededShuffle(ids, seed);
 
   const items: EvalItem[] = [];
@@ -184,31 +176,6 @@ function cmdSelect(args: Record<string, string>): void {
 // ---------------------------------------------------------------------------
 // run
 // ---------------------------------------------------------------------------
-
-function looksLikeCallFailure(raw: string): boolean {
-  const t = raw.trim();
-  if (t === "") return true;
-  if (t.length > 400) return false;
-  return /rate[\s-]?limit|too many requests|quota exceeded|\b429\b/i.test(t);
-}
-
-async function callOnce(
-  client: ReturnType<typeof claudeCliClientFactory>,
-  model: string,
-  system: string,
-  prompt: string,
-): Promise<string> {
-  let raw = "";
-  for await (const ev of client.stream({
-    model,
-    max_tokens: 8192,
-    system,
-    messages: [{ role: "user", content: prompt }],
-  })) {
-    if (ev.delta) raw += ev.delta;
-  }
-  return raw;
-}
 
 interface AuditedFindingRow {
   key: string; // findingKey (category|sorted eventIds) — single-source predicate, src/shared/findingKey.ts

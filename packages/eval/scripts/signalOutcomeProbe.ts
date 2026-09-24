@@ -77,6 +77,8 @@ import { appendFileSync, existsSync, readdirSync, readFileSync } from "fs";
 import { basename, join } from "path";
 import { gunzipSync } from "zlib";
 
+import { isoWeek, rankLedger } from "../src/explore/ratingPercentile";
+
 const argv = process.argv.slice(2);
 const cmd = argv[0];
 const flag = (f: string): string | undefined => {
@@ -133,22 +135,6 @@ const SIGNAL_LEGEND: Record<string, string> = {
 // Ledger / ranking (same construction as behaviorPriorScan.ts)
 // ---------------------------------------------------------------------------
 
-function isoWeek(ms: number): string {
-  const d = new Date(ms);
-  const day = (d.getUTCDay() + 6) % 7;
-  d.setUTCDate(d.getUTCDate() - day + 3);
-  const firstThu = new Date(Date.UTC(d.getUTCFullYear(), 0, 4));
-  const wk =
-    1 +
-    Math.round(
-      ((d.getTime() - firstThu.getTime()) / 86400000 -
-        3 +
-        ((firstThu.getUTCDay() + 6) % 7)) /
-        7,
-    );
-  return `${d.getUTCFullYear()}-W${String(wk).padStart(2, "0")}`;
-}
-
 function loadLedger(dir: string): Map<string, any> {
   const out = new Map<string, any>();
   for (const f of readdirSync(dir)) {
@@ -162,38 +148,6 @@ function loadLedger(dir: string): Map<string, any> {
         /* torn */
       }
     }
-  }
-  return out;
-}
-
-/** percentile of each ledger row's rating within (bracket, week) */
-function rankLedger(ledger: Map<string, any>): Map<string, number> {
-  const groups = new Map<string, number[]>();
-  for (const r of ledger.values()) {
-    if (!r.playerTeamRating || !r.startTime) continue;
-    const k = `${r.bracket}|${isoWeek(r.startTime)}`;
-    (groups.get(k) ?? groups.set(k, []).get(k)!).push(r.playerTeamRating);
-  }
-  for (const v of groups.values()) v.sort((a, b) => a - b);
-  const out = new Map<string, number>();
-  for (const [id, r] of ledger) {
-    if (!r.playerTeamRating || !r.startTime) continue;
-    const v = groups.get(`${r.bracket}|${isoWeek(r.startTime)}`)!;
-    let lo = 0,
-      hi = v.length;
-    while (lo < hi) {
-      const m = (lo + hi) >> 1;
-      if (v[m]! < r.playerTeamRating) lo = m + 1;
-      else hi = m;
-    }
-    let lo2 = lo,
-      hi2 = v.length;
-    while (lo2 < hi2) {
-      const m = (lo2 + hi2) >> 1;
-      if (v[m]! <= r.playerTeamRating) lo2 = m + 1;
-      else hi2 = m;
-    }
-    out.set(id, (100 * ((lo + lo2) / 2)) / v.length);
   }
   return out;
 }
