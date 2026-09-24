@@ -86,7 +86,7 @@ input: {
 
 `derive/` 与 `components/` 合计约 16,800 行(含测试约 100 个文件)。分工:
 
-- **`derive/`** —— 纯函数,接一个 `ReportSource`/doc 类对象,返回纯粹的视图数据。无 JSX、不 import React,例如 `derive/summary.ts`(`deriveSummary(m, range) → UnitTotals[]`)、`derive/roster.ts`、`derive/mistakes.ts`。唯一的例外是 `derive/inlineRich.tsx`,是 `.tsx` 因为 `makeRichText()` 返回 `ReactNode`(把匹配到的技能/专精名包进 `components/` 的 `<SpellInline>`/`<SpecInline>`)。
+- **`derive/`** —— 纯函数,接一个 `ReportSource`/doc 类对象,返回纯粹的视图数据。无 JSX、不 import React,例如 `derive/summary.ts`(`deriveSummary(m, range) → UnitTotals[]`)、`derive/mistakes.ts`。唯一的例外是 `derive/inlineRich.tsx`,是 `.tsx` 因为 `makeRichText()` 返回 `ReactNode`(把匹配到的技能/专精名包进 `components/` 的 `<SpellInline>`/`<SpecInline>`)。
 - **`components/`** —— 视图层。`components/MatchReport.tsx` 是主要消费者,import 约 17 个 `derive*` 函数并渲染。
 
 当 `derive/` 或 `components/` 代码需要 `@gladlog/analysis` 的一个活谓词(而不只是预算好的 doc 数据)时,会走 **`derive/legacySource.ts`**,它导出 `toLegacySafe(source)` —— 一个带 LRU 缓存(`CACHE_MAX = 2`)的小型封装,包着来自 `@gladlog/parser-compat` 的 `toLegacyMatch`。它会先给裁剪版测试 fixture 缺失的单位事件数组补空数组(`healIn`/`absorbsIn`/`actionsIn`/... 默认 `[]`)再调用 `toLegacyMatch`,这样期望完整 legacy `ICombatUnit` 形状的分析函数,不会在特意为控体积裁剪过数组的 fixture 上直接抛错。**注意:**`toLegacySafe` 是桌面本地的安全封装,不是 `@gladlog/parser-compat` 自己导出的东西 —— 该包只导出原始的 `toLegacyMatch`。
