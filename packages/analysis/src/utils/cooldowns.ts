@@ -2533,6 +2533,7 @@ export function isHealerSpec(spec: CombatUnitSpec): boolean {
 
 // All specs that fight primarily at melee range, including tanks (rare in arena but present).
 // Used for enemy comp classification — anything not in this set and not a healer = ranged/caster.
+// Beast Mastery is a ranged spec (Cobra Shot / Kill Command at 40+ yd); only Survival hunters melee.
 const MELEE_SPECS = new Set([
   CombatUnitSpec.DeathKnight_Blood,
   CombatUnitSpec.DeathKnight_Frost,
@@ -2541,7 +2542,6 @@ const MELEE_SPECS = new Set([
   CombatUnitSpec.DemonHunter_Vengeance,
   CombatUnitSpec.Druid_Feral,
   CombatUnitSpec.Druid_Guardian,
-  CombatUnitSpec.Hunter_BeastMastery,
   CombatUnitSpec.Hunter_Survival,
   CombatUnitSpec.Monk_Brewmaster,
   CombatUnitSpec.Monk_Windwalker,

@@ -196,8 +196,8 @@ describe("isMeleeSpec", () => {
     expect(isMeleeSpec(CombatUnitSpec.DeathKnight_Unholy)).toBe(true);
   });
 
-  it("returns true for BM and Survival Hunters (melee range)", () => {
-    expect(isMeleeSpec(CombatUnitSpec.Hunter_BeastMastery)).toBe(true);
+  it("returns true for Survival Hunter only — Beast Mastery is ranged (corpus 2026-09-24: median 17.8 yd to its damage target, MM 18.0, SV 8.6)", () => {
+    expect(isMeleeSpec(CombatUnitSpec.Hunter_BeastMastery)).toBe(false);
     expect(isMeleeSpec(CombatUnitSpec.Hunter_Survival)).toBe(true);
   });
 

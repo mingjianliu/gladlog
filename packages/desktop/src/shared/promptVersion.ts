@@ -806,4 +806,13 @@
 //  candidate counts and findings unchanged; [HEALER EXPOSURE] lines
 //  6,712 → 6,153, IN-LoS threat entries 26,099 → 18,555 (Psychic Scream
 //  2,092 → 864, Intimidating Shout 1,676 → 898, Dragon's Breath 1,147 → 567).
-export const PROMPT_VERSION = 105;
+//  v106 (2026-09-24): Beast Mastery Hunter is no longer a melee spec
+//  (cooldowns.ts MELEE_SPECS; ported upstream list had it). Corpus, 605 files:
+//  median distance to the enemy it is damaging BM 17.8 yd, MM 18.0, SV 8.6,
+//  melee specs 4–8. Same 605 files (1,270 rounds): HEALER TRAINED lines
+//  1,134 → 1,078 (a BM was "melee camping" the healer), SPLIT PUSH 56 → 32,
+//  [ROOT] 4,304 → 4,221 (a rooted BM still reaches at range),
+//  [UNCLEANSED DEBUFF] 531 → 523, STAYED IN 1,264 → 1,294 (BM owners get the
+//  ranged positioning block); candidates dps:position-mistake 621 → 622,
+//  healer:missed-cleanse 284 → 280, every other type unchanged.
+export const PROMPT_VERSION = 106;
