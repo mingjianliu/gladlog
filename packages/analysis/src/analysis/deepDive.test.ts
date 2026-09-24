@@ -155,7 +155,9 @@ describe("buildDeepDivePrompt", () => {
     expect(p).toContain("key=p1 kind=cc");
     expect(p).toContain("{{key.field}}");
     expect(p).toContain('"citedKeys"');
-    expect(p).toContain("Do NOT assert causation");
+    // GH #70: aligned with the findings prompt (outcome attribution banned,
+    // observable consequences allowed)
+    expect(p).toContain("NEVER pin a death, loss or win on one event");
     // PROMPT_VERSION 17 (retest-prep 2026-08-05): two format hard rules apply
     // in every mode, not just snapshot.
     expect(p).toContain("Never write a pack key");

@@ -861,4 +861,14 @@
 //  (Solo Shuffle / 3v3; 2v2 shows no cost at any coverage and is left
 //  alone). 605 files: dps:burst-into-mitigation 163 → 35, every other
 //  candidate count and the context hash unchanged.
-export const PROMPT_VERSION = 111;
+//  v112 (2026-09-24, GH #70 tail): the deep-dive round's causation rule is
+//  aligned with the findings prompt's (v109) — what the evidence packs show
+//  happened after an event and the reason behind advice are allowed; outcome
+//  attribution, certain counterfactuals and states the packs do not show are
+//  not (causalLint unchanged). Same 90 rounds / 141 deep dives, old vs new
+//  rule, Opus 5.5, 1,463 sentences judged blind and mixed (eval-private
+//  runs/2026-09-24-gh70-deepdive): deep dives with >= 1 overreach sentence
+//  71/140 (50.7 %) → 41/141 (29.1 %); consequence sentences judged partly
+//  62 → 26, fully supported 3 → 7; unsupported sentences 30 → 26; audit
+//  drops 1 → 0. First-round prompt and candidate menu unchanged.
+export const PROMPT_VERSION = 112;

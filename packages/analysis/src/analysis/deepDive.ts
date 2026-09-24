@@ -901,7 +901,11 @@ export function buildDeepDivePrompt(
     `- Write NO digits in "deepDive". Every number must be a {{key.field}} placeholder from that finding's pack (e.g. {{p1.t}}, {{p2.duration}}). Words for counts ("twice", "briefly") are fine.`,
     `- Never write a pack key (like p3) as bare prose text; evidence is referenced ONLY through {{pN.field}} placeholders.`,
     `- Output must be strictly valid JSON: inside string values use 「」 for quotation marks, never unescaped ".`,
-    `- Do NOT assert causation ("led to"/"caused"/"resulted in" a death/loss). Describe the sequence neutrally and coach what to do differently at these moments.`,
+    // GH #70 (PROMPT_VERSION 109 findings rule, aligned here): what the packs
+    // show happened after an event, and the reason behind advice, are
+    // allowed; outcome attribution, certain counterfactuals and unshown
+    // states are not. causalLint still drops the first kind mechanically.
+    `- You MAY state what the evidence packs show happened after an event (a kick ended that cast; a teammate dropped while the healer was locked) and give the reason behind advice. NEVER pin a death, loss or win on one event ("led to"/"caused"/"resulted in" a death/loss, "that's why you lost"); NEVER claim what would certainly have happened ("had you pressed it you would have lived"); NEVER infer a state the packs do not show ("nobody could heal you", "only X kept you alive"). Coach what to do differently at these moments.`,
     // window-only (SDD 2026-08-05 window-multi-finding Task 1): the deepen
     // contract line stays byte-identical below (existing deepen tests pin
     // this), so the extra rule and the wider output shape are both gated on
@@ -965,7 +969,7 @@ export interface AuditDropInfo {
 
 /**
  * Deep-dive audit: placeholders must resolve against that finding's pack facts
- * (claimChecker), no causal assertions (causalLint), and citedKeys must be a
+ * (claimChecker), no outcome attribution (causalLint), and citedKeys must be a
  * non-empty subset of the pack. Any violation → drop that entry (the finding
  * silently keeps its first-round content).
  *
@@ -1239,7 +1243,7 @@ export function buildAuditRepairPrompt(
     `AUDIT VIOLATIONS (fix every one):`,
     violations,
     ``,
-    `Rewrite the COMPLETE JSON array. Keep the substance; fix ONLY the violations: every number must be a {{pN.field}} placeholder, no causal assertions, citedKeys must list the placeholders you used, output strictly valid JSON. Do not mention the audit or this correction.`,
+    `Rewrite the COMPLETE JSON array. Keep the substance; fix ONLY the violations: every number must be a {{pN.field}} placeholder, no outcome attribution (a death, loss or win pinned on one event), citedKeys must list the placeholders you used, output strictly valid JSON. Do not mention the audit or this correction.`,
   ].join("\n");
 }
 
