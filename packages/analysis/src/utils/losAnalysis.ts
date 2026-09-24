@@ -180,7 +180,7 @@ function segmentsIntersect(
   return false;
 }
 
-function pointInPolygon(
+export function pointInPolygon(
   px: number,
   py: number,
   vertices: [number, number][],
@@ -197,7 +197,7 @@ function pointInPolygon(
   return inside;
 }
 
-function obstacleBlocksSegment(
+export function obstacleBlocksSegment(
   obs: ArenaObstacle,
   ax: number,
   ay: number,
@@ -221,7 +221,9 @@ function obstacleBlocksSegment(
  *
  * Returns null when:
  *   - the zoneId has no geometry data (arena not yet mapped), or
- *   - either position is unavailable (no advanced logging).
+ *   - either position is unavailable (no advanced logging), or
+ *   - the line crosses an `elevated` structure with a unit inside its
+ *     outline and nothing else blocks it (height unknown, GH #83).
  *
  * Note: this is a 2D approximation — Z-axis elevation and pillar overhangs
  * are not modelled. Accurate for standard arena play where players stay on
@@ -245,20 +247,33 @@ export function hasLineOfSight(
   if (distanceBetween(casterPos, targetPos) < NEAR_RANGE_LOS_EXEMPT_YARDS)
     return true;
 
+  let unknown = false;
   for (const obs of obstacles) {
     if (
-      obstacleBlocksSegment(
+      !obstacleBlocksSegment(
         obs,
         casterPos.x,
         casterPos.y,
         targetPos.x,
         targetPos.y,
       )
+    )
+      continue;
+    // A walkable structure with a unit inside its outline: that unit may be
+    // on top or at its foot, and the log has no height — unknown, unless
+    // another obstacle blocks outright (GH #83).
+    if (
+      obs.type === "polygon" &&
+      obs.elevated &&
+      (pointInPolygon(casterPos.x, casterPos.y, obs.vertices) ||
+        pointInPolygon(targetPos.x, targetPos.y, obs.vertices))
     ) {
-      return false;
+      unknown = true;
+      continue;
     }
+    return false;
   }
-  return true;
+  return unknown ? null : true;
 }
 
 /**

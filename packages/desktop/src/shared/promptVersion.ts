@@ -779,7 +779,8 @@
 //  距离的也修"): every "could this player reach" range is the caster's —
 //  official DB2 range + the range talents they hold (utils/spellRange.ts):
 //  kicks, externals, cleanse / purge reach, healer reach. 602 archive files
-//  (1,022 rounds, 2,827 owners), same code otherwise (measured on the v100 base, before GH #103's v101–v103 landed): 139 context lines gain
+//  (1,022 rounds, 2,827 owners), same code otherwise (measured on the v100
+//  base, before GH #103's v101–v103 landed): 139 context lines gain
 //  "no purger/dispeller had range/line of sight — not actionable" (Purge and
 //  Dispel Magic are 30 yd, Preservation cleanses 25–30, not 40) and 5 lose it
 //  (Purify 46 with Phantom Reach, druid cleanses 45); missed-cleanse
@@ -787,4 +788,11 @@
 //  kick-priority-team dps 70→71 / healer 67→69 (kick range talents: Charging
 //  Bash, Improved Disrupt, Sniper's Advantage, …); 3 [BURST ANSWERED] lines
 //  (a Pain Suppression from 40–46 yd now counts as reachable).
+//  Same version, same batch — arena geometry checked against the game's own
+//  verdicts (losGroundTruthScan.ts): Ruins of Lordaeron's walkable tomb
+//  answers "unknown" when a unit stands inside its outline (false "blocked"
+//  10.6 % → 2.8 % on a held-out sample), Dalaran Sewers' pillars redrawn as
+//  diamonds (3.5 % → 0.9 %). Same 602 files: no candidate count moves; landed
+//  [CC ON TEAM] lines stamped "LoS blocked" 419 → 269, "target unreachable"
+//  148 → 126, LoS-break suggestion distances on those maps shift.
 export const PROMPT_VERSION = 104;

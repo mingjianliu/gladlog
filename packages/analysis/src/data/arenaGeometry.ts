@@ -20,15 +20,29 @@
  */
 
 export type CircleObstacle = {
-  type: 'circle';
+  type: "circle";
   cx: number;
   cy: number;
   r: number;
 };
 
 export type PolygonObstacle = {
-  type: 'polygon';
+  type: "polygon";
   vertices: [number, number][];
+  /**
+   * A walkable raised structure whose height the log cannot tell (GH #83,
+   * 2026-09-23). The log has x / y and no z, so a unit inside the outline may
+   * be standing ON it or at its foot. When a line crosses this obstacle with
+   * an end inside the outline, `hasLineOfSight` answers null (unknown) rather
+   * than guess. Measured on Ruins of Lordaeron's tomb against the game's own
+   * verdicts (`losGroundTruthScan.ts`): with an end inside, 1,063 clear casts
+   * vs 11 "not in line of sight" failures on one sample and 952 vs 9 on a
+   * held-out one — and the failures had the other unit 1–10 yd away, both
+   * inside, grazing: no 2D rule separated them (an inset-2 yd + "hidden within
+   * 5 yd" rule fitted the first sample and lost 14 of 33 real blocks on the
+   * second).
+   */
+  elevated?: true;
 };
 
 export type ArenaObstacle = CircleObstacle | PolygonObstacle;
@@ -49,11 +63,11 @@ export const arenaObstacles: Record<string, ArenaObstacle[]> = {
   //   shrinking "fixed" violations while under-blocking. Recentered on the observed
   //   voids, r=4 (0.5-unit inset from the void bbox).
   // ---------------------------------------------------------------------------
-  '1505': [
-    { type: 'circle', cx: -2044.5, cy: 6623.5, r: 4 }, // north pillar (void x[-2049..-2040] y[6619..6627])
-    { type: 'circle', cx: -2018, cy: 6638.5, r: 4 }, // east pillar (void x[-2022..-2014] y[6634..6642])
-    { type: 'circle', cx: -2042, cy: 6685.5, r: 4 }, // south pillar (void x[-2046..-2038] y[6681..6689])
-    { type: 'circle', cx: -2071.5, cy: 6670, r: 4 }, // west pillar (void x[-2075..-2068] y[6666..6673])
+  "1505": [
+    { type: "circle", cx: -2044.5, cy: 6623.5, r: 4 }, // north pillar (void x[-2049..-2040] y[6619..6627])
+    { type: "circle", cx: -2018, cy: 6638.5, r: 4 }, // east pillar (void x[-2022..-2014] y[6634..6642])
+    { type: "circle", cx: -2042, cy: 6685.5, r: 4 }, // south pillar (void x[-2046..-2038] y[6681..6689])
+    { type: "circle", cx: -2071.5, cy: 6670, r: 4 }, // west pillar (void x[-2075..-2068] y[6666..6673])
   ],
 
   // ---------------------------------------------------------------------------
@@ -61,9 +75,9 @@ export const arenaObstacles: Record<string, ArenaObstacle[]> = {
   // 505×550 px. zone bounds: minX=2732 maxX=2833 minY=5951 maxY=6061
   // Three-piece structure: top-right column, central spine, bottom-left column.
   // ---------------------------------------------------------------------------
-  '1672': [
+  "1672": [
     {
-      type: 'polygon',
+      type: "polygon",
       vertices: [
         [2774, 5962],
         [2744, 5962],
@@ -72,7 +86,7 @@ export const arenaObstacles: Record<string, ArenaObstacle[]> = {
       ],
     }, // top-right column
     {
-      type: 'polygon',
+      type: "polygon",
       vertices: [
         [2804, 5982],
         [2755, 5982],
@@ -81,7 +95,7 @@ export const arenaObstacles: Record<string, ArenaObstacle[]> = {
       ],
     }, // central spine
     {
-      type: 'polygon',
+      type: "polygon",
       vertices: [
         [2828, 6016],
         [2802, 6016],
@@ -109,18 +123,27 @@ export const arenaObstacles: Record<string, ArenaObstacle[]> = {
   // voids sit OUTSIDE the arena floor (min-side 17–45 samples vs 2000+ for real
   // structures; all four read "black/empty" on the minimap). Removed. The 3
   // survivors have all 4 sides densely surrounded by players.
-  '572': [
+  // GH #83 (2026-09-23), measured against the game's verdicts (successful
+  // heals on a teammate = NOT blocked; 2v2 "target not in line of sight"
+  // failures = blocked), 3,166 archive files + a disjoint 3,165-file hold-out:
+  // the tomb blocked 10.8 % / 10.6 % of the game's clear casts, ~80 % of them
+  // with an end inside the tomb's outline — players standing ON it. The tomb
+  // is `elevated`: those lines are now unknown instead of blocked. Hold-out,
+  // old → new: false "blocked" 10.63 % → 2.82 %; real blocks caught 26/33 →
+  // 17/33 — the 9 no longer caught all became "unknown", none "clear".
+  "572": [
     {
-      type: 'polygon',
+      type: "polygon",
       vertices: [
         [1295, 1659],
         [1276, 1659],
         [1276, 1672],
         [1295, 1672],
       ],
-    }, // central tomb (⚠ ELEVATED — violations expected, do not shrink)
+      elevated: true,
+    }, // central tomb — walkable, height unknown (see `elevated`)
     {
-      type: 'polygon',
+      type: "polygon",
       vertices: [
         [1317, 1675],
         [1314, 1675],
@@ -129,7 +152,7 @@ export const arenaObstacles: Record<string, ArenaObstacle[]> = {
       ],
     }, // small pillar (west) — ring-confirmed real (all sides hugged)
     {
-      type: 'polygon',
+      type: "polygon",
       vertices: [
         [1258, 1656],
         [1252, 1656],
@@ -149,23 +172,30 @@ export const arenaObstacles: Record<string, ArenaObstacle[]> = {
   // outside the platform (min-side 28 / 104 samples vs 6000+ for the 2 real
   // diamonds). Removed. The 2 survivors are surrounded on all sides.
   // ---------------------------------------------------------------------------
-  '617': [
+  // GH #83 (2026-09-23): the two "diamonds" were drawn as axis-aligned
+  // squares, and the game's own verdicts show the corners are not there —
+  // 4,972 successful heals on a teammate (NOT blocked): the squares blocked
+  // 3.84 %, almost all grazing (< 1 yd deep). Redrawn as diamonds on the same
+  // centres, 1.2 × the half-width of the old squares: false "blocked"
+  // 3.84 % → 0.48 %, 2v2 "not in line of sight" caught 17/31 → 16/31; on a
+  // disjoint 3,165-file hold-out 3.53 % → 0.94 %, 11/29 → 9/29.
+  "617": [
     {
-      type: 'polygon',
+      type: "polygon",
       vertices: [
-        [1312, 771],
-        [1305, 771],
-        [1305, 778],
-        [1312, 778],
+        [1312.7, 774.5],
+        [1308.5, 770.3],
+        [1304.3, 774.5],
+        [1308.5, 778.7],
       ],
     }, // center-east diamond — ring-confirmed real (min-side 6932)
     {
-      type: 'polygon',
+      type: "polygon",
       vertices: [
-        [1278, 804],
-        [1271, 804],
-        [1271, 812],
-        [1278, 812],
+        [1278.7, 808],
+        [1274.5, 803.2],
+        [1270.3, 808],
+        [1274.5, 812.8],
       ],
     }, // center-south diamond — ring-confirmed real (min-side 6339)
   ],
@@ -180,9 +210,9 @@ export const arenaObstacles: Record<string, ArenaObstacle[]> = {
   // (98–100% void) and are tightened to their observed footprints. North-band
   // (y<585) voids are the starting pen area and are deliberately not modeled.
   // ---------------------------------------------------------------------------
-  '1134': [
+  "1134": [
     {
-      type: 'polygon',
+      type: "polygon",
       vertices: [
         [596, 629],
         [588, 629],
@@ -191,7 +221,7 @@ export const arenaObstacles: Record<string, ArenaObstacle[]> = {
       ],
     }, // west wall segment (observed void 29 cells)
     {
-      type: 'polygon',
+      type: "polygon",
       vertices: [
         [545, 630],
         [541, 630],
@@ -205,9 +235,9 @@ export const arenaObstacles: Record<string, ArenaObstacle[]> = {
   // Tol'Viron Arena — 1 square pillar (north) + 2 diamond pillars (south-west, south-east).
   // 635×520 px. zone bounds: minX=-10781 maxX=-10654 minY=379 maxY=483
   // ---------------------------------------------------------------------------
-  '980': [
+  "980": [
     {
-      type: 'polygon',
+      type: "polygon",
       vertices: [
         [-10709, 396],
         [-10719, 396],
@@ -216,7 +246,7 @@ export const arenaObstacles: Record<string, ArenaObstacle[]> = {
       ],
     }, // north pillar (axis-aligned square)
     {
-      type: 'polygon',
+      type: "polygon",
       vertices: [
         [-10687, 445],
         [-10683, 449],
@@ -225,7 +255,7 @@ export const arenaObstacles: Record<string, ArenaObstacle[]> = {
       ],
     }, // south-west diamond pillar
     {
-      type: 'polygon',
+      type: "polygon",
       vertices: [
         [-10740, 445],
         [-10736, 449],
@@ -239,10 +269,10 @@ export const arenaObstacles: Record<string, ArenaObstacle[]> = {
   // Black Rook Hold Arena — single central circular pillar.
   // 505×480 px. zone bounds: minX=1366 maxX=1467 minY=1190 maxY=1286
   // ---------------------------------------------------------------------------
-  '1504': [
+  "1504": [
     // Jul 2026 void analysis (485k samples): real pillar void is 8×8 at
     // x[1417..1424] y[1244..1251] — recentered and grown from r=3.5.
-    { type: 'circle', cx: 1421, cy: 1248, r: 4 }, // central pillar
+    { type: "circle", cx: 1421, cy: 1248, r: 4 }, // central pillar
   ],
 
   // ---------------------------------------------------------------------------
@@ -251,9 +281,9 @@ export const arenaObstacles: Record<string, ArenaObstacle[]> = {
   // ---------------------------------------------------------------------------
   // Jul 2026 void analysis (724k samples): diamonds enlarged to their observed
   // voids (46/44 cells).
-  '1552': [
+  "1552": [
     {
-      type: 'polygon',
+      type: "polygon",
       vertices: [
         [3574, 5532],
         [3566, 5532],
@@ -262,7 +292,7 @@ export const arenaObstacles: Record<string, ArenaObstacle[]> = {
       ],
     }, // central stone structure (void 88%)
     {
-      type: 'polygon',
+      type: "polygon",
       vertices: [
         [3526.5, 5519.5],
         [3522, 5524],
@@ -271,7 +301,7 @@ export const arenaObstacles: Record<string, ArenaObstacle[]> = {
       ],
     }, // north-east diamond pillar (void x[3517..3526] y[5516..5522])
     {
-      type: 'polygon',
+      type: "polygon",
       vertices: [
         [3528, 5554],
         [3523.5, 5558.5],
@@ -288,9 +318,9 @@ export const arenaObstacles: Record<string, ArenaObstacle[]> = {
   // Mugambala — 2 small square totems (west side) + 1 tall rectangular column (east).
   // 530×585 px. zone bounds: minX=-1994 maxX=-1888 minY=1237 maxY=1354
   // ---------------------------------------------------------------------------
-  '1911': [
+  "1911": [
     {
-      type: 'polygon',
+      type: "polygon",
       vertices: [
         [-1918, 1281],
         [-1924, 1281],
@@ -299,7 +329,7 @@ export const arenaObstacles: Record<string, ArenaObstacle[]> = {
       ],
     }, // north-west totem
     {
-      type: 'polygon',
+      type: "polygon",
       vertices: [
         [-1918, 1312],
         [-1924, 1312],
@@ -308,7 +338,7 @@ export const arenaObstacles: Record<string, ArenaObstacle[]> = {
       ],
     }, // south-west totem
     {
-      type: 'polygon',
+      type: "polygon",
       vertices: [
         [-1962, 1292],
         [-1970, 1292],
@@ -325,9 +355,9 @@ export const arenaObstacles: Record<string, ArenaObstacle[]> = {
   // Jul 2026 void analysis (633k samples): both pillars were drawn on the EDGE
   // of their real voids (verdict SUSPECT, 40–50% void). Replaced with the
   // observed 8–9-unit-square voids (53/56 cells, density ~0.7 = round-ish).
-  '1825': [
+  "1825": [
     {
-      type: 'polygon',
+      type: "polygon",
       vertices: [
         [1036, -330],
         [1030, -330],
@@ -336,7 +366,7 @@ export const arenaObstacles: Record<string, ArenaObstacle[]> = {
       ],
     }, // west pillar (void x[1029..1036] y[-331..-323])
     {
-      type: 'polygon',
+      type: "polygon",
       vertices: [
         [1007, -320],
         [1000, -320],
@@ -350,9 +380,9 @@ export const arenaObstacles: Record<string, ArenaObstacle[]> = {
   // The Robodrome — 2 diamond pillars (moving central platform excluded).
   // 910×480 px. zone bounds: minX=-372 maxX=-190 minY=-328 maxY=-232
   // ---------------------------------------------------------------------------
-  '2167': [
+  "2167": [
     {
-      type: 'polygon',
+      type: "polygon",
       vertices: [
         [-261, -303],
         [-257, -299],
@@ -361,7 +391,7 @@ export const arenaObstacles: Record<string, ArenaObstacle[]> = {
       ],
     }, // west diamond pillar
     {
-      type: 'polygon',
+      type: "polygon",
       vertices: [
         [-305, -303],
         [-301, -299],
@@ -378,9 +408,9 @@ export const arenaObstacles: Record<string, ArenaObstacle[]> = {
   // Jul 2026 void analysis (522k samples): three of four crystals were drawn on
   // the edges of their real voids (SUSPECT, 41–69% void). Recentered on the
   // observed ~8-unit voids (33–37 cells each) and enlarged to half-diagonal 4.5.
-  '2373': [
+  "2373": [
     {
-      type: 'polygon',
+      type: "polygon",
       vertices: [
         [-1246.5, 700.5],
         [-1251, 705],
@@ -389,7 +419,7 @@ export const arenaObstacles: Record<string, ArenaObstacle[]> = {
       ],
     }, // north crystal (void x[-1255..-1248] y[697..703])
     {
-      type: 'polygon',
+      type: "polygon",
       vertices: [
         [-1216.5, 729.5],
         [-1221, 734],
@@ -398,7 +428,7 @@ export const arenaObstacles: Record<string, ArenaObstacle[]> = {
       ],
     }, // east crystal (void x[-1225..-1218] y[726..732])
     {
-      type: 'polygon',
+      type: "polygon",
       vertices: [
         [-1275.5, 730],
         [-1280, 734.5],
@@ -407,7 +437,7 @@ export const arenaObstacles: Record<string, ArenaObstacle[]> = {
       ],
     }, // west crystal (void x[-1284..-1277] y[726..733])
     {
-      type: 'polygon',
+      type: "polygon",
       vertices: [
         [-1246.5, 760],
         [-1251, 764.5],
@@ -425,9 +455,9 @@ export const arenaObstacles: Record<string, ArenaObstacle[]> = {
   // Obs#2 (south-east, 6×6): 1 violation, min_dist=1.3 — borderline. Held for more data.
   // Calibrated from 12 combat logs, ~120k samples (Apr 2026).
   // ---------------------------------------------------------------------------
-  '2509': [
+  "2509": [
     {
-      type: 'polygon',
+      type: "polygon",
       vertices: [
         [2814, 2226],
         [2806, 2226],
@@ -436,7 +466,7 @@ export const arenaObstacles: Record<string, ArenaObstacle[]> = {
       ],
     }, // north-east pillar — shrunk 2nd pass Apr 2026
     {
-      type: 'polygon',
+      type: "polygon",
       vertices: [
         [2867, 2251],
         [2859, 2251],
@@ -445,7 +475,7 @@ export const arenaObstacles: Record<string, ArenaObstacle[]> = {
       ],
     }, // south-west pillar — shrunk 2nd pass Apr 2026
     {
-      type: 'polygon',
+      type: "polygon",
       vertices: [
         [2809, 2273],
         [2803, 2273],
@@ -461,11 +491,11 @@ export const arenaObstacles: Record<string, ArenaObstacle[]> = {
   // Large clusters (#0, #3) reduced r=6→r=5 from TWW 11.0+ position data (edge-touching
   // violations at 4.5–5.9 units from center across ~20 matches).
   // ---------------------------------------------------------------------------
-  '2547': [
-    { type: 'circle', cx: 291, cy: 250, r: 5 }, // north-west cluster (large)
-    { type: 'circle', cx: 255, cy: 240, r: 3 }, // north-east single
-    { type: 'circle', cx: 278, cy: 293, r: 3 }, // south-west single
-    { type: 'circle', cx: 241, cy: 280, r: 5 }, // south-east cluster (large)
+  "2547": [
+    { type: "circle", cx: 291, cy: 250, r: 5 }, // north-west cluster (large)
+    { type: "circle", cx: 255, cy: 240, r: 3 }, // north-east single
+    { type: "circle", cx: 278, cy: 293, r: 3 }, // south-west single
+    { type: "circle", cx: 241, cy: 280, r: 5 }, // south-east cluster (large)
   ],
 
   // ---------------------------------------------------------------------------
@@ -487,9 +517,9 @@ export const arenaObstacles: Record<string, ArenaObstacle[]> = {
   // daises, not sight blockers. The two round pillars are real solid structures;
   // replaced with their observed void footprints (56 and 53 contiguous cells).
   // Central diagonal wall kept as-is (88% void — correct, slightly conservative).
-  '2563': [
+  "2563": [
     {
-      type: 'polygon',
+      type: "polygon",
       vertices: [
         [-547, 4151],
         [-554, 4151],
@@ -498,7 +528,7 @@ export const arenaObstacles: Record<string, ArenaObstacle[]> = {
       ],
     }, // north-east round pillar (observed void 56 cells; inset 1 unit — round pillar in a square void bbox)
     {
-      type: 'polygon',
+      type: "polygon",
       vertices: [
         [-519, 4170],
         [-521, 4168],
@@ -507,7 +537,7 @@ export const arenaObstacles: Record<string, ArenaObstacle[]> = {
       ],
     }, // central diagonal wall (⚠ partially elevated — violations expected)
     {
-      type: 'polygon',
+      type: "polygon",
       vertices: [
         [-512, 4193],
         [-518, 4193],
@@ -523,9 +553,9 @@ export const arenaObstacles: Record<string, ArenaObstacle[]> = {
   // ~1700 units wrong and had been cleared). Five compact zero-sample voids
   // (density >=0.5 in bbox) adopted as solid obstacles.
   // ---------------------------------------------------------------------------
-  '2759': [
+  "2759": [
     {
-      type: 'polygon',
+      type: "polygon",
       vertices: [
         [418, 410],
         [411, 410],
@@ -534,7 +564,7 @@ export const arenaObstacles: Record<string, ArenaObstacle[]> = {
       ],
     }, // south-west structure (void 46 cells)
     {
-      type: 'polygon',
+      type: "polygon",
       vertices: [
         [475, 352],
         [469, 352],
@@ -543,7 +573,7 @@ export const arenaObstacles: Record<string, ArenaObstacle[]> = {
       ],
     }, // north-east structure (void 44 cells)
     {
-      type: 'polygon',
+      type: "polygon",
       vertices: [
         [427, 363],
         [422, 363],
@@ -552,7 +582,7 @@ export const arenaObstacles: Record<string, ArenaObstacle[]> = {
       ],
     }, // west structure (void 25 cells)
     {
-      type: 'polygon',
+      type: "polygon",
       vertices: [
         [465, 401],
         [460, 401],
