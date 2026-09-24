@@ -117,10 +117,18 @@ For each entry in the index, launch a **background subagent** (prompt is self-co
 > word. The ledger lists tracked cooldowns only — "no tracked cooldown was ready" is the most it
 > supports.
 >
-> FOCUS DISCIPLINE: structure the response around the 2-3 windows that actually
-> decided the match; give each secondary observation at most one line, and label
-> minor items as minor. Do not let "what went right" match the decisive analysis
-> in length.
+> FOCUS DISCIPLINE: structure the response around the 2-3 windows that mattered most
+> (deaths, the deepest drops, the costliest cooldown trades); give each secondary
+> observation at most one line, and label minor items as minor. Do not let "what went
+> right" match the main analysis in length.
+>
+> CAUSAL DISCIPLINE (mandatory): describe what happened and the direct consequence the
+> prompt shows on the same unit ("Lay on Hands took him from 13% to 82% by 0:50"). Do not
+> write past causal verdicts — "saved him", "decided the round", "cost you X", "led to",
+> "that is why", "only because" — unless a prompt line itself states that link (e.g.
+> "Will to Survive broke this CC", "target trinketed out of our stun", "FAILED: not enough
+> damage"). Time order alone is not causation. Advice for next time may give its reason
+> ("hold X for the next go, because …") — that is allowed.
 >
 > Write your coaching response to:
 > `$GLADLOG_EVAL_HOME/runs/<runId>/responses/NNN.txt`
