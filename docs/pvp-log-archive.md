@@ -212,39 +212,6 @@ roughly **27 weeks** of runway (decompressed) into roughly **6 years**
 see the "Empirical Base" table in the design spec for the underlying
 measurements (feed depth, per-match size, growth rate).
 
-## Installing as a scheduled job (launchd)
-
-The plist lives at `packages/corpus-tools/ops/app.gladlog.pvp-archive.plist`
-and is **not loaded automatically** — committing it to the repo does
-nothing on its own. **When** to enable it is a decision for whoever runs
-it, not something this doc prescribes. **As of 2026-08-23 it is
-deliberately still not installed**: the archiver is being run by hand
-instead, while the season's corpus builds up. That is a standing decision,
-not an oversight — don't "fix" it by installing the plist.
-
-Running it by hand is safe to repeat: the script takes a lock and exits
-immediately if another run is already in progress.
-
-To install:
-
-```bash
-sed 's|<Repository Path>|/absolute/path/to/gladlog|' \
-  packages/corpus-tools/ops/app.gladlog.pvp-archive.plist \
-  > ~/Library/LaunchAgents/app.gladlog.pvp-archive.plist
-launchctl load ~/Library/LaunchAgents/app.gladlog.pvp-archive.plist
-```
-
-To stop it:
-
-```bash
-launchctl unload ~/Library/LaunchAgents/app.gladlog.pvp-archive.plist
-```
-
-Runs 4 times a day (01:00 / 07:00 / 13:00 / 19:00 local time), logging to
-`/tmp/gladlog-pvp-archive.log` / `.err`. launchd (rather than cron) is used
-deliberately: cron simply skips a run missed because the laptop's lid was
-closed, while launchd's `StartCalendarInterval` catches up on wake.
-
 ## Operational notes
 
 1. **Zero new matches in a run is an incident, not a quiet success.** A
@@ -253,9 +220,9 @@ closed, while launchd's `StartCalendarInterval` catches up on wake.
    change) — the script logs an explicit warning line when this happens,
    but nothing pages anyone. The feed only retains ~7 days, so a silent
    failure that lasts a week is a **permanent** week of lost data.
-2. **Enablement timing is a human decision; the plist does not act on its
-   own.** See "Installing as a scheduled job" above for the current plan
-   and the install/uninstall commands.
+2. The launchd plist that could schedule this (`app.gladlog.pvp-archive.plist`)
+   was never installed and was deleted on 2026-09-24 after the archiver was
+   retired.
 
 ## What's been verified so far
 

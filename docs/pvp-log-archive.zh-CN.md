@@ -172,44 +172,14 @@ Google Drive 的可用时长从解压存的约 **27 周** 变成压缩存的约 
 里收益最大的单点决定。背后的实测数字(feed 深度、单场体积、增速)见设计文档
 「实测底数」一节。
 
-## 装成定时任务(launchd)
-
-plist 文件在 `packages/corpus-tools/ops/app.gladlog.pvp-archive.plist`,
-**不会自动装载**——把它提交进仓库本身什么都不会发生。**什么时候启用由使用者
-决定**,这篇文档不替你拍板。**截至 2026-08-23,它仍然刻意没有装**:目前是手工
-起归档器,一边跑一边攒本赛季语料。这是一个明确的决定,不是遗漏 —— 别当成缺陷去
-「补装」plist。
-
-手工重复起是安全的:脚本带并发锁,检测到已有归档进程在跑会立刻退出。
-
-装载:
-
-```bash
-sed 's|<仓库路径>|/绝对路径/到/gladlog|' \
-  packages/corpus-tools/ops/app.gladlog.pvp-archive.plist \
-  > ~/Library/LaunchAgents/app.gladlog.pvp-archive.plist
-launchctl load ~/Library/LaunchAgents/app.gladlog.pvp-archive.plist
-```
-
-停用:
-
-```bash
-launchctl unload ~/Library/LaunchAgents/app.gladlog.pvp-archive.plist
-```
-
-一天跑 4 次(本机时间 01:00 / 07:00 / 13:00 / 19:00),日志写到
-`/tmp/gladlog-pvp-archive.log` / `.err`。用 launchd 而不是 cron 是刻意选择:
-合盖错过的任务 cron 直接跳过不补,而 launchd 的 `StartCalendarInterval`
-会在唤醒后补跑。
-
 ## 运维注意
 
 1. **新增 0 场要当故障看,不是「今天正好没有」。** 正常每次运行都该有上千场
    新增。0 说明 feed 挂了或查询失效(如上游改了 schema)——脚本会打一行明确的
    警告,但不会主动通知任何人。feed 检索窗口仅约 7 天,这种故障静默持续一周就是
    **永久**丢一周数据。
-2. **启用时机由使用者决定,plist 不会自己动。** 当前状态(2026-08-23 起刻意手工
-   跑、不装 launchd)见上面「装成定时任务」一节的说明与装载/停用命令。
+2. 原本可以用来定时跑它的 launchd plist(`app.gladlog.pvp-archive.plist`)从未装载,
+   归档器退役后已于 2026-09-24 删除。
 
 ## 已验证到什么程度
 

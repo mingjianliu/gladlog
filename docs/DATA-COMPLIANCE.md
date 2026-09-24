@@ -99,7 +99,7 @@ paragraph that used to say "revisit this section if it ever becomes one" is now
 cashed in. (Built, not enabled — see the last bullet below.)
 `packages/corpus-tools/scripts/archivePvpLogs.ts` sweeps the whole feed and archives every new public
 match; `packages/corpus-tools/ops/app.gladlog.pvp-archive.plist` runs it under
-launchd **4 times a day, every 6 hours** (01:00 / 07:00 / 13:00 / 19:00 local).
+launchd **4 times a day, every 6 hours** (01:00 / 07:00 / 13:00 / 19:00 local). (The plist was never installed and was deleted on 2026-09-24, after the archiver was retired.)
 What that means in numbers, and why we consider it acceptable:
 
 - **Throttling is unchanged from the numbers above** — 500 ms between pages,
