@@ -16,7 +16,7 @@
  * 1,946 rounds, 2026-09-23); the counts are in each note. The parameter is
  * read by `utils/castParam.ts` → `castParamAt`, never inferred.
  */
-export interface ICastParamDuration {
+interface ICastParamDuration {
   param: "empower" | "combo";
   /** Spell ids whose cast carries the parameter (the empower press, or the
    * finisher itself). */

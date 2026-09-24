@@ -44,7 +44,7 @@ const NEUTRAL_CWD = mkdtempSync(join(tmpdir(), "gladlog-probe-"));
 
 export type CliBackend = "claude" | "agy";
 
-export interface CliCallOptions {
+interface CliCallOptions {
   /** 超时(毫秒)。claude 慢,默认给足。 */
   timeoutMs?: number;
   /** 传给后端的模型名;省略则用后端默认。 */

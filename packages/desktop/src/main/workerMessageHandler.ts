@@ -13,7 +13,7 @@ import type { RecorderService } from "./recorder";
  * through this function, so it naturally lacks `live` and needs no extra check
  * here.
  */
-export interface WorkerMessageHandlerDeps {
+interface WorkerMessageHandlerDeps {
   store: Pick<MatchStore, "store">;
   recorder: Pick<
     RecorderService,

@@ -6,7 +6,6 @@ import {
 import { ccSpellIds } from "../src/data/spellTags";
 import { CANDIDATE_TYPE_FLAGS } from "../src/data/candidateTypeFlags";
 import { DISCOVERY_TAG_RULES } from "../src/data/discoveryRules";
-import { DISPEL_FEATURE_FLAGS } from "../src/data/dispelFeatureFlags";
 
 describe("data layer", () => {
   it("overrides:每条含 cooldown 或 duration 至少其一,id 键一致", () => {
@@ -37,7 +36,6 @@ describe("data layer", () => {
     );
     expect(DISCOVERY_TAG_RULES.length).toBeGreaterThan(0);
     expect(DISCOVERY_TAG_RULES[0]!.pattern).toBeInstanceOf(RegExp);
-    expect(DISPEL_FEATURE_FLAGS).toBeDefined();
   });
   it("candidateTypeFlags(Task 9,2026-08-15 四个 P1/P2 起爆开关全量上线;2026-08-19 missedSyncWindow、2026-08-29 unsyncedBurst/missedPurge/ccHeld、2026-08-30 killReview/cdSpentIdle 下架);manaPressure/manaEfficiency 两开关已随候选退役删除(2026-08-21 管线审查第 3 条,#26 结案、后继 #33)", () => {
     expect(CANDIDATE_TYPE_FLAGS).toEqual({

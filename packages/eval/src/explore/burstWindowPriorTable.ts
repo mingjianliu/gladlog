@@ -23,7 +23,7 @@ export interface BurstWindowPriorRow {
   point: BurstWindowDecisionPoint;
 }
 
-export interface BurstWindowPriorCell {
+interface BurstWindowPriorCell {
   /** feasible windows the team ANSWERED within 8 s */
   nResp: number;
   /** share of those in which a friendly still died inside the window */
@@ -35,7 +35,7 @@ export interface BurstWindowPriorCell {
   topResponses: [string, number][];
 }
 
-export interface BurstWindowPriorTable {
+interface BurstWindowPriorTable {
   meta: {
     generatedAt: string;
     corpus: string;

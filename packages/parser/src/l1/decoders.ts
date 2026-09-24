@@ -158,7 +158,7 @@ export function decodeHeal(
  * "600|100" / "15000|100") — measured at 2.7% of SPELL_CAST_SUCCESS lines in
  * the 12.1 archive — so this returns a list, not a scalar.
  */
-export interface PowerEntry {
+interface PowerEntry {
   /** Blizzard power type: 0 Mana, 1 Rage, 2 Focus, 3 Energy, 6 Runic Power,
    * 13 Insanity, 19 Essence, … -1 when the field is absent/unparsable. */
   powerType: number;
@@ -292,7 +292,7 @@ export function decodeMissed(
  * - Swing attack form (18 params): prefix (0..7), shield caster prefix (8..11),
  *   shield spell triple (12..14), amounts (15..16), critical (17).
  */
-export const ABSORB_SPELL_OFFSETS = {
+const ABSORB_SPELL_OFFSETS = {
   ATTACKER_GUID: 0,
   ATTACKER_NAME: 1,
   VICTIM_GUID: 4,
@@ -308,7 +308,7 @@ export const ABSORB_SPELL_OFFSETS = {
   CRITICAL: 20,
 } as const;
 
-export const ABSORB_SWING_OFFSETS = {
+const ABSORB_SWING_OFFSETS = {
   ATTACKER_GUID: 0,
   ATTACKER_NAME: 1,
   VICTIM_GUID: 4,
@@ -501,7 +501,7 @@ export function decodeArenaEnd(params: string[]): {
 
 /** Used to locate the tail params of damage/heal events: finds the starting
  * index of the advanced coordinate pair (x, y). */
-export function findXIdx(params: string[], at: number): number {
+function findXIdx(params: string[], at: number): number {
   let xIdx = at + 14;
   for (let i = at + 4; i < params.length - 1; i++) {
     const val1 = params[i];

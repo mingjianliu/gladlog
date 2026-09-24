@@ -88,7 +88,7 @@ export const SWEEP_STRIDE_S = 10;
  */
 export const ANCHOR_TOLERANCE_S = 5;
 /** Cap on how many entries are finally displayed (top N by signal density). */
-export const TOP_N = 3;
+const TOP_N = 3;
 
 export interface UncoveredHighlight {
   range: TimeRange;

@@ -362,7 +362,7 @@ for (const [id, durationSeconds] of Object.entries(CORPUS_DURATION_PATCHES)) {
 // the FINAL arena cooldown; `applyCdTalentModifiers` skips the DB2 talent
 // rows for such an id (they would stack on top of a number that already
 // contains them and undershoot the floor). Registered in curatedIdRegistry.
-export interface CorpusCooldownPatch {
+interface CorpusCooldownPatch {
   cooldownSeconds: number;
   talentsIncluded: boolean;
 }

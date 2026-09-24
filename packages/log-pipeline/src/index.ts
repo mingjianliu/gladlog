@@ -22,7 +22,7 @@ function argValue(flag: string): string | undefined {
   return i !== -1 ? process.argv[i + 1] : undefined;
 }
 
-export async function flushBatch(opts: {
+async function flushBatch(opts: {
   fileNames: string[];
   config: AgentConfig;
   adapter: StorageAdapter;

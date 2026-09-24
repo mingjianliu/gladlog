@@ -49,7 +49,7 @@
  * 消费方是 `canHelpAnotherUnit`(GH #28):这些 CD 官方目标是施法者自己,但按下去
  * 确实帮到被你治疗的队友,所以不能被「自保技能救不了队友」那道门滤掉。
  */
-export interface ICuratedAbilityFact {
+interface ICuratedAbilityFact {
   id: string; // spellId 或 talent spellId
   claim: string; // 一句中文事实断言
   kind:

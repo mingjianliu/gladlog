@@ -13,7 +13,7 @@ import {
  * (the old implementation stringified the whole doc into a <pre> and froze
  * the renderer process).
  */
-export interface JsonTreeProps {
+interface JsonTreeProps {
   root: unknown;
   /** Currently selected (the target of the right pane's copy-node action) */
   selectedPath: string;

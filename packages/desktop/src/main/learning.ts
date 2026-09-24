@@ -53,7 +53,7 @@ import { createLearningLedger } from "./learningLedger";
 
 /** Auto-consolidate once the ledger has grown by at least this many matches
  * since the last consolidation (spec §5). */
-export const CONSOLIDATE_EVERY_MATCHES = 10;
+const CONSOLIDATE_EVERY_MATCHES = 10;
 
 export interface LearningState {
   backfill: { running: boolean; scanned: number; total: number } | null;

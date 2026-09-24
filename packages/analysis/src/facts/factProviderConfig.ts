@@ -26,7 +26,7 @@
  * docs/predicate-index.md's feature-flag ledger).
  */
 
-export type FactProviderConfig = Readonly<Record<string, boolean>>;
+type FactProviderConfig = Readonly<Record<string, boolean>>;
 
 export const PRODUCTION_FACT_CONFIG: FactProviderConfig = Object.freeze({
   /** M3b: talent value-modifiers on mitigation auras (mitigationComponents.ts).

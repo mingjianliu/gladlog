@@ -1,4 +1,4 @@
-export const SpellSchoolNames: Record<number, string> = {
+const SpellSchoolNames: Record<number, string> = {
   1: 'Physical',
   2: 'Holy',
   4: 'Fire',

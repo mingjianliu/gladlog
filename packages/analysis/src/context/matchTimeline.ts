@@ -10,7 +10,6 @@ import { BACKLASH_AURA_CC_TYPE } from "../data/backlashCc";
 import { type BurstWindowDecisionPoint } from "../analysis/burstWindowDecisionPoints";
 import type { CdPriorHoldEpisode } from "../analysis/cdTriggerPrior";
 import type { StackedDefensivePair } from "../analysis/stackedDefensives";
-import { DISPEL_FEATURE_FLAGS } from "../data/dispelFeatureFlags";
 import {
   effectiveCooldownSeconds,
   getEnglishSpellName,
@@ -2205,12 +2204,11 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     return false;
   }
 
-  const qualifyingMissedPurges =
-    DISPEL_FEATURE_FLAGS.F152_MISSED_PURGES_TIMELINE && canOffensivePurge(owner)
-      ? dispelSummary.missedPurgeWindows.filter((m) =>
-          HIGH_VALUE_PURGEABLE_BUFFS.has(m.spellId),
-        )
-      : [];
+  const qualifyingMissedPurges = canOffensivePurge(owner)
+    ? dispelSummary.missedPurgeWindows.filter((m) =>
+        HIGH_VALUE_PURGEABLE_BUFFS.has(m.spellId),
+      )
+    : [];
 
   function formatPurgeAnnotationWithMiss(miss: IMissedPurgeWindow): string {
     const rawExemption = formatMissedPurgeExemption(miss);
@@ -2510,18 +2508,15 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
         : "";
 
       const drStr =
-        DISPEL_FEATURE_FLAGS.F124_ENHANCED_CC_ANNOTATIONS &&
-        cc.drInfo &&
-        cc.drInfo.category !== "Unknown"
+        cc.drInfo && cc.drInfo.category !== "Unknown"
           ? ` [DR: ${cc.drInfo.category} ${cc.drInfo.level}]`
           : "";
       // GH #103: the tag names the CC (the coach guessed "stun" for a silence)
       // and reads the one backlash table (data/backlashCc.ts).
       const backlashType = BACKLASH_AURA_CC_TYPE.get(cc.spellId);
-      const backlashStr =
-        DISPEL_FEATURE_FLAGS.F124_ENHANCED_CC_ANNOTATIONS && backlashType
-          ? ` [DISPEL BACKLASH CC: ${backlashType}]`
-          : "";
+      const backlashStr = backlashType
+        ? ` [DISPEL BACKLASH CC: ${backlashType}]`
+        : "";
 
       // B111: for a trinket-broken CC the logged duration is the truncated endured time, not the CC's
       // natural length; suppress the standalone "| Ns" (the trinket note carries the endured time) so it
@@ -2669,10 +2664,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   // owner can actually offensive-purge. Mistweaver/Evoker/Holy Priest/Paladin etc. spammed this tag
   // for enemy buffs (e.g. Power Infusion) they had no tool to remove — the weakest, lowest-confidence
   // findings in the corpus. Gate the whole block to owners who can purge.
-  if (
-    DISPEL_FEATURE_FLAGS.F152_MISSED_PURGES_TIMELINE &&
-    canOffensivePurge(owner)
-  ) {
+  if (canOffensivePurge(owner)) {
     for (const miss of dispelSummary.missedPurgeWindows) {
       if (consumedMissedPurges.has(miss)) continue;
       if (HIGH_VALUE_PURGEABLE_BUFFS.has(miss.spellId)) {
@@ -2699,9 +2691,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     for (const group of cleanseGroups.values()) {
       const first = group[0];
       const petTag = group.some((c) => c.isPetDispel) ? " (pet)" : "";
-      const fatalCleanse = DISPEL_FEATURE_FLAGS.F18_FATAL_DISPEL
-        ? group.find((c) => c.wasFatal)
-        : undefined;
+      const fatalCleanse = group.find((c) => c.wasFatal);
       const fatalTag = fatalCleanse
         ? ` [FATAL DISPEL: ${pid(fatalCleanse.fatalUnitName ?? fatalCleanse.sourceName)}]`
         : "";

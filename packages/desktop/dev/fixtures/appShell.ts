@@ -15,7 +15,7 @@ const BRACKETS = ["3v3", "3v3", "2v2", "Solo Shuffle"] as const;
 
 /** 12 deterministic matches: spanning 3 days, with wins/losses and rating
  * swings — enough to cover list grouping and the dashboard curves. */
-export const DEMO_METAS: StoredMatchMeta[] = Array.from(
+const DEMO_METAS: StoredMatchMeta[] = Array.from(
   { length: 12 },
   (_, i) => {
     const startTime = FIXED_NOW - Math.floor(i / 4) * DAY - (i % 4) * HOUR;

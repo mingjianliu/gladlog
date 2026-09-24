@@ -8,7 +8,7 @@ export interface KeystoneGate {
   groupPresent: string;
   groupAbsent: string;
 }
-export interface GateTable {
+interface GateTable {
   wowPatchVersion: string;
   gates: KeystoneGate[];
 }

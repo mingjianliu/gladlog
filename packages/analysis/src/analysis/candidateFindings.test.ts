@@ -5,24 +5,17 @@ import {
   BRACKET_TYPE_ALLOWLIST,
   CANDIDATE_TYPE_FLAGS,
 } from "../data/candidateTypeFlags";
-import {
-  extractMajorCooldowns,
-  FORBEARANCE_GATED_IDS,
-  type IMajorCooldownInfo,
-  USABLE_WHILE_CC_SPELL_IDS,
-} from "../utils/cooldowns";
+import { extractMajorCooldowns } from "../utils/cooldowns";
 import type { RawStreams } from "../utils/rawStreams";
 import { matchThreatLevel, threatActiveAt } from "../utils/threatAssessment";
 import {
   ccAvoidableEvents,
   ccAvoidanceOptionsAt,
   ccHeldEvents,
-  ccLockedEvents,
   cdHoardedEvents,
   cdSpentIdleEvents,
   cdWasteEvents,
   deathSetupEvents,
-  deathUnusedDefensiveEvents,
   enemyHealerCcWindows,
   enemyMinHpPctInWindow,
   externalUnusedEvents,
@@ -42,9 +35,7 @@ import {
   missedPurgeEvents,
   missedSyncWindowEvents,
   positionMistakeEvents,
-  trinketTeamMinHpPctAt,
   unsyncedBurstEvents,
-  wastedTrinketEvents,
 } from "./candidateFindings";
 import { crisisNoResponseEvents } from "./candidates/crisisNoResponse";
 import { crisisDecisionPoints } from "./crisisDecisionPoints";
@@ -155,7 +146,7 @@ describe("extractCandidateFindings", () => {
     ).toEqual([]);
   });
 
-  it("death-unused-defensive 已退役(GH #58,2026-08-29):即使走缺省 owner 回退、治疗自己死亡且有可用保命技,菜单也不再产出它(纯函数 deathUnusedDefensiveEvents 另有测试)", () => {
+  it("death-unused-defensive 已退役(GH #58,2026-08-29):即使走缺省 owner 回退、治疗自己死亡且有可用保命技,菜单也不再产出它(产出函数已于 2026-09-24 删除)", () => {
     // Priest_Holy (a healer, the fallback target), with Ultimate Penitence
     // (421453, 240s CD, Defensive and not throughput — the second spell that
     // extractMajorCooldowns dynamically appends for Priest, not in the talent
@@ -647,420 +638,6 @@ describe("deathSetupEvents(死亡前因链,纯函数)", () => {
   });
 });
 
-describe("death-unused-defensive(死亡时保命技可用未按)", () => {
-  const wall = (over: Partial<IMajorCooldownInfo> = {}) => ({
-    spellId: "108271", // Astral Shift
-    spellName: "Astral Shift",
-    tag: "Defensive",
-    cooldownSeconds: 90,
-    casts: [],
-    neverUsed: true,
-    isThroughput: false,
-    ...over,
-  });
-  const base = {
-    deathT: 100,
-    victim: { id: "p1", name: "Me-R" },
-    victimCDs: [wall()],
-    victimCC: { ccInstances: [], trinketUseTimes: [] },
-  };
-
-  it("可用保命技 + 死亡时不在 CC → 发一条,facts 列技能与 free=yes", () => {
-    const ev = deathUnusedDefensiveEvents(base, { isOwner: true });
-    expect(ev).toHaveLength(1);
-    expect(ev[0]!.type).toBe("death-unused-defensive");
-    expect(ev[0]!.facts.walls).toContain("Astral Shift");
-    expect(ev[0]!.facts.free).toBe("yes");
-  });
-
-  it("非 owner 的死亡 → 不发(指摘只对 owner)", () => {
-    expect(deathUnusedDefensiveEvents(base, { isOwner: false })).toEqual([]);
-  });
-
-  it("保命技死亡时在 CD → 不发", () => {
-    const p = {
-      ...base,
-      victimCDs: [wall({ casts: [{ timeSeconds: 50 }], neverUsed: false })],
-    }; // readyAt=140 > deathT=100
-    expect(deathUnusedDefensiveEvents(p, { isOwner: true })).toEqual([]);
-  });
-
-  it("死亡时在 CC 且饰品在 CD → 不自由,不发", () => {
-    const p = {
-      ...base,
-      victimCC: {
-        ccInstances: [
-          {
-            atSeconds: 96,
-            durationSeconds: 6,
-            spellName: "Polymorph",
-            trinketState: "on_cooldown",
-          },
-        ],
-        trinketUseTimes: [40],
-      },
-    };
-    expect(deathUnusedDefensiveEvents(p, { isOwner: true })).toEqual([]);
-  });
-
-  it("死亡时在 CC 但饰品可用 → 仍发(free=trinket_in_hand)", () => {
-    const p = {
-      ...base,
-      victimCC: {
-        ccInstances: [
-          {
-            atSeconds: 96,
-            durationSeconds: 6,
-            spellName: "Polymorph",
-            trinketState: "available_unused",
-          },
-        ],
-        trinketUseTimes: [],
-      },
-    };
-    const ev = deathUnusedDefensiveEvents(p, { isOwner: true });
-    expect(ev).toHaveLength(1);
-    expect(ev[0]!.facts.free).toBe("trinket_in_hand");
-  });
-
-  it("死亡时在 CC 且饰品为被动饰品(Relentless passive_trinket)→ 不自由,不发(回归:此前 !== on_cooldown 误把被动饰品当 trinket_in_hand,假指摘玩家没解一个不存在的主动饰品)", () => {
-    const p = {
-      ...base,
-      victimCC: {
-        ccInstances: [
-          {
-            atSeconds: 96,
-            durationSeconds: 6,
-            spellName: "Polymorph",
-            trinketState: "passive_trinket",
-          },
-        ],
-        trinketUseTimes: [],
-      },
-    };
-    expect(deathUnusedDefensiveEvents(p, { isOwner: true })).toEqual([]);
-  });
-
-  it("死亡时在 CC 且饰品已用(used)→ 不自由,不发", () => {
-    const p = {
-      ...base,
-      victimCC: {
-        ccInstances: [
-          {
-            atSeconds: 96,
-            durationSeconds: 6,
-            spellName: "Polymorph",
-            trinketState: "used",
-          },
-        ],
-        trinketUseTimes: [40],
-      },
-    };
-    expect(deathUnusedDefensiveEvents(p, { isOwner: true })).toEqual([]);
-  });
-
-  it("victimCC 缺席(摘要不可算)→ 不发(宁缺勿假指摘,不能默认 free=yes)", () => {
-    const p = { ...base, victimCC: undefined };
-    expect(deathUnusedDefensiveEvents(p, { isOwner: true })).toEqual([]);
-  });
-
-  it("throughput 型不算保命技 → 不发", () => {
-    const p = { ...base, victimCDs: [wall({ isThroughput: true })] };
-    expect(deathUnusedDefensiveEvents(p, { isOwner: true })).toEqual([]);
-  });
-
-  // Take the id from the real whitelist (do not mock the set itself): we need an
-  // id that is in USABLE_WHILE_CC_SPELL_IDS but NOT in FORBEARANCE_GATED_IDS, so
-  // this case does not interfere with the Forbearance case below.
-  const usableInCcOnlyId = [...USABLE_WHILE_CC_SPELL_IDS].find(
-    (id) => !FORBEARANCE_GATED_IDS.has(id),
-  )!;
-
-  it("死亡时在纯晕 CC 且饰品在 CD,但技能在 CC 中可用清单里 → 仍发,free=usable_in_cc", () => {
-    // The freeState=null branch (under CC with trinketState=on_cooldown) may
-    // only pass on a hit in USABLE_WHILE_CC_SPELL_IDS AND the CC being Stun —
-    // this is the one path in the whole package that emits the "usable_in_cc"
-    // string, without which a flipped freeState===null && !has(...) condition
-    // (||/&& written the wrong way round) would be caught by no test at all.
-    const p = {
-      ...base,
-      victimCC: {
-        ccInstances: [
-          {
-            atSeconds: 96,
-            durationSeconds: 6,
-            spellName: "Stun",
-            trinketState: "on_cooldown",
-            drInfo: { category: "Stun" },
-          },
-        ],
-        trinketUseTimes: [],
-      },
-      victimCDs: [
-        wall({ spellId: usableInCcOnlyId, spellName: "UsableInCC-Wall" }),
-      ],
-    };
-    const ev = deathUnusedDefensiveEvents(p, { isOwner: true });
-    expect(ev).toHaveLength(1);
-    expect(ev[0]!.facts.free).toBe("usable_in_cc");
-    expect(ev[0]!.facts.walls).toContain("UsableInCC-Wall");
-  });
-
-  it("死亡时在恐惧(非晕)CC 且饰品在 CD,即使技能在 CC 中可用清单里 → 仍不发(finding #1,2026-08-14 终审:USABLE_WHILE_CC_SPELL_IDS 只是「晕中可用」表,非晕类硬控必须无条件赦免,不得按该表判定)", () => {
-    const p = {
-      ...base,
-      victimCC: {
-        ccInstances: [
-          {
-            atSeconds: 96,
-            durationSeconds: 6,
-            spellName: "Fear",
-            trinketState: "on_cooldown",
-            drInfo: { category: "Disorient" },
-          },
-        ],
-        trinketUseTimes: [],
-      },
-      victimCDs: [
-        wall({ spellId: usableInCcOnlyId, spellName: "UsableInCC-Wall" }),
-      ],
-    };
-    expect(deathUnusedDefensiveEvents(p, { isOwner: true })).toEqual([]);
-  });
-
-  it("死亡时在 CC 但 drInfo 缺失(未知类别)→ 保守按非晕处理,不发", () => {
-    const p = {
-      ...base,
-      victimCC: {
-        ccInstances: [
-          {
-            atSeconds: 96,
-            durationSeconds: 6,
-            spellName: "Unknown-CC",
-            trinketState: "on_cooldown",
-          },
-        ],
-        trinketUseTimes: [],
-      },
-      victimCDs: [
-        wall({ spellId: usableInCcOnlyId, spellName: "UsableInCC-Wall" }),
-      ],
-    };
-    expect(deathUnusedDefensiveEvents(p, { isOwner: true })).toEqual([]);
-  });
-
-  it("Forbearance 期内的圣盾类:自施 30s 内即使裸 CD 显示可用也要排除,不发", () => {
-    // Divine-Shield-class spells physically cannot be pressed inside the
-    // Forbearance window; if this exclusion regresses, the coach would falsely
-    // accuse the player of not pressing a button they could not press — exactly
-    // the false accusation this predicate exists to prevent, and until now no
-    // test could catch that regression.
-    const forbearanceGatedId = [...FORBEARANCE_GATED_IDS][0]!;
-    const forbUnit = {
-      id: "p1",
-      spellCastEvents: [
-        {
-          logLine: { event: LogEvent.SPELL_CAST_SUCCESS },
-          spellId: forbearanceGatedId,
-          // matchStartMs=0 → 80s; deathT=100 → 20s earlier, inside the 30s window
-          timestamp: 80_000,
-          destUnitId: "p1",
-        },
-      ],
-    };
-    const p = {
-      ...base,
-      victimCDs: [
-        wall({
-          spellId: forbearanceGatedId,
-          spellName: "Forbearance-Gated-Wall",
-        }),
-      ],
-    };
-    const ev = deathUnusedDefensiveEvents(
-      p,
-      { isOwner: true, unit: forbUnit },
-      { startTime: 0, units: { p1: forbUnit } },
-    );
-    expect(ev).toEqual([]);
-  });
-
-  describe("cost_norm 守护注(#25,2026-08-14):圣盾/冰箱类『机制可用但代价禁常规』", () => {
-    it("死亡时保命技命中在册 cost_norm(642 圣盾术)→ facts.costNorm 出现", () => {
-      const p = {
-        ...base,
-        victimCDs: [wall({ spellId: "642", spellName: "Divine Shield" })],
-      };
-      const ev = deathUnusedDefensiveEvents(p, { isOwner: true });
-      expect(ev).toHaveLength(1);
-      expect(ev[0]!.facts.costNorm).toBeTruthy();
-    });
-
-    it("死亡时保命技不在 cost_norm 册(Astral Shift)→ facts 无 costNorm 字段", () => {
-      const ev = deathUnusedDefensiveEvents(base, { isOwner: true });
-      expect(ev).toHaveLength(1);
-      expect(ev[0]!.facts).not.toHaveProperty("costNorm");
-    });
-  });
-
-  describe("意图守护(BACKLOG #26 Task 2,按了被拒不算屯——三条红线)", () => {
-    // base: deathT=100, victim.id="p1", wall=Astral Shift(108271) never cast
-    // (casts:[]) → the guard's "available since" window is [0, 100].
-    it("① 死亡前窗内该技能 CAST_FAILED×3(两种理由)→ facts.attempted 按频次聚合(尚未恢复×2、法力值不足×1)", () => {
-      const rawStreams: RawStreams = {
-        available: true,
-        manaSamples: [],
-        castFailed: [
-          {
-            tSeconds: 45.3,
-            unitGuid: "p1",
-            spellId: 108271,
-            spellName: "Astral Shift",
-            reason: "尚未恢复",
-          },
-          {
-            tSeconds: 72.8,
-            unitGuid: "p1",
-            spellId: 108271,
-            spellName: "Astral Shift",
-            reason: "尚未恢复",
-          },
-          {
-            tSeconds: 90.1,
-            unitGuid: "p1",
-            spellId: 108271,
-            spellName: "Astral Shift",
-            reason: "法力值不足",
-          },
-        ],
-      };
-      const ev = deathUnusedDefensiveEvents(
-        base,
-        { isOwner: true },
-        undefined,
-        rawStreams,
-      );
-      expect(ev).toHaveLength(1);
-      expect(ev[0]!.facts["attempted"]).toBe(
-        "曾尝试施放被拒(尚未恢复×2、法力值不足×1)",
-      );
-    });
-
-    it("② 真没按(窗内有 CAST_FAILED,但不同技能/不同单位,零命中)→ facts 逐字段与无 rawStreams 时完全相同", () => {
-      const rawStreams: RawStreams = {
-        available: true,
-        manaSamples: [],
-        castFailed: [
-          // Wrong spellId.
-          {
-            tSeconds: 45.3,
-            unitGuid: "p1",
-            spellId: 99999,
-            spellName: "Some Other Spell",
-            reason: "尚未恢复",
-          },
-          // Wrong unit.
-          {
-            tSeconds: 72.8,
-            unitGuid: "someone-else",
-            spellId: 108271,
-            spellName: "Astral Shift",
-            reason: "法力值不足",
-          },
-        ],
-      };
-      const withGuard = deathUnusedDefensiveEvents(
-        base,
-        { isOwner: true },
-        undefined,
-        rawStreams,
-      );
-      const without = deathUnusedDefensiveEvents(base, { isOwner: true });
-      expect(withGuard).toEqual(without);
-      expect(withGuard[0]!.facts["attempted"]).toBeUndefined();
-    });
-
-    it("③ rawStreams 缺省 / available:false → 逐字段与无 rawStreams 时完全相同(优雅降级,绝不 throw)", () => {
-      const without = deathUnusedDefensiveEvents(base, { isOwner: true });
-      const absent = deathUnusedDefensiveEvents(
-        base,
-        { isOwner: true },
-        undefined,
-        undefined,
-      );
-      expect(absent).toEqual(without);
-      const unavailable: RawStreams = {
-        available: false,
-        manaSamples: [],
-        castFailed: [
-          {
-            tSeconds: 45.3,
-            unitGuid: "p1",
-            spellId: 108271,
-            spellName: "Astral Shift",
-            reason: "尚未恢复",
-          },
-        ],
-      };
-      const withUnavailable = deathUnusedDefensiveEvents(
-        base,
-        { isOwner: true },
-        undefined,
-        unavailable,
-      );
-      expect(withUnavailable).toEqual(without);
-    });
-
-    // #29 rewrite (2026-08-17): GCD-spam presses are not "pressed but
-    // rejected" — same filterIntentGuardEvidence (shared.ts) as cd-hoarded;
-    // the death side derives ownCastSuccessSeconds from victim.unit's own
-    // spellCastEvents (already threaded for the Forbearance check).
-    it("④ #29:自己刚成功施放 ≤1.5s 内的「尚未恢复」是 GCD 不算证据;其余理由保留", () => {
-      const victimUnit = {
-        id: "p1",
-        spellCastEvents: [
-          {
-            logLine: { event: LogEvent.SPELL_CAST_SUCCESS },
-            spellId: "8092", // any filler cast triggering the GCD
-            timestamp: 44_000, // matchStartMs=0 → t=44s
-            destUnitId: "e1",
-          },
-        ],
-      };
-      const rawStreams: RawStreams = {
-        available: true,
-        manaSamples: [],
-        castFailed: [
-          // 1.3s after own successful cast at 44s → GCD artifact, excluded.
-          {
-            tSeconds: 45.3,
-            unitGuid: "p1",
-            spellId: 108271,
-            spellName: "Astral Shift",
-            reason: "尚未恢复",
-          },
-          // Mid-window, no adjacent own cast → genuine, kept.
-          {
-            tSeconds: 90.1,
-            unitGuid: "p1",
-            spellId: 108271,
-            spellName: "Astral Shift",
-            reason: "法力值不足",
-          },
-        ],
-      };
-      const ev = deathUnusedDefensiveEvents(
-        base,
-        { isOwner: true, unit: victimUnit },
-        { startTime: 0, units: { p1: victimUnit } },
-        rawStreams,
-      );
-      expect(ev).toHaveLength(1);
-      expect(ev[0]!.facts["attempted"]).toBe("曾尝试施放被拒(法力值不足×1)");
-    });
-  });
-});
-
 describe("crisis-no-response wiring(菜单接线 + death-unused-defensive precededBy,2026-08-29)", () => {
   const T0 = 5_000_000;
   // Full IAdvancedAction shape (not crisisDecisionPoints.test.ts's bare-bones
@@ -1530,25 +1107,6 @@ describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
     expect(evts).toHaveLength(2);
     // in-window entries sort first
     expect(evts[0]!.facts["inKillWindow"]).toBe("yes");
-  });
-
-  it("cc-locked:≥4s 才报,trinketState 进 facts", () => {
-    const cc = (dur: number, state: string, dmg: number) => ({
-      atSeconds: 40,
-      durationSeconds: dur,
-      spellName: "Polymorph",
-      spellId: "118",
-      sourceName: "Mage",
-      trinketState: state as never,
-      damageTakenDuring: dmg,
-    });
-    const evts = ccLockedEvents(
-      [cc(3.9, "available_unused", 999_999), cc(6, "on_cooldown", 50_000)],
-      { id: "P1", name: "Me" },
-    );
-    expect(evts).toHaveLength(1);
-    expect(evts[0]!.facts["trinketState"]).toBe("on_cooldown");
-    expect(evts[0]!.facts["damageTakenK"]).toBe("50");
   });
 
   it("kick-eaten:#36(b) 按 postKick 严重度排序(idle 最前)截 2,facts 带行为", () => {
@@ -2138,94 +1696,7 @@ describe("ccAvoidanceOptionsAt(DEFENSIVE-001 wiring helper,2026-08-07)", () => {
   });
 });
 
-describe("wasted-trinket(中立局面浪费 PvP 饰品)", () => {
-  const probes = {
-    // lowest HP% on the team (null = no sample available)
-    friendlyHpPctAt: (_t: number) => 95,
-    healerInCCAt: (_t: number) => false,
-    enemyOffensiveActiveAt: (_t: number) => false,
-  };
-  const owner = { id: "p1", name: "Me-R" };
-
-  it("全队高血 + 治疗自由 + 无敌方爆发 → 中立,发一条", () => {
-    const ev = wastedTrinketEvents([42.4], owner, probes);
-    expect(ev).toHaveLength(1);
-    expect(ev[0]!.type).toBe("wasted-trinket");
-    expect(ev[0]!.facts.teamMinHpPct).toBe("95");
-  });
-
-  it("有人低血(<80%)→ 非中立,不发", () => {
-    expect(
-      wastedTrinketEvents([42], owner, {
-        ...probes,
-        friendlyHpPctAt: () => 60,
-      }),
-    ).toEqual([]);
-  });
-
-  it("HP 采不到样 → 保守不发", () => {
-    expect(
-      wastedTrinketEvents([42], owner, {
-        ...probes,
-        friendlyHpPctAt: () => null,
-      }),
-    ).toEqual([]);
-  });
-
-  it("治疗在 CC 中 → 非中立,不发", () => {
-    expect(
-      wastedTrinketEvents([42], owner, { ...probes, healerInCCAt: () => true }),
-    ).toEqual([]);
-  });
-
-  it("敌方进攻 CD buff 生效中 → 非中立,不发", () => {
-    expect(
-      wastedTrinketEvents([42], owner, {
-        ...probes,
-        enemyOffensiveActiveAt: () => true,
-      }),
-    ).toEqual([]);
-  });
-
-  it("agy flash 复核采纳:同一次按压的脏重复记录(近邻,含跨秒)只留最早一条", () => {
-    // 42.1 and 42.4 fall in the same second (same id after Math.round, which
-    // previously made them silently overwrite each other in auditFindings' byId
-    // Map); 42.1 vs 43.2 cross a second boundary and would produce two coaching
-    // entries nagging about the same action.
-    const ev = wastedTrinketEvents([42.1, 42.4, 43.2], owner, probes);
-    expect(ev).toHaveLength(1);
-    expect(ev[0]!.t).toBe(42.1);
-  });
-
-  it("间隔 ≥ TRINKET_DEDUPE_GAP_S 的两次独立开饰品,但 per-round 上限(TEMPORARY,BACKLOG #22)只保留 1 条", () => {
-    // Before the 2026-08-06 throttle both survived (see git history); the
-    // WASTED_TRINKET_CAP=1 truncation is exercised end-to-end in the dedicated
-    // describe block below.
-    const ev = wastedTrinketEvents([42.1, 100], owner, probes);
-    expect(ev).toHaveLength(1);
-    expect(ev[0]!.t).toBe(42.1);
-  });
-});
-
 describe("驱散/徽章类候选 per-round 上限(TEMPORARY,2026-08-06,BACKLOG #22——信号扩容批落地后移除;截断前先按各自严重度字段排序,保住最重的)", () => {
-  it("cc-locked ≤2/round:4 条超阈值 CC 按承伤降序,只保留最重的 2 条", () => {
-    const cc = (dmg: number) => ({
-      atSeconds: 40,
-      durationSeconds: 5, // >= CC_LOCKED_MIN_S
-      spellName: "Polymorph",
-      spellId: "118",
-      sourceName: "Mage",
-      trinketState: "on_cooldown" as never,
-      damageTakenDuring: dmg,
-    });
-    const evts = ccLockedEvents(
-      [cc(10_000), cc(40_000), cc(30_000), cc(20_000)],
-      { id: "P1", name: "Me" },
-    );
-    expect(evts).toHaveLength(2);
-    expect(evts.map((e) => e.facts["damageTakenK"])).toEqual(["40", "30"]);
-  });
-
   it("missed-purge ≤2/round:4 条 High 优先级窗口按时长降序,只保留最重的 2 条", () => {
     const w = (dur: number) => ({
       timeSeconds: 20,
@@ -2270,24 +1741,6 @@ describe("驱散/徽章类候选 per-round 上限(TEMPORARY,2026-08-06,BACKLOG #
     expect(evts.map((e) => e.facts["postCcDamageK"])).toEqual(["40", "30"]);
   });
 
-  it("wasted-trinket ≤1/round:3 次中立按压(间隔均超去重窗)按 teamMinHpPct 降序,只保留最中立的 1 条", () => {
-    const owner = { id: "p1", name: "Me-R" };
-    const hpByT = new Map([
-      [10, 82],
-      [80, 99],
-      [160, 90],
-    ]);
-    const probes = {
-      friendlyHpPctAt: (t: number) => hpByT.get(t) ?? null,
-      healerInCCAt: () => false,
-      enemyOffensiveActiveAt: () => false,
-    };
-    const evts = wastedTrinketEvents([10, 80, 160], owner, probes);
-    expect(evts).toHaveLength(1);
-    expect(evts[0]!.t).toBe(80);
-    expect(evts[0]!.facts["teamMinHpPct"]).toBe("99");
-  });
-
   it("防漂移(2026-08-11;2026-08-19 GH #14 cc-locked 与 wasted-trinket 先后退役后缩为二族):LEGACY_TOPIC_TYPES 恰好覆盖本 describe 块的两个类型,不多不少 -- 挑选层多样性指令(buildFindingsPrompt)与审计层上限(auditFindings)都从这个 export 派生名单,漂移会让二者与这些每-round-上限函数各说各话", () => {
     expect([...LEGACY_TOPIC_TYPES].sort()).toEqual(
       ["missed-cleanse", "missed-purge"].sort(),
@@ -2295,9 +1748,8 @@ describe("驱散/徽章类候选 per-round 上限(TEMPORARY,2026-08-06,BACKLOG #
     // End-to-end: the actual `.type` string each capped function emits must
     // be a member of the set -- pins the association by real output, not by
     // two hand-typed string lists that merely happen to agree today.
-    // (ccLockedEvents and wastedTrinketEvents left this family with their
-    // GH #14 retirements — the pure functions still exist but no longer feed
-    // the menu; the trinket check below pins the DEMOTION.)
+    // (cc-locked and wasted-trinket left this family with their GH #14
+    // retirements; their producers were deleted 2026-09-24.)
     const purge = missedPurgeEvents([
       {
         timeSeconds: 20,
@@ -2334,71 +1786,10 @@ describe("驱散/徽章类候选 per-round 上限(TEMPORARY,2026-08-06,BACKLOG #
       [cleanseOwner],
       false,
     );
-    const trinket = wastedTrinketEvents(
-      [10],
-      { id: "p1", name: "Me-R" },
-      {
-        friendlyHpPctAt: () => 90,
-        healerInCCAt: () => false,
-        enemyOffensiveActiveAt: () => false,
-      },
-    );
     for (const evts of [purge, cleanse]) {
       expect(evts.length).toBeGreaterThan(0);
       for (const e of evts) expect(LEGACY_TOPIC_TYPES.has(e.type)).toBe(true);
     }
-    // Demotion pin: the retired wasted-trinket's output must NOT count as
-    // legacy any more (it no longer reaches the menu, but auditFindings'
-    // cap must also not charge cached findings of it against the family).
-    expect(trinket.length).toBeGreaterThan(0);
-    for (const e of trinket) expect(LEGACY_TOPIC_TYPES.has(e.type)).toBe(false);
-  });
-});
-
-describe("trinketTeamMinHpPctAt(HP 查询时刻先 floor 到渲染网格)", () => {
-  // Review point (agy flash review): querying HP at trinketUseTimes' raw
-  // fractional seconds would contradict the whole-second-tick [STATE] view (the
-  // same bug as class A of the 2026-07-20 audit; see the toRenderSecond comment
-  // in utils/cooldowns.ts). A spy that records its arguments pins down that "the
-  // query instant is already toRenderSecond(t)*1000, not the raw t*1000".
-  it("查询时刻是 toRenderSecond(t)*1000 + startTime,不是原始 t*1000", () => {
-    const calls: number[] = [];
-    const spyLookup = (_unit: any, timestampMs: number) => {
-      calls.push(timestampMs);
-      return 95;
-    };
-    trinketTeamMinHpPctAt([{ id: "f1" }], { startTime: 1000 }, 42.4, spyLookup);
-    // toRenderSecond(42.4) = 42 → 1000 + 42*1000 = 43000; not 1000 + 42400 = 43400.
-    expect(calls).toEqual([43000]);
-  });
-
-  it("多个友方都用同一个渲染网格时刻查询", () => {
-    const calls: number[] = [];
-    const spyLookup = (_unit: any, timestampMs: number) => {
-      calls.push(timestampMs);
-      return 90;
-    };
-    trinketTeamMinHpPctAt(
-      [{ id: "f1" }, { id: "f2" }],
-      { startTime: 0 },
-      7.9,
-      spyLookup,
-    );
-    // toRenderSecond(7.9) = 7, identical for both players
-    expect(calls).toEqual([7000, 7000]);
-  });
-
-  it("任何人采不到样 → null(保守不发),仍走渲染网格时刻", () => {
-    const spyLookup = (_unit: any, timestampMs: number) =>
-      timestampMs === 5000 ? null : 100;
-    expect(
-      trinketTeamMinHpPctAt(
-        [{ id: "f1" }, { id: "f2" }],
-        { startTime: 0 },
-        5.7,
-        spyLookup,
-      ),
-    ).toBeNull();
   });
 });
 
@@ -2450,7 +1841,7 @@ describe("missedSyncWindowEvents(P1 起爆-1,2026-08-15,纯函数)", () => {
   ) => ({
     enemyMinHpPctAt: (_from: number, _to: number) => minHp,
     enemyDeathS: extra?.enemyDeathS ?? [],
-    ref: extra && "ref" in extra ? extra.ref ?? null : REF,
+    ref: extra && "ref" in extra ? (extra.ref ?? null) : REF,
   });
 
   it("① 60ab-7:19 形态:敌治疗被睡 8s + 我方锤 ready + 窗内无起爆 → 1 条,facts 含被控技能/时长/ready 清单/窗内敌方最低血", () => {
@@ -2482,36 +1873,48 @@ describe("missedSyncWindowEvents(P1 起爆-1,2026-08-15,纯函数)", () => {
 
   it("facts 带 dr 字段(50% 细分,GH #72 / B5)", () => {
     const halfCcWindow = { ...ccWindow, drLevel: "50%" as const };
-    const evts = missedSyncWindowEvents([halfCcWindow], [readyHammer], probes(42));
+    const evts = missedSyncWindowEvents(
+      [halfCcWindow],
+      [readyHammer],
+      probes(42),
+    );
     expect(evts).toHaveLength(1);
     expect(evts[0]!.facts["dr"]).toBe("50%");
   });
 
   it("门:ref=null(bracket 无格/不够样本/对比不过门)→ 整轮静音", () => {
     expect(
-      missedSyncWindowEvents([ccWindow], [readyHammer], probes(50, { ref: null })),
+      missedSyncWindowEvents(
+        [ccWindow],
+        [readyHammer],
+        probes(50, { ref: null }),
+      ),
     ).toEqual([]);
   });
 
   it("门:对比 <3pp(平/反)→ 静音(引用的数字在反驳指控本身)", () => {
     const flat = { ...REF, killEnteredPct: 9, killUnenteredPct: 8 };
     expect(
-      missedSyncWindowEvents([ccWindow], [readyHammer], probes(50, { ref: flat })),
+      missedSyncWindowEvents(
+        [ccWindow],
+        [readyHammer],
+        probes(50, { ref: flat }),
+      ),
     ).toEqual([]);
   });
 
   it("t<30s(开场铺垫窗)→ 不产出", () => {
     const opener = { ...ccWindow, fromSeconds: 12.4, toSeconds: 19.9 };
-    expect(
-      missedSyncWindowEvents([opener], [readyHammer], probes(50)),
-    ).toEqual([]);
+    expect(missedSyncWindowEvents([opener], [readyHammer], probes(50))).toEqual(
+      [],
+    );
   });
 
   it("渲染时长 <3s → 不产出(与 syncWindowScan 共享的 eligibility)", () => {
     const blip = { ...ccWindow, fromSeconds: 439.62, toSeconds: 441.9 }; // 441-439=2
-    expect(
-      missedSyncWindowEvents([blip], [readyHammer], probes(50)),
-    ).toEqual([]);
+    expect(missedSyncWindowEvents([blip], [readyHammer], probes(50))).toEqual(
+      [],
+    );
   });
 
   it("窗内有敌人死亡 → 不产出(没压 CD 也在转化的击杀不是漏同步;非血线门,B8 仍然成立)", () => {
@@ -2529,9 +1932,9 @@ describe("missedSyncWindowEvents(P1 起爆-1,2026-08-15,纯函数)", () => {
       ...readyHammer,
       casts: [{ timeSeconds: 0 }, { timeSeconds: 438.0 }], // 439.62-2=437.62 <= 438
     };
-    expect(
-      missedSyncWindowEvents([ccWindow], [leadCast], probes(50)),
-    ).toEqual([]);
+    expect(missedSyncWindowEvents([ccWindow], [leadCast], probes(50))).toEqual(
+      [],
+    );
   });
 
   it("② 红线(B8,用户裁决,无血线门):敌方全员满血(100%)→ 仍出候选,不因为血高就不报", () => {
@@ -3397,7 +2800,7 @@ describe("missed-sync-window / unsynced-burst 接线(extractCandidateFindings,20
   // fixture 两个类型的数据条件都满足,证明两个 flag 各自独立生效而非联动。
   // finally 里把开关复位回默认 true(Task 9 上线态),防止状态泄漏给上面的
   // 默认开启正向测试或其它文件的默认态测试(CANDIDATE_TYPE_FLAGS 是模块级可
-  // 变单例,和 DISPEL_FEATURE_FLAGS 一样)。
+  // 变单例,和 TIMELINE_LINE_FLAGS 一样)。
   // Both flags default to false since 2026-08-29; the independence check now
   // turns each ON alone and expects only that type to appear.
   it("unsynced-burst 默认关:bracket=3v3 时只有 missed-sync-window 出现,unsynced-burst 不出现", () => {

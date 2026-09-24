@@ -30,7 +30,7 @@ import raw from "./behaviorPriorGenerated.json";
  * re-exports this same type rather than declaring its own. */
 export type CrisisRole = "healer" | "dps";
 export const BEHAVIOR_PRIOR_N_FLOOR = 50;
-export type DmgBin = "<10%" | "10-20%" | ">=20%";
+type DmgBin = "<10%" | "10-20%" | ">=20%";
 export function dmgBinOf(dmg2s: number): DmgBin {
   return dmg2s < 0.1 ? "<10%" : dmg2s < 0.2 ? "10-20%" : ">=20%";
 }
@@ -58,7 +58,7 @@ function isValidOutcome(v: unknown): v is BehaviorPriorOutcome {
 // cells are always ownDeath10s, spec §1d — outcomeOf), so its phrase can no
 // longer say "healer". `teamDeath15s` stays healer-only (outcomeOf never
 // returns it for a dps role), so its wording is unaffected.
-export const OUTCOME_PHRASE: Record<BehaviorPriorOutcome, string> = {
+const OUTCOME_PHRASE: Record<BehaviorPriorOutcome, string> = {
   ownDeath10s: "this player died within 10 s",
   teamDeath15s: "a teammate (or the healer) died within 15 s",
 };
@@ -78,9 +78,6 @@ interface Cell {
 // entry, so the static type admits both.
 const CELLS = (raw as unknown as { cells: Record<string, Cell | undefined> })
   .cells;
-export const BEHAVIOR_PRIOR_META = (
-  raw as unknown as { meta: Record<string, unknown> }
-).meta;
 
 export interface BehaviorPriorRef {
   cellKey: string;

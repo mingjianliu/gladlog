@@ -50,7 +50,7 @@ export type ChatSendResult =
   | { status: "need-reseed" } // resume failed and this call carried no seed: the renderer builds a seed and calls again
   | { status: "busy" | "unsupported" | "not-ready" }
   | { status: "error"; message: string };
-export type ChatSeed = {
+type ChatSeed = {
   richContext: string;
   spec: string;
   ownerName?: string;

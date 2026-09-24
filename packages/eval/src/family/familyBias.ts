@@ -27,7 +27,7 @@ import {
 } from "../ab/abCompareStats.js";
 import { FACT_AUDIT_VERDICTS } from "../provenance/checkScoreProvenance.js";
 
-export interface MappingItem {
+interface MappingItem {
   blindId: string;
   arm: "control" | "treatment";
   ordinal: number;
@@ -49,7 +49,7 @@ export interface DiffInDiffCells {
   djDr: ScoreFile[];
 }
 
-export interface DimensionDiffResult {
+interface DimensionDiffResult {
   dimension: string;
   /** 该维度参与 familyBias 配对计算的 item 数(四格都有该维度有效值)。 */
   n: number;
@@ -116,7 +116,7 @@ export function diffInDiff(
   return results;
 }
 
-export interface VerdictCounts {
+interface VerdictCounts {
   /** 带 factAudit 数组的份数(缺 factAudit 的分数文件不计入)。 */
   n: number;
   verified: number;
@@ -190,7 +190,7 @@ export function extractStep3Rubric(evalBaselineMd: string): string {
   return lines.slice(startIdx, endIdx).join("\n").trim();
 }
 
-export interface FamilyStatsReport {
+interface FamilyStatsReport {
   generatedAt: string;
   /** 四格都齐全、参与 diffInDiff 配对的 prompt 数。 */
   pairs: number;

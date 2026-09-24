@@ -18,7 +18,7 @@ export function initialTailState(cp?: FileCheckpoint | null): TailState {
   };
 }
 
-export function firstLineChecksumOf(filePath: string): string | null {
+function firstLineChecksumOf(filePath: string): string | null {
   let fd: number;
   try {
     fd = openSync(filePath, "r");

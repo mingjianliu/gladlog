@@ -48,15 +48,15 @@ export interface EventRow {
 
 /** Death aura-clear folding: a consecutive run of aura-removed rows on the
  * same target spanning ≤1.5s with ≥5 rows collapses into one group row. */
-export const AURA_FLOOD_SPAN_S = 1.5;
-export const AURA_FLOOD_MIN = 5;
+const AURA_FLOOD_SPAN_S = 1.5;
+const AURA_FLOOD_MIN = 5;
 /** A death row for that target within ±1.5s of the group marks it as a
  * death-triggered aura clear. */
-export const AURA_FLOOD_DEATH_SLACK_S = 1.5;
+const AURA_FLOOD_DEATH_SLACK_S = 1.5;
 /** Periodic tick grouping: adjacent rows with the same (kind, src, dest,
  * spell) at ≤2s spacing, with ≥3 rows. */
-export const TICK_GAP_S = 2;
-export const TICK_MIN = 3;
+const TICK_GAP_S = 2;
+const TICK_MIN = 3;
 
 export interface AuraFloodRow {
   kind: "aura-flood";
@@ -90,7 +90,7 @@ export type DisplayRow = EventRow | AuraFloodRow | TickGroupRow;
 export const isGroupRow = (r: DisplayRow): r is AuraFloodRow | TickGroupRow =>
   r.kind === "aura-flood" || r.kind === "tick-group";
 
-export interface EventsFilter {
+interface EventsFilter {
   kinds: EventKind[]; // empty = all
   /** Exact short name, per column. Both set = "only A hitting B". */
   srcName: string | null;

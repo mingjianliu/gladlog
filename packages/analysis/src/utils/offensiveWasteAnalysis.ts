@@ -26,13 +26,13 @@ import { fmtTime, toRenderSecond } from "./renderGrid";
  * 铁木树皮),80% 的伤害照样打进去了却被判「浪费」。
  */
 
-export interface IOffensiveWasteCast {
+interface IOffensiveWasteCast {
   spellId: string;
   spellName: string;
   atSeconds: number;
 }
 
-export interface IOffensiveWasteEvent {
+interface IOffensiveWasteEvent {
   casterName: string;
   casterSpec: string;
   targetName: string;
@@ -44,7 +44,7 @@ export interface IOffensiveWasteEvent {
   wasteCasts: IOffensiveWasteCast[];
 }
 
-export interface IOffensiveWasteSummary {
+interface IOffensiveWasteSummary {
   events: IOffensiveWasteEvent[];
 }
 

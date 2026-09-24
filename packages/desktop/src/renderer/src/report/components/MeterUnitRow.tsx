@@ -27,7 +27,7 @@ const sideRing = (side: TeamSide): string =>
  * a separate channel from class colour (TeamDot.tsx explains why); here that
  * channel is the ring, not a dot.
  */
-export function MeterIdent({
+function MeterIdent({
   row,
   side,
   off,

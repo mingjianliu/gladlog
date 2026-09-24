@@ -22,7 +22,7 @@ export interface BugReportInput {
   comment: string;
 }
 
-export interface BugReportResult {
+interface BugReportResult {
   dir: string;
   /** true = written into the Drive sync folder and will upload automatically. */
   synced: boolean;

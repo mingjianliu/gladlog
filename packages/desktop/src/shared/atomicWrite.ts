@@ -38,7 +38,7 @@ const REAL_OPS: AtomicFsOps = {
   sleep: sleepSync,
 };
 
-export function isRetryableRenameError(err: unknown): boolean {
+function isRetryableRenameError(err: unknown): boolean {
   const code = (err as { code?: unknown } | null)?.code;
   return typeof code === "string" && RETRYABLE_RENAME_CODES.has(code);
 }

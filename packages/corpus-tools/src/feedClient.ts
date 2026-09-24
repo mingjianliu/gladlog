@@ -59,13 +59,13 @@ export function withUserAgent(init: any): any {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** Per-attempt wall-clock budget for feed queries (small JSON responses). */
-export const FEED_TIMEOUT_MS = 60_000;
+const FEED_TIMEOUT_MS = 60_000;
 /**
  * Per-attempt budget for a GCS log download including body read. A full Solo
  * Shuffle log is ~30MB; at a modest 1MB/s that is 30s, so 5 min is generous
  * for "slow" while still turning "hung" into a retry.
  */
-export const DOWNLOAD_TIMEOUT_MS = 5 * 60_000;
+const DOWNLOAD_TIMEOUT_MS = 5 * 60_000;
 /** Download attempts = retries + 1; worst case per match ≈ 3 × DOWNLOAD_TIMEOUT_MS. */
 export const DOWNLOAD_RETRIES = 2;
 
@@ -253,7 +253,7 @@ export function sessionCookieHeader(raw: string): string {
   return v.includes("=") ? v : `${WAL_SESSION_COOKIE_NAME}=${v}`;
 }
 
-export interface GraphqlErrorInfo {
+interface GraphqlErrorInfo {
   code: string;
   message: string;
   extensions: Record<string, unknown>;
@@ -536,7 +536,7 @@ export function expectedByteLength(headers: {
   return Number.isFinite(n) && n > 0 ? n : undefined;
 }
 
-export interface RawDownload {
+interface RawDownload {
   /** Undecompressed response body bytes. Objects on GCS are stored gzipped, so this is exactly those compressed bytes. */
   bytes: Buffer;
   /** The response's content-encoding, usually "gzip"; an empty string means uncompressed. */

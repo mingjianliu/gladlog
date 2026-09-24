@@ -55,7 +55,7 @@ export const DEFAULT_MATCH_DIR =
  * storedAt, …); only the ones this module's callers need are typed —
  * `kind`/`durationS` are absent on some older `match` rows in the wild, so
  * both stay optional and callers must not assume presence. */
-export interface StoredMetaRow {
+interface StoredMetaRow {
   id: string;
   kind?: "match" | "shuffle";
   durationS?: number;

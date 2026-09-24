@@ -18,7 +18,6 @@
  * (docs/coaching-grounding-audit.md)指出的「九张手工表只有一张有漏项检测」
  * 的直接补救。
  */
-import { MITIGATION_TABLE } from "./mitigationData";
 
 export type MitigationVerdict =
   /** 打进去就是白打 —— 与击杀是否成立无关,无条件产出「浪费」。 */
@@ -30,7 +29,7 @@ export type MitigationVerdict =
   /** 语料里没出现过、裁定人未遇到过 —— 记成有据可查的空缺,不猜,不出面。 */
   | "unresolved";
 
-export interface IMitigationVerdict {
+interface IMitigationVerdict {
   /** 官方中文名(取自 spellNamesZhGenerated),便于人核对。 */
   zh: string;
   /** 签字当时 MITIGATION_TABLE 里的官方数值,仅供对照 —— 判据不从它推导。 */
@@ -369,15 +368,8 @@ export const MITIGATION_VERDICTS: Record<string, IMitigationVerdict> = {
   },
 };
 
-/** 键集一致性:每个官方减伤条目都必须有裁定(测试里断言,这里只导出便于复用)。 */
-export const MITIGATION_VERDICT_IDS: ReadonlySet<string> = new Set(
-  Object.keys(MITIGATION_VERDICTS),
-);
-
 /** 未裁定 / 从不出面的条目不参与任何「浪费」判断。 */
 export function mitigationVerdictOf(spellId: string): MitigationVerdict | null {
   return MITIGATION_VERDICTS[spellId]?.verdict ?? null;
 }
 
-/** 防止 MITIGATION_TABLE 被 tree-shake 掉导致一致性测试假绿。 */
-export const MITIGATION_TABLE_KEY_COUNT = Object.keys(MITIGATION_TABLE).length;

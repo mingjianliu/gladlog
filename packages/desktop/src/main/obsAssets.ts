@@ -45,7 +45,7 @@ export interface ObsAssets {
  * M4). Precheck at a round 1GB before starting any I/O. */
 const MIN_FREE_BYTES = 1_073_741_824;
 
-export interface CreateObsAssetsDeps {
+interface CreateObsAssetsDeps {
   userDataDir: string;
   fetchImpl?: typeof fetch;
   /** injected for tests; default = spawnSync("tar", ["-xf", zip, "-C", dest])

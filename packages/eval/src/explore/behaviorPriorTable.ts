@@ -60,7 +60,7 @@ export interface BehaviorPriorRow {
   pct: number | null;
   point: DecisionPoint;
 }
-export interface BehaviorPriorCell {
+interface BehaviorPriorCell {
   /** ALL ranked players (pct != null), feasible && dangerous && !responded */
   nNoResp: number;
   /** death rate under `outcome`'s predicate (spec §1c) */
@@ -73,7 +73,7 @@ export interface BehaviorPriorCell {
   /** which death predicate this cell's bracket uses (spec §1c) */
   outcome: BehaviorPriorOutcome;
 }
-export interface BehaviorPriorTable {
+interface BehaviorPriorTable {
   meta: {
     generatedAt: string;
     corpus: string;

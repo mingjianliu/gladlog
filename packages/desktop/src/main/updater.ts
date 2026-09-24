@@ -36,7 +36,7 @@ export interface UpdaterEnv {
   testFeed: string | undefined;
 }
 
-export type GateResult =
+type GateResult =
   | { ok: true; feed: { owner: string; repo: string } | null }
   | { ok: false; reason: "platform" | "dev" | "portable" };
 
@@ -136,7 +136,7 @@ export interface UpdaterBackend {
   quitAndInstall(isSilent?: boolean, isForceRunAfter?: boolean): void;
 }
 
-export interface UpdaterDeps {
+interface UpdaterDeps {
   autoUpdater: UpdaterBackend;
   env: UpdaterEnv;
   now: () => number;

@@ -379,7 +379,7 @@ export function reactToManagedToggle(
 
 // -- Managed-OBS prefs restart (2026-09-04) ---------------------------------
 
-export interface ManagedRestartCoordinatorDeps {
+interface ManagedRestartCoordinatorDeps {
   /** Live recorder status: `recorder.getStatus().recording`. */
   isRecording: () => boolean;
   /** `ensureManagedTeardown` / `ensureManagedAssembly` from index.ts — the
@@ -390,7 +390,7 @@ export interface ManagedRestartCoordinatorDeps {
   assemble: () => Promise<void>;
 }
 
-export interface ManagedRestartCoordinator {
+interface ManagedRestartCoordinator {
   /** settings:save hook (called BEFORE reactToManagedToggle for the same
    * patch, so a disable cancels a pending restart before the teardown's
    * status push could trigger it). Restarts the managed instance when any

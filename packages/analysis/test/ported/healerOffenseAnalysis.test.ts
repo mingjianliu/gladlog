@@ -13,7 +13,6 @@ import {
   buildHealerOffenseSummary,
   computeSlackSegments,
   formatHealerOffenseForContext,
-  HEALER_OFFENSE_FLAGS,
 } from "../../src/utils/healerOffenseAnalysis";
 import {
   makeAdvancedAction,
@@ -1087,54 +1086,6 @@ describe("F193 V2 — contested trade facts", () => {
     );
 
     expect(summary.contestedTradeFacts.length).toBe(0);
-  });
-
-  it("4. emits no contested facts or [CONTESTED] formatted line when flag is disabled", () => {
-    const partialHpActions = [];
-    for (let s = 0; s <= 120; s += 5) {
-      partialHpActions.push(
-        makeAdvancedAction(T0 + s * 1000, 0, 0, 500_000, 375_000),
-      );
-    }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const mate = makeFriend("mate", {
-      advancedActions: partialHpActions as any[],
-    });
-    const owner = makeFriend("owner", {
-      spellCastEvents: [
-        makeSpellCastEvent(
-          "8122",
-          T0 + 100_000,
-          "enemy-h",
-          "Rsham",
-          "owner",
-          "Owner",
-        ),
-      ],
-    });
-
-    const savedFlags = { ...HEALER_OFFENSE_FLAGS };
-    HEALER_OFFENSE_FLAGS.V2_CONTESTED_TRADES = false;
-    try {
-      const summary = buildHealerOffenseSummary(
-        combat,
-        owner,
-        [owner, mate],
-        [enemyHealer],
-        [],
-        emptyEnemyTimeline(),
-        [],
-        [],
-        [],
-      );
-
-      expect(summary.contestedTradeFacts.length).toBe(0);
-      const lines = formatHealerOffenseForContext(summary);
-      const text = lines.join("\n");
-      expect(text).not.toContain("[CONTESTED]");
-    } finally {
-      Object.assign(HEALER_OFFENSE_FLAGS, savedFlags);
-    }
   });
 
   it("5. does not eat slack when all friends are at 100% HP (contested segments empty)", () => {

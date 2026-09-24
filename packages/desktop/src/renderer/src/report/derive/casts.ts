@@ -12,18 +12,6 @@ export interface CastRow {
    * the table has no entry → falls back to the first letter. */
   icon?: string;
 }
-export interface AuraRow {
-  t: number;
-  spellId: number;
-  spellName: string;
-  auraType: "BUFF" | "DEBUFF";
-  applied: boolean;
-}
-
-/** One unit event: a cast, or a significant aura (an aura inside the curated
- * PvP categories). */
-export type UnitEvent =
-  ({ kind: "cast" } & CastRow) | ({ kind: "aura"; category: string } & AuraRow);
 
 /** Whether this aura belongs to the curated PvP category set (CC / root /
  * immunity / defensive CD / offensive CD / disarm / interrupt …). */
@@ -146,38 +134,4 @@ export function filterGcdNoise(rows: CastRow[]): CastRow[] {
 /** The cast stream the GCD lane consumes = all casts minus GCD noise. */
 export function deriveGcdCasts(m: ReportSource, unitId: string): CastRow[] {
   return filterGcdNoise(deriveCasts(m, unitId));
-}
-
-export function deriveAuraEvents(m: ReportSource, unitId: string): AuraRow[] {
-  const u = m.units[unitId];
-  if (!u) return [];
-  return u.auraEvents.map((e) => ({
-      t: e.timestamp,
-      spellId: e.spellId,
-      spellName: e.spellName,
-      auraType: e.auraType,
-      applied: !e.eventName.includes("REMOVED"),
-    }));
-}
-
-/**
- * Merge casts and significant auras into one time-ascending event stream.
- * Only auras inside the curated PvP categories are kept (noisy procs / minor
- * buffs are filtered out).
- */
-export function deriveUnitTimeline(
-  m: ReportSource,
-  unitId: string,
-): UnitEvent[] {
-  const casts: UnitEvent[] = deriveCasts(m, unitId).map((c) => ({
-    kind: "cast",
-    ...c,
-  }));
-  const auras: UnitEvent[] = [];
-  for (const a of deriveAuraEvents(m, unitId)) {
-    const category = auraCategory(a.spellId);
-    if (!category) continue;
-    auras.push({ kind: "aura", category, ...a });
-  }
-  return [...casts, ...auras].sort((a, b) => a.t - b.t);
 }

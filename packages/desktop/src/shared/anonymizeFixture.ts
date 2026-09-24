@@ -79,14 +79,14 @@ function stripRawLines(v: unknown): unknown {
   return v;
 }
 
-export interface AnonymizeResult {
+interface AnonymizeResult {
   /** Anonymized JSON text (indent 1, matching the existing fixtures) */
   text: string;
   /** Number of players that were replaced */
   players: number;
 }
 
-export interface AnonymizeOptions {
+interface AnonymizeOptions {
   /** Keep real names (only for gitignored local stress-test samples: CN /
    *  special-character original names are themselves the rendering edge-case
    *  under test). rawLines are stripped all the same. */

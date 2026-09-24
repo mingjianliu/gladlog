@@ -69,7 +69,7 @@ function entryBuckets(deps: RichDeps): Map<string, Entry[]> | null {
   return m;
 }
 
-export interface MatchSpellIndex {
+interface MatchSpellIndex {
   ids: ReadonlySet<string>;
   logNames: ReadonlyMap<string, string>;
 }

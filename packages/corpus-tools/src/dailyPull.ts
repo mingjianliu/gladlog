@@ -8,7 +8,7 @@
 import { type QuotaState, remainingGrantsToday } from "./pvpLogFetch";
 
 /** The upstream's flat daily quota (their accessLimits.ts, 2026-09-13). */
-export const DAILY_QUOTA = 15;
+const DAILY_QUOTA = 15;
 /** Solo Shuffle objects to take first each day; 3v3 gets the remainder. */
 export const DAILY_SHUFFLE_SHARE = 10;
 /** Highest filter tier the server indexes (1400/1800/2100/2400; 2400 is empty this season). */

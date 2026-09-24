@@ -8,7 +8,7 @@ import { ChipIcon } from "./SpellInline";
  * FindingsList/StructuredAnalysisPanel); #16 window analysis takes its own path
  * and does not reuse the Finding type, so this is exported separately for the
  * renderer to assemble. */
-export type Chips = Array<{
+type Chips = Array<{
   t: number;
   label: string;
   unitNames: string[];

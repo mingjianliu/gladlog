@@ -10,7 +10,7 @@ import type { ReportSource } from "./types";
 
 /** Active intervals of an enemy's offensive major cooldowns (absolute ms) —
  *  used by the replay's red glow pulse. */
-export interface BurstAuraSpan {
+interface BurstAuraSpan {
   fromMs: number;
   toMs: number;
   spellName: string;
@@ -54,7 +54,7 @@ export function deriveBurstAuras(
 }
 
 /** One loss-of-control interval on a unit (absolute ms). */
-export interface CcSpan {
+interface CcSpan {
   fromMs: number;
   toMs: number;
   spellId: string;

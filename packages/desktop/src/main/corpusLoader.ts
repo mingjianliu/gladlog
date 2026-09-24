@@ -9,13 +9,13 @@ function isValidCorpusShape(x: unknown): x is ReferenceCorpus {
   return Array.isArray(c.cells) && typeof c.wowPatchVersion === "string";
 }
 
-export interface CorpusLoadedInfo {
+interface CorpusLoadedInfo {
   path: string;
   wowPatchVersion: string;
   builtAt: string;
 }
 
-export interface CorpusSkippedInfo {
+interface CorpusSkippedInfo {
   path: string;
   reason: string;
 }

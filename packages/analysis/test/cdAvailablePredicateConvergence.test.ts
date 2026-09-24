@@ -4,30 +4,24 @@
  * several independent implementations — matchTimelineSections' [DEATH] Unused
  * (previously hand-computed availableWindows hits), timelineHelpers'
  * [DEFENSIVE AVAILABLE] (previously a hand-computed readyAt),
- * candidateFindings' death-unused-defensive / external-unused (already
- * consuming cdAvailableAt), (criticalMoments' three spots — module deleted 2026-09-05, GH #51)
+ * candidateFindings' external-unused (already consuming cdAvailableAt),
+ * (criticalMoments' three spots — module deleted 2026-09-05, GH #51)
  * buildKillMomentFields (mechanical availability / spentCDs /
- * allDefensivesSpent, each previously hand-computing readyAt), and the
- * spentAtEnd in matchNarrative's buildMatchFlow (previously a hand-computed
- * readyAt). All of them now import and call cdAvailableAt directly — this test
- * is the anti-drift sentinel: given the same synthetic cooldown ledger and the
- * same instant, every consumer must reach the same boolean conclusion as
- * cdAvailableAt itself. If any of them is ever reverted to a local formula,
- * this fails the moment that formula diverges from cdAvailableAt's semantics.
+ * allDefensivesSpent, each previously hand-computing readyAt). All of them now
+ * import and call cdAvailableAt directly — this test is the anti-drift
+ * sentinel: given the same synthetic cooldown ledger and the same instant,
+ * every consumer must reach the same boolean conclusion as cdAvailableAt
+ * itself. If any of them is ever reverted to a local formula, this fails the
+ * moment that formula diverges from cdAvailableAt's semantics.
  *
- * Explicitly out of scope: matchNarrative's `ownerDefsAvailableInWindow`
- * (inside buildMatchFlow, the Post-Trade Window section) is a two-instant check
- * — "casts before the window start firstBurst.toSeconds vs whether it is ready
- * by the window end midEnd" — which is not equivalent to cdAvailableAt's
- * single-instant semantics, so a mechanical substitution would change
- * behaviour. It is not part of this convergence and is honestly recorded in the
- * BACKLOG as a separate item pending a generalized predicate.
+ * Two former consumers were deleted on 2026-09-24 as dead code and dropped out
+ * of this test: the death-unused-defensive candidate producer (retired GH #58)
+ * and matchNarrative's @deprecated buildMatchFlow (whose spentAtEnd and
+ * two-instant `ownerDefsAvailableInWindow` were only ever reached from here).
  */
 import { CombatUnitReaction, CombatUnitSpec } from "@gladlog/parser-compat";
 import { describe, expect, it } from "vitest";
 
-import { deathUnusedDefensiveEvents } from "../src/analysis/candidateFindings";
-import { buildMatchFlow } from "../src/context/matchNarrative";
 import { emitFriendlyDeathEntries } from "../src/context/matchTimelineSections";
 import { buildKillSequenceBlock } from "../src/context/timelineHelpers";
 import { cdAvailableAt, IMajorCooldownInfo } from "../src/utils/cooldowns";
@@ -111,39 +105,6 @@ function killSeqFlagsAvailable(cd: IMajorCooldownInfo): boolean {
   );
 }
 
-/** Whether the death-unused-defensive candidate lists Ironbark under walls. */
-function candidateFlagsUnused(cd: IMajorCooldownInfo): boolean {
-  const events = deathUnusedDefensiveEvents(
-    {
-      deathT: DEATH_T,
-      victim: { id: "Player1", name: "Player1" },
-      victimCC: { ccInstances: [], trinketUseTimes: [] },
-      victimCDs: [cd],
-    },
-    { isOwner: true },
-  );
-  if (events.length === 0) return false;
-  return String(events[0].facts.walls).includes(SPELL_NAME);
-}
-
-/** Whether the "spentAtEnd" of matchNarrative's buildMatchFlow lists Ironbark
- * under "on cooldown". */
-function matchFlowFlagsSpent(cd: IMajorCooldownInfo): boolean {
-  const lines = buildMatchFlow(
-    {
-      alignedBurstWindows: [
-        { fromSeconds: 0, toSeconds: 1, activeCDs: [], dangerLabel: "Low" },
-      ],
-      players: [],
-    } as any,
-    [cd],
-    [],
-    [{ spec: "Restoration Druid", atSeconds: DEATH_T }],
-    DEATH_T + 5,
-  );
-  return lines.some((l) => l.includes("on cooldown") && l.includes(SPELL_NAME));
-}
-
 describe("cdAvailableAt 消费点防漂移一致性(BACKLOG #18 Minor #3 + 追加轮)", () => {
   const cases: Array<{ label: string; cd: IMajorCooldownInfo }> = [
     { label: "从未使用 → 全程可用", cd: makeCd([], 60) },
@@ -176,18 +137,14 @@ describe("cdAvailableAt 消费点防漂移一致性(BACKLOG #18 Minor #3 + 追�
     const expected = cdAvailableAt(cd, DEATH_T);
     expect(deathSectionFlagsUnused(cd)).toBe(expected);
     expect(killSeqFlagsAvailable(cd)).toBe(expected);
-    expect(candidateFlagsUnused(cd)).toBe(expected);
-
-
-    expect(matchFlowFlagsSpent(cd)).toBe(!expected);
   });
 });
 
 /**
  * 自施放空操作的外减(牺牲祝福:30% 伤害转给施法者本人)绝不能出现在
- * 「你死时还没交的减伤」清单里 —— 对自己放它救不了自己。两条消费路径
- * (prompt 死亡行、death-unused-defensive finding)共用
- * SELF_CAST_NOOP_EXTERNAL_IDS 这一个 set;此测试同时钉住两边,漏改一边即红。
+ * 「你死时还没交的减伤」清单里 —— 对自己放它救不了自己。消费路径
+ * (prompt 死亡行;原先的 death-unused-defensive finding 已于 2026-09-24
+ * 删除)读 SELF_CAST_NOOP_EXTERNAL_IDS 这一个 set;此测试钉住它。
  * 基线:本机 80 场里带 Unused 清单的死亡行 9 条,其中 4 条含牺牲祝福。
  */
 describe("死亡未用清单:自施放空操作的外减不算本人的减伤", () => {
@@ -229,21 +186,5 @@ describe("死亡未用清单:自施放空操作的外减不算本人的减伤", 
     expect(lines[0]).not.toContain("Blessing of Sacrifice");
     // 阴性对照:同样全程可用的 Ironbark(非转移型)仍要被列出
     expect(deathSectionFlagsUnused(makeCd([], 60))).toBe(true);
-  });
-
-  it("death-unused-defensive finding 不列牺牲祝福", () => {
-    const events = deathUnusedDefensiveEvents(
-      {
-        deathT: DEATH_T,
-        victim: { id: "Player1", name: "Player1" },
-        victimCC: { ccInstances: [], trinketUseTimes: [] },
-        victimCDs: [bos()],
-      } as any,
-      { isOwner: true },
-    );
-    // 只有牺牲祝福一个候选 → 过滤后无墙可列,整条 finding 不出面
-    expect(events).toHaveLength(0);
-    // 阴性对照
-    expect(candidateFlagsUnused(makeCd([], 60))).toBe(true);
   });
 });

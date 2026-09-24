@@ -25,7 +25,7 @@ export interface LedgerPlayer {
   kicks: IKickAuditEntry[];
 }
 
-export interface BurstLedgerResult {
+interface BurstLedgerResult {
   players: LedgerPlayer[];
   /** Kill-window target-selection verdicts (team level, independent of which
    * friendly player — one snapshot of all enemies per window batch, never

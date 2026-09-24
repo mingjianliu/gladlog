@@ -35,7 +35,7 @@ const KEY_PATH = join(homedir(), ".config", "gladlog-dev", "deepseek.key");
  * catch-and-log it, since a caught error's `.message` is exactly the kind of
  * thing that ends up in a report.
  */
-export function readDeepseekKey(): string {
+function readDeepseekKey(): string {
   let raw: string;
   try {
     raw = readFileSync(KEY_PATH, "utf-8");

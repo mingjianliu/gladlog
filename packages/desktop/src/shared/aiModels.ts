@@ -23,7 +23,7 @@ export const AI_BACKENDS: AiBackend[] = [
   "deepseek",
 ];
 
-export interface AiModelOption {
+interface AiModelOption {
   /** The actual value handed to the backend: the Anthropic API `model`, or the
    * CLI's --model argument. */
   id: string;

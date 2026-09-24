@@ -19,22 +19,6 @@ export const CLASS_COLORS: Record<number, string> = {
   13: "#33937F",
 };
 
-export const CLASS_NAMES: Record<number, string> = {
-  1: "Warrior",
-  2: "Paladin",
-  3: "Hunter",
-  4: "Rogue",
-  5: "Priest",
-  6: "Death Knight",
-  7: "Shaman",
-  8: "Mage",
-  9: "Warlock",
-  10: "Monk",
-  11: "Druid",
-  12: "Demon Hunter",
-  13: "Evoker",
-};
-
 export const SPEC_NAMES: Record<number, string> = {
   62: "Arcane Mage",
   63: "Fire Mage",
@@ -84,7 +68,7 @@ export function classColor(classId: number): string {
 
 /** Two-letter class glyphs (for replay dots / legends); classId is Blizzard's
  * class ID. */
-export const CLASS_GLYPH: Record<number, string> = {
+const CLASS_GLYPH: Record<number, string> = {
   1: "WA",
   2: "PA",
   3: "HU",
@@ -102,10 +86,6 @@ export const CLASS_GLYPH: Record<number, string> = {
 
 export function classGlyph(classId: number): string {
   return CLASS_GLYPH[classId] || "??";
-}
-
-export function className(classId: number): string {
-  return CLASS_NAMES[classId] || "Unknown";
 }
 
 export function specName(specId: number): string {

@@ -10,9 +10,9 @@ import type { CastFailedEvent } from "../../utils/rawStreams";
 /**
  * Intent guard (BACKLOG #26 Task 2, 意图守护 — "pressed but rejected ≠ never
  * pressed"): formats the `CastFailedEvent`s `castFailedInWindow` returns into
- * the `attempted` fact both `cdHoardedEvents` and `deathUnusedDefensiveEvents`
- * attach when the player actually pressed the button and the game rejected
- * the cast (stun/silence/oom/GCD/etc). Aggregated by the localized `reason`
+ * the `attempted` fact `cdHoardedEvents` attaches (as did the
+ * death-unused-defensive producer until its emitter was deleted 2026-09-24)
+ * when the player actually pressed the button and the game rejected the cast (stun/silence/oom/GCD/etc). Aggregated by the localized `reason`
  * string kept verbatim (rawStreams.ts's own rule — never translated or
  * normalized), most-frequent reason first; ties keep first-seen order (`Map`
  * preserves insertion order and `Array.prototype.sort` is stable, so no

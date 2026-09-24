@@ -23,7 +23,7 @@ export interface PerMatchRecord {
   durationS?: number;
   firstEnemyKillSpec?: string;
 }
-export interface MetricDist {
+interface MetricDist {
   p10: number;
   p50: number;
   p90: number;
@@ -120,7 +120,7 @@ function distFor(records: PerMatchRecord[], metric: string): MetricDist {
  * sequence is counted once per record (within-record repetition is already the
  * suffix's job). Records without rotations (old pipelines, hand fixtures) are
  * excluded from the denominator. */
-export function aggregateRotations(
+function aggregateRotations(
   records: PerMatchRecord[],
 ): RotationSummary | undefined {
   const withRot = records.filter((r) => r.rotations);

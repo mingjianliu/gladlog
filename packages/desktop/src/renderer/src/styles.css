@@ -373,11 +373,6 @@ pre {
   font-weight: 600;
   font-size: 13px;
 }
-.rpt-player-sub {
-  color: var(--mute);
-  font-size: 11px;
-  font-family: var(--font-data);
-}
 .rpt-center {
   text-align: center;
   align-self: center;
@@ -671,87 +666,8 @@ pre {
   border-radius: 8px;
   padding: 10px 12px;
 }
-.rpt-unitpanel h3 {
-  margin: 2px 0 6px;
-  font-size: 14px;
-}
-.rpt-unitpanel h4 {
-  margin: 12px 0 4px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  color: var(--accent);
-}
-.rpt-scroll {
-  max-height: 230px;
-  overflow-y: auto;
-}
-/* 合并事件流一屏更长 */
-.rpt-scroll-tall {
-  max-height: 420px;
-}
-.rpt-scroll table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 12px;
-}
-.rpt-scroll td {
-  padding: 2px 6px;
-  border-bottom: 1px solid var(--hairline-soft);
-}
-.rpt-t {
-  color: var(--mute);
-  font-family: var(--font-data);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
 .rpt-dim {
   color: var(--ink-2);
-}
-
-/* ── 单位面板:玩家筛选 + 合并事件流(施法/重要光环)── */
-.rpt-unit-filter {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-.rpt-unit-filter span {
-  font-size: 11px;
-  letter-spacing: 0.1em;
-  color: var(--accent);
-}
-.rpt-unit-filter select {
-  flex: 1;
-  min-width: 0;
-  background: var(--surface-2);
-  color: var(--ink);
-  border: 1px solid var(--hairline);
-  border-radius: 4px;
-  padding: 3px 6px;
-  font-family: var(--font-ui);
-  font-size: 12px;
-}
-/* aura 行左侧细色条,与施法行区分 */
-.rpt-ev-aura td:first-child {
-  box-shadow: inset 2px 0 0 var(--accent-line);
-}
-.rpt-aura-on {
-  color: var(--win);
-  font-weight: 600;
-}
-.rpt-aura-off {
-  color: var(--mute);
-  font-weight: 600;
-}
-.rpt-cat {
-  font-size: 10px;
-  letter-spacing: 0.04em;
-  color: var(--accent-line);
-  border: 1px solid var(--hairline);
-  border-radius: 3px;
-  padding: 0 5px;
-  white-space: nowrap;
 }
 
 /* ── 模式/回合 tab:激活 = 鎏金底线 ── */
@@ -2194,22 +2110,6 @@ pre {
   color: var(--ink-2);
 }
 
-.rpt-build {
-  color: var(--ink-2);
-  font-size: 12px;
-  margin: 0 0 4px;
-}
-.rpt-build-raw summary {
-  color: var(--mute);
-  font-size: 11px;
-  cursor: pointer;
-}
-.rpt-build-raw pre {
-  max-height: 160px;
-  overflow-y: auto;
-  font-size: 10px;
-}
-
 /* ── AI 分析面板 ── */
 .rpt-ai-panel {
   display: flex;
@@ -2454,24 +2354,11 @@ pre {
   bottom: 0;
   pointer-events: auto;
 }
-.rpt-replay-band-burst,
-.rpt-strip-band-burst {
+.rpt-replay-band-burst {
   background: color-mix(in srgb, var(--gold) 32%, transparent);
 }
-.rpt-replay-band-vulnerable,
-.rpt-strip-band-vulnerable {
+.rpt-replay-band-vulnerable {
   background: color-mix(in srgb, var(--loss) 22%, transparent);
-}
-.rpt-strip-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.rpt-strip-jump {
-  font-size: 11px;
-  padding: 2px 8px;
-  color: var(--accent);
-  white-space: nowrap;
 }
 
 /* ── 死亡回顾抽屉卡(backlog #6)── */

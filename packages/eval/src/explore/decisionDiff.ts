@@ -29,7 +29,7 @@ export interface TraceLine {
   candidateIds: string[];
 }
 
-export type DiffClass =
+type DiffClass =
   | "unchanged"
   | "corrected-fact"
   | "removed"
@@ -38,7 +38,7 @@ export type DiffClass =
   | "evaluation-error"
   | "unmatched";
 
-export interface DiffRow {
+interface DiffRow {
   opportunityId: string;
   type: string;
   spec: string;
@@ -152,7 +152,7 @@ export function diffTraces(a: TraceLine[], b: TraceLine[]): DiffRow[] {
   return rows;
 }
 
-export interface DiffSummaryCell {
+interface DiffSummaryCell {
   /** opportunities eligible on at least one side (the denominator) */
   eligible: number;
   counts: Record<DiffClass, number>;

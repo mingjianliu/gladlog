@@ -8,7 +8,7 @@ import {
 
 import type { MatchStore, StoredMatchMeta } from "./matchStore";
 
-export interface ImportProgress {
+interface ImportProgress {
   file: string;
   i: number; // 1-based index of the current file
   n: number;
@@ -16,7 +16,7 @@ export interface ImportProgress {
   dup: number; // running total skipped as duplicates
 }
 
-export interface ImportSummary {
+interface ImportSummary {
   files: number;
   stored: number;
   dup: number;

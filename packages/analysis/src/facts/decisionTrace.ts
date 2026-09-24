@@ -41,7 +41,7 @@ export interface DecisionRecord {
   candidateIds: string[];
 }
 
-export type DecisionSink = (record: DecisionRecord) => void;
+type DecisionSink = (record: DecisionRecord) => void;
 
 let sink: DecisionSink | null = null;
 

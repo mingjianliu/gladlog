@@ -61,7 +61,7 @@ const relTime = (t: number, start: number): string => {
   return fmtTime(s);
 };
 
-export interface SeekRequest {
+interface SeekRequest {
   tMs: number;
   unitNames: string[];
   nonce: number;

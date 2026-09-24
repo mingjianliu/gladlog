@@ -1,6 +1,6 @@
 import { splitTopLevel } from "./splitTopLevel";
 
-export interface GladCombatantInfoRaw {
+interface GladCombatantInfoRaw {
   playerGuid: string;
   teamId: number;
   specId: number;

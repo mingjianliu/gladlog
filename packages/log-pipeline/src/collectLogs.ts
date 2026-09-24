@@ -10,7 +10,7 @@ import { parseSegmentKey, SegmentRef } from "./protocol/segments";
 import { createAdapter } from "./storage/createAdapter";
 import { StorageAdapter } from "./storage/StorageAdapter";
 
-export interface CollectStats {
+interface CollectStats {
   segmentsFetched: number;
   bytesAppended: number;
   filesUpdated: string[];
@@ -32,7 +32,7 @@ export function outputNameFor(ref: SegmentRef): string {
  * remind every DEFERRAL_REMIND_EVERY polls with the stuck duration, forget
  * the entry the moment it stops recurring so a later stall warns afresh.
  */
-export interface DeferralWarnState {
+interface DeferralWarnState {
   seen: Map<string, { since: number; polls: number }>;
 }
 export function createDeferralWarnState(): DeferralWarnState {

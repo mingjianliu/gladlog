@@ -18,7 +18,7 @@ import {
 import { GladLogParser, type GladMatch } from "@gladlog/parser";
 import { CombatUnitReaction, toLegacyMatch } from "@gladlog/parser-compat";
 
-export interface ParsedCombat {
+interface ParsedCombat {
   /** Raw GladMatch id — buildCorpus.ts uses the same id (incl. for shuffle
    *  rounds, which the parser hands over as GladMatch-shaped) as
    *  IndexEntry.matchId, so this is the join key back to a built corpus. */

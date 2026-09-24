@@ -58,7 +58,7 @@ import {
 import { API_MAX_TOKENS } from "./aiBudgets";
 import { recordAiDebug } from "./aiDebugLog";
 
-export type AnalysisInput = {
+type AnalysisInput = {
   matchId: string;
   candidates: CandidateEvent[];
   richContext: string;
@@ -153,14 +153,14 @@ function readSlottedDoc(
   }
 }
 
-export type DeepenInput = {
+type DeepenInput = {
   matchId: string;
   findings: Finding[];
   packs: DeepDivePack[];
   spec: string;
   ownerName?: string;
 };
-export type WindowAnalyzeInput = {
+type WindowAnalyzeInput = {
   matchId: string;
   fromS: number;
   toS: number;
@@ -186,12 +186,12 @@ export type WindowAnalyzeInput = {
  * fresh entry, but the type stays nullable rather than required so the
  * renderer's "null → don't render the heading row" branch has a real case to
  * handle instead of an unreachable one. */
-export type WindowAnalyzeEntry = {
+type WindowAnalyzeEntry = {
   title: string | null;
   text: string;
   chips: DeepDiveResult["chips"];
 };
-export type WindowAnalyzeResult =
+type WindowAnalyzeResult =
   | {
       status: "ok";
       /** Up to 4 entries (auditDeepDives' window-mode cap), audited and ordered

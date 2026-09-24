@@ -11,19 +11,19 @@ import { resolveEvalHome } from "../../../eval/src/evalHome";
 
 const NAME_RE = /^[A-Za-z0-9._-]+$/;
 
-export interface ReviewIo {
+interface ReviewIo {
   readFile(p: string): string | null;
   writeFileAtomic(p: string, data: string): void;
   listDir(p: string): string[];
 }
 
-export interface ReviewRequest {
+interface ReviewRequest {
   method: string;
   url: string;
   body: string;
 }
 
-export interface ReviewResponse {
+interface ReviewResponse {
   status: number;
   body: string;
 }

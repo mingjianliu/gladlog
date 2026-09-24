@@ -26,7 +26,7 @@ interface MappingItem {
   matchId: string;
 }
 
-export interface HaloDimStats {
+interface HaloDimStats {
   dimension: string;
   n: number;
   alignedMean: number;
@@ -40,7 +40,7 @@ export interface HaloDimStats {
   verdict: "contaminated" | "reverse" | "inconclusive" | "expected-change";
 }
 
-export interface HaloReport {
+interface HaloReport {
   pairs: number;
   missingScores: number;
   stats: HaloDimStats[];

@@ -304,7 +304,9 @@ describe("burst-into-mitigation(OFFENSIVE-002,2026-08-11 信号扩容批 2)", ()
 
   it("目标自己开的黑曜鳞片(30%)照旧产出,mitPct 是施法者自己的值", () => {
     const { combat } = buildMitigationCombat({ mitSpellId: "363916" });
-    for (const a of (combat.units.e1 as { auraEvents: Array<{ srcUnitName: string }> }).auraEvents)
+    for (const a of (
+      combat.units.e1 as { auraEvents: Array<{ srcUnitName: string }> }
+    ).auraEvents)
       a.srcUnitName = "Tank";
     const events = extractCandidateFindings(combat, "p1");
     const found = events.find((e) => e.type === "burst-into-mitigation");
@@ -491,15 +493,15 @@ describe("buildFindingsPrompt legend 动态化(D2)", () => {
   });
 
   it("含 DPS 事件时对应 legend 出现(且只出现在场的类型)", () => {
-    const juke: CandidateEvent = {
-      id: "juked-kick:p1:40",
-      type: "juked-kick",
+    const mit: CandidateEvent = {
+      id: "burst-into-mitigation:p1:40",
+      type: "burst-into-mitigation",
       t: 40,
       unitNames: ["Ret"],
-      facts: { t: "40", kick: "Wind Shear", fake: "Frostbolt" },
+      facts: { t: "40", spell: "Avenging Wrath", target: "Mage" },
     };
-    const p = buildFindingsPrompt([death, juke], "ctx", "Retribution Paladin");
-    expect(p).toContain(`"juked-kick"`);
-    expect(p).not.toContain(`"burst-into-immunity"`);
+    const p = buildFindingsPrompt([death, mit], "ctx", "Retribution Paladin");
+    expect(p).toContain(`"burst-into-mitigation"`);
+    expect(p).not.toContain(`"attempt-into-trinket"`);
   });
 });

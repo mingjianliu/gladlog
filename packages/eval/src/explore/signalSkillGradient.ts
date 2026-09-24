@@ -191,7 +191,7 @@ export {
  * so a per-unit rate is a LOWER bound on intensity; it is comparable across
  * buckets (same cap everywhere) but must not be read as an absolute share.
  */
-export const PER_UNIT_TYPES: ReadonlySet<string> = new Set(["cd-waste"]);
+const PER_UNIT_TYPES: ReadonlySet<string> = new Set(["cd-waste"]);
 
 export interface RoundRecord {
   matchId: string;
@@ -212,7 +212,7 @@ export interface RoundRecord {
   exposure: RoundExposure;
 }
 
-export interface GradientRow {
+interface GradientRow {
   type: string;
   denominator: string;
   /** bucket → { triggered, exposed, rate } */
@@ -345,7 +345,7 @@ export function formatStratifiedReport(
   return parts.join("\n");
 }
 
-export function formatGradientReport(
+function formatGradientReport(
   rows: GradientRow[],
   meta: string,
 ): string {

@@ -128,7 +128,8 @@ The weakest pillar; make the UI as honest as the LLM output.
 
 - **C1. Data-faithfulness (the UI can't lie)** ✅ _(done 2026-07-12)_ — the on-brand
   core. Render-math extracted to pure, tested selectors (`report/derive/meterRows`,
-  `timelineMarks`, `cohortDims`); the meters/cohort/timeline components are dumb
+  `timelineMarks`, `cohortDims` — the timeline strip and `timelineMarks` were deleted as dead
+  code on 2026-09-24); the meters/cohort/timeline components are dumb
   renderers. `report/derive/faithfulness.ts` `checkFaithful(kind, root, selectorOutput)`
   walks the rendered DOM and emits `Divergence[]` on (A) view-faithful mismatches
   (rendered ≠ selector, incl. tooltips + non-% units) and (B) non-circular structural

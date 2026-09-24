@@ -60,7 +60,7 @@ export const RESPONSE_PRESERVING = [
 ] as const;
 
 /** factAudit verdicts that mean "the judge found something wrong here". */
-export const ERROR_VERDICTS = new Set(["refuted", "unsupported"]);
+const ERROR_VERDICTS = new Set(["refuted", "unsupported"]);
 
 interface CalibrationCase {
   caseId: string;
@@ -74,7 +74,7 @@ interface ScoreFile {
   response?: Record<string, number | string>;
 }
 
-export interface SourceRow {
+interface SourceRow {
   sourceOrdinal: number;
   caseIds: string[];
   accuracy: (number | null)[];
@@ -83,7 +83,7 @@ export interface SourceRow {
   errorCountRange: number;
 }
 
-export interface VarianceReport {
+interface VarianceReport {
   scoresDir: string;
   inputHash: string;
   sources: SourceRow[];

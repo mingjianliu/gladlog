@@ -17,14 +17,14 @@ const DIM_KEYS = [
   "impact",
 ] as const;
 
-export interface SourceSummary {
+interface SourceSummary {
   total: number;
   answered: number;
   novelValuable: number;
   dims: Record<string, Record<string, number>>;
 }
 
-export interface ReviewSummary {
+interface ReviewSummary {
   bySource: Record<"deep" | "baseline", SourceSummary>;
 }
 

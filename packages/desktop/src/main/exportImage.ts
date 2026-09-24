@@ -21,7 +21,7 @@ const READY_POLL_MS = 200;
  * an intermediate layout state. */
 const SETTLE_MS = 250;
 
-export interface ExportImageOptions {
+interface ExportImageOptions {
   matchId: string;
   roundSeq?: number | null;
   range?: { fromS: number; toS: number } | null;

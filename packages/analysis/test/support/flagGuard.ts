@@ -29,8 +29,6 @@ type FlagObject = Record<string, boolean | string>;
  * singleton cannot silently escape the guard. */
 export const MUTABLE_FLAG_NAMES = [
   "CANDIDATE_TYPE_FLAGS",
-  "DISPEL_FEATURE_FLAGS",
-  "HEALER_OFFENSE_FLAGS",
   "TIMELINE_LINE_FLAGS",
 ] as const;
 
@@ -40,25 +38,19 @@ export interface FlagGuardState {
 }
 
 export async function loadFlagGuardState(): Promise<FlagGuardState> {
-  const [flags, registry, dispel, offense, timeline] = await Promise.all([
+  const [flags, registry, timeline] = await Promise.all([
     import("../../src/data/candidateTypeFlags"),
     import("../../src/data/candidateTypeRegistry"),
-    import("../../src/data/dispelFeatureFlags"),
-    import("../../src/utils/healerOffenseAnalysis"),
     import("../../src/data/timelineLineFlags"),
   ]);
   const objects: Record<string, FlagObject> = {
     CANDIDATE_TYPE_FLAGS: flags.CANDIDATE_TYPE_FLAGS,
-    DISPEL_FEATURE_FLAGS: dispel.DISPEL_FEATURE_FLAGS,
-    HEALER_OFFENSE_FLAGS: offense.HEALER_OFFENSE_FLAGS,
     TIMELINE_LINE_FLAGS: timeline.TIMELINE_LINE_FLAGS,
   };
   const g = globalThis as {
     __gladlogFlagSnapshots?: Record<string, FlagObject>;
   };
   g.__gladlogFlagSnapshots ??= {
-    DISPEL_FEATURE_FLAGS: { ...dispel.DISPEL_FEATURE_FLAGS },
-    HEALER_OFFENSE_FLAGS: { ...offense.HEALER_OFFENSE_FLAGS },
     TIMELINE_LINE_FLAGS: { ...timeline.TIMELINE_LINE_FLAGS },
   };
   const snapshots = g.__gladlogFlagSnapshots;

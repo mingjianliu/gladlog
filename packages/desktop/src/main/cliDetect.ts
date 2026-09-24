@@ -15,7 +15,7 @@ const execFileP = promisify(execFile);
  *  copy). */
 export type LocalCliTool = "claude" | "agy" | "codex" | "cbc" | "node";
 
-export interface CliDetectDeps {
+interface CliDetectDeps {
   platform?: NodeJS.Platform;
   home?: string;
   env?: Record<string, string | undefined>;

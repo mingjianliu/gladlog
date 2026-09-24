@@ -145,7 +145,7 @@ interface NamedEvent {
 /** An event counts as covered if EITHER its logged (localized) name or its
  * canonical English name appears in the prompt — non-EN logs carry localized
  * names while the builder renders English from static data. */
-export function checkSpells(
+function checkSpells(
   promptText: string,
   events: NamedEvent[],
 ): CoverageResult {
@@ -177,7 +177,7 @@ export function checkSpells(
 const TRINKET_USE =
   /trinketed|trinket broke|\[(ENEMY )?TRINKET\]|trinket:\s*used/i;
 
-export function checkTrinkets(
+function checkTrinkets(
   promptLines: string[],
   manifest: CoverageManifest,
 ): CoverageResult {
@@ -1579,7 +1579,7 @@ export function checkBacklashRefConsistency(lines: string[]): string[] {
   return failures;
 }
 
-export function checkSyncWindowRefConsistency(lines: string[]): string[] {
+function checkSyncWindowRefConsistency(lines: string[]): string[] {
   const failures: string[] = [];
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!;
@@ -1948,7 +1948,7 @@ const MENU_LINE_FACTS = /facts=\{(.*)\}\s*$/;
  * and why. `death-setup`'s `deathT` fact IS listed: it names the same later
  * death `death`'s own `t` names, so it shares that marker.
  */
-export interface MenuTRenderGridSpec {
+interface MenuTRenderGridSpec {
   readonly type: string;
   readonly factKey: string;
   readonly marker: string;
@@ -2243,7 +2243,7 @@ export function checkSnapshotFactsConsistency(promptText: string): string[] {
   return violations;
 }
 
-export function duplicateRatio(
+function duplicateRatio(
   lines: string[],
   normalize: (line: string) => string,
 ): number {

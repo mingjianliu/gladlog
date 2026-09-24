@@ -79,7 +79,7 @@ export const COPY_CAST_IDS: ReadonlyMap<string, string> = new Map([
 /** Same-spellId events closer than this are ticks of one channel, not two
  * presses. 1.05s clears the observed tick spacings (0.80–1.00s) while staying
  * under the 1.4s cadence of real filler spam — do not loosen. */
-export const CHANNEL_TICK_MAX_GAP_S = 1.05;
+const CHANNEL_TICK_MAX_GAP_S = 1.05;
 
 /**
  * Reduce a SPELL_CAST_SUCCESS list to actual button presses:

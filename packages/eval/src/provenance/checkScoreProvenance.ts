@@ -65,8 +65,7 @@ export function computeAccuracyFromFactAudit(
 }
 
 /** Unified prompt-file resolution: prefer the '<ordinal>-*' prefix, fall back
- * to '<ordinal>.txt'. Shared by judgeSpotAudit/calibrateAuditor so they stay
- * consistent with this validator (final review F5). */
+ * to '<ordinal>.txt' (final review F5). */
 export function promptFileFor(
   ordinal: string,
   promptsDir: string,

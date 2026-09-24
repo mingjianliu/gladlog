@@ -33,7 +33,7 @@ export interface TeammateCrisisPriorRow {
   busyOnHpPct?: number | null;
 }
 
-export interface TeammateCrisisPriorTable {
+interface TeammateCrisisPriorTable {
   meta: {
     generatedAt: string;
     corpus: string;
@@ -62,7 +62,7 @@ interface Acc {
  * scan row's fields so the table and the card share one definition:
  * comparator, healer answered neither, cast on a friendly whose HP was known
  * and above the crisis line (and no in-window cast reached one at/under it) */
-export function triageKindOf(
+function triageKindOf(
   r: TeammateCrisisPriorRow,
 ): "wrong" | "other" | null {
   if (r.excluded !== null || r.healerAnswered || r.mateResponded) return null;

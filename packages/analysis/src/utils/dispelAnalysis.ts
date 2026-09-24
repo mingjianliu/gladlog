@@ -34,7 +34,6 @@ import {
 import { threatActiveAt } from "./threatAssessment";
 
 export type DispelPriority = "Critical" | "High" | "Medium" | "Low";
-import { DISPEL_FEATURE_FLAGS } from "../data/dispelFeatureFlags";
 import {
   buildCastMatchIndex,
   classifyDispel,
@@ -1503,31 +1502,27 @@ export function reconstructDispelSummary(
       const targetUnitForPenalty = ownerPlayer ?? unit;
 
       if (penaltyDesc !== undefined) {
-        if (DISPEL_FEATURE_FLAGS.F18_FATAL_DISPEL) {
-          const fatalDeath = getFatalDeath(
-            targetUnitForPenalty,
-            action.timestamp,
-          );
-          if (fatalDeath) {
-            event.wasFatal = true;
-            event.fatalUnitName = fatalDeath.name;
-            event.fatalUnitSpec = fatalDeath.spec;
-          }
+        const fatalDeath = getFatalDeath(
+          targetUnitForPenalty,
+          action.timestamp,
+        );
+        if (fatalDeath) {
+          event.wasFatal = true;
+          event.fatalUnitName = fatalDeath.name;
+          event.fatalUnitSpec = fatalDeath.spec;
         }
 
-        if (DISPEL_FEATURE_FLAGS.F124_ENHANCED_CC_ANNOTATIONS) {
-          const backlashInfo = BACKLASH_CC_SPELL_IDS.get(removedSpellId);
-          if (backlashInfo) {
-            const match = (targetUnitForPenalty.auraEvents ?? []).find(
-              (aura) =>
-                aura.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
-                aura.spellId === backlashInfo.backlashSpellId &&
-                aura.timestamp >= action.timestamp &&
-                aura.timestamp <= action.timestamp + 100,
-            );
-            if (match) {
-              event.backlashCcSpellId = match.spellId ?? undefined;
-            }
+        const backlashInfo = BACKLASH_CC_SPELL_IDS.get(removedSpellId);
+        if (backlashInfo) {
+          const match = (targetUnitForPenalty.auraEvents ?? []).find(
+            (aura) =>
+              aura.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+              aura.spellId === backlashInfo.backlashSpellId &&
+              aura.timestamp >= action.timestamp &&
+              aura.timestamp <= action.timestamp + 100,
+          );
+          if (match) {
+            event.backlashCcSpellId = match.spellId ?? undefined;
           }
         }
       }
@@ -1950,8 +1945,6 @@ export function reconstructDispelSummary(
             const recentCleanses = allyCleanse.filter((c) => {
               if (!activeDispellerNames.has(c.sourceName)) return false;
               if (c.timeSeconds >= applyRelative) return false;
-              if (!DISPEL_FEATURE_FLAGS.F131_F132_CLEANSE_COOLDOWNS)
-                return c.timeSeconds + DEFAULT_CLEANSE_CD_S > applyRelative;
               // A rider/proc dispel costs the caster nothing, so it can never be
               // the reason their cleanse was unavailable. `dispelKind` already
               // decides this (dispelKind.ts) — reuse it instead of a second list.
@@ -1989,11 +1982,7 @@ export function reconstructDispelSummary(
             }
             const dispellersWhoUsedCD = new Set(
               [...recentByName]
-                .filter(
-                  ([name, n]) =>
-                    !DISPEL_FEATURE_FLAGS.F131_F132_CLEANSE_COOLDOWNS ||
-                    n >= (chargesByName.get(name) ?? 1),
-                )
+                .filter(([name, n]) => n >= (chargesByName.get(name) ?? 1))
                 .map(([name]) => name),
             );
 
@@ -2344,11 +2333,7 @@ export function formatDispelContextForAI(summary: IDispelSummary): string[] {
       lines.push(
         `  Worst missed cleanse: ${worst.spellName} [${worst.priority}] on ${worst.targetSpec} at ${fmtTime(worst.timeSeconds)} (${Math.round(worst.durationSeconds)}s${dmgStr})`,
       );
-      if (
-        DISPEL_FEATURE_FLAGS.F131_F132_CLEANSE_COOLDOWNS &&
-        worst.cleanseWasOnCD &&
-        worst.cdBurnedOn
-      ) {
+      if (worst.cleanseWasOnCD && worst.cdBurnedOn) {
         lines.push(
           `    - Note: Cleanse was on cooldown (burned on ${worst.cdBurnedOn.spellName} [${worst.cdBurnedOn.priority} priority] ${worst.cdBurnedOn.secondsBefore.toFixed(1)}s before)`,
         );

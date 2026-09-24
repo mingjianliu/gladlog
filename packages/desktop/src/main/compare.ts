@@ -42,7 +42,7 @@ import {
 import { API_MAX_TOKENS } from "./aiBudgets";
 import { recordAiDebug } from "./aiDebugLog";
 
-export type CompareInput = {
+type CompareInput = {
   matchId: string;
   healerMetrics: Record<string, number | null>;
   /** P2: the enemy comp signature (enemyCompSignature); when it hits a comp
@@ -61,7 +61,7 @@ export type CompareInput = {
    * 重挂载后不丢(agy review #2)。 */
   autoTriggered?: boolean;
 };
-export type CompareResult = {
+type CompareResult = {
   verifiedComparison: VerifiedComparison;
   report: string | null;
   droppedReason: string | null;
@@ -98,7 +98,7 @@ export type CompareResult = {
  * 不缓存就意味着每次重启后为同一场再烧一次模型调用,代价方向反了。
  */
 const UNCACHEABLE_DROPPED_REASONS = new Set(["NO_API_KEY"]);
-export function isCacheableCompareResult(result: CompareResult): boolean {
+function isCacheableCompareResult(result: CompareResult): boolean {
   return !(
     result.droppedReason &&
     UNCACHEABLE_DROPPED_REASONS.has(result.droppedReason)
@@ -125,7 +125,7 @@ export function isCacheableCompareResult(result: CompareResult): boolean {
  * 报错多是环境/瞬时的(CLI 超时、语料没载到),固化到盘上等于把一次超时变成
  * 永久结论。因此 getState 依旧内存优先、磁盘兜底。
  */
-export type CompareState =
+type CompareState =
   | { phase: "idle" }
   /** startedAt(2026-08-05 生产反馈):CLI 后端整段返回、无中途 delta,跑一次
    * 是分钟级;renderer 靠这个时间戳在重挂载后仍能显示真实已耗时,证明

@@ -78,7 +78,7 @@ export function joinAnswers(
 
 /** Per-dimension label counts for one group of rows. Keys are the raw label
  * values (`"true"`, `"maybe"`, …); absent = zero. */
-export interface LabelCounts {
+interface LabelCounts {
   n: number;
   truth: Record<string, number>;
   awareness: Record<string, number>;
@@ -110,7 +110,7 @@ function addRow(c: LabelCounts, a: ReviewAnswer): void {
 /** Aggregated alignment over any number of sessions' rows. `byType` counts a
  * multi-type card once under EACH of its types (types are not disjoint — the
  * report renderer says so), so `byType` ns can sum above `bySource.baseline.n`. */
-export interface AlignmentSummary {
+interface AlignmentSummary {
   sessions: string[];
   bySource: Record<"deep" | "baseline", LabelCounts>;
   byType: Record<string, LabelCounts>;

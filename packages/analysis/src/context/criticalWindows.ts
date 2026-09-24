@@ -18,7 +18,7 @@ import { DMG_SPIKE_THRESHOLD } from "./timelineHelpers";
  * in utils/cooldowns.ts). Any new "HP at a rendered instant" call site must be
  * wired to this set rather than passing a hard-coded HP_SAMPLE_RADIUS_MS.
  */
-export interface CriticalWindowInputs {
+interface CriticalWindowInputs {
   friendlyDeaths: ReadonlyArray<{ atSeconds: number }>;
   enemyDeaths: ReadonlyArray<{ atSeconds: number }>;
   pressureWindows: ReadonlyArray<{ fromSeconds: number; totalDamage: number }>;

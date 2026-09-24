@@ -17,7 +17,6 @@ import { AtomicArenaCombat, ICombatUnit } from "@gladlog/parser-compat";
 import { IPlayerCCTrinketSummary } from "./ccTrinketAnalysis";
 import { isHealerSpec, isMeleeSpec, specToString } from "./cooldowns";
 import { incomingPressureEvents } from "./incomingPressure";
-import { fmtTime } from "./renderGrid";
 import { IAlignedBurstWindow } from "./enemyCDs";
 import { IHealerBurstExposure } from "./healerExposureAnalysis";
 
@@ -25,7 +24,7 @@ import { IHealerBurstExposure } from "./healerExposureAnalysis";
 // Types
 // ---------------------------------------------------------------------------
 
-export interface IMatchArchetypeMeasurements {
+interface IMatchArchetypeMeasurements {
   durationSeconds: number;
   /** Seconds into the match when the first friendly death occurred; null if no death */
   firstDeathAtSeconds: number | null;
@@ -207,55 +206,3 @@ export function computeMatchArchetype(
 // Formatter
 // ---------------------------------------------------------------------------
 
-export function formatMatchArchetypeForContext(
-  m: IMatchArchetypeMeasurements,
-): string[] {
-  const lines: string[] = [];
-  lines.push("MATCH MEASUREMENTS:");
-
-  // Burst window timing relative to first death (duration already in MATCH SUMMARY)
-  if (m.firstDeathAtSeconds !== null) {
-    lines.push(
-      `  First death: ${fmtTime(m.firstDeathAtSeconds)} | Burst windows before death: ${m.burstWindowsBeforeFirstDeath} of ${m.burstWindowCount} total (peak score: ${m.peakBurstScore.toFixed(1)})`,
-    );
-  } else {
-    lines.push(
-      `  No friendly deaths | Burst windows: ${m.burstWindowCount} (peak score: ${m.peakBurstScore.toFixed(1)})`,
-    );
-  }
-
-  // Peak raw pressure — complements burst window score for uncoordinated kills
-  const peakPressureK = Math.round(m.peakDamagePressure5s / 1000);
-  lines.push(`  Peak damage pressure: ${peakPressureK}k in 5s`);
-
-  // Enemy comp — spec list already in MATCH SUMMARY, just surface the melee/ranged split
-  lines.push(
-    `  Enemy comp: ${m.enemyMeleeCount} melee, ${m.enemyRangedCount} ranged/caster`,
-  );
-
-  // CC pressure — omit rate for very short matches where events/min is misleading
-  const showRate = m.durationSeconds >= 30;
-  const ccRateStr = showRate ? ` (${m.ccEventsPerMinute.toFixed(1)}/min)` : "";
-  const exposureStr =
-    m.criticalOrExposedBurstWindows !== null
-      ? ` | Critical/Exposed healer burst windows: ${m.criticalOrExposedBurstWindows}`
-      : "";
-  const unknownCC = m.totalFriendlyCCEvents - m.classifiedFriendlyCCEvents;
-  const ccBreakdownStr =
-    m.totalFriendlyCCEvents > 0
-      ? ` (${m.classifiedFriendlyCCEvents} hard CC, ${unknownCC} unknown/root)`
-      : "";
-  lines.push(
-    `  CC pressure (all friendlies): ${m.totalFriendlyCCEvents} events${ccBreakdownStr}${ccRateStr}${exposureStr}`,
-  );
-
-  // Damage distribution
-  if (m.friendlyDamageShare.length > 0) {
-    const shareStr = m.friendlyDamageShare
-      .map((p) => `${p.spec} (${p.name}): ${Math.round(p.share * 100)}%`)
-      .join(", ");
-    lines.push(`  Damage received: ${shareStr}`);
-  }
-
-  return lines;
-}

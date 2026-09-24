@@ -135,8 +135,8 @@ export function enemyHealerCcWindows(
  * [fromSeconds, toSeconds] (inclusive) — the ACCELERATOR-only fact
  * `missed-sync-window` attaches (B8: never a gate). Render-grid discipline
  * (CLAUDE.md): the query instants are `toRenderSecond`-floored before
- * sampling, same as `trinketTeamMinHpPctAt`, so this cannot contradict the
- * whole-second [STATE] HP the prompt timeline separately renders. Returns
+ * sampling (at `HP_SAMPLE_RADIUS_MS`, the gate's radius), so this cannot
+ * contradict the whole-second [STATE] HP the prompt timeline separately renders. Returns
  * null only when NO sample succeeded anywhere in the window (no advanced
  * logging) — the caller must treat null as "omit the fact", never as "0%".
  */

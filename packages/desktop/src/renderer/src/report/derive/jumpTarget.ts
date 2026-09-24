@@ -2,7 +2,7 @@ import type { CandidateEvent } from "@gladlog/analysis";
 
 /** Evidence-chain jump target: the earliest instant among the events a finding
  *  references, plus every unit involved. */
-export interface JumpTarget {
+interface JumpTarget {
   /** Seconds relative to the start of the match */
   t: number;
   unitNames: string[];

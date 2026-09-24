@@ -27,7 +27,7 @@ import type { ICombatUnit } from "@gladlog/parser-compat";
  */
 
 /** One shield's measured contribution inside a queried window. */
-export interface IAbsorbContribution {
+interface IAbsorbContribution {
   spellId: string;
   spellName: string;
   /** Damage this shield actually absorbed inside the window. */

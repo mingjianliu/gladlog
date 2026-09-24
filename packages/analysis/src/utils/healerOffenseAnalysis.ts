@@ -29,13 +29,6 @@ import { fmtTime, renderedWindowSeconds } from "./renderGrid";
 type SpellEntry = { type: string };
 const SPELLS = spellsData as Record<string, SpellEntry>;
 
-/** Local feature flags, mirroring DISPEL_FEATURE_FLAGS pattern. */
-export const HEALER_OFFENSE_FLAGS = {
-  V1_SLACK_GATED: true,
-  /** F193 V2: contested-trade facts (team 70–85% band) — EV framing, not verdicts. */
-  V2_CONTESTED_TRADES: true,
-};
-
 // GH #34 batch 4 (2026-08-28), 300 matches / 1,127 healer rounds (advanced
 // logging on 1,125), team MIN-HP sampled every 2 s (85,774 known samples):
 //   ≥ 85 % (slack)        41.8 % of match time
@@ -795,24 +788,23 @@ export function buildHealerOffenseSummary(
     };
   }
 
-  const contestedTradeFacts = HEALER_OFFENSE_FLAGS.V2_CONTESTED_TRADES
-    ? computeContestedTradeFacts(
-        combat,
-        owner,
-        enemies,
-        computeContestedSegments(
-          combat,
-          owner,
-          friends,
-          enemies,
-          enemyCDTimeline,
-          ownerCCInstances,
-          ownerPurgeTimesSeconds,
-        ).segments,
-        offensiveWindows,
-        enemyHealerCCInstances,
-      )
-    : [];
+  // F193 V2: contested-trade facts (team 70–85% band) — EV framing, not verdicts.
+  const contestedTradeFacts = computeContestedTradeFacts(
+    combat,
+    owner,
+    enemies,
+    computeContestedSegments(
+      combat,
+      owner,
+      friends,
+      enemies,
+      enemyCDTimeline,
+      ownerCCInstances,
+      ownerPurgeTimesSeconds,
+    ).segments,
+    offensiveWindows,
+    enemyHealerCCInstances,
+  );
 
   return {
     advancedLoggingAvailable: true,

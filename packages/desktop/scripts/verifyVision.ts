@@ -2,14 +2,12 @@
 // static HTML, parses it with jsdom, runs checkFaithful, prints structured
 // diffs, and exits non-zero if anything diverged. Cross-agent primitive:
 //   npm -w @gladlog/desktop run verify:vision
-import type { CandidateEvent } from "@gladlog/analysis";
 import { JSDOM } from "jsdom";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { CohortDimsTable } from "../src/renderer/src/report/components/CohortDimsTable";
 import { Meters } from "../src/renderer/src/report/components/Meters";
-import { TimelineStrip } from "../src/renderer/src/report/components/TimelineStrip";
 import {
   type CohortDim,
   cohortDims,
@@ -20,7 +18,6 @@ import {
 } from "../src/renderer/src/report/derive/faithfulness";
 import { meterRows } from "../src/renderer/src/report/derive/meterRows";
 import { deriveSummary } from "../src/renderer/src/report/derive/summary";
-import { timelineMarks } from "../src/renderer/src/report/derive/timelineMarks";
 import { loadMatchFixture } from "../test/fixtures/loadFixture";
 
 function rootOf(html: string): HTMLElement {
@@ -30,25 +27,9 @@ function rootOf(html: string): HTMLElement {
   return dom.window.document.getElementById("root") as unknown as HTMLElement;
 }
 
-// Timeline + cohort inputs aren't part of the match fixture (they come from
-// candidate extraction and the compare service); use deterministic fixtures so
-// the check is self-contained and reproducible.
-const candidates: CandidateEvent[] = [
-  {
-    id: "d1",
-    type: "death",
-    t: 12,
-    unitNames: ["PlayerA-Test"],
-    facts: { t: "12" },
-  },
-  {
-    id: "d2",
-    type: "death",
-    t: 47,
-    unitNames: ["PlayerB-Test"],
-    facts: { t: "47" },
-  },
-];
+// Cohort inputs aren't part of the match fixture (they come from the compare
+// service); use a deterministic fixture so the check is self-contained and
+// reproducible.
 const cohortFixture: CohortDim[] = [
   {
     key: "offensiveIndex",
@@ -85,24 +66,6 @@ function main(): void {
         ),
       ),
       meterModel,
-    ),
-  });
-
-  const tlModel = timelineMarks(candidates);
-  results.push({
-    component: "timeline",
-    divergences: checkFaithful(
-      "timeline",
-      rootOf(
-        renderToStaticMarkup(
-          createElement(TimelineStrip, {
-            candidates,
-            activeEventIds: [],
-            onSelect: () => {},
-          }),
-        ),
-      ),
-      tlModel,
     ),
   });
 

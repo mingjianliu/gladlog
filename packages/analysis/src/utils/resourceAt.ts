@@ -25,7 +25,7 @@ import { getSortedAdvancedActions } from "./advancedActions";
  * choice at the call site rather than an accident. */
 export const MANA_POWER_TYPE = CombatUnitPowerType.Mana;
 
-export interface IResourceReading {
+interface IResourceReading {
   current: number;
   max: number;
   /** 0–100. */

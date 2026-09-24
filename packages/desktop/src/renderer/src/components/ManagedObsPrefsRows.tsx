@@ -14,7 +14,7 @@ const NONE = "__none__";
 
 /** The save note every prefs row uses: honest about WHEN it applies (user
  * ruling 2026-09-04 — restart now, or after the current recording). */
-export const PREFS_SAVED_NOTE =
+const PREFS_SAVED_NOTE =
   "已保存,托管 OBS 重启后生效(正在录制则本场结束后自动重启)";
 
 interface Props {

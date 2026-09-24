@@ -59,7 +59,7 @@ interface CDSummary {
   p75FirstUseSeconds: number | null;
 }
 
-export interface SpecSummary {
+interface SpecSummary {
   sampleCount: number;
   pressureWindows: Percentiles;
   hps: Percentiles | null;
@@ -78,7 +78,7 @@ export interface SpecSummary {
   dampeningAtDeath: Percentiles | null;
 }
 
-export interface BenchmarkOutput {
+interface BenchmarkOutput {
   bySpec: Record<string, SpecSummary>;
 }
 
@@ -335,19 +335,6 @@ function summarise(
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
-
-/**
- * Compute benchmark metrics from a collection of arena combats.
- * Aggregates per-spec statistics on pressure, HPS/DPS, CD usage, timing, purges, and dampening.
- */
-export function computeBenchmarks(
-  matches: AtomicArenaCombat[],
-  ratingFloor: number = 0,
-): BenchmarkOutput {
-  const acc = createBenchmarkAccumulator(ratingFloor);
-  for (const combat of matches) acc.add(combat);
-  return acc.finalize();
-}
 
 /** Streaming aggregation: feed one match at a time and discard it, so the
  * whole corpus never has to stay resident in memory */

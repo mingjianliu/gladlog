@@ -3,7 +3,7 @@ export interface CrashRecord {
   offset: number | null;
   count: number;
 }
-export const OFFSET_TOLERANCE = 65536;
+const OFFSET_TOLERANCE = 65536;
 const LIMIT = 3;
 
 export function nextCrashRecord(

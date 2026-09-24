@@ -132,14 +132,10 @@ type PendingEvent =
  * `windowCount` is not itself evidentiary (it doesn't check casts); it
  * exists purely so `uwcCorpusScan.ts` can report "N windows observed"
  * without a second parse pass over the same corpus. */
-export interface CcWindowScan {
+interface CcWindowScan {
   castsBySpell: Map<string, number>;
   windowCount: number;
 }
-
-/** @deprecated Task E rename — kept as a type alias, not removed, purely so
- * nothing importing the pre-generalization name breaks. */
-export type StunWindowScan = CcWindowScan;
 
 /** Is `guid` still within `maxWindowMs` of any tracked aura it was seen
  * gaining, as of `atTs`? Checking elapsed time (rather than mere presence in
@@ -297,37 +293,10 @@ export function observedCastsWhileStunned(
 
 // ── Aggregation across the corpus + three-way diff report ──────────────────
 
-/** One match's contribution — spellId counts plus how many stun windows it
- * contained, so the caller (uwcCorpusScan.ts) doesn't need to re-derive
- * anything from raw counts. */
-export interface UwcMatchScan {
-  matchId: string;
-  scan: StunWindowScan;
-}
-
-/** Sums `castsBySpell` and `windowCount` across every scanned match. */
-export function aggregateUwcScans(matches: UwcMatchScan[]): {
-  totalCastsBySpell: Map<string, number>;
-  totalWindows: number;
-  totalCastsInStun: number;
-} {
-  const totalCastsBySpell = new Map<string, number>();
-  let totalWindows = 0;
-  let totalCastsInStun = 0;
-  for (const { scan } of matches) {
-    totalWindows += scan.windowCount;
-    for (const [spellId, n] of scan.castsBySpell) {
-      totalCastsBySpell.set(spellId, (totalCastsBySpell.get(spellId) ?? 0) + n);
-      totalCastsInStun += n;
-    }
-  }
-  return { totalCastsBySpell, totalWindows, totalCastsInStun };
-}
-
 /** One line of the hand-written 6-id table (`cooldowns.ts`
  * `USABLE_WHILE_CC_SPELL_IDS`) or a named diagnostic anchor, annotated with
  * what the corpus actually saw. */
-export interface UwcAnnotatedId {
+interface UwcAnnotatedId {
   spellId: string;
   name: string;
   /** Official generated table's verdict for the "stunned" dimension. */
@@ -351,7 +320,7 @@ function annotate(
   }));
 }
 
-export interface UwcDiffReportInputs {
+interface UwcDiffReportInputs {
   matchesScanned: number;
   /** Indexed matches whose raw.txt was missing/unreadable and so were
    * skipped (not counted in `matchesScanned`). 0 in the common case. */
@@ -621,14 +590,14 @@ export interface CcCategoryScanSummary {
  * (2026-08-15)**: 22812 was resolved to `feared: true` by the Task E corpus
  * evidence this report itself produced (430e3b7) and no longer reads as
  * `null` — only 47585 remains unsigned. */
-export interface FearedAnchorRow {
+interface FearedAnchorRow {
   spellId: string;
   name: string;
   feared: boolean | null;
   rationale: string;
 }
 
-export interface FearedDiffReportInputs {
+interface FearedDiffReportInputs {
   /** One entry per category actually scanned — brief requires disorient AND
    * incapacitate as separate runs; both are expected here. */
   categories: CcCategoryScanSummary[];

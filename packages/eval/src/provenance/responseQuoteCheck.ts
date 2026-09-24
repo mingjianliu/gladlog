@@ -28,13 +28,13 @@ const HP_AT_TIME = new RegExp(
 );
 const LINE_TIME = new RegExp(String.raw`^\s*(${T})\b`);
 
-export interface RecutRange {
+interface RecutRange {
   range: string;
   /** printed ranges sharing an endpoint with the quoted one */
   printed: string[];
 }
 
-export interface ResponseQuoteResult {
+interface ResponseQuoteResult {
   verbatimRanges: number;
   recutRanges: RecutRange[];
   freeFormRanges: number;

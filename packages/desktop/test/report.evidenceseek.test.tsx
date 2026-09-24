@@ -86,63 +86,9 @@ describe("证据链跳转(evidence → replay seek)", () => {
   });
 });
 
-import { TimelineStrip } from "../src/renderer/src/report/components/TimelineStrip";
 import { deriveVulnBands } from "../src/renderer/src/report/derive/vulnWindows";
 
-const candidates = [
-  { id: "e1", type: "death", t: 30, unitNames: ["A"], facts: { t: "0:30" } },
-  { id: "e2", type: "cc", t: 60, unitNames: ["B"], facts: { t: "1:00" } },
-];
-
-describe("#8 收尾:strip 跳转 + 窗口色带", () => {
-  it("TimelineStrip:有选中标记且传 onJump 时显示「回放此刻」,跳最早选中的 t", () => {
-    const jumps: number[] = [];
-    render(
-      <TimelineStrip
-        candidates={candidates as never}
-        activeEventIds={["e2", "e1"]}
-        onSelect={() => {}}
-        onJump={(t) => jumps.push(t)}
-      />,
-    );
-    fireEvent.click(screen.getByRole("button", { name: /回放此刻/ }));
-    expect(jumps).toEqual([30]);
-  });
-
-  it("TimelineStrip:无选中标记时不显示跳转按钮;色带按 kind 渲染", () => {
-    const { container } = render(
-      <TimelineStrip
-        candidates={candidates as never}
-        activeEventIds={[]}
-        onSelect={() => {}}
-        onJump={() => {}}
-        bands={[
-          {
-            kind: "burst",
-            fromS: 10,
-            toS: 20,
-            targetName: "X",
-            damage: 90000,
-            targetDied: false,
-          },
-          {
-            kind: "vulnerable",
-            fromS: 40,
-            toS: 55,
-            targetName: "Y",
-            damage: 8000,
-          targetDied: false,
-          },
-        ]}
-      />,
-    );
-    expect(screen.queryByRole("button", { name: /回放此刻/ })).toBeNull();
-    const bands = container.querySelectorAll('[data-testid="strip-band"]');
-    expect(bands.length).toBe(2);
-    expect(bands[0]!.className).toContain("burst");
-    expect(bands[1]!.className).toContain("vulnerable");
-  });
-
+describe("#8 收尾:窗口色带", () => {
   it("deriveVulnBands:真实 fixture 出带且时间升序、kind 合法", () => {
     const bands = deriveVulnBands(m);
     for (let i = 1; i < bands.length; i++) {
@@ -159,37 +105,13 @@ describe("#8 收尾:strip 跳转 + 窗口色带", () => {
     expect(container.querySelector(".rpt-replay-bands")).toBeTruthy();
   });
 
-  it("色带可点:scrubber 色带点击 → 时钟定位到带起点;strip 色带点击 → onJump(fromS)", () => {
-    // Scrubber side
+  it("色带可点:scrubber 色带点击 → 时钟定位到带起点", () => {
     const { container } = render(<ReplayView source={m} />);
     const band = container.querySelector(".rpt-replay-band") as HTMLElement;
     expect(band).toBeTruthy();
     fireEvent.click(band);
     const time = container.querySelector(".rpt-replay-time");
     expect(time?.textContent?.startsWith("0:00 /")).toBe(false);
-
-    // Strip side
-    const jumps: number[] = [];
-    const { container: c2 } = render(
-      <TimelineStrip
-        candidates={candidates as never}
-        activeEventIds={[]}
-        onSelect={() => {}}
-        onJump={(t) => jumps.push(t)}
-        bands={[
-          {
-            kind: "burst",
-            fromS: 12,
-            toS: 20,
-            targetName: "X",
-            damage: 90000,
-            targetDied: false,
-          },
-        ]}
-      />,
-    );
-    fireEvent.click(c2.querySelector('[data-testid="strip-band"]')!);
-    expect(jumps).toEqual([12]);
   });
 });
 

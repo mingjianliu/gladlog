@@ -424,13 +424,13 @@ export function scanRound(
   return countsAtThresholds(ctx, opts);
 }
 
-export interface TypeSummary {
+interface TypeSummary {
   occurrenceRatePct: number;
   meanCappedPerRound: number;
   meanRawPerRound: number;
 }
 
-export interface CalibrationSummary {
+interface CalibrationSummary {
   roundsScanned: number;
   perType: {
     cdHoarded: TypeSummary;

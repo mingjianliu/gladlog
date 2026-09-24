@@ -43,7 +43,6 @@ import {
   type ICCInstance,
   postKickSeverityRank,
   REPOSITIONING_SPELL_IDS,
-  trinketStateFact,
 } from "../utils/ccTrinketAnalysis";
 import {
   annotateDefensiveTimings,
@@ -52,8 +51,6 @@ import {
   chargesAvailableAt,
   DEFENSIVE_TAGS,
   extractMajorCooldowns,
-  getUnitHpAtTimestamp,
-  HP_SAMPLE_RADIUS_MS,
   type IAvailableWindow,
   type IMajorCooldownInfo,
   isAllyCastableDefensive,
@@ -119,7 +116,6 @@ import { crisisNoResponseEvents } from "./candidates/crisisNoResponse";
 import {
   deathSetupEvents,
   type DeathSetupParts,
-  deathUnusedDefensiveEvents,
   enemyImmunityBreakers,
   externalUnusedEvents,
   questionableExternalEvents,
@@ -171,7 +167,6 @@ export {
   DEATH_SETUP_LOOKBACK_S,
   deathSetupEvents,
   type DeathSetupParts,
-  deathUnusedDefensiveEvents,
   EXTERNAL_FREE_MIN_GAP_S,
   EXTERNAL_FREE_WINDOW_S,
   externalUnusedEvents,
@@ -203,8 +198,9 @@ export {
 } from "./candidates/crisisNoResponse";
 
 /** Single-source predicate (CLAUDE.md shared-predicate rule; review round 1,
- * BACKLOG #26 Task 2 Minor finding): the two candidate types
- * `formatAttemptedFact` above ever populates `facts.attempted` on today.
+ * BACKLOG #26 Task 2 Minor finding): the candidate types
+ * `formatAttemptedFact` ever populates `facts.attempted` on today (the second
+ * one, death-unused-defensive, had its emitter deleted 2026-09-24).
  * `auditFindings.ts`'s severity downgrade gates on this set (mirroring how
  * `LEGACY_TOPIC_TYPES` gates the diversity cap) rather than on the bare
  * `facts.attempted` string key alone — a future candidate type that happens
@@ -212,7 +208,6 @@ export {
  * downgrading severity too. */
 export const ATTEMPTED_GUARD_TYPES: ReadonlySet<string> = new Set([
   "cd-hoarded",
-  "death-unused-defensive",
 ]);
 
 /**
@@ -456,15 +451,11 @@ export function extractCandidateFindings(
  * missed-purge 在 **94% 的有产出回合打到上限**(455/485)—— 与上段「原始窗口
  * 场均 12.6 条」的复查数字互证,cap 仍是全家族最承重的一条;kick-eaten 59%
  * (136/231)、missed-cleanse 28%(34/121);cc-locked / wasted-trinket 已退役,
- * 语料产出为 0,其 cap 仅供保留的纯函数测试消费。
+ * 其产出函数与 cap 已于 2026-09-24 删除。
  */
 const MISSED_CLEANSE_CAP = 2;
 const MISSED_PURGE_CAP = 2;
-const CC_LOCKED_CAP = 2;
 const KICK_EATEN_CAP = 2;
-/** 长期保留(2026-08-20 复查,见上方块注释);wasted-trinket 类型已退役,
- * 本常量仅供保留的纯函数测试消费。 */
-const WASTED_TRINKET_CAP = 1;
 
 /** Single-source predicate (CLAUDE.md shared-predicate rule): the
  * candidate-menu types this repo has repeatedly measured the SELECTION layer
@@ -484,16 +475,6 @@ export const LEGACY_TOPIC_TYPES: ReadonlySet<string> = new Set([
   "missed-cleanse",
   "missed-purge",
 ]);
-/** cc-locked: how long a single CC must last to be worth coaching (short CCs
- * are constant background noise). */
-// GH #34 batch 4 (2026-08-28), 300 matches / 1,127 healer rounds / 10,366
-// hard-CC instances on the owner: duration [0,1) 1,408 · [1,2) 1,979 · [2,3)
-// 1,460 · [3,4) 1,962 · [4,5) 1,264 · [5,6) 1,267 · [6,8) 971 · ≥ 8 54 (p50
-// 3.0 s, p90 6.0 s). Share that clears the gate: ≥ 3 s 53.2 % · **≥ 4 s
-// 34.3 %** · ≥ 5 s 22.1 % — no natural break; 4 s is an editorial "worth a
-// coaching line" cut that halves the volume relative to 3 s. Measured, not
-// official; re-run before moving.
-const CC_LOCKED_MIN_S = 4;
 
 /**
  * Signal-expansion batch 1 thresholds/caps (2026-08-06, BACKLOG #18 second
@@ -839,47 +820,6 @@ export function missedPurgeEvents(
     }));
 }
 
-/** cc-locked mapping (pure function): the owner themselves ate a hard CC of
- * >=CC_LOCKED_MIN_S seconds. trinketState goes straight into facts — "sat
- * through it with the trinket in hand" and "sat through it with the trinket on
- * cooldown" are two different coaching points, and the model distinguishes
- * them by that state. */
-export function ccLockedEvents(
-  instances: Pick<
-    ReturnType<typeof analyzePlayerCCAndTrinket>["ccInstances"][number],
-    | "atSeconds"
-    | "durationSeconds"
-    | "spellName"
-    | "spellId"
-    | "sourceName"
-    | "trinketState"
-    | "breakRacialName"
-    | "damageTakenDuring"
-  >[],
-  owner: { id: string; name: string },
-): CandidateEvent[] {
-  return instances
-    .filter((cc) => cc.durationSeconds >= CC_LOCKED_MIN_S)
-    .sort((a, b) => b.damageTakenDuring - a.damageTakenDuring)
-    .slice(0, CC_LOCKED_CAP)
-    .map((cc) => ({
-      id: `cc-locked:${owner.id}:${Math.round(cc.atSeconds)}`,
-      type: "cc-locked",
-      t: cc.atSeconds,
-      unitNames: [owner.name, cc.sourceName],
-      spell: cc.spellName,
-      spellId: cc.spellId,
-      facts: {
-        t: fmt(cc.atSeconds),
-        cc: cc.spellName,
-        duration: cc.durationSeconds.toFixed(1),
-        source: cc.sourceName,
-        trinketState: trinketStateFact(cc),
-        damageTakenK: (cc.damageTakenDuring / 1000).toFixed(0),
-      },
-    }));
-}
-
 /** kick-eaten mapping (pure function): the owner hard-cast into an enemy
  * interrupt (especially coachable for healers: fake-casting).
  *
@@ -991,112 +931,6 @@ export function kickEatenEvents(
               : `waited out the lockout (first cast ${k.firstActionDelayS?.toFixed(1) ?? "?"}s later)`,
       },
     }));
-}
-
-/** Neutral-HP line for wasted-trinket (arenacoach TRINKET-001: "everyone at
- * high health"; their catalog gives no exact number, so we take 80% and
- * calibrated it against the corpus in Task 6). */
-export const TRINKET_NEUTRAL_HP_PCT = 80;
-
-/** wasted-trinket dedupe gap (seconds): dirty logs occasionally record the
- * same trinket press twice (e.g. 42.1 and 42.4, sometimes even across a second
- * boundary at 42.1/43.2). The shortest PvP trinket cooldown is far longer than
- * this value, so neighboring records must be dirty duplicates of one action
- * rather than two independent presses — drop anything less than this gap from
- * the previously kept timestamp (adopted from agy flash review: same-second
- * records used to silently overwrite each other in auditFindings' byId Map,
- * and cross-second records made the coach nag twice about one action). */
-export const TRINKET_DEDUPE_GAP_S = 30;
-
-/**
- * wasted-trinket mapping (pure function, probes injected): the owner popped
- * the PvP trinket in an obviously neutral situation (whole team at high HP,
- * healer not CC'd, no enemy offensive cooldown active) — arenacoach
- * TRINKET-001. All three probes mirror the gate's single-source predicates:
- * the caller wires friendlyHpPctAt to getUnitHpAtTimestamp +
- * HP_SAMPLE_RADIUS_MS, and healerInCCAt / enemyOffensiveActiveAt to the
- * existing output of analyzePlayerCCAndTrinket / reconstructEnemyCDTimeline;
- * see the wiring in teamPlayEvents.
- *
- * Severity field / cap (TEMPORARY, BACKLOG #22, see the constant block
- * above): this type has no damage-based severity metric — a wasted trinket is
- * a spent-resource judgment, not a damage event — so `teamMinHpPct` (the
- * team's lowest HP% at the press, already gathered for the neutral-situation
- * gate) doubles as the ordering key: the higher it is, the more unambiguously
- * neutral the moment was, i.e. the more clearly a "wasted" press rather than a
- * borderline call right at the 80% gate. Ties keep insertion (chronological)
- * order, since Array.prototype.sort is stable.
- */
-export function wastedTrinketEvents(
-  trinketUseTimes: number[],
-  owner: { id: string; name: string },
-  probes: {
-    /** Lowest HP% across all friendly players at time t; if any of them can't
-     * be sampled → null (conservatively emit nothing). */
-    friendlyHpPctAt: (t: number) => number | null;
-    healerInCCAt: (t: number) => boolean;
-    enemyOffensiveActiveAt: (t: number) => boolean;
-  },
-): CandidateEvent[] {
-  const dedupedTimes: number[] = [];
-  for (const t of [...trinketUseTimes].sort((a, b) => a - b)) {
-    const prev = dedupedTimes[dedupedTimes.length - 1];
-    if (prev !== undefined && t - prev < TRINKET_DEDUPE_GAP_S) continue;
-    dedupedTimes.push(t);
-  }
-  const candidates: Array<{ t: number; minHp: number }> = [];
-  for (const t of dedupedTimes) {
-    const minHp = probes.friendlyHpPctAt(t);
-    if (minHp === null || minHp < TRINKET_NEUTRAL_HP_PCT) continue;
-    if (probes.healerInCCAt(t)) continue;
-    if (probes.enemyOffensiveActiveAt(t)) continue;
-    candidates.push({ t, minHp });
-  }
-  return candidates
-    .sort((a, b) => b.minHp - a.minHp)
-    .slice(0, WASTED_TRINKET_CAP)
-    .map(({ t, minHp }) => ({
-      id: `wasted-trinket:${owner.id}:${Math.round(t)}`,
-      type: "wasted-trinket",
-      t,
-      unitNames: [owner.name],
-      facts: { t: fmt(t), unit: owner.name, teamMinHpPct: fmt(minHp) },
-    }));
-}
-
-/**
- * Wiring helper for wasted-trinket: the team's lowest HP% at time t (gate
- * predicate IS the spec, see CLAUDE.md). The HP query timestamp must first be
- * snapped to the render grid (whole seconds) via `toRenderSecond(t)` before
- * sampling — using the raw fractional seconds from trinketUseTimes would
- * conflict with the whole-second [STATE] tick view (two contradictory HP
- * numbers under the same displayed second: the class-A bug from the
- * 2026-07-20 audit, see the comment on `toRenderSecond`). `hpLookup` defaults
- * to `getUnitHpAtTimestamp`; it is exported and injectable so tests can pin
- * the "query timestamp is already a render second" behavior directly instead
- * of guessing at it.
- */
-export function trinketTeamMinHpPctAt(
-  friends: any[],
-  combat: { startTime: number },
-  t: number,
-  hpLookup: (
-    unit: any,
-    timestampMs: number,
-    maxDtMs: number,
-  ) => number | null = getUnitHpAtTimestamp,
-): number | null {
-  let min = 100;
-  for (const f of friends) {
-    const hp = hpLookup(
-      f,
-      combat.startTime + toRenderSecond(t) * 1000,
-      HP_SAMPLE_RADIUS_MS, // single-source predicate: same radius as the gate
-    );
-    if (hp === null) return null;
-    min = Math.min(min, hp);
-  }
-  return min;
 }
 
 /**
@@ -1910,8 +1744,8 @@ function teamPlayEvents(
     // 反向(能解时真解了:胜 23.2% vs 负 27.9%,−4.7pp;赢家更常全程不交徽章,
     // 有机会零解控回合 胜 23.4% vs 负 16.2%),出面事件 98.5% 落在两个无证据
     // 档位(available_unused 51% + on_cooldown 47%)。被控事实仍由时间线
-    // [CC ON TEAM] 行完整供给模型;纯函数 ccLockedEvents 与测试保留(照
-    // juked-kick #15 先例,缓存 findings 仍要能渲染)。
+    // [CC ON TEAM] 行完整供给模型;其产出函数与测试已于 2026-09-24 删除
+    // (旧版本缓存从不被读取,渲染也不调产出函数)。
     out.push(...kickEatenEvents(cc.interruptInstances, owner));
 
     // wasted-trinket 已退役(GH #14 B 组复测,用户裁定 2026-08-19,v29):出面
@@ -1919,8 +1753,8 @@ function teamPlayEvents(
     // 恒 false 的结构性盲区让「满血时解控」本身成了罪名;按使用次数归一化后
     // 反向(胜 12.0% vs 负 10.4% 被判浪费),触发率持平(12.3/12.5)。徽章按压
     // 事实仍由时间线 [TRINKET] 行与 [CC ON TEAM] trinket 备注完整供给模型;
-    // 纯函数 wastedTrinketEvents / trinketTeamMinHpPctAt 与测试保留(照
-    // juked-kick #15 先例)。将来若要「徽章被钓」信号,应重新设计成看后果的
+    // 其产出函数、团队血线辅助函数与测试已于 2026-09-24 删除。将来若要
+    // 「徽章被钓」信号,应重新设计成看后果的
     // 版本(中立按压 + 真空期内落硬控/击杀尝试)再接地上线。
     //
     // owner/friends are passed through (2026-08-06, signal-expansion batch 1)
@@ -1966,8 +1800,8 @@ function teamPlayEvents(
       );
     }
   } catch {
-    /* owner CC summary not computable → all five types (cc-locked /
-       kick-eaten / wasted-trinket / position-mistake / cc-avoidable) absent */
+    /* owner CC summary not computable → all three types (kick-eaten /
+       position-mistake / cc-avoidable) absent */
   }
 
   // cc-held (COOLDOWN-001, 2026-08-06): pure filter over ownerCds, already
@@ -2098,9 +1932,9 @@ function extractDeathSetups(
   units: any[],
   start: number,
   ownerId?: string,
-  /** Intent guard (BACKLOG #26 Task 2): threaded down to
-   * `deathUnusedDefensiveEvents` only — absent/`available:false` degrades
-   * silently there. */
+  /** Intent guard (BACKLOG #26 Task 2): was threaded down only to the
+   * death-unused-defensive producer, whose emitter was deleted 2026-09-24;
+   * currently unused. */
   rawStreams?: RawStreams,
 ): CandidateEvent[] {
   const out: CandidateEvent[] = [];
@@ -2190,9 +2024,8 @@ function extractDeathSetups(
       // 神圣赞美诗这类非个人减伤;真正有分段梯度的错误是「危机 3 秒无应对」,
       // 由 crisis-no-response(不以死亡为锚、承伤 ≥10%、结果参照)接替。
       // 死亡时哪些减伤可用的事实仍由时间线 [DEATH] 行的 (Unused: …) 供给模型;
-      // 纯函数 deathUnusedDefensiveEvents 与测试保留(照 cc-locked #14 先例,
-      // 缓存 findings 仍要能渲染)。
-      void deathUnusedDefensiveEvents;
+      // 其产出函数与测试已于 2026-09-24 删除(旧版本缓存从不被读取,渲染
+      // 也不调产出函数)。
       void rawStreams; // was threaded only to the retired producer
       if (ownerUnit && ownerUnit.id !== u.id) {
         try {

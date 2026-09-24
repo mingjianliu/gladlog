@@ -57,7 +57,6 @@ import {
 import {
   buildHealerOffenseSummary,
   formatHealerOffenseForContext,
-  HEALER_OFFENSE_FLAGS,
 } from "../utils/healerOffenseAnalysis";
 import { detectHealingGaps } from "../utils/healingGaps";
 import { analyzeKickAudit } from "../utils/kickAudit";
@@ -100,13 +99,10 @@ import {
   lowPressureUnusedDefensiveNote,
   MITIGATION_AUDIT_INDEPENDENT_NOTE,
 } from "./matchTimelineSections";
+import { buildMatchTimeline, BuildMatchTimelineParams } from "./matchTimeline";
+import { buildPlayerLoadout } from "./resourceSnapshot";
 import { DMG_SPIKE_THRESHOLD, mergeTimestampedLines } from "./timelineHelpers";
 import { unitLabeler } from "./unitLabel";
-import {
-  buildMatchTimeline,
-  BuildMatchTimelineParams,
-  buildPlayerLoadout,
-} from "./utils";
 
 // ──────────────────────────────────────────────────────────────────────────────
 
@@ -370,20 +366,19 @@ export function buildMatchContext(
   const ownerPurgeTimes = dispelSummary.ourPurges
     .filter((p) => p.sourceName === owner.name)
     .map((p) => p.timeSeconds);
-  const healerOffense =
-    healer && HEALER_OFFENSE_FLAGS.V1_SLACK_GATED
-      ? buildHealerOffenseSummary(
-          combat,
-          owner,
-          friends as ICombatUnit[],
-          enemies as ICombatUnit[],
-          offensiveWindows,
-          enemyCDTimeline,
-          ownerCCSummary?.ccInstances ?? [],
-          enemyHealerCCSummary?.ccInstances ?? [],
-          ownerPurgeTimes,
-        )
-      : null;
+  const healerOffense = healer
+    ? buildHealerOffenseSummary(
+        combat,
+        owner,
+        friends as ICombatUnit[],
+        enemies as ICombatUnit[],
+        offensiveWindows,
+        enemyCDTimeline,
+        ownerCCSummary?.ccInstances ?? [],
+        enemyHealerCCSummary?.ccInstances ?? [],
+        ownerPurgeTimes,
+      )
+    : null;
 
   const matchArchetype = computeMatchArchetype(
     friends as ICombatUnit[],

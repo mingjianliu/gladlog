@@ -21,7 +21,7 @@
  * electron's app/BrowserWindow cannot be instantiated cheaply under vitest,
  * while this layer depends on three pure function dependencies and can be
  * tested completely without electron. */
-export interface QuitLifecycleDeps {
+interface QuitLifecycleDeps {
   /** Usually `() => recorder?.stop() ?? Promise.resolve()` */
   stopRecorder: () => Promise<void>;
   /** Usually `() => host?.stop()` */
@@ -51,7 +51,7 @@ export interface QuitLifecycleDeps {
   timeoutMs?: number | (() => number);
 }
 
-export interface QuitLifecycleHandler {
+interface QuitLifecycleHandler {
   /** Wire up as `app.on("before-quit", (e) => handler.onBeforeQuit(e))`. */
   onBeforeQuit(event: { preventDefault(): void }): void;
   /** Test-only: await the cleanup chain (production code need not call it). */

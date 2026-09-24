@@ -19,8 +19,8 @@ export const RULE_RETIRE_MAX_HITS = 2;
 export const TREND_BUCKET_MATCHES = 5;
 /** Conditional slice significance (spec §2): the subset has >=4 hits and a
  * hit rate >= 2x that of the full set. */
-export const SLICE_MIN_HITS = 4;
-export const SLICE_RATE_FACTOR = 2;
+const SLICE_MIN_HITS = 4;
+const SLICE_RATE_FACTOR = 2;
 
 export function patternId(
   category: string,

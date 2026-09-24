@@ -15,7 +15,7 @@ const PAIR_WINDOW_MS = 12_000;
  * proc'd instant casts get mispaired) and was rejected. */
 const QUEUE_TOLERANCE_MS = 400;
 
-export interface CastBar {
+interface CastBar {
   unitId: string;
   spellId: number;
   spellName: string;

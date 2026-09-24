@@ -2,7 +2,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 
 import { MatchReport } from "../src/renderer/src/report/components/MatchReport";
-import { deriveUnitTimeline } from "../src/renderer/src/report/derive/casts";
 import { deriveReplay } from "../src/renderer/src/report/derive/replay";
 import { deriveSummary } from "../src/renderer/src/report/derive/summary";
 import { loadRealMatchFixture } from "./fixtures/loadFixture";
@@ -21,7 +20,7 @@ describe("真实比赛数据渲染", () => {
     expect(players.every((p) => /^Player\d+-Test$/.test(p.name))).toBe(true);
   });
 
-  it("derive 层吃真实数据:meters/回放/单位事件流都非空", () => {
+  it("derive 层吃真实数据:meters/回放都非空", () => {
     const summary = deriveSummary(m);
     expect(summary.length).toBeGreaterThan(0);
     expect(summary.some((r) => r.damageDone > 0 || r.healingDone > 0)).toBe(
@@ -33,9 +32,6 @@ describe("真实比赛数据渲染", () => {
     expect(replay.tracks.every((t) => t.samples.length > 0)).toBe(true);
     // Real movement: the bounding box is non-degenerate
     expect(replay.bounds.maxX - replay.bounds.minX).toBeGreaterThan(1);
-
-    const anyPlayer = Object.values(m.units).find((u) => u.kind === "Player")!;
-    expect(deriveUnitTimeline(m, anyPlayer.id).length).toBeGreaterThan(0);
   });
 
   it("战报视图:头/榜单卡/时间轴齐全(全宽,无侧栏)", () => {
@@ -47,8 +43,6 @@ describe("真实比赛数据渲染", () => {
     expect(
       container.querySelector("[data-testid='rpt-timeline']"),
     ).toBeTruthy();
-    // View B's unit sidebar was removed by design
-    expect(container.querySelector(".rpt-unitpanel")).toBeNull();
   });
 
   it("回放视图:竞技场画出多个单位(职业字形 + 血条)", () => {

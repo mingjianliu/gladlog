@@ -497,10 +497,10 @@ export function wasLockedOutThroughWindow(
  * while stunned" SpellMisc attribute bits (usableWhileCcGenerated.ts) plus a
  * small unconditional gap layer researched the same way. It says nothing about
  * whether an ability is usable while feared, disoriented, or incapacitated.
- * Two consumers (`matchTimelineSections.ts`'s [DEATH] Unused list and
- * `candidateFindings.ts`'s `deathUnusedDefensiveEvents`) used to gate their
- * "was this wall exempt from blame" check on `wasLockedOutThroughWindow` +
- * `USABLE_WHILE_CC_SPELL_IDS.has(...)` alone — which meant a player locked out
+ * Two consumers (`matchTimelineSections.ts`'s [DEATH] Unused list and the
+ * death-unused-defensive candidate producer, emitter deleted 2026-09-24) used
+ * to gate their "was this wall exempt from blame" check on
+ * `wasLockedOutThroughWindow` + `USABLE_WHILE_CC_SPELL_IDS.has(...)` alone — which meant a player locked out
  * by Fear for the whole lethal window (not a stun) could still be blamed for
  * not pressing e.g. 1022 Blessing of Protection, because 1022 happens to sit in
  * the *stunned* table (confirmed usable-while-stunned by user sign-off — but

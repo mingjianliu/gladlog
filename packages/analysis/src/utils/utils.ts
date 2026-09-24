@@ -57,7 +57,7 @@ type ParseResult = {
  */
 export const SIGNIFICANT_DAMAGE_HEAL_THRESHOLD = 10000;
 
-export interface IAuraInterval {
+interface IAuraInterval {
   spellId: string;
   spellName: string;
   /** Raw log source name of the aura (who applied it) — needed to price a

@@ -15,7 +15,7 @@
  * path (fail-open).
  */
 
-export interface RoundOffsets {
+interface RoundOffsets {
   /** Byte offset one past the rounds array's opening `[`. */
   arrayOpenEnd: number;
   /** Byte offset of the rounds array's closing `]`. */

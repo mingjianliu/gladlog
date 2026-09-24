@@ -17,7 +17,7 @@
  * file simply waits for the next run. */
 export const OWN_LOG_QUIET_MS = 10 * 60 * 1000;
 
-export interface OwnLogFile {
+interface OwnLogFile {
   name: string;
   size: number;
   mtimeMs: number;

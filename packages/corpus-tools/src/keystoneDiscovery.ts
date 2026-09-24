@@ -5,7 +5,7 @@ export interface StudyRow {
   offensiveIndex: number;
   ccDensity: number;
 }
-export interface NodeCandidate {
+interface NodeCandidate {
   nodeId: number;
   prevalence: number;
   medWith: number;

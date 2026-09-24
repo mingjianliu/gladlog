@@ -8,7 +8,7 @@
  * Except for Nagrand (1505, validated against real positions), the values are
  * approximate and will be refined as needed.
  */
-export interface ArenaMap {
+interface ArenaMap {
   minX: number;
   maxX: number;
   minY: number;

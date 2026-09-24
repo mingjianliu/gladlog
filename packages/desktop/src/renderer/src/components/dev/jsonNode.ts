@@ -28,7 +28,7 @@ export interface JsonChild {
   summary: string | null;
 }
 
-export interface ChildPage {
+interface ChildPage {
   children: JsonChild[];
   /** Total child count of this container (unaffected by paging) */
   total: number;
@@ -46,7 +46,7 @@ export interface ChildPage {
 export const ARRAY_PAGE_SIZE = 500;
 
 /** Character cap for a leaf's inline preview. */
-export const LEAF_PREVIEW_CAP = 200;
+const LEAF_PREVIEW_CAP = 200;
 
 /**
  * Node budget for key-name search: a full-graph walk of a 62MB doc is a
@@ -55,7 +55,7 @@ export const LEAF_PREVIEW_CAP = 200;
 export const SEARCH_NODE_BUDGET = 200_000;
 
 /** Maximum number of hits reported by a single search. */
-export const SEARCH_HIT_CAP = 50;
+const SEARCH_HIT_CAP = 50;
 
 export function kindOf(v: unknown): JsonNodeKind {
   if (v === null) return "null";
@@ -210,7 +210,7 @@ export function ancestorPaths(path: string): string[] {
   return out;
 }
 
-export interface KeySearchResult {
+interface KeySearchResult {
   paths: string[];
   /** Number of nodes actually visited */
   scanned: number;

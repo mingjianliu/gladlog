@@ -8,7 +8,7 @@ export interface SampleMeta {
   archetype: string;
 }
 
-export interface StratificationResult {
+interface StratificationResult {
   selected: SampleMeta[];
   perSpec: Record<string, { n: number; insufficient: boolean }>;
 }

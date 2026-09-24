@@ -9,7 +9,7 @@ import type { ManagedObsPrefs } from "../shared/managedObsPrefs";
  * directly saves the user from copying the password out of OBS by hand (real-
  * machine feedback). Read-only, never write — OBS rewrites the whole file on
  * exit, so any external write gets silently clobbered. */
-export interface ObsWsDetected {
+interface ObsWsDetected {
   found: boolean;
   configPath?: string;
   enabled?: boolean;
@@ -125,7 +125,7 @@ export function resolveAutoConfigPassword(d: ObsWsDetected): string | null {
 //                                            DesktopAudioDevice1 / AuxAudioDevice1
 //                                            → settings.device_id, muted
 
-export interface ObsAudioDeviceDetected {
+interface ObsAudioDeviceDetected {
   deviceId: string;
   /** The source is muted (or disabled) in the user's OBS — they have the
    * device configured but do not actually record it. Import maps this to
@@ -133,7 +133,7 @@ export interface ObsAudioDeviceDetected {
   muted: boolean;
 }
 
-export interface ObsRecordingPrefsDetected {
+interface ObsRecordingPrefsDetected {
   found: boolean;
   configRoot?: string;
   /** The profile's recording folder, or null when the profile could not be

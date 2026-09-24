@@ -16,15 +16,7 @@ import {
   reconstructDispelSummary,
   wasRemovedByAllyDispel,
 } from "../../src/utils/dispelAnalysis";
-import { DISPEL_FEATURE_FLAGS } from "../../src/data/dispelFeatureFlags";
 import { makeAuraEvent, makeDispelAction, makeUnit } from "./testHelpers";
-
-beforeAll(() => {
-  DISPEL_FEATURE_FLAGS.F18_FATAL_DISPEL = true;
-  DISPEL_FEATURE_FLAGS.F124_ENHANCED_CC_ANNOTATIONS = true;
-  DISPEL_FEATURE_FLAGS.F131_F132_CLEANSE_COOLDOWNS = true;
-  DISPEL_FEATURE_FLAGS.F152_MISSED_PURGES_TIMELINE = true;
-});
 
 // Mock talents module to bypass complex lookups
 vi.mock("../../src/utils/talents", () => ({

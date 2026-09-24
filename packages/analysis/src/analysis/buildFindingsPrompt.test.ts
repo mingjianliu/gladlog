@@ -109,45 +109,20 @@ describe("buildFindingsPrompt", () => {
       expect(p).toMatch(/facts\.costNorm/);
       expect(p).toMatch(/last-resort|emergency/);
     });
-
-    it("death-unused-defensive 携带 costNorm 事实时,图例出现同一解释(单源文案,与 cd-waste 一致)", () => {
-      const withCostNorm: CandidateEvent[] = [
-        ...candidates,
-        {
-          id: "death-unused-defensive:p1:100",
-          type: "death-unused-defensive",
-          t: 100,
-          unitNames: ["Me-R"],
-          facts: {
-            t: "100",
-            unit: "Me-R",
-            walls: "Divine Shield",
-            free: "yes",
-            costNorm:
-              "大技能:机制可用,但代价过高,不得推荐为常规挡控手段,仅致死威胁下的最后手段",
-          },
-        },
-      ];
-      const p = buildFindingsPrompt(withCostNorm, "", "Holy Paladin");
-      expect(p).toMatch(/facts\.costNorm/);
-      expect(p).toMatch(/never as "you should press this to block\/mitigate"/);
-    });
   });
 
   describe("意图守护注(BACKLOG #26 Task 2,2026-08-15):facts.attempted 字段说明", () => {
-    it("death-unused-defensive 携带 attempted 事实时,图例出现意图守护措辞(不得读作屯而不用)", () => {
+    it("cd-hoarded 携带 attempted 事实时,图例出现意图守护措辞(不得读作屯而不用)", () => {
       const withAttempted: CandidateEvent[] = [
         ...candidates,
         {
-          id: "death-unused-defensive:p1:100",
-          type: "death-unused-defensive",
+          id: "cd-hoarded:p1:100",
+          type: "cd-hoarded",
           t: 100,
           unitNames: ["Me-R"],
           facts: {
             t: "100",
-            unit: "Me-R",
-            walls: "Astral Shift",
-            free: "yes",
+            readyCds: "Astral Shift",
             attempted: "曾尝试施放被拒(尚未恢复×3)",
           },
         },

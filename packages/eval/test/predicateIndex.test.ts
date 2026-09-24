@@ -59,7 +59,6 @@ import * as burstWindowPrior from "@gladlog/analysis/src/data/burstWindowPrior";
 import { CANDIDATE_TYPE_FLAGS } from "@gladlog/analysis/src/data/candidateTypeFlags";
 import * as candidateTypeRegistry from "@gladlog/analysis/src/data/candidateTypeRegistry";
 import * as cdTriggerPriorData from "@gladlog/analysis/src/data/cdTriggerPrior";
-import { DISPEL_FEATURE_FLAGS } from "@gladlog/analysis/src/data/dispelFeatureFlags";
 import * as dispelObservedGenerated from "@gladlog/analysis/src/data/dispelObservedGenerated";
 import * as dispelVerdicts from "@gladlog/analysis/src/data/dispelVerdicts";
 import * as healerSaveCd from "@gladlog/analysis/src/data/healerSaveCd";
@@ -98,7 +97,6 @@ import * as enemyDefensives from "@gladlog/analysis/src/utils/enemyDefensives";
 import * as enemyInterrupts from "@gladlog/analysis/src/utils/enemyInterrupts";
 import * as externalDamage from "@gladlog/analysis/src/utils/externalDamage";
 import * as healerOffenseAnalysis from "@gladlog/analysis/src/utils/healerOffenseAnalysis";
-import { HEALER_OFFENSE_FLAGS } from "@gladlog/analysis/src/utils/healerOffenseAnalysis";
 import * as incomingPressure from "@gladlog/analysis/src/utils/incomingPressure";
 import * as killAttempts from "@gladlog/analysis/src/utils/killAttempts";
 import * as killWindowFactsMod from "@gladlog/analysis/src/utils/killWindowFacts";
@@ -2229,8 +2227,6 @@ describe("谓词索引:分析产出 X ⇄ 门规验证 X", () => {
 // value in double quotes: `\`"timeline"\``.
 const FLAG_REGISTRIES: Record<string, Record<string, boolean | string>> = {
   CANDIDATE_TYPE_FLAGS,
-  DISPEL_FEATURE_FLAGS,
-  HEALER_OFFENSE_FLAGS,
   PRODUCTION_FACT_CONFIG,
   TIMELINE_LINE_FLAGS,
 };

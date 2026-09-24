@@ -1,8 +1,5 @@
 import { join } from "path";
 
-import { PROMPT_VERSION } from "./promptVersion";
-import type { AnalysisCacheDoc } from "./analysisSlots";
-
 /**
  * The renderer must NOT import this file — the `import { join } from "path"` at
  * the top is a Node builtin, and electron-vite's renderer build targets the
@@ -33,25 +30,4 @@ export function analysisCachePath(
   lang: string,
 ): string {
   return join(matchesDir, matchId, `analysis-v2.${lang}.json`);
-}
-
-/**
- * Wraps a result in the envelope above. `createdAt` is injected by the caller so
- * tests can pin the time.
- * @deprecated The v1 single-result envelope. The write side has moved to
- * `upsertSlot` (v2, per-slot); this is kept only for the old migration path and
- * internal references in this file — do not add new call sites.
- */
-export function analysisCacheDoc<T>(
-  lang: string,
-  result: T,
-  createdAt: number = Date.now(),
-): AnalysisCacheDoc<T> {
-  return {
-    schemaVersion: 1,
-    promptVersion: PROMPT_VERSION,
-    language: lang,
-    createdAt,
-    result,
-  };
 }

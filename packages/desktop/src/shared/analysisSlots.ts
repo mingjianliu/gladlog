@@ -21,7 +21,7 @@ import { PROMPT_VERSION } from "./promptVersion";
 
 /** On-disk envelope for the analysis cache. Written by main, read by main, and
  * seeded by E2E — all three share this one shape. */
-export interface AnalysisCacheDoc<T> {
+interface AnalysisCacheDoc<T> {
   schemaVersion: 1;
   promptVersion: number;
   language: string;

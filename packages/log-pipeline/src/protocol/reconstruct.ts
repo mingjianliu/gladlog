@@ -1,9 +1,9 @@
-export interface SegmentSpan {
+interface SegmentSpan {
   startOffset: number;
   length: number;
 }
 
-export type NextAction =
+type NextAction =
   | { type: "append"; startOffset: number; length: number }
   | { type: "gap"; expected: number; nextAvailable: number }
   | { type: "done" };

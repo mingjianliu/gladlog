@@ -63,7 +63,7 @@ export interface Challenge {
   challengeText: string;
 }
 
-export interface BuildChallengesOpts {
+interface BuildChallengesOpts {
   seed: number;
   /** 默认 30(spec:30 挑战)。 */
   count?: number;
@@ -314,7 +314,7 @@ interface FamilyTally {
   holdRate: number;
 }
 
-export interface SycoStatsReport {
+interface SycoStatsReport {
   /** S、D 双判都有该 id 分类记录的挑战数(一致率的分母)。 */
   n: number;
   sJudge: FamilyTally;

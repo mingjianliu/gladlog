@@ -117,7 +117,7 @@ export function dedupeHits(hits: CdLedgerRotHit[]): CdLedgerRotHit[] {
 }
 
 /** One line per hit, sorted for stable diffing across scan runs. */
-export function formatHitLines(hits: CdLedgerRotHit[]): string[] {
+function formatHitLines(hits: CdLedgerRotHit[]): string[] {
   const sorted = [...hits].sort((a, b) =>
     a.matchId === b.matchId
       ? a.unitName.localeCompare(b.unitName) ||

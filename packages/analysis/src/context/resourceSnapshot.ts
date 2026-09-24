@@ -366,7 +366,7 @@ export function computeOnCDDisplayNames(
   }
   return onCDNames;
 }
-export interface ResourceSnapshotParams {
+interface ResourceSnapshotParams {
   timeSeconds: number;
   ownerCDs: IMajorCooldownInfo[];
   ownerName: string;

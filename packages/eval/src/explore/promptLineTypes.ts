@@ -8,16 +8,6 @@
  * 逐类实测,而实测的前提是分类本身稳定可复现。
  */
 
-/** 一局 prompt 的行类型普查(154 局均值,2026-08-23):前 14 类占 87% 的字符。 */
-export interface LineTypeShare {
-  /** 分类键,形如 `[STATE]`,或括号包住的非标签类。 */
-  key: string;
-  /** 每局平均行数。 */
-  linesPerMatch: number;
-  /** 占全 prompt 字符的比例(0–1)。 */
-  charShare: number;
-}
-
 /**
  * 把一行 prompt 归到一个类型。带方括号标签的按标签分;其余按形状分到几个兜底类。
  *
@@ -48,13 +38,13 @@ export function classifyPromptLine(line: string): string {
  */
 import { isNoChangeResLine } from "@gladlog/analysis";
 
-export const RES_NO_CHANGE_KEY = "[RES:no-change]";
+const RES_NO_CHANGE_KEY = "[RES:no-change]";
 /**
  * GH #91 消融键:只删 `[ENEMY DEF]` 外置行上的 `| during it: …` 尾段(行本身保留)、
  * 图例里解释它的四行、候选事实块里的 `duringExternal=…`。删整行会把外置减伤这个
  * 事实一起删掉,测出来的就不是「这段标注有没有用」。
  */
-export const DURING_EXTERNAL_KEY = "[ENEMY DEF:during-it]";
+const DURING_EXTERNAL_KEY = "[ENEMY DEF:during-it]";
 const DURING_LEGEND = [
   "`| during it:",
   "friendly who had hit that unit in the 3 s before the external",
@@ -62,12 +52,17 @@ const DURING_LEGEND = [
   "how much of it was in the wall's school",
   "whether they could act.",
 ];
-export function ablateDuringExternal(promptText: string): string {
+function ablateDuringExternal(promptText: string): string {
   return promptText
     .split("\n")
-    .filter((l) => !(l.startsWith("    ") && DURING_LEGEND.some((k) => l.includes(k))))
+    .filter(
+      (l) =>
+        !(l.startsWith("    ") && DURING_LEGEND.some((k) => l.includes(k))),
+    )
     .map((l) =>
-      l.includes("[ENEMY DEF]") ? l.replace(/ \| during it: .*$/, "") : l.replace(/, duringExternal=[^,}]*/, ""),
+      l.includes("[ENEMY DEF]")
+        ? l.replace(/ \| during it: .*$/, "")
+        : l.replace(/, duringExternal=[^,}]*/, ""),
     )
     .join("\n");
 }
@@ -120,7 +115,7 @@ export function jaccard(a: Set<string>, b: Set<string>): number {
  * 而删掉占 16.5% 字符的整个 `[STATE]` 类才把它压到 0.401。信号比噪声还小,这个尺子
  * 没法用。固定枚举把「这一局模型认为哪几类问题存在」变成可比集合,才谈得上比较。
  */
-export const FINDING_TOPICS = [
+const FINDING_TOPICS = [
   "defensive-timing",
   "cc-usage",
   "dispel",

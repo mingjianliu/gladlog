@@ -9,7 +9,7 @@
  */
 import generated from "./spellManaCostGenerated.json";
 
-export interface ISpellManaCostRaw {
+interface ISpellManaCostRaw {
   /** % of the caster's base max mana per cast. */
   pct?: number;
   /** Flat absolute mana cost — mutually exclusive with `pct` in every
@@ -17,7 +17,7 @@ export interface ISpellManaCostRaw {
   flat?: number;
 }
 
-export interface ISpellManaCostRow extends ISpellManaCostRaw {
+interface ISpellManaCostRow extends ISpellManaCostRaw {
   /** Present when this spell's cost differs by casting spec — keyed by
    * `CombatUnitSpec` id (packages/parser-compat/src/enumsGenerated.ts). */
   bySpec?: Record<string, ISpellManaCostRaw>;

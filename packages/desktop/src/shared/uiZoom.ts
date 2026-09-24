@@ -28,11 +28,11 @@
  * slivers and the user cannot find their way back to the settings page to undo
  * it. The clamp is what makes a dirty config recoverable instead of a
  * reinstall. */
-export const UI_ZOOM_MIN = 0.5;
+const UI_ZOOM_MIN = 0.5;
 /** Ceiling. Above the 150% the UI offers, but not by much: past ~3x a 4K
  * window shows less content than a 1080p one and the report layout has nowhere
  * left to reflow. */
-export const UI_ZOOM_MAX = 3;
+const UI_ZOOM_MAX = 3;
 export const UI_ZOOM_DEFAULT = 1;
 
 /** The steps the settings page offers. Percentages in the UI are rendered from

@@ -6,7 +6,7 @@
  * Contains only the name the prompt needs; to be replaced by the subproject-5
  * pipeline output (which includes map geometry).
  */
-export interface IZoneMetadata {
+interface IZoneMetadata {
   id: string;
   name: string;
 }

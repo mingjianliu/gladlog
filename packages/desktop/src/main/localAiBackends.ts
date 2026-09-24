@@ -50,7 +50,7 @@ export const AGY_PROMPT_SPILL_DIR = join(tmpdir(), "gladlog-agy-prompts");
 // directory itself (0o700 on POSIX denies other users from traversing into it,
 // regardless of the mode on each file inside) is the only lever available on
 // this path.
-export const CODEX_OUT_SPILL_DIR = join(tmpdir(), "gladlog-codex-out");
+const CODEX_OUT_SPILL_DIR = join(tmpdir(), "gladlog-codex-out");
 
 // Each spill subdirectory is swept once per process (triggered on the first
 // spill inside the module, not at import time — tests import this module
@@ -922,7 +922,7 @@ export function stripAgyHeader(s: string): string {
 /** Session id from codex's `--json` JSONL event stream: JSON.parse line by
  * line and take the first `session_id` or `thread_id` value shaped like a
  * UUID; returns null if nothing parses out of the whole stream. */
-export function parseCodexSessionId(stdoutJsonl: string): string | null {
+function parseCodexSessionId(stdoutJsonl: string): string | null {
   const UUID_RE =
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   for (const line of stdoutJsonl.split("\n")) {
@@ -943,7 +943,7 @@ export function parseCodexSessionId(stdoutJsonl: string): string | null {
  * Returns null if the whole thing fails to parse (older agy / truncated
  * output) — the caller then falls back to plain text; the main analysis flow
  * must never fail because session capture failed (coach chat spec). */
-export function parseAgyJsonEnvelope(stdout: string): {
+function parseAgyJsonEnvelope(stdout: string): {
   conversationId: string | null;
   status: string | null;
   response: string;

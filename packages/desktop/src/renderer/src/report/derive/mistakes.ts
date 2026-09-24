@@ -378,16 +378,10 @@ export function candidateDetail(c: CandidateEvent): string {
           : "";
       return `${f.stun ?? ""} 开在 ${f.target ?? ""} 身上(徽章还在),当时 ${f.primeAlt ?? ""} 无徽章无控中减伤;失败原因 ${f.failedBy ?? "?"}${ref}`;
     }
-    case "burst-into-immunity":
-      return `${f.spell ?? ""} 打进 ${f.target ?? ""} 的 ${f.immunity ?? ""}(重叠 ${f.overlap ?? "?"}s)`;
     case "burst-into-mitigation":
       return `${f.spell ?? ""} 打进 ${f.target ?? ""} 的 ${f.mitSpell ?? ""}(减伤 ${f.mitPct ?? "?"}%),当时 ${f.betterTarget ?? ""} 是更软的目标`;
-    case "dr-clipped-cc":
-      return `${f.spell ?? ""} 打在 ${f.target ?? ""} 的 ${f.dr ?? ""} 递减上(仅 ${f.duration ?? "?"}s)`;
     case "cd-waste":
       return `${f.spell ?? ""} 整场未按`;
-    case "death-unused-defensive":
-      return `死亡时 ${f.walls ?? ""} 可用未按`;
     case "crisis-no-response": {
       // spec §1c: Solo Shuffle's reference counts ANY friendly death within
       // 15 s; everything else counts the owner's own death within 10 s —
@@ -413,8 +407,6 @@ export function candidateDetail(c: CandidateEvent): string {
       return `${f.mate ?? ""} 掉到 ${f.mateHpPct ?? "?"}%(2 秒内承伤 ${f.dmg2sPct ?? "?"}%),你 ${f.windowFrom ?? ""}–${f.windowTo ?? ""} 什么都没放(距 ${f.distanceYd ?? "?"} 码,可用外置:${f.externalsReady ?? "none"};同类时刻治疗没出手 ${f.refDeathIdle ?? "?"}% 队友十秒内阵亡,出手了 ${f.refDeathAnswered ?? "?"}%)`;
     case "external-unused":
       return `${f.victim ?? ""} 阵亡时 ${f.external ?? ""} 可用`;
-    case "wasted-trinket":
-      return `全队最低血量 ${f.teamMinHpPct ?? "?"}% 时开饰品`;
     case "questionable-external":
       return `${f.spell ?? ""} 给 ${f.target ?? ""}(${f.targetHp ?? "?"}% HP,距最近爆发窗 ${f.nearestBurstGapS ?? "?"}s)`;
     case "slow-defensive-response":

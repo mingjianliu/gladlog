@@ -27,8 +27,6 @@ import type {
  * (>20% redundancy) -- spec §6. */
 const COMPACT_REDUNDANCY_FACTOR = 1.2;
 
-export type LearningLedger = ReturnType<typeof createLearningLedger>;
-
 export function createLearningLedger(learningDir: string) {
   const file = join(learningDir, "ledger.ndjson");
 

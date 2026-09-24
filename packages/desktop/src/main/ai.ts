@@ -73,7 +73,7 @@ export function buildCoachSystemPrompt(lang: AiLanguage): string {
 export type { AiBackend } from "../shared/aiModels";
 import type { AiBackend, AiModelSelection } from "../shared/aiModels";
 
-export interface AiClientSettings {
+interface AiClientSettings {
   anthropicApiKey: string | null;
   deepseekApiKey?: string | null;
   aiBackend?: AiBackend | null;

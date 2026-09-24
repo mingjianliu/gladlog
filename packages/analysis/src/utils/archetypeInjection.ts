@@ -24,14 +24,14 @@ import {
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export interface IArchetypeClusterPrompt {
+interface IArchetypeClusterPrompt {
   label: string;
   isNoise: boolean;
   promptText: string;
   matchCount: number;
 }
 
-export interface IArchetypeClassification {
+interface IArchetypeClassification {
   clusterKey: string;
   label: string;
   isNoise: boolean;
@@ -66,13 +66,13 @@ const MAX_DISTANCE_SD = 4.5;
 
 // ── Bracket detection ─────────────────────────────────────────────────────────
 
-export type ArchetypeBracket = "3v3" | "solo_shuffle";
+type ArchetypeBracket = "3v3" | "solo_shuffle";
 
 /**
  * Maps the raw bracket string from combat metadata to the archetype slug.
  * Returns null for brackets we don't have a model for (2v2, BG Blitz, etc.).
  */
-export function bracketToArchetypeSlug(
+function bracketToArchetypeSlug(
   bracket: string | undefined | null,
 ): ArchetypeBracket | null {
   // Shared bracket predicate (utils/bracketKey.ts, 2026-08-30) — 2v2 and
@@ -110,7 +110,7 @@ function getPrompts(
  *   - Bracket is unsupported (e.g., 2v2)
  *   - The classified cluster has no prompt entry (shouldn't happen for valid models)
  */
-export function classifyMatchArchetype(
+function classifyMatchArchetype(
   bracket: string | undefined | null,
   dynamics: IMatchDynamicFeatures,
 ): IArchetypeClassification | null {

@@ -44,11 +44,11 @@ import { OFFENSIVE_CD_SPELL_IDS } from "@gladlog/analysis/src/utils/spellDanger"
 import type { ICombatUnit } from "@gladlog/parser-compat";
 
 export const WINDOW_MS = 3000;
-export const PRIOR_DAMAGE_MS = 2000;
+const PRIOR_DAMAGE_MS = 2000;
 
-export type EvidenceStatus = "known" | "estimated" | "unknown";
-export type EvidencePhase = "at-t" | "window";
-export type EvidenceKind =
+type EvidenceStatus = "known" | "estimated" | "unknown";
+type EvidencePhase = "at-t" | "window";
+type EvidenceKind =
   | "pressure"
   | "mitigation"
   | "immunity"
@@ -75,7 +75,7 @@ const MINIMAP_TRACED_ZONES: ReadonlySet<string> = new Set([
   "2547", // Enigma Crucible
 ]);
 
-export interface EvidenceItem {
+interface EvidenceItem {
   phase: EvidencePhase;
   kind: EvidenceKind;
   status: EvidenceStatus;
@@ -91,7 +91,7 @@ export interface EvidenceItem {
   detail?: Record<string, unknown>;
 }
 
-export interface CrisisAnswerEvidence {
+interface CrisisAnswerEvidence {
   ownerId: string;
   ownerName: string;
   tMs: number;

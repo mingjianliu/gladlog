@@ -32,7 +32,6 @@ describe("MatchReport", () => {
     );
     expect(meterNames.some((t) => t.includes(short))).toBe(true);
     expect(meterNames.some((t) => t.includes(owner.name))).toBe(false);
-    expect(container.querySelector(".rpt-unitpanel")).toBeNull(); // View B was removed
   });
   it("meters 模式切换按钮工作", () => {
     render(<MatchReport source={m} />);

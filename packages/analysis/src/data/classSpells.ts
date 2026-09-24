@@ -12,12 +12,12 @@
 import { CombatUnitClass } from "@gladlog/parser-compat";
 import { SpellTag } from "./spellTypes";
 
-export interface IClassAbility {
+interface IClassAbility {
   spellId: string;
   name: string;
   tags: SpellTag[];
 }
-export interface IClassSpellMetadata {
+interface IClassSpellMetadata {
   unitClass: CombatUnitClass;
   abilities: IClassAbility[];
 }

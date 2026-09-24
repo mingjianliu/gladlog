@@ -1,6 +1,6 @@
 import { useIconDataUrl } from "./useIconDataUrl";
 
-export interface SpellIconProps {
+interface SpellIconProps {
   icon?: string;
   label: string;
   size?: number;

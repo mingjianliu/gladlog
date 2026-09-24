@@ -1,4 +1,4 @@
-export const OFFSET_PAD = 12;
+const OFFSET_PAD = 12;
 
 export interface SegmentRef {
   hostname: string;

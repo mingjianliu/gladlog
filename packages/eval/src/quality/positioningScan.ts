@@ -49,10 +49,10 @@ import {
   positionSampleInstants,
 } from "@gladlog/analysis";
 
-export type GeoClaimKind =
+type GeoClaimKind =
   "CC_DISTANCE" | "TRAINED" | "CD_RANGE" | "STAYED_OR_KITED" | "LOS_BREAK";
 
-export interface GeoClaim {
+interface GeoClaim {
   kind: GeoClaimKind;
   lineNo: number;
   atSeconds: number;
@@ -71,13 +71,13 @@ export interface GeoClaim {
   raw: string;
 }
 
-export interface GeoViolation {
+interface GeoViolation {
   claim: GeoClaim;
   code: string;
   detail: string;
 }
 
-export interface GeoCheckResult {
+interface GeoCheckResult {
   checked: number;
   unverifiable: number;
   violations: GeoViolation[];
@@ -111,7 +111,7 @@ function tolerance(claimYd: number): number {
   return Math.max(3, claimYd * 0.25);
 }
 
-export interface GeoExtraction {
+interface GeoExtraction {
   claims: GeoClaim[];
   /** The authoritative pid→full-name map carried by the prompt itself
    * (<unit id="N" name="..."/>) */
@@ -280,7 +280,7 @@ function windowDistanceSpan(
 
 /** The [min, max] distance over [fromS, toS] (match seconds) — the body of
  * `windowDistanceSpan`, callable with a claim family's own window. */
-export function distanceSpanBetween(
+function distanceSpanBetween(
   a: ICombatUnit,
   b: ICombatUnit,
   fromS: number,

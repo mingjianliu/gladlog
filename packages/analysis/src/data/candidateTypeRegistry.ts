@@ -55,7 +55,7 @@
  *     candidateFindings.ts — and the tests here cannot prove you did (a
  *     `status: "retired"` row whose emitter still fires passes every test in
  *     candidateTypeRegistry.test.ts; only the corpus scan shows it). The
- *     reverse holds for `retired` unwired types (cc-locked, wasted-trinket):
+ *     reverse holds for `retired` unwired types (mana-pressure, mana-efficiency):
  *     flipping to `live` reconnects nothing until the assembly calls the
  *     producer again.
  *   - `deleted` is enforced: the test fails if a `type: "…"` literal is still
@@ -409,33 +409,6 @@ export const CANDIDATE_TYPE_REGISTRY: Readonly<
   },
 
   // ─── retired by unwiring (emitter kept, assembly no longer calls it) ──────
-  "cc-locked": {
-    status: "retired",
-    surface: "card",
-    origin: "candidate",
-    since: "2026-08-19",
-    issue: "GH #14 (v28)",
-    reason:
-      "Opportunity-normalised breakout conversion is REVERSE — winners sit through CC with the trinket in hand MORE than losers — so neither coaching claim held. Fired in 87 % of rounds with +2.6pp discrimination. Emitter kept for cached rounds; unwired from the assembly.",
-  },
-  "wasted-trinket": {
-    status: "retired",
-    surface: "card",
-    origin: "candidate",
-    since: "2026-08-19",
-    issue: "GH #14 B-group re-measurement (v29)",
-    reason:
-      '94.5 % of emitted events were the healer breaking CC on THEMSELVES — the healerInCCAt-always-false blind spot made "trinketing at high team HP" itself the accusation — and the waste-share of presses ran REVERSE, 12.0 % win vs 10.4 % loss. Unwired; emitter kept.',
-  },
-  "death-unused-defensive": {
-    status: "retired",
-    surface: "card",
-    origin: "candidate",
-    since: "2026-08-29",
-    issue: "GH #58",
-    reason:
-      "Superseded by crisis-no-response. Pooled −9.6pp was a bracket-composition artifact: +0.1pp inside Solo Shuffle alone (aggregateGradient refuses a pooled call). Unwired; emitter kept.",
-  },
   "mana-pressure": {
     status: "retired",
     surface: "card",
@@ -456,6 +429,33 @@ export const CANDIDATE_TYPE_REGISTRY: Readonly<
   },
 
   // ─── deleted (no emitter; legend / deep-dive text may remain) ────────────
+  "cc-locked": {
+    status: "deleted",
+    surface: "card",
+    origin: "candidate",
+    since: "2026-08-19",
+    issue: "GH #14 (v28)",
+    reason:
+      "Opportunity-normalised breakout conversion is REVERSE — winners sit through CC with the trinket in hand MORE than losers — so neither coaching claim held. Fired in 87 % of rounds with +2.6pp discrimination. Unwired from the assembly 2026-08-19. Emitter deleted 2026-09-24.",
+  },
+  "wasted-trinket": {
+    status: "deleted",
+    surface: "card",
+    origin: "candidate",
+    since: "2026-08-19",
+    issue: "GH #14 B-group re-measurement (v29)",
+    reason:
+      '94.5 % of emitted events were the healer breaking CC on THEMSELVES — the healerInCCAt-always-false blind spot made "trinketing at high team HP" itself the accusation — and the waste-share of presses ran REVERSE, 12.0 % win vs 10.4 % loss. Unwired 2026-08-19. Emitter deleted 2026-09-24.',
+  },
+  "death-unused-defensive": {
+    status: "deleted",
+    surface: "card",
+    origin: "candidate",
+    since: "2026-08-29",
+    issue: "GH #58",
+    reason:
+      "Superseded by crisis-no-response. Pooled −9.6pp was a bracket-composition artifact: +0.1pp inside Solo Shuffle alone (aggregateGradient refuses a pooled call). Unwired 2026-08-29. Emitter deleted 2026-09-24.",
+  },
   "juked-kick": {
     status: "deleted",
     surface: "menu-only",

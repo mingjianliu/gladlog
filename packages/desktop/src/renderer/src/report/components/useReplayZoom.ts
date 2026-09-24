@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 
-export interface ReplayViewBox {
+interface ReplayViewBox {
   x: number;
   y: number;
   w: number;

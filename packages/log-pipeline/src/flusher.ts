@@ -6,7 +6,7 @@ import { buildSegmentKey } from "./protocol/segments";
 import { FileCheckpoint } from "./state";
 import { StorageAdapter } from "./storage/StorageAdapter";
 
-export interface FlushOutcome {
+interface FlushOutcome {
   checkpoint: FileCheckpoint | undefined;
   flushedBytes: number;
   reset: boolean;

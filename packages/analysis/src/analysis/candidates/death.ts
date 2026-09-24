@@ -1,31 +1,25 @@
 /**
  * Death-anchored candidate producers — the precursor chain (`death-setup`),
- * `death-unused-defensive`, `external-unused` and `questionable-external`.
+ * `external-unused` and `questionable-external`.
  *
  * Split out of `candidateFindings.ts` on 2026-08-16 (mechanical split by
- * theme); logic moved verbatim. These four share the death window and the
- * free-to-act predicates, which is why they travel together.
+ * theme); logic moved verbatim. These share the death window and the
+ * free-to-act predicates, which is why they travel together. (The fourth,
+ * `death-unused-defensive`, retired 2026-08-29; its emitter was deleted
+ * 2026-09-24.)
  */
 import { CombatUnitClass } from "@gladlog/parser-compat";
 import { effectiveCooldownSeconds } from "../../data/spellEffectData";
 import { immunitySchoolMask } from "../../data/spellSchools";
 import { lastCastBefore } from "../../context/timelineHelpers";
-import { costNormPhrase } from "../../data/curatedAbilityFacts";
 import {
   cdAvailableAt,
   cdReadyInTimeAt,
-  FORBEARANCE_GATED_IDS,
   type IMajorCooldownInfo,
   isProcOnlyActivation,
-  SELF_CAST_NOOP_EXTERNAL_IDS,
-  selfForbearanceActiveAt,
-  usableWhileStunned,
 } from "../../utils/cooldowns";
-import { isStunCcInstance } from "../../utils/drAnalysis";
-import { castFailedInWindow, type RawStreams } from "../../utils/rawStreams";
 import { fmtFactNum as fmt, fmtFactTime } from "../factFormat";
 import { CandidateEvent } from "../types";
-import { filterIntentGuardEvidence, formatAttemptedFact } from "./shared";
 
 /** death-setup: maximum lookback (seconds) from a death to a precursor event —
  * resource spends earlier than this are too causally weak for that death.
@@ -68,13 +62,14 @@ export interface DeathSetupParts {
       trinketState: string;
       /** DR category of this CC instance (e.g. "Stun"/"Incapacitate"/
        * "Disorient"/…), when known — same field as ICCInstance.drInfo.category
-       * (DR_CATEGORIES_GENERATED, shared-predicate rule). Used by
-       * deathUnusedDefensiveEvents to gate the USABLE_WHILE_CC_SPELL_IDS check
-       * (finding #1, 2026-08-14 final review): that table is stunned-only —
-       * a non-stun CC active at death must exempt unconditionally rather than
-       * being checked against it. Optional/nullable so hand-built test
-       * fixtures without DR data still type-check (absence reads as "not
-       * stun", the conservative direction). */
+       * (DR_CATEGORIES_GENERATED, shared-predicate rule). Was used by the
+       * death-unused-defensive producer (emitter deleted 2026-09-24) to gate
+       * the USABLE_WHILE_CC_SPELL_IDS check (finding #1, 2026-08-14 final
+       * review): that table is stunned-only — a non-stun CC active at death
+       * must exempt unconditionally rather than being checked against it.
+       * Optional/nullable so hand-built test fixtures without DR data still
+       * type-check (absence reads as "not stun", the conservative
+       * direction). */
       drInfo?: { category: string } | null;
     }>;
     trinketUseTimes: number[];
@@ -323,172 +318,6 @@ export function deathSetupEvents(parts: DeathSetupParts): CandidateEvent[] {
   }
 
   return out.slice(0, SETUPS_PER_DEATH);
-}
-
-/** Max number of available survival abilities listed in a death's facts. */
-const UNUSED_DEFENSIVE_MAX_LISTED = 3;
-
-/**
- * death-unused-defensive: the owner died with a survival ability available and
- * never pressed it (arenacoach DEATH-001 predicate, same thresholds). "Free"
- * verdict: not in CC at the moment of death, or in CC but with the trinket
- * usable (available_unused/available), or the ability is castable while CC'd
- * (USABLE_WHILE_CC_SPELL_IDS). Divine Shield-class abilities do not count as
- * available during Forbearance.
- */
-export function deathUnusedDefensiveEvents(
-  parts: DeathSetupParts,
-  victim: { isOwner: boolean; unit?: any },
-  combat?: any,
-  /**
-   * Intent guard (BACKLOG #26 Task 2): optional, absent/`available:false` →
-   * byte-identical to before this param existed. For each listed wall, the
-   * window queried is [the wall's own most-recent-cast-before-death +
-   * cooldownSeconds (or 0 if never cast), deathT] — the same "available
-   * since" instant the `walls` filter above already established via
-   * `cdAvailableAt`, so the query window can never disagree with why the
-   * wall was already counted as available.
-   */
-  rawStreams?: RawStreams,
-): CandidateEvent[] {
-  if (!victim.isOwner) return [];
-  // When victimCC is absent (summary not computable) we must NOT default to
-  // "not in CC" — that would wrongly land freeState on "yes" and falsely blame
-  // a death that may well have happened under CC. Better to emit nothing than
-  // to blame falsely.
-  if (!parts.victimCC) return [];
-  const { deathT } = parts;
-  const ccAtDeath = parts.victimCC.ccInstances.find(
-    (cc) =>
-      cc.atSeconds <= deathT && cc.atSeconds + cc.durationSeconds >= deathT,
-  );
-  const freeState = !ccAtDeath
-    ? "yes"
-    : ccAtDeath.trinketState === "available_unused"
-      ? "trinket_in_hand"
-      : null; // in CC and the trinket is not actively usable
-  // (passive_trinket/used/on_cooldown): not free overall, and only
-  // USABLE_WHILE_CC abilities are exempt, and only when the CC active at
-  // death is itself Stun-category (finding #1, 2026-08-14 final review):
-  // USABLE_WHILE_CC_SPELL_IDS is a stunned-only table (DB2's "usable while
-  // stunned" attribute), so a Fear/Disorient/Incapacitate at death must
-  // exempt unconditionally rather than being checked against it — see
-  // wasLockedOutByStunOnly (deathOutcomeAnalysis.ts) for the fuller story
-  // behind the same fix applied there for the windowed lockout case.
-  const ccAtDeathIsStunOnly = !!ccAtDeath && isStunCcInstance(ccAtDeath);
-
-  // selfForbearanceActiveAt needs the whole-match unit list and matchStartMs —
-  // derived from the same source as units/start in extractCandidateFindings
-  // (see the top of that function).
-  const allUnits: any[] = combat ? Object.values(combat.units ?? {}) : [];
-  const matchStartMs: number = combat?.startTime ?? 0;
-
-  /** 受害者的 PvP 天赋 id —— 条件层(某天赋才解锁「被晕可按」)要用。
-   *  取不到时是 undefined,谓词按保守方向处理(不假设玩家点了天赋)。 */
-  const victimPvpTalentIds: ReadonlySet<string> | undefined = victim.unit?.info
-    ?.pvpTalents
-    ? new Set((victim.unit.info.pvpTalents as string[]).map(String))
-    : undefined;
-
-  const walls = (parts.victimCDs ?? []).filter((cd) => {
-    if (cd.tag !== "Defensive") return false;
-    if ((cd as IMajorCooldownInfo).isThroughput) return false;
-    // 没有按键的能力不算「你本可以按却没按的墙」—— 不是难做到,是没有那个按钮
-    // (`PROC_ONLY_ACTIVATION_IDS`,用户 2026-08-23 裁定复苏烈焰是被动技能)。
-    if (isProcOnlyActivation(cd.spellId)) return false;
-    if (!cdReadyInTimeAt(cd as IMajorCooldownInfo, deathT)) return false;
-    if (freeState === null) {
-      if (!ccAtDeathIsStunOnly) return false;
-      // 单源:问「被晕时能不能按」只能问 usableWhileStunned,不能直接 .has()
-      // 这个集合 —— 集合是无条件层,条件层(某 PvP 天赋才解锁)只活在谓词里。
-      // GH #29 阶段 0 之前全仓没有一个生产调用点走谓词,于是 2026-08-14 签字的
-      // 那条事实(超脱:转移 119996 需明心天赋)永远不生效。
-      if (!usableWhileStunned(cd.spellId, victimPvpTalentIds)) return false;
-    }
-    if (
-      FORBEARANCE_GATED_IDS.has(cd.spellId) &&
-      victim.unit &&
-      combat &&
-      selfForbearanceActiveAt(victim.unit, allUnits, deathT, matchStartMs)
-    )
-      return false;
-    // A damage-redirect external self-cast is a mechanical no-op (Blessing of
-    // Sacrifice transfers damage TO the caster), so it is not a wall this
-    // player could have pressed to survive. Shares the set with the prompt's
-    // death line and with cooldowns.ts's "cheaper available" guard.
-    if (SELF_CAST_NOOP_EXTERNAL_IDS.has(cd.spellId)) return false;
-    return true;
-  });
-  if (walls.length === 0) return [];
-  const listedWalls = walls.slice(0, UNUSED_DEFENSIVE_MAX_LISTED);
-  // Cost-norm guard (#25, 2026-08-14): the first listed wall that is a
-  // signed-off cost_norm ability (Divine Shield/Ice Block) supplies the
-  // caveat — "off cooldown and unused" reads exactly like "you should have
-  // pressed it" bait for an ability whose real cost rule is "last resort
-  // only". Same precedent as missed-cleanse's ownerCanDispel gate: the fact
-  // carries the guard, buildFindingsPrompt explains the field.
-  const costNorm = listedWalls
-    .map((w) => costNormPhrase(w.spellId))
-    .find((phrase): phrase is string => phrase !== null);
-  // Intent guard (BACKLOG #26 Task 2): per listed wall, "available since" is
-  // its own most-recent cast before death + its cooldown (0 if never cast) —
-  // the same instant that made `cdAvailableAt` accept it into `walls` above,
-  // so this can never disagree with why the wall counts as available. Hits
-  // across all listed walls are pooled into one `attempted` fact (the
-  // candidate is one-per-death, not one-per-wall).
-  // #29 (2026-08-17): raw hits are filtered through the shared GCD-artifact
-  // exclusions before they count as "pressed but rejected" — see
-  // filterIntentGuardEvidence's doc comment (shared.ts). The gcd-locked
-  // exclusion consumes the victim's own successful-cast instants, derived
-  // from the same `victim.unit`/`matchStartMs` pair the Forbearance check
-  // above already threads; when the caller passes no unit (older call
-  // shapes), the exclusion silently no-ops, same convention as `rawStreams?`.
-  const ownCastSuccessSeconds: number[] | undefined = victim.unit
-    ? (victim.unit.spellCastEvents ?? []).map(
-        (e: any) => (e.timestamp - matchStartMs) / 1000,
-      )
-    : undefined;
-  const failedHits = rawStreams
-    ? listedWalls.flatMap((w) => {
-        const lastCast = [...w.casts]
-          .filter((c) => c.timeSeconds <= deathT)
-          .pop();
-        const fromS = Math.max(
-          0,
-          lastCast ? lastCast.timeSeconds + w.cooldownSeconds : 0,
-        );
-        return filterIntentGuardEvidence(
-          castFailedInWindow(
-            rawStreams,
-            parts.victim.id,
-            fromS,
-            deathT,
-            Number(w.spellId),
-          ),
-          w.casts.map((c) => c.timeSeconds),
-          { ownCastSuccessSeconds },
-        );
-      })
-    : [];
-  const attempted = formatAttemptedFact(failedHits);
-  return [
-    {
-      id: `death-unused-defensive:${parts.victim.id}:${Math.round(deathT)}`,
-      type: "death-unused-defensive",
-      t: deathT,
-      unitNames: [parts.victim.name],
-      facts: {
-        // Render-grid fix (2026-08-30, same bug/fix as kick-eaten): t IS the
-        // death instant, matched against the [DEATH] marker.
-        t: fmtFactTime(deathT),
-        unit: parts.victim.name,
-        walls: listedWalls.map((w) => w.spellName).join(", "),
-        free: freeState ?? "usable_in_cc",
-        ...(costNorm ? { costNorm } : {}),
-        ...(attempted ? { attempted } : {}),
-      },
-    },
-  ];
 }
 
 /** external-unused: lookback window before the death (seconds) and the owner's

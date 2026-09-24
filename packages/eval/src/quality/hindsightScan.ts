@@ -30,13 +30,13 @@ import path from "path";
 import type { IndexEntry } from "../corpus/buildCorpus";
 import { healerOwnerMenu, parseLogCombats } from "../corpus/candidateMenu";
 
-export interface CandidateMenu {
+interface CandidateMenu {
   matchId: string;
   ordinal: number;
   candidates: CandidateEvent[];
 }
 
-export interface SynthesizedItem {
+interface SynthesizedItem {
   matchId: string;
   ordinal: number;
   eventIds: string[];
@@ -141,7 +141,7 @@ export function sampleSynthesis(
   return { planted, legit };
 }
 
-export interface CheckLineInput {
+interface CheckLineInput {
   eventIds: string[];
   candidates: CandidateEvent[];
 }

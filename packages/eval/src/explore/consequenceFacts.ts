@@ -48,7 +48,7 @@ export const FORCED_HP_GATE_PCT_DEFAULT = 50;
 /** A CC shorter than this is a GCD-sized blip — nothing to report inside it. */
 const HEALER_CC_MIN_S = 2;
 
-export interface ConsequenceLine {
+interface ConsequenceLine {
   atS: number;
   kind: "kick" | "healer-cc" | "forced" | "used";
   text: string;
@@ -68,7 +68,7 @@ export interface ForcedSample {
 
 /** name → "N(Tag)" from the rendered context's roster (`<unit id="N" name="…">`
  * plus the first "N(Tag)" occurrence), so labels match every other line. */
-export function labelMapFromContext(ctx: string): Map<string, string> {
+function labelMapFromContext(ctx: string): Map<string, string> {
   const out = new Map<string, string>();
   for (const m of ctx.matchAll(/<unit id="(\d+)" name="([^"]+)"/g)) {
     const id = m[1]!;
@@ -383,7 +383,7 @@ export function buildConsequenceLines(
   return { lines, forcedSamples };
 }
 
-export const CONSEQ_SECTION_HEADER =
+const CONSEQ_SECTION_HEADER =
   "OBSERVED CONSEQUENCES — what the log shows happened right after a kick, while a healer was CC'd, and which enemy defensives/trinkets came out inside your team's kill attempts. Measurements, not verdicts. `FORCED` is stamped only when the evidence gate holds; a line saying `NOT counted as forced` must not be described as forced.";
 
 export function renderConsequenceSection(lines: ConsequenceLine[]): string {

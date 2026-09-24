@@ -19,9 +19,9 @@
  * Talent modifiers add percentage points to the component they target
  * (Barkskin 20 + Oakskin 10 = 30), design D3.
  */
-export type TalentMitigationValidation = "promoted" | "unvalidated";
+type TalentMitigationValidation = "promoted" | "unvalidated";
 
-export interface ITalentMitigationModifier {
+interface ITalentMitigationModifier {
   auraSpellId: string;
   talentSpellId: string;
   /** school mask the modified effect covers */

@@ -102,12 +102,3 @@ export function meterGroups(
     .filter((s) => (bucket.get(s)?.length ?? 0) > 0)
     .map((side) => ({ side, rows: bucket.get(side)! }));
 }
-
-/** The flat render order implied by meterGroups — what the faithfulness check
- *  must compare against whenever the component was given side information. */
-export function meterOrdered(
-  rows: MeterRow[],
-  sideOf?: (unitId: string) => TeamSide,
-): MeterRow[] {
-  return meterGroups(rows, sideOf).flatMap((g) => g.rows);
-}

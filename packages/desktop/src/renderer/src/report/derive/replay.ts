@@ -28,14 +28,14 @@ export interface ReplayTrack {
   deathT: number | null;
 }
 
-export interface ReplayBounds {
+interface ReplayBounds {
   minX: number;
   maxX: number;
   minY: number;
   maxY: number;
 }
 
-export interface ReplayData {
+interface ReplayData {
   startTime: number;
   endTime: number;
   bounds: ReplayBounds;

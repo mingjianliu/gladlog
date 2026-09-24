@@ -15,7 +15,7 @@ import { bridge } from "../../bridge";
 const ICON_MEMO_MAX = 512;
 const iconMemo = new Map<string, Promise<string | null>>();
 
-export function getIconCached(icon: string): Promise<string | null> {
+function getIconCached(icon: string): Promise<string | null> {
   const hit = iconMemo.get(icon);
   if (hit) {
     iconMemo.delete(icon);

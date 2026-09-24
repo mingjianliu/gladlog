@@ -18,7 +18,7 @@ const RANK = SEVERITY_RANK;
 
 /**
  * Intent-guard severity downgrade (BACKLOG #26 Task 2, 意图守护): a finding
- * that cites a `cd-hoarded`/`death-unused-defensive` candidate (gated on
+ * that cites a `cd-hoarded` candidate (gated on
  * `ATTEMPTED_GUARD_TYPES`, not the bare `facts.attempted` string key —
  * review round 1 Minor finding: a future candidate type reusing that key
  * name for an unrelated fact must not silently inherit this downgrade)

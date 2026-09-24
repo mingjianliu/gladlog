@@ -108,7 +108,8 @@ brainstorm → spec → plan → 实现 的循环。
 
 - **C1. 数据忠实性(UI 不能撒谎)** ✅ _(2026-07-12 完成)_ —— 最切题的内核。渲染
   数学被抽成纯的、有测试的 selector(`report/derive/meterRows`、`timelineMarks`、
-  `cohortDims`);meters/cohort/timeline 组件退化成哑渲染器。
+  `cohortDims`;时间线色带与 `timelineMarks` 已于 2026-09-24 作为死代码删除);
+  meters/cohort/timeline 组件退化成哑渲染器。
   `report/derive/faithfulness.ts` 的 `checkFaithful(kind, root, selectorOutput)`
   遍历渲染出的 DOM,对以下两类产出 `Divergence[]`:(A) 视图忠实性不匹配(渲染值 ≠
   selector 值,含 tooltip 与非百分比单位),(B) 非循环的结构不变量(meter 的

@@ -4,11 +4,11 @@ import path from "node:path";
 import { outputNameFor } from "./collectLogs";
 import { parseSegmentKey } from "./protocol/segments";
 
-export function gzipUncompressedSize(tail4: Buffer): number {
+function gzipUncompressedSize(tail4: Buffer): number {
   return tail4.readUInt32LE(0);
 }
 
-export interface CleanupResult {
+interface CleanupResult {
   deleted: string[];
   kept: number;
 }

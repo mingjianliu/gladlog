@@ -15,7 +15,7 @@ import { atomicWriteFileSync } from "../shared/atomicWrite";
  * Time-window association tolerance: a recording starting later than the match
  * opening is normal (log lag), so the criterion is overlap, not containment.
  */
-export const TOLERANCE_MS = 60_000;
+const TOLERANCE_MS = 60_000;
 
 /** I2 fix: retention cap for orphan (unassociated) recordings, computed
  * completely independently of the matched recordings' keepCount — otherwise

@@ -1,6 +1,6 @@
 import { watch } from "fs";
 
-export interface LogWatcher {
+interface LogWatcher {
   close(): void;
   /** Exposed for tests; production events arrive via fs.watch. */
   handleEvent(eventType: string, fileName: string | Buffer | null): void;
