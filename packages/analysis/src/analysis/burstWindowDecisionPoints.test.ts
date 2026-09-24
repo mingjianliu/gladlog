@@ -19,6 +19,7 @@ import {
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { ensureAnalysisData } from "../data/ensure";
+import { extractMajorCooldowns } from "../utils/cooldowns";
 import {
   BURST_HEAL_CD_IDS,
   BURST_LEAD_CD_EXCLUDED_IDS,
@@ -290,6 +291,70 @@ describe("burstWindowDecisionPoints — response classification", () => {
     );
     expect(pts[0]!.responses.wall).toBe(true);
     expect(pts[0]!.firstResponseSec).toBe(-1);
+  });
+});
+
+const poly = (fromSec: number, toSec: number) => [
+  {
+    spellId: "118",
+    spellName: "Polymorph",
+    srcUnitId: "E1",
+    srcUnitName: "Enemy-R",
+    destUnitId: "F1",
+    timestamp: T0 + fromSec * 1000,
+    logLine: {
+      event: LogEvent.SPELL_AURA_APPLIED,
+      timestamp: T0 + fromSec * 1000,
+    },
+  },
+  {
+    spellId: "118",
+    spellName: "Polymorph",
+    srcUnitId: "E1",
+    srcUnitName: "Enemy-R",
+    destUnitId: "F1",
+    timestamp: T0 + toSec * 1000,
+    logLine: {
+      event: LogEvent.SPELL_AURA_REMOVED,
+      timestamp: T0 + toSec * 1000,
+    },
+  },
+];
+
+describe("burstWindowDecisionPoints — simultaneous opportunity (GH #103 follow-up)", () => {
+  it("free only for the last half second of the window is not an opportunity", () => {
+    // window [10, 18): CC until 17.5 — every whole second 10..17 is inside
+    // it. The old gate ("not CC'd for the WHOLE window") called this feasible.
+    const f = friendly({
+      damageIn: steadyDamage(10, 20),
+      advancedActions: hpTrack("F1", 0, 40, 60),
+      spellCastEvents: [cast(BARKSKIN, 120)],
+      auraEvents: poly(9, 17.5),
+    });
+    const pts = burstWindowDecisionPoints(
+      combat([f, hostile({ spellCastEvents: [cast(AR, 10)] })]),
+    );
+    expect(pts[0]!.feasible).toBe(false);
+  });
+
+  it("a cooldown back mid-window is an opportunity from its first reaction-ready second", () => {
+    const probe = friendly({ spellCastEvents: [cast(BARKSKIN, 0)] });
+    const barkCd = extractMajorCooldowns(
+      probe as never,
+      combat([probe]) as never,
+    ).find((c) => c.spellId === BARKSKIN)!.cooldownSeconds;
+    // Barkskin back at 12.5 s: on cooldown at the window start (10 s),
+    // reaction-ready from 14 s — inside the window
+    const f = friendly({
+      damageIn: steadyDamage(10, 20),
+      advancedActions: hpTrack("F1", 0, 40, 60),
+      spellCastEvents: [cast(BARKSKIN, 12.5 - barkCd)],
+    });
+    const pts = burstWindowDecisionPoints(
+      combat([f, hostile({ spellCastEvents: [cast(AR, 10)] })]),
+    );
+    expect(pts[0]!.feasible).toBe(true);
+    expect(pts[0]!.feasibleUnits).toContain("Friend-R");
   });
 });
 

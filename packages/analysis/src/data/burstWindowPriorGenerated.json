@@ -1,15 +1,15 @@
 {
   "meta": {
-    "generatedAt": "2026-09-16",
-    "corpus": "wowarenalogs archive 2026-09-15 (GH #93 attackerMoved split)",
+    "generatedAt": "2026-09-24",
+    "corpus": "wowarenalogs archive 2026-09-23 (GH #103 simultaneous-opportunity feasibility)",
     "command": "npx tsx packages/eval/scripts/burstWindowScan.ts emit-table --in <scan.jsonl> --out <file.json>",
     "predicateVersion": 1
   },
   "cells": {
     "*|*": {
-      "nResp": 150912,
+      "nResp": 188818,
       "deathResp": 0.04,
-      "nNoResp": 52862,
+      "nNoResp": 72881,
       "deathNoResp": 0.08,
       "topResponses": [
         [
@@ -18,27 +18,27 @@
         ],
         [
           "external",
-          0.31
+          0.3
         ],
         [
           "wall",
-          0.29
+          0.28
         ]
       ]
     },
     "2v2|*": {
-      "nResp": 19681,
+      "nResp": 26839,
       "deathResp": 0.04,
-      "nNoResp": 7453,
+      "nNoResp": 11393,
       "deathNoResp": 0.08,
       "topResponses": [
         [
           "control",
-          0.47
+          0.45
         ],
         [
           "wall",
-          0.33
+          0.32
         ],
         [
           "external",
@@ -47,18 +47,18 @@
       ]
     },
     "2v2|102543": {
-      "nResp": 900,
+      "nResp": 908,
       "deathResp": 0.03,
-      "nNoResp": 398,
-      "deathNoResp": 0.05,
+      "nNoResp": 412,
+      "deathNoResp": 0.06,
       "topResponses": [
         [
           "control",
-          0.45
+          0.46
         ],
         [
           "wall",
-          0.29
+          0.28
         ],
         [
           "external",
@@ -67,14 +67,14 @@
       ]
     },
     "2v2|102560": {
-      "nResp": 595,
+      "nResp": 406,
       "deathResp": 0.05,
-      "nNoResp": 177,
-      "deathNoResp": 0.12,
+      "nNoResp": 131,
+      "deathNoResp": 0.15,
       "topResponses": [
         [
           "control",
-          0.46
+          0.47
         ],
         [
           "wall",
@@ -82,7 +82,7 @@
         ],
         [
           "external",
-          0.34
+          0.33
         ]
       ]
     },
@@ -101,55 +101,55 @@
           0.4
         ],
         [
-          "wall",
+          "external",
           0.25
         ]
       ]
     },
     "2v2|107574": {
-      "nResp": 952,
-      "deathResp": 0.02,
-      "nNoResp": 386,
-      "deathNoResp": 0.04,
+      "nResp": 3051,
+      "deathResp": 0.03,
+      "nNoResp": 1656,
+      "deathNoResp": 0.07,
       "topResponses": [
         [
           "control",
-          0.54
+          0.39
         ],
         [
           "wall",
-          0.3
+          0.32
         ],
         [
           "external",
-          0.28
+          0.3
         ]
       ]
     },
     "2v2|1122": {
-      "nResp": 539,
+      "nResp": 544,
       "deathResp": 0.01,
-      "nNoResp": 233,
+      "nNoResp": 240,
       "deathNoResp": 0.04,
       "topResponses": [
         [
           "control",
-          0.54
+          0.55
         ],
         [
           "kite",
-          0.27
+          0.26
         ],
         [
           "wall",
-          0.23
+          0.22
         ]
       ]
     },
     "2v2|114050": {
-      "nResp": 155,
-      "deathResp": 0.04,
-      "nNoResp": 40,
+      "nResp": 153,
+      "deathResp": 0.05,
+      "nNoResp": 41,
       "deathNoResp": 0.05,
       "topResponses": [
         [
@@ -158,11 +158,11 @@
         ],
         [
           "wall",
-          0.36
+          0.35
         ],
         [
           "external",
-          0.32
+          0.31
         ]
       ]
     },
@@ -178,7 +178,7 @@
         ],
         [
           "wall",
-          0.44
+          0.43
         ],
         [
           "control",
@@ -187,14 +187,14 @@
       ]
     },
     "2v2|121471": {
-      "nResp": 262,
-      "deathResp": 0.05,
-      "nNoResp": 64,
-      "deathNoResp": 0.14,
+      "nResp": 264,
+      "deathResp": 0.04,
+      "nNoResp": 62,
+      "deathNoResp": 0.15,
       "topResponses": [
         [
           "control",
-          0.51
+          0.53
         ],
         [
           "external",
@@ -202,15 +202,15 @@
         ],
         [
           "wall",
-          0.33
+          0.31
         ]
       ]
     },
     "2v2|1233448": {
-      "nResp": 245,
+      "nResp": 249,
       "deathResp": 0.07,
-      "nNoResp": 176,
-      "deathNoResp": 0.06,
+      "nNoResp": 181,
+      "deathNoResp": 0.07,
       "topResponses": [
         [
           "control",
@@ -218,38 +218,38 @@
         ],
         [
           "wall",
-          0.29
-        ],
-        [
-          "external",
           0.28
-        ]
-      ]
-    },
-    "2v2|123904": {
-      "nResp": 11,
-      "deathResp": 0.09,
-      "nNoResp": 8,
-      "deathNoResp": 0,
-      "topResponses": [
-        [
-          "control",
-          0.64
         ],
         [
           "external",
-          0.45
-        ],
-        [
-          "wall",
           0.27
         ]
       ]
     },
+    "2v2|123904": {
+      "nResp": 9,
+      "deathResp": 0.11,
+      "nNoResp": 7,
+      "deathNoResp": 0,
+      "topResponses": [
+        [
+          "control",
+          0.67
+        ],
+        [
+          "external",
+          0.44
+        ],
+        [
+          "wall",
+          0.22
+        ]
+      ]
+    },
     "2v2|1241937": {
-      "nResp": 138,
+      "nResp": 143,
       "deathResp": 0.01,
-      "nNoResp": 123,
+      "nNoResp": 124,
       "deathNoResp": 0.01,
       "topResponses": [
         [
@@ -267,9 +267,9 @@
       ]
     },
     "2v2|1246167": {
-      "nResp": 105,
+      "nResp": 106,
       "deathResp": 0.02,
-      "nNoResp": 66,
+      "nNoResp": 69,
       "deathNoResp": 0,
       "topResponses": [
         [
@@ -278,7 +278,7 @@
         ],
         [
           "wall",
-          0.3
+          0.29
         ],
         [
           "kite",
@@ -286,11 +286,51 @@
         ]
       ]
     },
+    "2v2|1249625": {
+      "nResp": 1889,
+      "deathResp": 0.04,
+      "nNoResp": 584,
+      "deathNoResp": 0.12,
+      "topResponses": [
+        [
+          "control",
+          0.43
+        ],
+        [
+          "external",
+          0.39
+        ],
+        [
+          "wall",
+          0.34
+        ]
+      ]
+    },
+    "2v2|1249658": {
+      "nResp": 59,
+      "deathResp": 0.07,
+      "nNoResp": 19,
+      "deathNoResp": 0.11,
+      "topResponses": [
+        [
+          "wall",
+          0.49
+        ],
+        [
+          "external",
+          0.37
+        ],
+        [
+          "control",
+          0.34
+        ]
+      ]
+    },
     "2v2|1250646": {
-      "nResp": 598,
+      "nResp": 609,
       "deathResp": 0.05,
-      "nNoResp": 122,
-      "deathNoResp": 0.15,
+      "nNoResp": 129,
+      "deathNoResp": 0.17,
       "topResponses": [
         [
           "external",
@@ -298,38 +338,58 @@
         ],
         [
           "wall",
-          0.39
+          0.38
         ],
         [
           "control",
-          0.35
+          0.36
         ]
       ]
     },
     "2v2|1261193": {
-      "nResp": 54,
+      "nResp": 58,
       "deathResp": 0.02,
-      "nNoResp": 32,
-      "deathNoResp": 0.16,
+      "nNoResp": 33,
+      "deathNoResp": 0.15,
       "topResponses": [
         [
           "control",
-          0.54
+          0.57
         ],
         [
           "external",
-          0.39
+          0.41
         ],
         [
           "wall",
-          0.31
+          0.33
+        ]
+      ]
+    },
+    "2v2|1276452": {
+      "nResp": 194,
+      "deathResp": 0.01,
+      "nNoResp": 128,
+      "deathNoResp": 0.03,
+      "topResponses": [
+        [
+          "control",
+          0.56
+        ],
+        [
+          "kite",
+          0.34
+        ],
+        [
+          "wall",
+          0.15
         ]
       ]
     },
     "2v2|13750": {
-      "nResp": 246,
-      "deathResp": 0.04,
-      "nNoResp": 131,
+      "nResp": 251,
+      "deathResp": 0.03,
+      "nNoResp": 136,
       "deathNoResp": 0.06,
       "topResponses": [
         [
@@ -338,23 +398,43 @@
         ],
         [
           "wall",
-          0.28
+          0.29
+        ],
+        [
+          "kite",
+          0.22
+        ]
+      ]
+    },
+    "2v2|167105": {
+      "nResp": 1353,
+      "deathResp": 0.03,
+      "nNoResp": 882,
+      "deathNoResp": 0.06,
+      "topResponses": [
+        [
+          "control",
+          0.36
         ],
         [
           "external",
-          0.23
+          0.32
+        ],
+        [
+          "wall",
+          0.31
         ]
       ]
     },
     "2v2|1719": {
-      "nResp": 709,
-      "deathResp": 0.04,
-      "nNoResp": 358,
-      "deathNoResp": 0.05,
+      "nResp": 793,
+      "deathResp": 0.03,
+      "nNoResp": 439,
+      "deathNoResp": 0.07,
       "topResponses": [
         [
           "control",
-          0.47
+          0.45
         ],
         [
           "wall",
@@ -367,14 +447,14 @@
       ]
     },
     "2v2|190319": {
-      "nResp": 1979,
+      "nResp": 1981,
       "deathResp": 0.03,
-      "nNoResp": 495,
+      "nNoResp": 513,
       "deathNoResp": 0.11,
       "topResponses": [
         [
           "control",
-          0.42
+          0.43
         ],
         [
           "external",
@@ -382,19 +462,19 @@
         ],
         [
           "wall",
-          0.39
+          0.38
         ]
       ]
     },
     "2v2|191634": {
-      "nResp": 106,
+      "nResp": 104,
       "deathResp": 0.02,
-      "nNoResp": 48,
+      "nNoResp": 50,
       "deathNoResp": 0.08,
       "topResponses": [
         [
           "control",
-          0.54
+          0.53
         ],
         [
           "external",
@@ -407,30 +487,30 @@
       ]
     },
     "2v2|194223": {
-      "nResp": 16,
+      "nResp": 13,
       "deathResp": 0,
-      "nNoResp": 5,
+      "nNoResp": 4,
       "deathNoResp": 0,
       "topResponses": [
         [
           "control",
-          0.75
+          0.77
         ],
         [
           "wall",
           0.31
         ],
         [
-          "kite",
-          0.19
+          "healCd",
+          0.15
         ]
       ]
     },
     "2v2|19574": {
-      "nResp": 811,
+      "nResp": 834,
       "deathResp": 0.03,
-      "nNoResp": 271,
-      "deathNoResp": 0.07,
+      "nNoResp": 274,
+      "deathNoResp": 0.08,
       "topResponses": [
         [
           "control",
@@ -438,63 +518,243 @@
         ],
         [
           "external",
-          0.3
+          0.29
         ],
         [
           "wall",
-          0.23
+          0.22
+        ]
+      ]
+    },
+    "2v2|202770": {
+      "nResp": 17,
+      "deathResp": 0.06,
+      "nNoResp": 15,
+      "deathNoResp": 0,
+      "topResponses": [
+        [
+          "wall",
+          0.41
+        ],
+        [
+          "healCd",
+          0.35
+        ],
+        [
+          "control",
+          0.35
         ]
       ]
     },
     "2v2|204361": {
-      "nResp": 58,
-      "deathResp": 0.05,
-      "nNoResp": 22,
-      "deathNoResp": 0.05,
+      "nResp": 77,
+      "deathResp": 0.06,
+      "nNoResp": 25,
+      "deathNoResp": 0.04,
       "topResponses": [
         [
           "control",
-          0.59
+          0.52
         ],
         [
           "wall",
-          0.47
+          0.48
         ],
         [
           "external",
-          0.33
+          0.35
         ]
       ]
     },
     "2v2|205021": {
-      "nResp": 352,
+      "nResp": 349,
       "deathResp": 0.04,
-      "nNoResp": 143,
+      "nNoResp": 144,
       "deathNoResp": 0.06,
+      "topResponses": [
+        [
+          "control",
+          0.57
+        ],
+        [
+          "external",
+          0.29
+        ],
+        [
+          "wall",
+          0.27
+        ]
+      ]
+    },
+    "2v2|205180": {
+      "nResp": 1545,
+      "deathResp": 0.03,
+      "nNoResp": 625,
+      "deathNoResp": 0.04,
+      "topResponses": [
+        [
+          "control",
+          0.57
+        ],
+        [
+          "wall",
+          0.24
+        ],
+        [
+          "kite",
+          0.23
+        ]
+      ]
+    },
+    "2v2|205636": {
+      "nResp": 177,
+      "deathResp": 0.04,
+      "nNoResp": 68,
+      "deathNoResp": 0.1,
+      "topResponses": [
+        [
+          "control",
+          0.5
+        ],
+        [
+          "wall",
+          0.31
+        ],
+        [
+          "external",
+          0.25
+        ]
+      ]
+    },
+    "2v2|227847": {
+      "nResp": 17,
+      "deathResp": 0,
+      "nNoResp": 7,
+      "deathNoResp": 0.14,
+      "topResponses": [
+        [
+          "control",
+          0.76
+        ],
+        [
+          "wall",
+          0.24
+        ],
+        [
+          "external",
+          0.18
+        ]
+      ]
+    },
+    "2v2|228260": {
+      "nResp": 525,
+      "deathResp": 0.02,
+      "nNoResp": 273,
+      "deathNoResp": 0.03,
+      "topResponses": [
+        [
+          "control",
+          0.44
+        ],
+        [
+          "wall",
+          0.34
+        ],
+        [
+          "external",
+          0.29
+        ]
+      ]
+    },
+    "2v2|260243": {
+      "nResp": 145,
+      "deathResp": 0.05,
+      "nNoResp": 44,
+      "deathNoResp": 0.02,
+      "topResponses": [
+        [
+          "control",
+          0.46
+        ],
+        [
+          "external",
+          0.3
+        ],
+        [
+          "wall",
+          0.26
+        ]
+      ]
+    },
+    "2v2|265187": {
+      "nResp": 46,
+      "deathResp": 0.02,
+      "nNoResp": 23,
+      "deathNoResp": 0.04,
+      "topResponses": [
+        [
+          "control",
+          0.5
+        ],
+        [
+          "kite",
+          0.28
+        ],
+        [
+          "external",
+          0.24
+        ]
+      ]
+    },
+    "2v2|274837": {
+      "nResp": 351,
+      "deathResp": 0.01,
+      "nNoResp": 114,
+      "deathNoResp": 0.07,
       "topResponses": [
         [
           "control",
           0.56
         ],
         [
-          "external",
-          0.28
+          "wall",
+          0.26
         ],
         [
-          "wall",
-          0.28
+          "external",
+          0.24
         ]
       ]
     },
-    "2v2|205180": {
-      "nResp": 1492,
-      "deathResp": 0.02,
-      "nNoResp": 611,
+    "2v2|288613": {
+      "nResp": 530,
+      "deathResp": 0.03,
+      "nNoResp": 222,
       "deathNoResp": 0.05,
       "topResponses": [
         [
           "control",
-          0.57
+          0.43
+        ],
+        [
+          "external",
+          0.35
+        ],
+        [
+          "wall",
+          0.33
+        ]
+      ]
+    },
+    "2v2|31884": {
+      "nResp": 1055,
+      "deathResp": 0.03,
+      "nNoResp": 623,
+      "deathNoResp": 0.06,
+      "topResponses": [
+        [
+          "control",
+          0.47
         ],
         [
           "wall",
@@ -506,55 +766,15 @@
         ]
       ]
     },
-    "2v2|227847": {
-      "nResp": 14,
-      "deathResp": 0,
-      "nNoResp": 5,
-      "deathNoResp": 0,
+    "2v2|321507": {
+      "nResp": 50,
+      "deathResp": 0.04,
+      "nNoResp": 24,
+      "deathNoResp": 0.08,
       "topResponses": [
         [
           "control",
-          0.93
-        ],
-        [
-          "wall",
-          0.29
-        ],
-        [
-          "external",
-          0.29
-        ]
-      ]
-    },
-    "2v2|265187": {
-      "nResp": 55,
-      "deathResp": 0.02,
-      "nNoResp": 15,
-      "deathNoResp": 0.07,
-      "topResponses": [
-        [
-          "control",
-          0.6
-        ],
-        [
-          "external",
-          0.27
-        ],
-        [
-          "wall",
-          0.16
-        ]
-      ]
-    },
-    "2v2|274837": {
-      "nResp": 349,
-      "deathResp": 0.01,
-      "nNoResp": 110,
-      "deathNoResp": 0.06,
-      "topResponses": [
-        [
-          "control",
-          0.55
+          0.54
         ],
         [
           "wall",
@@ -562,63 +782,23 @@
         ],
         [
           "external",
-          0.23
-        ]
-      ]
-    },
-    "2v2|288613": {
-      "nResp": 618,
-      "deathResp": 0.04,
-      "nNoResp": 246,
-      "deathNoResp": 0.07,
-      "topResponses": [
-        [
-          "control",
-          0.44
-        ],
-        [
-          "external",
-          0.36
-        ],
-        [
-          "wall",
-          0.34
-        ]
-      ]
-    },
-    "2v2|31884": {
-      "nResp": 1074,
-      "deathResp": 0.03,
-      "nNoResp": 625,
-      "deathNoResp": 0.05,
-      "topResponses": [
-        [
-          "control",
-          0.45
-        ],
-        [
-          "wall",
-          0.25
-        ],
-        [
-          "external",
-          0.24
+          0.26
         ]
       ]
     },
     "2v2|360194": {
-      "nResp": 3676,
-      "deathResp": 0.09,
-      "nNoResp": 830,
-      "deathNoResp": 0.2,
+      "nResp": 3041,
+      "deathResp": 0.1,
+      "nNoResp": 710,
+      "deathNoResp": 0.23,
       "topResponses": [
         [
           "external",
-          0.45
+          0.44
         ],
         [
           "wall",
-          0.41
+          0.4
         ],
         [
           "control",
@@ -627,30 +807,30 @@
       ]
     },
     "2v2|365350": {
-      "nResp": 60,
-      "deathResp": 0,
-      "nNoResp": 18,
-      "deathNoResp": 0.22,
+      "nResp": 248,
+      "deathResp": 0.01,
+      "nNoResp": 84,
+      "deathNoResp": 0.1,
       "topResponses": [
         [
           "control",
-          0.68
+          0.56
         ],
         [
           "wall",
-          0.38
+          0.31
         ],
         [
           "external",
-          0.3
+          0.31
         ]
       ]
     },
     "2v2|370965": {
-      "nResp": 250,
+      "nResp": 262,
       "deathResp": 0.01,
-      "nNoResp": 96,
-      "deathNoResp": 0.11,
+      "nNoResp": 94,
+      "deathNoResp": 0.12,
       "topResponses": [
         [
           "control",
@@ -667,9 +847,9 @@
       ]
     },
     "2v2|375087": {
-      "nResp": 264,
+      "nResp": 267,
       "deathResp": 0.04,
-      "nNoResp": 95,
+      "nNoResp": 96,
       "deathNoResp": 0.06,
       "topResponses": [
         [
@@ -678,7 +858,7 @@
         ],
         [
           "wall",
-          0.27
+          0.26
         ],
         [
           "external",
@@ -686,19 +866,59 @@
         ]
       ]
     },
+    "2v2|384352": {
+      "nResp": 33,
+      "deathResp": 0.06,
+      "nNoResp": 10,
+      "deathNoResp": 0.3,
+      "topResponses": [
+        [
+          "wall",
+          0.55
+        ],
+        [
+          "control",
+          0.48
+        ],
+        [
+          "healCd",
+          0.27
+        ]
+      ]
+    },
+    "2v2|385627": {
+      "nResp": 794,
+      "deathResp": 0.07,
+      "nNoResp": 186,
+      "deathNoResp": 0.13,
+      "topResponses": [
+        [
+          "external",
+          0.43
+        ],
+        [
+          "wall",
+          0.41
+        ],
+        [
+          "control",
+          0.39
+        ]
+      ]
+    },
     "2v2|392983": {
-      "nResp": 290,
-      "deathResp": 0.03,
-      "nNoResp": 57,
-      "deathNoResp": 0.04,
+      "nResp": 238,
+      "deathResp": 0.07,
+      "nNoResp": 132,
+      "deathNoResp": 0.06,
       "topResponses": [
         [
           "control",
-          0.67
+          0.45
         ],
         [
           "external",
-          0.39
+          0.34
         ],
         [
           "wall",
@@ -707,9 +927,9 @@
       ]
     },
     "2v2|42650": {
-      "nResp": 864,
+      "nResp": 878,
       "deathResp": 0.08,
-      "nNoResp": 560,
+      "nNoResp": 565,
       "deathNoResp": 0.1,
       "topResponses": [
         [
@@ -718,18 +938,18 @@
         ],
         [
           "wall",
-          0.33
+          0.34
         ],
         [
           "external",
-          0.27
+          0.26
         ]
       ]
     },
     "2v2|442726": {
-      "nResp": 320,
+      "nResp": 333,
       "deathResp": 0.05,
-      "nNoResp": 164,
+      "nNoResp": 167,
       "deathNoResp": 0.07,
       "topResponses": [
         [
@@ -742,59 +962,79 @@
         ],
         [
           "external",
-          0.21
+          0.2
+        ]
+      ]
+    },
+    "2v2|446035": {
+      "nResp": 393,
+      "deathResp": 0.04,
+      "nNoResp": 310,
+      "deathNoResp": 0.09,
+      "topResponses": [
+        [
+          "control",
+          0.43
+        ],
+        [
+          "external",
+          0.29
+        ],
+        [
+          "wall",
+          0.29
         ]
       ]
     },
     "2v2|47568": {
-      "nResp": 568,
+      "nResp": 542,
       "deathResp": 0.03,
-      "nNoResp": 374,
+      "nNoResp": 371,
       "deathNoResp": 0.07,
       "topResponses": [
         [
           "control",
-          0.36
+          0.38
         ],
         [
           "wall",
-          0.34
+          0.32
         ],
         [
           "kite",
-          0.28
+          0.27
         ]
       ]
     },
     "2v2|51271": {
-      "nResp": 237,
-      "deathResp": 0.05,
-      "nNoResp": 86,
-      "deathNoResp": 0.19,
+      "nResp": 225,
+      "deathResp": 0.04,
+      "nNoResp": 83,
+      "deathNoResp": 0.17,
       "topResponses": [
         [
           "wall",
-          0.49
+          0.48
         ],
         [
           "control",
-          0.41
+          0.4
         ],
         [
           "external",
-          0.35
+          0.33
         ]
       ]
     },
     "2v2|6353": {
-      "nResp": 125,
+      "nResp": 128,
       "deathResp": 0.06,
       "nNoResp": 53,
       "deathNoResp": 0.08,
       "topResponses": [
         [
           "control",
-          0.5
+          0.49
         ],
         [
           "wall",
@@ -807,14 +1047,14 @@
       ]
     },
     "2v2|84714": {
-      "nResp": 351,
+      "nResp": 359,
       "deathResp": 0.03,
-      "nNoResp": 162,
+      "nNoResp": 163,
       "deathNoResp": 0.07,
       "topResponses": [
         [
           "control",
-          0.56
+          0.57
         ],
         [
           "wall",
@@ -822,35 +1062,15 @@
         ],
         [
           "external",
-          0.17
+          0.16
         ]
       ]
     },
     "3v3|*": {
-      "nResp": 50147,
+      "nResp": 62381,
       "deathResp": 0.06,
-      "nNoResp": 16286,
-      "deathNoResp": 0.12,
-      "topResponses": [
-        [
-          "control",
-          0.58
-        ],
-        [
-          "external",
-          0.29
-        ],
-        [
-          "wall",
-          0.29
-        ]
-      ]
-    },
-    "3v3|102543": {
-      "nResp": 1465,
-      "deathResp": 0.04,
-      "nNoResp": 555,
-      "deathNoResp": 0.1,
+      "nNoResp": 22833,
+      "deathNoResp": 0.11,
       "topResponses": [
         [
           "control",
@@ -858,23 +1078,43 @@
         ],
         [
           "external",
-          0.25
+          0.28
+        ],
+        [
+          "wall",
+          0.27
+        ]
+      ]
+    },
+    "3v3|102543": {
+      "nResp": 1451,
+      "deathResp": 0.04,
+      "nNoResp": 547,
+      "deathNoResp": 0.11,
+      "topResponses": [
+        [
+          "control",
+          0.59
         ],
         [
           "wall",
           0.24
+        ],
+        [
+          "external",
+          0.23
         ]
       ]
     },
     "3v3|102560": {
-      "nResp": 2621,
+      "nResp": 1655,
       "deathResp": 0.07,
-      "nNoResp": 566,
-      "deathNoResp": 0.16,
+      "nNoResp": 396,
+      "deathNoResp": 0.19,
       "topResponses": [
         [
           "control",
-          0.56
+          0.58
         ],
         [
           "wall",
@@ -882,7 +1122,7 @@
         ],
         [
           "external",
-          0.35
+          0.34
         ]
       ]
     },
@@ -907,14 +1147,14 @@
       ]
     },
     "3v3|107574": {
-      "nResp": 4064,
-      "deathResp": 0.05,
-      "nNoResp": 1464,
+      "nResp": 6250,
+      "deathResp": 0.06,
+      "nNoResp": 3026,
       "deathNoResp": 0.11,
       "topResponses": [
         [
           "control",
-          0.58
+          0.48
         ],
         [
           "external",
@@ -927,38 +1167,38 @@
       ]
     },
     "3v3|1122": {
-      "nResp": 1188,
+      "nResp": 1148,
       "deathResp": 0.03,
-      "nNoResp": 458,
+      "nNoResp": 444,
       "deathNoResp": 0.05,
       "topResponses": [
         [
           "control",
-          0.65
+          0.66
         ],
         [
           "kite",
-          0.22
+          0.21
         ],
         [
           "wall",
-          0.2
+          0.19
         ]
       ]
     },
     "3v3|114050": {
-      "nResp": 850,
-      "deathResp": 0.07,
-      "nNoResp": 235,
-      "deathNoResp": 0.09,
+      "nResp": 748,
+      "deathResp": 0.06,
+      "nNoResp": 226,
+      "deathNoResp": 0.1,
       "topResponses": [
         [
           "control",
-          0.54
+          0.56
         ],
         [
           "wall",
-          0.28
+          0.27
         ],
         [
           "external",
@@ -967,10 +1207,10 @@
       ]
     },
     "3v3|114051": {
-      "nResp": 709,
-      "deathResp": 0.06,
-      "nNoResp": 135,
-      "deathNoResp": 0.16,
+      "nResp": 634,
+      "deathResp": 0.05,
+      "nNoResp": 108,
+      "deathNoResp": 0.11,
       "topResponses": [
         [
           "control",
@@ -982,15 +1222,15 @@
         ],
         [
           "wall",
-          0.4
+          0.37
         ]
       ]
     },
     "3v3|121471": {
-      "nResp": 875,
+      "nResp": 861,
       "deathResp": 0.06,
-      "nNoResp": 139,
-      "deathNoResp": 0.16,
+      "nNoResp": 137,
+      "deathNoResp": 0.18,
       "topResponses": [
         [
           "control",
@@ -1007,69 +1247,229 @@
       ]
     },
     "3v3|1233448": {
-      "nResp": 757,
-      "deathResp": 0.08,
-      "nNoResp": 413,
-      "deathNoResp": 0.11,
+      "nResp": 876,
+      "deathResp": 0.09,
+      "nNoResp": 472,
+      "deathNoResp": 0.09,
+      "topResponses": [
+        [
+          "control",
+          0.56
+        ],
+        [
+          "external",
+          0.23
+        ],
+        [
+          "wall",
+          0.23
+        ]
+      ]
+    },
+    "3v3|123904": {
+      "nResp": 36,
+      "deathResp": 0.11,
+      "nNoResp": 18,
+      "deathNoResp": 0.17,
+      "topResponses": [
+        [
+          "control",
+          0.56
+        ],
+        [
+          "healCd",
+          0.31
+        ],
+        [
+          "wall",
+          0.28
+        ]
+      ]
+    },
+    "3v3|1241937": {
+      "nResp": 525,
+      "deathResp": 0.04,
+      "nNoResp": 368,
+      "deathNoResp": 0.04,
+      "topResponses": [
+        [
+          "control",
+          0.66
+        ],
+        [
+          "kite",
+          0.17
+        ],
+        [
+          "wall",
+          0.16
+        ]
+      ]
+    },
+    "3v3|1246167": {
+      "nResp": 224,
+      "deathResp": 0.06,
+      "nNoResp": 96,
+      "deathNoResp": 0.07,
+      "topResponses": [
+        [
+          "control",
+          0.56
+        ],
+        [
+          "wall",
+          0.23
+        ],
+        [
+          "external",
+          0.22
+        ]
+      ]
+    },
+    "3v3|1249625": {
+      "nResp": 2944,
+      "deathResp": 0.06,
+      "nNoResp": 810,
+      "deathNoResp": 0.13,
+      "topResponses": [
+        [
+          "control",
+          0.53
+        ],
+        [
+          "wall",
+          0.34
+        ],
+        [
+          "external",
+          0.32
+        ]
+      ]
+    },
+    "3v3|1249658": {
+      "nResp": 58,
+      "deathResp": 0.07,
+      "nNoResp": 26,
+      "deathNoResp": 0.15,
       "topResponses": [
         [
           "control",
           0.55
         ],
         [
-          "external",
-          0.25
+          "wall",
+          0.4
         ],
         [
-          "wall",
-          0.25
+          "external",
+          0.4
         ]
       ]
     },
-    "3v3|123904": {
-      "nResp": 39,
-      "deathResp": 0.1,
-      "nNoResp": 25,
+    "3v3|1250646": {
+      "nResp": 840,
+      "deathResp": 0.07,
+      "nNoResp": 219,
       "deathNoResp": 0.16,
       "topResponses": [
         [
           "control",
-          0.54
+          0.45
         ],
         [
           "wall",
-          0.28
+          0.38
         ],
         [
-          "healCd",
-          0.28
+          "external",
+          0.33
         ]
       ]
     },
-    "3v3|1241937": {
-      "nResp": 485,
-      "deathResp": 0.04,
-      "nNoResp": 349,
-      "deathNoResp": 0.03,
+    "3v3|1261193": {
+      "nResp": 222,
+      "deathResp": 0.08,
+      "nNoResp": 132,
+      "deathNoResp": 0.14,
       "topResponses": [
         [
           "control",
-          0.65
+          0.53
         ],
         [
-          "kite",
-          0.18
+          "external",
+          0.33
         ],
         [
           "wall",
-          0.15
+          0.26
         ]
       ]
     },
-    "3v3|1246167": {
+    "3v3|1276452": {
+      "nResp": 424,
+      "deathResp": 0.06,
+      "nNoResp": 191,
+      "deathNoResp": 0.04,
+      "topResponses": [
+        [
+          "control",
+          0.68
+        ],
+        [
+          "kite",
+          0.2
+        ],
+        [
+          "external",
+          0.17
+        ]
+      ]
+    },
+    "3v3|13750": {
       "nResp": 211,
-      "deathResp": 0.04,
+      "deathResp": 0.05,
       "nNoResp": 95,
+      "deathNoResp": 0.06,
+      "topResponses": [
+        [
+          "control",
+          0.61
+        ],
+        [
+          "external",
+          0.27
+        ],
+        [
+          "wall",
+          0.21
+        ]
+      ]
+    },
+    "3v3|167105": {
+      "nResp": 3369,
+      "deathResp": 0.06,
+      "nNoResp": 1884,
+      "deathNoResp": 0.09,
+      "topResponses": [
+        [
+          "control",
+          0.48
+        ],
+        [
+          "external",
+          0.29
+        ],
+        [
+          "wall",
+          0.25
+        ]
+      ]
+    },
+    "3v3|1719": {
+      "nResp": 1404,
+      "deathResp": 0.06,
+      "nNoResp": 764,
       "deathNoResp": 0.08,
       "topResponses": [
         [
@@ -1078,27 +1478,27 @@
         ],
         [
           "external",
-          0.24
+          0.26
         ],
         [
           "wall",
-          0.23
+          0.24
         ]
       ]
     },
-    "3v3|1250646": {
-      "nResp": 840,
+    "3v3|190319": {
+      "nResp": 7127,
       "deathResp": 0.07,
-      "nNoResp": 229,
+      "nNoResp": 1565,
       "deathNoResp": 0.16,
       "topResponses": [
         [
           "control",
-          0.42
+          0.56
         ],
         [
           "wall",
-          0.39
+          0.36
         ],
         [
           "external",
@@ -1106,11 +1506,271 @@
         ]
       ]
     },
-    "3v3|1261193": {
-      "nResp": 204,
-      "deathResp": 0.08,
-      "nNoResp": 123,
-      "deathNoResp": 0.14,
+    "3v3|191634": {
+      "nResp": 1352,
+      "deathResp": 0.05,
+      "nNoResp": 536,
+      "deathNoResp": 0.1,
+      "topResponses": [
+        [
+          "control",
+          0.61
+        ],
+        [
+          "external",
+          0.25
+        ],
+        [
+          "wall",
+          0.22
+        ]
+      ]
+    },
+    "3v3|194223": {
+      "nResp": 20,
+      "deathResp": 0.1,
+      "nNoResp": 7,
+      "deathNoResp": 0,
+      "topResponses": [
+        [
+          "control",
+          0.6
+        ],
+        [
+          "kite",
+          0.25
+        ],
+        [
+          "wall",
+          0.2
+        ]
+      ]
+    },
+    "3v3|19574": {
+      "nResp": 2951,
+      "deathResp": 0.06,
+      "nNoResp": 1036,
+      "deathNoResp": 0.13,
+      "topResponses": [
+        [
+          "control",
+          0.64
+        ],
+        [
+          "external",
+          0.29
+        ],
+        [
+          "wall",
+          0.22
+        ]
+      ]
+    },
+    "3v3|202770": {
+      "nResp": 71,
+      "deathResp": 0.04,
+      "nNoResp": 23,
+      "deathNoResp": 0.09,
+      "topResponses": [
+        [
+          "control",
+          0.63
+        ],
+        [
+          "external",
+          0.35
+        ],
+        [
+          "wall",
+          0.31
+        ]
+      ]
+    },
+    "3v3|204361": {
+      "nResp": 692,
+      "deathResp": 0.06,
+      "nNoResp": 257,
+      "deathNoResp": 0.11,
+      "topResponses": [
+        [
+          "control",
+          0.58
+        ],
+        [
+          "external",
+          0.28
+        ],
+        [
+          "wall",
+          0.26
+        ]
+      ]
+    },
+    "3v3|205021": {
+      "nResp": 1171,
+      "deathResp": 0.05,
+      "nNoResp": 301,
+      "deathNoResp": 0.08,
+      "topResponses": [
+        [
+          "control",
+          0.74
+        ],
+        [
+          "external",
+          0.24
+        ],
+        [
+          "wall",
+          0.22
+        ]
+      ]
+    },
+    "3v3|205180": {
+      "nResp": 2554,
+      "deathResp": 0.05,
+      "nNoResp": 816,
+      "deathNoResp": 0.08,
+      "topResponses": [
+        [
+          "control",
+          0.71
+        ],
+        [
+          "external",
+          0.2
+        ],
+        [
+          "wall",
+          0.19
+        ]
+      ]
+    },
+    "3v3|205636": {
+      "nResp": 1073,
+      "deathResp": 0.09,
+      "nNoResp": 336,
+      "deathNoResp": 0.11,
+      "topResponses": [
+        [
+          "control",
+          0.62
+        ],
+        [
+          "wall",
+          0.3
+        ],
+        [
+          "external",
+          0.28
+        ]
+      ]
+    },
+    "3v3|227847": {
+      "nResp": 30,
+      "deathResp": 0.17,
+      "nNoResp": 24,
+      "deathNoResp": 0.04,
+      "topResponses": [
+        [
+          "control",
+          0.63
+        ],
+        [
+          "wall",
+          0.33
+        ],
+        [
+          "kite",
+          0.2
+        ]
+      ]
+    },
+    "3v3|228260": {
+      "nResp": 1791,
+      "deathResp": 0.07,
+      "nNoResp": 749,
+      "deathNoResp": 0.08,
+      "topResponses": [
+        [
+          "control",
+          0.59
+        ],
+        [
+          "external",
+          0.26
+        ],
+        [
+          "wall",
+          0.26
+        ]
+      ]
+    },
+    "3v3|260243": {
+      "nResp": 493,
+      "deathResp": 0.04,
+      "nNoResp": 184,
+      "deathNoResp": 0.1,
+      "topResponses": [
+        [
+          "control",
+          0.49
+        ],
+        [
+          "wall",
+          0.27
+        ],
+        [
+          "external",
+          0.26
+        ]
+      ]
+    },
+    "3v3|265187": {
+      "nResp": 257,
+      "deathResp": 0.07,
+      "nNoResp": 57,
+      "deathNoResp": 0.12,
+      "topResponses": [
+        [
+          "control",
+          0.7
+        ],
+        [
+          "wall",
+          0.22
+        ],
+        [
+          "kite",
+          0.17
+        ]
+      ]
+    },
+    "3v3|274837": {
+      "nResp": 1043,
+      "deathResp": 0.06,
+      "nNoResp": 407,
+      "deathNoResp": 0.09,
+      "topResponses": [
+        [
+          "control",
+          0.59
+        ],
+        [
+          "external",
+          0.29
+        ],
+        [
+          "wall",
+          0.22
+        ]
+      ]
+    },
+    "3v3|288613": {
+      "nResp": 1033,
+      "deathResp": 0.06,
+      "nNoResp": 341,
+      "deathNoResp": 0.13,
       "topResponses": [
         [
           "control",
@@ -1122,355 +1782,75 @@
         ],
         [
           "wall",
-          0.25
-        ]
-      ]
-    },
-    "3v3|13750": {
-      "nResp": 216,
-      "deathResp": 0.05,
-      "nNoResp": 100,
-      "deathNoResp": 0.07,
-      "topResponses": [
-        [
-          "control",
-          0.59
-        ],
-        [
-          "external",
-          0.27
-        ],
-        [
-          "kite",
-          0.22
-        ]
-      ]
-    },
-    "3v3|1719": {
-      "nResp": 1345,
-      "deathResp": 0.06,
-      "nNoResp": 716,
-      "deathNoResp": 0.09,
-      "topResponses": [
-        [
-          "control",
-          0.55
-        ],
-        [
-          "external",
           0.26
-        ],
-        [
-          "wall",
-          0.25
-        ]
-      ]
-    },
-    "3v3|190319": {
-      "nResp": 7676,
-      "deathResp": 0.07,
-      "nNoResp": 1654,
-      "deathNoResp": 0.16,
-      "topResponses": [
-        [
-          "control",
-          0.54
-        ],
-        [
-          "wall",
-          0.37
-        ],
-        [
-          "external",
-          0.35
-        ]
-      ]
-    },
-    "3v3|191634": {
-      "nResp": 1299,
-      "deathResp": 0.05,
-      "nNoResp": 511,
-      "deathNoResp": 0.08,
-      "topResponses": [
-        [
-          "control",
-          0.59
-        ],
-        [
-          "wall",
-          0.25
-        ],
-        [
-          "external",
-          0.24
-        ]
-      ]
-    },
-    "3v3|194223": {
-      "nResp": 30,
-      "deathResp": 0.07,
-      "nNoResp": 9,
-      "deathNoResp": 0,
-      "topResponses": [
-        [
-          "control",
-          0.5
-        ],
-        [
-          "kite",
-          0.33
-        ],
-        [
-          "wall",
-          0.2
-        ]
-      ]
-    },
-    "3v3|19574": {
-      "nResp": 2724,
-      "deathResp": 0.06,
-      "nNoResp": 909,
-      "deathNoResp": 0.12,
-      "topResponses": [
-        [
-          "control",
-          0.64
-        ],
-        [
-          "external",
-          0.29
-        ],
-        [
-          "wall",
-          0.23
-        ]
-      ]
-    },
-    "3v3|204361": {
-      "nResp": 712,
-      "deathResp": 0.06,
-      "nNoResp": 239,
-      "deathNoResp": 0.14,
-      "topResponses": [
-        [
-          "control",
-          0.55
-        ],
-        [
-          "external",
-          0.31
-        ],
-        [
-          "wall",
-          0.29
-        ]
-      ]
-    },
-    "3v3|205021": {
-      "nResp": 1141,
-      "deathResp": 0.04,
-      "nNoResp": 284,
-      "deathNoResp": 0.08,
-      "topResponses": [
-        [
-          "control",
-          0.71
-        ],
-        [
-          "external",
-          0.25
-        ],
-        [
-          "wall",
-          0.23
-        ]
-      ]
-    },
-    "3v3|205180": {
-      "nResp": 2788,
-      "deathResp": 0.05,
-      "nNoResp": 861,
-      "deathNoResp": 0.08,
-      "topResponses": [
-        [
-          "control",
-          0.69
-        ],
-        [
-          "external",
-          0.21
-        ],
-        [
-          "wall",
-          0.2
-        ]
-      ]
-    },
-    "3v3|227847": {
-      "nResp": 25,
-      "deathResp": 0.16,
-      "nNoResp": 15,
-      "deathNoResp": 0.07,
-      "topResponses": [
-        [
-          "control",
-          0.64
-        ],
-        [
-          "wall",
-          0.4
-        ],
-        [
-          "attackerMoved",
-          0.16
-        ]
-      ]
-    },
-    "3v3|265187": {
-      "nResp": 295,
-      "deathResp": 0.05,
-      "nNoResp": 73,
-      "deathNoResp": 0.18,
-      "topResponses": [
-        [
-          "control",
-          0.71
-        ],
-        [
-          "wall",
-          0.24
-        ],
-        [
-          "external",
-          0.21
-        ]
-      ]
-    },
-    "3v3|274837": {
-      "nResp": 1016,
-      "deathResp": 0.06,
-      "nNoResp": 379,
-      "deathNoResp": 0.09,
-      "topResponses": [
-        [
-          "control",
-          0.58
-        ],
-        [
-          "external",
-          0.29
-        ],
-        [
-          "wall",
-          0.23
-        ]
-      ]
-    },
-    "3v3|288613": {
-      "nResp": 1259,
-      "deathResp": 0.05,
-      "nNoResp": 423,
-      "deathNoResp": 0.13,
-      "topResponses": [
-        [
-          "control",
-          0.51
-        ],
-        [
-          "external",
-          0.33
-        ],
-        [
-          "wall",
-          0.28
         ]
       ]
     },
     "3v3|31884": {
-      "nResp": 2339,
+      "nResp": 2170,
       "deathResp": 0.06,
-      "nNoResp": 1129,
+      "nNoResp": 1026,
       "deathNoResp": 0.08,
       "topResponses": [
         [
           "control",
-          0.55
+          0.57
         ],
         [
           "external",
-          0.26
+          0.24
         ],
         [
           "wall",
-          0.22
+          0.21
+        ]
+      ]
+    },
+    "3v3|321507": {
+      "nResp": 193,
+      "deathResp": 0.06,
+      "nNoResp": 64,
+      "deathNoResp": 0.08,
+      "topResponses": [
+        [
+          "control",
+          0.72
+        ],
+        [
+          "external",
+          0.23
+        ],
+        [
+          "kite",
+          0.16
         ]
       ]
     },
     "3v3|360194": {
-      "nResp": 3482,
+      "nResp": 2886,
       "deathResp": 0.1,
-      "nNoResp": 953,
-      "deathNoResp": 0.26,
+      "nNoResp": 809,
+      "deathNoResp": 0.27,
       "topResponses": [
         [
           "control",
-          0.45
+          0.47
         ],
         [
           "external",
-          0.41
-        ],
-        [
-          "wall",
-          0.35
-        ]
-      ]
-    },
-    "3v3|365350": {
-      "nResp": 247,
-      "deathResp": 0.08,
-      "nNoResp": 35,
-      "deathNoResp": 0.09,
-      "topResponses": [
-        [
-          "control",
-          0.73
+          0.39
         ],
         [
           "wall",
           0.34
-        ],
-        [
-          "external",
-          0.3
         ]
       ]
     },
-    "3v3|370965": {
-      "nResp": 1169,
-      "deathResp": 0.05,
-      "nNoResp": 400,
-      "deathNoResp": 0.09,
-      "topResponses": [
-        [
-          "control",
-          0.65
-        ],
-        [
-          "external",
-          0.29
-        ],
-        [
-          "wall",
-          0.25
-        ]
-      ]
-    },
-    "3v3|375087": {
-      "nResp": 839,
-      "deathResp": 0.03,
-      "nNoResp": 204,
-      "deathNoResp": 0.1,
+    "3v3|365350": {
+      "nResp": 415,
+      "deathResp": 0.08,
+      "nNoResp": 98,
+      "deathNoResp": 0.06,
       "topResponses": [
         [
           "control",
@@ -1478,47 +1858,7 @@
         ],
         [
           "wall",
-          0.26
-        ],
-        [
-          "external",
-          0.22
-        ]
-      ]
-    },
-    "3v3|392983": {
-      "nResp": 1099,
-      "deathResp": 0.07,
-      "nNoResp": 239,
-      "deathNoResp": 0.15,
-      "topResponses": [
-        [
-          "control",
-          0.63
-        ],
-        [
-          "wall",
-          0.35
-        ],
-        [
-          "external",
-          0.32
-        ]
-      ]
-    },
-    "3v3|42650": {
-      "nResp": 1919,
-      "deathResp": 0.1,
-      "nNoResp": 810,
-      "deathNoResp": 0.15,
-      "topResponses": [
-        [
-          "control",
-          0.47
-        ],
-        [
-          "wall",
-          0.3
+          0.29
         ],
         [
           "external",
@@ -1526,35 +1866,175 @@
         ]
       ]
     },
-    "3v3|442726": {
-      "nResp": 1397,
+    "3v3|370965": {
+      "nResp": 1193,
       "deathResp": 0.06,
-      "nNoResp": 407,
+      "nNoResp": 433,
       "deathNoResp": 0.1,
       "topResponses": [
         [
           "control",
-          0.71
+          0.64
+        ],
+        [
+          "external",
+          0.28
         ],
         [
           "wall",
-          0.22
+          0.24
+        ]
+      ]
+    },
+    "3v3|375087": {
+      "nResp": 800,
+      "deathResp": 0.03,
+      "nNoResp": 193,
+      "deathNoResp": 0.1,
+      "topResponses": [
+        [
+          "control",
+          0.68
         ],
         [
-          "kite",
+          "wall",
+          0.25
+        ],
+        [
+          "external",
           0.21
         ]
       ]
     },
+    "3v3|384352": {
+      "nResp": 147,
+      "deathResp": 0.07,
+      "nNoResp": 25,
+      "deathNoResp": 0.24,
+      "topResponses": [
+        [
+          "external",
+          0.5
+        ],
+        [
+          "control",
+          0.41
+        ],
+        [
+          "wall",
+          0.4
+        ]
+      ]
+    },
+    "3v3|385627": {
+      "nResp": 1163,
+      "deathResp": 0.09,
+      "nNoResp": 301,
+      "deathNoResp": 0.22,
+      "topResponses": [
+        [
+          "control",
+          0.56
+        ],
+        [
+          "external",
+          0.35
+        ],
+        [
+          "wall",
+          0.32
+        ]
+      ]
+    },
+    "3v3|392983": {
+      "nResp": 527,
+      "deathResp": 0.09,
+      "nNoResp": 213,
+      "deathNoResp": 0.15,
+      "topResponses": [
+        [
+          "control",
+          0.57
+        ],
+        [
+          "external",
+          0.28
+        ],
+        [
+          "wall",
+          0.25
+        ]
+      ]
+    },
+    "3v3|42650": {
+      "nResp": 1870,
+      "deathResp": 0.09,
+      "nNoResp": 765,
+      "deathNoResp": 0.16,
+      "topResponses": [
+        [
+          "control",
+          0.5
+        ],
+        [
+          "wall",
+          0.3
+        ],
+        [
+          "external",
+          0.27
+        ]
+      ]
+    },
+    "3v3|442726": {
+      "nResp": 1411,
+      "deathResp": 0.07,
+      "nNoResp": 406,
+      "deathNoResp": 0.1,
+      "topResponses": [
+        [
+          "control",
+          0.72
+        ],
+        [
+          "wall",
+          0.21
+        ],
+        [
+          "kite",
+          0.2
+        ]
+      ]
+    },
+    "3v3|446035": {
+      "nResp": 1309,
+      "deathResp": 0.08,
+      "nNoResp": 738,
+      "deathNoResp": 0.12,
+      "topResponses": [
+        [
+          "control",
+          0.6
+        ],
+        [
+          "external",
+          0.23
+        ],
+        [
+          "wall",
+          0.22
+        ]
+      ]
+    },
     "3v3|47568": {
-      "nResp": 676,
+      "nResp": 616,
       "deathResp": 0.1,
-      "nNoResp": 327,
+      "nNoResp": 315,
       "deathNoResp": 0.13,
       "topResponses": [
         [
           "control",
-          0.46
+          0.5
         ],
         [
           "wall",
@@ -1567,69 +2047,69 @@
       ]
     },
     "3v3|51271": {
-      "nResp": 339,
-      "deathResp": 0.1,
-      "nNoResp": 67,
-      "deathNoResp": 0.15,
+      "nResp": 276,
+      "deathResp": 0.11,
+      "nNoResp": 60,
+      "deathNoResp": 0.13,
       "topResponses": [
         [
-          "wall",
+          "control",
           0.5
         ],
         [
-          "control",
-          0.45
+          "wall",
+          0.47
         ],
         [
           "external",
-          0.34
+          0.35
         ]
       ]
     },
     "3v3|6353": {
-      "nResp": 489,
+      "nResp": 490,
       "deathResp": 0.08,
-      "nNoResp": 143,
-      "deathNoResp": 0.12,
+      "nNoResp": 142,
+      "deathNoResp": 0.14,
       "topResponses": [
         [
           "control",
-          0.67
+          0.71
         ],
         [
           "wall",
-          0.27
+          0.24
         ],
         [
           "external",
-          0.22
+          0.2
         ]
       ]
     },
     "3v3|84714": {
-      "nResp": 1314,
-      "deathResp": 0.04,
-      "nNoResp": 612,
-      "deathNoResp": 0.06,
+      "nResp": 1373,
+      "deathResp": 0.05,
+      "nNoResp": 646,
+      "deathNoResp": 0.05,
       "topResponses": [
         [
           "control",
-          0.67
+          0.68
         ],
         [
           "external",
-          0.21
+          0.2
         ],
         [
-          "kite",
-          0.17
+          "wall",
+          0.16
         ]
       ]
     },
     "Rated Solo Shuffle|*": {
-      "nResp": 81084,
+      "nResp": 99598,
       "deathResp": 0.03,
-      "nNoResp": 29123,
+      "nNoResp": 38655,
       "deathNoResp": 0.06,
       "topResponses": [
         [
@@ -1638,43 +2118,43 @@
         ],
         [
           "external",
-          0.32
+          0.31
         ],
         [
           "wall",
-          0.28
+          0.27
         ]
       ]
     },
     "Rated Solo Shuffle|102543": {
-      "nResp": 1749,
-      "deathResp": 0.02,
-      "nNoResp": 734,
-      "deathNoResp": 0.05,
+      "nResp": 1699,
+      "deathResp": 0.03,
+      "nNoResp": 709,
+      "deathNoResp": 0.06,
       "topResponses": [
         [
           "control",
-          0.49
+          0.51
         ],
         [
           "wall",
-          0.27
+          0.26
         ],
         [
           "external",
-          0.27
+          0.26
         ]
       ]
     },
     "Rated Solo Shuffle|102560": {
-      "nResp": 4276,
-      "deathResp": 0.04,
-      "nNoResp": 1210,
+      "nResp": 2723,
+      "deathResp": 0.05,
+      "nNoResp": 815,
       "deathNoResp": 0.1,
       "topResponses": [
         [
           "control",
-          0.48
+          0.49
         ],
         [
           "external",
@@ -1682,63 +2162,23 @@
         ],
         [
           "wall",
-          0.34
+          0.32
         ]
       ]
     },
     "Rated Solo Shuffle|106951": {
-      "nResp": 38,
+      "nResp": 37,
       "deathResp": 0.03,
-      "nNoResp": 22,
-      "deathNoResp": 0.14,
+      "nNoResp": 20,
+      "deathNoResp": 0.15,
       "topResponses": [
         [
           "control",
-          0.5
+          0.51
         ],
         [
           "external",
-          0.26
-        ],
-        [
-          "wall",
           0.24
-        ]
-      ]
-    },
-    "Rated Solo Shuffle|107574": {
-      "nResp": 7106,
-      "deathResp": 0.02,
-      "nNoResp": 2776,
-      "deathNoResp": 0.04,
-      "topResponses": [
-        [
-          "control",
-          0.55
-        ],
-        [
-          "external",
-          0.33
-        ],
-        [
-          "wall",
-          0.3
-        ]
-      ]
-    },
-    "Rated Solo Shuffle|1122": {
-      "nResp": 1669,
-      "deathResp": 0.02,
-      "nNoResp": 660,
-      "deathNoResp": 0.03,
-      "topResponses": [
-        [
-          "control",
-          0.61
-        ],
-        [
-          "external",
-          0.23
         ],
         [
           "wall",
@@ -1746,35 +2186,75 @@
         ]
       ]
     },
+    "Rated Solo Shuffle|107574": {
+      "nResp": 9131,
+      "deathResp": 0.03,
+      "nNoResp": 4496,
+      "deathNoResp": 0.04,
+      "topResponses": [
+        [
+          "control",
+          0.47
+        ],
+        [
+          "external",
+          0.32
+        ],
+        [
+          "wall",
+          0.29
+        ]
+      ]
+    },
+    "Rated Solo Shuffle|1122": {
+      "nResp": 1596,
+      "deathResp": 0.02,
+      "nNoResp": 639,
+      "deathNoResp": 0.04,
+      "topResponses": [
+        [
+          "control",
+          0.62
+        ],
+        [
+          "external",
+          0.22
+        ],
+        [
+          "wall",
+          0.21
+        ]
+      ]
+    },
     "Rated Solo Shuffle|114050": {
-      "nResp": 1179,
+      "nResp": 1137,
       "deathResp": 0.04,
-      "nNoResp": 324,
+      "nNoResp": 326,
       "deathNoResp": 0.07,
       "topResponses": [
         [
           "control",
-          0.55
+          0.57
         ],
         [
           "external",
-          0.33
+          0.32
         ],
         [
           "wall",
-          0.32
+          0.31
         ]
       ]
     },
     "Rated Solo Shuffle|114051": {
-      "nResp": 1420,
+      "nResp": 1344,
       "deathResp": 0.04,
-      "nNoResp": 308,
-      "deathNoResp": 0.09,
+      "nNoResp": 299,
+      "deathNoResp": 0.1,
       "topResponses": [
         [
           "control",
-          0.49
+          0.5
         ],
         [
           "external",
@@ -1782,19 +2262,19 @@
         ],
         [
           "wall",
-          0.36
+          0.35
         ]
       ]
     },
     "Rated Solo Shuffle|121471": {
-      "nResp": 1038,
+      "nResp": 1061,
       "deathResp": 0.02,
-      "nNoResp": 249,
-      "deathNoResp": 0.07,
+      "nNoResp": 264,
+      "deathNoResp": 0.06,
       "topResponses": [
         [
           "control",
-          0.55
+          0.54
         ],
         [
           "external",
@@ -1802,23 +2282,23 @@
         ],
         [
           "wall",
-          0.34
+          0.33
         ]
       ]
     },
     "Rated Solo Shuffle|1233448": {
-      "nResp": 1809,
+      "nResp": 1945,
       "deathResp": 0.03,
-      "nNoResp": 872,
+      "nNoResp": 988,
       "deathNoResp": 0.04,
       "topResponses": [
         [
           "control",
-          0.55
+          0.56
         ],
         [
           "external",
-          0.26
+          0.25
         ],
         [
           "wall",
@@ -1827,38 +2307,38 @@
       ]
     },
     "Rated Solo Shuffle|123904": {
-      "nResp": 77,
+      "nResp": 59,
       "deathResp": 0,
-      "nNoResp": 24,
+      "nNoResp": 21,
       "deathNoResp": 0,
       "topResponses": [
         [
           "control",
-          0.48
+          0.51
         ],
         [
           "external",
-          0.35
+          0.37
         ],
         [
           "kite",
-          0.25
+          0.22
         ]
       ]
     },
     "Rated Solo Shuffle|1241937": {
-      "nResp": 1331,
+      "nResp": 1396,
       "deathResp": 0.01,
-      "nNoResp": 932,
+      "nNoResp": 968,
       "deathNoResp": 0.01,
       "topResponses": [
         [
           "control",
-          0.65
+          0.66
         ],
         [
           "external",
-          0.2
+          0.19
         ],
         [
           "wall",
@@ -1867,38 +2347,78 @@
       ]
     },
     "Rated Solo Shuffle|1246167": {
-      "nResp": 737,
+      "nResp": 747,
       "deathResp": 0.01,
-      "nNoResp": 285,
+      "nNoResp": 287,
       "deathNoResp": 0.02,
       "topResponses": [
         [
           "control",
-          0.6
+          0.62
         ],
         [
           "external",
-          0.3
+          0.29
         ],
         [
           "wall",
-          0.23
+          0.21
+        ]
+      ]
+    },
+    "Rated Solo Shuffle|1249625": {
+      "nResp": 4343,
+      "deathResp": 0.02,
+      "nNoResp": 1431,
+      "deathNoResp": 0.06,
+      "topResponses": [
+        [
+          "control",
+          0.47
+        ],
+        [
+          "external",
+          0.37
+        ],
+        [
+          "wall",
+          0.31
+        ]
+      ]
+    },
+    "Rated Solo Shuffle|1249658": {
+      "nResp": 152,
+      "deathResp": 0.05,
+      "nNoResp": 48,
+      "deathNoResp": 0.1,
+      "topResponses": [
+        [
+          "control",
+          0.49
+        ],
+        [
+          "wall",
+          0.38
+        ],
+        [
+          "external",
+          0.35
         ]
       ]
     },
     "Rated Solo Shuffle|1250646": {
-      "nResp": 1423,
+      "nResp": 1402,
       "deathResp": 0.05,
-      "nNoResp": 370,
-      "deathNoResp": 0.11,
+      "nNoResp": 375,
+      "deathNoResp": 0.12,
       "topResponses": [
         [
           "control",
-          0.43
+          0.44
         ],
         [
           "external",
-          0.42
+          0.41
         ],
         [
           "wall",
@@ -1907,38 +2427,58 @@
       ]
     },
     "Rated Solo Shuffle|1261193": {
-      "nResp": 340,
+      "nResp": 375,
       "deathResp": 0.01,
-      "nNoResp": 130,
+      "nNoResp": 152,
       "deathNoResp": 0.03,
       "topResponses": [
         [
           "control",
-          0.54
+          0.55
         ],
         [
           "external",
-          0.29
+          0.26
         ],
         [
           "wall",
           0.24
+        ]
+      ]
+    },
+    "Rated Solo Shuffle|1276452": {
+      "nResp": 775,
+      "deathResp": 0.01,
+      "nNoResp": 397,
+      "deathNoResp": 0.02,
+      "topResponses": [
+        [
+          "control",
+          0.65
+        ],
+        [
+          "kite",
+          0.19
+        ],
+        [
+          "external",
+          0.19
         ]
       ]
     },
     "Rated Solo Shuffle|13750": {
-      "nResp": 716,
+      "nResp": 690,
       "deathResp": 0.02,
-      "nNoResp": 353,
-      "deathNoResp": 0.03,
+      "nNoResp": 339,
+      "deathNoResp": 0.04,
       "topResponses": [
         [
           "control",
-          0.48
+          0.51
         ],
         [
           "external",
-          0.27
+          0.26
         ],
         [
           "wall",
@@ -1946,95 +2486,15 @@
         ]
       ]
     },
-    "Rated Solo Shuffle|1719": {
-      "nResp": 2556,
-      "deathResp": 0.02,
-      "nNoResp": 1241,
-      "deathNoResp": 0.05,
-      "topResponses": [
-        [
-          "control",
-          0.49
-        ],
-        [
-          "external",
-          0.3
-        ],
-        [
-          "wall",
-          0.26
-        ]
-      ]
-    },
-    "Rated Solo Shuffle|190319": {
-      "nResp": 6532,
-      "deathResp": 0.04,
-      "nNoResp": 1671,
-      "deathNoResp": 0.12,
-      "topResponses": [
-        [
-          "control",
-          0.5
-        ],
-        [
-          "external",
-          0.4
-        ],
-        [
-          "wall",
-          0.34
-        ]
-      ]
-    },
-    "Rated Solo Shuffle|191634": {
-      "nResp": 1670,
+    "Rated Solo Shuffle|167105": {
+      "nResp": 4420,
       "deathResp": 0.03,
-      "nNoResp": 705,
+      "nNoResp": 2370,
       "deathNoResp": 0.04,
       "topResponses": [
         [
           "control",
-          0.58
-        ],
-        [
-          "external",
-          0.29
-        ],
-        [
-          "wall",
-          0.27
-        ]
-      ]
-    },
-    "Rated Solo Shuffle|194223": {
-      "nResp": 47,
-      "deathResp": 0.06,
-      "nNoResp": 15,
-      "deathNoResp": 0,
-      "topResponses": [
-        [
-          "external",
-          0.4
-        ],
-        [
-          "control",
-          0.38
-        ],
-        [
-          "wall",
-          0.34
-        ]
-      ]
-    },
-    "Rated Solo Shuffle|19574": {
-      "nResp": 5702,
-      "deathResp": 0.02,
-      "nNoResp": 1687,
-      "deathNoResp": 0.06,
-      "topResponses": [
-        [
-          "control",
-          0.62
+          0.47
         ],
         [
           "external",
@@ -2042,15 +2502,135 @@
         ],
         [
           "wall",
+          0.26
+        ]
+      ]
+    },
+    "Rated Solo Shuffle|1719": {
+      "nResp": 2602,
+      "deathResp": 0.02,
+      "nNoResp": 1259,
+      "deathNoResp": 0.05,
+      "topResponses": [
+        [
+          "control",
+          0.51
+        ],
+        [
+          "external",
+          0.3
+        ],
+        [
+          "wall",
           0.25
         ]
       ]
     },
+    "Rated Solo Shuffle|190319": {
+      "nResp": 6227,
+      "deathResp": 0.04,
+      "nNoResp": 1584,
+      "deathNoResp": 0.12,
+      "topResponses": [
+        [
+          "control",
+          0.52
+        ],
+        [
+          "external",
+          0.4
+        ],
+        [
+          "wall",
+          0.33
+        ]
+      ]
+    },
+    "Rated Solo Shuffle|191634": {
+      "nResp": 1710,
+      "deathResp": 0.02,
+      "nNoResp": 721,
+      "deathNoResp": 0.03,
+      "topResponses": [
+        [
+          "control",
+          0.6
+        ],
+        [
+          "external",
+          0.29
+        ],
+        [
+          "wall",
+          0.26
+        ]
+      ]
+    },
+    "Rated Solo Shuffle|194223": {
+      "nResp": 26,
+      "deathResp": 0.08,
+      "nNoResp": 10,
+      "deathNoResp": 0,
+      "topResponses": [
+        [
+          "control",
+          0.46
+        ],
+        [
+          "external",
+          0.35
+        ],
+        [
+          "wall",
+          0.27
+        ]
+      ]
+    },
+    "Rated Solo Shuffle|19574": {
+      "nResp": 6324,
+      "deathResp": 0.02,
+      "nNoResp": 1989,
+      "deathNoResp": 0.06,
+      "topResponses": [
+        [
+          "control",
+          0.61
+        ],
+        [
+          "external",
+          0.32
+        ],
+        [
+          "wall",
+          0.25
+        ]
+      ]
+    },
+    "Rated Solo Shuffle|202770": {
+      "nResp": 229,
+      "deathResp": 0.05,
+      "nNoResp": 80,
+      "deathNoResp": 0.1,
+      "topResponses": [
+        [
+          "control",
+          0.59
+        ],
+        [
+          "wall",
+          0.31
+        ],
+        [
+          "external",
+          0.26
+        ]
+      ]
+    },
     "Rated Solo Shuffle|204361": {
-      "nResp": 893,
+      "nResp": 1006,
       "deathResp": 0.03,
-      "nNoResp": 293,
-      "deathNoResp": 0.04,
+      "nNoResp": 352,
+      "deathNoResp": 0.05,
       "topResponses": [
         [
           "control",
@@ -2067,18 +2647,18 @@
       ]
     },
     "Rated Solo Shuffle|205021": {
-      "nResp": 2191,
-      "deathResp": 0.02,
-      "nNoResp": 507,
-      "deathNoResp": 0.04,
+      "nResp": 2225,
+      "deathResp": 0.03,
+      "nNoResp": 526,
+      "deathNoResp": 0.05,
       "topResponses": [
         [
           "control",
-          0.68
+          0.7
         ],
         [
           "external",
-          0.27
+          0.26
         ],
         [
           "wall",
@@ -2087,14 +2667,174 @@
       ]
     },
     "Rated Solo Shuffle|205180": {
-      "nResp": 3299,
-      "deathResp": 0.03,
-      "nNoResp": 1112,
+      "nResp": 3121,
+      "deathResp": 0.02,
+      "nNoResp": 1064,
+      "deathNoResp": 0.05,
+      "topResponses": [
+        [
+          "control",
+          0.65
+        ],
+        [
+          "external",
+          0.25
+        ],
+        [
+          "wall",
+          0.22
+        ]
+      ]
+    },
+    "Rated Solo Shuffle|205636": {
+      "nResp": 1589,
+      "deathResp": 0.04,
+      "nNoResp": 558,
+      "deathNoResp": 0.06,
+      "topResponses": [
+        [
+          "control",
+          0.56
+        ],
+        [
+          "external",
+          0.29
+        ],
+        [
+          "wall",
+          0.28
+        ]
+      ]
+    },
+    "Rated Solo Shuffle|227847": {
+      "nResp": 103,
+      "deathResp": 0.01,
+      "nNoResp": 62,
+      "deathNoResp": 0,
+      "topResponses": [
+        [
+          "control",
+          0.6
+        ],
+        [
+          "external",
+          0.21
+        ],
+        [
+          "wall",
+          0.17
+        ]
+      ]
+    },
+    "Rated Solo Shuffle|228260": {
+      "nResp": 2957,
+      "deathResp": 0.04,
+      "nNoResp": 1152,
+      "deathNoResp": 0.06,
+      "topResponses": [
+        [
+          "control",
+          0.57
+        ],
+        [
+          "external",
+          0.29
+        ],
+        [
+          "wall",
+          0.25
+        ]
+      ]
+    },
+    "Rated Solo Shuffle|260243": {
+      "nResp": 1327,
+      "deathResp": 0.02,
+      "nNoResp": 501,
       "deathNoResp": 0.04,
       "topResponses": [
         [
           "control",
-          0.64
+          0.56
+        ],
+        [
+          "external",
+          0.3
+        ],
+        [
+          "wall",
+          0.26
+        ]
+      ]
+    },
+    "Rated Solo Shuffle|265187": {
+      "nResp": 480,
+      "deathResp": 0.03,
+      "nNoResp": 158,
+      "deathNoResp": 0.01,
+      "topResponses": [
+        [
+          "control",
+          0.69
+        ],
+        [
+          "external",
+          0.23
+        ],
+        [
+          "wall",
+          0.2
+        ]
+      ]
+    },
+    "Rated Solo Shuffle|274837": {
+      "nResp": 1201,
+      "deathResp": 0.03,
+      "nNoResp": 452,
+      "deathNoResp": 0.06,
+      "topResponses": [
+        [
+          "control",
+          0.57
+        ],
+        [
+          "external",
+          0.27
+        ],
+        [
+          "wall",
+          0.25
+        ]
+      ]
+    },
+    "Rated Solo Shuffle|288613": {
+      "nResp": 2724,
+      "deathResp": 0.03,
+      "nNoResp": 973,
+      "deathNoResp": 0.08,
+      "topResponses": [
+        [
+          "control",
+          0.49
+        ],
+        [
+          "external",
+          0.35
+        ],
+        [
+          "wall",
+          0.28
+        ]
+      ]
+    },
+    "Rated Solo Shuffle|31884": {
+      "nResp": 4428,
+      "deathResp": 0.02,
+      "nNoResp": 2152,
+      "deathNoResp": 0.03,
+      "topResponses": [
+        [
+          "control",
+          0.55
         ],
         [
           "external",
@@ -2106,110 +2846,30 @@
         ]
       ]
     },
-    "Rated Solo Shuffle|227847": {
-      "nResp": 110,
-      "deathResp": 0.01,
-      "nNoResp": 49,
-      "deathNoResp": 0,
-      "topResponses": [
-        [
-          "control",
-          0.59
-        ],
-        [
-          "external",
-          0.25
-        ],
-        [
-          "wall",
-          0.19
-        ]
-      ]
-    },
-    "Rated Solo Shuffle|265187": {
-      "nResp": 636,
+    "Rated Solo Shuffle|321507": {
+      "nResp": 693,
       "deathResp": 0.02,
-      "nNoResp": 202,
-      "deathNoResp": 0.01,
-      "topResponses": [
-        [
-          "control",
-          0.7
-        ],
-        [
-          "external",
-          0.25
-        ],
-        [
-          "wall",
-          0.22
-        ]
-      ]
-    },
-    "Rated Solo Shuffle|274837": {
-      "nResp": 1116,
-      "deathResp": 0.03,
-      "nNoResp": 396,
-      "deathNoResp": 0.06,
-      "topResponses": [
-        [
-          "control",
-          0.57
-        ],
-        [
-          "external",
-          0.28
-        ],
-        [
-          "wall",
-          0.26
-        ]
-      ]
-    },
-    "Rated Solo Shuffle|288613": {
-      "nResp": 3384,
-      "deathResp": 0.03,
-      "nNoResp": 1165,
-      "deathNoResp": 0.08,
-      "topResponses": [
-        [
-          "control",
-          0.47
-        ],
-        [
-          "external",
-          0.36
-        ],
-        [
-          "wall",
-          0.29
-        ]
-      ]
-    },
-    "Rated Solo Shuffle|31884": {
-      "nResp": 4690,
-      "deathResp": 0.02,
-      "nNoResp": 2318,
+      "nNoResp": 195,
       "deathNoResp": 0.03,
       "topResponses": [
         [
           "control",
-          0.53
-        ],
-        [
-          "external",
-          0.27
+          0.74
         ],
         [
           "wall",
-          0.24
+          0.22
+        ],
+        [
+          "external",
+          0.2
         ]
       ]
     },
     "Rated Solo Shuffle|360194": {
-      "nResp": 5129,
+      "nResp": 3953,
       "deathResp": 0.07,
-      "nNoResp": 1457,
+      "nNoResp": 1152,
       "deathNoResp": 0.19,
       "topResponses": [
         [
@@ -2217,40 +2877,40 @@
           0.45
         ],
         [
-          "wall",
-          0.37
+          "control",
+          0.36
         ],
         [
-          "control",
-          0.35
+          "wall",
+          0.36
         ]
       ]
     },
     "Rated Solo Shuffle|365350": {
-      "nResp": 839,
+      "nResp": 1386,
       "deathResp": 0.02,
-      "nNoResp": 149,
-      "deathNoResp": 0.01,
+      "nNoResp": 382,
+      "deathNoResp": 0.02,
       "topResponses": [
         [
           "control",
-          0.73
+          0.64
         ],
         [
           "external",
-          0.28
+          0.29
         ],
         [
           "wall",
-          0.22
+          0.23
         ]
       ]
     },
     "Rated Solo Shuffle|370965": {
-      "nResp": 2264,
+      "nResp": 2359,
       "deathResp": 0.03,
-      "nNoResp": 789,
-      "deathNoResp": 0.03,
+      "nNoResp": 858,
+      "deathNoResp": 0.04,
       "topResponses": [
         [
           "control",
@@ -2258,23 +2918,23 @@
         ],
         [
           "external",
-          0.29
+          0.28
         ],
         [
           "wall",
-          0.28
+          0.27
         ]
       ]
     },
     "Rated Solo Shuffle|375087": {
-      "nResp": 1382,
-      "deathResp": 0.03,
-      "nNoResp": 410,
+      "nResp": 1332,
+      "deathResp": 0.02,
+      "nNoResp": 389,
       "deathNoResp": 0.04,
       "topResponses": [
         [
           "control",
-          0.66
+          0.67
         ],
         [
           "external",
@@ -2282,23 +2942,83 @@
         ],
         [
           "wall",
-          0.26
+          0.25
         ]
       ]
     },
-    "Rated Solo Shuffle|392983": {
-      "nResp": 1645,
-      "deathResp": 0.02,
-      "nNoResp": 436,
-      "deathNoResp": 0.06,
+    "Rated Solo Shuffle|384352": {
+      "nResp": 139,
+      "deathResp": 0.04,
+      "nNoResp": 44,
+      "deathNoResp": 0.14,
       "topResponses": [
         [
           "control",
-          0.59
+          0.52
+        ],
+        [
+          "wall",
+          0.43
         ],
         [
           "external",
           0.34
+        ]
+      ]
+    },
+    "Rated Solo Shuffle|385627": {
+      "nResp": 1832,
+      "deathResp": 0.06,
+      "nNoResp": 536,
+      "deathNoResp": 0.1,
+      "topResponses": [
+        [
+          "control",
+          0.47
+        ],
+        [
+          "external",
+          0.39
+        ],
+        [
+          "wall",
+          0.35
+        ]
+      ]
+    },
+    "Rated Solo Shuffle|392983": {
+      "nResp": 838,
+      "deathResp": 0.03,
+      "nNoResp": 416,
+      "deathNoResp": 0.05,
+      "topResponses": [
+        [
+          "control",
+          0.51
+        ],
+        [
+          "external",
+          0.32
+        ],
+        [
+          "wall",
+          0.26
+        ]
+      ]
+    },
+    "Rated Solo Shuffle|42650": {
+      "nResp": 3853,
+      "deathResp": 0.04,
+      "nNoResp": 1768,
+      "deathNoResp": 0.05,
+      "topResponses": [
+        [
+          "control",
+          0.5
+        ],
+        [
+          "external",
+          0.29
         ],
         [
           "wall",
@@ -2306,15 +3026,35 @@
         ]
       ]
     },
-    "Rated Solo Shuffle|42650": {
-      "nResp": 3931,
-      "deathResp": 0.04,
-      "nNoResp": 1838,
-      "deathNoResp": 0.05,
+    "Rated Solo Shuffle|442726": {
+      "nResp": 1821,
+      "deathResp": 0.03,
+      "nNoResp": 573,
+      "deathNoResp": 0.03,
       "topResponses": [
         [
           "control",
-          0.49
+          0.69
+        ],
+        [
+          "external",
+          0.22
+        ],
+        [
+          "wall",
+          0.21
+        ]
+      ]
+    },
+    "Rated Solo Shuffle|446035": {
+      "nResp": 1868,
+      "deathResp": 0.04,
+      "nNoResp": 956,
+      "deathNoResp": 0.04,
+      "topResponses": [
+        [
+          "control",
+          0.52
         ],
         [
           "external",
@@ -2326,79 +3066,59 @@
         ]
       ]
     },
-    "Rated Solo Shuffle|442726": {
-      "nResp": 1834,
-      "deathResp": 0.03,
-      "nNoResp": 577,
-      "deathNoResp": 0.03,
-      "topResponses": [
-        [
-          "control",
-          0.67
-        ],
-        [
-          "external",
-          0.23
-        ],
-        [
-          "wall",
-          0.22
-        ]
-      ]
-    },
     "Rated Solo Shuffle|47568": {
-      "nResp": 2187,
+      "nResp": 2042,
       "deathResp": 0.03,
-      "nNoResp": 1301,
+      "nNoResp": 1249,
       "deathNoResp": 0.06,
-      "topResponses": [
-        [
-          "control",
-          0.4
-        ],
-        [
-          "external",
-          0.35
-        ],
-        [
-          "wall",
-          0.33
-        ]
-      ]
-    },
-    "Rated Solo Shuffle|51271": {
-      "nResp": 1043,
-      "deathResp": 0.05,
-      "nNoResp": 318,
-      "deathNoResp": 0.08,
       "topResponses": [
         [
           "control",
           0.43
         ],
         [
+          "external",
+          0.33
+        ],
+        [
           "wall",
-          0.41
+          0.32
+        ]
+      ]
+    },
+    "Rated Solo Shuffle|51271": {
+      "nResp": 945,
+      "deathResp": 0.05,
+      "nNoResp": 297,
+      "deathNoResp": 0.07,
+      "topResponses": [
+        [
+          "control",
+          0.45
+        ],
+        [
+          "wall",
+          0.39
         ],
         [
           "external",
-          0.38
+          0.37
         ]
       ]
     },
     "Rated Solo Shuffle|6353": {
-      "nResp": 643,
+      "nResp": 671,
       "deathResp": 0.03,
-      "nNoResp": 197,
-      "deathNoResp": 0.1,
+      "nNoResp": 209,
+      "deathNoResp": 0.11,
       "topResponses": [
         [
           "control",
-          0.57
+          0.58
         ],
         [
           "external",
-          0.31
+          0.29
         ],
         [
           "wall",
@@ -2407,22 +3127,22 @@
       ]
     },
     "Rated Solo Shuffle|84714": {
-      "nResp": 2453,
+      "nResp": 2555,
       "deathResp": 0.02,
-      "nNoResp": 1041,
+      "nNoResp": 1094,
       "deathNoResp": 0.02,
       "topResponses": [
         [
           "control",
-          0.62
+          0.64
         ],
         [
           "external",
-          0.25
+          0.24
         ],
         [
           "wall",
-          0.22
+          0.21
         ]
       ]
     }

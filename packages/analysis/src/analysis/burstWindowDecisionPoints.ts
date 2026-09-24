@@ -39,7 +39,7 @@ import {
 } from "../data/spellTags";
 import {
   canHelpAnotherUnit,
-  cdAvailableAt,
+  cdReadyInTimeAt,
   extractMajorCooldowns,
   gridHpPct,
   type IMajorCooldownInfo,
@@ -372,6 +372,10 @@ export interface BurstWindowDecisionPoint {
   feasible: boolean;
   /** names of the friendlies that satisfied the gate (empty ⇒ !feasible) */
   feasibleUnits: string[];
+  /** Per feasible unit, the FIRST whole second of the response window that
+   * satisfied the simultaneous-opportunity test and the tool that did it —
+   * the evidence behind `feasibleUnits` (decision trace / audit). */
+  feasibleEvidence: Array<{ unit: string; sec: number; spellId: string }>;
   /**
    * Severity triage (approved correction 2, tightened 2026-09-01):
    *
@@ -628,20 +632,6 @@ function damagePctPerSecond(
     }
   }
   return out;
-}
-
-function coveredThroughout(
-  intervals: { startMs: number; endMs: number }[],
-  fromMs: number,
-  toMs: number,
-): boolean {
-  let cursor = fromMs;
-  for (const iv of [...intervals].sort((a, b) => a.startMs - b.startMs)) {
-    if (iv.startMs > cursor) return false;
-    cursor = Math.max(cursor, iv.endMs);
-    if (cursor >= toMs) return true;
-  }
-  return cursor >= toMs;
 }
 
 /**
@@ -977,44 +967,67 @@ export function burstWindowDecisionPoints(
         : null;
 
       // ── feasibility (Value-Gate rule 3, per the pressured friendly) ──────
-      const freeToAct = (u: any): boolean =>
-        !coveredThroughout(ccByUnit.get(u.id) ?? [], tMs, w1);
+      // One SIMULTANEOUS opportunity inside the response window (codex astra
+      // GH #103 follow-up, 2026-09-23): some whole second s in [t, w1) at
+      // which the helper is not in CC, a tool is reaction-ready
+      // (`cdReadyInTimeAt`, REACTION_WINDOW_S — user ruling 2026-09-23) and,
+      // for a teammate, deliverable at s. The previous test combined three
+      // facts from different instants — "not CC'd for the WHOLE window",
+      // "a tool ready at t", "in range at t" — so a teammate with a ready
+      // external in range at t who then sat in CC until t+7 and ran out of
+      // range still counted as able to answer. A cooldown that came back
+      // three seconds into the window is now an opportunity it was not.
+      const inCcAt = (u: any, ms: number): boolean =>
+        (ccByUnit.get(u.id) ?? []).some(
+          (iv) => iv.startMs <= ms && ms < iv.endMs,
+        );
+      const windowSecs: number[] = [];
+      for (let sec = tSec; start + sec * 1000 < w1; sec++) windowSecs.push(sec);
       const feasibleUnits: string[] = [];
-      if (pressuredUnit && freeToAct(pressuredUnit)) {
+      const feasibleEvidence: BurstWindowDecisionPoint["feasibleEvidence"] = [];
+      if (pressuredUnit) {
         // (a) the person under the burst could have saved themselves
-        if (
-          (selfCdsByUnit.get(pressuredUnit.id) ?? []).some((cd) =>
-            cdAvailableAt(cd, tSec),
-          )
-        )
+        const selfCds = selfCdsByUnit.get(pressuredUnit.id) ?? [];
+        for (const sec of windowSecs) {
+          if (inCcAt(pressuredUnit, start + sec * 1000)) continue;
+          const tool = selfCds.find((cd) => cdReadyInTimeAt(cd, sec));
+          if (!tool) continue;
           feasibleUnits.push(pressuredUnit.name);
+          feasibleEvidence.push({
+            unit: pressuredUnit.name,
+            sec,
+            spellId: tool.spellId,
+          });
+          break;
+        }
       }
       // (b)'s reachability gate (2026-09-02, GH #60 tail — chg7b §5 closed):
       // a teammate's ready tool only counts if the teammate could DELIVER it
-      // to the pressured friendly at the window-start render second. One
-      // predicate, shared with the [ROOT] work (`canReachTargetAt`): same
-      // position sampler (`getUnitPositionAtTime` at `LOS_SWEEP_GAP_MS`),
-      // same "LoS not disproven counts as reachable" posture, and the range
-      // is per tool via `externalReachYards` (official DB2 reach, 40 yd
-      // fallback — never lower, so an unlisted spell cannot start acquitting
-      // or accusing silently). Fail OPEN on missing data: no pressured
-      // friendly, no position sample for the helper, or an unknown reach
-      // (`null`: target dead at t / no target sample) all count as reachable
-      // — sampling gaps must not manufacture infeasibility, only a position
-      // pair the log actually recorded may remove a window.
+      // to the pressured friendly at that same second. One predicate, shared
+      // with the [ROOT] work (`canReachTargetAt`): same position sampler
+      // (`getUnitPositionAtTime` at `LOS_SWEEP_GAP_MS`), same "LoS not
+      // disproven counts as reachable" posture, and the range is per tool via
+      // `externalReachYards` (official DB2 reach, 40 yd fallback — never
+      // lower, so an unlisted spell cannot start acquitting or accusing
+      // silently). Fail OPEN on missing data: no pressured friendly, no
+      // position sample for the helper, or an unknown reach (`null`: target
+      // dead / no target sample) all count as reachable — sampling gaps must
+      // not manufacture infeasibility, only a position pair the log actually
+      // recorded may remove a window.
       const teammateCanDeliver = (
         u: any,
         readyCds: IMajorCooldownInfo[],
+        atMs: number,
       ): boolean => {
         if (!pressuredUnit) return true;
-        const helperPos = getUnitPositionAtTime(u, tMs, LOS_SWEEP_GAP_MS);
+        const helperPos = getUnitPositionAtTime(u, atMs, LOS_SWEEP_GAP_MS);
         if (!helperPos) return true;
         return readyCds.some(
           (cd) =>
             canReachTargetAt(
               helperPos,
               pressuredUnit,
-              tMs,
+              atMs,
               combat?.startInfo?.zoneId,
               externalReachYards(cd.spellId, u),
               true,
@@ -1024,13 +1037,23 @@ export function burstWindowDecisionPoints(
       for (const u of friendlies) {
         // (b) a teammate could have reached them
         if (pressuredUnit && u.id === pressuredUnit.id) continue;
-        if (!freeToAct(u)) continue;
-        const readyCds = (allyCdsByUnit.get(u.id) ?? []).filter((cd) =>
-          cdAvailableAt(cd, tSec),
-        );
-        if (!readyCds.length) continue;
-        if (!teammateCanDeliver(u, readyCds)) continue;
-        feasibleUnits.push(u.name);
+        const allyCds = allyCdsByUnit.get(u.id) ?? [];
+        if (!allyCds.length) continue;
+        for (const sec of windowSecs) {
+          const ms = start + sec * 1000;
+          if (inCcAt(u, ms)) continue;
+          const deliverable = allyCds.find(
+            (cd) => cdReadyInTimeAt(cd, sec) && teammateCanDeliver(u, [cd], ms),
+          );
+          if (!deliverable) continue;
+          feasibleUnits.push(u.name);
+          feasibleEvidence.push({
+            unit: u.name,
+            sec,
+            spellId: deliverable.spellId,
+          });
+          break;
+        }
       }
 
       const deathsInWindow = friendlyOutcomes.filter((f) => f.died).length;
@@ -1090,6 +1113,7 @@ export function burstWindowDecisionPoints(
         responseCasts,
         feasible: feasibleUnits.length > 0,
         feasibleUnits,
+        feasibleEvidence,
         triaged:
           pressured !== null &&
           pressuredDropPp !== null &&

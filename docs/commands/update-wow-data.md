@@ -146,10 +146,14 @@ npx tsx packages/eval/scripts/behaviorPriorScan.ts emit-table --in $R/opportunit
 #   stale table is a red CI, not a silent drift. ~1 h over the archive; ≤3 nice shards.
 #   NOTE the --out flag: emit-table writes a temp file and copies it in, so a crash cannot truncate
 #   the json the product imports — do NOT replace it with a `>` redirection.
+#   Corpus = the FULL new-season archive (manifest-archive-2026-09-14-newseason.txt, 63,303 files) —
+#   the table in the repo since 2026-09-16 was built over it. This block used to name the 18,134-file
+#   2026-08-28 manifest: a regen from it silently shrinks every cell's n to about a third and cannot be
+#   compared with the table it replaces (caught 2026-09-23, GH #103 follow-up).
 E=$GLADLOG_EVAL_HOME; R=$E/reports/burst-window-$(date +%F); mkdir -p $R
 for i in 0 1 2; do nice -n 10 npx tsx packages/eval/scripts/burstWindowScan.ts scan \
-  --manifest $E/corpus/manifest-archive-2026-08-28-newseason.txt --ledger $E/archive/ledger \
-  --out $R/shard$i.jsonl --offset $((i*6045)) --limit 6045 > $R/shard$i.log 2>&1 & done; wait
+  --manifest $E/corpus/manifest-archive-2026-09-14-newseason.txt --ledger $E/archive/ledger \
+  --out $R/shard$i.jsonl --offset $((i*21101)) --limit 21101 > $R/shard$i.log 2>&1 & done; wait
 cat $R/shard*.jsonl > $R/windows.jsonl
 npx tsx packages/eval/scripts/burstWindowScan.ts report --in $R/windows.jsonl > $R/report.md
 npx tsx packages/eval/scripts/burstWindowScan.ts emit-table --in $R/windows.jsonl \

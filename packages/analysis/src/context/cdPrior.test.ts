@@ -21,6 +21,7 @@ const ep = (over: Partial<CdPriorHoldEpisode> = {}): CdPriorHoldEpisode => ({
   minUnitIsOwner: false,
   endSec: 55,
   ownerLockedSecs: 0,
+  readyFromSec: 47,
   ref: {
     cellKey: "Discipline Priest|Oracle|33206",
     fellBack: false,
@@ -32,6 +33,13 @@ const ep = (over: Partial<CdPriorHoldEpisode> = {}): CdPriorHoldEpisode => ({
 const cohort = { spec: "Discipline Priest", heroTree: "Oracle" };
 
 describe("formatCdPriorLines", () => {
+  it("a cooldown that came back mid-dip says when (reaction window, GH #103)", () => {
+    const [e] = formatCdPriorLines([ep({ readyFromSec: 50 })], cohort);
+    expect(e!.line).toContain(
+      "bottomed at 44% by 0:55 with Pain Suppression ready from 0:50 and unspent",
+    );
+  });
+
   it("renders the cohort, both numbers, both times, and the machine-readable ref", () => {
     const [e] = formatCdPriorLines([ep()], cohort);
     expect(e!.atSeconds).toBe(47);
@@ -46,7 +54,12 @@ describe("formatCdPriorLines", () => {
         ep({
           minUnitIsOwner: true,
           minUnitName: "Me-Realm-US",
-          ref: { cellKey: "Discipline Priest|*|33206", fellBack: true, n: 2200, medianHpPct: 50 },
+          ref: {
+            cellKey: "Discipline Priest|*|33206",
+            fellBack: true,
+            n: 2200,
+            medianHpPct: 50,
+          },
         }),
       ],
       cohort,
@@ -58,12 +71,18 @@ describe("formatCdPriorLines", () => {
 
   it("locked seconds inside the dip are said out loud", () => {
     const [e] = formatCdPriorLines([ep({ ownerLockedSecs: 3 })], cohort);
-    expect(e!.line).toContain("ready and unspent (you could not cast for 3s of that dip) — context");
+    expect(e!.line).toContain(
+      "ready and unspent (you could not cast for 3s of that dip) — context",
+    );
   });
 
   it("caps by depth of the dip, then emits in time order", () => {
     const out = formatCdPriorLines(
-      [ep({ tSec: 10, minHpPct: 50 }), ep({ tSec: 30, minHpPct: 42 }), ep({ tSec: 20, minHpPct: 46 })],
+      [
+        ep({ tSec: 10, minHpPct: 50 }),
+        ep({ tSec: 30, minHpPct: 42 }),
+        ep({ tSec: 20, minHpPct: 46 }),
+      ],
       cohort,
     );
     expect(CD_PRIOR_CAP).toBe(2);
@@ -71,7 +90,9 @@ describe("formatCdPriorLines", () => {
   });
 
   it("the legend names the cap and the crisis partition", () => {
-    expect(CD_PRIOR_LEGEND.join("\n")).toContain(`At most ${CD_PRIOR_CAP} per round`);
+    expect(CD_PRIOR_LEGEND.join("\n")).toContain(
+      `At most ${CD_PRIOR_CAP} per round`,
+    );
     expect(CD_PRIOR_LEGEND.join("\n")).toContain("40%");
   });
 });

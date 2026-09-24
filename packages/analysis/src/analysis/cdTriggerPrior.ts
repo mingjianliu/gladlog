@@ -41,7 +41,7 @@ import type { CdTriggerPriorRef } from "../data/cdTriggerPrior";
 import { buildCannotCastIntervals } from "../utils/cannotCastIntervals";
 import {
   canHelpAnotherUnit,
-  cdAvailableAt,
+  cdReadyInTimeAt,
   extractMajorCooldowns,
   gridHpPct,
   type IMajorCooldownInfo,
@@ -114,6 +114,10 @@ export interface CdPriorHoldEpisode {
    * rendered on the line so a stun at the crossing is not hidden behind
    * "ready and unspent" */
   ownerLockedSecs: number;
+  /** First second of the dip at which the COOLDOWN was reaction-ready
+   * (`cdReadyInTimeAt`); later than `tSec` only when it came back mid-dip —
+   * the owner's own lockout is `ownerLockedSecs`, not this. */
+  readyFromSec: number;
   /** the friendly at the minimum (may differ from the one that crossed) */
   minUnitName: string;
   /** whether that friendly is the owner */
@@ -175,7 +179,8 @@ function rosterOf(
   combat: any,
   overrides?: CdTriggerPriorOverrides,
 ): SpendableDefensiveCd[] {
-  if (overrides?.cds) return overrides.cds.filter((cd) => isSpendableDefensiveCd(cd));
+  if (overrides?.cds)
+    return overrides.cds.filter((cd) => isSpendableDefensiveCd(cd));
   return spendableCds(owner, combat);
 }
 
@@ -219,7 +224,7 @@ export function cdTriggerObservations(
  * Feasibility at the crossing second, in the same spirit as `cd-hoarded`'s
  * gates: the owner is alive, is not inside a cannot-cast interval (hard CC /
  * silence / school lockout — `buildCannotCastIntervals`, the healing-gap
- * and dispel gate's builder), the cooldown is READY (`cdAvailableAt`) and
+ * and dispel gate's builder), the cooldown is reaction-ready (`cdReadyInTimeAt`) and
  * can reach the unit that dipped (`canHelpAnotherUnit` for a teammate,
  * `!SELF_CAST_NOOP_EXTERNAL_IDS` for the owner's own dip). "Held" = no press
  * of that cooldown from `RESPONSE_PRE_MS` before the crossing to the end of
@@ -245,7 +250,9 @@ export function cdPriorHoldEpisodes(
 
   const enemyIds = new Set(
     (Object.values(combat.units ?? {}) as UnitLike[])
-      .filter((u) => u.reaction !== (owner.reaction ?? CombatUnitReaction.Friendly))
+      .filter(
+        (u) => u.reaction !== (owner.reaction ?? CombatUnitReaction.Friendly),
+      )
       .map((u) => u.id),
   );
   let cannotCast: Array<{ from: number; to: number }> = [];
@@ -310,16 +317,30 @@ export function cdPriorHoldEpisodes(
       // Two readings of the same constant: the dip outlasted the response
       // window (still at/below the line at s + window), and the owner had a
       // response window's worth of castable seconds inside it.
+      //
+      // An ACTIONABLE second is one where the owner could cast AND the
+      // cooldown was reaction-ready (`cdReadyInTimeAt`, REACTION_WINDOW_S —
+      // user ruling 2026-09-23; codex astra's GH #103 follow-up: count the two
+      // together, not castable seconds plus a separate readiness check at the
+      // crossing). A cooldown that came back mid-dip therefore still counts
+      // from the second it was usable; the crossing second stays the HP fact.
       let castableSecs = 0;
-      for (let t = s; t <= episodeEndSec; t++) if (ownerCanActAt(t)) castableSecs++;
+      let actionableSecs = 0;
+      // The cooldown's own readiness, kept apart from the owner's: the line
+      // says "ready from M:SS" about the COOLDOWN, while the owner's lockout
+      // has its own clause ("you could not cast for Ns of that dip").
+      let firstReadySec: number | null = null;
+      for (let t = s; t <= episodeEndSec; t++) {
+        const ready = cdReadyInTimeAt(cd, t);
+        if (ready) firstReadySec ??= t;
+        if (!ownerCanActAt(t)) continue;
+        castableSecs++;
+        if (ready) actionableSecs++;
+      }
       if (
         episodeEndSec - s < CD_PRIOR_MIN_PERSIST_S ||
-        castableSecs < CD_PRIOR_MIN_PERSIST_S
+        actionableSecs < CD_PRIOR_MIN_PERSIST_S
       ) {
-        skipTo();
-        continue;
-      }
-      if (!cdAvailableAt(cd, s)) {
         skipTo();
         continue;
       }
@@ -349,6 +370,7 @@ export function cdPriorHoldEpisodes(
         minSec,
         endSec: episodeEndSec,
         ownerLockedSecs: episodeEndSec - s + 1 - castableSecs,
+        readyFromSec: firstReadySec ?? s,
         minUnitName: min.unit.name,
         minUnitIsOwner: minIsOwner,
         ref,

@@ -820,4 +820,17 @@
 //  off-target-in-window / dr-clipped-cc candidate types, so they could never
 //  appear. First-round prompt and candidate menu unchanged; only the window
 //  analysis's offensive deep-dive prompt text is shorter.
-export const PROMPT_VERSION = 107;
+//  v108 (2026-09-24, GH #103 follow-up, user "两个议题全做" after a codex
+//  astra round): the reaction window reaches the decision-point generators,
+//  shaped per codex's DO-DIFFERENTLY. (1) [CD PRIOR] needs
+//  CD_PRIOR_MIN_PERSIST_S seconds that are castable AND reaction-ready, and
+//  says `ready from M:SS` when the cooldown came back mid-dip; (2) DPS crisis
+//  `hasTool` uses cdReadyInTimeAt; (3) burst-window feasibility is ONE
+//  simultaneous second in the response window (not in CC + reaction-ready +
+//  deliverable) — it used to combine "not CC'd for the whole window", "ready
+//  at t" and "in range at t". Burst reference table regenerated over the full
+//  63,303-file archive. 605 files: slow-defensive-response 150 → 116 (code
+//  +8, all later-window opportunities checked by hand; table −42: 44 lead
+//  CDs now have their own cell with a 0–2 pp contrast, 6 own cells fell
+//  under 3 pp); [CD PRIOR] episodes 222 → 223, 4 say "ready from".
+export const PROMPT_VERSION = 108;

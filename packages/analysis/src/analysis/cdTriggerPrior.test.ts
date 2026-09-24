@@ -104,7 +104,9 @@ describe("cdTriggerObservations (scan side)", () => {
     expect(rows[0]!.tSec).toBe(3);
     expect(rows[0]!.lowestFriendlyName).toBe("M-Realm-US");
     // the shared-predicate pin
-    expect(rows[0]!.lowestFriendlyHpPct).toBe(gridHpPct(mate as any, T0 + 3000));
+    expect(rows[0]!.lowestFriendlyHpPct).toBe(
+      gridHpPct(mate as any, T0 + 3000),
+    );
     expect(lowestFriendlyGridHp([me, mate] as any, T0, 3)!.hpPct).toBe(
       rows[0]!.lowestFriendlyHpPct,
     );
@@ -205,6 +207,66 @@ describe("cdPriorHoldEpisodes (product side)", () => {
     ).toHaveLength(0);
   });
 
+  /** Mate below the 54 line from s=2 through s=10, back above at s=11. */
+  const longDip = () =>
+    unit("M", {
+      advancedActions: [
+        hp(0, 100),
+        hp(1000, 60),
+        ...Array.from({ length: 9 }, (_, i) =>
+          hp((i + 2) * 1000, 46 + (i % 3)),
+        ),
+        hp(11000, 70),
+      ],
+    });
+
+  it("reaction window: a cooldown back mid-dip counts from the first actionable second (GH #103)", () => {
+    const me = unit("H");
+    // back at 2.5 s → reaction-ready (ready by t − 1) from t = 4
+    const eps = cdPriorHoldEpisodes(me, combat([me, longDip()]), () => ref(), {
+      cds: [cd({ casts: [{ timeSeconds: -87.5 }], neverUsed: false })],
+    });
+    expect(eps).toHaveLength(1);
+    expect(eps[0]!.tSec).toBe(2);
+    expect(eps[0]!.readyFromSec).toBe(4);
+  });
+
+  it("an owner locked at the crossing does not move 'ready from' — that is ownerLockedSecs", () => {
+    const enemy = unit("E", { reaction: CombatUnitReaction.Hostile });
+    const stun = (ev: string, dtMs: number) => ({
+      spellId: "853",
+      spellName: "Hammer of Justice",
+      srcUnitId: "E",
+      destUnitId: "H",
+      timestamp: T0 + dtMs,
+      logLine: { event: ev, timestamp: T0 + dtMs },
+    });
+    const me = unit("H", {
+      auraEvents: [
+        stun("SPELL_AURA_APPLIED", 1500),
+        stun("SPELL_AURA_REMOVED", 4500),
+      ],
+    });
+    const eps = cdPriorHoldEpisodes(
+      me,
+      combat([me, longDip(), enemy]),
+      () => ref(),
+      { cds: [cd()] },
+    );
+    expect(eps).toHaveLength(1);
+    expect(eps[0]!.readyFromSec).toBe(eps[0]!.tSec);
+    expect(eps[0]!.ownerLockedSecs).toBe(3);
+  });
+
+  it("reaction window: fewer than CD_PRIOR_MIN_PERSIST_S actionable seconds → no episode", () => {
+    const me = unit("H");
+    // back at 8.5 s → reaction-ready only at t = 10
+    const eps = cdPriorHoldEpisodes(me, combat([me, longDip()]), () => ref(), {
+      cds: [cd({ casts: [{ timeSeconds: -81.5 }], neverUsed: false })],
+    });
+    expect(eps).toHaveLength(0);
+  });
+
   it("a cooldown still on cooldown at the crossing is not 'held'", () => {
     const me = unit("H");
     const eps = cdPriorHoldEpisodes(me, combat([me, dipping()]), () => ref(), {
@@ -216,7 +278,13 @@ describe("cdPriorHoldEpisodes (product side)", () => {
   it("a dip that is back above the median before the response window elapses is not 'held' (persistence door)", () => {
     const me = unit("H");
     const blip = unit("M", {
-      advancedActions: [hp(0, 100), hp(1000, 60), hp(2000, 50), hp(3000, 45), hp(4000, 70)],
+      advancedActions: [
+        hp(0, 100),
+        hp(1000, 60),
+        hp(2000, 50),
+        hp(3000, 45),
+        hp(4000, 70),
+      ],
     });
     expect(CD_PRIOR_MIN_PERSIST_S).toBe(3);
     expect(
@@ -227,7 +295,13 @@ describe("cdPriorHoldEpisodes (product side)", () => {
   it("a dip that reaches the crisis line is crisis territory (cd-hoarded's), not a [CD PRIOR] episode", () => {
     const me = unit("H");
     const mate = unit("M", {
-      advancedActions: [hp(0, 100), hp(1000, 60), hp(2000, 50), hp(3000, 38), hp(5000, 70)],
+      advancedActions: [
+        hp(0, 100),
+        hp(1000, 60),
+        hp(2000, 50),
+        hp(3000, 38),
+        hp(5000, 70),
+      ],
     });
     expect(CRISIS_HP_PCT_RENDERED).toBe(40);
     expect(
@@ -246,7 +320,14 @@ describe("cdPriorHoldEpisodes (product side)", () => {
 
   it("the owner's own dip counts (self-castable wall), and a self-cast no-op external does not", () => {
     const me = unit("H", {
-      advancedActions: [hp(0, 100), hp(1000, 60), hp(2000, 50), hp(3000, 45), hp(5000, 50), hp(6000, 70)],
+      advancedActions: [
+        hp(0, 100),
+        hp(1000, 60),
+        hp(2000, 50),
+        hp(3000, 45),
+        hp(5000, 50),
+        hp(6000, 70),
+      ],
     });
     const mate = unit("M");
     // Desperate Prayer — a self heal; helps the owner's own dip.

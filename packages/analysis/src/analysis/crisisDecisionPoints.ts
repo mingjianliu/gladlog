@@ -23,7 +23,7 @@ import {
   spells as spellMeta,
 } from "../data/spellTags";
 import {
-  cdAvailableAt,
+  cdReadyInTimeAt,
   extractMajorCooldowns,
   // The [STATE] tick's own HP sampler (getUnitHpAtTimestamp +
   // HP_SAMPLE_RADIUS_MS + the 100 clamp), imported rather than re-derived so
@@ -956,8 +956,11 @@ export function crisisDecisionPoints(
     let hasTool = true;
     if (role === "dps") {
       const rooted = rootIntervals.some((i) => i.startMs <= t && i.endMs >= t);
-      const wallReady = wallCds.some((cd) => cdAvailableAt(cd, tSec));
-      const controlReady = controlCds.some((cd) => cdAvailableAt(cd, tSec));
+      // Reaction window (REACTION_WINDOW_S, user ruling 2026-09-23; codex
+      // astra GH #103 follow-up: "has a tool" is an instant actionable
+      // judgement, not a state): a wall back within 1 s is not a tool.
+      const wallReady = wallCds.some((cd) => cdReadyInTimeAt(cd, tSec));
+      const controlReady = controlCds.some((cd) => cdReadyInTimeAt(cd, tSec));
       hasTool = !rooted || wallReady || controlReady;
     }
     out.push({
