@@ -32,6 +32,7 @@ function scenario(opts: {
   attackerSpec?: CombatUnitSpec;
   attackerCasts?: any[];
   attackerX?: number;
+  extraDamageIn?: any[];
 }) {
   const owner = makeUnit("p1", {
     name: "Owner",
@@ -61,7 +62,7 @@ function scenario(opts: {
       ...makeDamageEvent(at(DEATH_S - 9 + i), -60_000, "v1"),
       srcUnitId: "e1",
       srcUnitName: "Attacker",
-    })),
+    })).concat(opts.extraDamageIn ?? []),
     deathRecords: [{ timestamp: at(DEATH_S) }],
     advancedActions: standAt(1),
   });
@@ -111,6 +112,17 @@ describe("peelOptionsForDeaths (GH #77)", () => {
     expect(lines[1]).toMatch(
       /\[PEEL OPTION\] {2}Owner Hammer of Justice → Attacker: usable \d+ s, not used/,
     );
+  });
+
+  it("prices the attacker's share against ALL damage the victim took, not just mapped enemy damage", () => {
+    const unmapped = Array.from({ length: 10 }, (_, i) => ({
+      ...makeDamageEvent(at(DEATH_S - 9 + i), -60_000, "v1"),
+      srcUnitId: "Creature-0-unmapped",
+      srcUnitName: "Something",
+    }));
+    const out = scenario({ ...paladin, extraDamageIn: unmapped });
+    expect(out).toHaveLength(1);
+    expect(out[0]!.attackerShare).toBeCloseTo(0.5, 5);
   });
 
   it("says nothing when the CC was used inside the window", () => {

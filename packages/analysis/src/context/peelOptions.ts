@@ -151,19 +151,23 @@ export function peelOptionsForDeaths(params: {
     if (!victim) continue;
 
     // Main attacker: the enemy player (pets folded into their owner) with the
-    // most damage on the victim in the window.
+    // most damage on the victim in the window. The share's denominator is ALL
+    // damage the victim took in the window — the rendered line says "% of
+    // X's damage taken" — not just the damage we could map to an enemy player
+    // (codex astra review, 2026-09-24: 60 of 100 mapped plus 100 unmapped
+    // would otherwise read 60 %).
     const dmg = new Map<string, number>();
     let total = 0;
     for (const e of victim.damageIn ?? []) {
       const t = (e.timestamp - start) / 1000;
       if (t < tD - PEEL_LOOKBACK_S || t > tD) continue;
+      const a = Math.abs(e.effectiveAmount ?? e.amount ?? 0);
+      total += a;
       const src = enemyIds.has(e.srcUnitId)
         ? e.srcUnitId
         : enemyPetOwner.get(e.srcUnitId);
       if (!src || !enemyIds.has(src)) continue;
-      const a = Math.abs(e.effectiveAmount ?? e.amount ?? 0);
       dmg.set(src, (dmg.get(src) ?? 0) + a);
-      total += a;
     }
     const top = [...dmg.entries()].sort((a, b) => b[1] - a[1])[0];
     if (!top || total === 0) continue;
@@ -225,7 +229,7 @@ export function peelOptionsForDeaths(params: {
 
         const secs: number[] = [];
         let firstDist = 0;
-        let firstDr = "Full";
+        let firstDr = cat ? "Full" : "n/a";
         for (let s = Math.ceil(tD - PEEL_LOOKBACK_S); s < tD; s++) {
           const ms = start + s * 1000;
           if (!cdReadyInTimeAt(cd, s)) continue;
@@ -243,7 +247,7 @@ export function peelOptionsForDeaths(params: {
                 drHistory.filter((h) => h.applyMs < ms),
                 ms,
               ).level
-            : "Full";
+            : "n/a";
           if (dr === "Immune") continue;
           if (
             tools.some((id) =>

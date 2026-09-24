@@ -894,4 +894,10 @@
 //  radius). 605 files: lines 239 → 235 (Storm Bolt 19 → 16, Intimidating
 //  Shout 16 → 14), deaths with a line 200 → 196; gate 0; candidates
 //  unchanged.
-export const PROMPT_VERSION = 115;
+//  v116 (2026-09-24, GH #77 fix, codex astra round 3): a [PEEL OPTION]'s
+//  "N% of X's damage taken" divided by the damage mapped to enemy players
+//  only; now by ALL damage X took in the window. 605 files: 23 of 235 lines
+//  re-priced (median −7 pp, max −19 pp, e.g. 82 % → 75 %); same lines, gate
+//  0, candidates unchanged. A CC with no DR category now renders "DR n/a"
+//  instead of "DR Full" (0 lines today).
+export const PROMPT_VERSION = 116;
