@@ -99,7 +99,7 @@ export function buildMatchContext(
 3. **加一行图例**,在 `src/analysis/buildFindingsPrompt.ts` —— 新 `type` 需要在 `DPS_LEGENDS` 或 `CHAIN_LEGENDS` 里加一条(两者都以 `type` 字符串本身为键),告诉模型这个事件是什么意思。漏掉这步不会造成机制上的错误,但模型会看到一个没解释过的事件。
 4. **`findingCategories.ts` 通常不用改** —— 它的 8 值枚举很粗,由模型自己赋值;新 finding 类型只要能合理归进某个既有类别就行。
 5. **`auditFindings.ts` 不需要按类型改** —— 它的溯源/占位符/lint 逻辑对所有候选类型都是通用的。
-6. **可选:`deepDive.ts` 路由** —— 如果新类型该参与自动多轮追问,加进相关集合(比如 `OFFENSIVE_CANDIDATE_TYPES`);有些类型是根据 A/B 结果刻意排除在外的,不要默认全加。
+6. **`deepDive.ts` 不需要按类型改动** —— 首轮每条 finding 的追问都走生存证据包和 `hasCoachableSignal` 门(按类型分流进攻深挖的集合已于 2026-09-24 删除,它列的四个类型都已删除;进攻证据包现在只服务选段分析)。
 7. **测试** —— 检测函数的单测放 `candidateFindings.test.ts` 或 `test/ported/<name>.test.ts`;如果图例/菜单逻辑改了,`buildFindingsPrompt.test.ts` 也要补覆盖。
 8. **数据(如果需要)** —— 在 `src/data/` 里扩展一个策展文件(比如 CC 分类用 `spellCategories.ts`/`spellTags.ts`),或者如果是语料观测类事实,走上面的 datagen 管线。
 

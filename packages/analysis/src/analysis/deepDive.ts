@@ -13,7 +13,14 @@ import {
   analyzePlayerCCAndTrinket,
   trinketStateFact,
 } from "../utils/ccTrinketAnalysis";
-import { annotateDefensiveTimings, DEFENSIVE_TAGS, extractMajorCooldowns, type IMajorCooldownInfo, isHealerSpec, isMeleeSpec } from "../utils/cooldowns";
+import {
+  annotateDefensiveTimings,
+  DEFENSIVE_TAGS,
+  extractMajorCooldowns,
+  type IMajorCooldownInfo,
+  isHealerSpec,
+  isMeleeSpec,
+} from "../utils/cooldowns";
 import { buildDeathOutcomeSummary } from "../utils/deathOutcomeAnalysis";
 import { reconstructDispelSummary } from "../utils/dispelAnalysis";
 import {
@@ -63,8 +70,6 @@ export interface PackItem {
     | "immunity"
     | "our-cc"
     | "our-cd"
-    | "off-target"
-    | "dr-clip"
     | "cd-ledger"
     | "aura-snap"
     | "pos-snap"
@@ -81,7 +86,7 @@ export interface PackItem {
    * Spell id (string). Display only: the UI looks up SPELL_ICONS_GENERATED
    * for the icon. Same nature as CandidateEvent.spellId — never enters the
    * prompt or facts, not subject to gate audits. Items with no single spell
-   * (HP, off-target, DR clip) legitimately leave it empty.
+   * (e.g. HP) legitimately leave it empty.
    */
   spellId?: string;
   facts: Record<string, string>;
@@ -96,8 +101,6 @@ export const OFFENSIVE_KINDS = new Set<PackItem["kind"]>([
   "immunity",
   "our-cc",
   "our-cd",
-  "off-target",
-  "dr-clip",
 ]);
 
 export interface DeepDivePack {
@@ -115,7 +118,6 @@ export interface WindowOverride {
   fromS: number;
   toS: number;
 }
-
 
 /**
  * Quota-based truncation shared by `buildDeepDivePack` / `buildOffensiveDeepDivePack`:
@@ -529,14 +531,12 @@ export function buildDeepDivePack(
 export interface OffensiveMapInput {
   entries: IBurstLedgerEntry[];
   healerChains: IOutgoingCCChain[];
-  candFacts: Record<string, string>[];
-  candTypes: string[];
   ownerName?: string;
   inWin: (t: number) => boolean;
 }
 
 /** Offensive evidence → PackItem (pure): target HP / enemy defensives+immunities /
- * our CC on the enemy healer / cooldown alignment + type-specific items. */
+ * our CC on the enemy healer / cooldown alignment. */
 export function offensivePackItems(
   inp: OffensiveMapInput,
 ): Omit<PackItem, "key">[] {
@@ -656,45 +656,6 @@ export function offensivePackItems(
       });
     }
 
-  // Type-specific items (carry over the candidate's own facts; short names)
-  inp.candTypes.forEach((type, i) => {
-    const cf = inp.candFacts[i] ?? {};
-    const tt = Number(cf.t);
-    if (type === "off-target-in-window")
-      raw.push({
-        kind: "off-target",
-        t: Number.isFinite(tt) ? tt : 0,
-        label: `脱靶`,
-        unitNames: [],
-        facts: {
-          ...(cf.t ? { t: cf.t } : {}),
-          role: "owner",
-          ...(cf.onTargetPct ? { onTargetPct: cf.onTargetPct } : {}),
-          ...(cf.offTarget ? { target: sn(cf.offTarget) } : {}),
-        },
-      });
-    // juked-kick was demoted out of the offensive deep dive (Task 6 A/B: the
-    // only one of the 5 types averaging <3.5, combined 2.9, and all four scores
-    // of <=2 were it — "read the fake cast, don't kick blindly" is self-evident
-    // generic advice, so deepening only bolts context onto it and yields no new
-    // insight. It stays a first-round finding, it just isn't deepened). Hence no
-    // juked items are produced here.
-    if (type === "dr-clipped-cc")
-      raw.push({
-        kind: "dr-clip",
-        t: Number.isFinite(tt) ? tt : 0,
-        label: `踩 DR`,
-        unitNames: [],
-        facts: {
-          ...(cf.t ? { t: cf.t } : {}),
-          role: "owner",
-          ...(cf.spell ? { spell: cf.spell } : {}),
-          ...(cf.target ? { target: sn(cf.target) } : {}),
-          ...(cf.dr ? { dr: cf.dr } : {}),
-        },
-      });
-  });
-
   return raw;
 }
 
@@ -760,8 +721,6 @@ export function buildOffensiveDeepDivePack(
   const raw0 = offensivePackItems({
     entries,
     healerChains,
-    candFacts: cands.map((c) => c.facts),
-    candTypes: cands.map((c) => c.type),
     ownerName,
     inWin,
   });
@@ -861,9 +820,7 @@ const OFFENSIVE_HP_THRESHOLD = 35;
  * (measured over a 519-match scan: with the gates combined, only 10% of
  * burst-into-immunity passed, dropping the flagship offensive mistake). The
  * rest: the target was driven low AND a non-immunity defensive answered (CC the
- * healer / swap), or off-target / dr-clip, each a mistake on its own.
- * (juked-kick was demoted and does not enter the offensive deep dive — see the
- * comment in offensivePackItems and OFFENSIVE_CANDIDATE_TYPES.)
+ * healer / swap).
  */
 export function hasOffensiveCoachableSignal(items: PackItem[]): boolean {
   if (items.some((i) => i.kind === "immunity")) return true;
@@ -871,41 +828,8 @@ export function hasOffensiveCoachableSignal(items: PackItem[]): boolean {
     (i) =>
       i.kind === "target-hp" && Number(i.facts.hp) <= OFFENSIVE_HP_THRESHOLD,
   );
-  const defensiveAnswered = items.some(
-    (i) => i.kind === "enemy-defensive",
-  );
-  if (targetBottomed && defensiveAnswered) return true;
-  return items.some((i) => i.kind === "off-target" || i.kind === "dr-clip");
-}
-
-// juked-kick removed (Task 6 A/B): the offensive deep dive keeps only the four
-// types worth >=4.4; juked-kick deep dives scored combined 2.9 (the only one
-// <3.5), so it is demoted to a first-round finding only and is not routed into
-// the offensive deep dive (→ classify puts it under survival, and if the
-// survival gate does not fire it simply isn't deepened).
-const OFFENSIVE_CANDIDATE_TYPES = new Set([
-  "unconverted-burst",
-  "burst-into-immunity",
-  "off-target-in-window",
-  "dr-clipped-cc",
-]);
-
-/** Routing: the majority of the candidates a finding references decides the
- * route; ties go to survival (death coaching anchors more value). */
-export function classifyFindingKind(
-  finding: Finding,
-  candidates: CandidateEvent[],
-): "survival" | "offensive" {
-  const byId = new Map(candidates.map((c) => [c.id, c]));
-  let off = 0,
-    surv = 0;
-  for (const id of finding.eventIds ?? []) {
-    const t = byId.get(id)?.type;
-    if (!t) continue;
-    if (OFFENSIVE_CANDIDATE_TYPES.has(t)) off++;
-    else surv++;
-  }
-  return off > surv ? "offensive" : "survival";
+  const defensiveAnswered = items.some((i) => i.kind === "enemy-defensive");
+  return targetBottomed && defensiveAnswered;
 }
 
 /** Deep-dive prompt: one section per pack; the audit discipline is the same as
@@ -968,7 +892,7 @@ export function buildDeepDivePrompt(
       : []),
     ...(packs.some((p) => p.items.some((it) => OFFENSIVE_KINDS.has(it.kind)))
       ? [
-          `- Offensive items (non-death findings): kind=target-hp = the enemy target's HP (hp) at that moment; kind=enemy-defensive / kind=immunity = what answered ${ownerShort}'s burst on that target (immunity has overlap seconds); kind=our-cc = ${ownerShort}'s team CC landed on the enemy healer; kind=our-cd = ${ownerShort}'s team offensive cooldown; kind=off-target = damage went to the wrong target (onTargetPct); kind=dr-clip = a CC landed on wasted DR (dr). You had the kill set up — coach what to change to close it (swap to the exposed target, hold burst past the immunity, lock their healer first), not survival.`,
+          `- Offensive items (non-death findings): kind=target-hp = the enemy target's HP (hp) at that moment; kind=enemy-defensive / kind=immunity = what answered ${ownerShort}'s burst on that target (immunity has overlap seconds); kind=our-cc = ${ownerShort}'s team CC landed on the enemy healer; kind=our-cd = ${ownerShort}'s team offensive cooldown. You had the kill set up — coach what to change to close it (swap to the exposed target, hold burst past the immunity, lock their healer first), not survival.`,
         ]
       : []),
     `- If, after reviewing a pack, you cannot name a specific ${ownerShort}-team decision that was clearly suboptimal, OMIT that finding from your output entirely. Do NOT manufacture generic advice ("use defensives better", "peel/reposition", "watch HP"). A clean window is a valid outcome — say nothing rather than pad.`,
@@ -1324,11 +1248,8 @@ export function buildAuditRepairPrompt(
  * neither passes → null (the caller shows "no coachable signal" and never calls
  * the model). The synthetic finding references the ids of ALL candidate events
  * inside the window (rather than empty eventIds) — the HP section's `focus`
- * (resolving unitNames via eventIds) and the offensive section's `cands`
- * (reading off-target / dr-clip specific facts via eventIds) both need those ids
- * to derive their items; passing empty eventIds would make both item classes
- * permanently absent and, with them, kill the off-target / dr-clip branches of
- * hasOffensiveCoachableSignal (found in fix round 1's review). The window itself
+ * resolves unitNames via eventIds, so passing empty eventIds would make those
+ * items permanently absent (found in fix round 1's review). The window itself
  * is still clamped by windowOverride, not bounded by candidates — this only
  * borrows finding.eventIds as an existing derivation path, with zero special
  * cases inside the collectors (predicate single-source: window mode = "a finding
@@ -1395,8 +1316,6 @@ export const PACK_ITEM_KIND_ZH: Record<PackItem["kind"], string> = {
   immunity: "敌方免疫",
   "our-cc": "我方控制",
   "our-cd": "我方大招",
-  "off-target": "脱靶",
-  "dr-clip": "踩 DR",
   "cd-ledger": "冷却台账",
   "aura-snap": "光环快照",
   "pos-snap": "站位快照",

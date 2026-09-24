@@ -280,7 +280,10 @@ describe("buildWindowPack 信号门分级", () => {
     expect(r!.pack.items.some((i) => i.kind === "hp")).toBe(true);
   });
 
-  it("含窗口内 dr-clipped-cc candidate → 进攻门过、含 kind=dr-clip、kind=offensive", () => {
+  // dr-clipped-cc / off-target-in-window are deleted candidate types; their
+  // offensive pack items (dr-clip / off-target) were removed 2026-09-24, so a
+  // stray candidate of that type no longer opens the offensive gate.
+  it("窗口内只有已删除类型 dr-clipped-cc 的 candidate → 无进攻信号,返回 null", () => {
     const mkOffUnit = (id: string, name: string, friendly: boolean) => ({
       id,
       name,
@@ -328,9 +331,7 @@ describe("buildWindowPack 信号门分级", () => {
       },
     ] as unknown as CandidateEvent[];
     const r = buildWindowPack(drCombat, 70, 105, drCandidates, "Owner-Area52");
-    expect(r).not.toBeNull();
-    expect(r!.kind).toBe("offensive");
-    expect(r!.pack.items.some((i) => i.kind === "dr-clip")).toBe(true);
+    expect(r).toBeNull();
   });
 });
 

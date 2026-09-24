@@ -6,7 +6,6 @@ import {
   buildAuditRepairPrompt,
   buildDeepDivePack,
   buildDeepDivePrompt,
-  classifyFindingKind,
   hasCoachableSignal,
   hasOffensiveCoachableSignal,
   offensivePackItems,
@@ -374,18 +373,6 @@ describe("hasOffensiveCoachableSignal(进攻信号门,进攻深挖)", () => {
       ]),
     ).toBe(true);
   });
-  it("off-target / dr-clip 各自即信号(juked-kick 已降级不算)", () => {
-    expect(
-      hasOffensiveCoachableSignal([
-        item("off-target", { role: "owner", onTargetPct: "40" }),
-      ]),
-    ).toBe(true);
-    expect(
-      hasOffensiveCoachableSignal([
-        item("dr-clip", { role: "owner", dr: "Immune" }),
-      ]),
-    ).toBe(true);
-  });
   it("目标没触底 / 只有 target-hp 无防御 → 无信号", () => {
     expect(
       hasOffensiveCoachableSignal([
@@ -454,12 +441,10 @@ describe("offensivePackItems(进攻证据映射,纯函数)", () => {
   };
   const inWin = (t: number) => t >= 10 && t <= 50;
 
-  it("burst-into-immunity:出 target-hp(start+end)+ immunity + our-cd,名字短名、role 正确", () => {
+  it("爆发打进免疫:出 target-hp(start+end)+ immunity + our-cd,名字短名、role 正确", () => {
     const items = offensivePackItems({
       entries: [entry],
       healerChains: [],
-      candFacts: [{ immunity: "Ice Block", overlap: "2.5" }],
-      candTypes: ["burst-into-immunity"],
       ownerName: "Me-Area52",
       inWin,
     });
@@ -483,14 +468,6 @@ describe("offensivePackItems(进攻证据映射,纯函数)", () => {
   it("healer CC 链在窗口内 → our-cc(role=owner);窗口外的丢弃", () => {
     const items = offensivePackItems({
       entries: [],
-      candTypes: ["off-target-in-window"],
-      candFacts: [
-        {
-          onTargetPct: "40",
-          target: "Rdruid-Area52",
-          offTarget: "Warr-Area52",
-        },
-      ],
       healerChains: [
         {
           targetName: "Hpal-Area52",
@@ -523,10 +500,6 @@ describe("offensivePackItems(进攻证据映射,纯函数)", () => {
     const cc = items.filter((i) => i.kind === "our-cc");
     expect(cc).toHaveLength(1); // the out-of-window 99s entry is dropped by inWin
     expect(cc[0]!.facts.role).toBe("owner");
-    // off-target item: comes from the candidate facts
-    const off = items.find((i) => i.kind === "off-target");
-    expect(off!.facts.onTargetPct).toBe("40");
-    expect(off!.facts.target).toBe("Warr"); // offTarget short name
   });
 
   it("Fix 1 回归:跨服撞名的队友(短名同、全名不同)不能被判成 owner", () => {
@@ -539,8 +512,6 @@ describe("offensivePackItems(进攻证据映射,纯函数)", () => {
     const items = offensivePackItems({
       entries: [crossRealmEntry],
       healerChains: [],
-      candFacts: [],
-      candTypes: [],
       ownerName: "Me-Area52",
       inWin,
     });
@@ -566,8 +537,6 @@ describe("offensivePackItems(进攻证据映射,纯函数)", () => {
     const items = offensivePackItems({
       entries: [spanningEntry],
       healerChains: [],
-      candFacts: [],
-      candTypes: [],
       ownerName: "Me-Area52",
       inWin: lateWin,
     });
@@ -582,42 +551,6 @@ describe("offensivePackItems(进攻证据映射,纯函数)", () => {
         (i) => i.kind === "target-hp" && i.t === 55 && i.facts.hp === "18",
       ),
     ).toBeTruthy();
-  });
-});
-
-describe("classifyFindingKind(分发)", () => {
-  const cand = (id: string, type: string): CandidateEvent => ({
-    id,
-    type,
-    t: 10,
-    unitNames: [],
-    facts: {},
-  });
-  const cands = [
-    cand("d1", "death"),
-    cand("b1", "unconverted-burst"),
-    cand("o1", "off-target-in-window"),
-    cand("j1", "juked-kick"),
-  ];
-  const F = (eventIds: string[]): Finding => ({
-    eventIds,
-    severity: "high",
-    category: "x",
-    title: "x",
-    explanation: "x",
-  });
-  it("death 候选 → survival", () => {
-    expect(classifyFindingKind(F(["d1"]), cands)).toBe("survival");
-  });
-  it("非死亡候选 → offensive", () => {
-    expect(classifyFindingKind(F(["b1"]), cands)).toBe("offensive");
-    expect(classifyFindingKind(F(["o1"]), cands)).toBe("offensive");
-  });
-  it("混合平票偏 survival", () => {
-    expect(classifyFindingKind(F(["d1", "b1"]), cands)).toBe("survival");
-  });
-  it("juked-kick 已降级 → survival(不路由进攻深挖)", () => {
-    expect(classifyFindingKind(F(["j1"]), cands)).toBe("survival");
   });
 });
 

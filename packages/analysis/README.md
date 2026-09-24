@@ -99,7 +99,7 @@ Traced from a real example (the `juked-kick` finding type):
 3. **Add a legend line** in `src/analysis/buildFindingsPrompt.ts` — a new `type` needs an entry in `DPS_LEGENDS` or `CHAIN_LEGENDS` (both keyed by exactly the `type` string) so the model is told what the event means. Skipping this doesn't break anything mechanically, but the model sees an unexplained event.
 4. **`findingCategories.ts` usually doesn't need a change** — its 8-value enum is coarse and model-assigned; a new finding type just needs to plausibly fall under an existing category.
 5. **`auditFindings.ts` needs no per-type change** — its grounding/placeholder/lint logic is generic across all candidate types.
-6. **Optional: `deepDive.ts` routing** — if the new type should be eligible for automated multi-round follow-up, add it to a relevant set (e.g. `OFFENSIVE_CANDIDATE_TYPES`); some types are deliberately excluded based on A/B results, so don't add by default.
+6. **`deepDive.ts` needs no per-type change** — every first-round finding is deep-dived through the survival pack and its `hasCoachableSignal` gate (the per-type offensive routing set was removed on 2026-09-24 when the four types it named were deleted; the offensive pack now serves window analysis only).
 7. **Tests** — a detection-function unit test in `candidateFindings.test.ts` or `test/ported/<name>.test.ts`, plus prompt-rendering coverage in `buildFindingsPrompt.test.ts` if the legend/menu logic changed.
 8. **Data, if needed** — extend a curated file in `src/data/` (e.g. `spellCategories.ts`/`spellTags.ts` for CC classification) or, for corpus-observed facts, go through the datagen pipeline above.
 

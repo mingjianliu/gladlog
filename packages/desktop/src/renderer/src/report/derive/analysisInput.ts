@@ -1,15 +1,12 @@
 import {
   buildDeepDivePack,
   buildMatchContext,
-  buildOffensiveDeepDivePack,
   buildWindowPack,
-  classifyFindingKind,
   DEEP_DIVE_MAX,
   type DeepDivePack,
   extractCandidateFindings,
   type Finding,
   hasCoachableSignal,
-  hasOffensiveCoachableSignal,
   isHealerSpec,
   SEVERITY_RANK,
   specToString,
@@ -111,7 +108,7 @@ export function buildAnalysisInput(
 
 /**
  * Evidence-pack construction for the deep-dive round (first-round findings →
- * ≤DEEP_DIVE_MAX survival seats + one guaranteed offensive seat); also the
+ * ≤DEEP_DIVE_MAX survival seats); also the
  * shared path for the panel's deep-dive effect and the batch driver. Returns an
  * empty array when pack construction fails (a failed deep dive is not fatal —
  * the first round stands).
@@ -132,31 +129,18 @@ export function buildDeepenPacks(
             (SEVERITY_RANK[b.f.severity] ?? 9) || a.i - b.i,
       );
     // Survival seats: take up to DEEP_DIVE_MAX death-class packs that pass the
-    // gate, in severity order; plus one guaranteed offensive seat
+    // gate, in severity order. (Findings no longer get an offensive seat: the
+    // four candidate types that routed there are deleted; the offensive pack
+    // survives only in window mode, buildWindowPack.)
     const survivalPacks: DeepDivePack[] = [];
-    const offensivePacks: DeepDivePack[] = [];
     for (const { f, i } of ranked) {
-      const kind = classifyFindingKind(f, candidates);
-      if (kind === "survival") {
-        if (survivalPacks.length >= DEEP_DIVE_MAX) continue;
-        const pack = buildDeepDivePack(legacy, f, i, candidates, ownerName);
-        // Coachable-signal gate: do not deep-dive a clean window, which would
-        // only produce boilerplate
-        if (pack && hasCoachableSignal(pack.items)) survivalPacks.push(pack);
-      } else {
-        if (offensivePacks.length >= 1) continue; // OFFENSIVE_DEEP_DIVE_MAX = 1
-        const pack = buildOffensiveDeepDivePack(
-          legacy,
-          f,
-          i,
-          candidates,
-          ownerName,
-        );
-        if (pack && hasOffensiveCoachableSignal(pack.items))
-          offensivePacks.push(pack);
-      }
+      if (survivalPacks.length >= DEEP_DIVE_MAX) break;
+      const pack = buildDeepDivePack(legacy, f, i, candidates, ownerName);
+      // Coachable-signal gate: do not deep-dive a clean window, which would
+      // only produce boilerplate
+      if (pack && hasCoachableSignal(pack.items)) survivalPacks.push(pack);
     }
-    return [...survivalPacks, ...offensivePacks];
+    return survivalPacks;
   } catch {
     return [];
   }

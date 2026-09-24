@@ -815,4 +815,9 @@
 //  [UNCLEANSED DEBUFF] 531 → 523, STAYED IN 1,264 → 1,294 (BM owners get the
 //  ranged positioning block); candidates dps:position-mistake 621 → 622,
 //  healer:missed-cleanse 284 → 280, every other type unchanged.
-export const PROMPT_VERSION = 106;
+//  v107 (2026-09-24): deep-dive offensive legend drops the kind=off-target /
+//  kind=dr-clip sentence — those pack items came only from the deleted
+//  off-target-in-window / dr-clipped-cc candidate types, so they could never
+//  appear. First-round prompt and candidate menu unchanged; only the window
+//  analysis's offensive deep-dive prompt text is shorter.
+export const PROMPT_VERSION = 107;

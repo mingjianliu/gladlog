@@ -576,9 +576,9 @@ export function externalUnusedEvents(input: {
  * conditions are already decided inside annotate, so here we only filter on
  * timingLabel). For the corpus-measured occurrence rate see the task-3 report
  * (the pre-gate numbers).
- * Filed under category "cooldowns"; NOT in OFFENSIVE_CANDIDATE_TYPES
- * (deepDive.ts), so it routes to survival by default — "spending what you
- * should have saved" is a survival-discipline issue, not an offensive one.
+ * Filed under category "cooldowns"; its deep dive is the survival pack —
+ * "spending what you should have saved" is a survival-discipline issue, not
+ * an offensive one.
  *
  * nearestBurstGapS is read straight off cast.nearestBurstGapS —
  * annotateDefensiveTimings already computed it while deciding Unnecessary,
