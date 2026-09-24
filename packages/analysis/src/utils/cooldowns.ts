@@ -33,9 +33,14 @@ import { COPY_CAST_IDS } from "./castPress";
 import { incomingPressureEvents } from "./incomingPressure";
 import { fmtTime, toRenderSecond } from "./renderGrid";
 import { OFFENSIVE_CD_SPELL_IDS } from "./spellDanger";
-import { CD_TALENT_MODIFIERS, type ICDModifier } from "./talentModifiers";
+import {
+  CD_TALENT_MODIFIERS,
+  type ICDModifier,
+  PER_RANK_COOLDOWN_TALENTS,
+} from "./talentModifiers";
 import {
   getPlayerTalentedSpellInfo,
+  getPlayerTalentRanks,
   getSpecTalentTreeSpellInfo,
 } from "./talents";
 
@@ -1044,7 +1049,10 @@ export function kitSpellReadyAt(
   spellId: string,
   tSeconds: number,
   matchStartMs: number,
-  talents: { talentedSpellIds: Set<string> | null; pvpTalentIds: Set<string> },
+  talents: {
+    talentedSpellIds: Set<string> | null;
+    pvpTalentIds: Set<string>;
+  } & NonNullable<Parameters<typeof applyCdModifiers>[5]>,
 ): boolean {
   const baseCd = effectiveCooldownSeconds(spellId) ?? null;
   if (baseCd === null) return false; // unknown CD, don't guess
@@ -1054,6 +1062,7 @@ export function kitSpellReadyAt(
     spellEffectData[spellId]?.charges?.charges ?? 1,
     talents.talentedSpellIds,
     talents.pvpTalentIds,
+    talents,
   );
   const castTimes = unit.spellCastEvents
     .filter(
@@ -1359,8 +1368,19 @@ export function applyCdModifiers(
   baseCharges: number,
   talentedSpellIds: Set<string> | null,
   pvpTalentIds: Set<string>,
+  /** The player's spec (owns every `specIds` spec-passive modifier) and
+   * talent ranks (scale the `PER_RANK_COOLDOWN_TALENTS` rows). Omitted →
+   * neither applies, the pre-GH #106 behaviour. */
+  owner?: {
+    specId?: string;
+    talentRanks?: ReadonlyMap<string, number> | null;
+  },
 ): { cooldownSeconds: number; charges: number } {
-  if (!modifiers || (!talentedSpellIds && pvpTalentIds.size === 0)) {
+  const specId = owner?.specId;
+  if (
+    !modifiers ||
+    (!talentedSpellIds && pvpTalentIds.size === 0 && !specId)
+  ) {
     return { cooldownSeconds: baseCooldownSeconds, charges: baseCharges };
   }
 
@@ -1368,16 +1388,19 @@ export function applyCdModifiers(
   let flatReduceSeconds = 0;
   let pctMultiplier = 1;
   for (const mod of modifiers) {
-    if (
-      !talentedSpellIds?.has(mod.talentSpellId) &&
-      !pvpTalentIds.has(mod.talentSpellId)
-    ) {
-      continue;
-    }
+    const owned = mod.specIds
+      ? specId !== undefined && mod.specIds.includes(specId)
+      : !!talentedSpellIds?.has(mod.talentSpellId) ||
+        pvpTalentIds.has(mod.talentSpellId);
+    if (!owned) continue;
     if (mod.effect === "extra_charge") {
       charges += mod.value;
     } else if (mod.effect === "reduce_cd") {
-      flatReduceSeconds += mod.value;
+      // unknown rank → counted once, the value-once reading
+      const rank = PER_RANK_COOLDOWN_TALENTS.has(mod.talentSpellId)
+        ? Math.max(1, owner?.talentRanks?.get(mod.talentSpellId) ?? 1)
+        : 1;
+      flatReduceSeconds += mod.value * rank;
     } else if (mod.effect === "reduce_cd_pct") {
       pctMultiplier *= 1 - mod.value / 100;
     }
@@ -1482,15 +1505,17 @@ export function chargesAvailableAt(
  * returned object is SHARED — callers read it (`.has`) and must never mutate
  * the sets.
  */
-const talentIdSetsCache = new WeakMap<
-  ICombatUnit,
-  { talentedSpellIds: Set<string> | null; pvpTalentIds: Set<string> }
->();
-
-export function playerTalentIdSets(unit: ICombatUnit): {
+interface IPlayerTalentIdSets {
   talentedSpellIds: Set<string> | null;
   pvpTalentIds: Set<string>;
-} {
+  /** spec passives own their `specIds` modifiers (GH #106) */
+  specId: string | undefined;
+  /** COMBATANT_INFO ranks, for `PER_RANK_COOLDOWN_TALENTS` (GH #106) */
+  talentRanks: ReadonlyMap<string, number> | null;
+}
+const talentIdSetsCache = new WeakMap<ICombatUnit, IPlayerTalentIdSets>();
+
+export function playerTalentIdSets(unit: ICombatUnit): IPlayerTalentIdSets {
   const cached = talentIdSetsCache.get(unit);
   if (cached !== undefined) return cached;
 
@@ -1505,6 +1530,10 @@ export function playerTalentIdSets(unit: ICombatUnit): {
     // PvP talents selected by this player (spell IDs). Available when
     // COMBATANT_INFO is present.
     pvpTalentIds: new Set<string>(unit.info?.pvpTalents ?? []),
+    specId: Number.isFinite(specIdNum) && specIdNum > 0 ? unit.spec : undefined,
+    talentRanks: unit.info?.talents
+      ? getPlayerTalentRanks(specIdNum, unit.info.talents)
+      : null,
   };
   talentIdSetsCache.set(unit, result);
   return result;
@@ -1516,6 +1545,7 @@ export function applyCdTalentModifiers(
   baseCharges: number,
   talentedSpellIds: Set<string> | null,
   pvpTalentIds: Set<string>,
+  owner?: Parameters<typeof applyCdModifiers>[5],
 ): { cooldownSeconds: number; charges: number } {
   // BACKLOG #45: a corpus cooldown patch whose number already contains the
   // talents (The Hunt 60 s) must not have the DB2 talent rows stacked on top.
@@ -1529,6 +1559,7 @@ export function applyCdTalentModifiers(
       baseCharges,
       talentedSpellIds,
       pvpTalentIds,
+      owner,
     );
   return applyCdModifiers(
     CD_TALENT_MODIFIERS[spellId],
@@ -1536,6 +1567,7 @@ export function applyCdTalentModifiers(
     baseCharges,
     talentedSpellIds,
     pvpTalentIds,
+    owner,
   );
 }
 
@@ -1569,7 +1601,8 @@ export function extractMajorCooldowns(
   const talentedSpellInfo = unit.info?.talents
     ? getPlayerTalentedSpellInfo(specIdNum, unit.info.talents)
     : null;
-  const { talentedSpellIds, pvpTalentIds } = playerTalentIdSets(unit);
+  const talentSets = playerTalentIdSets(unit);
+  const { talentedSpellIds, pvpTalentIds } = talentSets;
   // Spells **replaced** by a selected PvP talent: with the talent taken, the
   // baseline/class-talent spell no longer exists, so it must not enter the
   // "never used all match" ledger (2026-07-25 user report: a Holy Paladin who
@@ -1808,6 +1841,7 @@ export function extractMajorCooldowns(
         baseCharges,
         talentedSpellIds,
         pvpTalentIds,
+        talentSets,
       );
 
     const castEvents = unit.spellCastEvents.filter(

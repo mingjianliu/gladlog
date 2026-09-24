@@ -184,17 +184,20 @@ export const DEFAULT_CLEANSE_CD_S = 8;
 export function cleanseRecoveryOf(
   dispelSpellId: string,
   casterPvpTalentIds?: ReadonlySet<string>,
+  /** the dispeller's spec — owns spec-passive rows (GH #106) */
+  casterSpecId?: string,
 ): { cooldownSeconds: number; charges: number } {
   const base =
     DISPEL_COOLDOWNS_BY_SPELL.get(dispelSpellId) ?? DEFAULT_CLEANSE_CD_S;
-  if (base === 0 || !casterPvpTalentIds?.size)
+  if (base === 0 || (!casterPvpTalentIds?.size && !casterSpecId))
     return { cooldownSeconds: base, charges: 1 };
   return applyCdTalentModifiers(
     dispelSpellId,
     base,
     1,
     null,
-    new Set(casterPvpTalentIds),
+    new Set(casterPvpTalentIds ?? []),
+    { specId: casterSpecId },
   );
 }
 
@@ -1941,6 +1944,9 @@ export function reconstructDispelSummary(
                 new Set((u.info?.pvpTalents ?? []).map(String)),
               ]),
             );
+            const specByName = new Map(
+              activeDispellers.map((u) => [u.name, u.spec as string]),
+            );
             // Look back dynamically based on the spell ID of each dispel event
             const recentCleanses = allyCleanse.filter((c) => {
               if (!activeDispellerNames.has(c.sourceName)) return false;
@@ -1955,6 +1961,7 @@ export function reconstructDispelSummary(
               const { cooldownSeconds } = cleanseRecoveryOf(
                 c.dispelSpellId,
                 pvpTalentsByName.get(c.sourceName),
+                specByName.get(c.sourceName),
               );
               if (cooldownSeconds === 0) return false;
               return c.timeSeconds + cooldownSeconds > applyRelative;
@@ -1974,6 +1981,7 @@ export function reconstructDispelSummary(
               const { charges } = cleanseRecoveryOf(
                 c.dispelSpellId,
                 pvpTalentsByName.get(c.sourceName),
+                specByName.get(c.sourceName),
               );
               chargesByName.set(
                 c.sourceName,

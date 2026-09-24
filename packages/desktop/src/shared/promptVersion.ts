@@ -900,4 +900,15 @@
 //  re-priced (median −7 pp, max −19 pp, e.g. 82 % → 75 %); same lines, gate
 //  0, candidates unchanged. A CC with no DR category now renders "DR n/a"
 //  instead of "DR Full" (0 lines today).
-export const PROMPT_VERSION = 116;
+//  v117 (2026-09-24, GH #106 step 1, user "好 做" / orphan patches "改"):
+//  static cooldown modifiers the model was missing — cooldown rows PvP-
+//  scaled, spec passives (SpecializationSpells) as modifier sources, per-rank
+//  talents by COMBATANT_INFO rank, Ashamane's Guidance, Pillar of Frost 45 s /
+//  Summon Demonic Tyrant 60 s patches. Every changed major cooldown lands on
+//  its corpus recast floor (Divine Toll Holy −15 → 0, Exhilaration −30 → 0,
+//  Pillar −15 → 0, Ashamane −30 → 0, Fade −5 → 0, healer PvP trinket 90 s on
+//  all 7 healer specs). 605 files: [RES] lines 68,182 → 68,690; dps /
+//  healer missed-sync-window +24 / +12, cd-hoarded +8 / −8, healer
+//  cc-avoidable +7, each traced to a verified shorter cooldown; gate
+//  failure counts unchanged.
+export const PROMPT_VERSION = 117;

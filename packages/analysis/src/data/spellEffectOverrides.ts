@@ -367,14 +367,22 @@ interface CorpusCooldownPatch {
   talentsIncluded: boolean;
 }
 export const CORPUS_COOLDOWN_PATCHES: Record<string, CorpusCooldownPatch> = {
-  // The Hunt (Havoc): DB2 SpellCooldowns 90 s, Eternal Hunt −15 s → 75 s, but
-  // the full-archive 1/10 recast-gap histogram (recastGapHistogram.ts,
-  // 2026-09-15) has a hard floor at 60 s (58 s ×1, 60 s ×108, 61 s ×366,
-  // 62 s ×331 …) and no data-side source for the last 15 s (no category /
-  // label / class-mask SpellMod, no PvP rule spell, no hotfix). 75 × 0.8 = 60
-  // matches a "−20 % in PvP" server rule nobody can show. User ruling
-  // 2026-09-17: patch to 60 s, talents included.
-  "370965": { cooldownSeconds: 60, talentsIncluded: true },
+  // (The Hunt 60 s, BACKLOG #45 2026-09-17, retired 2026-09-24 GH #106: the
+  // missing 15 s was Eternal Hunt's second rank — the row is per rank, 90 −
+  // 2 × 15 = 60, and all 289 corpus cells are rank 2. It now comes from
+  // PER_RANK_COOLDOWN_TALENTS, so a rank-1 or talentless Havoc reads 75 / 90.)
+  //
+  // Two passives that carry a cooldown SpellMod but are in no talent tree, no
+  // PvP pool and no SpecializationSpells row, so no generator can own them.
+  // Both floors are exact in the S2 archive (every 30th file, per-unit
+  // recast gap minus the talent-resolved model). User ruling 2026-09-24
+  // 「改」. `talentsIncluded: false` — the DB2 talent rows still stack.
+  //   Pillar of Frost: Icecap 207126 row 306334 −15 s; 90 Frost gaps, min and
+  //   p2 both −15.0, 90 % below the old 60 s base.
+  "51271": { cooldownSeconds: 45, talentsIncluded: false },
+  //   Summon Demonic Tyrant: Grand Warlock's Design 387084 row 1021640 −30 s;
+  //   81 Demonology gaps, min −28.7, p2 −28.4, 95 % below the old 90 s base.
+  "265187": { cooldownSeconds: 60, talentsIncluded: false },
 };
 for (const [id, patch] of Object.entries(CORPUS_COOLDOWN_PATCHES)) {
   const cur = SPELL_EFFECT_OVERRIDES[id];

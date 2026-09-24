@@ -1153,12 +1153,14 @@ export function ccAvoidanceOptionsAt(
   // applies only when THAT player actually took THAT talent (regular, hero or
   // PvP). `spec` absent (hand-built test fixtures) degrades to base values,
   // exactly the old behaviour.
-  const { talentedSpellIds, pvpTalentIds } =
+  const talentSets =
     owner.spec !== undefined
       ? playerTalentIdSets(
           owner as unknown as Parameters<typeof playerTalentIdSets>[0],
         )
-      : { talentedSpellIds: null, pvpTalentIds: new Set<string>() };
+      : undefined;
+  const talentedSpellIds = talentSets?.talentedSpellIds ?? null;
+  const pvpTalentIds = talentSets?.pvpTalentIds ?? new Set<string>();
   const triggers = getTalentAvoidanceTriggers();
   const out: string[] = [];
   for (const id of applicableCCAvoidanceIds(cc.spellId, cc.spellName)) {
@@ -1187,10 +1189,13 @@ export function ccAvoidanceOptionsAt(
     // Kit evidence, talent-aware cooldown, charges and the reaction window all
     // live in the shared `kitSpellReadyAt` (GH #77 made it a second consumer).
     const available = resolvedIds.some((rid) =>
-      kitSpellReadyAt(owner, rid, cc.atSeconds, matchStartMs, {
-        talentedSpellIds,
-        pvpTalentIds,
-      }),
+      kitSpellReadyAt(
+        owner,
+        rid,
+        cc.atSeconds,
+        matchStartMs,
+        talentSets ?? { talentedSpellIds, pvpTalentIds },
+      ),
     );
     if (!available) continue;
     out.push(

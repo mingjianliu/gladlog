@@ -87,7 +87,8 @@ describe("buildMatchContext on real fixture", () => {
   it("GH #103 A5: Defensive loadout entries state how long the effect lasts", () => {
     const ctx = buildMatchContext(match, friends, enemies, {});
     expect(ctx).toContain("Pain Suppression [180s, 2 Charges, lasts 8s]");
-    expect(ctx).toContain("Ice Block [180s, lasts 10s]");
+    // 150 s since GH #106: Winter's Protection counts per rank (rank 2 = −60)
+    expect(ctx).toContain("Ice Block [150s, lasts 10s]");
     // offensive / control cooldowns keep the old shape
     expect(ctx).toContain("Combustion [60s]");
     expect(ctx).toContain("Psychic Scream [20s]");

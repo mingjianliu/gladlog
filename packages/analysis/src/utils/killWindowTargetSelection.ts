@@ -240,7 +240,8 @@ function getDefensiveStateAtTime(
   // `talentedSpellIds: null` ("unknown", never "took none") and an empty PvP
   // set, which `applyCdTalentModifiers` renders as the base numbers, i.e.
   // exactly the old behaviour.
-  const { talentedSpellIds, pvpTalentIds } = playerTalentIdSets(enemy);
+  const talentSets = playerTalentIdSets(enemy);
+  const { talentedSpellIds, pvpTalentIds } = talentSets;
 
   // For each tracked defensive, determine state at window start
   for (const [spellId, casts] of castsBySpell) {
@@ -266,6 +267,7 @@ function getDefensiveStateAtTime(
         effectData.charges?.charges ?? 1,
         talentedSpellIds,
         pvpTalentIds,
+        talentSets,
       );
     const buffSeconds =
       effectData.durationSeconds && effectData.durationSeconds > 0

@@ -64,7 +64,7 @@ describe("deriveUncoveredHighlights —— 真实 fixture 集成", () => {
     expect(highlights[0]!.summary.length).toBeGreaterThan(0);
   });
 
-  it("去重:真实失误清单的 timed 锚点(与 MatchReport 生产接线一致)—— 幸存的是 0–30s 与 80–90s(其余窗口都被 ±5s 容差内的某条失误覆盖)", () => {
+  it("去重:真实失误清单的 timed 锚点(与 MatchReport 生产接线一致)—— 幸存的只有 0–30s(其余窗口都被 ±5s 容差内的某条失误覆盖)", () => {
     // timedAnchorsFromMistakes rather than a bare .map(mk => mk.tS): a
     // review-round fix — sentinel tS values from "whole-match observation"
     // classes such as cd-waste must not enter the anchor set (see the red→green
@@ -110,17 +110,17 @@ describe("deriveUncoveredHighlights —— 真实 fixture 集成", () => {
     // less than 60 % of the burst), so its anchor is gone and 0–20 / 10–30
     // are uncovered again. Verified: at the old 0.3 door this list was
     // exactly ["80-90"].
+    // GH #106 (2026-09-24): the Ret paladin's spec passive takes 60 s off
+    // Avenging Wrath (corpus floor exactly 60 s, n = 161), so it is ready
+    // during the 85 s Freezing Trap on the enemy healer and a
+    // missed-sync-window anchor now covers 80–90.
     expect(coverage.filter((c) => !c.covered).map((c) => c.window)).toEqual([
       "0-20",
       "10-30",
-      "80-90",
     ]);
 
     const highlights = deriveUncoveredHighlights(m, durationS, anchors);
-    expect(highlights.map((h) => h.range)).toEqual([
-      { fromS: 0, toS: 30 },
-      { fromS: 80, toS: 90 },
-    ]);
+    expect(highlights.map((h) => h.range)).toEqual([{ fromS: 0, toS: 30 }]);
   });
 
   it("零亮点(零噪音):锚点每 10s 密布全场 → 每个滑窗 ±5s 容差内必有锚点,全丢", () => {

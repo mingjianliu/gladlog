@@ -97,6 +97,7 @@ import {
   OFFENSIVE_PURGE_TALENT_IDS,
   TALENT_BEHAVIORS,
 } from "../utils/talentBehaviors";
+import { PER_RANK_COOLDOWN_TALENTS } from "../utils/talentModifiers";
 import { KW_MAJOR_DEFENSIVE_IDS } from "./abilityProfile";
 import { CAST_PARAM_DURATIONS } from "./castParamDurations";
 import { classMetadata } from "./classSpells";
@@ -502,9 +503,18 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   t("CAST_PARAM_DURATIONS.castIds", "data/castParamDurations.ts", "cast", () =>
     Object.values(CAST_PARAM_DURATIONS).flatMap((c) => c.castIds),
   ),
-  // BACKLOG #45 (2026-09-17): corpus-corrected arena cooldowns (The Hunt 60 s).
+  // BACKLOG #45 (2026-09-17) / GH #106 (2026-09-24): corpus-corrected arena
+  // cooldowns (Pillar of Frost 45 s, Summon Demonic Tyrant 60 s).
   t("CORPUS_COOLDOWN_PATCHES", "data/spellEffectOverrides.ts", "cast", () =>
     keys(CORPUS_COOLDOWN_PATCHES),
+  ),
+  // GH #106 (2026-09-24): talents whose cooldown row scales with rank — a
+  // renumbered talent would silently fall back to the value-once reading.
+  t(
+    "PER_RANK_COOLDOWN_TALENTS",
+    "utils/talentModifiers.ts",
+    "talent",
+    () => [...PER_RANK_COOLDOWN_TALENTS],
   ),
   t("OPPRESSING_ROAR_SPELL_ID", "data/spellEffectData.ts", "aura", () => [
     OPPRESSING_ROAR_SPELL_ID,

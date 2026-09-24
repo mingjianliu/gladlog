@@ -293,6 +293,18 @@ describe("applyCdTalentModifiers — flat vs pct arithmetic (fix-29a-review.md f
 describe("CD_TALENT_MODIFIERS invariant — no tracked major CD can go negative at either extreme", () => {
   const isCdModifier = (m: { effect: string }) =>
     m.effect === "reduce_cd" || m.effect === "reduce_cd_pct";
+  // GH #106 (agy review): exercise the owner-dependent rows too — every spec
+  // a spec-passive row names, and every talent at rank 2 (the per-rank rows'
+  // largest reach). `undefined` keeps the talent-only reading.
+  const ownersFor = (spellId: string) => {
+    const mods = CD_TALENT_MODIFIERS[spellId] ?? [];
+    const specs = [
+      undefined,
+      ...new Set(mods.flatMap((m) => m.specIds ?? [])),
+    ] as Array<string | undefined>;
+    const talentRanks = new Map(mods.map((m) => [m.talentSpellId, 2]));
+    return specs.map((specId) => ({ specId, talentRanks }));
+  };
   const spellIdsWithCdModifier = Object.entries(CD_TALENT_MODIFIERS)
     .filter(([, mods]) => mods.some(isCdModifier))
     .map(([spellId]) => spellId);
@@ -311,14 +323,17 @@ describe("CD_TALENT_MODIFIERS invariant — no tracked major CD can go negative 
           .filter(isCdModifier)
           .map((m) => m.talentSpellId),
       );
-      const { cooldownSeconds } = applyCdTalentModifiers(
-        spellId,
-        base,
-        effectiveBaseCharges(spellId),
-        allTalentIds,
-        new Set(),
-      );
-      expect(cooldownSeconds).toBeGreaterThanOrEqual(0);
+      for (const owner of ownersFor(spellId)) {
+        const { cooldownSeconds } = applyCdTalentModifiers(
+          spellId,
+          base,
+          effectiveBaseCharges(spellId),
+          allTalentIds,
+          new Set(),
+          owner,
+        );
+        expect(cooldownSeconds).toBeGreaterThanOrEqual(0);
+      }
     },
   );
 
@@ -333,14 +348,17 @@ describe("CD_TALENT_MODIFIERS invariant — no tracked major CD can go negative 
           .map((m) => m.talentSpellId),
       );
       for (const talentId of talentIds) {
-        const { cooldownSeconds } = applyCdTalentModifiers(
-          spellId,
-          base,
-          effectiveBaseCharges(spellId),
-          new Set([talentId]),
-          new Set(),
-        );
-        expect(cooldownSeconds).toBeGreaterThanOrEqual(0);
+        for (const owner of ownersFor(spellId)) {
+          const { cooldownSeconds } = applyCdTalentModifiers(
+            spellId,
+            base,
+            effectiveBaseCharges(spellId),
+            new Set([talentId]),
+            new Set(),
+            owner,
+          );
+          expect(cooldownSeconds).toBeGreaterThanOrEqual(0);
+        }
       }
     },
   );
@@ -699,5 +717,121 @@ describe("extractTalentModifiers — 2026-09-13 audit fixes", () => {
         { talentSpellId: "50334", effect: "reduce_cd_pct", value: 100 },
       ]),
     );
+  });
+});
+
+describe("GH #106 — PvP scale, spec passives, per-rank rows", () => {
+  const row = (
+    spellId: string,
+    aura: string,
+    basePoints: string,
+    pvp: string,
+  ): Record<string, string> => ({
+    SpellID: spellId,
+    Effect: "6",
+    EffectAura: aura,
+    EffectBasePointsF: basePoints,
+    EffectMiscValue_0: "11",
+    EffectSpellClassMask_0: "4",
+    EffectSpellClassMask_1: "0",
+    EffectSpellClassMask_2: "0",
+    EffectSpellClassMask_3: "0",
+    PvpMultiplier: pvp,
+  });
+  const monkTarget = [
+    {
+      SpellID: "900053",
+      SpellClassSet: "53",
+      SpellClassMask_0: "4",
+      SpellClassMask_1: "0",
+      SpellClassMask_2: "0",
+      SpellClassMask_3: "0",
+    },
+  ];
+
+  it("a cooldown row is PvP-scaled and kept to 0.1 s (Chrysalis shape: −45 s × 0.667 = −30 s)", () => {
+    const result = extractTalentModifiers(
+      [row("344359", "107", "-45000", "0.66699999571")],
+      monkTarget,
+      [],
+      [],
+      new Set(["900053"]),
+    );
+    expect(result["900053"]).toEqual([
+      { talentSpellId: "344359", effect: "reduce_cd", value: 30 },
+    ]);
+  });
+
+  it("PvpMultiplier 0 means off in PvP: no modifier is emitted", () => {
+    const result = extractTalentModifiers(
+      [row("344359", "107", "-10000", "0")],
+      monkTarget,
+      [],
+      [],
+      new Set(["900053"]),
+    );
+    expect(result["900053"]).toBeUndefined();
+  });
+
+  it("a SpecializationSpells passive is a source, tagged with its specs", () => {
+    const result = extractTalentModifiers(
+      [row("900777", "107", "-15000", "1")],
+      monkTarget,
+      [],
+      [],
+      new Set(["900053"]),
+      new Set(),
+      [],
+      new Map([["900777", [270]]]),
+    );
+    expect(result["900053"]).toEqual([
+      {
+        talentSpellId: "900777",
+        effect: "reduce_cd",
+        value: 15,
+        specIds: ["270"],
+      },
+    ]);
+  });
+
+  it("a spec-passive modifier applies to that spec only, talents or not", () => {
+    const mods = [
+      {
+        talentSpellId: "1258016",
+        effect: "reduce_cd" as const,
+        value: 15,
+        specIds: ["65"],
+      },
+    ];
+    const holy = applyCdModifiers(mods, 60, 1, null, new Set(), {
+      specId: "65",
+    });
+    const ret = applyCdModifiers(mods, 60, 1, new Set(["1258016"]), new Set(), {
+      specId: "70",
+    });
+    expect(holy.cooldownSeconds).toBe(45);
+    expect(ret.cooldownSeconds).toBe(60);
+  });
+
+  it("a PER_RANK talent row scales with the COMBATANT_INFO rank; others count once", () => {
+    const fade = CD_TALENT_MODIFIERS["586"]!.filter(
+      (m) => m.talentSpellId === "390670",
+    );
+    const at = (rank: number | undefined) =>
+      applyCdModifiers(fade, 30, 1, new Set(["390670"]), new Set(), {
+        talentRanks: rank === undefined ? null : new Map([["390670", rank]]),
+      }).cooldownSeconds;
+    expect(at(2)).toBe(20); // the 20 s floor every priest spec shows
+    expect(at(1)).toBe(25);
+    expect(at(undefined)).toBe(25); // rank unknown → value once
+    const arts = CD_TALENT_MODIFIERS["115078"]!.filter(
+      (m) => m.talentSpellId === "344359",
+    );
+    // Ancient Arts is a total, not per rank (774 corpus gaps at the model)
+    expect(
+      applyCdModifiers(arts, 45, 1, new Set(["344359"]), new Set(), {
+        talentRanks: new Map([["344359", 2]]),
+      }).cooldownSeconds,
+    ).toBe(45 - arts[0]!.value);
   });
 });

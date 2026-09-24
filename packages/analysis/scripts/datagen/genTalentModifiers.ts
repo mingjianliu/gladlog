@@ -21,7 +21,12 @@ import {
   serializeTalentInventory,
   talentClassMapOf,
 } from "./lib/talentInventory";
-import { fetchTable, parseCsv, resolveBuild } from "./lib/wagoCsv";
+import {
+  assertColumns,
+  fetchTable,
+  parseCsv,
+  resolveBuild,
+} from "./lib/wagoCsv";
 
 /** Re-exported from the inventory module (GH #96 M1): one definition. */
 export type { ICDModifier } from "./lib/talentInventory";
@@ -59,8 +64,11 @@ export function extractTalentModifiers(
   temporarySourceIds: ReadonlySet<string> = new Set(),
   /** SpellLabel rows for the label-keyed SpellMods (aura 218 / 219) */
   spellLabelRows: Record<string, string>[] = [],
+  /** SpecializationSpells (spell → specs): spec passives as modifier sources */
+  specSpells?: ReadonlyMap<string, readonly number[]>,
 ): Record<string, ICDModifier[]> {
   const inventory = buildTalentInventory({
+    specSpells,
     talentTrees: talentIdMap as never,
     pvpPool: PVP_TALENT_POOL_GENERATED,
     spellEffectRows,
@@ -85,6 +93,7 @@ export async function main(): Promise<void> {
     spellMiscRaw,
     spellDurationRaw,
     spellLabelRaw,
+    specSpellsRaw,
   ] = await Promise.all([
     fetchTable("SpellEffect", build, cacheDir),
     fetchTable("SpellClassOptions", build, cacheDir),
@@ -93,8 +102,25 @@ export async function main(): Promise<void> {
     fetchTable("SpellMisc", build, cacheDir),
     fetchTable("SpellDuration", build, cacheDir),
     fetchTable("SpellLabel", build, cacheDir),
+    fetchTable("SpecializationSpells", build, cacheDir),
   ]);
   const spellLabelRows = parseCsv(spellLabelRaw).rows;
+  // Spec passives as cooldown-modifier sources (GH #106, 2026-09-24): 50 DB2
+  // cooldown / charge rows sit on SpecializationSpells auras, which the
+  // talent + PvP-pool universe never reached.
+  const specSpellsCsv = parseCsv(specSpellsRaw);
+  assertColumns(
+    specSpellsCsv.header,
+    ["SpecID", "SpellID"],
+    "SpecializationSpells",
+  );
+  const specSpells = new Map<string, number[]>();
+  for (const r of specSpellsCsv.rows) {
+    if (!r.SpellID || r.SpellID === "0") continue;
+    const l = specSpells.get(r.SpellID) ?? [];
+    if (!l.includes(toInt(r.SpecID))) l.push(toInt(r.SpecID));
+    specSpells.set(r.SpellID, l);
+  }
 
   const spellEffectRows = parseCsv(spellEffectRaw).rows;
   // Live hotfixes on top of the client build (BACKLOG #41 (3)): cooldown /
@@ -227,6 +253,7 @@ export async function main(): Promise<void> {
     trackedSpellIds,
     temporarySourceIds,
     spellLabelRows,
+    specSpells,
   );
 
   console.log(
@@ -257,6 +284,7 @@ export async function main(): Promise<void> {
     temporarySpellIds: temporarySourceIds,
     knownDurationSpellIds,
     trackedSpellIds,
+    specSpells,
   });
   const inventoryPath = new URL(
     "../../src/data/talentEffectInventoryGenerated.json",

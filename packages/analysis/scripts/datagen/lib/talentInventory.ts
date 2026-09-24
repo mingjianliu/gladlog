@@ -23,6 +23,7 @@
  * (M1 parity gate: the generated talentModifiers.json must not change).
  */
 import { CUSTOM_TALENT_MODIFIERS } from "../customTalentModifiers";
+import { pvpMultiplierOf } from "./pvpMultiplier";
 
 export const EFFECT_MOD_CHARGES = 121;
 export const EFFECT_MOD_COOLDOWN = 148;
@@ -82,6 +83,9 @@ export interface ICDModifier {
   value: number;
   isConditional?: boolean;
   sourceRowId?: string;
+  /** set when the source is a spec passive (SpecializationSpells), not a
+   * talent: every player of these specs owns it */
+  specIds?: string[];
 }
 
 export type TargetVia =
@@ -109,8 +113,10 @@ export interface IInventoryEdge {
   /** the spell whose effect rows this edge reaches (talent itself at hop 0) */
   spellId: string;
   hop: number;
-  path: "node" | "pvp";
+  path: "node" | "pvp" | "spec";
   classId: number;
+  /** path "spec": the specializations whose SpecializationSpells grant it */
+  specIds?: number[];
 }
 
 export interface ITalentInventory {
@@ -212,12 +218,38 @@ export function buildTalentInventory(input: {
   knownDurationSpellIds?: ReadonlySet<string>;
   /** restrict stored targets (the compiler filters on the same set anyway) */
   trackedSpellIds?: ReadonlySet<string>;
+  /** SpecializationSpells: spell id → the specs it is granted to. Spec
+   * passives carry cooldown SpellMods too (GH #106: the "Holy Paladin" aura
+   * 1258016 takes 15 s off Divine Toll), and a talent-only universe never
+   * sees them. Omitted → no spec sources. */
+  specSpells?: ReadonlyMap<string, readonly number[]>;
 }): ITalentInventory {
   const talentClass = talentClassMapOf(input.talentTrees, input.pvpPool);
   const { family } = deriveClassFamilies(
     talentClass,
     input.spellClassOptionsRows,
   );
+  // Sources = talents, then spec passives that are not also talents. Added
+  // AFTER the family derivation so they cannot move a class's family vote.
+  const sources = new Map<
+    string,
+    { classId: number; path: "node" | "pvp" | "spec"; specIds?: number[] }
+  >(talentClass);
+  const classIdOfSpec = new Map<number, number>();
+  for (const tree of input.talentTrees)
+    classIdOfSpec.set(tree.specId, tree.classId);
+  for (const [spellId, specIds] of input.specSpells ?? []) {
+    if (sources.has(spellId)) continue;
+    const classId = specIds
+      .map((s) => classIdOfSpec.get(s))
+      .find((c) => c !== undefined);
+    if (classId === undefined) continue;
+    sources.set(spellId, {
+      classId,
+      path: "spec",
+      specIds: [...specIds].sort((a, b) => a - b),
+    });
+  }
 
   // target spells by family, SpellClassOptions order preserved within each
   const targetsByFamily = new Map<
@@ -285,15 +317,24 @@ export function buildTalentInventory(input: {
   // spell → classId: a talent spell is always its own class; a spell reached
   // only through triggers takes the class of the first talent reaching it
   const reachClass = new Map<string, number>();
-  for (const [spellId, { classId }] of talentClass)
+  for (const [spellId, { classId }] of sources)
     reachClass.set(spellId, classId);
-  for (const [talentSpellId, { classId, path }] of talentClass) {
+  for (const [talentSpellId, { classId, path, specIds }] of sources) {
     let frontier = [talentSpellId];
     const seen = new Set(frontier);
-    for (let hop = 0; hop <= MAX_TRIGGER_HOPS && frontier.length; hop++) {
+    // spec passives: their own rows only (the cooldown compiler reads hop 0)
+    const maxHops = path === "spec" ? 0 : MAX_TRIGGER_HOPS;
+    for (let hop = 0; hop <= maxHops && frontier.length; hop++) {
       const next: string[] = [];
       for (const spellId of frontier) {
-        edges.push({ talentSpellId, spellId, hop, path, classId });
+        edges.push({
+          talentSpellId,
+          spellId,
+          hop,
+          path,
+          classId,
+          ...(specIds ? { specIds } : {}),
+        });
         if (!reachClass.has(spellId)) reachClass.set(spellId, classId);
         for (const r of rowsBySpell.get(spellId) ?? []) {
           const trig = r.EffectTriggerSpell;
@@ -374,7 +415,9 @@ export function buildTalentInventory(input: {
       aura,
       misc0,
       basePoints: toInt(r.EffectBasePointsF),
-      pvpMultiplier: Number(r.PvpMultiplier) || 1,
+      // the shared parser: a literal 0 is "no effect in PvP" (185 SpellEffect
+      // rows, e.g. Frost/Unholy's Death Grip recharge −10 s), not a blank
+      pvpMultiplier: pvpMultiplierOf(r),
       // school mask for mitigation / immunity auras (87 / 39 / 40 / 184 / 186)
       schoolMask: [87, 39, 40, 184, 186].includes(aura) ? misc0 : 0,
       masks,
@@ -413,6 +456,10 @@ export function compileCooldownModifiers(
   const hop0 = new Set(
     inv.edges.filter((e) => e.hop === 0).map((e) => e.spellId),
   );
+  const specIdsOf = new Map<string, string[]>();
+  for (const e of inv.edges)
+    if (e.hop === 0 && e.path === "spec" && e.specIds)
+      specIdsOf.set(e.spellId, e.specIds.map(String));
   const results: Record<string, ICDModifier[]> = {};
   const mechanismOf = new WeakMap<ICDModifier, "cooldown" | "charge">();
 
@@ -447,6 +494,14 @@ export function compileCooldownModifiers(
     const { effect, aura, misc0 } = row;
     let type: ICDModifier["effect"] | null = null;
     let value = row.basePoints;
+    // Cooldown numbers are PvP-scaled like every other generated number
+    // (lib/pvpMultiplier.ts, user ruling 2026-09-04 "the PvP value IS the
+    // official value"); until GH #106 this compiler read the bare base points.
+    // Chrysalis 202424 −45 s × 0.667 = −30 s is what makes Life Cocoon's
+    // modelled 75 s match the 90 s the corpus shows; Improved Conjuration
+    // −30 s × 0.5, Bounding Stride −15 s × 0.7. Charges are counts, never scaled.
+    const pvpValue =
+      Math.round(row.basePoints * row.pvpMultiplier * 1000) / 1000;
     if (
       effect === EFFECT_MOD_CHARGES ||
       (effect === EFFECT_APPLY_AURA && aura === AURA_MOD_MAX_CHARGES)
@@ -460,13 +515,13 @@ export function compileCooldownModifiers(
       misc0 === SPELLMOD_COOLDOWN
     ) {
       type = "reduce_cd_pct";
-      value = Math.abs(value);
+      value = Math.abs(pvpValue);
     } else if (
       effect === EFFECT_APPLY_AURA &&
       aura === AURA_CHARGE_RECOVERY_MULTIPLIER
     ) {
       type = "reduce_cd_pct";
-      value = -value;
+      value = -pvpValue;
     } else if (
       effect === EFFECT_MOD_COOLDOWN ||
       (effect === EFFECT_APPLY_AURA && aura === AURA_MOD_CATEGORY_COOLDOWN) ||
@@ -478,8 +533,10 @@ export function compileCooldownModifiers(
         misc0 === SPELLMOD_COOLDOWN)
     ) {
       type = "reduce_cd";
-      value = -value;
-      if (Math.abs(value) > 500) value = Math.round(value / 1000);
+      value = -pvpValue;
+      // milliseconds → seconds, kept to 0.1 s: a PvP-scaled −10.5 s must not
+      // round to 11 (that is a half-second the model would claim is ready early)
+      if (Math.abs(value) > 500) value = Math.round(value / 100) / 10;
     } else if (
       effect === EFFECT_APPLY_AURA &&
       aura === AURA_OVERRIDE_ACTION_SPELL
@@ -488,6 +545,9 @@ export function compileCooldownModifiers(
     }
     if (!type) continue;
     if (type !== "replace_spell" && row.activation === "whileAura") continue;
+    // a no-op in the arena (base 0, or PvpMultiplier 0 = "off in PvP")
+    if ((type === "reduce_cd" || type === "reduce_cd_pct") && value === 0)
+      continue;
     for (const t of row.targets) {
       add(
         t.spellId,
@@ -496,6 +556,9 @@ export function compileCooldownModifiers(
           effect: type,
           value,
           ...(row.rowId ? { sourceRowId: row.rowId } : {}),
+          ...(specIdsOf.has(row.spellId)
+            ? { specIds: specIdsOf.get(row.spellId) }
+            : {}),
         },
         t.via === "chargeCategory" ? "charge" : "cooldown",
       );

@@ -64,4 +64,19 @@ export const CUSTOM_TALENT_MODIFIERS: Record<string, ICDModifier[]> = {
       value: -30,
     },
   ],
+
+  // Incarnation: Avatar of Ashamane ← Ashamane's Guidance (GH #106,
+  // 2026-09-24). The talent 391548 is a script dummy (effect 3); the SpellMod
+  // lives on the aura it applies, 1244546 (row 1245410: aura 107, SPELLMOD
+  // cooldown, −30000 ms, PvpMultiplier 1), which no trigger edge reaches, so
+  // the generator never sees it. Corpus (S2 archive every 30th file): 87
+  // Feral recast gaps sit at the talent-resolved model minus 30.0 s (min
+  // −30.2, p2 −30.0, p10 −29.0), 93 % of them below the old model.
+  "102543": [
+    {
+      talentSpellId: "391548", // Ashamane's Guidance
+      effect: "reduce_cd",
+      value: 30,
+    },
+  ],
 };
