@@ -27,6 +27,7 @@ import {
   IPlayerCCTrinketSummary,
 } from "./ccTrinketAnalysis";
 import { isHealerSpec, specToString } from "./cooldowns";
+import { ccThreatRadiusYards } from "./spellRange";
 import { fmtTime } from "./renderGrid";
 import { DR_CATEGORY_MAP, DRLevel, getDRLevelAtTime } from "./drAnalysis";
 import { IAlignedBurstWindow, reconstructEnemyCDTimeline } from "./enemyCDs";
@@ -85,35 +86,42 @@ function isEnemyInCC(enemy: ICombatUnit, atMs: number): boolean {
 // Order matters: check "Demon Hunter" before "Hunter".
 // ---------------------------------------------------------------------------
 
-const SPEC_PRIMARY_CC: Array<{
+// GH #83 (2026-09-23): each entry now names the CC AURA id — the id the log
+// records for a landed CC, the same key `buildEnemyCCHistory` uses — so the
+// DR category comes from `DR_CATEGORY_MAP` (never hand-typed) and the reach
+// from `ccThreatReachYards` (through the cast that triggers the aura). Two rows
+// corrected on corpus evidence while doing so: Paladin Repentance (20066 and
+// every other Repentance id: 0 occurrences in 63,303 season files) → Hammer of
+// Justice (3,094 landed on a 1,000-file slice); Evoker Landslide (a root — no
+// DR category exists for it, the old "Disorient" was invented) → Sleep Walk
+// (Disorient, 1,255 landed). Registered in data/curatedIdRegistry.ts.
+export const SPEC_PRIMARY_CC: ReadonlyArray<{
   keyword: string;
   spellName: string;
-  category: string;
+  spellId: string;
 }> = [
-  { keyword: "Demon Hunter", spellName: "Imprison", category: "Incapacitate" },
-  { keyword: "Death Knight", spellName: "Strangulate", category: "Silence" },
-  { keyword: "Mage", spellName: "Polymorph", category: "Incapacitate" },
-  { keyword: "Rogue", spellName: "Kidney Shot", category: "Stun" },
-  { keyword: "Warlock", spellName: "Fear", category: "Disorient" },
-  { keyword: "Druid", spellName: "Cyclone", category: "Cyclone" },
-  { keyword: "Hunter", spellName: "Freezing Trap", category: "Incapacitate" },
-  { keyword: "Shaman", spellName: "Hex", category: "Incapacitate" },
-  { keyword: "Paladin", spellName: "Repentance", category: "Incapacitate" },
-  {
-    keyword: "Warrior",
-    spellName: "Intimidating Shout",
-    category: "Disorient",
-  },
-  { keyword: "Monk", spellName: "Paralysis", category: "Incapacitate" },
-  { keyword: "Priest", spellName: "Psychic Scream", category: "Disorient" },
-  { keyword: "Evoker", spellName: "Landslide", category: "Disorient" },
+  { keyword: "Demon Hunter", spellName: "Imprison", spellId: "217832" },
+  { keyword: "Death Knight", spellName: "Strangulate", spellId: "47476" },
+  { keyword: "Mage", spellName: "Polymorph", spellId: "118" },
+  { keyword: "Rogue", spellName: "Kidney Shot", spellId: "408" },
+  { keyword: "Warlock", spellName: "Fear", spellId: "118699" },
+  { keyword: "Druid", spellName: "Cyclone", spellId: "33786" },
+  { keyword: "Hunter", spellName: "Freezing Trap", spellId: "3355" },
+  { keyword: "Shaman", spellName: "Hex", spellId: "51514" },
+  { keyword: "Paladin", spellName: "Hammer of Justice", spellId: "853" },
+  { keyword: "Warrior", spellName: "Intimidating Shout", spellId: "5246" },
+  { keyword: "Monk", spellName: "Paralysis", spellId: "115078" },
+  { keyword: "Priest", spellName: "Psychic Scream", spellId: "8122" },
+  { keyword: "Evoker", spellName: "Sleep Walk", spellId: "360806" },
 ];
 
 function getPrimaryCC(
   specName: string,
-): { spellName: string; category: string } | null {
+): { spellName: string; spellId: string; category: string } | null {
   for (const entry of SPEC_PRIMARY_CC) {
-    if (specName.includes(entry.keyword)) return entry;
+    if (!specName.includes(entry.keyword)) continue;
+    const category = DR_CATEGORY_MAP[entry.spellId];
+    return category ? { ...entry, category } : null;
   }
   return null;
 }
@@ -198,10 +206,13 @@ function computeExposureLabel(
  */
 function buildEnemyCCHistory(
   allFriendlyCCSummaries: IPlayerCCTrinketSummary[],
-): Map<string, Array<{ spellName: string; category: string }>> {
+): Map<
+  string,
+  Array<{ spellName: string; spellId: string; category: string }>
+> {
   const result = new Map<
     string,
-    Array<{ spellName: string; category: string }>
+    Array<{ spellName: string; spellId: string; category: string }>
   >();
   for (const summary of allFriendlyCCSummaries) {
     for (const cc of summary.ccInstances) {
@@ -209,7 +220,11 @@ function buildEnemyCCHistory(
       if (!category) continue;
       const existing = result.get(cc.sourceName) ?? [];
       if (!existing.some((e) => e.category === category)) {
-        existing.push({ spellName: cc.spellName, category });
+        existing.push({
+          spellName: cc.spellName,
+          spellId: cc.spellId,
+          category,
+        });
       }
       result.set(cc.sourceName, existing);
     }
@@ -288,7 +303,9 @@ export function analyzeHealerExposureAtBurst(
       // Blocked only when positions exist and NO swept instant had LoS.
       const losBlocked = sawAnyLosSample && !sawLoS;
 
-      // B26: enemies beyond CC range or in CC cannot threaten the healer
+      // B26: enemies beyond CC range or in CC cannot threaten the healer.
+      // GH #83: "beyond CC range" is per CC below (its own reach + how far
+      // such casters close in); the flat bound stays as the outer limit.
       const distance = distanceBetween(healerPos, enemyPos);
       if (distance > CC_MAX_CAST_RANGE_YARDS) continue;
       if (isEnemyInCC(enemy, windowMs)) continue;
@@ -309,7 +326,8 @@ export function analyzeHealerExposureAtBurst(
       const ccSources =
         observedCCs.length > 0 ? observedCCs : primaryCC ? [primaryCC] : [];
 
-      for (const { spellName, category } of ccSources) {
+      for (const { spellName, spellId, category } of ccSources) {
+        if (distance > ccThreatRadiusYards(enemy, spellId)) continue;
         const healerDRLevel = getDRLevelAtTime(
           healerCCSummary.ccInstances,
           category,

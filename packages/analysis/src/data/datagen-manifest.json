@@ -113,10 +113,10 @@
       "bytes": 2035
     },
     "spellReachGenerated.json": {
-      "spells": 15,
-      "bytes": 2463,
+      "spells": 3017,
+      "bytes": 224629,
       "generator": "scripts/datagen/genSpellReach.ts",
-      "consumer": "utils/deathOutcomeAnalysis.ts externalReachYards (GH #34 ②)",
+      "consumer": "utils/spellRange.ts (caster + talent range: kicks, externals, cleanse / purge, healer reach, CC threat — GH #83); utils/deathOutcomeAnalysis.ts externalReachYards (GH #34 ②)",
       "entries": 38
     },
     "kickLockoutObservedGenerated.json": {
@@ -170,6 +170,10 @@
     "kickPriorityHealSpellsGenerated.json": {
       "entries": 9,
       "producer": "packages/eval/scripts/kickPriorityOutcomeProbe.ts emit-heal-spells"
+    },
+    "ccCloseInGenerated.json": {
+      "entries": 45,
+      "producer": "packages/eval/scripts/ccCloseInScan.ts --emit"
     }
   }
 }

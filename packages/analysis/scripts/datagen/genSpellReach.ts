@@ -91,11 +91,22 @@ async function main() {
         rangeById.get(String(r.RangeIndex)) ?? 0,
       );
   const radiusBySpell = new Map<string, number>();
+  // GH #83: which casts trigger which spell (SpellEffect.EffectTriggerSpell).
+  // Aura ids the log records for a CC (Fear 118699, Storm Bolt 132169, …)
+  // carry no range of their own; the cast that triggers them does.
+  const triggerCol = eff.header.find((h) => /^EffectTriggerSpell$/.test(h));
+  const parentsOf = new Map<string, string[]>();
   for (const r of eff.rows) {
     const id = String(r.SpellID);
     for (const c of radiusCols) {
       const rad = radiusById.get(String(r[c])) ?? 0;
       if (rad > (radiusBySpell.get(id) ?? 0)) radiusBySpell.set(id, rad);
+    }
+    const trig = triggerCol ? String(r[triggerCol] ?? "0") : "0";
+    if (trig !== "0" && trig !== "" && trig !== id) {
+      const list = parentsOf.get(trig) ?? [];
+      if (!list.includes(id)) list.push(id);
+      parentsOf.set(trig, list);
     }
   }
 
@@ -179,13 +190,41 @@ async function main() {
     }
   > = {};
   const curatedSet = new Set(curated);
+  let triggeredFromParent = 0;
   for (const id of ids) {
-    const rangeYards = rangeBySpell.get(id) ?? 0;
+    let rangeYards = rangeBySpell.get(id) ?? 0;
     let radiusYards = radiusBySpell.get(id) ?? 0;
     let source: string | undefined;
+    let modsFrom = id;
     if (radiusYards === 0 && LINKED_REACH_SPELL[id]) {
       radiusYards = radiusBySpell.get(LINKED_REACH_SPELL[id]!) ?? 0;
       source = `radius from linked spell ${LINKED_REACH_SPELL[id]}`;
+    }
+    // no reach of its own → the farthest-reaching cast that triggers it (one
+    // EffectTriggerSpell hop, like genSpellTargeting)
+    if (rangeYards === 0 && radiusYards === 0) {
+      let best: { id: string; range: number; radius: number } | null = null;
+      for (const pid of parentsOf.get(id) ?? []) {
+        const range = rangeBySpell.get(pid) ?? 0;
+        const radius = radiusBySpell.get(pid) ?? 0;
+        const reach =
+          radius > 0 ? (range > 0 ? range + radius : radius) : range;
+        const bestReach = best
+          ? best.radius > 0
+            ? best.range > 0
+              ? best.range + best.radius
+              : best.radius
+            : best.range
+          : -1;
+        if (reach > 0 && reach > bestReach) best = { id: pid, range, radius };
+      }
+      if (best) {
+        rangeYards = best.range;
+        radiusYards = best.radius;
+        modsFrom = best.id;
+        source = `triggered by ${best.id}`;
+        triggeredFromParent++;
+      }
     }
     // an observed id with neither a range nor a radius carries no reach
     // fact; curated ones are kept so their consumers can see the 0
@@ -201,11 +240,11 @@ async function main() {
       radiusYards,
       reachYards,
       ...(source ? { source } : {}),
-      ...(rangeMods.has(id) && rangeYards > 0
-        ? { rangeMods: rangeMods.get(id) }
+      ...(rangeMods.has(modsFrom) && rangeYards > 0
+        ? { rangeMods: rangeMods.get(modsFrom) }
         : {}),
-      ...(radiusMods.has(id) && radiusYards > 0
-        ? { radiusMods: radiusMods.get(id) }
+      ...(radiusMods.has(modsFrom) && radiusYards > 0
+        ? { radiusMods: radiusMods.get(modsFrom) }
         : {}),
     };
   }
@@ -228,6 +267,7 @@ async function main() {
   console.log(
     `spellReachGenerated.json: ${Object.keys(out).length} spells (${curated.length} curated, ${ids.length} candidates); ` +
       `${withRangeMods} with range talents, ${withRadiusMods} with radius talents; ${buffGated} buff-gated modifier rows skipped; ` +
+      `${triggeredFromParent} take their reach from the cast that triggers them; ` +
       `curated reach 0: ${zero.join(",")}`,
   );
 }

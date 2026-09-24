@@ -187,6 +187,14 @@ npx tsx packages/eval/scripts/healerSaveCdScan.ts emit-table --in $R/counts.json
 #   Read rejectedForReview in the json: "below the door" rows are measured negatives; a spell the user wants
 #   in anyway is signed as save_role (a ruling beats the door), one they want out as not_save_role.
 
+# 6b-pre-8. CC close-in table (data/ccCloseInGenerated.json; GH #83, 2026-09-23): per CC aura id, how far
+#   its casters close in during the 2 s before it lands (p85 of caster→target distance minus the spell's
+#   reach, n ≥ 100). Read by utils/spellRange.ts ccThreatRadiusYards → [HEALER EXPOSURE]'s threat list.
+#   Corpus-driven, NOT DB2. Regenerate at season start and after genSpellReach (the reach it subtracts).
+#   ~30 min single process over every 20th file. Write to a temp file, then copy it in.
+# E=$GLADLOG_EVAL_HOME; nice -n 10 npx tsx packages/eval/scripts/ccCloseInScan.ts \
+#   --manifest $E/corpus/manifest-archive-<season>.txt --every 20 --limit 3200 --lead 2 --emit /tmp/ccCloseIn.json \
+#   && cp /tmp/ccCloseIn.json packages/analysis/src/data/ccCloseInGenerated.json
 # 6b-pre-6. Save-cooldown cohort trigger-HP table ([CD PRIOR] context fact; GH #54 (f) / BACKLOG #38 (a)(h),
 #   user ruling 2026-09-04 option 1). Per (spec | hero tree | spellId): the median lowest-alive-friendly gridHpPct
 #   at which healers of that cohort press that save cooldown, plus a spec-wide `|*|` roll-up. Corpus-driven, NOT DB2.

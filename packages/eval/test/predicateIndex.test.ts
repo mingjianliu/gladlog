@@ -952,6 +952,11 @@ const INDEX: PredicateRow[] = [
     mod: spellRange,
   },
   {
+    file: `${A}/utils/spellRange.ts`,
+    symbol: "ccThreatRadiusYards",
+    mod: spellRange,
+  },
+  {
     file: `${A}/data/kickPriorityHealSpells.ts`,
     symbol: "hardcastHealSpell",
     mod: kickPriorityHealSpells,

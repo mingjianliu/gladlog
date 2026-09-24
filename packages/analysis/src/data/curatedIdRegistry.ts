@@ -83,6 +83,7 @@ import {
   STELLAR_PROTECTION_PENALIZED_SPELLS,
 } from "../utils/dispelAnalysis";
 import { HEALER_REACH_SPELLS } from "../utils/spellRange";
+import { SPEC_PRIMARY_CC } from "../utils/healerExposureAnalysis";
 import { MOVEMENT_ROOT_BREAK_DISPEL_IDS } from "../utils/dispelKind";
 import { AOE_CC_SPELL_IDS } from "../utils/drAnalysis";
 import { EXTERNAL_DAMAGE_SHIELD_IDS } from "../utils/externalDamage";
@@ -346,6 +347,10 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
         Object.values(bySpec).flatMap((ids) => [...(ids ?? [])]),
       ),
     ),
+  ),
+  // GH #83: the fallback CC per class for enemies not yet seen casting one
+  t("SPEC_PRIMARY_CC", "utils/healerExposureAnalysis.ts", "aura", () =>
+    SPEC_PRIMARY_CC.map((e) => e.spellId),
   ),
   t("HEALER_REACH_SPELLS", "utils/spellRange.ts", "cast", () =>
     set(Object.values(HEALER_REACH_SPELLS).flat()),

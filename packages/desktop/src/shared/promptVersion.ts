@@ -795,4 +795,15 @@
 //  diamonds (3.5 % → 0.9 %). Same 602 files: no candidate count moves; landed
 //  [CC ON TEAM] lines stamped "LoS blocked" 419 → 269, "target unreachable"
 //  148 → 126, LoS-break suggestion distances on those maps shift.
-export const PROMPT_VERSION = 104;
+//  v105 (2026-09-23, GH #83, user "距离都可以算进来"): [HEALER EXPOSURE]
+//  lists an enemy CC as a threat only within that CC's own reach plus how far
+//  its casters close in during the 2 s before it lands (utils/spellRange.ts
+//  ccThreatRadiusYards; per-spell p85 from ccCloseInScan.ts — Kidney Shot
+//  +14.7, Psychic Scream +12.8, Polymorph +0), not a flat 40 yd. The
+//  class-fallback CC list now keys on aura ids with DR categories from
+//  DR_CATEGORY_MAP (Paladin Repentance — 0 occurrences in the season — →
+//  Hammer of Justice; Evoker Landslide, a root → Sleep Walk). 602 files:
+//  candidate counts and findings unchanged; [HEALER EXPOSURE] lines
+//  6,712 → 6,153, IN-LoS threat entries 26,099 → 18,555 (Psychic Scream
+//  2,092 → 864, Intimidating Shout 1,676 → 898, Dragon's Breath 1,147 → 567).
+export const PROMPT_VERSION = 105;

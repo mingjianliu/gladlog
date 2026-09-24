@@ -24,7 +24,9 @@
  */
 import type { ICombatUnit } from "@gladlog/parser-compat";
 
+import closeInRaw from "../data/ccCloseInGenerated.json";
 import raw from "../data/spellReachGenerated.json";
+import { CC_MAX_CAST_RANGE_YARDS } from "./positionSampling";
 import { talentModifierOwnershipOf } from "./talentOwnership";
 
 interface RangeMod {
@@ -128,6 +130,77 @@ export function healerReachYards(
     if (r !== null && (best === null || r > best)) best = r;
   }
   return best ?? fallback;
+}
+
+/** DB2's "Vision Range (AOI)" row (100 yd) sits on triggered auras and
+ * area-trigger payloads (Binding Shot 117526, Freezing Trap 3355): it is a
+ * placeholder, not a cast range. */
+const PLACEHOLDER_RANGE_YD = 100;
+
+/**
+ * How far a crowd control reaches from its caster, for "could this enemy CC
+ * that unit" — GH #83 (user 2026-09-23: "距离都可以算进来"). A cast range when
+ * the spell has one (Polymorph 30, Cyclone 20, Kidney Shot 5 — talents
+ * included), else the radius of a caster-centred one (Psychic Scream 8,
+ * Dragon's Breath 12, Blinding Light 10). Aura ids the log records for a CC
+ * resolve through the cast that triggers them (genSpellReach, Fear 118699 →
+ * 5782). null when neither is known or the only number is the 100 yd
+ * placeholder — callers fall back to their generic bound.
+ */
+export function ccThreatReachYards(
+  caster: Caster | null | undefined,
+  spellId: string,
+): number | null {
+  const e = SPELLS[spellId];
+  if (!e) return null;
+  if (e.rangeYards > 0 && e.rangeYards < PLACEHOLDER_RANGE_YD)
+    return modified(e.rangeYards, e.rangeMods, caster);
+  if (
+    e.rangeYards === 0 &&
+    e.radiusYards > 0 &&
+    e.radiusYards < PLACEHOLDER_RANGE_YD
+  )
+    return modified(e.radiusYards, e.radiusMods, caster);
+  return null;
+}
+
+/** How far CC casters close in before their CC lands — `ccCloseInScan.ts`:
+ * the caster → target distance 2 s before the aura, minus the spell's reach.
+ * The 2 s matches `[HEALER EXPOSURE]`'s ±2 s sweep. It depends on the SPELL:
+ * everyone runs in for an 8 yd Psychic Scream, melee run in for a 15–20 yd
+ * Blind / Paralysis / Imprison, nobody runs in for a 30 yd Polymorph. So each
+ * CC with enough landings uses its own measured p85
+ * (`data/ccCloseInGenerated.json`); the rest fall back to the reach split
+ * below (1,000 season files: reach ≤ 12 yd p85 13.4, longer p85 1.2).
+ * User 2026-09-23: "距离都可以算进来". */
+export const CC_CLOSE_IN_MELEE_YD = 13;
+export const CC_CLOSE_IN_RANGED_YD = 1;
+/** reach at or below this counts as melee / caster-centred for the fallback */
+export const CC_MELEE_REACH_MAX_YD = 12;
+const CLOSE_IN = (
+  closeInRaw as unknown as {
+    spells: Record<string, { n: number; p85: number } | undefined>;
+  }
+).spells;
+
+/** How close an enemy has to be for this CC of theirs to be a threat around
+ * a moment: its reach (`ccThreatReachYards`) plus how far such casters close
+ * in (measured per spell, else the reach split).
+ * The generic CC_MAX_CAST_RANGE_YARDS when the reach is unknown. */
+export function ccThreatRadiusYards(
+  caster: Caster | null | undefined,
+  spellId: string | undefined,
+): number {
+  const reach = spellId ? ccThreatReachYards(caster, spellId) : null;
+  if (reach === null) return CC_MAX_CAST_RANGE_YARDS;
+  const measured = spellId ? CLOSE_IN[spellId]?.p85 : undefined;
+  return (
+    reach +
+    (measured ??
+      (reach <= CC_MELEE_REACH_MAX_YD
+        ? CC_CLOSE_IN_MELEE_YD
+        : CC_CLOSE_IN_RANGED_YD))
+  );
 }
 
 /** How far from the caster the spell can take effect: range for a targeted

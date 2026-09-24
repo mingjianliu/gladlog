@@ -235,6 +235,12 @@ export async function main(): Promise<void> {
           .length,
         producer: "packages/eval/scripts/burstWindowScan.ts emit-table",
       },
+      // GH #83 (2026-09-23): how far CC casters close in before their CC lands,
+      // per CC aura id — corpus-driven like the two tables above.
+      "ccCloseInGenerated.json": {
+        entries: Object.keys(readJson("ccCloseInGenerated.json").spells).length,
+        producer: "packages/eval/scripts/ccCloseInScan.ts --emit",
+      },
       // "Usable while stunned" (B1, task-3): only the stunned dimension
       // resolves to a unique SpellMisc bit combo; feared/confused are a
       // documented gap (see the artifact's own file header and
@@ -292,7 +298,8 @@ export async function main(): Promise<void> {
         spells: Object.keys(readJson("spellReachGenerated.json").spells).length,
         bytes: statSync(dataDir + "spellReachGenerated.json").size,
         generator: "scripts/datagen/genSpellReach.ts",
-        consumer: "utils/deathOutcomeAnalysis.ts externalReachYards (GH #34 ②)",
+        consumer:
+          "utils/spellRange.ts (caster + talent range: kicks, externals, cleanse / purge, healer reach, CC threat — GH #83); utils/deathOutcomeAnalysis.ts externalReachYards (GH #34 ②)",
       },
       // Corpus-observed kick lockouts (GH #62, 2026-09-02): not a DB2 artifact —
       // regenerated per season from the archive by the eval script; listed here

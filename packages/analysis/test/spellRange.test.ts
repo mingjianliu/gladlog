@@ -17,7 +17,15 @@ import {
   dispelReachYards,
   PURGE_SPELLS_BY_SPEC,
 } from "../src/utils/dispelAnalysis";
+import closeIn from "../src/data/ccCloseInGenerated.json";
+import { SPEC_PRIMARY_CC } from "../src/utils/healerExposureAnalysis";
+import { DR_CATEGORY_MAP } from "../src/utils/drAnalysis";
+import { CC_MAX_CAST_RANGE_YARDS } from "../src/utils/positionSampling";
 import {
+  CC_CLOSE_IN_MELEE_YD,
+  CC_CLOSE_IN_RANGED_YD,
+  ccThreatRadiusYards,
+  ccThreatReachYards,
   healerReachYards,
   spellRangeForCaster,
   spellReachForCaster,
@@ -102,5 +110,51 @@ describe("dispelReachYards", () => {
 
   it("a spec with no listed spell keeps the old 40", () => {
     expect(dispelReachYards(unit("265"), PURGE_SPELLS_BY_SPEC["265"])).toBe(40);
+  });
+});
+
+describe("ccThreatReachYards / ccThreatRadiusYards (GH #83)", () => {
+  it("a targeted CC is its cast range, a caster-centred one its radius", () => {
+    expect(ccThreatReachYards(null, "408")).toBe(5); // Kidney Shot
+    expect(ccThreatReachYards(null, "118")).toBe(30); // Polymorph
+    expect(ccThreatReachYards(null, "8122")).toBe(8); // Psychic Scream
+  });
+
+  it("an aura id resolves through the cast that triggers it", () => {
+    // Fear's aura 118699 carries no range; the Fear cast 5782 is 30 yd
+    expect(ccThreatReachYards(null, "118699")).toBe(30);
+  });
+
+  it("the 100 yd 'vision range' placeholder is not a range", () => {
+    expect(ccThreatReachYards(null, "3355")).toBeNull(); // Freezing Trap aura
+    expect(ccThreatRadiusYards(null, "3355")).toBe(CC_MAX_CAST_RANGE_YARDS);
+  });
+
+  it("adds the spell's measured close-in: melee runs in, ranged casts in place", () => {
+    const p85 = (id: string) =>
+      (closeIn as { spells: Record<string, { p85: number }> }).spells[id]!.p85;
+    expect(ccThreatRadiusYards(null, "408")).toBeCloseTo(5 + p85("408"), 5); // Kidney Shot
+    expect(ccThreatRadiusYards(null, "2094")).toBeCloseTo(15 + p85("2094"), 5); // Blind
+    expect(ccThreatRadiusYards(null, "118")).toBeCloseTo(30 + p85("118"), 5); // Polymorph
+    // the table's own shape: short CC runs in, ranged CC does not
+    expect(p85("408")).toBeGreaterThan(8);
+    expect(p85("118")).toBeLessThan(2);
+  });
+
+  it("falls back to the reach split for a CC with too few landings", () => {
+    // Freezing Trap's cast 187650 is never an aura id → not in the table
+    expect(
+      (closeIn as { spells: Record<string, unknown> }).spells["187650"],
+    ).toBeUndefined();
+    expect(ccThreatRadiusYards(null, "187650")).toBe(
+      40 + CC_CLOSE_IN_RANGED_YD,
+    );
+    expect(ccThreatRadiusYards(null, undefined)).toBe(CC_MAX_CAST_RANGE_YARDS);
+    expect(CC_CLOSE_IN_MELEE_YD).toBeGreaterThan(CC_CLOSE_IN_RANGED_YD);
+  });
+
+  it("every fallback primary CC has a DR category (never hand-typed)", () => {
+    for (const e of SPEC_PRIMARY_CC)
+      expect(DR_CATEGORY_MAP[e.spellId], e.spellName).toBeTruthy();
   });
 });
