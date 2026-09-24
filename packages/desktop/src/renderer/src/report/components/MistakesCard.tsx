@@ -1,3 +1,4 @@
+import { fmtTime } from "@gladlog/analysis";
 import { useMemo, useState } from "react";
 
 import type {
@@ -12,8 +13,6 @@ import {
 } from "../derive/mistakes";
 import { UnitName } from "./UnitName";
 
-const fmtT = (s: number): string =>
-  `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
 const SEVERITY_CHIP: Record<MistakeSeverity, { cls: string; label: string }> = {
   major: { cls: "bad", label: "重大" },
@@ -173,7 +172,7 @@ function MomentRow({
   return (
     <div className="rpt-ledger-row">
       <span className="rpt-stats-detail-t">
-        {moment.timed && moment.tS > 0 ? fmtT(moment.tS) : "全场"}
+        {moment.timed && moment.tS > 0 ? fmtTime(moment.tS) : "全场"}
       </span>
       <span className={`rpt-ledger-chip rpt-ledger-chip-${chip.cls}`}>
         {chip.label}

@@ -1,7 +1,8 @@
+import { fmtTime } from "@gladlog/analysis";
+
+import { shortUnitName } from "../derive/teamSide";
 import type { VulnBand } from "../derive/vulnWindows";
 
-const mmss = (s: number): string =>
-  `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
 /**
  * Window list (1c): below the HP curve, one row per kill/vulnerability window;
@@ -41,12 +42,12 @@ export function WindowList({
             }}
           />
           <span className="rpt-window-t">
-            {mmss(b.fromS)}–{mmss(b.toS)}
+            {fmtTime(b.fromS)}–{fmtTime(b.toS)}
           </span>
           <span className="rpt-window-title">
             {b.kind === "burst"
-              ? `击杀尝试 → ${b.targetName.split("-")[0]}`
-              : `${b.targetName.split("-")[0]} 脆弱且未被惩罚`}
+              ? `击杀尝试 → ${shortUnitName(b.targetName)}`
+              : `${shortUnitName(b.targetName)} 脆弱且未被惩罚`}
           </span>
           <span className="rpt-window-detail">
             团队伤害{b.kind === "burst" ? "" : "仅"}{" "}

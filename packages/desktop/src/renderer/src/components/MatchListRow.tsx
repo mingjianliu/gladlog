@@ -1,4 +1,4 @@
-import { zoneMetadata } from "@gladlog/analysis";
+import { fmtTime, zoneMetadata } from "@gladlog/analysis";
 
 import type { StoredMatchMeta } from "../../../main/matchStore";
 import { useIconDataUrl } from "../report/components/useIconDataUrl";
@@ -9,8 +9,6 @@ import {
   specName,
 } from "../report/data/gameConstants";
 
-const fmtDuration = (s: number): string =>
-  `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
 const fmtWhen = (t: number): string => new Date(t).toLocaleString();
 
@@ -139,7 +137,7 @@ export function MatchListRow({
           </span>
         )}
         {meta.durationS != null && (
-          <span className="mlr-dur">{fmtDuration(meta.durationS)}</span>
+          <span className="mlr-dur">{fmtTime(meta.durationS)}</span>
         )}
         {rating != null && (
           <span

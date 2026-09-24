@@ -1,11 +1,10 @@
+import { fmtTime } from "@gladlog/analysis";
 import { useState } from "react";
 
 import { classColor } from "../data/gameConstants";
 import type { KickDashRow } from "../derive/kickDash";
 import { UnitName } from "./UnitName";
 
-const fmtT = (s: number): string =>
-  `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
 /**
  * The kick dashboard (backlog #2): per-player landed/juked/missed kick
@@ -98,7 +97,7 @@ export function KickDashboard({
                       {r.entries.map((k, i) => (
                         <span key={i} className="rpt-stats-detail-item">
                           <span className="rpt-stats-detail-t">
-                            {fmtT(k.atSeconds)}
+                            {fmtTime(k.atSeconds)}
                           </span>{" "}
                           {k.kickSpellName}
                           {k.result === "landed" &&

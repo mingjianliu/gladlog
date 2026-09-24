@@ -5,6 +5,7 @@ import { toLegacySafe } from "./legacySource";
 import { displaySpellName } from "./spellDisplay";
 import { tInRange, type TimeRange } from "./timeRange";
 import type { ReportSource } from "./types";
+import { shortUnitName } from "./teamSide";
 
 /** A single CC-break instance; tS = relative seconds. */
 export interface CcBreakRow {
@@ -30,8 +31,6 @@ const EMPTY: CcBreakDash = { friendly: [], enemy: [], rootBreakCount: 0 };
 
 const fmtName = (id: string, fallback: string): string =>
   id ? displaySpellName(id, fallback) : "近战";
-
-const short = (name: string): string => name.split("-")[0];
 
 const remainTag = (e: ICcBreakEvent): string =>
   e.remainingSeconds !== null ? `(剩 ${e.remainingSeconds.toFixed(1)}s)` : "";
@@ -77,7 +76,7 @@ export function deriveCcBreakDash(
       .filter((e) => tInRange(e.atSeconds, range))
       .map((e) => ({
         tS: e.atSeconds,
-        label: `${short(e.breakerName)} 的 ${fmtName(e.breakSpellId, e.breakSpellName)} 打破了 ${short(e.casterName)} 给 ${short(e.holderName)} 上的 ${fmtName(e.ccSpellId, e.ccSpellName)}${remainTag(e)}`,
+        label: `${shortUnitName(e.breakerName)} 的 ${fmtName(e.breakSpellId, e.breakSpellName)} 打破了 ${shortUnitName(e.casterName)} 给 ${shortUnitName(e.holderName)} 上的 ${fmtName(e.ccSpellId, e.ccSpellName)}${remainTag(e)}`,
         unitName: e.breakerName,
       }));
 
@@ -85,7 +84,7 @@ export function deriveCcBreakDash(
       .filter((e) => tInRange(e.atSeconds, range))
       .map((e) => ({
         tS: e.atSeconds,
-        label: `敌方 ${short(e.breakerName)} 的 ${fmtName(e.breakSpellId, e.breakSpellName)} 提前打破了 ${short(e.holderName)} 身上的 ${fmtName(e.ccSpellId, e.ccSpellName)}${remainTag(e)}`,
+        label: `敌方 ${shortUnitName(e.breakerName)} 的 ${fmtName(e.breakSpellId, e.breakSpellName)} 提前打破了 ${shortUnitName(e.holderName)} 身上的 ${fmtName(e.ccSpellId, e.ccSpellName)}${remainTag(e)}`,
         unitName: e.holderName,
       }));
 

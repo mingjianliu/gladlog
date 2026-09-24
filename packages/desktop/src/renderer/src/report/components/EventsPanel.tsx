@@ -1,4 +1,4 @@
-import { SPELL_ICONS_GENERATED } from "@gladlog/analysis";
+import { fmtTime } from "@gladlog/analysis";
 import {
   Fragment,
   useEffect,
@@ -9,7 +9,7 @@ import {
 } from "react";
 
 import { bridge } from "../../bridge";
-import { SpellIcon } from "./SpellIcon";
+import { ChipIcon } from "./SpellInline";
 import { TeamDot } from "./TeamDot";
 import {
   DEFAULT_EVENT_KINDS,
@@ -32,13 +32,10 @@ import {
   type EventSort,
   type EventSortKey,
 } from "../derive/eventsView";
-import { teamSideByName } from "../derive/teamSide";
+import { shortUnitName, teamSideByName } from "../derive/teamSide";
 import type { TimeRange } from "../derive/timeRange";
 import type { ReportSource } from "../derive/types";
 import type { VulnBand } from "../derive/vulnWindows";
-
-const fmtT = (s: number): string =>
-  `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
 /** Spell icon on an event row: if the id is not in the generated table, render
  * nothing (an empty label keeps the fallback initial from duplicating the spell
@@ -46,10 +43,9 @@ const fmtT = (s: number): string =>
  * 22px row height is a design premise of the virtualization — a 14px icon plus
  * .rpt-events-spell's inline-flex must not stretch the row. */
 function EvtSpell({ spellId, name }: { spellId?: string; name: string }) {
-  const icon = spellId ? SPELL_ICONS_GENERATED[spellId] : undefined;
   return (
     <span className="rpt-events-spell">
-      {icon && <SpellIcon icon={icon} label="" size={14} />}
+      <ChipIcon spellId={spellId} />
       {name}
     </span>
   );
@@ -613,7 +609,7 @@ export function EventsPanel({
             .join(" ") || undefined
         }
       >
-        <td className="rpt-stats-detail-t">{fmtT(r.tS)}</td>
+        <td className="rpt-stats-detail-t">{fmtTime(r.tS)}</td>
         <td>{EVENT_KIND_LABEL[r.kind]}</td>
         <td>{nameCell(r.srcName)}</td>
         <td>{nameCell(r.destName)}</td>
@@ -738,19 +734,19 @@ export function EventsPanel({
           <option value="all">全场</option>
           {customRange && (
             <option value="custom">
-              自定义 {fmtT(customRange.fromS)}–{fmtT(customRange.toS)}
+              自定义 {fmtTime(customRange.fromS)}–{fmtTime(customRange.toS)}
             </option>
           )}
           {globalRange && (
             <option value="global">
-              全局时间窗 {fmtT(globalRange.fromS)}–{fmtT(globalRange.toS)}
+              全局时间窗 {fmtTime(globalRange.fromS)}–{fmtTime(globalRange.toS)}
             </option>
           )}
           {bands.map((b, i) => (
             <option key={i} value={`band:${i}`}>
-              {fmtT(b.fromS)}–{fmtT(b.toS)}{" "}
+              {fmtTime(b.fromS)}–{fmtTime(b.toS)}{" "}
               {b.kind === "burst" ? "击杀尝试" : "脆弱"} ·{" "}
-              {b.targetName.split("-")[0]}
+              {shortUnitName(b.targetName)}
             </option>
           ))}
         </select>
@@ -905,7 +901,7 @@ export function EventsPanel({
               if (d.kind === "aura-flood") {
                 return (
                   <tr className="rpt-events-group" key={item.key}>
-                    <td className="rpt-stats-detail-t">{fmtT(d.tS)}</td>
+                    <td className="rpt-stats-detail-t">{fmtTime(d.tS)}</td>
                     <td>{EVENT_KIND_LABEL.aura}</td>
                     <td />
                     <td>{nameCell(d.destName)}</td>
@@ -929,7 +925,7 @@ export function EventsPanel({
               }
               return (
                 <tr className="rpt-events-group" key={item.key}>
-                  <td className="rpt-stats-detail-t">{fmtT(d.tS)}</td>
+                  <td className="rpt-stats-detail-t">{fmtTime(d.tS)}</td>
                   <td>{EVENT_KIND_LABEL[d.rowKind]}</td>
                   <td>{nameCell(d.srcName)}</td>
                   <td>{nameCell(d.destName)}</td>

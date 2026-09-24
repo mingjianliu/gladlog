@@ -65,9 +65,10 @@ export function teamSidesByUnitId(m: ReportSource): Map<string, TeamSide> {
  *
  * Exported because it is a rule, not a string operation — new callers must
  * import it rather than hand-copy `split("-")[0]`. (The pre-2026-08-18 code
- * hand-copied it at ~30 sites; those are being left alone for now, but nothing
- * new should join them, and `Meters` was the one surface that forgot to strip
- * at all — see its call site.)
+ * hand-copied it at ~30 sites; they were folded into this on 2026-09-24,
+ * except MatchReport's `unitNames[0]?.split(...) ?? null`, which keeps `null`
+ * for a nameless unit. `Meters` was the one surface that forgot to strip at
+ * all — see its call site.)
  *
  * Total: a nameless unit yields "", never undefined, so it stays usable as a
  * Map key and as rendered text.

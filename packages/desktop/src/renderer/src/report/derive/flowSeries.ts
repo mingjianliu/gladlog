@@ -62,8 +62,10 @@ const arr = <T>(v: T[] | undefined): T[] => v ?? [];
 
 /** Pets are attributed to their owner — the same rule the leaderboard uses, so
  * both consumers agree on whose damage a warlock's felhunter is. */
-export const petsOf = (units: Unit[], unitId: string): Unit[] =>
-  units.filter((p) => p.ownerId === unitId);
+export const petsOf = <T extends { ownerId?: string | null }>(
+  units: T[],
+  unitId: string,
+): T[] => units.filter((p) => p.ownerId === unitId);
 
 /**
  * Single source for "which events count toward `basis` for `unit`, and at what

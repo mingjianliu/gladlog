@@ -21,6 +21,7 @@ import { CombatUnitReaction } from "@gladlog/parser-compat";
 
 import { resolveOwner } from "./analysisInput";
 import { toLegacySafe } from "./legacySource";
+import { shortUnitName } from "./teamSide";
 import type { ReportSource } from "./types";
 
 export type KeyMomentKind =
@@ -60,8 +61,6 @@ const MAJOR_KINDS: ReadonlySet<KeyMomentKind> = new Set([
 
 const TRINKETS = new Set<string>(trinketSpellIds);
 const CC_MIN_S = 3;
-
-const shortName = (n: string): string => n.split("-")[0] ?? n;
 
 /** DR-level suffix for cc details (#10 T2). Single-source predicate: use
  * analysis's DR_LEVEL_LABEL wording directly, do not invent a second set of
@@ -159,7 +158,7 @@ export function deriveKeyMoments(
           side: "friendly",
           title: converted ? "爆发(已转化)" : "爆发(未转化)",
           detail: t
-            ? `${(t.damage / 1_000_000).toFixed(2)}M → ${shortName(t.unitName)}`
+            ? `${(t.damage / 1_000_000).toFixed(2)}M → ${shortUnitName(t.unitName)}`
             : undefined,
           unitNames: [owner.name, ...(t ? [t.unitName] : [])],
           jumpT: b.fromSeconds,
@@ -300,7 +299,7 @@ export function deriveKeyMoments(
           kind: "cc",
           side: "friendly",
           title: `控制成功:${cc.spellName}`,
-          detail: `${cc.durationSeconds.toFixed(0)}s → ${shortName(e.name)}${drSuffix(cc.drInfo)}`,
+          detail: `${cc.durationSeconds.toFixed(0)}s → ${shortUnitName(e.name)}${drSuffix(cc.drInfo)}`,
           unitNames: [cc.sourceName, e.name],
           jumpT: cc.atSeconds,
         });
@@ -322,7 +321,7 @@ export function deriveKeyMoments(
           kind: "heal-gap",
           side: "friendly",
           title: `治疗空窗 ${g.durationSeconds.toFixed(1)}s`,
-          detail: `${g.mostDamagedSpec}(${shortName(g.mostDamagedName)})承受 ${Math.round(g.mostDamagedAmount / 1000)}k`,
+          detail: `${g.mostDamagedSpec}(${shortUnitName(g.mostDamagedName)})承受 ${Math.round(g.mostDamagedAmount / 1000)}k`,
           unitNames: [owner.name],
           jumpT: g.fromSeconds,
         });
@@ -379,7 +378,7 @@ export function deriveKeyMoments(
               : "CD 距离外";
         const detail =
           e.type === "STAYED_IN"
-            ? `${e.startDistanceYards}→${e.endDistanceYards}yd 贴 ${shortName(e.nearestEnemyName ?? "")}${
+            ? `${e.startDistanceYards}→${e.endDistanceYards}yd 贴 ${shortUnitName(e.nearestEnemyName ?? "")}${
                 e.dangerLabel ? ` · ${e.dangerLabel}爆发` : ""
               }${
                 e.ownerHpStartPct != null && e.ownerHpMinPct != null

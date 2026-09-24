@@ -1,3 +1,4 @@
+import { fmtTime } from "@gladlog/analysis";
 import { useState } from "react";
 
 import { classColor } from "../data/gameConstants";
@@ -7,8 +8,6 @@ import { UnitName } from "./UnitName";
 
 const BAR_W = 420;
 
-const fmtT = (s: number): string =>
-  `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
 /**
  * Aura uptime card (phase 4 ④): grouped by unit (P1-2) — a group header (class
@@ -140,8 +139,8 @@ export function AuraUptimeCard({
             <td className="rpt-aura-bar-cell">
               <div className="rpt-aura-scale">
                 <span>0:00</span>
-                <span>{fmtT(durationS / 2)}</span>
-                <span>{fmtT(durationS)}</span>
+                <span>{fmtTime(durationS / 2)}</span>
+                <span>{fmtTime(durationS)}</span>
               </div>
             </td>
             <td />

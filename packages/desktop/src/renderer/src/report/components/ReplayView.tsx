@@ -1,4 +1,4 @@
-import { arenaObstacles } from "@gladlog/analysis";
+import { arenaObstacles, fmtTime } from "@gladlog/analysis";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import arenaFloorsJson from "../data/arenaFloors.json";
@@ -58,9 +58,7 @@ const hpColor = (f: number): string =>
 
 const relTime = (t: number, start: number): string => {
   const s = Math.max(0, (t - start) / 1000);
-  return `${Math.floor(s / 60)}:${Math.floor(s % 60)
-    .toString()
-    .padStart(2, "0")}`;
+  return fmtTime(s);
 };
 
 export interface SeekRequest {

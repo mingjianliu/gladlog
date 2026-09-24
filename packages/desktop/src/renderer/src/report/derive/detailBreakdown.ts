@@ -1,5 +1,7 @@
 import { decodeHpTail } from "@gladlog/parser";
 
+import { petsOf } from "./flowSeries";
+import { shortUnitName } from "./teamSide";
 import { eventInRange, type TimeRange } from "./timeRange";
 import type { ReportSource } from "./types";
 
@@ -115,7 +117,7 @@ export function deriveDetailBreakdown(
   const units = Object.values(source.units) as unknown as UnitLike[];
   const self = units.find((u) => u.id === unitId);
   if (!self) return { rows: [], critAvailable: false };
-  const pets = units.filter((u) => u.ownerId === unitId);
+  const pets = petsOf(units, unitId);
   const inR = eventInRange(source, range);
   const map = new Map<string, Acc>();
 
@@ -127,12 +129,12 @@ export function deriveDetailBreakdown(
       (self.damageIn ?? []).filter(inR).map((e) => e.srcName ?? "?"),
     );
     for (const f of fulls) {
-      const short = f.split("-")[0]!;
+      const short = shortUnitName(f);
       shortCount.set(short, (shortCount.get(short) ?? 0) + 1);
     }
     for (const e of (self.damageIn ?? []).filter(inR)) {
       const full = e.srcName ?? "?";
-      const short = full.split("-")[0]!;
+      const short = shortUnitName(full);
       const src = (shortCount.get(short) ?? 0) > 1 ? full : short;
       const key = `${full}:${e.spellId}`;
       addHp(

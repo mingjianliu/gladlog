@@ -1,3 +1,4 @@
+import { fmtTime } from "@gladlog/analysis";
 import { useEffect, useRef } from "react";
 import type { VideoMoment } from "../derive/videoMoments";
 
@@ -119,8 +120,6 @@ const KIND_ICON: Record<string, string> = {
   ai: "🤖",
 };
 
-export const fmtClock = (tS: number) =>
-  `${Math.floor(tS / 60)}:${String(Math.floor(tS % 60)).padStart(2, "0")}`;
 
 export function VideoFeed({
   items,
@@ -159,7 +158,7 @@ export function VideoFeed({
           key={it.key}
           className={`rpt-video-feed-item${it.out ? " out" : ""}`}
         >
-          <span className="rpt-video-feed-t">{fmtClock(it.moment.tS)}</span>
+          <span className="rpt-video-feed-t">{fmtTime(it.moment.tS)}</span>
           <span className="rpt-video-feed-icon">
             {KIND_ICON[it.moment.kind] ?? "•"}
           </span>

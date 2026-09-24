@@ -1,10 +1,12 @@
 import type { Finding } from "@gladlog/analysis";
+import { fmtTime } from "@gladlog/analysis";
 
 import { deriveKickDash } from "./kickDash";
 import { meterValue } from "./meterRows";
 import { deriveMistakes } from "./mistakes";
 import { deriveStatsTable } from "./statsTable";
 import { deriveSummary } from "./summary";
+import { shortUnitName } from "./teamSide";
 import { rangeDurationS, type TimeRange } from "./timeRange";
 import type { ReportSource } from "./types";
 
@@ -26,8 +28,6 @@ import type { ReportSource } from "./types";
  * predicate — see docs/predicate-index.md.
  */
 
-const fmtT = (s: number): string =>
-  `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
 export function buildReportMarkdown(
   source: ReportSource,
@@ -38,7 +38,7 @@ export function buildReportMarkdown(
   lines.push(
     `# gladlog 战报 — ${source.bracket} · ${source.result}` +
       (range
-        ? ` · 窗口 ${fmtT(range.fromS)}–${fmtT(range.toS)}(${durS}s)`
+        ? ` · 窗口 ${fmtTime(range.fromS)}–${fmtTime(range.toS)}(${durS}s)`
         : ""),
   );
 
@@ -54,7 +54,7 @@ export function buildReportMarkdown(
     // 手抄 healingDone 会让戒律牧/铭文法这类护盾职业在导出里凭空少掉整块盾
     // (实测 b6057f93 第 3 轮:戒律牧 6,846,504 → 3,908,949,名次由第 1 掉到第 2)。
     lines.push(
-      `| ${r.name.split("-")[0]} | ${r.damageDone} | ${meterValue(r, "healing")} | ${r.damageTaken} | ${r.deaths} |`,
+      `| ${shortUnitName(r.name)} | ${r.damageDone} | ${meterValue(r, "healing")} | ${r.damageTaken} | ${r.deaths} |`,
     );
   }
 
@@ -69,7 +69,7 @@ export function buildReportMarkdown(
     );
     for (const r of stats) {
       lines.push(
-        `| ${r.name.split("-")[0]} | ${r.kicksCast} | ${r.kicksTaken} | ${r.ccTakenS} | ${r.cleanses} | ${r.purges} |`,
+        `| ${shortUnitName(r.name)} | ${r.kicksCast} | ${r.kicksTaken} | ${r.ccTakenS} | ${r.cleanses} | ${r.purges} |`,
       );
     }
   }
@@ -85,7 +85,7 @@ export function buildReportMarkdown(
     );
     for (const r of kicks) {
       lines.push(
-        `| ${r.name.split("-")[0]} | ${r.total} | ${r.landed} | ${r.juked} | ${r.missed} |`,
+        `| ${shortUnitName(r.name)} | ${r.total} | ${r.landed} | ${r.juked} | ${r.missed} |`,
       );
     }
   }
@@ -95,7 +95,7 @@ export function buildReportMarkdown(
     lines.push("", `## 失误清单(${mistakes.length} 条,确定性规则直出)`, "");
     for (const mk of mistakes) {
       lines.push(
-        `- ${mk.tS > 0 ? fmtT(mk.tS) : "全场"} [${mk.severity}] ${mk.unitName.split("-")[0]} · ${mk.label}${mk.detail ? ` — ${mk.detail}` : ""}`,
+        `- ${mk.tS > 0 ? fmtTime(mk.tS) : "全场"} [${mk.severity}] ${shortUnitName(mk.unitName)} · ${mk.label}${mk.detail ? ` — ${mk.detail}` : ""}`,
       );
     }
   }

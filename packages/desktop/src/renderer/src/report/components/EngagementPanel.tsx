@@ -1,3 +1,4 @@
+import { fmtTime } from "@gladlog/analysis";
 import { useState } from "react";
 
 import type { AuraUptime } from "../derive/auraUptime";
@@ -13,8 +14,6 @@ import { KickDashboard } from "./KickDashboard";
 
 type Tab = "kick" | "dispel" | "aura" | "cc" | "break";
 
-const fmtBreakT = (s: number): string =>
-  `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
 /** CC-break row list (shared by self-inflicted and enemy-mistake sections; same
  * row shape as DispelDashboard.InstanceList). */
@@ -29,7 +28,7 @@ function CcBreakList({
     <div className="rpt-stats-detail-group">
       {items.map((i, k) => (
         <span key={k} className="rpt-stats-detail-item">
-          <span className="rpt-stats-detail-t">{fmtBreakT(i.tS)}</span>{" "}
+          <span className="rpt-stats-detail-t">{fmtTime(i.tS)}</span>{" "}
           {i.label}
           {onSeek && (
             <button

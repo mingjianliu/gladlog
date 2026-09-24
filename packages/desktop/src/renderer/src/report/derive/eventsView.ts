@@ -1,6 +1,8 @@
+import { fmtTime } from "@gladlog/analysis";
 import { displaySpellName } from "./spellDisplay";
 import { tInRange, type TimeRange } from "./timeRange";
 import type { ReportSource } from "./types";
+import { shortUnitName } from "./teamSide";
 
 /**
  * Events view (phase four ②, a structured-filter take on WCL Events — no
@@ -196,8 +198,8 @@ export function deriveEventRows(source: ReportSource): EventRow[] {
       rows.push({
         tS: rel(e.timestamp),
         kind,
-        srcName: (e.srcName ?? "").split("-")[0]!,
-        destName: (extra?.destOverride ?? e.destName ?? "").split("-")[0]!,
+        srcName: shortUnitName(e.srcName),
+        destName: shortUnitName(extra?.destOverride ?? e.destName),
         spellId: String(e.spellId ?? ""),
         spellName: spellNameOf(e),
         detail,
@@ -236,7 +238,7 @@ export function deriveEventRows(source: ReportSource): EventRow[] {
       for (const e of u.deaths ?? []) {
         if (!e.unconscious)
           push(e, "death", "死亡", {
-            destOverride: (u.name ?? "").split("-")[0],
+            destOverride: shortUnitName(u.name),
             destId: u.id,
           });
       }
@@ -498,12 +500,10 @@ export function sortDisplayRows(
 }
 
 /** `M:SS` for one endpoint of the time-window input. */
-const fmtRangeT = (s: number): string =>
-  `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
 /** What the 时间 column's input shows for the current window. */
 export function formatRangeInput(r: TimeRange | null): string {
-  return r ? `${fmtRangeT(r.fromS)}-${fmtRangeT(r.toS)}` : "";
+  return r ? `${fmtTime(r.fromS)}-${fmtTime(r.toS)}` : "";
 }
 
 /**

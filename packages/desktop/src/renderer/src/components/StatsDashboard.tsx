@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { zoneMetadata } from "@gladlog/analysis";
+import { fmtTime, zoneMetadata } from "@gladlog/analysis";
 import { interpolate } from "@gladlog/analysis/src/compare/claimChecker";
 import { distillFacts } from "@gladlog/analysis/src/learning/distillRules";
 import { habitBadgeText } from "@gladlog/analysis/src/learning/matchRules";
@@ -30,6 +30,7 @@ import {
   RATE_MIN_N_TOTAL,
   rateDisplay,
 } from "./dashboard";
+import { shortUnitName } from "../report/derive/teamSide";
 
 const PERIOD_LABEL: Record<DashPeriod, string> = {
   today: "今天",
@@ -494,7 +495,7 @@ export function StatsDashboard({
                 onClick={() => setCharacter(c.name)}
                 title={`${c.games} 场`}
               >
-                {c.name.split("-")[0]}
+                {shortUnitName(c.name)}
                 <span className="dash-chars-n">{c.games}</span>
               </button>
             ))}
@@ -598,9 +599,7 @@ export function StatsDashboard({
           <div className="dash-kpi-card">
             <span className="dash-kpi-v">
               {dash.medianDurationS != null
-                ? `${Math.floor(dash.medianDurationS / 60)}:${String(
-                    Math.floor(dash.medianDurationS % 60),
-                  ).padStart(2, "0")}`
+                ? fmtTime(dash.medianDurationS)
                 : "—"}
             </span>
             <span className="dash-kpi-k">时长中位</span>
@@ -1029,7 +1028,7 @@ export function StatsDashboard({
               <span className="rpt-card-label">
                 评分曲线(
                 {character
-                  ? `${character.split("-")[0]} 本人`
+                  ? `${shortUnitName(character)} 本人`
                   : "本人评分,旧数据回退队均"}
                 )
               </span>

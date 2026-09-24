@@ -1,3 +1,4 @@
+import { fmtTime } from "@gladlog/analysis";
 import type { IMatchArcPhase } from "@gladlog/analysis/src/context/matchNarrative";
 
 const PHASE_ZH: Record<IMatchArcPhase["phase"], string> = {
@@ -6,10 +7,6 @@ const PHASE_ZH: Record<IMatchArcPhase["phase"], string> = {
   late: "后期",
 };
 
-const mmss = (sec: number): string =>
-  `${Math.floor(sec / 60)}:${Math.floor(sec % 60)
-    .toString()
-    .padStart(2, "0")}`;
 
 /**
  * Match-tempo header line (#10 T4). Consumes the structured phases from T1's
@@ -44,7 +41,7 @@ export function MatchArcLine({
       {phases.map((p, i) => (
         <span className="rpt-arc-phase" key={`${p.phase}-${p.fromS}`}>
           <span className="rpt-arc-phase-label">
-            {PHASE_ZH[p.phase]} {mmss(p.fromS)}–{mmss(p.toS)}
+            {PHASE_ZH[p.phase]} {fmtTime(p.fromS)}–{fmtTime(p.toS)}
           </span>
           {/* When onSeek is absent, don't render a dead button that looks
               clickable but does nothing -- if we can't seek, don't pretend. */}
@@ -52,11 +49,11 @@ export function MatchArcLine({
             <button
               type="button"
               className="rpt-arc-turning"
-              aria-label={`跳转到转折点 ${mmss(p.turningPoint.tS)}`}
+              aria-label={`跳转到转折点 ${fmtTime(p.turningPoint.tS)}`}
               title={p.turningPoint.label}
               onClick={() => onSeek(p.turningPoint!.tS, [])}
             >
-              ⟶ {mmss(p.turningPoint.tS)}
+              ⟶ {fmtTime(p.turningPoint.tS)}
             </button>
           )}
           {i < phases.length - 1 && <span className="rpt-arc-sep"> ｜ </span>}

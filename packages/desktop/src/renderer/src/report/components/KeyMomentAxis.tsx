@@ -1,4 +1,5 @@
 import type { CandidateEvent, Finding } from "@gladlog/analysis";
+import { fmtTime } from "@gladlog/analysis";
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
 
@@ -18,10 +19,6 @@ const CLUSTER_GAP_S = 5;
  * "+N minor moments" row by default. */
 const VALVE_MAX_ENTRIES = 40;
 
-const mmss = (sec: number): string =>
-  `${Math.floor(sec / 60)}:${Math.floor(sec % 60)
-    .toString()
-    .padStart(2, "0")}`;
 
 /** Unified text glyphs (no emoji: 🛡♱ render inconsistently across
  * platforms). */
@@ -205,7 +202,7 @@ export function KeyMomentAxis({
       key={key}
       className={`rpt-axis-node-minor k-${m.kind} s-${m.side}`}
       data-testid="axis-node-minor"
-      title={onSeek ? `跳到 ${mmss(m.jumpT)} 的回放` : undefined}
+      title={onSeek ? `跳到 ${fmtTime(m.jumpT)} 的回放` : undefined}
       onClick={onSeek ? () => onSeek(m.jumpT, m.unitNames) : undefined}
     >
       <span className="rpt-axis-icon">{KIND_ICON[m.kind]}</span>
@@ -245,14 +242,14 @@ export function KeyMomentAxis({
           key={e.key}
           className={`rpt-axis-node k-${e.m.kind} s-${e.m.side}`}
           data-testid="axis-node"
-          title={onSeek ? `跳到 ${mmss(e.m.jumpT)} 的回放` : undefined}
+          title={onSeek ? `跳到 ${fmtTime(e.m.jumpT)} 的回放` : undefined}
           onClick={onSeek ? () => onSeek(e.m.jumpT, e.m.unitNames) : undefined}
         >
           <span className="rpt-axis-icon">{KIND_ICON[e.m.kind]}</span>
           <span className="rpt-axis-title">{e.m.title}</span>
           {e.m.kind === "burst-band" && e.m.toT != null && (
             <span className="rpt-axis-detail">
-              {mmss(e.at)}–{mmss(e.m.toT)}
+              {fmtTime(e.at)}–{fmtTime(e.m.toT)}
             </span>
           )}
           {e.m.detail && <span className="rpt-axis-detail">{e.m.detail}</span>}
@@ -301,7 +298,7 @@ export function KeyMomentAxis({
                   title={c.label}
                   onClick={onSeek ? () => onSeek(c.t, c.unitNames) : undefined}
                 >
-                  <ChipIcon spellId={c.spellId} />⏱ {mmss(c.t)} {c.label}
+                  <ChipIcon spellId={c.spellId} />⏱ {fmtTime(c.t)} {c.label}
                 </button>
               ))}
             </span>
@@ -323,11 +320,11 @@ export function KeyMomentAxis({
                 className="rpt-finding-evt"
                 title={
                   (c.spell ? `${c.spell} · ` : "") +
-                  (onSeek ? `跳到 ${mmss(c.t)} 的回放` : mmss(c.t))
+                  (onSeek ? `跳到 ${fmtTime(c.t)} 的回放` : fmtTime(c.t))
                 }
                 onClick={onSeek ? () => onSeek(c.t, c.unitNames) : undefined}
               >
-                ⏱ {mmss(c.t)} {candidateShortLabel(c)}
+                ⏱ {fmtTime(c.t)} {candidateShortLabel(c)}
               </button>
             ))}
           {onSeek && (
@@ -386,7 +383,7 @@ export function KeyMomentAxis({
                 ⏱ {Math.round(gap)}s 无关键事件 — 折叠
               </div>
             )}
-            <span className="rpt-axis-t">{mmss(e.at)}</span>
+            <span className="rpt-axis-t">{fmtTime(e.at)}</span>
             <div
               className={
                 i === rows.length - 1 ? "rpt-axis-entry last" : "rpt-axis-entry"

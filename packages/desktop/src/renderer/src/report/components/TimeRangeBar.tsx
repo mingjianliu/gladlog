@@ -1,8 +1,9 @@
+import { fmtTime } from "@gladlog/analysis";
+
+import { shortUnitName } from "../derive/teamSide";
 import type { TimeRange } from "../derive/timeRange";
 import type { VulnBand } from "../derive/vulnWindows";
 
-const fmtT = (s: number): string =>
-  `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
 /**
  * Time-window toolbar (phase 4 ①; a combination of WCL's phase dropdown and
@@ -48,17 +49,17 @@ export function TimeRangeBar({
         <option value="">全场</option>
         {bands.map((b, i) => (
           <option key={i} value={String(i)}>
-            {fmtT(b.fromS)}–{fmtT(b.toS)}{" "}
+            {fmtTime(b.fromS)}–{fmtTime(b.toS)}{" "}
             {b.kind === "burst"
-              ? `击杀尝试 → ${b.targetName.split("-")[0]}`
-              : `${b.targetName.split("-")[0]} 脆弱`}
+              ? `击杀尝试 → ${shortUnitName(b.targetName)}`
+              : `${shortUnitName(b.targetName)} 脆弱`}
           </option>
         ))}
       </select>
       {range && (
         <>
           <span className="rpt-trb-chip" data-testid="time-range-chip">
-            {fmtT(range.fromS)}–{fmtT(range.toS)}(
+            {fmtTime(range.fromS)}–{fmtTime(range.toS)}(
             {Math.round(range.toS - range.fromS)}s)
           </span>
           <button className="rpt-trb-clear" onClick={() => onChange(null)}>

@@ -1,3 +1,4 @@
+import { fmtTime } from "@gladlog/analysis";
 import {
   memo,
   useCallback,
@@ -17,6 +18,7 @@ import {
 } from "../derive/casts";
 import { clusterGcdCasts } from "../derive/gcdCluster";
 import type { ReplayTrack } from "../derive/replay";
+import { shortUnitName } from "../derive/teamSide";
 import type { ReportSource } from "../derive/types";
 import type { VulnBand } from "../derive/vulnWindows";
 import { SpellIcon } from "./SpellIcon";
@@ -47,7 +49,7 @@ const chipTarget = (
   casterName: string,
 ): string | null => {
   if (!m.targetName || m.targetName === casterName) return null;
-  return m.targetName.split("-")[0] ?? null;
+  return shortUnitName(m.targetName);
 };
 /** Fallback lane height, in px. NOT the rendered height any more — that is
  * `max(620px, 75vh)` in styles.css's .rpt-gcd-scroll, so a 4K screen shows
@@ -74,11 +76,6 @@ const sideRing = (side: string): string =>
     : side === "enemy"
       ? "var(--loss)"
       : "var(--mute)";
-
-const mmss = (sec: number): string =>
-  `${Math.floor(sec / 60)}:${Math.floor(sec % 60)
-    .toString()
-    .padStart(2, "0")}`;
 
 function Dot({ track }: { track: ReplayTrack }) {
   return (
@@ -144,7 +141,7 @@ const LaneBody = memo(function LaneBody({
 }) {
   const fmtT = (ms: number) => {
     const sec = Math.max(0, (ms - startTime) / 1000);
-    return `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
+    return fmtTime(sec);
   };
   return (
     <>
@@ -616,9 +613,9 @@ export function GcdSwimlane({
                 onClick={() => onSeekT(fromMs)}
                 title="点击定位(地图同步)"
               >
-                {mmss(Math.max(0, (fromMs - startTime) / 1000))}{" "}
+                {fmtTime(Math.max(0, (fromMs - startTime) / 1000))}{" "}
                 {b.kind === "burst" ? "击杀尝试" : "脆弱"} →{" "}
-                {b.targetName.split("-")[0]}
+                {shortUnitName(b.targetName)}
               </button>
             );
           })}
@@ -644,7 +641,7 @@ export function GcdSwimlane({
                 className="rpt-gcd-tick"
                 style={{ top: HEAD_H + s * PX_PER_SEC }}
               >
-                {mmss(s)}
+                {fmtTime(s)}
               </span>
             ))}
           </div>
@@ -678,7 +675,7 @@ export function GcdSwimlane({
           >
             {/* Time badge at the right end (1f) */}
             <span className="rpt-gcd-cursor-badge">
-              {mmss(Math.max(0, (t - startTime) / 1000))}
+              {fmtTime(Math.max(0, (t - startTime) / 1000))}
             </span>
           </div>
         </div>

@@ -1,4 +1,4 @@
-import { DECISIVE_MARGIN_PCT } from "@gladlog/analysis";
+import { DECISIVE_MARGIN_PCT, fmtTime } from "@gladlog/analysis";
 import { Fragment, useEffect, useState } from "react";
 
 import {
@@ -9,8 +9,6 @@ import {
 import { ChipIcon } from "./SpellInline";
 import { UnitName } from "./UnitName";
 
-const fmtT = (s: number): string =>
-  `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
 const fmtK = (n: number): string => `${(n / 1000).toFixed(1)}k`;
 
@@ -144,7 +142,7 @@ export function DeathRecapCard({
         key={key}
         className={`rpt-recap-row rpt-recap-${e.kind}${extraClass ? ` ${extraClass}` : ""}`}
       >
-        <td className="rpt-recap-t">{fmtT(e.tS)}</td>
+        <td className="rpt-recap-t">{fmtTime(e.tS)}</td>
         <td className="rpt-recap-kind">{KIND_LABEL[e.kind]}</td>
         <td className="rpt-recap-spell">
           <ChipIcon spellId={e.spellId} />
@@ -223,7 +221,7 @@ export function DeathRecapCard({
                     key={i}
                     className={`rpt-recap-row rpt-recap-${row.kind} rpt-recap-subtotal`}
                   >
-                    <td className="rpt-recap-t">{fmtT(row.fromS)}</td>
+                    <td className="rpt-recap-t">{fmtTime(row.fromS)}</td>
                     <td className="rpt-recap-kind">{KIND_LABEL[row.kind]}</td>
                     <td className="rpt-recap-spell">
                       <ChipIcon spellId={row.spellId} />
@@ -292,7 +290,7 @@ export function DeathRecapCard({
       <div className="rpt-recap-head">
         <span className="rpt-recap-title">
           {enemy ? "终结回顾" : "死亡回顾"} — {recap.unitName} @{" "}
-          {fmtT(recap.deathS)}
+          {fmtTime(recap.deathS)}
         </span>
         <span className="rpt-recap-actions">
           <button

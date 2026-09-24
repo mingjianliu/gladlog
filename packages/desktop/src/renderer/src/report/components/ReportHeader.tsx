@@ -1,5 +1,6 @@
-import { zoneMetadata } from "@gladlog/analysis";
+import { fmtTime, zoneMetadata } from "@gladlog/analysis";
 
+import { shortUnitName } from "../derive/teamSide";
 import type { ReportSource } from "../derive/types";
 
 function fmtDuration(ms: number): string {
@@ -7,8 +8,6 @@ function fmtDuration(ms: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
-const mmss = (s: number): string =>
-  `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
 const RESULT_LABEL: Record<string, string> = {
   win: "胜利",
@@ -88,7 +87,7 @@ export function ReportHeader({
         >
           <span className="rpt-kpi-k">终结</span>
           <span className="rpt-kpi-v">
-            {finisher.name.split("-")[0]} · {mmss(finisher.tS)}
+            {shortUnitName(finisher.name)} · {fmtTime(finisher.tS)}
           </span>
         </button>
       )}
@@ -98,11 +97,11 @@ export function ReportHeader({
           className="rpt-hero-fact"
           data-testid="hero-turning"
           title={turningPoint.label}
-          aria-label={`跳转到转折点 ${mmss(turningPoint.tS)}`}
+          aria-label={`跳转到转折点 ${fmtTime(turningPoint.tS)}`}
           onClick={() => onSeek(turningPoint.tS, [])}
         >
           <span className="rpt-kpi-k">转折</span>
-          <span className="rpt-kpi-v">{mmss(turningPoint.tS)}</span>
+          <span className="rpt-kpi-v">{fmtTime(turningPoint.tS)}</span>
         </button>
       )}
     </div>

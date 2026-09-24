@@ -1,5 +1,6 @@
 import { deriveKeyMoments, type KeyMomentKind } from "./keyMoments";
 import { deriveMistakes } from "./mistakes";
+import { shortUnitName } from "./teamSide";
 import type { ReportSource } from "./types";
 
 /** The single moment source for the recording tab (shared by the marker bar and
@@ -48,7 +49,7 @@ export function deriveVideoMoments(
         tS: mk.tS,
         kind: "mistake",
         weight: "major",
-        label: `${mk.label} · ${mk.unitName.split("-")[0] ?? mk.unitName}`,
+        label: `${mk.label} · ${shortUnitName(mk.unitName)}`,
         unitNames: mk.seekNames,
       });
     }

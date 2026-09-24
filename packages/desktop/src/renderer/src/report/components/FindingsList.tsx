@@ -1,4 +1,5 @@
 import type { CandidateEvent, Finding } from "@gladlog/analysis";
+import { fmtTime } from "@gladlog/analysis";
 import type { ReactNode } from "react";
 import { useState } from "react";
 
@@ -11,10 +12,6 @@ import {
 import { ChipIcon } from "./SpellInline";
 export { findingKey };
 
-const mmss = (sec: number): string =>
-  `${Math.floor(sec / 60)}:${Math.floor(sec % 60)
-    .toString()
-    .padStart(2, "0")}`;
 
 export function FindingsList({
   findings,
@@ -117,7 +114,7 @@ export function FindingsList({
                         onJump ? () => onJumpT?.(c.t, c.unitNames) : undefined
                       }
                     >
-                      <ChipIcon spellId={c.spellId} />⏱ {mmss(c.t)} {c.label}
+                      <ChipIcon spellId={c.spellId} />⏱ {fmtTime(c.t)} {c.label}
                     </button>
                   ))}
                 </span>
@@ -149,11 +146,11 @@ export function FindingsList({
                         // When there is a spell, put its name in the tooltip:
                         // the icon alone carries no meaning
                         (c.spell ? `${c.spell} · ` : "") +
-                        (onJump ? `跳到 ${mmss(c.t)} 的回放` : mmss(c.t))
+                        (onJump ? `跳到 ${fmtTime(c.t)} 的回放` : fmtTime(c.t))
                       }
                       onClick={onJump ? () => onJump([c.id]) : undefined}
                     >
-                      <ChipIcon spellId={c.spellId} />⏱ {mmss(c.t)}{" "}
+                      <ChipIcon spellId={c.spellId} />⏱ {fmtTime(c.t)}{" "}
                       {candidateShortLabel(c)}
                     </button>
                   ))}

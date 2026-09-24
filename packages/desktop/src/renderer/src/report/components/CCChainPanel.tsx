@@ -1,13 +1,11 @@
 import { useState } from "react";
 
-import { DR_LEVEL_LABEL } from "@gladlog/analysis";
+import { DR_LEVEL_LABEL, fmtTime } from "@gladlog/analysis";
 
 import { classColor } from "../data/gameConstants";
 import type { CCChainRow } from "../derive/ccChainDash";
 import { UnitName } from "./UnitName";
 
-const fmtT = (s: number): string =>
-  `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
 /**
  * Enemy CC-chain panel (#10 T5): per enemy target, an aggregate of the CC
@@ -106,7 +104,7 @@ export function CCChainPanel({
                             className="rpt-stats-detail-item"
                           >
                             <span className="rpt-stats-detail-t">
-                              {fmtT(a.atSeconds)}
+                              {fmtTime(a.atSeconds)}
                             </span>{" "}
                             {a.spellName} · {a.casterName} ·{" "}
                             {isWasted ? (

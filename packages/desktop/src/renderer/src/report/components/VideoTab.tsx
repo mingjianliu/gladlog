@@ -1,4 +1,4 @@
-import type { Finding } from "@gladlog/analysis";
+import { type Finding, fmtTime } from "@gladlog/analysis";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { bridge } from "../../bridge";
 import { buildAnalysisInput } from "../derive/analysisInput";
@@ -19,7 +19,6 @@ import {
 } from "../../../../shared/videoTime";
 import {
   advanceFeed,
-  fmtClock,
   FEED_CAPACITY_FALLBACK,
   FEED_OUT_MS,
   initialFeed,
@@ -450,8 +449,8 @@ export function VideoTab({
                   {playing ? "⏸" : "▶"}
                 </button>
                 <span className="rpt-video-ctrl-time" aria-hidden="true">
-                  {fmtClock(Math.max(0, toBattleSeconds(clampedCurS, offsetS)))}{" "}
-                  / {fmtClock(Math.max(0, toBattleSeconds(endS, offsetS)))}
+                  {fmtTime(Math.max(0, toBattleSeconds(clampedCurS, offsetS)))}{" "}
+                  / {fmtTime(Math.max(0, toBattleSeconds(endS, offsetS)))}
                 </span>
                 {/* The range input and the mark strip are wrapped in one
                     column (spec 3-1, decided by the user): the gold bands and

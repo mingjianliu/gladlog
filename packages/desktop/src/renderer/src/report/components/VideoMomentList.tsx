@@ -1,7 +1,7 @@
+import { fmtTime } from "@gladlog/analysis";
 import { useEffect, useRef } from "react";
 
 import type { VideoMoment } from "../derive/videoMoments";
-import { fmtClock } from "./VideoFeed";
 import { MARK_STYLE } from "./VideoMomentStrip";
 
 /**
@@ -66,7 +66,7 @@ export function VideoMomentList({
             onClick={() => onSeek?.(m.tS)}
             title={unreachable ? "该时刻在录像开始之前" : "定位到该时刻"}
           >
-            <span className="rpt-video-feed-t">{fmtClock(m.tS)}</span>
+            <span className="rpt-video-feed-t">{fmtTime(m.tS)}</span>
             <span className={`rpt-video-moment-icon ${style.cls}`}>
               {style.glyph}
             </span>

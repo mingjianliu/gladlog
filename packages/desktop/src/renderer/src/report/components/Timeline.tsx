@@ -1,3 +1,4 @@
+import { fmtTime } from "@gladlog/analysis";
 import { scaleLinear } from "d3-scale";
 import { useMemo, useState } from "react";
 
@@ -9,7 +10,7 @@ import {
   type FlowSeriesData,
 } from "../derive/flowSeries";
 import { abbrevAmount } from "../derive/meterRows";
-import type { TeamSide } from "../derive/teamSide";
+import { shortUnitName, type TeamSide } from "../derive/teamSide";
 import type { ExposureMark, PressureBand } from "../derive/pressureLanes";
 import { TeamDot } from "./TeamDot";
 import {
@@ -465,7 +466,7 @@ export function Timeline({
             onClick={() => onSelectUnit?.(u.unitId)}
             d={d}
           >
-            <title>{`${u.name.split("-")[0]} — 全场${CURVE_METRIC_LABEL[activeMetric]} ${abbrevAmount(u.total)}`}</title>
+            <title>{`${shortUnitName(u.name)} — 全场${CURVE_METRIC_LABEL[activeMetric]} ${abbrevAmount(u.total)}`}</title>
           </path>
         ))}
         {isFlow && flowMax <= 0 && (
@@ -512,8 +513,6 @@ export function Timeline({
           const x1 = x(data.start + s.fromS * 1000);
           const x2 = x(data.start + s.toS * 1000);
           const dmgM = (s.totalDamage / 1_000_000).toFixed(2);
-          const mm = (v: number) =>
-            `${Math.floor(v / 60)}:${String(Math.floor(v % 60)).padStart(2, "0")}`;
           return (
             <rect
               key={`ps${i}`}
@@ -528,7 +527,7 @@ export function Timeline({
               }
               style={{ cursor: onRangeSelect ? "pointer" : undefined }}
             >
-              <title>{`${mm(s.fromS)}–${mm(s.toS)} ${s.targetName.split("-")[0]} 承压 ${dmgM}M(${s.dpsK}k DPS)${onRangeSelect ? "(点击设为时间窗)" : ""}`}</title>
+              <title>{`${fmtTime(s.fromS)}–${fmtTime(s.toS)} ${shortUnitName(s.targetName)} 承压 ${dmgM}M(${s.dpsK}k DPS)${onRangeSelect ? "(点击设为时间窗)" : ""}`}</title>
             </rect>
           );
         })}
@@ -646,12 +645,12 @@ export function Timeline({
                   className="rpt-tl-death-label"
                   textAnchor="end"
                 >
-                  {d.name.split("-")[0]} {relSec(d.t)}s
+                  {shortUnitName(d.name)} {relSec(d.t)}s
                 </text>
               </g>
             ) : (
               <text y={-8} className="rpt-tl-death-label" textAnchor="middle">
-                {d.name.split("-")[0]} {relSec(d.t)}s
+                {shortUnitName(d.name)} {relSec(d.t)}s
               </text>
             )}
             <title>{`${d.name} 死亡 @ ${relSec(d.t)}s${onDeathClick ? " — 点击看死亡回顾" : ""}`}</title>
@@ -809,7 +808,7 @@ export function Timeline({
                   : { background: classColor(s.classId) }
               }
             />
-            {s.name.split("-")[0]}
+            {shortUnitName(s.name)}
           </button>
         ))}
       </div>

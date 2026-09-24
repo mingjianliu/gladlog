@@ -1,11 +1,10 @@
+import { fmtTime } from "@gladlog/analysis";
 import { useState } from "react";
 
 import { classColor } from "../data/gameConstants";
 import type { DispelDash, DispelInstance } from "../derive/dispelDash";
 import { UnitName } from "./UnitName";
 
-const fmtT = (s: number): string =>
-  `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
 function InstanceList({
   items,
@@ -18,7 +17,7 @@ function InstanceList({
     <div className="rpt-stats-detail-group">
       {items.map((i, k) => (
         <span key={k} className="rpt-stats-detail-item">
-          <span className="rpt-stats-detail-t">{fmtT(i.tS)}</span> {i.label}
+          <span className="rpt-stats-detail-t">{fmtTime(i.tS)}</span> {i.label}
           {onSeek && (
             <button
               className="rpt-stats-detail-jump"

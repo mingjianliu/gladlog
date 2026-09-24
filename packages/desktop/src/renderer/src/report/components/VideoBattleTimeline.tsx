@@ -1,5 +1,6 @@
 import { useRef } from "react";
 
+import { shortUnitName } from "../derive/teamSide";
 import type { TimelineData } from "../derive/timeline";
 import type { VulnBand } from "../derive/vulnWindows";
 
@@ -126,7 +127,7 @@ export function VideoBattleTimeline({
           textAnchor="middle"
           className="rpt-video-bt-death"
         >
-          ✕<title>{d.name.split("-")[0]}</title>
+          ✕<title>{shortUnitName(d.name)}</title>
         </text>
       ))}
       {/* Playhead */}

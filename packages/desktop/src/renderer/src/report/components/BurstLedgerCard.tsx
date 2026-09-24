@@ -1,14 +1,13 @@
+import { fmtTime } from "@gladlog/analysis";
 import { useContext, useMemo, useState } from "react";
 
 import type { IKillWindowTargetEval } from "@gladlog/analysis";
 
 import { classColor } from "../data/gameConstants";
 import type { LedgerPlayer } from "../derive/burstLedger";
-import { type TeamSide } from "../derive/teamSide";
+import { shortUnitName, type TeamSide } from "../derive/teamSide";
 import { TeamSideContext, UnitName } from "./UnitName";
 
-const fmtT = (s: number): string =>
-  `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 const fmtDmg = (n: number): string =>
   n >= 1_000_000
     ? `${(n / 1_000_000).toFixed(2)}M`
@@ -120,7 +119,7 @@ export function BurstLedgerCard({
                 className="rpt-meter-dot"
                 style={{
                   background: classColor(pl.classId),
-                  borderColor: teamRing(sides.get(pl.name.split("-")[0] ?? "")),
+                  borderColor: teamRing(sides.get(shortUnitName(pl.name))),
                 }}
               />
               {pl.name}
@@ -140,7 +139,7 @@ export function BurstLedgerCard({
             return (
               <div key={k} className="rpt-ledger-row">
                 <span className="rpt-stats-detail-t">
-                  {fmtT(b.fromSeconds)}–{fmtT(b.toSeconds)}
+                  {fmtTime(b.fromSeconds)}–{fmtTime(b.toSeconds)}
                 </span>
                 <span className="rpt-ledger-spells">
                   {b.spells.map((s) => s.spellName).join(" + ")}
@@ -196,7 +195,7 @@ export function BurstLedgerCard({
             return (
               <div key={k} className="rpt-ledger-row">
                 <span className="rpt-stats-detail-t">
-                  {fmtT(w.windowFromSeconds)}–{fmtT(w.windowToSeconds)}
+                  {fmtTime(w.windowFromSeconds)}–{fmtTime(w.windowToSeconds)}
                 </span>
                 <span>窗口目标 {w.windowTargetName}</span>
                 <Chip kind={w.onTargetPct >= 50 ? "good" : "bad"}>
@@ -236,7 +235,7 @@ export function BurstLedgerCard({
           <span className="rpt-stats-detail-title">打断审计</span>
           {p.kicks.map((kk, k) => (
             <div key={k} className="rpt-ledger-row">
-              <span className="rpt-stats-detail-t">{fmtT(kk.atSeconds)}</span>
+              <span className="rpt-stats-detail-t">{fmtTime(kk.atSeconds)}</span>
               <span>{kk.kickSpellName}</span>
               {kk.result === "landed" && (
                 <Chip kind="good">打断 {kk.interruptedSpellName}</Chip>
