@@ -44,6 +44,24 @@ export const LOS_SWEEP_SLACK_S = 2;
 export const LOS_SWEEP_GAP_MS = 3_000;
 
 /**
+ * Verification window for a `[CC ON TEAM] … | Nyd from caster` distance claim
+ * (GH #103 follow-up, codex astra ruling 2026-09-23). The producer
+ * (`ccTrinketAnalysis`) samples caster and target at the aura-application
+ * instant and the line is stamped `fmtTime` of that same instant, so the
+ * instant lies in [t, t+1) of the rendered second — the gate needs no wider
+ * window. It used to borrow the LoS sweep's ±LOS_SWEEP_SLACK_S, and in 4 s of
+ * movement a +15 yd mutation still fell inside the distance span 38.7 % of
+ * the time. The LoS / STAYED families keep their ±2 s: their anchors are not
+ * a single sampled instant.
+ */
+export function ccDistanceClaimWindowS(renderedSecond: number): {
+  fromS: number;
+  toS: number;
+} {
+  return { fromS: renderedSecond, toS: renderedSecond + 1 };
+}
+
+/**
  * Grounding guard for single-point position interpolation (milliseconds). An
  * interpolated position across a larger interval is treated as fabricated — a
  * stale position would claim LoS exists while real samples show it broke long

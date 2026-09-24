@@ -9,7 +9,9 @@
  * extracts geometric claims and recomputes them against the raw coordinates.
  * --mutate adds a mutation-sensitivity test (distance +15yd / time +45s,
  * requiring 100% detection).
- * Any violation exits 1; a mutation detection rate <100% also exits 1.
+ * Any violation exits 1. The corpus-level mutation rate is diagnostic only
+ * (real movement widens the checked span); the 100 % detection gate lives in
+ * the stationary synthetic fixture, packages/eval/test/positioningScan.test.ts.
  */
 import fs from "fs-extra";
 import path from "path";
@@ -56,6 +58,8 @@ async function main() {
   let totalUnverifiable = 0;
   let totalMutated = 0;
   let totalDetected = 0;
+  const mutationByKind: Record<string, { mutated: number; detected: number }> =
+    {};
   const allViolations: string[] = [];
 
   const logPaths = (await fs.readFile(manifest, "utf-8"))
@@ -142,9 +146,14 @@ async function main() {
     }
 
     if (mutate) {
-      const { mutated, detected } = mutationDetectionRate(claims, ctx);
+      const { mutated, detected, byKind } = mutationDetectionRate(claims, ctx);
       totalMutated += mutated;
       totalDetected += detected;
+      for (const [k, v] of Object.entries(byKind)) {
+        const agg = (mutationByKind[k] ??= { mutated: 0, detected: 0 });
+        agg.mutated += v.mutated;
+        agg.detected += v.detected;
+      }
     }
   }
 
@@ -157,6 +166,10 @@ async function main() {
     console.log(
       `Mutation sensitivity: ${totalDetected}/${totalMutated} detected (${rate.toFixed(1)}%).`,
     );
+    for (const [k, v] of Object.entries(mutationByKind))
+      console.log(
+        `  ${k}: ${v.detected}/${v.mutated} (${((100 * v.detected) / Math.max(1, v.mutated)).toFixed(1)}%)`,
+      );
     // The corpus-level mutation rate is affected by real movement noise and is
     // diagnostic only; the hard gate on detection rate is carried by the
     // synthetic-fixture unit test (packages/eval/test/positioningScan.test.ts,

@@ -538,6 +538,11 @@ const INDEX: PredicateRow[] = [
   },
   {
     file: `${A}/utils/positionSampling.ts`,
+    symbol: "ccDistanceClaimWindowS",
+    mod: positionSampling,
+  },
+  {
+    file: `${A}/utils/positionSampling.ts`,
     symbol: "LOS_SWEEP_GAP_MS",
     mod: positionSampling,
   },

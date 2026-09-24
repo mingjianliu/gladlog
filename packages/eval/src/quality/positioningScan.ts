@@ -38,6 +38,7 @@ import type { ICombatUnit } from "@gladlog/parser-compat";
 import {
   arenaObstacles,
   CC_MAX_PLAUSIBLE_RANGE_YARDS,
+  ccDistanceClaimWindowS,
   distanceBetween,
   getUnitPositionAtTime,
   hasLineOfSight,
@@ -268,14 +269,32 @@ function windowDistanceSpan(
   atSeconds: number,
   ctx: CheckContext,
 ): { min: number; max: number } | null {
+  return distanceSpanBetween(
+    a,
+    b,
+    atSeconds - TIME_SLACK_SECONDS,
+    atSeconds + TIME_SLACK_SECONDS,
+    ctx,
+  );
+}
+
+/** The [min, max] distance over [fromS, toS] (match seconds) — the body of
+ * `windowDistanceSpan`, callable with a claim family's own window. */
+export function distanceSpanBetween(
+  a: ICombatUnit,
+  b: ICombatUnit,
+  fromS: number,
+  toS: number,
+  ctx: Pick<CheckContext, "matchStartMs">,
+): { min: number; max: number } | null {
   // The set of sampling instants comes from the single source
   // positionSampleInstants (anchors + both units' real advanced sample
   // instants inside the window + a sub-second grid). Checking only whole
   // seconds misses sub-second troughs; checking only sample instants misses
   // the crossing trough when the two units' samples do not coincide — this
   // function and minDistanceInWindow each used to carry their own copy.
-  const fromMs = ctx.matchStartMs + (atSeconds - TIME_SLACK_SECONDS) * 1000;
-  const toMs = ctx.matchStartMs + (atSeconds + TIME_SLACK_SECONDS) * 1000;
+  const fromMs = ctx.matchStartMs + fromS * 1000;
+  const toMs = ctx.matchStartMs + toS * 1000;
   const instants = positionSampleInstants([a, b], fromMs, toMs, [fromMs, toMs]);
   let min: number | null = null;
   let max: number | null = null;
@@ -365,7 +384,16 @@ export function checkGeoClaims(
           unverifiable++;
           continue;
         }
-        const span = windowDistanceSpan(caster, target, claim.atSeconds, ctx);
+        // The producer's own sampling contract: one instant inside the
+        // rendered second (ccDistanceClaimWindowS), not the LoS ±2 s.
+        const win = ccDistanceClaimWindowS(claim.atSeconds);
+        const span = distanceSpanBetween(
+          caster,
+          target,
+          win.fromS,
+          win.toS,
+          ctx,
+        );
         if (span === null) {
           unverifiable++;
           continue;
@@ -549,9 +577,15 @@ export function checkGeoClaims(
 export function mutationDetectionRate(
   claims: GeoClaim[],
   ctx: CheckContext,
-): { mutated: number; detected: number } {
+): {
+  mutated: number;
+  detected: number;
+  /** per claim kind — which families the diagnostic rate is losing */
+  byKind: Record<string, { mutated: number; detected: number }>;
+} {
   let mutated = 0;
   let detected = 0;
+  const byKind: Record<string, { mutated: number; detected: number }> = {};
   const baseline = checkGeoClaims(claims, ctx);
   const cleanClaims = claims.filter(
     (c) => !baseline.violations.some((v) => v.claim === c),
@@ -564,8 +598,13 @@ export function mutationDetectionRate(
     const r1 = checkGeoClaims([m1], ctx);
     if (r1.checked > 0) {
       mutated++;
-      if (r1.violations.length > 0) detected++;
+      const k = (byKind[c.kind] ??= { mutated: 0, detected: 0 });
+      k.mutated++;
+      if (r1.violations.length > 0) {
+        detected++;
+        k.detected++;
+      }
     }
   }
-  return { mutated, detected };
+  return { mutated, detected, byKind };
 }

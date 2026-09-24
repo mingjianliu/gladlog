@@ -171,3 +171,41 @@ describe("checkGeoClaims on static fixture", () => {
     expect(r.violations.some((v) => v.code === "G5_NO_GEOMETRY")).toBe(true);
   });
 });
+
+describe("CC_DISTANCE checks the rendered second only (ccDistanceClaimWindowS)", () => {
+  // The caster stands 30yd away until 29.5s, then 10yd away: the CC at 0:30
+  // was cast from 10yd. The old ±2s window spanned 10–30yd and let a claim of
+  // 25yd through; the producer's instant lies in [30, 31) only.
+  const moving: any = {
+    name: "Bad-Realm-US",
+    advancedActions: Array.from({ length: 121 }, (_, i) => i * 500).map(
+      (dt) => ({
+        timestamp: START + dt,
+        advancedActorCurrentHp: 100,
+        advancedActorMaxHp: 100,
+        advancedActorPositionX: dt < 29_500 ? 30 : 10,
+        advancedActorPositionY: 0,
+        advanced: true,
+        advancedActorPowers: [],
+      }),
+    ),
+  };
+  const movingCtx = { ...ctx, enemies: [moving] };
+  const line = (yd: string) =>
+    [
+      '  <unit id="1" name="Me-Realm-US" spec="Holy Paladin" role="log owner">',
+      '  <unit id="3" name="Bad-Realm-US" spec="Subtlety Rogue" role="enemy">',
+      `0:30  [CC ON TEAM]   1(HPaladin) ← Cheap Shot (by 3(SRogue)) | 4s [DR: Stun Full] | ${yd}yd from caster`,
+    ].join("\n");
+
+  it("the true distance at the rendered second passes", () => {
+    const r = checkGeoClaims(extractGeoClaims(line("10.0")).claims, movingCtx);
+    expect(r.checked).toBe(1);
+    expect(r.violations).toHaveLength(0);
+  });
+
+  it("a distance only true two seconds earlier is a violation", () => {
+    const r = checkGeoClaims(extractGeoClaims(line("25.0")).claims, movingCtx);
+    expect(r.violations.map((v) => v.code)).toEqual(["G1_DISTANCE_MISMATCH"]);
+  });
+});
