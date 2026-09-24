@@ -796,7 +796,7 @@ export function formatHealerCCReceivedForContext(
   if (events.length === 0) return "";
   const lines: string[] = ["HEALER CC RECEIVED"];
   for (const ev of events) {
-    const t = `${Math.floor(ev.atSeconds / 60)}:${String(Math.floor(ev.atSeconds % 60)).padStart(2, "0")}`;
+    const t = fmtTime(ev.atSeconds);
     if (ev.avoidanceToolsAvailable.length > 0) {
       const tools = ev.avoidanceToolsAvailable
         .map(

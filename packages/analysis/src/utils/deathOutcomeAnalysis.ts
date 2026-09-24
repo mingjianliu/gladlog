@@ -19,6 +19,7 @@ import {
   getUnitPositionAtTime,
   hasLineOfSight,
 } from "./losAnalysis";
+import { fmtTime } from "./renderGrid";
 import { spellReachForCaster } from "./spellRange";
 import { talentOwnershipOf } from "./talentOwnership";
 
@@ -729,7 +730,7 @@ export function formatDeathOutcomeForContext(
   if (summary.events.length === 0) return "";
   const lines: string[] = ["DEATHS WITH MISSED OPTIONS"];
   for (const ev of summary.events) {
-    const t = `${Math.floor(ev.atSeconds / 60)}:${String(Math.floor(ev.atSeconds % 60)).padStart(2, "0")}`;
+    const t = fmtTime(ev.atSeconds);
     for (const imm of ev.availableImmunities) {
       const ccNote = imm.wasInCC ? ", was in CC" : ", was not CC'd";
       lines.push(

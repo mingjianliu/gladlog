@@ -16,7 +16,7 @@ import {
   HP_SAMPLE_RADIUS_MS,
   specToString,
 } from "./cooldowns";
-import { toRenderSecond } from "./renderGrid";
+import { fmtTime, toRenderSecond } from "./renderGrid";
 
 /**
  * 2026-08-17:两张手打名单(IMMUNITY_AURAS 4 条 / MAJOR_DR_AURAS 5 条)已删除,
@@ -236,7 +236,7 @@ export function formatOffensiveWasteForContext(
   if (summary.events.length === 0) return "";
   const lines: string[] = ["ABILITIES INTO IMMUNITY/DR"];
   for (const ev of summary.events) {
-    const t = `${Math.floor(ev.defenseWindowSeconds[0] / 60)}:${String(Math.floor(ev.defenseWindowSeconds[0] % 60)).padStart(2, "0")}`;
+    const t = fmtTime(ev.defenseWindowSeconds[0]);
     const spells = formatAbilitySequence(ev.wasteCasts);
     lines.push(
       `  [${t}] ${ev.casterSpec} (${ev.casterName}): ${spells} into ${ev.targetName}'s ${ev.defenseName}`,

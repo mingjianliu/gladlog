@@ -1,7 +1,8 @@
 import { CombatUnitSpec, ICombatUnit } from "@gladlog/parser-compat";
 
+import { isHealerSpec } from "./cooldowns";
 import { toRenderSecond } from "./renderGrid";
-import { tanksOrHealers } from "./utils";
+import { tankSpecs } from "./utils";
 
 // DF RULES https://www.icy-veins.com/forums/topic/69530-dampening-and-healing-changes-in-dragonflight-pre-patch-phase-2-arenas/
 // Solo Shuffle - Start at 10% Dampening and after 1 minute, ramp up at a pace of 25% per minute
@@ -79,12 +80,14 @@ function computeRules(
   const team0HasHealer = safePlayers.some(
     (c) =>
       c?.info?.teamId === "0" &&
-      tanksOrHealers.includes(c?.spec as CombatUnitSpec),
+      (isHealerSpec(c?.spec as CombatUnitSpec) ||
+        tankSpecs.includes(c?.spec as CombatUnitSpec)),
   );
   const team1HasHealer = safePlayers.some(
     (c) =>
       c?.info?.teamId === "1" &&
-      tanksOrHealers.includes(c?.spec as CombatUnitSpec),
+      (isHealerSpec(c?.spec as CombatUnitSpec) ||
+        tankSpecs.includes(c?.spec as CombatUnitSpec)),
   );
   if (team0HasHealer && team1HasHealer) {
     return "2v2";

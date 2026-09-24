@@ -96,15 +96,7 @@ export function buildFilteredAuraIntervals(
     .sort((x, y) => x.startMs - y.startMs);
 }
 
-export const healerSpecs = [
-  CombatUnitSpec.Paladin_Holy,
-  CombatUnitSpec.Priest_Discipline,
-  CombatUnitSpec.Priest_Holy,
-  CombatUnitSpec.Shaman_Restoration,
-  CombatUnitSpec.Druid_Restoration,
-  CombatUnitSpec.Monk_Mistweaver,
-  CombatUnitSpec.Evoker_Preservation,
-];
+/** Healer specs live in one place: cooldowns.ts's `isHealerSpec`. */
 export const tankSpecs = [
   CombatUnitSpec.Druid_Guardian,
   CombatUnitSpec.Monk_Brewmaster,
@@ -113,8 +105,6 @@ export const tankSpecs = [
   CombatUnitSpec.DemonHunter_Vengeance,
   CombatUnitSpec.DeathKnight_Blood,
 ];
-
-export const tanksOrHealers = [...healerSpecs, ...tankSpecs];
 
 export class Utils {
   public static parseFromStringArray(
