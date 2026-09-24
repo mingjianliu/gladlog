@@ -44,6 +44,7 @@
     "src/context/matchTimeline.purgeWhitelist.test.ts",
     "src/context/matchTimelineSections.ccCover.test.ts",
     "src/context/matchTimelineSections.trough.test.ts",
+    "src/context/peelOptions.test.ts",
     "src/context/timelineHelpers.topSources.test.ts",
     "src/data/behaviorPrior.test.ts",
     "src/data/candidateTypeRegistry.test.ts",

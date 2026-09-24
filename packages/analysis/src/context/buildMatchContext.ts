@@ -93,6 +93,7 @@ import { heroBuildGroupOf } from "../utils/talents";
 import { warlockPetFunction } from "../utils/warlockPet";
 import { buildCriticalWindowSet } from "./criticalWindows";
 import { formatObservedConsequences } from "./observedConsequences";
+import { formatPeelOptions, peelOptionsForDeaths } from "./peelOptions";
 import {
   formatDecisiveCounterfactualLine,
   formatMitigationAuditLine,
@@ -864,6 +865,29 @@ export function buildMatchContext(
     if (conseqLines.length > 0) {
       tLines.push("");
       conseqLines.forEach((l) => tLines.push(l));
+    }
+  }
+
+  // GH #77 (2026-09-24): an instant CC a teammate (or the victim) had ready
+  // on the main attacker before a friendly death — an option, not a verdict.
+  {
+    const peelLines = formatPeelOptions(
+      peelOptionsForDeaths({
+        combat,
+        friends: friends as ICombatUnit[],
+        enemies: enemies as ICombatUnit[],
+        friendlyDeaths,
+        enemyCC: enemyCCSummaries,
+      }),
+      unitLabeler(
+        [...friends, ...enemies] as ICombatUnit[],
+        playerIdMap,
+        enemyIdMap,
+      ),
+    );
+    if (peelLines.length > 0) {
+      tLines.push("");
+      peelLines.forEach((l) => tLines.push(l));
     }
   }
 

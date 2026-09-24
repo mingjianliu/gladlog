@@ -13,6 +13,7 @@ import {
   checkDuringExternalConsistency,
   checkHeaderHpPromise,
   checkMatch,
+  checkPeelOptionConsistency,
   checkPetCreditSide,
   checkResNoChangeRowsPruned,
   checkSameSecondHpConsistency,
@@ -619,6 +620,45 @@ describe("checkResNoChangeRowsPruned — a zero-loss [RES] rdy:Δ cd:— row may
         "      [RES] rdy:Δ  cd:—  focus:2  cc:3/Incapacitating Roar-2s[disorient]",
       ]),
     ).toEqual([]);
+  });
+});
+
+describe("checkPeelOptionConsistency — a [PEEL OPTION] line must agree with the death and CC lines (GH #77)", () => {
+  const death =
+    "2:29  [DEATH]  3(FDKnight) (Frost Death Knight — friendly) (Unused: Anti-Magic Zone) | dampening: 46%";
+  const peel =
+    "2:23–2:29  [PEEL OPTION]  1(RPaladin) Hammer of Justice → 4(ARogue): usable 7 s, not used | 4.0yd, DR Full | 4(ARogue) did 71% of 3(FDKnight)'s damage taken in the 10 s before dying at 2:29 | 4(ARogue) PvP trinket on cooldown";
+  it("passes a consistent line", () => {
+    expect(checkPeelOptionConsistency([death, peel])).toEqual([]);
+  });
+  it("fails without the matching [DEATH] line", () => {
+    expect(checkPeelOptionConsistency([peel])).toHaveLength(1);
+  });
+  it("fails when the same CC landed on that target inside the window", () => {
+    expect(
+      checkPeelOptionConsistency([
+        death,
+        peel,
+        "2:25  [CC ON ENEMY]   4(ARogue) ← Hammer of Justice (by 1(RPaladin)) (3s)",
+      ]),
+    ).toHaveLength(1);
+  });
+  it("fails on a span outside the window or a count the span cannot hold", () => {
+    expect(
+      checkPeelOptionConsistency([
+        death,
+        peel.replace("2:23–2:29", "2:10–2:29"),
+      ]),
+    ).toHaveLength(1);
+    expect(
+      checkPeelOptionConsistency([
+        death,
+        peel.replace("usable 7 s", "usable 9 s"),
+      ]),
+    ).toHaveLength(1);
+    expect(
+      checkPeelOptionConsistency([death, peel.replace("DR Full", "DR Immune")]),
+    ).toHaveLength(1);
   });
 });
 

@@ -871,4 +871,14 @@
 //  71/140 (50.7 %) → 41/141 (29.1 %); consequence sentences judged partly
 //  62 → 26, fully supported 3 → 7; unsupported sentences 30 → 26; audit
 //  drops 1 → 0. First-round prompt and candidate menu unchanged.
-export const PROMPT_VERSION = 112;
+//  v113 (2026-09-24, GH #77, user rulings 2026-09-19 / 2026-09-24): new
+//  PEEL OPTIONS section — an INSTANT CC a teammate (or the victim) had ready
+//  for >= 3 s on the main attacker in the 10 s before a friendly death, with
+//  the owner free (not CC'd, not in a casting lockout), the target in range
+//  and LoS, not CC'd / immune / at Immune DR, and no ready breaker of the
+//  target's own (Berserker Rage on a fear). Enemy dispels not considered.
+//  Findings prompt: one rule — an option, never a verdict. 605 files: 239
+//  lines, 200 / 702 friendly deaths (28.5 %), gate
+//  checkPeelOptionConsistency 0 failures; every candidate count unchanged
+//  (findings byte-identical apart from the new rule line).
+export const PROMPT_VERSION = 113;

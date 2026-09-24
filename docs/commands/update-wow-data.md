@@ -253,6 +253,12 @@ npx tsx packages/analysis/scripts/datagen/genSpellReach.ts
 npx tsx packages/analysis/scripts/datagen/genInterruptKit.ts
 # 6f. off-GCD active abilities table (SpellCooldowns StartRecoveryTime==0; consumed by swimlane folding)
 npx tsx packages/analysis/scripts/datagen/genOffGcd.ts
+# 6f2. Spell mechanic facts (GH #77, 2026-09-24): CC mechanic (SpellCategories / SpellEffect, one
+#      EffectTriggerSpell hop, else the unique loss-of-control mechanic among same-named observed spells),
+#      base cast time (SpellMisc → SpellCastTimes; 0 = instant), mechanic immunity (aura 77), all-school
+#      immunity (aura 39 misc 127), casting lockout (aura 60 / 263). Aura 147 masks are kept raw and read as
+#      UNKNOWN (bit order contradicted by the corpus). Controls are asserted before writing.
+npx tsx packages/analysis/scripts/datagen/genSpellMechanics.ts
 # 6g. Damage mitigation table (#17 foundation; whitelist = big ∪ external 35 items, curated overrides in mitigationData.ts).
 #     Percentages are PvP-scaled: aura87 EffectBasePointsF × SpellEffect.PvpMultiplier via lib/pvpMultiplier.ts
 #     (user ruling 2026-09-04 "PvP 值为官方值", BACKLOG #41 — Divine Protection 20 → 35, Ardent Defender 30 → 45,

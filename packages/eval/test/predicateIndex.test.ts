@@ -85,6 +85,8 @@ import * as buffDuration from "@gladlog/analysis/src/utils/buffDuration";
 import * as cannotCastIntervals from "@gladlog/analysis/src/utils/cannotCastIntervals";
 import * as castParam from "@gladlog/analysis/src/utils/castParam";
 import * as ccTrinketAnalysis from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
+import * as peelOptions from "@gladlog/analysis/src/context/peelOptions";
+import * as spellMechanics from "@gladlog/analysis/src/utils/spellMechanics";
 import * as cooldowns from "@gladlog/analysis/src/utils/cooldowns";
 import * as counterfactual from "@gladlog/analysis/src/utils/counterfactual";
 import * as deathOutcomeAnalysis from "@gladlog/analysis/src/utils/deathOutcomeAnalysis";
@@ -1326,6 +1328,56 @@ const INDEX: PredicateRow[] = [
   {
     file: `${E}/quality/promptQualityCheck.ts`,
     symbol: "checkCcAvoidedLandedConsistency",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "kitSpellReadyAt",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/spellMechanics.ts`,
+    symbol: "ccMechanicOf",
+    mod: spellMechanics,
+  },
+  {
+    file: `${A}/utils/spellMechanics.ts`,
+    symbol: "isInstantCast",
+    mod: spellMechanics,
+  },
+  {
+    file: `${A}/utils/spellMechanics.ts`,
+    symbol: "auraBlocksMechanic",
+    mod: spellMechanics,
+  },
+  {
+    file: `${A}/utils/spellMechanics.ts`,
+    symbol: "explicitlyBreaksMechanic",
+    mod: spellMechanics,
+  },
+  {
+    file: `${A}/utils/spellMechanics.ts`,
+    symbol: "auraLocksCasting",
+    mod: spellMechanics,
+  },
+  {
+    file: `${A}/context/peelOptions.ts`,
+    symbol: "peelOptionsForDeaths",
+    mod: peelOptions,
+  },
+  {
+    file: `${A}/context/peelOptions.ts`,
+    symbol: "PEEL_LOOKBACK_S",
+    mod: peelOptions,
+  },
+  {
+    file: `${A}/context/peelOptions.ts`,
+    symbol: "PEEL_MIN_USABLE_S",
+    mod: peelOptions,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkPeelOptionConsistency",
     mod: promptQualityCheck,
   },
   {

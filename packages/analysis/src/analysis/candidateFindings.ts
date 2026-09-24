@@ -1,9 +1,5 @@
 import type { ICombatUnit } from "@gladlog/parser-compat";
-import {
-  CombatUnitClass,
-  CombatUnitReaction,
-  LogEvent,
-} from "@gladlog/parser-compat";
+import { CombatUnitClass, CombatUnitReaction } from "@gladlog/parser-compat";
 
 import {
   lookupBacklashPrior,
@@ -22,10 +18,6 @@ import {
   resolveMitigation,
   strongestComponentPct,
 } from "../data/mitigationComponents";
-import {
-  effectiveCooldownSeconds,
-  spellEffectData,
-} from "../data/spellEffectData";
 import { ccSpellIds } from "../data/spellTags";
 import { lookupSyncWindowPrior } from "../data/syncWindowPrior";
 import {
@@ -46,9 +38,7 @@ import {
 } from "../utils/ccTrinketAnalysis";
 import {
   annotateDefensiveTimings,
-  applyCdTalentModifiers,
   cdAvailableAt,
-  chargesAvailableAt,
   DEFENSIVE_TAGS,
   extractMajorCooldowns,
   type IAvailableWindow,
@@ -57,8 +47,8 @@ import {
   isHealerSpec,
   isMeleeSpec,
   isProcOnlyActivation,
+  kitSpellReadyAt,
   playerTalentIdSets,
-  REACTION_WINDOW_S,
   specToString,
 } from "../utils/cooldowns";
 import {
@@ -1194,49 +1184,14 @@ export function ccAvoidanceOptionsAt(
     const proc = triggers.get(id);
     if (proc && !pvpTalentIds.has(proc.talentSpellId)) continue;
     const resolvedIds = proc?.triggerSpellIds ?? [id];
-    let available = false;
-    for (const rid of resolvedIds) {
-      const eff = spellEffectData[rid];
-      const baseCd = effectiveCooldownSeconds(rid) ?? null;
-      if (baseCd === null) continue; // unknown CD, don't guess
-      const { cooldownSeconds, charges } = applyCdTalentModifiers(
-        rid,
-        baseCd,
-        eff?.charges?.charges ?? 1,
+    // Kit evidence, talent-aware cooldown, charges and the reaction window all
+    // live in the shared `kitSpellReadyAt` (GH #77 made it a second consumer).
+    const available = resolvedIds.some((rid) =>
+      kitSpellReadyAt(owner, rid, cc.atSeconds, matchStartMs, {
         talentedSpellIds,
         pvpTalentIds,
-      );
-      const castTimes = owner.spellCastEvents
-        .filter(
-          (e) =>
-            e.spellId === rid &&
-            e.logLine.event === LogEvent.SPELL_CAST_SUCCESS,
-        )
-        .map((e) => (e.logLine.timestamp - matchStartMs) / 1000);
-      if (castTimes.length === 0) continue; // kit-evidence gate
-      // Charge-aware availability through the shared `chargesAvailableAt`
-      // simulation — charges recharge SEQUENTIALLY, so a sliding-window count
-      // over-reports (see that function's doc comment for the case cross-AI
-      // review caught). Reduces exactly to `cdAvailableAt`'s "last cast + cd
-      // <= t" at one charge, so single-charge tools are unaffected; needed
-      // because the talents that matter here are charge talents (Celerity +1
-      // Roll, Aerial Mastery +1 Hover, Wings of Liberty +1 Verdant Embrace).
-      // Reaction window (REACTION_WINDOW_S, user ruling 2026-09-23): a tool
-      // that came back within 1 s of the CC was not a real option.
-      if (
-        chargesAvailableAt(castTimes, cooldownSeconds, charges, cc.atSeconds) >
-          0 &&
-        chargesAvailableAt(
-          castTimes,
-          cooldownSeconds,
-          charges,
-          cc.atSeconds - REACTION_WINDOW_S,
-        ) > 0
-      ) {
-        available = true;
-        break;
-      }
-    }
+      }),
+    );
     if (!available) continue;
     out.push(
       CC_AVOIDANCE_BUFF_SPELLS.get(id) ?? REPOSITIONING_SPELL_IDS.get(id) ?? id,

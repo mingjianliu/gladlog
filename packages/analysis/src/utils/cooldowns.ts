@@ -1018,6 +1018,63 @@ export function cdReadyInTimeAt(
 }
 
 /**
+ * "Could this unit press `spellId` at `tSeconds`" for an ability that is NOT
+ * on the major-cooldown ledger — the single predicate for ad hoc kit tools.
+ * Consumers: cc-avoidable's `ccAvoidanceOptionsAt` (was the avoidance tool up
+ * when the CC landed) and GH #77's peel options (could the attacker break the
+ * suggested CC himself — Berserker Rage on a fear).
+ *
+ * True only when all three hold:
+ *   - kit evidence: the unit cast the spell at least once in the match (a spec
+ *     without the button is never credited with it);
+ *   - a known cooldown: `effectiveCooldownSeconds`, run through the unit's own
+ *     talents via `applyCdTalentModifiers` (regular, hero and PvP);
+ *   - a charge in hand at t AND at t − REACTION_WINDOW_S (user ruling
+ *     2026-09-23: a tool that came back within 1 s was not a real option),
+ *     through the sequential-recharge simulation `chargesAvailableAt`.
+ * `talents` absent (hand-built fixtures without a spec) → base values.
+ */
+export function kitSpellReadyAt(
+  unit: {
+    spellCastEvents: Array<{
+      spellId?: string;
+      logLine: { event: string; timestamp: number };
+    }>;
+  },
+  spellId: string,
+  tSeconds: number,
+  matchStartMs: number,
+  talents: { talentedSpellIds: Set<string> | null; pvpTalentIds: Set<string> },
+): boolean {
+  const baseCd = effectiveCooldownSeconds(spellId) ?? null;
+  if (baseCd === null) return false; // unknown CD, don't guess
+  const { cooldownSeconds, charges } = applyCdTalentModifiers(
+    spellId,
+    baseCd,
+    spellEffectData[spellId]?.charges?.charges ?? 1,
+    talents.talentedSpellIds,
+    talents.pvpTalentIds,
+  );
+  const castTimes = unit.spellCastEvents
+    .filter(
+      (e) =>
+        e.spellId === spellId &&
+        e.logLine.event === LogEvent.SPELL_CAST_SUCCESS,
+    )
+    .map((e) => (e.logLine.timestamp - matchStartMs) / 1000);
+  if (castTimes.length === 0) return false; // kit-evidence gate
+  return (
+    chargesAvailableAt(castTimes, cooldownSeconds, charges, tSeconds) > 0 &&
+    chargesAvailableAt(
+      castTimes,
+      cooldownSeconds,
+      charges,
+      tSeconds - REACTION_WINDOW_S,
+    ) > 0
+  );
+}
+
+/**
  * For a given unit, return all class-tagged major cooldowns (>= 30s) with
  * cast times and idle availability windows derived from the combat log.
  */

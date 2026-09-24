@@ -1,6 +1,6 @@
 {
   "build": "12.1.0.69587",
-  "generatedAt": "2026-09-05T03:29:43.017Z",
+  "generatedAt": "2026-09-24T20:26:42.547Z",
   "artifacts": {
     "talentIdMap.json": {
       "specs": 40
@@ -30,7 +30,13 @@
       "relentless": 10
     },
     "talentModifiers.json": {
-      "trackedSpells": 438
+      "trackedSpells": 685
+    },
+    "talentEffectInventoryGenerated.json": {
+      "rows": 8229,
+      "edges": 4037,
+      "truncatedTriggerEdges": 7,
+      "bytes": 2686766
     },
     "mitigationGenerated.json": {
       "entries": 19,
@@ -94,8 +100,12 @@
       "producer": "packages/eval/scripts/behaviorPriorScan.ts emit-table"
     },
     "burstWindowPriorGenerated.json": {
-      "entries": 121,
+      "entries": 157,
       "producer": "packages/eval/scripts/burstWindowScan.ts emit-table"
+    },
+    "ccCloseInGenerated.json": {
+      "entries": 45,
+      "producer": "packages/eval/scripts/ccCloseInScan.ts --emit"
     },
     "usableWhileCcGenerated.ts": {
       "stunned": 437,
@@ -112,12 +122,19 @@
       "classes": 14,
       "bytes": 2035
     },
+    "spellMechanicsGenerated.json": {
+      "entries": 5352,
+      "mech": 1147,
+      "instant": 4310,
+      "immuneMech": 58,
+      "locksCasting": 28,
+      "bytes": 206603
+    },
     "spellReachGenerated.json": {
       "spells": 3017,
       "bytes": 224629,
       "generator": "scripts/datagen/genSpellReach.ts",
-      "consumer": "utils/spellRange.ts (caster + talent range: kicks, externals, cleanse / purge, healer reach, CC threat — GH #83); utils/deathOutcomeAnalysis.ts externalReachYards (GH #34 ②)",
-      "entries": 38
+      "consumer": "utils/spellRange.ts (caster + talent range: kicks, externals, cleanse / purge, healer reach, CC threat — GH #83); utils/deathOutcomeAnalysis.ts externalReachYards (GH #34 ②)"
     },
     "kickLockoutObservedGenerated.json": {
       "kicks": 17,
@@ -161,19 +178,9 @@
       "entries": 1,
       "producer": "packages/eval/scripts/kickPriorityOutcomeProbe.ts emit-table"
     },
-    "talentEffectInventoryGenerated.json": {
-      "rows": 8225,
-      "edges": 4037,
-      "truncatedTriggerEdges": 7,
-      "bytes": 2369929
-    },
     "kickPriorityHealSpellsGenerated.json": {
       "entries": 9,
       "producer": "packages/eval/scripts/kickPriorityOutcomeProbe.ts emit-heal-spells"
-    },
-    "ccCloseInGenerated.json": {
-      "entries": 45,
-      "producer": "packages/eval/scripts/ccCloseInScan.ts --emit"
     }
   }
 }

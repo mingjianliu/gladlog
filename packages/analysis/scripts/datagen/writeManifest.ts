@@ -294,6 +294,26 @@ export async function main(): Promise<void> {
       // landed; the script did not know it, so the next writeManifest run
       // silently dropped the entry and datagenManifest.test went red
       // (caught 2026-09-01 while refreshing mitigationGenerated for GH #44).
+      // GH #77: tracked per field — each decodes a different DB2 column and
+      // can empty on its own while the id count holds.
+      "spellMechanicsGenerated.json": (() => {
+        const sp = Object.values(
+          readJson("spellMechanicsGenerated.json").spells,
+        ) as Array<{
+          mech?: number;
+          castMs?: number;
+          immuneMech?: number[];
+          locksCasting?: boolean;
+        }>;
+        return {
+          entries: sp.length,
+          mech: sp.filter((e) => e.mech !== undefined).length,
+          instant: sp.filter((e) => e.castMs === 0).length,
+          immuneMech: sp.filter((e) => e.immuneMech).length,
+          locksCasting: sp.filter((e) => e.locksCasting).length,
+          bytes: statSync(dataDir + "spellMechanicsGenerated.json").size,
+        };
+      })(),
       "spellReachGenerated.json": {
         spells: Object.keys(readJson("spellReachGenerated.json").spells).length,
         bytes: statSync(dataDir + "spellReachGenerated.json").size,

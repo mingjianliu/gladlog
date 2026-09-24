@@ -217,6 +217,10 @@ export function buildFindingsPrompt(
     // HP drop) was B's main failure — hence the third NEVER.
     `- You MAY state an observable consequence the match context shows: a kick meant that cast never landed; while a healer was kicked or CC'd a teammate dropped as an OBSERVED CONSEQUENCES line states; an opponent trinketed out of your CC. You MAY give the reason behind advice ("split the two defensives so each covers one burst").`,
     `- NEVER pin a death, loss or win on one event ("led to the death", "cost you the round", "that's why you lost"); NEVER claim what would certainly have happened in this match ("had you pressed it you would have lived"); NEVER infer a state the context does not show ("nobody could heal you", "only X kept you alive", "you had no choice but") — when an OBSERVED CONSEQUENCES line says no teammate dropped, do not say the team suffered.`,
+    // GH #77 (user rulings 2026-09-19 / 2026-09-24): a [PEEL OPTION] line is a
+    // feasible, unused instant CC on the main attacker before a death — an
+    // additional option to offer, never a verdict about the death.
+    `- A PEEL OPTIONS line may be offered as an additional way to take pressure off ("the rogue was in range and Hammer of Justice was ready for several seconds — a stun there is another way to buy space"). It is NOT a mistake and NOT the reason anyone died: never say using it would have saved them, never call not using it an error, and never extend it to other moments of the match.`,
     // GH #103 class B (2026-09-23): 14 of 32 universal claims in the Opus 5.5
     // baseline were contradicted by the prompt ("the only big cooldown you had
     // left was Spirit Link" beside a [RES] listing Astral Shift and Nature's

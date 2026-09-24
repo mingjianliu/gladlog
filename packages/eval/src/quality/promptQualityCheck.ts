@@ -68,6 +68,10 @@ import {
 } from "@gladlog/analysis/src/data/teammateCrisisPrior";
 import { KILL_CREDIT_SLACK_S } from "@gladlog/analysis/src/utils/burstLedger";
 import { CC_LANDED_MATCH_WINDOW_MS } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
+import {
+  PEEL_LOOKBACK_S,
+  PEEL_MIN_USABLE_S,
+} from "@gladlog/analysis/src/context/peelOptions";
 import { canHelpAnotherUnit } from "@gladlog/analysis/src/utils/cooldowns";
 import { fmtTime } from "@gladlog/analysis/src/utils/renderGrid";
 import fs from "fs-extra";
@@ -900,6 +904,76 @@ export function checkCcAvoidedLandedConsistency(lines: string[]): string[] {
     if (twin !== undefined)
       failures.push(
         `line ${i + 1}: [CC AVOIDED?] 说 ${m[4]} 没落在 ${m[3]} 身上,但 ${fmtTime(twin)} 有同名 [CC ON TEAM] 落地行 —— ${line.trim().slice(0, 140)}`,
+      );
+  });
+  return failures;
+}
+
+const PEEL_LINE =
+  /^\s*(\d+):(\d{2})–(\d+):(\d{2})\s+\[PEEL OPTION\]\s+(\S+) (.+?) → (\S+)(?: \(the victim's own CC\))?: usable (\d+) s, not used \| [\d.]+yd, DR (\S+) \| \S+ did \d+% of (\S+)'s damage taken in the \d+ s before dying at (\d+):(\d{2})/;
+const FRIENDLY_DEATH_LINE = /^\s*(\d+):(\d{2})\s+\[DEATH\]\s+(\S+) \(.*— friendly\)/;
+const CC_ON_ENEMY_LINE =
+  /^\s*(\d+):(\d{2})\s+\[CC ON ENEMY\]\s+(\S+) ← (.+?) \(by (\S+)\)/;
+
+/**
+ * `[PEEL OPTION]` framing (31st hardFailure class, GH #77, user rulings
+ * 2026-09-19 / 2026-09-24). The producer (`context/peelOptions.ts`) offers an
+ * instant CC its owner had ready for >= PEEL_MIN_USABLE_S seconds inside the
+ * PEEL_LOOKBACK_S before a friendly death and did not use; both constants are
+ * imported here. The gate re-parses every line and fails when:
+ *  - no `[DEATH]` line names that victim at the stated second;
+ *  - the usable span leaves the lookback window or reaches past the death;
+ *  - the second count is below the door or exceeds the span;
+ *  - the DR is Immune;
+ *  - a `[CC ON ENEMY]` line shows that owner landing the same-named CC on
+ *    that target inside the window ("not used" would be false).
+ */
+export function checkPeelOptionConsistency(lines: string[]): string[] {
+  const deaths = new Set<string>();
+  const landed: Array<{ at: number; target: string; spell: string; by: string }> = [];
+  for (const line of lines) {
+    const d = line.match(FRIENDLY_DEATH_LINE);
+    if (d) deaths.add(`${Number(d[1]) * 60 + Number(d[2])}\u0000${d[3]}`);
+    const c = line.match(CC_ON_ENEMY_LINE);
+    if (c)
+      landed.push({
+        at: Number(c[1]) * 60 + Number(c[2]),
+        target: c[3]!,
+        spell: c[4]!,
+        by: c[5]!,
+      });
+  }
+  const failures: string[] = [];
+  lines.forEach((line, i) => {
+    const m = line.match(PEEL_LINE);
+    if (!m) return;
+    const from = Number(m[1]) * 60 + Number(m[2]);
+    const to = Number(m[3]) * 60 + Number(m[4]);
+    const [owner, spell, target] = [m[5]!, m[6]!, m[7]!];
+    const n = Number(m[8]);
+    const dr = m[9]!;
+    const victim = m[10]!;
+    const death = Number(m[11]) * 60 + Number(m[12]);
+    const why: string[] = [];
+    if (!deaths.has(`${death}\u0000${victim}`))
+      why.push(`没有 ${victim} 在 ${fmtTime(death)} 的 [DEATH] 行`);
+    if (from < death - PEEL_LOOKBACK_S || to > death || from > to)
+      why.push(`可用时段 ${fmtTime(from)}–${fmtTime(to)} 不在死前 ${PEEL_LOOKBACK_S} 秒内`);
+    if (n < PEEL_MIN_USABLE_S || n > to - from + 1)
+      why.push(`可用 ${n} 秒与门槛 ${PEEL_MIN_USABLE_S} 秒 / 时段长度不符`);
+    if (dr === "Immune") why.push("递减为 Immune");
+    const used = landed.find(
+      (c) =>
+        c.by === owner &&
+        c.target === target &&
+        c.spell === spell &&
+        c.at >= death - PEEL_LOOKBACK_S &&
+        c.at <= death,
+    );
+    if (used) why.push(`${fmtTime(used.at)} 已有 ${owner} 的 ${spell} 落在 ${target} 身上`);
+    if (why.length)
+      failures.push(
+        `line ${i + 1}: [PEEL OPTION] 自相矛盾(${why.join(";")})—— ${line.trim().slice(0, 160)}`,
       );
   });
   return failures;
@@ -2364,6 +2438,7 @@ export function checkMatch(
   hardFailures.push(...checkDuringExternalConsistency(lines));
   hardFailures.push(...checkConseqHpStateConsistency(lines));
   hardFailures.push(...checkCcAvoidedLandedConsistency(lines));
+  hardFailures.push(...checkPeelOptionConsistency(lines));
 
   return {
     ordinal: entry.ordinal,
