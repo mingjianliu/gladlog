@@ -224,8 +224,21 @@ async function dist(): Promise<void> {
       hp.length
         ? `${((100 * hp.filter((h) => h <= g).length) / hp.length).toFixed(0)}%`
         : "-";
+    const dm = xs
+      .map((s) => s.dmg3sPct)
+      .filter((h): h is number => h !== null && h !== undefined)
+      .sort((a, b) => a - b);
+    const dq = (f: number): string =>
+      dm.length ? dm[Math.floor(f * (dm.length - 1))]!.toFixed(0) : "-";
+    const ge = (g: number): string =>
+      dm.length
+        ? `${((100 * dm.filter((h) => h >= g).length) / dm.length).toFixed(0)}%`
+        : "-";
     console.log(
       `${label.padEnd(34)} n=${String(xs.length).padStart(5)} (HP known ${hp.length})  p10=${q(0.1)} p25=${q(0.25)} p50=${q(0.5)} p75=${q(0.75)} p90=${q(0.9)}  ≤30:${le(30)} ≤40:${le(40)} ≤50:${le(50)} ≤60:${le(60)} ≤70:${le(70)}`,
+    );
+    console.log(
+      `${"".padEnd(34)} dmg taken in the 3 s before, % max HP: p25=${dq(0.25)} p50=${dq(0.5)} p75=${dq(0.75)}  ≥10:${ge(10)} ≥20:${ge(20)} ≥30:${ge(30)} ≥40:${ge(40)}`,
     );
   };
   console.log(`rounds=${rounds}`);
@@ -252,7 +265,11 @@ async function dist(): Promise<void> {
   );
   show(
     "trinket OUTSIDE any attempt",
-    samples.filter((s) => !s.inAttempt),
+    samples.filter((s) => !s.inAttempt && s.what === "trinket"),
+  );
+  show(
+    "wall OUTSIDE any attempt",
+    samples.filter((s) => !s.inAttempt && s.what === "defensive"),
   );
 }
 

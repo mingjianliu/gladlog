@@ -32,6 +32,15 @@ import {
   kickLockoutSeconds,
 } from "@gladlog/analysis/src/data/spellEffectData";
 import { fmtTime } from "@gladlog/analysis/src/utils/renderGrid";
+import {
+  MITIGATION_AURA_IDS,
+  MITIGATION_AURA_MIN_PCT,
+} from "@gladlog/analysis/src/utils/enemyDefensives";
+import { WALL_IN_HAND_MIT_IDS } from "@gladlog/analysis/src/utils/killWindowTargetSelection";
+import {
+  resolveMitigation,
+  strongestComponentPct,
+} from "@gladlog/analysis/src/data/mitigationComponents";
 import { LogEvent } from "@gladlog/parser-compat";
 
 /** Experiment default; the report sweeps 30/40/50/60/70. */
@@ -50,6 +59,8 @@ export interface ConsequenceLine {
 export interface ForcedSample {
   hpAtUse: number | null;
   inAttempt: boolean;
+  /** damage taken in the 3 s before use, % of max HP (statistics only) */
+  dmg3sPct?: number | null;
   /** trinket only: it broke a CC from our side (ccInstances trinketState "used") */
   brokeCc?: boolean;
   what: "defensive" | "external" | "trinket";
@@ -86,6 +97,24 @@ export function buildConsequenceLines(
   const lines: ConsequenceLine[] = [];
   const teamOf = (u: any): any[] =>
     friends.some((f) => f.id === u.id) ? friends : enemies;
+  /** Damage taken in [t-3, t] as % of max HP (max HP from the nearest
+   * advanced-logging sample). Statistics for the gate choice only. */
+  const dmg3sPct = (u: any, tS: number): number | null => {
+    const toMs = start + tS * 1000;
+    const adv = (u.advancedActions ?? []) as any[];
+    let maxHp = 0;
+    for (const a of adv) {
+      if (a.advancedActorMaxHp > 0) maxHp = a.advancedActorMaxHp;
+      if (a.logLine.timestamp >= toMs) break;
+    }
+    if (maxHp <= 0) return null;
+    let dmg = 0;
+    for (const d of (u.damageIn ?? []) as any[]) {
+      const ts = d.logLine.timestamp;
+      if (ts >= toMs - 3000 && ts <= toMs) dmg += Math.abs(d.effectiveAmount);
+    }
+    return (100 * dmg) / maxHp;
+  };
   const deathS = (u: any): number | null => {
     const d = (u.deathRecords ?? [])[0];
     return d ? sec(d.timestamp) : null;
@@ -262,6 +291,7 @@ export function buildConsequenceLines(
       const hp = gridHpPct(target, start + Math.floor(u.atS) * 1000);
       forcedSamples.push({
         hpAtUse: hp,
+        dmg3sPct: dmg3sPct(target, u.atS),
         inAttempt: true,
         what: u.what,
         brokeCc:
@@ -308,8 +338,43 @@ export function buildConsequenceLines(
       if (inAny) continue;
       forcedSamples.push({
         hpAtUse: gridHpPct(e, start + Math.floor(tu) * 1000),
+        dmg3sPct: dmg3sPct(e, tu),
         inAttempt: false,
         what: "trinket",
+      });
+    }
+    // …and their self-applied walls OUTSIDE attempts, under killAttempts'
+    // own "popped a defensive" predicate (same id sets, same resolver, same
+    // ≥ MITIGATION_AURA_MIN_PCT floor; only the composition is repeated —
+    // attributeFailure is private). Statistics only, never rendered.
+    const seenWall = new Set<string>();
+    for (const aura of (e.auraEvents ?? []) as any[]) {
+      if (aura.destUnitId !== e.id || aura.srcUnitId !== e.id) continue;
+      if (aura.logLine?.event !== LogEvent.SPELL_AURA_APPLIED) continue;
+      const id = aura.spellId;
+      if (!id || !(MITIGATION_AURA_IDS.has(id) || WALL_IN_HAND_MIT_IDS.has(id)))
+        continue;
+      const comp = resolveMitigation(id, { carrierIsCaster: true, caster: e });
+      if (
+        !comp ||
+        (strongestComponentPct(comp, { includeImmunity: true })?.pctMin ?? 0) <
+          MITIGATION_AURA_MIN_PCT
+      )
+        continue;
+      const t = sec(aura.logLine.timestamp);
+      const key = `${id}|${Math.floor(t / 5)}`; // form refreshes re-apply
+      if (seenWall.has(key)) continue;
+      seenWall.add(key);
+      const inAny = attempts.some(
+        (a) =>
+          a.targetName === e.name && t >= a.fromSeconds && t <= a.toSeconds,
+      );
+      if (inAny) continue;
+      forcedSamples.push({
+        hpAtUse: gridHpPct(e, start + Math.floor(t) * 1000),
+        dmg3sPct: dmg3sPct(e, t),
+        inAttempt: false,
+        what: "defensive",
       });
     }
   }
