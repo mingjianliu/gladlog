@@ -215,14 +215,23 @@ export function buildFindingsPrompt(
     `- Reference only event ids from the menu (in "eventIds"). Never invent an event.`,
     `- Write NO digits at all in "explanation". Every number must be a {{key}} placeholder drawn from the referenced events' facts (e.g. {{t}}). For counts or durations you have no placeholder for, use words ("twice", "briefly", "early", "a few globals") — never a raw number. An explanation containing any bare digit will be discarded.
 - When ONE finding cites MULTIPLE events, indexed placeholders are always available, numbered by your eventIds order: {{t1}} = first event's t, {{t2}} = second event's, {{duration2}}, {{cc1}}, ... Use them whenever the events share a fact key — a bare {{t}} across events with DIFFERING t values is ambiguous and gets the finding discarded.`,
-    `- Do NOT assert causation. No "because … you lost", "cost you the game", "that's why", "led to the loss". State observations and suggestions only.`,
+    // GH #70 (user 2026-09-19 / 2026-09-24; agy review concurred): the old
+    // blanket "do NOT assert causation" also forbade what the log plainly
+    // shows (a kick ended that cast; the team dropped while the healer was
+    // locked). Observable consequences and the reason behind advice are
+    // allowed; outcome attribution, certain counterfactuals about THIS match
+    // and states the context does not show stay banned. Probe (40 rounds × 2
+    // arms): the overreach class ("nobody could heal you" over a span with no
+    // HP drop) was B's main failure — hence the third NEVER.
+    `- You MAY state an observable consequence the match context shows: a kick meant that cast never landed; while a healer was kicked or CC'd a teammate dropped as an OBSERVED CONSEQUENCES line states; an opponent trinketed out of your CC. You MAY give the reason behind advice ("split the two defensives so each covers one burst").`,
+    `- NEVER pin a death, loss or win on one event ("led to the death", "cost you the round", "that's why you lost"); NEVER claim what would certainly have happened in this match ("had you pressed it you would have lived"); NEVER infer a state the context does not show ("nobody could heal you", "only X kept you alive", "you had no choice but") — when an OBSERVED CONSEQUENCES line says no teammate dropped, do not say the team suffered.`,
     // GH #103 class B (2026-09-23): 14 of 32 universal claims in the Opus 5.5
     // baseline were contradicted by the prompt ("the only big cooldown you had
     // left was Spirit Link" beside a [RES] listing Astral Shift and Nature's
     // Swiftness ready). Same rule as the responder's EXCLUSIVITY DISCIPLINE.
     `- No exclusive or universal claims ("the only cooldown left", "nothing left", "every save was spent", "free the whole time") unless the match context shows nothing else ready and nothing breaking that span; otherwise name the alternatives or drop the universal word.`,
     ``,
-    `Example explanation: "You went down at {{t}}s; consider holding the trinket for the first swap and using your wall a beat earlier." (numbers only via placeholders; no causation)`,
+    `Example explanation: "You went down at {{t}}s; consider holding the trinket for the first swap and using your wall a beat earlier." (numbers only via placeholders; no outcome attribution)`,
     ``,
     `Output ONLY a JSON array: [{ "eventIds": string[], "severity": "high"|"med"|"low", "category": ${CATEGORY_UNION}, "title": string, "explanation": string }]`,
     `"category" must be EXACTLY one of those slugs (lowercase, English) regardless of the reply language — it is a stable aggregation key, not display text.`,

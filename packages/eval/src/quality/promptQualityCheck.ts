@@ -325,9 +325,10 @@ export function checkSameSecondHpConsistency(lines: string[]): string[] {
       m = line.match(SPIKE_HP);
       label = "[DMG SPIKE]";
     } else if (line.includes("[ENEMY DEF]")) {
-      m = line.includes("→") || line.includes("->")
-        ? line.match(ENEMY_DEF_EXT_HP)
-        : line.match(ENEMY_DEF_SELF_HP);
+      m =
+        line.includes("→") || line.includes("->")
+          ? line.match(ENEMY_DEF_EXT_HP)
+          : line.match(ENEMY_DEF_SELF_HP);
       label = "[ENEMY DEF]";
     } else if (line.includes("[ENEMY TRINKET]")) {
       m = line.match(ENEMY_TRINKET_HP);
@@ -861,11 +862,13 @@ export function checkResNoChangeRowsPruned(lines: string[]): string[] {
 }
 
 /** `[ENEMY DEF] … X → 5(DDHunter) (11.0s …)` — the observed duration of an external. */
-const ENEMY_DEF_EXTERNAL_DUR = /\[ENEMY DEF\]\s+.*?→\s*\S+\s*\((\d+(?:\.\d+)?)s/;
+const ENEMY_DEF_EXTERNAL_DUR =
+  /\[ENEMY DEF\]\s+.*?→\s*\S+\s*\((\d+(?:\.\d+)?)s/;
 /** One `during it:` segment (segments are `; `-joined; fields ` · `-joined). */
 const DURING_SEG =
   /^(\S+) (\d+)k on target(?: \(\+\d+k absorbed\))? · (\d+)% of their enemy-player damage · direct (\d+)k \/ periodic (\d+)k(?: · (\d+)k \((\d+)%\) of it in the wall's school)?(?: · (\d+) hits? immune)? · damage in (\d+) of (\d+) s · longest gap (\d+) s$/;
-const DURING_EMPTY_SEG = /^(\S+) 0k on target · no damage on any enemy player · 0 of (\d+) s$/;
+const DURING_EMPTY_SEG =
+  /^(\S+) 0k on target · no damage on any enemy player · 0 of (\d+) s$/;
 
 /**
  * `[ENEMY DEF] … | during it:` annotation consistency (28th hardFailure
@@ -884,13 +887,17 @@ export function checkDuringExternalConsistency(lines: string[]): string[] {
     const at = line.indexOf("| during it: ");
     if (at < 0) return;
     const observed = line.match(ENEMY_DEF_EXTERNAL_DUR)?.[1];
-    const maxM = observed !== undefined ? Math.ceil(Number(observed)) + 1 : null;
+    const maxM =
+      observed !== undefined ? Math.ceil(Number(observed)) + 1 : null;
     const fail = (why: string) =>
-      failures.push(`line ${i + 1}: [ENEMY DEF] during-it 标注自相矛盾(${why})—— ${line.trim().slice(0, 160)}`);
+      failures.push(
+        `line ${i + 1}: [ENEMY DEF] during-it 标注自相矛盾(${why})—— ${line.trim().slice(0, 160)}`,
+      );
     for (const seg of line.slice(at + "| during it: ".length).split("; ")) {
       const e = seg.match(DURING_EMPTY_SEG);
       if (e) {
-        if (maxM !== null && Number(e[2]) > maxM) fail(`窗口 ${e[2]} s 长于观测时长 ${observed}s`);
+        if (maxM !== null && Number(e[2]) > maxM)
+          fail(`窗口 ${e[2]} s 长于观测时长 ${observed}s`);
         continue;
       }
       const m = seg.match(DURING_SEG);
@@ -898,7 +905,8 @@ export function checkDuringExternalConsistency(lines: string[]): string[] {
         fail(`段落格式不可解析:${seg.slice(0, 80)}`);
         continue;
       }
-      const num = (i: number) => (m[i] === undefined ? undefined : Number(m[i]));
+      const num = (i: number) =>
+        m[i] === undefined ? undefined : Number(m[i]);
       const total = num(2)!;
       const x = num(3)!;
       const direct = num(4)!;
@@ -907,12 +915,15 @@ export function checkDuringExternalConsistency(lines: string[]): string[] {
       const K = num(9)!;
       const M = num(10)!;
       const G = num(11)!;
-      if (Math.abs(direct + periodic - total) > 1) fail(`direct ${direct}k + periodic ${periodic}k ≠ ${total}k`);
-      if (inSchool !== undefined && inSchool > total + 1) fail(`本学派 ${inSchool}k > 总量 ${total}k`);
+      if (Math.abs(direct + periodic - total) > 1)
+        fail(`direct ${direct}k + periodic ${periodic}k ≠ ${total}k`);
+      if (inSchool !== undefined && inSchool > total + 1)
+        fail(`本学派 ${inSchool}k > 总量 ${total}k`);
       if (x < 0 || x > 100) fail(`份额 ${x}% 越界`);
       if (K > M) fail(`有伤害秒数 ${K} > 窗口 ${M}`);
       if (G > M - K) fail(`最长空档 ${G} > ${M - K}`);
-      if (maxM !== null && M > maxM) fail(`窗口 ${M} s 长于观测时长 ${observed}s`);
+      if (maxM !== null && M > maxM)
+        fail(`窗口 ${M} s 长于观测时长 ${observed}s`);
     }
   });
   return failures;
@@ -1819,6 +1830,103 @@ export function checkOutcomeRefConsistency(lines: string[]): string[] {
 /** `95` → `1:35` — the gate's own rendering of a rendered second, only for
  * failure messages (the analysis side's `fmtTime` is the authority on the
  * text itself). */
+// "1:15  [CONSEQ]   friendly healer 1(HPriest) in Fear for 2s → during it: 2(AWarrior) 80% → low 59% at 1:02"
+// "0:46  [CONSEQ]   enemy healer 5(HPriest) kicked (Heal; 4s school lockout) → inside the lockout: …"
+const CONSEQ_LINE =
+  /^(\d+):(\d+)\s+\[CONSEQ\]\s+(friendly|enemy) healer (\d+)\([^)]*\) (?:kicked \([^;]*; ([\d.]+)s school lockout\) → inside the lockout|in .*? for (\d+)s → during it): (.*)$/;
+const CONSEQ_DROP = /(\d+)\([^)]*\) (\d+)% → low (\d+)% at (\d+):(\d+)/g;
+
+/**
+ * Hard invariant (GH #70, 2026-09-24): an `[CONSEQ]` line's HP numbers are
+ * `[STATE]` grid readings (observedConsequences.ts samples with
+ * `gridHpPct` / `gridHpMinInWindow`, the sampler behind every [STATE] tick),
+ * so wherever the timeline also printed a tick they must agree:
+ *  - `A% → low B% at m:ss`: the tick at the line's second reads A, the tick
+ *    at m:ss reads B, and no tick of that unit inside the span reads below B;
+ *  - `no teammate dropped 10% or more`: no teammate of that healer (same side
+ *    of the [STATE] line) reads 10+ points below its tick at the line's second
+ *    anywhere inside the span.
+ * The span end is only known to the second the analysis floored, so the
+ * check covers [start, start + rendered duration − 1], which is always
+ * inside it. Same class as checkHealedThroughConsistency (endpoints and
+ * trough must come from one sampler).
+ */
+export function checkConseqHpStateConsistency(lines: string[]): string[] {
+  const stateAt = new Map<
+    number,
+    { friends: Map<number, number>; enemies: Map<number, number> }
+  >();
+  for (const line of lines) {
+    const st = line.match(STATE_LINE);
+    if (!st) continue;
+    const [fPart, ePart] = st[3]!.split(" / ");
+    const read = (part: string | undefined): Map<number, number> => {
+      const m = new Map<number, number>();
+      for (const tok of (part ?? "").matchAll(STATE_TOKEN))
+        if (/^\d+$/.test(tok[2]!)) m.set(Number(tok[1]), Number(tok[2]));
+      return m;
+    };
+    const friendsPart = fPart?.startsWith("friends") ? fPart : undefined;
+    const enemiesPart = fPart?.startsWith("enemies") ? fPart : ePart;
+    stateAt.set(Number(st[1]) * 60 + Number(st[2]), {
+      friends: read(friendsPart),
+      enemies: read(enemiesPart),
+    });
+  }
+  const tick = (sec: number, side: "friends" | "enemies", id: number) =>
+    stateAt.get(sec)?.[side].get(id);
+
+  const failures: string[] = [];
+  lines.forEach((line, i) => {
+    const m = line.match(CONSEQ_LINE);
+    if (!m) return;
+    const start = Number(m[1]) * 60 + Number(m[2]);
+    const side = m[3] === "friendly" ? "friends" : "enemies";
+    const healerId = Number(m[4]);
+    const spanS = Math.floor(Number(m[5] ?? m[6]));
+    const lastSure = start + Math.max(0, spanS - 1);
+    const body = m[7]!;
+    const where = `line ${i + 1}: [CONSEQ] ${fmtMmSs(start)}`;
+    const drops = [...body.matchAll(CONSEQ_DROP)];
+    for (const d of drops) {
+      const id = Number(d[1]);
+      const a = Number(d[2]);
+      const b = Number(d[3]);
+      const lowSec = Number(d[4]) * 60 + Number(d[5]);
+      const t0 = tick(start, side, id);
+      if (t0 !== undefined && t0 !== a)
+        failures.push(`${where} 起点写 ${id} 为 ${a}%,同秒 [STATE] 报 ${t0}%`);
+      const tl = tick(lowSec, side, id);
+      if (tl !== undefined && tl !== b)
+        failures.push(
+          `${where} 低点写 ${id} 在 ${fmtMmSs(lowSec)} 为 ${b}%,同秒 [STATE] 报 ${tl}%`,
+        );
+      for (let s = start; s <= lastSure; s++) {
+        const v = tick(s, side, id);
+        if (v !== undefined && v < b)
+          failures.push(
+            `${where} 低点写 ${id} ${b}%,但 ${fmtMmSs(s)} 的 [STATE] 报 ${v}%`,
+          );
+      }
+    }
+    if (drops.length === 0 && body.startsWith("no teammate dropped")) {
+      const startTicks = stateAt.get(start)?.[side];
+      if (!startTicks) return;
+      for (const [id, v0] of startTicks) {
+        if (id === healerId) continue;
+        for (let s = start; s <= lastSure; s++) {
+          const v = tick(s, side, id);
+          if (v !== undefined && v0 - v >= 10)
+            failures.push(
+              `${where} 写「no teammate dropped」,但 ${id} 从 ${v0}% 掉到 ${fmtMmSs(s)} 的 ${v}%`,
+            );
+        }
+      }
+    }
+  });
+  return failures;
+}
+
 function fmtMmSs(seconds: number): string {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
@@ -2210,6 +2318,7 @@ export function checkMatch(
   hardFailures.push(...checkKillAttemptFraming(lines));
   hardFailures.push(...checkResNoChangeRowsPruned(lines));
   hardFailures.push(...checkDuringExternalConsistency(lines));
+  hardFailures.push(...checkConseqHpStateConsistency(lines));
 
   return {
     ordinal: entry.ordinal,

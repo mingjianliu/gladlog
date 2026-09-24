@@ -45,9 +45,11 @@ import * as claimChecker from "@gladlog/analysis/src/compare/claimChecker";
 import * as burstAnswered from "@gladlog/analysis/src/context/burstAnswered";
 import * as cdPrior from "@gladlog/analysis/src/context/cdPrior";
 import * as matchTimelineSections from "@gladlog/analysis/src/context/matchTimelineSections";
+import * as observedConsequences from "@gladlog/analysis/src/context/observedConsequences";
 import * as resLedgerPrune from "@gladlog/analysis/src/context/resLedgerPrune";
 import * as stackedDefensivesContext from "@gladlog/analysis/src/context/stackedDefensives";
 import * as timelineHelpers from "@gladlog/analysis/src/context/timelineHelpers";
+import * as unitLabel from "@gladlog/analysis/src/context/unitLabel";
 import * as abilityProfileMod from "@gladlog/analysis/src/data/abilityProfile";
 import * as arenaGeometry from "@gladlog/analysis/src/data/arenaGeometry";
 import * as backlashCc from "@gladlog/analysis/src/data/backlashCc";
@@ -268,6 +270,16 @@ const INDEX: PredicateRow[] = [
     file: `${A}/analysis/crisisDecisionPoints.ts`,
     symbol: "isDmgSpikeTrough",
     mod: crisisDecisionPoints,
+  },
+  {
+    file: `${A}/context/observedConsequences.ts`,
+    symbol: "formatObservedConsequences",
+    mod: observedConsequences,
+  },
+  {
+    file: `${A}/context/unitLabel.ts`,
+    symbol: "abbrevSpec",
+    mod: unitLabel,
   },
   {
     file: `${A}/utils/enemyDefensives.ts`,
@@ -1271,6 +1283,11 @@ const INDEX: PredicateRow[] = [
   {
     file: `${E}/quality/promptQualityCheck.ts`,
     symbol: "checkCrisisHpStateConsistency",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkConseqHpStateConsistency",
     mod: promptQualityCheck,
   },
   {

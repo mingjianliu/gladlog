@@ -23,6 +23,12 @@
  *       `claude -p` (product isolation args, neutral cwd, product system prompt
  *       prepended as joinPrompt does), resumable; RUN/<arm>/responses/NNN.txt
  *   then: npx tsx packages/eval/scripts/interpolateResponses.ts --arm RUN/<arm>
+ *   build … --any
+ *       skip the "must have a forced/used line" filter (a plain round sample)
+ *   control --run RUN
+ *       PROMPT_VERSION ≥ 109: RUN/A holds product prompts; write the pre-109
+ *       prompt for the same rounds into RUN/B (section dropped, old rule back;
+ *       verified byte-identical to v106 prompts on 40/40 rounds)
  *   judge-prep --run RUN / judge --run RUN [--concurrency 4] / report --run RUN
  *       every surviving title + explanation sentence of BOTH arms, shuffled
  *       per round, judged blind (Opus 5.5) against arm B's evidence;
@@ -161,25 +167,33 @@ async function build(): Promise<void> {
       const k = new Set(lines.map((l) => l.kind));
       if (lines.length < 3 || k.size < 2) continue;
       // every round must exercise the evidence-gated "forced" wording
-      if (!k.has("forced") && !k.has("used")) continue;
+      // (--any: skip that filter — a plain sample of rounds, e.g. for the
+      // post-launch overreach measurement)
+      if (!argv.includes("--any") && !k.has("forced") && !k.has("used"))
+        continue;
       const promptA = buildFindingsPrompt(
         cands,
         ctx,
         specToString(owner.spec) || String(owner.spec),
       );
       const section = renderConsequenceSection(lines);
-      const promptB = armBPrompt(promptA, section);
+      // Since PROMPT_VERSION 109 the product itself carries the relaxed rule
+      // and the [CONSEQ] section: arm A is then the product, and there is no
+      // arm B to build (the old rule text is gone).
+      const promptB = promptA.includes(CAUSATION_RULE_A)
+        ? armBPrompt(promptA, section)
+        : null;
       const ordinal = index.length + 1;
       const nnn = String(ordinal).padStart(3, "0");
       const matchId = String(combat.id ?? path.split("/").pop());
       const file = `prompts/${nnn}-${matchId.slice(0, 8)}.txt`;
       writeFileSync(join(run, "A", file), promptA);
-      writeFileSync(join(run, "B", file), promptB);
+      if (promptB !== null) writeFileSync(join(run, "B", file), promptB);
       writeFileSync(join(run, "conseq", `${nnn}.txt`), section + "\n");
       index.push({ ordinal, file, matchId, source: path });
       for (const l of lines) kinds[l.kind] = (kinds[l.kind] ?? 0) + 1;
       console.log(
-        `${nnn} ${matchId.slice(0, 8)} ${specToString(owner.spec)} lines=${lines.length} kinds=${[...k].join(",")} chars A=${promptA.length} B=${promptB.length}`,
+        `${nnn} ${matchId.slice(0, 8)} ${specToString(owner.spec)} lines=${lines.length} kinds=${[...k].join(",")} chars A=${promptA.length} B=${promptB?.length ?? "-"}`,
       );
       break; // one round per file, for spread
     }
@@ -514,7 +528,13 @@ function judgePrep(): void {
       join(run, "judge", `${nnn}.items.json`),
       JSON.stringify(mixed, null, 2) + "\n",
     );
-    const evidence = evidenceOf(readFileSync(join(run, "B", e.file), "utf8"));
+    // Evidence = the arm whose prompt is the superset (it carries the
+    // OBSERVED CONSEQUENCES section): B in the first run, A once the product
+    // itself renders the section and B is the pre-109 control.
+    const bFile = join(run, "B", e.file);
+    const aText = readFileSync(join(run, "A", e.file), "utf8");
+    const bText = existsSync(bFile) ? readFileSync(bFile, "utf8") : "";
+    const evidence = evidenceOf(bText.length > aText.length ? bText : aText);
     const list = mixed.map((it) => `${it.id}: ${it.text}`).join("\n");
     writeFileSync(
       join(run, "judge", "prompts", `${nnn}.txt`),
@@ -613,7 +633,10 @@ function report(): void {
       " | unsupported (no) | partly |",
   );
   lines.push("|" + "---|".repeat(9 + kinds.length - 1));
-  for (const arm of ["A", "B"] as const) {
+  const arms = (["A", "B"] as const).filter((a) =>
+    existsSync(join(run, a, "audit-summary.json")),
+  );
+  for (const arm of arms) {
     const summary = JSON.parse(
       readFileSync(join(run, arm, "audit-summary.json"), "utf8"),
     ) as Record<
@@ -653,11 +676,38 @@ function report(): void {
     "| arm | forced-wording sentences | yes | partly | no |",
     "|---|---|---|---|---|",
   );
-  for (const arm of ["A", "B"] as const) {
+  for (const arm of arms) {
     const f = rows.filter((r) => r.arm === arm && FORCED_RE.test(r.text));
     const c = (v: string): number => f.filter((r) => r.supported === v).length;
     lines.push(
       `| ${arm} | ${f.length} | ${c("yes")} | ${c("partly")} | ${c("no")} |`,
+    );
+  }
+  // Launch check (agy review 2026-09-24): share of surviving findings with at
+  // least one overreach sentence — a consequence not fully supported, a
+  // causal verdict, or an unsupported counterfactual. > 5 % ⇒ the prompt rule
+  // alone is not enough and a programmatic check is needed.
+  const isOverreach = (r: (typeof rows)[number]): boolean =>
+    (r.kind === "consequence" && r.supported !== "yes") ||
+    r.kind === "causal-verdict" ||
+    (r.kind === "counterfactual" && r.supported !== "yes");
+  lines.push(
+    "",
+    "| arm | findings judged | with ≥ 1 overreach sentence | share | of which a consequence judged `no` |",
+    "|---|---|---|---|---|",
+  );
+  for (const arm of arms) {
+    const byF = new Map<string, (typeof rows)[number][]>();
+    for (const r of rows.filter((x) => x.arm === arm)) {
+      const k = `${r.nnn}#${r.finding}`;
+      byF.set(k, [...(byF.get(k) ?? []), r]);
+    }
+    const over = [...byF.values()].filter((rs) => rs.some(isOverreach));
+    const hardNo = [...byF.values()].filter((rs) =>
+      rs.some((r) => r.kind === "consequence" && r.supported === "no"),
+    );
+    lines.push(
+      `| ${arm} | ${byF.size} | ${over.length} | ${((100 * over.length) / Math.max(1, byF.size)).toFixed(1)} % | ${hardNo.length} |`,
     );
   }
   lines.push(
@@ -692,20 +742,69 @@ function report(): void {
   console.log(lines.slice(0, 8).join("\n"));
 }
 
+// ---------------------------------------------------------------------------
+// control --run RUN: from PROMPT_VERSION ≥ 109 product prompts in RUN/A,
+// rebuild the pre-109 prompt for the SAME rounds into RUN/B — drop the
+// OBSERVED CONSEQUENCES section and put the old causation rule back. The
+// two v109 rule lines and the example's parenthetical are the only other
+// differences between the versions, so this is the old product exactly.
+// ---------------------------------------------------------------------------
+const RULES_109_START = "- You MAY state an observable consequence";
+const RULES_109_END = "do not say the team suffered.";
+
+export function oldProductPrompt(p109: string): string {
+  const s = p109.indexOf(
+    "\n\nOBSERVED CONSEQUENCES — what the log shows happened to a team",
+  );
+  const e = p109.indexOf(MENU_ANCHOR);
+  let out = s >= 0 && e > s ? p109.slice(0, s) + p109.slice(e) : p109;
+  const rs = out.indexOf(RULES_109_START);
+  const re = out.indexOf(RULES_109_END);
+  if (rs < 0 || re < rs) throw new Error("v109 rule lines not found");
+  out =
+    out.slice(0, rs) + CAUSATION_RULE_A + out.slice(re + RULES_109_END.length);
+  return out.replace(
+    "(numbers only via placeholders; no outcome attribution)",
+    "(numbers only via placeholders; no causation)",
+  );
+}
+
+function control(): void {
+  const run = flag("--run")!;
+  const index = JSON.parse(
+    readFileSync(join(run, "A", "index.json"), "utf8"),
+  ) as { file: string }[];
+  mkdirSync(join(run, "B", "prompts"), { recursive: true });
+  for (const e of index)
+    writeFileSync(
+      join(run, "B", e.file),
+      oldProductPrompt(readFileSync(join(run, "A", e.file), "utf8")),
+    );
+  writeFileSync(
+    join(run, "B", "index.json"),
+    readFileSync(join(run, "A", "index.json"), "utf8"),
+  );
+  console.log(
+    `control arm (pre-109 prompt) written for ${index.length} rounds`,
+  );
+}
+
 const main =
-  cmd === "build"
-    ? build
-    : cmd === "dist"
-      ? dist
-      : cmd === "run"
-        ? runArm
-        : cmd === "judge-prep"
-          ? async () => judgePrep()
-          : cmd === "judge"
-            ? judgeRun
-            : cmd === "report"
-              ? async () => report()
-              : null;
+  cmd === "control"
+    ? async () => control()
+    : cmd === "build"
+      ? build
+      : cmd === "dist"
+        ? dist
+        : cmd === "run"
+          ? runArm
+          : cmd === "judge-prep"
+            ? async () => judgePrep()
+            : cmd === "judge"
+              ? judgeRun
+              : cmd === "report"
+                ? async () => report()
+                : null;
 if (!main) {
   console.error("usage: consequenceProbe.ts build|dist|run … (see header)");
   process.exit(2);

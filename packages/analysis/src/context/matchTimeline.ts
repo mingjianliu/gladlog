@@ -121,6 +121,7 @@ import {
   peakSpikePlacement,
 } from "./peakSpikePlacement";
 import { pruneZeroLossResRows } from "./resLedgerPrune";
+import { abbrevSpec } from "./unitLabel";
 import {
   formatStackedDefensiveLines,
   STACKED_DEFENSIVES_LEGEND,
@@ -533,17 +534,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   // to map unit identity itself across thousands of tokens; blind review showed
   // fine-grained misattribution (pets / unit HP / dispel direction crossed).
   // Inline a compact spec tag at every reference; same-spec twins are still
-  // disambiguated by id.
-  function abbrevSpec(spec: string): string {
-    const words = spec.split(" ").filter(Boolean);
-    if (words.length <= 1) return spec;
-    return (
-      words
-        .slice(0, -1)
-        .map((w) => w[0])
-        .join("") + words[words.length - 1]
-    );
-  }
+  // disambiguated by id. abbrevSpec is shared with observedConsequences.ts.
   const nameSpecTag = new Map<string, string>(
     [...friends, ...(enemies ?? [])].map((u) => [
       u.name,

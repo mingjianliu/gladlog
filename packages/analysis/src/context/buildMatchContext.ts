@@ -93,6 +93,7 @@ import {
 import { heroBuildGroupOf } from "../utils/talents";
 import { warlockPetFunction } from "../utils/warlockPet";
 import { buildCriticalWindowSet } from "./criticalWindows";
+import { formatObservedConsequences } from "./observedConsequences";
 import {
   formatDecisiveCounterfactualLine,
   formatMitigationAuditLine,
@@ -100,6 +101,7 @@ import {
   MITIGATION_AUDIT_INDEPENDENT_NOTE,
 } from "./matchTimelineSections";
 import { DMG_SPIKE_THRESHOLD, mergeTimestampedLines } from "./timelineHelpers";
+import { unitLabeler } from "./unitLabel";
 import {
   buildMatchTimeline,
   BuildMatchTimelineParams,
@@ -846,6 +848,27 @@ export function buildMatchContext(
     if (attemptLines.length > 0) {
       tLines.push("");
       attemptLines.forEach((l) => tLines.push(l));
+    }
+  }
+
+  // GH #70 (2026-09-24): what a team's HP did while its healer was kicked or
+  // CC'd — observable consequences the findings prompt may now state.
+  {
+    const conseqLines = formatObservedConsequences({
+      combat,
+      friends: friends as ICombatUnit[],
+      enemies: enemies as ICombatUnit[],
+      friendlyCC: ccTrinketSummaries,
+      enemyCC: enemyCCSummaries,
+      labels: unitLabeler(
+        [...friends, ...enemies] as ICombatUnit[],
+        playerIdMap,
+        enemyIdMap,
+      ),
+    });
+    if (conseqLines.length > 0) {
+      tLines.push("");
+      conseqLines.forEach((l) => tLines.push(l));
     }
   }
 

@@ -833,4 +833,16 @@
 //  +8, all later-window opportunities checked by hand; table −42: 44 lead
 //  CDs now have their own cell with a 0–2 pp contrast, 6 own cells fell
 //  under 3 pp); [CD PRIOR] episodes 222 → 223, 4 say "ready from".
-export const PROMPT_VERSION = 108;
+//  v109 (2026-09-24, GH #70, user rulings 2026-09-19 / 2026-09-24): the
+//  findings prompt may state observable consequences and the reason behind
+//  advice; it still may not pin a death / loss / win on one event, claim what
+//  would certainly have happened in this match, or infer a state the context
+//  does not show. New OBSERVED CONSEQUENCES section (context/
+//  observedConsequences.ts): what a team's HP did while its healer was kicked
+//  (inside the school lockout) or CC'd >= 2 s, both teams, [STATE]-grid
+//  numbers. 605 files (3,520 owner contexts): 48,162 [CONSEQ] lines in 3,502
+//  contexts (kick 5,066; "no teammate dropped" 23,489); context +5.73 %;
+//  candidate counts unchanged. Gate checkConseqHpStateConsistency (29th
+//  class): 0 failures; a +7 pp mutation of each file's first low is caught
+//  in 2,215 / 3,399 files (the rest have no [STATE] tick in the span).
+export const PROMPT_VERSION = 109;

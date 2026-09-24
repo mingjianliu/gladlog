@@ -27,7 +27,11 @@ describe("buildFindingsPrompt", () => {
     expect(p).toMatch(/RICH CONTEXT HERE/); // holistic context included
     expect(p).toMatch(/JSON/i);
     expect(p).toMatch(/placeholder|\{\{/); // numbers via placeholders
-    expect(p).toMatch(/because|causal|caused/i); // the no-causal rule is stated
+    // GH #70: observable consequences are allowed; outcome attribution,
+    // certain counterfactuals and unshown states stay banned
+    expect(p).toMatch(/NEVER pin a death, loss or win on one event/);
+    expect(p).toMatch(/NEVER claim what would certainly have happened/);
+    expect(p).toMatch(/NEVER infer a state the context does not show/);
     expect(p).toMatch(/Discipline Priest/);
     expect(p).toMatch(/no digits|words|discarded/i); // strict no-raw-digit guidance
   });
