@@ -1,7 +1,6 @@
 import {
   AtomicArenaCombat,
   CombatUnitClass,
-  CombatUnitPowerType,
   CombatUnitSpec,
   ICombatUnit,
   LogEvent,
@@ -828,45 +827,6 @@ export function isDeadAtRenderSecond(
   let lastMs = -Infinity;
   for (const d of records) lastMs = Math.max(lastMs, d.timestamp);
   return renderSecond >= Math.floor((lastMs - matchStartMs) / 1000);
-}
-
-/**
- * Returns the power state (current/max) of `unit` for a specific power type
- * (defaults to Mana) at the given timestamp by finding the nearest advancedAction.
- * Returns null when no data exists.
- */
-export function getUnitManaAtTimestamp(
-  unit: ICombatUnit,
-  timestampMs: number,
-  maxDtMs = HP_SAMPLE_RADIUS_MS,
-): { current: number; max: number } | null {
-  const closestAction = binarySearchClosest(
-    getSortedAdvancedActions(unit),
-    timestampMs,
-    (a) => a.logLine.timestamp,
-  );
-
-  if (!closestAction) {
-    return null;
-  }
-
-  if (closestAction.advancedActorId !== unit.id) {
-    return null;
-  }
-
-  const manaPower = closestAction.advancedActorPowers.find(
-    (p) => p.type === CombatUnitPowerType.Mana,
-  );
-  if (!manaPower) {
-    return null;
-  }
-
-  const dt = Math.abs(closestAction.logLine.timestamp - timestampMs);
-  if (dt > maxDtMs) {
-    return null;
-  }
-
-  return { current: manaPower.current, max: manaPower.max };
 }
 
 /**

@@ -9,7 +9,6 @@ import {
   DEFENSIVE_TAGS,
   FORBEARANCE_GATED_IDS,
   getUnitHpAtTimestamp,
-  getUnitManaAtTimestamp,
   gridHpMinInWindow,
   HP_SAMPLE_RADIUS_MS,
   IDamageBucket,
@@ -34,6 +33,7 @@ import {
 } from "../utils/deathOutcomeAnalysis";
 import { sumAbsorbedPressure } from "../utils/incomingPressure";
 import { getHpPercentAtTime } from "../utils/killWindowTargetSelection";
+import { getUnitResourceAtTimestamp } from "../utils/resourceAt";
 import { benchmarks } from "../utils/specBaselines";
 import {
   DMG_SPIKE_THRESHOLD,
@@ -513,12 +513,8 @@ export function emitManaMarkerEntries(params: {
         const isDead = deathAt !== undefined && t >= Math.floor(deathAt);
         if (isDead) continue;
 
-        const mana = getUnitManaAtTimestamp(u, tsMs);
-        if (mana) {
-          const pct =
-            mana.max > 0 ? Math.round((mana.current / mana.max) * 100) : 0;
-          friendlyParts.push(`${pid(u.name)}:${pct}%`);
-        }
+        const mana = getUnitResourceAtTimestamp(u, tsMs);
+        if (mana) friendlyParts.push(`${pid(u.name)}:${mana.pct}%`);
       }
 
       const enemyParts: string[] = [];
@@ -527,12 +523,8 @@ export function emitManaMarkerEntries(params: {
         const isDead = deathAt !== undefined && t >= Math.floor(deathAt);
         if (isDead) continue;
 
-        const mana = getUnitManaAtTimestamp(u, tsMs);
-        if (mana) {
-          const pct =
-            mana.max > 0 ? Math.round((mana.current / mana.max) * 100) : 0;
-          enemyParts.push(`${enemyPid(u.name)}:${pct}%`);
-        }
+        const mana = getUnitResourceAtTimestamp(u, tsMs);
+        if (mana) enemyParts.push(`${enemyPid(u.name)}:${mana.pct}%`);
       }
 
       if (friendlyParts.length > 0 || enemyParts.length > 0) {

@@ -201,9 +201,11 @@ function ccSecondsInWindow(
   const windowStartMs = matchStartMs + windowFrom * 1000;
   const windowEndMs = matchStartMs + windowTo * 1000;
 
-  // Track per-spellId CC start times (handles overlapping auras correctly)
+  // Track per-spellId CC start times. Overlaps are collected per CC and merged
+  // before summing (same rule as enemyCDs.ts's healer-CC block): two different
+  // CCs running at once are one CC'd stretch, not two.
   const ccStartBySpell = new Map<string, number>();
-  let totalMs = 0;
+  const spans: { start: number; end: number }[] = [];
 
   for (const a of unit.auraEvents) {
     if (!a.spellId) continue;
@@ -224,11 +226,12 @@ function ccSecondsInWindow(
       const ccEnd = a.logLine.timestamp;
       ccStartBySpell.delete(a.spellId);
 
-      // Clamp to window and accumulate overlap
+      // Clamp to window
       if (ccStart > 0 && ccStart < windowEndMs && ccEnd > windowStartMs) {
-        const overlapStart = Math.max(ccStart, windowStartMs);
-        const overlapEnd = Math.min(ccEnd, windowEndMs);
-        totalMs += Math.max(0, overlapEnd - overlapStart);
+        spans.push({
+          start: Math.max(ccStart, windowStartMs),
+          end: Math.min(ccEnd, windowEndMs),
+        });
       }
     }
   }
@@ -236,11 +239,22 @@ function ccSecondsInWindow(
   // Any CC aura still open at the end of the window
   for (const [, ccStart] of ccStartBySpell) {
     if (ccStart < windowEndMs) {
-      const overlapStart = Math.max(ccStart, windowStartMs);
-      totalMs += Math.max(0, windowEndMs - overlapStart);
+      spans.push({ start: Math.max(ccStart, windowStartMs), end: windowEndMs });
     }
   }
 
+  spans.sort((a, b) => a.start - b.start);
+  let totalMs = 0;
+  let cur: { start: number; end: number } | null = null;
+  for (const sp of spans) {
+    if (cur && sp.start <= cur.end) {
+      cur.end = Math.max(cur.end, sp.end);
+    } else {
+      if (cur) totalMs += Math.max(0, cur.end - cur.start);
+      cur = { ...sp };
+    }
+  }
+  if (cur) totalMs += Math.max(0, cur.end - cur.start);
   return totalMs / 1000;
 }
 

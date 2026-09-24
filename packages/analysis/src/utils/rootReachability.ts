@@ -28,6 +28,7 @@
 import type { ICombatUnit } from "@gladlog/parser-compat";
 import { CombatUnitReaction } from "@gladlog/parser-compat";
 
+import { resolveSummonOwner } from "../context/timelineHelpers";
 import { DR_CATEGORIES_GENERATED } from "../data/drCategoriesGenerated";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { buildAuraIntervals } from "./auraIntervals";
@@ -138,14 +139,18 @@ export function rootSourceLabel(
   srcUnitName: string,
   players: ICombatUnit[],
   allUnits: ICombatUnit[],
+  /** Players on the side that could have cast the root (the rooted unit's
+   * opponents). Restricts the by-name owner lookup to that side, so a
+   * same-named summon on the other team is never credited. */
+  sourceSide?: ICombatUnit[],
 ): string {
   if (players.some((p) => p.name === srcUnitName)) return srcUnitName;
-  const summon = allUnits.find(
-    (u) => u.name === srcUnitName && u.ownerId.length > 0,
-  );
-  const owner = summon
-    ? players.find((p) => p.id === summon.ownerId)
-    : undefined;
+  const owner = resolveSummonOwner({
+    allUnits,
+    friends: sourceSide ?? players,
+    name: srcUnitName,
+    side: "friendly",
+  });
   if (owner) return `${owner.name.split("-")[0]}'s pet`;
   const short = srcUnitName.split("-")[0];
   return [...short].some((c) => c.charCodeAt(0) > 127) ? "[pet]" : short;
@@ -226,7 +231,12 @@ export function computeRootReachability(
         rootedIsFriendly: X.reaction === CombatUnitReaction.Friendly,
         rootedRole: role,
         sourceName: iv.srcUnitName,
-        sourceLabel: rootSourceLabel(iv.srcUnitName, players, allUnits),
+        sourceLabel: rootSourceLabel(
+          iv.srcUnitName,
+          players,
+          allUnits,
+          enemies,
+        ),
         spellId: iv.spellId,
         spellName: getEnglishSpellName(iv.spellId, iv.spellName),
         unreachableSeconds: unreachable,

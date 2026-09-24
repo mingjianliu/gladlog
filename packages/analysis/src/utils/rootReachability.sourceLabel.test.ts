@@ -28,6 +28,24 @@ describe("rootSourceLabel", () => {
     expect(rootSourceLabel("陷地图腾", players, all)).toBe("Bingbumlol's pet");
   });
 
+  it("sourceSide restricts the by-name owner lookup to the side that could cast it", () => {
+    // Real shape (2026-09-24 corpus, 18 [ROOT] lines): both teams field a
+    // shaman whose Earthgrab Totem shares one unit name; the name-only lookup
+    // credited the rooted player's own teammate.
+    const all = [
+      ...players,
+      unit("t1", "Earthgrab Totem", "p1"),
+      unit("t2", "Earthgrab Totem", "p2"),
+    ];
+    expect(
+      rootSourceLabel("Earthgrab Totem", players, all, [players[1]!]),
+    ).toBe("Trillebelly's pet");
+    // No owner on the casting side → no owner is invented.
+    expect(rootSourceLabel("Earthgrab Totem", players, all, [])).toBe(
+      "Earthgrab Totem",
+    );
+  });
+
   it("a localized summon with no owner → `[pet]`; an ASCII one keeps its short name", () => {
     expect(rootSourceLabel("陷地图腾", players, players)).toBe("[pet]");
     expect(

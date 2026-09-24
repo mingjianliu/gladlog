@@ -5,6 +5,7 @@ import {
   coveredMsWithin,
 } from "./cannotCastIntervals";
 import { isHealerSpec, specToString } from "./cooldowns";
+import { getLowestHpPercentInWindow } from "./killWindowTargetSelection";
 import { fmtTime } from "./renderGrid";
 
 // ---------------------------------------------------------------------------
@@ -98,38 +99,6 @@ function getCCCoveredMs(
   toMs: number,
 ): number {
   return coveredMsWithin(cannotCast, fromMs, toMs);
-}
-
-// ---------------------------------------------------------------------------
-// Lowest-friendly-HP helper (gap window)
-// ---------------------------------------------------------------------------
-
-/**
- * The minimum HP% (0-100) across every friendly player's raw advancedAction
- * samples whose timestamp falls inside [fromMs, toMs]. Unlike
- * `getUnitHpAtTimestamp` (nearest-sample lookup for a single instant, used by
- * the render-grid-anchored gate predicates), this scans every sample the
- * window actually contains — the fact being measured is "how low did anyone
- * get while the healer sat idle", not "what was the HP at one clock tick".
- * Returns null when no friendly advancedAction sample lands inside the window.
- */
-function getLowestFriendlyHpPct(
-  teammates: ICombatUnit[],
-  fromMs: number,
-  toMs: number,
-): number | null {
-  let min: number | null = null;
-  for (const teammate of teammates) {
-    for (const action of teammate.advancedActions) {
-      if (action.logLine.timestamp < fromMs || action.logLine.timestamp > toMs)
-        continue;
-      if (action.advancedActorMaxHp <= 0) continue;
-      const pct =
-        (action.advancedActorCurrentHp / action.advancedActorMaxHp) * 100;
-      if (min === null || pct < min) min = pct;
-    }
-  }
-  return min;
 }
 
 // ---------------------------------------------------------------------------
@@ -241,11 +210,22 @@ export function detectHealingGaps(
 
     if (!anyUnderPressure) continue;
 
-    const lowestFriendlyHpPct = getLowestFriendlyHpPct(
-      teammates,
-      fromMs,
-      effectiveToMs,
-    );
+    // "How low did anyone get while the healer sat idle": every sample in the
+    // window, per teammate via the shared windowed predicate, then the min.
+    let lowestFriendlyHpPct: number | null = null;
+    for (const teammate of teammates) {
+      const low = getLowestHpPercentInWindow(
+        teammate,
+        (fromMs - matchStartMs) / 1000,
+        (effectiveToMs - matchStartMs) / 1000,
+        matchStartMs,
+      );
+      if (
+        low !== null &&
+        (lowestFriendlyHpPct === null || low < lowestFriendlyHpPct)
+      )
+        lowestFriendlyHpPct = low;
+    }
 
     results.push({
       fromSeconds: (fromMs - matchStartMs) / 1000,

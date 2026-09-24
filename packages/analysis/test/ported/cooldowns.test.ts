@@ -1,7 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-non-null-assertion */
 import {
   CombatUnitClass,
-  CombatUnitPowerType,
   CombatUnitReaction,
   CombatUnitSpec,
   LogEvent,
@@ -22,7 +21,6 @@ import {
   GUARDIAN_SPIRIT_SAVE_HEAL_ID,
   guardianSpiritSaved,
   getUnitHpAtTimestamp,
-  getUnitManaAtTimestamp,
   IEnemyCDTimelineForTiming,
   IMajorCooldownInfo,
   isHealerSpec,
@@ -1797,110 +1795,6 @@ describe("extractMajorCooldowns", () => {
     it("should find closest within maxDtMs", () => {
       // Target 1500, closest is 1000. Diff = 500. maxDtMs = 600
       expect(getUnitHpAtTimestamp(unit, 1500, 600)).toBe(10);
-    });
-  });
-
-  describe("getUnitManaAtTimestamp (optimized with binary search)", () => {
-    const advancedActions = (
-      [
-        {
-          ...makeAdvancedAction(1000, 0, 0, 1000, 1000),
-          advancedActorId: "player-1",
-          advancedActorPowers: [
-            { type: CombatUnitPowerType.Mana, current: 100, max: 1000 },
-          ],
-        },
-        {
-          ...makeAdvancedAction(2000, 0, 0, 1000, 1000),
-          advancedActorId: "player-1",
-          advancedActorPowers: [
-            { type: CombatUnitPowerType.Mana, current: 500, max: 1000 },
-          ],
-        },
-        {
-          ...makeAdvancedAction(3000, 0, 0, 1000, 1000),
-          advancedActorId: "player-1",
-          advancedActorPowers: [
-            { type: CombatUnitPowerType.Mana, current: 200, max: 1000 },
-          ],
-        },
-        {
-          ...makeAdvancedAction(4000, 0, 0, 1000, 1000),
-          advancedActorId: "player-1",
-          advancedActorPowers: [
-            { type: CombatUnitPowerType.Mana, current: 800, max: 1000 },
-          ],
-        },
-      ] as any[]
-    ).sort((a, b) => a.logLine.timestamp - b.logLine.timestamp);
-
-    const unit = makeUnit("player-1", { advancedActions });
-
-    it("should find the exact mana at a given timestamp", () => {
-      expect(getUnitManaAtTimestamp(unit, 2000)).toEqual({
-        current: 500,
-        max: 1000,
-      });
-    });
-
-    it("should find the closest mana before the timestamp", () => {
-      expect(getUnitManaAtTimestamp(unit, 2100)).toEqual({
-        current: 500,
-        max: 1000,
-      });
-    });
-
-    it("should find the closest mana after the timestamp", () => {
-      expect(getUnitManaAtTimestamp(unit, 2900)).toEqual({
-        current: 200,
-        max: 1000,
-      });
-    });
-
-    it("should handle timestamp before the first action", () => {
-      expect(getUnitManaAtTimestamp(unit, 500)).toEqual({
-        current: 100,
-        max: 1000,
-      });
-    });
-
-    it("should handle timestamp after the last action", () => {
-      expect(getUnitManaAtTimestamp(unit, 4500)).toEqual({
-        current: 800,
-        max: 1000,
-      });
-    });
-
-    it("should return null if no advancedActions are present", () => {
-      const emptyUnit = makeUnit("player-empty", { advancedActions: [] });
-      expect(getUnitManaAtTimestamp(emptyUnit, 2000)).toBeNull();
-    });
-
-    it("should return null if no mana power type is found in advancedActions", () => {
-      const hpOnlyActions = [
-        {
-          ...makeAdvancedAction(1000, 0, 0, 1000, 1000),
-          advancedActorId: "player-hp-only",
-          advancedActorPowers: [
-            { type: CombatUnitPowerType.HealthCost, current: 100, max: 1000 },
-          ],
-        },
-      ] as any[];
-      const unitHpOnly = makeUnit("player-hp-only", {
-        advancedActions: hpOnlyActions,
-      });
-      expect(getUnitManaAtTimestamp(unitHpOnly, 1000)).toBeNull();
-    });
-
-    it("should respect maxDtMs and return null if no close action", () => {
-      expect(getUnitManaAtTimestamp(unit, 1500, 200)).toBeNull();
-    });
-
-    it("should find closest within maxDtMs", () => {
-      expect(getUnitManaAtTimestamp(unit, 1500, 600)).toEqual({
-        current: 100,
-        max: 1000,
-      });
     });
   });
 });

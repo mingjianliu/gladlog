@@ -4,6 +4,7 @@ import { resolveMitigation } from "../data/mitigationComponents";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import spellIdLists from "../data/spellIdLists";
 import { absorbContributionsInWindow } from "./absorbShields";
+import { getSortedAdvancedActions } from "./advancedActions";
 import { buildAuraIntervals, IAuraInterval } from "./auraIntervals";
 import { binarySearchClosest } from "./binarySearch";
 import { IPlayerCCTrinketSummary } from "./ccTrinketAnalysis";
@@ -96,7 +97,7 @@ function absHpAt(
   tMs: number,
 ): { hp: number; maxHp: number } | null {
   const closest = binarySearchClosest(
-    unit.advancedActions,
+    getSortedAdvancedActions(unit),
     tMs,
     (a) => a.logLine.timestamp,
   );

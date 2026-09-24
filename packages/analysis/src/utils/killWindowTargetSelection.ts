@@ -14,6 +14,7 @@ import {
   effectiveCooldownSeconds,
   spellEffectData,
 } from "../data/spellEffectData";
+import { getSortedAdvancedActions } from "./advancedActions";
 import {
   applyCdTalentModifiers,
   cdAvailableAt,
@@ -171,7 +172,7 @@ export function getLowestHpPercentInWindow(
   toSeconds: number,
   matchStartMs: number,
 ): number | null {
-  const actions = unit.advancedActions;
+  const actions = getSortedAdvancedActions(unit);
   if (actions.length === 0) return null;
 
   const fromMs = matchStartMs + fromSeconds * 1000;
