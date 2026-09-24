@@ -70,7 +70,7 @@ a death / finding / burst window and jump to that moment in the video.
   the coupled-dimension + rubric fixes. This entry was never struck through —
   accounting closed 2026-09-22 (GH #38).
 
-- **Timeline-prompt token compression** — ~~the timeline-variant prompt is ~76%
+- ~~**Timeline-prompt token compression**~~ **Retired 2026-09-24, user ruling (option (a), "38关掉").** Size at PROMPT_VERSION 108, 309-prompt corpus: mean 41.6k chars ≈ 10.9k tokens, `[STATE]` 14.3 %. Neither latency nor quality was ever measured against prompt size, and the two levers together would save at most ~1.5k tokens. History of the entry: ~~the timeline-variant prompt is ~76%
   larger than the sparse one; compress it (also helps the slow `claude -p` local
   backend).~~ **Referent gone, awaiting ruling (2026-09-22, GH #38)**: the "+76%"
   was the 2026-07-11 A/B (`ab/2026-07-11-timeline-variant`: sparse 2,851 vs
