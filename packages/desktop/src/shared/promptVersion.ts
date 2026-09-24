@@ -881,4 +881,10 @@
 //  lines, 200 / 702 friendly deaths (28.5 %), gate
 //  checkPeelOptionConsistency 0 failures; every candidate count unchanged
 //  (findings byte-identical apart from the new rule line).
-export const PROMPT_VERSION = 113;
+//  v114 (2026-09-24, GH #77 follow-up): the PEEL OPTIONS header no longer
+//  says "An option, not a verdict" — a 6-response Opus 5.5 smoke echoed it
+//  verbatim to the player 3/6 times ("Team option (not a verdict)"). Now:
+//  "Use it only as an extra way the player could have taken pressure off, in
+//  your own words", same prohibitions. Re-run of those 3: 0/3 echoes, 0
+//  boundary breaches (none in the first 6 either). Header text only.
+export const PROMPT_VERSION = 114;

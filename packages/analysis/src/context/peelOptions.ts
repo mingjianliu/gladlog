@@ -77,7 +77,7 @@ export const PEEL_MIN_USABLE_S = 3;
 export const PEEL_MAX_PER_DEATH = 2;
 
 export const PEEL_SECTION_HEADER =
-  "PEEL OPTIONS — before a friendly death: an INSTANT crowd control a teammate (or the victim) had ready on the enemy who did most of the victim's damage in the 10 s before the death, and did not use. Every counted second had: the CC reaction-ready, its owner free to act, the target in range and line of sight, not already CC'd, not immune, not at Immune DR, and no ready ability of the target's own that breaks that kind of CC. Enemy dispels are not considered. An option, not a verdict: offer it as an additional way to take pressure off; never say using it would have saved the teammate, and never call not using it a mistake.";
+  "PEEL OPTIONS — before a friendly death: an INSTANT crowd control a teammate (or the victim) had ready on the enemy who did most of the victim's damage in the 10 s before the death, and did not use. Every counted second had: the CC reaction-ready, its owner free to act, the target in range and line of sight, not already CC'd, not immune, not at Immune DR, and no ready ability of the target's own that breaks that kind of CC. Enemy dispels are not considered. Use it only as an extra way the player could have taken pressure off, in your own words; never say using it would have saved the teammate, and never call not using it a mistake.";
 
 export interface IPeelOption {
   victimName: string;
