@@ -855,4 +855,10 @@
 //  2,321; same-second landed-twin contradictions 334 → 0 (new 30th
 //  hardFailure class checkCcAvoidedLandedConsistency). Candidate menu
 //  unchanged by this.
-export const PROMPT_VERSION = 110;
+//  v111 (2026-09-24, GH #96, user "用60 2v2不管"): burst-into-mitigation's
+//  wall-coverage door 30 % → 60 %, read from data — only above 60 % does a
+//  wall measurably shrink the burst's HP drop against bursts into no wall
+//  (Solo Shuffle / 3v3; 2v2 shows no cost at any coverage and is left
+//  alone). 605 files: dps:burst-into-mitigation 163 → 35, every other
+//  candidate count and the context hash unchanged.
+export const PROMPT_VERSION = 111;

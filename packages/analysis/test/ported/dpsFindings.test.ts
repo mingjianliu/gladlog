@@ -177,6 +177,9 @@ function buildMitigationCombat(
     twoEnemies?: boolean;
     e2HpPct?: number;
     e2TrinketBurned?: boolean;
+    /** When the wall drops, ms after match start. The default (40 s)
+     * covers the whole burst; 20 s covers about half of it. */
+    mitRemoveMs?: number;
   } = {},
 ) {
   const {
@@ -184,6 +187,7 @@ function buildMitigationCombat(
     twoEnemies = true,
     e2HpPct = 20,
     e2TrinketBurned = true,
+    mitRemoveMs = 40_000,
   } = opts;
 
   const owner = makeUnit("p1", {
@@ -221,7 +225,7 @@ function buildMitigationCombat(
       makeAuraEvent(
         LogEvent.SPELL_AURA_REMOVED,
         mitSpellId,
-        MATCH_START + 20_000,
+        MATCH_START + mitRemoveMs,
         "ally",
         "e1",
         "BUFF",
@@ -275,6 +279,12 @@ describe("burst-into-mitigation(OFFENSIVE-002,2026-08-11 信号扩容批 2)", ()
     expect(found!.facts.mitSpell).toBe("Pain Suppression");
     expect(found!.facts.mitPct).toBe("40");
     expect(found!.facts.betterTarget).toBe("Squishy");
+  });
+
+  it("墙只盖住约一半爆发:不产出(GH #96 覆盖门槛 60%,用户 2026-09-24)", () => {
+    const { combat } = buildMitigationCombat({ mitRemoveMs: 20_000 });
+    const events = extractCandidateFindings(combat, "p1");
+    expect(events.some((e) => e.type === "burst-into-mitigation")).toBe(false);
   });
 
   it("无更软目标(单一敌人):不产出", () => {
@@ -448,19 +458,19 @@ describe("burst-into-mitigation(OFFENSIVE-002,2026-08-11 信号扩容批 2)", ()
         e1: mitigatedEnemy(
           "e1",
           MATCH_START + 5_000,
-          MATCH_START + 20_000,
+          MATCH_START + 40_000,
           MATCH_START + 10_000,
         ),
         e2: mitigatedEnemy(
           "e2",
           MATCH_START + 55_000,
-          MATCH_START + 70_000,
+          MATCH_START + 90_000,
           MATCH_START + 60_000,
         ),
         e3: mitigatedEnemy(
           "e3",
           MATCH_START + 105_000,
-          MATCH_START + 120_000,
+          MATCH_START + 140_000,
           MATCH_START + 110_000,
         ),
         alt1: softAlt("alt1", MATCH_START + 10_000),

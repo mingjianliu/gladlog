@@ -575,17 +575,27 @@ const CC_AVOIDABLE_CAP = 2;
  */
 const BURST_INTO_MITIGATION_MIN_PCT = 30;
 /**
- * The cited wall must cover at least this share of the burst span — USER
- * RULING 2026-09-14 ("30% 左右比较合适"), GH #96. The ledger keeps any
- * defensive overlapping >= 0.5 s, so a 20 s Avatar + Recklessness was accused
- * of going "into" a Barkskin it overlapped for 0.7 s. Measured before the
- * ruling (burstMitigationOverlapProbe.ts, talentMitigation on, S2 every 30,
- * 210 candidates): coverage >= 30 % keeps 148 (target HP drop median 10 points,
- * 13 deaths); the 62 below lost a median 21 points — the burst was not "into"
- * the wall. PROVISIONAL: the user called 30 % a guess and may prefer 35 %
- * (docs/BACKLOG.md #42 has the 25–50 % table) — not a validated value.
+ * The cited wall must cover at least this share of the burst span, GH #96.
+ * The ledger keeps any defensive that overlaps the burst by >= 0.5 s, so a
+ * 20 s Avatar + Recklessness was once accused of going "into" a Barkskin it
+ * overlapped for only 0.7 s.
+ *
+ * USER RULING 2026-09-24 ("用60 2v2不管"): 60 %, read from data rather than
+ * guessed. The 09-14 value was a provisional 30 %.
+ *
+ * Method (eval-private reports/gh96-coverage-threshold-2026-09-24, S2
+ * every-30): compare each burst with bursts into no wall at all, and find the
+ * coverage where the target's HP drop becomes measurably smaller. Start HP
+ * >= 80 %, mean drop with 95 % CI:
+ *   - Solo Shuffle: no wall 19.2 [18.5, 20.0]; 30-60 % 21.3 [19.1, 23.6]
+ *     (not different from no wall); > 60 % 15.2 [11.5, 18.8].
+ *   - 3v3: no wall 18.2; 30-60 % 13.4; > 60 % 6.8.
+ *   - Below 30 %: bursts did BETTER than no wall in every bracket (26-35).
+ *     These are reactive walls, popped late because the burst hurt.
+ * 2v2 shows no cost at any coverage (n = 46 above 60 %); the ruling leaves
+ * it alone rather than special-casing it.
  */
-const BURST_INTO_MITIGATION_MIN_COVERAGE = 0.3;
+const BURST_INTO_MITIGATION_MIN_COVERAGE = 0.6;
 // at-cap 体检(2026-08-26):2/20(10%),惰性。
 const BURST_INTO_MITIGATION_CAP = 2;
 

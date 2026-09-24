@@ -60,7 +60,7 @@ beforeEach(() => {
 });
 
 describe("UncoveredHighlightsCard 点击链路(BACKLOG #13)", () => {
-  it("AI 视图挂载即出现未覆盖亮点卡(真实 fixture:80–90s 是唯一未被 mistakesAll 覆盖的滑窗)", async () => {
+  it("AI 视图挂载即出现未覆盖亮点卡(真实 fixture:0–30s 与 80–90s 未被 mistakesAll 覆盖)", async () => {
     const { findByTestId } = render(
       <MatchReport source={m} matchId="uh-1" initialView="ai" />,
     );
@@ -84,8 +84,10 @@ describe("UncoveredHighlightsCard 点击链路(BACKLOG #13)", () => {
 
     await waitFor(() => expect(analyzeWindow).toHaveBeenCalledTimes(1));
     const call = analyzeWindow.mock.calls[0]![0];
-    expect(call.fromS).toBe(80);
-    expect(call.toS).toBe(90);
+    // btn-0 is the first highlight, 0–30 s since GH #96's 60 % coverage door
+    // (see uncoveredHighlights.test.ts).
+    expect(call.fromS).toBe(0);
+    expect(call.toS).toBe(30);
     expect(call.matchId).toBe("uh-2");
 
     // The result card appears in place in the AI view (no need to switch to
