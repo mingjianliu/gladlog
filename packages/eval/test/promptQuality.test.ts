@@ -9,6 +9,7 @@ import { CombatUnitReaction } from "@gladlog/parser-compat";
 import type { CoverageManifest } from "../src/quality/coverageManifest";
 import {
   checkBehaviorPriorConsistency,
+  checkCcAvoidedLandedConsistency,
   checkDuringExternalConsistency,
   checkHeaderHpPromise,
   checkMatch,
@@ -568,8 +569,10 @@ describe("checkSameSecondHpConsistency", () => {
 });
 
 describe("checkResNoChangeRowsPruned — a zero-loss [RES] rdy:Δ cd:— row may not survive rendering (GH #99 item 5)", () => {
-  const stateA = "0:55  [STATE]   friends 1(MMonk):91 2(UDKnight):96 / enemies 4(BDruid):75";
-  const stateB = "0:58  [STATE]   friends 1(MMonk):88 2(UDKnight):68 / enemies 4(BDruid):70";
+  const stateA =
+    "0:55  [STATE]   friends 1(MMonk):91 2(UDKnight):96 / enemies 4(BDruid):75";
+  const stateB =
+    "0:58  [STATE]   friends 1(MMonk):88 2(UDKnight):68 / enemies 4(BDruid):70";
   const full = "      [RES] rdy:Revival,Life Cocoon  cd:—  focus:2";
 
   it("flags a no-change row whose focus the surviving neighbours already show", () => {
@@ -619,6 +622,39 @@ describe("checkResNoChangeRowsPruned — a zero-loss [RES] rdy:Δ cd:— row may
   });
 });
 
+describe("checkCcAvoidedLandedConsistency — a CC that landed cannot also have 'not landed' (GH #105)", () => {
+  const avoided =
+    "0:45  [CC AVOIDED?]   2(EShaman): Mortal Coil (by 5(DWarlock)) did not land; Grounding Totem (own) active";
+  it("flags a same-second landed twin", () => {
+    const out = checkCcAvoidedLandedConsistency([
+      avoided,
+      "0:45  [CC ON TEAM]   2(EShaman) ← Mortal Coil (by 5(DWarlock)) | 0s [DR: Incapacitate Full] | 15.9yd from caster [CLEANSED]",
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toContain("line 1");
+  });
+
+  it("parses a spell name that itself contains a colon", () => {
+    expect(
+      checkCcAvoidedLandedConsistency([
+        "1:10  [CC AVOIDED?]   1(HPaladin): Holy Word: Chastise (by 4(HPriest)) did not land; Divine Shield (own) active",
+        "1:10  [CC ON TEAM]   1(HPaladin) ← Holy Word: Chastise (by 4(HPriest)) | 3s",
+      ]),
+    ).toHaveLength(1);
+  });
+
+  it("does not flag a landed line one rendered second away (the real gap may exceed the window), another target, or another spell", () => {
+    expect(
+      checkCcAvoidedLandedConsistency([
+        avoided,
+        "0:46  [CC ON TEAM]   2(EShaman) ← Mortal Coil (by 5(DWarlock)) | 3s",
+        "0:45  [CC ON TEAM]   1(RDruid) ← Mortal Coil (by 5(DWarlock)) | 3s",
+        "0:45  [CC ON TEAM]   2(EShaman) ← Fear (by 5(DWarlock)) | 3s",
+      ]),
+    ).toEqual([]);
+  });
+});
+
 describe("checkDuringExternalConsistency — the [ENEMY DEF] during-it annotation must agree with itself (GH #91)", () => {
   const ok =
     "0:54  [ENEMY DEF]   6(RDruid) (Restoration Druid): Ironbark → 5(DDHunter) (11.0s) (target at 21% HP) | during it: 3(SHunter) 13k on target · 15% of their enemy-player damage · direct 0k / periodic 13k · damage in 5 of 11 s · longest gap 6 s; 1(AWarrior) 0k on target · no damage on any enemy player · 0 of 11 s";
@@ -626,24 +662,46 @@ describe("checkDuringExternalConsistency — the [ENEMY DEF] during-it annotatio
     expect(checkDuringExternalConsistency([ok])).toEqual([]);
   });
   it("flags direct + periodic ≠ total, K > M, and a window longer than the observed aura", () => {
-    expect(checkDuringExternalConsistency([ok.replace("direct 0k / periodic 13k", "direct 5k / periodic 13k")])).toHaveLength(1);
+    expect(
+      checkDuringExternalConsistency([
+        ok.replace("direct 0k / periodic 13k", "direct 5k / periodic 13k"),
+      ]),
+    ).toHaveLength(1);
     // K > M, and with K = 12 the gap bound M − K is negative, so G = 6 fails too: two findings on one segment.
-    expect(checkDuringExternalConsistency([ok.replace("damage in 5 of 11 s", "damage in 12 of 11 s")])).toHaveLength(2);
-    expect(checkDuringExternalConsistency([ok.replace("(11.0s)", "(9.0s)")])).toHaveLength(2); // both segments' M=11 > 10
+    expect(
+      checkDuringExternalConsistency([
+        ok.replace("damage in 5 of 11 s", "damage in 12 of 11 s"),
+      ]),
+    ).toHaveLength(2);
+    expect(
+      checkDuringExternalConsistency([ok.replace("(11.0s)", "(9.0s)")]),
+    ).toHaveLength(2); // both segments' M=11 > 10
   });
   it("accepts the absorbed tag (Touch of Karma shape) as part of the total field", () => {
     expect(
       checkDuringExternalConsistency([
-        ok.replace("13k on target ·", "0k on target (+350k absorbed) ·").replace("direct 0k / periodic 13k", "direct 0k / periodic 0k"),
+        ok
+          .replace("13k on target ·", "0k on target (+350k absorbed) ·")
+          .replace("direct 0k / periodic 13k", "direct 0k / periodic 0k"),
       ]),
     ).toEqual([]);
   });
   it("round 2: accepts the in-school and immune fields, and flags in-school above the total", () => {
-    const r2 = ok.replace("direct 0k / periodic 13k", "direct 0k / periodic 13k · 9k (69%) of it in the wall's school · 2 hits immune");
+    const r2 = ok.replace(
+      "direct 0k / periodic 13k",
+      "direct 0k / periodic 13k · 9k (69%) of it in the wall's school · 2 hits immune",
+    );
     expect(checkDuringExternalConsistency([r2])).toEqual([]);
-    expect(checkDuringExternalConsistency([r2.replace("9k (69%)", "40k (300%)")])).toHaveLength(1);
+    expect(
+      checkDuringExternalConsistency([r2.replace("9k (69%)", "40k (300%)")]),
+    ).toHaveLength(1);
   });
   it("ignores [ENEMY DEF] lines without the annotation and lines of other kinds", () => {
-    expect(checkDuringExternalConsistency(["0:54  [ENEMY DEF]   6(RDruid) (Restoration Druid): Ironbark → 5(DDHunter) (11.0s)", "0:55  [STATE]   x"])).toEqual([]);
+    expect(
+      checkDuringExternalConsistency([
+        "0:54  [ENEMY DEF]   6(RDruid) (Restoration Druid): Ironbark → 5(DDHunter) (11.0s)",
+        "0:55  [STATE]   x",
+      ]),
+    ).toEqual([]);
   });
 });

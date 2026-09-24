@@ -1561,7 +1561,7 @@ describe("analyzePlayerCCAndTrinket — CC Avoidance", () => {
     ).toHaveLength(0);
   });
 
-  it("tracks SW:D self-damage breaks for Priests", () => {
+  it("a SW:D self-damage break is a landed CC, not an avoidance (GH #105)", () => {
     // CC (Polymorph '118') is applied to Priest at T+10s and removed at T+10.5s (duration <= 1.0)
     const ccApply = makeAuraEvent(
       LogEvent.SPELL_AURA_APPLIED,
@@ -1598,12 +1598,9 @@ describe("analyzePlayerCCAndTrinket — CC Avoidance", () => {
 
     const result = analyzePlayerCCAndTrinket(player, [enemy], makeCombat());
 
-    expect(result.ccAvoidedInstances).toHaveLength(1);
-    expect(result.ccAvoidedInstances[0].spellId).toBe("118");
-    expect(result.ccAvoidedInstances[0].avoidanceSpellName).toBe(
-      "Shadow Word: Death",
-    );
-    expect(result.ccAvoidedInstances[0].avoidanceSpellId).toBe("32379");
+    expect(result.ccAvoidedInstances).toHaveLength(0);
+    // the CC itself is still a landed instance
+    expect(result.ccInstances.length).toBeGreaterThan(0);
   });
 
   it("tracks CC avoidance when a buff is refreshed or initial APPLIED is missing", () => {
@@ -1804,7 +1801,7 @@ describe("analyzePlayerCCAndTrinket — CC Avoidance", () => {
     );
   });
 
-  it("tracks Paladin Blessing of Sacrifice CC break", () => {
+  it("a Blessing of Sacrifice break is a landed CC, not an avoidance (GH #105)", () => {
     // Paladin casts Sacrifice (6940) at T+5s, gets feared (5782) at T+10s, fear breaks at T+11s (duration=1s <= 1.5s)
     const sacrificeCast = {
       logLine: {
@@ -1840,10 +1837,9 @@ describe("analyzePlayerCCAndTrinket — CC Avoidance", () => {
     const enemy = makeEnemy("enemy-1", "EnemyA");
 
     const result = analyzePlayerCCAndTrinket(player, [enemy], makeCombat());
-    expect(result.ccAvoidedInstances).toHaveLength(1);
-    expect(result.ccAvoidedInstances[0].avoidanceSpellName).toBe(
-      "Blessing of Sacrifice",
-    );
+    expect(result.ccAvoidedInstances).toHaveLength(0);
+    // the CC itself is still a landed instance
+    expect(result.ccInstances.length).toBeGreaterThan(0);
   });
 
   it("tracks Monk Roll avoiding Hunter Freezing Trap ground CC", () => {
@@ -1982,7 +1978,7 @@ describe("analyzePlayerCCAndTrinket — CC Avoidance", () => {
     expect(result.ccAvoidedInstances).toHaveLength(0);
   });
 
-  it("tracks Shaman Tremor Totem breaking Fear early", () => {
+  it("a pre-placed Tremor Totem ending a fear is a landed CC, not an avoidance (GH #105)", () => {
     // Shaman gets feared at T+10s, breaks at T+11s (duration 1.0s)
     const fearApplied = makeAuraEvent(
       LogEvent.SPELL_AURA_APPLIED,
@@ -2022,10 +2018,9 @@ describe("analyzePlayerCCAndTrinket — CC Avoidance", () => {
     const enemy = makeEnemy("enemy-1", "EnemyA");
 
     const result = analyzePlayerCCAndTrinket(player, [enemy], makeCombat());
-    expect(result.ccAvoidedInstances).toHaveLength(1);
-    expect(result.ccAvoidedInstances[0].avoidanceSpellName).toBe(
-      "Tremor Totem",
-    );
+    expect(result.ccAvoidedInstances).toHaveLength(0);
+    // the CC itself is still a landed instance
+    expect(result.ccInstances.length).toBeGreaterThan(0);
   });
 });
 
@@ -2255,5 +2250,113 @@ describe("CC 规避门控真单源交叉校验(2026-08-07,矩阵:CC × 规避技
       (a) => a.spellId === row.ccSpellId && a.avoidanceSpellId === row.avoidId,
     );
     expect(realResult, "analyzePlayerCCAndTrinket 真实产出").toBe(row.expected);
+  });
+});
+
+describe("GH #105: a landed CC is never also 'avoided'", () => {
+  const MATCH_START = 1_000_000;
+  const makeCombat = () => ({
+    startTime: MATCH_START,
+    endTime: MATCH_START + 300_000,
+    startInfo: { zoneId: "1672" },
+  });
+  const makeEnemy = (id: string, name: string) =>
+    makeUnit(id, {
+      name,
+      reaction: CombatUnitReaction.Hostile,
+      spec: CombatUnitSpec.Priest_Holy,
+    });
+
+  it("Holy Word: Chastise cast 88625 landing as the 200200 stun is not an avoidance", () => {
+    const shield = [
+      makeAuraEvent(
+        LogEvent.SPELL_AURA_APPLIED,
+        "642",
+        MATCH_START + 9_000,
+        "player-1",
+        "player-1",
+      ),
+      makeAuraEvent(
+        LogEvent.SPELL_AURA_REMOVED,
+        "642",
+        MATCH_START + 17_000,
+        "player-1",
+        "player-1",
+      ),
+    ];
+    const stun = [
+      makeAuraEvent(
+        LogEvent.SPELL_AURA_APPLIED,
+        "200200",
+        MATCH_START + 10_100,
+        "enemy-1",
+        "player-1",
+      ),
+      makeAuraEvent(
+        LogEvent.SPELL_AURA_REMOVED,
+        "200200",
+        MATCH_START + 13_000,
+        "enemy-1",
+        "player-1",
+      ),
+    ];
+    const player = makeUnit("player-1", { auraEvents: [...shield, ...stun] });
+    const enemy = makeEnemy("enemy-1", "EnemyA");
+    enemy.spellCastEvents = [
+      makeSpellCastEvent(
+        "88625",
+        MATCH_START + 10_000,
+        "player-1",
+        "player-1",
+        "enemy-1",
+        "EnemyA",
+      ) as any,
+    ];
+    const result = analyzePlayerCCAndTrinket(player, [enemy], makeCombat());
+    expect(result.ccInstances.map((c) => c.spellId)).toContain("200200");
+    expect(result.ccAvoidedInstances).toHaveLength(0);
+  });
+
+  it("a cast logged onto the shaman's Grounding Totem that still lands on the shaman is not an avoidance", () => {
+    // S2 archive 2026-08-18: Mortal Coil SPELL_CAST_SUCCESS → Grounding Totem,
+    // yet the debuff applied to the shaman 0.57 s later (dispelled 48 ms after)
+    const coil = [
+      makeAuraEvent(
+        LogEvent.SPELL_AURA_APPLIED,
+        "6789",
+        MATCH_START + 12_570,
+        "enemy-1",
+        "player-1",
+      ),
+      makeAuraEvent(
+        LogEvent.SPELL_AURA_REMOVED,
+        "6789",
+        MATCH_START + 12_620,
+        "enemy-1",
+        "player-1",
+      ),
+    ];
+    const player = makeUnit("player-1", {
+      class: CombatUnitClass.Shaman,
+      spec: CombatUnitSpec.Shaman_Restoration,
+      auraEvents: coil,
+      spellCastEvents: [
+        makeSpellCastEvent("204336", MATCH_START + 10_000, "", "") as any,
+      ],
+    });
+    const enemy = makeEnemy("enemy-1", "EnemyA");
+    enemy.spellCastEvents = [
+      makeSpellCastEvent(
+        "6789",
+        MATCH_START + 12_000,
+        "grounding-totem-id",
+        "Grounding Totem",
+        "enemy-1",
+        "EnemyA",
+      ) as any,
+    ];
+    const result = analyzePlayerCCAndTrinket(player, [enemy], makeCombat());
+    expect(result.ccInstances.map((c) => c.spellId)).toContain("6789");
+    expect(result.ccAvoidedInstances).toHaveLength(0);
   });
 });

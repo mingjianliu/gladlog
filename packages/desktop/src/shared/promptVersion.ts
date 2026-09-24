@@ -845,4 +845,14 @@
 //  candidate counts unchanged. Gate checkConseqHpStateConsistency (29th
 //  class): 0 failures; a +7 pp mutation of each file's first low is caught
 //  in 2,215 / 3,399 files (the rest have no [STATE] tick in the span).
-export const PROMPT_VERSION = 109;
+//  v110 (2026-09-24, GH #105, user "修"): a CC that landed is never also
+//  rendered as `[CC AVOIDED?] … did not land`. The Blessing of Sacrifice /
+//  Shadow Word: Death / Tremor Totem "break" paths are gone (a break is a
+//  landed CC cut short), and both remaining avoidance paths (buff / mobility,
+//  Grounding Totem) drop a cast when a same-id OR same-name CC aura started
+//  on the player within 1.5 s (cast ≠ aura ids: Holy Word: Chastise → 200200,
+//  Ring of Frost, Maim, Mortal Coil). 605 files: [CC AVOIDED?] lines 2,667 →
+//  2,321; same-second landed-twin contradictions 334 → 0 (new 30th
+//  hardFailure class checkCcAvoidedLandedConsistency). Candidate menu
+//  unchanged by this.
+export const PROMPT_VERSION = 110;

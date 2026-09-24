@@ -67,6 +67,7 @@ import {
   teammateCrisisDmgBinOf,
 } from "@gladlog/analysis/src/data/teammateCrisisPrior";
 import { KILL_CREDIT_SLACK_S } from "@gladlog/analysis/src/utils/burstLedger";
+import { CC_LANDED_MATCH_WINDOW_MS } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
 import { canHelpAnotherUnit } from "@gladlog/analysis/src/utils/cooldowns";
 import { fmtTime } from "@gladlog/analysis/src/utils/renderGrid";
 import fs from "fs-extra";
@@ -858,6 +859,49 @@ export function checkResNoChangeRowsPruned(lines: string[]): string[] {
     failures.push(
       `line ${i + 1}: 零信息损失的 [RES] rdy:Δ cd:— 行仍在 prompt 里(它的每个事实别处都有)—— ${lines[i]!.trim().slice(0, 140)}`,
     );
+  return failures;
+}
+
+const CC_AVOIDED_LINE =
+  /^\s*(\d+):(\d{2})\s+\[CC AVOIDED\?\]\s+(\S+): (.+?) \(by /;
+const CC_ON_TEAM_LINE =
+  /^\s*(\d+):(\d{2})\s+\[CC ON TEAM\]\s+(\S+) ← (.+?) \(by /;
+
+/**
+ * `[CC AVOIDED?] … did not land` ⟺ no landed `[CC ON TEAM]` line (30th
+ * hardFailure class, GH #105, user "修" 2026-09-24). The producer
+ * (`ccTrinketAnalysis`) drops an avoidance whenever a CC aura of the same id
+ * or English name started on that player within `CC_LANDED_MATCH_WINDOW_MS`
+ * of the cast. Rendered on the `fmtTime` grid, a gap of d whole seconds is a
+ * real gap in (d − 1, d + 1), so the gate fails only where the imported
+ * window makes the contradiction certain: d + 1 ≤ window. Before the fix, 334
+ * of 2,667 avoided lines on the S2 archive every-30 had a same-second landed
+ * twin (BoS / SW:D / Tremor "breaks" of a CC that did land, plus cast ≠ aura
+ * ids like Holy Word: Chastise 88625 → 200200).
+ */
+export function checkCcAvoidedLandedConsistency(lines: string[]): string[] {
+  const landed = new Map<string, number[]>();
+  for (const line of lines) {
+    const m = line.match(CC_ON_TEAM_LINE);
+    if (!m) continue;
+    const key = `${m[3]}\u0000${m[4]}`;
+    const at = Number(m[1]) * 60 + Number(m[2]);
+    landed.set(key, [...(landed.get(key) ?? []), at]);
+  }
+  const maxCertainGapS = CC_LANDED_MATCH_WINDOW_MS / 1000 - 1;
+  const failures: string[] = [];
+  lines.forEach((line, i) => {
+    const m = line.match(CC_AVOIDED_LINE);
+    if (!m) return;
+    const at = Number(m[1]) * 60 + Number(m[2]);
+    const twin = (landed.get(`${m[3]}\u0000${m[4]}`) ?? []).find(
+      (t) => Math.abs(t - at) <= maxCertainGapS,
+    );
+    if (twin !== undefined)
+      failures.push(
+        `line ${i + 1}: [CC AVOIDED?] 说 ${m[4]} 没落在 ${m[3]} 身上,但 ${fmtTime(twin)} 有同名 [CC ON TEAM] 落地行 —— ${line.trim().slice(0, 140)}`,
+      );
+  });
   return failures;
 }
 
@@ -2319,6 +2363,7 @@ export function checkMatch(
   hardFailures.push(...checkResNoChangeRowsPruned(lines));
   hardFailures.push(...checkDuringExternalConsistency(lines));
   hardFailures.push(...checkConseqHpStateConsistency(lines));
+  hardFailures.push(...checkCcAvoidedLandedConsistency(lines));
 
   return {
     ordinal: entry.ordinal,

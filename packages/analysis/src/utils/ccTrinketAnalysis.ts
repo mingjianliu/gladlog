@@ -191,6 +191,15 @@ export const BREAKABLE_CC_SPELL_IDS = new Set([
   "8122", // Psychic Scream
 ]);
 
+/**
+ * GH #105: a CC cast counts as having landed on the player — and so is never
+ * an avoidance — when a CC aura with the same id or the same English name
+ * starts within this many ms of the cast. The gate
+ * (`promptQualityCheck.checkCcAvoidedLandedConsistency`) derives from it which
+ * rendered-second gaps are a certain contradiction.
+ */
+export const CC_LANDED_MATCH_WINDOW_MS = 1500;
+
 /** Shaman Grounding Totem — redirects the first targeted hostile spell. */
 export const GROUNDING_TOTEM_SPELL_ID = "204336"; // 2026-08-21: was 8177 (no DB2 name); 204336 = live Grounding Totem
 /**
@@ -203,9 +212,6 @@ export const GROUNDING_TOTEM_SPELL_ID = "204336"; // 2026-08-21: was 8177 (no DB
  * and none had no cast at all.
  */
 export const GROUNDING_TOTEM_WINDOW_S = 3.5;
-
-/** Priest Shadow Word: Death — can break a freshly-applied breakable CC on the caster. */
-const SHADOW_WORD_DEATH_SPELL_ID = "32379";
 
 // 2026-08-21 S2 corpus scan (10,682 matches): removed Sigil of Silence 202137 — 0 occurrences, ability gone in 12.x (eval-private/reports/s2-health-2026-08-21)
 export const GROUND_CC_SPELL_IDS = new Set<string>([
@@ -324,65 +330,6 @@ export function tremorTotemBreak(
     }
   }
   return null;
-}
-
-/** Maximum lookback window (ms) for a pre-placed Tremor Totem to count as avoiding a short fear. */
-export const TREMOR_AVOIDANCE_LOOKBACK_MS = 10_000;
-/** Maximum CC duration (seconds) to count as avoided under a pre-placed Tremor Totem. */
-export const TREMOR_AVOIDANCE_MAX_DURATION_S = 2.0;
-
-/**
- * Extracts CC avoidance instances where a Shaman's pre-placed Tremor Totem
- * (cast within 10s prior to CC application) ended a fear within 2.0s.
- */
-export function extractTremorAvoidedInstances(
-  player: Pick<ICombatUnit, "class" | "name" | "spellCastEvents">,
-  ccInstances: ICCInstance[],
-  matchStartMs: number,
-): ICCAvoidedInstance[] {
-  if (player.class !== CombatUnitClass.Shaman) return [];
-
-  const breakable = ccInstances.filter(
-    (cc) =>
-      TREMOR_BREAKABLE_CC_IDS.has(cc.spellId) &&
-      cc.durationSeconds <= TREMOR_AVOIDANCE_MAX_DURATION_S,
-  );
-  if (breakable.length === 0) return [];
-
-  const tremorCastTimestamps: number[] = [];
-  for (const e of player.spellCastEvents) {
-    if (
-      e.spellId === TREMOR_TOTEM_CAST_SPELL_ID &&
-      e.logLine.event === LogEvent.SPELL_CAST_SUCCESS
-    ) {
-      tremorCastTimestamps.push(e.logLine.timestamp);
-    }
-  }
-  if (tremorCastTimestamps.length === 0) return [];
-
-  const avoided: ICCAvoidedInstance[] = [];
-  for (const cc of breakable) {
-    const ccAppliedTimeMs = cc.atSeconds * 1000 + matchStartMs;
-    const hasRecentTremor = tremorCastTimestamps.some(
-      (ts) =>
-        ccAppliedTimeMs >= ts &&
-        ccAppliedTimeMs - ts <= TREMOR_AVOIDANCE_LOOKBACK_MS,
-    );
-    if (hasRecentTremor) {
-      avoided.push({
-        atSeconds: cc.atSeconds,
-        spellId: cc.spellId,
-        spellName: cc.spellName,
-        avoidanceSpellName: "Tremor Totem",
-        avoidanceSpellId: TREMOR_TOTEM_CAST_SPELL_ID,
-        avoidanceSourceName: player.name,
-        sourceName: cc.sourceName,
-        sourceId: cc.sourceId,
-        sourceSpec: cc.sourceSpec,
-      });
-    }
-  }
-  return avoided;
 }
 
 /**
@@ -1536,6 +1483,32 @@ export function analyzePlayerCCAndTrinket(
     });
   }
 
+  // GH #105: an "avoided" CC that nonetheless landed on the player is not an
+  // avoidance — both paths below ask this one predicate. The landed aura may
+  // carry a different id than the cast (Holy Word: Chastise 88625 → stun
+  // 200200, Ring of Frost 113724 → 82691, Maim, Mortal Coil), so the same
+  // English name within the window counts too (29 landed CCs had rendered as
+  // "did not land" on id alone). A cast logged onto a Grounding Totem can
+  // still land on its shaman (Mortal Coil, S2 archive 2026-08-18, dispelled
+  // 48 ms later).
+  const landedOnPlayer = (cast: {
+    spellId?: string | null;
+    spellName?: string | null;
+    logLine: { timestamp: number };
+  }): boolean => {
+    const atMs = cast.logLine.timestamp - matchStartMs;
+    const castName = getEnglishSpellName(
+      cast.spellId ?? "",
+      cast.spellName ?? "",
+    );
+    return ccInstances.some(
+      (cc) =>
+        Math.abs(cc.atSeconds * 1000 - atMs) <= CC_LANDED_MATCH_WINDOW_MS &&
+        (cc.spellId === cast.spellId ||
+          getEnglishSpellName(cc.spellId, cc.spellName) === castName),
+    );
+  };
+
   // 1. Unified Buff & Mobility CC Avoidance (targeted and ground CCs)
   for (const enemy of enemies) {
     // F134: include the enemy's pet/guardian casts so a whiffed pet CC (Water Elemental Freeze,
@@ -1559,13 +1532,7 @@ export function analyzePlayerCCAndTrinket(
 
       if (isTargeted || isGroundCC) {
         const castTimeMs = cast.logLine.timestamp;
-        const gotCCd = ccInstances.some(
-          (cc) =>
-            Math.abs(cc.atSeconds * 1000 - (castTimeMs - matchStartMs)) <=
-              1500 && cc.spellId === cast.spellId,
-        );
-
-        if (!gotCCd) {
+        if (!landedOnPlayer(cast)) {
           const ccSpellName = getEnglishSpellName(cast.spellId, cast.spellName);
           // Single-source predicate (2026-08-07, shared-predicate rule / CC
           // avoidance gating IS the spec): school gate (magic-only immunity
@@ -1652,7 +1619,7 @@ export function analyzePlayerCCAndTrinket(
           cast.destUnitName?.toLowerCase().includes("grounding totem") ||
           (cast.destUnitId?.startsWith("Creature-") &&
             cast.destUnitId.split("-")[5] === "5925");
-        if (isGroundingTotem) {
+        if (isGroundingTotem && !landedOnPlayer(cast)) {
           const castTimeMs = cast.logLine.timestamp;
           if (
             !ownGroundingCastsMs.some(
@@ -1688,68 +1655,14 @@ export function analyzePlayerCCAndTrinket(
     }
   }
 
-  // 4. Paladin Blessing of Sacrifice Breaks
-  if (player.class === CombatUnitClass.Paladin) {
-    for (const cc of ccInstances) {
-      const ccAppliedTimeMs = cc.atSeconds * 1000 + matchStartMs;
-      if (BREAKABLE_CC_SPELL_IDS.has(cc.spellId) && cc.durationSeconds <= 4.0) {
-        const sacrificeCast = player.spellCastEvents.find(
-          (e) =>
-            (e.spellId === "6940" || e.spellId === "199448") &&
-            e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
-            ccAppliedTimeMs >= e.logLine.timestamp &&
-            ccAppliedTimeMs - e.logLine.timestamp <= 12000,
-        );
-        if (sacrificeCast) {
-          ccAvoidedInstances.push({
-            atSeconds: cc.atSeconds,
-            spellId: cc.spellId,
-            spellName: cc.spellName,
-            avoidanceSpellName: "Blessing of Sacrifice",
-            avoidanceSpellId: sacrificeCast.spellId || "6940",
-            avoidanceSourceName: player.name,
-            sourceName: cc.sourceName,
-            sourceId: cc.sourceId,
-            sourceSpec: cc.sourceSpec,
-          });
-        }
-      }
-    }
-  }
-
-  // 5. Shadow Word: Death Breaks (only Priest players)
-  if (player.class === CombatUnitClass.Priest) {
-    for (const cc of ccInstances) {
-      const ccAppliedTimeMs = cc.atSeconds * 1000 + matchStartMs;
-      if (BREAKABLE_CC_SPELL_IDS.has(cc.spellId) && cc.durationSeconds <= 1.0) {
-        const swdCast = player.spellCastEvents.find(
-          (e) =>
-            e.spellId === SHADOW_WORD_DEATH_SPELL_ID &&
-            e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
-            e.logLine.timestamp >= ccAppliedTimeMs - 500 &&
-            e.logLine.timestamp <= ccAppliedTimeMs,
-        );
-        if (swdCast) {
-          ccAvoidedInstances.push({
-            atSeconds: cc.atSeconds,
-            spellId: cc.spellId,
-            spellName: cc.spellName,
-            avoidanceSpellName: "Shadow Word: Death",
-            avoidanceSpellId: SHADOW_WORD_DEATH_SPELL_ID,
-            avoidanceSourceName: player.name,
-            sourceName: cc.sourceName,
-            sourceId: cc.sourceId,
-            sourceSpec: cc.sourceSpec,
-          });
-        }
-      }
-    }
-  }
-
-  // 6. Tremor Totem Breaks (only Shaman players)
-  ccAvoidedInstances.push(
-    ...extractTremorAvoidedInstances(player, ccInstances, matchStartMs),
-  );
+  // GH #105 (2026-09-24, user "修"): the Blessing of Sacrifice / Shadow Word:
+  // Death / pre-placed Tremor Totem "break" paths used to push here and render
+  // as `[CC AVOIDED?] … did not land` — but every one of them is a CC that DID
+  // land and was cut short (334 of 2,667 avoided lines had a same-second
+  // `[CC ON TEAM]` landed line on the S2 archive every-30). The landed CC and
+  // its short duration stay on `[CC ON TEAM]`; the one tremor fact the log
+  // supports (a totem dropped mid-fear, GH #100 user ruling) is the
+  // `tremorTotemBreak` note there. A break is not an avoidance.
 
   ccAvoidedInstances.sort((a, b) => a.atSeconds - b.atSeconds);
 

@@ -1319,6 +1319,16 @@ const INDEX: PredicateRow[] = [
     mod: promptQualityCheck,
   },
   {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "CC_LANDED_MATCH_WINDOW_MS",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkCcAvoidedLandedConsistency",
+    mod: promptQualityCheck,
+  },
+  {
     file: `${E}/quality/promptQualityCheck.ts`,
     symbol: "checkCdPriorRefConsistency",
     mod: promptQualityCheck,
