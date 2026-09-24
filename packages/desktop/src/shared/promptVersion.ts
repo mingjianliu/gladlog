@@ -887,4 +887,11 @@
 //  "Use it only as an extra way the player could have taken pressure off, in
 //  your own words", same prohibitions. Re-run of those 3: 0/3 echoes, 0
 //  boundary breaches (none in the first 6 either). Header text only.
-export const PROMPT_VERSION = 114;
+//  v115 (2026-09-24, GH #77 fix): PEEL OPTIONS measured a targeted CC's
+//  reach as range + splash radius (spellReachForCaster, the placed-area
+//  reach of an external) — Storm Bolt 20 + 10 yd was offered on an attacker
+//  27 yd away. Now ccThreatReachYards (cast range, else a caster-centred
+//  radius). 605 files: lines 239 → 235 (Storm Bolt 19 → 16, Intimidating
+//  Shout 16 → 14), deaths with a line 200 → 196; gate 0; candidates
+//  unchanged.
+export const PROMPT_VERSION = 115;

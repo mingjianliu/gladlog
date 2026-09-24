@@ -31,6 +31,7 @@ function scenario(opts: {
   ownerAuras?: any[];
   attackerSpec?: CombatUnitSpec;
   attackerCasts?: any[];
+  attackerX?: number;
 }) {
   const owner = makeUnit("p1", {
     name: "Owner",
@@ -69,7 +70,7 @@ function scenario(opts: {
     spec: opts.attackerSpec ?? CombatUnitSpec.Rogue_Assassination,
     reaction: CombatUnitReaction.Hostile,
     spellCastEvents: opts.attackerCasts ?? [],
-    advancedActions: standAt(3),
+    advancedActions: standAt(opts.attackerX ?? 3),
   });
   const combat: any = {
     startTime: T0,
@@ -150,6 +151,18 @@ describe("peelOptionsForDeaths (GH #77)", () => {
     expect(scenario({ ...priest, attackerCasts: [rage(2)] })).toHaveLength(0);
     // Cast at 65 s: on cooldown for the whole window
     expect(scenario({ ...priest, attackerCasts: [rage(65)] })).toHaveLength(1);
+  });
+
+  it("measures a targeted CC by its cast range, not range + splash radius (Storm Bolt 20 yd + 10 yd splash)", () => {
+    const warrior = {
+      ownerSpec: CombatUnitSpec.Warrior_Arms,
+      ownerClass: CombatUnitClass.Warrior,
+      ccSpellId: "107570", // Storm Bolt — 20 yd, 10 yd splash
+    };
+    const bolts = (out: ReturnType<typeof scenario>) =>
+      out.filter((o) => o.spellId === "107570");
+    expect(bolts(scenario({ ...warrior, attackerX: 15 }))).toHaveLength(1);
+    expect(bolts(scenario({ ...warrior, attackerX: 24 }))).toHaveLength(0);
   });
 
   it("never offers a cast-time CC (Polymorph, 1.7 s)", () => {

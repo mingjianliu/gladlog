@@ -22,8 +22,9 @@
  *  - its owner is not CC'd (`buildCannotCastIntervals`) and not inside an
  *    aura that locks their own casting (Bladestorm, Ice Block — DB2 aura
  *    60 / 263, `auraLocksCasting`);
- *  - the attacker is within the owner's talent-applied reach
- *    (`spellReachForCaster`; unknown reach → no line) with line of sight not
+ *  - the attacker is within the owner's talent-applied reach on a single
+ *    target (`ccThreatReachYards`: cast range, else a caster-centred radius;
+ *    unknown reach → no line) with line of sight not
  *    falsified, not already in a CC, not carrying an aura that blocks that
  *    mechanic (`auraBlocksMechanic`; an unresolved mask → no line), and not
  *    at Immune DR for that category;
@@ -66,7 +67,7 @@ import {
   isInstantCast,
   mechanicStateOf,
 } from "../utils/spellMechanics";
-import { spellReachForCaster } from "../utils/spellRange";
+import { ccThreatReachYards } from "../utils/spellRange";
 
 /** How far back from a death the window reaches (seconds). */
 export const PEEL_LOOKBACK_S = 10;
@@ -201,7 +202,12 @@ export function peelOptionsForDeaths(params: {
         )
           continue;
         const mech = ccMechanicOf(cd.spellId);
-        const reach = spellReachForCaster(o, cd.spellId);
+        // The CC's reach on ONE target: its cast range, else the radius of a
+        // caster-centred one (`ccThreatReachYards`). Not `spellReachForCaster`,
+        // whose range + radius is the placed-area reach of an external: Storm
+        // Bolt is 20 yd with a 10 yd splash, and range + radius offered it on
+        // an attacker 27 yd away (found 2026-09-24 building GH #77 part 2).
+        const reach = ccThreatReachYards(o, cd.spellId);
         if (mech === undefined || reach === null) continue;
         const cat = getDRCategory(cd.spellId);
         const drHistory = attackerCc
