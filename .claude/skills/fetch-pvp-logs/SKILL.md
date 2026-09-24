@@ -78,11 +78,13 @@ npm run logs:daily:status   # 最近 7 次运行 + 今日额度 + cookie 写入�
 
 落盘:`$GLADLOG_EVAL_HOME/downloads/RatedSoloShuffle-r2100-allspecs/` 与 `3v3-r2100-allspecs/`
 (各自 manifest 断点续传);运行记录 `downloads/daily-pull/runs.jsonl`(每次一行:各步
-bracket/limit/fresh/exit、结束时额度、状态 ok / auth-expired / error、`driveSync`)。
+bracket/limit/fresh/exit、结束时额度、状态 ok / auth-expired / error、`archives[]`;
+更早的记录是单步的 `driveSync`,仍能显示)。
 
-**拉完自动归档到 Drive(2026-09-20 接线)**:每次运行末尾跑一遍
-`syncPvpLogsToDrive.ts`(增量,见下节),失败弹通知 + 退出码非零,`logs:daily:status`
-每行有 `drive ok / FAILED / -`(`-` = 2026-09-20 之前的旧记录,那时没有这一步)。
+**拉完自动归档到 Drive(2026-09-20 接线)**:每次运行末尾依次跑两个增量归档步骤——
+`pvp-downloads`(`syncPvpLogsToDrive.ts`,见下节)和 `own-logs`(`archiveOwnLogs.ts`),
+失败弹通知 + 退出码非零,`logs:daily:status` 每行有 `drive ok(N) / drive FAILED(<步骤名>) / drive -`
+(`-` = 这条记录没有归档步骤:2026-09-20 之前的旧记录,或设了 `DAILY_SKIP_DRIVE_SYNC=1` 的运行)。
 零下载的日子也同步,所以某天传失败第二天自动重试。`DAILY_SKIP_DRIVE_SYNC=1` 可跳过。
 接线之前这一步全靠人记,结果 9/15 起每日采集一场都没上云、8 月那批也只传上去 1/4
 (2026-09-20 用户问起才发现,补传 205 个文件 2.5 GiB)——**「某步骤要人定期手跑」= 它不会被跑**。
@@ -102,7 +104,7 @@ bracket/limit/fresh/exit、结束时额度、状态 ok / auth-expired / error、
 `__Secure-next-auth.session-token` 写回 `~/.gladlog/wal-session-cookie`。next-auth 会话
 30 天滚动续期,每天跑一次正常不会过期。
 
-**launchd**(2026-09-15 已装载):`ops/app.gladlog.daily-pull.plist` → `~/Library/LaunchAgents/`,
+**launchd**(2026-09-15 已装载):`packages/corpus-tools/ops/app.gladlog.daily-pull.plist` → `~/Library/LaunchAgents/`,
 每天本地 21:00(UTC 0 点重置后,冬夏令时都过了),合盖错过的在唤醒后补跑。
 stdout/stderr 在 `downloads/daily-pull/launchd.log`。
 重装:`launchctl bootout gui/$(id -u)/app.gladlog.daily-pull; launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/app.gladlog.daily-pull.plist`。
@@ -119,7 +121,9 @@ stdout/stderr 在 `downloads/daily-pull/launchd.log`。
 - **GraphQL 错误在 HTTP 200 里**,`fetchWithRetry` 不重试不告警;`fetchDetailedStubs`/
   `requestLogGrant` 现在会先分类 `errors[0].extensions.code`(`UNAUTHENTICATED` /
   `LOG_QUOTA_EXCEEDED` / 其他)再读 `data`,别再手写 `json.data` 直取。
-- cookie 过期表现为 `UNAUTHENTICATED`;脚本会打印取法后退出 1。next-auth 的会话是
+- cookie 过期表现为 `UNAUTHENTICATED`:拉 stub 时发现,脚本打印取法后退出 3(驱动记
+  `auth-expired`);若是拉完 stub、申请 grant 时才过期,`requestLogGrant` 的错误会一路抛到
+  顶层,退出 1、不打印取法,驱动记 `error`。next-auth 的会话是
   数据库会话,浏览器里重新登录即可拿到新值。
 - 最近 1 小时的场次搜不到(服务端禁运期),不是过滤条件写错。
 

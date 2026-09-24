@@ -43,7 +43,7 @@ description: gladlog desktop(Electron)改代码的工程约定与坑。改 packa
 ## push 前检查(CI 与本地不等价,连挂过三次)
 
 ```bash
-npm run presubmit    # = lint + typecheck + 全 workspace test + verify:vision + electron-vite build
+npm run presubmit    # = lint + verify:doc-commands + typecheck + 全 workspace test + verify:vision + electron-vite build
 ```
 
 这一条覆盖 CI `test` workflow 里 `static` + `unit` 两个 job 的全部 5 步(CI 把单测拆到并行 runner 上跑)。**别再手敲那三件套**(旧清单只有

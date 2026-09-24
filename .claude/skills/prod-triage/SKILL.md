@@ -44,8 +44,9 @@ numeric/causal 各对应一类 rubric-模型失配)。用户侧残留症状:设�
 **症状**:某个技能/机制在产品里完全不存在 —— 不产出候选、不进图例、查不到属性。
 
 **别急着下「官方数据没有」的结论**:生成数据只覆盖 `collectCandidateIds` /
-`trackedSpellIds` 这类**手工候选名单**放行的 id,没人手工列过的技能是「从没被问过」,
-下游长得和「游戏里没有」一模一样。已经踩过三次(详见 CLAUDE.md 的
+`trackedSpellIds` 这类**候选名单**放行的 id(手工来源 + 语料观测到的
+`observedSpellIdsGenerated.json`),手工没列过、语料里也没出现过的技能是「从没被问过」,
+下游长得和「游戏里没有」一模一样。已经踩过五次(详见 CLAUDE.md 的
 Curated-List Completeness Rule)。
 
 **判据**:拿语料 ground truth 反查官方路径解释不了的 id。驱散那次的形状:

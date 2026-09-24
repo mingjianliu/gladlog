@@ -82,6 +82,9 @@ combat logging shows 无位置数据 in 回放.
 ## Files
 
 `dev/index.html` · `dev/main.tsx` (harness + fixture switch + AI mock bridge) ·
-`dev/harness.css` · `dev/vite.config.mts` · `dev/.gitignore` (ignores `local/`).
-`dev/` is outside `tsconfig`/electron-vite/eslint → never affects
-`build`/`test`/`typecheck`/`lint`.
+`dev/harness.css` · `dev/vite.config.mts` · `dev/.gitignore` (ignores `local/`) ·
+`dev/scenes.ts` + `dev/scenes.test.ts` · `dev/ports.ts` · `dev/review/` · `dev/fixtures/`.
+`dev/` is outside the electron-vite build, but it IS covered by the desktop
+`tsconfig` (`include` lists `dev`), by root `eslint .`, and by vitest
+(`scenes.test.ts`) — and `scenes.ts`/`ports.ts` feed the visual-regression
+suite, so edits here can turn `typecheck`/`lint`/`test`/`test:visual` red.
