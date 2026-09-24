@@ -5,13 +5,17 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
+import { getEnglishSpellName } from "../data/spellEffectData";
 import { IPlayerCCTrinketSummary } from "./ccTrinketAnalysis";
 import {
   auraOnlyActivationSeconds,
   CD_INSTANT_SLACK_S,
   isCooldownAvailableFromLastUse,
+  isPressOfCooldown,
+  isProcOnlyActivation,
   REACTION_WINDOW_S,
   specToString,
+  talentReplacementsOf,
 } from "./cooldowns";
 import { isStunCcInstance } from "./drAnalysis";
 import {
@@ -274,12 +278,13 @@ function lastCastSeconds(
   matchStartMs: number,
   atSeconds: number,
 ): number | null {
+  // The ledger's press predicate (GH #106 step 2, agy review): a talent's
+  // pressable replacement (Ice Cold for Ice Block) and a same-named variant
+  // press (Ultimate Sacrifice's Blessing of Sacrifice) are presses here too.
+  const replacements = talentReplacementsOf(unit);
+  const name = getEnglishSpellName(spellId, "");
   const castSeconds = unit.spellCastEvents
-    .filter(
-      (e) =>
-        e.spellId === spellId &&
-        e.logLine.event === LogEvent.SPELL_CAST_SUCCESS,
-    )
+    .filter((e) => isPressOfCooldown(e, spellId, name, replacements))
     .map((e) => (e.logLine.timestamp - matchStartMs) / 1000);
   const auraSeconds = auraOnlyActivationSeconds(unit, spellId, matchStartMs);
   const casts = [...castSeconds, ...auraSeconds].filter((t) => t <= atSeconds);
@@ -302,6 +307,13 @@ export function isAvailableAt(
   // "pressed" (too late is not "never pressed"), exactly as the ledger shows
   // it on cd: for the same rendered second.
   const at = atSeconds + CD_INSTANT_SLACK_S;
+  // Same gate as cdAvailableAt (GH #106 step 2): no button, never "available"
+  // — the spell-level list and this unit's talent replacements alike.
+  if (
+    isProcOnlyActivation(spellId) ||
+    talentReplacementsOf(unit).procOnly.has(spellId)
+  )
+    return false;
   const lastCast = lastCastSeconds(unit, spellId, matchStartMs, at);
   // The core predicate is shared with cdAvailableAt in cooldowns.ts
   // (isCooldownAvailableFromLastUse) — each side keeps its own data source

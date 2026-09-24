@@ -3,6 +3,7 @@ import { extractTalentModifiers } from "../../scripts/datagen/genTalentModifiers
 import {
   applyCdTalentModifiers,
   applyCdModifiers,
+  isVariantPress,
 } from "../../src/utils/cooldowns";
 import {
   effectiveCooldownSeconds,
@@ -702,8 +703,15 @@ describe("extractTalentModifiers — 2026-09-13 audit fixes", () => {
       new Set(["900007"]),
       new Set(["50334"]),
     );
+    // kept, but flagged: a buff-bound override is not the talent taking the
+    // button away (GH #106 step 2 reads only unconditional replacements)
     expect(gated["900007"]).toEqual([
-      { talentSpellId: "50334", effect: "replace_spell", value: 900999 },
+      {
+        talentSpellId: "50334",
+        effect: "replace_spell",
+        value: 900999,
+        isConditional: true,
+      },
     ]);
     const ungated = extractTalentModifiers(
       rows,
@@ -833,5 +841,38 @@ describe("GH #106 — PvP scale, spec passives, per-rank rows", () => {
         talentRanks: new Map([["344359", 2]]),
       }).cooldownSeconds,
     ).toBe(45 - arts[0]!.value);
+  });
+});
+
+describe("GH #106 step 2 — a same-named id is a press only with its own cooldown", () => {
+  it.each([
+    ["77764", "Stampeding Roar (cat form)"],
+    ["210873", "Hex variant"],
+    ["221527", "Imprison (Detainment)"],
+    ["199448", "Blessing of Sacrifice (Ultimate Sacrifice)"],
+    ["446035", "Bladestorm (Unrelenting Onslaught)"],
+  ])("%s %s counts as a press", (id) => {
+    expect(isVariantPress(id)).toBe(true);
+  });
+  it.each([
+    ["64844", "Divine Hymn tick"],
+    ["157982", "Tranquility tick"],
+    ["370966", "The Hunt sub-effect"],
+    ["469270", "Doom Winds proc"],
+    ["370564", "Stasis release"],
+    ["454351", "Radiant Glory's proc Avenging Wrath"],
+  ])("%s %s does not", (id) => {
+    expect(isVariantPress(id)).toBe(false);
+  });
+  it("Radiant Glory's replace_spell is unconditional; the buff-bound Zenith one is flagged", () => {
+    const rg = CD_TALENT_MODIFIERS["31884"]!.find(
+      (m) => m.effect === "replace_spell" && m.talentSpellId === "458359",
+    );
+    expect(rg).toBeDefined();
+    expect(rg!.isConditional).toBeUndefined();
+    const zenith = CD_TALENT_MODIFIERS["1249625"]!.find(
+      (m) => m.effect === "replace_spell",
+    );
+    expect(zenith?.isConditional).toBe(true);
   });
 });

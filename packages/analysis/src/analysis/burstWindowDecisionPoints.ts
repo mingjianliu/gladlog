@@ -44,7 +44,7 @@ import {
   gridHpPct,
   type IMajorCooldownInfo,
   isDeadAtRenderSecond,
-  isProcOnlyActivation,
+  cdIsProcOnly,
   SELF_CAST_NOOP_EXTERNAL_IDS,
   specToString,
   TEAM_HEAL_CD_IDS,
@@ -753,7 +753,7 @@ export function burstWindowDecisionPoints(
     }
     const answers = cds.filter(
       (cd) =>
-        !isProcOnlyActivation(cd.spellId) &&
+        !cdIsProcOnly(cd) &&
         !cd.isThroughput &&
         (PERSONAL_WALL_IDS.has(cd.spellId) ||
           EXTERNAL_IDS.has(cd.spellId) ||

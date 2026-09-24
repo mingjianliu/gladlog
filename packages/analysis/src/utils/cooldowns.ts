@@ -936,10 +936,13 @@ export function isCooldownAvailableFromLastUse(
 export function cdAvailableAt(
   cd: Pick<
     IMajorCooldownInfo,
-    "casts" | "cooldownSeconds" | "neverUsed" | "charges"
+    "casts" | "cooldownSeconds" | "neverUsed" | "charges" | "isProcOnly"
   >,
   tSeconds: number,
 ): boolean {
+  // No button, nothing to have ready (GH #106 step 2): a proc-only entry keeps
+  // its activations for "did it fire", never answers "could it be pressed".
+  if (cd.isProcOnly) return false;
   // GH #22: multi-charge entries go through the shared sequential-recharge
   // simulation — "last cast + cooldown" alone calls a 2-charge ability with one
   // charge spent unavailable. At <=1 charge the two agree point-by-point
@@ -1012,7 +1015,7 @@ export const REACTION_WINDOW_S = 1;
 export function cdReadyInTimeAt(
   cd: Pick<
     IMajorCooldownInfo,
-    "casts" | "cooldownSeconds" | "neverUsed" | "charges"
+    "casts" | "cooldownSeconds" | "neverUsed" | "charges" | "isProcOnly"
   >,
   tSeconds: number,
 ): boolean {
@@ -1220,7 +1223,27 @@ export const AURA_ONLY_ACTIVATION_IDS: Record<string, string[]> = {
   "374348": ["374349"], // Renewing Blaze (Evoker)
   "31884": ["31884", "454351"], // Avenging Wrath (Paladin) — Herald of the Sun Judgment proc
   "114052": ["114052"], // Ascendance (Shaman) — Deeply Rooted Elements-style Riptide proc
+  // Doom Winds (Enhancement, 60 s): the press itself is not logged — the log
+  // shows the buff 466772 going up, then the storm's 1 s pulses as
+  // SPELL_CAST_SUCCESS 469270 for 10 s (2,167 pulses vs 27 logged presses in
+  // 605 archive files). The pulses used to stand in for the press (merged to
+  // one "cast" every 2+ s, the last one ~6 s after the real press); since GH
+  // #106 step 2 they are not presses at all, so the buff is the evidence.
+  "384352": ["466772"],
 };
+
+/**
+ * Entries of `AURA_ONLY_ACTIVATION_IDS` whose buff IS the press, every time —
+ * not a fallback for a missing cast line. For these the buff applications are
+ * read even when the round also logged a real cast (the ledger's 2 s merge
+ * folds the pair into one press). Doom Winds: 27 logged presses vs ~270 storms
+ * in 605 files, so one logged press per round used to hide every other storm
+ * and leave the ledger saying "ready" (agy review of GH #106 step 2). The
+ * other entries keep the fallback-only rule: their auras also come from procs
+ * (Herald of the Sun's Avenging Wrath, a Riptide Ascendance) that must not
+ * restart a pressed cooldown.
+ */
+export const AURA_IS_THE_PRESS_IDS: ReadonlySet<string> = new Set(["384352"]);
 
 /**
  * **根本没有按键的能力** —— `AURA_ONLY_ACTIVATION_IDS` 上面那段注释里的「第 1 种」
@@ -1249,6 +1272,124 @@ export const PROC_ONLY_ACTIVATION_IDS: ReadonlySet<string> = new Set([
 /** 这个能力有没有按键;`false` 表示玩家可以主动按它。 */
 export function isProcOnlyActivation(spellId: string): boolean {
   return PROC_ONLY_ACTIVATION_IDS.has(spellId);
+}
+
+/**
+ * Per-unit form: no button for THIS player — a spell-level proc-only id, or a
+ * button a talent replaced by a passive (`isProcOnly`, set by
+ * extractMajorCooldowns; GH #106 step 2, Radiant Glory). Every "had it ready /
+ * never used it / spent it early" reader goes through this, not the id table.
+ */
+export function cdIsProcOnly(cd: {
+  spellId: string;
+  isProcOnly?: boolean;
+}): boolean {
+  return !!cd.isProcOnly || PROC_ONLY_ACTIVATION_IDS.has(cd.spellId);
+}
+
+/**
+ * Does a SPELL_CAST_SUCCESS under a same-named but DIFFERENT id count as
+ * pressing the cooldown? Only when that id has a cooldown of its own (GH #106
+ * step 2). Every real variant press does — Stampeding Roar's three forms
+ * (120 s), the Hex variants (30 s), PvP Imprison (45 s), Ultimate Sacrifice's
+ * Blessing of Sacrifice (120 s), Unrelenting Onslaught's Bladestorm (90 s) —
+ * and every non-press does not: channel ticks (Divine Hymn 64844, 3,122 in
+ * 605 files; Tranquility 157982), triggered sub-effects (The Hunt 370966,
+ * Shield Charge 385954, Doom Winds 469270 — 2,167 procs against 27 presses),
+ * the Stasis release 370564 and Radiant Glory's proc Avenging Wrath 454351.
+ * The procs restarted a cooldown that was never pressed (Doom Winds' recast
+ * floor −58 s → +0.5 s once they are gone); the ticks happened to fall
+ * inside the 2 s merge in this corpus (no floor moved) but are not presses
+ * either. An id the effect table does not know keeps the old behaviour
+ * (counted).
+ */
+export function isVariantPress(spellId: string): boolean {
+  if (!spellEffectData[spellId]) return true;
+  return (effectiveCooldownSeconds(spellId) ?? 0) > 0;
+}
+
+/**
+ * GH #106 step 2: how DB2 talent replacements (replace_spell rows in
+ * CD_TALENT_MODIFIERS; a replacement that only lasts while a buff is up is
+ * `isConditional` and ignored) change ONE unit's buttons.
+ *
+ * - `procOnly`: replaced by a passive with no cooldown of its own — the button
+ *   is gone but the effect still fires. Radiant Glory turns Avenging Wrath into
+ *   an 8 s proc off Wake of Ashes (324 Retribution players in 605 archive
+ *   files, 1,406 procs logged as "Avenging Wrath" 454351, zero presses of
+ *   31884). The procs stay in the ledger as activations (a Wake of Ashes AW
+ *   still "enters" a healer-CC window) and the entry is proc-only for THIS
+ *   unit — never "ready", never "unused". Dropping the entry instead (first
+ *   try) turned 78 of 96 new missed-sync-window accusations into "your team
+ *   entered nothing" while the Ret's proc AW was up.
+ * - `pressedAs`: replaced by another pressable spell — its casts are this
+ *   cooldown's presses (Ice Cold 414658 for Ice Block, a different English
+ *   name the name match misses).
+ *
+ * Memoised per unit, like `playerTalentIdSets` it reads.
+ */
+const talentReplacementsCache = new WeakMap<
+  ICombatUnit,
+  { procOnly: ReadonlySet<string>; pressedAs: ReadonlyMap<string, string[]> }
+>();
+export function talentReplacementsOf(unit: ICombatUnit): {
+  procOnly: ReadonlySet<string>;
+  pressedAs: ReadonlyMap<string, string[]>;
+} {
+  const cached = talentReplacementsCache.get(unit);
+  if (cached) return cached;
+  const { talentedSpellIds, pvpTalentIds } = playerTalentIdSets(unit);
+  const procOnly = new Set<string>();
+  const pressedAs = new Map<string, string[]>();
+  for (const [spellId, mods] of Object.entries(CD_TALENT_MODIFIERS))
+    for (const m of mods) {
+      if (m.effect !== "replace_spell" || m.isConditional) continue;
+      if (
+        !talentedSpellIds?.has(m.talentSpellId) &&
+        !pvpTalentIds.has(m.talentSpellId)
+      )
+        continue;
+      const replacement = String(m.value);
+      if ((effectiveCooldownSeconds(replacement) ?? 0) > 0)
+        pressedAs.set(spellId, [...(pressedAs.get(spellId) ?? []), replacement]);
+      else procOnly.add(spellId);
+    }
+  const result = { procOnly, pressedAs };
+  talentReplacementsCache.set(unit, result);
+  return result;
+}
+
+/**
+ * "Is this SPELL_CAST_SUCCESS a press of cooldown `spellId` (English name
+ * `spellName`) for this unit" — the single predicate for the cooldown ledger
+ * (`extractMajorCooldowns`) and deathOutcomeAnalysis' `isAvailableAt` (agy
+ * review of GH #106 step 2: the two read the same fact through two paths, so
+ * an Ice Cold mage was "on cooldown" in one and "died with Ice Block
+ * available" in the other). Same id, same canonical id, a talent's pressable
+ * replacement, or a same-named variant that is a real press
+ * (`isVariantPress`) — the last also when the entry is proc-only for the
+ * unit, whose procs are its only activations.
+ */
+export function isPressOfCooldown(
+  e: { spellId?: string | null; logLine: { event: string } },
+  spellId: string,
+  spellName: string,
+  replacements: ReturnType<typeof talentReplacementsOf>,
+): boolean {
+  if (e.logLine.event !== LogEvent.SPELL_CAST_SUCCESS || !e.spellId)
+    return false;
+  if (e.spellId === spellId) return true;
+  if (canonicalSpellId(e.spellId) === canonicalSpellId(spellId)) return true;
+  if (replacements.pressedAs.get(spellId)?.includes(e.spellId)) return true;
+  // Variant cast ids (form-specific Stampeding Roar, talent-modified Blessing
+  // of Sacrifice / Oppressing Roar, …) log a different id with the same
+  // English name. Exact-id matching stamped 15/1245 prompts' real casts
+  // [UNUSED] and emitted bogus "available all match" windows (invariant sweep
+  // I1, 2026-07-16).
+  return (
+    getEnglishSpellName(e.spellId, "") === spellName &&
+    (isVariantPress(e.spellId) || replacements.procOnly.has(spellId))
+  );
 }
 
 /**
@@ -1312,7 +1453,7 @@ export function auraOnlyActivationSeconds(
     (e) =>
       e.logLine.event === LogEvent.SPELL_CAST_SUCCESS && e.spellId === spellId,
   );
-  if (hasRealCast) return [];
+  if (hasRealCast && !AURA_IS_THE_PRESS_IDS.has(spellId)) return [];
   return unit.auraEvents
     .filter(
       (a) =>
@@ -1377,10 +1518,7 @@ export function applyCdModifiers(
   },
 ): { cooldownSeconds: number; charges: number } {
   const specId = owner?.specId;
-  if (
-    !modifiers ||
-    (!talentedSpellIds && pvpTalentIds.size === 0 && !specId)
-  ) {
+  if (!modifiers || (!talentedSpellIds && pvpTalentIds.size === 0 && !specId)) {
     return { cooldownSeconds: baseCooldownSeconds, charges: baseCharges };
   }
 
@@ -1613,6 +1751,8 @@ export function extractMajorCooldowns(
   for (const [talentId, replaced] of Object.entries(PVP_TALENT_REPLACES))
     if (pvpTalentIds.has(talentId))
       for (const r of replaced) replacedByPvpTalent.add(r);
+  const replacements = talentReplacementsOf(unit);
+  const procOnlyForUnit = replacements.procOnly;
   const hasCombatantInfo = unit.info !== undefined;
   // Build a fast lookup of all spell IDs the player actually cast this match.
   const castSpellIds = new Set<string>(
@@ -1844,18 +1984,8 @@ export function extractMajorCooldowns(
         talentSets,
       );
 
-    const castEvents = unit.spellCastEvents.filter(
-      (e) =>
-        e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
-        (e.spellId === spell.spellId ||
-          (!!e.spellId &&
-            canonicalSpellId(e.spellId) === canonicalSpellId(spell.spellId)) ||
-          // Variant cast ids (form-specific Stampeding Roar, talent-modified
-          // Blessing of Sacrifice / Oppressing Roar, …) log a different id
-          // with the same English name. Exact-id matching stamped 15/1245
-          // prompts' real casts [UNUSED] and emitted bogus "available all
-          // match" windows (invariant sweep I1, 2026-07-16).
-          (!!e.spellId && getEnglishSpellName(e.spellId, "") === spell.name)),
+    const castEvents = unit.spellCastEvents.filter((e) =>
+      isPressOfCooldown(e, spell.spellId, spell.name, replacements),
     );
 
     const isDefOrExternal = spell.tags.includes(SpellTag.Defensive);
@@ -1942,9 +2072,16 @@ export function extractMajorCooldowns(
     }
 
     const availableWindows: IAvailableWindow[] = [];
+    const procOnly =
+      PROC_ONLY_ACTIVATION_IDS.has(spell.spellId) ||
+      procOnlyForUnit.has(spell.spellId);
 
     const pushWindow = (from: number, to: number) => {
       const duration = to - from;
+      // No button → never an "available" window (agy review of GH #106 step
+      // 2: findCheaperDefensiveAlternatives, offensiveWindows and
+      // positionAnalysis read these windows directly).
+      if (procOnly) return;
       if (duration > GRACE_SECONDS) {
         availableWindows.push({
           fromSeconds: from,
@@ -1999,7 +2136,7 @@ export function extractMajorCooldowns(
         availableWindows,
         neverUsed: casts.length === 0,
         isThroughput: spell.tags.includes(SpellTag.Offensive),
-        isProcOnly: PROC_ONLY_ACTIVATION_IDS.has(spell.spellId),
+        isProcOnly: procOnly,
       },
     ];
   });

@@ -559,6 +559,11 @@ export function compileCooldownModifiers(
           ...(specIdsOf.has(row.spellId)
             ? { specIds: specIdsOf.get(row.spellId) }
             : {}),
+          // a replacement that only holds while a finite buff is up (Zenith →
+          // Zenith Stomp) is not the talent taking the button away (GH #106)
+          ...(type === "replace_spell" && row.activation === "whileAura"
+            ? { isConditional: true }
+            : {}),
         },
         t.via === "chargeCategory" ? "charge" : "cooldown",
       );

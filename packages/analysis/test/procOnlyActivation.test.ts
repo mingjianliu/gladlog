@@ -13,6 +13,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   AURA_ONLY_ACTIVATION_IDS,
+  cdAvailableAt,
+  cdIsProcOnly,
   PROC_ONLY_ACTIVATION_IDS,
   isProcOnlyActivation,
 } from "../src/utils/cooldowns";
@@ -47,5 +49,35 @@ describe("PROC_ONLY_ACTIVATION_IDS", () => {
         `${id} 没有按键却没登记光环激活路径,它的使用将永远无法被观测到`,
       ).toBeDefined();
     }
+  });
+});
+
+// GH #106 step 2: a talent can take the button away for ONE player (Radiant
+// Glory replaces Avenging Wrath with an 8 s proc off Wake of Ashes). The
+// ledger marks that player's entry `isProcOnly`; the per-unit predicate and
+// the readiness predicate must both honour it, while the same spell stays a
+// real button for everyone else.
+describe("按人判断的无按键(isProcOnly)", () => {
+  const procAw = {
+    spellId: "31884",
+    isProcOnly: true,
+    casts: [{ timeSeconds: 10 }],
+    cooldownSeconds: 60,
+    neverUsed: false,
+    charges: 1,
+  };
+  it("点了光辉荣耀的人:复仇之怒无按键,任何时刻都不算「可以按」", () => {
+    expect(cdIsProcOnly(procAw)).toBe(true);
+    expect(cdAvailableAt(procAw, 5)).toBe(false);
+    expect(cdAvailableAt(procAw, 500)).toBe(false);
+  });
+  it("没点的人:同一个技能照常是按键,照常按冷却判断", () => {
+    const pressed = { ...procAw, isProcOnly: false };
+    expect(cdIsProcOnly(pressed)).toBe(false);
+    expect(cdAvailableAt(pressed, 30)).toBe(false);
+    expect(cdAvailableAt(pressed, 70)).toBe(true);
+  });
+  it("按技能判断的表照样生效(复苏烈焰,字段缺省时)", () => {
+    expect(cdIsProcOnly({ spellId: "374348" })).toBe(true);
   });
 });

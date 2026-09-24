@@ -618,7 +618,8 @@
       "talentSpellId": "114051",
       "effect": "replace_spell",
       "value": 115356,
-      "sourceRowId": "1180317"
+      "sourceRowId": "1180317",
+      "isConditional": true
     },
     {
       "talentSpellId": "319930",
@@ -806,7 +807,8 @@
       "talentSpellId": "1719",
       "effect": "replace_spell",
       "value": 335096,
-      "sourceRowId": "1201495"
+      "sourceRowId": "1201495",
+      "isConditional": true
     }
   ],
   "23920": [
@@ -1298,7 +1300,8 @@
       "talentSpellId": "473909",
       "effect": "replace_spell",
       "value": 474149,
-      "sourceRowId": "1193145"
+      "sourceRowId": "1193145",
+      "isConditional": true
     },
     {
       "talentSpellId": "428937",
@@ -1702,7 +1705,8 @@
       "talentSpellId": "1719",
       "effect": "replace_spell",
       "value": 335097,
-      "sourceRowId": "1193953"
+      "sourceRowId": "1193953",
+      "isConditional": true
     }
   ],
   "86659": [
@@ -1792,7 +1796,8 @@
       "sourceRowId": "128685",
       "specIds": [
         "269"
-      ]
+      ],
+      "isConditional": true
     }
   ],
   "102342": [
@@ -2701,7 +2706,8 @@
       "sourceRowId": "271240",
       "specIds": [
         "255"
-      ]
+      ],
+      "isConditional": true
     }
   ],
   "186289": [
@@ -3214,7 +3220,8 @@
       "talentSpellId": "205630",
       "effect": "replace_spell",
       "value": 208173,
-      "sourceRowId": "307986"
+      "sourceRowId": "307986",
+      "isConditional": true
     }
   ],
   "205636": [
@@ -3554,7 +3561,8 @@
       "sourceRowId": "271240",
       "specIds": [
         "255"
-      ]
+      ],
+      "isConditional": true
     }
   ],
   "268475": [
@@ -7145,7 +7153,8 @@
       "talentSpellId": "473909",
       "effect": "replace_spell",
       "value": 473919,
-      "sourceRowId": "1193213"
+      "sourceRowId": "1193213",
+      "isConditional": true
     }
   ],
   "474421": [
@@ -7481,7 +7490,8 @@
       "talentSpellId": "1249625",
       "effect": "replace_spell",
       "value": 1272696,
-      "sourceRowId": "1310823"
+      "sourceRowId": "1310823",
+      "isConditional": true
     }
   ],
   "1250646": [
@@ -7666,7 +7676,8 @@
       "sourceRowId": "271240",
       "specIds": [
         "255"
-      ]
+      ],
+      "isConditional": true
     }
   ],
   "1262343": [
@@ -7677,7 +7688,8 @@
       "sourceRowId": "271240",
       "specIds": [
         "255"
-      ]
+      ],
+      "isConditional": true
     }
   ],
   "1264379": [

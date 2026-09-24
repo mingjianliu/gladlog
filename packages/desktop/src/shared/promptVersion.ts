@@ -937,4 +937,15 @@
 //  [ENEMY TRINKET] "out of" attributions (a trinket at 0:59 is out of the
 //  Psychic Scream, not the phantom Sap); findings byte-identical, every
 //  gate 0.
-export const PROMPT_VERSION = 119;
+//  v120 (2026-09-24, GH #106 step 2, user "好，那我们做下一步吧"): casts that
+//  were not button presses leave the cooldown ledger — a same-named id counts
+//  only with a cooldown of its own (ticks, sub-effects, Doom Winds pulses,
+//  the Stasis release are out), Doom Winds' press is its buff, Radiant Glory
+//  makes Avenging Wrath proc-only for that player (never "ready", never
+//  "unused", procs still enter windows), and the death analysis shares the
+//  press predicate. 605 files: Ret Avenging Wrath recast floor −55 s → 0;
+//  missed-sync-window 1,084 → 1,100 dps / 542 → 550 healer (Doom Winds'
+//  exact press time), position-mistake 622 → 616; "had Blessing of
+//  Sacrifice available" at a death after an Ultimate Sacrifice press and
+//  "cheaper available: Renewing Blaze" gone; gate failures unchanged.
+export const PROMPT_VERSION = 120;

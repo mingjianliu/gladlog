@@ -17,6 +17,7 @@ import { CombatUnitReaction, LogEvent } from "@gladlog/parser-compat";
 
 import {
   cdAvailableAt,
+  cdIsProcOnly,
   extractMajorCooldowns,
   isHealerSpec,
   MAJOR_DEFENSIVE_IDS,
@@ -220,6 +221,8 @@ export function buildMomentSnapshotItems(
     const ready: string[] = [];
     const onCd: string[] = [];
     for (const cd of cds) {
+      // no button → neither "ready" nor "on cooldown" (GH #106 step 2)
+      if (cdIsProcOnly(cd)) continue;
       // #25-1: damage-redirect externals carry the guard annotation — a bare
       // name in the victim's own "ready" reads as self-rescue advice.
       (cdAvailableAt(cd, midT) ? ready : onCd).push(

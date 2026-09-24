@@ -221,13 +221,18 @@ describe("cdAvailableAt 与 isAvailableAt 对「仅有光环证据」的技能�
     });
   }
 
-  const scenarios: { name: string; auraAt: number; atSeconds: number }[] = [
-    { name: "光环刚触发,CD 未转好", auraAt: 10, atSeconds: 40 },
-    { name: "CD 恰好转好(闭区间边界)", auraAt: 10, atSeconds: 100 },
-    { name: "CD 早已转好", auraAt: 10, atSeconds: 300 },
+  const scenarios: {
+    name: string;
+    auraAt: number;
+    atSeconds: number;
+    timerDone: boolean;
+  }[] = [
+    { name: "光环刚触发,CD 未转好", auraAt: 10, atSeconds: 40, timerDone: false },
+    { name: "CD 恰好转好(闭区间边界)", auraAt: 10, atSeconds: 100, timerDone: true },
+    { name: "CD 早已转好", auraAt: 10, atSeconds: 300, timerDone: true },
   ];
 
-  for (const { name, auraAt, atSeconds } of scenarios) {
+  for (const { name, auraAt, atSeconds, timerDone } of scenarios) {
     it(`${name}(aura@${auraAt}s, t=${atSeconds}s)`, () => {
       const unit = unitWithAuraOnly(auraAt);
       const combat = {
@@ -250,6 +255,14 @@ describe("cdAvailableAt 与 isAvailableAt 对「仅有光环证据」的技能�
       );
 
       expect(viaIsAvailableAt).toBe(viaCdAvailableAt);
+      // GH #106 step 2: Renewing Blaze has no button, so both predicates say
+      // "not available" at every instant ...
+      expect(viaCdAvailableAt).toBe(false);
+      // ... while the aura evidence still drives the ledger's timer exactly as
+      // before (the gate is the only difference).
+      expect(
+        cdAvailableAt({ ...renewingBlaze!, isProcOnly: false }, atSeconds),
+      ).toBe(timerDone);
     });
   }
 });

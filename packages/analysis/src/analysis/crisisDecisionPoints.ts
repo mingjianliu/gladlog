@@ -34,7 +34,7 @@ import {
   type IMajorCooldownInfo,
   // ...and its companion, the [STATE] tick's `unit:dead` predicate.
   isDeadAtRenderSecond,
-  isProcOnlyActivation,
+  cdIsProcOnly,
 } from "../utils/cooldowns";
 import { PVP_TRINKET_SPELL_IDS } from "../utils/killWindowTargetSelection";
 import { isEnemyCdWindowSpell } from "../utils/enemyCDs";
@@ -743,7 +743,7 @@ export function crisisDecisionPoints(
       (cd) =>
         cd.tag === "Defensive" &&
         !cd.isThroughput &&
-        !isProcOnlyActivation(cd.spellId) &&
+        !cdIsProcOnly(cd) &&
         PERSONAL_WALL_IDS.has(cd.spellId),
     );
     controlCds = cds.filter((cd) => cd.tag === "Control");

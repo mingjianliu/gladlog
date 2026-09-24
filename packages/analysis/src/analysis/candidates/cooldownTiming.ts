@@ -25,7 +25,7 @@ import {
   HP_SAMPLE_RADIUS_MS,
   type IMajorCooldownInfo,
   isHealerSpec,
-  isProcOnlyActivation,
+  cdIsProcOnly,
   SELF_CAST_NOOP_EXTERNAL_IDS,
   THROUGHPUT_EMPOWER_DEFENSIVE_IDS,
 } from "../../utils/cooldowns";
@@ -614,13 +614,11 @@ export type SpendableDefensiveCd = CdHoardCandidateCd;
  * `readyDefensiveCds` below is now written through it.
  */
 export function isSpendableDefensiveCd(
-  cd: Pick<SpendableDefensiveCd, "spellId" | "tag" | "isThroughput">,
+  cd: Pick<SpendableDefensiveCd, "spellId" | "tag" | "isThroughput"> & {
+    isProcOnly?: boolean;
+  },
 ): boolean {
-  return (
-    cd.tag === "Defensive" &&
-    !cd.isThroughput &&
-    !isProcOnlyActivation(cd.spellId)
-  );
+  return cd.tag === "Defensive" && !cd.isThroughput && !cdIsProcOnly(cd);
 }
 
 /** Base "can this Defensive CD be pressed at all right now" gate — the part
@@ -1054,7 +1052,7 @@ export function cdSpentIdleEvents(
       DEFENSIVE_TAGS.has(cd.tag) &&
       !cd.isThroughput &&
       // 空放/攥着不放都是「你当时的选择」,被动触发的能力没有这个选择。
-      !isProcOnlyActivation(cd.spellId) &&
+      !cdIsProcOnly(cd) &&
       !THROUGHPUT_EMPOWER_DEFENSIVE_IDS.has(cd.spellId),
   );
   const candidates: Array<{ cd: (typeof cds)[number]; t: number }> = [];

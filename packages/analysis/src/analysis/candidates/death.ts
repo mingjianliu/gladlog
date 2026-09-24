@@ -16,7 +16,7 @@ import {
   cdAvailableAt,
   cdReadyInTimeAt,
   type IMajorCooldownInfo,
-  isProcOnlyActivation,
+  cdIsProcOnly,
 } from "../../utils/cooldowns";
 import { fmtFactNum as fmt, fmtFactTime } from "../factFormat";
 import { CandidateEvent } from "../types";
@@ -271,7 +271,7 @@ export function deathSetupEvents(parts: DeathSetupParts): CandidateEvent[] {
   for (const cd of parts.victimCDs ?? []) {
     if (cd.tag !== "Defensive" || cd.neverUsed) continue;
     // 被动触发的能力谈不上「交早了」—— 交的时机不是玩家选的。
-    if (isProcOnlyActivation(cd.spellId)) continue;
+    if (cdIsProcOnly(cd)) continue;
     const last = lastCastBefore(cd as IMajorCooldownInfo, deathT);
     if (!last) continue;
     // available at death → this is not a "spent it too early" chain

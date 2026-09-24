@@ -53,6 +53,7 @@ import {
 import { STASIS_STORABLE_HEAL_IDS } from "../utils/combatStates";
 import {
   ADDITIONAL_OVERLAP_DEFENSIVE_IDS,
+  AURA_IS_THE_PRESS_IDS,
   AURA_ONLY_ACTIVATION_IDS,
   CD_ROLE_TAGS,
   FORBEARANCE_GATED_IDS,
@@ -303,6 +304,11 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   t("SPEC_EXCLUSIVE_SPELLS", "utils/cooldowns.ts", "cast", () =>
     keys(SPEC_EXCLUSIVE_SPELLS),
   ),
+  // GH #106 step 2 (2026-09-24): aura-only entries whose buff is the press
+  // itself (read even when a real cast was logged).
+  t("AURA_IS_THE_PRESS_IDS", "utils/cooldowns.ts", "cast", () => [
+    ...AURA_IS_THE_PRESS_IDS,
+  ]),
   t("AURA_ONLY_ACTIVATION_IDS", "utils/cooldowns.ts", "mixed", () => [
     ...keys(AURA_ONLY_ACTIVATION_IDS),
     ...Object.values(AURA_ONLY_ACTIVATION_IDS).flat(),

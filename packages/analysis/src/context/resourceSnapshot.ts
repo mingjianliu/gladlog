@@ -5,7 +5,7 @@ import { IPlayerCCTrinketSummary } from "../utils/ccTrinketAnalysis";
 import {
   CD_INSTANT_SLACK_S,
   IMajorCooldownInfo,
-  isProcOnlyActivation,
+  cdIsProcOnly,
   specToString,
 } from "../utils/cooldowns";
 import { IEnemyCDTimeline } from "../utils/enemyCDs";
@@ -119,12 +119,11 @@ export function buildPlayerLoadout(
       : "";
   };
   const fmtCDLabel = (cd: IMajorCooldownInfo, caster?: ICombatUnit) =>
-    `${cd.spellName} [${cd.cooldownSeconds}s${cd.maxChargesDetected > 1 ? `, ${cd.maxChargesDetected} Charges` : ""}${lastsPart(cd, caster)}]${
-      isProcOnlyActivation(cd.spellId)
-        ? " [PASSIVE]"
-        : cd.neverUsed
-          ? " [UNUSED]"
-          : ""
+    // a proc-only entry's "charges" are inferred from how often it procced
+    // (Radiant Glory's Avenging Wrath every Wake of Ashes → "2 Charges"), not
+    // something the player holds — not printed (GH #106 step 2)
+    `${cd.spellName} [${cd.cooldownSeconds}s${cd.maxChargesDetected > 1 && !cdIsProcOnly(cd) ? `, ${cd.maxChargesDetected} Charges` : ""}${lastsPart(cd, caster)}]${
+      cdIsProcOnly(cd) ? " [PASSIVE]" : cd.neverUsed ? " [UNUSED]" : ""
     }`;
 
   const ownerId = nextId++;
@@ -301,16 +300,22 @@ export function computeReadyNames(
   teammateCDs: Array<{ cds: IMajorCooldownInfo[]; playerLabel?: string }>,
 ): string[] {
   const readyNames: string[] = [];
+  // No button → not on the ledger line at all (GH #106 step 2): "rdy:X" would
+  // tell the model the player could press X.
   const allFriendlyCDs: Array<{ displayName: string; cd: IMajorCooldownInfo }> =
     [
-      ...ownerCDs.map((cd) => ({ displayName: cd.spellName, cd })),
+      ...ownerCDs
+        .filter((cd) => !cdIsProcOnly(cd))
+        .map((cd) => ({ displayName: cd.spellName, cd })),
       ...teammateCDs.flatMap(({ cds, playerLabel }) =>
-        cds.map((cd) => ({
-          displayName: playerLabel
-            ? `${playerLabel}:${cd.spellName}`
-            : cd.spellName,
-          cd,
-        })),
+        cds
+          .filter((cd) => !cdIsProcOnly(cd))
+          .map((cd) => ({
+            displayName: playerLabel
+              ? `${playerLabel}:${cd.spellName}`
+              : cd.spellName,
+            cd,
+          })),
       ),
     ];
   for (const { displayName, cd } of allFriendlyCDs) {
@@ -341,16 +346,22 @@ export function computeOnCDDisplayNames(
   teammateCDs: Array<{ cds: IMajorCooldownInfo[]; playerLabel?: string }>,
 ): string[] {
   const onCDNames: string[] = [];
+  // No button → not on the ledger line at all (GH #106 step 2): "rdy:X" would
+  // tell the model the player could press X.
   const allFriendlyCDs: Array<{ displayName: string; cd: IMajorCooldownInfo }> =
     [
-      ...ownerCDs.map((cd) => ({ displayName: cd.spellName, cd })),
+      ...ownerCDs
+        .filter((cd) => !cdIsProcOnly(cd))
+        .map((cd) => ({ displayName: cd.spellName, cd })),
       ...teammateCDs.flatMap(({ cds, playerLabel }) =>
-        cds.map((cd) => ({
-          displayName: playerLabel
-            ? `${playerLabel}:${cd.spellName}`
-            : cd.spellName,
-          cd,
-        })),
+        cds
+          .filter((cd) => !cdIsProcOnly(cd))
+          .map((cd) => ({
+            displayName: playerLabel
+              ? `${playerLabel}:${cd.spellName}`
+              : cd.spellName,
+            cd,
+          })),
       ),
     ];
   for (const { displayName, cd } of allFriendlyCDs) {
@@ -438,14 +449,20 @@ export function buildResourceSnapshot({
   const prevOnCDSet =
     prevOnCDNames !== undefined ? new Set(prevOnCDNames) : null;
 
+  // No button → not on the ledger line at all (GH #106 step 2): "rdy:X" would
+  // tell the model the player could press X.
   const allFriendlyCDs: Array<{ displayName: string; cd: IMajorCooldownInfo }> =
     [
-      ...ownerCDs.map((cd) => ({ displayName: cd.spellName, cd })),
+      ...ownerCDs
+        .filter((cd) => !cdIsProcOnly(cd))
+        .map((cd) => ({ displayName: cd.spellName, cd })),
       ...teammateCDs.flatMap(({ player, cds }) =>
-        cds.map((cd) => ({
-          displayName: `${pid(player.name)}:${cd.spellName}`,
-          cd,
-        })),
+        cds
+          .filter((cd) => !cdIsProcOnly(cd))
+          .map((cd) => ({
+            displayName: `${pid(player.name)}:${cd.spellName}`,
+            cd,
+          })),
       ),
     ];
 

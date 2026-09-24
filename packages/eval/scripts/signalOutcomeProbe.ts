@@ -13,7 +13,7 @@
  *
  *   1. cd-hoarded            crisisDecisionPoints (analysis/crisisDecisionPoints.ts)
  *                            + extractMajorCooldowns / cdAvailableAt /
- *                              canHelpAnotherUnit / isProcOnlyActivation /
+ *                              canHelpAnotherUnit / cdIsProcOnly /
  *                              DEFENSIVE_TAGS (utils/cooldowns.ts)
  *   2. attempt-into-trinket  extractKillAttempts (utils/killAttempts.ts)
  *                            + analyzePlayerCCAndTrinket (utils/ccTrinketAnalysis.ts)
@@ -50,7 +50,7 @@ import {
   extractMajorCooldowns,
   type IMajorCooldownInfo,
   isHealerSpec,
-  isProcOnlyActivation,
+  cdIsProcOnly,
   matchThreatLevel,
   specToString,
   SpellTag,
@@ -264,7 +264,7 @@ function probeCdHoarded(ctx: RoundCtx, emit: Emit): void {
     return;
   }
   const defensive = cds.filter(
-    (cd) => DEFENSIVE_TAGS.has(cd.tag) && !isProcOnlyActivation(cd.spellId),
+    (cd) => DEFENSIVE_TAGS.has(cd.tag) && !cdIsProcOnly(cd),
   );
   if (!defensive.length) return;
   const allyCapable = defensive.filter((cd) =>
@@ -550,7 +550,7 @@ function probeKickEaten(ctx: RoundCtx, emit: Emit): void {
 /**
  * Decision point: every cast of one of the owner's defensive major CDs, using
  * the EXACT filter `cdSpentIdleEvents` applies (`DEFENSIVE_TAGS.has(tag) &&
- * !isThroughput && !isProcOnlyActivation && !THROUGHPUT_EMPOWER_DEFENSIVE_IDS`).
+ * !isThroughput && !cdIsProcOnly && !THROUGHPUT_EMPOWER_DEFENSIVE_IDS`).
  * The cast instant is render-floored (`toRenderSecond`) BEFORE the threat gate
  * runs, exactly as the producer does.
  *
@@ -576,7 +576,7 @@ function probeCdSpentIdle(ctx: RoundCtx, emit: Emit): void {
     (cd) =>
       DEFENSIVE_TAGS.has(cd.tag) &&
       !cd.isThroughput &&
-      !isProcOnlyActivation(cd.spellId) &&
+      !cdIsProcOnly(cd) &&
       !THROUGHPUT_EMPOWER_DEFENSIVE_IDS.has(cd.spellId),
   );
   if (!defensive.length) return;

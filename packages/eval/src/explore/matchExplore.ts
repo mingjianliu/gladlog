@@ -30,6 +30,7 @@ import {
   analyzeOutgoingCCChains,
   castFailedInWindow,
   cdAvailableAt,
+  cdIsProcOnly,
   detectHealingGaps,
   distanceBetween,
   drinkingSegments,
@@ -103,7 +104,10 @@ export function cdLines(legacy: LegacyRound, t: number): string[] {
     return lines;
   }
   for (const u of players) {
-    const cds = extractMajorCooldowns(u, legacy);
+    // no button → neither "ready" nor "on cooldown" (GH #106 step 2)
+    const cds = extractMajorCooldowns(u, legacy).filter(
+      (cd) => !cdIsProcOnly(cd),
+    );
     const ready = cds.filter((cd) => cdAvailableAt(cd, tt));
     const onCd = cds.filter((cd) => !cdAvailableAt(cd, tt));
     // #25-1: ledger surfaces render damage-redirect externals through the
