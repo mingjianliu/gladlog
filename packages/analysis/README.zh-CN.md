@@ -34,7 +34,7 @@ export function buildMatchContext(
   2. `buildFindingsPrompt.ts` —— 把候选菜单加一份按类型分的图例(`DPS_LEGENDS`/`CHAIN_LEGENDS`)渲染进真正发给模型的 prompt。
   3. `auditFindings.ts` —— 模型返回后的溯源审计:每条模型返回的 finding 的 `eventIds` 都必须落到一个真实候选上,每个 `{{placeholder}}` 都必须无歧义地解出值。这个文件是通用的(零按 finding 类型分支的逻辑)。
 
-  配套:`findingCategories.ts`(把模型的自由文本类别归一化成固定的 8 值枚举:`survival, cooldowns, positioning, target-selection, cc, interrupts, dispels, offense`)、`causalLint.ts` / `spellNameZhLint.ts`(审计过程里跑的文本级 linter)、`deepDive.ts`(多轮自动追问管线,有自己的路由集合如 `OFFENSIVE_CANDIDATE_TYPES`)、`parseModelJson.ts`(容错解析模型 JSON)、`factFormat.ts`(数值事实格式化)。
+  配套:`findingCategories.ts`(把模型的自由文本类别归一化成固定的 8 值枚举:`survival, cooldowns, positioning, target-selection, cc, interrupts, dispels, offense`)、`causalLint.ts` / `spellNameZhLint.ts`(审计过程里跑的文本级 linter)、`deepDive.ts`(多轮自动追问管线)、`parseModelJson.ts`(容错解析模型 JSON)、`factFormat.ts`(数值事实格式化)。
 
 - **`compare/`**(10 个文件)—— 对照 `packages/eval` 构建的参考语料做群体/百分位对比。`verifiedComparison.ts` 导出 `percentileRank`/`verdictFor`(从存好的 p10/p50/p90 锚点做分段线性百分位,截断到 [10,90])。`cellLookup.ts` 的 `assignBuildGroup` 把一场对局的天赋匹配到参考 cell。`claimChecker.ts` 掌管单源的占位符语法 `PLACEHOLDER = /\{\{\s*([\w.]+)\s*\}\}/g`,明确注明由插值、claim 校验、深挖审计三处共用以防漂移。`buildExemplarLedPrompt.ts` 渲染「群体范例」文本块;`metricLabels.ts` 是对比维度的中英文标签单源表。
 
