@@ -15,6 +15,7 @@ import {
 } from "@gladlog/parser-compat";
 import fs from "fs-extra";
 import path from "path";
+import { gunzipSync } from "zlib";
 
 import { buildCoverageManifest } from "../quality/coverageManifest";
 
@@ -96,7 +97,12 @@ export async function buildCorpus(opts: {
 
   for (const logPath of logPaths) {
     try {
-      const content = await fs.readFile(logPath, "utf-8");
+      // The PvP log archive is gzip (`archive-gz/…/*.txt.gz`); reading it as
+      // utf-8 parsed garbage and produced zero combats without an error.
+      const raw = await fs.readFile(logPath);
+      const content = (
+        logPath.endsWith(".gz") ? gunzipSync(raw) : raw
+      ).toString("utf-8");
       const parser = new GladLogParser();
       const combats: { gladId: string; combat: any }[] = [];
 
