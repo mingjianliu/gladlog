@@ -1030,6 +1030,14 @@ export function hardCastOccupancyWithin(
   enemyIds: Set<string>,
   windowStartMs: number,
   windowEndMs: number,
+  /** Reliability audit A5 (2026-09-25): the unit's own SPELL_CAST_FAILED
+   * (absolute ms, from the raw stream). A same-spell failure after a bar
+   * started, with no same-spell success before the next bar, is that bar
+   * being cancelled (moved, juked, interrupted) — 7c598eeb r0: Holy Fire
+   * started 5.99 and failed "interrupted" at 6.19, yet the bar was counted
+   * as running through the 9.18–14.78 Mind Control window ("you were mid
+   * hard cast", preCommitted=yes). Absent = the pre-A5 cuts only. */
+  failedCasts?: ReadonlyArray<{ spellId: string; ms: number }>,
 ): IHardCastOccupancy | null {
   const starts = unit.castStartEvents;
   if (!Array.isArray(starts)) return null;
@@ -1052,7 +1060,22 @@ export function hardCastOccupancyWithin(
       (e) => e.spellId === sorted[i].spellId && e.timestamp >= from,
     );
     const cut = cutters.find((c) => c > from);
-    const ends = [succ?.timestamp, sorted[i + 1]?.timestamp, cut].filter(
+    const nextStart = sorted[i + 1]?.timestamp;
+    // A5: the bar's own cancel — a same-spell failure before the next bar,
+    // when the spell did not also succeed before the next bar (a failure
+    // followed by the success is a mid-cast spam press, not a cancel).
+    const completedBeforeNext =
+      succ !== undefined &&
+      (nextStart === undefined || succ.timestamp <= nextStart);
+    const cancel = completedBeforeNext
+      ? undefined
+      : failedCasts?.find(
+          (f) =>
+            f.spellId === String(sorted[i].spellId) &&
+            f.ms > from &&
+            (nextStart === undefined || f.ms <= nextStart),
+        )?.ms;
+    const ends = [succ?.timestamp, nextStart, cut, cancel].filter(
       (x): x is number => typeof x === "number" && x > from,
     );
     if (ends.length === 0) continue;

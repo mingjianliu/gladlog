@@ -985,6 +985,52 @@ describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
     // 未传 occupancy(旧调用方)→ 同样不出现
     const legacy = missedCleanseEvents([w()], busyOwner, [busyOwner], false);
     expect(legacy[0]!.facts["ownerCastingS"]).toBeUndefined();
+
+    // A5(2026-09-25 可靠性审计):窗口前起手的读条在窗口前就被取消
+    // (SPELL_CAST_FAILED,7c598eeb r0 神圣之火 5.99 起手 → 6.19 被打断),
+    // 之后没有同技能成功、下一条起手远在窗口后 → 读条到取消那一刻为止,
+    // 与窗口无重叠,ownerCasting* 不出现。旧逻辑会一直算到下一条起手。
+    const cancelOwner = {
+      ...busyOwner,
+      castStartEvents: [
+        cast("14914", "神圣之火", 25_990),
+        cast("2060", "快速治疗", 42_000),
+      ],
+      spellCastEvents: [],
+    };
+    const noCancel = missedCleanseEvents(
+      [w()],
+      cancelOwner,
+      [cancelOwner],
+      false,
+      { enemyIds: new Set(), matchStartMs: 0 },
+    );
+    expect(noCancel[0]!.facts["ownerCastingS"]).toBe("6.0"); // pre-A5 reading
+    const cancelled = missedCleanseEvents(
+      [w()],
+      cancelOwner,
+      [cancelOwner],
+      false,
+      {
+        enemyIds: new Set(),
+        matchStartMs: 0,
+        failedCasts: [{ spellId: "14914", ms: 26_190 }],
+      },
+    );
+    expect(cancelled[0]!.facts["ownerCastingS"]).toBeUndefined();
+    // 失败之后同技能又成功(读条中途连按)→ 不当作取消
+    const spam = missedCleanseEvents(
+      [w()],
+      { ...cancelOwner, spellCastEvents: [cast("14914", "神圣之火", 31_000)] },
+      [cancelOwner],
+      false,
+      {
+        enemyIds: new Set(),
+        matchStartMs: 0,
+        failedCasts: [{ spellId: "14914", ms: 26_190 }],
+      },
+    );
+    expect(spam[0]!.facts["ownerCastingS"]).toBe("1.0");
   });
 
   it("missed-cleanse(DISPEL-002,2026-08-06):lateDispelSeconds 有值 → facts 带整数串 latencyS;无值 → 该键不存在", () => {

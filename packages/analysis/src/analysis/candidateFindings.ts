@@ -663,7 +663,12 @@ export function missedCleanseEvents(
   // so the coach can phrase "you chose Y for these N seconds" instead of the
   // false "you idly missed X". Optional so older callers/tests are untouched;
   // absent ⇒ no facts (unknown, not "idle").
-  occupancy?: { enemyIds: Set<string>; matchStartMs: number },
+  occupancy?: {
+    enemyIds: Set<string>;
+    matchStartMs: number;
+    /** A5: the owner's SPELL_CAST_FAILED (absolute ms) — cuts a cancelled bar. */
+    failedCasts?: ReadonlyArray<{ spellId: string; ms: number }>;
+  },
 ): CandidateEvent[] {
   return windows
     .filter(
@@ -691,6 +696,7 @@ export function missedCleanseEvents(
             occupancy.enemyIds,
             occupancy.matchStartMs + w.timeSeconds * 1000,
             occupancy.matchStartMs + (w.timeSeconds + w.durationSeconds) * 1000,
+            occupancy.failedCasts,
           )
         : null;
       // Rendering floor anchored to the rendered value itself: attach only
@@ -1607,7 +1613,18 @@ function teamPlayEvents(
         // was hard-casting during the window). startTime missing ⇒ omitted
         // entirely — the facts must never appear on a guessed clock.
         typeof combat?.startTime === "number"
-          ? { enemyIds, matchStartMs: combat.startTime }
+          ? {
+              enemyIds,
+              matchStartMs: combat.startTime,
+              failedCasts: rawStreams?.available
+                ? rawStreams.castFailed
+                    .filter((f) => f.unitGuid === owner.id)
+                    .map((f) => ({
+                      spellId: String(f.spellId),
+                      ms: combat.startTime + f.tSeconds * 1000,
+                    }))
+                : undefined,
+            }
           : undefined,
       ),
     );
