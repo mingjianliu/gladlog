@@ -409,6 +409,15 @@ npx tsx packages/eval/scripts/dispelCompletenessScan.ts <dispel-counts.txt>
 #    removed on its first run (DB2 was right); Infernal Awakening 22703 shares none. ~35 s at
 #    --every 30. drGapScan cannot see a CC DB2 leaves uncategorised — this can.
 npx tsx packages/eval/scripts/drShareScan.ts --manifest <newseason manifest> --every 30 --spells 33786,99,22703
+# 3c. Cooldown-changing buffs the ledger cannot see (2026-09-25, GH #106 follow-up): every aura a player
+#    applied to themselves, fed through the talent generator's own target resolution against the spells
+#    extractMajorCooldowns really put in that spec's ledger; reports UNSEEN (never reached — a talent that
+#    grants the buff through a script), CONDITIONAL (reached, dropped as a finite buff) and MODELLED. First
+#    run (605 files, 1,433 auras, DB2 69594): one UNSEEN — Heart of the Wild 319454 (Call of the Elder
+#    Druid) +1 Frenzied Regeneration charge for Restoration Druid; logged, not modelled (BACKLOG §58).
+#    Event-driven reductions (Frostbound Will per Rime, Anger Management per rage) are not buffs and stay
+#    with the recast-floor table (6b-pre-9). ~12 min at --every 30; --from-dump re-runs pass 2 alone.
+npx tsx packages/eval/scripts/auraCooldownModScan.ts --manifest <newseason manifest> --every 30 --dump <dump.json>
 # 4. Buff durations: the two hand tables that assert how long a buff LASTS
 #    (BUFF_DURATION_TALENT_MODIFIERS, CORPUS_DURATION_PATCHES) re-measured against
 #    the season's own corpus. ROT = a registered entry no longer reproduces the

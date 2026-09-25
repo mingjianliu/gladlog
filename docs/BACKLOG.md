@@ -2509,3 +2509,15 @@ M6 已做完的:1,190 个脚本型天赋分队列 → 118 个点名了产品追�
 **范围(未审)**:还有约 30 处直接读 `SPELL_CAST_SUCCESS`(kickPriority、momentSnapshot、teammateCrisis、matchTimeline、combatStates、dispelAnalysis、deathOutcomeAnalysis …)。有的只是问「这个法术发生了没有」(不用改),有的问「玩家按了没有」(要走 `isPassiveProcCast`)。
 
 **做法(未开工)**:逐个把读取方分成「法术发生」和「玩家按键」两类 → 后者统一走 `isPassiveProcCast` → 登记 predicate-index → 每个消费者一条单测 + 605 场切片前后数字。
+
+## 58. Heart of the Wild 让奶德的狂暴回复有 2 层,冷却账本不认识(logged 2026-09-25,GH #106 遗留,用户裁「记下来 不急着修」)
+
+**现象**:恢复德鲁伊的 Frenzied Regeneration(22842)经常 1.2–4.5 秒内连按两次,账本按 1 层算。每 30 个归档文件取 1 个:18 对短间隔里,11 对连按,按的时候 Heart of the Wild(319454)都在(11/11);另 4 对间隔约 30 秒(短于 36 秒)是 buff 在时攒下、buff 掉了之后才用掉的第二层;2 对只在第二次施放时有 buff,未解释;1 对差 0.9 秒,是抖动。不是 Well-Honed Instincts(377847,血量 < 40 % 自动施放):13/18 对两次施放都不在 40 % 以下。
+
+**根因**:Call of the Elder Druid(426784,专精天赋)变形时给 Heart of the Wild(319454),319454 的 effect 8 = aura 411(最大充能 +1)、misc0 1568(狂暴回复的充能类别)。426784 在 DB2 里只有 dummy 行(aura 4),给 buff 是服务器脚本,没有 EffectTriggerSpell,所以天赋清单(`talentEffectInventoryGenerated.json`)永远走不到 319454。
+
+**范围**:`packages/eval/scripts/auraCooldownModScan.ts`(runbook §7b-3c)首跑 605 场,玩家给自己上过的 1,433 种光环里,改动某个专精账本冷却(充能 / 冷却 / 回充速率)而模型不知道的**只有这一条**。按事件缩短的(Frostbound Will、Anger Management)不是 buff,归下限表管。
+
+**现状**:下限表给 22842|105 一个 ×0.070 的下限,`[RES]` 不会说它「一定在冷却」(留出集误报 4/102);C2 之后它对奶德只算应对、不进指控 —— 所以没有错指控,只有 `[RES]` 区间偏宽。
+
+**做法(未开工)**:精确版是「319454 在身上时 22842 上限 2 层」—— 需要冷却核心(`chargesAvailableAt` / `cdAvailableAt`)支持随时间变化的充能上限,只为这一个技能。等 §7b-3c 再扫出第二个同类再做。
