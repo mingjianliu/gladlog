@@ -196,10 +196,11 @@ npx tsx packages/eval/scripts/healerSaveCdScan.ts emit-table --in $R/counts.json
 #   "earliest ready" bound behind the [RES] `(a–Ns)` / `(≤Ns)` forms. Corpus-driven, NOT DB2. Regenerate at season
 #   start and after any change to extractMajorCooldowns' press matching or the talent cooldown modifiers (it divides
 #   by the modelled cooldown). Floor = the highest of p2 / p1 / p0.5 on even-indexed files that the odd-indexed
-#   half breaks ≤ 3 % (the script prints the rejected cells too — read them). ~30 min single process over every 10th file;
-#   the script writes temp-then-copy itself. Health test: packages/analysis/test/gh106Tristate.test.ts.
+#   half breaks ≤ 3 % (the script prints the rejected cells too — read them). ~1.5 h single process over every 3rd
+#   file (every 10th left thinner cells — Pain Suppression, Ancient of Lore — under the 50-per-half bar; keep
+#   --offset away from any file set you evaluate on); the script writes temp-then-rename itself. Health test: packages/analysis/test/gh106Tristate.test.ts.
 # npx tsx packages/eval/scripts/cdRecastFloorScan.ts \
-#   --manifest $GLADLOG_EVAL_HOME/corpus/manifest-archive-<season>.txt --every 10 \
+#   --manifest $GLADLOG_EVAL_HOME/corpus/manifest-archive-<season>.txt --every 3 --offset 1 \
 #   --out packages/analysis/src/data/cdRecastFloorGenerated.json
 # 6b-pre-8. CC close-in table (data/ccCloseInGenerated.json; GH #83, 2026-09-23): per CC aura id, how far
 #   its casters close in during the 2 s before it lands (p85 of caster→target distance minus the spell's

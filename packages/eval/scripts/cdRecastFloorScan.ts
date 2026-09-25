@@ -1,4 +1,4 @@
-/* eslint-disable no-console */
+ 
 /**
  * CLI: the fastest a major cooldown ever comes back, per (spell, spec) — the
  * "earliest ready" bound of the tri-state cooldown ledger (GH #106 step 3).
@@ -21,15 +21,16 @@
  * Usage:
  *   tsx packages/eval/scripts/cdRecastFloorScan.ts \
  *     --manifest $GLADLOG_EVAL_HOME/corpus/manifest-archive-2026-08-28-newseason.txt \
- *     [--every 10] [--out <json>]   (default: print the report only)
+ *     [--every 10] [--offset 0] [--out <json>]   (default: print the report only)
+ *   --offset picks manifest index ≡ offset (mod every), so an evaluation on a
+ *   disjoint file set stays out-of-sample.
  */
+import { ensureAnalysisData } from "@gladlog/analysis/src/data/ensure";
+import { extractMajorCooldowns } from "@gladlog/analysis/src/utils/cooldowns";
 import { GladLogParser, type GladMatch } from "@gladlog/parser";
 import { toLegacyMatch } from "@gladlog/parser-compat";
 import { readFileSync, renameSync, writeFileSync } from "fs";
 import { gunzipSync } from "zlib";
-
-import { ensureAnalysisData } from "@gladlog/analysis/src/data/ensure";
-import { extractMajorCooldowns } from "@gladlog/analysis/src/utils/cooldowns";
 
 const FLOOR_QS = [0.02, 0.01, 0.005];
 // 50, not 30: at n = 30 every FLOOR_QS quantile is the sample minimum and a
@@ -40,15 +41,24 @@ const MAX_HOLDOUT_BELOW = 0.03;
 
 function parseArgs() {
   const a = process.argv.slice(2);
-  const out = { manifest: "", every: 10, out: "" };
+  const out = { manifest: "", every: 10, offset: 0, out: "" };
   for (let i = 0; i < a.length; i++) {
     if (a[i] === "--manifest") out.manifest = a[++i] ?? "";
     else if (a[i] === "--every") out.every = Number(a[++i]);
+    else if (a[i] === "--offset") out.offset = Number(a[++i]);
     else if (a[i] === "--out") out.out = a[++i] ?? "";
   }
-  if (!out.manifest || !Number.isFinite(out.every) || out.every < 1) {
+  if (
+    !out.manifest ||
+    !Number.isInteger(out.every) ||
+    out.every < 1 ||
+    // an offset outside [0, every) would silently select no file
+    !Number.isInteger(out.offset) ||
+    out.offset < 0 ||
+    out.offset >= out.every
+  ) {
     console.error(
-      "usage: cdRecastFloorScan.ts --manifest <path> [--every N] [--out <json>]",
+      "usage: cdRecastFloorScan.ts --manifest <path> [--every N] [--offset 0..N-1] [--out <json>]",
     );
     process.exit(1);
   }
@@ -64,7 +74,7 @@ const files = readFileSync(args.manifest, "utf8")
   .split("\n")
   .map((s) => s.trim())
   .filter(Boolean)
-  .filter((_, i) => i % args.every === 0);
+  .filter((_, i) => i % args.every === args.offset);
 
 type Cell = { name: string; ratios: [number[], number[]] };
 const cells = new Map<string, Cell>();
@@ -172,6 +182,7 @@ if (args.out) {
       generatedAt: new Date().toISOString().slice(0, 10),
       manifest: args.manifest.split("/").pop(),
       every: args.every,
+      offset: args.offset,
       filesRead: read,
       rule: `floor = the highest of p${FLOOR_QS.map((q) => q * 100).join(" / p")} of recast/modelled-cooldown ratios on even-indexed files that ≤ ${MAX_HOLDOUT_BELOW * 100} % of odd-file ratios fall below; kept when < ${MAX_FLOOR_RATIO} and ≥ ${MIN_N} ratios per half`,
     },

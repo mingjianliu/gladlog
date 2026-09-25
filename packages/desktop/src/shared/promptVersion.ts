@@ -1038,4 +1038,13 @@
 //  "(self-save)" (4,332 lines) and a survived kill attempt says
 //  "self-saved (X)" (202). Candidate ids unchanged apart from 2 kick-eaten
 //  cap swaps.
-export const PROMPT_VERSION = 129;
+//  v130 (2026-09-25, GH #106 step 3 follow-up): the recast-floor table is
+//  learnt over every 3rd archive file (6,045) instead of every 10th — 31
+//  validated cells instead of 21, adding Pain Suppression, Ancient of Lore,
+//  Fury Bladestorm, Adrenaline Rush, Frost Ice Block, Lay on Hands, Oppressing
+//  Roar, Obsidian Scales. Disjoint held-out files (1,209): "certainly on
+//  cooldown" at a real press 1.9 % → 1.4 % (Pain Suppression 13.7 → 0.2 %,
+//  Ancient of Lore 92.9 → 1.2 %, Fury Bladestorm 96.7 → 1.7 %). 605 files:
+//  findings byte-identical; `(a–Ns)` 15,614 → 18,485, `(≤Ns)` 4,336 → 4,875,
+//  charge ranges 349 → 740.
+export const PROMPT_VERSION = 130;
