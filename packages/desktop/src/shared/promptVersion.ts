@@ -1098,4 +1098,10 @@
 //  (−18); missed-cleanse ignores dead dispellers and late-cleanse windows
 //  compute the dispellers' lockout (−19, one [UNCLEANSED DEBUFF] line).
 //  605 files: +27 same-type cap refills, nothing new; context gates 26 → 26.
-export const PROMPT_VERSION = 137;
+//  v138 (2026-09-25, reliability round 2 W1c): death-setup healer-locked
+//  needs ≥ 3 s of the healer's CC inside the 12 s window (not a ≥ 3 s CC
+//  touching its edge) and the victim paying for it — the [CONSEQ] line's own
+//  test (mateHitDuringCc: a 10-point drop inside the CC, or a death). 605
+//  files: healer-locked 869 → 525 (230 edge-only, 114 victim not hit);
+//  nothing added; context byte-identical.
+export const PROMPT_VERSION = 138;

@@ -30,6 +30,14 @@ const HEALER_LOCK_MIN_S = 3;
 export interface DeathSetupParts {
   deathT: number;
   victim: { id: string; name: string };
+  /**
+   * Did the victim pay for this healer CC (`mateHitDuringCc`, the `[CONSEQ]`
+   * predicate)? Absent = not checked (hand-built fixtures).
+   */
+  victimHitDuring?: (cc: {
+    atSeconds: number;
+    durationSeconds: number;
+  }) => boolean;
   /** CC summary for the friendly healer (when the healer is not the victim). */
   healerCC?: {
     healerName: string;
@@ -76,17 +84,23 @@ export const DEATH_CC_LOOKBACK_S = 12;
 export function deathSetupEvents(parts: DeathSetupParts): CandidateEvent[] {
   const { deathT, victim } = parts;
   const out: CandidateEvent[] = [];
-  const inWindow = (cc: { atSeconds: number; durationSeconds: number }) =>
-    cc.atSeconds <= deathT &&
-    cc.atSeconds + cc.durationSeconds >= deathT - DEATH_CC_LOOKBACK_S;
+  // Seconds of the CC inside [death − DEATH_CC_LOOKBACK_S, death].
+  const overlapS = (cc: { atSeconds: number; durationSeconds: number }) =>
+    Math.min(cc.atSeconds + cc.durationSeconds, deathT) -
+    Math.max(cc.atSeconds, deathT - DEATH_CC_LOOKBACK_S);
 
-  // healer-locked: healer was CC'd for >=3s inside the kill window, starting
-  // before the moment of death
+  // healer-locked: the healer was CC'd for ≥ HEALER_LOCK_MIN_S INSIDE the
+  // kill window (not merely a ≥ 3 s CC touching its edge), and the victim
+  // paid for it. Reliability round 2 W1c: a Binding Shot that ended 10.7 s
+  // before the death overlapped the window by 1.4 s (61740741), a Cyclone
+  // 0.4 s (b12bfef4), a backlash 0.95 s inside the healer's own GCD
+  // (eb8041ce); a Kidney Shot with the victim 84 % → 80 % during it, the
+  // lethal dive after the healer was free (be835950).
   const lock = parts.healerCC?.ccInstances.find(
     (cc) =>
-      inWindow(cc) &&
-      cc.durationSeconds >= HEALER_LOCK_MIN_S &&
-      cc.atSeconds < deathT,
+      cc.atSeconds < deathT &&
+      overlapS(cc) >= HEALER_LOCK_MIN_S &&
+      (parts.victimHitDuring?.(cc) ?? true),
   );
   if (lock) {
     out.push({

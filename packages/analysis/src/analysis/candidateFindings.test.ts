@@ -591,6 +591,49 @@ describe("deathSetupEvents(死亡前因链,纯函数)", () => {
     expect(outside).toHaveLength(0);
   });
 
+  it("可靠性第二轮 W1c:≥3s 的 CC 只擦到窗口边(窗口内 <3s)→ 不出(61740741:Binding Shot 在死亡前 10.7s 结束)", () => {
+    const evts = deathSetupEvents({
+      deathT: 539.1,
+      victim,
+      healerCC: {
+        healerName: "H",
+        ccInstances: [
+          // 525.4 → 528.4: 3 s long, 1.3 s of it inside [527.1, 539.1]
+          {
+            atSeconds: 525.4,
+            durationSeconds: 3,
+            spellName: "Binding Shot",
+            sourceName: "E",
+          },
+        ],
+      },
+    });
+    expect(evts).toHaveLength(0);
+  });
+
+  it("可靠性第二轮 W1c:CC 期间受害者没付代价([CONSEQ] 同一判断)→ 不出;付了代价 → 出", () => {
+    const cc = {
+      atSeconds: 137.6,
+      durationSeconds: 5,
+      spellName: "Kidney Shot",
+      sourceName: "E",
+    };
+    const notHit = deathSetupEvents({
+      deathT: 148.1,
+      victim,
+      victimHitDuring: () => false,
+      healerCC: { healerName: "H", ccInstances: [cc] },
+    });
+    expect(notHit).toHaveLength(0);
+    const hit = deathSetupEvents({
+      deathT: 148.1,
+      victim,
+      victimHitDuring: (c) => c.atSeconds === 137.6,
+      healerCC: { healerName: "H", ccInstances: [cc] },
+    });
+    expect(hit.map((e) => e.facts["kind"])).toEqual(["healer-locked"]);
+  });
+
   it("trinket-early / defensive-early 已退役为指控(2026-09-25 可靠性审计 B2a,用户 2026-09-24 裁「改」):同一死亡只剩 healer-locked", () => {
     // 旧版本对这份输入会再出 trinket-early(饰品 80s → 死亡 150s)与
     // defensive-early(Wall 在 100s 被标 Early)。事实仍在时间线

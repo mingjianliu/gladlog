@@ -5,6 +5,7 @@ import {
   lookupBacklashPrior,
   lookupBacklashWorth,
 } from "../data/backlashDispelPrior";
+import { mateHitDuringCc } from "../context/observedConsequences";
 import { lookupBehaviorPrior } from "../data/behaviorPrior";
 import { lookupBurstWindowPrior } from "../data/burstWindowPrior";
 import {
@@ -2435,6 +2436,7 @@ function extractDeathSetups(
       const parts: DeathSetupParts = {
         deathT,
         victim: { id: u.id, name: u.name },
+        victimHitDuring: (cc) => mateHitDuringCc(u, start, cc),
       };
       // Each summary is independently fault-tolerant: when a synthetic fixture
       // lacks startInfo or an event array, only that one part goes missing and

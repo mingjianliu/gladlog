@@ -138,6 +138,7 @@
     "test/matchNarrative.arc.test.ts",
     "test/matchTimeline.ccAvoidedSource.test.ts",
     "test/matchTimeline.spectag.test.ts",
+    "test/mateHitDuringCc.test.ts",
     "test/mitigationData.test.ts",
     "test/mitigationVerdicts.test.ts",
     "test/nonPlayerUnitKill.test.ts",

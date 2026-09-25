@@ -55,6 +55,50 @@ interface Labels {
   enemy: (name: string) => string;
 }
 
+/**
+ * One teammate's HP across a span of whole render seconds: the `[STATE]`
+ * reading at `fromSec` and the lowest reading inside `[fromSec, toSec]`.
+ * Null when the grid has no sample to read.
+ */
+export function mateHpAcross(
+  mate: ICombatUnit,
+  matchStartMs: number,
+  fromSec: number,
+  toSec: number,
+): { h0: number; lo: { pct: number; atSec: number } } | null {
+  const h0 = gridHpPct(mate, matchStartMs + fromSec * 1000);
+  const lo = gridHpMinInWindow(mate, matchStartMs, fromSec, toSec);
+  if (h0 === null || !lo) return null;
+  return { h0, lo };
+}
+
+/**
+ * Did this teammate pay for the healer's CC — the `[CONSEQ]` line's own
+ * test: a drop of `CONSEQ_DROP_MIN_PCT` from the CC's first rendered second
+ * to its lowest reading inside the CC, or a death inside it. Shared with
+ * death-setup `healer-locked` (reliability round 2 W1c), so the menu never
+ * says "the healer was CC'd through the kill window" next to a `[CONSEQ]`
+ * line saying nobody dropped during that CC (be835950).
+ */
+export function mateHitDuringCc(
+  mate: ICombatUnit,
+  matchStartMs: number,
+  cc: { atSeconds: number; durationSeconds: number },
+): boolean {
+  const died = (mate.deathRecords ?? []).some((d) => {
+    const s = (d.timestamp - matchStartMs) / 1000;
+    return s >= cc.atSeconds && s <= cc.atSeconds + cc.durationSeconds;
+  });
+  if (died) return true;
+  const hp = mateHpAcross(
+    mate,
+    matchStartMs,
+    Math.floor(cc.atSeconds),
+    Math.floor(cc.atSeconds + cc.durationSeconds),
+  );
+  return hp !== null && hp.h0 - hp.lo.pct >= CONSEQ_DROP_MIN_PCT;
+}
+
 function teamDrops(
   mates: ICombatUnit[],
   label: (name: string) => string,
@@ -65,9 +109,9 @@ function teamDrops(
   const parts: string[] = [];
   let measured = 0;
   for (const mate of mates) {
-    const h0 = gridHpPct(mate, matchStartMs + fromSec * 1000);
-    const lo = gridHpMinInWindow(mate, matchStartMs, fromSec, toSec);
-    if (h0 === null || !lo) continue;
+    const hp = mateHpAcross(mate, matchStartMs, fromSec, toSec);
+    if (!hp) continue;
+    const { h0, lo } = hp;
     measured++;
     if (h0 - lo.pct >= CONSEQ_DROP_MIN_PCT)
       parts.push(

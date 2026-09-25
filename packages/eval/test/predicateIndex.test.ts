@@ -958,6 +958,21 @@ const INDEX: PredicateRow[] = [
     mod: cannotCastIntervals,
   },
   {
+    file: `${A}/context/observedConsequences.ts`,
+    symbol: "mateHitDuringCc",
+    mod: observedConsequences,
+  },
+  {
+    file: `${A}/context/observedConsequences.ts`,
+    symbol: "mateHpAcross",
+    mod: observedConsequences,
+  },
+  {
+    file: `${A}/context/observedConsequences.ts`,
+    symbol: "CONSEQ_DROP_MIN_PCT",
+    mod: observedConsequences,
+  },
+  {
     file: `${A}/data/spellTags.ts`,
     symbol: "officialSilenceIds",
     mod: spellTags,
