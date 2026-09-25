@@ -32,10 +32,47 @@ interface IResourceReading {
   pct: number;
 }
 
+type AdvancedSample = ReturnType<typeof getSortedAdvancedActions>[number];
+
+const powerEntry = (a: AdvancedSample, powerType: number) =>
+  (a.advancedActorPowers ?? []).find(
+    (p) => (p.type as unknown as number) === powerType,
+  );
+
+// sorted samples → per power type, the subset that can answer for it
+const bearingCache = new WeakMap<
+  readonly AdvancedSample[],
+  Map<number, AdvancedSample[]>
+>();
+function samplesBearing(
+  unitId: string,
+  sorted: AdvancedSample[],
+  powerType: number,
+): AdvancedSample[] {
+  let byType = bearingCache.get(sorted);
+  if (!byType) bearingCache.set(sorted, (byType = new Map()));
+  let list = byType.get(powerType);
+  if (!list) {
+    list = sorted.filter((a) => {
+      if (a.advancedActorId !== unitId) return false;
+      const e = powerEntry(a, powerType);
+      return !!e && e.max > 0;
+    });
+    byType.set(powerType, list);
+  }
+  return list;
+}
+
 /**
  * The unit's reading for `powerType` at `timestampMs`, or null when no advanced
- * sample for THIS unit lands within `maxDtMs` / the sample carried no such
- * power / the max is non-positive.
+ * sample for THIS unit that CARRIES that power lands within `maxDtMs`.
+ *
+ * Nearest among the samples that can answer, not nearest overall (reliability
+ * audit D2, 2026-09-25): a druid's advanced block reports rage in Bear Form
+ * and energy in Cat Form, so the nearest sample of all can carry no mana
+ * while a mana sample sits 0.4 s away — e9ea8a0c 4:31, Innervate, then Bear
+ * Form one second in, and the note printed "no resource reading". Same
+ * `binarySearchClosest` (and its tie rules) over that subset, same radius.
  */
 export function getUnitResourceAtTimestamp(
   unit: Pick<ICombatUnit, "id" | "advancedActions">,
@@ -44,17 +81,14 @@ export function getUnitResourceAtTimestamp(
   maxDtMs = HP_SAMPLE_RADIUS_MS,
 ): IResourceReading | null {
   const closest = binarySearchClosest(
-    getSortedAdvancedActions(unit),
+    samplesBearing(unit.id, getSortedAdvancedActions(unit), powerType),
     timestampMs,
     (a) => a.logLine.timestamp,
   );
   if (!closest) return null;
-  if (closest.advancedActorId !== unit.id) return null;
   if (Math.abs(closest.logLine.timestamp - timestampMs) > maxDtMs) return null;
 
-  const entry = (closest.advancedActorPowers ?? []).find(
-    (p) => (p.type as unknown as number) === powerType,
-  );
+  const entry = powerEntry(closest, powerType);
   if (!entry || entry.max <= 0) return null;
   if (!Number.isFinite(entry.current) || !Number.isFinite(entry.max)) {
     return null;

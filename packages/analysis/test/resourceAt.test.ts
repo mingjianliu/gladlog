@@ -47,6 +47,44 @@ describe("resourceAt — getUnitResourceAtTimestamp", () => {
     expect(getUnitResourceAtTimestamp(unit, 10_000)).toBeNull();
   });
 
+  it("a nearer sample WITHOUT mana (Bear Form rage) does not mask a mana sample within the radius (reliability audit D2)", () => {
+    const unit = makeUnit([
+      {
+        advancedActorId: "Player-1234",
+        logLine: { timestamp: 9_600 },
+        advancedActorPowers: [
+          { type: CombatUnitPowerType.Mana, current: 50_000, max: 250_000 },
+        ],
+      },
+      {
+        advancedActorId: "Player-1234",
+        logLine: { timestamp: 10_000 },
+        advancedActorPowers: [{ type: 1, current: 300, max: 1000 }], // rage
+      },
+    ]);
+    expect(getUnitResourceAtTimestamp(unit, 10_000)?.pct).toBe(20);
+  });
+
+  it("a nearer sample of ANOTHER unit does not mask this unit's own reading", () => {
+    const unit = makeUnit([
+      {
+        advancedActorId: "Player-1234",
+        logLine: { timestamp: 9_000 },
+        advancedActorPowers: [
+          { type: CombatUnitPowerType.Mana, current: 125_000, max: 250_000 },
+        ],
+      },
+      {
+        advancedActorId: "Other-Unit",
+        logLine: { timestamp: 10_000 },
+        advancedActorPowers: [
+          { type: CombatUnitPowerType.Mana, current: 1, max: 250_000 },
+        ],
+      },
+    ]);
+    expect(getUnitResourceAtTimestamp(unit, 10_000)?.pct).toBe(50);
+  });
+
   it("returns null when power type is missing from sample", () => {
     const unit = makeUnit([
       {
@@ -57,7 +95,9 @@ describe("resourceAt — getUnitResourceAtTimestamp", () => {
         ],
       },
     ]);
-    expect(getUnitResourceAtTimestamp(unit, 10_000, CombatUnitPowerType.Mana)).toBeNull();
+    expect(
+      getUnitResourceAtTimestamp(unit, 10_000, CombatUnitPowerType.Mana),
+    ).toBeNull();
   });
 
   it("returns null when max power is non-positive or non-finite", () => {
@@ -210,9 +250,13 @@ describe("resourceAt — getUnitResourceAtTimestamp", () => {
     });
   });
 
-  it("returns null when nearest sample lacks mana without skipping to farther sample", () => {
+  it("skips a nearer sample that lacks mana and reads the farther mana sample within the radius", () => {
     // Nearest sample is at 10_050 (50ms away) but only has Rage.
     // Farther sample at 10_500 (500ms away) has Mana.
+    // This test used to pin null (a characterisation added with the N12
+    // sorted view, 2026-09-21) — that was the reliability audit D2 bug: a
+    // druid in Bear Form read "no resource reading" while mana samples sat
+    // inside the radius.
     const unit = makeUnit([
       {
         advancedActorId: "Player-1234",
@@ -229,13 +273,14 @@ describe("resourceAt — getUnitResourceAtTimestamp", () => {
         ],
       },
     ]);
-    // Closest sample is 10_050, which lacks mana -> must return null (not 10_500)
-    expect(getUnitResourceAtTimestamp(unit, 10_000)).toBeNull();
+    expect(getUnitResourceAtTimestamp(unit, 10_000)?.pct).toBe(80);
   });
 });
 
 describe("resourceAt — resourceDeltaPct", () => {
-  const makeUnit = (samples: Array<{ t: number; current: number; max: number }>): ICombatUnit =>
+  const makeUnit = (
+    samples: Array<{ t: number; current: number; max: number }>,
+  ): ICombatUnit =>
     ({
       id: "Player-1234",
       name: "Healer",
