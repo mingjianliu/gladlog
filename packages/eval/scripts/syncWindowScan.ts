@@ -33,6 +33,7 @@ import {
   toRenderSecond,
 } from "@gladlog/analysis";
 import {
+  countsAsTeamBurst,
   enemyHealerCcWindows,
   enemyMinHpPctInWindow,
   evaluateSyncWindow,
@@ -40,7 +41,6 @@ import {
   syncWindowEligible,
 } from "@gladlog/analysis/src/analysis/candidates/cooldownTiming";
 import { PATCH_121_GOLIVE_EPOCH_MS } from "@gladlog/analysis/src/utils/drAnalysis";
-import { OFFENSIVE_CD_SPELL_IDS } from "@gladlog/analysis/src/utils/spellDanger";
 import { GladLogParser } from "@gladlog/parser";
 import {
   CombatUnitReaction,
@@ -173,7 +173,7 @@ async function scan(): Promise<void> {
       for (const f of friends) {
         try {
           for (const cd of extractMajorCooldowns(f, combat)) {
-            if (!OFFENSIVE_CD_SPELL_IDS.has(String(cd.spellId))) continue;
+            if (!countsAsTeamBurst(f, String(cd.spellId))) continue;
             teamCds.push({
               ...cd,
               owner: f,
@@ -344,7 +344,7 @@ function emitTable(): void {
           generatedAt: new Date().toISOString().slice(0, 10),
           windows: rows.length,
           predicate:
-            "eligible window: enemyHealerCcWindows merged per healer (mergeHealerCcWindows: one continuous lock = one window), syncWindowEligible (rendered dur>=3s, rendered t>=30s, no enemy death in-window), evaluateSyncWindow: >=1 canonical OFFENSIVE_CD_SPELL_IDS off cooldown at the window start or at a merged component's start, whose owner was then free to act >= REACTION_WINDOW_S of the rest of the lock; entered = such a CD pressed in [from-2s, to] or still active (buffFullDurationForCaster) at the lock start; kill15 = enemy death in (from, from+15s]",
+            "eligible window: enemyHealerCcWindows merged per healer; team burst = countsAsTeamBurst (canonical offensive table, a healer's own only Power Infusion) (mergeHealerCcWindows: one continuous lock = one window), syncWindowEligible (rendered dur>=3s, rendered t>=30s, no enemy death in-window), evaluateSyncWindow: >=1 canonical OFFENSIVE_CD_SPELL_IDS off cooldown at the window start or at a merged component's start, whose owner was then free to act >= REACTION_WINDOW_S of the rest of the lock; entered = such a CD pressed in [from-2s, to] or still active (buffFullDurationForCaster) at the lock start; kill15 = enemy death in (from, from+15s]",
         },
         cells: outCells,
       },

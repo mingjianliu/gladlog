@@ -46,6 +46,7 @@ import {
   traceDecision,
 } from "../../facts/decisionTrace";
 import { renderedWindowSeconds, toRenderSecond } from "../../utils/renderGrid";
+import { OFFENSIVE_CD_SPELL_IDS } from "../../utils/spellDanger";
 import { type MatchThreatLevel } from "../../utils/threatAssessment";
 import { type DecisionPoint, RESPONSE_PRE_MS } from "../crisisDecisionPoints";
 import { fmtFactNum as fmt } from "../factFormat";
@@ -392,6 +393,32 @@ export function evaluateSyncWindow(
     }),
   );
   return { ready, entered };
+}
+
+/**
+ * Reliability audit B3iii (user ruling 2026-09-25): which of a HEALER's own
+ * offensive cooldowns count as team burst for a sync window. Only Power
+ * Infusion — it is handed to a DPS for their burst. The others a healer
+ * holds (Holy Paladin Avenging Wrath, Discipline Archangel, Restoration
+ * Shaman Ascendance) add little to the team's damage ("除了灌注 其他对输出帮助
+ * 不大"). Hand table, registered in curatedIdRegistry.
+ */
+export const HEALER_TEAM_BURST_IDS: ReadonlySet<string> = new Set([
+  "10060", // Power Infusion
+]);
+
+/** Does this friendly's offensive cooldown count as team burst for a sync
+ * window — the canonical offensive table, and for a healer only
+ * `HEALER_TEAM_BURST_IDS`. One predicate for the candidate and
+ * syncWindowScan (the reference table it quotes). */
+export function countsAsTeamBurst(
+  owner: { spec?: unknown },
+  spellId: string,
+): boolean {
+  if (!OFFENSIVE_CD_SPELL_IDS.has(spellId)) return false;
+  return (
+    !isHealerSpec(owner.spec as never) || HEALER_TEAM_BURST_IDS.has(spellId)
+  );
 }
 
 export const SYNC_WINDOW_MIN_T_S = 30;

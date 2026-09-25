@@ -838,6 +838,11 @@ const INDEX: PredicateRow[] = [
     mod: cooldownTiming,
   },
   {
+    file: `${A}/analysis/candidates/cooldownTiming.ts`,
+    symbol: "countsAsTeamBurst",
+    mod: cooldownTiming,
+  },
+  {
     file: "packages/eval/src/quality/promptQualityCheck.ts",
     symbol: "checkPetCreditSide",
     mod: promptQualityCheck,

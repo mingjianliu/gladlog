@@ -14,6 +14,7 @@ import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import {
+  countsAsTeamBurst,
   evaluateSyncWindow,
   mergeHealerCcWindows,
   syncWindowEligible,
@@ -206,5 +207,20 @@ describe("evaluateSyncWindow — entered counts a burst still active (B3iii)", (
     expect(evaluateSyncWindow(win(33.4, 37, "Cyclone"), [noDur]).entered).toBe(
       true,
     );
+  });
+});
+
+describe("countsAsTeamBurst (B3iii, user ruling 2026-09-25)", () => {
+  it("a healer's own offensive CD counts only when it is Power Infusion", () => {
+    const holyPaladin = { spec: "65" };
+    const discPriest = { spec: "256" };
+    expect(countsAsTeamBurst(holyPaladin, "31884")).toBe(false); // Avenging Wrath
+    expect(countsAsTeamBurst(discPriest, "10060")).toBe(true); // Power Infusion
+  });
+
+  it("a DPS's canonical offensive CD always counts; a non-offensive id never", () => {
+    const ret = { spec: "70" };
+    expect(countsAsTeamBurst(ret, "31884")).toBe(true);
+    expect(countsAsTeamBurst(ret, "642")).toBe(false); // Divine Shield
   });
 });

@@ -92,7 +92,6 @@ import {
   type RawStreams,
 } from "../utils/rawStreams";
 import { toRenderSecond } from "../utils/renderGrid";
-import { OFFENSIVE_CD_SPELL_IDS } from "../utils/spellDanger";
 import { spellRangeForCaster, spellReachForCaster } from "../utils/spellRange";
 import { getSpellSchoolName } from "../utils/spellSchools";
 import { getTalentAvoidanceTriggers } from "../utils/talentBehaviors";
@@ -107,6 +106,7 @@ import { burstWindowResponseEvents } from "./candidates/burstWindowResponse";
 import {
   cdHoardedEvents,
   cdSpentIdleEvents,
+  countsAsTeamBurst,
   enemyHealerCcWindows,
   enemyMinHpPctInWindow,
   friendlyCrisisMomentInWindow,
@@ -1835,7 +1835,9 @@ function teamPlayEvents(
               // "ready offensive CDs". Deliberately also narrows
               // unsynced-burst's input (retired, flag false) — if that type
               // ever returns it must return on the canonical table too.
-              if (!OFFENSIVE_CD_SPELL_IDS.has(String(cd.spellId))) continue;
+              // B3iii (2026-09-25): a healer's own CD counts only if it is
+              // Power Infusion — the shared countsAsTeamBurst.
+              if (!countsAsTeamBurst(f, String(cd.spellId))) continue;
               teamOffensiveCds.push({
                 ...cd,
                 ownerName: f.name,

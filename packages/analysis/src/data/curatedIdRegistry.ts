@@ -28,6 +28,7 @@ import {
   HIGH_VALUE_PURGEABLE_BUFFS,
   PURGE_WHITELIST_DATA_BLOCKED,
 } from "../context/matchTimeline";
+import { HEALER_TEAM_BURST_IDS } from "../analysis/candidates/cooldownTiming";
 import { DOT_SPELL_IDS } from "../context/matchTimelineSections";
 import {
   CHANNELED_CD_SPELL_IDS,
@@ -395,6 +396,12 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
     "cast",
     () => set(BURST_LEAD_CD_EXCLUDED_IDS),
   ),
+  t(
+    "HEALER_TEAM_BURST_IDS",
+    "analysis/candidates/cooldownTiming.ts",
+    "cast",
+    () => set(HEALER_TEAM_BURST_IDS),
+  ),
   t("PHYSICAL_CC_IDS", "utils/ccTrinketAnalysis.ts", "aura", () =>
     set(PHYSICAL_CC_IDS),
   ),
@@ -512,12 +519,9 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   ),
   // GH #106 (2026-09-24): talents whose cooldown row scales with rank — a
   // renumbered talent would silently fall back to the value-once reading.
-  t(
-    "PER_RANK_COOLDOWN_TALENTS",
-    "utils/talentModifiers.ts",
-    "talent",
-    () => [...PER_RANK_COOLDOWN_TALENTS],
-  ),
+  t("PER_RANK_COOLDOWN_TALENTS", "utils/talentModifiers.ts", "talent", () => [
+    ...PER_RANK_COOLDOWN_TALENTS,
+  ]),
   t("OPPRESSING_ROAR_SPELL_ID", "data/spellEffectData.ts", "aura", () => [
     OPPRESSING_ROAR_SPELL_ID,
   ]),
