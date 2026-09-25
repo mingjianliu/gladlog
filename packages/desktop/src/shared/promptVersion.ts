@@ -1108,4 +1108,7 @@
 //  63,303-file archive (the corpus of the table it replaced, 512470b0) — the
 //  two regens before it (1fcec5e9 / 41ef7d55) used the 18,134-file manifest.
 //  Rendered contrasts: 2v2 7 → 5, 3v3 5 → 4, Solo Shuffle 5 → 4 pp.
-export const PROMPT_VERSION = 139;
+//  v140 (2026-09-25): cdTriggerPrior reference regenerated for the C2 roster
+//  (Restoration Druid Barkskin / Frenzied Regeneration cells, +6) and the
+//  GH #106 press matching (Lay on Hands counted under the live 471195).
+export const PROMPT_VERSION = 140;
