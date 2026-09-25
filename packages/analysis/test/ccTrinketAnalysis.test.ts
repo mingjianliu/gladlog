@@ -43,12 +43,24 @@ describe("bindBreakToWindow and findBrokenCC", () => {
     });
 
     it("binds to the window with the longest duration when multiple windows overlap", () => {
-      const shortWindow: ICCBreakableWindow = { applyMs: 10_000, removeMs: 13_000 }; // 3s
-      const longWindow: ICCBreakableWindow = { applyMs: 10_500, removeMs: 16_500 }; // 6s
-      const mediumWindow: ICCBreakableWindow = { applyMs: 9_000, removeMs: 14_000 }; // 5s
+      const shortWindow: ICCBreakableWindow = {
+        applyMs: 10_000,
+        removeMs: 13_000,
+      }; // 3s
+      const longWindow: ICCBreakableWindow = {
+        applyMs: 10_500,
+        removeMs: 16_500,
+      }; // 6s
+      const mediumWindow: ICCBreakableWindow = {
+        applyMs: 9_000,
+        removeMs: 14_000,
+      }; // 5s
 
       // Cast at 11_000 when all three are active
-      const bound = bindBreakToWindow([shortWindow, longWindow, mediumWindow], 11_000);
+      const bound = bindBreakToWindow(
+        [shortWindow, longWindow, mediumWindow],
+        11_000,
+      );
       expect(bound).toBe(longWindow);
     });
 
@@ -76,7 +88,11 @@ describe("bindBreakToWindow and findBrokenCC", () => {
   });
 
   describe("findBrokenCC", () => {
-    const makeCC = (atSeconds: number, durationSeconds: number, spellName: string): ICCInstance => ({
+    const makeCC = (
+      atSeconds: number,
+      durationSeconds: number,
+      spellName: string,
+    ): ICCInstance => ({
       atSeconds,
       durationSeconds,
       spellId: "118",
@@ -97,11 +113,19 @@ describe("bindBreakToWindow and findBrokenCC", () => {
       const cc2 = makeCC(25.0, 4.0, "Kidney Shot"); // 25_000ms to 29_000ms from matchStart
 
       // Cast at matchStartMs + 12_000ms
-      const broken = findBrokenCC([cc1, cc2], matchStartMs, matchStartMs + 12_000);
+      const broken = findBrokenCC(
+        [cc1, cc2],
+        matchStartMs,
+        matchStartMs + 12_000,
+      );
       expect(broken).toBe(cc1);
 
       // Cast outside any CC
-      const none = findBrokenCC([cc1, cc2], matchStartMs, matchStartMs + 20_000);
+      const none = findBrokenCC(
+        [cc1, cc2],
+        matchStartMs,
+        matchStartMs + 20_000,
+      );
       expect(none).toBeUndefined();
     });
 
@@ -110,7 +134,11 @@ describe("bindBreakToWindow and findBrokenCC", () => {
       const shortCC = makeCC(10.0, 3.0, "Cheap Shot"); // 10s to 13s
       const longCC = makeCC(10.5, 6.0, "Blind"); // 10.5s to 16.5s
 
-      const broken = findBrokenCC([shortCC, longCC], matchStartMs, matchStartMs + 11_000);
+      const broken = findBrokenCC(
+        [shortCC, longCC],
+        matchStartMs,
+        matchStartMs + 11_000,
+      );
       expect(broken).toBe(longCC);
     });
   });
@@ -178,7 +206,11 @@ describe("analyzePlayerCCAndTrinket — structured data contract (N4)", () => {
       ],
     });
 
-    const result = analyzePlayerCCAndTrinket(player, [enemy1, enemy2], makeCombat());
+    const result = analyzePlayerCCAndTrinket(
+      player,
+      [enemy1, enemy2],
+      makeCombat(),
+    );
 
     expect(result.ccInstances).toHaveLength(1);
     expect(result.ccInstances[0]).toEqual({
@@ -249,7 +281,11 @@ describe("analyzePlayerCCAndTrinket — structured data contract (N4)", () => {
       ],
     });
 
-    const racialResult = analyzePlayerCCAndTrinket(racialPlayer, [enemy], makeCombat());
+    const racialResult = analyzePlayerCCAndTrinket(
+      racialPlayer,
+      [enemy],
+      makeCombat(),
+    );
     expect(racialResult.ccInstances).toHaveLength(1);
     expect(racialResult.ccInstances[0].trinketState).toBe("racial_break");
     expect(racialResult.ccInstances[0].breakRacialName).toBe("Will to Survive");
@@ -288,7 +324,11 @@ describe("analyzePlayerCCAndTrinket — structured data contract (N4)", () => {
       ],
     });
 
-    const trinketResult = analyzePlayerCCAndTrinket(trinketPlayer, [enemy], makeCombat());
+    const trinketResult = analyzePlayerCCAndTrinket(
+      trinketPlayer,
+      [enemy],
+      makeCombat(),
+    );
     expect(trinketResult.ccInstances).toHaveLength(1);
     expect(trinketResult.ccInstances[0].trinketState).toBe("used");
     expect(trinketResult.ccInstances[0].breakRacialName).toBeUndefined();
@@ -379,7 +419,11 @@ describe("analyzePlayerCCAndTrinket — structured data contract (N4)", () => {
       ],
     });
 
-    const resNoSwitch = analyzePlayerCCAndTrinket(playerNoSwitch, [enemy], makeCombat());
+    const resNoSwitch = analyzePlayerCCAndTrinket(
+      playerNoSwitch,
+      [enemy],
+      makeCombat(),
+    );
     expect(resNoSwitch.interruptInstances).toHaveLength(1);
     expect(resNoSwitch.interruptInstances[0]).toEqual({
       atSeconds: 10,
@@ -399,6 +443,7 @@ describe("analyzePlayerCCAndTrinket — structured data contract (N4)", () => {
       switchDelayS: null,
       switchSpellName: null,
       switchWasHardCast: null,
+      ccInWindowS: 0,
     });
 
     // Case B: Interrupted on Holy (2060 Heal) followed by instant Shadow (589 Shadow Word: Pain)
@@ -443,11 +488,85 @@ describe("analyzePlayerCCAndTrinket — structured data contract (N4)", () => {
       ],
     });
 
-    const resInstantSwitch = analyzePlayerCCAndTrinket(playerInstantSwitch, [enemy], makeCombat());
+    const resInstantSwitch = analyzePlayerCCAndTrinket(
+      playerInstantSwitch,
+      [enemy],
+      makeCombat(),
+    );
     expect(resInstantSwitch.interruptInstances).toHaveLength(1);
-    expect(resInstantSwitch.interruptInstances[0].switchSpellName).toBe("Shadow Word: Pain");
+    expect(resInstantSwitch.interruptInstances[0].switchSpellName).toBe(
+      "Shadow Word: Pain",
+    );
     expect(resInstantSwitch.interruptInstances[0].switchDelayS).toBe(1);
-    expect(resInstantSwitch.interruptInstances[0].switchWasHardCast).toBe(false);
+    expect(resInstantSwitch.interruptInstances[0].switchWasHardCast).toBe(
+      false,
+    );
     expect(resInstantSwitch.interruptInstances[0].postKick).toBe("switched");
+  });
+
+  it("A3 (2026-09-25): a PvP trinket pressed in the post-kick window is a CC break, not 'acting on another school'; ccInWindowS counts the CC", () => {
+    const enemy = makeUnit("enemy-1", {
+      name: "EnemyRogue",
+      spec: CombatUnitSpec.Rogue_Subtlety,
+      reaction: CombatUnitReaction.Hostile,
+    });
+    const poly = (event: LogEvent, t: number) => {
+      const a = makeAuraEvent(
+        event,
+        "118",
+        MATCH_START + t,
+        "enemy-1",
+        "player-1",
+      );
+      a.srcUnitName = "EnemyRogue";
+      return a;
+    };
+    const player = makeUnit("player-1", {
+      name: "PlayerPriest",
+      spec: CombatUnitSpec.Priest_Discipline,
+      reaction: CombatUnitReaction.Friendly,
+      actionIn: [
+        makeInterruptEvent(
+          "1766",
+          "Kick",
+          "2061",
+          "Flash Heal",
+          MATCH_START + 30_000,
+          "enemy-1",
+          "EnemyRogue",
+        ),
+      ],
+      auraEvents: [
+        poly(LogEvent.SPELL_AURA_APPLIED, 31_000),
+        poly(LogEvent.SPELL_AURA_REMOVED, 33_000),
+      ],
+      spellCastEvents: [
+        makeSpellCastEvent(
+          "336126",
+          MATCH_START + 31_500,
+          "player-1",
+          "PlayerPriest",
+          "player-1",
+          "PlayerPriest",
+          0,
+          "Gladiator's Medallion",
+        ),
+        makeSpellCastEvent(
+          "589",
+          MATCH_START + 34_000,
+          "player-1",
+          "PlayerPriest",
+          "enemy-1",
+          "EnemyRogue",
+          0,
+          "Shadow Word: Pain",
+        ),
+      ],
+    });
+    const inst = analyzePlayerCCAndTrinket(player, [enemy], makeCombat())
+      .interruptInstances[0]!;
+    expect(inst.switchSpellName).toBe("Shadow Word: Pain");
+    expect(inst.firstActionDelayS).toBe(4);
+    expect(inst.ccInWindowS).toBe(2);
   });
 });

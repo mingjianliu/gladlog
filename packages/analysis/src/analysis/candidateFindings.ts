@@ -865,6 +865,7 @@ export function kickEatenEvents(
     | "nearestKickerDistYd"
     | "kickersInRange"
     | "kickDepthPct"
+    | "ccInWindowS"
   >[],
   owner: { id: string; name: string },
   /** Reliability audit A1 (2026-09-24): the owner's rejected presses. Without
@@ -923,6 +924,13 @@ export function kickEatenEvents(
           : {}),
         ...(k.kickDepthPct != null
           ? { kickDepthPct: String(k.kickDepthPct) }
+          : {}),
+        // A3 (2026-09-25): seconds of the window the player could not act
+        // for another reason (CC, silence, another kick). Only when the
+        // one-decimal rendering is non-zero — zero is "no evidence of CC",
+        // never shown as a fact.
+        ...(k.ccInWindowS != null && k.ccInWindowS >= 0.1
+          ? { ccInWindowS: k.ccInWindowS.toFixed(1) }
           : {}),
         // BACKLOG #36(b): the behavior fact the model can actually coach on.
         // 2026-09-06: the `switched` wording used to assert "kept playing

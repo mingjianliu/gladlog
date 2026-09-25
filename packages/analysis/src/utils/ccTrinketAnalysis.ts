@@ -21,8 +21,17 @@ import {
   isPhysicalSpell,
   spellSchoolMask,
 } from "../data/spellSchools";
-import { ccSpellIds, disarmSpellIds, rootSpellIds } from "../data/spellTags";
+import {
+  ccSpellIds,
+  disarmSpellIds,
+  rootSpellIds,
+  trinketSpellIds,
+} from "../data/spellTags";
 import trinketItemIdsData from "../data/trinketItemIds.json";
+import {
+  buildCannotCastIntervals,
+  coveredMsWithin,
+} from "./cannotCastIntervals";
 import { isHealerSpec, specToString } from "./cooldowns";
 import { computeIncomingDR, IDRInfo, matchPendingCcKey } from "./drAnalysis";
 import {
@@ -608,6 +617,12 @@ export interface IInterruptInstance {
   postKick: PostKickBehavior;
   /** Seconds until the first cast after the kick; null when idle. */
   firstActionDelayS: number | null;
+  /** Reliability audit A3 (2026-09-25): seconds of the `POST_KICK_WINDOW_S`
+   * window the player could NOT act for another reason than this kick's own
+   * lockout (hard CC, silence, another kick — the shared
+   * `buildCannotCastIntervals`). 825ca842 @303: Intimidation into Freezing
+   * Trap ate ~2.6 s of the window and the line read as a choice. */
+  ccInWindowS?: number;
   /** `switched` only: the cast that actually made the classification
    * "switched" — the first one in the window on a disjoint school. It is NOT
    * always `firstActionDelayS`'s cast: a same-school cast can come first
@@ -1349,8 +1364,20 @@ export function analyzePlayerCCAndTrinket(
   // research criterion exactly (5s straddles the 3–4s lockout, so "idle" means
   // the player did nothing even after the lockout ended).
   {
+    // A3 (2026-09-25): a PvP trinket / break racial pressed in the window is
+    // a CC break, not "acting on another school" (825ca842 @303: Will to
+    // Survive out of Intimidation was rendered "acted on another school …
+    // (Will to Survive)" and read as the better template).
+    const ccBreakIds = new Set<string>([
+      ...trinketSpellIds,
+      ...BREAK_RACIAL_SPELL_IDS,
+    ]);
     const castTimes = player.spellCastEvents
-      .filter((e) => e.logLine.event === LogEvent.SPELL_CAST_SUCCESS)
+      .filter(
+        (e) =>
+          e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+          !ccBreakIds.has(String(e.spellId ?? "")),
+      )
       .map((e) => ({
         t: (e.logLine.timestamp - matchStartMs) / 1000,
         spellId: e.spellId ?? "",
@@ -1366,7 +1393,21 @@ export function analyzePlayerCCAndTrinket(
       t: (e.logLine.timestamp - matchStartMs) / 1000,
       spellId: e.spellId ?? "",
     }));
+    let cannotCast: Array<{ from: number; to: number }> | null = null;
     for (const inst of interruptInstances) {
+      try {
+        cannotCast = cannotCast ?? buildCannotCastIntervals(player, enemyIds);
+        const kickMs = matchStartMs + inst.atSeconds * 1000;
+        const ccMs = coveredMsWithin(
+          // this kick's own lockout starts at the interrupt itself
+          cannotCast.filter((iv) => Math.abs(iv.from - kickMs) > 1),
+          kickMs,
+          kickMs + POST_KICK_WINDOW_S * 1000,
+        );
+        inst.ccInWindowS = Math.round(ccMs / 100) / 10;
+      } catch {
+        /* no aura/interrupt streams → unknown, field stays absent */
+      }
       const after = castTimes.filter(
         (c) =>
           c.t > inst.atSeconds && c.t <= inst.atSeconds + POST_KICK_WINDOW_S,
