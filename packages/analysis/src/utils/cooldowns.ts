@@ -1069,9 +1069,9 @@ export function earliestCooldownSecondsFor(
   spec: string,
   cooldownSeconds: number,
 ): number | undefined {
-  const f = (
-    CD_RECAST_FLOORS.floors as Record<string, { floorRatio: number }>
-  )[`${spellId}|${spec}`];
+  const f = (CD_RECAST_FLOORS.floors as Record<string, { floorRatio: number }>)[
+    `${spellId}|${spec}`
+  ];
   return f ? Math.round(cooldownSeconds * f.floorRatio * 10) / 10 : undefined;
 }
 
@@ -1220,6 +1220,12 @@ export const SPELL_CANONICAL_IDS: Record<string, string> = {
   "633": "471195", // Lay on Hands: 633 is the pre-12.x id, 471195 the live cast id
   "432496": "432459", // Holy Bulwark: buff aura ID -> 432459 cast ID
   "432607": "432459", // Holy Bulwark: buff aura ID -> 432459 cast ID
+  // Bladestorm (GH #106 follow-up, 2026-09-25): 227847 is the pre-talent id,
+  // 446035 the one Unrelenting Onslaught swaps in (93 % of Arms rounds). Both
+  // sat in the Warrior roster, so every Arms / Fury Bladestorm rendered twice
+  // — 605 archive files: 1,188 loadout lines, 2,613 [RES] lines and 1,246
+  // duplicated [YOU]/[TEAM] [CD] lines.
+  "227847": "446035",
 };
 
 export function canonicalSpellId(spellId: string): string {
@@ -1456,7 +1462,10 @@ export function talentReplacementsOf(unit: ICombatUnit): {
         continue;
       const replacement = String(m.value);
       if ((effectiveCooldownSeconds(replacement) ?? 0) > 0)
-        pressedAs.set(spellId, [...(pressedAs.get(spellId) ?? []), replacement]);
+        pressedAs.set(spellId, [
+          ...(pressedAs.get(spellId) ?? []),
+          replacement,
+        ]);
       else procOnly.add(spellId);
     }
   const result = { procOnly, pressedAs };
