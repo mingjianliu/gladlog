@@ -127,12 +127,15 @@ npx tsx packages/eval/scripts/behaviorPriorScan.ts emit-table --in $R/opportunit
 #   Regenerate at season start and whenever the eligibility predicate in
 #   packages/analysis/src/analysis/candidates/cooldownTiming.ts (missedSyncWindowEvents) changes —
 #   missed-sync-window quotes these numbers and checkSyncWindowRefConsistency re-checks them plus the
-#   >=3pp min-contrast door, so a stale table is a red CI. ~2 h over the archive; <=3 nice shards.
+#   >=3pp min-contrast door, so a stale table is a red CI. ~7 h over the FULL 63,303-file archive
+#   (manifest-archive-2026-09-14-newseason.txt, 3 × 21,101); <=3 nice shards. Use the same manifest as the
+#   table it replaces — a regen over the 18,134-file 08-28 manifest shrinks every n to about a third and
+#   cannot be compared with it (2026-09-25: pushed twice that way, 1fcec5e9 / 41ef7d55, corrected here).
 #   Write temp-then-cp — never `>` directly into the imported json.
 # R=$GLADLOG_EVAL_HOME/reports/sync-window-$(date +%F); mkdir -p $R
 # for i in 0 1 2; do nice -n 10 npx tsx packages/eval/scripts/syncWindowScan.ts scan \
-#   --manifest <newseason manifest> --ledger $GLADLOG_EVAL_HOME/archive/ledger \
-#   --out $R/shard$i.jsonl --offset $((i*N)) --limit N > $R/shard$i.log 2>&1 & done; wait
+#   --manifest $GLADLOG_EVAL_HOME/corpus/manifest-archive-2026-09-14-newseason.txt --ledger $GLADLOG_EVAL_HOME/archive/ledger \
+#   --out $R/shard$i.jsonl --offset $((i*21101)) --limit 21101 > $R/shard$i.log 2>&1 & done; wait
 # cat $R/shard*.jsonl > $R/windows.jsonl
 # npx tsx packages/eval/scripts/syncWindowScan.ts emit-table --in $R/windows.jsonl \
 #   --corpus "wowarenalogs archive $(date +%F)" > $R/table.json \

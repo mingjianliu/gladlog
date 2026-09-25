@@ -1104,4 +1104,8 @@
 //  test (mateHitDuringCc: a 10-point drop inside the CC, or a death). 605
 //  files: healer-locked 869 → 525 (230 edge-only, 114 victim not hit);
 //  nothing added; context byte-identical.
-export const PROMPT_VERSION = 138;
+//  v139 (2026-09-25): the sync-window reference table rebuilt over the FULL
+//  63,303-file archive (the corpus of the table it replaced, 512470b0) — the
+//  two regens before it (1fcec5e9 / 41ef7d55) used the 18,134-file manifest.
+//  Rendered contrasts: 2v2 7 → 5, 3v3 5 → 4, Solo Shuffle 5 → 4 pp.
+export const PROMPT_VERSION = 139;
