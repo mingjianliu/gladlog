@@ -113,6 +113,7 @@ import * as renderGrid from "@gladlog/analysis/src/utils/renderGrid";
 import * as rootReachability from "@gladlog/analysis/src/utils/rootReachability";
 import * as spellDanger from "@gladlog/analysis/src/utils/spellDanger";
 import * as stats from "@gladlog/analysis/src/utils/stats";
+import * as summonOwner from "@gladlog/analysis/src/utils/summonOwner";
 import * as summonReachability from "@gladlog/analysis/src/utils/summonReachability";
 import * as talentBehaviors from "@gladlog/analysis/src/utils/talentBehaviors";
 import * as talentOwnership from "@gladlog/analysis/src/utils/talentOwnership";
@@ -819,6 +820,16 @@ const INDEX: PredicateRow[] = [
     file: `${A}/context/timelineHelpers.ts`,
     symbol: "resolveSummonOwner",
     mod: timelineHelpers,
+  },
+  {
+    file: `${A}/utils/summonOwner.ts`,
+    symbol: "summonOwnerById",
+    mod: summonOwner,
+  },
+  {
+    file: `${A}/analysis/candidates/cooldownTiming.ts`,
+    symbol: "evaluateSyncWindow",
+    mod: cooldownTiming,
   },
   {
     file: "packages/eval/src/quality/promptQualityCheck.ts",

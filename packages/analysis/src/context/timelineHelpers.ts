@@ -25,6 +25,7 @@ import { IEnemyCDTimeline } from "../utils/enemyCDs";
 import { getHpPercentAtTime } from "../utils/killWindowTargetSelection";
 import { fmtTime } from "../utils/renderGrid";
 import { getSpellSchoolName } from "../utils/spellSchools";
+import { summonOwnerById } from "../utils/summonOwner";
 
 export { isPassiveProcCast, PASSIVE_SPELL_BLOCKLIST };
 
@@ -1232,10 +1233,12 @@ export function resolveSummonOwner(params: {
 }): ICombatUnit | undefined {
   const { allUnits, friends, enemies, name, sourceId, side } = params;
   const roster = [...friends, ...(enemies ?? [])];
-  const byId = sourceId
-    ? allUnits?.find((u) => u.id === sourceId && Boolean(u.ownerId))
-    : undefined;
-  if (byId) return roster.find((u) => u.id === byId.ownerId);
+  // a known summon GUID is final — its owner or nothing, never the name path
+  if (
+    sourceId &&
+    allUnits?.some((u) => u.id === sourceId && Boolean(u.ownerId))
+  )
+    return summonOwnerById(allUnits, sourceId, roster);
   const allowed =
     side === undefined
       ? roster

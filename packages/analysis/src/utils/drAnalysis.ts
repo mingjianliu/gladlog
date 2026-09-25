@@ -28,6 +28,7 @@ import { spellClassMap } from "../data/drCategories";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { ccSpellIds } from "../data/spellTags";
 import { specToString } from "./cooldowns";
+import { summonOwnerById } from "./summonOwner";
 
 // ── DR category constants ─────────────────────────────────────────────────────
 
@@ -504,6 +505,19 @@ export function analyzeOutgoingCCChains(
   // the old Hostile-only filter silently dropped every target in that call
   // shape, making the reversed call always return `[]`.
   const targetIds = new Set(enemies.map((e) => e.id));
+  // Reliability audit C6 (2026-09-25): a CC applied by a friendly SUMMON
+  // (Capacitor Totem, Intimidation, a Felhunter / Succubus, Psyfiend…) is the
+  // owner's CC. It used to be dropped by the caster filter below: 4ef486f5 r1
+  // had 5 summon hard CCs on the enemy healer in [CC ON ENEMY] (Intimidation
+  // ×3, Capacitor ×2) and 4 windows in `enemyHealerCcWindows`, none of them.
+  // Credited to the owner through the same GUID lookup as every `(by X's pet)`
+  // line (`summonOwnerById`); the pending key keeps the summon's own GUID so
+  // its removal still closes it.
+  const allUnits = Object.values(combat.units ?? {});
+  const creditedCaster = (srcId: string): ICombatUnit | undefined =>
+    friendlyIds.has(srcId)
+      ? friendlies.find((f) => f.id === srcId)
+      : summonOwnerById(allUnits, srcId, friendlies);
 
   return enemies
     .filter((e) => e.type === CombatUnitType.Player && targetIds.has(e.id))
@@ -552,7 +566,10 @@ export function analyzeOutgoingCCChains(
         // (especially BROKEN, where src = the breaker) must not be discarded
         // by src -- otherwise a broken CC never closes (the inflated-duration
         // fix).
-        if (!isRemovalEvent && !friendlyIds.has(aura.srcUnitId)) continue;
+        const caster = isRemovalEvent
+          ? undefined
+          : creditedCaster(aura.srcUnitId);
+        if (!isRemovalEvent && !caster) continue;
 
         const key = `${spellId}:${aura.srcUnitId}`;
 
@@ -560,8 +577,10 @@ export function analyzeOutgoingCCChains(
           pending.set(key, {
             applyMs: aura.timestamp,
             spellName: getEnglishSpellName(spellId, aura.spellName),
-            srcId: aura.srcUnitId,
-            srcName: aura.srcUnitName,
+            srcId: caster!.id,
+            srcName: friendlyIds.has(aura.srcUnitId)
+              ? aura.srcUnitName
+              : caster!.name,
           });
         } else if (event === LogEvent.SPELL_AURA_REFRESH) {
           // A refresh means the caster re-applied the CC while it was still active.
@@ -571,8 +590,10 @@ export function analyzeOutgoingCCChains(
           pending.set(key, {
             applyMs: aura.timestamp,
             spellName: getEnglishSpellName(spellId, aura.spellName),
-            srcId: aura.srcUnitId,
-            srcName: aura.srcUnitName,
+            srcId: caster!.id,
+            srcName: friendlyIds.has(aura.srcUnitId)
+              ? aura.srcUnitName
+              : caster!.name,
           });
         } else if (isRemovalEvent) {
           const matchKey = matchPendingCcKey(pending, spellId, key);
