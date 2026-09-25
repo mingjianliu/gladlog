@@ -1,6 +1,11 @@
 import { configDefaults, defineConfig } from "vitest/config";
 
 export default defineConfig({
+  // Big JSON through JSON.parse, not an object literal — the same setting
+  // electron.vite.config.ts uses for the production bundle; vitest reads this
+  // file instead and Vite 5 defaults it to false, so every isolated worker
+  // was parsing spellNames.json as source. See packages/analysis/vitest.config.ts.
+  json: { stringify: true },
   test: {
     globals: true,
     // Now that the large data tables load in the background, an import no longer
