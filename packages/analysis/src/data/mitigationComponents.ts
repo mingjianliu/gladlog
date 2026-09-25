@@ -162,3 +162,22 @@ export function strongestComponentPct(
     pctMax: Math.max(...comps.map((c) => c.pctMax)),
   };
 }
+
+/**
+ * The % one wall application is worth for a "burst into a wall" / "popped a
+ * wall" claim: the strongest component's LOWER bound, immunity components
+ * included. The single source for burst-into-mitigation's door and `mitPct`
+ * (`candidateFindings.ts`) and the `[ENEMY DEF]` line's `(N%, …)`
+ * (`enemyDefensives.ts`) — the line used to read the raw table and printed
+ * Barkskin 20 % while the candidate priced the same aura 30 % with the
+ * caster's talents (GH #114). Undefined = not a table entry.
+ */
+export function wallDoorPct(
+  spellId: string,
+  ctx: IMitigationContext,
+): number | undefined {
+  const res = resolveMitigation(spellId, ctx);
+  return res
+    ? strongestComponentPct(res, { includeImmunity: true })?.pctMin
+    : undefined;
+}

@@ -1135,4 +1135,13 @@
 //  Protection, Spellwarding, Cloak, Anti-Magic Zone) only when it covers
 //  ≥ 50 % of the crisis's 2 s of damage. 605 files: cd-hoarded −104
 //  (+20 refills); kept lines drop the mismatched save; context unchanged.
-export const PROMPT_VERSION = 144;
+//  v145 (2026-09-25, GH #111 + GH #114): the shared CC evaluator reads a
+//  cast's DR through the aura it applies (Shockwave / Capacitor Totem /
+//  Fear no longer Full DR forever) — 605 files: 30 Shockwave bookmark /
+//  peel lines dropped, 14 re-rendered (5 at "DR 50%"); [ENEMY DEF] prices a
+//  self wall through wallDoorPct, the burst-into-mitigation door value —
+//  1,544 of 20,175 lines changed % (Barkskin 20 → 30, Unending Resolve
+//  25 → 40, Obsidian Scales 30 → 40, Astral Shift 40 → 60, self Pain
+//  Suppression 40 → 50); the [ENEMY DEF] legend says the % may include the
+//  caster's talents. Candidate menu byte-identical.
+export const PROMPT_VERSION = 145;

@@ -3764,9 +3764,10 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     "    its `peak spike` figure covers the spike's own sub-window, printed after it — not the whole offensive window; a marker means the spike's sub-window extends past the offensive window (the +5 s allowance).",
     ...(TIMELINE_LINE_FLAGS.enemyDef === "timeline"
       ? [
-          "  [ENEMY DEF] = an enemy pressed a defensive at that second: `(N%, Ts)` = official damage reduction and the",
-          "    OBSERVED duration in this round; `immune` = full immunity; `— removed early` = it ended before its full",
-          "    duration (dispelled, broken or cancelled); `X → unit` = an external put on that unit. Absent = not pressed.",
+          "  [ENEMY DEF] = an enemy pressed a defensive at that second: `(N%, Ts)` = official damage reduction (with the",
+          "    caster's own talents where the log shows them) and the OBSERVED duration in this round; `immune` = full",
+          "    immunity; `— removed early` = it ended before its full duration (dispelled, broken or cancelled);",
+          "    `X → unit` = an external put on that unit. Absent = not pressed.",
           "    `(self-save)` = the enemy's own save that carries no damage reduction (Guardian Spirit on itself, Desperate",
           "    Prayer, Touch of Karma, Renewing Blaze…) — KILL ATTEMPTS `self-saved (X)` names these.",
           "    `[friendly offensive CD active]` indicates at least one friendly offensive cooldown was active at that displayed second.",

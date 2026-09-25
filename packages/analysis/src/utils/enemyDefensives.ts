@@ -9,6 +9,7 @@
  */
 import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
+import { wallDoorPct } from "../data/mitigationComponents";
 import { MITIGATION_TABLE, NO_MITIGATION_IDS } from "../data/mitigationData";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import spellIdListsData from "../data/spellIdLists";
@@ -162,7 +163,12 @@ export function enemyDefensiveEvents(
       spellName: getEnglishSpellName(iv.spellId, iv.spellName),
       casterName: enemy.name,
       kind: immune ? "immune" : "self",
-      pct: MITIGATION_TABLE[iv.spellId]?.pct,
+      // Priced through the one pricing path (predicate index: "the mitigation
+      // % an aura is worth on the unit that carries it"), with the caster's
+      // talents — the number burst-into-mitigation's door reads for the same
+      // aura. The raw table value printed Barkskin 20 % while the candidate
+      // priced it 30 % (GH #114).
+      pct: wallDoorPct(iv.spellId, { carrierIsCaster: true, caster: enemy }),
       observedSeconds: observed,
       removedEarly: !iv.inferredEnd && removedEarly(iv.spellId, observed),
     });

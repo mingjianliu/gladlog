@@ -1,8 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { CombatUnitSpec } from "@gladlog/parser-compat";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import {
   resolveMitigation,
   strongestComponentPct,
+  wallDoorPct,
 } from "../src/data/mitigationComponents";
 import { MITIGATION_TABLE, mitigationPctFor } from "../src/data/mitigationData";
 import {
@@ -60,5 +65,40 @@ describe("mitigation component resolver (M3a parity)", () => {
 
   it("an aura outside the table does not resolve", () => {
     expect(resolveMitigation("1", { carrierIsCaster: true })).toBeUndefined();
+  });
+});
+
+// GH #114 (2026-09-25): the [ENEMY DEF] line read the raw table (Barkskin
+// 20 %) while burst-into-mitigation priced the same aura through the resolver
+// with the caster's talents (30 %). Both now read wallDoorPct.
+describe("wallDoorPct (GH #114 — one price for [ENEMY DEF] and the burst-into-mitigation door)", () => {
+  const resto = {
+    spec: CombatUnitSpec.Druid_Restoration,
+    info: { talents: [], pvpTalents: [] },
+    spellCastEvents: [],
+  } as never;
+
+  it("is the resolver's strongest lower bound (immunity included) for every entry, both carriers, with and without a caster", () => {
+    for (const id of Object.keys(MITIGATION_TABLE)) {
+      for (const carrierIsCaster of [true, false]) {
+        for (const caster of [undefined, resto]) {
+          const ctx = { carrierIsCaster, caster };
+          const res = resolveMitigation(id, ctx)!;
+          expect(wallDoorPct(id, ctx)).toBe(
+            strongestComponentPct(res, { includeImmunity: true })?.pctMin,
+          );
+        }
+      }
+    }
+    expect(wallDoorPct("1", { carrierIsCaster: true })).toBeUndefined();
+  });
+
+  it("the [ENEMY DEF] self-wall % is priced through wallDoorPct, not the raw table", () => {
+    const src = readFileSync(
+      join(__dirname, "../src/utils/enemyDefensives.ts"),
+      "utf8",
+    );
+    expect(src).toContain("pct: wallDoorPct(iv.spellId");
+    expect(src).not.toMatch(/pct:\s*MITIGATION_TABLE\[/);
   });
 });

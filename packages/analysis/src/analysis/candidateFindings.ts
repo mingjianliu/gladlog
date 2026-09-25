@@ -19,7 +19,7 @@ import { OFF_GCD_SPELL_IDS } from "../data/offGcdGenerated";
 import { lookupKickPriorityPrior } from "../data/kickPriorityPrior";
 import {
   resolveMitigation,
-  strongestComponentPct,
+  wallDoorPct,
 } from "../data/mitigationComponents";
 import { spellSchoolMask } from "../data/spellSchools";
 import { ccSpellIds } from "../data/spellTags";
@@ -2616,17 +2616,16 @@ function dpsOwnerEvents(
           // strongest component's lower bound; immunity components included,
           // exactly as the table read did — `isImmunity` above is the
           // ledger's own exclusion).
-          const res = resolveMitigation(d.spellId, {
+          const ctx = {
             carrierIsCaster: !d.appliedByOther,
             caster: players.find((u) => u.name === d.casterName),
-          });
-          const strongest = res
-            ? strongestComponentPct(res, { includeImmunity: true })
-            : undefined;
+          };
+          const res = resolveMitigation(d.spellId, ctx);
           return {
             d,
             res,
-            pct: strongest?.pctMin ?? 0,
+            // GH #114: the same helper prices the [ENEMY DEF] line
+            pct: wallDoorPct(d.spellId, ctx) ?? 0,
           };
         })
         .filter(
@@ -2644,21 +2643,16 @@ function dpsOwnerEvents(
       const bimFacts = () => ({
         fromSeconds: b.fromSeconds,
         target: t.unitId,
-        defensivesHit: t.defensivesHit.map((d) => {
-          const res = resolveMitigation(d.spellId, {
-            carrierIsCaster: !d.appliedByOther,
-            caster: players.find((u) => u.name === d.casterName),
-          });
-          return {
-            spellId: d.spellId,
-            isImmunity: d.isImmunity,
-            appliedByOther: !!d.appliedByOther,
-            pct: res
-              ? (strongestComponentPct(res, { includeImmunity: true })
-                  ?.pctMin ?? null)
-              : null,
-          };
-        }),
+        defensivesHit: t.defensivesHit.map((d) => ({
+          spellId: d.spellId,
+          isImmunity: d.isImmunity,
+          appliedByOther: !!d.appliedByOther,
+          pct:
+            wallDoorPct(d.spellId, {
+              carrierIsCaster: !d.appliedByOther,
+              caster: players.find((u) => u.name === d.casterName),
+            }) ?? null,
+        })),
       });
       if (!hit) {
         if (bimTracing)
