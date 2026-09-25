@@ -27,12 +27,26 @@ export function crisisNoResponseEvents(
   points: DecisionPoint[],
   owner: { id: string; name: string },
   bracket: string,
-  probes: { lookup: (dmg2s: number) => BehaviorPriorRef | null },
+  probes: {
+    lookup: (dmg2s: number) => BehaviorPriorRef | null;
+    /** Major walls friendlies had up on the owner (`majorWallIntervals`,
+     * seconds). A crossing inside one abstains (A2b below); absent = none. */
+    majorWalls?: ReadonlyArray<{ fromS: number; toS: number }>;
+  },
   overrides?: { cap?: number },
 ): CandidateEvent[] {
   const cap = overrides?.cap ?? CRISIS_NO_RESPONSE_CAP;
+  // Reliability audit A2b (2026-09-25; the cd-hoarded A2 ruling 2026-09-19
+  // "该不该救 = 伤情 × 已有保护一起看" + codex astra debate 2026-09-24): a
+  // major wall already up on the owner at the crossing — pressed more than
+  // the 1.5 s the response window looks back, or put there by a teammate —
+  // means "did nothing" is not the story. Abstain; the point is NOT counted
+  // as a response (the behavior-prior table and crisisDecisionPoints are
+  // unchanged — this is the consumer's feasibility filter).
+  const walled = (p: DecisionPoint) =>
+    (probes.majorWalls ?? []).some((w) => w.fromS <= p.tSec && p.tSec < w.toS);
   const eligible = points.filter(
-    (p) => p.feasible && p.dangerous && !p.responded,
+    (p) => p.feasible && p.dangerous && !p.responded && !walled(p),
   );
   // danger order — enemyBurst, then attackers, then damage; NEVER outcome
   const ranked = [...eligible].sort(
@@ -83,6 +97,16 @@ export function crisisNoResponseEvents(
           ownerId: owner.id,
           verdict: "suppressed",
           reason: "responded",
+          facts: facts(p),
+          candidateIds: [],
+        });
+      else if (walled(p))
+        trace.push({
+          type: "crisis-no-response",
+          opportunityId: oppId(p),
+          ownerId: owner.id,
+          verdict: "suppressed",
+          reason: "wall-active",
           facts: facts(p),
           candidateIds: [],
         });

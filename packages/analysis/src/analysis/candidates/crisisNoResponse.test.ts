@@ -147,3 +147,35 @@ describe("crisis-no-response", () => {
     expect(ev.map((e) => e.t)).toEqual([5, 50]);
   });
 });
+
+describe("crisis-no-response: a major wall already up abstains (reliability audit A2b)", () => {
+  const walls = (fromS: number, toS: number) => ({
+    ...probes,
+    majorWalls: [{ fromS, toS }],
+  });
+
+  it("a wall covering the crossing (pressed before the 1.5 s look-back, or a teammate's) → no line", () => {
+    expect(crisisNoResponseEvents([pt()], owner, "3v3", walls(66, 78))).toEqual(
+      [],
+    );
+  });
+
+  it("a wall that ended before the crossing, or starts after it, does not abstain", () => {
+    expect(
+      crisisNoResponseEvents([pt()], owner, "3v3", walls(60, 72.4)),
+    ).toHaveLength(1);
+    expect(
+      crisisNoResponseEvents([pt()], owner, "3v3", walls(73, 80)),
+    ).toHaveLength(1);
+  });
+
+  it("an abstained crossing frees its cap slot for the next one (it is not a response, just not accusable)", () => {
+    const ev = crisisNoResponseEvents(
+      [pt(), pt({ tSec: 120.2 }), pt({ tSec: 150.1, enemyBurst: false })],
+      owner,
+      "3v3",
+      walls(66, 78),
+    );
+    expect(ev.map((e) => e.t)).toEqual([120.2, 150.1]);
+  });
+});

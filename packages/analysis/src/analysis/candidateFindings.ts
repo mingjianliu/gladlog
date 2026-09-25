@@ -294,6 +294,39 @@ export function cdWasteEvents(
  *    off-target-in-window / juked-kick / dr-clipped-cc / unconverted-burst
  */
 /**
+ * Major walls friendlies had up on a unit (reliability audit A2, 2026-09-24):
+ * the shared protection-evidence record — the same `majorWallIntervals` the
+ * [STACKED DEFENSIVES] line reads, friendly casters only (the unit's own team,
+ * as that line defines it). Read by cd-hoarded and crisis-no-response (A2b),
+ * which both ABSTAIN at a crossing a wall already covers — never "responded",
+ * never "enough protection".
+ */
+function majorWallsOnFor(
+  combat: any,
+): (unit: any) => ReturnType<typeof majorWallIntervals> {
+  const wallPlayers = (Object.values(combat.units ?? {}) as any[]).filter(
+    (u) => u.info,
+  );
+  const wallById = new Map<string, any>(wallPlayers.map((u) => [u.id, u]));
+  return (unit: any) => {
+    try {
+      return majorWallIntervals(
+        unit,
+        combat,
+        wallById,
+        new Set(
+          wallPlayers
+            .filter((u) => u.reaction === unit.reaction)
+            .map((u) => u.name),
+        ),
+      );
+    } catch {
+      return [];
+    }
+  };
+}
+
+/**
  * The candidate type encoded in a candidate id — every builder in this file
  * and candidates/*.ts writes ids as `<type>:<...>` (e.g.
  * `cd-hoarded:Player-…:5211:0`). Shared inverse for consumers that only have
@@ -1845,29 +1878,7 @@ function teamPlayEvents(
         ((u.deathRecords ?? []) as any[]).map(
           (d) => (d.timestamp - combat.startTime) / 1000,
         );
-      // A2 (2026-09-24): the shared protection-evidence record — the same
-      // majorWallIntervals the [STACKED DEFENSIVES] line reads, friendly
-      // casters only (the crisis unit's own team, as that line defines it).
-      const wallPlayers = (Object.values(combat.units ?? {}) as any[]).filter(
-        (u) => u.info,
-      );
-      const wallById = new Map<string, any>(wallPlayers.map((u) => [u.id, u]));
-      const wallsOn = (unit: any) => {
-        try {
-          return majorWallIntervals(
-            unit,
-            combat,
-            wallById,
-            new Set(
-              wallPlayers
-                .filter((u) => u.reaction === unit.reaction)
-                .map((u) => u.name),
-            ),
-          );
-        } catch {
-          return [];
-        }
-      };
+      const wallsOn = majorWallsOnFor(combat);
       const cdHoardSources = [
         {
           crisisUnit: { id: owner.id, name: owner.name },
@@ -2129,7 +2140,10 @@ function teamPlayEvents(
           crisisDecisionPoints(owner, combat, "healer"),
           owner,
           bracket,
-          { lookup: (dmg2s) => lookupBehaviorPrior(bracket, "healer", dmg2s) },
+          {
+            lookup: (dmg2s) => lookupBehaviorPrior(bracket, "healer", dmg2s),
+            majorWalls: majorWallsOnFor(combat)(owner),
+          },
         ),
       );
     } catch {
