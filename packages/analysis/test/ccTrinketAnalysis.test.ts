@@ -618,4 +618,75 @@ describe("analyzePlayerCCAndTrinket — structured data contract (N4)", () => {
       .interruptInstances[0]!;
     expect(inst.firstActionDelayS).toBeCloseTo(3.2, 5);
   });
+
+  it("hardcast median: does not re-order the player's shared castStartEvents, and reads a median from unsorted / tied starts", () => {
+    const enemy = makeUnit("enemy-1", {
+      name: "EnemyRogue",
+      spec: CombatUnitSpec.Rogue_Subtlety,
+      reaction: CombatUnitReaction.Hostile,
+    });
+    // An id the hardcast-heal table does not know, so kickDepthPct has to
+    // come from the player's own completed-cast median.
+    const SP = "999001";
+    const start = (spellId: string, atMs: number) =>
+      ({
+        logLine: {
+          event: LogEvent.SPELL_CAST_START,
+          timestamp: atMs,
+          parameters: [],
+        },
+        spellId,
+      }) as any;
+    const success = (spellId: string, atMs: number) =>
+      makeSpellCastEvent(
+        spellId,
+        atMs,
+        "enemy-1",
+        "EnemyRogue",
+        "player-1",
+        "PlayerPriest",
+      );
+    // Deliberately NOT chronological, with an exact-tie duplicate and a
+    // fractional stamp: two completed 2 s casts (+10→+12, +20.5→+22.5), then
+    // the kicked one at +30 (kick at +31 ⇒ 1 s / 2 s median = 50 %).
+    const castStartEvents = [
+      start(SP, MATCH_START + 30_000),
+      start("999002", MATCH_START + 40_000),
+      start(SP, MATCH_START + 20_500),
+      start(SP, MATCH_START + 10_000),
+      start(SP, MATCH_START + 10_000),
+    ];
+    const orderBefore = castStartEvents.map((e) => e.logLine.timestamp);
+    const player = makeUnit("player-1", {
+      name: "PlayerPriest",
+      spec: CombatUnitSpec.Priest_Discipline,
+      reaction: CombatUnitReaction.Friendly,
+      castStartEvents,
+      spellCastEvents: [
+        success(SP, MATCH_START + 22_500),
+        success(SP, MATCH_START + 12_000),
+      ],
+      actionIn: [
+        makeInterruptEvent(
+          "1766",
+          "Kick",
+          SP,
+          "Unknown Hardcast",
+          MATCH_START + 31_000,
+          "enemy-1",
+          "EnemyRogue",
+        ),
+      ],
+    });
+
+    const res = analyzePlayerCCAndTrinket(player, [enemy], makeCombat());
+
+    expect(res.interruptInstances).toHaveLength(1);
+    expect(res.interruptInstances[0].kickDepthPct).toBe(50);
+    // The analysis sorts a COPY: every other reader of this unit sees the
+    // array exactly as the parser left it.
+    expect(player.castStartEvents!.map((e) => e.logLine.timestamp)).toEqual(
+      orderBefore,
+    );
+  });
 });

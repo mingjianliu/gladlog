@@ -55,3 +55,16 @@ export function binarySearchClosest<T>(
   const dAfter = keyFn(arr[after]) - targetTimestamp;
   return dAfter < dBefore ? arr[after] : arr[before];
 }
+
+/** First index of ascending-sorted `sorted` whose value is strictly greater
+ * than `target`; `sorted.length` when none is. */
+export function upperBound(sorted: readonly number[], target: number): number {
+  let low = 0;
+  let high = sorted.length;
+  while (low < high) {
+    const mid = (low + high) >>> 1;
+    if (sorted[mid] <= target) low = mid + 1;
+    else high = mid;
+  }
+  return low;
+}

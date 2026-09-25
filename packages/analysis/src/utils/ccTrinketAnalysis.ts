@@ -6,6 +6,7 @@ import {
 } from "@gladlog/parser-compat";
 
 import { BACKLASH_AURA_CC_TYPE } from "../data/backlashCc";
+import { hardcastHealSpell } from "../data/kickPriorityHealSpells";
 import {
   BREAK_RACIAL_SPELL_IDS,
   racialName,
@@ -28,32 +29,32 @@ import {
   trinketSpellIds,
 } from "../data/spellTags";
 import trinketItemIdsData from "../data/trinketItemIds.json";
+import { upperBound } from "./binarySearch";
 import {
   buildCannotCastIntervals,
   coveredMsWithin,
 } from "./cannotCastIntervals";
+import { ccFullDurationForCaster } from "./ccDuration";
 import { isHealerSpec, isPassiveProcCast, specToString } from "./cooldowns";
 import { computeIncomingDR, IDRInfo, matchPendingCcKey } from "./drAnalysis";
+import {
+  interruptCooldownRemainingMs,
+  interruptForUnit,
+} from "./enemyInterrupts";
 import {
   distanceBetween,
   getUnitPositionAtTime,
   hasLineOfSight,
 } from "./losAnalysis";
 import {
-  interruptCooldownRemainingMs,
-  interruptForUnit,
-} from "./enemyInterrupts";
-import { spellRangeForCaster } from "./spellRange";
-import {
   CC_MAX_PLAUSIBLE_RANGE_YARDS,
   INTERP_MAX_GAP_MS,
   LOS_SWEEP_GAP_MS,
 } from "./positionSampling";
-import { ccFullDurationForCaster } from "./ccDuration";
 import { fmtTime } from "./renderGrid";
-import { getTalentAvoidanceBuffs } from "./talentBehaviors";
-import { hardcastHealSpell } from "../data/kickPriorityHealSpells";
+import { spellRangeForCaster } from "./spellRange";
 import { medianFinite } from "./stats";
+import { getTalentAvoidanceBuffs } from "./talentBehaviors";
 import { DPS_TRINKET_CD_S, HEALER_TRINKET_CD_S } from "./trinketCooldown";
 
 // ---------------------------------------------------------------------------
@@ -1168,6 +1169,29 @@ export function analyzePlayerCCAndTrinket(
     .sort((a, b) => a.atSeconds - b.atSeconds);
 
   const playerCompletedMedians = new Map<string, number | null>();
+  let sortedTimesCache: { allStartMs: number[]; pressMs: number[] } | null =
+    null;
+  /** Timestamps of every cast start, and of every non-passive cast success
+   * (a button press), each sorted ascending. Copies — never sorts the
+   * player's own arrays in place. */
+  const playerSortedTimes = () => {
+    if (sortedTimesCache) return sortedTimesCache;
+    const asc = (a: number, b: number) => a - b;
+    sortedTimesCache = {
+      allStartMs: (player.castStartEvents ?? [])
+        .map((e) => e.logLine.timestamp)
+        .sort(asc),
+      pressMs: player.spellCastEvents
+        .filter(
+          (c) =>
+            c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+            !isPassiveProcCast(c),
+        )
+        .map((c) => c.logLine.timestamp)
+        .sort(asc),
+    };
+    return sortedTimesCache;
+  };
   const getPlayerCompletedMedian = (spellId: string): number | null => {
     if (!spellId) return null;
     if (playerCompletedMedians.has(spellId)) {
@@ -1194,21 +1218,32 @@ export function analyzePlayerCCAndTrinket(
     const playerInterrupts = player.actionIn.filter(
       (a) => a.logLine.event === LogEvent.SPELL_INTERRUPT,
     );
-    const allStarts = (player.castStartEvents ?? []).sort(
-      (a, b) => a.logLine.timestamp - b.logLine.timestamp,
-    );
+    // Sorted copies, built once per player: the shared arrays must not be
+    // re-ordered in place (every other reader sees the mutation), and the
+    // per-start lookups below walk these with a pointer instead of a full
+    // `find` per start — `starts` is a sorted subsequence of `allStartMs`.
+    const { allStartMs, pressMs } = playerSortedTimes();
 
     const durations: number[] = [];
+    let nextStartIdx = 0;
+    let successIdx = 0;
     for (let i = 0; i < starts.length; i++) {
       const sMs = starts[i].logLine.timestamp;
       // Any subsequent cast start of ANY spell ends the previous hardcast
-      const nextAnyStartMs =
-        allStarts.find((e) => e.logLine.timestamp > sMs)?.logLine.timestamp ??
-        Infinity;
+      while (nextStartIdx < allStartMs.length && allStartMs[nextStartIdx] <= sMs)
+        nextStartIdx++;
+      const nextAnyStartMs = allStartMs[nextStartIdx] ?? Infinity;
       const maxMs = Math.min(nextAnyStartMs, sMs + 6_000);
-      const match = successes.find(
-        (c) => c.logLine.timestamp >= sMs && c.logLine.timestamp <= maxMs,
-      );
+      while (
+        successIdx < successes.length &&
+        successes[successIdx].logLine.timestamp < sMs
+      )
+        successIdx++;
+      const match =
+        successIdx < successes.length &&
+        successes[successIdx].logLine.timestamp <= maxMs
+          ? successes[successIdx]
+          : undefined;
       if (match) {
         // Codex review P2: Reject start/success pairs crossed by an interruption
         // on this spell, so an instant proc or later cast does not contaminate the median.
@@ -1221,14 +1256,12 @@ export function analyzePlayerCCAndTrinket(
         if (wasInterrupted) continue;
 
         // An intervening cast success of any other spell also proves the hardcast was broken
-        const hadInterveningCast = player.spellCastEvents.some(
-          (c) =>
-            c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
-            // GH #108: a passive proc during the bar does not break it
-            !isPassiveProcCast(c) &&
-            c.logLine.timestamp > sMs &&
-            c.logLine.timestamp < match.logLine.timestamp,
-        );
+        // (GH #108: a passive proc during the bar does not break it — pressMs
+        // already excludes those). Open interval (sMs, matchMs).
+        const firstAfterStart = upperBound(pressMs, sMs);
+        const hadInterveningCast =
+          firstAfterStart < pressMs.length &&
+          pressMs[firstAfterStart] < match.logLine.timestamp;
         if (hadInterveningCast) continue;
 
         const durS = (match.logLine.timestamp - sMs) / 1000;
