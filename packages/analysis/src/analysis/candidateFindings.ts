@@ -20,6 +20,7 @@ import {
   resolveMitigation,
   strongestComponentPct,
 } from "../data/mitigationComponents";
+import { spellSchoolMask } from "../data/spellSchools";
 import { ccSpellIds } from "../data/spellTags";
 import { lookupSyncWindowPrior } from "../data/syncWindowPrior";
 import {
@@ -92,6 +93,7 @@ import {
 } from "../utils/rawStreams";
 import { toRenderSecond } from "../utils/renderGrid";
 import { OFFENSIVE_CD_SPELL_IDS } from "../utils/spellDanger";
+import { getSpellSchoolName } from "../utils/spellSchools";
 import { getTalentAvoidanceTriggers } from "../utils/talentBehaviors";
 import { matchThreatLevel, threatActiveAt } from "../utils/threatAssessment";
 import { burstWindowDecisionPoints } from "./burstWindowDecisionPoints";
@@ -883,7 +885,7 @@ export function missedPurgeEvents(
  * (戒律 76–80% vs 神骑 8%),同专精内 idle 率才是可教的那一半。 */
 
 export function kickEatenEvents(
-  instances: Pick<
+  instances: (Pick<
     ReturnType<typeof analyzePlayerCCAndTrinket>["interruptInstances"][number],
     | "atSeconds"
     | "lockoutDurationSeconds"
@@ -899,7 +901,15 @@ export function kickEatenEvents(
     | "kickersInRange"
     | "kickDepthPct"
     | "ccInWindowS"
-  >[],
+  > &
+    Partial<
+      Pick<
+        ReturnType<
+          typeof analyzePlayerCCAndTrinket
+        >["interruptInstances"][number],
+        "interruptedSpellId"
+      >
+    >)[],
   owner: { id: string; name: string },
   /** Reliability audit A1 (2026-09-24): the owner's rejected presses. Without
    * them `postKick` is read off SUCCESSFUL casts only, and the line told the
@@ -949,6 +959,20 @@ export function kickEatenEvents(
         kick: k.kickSpellName,
         source: k.sourceName,
         lockout: k.lockoutDurationSeconds.toFixed(1),
+        // Reliability audit D4(c) (2026-09-25): WHICH school the kick locked
+        // (the interrupted spell's official school — the same
+        // `spellSchoolMask` the switched/acted classification tests). Without
+        // it the model wrote "a kick locks only that school; instants are not
+        // locked" (e9ea8a0c @363) — every spell of the school is locked,
+        // instants included. Absent when the official mask is unknown.
+        ...((): Record<string, string> => {
+          const school = getSpellSchoolName(
+            k.interruptedSpellId
+              ? spellSchoolMask(k.interruptedSpellId)
+              : undefined,
+          );
+          return school ? { lockedSchool: school } : {};
+        })(),
         ...(k.nearestKickerDistYd != null
           ? { nearestKickerDistYd: k.nearestKickerDistYd.toFixed(1) }
           : {}),
@@ -988,9 +1012,11 @@ export function kickEatenEvents(
         //
         // `switchWasHardCast` is three-state: null (no cast-start data, or
         // an old archive) prints no qualifier at all rather than guessing,
-        // and `false` says "instant or channel" because parser-compat
-        // exposes no channel events — a channel cannot be told from an
-        // instant here, so the line must not claim it is one. The qualifier
+        // and `false` says "not a hard cast" because parser-compat exposes
+        // no channel events — a channel cannot be told from an instant here,
+        // so the line must not claim it is one. (It said "instant or
+        // channel" until 2026-09-25: next to "another school" that read as
+        // "instants escape the lockout" — reliability audit D4(c).) The qualifier
         // is joined with "; " not ", ": a ", " inside a facts value is cut off
         // by every text-side facts parser (`checkFactsBlockIntegrity`).
         postKick: postKickFact(k, rejected),
@@ -1085,7 +1111,7 @@ function postKickFact(
       k.switchWasHardCast === true
         ? "; hard cast"
         : k.switchWasHardCast === false
-          ? "; instant or channel"
+          ? "; not a hard cast"
           : ""
     })`;
   // Strict `<`: the lockout's end instant belongs to "after", the same

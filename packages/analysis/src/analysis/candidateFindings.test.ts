@@ -1217,12 +1217,22 @@ describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
         name: "Me",
       })[0]!.facts["postKick"]!;
     expect(of(true)).toContain("hard cast");
-    expect(of(false)).toContain("instant or channel");
+    expect(of(false)).toContain("not a hard cast");
     // null = 没有 cast-start 数据(旧归档),不许猜 —— 只点名技能。
     const unknown = of(null);
     expect(unknown).toContain("Cat Form");
     expect(unknown).not.toContain("hard cast");
     expect(unknown).not.toContain("instant");
+  });
+
+  it("kick-eaten: lockedSchool names the kicked spell's official school; absent without an id (reliability audit D4(c))", () => {
+    const withId = kickEatenEvents(
+      [switchedInst({ interruptedSpellId: "740" })], // Tranquility — Nature
+      { id: "P1", name: "Me" },
+    );
+    expect(withId[0]!.facts["lockedSchool"]).toBe("Nature");
+    const noId = kickEatenEvents([switchedInst()], { id: "P1", name: "Me" });
+    expect(noId[0]!.facts["lockedSchool"]).toBeUndefined();
   });
 
   it("kick-eaten: carries nearestKickerDistYd and kickersInRange facts when present (GH #73, B6)", () => {
