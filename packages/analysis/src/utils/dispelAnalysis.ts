@@ -1349,12 +1349,42 @@ export function wasRemovedByAllyDispel(
   // A 50ms window tolerates log skew while still being far tighter than a distinct re-cast.
   // Match is further constrained by removedSpellId + targetName, so cross-debuff collisions
   // within 50ms are not a concern.
-  const MATCH_TOLERANCE_SECONDS = 0.05;
+  // Reliability audit D1 (2026-09-25): a `rider` removal (a form shift, a
+  // movement ability — dispelKind.ts) is not a cleanse. a9bc48b5 @2:51: Tree of
+  // Life expiring broke Entangling Roots, logged as SPELL_DISPEL, and the prompt
+  // said "[CLEANSE] … (Incarnation: Tree of Life)" and "cleansed 4 s late".
+  // Procs (Cleanse the Weak) still count: the debuff really was stripped by a
+  // dispel. Same predicate the desktop dispel dash already uses.
   return allyCleanse.some(
     (d) =>
+      d.dispelKind !== "rider" &&
       d.removedSpellId === spellId &&
       d.targetName === targetName &&
-      Math.abs(d.timeSeconds - removalSeconds) <= MATCH_TOLERANCE_SECONDS,
+      Math.abs(d.timeSeconds - removalSeconds) <= ALLY_DISPEL_MATCH_TOLERANCE_S,
+  );
+}
+
+/** The 50 ms SPELL_DISPEL ↔ SPELL_AURA_REMOVED pairing tolerance (see B11
+ * above), shared by both removal matchers. */
+const ALLY_DISPEL_MATCH_TOLERANCE_S = 0.05;
+
+/** Did the debuffed unit free ITSELF with a rider (its own form shift /
+ * movement ability, or a form expiring) at this removal? User ruling
+ * 2026-09-24 (reliability audit D1): 「自己变形解掉的，当然不算」 — such a
+ * window is not a cleanse window at all. */
+export function wasRemovedBySelfRider(
+  allyCleanse: IDispelEvent[],
+  spellId: string,
+  targetName: string,
+  removalSeconds: number,
+): boolean {
+  return allyCleanse.some(
+    (d) =>
+      d.dispelKind === "rider" &&
+      d.sourceName === targetName &&
+      d.removedSpellId === spellId &&
+      d.targetName === targetName &&
+      Math.abs(d.timeSeconds - removalSeconds) <= ALLY_DISPEL_MATCH_TOLERANCE_S,
   );
 }
 
@@ -1730,6 +1760,17 @@ export function reconstructDispelSummary(
 
         const durationSeconds = (removal.ts - applyTs) / 1000;
 
+        // D1: freed by its own rider (form shift / form expiry) → not a
+        // cleanse window at all (user ruling 2026-09-24).
+        if (
+          wasRemovedBySelfRider(
+            allyCleanse,
+            spellId,
+            unit.name,
+            (removal.ts - combat.startTime) / 1000,
+          )
+        )
+          continue;
         // Was removed by a friendly dispel near that removal time?
         const removedByDispel = wasRemovedByAllyDispel(
           allyCleanse,

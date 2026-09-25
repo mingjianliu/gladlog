@@ -2790,6 +2790,9 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     for (const cleanse of dispelSummary.allyCleanse) {
       if (cleanse.priority !== "Critical" && cleanse.priority !== "High")
         continue;
+      // D1 (2026-09-25): a rider (form shift, movement ability) is not a
+      // cleanse — it folds into the "(passive)" minor line below instead.
+      if (cleanse.dispelKind === "rider") continue;
       const key = `${Math.round(cleanse.timeSeconds)}|${cleanse.sourceName}`;
       const group = cleanseGroups.get(key) ?? [];
       group.push(cleanse);
@@ -2938,7 +2941,13 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       labelOf: (name: string) => string,
     ) => {
       for (const e of events) {
-        if (e.priority === "Critical" || e.priority === "High") continue;
+        // High/Critical riders are NOT on a [CLEANSE] line (D1), so they fold
+        // here as "(passive)" instead of vanishing.
+        if (
+          (e.priority === "Critical" || e.priority === "High") &&
+          e.dispelKind !== "rider"
+        )
+          continue;
         const spellName = e.dispelSpellName || "unknown";
         // UI review 2026-08-21 #3: passive procs / riders fold into their own
         // line with a "(passive)" tag so 92 Cleanse the Weak procs never read
