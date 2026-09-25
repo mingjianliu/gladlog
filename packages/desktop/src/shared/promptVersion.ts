@@ -983,4 +983,16 @@
 //  checkForcedTrinketConsistency. 605 files / 3,520 prompts: 146 lines
 //  (dps 95/2,263 = 4.2 %, healer 51/1,257 = 4.1 %), 56 kept aura lines,
 //  nothing else in any context changed; candidate counts unchanged; gate 0.
-export const PROMPT_VERSION = 123;
+//  v124 (2026-09-25, found via a [CC BOOKMARK] that read as a contradiction):
+//  the owner's [YOU] [CC] line now tags a CC that did not land — MISS /
+//  REFLECT / PARRY / DODGE / EVADE / DEFLECT → "[MISSED on X]" /
+//  "[REFLECTED by X]" …, the unit labelled by GUID (pets never leak a raw
+//  localized name). ABSORB stays untagged (after an ABSORB the caster's CC
+//  aura appeared on that target within 0.5 s 957/1,072; after MISS/REFLECT/
+//  PARRY/DODGE 0/474). A miss now belongs to the latest same-spell cast at or
+//  before it — also for the existing [IMMUNE] tag (codex astra: a reflect of
+//  a second Polymorph used to tag the first, landed one). 605 files: 173
+//  contexts gained tags (MISSED 181, REFLECTED 17, PARRIED 4, DODGED 2),
+//  no [IMMUNE] tag moved, nothing else changed; candidate counts identical;
+//  hardFailures 4 → 4 (pre-existing [STACKED DEFENSIVES] spans).
+export const PROMPT_VERSION = 124;

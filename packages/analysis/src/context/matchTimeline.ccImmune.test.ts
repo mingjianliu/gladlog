@@ -224,3 +224,118 @@ describe("[IMMUNE] on the owner's CC casts", () => {
     expect(tagged).toBe(1);
   });
 });
+
+describe("[MISSED on …] / [REFLECTED by …] on the owner's CC casts (2026-09-25)", () => {
+  const miss = (
+    spellId: string,
+    spellName: string,
+    t: number,
+    missType: string,
+  ) => ({
+    ...missImmune(spellId, spellName, t),
+    missType,
+  });
+  const run = (missType: string, ledger: boolean) => {
+    const enemy = mkUnit("e", "Enemy-Realm", {
+      reaction: CombatUnitReaction.Hostile,
+    });
+    const owner = mkUnit("o", "Me-Realm", {
+      spellCastEvents: ledger
+        ? []
+        : ([cast(POLYMORPH, "Polymorph", 30_000)] as never),
+      missesOut: [
+        miss(
+          ledger ? PSYCHIC_SCREAM : POLYMORPH,
+          ledger ? "Psychic Scream" : "Polymorph",
+          30_050,
+          missType,
+        ),
+      ] as never,
+    });
+    return buildMatchTimeline(
+      baseParams(
+        owner,
+        enemy,
+        ledger
+          ? [
+              {
+                spellId: PSYCHIC_SCREAM,
+                spellName: "Psychic Scream",
+                tag: "CC",
+                cooldownSeconds: 30,
+                maxChargesDetected: 1,
+                casts: [{ timeSeconds: 30 }],
+                availableWindows: [],
+                neverUsed: false,
+              },
+            ]
+          : [],
+      ),
+    )
+      .split("\n")
+      .filter((l) => l.includes("[YOU] [CC]"));
+  };
+
+  it("tags a MISS with the unit it missed, on both [YOU] [CC] emitters", () => {
+    for (const ledger of [true, false]) {
+      const lines = run("MISS", ledger);
+      expect(lines).toHaveLength(1);
+      expect(lines[0]).toMatch(/ \[MISSED on \S+\]$/);
+      expect(lines[0]).not.toContain("[IMMUNE");
+    }
+  });
+
+  it("names a reflect / parry / dodge", () => {
+    expect(run("REFLECT", true)[0]).toMatch(/ \[REFLECTED by \S+\]$/);
+    expect(run("PARRY", true)[0]).toMatch(/ \[PARRIED by \S+\]$/);
+    expect(run("DODGE", false)[0]).toMatch(/ \[DODGED by \S+\]$/);
+  });
+
+  it("ignores ABSORB — on its own it does not establish a failed control", () => {
+    for (const ledger of [true, false]) {
+      const lines = run("ABSORB", ledger);
+      expect(lines).toHaveLength(1);
+      expect(lines[0]).not.toMatch(/MISSED|ABSORB|by \S+\]$/);
+    }
+  });
+
+  it("attributes a miss to the cast that produced it, not an earlier landed cast (codex astra)", () => {
+    const enemy = mkUnit("e", "Enemy-Realm", {
+      reaction: CombatUnitReaction.Hostile,
+    });
+    const owner = mkUnit("o", "Me-Realm", {
+      spellCastEvents: [
+        cast(POLYMORPH, "Polymorph", 30_000),
+        cast(POLYMORPH, "Polymorph", 31_500),
+      ] as never,
+      missesOut: [miss(POLYMORPH, "Polymorph", 31_550, "REFLECT")] as never,
+    });
+    const lines = buildMatchTimeline(baseParams(owner, enemy))
+      .split("\n")
+      .filter((l) => l.includes("[YOU] [CC]"));
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).not.toContain("REFLECTED");
+    expect(lines[1]).toMatch(/ \[REFLECTED by \S+\]$/);
+  });
+
+  it("labels a pet target by GUID, never its raw localized name (codex astra)", () => {
+    const enemy = mkUnit("e", "Enemy-Realm", {
+      reaction: CombatUnitReaction.Hostile,
+    });
+    const owner = mkUnit("o", "Me-Realm", {
+      spellCastEvents: [cast(POLYMORPH, "Polymorph", 30_000)] as never,
+      missesOut: [
+        {
+          ...miss(POLYMORPH, "Polymorph", 30_050, "MISS"),
+          destUnitId: "Creature-0-1-2-3-17252-0000000001",
+          destUnitName: "恶魔卫士",
+        },
+      ] as never,
+    });
+    const line = buildMatchTimeline(baseParams(owner, enemy))
+      .split("\n")
+      .find((l) => l.includes("[YOU] [CC]"))!;
+    expect(line).toContain("[MISSED on [pet]]");
+    expect(line).not.toMatch(/[\u4e00-\u9fff]/);
+  });
+});

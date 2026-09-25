@@ -697,6 +697,31 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
    * event is consumed once so chain-cast spam cannot re-attach one miss to
    * several cast lines.
    */
+  // The owner's own SPELL_CAST_SUCCESS times per spell, for attributing a miss
+  // to the cast that produced it (codex astra 2026-09-25: with only a window,
+  // a Polymorph reflected at 31.55 s tagged the landed 30.0 s cast and left
+  // the reflected 31.5 s cast bare).
+  const ownerCastMsBySpell = new Map<string, number[]>();
+  for (const e of owner.spellCastEvents ?? []) {
+    if (e.logLine?.event !== LogEvent.SPELL_CAST_SUCCESS || !e.spellId)
+      continue;
+    const list = ownerCastMsBySpell.get(e.spellId) ?? [];
+    list.push(e.timestamp);
+    ownerCastMsBySpell.set(e.spellId, list);
+  }
+  /** The miss falls in the cast's window AND no later cast of the same spell
+   * happened at or before it — it belongs to the latest cast before it. */
+  function missBelongsToCast(
+    spellId: string,
+    castMs: number,
+    missMs: number,
+  ): boolean {
+    if (missMs < castMs - 100 || missMs > castMs + 2500) return false;
+    return !(ownerCastMsBySpell.get(spellId) ?? []).some(
+      (t) => t > castMs + 5 && t <= missMs + 100,
+    );
+  }
+
   const consumedImmuneMisses = new Set<unknown>();
   function ownerCcImmuneTag(spellId: string, castTimeSeconds: number): string {
     const misses = owner.missesOut;
@@ -707,8 +732,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
         m.missType === "IMMUNE" &&
         m.spellId === spellId &&
         !consumedImmuneMisses.has(m) &&
-        m.timestamp >= castMs - 100 &&
-        m.timestamp <= castMs + 2500,
+        missBelongsToCast(spellId, castMs, m.timestamp),
     );
     if (!miss) return "";
     consumedImmuneMisses.add(miss);
@@ -739,6 +763,55 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       immunityName = [...active.values()][0] ?? "";
     }
     return immunityName ? ` [IMMUNE — ${immunityName} was up]` : " [IMMUNE]";
+  }
+
+  /**
+   * The other ways an owner CC fails to land on a unit (2026-09-25): the game
+   * reports MISS, REFLECT, PARRY, DODGE, EVADE or DEFLECT in the same
+   * `SPELL_MISSED` stream as IMMUNE, and without a tag the cast line reads
+   * exactly like a landed CC — "Intimidating Shout → 5(HPaladin)" when the
+   * Shout missed the paladin (MISS, AOE), next to a [CC BOOKMARK] saying the
+   * healer was not CC'd. Season sample (1 file in 60): MISS 397, REFLECT 60,
+   * PARRY/DODGE 17 against IMMUNE 1,866. ABSORB alone does not establish a
+   * failed control (it reports the CC's damage part) and is ignored.
+   * Each miss names its unit — an AoE CC can miss one target and land on
+   * another — and is consumed once. Attributed like the IMMUNE tag
+   * (`missBelongsToCast`). Ground truth, same sample: after a MISS / REFLECT /
+   * PARRY / DODGE the caster's CC aura appeared on that target within 0.5 s
+   * 0 / 474 times; after an ABSORB, 957 / 1,072 (89 %).
+   */
+  const OWNER_CC_MISS_WORD: Record<string, string> = {
+    MISS: "MISSED",
+    REFLECT: "REFLECTED by",
+    PARRY: "PARRIED by",
+    DODGE: "DODGED by",
+    EVADE: "EVADED by",
+    DEFLECT: "DEFLECTED by",
+  };
+  const consumedCcMisses = new Set<unknown>();
+  function ownerCcMissTag(spellId: string, castTimeSeconds: number): string {
+    const misses = owner.missesOut;
+    if (!misses || misses.length === 0) return "";
+    const castMs = matchStartMs + castTimeSeconds * 1000;
+    const parts: string[] = [];
+    for (const m of misses) {
+      const word = m.missType ? OWNER_CC_MISS_WORD[m.missType] : undefined;
+      if (
+        !word ||
+        m.spellId !== spellId ||
+        consumedCcMisses.has(m) ||
+        !missBelongsToCast(spellId, castMs, m.timestamp)
+      )
+        continue;
+      consumedCcMisses.add(m);
+      // By GUID: a pet target renders as "X's pet" / "[pet]", never its raw
+      // (possibly localized) name (codex astra: `[MISSED on 恶魔卫士]`).
+      const who = actorLabel(m.destUnitName, "enemy", m.destUnitId);
+      parts.push(
+        word === "MISSED" ? ` [MISSED on ${who}]` : ` [${word} ${who}]`,
+      );
+    }
+    return parts.join("");
   }
 
   /**
@@ -1445,7 +1518,8 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       // rendering here.
       const outgoingDrNote = isCC ? outgoingDrTag(cd.spellId, cast) : "";
       const immuneNote = isCC
-        ? ownerCcImmuneTag(cd.spellId, cast.timeSeconds)
+        ? ownerCcImmuneTag(cd.spellId, cast.timeSeconds) +
+          ownerCcMissTag(cd.spellId, cast.timeSeconds)
         : "";
       const empowerNote = ownerEmpowerTag(cd.spellId, cast.timeSeconds);
       const groundingNote = groundingAbsorbNote(
@@ -1940,7 +2014,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
         }
         addEntry(
           timeSeconds,
-          `${fmtTime(timeSeconds)}  [YOU] [CC]   ${displayName}${effectiveTargetPart}${totemNote}${orderNote}${purgeNote}${ownerCcImmuneTag(e.spellId, timeSeconds)}`,
+          `${fmtTime(timeSeconds)}  [YOU] [CC]   ${displayName}${effectiveTargetPart}${totemNote}${orderNote}${purgeNote}${ownerCcImmuneTag(e.spellId, timeSeconds)}${ownerCcMissTag(e.spellId, timeSeconds)}`,
           requestSnapshotPlaceholder(timeSeconds),
         );
         continue;
