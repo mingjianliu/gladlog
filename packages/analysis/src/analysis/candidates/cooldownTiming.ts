@@ -26,6 +26,7 @@ import {
   type IMajorCooldownInfo,
   isHealerSpec,
   cdIsProcOnly,
+  REACTION_WINDOW_S,
   SELF_CAST_NOOP_EXTERNAL_IDS,
   THROUGHPUT_EMPOWER_DEFENSIVE_IDS,
 } from "../../utils/cooldowns";
@@ -34,6 +35,10 @@ import {
   DR_CATEGORY_MAP,
   type DRLevel,
 } from "../../utils/drAnalysis";
+import {
+  buildCannotCastIntervals,
+  coveredMsWithin,
+} from "../../utils/cannotCastIntervals";
 import { castFailedInWindow, type RawStreams } from "../../utils/rawStreams";
 import {
   type DecisionRecord,
@@ -224,6 +229,145 @@ const MISSED_SYNC_WINDOW_CAP = 2; // <标定定稿 2026-08-15,报告 p1p2-calibr
  * Severity/cap: sorted by rendered window length (a longer lock is a bigger
  * missed opportunity), then capped at MISSED_SYNC_WINDOW_CAP.
  */
+/**
+ * Reliability audit B3 (2026-09-25): the shared sync-window predicate — ONE
+ * function set the candidate AND `packages/eval/scripts/syncWindowScan.ts`
+ * (the reference table) run, so the table is measured on exactly the windows
+ * and the "entered" the candidate judges (the scan used to carry its own copy
+ * of the eligibility gates).
+ *
+ * B3ii — one continuous lock is one window. `enemyHealerCcWindows` emits one
+ * window per CC application; 825ca842's Fear 51.24–55.77 + Blind 51.35–53.85
+ * + Cheap Shot 53.59–57.19 on the same healer became two missed-sync
+ * candidates (both of the round's cap). Windows on the same healer that
+ * overlap or touch merge; the merged window keeps the opener's id / DR and
+ * names the chain "Fear→Cheap Shot".
+ */
+export function mergeHealerCcWindows<
+  W extends Pick<
+    IEnemyHealerCcWindow,
+    | "fromSeconds"
+    | "toSeconds"
+    | "spellName"
+    | "spellId"
+    | "healerName"
+    | "drLevel"
+  >,
+>(windows: readonly W[]): W[] {
+  const out: W[] = [];
+  const byHealer = new Map<string, W[]>();
+  for (const w of windows) {
+    const list = byHealer.get(w.healerName) ?? [];
+    list.push(w);
+    byHealer.set(w.healerName, list);
+  }
+  for (const list of byHealer.values()) {
+    const sorted = [...list].sort((a, b) => a.fromSeconds - b.fromSeconds);
+    let cur = null as W | null;
+    let names: string[] = [];
+    for (const w of sorted) {
+      if (cur && w.fromSeconds <= cur.toSeconds) {
+        cur = { ...cur, toSeconds: Math.max(cur.toSeconds, w.toSeconds) };
+        if (names[names.length - 1] !== w.spellName) names.push(w.spellName);
+        continue;
+      }
+      if (cur) out.push({ ...cur, spellName: names.join("→") });
+      cur = { ...w };
+      names = [w.spellName];
+    }
+    if (cur) out.push({ ...cur, spellName: names.join("→") });
+  }
+  return out.sort((a, b) => a.fromSeconds - b.fromSeconds);
+}
+
+/** Eligibility of a (merged) enemy-healer lock: rendered start ≥
+ * SYNC_WINDOW_MIN_T_S, rendered length ≥ SYNC_WINDOW_MIN_DUR_S, and no enemy
+ * died inside it. */
+export function syncWindowEligible(
+  w: Pick<IEnemyHealerCcWindow, "fromSeconds" | "toSeconds">,
+  enemyDeathS: readonly number[],
+): boolean {
+  const t = toRenderSecond(w.fromSeconds);
+  if (t < SYNC_WINDOW_MIN_T_S) return false;
+  if (toRenderSecond(w.toSeconds) - t < SYNC_WINDOW_MIN_DUR_S) return false;
+  return !enemyDeathS.some((d) => d >= w.fromSeconds && d <= w.toSeconds);
+}
+
+/** An offensive CD with, optionally, the unit that owns it — needed for the
+ * B3i feasibility gate and the B3iii active-span check. Without an owner both
+ * fall back to the pre-2026-09-25 behaviour. */
+export type SyncWindowCd = Pick<
+  IMajorCooldownInfo,
+  | "spellId"
+  | "spellName"
+  | "casts"
+  | "cooldownSeconds"
+  | "neverUsed"
+  | "charges"
+> & {
+  /** the unit that owns the CD */
+  owner?: any;
+  /** the owner's enemies' ids (for `buildCannotCastIntervals`) */
+  ownerEnemyIds?: Set<string>;
+  /** absolute ms of match start (the owner's intervals are absolute) */
+  matchStartMs?: number;
+};
+
+/**
+ * Which offensive CDs were READY for this lock, and did the team ENTER it.
+ *
+ * B3i — ready needs an owner who could act: at least REACTION_WINDOW_S (the
+ * 2026-09-23 reaction ruling) of the lock outside the owner's own cannot-cast
+ * intervals (hard CC, silence, kick lockouts — the shared
+ * `buildCannotCastIntervals`). e9ea8a0c @298: the Demon Hunter's The Hunt was
+ * "ready" while he was stunned by a Capacitor Totem for most of the window.
+ * Roots are not cannot-cast (whether a given CD works while rooted is not in
+ * the repo's data), so a rooted owner stays ready — the fail-open direction.
+ *
+ * B3iii — entered counts a burst whose ACTIVE span overlaps the lock, not only
+ * a press inside [from − SYNC_ENTER_LEAD_S, to]: 7c598eeb r0 @33, the Balance
+ * Druid's Incarnation was running 17.4–37.4 across the whole Cyclone, and its
+ * second charge made it "ready" and the window "unentered". The span is the
+ * cast plus the owner's full buff duration (`buffFullDurationForCaster`,
+ * talent-aware); unknown duration → the press instant only (the old test).
+ */
+export function evaluateSyncWindow(
+  w: Pick<IEnemyHealerCcWindow, "fromSeconds" | "toSeconds">,
+  cds: readonly SyncWindowCd[],
+): { ready: SyncWindowCd[]; entered: boolean } {
+  const ready = cds.filter((cd) => {
+    if (!cdAvailableAt(cd, w.fromSeconds)) return false;
+    if (!cd.owner || !cd.ownerEnemyIds || cd.matchStartMs === undefined)
+      return true;
+    let blocked: Array<{ from: number; to: number }>;
+    try {
+      blocked = buildCannotCastIntervals(cd.owner, cd.ownerEnemyIds);
+    } catch {
+      return true;
+    }
+    const fromMs = cd.matchStartMs + w.fromSeconds * 1000;
+    const toMs = cd.matchStartMs + w.toSeconds * 1000;
+    const freeMs = toMs - fromMs - coveredMsWithin(blocked, fromMs, toMs);
+    return freeMs >= REACTION_WINDOW_S * 1000;
+  });
+  const entered = cds.some((cd) =>
+    cd.casts.some((c) => {
+      const spanEnd =
+        c.timeSeconds +
+        (cd.owner ? (buffFullDurationForCaster(cd.spellId, cd.owner) ?? 0) : 0);
+      // a press leading the lock by ≤ SYNC_ENTER_LEAD_S (the old test), or a
+      // burst still ACTIVE when the lock starts — a burst that ended before
+      // the lock is not in it, however close
+      const pressedIn =
+        c.timeSeconds >= w.fromSeconds - SYNC_ENTER_LEAD_S &&
+        c.timeSeconds <= w.toSeconds;
+      const activeIn = c.timeSeconds <= w.toSeconds && spanEnd > w.fromSeconds;
+      return pressedIn || activeIn;
+    }),
+  );
+  return { ready, entered };
+}
+
 export const SYNC_WINDOW_MIN_T_S = 30;
 export const SYNC_WINDOW_MIN_DUR_S = 3;
 export const SYNC_ENTER_LEAD_S = 2;
@@ -237,15 +381,7 @@ export function missedSyncWindowEvents(
     | "healerName"
     | "drLevel"
   >[],
-  offensiveCds: Pick<
-    IMajorCooldownInfo,
-    | "spellId"
-    | "spellName"
-    | "casts"
-    | "cooldownSeconds"
-    | "neverUsed"
-    | "charges"
-  >[],
+  offensiveCds: SyncWindowCd[],
   probes: {
     /** Wired to enemyMinHpPctInWindow in production. Accelerator-only, see
      * the B8 doc comment above — must NEVER gate the candidate. */
@@ -269,24 +405,12 @@ export function missedSyncWindowEvents(
     ready: string[];
     minHp: number | null;
   }> = [];
-  for (const w of ccWindows) {
-    const t = toRenderSecond(w.fromSeconds);
-    if (t < SYNC_WINDOW_MIN_T_S) continue;
-    if (toRenderSecond(w.toSeconds) - t < SYNC_WINDOW_MIN_DUR_S) continue;
-    if (probes.enemyDeathS.some((d) => d >= w.fromSeconds && d <= w.toSeconds))
-      continue;
-    const ready = offensiveCds
-      .filter((cd) => cdAvailableAt(cd, w.fromSeconds))
-      .map((cd) => cd.spellName);
+  for (const w of mergeHealerCcWindows(ccWindows)) {
+    if (!syncWindowEligible(w, probes.enemyDeathS)) continue;
+    const ev = evaluateSyncWindow(w, offensiveCds);
+    const ready = ev.ready.map((cd) => cd.spellName);
     if (ready.length === 0) continue;
-    const castDuring = offensiveCds.some((cd) =>
-      cd.casts.some(
-        (c) =>
-          c.timeSeconds >= w.fromSeconds - SYNC_ENTER_LEAD_S &&
-          c.timeSeconds <= w.toSeconds,
-      ),
-    );
-    if (castDuring) continue;
+    if (ev.entered) continue;
     candidates.push({
       w,
       ready,

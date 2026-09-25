@@ -2159,7 +2159,7 @@ describe("missedSyncWindowEvents(P1 起爆-1,2026-08-15,纯函数)", () => {
     ).toEqual([]);
   });
 
-  it("id 消歧(review fix round 2,2026-08-15):同一治疗两个 CC 窗 floor 到同一渲染秒但技能不同 → 两条 id 不同(菜单 id 是 eventIds 引用键,碰撞会破坏采纳归因)", () => {
+  it("id 消歧(review fix round 2,2026-08-15;B3ii 2026-09-25 起同一治疗的重叠窗口合并为一条):不同治疗同一渲染秒 → 两条 id 不同(菜单 id 是 eventIds 引用键,碰撞会破坏采纳归因)", () => {
     // Both windows start at 439.x/439.y — toRenderSecond floors both to 439,
     // so the pre-fix id `missed-sync-window:${healerName}:${t}` collided.
     // Different castTimes so both survive the "no cast during window" gate.
@@ -2177,20 +2177,26 @@ describe("missedSyncWindowEvents(P1 起爆-1,2026-08-15,纯函数)", () => {
       spellName: "Fear",
       spellId: "5782",
     };
+    // Reliability audit B3ii (2026-09-25): two overlapping locks on the same
+    // healer are ONE window now (825ca842 Fear→Blind→Cheap Shot was two
+    // candidates), so the same-healer collision this test guarded cannot
+    // arise any more; the id stays keyed on the opener's spell, and two
+    // healers locked in the same second still get distinct ids.
     const evts = missedSyncWindowEvents(
       [polyWindow, fearWindow],
       [readyHammer],
       probes(50),
     );
-    expect(evts).toHaveLength(2);
-    expect(evts[0]!.t).toBe(439);
-    expect(evts[1]!.t).toBe(439);
-    const ids = evts.map((e) => e.id);
-    expect(new Set(ids).size).toBe(2);
-    expect(ids).toEqual([
-      "missed-sync-window:Enemy-Healer:5782:439",
-      "missed-sync-window:Enemy-Healer:118:439",
-    ]);
+    expect(evts).toHaveLength(1);
+    expect(evts[0]!.id).toBe("missed-sync-window:Enemy-Healer:118:439");
+    expect(evts[0]!.facts["cc"]).toBe("Polymorph→Fear");
+
+    const twoHealers = missedSyncWindowEvents(
+      [polyWindow, { ...fearWindow, healerName: "Other-Healer" }],
+      [readyHammer],
+      probes(50),
+    );
+    expect(new Set(twoHealers.map((e) => e.id)).size).toBe(2);
   });
 
   it("多个窗口按渲染窗口时长降序排,截 MISSED_SYNC_WINDOW_CAP=2", () => {

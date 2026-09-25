@@ -1731,8 +1731,19 @@ function teamPlayEvents(
       // to overlap), flooding the menu with a claim sync was never even
       // possible to attempt — not the coaching point this type exists for.
       if (ccWindows.length > 0) {
+        // B3i: enemy CC can come from a pet or totem (Capacitor Totem,
+        // e9ea8a0c @298), so the owner's cannot-cast sources include them.
+        const enemyAndPetIds = new Set<string>([
+          ...enemyIds,
+          ...enemyPets.map((u: any) => u.id as string),
+        ]);
         const teamOffensiveCds: Array<
-          IMajorCooldownInfo & { ownerName: string }
+          IMajorCooldownInfo & {
+            ownerName: string;
+            owner: any;
+            ownerEnemyIds: Set<string>;
+            matchStartMs: number;
+          }
         > = [];
         for (const f of friends) {
           try {
@@ -1744,7 +1755,15 @@ function teamPlayEvents(
               // unsynced-burst's input (retired, flag false) — if that type
               // ever returns it must return on the canonical table too.
               if (!OFFENSIVE_CD_SPELL_IDS.has(String(cd.spellId))) continue;
-              teamOffensiveCds.push({ ...cd, ownerName: f.name });
+              teamOffensiveCds.push({
+                ...cd,
+                ownerName: f.name,
+                // B3i / B3iii (2026-09-25): who can press it, for the
+                // shared evaluateSyncWindow feasibility + active-span test
+                owner: f,
+                ownerEnemyIds: enemyAndPetIds,
+                matchStartMs: combat.startTime,
+              });
             }
           } catch {
             /* this friend's CD ledger not computable → their CDs absent */

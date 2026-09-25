@@ -114,13 +114,23 @@ describe("deriveUncoveredHighlights —— 真实 fixture 集成", () => {
     // Avenging Wrath (corpus floor exactly 60 s, n = 161), so it is ready
     // during the 85 s Freezing Trap on the enemy healer and a
     // missed-sync-window anchor now covers 80–90.
+    // Reliability audit B3 (2026-09-25): that anchor is gone again, and
+    // rightly — the Ret paladin was CC'd 83.2–88.1 and 86.1–89.1, then again
+    // from 89.2, so of the 82.2–90.0 lock (Intimidation, now credited by C6,
+    // → Freezing Trap) only ~0.1 s was free: Avenging Wrath was never
+    // pressable there (evaluateSyncWindow's owner-could-act gate,
+    // REACTION_WINDOW_S). 80–90 is uncovered again.
     expect(coverage.filter((c) => !c.covered).map((c) => c.window)).toEqual([
       "0-20",
       "10-30",
+      "80-90",
     ]);
 
     const highlights = deriveUncoveredHighlights(m, durationS, anchors);
-    expect(highlights.map((h) => h.range)).toEqual([{ fromS: 0, toS: 30 }]);
+    expect(highlights.map((h) => h.range)).toEqual([
+      { fromS: 0, toS: 30 },
+      { fromS: 80, toS: 90 },
+    ]);
   });
 
   it("零亮点(零噪音):锚点每 10s 密布全场 → 每个滑窗 ±5s 容差内必有锚点,全丢", () => {

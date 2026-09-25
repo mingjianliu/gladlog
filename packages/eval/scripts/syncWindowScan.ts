@@ -16,6 +16,14 @@
  *   same as signalOutcomeProbe's healer-locked-window).
  * kill15 = enemy death in (from, from+15].
  *
+ * 2026-09-25 (reliability audit B3): the eligibility / ready / entered tests
+ * are no longer copied here — the scan runs the product's own
+ * `mergeHealerCcWindows` + `syncWindowEligible` + `evaluateSyncWindow`
+ * (cooldownTiming.ts): one continuous lock = one window (B3ii), a ready CD
+ * needs an owner free for ≥ REACTION_WINDOW_S of it (B3i), and a burst still
+ * active at the lock counts as entered (B3iii); the DR labels the windows are
+ * filtered on come from the apply-order engine (B3iv).
+ *
  * scan   tsx syncWindowScan.ts scan --manifest <f> --ledger <dir> --out <f.jsonl> [--offset N] [--limit N]
  * report tsx syncWindowScan.ts report --in <f.jsonl>
  */
@@ -27,8 +35,10 @@ import {
 import {
   enemyHealerCcWindows,
   enemyMinHpPctInWindow,
+  evaluateSyncWindow,
+  mergeHealerCcWindows,
+  syncWindowEligible,
 } from "@gladlog/analysis/src/analysis/candidates/cooldownTiming";
-import { cdAvailableAt } from "@gladlog/analysis/src/utils/cooldowns";
 import { PATCH_121_GOLIVE_EPOCH_MS } from "@gladlog/analysis/src/utils/drAnalysis";
 import { OFFENSIVE_CD_SPELL_IDS } from "@gladlog/analysis/src/utils/spellDanger";
 import { GladLogParser } from "@gladlog/parser";
@@ -37,7 +47,7 @@ import {
   toLegacyMatch,
   toLegacyShuffle,
 } from "@gladlog/parser-compat";
-import { appendFileSync, existsSync, readdirSync,readFileSync } from "fs";
+import { appendFileSync, existsSync, readdirSync, readFileSync } from "fs";
 import { basename, join } from "path";
 import { gunzipSync } from "zlib";
 
@@ -60,7 +70,9 @@ function loadLedger(dir: string): Map<string, any> {
       try {
         const r = JSON.parse(line);
         if (r.id) out.set(String(r.id), r);
-      } catch { /* torn/unparseable — skip */ }
+      } catch {
+        /* torn/unparseable — skip */
+      }
     }
   }
   return out;
@@ -79,7 +91,9 @@ async function scan(): Promise<void> {
       if (!l.trim()) continue;
       try {
         done.add(JSON.parse(l).matchId);
-      } catch { /* torn/unparseable — skip */ }
+      } catch {
+        /* torn/unparseable — skip */
+      }
     }
   let files = readFileSync(manifestPath, "utf8")
     .split("\n")
@@ -141,40 +155,42 @@ async function scan(): Promise<void> {
         .sort((a: number, b: number) => a - b);
       let windows: any[];
       try {
-        windows = enemyHealerCcWindows(friends, enemies, combat);
+        windows = mergeHealerCcWindows(
+          enemyHealerCcWindows(friends, enemies, combat),
+        );
       } catch {
         continue;
       }
+      const enemyIdSet = new Set<string>(enemies.map((u: any) => u.id));
+      const enemyAndPetIds = new Set<string>([
+        ...enemyIdSet,
+        ...units
+          .filter((u: any) => u.ownerId && enemyIdSet.has(u.ownerId))
+          .map((u: any) => u.id as string),
+      ]);
       if (!windows.length) continue;
       const teamCds: any[] = [];
       for (const f of friends) {
         try {
           for (const cd of extractMajorCooldowns(f, combat)) {
             if (!OFFENSIVE_CD_SPELL_IDS.has(String(cd.spellId))) continue;
-            teamCds.push(cd);
+            teamCds.push({
+              ...cd,
+              owner: f,
+              ownerEnemyIds: enemyAndPetIds,
+              matchStartMs: startMs,
+            });
           }
-        } catch { /* torn/unparseable — skip */ }
+        } catch {
+          /* torn/unparseable — skip */
+        }
       }
       for (const w of windows) {
+        if (!syncWindowEligible(w, enemyDeathS)) continue;
         const t = toRenderSecond(w.fromSeconds);
         const durR = toRenderSecond(w.toSeconds) - t;
-        if (durR < 3) continue;
-        if (t < 30) continue;
-        if (
-          enemyDeathS.some((d) => d >= w.fromSeconds && d <= w.toSeconds)
-        )
-          continue;
-        const ready = teamCds.filter((cd) =>
-          cdAvailableAt(cd, w.fromSeconds),
-        );
+        const { ready, entered } = evaluateSyncWindow(w, teamCds);
         if (!ready.length) continue;
-        const entered = teamCds.some((cd) =>
-          cd.casts.some(
-            (c: any) =>
-              c.timeSeconds >= w.fromSeconds - 2 &&
-              c.timeSeconds <= w.toSeconds,
-          ),
-        );
         const kill15 = enemyDeathS.some(
           (d) => d > w.fromSeconds && d <= w.fromSeconds + 15,
         );
@@ -186,7 +202,9 @@ async function scan(): Promise<void> {
             w.fromSeconds,
             w.toSeconds,
           );
-        } catch { /* torn/unparseable — skip */ }
+        } catch {
+          /* torn/unparseable — skip */
+        }
         lines.push(
           JSON.stringify({
             matchId,
@@ -223,10 +241,20 @@ function report(): void {
     if (!l.trim()) continue;
     try {
       rows.push(JSON.parse(l));
-    } catch { /* torn/unparseable — skip */ }
+    } catch {
+      /* torn/unparseable — skip */
+    }
   }
   const pctBin = (p: number | null): string =>
-    p === null ? "?" : p < 30 ? "<30" : p < 70 ? "30-70" : p < 90 ? "70-90" : ">=90";
+    p === null
+      ? "?"
+      : p < 30
+        ? "<30"
+        : p < 70
+          ? "30-70"
+          : p < 90
+            ? "70-90"
+            : ">=90";
   const agg = (rs: any[]): string => {
     const ent = rs.filter((r) => r.entered);
     const un = rs.filter((r) => !r.entered);
@@ -235,10 +263,8 @@ function report(): void {
       d ? ((100 * n) / d).toFixed(1) + "%" : "—";
     return `n=${rs.length} entered=${pc(ent.length, rs.length)} | kill15·entered=${pc(k(ent), ent.length)} (${k(ent)}/${ent.length}) kill15·unentered=${pc(k(un), un.length)} (${k(un)}/${un.length}) Δ=${
       ent.length && un.length
-        ? (
-            (100 * k(ent)) / ent.length -
-            (100 * k(un)) / un.length
-          ).toFixed(1) + "pp"
+        ? ((100 * k(ent)) / ent.length - (100 * k(un)) / un.length).toFixed(1) +
+          "pp"
         : "—"
     }`;
   };
@@ -250,9 +276,7 @@ function report(): void {
   console.log("\n## per bracket x rating percentile bin");
   for (const b of brackets)
     for (const bin of ["<30", "30-70", "70-90", ">=90"]) {
-      const rs = rows.filter(
-        (r) => r.bracket === b && pctBin(r.pct) === bin,
-      );
+      const rs = rows.filter((r) => r.bracket === b && pctBin(r.pct) === bin);
       if (rs.length) console.log(`${b} pct ${bin}: ${agg(rs)}`);
     }
   console.log("\n## density");
@@ -275,11 +299,18 @@ function emitTable(): void {
     if (!l.trim()) continue;
     try {
       rows.push(JSON.parse(l));
-    } catch { /* torn/unparseable — skip */ }
+    } catch {
+      /* torn/unparseable — skip */
+    }
   }
   const cells: Record<
     string,
-    { nEntered: number; nUnentered: number; killEntered: number; killUnentered: number }
+    {
+      nEntered: number;
+      nUnentered: number;
+      killEntered: number;
+      killUnentered: number;
+    }
   > = {};
   for (const r of rows) {
     const c = (cells[r.bracket] ??= {
@@ -313,7 +344,7 @@ function emitTable(): void {
           generatedAt: new Date().toISOString().slice(0, 10),
           windows: rows.length,
           predicate:
-            "eligible window: enemyHealerCcWindows, rendered dur>=3s, rendered t>=30s, no enemy death in-window, >=1 canonical OFFENSIVE_CD_SPELL_IDS ready at window start; entered = canonical offensive CD cast in [from-2s, to]; kill15 = enemy death in (from, from+15s]",
+            "eligible window: enemyHealerCcWindows merged per healer (mergeHealerCcWindows: one continuous lock = one window), syncWindowEligible (rendered dur>=3s, rendered t>=30s, no enemy death in-window), evaluateSyncWindow: >=1 canonical OFFENSIVE_CD_SPELL_IDS off cooldown at window start whose owner was free to act >= REACTION_WINDOW_S of the lock; entered = such a CD pressed in [from-2s, to] or still active (buffFullDurationForCaster) at the lock start; kill15 = enemy death in (from, from+15s]",
         },
         cells: outCells,
       },
