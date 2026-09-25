@@ -100,6 +100,7 @@
     "test/cooldowns.healerSaveCdRoster.test.ts",
     "test/core-a.test.ts",
     "test/counterfactual.test.ts",
+    "test/crisisSchoolCoverage.test.ts",
     "test/curatedFacts.test.ts",
     "test/curatedIdRegistry.test.ts",
     "test/data.test.ts",

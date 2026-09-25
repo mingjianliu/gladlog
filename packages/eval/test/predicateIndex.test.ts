@@ -994,6 +994,21 @@ const INDEX: PredicateRow[] = [
     mod: dispelAnalysis,
   },
   {
+    file: `${A}/analysis/crisisDecisionPoints.ts`,
+    symbol: "schoolShareCoveredBy",
+    mod: crisisDecisionPoints,
+  },
+  {
+    file: `${A}/analysis/candidates/cooldownTiming.ts`,
+    symbol: "coversCrisisSchool",
+    mod: cooldownTiming,
+  },
+  {
+    file: `${A}/analysis/candidates/cooldownTiming.ts`,
+    symbol: "SCHOOL_SAVE_MIN_SHARE",
+    mod: cooldownTiming,
+  },
+  {
     file: `${A}/data/spellTags.ts`,
     symbol: "officialSilenceIds",
     mod: spellTags,

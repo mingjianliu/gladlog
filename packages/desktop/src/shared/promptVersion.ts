@@ -1130,4 +1130,9 @@
 //  no "[totem/pet]" tag on a controlled player. 605 files: missed-cleanse
 //  −18 Mind Control windows, +5 refills, +1 (a Spellsteal-able miss);
 //  gates unchanged.
-export const PROMPT_VERSION = 143;
+//  v144 (2026-09-25, reliability round 2 W1e, school half): cd-hoarded
+//  names a school-limited save (MITIGATION_TABLE mask: Blessing of
+//  Protection, Spellwarding, Cloak, Anti-Magic Zone) only when it covers
+//  ≥ 50 % of the crisis's 2 s of damage. 605 files: cd-hoarded −104
+//  (+20 refills); kept lines drop the mismatched save; context unchanged.
+export const PROMPT_VERSION = 144;

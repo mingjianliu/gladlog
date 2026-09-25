@@ -47,7 +47,12 @@ import {
 import { renderedWindowSeconds, toRenderSecond } from "../../utils/renderGrid";
 import { OFFENSIVE_CD_SPELL_IDS } from "../../utils/spellDanger";
 import { type MatchThreatLevel } from "../../utils/threatAssessment";
-import { type DecisionPoint, RESPONSE_PRE_MS } from "../crisisDecisionPoints";
+import { MITIGATION_TABLE } from "../../data/mitigationData";
+import {
+  type DecisionPoint,
+  RESPONSE_PRE_MS,
+  schoolShareCoveredBy,
+} from "../crisisDecisionPoints";
 import { fmtFactNum as fmt } from "../factFormat";
 import { CandidateEvent } from "../types";
 import { filterIntentGuardEvidence, formatAttemptedFact } from "./shared";
@@ -706,6 +711,27 @@ const CD_HOARD_CAP = 2;
 export const CD_HOARD_RESPONSE_S = 5;
 
 /**
+ * A school-limited save (its `MITIGATION_TABLE` school mask is not all
+ * schools) is a relevant "ready" save for a crisis only when it covers at
+ * least this share of the crisis's 2 s of damage — a majority, so the save
+ * named would have stopped most of what put the unit there. Editorial, not
+ * measured; the audited misses sat far from it (Blessing of Protection vs
+ * 22 % and 0 % physical, 06bb9860 / a5a8d31b).
+ */
+export const SCHOOL_SAVE_MIN_SHARE = 0.5;
+const ALL_SCHOOLS = 0x7f;
+
+export function coversCrisisSchool(
+  spellId: string,
+  point: Pick<DecisionPoint, "dmg2sBySchool">,
+): boolean {
+  const mask = MITIGATION_TABLE[spellId]?.schoolMask;
+  if (mask === undefined || (mask & ALL_SCHOOLS) === ALL_SCHOOLS) return true;
+  const share = schoolShareCoveredBy(point, mask);
+  return share === null || share >= SCHOOL_SAVE_MIN_SHARE;
+}
+
+/**
  * Corpus-derived outcome reference for cd-hoarded (2026-08-30, GH #34):
  * 3,000-match outcome probe "cd-hoarded"
  * (eval-private/reports/signal-outcomes-2026-08-30/report.md). Decision
@@ -766,7 +792,7 @@ export interface ICdHoardedCrisisSource {
     | "inCC"
     | "dangerous"
   > &
-    Partial<Pick<DecisionPoint, "responses">>)[];
+    Partial<Pick<DecisionPoint, "responses" | "dmg2sBySchool">>)[];
   /** Reliability audit A2 (2026-09-24): the major defensives friendlies put
    * on the crisis unit (`majorWallIntervals`, the same record the
    * `[STACKED DEFENSIVES]` line reads). A wall up at the crossing, whoever
@@ -1003,8 +1029,16 @@ export function cdHoardedEvents(
       // The ACCUSATION set: a response-only save (Barkskin / Frenzied
       // Regeneration, user ruling 2026-09-25 「不指控」) is never named as
       // "ready" — it still answers the crisis through `spent` below.
+      // W1e (reliability round 2): a save that only blocks some schools
+      // (Blessing of Protection physical, Spellwarding / Cloak of Shadows
+      // magic — `MITIGATION_TABLE`'s official school mask) is named only when
+      // it covers at least SCHOOL_SAVE_MIN_SHARE of the 2 s of damage that
+      // made this a crisis. The response set below is untouched.
       const ready = offCooldown.filter(
-        (cd) => !cd.responseOnly && cdReadyInTimeAt(cd, p.tSec),
+        (cd) =>
+          !cd.responseOnly &&
+          cdReadyInTimeAt(cd, p.tSec) &&
+          coversCrisisSchool(cd.spellId, p),
       );
       if (ready.length === 0) {
         if (tracing)

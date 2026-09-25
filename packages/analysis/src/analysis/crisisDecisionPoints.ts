@@ -56,6 +56,29 @@ export const RESPONSE_WINDOW_MS = 3000;
 /** A response landed just before the sampled crossing still counts. */
 export const RESPONSE_PRE_MS = 1500;
 export const DMG_WINDOW_MS = 2000;
+
+/**
+ * Share of a crisis point's `DMG_WINDOW_MS` damage whose school a
+ * mitigation `schoolMask` covers (`MITIGATION_TABLE`, the log's own school
+ * bits). Null when the window recorded no damage (no claim either way).
+ * Reliability round 2 W1e: cd-hoarded offered Blessing of Protection
+ * (physical only) for crises that were 78 % and 100 % magic (06bb9860,
+ * a5a8d31b).
+ */
+export function schoolShareCoveredBy(
+  point: { dmg2sBySchool?: Record<string, number> },
+  schoolMask: number,
+): number | null {
+  const by = point.dmg2sBySchool;
+  if (!by) return null;
+  let total = 0;
+  let covered = 0;
+  for (const [school, amount] of Object.entries(by)) {
+    total += amount;
+    if ((Number(school) & schoolMask) !== 0) covered += amount;
+  }
+  return total > 0 ? covered / total : null;
+}
 export const ENEMY_BURST_LOOKBACK_MS = 8000;
 /** Gate 2: an interrupt landing on the owner this close before the crossing
  * means the school is locked — handed to `kick-eaten`, never double-charged. */
@@ -134,6 +157,13 @@ export interface DecisionPoint {
    * before 2026-08-30 */
   hpPct: number;
   dmg2s: number;
+  /**
+   * The same `DMG_WINDOW_MS` damage as `dmg2s` (same events, same amounts),
+   * summed per log school mask (`spellSchoolId`, 0x1 = physical; a swing is
+   * 0x1). Read by `schoolShareCoveredBy`; the reference tables never read
+   * it. Optional so hand-built fixtures need not carry it.
+   */
+  dmg2sBySchool?: Record<string, number>;
   attackers2s: number;
   enemyBurst: boolean;
   inCC: boolean;
@@ -686,6 +716,7 @@ export function crisisDecisionPoints(
     t: d.timestamp,
     src: d.srcUnitId,
     a: Math.abs(d.effectiveAmount ?? d.amount ?? 0),
+    school: Number.parseInt(String(d.spellSchoolId ?? "0x0"), 16) || 0,
   }));
   const healIn = ((owner.healIn ?? []) as any[]).map((h) => ({
     t: h.timestamp,
@@ -962,6 +993,10 @@ export function crisisDecisionPoints(
       tSec,
       hpPct: anchor.hpPct,
       dmg2s: dmg2sRounded,
+      dmg2sBySchool: recent.reduce<Record<string, number>>((m, d) => {
+        m[String(d.school)] = (m[String(d.school)] ?? 0) + d.a;
+        return m;
+      }, {}),
       attackers2s: attackers.size,
       enemyBurst: enemyBurstCasts.some(
         (b) => b > t - ENEMY_BURST_LOOKBACK_MS && b <= t,
