@@ -206,6 +206,13 @@ export interface BuildMatchTimelineParams {
   enemyDispelSummary?: IDispelSummary;
   /** Per-enemy CC-received summaries (our CC landing on enemies; the owner's already have cast lines, skipped at render). */
   enemyCCSummaries?: IPlayerCCTrinketSummary[];
+  /** Owner CC instances whose [CC ON ENEMY] line is kept even when the spell
+   * has a [YOU] [CC] cast line — the QUICK FOLLOW-UPS evidence (GH #69). */
+  keepOwnerCcOnEnemy?: ReadonlyArray<{
+    targetName: string;
+    spellId: string;
+    ccAtS: number;
+  }>;
   /** BACKLOG #36(e): our side's squandered CC breaks (our damage broke CC we
    * had landed on an enemy, with meaningful time remaining). Source:
    * `analyzeCcBreaks(...).friendlySquander` — already filtered by
@@ -2627,10 +2634,18 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
         // The owner's own tracked CC normally renders on its [YOU] [CC] cast
         // line only; that line is per cast, not per target, so a tremor break
         // keeps this per-target line.
+        // A QUICK FOLLOW-UPS line cites this landing, so it keeps its line.
+        const keptForFollowUp = (params.keepOwnerCcOnEnemy ?? []).some(
+          (k) =>
+            k.targetName === summary.playerName &&
+            k.spellId === cc.spellId &&
+            k.ccAtS === cc.atSeconds,
+        );
         if (
           cc.sourceName === owner.name &&
           ownerRenderedCcIds.has(cc.spellId) &&
-          !enemyTremor
+          !enemyTremor &&
+          !keptForFollowUp
         )
           continue;
         const durStr = enemyTremor

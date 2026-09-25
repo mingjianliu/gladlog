@@ -224,6 +224,9 @@ export function buildFindingsPrompt(
     // GH #77 part 2 (user 2026-09-24, three codex astra rounds): CC USE counts
     // and [CC BOOKMARK] lines point at moments to review — never a missed cast.
     `- A CC USE [CC BOOKMARK] only points at a moment worth reviewing ("worth a look at whether Blind on their healer fit your go there"). It is NOT a missed cast and NOT a mistake: never say the player should have cast it, never count bookmarks against them, and never call the player passive or aggressive from the CC USE counts.`,
+    // GH #69 (user 2026-09-24): a [FORCED TRINKET] line credits the owner's
+    // follow-up landing right after an enemy trinket — observed timing only.
+    `- A QUICK FOLLOW-UPS [FORCED TRINKET] line may be credited as observed ("right after their trinket went, your Fear landed and held"). Credit only that timing: not forcing the trinket (the team's attempt), not reacting to it, not a "full" CC, and never a kill or a win.`,
     // GH #103 class B (2026-09-23): 14 of 32 universal claims in the Opus 5.5
     // baseline were contradicted by the prompt ("the only big cooldown you had
     // left was Spirit Link" beside a [RES] listing Astral Shift and Nature's

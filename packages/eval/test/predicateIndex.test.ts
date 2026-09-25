@@ -86,6 +86,7 @@ import * as cannotCastIntervals from "@gladlog/analysis/src/utils/cannotCastInte
 import * as castParam from "@gladlog/analysis/src/utils/castParam";
 import * as ccTrinketAnalysis from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
 import * as ccUse from "@gladlog/analysis/src/context/ccUse";
+import * as forcedTrinket from "@gladlog/analysis/src/context/forcedTrinket";
 import * as peelOptions from "@gladlog/analysis/src/context/peelOptions";
 import * as ccTargetState from "@gladlog/analysis/src/utils/ccTargetState";
 import * as spellMechanics from "@gladlog/analysis/src/utils/spellMechanics";
@@ -1430,6 +1431,46 @@ const INDEX: PredicateRow[] = [
   {
     file: `${E}/quality/promptQualityCheck.ts`,
     symbol: "checkCcBookmarkConsistency",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${A}/context/forcedTrinket.ts`,
+    symbol: "forcedTrinketFollowUps",
+    mod: forcedTrinket,
+  },
+  {
+    file: `${A}/context/forcedTrinket.ts`,
+    symbol: "FORCED_FOLLOWUP_MAX_GAP_S",
+    mod: forcedTrinket,
+  },
+  {
+    file: `${A}/context/forcedTrinket.ts`,
+    symbol: "FORCED_FOLLOWUP_MIN_DUR_S",
+    mod: forcedTrinket,
+  },
+  {
+    file: `${A}/context/forcedTrinket.ts`,
+    symbol: "FORCED_FOLLOWUP_CAP",
+    mod: forcedTrinket,
+  },
+  {
+    file: `${A}/context/forcedTrinket.ts`,
+    symbol: "forcedFollowUpGapOk",
+    mod: forcedTrinket,
+  },
+  {
+    file: `${A}/context/forcedTrinket.ts`,
+    symbol: "forcedFollowUpDurOk",
+    mod: forcedTrinket,
+  },
+  {
+    file: `${A}/context/forcedTrinket.ts`,
+    symbol: "renderedInsideSpan",
+    mod: forcedTrinket,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkForcedTrinketConsistency",
     mod: promptQualityCheck,
   },
   {

@@ -973,4 +973,14 @@
 //  pre-press −237 (+62 cap substitutions), wall-active −280 (+72); every
 //  addition is a cap substitution; all other candidate ids and the match
 //  contexts byte-identical.
-export const PROMPT_VERSION = 122;
+//  v123 (2026-09-25, GH #69 v1, user "1可以 3的话我觉得有点过于宽了" +
+//  timeline only): QUICK FOLLOW-UPS — one [FORCED TRINKET] line per round
+//  when an enemy spent their PvP trinket inside our kill attempt on them and
+//  the owner's own CC landed on that enemy ≤ 3 displayed seconds later
+//  (≥ 2 s observed). Credit is for the landing timing only — never forcing,
+//  reacting, a "full" CC, or a kill/win. The selected CC keeps its
+//  [CC ON ENEMY] aura line (the gate's only evidence). New gate
+//  checkForcedTrinketConsistency. 605 files / 3,520 prompts: 146 lines
+//  (dps 95/2,263 = 4.2 %, healer 51/1,257 = 4.1 %), 56 kept aura lines,
+//  nothing else in any context changed; candidate counts unchanged; gate 0.
+export const PROMPT_VERSION = 123;

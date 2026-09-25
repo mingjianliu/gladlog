@@ -94,6 +94,10 @@ import { warlockPetFunction } from "../utils/warlockPet";
 import { buildCriticalWindowSet } from "./criticalWindows";
 import { formatObservedConsequences } from "./observedConsequences";
 import { ccUseSummary, formatCcUse } from "./ccUse";
+import {
+  forcedTrinketFollowUps,
+  formatForcedTrinketFollowUps,
+} from "./forcedTrinket";
 import { formatPeelOptions, peelOptionsForDeaths } from "./peelOptions";
 import {
   formatDecisiveCounterfactualLine,
@@ -740,6 +744,22 @@ export function buildMatchContext(
     /* no aura intervals → no [STACKED DEFENSIVES] lines */
   }
 
+  // Computed once: the [KILL ATTEMPTS] block renders these attempts and the
+  // QUICK FOLLOW-UPS lines cite them by span (GH #69). The follow-ups are
+  // picked before the timeline so it keeps the selected CC's [CC ON ENEMY]
+  // line — the aura evidence the gate checks (an owner's tracked CC otherwise
+  // renders on its [YOU] [CC] cast line only).
+  const killAttempts = extractKillAttempts(
+    friends,
+    enemies as ICombatUnit[],
+    combat,
+  );
+  const forcedFollowUps = forcedTrinketFollowUps({
+    owner: owner as ICombatUnit,
+    enemyCC: enemyCCSummaries,
+    killAttempts,
+  });
+
   const timelineText = buildMatchTimeline({
     owner: owner as ICombatUnit,
     ownerSpec,
@@ -751,6 +771,7 @@ export function buildMatchContext(
     dispelSummary,
     enemyDispelSummary,
     enemyCCSummaries,
+    keepOwnerCcOnEnemy: forcedFollowUps,
     friendlyDeaths,
     enemyDeaths,
     pressureWindows,
@@ -844,10 +865,9 @@ export function buildMatchContext(
   // contexts contained the block while the attempt-into-trinket CANDIDATE
   // (menu path, independent) worked, which is why the 2026-08-19 smoke
   // passed without noticing. Wired here alongside the v2 burst anchor.
+  // `killAttempts` is computed once, before the timeline (GH #69).
   {
-    const attemptLines = formatKillAttemptsForContext(
-      extractKillAttempts(friends, enemies as ICombatUnit[], combat),
-    );
+    const attemptLines = formatKillAttemptsForContext(killAttempts);
     if (attemptLines.length > 0) {
       tLines.push("");
       attemptLines.forEach((l) => tLines.push(l));
@@ -920,6 +940,23 @@ export function buildMatchContext(
     if (ccUseLines.length > 0) {
       tLines.push("");
       ccUseLines.forEach((l) => tLines.push(l));
+    }
+  }
+
+  // GH #69 (2026-09-24): an enemy trinket inside our kill attempt, then the
+  // owner's own CC landing on them within 3 s — timeline-only credit.
+  {
+    const followUpLines = formatForcedTrinketFollowUps(
+      forcedFollowUps,
+      unitLabeler(
+        [...friends, ...enemies] as ICombatUnit[],
+        playerIdMap,
+        enemyIdMap,
+      ).enemy,
+    );
+    if (followUpLines.length > 0) {
+      tLines.push("");
+      followUpLines.forEach((l) => tLines.push(l));
     }
   }
 

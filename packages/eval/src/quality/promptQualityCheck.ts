@@ -77,6 +77,13 @@ import {
   CC_USE_MIN_S,
   CC_USE_MIN_SHARE,
 } from "@gladlog/analysis/src/context/ccUse";
+import {
+  FORCED_FOLLOWUP_CAP,
+  FORCED_FOLLOWUP_MAX_GAP_S,
+  forcedFollowUpDurOk,
+  forcedFollowUpGapOk,
+  renderedInsideSpan,
+} from "@gladlog/analysis/src/context/forcedTrinket";
 import { canHelpAnotherUnit } from "@gladlog/analysis/src/utils/cooldowns";
 import { fmtTime } from "@gladlog/analysis/src/utils/renderGrid";
 import fs from "fs-extra";
@@ -1142,6 +1149,102 @@ export function checkCcBookmarkConsistency(lines: string[]): string[] {
     if (early)
       failures.push(`CC USE 计数说 ${sp} 首次 ${fmtTime(first)},但 ${fmtTime(early.at)} 已有 [YOU] [CC]`);
   }
+  return failures;
+}
+
+const FORCED_TRINKET_DATA_LINE = /^\s*\d+:\d{2}\s+\[FORCED TRINKET\]/;
+const FORCED_TRINKET_LINE =
+  /^\s*(\d+):(\d{2})\s+\[FORCED TRINKET\]\s+(\S+) used PvP trinket inside your team's kill attempt \[(\d+):(\d{2})–(\d+):(\d{2})\] on them → (\d+):(\d{2}) your (.+?) landed on (\S+) (\d+) s later \((\d+)s\)$/;
+const UNIT_LEGEND_LINE = /<unit id="(\d+)" name="([^"]+)"[^>]*role="([^"]+)"/;
+const ENEMY_TRINKET_AT_LINE = /^\s*(\d+):(\d{2})\s+\[ENEMY TRINKET\]\s+(\S+) used PvP trinket/;
+const KILL_ATTEMPT_SPAN_LINE = /^\s*\[(\d+):(\d{2})–(\d+):(\d{2})\] on (\S+) — /;
+
+/**
+ * `[FORCED TRINKET]` quick follow-ups (33rd hardFailure class, GH #69, user
+ * 2026-09-24 after two codex astra rounds). The producer
+ * (`context/forcedTrinket.ts`) keeps an enemy PvP trinket that fell inside one
+ * of our kill attempts on that enemy, followed by the log owner's own CC
+ * landing on them shortly after and lasting long enough; at most
+ * FORCED_FOLLOWUP_CAP per round. The gap, duration and span-membership
+ * predicates are the producer's own exports. The gate fails a malformed data
+ * line, and any line whose trinket has no same-second [ENEMY TRINKET] on that
+ * unit, whose attempt span has no [KILL ATTEMPTS] line on that unit (resolved
+ * through the `<unit>` legend) containing the trinket, whose follow-up has no
+ * [CC ON ENEMY] line by the log owner on that unit, with that spell and that
+ * duration — `(Ns)` or the Tremor form `ended this CC after Ns` — at that
+ * second, whose stated gap is not the rendered difference or fails the
+ * window, or whose duration fails the door; and more lines than the cap.
+ * Only the aura line counts as evidence: the producer makes the timeline keep
+ * it for an owner CC that otherwise renders on its [YOU] [CC] cast line only,
+ * and a cast line shows neither the landing nor the duration (codex astra
+ * implementation review: with a cast-line fallback, a 99 s claim passed).
+ */
+export function checkForcedTrinketConsistency(lines: string[]): string[] {
+  const nameOfId = new Map<string, string>();
+  let ownerId: string | null = null;
+  const trinkets: Array<{ at: number; unit: string }> = [];
+  const attempts: Array<{ from: number; to: number; name: string }> = [];
+  for (const line of lines) {
+    const u = line.match(UNIT_LEGEND_LINE);
+    if (u) {
+      nameOfId.set(u[1]!, u[2]!);
+      if (u[3] === "log owner") ownerId = u[1]!;
+    }
+    const t = line.match(ENEMY_TRINKET_AT_LINE);
+    if (t) trinkets.push({ at: Number(t[1]) * 60 + Number(t[2]), unit: t[3]! });
+    const a = line.match(KILL_ATTEMPT_SPAN_LINE);
+    if (a)
+      attempts.push({
+        from: Number(a[1]) * 60 + Number(a[2]),
+        to: Number(a[3]) * 60 + Number(a[4]),
+        name: a[5]!,
+      });
+  }
+  const failures: string[] = [];
+  let count = 0;
+  lines.forEach((line, i) => {
+    if (!FORCED_TRINKET_DATA_LINE.test(line)) return;
+    count++;
+    const m = line.match(FORCED_TRINKET_LINE);
+    if (!m) {
+      failures.push(`line ${i + 1}: [FORCED TRINKET] 格式不符 —— ${line.trim().slice(0, 160)}`);
+      return;
+    }
+    const tS = Number(m[1]) * 60 + Number(m[2]);
+    const unit = m[3]!;
+    const aFrom = Number(m[4]) * 60 + Number(m[5]);
+    const aTo = Number(m[6]) * 60 + Number(m[7]);
+    const cS = Number(m[8]) * 60 + Number(m[9]);
+    const spell = m[10]!;
+    const landedOn = m[11]!;
+    const gap = Number(m[12]);
+    const dur = Number(m[13]);
+    const why: string[] = [];
+    if (landedOn !== unit) why.push("后续控制的目标不是交饰品的人");
+    if (gap !== cS - tS) why.push(`写的间隔 ${gap} 秒不等于渲染时间差 ${cS - tS} 秒`);
+    if (!forcedFollowUpGapOk(tS, cS))
+      why.push(`间隔超出 0–${FORCED_FOLLOWUP_MAX_GAP_S} 秒`);
+    if (!forcedFollowUpDurOk(dur)) why.push(`时长 ${dur} 秒低于门槛`);
+    if (!trinkets.some((t) => t.at === tS && t.unit === unit))
+      why.push(`${fmtTime(tS)} 没有 ${unit} 的 [ENEMY TRINKET] 行`);
+    const id = unit.match(/^(\d+)\(/)?.[1];
+    const name = id ? nameOfId.get(id) : undefined;
+    if (!name) why.push(`<unit> 图例里查不到 ${unit}`);
+    else if (!attempts.some((a) => a.name === name && a.from === aFrom && a.to === aTo && renderedInsideSpan(tS, a.from, a.to)))
+      why.push(`没有 [${fmtTime(aFrom)}–${fmtTime(aTo)}] on ${name} 且包含饰品时间的 [KILL ATTEMPTS] 行`);
+    const esc = spell.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const ccOn = ownerId
+      ? new RegExp(
+          `^\\s*${fmtTime(cS)}\\s+\\[CC ON ENEMY\\]\\s+${unit.replace(/[()]/g, "\\$&")} ← ${esc} \\(by ${ownerId}\\([^)]*\\)\\)(?: \\(${dur}s\\)$| \\| enemy Tremor Totem from \\S+ ended this CC after ${dur}s )`,
+        )
+      : null;
+    if (!ccOn || !lines.some((l) => ccOn.test(l)))
+      why.push(`${fmtTime(cS)} 没有你把 ${spell} 放到 ${unit} 身上、时长 ${dur} 秒的 [CC ON ENEMY] 行`);
+    if (why.length)
+      failures.push(`line ${i + 1}: [FORCED TRINKET] 自相矛盾(${why.join(";")})—— ${line.trim().slice(0, 160)}`);
+  });
+  if (count > FORCED_FOLLOWUP_CAP)
+    failures.push(`[FORCED TRINKET] ${count} 条,超过上限 ${FORCED_FOLLOWUP_CAP}`);
   return failures;
 }
 
@@ -2640,6 +2743,7 @@ export function checkMatch(
   hardFailures.push(...checkCcAvoidedLandedConsistency(lines));
   hardFailures.push(...checkPeelOptionConsistency(lines));
   hardFailures.push(...checkCcBookmarkConsistency(lines));
+  hardFailures.push(...checkForcedTrinketConsistency(lines));
 
   return {
     ordinal: entry.ordinal,

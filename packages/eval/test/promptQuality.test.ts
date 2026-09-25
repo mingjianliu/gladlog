@@ -12,6 +12,7 @@ import {
   checkCcAvoidedLandedConsistency,
   checkCcBookmarkConsistency,
   checkDuringExternalConsistency,
+  checkForcedTrinketConsistency,
   checkHeaderHpPromise,
   checkMatch,
   checkPeelOptionConsistency,
@@ -621,6 +622,92 @@ describe("checkResNoChangeRowsPruned — a zero-loss [RES] rdy:Δ cd:— row may
         "      [RES] rdy:Δ  cd:—  focus:2  cc:3/Incapacitating Roar-2s[disorient]",
       ]),
     ).toEqual([]);
+  });
+});
+
+describe("checkForcedTrinketConsistency — [FORCED TRINKET] agrees with the trinket, attempt and CC lines (GH #69)", () => {
+  const legend = [
+    '  <unit id="1" name="Pionrag-Mal\'Ganis-US" spec="Arms Warrior" role="log owner">',
+    '  <unit id="5" name="Zenkitty-Illidan-US" spec="Discipline Priest" role="enemy">',
+  ];
+  const trinket =
+    "0:16  [ENEMY TRINKET]   5(DPriest) used PvP trinket out of Leg Sweep (by 2(MMonk)) [friendly offensive CD active] (target at 92% HP)";
+  const you =
+    "0:17  [YOU] [CC]   Intimidating Shout → 4(UDKnight) (41% HP), 5(DPriest) [2 enemies] [DR: Disorient Full]";
+  const ccOn =
+    "0:17  [CC ON ENEMY]   5(DPriest) ← Intimidating Shout (by 1(AWarrior)) (6s)";
+  const attempt =
+    "  [0:13–0:26] on Zenkitty-Illidan-US — Leg Sweep opener (Full DR), 2 stuns | opportunity: trinket up (no softer target) | team focus 31% (0.46M on target) | FAILED: target trinketed out";
+  const line =
+    "0:16  [FORCED TRINKET]  5(DPriest) used PvP trinket inside your team's kill attempt [0:13–0:26] on them → 0:17 your Intimidating Shout landed on 5(DPriest) 1 s later (6s)";
+  const ok = [...legend, trinket, you, ccOn, attempt, line];
+  const swap = (to: string) => ok.map((l) => (l === line ? to : l));
+  it("passes a consistent line", () => {
+    expect(checkForcedTrinketConsistency(ok)).toEqual([]);
+  });
+  it("needs the log owner's [CC ON ENEMY] aura line; a cast line is not evidence (codex astra)", () => {
+    expect(
+      checkForcedTrinketConsistency(ok.filter((l) => l !== ccOn)),
+    ).toHaveLength(1);
+    const byMate = ccOn.replace("(by 1(AWarrior))", "(by 2(MMonk))");
+    expect(
+      checkForcedTrinketConsistency(ok.map((l) => (l === ccOn ? byMate : l))),
+    ).toHaveLength(1);
+  });
+  it("fails an invented duration — even with the cast line present — and one the aura line contradicts", () => {
+    expect(
+      checkForcedTrinketConsistency(swap(line.replace("(6s)", "(99s)"))),
+    ).toHaveLength(1);
+    const shortAura = ccOn.replace("(6s)", "(1s)");
+    expect(
+      checkForcedTrinketConsistency(ok.map((l) => (l === ccOn ? shortAura : l))),
+    ).toHaveLength(1);
+  });
+  it("accepts the Tremor-ended aura form with the same duration", () => {
+    const tremor =
+      "0:17  [CC ON ENEMY]   5(DPriest) ← Intimidating Shout (by 1(AWarrior)) | enemy Tremor Totem from 6(RShaman) ended this CC after 6s (cut short — it had not expired)";
+    expect(
+      checkForcedTrinketConsistency(ok.map((l) => (l === ccOn ? tremor : l))),
+    ).toEqual([]);
+    expect(
+      checkForcedTrinketConsistency(
+        ok.map((l) => (l === ccOn ? tremor.replace("after 6s", "after 5s") : l)),
+      ),
+    ).toHaveLength(1);
+  });
+  it("fails a missing trinket or attempt line", () => {
+    expect(
+      checkForcedTrinketConsistency(ok.filter((l) => l !== trinket)),
+    ).toHaveLength(1);
+    expect(
+      checkForcedTrinketConsistency(ok.filter((l) => l !== attempt)),
+    ).toHaveLength(1);
+  });
+  it("fails a wrong gap, a gap over the window, a short duration, another target, malformed text, and more than the cap", () => {
+    expect(
+      checkForcedTrinketConsistency(
+        swap(line.replace("1 s later", "2 s later")),
+      ),
+    ).toHaveLength(1);
+    expect(
+      checkForcedTrinketConsistency(
+        swap(line.replace("0:16  [FORCED", "0:12  [FORCED")),
+      ),
+    ).not.toEqual([]);
+    expect(
+      checkForcedTrinketConsistency(swap(line.replace("(6s)", "(1s)"))),
+    ).toHaveLength(1);
+    expect(
+      checkForcedTrinketConsistency(
+        swap(line.replace("landed on 5(DPriest)", "landed on 4(UDKnight)")),
+      ),
+    ).toHaveLength(1);
+    expect(
+      checkForcedTrinketConsistency(swap(`${line} nonsense`)),
+    ).toHaveLength(1);
+    expect(
+      checkForcedTrinketConsistency([...ok, line]).length,
+    ).toBeGreaterThanOrEqual(1);
   });
 });
 
