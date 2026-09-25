@@ -1111,4 +1111,13 @@
 //  v140 (2026-09-25): cdTriggerPrior reference regenerated for the C2 roster
 //  (Restoration Druid Barkskin / Frenzied Regeneration cells, +6) and the
 //  GH #106 press matching (Lay on Hands counted under the live 471195).
-export const PROMPT_VERSION = 140;
+//  v141 (2026-09-25, GH #106 follow-up): the cooldown ledger drops presses
+//  after the round's endTime — a Solo Shuffle round's units carry the next
+//  round's preparation phase, whose pre-gate Stasis / Ice Barrier / Shadow
+//  Blades counted as this round's presses (Stasis recast minimum 13.5 s →
+//  85.0 s). Recast-floor table regenerated on that ledger under a lower
+//  quantile ladder (down to the training minimum, floors ≥ 0.99 skipped,
+//  ≥ 1 % and ≥ 3 recasts must beat the model on each half): 31 → 33
+//  cells, Life Cocoon now has one (held-out "certainly on cooldown" at a
+//  real press 18.6 % → 2.1 %).
+export const PROMPT_VERSION = 141;

@@ -198,8 +198,11 @@ npx tsx packages/eval/scripts/healerSaveCdScan.ts emit-table --in $R/counts.json
 #   (spell, spec), the fastest a major cooldown comes back as a fraction of the unit's modelled cooldown — the
 #   "earliest ready" bound behind the [RES] `(a–Ns)` / `(≤Ns)` forms. Corpus-driven, NOT DB2. Regenerate at season
 #   start and after any change to extractMajorCooldowns' press matching or the talent cooldown modifiers (it divides
-#   by the modelled cooldown). Floor = the highest of p2 / p1 / p0.5 on even-indexed files that the odd-indexed
-#   half breaks ≤ 3 % (the script prints the rejected cells too — read them). ~1.5 h single process over every 3rd
+#   by the modelled cooldown). Floor = the highest of p2 / p1 / p0.5 / p0.25 / minimum on even-indexed files that
+#   is < 0.99 and that the odd-indexed half breaks ≤ 3 %; a cell is emitted only when on EACH half ≥ 1 % and
+#   ≥ 3 recasts beat the modelled cooldown and some odd-file recast lands within 0.1 of the floor (the script
+#   prints the rejected cells too — read them). Add --dump <json> to keep the corpus pass; a rule-only change
+#   then re-runs in minutes with --from-dump <json> --out …. ~1.5 h single process over every 3rd
 #   file (every 10th left thinner cells — Pain Suppression, Ancient of Lore — under the 50-per-half bar; keep
 #   --offset away from any file set you evaluate on); the script writes temp-then-rename itself. Health test: packages/analysis/test/gh106Tristate.test.ts.
 # npx tsx packages/eval/scripts/cdRecastFloorScan.ts \

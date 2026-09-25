@@ -55,6 +55,8 @@ describe("cdRecastFloorGenerated.json", () => {
     string,
     {
       floorRatio: number;
+      staticBreak: number;
+      holdoutStaticBreak: number;
       nTrain: number;
       nHoldout: number;
       holdoutBelow: number;
@@ -63,7 +65,11 @@ describe("cdRecastFloorGenerated.json", () => {
   it("every floor is a real shortening that the hold-out half upheld", () => {
     for (const [key, f] of Object.entries(floors)) {
       expect(f.floorRatio, key).toBeGreaterThan(0);
-      expect(f.floorRatio, key).toBeLessThan(0.95);
+      expect(f.floorRatio, key).toBeLessThan(0.99);
+      // ≥ 1 % of recasts beat the static model on BOTH halves — one
+      // mislogged press cannot open a range on a cooldown the model gets right
+      expect(f.staticBreak, key).toBeGreaterThanOrEqual(0.01);
+      expect(f.holdoutStaticBreak, key).toBeGreaterThanOrEqual(0.01);
       expect(f.nTrain, key).toBeGreaterThanOrEqual(50);
       expect(f.nHoldout, key).toBeGreaterThanOrEqual(50);
       expect(f.holdoutBelow, key).toBeLessThanOrEqual(0.03);

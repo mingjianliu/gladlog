@@ -2178,9 +2178,17 @@ export function extractMajorCooldowns(
       matchStartMs,
     ).map((timeSeconds) => ({ timeSeconds }));
 
-    const rawCasts: ICooldownCast[] = [...castRawCasts, ...auraRawCasts].sort(
-      (a, b) => a.timeSeconds - b.timeSeconds,
-    );
+    // A Solo Shuffle round's endTime is its deciding death + 2 s, but its
+    // units keep the whole between-round gap — including the NEXT round's
+    // preparation phase, whose pre-gate presses (Stasis stocked before the
+    // gates, Blessing of the Bronze) come back reset at the gate. Counted
+    // here they were presses of this round, often 15–30 s after the real one
+    // (27 presses in 27 of 1,270 rounds on every 30th archive file, mostly
+    // Stasis; GH #106. parser/src/l3/compose.ts clamps endTime, the events
+    // stay).
+    const rawCasts: ICooldownCast[] = [...castRawCasts, ...auraRawCasts]
+      .filter((c) => c.timeSeconds <= matchDurationSeconds)
+      .sort((a, b) => a.timeSeconds - b.timeSeconds);
 
     const casts: ICooldownCast[] = [];
     for (const c of rawCasts) {

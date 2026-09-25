@@ -148,3 +148,29 @@ describe("aura evidence", () => {
     expect(rb!.availableWindows).toEqual([]);
   });
 });
+
+describe("the round's own window", () => {
+  it("a press after a shuffle round's endTime (the next round's preparation phase) is not a press of this round", () => {
+    // Crumbstain, every-12th archive file: Stasis at 100.0, the deciding death
+    // ~116, Arena Preparation re-applied at 118.4, Stasis stocked again before
+    // the next gate at 126.3 — a 26 s "recast" of a 90 s cooldown
+    const evoker = makeUnit("p1", {
+      class: CombatUnitClass.Evoker,
+      spec: CombatUnitSpec.Evoker_Preservation,
+      spellCastEvents: [
+        makeSpellCastEvent("370537", at(100), "p1"),
+        makeSpellCastEvent("370537", at(126.3), "p1"),
+      ],
+    });
+    const combat = {
+      startTime: START,
+      endTime: at(118),
+      units: { p1: evoker },
+    } as unknown as AtomicArenaCombat;
+    const stasis = extractMajorCooldowns(evoker, combat).find(
+      (cd) => cd.spellId === "370537",
+    );
+    expect(stasis).toBeDefined();
+    expect(stasis!.casts.map((c) => c.timeSeconds)).toEqual([100]);
+  });
+});
