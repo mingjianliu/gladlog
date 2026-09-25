@@ -1160,6 +1160,13 @@ function dispellersLockedOutForWindow(
   return freeMs < freeThresholdMs;
 }
 
+/** The units still alive at `ms` (no death record at or before it). */
+function aliveAt(units: ICombatUnit[], ms: number): ICombatUnit[] {
+  return units.filter(
+    (u) => !(u.deathRecords ?? []).some((d) => d.timestamp <= ms),
+  );
+}
+
 function mergeIntervals(
   intervals: Array<{ from: number; to: number }>,
 ): Array<{ from: number; to: number }> {
@@ -1867,7 +1874,21 @@ export function reconstructDispelSummary(
               dispelType: windowDispelType,
               postCcDamage,
               cleanseWasOnCD: false,
-              dispellersLockedOut: false,
+              // Reliability round 2 W1a (2026-09-25): was hard-coded false —
+              // "a dispel landed, so nobody was locked out" — which charged a
+              // healer stunned until 0.1 s before his cleanse with 5 s of
+              // latency (21cc, ad63). The same gate the missed windows use,
+              // over the same alive-capable dispellers.
+              dispellersLockedOut: dispellersLockedOutForWindow(
+                aliveAt(
+                  teamDispelCapability.get(windowDispelType) ?? [],
+                  applyTs,
+                ),
+                applyTs,
+                removal.ts,
+                enemyIds,
+                MISSED_CLEANSE_THRESHOLD_S * 1000,
+              ),
               losReachable: true,
               drChainRisk: computeDrChainRisk(
                 unit,
@@ -1949,8 +1970,13 @@ export function reconstructDispelSummary(
 
           // Skip if every capable dispeller was themselves CC'd for the entire window —
           // you can't dispel while hard-CC'd.
-          const capableDispellers =
-            teamDispelCapability.get(windowDispelType) ?? [];
+          // Reliability round 2 W1a (2026-09-25): and a dispeller already dead
+          // is not capable — 1e37 got "call for a dispel" naming a druid who
+          // had died 13.7 s earlier. No one alive who could dispel → no window.
+          const teamCapable = teamDispelCapability.get(windowDispelType) ?? [];
+          const capableDispellers = aliveAt(teamCapable, applyTs);
+          if (teamCapable.length > 0 && capableDispellers.length === 0)
+            continue;
           const allDispellersBlocked =
             capableDispellers.length > 0 &&
             capableDispellers.every((dispeller) =>

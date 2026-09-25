@@ -948,6 +948,16 @@ const INDEX: PredicateRow[] = [
     mod: cannotCastIntervals,
   },
   {
+    file: `${A}/utils/cannotCastIntervals.ts`,
+    symbol: "couldReactWithin",
+    mod: cannotCastIntervals,
+  },
+  {
+    file: `${A}/utils/cannotCastIntervals.ts`,
+    symbol: "couldRespondFor",
+    mod: cannotCastIntervals,
+  },
+  {
     file: `${A}/data/spellTags.ts`,
     symbol: "officialSilenceIds",
     mod: spellTags,

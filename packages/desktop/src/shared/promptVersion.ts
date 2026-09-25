@@ -1090,4 +1090,12 @@
 //  locked on. 605 files: 2,362 contexts gain 11,276 [SILENCE] lines + legend,
 //  nothing else changes; candidates identical; hard failures 26 → 26 (all the
 //  known Guardian Spirit [RES] regression, GH #106).
-export const PROMPT_VERSION = 136;
+//  v137 (2026-09-25, reliability round 2 W1a): the owner must have been
+//  able to act. cd-hoarded needs a free second of the owner (shared
+//  cannot-cast predicate, before their death) around the crisis (−70);
+//  a Solo Shuffle round's events after its first death are dropped (−16);
+//  cc-avoidable counts the owner's own CC / silence / lockout during the bar
+//  (−18); missed-cleanse ignores dead dispellers and late-cleanse windows
+//  compute the dispellers' lockout (−19, one [UNCLEANSED DEBUFF] line).
+//  605 files: +27 same-type cap refills, nothing new; context gates 26 → 26.
+export const PROMPT_VERSION = 137;

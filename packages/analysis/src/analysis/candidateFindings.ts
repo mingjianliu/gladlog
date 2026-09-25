@@ -41,6 +41,10 @@ import {
   REPOSITIONING_SPELL_IDS,
 } from "../utils/ccTrinketAnalysis";
 import {
+  buildCannotCastIntervals,
+  couldRespondFor,
+} from "../utils/cannotCastIntervals";
+import {
   annotateDefensiveTimings,
   cdAvailableAt,
   DEFENSIVE_TAGS,
@@ -55,6 +59,9 @@ import {
   playerTalentIdSets,
   REACTION_WINDOW_S,
   specToString,
+  USABLE_WHILE_CC_SPELL_IDS,
+  USABLE_WHILE_CONFUSED_SPELL_IDS,
+  USABLE_WHILE_FEARED_SPELL_IDS,
 } from "../utils/cooldowns";
 import {
   annotateMissedPurgesWithKillWindows,
@@ -457,11 +464,43 @@ export function extractCandidateFindings(
     }
   }
 
+  // Reliability round 2 W1a (2026-09-25): in Solo Shuffle the round ends at
+  // the first player death — nothing after it is playable, yet the log keeps
+  // running for a few seconds and candidates fired there (7b3c: crisis-no-
+  // response and cd-hoarded at 1:47 after the round-ending death at 1:46.4).
+  // Deaths themselves stay; every other event must be at or before it.
+  const roundEnded = afterShuffleRoundEnd(combat, units, start);
+  const inRound = roundEnded
+    ? out.filter((e) => e.type === "death" || !roundEnded(e.t))
+    : out;
+
   // Per-bracket allow-list (GH #18 ruling 2026-08-30): a listed bracket keeps
   // only its named types; the rest of the menu becomes context.
   const bk = bracketKey(combat?.startInfo?.bracket);
   const allow = bk ? BRACKET_TYPE_ALLOWLIST[bk] : undefined;
-  return allow ? out.filter((e) => allow.has(e.type)) : out;
+  return allow ? inRound.filter((e) => allow.has(e.type)) : inRound;
+}
+
+/**
+ * Solo Shuffle only: a predicate "is second `t` after the round-ending death",
+ * or undefined for other brackets / a round with no player death. `t` is a
+ * candidate's own `t` (render-grid seconds for most types), compared with the
+ * raw first death, so a candidate in the death's own displayed second stays.
+ */
+export function afterShuffleRoundEnd(
+  combat: any,
+  units: any[],
+  start: number,
+): ((t: number) => boolean) | undefined {
+  if (combat?.startInfo?.bracket !== "Rated Solo Shuffle") return undefined;
+  let firstDeathS = Infinity;
+  for (const u of units) {
+    if (!u.info) continue;
+    for (const d of (u.deathRecords ?? []) as any[])
+      firstDeathS = Math.min(firstDeathS, ((d.timestamp ?? 0) - start) / 1000);
+  }
+  if (!Number.isFinite(firstDeathS)) return undefined;
+  return (t) => t > firstDeathS;
 }
 
 /** Per-match cap for each team-play type (sorted by coaching value, then
@@ -793,12 +832,20 @@ export function missedCleanseEvents(
             ? {}
             : {
                 ownerCanDispel: "no",
+                // W1a (2026-09-25): a teammate already dead when the CC landed
+                // cannot be asked to dispel it (1e37).
                 eligibleDispellers:
                   friends
                     .filter(
                       (f) =>
                         f.id !== owner.id &&
-                        canDefensiveCleanse(f, w.dispelType),
+                        canDefensiveCleanse(f, w.dispelType) &&
+                        (occupancy?.matchStartMs === undefined ||
+                          !((f.deathRecords ?? []) as any[]).some(
+                            (d) =>
+                              d.timestamp <=
+                              occupancy.matchStartMs + w.timeSeconds * 1000,
+                          )),
                     )
                     .map((f) => specToString(f.spec))
                     .join(", ") || "no one on your team",
@@ -1548,19 +1595,29 @@ export function ownerCouldReactWith(
   castStartS: number,
   landS: number,
   toolOnGcd: boolean,
+  /** Reliability round 2 W1a (2026-09-25): the owner's cannot-cast intervals
+   * (`buildCannotCastIntervals`, in seconds since round start). An instant
+   * inside one is no chance to react unless the tool is usable under CC
+   * (`toolUsableWhileCc`). 9c9d @80: the whole Hex bar sat inside a Maim stun
+   * and the owner was still told Fade / Phase Shift would have avoided it.
+   * Absent ⇒ the pre-W1a behaviour (GCD only). */
+  blockedS?: ReadonlyArray<{ from: number; to: number }>,
+  toolUsableWhileCc = false,
 ): boolean {
   const from = castStartS + REACTION_WINDOW_S;
   if (from >= landS) return false;
-  if (!toolOnGcd) return true;
-  const locked = (tau: number) =>
+  const gcdLocked = (tau: number) =>
+    toolOnGcd &&
     ownerOnGcdCastSeconds.some((s) => s <= tau && tau < s + INTENT_GUARD_GCD_S);
+  const ccLocked = (tau: number) =>
+    !toolUsableWhileCc &&
+    (blockedS ?? []).some((b) => b.from <= tau && tau < b.to);
   const probes = [
     from,
-    ...ownerOnGcdCastSeconds
-      .map((s) => s + INTENT_GUARD_GCD_S)
-      .filter((t) => t > from && t < landS),
-  ];
-  return probes.some((tau) => !locked(tau));
+    ...ownerOnGcdCastSeconds.map((s) => s + INTENT_GUARD_GCD_S),
+    ...(blockedS ?? []).map((b) => b.to),
+  ].filter((t) => t >= from && t < landS);
+  return probes.some((tau) => !gcdLocked(tau) && !ccLocked(tau));
 }
 
 export function ccAvoidableEvents(
@@ -1960,6 +2017,10 @@ function teamPlayEvents(
           (owner.spellCastEvents ?? []).map(
             (e: any) => (e.logLine.timestamp - combat.startTime) / 1000,
           ),
+          // Reliability round 2 W1a: the owner's own feasibility — the one
+          // could-react predicate (`couldReactWithin`) over the one
+          // cannot-cast predicate, plus death.
+          couldRespondFor(owner, enemyIds, combat.startTime),
         ),
       );
     } catch {
@@ -2133,6 +2194,21 @@ function teamPlayEvents(
             !OFF_GCD_SPELL_IDS.has(String(e.spellId ?? "")),
         )
         .map((e: any) => (e.logLine.timestamp - combat.startTime) / 1000);
+      // W1a: the owner's own cannot-cast intervals (CC, silence, kick
+      // lockout) — the one predicate every feasibility gate reads.
+      let ownerBlockedS: Array<{ from: number; to: number }> = [];
+      try {
+        ownerBlockedS = buildCannotCastIntervals(owner, enemyIds).map((b) => ({
+          from: (b.from - combat.startTime) / 1000,
+          to: (b.to - combat.startTime) / 1000,
+        }));
+      } catch {
+        ownerBlockedS = [];
+      }
+      const usableWhileCc = (id: string) =>
+        USABLE_WHILE_CC_SPELL_IDS.has(id) ||
+        USABLE_WHILE_FEARED_SPELL_IDS.has(id) ||
+        USABLE_WHILE_CONFUSED_SPELL_IDS.has(id);
       out.push(
         ...ccAvoidableEvents(
           cc.ccInstances,
@@ -2155,6 +2231,8 @@ function teamPlayEvents(
                   castStartS,
                   inst.atSeconds,
                   pressIds.some((id) => !OFF_GCD_SPELL_IDS.has(id)),
+                  ownerBlockedS,
+                  pressIds.some(usableWhileCc),
                 ),
             );
           },

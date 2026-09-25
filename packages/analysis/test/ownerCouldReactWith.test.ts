@@ -78,3 +78,37 @@ describe("ccCastStartSeconds — the start of the cast that LANDED", () => {
     ).toBeCloseTo(35.469, 6);
   });
 });
+
+describe("ownerCouldReactWith — the owner's own CC (reliability round 2 W1a)", () => {
+  // 9c9d @80: Hex bar 80.622 → 81.707, inside a Maim stun 80.366 → 85.375
+  const maim = [{ from: 80.366, to: 85.375 }];
+
+  it("a cast bar entirely inside the owner's stun → no reaction, even off the GCD", () => {
+    // the real bar: start 80.622 → window [81.622, 81.707), all inside Maim
+    expect(ownerCouldReactWith([], 80.622, 81.707, false, maim)).toBe(false);
+    expect(ownerCouldReactWith([], 80.622, 81.707, true, maim)).toBe(false);
+  });
+
+  it("free before the stun inside the reaction window → can react", () => {
+    // window [79.0 + 1, 81.707): 80.0 is before the stun starts at 80.366
+    expect(
+      ownerCouldReactWith([], 79.0, 81.707, false, [{ from: 80.5, to: 85 }]),
+    ).toBe(true);
+  });
+
+  it("a stun that ends inside the window leaves its end as a chance to react", () => {
+    expect(
+      ownerCouldReactWith([], 78.0, 82.0, false, [{ from: 78.5, to: 80.5 }]),
+    ).toBe(true);
+  });
+
+  it("a tool usable under CC ignores the owner's CC", () => {
+    expect(ownerCouldReactWith([], 80.622, 81.707, false, maim, true)).toBe(
+      true,
+    );
+  });
+
+  it("without blocked intervals the old (GCD-only) answer stands", () => {
+    expect(ownerCouldReactWith([], 80.622, 81.707, false)).toBe(true);
+  });
+});

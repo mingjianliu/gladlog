@@ -84,6 +84,7 @@
     "test/ccTrinketAnalysis.test.ts",
     "test/cdAvailableAt.test.ts",
     "test/cdAvailablePredicateConvergence.test.ts",
+    "test/cdHoardedOwnerFeasibility.test.ts",
     "test/cdHoardedSelfOnly.test.ts",
     "test/cdWasteGate.test.ts",
     "test/chargeAvailability.test.ts",

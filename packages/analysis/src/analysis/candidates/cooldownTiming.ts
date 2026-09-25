@@ -26,7 +26,6 @@ import {
   type IMajorCooldownInfo,
   isHealerSpec,
   cdIsProcOnly,
-  REACTION_WINDOW_S,
   SELF_CAST_NOOP_EXTERNAL_IDS,
   THROUGHPUT_EMPOWER_DEFENSIVE_IDS,
 } from "../../utils/cooldowns";
@@ -37,7 +36,7 @@ import {
 } from "../../utils/drAnalysis";
 import {
   buildCannotCastIntervals,
-  coveredMsWithin,
+  couldReactWithin,
 } from "../../utils/cannotCastIntervals";
 import { castFailedInWindow, type RawStreams } from "../../utils/rawStreams";
 import {
@@ -374,8 +373,7 @@ export function evaluateSyncWindow(
     }
     const fromMs = cd.matchStartMs + readyAtS * 1000;
     const toMs = cd.matchStartMs + w.toSeconds * 1000;
-    const freeMs = toMs - fromMs - coveredMsWithin(blocked, fromMs, toMs);
-    return freeMs >= REACTION_WINDOW_S * 1000;
+    return couldReactWithin(blocked, fromMs, toMs);
   });
   const entered = cds.some((cd) =>
     cd.casts.some((c) => {
@@ -903,6 +901,12 @@ export function cdHoardedEvents(
    * consumed only by `filterIntentGuardEvidence`'s gcd-locked exclusion —
    * same convention as every other guard-carrying builder in this file. */
   ownCastSuccessSeconds?: number[],
+  /** Reliability round 2 W1a (2026-09-25): could the OWNER act at all during
+   * the response window `[fromS, toS]` (seconds since round start)? Built by
+   * the caller from `buildCannotCastIntervals` + the owner's death — the same
+   * predicate `evaluateSyncWindow` and cdTriggerPrior's opportunity set use.
+   * Absent ⇒ no owner gate (tests, callers without a combat clock). */
+  ownerCouldRespond?: (fromS: number, toS: number) => boolean,
 ): CandidateEvent[] {
   const cap = overrides?.cap ?? CD_HOARD_CAP;
   const candidates: Array<{
@@ -950,6 +954,32 @@ export function cdHoardedEvents(
             ownerId: owner.id,
             verdict: "ineligible",
             reason: !p.dangerous ? "not-dangerous" : "crisis-unit-in-cc",
+            facts: pointFacts(src.own, p),
+            candidateIds: [],
+          });
+        continue;
+      }
+      // Reliability round 2 W1a: `p.inCC` is the CRISIS UNIT's state. For a
+      // teammate's crisis nothing checked the owner, and for the owner's own
+      // crisis only hard CC (not silence or a kick lockout) was checked — the
+      // accusation fired on a silenced / stunned / kicked owner (6fcb Garrote
+      // 58.5–61.5 at a 1:00 teammate crisis; 138e Skull Bash lockout then
+      // Incapacitating Roar). The owner must be able to act for at least
+      // REACTION_WINDOW_S inside the same window "spent" counts presses in.
+      if (
+        ownerCouldRespond &&
+        !ownerCouldRespond(
+          p.tSec - RESPONSE_PRE_MS / 1000,
+          p.tSec + CD_HOARD_RESPONSE_S,
+        )
+      ) {
+        if (tracing)
+          trace.push({
+            type: "cd-hoarded",
+            opportunityId: opportunity(src.crisisUnit.id, p),
+            ownerId: owner.id,
+            verdict: "ineligible",
+            reason: "owner-could-not-act",
             facts: pointFacts(src.own, p),
             candidateIds: [],
           });

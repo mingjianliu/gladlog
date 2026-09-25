@@ -6,6 +6,7 @@ import {
 } from "../data/spellCategories";
 import { kickLockoutSeconds } from "../data/spellEffectData";
 import { ccSpellIds, officialSilenceIds } from "../data/spellTags";
+import { REACTION_WINDOW_S } from "./cooldowns";
 
 /**
  * "When could this unit not cast?" — ONE predicate for the two consumers that
@@ -186,4 +187,53 @@ export function coveredMsWithin(
   }
   covered += cur.to - cur.from;
   return covered;
+}
+
+/**
+ * The one "could this unit react at all in [fromMs, toMs]" test: at least
+ * REACTION_WINDOW_S of the window not covered by a cannot-cast interval.
+ * Shared by missed-sync-window's readiness (`evaluateSyncWindow`, B3i) and
+ * cd-hoarded's owner gate (reliability round 2 W1a, 2026-09-25) — before this
+ * each consumer either computed it inline or did not check at all.
+ */
+export function couldReactWithin(
+  blocked: ReadonlyArray<{ from: number; to: number }>,
+  fromMs: number,
+  toMs: number,
+): boolean {
+  const freeMs = toMs - fromMs - coveredMsWithin(blocked, fromMs, toMs);
+  return freeMs >= REACTION_WINDOW_S * 1000;
+}
+
+/**
+ * `couldReactWithin` bound to one unit on the round's clock, with death: the
+ * window is cut at the unit's first death, and a unit dead before the window
+ * could not respond. Arguments are seconds since `matchStartMs`. When the
+ * intervals cannot be built the answer is "could respond" — a missing input
+ * must never manufacture an exemption silently, but neither may it throw the
+ * caller's candidate away (the caller's try/catch would drop the whole type).
+ */
+export function couldRespondFor(
+  unit: ICombatUnit,
+  enemyIds: Set<string>,
+  matchStartMs: number,
+): (fromS: number, toS: number) => boolean {
+  let blocked: Array<{ from: number; to: number }>;
+  try {
+    blocked = buildCannotCastIntervals(unit, enemyIds);
+  } catch {
+    return () => true;
+  }
+  const deathMs = Math.min(
+    ...((unit.deathRecords ?? []) as Array<{ timestamp: number }>).map(
+      (d) => d.timestamp,
+    ),
+    Infinity,
+  );
+  return (fromS, toS) => {
+    const fromMs = matchStartMs + fromS * 1000;
+    const toMs = Math.min(matchStartMs + toS * 1000, deathMs);
+    if (toMs <= fromMs) return false;
+    return couldReactWithin(blocked, fromMs, toMs);
+  };
 }

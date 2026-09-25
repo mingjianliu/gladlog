@@ -15,6 +15,39 @@ import { PRE_ROLL_S } from "../../../../shared/videoTime";
 import type { ReportSource } from "../derive/types";
 import { VideoTab } from "./VideoTab";
 
+// One timed candidate pinned onto the real input. These tests are about how
+// a timed finding becomes a chip / a seek target, not about which analysis
+// predicate happens to fire on the fixture: the fixture's only timed
+// candidate has been retired twice by analysis fixes (a missed-cleanse on
+// 2026-09-18, then cd-hoarded @58 on 2026-09-25 — reliability round 2 W1a,
+// the owner was CC'd 55.1–65.2 s). buildAnalysisInput itself stays real.
+vi.mock("../derive/analysisInput", async (importOriginal) => {
+  const real = await importOriginal<typeof import("../derive/analysisInput")>();
+  return {
+    ...real,
+    buildAnalysisInput: (
+      ...args: Parameters<typeof real.buildAnalysisInput>
+    ) => {
+      const input = real.buildAnalysisInput(...args);
+      return input
+        ? {
+            ...input,
+            candidates: [
+              ...input.candidates,
+              {
+                id: "test-timed:58",
+                type: "cd-hoarded",
+                t: 58,
+                unitNames: ["Player3-Test"],
+                facts: { t: "58" },
+              },
+            ],
+          }
+        : input;
+    },
+  };
+});
+
 const source = loadRealMatchFixture() as unknown as ReportSource;
 // startedAt = source.startTime → offsetS = 0, endS = (endTime-startTime)/1000 = 90
 const startedAt = source.startTime;
@@ -170,13 +203,8 @@ describe("VideoTab 自定义控制条(按轮 clamp)", () => {
 });
 
 describe("VideoTab AI 结果进 feed/strip", () => {
-  // A candidate event from the real fixture (derived from
-  // test/fixtures/real-match-sample.json): buildAnalysisInput builds candidates
-  // from it and facts.t is always present (timed). Was
-  // "missed-cleanse:Player6-Test:61" until 2026-09-18: Kingsbane / Volley
-  // joined OFFENSIVE_CD_SPELL_IDS, the fixture's enemies press both, and that
-  // cleanse is now exempt under the no-calm-second threat gate.
-  const TIMED_EVENT_ID = "cd-hoarded:Player-1-00000003:Player-1-00000001:58";
+  // The timed candidate the file-level vi.mock pins onto the real input.
+  const TIMED_EVENT_ID = "test-timed:58";
   const TIMED_T = 58;
 
   it("时间轴 finding(与 splitFindings 同一谓词)映射为 chip,连同 deepDive chips 一起画进标记条", async () => {
@@ -565,7 +593,7 @@ describe("VideoTab:录像晚于开场(缺头,一期生产上的常态)", () => {
   // above (TIMED_EVENT_ID/TIMED_T are scoped there, so redeclared here) to
   // reach that tab's rows without depending on it.
   it("点击「AI 发现」tab 某行:同一 onSeek 落点公式(seekTargetS),不是重新内联的旧公式", async () => {
-    const TIMED_EVENT_ID = "cd-hoarded:Player-1-00000003:Player-1-00000001:58";
+    const TIMED_EVENT_ID = "test-timed:58";
     const TIMED_T = 58;
     const getCached = vi.fn().mockResolvedValue({
       findings: [
