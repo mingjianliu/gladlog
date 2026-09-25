@@ -10,6 +10,7 @@ import type { CoverageManifest } from "../src/quality/coverageManifest";
 import {
   checkBehaviorPriorConsistency,
   checkCcAvoidedLandedConsistency,
+  checkCcBookmarkConsistency,
   checkDuringExternalConsistency,
   checkHeaderHpPromise,
   checkMatch,
@@ -620,6 +621,131 @@ describe("checkResNoChangeRowsPruned — a zero-loss [RES] rdy:Δ cd:— row may
         "      [RES] rdy:Δ  cd:—  focus:2  cc:3/Incapacitating Roar-2s[disorient]",
       ]),
     ).toEqual([]);
+  });
+});
+
+describe("checkCcBookmarkConsistency — [CC BOOKMARK] lines agree with the burst / spike / cast lines (GH #77 part 2)", () => {
+  const burst = "  Burst #1 — 0:33–0:50 | Kingsbane + Deathmark";
+  const spike =
+    "0:47–0:57  [DMG SPIKE]   3(RPaladin) (Retribution Paladin): 0.86M in 10s (86k DPS) (86% -> 64% HP, -2%/s, low 32% @0:55)";
+  const counts = "  Counts: Kidney Shot cast 2× (first 0:31) · Blind not cast";
+  const off =
+    "0:35–0:46  [CC BOOKMARK]  Blind → 6(DPriest): during your Burst #1 (0:33–0:50) on 4(BDruid), their healer was not CC'd | at 0:35: 4.1yd, DR Full, 6(DPriest) PvP trinket ready";
+  const def =
+    "0:48–0:55  [CC BOOKMARK]  Blind → 4(BDruid): 4(BDruid) did 81% of 3(RPaladin)'s damage taken in the [DMG SPIKE] 0:47–0:57 | at 0:48: 5.9yd, DR Full, 4(BDruid) PvP trinket on cooldown";
+  const kidney = [
+    "0:31  [YOU] [CC]   Kidney Shot → Herbivore (92% HP)",
+    "1:09  [YOU] [CC]   Kidney Shot → Smokenoob (100% HP)",
+  ];
+  const ok = [burst, spike, counts, ...kidney, off, def];
+  it("passes consistent lines", () => {
+    expect(checkCcBookmarkConsistency(ok)).toEqual([]);
+  });
+  it("fails a missing or mismatched burst / spike", () => {
+    expect(
+      checkCcBookmarkConsistency(ok.filter((l) => l !== burst)),
+    ).toHaveLength(1);
+    expect(
+      checkCcBookmarkConsistency(ok.filter((l) => l !== spike)),
+    ).toHaveLength(1);
+  });
+  it("fails a short span, a wrong 'at', a low share, a trinket about another unit", () => {
+    const swap = (from: string, to: string) =>
+      ok.map((l) => (l === off ? to : l === from ? to : l));
+    expect(
+      checkCcBookmarkConsistency(
+        ok.map((l) =>
+          l === off
+            ? off
+                .replace("0:35–0:46", "0:43–0:46")
+                .replace("at 0:35", "at 0:43")
+            : l,
+        ),
+      ),
+    ).toHaveLength(1);
+    expect(
+      checkCcBookmarkConsistency(
+        ok.map((l) => (l === off ? off.replace("at 0:35", "at 0:36") : l)),
+      ),
+    ).toHaveLength(1);
+    expect(
+      checkCcBookmarkConsistency(
+        ok.map((l) => (l === def ? def.replace("81%", "55%") : l)),
+      ),
+    ).toHaveLength(1);
+    expect(
+      checkCcBookmarkConsistency(
+        ok.map((l) =>
+          l === off ? off.replace(", 6(DPriest) PvP", ", 5(UDKnight) PvP") : l,
+        ),
+      ),
+    ).toHaveLength(1);
+    void swap;
+  });
+  it("fails malformed data lines (and counts them toward the cap), 50% DR, trailing text", () => {
+    expect(
+      checkCcBookmarkConsistency(
+        ok.map((l) => (l === off ? off.replace("DR Full", "DR 50%") : l)),
+      ),
+    ).toHaveLength(1);
+    expect(
+      checkCcBookmarkConsistency(
+        ok.map((l) => (l === off ? `${off} nonsense` : l)),
+      ),
+    ).toHaveLength(1);
+    const junk = "1:30–1:40  [CC BOOKMARK]  Blind → 6(DPriest): whatever";
+    expect(
+      checkCcBookmarkConsistency([...ok, junk]).length,
+    ).toBeGreaterThanOrEqual(2); // malformed + over cap
+  });
+  it("fails a target already CC'd inside the span and an own cast inside it", () => {
+    expect(
+      checkCcBookmarkConsistency([
+        ...ok,
+        "0:40  [CC ON ENEMY]   6(DPriest) ← Fear (by 2(DPriest)) (3s)",
+      ]),
+    ).toHaveLength(1);
+    expect(
+      checkCcBookmarkConsistency([
+        ...ok,
+        "0:32  [CC ON ENEMY]   6(DPriest) ← Fear (by 2(DPriest)) (6s)",
+      ]),
+    ).toHaveLength(1);
+    expect(
+      checkCcBookmarkConsistency([
+        ...ok,
+        "0:30  [CC ON ENEMY]   6(DPriest) ← Fear (by 2(DPriest)) (3s)",
+      ]),
+    ).toEqual([]);
+    expect(
+      checkCcBookmarkConsistency([
+        ...ok,
+        "0:40  [YOU] [CC]   Blind → Smokenoob (90% HP)",
+      ]).length,
+    ).toBeGreaterThanOrEqual(2); // inside span + "not cast"
+  });
+  it("fails counts contradicted by rendered casts", () => {
+    expect(
+      checkCcBookmarkConsistency(
+        ok.map((l) =>
+          l === counts ? counts.replace("cast 2×", "cast 1×") : l,
+        ),
+      ),
+    ).toHaveLength(1);
+    expect(
+      checkCcBookmarkConsistency(
+        ok.map((l) =>
+          l === counts ? counts.replace("first 0:31", "first 0:40") : l,
+        ),
+      ),
+    ).toHaveLength(1);
+    expect(
+      checkCcBookmarkConsistency(
+        ok.map((l) =>
+          l === counts ? counts.replace("cast 2×", "cast 999×") : l,
+        ),
+      ),
+    ).toEqual([]); // omissions allowed
   });
 });
 

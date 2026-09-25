@@ -72,6 +72,11 @@ import {
   PEEL_LOOKBACK_S,
   PEEL_MIN_USABLE_S,
 } from "@gladlog/analysis/src/context/peelOptions";
+import {
+  CC_USE_CAP,
+  CC_USE_MIN_S,
+  CC_USE_MIN_SHARE,
+} from "@gladlog/analysis/src/context/ccUse";
 import { canHelpAnotherUnit } from "@gladlog/analysis/src/utils/cooldowns";
 import { fmtTime } from "@gladlog/analysis/src/utils/renderGrid";
 import fs from "fs-extra";
@@ -976,6 +981,159 @@ export function checkPeelOptionConsistency(lines: string[]): string[] {
         `line ${i + 1}: [PEEL OPTION] 自相矛盾(${why.join(";")})—— ${line.trim().slice(0, 160)}`,
       );
   });
+  return failures;
+}
+
+const CC_BOOKMARK_DATA_LINE = /^\s*\d+:\d{2}–\d+:\d{2}\s+\[CC BOOKMARK\]/;
+const CC_BOOKMARK_LINE =
+  /^\s*(\d+):(\d{2})–(\d+):(\d{2})\s+\[CC BOOKMARK\]\s+(.+?) → (\S+): (?:during your Burst #(\d+) \((\d+):(\d{2})–(\d+):(\d{2})\) on \S+, their healer was not CC'd|(\S+) did (\d+)% of (\S+)'s damage taken in the \[DMG SPIKE\] (\d+):(\d{2})–(\d+):(\d{2})) \| at (\d+):(\d{2}): [\d.]+yd, DR Full(?:, (\S+) PvP trinket (?:ready|on cooldown))?$/;
+const BURST_LEDGER_LINE = /^\s*Burst #(\d+) — (\d+):(\d{2})–(\d+):(\d{2}) \|/;
+const DMG_SPIKE_BOUNDS_LINE =
+  /^\s*(\d+):(\d{2})–(\d+):(\d{2})\s+\[DMG SPIKE\]\s+(\S+) \(/;
+const YOU_CC_LINE = /^\s*(\d+):(\d{2})\s+\[YOU\] \[CC\]\s+(.+?) →/;
+const CC_ON_ENEMY_SPAN_LINE =
+  /^\s*(\d+):(\d{2})\s+\[CC ON ENEMY\]\s+(\S+) ← .*?(?:\((\d+(?:\.\d+)?)s\))?\s*$/;
+const CC_USE_COUNTS_LINE = /^\s*Counts: (.*)$/;
+const CC_USE_COUNT_ITEM = /^(.+) cast (\d+)× \(first (\d+):(\d{2})\)$/;
+
+/**
+ * `[CC BOOKMARK]` / CC USE counts (32nd hardFailure class, GH #77 part 2,
+ * user 2026-09-24 after four codex astra rounds). The producer
+ * (`context/ccUse.ts`) keeps a bookmark only when every condition held on each
+ * of >= CC_USE_MIN_S consecutive whole seconds (render-second policy of
+ * `ccSamplerFor`), inside a burst it cites by the <burst_ledger> number or a
+ * [DMG SPIKE] on a teammate whose dominant attacker did >= CC_USE_MIN_SHARE of
+ * the damage; at most CC_USE_CAP per round. All three constants are imported.
+ *
+ * Scope, stated honestly: this checks the textual consistency of what a
+ * bookmark asserts against other rendered lines — it does not re-derive the
+ * full feasibility predicate (reach, LoS, immunity, breakers, the defense
+ * share's arithmetic). It fails:
+ *  - any `[CC BOOKMARK]` data line that does not match the exact format to the
+ *    end of the line (malformed lines also count toward the cap);
+ *  - a span shorter than the door, or an `at m:ss` that is not its start;
+ *  - a cited burst / teammate spike that is missing, has other bounds, or does
+ *    not contain the span; a defense target that is not the named attacker, or
+ *    a share under the door; a trinket fact about another unit;
+ *  - a `[CC ON ENEMY]` on the bookmark's target active inside the span, or a
+ *    `[YOU] [CC]` of that spell inside it;
+ *  - more bookmarks than the cap;
+ *  - counts contradicted by rendered casts (a "not cast" CC with a `[YOU]
+ *    [CC]` line, a rendered cast before the stated first, or more rendered
+ *    casts than N — the timeline may omit casts, so fewer is allowed).
+ */
+export function checkCcBookmarkConsistency(lines: string[]): string[] {
+  const bursts = new Map<number, [number, number]>();
+  const spikes: Array<{ from: number; to: number; unit: string }> = [];
+  const youCc: Array<{ at: number; spell: string }> = [];
+  const enemyCc: Array<{ from: number; to: number; unit: string }> = [];
+  let countItems: string[] = [];
+  for (const line of lines) {
+    const b = line.match(BURST_LEDGER_LINE);
+    if (b)
+      bursts.set(Number(b[1]), [
+        Number(b[2]) * 60 + Number(b[3]),
+        Number(b[4]) * 60 + Number(b[5]),
+      ]);
+    const d = line.match(DMG_SPIKE_BOUNDS_LINE);
+    if (d)
+      spikes.push({
+        from: Number(d[1]) * 60 + Number(d[2]),
+        to: Number(d[3]) * 60 + Number(d[4]),
+        unit: d[5]!,
+      });
+    const y = line.match(YOU_CC_LINE);
+    if (y) youCc.push({ at: Number(y[1]) * 60 + Number(y[2]), spell: y[3]! });
+    const e = line.match(CC_ON_ENEMY_SPAN_LINE);
+    if (e) {
+      const at = Number(e[1]) * 60 + Number(e[2]);
+      const dur = e[4] ? Number(e[4]) : 0;
+      enemyCc.push({ from: at, to: at + Math.max(dur, 1) - 1, unit: e[3]! });
+    }
+    const c = line.match(CC_USE_COUNTS_LINE);
+    if (c) countItems = c[1]!.split(" · ");
+  }
+  const failures: string[] = [];
+  let bookmarks = 0;
+  lines.forEach((line, i) => {
+    if (!CC_BOOKMARK_DATA_LINE.test(line)) return;
+    bookmarks++;
+    const m = line.match(CC_BOOKMARK_LINE);
+    if (!m) {
+      failures.push(
+        `line ${i + 1}: [CC BOOKMARK] 格式不符(整行必须按生成格式)—— ${line.trim().slice(0, 160)}`,
+      );
+      return;
+    }
+    const from = Number(m[1]) * 60 + Number(m[2]);
+    const to = Number(m[3]) * 60 + Number(m[4]);
+    const spell = m[5]!;
+    const target = m[6]!;
+    const atS = Number(m[19]) * 60 + Number(m[20]);
+    const trinketUnit = m[21];
+    const why: string[] = [];
+    if (to - from + 1 < CC_USE_MIN_S)
+      why.push(`时段 ${to - from + 1} 秒短于门槛 ${CC_USE_MIN_S} 秒`);
+    if (atS !== from) why.push(`at ${fmtTime(atS)} 不是时段起点`);
+    if (trinketUnit && trinketUnit !== target)
+      why.push(`饰品事实写的是 ${trinketUnit},不是书签目标`);
+    if (m[7]) {
+      const k = Number(m[7]);
+      const a = Number(m[8]) * 60 + Number(m[9]);
+      const z = Number(m[10]) * 60 + Number(m[11]);
+      const burst = bursts.get(k);
+      if (!burst || burst[0] !== a || burst[1] !== z)
+        why.push(`没有 Burst #${k} ${fmtTime(a)}–${fmtTime(z)} 这一行`);
+      else if (from < a || to > z) why.push("书签不在引用的爆发内");
+    } else {
+      const attacker = m[12]!;
+      const pct = Number(m[13]);
+      const mate = m[14]!;
+      const a = Number(m[15]) * 60 + Number(m[16]);
+      const z = Number(m[17]) * 60 + Number(m[18]);
+      if (attacker !== target) why.push("书签目标不是施压的攻击者");
+      if (pct < Math.round(CC_USE_MIN_SHARE * 100))
+        why.push(`占比 ${pct}% 低于门槛`);
+      if (!spikes.some((sp) => sp.unit === mate && sp.from === a && sp.to === z))
+        why.push(`没有 ${mate} 在 ${fmtTime(a)}–${fmtTime(z)} 的 [DMG SPIKE] 行`);
+      else if (from < a || to > z) why.push("书签不在引用的施压窗口内");
+    }
+    const ccd = enemyCc.find((c) => c.unit === target && c.from <= to && c.to >= from);
+    if (ccd) why.push(`${fmtTime(ccd.from)} 起 ${target} 已在控制中`);
+    const cast = youCc.find((y) => y.spell === spell && y.at >= from && y.at <= to);
+    if (cast) why.push(`${fmtTime(cast.at)} 已放出 ${spell}`);
+    if (why.length)
+      failures.push(
+        `line ${i + 1}: [CC BOOKMARK] 自相矛盾(${why.join(";")})—— ${line.trim().slice(0, 160)}`,
+      );
+  });
+  if (bookmarks > CC_USE_CAP)
+    failures.push(`[CC BOOKMARK] ${bookmarks} 条,超过上限 ${CC_USE_CAP}`);
+  for (const item of countItems) {
+    if (item.endsWith(" not cast")) {
+      const sp = item.slice(0, -" not cast".length);
+      const cast = youCc.find((y) => y.spell === sp);
+      if (cast)
+        failures.push(
+          `CC USE 计数说 ${sp} not cast,但 ${fmtTime(cast.at)} 有 [YOU] [CC] ${sp}`,
+        );
+      continue;
+    }
+    const m = item.match(CC_USE_COUNT_ITEM);
+    if (!m) {
+      failures.push(`CC USE 计数格式不符:${item}`);
+      continue;
+    }
+    const sp = m[1]!;
+    const n = Number(m[2]);
+    const first = Number(m[3]) * 60 + Number(m[4]);
+    const rendered = youCc.filter((y) => y.spell === sp);
+    if (rendered.length > n)
+      failures.push(`CC USE 计数说 ${sp} ${n} 次,但时间线有 ${rendered.length} 条 [YOU] [CC]`);
+    const early = rendered.find((y) => y.at < first);
+    if (early)
+      failures.push(`CC USE 计数说 ${sp} 首次 ${fmtTime(first)},但 ${fmtTime(early.at)} 已有 [YOU] [CC]`);
+  }
   return failures;
 }
 
@@ -2439,6 +2597,7 @@ export function checkMatch(
   hardFailures.push(...checkConseqHpStateConsistency(lines));
   hardFailures.push(...checkCcAvoidedLandedConsistency(lines));
   hardFailures.push(...checkPeelOptionConsistency(lines));
+  hardFailures.push(...checkCcBookmarkConsistency(lines));
 
   return {
     ordinal: entry.ordinal,

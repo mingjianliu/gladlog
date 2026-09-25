@@ -34,6 +34,7 @@
     "src/compare/rotationPrompt.test.ts",
     "src/compare/verifiedComparison.test.ts",
     "src/context/burstAnswered.test.ts",
+    "src/context/ccUse.test.ts",
     "src/context/cdPrior.test.ts",
     "src/context/criticalWindows.test.ts",
     "src/context/matchTimeline.ccBreak.test.ts",

@@ -221,6 +221,9 @@ export function buildFindingsPrompt(
     // feasible, unused instant CC on the main attacker before a death — an
     // additional option to offer, never a verdict about the death.
     `- A PEEL OPTIONS line may be offered as an additional way to take pressure off ("the rogue was in range and Hammer of Justice was ready for several seconds — a stun there is another way to buy space"). It is NOT a mistake and NOT the reason anyone died: never say using it would have saved them, never call not using it an error, and never extend it to other moments of the match.`,
+    // GH #77 part 2 (user 2026-09-24, three codex astra rounds): CC USE counts
+    // and [CC BOOKMARK] lines point at moments to review — never a missed cast.
+    `- A CC USE [CC BOOKMARK] only points at a moment worth reviewing ("worth a look at whether Blind on their healer fit your go there"). It is NOT a missed cast and NOT a mistake: never say the player should have cast it, never count bookmarks against them, and never call the player passive or aggressive from the CC USE counts.`,
     // GH #103 class B (2026-09-23): 14 of 32 universal claims in the Opus 5.5
     // baseline were contradicted by the prompt ("the only big cooldown you had
     // left was Spirit Link" beside a [RES] listing Astral Shift and Nature's

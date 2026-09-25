@@ -85,7 +85,9 @@ import * as buffDuration from "@gladlog/analysis/src/utils/buffDuration";
 import * as cannotCastIntervals from "@gladlog/analysis/src/utils/cannotCastIntervals";
 import * as castParam from "@gladlog/analysis/src/utils/castParam";
 import * as ccTrinketAnalysis from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
+import * as ccUse from "@gladlog/analysis/src/context/ccUse";
 import * as peelOptions from "@gladlog/analysis/src/context/peelOptions";
+import * as ccTargetState from "@gladlog/analysis/src/utils/ccTargetState";
 import * as spellMechanics from "@gladlog/analysis/src/utils/spellMechanics";
 import * as cooldowns from "@gladlog/analysis/src/utils/cooldowns";
 import * as counterfactual from "@gladlog/analysis/src/utils/counterfactual";
@@ -1378,6 +1380,41 @@ const INDEX: PredicateRow[] = [
   {
     file: `${E}/quality/promptQualityCheck.ts`,
     symbol: "checkPeelOptionConsistency",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${A}/utils/ccTargetState.ts`,
+    symbol: "ccSamplerFor",
+    mod: ccTargetState,
+  },
+  {
+    file: `${A}/utils/ccTargetState.ts`,
+    symbol: "pvpTrinketReadyAtSecond",
+    mod: ccTargetState,
+  },
+  {
+    file: `${A}/context/ccUse.ts`,
+    symbol: "ccUseSummary",
+    mod: ccUse,
+  },
+  {
+    file: `${A}/context/ccUse.ts`,
+    symbol: "CC_USE_MIN_S",
+    mod: ccUse,
+  },
+  {
+    file: `${A}/context/ccUse.ts`,
+    symbol: "CC_USE_MIN_SHARE",
+    mod: ccUse,
+  },
+  {
+    file: `${A}/context/ccUse.ts`,
+    symbol: "CC_USE_CAP",
+    mod: ccUse,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkCcBookmarkConsistency",
     mod: promptQualityCheck,
   },
   {

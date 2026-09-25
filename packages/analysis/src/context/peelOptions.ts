@@ -39,35 +39,11 @@
 import type { AtomicArenaCombat, ICombatUnit } from "@gladlog/parser-compat";
 
 import { ccSpellIds } from "../data/spellTags";
-import { buildAuraIntervals } from "../utils/auraIntervals";
-import { buildCannotCastIntervals } from "../utils/cannotCastIntervals";
+import { ccSamplerFor, pvpTrinketReadyAtSecond } from "../utils/ccTargetState";
 import type { IPlayerCCTrinketSummary } from "../utils/ccTrinketAnalysis";
-import {
-  cdReadyInTimeAt,
-  extractMajorCooldowns,
-  kitSpellReadyAt,
-  playerTalentIdSets,
-  USABLE_WHILE_CC_SPELL_IDS,
-  USABLE_WHILE_CONFUSED_SPELL_IDS,
-  USABLE_WHILE_FEARED_SPELL_IDS,
-} from "../utils/cooldowns";
-import { getDRCategory, getDRLevel } from "../utils/drAnalysis";
-import {
-  distanceBetween,
-  getUnitPositionAtTime,
-  hasLineOfSight,
-} from "../utils/losAnalysis";
-import { INTERP_MAX_GAP_MS } from "../utils/positionSampling";
+import { extractMajorCooldowns } from "../utils/cooldowns";
 import { fmtTime } from "../utils/renderGrid";
-import {
-  auraBlocksMechanic,
-  auraLocksCasting,
-  ccMechanicOf,
-  explicitlyBreaksMechanic,
-  isInstantCast,
-  mechanicStateOf,
-} from "../utils/spellMechanics";
-import { ccThreatReachYards } from "../utils/spellRange";
+import { isInstantCast } from "../utils/spellMechanics";
 
 /** How far back from a death the window reaches (seconds). */
 export const PEEL_LOOKBACK_S = 10;
@@ -95,35 +71,6 @@ export interface IPeelOption {
   attackerTrinketReady: boolean | null;
 }
 
-type Interval = { from: number; to: number };
-const inAny = (ivs: Interval[], ms: number) =>
-  ivs.some((w) => w.from <= ms && ms < w.to);
-
-function breakToolsFor(attacker: ICombatUnit, mech: number): string[] {
-  const state = mechanicStateOf(mech);
-  const usableIn =
-    state === "stunned"
-      ? USABLE_WHILE_CC_SPELL_IDS
-      : state === "feared"
-        ? USABLE_WHILE_FEARED_SPELL_IDS
-        : state === "confused"
-          ? USABLE_WHILE_CONFUSED_SPELL_IDS
-          : null;
-  const ids = new Set<string>();
-  for (const e of attacker.spellCastEvents ?? [])
-    if (e.spellId) ids.add(e.spellId);
-  // A designed breaker (mechanic listed on its own aura 77) counts outright;
-  // a full-school immunity (Ice Block, Divine Shield) only where the official
-  // usable-while attribute says it can be pressed in that state (user ruling
-  // 2026-09-04: neither is usable while stunned).
-  return [...ids].filter(
-    (id) =>
-      explicitlyBreaksMechanic(id, mech) ||
-      (auraBlocksMechanic(id, mech) === true &&
-        (usableIn === null || usableIn.has(id))),
-  );
-}
-
 export function peelOptionsForDeaths(params: {
   combat: AtomicArenaCombat;
   friends: ICombatUnit[];
@@ -136,7 +83,6 @@ export function peelOptionsForDeaths(params: {
   const { combat, friends, enemies, friendlyDeaths, enemyCC } = params;
   const allUnits = params.allUnits ?? Object.values(combat.units);
   const start = combat.startTime;
-  const zone = String(combat.startInfo?.zoneId ?? "");
   const enemyIds = new Set(enemies.map((u) => u.id));
   const enemyPetOwner = new Map<string, string>();
   for (const u of allUnits)
@@ -172,10 +118,6 @@ export function peelOptionsForDeaths(params: {
     const top = [...dmg.entries()].sort((a, b) => b[1] - a[1])[0];
     if (!top || total === 0) continue;
     const attacker = enemies.find((u) => u.id === top[0])!;
-    const attackerCc = buildAuraIntervals(attacker, combat).filter((iv) =>
-      ccSpellIds.has(iv.spellId),
-    );
-    const attackerAuras = buildAuraIntervals(attacker, combat);
     const trinket = enemyCC.find((s) => s.playerName === attacker.name);
 
     const perDeath: IPeelOption[] = [];
@@ -191,13 +133,6 @@ export function peelOptionsForDeaths(params: {
         continue;
       }
       if (cds.length === 0) continue;
-      const cannot = buildCannotCastIntervals(o, enemyIds);
-      const locks: Interval[] = buildAuraIntervals(o, combat)
-        .filter((iv) => auraLocksCasting(iv.spellId))
-        .map((iv) => ({
-          from: start + iv.fromS * 1000,
-          to: start + iv.toS * 1000,
-        }));
       for (const cd of cds) {
         if (
           cd.casts.some(
@@ -205,69 +140,32 @@ export function peelOptionsForDeaths(params: {
           )
         )
           continue;
-        const mech = ccMechanicOf(cd.spellId);
-        // The CC's reach on ONE target: its cast range, else the radius of a
-        // caster-centred one (`ccThreatReachYards`). Not `spellReachForCaster`,
-        // whose range + radius is the placed-area reach of an external: Storm
-        // Bolt is 20 yd with a 10 yd splash, and range + radius offered it on
-        // an attacker 27 yd away (found 2026-09-24 building GH #77 part 2).
-        const reach = ccThreatReachYards(o, cd.spellId);
-        if (mech === undefined || reach === null) continue;
-        const cat = getDRCategory(cd.spellId);
-        const drHistory = attackerCc
-          .filter((iv) => getDRCategory(iv.spellId) === cat)
-          .map((iv) => ({
-            applyMs: start + iv.fromS * 1000,
-            removeMs: start + iv.toS * 1000,
-            spellId: iv.spellId,
-          }));
-        const blockers = attackerAuras.filter(
-          (iv) => auraBlocksMechanic(iv.spellId, mech) !== false,
-        );
-        const tools = breakToolsFor(attacker, mech);
-        const attackerTalents = playerTalentIdSets(attacker);
-
+        // Reach, LoS, immunity, DR and the attacker's own breakers: the shared
+        // evaluator (utils/ccTargetState.ts). Peel policy: any DR below Immune.
+        const sampler = ccSamplerFor({
+          combat,
+          owner: o,
+          cd,
+          enemyIds,
+          renderedCcOf: (name) =>
+            enemyCC.find((x) => x.playerName === name)?.ccInstances ?? [],
+        });
+        if (!sampler) continue;
         const secs: number[] = [];
         let firstDist = 0;
-        let firstDr = cat ? "Full" : "n/a";
+        let firstDr = "n/a";
         for (let s = Math.ceil(tD - PEEL_LOOKBACK_S); s < tD; s++) {
-          const ms = start + s * 1000;
-          if (!cdReadyInTimeAt(cd, s)) continue;
-          if (inAny(cannot, ms) || inAny(locks, ms)) continue;
-          if (attackerCc.some((iv) => iv.fromS <= s && s < iv.toS)) continue;
-          if (blockers.some((iv) => iv.fromS <= s && s < iv.toS)) continue;
-          const po = getUnitPositionAtTime(o, ms, INTERP_MAX_GAP_MS);
-          const pa = getUnitPositionAtTime(attacker, ms, INTERP_MAX_GAP_MS);
-          if (!po || !pa) continue;
-          const dist = distanceBetween(po, pa);
-          if (dist > reach) continue;
-          if (hasLineOfSight(zone, po, pa) === false) continue;
-          const dr = cat
-            ? getDRLevel(
-                drHistory.filter((h) => h.applyMs < ms),
-                ms,
-              ).level
-            : "n/a";
-          if (dr === "Immune") continue;
-          if (
-            tools.some((id) =>
-              kitSpellReadyAt(attacker, id, s, start, attackerTalents),
-            )
-          )
-            continue;
+          const st = sampler.stateAt(attacker, s);
+          if (!st.ok) continue;
           if (secs.length === 0) {
-            firstDist = dist;
-            firstDr = dr;
+            firstDist = st.distanceYards;
+            firstDr = st.dr;
           }
           secs.push(s);
         }
         if (secs.length < PEEL_MIN_USABLE_S) continue;
         const from = secs[0]!;
-        const trinketReady = !trinket
-          ? null
-          : !trinket.trinketUseTimes.some(
-              (u) => u <= from && from - u < trinket.trinketCooldownSeconds,
-            );
+        const trinketReady = pvpTrinketReadyAtSecond(trinket, from);
         perDeath.push({
           victimName: victim.name,
           deathAtSeconds: tD,

@@ -93,6 +93,7 @@ import { heroBuildGroupOf } from "../utils/talents";
 import { warlockPetFunction } from "../utils/warlockPet";
 import { buildCriticalWindowSet } from "./criticalWindows";
 import { formatObservedConsequences } from "./observedConsequences";
+import { ccUseSummary, formatCcUse } from "./ccUse";
 import { formatPeelOptions, peelOptionsForDeaths } from "./peelOptions";
 import {
   formatDecisiveCounterfactualLine,
@@ -522,18 +523,24 @@ export function buildMatchContext(
     }
   }
 
+  // Computed once: the <burst_ledger> block numbers these bursts (`Burst #i+1`)
+  // and the CC USE bookmarks cite them by that number (GH #77).
+  const ownerBurstLedger = healer
+    ? []
+    : analyzeBurstLedger(
+        owner as ICombatUnit,
+        friends.filter((p) => p.id !== owner.id) as ICombatUnit[],
+        enemies as ICombatUnit[],
+        combat,
+      );
+
   // DPS owner (D2): the burst-ledger block — the counterpart of
   // healer_offense. Its predicates are exactly the ones the report card uses
   // (analyzeBurstLedger / auditWindowTargeting / analyzeKickAudit); a healer
   // owner never enters this branch, so healer prompts are byte-identical.
   if (!healer) {
     const ledgerLines = formatBurstLedgerForContext(
-      analyzeBurstLedger(
-        owner as ICombatUnit,
-        friends.filter((p) => p.id !== owner.id) as ICombatUnit[],
-        enemies as ICombatUnit[],
-        combat,
-      ),
+      ownerBurstLedger,
       auditWindowTargeting(
         owner as ICombatUnit,
         offensiveWindows,
@@ -888,6 +895,31 @@ export function buildMatchContext(
     if (peelLines.length > 0) {
       tLines.push("");
       peelLines.forEach((l) => tLines.push(l));
+    }
+  }
+
+  // GH #77 part 2 (2026-09-24): the owner's CC counts; DPS owners also get at
+  // most two event-linked review bookmarks — never a count of missed casts.
+  {
+    const ccUseLines = formatCcUse(
+      ccUseSummary({
+        combat,
+        owner: owner as ICombatUnit,
+        friends: friends as ICombatUnit[],
+        enemies: enemies as ICombatUnit[],
+        enemyCC: enemyCCSummaries,
+        burstLedger: ownerBurstLedger,
+        pressureWindows,
+      }),
+      unitLabeler(
+        [...friends, ...enemies] as ICombatUnit[],
+        playerIdMap,
+        enemyIdMap,
+      ),
+    );
+    if (ccUseLines.length > 0) {
+      tLines.push("");
+      ccUseLines.forEach((l) => tLines.push(l));
     }
   }
 

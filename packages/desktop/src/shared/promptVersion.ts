@@ -911,4 +911,19 @@
 //  healer missed-sync-window +24 / +12, cd-hoarded +8 / −8, healer
 //  cc-avoidable +7, each traced to a verified shorter cooldown; gate
 //  failure counts unchanged.
-export const PROMPT_VERSION = 117;
+//  v118 (2026-09-24, GH #77 part 2, user "先留下来吧 … 我觉得是有一定价值的"
+//  after four codex astra rounds): new CC USE section — the owner's CC
+//  counts (completed casts); DPS owners also get at most 2 instant-CC
+//  [CC BOOKMARK] lines (offense: own burst on a known non-healer × a CC-able
+//  enemy healer; defense: a teammate's [DMG SPIKE] × an attacker with ≥ 60 %
+//  of ALL its damage), each >= 5 consecutive seconds at Full DR, with the
+//  distance / DR / trinket stated "at <first second>". PEEL OPTIONS and the
+//  bookmarks share utils/ccTargetState.ts, which now applies a render-second
+//  policy (an absent-state must be absent over the whole rendered second)
+//  and reads the same CC instances the [CC ON …] lines render. 605 files:
+//  CC USE in 3,122 / 3,520 prompts; bookmarks in 348 of 2,263 DPS prompts
+//  (15.4 %), 430 lines; PEEL OPTIONS 235 → 208 lines (10 of the 27 removed
+//  sat on a rendered [CC ON ENEMY] of their own attacker; 17 fell under the
+//  3 s door once boundary seconds were excluded), deaths with a line
+//  196 → 176; both gates 0; candidates unchanged.
+export const PROMPT_VERSION = 118;
