@@ -198,12 +198,27 @@ describe("burstLedger — burst grouping and audit", () => {
       name: "Pally",
       info,
       auraEvents: [
-        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "363916", MATCH_START + 11_000, "evoker", "e1", "BUFF"),
-        makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, "363916", MATCH_START + 17_000, "evoker", "e1", "BUFF"),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          "363916",
+          MATCH_START + 11_000,
+          "evoker",
+          "e1",
+          "BUFF",
+        ),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_REMOVED,
+          "363916",
+          MATCH_START + 17_000,
+          "evoker",
+          "e1",
+          "BUFF",
+        ),
       ],
     } as any);
-    const hitsAlly = analyzeBurstLedger(mkPlayer(), [], [byAlly], makeCombat())[0]
-      .dominantTarget?.defensivesHit ?? [];
+    const hitsAlly =
+      analyzeBurstLedger(mkPlayer(), [], [byAlly], makeCombat())[0]
+        .dominantTarget?.defensivesHit ?? [];
     expect(hitsAlly).toHaveLength(1);
     expect(hitsAlly[0].appliedByOther).toBe(true);
 
@@ -211,14 +226,99 @@ describe("burstLedger — burst grouping and audit", () => {
       name: "Pally",
       info,
       auraEvents: [
-        { ...makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "363916", MATCH_START + 11_000, "e1", "e1", "BUFF"), srcUnitName: "Pally" },
-        { ...makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, "363916", MATCH_START + 17_000, "e1", "e1", "BUFF"), srcUnitName: "Pally" },
+        {
+          ...makeAuraEvent(
+            LogEvent.SPELL_AURA_APPLIED,
+            "363916",
+            MATCH_START + 11_000,
+            "e1",
+            "e1",
+            "BUFF",
+          ),
+          srcUnitName: "Pally",
+        },
+        {
+          ...makeAuraEvent(
+            LogEvent.SPELL_AURA_REMOVED,
+            "363916",
+            MATCH_START + 17_000,
+            "e1",
+            "e1",
+            "BUFF",
+          ),
+          srcUnitName: "Pally",
+        },
       ],
     } as any);
-    const hitsSelf = analyzeBurstLedger(mkPlayer(), [], [bySelf], makeCombat())[0]
-      .dominantTarget?.defensivesHit ?? [];
+    const hitsSelf =
+      analyzeBurstLedger(mkPlayer(), [], [bySelf], makeCombat())[0]
+        .dominantTarget?.defensivesHit ?? [];
     expect(hitsSelf).toHaveLength(1);
     expect(hitsSelf[0].appliedByOther).toBe(false);
+  });
+
+  it("可靠性第二轮 W1h:我方挂在敌人身上的业报之触(122470)不是敌人的减伤(d78f)", () => {
+    const monk = makeUnit("p1", {
+      name: "Ret",
+      spec: CombatUnitSpec.Paladin_Retribution,
+      info,
+      spellCastEvents: [
+        makeSpellCastEvent(
+          "31884",
+          MATCH_START + 10_000,
+          "p1",
+          "Self",
+          "p1",
+          "Ret",
+          0,
+          "Avenging Wrath",
+        ),
+      ],
+      damageOut: [dmgOut(MATCH_START + 12_000, -50_000, "e1")],
+    } as any);
+    const target = makeUnit("e1", {
+      name: "Priest",
+      info,
+      auraEvents: [
+        {
+          ...makeAuraEvent(
+            LogEvent.SPELL_AURA_APPLIED,
+            "122470",
+            MATCH_START + 11_000,
+            "p1",
+            "e1",
+            "DEBUFF",
+          ),
+          srcUnitName: "Ret",
+        },
+        {
+          ...makeAuraEvent(
+            LogEvent.SPELL_AURA_REMOVED,
+            "122470",
+            MATCH_START + 17_000,
+            "p1",
+            "e1",
+            "DEBUFF",
+          ),
+          srcUnitName: "Ret",
+        },
+      ],
+    } as any);
+    const entries = analyzeBurstLedger(monk, [], [target], makeCombat());
+    expect(entries.length).toBeGreaterThan(0);
+    expect(entries[0].dominantTarget?.defensivesHit ?? []).toEqual([]);
+    // control: the same aura from someone NOT on the attacking side is counted
+    const other = {
+      ...target,
+      auraEvents: target.auraEvents.map((a: any) => ({
+        ...a,
+        srcUnitName: "Other",
+      })),
+    } as any;
+    const hits =
+      analyzeBurstLedger(monk, [], [other], makeCombat())[0].dominantTarget
+        ?.defensivesHit ?? [];
+    expect(hits.map((h) => h.spellId)).toEqual(["122470"]);
   });
 
   it("reports ally CD overlap and target death credit (D1-B4)", () => {

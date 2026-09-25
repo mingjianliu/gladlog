@@ -1144,4 +1144,8 @@
 //  25 → 40, Obsidian Scales 30 → 40, Astral Shift 40 → 60, self Pain
 //  Suppression 40 → 50); the [ENEMY DEF] legend says the % may include the
 //  caster's talents. Candidate menu byte-identical.
-export const PROMPT_VERSION = 145;
+//  v146 (2026-09-25, reliability round 2 W1h i): the burst ledger skips
+//  defensive auras our side put on the target — the owner's own Touch of
+//  Karma tether read as "Target had a major defensive up". 605 files: 49
+//  lines removed in 40 contexts, menu unchanged.
+export const PROMPT_VERSION = 146;

@@ -120,6 +120,10 @@ export function analyzeBurstLedger(
 ): IBurstLedgerEntry[] {
   const matchStartMs = combat.startTime;
   const matchEndS = (combat.endTime - matchStartMs) / 1000;
+  const attackingSide = new Set<string>([
+    player.name,
+    ...allies.map((a) => a.name),
+  ]);
 
   const ownCDs =
     reconstructEnemyCDTimeline([player], combat).players[0]?.offensiveCDs ?? [];
@@ -200,6 +204,11 @@ export function analyzeBurstLedger(
         DEF_OR_IMMUNE_IDS,
         combat,
       )) {
+        // An aura OUR side put on the target is not the target's defensive —
+        // the owner's own Touch of Karma tether (122470, applied by the monk
+        // ON the enemy) read as "Target had a major defensive up" (reliability
+        // round 2 W1h, d78f). An enemy teammate's external still counts.
+        if (attackingSide.has(iv.srcUnitName)) continue;
         const overlapMs =
           Math.min(iv.endMs, toMs) - Math.max(iv.startMs, fromMs);
         if (overlapMs / 1000 < MIN_DEFENSIVE_OVERLAP_S) continue;
