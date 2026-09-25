@@ -2618,8 +2618,14 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
         ? ` | Tremor Totem from ${pid(tremor.shamanName)} ended this CC after ${cc.durationSeconds.toFixed(0)}s (cut short — it had not expired)`
         : "";
 
+      // `spell:<id>` is getDRCategory's self-DR fallback for a CC no DR
+      // family claims (Infernal Awakening 22703 — drShareScan 2026-09-25: full
+      // 79 % after a stun, 88 % after disorient / incapacitate, i.e. it shares
+      // none) — a key, not a category the reader can use, so no tag.
       const drStr =
-        cc.drInfo && cc.drInfo.category !== "Unknown"
+        cc.drInfo &&
+        cc.drInfo.category !== "Unknown" &&
+        !cc.drInfo.category.startsWith("spell:")
           ? ` [DR: ${cc.drInfo.category} ${cc.drInfo.level}]`
           : "";
       // GH #103: the tag names the CC (the coach guessed "stun" for a silence)

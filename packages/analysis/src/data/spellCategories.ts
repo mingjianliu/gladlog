@@ -119,6 +119,11 @@ export const SPELL_CATEGORIES: Record<string, ISpellCategoryEntry> = {
   "5484": cc(), // Howl of Terror
   "6789": cc(), // Mortal Coil (DR: Incapacitate)
   "30283": cc(), // Shadowfury
+  // Infernal Awakening — the Summon Infernal landing stun (DB2 2 s). Observed
+  // in the corpus but missing here, so it was neither a cannot-cast cutter
+  // nor a rendered CC (reliability audit side item, 2026-09-25: an owner was
+  // stunned 11.83–13.83 with no [CC ON TEAM] line).
+  "22703": cc(),
   "710": cc(), // Banish
   "6358": cc(), // Seduction
   "89766": cc(), // Axe Toss
