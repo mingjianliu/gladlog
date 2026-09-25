@@ -2497,3 +2497,15 @@ M6 已做完的:1,190 个脚本型天赋分队列 → 118 个点名了产品追�
 
 - **2026-09-24 已上线 `d06a86c5`(PROMPT_VERSION 109,用户「先做」)**:agy 复核(codex 没额度)认为三个问题都有合理默认,用户采纳 —— 允许可观测后果与建议理由,禁归因输赢 / 对本场结果的笃定假设 / 凭空推断状态;先上踢断 + 治疗被控两类 `[CONSEQ]`,「逼出」等 #69;饰品按裁决 1 不看血量。新门规 `checkConseqHpStateConsistency`(第 29 类):605 份 0 失败、变异抓住 2,215/3,399。同 100 场改前 vs 改后盲审:全对后果句 14 → 49,含过头句的建议 14.5 % → 14.6 %(agy 提的 5 % 门槛旧产品本来就过不了,改用「不比之前差」),无依据句 35 → 29。**剩**:墙 / 外置「逼出」随 #69;深挖 prompt(`deepDive.ts`)仍是旧的一刀切因果禁令,对齐要另测。
 - **2026-09-24 深挖对齐 `e927b9e3`(PROMPT_VERSION 112),#70 已关**:第二轮深挖的一刀切因果禁令改成与第一轮同一套规则。同 90 场 141 条深挖、改前 vs 改后混合盲审:含过头句的深挖 50.7 % → 29.1 %,部分对的后果句 62 → 26,全对 3 → 7。旧禁令从没点名「凭空推断状态」,那正是它过头的大头。「逼出」挪到 #69(评论里有门槛数据);#83 同日关闭,地图后续在 #104。
+
+## 57. 被动触发的施放被当成玩家按键(logged 2026-09-25,GH #108,可靠性审计 GH #107 遗留,用户裁「记账」)
+
+**现象**:日志里有些 `SPELL_CAST_SUCCESS` 是被动触发,不是玩家按的键 —— 典型是奶骑的 Reclamation 415388(约占该专精原始施法数 24 %)。把它当成「玩家在做事」的消费者就会说错话:
+- kick-eaten 的 `postKick`(`ccTrinketAnalysis.ts` 被踢后的 `castTimes`):825ca842 @303「被踢后 0.5 秒第一次施法」其实是 Reclamation;
+- cc-avoidable 的 GCD 门(A4,`candidateFindings.ts` 的 `ownerOnGcdCastSeconds`):217.25–217.57 秒 Reclamation 连触 5 次,被读成「奶在 GCD 里,按不了反应技能」。
+
+**更正**:审计时我写「要先有玩家真正按下的施法数据集才能修」,不对 —— 共享谓词早就有:`utils/cooldowns.ts` → `isPassiveProcCast`(`PASSIVE_PROC_CAST_IDS` + 名字兜底,已含 Reclamation),冷却账本、`[YOU] [CAST]` 时间线、`extractRotations`、`crisisEvents` 都在用。问题是上面两处(以及可能更多)直接读 `SPELL_CAST_SUCCESS` 绕过了它 —— 共享谓词规则类缺口,不缺数据。
+
+**范围(未审)**:还有约 30 处直接读 `SPELL_CAST_SUCCESS`(kickPriority、momentSnapshot、teammateCrisis、matchTimeline、combatStates、dispelAnalysis、deathOutcomeAnalysis …)。有的只是问「这个法术发生了没有」(不用改),有的问「玩家按了没有」(要走 `isPassiveProcCast`)。
+
+**做法(未开工)**:逐个把读取方分成「法术发生」和「玩家按键」两类 → 后者统一走 `isPassiveProcCast` → 登记 predicate-index → 每个消费者一条单测 + 605 场切片前后数字。
