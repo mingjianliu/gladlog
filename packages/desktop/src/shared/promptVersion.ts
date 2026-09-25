@@ -1075,4 +1075,12 @@
 //  listing it twice 1,188 → 0, duplicated [CD] lines 1,246 → 0,
 //  "Bladestorm、Bladestorm" in missed-sync-window facts 9 → 0; candidate ids
 //  unchanged; gates unchanged.
-export const PROMPT_VERSION = 134;
+//  v135 (2026-09-25, reliability audit side + B3b + C2 + A2 step 2 +
+//  B3iii): Infernal Awakening renders as CC (1,048 lines, no raw DR key);
+//  a merged enemy-healer lock is judged at each component start; Barkskin /
+//  Frenzied Regeneration are response-only Restoration Druid saves (never
+//  accused); a save given to another teammate no longer answers a crisis and
+//  the cd-hoarded line says where it went (spentElsewhere, +21); a healer's
+//  own CD counts as team burst only if it is Power Infusion; sync-window
+//  reference regenerated (SS contrast 3 pp, at the door).
+export const PROMPT_VERSION = 135;
