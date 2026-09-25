@@ -4,7 +4,7 @@ import {
   buildCannotCastIntervals,
   coveredMsWithin,
 } from "./cannotCastIntervals";
-import { isHealerSpec, specToString } from "./cooldowns";
+import { isHealerSpec, isPassiveProcCast, specToString } from "./cooldowns";
 import { getLowestHpPercentInWindow } from "./killWindowTargetSelection";
 import { fmtTime } from "./renderGrid";
 
@@ -127,7 +127,12 @@ export function detectHealingGaps(
   // All timestamps where the healer produced a heal event or successfully cast a spell, sorted ascending
   const healTimestamps = healer.healOut.map((h) => h.logLine.timestamp);
   const castTimestamps = healer.spellCastEvents
-    .filter((e) => e.logLine.event === LogEvent.SPELL_CAST_SUCCESS)
+    // GH #108: a passive proc is not the healer acting
+    .filter(
+      (e) =>
+        e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+        !isPassiveProcCast(e),
+    )
     .map((e) => e.logLine.timestamp);
 
   const activeTimestamps = Array.from(

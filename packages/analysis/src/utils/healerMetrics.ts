@@ -12,6 +12,7 @@ import {
   extractMajorCooldowns,
   IMajorCooldownInfo,
   MAJOR_DEFENSIVE_IDS,
+  isPassiveProcCast,
 } from "./cooldowns";
 import { reconstructEnemyCDTimeline } from "./enemyCDs";
 import { detectHealingGaps } from "./healingGaps";
@@ -166,8 +167,10 @@ export function computeHealerMetrics(
     combat as any,
     enemyPets,
   );
+  // GH #108: passive procs are not casts the healer landed
   const successCasts = healerUnit.spellCastEvents.filter(
-    (e: any) => e.logLine.event === "SPELL_CAST_SUCCESS",
+    (e: any) =>
+      e.logLine.event === "SPELL_CAST_SUCCESS" && !isPassiveProcCast(e),
   ).length;
   const interuptsOnMe = ccTrinketSummary.interruptInstances.length;
   const effectiveCastRatio = successCasts / (successCasts + interuptsOnMe + 1);

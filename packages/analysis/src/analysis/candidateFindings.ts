@@ -63,6 +63,7 @@ import {
   USABLE_WHILE_CC_SPELL_IDS,
   USABLE_WHILE_CONFUSED_SPELL_IDS,
   USABLE_WHILE_FEARED_SPELL_IDS,
+  isPassiveProcCast,
 } from "../utils/cooldowns";
 import {
   annotateMissedPurgesWithKillWindows,
@@ -2192,7 +2193,10 @@ function teamPlayEvents(
         .filter(
           (e: any) =>
             e.logLine?.event === "SPELL_CAST_SUCCESS" &&
-            !OFF_GCD_SPELL_IDS.has(String(e.spellId ?? "")),
+            !OFF_GCD_SPELL_IDS.has(String(e.spellId ?? "")) &&
+            // GH #108: a passive proc (Reclamation fired 5× at
+            // 217.25–217.57) is not the owner locking their own GCD.
+            !isPassiveProcCast(e),
         )
         .map((e: any) => (e.logLine.timestamp - combat.startTime) / 1000);
       // W1a: the owner's own cannot-cast intervals (CC, silence, kick

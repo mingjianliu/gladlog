@@ -32,7 +32,7 @@ import {
   buildCannotCastIntervals,
   coveredMsWithin,
 } from "./cannotCastIntervals";
-import { isHealerSpec, specToString } from "./cooldowns";
+import { isHealerSpec, isPassiveProcCast, specToString } from "./cooldowns";
 import { computeIncomingDR, IDRInfo, matchPendingCcKey } from "./drAnalysis";
 import {
   distanceBetween,
@@ -1224,6 +1224,8 @@ export function analyzePlayerCCAndTrinket(
         const hadInterveningCast = player.spellCastEvents.some(
           (c) =>
             c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+            // GH #108: a passive proc during the bar does not break it
+            !isPassiveProcCast(c) &&
             c.logLine.timestamp > sMs &&
             c.logLine.timestamp < match.logLine.timestamp,
         );
@@ -1376,7 +1378,10 @@ export function analyzePlayerCCAndTrinket(
       .filter(
         (e) =>
           e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
-          !ccBreakIds.has(String(e.spellId ?? "")),
+          !ccBreakIds.has(String(e.spellId ?? "")) &&
+          // GH #108: a passive proc is not "the first cast after the kick"
+          // (825ca842 @303: Reclamation read as "first cast 0.5s later").
+          !isPassiveProcCast(e),
       )
       .map((e) => ({
         t: (e.logLine.timestamp - matchStartMs) / 1000,

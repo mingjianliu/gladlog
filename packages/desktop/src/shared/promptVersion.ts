@@ -1120,4 +1120,8 @@
 //  ≥ 1 % and ≥ 3 recasts must beat the model on each half): 31 → 33
 //  cells, Life Cocoon now has one (held-out "certainly on cooldown" at a
 //  real press 18.6 % → 2.1 %).
-export const PROMPT_VERSION = 141;
+//  v142 (2026-09-25, GH #108): a passive proc (Reclamation …) is not a
+//  press in cc-avoidable's GCD gate, kick-eaten's post-kick casts, the
+//  hardcast-broken test, healing-gap / [INACTIVITY] activity, the healer
+//  cast ratio, moment snapshots and teammate-crisis owner casts.
+export const PROMPT_VERSION = 142;

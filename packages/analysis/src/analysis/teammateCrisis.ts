@@ -60,6 +60,7 @@ import {
   gridHpPct,
   type IMajorCooldownInfo,
   isHealerSpec,
+  isPassiveProcCast,
 } from "../utils/cooldowns";
 import { isEnemyCdWindowSpell } from "../utils/enemyCDs";
 import { hasLineOfSight } from "../utils/losAnalysis";
@@ -282,8 +283,10 @@ export function teammateCrisisPoints(
   const externalCds = cds.filter((cd) =>
     CRISIS_EXTERNAL_IDS.has(String(cd.spellId)),
   );
+  // GH #108: the owner's presses — a passive proc is not the healer acting
   const ownerCasts = ((owner.spellCastEvents ?? []) as any[]).filter(
-    (c) => c.logLine?.event === LogEvent.SPELL_CAST_SUCCESS,
+    (c) =>
+      c.logLine?.event === LogEvent.SPELL_CAST_SUCCESS && !isPassiveProcCast(c),
   );
   const ownerStarts = (owner.castStartEvents ?? []) as any[];
   const friendlyDeaths: number[] = [];

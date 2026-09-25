@@ -25,6 +25,7 @@ import {
   selfCastNoopAnnotatedName,
   specToString,
   type IMajorCooldownInfo,
+  isPassiveProcCast,
 } from "../utils/cooldowns";
 import { fmtTime } from "../utils/renderGrid";
 import { analyzeOutgoingCCChains, DR_CATEGORY_MAP } from "../utils/drAnalysis";
@@ -130,7 +131,12 @@ export function largestCastGap(
 ): { fromT: number; toT: number; gapS: number } | null {
   const events = (unit.spellCastEvents ?? []) as any[];
   const times = events
-    .filter((e) => e.logLine?.event === LogEvent.SPELL_CAST_SUCCESS)
+    // GH #108: a passive proc does not break an idle gap
+    .filter(
+      (e) =>
+        e.logLine?.event === LogEvent.SPELL_CAST_SUCCESS &&
+        !isPassiveProcCast(e),
+    )
     .map((e) => (e.logLine.timestamp - matchStartMs) / 1000)
     .filter((s) => s >= fromS && s <= toS)
     .sort((a, b) => a - b);
@@ -166,6 +172,7 @@ export function buildCastFlowLines(
     const events = (u.spellCastEvents ?? []) as any[];
     for (const e of events) {
       if (e.logLine?.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
+      if (isPassiveProcCast(e)) continue; // GH #108: not a press
       const relS = (e.logLine.timestamp - matchStartMs) / 1000;
       if (relS < fromS || relS > toS) continue;
       rows.push({

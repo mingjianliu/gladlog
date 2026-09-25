@@ -569,4 +569,53 @@ describe("analyzePlayerCCAndTrinket — structured data contract (N4)", () => {
     expect(inst.firstActionDelayS).toBe(4);
     expect(inst.ccInWindowS).toBe(2);
   });
+
+  it("GH #108: a passive proc (Reclamation) in the post-kick window is not the first cast (825ca842 @303)", () => {
+    const enemy = makeUnit("enemy-1", {
+      name: "EnemyShaman",
+      spec: CombatUnitSpec.Shaman_Enhancement,
+      reaction: CombatUnitReaction.Hostile,
+    });
+    const player = makeUnit("player-1", {
+      name: "PlayerPaladin",
+      spec: CombatUnitSpec.Paladin_Holy,
+      reaction: CombatUnitReaction.Friendly,
+      actionIn: [
+        makeInterruptEvent(
+          "57994",
+          "Wind Shear",
+          "19750",
+          "Flash of Light",
+          MATCH_START + 30_000,
+          "enemy-1",
+          "EnemyShaman",
+        ),
+      ],
+      spellCastEvents: [
+        makeSpellCastEvent(
+          "415388",
+          MATCH_START + 30_500,
+          "player-1",
+          "PlayerPaladin",
+          "player-1",
+          "PlayerPaladin",
+          0,
+          "Reclamation",
+        ),
+        makeSpellCastEvent(
+          "20473",
+          MATCH_START + 33_200,
+          "player-1",
+          "PlayerPaladin",
+          "player-1",
+          "PlayerPaladin",
+          0,
+          "Holy Shock",
+        ),
+      ],
+    });
+    const inst = analyzePlayerCCAndTrinket(player, [enemy], makeCombat())
+      .interruptInstances[0]!;
+    expect(inst.firstActionDelayS).toBeCloseTo(3.2, 5);
+  });
 });
