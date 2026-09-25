@@ -136,6 +136,7 @@ import {
 } from "./candidates/teammateCrisisIdle";
 import { CRISIS_HP_PCT, crisisDecisionPoints } from "./crisisDecisionPoints";
 import { fmtFactNum as fmt, fmtFactTime } from "./factFormat";
+import { majorWallIntervals } from "./stackedDefensives";
 import { teammateCrisisPoints } from "./teammateCrisis";
 import type { CandidateEvent } from "./types";
 
@@ -1713,12 +1714,36 @@ function teamPlayEvents(
         ((u.deathRecords ?? []) as any[]).map(
           (d) => (d.timestamp - combat.startTime) / 1000,
         );
+      // A2 (2026-09-24): the shared protection-evidence record — the same
+      // majorWallIntervals the [STACKED DEFENSIVES] line reads, friendly
+      // casters only (the crisis unit's own team, as that line defines it).
+      const wallPlayers = (Object.values(combat.units ?? {}) as any[]).filter(
+        (u) => u.info,
+      );
+      const wallById = new Map<string, any>(wallPlayers.map((u) => [u.id, u]));
+      const wallsOn = (unit: any) => {
+        try {
+          return majorWallIntervals(
+            unit,
+            combat,
+            wallById,
+            new Set(
+              wallPlayers
+                .filter((u) => u.reaction === unit.reaction)
+                .map((u) => u.name),
+            ),
+          );
+        } catch {
+          return [];
+        }
+      };
       const cdHoardSources = [
         {
           crisisUnit: { id: owner.id, name: owner.name },
           own: true,
           points: crisisDecisionPoints(owner, combat),
           deathSeconds: deathSecondsOf(owner),
+          majorWalls: wallsOn(owner),
         },
         ...friends
           .filter((f: any) => f.id !== owner.id)
@@ -1727,6 +1752,7 @@ function teamPlayEvents(
             own: false,
             points: crisisDecisionPoints(f, combat),
             deathSeconds: deathSecondsOf(f),
+            majorWalls: wallsOn(f),
           })),
       ];
       out.push(

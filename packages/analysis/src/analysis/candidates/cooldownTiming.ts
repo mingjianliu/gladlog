@@ -552,6 +552,14 @@ export const CD_HOARD_RESPONSE_S = 5;
  * same shape as `data/behaviorPriorGenerated.json`) is the follow-up, not
  * yet built — until then this is a fixed constant block, not a per-cell
  * lookup keyed on bracket/role/damage the way that table is.
+ *
+ * ⚠ Measured on the PRE-2026-09-24 spent/held partition. Reliability audit
+ * A2 moved points out of "held": a save cooldown pressed just before the
+ * crossing now counts as spent, and a major wall already up on the crisis
+ * unit makes the point abstain (605-file slice: emitted cd-hoarded 2,241 →
+ * 1,858). Both removals are answered-or-protected crises, so the "held" arm
+ * was, if anything, diluted with safer points; the numbers are kept as the
+ * last measured reference until the probe is re-run on the new partition.
  */
 export const CD_HOARDED_OUTCOME_REF = {
   refDeathSpent: "4.5",
@@ -584,6 +592,17 @@ export interface ICdHoardedCrisisSource {
     | "dangerous"
   > &
     Partial<Pick<DecisionPoint, "responses">>)[];
+  /** Reliability audit A2 (2026-09-24): the major defensives friendlies put
+   * on the crisis unit (`majorWallIntervals`, the same record the
+   * `[STACKED DEFENSIVES]` line reads). A wall up at the crossing, whoever
+   * cast it, makes cd-hoarded ABSTAIN (never "responded", never "enough").
+   * Absent = no abstention (the pre-2026-09-24 behaviour). */
+  majorWalls?: {
+    spellId: string;
+    srcUnitName: string;
+    fromS: number;
+    toS: number;
+  }[];
   /** the crisis unit's death instants (seconds since round start), for the
    * BACKLOG #43 proc exemption — a proc that fired while they still died
    * inside CD_HOARD_RESPONSE_S does not lift the accusation */
@@ -671,10 +690,15 @@ function readyDefensiveCds(
  * to pin (a self-only heal like Desperate Prayer can never answer a
  * teammate's crisis).
  *
- * "Spent" is a press of any READY cooldown (not just the first one found)
- * inside `[tSec - RESPONSE_PRE_MS/1000, tSec + CD_HOARD_RESPONSE_S]` — a
- * press landing just before the sampled crossing still counts, the same
- * convention `crisisDecisionPoints`' own response window uses.
+ * "Spent" is a press of any of the owner's save cooldowns that can help
+ * this crisis unit (`isSpendableDefensiveCd` + the same help gate), inside
+ * `[tSec - RESPONSE_PRE_MS/1000, tSec + CD_HOARD_RESPONSE_S]` — a press
+ * landing just before the sampled crossing still counts, the same convention
+ * `crisisDecisionPoints`' own response window uses. Until 2026-09-24 the set
+ * was "off cooldown at tSec", so a single-charge cooldown pressed in that
+ * pre-window was already on cooldown at tSec and could never count
+ * (a9bc48b5 @23: Ironbark on the crisis unit 0.9 s before the anchor was
+ * accused as "held") — reliability audit A2.
  *
  * Severity/cap: sorted by the SAME danger order `crisisNoResponseEvents`
  * uses (enemyBurst, then attackers2s, then dmg2s — NEVER by outcome; this
@@ -754,18 +778,19 @@ export function cdHoardedEvents(
       }
       // Two sets on purpose (reaction window, user ruling 2026-09-23): the
       // ACCUSATION names only cooldowns ready by t − REACTION_WINDOW_S
-      // (`cdReadyInTimeAt`), but "did they respond" (`spent` below) still
-      // counts a press of anything off cooldown at t. With one strict set, a
+      // (`cdReadyInTimeAt`), but "did they respond" (`spent` below) counts a
+      // press of any save cooldown that helps this unit (since 2026-09-24 not
+      // even required to be off cooldown at t — reliability audit A2). With one strict set, a
       // cooldown that came back 0.4 s before the crisis and WAS pressed fell
       // out of `spent`, and the other unpressed wall became a new accusation
       // against a player who had answered — 8 new accusations on the S2
       // archive every-30 before the split, 0 after (the 1 remaining addition is a
       // CD_HOARD_CAP substitution).
-      const offCooldown = readyDefensiveCds(ownerCds, p.tSec, (cd) =>
+      const helps = (cd: CdHoardCandidateCd) =>
         src.own
           ? !SELF_CAST_NOOP_EXTERNAL_IDS.has(cd.spellId)
-          : canHelpAnotherUnit(cd.spellId, cd.tag),
-      );
+          : canHelpAnotherUnit(cd.spellId, cd.tag);
+      const offCooldown = readyDefensiveCds(ownerCds, p.tSec, helps);
       const ready = offCooldown.filter((cd) => cdReadyInTimeAt(cd, p.tSec));
       if (ready.length === 0) {
         if (tracing)
@@ -802,13 +827,38 @@ export function cdHoardedEvents(
           });
         continue;
       }
-      const spent = offCooldown.some((cd) =>
-        cd.casts.some(
-          (c) =>
-            c.timeSeconds >= p.tSec - RESPONSE_PRE_MS / 1000 &&
-            c.timeSeconds <= p.tSec + CD_HOARD_RESPONSE_S,
-        ),
+      // A2 (user ruling 2026-09-19, codex astra debate 2026-09-24): a major
+      // wall already up on the crisis unit at the crossing — whoever cast it —
+      // means this line cannot say the owner left them unprotected. Abstain;
+      // it is NOT recorded as a response and NOT as "enough protection".
+      const wall = (src.majorWalls ?? []).find(
+        (w) => w.fromS <= p.tSec && p.tSec < w.toS,
       );
+      if (wall) {
+        if (tracing)
+          trace.push({
+            type: "cd-hoarded",
+            opportunityId: opportunity(src.crisisUnit.id, p),
+            ownerId: owner.id,
+            verdict: "suppressed",
+            reason: "wall-active",
+            facts: pointFacts(src.own, p, ready),
+            candidateIds: [],
+          });
+        continue;
+      }
+      // Response set (A2): every save cooldown that could help this unit,
+      // pressed in the window — NOT only the ones off cooldown at tSec (see the
+      // "Spent" paragraph above). The accusation set `ready` is unchanged.
+      const spent = ownerCds
+        .filter((cd) => isSpendableDefensiveCd(cd) && helps(cd))
+        .some((cd) =>
+          cd.casts.some(
+            (c) =>
+              c.timeSeconds >= p.tSec - RESPONSE_PRE_MS / 1000 &&
+              c.timeSeconds <= p.tSec + CD_HOARD_RESPONSE_S,
+          ),
+        );
       if (spent) {
         if (tracing)
           trace.push({

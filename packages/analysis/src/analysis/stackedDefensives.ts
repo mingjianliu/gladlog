@@ -28,7 +28,7 @@ import {
 } from "../data/mitigationComponents";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import spellIdLists from "../data/spellIdLists";
-import { buildAuraIntervals } from "../utils/auraIntervals";
+import { buildAuraIntervals, type IAuraInterval } from "../utils/auraIntervals";
 
 /** external ∪ big-personal defensives — the two lists the product already
  * treats as "major"; small cooldowns (Fade, PW:S) are on neither */
@@ -74,6 +74,30 @@ export interface StackedDefensivePair {
   secondRunSeconds: number;
 }
 
+/**
+ * The protection-evidence record (reliability audit A2, 2026-09-24): every
+ * MAJOR defensive (`STACKED_DEFENSIVE_MAJOR_IDS`) a friendly put on `target`,
+ * as observed aura intervals — who cast it, when it was up. One source for
+ * both consumers: the `[STACKED DEFENSIVES]` fact line below and cd-hoarded's
+ * "already protected at the crossing → abstain" (user ruling 2026-09-19
+ * "该不该救 = 伤情 × 已有保护一起看"). It states protection, never that the
+ * protection was ENOUGH (the 2026-09-16 withdrawal).
+ */
+export function majorWallIntervals(
+  target: any,
+  combat: any,
+  playersById: ReadonlyMap<string, any>,
+  friendNames: ReadonlySet<string>,
+): IAuraInterval[] {
+  return buildAuraIntervals(target, combat, playersById)
+    .filter(
+      (iv) =>
+        STACKED_DEFENSIVE_MAJOR_IDS.has(iv.spellId) &&
+        friendNames.has(iv.srcUnitName),
+    )
+    .sort((x, y) => x.fromS - y.fromS);
+}
+
 export function stackedDefensivePairs(
   owner: any,
   combat: any,
@@ -98,13 +122,7 @@ export function stackedDefensivePairs(
     );
     let ivs;
     try {
-      ivs = buildAuraIntervals(target, combat, byId)
-        .filter(
-          (iv) =>
-            STACKED_DEFENSIVE_MAJOR_IDS.has(iv.spellId) &&
-            friendNames.has(iv.srcUnitName),
-        )
-        .sort((x, y) => x.fromS - y.fromS);
+      ivs = majorWallIntervals(target, combat, byId, friendNames);
     } catch {
       continue;
     }

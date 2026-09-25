@@ -962,4 +962,15 @@
 //  111, waited-out → first-cast 89, idle → idle+pressed 51; 38 owners swap
 //  which kicks make the cap (42 idle-with-presses out, other tier-1 in);
 //  "waited out" with X < lockout 112 → 0; match contexts byte-identical.
-export const PROMPT_VERSION = 121;
+//  v122 (2026-09-25, reliability audit A2 step 1, user rulings 2026-09-24
+//  "加 改" + 2026-09-19 "该不该救 = 伤情 × 已有保护一起看"): cd-hoarded's
+//  response set no longer requires the cooldown to be off cooldown at the
+//  crossing (a save pressed in the 1.5 s before it now answers it), and a
+//  major wall friendlies had up on the crisis unit at the crossing makes the
+//  point abstain (never "responded", never "enough"; shared
+//  majorWallIntervals with the [STACKED DEFENSIVES] line). 605 files:
+//  emitted cd-hoarded 2,241 → 1,858 (dps 1,157 → 967, healer 1,084 → 891):
+//  pre-press −237 (+62 cap substitutions), wall-active −280 (+72); every
+//  addition is a cap substitution; all other candidate ids and the match
+//  contexts byte-identical.
+export const PROMPT_VERSION = 122;

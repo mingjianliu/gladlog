@@ -1230,6 +1230,11 @@ const INDEX: PredicateRow[] = [
     mod: stackedDefensives,
   },
   {
+    file: `${A}/analysis/stackedDefensives.ts`,
+    symbol: "majorWallIntervals",
+    mod: stackedDefensives,
+  },
+  {
     file: `${A}/context/stackedDefensives.ts`,
     symbol: "formatStackedDefensiveLines",
     mod: stackedDefensivesContext,
