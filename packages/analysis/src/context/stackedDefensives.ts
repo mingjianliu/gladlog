@@ -12,7 +12,7 @@
  * percent is the engine's own rounded integer.
  */
 import type { StackedDefensivePair } from "../analysis/stackedDefensives";
-import { fmtTime } from "../utils/renderGrid";
+import { fmtTime, renderedWindowSeconds } from "../utils/renderGrid";
 
 export const STACKED_DEFENSIVES_TAG = "[STACKED DEFENSIVES]";
 
@@ -54,10 +54,21 @@ export function formatStackedDefensiveLines(
       else if (s.pricing === "absorb")
         priced = `absorbed ${s.blockedOverlapPct}% of their max HP during the overlap`;
       else priced = `is not priced here (${s.unpricedReason})`;
+      // The span's duration is the difference of its RENDERED endpoints —
+      // the gate re-parses "m:ss–m:ss (Ns)" (checkWindowSpanConsistency).
+      // The raw 1-dp overlap ("0:34–0:38 (4.3s)") disagreed with its own
+      // endpoints on ~3 of 4 lines and slipped past the gate's integer regex;
+      // the 1 in 4 that rounded to a whole number failed it. An overlap
+      // inside one rendered second says so instead of "(0s)".
+      const spanS = renderedWindowSeconds(s.overlapFromSec, s.overlapToSec);
+      const span =
+        spanS === 0
+          ? `for under 1 s at ${fmtTime(s.overlapFromSec)}`
+          : `${fmtTime(s.overlapFromSec)}–${fmtTime(s.overlapToSec)} (${spanS}s)`;
       return {
         atSeconds: s.overlapFromSec,
         line:
-          `${STACKED_DEFENSIVES_TAG}   ${target} had ${s.first.spellName} (from ${who(s.first)}) and ${s.second.spellName} (from ${who(s.second)}) up together ${fmtTime(s.overlapFromSec)}–${fmtTime(s.overlapToSec)} (${s.overlapSeconds}s); ` +
+          `${STACKED_DEFENSIVES_TAG}   ${target} had ${s.first.spellName} (from ${who(s.first)}) and ${s.second.spellName} (from ${who(s.second)}) up together ${span}; ` +
           `the later one, ${s.second.spellName}, ${priced} — a fact about the stack, not a verdict`,
       };
     })

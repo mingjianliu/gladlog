@@ -161,6 +161,17 @@ describe("formatStackedDefensiveLines", () => {
     );
   });
 
+  it("labels the span with the difference of its rendered endpoints, never the raw overlap", () => {
+    const [e] = formatStackedDefensiveLines([
+      pair({ overlapFromSec: 34, overlapToSec: 38, overlapSeconds: 4.3 }),
+    ]);
+    expect(e!.line).toContain("up together 0:34–0:38 (4s);");
+    const [z] = formatStackedDefensiveLines([
+      pair({ overlapFromSec: 34, overlapToSec: 34, overlapSeconds: 0.7 }),
+    ]);
+    expect(z!.line).toContain("up together for under 1 s at 0:34;");
+  });
+
   it("unpriced auras say so; the cap keeps the longest overlaps, emitted in time order", () => {
     const [u] = formatStackedDefensiveLines([
       pair({

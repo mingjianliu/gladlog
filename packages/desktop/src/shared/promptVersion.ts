@@ -1002,4 +1002,11 @@
 //  contexts, Phase Shift 80, Spell Reflection 14, Aspect of the Turtle 2,
 //  Psychic Shroud 1; nothing else changed; candidate counts identical;
 //  hardFailures unchanged.
-export const PROMPT_VERSION = 125;
+//  v126 (2026-09-25): [STACKED DEFENSIVES] labels its span with the
+//  difference of the rendered endpoints (renderedWindowSeconds) instead of
+//  the raw 1-dp overlap ("0:34–0:38 (4.3s)" → "(4s)"; a same-second overlap
+//  → "for under 1 s at m:ss"); checkWindowSpanConsistency now also parses
+//  decimal labels. 605 files: 583 lines in 497 contexts, nothing else
+//  changed; candidate counts identical; hardFailures 4 → 0 (widened gate:
+//  583 → 0).
+export const PROMPT_VERSION = 126;

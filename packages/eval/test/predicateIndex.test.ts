@@ -2169,6 +2169,11 @@ describe("谓词索引:分析产出 X ⇄ 门规验证 X", () => {
     expect(
       promptQualityCheck.checkWindowSpanConsistency(naive).length,
     ).toBeGreaterThan(0);
+    // A decimal label is gated too (2026-09-25: [STACKED DEFENSIVES]
+    // printed the raw 1-dp overlap and the integer-only regex never saw it).
+    expect(
+      promptQualityCheck.checkWindowSpanConsistency(["0:34–0:38 (4.3s)"]),
+    ).toHaveLength(1);
   });
 
   it("取自 toSortedFinite 的百分位,门规零违规", () => {

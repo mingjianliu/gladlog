@@ -366,8 +366,11 @@ export function checkSameSecondHpConsistency(lines: string[]): string[] {
   return violations;
 }
 
-// "2:57–3:15 (19s)" — window endpoints + labelled duration
-const WINDOW_SPAN = /(\d+):(\d+)–(\d+):(\d+)\s*\((\d+)s\)/g;
+// "2:57–3:15 (19s)" — window endpoints + labelled duration. A decimal label
+// ("0:34–0:38 (4.3s)") is matched too (2026-09-25): the integer-only regex
+// let 579 [STACKED DEFENSIVES] labels that disagreed with their endpoints
+// pass unchecked.
+const WINDOW_SPAN = /(\d+):(\d+)–(\d+):(\d+)\s*\((\d+(?:\.\d+)?)s\)/g;
 
 /**
  * Hard invariant: a window's labelled duration must equal the difference of its
