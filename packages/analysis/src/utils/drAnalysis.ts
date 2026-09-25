@@ -353,6 +353,10 @@ export function getDRLevel(
 
   for (let i = history.length - 1; i >= 0; i--) {
     const entry = history[i];
+    // Only a CC applied BEFORE this one can diminish it (reliability audit
+    // B3iv, 2026-09-25): the outgoing path used to feed entries in REMOVAL
+    // order, so a later-applied, earlier-removed CC counted as a predecessor.
+    if (entry.applyMs > newApplyMs) continue;
     if (entry.removeMs > newApplyMs) {
       // CC was still active when the new one was applied — still counts toward DR
       chainLength++;
@@ -504,8 +508,6 @@ export function analyzeOutgoingCCChains(
   return enemies
     .filter((e) => e.type === CombatUnitType.Player && targetIds.has(e.id))
     .map((enemy) => {
-      // Per DR-category history on this enemy
-      const history: Map<string, CCEntry[]> = new Map();
       const pending: Map<
         string,
         { applyMs: number; spellName: string; srcId: string; srcName: string }
@@ -520,14 +522,9 @@ export function analyzeOutgoingCCChains(
 
         const spellId = key.split(":")[0];
         if (!spellId) return;
-        const category = getDRCategory(spellId);
-        const cat = history.get(category) ?? [];
-        const { level, sequenceIndex } = getDRLevel(cat, p.applyMs);
         const durationSeconds = (removeMs - p.applyMs) / 1000;
 
-        cat.push({ applyMs: p.applyMs, removeMs, spellId });
-        history.set(category, cat);
-
+        // DR is assigned below, in APPLY order, once every interval is closed.
         applications.push({
           atSeconds: (p.applyMs - matchStartMs) / 1000,
           durationSeconds,
@@ -537,8 +534,8 @@ export function analyzeOutgoingCCChains(
           casterSpec: friendlySpecMap.get(p.srcId) ?? "Unknown",
           drInfo: {
             category: DR_CATEGORY_MAP[spellId] ?? "Unknown",
-            level,
-            sequenceIndex,
+            level: "Full",
+            sequenceIndex: 0,
           },
         });
       };
@@ -589,6 +586,23 @@ export function analyzeOutgoingCCChains(
       }
 
       applications.sort((a, b) => a.atSeconds - b.atSeconds);
+      // Reliability audit B3iv (2026-09-25): DR levels in APPLY order, through
+      // the same algorithm the incoming path uses (`computeIncomingDR`, which
+      // walks instances in time order). They used to be computed at REMOVAL
+      // time: 825ca842 Fear 51.24 (removed 55.77) and Blind 51.35 (removed
+      // 53.85) came out Fear 50 % / Blind Full — inverted — and the Blind
+      // [DR CLASH] was never shown; 10 of 413 applications across the five
+      // audited matches were mislabelled.
+      const drs = computeIncomingDR(applications, matchStartMs);
+      applications.forEach((app, i) => {
+        const dr = drs[i];
+        if (dr)
+          app.drInfo = {
+            category: app.drInfo.category,
+            level: dr.level,
+            sequenceIndex: dr.sequenceIndex,
+          };
+      });
 
       return {
         targetName: enemy.name,
