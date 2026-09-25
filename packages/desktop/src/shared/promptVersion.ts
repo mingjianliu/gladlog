@@ -1047,4 +1047,11 @@
 //  Ancient of Lore 92.9 → 1.2 %, Fury Bladestorm 96.7 → 1.7 %). 605 files:
 //  findings byte-identical; `(a–Ns)` 15,614 → 18,485, `(≤Ns)` 4,336 → 4,875,
 //  charge ranges 349 → 740.
-export const PROMPT_VERSION = 130;
+//  v131 (2026-09-25, reliability audit B3iv + B3 + C6 + C5): outgoing DR in
+//  apply order (102 labels, [DR CLASH] +297); missed-sync-window merges one
+//  lock, needs an owner free to press and counts a running burst as entered
+//  (unique 549 → 321), its reference table regenerated under that predicate
+//  (SS contrast 5 → 3 pp, at the door); summon CC credited to its owner in
+//  the outgoing chains (+18 windows); Cyclone / Incapacitating Roar follow
+//  DB2 DR categories (3,704 labels).
+export const PROMPT_VERSION = 131;
