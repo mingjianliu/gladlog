@@ -591,78 +591,10 @@ describe("deathSetupEvents(死亡前因链,纯函数)", () => {
     expect(outside).toHaveLength(0);
   });
 
-  it("trinket-early:死亡窗口内被控且饰品 CD 中 → 前因在更早的饰品施放时刻;超 90s 回溯不出", () => {
-    const base = {
-      deathT: 150,
-      victim,
-      victimCC: {
-        ccInstances: [
-          {
-            atSeconds: 146,
-            durationSeconds: 6,
-            spellName: "Stun",
-            trinketState: "on_cooldown",
-          },
-        ],
-        trinketUseTimes: [80],
-      },
-    };
-    const evts = deathSetupEvents(base);
-    expect(evts).toHaveLength(1);
-    expect(evts[0]!.t).toBe(80);
-    expect(evts[0]!.facts["kind"]).toBe("trinket-early");
-    expect(evts[0]!.facts["ccAtDeath"]).toBe("Stun");
-    expect(evts[0]!.facts["gapS"]).toBe("70");
-    // Look-back beyond 90s (death 150, trinket 40 → gap 110) emits nothing
-    const tooOld = deathSetupEvents({
-      ...base,
-      victimCC: { ...base.victimCC, trinketUseTimes: [40] },
-    });
-    expect(tooOld).toHaveLength(0);
-  });
-
-  it("defensive-early:死亡时 ON COOLDOWN 且上次使用被审计标 Early;Optimal/可用则不出", () => {
-    const cd = (
-      timingLabel: string,
-      timeSeconds: number,
-      cooldownSeconds = 120,
-    ) => ({
-      spellId: "1",
-      spellName: "Wall",
-      tag: "Defensive",
-      cooldownSeconds,
-      neverUsed: false,
-      casts: [{ timeSeconds, timingLabel: timingLabel as never }],
-    });
-    const early = deathSetupEvents({
-      deathT: 150,
-      victim,
-      victimCDs: [cd("Early", 100)], // ready at 220 > 150 → still on cooldown
-    });
-    expect(early).toHaveLength(1);
-    expect(early[0]!.facts["kind"]).toBe("defensive-early");
-    expect(early[0]!.t).toBe(100);
-    expect(early[0]!.facts["gapS"]).toBe("50");
-    // An Optimal usage emits nothing
-    expect(
-      deathSetupEvents({
-        deathT: 150,
-        victim,
-        victimCDs: [cd("Optimal", 100)],
-      }),
-    ).toHaveLength(0);
-    // Back up by the time of death (available-but-unpressed belongs to
-    // death-trace, not to the used-too-early chain) emits nothing
-    expect(
-      deathSetupEvents({
-        deathT: 150,
-        victim,
-        victimCDs: [cd("Early", 20, 60)],
-      }),
-    ).toHaveLength(0);
-  });
-
-  it("每死亡至多 2 条,优先 healer-locked > trinket-early > defensive-early", () => {
+  it("trinket-early / defensive-early 已退役为指控(2026-09-25 可靠性审计 B2a,用户 2026-09-24 裁「改」):同一死亡只剩 healer-locked", () => {
+    // 旧版本对这份输入会再出 trinket-early(饰品 80s → 死亡 150s)与
+    // defensive-early(Wall 在 100s 被标 Early)。事实仍在时间线
+    // [TRINKET] / [YOU] [CD] / [RES] 行里,只是不再作为「交早了」的菜单项。
     const evts = deathSetupEvents({
       deathT: 150,
       victim,
@@ -677,33 +609,22 @@ describe("deathSetupEvents(死亡前因链,纯函数)", () => {
           },
         ],
       },
-      victimCC: {
-        ccInstances: [
-          {
-            atSeconds: 146,
-            durationSeconds: 6,
-            spellName: "Stun",
-            trinketState: "on_cooldown",
-          },
-        ],
-        trinketUseTimes: [80],
-      },
-      victimCDs: [
-        {
-          spellId: "1",
-          spellName: "Wall",
-          tag: "Defensive",
-          cooldownSeconds: 120,
-          neverUsed: false,
-          casts: [{ timeSeconds: 100, timingLabel: "Early" as never }],
+      // extra fields a stale caller might still pass are ignored
+      ...({
+        victimCC: {
+          ccInstances: [
+            {
+              atSeconds: 146,
+              durationSeconds: 6,
+              spellName: "Stun",
+              trinketState: "on_cooldown",
+            },
+          ],
+          trinketUseTimes: [80],
         },
-      ],
+      } as object),
     });
-    expect(evts).toHaveLength(2);
-    expect(evts.map((e) => e.facts["kind"])).toEqual([
-      "healer-locked",
-      "trinket-early",
-    ]);
+    expect(evts.map((e) => e.facts["kind"])).toEqual(["healer-locked"]);
   });
 });
 

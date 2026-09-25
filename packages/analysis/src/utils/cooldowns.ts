@@ -934,7 +934,7 @@ export function isCooldownAvailableFromLastUse(
 
 /**
  * Whether this major CD is available at instant t. Same source of truth as
- * deathSetupEvents' defensive-early check (which computes readyAt by hand):
+ * the (retired 2026-09-25) deathSetupEvents defensive-early check, which computed readyAt by hand:
  * that side decides "unavailable at death because it was pressed too early",
  * this side is the complementary consumer (death-unused-defensive /
  * external-unused decide "available at death yet never pressed").

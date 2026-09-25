@@ -114,7 +114,6 @@ import { crisisNoResponseEvents } from "./candidates/crisisNoResponse";
 import {
   deathSetupEvents,
   type DeathSetupParts,
-  enemyImmunityBreakers,
   externalUnusedEvents,
   questionableExternalEvents,
 } from "./candidates/death";
@@ -167,7 +166,6 @@ export {
 // Death-anchored producers moved to `candidates/death.ts` in the 2026-08-16
 // theme split; re-exported so importers keep their paths.
 export {
-  DEATH_SETUP_LOOKBACK_S,
   deathSetupEvents,
   type DeathSetupParts,
   EXTERNAL_FREE_MIN_GAP_S,
@@ -2241,17 +2239,6 @@ function extractDeathSetups(
       // lacks startInfo or an event array, only that one part goes missing and
       // the other precursor verdicts still stand (second layer on top of the
       // menu-wide try/catch).
-      try {
-        parts.victimCC = ccOf(u);
-      } catch {
-        /* summary not computable → that precursor type is absent */
-      }
-      try {
-        parts.victimCDs = cdsOf(u);
-        parts.enemyImmunityBreakers = enemyImmunityBreakers(enemies, start);
-      } catch {
-        /* same as above */
-      }
       if (healer && healer.id !== u.id) {
         try {
           parts.healerCC = {

@@ -8,31 +8,13 @@
  * `death-unused-defensive`, retired 2026-08-29; its emitter was deleted
  * 2026-09-24.)
  */
-import { CombatUnitClass } from "@gladlog/parser-compat";
-import { effectiveCooldownSeconds } from "../../data/spellEffectData";
-import { immunitySchoolMask } from "../../data/spellSchools";
-import { lastCastBefore } from "../../context/timelineHelpers";
 import {
-  cdAvailableAt,
   cdReadyInTimeAt,
   type IMajorCooldownInfo,
-  cdIsProcOnly,
 } from "../../utils/cooldowns";
 import { fmtFactNum as fmt, fmtFactTime } from "../factFormat";
 import { CandidateEvent } from "../types";
 
-/** death-setup: maximum lookback (seconds) from a death to a precursor event —
- * resource spends earlier than this are too causally weak for that death.
- *
- * GH #34 batch 4 (2026-08-28), 300 matches / 1,127 healer rounds, 507
- * death-setup candidates (healer-locked 284 · trinket-early 177 ·
- * defensive-early 46). Gap death − precursor: trinket-early [0,10) 11 ·
- * [10,20) 17 · [20,30) 17 · [30,45) 25 · [45,60) 46 · [60,75) 39 · ≥ 75 22
- * (p50 50.9 s, p90 77.5 s, max 89.8 s) — the mass RISES toward the cap, so
- * 90 s is binding: it is the "causally too weak" cut on a still-populated
- * tail, not a natural end. defensive-early p50 21.9 s, max 83 s (cap not
- * binding). Editorial; measured, not official. */
-export const DEATH_SETUP_LOOKBACK_S = 90;
 /** death-setup: minimum healer CC duration (seconds) — a short incapacitate
  * does not make the kill window unhealable.
  *
@@ -44,52 +26,11 @@ export const DEATH_SETUP_LOOKBACK_S = 90;
  * attaches to roughly 55 % of ALL friendly deaths at 3 s (41 % at 4 s). No
  * natural break; editorial. Measured, not official. */
 const HEALER_LOCK_MIN_S = 3;
-/** Max precursor events attached to one death (priority: healer-locked >
- * trinket-early > defensive-early). */
-// at-cap 体检(2026-08-26):death-setup 76/255 有产出回合打到上限(30%)。
-const SETUPS_PER_DEATH = 2;
 
 export interface DeathSetupParts {
   deathT: number;
   victim: { id: string; name: string };
-  /** The victim's CC/trinket summary (the relevant slice of
-   * analyzePlayerCCAndTrinket). */
-  victimCC?: {
-    ccInstances: Array<{
-      atSeconds: number;
-      durationSeconds: number;
-      spellName: string;
-      trinketState: string;
-      /** DR category of this CC instance (e.g. "Stun"/"Incapacitate"/
-       * "Disorient"/…), when known — same field as ICCInstance.drInfo.category
-       * (DR_CATEGORIES_GENERATED, shared-predicate rule). Was used by the
-       * death-unused-defensive producer (emitter deleted 2026-09-24) to gate
-       * the USABLE_WHILE_CC_SPELL_IDS check (finding #1, 2026-08-14 final
-       * review): that table is stunned-only — a non-stun CC active at death
-       * must exempt unconditionally rather than being checked against it.
-       * Optional/nullable so hand-built test fixtures without DR data still
-       * type-check (absence reads as "not stun", the conservative
-       * direction). */
-      drInfo?: { category: string } | null;
-    }>;
-    trinketUseTimes: number[];
-  };
-  /** The victim's major cooldowns (extractMajorCooldowns). */
-  victimCDs?: Array<
-    Pick<
-      IMajorCooldownInfo,
-      | "spellId"
-      | "spellName"
-      | "tag"
-      | "cooldownSeconds"
-      | "casts"
-      | "neverUsed"
-    >
-  >;
   /** CC summary for the friendly healer (when the healer is not the victim). */
-  /** Enemy players who can break an immunity, with their breaker's cast
-   * times (seconds) — `enemyImmunityBreakers()`; GH #18 ruling (c). */
-  enemyImmunityBreakers?: Array<{ spellId: string; castTimesS: number[] }>;
   healerCC?: {
     healerName: string;
     ccInstances: Array<{
@@ -107,82 +48,22 @@ export interface DeathSetupParts {
 /**
  * death-setup candidates (reasoning chain): trace a friendly death back to an
  * earlier precursor moment, giving the model a citable "other end of the
- * chain". Pure function (unit-testable with hand-built fixtures); every
- * verdict mirrors the existing predicates of buildDeathRootCauseTrace:
+ * chain". Pure function (unit-testable with hand-built fixtures):
  *  - healer-locked: healer CC covers the DEATH_CC_LOOKBACK_S window before the
- *    death (same window constant);
- *  - trinket-early: the victim was CC'd inside the death window with
- *    trinketState=on_cooldown (the trace's CC row); the precursor moment is
- *    the earlier trinket press;
- *  - defensive-early: a victim's major defensive was ON COOLDOWN at death and
- *    its last use was labeled Early by the timing audit (the trace's
- *    [last use: EARLY] row); the precursor moment is that cast.
+ *    death (same window constant).
+ *
+ * trinket-early and defensive-early were retired as accusations on
+ * 2026-09-25 (reliability audit B2a; user ruling 2026-09-24 「改」 after the
+ * codex astra debate): a later death cannot show an earlier trinket / wall
+ * was used too early — a wall at 20 % that brings the target back to 80 %
+ * before a separate burst kills them was the right press. Both also carried
+ * false facts on the 5 audited matches (ccAtDeath named a CC that ended
+ * 11.4 s before the death; an Ironbark pre-wall on a 34 % teammate was
+ * called "spent early" for the owner). The facts stay in the timeline —
+ * [TRINKET] / [YOU] [CD] (target + HP) / [RES] — and the IMMUNITY_BREAKERS
+ * feasibility table (GH #18 ruling (c), whose only consumer was
+ * defensive-early) went with them.
  */
-/**
- * Immunity breakers (hand table, registered in curatedIdRegistry): the enemy
- * CLASS that carries each — a warrior always has Shattering Throw, a priest
- * always has Mass Dispel, whether or not the log ever saw it cast. Cooldowns
- * come from the official spell data (fallbacks are the 12.x values).
- * Both ids are in observedSpellIdsGenerated (corpus-verified 2026-08-30).
- */
-export const IMMUNITY_BREAKERS: ReadonlyArray<{
-  spellId: string;
-  name: string;
-  cls: CombatUnitClass;
-  fallbackCooldownS: number;
-}> = [
-  {
-    spellId: "64382",
-    name: "Shattering Throw",
-    cls: CombatUnitClass.Warrior,
-    fallbackCooldownS: 180,
-  },
-  {
-    spellId: "32375",
-    name: "Mass Dispel",
-    cls: CombatUnitClass.Priest,
-    fallbackCooldownS: 120,
-  },
-];
-
-function breakerCooldownS(b: (typeof IMMUNITY_BREAKERS)[number]): number {
-  return effectiveCooldownSeconds(b.spellId) ?? b.fallbackCooldownS;
-}
-
-/** Enemy players' breakers with cast times (seconds from match start). */
-export function enemyImmunityBreakers(
-  enemies: ReadonlyArray<{ class?: CombatUnitClass; spellCastEvents?: any[] }>,
-  startMs: number,
-): Array<{ spellId: string; castTimesS: number[] }> {
-  const out: Array<{ spellId: string; castTimesS: number[] }> = [];
-  for (const e of enemies) {
-    for (const b of IMMUNITY_BREAKERS) {
-      if (e.class !== b.cls) continue;
-      out.push({
-        spellId: b.spellId,
-        castTimesS: (e.spellCastEvents ?? [])
-          .filter((c: any) => String(c.spellId) === b.spellId)
-          .map((c: any) => (c.timestamp - startMs) / 1000),
-      });
-    }
-  }
-  return out;
-}
-
-/** True when some enemy breaker is off cooldown at `tSeconds` — i.e. an
- * immunity pressed then could have been broken. */
-export function enemyHoldsImmunityBreakerAt(
-  breakers: ReadonlyArray<{ spellId: string; castTimesS: number[] }>,
-  tSeconds: number,
-): boolean {
-  return breakers.some((br) => {
-    const def = IMMUNITY_BREAKERS.find((b) => b.spellId === br.spellId);
-    if (!def) return false;
-    const cd = breakerCooldownS(def);
-    return !br.castTimesS.some((c) => c <= tSeconds && tSeconds - c < cd);
-  });
-}
-
 /**
  * CC look-back window (seconds) for the death chain: "CC inside the death
  * window" is judged over the 12 s before the death. Lived in
@@ -232,92 +113,7 @@ export function deathSetupEvents(parts: DeathSetupParts): CandidateEvent[] {
     });
   }
 
-  // trinket-early: CC'd inside the death window with the trinket on cooldown;
-  // the precursor is that earlier trinket press
-  const deadInCC = parts.victimCC?.ccInstances.find(
-    (cc) => inWindow(cc) && cc.trinketState === "on_cooldown",
-  );
-  if (deadInCC) {
-    const trinketT = [...(parts.victimCC?.trinketUseTimes ?? [])]
-      .filter(
-        (t) => t < deadInCC.atSeconds && t >= deathT - DEATH_SETUP_LOOKBACK_S,
-      )
-      .pop();
-    if (trinketT !== undefined) {
-      out.push({
-        id: `death-setup:${victim.id}:${Math.round(deathT)}:trinket-early`,
-        type: "death-setup",
-        t: trinketT,
-        unitNames: [victim.name],
-        facts: {
-          t: fmt(trinketT),
-          kind: "trinket-early",
-          // Render-grid fix (2026-08-30, same bug/fix as kick-eaten): deathT
-          // names the SAME instant the later "death" candidate's own t names,
-          // and must floor onto the same [DEATH] marker second -- 10/129
-          // (7.8%) death-setup deathT facts on the 2026-08-30 A/B corpus
-          // rounded up past it before this.
-          deathT: fmtFactTime(deathT),
-          victim: victim.name,
-          ccAtDeath: deadInCC.spellName,
-          gapS: fmt(deathT - trinketT),
-        },
-      });
-    }
-  }
-
-  // defensive-early: ON COOLDOWN at death and its last use was labeled Early
-  // by the timing audit
-  for (const cd of parts.victimCDs ?? []) {
-    if (cd.tag !== "Defensive" || cd.neverUsed) continue;
-    // 被动触发的能力谈不上「交早了」—— 交的时机不是玩家选的。
-    if (cdIsProcOnly(cd)) continue;
-    const last = lastCastBefore(cd as IMajorCooldownInfo, deathT);
-    if (!last) continue;
-    // available at death → this is not a "spent it too early" chain
-    if (cdAvailableAt(cd as IMajorCooldownInfo, deathT)) continue;
-    if (last.timingLabel !== "Early") continue;
-    if (last.timeSeconds < deathT - DEATH_SETUP_LOOKBACK_S) continue;
-    // Feasibility (GH #18 human label 2026-08-30, ruling (c)): an IMMUNITY
-    // "traded early" is not a mistake while an enemy still holds a breaker
-    // for it (Shattering Throw / Mass Dispel) — the player's own words:
-    // "shattering throw 都留着破无敌". Only official immunities
-    // (spellSchools immuneSchools) are exempted; ordinary defensives keep
-    // the timing verdict.
-    if (
-      immunitySchoolMask(cd.spellId) !== undefined &&
-      enemyHoldsImmunityBreakerAt(
-        parts.enemyImmunityBreakers ?? [],
-        last.timeSeconds,
-      )
-    )
-      continue;
-    out.push({
-      id: `death-setup:${victim.id}:${Math.round(deathT)}:defensive-early`,
-      type: "death-setup",
-      t: last.timeSeconds,
-      unitNames: [victim.name],
-      spell: cd.spellName,
-      spellId: cd.spellId,
-      facts: {
-        t: fmt(last.timeSeconds),
-        kind: "defensive-early",
-        // Render-grid fix (2026-08-30, same bug/fix as kick-eaten): deathT
-        // names the SAME instant the later "death" candidate's own t names,
-        // and must floor onto the same [DEATH] marker second -- 10/129
-        // (7.8%) death-setup deathT facts on the 2026-08-30 A/B corpus
-        // rounded up past it before this.
-        deathT: fmtFactTime(deathT),
-        victim: victim.name,
-        spell: cd.spellName,
-        gapS: fmt(deathT - last.timeSeconds),
-      },
-    });
-    // at most one defensive-early per death (take the first matching wall)
-    break;
-  }
-
-  return out.slice(0, SETUPS_PER_DEATH);
+  return out;
 }
 
 /** external-unused: lookback window before the death (seconds) and the owner's

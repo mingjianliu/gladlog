@@ -27,7 +27,6 @@ import * as candidateFindings from "@gladlog/analysis/src/analysis/candidateFind
 import * as backlashDispel from "@gladlog/analysis/src/analysis/candidates/backlashDispel";
 import * as burstWindowResponse from "@gladlog/analysis/src/analysis/candidates/burstWindowResponse";
 import * as cooldownTiming from "@gladlog/analysis/src/analysis/candidates/cooldownTiming";
-import * as death from "@gladlog/analysis/src/analysis/candidates/death";
 import * as kickPriority from "@gladlog/analysis/src/analysis/candidates/kickPriority";
 import * as candidatesShared from "@gladlog/analysis/src/analysis/candidates/shared";
 import * as teammateCrisisIdle from "@gladlog/analysis/src/analysis/candidates/teammateCrisisIdle";
@@ -540,11 +539,6 @@ const INDEX: PredicateRow[] = [
     file: `${A}/data/candidateTypeRegistry.ts`,
     symbol: "CANDIDATE_TYPE_REGISTRY",
     mod: candidateTypeRegistry,
-  },
-  {
-    file: `${A}/analysis/candidates/death.ts`,
-    symbol: "IMMUNITY_BREAKERS",
-    mod: death,
   },
   {
     file: `${A}/analysis/candidateFindings.ts`,

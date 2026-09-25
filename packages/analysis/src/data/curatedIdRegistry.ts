@@ -19,7 +19,6 @@
  * index, and the rule has never been the missing piece (CLAUDE.md).
  */
 import { BURST_LEAD_CD_EXCLUDED_IDS } from "../analysis/burstWindowDecisionPoints";
-import { IMMUNITY_BREAKERS } from "../analysis/candidates/death";
 import {
   CRISIS_MOBILITY_PRESS_IDS,
   CRISIS_PROC_ANSWERS,
@@ -389,9 +388,6 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   ),
   t("MAGIC_ONLY_IMMUNITY_IDS", "utils/ccTrinketAnalysis.ts", "aura", () =>
     set(MAGIC_ONLY_IMMUNITY_IDS),
-  ),
-  t("IMMUNITY_BREAKERS", "analysis/candidates/death.ts", "cast", () =>
-    IMMUNITY_BREAKERS.map((b) => b.spellId),
   ),
   t(
     "BURST_LEAD_CD_EXCLUDED_IDS",

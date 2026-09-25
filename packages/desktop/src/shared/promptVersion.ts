@@ -1021,4 +1021,13 @@
 //  read certain readiness); 15,614 `(a–Ns)`, 4,336 `(≤Ns)`, 349 charge
 //  ranges, ~14.9k fake [k/N] suffixes gone, a recast during 'maybe' is no
 //  longer swallowed by the delta form; three legend lines; gates unchanged.
-export const PROMPT_VERSION = 127;
+//  v128 (2026-09-25, reliability audit A4 + B2a): cc-avoidable offers only a
+//  tool the healer could have pressed — no cost_norm tool (Divine Shield /
+//  Ice Block), and the cast bar must leave the 1 s reaction window with a
+//  GCD-free instant for an on-GCD tool (user ruling 2026-09-24 「需要满足」);
+//  the bar starts at the cast that LANDED. death-setup trinket-early /
+//  defensive-early retired as accusations (user ruling 2026-09-24 「改」);
+//  healer-locked stays. 605 files: healer cc-avoidable 89 → 62, death-setup
+//  dps 907 → 579 / healer 454 → 290 (all removed events early-kind, all
+//  healer-locked kept); nothing else changed.
+export const PROMPT_VERSION = 128;
