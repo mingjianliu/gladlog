@@ -23,8 +23,8 @@ const auditIdx = argv.indexOf("--audit");
 
 const combats = parseLogCombats(readFileSync(logPath, "utf8"));
 
-for (const { legacy } of combats) {
-  const menu = healerOwnerMenu(legacy);
+for (const { legacy, rawText } of combats) {
+  const menu = healerOwnerMenu(legacy, rawText);
   if (!menu) continue;
   const { owner, candidates: cands } = menu;
   const newTypes = cands.filter((c) =>

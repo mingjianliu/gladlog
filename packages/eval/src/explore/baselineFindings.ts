@@ -19,12 +19,12 @@ import { join } from "node:path";
 import {
   candidateTypeOfId,
   type CandidateEvent,
-  extractCandidateFindings,
   type Finding,
   toRenderSecond,
 } from "@gladlog/analysis";
 import type { ICombatUnit } from "@gladlog/parser-compat";
 
+import { candidatesAsTheAppRuns } from "../corpus/appCandidates";
 import type { EvidenceRef, ReviewCard } from "./reviewTypes";
 import type { LegacyRound } from "./storeAccess";
 
@@ -170,6 +170,9 @@ export function baselineToCards(
   findings: Finding[],
   legacy: LegacyRound,
   owner: ICombatUnit | undefined,
+  /** The match's raw.txt (storeAccess `readRawText`), so the candidate menu
+   *  is the one the app built; null = no raw.txt stored. */
+  rawText?: string | null,
 ): Array<
   Omit<ReviewCard, "cardId" | "evidence"> & { evidence: EvidenceRef[] }
 > {
@@ -177,7 +180,7 @@ export function baselineToCards(
   const getCandidates = (): CandidateEvent[] => {
     if (candidates === undefined) {
       try {
-        candidates = extractCandidateFindings(legacy, owner?.id);
+        candidates = candidatesAsTheAppRuns(legacy, owner?.id, rawText);
       } catch {
         candidates = [];
       }

@@ -2,7 +2,6 @@ import {
   buildFindingsPrompt,
   buildMatchContext,
   ensureAnalysisData,
-  extractCandidateFindings,
   isHealerSpec,
   specToString,
 } from "@gladlog/analysis";
@@ -18,6 +17,7 @@ import path from "path";
 import { gunzipSync } from "zlib";
 
 import { buildCoverageManifest } from "../quality/coverageManifest";
+import { candidatesAsTheAppRuns, roundRawStreams } from "./appCandidates";
 
 export interface IndexEntry {
   ordinal: number;
@@ -143,6 +143,7 @@ export async function buildCorpus(opts: {
         // for a control arm)
         const richContext = buildMatchContext(combat, friends, enemies, {
           owner,
+          rawStreams: roundRawStreams(combat, content),
         });
         // GLADLOG_CORPUS_PROMPT=findings renders the PRODUCTION single-shot
         // prompt (candidate menu + legend + rich context, exactly what
@@ -161,12 +162,13 @@ export async function buildCorpus(opts: {
           .filter(Boolean)) {
           if (key in CANDIDATE_TYPE_FLAGS)
             (CANDIDATE_TYPE_FLAGS as Record<string, boolean>)[key] = false;
-          else throw new Error(`GLADLOG_CANDIDATE_FLAGS_OFF: unknown flag ${key}`);
+          else
+            throw new Error(`GLADLOG_CANDIDATE_FLAGS_OFF: unknown flag ${key}`);
         }
         const prompt =
           process.env.GLADLOG_CORPUS_PROMPT === "findings"
             ? buildFindingsPrompt(
-                extractCandidateFindings(combat, owner.id),
+                candidatesAsTheAppRuns(combat, owner.id, content),
                 richContext,
                 specToString(owner.spec) || String(owner.spec),
               )

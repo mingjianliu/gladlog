@@ -17,12 +17,17 @@
  * Output (stdout): one line per kept file — path, rounds, differing rounds,
  * per-type counts — and a summary. The manifest lists the decompressed copies.
  */
-import { ensureAnalysisData, extractCandidateFindings } from "@gladlog/analysis";
+import {
+  ensureAnalysisData,
+  extractCandidateFindings,
+} from "@gladlog/analysis";
 import { GladLogParser, type GladMatch } from "@gladlog/parser";
 import { toLegacyMatch } from "@gladlog/parser-compat";
 import { mkdirSync, readFileSync, writeFileSync } from "fs";
 import { basename, resolve } from "path";
 import { gunzipSync } from "zlib";
+
+import { candidatesAsTheAppRuns } from "../src/corpus/appCandidates";
 
 import { selectCorpusOwner } from "../src/corpus/buildCorpus";
 
@@ -44,13 +49,22 @@ function parseArgs() {
     else if (a[i] === "--every") out.every = Number(a[++i]);
     else if (a[i] === "--offset") out.offset = Number(a[++i]);
     else if (a[i] === "--owner") out.owner = a[++i] as never;
-    else if (a[i] === "--types") out.types = (a[++i] ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+    else if (a[i] === "--types")
+      out.types = (a[++i] ?? "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
     else if (a[i] === "--target") out.target = Number(a[++i]);
     else if (a[i] === "--out-dir") out.outDir = a[++i] ?? "";
     else if (a[i] === "--manifest-out") out.manifestOut = a[++i] ?? "";
     else if (a[i] === "--archive-dir") out.archiveDir = a[++i] ?? "";
   }
-  if (!out.manifest || out.types.length === 0 || !out.outDir || !out.manifestOut) {
+  if (
+    !out.manifest ||
+    out.types.length === 0 ||
+    !out.outDir ||
+    !out.manifestOut
+  ) {
     console.error(
       "usage: abPairSelect.ts --manifest <path> --types a,b [--every N] [--offset K] [--owner recorder|healer|dps] [--target N] --out-dir <dir> --manifest-out <file>",
     );
@@ -104,7 +118,9 @@ for (const f of files) {
     }
     fileRounds++;
     roundsSeen++;
-    const players = Object.values(legacy.units as Record<string, any>).filter((u: any) => u.info);
+    const players = Object.values(legacy.units as Record<string, any>).filter(
+      (u: any) => u.info,
+    );
     const owner = selectCorpusOwner(players, legacy as never, args.owner);
     if (!owner) {
       ownerMissing++;
@@ -112,7 +128,7 @@ for (const f of files) {
     }
     let cands: ReturnType<typeof extractCandidateFindings> = [];
     try {
-      cands = extractCandidateFindings(legacy, owner.id);
+      cands = candidatesAsTheAppRuns(legacy, owner.id, text);
     } catch {
       continue;
     }
@@ -126,7 +142,9 @@ for (const f of files) {
   }
   if (fileDiff === 0) {
     if (scanned % 50 === 0)
-      console.error(`scanned ${scanned}/${files.length} files, ${differing} differing rounds | ${Math.round((Date.now() - t0) / 1000)}s`);
+      console.error(
+        `scanned ${scanned}/${files.length} files, ${differing} differing rounds | ${Math.round((Date.now() - t0) / 1000)}s`,
+      );
     continue;
   }
   differing += fileDiff;

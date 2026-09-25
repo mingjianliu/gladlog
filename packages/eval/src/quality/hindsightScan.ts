@@ -184,12 +184,12 @@ async function loadMenusFromRun(
       console.warn(`WARN: ${logPath}: ${err}`);
       continue;
     }
-    for (const { id, legacy } of parseLogCombats(text)) {
+    for (const { id, legacy, rawText } of parseLogCombats(text)) {
       const entry = entryByMatchId.get(id);
       if (!entry) continue;
       let menu;
       try {
-        menu = healerOwnerMenu(legacy);
+        menu = healerOwnerMenu(legacy, rawText);
       } catch {
         continue;
       }

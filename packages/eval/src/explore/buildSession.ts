@@ -22,7 +22,7 @@ import {
 } from "./reviewTypes";
 import { baselineToCards, readActiveAnalysisResult } from "./baselineFindings";
 import { runQuery } from "./matchExplore";
-import { type LegacyRound, splitTeams } from "./storeAccess";
+import { type LegacyRound, readRawText, splitTeams } from "./storeAccess";
 
 // ---------------------------------------------------------------------------
 // prescreen
@@ -150,7 +150,12 @@ export function buildSession(opts: {
     opts.analysisId ?? opts.matchId,
   );
   const baselineCards: Array<Omit<ReviewCard, "cardId">> = activeResult
-    ? baselineToCards(activeResult.findings, opts.legacy, owner).map((c) => ({
+    ? baselineToCards(
+        activeResult.findings,
+        opts.legacy,
+        owner,
+        readRawText(opts.matchesDir, opts.matchId),
+      ).map((c) => ({
         ...c,
         evidence: c.evidence.map((e) => ({
           ...e,

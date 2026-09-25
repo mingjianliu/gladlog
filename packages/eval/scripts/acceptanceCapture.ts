@@ -22,9 +22,10 @@
  * (`<文件序号>-<回合序号>-<owner 序号>.txt`),前后两次 `diff -r` 就能把一个哈希变化
  * 落到具体行上 —— GH #100 环境伤害修复时 context 哈希动了而 needle 没抓到,靠它定位。
  *
- * `--raw-streams`(2026-09-25,可靠性审计 E1 第一步):按 app 的方式给候选层传原始流
- * (SPELL_CAST_FAILED + 法力,`parseRawStreams`)。不加时和以前逐字节相同 —— 旧基线
- * 哈希仍可比。app 一直传原始流而本工具从不传,所以「按了被拒」这一层(cd-hoarded 的
+ * 原始流(2026-09-25,可靠性审计 E1):按 app 的方式给候选层传原始流
+ * (SPELL_CAST_FAILED + 法力,`parseRawStreams`,经 `src/corpus/appCandidates.ts`)。
+ * 用户 2026-09-25 裁定默认开;`--no-raw-streams` 关掉,和 2026-09-25 之前的旧基线
+ * 逐字节可比(`--raw-streams` 仍接受,已是默认)。app 一直传原始流而本工具从不传,所以「按了被拒」这一层(cd-hoarded 的
  * 意图守护、A1 kick-eaten 的被拒按键)在所有历史验收里都没被量到;A1 的 605 场数字
  * (矛盾的「零施法 / 等满锁定」≥162 → 0)就是用这条路径量的。
  */
@@ -35,7 +36,6 @@ import {
   ensureAnalysisData,
   extractCandidateFindings,
   isHealerSpec,
-  parseRawStreams,
 } from "@gladlog/analysis";
 import { buildMatchContext } from "@gladlog/analysis/src/context/buildMatchContext";
 import { GladLogParser, type GladMatch } from "@gladlog/parser";
@@ -43,6 +43,8 @@ import { toLegacyMatch } from "@gladlog/parser-compat";
 import { mkdirSync, readFileSync, writeFileSync } from "fs";
 import { resolve } from "path";
 import { gunzipSync } from "zlib";
+
+import { candidatesAsTheAppRuns } from "../src/corpus/appCandidates";
 
 import { splitTeams } from "../src/explore/storeAccess";
 
@@ -56,7 +58,8 @@ function parseArgs() {
     linesOut: "",
     findingsDir: "",
     contextDir: "",
-    rawStreams: false,
+    // E1 (2026-09-25): on by default — the menu as the app builds it.
+    rawStreams: true,
   };
   for (let i = 0; i < a.length; i++) {
     if (a[i] === "--manifest") out.manifest = a[++i] ?? "";
@@ -67,10 +70,11 @@ function parseArgs() {
     else if (a[i] === "--findings-dir") out.findingsDir = a[++i] ?? "";
     else if (a[i] === "--context-dir") out.contextDir = a[++i] ?? "";
     else if (a[i] === "--raw-streams") out.rawStreams = true;
+    else if (a[i] === "--no-raw-streams") out.rawStreams = false;
   }
   if (!out.manifest || !Number.isFinite(out.every) || out.every < 1) {
     console.error(
-      "usage: acceptanceCapture.ts --manifest <path> [--every N] [--archive-dir <dir>] [--needle <text> --lines-out <file>] [--context-dir <dir>] [--findings-dir <dir>] [--raw-streams]",
+      "usage: acceptanceCapture.ts --manifest <path> [--every N] [--archive-dir <dir>] [--needle <text> --lines-out <file>] [--context-dir <dir>] [--findings-dir <dir>] [--no-raw-streams]",
     );
     process.exit(1);
   }
@@ -125,16 +129,10 @@ for (const f of files) {
       owners++;
       let cands: ReturnType<typeof extractCandidateFindings> = [];
       try {
-        cands = extractCandidateFindings(
+        cands = candidatesAsTheAppRuns(
           legacy,
           owner.id,
-          args.rawStreams
-            ? parseRawStreams(
-                text,
-                legacy.startTime ?? 0,
-                ((legacy.endTime ?? 0) - (legacy.startTime ?? 0)) / 1000,
-              )
-            : undefined,
+          args.rawStreams ? text : null,
         );
       } catch {
         continue;

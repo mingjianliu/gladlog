@@ -17,10 +17,7 @@
  *   npx tsx packages/eval/scripts/decisionTraceCapture.ts \
  *     --manifest <manifest> [--every 30] --out <trace.jsonl>
  */
-import {
-  ensureAnalysisData,
-  extractCandidateFindings,
-} from "@gladlog/analysis";
+import { ensureAnalysisData } from "@gladlog/analysis";
 import {
   type DecisionRecord,
   setDecisionSink,
@@ -31,6 +28,8 @@ import { toLegacyMatch } from "@gladlog/parser-compat";
 import { createWriteStream, readFileSync } from "fs";
 import { resolve } from "path";
 import { gunzipSync } from "zlib";
+
+import { candidatesAsTheAppRuns } from "../src/corpus/appCandidates";
 
 import { splitTeams } from "../src/explore/storeAccess";
 
@@ -133,7 +132,7 @@ for (const f of files) {
         bracket,
       };
       try {
-        const cands = extractCandidateFindings(legacy, owner.id);
+        const cands = candidatesAsTheAppRuns(legacy, owner.id, text);
         const finalIds = new Set(cands.map((c) => c.id));
         // consistency: every final candidate of a traced type must come from
         // a traced "emitted" opportunity, else the instrumentation drifted

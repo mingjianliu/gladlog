@@ -115,6 +115,7 @@ import * as rootReachability from "@gladlog/analysis/src/utils/rootReachability"
 import * as spellDanger from "@gladlog/analysis/src/utils/spellDanger";
 import * as stats from "@gladlog/analysis/src/utils/stats";
 import * as summonOwner from "@gladlog/analysis/src/utils/summonOwner";
+import * as appCandidates from "../src/corpus/appCandidates";
 import * as summonReachability from "@gladlog/analysis/src/utils/summonReachability";
 import * as talentBehaviors from "@gladlog/analysis/src/utils/talentBehaviors";
 import * as talentOwnership from "@gladlog/analysis/src/utils/talentOwnership";
@@ -846,6 +847,11 @@ const INDEX: PredicateRow[] = [
     file: "packages/eval/src/quality/promptQualityCheck.ts",
     symbol: "checkPetCreditSide",
     mod: promptQualityCheck,
+  },
+  {
+    file: "packages/eval/src/corpus/appCandidates.ts",
+    symbol: "candidatesAsTheAppRuns",
+    mod: appCandidates,
   },
   {
     file: `${A}/utils/healerOffenseAnalysis.ts`,

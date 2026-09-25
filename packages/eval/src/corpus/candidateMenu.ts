@@ -10,13 +10,11 @@
  * the first one that satisfies a type-richness filter) doesn't hand-roll a
  * third copy. smokeFindingsPrompt.ts now imports this too.
  */
-import {
-  type CandidateEvent,
-  extractCandidateFindings,
-  isHealerSpec,
-} from "@gladlog/analysis";
+import { type CandidateEvent, isHealerSpec } from "@gladlog/analysis";
 import { GladLogParser, type GladMatch } from "@gladlog/parser";
 import { CombatUnitReaction, toLegacyMatch } from "@gladlog/parser-compat";
+
+import { candidatesAsTheAppRuns } from "./appCandidates";
 
 interface ParsedCombat {
   /** Raw GladMatch id — buildCorpus.ts uses the same id (incl. for shuffle
@@ -24,6 +22,9 @@ interface ParsedCombat {
    *  IndexEntry.matchId, so this is the join key back to a built corpus. */
   id: string;
   legacy: ReturnType<typeof toLegacyMatch>;
+  /** The whole log text — the raw streams are sliced from it per round
+   *  (`candidatesAsTheAppRuns`). */
+  rawText: string;
 }
 
 /** Parse every match / shuffle-round out of one raw combat log's text. */
@@ -37,6 +38,7 @@ export function parseLogCombats(text: string): ParsedCombat[] {
   return items.map((m) => ({
     id: m.id,
     legacy: toLegacyMatch({ ...m, rawLines: [] } as GladMatch),
+    rawText: text,
   }));
 }
 
@@ -46,11 +48,15 @@ export function parseLogCombats(text: string): ParsedCombat[] {
  *  boundary, matching the original inline code. */
 export function healerOwnerMenu(
   legacy: ParsedCombat["legacy"],
+  rawText?: string | null,
 ): { owner: any; candidates: CandidateEvent[] } | undefined {
   const players = (Object.values(legacy.units) as any[]).filter((u) => u.info);
   const owner = players.find(
     (u) => isHealerSpec(u.spec) && u.reaction === CombatUnitReaction.Friendly,
   );
   if (!owner) return undefined;
-  return { owner, candidates: extractCandidateFindings(legacy, owner.id) };
+  return {
+    owner,
+    candidates: candidatesAsTheAppRuns(legacy, owner.id, rawText),
+  };
 }
