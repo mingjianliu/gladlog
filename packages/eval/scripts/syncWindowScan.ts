@@ -344,7 +344,7 @@ function emitTable(): void {
           generatedAt: new Date().toISOString().slice(0, 10),
           windows: rows.length,
           predicate:
-            "eligible window: enemyHealerCcWindows merged per healer (mergeHealerCcWindows: one continuous lock = one window), syncWindowEligible (rendered dur>=3s, rendered t>=30s, no enemy death in-window), evaluateSyncWindow: >=1 canonical OFFENSIVE_CD_SPELL_IDS off cooldown at window start whose owner was free to act >= REACTION_WINDOW_S of the lock; entered = such a CD pressed in [from-2s, to] or still active (buffFullDurationForCaster) at the lock start; kill15 = enemy death in (from, from+15s]",
+            "eligible window: enemyHealerCcWindows merged per healer (mergeHealerCcWindows: one continuous lock = one window), syncWindowEligible (rendered dur>=3s, rendered t>=30s, no enemy death in-window), evaluateSyncWindow: >=1 canonical OFFENSIVE_CD_SPELL_IDS off cooldown at the window start or at a merged component's start, whose owner was then free to act >= REACTION_WINDOW_S of the rest of the lock; entered = such a CD pressed in [from-2s, to] or still active (buffFullDurationForCaster) at the lock start; kill15 = enemy death in (from, from+15s]",
         },
         cells: outCells,
       },

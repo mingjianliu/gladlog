@@ -142,6 +142,28 @@ describe("evaluateSyncWindow — ready needs an owner free to act (B3i)", () => 
   });
 });
 
+describe("evaluateSyncWindow — a merged lock is judged at each component start", () => {
+  it("a CD back mid-lock (at the second CC's start) is ready — merging must not lose it (Intimidation 82.2 + Freezing Trap 85, Avenging Wrath back at 84)", () => {
+    const [merged] = mergeHealerCcWindows([
+      win(82.2, 85.2, "Intimidation"),
+      win(85.0, 90.0, "Freezing Trap"),
+    ]);
+    const aw = {
+      spellId: "31884",
+      spellName: "Avenging Wrath",
+      casts: [{ timeSeconds: 24 }],
+      cooldownSeconds: 60,
+      neverUsed: false,
+    };
+    expect(merged!.componentStartsSeconds).toEqual([82.2, 85.0]);
+    expect(evaluateSyncWindow(merged!, [aw]).ready).toHaveLength(1);
+    // judged at the merged start only, it would not be
+    expect(
+      evaluateSyncWindow({ fromSeconds: 82.2, toSeconds: 90 }, [aw]).ready,
+    ).toHaveLength(0);
+  });
+});
+
 describe("evaluateSyncWindow — entered counts a burst still active (B3iii)", () => {
   const owner = {
     id: "Player-2",

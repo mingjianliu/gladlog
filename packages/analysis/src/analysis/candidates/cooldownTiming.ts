@@ -253,8 +253,8 @@ export function mergeHealerCcWindows<
     | "healerName"
     | "drLevel"
   >,
->(windows: readonly W[]): W[] {
-  const out: W[] = [];
+>(windows: readonly W[]): Array<W & { componentStartsSeconds: number[] }> {
+  const out: Array<W & { componentStartsSeconds: number[] }> = [];
   const byHealer = new Map<string, W[]>();
   for (const w of windows) {
     const list = byHealer.get(w.healerName) ?? [];
@@ -265,17 +265,30 @@ export function mergeHealerCcWindows<
     const sorted = [...list].sort((a, b) => a.fromSeconds - b.fromSeconds);
     let cur = null as W | null;
     let names: string[] = [];
+    let starts: number[] = [];
     for (const w of sorted) {
       if (cur && w.fromSeconds <= cur.toSeconds) {
         cur = { ...cur, toSeconds: Math.max(cur.toSeconds, w.toSeconds) };
         if (names[names.length - 1] !== w.spellName) names.push(w.spellName);
+        starts.push(w.fromSeconds);
         continue;
       }
-      if (cur) out.push({ ...cur, spellName: names.join("→") });
+      if (cur)
+        out.push({
+          ...cur,
+          spellName: names.join("→"),
+          componentStartsSeconds: starts,
+        });
       cur = { ...w };
       names = [w.spellName];
+      starts = [w.fromSeconds];
     }
-    if (cur) out.push({ ...cur, spellName: names.join("→") });
+    if (cur)
+      out.push({
+        ...cur,
+        spellName: names.join("→"),
+        componentStartsSeconds: starts,
+      });
   }
   return out.sort((a, b) => a.fromSeconds - b.fromSeconds);
 }
@@ -332,11 +345,24 @@ export type SyncWindowCd = Pick<
  * talent-aware); unknown duration → the press instant only (the old test).
  */
 export function evaluateSyncWindow(
-  w: Pick<IEnemyHealerCcWindow, "fromSeconds" | "toSeconds">,
+  w: Pick<IEnemyHealerCcWindow, "fromSeconds" | "toSeconds"> & {
+    /** Starts of the locks a merged window is made of
+     * (`mergeHealerCcWindows`); absent = the window's own start. */
+    componentStartsSeconds?: readonly number[];
+  },
   cds: readonly SyncWindowCd[],
 ): { ready: SyncWindowCd[]; entered: boolean } {
+  // A merged lock is judged at each of its component starts — a CD that
+  // comes off cooldown mid-lock was ready for the part of the lock that
+  // followed, exactly as the unmerged windows judged it. Found on the desktop
+  // uncoveredHighlights fixture: Intimidation 82.2 merged with Freezing Trap
+  // 85 → one window from 82.2, and Avenging Wrath (back at 84) was lost.
+  const starts = w.componentStartsSeconds?.length
+    ? w.componentStartsSeconds
+    : [w.fromSeconds];
   const ready = cds.filter((cd) => {
-    if (!cdAvailableAt(cd, w.fromSeconds)) return false;
+    const readyAtS = starts.find((s) => cdAvailableAt(cd, s));
+    if (readyAtS === undefined) return false;
     if (!cd.owner || !cd.ownerEnemyIds || cd.matchStartMs === undefined)
       return true;
     let blocked: Array<{ from: number; to: number }>;
@@ -345,7 +371,7 @@ export function evaluateSyncWindow(
     } catch {
       return true;
     }
-    const fromMs = cd.matchStartMs + w.fromSeconds * 1000;
+    const fromMs = cd.matchStartMs + readyAtS * 1000;
     const toMs = cd.matchStartMs + w.toSeconds * 1000;
     const freeMs = toMs - fromMs - coveredMsWithin(blocked, fromMs, toMs);
     return freeMs >= REACTION_WINDOW_S * 1000;
