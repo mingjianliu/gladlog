@@ -32,6 +32,7 @@ import {
   tremorTotemBreak,
 } from "../utils/ccTrinketAnalysis";
 import { silenceIntervals } from "../utils/cannotCastIntervals";
+import { isControlledPlayerFlags } from "../utils/charmedPlayer";
 import {
   IFormInterval,
   ISpiritOfRedemptionInterval,
@@ -64,7 +65,7 @@ import {
   getDampeningPercentage,
 } from "../utils/dampening";
 import {
-  canDefensiveCleanse,
+  canRemoveFrom,
   canOffensivePurge,
   formatMissedCleanseExemption,
   formatMissedPurgeExemption,
@@ -1987,8 +1988,10 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       const destType = getUnitType(e.destUnitFlags ?? 0);
       let totemNote = "";
       if (
-        destType === CombatUnitType.Guardian ||
-        destType === CombatUnitType.Pet
+        (destType === CombatUnitType.Guardian ||
+          destType === CombatUnitType.Pet) &&
+        // a Mind-Controlled player carries the PET flag (W1d, 7b3c556e)
+        !isControlledPlayerFlags(e.destUnitId, e.destUnitFlags)
       ) {
         // B44: distinguish Grounding Totem absorption (wasted cast) from other totem/pet
         // targets. Detect by npcId from the dest GUID (locale-independent — the unit NAME
@@ -2832,8 +2835,17 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   // ── [UNCLEANSED DEBUFF] and [CLEANSE] events ──────────────────────────────────
 
   for (const miss of dispelSummary.missedCleanseWindows) {
-    // B16: only emit if the log owner's spec can actually remove this debuff type
-    if (!canDefensiveCleanse(owner, miss.dispelType)) continue;
+    // B16: only emit if the log owner's spec can actually remove this debuff
+    // type — from a charmed teammate only by an offensive purge (W1d, a5a8d31b)
+    if (
+      !canRemoveFrom(
+        owner,
+        miss.dispelType,
+        miss.targetCharmed,
+        miss.targetName,
+      )
+    )
+      continue;
     const dmgK = Math.round(miss.postCcDamage / 1000);
     const spellName = getEnglishSpellName(miss.spellId, miss.spellName);
     addEntry(
@@ -3322,7 +3334,9 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       keyMomentSeconds.add(Math.floor(pw.fromSeconds));
   }
   for (const miss of dispelSummary.missedCleanseWindows) {
-    if (canDefensiveCleanse(owner, miss.dispelType))
+    if (
+      canRemoveFrom(owner, miss.dispelType, miss.targetCharmed, miss.targetName)
+    )
       keyMomentSeconds.add(Math.floor(miss.timeSeconds));
   }
   for (const cleanse of dispelSummary.allyCleanse) {

@@ -5,6 +5,7 @@ import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
 import { getEnglishSpellName, spellEffectData } from "../data/spellEffectData";
 import spellIdListsData from "../data/spellIdLists";
 import { buildCannotCastIntervals } from "./cannotCastIntervals";
+import { charmedThrough } from "./charmedPlayer";
 import {
   applyCdTalentModifiers,
   getPressureThreshold,
@@ -556,6 +557,27 @@ export function canDefensiveCleanse(
 }
 
 /**
+ * Could `unit` remove a `dispelType` effect from a teammate — by a defensive
+ * cleanse normally, by an offensive purge (Magic only) when the teammate was
+ * charmed (reliability round 2 W1d, `charmedPlayer.ts`). One predicate for
+ * the dispel windows, the missed-cleanse menu and the timeline lines.
+ */
+export function canRemoveFrom(
+  unit: ICombatUnit,
+  dispelType: DispelType,
+  targetCharmed: boolean | undefined,
+  targetName?: string,
+): boolean {
+  // the charmed player is under enemy control: never their own dispeller
+  // (509-1-3009: a Scouring-Flame Devastation Evoker "able to purge" the
+  // Mind Control he was under)
+  if (targetCharmed && unit.name === targetName) return false;
+  return targetCharmed
+    ? dispelType === "Magic" && canOffensivePurge(unit)
+    : canDefensiveCleanse(unit, dispelType);
+}
+
+/**
  * Returns true if the unit can actually perform an offensive purge, accounting for
  * talent gating (DH Consume Magic) and pet requirements (Warlock Felhunter).
  */
@@ -744,6 +766,10 @@ export interface IMissedCleanseWindow {
    * time < the reaction threshold (MISSED_CLEANSE_THRESHOLD_S) inside the
    * window — you can't cleanse while CC'd/locked out, so it isn't a miss. */
   dispellersLockedOut: boolean;
+  /** The target was charmed (Mind Control, `charmedThrough`) for the
+   * window: only a friendly offensive purge could remove anything on them
+   * (`canRemoveFrom`). Absent on hand-built fixtures = false. */
+  targetCharmed?: boolean;
   /** Feasibility gate a (tri-state): true = at least one dispeller was in
    * reach during the reaction window (≤40 yd and LoS not false); false =
    * position data exists and nobody was in reach; null = no position data, so
@@ -1469,6 +1495,29 @@ export function reconstructDispelSummary(
   const enemyPlayerById = new Map(enemies.map((u) => [u.id, u]));
   const teamDispelTypes = buildTeamDispelTypes(friends);
   const teamDispelCapability = buildTeamDispelCapability(friends);
+  // Reliability round 2 W1d (2026-09-25): a charmed teammate (Mind Control)
+  // is hostile for the duration — a friendly Cleanse cannot touch anything
+  // on them; only an offensive purge can, and only Magic (a5a8d31b: "your
+  // Cleanse was available" on a Mind-Controlled rogue, a team with no
+  // purge). Everything else keeps the defensive-cleanse capability.
+  const friendlyPurgers = friends.filter((f) => canOffensivePurge(f));
+  const capableFor = (
+    type: DispelType,
+    target: ICombatUnit,
+    fromMs: number,
+    toMs: number,
+  ): { units: ICombatUnit[]; charmed: boolean } =>
+    // charmed for all but < MISSED_CLEANSE_THRESHOLD_S of the window — the
+    // same reaction floor the dispellers-locked-out gate uses
+    charmedThrough(target, fromMs, toMs, MISSED_CLEANSE_THRESHOLD_S * 1000)
+      ? {
+          units:
+            type === "Magic"
+              ? friendlyPurgers.filter((u) => u.id !== target.id)
+              : [],
+          charmed: true,
+        }
+      : { units: teamDispelCapability.get(type) ?? [], charmed: false };
   const unitMap = new Map<string, ICombatUnit>(
     [...friends, ...enemies, ...friendlyPets, ...enemyPets].map((u) => [
       u.id,
@@ -1879,9 +1928,15 @@ export function reconstructDispelSummary(
               // healer stunned until 0.1 s before his cleanse with 5 s of
               // latency (21cc, ad63). The same gate the missed windows use,
               // over the same alive-capable dispellers.
+              targetCharmed: capableFor(
+                windowDispelType,
+                unit,
+                applyTs,
+                removal.ts,
+              ).charmed,
               dispellersLockedOut: dispellersLockedOutForWindow(
                 aliveAt(
-                  teamDispelCapability.get(windowDispelType) ?? [],
+                  capableFor(windowDispelType, unit, applyTs, removal.ts).units,
                   applyTs,
                 ),
                 applyTs,
@@ -1973,9 +2028,17 @@ export function reconstructDispelSummary(
           // Reliability round 2 W1a (2026-09-25): and a dispeller already dead
           // is not capable — 1e37 got "call for a dispel" naming a druid who
           // had died 13.7 s earlier. No one alive who could dispel → no window.
-          const teamCapable = teamDispelCapability.get(windowDispelType) ?? [];
+          const { units: teamCapable, charmed } = capableFor(
+            windowDispelType,
+            unit,
+            applyTs,
+            removal.ts,
+          );
           const capableDispellers = aliveAt(teamCapable, applyTs);
-          if (teamCapable.length > 0 && capableDispellers.length === 0)
+          if (
+            (charmed || teamCapable.length > 0) &&
+            capableDispellers.length === 0
+          )
             continue;
           const allDispellersBlocked =
             capableDispellers.length > 0 &&
@@ -2120,6 +2183,7 @@ export function reconstructDispelSummary(
             // Feasibility / value gates (user-decided 2026-08-02; measured on
             // a 150-match corpus, together they hold back ~24% of the blame
             // candidates):
+            targetCharmed: charmed,
             dispellersLockedOut: dispellersLockedOutForWindow(
               capableDispellers,
               applyTs,
@@ -2159,7 +2223,7 @@ export function reconstructDispelSummary(
   // Missed offensive purge detection: Critical/High magic buffs on enemies that sat >threshold
   // without being purged, when our team had the capability to purge.
   const missedPurgeWindows: IMissedPurgeWindow[] = [];
-  const friendlyPurgers = friends.filter((f) => canOffensivePurge(f));
+  // (friendlyPurgers: declared once at the top of this function, W1d)
 
   if (friendlyPurgers.length > 0) {
     for (const enemy of enemies) {

@@ -67,7 +67,7 @@ import {
 } from "../utils/cooldowns";
 import {
   annotateMissedPurgesWithKillWindows,
-  canDefensiveCleanse,
+  canRemoveFrom,
   hardCastOccupancyWithin,
   type IMissedCleanseWindow,
   type IMissedPurgeWindow,
@@ -734,6 +734,7 @@ export function missedCleanseEvents(
     | "drChainRisk"
     | "dispelType"
     | "lateDispelSeconds"
+    | "targetCharmed"
   >[],
   owner: any,
   friends: any[],
@@ -764,12 +765,18 @@ export function missedCleanseEvents(
         !w.dispellersLockedOut &&
         w.losReachable !== false &&
         // Owner capability gate: solo shuffle has nobody to hand this off to.
-        (canDefensiveCleanse(owner, w.dispelType) || !isShuffle),
+        (canRemoveFrom(owner, w.dispelType, w.targetCharmed, w.targetName) ||
+          !isShuffle),
     )
     .sort((a, b) => b.postCcDamage - a.postCcDamage)
     .slice(0, MISSED_CLEANSE_CAP)
     .map((w) => {
-      const ownerCanDispel = canDefensiveCleanse(owner, w.dispelType);
+      const ownerCanDispel = canRemoveFrom(
+        owner,
+        w.dispelType,
+        w.targetCharmed,
+        w.targetName,
+      );
       const occ = occupancy
         ? hardCastOccupancyWithin(
             owner,
@@ -841,7 +848,12 @@ export function missedCleanseEvents(
                     .filter(
                       (f) =>
                         f.id !== owner.id &&
-                        canDefensiveCleanse(f, w.dispelType) &&
+                        canRemoveFrom(
+                          f,
+                          w.dispelType,
+                          w.targetCharmed,
+                          w.targetName,
+                        ) &&
                         (occupancy?.matchStartMs === undefined ||
                           !((f.deathRecords ?? []) as any[]).some(
                             (d) =>

@@ -88,6 +88,7 @@
     "test/cdHoardedSelfOnly.test.ts",
     "test/cdWasteGate.test.ts",
     "test/chargeAvailability.test.ts",
+    "test/charmedPlayer.test.ts",
     "test/consequenceGate.test.ts",
     "test/context.groundingAbsorb.test.ts",
     "test/context.matchNarrative.test.ts",

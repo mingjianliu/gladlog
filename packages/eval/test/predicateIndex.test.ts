@@ -45,6 +45,7 @@ import * as burstAnswered from "@gladlog/analysis/src/context/burstAnswered";
 import * as cdPrior from "@gladlog/analysis/src/context/cdPrior";
 import * as matchTimelineSections from "@gladlog/analysis/src/context/matchTimelineSections";
 import * as observedConsequences from "@gladlog/analysis/src/context/observedConsequences";
+import * as charmedPlayer from "@gladlog/analysis/src/utils/charmedPlayer";
 import * as resLedgerPrune from "@gladlog/analysis/src/context/resLedgerPrune";
 import * as stackedDefensivesContext from "@gladlog/analysis/src/context/stackedDefensives";
 import * as timelineHelpers from "@gladlog/analysis/src/context/timelineHelpers";
@@ -971,6 +972,26 @@ const INDEX: PredicateRow[] = [
     file: `${A}/context/observedConsequences.ts`,
     symbol: "CONSEQ_DROP_MIN_PCT",
     mod: observedConsequences,
+  },
+  {
+    file: `${A}/utils/charmedPlayer.ts`,
+    symbol: "isControlledPlayerFlags",
+    mod: charmedPlayer,
+  },
+  {
+    file: `${A}/utils/charmedPlayer.ts`,
+    symbol: "charmedSpans",
+    mod: charmedPlayer,
+  },
+  {
+    file: `${A}/utils/charmedPlayer.ts`,
+    symbol: "charmedThrough",
+    mod: charmedPlayer,
+  },
+  {
+    file: `${A}/utils/dispelAnalysis.ts`,
+    symbol: "canRemoveFrom",
+    mod: dispelAnalysis,
   },
   {
     file: `${A}/data/spellTags.ts`,

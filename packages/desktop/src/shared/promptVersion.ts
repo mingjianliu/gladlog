@@ -1124,4 +1124,10 @@
 //  press in cc-avoidable's GCD gate, kick-eaten's post-kick casts, the
 //  hardcast-broken test, healing-gap / [INACTIVITY] activity, the healer
 //  cast ratio, moment snapshots and teammate-crisis owner casts.
-export const PROMPT_VERSION = 142;
+//  v143 (2026-09-25, reliability round 2 W1d): a charmed (Mind-Controlled)
+//  teammate can be freed only by a friendly offensive purge, never a
+//  cleanse and never by themselves (386/386 corpus removals offensive);
+//  no "[totem/pet]" tag on a controlled player. 605 files: missed-cleanse
+//  −18 Mind Control windows, +5 refills, +1 (a Spellsteal-able miss);
+//  gates unchanged.
+export const PROMPT_VERSION = 143;
