@@ -46,7 +46,7 @@ import {
   USABLE_WHILE_CONFUSED_SPELL_IDS,
   USABLE_WHILE_FEARED_SPELL_IDS,
 } from "./cooldowns";
-import { getDRCategory, getDRLevel } from "./drAnalysis";
+import { drCategoryOfCast, getDRCategory, getDRLevel } from "./drAnalysis";
 import {
   distanceBetween,
   getUnitPositionAtTime,
@@ -161,7 +161,9 @@ export function ccSamplerFor(params: {
   if (mech === undefined || reach === null) return null;
   const start = combat.startTime;
   const zone = String(combat.startInfo?.zoneId ?? "");
-  const cat = getDRCategory(cd.spellId);
+  // The cooldown is a CAST id; the DR history below is keyed by the aura ids
+  // the log applies (GH #111).
+  const cat = drCategoryOfCast(cd.spellId);
   const deathS = (u: ICombatUnit) => {
     const d = u.deathRecords[0];
     return d ? (d.timestamp - start) / 1000 : Infinity;

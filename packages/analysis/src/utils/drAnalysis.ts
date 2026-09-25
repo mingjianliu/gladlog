@@ -335,6 +335,36 @@ export function getDRCategory(spellId: string): string {
 }
 
 /**
+ * CC casts whose logged CAST id is not the debuff aura the log applies for
+ * it. `DR_CATEGORY_MAP` is keyed by aura id on purpose (drCategories.ts), so
+ * looking one of these casts up directly lands on the `spell:<castId>`
+ * self-DR fallback, and a consumer that filters the target's CC auras by that
+ * key finds none — DR read Full forever (GH #111: `[PEEL OPTION]` and
+ * `[CC BOOKMARK]` offered Shockwave at Full DR right after a stun).
+ *
+ * Measured 2026-09-25 (new-season archive, every 300th file): the CC aura the
+ * same caster (or its totem) applied within 3 s of the cast — Shockwave →
+ * 132168 on 316 of 355 casts, Capacitor Totem → 118905 on 258 / 319, Fear →
+ * 118699 on 382 / 480 (the rest are other CCs of the same caster). Registered
+ * in `curatedIdRegistry.ts`; `test/drCategoryIds.test.ts` fails when a CC id
+ * with a known mechanic resolves to no DR category and is not a declared
+ * self-DR spell. Infernal Awakening 22703 is NOT here: its cast and aura id
+ * are the same, and drShareScan shows it shares no DR family (5d6347e3).
+ */
+export const CC_CAST_EFFECT_AURA: Readonly<Record<string, string>> = {
+  "46968": "132168", // Shockwave → stun aura
+  "192058": "118905", // Capacitor Totem → Static Charge
+  "5782": "118699", // Fear → Fear debuff
+};
+
+/** The DR category of the CC a CAST applies — the single source for any
+ * consumer that starts from a spell the player can press (a cooldown, a kit
+ * entry) rather than from an aura in the log. */
+export function drCategoryOfCast(castSpellId: string): string {
+  return getDRCategory(CC_CAST_EFFECT_AURA[castSpellId] ?? castSpellId);
+}
+
+/**
  * Given the history of previous CC applications (same category, same target),
  * compute the DR level AND sequence index for a new application at `newApplyMs`.
  *

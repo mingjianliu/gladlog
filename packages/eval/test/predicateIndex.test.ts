@@ -444,6 +444,11 @@ const INDEX: PredicateRow[] = [
     mod: drAnalysis,
   },
   {
+    file: `${A}/utils/drAnalysis.ts`,
+    symbol: "drCategoryOfCast",
+    mod: drAnalysis,
+  },
+  {
     file: `${A}/analysis/candidateFindings.ts`,
     symbol: "CD_WASTE_PRESSURE_HP_PCT",
     mod: candidateFindings,

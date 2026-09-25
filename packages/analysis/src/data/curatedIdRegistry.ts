@@ -86,7 +86,7 @@ import {
 import { HEALER_REACH_SPELLS } from "../utils/spellRange";
 import { SPEC_PRIMARY_CC } from "../utils/healerExposureAnalysis";
 import { MOVEMENT_ROOT_BREAK_DISPEL_IDS } from "../utils/dispelKind";
-import { AOE_CC_SPELL_IDS } from "../utils/drAnalysis";
+import { AOE_CC_SPELL_IDS, CC_CAST_EFFECT_AURA } from "../utils/drAnalysis";
 import { EXTERNAL_DAMAGE_SHIELD_IDS } from "../utils/externalDamage";
 import { HEALER_AVOIDANCE_SPELLS } from "../utils/healerExposureAnalysis";
 import { PVP_TRINKET_SPELL_IDS } from "../utils/killWindowTargetSelection";
@@ -461,6 +461,12 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   t("AOE_CC_SPELL_IDS", "utils/drAnalysis.ts", "cast", () =>
     set(AOE_CC_SPELL_IDS),
   ),
+  // GH #111 (2026-09-25): CC cast id → the debuff aura the log applies, so a
+  // cast-keyed DR lookup reaches the aura-keyed DR table.
+  t("CC_CAST_EFFECT_AURA", "utils/drAnalysis.ts", "mixed", () => [
+    ...Object.keys(CC_CAST_EFFECT_AURA),
+    ...Object.values(CC_CAST_EFFECT_AURA),
+  ]),
   t("IMMUNITY_SPELLS", "utils/deathOutcomeAnalysis.ts", "mixed", () =>
     Object.entries(IMMUNITY_SPELLS).flatMap(([k, v]) => [
       k,

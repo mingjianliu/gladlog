@@ -6,7 +6,7 @@ import { ccSpellIds } from "../data/spellTags";
 import { isHealerSpec, specToString } from "./cooldowns";
 import {
   DRLevel,
-  getDRCategory,
+  drCategoryOfCast,
   getDRLevelAtTime,
   IDRInfo,
 } from "./drAnalysis";
@@ -399,7 +399,7 @@ export function computeContestedTradeFacts(
         isCCReadyAt(s, seg.fromSeconds) &&
         getDRLevelAtTime(
           enemyHealerCCInstances,
-          getDRCategory(s.spellId),
+          drCategoryOfCast(s.spellId),
           seg.fromSeconds,
           matchStartMs,
         ) === "Full",
@@ -556,7 +556,7 @@ export function computeWindowContributions(
         enemyHealerDR: enemyHealer
           ? getDRLevelAtTime(
               enemyHealerCCInstances,
-              getDRCategory(s.spellId),
+              drCategoryOfCast(s.spellId),
               fromSeconds,
               matchStartMs,
             )
@@ -695,7 +695,7 @@ export function computeWindowCreationFacts(
         isCCReadyAt(s, seg.fromSeconds) &&
         getDRLevelAtTime(
           enemyHealerCCInstances,
-          getDRCategory(s.spellId),
+          drCategoryOfCast(s.spellId),
           seg.fromSeconds,
           matchStartMs,
         ) === "Full",
