@@ -243,7 +243,7 @@ export function cdWasteEvents(
      *  集合**被当成「你整局没交的保命技能」。治疗视角看不到(0/17),换 DPS 视角
      *  立刻暴露:**58/176(33%)**引用的是 Control CD(致盲 13、龙息 7、雷鸣怒吼 6、
      *  恐惧嚎叫 4、变形术 4、焦油陷阱 4、震荡波 3…)。tag 可选,缺省退回原判据。 */
-    Partial<Pick<IMajorCooldownInfo, "tag">>)[],
+    Partial<Pick<IMajorCooldownInfo, "tag" | "responseOnly">>)[],
   healer: { id: string; name: string },
   minHpPct: number | null,
 ): CandidateEvent[] {
@@ -254,6 +254,9 @@ export function cdWasteEvents(
     const isDefensive = cd.tag === undefined || DEFENSIVE_TAGS.has(cd.tag);
     // 「整局没交」对没有按键的能力不成立(`PROC_ONLY_ACTIVATION_IDS`)。
     if (cdIsProcOnly(cd)) continue;
+    // A response-only save (Barkskin / Frenzied Regeneration, user ruling
+    // 2026-09-25 「不指控」) is never "never used".
+    if (cd.responseOnly) continue;
     if (cd.neverUsed && !cd.isThroughput && isDefensive) {
       // Cost-norm guard (#25, 2026-08-14): a never-used major defensive is
       // exactly the shape of fact that tempts the model into "you should

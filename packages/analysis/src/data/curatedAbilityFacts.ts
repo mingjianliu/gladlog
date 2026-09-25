@@ -64,6 +64,12 @@ interface ICuratedAbilityFact {
     | "not_save_role";
   /** conditional 类:授权 PvP 天赋 spellId(2026-08-14 用户设计:被控可用可为天赋条件性) */
   requiresTalent?: string;
+  /** save_role only: the spell answers a crisis (a press counts as a
+   * response, and it is a defensive the player HAS) but it is never the
+   * subject of an accusation — no cd-waste "never used", no cd-hoarded
+   * "was ready". User ruling 2026-09-25 on Barkskin / Frenzied Regeneration
+   * ("嗯 不指控"). */
+  responseOnly?: true;
   source: string; // 出处(官方 tooltip/wowhead 链接/裁决记录)
   approved: string; // "YYYY-MM-DD user" —— 无此字段的条目测试红
 }
@@ -82,44 +88,53 @@ export const CURATED_ABILITY_FACTS: ICuratedAbilityFact[] = [
   // healerSaveCdGenerated.json is what the product reads.
   {
     id: "375576",
-    claim: "圣洁鸣钟(Divine Toll,奶骑):对 5 个目标施放圣光震击,是救人级的大治疗;官方画像只看到「施放另一个法术」。",
+    claim:
+      "圣洁鸣钟(Divine Toll,奶骑):对 5 个目标施放圣光震击,是救人级的大治疗;官方画像只看到「施放另一个法术」。",
     kind: "save_role",
-    source: "用户裁定 2026-09-04(GH #63);语料 n=878,Δ +13 pp,10 秒阵亡 4.6% vs 对照 7.2%",
+    source:
+      "用户裁定 2026-09-04(GH #63);语料 n=878,Δ +13 pp,10 秒阵亡 4.6% vs 对照 7.2%",
     approved: "2026-09-04 user",
   },
   {
     id: "31884",
-    claim: "复仇之怒(Avenging Wrath):奶骑手里是治疗 +20% 的放大器,放大出来的量在按下后 5 秒内到达。",
+    claim:
+      "复仇之怒(Avenging Wrath):奶骑手里是治疗 +20% 的放大器,放大出来的量在按下后 5 秒内到达。",
     kind: "save_role",
     source: "用户裁定 2026-09-04(GH #63);语料 n=456,Δ +21 pp,阵亡 3.1% vs 5.8%",
     approved: "2026-09-04 user",
   },
   {
     id: "132158",
-    claim: "自然迅捷(Nature's Swiftness,奶德):下一个治疗瞬发;语料 Δ 只有 +2、阵亡 7.7% vs 7.9%,踩线,用户裁定进名单。",
+    claim:
+      "自然迅捷(Nature's Swiftness,奶德):下一个治疗瞬发;语料 Δ 只有 +2、阵亡 7.7% vs 7.9%,踩线,用户裁定进名单。",
     kind: "save_role",
     source: "用户裁定 2026-09-04(GH #63,原话「自然迅捷和福音还行」);语料 n=678",
     approved: "2026-09-04 user",
   },
   {
     id: "378081",
-    claim: "自然迅捷(Nature's Swiftness,奶萨):下一个治疗瞬发,放大量落在窗口内。",
+    claim:
+      "自然迅捷(Nature's Swiftness,奶萨):下一个治疗瞬发,放大量落在窗口内。",
     kind: "save_role",
-    source: "用户裁定 2026-09-04(GH #63);语料 n=1055,Δ +20 pp,阵亡 2.6% vs 7.0%",
+    source:
+      "用户裁定 2026-09-04(GH #63);语料 n=1055,Δ +20 pp,阵亡 2.6% vs 7.0%",
     approved: "2026-09-04 user",
   },
   {
     id: "472433",
-    claim: "福音(Evangelism,戒律):延长救赎并群体回血;语料 Δ +9、阵亡 5.9% vs 8.1% 踩线,用户裁定进名单。",
+    claim:
+      "福音(Evangelism,戒律):延长救赎并群体回血;语料 Δ +9、阵亡 5.9% vs 8.1% 踩线,用户裁定进名单。",
     kind: "save_role",
-    source: "用户裁定 2026-09-04(GH #63,原话「自然迅捷和福音还行」);语料 n=1251",
+    source:
+      "用户裁定 2026-09-04(GH #63,原话「自然迅捷和福音还行」);语料 n=1251",
     approved: "2026-09-04 user",
   },
   {
     id: "370537",
     claim: "静滞(Stasis,奶龙):存下三个法术一起释放,产出在按下后 5 秒内到达。",
     kind: "save_role",
-    source: "用户裁定 2026-09-04(GH #63);语料 n=286,Δ +18 pp,阵亡 3.5% vs 11.1%",
+    source:
+      "用户裁定 2026-09-04(GH #63);语料 n=286,Δ +18 pp,阵亡 3.5% vs 11.1%",
     approved: "2026-09-04 user",
   },
   {
@@ -138,63 +153,93 @@ export const CURATED_ABILITY_FACTS: ICuratedAbilityFact[] = [
   },
   {
     id: "31821",
-    claim: "光环掌握(Aura Mastery,奶骑):全队 20% 减伤外放;语料 Δ 9.9 / 阵亡差 4.2pp 差门一线,减伤类在 5 秒窗被低估,用户裁定进名单。",
+    claim:
+      "光环掌握(Aura Mastery,奶骑):全队 20% 减伤外放;语料 Δ 9.9 / 阵亡差 4.2pp 差门一线,减伤类在 5 秒窗被低估,用户裁定进名单。",
     kind: "save_role",
     source: "用户裁定 2026-09-04(GH #63,「1 做」);语料 n=901,阵亡 2.8% vs 7.0%",
     approved: "2026-09-04 user",
   },
   {
     id: "6940",
-    claim: "牺牲祝福(Blessing of Sacrifice,奶骑):转伤外放;语料 Δ 9.8 / 阵亡差 3.9pp 差门一线,用户裁定进名单。",
+    claim:
+      "牺牲祝福(Blessing of Sacrifice,奶骑):转伤外放;语料 Δ 9.8 / 阵亡差 3.9pp 差门一线,用户裁定进名单。",
     kind: "save_role",
     source: "用户裁定 2026-09-04(GH #63,「1 做」);语料 n=961,阵亡 1.8% vs 5.7%",
     approved: "2026-09-04 user",
   },
   {
     id: "115310",
-    claim: "还阳术(Revival,织雾):团队群疗 + 驱散;12.1 首周语料 n=36 不够门槛,Δ +29,用户裁定先进名单,赛季语料变多后复核。",
+    claim:
+      "还阳术(Revival,织雾):团队群疗 + 驱散;12.1 首周语料 n=36 不够门槛,Δ +29,用户裁定先进名单,赛季语料变多后复核。",
     kind: "save_role",
     source: "用户裁定 2026-09-04(GH #63,「你说的那三个也加进去」)",
     approved: "2026-09-04 user",
   },
   {
     id: "443028",
-    claim: "天神之道(Celestial Conduit,织雾 Conduit):引导群疗;语料 n=45 不够门槛,Δ +26,用户裁定先进名单。",
+    claim:
+      "天神之道(Celestial Conduit,织雾 Conduit):引导群疗;语料 n=45 不够门槛,Δ +26,用户裁定先进名单。",
     kind: "save_role",
     source: "用户裁定 2026-09-04(GH #63,「你说的那三个也加进去」)",
     approved: "2026-09-04 user",
   },
   {
     id: "473909",
-    claim: "知识古树(Ancient of Lore,奶德):语料 n=99 差一个样本,Δ +8.5,用户裁定先进名单。",
+    claim:
+      "知识古树(Ancient of Lore,奶德):语料 n=99 差一个样本,Δ +8.5,用户裁定先进名单。",
     kind: "save_role",
     source: "用户裁定 2026-09-04(GH #63,「你说的那三个也加进去」)",
     approved: "2026-09-04 user",
   },
   {
     id: "115203",
-    claim: "壮胆酒(Fortifying Brew,织雾):360 秒自保减伤;全量语料 n=1,570 Δ 8.9 / 阵亡差 4.6pp 差门一线(每 10 取 1 时曾过门),用户裁定签进。",
+    claim:
+      "壮胆酒(Fortifying Brew,织雾):360 秒自保减伤;全量语料 n=1,570 Δ 8.9 / 阵亡差 4.6pp 差门一线(每 10 取 1 时曾过门),用户裁定签进。",
     kind: "save_role",
-    source: "用户裁定 2026-09-04(GH #63,「好的 进」);全量扫描阵亡 6.2% vs 10.8%",
+    source:
+      "用户裁定 2026-09-04(GH #63,「好的 进」);全量扫描阵亡 6.2% vs 10.8%",
     approved: "2026-09-04 user",
   },
   {
+    id: "22812",
+    claim:
+      "树皮术(Barkskin,奶德):自保减伤;GH #63 按门槛测为门下被剥掉,用户改裁为救人牌,但只救自己(自保墙,救不了队友)。",
+    kind: "save_role",
+    responseOnly: true,
+    source:
+      "用户裁定 2026-09-24(可靠性审计 C2,「算救人 但是只能是自己」);只救自己由 canHelpAnotherUnit 执行(无友方射程 + 防御类);2026-09-25 裁「不指控」→ responseOnly",
+    approved: "2026-09-24 user",
+  },
+  {
+    id: "22842",
+    claim:
+      "狂暴回复(Frenzied Regeneration,奶德):自疗;GH #63 按门槛测为门下被剥掉,用户改裁为救人牌,但只救自己。",
+    kind: "save_role",
+    responseOnly: true,
+    source:
+      "用户裁定 2026-09-24(可靠性审计 C2,「算救人 但是只能是自己」);只救自己由 canHelpAnotherUnit 执行;2026-09-25 裁「不指控」→ responseOnly",
+    approved: "2026-09-24 user",
+  },
+  {
     id: "443454",
-    claim: "先祖迅捷(Ancestral Swiftness,奶萨 Farseer):12.x 是 30 秒冷却,按「30 秒核心治疗不算救人牌」的裁决拿掉;Δ +22 过门,可翻。",
+    claim:
+      "先祖迅捷(Ancestral Swiftness,奶萨 Farseer):12.x 是 30 秒冷却,按「30 秒核心治疗不算救人牌」的裁决拿掉;Δ +22 过门,可翻。",
     kind: "not_save_role",
     source: "用户裁定 2026-09-04(GH #63,「2 也做吧」)",
     approved: "2026-09-04 user",
   },
   {
     id: "116680",
-    claim: "雷霆焦茶(Thunder Focus Tea,织雾):30 秒冷却的核心治疗强化,用户裁定不算救人牌(「有点多了」)。",
+    claim:
+      "雷霆焦茶(Thunder Focus Tea,织雾):30 秒冷却的核心治疗强化,用户裁定不算救人牌(「有点多了」)。",
     kind: "not_save_role",
     source: "用户裁定 2026-09-04(GH #63);语料 n=1162,Δ +18 pp —— 过门但排除",
     approved: "2026-09-04 user",
   },
   {
     id: "355936",
-    claim: "梦境吐息(Dream Breath,奶龙):30 秒冷却的核心治疗,用户裁定不算救人牌。",
+    claim:
+      "梦境吐息(Dream Breath,奶龙):30 秒冷却的核心治疗,用户裁定不算救人牌。",
     kind: "not_save_role",
     source: "用户裁定 2026-09-04(GH #63);语料 n=1324,Δ +19 pp —— 过门但排除",
     approved: "2026-09-04 user",
@@ -208,23 +253,27 @@ export const CURATED_ABILITY_FACTS: ICuratedAbilityFact[] = [
   },
   {
     id: "34861",
-    claim: "圣言术:洁(Holy Word: Sanctify,神牧):与圣言术:宁同族的核心治疗,按同一裁决排除;未单独点名,可翻。",
+    claim:
+      "圣言术:洁(Holy Word: Sanctify,神牧):与圣言术:宁同族的核心治疗,按同一裁决排除;未单独点名,可翻。",
     kind: "not_save_role",
     source: "同 2050 的 2026-09-04 裁决推及;语料 n=937,Δ +23 pp",
     approved: "2026-09-04 user",
   },
   {
     id: "432459",
-    claim: "圣洁壁垒(Holy Bulwark,奶骑 Lightsmith):用户裁定不进(「其他不行」)。",
+    claim:
+      "圣洁壁垒(Holy Bulwark,奶骑 Lightsmith):用户裁定不进(「其他不行」)。",
     kind: "not_save_role",
-    source: "用户裁定 2026-09-04(GH #63);语料 n=1140,Δ +6 pp,阵亡 3.4% vs 6.5% —— 未过门",
+    source:
+      "用户裁定 2026-09-04(GH #63);语料 n=1140,Δ +6 pp,阵亡 3.4% vs 6.5% —— 未过门",
     approved: "2026-09-04 user",
   },
   {
     id: "432472",
     claim: "神圣武器(Sacred Weapon,奶骑 Lightsmith):用户裁定不进。",
     kind: "not_save_role",
-    source: "用户裁定 2026-09-04(GH #63);语料 n=1019,Δ +7 pp,阵亡 5.0% vs 5.9% —— 未过门",
+    source:
+      "用户裁定 2026-09-04(GH #63);语料 n=1019,Δ +7 pp,阵亡 5.0% vs 5.9% —— 未过门",
     approved: "2026-09-04 user",
   },
   {

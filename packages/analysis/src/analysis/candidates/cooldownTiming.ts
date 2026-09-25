@@ -766,7 +766,9 @@ type CdHoardCandidateCd = Pick<
   IMajorCooldownInfo,
   "spellId" | "spellName" | "casts" | "cooldownSeconds" | "neverUsed" | "tag"
 > &
-  Partial<Pick<IMajorCooldownInfo, "isThroughput" | "charges">>;
+  Partial<
+    Pick<IMajorCooldownInfo, "isThroughput" | "charges" | "responseOnly">
+  >;
 
 /** The shape `isSpendableDefensiveCd` / `readyDefensiveCds` read. Exported
  * so the cohort-prior engine (`analysis/cdTriggerPrior.ts`) can type its
@@ -941,7 +943,12 @@ export function cdHoardedEvents(
           ? !SELF_CAST_NOOP_EXTERNAL_IDS.has(cd.spellId)
           : canHelpAnotherUnit(cd.spellId, cd.tag);
       const offCooldown = readyDefensiveCds(ownerCds, p.tSec, helps);
-      const ready = offCooldown.filter((cd) => cdReadyInTimeAt(cd, p.tSec));
+      // The ACCUSATION set: a response-only save (Barkskin / Frenzied
+      // Regeneration, user ruling 2026-09-25 「不指控」) is never named as
+      // "ready" — it still answers the crisis through `spent` below.
+      const ready = offCooldown.filter(
+        (cd) => !cd.responseOnly && cdReadyInTimeAt(cd, p.tSec),
+      );
       if (ready.length === 0) {
         if (tracing)
           trace.push({

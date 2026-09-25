@@ -897,6 +897,12 @@ export interface IMajorCooldownInfo {
    *  凡是「你当时本可以按它」形状的判断都必须跳过它:玩家没有那个选择,指控无法
    *  被满足。可选是为了兼容手搭 fixture,生产路径一定会设。 */
   isProcOnly?: boolean;
+  /** A healer save cooldown the user ruled RESPONSE-ONLY (Barkskin / Frenzied
+   * Regeneration for Restoration Druid, 2026-09-25 「不指控」): pressing it
+   * answers a crisis and it counts as a defensive the player has, but no
+   * accusation may name it (cd-waste "never used", cd-hoarded "was ready").
+   * Read from the generated save roster. */
+  responseOnly?: boolean;
   /** GH #106 step 3: the EARLIEST this cooldown can be back after a use —
    *  set only for spells whose cooldown combat events shorten (corpus floor,
    *  `cdRecastFloorGenerated.json`). `cooldownSeconds` stays the latest: past
@@ -2264,6 +2270,11 @@ export function extractMajorCooldowns(
         neverUsed: casts.length === 0,
         isThroughput: spell.tags.includes(SpellTag.Offensive),
         isProcOnly: procOnly,
+        ...(spellAliasIds(spell.spellId).some(
+          (id) => saveRoster?.get(id)?.responseOnly,
+        )
+          ? { responseOnly: true }
+          : {}),
         ...(procOnly
           ? {}
           : (() => {

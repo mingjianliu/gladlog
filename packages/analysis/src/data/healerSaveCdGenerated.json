@@ -1,6 +1,6 @@
 {
   "meta": {
-    "generatedAt": "2026-09-05",
+    "generatedAt": "2026-09-25",
     "corpus": "1814 archived files (12.1+ rounds only)",
     "command": "npx tsx packages/eval/scripts/healerSaveCdScan.ts emit-table --in <counts.json> --out <file.json>",
     "minShare": 0.02,
@@ -624,6 +624,22 @@
           ]
         },
         {
+          "spellId": "22812",
+          "name": "Barkskin",
+          "cooldownSeconds": 60,
+          "share": 0.487,
+          "rounds": 458,
+          "casts": 684,
+          "savesAlly": false,
+          "savesSelf": true,
+          "why": [
+            "self: mitigation",
+            "save-role (user-signed, 2026-09-24)",
+            "door: n=4682 Δ5.3pp death-contrast 2.5pp"
+          ],
+          "responseOnly": true
+        },
+        {
           "spellId": "740",
           "name": "Tranquility",
           "cooldownSeconds": 180,
@@ -636,6 +652,22 @@
             "ally: absorb+heals-others",
             "door: n=2615 Δ19.2pp death-contrast 4.1pp"
           ]
+        },
+        {
+          "spellId": "22842",
+          "name": "Frenzied Regeneration",
+          "cooldownSeconds": 36,
+          "share": 0.214,
+          "rounds": 201,
+          "casts": 310,
+          "savesAlly": false,
+          "savesSelf": true,
+          "why": [
+            "self: self-heal",
+            "save-role (user-signed, 2026-09-24)",
+            "door: n=2481 Δ-2.3pp death-contrast 0.8pp"
+          ],
+          "responseOnly": true
         },
         {
           "spellId": "391528",
@@ -673,8 +705,6 @@
         "106898",
         "1850",
         "22570",
-        "22812",
-        "22842",
         "29166",
         "336126",
         "33891",
@@ -776,14 +806,14 @@
         "name": "Power Infusion",
         "cooldownSeconds": 120,
         "share": 0.928,
-        "reason": "official profile silent (reachesAlly=true, hitsEnemy=false, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=true, hitsEnemy=false, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "8122",
         "name": "Psychic Scream",
         "cooldownSeconds": 30,
         "share": 0.818,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "586",
@@ -797,35 +827,35 @@
         "name": "Gladiator's Medallion",
         "cooldownSeconds": 120,
         "share": 0.707,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "73325",
         "name": "Leap of Faith",
         "cooldownSeconds": 90,
         "share": 0.343,
-        "reason": "official profile silent (reachesAlly=true, hitsEnemy=false, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=true, hitsEnemy=false, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "7744",
         "name": "Will of the Forsaken",
         "cooldownSeconds": 120,
         "share": 0.18,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "32375",
         "name": "Mass Dispel",
         "cooldownSeconds": 120,
         "share": 0.117,
-        "reason": "official profile silent (reachesAlly=true, hitsEnemy=true, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=true, hitsEnemy=true, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "58984",
         "name": "Shadowmeld",
         "cooldownSeconds": 120,
         "share": 0.07,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, moveSpeed=-)"
       }
     ],
     "Holy Paladin": [
@@ -834,21 +864,21 @@
         "name": "Hammer of Justice",
         "cooldownSeconds": 45,
         "share": 0.925,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=true, haste=-)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=true, moveSpeed=-)"
       },
       {
         "spellId": "190784",
         "name": "Divine Steed",
         "cooldownSeconds": 45,
         "share": 0.86,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "336126",
         "name": "Gladiator's Medallion",
         "cooldownSeconds": 120,
         "share": 0.734,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "432459",
@@ -876,28 +906,28 @@
         "name": "Blinding Light",
         "cooldownSeconds": 90,
         "share": 0.573,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "410126",
         "name": "Searing Glare",
         "cooldownSeconds": 60,
         "share": 0.225,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "59752",
         "name": "Will to Survive",
         "cooldownSeconds": 180,
         "share": 0.133,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "6262",
         "name": "Healthstone",
         "cooldownSeconds": 60,
         "share": 0.051,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, moveSpeed=-)"
       }
     ],
     "Holy Priest": [
@@ -913,42 +943,42 @@
         "name": "Holy Word: Chastise",
         "cooldownSeconds": 60,
         "share": 0.958,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=true, haste=-)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=true, moveSpeed=-)"
       },
       {
         "spellId": "10060",
         "name": "Power Infusion",
         "cooldownSeconds": 120,
         "share": 0.935,
-        "reason": "official profile silent (reachesAlly=true, hitsEnemy=false, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=true, hitsEnemy=false, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "8122",
         "name": "Psychic Scream",
         "cooldownSeconds": 30,
         "share": 0.92,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "336126",
         "name": "Gladiator's Medallion",
         "cooldownSeconds": 120,
         "share": 0.718,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "73325",
         "name": "Leap of Faith",
         "cooldownSeconds": 90,
         "share": 0.36,
-        "reason": "official profile silent (reachesAlly=true, hitsEnemy=false, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=true, hitsEnemy=false, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "7744",
         "name": "Will of the Forsaken",
         "cooldownSeconds": 120,
         "share": 0.246,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "34861",
@@ -962,7 +992,7 @@
         "name": "Mass Dispel",
         "cooldownSeconds": 120,
         "share": 0.167,
-        "reason": "official profile silent (reachesAlly=true, hitsEnemy=true, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=true, hitsEnemy=true, dealsDamage=false, moveSpeed=-)"
       }
     ],
     "Mistweaver Monk": [
@@ -978,91 +1008,91 @@
         "name": "Leg Sweep",
         "cooldownSeconds": 60,
         "share": 0.887,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "115078",
         "name": "Paralysis",
         "cooldownSeconds": 45,
         "share": 0.822,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "336126",
         "name": "Gladiator's Medallion",
         "cooldownSeconds": 120,
         "share": 0.664,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "198898",
         "name": "Song of Chi-Ji",
         "cooldownSeconds": 30,
         "share": 0.622,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "116841",
         "name": "Tiger's Lust",
         "cooldownSeconds": 30,
         "share": 0.5,
-        "reason": "official profile silent (reachesAlly=true, hitsEnemy=false, dealsDamage=false, haste=70)"
+        "reason": "official profile silent (reachesAlly=true, hitsEnemy=false, dealsDamage=false, moveSpeed=70)"
       },
       {
         "spellId": "119996",
         "name": "Transcendence: Transfer",
         "cooldownSeconds": 45,
         "share": 0.297,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "322109",
         "name": "Touch of Death",
         "cooldownSeconds": 180,
         "share": 0.146,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=true, haste=-)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=true, moveSpeed=-)"
       },
       {
         "spellId": "116844",
         "name": "Ring of Peace",
         "cooldownSeconds": 45,
         "share": 0.126,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "7744",
         "name": "Will of the Forsaken",
         "cooldownSeconds": 120,
         "share": 0.106,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "322118",
         "name": "Invoke Yu'lon, the Jade Serpent",
         "cooldownSeconds": 120,
         "share": 0.083,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "447446",
         "name": "Cherry Blossom Trail",
         "cooldownSeconds": 600,
         "share": 0.07,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "33697",
         "name": "Blood Fury",
         "cooldownSeconds": 120,
         "share": 0.061,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "345228",
         "name": "Gladiator's Badge",
         "cooldownSeconds": 60,
         "share": 0.054,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, moveSpeed=-)"
       }
     ],
     "Preservation Evoker": [
@@ -1078,84 +1108,84 @@
         "name": "Hover",
         "cooldownSeconds": 35,
         "share": 0.956,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=30)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, moveSpeed=30)"
       },
       {
         "spellId": "357208",
         "name": "Fire Breath",
         "cooldownSeconds": 30,
         "share": 0.928,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "357210",
         "name": "Deep Breath",
         "cooldownSeconds": 120,
         "share": 0.87,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "336126",
         "name": "Gladiator's Medallion",
         "cooldownSeconds": 120,
         "share": 0.713,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "358385",
         "name": "Landslide",
         "cooldownSeconds": 90,
         "share": 0.541,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "370665",
         "name": "Rescue",
         "cooldownSeconds": 60,
         "share": 0.428,
-        "reason": "official profile silent (reachesAlly=true, hitsEnemy=false, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=true, hitsEnemy=false, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "374968",
         "name": "Time Spiral",
         "cooldownSeconds": 120,
         "share": 0.367,
-        "reason": "official profile silent (reachesAlly=true, hitsEnemy=false, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=true, hitsEnemy=false, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "357214",
         "name": "Wing Buffet",
         "cooldownSeconds": 180,
         "share": 0.331,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "372048",
         "name": "Oppressing Roar",
         "cooldownSeconds": 120,
         "share": 0.326,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "406971",
         "name": "Oppressing Roar",
         "cooldownSeconds": 120,
         "share": 0.251,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "368970",
         "name": "Tail Swipe",
         "cooldownSeconds": 180,
         "share": 0.18,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "406732",
         "name": "Spatial Paradox",
         "cooldownSeconds": 180,
         "share": 0.055,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, moveSpeed=-)"
       }
     ],
     "Restoration Druid": [
@@ -1164,98 +1194,84 @@
         "name": "Gladiator's Medallion",
         "cooldownSeconds": 120,
         "share": 0.739,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "33891",
         "name": "Incarnation: Tree of Life",
         "cooldownSeconds": 180,
         "share": 0.586,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "102793",
         "name": "Ursol's Vortex",
         "cooldownSeconds": 60,
         "share": 0.52,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
-      },
-      {
-        "spellId": "22812",
-        "name": "Barkskin",
-        "cooldownSeconds": 60,
-        "share": 0.487,
-        "reason": "below the door: n=4682 Δ5.3pp death-contrast 2.5pp"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "22570",
         "name": "Maim",
         "cooldownSeconds": 30,
         "share": 0.466,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=true, haste=-)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=true, moveSpeed=-)"
       },
       {
         "spellId": "29166",
         "name": "Innervate",
         "cooldownSeconds": 180,
         "share": 0.416,
-        "reason": "official profile silent (reachesAlly=true, hitsEnemy=false, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=true, hitsEnemy=false, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "99",
         "name": "Incapacitating Roar",
         "cooldownSeconds": 30,
         "share": 0.348,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "5211",
         "name": "Mighty Bash",
         "cooldownSeconds": 60,
         "share": 0.338,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "1850",
         "name": "Dash",
         "cooldownSeconds": 120,
         "share": 0.318,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=60)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, moveSpeed=60)"
       },
       {
         "spellId": "58984",
         "name": "Shadowmeld",
         "cooldownSeconds": 120,
         "share": 0.304,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
-      },
-      {
-        "spellId": "22842",
-        "name": "Frenzied Regeneration",
-        "cooldownSeconds": 36,
-        "share": 0.214,
-        "reason": "below the door: n=2481 Δ-2.3pp death-contrast 0.8pp"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "77764",
         "name": "Stampeding Roar",
         "cooldownSeconds": 120,
         "share": 0.122,
-        "reason": "official profile silent (reachesAlly=true, hitsEnemy=false, dealsDamage=false, haste=60)"
+        "reason": "official profile silent (reachesAlly=true, hitsEnemy=false, dealsDamage=false, moveSpeed=60)"
       },
       {
         "spellId": "102359",
         "name": "Mass Entanglement",
         "cooldownSeconds": 30,
         "share": 0.109,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=true, haste=-)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=true, moveSpeed=-)"
       },
       {
         "spellId": "106898",
         "name": "Stampeding Roar",
         "cooldownSeconds": 120,
         "share": 0.1,
-        "reason": "official profile silent (reachesAlly=true, hitsEnemy=false, dealsDamage=false, haste=60)"
+        "reason": "official profile silent (reachesAlly=true, hitsEnemy=false, dealsDamage=false, moveSpeed=60)"
       }
     ],
     "Restoration Shaman": [
@@ -1264,77 +1280,77 @@
         "name": "Earthgrab Totem",
         "cooldownSeconds": 30,
         "share": 0.899,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "204336",
         "name": "Grounding Totem",
         "cooldownSeconds": 30,
         "share": 0.808,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "192058",
         "name": "Capacitor Totem",
         "cooldownSeconds": 60,
         "share": 0.8,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "336126",
         "name": "Gladiator's Medallion",
         "cooldownSeconds": 120,
         "share": 0.75,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "79206",
         "name": "Spiritwalker's Grace",
         "cooldownSeconds": 120,
         "share": 0.671,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "51514",
         "name": "Hex",
         "cooldownSeconds": 30,
         "share": 0.593,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "8143",
         "name": "Tremor Totem",
         "cooldownSeconds": 60,
         "share": 0.464,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "305483",
         "name": "Lightning Lasso",
         "cooldownSeconds": 45,
         "share": 0.436,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "355580",
         "name": "Static Field Totem",
         "cooldownSeconds": 90,
         "share": 0.397,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "58875",
         "name": "Spirit Walk",
         "cooldownSeconds": 60,
         "share": 0.323,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=60)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, moveSpeed=60)"
       },
       {
         "spellId": "33697",
         "name": "Blood Fury",
         "cooldownSeconds": 120,
         "share": 0.268,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "443454",
@@ -1348,28 +1364,28 @@
         "name": "Hex",
         "cooldownSeconds": 30,
         "share": 0.093,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "198103",
         "name": "Earth Elemental",
         "cooldownSeconds": 180,
         "share": 0.08,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "204331",
         "name": "Counterstrike Totem",
         "cooldownSeconds": 45,
         "share": 0.061,
-        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "59547",
         "name": "Gift of the Naaru",
         "cooldownSeconds": 120,
         "share": 0.056,
-        "reason": "official profile silent (reachesAlly=true, hitsEnemy=false, dealsDamage=false, haste=-)"
+        "reason": "official profile silent (reachesAlly=true, hitsEnemy=false, dealsDamage=false, moveSpeed=-)"
       }
     ]
   }

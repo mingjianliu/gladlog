@@ -92,6 +92,19 @@ export const SAVE_CD_DOOR_MIN_DEATH_CONTRAST_PP = 5;
 const SAVE_ROLE_IDS = new Set(
   CURATED_ABILITY_FACTS.filter((f) => f.kind === "save_role").map((f) => f.id),
 );
+// the date each save_role was signed (its `approved` field), for the `why`
+const SAVE_ROLE_SIGNED = new Map(
+  CURATED_ABILITY_FACTS.filter((f) => f.kind === "save_role").map((f) => [
+    f.id,
+    f.approved.replace(/ user$/, ""),
+  ]),
+);
+// save_role facts the user ruled response-only (never accused)
+const RESPONSE_ONLY_IDS = new Set(
+  CURATED_ABILITY_FACTS.filter(
+    (f) => f.kind === "save_role" && f.responseOnly,
+  ).map((f) => f.id),
+);
 const NOT_SAVE_ROLE_IDS = new Set(
   CURATED_ABILITY_FACTS.filter((f) => f.kind === "not_save_role").map((f) => f.id),
 );
@@ -259,6 +272,7 @@ export interface HealerSaveCdEntry {
   savesAlly: boolean;
   savesSelf: boolean;
   why: string[];
+  responseOnly?: boolean;
 }
 
 async function emitTable(): Promise<void> {
@@ -319,7 +333,7 @@ async function emitTable(): Promise<void> {
       if (savesAlly) why.push(`ally: ${allyEffect.join("+")}`);
       if (savesSelf) why.push(`self: ${selfEffect.join("+")}`);
       if (p.throughputRole) why.push("throughput-role (user-signed save)");
-      if (SAVE_ROLE_IDS.has(id)) why.push("save-role (user-signed, 2026-09-04)");
+      if (SAVE_ROLE_IDS.has(id)) why.push(`save-role (user-signed, ${SAVE_ROLE_SIGNED.get(id)})`);
       // Racials come from the registered racial table (racialAbilities.ts —
       // the corpus rule alone misses a racial only one healer class happened
       // to press in the sample: Gift of the Naaru, Shaman-only in the slice).
@@ -342,6 +356,7 @@ async function emitTable(): Promise<void> {
         savesAlly,
         savesSelf,
         why,
+        ...(RESPONSE_ONLY_IDS.has(id) ? { responseOnly: true } : {}),
       };
       if (NOT_SAVE_ROLE_IDS.has(id)) {
         rej.push({ spellId: id, name, cooldownSeconds: cd, share: entry.share, reason: "user-ruled not a save tool (not_save_role, 2026-09-04)" });

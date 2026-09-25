@@ -39,6 +39,9 @@ export interface HealerSaveCdEntry {
   savesAlly: boolean;
   savesSelf: boolean;
   why: string[];
+  /** User-ruled response-only (curatedAbilityFacts `responseOnly`): a press
+   * answers a crisis, the spell is never accused. */
+  responseOnly?: boolean;
 }
 
 const SPECS = (
