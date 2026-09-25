@@ -93,6 +93,7 @@ import {
 } from "../utils/rawStreams";
 import { toRenderSecond } from "../utils/renderGrid";
 import { OFFENSIVE_CD_SPELL_IDS } from "../utils/spellDanger";
+import { spellRangeForCaster, spellReachForCaster } from "../utils/spellRange";
 import { getSpellSchoolName } from "../utils/spellSchools";
 import { getTalentAvoidanceTriggers } from "../utils/talentBehaviors";
 import { matchThreatLevel, threatActiveAt } from "../utils/threatAssessment";
@@ -907,7 +908,7 @@ export function kickEatenEvents(
         ReturnType<
           typeof analyzePlayerCCAndTrinket
         >["interruptInstances"][number],
-        "interruptedSpellId"
+        "interruptedSpellId" | "kickSpellId" | "sourceId"
       >
     >)[],
   owner: { id: string; name: string },
@@ -924,6 +925,15 @@ export function kickEatenEvents(
      * shared `filterIntentGuardEvidence` exactly as cd-hoarded feeds it. */
     ownerCasts: { spellId: string; tSeconds: number }[];
   },
+  /** Reliability audit D4(d) (2026-09-25): the interrupted spell's reach
+   * for the owner and the kick's cast range for the kicker (official DB2
+   * ranges with talents, `spellReachForCaster` / `spellRangeForCaster`).
+   * The legend may coach "cast from outside kick range" only when the first
+   * exceeds the second; null when either is unknown. */
+  reach?: (k: (typeof instances)[number]) => {
+    yourReachYd: number;
+    kickRangeYd: number;
+  } | null,
 ): CandidateEvent[] {
   const withPresses = instances.map((k) => ({
     k,
@@ -972,6 +982,15 @@ export function kickEatenEvents(
               : undefined,
           );
           return school ? { lockedSchool: school } : {};
+        })(),
+        ...((): Record<string, string> => {
+          const r = reach?.(k);
+          return r
+            ? {
+                yourReachYd: String(Math.round(r.yourReachYd)),
+                kickRangeYd: String(Math.round(r.kickRangeYd)),
+              }
+            : {};
         })(),
         ...(k.nearestKickerDistYd != null
           ? { nearestKickerDistYd: k.nearestKickerDistYd.toFixed(1) }
@@ -2032,15 +2051,30 @@ function teamPlayEvents(
     // [CC ON TEAM] 行完整供给模型;其产出函数与测试已于 2026-09-24 删除
     // (旧版本缓存从不被读取,渲染也不调产出函数)。
     out.push(
-      ...kickEatenEvents(cc.interruptInstances, owner, {
-        rawStreams,
-        // Same seconds base and same source list as cd-hoarded's
-        // `ownCastSuccessSeconds` (teamPlayEvents above).
-        ownerCasts: (owner.spellCastEvents ?? []).map((e: any) => ({
-          spellId: String(e.spellId ?? ""),
-          tSeconds: (e.logLine.timestamp - combat.startTime) / 1000,
-        })),
-      }),
+      ...kickEatenEvents(
+        cc.interruptInstances,
+        owner,
+        {
+          rawStreams,
+          // Same seconds base and same source list as cd-hoarded's
+          // `ownCastSuccessSeconds` (teamPlayEvents above).
+          ownerCasts: (owner.spellCastEvents ?? []).map((e: any) => ({
+            spellId: String(e.spellId ?? ""),
+            tSeconds: (e.logLine.timestamp - combat.startTime) / 1000,
+          })),
+        },
+        (k) => {
+          if (!k.interruptedSpellId || !k.kickSpellId) return null;
+          const kicker = k.sourceId
+            ? ((combat.units ?? {})[k.sourceId] ?? null)
+            : null;
+          const yourReachYd = spellReachForCaster(owner, k.interruptedSpellId);
+          const kickRangeYd = spellRangeForCaster(kicker, k.kickSpellId);
+          return yourReachYd !== null && kickRangeYd !== null
+            ? { yourReachYd, kickRangeYd }
+            : null;
+        },
+      ),
     );
 
     // wasted-trinket 已退役(GH #14 B 组复测,用户裁定 2026-08-19,v29):出面

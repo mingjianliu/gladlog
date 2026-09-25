@@ -1235,6 +1235,25 @@ describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
     expect(noId[0]!.facts["lockedSchool"]).toBeUndefined();
   });
 
+  it("kick-eaten: yourReachYd / kickRangeYd only when both reaches are known (reliability audit D4(d))", () => {
+    const withReach = kickEatenEvents(
+      [switchedInst()],
+      { id: "P1", name: "Me" },
+      undefined,
+      () => ({ yourReachYd: 25, kickRangeYd: 30 }),
+    );
+    expect(withReach[0]!.facts["yourReachYd"]).toBe("25");
+    expect(withReach[0]!.facts["kickRangeYd"]).toBe("30");
+    const unknown = kickEatenEvents(
+      [switchedInst()],
+      { id: "P1", name: "Me" },
+      undefined,
+      () => null,
+    );
+    expect(unknown[0]!.facts["yourReachYd"]).toBeUndefined();
+    expect(unknown[0]!.facts["kickRangeYd"]).toBeUndefined();
+  });
+
   it("kick-eaten: carries nearestKickerDistYd and kickersInRange facts when present (GH #73, B6)", () => {
     const evts = kickEatenEvents(
       [
