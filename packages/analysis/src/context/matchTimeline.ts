@@ -807,8 +807,23 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       // By GUID: a pet target renders as "X's pet" / "[pet]", never its raw
       // (possibly localized) name (codex astra: `[MISSED on 恶魔卫士]`).
       const who = actorLabel(m.destUnitName, "enemy", m.destUnitId);
+      // The cause, when the shared avoidance sweep found one for THIS cast
+      // (the enemy summary's ccAvoidedInstances — the predicate behind
+      // [CC AVOIDED?]): same caster, same spell, same cast time. 105 of 204
+      // tags on the 605-file slice were Holy Priests (Phase Shift).
+      const avoided = enemyCCSummaries
+        ?.find((x) => x.playerName === m.destUnitName)
+        ?.ccAvoidedInstances?.find(
+          (a) =>
+            a.sourceName === owner.name &&
+            a.spellId === spellId &&
+            Math.abs(a.atSeconds - castTimeSeconds) < 0.01,
+        );
+      const cause = avoided ? ` — ${avoided.avoidanceSpellName} was up` : "";
       parts.push(
-        word === "MISSED" ? ` [MISSED on ${who}]` : ` [${word} ${who}]`,
+        word === "MISSED"
+          ? ` [MISSED on ${who}${cause}]`
+          : ` [${word} ${who}${cause}]`,
       );
     }
     return parts.join("");

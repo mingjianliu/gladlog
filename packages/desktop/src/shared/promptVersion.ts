@@ -995,4 +995,11 @@
 //  contexts gained tags (MISSED 181, REFLECTED 17, PARRIED 4, DODGED 2),
 //  no [IMMUNE] tag moved, nothing else changed; candidate counts identical;
 //  hardFailures 4 → 4 (pre-existing [STACKED DEFENSIVES] spans).
-export const PROMPT_VERSION = 124;
+//  v125 (2026-09-25): a [MISSED on X] / [REFLECTED by X] tag names its
+//  cause when the shared avoidance sweep (the enemy summary's
+//  ccAvoidedInstances — the predicate behind [CC AVOIDED?]) found one for
+//  that cast: "[MISSED on 5(HPriest) — Phase Shift was up]". 605 files: 88
+//  contexts, Phase Shift 80, Spell Reflection 14, Aspect of the Turtle 2,
+//  Psychic Shroud 1; nothing else changed; candidate counts identical;
+//  hardFailures unchanged.
+export const PROMPT_VERSION = 125;

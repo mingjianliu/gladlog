@@ -338,4 +338,44 @@ describe("[MISSED on …] / [REFLECTED by …] on the owner's CC casts (2026-09-
     expect(line).toContain("[MISSED on [pet]]");
     expect(line).not.toMatch(/[\u4e00-\u9fff]/);
   });
+
+  it("names the avoidance aura the shared sweep found for this cast (Phase Shift)", () => {
+    const enemy = mkUnit("e", "Enemy-Realm", {
+      reaction: CombatUnitReaction.Hostile,
+    });
+    const owner = mkUnit("o", "Me-Realm", {
+      spellCastEvents: [cast(POLYMORPH, "Polymorph", 30_000)] as never,
+      missesOut: [miss(POLYMORPH, "Polymorph", 30_050, "MISS")] as never,
+    });
+    const avoided = (atSeconds: number) => ({
+      ...baseParams(owner, enemy),
+      enemyCCSummaries: [
+        {
+          playerName: "Enemy-Realm",
+          ccInstances: [],
+          trinketUseTimes: [],
+          ccAvoidedInstances: [
+            {
+              atSeconds,
+              spellId: POLYMORPH,
+              spellName: "Polymorph",
+              avoidanceSpellName: "Phase Shift",
+              avoidanceSpellId: "408558",
+              sourceName: "Me-Realm",
+              sourceId: "o",
+            },
+          ],
+        },
+      ] as never,
+    });
+    const lineOf = (t: string) =>
+      t.split("\n").find((l) => l.includes("[YOU] [CC]"))!;
+    expect(lineOf(buildMatchTimeline(avoided(30)))).toMatch(
+      / \[MISSED on \S+ — Phase Shift was up\]$/,
+    );
+    // another cast's avoidance is not this one's cause
+    expect(lineOf(buildMatchTimeline(avoided(31)))).toMatch(
+      / \[MISSED on \S+\]$/,
+    );
+  });
 });
