@@ -9,7 +9,7 @@
  */
 import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
-import { MITIGATION_TABLE } from "../data/mitigationData";
+import { MITIGATION_TABLE, NO_MITIGATION_IDS } from "../data/mitigationData";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import spellIdListsData from "../data/spellIdLists";
 import { buildAuraIntervals } from "./auraIntervals";
@@ -44,6 +44,49 @@ export const MITIGATION_AURA_IDS = new Set<string>(
     .map(([id]) => id),
 );
 
+/** Reliability audit B4a (2026-09-25): an enemy's own save that carries no
+ * percentage mitigation — Guardian Spirit on itself, Desperate Prayer, Touch
+ * of Karma, Renewing Blaze, Life Cocoon on itself, Rallying Cry, Zephyr — the
+ * product's "major" lists (external ∪ big defensive) ∩ `NO_MITIGATION_IDS`.
+ * Neither the mitigation-aura test nor the external branch saw these, so a
+ * kill attempt the target survived with one was attributed "not enough
+ * damage" (a9bc48b5 @2:14: the priest's self Guardian Spirit at 2:16 and
+ * Desperate Prayer at 2:20). Both lists are already registered in
+ * curatedIdRegistry. */
+export const SELF_SAVE_IDS: ReadonlySet<string> = new Set<string>(
+  [
+    ...EXTERNAL_DEF_IDS,
+    ...(
+      (spellIdListsData as unknown as { bigDefensiveSpellIds?: string[] })
+        .bigDefensiveSpellIds ?? []
+    ).map(String),
+  ].filter((id) => NO_MITIGATION_IDS.has(id)),
+);
+
+/** The enemy's own presses of a `SELF_SAVE_IDS` save on itself, in cast
+ * order (seconds from match start). An external-capable one (Guardian
+ * Spirit, Life Cocoon) counts only when its cast target is the caster — cast
+ * on an ally it is an external, which the external branch already reports. */
+export function selfSaveCasts(
+  enemy: ICombatUnit,
+  matchStartMs: number,
+): Array<{ atSeconds: number; spellId: string; spellName: string }> {
+  const out: Array<{ atSeconds: number; spellId: string; spellName: string }> =
+    [];
+  for (const cast of enemy.spellCastEvents ?? []) {
+    if (cast.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
+    if (!cast.spellId || !SELF_SAVE_IDS.has(cast.spellId)) continue;
+    if (EXTERNAL_DEF_IDS.has(cast.spellId) && cast.destUnitId !== enemy.id)
+      continue;
+    out.push({
+      atSeconds: (cast.logLine.timestamp - matchStartMs) / 1000,
+      spellId: cast.spellId,
+      spellName: getEnglishSpellName(cast.spellId, cast.spellName),
+    });
+  }
+  return out;
+}
+
 /** An observed aura ended this much before its full duration → "removed
  * early" (dispelled, broken by damage/immunity rules, or cancelled). One
  * second of slack absorbs the log's aura-event jitter. */
@@ -55,8 +98,8 @@ export interface IEnemyDefensiveEvent {
   spellName: string;
   /** the enemy who pressed it */
   casterName: string;
-  /** "self" = a wall on the caster (pct < 100); "immune" = pct 100; "external" = cast on another enemy */
-  kind: "self" | "immune" | "external";
+  /** "self" = a wall on the caster (pct < 100); "immune" = pct 100; "external" = cast on another enemy; "self-save" = the caster's own no-%-mitigation save (`SELF_SAVE_IDS`) */
+  kind: "self" | "immune" | "external" | "self-save";
   /** official mitigation pct (self / immune); undefined for externals */
   pct?: number;
   /** who received an external */
@@ -161,6 +204,18 @@ export function enemyDefensiveEvents(
         !paired.inferredEnd &&
         observed !== undefined &&
         removedEarly(cast.spellId, observed),
+    });
+  }
+
+  // B4a (2026-09-25): the caster's own no-%-mitigation saves.
+  for (const c of selfSaveCasts(enemy, combat.startTime)) {
+    out.push({
+      atSeconds: c.atSeconds,
+      spellId: c.spellId,
+      spellName: c.spellName,
+      casterName: enemy.name,
+      kind: "self-save",
+      removedEarly: false,
     });
   }
 

@@ -14,6 +14,21 @@ const ATTEMPT = (span: string, tail: string) =>
   `  [${span}] on Osiklm-Archimonde-EU — Avatar burst (no stun) | opportunity: trinket up (no softer target) | team focus 55% (1.23M on target) | FAILED: ${tail}`;
 
 describe("checkEnemyDefRefConsistency", () => {
+  it("B4a (2026-09-25): `self-saved (X)` needs a `(self-save)` [ENEMY DEF] line for X in the span", () => {
+    const ok = [
+      LEGEND,
+      "2:16  [ENEMY DEF]   4(HPriest) (Holy Priest): Guardian Spirit (self-save) (at 50% HP)",
+      "2:20  [ENEMY DEF]   4(HPriest) (Holy Priest): Desperate Prayer (self-save) (at 75% HP)",
+      ATTEMPT("2:14–2:24", "self-saved (Guardian Spirit/Desperate Prayer)"),
+    ];
+    expect(checkEnemyDefRefConsistency(ok)).toEqual([]);
+    const missing = [
+      LEGEND,
+      ATTEMPT("2:14–2:24", "self-saved (Guardian Spirit)"),
+    ];
+    expect(checkEnemyDefRefConsistency(missing)).toHaveLength(1);
+  });
+
   it("passes when the named wall / external has a line inside the span (+ kill-credit slack)", () => {
     expect(KILL_CREDIT_SLACK_S).toBe(5);
     const lines = [

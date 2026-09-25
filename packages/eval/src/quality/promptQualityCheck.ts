@@ -1112,13 +1112,21 @@ export function checkCcBookmarkConsistency(lines: string[]): string[] {
       if (attacker !== target) why.push("书签目标不是施压的攻击者");
       if (pct < Math.round(CC_USE_MIN_SHARE * 100))
         why.push(`占比 ${pct}% 低于门槛`);
-      if (!spikes.some((sp) => sp.unit === mate && sp.from === a && sp.to === z))
-        why.push(`没有 ${mate} 在 ${fmtTime(a)}–${fmtTime(z)} 的 [DMG SPIKE] 行`);
+      if (
+        !spikes.some((sp) => sp.unit === mate && sp.from === a && sp.to === z)
+      )
+        why.push(
+          `没有 ${mate} 在 ${fmtTime(a)}–${fmtTime(z)} 的 [DMG SPIKE] 行`,
+        );
       else if (from < a || to > z) why.push("书签不在引用的施压窗口内");
     }
-    const ccd = enemyCc.find((c) => c.unit === target && c.from <= to && c.to >= from);
+    const ccd = enemyCc.find(
+      (c) => c.unit === target && c.from <= to && c.to >= from,
+    );
     if (ccd) why.push(`${fmtTime(ccd.from)} 起 ${target} 已在控制中`);
-    const cast = youCc.find((y) => y.spell === spell && y.at >= from && y.at <= to);
+    const cast = youCc.find(
+      (y) => y.spell === spell && y.at >= from && y.at <= to,
+    );
     if (cast) why.push(`${fmtTime(cast.at)} 已放出 ${spell}`);
     if (why.length)
       failures.push(
@@ -1147,10 +1155,14 @@ export function checkCcBookmarkConsistency(lines: string[]): string[] {
     const first = Number(m[3]) * 60 + Number(m[4]);
     const rendered = youCc.filter((y) => y.spell === sp);
     if (rendered.length > n)
-      failures.push(`CC USE 计数说 ${sp} ${n} 次,但时间线有 ${rendered.length} 条 [YOU] [CC]`);
+      failures.push(
+        `CC USE 计数说 ${sp} ${n} 次,但时间线有 ${rendered.length} 条 [YOU] [CC]`,
+      );
     const early = rendered.find((y) => y.at < first);
     if (early)
-      failures.push(`CC USE 计数说 ${sp} 首次 ${fmtTime(first)},但 ${fmtTime(early.at)} 已有 [YOU] [CC]`);
+      failures.push(
+        `CC USE 计数说 ${sp} 首次 ${fmtTime(first)},但 ${fmtTime(early.at)} 已有 [YOU] [CC]`,
+      );
   }
   return failures;
 }
@@ -1408,10 +1420,11 @@ export function checkPetCreditSide(lines: string[]): string[] {
  * `TIMELINE_LINE_FLAGS.enemyDef === "timeline"` — the gate keys on it so a
  * prompt built with the line off is not accused of missing it. */
 const ENEMY_DEF_LEGEND = /^\s*\[ENEMY DEF\] = /;
-/** `  [m:ss–m:ss] on <unit> — … | FAILED: popped A/B` or
- * `… | FAILED: saved by external (A/B)`; names may carry `@m:ss` (stamp mode). */
+/** `  [m:ss–m:ss] on <unit> — … | FAILED: popped A/B`,
+ * `… | FAILED: saved by external (A/B)` or (B4a, 2026-09-25)
+ * `… | FAILED: self-saved (A/B)`; names may carry `@m:ss` (stamp mode). */
 const KILL_ATTEMPT_DEFENSIVE =
-  /^\s*\[(\d+):(\d\d)–(\d+):(\d\d)\] on .*\| FAILED: (?:popped |saved by external \()([^|()]+?)\)?\s*$/;
+  /^\s*\[(\d+):(\d\d)–(\d+):(\d\d)\] on .*\| FAILED: (?:popped |saved by external \(|self-saved \()([^|()]+?)\)?\s*$/;
 /** `m:ss  [ENEMY DEF]   <pid> (<spec>): <Spell> (…)` / `: <Spell> → <pid> (…)` */
 const ENEMY_DEF_LINE =
   /^(\d+):(\d\d) {2}\[ENEMY DEF\] {3}[^:]+: (.+?)(?: \(| → |$)/;

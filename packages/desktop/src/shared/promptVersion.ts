@@ -1030,4 +1030,12 @@
 //  healer-locked stays. 605 files: healer cc-avoidable 89 → 62, death-setup
 //  dps 907 → 579 / healer 454 → 290 (all removed events early-kind, all
 //  healer-locked kept); nothing else changed.
-export const PROMPT_VERSION = 128;
+//  v129 (2026-09-25, reliability audit A5 + A3 + B4a): missed-cleanse's
+//  "owner was hard casting" facts end at a cancelled cast (34 lines
+//  corrected on 605 files); kick-eaten postKick no longer calls a PvP
+//  trinket / break racial "acting on another school" (24 → 0) and carries
+//  ccInWindowS (481 lines); enemy self-saves render in [ENEMY DEF]
+//  "(self-save)" (4,332 lines) and a survived kill attempt says
+//  "self-saved (X)" (202). Candidate ids unchanged apart from 2 kick-eaten
+//  cap swaps.
+export const PROMPT_VERSION = 129;

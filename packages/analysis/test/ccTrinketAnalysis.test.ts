@@ -554,10 +554,10 @@ describe("analyzePlayerCCAndTrinket — structured data contract (N4)", () => {
         makeSpellCastEvent(
           "589",
           MATCH_START + 34_000,
-          "player-1",
-          "PlayerPriest",
           "enemy-1",
           "EnemyRogue",
+          "player-1",
+          "PlayerPriest",
           0,
           "Shadow Word: Pain",
         ),

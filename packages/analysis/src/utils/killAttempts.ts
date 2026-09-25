@@ -79,6 +79,7 @@ import {
   IMMUNITY_IDS,
   MITIGATION_AURA_IDS,
   MITIGATION_AURA_MIN_PCT,
+  selfSaveCasts,
 } from "./enemyDefensives";
 import {
   getHpPercentAtTime,
@@ -116,12 +117,17 @@ export interface IKillAttemptAttribution {
   externalReceived: string[];
   /** round seconds of each `externalReceived` cast (parallel array) */
   externalReceivedAtS: number[];
+  /** B4a (2026-09-25): the target's own no-%-mitigation saves in the span
+   * (`selfSaveCasts`, the same predicate the [ENEMY DEF] self-save line uses) */
+  selfSaved: string[];
+  selfSavedAtS: number[];
   outhealed: boolean;
   primary:
     | "trinketed"
     | "immunity-baited"
     | "defensive"
     | "external"
+    | "self-saved"
     | "outhealed"
     | "pressure";
 }
@@ -493,6 +499,8 @@ function failureText(attr: IKillAttemptAttribution): string {
       return `popped ${stampNames(attr.defensivePopped, attr.defensivePoppedAtS)}`;
     case "external":
       return `saved by external (${stampNames(attr.externalReceived, attr.externalReceivedAtS)})`;
+    case "self-saved":
+      return `self-saved (${stampNames(attr.selfSaved, attr.selfSavedAtS)})`;
     case "outhealed":
       return "healed through";
     case "pressure":
@@ -712,6 +720,15 @@ function attributeFailure(
     }
   }
 
+  const selfSaved: string[] = [];
+  const selfSavedAtS: number[] = [];
+  for (const c of selfSaveCasts(target, matchStartMs)) {
+    if (!inSpan(matchStartMs + c.atSeconds * 1000)) continue;
+    if (selfSaved.includes(c.spellName)) continue;
+    selfSaved.push(c.spellName);
+    selfSavedAtS.push(c.atSeconds);
+  }
+
   let healedIn = 0;
   for (const h of target.healIn) {
     if (inSpan(h.logLine.timestamp)) healedIn += Math.abs(h.effectiveAmount);
@@ -730,9 +747,11 @@ function attributeFailure(
         ? "defensive"
         : externalReceived.length > 0
           ? "external"
-          : outhealed
-            ? "outhealed"
-            : "pressure";
+          : selfSaved.length > 0
+            ? "self-saved"
+            : outhealed
+              ? "outhealed"
+              : "pressure";
 
   return {
     trinketed,
@@ -741,6 +760,8 @@ function attributeFailure(
     defensivePoppedAtS,
     externalReceived,
     externalReceivedAtS,
+    selfSaved,
+    selfSavedAtS,
     outhealed,
     primary,
   };

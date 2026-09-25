@@ -2496,6 +2496,9 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
               duringStr = ` | during it: ${obs.map((o) => formatDuringExternal(o, pid)).join("; ")}`;
           }
           line = `${d.spellName} → ${enemyPid(d.recipientName ?? "")}${dur ? ` (${dur})` : ""}${burstStr}${hpStr}${duringStr}`;
+        } else if (d.kind === "self-save") {
+          const hpStr = hpPct !== null ? ` (at ${hpPct.toFixed(0)}% HP)` : "";
+          line = `${d.spellName} (self-save)${burstStr}${hpStr}`;
         } else {
           const strength = d.kind === "immune" ? "immune" : `${d.pct}%`;
           const hpStr = hpPct !== null ? ` (at ${hpPct.toFixed(0)}% HP)` : "";
@@ -3662,6 +3665,8 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
           "  [ENEMY DEF] = an enemy pressed a defensive at that second: `(N%, Ts)` = official damage reduction and the",
           "    OBSERVED duration in this round; `immune` = full immunity; `— removed early` = it ended before its full",
           "    duration (dispelled, broken or cancelled); `X → unit` = an external put on that unit. Absent = not pressed.",
+          "    `(self-save)` = the enemy's own save that carries no damage reduction (Guardian Spirit on itself, Desperate",
+          "    Prayer, Touch of Karma, Renewing Blaze…) — KILL ATTEMPTS `self-saved (X)` names these.",
           "    `[friendly offensive CD active]` indicates at least one friendly offensive cooldown was active at that displayed second.",
           "    `(at N% HP)` / `(target at N% HP)` reflects the target's HP at the displayed second.",
           ...(TIMELINE_LINE_FLAGS.duringExternal === "annotate"
