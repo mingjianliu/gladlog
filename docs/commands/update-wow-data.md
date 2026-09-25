@@ -396,6 +396,13 @@ npx tsx packages/eval/scripts/curatedRotScan.ts \
 #    ground truth vs getDispelType (the awk extraction from the Notes below, over .gz via gzip -dc).
 npx tsx packages/eval/scripts/drGapScan.ts $GLADLOG_EVAL_HOME/corpus/observedSpellIds-S<n>-archive-<date>.json
 npx tsx packages/eval/scripts/dispelCompletenessScan.ts <dispel-counts.txt>
+# 3b. DR sharing (2026-09-25, reliability audit C5): does each DR override in DR_CATEGORY_MAP — and
+#    any CC DB2 files under no category — really share (or not share) DR the way the table says?
+#    Per spell under test: its full-duration rate right after each DB2 category vs with no
+#    predecessor (a shared DR makes "full" impossible). Cyclone / Incapacitating Roar overrides were
+#    removed on its first run (DB2 was right); Infernal Awakening 22703 shares none. ~35 s at
+#    --every 30. drGapScan cannot see a CC DB2 leaves uncategorised — this can.
+npx tsx packages/eval/scripts/drShareScan.ts --manifest <newseason manifest> --every 30 --spells 33786,99,22703
 # 4. Buff durations: the two hand tables that assert how long a buff LASTS
 #    (BUFF_DURATION_TALENT_MODIFIERS, CORPUS_DURATION_PATCHES) re-measured against
 #    the season's own corpus. ROT = a registered entry no longer reproduces the

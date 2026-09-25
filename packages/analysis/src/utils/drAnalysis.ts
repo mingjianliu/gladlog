@@ -136,11 +136,15 @@ export const DR_CATEGORY_MAP: Record<string, string> = (() => {
   map["28271"] = "Incapacitate"; // Polymorph: Turtle (Old)
   map["22570"] = "Stun"; // Maim (should be Stun per DB2, but often missing)
 
-  // DB2 override: Cyclone has its own DR category in WoW, not shared with Disorient
-  map["33786"] = "Cyclone";
-
-  // DB2 override: Incapacitating Roar is Disorient in WoW, not Incapacitate
-  map["99"] = "Disorient";
+  // No override for 33786 Cyclone or 99 Incapacitating Roar: DB2 files them
+  // under Disorient and Incapacitate, and the log agrees (reliability audit
+  // C5, user ruling 2026-09-24 "follow DB2 after a corpus scan";
+  // `packages/eval/scripts/drShareScan.ts`, 605 files). Cyclone after a
+  // Disorient-category CC lands full 19 % (n=93, 31 half, 16 immune) against
+  // 69 % with no predecessor and 71–76 % after Incapacitate / Stun; Roar after
+  // Incapacitate 9 % full (n=35, 20 half) against 53 % after Disorient. The
+  // removed overrides ("Cyclone has its own category", "Roar is Disorient")
+  // produced false [DR: …] labels and [DR CLASH] lines blaming a teammate.
 
   // Sigil of Misery (DH) — Disorient DR. Missing from the generated map, so
   // the timeline rendered the raw-id fallback "[DR: spell:207685 …]"
@@ -152,14 +156,15 @@ export const DR_CATEGORY_MAP: Record<string, string> = (() => {
 
 /**
  * Every spell id the product files under one DR category label ("Stun",
- * "Disorient", "Incapacitate", "Cyclone", …) — the inverse view of
+ * "Disorient", "Incapacitate", "Horror", …) — the inverse view of
  * `DR_CATEGORY_MAP`, override layer included. The single source for any
  * consumer that needs a per-category id SET rather than a per-id lookup:
  * eval's `uwcCorpusScan --category` used to read `DR_CATEGORIES_GENERATED`
  * directly and therefore disagreed with the product on 33786 Cyclone (own
  * category, not Disorient) and 99 Incapacitating Roar (Disorient, not
  * Incapacitate) — predicate-index "not yet unified" entry, closed 2026-08-27
- * (GH #33).
+ * (GH #33). Those two overrides were themselves wrong and are gone (C5,
+ * 2026-09-25), so today the override layer only fills ids DB2 leaves blank.
  */
 export function drCategoryIds(label: string): ReadonlySet<string> {
   const out = new Set<string>();

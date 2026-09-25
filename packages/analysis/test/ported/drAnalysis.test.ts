@@ -50,8 +50,12 @@ describe("getDRCategory", () => {
     expect(getDRCategory("5246")).toBe("Disorient");
   });
 
-  it('returns "Cyclone" for Cyclone (33786)', () => {
-    expect(getDRCategory("33786")).toBe("Cyclone");
+  it('returns "Disorient" for Cyclone (33786) — DB2, confirmed by drShareScan (C5 2026-09-25)', () => {
+    expect(getDRCategory("33786")).toBe("Disorient");
+  });
+
+  it('returns "Incapacitate" for Incapacitating Roar (99) — DB2, confirmed by drShareScan (C5 2026-09-25)', () => {
+    expect(getDRCategory("99")).toBe("Incapacitate");
   });
 
   it('returns "Incapacitate" for Mortal Coil (6789)', () => {
@@ -836,7 +840,7 @@ describe("formatOutgoingCCChainsForContext", () => {
       {
         targetName: "Enemy1",
         targetSpec: "Retribution Paladin",
-          applications: [
+        applications: [
           {
             atSeconds: 10,
             durationSeconds: 6,
@@ -862,7 +866,7 @@ describe("formatOutgoingCCChainsForContext", () => {
       {
         targetName: "Enemy1",
         targetSpec: "Frost Mage",
-          applications: [
+        applications: [
           {
             atSeconds: 5,
             durationSeconds: 4,
@@ -905,7 +909,7 @@ describe("formatOutgoingCCChainsForContext", () => {
       {
         targetName: "E",
         targetSpec: "X",
-          applications: [
+        applications: [
           {
             atSeconds: 5,
             durationSeconds: 4,
@@ -991,7 +995,11 @@ describe("detectTeammateDrClashes", () => {
             spellName: "Gouge",
             casterName: "RoguePlayer",
             casterSpec: "Subtlety Rogue",
-            drInfo: { category: "Incapacitate", level: "Full", sequenceIndex: 0 },
+            drInfo: {
+              category: "Incapacitate",
+              level: "Full",
+              sequenceIndex: 0,
+            },
           },
           {
             atSeconds: 20,
@@ -1000,7 +1008,11 @@ describe("detectTeammateDrClashes", () => {
             spellName: "Freezing Trap",
             casterName: "HunterPlayer",
             casterSpec: "Survival Hunter",
-            drInfo: { category: "Incapacitate", level: "50%", sequenceIndex: 1 },
+            drInfo: {
+              category: "Incapacitate",
+              level: "50%",
+              sequenceIndex: 1,
+            },
           },
         ],
       },
@@ -1034,7 +1046,11 @@ describe("detectTeammateDrClashes", () => {
             spellName: "Gouge",
             casterName: "RoguePlayer",
             casterSpec: "Subtlety Rogue",
-            drInfo: { category: "Incapacitate", level: "Full", sequenceIndex: 0 },
+            drInfo: {
+              category: "Incapacitate",
+              level: "Full",
+              sequenceIndex: 0,
+            },
           },
           {
             atSeconds: 18,
@@ -1043,7 +1059,11 @@ describe("detectTeammateDrClashes", () => {
             spellName: "Gouge",
             casterName: "RoguePlayer",
             casterSpec: "Subtlety Rogue",
-            drInfo: { category: "Incapacitate", level: "50%", sequenceIndex: 1 },
+            drInfo: {
+              category: "Incapacitate",
+              level: "50%",
+              sequenceIndex: 1,
+            },
           },
         ],
       },
@@ -1066,7 +1086,11 @@ describe("detectTeammateDrClashes", () => {
             spellName: "Gouge",
             casterName: "RoguePlayer",
             casterSpec: "Subtlety Rogue",
-            drInfo: { category: "Incapacitate", level: "Full", sequenceIndex: 0 },
+            drInfo: {
+              category: "Incapacitate",
+              level: "Full",
+              sequenceIndex: 0,
+            },
           },
           {
             atSeconds: 36, // > 14 + 20 = 34s
@@ -1075,7 +1099,11 @@ describe("detectTeammateDrClashes", () => {
             spellName: "Freezing Trap",
             casterName: "HunterPlayer",
             casterSpec: "Survival Hunter",
-            drInfo: { category: "Incapacitate", level: "50%", sequenceIndex: 1 },
+            drInfo: {
+              category: "Incapacitate",
+              level: "50%",
+              sequenceIndex: 1,
+            },
           },
         ],
       },
@@ -1107,7 +1135,11 @@ describe("detectTeammateDrClashes", () => {
             spellName: "Freezing Trap",
             casterName: "HunterPlayer",
             casterSpec: "Survival Hunter",
-            drInfo: { category: "Incapacitate", level: "Full", sequenceIndex: 0 },
+            drInfo: {
+              category: "Incapacitate",
+              level: "Full",
+              sequenceIndex: 0,
+            },
           },
         ],
       },
