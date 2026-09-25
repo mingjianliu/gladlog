@@ -14,6 +14,7 @@ import {
 import { costNormPhrase } from "../data/curatedAbilityFacts";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { CORPUS_OBSERVED_DISPEL_IDS } from "../data/dispelObservedGenerated";
+import { OFF_GCD_SPELL_IDS } from "../data/offGcdGenerated";
 import { lookupKickPriorityPrior } from "../data/kickPriorityPrior";
 import {
   resolveMitigation,
@@ -51,6 +52,7 @@ import {
   cdIsProcOnly,
   kitSpellReadyAt,
   playerTalentIdSets,
+  REACTION_WINDOW_S,
   specToString,
 } from "../utils/cooldowns";
 import {
@@ -129,7 +131,10 @@ import {
   MD_SPELL_ID,
   mdCycloneWindowEvents,
 } from "./candidates/massDispel";
-import { filterIntentGuardEvidence } from "./candidates/shared";
+import {
+  filterIntentGuardEvidence,
+  INTENT_GUARD_GCD_S,
+} from "./candidates/shared";
 import {
   teammateCrisisIdleEvents,
   teammateCrisisTriageEvents,
@@ -1263,6 +1268,11 @@ export function ccAvoidanceOptionsAt(
   },
   cc: { atSeconds: number; spellId: string; spellName: string },
   matchStartMs: number,
+  /** Reliability audit A4 (2026-09-24): could the owner have reacted with a
+   * tool whose press ids are these (the tool itself, or a proc tool's
+   * triggers)? Wired to `ownerCouldReactWith` in production; absent = no
+   * reaction gate (hand-built fixtures, the pre-A4 behaviour). */
+  couldReactWith?: (pressIds: string[]) => boolean,
 ): string[] {
   // Talent-aware cooldowns (2026-08-18, user ruling 「这些数值要做成活的,根据
   // 玩家的天赋适应」). This used to read the RAW base cooldown out of
@@ -1307,7 +1317,16 @@ export function ccAvoidanceOptionsAt(
     // not own turns straight into an accusation.
     const proc = triggers.get(id);
     if (proc && !pvpTalentIds.has(proc.talentSpellId)) continue;
+    // cost_norm (user ruling 2026-08-14, curatedAbilityFacts 642 / 45438):
+    // Divine Shield / Ice Block are "never a routine CC answer, only a last
+    // resort under lethal threat" — and "you could have avoided this Hex
+    // with it" is exactly the routine-answer advice the ruling forbids
+    // (825ca842: the model told a Holy Paladin to bubble two Hexes). A tool
+    // on the sign-off book is never offered here; with no other tool left
+    // there is no accusation (reliability audit A4).
+    if (costNormPhrase(id) !== null) continue;
     const resolvedIds = proc?.triggerSpellIds ?? [id];
+    if (couldReactWith && !couldReactWith(resolvedIds)) continue;
     // Kit evidence, talent-aware cooldown, charges and the reaction window all
     // live in the shared `kitSpellReadyAt` (GH #77 made it a second consumer).
     const available = resolvedIds.some((rid) =>
@@ -1370,15 +1389,85 @@ export function wasCcHardCastAt(
   cc: { atSeconds: number; spellId: string },
   matchStartMs: number,
 ): boolean {
+  return ccCastStartSeconds(enemies, enemyPets, cc, matchStartMs) !== null;
+}
+
+/** When the visible cast bar of this CC began (seconds from match start):
+ * the LATEST enemy / enemy-pet SPELL_CAST_START of the same spell within
+ * `CC_HARD_CAST_LOOKBACK_S` before it landed, or null. The one cast-start
+ * lookup both `wasCcHardCastAt` and the A4 reaction gate read.
+ *
+ * The start must precede the cast that LANDED (the latest same-spell
+ * SPELL_CAST_SUCCESS at or before the landing), not the landing itself: a
+ * chain-caster starts the NEXT Cyclone between the success and the aura —
+ * 823c3f89 r4 @178, success 35.468, next start 35.469, aura 35.477 — and
+ * taking that start measured a 0 s cast bar out of a 1.15 s one, so the A4
+ * reaction gate declared the owner unable to react. */
+export function ccCastStartSeconds(
+  enemies: ICombatUnit[],
+  enemyPets: ICombatUnit[],
+  cc: { atSeconds: number; spellId: string },
+  matchStartMs: number,
+): number | null {
   const atMs = matchStartMs + cc.atSeconds * 1000;
-  for (const u of [...enemies, ...enemyPets]) {
+  const lookbackMs = CC_HARD_CAST_LOOKBACK_S * 1000;
+  const casters = [...enemies, ...enemyPets];
+  let landedCastMs: number | null = null;
+  for (const u of casters) {
+    for (const e of u.spellCastEvents ?? []) {
+      if (e.logLine?.event !== "SPELL_CAST_SUCCESS") continue;
+      if (String(e.spellId) !== String(cc.spellId)) continue;
+      const dt = atMs - e.timestamp;
+      if (dt >= 0 && dt <= lookbackMs)
+        landedCastMs = Math.max(landedCastMs ?? -Infinity, e.timestamp);
+    }
+  }
+  let latest: number | null = null;
+  for (const u of casters) {
     for (const start of u.castStartEvents ?? []) {
       if (String(start.spellId) !== String(cc.spellId)) continue;
       const dt = atMs - start.timestamp;
-      if (dt >= 0 && dt <= CC_HARD_CAST_LOOKBACK_S * 1000) return true;
+      if (dt < 0 || dt > lookbackMs) continue;
+      if (landedCastMs !== null && start.timestamp >= landedCastMs) continue;
+      latest = Math.max(latest ?? -Infinity, start.timestamp);
     }
   }
-  return false;
+  return latest === null ? null : (latest - matchStartMs) / 1000;
+}
+
+/**
+ * Could the owner have REACTED to a visible CC cast bar with a tool
+ * (reliability audit A4, user ruling 2026-09-24 「需要满足」 on top of the
+ * 2026-09-23 reaction-window ruling)?
+ *
+ * The reaction window is `[castStart + REACTION_WINDOW_S, land)` — a second
+ * to see the bar and decide. Empty → no one could have reacted. For a tool on
+ * the global cooldown (not in the DB2 `OFF_GCD_SPELL_IDS`) the owner must
+ * also have been off the GCD at some instant of that window: an own on-GCD
+ * cast at s locks `[s, s + INTENT_GUARD_GCD_S)`. 825ca842 @244: the owner
+ * pressed Judgment 0.16 s into the Hex bar and was GCD-locked for all of it.
+ * The GCD is taken at its 1.5 s ceiling (haste shortens it), and proc casts
+ * the log attributes to the owner also count as GCD — both err toward FEWER
+ * accusations, never more.
+ */
+export function ownerCouldReactWith(
+  ownerOnGcdCastSeconds: readonly number[],
+  castStartS: number,
+  landS: number,
+  toolOnGcd: boolean,
+): boolean {
+  const from = castStartS + REACTION_WINDOW_S;
+  if (from >= landS) return false;
+  if (!toolOnGcd) return true;
+  const locked = (tau: number) =>
+    ownerOnGcdCastSeconds.some((s) => s <= tau && tau < s + INTENT_GUARD_GCD_S);
+  const probes = [
+    from,
+    ...ownerOnGcdCastSeconds
+      .map((s) => s + INTENT_GUARD_GCD_S)
+      .filter((t) => t > from && t < landS),
+  ];
+  return probes.some((tau) => !locked(tau));
 }
 
 export function ccAvoidableEvents(
@@ -1917,11 +2006,40 @@ function teamPlayEvents(
     // play, this candidate specifically coaches a healer's self-preservation
     // kit. Reuses this same try's `cc.ccInstances` (no re-fetch).
     if (isHealerSpec(owner.spec)) {
+      // A4: the owner's own on-GCD successful casts (seconds from start) —
+      // what locks the GCD during an enemy CC cast bar.
+      const ownerOnGcdCastSeconds = (owner.spellCastEvents ?? [])
+        .filter(
+          (e: any) =>
+            e.logLine?.event === "SPELL_CAST_SUCCESS" &&
+            !OFF_GCD_SPELL_IDS.has(String(e.spellId ?? "")),
+        )
+        .map((e: any) => (e.logLine.timestamp - combat.startTime) / 1000);
       out.push(
         ...ccAvoidableEvents(
           cc.ccInstances,
           owner,
-          (inst) => ccAvoidanceOptionsAt(owner, inst, combat.startTime),
+          (inst) => {
+            const castStartS = ccCastStartSeconds(
+              enemies,
+              enemyPets,
+              inst,
+              combat.startTime,
+            );
+            return ccAvoidanceOptionsAt(
+              owner,
+              inst,
+              combat.startTime,
+              (pressIds) =>
+                castStartS !== null &&
+                ownerCouldReactWith(
+                  ownerOnGcdCastSeconds,
+                  castStartS,
+                  inst.atSeconds,
+                  pressIds.some((id) => !OFF_GCD_SPELL_IDS.has(id)),
+                ),
+            );
+          },
           (inst) => wasCcHardCastAt(enemies, enemyPets, inst, combat.startTime),
         ),
       );

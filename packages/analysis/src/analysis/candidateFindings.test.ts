@@ -254,14 +254,25 @@ describe("extractCandidateFindings", () => {
    * cast strictly before t=50 → treated as available then, same semantics
    * ccAvoidanceOptionsAt's own unit tests pin down).
    */
-  function ccAvoidableFixture(ownerSpec: string): any {
+  function ccAvoidableFixture(
+    ownerSpec: string,
+    opts: {
+      toolId?: string;
+      toolName?: string;
+      castStartMs?: number;
+      ownerGcdCastMs?: number;
+    } = {},
+  ): any {
     // 2026-08-22: the CC here must be one the healer could SEE coming — the
     // type now requires a visible cast bar (Cheap Shot, the original fixture,
     // is an instant stealth opener, i.e. exactly what the reactability gate
     // exists to stop accusing people of).
     const ccStart = {
-      logLine: { event: "SPELL_CAST_START", timestamp: 48_500 },
-      timestamp: 48_500,
+      logLine: {
+        event: "SPELL_CAST_START",
+        timestamp: opts.castStartMs ?? 48_500,
+      },
+      timestamp: opts.castStartMs ?? 48_500,
       spellId: "118",
       spellName: "Polymorph",
       srcUnitId: "e",
@@ -297,8 +308,8 @@ describe("extractCandidateFindings", () => {
     const divineShieldCast = {
       logLine: { event: "SPELL_CAST_SUCCESS", timestamp: 60_000 },
       timestamp: 60_000,
-      spellId: "642", // Divine Shield
-      spellName: "Divine Shield",
+      spellId: opts.toolId ?? "642", // Divine Shield
+      spellName: opts.toolName ?? "Divine Shield",
       srcUnitId: "h",
       srcUnitName: "Healer-R",
       destUnitId: "h",
@@ -317,7 +328,27 @@ describe("extractCandidateFindings", () => {
           spec: ownerSpec,
           class: CombatUnitClass.Priest,
           deathRecords: [],
-          spellCastEvents: [trinketPress, divineShieldCast],
+          spellCastEvents: [
+            trinketPress,
+            divineShieldCast,
+            ...(opts.ownerGcdCastMs !== undefined
+              ? [
+                  {
+                    logLine: {
+                      event: "SPELL_CAST_SUCCESS",
+                      timestamp: opts.ownerGcdCastMs,
+                    },
+                    timestamp: opts.ownerGcdCastMs,
+                    spellId: "2061", // Flash Heal — on the GCD
+                    spellName: "Flash Heal",
+                    srcUnitId: "h",
+                    srcUnitName: "Healer-R",
+                    destUnitId: "h",
+                    destUnitName: "Healer-R",
+                  },
+                ]
+              : []),
+          ],
           healOut: [],
           advancedActions: [],
           // Aura events are recorded on the unit that RECEIVED the debuff
@@ -350,18 +381,56 @@ describe("extractCandidateFindings", () => {
     };
   }
 
-  it("cc-avoidable(DEFENSIVE-001,2026-08-07)端到端:治疗 owner 吃满 Full-DR 变形术(4s,看得见读条)+ Divine Shield 落地前可用未用(饰品已在冷却,不触发去重门)→ 产出一条,facts 齐全", () => {
-    const evts = extractCandidateFindings(ccAvoidableFixture("256"), "h"); // Priest_Discipline (healer)
+  // Reliability audit A4 (2026-09-24): Divine Shield is on the cost_norm
+  // sign-off book (never a routine CC answer), so the end-to-end case now runs
+  // on Ultimate Penitence (421453, a real 240 s Disc channel immunity) and a
+  // separate case pins that a Divine-Shield-only instance emits nothing.
+  const UP = { toolId: "421453", toolName: "Ultimate Penitence" };
+
+  it("cc-avoidable(DEFENSIVE-001,2026-08-07)端到端:治疗 owner 吃 Full-DR 变形术(4s,看得见读条)+ 非 cost_norm 规避手段落地前可用未用(饰品已在冷却,不触发去重门)→ 产出一条,facts 齐全", () => {
+    const evts = extractCandidateFindings(ccAvoidableFixture("256", UP), "h"); // Priest_Discipline (healer)
     const found = evts.find((e) => e.type === "cc-avoidable");
     expect(found).toBeTruthy();
     expect(found!.facts["spell"]).toBe("Polymorph");
     expect(found!.facts["castBarSeen"]).toBe("yes");
     expect(found!.facts["durationS"]).toBe("4");
-    expect(found!.facts["avoidableWith"]).toContain("Divine Shield");
+    expect(found!.facts["avoidableWith"]).toContain("Ultimate Penitence");
+  });
+
+  it("cc-avoidable A4 (i): Divine Shield is never offered (cost_norm, user ruling 2026-08-14) — a DS-only instance emits nothing", () => {
+    const evts = extractCandidateFindings(ccAvoidableFixture("256"), "h");
+    expect(evts.some((e) => e.type === "cc-avoidable")).toBe(false);
+  });
+
+  it("cc-avoidable A4 (ii): GCD-locked for the whole reaction window → no accusation (825ca842 @244 shape)", () => {
+    // bar 48.5 → land 50.0, reaction window [49.5, 50.0); a Flash Heal at
+    // 49.2 locks the GCD to 50.7.
+    const evts = extractCandidateFindings(
+      ccAvoidableFixture("256", { ...UP, ownerGcdCastMs: 49_200 }),
+      "h",
+    );
+    expect(evts.some((e) => e.type === "cc-avoidable")).toBe(false);
+  });
+
+  it("cc-avoidable A4 (ii): a GCD that ends inside the reaction window leaves a free instant → still accused", () => {
+    // Flash Heal at 48.2 → locked to 49.7; free from 49.7 < land 50.0.
+    const evts = extractCandidateFindings(
+      ccAvoidableFixture("256", { ...UP, ownerGcdCastMs: 48_200 }),
+      "h",
+    );
+    expect(evts.some((e) => e.type === "cc-avoidable")).toBe(true);
+  });
+
+  it("cc-avoidable A4 (ii): a bar shorter than the 1 s reaction window → no accusation", () => {
+    const evts = extractCandidateFindings(
+      ccAvoidableFixture("256", { ...UP, castStartMs: 49_300 }),
+      "h",
+    );
+    expect(evts.some((e) => e.type === "cc-avoidable")).toBe(false);
   });
 
   it("cc-avoidable:非治疗 owner(判据=owner(治疗))→ 零产出,即便同一场景下 CC 本身满足条件", () => {
-    const evts = extractCandidateFindings(ccAvoidableFixture("577"), "h"); // Warrior_Fury (not a healer)
+    const evts = extractCandidateFindings(ccAvoidableFixture("577", UP), "h"); // Warrior_Fury (not a healer)
     expect(evts.some((e) => e.type === "cc-avoidable")).toBe(false);
   });
 });
@@ -1745,33 +1814,45 @@ describe("ccAvoidanceOptionsAt(DEFENSIVE-001 wiring helper,2026-08-07)", () => {
   });
 
   it("owner 施放过该技能,但落地前(t=40s)最近一次施放仍在冷却内 → 不计入", () => {
-    // Divine Shield (642, cd 300s) cast at t=10s — still on cooldown at t=40s.
-    const owner = { spellCastEvents: [cast("642", 10_000)] };
-    expect(ccAvoidanceOptionsAt(owner, cc, 0)).not.toContain("Divine Shield");
+    // Blessing of Protection (1022, cd 300s) cast at t=10s — still on
+    // cooldown at t=40s. (These availability cases used Divine Shield until
+    // reliability audit A4 took cost_norm tools out of this helper.)
+    const owner = { spellCastEvents: [cast("1022", 10_000)] };
+    expect(ccAvoidanceOptionsAt(owner, cc, 0)).not.toContain(
+      "Blessing of Protection",
+    );
   });
 
   it("owner 落地前从未按过该技能,证据来自落地后的一次施放 → 计入(落地前视为一直可用)", () => {
-    // Divine Shield cast AFTER the CC (t=60s) — proves the kit has it; the
-    // pre-CC availability check (t=40s) finds no earlier cast, so it counts
-    // as available at the CC.
-    const owner = { spellCastEvents: [cast("642", 60_000)] };
-    expect(ccAvoidanceOptionsAt(owner, cc, 0)).toContain("Divine Shield");
+    // Blessing of Protection cast AFTER the CC (t=60s) — proves the kit has
+    // it; the pre-CC availability check (t=40s) finds no earlier cast, so it
+    // counts as available at the CC.
+    const owner = { spellCastEvents: [cast("1022", 60_000)] };
+    expect(ccAvoidanceOptionsAt(owner, cc, 0)).toContain(
+      "Blessing of Protection",
+    );
   });
 
   it("非 SPELL_CAST_SUCCESS 事件不算证据(例如 SPELL_CAST_START)", () => {
     const owner = {
-      spellCastEvents: [cast("642", 60_000, LogEvent.SPELL_CAST_START)],
+      spellCastEvents: [cast("1022", 60_000, LogEvent.SPELL_CAST_START)],
     };
     expect(ccAvoidanceOptionsAt(owner, cc, 0)).toEqual([]);
   });
 
   it("多个可用技能:返回顺序确定(跟随 applicableCCAvoidanceIds 的固定迭代顺序)", () => {
     const owner = {
-      spellCastEvents: [cast("642", 60_000), cast("1022", 60_000)],
+      spellCastEvents: [
+        cast("642", 60_000),
+        cast("186265", 60_000),
+        cast("1022", 60_000),
+      ],
     };
+    // Divine Shield is in the kit and ready, but it is a cost_norm tool
+    // (user ruling 2026-08-14) — never offered (reliability audit A4).
     expect(ccAvoidanceOptionsAt(owner, cc, 0)).toEqual([
-      "Divine Shield",
       "Blessing of Protection",
+      "Aspect of the Turtle",
     ]);
   });
 
@@ -1782,20 +1863,20 @@ describe("ccAvoidanceOptionsAt(DEFENSIVE-001 wiring helper,2026-08-07)", () => {
   // 触发技能 586 渐隐术 30s,PvP 天赋 408557)。
 
   it("单充能等价性:charges=1 时与旧的『上次施放 + CD ≤ t』逐例一致(边界含端点)", () => {
-    // Divine Shield cd=300s, CC at t=40s. 施放于 t=-260s(即 40-300)恰好
+    // Blessing of Protection cd=300s(A4 前用的是同为 300s 单充能的圣盾术), CC at t=40s. 施放于 t=-260s(即 40-300)恰好
     // 到期 → 可用;施放于 t=-259s 差一秒 → 不可用。用 matchStartMs 平移到
     // 正时间轴上表达。
     // 2026-09-23 reaction window (REACTION_WINDOW_S = 1, user ruling): back
     // at t=300 s counts only from t=301 s — the boundary moved by exactly 1 s.
     const atExpiry = {
-      spellCastEvents: [cast("642", 0)], // t=0s,CC 在 t=301s
+      spellCastEvents: [cast("1022", 0)], // t=0s,CC 在 t=301s
     };
     expect(
       ccAvoidanceOptionsAt(atExpiry, { ...cc, atSeconds: 301 }, 0),
-    ).toContain("Divine Shield");
+    ).toContain("Blessing of Protection");
     expect(
       ccAvoidanceOptionsAt(atExpiry, { ...cc, atSeconds: 300.9 }, 0),
-    ).not.toContain("Divine Shield");
+    ).not.toContain("Blessing of Protection");
   });
 
   it("proc 型免疫(相位变换):没点 PvP 天赋 → 不计入,即使触发技能渐隐术随时可用", () => {
