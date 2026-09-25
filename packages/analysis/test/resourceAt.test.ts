@@ -5,6 +5,7 @@ import { HP_SAMPLE_RADIUS_MS } from "../src/utils/cooldowns";
 import {
   getUnitResourceAtTimestamp,
   MANA_POWER_TYPE,
+  manaReadingAt,
   resourceDeltaPct,
 } from "../src/utils/resourceAt";
 
@@ -311,5 +312,64 @@ describe("resourceAt — resourceDeltaPct", () => {
       toPct: 60,
       deltaPct: -20,
     });
+  });
+});
+
+describe("resourceAt — manaReadingAt raw-pass fallback (reliability audit D2)", () => {
+  const unit = (advancedActions: unknown[]) =>
+    ({
+      id: "Player-1234",
+      name: "Healer",
+      advancedActions,
+    }) as unknown as ICombatUnit;
+  const raw = (samples: Array<[number, number]>) => ({
+    available: true,
+    castFailed: [],
+    manaSamples: samples.map(([tSeconds, mana]) => ({
+      tSeconds,
+      unitGuid: "Player-1234",
+      mana,
+      manaMax: 100_000,
+    })),
+  });
+  const START = 1_000_000;
+
+  it("a stored document with no power samples reads the nearest raw sample within the radius", () => {
+    const r = manaReadingAt(unit([]), START + 30_000, {
+      rawStreams: raw([
+        [28.5, 91_000],
+        [31.0, 90_000],
+      ]),
+      matchStartMs: START,
+    });
+    expect(r?.pct).toBe(90);
+  });
+
+  it("no raw sample within the radius → null (same radius as the advanced path)", () => {
+    expect(
+      manaReadingAt(unit([]), START + 30_000, {
+        rawStreams: raw([[20, 91_000]]),
+        matchStartMs: START,
+      }),
+    ).toBeNull();
+  });
+
+  it("a unit whose advanced samples DO carry mana never reads the raw pass", () => {
+    const u = unit([
+      {
+        advancedActorId: "Player-1234",
+        logLine: { timestamp: START + 10_000 },
+        advancedActorPowers: [
+          { type: MANA_POWER_TYPE, current: 50_000, max: 100_000 },
+        ],
+      },
+    ]);
+    expect(
+      manaReadingAt(u, START + 30_000, {
+        rawStreams: raw([[30, 10_000]]),
+        matchStartMs: START,
+      }),
+    ).toBeNull();
+    expect(manaReadingAt(u, START + 10_000)?.pct).toBe(50);
   });
 });

@@ -110,6 +110,7 @@ import * as positionAnalysis from "@gladlog/analysis/src/utils/positionAnalysis"
 import * as positionSampling from "@gladlog/analysis/src/utils/positionSampling";
 import * as rawStreams from "@gladlog/analysis/src/utils/rawStreams";
 import * as renderGrid from "@gladlog/analysis/src/utils/renderGrid";
+import * as resourceAt from "@gladlog/analysis/src/utils/resourceAt";
 import * as rootReachability from "@gladlog/analysis/src/utils/rootReachability";
 import * as spellDanger from "@gladlog/analysis/src/utils/spellDanger";
 import * as stats from "@gladlog/analysis/src/utils/stats";
@@ -825,6 +826,11 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/summonOwner.ts`,
     symbol: "summonOwnerById",
     mod: summonOwner,
+  },
+  {
+    file: `${A}/utils/resourceAt.ts`,
+    symbol: "manaReadingAt",
+    mod: resourceAt,
   },
   {
     file: `${A}/analysis/candidates/cooldownTiming.ts`,

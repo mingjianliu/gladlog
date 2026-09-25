@@ -92,6 +92,7 @@ async function main() {
       const candidates = extractCandidateFindings(legacy, owner.id, rawStreams);
       const richContext = buildMatchContext(legacy, friends, enemies, {
         owner,
+        rawStreams,
       });
       console.log(
         `${spec}: owner=${owner.name} spec=${specToString(owner.spec)} candidates=${candidates.length} ctx=${richContext.length}ch — running…`,

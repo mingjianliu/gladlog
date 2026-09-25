@@ -109,6 +109,7 @@ import { buildMatchTimeline, BuildMatchTimelineParams } from "./matchTimeline";
 import { buildPlayerLoadout } from "./resourceSnapshot";
 import { DMG_SPIKE_THRESHOLD, mergeTimestampedLines } from "./timelineHelpers";
 import { unitLabeler } from "./unitLabel";
+import type { RawStreams } from "../utils/rawStreams";
 
 // ──────────────────────────────────────────────────────────────────────────────
 
@@ -116,7 +117,12 @@ export function buildMatchContext(
   combat: AtomicArenaCombat,
   friends: ICombatUnit[],
   enemies: ICombatUnit[],
-  options: { owner?: ICombatUnit } = {},
+  options: {
+    owner?: ICombatUnit;
+    /** The round's raw.txt pass (`parseRawStreams`) — the mana fallback for
+     * stored documents without power samples (reliability audit D2). */
+    rawStreams?: RawStreams;
+  } = {},
 ): string {
   const durationSeconds = (combat.endTime - combat.startTime) / 1000;
 
@@ -761,6 +767,7 @@ export function buildMatchContext(
   });
 
   const timelineText = buildMatchTimeline({
+    rawStreams: options.rawStreams,
     owner: owner as ICombatUnit,
     ownerSpec,
     ownerCDs: cooldowns,

@@ -1054,4 +1054,11 @@
 //  (SS contrast 5 → 3 pp, at the door); summon CC credited to its owner in
 //  the outgoing chains (+18 windows); Cyclone / Incapacitating Roar follow
 //  DB2 DR categories (3,704 labels).
-export const PROMPT_VERSION = 131;
+//  v132 (2026-09-25, reliability audit D1 + A2b + D4 + D2): a form-shift
+//  rider is never a [CLEANSE] nor a missed-cleanse window (−339 lines);
+//  crisis-no-response abstains under a major wall (12 → 9); kick-eaten
+//  names the locked school, drops "instant or channel", and allows
+//  out-range coaching only when the spell out-reaches the kick
+//  (yourReachYd / kickRangeYd); mana readings skip rage/energy samples and
+//  stored matches without powers read the raw pass.
+export const PROMPT_VERSION = 132;

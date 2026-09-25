@@ -79,16 +79,16 @@ export function buildAnalysisInput(
     // `batchAnalysis.ts` do). A cold cache degrades to `undefined`, which
     // `extractCandidateFindings` already treats as "no guard" (silent,
     // Global Constraint).
-    const candidates = extractCandidateFindings(
-      legacy,
-      owner.id,
-      getRawStreamsSync(source.id),
-    );
+    const rawStreams = getRawStreamsSync(source.id);
+    const candidates = extractCandidateFindings(legacy, owner.id, rawStreams);
     const friends = players.filter((u) => u.reaction === owner.reaction);
     const enemies = players.filter((u) => u.reaction !== owner.reaction);
 
+    // Same raw pass: the [MANA] lines fall back to it on documents stored
+    // without power samples (reliability audit D2).
     const richContext = buildMatchContext(legacy, friends, enemies, {
       owner,
+      rawStreams,
     });
     const spec = specToString(owner.spec);
 

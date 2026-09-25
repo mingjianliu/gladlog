@@ -3,6 +3,7 @@ import { CombatUnitPowerType, ICombatUnit } from "@gladlog/parser-compat";
 import { binarySearchClosest } from "./binarySearch";
 import { HP_SAMPLE_RADIUS_MS } from "./cooldowns";
 import { getSortedAdvancedActions } from "./advancedActions";
+import type { ManaSample, RawStreams } from "./rawStreams";
 
 /**
  * resourceAt.ts — "what resource did this unit have at instant T".
@@ -100,16 +101,85 @@ export function getUnitResourceAtTimestamp(
   };
 }
 
+/** Where a unit's mana can also be read when its advanced samples carry none:
+ * the round's raw.txt pass (`parseRawStreams`, seconds from `matchStartMs`). */
+export interface ManaFallback {
+  rawStreams?: RawStreams;
+  matchStartMs: number;
+}
+
+const rawManaCache = new WeakMap<RawStreams, Map<string, ManaSample[]>>();
+function rawManaSamplesOf(rs: RawStreams, unitId: string): ManaSample[] {
+  let byUnit = rawManaCache.get(rs);
+  if (!byUnit) rawManaCache.set(rs, (byUnit = new Map()));
+  let list = byUnit.get(unitId);
+  if (!list) {
+    // raw.txt lines are chronological, so this stays time-ordered
+    list = rs.manaSamples.filter((m) => m.unitGuid === unitId && m.manaMax > 0);
+    byUnit.set(unitId, list);
+  }
+  return list;
+}
+
+/**
+ * The unit's MANA reading at `timestampMs` — the one mana sampler the context
+ * lines read (reliability audit D2, 2026-09-25).
+ *
+ * Advanced samples first (`getUnitResourceAtTimestamp`). Only when the unit's
+ * advanced stream carries NO mana at all — a document stored before the
+ * parser decoded powers (2026-08-23), which is most of an older library — is
+ * the raw.txt pass asked instead, under the same predicate: nearest sample,
+ * same `binarySearchClosest` tie rules, same `HP_SAMPLE_RADIUS_MS`. 825ca842
+ * had no [MANA] line at all while raw.txt read 91 % → 3 % across the round.
+ * A unit whose advanced stream DOES carry mana is never overridden by the raw
+ * pass: its null (no sample within the radius) is the answer.
+ */
+export function manaReadingAt(
+  unit: Pick<ICombatUnit, "id" | "advancedActions">,
+  timestampMs: number,
+  fallback?: ManaFallback,
+  maxDtMs = HP_SAMPLE_RADIUS_MS,
+): IResourceReading | null {
+  const advanced = samplesBearing(
+    unit.id,
+    getSortedAdvancedActions(unit),
+    MANA_POWER_TYPE,
+  );
+  if (advanced.length > 0 || !fallback?.rawStreams?.available)
+    return getUnitResourceAtTimestamp(
+      unit,
+      timestampMs,
+      MANA_POWER_TYPE,
+      maxDtMs,
+    );
+  const tSeconds = (timestampMs - fallback.matchStartMs) / 1000;
+  const closest = binarySearchClosest(
+    rawManaSamplesOf(fallback.rawStreams, unit.id),
+    tSeconds,
+    (m) => m.tSeconds,
+  );
+  if (!closest || Math.abs(closest.tSeconds - tSeconds) * 1000 > maxDtMs)
+    return null;
+  if (!Number.isFinite(closest.mana)) return null;
+  return {
+    current: closest.mana,
+    max: closest.manaMax,
+    pct: Math.round((closest.mana / closest.manaMax) * 100),
+  };
+}
+
 /** Mana percentage points gained/lost across [fromMs, toMs]; null when either
- * end has no reading — a one-ended window cannot be a delta. */
+ * end has no reading — a one-ended window cannot be a delta. Mana only: it
+ * reads `manaReadingAt`, so a stored document without powers falls back to
+ * the raw pass exactly as the [MANA] markers do. */
 export function resourceDeltaPct(
   unit: Pick<ICombatUnit, "id" | "advancedActions">,
   fromMs: number,
   toMs: number,
-  powerType: number = MANA_POWER_TYPE,
+  fallback?: ManaFallback,
 ): { fromPct: number; toPct: number; deltaPct: number } | null {
-  const a = getUnitResourceAtTimestamp(unit, fromMs, powerType);
-  const b = getUnitResourceAtTimestamp(unit, toMs, powerType);
+  const a = manaReadingAt(unit, fromMs, fallback);
+  const b = manaReadingAt(unit, toMs, fallback);
   if (!a || !b) return null;
   return { fromPct: a.pct, toPct: b.pct, deltaPct: b.pct - a.pct };
 }

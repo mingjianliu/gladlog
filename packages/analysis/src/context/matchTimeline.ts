@@ -98,6 +98,7 @@ import { IHealingGap } from "../utils/healingGaps";
 import { sumIncomingPressure } from "../utils/incomingPressure";
 import { getHpPercentAtTime } from "../utils/killWindowTargetSelection";
 import { fmtTime, toRenderSecond } from "../utils/renderGrid";
+import type { RawStreams } from "../utils/rawStreams";
 import { resourceDeltaPct } from "../utils/resourceAt";
 import { SUMMON_REACH_MIN_S, summonReach } from "../utils/summonReachability";
 import { getInterruptImmunityConditions } from "../utils/talentBehaviors";
@@ -258,6 +259,10 @@ export interface BuildMatchTimelineParams {
    * are emitted if no matching cast line exists.
    */
   outgoingCCChains?: IOutgoingCCChain[];
+  /** The round's raw.txt pass — the mana fallback for units whose advanced
+   * samples carry no powers (documents stored before 2026-08-23; reliability
+   * audit D2). Absent → advanced samples only. */
+  rawStreams?: RawStreams;
   allUnits?: ICombatUnit[];
   /** Arena zone id — the line-of-sight check of `summonReach` needs the map. */
   zoneId?: string;
@@ -396,7 +401,9 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     cdPriorEpisodes,
     cdPriorCohort,
     stackedDefensives,
+    rawStreams,
   } = params;
+  const manaFallback = { rawStreams, matchStartMs };
 
   const matchDurationS = (matchEndMs - matchStartMs) / 1000;
   const enemyBuffIntervals = extractEnemyMajorBuffIntervals(
@@ -492,7 +499,12 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
         ? allPlayers.find((u) => u.name === targetName)
         : undefined) ?? owner;
     const fromMs = matchStartMs + timeSeconds * 1000;
-    const delta = resourceDeltaPct(target, fromMs, fromMs + duration * 1000);
+    const delta = resourceDeltaPct(
+      target,
+      fromMs,
+      fromMs + duration * 1000,
+      manaFallback,
+    );
     const who = target.id === owner.id ? "self" : pid(target.name);
     return delta
       ? `      [MANA]       ${who}: ${delta.fromPct}% -> ${delta.toPct}% mana (${delta.deltaPct >= 0 ? "+" : ""}${delta.deltaPct}pp over ${duration}s)`
@@ -3471,6 +3483,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       pid,
       enemyPid,
       addEntry,
+      manaFallback,
     });
   }
 

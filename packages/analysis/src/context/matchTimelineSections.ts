@@ -33,7 +33,7 @@ import {
 } from "../utils/deathOutcomeAnalysis";
 import { sumAbsorbedPressure } from "../utils/incomingPressure";
 import { getHpPercentAtTime } from "../utils/killWindowTargetSelection";
-import { getUnitResourceAtTimestamp } from "../utils/resourceAt";
+import { type ManaFallback, manaReadingAt } from "../utils/resourceAt";
 import { benchmarks } from "../utils/specBaselines";
 import {
   DMG_SPIKE_THRESHOLD,
@@ -484,8 +484,11 @@ export function emitManaMarkerEntries(params: {
   pid: (name: string) => string;
   enemyPid: (name: string) => string;
   addEntry: (timeSeconds: number, ...lines: string[]) => void;
+  /** Raw-pass mana fallback (`manaReadingAt`). */
+  manaFallback?: ManaFallback;
 }): void {
   const {
+    manaFallback,
     owner,
     friends,
     enemies,
@@ -513,7 +516,7 @@ export function emitManaMarkerEntries(params: {
         const isDead = deathAt !== undefined && t >= Math.floor(deathAt);
         if (isDead) continue;
 
-        const mana = getUnitResourceAtTimestamp(u, tsMs);
+        const mana = manaReadingAt(u, tsMs, manaFallback);
         if (mana) friendlyParts.push(`${pid(u.name)}:${mana.pct}%`);
       }
 
@@ -523,7 +526,7 @@ export function emitManaMarkerEntries(params: {
         const isDead = deathAt !== undefined && t >= Math.floor(deathAt);
         if (isDead) continue;
 
-        const mana = getUnitResourceAtTimestamp(u, tsMs);
+        const mana = manaReadingAt(u, tsMs, manaFallback);
         if (mana) enemyParts.push(`${enemyPid(u.name)}:${mana.pct}%`);
       }
 
