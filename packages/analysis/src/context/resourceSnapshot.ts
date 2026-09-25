@@ -4,8 +4,12 @@ import { buffFullDurationForCaster } from "../utils/buffDuration";
 import { IPlayerCCTrinketSummary } from "../utils/ccTrinketAnalysis";
 import {
   CD_INSTANT_SLACK_S,
-  IMajorCooldownInfo,
+  cdAvailableAt,
+  cdChargesReadyAt,
   cdIsProcOnly,
+  cdMaybeAvailableAt,
+  cdSecondsUntilReady,
+  IMajorCooldownInfo,
   specToString,
 } from "../utils/cooldowns";
 import { IEnemyCDTimeline } from "../utils/enemyCDs";
@@ -122,7 +126,7 @@ export function buildPlayerLoadout(
     // a proc-only entry's "charges" are inferred from how often it procced
     // (Radiant Glory's Avenging Wrath every Wake of Ashes → "2 Charges"), not
     // something the player holds — not printed (GH #106 step 2)
-    `${cd.spellName} [${cd.cooldownSeconds}s${cd.maxChargesDetected > 1 && !cdIsProcOnly(cd) ? `, ${cd.maxChargesDetected} Charges` : ""}${lastsPart(cd, caster)}]${
+    `${cd.spellName} [${cd.cooldownSeconds}s${(cd.charges ?? 1) > 1 && !cdIsProcOnly(cd) ? `, ${cd.charges} Charges` : ""}${lastsPart(cd, caster)}]${
       cdIsProcOnly(cd) ? " [PASSIVE]" : cd.neverUsed ? " [UNUSED]" : ""
     }`;
 
@@ -276,22 +280,66 @@ export function chargesReadyCount(
   cd: IMajorCooldownInfo,
   timeSeconds: number,
 ): number {
-  const maxCharges = cd.maxChargesDetected > 1 ? cd.maxChargesDetected : 1;
-  // ≤ t+0.5: a cast in the same rendered second counts as already consumed —
-  // a [RES] block under a [CD] line must reflect the state AFTER that line's
-  // cast, not before it (RES-lag defect, Gemini adversarial review 2026-07-15;
-  // the old `< t − 0.5` guard made every snapshot stale by exactly the event
-  // it was attached to). Same boundary at every priorCasts site in this file.
-  const priorCasts = cd.casts.filter(
+  // GH #106 step 3: the talent-resolved charge count and the sequential
+  // recharge `cdAvailableAt` runs — the old parallel "last N casts" count on
+  // the OBSERVED maximum turned a cooldown combat shortens into fake charges
+  // (~21k false [k/2] over 605 files).
+  return cdChargesReadyAt(cd, timeSeconds);
+}
+
+/**
+ * GH #106 step 3: the "(Ns)" of a `cd:` entry. A cooldown combat events
+ * shorten (`earliestCooldownSeconds`) is never exactly N s away: it is
+ * `(a–Ns)` while even its fastest recast has not come round (certainly on
+ * cooldown, a to N s left) and `(≤Ns)` once it has (possibly already back).
+ * Everything else keeps the exact `(Ns)`.
+ */
+function remainingText(cd: IMajorCooldownInfo, timeSeconds: number): string {
+  const latest = Math.max(1, Math.round(cdSecondsUntilReady(cd, timeSeconds)));
+  if (cd.earliestCooldownSeconds === undefined) return `${latest}s`;
+  if (cdMaybeAvailableAt(cd, timeSeconds)) return `≤${latest}s`;
+  const soonest = Math.max(
+    1,
+    Math.round(
+      cdSecondsUntilReady(cd, timeSeconds, cd.earliestCooldownSeconds),
+    ),
+  );
+  return soonest < latest ? `${soonest}–${latest}s` : `${latest}s`;
+}
+
+/**
+ * B35 delta key of an on-cooldown entry: the name AND the press it is cooling
+ * from. With a bare name, a cooldown recast while it sat in the uncertain
+ * `(≤Ns)` state stayed "already listed" and the new, longer interval was never
+ * printed (codex astra review, GH #106 step 3: Avatar recast at 150 s left the
+ * reader on the old "back by 170 s").
+ */
+function onCdKey(
+  displayName: string,
+  cd: IMajorCooldownInfo,
+  timeSeconds: number,
+): string {
+  const last = cd.casts
+    .filter((c) => c.timeSeconds <= timeSeconds + CD_INSTANT_SLACK_S)
+    .reduce((m, c) => Math.max(m, c.timeSeconds), Number.NEGATIVE_INFINITY);
+  return `${displayName}@${Math.round(last * 10) / 10}`;
+}
+
+/**
+ * One cooldown's state on a [RES] line, through the shared predicate
+ * (`cdAvailableAt`, GH #106 step 3 — the ledger used to run its own parallel
+ * "last N casts" arithmetic on the observed charge maximum). Never pressed →
+ * ready, except in the first 5 s (nothing to report yet).
+ */
+function resStateOf(
+  cd: IMajorCooldownInfo,
+  timeSeconds: number,
+): "ready" | "onCd" | "skip" {
+  const pressed = cd.casts.some(
     (c) => c.timeSeconds <= timeSeconds + CD_INSTANT_SLACK_S,
   );
-  if (priorCasts.length === 0) return maxCharges;
-  const recent = priorCasts.slice(-maxCharges);
-  const stillRecharging = recent.filter(
-    (c) =>
-      c.timeSeconds + cd.cooldownSeconds > timeSeconds + CD_INSTANT_SLACK_S,
-  ).length;
-  return Math.max(0, maxCharges - stillRecharging);
+  if (!pressed) return timeSeconds > 5 ? "ready" : "skip";
+  return cdAvailableAt(cd, timeSeconds) ? "ready" : "onCd";
 }
 
 export function computeReadyNames(
@@ -318,27 +366,17 @@ export function computeReadyNames(
           })),
       ),
     ];
-  for (const { displayName, cd } of allFriendlyCDs) {
-    const priorCasts = cd.casts.filter(
-      (c) => c.timeSeconds <= timeSeconds + CD_INSTANT_SLACK_S,
-    );
-    if (priorCasts.length === 0) {
-      if (timeSeconds > 5) readyNames.push(displayName);
-      continue;
-    }
-    const charges = cd.maxChargesDetected > 1 ? cd.maxChargesDetected : 1;
-    const relevantCasts = priorCasts.slice(-charges);
-    const earliestSlotReady = relevantCasts[0].timeSeconds + cd.cooldownSeconds;
-    if (earliestSlotReady <= timeSeconds + CD_INSTANT_SLACK_S)
-      readyNames.push(displayName);
-  }
+  for (const { displayName, cd } of allFriendlyCDs)
+    if (resStateOf(cd, timeSeconds) === "ready") readyNames.push(displayName);
   return readyNames;
 }
 
 /**
- * Returns attributed display names for all CDs currently on cooldown.
- * Mirrors computeReadyNames but returns on-CD entries. Used by the resourceSnapshot
- * closure in buildMatchTimeline to track prevOnCDNamesState for B35 delta suppression.
+ * Returns the B35 delta keys (`onCdKey`: attributed display name @ the press
+ * it is cooling from) of all CDs currently on cooldown. Mirrors
+ * computeReadyNames but returns on-CD entries. Used by the resourceSnapshot
+ * closure in buildMatchTimeline to track prevOnCDNamesState for B35 delta
+ * suppression — its only consumer, which compares keys, never displays them.
  */
 export function computeOnCDDisplayNames(
   timeSeconds: number,
@@ -364,17 +402,9 @@ export function computeOnCDDisplayNames(
           })),
       ),
     ];
-  for (const { displayName, cd } of allFriendlyCDs) {
-    const priorCasts = cd.casts.filter(
-      (c) => c.timeSeconds <= timeSeconds + CD_INSTANT_SLACK_S,
-    );
-    if (priorCasts.length === 0) continue;
-    const charges = cd.maxChargesDetected > 1 ? cd.maxChargesDetected : 1;
-    const relevantCasts = priorCasts.slice(-charges);
-    const earliestSlotReady = relevantCasts[0].timeSeconds + cd.cooldownSeconds;
-    if (earliestSlotReady > timeSeconds + CD_INSTANT_SLACK_S)
-      onCDNames.push(displayName);
-  }
+  for (const { displayName, cd } of allFriendlyCDs)
+    if (resStateOf(cd, timeSeconds) === "onCd")
+      onCDNames.push(onCdKey(displayName, cd, timeSeconds));
   return onCDNames;
 }
 interface ResourceSnapshotParams {
@@ -471,33 +501,34 @@ export function buildResourceSnapshot({
   // full-form lines below (delta comparison keeps the bare displayName to stay stable).
   const chargeSuffix = new Map<string, string>();
   for (const { displayName, cd } of allFriendlyCDs) {
-    if (cd.maxChargesDetected > 1) {
+    if ((cd.charges ?? 1) > 1) {
+      const certain = chargesReadyCount(cd, timeSeconds);
+      // a combat-shortened cooldown may already hold more (codex astra
+      // review, GH #106 step 3: "(≤4s)[0/2]" contradicted itself)
+      const most =
+        cd.earliestCooldownSeconds === undefined
+          ? certain
+          : cdChargesReadyAt(cd, timeSeconds, cd.earliestCooldownSeconds);
       chargeSuffix.set(
         displayName,
-        `[${chargesReadyCount(cd, timeSeconds)}/${cd.maxChargesDetected}]`,
+        most > certain
+          ? `[${certain}–${most}/${cd.charges}]`
+          : `[${certain}/${cd.charges}]`,
       );
     }
   }
 
   const currentOnCDNames: string[] = [];
   for (const { displayName, cd } of allFriendlyCDs) {
-    const priorCasts = cd.casts.filter(
-      (c) => c.timeSeconds <= timeSeconds + CD_INSTANT_SLACK_S,
-    );
-    if (priorCasts.length === 0) continue;
-    const charges = cd.maxChargesDetected > 1 ? cd.maxChargesDetected : 1;
-    const relevantCasts = priorCasts.slice(-charges);
-    const earliestSlotReady = relevantCasts[0].timeSeconds + cd.cooldownSeconds;
-    if (earliestSlotReady > timeSeconds + CD_INSTANT_SLACK_S) {
-      const remaining = Math.round(earliestSlotReady - timeSeconds);
-      currentOnCDNames.push(displayName);
-      // B35: in delta mode only show CDs that newly went on cooldown (not in previous snapshot).
-      if (prevOnCDSet === null || !prevOnCDSet.has(displayName)) {
-        // B114: a multi-charge CD in cd: has 0 charges ready; the "(Ns)" is time to the next charge.
-        onCDParts.push(
-          `${displayName}(${remaining}s)${chargeSuffix.get(displayName) ?? ""}`,
-        );
-      }
+    if (resStateOf(cd, timeSeconds) !== "onCd") continue;
+    const key = onCdKey(displayName, cd, timeSeconds);
+    currentOnCDNames.push(key);
+    // B35: in delta mode only show CDs that newly went on cooldown (not in previous snapshot).
+    if (prevOnCDSet === null || !prevOnCDSet.has(key)) {
+      // B114: a multi-charge CD in cd: has 0 charges ready; the "(Ns)" is time to the next charge.
+      onCDParts.push(
+        `${displayName}(${remainingText(cd, timeSeconds)})${chargeSuffix.get(displayName) ?? ""}`,
+      );
     }
   }
 

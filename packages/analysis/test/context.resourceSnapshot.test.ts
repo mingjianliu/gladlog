@@ -134,6 +134,7 @@ describe("context.resourceSnapshot unit tests", () => {
         tag: "Defensive",
         cooldownSeconds: 60,
         maxChargesDetected: 2,
+        charges: 2,
         casts: [],
         availableWindows: [],
         neverUsed: true,
@@ -148,6 +149,7 @@ describe("context.resourceSnapshot unit tests", () => {
         tag: "Defensive",
         cooldownSeconds: 60,
         maxChargesDetected: 2,
+        charges: 2,
         casts: [{ timeSeconds: 10 }, { timeSeconds: 15 }],
         availableWindows: [],
         neverUsed: false,
@@ -282,8 +284,9 @@ describe("context.resourceSnapshot unit tests", () => {
         },
       ];
       // Query t=80: Ironbark is back up (not part of cd), Sacrifice is still on CD (2:Sacrifice)
+      // entries are B35 delta keys: name @ the press it is cooling from
       expect(computeOnCDDisplayNames(80, ownerCDs, teammateCDs)).toEqual([
-        "2:Sacrifice",
+        "2:Sacrifice@15",
       ]);
     });
 
@@ -300,7 +303,7 @@ describe("context.resourceSnapshot unit tests", () => {
       // Cast at 10s, 60s CD -> back up at 70s
       // t=69.49: earliestSlotReady(70) > 69.99 (true) -> still on cooldown
       expect(computeOnCDDisplayNames(69.49, ownerCDs, [])).toEqual([
-        "Ironbark",
+        "Ironbark@10",
       ]);
       // t=69.50: earliestSlotReady(70) > 70.00 (false) -> cooldown finished
       expect(computeOnCDDisplayNames(69.5, ownerCDs, [])).toEqual([]);
@@ -360,6 +363,7 @@ describe("context.resourceSnapshot unit tests", () => {
               spellName: "Sacrifice",
               cooldownSeconds: 120,
               maxChargesDetected: 2,
+              charges: 2,
               neverUsed: false,
             } as unknown as IMajorCooldownInfo,
           ],

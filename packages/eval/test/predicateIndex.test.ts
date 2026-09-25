@@ -167,7 +167,6 @@ import * as collectLogs from "../../log-pipeline/src/collectLogs";
 import * as candidateDiagnostics from "../scripts/candidateDiagnostics";
 import * as abCompareStats from "../src/ab/abCompareStats";
 import * as baselineFindings from "../src/explore/baselineFindings";
-import * as matchExplore from "../src/explore/matchExplore";
 import * as redactOutcome from "../src/halo/redactOutcome";
 import * as checkScoreProvenance from "../src/provenance/checkScoreProvenance";
 import * as positioningScan from "../src/quality/positioningScan";
@@ -337,9 +336,39 @@ const INDEX: PredicateRow[] = [
     mod: dispelVerdicts,
   },
   {
-    file: `${E}/explore/matchExplore.ts`,
-    symbol: "remainingCdSeconds",
-    mod: matchExplore,
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "cdSecondsUntilReady",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "cdMaybeAvailableAt",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "isPressOfCooldown",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "cdIsProcOnly",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "earliestCooldownSecondsFor",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "talentReplacementsOf",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "isVariantPress",
+    mod: cooldowns,
   },
   {
     file: `${A}/utils/cooldowns.ts`,

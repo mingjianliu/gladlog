@@ -1009,4 +1009,16 @@
 //  decimal labels. 605 files: 583 lines in 497 contexts, nothing else
 //  changed; candidate counts identical; hardFailures 4 → 0 (widened gate:
 //  583 → 0).
-export const PROMPT_VERSION = 126;
+//  v127 (2026-09-25, GH #106 step 3, user "继续做"): tri-state cooldown
+//  readiness. The [RES] ledger reads the shared predicate (cdAvailableAt,
+//  talent-resolved charges) instead of its own "last N casts on the observed
+//  charge maximum", and a cooldown combat shortens prints `(a–Ns)` (certainly
+//  still down) or `(≤Ns)` (may already be back) — and `[a–b/N]` charges —
+//  from a corpus floor learnt and hold-out-checked per spell and spec
+//  (cdRecastFloorGenerated.json, 21 cells). Held-out files (1,813): real
+//  presses the ledger called certainly on cooldown 10,199 / 91,252 (11.2 %)
+//  → 1,693 (1.9 %). 605 files: findings byte-identical (accusations still
+//  read certain readiness); 15,614 `(a–Ns)`, 4,336 `(≤Ns)`, 349 charge
+//  ranges, ~14.9k fake [k/N] suffixes gone, a recast during 'maybe' is no
+//  longer swallowed by the delta form; three legend lines; gates unchanged.
+export const PROMPT_VERSION = 127;

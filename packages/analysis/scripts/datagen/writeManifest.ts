@@ -241,6 +241,13 @@ export async function main(): Promise<void> {
         entries: Object.keys(readJson("ccCloseInGenerated.json").spells).length,
         producer: "packages/eval/scripts/ccCloseInScan.ts --emit",
       },
+      // GH #106 step 3 (2026-09-24): per (spell, spec) recast floors behind
+      // the [RES] ledger's tri-state readiness — corpus-driven, like above.
+      "cdRecastFloorGenerated.json": {
+        entries: Object.keys(readJson("cdRecastFloorGenerated.json").floors)
+          .length,
+        producer: "packages/eval/scripts/cdRecastFloorScan.ts --out",
+      },
       // "Usable while stunned" (B1, task-3): only the stunned dimension
       // resolves to a unique SpellMisc bit combo; feared/confused are a
       // documented gap (see the artifact's own file header and

@@ -4,6 +4,7 @@ import { join } from "node:path";
 
 import {
   cdAvailableAt,
+  cdSecondsUntilReady,
   ensureAnalysisData,
   type IMajorCooldownInfo,
   parseRawStreams,
@@ -11,7 +12,7 @@ import {
 } from "@gladlog/analysis";
 import { describe, expect, it } from "vitest";
 
-import { remainingCdSeconds, runQuery } from "../src/explore/matchExplore";
+import { runQuery } from "../src/explore/matchExplore";
 import {
   DEFAULT_MATCH_DIR,
   loadIndex,
@@ -98,12 +99,9 @@ describe("runQuery dispatch", () => {
   });
 });
 
-// remainingCdSeconds hand-copies cdAvailableAt's "most recent cast at/before
-// t" lookup (no export exposes it) — per CLAUDE.md's shared-predicate
-// fallback, pin the duplicate to the real predicate with an equality test
-// instead of a comment, so a future boundary/charge change in cooldowns.ts
-// turns this red.
-describe("remainingCdSeconds parity with cdAvailableAt", () => {
+// "还剩 Ns" is the shared cdSecondsUntilReady since GH #106 step 3 (it used to
+// be a hand-copy here); keep the sign/arithmetic pins on the shared function.
+describe("cdSecondsUntilReady parity with cdAvailableAt", () => {
   const cd: Pick<
     IMajorCooldownInfo,
     "casts" | "cooldownSeconds" | "neverUsed"
@@ -113,11 +111,9 @@ describe("remainingCdSeconds parity with cdAvailableAt", () => {
     neverUsed: false,
   };
 
-  it("agrees with cdAvailableAt's sign across before/at/mid/expiry/after boundaries", () => {
-    // before first cast, exactly at cast time, mid-cooldown, exactly at
-    // expiry (10+120=130), just after expiry, well after expiry.
-    for (const t of [5, 10, 70, 130, 131, 200]) {
-      expect(remainingCdSeconds(cd, t) <= 0).toBe(cdAvailableAt(cd, t));
+  it("is 0 exactly when cdAvailableAt says ready, across before/at/mid/expiry/after", () => {
+    for (const t of [5, 10, 70, 129.4, 129.6, 130, 131, 200]) {
+      expect(cdSecondsUntilReady(cd, t) === 0).toBe(cdAvailableAt(cd, t));
     }
   });
 
@@ -127,21 +123,20 @@ describe("remainingCdSeconds parity with cdAvailableAt", () => {
       "casts" | "cooldownSeconds" | "neverUsed"
     > = { casts: [], cooldownSeconds: 60, neverUsed: true };
     for (const t of [0, 30, 1000]) {
-      expect(remainingCdSeconds(neverUsed, t) <= 0).toBe(
-        cdAvailableAt(neverUsed, t),
-      );
+      expect(cdSecondsUntilReady(neverUsed, t)).toBe(0);
+      expect(cdAvailableAt(neverUsed, t)).toBe(true);
     }
   });
 
   it("pins exact 还剩 Ns arithmetic, not just its sign", () => {
     // cast at t=10, 120s cd → at t=70, 60s remain.
-    expect(remainingCdSeconds(cd, 70)).toBe(60);
+    expect(cdSecondsUntilReady(cd, 70)).toBe(60);
     const shortCd: Pick<
       IMajorCooldownInfo,
       "casts" | "cooldownSeconds" | "neverUsed"
     > = { casts: [{ timeSeconds: 0 }], cooldownSeconds: 30, neverUsed: false };
     // cast at t=0, 30s cd → at t=10, 20s remain.
-    expect(remainingCdSeconds(shortCd, 10)).toBe(20);
+    expect(cdSecondsUntilReady(shortCd, 10)).toBe(20);
   });
 });
 

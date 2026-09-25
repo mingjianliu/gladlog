@@ -3626,7 +3626,8 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     // 2026-07-20 eval: 9/50 matches were judged "notation without a legend" —
     // the same notation could be read with the opposite meaning. The four lines
     // below each address one ambiguity the judge cited.
-    "  [n/m] after a spell = CHARGES REMAINING / total (so [1/2] = one charge left, one on cooldown).",
+    "  [n/m] after a spell = CHARGES REMAINING / total (so [1/2] = one charge left, one on cooldown); `[a–b/m]` =",
+    "    a to b charges left on a cooldown combat shortens.",
     // Class D (2026-07-20 eval): the ledger did not list Lay on Hands while
     // DEATHS WITH MISSED OPTIONS said it was available — the judge read this as
     // two judgements contradicting each other. In fact the ledger simply does
@@ -3637,6 +3638,10 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     "    is one this ledger does not track, NOT one that was unavailable. Other sections may still cite it.",
     "  [RES] rdy: = abilities READY at that instant. `rdy:Δ` = unchanged since the previous [RES];",
     "    a leading `-<spell>` marks one that just LEFT the ready set. `cd:<spell>(Ns)` = seconds until it returns.",
+    // GH #106 step 3: cooldowns combat shortens (rage spent, resets, procs)
+    // print a range — the static number is only the latest they can return.
+    "    `cd:<spell>(a–Ns)` = a cooldown that combat shortens: back in a to N s. `cd:<spell>(≤Ns)` = back in at",
+    "    most N s and it MAY ALREADY BE BACK — never state that such a spell was certainly unavailable.",
     // GH #99 item 5: a bare `rdy:Δ  cd:—` row survives only when it states a
     // fact no other line does (resLedgerPrune.ts); tell the reader so an
     // absent ledger row is not misread as "nothing was tracked here".

@@ -31,6 +31,8 @@ import {
   castFailedInWindow,
   cdAvailableAt,
   cdIsProcOnly,
+  cdMaybeAvailableAt,
+  cdSecondsUntilReady,
   detectHealingGaps,
   distanceBetween,
   drinkingSegments,
@@ -78,21 +80,20 @@ function allPlayers(legacy: LegacyRound): ICombatUnit[] {
 // cd
 // ---------------------------------------------------------------------------
 
-/** Remaining seconds until `cd` is off cooldown at `tt` (a render-grid
- * second). Only meaningful when `cdAvailableAt(cd, tt)` is false; derived
- * from the exact same fields (`cd.casts`, `cd.cooldownSeconds`) that
- * `cdAvailableAt`/`isCooldownAvailableFromLastUse` read — not a second
- * "available" judgement, just the arithmetic distance `cdAvailableAt`
- * doesn't itself expose. Its "most recent cast at/before t" lookup is a
- * hand-copy of the one inside `cdAvailableAt` (no export exposes it) —
- * 平价单测钉住与 cdAvailableAt 的边界一致性:explore.queries.test.ts. */
-export function remainingCdSeconds(
-  cd: Pick<IMajorCooldownInfo, "casts" | "cooldownSeconds" | "neverUsed">,
-  tt: number,
-): number {
-  const last = [...cd.casts].filter((c) => c.timeSeconds <= tt).pop();
-  if (!last) return 0;
-  return last.timeSeconds + cd.cooldownSeconds - tt;
+/** "还剩 Ns" through the shared `cdSecondsUntilReady` (GH #106 step 3 —
+ * this used to hand-copy cdAvailableAt's last-cast lookup); a cooldown combat
+ * shortens reads as a range, or "可能已好" once its fastest recast is past. */
+function remainingNote(cd: IMajorCooldownInfo, tt: number): string {
+  const latest = Math.max(0, Math.round(cdSecondsUntilReady(cd, tt)));
+  if (cdMaybeAvailableAt(cd, tt)) return `可能已好,最多还剩 ${latest}s`;
+  if (cd.earliestCooldownSeconds !== undefined) {
+    const soonest = Math.max(
+      0,
+      Math.round(cdSecondsUntilReady(cd, tt, cd.earliestCooldownSeconds)),
+    );
+    if (soonest < latest) return `还剩 ${soonest}–${latest}s`;
+  }
+  return `还剩 ${latest}s`;
 }
 
 export function cdLines(legacy: LegacyRound, t: number): string[] {
@@ -121,7 +122,7 @@ export function cdLines(legacy: LegacyRound, t: number): string[] {
       ? onCd
           .map(
             (cd) =>
-              `${selfCastNoopAnnotatedName(cd)}(还剩 ${Math.max(0, Math.round(remainingCdSeconds(cd, tt)))}s)`,
+              `${selfCastNoopAnnotatedName(cd)}(${remainingNote(cd, tt)})`,
           )
           .join(",")
       : "无";

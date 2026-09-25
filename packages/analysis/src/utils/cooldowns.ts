@@ -21,6 +21,7 @@ import {
   getEnglishSpellName,
   spellEffectData,
 } from "../data/spellEffectData";
+import CD_RECAST_FLOORS from "../data/cdRecastFloorGenerated.json";
 import { CORPUS_COOLDOWN_PATCHES } from "../data/spellEffectOverrides";
 import spellIdListsData from "../data/spellIdLists";
 import { reachesAlly } from "../data/spellTargeting";
@@ -896,6 +897,11 @@ export interface IMajorCooldownInfo {
    *  凡是「你当时本可以按它」形状的判断都必须跳过它:玩家没有那个选择,指控无法
    *  被满足。可选是为了兼容手搭 fixture,生产路径一定会设。 */
   isProcOnly?: boolean;
+  /** GH #106 step 3: the EARLIEST this cooldown can be back after a use —
+   *  set only for spells whose cooldown combat events shorten (corpus floor,
+   *  `cdRecastFloorGenerated.json`). `cooldownSeconds` stays the latest: past
+   *  it the spell is certainly ready; between the two it MAY be. */
+  earliestCooldownSeconds?: number;
 }
 
 /**
@@ -968,6 +974,105 @@ export function cdAvailableAt(
     last?.cooldownSecondsOverride ?? cd.cooldownSeconds,
     t,
   );
+}
+
+/**
+ * GH #106 step 3 — the uncertain middle of a dynamically shortened cooldown:
+ * NOT certainly ready (`cdAvailableAt` on the static, latest number says no)
+ * but past the earliest it has ever been seen back for this spell and spec
+ * (`earliestCooldownSeconds`). Same kernel as `cdAvailableAt` (charges,
+ * slack), only the cooldown differs. Accusations ("had X ready") keep reading
+ * `cdAvailableAt`; this only keeps facts from calling X unavailable.
+ */
+export function cdMaybeAvailableAt(
+  cd: Pick<
+    IMajorCooldownInfo,
+    | "casts"
+    | "cooldownSeconds"
+    | "neverUsed"
+    | "charges"
+    | "isProcOnly"
+    | "earliestCooldownSeconds"
+  >,
+  tSeconds: number,
+): boolean {
+  if (cd.earliestCooldownSeconds === undefined) return false;
+  if (cdAvailableAt(cd, tSeconds)) return false;
+  // a per-cast override (Guardian Angel's saved branch) is an exact number
+  // for that cast, not a statistical one — no "maybe" on top of it
+  const last = [...cd.casts]
+    .filter((c) => c.timeSeconds <= tSeconds + CD_INSTANT_SLACK_S)
+    .pop();
+  if (last?.cooldownSecondsOverride !== undefined) return false;
+  return cdAvailableAt(
+    { ...cd, cooldownSeconds: cd.earliestCooldownSeconds },
+    tSeconds,
+  );
+}
+
+/**
+ * Seconds from `tSeconds` until cooldown X next has a charge in hand, 0 when
+ * it is ready (`cdAvailableAt`) — the "(Ns)" of the [RES] ledger. Same
+ * sequential-recharge simulation, same rendered-second slack; `cooldown`
+ * overrides the modelled number (the earliest bound of a combat-shortened
+ * cooldown, GH #106 step 3).
+ */
+export function cdSecondsUntilReady(
+  cd: Pick<
+    IMajorCooldownInfo,
+    "casts" | "cooldownSeconds" | "neverUsed" | "charges" | "isProcOnly"
+  >,
+  tSeconds: number,
+  cooldown: number = cd.cooldownSeconds,
+): number {
+  const view = { ...cd, cooldownSeconds: cooldown };
+  if (cdAvailableAt(view, tSeconds)) return 0;
+  const t = tSeconds + CD_INSTANT_SLACK_S;
+  if ((cd.charges ?? 1) > 1) {
+    const { nextRecharge } = chargeStateAt(
+      cd.casts.map((c) => c.timeSeconds),
+      cooldown,
+      cd.charges as number,
+      t,
+    );
+    return Number.isFinite(nextRecharge) ? nextRecharge - tSeconds : 0;
+  }
+  const last = [...cd.casts].filter((c) => c.timeSeconds <= t).pop();
+  if (!last) return 0;
+  // a per-cast override (Guardian Angel's saved branch) wins, as in
+  // cdAvailableAt — also over an `earliestCooldownSeconds` argument, so the
+  // (a–Ns) range can never invert on such a cast
+  const own = last.cooldownSecondsOverride ?? cooldown;
+  return Math.max(0, last.timeSeconds + own - tSeconds);
+}
+
+/** Charges of X in hand at `tSeconds` — the [RES] `[k/N]` suffix; N is the
+ *  talent-resolved `charges`, the simulation `cdAvailableAt` runs. */
+export function cdChargesReadyAt(
+  cd: Pick<IMajorCooldownInfo, "casts" | "cooldownSeconds" | "charges">,
+  tSeconds: number,
+  cooldown: number = cd.cooldownSeconds,
+): number {
+  return chargesAvailableAt(
+    cd.casts.map((c) => c.timeSeconds),
+    cooldown,
+    cd.charges ?? 1,
+    tSeconds + CD_INSTANT_SLACK_S,
+  );
+}
+
+/** Corpus floor of a spell's recast for a spec, as a fraction of the unit's
+ *  modelled cooldown (GH #106 step 3; cdRecastFloorScan.ts, hold-out
+ *  validated). Undefined = no dynamic shortening measured. */
+export function earliestCooldownSecondsFor(
+  spellId: string,
+  spec: string,
+  cooldownSeconds: number,
+): number | undefined {
+  const f = (
+    CD_RECAST_FLOORS.floors as Record<string, { floorRatio: number }>
+  )[`${spellId}|${spec}`];
+  return f ? Math.round(cooldownSeconds * f.floorRatio * 10) / 10 : undefined;
 }
 
 /**
@@ -1579,8 +1684,21 @@ export function chargesAvailableAt(
   maxCharges: number,
   atSeconds: number,
 ): number {
+  return chargeStateAt(castSeconds, rechargeSeconds, maxCharges, atSeconds)
+    .charges;
+}
+
+/** `chargesAvailableAt`'s simulation, also returning when the next charge
+ *  lands (+∞ at full charges) — GH #106 step 3's "seconds until ready". */
+function chargeStateAt(
+  castSeconds: readonly number[],
+  rechargeSeconds: number,
+  maxCharges: number,
+  atSeconds: number,
+): { charges: number; nextRecharge: number } {
   const cap = Math.max(1, Math.floor(maxCharges));
-  if (!(rechargeSeconds > 0)) return cap;
+  if (!(rechargeSeconds > 0))
+    return { charges: cap, nextRecharge: Number.POSITIVE_INFINITY };
   const casts = [...castSeconds]
     .filter((t) => t <= atSeconds)
     .sort((a, b) => a - b);
@@ -1612,7 +1730,7 @@ export function chargesAvailableAt(
     }
   }
   advanceTo(atSeconds);
-  return charges;
+  return { charges, nextRecharge };
 }
 
 /**
@@ -2137,6 +2255,18 @@ export function extractMajorCooldowns(
         neverUsed: casts.length === 0,
         isThroughput: spell.tags.includes(SpellTag.Offensive),
         isProcOnly: procOnly,
+        ...(procOnly
+          ? {}
+          : (() => {
+              const e = earliestCooldownSecondsFor(
+                spell.spellId,
+                unit.spec,
+                cooldownSeconds,
+              );
+              return e !== undefined && e < cooldownSeconds
+                ? { earliestCooldownSeconds: e }
+                : {};
+            })()),
       },
     ];
   });

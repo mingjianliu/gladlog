@@ -191,6 +191,16 @@ npx tsx packages/eval/scripts/healerSaveCdScan.ts emit-table --in $R/counts.json
 #   Read rejectedForReview in the json: "below the door" rows are measured negatives; a spell the user wants
 #   in anyway is signed as save_role (a ruling beats the door), one they want out as not_save_role.
 
+# 6b-pre-9. Cooldown recast-floor table (data/cdRecastFloorGenerated.json; GH #106 step 3, 2026-09-24): per
+#   (spell, spec), the fastest a major cooldown comes back as a fraction of the unit's modelled cooldown — the
+#   "earliest ready" bound behind the [RES] `(a–Ns)` / `(≤Ns)` forms. Corpus-driven, NOT DB2. Regenerate at season
+#   start and after any change to extractMajorCooldowns' press matching or the talent cooldown modifiers (it divides
+#   by the modelled cooldown). Floor = the highest of p2 / p1 / p0.5 on even-indexed files that the odd-indexed
+#   half breaks ≤ 3 % (the script prints the rejected cells too — read them). ~30 min single process over every 10th file;
+#   the script writes temp-then-copy itself. Health test: packages/analysis/test/gh106Tristate.test.ts.
+# npx tsx packages/eval/scripts/cdRecastFloorScan.ts \
+#   --manifest $GLADLOG_EVAL_HOME/corpus/manifest-archive-<season>.txt --every 10 \
+#   --out packages/analysis/src/data/cdRecastFloorGenerated.json
 # 6b-pre-8. CC close-in table (data/ccCloseInGenerated.json; GH #83, 2026-09-23): per CC aura id, how far
 #   its casters close in during the 2 s before it lands (p85 of caster→target distance minus the spell's
 #   reach, n ≥ 100). Read by utils/spellRange.ts ccThreatRadiusYards → [HEALER EXPOSURE]'s threat list.

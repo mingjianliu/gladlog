@@ -1,0 +1,179 @@
+{
+  "meta": {
+    "generatedAt": "2026-09-25",
+    "manifest": "manifest-archive-2026-08-28-newseason.txt",
+    "every": 10,
+    "filesRead": 1814,
+    "rule": "floor = the highest of p2 / p1 / p0.5 of recast/modelled-cooldown ratios on even-indexed files that ≤ 3 % of odd-file ratios fall below; kept when < 0.95 and ≥ 50 ratios per half"
+  },
+  "floors": {
+    "47568|251": {
+      "name": "Empower Rune Weapon",
+      "quantile": 0.02,
+      "floorRatio": 0.018,
+      "nTrain": 394,
+      "nHoldout": 263,
+      "holdoutBelow": 0.015
+    },
+    "384352|263": {
+      "name": "Doom Winds",
+      "quantile": 0.02,
+      "floorRatio": 0.196,
+      "nTrain": 218,
+      "nHoldout": 187,
+      "holdoutBelow": 0.011
+    },
+    "370537|1468": {
+      "name": "Stasis",
+      "quantile": 0.02,
+      "floorRatio": 0.227,
+      "nTrain": 86,
+      "nHoldout": 120,
+      "holdoutBelow": 0.008
+    },
+    "446035|71": {
+      "name": "Bladestorm",
+      "quantile": 0.01,
+      "floorRatio": 0.28,
+      "nTrain": 798,
+      "nHoldout": 920,
+      "holdoutBelow": 0.012
+    },
+    "227847|71": {
+      "name": "Bladestorm",
+      "quantile": 0.01,
+      "floorRatio": 0.281,
+      "nTrain": 829,
+      "nHoldout": 956,
+      "holdoutBelow": 0.012
+    },
+    "1719|72": {
+      "name": "Recklessness",
+      "quantile": 0.02,
+      "floorRatio": 0.344,
+      "nTrain": 292,
+      "nHoldout": 314,
+      "holdoutBelow": 0.01
+    },
+    "107574|72": {
+      "name": "Avatar",
+      "quantile": 0.02,
+      "floorRatio": 0.372,
+      "nTrain": 211,
+      "nHoldout": 224,
+      "holdoutBelow": 0.009
+    },
+    "391528|105": {
+      "name": "Convoke the Spirits",
+      "quantile": 0.02,
+      "floorRatio": 0.395,
+      "nTrain": 70,
+      "nHoldout": 77,
+      "holdoutBelow": 0.026
+    },
+    "228260|258": {
+      "name": "Voidform",
+      "quantile": 0.02,
+      "floorRatio": 0.439,
+      "nTrain": 261,
+      "nHoldout": 168,
+      "holdoutBelow": 0.012
+    },
+    "202770|102": {
+      "name": "Fury of Elune",
+      "quantile": 0.02,
+      "floorRatio": 0.523,
+      "nTrain": 70,
+      "nHoldout": 113,
+      "holdoutBelow": 0.018
+    },
+    "46968|72": {
+      "name": "Shockwave",
+      "quantile": 0.02,
+      "floorRatio": 0.664,
+      "nTrain": 123,
+      "nHoldout": 121,
+      "holdoutBelow": 0.025
+    },
+    "46968|71": {
+      "name": "Shockwave",
+      "quantile": 0.02,
+      "floorRatio": 0.677,
+      "nTrain": 638,
+      "nHoldout": 645,
+      "holdoutBelow": 0.029
+    },
+    "205636|102": {
+      "name": "Force of Nature",
+      "quantile": 0.02,
+      "floorRatio": 0.68,
+      "nTrain": 339,
+      "nHoldout": 482,
+      "holdoutBelow": 0.015
+    },
+    "108280|264": {
+      "name": "Healing Tide Totem",
+      "quantile": 0.01,
+      "floorRatio": 0.694,
+      "nTrain": 194,
+      "nHoldout": 165,
+      "holdoutBelow": 0.012
+    },
+    "167105|71": {
+      "name": "Colossus Smash",
+      "quantile": 0.02,
+      "floorRatio": 0.727,
+      "nTrain": 1431,
+      "nHoldout": 1562,
+      "holdoutBelow": 0.019
+    },
+    "107574|71": {
+      "name": "Avatar",
+      "quantile": 0.02,
+      "floorRatio": 0.743,
+      "nTrain": 612,
+      "nHoldout": 682,
+      "holdoutBelow": 0.013
+    },
+    "132158|105": {
+      "name": "Nature's Swiftness",
+      "quantile": 0.02,
+      "floorRatio": 0.809,
+      "nTrain": 324,
+      "nHoldout": 284,
+      "holdoutBelow": 0.018
+    },
+    "11426|64": {
+      "name": "Ice Barrier",
+      "quantile": 0.01,
+      "floorRatio": 0.834,
+      "nTrain": 673,
+      "nHoldout": 633,
+      "holdoutBelow": 0.008
+    },
+    "102560|102": {
+      "name": "Incarnation: Chosen of Elune",
+      "quantile": 0.02,
+      "floorRatio": 0.877,
+      "nTrain": 108,
+      "nHoldout": 136,
+      "holdoutBelow": 0
+    },
+    "370553|1468": {
+      "name": "Tip the Scales",
+      "quantile": 0.01,
+      "floorRatio": 0.918,
+      "nTrain": 93,
+      "nHoldout": 131,
+      "holdoutBelow": 0.008
+    },
+    "357170|1468": {
+      "name": "Time Dilation",
+      "quantile": 0.01,
+      "floorRatio": 0.928,
+      "nTrain": 199,
+      "nHoldout": 271,
+      "holdoutBelow": 0.03
+    }
+  }
+}

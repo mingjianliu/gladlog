@@ -18,6 +18,7 @@ import { CombatUnitReaction, LogEvent } from "@gladlog/parser-compat";
 import {
   cdAvailableAt,
   cdIsProcOnly,
+  cdMaybeAvailableAt,
   extractMajorCooldowns,
   isHealerSpec,
   MAJOR_DEFENSIVE_IDS,
@@ -225,9 +226,12 @@ export function buildMomentSnapshotItems(
       if (cdIsProcOnly(cd)) continue;
       // #25-1: damage-redirect externals carry the guard annotation — a bare
       // name in the victim's own "ready" reads as self-rescue advice.
-      (cdAvailableAt(cd, midT) ? ready : onCd).push(
-        selfCastNoopAnnotatedName(cd),
-      );
+      if (cdAvailableAt(cd, midT)) ready.push(selfCastNoopAnnotatedName(cd));
+      // GH #106 step 3: a combat-shortened cooldown past its fastest recast is
+      // not certainly on cooldown — say so rather than list it as down
+      else if (cdMaybeAvailableAt(cd, midT))
+        onCd.push(`${selfCastNoopAnnotatedName(cd)}(可能已好)`);
+      else onCd.push(selfCastNoopAnnotatedName(cd));
     }
     raw.push({
       kind: "cd-ledger",
