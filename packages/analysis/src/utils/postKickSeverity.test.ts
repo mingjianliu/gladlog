@@ -51,4 +51,12 @@ describe("postKickSeverityRank(2026-09-06,替换扁平 idle/acted/switched 表)"
     ];
     expect(ranks).toEqual([0, 1, 1, 2]);
   });
+
+  it("idle 但有被拒按键 → 中间档(2026-09-24 可靠性审计 A1:一直在按不是瘫痪)", () => {
+    expect(postKickSeverityRank(inst("idle"), 0)).toBe(0);
+    expect(postKickSeverityRank(inst("idle"), 3)).toBe(1);
+    // 被拒按键只改 idle —— 其他档不因此移动。
+    expect(postKickSeverityRank(inst("acted"), 3)).toBe(1);
+    expect(postKickSeverityRank(inst("switched", true), 3)).toBe(2);
+  });
 });

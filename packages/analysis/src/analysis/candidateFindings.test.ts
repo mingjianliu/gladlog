@@ -1214,6 +1214,149 @@ describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
     );
     expect(evts[0]!.facts["kickDepthPct"]).toBe("25");
   });
+
+  // Reliability audit A1 (2026-09-24): postKick used to be read off
+  // SUCCESSFUL casts only. These pin the rejected-press path.
+  const kickInst = (over: Record<string, unknown> = {}) => ({
+    atSeconds: 91.13,
+    lockoutDurationSeconds: 5,
+    kickSpellName: "Spell Lock",
+    interruptedSpellName: "Benediction",
+    sourceName: "Lock",
+    postKick: "idle" as const,
+    firstActionDelayS: null as number | null,
+    switchSpellName: null,
+    switchDelayS: null,
+    switchWasHardCast: null,
+    ...over,
+  });
+  const failed = (t: number, spellId: number, reason = "尚未恢复") => ({
+    tSeconds: t,
+    unitGuid: "P1",
+    spellId,
+    spellName: `spell-${spellId}`,
+    reason,
+  });
+  const streams = (castFailed: ReturnType<typeof failed>[]): RawStreams => ({
+    available: true,
+    manaSamples: [],
+    castFailed,
+  });
+
+  it("kick-eaten: idle with rejected presses says 'no successful cast' and names the presses (7c598eeb r0 @91)", () => {
+    const evts = kickEatenEvents(
+      [kickInst()],
+      { id: "P1", name: "Me" },
+      {
+        rawStreams: streams([
+          // the interrupted cast's own same-millisecond "interrupted" row is the
+          // kick itself, not a press after it
+          failed(91.13, 1262763, "被打断"),
+          failed(92.29, 605, "目标不在视野中"),
+          failed(92.96, 14914),
+          failed(94.63, 605, "无法在迷惑时那样做"),
+        ]),
+        ownerCasts: [],
+      },
+    );
+    const f = evts[0]!.facts["postKick"]!;
+    expect(f).toContain("no successful cast for 5s");
+    expect(f).toContain("pressed 3x but rejected");
+    expect(f).not.toContain("1262763");
+    expect(f).not.toContain(", "); // checkFactsBlockIntegrity
+    expect(f).not.toMatch(/[一-鿿]/); // checkCjkLeak: reasons stay out
+  });
+
+  it("kick-eaten: an idle kick with rejected presses no longer outranks a plain idle kick", () => {
+    const evts = kickEatenEvents(
+      [
+        kickInst({ atSeconds: 10 }),
+        kickInst({ atSeconds: 50 }),
+        kickInst({ atSeconds: 30, postKick: "acted", firstActionDelayS: 4.1 }),
+      ],
+      { id: "P1", name: "Me" },
+      { rawStreams: streams([failed(11, 605)]), ownerCasts: [] },
+    );
+    // 50 is the only truly idle kick (tier 0); 10 has a rejected press and
+    // ties with the acted kick at tier 1, then time order.
+    expect(evts.map((e) => e.t)).toEqual([50, 10]);
+  });
+
+  it("kick-eaten: acted never says 'waited out' when a press was rejected inside the lockout (825ca842 @263)", () => {
+    const evts = kickEatenEvents(
+      [
+        kickInst({
+          atSeconds: 263.34,
+          lockoutDurationSeconds: 2,
+          postKick: "acted",
+          firstActionDelayS: 3.2,
+        }),
+      ],
+      { id: "P1", name: "Me" },
+      {
+        rawStreams: streams([failed(264.32, 853)]),
+        ownerCasts: [{ spellId: "853", tSeconds: 266.51 }],
+      },
+    );
+    const f = evts[0]!.facts["postKick"]!;
+    expect(f).not.toContain("waited out");
+    expect(f).toContain("pressed 1x but rejected");
+    expect(f).toContain("inside the lockout");
+    expect(f).toContain("3.2s");
+  });
+
+  it("kick-eaten: a press rejected at exactly the lockout end is not 'inside the lockout' (same boundary as 'waited out')", () => {
+    const f = kickEatenEvents(
+      [
+        kickInst({
+          atSeconds: 10,
+          lockoutDurationSeconds: 2,
+          postKick: "acted",
+          firstActionDelayS: 4.5,
+        }),
+      ],
+      { id: "P1", name: "Me" },
+      {
+        rawStreams: streams([failed(12, 605, "目标不在视野中")]),
+        ownerCasts: [{ spellId: "605", tSeconds: 14.5 }],
+      },
+    )[0]!.facts["postKick"]!;
+    expect(f).toBe("waited out the lockout (first cast 4.5s later)");
+  });
+
+  it("kick-eaten: a first cast before the lockout ends is not 'waited out' (e9ea8a0c @363)", () => {
+    const f = kickEatenEvents(
+      [
+        kickInst({
+          lockoutDurationSeconds: 2,
+          postKick: "acted",
+          firstActionDelayS: 1.3,
+        }),
+      ],
+      { id: "P1", name: "Me" },
+    )[0]!.facts["postKick"]!;
+    expect(f).toBe("first cast 1.3s later");
+  });
+
+  it("kick-eaten: rejected presses go through the shared intent-guard filter (a press that self-resolved into the same spell within 2 s does not count)", () => {
+    const f = kickEatenEvents(
+      [kickInst({ postKick: "acted", firstActionDelayS: 3.0 })],
+      { id: "P1", name: "Me" },
+      {
+        rawStreams: streams([failed(93.5, 853)]),
+        ownerCasts: [{ spellId: "853", tSeconds: 94.13 }],
+      },
+    )[0]!.facts["postKick"]!;
+    expect(f).not.toContain("rejected");
+  });
+
+  it("kick-eaten: without raw streams the line is unchanged (old archives)", () => {
+    expect(
+      kickEatenEvents([kickInst()], { id: "P1", name: "Me" })[0]!.facts[
+        "postKick"
+      ],
+    ).toBe("no cast for 5s after the kick");
+  });
 });
 
 describe("healingGapEvents(HEAL-001,2026-08-30 HP-crisis 门 change 1/5)", () => {

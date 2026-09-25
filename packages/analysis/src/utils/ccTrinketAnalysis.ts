@@ -570,11 +570,21 @@ export type PostKickBehavior = "switched" | "acted" | "idle";
  * `switchWasHardCast === null` (no cast-start data, old archive) stays in
  * tier 1: absence of evidence must not promote a line into the
  * "demonstrably fine" tier.
+ *
+ * `rejectedPresses` (2026-09-24, reliability audit A1): the number of the
+ * player's presses in the same window that the game REJECTED
+ * (SPELL_CAST_FAILED, after the shared `filterIntentGuardEvidence`). `idle`
+ * only means "no SUCCESSFUL cast": 7c598eeb r0 @91 was idle with 7 rejected
+ * presses (Mind Control out of line of sight, then while disoriented) and sat
+ * in tier 0 as the paralysis case. A player who kept pressing is not
+ * paralysed, so an idle line with rejected presses drops to tier 1 — it
+ * cannot claim "did something useful" either, which is exactly tier 1.
  */
 export function postKickSeverityRank(
   inst: Pick<IInterruptInstance, "postKick" | "switchWasHardCast">,
+  rejectedPresses = 0,
 ): number {
-  if (inst.postKick === "idle") return 0;
+  if (inst.postKick === "idle") return rejectedPresses > 0 ? 1 : 0;
   if (inst.postKick === "switched" && inst.switchWasHardCast === true) return 2;
   return 1;
 }

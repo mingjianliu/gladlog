@@ -602,6 +602,16 @@ const INDEX: PredicateRow[] = [
     mod: ccTrinketAnalysis,
   },
   {
+    file: `${A}/analysis/candidateFindings.ts`,
+    symbol: "kickEatenEvents",
+    mod: candidateFindings,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkKickWaitedOutConsistency",
+    mod: promptQualityCheck,
+  },
+  {
     file: `${A}/data/spellEffectData.ts`,
     symbol: "ccFullDurationSeconds",
     mod: spellEffectData,

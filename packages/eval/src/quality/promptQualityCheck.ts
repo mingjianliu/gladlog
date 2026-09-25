@@ -155,10 +155,7 @@ interface NamedEvent {
 /** An event counts as covered if EITHER its logged (localized) name or its
  * canonical English name appears in the prompt — non-EN logs carry localized
  * names while the builder renders English from static data. */
-function checkSpells(
-  promptText: string,
-  events: NamedEvent[],
-): CoverageResult {
+function checkSpells(promptText: string, events: NamedEvent[]): CoverageResult {
   const distinct = new Map<string, string[]>();
   for (const e of events) {
     const candidates = [e.spellName, e.spellNameEn].filter(
@@ -916,7 +913,8 @@ export function checkCcAvoidedLandedConsistency(lines: string[]): string[] {
 
 const PEEL_LINE =
   /^\s*(\d+):(\d{2})–(\d+):(\d{2})\s+\[PEEL OPTION\]\s+(\S+) (.+?) → (\S+)(?: \(the victim's own CC\))?: usable (\d+) s, not used \| [\d.]+yd, DR (\S+) \| \S+ did \d+% of (\S+)'s damage taken in the \d+ s before dying at (\d+):(\d{2})/;
-const FRIENDLY_DEATH_LINE = /^\s*(\d+):(\d{2})\s+\[DEATH\]\s+(\S+) \(.*— friendly\)/;
+const FRIENDLY_DEATH_LINE =
+  /^\s*(\d+):(\d{2})\s+\[DEATH\]\s+(\S+) \(.*— friendly\)/;
 const CC_ON_ENEMY_LINE =
   /^\s*(\d+):(\d{2})\s+\[CC ON ENEMY\]\s+(\S+) ← (.+?) \(by (\S+)\)/;
 
@@ -935,7 +933,12 @@ const CC_ON_ENEMY_LINE =
  */
 export function checkPeelOptionConsistency(lines: string[]): string[] {
   const deaths = new Set<string>();
-  const landed: Array<{ at: number; target: string; spell: string; by: string }> = [];
+  const landed: Array<{
+    at: number;
+    target: string;
+    spell: string;
+    by: string;
+  }> = [];
   for (const line of lines) {
     const d = line.match(FRIENDLY_DEATH_LINE);
     if (d) deaths.add(`${Number(d[1]) * 60 + Number(d[2])}\u0000${d[3]}`);
@@ -963,7 +966,9 @@ export function checkPeelOptionConsistency(lines: string[]): string[] {
     if (!deaths.has(`${death}\u0000${victim}`))
       why.push(`没有 ${victim} 在 ${fmtTime(death)} 的 [DEATH] 行`);
     if (from < death - PEEL_LOOKBACK_S || to > death || from > to)
-      why.push(`可用时段 ${fmtTime(from)}–${fmtTime(to)} 不在死前 ${PEEL_LOOKBACK_S} 秒内`);
+      why.push(
+        `可用时段 ${fmtTime(from)}–${fmtTime(to)} 不在死前 ${PEEL_LOOKBACK_S} 秒内`,
+      );
     if (n < PEEL_MIN_USABLE_S || n > to - from + 1)
       why.push(`可用 ${n} 秒与门槛 ${PEEL_MIN_USABLE_S} 秒 / 时段长度不符`);
     if (dr === "Immune") why.push("递减为 Immune");
@@ -975,7 +980,10 @@ export function checkPeelOptionConsistency(lines: string[]): string[] {
         c.at >= death - PEEL_LOOKBACK_S &&
         c.at <= death,
     );
-    if (used) why.push(`${fmtTime(used.at)} 已有 ${owner} 的 ${spell} 落在 ${target} 身上`);
+    if (used)
+      why.push(
+        `${fmtTime(used.at)} 已有 ${owner} 的 ${spell} 落在 ${target} 身上`,
+      );
     if (why.length)
       failures.push(
         `line ${i + 1}: [PEEL OPTION] 自相矛盾(${why.join(";")})—— ${line.trim().slice(0, 160)}`,
@@ -1740,6 +1748,39 @@ export function checkTeammateCrisisRefConsistency(lines: string[]): string[] {
  * `kick-priority-team` lines quote the one corpus cell of
  * data/kickPriorityPrior.ts; re-check the four rendered ref* facts.
  */
+/**
+ * kick-eaten `postKick=waited out the lockout (first cast Xs later)` must not
+ * contradict its own `lockout` fact: X ≥ lockout (reliability audit A1,
+ * 2026-09-24). The producer used to print "waited out" for every same-school
+ * (or unknown-school) first cast, so e9ea8a0c @363 read "waited out the
+ * lockout (first cast 1.3s later)" against `lockout=2.0`. The producer now
+ * says "waited out" only when the first successful cast came at or after the
+ * lockout end and nothing was pressed inside it; both numbers render with one
+ * decimal and rounding is monotone, so a line the producer may print always
+ * passes here.
+ */
+const KICK_WAITED_OUT =
+  /^waited out the lockout \(first cast ([\d.]+)s later\)$/;
+export function checkKickWaitedOutConsistency(lines: string[]): string[] {
+  const failures: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+    if (!line.includes("type=kick-eaten ")) continue;
+    const m = line.match(MENU_LINE_FACTS);
+    if (!m) continue;
+    const f = parseFactsBlock(m[1]!);
+    const w = (f["postKick"] ?? "").match(KICK_WAITED_OUT);
+    if (!w) continue;
+    const first = Number(w[1]);
+    const lockout = Number(f["lockout"]);
+    if (!(first >= lockout))
+      failures.push(
+        `line ${i + 1}: kick-eaten 说「等满锁定」但首次施法 ${w[1]}s < lockout ${f["lockout"] ?? "(缺)"}s`,
+      );
+  }
+  return failures;
+}
+
 export function checkKickPriorityRefConsistency(lines: string[]): string[] {
   const failures: string[] = [];
   for (let i = 0; i < lines.length; i++) {
@@ -2587,6 +2628,7 @@ export function checkMatch(
   hardFailures.push(...checkOutcomeRefConsistency(lines));
   hardFailures.push(...checkMenuTRenderGrid(lines));
   hardFailures.push(...checkCjkLeak(lines));
+  hardFailures.push(...checkKickWaitedOutConsistency(lines));
   hardFailures.push(...checkEnemyDefRefConsistency(lines));
   hardFailures.push(...checkFactsBlockIntegrity(lines));
   hardFailures.push(...checkPetCreditSide(lines));

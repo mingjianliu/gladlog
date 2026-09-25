@@ -12,6 +12,7 @@ import {
   CANDIDATE_TYPE_FLAGS,
 } from "../data/candidateTypeFlags";
 import { costNormPhrase } from "../data/curatedAbilityFacts";
+import { getEnglishSpellName } from "../data/spellEffectData";
 import { CORPUS_OBSERVED_DISPEL_IDS } from "../data/dispelObservedGenerated";
 import { lookupKickPriorityPrior } from "../data/kickPriorityPrior";
 import {
@@ -33,6 +34,7 @@ import {
   applicableCCAvoidanceIds,
   CC_AVOIDANCE_BUFF_SPELLS,
   type ICCInstance,
+  POST_KICK_WINDOW_S,
   postKickSeverityRank,
   REPOSITIONING_SPELL_IDS,
 } from "../utils/ccTrinketAnalysis";
@@ -81,7 +83,11 @@ import {
   POSITION_MISTAKES,
   stayedInHadRealCost,
 } from "../utils/positionAnalysis";
-import { type RawStreams } from "../utils/rawStreams";
+import {
+  type CastFailedEvent,
+  castFailedInWindow,
+  type RawStreams,
+} from "../utils/rawStreams";
 import { toRenderSecond } from "../utils/renderGrid";
 import { OFFENSIVE_CD_SPELL_IDS } from "../utils/spellDanger";
 import { getTalentAvoidanceTriggers } from "../utils/talentBehaviors";
@@ -123,6 +129,7 @@ import {
   MD_SPELL_ID,
   mdCycloneWindowEvents,
 } from "./candidates/massDispel";
+import { filterIntentGuardEvidence } from "./candidates/shared";
 import {
   teammateCrisisIdleEvents,
   teammateCrisisTriageEvents,
@@ -850,18 +857,36 @@ export function kickEatenEvents(
     | "kickDepthPct"
   >[],
   owner: { id: string; name: string },
+  /** Reliability audit A1 (2026-09-24): the owner's rejected presses. Without
+   * them `postKick` is read off SUCCESSFUL casts only, and the line told the
+   * model "no cast for 5s" / "waited out the lockout" while the player was
+   * pressing — 825ca842 @263 pressed Hammer of Justice 4× inside the 2 s
+   * lockout, 7c598eeb r0 @91 pressed Mind Control / Holy Fire 7× (line of
+   * sight, then disoriented). Absent / `available:false` = today's behaviour
+   * (old archives have no raw stream). */
+  intent?: {
+    rawStreams?: RawStreams;
+    /** The owner's successful casts, seconds from match start — feeds the
+     * shared `filterIntentGuardEvidence` exactly as cd-hoarded feeds it. */
+    ownerCasts: { spellId: string; tSeconds: number }[];
+  },
 ): CandidateEvent[] {
-  return instances
+  const withPresses = instances.map((k) => ({
+    k,
+    rejected: rejectedPressesAfterKick(k, owner.id, intent),
+  }));
+  return withPresses
     .sort(
       (a, b) =>
         // Shared rank (ccTrinketAnalysis.ts) — never a second severity table
         // here: the cap decides which kicks the model ever sees, so the
         // ordering and the field it reads must not be able to drift apart.
-        postKickSeverityRank(a) - postKickSeverityRank(b) ||
-        a.atSeconds - b.atSeconds,
+        postKickSeverityRank(a.k, a.rejected.length) -
+          postKickSeverityRank(b.k, b.rejected.length) ||
+        a.k.atSeconds - b.k.atSeconds,
     )
     .slice(0, KICK_EATEN_CAP)
-    .map((k) => ({
+    .map(({ k, rejected }) => ({
       id: `kick-eaten:${owner.id}:${Math.round(k.atSeconds)}`,
       type: "kick-eaten",
       t: k.atSeconds,
@@ -917,20 +942,116 @@ export function kickEatenEvents(
         // instant here, so the line must not claim it is one. The qualifier
         // is joined with "; " not ", ": a ", " inside a facts value is cut off
         // by every text-side facts parser (`checkFactsBlockIntegrity`).
-        postKick:
-          k.postKick === "idle"
-            ? "no cast for 5s after the kick"
-            : k.postKick === "switched"
-              ? `acted on another school ${k.switchDelayS?.toFixed(1) ?? "?"}s later (${k.switchSpellName ?? "?"}${
-                  k.switchWasHardCast === true
-                    ? "; hard cast"
-                    : k.switchWasHardCast === false
-                      ? "; instant or channel"
-                      : ""
-                })`
-              : `waited out the lockout (first cast ${k.firstActionDelayS?.toFixed(1) ?? "?"}s later)`,
+        postKick: postKickFact(k, rejected),
       },
     }));
+}
+
+/** The owner's rejected presses in `[kick, kick + POST_KICK_WINDOW_S]`,
+ * filtered per spell through the SAME `filterIntentGuardEvidence` cd-hoarded
+ * uses (predicate index: "Which SPELL_CAST_FAILED hits count as genuine
+ * pressed-but-rejected evidence") — so a GCD-spam 尚未恢复 or a press that
+ * self-resolved into a same-spell cast within 2 s never counts here either. */
+function rejectedPressesAfterKick(
+  k: { atSeconds: number },
+  ownerId: string,
+  intent:
+    | {
+        rawStreams?: RawStreams;
+        ownerCasts: { spellId: string; tSeconds: number }[];
+      }
+    | undefined,
+): CastFailedEvent[] {
+  if (!intent?.rawStreams) return [];
+  // Strictly AFTER the kick, like the postKick classifier (`c.t >
+  // inst.atSeconds`): the interrupted cast itself logs a same-millisecond
+  // SPELL_CAST_FAILED "interrupted" (7c598eeb r0 @91.13, 1262763) — that is
+  // the kick, not a press made after it.
+  const hits = castFailedInWindow(
+    intent.rawStreams,
+    ownerId,
+    k.atSeconds,
+    k.atSeconds + POST_KICK_WINDOW_S,
+  ).filter((h) => h.tSeconds > k.atSeconds);
+  const ownCastSuccessSeconds = intent.ownerCasts.map((c) => c.tSeconds);
+  const bySpell = new Map<number, CastFailedEvent[]>();
+  for (const h of hits) {
+    const list = bySpell.get(h.spellId) ?? [];
+    list.push(h);
+    bySpell.set(h.spellId, list);
+  }
+  return [...bySpell].flatMap(([spellId, list]) =>
+    filterIntentGuardEvidence(
+      list,
+      intent.ownerCasts
+        .filter((c) => c.spellId === String(spellId))
+        .map((c) => c.tSeconds),
+      { ownCastSuccessSeconds },
+    ),
+  );
+}
+
+/** What the kick-eaten line may say about the player after the kick.
+ *
+ * The CLASSIFICATION (`postKick`, `ccTrinketAnalysis.ts`) is untouched; this
+ * only decides what the line may CLAIM, given the rejected presses:
+ *  - idle + rejected presses → "no successful cast", never "no cast": the
+ *    player was pressing (7c598eeb r0 @91).
+ *  - acted → "waited out the lockout" only when the first successful cast
+ *    came at or after the lockout end AND nothing was pressed inside the
+ *    lockout. The old line said it unconditionally, which both contradicted
+ *    the log (825ca842 @263, HoJ ×4 rejected inside the lockout) and itself
+ *    ("waited out the lockout (first cast 1.3s later)" with a 2.0 s lockout,
+ *    e9ea8a0c @363 — a first cast that early is an unknown- or multi-school
+ *    spell, not a wait). The gate `checkKickWaitedOutConsistency` pins the
+ *    second half on the rendered text.
+ * Spell names are English (`getEnglishSpellName`) and joined by
+ * `joinSpellCounts`, never with ", " (`checkFactsBlockIntegrity`); the
+ * localized reject reasons stay out of the line (`checkCjkLeak`). */
+function postKickFact(
+  k: Pick<
+    ReturnType<typeof analyzePlayerCCAndTrinket>["interruptInstances"][number],
+    | "atSeconds"
+    | "lockoutDurationSeconds"
+    | "postKick"
+    | "firstActionDelayS"
+    | "switchSpellName"
+    | "switchDelayS"
+    | "switchWasHardCast"
+  >,
+  rejected: CastFailedEvent[],
+): string {
+  const pressed = (list: CastFailedEvent[]) =>
+    `pressed ${list.length}x but rejected (${joinSpellCounts(
+      list.map((h) => getEnglishSpellName(String(h.spellId), h.spellName)),
+    )})`;
+  if (k.postKick === "idle")
+    return rejected.length > 0
+      ? `no successful cast for 5s after the kick; ${pressed(rejected)}`
+      : "no cast for 5s after the kick";
+  if (k.postKick === "switched")
+    return `acted on another school ${k.switchDelayS?.toFixed(1) ?? "?"}s later (${k.switchSpellName ?? "?"}${
+      k.switchWasHardCast === true
+        ? "; hard cast"
+        : k.switchWasHardCast === false
+          ? "; instant or channel"
+          : ""
+    })`;
+  // Strict `<`: the lockout's end instant belongs to "after", the same
+  // boundary the "waited out" test below uses for successful casts (a first
+  // cast at exactly the lockout end IS a wait) — codex astra review 2026-09-24.
+  const inLockout = rejected.filter(
+    (h) => h.tSeconds < k.atSeconds + k.lockoutDurationSeconds,
+  );
+  const first = k.firstActionDelayS?.toFixed(1) ?? "?";
+  if (inLockout.length > 0)
+    return `${pressed(inLockout)} inside the lockout; first successful cast ${first}s later`;
+  if (
+    k.firstActionDelayS != null &&
+    k.firstActionDelayS < k.lockoutDurationSeconds
+  )
+    return `first cast ${first}s later`;
+  return `waited out the lockout (first cast ${first}s later)`;
 }
 
 /**
@@ -1716,7 +1837,17 @@ function teamPlayEvents(
     // 档位(available_unused 51% + on_cooldown 47%)。被控事实仍由时间线
     // [CC ON TEAM] 行完整供给模型;其产出函数与测试已于 2026-09-24 删除
     // (旧版本缓存从不被读取,渲染也不调产出函数)。
-    out.push(...kickEatenEvents(cc.interruptInstances, owner));
+    out.push(
+      ...kickEatenEvents(cc.interruptInstances, owner, {
+        rawStreams,
+        // Same seconds base and same source list as cd-hoarded's
+        // `ownCastSuccessSeconds` (teamPlayEvents above).
+        ownerCasts: (owner.spellCastEvents ?? []).map((e: any) => ({
+          spellId: String(e.spellId ?? ""),
+          tSeconds: (e.logLine.timestamp - combat.startTime) / 1000,
+        })),
+      }),
+    );
 
     // wasted-trinket 已退役(GH #14 B 组复测,用户裁定 2026-08-19,v29):出面
     // 事件 94.9%(胜)/93.9%(负)是治疗解自己身上的控 —— healerInCCAt 对 owner

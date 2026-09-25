@@ -948,4 +948,18 @@
 //  exact press time), position-mistake 622 → 616; "had Blessing of
 //  Sacrifice available" at a death after an Ultimate Sacrifice press and
 //  "cheaper available: Renewing Blaze" gone; gate failures unchanged.
-export const PROMPT_VERSION = 120;
+//  v121 (2026-09-24, reliability audit A1, user "先修 bug"): kick-eaten reads
+//  the player's REJECTED presses (SPELL_CAST_FAILED strictly after the kick,
+//  per spell through the shared filterIntentGuardEvidence). postKick no
+//  longer says "no cast for 5s" / "waited out the lockout" while the player
+//  was pressing: idle + presses → "no successful cast …; pressed Nx but
+//  rejected (…)" and rank tier 1; "waited out" only when the first
+//  successful cast is at/after the lockout end and nothing was pressed
+//  inside it, else "pressed … inside the lockout" / "first cast Xs later".
+//  Legend note: never describe rejected presses as doing nothing. New gate
+//  checkKickWaitedOutConsistency. 605 files with raw streams (as the app):
+//  1,535 kick-eaten lines, count unchanged; waited-out → pressed-in-lockout
+//  111, waited-out → first-cast 89, idle → idle+pressed 51; 38 owners swap
+//  which kicks make the cap (42 idle-with-presses out, other tier-1 in);
+//  "waited out" with X < lockout 112 → 0; match contexts byte-identical.
+export const PROMPT_VERSION = 121;
