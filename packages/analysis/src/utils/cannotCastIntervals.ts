@@ -5,6 +5,7 @@ import {
   SPELL_CATEGORIES as SPELLS,
 } from "../data/spellCategories";
 import { kickLockoutSeconds } from "../data/spellEffectData";
+import { ccSpellIds, officialSilenceIds } from "../data/spellTags";
 
 /**
  * "When could this unit not cast?" — ONE predicate for the two consumers that
@@ -38,7 +39,51 @@ export function buildCannotCastIntervals(
   unit: ICombatUnit,
   enemyIds: Set<string>,
 ): Array<{ from: number; to: number }> {
-  const appliedTimes = new Map<string, number[]>();
+  const intervals: Array<{ from: number; to: number }> =
+    castBlockingAuraIntervals(unit, enemyIds).map((a) => ({
+      from: a.from,
+      to: a.to,
+    }));
+
+  for (const action of unit.actionIn ?? []) {
+    if (action.logLine.event !== LogEvent.SPELL_INTERRUPT) continue;
+    if (!enemyIds.has(action.srcUnitId)) continue;
+    const kickSpellId = action.spellId ?? "";
+    intervals.push({
+      from: action.timestamp,
+      to: action.timestamp + kickLockoutSeconds(kickSpellId) * 1000,
+    });
+  }
+
+  return intervals;
+}
+
+export interface CastBlockingAura {
+  spellId: string;
+  spellName: string;
+  srcUnitId: string;
+  srcUnitName: string;
+  /** SPELL_AURA_APPLIED, epoch ms */
+  from: number;
+  /** first REMOVED / BROKEN at or after `from`; Infinity when never removed */
+  to: number;
+}
+
+/**
+ * The enemy-applied cast-blocking auras on `unit` (hard CC + silence,
+ * `isCastBlockingAuraType`), APPLIED paired with the first REMOVED/BROKEN of
+ * the same spell at or after it. The aura half of `buildCannotCastIntervals`,
+ * exported so a renderer can name what blocked the unit without a second
+ * predicate (2026-09-25, reliability round 2 W1b).
+ */
+export function castBlockingAuraIntervals(
+  unit: ICombatUnit,
+  enemyIds: Set<string>,
+): CastBlockingAura[] {
+  const applied = new Map<
+    string,
+    Array<{ ts: number; name: string; srcId: string; srcName: string }>
+  >();
   const removedTimes = new Map<string, number[]>();
 
   // Fixture-built units may lack either stream (momentSnapshot.test.ts has
@@ -52,38 +97,63 @@ export function buildCannotCastIntervals(
     if (!spell || !isCastBlockingAuraType(spell.type)) continue;
 
     if (aura.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
-      const bucket = appliedTimes.get(spellId) ?? [];
-      appliedTimes.set(spellId, [...bucket, aura.timestamp]);
+      const bucket = applied.get(spellId) ?? [];
+      bucket.push({
+        ts: aura.timestamp,
+        name: aura.spellName ?? spellId,
+        srcId: aura.srcUnitId,
+        srcName: aura.srcUnitName ?? "",
+      });
+      applied.set(spellId, bucket);
     } else if (
       aura.logLine.event === LogEvent.SPELL_AURA_REMOVED ||
       aura.logLine.event === LogEvent.SPELL_AURA_BROKEN ||
       aura.logLine.event === LogEvent.SPELL_AURA_BROKEN_SPELL
     ) {
       const bucket = removedTimes.get(spellId) ?? [];
-      removedTimes.set(spellId, [...bucket, aura.timestamp]);
+      bucket.push(aura.timestamp);
+      removedTimes.set(spellId, bucket);
     }
   }
 
-  const intervals: Array<{ from: number; to: number }> = [];
-  for (const [spellId, applications] of appliedTimes) {
+  const out: CastBlockingAura[] = [];
+  for (const [spellId, applications] of applied) {
     const removals = removedTimes.get(spellId) ?? [];
-    for (const applyTs of applications) {
-      const removalTs = removals.find((r) => r >= applyTs);
-      intervals.push({ from: applyTs, to: removalTs ?? Infinity });
+    for (const a of applications) {
+      const removalTs = removals.find((r) => r >= a.ts);
+      out.push({
+        spellId,
+        spellName: a.name,
+        srcUnitId: a.srcId,
+        srcUnitName: a.srcName,
+        from: a.ts,
+        to: removalTs ?? Infinity,
+      });
     }
   }
+  return out;
+}
 
-  for (const action of unit.actionIn ?? []) {
-    if (action.logLine.event !== LogEvent.SPELL_INTERRUPT) continue;
-    if (!enemyIds.has(action.srcUnitId)) continue;
-    const kickSpellId = action.spellId ?? "";
-    intervals.push({
-      from: action.timestamp,
-      to: action.timestamp + kickLockoutSeconds(kickSpellId) * 1000,
-    });
-  }
-
-  return intervals;
+/**
+ * Silences on `unit`: the cast-blocking auras (the same predicate as
+ * `buildCannotCastIntervals`, which already locks the unit for them) that are
+ * in the official DR `silence` category and not hard CC (`ccSpellIds`, which
+ * the [CC ON TEAM] / [CC ON ENEMY] lines already render). The official
+ * category keeps kick-lockout auras out (Shambling Rush 91807 is mechanic
+ * "interrupt": 349 of the first run's 11,625 lines). Round 2 found Garrote -
+ * Silence, Strangulate and Spider Venom on the log owner in 4 of 24 matches
+ * with no timeline line at all, so the prompt read the healer as free
+ * (reliability round 2 W1b).
+ */
+export function silenceIntervals(
+  unit: ICombatUnit,
+  enemyIds: Set<string>,
+): CastBlockingAura[] {
+  return castBlockingAuraIntervals(unit, enemyIds)
+    .filter(
+      (a) => officialSilenceIds.has(a.spellId) && !ccSpellIds.has(a.spellId),
+    )
+    .sort((x, y) => x.from - y.from);
 }
 
 /**

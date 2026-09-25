@@ -14,11 +14,11 @@
 import { LogEvent } from "@gladlog/parser-compat";
 
 import { type CrisisRole } from "../data/behaviorPrior";
-import { spellClassMap } from "../data/drCategories";
 import { BREAK_RACIAL_SPELL_IDS } from "../data/racialAbilities";
 import spellIdLists from "../data/spellIdLists";
 import {
   ccSpellIds,
+  officialSilenceIds,
   rootSpellIds,
   spells as spellMeta,
 } from "../data/spellTags";
@@ -257,16 +257,10 @@ const CONTROL_IDS = new Set<string>([
 // the official category exactly the way spellTags.ts builds
 // `officialHardCcIds`: sourced from data/drCategories (not utils/drAnalysis
 // — that module imports spellTags, which would cycle).
-const OFFICIAL_SILENCE_IDS =
-  (spellClassMap.diminishingReturns as Record<string, { spellId: string }[]>)[
-    "silence"
-  ]?.map((e) => e.spellId) ?? [];
 /** silence-type auras also lock the school: hand `interrupts` type
- * (spellTags) ∪ official DR `silence` category. */
-const SILENCE_IDS = new Set<string>([
-  ...INTERRUPT_IDS,
-  ...OFFICIAL_SILENCE_IDS,
-]);
+ * (spellTags) ∪ official DR `silence` category (`officialSilenceIds`, shared
+ * with the [SILENCE] line since 2026-09-25). */
+const SILENCE_IDS = new Set<string>([...INTERRUPT_IDS, ...officialSilenceIds]);
 
 interface Sample {
   t: number;

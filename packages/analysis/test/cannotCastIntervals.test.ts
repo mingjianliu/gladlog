@@ -4,13 +4,18 @@ import { describe, expect, it } from "vitest";
 import {
   buildCannotCastIntervals,
   coveredMsWithin,
+  silenceIntervals,
 } from "../src/utils/cannotCastIntervals";
 
 describe("cannotCastIntervals — buildCannotCastIntervals", () => {
   const enemyIds = new Set(["Enemy-1"]);
 
   it("returns empty intervals when unit has no auraEvents or actionIn", () => {
-    const unit = { id: "Player-1", auraEvents: [], actionIn: [] } as unknown as ICombatUnit;
+    const unit = {
+      id: "Player-1",
+      auraEvents: [],
+      actionIn: [],
+    } as unknown as ICombatUnit;
     expect(buildCannotCastIntervals(unit, enemyIds)).toEqual([]);
   });
 
@@ -129,13 +134,19 @@ describe("cannotCastIntervals — coveredMsWithin", () => {
   it("clips interval to window boundaries", () => {
     // Window: [10_000, 20_000]
     // Interval: [5_000, 15_000] -> clipped to [10_000, 15_000] = 5_000 ms
-    expect(coveredMsWithin([{ from: 5_000, to: 15_000 }], 10_000, 20_000)).toBe(5_000);
+    expect(coveredMsWithin([{ from: 5_000, to: 15_000 }], 10_000, 20_000)).toBe(
+      5_000,
+    );
 
     // Interval: [18_000, 25_000] -> clipped to [18_000, 20_000] = 2_000 ms
-    expect(coveredMsWithin([{ from: 18_000, to: 25_000 }], 10_000, 20_000)).toBe(2_000);
+    expect(
+      coveredMsWithin([{ from: 18_000, to: 25_000 }], 10_000, 20_000),
+    ).toBe(2_000);
 
     // Interval completely outside window -> 0 ms
-    expect(coveredMsWithin([{ from: 1_000, to: 5_000 }], 10_000, 20_000)).toBe(0);
+    expect(coveredMsWithin([{ from: 1_000, to: 5_000 }], 10_000, 20_000)).toBe(
+      0,
+    );
   });
 
   it("correctly merges overlapping intervals without double-counting", () => {
@@ -168,6 +179,79 @@ describe("cannotCastIntervals — coveredMsWithin", () => {
 
   it("handles infinite open-ended intervals clipped to window end", () => {
     // Interval: [15_000, Infinity], window [10_000, 20_000] -> clipped [15_000, 20_000] = 5_000 ms
-    expect(coveredMsWithin([{ from: 15_000, to: Infinity }], 10_000, 20_000)).toBe(5_000);
+    expect(
+      coveredMsWithin([{ from: 15_000, to: Infinity }], 10_000, 20_000),
+    ).toBe(5_000);
+  });
+});
+
+describe("cannotCastIntervals — silenceIntervals (reliability round 2 W1b)", () => {
+  const enemyIds = new Set(["Enemy-1"]);
+  const aura = (
+    spellId: string,
+    spellName: string,
+    ts: number,
+    event: LogEvent,
+  ) => ({
+    spellId,
+    spellName,
+    srcUnitId: "Enemy-1",
+    srcUnitName: "Rogue-Realm",
+    timestamp: ts,
+    logLine: { event },
+  });
+
+  it("returns the silence (Garrote - Silence) and not the hard CC (Polymorph), with its source and span", () => {
+    const unit = {
+      id: "Player-1",
+      auraEvents: [
+        aura("1330", "Garrote - Silence", 10_000, LogEvent.SPELL_AURA_APPLIED),
+        aura("1330", "Garrote - Silence", 13_000, LogEvent.SPELL_AURA_REMOVED),
+        aura("118", "Polymorph", 20_000, LogEvent.SPELL_AURA_APPLIED),
+        aura("118", "Polymorph", 26_000, LogEvent.SPELL_AURA_REMOVED),
+      ],
+      actionIn: [],
+    } as unknown as ICombatUnit;
+    const s = silenceIntervals(unit, enemyIds);
+    expect(s).toHaveLength(1);
+    expect(s[0]).toEqual(
+      expect.objectContaining({
+        spellId: "1330",
+        srcUnitName: "Rogue-Realm",
+        from: 10_000,
+        to: 13_000,
+      }),
+    );
+  });
+
+  it("a kick's lockout aura (Shambling Rush 91807, mechanic interrupt) locks casting but is not a silence", () => {
+    const unit = {
+      id: "Player-1",
+      auraEvents: [
+        aura("91807", "Shambling Rush", 5_000, LogEvent.SPELL_AURA_APPLIED),
+        aura("91807", "Shambling Rush", 7_000, LogEvent.SPELL_AURA_REMOVED),
+      ],
+      actionIn: [],
+    } as unknown as ICombatUnit;
+    expect(buildCannotCastIntervals(unit, enemyIds)).toEqual([
+      { from: 5_000, to: 7_000 },
+    ]);
+    expect(silenceIntervals(unit, enemyIds)).toEqual([]);
+  });
+
+  it("every silence interval is also a cannot-cast interval (one predicate)", () => {
+    const unit = {
+      id: "Player-1",
+      auraEvents: [
+        aura("47476", "Strangulate", 5_000, LogEvent.SPELL_AURA_APPLIED),
+        aura("47476", "Strangulate", 7_000, LogEvent.SPELL_AURA_REMOVED),
+      ],
+      actionIn: [],
+    } as unknown as ICombatUnit;
+    const blocked = buildCannotCastIntervals(unit, enemyIds);
+    const silences = silenceIntervals(unit, enemyIds);
+    expect(silences).toHaveLength(1);
+    for (const s of silences)
+      expect(blocked).toContainEqual({ from: s.from, to: s.to });
   });
 });

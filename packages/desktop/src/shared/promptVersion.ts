@@ -1083,4 +1083,11 @@
 //  the cd-hoarded line says where it went (spentElsewhere, +21); a healer's
 //  own CD counts as team burst only if it is Power Infusion; sync-window
 //  reference regenerated (SS contrast 3 pp, at the door).
-export const PROMPT_VERSION = 135;
+//  v136 (2026-09-25, reliability round 2 W1b): enemy silences (official DR
+//  `silence` category, not hard CC — Garrote, Strangulate, Spider Venom,
+//  Silence, Shield of Virtue) render as [SILENCE] lines on both sides, with a
+//  trinket-broke suffix; the same auras buildCannotCastIntervals already
+//  locked on. 605 files: 2,362 contexts gain 11,276 [SILENCE] lines + legend,
+//  nothing else changes; candidates identical; hard failures 26 → 26 (all the
+//  known Guardian Spirit [RES] regression, GH #106).
+export const PROMPT_VERSION = 136;

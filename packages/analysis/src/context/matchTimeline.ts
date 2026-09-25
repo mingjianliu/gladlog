@@ -31,6 +31,7 @@ import {
   IPlayerCCTrinketSummary,
   tremorTotemBreak,
 } from "../utils/ccTrinketAnalysis";
+import { silenceIntervals } from "../utils/cannotCastIntervals";
 import {
   IFormInterval,
   ISpiritOfRedemptionInterval,
@@ -2674,6 +2675,65 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     }
   }
 
+  // ── [SILENCE]: silences on players (reliability round 2 W1b, 2026-09-25) ───
+  // Garrote - Silence / Strangulate / Spider Venom are cast-blocking auras
+  // (buildCannotCastIntervals already locks the unit for them) but not
+  // `ccSpellIds`, so no [CC ON …] line ever showed them: 4 of 24 audited
+  // matches had the log owner silenced with nothing in the prompt, and the
+  // coach read the healer as free. Same predicate (`silenceIntervals`), both
+  // sides; a PvP trinket pressed inside the silence that ended it is stated the
+  // way the CC lines state it.
+  let silenceLineCount = 0;
+  {
+    const idsOf = (players: ReadonlyArray<ICombatUnit>) => {
+      const ids = new Set(players.map((u) => u.id));
+      for (const u of allUnits ?? [])
+        if (u.ownerId && ids.has(u.ownerId)) ids.add(u.id);
+      return ids;
+    };
+    const friendIds = idsOf(friends);
+    const enemyIds = idsOf(enemies ?? []);
+    const renderSide = (
+      victims: ReadonlyArray<ICombatUnit>,
+      attackerIds: Set<string>,
+      side: "friendly" | "enemy",
+    ) => {
+      for (const u of victims) {
+        const trinketTimes =
+          side === "friendly"
+            ? (ccTrinketSummaries.find((s) => s.playerName === u.name)
+                ?.trinketUseTimes ?? [])
+            : [];
+        for (const s of silenceIntervals(u, attackerIds)) {
+          const at = (s.from - matchStartMs) / 1000;
+          const endMs = Math.min(s.to, matchEndMs);
+          const durS = Math.max(0, (endMs - s.from) / 1000);
+          const trinketAt = trinketTimes.find((t) => {
+            const tMs = matchStartMs + t * 1000;
+            return tMs >= s.from && tMs <= endMs && endMs - tMs <= 300;
+          });
+          const tail =
+            trinketAt !== undefined
+              ? ` | trinket broke this silence after ${(trinketAt - at).toFixed(0)}s (cut short — it had not expired)`
+              : ` | ${durS.toFixed(0)}s`;
+          const who = side === "friendly" ? pid(u.name) : enemyPid(u.name);
+          const by = actorLabel(
+            s.srcUnitName,
+            side === "friendly" ? "enemy" : "friendly",
+            s.srcUnitId,
+          );
+          addEntry(
+            at,
+            `${fmtTime(at)}  [SILENCE]   ${who} ← ${getEnglishSpellName(s.spellId, s.spellName)} (by ${by})${tail}`,
+          );
+          silenceLineCount++;
+        }
+      }
+    };
+    renderSide(friends, enemyIds, "friendly");
+    renderSide(enemies ?? [], friendIds, "enemy");
+  }
+
   // ── [CC ON ENEMY]: our CC landing on enemies (2026-07-18 coverage fix) ─────
   // The owner's CC is skipped only when it already has a [YOU] [CC] cast line
   // (i.e. it is in the tracked-CD catalog) — CC with no tracked CD (Sap /
@@ -3706,6 +3766,12 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
                 "    A measurement, not a verdict — the team's CC lines say whether they could act.",
               ]
             : []),
+        ]
+      : []),
+    ...(silenceLineCount > 0
+      ? [
+          "  [SILENCE] = that player was silenced from that second for the stated time: no spells (the [CC ON TEAM] / [CC ON ENEMY]",
+          "    lines do not include silences). `trinket broke this silence` = a PvP trinket ended it early.",
         ]
       : []),
     ...(enemyTrinketCount > 0

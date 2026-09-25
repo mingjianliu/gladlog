@@ -51,6 +51,17 @@ export const ccSpellIds = new Set<string>([
   ...officialHardCcIds,
 ]);
 
+/** The official DR `silence` category (DB2) — what counts as a SILENCE, as
+ * opposed to the hand `interrupts` type, which also holds kicks that leave a
+ * short lockout aura (Shambling Rush 91807: mechanic 26 "interrupt", 2 s).
+ * One set for the crisis "locked out" test and the [SILENCE] line
+ * (reliability round 2 W1b, 2026-09-25). */
+export const officialSilenceIds: ReadonlySet<string> = new Set(
+  (spellClassMap.diminishingReturns as Record<string, { spellId: string }[]>)[
+    "silence"
+  ]?.map((e) => e.spellId) ?? [],
+);
+
 export const rootSpellIds = new Set<string>(
   Object.keys(spells).filter((id) => spells[id].type === "roots"),
 );
