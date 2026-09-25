@@ -6,10 +6,15 @@ import {
   auditFindings,
   buildFindingsPrompt,
   parseModelJsonArray,
+  ensureAnalysisData,
 } from "@gladlog/analysis";
 import { readFileSync, writeFileSync } from "fs";
 
 import { healerOwnerMenu, parseLogCombats } from "../src/corpus/candidateMenu";
+
+// Prompt builders read the background-loaded talent / spell-name tables
+// (data/ensure.ts contract) — without this the first combats are degraded.
+await ensureAnalysisData();
 
 const argv = process.argv.slice(2);
 const logPath = argv[argv.indexOf("--log") + 1]!;

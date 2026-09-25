@@ -21,6 +21,7 @@ import {
   extractCandidateFindings,
   isHealerSpec,
   specToString,
+  ensureAnalysisData,
 } from "@gladlog/analysis";
 import { CombatUnitReaction } from "@gladlog/parser-compat";
 
@@ -94,6 +95,7 @@ function classify(raw: string): string {
 }
 
 async function main() {
+  await ensureAnalysisData();
   const backend = (process.argv[2] ?? "claudeCli") as "claudeCli" | "agy";
   const rounds = Number(process.argv[3] ?? 2);
   const model = backend === "agy" ? "flash" : AI_DEFAULT_MODEL.claudeCli;

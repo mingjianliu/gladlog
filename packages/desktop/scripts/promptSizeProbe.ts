@@ -23,10 +23,14 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-import { buildMatchContext } from "@gladlog/analysis";
+import { buildMatchContext, ensureAnalysisData } from "@gladlog/analysis";
 
 import { resolveOwner } from "../src/renderer/src/report/derive/analysisInput";
 import { toLegacySafe } from "../src/renderer/src/report/derive/legacySource";
+
+// Prompt builders read the background-loaded talent / spell-name tables
+// (data/ensure.ts contract) — without this the first combats are degraded.
+await ensureAnalysisData();
 
 const MATCH_DIR =
   process.env["GLADLOG_MATCH_DIR"] ??

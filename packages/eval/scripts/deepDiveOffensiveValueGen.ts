@@ -22,7 +22,12 @@ import {
   hasOffensiveCoachableSignal,
   specToString,
   type Finding,
+  ensureAnalysisData,
 } from "@gladlog/analysis";
+
+// Prompt builders read the background-loaded talent / spell-name tables
+// (data/ensure.ts contract) — without this the first combats are degraded.
+await ensureAnalysisData();
 
 const OFFENSIVE = new Set([
   "unconverted-burst",

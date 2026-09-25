@@ -21,6 +21,7 @@ import {
   extractCandidateFindings,
   parseRawStreams,
   specToString,
+  ensureAnalysisData,
 } from "@gladlog/analysis";
 import { createAnalysisService } from "../src/main/analysis";
 import { resolveOwner } from "../src/renderer/src/report/derive/analysisInput";
@@ -41,6 +42,7 @@ function pickSource(doc: any, roundSeq: number | undefined): unknown {
 }
 
 async function main() {
+  await ensureAnalysisData();
   const ids = process.argv.slice(2);
   if (ids.length === 0) {
     console.error("usage: headlessAnalyze.ts <matchId>[#roundSeq] ...");

@@ -26,6 +26,7 @@ import {
   specToString,
   isHealerSpec,
   enemyCompArchetype,
+  ensureAnalysisData,
 } from "@gladlog/analysis";
 import { createAnalysisService } from "../src/main/analysis";
 import { createCompareService } from "../src/main/compare";
@@ -155,8 +156,7 @@ async function deriveInputs() {
   const friends = players.filter((u: any) => u.reaction === healer.reaction);
   const archetype = enemyCompArchetype(enemies);
   const candidates = extractCandidateFindings(round);
-  const richContext = buildMatchContext(round, friends, enemies, {
-  });
+  const richContext = buildMatchContext(round, friends, enemies, {});
   const metrics = computeHealerMetrics(round, healer.name);
   const talents = (healer.info?.talents ?? [])
     .map((t: any) => t.id1)
@@ -340,6 +340,7 @@ async function local() {
 }
 
 async function main() {
+  await ensureAnalysisData();
   console.log(`\n=== SP-A/SP-B2 smoke (MODE=${MODE}) ===`);
   if (MODE === "dump") return dump();
   if (MODE === "replay") return replay();

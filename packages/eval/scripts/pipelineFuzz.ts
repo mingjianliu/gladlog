@@ -25,6 +25,7 @@ import {
   computeHealerMetrics,
   extractCandidateFindings,
   isHealerSpec,
+  ensureAnalysisData,
 } from "@gladlog/analysis";
 import { downloadLogText, fetchDetailedStubs } from "@gladlog/corpus-tools";
 import { GladLogParser } from "@gladlog/parser";
@@ -239,6 +240,7 @@ function auditCombat(
 }
 
 async function main() {
+  await ensureAnalysisData();
   const { count, run, skipHarvest, corpus } = parseArgs();
   const evalHome = resolveEvalHome();
   const logDir = corpus || defaultFuzzCorpusDir(evalHome);

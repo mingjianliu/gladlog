@@ -95,6 +95,7 @@ import {
   type CandidateEvent,
   type RawFinding,
   type RawStreams,
+  ensureAnalysisData,
 } from "@gladlog/analysis";
 
 import { resolveOwner } from "../src/renderer/src/report/derive/analysisInput";
@@ -875,6 +876,7 @@ function cmdOverlap(): void {
 // ---------------------------------------------------------------------------
 
 async function main() {
+  await ensureAnalysisData();
   const [cmd, ...rest] = process.argv.slice(2);
   const args = parseArgs(rest);
   if (cmd === "select") return cmdSelect(args);

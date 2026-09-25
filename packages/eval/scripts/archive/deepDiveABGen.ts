@@ -16,7 +16,12 @@ import {
   specToString,
   type DeepDivePack,
   type Finding,
+  ensureAnalysisData,
 } from "@gladlog/analysis";
+
+// Prompt builders read the background-loaded talent / spell-name tables
+// (data/ensure.ts contract) — without this the first combats are degraded.
+await ensureAnalysisData();
 
 const corpus = process.argv[2]!;
 const outDir = process.argv[3] ?? "/tmp/deepdive-ab";

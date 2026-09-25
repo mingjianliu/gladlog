@@ -27,6 +27,7 @@ import {
   type DispelKind,
   extractCandidateFindings,
   isHealerSpec,
+  ensureAnalysisData,
 } from "@gladlog/analysis";
 import { GladLogParser, type GladMatch } from "@gladlog/parser";
 import {
@@ -36,6 +37,10 @@ import {
 } from "@gladlog/parser-compat";
 import { readFileSync } from "fs";
 import { gunzipSync } from "zlib";
+
+// Prompt builders read the background-loaded talent / spell-name tables
+// (data/ensure.ts contract) — without this the first combats are degraded.
+await ensureAnalysisData();
 
 const argv = process.argv.slice(2);
 const emitTable = argv.includes("--emit-table");

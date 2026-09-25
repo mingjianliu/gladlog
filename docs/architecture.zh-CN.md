@@ -533,7 +533,7 @@ interface AnalysisSlot<T> {
 
 契约在 `packages/analysis/src/data/ensure.ts`:
 
-- **任何构建 prompt 的入口必须先 `await ensureAnalysisData()`。** prompt 里的法术名与天赋名不许降级,因为门规会复算渲染文本。
+- **任何构建 prompt 的入口必须先 `await ensureAnalysisData()`。** prompt 里的法术名与天赋名不许降级,因为门规会复算渲染文本。凡是能走到 prompt 构建函数的脚本都由 `packages/eval/test/ensureAnalysisDataEntrypoints.test.ts` 检查(会顺着库模块的导入往下追);2026-09-24 曾有 25 个脚本漏了这一步,导致进程里头几场的天赋冷却被悄悄降级。
 - **UI 展示路径可以不等。** 它们走兜底(日志名、空数组),下次渲染自愈。
 
 现有三个这样的入口:renderer 的 `StructuredAnalysisPanel`(有 `dataReady` 门)、`main/analysis.ts` 的深挖路径、`eval` 的语料构建器。新增第四个照抄。

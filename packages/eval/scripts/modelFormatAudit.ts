@@ -1,4 +1,3 @@
- 
 /**
  * CLI: audit of the model output's SHAPE (the findings JSON path).
  *
@@ -36,6 +35,7 @@ import {
   isHealerSpec,
   parseModelJsonArray,
   specToString,
+  ensureAnalysisData,
 } from "@gladlog/analysis";
 import { GladLogParser } from "@gladlog/parser";
 import { CombatUnitReaction, toLegacyMatch } from "@gladlog/parser-compat";
@@ -145,6 +145,7 @@ interface Row {
 }
 
 async function main() {
+  await ensureAnalysisData();
   const { count, backend, concurrency, run, corpus } = parseArgs();
   const evalHome = resolveEvalHome();
   const logDir = corpus || defaultFuzzCorpusDir(evalHome);

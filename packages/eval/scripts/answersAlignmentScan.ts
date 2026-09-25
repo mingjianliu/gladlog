@@ -27,6 +27,11 @@ import type {
   ReviewSession,
 } from "../src/explore/reviewTypes.js";
 import { resolveEvalHome } from "../src/evalHome.js";
+import { ensureAnalysisData } from "@gladlog/analysis";
+
+// Prompt builders read the background-loaded talent / spell-name tables
+// (data/ensure.ts contract) — without this the first combats are degraded.
+await ensureAnalysisData();
 
 const { values } = parseArgs({
   options: {

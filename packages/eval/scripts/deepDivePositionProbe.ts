@@ -20,10 +20,15 @@ import {
   analyzePlayerCCAndTrinket,
   specToString,
   type Finding,
+  ensureAnalysisData,
 } from "@gladlog/analysis";
 // Not exported from index (this is an investigation probe; the production API
 // will not be changed for it): import via the deep source path.
 import { computeOwnerPositionEvents } from "@gladlog/analysis/src/utils/positionAnalysis";
+
+// Prompt builders read the background-loaded talent / spell-name tables
+// (data/ensure.ts contract) — without this the first combats are degraded.
+await ensureAnalysisData();
 
 const PACK_BEFORE = 30;
 const PACK_AFTER = 10;

@@ -9,20 +9,26 @@ import {
   type Finding,
   isHealerSpec,
   specToString,
+  ensureAnalysisData,
 } from "@gladlog/analysis";
 import { GladLogParser, type GladMatch } from "@gladlog/parser";
-import { CombatUnitReaction,toLegacyMatch } from "@gladlog/parser-compat";
+import { CombatUnitReaction, toLegacyMatch } from "@gladlog/parser-compat";
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 
 import { resolveEvalHome } from "../../src/evalHome";
+
+// Prompt builders read the background-loaded talent / spell-name tables
+// (data/ensure.ts contract) — without this the first combats are degraded.
+await ensureAnalysisData();
 
 // Corpus directory resolved from $GLADLOG_EVAL_HOME (never a hardcoded
 // absolute path); --corpus <dir> overrides it.
 const argv = process.argv.slice(2);
 const cIdx = argv.indexOf("--corpus");
 const positional = argv.filter(
-  (a, i) => !a.startsWith("--") && !(cIdx >= 0 && (i === cIdx || i === cIdx + 1)),
+  (a, i) =>
+    !a.startsWith("--") && !(cIdx >= 0 && (i === cIdx || i === cIdx + 1)),
 );
 const dir =
   cIdx >= 0 ? argv[cIdx + 1]! : join(resolveEvalHome(), "corpus", "public-dps");

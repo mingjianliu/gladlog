@@ -9,13 +9,18 @@ import {
   extractCandidateFindings,
   type Finding,
   isHealerSpec,
+  ensureAnalysisData,
 } from "@gladlog/analysis";
 import { GladLogParser, type GladMatch } from "@gladlog/parser";
-import { CombatUnitReaction,toLegacyMatch } from "@gladlog/parser-compat";
+import { CombatUnitReaction, toLegacyMatch } from "@gladlog/parser-compat";
 import { readdirSync, readFileSync } from "fs";
 import { join } from "path";
 
 import { resolveEvalHome } from "../../src/evalHome";
+
+// Prompt builders read the background-loaded talent / spell-name tables
+// (data/ensure.ts contract) — without this the first combats are degraded.
+await ensureAnalysisData();
 
 // Corpus directory resolved from $GLADLOG_EVAL_HOME (never a hardcoded
 // absolute path); --corpus <dir> overrides it.

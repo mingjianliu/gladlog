@@ -17,6 +17,7 @@
  */
 import { resolveEvalHome, runDir } from "../src/evalHome";
 import { runCheck, runSynthesize } from "../src/quality/hindsightScan";
+import { ensureAnalysisData } from "@gladlog/analysis";
 
 function arg(flag: string): string | undefined {
   const i = process.argv.indexOf(flag);
@@ -24,6 +25,7 @@ function arg(flag: string): string | undefined {
 }
 
 async function main() {
+  await ensureAnalysisData();
   if (process.argv.includes("--synthesize")) {
     const runId = arg("--run");
     const manifestPath = arg("--manifest");

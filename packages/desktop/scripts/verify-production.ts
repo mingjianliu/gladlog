@@ -23,6 +23,7 @@ import {
   parseModelJsonArray,
   specToString,
   type RawFinding,
+  ensureAnalysisData,
 } from "@gladlog/analysis";
 
 import { resolveOwner } from "../src/renderer/src/report/derive/analysisInput";
@@ -66,6 +67,7 @@ function buildInput(source: unknown) {
 }
 
 async function main() {
+  await ensureAnalysisData();
   const n = Number(process.argv[2] ?? 6);
   const index = readFileSync(join(MATCH_DIR, "_index.ndjson"), "utf-8")
     .trim()

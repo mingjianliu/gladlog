@@ -5,13 +5,21 @@
 // candidates land in the last third; after death-setup shipped, the menu went
 // from avg 5.7 to 6.3 per match (38 chain candidates over 60 matches:
 // healer-locked 25 / trinket-early 8 / defensive-early 5).
-import { extractCandidateFindings, isHealerSpec } from "@gladlog/analysis";
+import {
+  extractCandidateFindings,
+  isHealerSpec,
+  ensureAnalysisData,
+} from "@gladlog/analysis";
 import { GladLogParser, type GladMatch } from "@gladlog/parser";
-import { CombatUnitReaction,toLegacyMatch } from "@gladlog/parser-compat";
+import { CombatUnitReaction, toLegacyMatch } from "@gladlog/parser-compat";
 import { readdirSync, readFileSync } from "fs";
 import { join } from "path";
 
 import { resolveEvalHome } from "../src/evalHome";
+
+// Prompt builders read the background-loaded talent / spell-name tables
+// (data/ensure.ts contract) — without this the first combats are degraded.
+await ensureAnalysisData();
 
 // With --manifest <file>, read the logs listed in that manifest instead (e.g.
 // the A3 coverage manifest → a healer-perspective corpus); the default is
@@ -21,9 +29,7 @@ const argv = process.argv.slice(2);
 const mIdx = argv.indexOf("--manifest");
 const cIdx = argv.indexOf("--corpus");
 const dir =
-  cIdx >= 0
-    ? argv[cIdx + 1]!
-    : join(resolveEvalHome(), "corpus", "public-dps");
+  cIdx >= 0 ? argv[cIdx + 1]! : join(resolveEvalHome(), "corpus", "public-dps");
 const files: string[] =
   mIdx >= 0
     ? readFileSync(argv[mIdx + 1]!, "utf8")
@@ -53,8 +59,7 @@ for (const f of files) {
   const parser = new GladLogParser();
   const items: GladMatch[] = [];
   parser.on("match", (m: GladMatch) => items.push(m));
-  for (const line of readFileSync(f, "utf8").split("\n"))
-    parser.push(line);
+  for (const line of readFileSync(f, "utf8").split("\n")) parser.push(line);
   parser.end();
   for (const m of items) {
     try {

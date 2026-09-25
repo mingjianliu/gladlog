@@ -533,7 +533,7 @@ Generated data modules follow the same rule: `spellIconsGenerated.ts` and `spell
 
 The contract (`packages/analysis/src/data/ensure.ts`):
 
-- **Any entry point that builds a prompt must `await ensureAnalysisData()` first.** Spell and talent names in a prompt may not degrade, because the verification gates re-parse the rendered text.
+- **Any entry point that builds a prompt must `await ensureAnalysisData()` first.** Spell and talent names in a prompt may not degrade, because the verification gates re-parse the rendered text. Every script that reaches a prompt builder is checked by `packages/eval/test/ensureAnalysisDataEntrypoints.test.ts` (it follows imports through library modules); on 2026-09-24 25 scripts had skipped it and silently degraded talent cooldowns in their first combats.
 - **UI display paths may skip the await.** They fall back (log name, empty array) and self-heal on the next render.
 
 There are three such entry points today: the renderer's `StructuredAnalysisPanel` (behind a `dataReady` gate), `main/analysis.ts`'s deep-dive path, and `eval`'s corpus builder. Add a fourth the same way.

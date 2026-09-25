@@ -67,6 +67,7 @@ import {
   LEGACY_TOPIC_TYPES,
   parseModelJsonArray,
   type RawFinding,
+  ensureAnalysisData,
 } from "@gladlog/analysis";
 
 import { seededShuffle } from "../../eval/src/explore/buildSession";
@@ -603,6 +604,7 @@ function readSafe(p: string): string | null {
 // ---------------------------------------------------------------------------
 
 async function main() {
+  await ensureAnalysisData();
   const [cmd, ...rest] = process.argv.slice(2);
   const args = parseArgs(rest);
   if (cmd === "select") return cmdSelect(args);

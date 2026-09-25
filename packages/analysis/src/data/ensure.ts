@@ -12,9 +12,14 @@ import { ensureHeroTalents } from "../utils/talents";
  * gate recomputes the rendered text). UI display paths need not wait (they
  * fall back to logName / empty arrays and heal themselves on the next render
  * after loading completes).
- * There are three entry points today: the renderer's StructuredAnalysisPanel
- * (via the dataReady gate), main's deepenInner, and eval's buildCorpus. Any
- * new entry point copies this. */
+ * Degradation is not only cosmetic: without the talent table the roster loses
+ * talent cooldown modifiers and replacement abilities (2026-09-24: Divine
+ * Shield rendered 300 s instead of 210 s, phantom charges, six abilities
+ * missing).
+ * App entry points: the renderer's StructuredAnalysisPanel (via the dataReady
+ * gate) and main's deepenInner / analysis service. Scripts: every file under a
+ * `scripts/` directory that reaches a prompt builder — enforced by
+ * packages/eval/test/ensureAnalysisDataEntrypoints.test.ts. */
 export async function ensureAnalysisData(): Promise<void> {
   await Promise.all([
     ensureSpellNames(),

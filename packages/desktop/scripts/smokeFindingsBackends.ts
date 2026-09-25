@@ -75,6 +75,7 @@ import {
   specToString,
   type CandidateEvent,
   type RawFinding,
+  ensureAnalysisData,
 } from "@gladlog/analysis";
 
 import { resolveOwner } from "../src/renderer/src/report/derive/analysisInput";
@@ -271,6 +272,7 @@ async function callOnce(
 }
 
 async function main() {
+  await ensureAnalysisData();
   const { backend, matches: n } = parseArgs(process.argv.slice(2));
   const probe = await probeBackend(backend);
   if (!probe.ok) {
