@@ -133,3 +133,86 @@ describe("cd-hoarded: a major wall already up at the crossing (A2 ii)", () => {
     expect(cdHoardedEvents([src(undefined)], [tranq], OWNER)).toHaveLength(1);
   });
 });
+
+describe("cd-hoarded: the press must reach THIS crisis unit (A2 step 2, user ruling 2026-09-24 「加」)", () => {
+  const bop = (casts: { timeSeconds: number; targetName?: string }[]) => ({
+    spellId: "1022",
+    spellName: "Blessing of Protection",
+    tag: "Defensive",
+    cooldownSeconds: 300,
+    casts,
+    neverUsed: casts.length === 0,
+  });
+  const OTHER = "Other-R";
+
+  it("an external on ANOTHER teammate does not answer this teammate's crisis — and the line says where it went (user ruling 2026-09-25)", () => {
+    const evts = cdHoardedEvents(
+      [{ crisisUnit: MATE, own: false, points: [point()] }],
+      [tranq, bop([{ timeSeconds: 24, targetName: OTHER }])],
+      OWNER,
+    );
+    expect(evts).toHaveLength(1);
+    expect(evts[0]!.facts["spentElsewhere"]).toBe(
+      "Blessing of Protection → Other-R +1.0s",
+    );
+  });
+
+  it("no save went elsewhere → no spentElsewhere fact", () => {
+    const evts = cdHoardedEvents(
+      [{ crisisUnit: MATE, own: false, points: [point()] }],
+      [tranq],
+      OWNER,
+    );
+    expect(evts[0]!.facts["spentElsewhere"]).toBeUndefined();
+  });
+
+  it("the same external on the crisis unit answers it", () => {
+    expect(
+      cdHoardedEvents(
+        [{ crisisUnit: MATE, own: false, points: [point()] }],
+        [tranq, bop([{ timeSeconds: 24, targetName: MATE.name }])],
+        OWNER,
+      ),
+    ).toEqual([]);
+  });
+
+  it("a press with no named target (self / group effect) still answers", () => {
+    expect(
+      cdHoardedEvents(
+        [{ crisisUnit: MATE, own: false, points: [point()] }],
+        [tranq, bop([{ timeSeconds: 24 }])],
+        OWNER,
+      ),
+    ).toEqual([]);
+  });
+
+  it("a SELF-only wall answers the owner's own crisis even when the log names an enemy as its cast target (Obsidian Scales / Touch of Karma)", () => {
+    const scales = {
+      spellId: "363916",
+      spellName: "Obsidian Scales",
+      tag: "Defensive",
+      cooldownSeconds: 90,
+      casts: [{ timeSeconds: 24, targetName: "Enemy-R" }],
+      neverUsed: false,
+    };
+    expect(
+      cdHoardedEvents(
+        [{ crisisUnit: OWNER, own: true, points: [point()] }],
+        [{ ...tranq, spellId: "642", spellName: "Divine Shield" }, scales],
+        OWNER,
+      ),
+    ).toEqual([]);
+  });
+
+  it("on the owner's own crisis, an external given to a teammate does not answer it", () => {
+    const evts = cdHoardedEvents(
+      [{ crisisUnit: OWNER, own: true, points: [point()] }],
+      [
+        { ...tranq, spellId: "642", spellName: "Divine Shield" },
+        bop([{ timeSeconds: 24, targetName: MATE.name }]),
+      ],
+      OWNER,
+    );
+    expect(evts).toHaveLength(1);
+  });
+});

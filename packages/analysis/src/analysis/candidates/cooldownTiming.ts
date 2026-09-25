@@ -1007,13 +1007,38 @@ export function cdHoardedEvents(
       // Response set (A2): every save cooldown that could help this unit,
       // pressed in the window — NOT only the ones off cooldown at tSec (see the
       // "Spent" paragraph above). The accusation set `ready` is unchanged.
+      // A2 (i b, user ruling 2026-09-24 "加"): a press only answers THIS
+      // crisis when it went to this unit. A cast the log names a target for
+      // must name the crisis unit (Blessing of Protection on the other
+      // teammate does not answer this one's crisis; nor does an external on
+      // a teammate answer the owner's own). A cast with no named target is a
+      // self or group effect (Divine Shield, Aura Mastery, Tranquility) and
+      // still counts — `helps` already kept only cooldowns that can reach
+      // this unit.
+      //
+      // Only for cooldowns that CAN go to someone else (`canHelpAnotherUnit`).
+      // A self-only wall always lands on the caster, and the log's cast
+      // target for it is whatever the player had selected — usually an enemy
+      // (Obsidian Scales → the Devastation Evoker's target, Touch of Karma →
+      // the Monk's): the first corpus run read those as "given to someone
+      // else" and produced 11 new false accusations out of 35. For those the
+      // recipient is the caster, which `helps` already restricted to the
+      // owner's own crisis.
+      const reachedThisUnit = (
+        cd: CdHoardCandidateCd,
+        c: { targetName?: string },
+      ) =>
+        !canHelpAnotherUnit(cd.spellId, cd.tag) ||
+        c.targetName === undefined ||
+        c.targetName === src.crisisUnit.name;
       const spent = ownerCds
         .filter((cd) => isSpendableDefensiveCd(cd) && helps(cd))
         .some((cd) =>
           cd.casts.some(
             (c) =>
               c.timeSeconds >= p.tSec - RESPONSE_PRE_MS / 1000 &&
-              c.timeSeconds <= p.tSec + CD_HOARD_RESPONSE_S,
+              c.timeSeconds <= p.tSec + CD_HOARD_RESPONSE_S &&
+              reachedThisUnit(cd, c),
           ),
         );
       if (spent) {
@@ -1088,6 +1113,36 @@ export function cdHoardedEvents(
           )
         : [];
       const attempted = formatAttemptedFact(failedHits);
+      // A2 step 2 (user ruling 2026-09-25 「给别人也算回应不行」): a save the
+      // owner pressed in this window on ANOTHER unit did not answer this
+      // crisis — but it WAS pressed, so the line says where it went, or the
+      // model reads "ready" as "held the whole time".
+      const spentElsewhere = ownerCds
+        .filter(
+          (cd) =>
+            isSpendableDefensiveCd(cd) &&
+            canHelpAnotherUnit(cd.spellId, cd.tag),
+        )
+        .flatMap((cd) =>
+          cd.casts
+            .filter(
+              (c) =>
+                c.timeSeconds >= windowFromS &&
+                c.timeSeconds <= windowToS &&
+                c.targetName !== undefined &&
+                c.targetName !== crisisUnit.name,
+            )
+            .map((c) => {
+              const dt = c.timeSeconds - point.tSec;
+              return {
+                at: c.timeSeconds,
+                text: `${cd.spellName} → ${c.targetName} ${dt >= 0 ? "+" : ""}${dt.toFixed(1)}s`,
+              };
+            }),
+        )
+        .sort((a, b) => a.at - b.at)
+        .map((x) => x.text)
+        .join("; ");
       return {
         id: `cd-hoarded:${owner.id}:${crisisUnit.id}:${t}`,
         type: "cd-hoarded",
@@ -1109,6 +1164,7 @@ export function cdHoardedEvents(
           own: own ? "yes" : "no",
           ...CD_HOARDED_OUTCOME_REF,
           ...(attempted ? { attempted } : {}),
+          ...(spentElsewhere ? { spentElsewhere } : {}),
         },
       };
     })
