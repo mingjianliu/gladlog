@@ -926,4 +926,15 @@
 //  sat on a rendered [CC ON ENEMY] of their own attacker; 17 fell under the
 //  3 s door once boundary seconds were excluded), deaths with a line
 //  196 → 176; both gates 0; candidates unchanged.
-export const PROMPT_VERSION = 118;
+//  v119 (2026-09-24, found by the GH #77 CC USE gate): a CC / root /
+//  disarm with no REMOVED event was closed at the match end — a pre-gate Sap
+//  rendered "(276s)", a Holy Word: Chastise "(8s)", a Freezing Trap "(55s)".
+//  Now closed at the CC's full duration for that caster
+//  (ccFullDurationForCaster), never later than the match end — the cap
+//  buildAuraIntervals already applied. 605 files: 47 of 3,520 contexts
+//  change — 44 [CC ON ENEMY] durations, 28 [CONSEQ] spans re-measured (e.g.
+//  "Freezing Trap for 55s … low 45 %" → "for 6s … low 83 %"), 18
+//  [ENEMY TRINKET] "out of" attributions (a trinket at 0:59 is out of the
+//  Psychic Scream, not the phantom Sap); findings byte-identical, every
+//  gate 0.
+export const PROMPT_VERSION = 119;

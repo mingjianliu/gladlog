@@ -40,6 +40,7 @@ import {
   INTERP_MAX_GAP_MS,
   LOS_SWEEP_GAP_MS,
 } from "./positionSampling";
+import { ccFullDurationForCaster } from "./ccDuration";
 import { fmtTime } from "./renderGrid";
 import { getTalentAvoidanceBuffs } from "./talentBehaviors";
 import { hardcastHealSpell } from "../data/kickPriorityHealSpells";
@@ -922,7 +923,18 @@ export function analyzePlayerCCAndTrinket(
     }
   }
 
-  // Close any CCs still pending at match end
+  // Close any CCs still pending at match end — at the CC's full duration for
+  // that caster when it is known, never later than the match end. Closing at
+  // combat.endTime alone rendered a pre-gate Sap with no REMOVED event as
+  // "(276s)" (the GH #77 CC USE gate caught it, 2026-09-24); buildAuraIntervals
+  // already caps its missing-REMOVED intervals by duration the same way.
+  const pendingEnd = (spellId: string, srcUnitId: string, applyMs: number) => {
+    const caster = [...enemies, ...enemyPets].find((u) => u.id === srcUnitId);
+    const full = ccFullDurationForCaster(spellId, caster);
+    return full === undefined
+      ? combat.endTime
+      : Math.min(combat.endTime, applyMs + full * 1000);
+  };
   Array.from(pendingCC.entries()).forEach(([ccKey, pending]) => {
     const [pendingSpellId] = ccKey.split(":");
     ccWindows.push({
@@ -931,7 +943,7 @@ export function analyzePlayerCCAndTrinket(
       srcName: pending.srcName,
       srcUnitId: pending.srcUnitId,
       applyMs: pending.applyMs,
-      removeMs: combat.endTime,
+      removeMs: pendingEnd(pendingSpellId, pending.srcUnitId, pending.applyMs),
     });
   });
 
@@ -943,7 +955,7 @@ export function analyzePlayerCCAndTrinket(
       srcId: p.srcId,
       srcName: p.srcName,
       applyMs: p.applyMs,
-      removeMs: combat.endTime,
+      removeMs: pendingEnd(pendingSpellId, p.srcId, p.applyMs),
     });
   }
   for (const [key, p] of pendingDisarm) {
@@ -954,7 +966,7 @@ export function analyzePlayerCCAndTrinket(
       srcId: p.srcId,
       srcName: p.srcName,
       applyMs: p.applyMs,
-      removeMs: combat.endTime,
+      removeMs: pendingEnd(pendingSpellId, p.srcId, p.applyMs),
     });
   }
 

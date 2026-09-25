@@ -673,7 +673,10 @@ describe("analyzePlayerCCAndTrinket — edge cases and corner branches", () => {
     );
 
     expect(result.ccInstances).toHaveLength(1);
-    expect(result.ccInstances[0].durationSeconds).toBe(290); // (1,300,000 - 1,010,000) / 1000
+    // Closed at HoJ's full duration (5 s), not at match end (290 s) — a CC
+    // with no REMOVED event cannot outlast its own duration (GH #77 gate
+    // finding, 2026-09-24).
+    expect(result.ccInstances[0].durationSeconds).toBe(5);
   });
 
   it("tracks roots/disarms broken by damage or spell", () => {
@@ -2358,5 +2361,35 @@ describe("GH #105: a landed CC is never also 'avoided'", () => {
     const result = analyzePlayerCCAndTrinket(player, [enemy], makeCombat());
     expect(result.ccInstances.map((c) => c.spellId)).toContain("6789");
     expect(result.ccAvoidedInstances).toHaveLength(0);
+  });
+});
+
+describe("a CC with no REMOVED event closes at its full duration, not at match end (GH #77 gate finding)", () => {
+  const MATCH_START = 1_000_000;
+  it("Polymorph applied at 10 s, never removed, 300 s match → 6 s, not 290 s", () => {
+    const player = makeUnit("player-1", {
+      auraEvents: [
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          "118",
+          MATCH_START + 10_000,
+          "enemy-1",
+          "player-1",
+        ),
+      ],
+    });
+    const enemy = makeUnit("enemy-1", {
+      name: "EnemyA",
+      reaction: CombatUnitReaction.Hostile,
+      spec: CombatUnitSpec.Mage_Frost,
+    });
+    const result = analyzePlayerCCAndTrinket(player, [enemy], {
+      startTime: MATCH_START,
+      endTime: MATCH_START + 300_000,
+      startInfo: { zoneId: "1672" },
+    } as any);
+    const poly = result.ccInstances.find((c) => c.spellId === "118");
+    expect(poly).toBeDefined();
+    expect(poly!.durationSeconds).toBeCloseTo(6, 5);
   });
 });
