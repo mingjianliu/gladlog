@@ -35,9 +35,10 @@ import {
   extractMajorCooldowns,
   type IDamageBucket,
   isHealerSpec,
+  isMeleeSpec,
 } from "../utils/cooldowns";
 import { fmtTime } from "../utils/renderGrid";
-import { isInstantCast } from "../utils/spellMechanics";
+import { ccMechanicOf, isInstantCast } from "../utils/spellMechanics";
 import { DMG_SPIKE_THRESHOLD } from "./timelineHelpers";
 
 /** A bookmark needs at least this many consecutive passing whole seconds. */
@@ -47,6 +48,8 @@ export const CC_USE_MIN_S = 5;
 export const CC_USE_MIN_SHARE = 0.6;
 /** At most this many bookmarks per round (the longest, shown in time order). */
 export const CC_USE_CAP = 2;
+/** DB2 SpellMechanic id "disarmed". */
+export const DISARM_MECHANIC = 3;
 
 export const CC_USE_SECTION_HEADER =
   "CC USE — your control cooldowns this round. `cast N×` counts completed casts. A [CC BOOKMARK] marks a moment worth a look, not a missed cast: on every second of its span the CC was ready and not cast, you were not CC'd or in a casting lockout, and the named enemy was in range, with no detected LoS obstruction, not CC'd, not immune, at Full DR, and with no known ready self-breaker of their own. The distance, DR and trinket state after `at m:ss` are as of the span's first second. Enemy dispels are not considered, and nothing here says whether casting was the better play — or whether you had a free global then: say \"you weren't CC'd\", never \"you were free\". Use a bookmark only to point the player at that moment, in your own words; never say they should have cast it, never count it as a mistake, and never judge the player as passive or aggressive from the counts.";
@@ -108,8 +111,11 @@ export function ccUseSummary(params: {
   const start = combat.startTime;
   let cds: ReturnType<typeof extractMajorCooldowns> = [];
   try {
-    cds = extractMajorCooldowns(owner, combat).filter((cd) =>
-      ccSpellIds.has(cd.spellId),
+    // W1g (reliability round 2, user ruling 2026-09-25): every control
+    // cooldown in the owner's kit — the roster's Control tag (disarms, grips,
+    // traps, totems included) as well as the hard-CC set.
+    cds = extractMajorCooldowns(owner, combat).filter(
+      (cd) => cd.tag === "Control" || ccSpellIds.has(cd.spellId),
     );
   } catch {
     return { counts: [], bookmarks: [] };
@@ -146,7 +152,11 @@ export function ccUseSummary(params: {
         enemyCC.find((x) => x.playerName === name)?.ccInstances ?? [],
     });
     if (!sampler) continue;
+    // User ruling 2026-09-25: a disarm is only worth a look against a melee
+    // target (official mechanic 3 = disarmed).
+    const isDisarm = ccMechanicOf(cd.spellId) === DISARM_MECHANIC;
     const scan = (target: ICombatUnit, fromS: number, toS: number) => {
+      if (isDisarm && !isMeleeSpec(target.spec)) return [];
       const secs: number[] = [];
       const facts = new Map<number, { dist: number; dr: string }>();
       for (let s = Math.ceil(fromS); s <= Math.floor(toS); s++) {

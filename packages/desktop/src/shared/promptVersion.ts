@@ -9,14 +9,6 @@
  *  Full history in docs/prompt-version-history.md (append new entries there);
  *  the last few entries stay inline so a reader sees the format:
  *
- *  v151 (2026-09-25, GH #113): kick-eaten reads both sides' pressure during
- *  the lockout (kickPressure.ts) — lowest unit at or below the crisis line,
- *  first death up to 5 s after, the other side's offensive cooldowns running —
- *  and, when neither side was pressed, which of our offensive cooldowns were
- *  ready; a kick with both sides calm and no burst ready is not listed. 605
- *  files: kick-eaten dps 1030 → 998, healer 506 → 475 (other types and the
- *  match context byte-identical); 560 new HP facts, 241 with a same-second
- *  [STATE] tick, 0 mismatches.
  *  v152 (2026-09-25, reliability round 3 W1k): a kick after an officially
  *  channelled spell (DB2 SpellMisc "Is Channelled") had gone out is a channel
  *  kick — kick-eaten carries phase=channel + channelS instead of a clamped
@@ -33,5 +25,13 @@
  *  healer 10 → 12 (57 stayed-in), burst-into-mitigation dps 35 → 44 (all
  *  Avenging Wrath), missed-cleanse −4 (the 08-19 timing gate now sees the
  *  burst), cd-hoarded 9 swapped; [ENEMY CD] Avenging Wrath lines appear.
+ *  v154 (2026-09-26, reliability round 2 W1g): control cooldowns enter the
+ *  ledger by their CAST id (Freezing Trap, Binding Shot, Intimidation,
+ *  Blinding Light, Capacitor Totem, Ring of Frost were listed by aura id and
+ *  never admitted) and 14 missing control cooldowns are listed; an unmapped
+ *  cast's DR is "n/a", never "Full"; CC USE counts every Control cooldown, a
+ *  disarm only on a melee target (user 2026-09-25). 605 files at 9a39c98c:
+ *  menu identical; 3,418 contexts change (loadouts / [RES] / cast lines gain
+ *  the control kit); [CC BOOKMARK] 412 → 733; context gates 0 → 0.
  */
-export const PROMPT_VERSION = 153;
+export const PROMPT_VERSION = 154;

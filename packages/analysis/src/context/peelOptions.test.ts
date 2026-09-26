@@ -160,9 +160,17 @@ describe("peelOptionsForDeaths (GH #77)", () => {
     };
     const rage = (s: number) =>
       makeSpellCastEvent("18499", at(s), "e1", "Attacker", "e1", "Attacker");
-    expect(scenario({ ...priest, attackerCasts: [rage(2)] })).toHaveLength(0);
+    // Only the fear: a talent-less fixture priest now also owns the other
+    // Priest control cooldowns in the roster (W1g added Void Nova).
+    const scream = (out: ReturnType<typeof scenario>) =>
+      out.filter((o) => o.spellId === "8122");
+    expect(
+      scream(scenario({ ...priest, attackerCasts: [rage(2)] })),
+    ).toHaveLength(0);
     // Cast at 65 s: on cooldown for the whole window
-    expect(scenario({ ...priest, attackerCasts: [rage(65)] })).toHaveLength(1);
+    expect(
+      scream(scenario({ ...priest, attackerCasts: [rage(65)] })),
+    ).toHaveLength(1);
   });
 
   it("measures a targeted CC by its cast range, not range + splash radius (Storm Bolt 20 yd + 10 yd splash)", () => {
@@ -207,4 +215,3 @@ describe("peelOptionsForDeaths (GH #77)", () => {
     expect(out.some((o) => o.spellId === "115078")).toBe(true);
   });
 });
-

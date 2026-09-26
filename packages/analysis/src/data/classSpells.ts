@@ -50,6 +50,8 @@ export const classMetadata: IClassSpellMetadata[] = [
       a("227847", "Bladestorm", O),
       a("46968", "Shockwave", C),
       a("107570", "Storm Bolt", C),
+      a("5246", "Intimidating Shout", C), // W1g 2026-09-25: control kit a player cast in the corpus (DB2 control mechanic, ≥ 30 s cooldown) that no roster listed
+      a("236077", "Disarm", C),
     ],
   },
   {
@@ -67,7 +69,7 @@ export const classMetadata: IClassSpellMetadata[] = [
       a("31884", "Avenging Wrath", O),
       a("231895", "Crusade", O),
       a("853", "Hammer of Justice", C),
-      a("105421", "Blinding Light", C),
+      a("115750", "Blinding Light", C), // W1g 2026-09-25: cast id (was the aura id, which is never cast — the ledger's cast-evidence gate never admitted it)
     ],
   },
   {
@@ -83,10 +85,12 @@ export const classMetadata: IClassSpellMetadata[] = [
       a("288613", "Trueshot", O),
       a("266779", "Coordinated Assault", O),
       a("359844", "Call of the Wild", O),
-      a("3355", "Freezing Trap", C),
-      a("24394", "Intimidation", C),
-      a("117526", "Binding Shot", C),
+      a("187650", "Freezing Trap", C), // W1g 2026-09-25: cast id (was the aura id, which is never cast — the ledger's cast-evidence gate never admitted it)
+      a("19577", "Intimidation", C), // W1g 2026-09-25: cast id (was the aura id, which is never cast — the ledger's cast-evidence gate never admitted it)
+      a("474421", "Intimidation", C), // W1g: the 12.x id, 300 casts on 303 files next to 19577's 556
+      a("109248", "Binding Shot", C), // W1g 2026-09-25: cast id (was the aura id, which is never cast — the ledger's cast-evidence gate never admitted it)
       a("213691", "Scatter Shot", C),
+      a("407028", "Sticky Tar Bomb", C), // W1g 2026-09-25: control kit a player cast in the corpus (DB2 control mechanic, ≥ 30 s cooldown) that no roster listed
     ],
   },
   {
@@ -107,6 +111,7 @@ export const classMetadata: IClassSpellMetadata[] = [
       a("408", "Kidney Shot", C),
       a("1833", "Cheap Shot", C),
       a("1776", "Gouge", C),
+      a("207777", "Dismantle", C), // W1g 2026-09-25: control kit a player cast in the corpus (DB2 control mechanic, ≥ 30 s cooldown) that no roster listed
     ],
   },
   {
@@ -128,6 +133,7 @@ export const classMetadata: IClassSpellMetadata[] = [
       a("8122", "Psychic Scream", C),
       a("605", "Mind Control", C),
       a("9484", "Shackle Undead", C),
+      a("1234195", "Void Nova", C), // W1g 2026-09-25: control kit a player cast in the corpus (DB2 control mechanic, ≥ 30 s cooldown) that no roster listed
     ],
   },
   {
@@ -147,6 +153,7 @@ export const classMetadata: IClassSpellMetadata[] = [
       a("207289", "Unholy Assault", O),
       a("221562", "Asphyxiate", C),
       a("207167", "Blinding Sleet", C),
+      a("389794", "Snowdrift", C), // W1g 2026-09-25: control kit a player cast in the corpus (DB2 control mechanic, ≥ 30 s cooldown) that no roster listed
     ],
   },
   {
@@ -161,7 +168,8 @@ export const classMetadata: IClassSpellMetadata[] = [
       a("114050", "Ascendance", O),
       a("114051", "Ascendance", O),
       a("51514", "Hex", C),
-      a("118905", "Static Charge", C),
+      a("305483", "Lightning Lasso", C), // W1g 2026-09-25: control kit a player cast in the corpus (DB2 control mechanic, ≥ 30 s cooldown) that no roster listed
+      a("192058", "Capacitor Totem", C), // W1g 2026-09-25: cast id (was the aura id, which is never cast — the ledger's cast-evidence gate never admitted it)
     ],
   },
   {
@@ -177,7 +185,7 @@ export const classMetadata: IClassSpellMetadata[] = [
       a("365350", "Arcane Surge", O),
       a("118", "Polymorph", C),
       a("31661", "Dragon's Breath", C),
-      a("82691", "Ring of Frost", C),
+      a("113724", "Ring of Frost", C), // W1g 2026-09-25: cast id (was the aura id, which is never cast — the ledger's cast-evidence gate never admitted it)
     ],
   },
   {
@@ -215,6 +223,8 @@ export const classMetadata: IClassSpellMetadata[] = [
       a("1249625", "Zenith", O),
       a("119381", "Leg Sweep", C),
       a("115078", "Paralysis", C),
+      a("233759", "Grapple Weapon", C), // W1g 2026-09-25: control kit a player cast in the corpus (DB2 control mechanic, ≥ 30 s cooldown) that no roster listed
+      a("198898", "Song of Chi-Ji", C),
     ],
   },
   {
@@ -239,6 +249,8 @@ export const classMetadata: IClassSpellMetadata[] = [
       a("99", "Incapacitating Roar", C),
       a("5211", "Mighty Bash", C),
       a("2637", "Hibernate", C),
+      a("22570", "Maim", C), // W1g 2026-09-25: control kit a player cast in the corpus (DB2 control mechanic, ≥ 30 s cooldown) that no roster listed
+      a("209749", "Faerie Swarm", C),
     ],
   },
   {
@@ -253,6 +265,8 @@ export const classMetadata: IClassSpellMetadata[] = [
       a("370965", "The Hunt", O),
       a("179057", "Chaos Nova", C),
       a("217832", "Imprison", C),
+      a("207684", "Sigil of Misery", C), // W1g 2026-09-25: control kit a player cast in the corpus (DB2 control mechanic, ≥ 30 s cooldown) that no roster listed
+      a("205630", "Illidan's Grasp", C),
     ],
   },
   {

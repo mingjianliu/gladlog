@@ -1049,6 +1049,21 @@ const INDEX: PredicateRow[] = [
     mod: racialAbilities,
   },
   {
+    file: `${A}/utils/drAnalysis.ts`,
+    symbol: "drCategoryKnown",
+    mod: drAnalysis,
+  },
+  {
+    file: `${A}/utils/drAnalysis.ts`,
+    symbol: "SELF_DR_SPELL_IDS",
+    mod: drAnalysis,
+  },
+  {
+    file: `${A}/utils/drAnalysis.ts`,
+    symbol: "CC_CAST_EFFECT_AURA",
+    mod: drAnalysis,
+  },
+  {
     file: `${A}/data/spellTags.ts`,
     symbol: "officialSilenceIds",
     mod: spellTags,

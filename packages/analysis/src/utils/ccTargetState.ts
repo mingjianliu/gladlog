@@ -48,7 +48,12 @@ import {
   USABLE_WHILE_CONFUSED_SPELL_IDS,
   USABLE_WHILE_FEARED_SPELL_IDS,
 } from "./cooldowns";
-import { drCategoryOfCast, getDRCategory, getDRLevel } from "./drAnalysis";
+import {
+  drCategoryKnown,
+  drCategoryOfCast,
+  getDRCategory,
+  getDRLevel,
+} from "./drAnalysis";
 import {
   distanceBetween,
   getUnitPositionAtTime,
@@ -174,6 +179,9 @@ export function ccSamplerFor(params: {
   // The cooldown is a CAST id; the DR history below is keyed by the aura ids
   // the log applies (GH #111).
   const cat = drCategoryOfCast(cd.spellId);
+  // An unmapped cast (spell:<id> fallback, not self-DR) has no DR history to
+  // read: "n/a", never a fabricated "Full" (W1g).
+  const catKnown = drCategoryKnown(cd.spellId);
   const deathS = (u: ICombatUnit) => {
     const d = u.deathRecords[0];
     return d ? (d.timestamp - start) / 1000 : Infinity;
@@ -269,7 +277,7 @@ export function ccSamplerFor(params: {
       if (dist > reach) return { ok: false, reason: "out-of-range" };
       if (hasLineOfSight(zone, po, pt) === false)
         return { ok: false, reason: "los" };
-      const dr = cat
+      const dr = catKnown
         ? getDRLevel(
             f.drHistory.filter((h) => h.applyMs < ms),
             ms,

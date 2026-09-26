@@ -1351,3 +1351,12 @@ within 0.02 s). 605 files at ccb3db74: slow-defensive-response healer
 healer 10 → 12 (57 stayed-in), burst-into-mitigation dps 35 → 44 (all
 Avenging Wrath), missed-cleanse −4 (the 08-19 timing gate now sees the
 burst), cd-hoarded 9 swapped; [ENEMY CD] Avenging Wrath lines appear.
+
+v154 (2026-09-26, reliability round 2 W1g): control cooldowns enter the
+ledger by their CAST id (Freezing Trap, Binding Shot, Intimidation,
+Blinding Light, Capacitor Totem, Ring of Frost were listed by aura id and
+never admitted) and 14 missing control cooldowns are listed; an unmapped
+cast's DR is "n/a", never "Full"; CC USE counts every Control cooldown, a
+disarm only on a melee target (user 2026-09-25). 605 files at 9a39c98c:
+menu identical; 3,418 contexts change (loadouts / [RES] / cast lines gain
+the control kit); [CC BOOKMARK] 412 → 733; context gates 0 → 0.

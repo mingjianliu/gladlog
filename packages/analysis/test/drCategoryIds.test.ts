@@ -1,13 +1,17 @@
 import { describe, expect, it } from "vitest";
 
+import { classMetadata } from "../src/data/classSpells";
 import { DR_CATEGORIES_GENERATED } from "../src/data/drCategoriesGenerated";
 import { ccSpellIds } from "../src/data/spellTags";
+import { SpellTag } from "../src/data/spellTypes";
 import {
   DR_CATEGORY_MAP,
   drCategoryIds,
+  drCategoryKnown,
   drCategoryOfCast,
   getDRCategory,
   getDRLevel,
+  SELF_DR_SPELL_IDS,
 } from "../src/utils/drAnalysis";
 import { ccMechanicOf } from "../src/utils/spellMechanics";
 
@@ -82,15 +86,27 @@ describe("drCategoryOfCast (GH #111 — cast id → the applied aura's DR)", () 
   // drCategoryOfCast, unless it is a declared self-DR spell. A new cast/aura
   // split then fails here instead of silently reading Full DR.
   it("no CC id with a mechanic falls back to a self-DR key unless declared", () => {
-    const SELF_DR = new Set([
-      "22703", // Infernal Awakening — shares no DR family (drShareScan, 5d6347e3)
+    // W1g (2026-09-25): the roster's Control cooldowns too — CC USE / PEEL
+    // OPTION sample them by their CAST id.
+    const rosterControl = classMetadata.flatMap((c) =>
+      c.abilities
+        .filter((a) => a.tags.includes(SpellTag.Control))
+        .map((a) => a.spellId),
+    );
+    // Disarms whose disarm aura carries no DR category in the log: the
+    // samplers read them as DR "n/a" (drCategoryKnown) and never bookmark
+    // them, so no false DR claim can come of it.
+    const KNOWN_UNRESOLVED = new Set([
+      "209749", // Faerie Swarm
+      "407028", // Sticky Tar Bomb
     ]);
-    const unresolved = [...ccSpellIds].filter(
+    const unresolved = [...new Set([...ccSpellIds, ...rosterControl])].filter(
       (id) =>
         ccMechanicOf(id) !== undefined &&
-        drCategoryOfCast(id).startsWith("spell:") &&
-        !SELF_DR.has(id),
+        !drCategoryKnown(id) &&
+        !KNOWN_UNRESOLVED.has(id),
     );
     expect(unresolved).toEqual([]);
+    expect(SELF_DR_SPELL_IDS.has("22703")).toBe(true);
   });
 });

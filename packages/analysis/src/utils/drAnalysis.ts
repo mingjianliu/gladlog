@@ -355,7 +355,41 @@ export const CC_CAST_EFFECT_AURA: Readonly<Record<string, string>> = {
   "46968": "132168", // Shockwave → stun aura
   "192058": "118905", // Capacitor Totem → Static Charge
   "5782": "118699", // Fear → Fear debuff
+  // Reliability round 2 W1g (2026-09-25): the control cooldowns the roster now
+  // lists by their CAST id. Same method, every 40th file of the 08-28
+  // new-season manifest; traps / Binding Shot / Ring of Frost / Sigil of Misery
+  // measured over 30 s (they fire when stepped on), Snowdrift 10 s.
+  "187650": "3355", // Freezing Trap → Freezing Trap (962 / 1,271)
+  "109248": "117526", // Binding Shot → stun (635 / 771)
+  "19577": "24394", // Intimidation → stun (543 / 579)
+  "474421": "24394", // Intimidation (12.x id) → stun (231 / 262)
+  "115750": "105421", // Blinding Light → disorient (462 / 488)
+  "113724": "82691", // Ring of Frost → incapacitate (284 / 373)
+  "207684": "207685", // Sigil of Misery → fear (119 / 174)
+  "22570": "203123", // Maim → stun (446 / 476)
+  "305483": "305485", // Lightning Lasso → stun (196 / 220)
+  "198898": "198909", // Song of Chi-Ji → disorient (132 / 155)
+  "389794": "389831", // Snowdrift → stun (41 / 54)
 };
+
+/**
+ * Spells whose own id IS their DR family (no shared category) — the
+ * `spell:<id>` fallback is correct for them, not a missing mapping.
+ * Infernal Awakening 22703: drShareScan shows it shares no DR family
+ * (5d6347e3). Single source for the completeness test and the CC samplers.
+ */
+export const SELF_DR_SPELL_IDS: ReadonlySet<string> = new Set(["22703"]);
+
+/**
+ * Is `castSpellId`'s DR category actually known? False for a `spell:<id>`
+ * fallback that is not a declared self-DR spell — a consumer must then say
+ * nothing about DR ("n/a"), never "Full" (reliability round 2 W1g: every
+ * trap / totem / grip whose cast id was unmapped read "DR Full" forever).
+ */
+export function drCategoryKnown(castSpellId: string): boolean {
+  const cat = drCategoryOfCast(castSpellId);
+  return !cat.startsWith("spell:") || SELF_DR_SPELL_IDS.has(castSpellId);
+}
 
 /** The DR category of the CC a CAST applies — the single source for any
  * consumer that starts from a spell the player can press (a cooldown, a kit
