@@ -2032,7 +2032,13 @@ const RAW_STREAMS_REAL_LINES = [
 ];
 
 describe("谓词索引:无法共享 export 的配对,断言相等", () => {
-  it("rawStreams.splitRawLine/parseRawTimestamp 与 parser 的 splitLine/parseTimestamp 在真实 raw.txt 行上逐字节相同(结构性做不到共享 export 的镜像,BACKLOG #26 Task 1)", () => {
+  it("rawStreams 的 splitRawLine / parseRawTimestamp / mirrorDecodeAdvanced 自 2026-09-26 起就是 parser 的 splitLine / parseTimestamp / decodeAdvanced 本身(经 parser-compat 重导出,同一引用),不再是镜像", () => {
+    expect(rawStreams.splitRawLine).toBe(parserSplitLine);
+    expect(rawStreams.parseRawTimestamp).toBe(parserParseTimestamp);
+    expect(rawStreams.mirrorDecodeAdvanced).toBe(parserDecodeAdvanced);
+  });
+
+  it("rawStreams.splitRawLine/parseRawTimestamp 与 parser 的 splitLine/parseTimestamp 在真实 raw.txt 行上逐字节相同(2026-08-15 到 09-26 是镜像 + parity,现为同一引用的回归对照,BACKLOG #26 Task 1)", () => {
     for (const line of RAW_STREAMS_REAL_LINES) {
       const mine = rawStreams.splitRawLine(line);
       const theirs = parserSplitLine(line);
