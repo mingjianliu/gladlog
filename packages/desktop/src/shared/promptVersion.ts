@@ -9,11 +9,6 @@
  *  Full history in docs/prompt-version-history.md (append new entries there);
  *  the last few entries stay inline so a reader sees the format:
  *
- *  v161 (2026-09-26, sync-window table regenerated after C4 + GH #115 + W1g):
- *  full 63,303-file archive at 47f4279b (spot-checked equal at ab72caed on 600
- *  files / 1,658 windows). 107,357 → 107,358 windows; Solo Shuffle nEntered
- *  −1 / nUnentered +2, every rate and contrast unchanged to 0.1 pp; the only
- *  rendered change is the Solo Shuffle refN (50,483 → 50,484).
  *  v162 (2026-09-26, reliability round 3 wave 2, endpoint identity): POSITIONING
  *  STAYED IN names whoever each distance was measured to ("from X→Y (X Dyd at the
  *  end)" when another enemy is nearest at the end), KITED labels B as the peak
@@ -26,5 +21,11 @@
  *  same 21,101-file every-3rd archive subset: completed 7,060 → 7,327, kicked
  *  1,110 → 1,191; kill-target death within 10 s 11 % completed / 32 → 33 %
  *  kicked. The kick-priority facts quote the new rates.
+ *  v164 (2026-09-26, reliability round 3 wave 2, audit 121c): a [PEEL OPTION]
+ *  row's distance, DR and target-trinket facts are one snapshot stamped with the
+ *  span's first second ("| at m:ss: D yd, DR L[, T PvP trinket …]") — DR can reset
+ *  inside the span (52 of 744 rows on the 605-file capture). The legend says the
+ *  snapshot can change later; every counted second still passed every check.
+ *  Rows 744 → 744, nothing else moves.
  */
-export const PROMPT_VERSION = 163;
+export const PROMPT_VERSION = 164;

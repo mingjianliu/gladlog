@@ -921,8 +921,11 @@ export function checkCcAvoidedLandedConsistency(lines: string[]): string[] {
   return failures;
 }
 
+// The row marker alone decides "this is a PEEL row" — a mangled time prefix
+// must fail the full parse, not escape detection (codex astra, 121c).
+const PEEL_DATA_LINE = /\[PEEL OPTION\]/;
 const PEEL_LINE =
-  /^\s*(\d+):(\d{2})–(\d+):(\d{2})\s+\[PEEL OPTION\]\s+(\S+) (.+?) → (\S+)(?: \(the victim's own CC\))?: usable (\d+) s, not used \| [\d.]+yd, DR (\S+) \| \S+ did \d+% of (\S+)'s damage taken in the \d+ s before dying at (\d+):(\d{2})/;
+  /^\s*(\d+):(\d{2})–(\d+):(\d{2})\s+\[PEEL OPTION\]\s+(\S+) (.+?) → (\S+)(?: \(the victim's own CC\))?: usable (\d+) s, not used \| (\S+) did \d+% of (\S+)'s damage taken in the \d+ s before dying at (\d+):(\d{2}) \| at (\d+):(\d{2}): [\d.]+yd, DR (\S+?)(?:, (\S+) PvP trinket (?:ready|on cooldown))?$/;
 const FRIENDLY_DEATH_LINE =
   /^\s*(\d+):(\d{2})\s+\[DEATH\]\s+(\S+) \(.*— friendly\)/;
 const CC_ON_ENEMY_LINE =
@@ -937,6 +940,11 @@ const CC_ON_ENEMY_LINE =
  *  - no `[DEATH]` line names that victim at the stated second;
  *  - the usable span leaves the lookback window or reaches past the death;
  *  - the second count is below the door or exceeds the span;
+ *  - the line does not parse in full (every `[PEEL OPTION]` row is checked;
+ *    a reworded row used to be skipped silently);
+ *  - the damage / trinket facts name someone other than the target, or the
+ *    distance / DR snapshot is not taken at the span's first second (audit
+ *    121c: DR resets inside a span, so the snapshot carries its own time);
  *  - the DR is Immune;
  *  - a `[CC ON ENEMY]` line shows that owner landing the same-named CC on
  *    that target inside the window ("not used" would be false).
@@ -963,16 +971,30 @@ export function checkPeelOptionConsistency(lines: string[]): string[] {
   }
   const failures: string[] = [];
   lines.forEach((line, i) => {
+    if (!PEEL_DATA_LINE.test(line)) return;
     const m = line.match(PEEL_LINE);
-    if (!m) return;
+    if (!m) {
+      failures.push(
+        `line ${i + 1}: [PEEL OPTION] 格式不符(整行必须按生成格式)—— ${line.trim().slice(0, 160)}`,
+      );
+      return;
+    }
     const from = Number(m[1]) * 60 + Number(m[2]);
     const to = Number(m[3]) * 60 + Number(m[4]);
     const [owner, spell, target] = [m[5]!, m[6]!, m[7]!];
     const n = Number(m[8]);
-    const dr = m[9]!;
+    const attacker = m[9]!;
     const victim = m[10]!;
     const death = Number(m[11]) * 60 + Number(m[12]);
+    const atS = Number(m[13]) * 60 + Number(m[14]);
+    const dr = m[15]!;
+    const trinketUnit = m[16];
     const why: string[] = [];
+    if (attacker !== target)
+      why.push(`伤害占比写的是 ${attacker},不是控制目标`);
+    if (trinketUnit && trinketUnit !== target)
+      why.push(`饰品事实写的是 ${trinketUnit},不是控制目标`);
+    if (atS !== from) why.push(`at ${fmtTime(atS)} 不是时段起点`);
     if (!deaths.has(`${death}\u0000${victim}`))
       why.push(`没有 ${victim} 在 ${fmtTime(death)} 的 [DEATH] 行`);
     if (from < death - PEEL_LOOKBACK_S || to > death || from > to)
@@ -1171,8 +1193,10 @@ const FORCED_TRINKET_DATA_LINE = /^\s*\d+:\d{2}\s+\[FORCED TRINKET\]/;
 const FORCED_TRINKET_LINE =
   /^\s*(\d+):(\d{2})\s+\[FORCED TRINKET\]\s+(\S+) used PvP trinket inside your team's kill attempt \[(\d+):(\d{2})–(\d+):(\d{2})\] on them → (\d+):(\d{2}) your (.+?) landed on (\S+) (\d+) s later \((\d+)s\)$/;
 const UNIT_LEGEND_LINE = /<unit id="(\d+)" name="([^"]+)"[^>]*role="([^"]+)"/;
-const ENEMY_TRINKET_AT_LINE = /^\s*(\d+):(\d{2})\s+\[ENEMY TRINKET\]\s+(\S+) used PvP trinket/;
-const KILL_ATTEMPT_SPAN_LINE = /^\s*\[(\d+):(\d{2})–(\d+):(\d{2})\] on (\S+) — /;
+const ENEMY_TRINKET_AT_LINE =
+  /^\s*(\d+):(\d{2})\s+\[ENEMY TRINKET\]\s+(\S+) used PvP trinket/;
+const KILL_ATTEMPT_SPAN_LINE =
+  /^\s*\[(\d+):(\d{2})–(\d+):(\d{2})\] on (\S+) — /;
 
 /**
  * `[FORCED TRINKET]` quick follow-ups (33rd hardFailure class, GH #69, user
@@ -1222,7 +1246,9 @@ export function checkForcedTrinketConsistency(lines: string[]): string[] {
     count++;
     const m = line.match(FORCED_TRINKET_LINE);
     if (!m) {
-      failures.push(`line ${i + 1}: [FORCED TRINKET] 格式不符 —— ${line.trim().slice(0, 160)}`);
+      failures.push(
+        `line ${i + 1}: [FORCED TRINKET] 格式不符 —— ${line.trim().slice(0, 160)}`,
+      );
       return;
     }
     const tS = Number(m[1]) * 60 + Number(m[2]);
@@ -1236,7 +1262,8 @@ export function checkForcedTrinketConsistency(lines: string[]): string[] {
     const dur = Number(m[13]);
     const why: string[] = [];
     if (landedOn !== unit) why.push("后续控制的目标不是交饰品的人");
-    if (gap !== cS - tS) why.push(`写的间隔 ${gap} 秒不等于渲染时间差 ${cS - tS} 秒`);
+    if (gap !== cS - tS)
+      why.push(`写的间隔 ${gap} 秒不等于渲染时间差 ${cS - tS} 秒`);
     if (!forcedFollowUpGapOk(tS, cS))
       why.push(`间隔超出 0–${FORCED_FOLLOWUP_MAX_GAP_S} 秒`);
     if (!forcedFollowUpDurOk(dur)) why.push(`时长 ${dur} 秒低于门槛`);
@@ -1245,8 +1272,18 @@ export function checkForcedTrinketConsistency(lines: string[]): string[] {
     const id = unit.match(/^(\d+)\(/)?.[1];
     const name = id ? nameOfId.get(id) : undefined;
     if (!name) why.push(`<unit> 图例里查不到 ${unit}`);
-    else if (!attempts.some((a) => a.name === name && a.from === aFrom && a.to === aTo && renderedInsideSpan(tS, a.from, a.to)))
-      why.push(`没有 [${fmtTime(aFrom)}–${fmtTime(aTo)}] on ${name} 且包含饰品时间的 [KILL ATTEMPTS] 行`);
+    else if (
+      !attempts.some(
+        (a) =>
+          a.name === name &&
+          a.from === aFrom &&
+          a.to === aTo &&
+          renderedInsideSpan(tS, a.from, a.to),
+      )
+    )
+      why.push(
+        `没有 [${fmtTime(aFrom)}–${fmtTime(aTo)}] on ${name} 且包含饰品时间的 [KILL ATTEMPTS] 行`,
+      );
     const esc = spell.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const ccOn = ownerId
       ? new RegExp(
@@ -1254,12 +1291,18 @@ export function checkForcedTrinketConsistency(lines: string[]): string[] {
         )
       : null;
     if (!ccOn || !lines.some((l) => ccOn.test(l)))
-      why.push(`${fmtTime(cS)} 没有你把 ${spell} 放到 ${unit} 身上、时长 ${dur} 秒的 [CC ON ENEMY] 行`);
+      why.push(
+        `${fmtTime(cS)} 没有你把 ${spell} 放到 ${unit} 身上、时长 ${dur} 秒的 [CC ON ENEMY] 行`,
+      );
     if (why.length)
-      failures.push(`line ${i + 1}: [FORCED TRINKET] 自相矛盾(${why.join(";")})—— ${line.trim().slice(0, 160)}`);
+      failures.push(
+        `line ${i + 1}: [FORCED TRINKET] 自相矛盾(${why.join(";")})—— ${line.trim().slice(0, 160)}`,
+      );
   });
   if (count > FORCED_FOLLOWUP_CAP)
-    failures.push(`[FORCED TRINKET] ${count} 条,超过上限 ${FORCED_FOLLOWUP_CAP}`);
+    failures.push(
+      `[FORCED TRINKET] ${count} 条,超过上限 ${FORCED_FOLLOWUP_CAP}`,
+    );
   return failures;
 }
 

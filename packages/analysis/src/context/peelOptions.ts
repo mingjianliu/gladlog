@@ -54,7 +54,7 @@ export const PEEL_MIN_USABLE_S = 3;
 export const PEEL_MAX_PER_DEATH = 2;
 
 export const PEEL_SECTION_HEADER =
-  "PEEL OPTIONS — before a friendly death: an INSTANT crowd control a teammate (or the victim) had ready on the enemy who did most of the victim's damage in the 10 s before the death, and did not use. Every counted second had: the CC reaction-ready, its owner free to act, the target in range and line of sight, not already CC'd, not immune, not at Immune DR, and no ready ability of the target's own that breaks that kind of CC. Enemy dispels are not considered. Use it only as an extra way the player could have taken pressure off, in your own words; never say using it would have saved the teammate, and never call not using it a mistake.";
+  "PEEL OPTIONS — before a friendly death: an INSTANT crowd control a teammate (or the victim) had ready on the enemy who did most of the victim's damage in the 10 s before the death, and did not use. Every counted second had: the CC reaction-ready, its owner free to act, the target in range and line of sight, not already CC'd, not immune, not at Immune DR, and no ready ability of the target's own that breaks that kind of CC. Enemy dispels are not considered. Distance, DR and the target's PvP trinket are read at the first usable second ('at m:ss'); they can change later in the span (DR resets, trinket comes up), but every counted second passed every check above. Use it only as an extra way the player could have taken pressure off, in your own words; never say using it would have saved the teammate, and never call not using it a mistake.";
 
 export interface IPeelOption {
   victimName: string;
@@ -214,10 +214,13 @@ export function formatPeelOptions(
       p.attackerTrinketReady === null
         ? ""
         : p.attackerTrinketReady
-          ? ` | ${target} PvP trinket ready`
-          : ` | ${target} PvP trinket on cooldown`;
+          ? `, ${target} PvP trinket ready`
+          : `, ${target} PvP trinket on cooldown`;
+    // Audit 121c: distance, DR and trinket are one snapshot at the first
+    // usable second — DR can reset inside the span, so the time is printed
+    // with them instead of letting the span's range imply they held throughout.
     lines.push(
-      `${fmtTime(from)}–${fmtTime(to)}  [PEEL OPTION]  ${owner} ${p.spellName} → ${target}${whose}: usable ${p.usableSeconds.length} s, not used | ${p.distanceYards.toFixed(1)}yd, DR ${p.drLevel} | ${target} did ${Math.round(p.attackerShare * 100)}% of ${victim}'s damage taken in the 10 s before dying at ${fmtTime(p.deathAtSeconds)}${trinket}`,
+      `${fmtTime(from)}–${fmtTime(to)}  [PEEL OPTION]  ${owner} ${p.spellName} → ${target}${whose}: usable ${p.usableSeconds.length} s, not used | ${target} did ${Math.round(p.attackerShare * 100)}% of ${victim}'s damage taken in the 10 s before dying at ${fmtTime(p.deathAtSeconds)} | at ${fmtTime(from)}: ${p.distanceYards.toFixed(1)}yd, DR ${p.drLevel}${trinket}`,
     );
   }
   return lines;

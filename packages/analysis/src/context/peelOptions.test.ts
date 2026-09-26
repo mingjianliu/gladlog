@@ -15,6 +15,7 @@ import {
   makeSpellCastEvent,
   makeUnit,
 } from "../../test/ported/testHelpers";
+import { fmtTime } from "../utils/renderGrid";
 import { formatPeelOptions, peelOptionsForDeaths } from "./peelOptions";
 
 const T0 = 1_000_000;
@@ -111,6 +112,14 @@ describe("peelOptionsForDeaths (GH #77)", () => {
     });
     expect(lines[1]).toMatch(
       /\[PEEL OPTION\] {2}Owner Hammer of Justice → Attacker: usable \d+ s, not used/,
+    );
+    // Audit 121c: distance / DR / trinket are a snapshot stamped with the
+    // span's first second, not a claim about the whole span.
+    const from = out[0]!.usableSeconds[0]!;
+    expect(lines[1]).toMatch(
+      new RegExp(
+        `^${fmtTime(from)}–\\d+:\\d{2} .* \\| at ${fmtTime(from)}: [\\d.]+yd, DR \\S+`,
+      ),
     );
   });
 

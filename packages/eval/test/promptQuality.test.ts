@@ -660,7 +660,9 @@ describe("checkForcedTrinketConsistency — [FORCED TRINKET] agrees with the tri
     ).toHaveLength(1);
     const shortAura = ccOn.replace("(6s)", "(1s)");
     expect(
-      checkForcedTrinketConsistency(ok.map((l) => (l === ccOn ? shortAura : l))),
+      checkForcedTrinketConsistency(
+        ok.map((l) => (l === ccOn ? shortAura : l)),
+      ),
     ).toHaveLength(1);
   });
   it("accepts the Tremor-ended aura form with the same duration", () => {
@@ -671,7 +673,9 @@ describe("checkForcedTrinketConsistency — [FORCED TRINKET] agrees with the tri
     ).toEqual([]);
     expect(
       checkForcedTrinketConsistency(
-        ok.map((l) => (l === ccOn ? tremor.replace("after 6s", "after 5s") : l)),
+        ok.map((l) =>
+          l === ccOn ? tremor.replace("after 6s", "after 5s") : l,
+        ),
       ),
     ).toHaveLength(1);
   });
@@ -840,7 +844,7 @@ describe("checkPeelOptionConsistency — a [PEEL OPTION] line must agree with th
   const death =
     "2:29  [DEATH]  3(FDKnight) (Frost Death Knight — friendly) (Unused: Anti-Magic Zone) | dampening: 46%";
   const peel =
-    "2:23–2:29  [PEEL OPTION]  1(RPaladin) Hammer of Justice → 4(ARogue): usable 7 s, not used | 4.0yd, DR Full | 4(ARogue) did 71% of 3(FDKnight)'s damage taken in the 10 s before dying at 2:29 | 4(ARogue) PvP trinket on cooldown";
+    "2:23–2:29  [PEEL OPTION]  1(RPaladin) Hammer of Justice → 4(ARogue): usable 7 s, not used | 4(ARogue) did 71% of 3(FDKnight)'s damage taken in the 10 s before dying at 2:29 | at 2:23: 4.0yd, DR Full, 4(ARogue) PvP trinket on cooldown";
   it("passes a consistent line", () => {
     expect(checkPeelOptionConsistency([death, peel])).toEqual([]);
   });
@@ -872,6 +876,48 @@ describe("checkPeelOptionConsistency — a [PEEL OPTION] line must agree with th
     expect(
       checkPeelOptionConsistency([death, peel.replace("DR Full", "DR Immune")]),
     ).toHaveLength(1);
+  });
+  it("fails a row that does not parse instead of skipping it (audit 121c)", () => {
+    // The pre-121c layout: DR without its snapshot time.
+    const old =
+      "2:23–2:29  [PEEL OPTION]  1(RPaladin) Hammer of Justice → 4(ARogue): usable 7 s, not used | 4.0yd, DR Full | 4(ARogue) did 71% of 3(FDKnight)'s damage taken in the 10 s before dying at 2:29";
+    const out = checkPeelOptionConsistency([death, old]);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toContain("格式不符");
+    // a mangled time prefix is still a PEEL row
+    for (const bad of [
+      peel.replace("2:23–2:29", "2:23-2:29"),
+      peel.replace("2:23–2:29  ", ""),
+    ]) {
+      const r = checkPeelOptionConsistency([death, bad]);
+      expect(r).toHaveLength(1);
+      expect(r[0]).toContain("格式不符");
+    }
+  });
+  it("fails a snapshot not taken at the span's first second, or facts about someone else", () => {
+    expect(
+      checkPeelOptionConsistency([death, peel.replace("at 2:23:", "at 2:26:")]),
+    ).toHaveLength(1);
+    expect(
+      checkPeelOptionConsistency([
+        death,
+        peel.replace(", 4(ARogue) PvP trinket", ", 5(DWarlock) PvP trinket"),
+      ]),
+    ).toHaveLength(1);
+    expect(
+      checkPeelOptionConsistency([
+        death,
+        peel.replace("4(ARogue) did 71%", "5(DWarlock) did 71%"),
+      ]),
+    ).toHaveLength(1);
+  });
+  it("accepts a line with no trinket fact (no PvP trinket equipped)", () => {
+    expect(
+      checkPeelOptionConsistency([
+        death,
+        peel.replace(", 4(ARogue) PvP trinket on cooldown", ""),
+      ]),
+    ).toEqual([]);
   });
 });
 
