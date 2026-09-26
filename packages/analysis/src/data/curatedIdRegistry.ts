@@ -39,6 +39,7 @@ import {
 } from "../context/timelineHelpers";
 import { SPELL_DURATION_OVERRIDES } from "../utils/buffDuration";
 import { COPY_CAST_IDS } from "../utils/castPress";
+import { UNUSED_SELF_COVERAGE_UNMODELLED } from "../utils/counterfactual";
 import {
   BREAKABLE_CC_SPELL_IDS,
   CC_AVOIDANCE_BUFF_SPELLS,
@@ -445,6 +446,9 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   ]),
   t("DOT_SPELL_IDS", "context/matchTimelineSections.ts", "aura", () =>
     set(DOT_SPELL_IDS),
+  ),
+  t("UNUSED_SELF_COVERAGE_UNMODELLED", "utils/counterfactual.ts", "cast", () =>
+    set(UNUSED_SELF_COVERAGE_UNMODELLED),
   ),
   // other utils/
   t("TALENT_BEHAVIORS", "utils/talentBehaviors.ts", "mixed", () =>

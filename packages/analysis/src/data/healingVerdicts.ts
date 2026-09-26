@@ -248,6 +248,15 @@ export const HEALING_VERDICTS: Record<string, IHealingVerdict> = {
     source: SRC + ";裁定人逐条口述",
     approved: "2026-08-23 user",
   },
+  "471195": {
+    zh: "圣疗术",
+    official: { healsSelf: true, healsOthers: true, isWall: false },
+    verdict: "burst-answer",
+    note: "瞬发把目标治满(可对自己也可对队友),10 分钟冷却、上自律 —— 形态与守护之魂同类。用户 2026-09-26 在三选一(burst-answer / sustain-only / unresolved)里选了 burst-answer;同一轮对三条的总体原话是「没法说的太绝对 但是要看有没有后续伤害 对面治疗的状态 位置 冷却 徽章 等等」—— 应对是否有效要看情境,判据本身不看这些。",
+    source:
+      "2026-09-26 可靠性第二轮 W1g:ledgerGapScan(605 场)发现 471195 被按 244 回合却不在账本里,加入 classMetadata 后进入完备域;档位由用户 2026-09-26 裁定",
+    approved: "2026-09-26 user",
+  },
 };
 
 /** 待签暂存区。获批后迁入 `HEALING_VERDICTS` 并从这里删除(晋升即移除)。 */
@@ -263,24 +272,12 @@ export interface IProposedHealingVerdict extends Omit<
 
 /**
  * 2026-08-23 建册当天 12 条全部提交裁定,同日全部签字迁入正册,按「晋升即移除」
- * 纪律不在此留副本。2026-09-26 可靠性第二轮 W1g 把圣疗术 471195 加进冷却账本
- * (Defensive + 官方说它治疗 → 进本册完备域),待签。
+ * 纪律不在此留副本。2026-09-26 圣疗术 471195(W1g 加进冷却账本)同日签字迁入正册。
  */
 export const PROPOSED_HEALING_VERDICTS: Record<
   string,
   IProposedHealingVerdict
-> = {
-  "471195": {
-    zh: "圣疗术",
-    official: { healsSelf: true, healsOthers: true, isWall: false },
-    proposed: "burst-answer",
-    note: "瞬发把目标治满(可对自己也可对队友),10 分钟冷却、上自律 —— 形态与守护之魂同类:爆发打在脸上时按下去就能改变这一波。",
-    wouldFlipIf:
-      "裁定人认为「治满但不带任何减伤」只顶得住当下这一口,接下来的爆发照样打穿 → 改判 sustain-only;或认为它是一局一次的保底、不该拿来要求在某个爆发里交 → unresolved。",
-    source:
-      "2026-09-26 可靠性第二轮 W1g:ledgerGapScan(605 场)发现 471195 被按 244 回合却不在账本里,加入 classMetadata 后进入完备域",
-  },
-};
+> = {};
 
 /** 这一册的完备域:挂 Defensive 牌子 **且** 官方数据说它治疗的技能。 */
 export function healingVerdictDomain(): string[] {

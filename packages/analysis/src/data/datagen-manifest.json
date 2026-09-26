@@ -40,9 +40,9 @@
       "bytes": 2686766
     },
     "mitigationGenerated.json": {
-      "entries": 19,
+      "entries": 20,
       "unresolved": 8,
-      "bytes": 1833
+      "bytes": 1897
     },
     "talentMitigationGenerated.json": {
       "entries": 59,

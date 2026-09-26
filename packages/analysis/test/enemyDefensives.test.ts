@@ -11,6 +11,7 @@ import {
   MITIGATION_AURA_IDS,
   MITIGATION_AURA_MIN_PCT,
   REMOVED_EARLY_SLACK_S,
+  SELF_SAVE_IDS,
 } from "../src/utils/enemyDefensives";
 
 /**
@@ -226,8 +227,12 @@ describe("enemyDefensiveEvents", () => {
     });
     expect(ev.observedSeconds).toBeCloseTo(12, 5);
     // with the cast present it stays one event (cast-paired), not two
-    const withCast = unit("e1", { spellCastEvents: [cast(IRONBARK, "e2", 9.7)] });
-    expect(enemyDefensiveEvents(withCast, [withCast, ally], combat)).toHaveLength(1);
+    const withCast = unit("e1", {
+      spellCastEvents: [cast(IRONBARK, "e2", 9.7)],
+    });
+    expect(
+      enemyDefensiveEvents(withCast, [withCast, ally], combat),
+    ).toHaveLength(1);
   });
 
   it("carries recipientId for external defensives", () => {
@@ -248,3 +253,56 @@ describe("enemyDefensiveEvents", () => {
   });
 });
 
+describe("Greater Invisibility is never double-counted (signed 2026-09-26, codex astra)", () => {
+  // The cast 110959 carries no mitigation row; its −60 % is on buff 113862.
+  // It is registered cast-keyed (the Blur 198589 → 212800 pattern). Listing
+  // 110959 in NO_MITIGATION_IDS as well would make it a self-save, and
+  // listing 113862 in the table would make its aura a wall — one activation,
+  // two defensive events (codex reproduced 0 → 2 with the real collector).
+  // This pins "no duplicate", NOT recognition: today an enemy GI yields ZERO
+  // events, because the aura branch matches buff ids and 113862 is not a key.
+  // Every cast-keyed override shares that gap (Blur, AMZ, Barrier, SLT), and
+  // so does the death-window mitigation audit (whitelisted aura ids only).
+  // It is ledgered for an explicit cast → buff link.
+  it("priced on the cast id, never as a no-mitigation self-save, the buff id unlisted", () => {
+    expect(MITIGATION_TABLE["110959"]?.pct).toBe(60);
+    expect(MITIGATION_TABLE["113862"]).toBeUndefined();
+    expect(SELF_SAVE_IDS.has("110959")).toBe(false);
+  });
+
+  it("a GI cast plus its 113862 buff yields at most one enemy defensive event", () => {
+    const mage: any = {
+      id: "mage",
+      name: "mage",
+      spellCastEvents: [
+        {
+          spellId: "110959",
+          spellName: "Greater Invisibility",
+          destUnitId: "mage",
+          logLine: { event: LogEvent.SPELL_CAST_SUCCESS, timestamp: 10_000 },
+        },
+      ],
+      auraEvents: [
+        {
+          spellId: "113862",
+          spellName: "Greater Invisibility",
+          srcUnitId: "mage",
+          destUnitId: "mage",
+          logLine: { event: LogEvent.SPELL_AURA_APPLIED, timestamp: 10_000 },
+        },
+        {
+          spellId: "113862",
+          spellName: "Greater Invisibility",
+          srcUnitId: "mage",
+          destUnitId: "mage",
+          logLine: { event: LogEvent.SPELL_AURA_REMOVED, timestamp: 13_000 },
+        },
+      ],
+    };
+    const events = enemyDefensiveEvents(mage, [mage], {
+      startTime: 0,
+      endTime: 60_000,
+    });
+    expect(events.length).toBeLessThanOrEqual(1);
+  });
+});

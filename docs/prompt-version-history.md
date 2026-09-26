@@ -1457,3 +1457,10 @@ v167 (2026-09-26, range audit): kick-eaten's kickRangeYd reads the kick's
 cast id (kickCastSpellId) — Skull Bash 100 → 13 yd, Solar Beam 105 → 45 yd
 (the effect ids carry DB2's 100 yd placeholder). 605 files: 33 kick-eaten
 lines change, nothing else.
+
+v168 (2026-09-26, user-signed verdicts): Greater Invisibility (60 %) and
+Retribution Divine Protection (20 %) join the big-defensive list and the
+mitigation table (kill-live-gated); Lay on Hands is signed burst-answer (data
+only). 605 files: cd-hoarded 1707 → 1700, slow-defensive-response 126 → 118,
+[ENEMY DEF] +996 Divine Protection lines, kill-attempt rows name it; the two
+new walls make no unused-self counterfactual claim (coverage unmodelled).

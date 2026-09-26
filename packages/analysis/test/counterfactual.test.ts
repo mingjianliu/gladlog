@@ -322,6 +322,36 @@ describe("computeUnusedSelfCounterfactuals(窄门)", () => {
     expect(hits[0].source).toBe("unused-self");
   });
 
+  test("walls whose coverage is unmodelled stay silent (GI 110959, Retribution DP 403876 — codex 2026-09-26)", () => {
+    // The same load that makes a 20 % Barkskin decisive would make a 60 %
+    // Greater Invisibility decisive under the full-window discount — but GI
+    // covers only while invisible + 3 s, so no claim is made for it.
+    const victim = mkVictim(
+      "v8b",
+      [
+        { atS: 55, amount: 700_000, school: "0x1" },
+        { atS: 56, amount: 10_000, school: "0x20" },
+      ],
+      [],
+      [
+        { atS: 50, hp: 100_000, maxHp: 200_000 },
+        { atS: 60, hp: 100, maxHp: 200_000 },
+      ],
+    );
+    const hits = computeUnusedSelfCounterfactuals(
+      victim,
+      [
+        neverUsedCd("110959", "Greater Invisibility"),
+        neverUsedCd("403876", "Divine Protection"),
+        neverUsedCd("22812", "Barkskin"),
+      ],
+      noLockoutCC,
+      combatOf(),
+      60,
+    );
+    expect(hits.map((h) => h.spellId)).toEqual(["22812"]);
+  });
+
   test("positional 候选跳过", () => {
     const victim = mkVictim(
       "v9",
@@ -415,7 +445,9 @@ describe("A 形态 × pctOnOthers:黑曜鳞片按「谁身上」定价(2026-09-1
   });
   test("受害者自己开的黑曜鳞片 → 30%:100k × 30/70", () => {
     const victim = mkVictim("v4", spec(), aura());
-    for (const a of (victim as unknown as { auraEvents: Array<{ srcUnitName: string }> }).auraEvents)
+    for (const a of (
+      victim as unknown as { auraEvents: Array<{ srcUnitName: string }> }
+    ).auraEvents)
       a.srcUnitName = "v4";
     const { rows } = computeMitigationAudit(victim, combatOf(), 60);
     const os = rows.find((r) => r.spellId === "363916")!;

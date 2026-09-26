@@ -30,13 +30,14 @@ const spellIdLists = {
     "498",
     // Reliability round 2 W1g (2026-09-26), from ledgerGapScan: Survival of
     // the Fittest moved here from attributedMitigationSpellIds — it is a
-    // pressed 90 s cooldown (25 %), not a held stance (1d52). Greater
-    // Invisibility 110959 (aura 113862, −60 %) and Retribution's Divine
-    // Protection 403876 (−20 %) belong here too, but joining this list puts
-    // them in MITIGATION_TABLE, whose every entry needs a user-signed
-    // mitigation verdict — pending; until then they are ledger-only
-    // (classMetadata Defensive).
+    // pressed 90 s cooldown (25 %), not a held stance (1d52).
     "264735", // Survival of the Fittest (Hunter)
+    // Same scan; mitigation verdicts signed by the user 2026-09-26
+    // (kill-live-gated, see mitigationVerdicts.ts). Greater Invisibility's
+    // −60 % lives on its buff 113862, so its MITIGATION_TABLE row is a
+    // cast-keyed override (the Blur 198589 → 212800 pattern).
+    "110959", // Greater Invisibility (Mage)
+    "403876", // Divine Protection (Retribution; 498 is Holy's)
     // 2026-08-23 用户裁定「复苏烈焰是大技能,虽然不是减伤」。它是**结构性无施法行**
     // 的被动 proc(见 cooldowns.ts 的 AURA_ONLY_ACTIVATION_IDS),证据只存在于光环
     // 374349:归档 400 个文件里上身 347 次、周期治疗 3,145 次、出现在 52 个文件。

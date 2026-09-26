@@ -423,6 +423,24 @@ function decisiveHitFor(
 }
 
 /**
+ * Walls this gate does not price. The discount assumes the wall covered every
+ * matching hit in the whole COUNTERFACTUAL_WINDOW_S window; nothing here
+ * clips to the wall's duration. Codex astra (2026-09-26) showed the full-window
+ * discount turns a "fatal" into a "decisive" claim for a 3 s cover.
+ *
+ * The two walls signed on 2026-09-26 stay out until coverage is modelled:
+ *  - Greater Invisibility 110959: −60 % only while invisible and for 3 s after;
+ *  - Retribution Divine Protection 403876: 8 s.
+ * They still count for the cooldown ledger, crisis readiness and burst pricing.
+ * The walls priced before that date keep the old model; the duration clip is
+ * ledgered (GH #109) rather than silently extended to the new walls.
+ */
+export const UNUSED_SELF_COVERAGE_UNMODELLED: ReadonlySet<string> = new Set([
+  "110959",
+  "403876",
+]);
+
+/**
  * Narrow gate: the player's own available-but-unused cooldown (in the table and
  * non-positional; returns empty when CC-locked). Returns decisive hits only.
  */
@@ -444,6 +462,7 @@ export function computeUnusedSelfCounterfactuals(
 
   const hits: ICounterfactualHit[] = [];
   for (const cd of victimCds) {
+    if (UNUSED_SELF_COVERAGE_UNMODELLED.has(cd.spellId)) continue;
     if (!cdReadyInTimeAt(cd, deathS)) continue;
     // GH #96 M3a: hypothetical ADDED protection: observed × p per component
     // (own cooldown → the victim carries it). Lower bound: "would have saved".

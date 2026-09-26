@@ -53,6 +53,7 @@ export const MITIGATION_OVERRIDES: Record<string, IMitigationEntry> = {
   // —— The mitigation aura hangs off a different id (the generation layer can't find it by cast id) ——
   "51052": { pct: 30, schoolMask: 0x7e }, // Anti-Magic Zone: DR aura 145629 (observed), aura87 −15/126 × PvpMultiplier 2 = 30 % in PvP (2026-09-04 user ruling "PvP 值为官方值", BACKLOG #41; was 15 = the PvE number); the same-named 332831 (-20) is not observed and judged not live
   "198589": { pct: 25, schoolMask: 0x7f }, // Blur 疾影术:DR aura 212800(S2 归档已观测),`aura87 pts=-25 misc=127`;cast id 198589 自己只有一条 `E64 trig=212800`,所以生成层按 cast id 找不到它。2026-08-22 用户确认「的确是减伤,而且是大技能」后补登记
+  "110959": { pct: 60, schoolMask: 0x7f }, // Greater Invisibility 强化隐形术:DR aura 113862(`aura87 pts=-60 misc=127`,PvpMultiplier 1,12.1.0.69587);cast id 110959 自己只有一条 `E64` 触发行,所以生成层按 cast id 找不到它 —— 与疾影术 198589 → 212800 同一形状。2026-09-26 用户签字 kill-live-gated 后登记(此前只在冷却账本里,ledgerGapScan 发现)
   "62618": { pct: 40, schoolMask: 0x7f }, // Power Word: Barrier: DR aura 81782 (observed), aura87 −20/127 × PvpMultiplier 2 = 40 % in PvP (2026-09-04 user ruling, BACKLOG #41; was 20 = the PvE number)
   "98008": { pct: 10, schoolMask: 0x7f }, // Spirit Link Totem: DR aura 325174 (observed), currently -10/127 (98007 has the same value but is not observed)
   "61336": { pct: 50, schoolMask: 0x7f }, // Survival Instincts: the cast id is dummy only (points=50); same-named 50322/236157 are both currently -50/127; stable at 50% long-term
