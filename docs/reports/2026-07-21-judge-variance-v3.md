@@ -4,7 +4,7 @@
 What was eliminated is anchor application noise (judges finding the same error but assigning different scores); what was NOT eliminated is verification misses —
 and the latter is precisely the primary cause identified in `HANDOFF-2026-07-20` §3.
 
-Criteria, baselines, and reading pitfalls were pre-registered in `docs/HANDOFF-2026-07-20-judge-variance.md` §3 and remained unchanged in this round.
+Criteria, baselines, and reading pitfalls were pre-registered in `docs/archive/HANDOFF-2026-07-20-judge-variance.md` §3 and remained unchanged in this round.
 
 ---
 

@@ -2,7 +2,7 @@
  * kick-eaten 代价门体检:**这条在产指控里,有多少发生在「锁了也不疼」的时刻?**
  *
  * 由来(2026-09-06,Skill Capped 教练语料复核):
- * `docs/HANDOFF-2026-09-05-skillcapped-coach-corpus.md` §3.3·⑧ 从 2101 条职业教练
+ * `docs/archive/HANDOFF-2026-09-05-skillcapped-coach-corpus.md` §3.3·⑧ 从 2101 条职业教练
  * 判决里筛出 38 条「教练明说这一手做得对、而 gladlog 谓词会在这里开火」的标注负样本。
  * 其中 `kick-eaten` 8 条,理由高度一致且不是随机噪声 —— 全部是**代价为零**:
  * 「此时吃断无关紧要,因为大家都是满血」「锁的是火焰学派,无所谓」

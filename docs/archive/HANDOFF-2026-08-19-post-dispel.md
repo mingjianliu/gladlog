@@ -1,5 +1,7 @@
 # HANDOFF 2026-08-19:驱散三层收官后的接力点
 
+> **Archived 2026-09-26** — historical handoff; paths and state may no longer match the repo.
+
 > 接替 `HANDOFF-2026-08-17-grounding.md`(那份的 §一–§四 已全部落地或结案)。
 > 本文档为新 session 自含:所有裁定、数字、方法都有 main 上的落点,不依赖
 > 任何旧对话。工作分支纪律照旧:直接 commit+push main,验收先行。

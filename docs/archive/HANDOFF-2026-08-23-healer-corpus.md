@@ -1,5 +1,7 @@
 # HANDOFF 2026-08-23:治疗语料研究(动作序列方向)的接力点
 
+> **Archived 2026-09-26** — historical handoff; paths and state may no longer match the repo.
+
 > 与 `HANDOFF-2026-08-19-post-dispel.md` 并行的独立主线,不依赖那份。
 > 本文档自含:所有裁定、数字、路径都能直接落地,新 session 不需要旧对话。
 > 代码与中间产物全部在 `~/code/gladlog-eval-private/healer-study/`(有 README,

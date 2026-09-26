@@ -2,7 +2,7 @@
 
 Python 工具（标准库 + crv venv 里的 `faster_whisper` + PATH 上的 `ffmpeg` / `yt-dlp` / `claude`）。**刻意放在 npm workspace 之外**：`presubmit` 不 lint、不 typecheck、不测它。数据在 gitignore 的 `tmp/skillcapped-vod/`（可用 `COACH_CORPUS_DATA` 覆盖）；转写含教练原话，永不进仓库 —— 产出只有转述与结构（沿用 arenacoach batch-1 的版权约定）。
 
-Runbook：`docs/commands/ingest-coach-corpus.md`。结论与逐环追踪示例：`docs/HANDOFF-2026-09-05-skillcapped-coach-corpus.md`。
+Runbook：`docs/commands/ingest-coach-corpus.md`。结论与逐环追踪示例：`docs/archive/HANDOFF-2026-09-05-skillcapped-coach-corpus.md`。
 
 | 步骤 | 工具 | 说明 |
 |---|---|---|

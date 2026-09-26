@@ -2,7 +2,7 @@
  * Prompt 逐行效果探针 —— 「我们发给 LLM 的每一行,它到底怎么用?」
  *
  * 为什么不用判官打分:accuracy 的成对噪声底 SD≈1.3(|Δ|<0.4 测不出)、sufficiency
- * 对植入缺陷只有 20% 检出率(docs/HANDOFF-2026-07-20-judge-variance.md)。两维都
+ * 对植入缺陷只有 20% 检出率(docs/archive/HANDOFF-2026-07-20-judge-variance.md)。两维都
  * 不具备 A/B 裁决力。本探针测的是**确定性的行为改变**:同一局、同一个模型,只改
  * prompt 的一类行,看输出引用的时刻集合变不变。变了 = 在用,不变 = token 开销。
  *

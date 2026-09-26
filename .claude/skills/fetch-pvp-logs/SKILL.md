@@ -15,9 +15,10 @@ gladlog parser 直接可解析。
 
 ## 2026-09-13 起的访问模型(先读这段)
 
-上游因为「bots have been scraping combat logs in bulk」改了接口(他们的源码
-`packages/shared/src/utils/accessLimits.ts`、`graphql-server/utils/accessGuard.ts`,
-2026-09-15 对线上 API 实测):
+上游因为「bots have been scraping combat logs in bulk」改了接口(依据:上游 wowarenalogs
+仓库的源码 `packages/shared/src/utils/accessLimits.ts`、`graphql-server/utils/accessGuard.ts`
+—— 这两个文件在上游仓,本仓没有;本仓套用该额度的地方是 `packages/corpus-tools/src/feedClient.ts`
+与 `dailyPull.ts` —— 以及 2026-09-15 对线上 API 的实测):
 
 | 面                   | 现在                                                                                                                      |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------- |

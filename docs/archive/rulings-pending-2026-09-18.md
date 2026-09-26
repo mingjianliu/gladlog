@@ -1,5 +1,7 @@
 # 待裁清单(2026-09-18)
 
+> **Archived 2026-09-26** — historical rulings list; 8 of its 19 items already carry a user ruling inline (the bold `用户:` lines); paths and state may no longer match the repo.
+
 每条 = 问题 · 上下文与数字 · 一个真实例子 · 选项 · 我的建议。数字都来自 issue 评论或 BACKLOG,脚本名可直接翻。分三档:**A 只要一句话**、**B 定形状再做**、**C 立不立项**。裁完把结论写在对应 issue 评论 / BACKLOG 条目里即可。
 
 ---

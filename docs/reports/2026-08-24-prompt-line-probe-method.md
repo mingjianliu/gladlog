@@ -15,7 +15,7 @@
 ## 为什么不用判官打分
 
 `accuracy` 成对噪声底 SD≈1.3(|Δ|<0.4 测不出)、`sufficiency` 对植入缺陷检出率 20%
-(docs/HANDOFF-2026-07-20-judge-variance.md)。两维都不具备 A/B 裁决力。本方法一律用
+(docs/archive/HANDOFF-2026-07-20-judge-variance.md)。两维都不具备 A/B 裁决力。本方法一律用
 **确定性的行为改变**做判据。
 
 ## 三种探法(单局验证均有效,已批量化)

@@ -691,7 +691,7 @@ export interface ITeammateDrClash {
 /**
  * Detects instances where a friendly CC landed at diminished DR (50% or Immune)
  * because a DIFFERENT friendly player applied a CC in the same DR category
- * within the reset window (GH #67 S3, rulings-pending-2026-09-18).
+ * within the reset window (GH #67 S3, docs/archive/rulings-pending-2026-09-18.md).
  *
  * Attribution rule:
  * - Only within the DR reset window (drResetMsAt(matchStartMs)). Beyond that,

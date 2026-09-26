@@ -1,5 +1,7 @@
 # Handoff — Judge Variance and Layer B Blockage (2026-07-20 Night)
 
+> **Archived 2026-09-26** — historical handoff; paths and state may no longer match the repo.
+
 **This document has real action items** — it is not a completed archive. There is only one core action item: measure the effect of the third-round rubric changes.
 
 ---
