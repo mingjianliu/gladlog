@@ -59,6 +59,12 @@ npx tsx packages/eval/scripts/observedSpellIds.ts \
   --manifest $GLADLOG_EVAL_HOME/corpus/manifest-fullscale.txt \
   --store ~/Library/Application\ Support/gladlog/matches \
   > packages/analysis/src/data/observedSpellIdsGenerated.json
+# SHARDED SCANS (every 6b-pre table below): wait on EACH shard's pid and stop on a non-zero exit — a bare
+#   `wait` returns 0 even when a shard died. 2026-09-26: the disk filled during the sync-window regen, two of
+#   three shards died with ENOSPC at ~6,600 / ~7,000 files, and the emit step still wrote a well-formed
+#   table (65,008 windows instead of 107k, 0 malformed rows, 0 duplicates). Before emitting, also check each
+#   shard log's `done: scanned=` equals its --limit. A shard that died can resume from its last written
+#   record (drop that record's rows first — the scans append once per file). codex astra review of 8a9cfd85.
 # 6b-pre-2. Behavior-prior reference table (all ranked healers' crisis-decision-point responses, split responded/not, with death-within-10s rates; corpus-driven, NOT DB2).
 #   Regenerate at season start and whenever packages/analysis/src/analysis/crisisDecisionPoints.ts changes.
 #   ~1 h over the archive; run ≤3 shards with nice. Health test: packages/analysis/src/data/behaviorPrior.test.ts
@@ -67,9 +73,10 @@ npx tsx packages/eval/scripts/observedSpellIds.ts \
 #   within 10 s (spec §1c) — a healer diving to 40% in Solo Shuffle usually isn't the kill target.
 E=$GLADLOG_EVAL_HOME; R=$E/reports/behavior-prior-$(date +%F); mkdir -p $R
 find $E/corpus/archive-gz -name '*.txt.gz' | sort > $R/manifest.txt
-for i in 0 1 2; do nice -n 10 npx tsx packages/eval/scripts/behaviorPriorScan.ts scan \
+pids=(); for i in 0 1 2; do nice -n 10 npx tsx packages/eval/scripts/behaviorPriorScan.ts scan \
   --manifest $R/manifest.txt --ledger $E/archive/ledger --out $R/shard$i.jsonl \
-  --offset $((i*7000)) --limit 7000 > $R/shard$i.log 2>&1 & done; wait
+  --offset $((i*7000)) --limit 7000 > $R/shard$i.log 2>&1 & pids+=($!); done
+for p in "${pids[@]}"; do wait "$p" || { echo "a shard failed — read its log (ENOSPC?), do not emit"; exit 1; }; done
 cat $R/shard*.jsonl > $R/opportunities.jsonl
 #   Write temp-then-cp — never `>` directly into the imported json (a script failure truncates it first).
 npx tsx packages/eval/scripts/behaviorPriorScan.ts emit-table --in $R/opportunities.jsonl \
@@ -91,8 +98,9 @@ npx tsx packages/eval/scripts/behaviorPriorScan.ts emit-table --in $R/opportunit
 #   melee reach calibration (landed melee kicks, distance at cast start) — read the report before trusting
 #   KICK_MELEE_REACH_YD. ~1 h over a 1/3 archive subset with 6 shards.
 # R=$GLADLOG_EVAL_HOME/reports/kick-priority-$(date +%F); mkdir -p $R
-# for i in 0 1 2 3 4 5; do nice -n 10 npx tsx packages/eval/scripts/kickPriorityOutcomeProbe.ts scan \
-#   --manifest <newseason manifest> --out $R/shard$i.jsonl --every 3 --offset $((i*N)) --limit N > $R/shard$i.log 2>&1 & done; wait
+# pids=(); for i in 0 1 2 3 4 5; do nice -n 10 npx tsx packages/eval/scripts/kickPriorityOutcomeProbe.ts scan \
+#   --manifest <newseason manifest> --out $R/shard$i.jsonl --every 3 --offset $((i*N)) --limit N > $R/shard$i.log 2>&1 & pids+=($!); done
+# for p in "${pids[@]}"; do wait "$p" || { echo "a shard failed — read its log (ENOSPC?), do not emit"; exit 1; }; done
 # cat $R/shard*.jsonl > $R/all.jsonl
 # npx tsx packages/eval/scripts/kickPriorityOutcomeProbe.ts emit-heal-spells --in $R/all.jsonl \
 #   --corpus "wowarenalogs archive $(date +%F)" > $R/heal.json \
@@ -114,8 +122,9 @@ npx tsx packages/eval/scripts/behaviorPriorScan.ts emit-table --in $R/opportunit
 #   archive subset with 6 shards (the decision point runs reconstructDispelSummary per team);
 #   the scan is resumable per --out file. Write temp-then-cp — never `>` into the imported json.
 # R=$GLADLOG_EVAL_HOME/reports/backlash-dispel-$(date +%F); mkdir -p $R
-# for i in 0 1 2 3 4 5; do nice -n 10 npx tsx packages/eval/scripts/backlashDispelOutcomeProbe.ts scan \
-#   --manifest <newseason manifest> --out $R/shard$i.jsonl --every 3 --offset $((i*N)) --limit N > $R/shard$i.log 2>&1 & done; wait
+# pids=(); for i in 0 1 2 3 4 5; do nice -n 10 npx tsx packages/eval/scripts/backlashDispelOutcomeProbe.ts scan \
+#   --manifest <newseason manifest> --out $R/shard$i.jsonl --every 3 --offset $((i*N)) --limit N > $R/shard$i.log 2>&1 & pids+=($!); done
+# for p in "${pids[@]}"; do wait "$p" || { echo "a shard failed — read its log (ENOSPC?), do not emit"; exit 1; }; done
 # cat $R/shard*.jsonl > $R/all.jsonl
 # npx tsx packages/eval/scripts/backlashDispelOutcomeProbe.ts emit-table --in $R/all.jsonl \
 #   --corpus "wowarenalogs archive $(date +%F)" > $R/table.json \
@@ -133,9 +142,10 @@ npx tsx packages/eval/scripts/behaviorPriorScan.ts emit-table --in $R/opportunit
 #   cannot be compared with it (2026-09-25: pushed twice that way, 1fcec5e9 / 41ef7d55, corrected here).
 #   Write temp-then-cp — never `>` directly into the imported json.
 # R=$GLADLOG_EVAL_HOME/reports/sync-window-$(date +%F); mkdir -p $R
-# for i in 0 1 2; do nice -n 10 npx tsx packages/eval/scripts/syncWindowScan.ts scan \
+# pids=(); for i in 0 1 2; do nice -n 10 npx tsx packages/eval/scripts/syncWindowScan.ts scan \
 #   --manifest $GLADLOG_EVAL_HOME/corpus/manifest-archive-2026-09-14-newseason.txt --ledger $GLADLOG_EVAL_HOME/archive/ledger \
-#   --out $R/shard$i.jsonl --offset $((i*21101)) --limit 21101 > $R/shard$i.log 2>&1 & done; wait
+#   --out $R/shard$i.jsonl --offset $((i*21101)) --limit 21101 > $R/shard$i.log 2>&1 & pids+=($!); done
+# for p in "${pids[@]}"; do wait "$p" || { echo "a shard failed — read its log (ENOSPC?), do not emit"; exit 1; }; done
 # cat $R/shard*.jsonl > $R/windows.jsonl
 # npx tsx packages/eval/scripts/syncWindowScan.ts emit-table --in $R/windows.jsonl \
 #   --corpus "wowarenalogs archive $(date +%F)" > $R/table.json \
@@ -154,9 +164,10 @@ npx tsx packages/eval/scripts/behaviorPriorScan.ts emit-table --in $R/opportunit
 #   2026-08-28 manifest: a regen from it silently shrinks every cell's n to about a third and cannot be
 #   compared with the table it replaces (caught 2026-09-23, GH #103 follow-up).
 E=$GLADLOG_EVAL_HOME; R=$E/reports/burst-window-$(date +%F); mkdir -p $R
-for i in 0 1 2; do nice -n 10 npx tsx packages/eval/scripts/burstWindowScan.ts scan \
+pids=(); for i in 0 1 2; do nice -n 10 npx tsx packages/eval/scripts/burstWindowScan.ts scan \
   --manifest $E/corpus/manifest-archive-2026-09-14-newseason.txt --ledger $E/archive/ledger \
-  --out $R/shard$i.jsonl --offset $((i*21101)) --limit 21101 > $R/shard$i.log 2>&1 & done; wait
+  --out $R/shard$i.jsonl --offset $((i*21101)) --limit 21101 > $R/shard$i.log 2>&1 & pids+=($!); done
+for p in "${pids[@]}"; do wait "$p" || { echo "a shard failed — read its log (ENOSPC?), do not emit"; exit 1; }; done
 cat $R/shard*.jsonl > $R/windows.jsonl
 npx tsx packages/eval/scripts/burstWindowScan.ts report --in $R/windows.jsonl > $R/report.md
 npx tsx packages/eval/scripts/burstWindowScan.ts emit-table --in $R/windows.jsonl \
@@ -225,9 +236,10 @@ npx tsx packages/eval/scripts/healerSaveCdScan.ts emit-table --in $R/counts.json
 #   `--cohort hi` (percentile >= 60 within bracket x ISO week) is the alternative to the default `all`.
 #   Health test: packages/analysis/src/data/cdTriggerPrior.test.ts.
 E=$GLADLOG_EVAL_HOME; R=$E/reports/cd-trigger-prior-$(date +%F); mkdir -p $R
-for i in 0 1 2; do nice -n 10 npx tsx packages/eval/scripts/cdTriggerPriorScan.ts scan \
+pids=(); for i in 0 1 2; do nice -n 10 npx tsx packages/eval/scripts/cdTriggerPriorScan.ts scan \
   --manifest $E/corpus/manifest-archive-2026-08-28-newseason.txt --ledger $E/archive/ledger \
-  --out $R/shard$i.jsonl --offset $((i*6045)) --limit 6045 2> $R/shard$i.err & done; wait
+  --out $R/shard$i.jsonl --offset $((i*6045)) --limit 6045 2> $R/shard$i.err & pids+=($!); done
+for p in "${pids[@]}"; do wait "$p" || { echo "a shard failed — read its log (ENOSPC?), do not emit"; exit 1; }; done
 cat $R/shard*.jsonl > $R/rows.jsonl
 npx tsx packages/eval/scripts/cdTriggerPriorScan.ts report --in $R/rows.jsonl > $R/report.md
 #   emit-table writes temp-then-cp itself; --out may point straight at the imported json.
