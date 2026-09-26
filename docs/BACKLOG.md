@@ -2531,3 +2531,15 @@ M6 已做完的:1,190 个脚本型天赋分队列 → 118 个点名了产品追�
 **未量**:语料里有多少敌方惩戒骑带 Radiant Glory;放进来以后爆发窗口、sync-window / burst-window 候选、击杀尝试措辞会动多少。`isEnemyCdWindowSpell` 喂参照表,改了要重生成读它的表。
 
 **做法(未开工)**:触发没有冷却,「什么时候再好」(`availableAgainAtSeconds`)对它没意义 —— 可能的形状是把 454351 当爆发发动收进来,但不进任何「什么时候再好」的推算,和己方账本同一个拆法(发动算、就绪不算)。
+
+**2026-09-26 已修(9c2b67d8,PV153)**:用户裁「做」。实测 454351 出现在 74.8% 的惩戒回合,伤害抬升中位 2.44(按键版 31884 为 2.39);1,406 / 1,406 次触发都紧跟一次灰烬觉醒按键(≤ 0.02 s)。codex astra 两轮辩论定形:**不**给 30 s 冷却补丁(`cdTierWeight(30)=0`,单次触发永远成不了窗),改成独立的「效果身份」表 `OFFENSIVE_EFFECT_ACTIVATION_IDS`(不是 `SPELL_CANONICAL_IDS`,触发不算按键),权重取 31884 的、时长用自己的 8 s、没有「什么时候再好」;所有「是不是进攻大招」的读者统一走 `isOffensiveSpell`。用户裁「指控」:己方惩戒的触发打进减伤照样算 burst-into-mitigation。605 场:slow-defensive-response 治疗 101 → 129(28 条以 454351 开头)、position-mistake dps 615 → 654、burst-into-mitigation dps 35 → 44、missed-cleanse −4(时机门看见了爆发)。参照表(爆发窗口 + 行为参照由 reliability-fixes 会话在 W1g 后一次重跑,随后同步窗口)未落地前 GH #115 保持开着。同形状的其他天赋见 §60。
+
+## 60. 天赋换了 id 送来的大招效果,以及大招光环 id 没人认识(logged 2026-09-26,GH #119,#115 后续,用户问「我们真的有理解所有天赋吗」)
+
+**现象**:#115 的 454351 是在一场审计对局里**偶然**撞到的,不是扫出来的。修它新建的 `OFFENSIVE_EFFECT_ACTIVATION_IDS` 只有一条,按「手工清单完整性」规则,完整性要单独验证。回答用户问题时跑的 5 分钟扫描(605 场,语料里和已登记进攻大招**同名但不同 id** 的施法 / 自身光环)表明同形状的不止一个:
+
+- **A 类,天赋送来的效果(和 454351 同形状)**:Doom Winds **469270**(47 个玩家触发 2,167 次,只有 232 次紧挨正宗按键;GH #106 当时只把它从「按键」里排除,从没当爆发收进来)、Berserk **1269349**(8 s 光环,3,550 次)。
+- **B 类,已登记大招的光环 id 没人认识**:光环证据读者(`hasOffensiveSpellActive` → `threatActiveAt`:危机 enemyBurst、驱散时机门、cd-spent-idle、panic-press)看不见恶魔变形 162264、暗影之舞 185422、黑暗突变 1235391、Kingsbane 394095、奥术涌动 365362、地狱火 111685、Ashamane 化身 252071、升腾 1219480 / 114052。spellDanger 表头的「KNOWN SPLIT」只记了其中一部分,从没系统扫过。
+- **C 类,正确不收的子效果**:The Hunt 370966、Takedown 1253859、恶魔变形落地冲击 200166(同名施法紧挨正宗按键)。
+
+**做法(未开工,先过价值门)**:按「游戏行为规则」第 2 条,**从 DB2 提名、用语料挑**:每个进攻大招查天赋清单里以别的 id 触发 / 授予它的行(`talentEffectInventoryGenerated.json`,类掩码和 SpellLabel 两种编码都查);上表只是线索。A 类逐个找触发它的按键、按 offensiveCdGapScan 的尺子量抬升、确认时长,三方证据齐了才收;B 类决定光环 id 是否进同一张效果表(光环 id → 施法 id,光环读者经 `offensiveEffectCdId` 解析),先在 605 场量三类光环读者会动多少。扫描要转正成 `packages/eval/scripts/offensiveEffectGapScan.ts` 进赛季 runbook §7b。所有收录一次批量、参照表一次重跑。
