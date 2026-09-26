@@ -61,6 +61,9 @@
     "summonGenerated.ts": {
       "entries": 185
     },
+    "rootAuraGenerated.ts": {
+      "entries": 28
+    },
     "abilityEffectsGenerated.ts": {
       "entries": 2232,
       "absorbs": 109,

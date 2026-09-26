@@ -3,6 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   type IKickPriorityPoint,
   isOwnerMissedKick,
+  KICK_MELEE_BASE_YD,
+  KICK_MELEE_REACH_YD,
+  meleeKickReachYd,
   type KickPriorityFriend,
   kickPriorityMissedEvents,
   kickPriorityTeamEvents,
@@ -20,6 +23,7 @@ const friend = (over: Partial<KickPriorityFriend> = {}): KickPriorityFriend => (
   distanceYd: 4,
   inRange: true,
   feasible: true,
+  reachableBeforeLanding: true,
   ...over,
 });
 const point = (over: Partial<IKickPriorityPoint> = {}): IKickPriorityPoint => ({
@@ -117,5 +121,34 @@ describe("kickPriorityTeamEvents (user ruling 3: teammate form, distance include
     expect(kickPriorityTeamEvents([point({ friends: [friend({ cdRemainingS: 6, feasible: false }), { ...mate, inRange: false, feasible: false }] })], owner, probes)).toHaveLength(0);
     // owner has no interrupt at all
     expect(kickPriorityTeamEvents([point({ friends: [mate] })], owner, probes)[0]!.facts.ownerWhy).toBe("no interrupt");
+  });
+});
+
+describe("meleeKickReachYd (reliability round 3 W1a, 6954)", () => {
+  it("a kicker who could not run at all reaches only the kick's own range + hitbox slack, not the 8 yd run envelope", () => {
+    expect(meleeKickReachYd(0, 5, 5)).toBe(7);
+    expect(meleeKickReachYd(0, 5, 5)).toBeLessThan(KICK_MELEE_BASE_YD);
+  });
+
+  it("a kicker who could run keeps the envelope, capped, plus range talents", () => {
+    expect(meleeKickReachYd(1, 5, 5)).toBe(KICK_MELEE_BASE_YD + 7);
+    expect(meleeKickReachYd(10, 5, 5)).toBe(KICK_MELEE_REACH_YD);
+    expect(meleeKickReachYd(10, 10, 5)).toBe(KICK_MELEE_REACH_YD + 5);
+  });
+});
+
+describe("the chance must come before the heal landed", () => {
+  it("feasible on the nominal cast but not reachable before the actual landing → no accusation, no team call-out", () => {
+    const late = friend({ reachableBeforeLanding: false });
+    expect(isOwnerMissedKick(point({ friends: [late] }), owner.id)).toBe(false);
+  });
+});
+
+describe("owner card: othersFeasible needs the landing predicate too (codex review)", () => {
+  it("a teammate feasible on the nominal cast but not before the landing is not named", () => {
+    const late = friend({ id: "P2", name: "Mate", reachableBeforeLanding: false });
+    const ev = kickPriorityMissedEvents([point({ friends: [friend(), late] })], owner, probes);
+    expect(ev).toHaveLength(1);
+    expect(ev[0]!.facts.othersFeasible).toBe("none");
   });
 });

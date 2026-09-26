@@ -149,6 +149,9 @@ export async function main(): Promise<void> {
       "summonGenerated.ts": {
         entries: countQuotedIds("summonGenerated.ts"),
       },
+      "rootAuraGenerated.ts": {
+        entries: countQuotedIds("rootAuraGenerated.ts"),
+      },
       // spell → charge pool pairs: count the keys, not every quoted number
       // (each row also quotes its category id).
       "sharedChargeGenerated.ts": {

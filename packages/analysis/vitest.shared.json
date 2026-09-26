@@ -172,6 +172,7 @@
     "test/rawStreams.test.ts",
     "test/reactionWindow.test.ts",
     "test/resLedgerPrune.test.ts",
+    "test/rootIntervals.test.ts",
     "test/rootReachability.test.ts",
     "test/sharedCharge.test.ts",
     "test/smoke.test.ts",

@@ -280,6 +280,9 @@ npx tsx packages/analysis/scripts/datagen/genSharedCharges.ts
 # 6f1c. summon spells (SpellEffect 28 SUMMON on the spell or one EffectTriggerSpell hop). CD_OUT_OF_RANGE
 #      abstains on them — the payoff is a pet, not the owner's position (reliability round 2 W1f).
 npx tsx packages/analysis/scripts/datagen/genSummonSpells.ts
+# 6f1d. root auras (SpellEffect aura 26 / 455 on the spell itself). ROOT_SPELL_IDS = the root DR class ∪
+#      these — the DR class misses roots with no DR (Ice Nova); read by [ROOT] and the kick run budget.
+npx tsx packages/analysis/scripts/datagen/genRootAuras.ts
 # 6f2. Spell mechanic facts (GH #77, 2026-09-24): CC mechanic (SpellCategories / SpellEffect, one
 #      EffectTriggerSpell hop, else the unique loss-of-control mechanic among same-named observed spells),
 #      base cast time (SpellMisc → SpellCastTimes; 0 = instant), mechanic immunity (aura 77), all-school

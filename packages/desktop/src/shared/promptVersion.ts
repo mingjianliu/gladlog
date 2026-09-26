@@ -9,15 +9,6 @@
  *  Full history in docs/prompt-version-history.md (append new entries there);
  *  the last few entries stay inline so a reader sees the format:
  *
- *  v156 (2026-09-26, kick-eaten legend fixes found in the fake-cast check):
- *  a multi-school lockedSchool lists its schools ("Chaos (Fire + Nature +
- *  Frost + Shadow + Arcane)") — the model told a Destruction Warlock Fire stays
- *  open after a Chaos Bolt kick; burstReady says only that the cooldowns were
- *  ready, never that the kick slowed the team's tempo. 605 files: 933 menus
- *  change (kick-eaten lines and legend only; other types and the match context
- *  byte-identical); 119 of 1,482 kick-eaten lines list a multi-school lock.
- *  Targeted check (same prompts, 2 responses each): "slowed your tempo" 4/4 →
- *  0/4 (074, 107); "Fire stays open" after a Chaos lock 2/2 → 0/2 (114).
  *  v157 (2026-09-26, reliability round 2 W1g defensive roster + W1e charges): the
  *  ledger admits Greater Invisibility, Alter Time, Survival of the Fittest,
  *  Retribution Divine Protection, Lay on Hands, Spellwarden AMS and
@@ -33,5 +24,12 @@
  *  positioned and beyond reach for the whole 5 s (exact closest approach between
  *  position events); the line states "its reach N yd". 605 files at efc522b4:
  *  rendered lines 516 → 2, menu cd-out-of-range −343 / +1; gates 0 → 0.
+ *  v159 (2026-09-26, reliability round 3 W1a 6954): kick-priority-missed / -team no
+ *  longer credit a melee kicker with a run he could not make — roots cut the run
+ *  budget, a kicker who could not move reaches only the kick's range + hitbox
+ *  slack, and the chance must exist before the heal actually landed; roots are the
+ *  DB2 root DR class ∪ official root auras (Ice Nova, Harpoon …). 605 files at
+ *  7c6488e1: kick-priority-missed −5 / +1, kick-priority-team −4 / +3, [ROOT]
+ *  +17 lines; gates 0 → 0.
  */
-export const PROMPT_VERSION = 158;
+export const PROMPT_VERSION = 159;

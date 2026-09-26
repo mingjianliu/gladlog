@@ -70,6 +70,7 @@ import * as kickPriorityPrior from "@gladlog/analysis/src/data/kickPriorityPrior
 import * as mitigationComponents from "@gladlog/analysis/src/data/mitigationComponents";
 import * as outcomeRefs from "@gladlog/analysis/src/data/outcomeRefs";
 import * as racialAbilities from "@gladlog/analysis/src/data/racialAbilities";
+import * as rootAuraGenerated from "@gladlog/analysis/src/data/rootAuraGenerated";
 import * as sharedChargeGenerated from "@gladlog/analysis/src/data/sharedChargeGenerated";
 import * as spellCategories from "@gladlog/analysis/src/data/spellCategories";
 import * as summonGenerated from "@gladlog/analysis/src/data/summonGenerated";
@@ -586,6 +587,16 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/rootReachability.ts`,
     symbol: "ROOT_SPELL_IDS",
     mod: rootReachability,
+  },
+  {
+    file: `${A}/utils/rootReachability.ts`,
+    symbol: "rootIntervalsOf",
+    mod: rootReachability,
+  },
+  {
+    file: `${A}/data/rootAuraGenerated.ts`,
+    symbol: "ROOT_AURA_SPELL_IDS",
+    mod: rootAuraGenerated,
   },
   {
     file: `${A}/utils/rootReachability.ts`,

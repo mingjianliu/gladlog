@@ -26,7 +26,10 @@
  */
 import { getEnglishSpellName } from "../../data/spellEffectData";
 import { MELEE_RANGE_YD, spellRangeYards } from "../../data/spellReach";
-import { spellRangeForCaster } from "../../utils/spellRange";
+import {
+  RANGE_HITBOX_SLACK_YD,
+  spellRangeForCaster,
+} from "../../utils/spellRange";
 import { hardcastHealSpell } from "../../data/kickPriorityHealSpells";
 import { buildCannotCastIntervals } from "../../utils/cannotCastIntervals";
 import { gridHpPct, isHealerSpec } from "../../utils/cooldowns";
@@ -41,7 +44,10 @@ import {
 import { computeOffensiveWindows } from "../../utils/offensiveWindows";
 import { LOS_SWEEP_GAP_MS } from "../../utils/positionSampling";
 import { toRenderSecond } from "../../utils/renderGrid";
-import { canReachTargetAt } from "../../utils/rootReachability";
+import {
+  canReachTargetAt,
+  rootIntervalsOf,
+} from "../../utils/rootReachability";
 import { fmtFactNum as fmt, fmtFactTime } from "../factFormat";
 import type { CandidateEvent } from "../types";
 
@@ -74,6 +80,29 @@ export const KICK_MELEE_REACH_YD = 20;
  * Base 8 yd = the p50 of landed melee kicks (model centres + hitbox). */
 export const KICK_MELEE_BASE_YD = 8;
 export const KICK_RUN_SPEED_YD_S = 7;
+
+/**
+ * A melee kicker's reach for a cast: the run envelope when they could run at
+ * all, and only the kick's own range + hitbox slack when they could not
+ * (rooted / locked for the whole stretch) — KICK_MELEE_BASE_YD is the p50 of
+ * landed kicks measured at cast START, movement included, so it is not a
+ * standing reach (codex, W1a 2026-09-26). `range - baseRange` keeps the
+ * kicker's range talents.
+ */
+export function meleeKickReachYd(
+  runS: number,
+  range: number,
+  baseRange: number,
+): number {
+  if (runS <= 0) return range + RANGE_HITBOX_SLACK_YD;
+  return (
+    Math.min(
+      KICK_MELEE_REACH_YD,
+      KICK_MELEE_BASE_YD + KICK_RUN_SPEED_YD_S * runS,
+    ) +
+    (range - baseRange)
+  );
+}
 /** The kicker must have been free to act for at least this long inside the
  * cast (not the whole cast): a lockout that expires 50 ms before the heal
  * lands is not an opportunity (codex round-1). */
@@ -103,6 +132,9 @@ export interface KickPriorityFriend {
    * no position sample / unknown map. */
   inRange: boolean | null;
   feasible: boolean;
+  /** Completed casts: still castable and in reach inside the ACTUAL cast
+   * (start → landing), not only the nominal one. Accusations need both. */
+  reachableBeforeLanding: boolean;
 }
 
 export interface IKickPriorityPoint {
@@ -202,12 +234,8 @@ export function kickPriorityDecisionPoints(
   const enemyById = new Map(enemyPlayers.map((e) => [e.id, e]));
   const healers = enemyPlayers.filter((e) => isHealerSpec(e.spec as never));
   const lockedCache = new Map<string, Array<{ from: number; to: number }>>();
-  /** The LONGEST CONTINUOUS stretch of seconds inside [a, b] during which the
-   * unit could cast (cannot-cast intervals subtracted, overlaps merged).
-   * Codex round-2 (2026-09-12): summing fragments let a 1.5 s stun inside a
-   * 2 s cast count as "0.5 s free" while the reach budget still assumed 2 s
-   * of running — reach and lockout now both key on this one number. */
-  const longestFreeSeconds = (f: UnitLike, a: number, b: number): number => {
+  const rootedCache = new Map<string, Array<{ from: number; to: number }>>();
+  const cannotCastOf = (f: UnitLike) => {
     let iv = lockedCache.get(f.id);
     if (!iv) {
       try {
@@ -217,6 +245,38 @@ export function kickPriorityDecisionPoints(
       }
       lockedCache.set(f.id, iv);
     }
+    return iv;
+  };
+  /** Roots on the unit (`rootIntervalsOf`), ms — castable, but no running
+   * (reliability round 3 W1a, 6954: a Retribution Paladin rooted through the
+   * whole heal was granted 16 yd of run). */
+  const rootedOf = (f: UnitLike) => {
+    let iv = rootedCache.get(f.id);
+    if (!iv) {
+      try {
+        iv = rootIntervalsOf(f as never, combat).map((x) => ({
+            from: startMs + x.fromS * 1000,
+            to: startMs + x.toS * 1000,
+          }));
+      } catch {
+        iv = [];
+      }
+      rootedCache.set(f.id, iv);
+    }
+    return iv;
+  };
+  /** The LONGEST CONTINUOUS stretch of seconds inside [a, b] outside the
+   * blocked intervals (overlaps merged). Codex round-2 (2026-09-12): summing
+   * fragments let a 1.5 s stun inside a 2 s cast count as "0.5 s free" while
+   * the reach budget still assumed 2 s of running. The castable stretch
+   * (cannot-cast) decides `locked`; the runnable one (cannot-cast ∪ roots)
+   * the melee run budget — a conservative stand-in for accumulated movement,
+   * never over-crediting it (codex, W1a 2026-09-26). */
+  const longestOutside = (
+    iv: Array<{ from: number; to: number }>,
+    a: number,
+    b: number,
+  ): number => {
     const clipped = iv
       .map((x) => [Math.max(x.from, a), Math.min(x.to, b)] as [number, number])
       .filter(([x, y]) => y > x)
@@ -401,8 +461,10 @@ export function kickPriorityDecisionPoints(
         // Feasibility is judged on the NOMINAL cast (same for a kicked and a
         // completed cast of the same spell), on the longest continuous
         // castable stretch inside it.
-        const freeS = longestFreeSeconds(f, sMs, nominalEndMs);
+        const freeS = longestOutside(cannotCastOf(f), sMs, nominalEndMs);
         const locked = freeS < Math.min(KICK_MIN_FREE_S, nominalS);
+        const runBlocked = [...cannotCastOf(f), ...rootedOf(f)];
+        const runS = longestOutside(runBlocked, sMs, nominalEndMs);
         const pos = getUnitPositionAtTime(f as never, sMs, LOS_SWEEP_GAP_MS);
         const hpos = getUnitPositionAtTime(
           healer as never,
@@ -415,6 +477,7 @@ export function kickPriorityDecisionPoints(
         // (GH #83 — Improved Disrupt +5 yd, …)
         const range = spellRangeForCaster(f as never, kit.spellId);
         let inRange: boolean | null = null;
+        let reachableBeforeLanding = true;
         if (
           pos &&
           baseRange != null &&
@@ -424,22 +487,36 @@ export function kickPriorityDecisionPoints(
           // melee is a property of the spell, not of the talented number: a
           // talented melee kick still needs no line of sight
           const melee = baseRange <= MELEE_RANGE_YD;
-          // run budget = the castable stretch, not the cast length: a
-          // friendly stunned for 1.5 s of a 2 s cast can run for 0.5 s
-          const meleeReach =
-            Math.min(
-              KICK_MELEE_REACH_YD,
-              KICK_MELEE_BASE_YD + KICK_RUN_SPEED_YD_S * freeS,
-            ) +
-            (range - baseRange);
+          // run budget = the runnable stretch (castable and not rooted), not
+          // the cast length: a friendly stunned for 1.5 s of a 2 s cast can
+          // run for 0.5 s, a rooted one not at all
           inRange = canReachTargetAt(
             pos,
             healer as never,
             sMs,
             zoneId,
-            melee ? meleeReach : range,
+            melee ? meleeKickReachYd(runS, range, baseRange) : range,
             !melee,
           );
+          // An accusation needs the chance BEFORE the heal landed (codex,
+          // W1a): the nominal cast keeps the kicked / completed arms
+          // comparable for the reference table, but a completed cast that
+          // landed early leaves less time than the nominal one.
+          if (outcome === "completed" && endMs < nominalEndMs) {
+            const freeB = longestOutside(cannotCastOf(f), sMs, endMs);
+            const runB = longestOutside(runBlocked, sMs, endMs);
+            reachableBeforeLanding =
+              freeB >= Math.min(KICK_MIN_FREE_S, durationS) &&
+              true ===
+                canReachTargetAt(
+                  pos,
+                  healer as never,
+                  sMs,
+                  zoneId,
+                  melee ? meleeKickReachYd(runB, range, baseRange) : range,
+                  !melee,
+                );
+          }
         }
         friendsOut.push({
           id: f.id,
@@ -455,6 +532,7 @@ export function kickPriorityDecisionPoints(
           // is class-wide and stale; a kick this player NEVER cast in the
           // round is not evidence of a kick at all. Observed-or-nothing.
           feasible: kitOk && cdRemainingS <= 0 && !locked && inRange === true,
+          reachableBeforeLanding,
         });
       }
 
@@ -499,7 +577,7 @@ export function isOwnerMissedKick(
 ): boolean {
   if (p.outcome !== "completed") return false;
   const me = p.friends.find((f) => f.id === ownerId);
-  return Boolean(me && me.feasible);
+  return Boolean(me && me.feasible && me.reachableBeforeLanding);
 }
 
 export interface KickPriorityRef {
@@ -539,7 +617,9 @@ export function kickPriorityMissedEvents(
   const out: CandidateEvent[] = mine.map((p) => {
     const me = p.friends.find((f) => f.id === owner.id)!;
     const others = p.friends
-      .filter((f) => f.id !== owner.id && f.feasible)
+      .filter(
+        (f) => f.id !== owner.id && f.feasible && f.reachableBeforeLanding,
+      )
       .map((f) => f.name);
     return {
       id: `kick-priority-missed:${owner.id}:${Math.round(p.castStartS)}`,
@@ -593,7 +673,9 @@ export function kickPriorityTeamEvents(
   for (const p of points) {
     if (p.outcome !== "completed") continue;
     if (isOwnerMissedKick(p, owner.id)) continue; // the owner form owns it
-    const mates = p.friends.filter((f) => f.id !== owner.id && f.feasible);
+    const mates = p.friends.filter(
+      (f) => f.id !== owner.id && f.feasible && f.reachableBeforeLanding,
+    );
     if (mates.length === 0) continue;
     const me = p.friends.find((f) => f.id === owner.id);
     const ownerWhy = !me

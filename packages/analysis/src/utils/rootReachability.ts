@@ -31,7 +31,8 @@ import { CombatUnitReaction } from "@gladlog/parser-compat";
 import { resolveSummonOwner } from "../context/timelineHelpers";
 import { DR_CATEGORIES_GENERATED } from "../data/drCategoriesGenerated";
 import { getEnglishSpellName } from "../data/spellEffectData";
-import { buildAuraIntervals } from "./auraIntervals";
+import { buildAuraIntervals, type IAuraInterval } from "./auraIntervals";
+import { ROOT_AURA_SPELL_IDS } from "../data/rootAuraGenerated";
 import { isHealerSpec, isMeleeSpec } from "./cooldowns";
 import {
   distanceBetween,
@@ -42,10 +43,51 @@ import {
 import { CLOSE_RANGE_YARDS, isDeadAt } from "./positionAnalysis";
 import { CC_MAX_CAST_RANGE_YARDS, LOS_SWEEP_GAP_MS } from "./positionSampling";
 
-/** Official root class (DB2 DiminishType 1), string ids. */
-export const ROOT_SPELL_IDS: ReadonlySet<string> = new Set(
-  DR_CATEGORIES_GENERATED["root"] ?? [],
+/**
+ * Official roots, string ids: the DB2 root DR class (DiminishType 1) UNION the
+ * observed auras whose own SpellEffect roots the carrier
+ * (`ROOT_AURA_SPELL_IDS`, aura 26 / 455). The DR class alone missed
+ * roots with no DR, among them Ice Nova 157997 (×1,193 corpus dispels) —
+ * reliability round 3 W1a, 6954: a Retribution Paladin under Ice Nova was
+ * granted a kick run he could not make. (The spell-level mechanic 7 was tried
+ * first and rejected: its same-name fallback called The Hunt's 7.8 s damage
+ * aura a root.) A root counts only when someone else applied it
+ * (`rootIntervalsOf`).
+ */
+const OTHER_CC_DR_IDS = new Set<string>(
+  (["stun", "incapacitate", "disorient", "silence"] as const).flatMap(
+    (c) => DR_CATEGORIES_GENERATED[c] ?? [],
+  ),
 );
+const ROOT_DR_IDS = new Set<string>(DR_CATEGORIES_GENERATED["root"] ?? []);
+export const ROOT_SPELL_IDS: ReadonlySet<string> = new Set([
+  ...ROOT_DR_IDS,
+  // A fear also carries the root aura (Psychic Scream, Intimidating Shout,
+  // Sigil of Misery: 828 [ROOT] lines on 605 files when admitted) — an aura
+  // in another CC DR class is that CC, not a root.
+  ...[...ROOT_AURA_SPELL_IDS].filter((id) => !OTHER_CC_DR_IDS.has(id)),
+]);
+
+/**
+ * The unit's root intervals — the one "could this unit move" root predicate;
+ * [ROOT] reachability and the kick run budget (candidates/kickPriority.ts)
+ * both read it. A root-DR-class aura always counts, whoever the source (a
+ * reflected Entangling Roots names the druid as source and target — codex
+ * astra review); a root aura outside the DR class counts only when another
+ * unit applied it, since those self-applied are voluntary self-roots (Spirit of
+ * Redemption, Emerald Communion's channel …). Known gap: a reflected no-DR root
+ * (Ice Nova) is dropped.
+ */
+export function rootIntervalsOf(
+  unit: ICombatUnit,
+  combat: { startTime: number; endTime: number },
+): IAuraInterval[] {
+  return buildAuraIntervals(unit, combat).filter(
+    (iv) =>
+      ROOT_DR_IDS.has(iv.spellId) ||
+      (ROOT_SPELL_IDS.has(iv.spellId) && iv.srcUnitName !== unit.name),
+  );
+}
 
 /**
  * Whole seconds of "cannot reach" before a root instance is worth a line.
@@ -175,9 +217,7 @@ export function computeRootReachability(
     );
     const enemies = players.filter((u) => u.reaction !== X.reaction);
     const role = roleOf(X);
-    const intervals = buildAuraIntervals(X, combat).filter((iv) =>
-      ROOT_SPELL_IDS.has(iv.spellId),
-    );
+    const intervals = rootIntervalsOf(X, combat);
     for (const iv of intervals) {
       const dur = iv.toS - iv.fromS;
       if (dur < ROOT_MIN_DURATION_S) continue;
