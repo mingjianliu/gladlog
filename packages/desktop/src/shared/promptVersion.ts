@@ -45,5 +45,14 @@
  *  stop). A/B v1 INCONCLUSIVE (eval-private ab/2026-09-26-fakecast-contrast),
  *  v3 targeted check 0 misuses in 14 responses; owner ruling 「比较基础 但是
  *  还是有一点价值 先做出来」.
+ *  v156 (2026-09-26, kick-eaten legend fixes found in the fake-cast check):
+ *  a multi-school lockedSchool lists its schools ("Chaos (Fire + Nature +
+ *  Frost + Shadow + Arcane)") — the model told a Destruction Warlock Fire stays
+ *  open after a Chaos Bolt kick; burstReady says only that the cooldowns were
+ *  ready, never that the kick slowed the team's tempo. 605 files: 933 menus
+ *  change (kick-eaten lines and legend only; other types and the match context
+ *  byte-identical); 119 of 1,482 kick-eaten lines list a multi-school lock.
+ *  Targeted check (same prompts, 2 responses each): "slowed your tempo" 4/4 →
+ *  0/4 (074, 107); "Fire stays open" after a Chaos lock 2/2 → 0/2 (114).
  */
-export const PROMPT_VERSION = 155;
+export const PROMPT_VERSION = 156;

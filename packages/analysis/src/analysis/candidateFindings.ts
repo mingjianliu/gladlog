@@ -1063,13 +1063,25 @@ export function kickEatenEvents(
         // it the model wrote "a kick locks only that school; instants are not
         // locked" (e9ea8a0c @363) — every spell of the school is locked,
         // instants included. Absent when the official mask is unknown.
+        //
+        // A multi-school name alone ("Chaos") read as one school: the model
+        // told a Destruction Warlock that Fire stays open after a Chaos Bolt
+        // kick (2026-09-26 fake-cast check, 114 twice) — Chaos contains
+        // Fire. A multi-school lock now lists its schools.
         ...((): Record<string, string> => {
-          const school = getSpellSchoolName(
-            k.interruptedSpellId
-              ? spellSchoolMask(k.interruptedSpellId)
-              : undefined,
-          );
-          return school ? { lockedSchool: school } : {};
+          const mask = k.interruptedSpellId
+            ? spellSchoolMask(k.interruptedSpellId)
+            : undefined;
+          const school = getSpellSchoolName(mask);
+          if (!school || mask === undefined) return {};
+          const parts = [1, 2, 4, 8, 16, 32, 64]
+            .filter((b) => (mask & b) === b)
+            .map((b) => getSpellSchoolName(b))
+            .filter((n): n is string => n !== null);
+          return {
+            lockedSchool:
+              parts.length > 1 ? `${school} (${parts.join(" + ")})` : school,
+          };
         })(),
         ...((): Record<string, string> => {
           const r = reach?.(k);

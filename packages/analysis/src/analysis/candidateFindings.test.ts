@@ -1326,6 +1326,21 @@ describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
       { id: "P1", name: "Me" },
     );
     expect(withId[0]!.facts["lockedSchool"]).toBe("Nature");
+    // A multi-school lock lists its schools — Chaos contains Fire (2026-09-26)
+    const chaos = kickEatenEvents(
+      [switchedInst({ interruptedSpellId: "116858" })], // Chaos Bolt — mask 124
+      { id: "P1", name: "Me" },
+    );
+    expect(chaos[0]!.facts["lockedSchool"]).toBe(
+      "Chaos (Fire + Nature + Frost + Shadow + Arcane)",
+    );
+    const spellfrost = kickEatenEvents(
+      [switchedInst({ interruptedSpellId: "356995" })], // Disintegrate — mask 80
+      { id: "P1", name: "Me" },
+    );
+    expect(spellfrost[0]!.facts["lockedSchool"]).toBe(
+      "Spellfrost (Frost + Arcane)",
+    );
     const noId = kickEatenEvents([switchedInst()], { id: "P1", name: "Me" });
     expect(noId[0]!.facts["lockedSchool"]).toBeUndefined();
   });
