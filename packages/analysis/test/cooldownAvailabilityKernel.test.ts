@@ -280,7 +280,7 @@ describe("cdAvailableAt 与 isAvailableAt 对「仅有光环证据」的技能�
 // Reliability audit C4 (2026-09-25): Guardian Angel's per-cast cooldown
 // (buff end + 60 on the expired branch) must price deathOutcomeAnalysis'
 // raw-event path exactly as it prices the ledger — handed the ledger's entry,
-// isAvailableAt reads the same per-cast override through castCooldownSeconds.
+// isAvailableAt reads the same per-cast override through castRecovery.
 describe("isAvailableAt 读账本条目时与 cdAvailableAt 同判(守护之魂逐次冷却)", () => {
   const MATCH_START = 1_000_000;
   const priest = makeUnit("p1", {
@@ -303,4 +303,30 @@ describe("isAvailableAt 读账本条目时与 cdAvailableAt 同判(守护之魂�
     expect(isAvailableAt(priest, "47788", 60, 75, MATCH_START)).toBe(true);
     expect(isAvailableAt(priest, "47788", ledger, 75, MATCH_START)).toBe(false);
   });
+});
+
+// codex astra review of a3a23a04 (2026-09-26): two raw presses 1.5 s apart
+// merge into ONE ledger cast; the override belongs to that cast's own time,
+// so the raw path must count from 10 s, not from the later 11.5 s press.
+describe("isAvailableAt: a press merged into an earlier ledger cast recovers from that cast", () => {
+  const MATCH_START = 1_000_000;
+  const priest = makeUnit("p1", {
+    spellCastEvents: [
+      makeSpellCastEvent("47788", MATCH_START + 10_000, "p2"),
+      makeSpellCastEvent("47788", MATCH_START + 11_500, "p2"),
+    ],
+  });
+  const ledger = {
+    casts: [{ timeSeconds: 10, cooldownSecondsOverride: 71 }],
+    cooldownSeconds: 60,
+    neverUsed: false,
+    charges: 1,
+  };
+  for (const atSeconds of [80, 81, 82, 83]) {
+    it(`t=${atSeconds}`, () => {
+      expect(
+        isAvailableAt(priest, "47788", ledger, atSeconds, MATCH_START),
+      ).toBe(cdAvailableAt(ledger, atSeconds));
+    });
+  }
 });

@@ -18,7 +18,7 @@ import {
   extractMajorCooldowns,
   findCheaperDefensiveAlternatives,
   getPressureThreshold,
-  castCooldownSeconds,
+  castRecovery,
   GUARDIAN_SPIRIT_SAVE_HEAL_ID,
   guardianSpiritCastCooldownSeconds,
   guardianSpiritSaved,
@@ -1785,14 +1785,24 @@ describe("extractMajorCooldowns", () => {
           ),
         ).toBe(180);
       });
-      it("castCooldownSeconds prices a raw press by the ledger cast it merged into", () => {
+      it("castRecovery prices a raw press by the ledger cast it merged into", () => {
         const cd = {
           cooldownSeconds: 60,
           casts: [{ timeSeconds: 10, cooldownSecondsOverride: 64 }],
         };
-        expect(castCooldownSeconds(cd, 10)).toBe(64);
-        expect(castCooldownSeconds(cd, 11.5)).toBe(64); // same 2 s cluster
-        expect(castCooldownSeconds(cd, 13)).toBe(60); // not that cast
+        expect(castRecovery(cd, 10)).toEqual({
+          fromSeconds: 10,
+          cooldownSeconds: 64,
+        });
+        // same 2 s cluster: the override counts from the merged cast's own time
+        expect(castRecovery(cd, 11.5)).toEqual({
+          fromSeconds: 10,
+          cooldownSeconds: 64,
+        });
+        expect(castRecovery(cd, 13)).toEqual({
+          fromSeconds: 13,
+          cooldownSeconds: 60,
+        }); // not that cast
       });
     });
   });

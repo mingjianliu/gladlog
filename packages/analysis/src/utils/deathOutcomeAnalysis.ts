@@ -10,7 +10,7 @@ import { IPlayerCCTrinketSummary } from "./ccTrinketAnalysis";
 import {
   auraOnlyActivationSeconds,
   CD_INSTANT_SLACK_S,
-  castCooldownSeconds,
+  castRecovery,
   type IMajorCooldownInfo,
   isCooldownAvailableFromLastUse,
   isPressOfCooldown,
@@ -295,7 +295,7 @@ function lastCastSeconds(
 }
 
 /** A plain number (a table constant), or the ledger's resolved entry — whose
- * per-cast overrides (Guardian Angel, `castCooldownSeconds`) then price the
+ * per-cast overrides (Guardian Angel, `castRecovery`) then price the
  * last press exactly as `cdAvailableAt` does. */
 export type CooldownSource =
   number | Pick<IMajorCooldownInfo, "casts" | "cooldownSeconds">;
@@ -327,13 +327,19 @@ export function isAvailableAt(
   // (isCooldownAvailableFromLastUse) — each side keeps its own data source
   // (raw spellCastEvents vs the resolved casts ledger) and this side keeps the
   // resetSpellIds extension below; see the comment above that function.
-  const cooldownSeconds =
+  const recovery =
     typeof cooldown === "number"
-      ? cooldown
+      ? { fromSeconds: lastCast, cooldownSeconds: cooldown }
       : lastCast === null
-        ? cooldown.cooldownSeconds
-        : castCooldownSeconds(cooldown, lastCast);
-  if (isCooldownAvailableFromLastUse(lastCast, cooldownSeconds, at))
+        ? { fromSeconds: null, cooldownSeconds: cooldown.cooldownSeconds }
+        : castRecovery(cooldown, lastCast);
+  if (
+    isCooldownAvailableFromLastUse(
+      recovery.fromSeconds,
+      recovery.cooldownSeconds,
+      at,
+    )
+  )
     return true;
 
   // B30: if a reset spell was cast between the last use and atSeconds, the cooldown was reset.

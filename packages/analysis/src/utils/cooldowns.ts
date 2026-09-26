@@ -494,22 +494,31 @@ export function guardianSpiritCastCooldownSeconds(
 }
 
 /**
- * The cooldown the ledger gives the press at `castSeconds`: its per-cast
- * override when it has one, else the entry-level value. The press is matched
- * to the ledger cast it was merged into (the latest at or before it, within
- * the ledger's 2 s de-duplication), so a consumer reading raw cast events —
- * deathOutcomeAnalysis' `isAvailableAt` — prices a press exactly as
- * `cdAvailableAt` does.
+ * How the ledger recovers the press at `castSeconds`: from when, and for how
+ * long. The press is matched to the ledger cast it was merged into (the
+ * latest at or before it, within the ledger's 2 s de-duplication). When that
+ * cast carries a per-cast override, the override counts from THAT cast's own
+ * time — a raw press merged 1.5 s later must not push the recovery 1.5 s back
+ * (codex astra review of a3a23a04, 2026-09-26: 10 s + 11.5 s presses, 71 s
+ * override → the ledger says ready at 81, the raw path had said 82.5).
+ * Otherwise the raw press with the entry-level value, unchanged. Lets a
+ * consumer reading raw cast events — deathOutcomeAnalysis' `isAvailableAt` —
+ * price a press exactly as `cdAvailableAt` does.
  */
-export function castCooldownSeconds(
+export function castRecovery(
   cd: Pick<IMajorCooldownInfo, "casts" | "cooldownSeconds">,
   castSeconds: number,
-): number {
+): { fromSeconds: number; cooldownSeconds: number } {
   let merged: ICooldownCast | undefined;
   for (const c of cd.casts)
     if (c.timeSeconds <= castSeconds && castSeconds - c.timeSeconds <= 2)
       merged = c;
-  return merged?.cooldownSecondsOverride ?? cd.cooldownSeconds;
+  return merged?.cooldownSecondsOverride !== undefined
+    ? {
+        fromSeconds: merged.timeSeconds,
+        cooldownSeconds: merged.cooldownSecondsOverride,
+      }
+    : { fromSeconds: castSeconds, cooldownSeconds: cd.cooldownSeconds };
 }
 
 /**
@@ -713,7 +722,7 @@ export interface ICooldownCast {
    * Guardian Spirit press that actually saved someone keeps the official 180s
    * while the one that expired comes back 60 s after the buff ended (see
    * `guardianSpiritCastCooldownSeconds`). Absent on every other cast —
-   * consumers fall back to the entry-level value (`castCooldownSeconds`).
+   * consumers fall back to the entry-level value (`castRecovery`).
    */
   cooldownSecondsOverride?: number;
   /** Timing classification relative to enemy burst activity. Only set for Defensive/External CDs. */
