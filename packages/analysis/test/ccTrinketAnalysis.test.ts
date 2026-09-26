@@ -437,6 +437,7 @@ describe("analyzePlayerCCAndTrinket — structured data contract (N4)", () => {
       lockoutDurationSeconds: 3,
       postKick: "idle",
       kickDepthPct: null,
+      channelS: null,
       kickersInRange: null,
       nearestKickerDistYd: null,
       firstActionDelayS: null,
@@ -617,6 +618,91 @@ describe("analyzePlayerCCAndTrinket — structured data contract (N4)", () => {
     const inst = analyzePlayerCCAndTrinket(player, [enemy], makeCombat())
       .interruptInstances[0]!;
     expect(inst.firstActionDelayS).toBeCloseTo(3.2, 5);
+  });
+
+  it("W1k: a kick after the spell's own SPELL_CAST_SUCCESS hit the channel — channelS set, no cast depth (1bad0a5c Mind Control)", () => {
+    const enemy = makeUnit("enemy-1", {
+      name: "EnemyShaman",
+      spec: CombatUnitSpec.Shaman_Restoration,
+      reaction: CombatUnitReaction.Hostile,
+    });
+    const MC = "605";
+    const player = makeUnit("player-1", {
+      name: "PlayerPriest",
+      spec: CombatUnitSpec.Priest_Discipline,
+      reaction: CombatUnitReaction.Friendly,
+      castStartEvents: [
+        {
+          logLine: {
+            event: LogEvent.SPELL_CAST_START,
+            timestamp: MATCH_START + 25_016,
+            parameters: [],
+          },
+          spellId: MC,
+        } as any,
+      ],
+      spellCastEvents: [
+        makeSpellCastEvent(
+          MC,
+          MATCH_START + 26_320,
+          "player-1",
+          "PlayerPriest",
+          "enemy-2",
+          "Target",
+        ),
+      ],
+      actionIn: [
+        makeInterruptEvent(
+          "57994",
+          "Wind Shear",
+          MC,
+          "Mind Control",
+          MATCH_START + 27_403,
+          "enemy-1",
+          "EnemyShaman",
+        ),
+      ],
+    });
+    const res = analyzePlayerCCAndTrinket(player, [enemy], makeCombat());
+    expect(res.interruptInstances[0].channelS).toBeCloseTo(1.1, 6);
+    expect(res.interruptInstances[0].kickDepthPct).toBeNull();
+  });
+
+  it("W1k: an instant-start channel (no cast start) kicked after it began is a channel kick (fa5e6c66 Void Torrent)", () => {
+    const enemy = makeUnit("enemy-1", {
+      name: "EnemyMage",
+      spec: CombatUnitSpec.Mage_Frost,
+      reaction: CombatUnitReaction.Hostile,
+    });
+    const VT = "263165";
+    const player = makeUnit("player-1", {
+      name: "PlayerPriest",
+      spec: CombatUnitSpec.Priest_Shadow,
+      reaction: CombatUnitReaction.Friendly,
+      spellCastEvents: [
+        makeSpellCastEvent(
+          VT,
+          MATCH_START + 22_900,
+          "player-1",
+          "PlayerPriest",
+          "enemy-1",
+          "EnemyMage",
+        ),
+      ],
+      actionIn: [
+        makeInterruptEvent(
+          "2139",
+          "Counterspell",
+          VT,
+          "Void Torrent",
+          MATCH_START + 24_402,
+          "enemy-1",
+          "EnemyMage",
+        ),
+      ],
+    });
+    const res = analyzePlayerCCAndTrinket(player, [enemy], makeCombat());
+    expect(res.interruptInstances[0].channelS).toBeCloseTo(1.5, 6);
   });
 
   it("hardcast median: does not re-order the player's shared castStartEvents, and reads a median from unsorted / tied starts", () => {

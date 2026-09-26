@@ -28,6 +28,7 @@ import {
   rootSpellIds,
   trinketSpellIds,
 } from "../data/spellTags";
+import { CHANNELED_SPELL_IDS } from "../data/channeledGenerated";
 import trinketItemIdsData from "../data/trinketItemIds.json";
 import { upperBound } from "./binarySearch";
 import {
@@ -93,6 +94,12 @@ const GLADIATOR_ITEM_IDS = new Set<string>(trinketItemIdsData.gladiatorItemIds);
  * moving it ±2 s reclassifies < 4 % of uses. Measured, not official.
  */
 const TRINKET_RESPONSE_WINDOW_MS = 5000;
+
+/** How far back a SPELL_CAST_SUCCESS of the interrupted spell may sit and still
+ * be the start of the channel a kick hit, when the spell logged no cast start
+ * (instant-start channels: Void Torrent, Drain Soul). The longest PvP channels
+ * run ~6–8 s; 10 s matches the cast-start lookback just above. */
+export const CHANNEL_LOOKBACK_MS = 10_000;
 
 /**
  * Minimum damage taken during a CC window for it to be considered a meaningful
@@ -664,8 +671,18 @@ export interface IInterruptInstance {
   nearestKickerDistYd?: number | null;
   /** Number of enemy kickers in kick range with interrupt available at cast start (GH #73, B6). */
   kickersInRange?: number | null;
-  /** Percentage of nominal cast elapsed before interruption (GH #87, B7). */
+  /** Percentage of nominal cast elapsed before interruption (GH #87, B7).
+   * null for a channel kick (`channelS` set): the cast had already finished. */
   kickDepthPct?: number | null;
+  /** Seconds into the CHANNEL when the kick landed — the spell had already
+   * gone out (its SPELL_CAST_SUCCESS precedes the kick), so it was not
+   * "interrupted before it landed" and there was no cast bar left to fake.
+   * Reliability round 3 W1k: 1bad0a5c's Mind Control had landed (aura
+   * applied 1.1 s before the Wind Shear) and read "kickDepthPct=100", the
+   * model wrote that the CC never landed; f4eb8c87's Drain Soul and
+   * fa5e6c66's Void Torrent had ticked before the kick. Absent for a cast
+   * kicked before it finished. */
+  channelS?: number | null;
 }
 
 export interface ICCAvoidedInstance {
@@ -1360,13 +1377,38 @@ export function analyzePlayerCCAndTrinket(
     let kickersInRange: number | null = null;
     let kickDepthPct: number | null = null;
 
+    // W1k: for an officially channelled spell (CHANNELED_SPELL_IDS, DB2
+    // SpellMisc "Is Channelled"), a SPELL_CAST_SUCCESS after its own cast
+    // start (or, for an instant-start channel with no cast start, in the
+    // CHANNEL_LOOKBACK_MS before the kick) means the kick hit the channel.
+    // The flag is load-bearing: without it a chain-caster whose next cast
+    // start went unlogged read as a channel kick (22 hardcasts on 605 files).
+    const successFloorMs = castStartEvent
+      ? castStartEvent.logLine.timestamp
+      : action.timestamp - CHANNEL_LOOKBACK_MS;
+    const channelStart = !CHANNELED_SPELL_IDS.has(interruptedSpellId)
+      ? undefined
+      : player.spellCastEvents
+          .filter(
+            (e) =>
+              e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+              e.spellId === interruptedSpellId &&
+              e.logLine.timestamp >= successFloorMs &&
+              e.logLine.timestamp <= action.timestamp,
+          )
+          .sort((a, b) => b.logLine.timestamp - a.logLine.timestamp)[0];
+    const channelS = channelStart
+      ? Math.round((action.timestamp - channelStart.logLine.timestamp) / 100) /
+        10
+      : null;
+
     if (castStartEvent) {
       const castStartMs = castStartEvent.logLine.timestamp;
       const elapsedS = Math.max(0, (action.timestamp - castStartMs) / 1000);
       const nominalS =
         hardcastHealSpell(interruptedSpellId)?.medianCastS ??
         getPlayerCompletedMedian(interruptedSpellId);
-      if (nominalS != null && nominalS > 0) {
+      if (nominalS != null && nominalS > 0 && channelS === null) {
         kickDepthPct = Math.max(
           0,
           Math.min(100, Math.round((elapsedS / nominalS) * 100)),
@@ -1430,6 +1472,7 @@ export function analyzePlayerCCAndTrinket(
       nearestKickerDistYd,
       kickersInRange,
       kickDepthPct,
+      channelS,
       firstActionDelayS: null,
       kickSpellId,
       kickSpellName: getEnglishSpellName(kickSpellId, action.spellName),

@@ -27,7 +27,8 @@
     },
     "trinketItemIds.json": {
       "adaptation": 28,
-      "relentless": 10
+      "relentless": 10,
+      "gladiator": 36
     },
     "talentModifiers.json": {
       "trackedSpells": 685
@@ -50,6 +51,9 @@
     },
     "offGcdGenerated.ts": {
       "entries": 422
+    },
+    "channeledGenerated.ts": {
+      "entries": 83
     },
     "abilityEffectsGenerated.ts": {
       "entries": 2232,

@@ -29,6 +29,7 @@ _English-only developer index, generated 2026-09-26 (`git log -1 -- <file>` for 
 | `mitigationGenerated.json` | 2 KB |  |
 | `observedSpellIdsGenerated.json` | 42 KB |  |
 | `offGcdGenerated.ts` | 4 KB | datagen output |
+| `channeledGenerated.ts` | 1 KB | datagen output (SpellMisc "Is Channelled") |
 | `pvpTalentPoolGenerated.ts` | 11 KB | datagen output |
 | `pvpTalentReplacesGenerated.ts` | 861 B | datagen output |
 | `specIconsGenerated.ts` | 2 KB | GENERATED — do not hand-edit. Produced by |

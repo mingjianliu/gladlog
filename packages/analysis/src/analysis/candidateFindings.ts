@@ -17,10 +17,7 @@ import { getEnglishSpellName } from "../data/spellEffectData";
 import { CORPUS_OBSERVED_DISPEL_IDS } from "../data/dispelObservedGenerated";
 import { OFF_GCD_SPELL_IDS } from "../data/offGcdGenerated";
 import { lookupKickPriorityPrior } from "../data/kickPriorityPrior";
-import {
-  resolveMitigation,
-  wallDoorPct,
-} from "../data/mitigationComponents";
+import { resolveMitigation, wallDoorPct } from "../data/mitigationComponents";
 import { spellSchoolMask } from "../data/spellSchools";
 import { ccSpellIds } from "../data/spellTags";
 import { lookupSyncWindowPrior } from "../data/syncWindowPrior";
@@ -978,6 +975,14 @@ export function kickEatenEvents(
         ReturnType<
           typeof analyzePlayerCCAndTrinket
         >["interruptInstances"][number],
+        "channelS"
+      >
+    > &
+    Partial<
+      Pick<
+        ReturnType<
+          typeof analyzePlayerCCAndTrinket
+        >["interruptInstances"][number],
         "interruptedSpellId" | "kickSpellId" | "sourceId"
       >
     >)[],
@@ -1078,6 +1083,10 @@ export function kickEatenEvents(
           : {}),
         ...(k.kickDepthPct != null
           ? { kickDepthPct: String(k.kickDepthPct) }
+          : {}),
+        // W1k: the kick hit the channel after the spell had gone out
+        ...(k.channelS != null
+          ? { phase: "channel", channelS: k.channelS.toFixed(1) }
           : {}),
         // A3 (2026-09-25): seconds of the window the player could not act
         // for another reason (CC, silence, another kick). Only when the

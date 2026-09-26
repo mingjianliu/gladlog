@@ -1333,3 +1333,10 @@ ready; a kick with both sides calm and no burst ready is not listed. 605
 files: kick-eaten dps 1030 → 998, healer 506 → 475 (other types and the
 match context byte-identical); 560 new HP facts, 241 with a same-second
 [STATE] tick, 0 mismatches.
+
+v152 (2026-09-25, reliability round 3 W1k): a kick after an officially
+channelled spell (DB2 SpellMisc "Is Channelled") had gone out is a channel
+kick — kick-eaten carries phase=channel + channelS instead of a clamped
+kickDepthPct, and the legend / consequence rule no longer say it "never
+landed" or invite fake-casting. 605 files: 273 of 1,536 kick-eaten lines
+are channel kicks, 33 lose kickDepthPct; nothing else moves.

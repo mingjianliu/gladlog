@@ -270,6 +270,9 @@ npx tsx packages/analysis/scripts/datagen/genSpellReach.ts
 npx tsx packages/analysis/scripts/datagen/genInterruptKit.ts
 # 6f. off-GCD active abilities table (SpellCooldowns StartRecoveryTime==0; consumed by swimlane folding)
 npx tsx packages/analysis/scripts/datagen/genOffGcd.ts
+# 6f1. channelled spells (SpellMisc Attributes_1 bit 2 "Is Channelled"; kick-eaten's phase=channel,
+#      reliability round 3 W1k). Restricted to the observed universe like 6f.
+npx tsx packages/analysis/scripts/datagen/genChanneled.ts
 # 6f2. Spell mechanic facts (GH #77, 2026-09-24): CC mechanic (SpellCategories / SpellEffect, one
 #      EffectTriggerSpell hop, else the unique loss-of-control mechanic among same-named observed spells),
 #      base cast time (SpellMisc → SpellCastTimes; 0 = instant), mechanic immunity (aura 77), all-school

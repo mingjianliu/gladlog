@@ -9,19 +9,6 @@
  *  Full history in docs/prompt-version-history.md (append new entries there);
  *  the last few entries stay inline so a reader sees the format:
  *
- *  v148 (2026-09-25, reliability round 2 W1a follow-up): a landed ground /
- *  AoE control on a burst caster answers the burst, feasibility also reads
- *  silences and kick lockouts, extras say "Ns later"; burst-window reference
- *  regenerated (C2 included; C4 regen follows). 605 files:
- *  slow-defensive-response −51 / +34, [BURST ANSWERED] reworded in 2,392
- *  contexts.
- *  v149 (2026-09-26, cdTriggerPrior regenerated at a3a23a04): the [CD
- *  PRIOR] reference catches up with the round-end ledger cut (3eb635fb) and
- *  the passive-proc press filter (ab68f275); C4 moved no cell (Holy Priest
- *  Guardian Spirit cells identical). 27 of the table's n values change by
- *  1–16 (Preservation Stasis −16, Holy Paladin −1..−4), no median moves;
- *  the rendered `(n=…)` on [CD PRIOR] lines is the only prompt text that
- *  can change.
  *  v150 (2026-09-25, reliability round 3 W1j): one PvP-trinket readiness
  *  predicate (pvpTrinketRemainingSecondsAt) for the [CC ON TEAM] note, the
  *  [DEATH] line, [HEALER EXPOSURE] and the peel / bookmark target state; a
@@ -37,5 +24,11 @@
  *  files: kick-eaten dps 1030 → 998, healer 506 → 475 (other types and the
  *  match context byte-identical); 560 new HP facts, 241 with a same-second
  *  [STATE] tick, 0 mismatches.
+ *  v152 (2026-09-25, reliability round 3 W1k): a kick after an officially
+ *  channelled spell (DB2 SpellMisc "Is Channelled") had gone out is a channel
+ *  kick — kick-eaten carries phase=channel + channelS instead of a clamped
+ *  kickDepthPct, and the legend / consequence rule no longer say it "never
+ *  landed" or invite fake-casting. 605 files: 273 of 1,536 kick-eaten lines
+ *  are channel kicks, 33 lose kickDepthPct; nothing else moves.
  */
-export const PROMPT_VERSION = 151;
+export const PROMPT_VERSION = 152;
