@@ -11,7 +11,7 @@ plan below is the ruling that came out of it.
 
 GH #71 proposed reading all high + medium mapped coach sentences next to each predicate's prompt
 legend and giving each predicate a ✅ / ❌ verdict, as the 21-sentence table in
-`docs/HANDOFF-2026-09-05-skillcapped-coach-corpus.md` (§ "用 high 匹配当 Value-Gate 目标句") did.
+`docs/archive/HANDOFF-2026-09-05-skillcapped-coach-corpus.md` (§ "用 high 匹配当 Value-Gate 目标句") did.
 Codex's objections, all verified against the cited code:
 
 - **"medium" is defined as "same event family, predicate might not catch this instance"**

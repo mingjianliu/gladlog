@@ -5,7 +5,7 @@ Python tools (stdlib + `faster_whisper` via crv's venv + `ffmpeg`, `yt-dlp`, `cl
 `tmp/skillcapped-vod/` (override with `COACH_CORPUS_DATA`); transcripts contain the coaches' words and never
 enter the repo — outputs are paraphrase + structure only (the arenacoach batch-1 copyright rule).
 
-Runbook: `docs/commands/ingest-coach-corpus.md`. Findings and the traced example: `docs/HANDOFF-2026-09-05-skillcapped-coach-corpus.md`.
+Runbook: `docs/commands/ingest-coach-corpus.md`. Findings and the traced example: `docs/archive/HANDOFF-2026-09-05-skillcapped-coach-corpus.md`.
 
 | step | tool | notes |
 |---|---|---|

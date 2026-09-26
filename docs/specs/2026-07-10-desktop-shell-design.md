@@ -2,7 +2,7 @@
 
 Date: 2026-07-10
 Status: Pending User Review
-Upstream Documents: `docs/specs/2026-07-10-clean-rewrite-roadmap-design.md` (Roadmap), `HANDOFF-2026-07-10.md`
+Upstream Documents: `docs/specs/2026-07-10-clean-rewrite-roadmap-design.md` (Roadmap), `HANDOFF-2026-07-10.md` (now `docs/archive/HANDOFF-2026-07-10.md`)
 
 ## Goals and Scope
 

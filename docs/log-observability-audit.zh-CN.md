@@ -1,6 +1,6 @@
 # 战斗日志可观测性审计
 
-[English](log-observability-audit.md) | **简体中文**
+[English](log-observability-audit.md) · **中文**
 
 ## 目的与范围
 

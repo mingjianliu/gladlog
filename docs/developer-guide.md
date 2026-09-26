@@ -2,7 +2,7 @@
 
 **English** · [Chinese](developer-guide.zh-CN.md)
 
-For people who need to read or modify this codebase. Read alongside: `CLAUDE.md` at the repo root (the hard rules), `docs/verifiability-roadmap.md` (the verification system as a whole), and `docs/plans/` (the history and current state of design decisions).
+For people who need to read or modify this codebase. Read alongside: `CLAUDE.md` at the repo root (the hard rules), `docs/verifiability-roadmap.md` (the verification system as a whole), and [`docs/README.md`](README.md) (the documentation map — it says which documents are kept current and which are frozen; design history lives in `docs/plans/` + `docs/specs/` up to 2026-08-05 and in `docs/superpowers/` after that).
 
 ## Development dependencies
 
@@ -82,7 +82,7 @@ npm run presubmit
 
 ## The eval system (prompt/response quality)
 
-Three workflows (`docs/commands/`), with output landing in the private repo at `$GLADLOG_EVAL_HOME`:
+The eval runbooks live in `docs/commands/` (the full list of ten runbooks, one line each, is in [`docs/README.md`](README.md)); output lands in the private repo at `$GLADLOG_EVAL_HOME`. The three you will use most:
 
 - **/eval-baseline** — evaluate the current state to find problems: build the corpus → deterministic quality gates (coverage / noise / leading words) → generate responses → three-pass scoring (anchored rubric + discriminant validity) → report and ledger.
 - **/eval-ab** — controlled A/B validation of a prompt-builder change (same corpus, blind scoring, bootstrap CI). Note that the worktree must run `npm ci` — symlinks will silently fall back to the main checkout's code.
@@ -97,6 +97,10 @@ Known measurement facts: under Sonnet, a single-round accuracy Δ of ≲0.6 was 
 ## Releasing
 
 GitHub Actions builds the Windows x64 and macOS installers natively on tag (no Wine). The electron-builder traps — pin electronVersion, don't add `files`, `extraResources`, macOS ad-hoc signing — are in `docs/BUILD-WINDOWS.md` and the commit history.
+
+## Language policy
+
+User-facing documents are bilingual: the list in `CLAUDE.md`'s "Bilingual Docs Rule" (thirteen top-level documents plus every `packages/<pkg>/README.md` that has a `.zh-CN.md` twin) is written in English as the canonical version, with a Chinese twin that must stay equivalent — update both or neither. Everything else is deliberately free-form and is mostly Chinese: source comments, CI and commit messages, `.claude/skills`, `docs/plans` / `docs/specs` / `docs/superpowers`, `docs/BACKLOG.md`, runbooks under `docs/commands/`, and the archived handoffs. Do not "fix" that by translating it, and do not add a `.zh-CN.md` twin to a document that is not on the list; if a new document is user-facing, add it to the list and ship both languages together.
 
 ## Where to start reading the code
 

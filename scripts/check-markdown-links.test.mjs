@@ -284,7 +284,7 @@ Content
 
     it("does not parse the escaped confidence interval as a link", () => {
       const rootDir = process.cwd();
-      const result = auditMarkdownLinks(rootDir, ["docs/HANDOFF-2026-09-05-skillcapped-coach-corpus.md"]);
+      const result = auditMarkdownLinks(rootDir, ["docs/archive/HANDOFF-2026-09-05-skillcapped-coach-corpus.md"]);
 
       assert.strictEqual(result.summary.brokenPaths, 0);
       assert.strictEqual(result.summary.totalFindings, 0);

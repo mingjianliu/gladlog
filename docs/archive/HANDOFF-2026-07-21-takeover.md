@@ -1,5 +1,7 @@
 # Takeover Instructions — 2026-07-21
 
+> **Archived 2026-09-26** — historical handoff; paths and state may no longer match the repo.
+
 **For the session taking over this work.** From here on you have full ownership — no need to come back and ask what the previous round did.
 Reading this document plus the two documents it references is sufficient. **Do not dig through old session logs.**
 

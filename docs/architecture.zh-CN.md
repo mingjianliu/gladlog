@@ -62,20 +62,17 @@ desktop renderer(React)
 
 ## 2. 七个包,以及箭头指向哪边
 
-2026-08-01 实测,统计各包 `src/` 下的 `.ts`/`.tsx`(含同目录的 `*.test.ts`;各包另有独立的 `test/` 目录,不计入此表):
+各包的源码在 `src/` 下(含同目录的 `*.test.ts`),另有独立的 `test/` 目录。逐包、逐文件的规模数字已于 2026-09-26 从本文档删除 —— 自 2026-08-01 那次实测以来它们腐烂得很厉害,也没人重新测过;今天要数字就跑 `wc -l`。
 
-| 包                       | `src/` 文件数 | `src/` 行数 | 声明的运行时依赖                                          | 一句话职责                          |
-| ------------------------ | ------------: | ----------: | --------------------------------------------------------- | ----------------------------------- |
-| `@gladlog/analysis`      |           128 |      35,325 | `@gladlog/parser-compat`                                  | 战斗分析谓词、prompt 构建、游戏数据 |
-| `@gladlog/desktop`       |           192 |      33,390 | `@gladlog/parser`(见下方注意)                             | Electron 应用本体                   |
-| `@gladlog/eval`          |            18 |       4,242 | parser、parser-compat、analysis、corpus-tools、`fs-extra` | prompt/回复的质量门规与判分         |
-| `@gladlog/corpus-tools`  |            25 |       3,944 | analysis、parser-compat、`node-fetch`、`fs-extra`         | 参照语料构建、第三方日志归档        |
-| `@gladlog/parser`        |            20 |       2,653 | **无**                                                    | 战斗日志 → 带类型的对局文档         |
-| `@gladlog/log-pipeline`  |            27 |       1,500 | **无**                                                    | 经共享文件夹做跨机日志中继          |
-| `@gladlog/parser-compat` |             6 |       1,119 | `@gladlog/parser`                                         | 新 doc 形状 → 旧 `ICombatUnit` 形状 |
-| **合计**                 |       **416** |  **82,173** |                                                           |                                     |
-
-这 416 个文件里 317 个是非测试文件、99 个是同目录测试。独立 `test/` 目录另有 59(analysis)、73(desktop)、19(parser)、13(eval)、3(parser-compat)个文件。
+| 包                       | 声明的运行时依赖                                          | 一句话职责                          |
+| ------------------------ | --------------------------------------------------------- | ----------------------------------- |
+| `@gladlog/analysis`      | `@gladlog/parser-compat`                                  | 战斗分析谓词、prompt 构建、游戏数据 |
+| `@gladlog/desktop`       | `@gladlog/parser`(见下方注意)                             | Electron 应用本体                   |
+| `@gladlog/eval`          | parser、parser-compat、analysis、corpus-tools、`fs-extra` | prompt/回复的质量门规与判分         |
+| `@gladlog/corpus-tools`  | analysis、parser-compat、`node-fetch`、`fs-extra`         | 参照语料构建、第三方日志归档        |
+| `@gladlog/parser`        | **无**                                                    | 战斗日志 → 带类型的对局文档         |
+| `@gladlog/log-pipeline`  | **无**                                                    | 经共享文件夹做跨机日志中继          |
+| `@gladlog/parser-compat` | `@gladlog/parser`                                         | 新 doc 形状 → 旧 `ICombatUnit` 形状 |
 
 依赖方向:
 
@@ -91,7 +88,7 @@ log-pipeline:谁都不依赖(纯 Node 标准库)
 
 1. **`parser` 零依赖。** `packages/parser/package.json` 里根本没有 `dependencies` 字段,`packages/parser/src/` 下每一个模块说明符都是相对路径。它唯一碰到的平台 API 是 `Intl.DateTimeFormat`(`src/l1/timestamp.ts`)。正因如此,parser 可以被 worker 进程、测试夹具、benchmark 脚本随手复用,不拖任何东西。
 2. **`analysis` 消费的是 `parser-compat`,不是 `parser`。** 分析代码是照着旧的 `ICombatUnit` 形状写的,不是 `GladUnit`。`packages/analysis/src/index.ts` 写明了这个取舍:入口形状是 legacy,类型设计留了余地,未来可以逐个 util 迁到原生形状。
-3. **renderer 直调 analysis。** 它不会让 main 去算分析谓词。`report/derive/*.ts` 调 `toLegacySafe(source)`(`src/renderer/src/report/derive/legacySource.ts`),然后在同进程内调 analysis 的函数。38 个非测试 derive 模块里有 24 个 import 了 `@gladlog/analysis`。
+3. **renderer 直调 analysis。** 它不会让 main 去算分析谓词。`report/derive/*.ts` 调 `toLegacySafe(source)`(`src/renderer/src/report/derive/legacySource.ts`),然后在同进程内调 analysis 的函数。derive 模块里多数都 import 了 `@gladlog/analysis`。
 
 ### 注意:未声明的工作区依赖
 
@@ -113,13 +110,13 @@ Electron 给了四个 JavaScript 上下文,gladlog 四个都用上了,外加 `wo
 | **renderer**         | `src/renderer/src/main.tsx`                                     | React UI、derive 层、直调 `@gladlog/analysis`     |
 | **`worker_threads`** | `src/main/slimWorker.ts`,以及 `matchStore.ts` 里一个内联 worker | 一次性的重型 JSON parse / 瘦身回写,不占主线程     |
 
-`src/main/index.ts` 就是用代码写的接线图 —— 246 行,几乎全是构造服务、把依赖递进去。从头读到尾就知道有哪些东西存在。
+`src/main/index.ts` 就是用代码写的接线图 —— 几乎全是构造服务、把依赖递进去。从头读到尾就知道有哪些东西存在。
 
 ### tail 日志的 utility 进程
 
 `WorkerHost`(`src/main/workerHost.ts`)用 `utilityProcess.fork` 拉起 `worker.js`,把 stdout/stderr 接进 `electron-log`,并在任何非预期退出后 1 秒重启。为什么用独立 OS 进程而不是线程:某一行畸形日志导致的解析崩溃不能带走 UI,而且必须能归因。
 
-归因逻辑就是 `crashPolicy.ts`(28 行):worker 在状态消息里报告 `{fileKey, offset}`;如果进程在大致同一位置连挂三次(`OFFSET_TOLERANCE = 65536` 字节),该文件被**隔离** —— 加进 `WorkerConfig.quarantined`,此后跳过。任何一次成功的 `match`/`shuffle` 消息都会清零计数。
+归因逻辑就是 `crashPolicy.ts`:worker 在状态消息里报告 `{fileKey, offset}`;如果进程在大致同一位置连挂三次(`OFFSET_TOLERANCE = 65536` 字节),该文件被**隔离** —— 加进 `WorkerConfig.quarantined`,此后跳过。任何一次成功的 `match`/`shuffle` 消息都会清零计数。
 
 worker 内部(`src/worker/`):
 
@@ -134,39 +131,39 @@ worker 内部(`src/worker/`):
 
 ## 4. 主进程服务清单
 
-`packages/desktop/src/main/` 有 29 个非测试模块(含测试共 48 个文件)。这里的一切都在 `index.ts` 的 `app.whenReady()` 里构造,并通过 `ipc.ts` 暴露给 renderer。
+`packages/desktop/src/main/` 放的是下表这些服务模块(测试与源码同目录)。这里的一切都在 `index.ts` 的 `app.whenReady()` 里构造,并通过 `ipc.ts` 暴露给 renderer。
 
-| 模块                              |  行数 | 它管什么                                                                                                                                   | 落盘状态                                                             |
-| --------------------------------- | ----: | ------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------- |
-| `matchStore.ts`                   |   625 | 对局库:`store` / `list` / `page` / `get` / `rawLine` / `rebuildIndex`。`get()` 返回**原始字节**,绝不返回对象。                             | `<userData>/matches/<id>/` + `_index.ndjson`                         |
-| `analysis.ts`                     | 1,207 | AI 复盘:`run`、`deepen`、`analyzeWindow`、`cancel`、`getState`、`getCached`、`getFlags`/`setFlag`、`aggregate`、`notebook`、`listAnalyzed` | 每场的 `analysis-v2.<lang>.json`、`windowAnalysis.<lang>.json`、标记 |
-| `learning.ts`                     |   461 | 跨场教练闭环:台账 → 确定性模式扫描 → AI 提炼 → 规则                                                                                        | `<userData>/learning/rules.json`(台账见下行)                         |
-| `learningLedger.ts`               |    92 | 只追加 NDJSON,一行一次分析 run;读取按场取最新一行(last-run-wins);冗余超 1.2 倍才重写归并                                                   | `<userData>/learning/ledger.ndjson`                                  |
-| `compare.ts`                      |   280 | 与参照语料对比;`N_FLOOR = 30`;流式吐 delta                                                                                                 | 每场一个 `compare.json`                                              |
-| `recorder.ts`                     |   334 | 按 `segmentOpen`/`segmentClose` 外控 OBS;40 分钟安全阀;起停走单条 promise 链串行化                                                         | 自己不落盘(委托 `recordingsStore`)                                   |
-| `recordingsStore.ts`              |   224 | 录像索引及其与对局的关联(`TOLERANCE_MS = 60_000` 重叠判据);按 `recordingKeepCount` 清理                                                    | `<userData>/recordings/` NDJSON 索引 + 视频文件                      |
-| `settingsStore.ts`                |   313 | 带默认值的类型化设置、patch 净化、旧字段迁移、密钥字段用 `safeStorage` 加密                                                                | `<userData>/settings.json`                                           |
-| `workerHost.ts`                   |    88 | 拉起/重启/重配 tail 日志的 utility 进程                                                                                                    | 无                                                                   |
-| `workerMessageHandler.ts`         |   ~70 | `WorkerToMain` 消息的纯路由(入库、通知录像、推给窗口)                                                                                      | 无                                                                   |
-| `crashPolicy.ts`                  |    28 | 判定反复崩溃的日志文件何时被隔离                                                                                                           | 无(内存)                                                             |
-| `quitLifecycle.ts`                |    93 | `before-quit` 钩子:挂起退出 → 停录像(封顶 4 秒)→ 停 worker → 收掉在飞 AI → 真正退出                                                        | 无                                                                   |
-| `slimWorker.ts`                   |    33 | `worker_threads` 入口:读 → parse → `slimStoredDoc` → 原子回写 → 回报每轮行偏移                                                             | 原地重写 `match.json`                                                |
-| `importLogs.ts`                   |    90 | 历史日志的一次性流式导入(4 MB 块、手写 `\n` 切分);按 match id 去重,重复导入天然幂等                                                        | 经 `MatchStore` 写                                                   |
-| `corpusLoader.ts`                 |    92 | 按优先级路径表加载 `reference_vectors.json`(userData 覆盖优先,再内置),带形状粗验                                                           | 只读                                                                 |
-| `iconCache.ts`                    |    78 | 从 `wow.zamimg.com` 取技能图标,落盘为 `<name>.jpg`,以 data URL 返回;每会话 512 次取图预算;测试用 `offline` 模式                            | `<userData>/icons/`                                                  |
-| `vodProtocol.ts`                  |    58 | 注册特权 `vod://` scheme,带 HTTP range 支持地提供录像                                                                                      | 读视频文件                                                           |
-| `ipc.ts`                          |   195 | main↔renderer 的全部契约面:约 40 个 `ipcMain.handle` 频道                                                                                  | 无                                                                   |
-| `ai.ts`                           |   123 | 后端选择(`resolveAiClient`)、教练系统提示、Anthropic 流式客户端、`stopAllAiActivity()`                                                     | 无                                                                   |
-| `localAiBackends.ts`              |   549 | `claude` / `agy` / `codex` 三个 CLI 后端:纯 argv spawn(不过 shell)、300 秒超时、prompt 落盘中转、失败时附版本线索                          | `os.tmpdir()` 下的临时中转目录                                       |
-| `cliDetect.ts`                    |   225 | 找 CLI 可执行文件:先 PATH,再常见安装目录;5 秒超时的轻量 `--version` 探测                                                                   | 无(进程内 memo)                                                      |
-| `deepseekClient.ts`               |   247 | DeepSeek 官方 API(OpenAI 兼容 SSE);整体 + 停滞双看门狗;抠掉错误文本里的 key                                                                | 无                                                                   |
-| `obsClient.ts`                    |   ~40 | 收敛到最小的 OBS websocket 面,好让 `recorder.ts` 全走 fake 单测                                                                            | 无                                                                   |
-| `obsAutoConfig.ts`                |   105 | 读 OBS 28+ 自己的 websocket 配置 JSON,省得用户手抄密码。**只读** —— OBS 退出时会回写整个文件                                               | 无                                                                   |
-| `aiDebugLog.ts`                   |    24 | 最近 10 次 AI 调用(prompt + 原始返回)的内存环形日志,供开发者页用。刻意不落盘                                                               | 无                                                                   |
-| `exportImage.ts`                  |   ~90 | 在离屏窗口里渲染战报并整页截图为 PNG                                                                                                       | 写用户选定的 PNG                                                     |
-| `detectWowDir.ts`                 |    30 | 仅 Windows 的 WoW 安装路径猜测,以及 `resolveLogsDir`                                                                                       | 无                                                                   |
-| `e2eEnv.ts`                       |    19 | `GLADLOG_E2E=1` 下把 `userData` 指到临时目录 —— 参数不合法时**抛错**,绝不静默回落到真实目录                                                | 无                                                                   |
-| `readNthLine`(在 `matchStore.ts`) |     — | 流式扫 `raw.txt` 找第 n 个 `\n` 并早停,而不是为取一行整读+切分一个 12–70 MB 的文件                                                         | 无                                                                   |
+| 模块                              | 它管什么                                                                                                                                   | 落盘状态                                                             |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------- |
+| `matchStore.ts`                   | 对局库:`store` / `list` / `page` / `get` / `rawLine` / `rebuildIndex`。`get()` 返回**原始字节**,绝不返回对象。                             | `<userData>/matches/<id>/` + `_index.ndjson`                         |
+| `analysis.ts`                     | AI 复盘:`run`、`deepen`、`analyzeWindow`、`cancel`、`getState`、`getCached`、`getFlags`/`setFlag`、`aggregate`、`notebook`、`listAnalyzed` | 每场的 `analysis-v2.<lang>.json`、`windowAnalysis.<lang>.json`、标记 |
+| `learning.ts`                     | 跨场教练闭环:台账 → 确定性模式扫描 → AI 提炼 → 规则                                                                                        | `<userData>/learning/rules.json`(台账见下行)                         |
+| `learningLedger.ts`               | 只追加 NDJSON,一行一次分析 run;读取按场取最新一行(last-run-wins);冗余超 1.2 倍才重写归并                                                   | `<userData>/learning/ledger.ndjson`                                  |
+| `compare.ts`                      | 与参照语料对比;`N_FLOOR = 30`;流式吐 delta                                                                                                 | 每场一个 `compare.json`                                              |
+| `recorder.ts`                     | 按 `segmentOpen`/`segmentClose` 外控 OBS;40 分钟安全阀;起停走单条 promise 链串行化                                                         | 自己不落盘(委托 `recordingsStore`)                                   |
+| `recordingsStore.ts`              | 录像索引及其与对局的关联(`TOLERANCE_MS = 60_000` 重叠判据);按 `recordingKeepCount` 清理                                                    | `<userData>/recordings/` NDJSON 索引 + 视频文件                      |
+| `settingsStore.ts`                | 带默认值的类型化设置、patch 净化、旧字段迁移、密钥字段用 `safeStorage` 加密                                                                | `<userData>/settings.json`                                           |
+| `workerHost.ts`                   | 拉起/重启/重配 tail 日志的 utility 进程                                                                                                    | 无                                                                   |
+| `workerMessageHandler.ts`         | `WorkerToMain` 消息的纯路由(入库、通知录像、推给窗口)                                                                                      | 无                                                                   |
+| `crashPolicy.ts`                  | 判定反复崩溃的日志文件何时被隔离                                                                                                           | 无(内存)                                                             |
+| `quitLifecycle.ts`                | `before-quit` 钩子:挂起退出 → 停录像(封顶 4 秒)→ 停 worker → 收掉在飞 AI → 真正退出                                                        | 无                                                                   |
+| `slimWorker.ts`                   | `worker_threads` 入口:读 → parse → `slimStoredDoc` → 原子回写 → 回报每轮行偏移                                                             | 原地重写 `match.json`                                                |
+| `importLogs.ts`                   | 历史日志的一次性流式导入(4 MB 块、手写 `\n` 切分);按 match id 去重,重复导入天然幂等                                                        | 经 `MatchStore` 写                                                   |
+| `corpusLoader.ts`                 | 按优先级路径表加载 `reference_vectors.json`(userData 覆盖优先,再内置),带形状粗验                                                           | 只读                                                                 |
+| `iconCache.ts`                    | 从 `wow.zamimg.com` 取技能图标,落盘为 `<name>.jpg`,以 data URL 返回;每会话 512 次取图预算;测试用 `offline` 模式                            | `<userData>/icons/`                                                  |
+| `vodProtocol.ts`                  | 注册特权 `vod://` scheme,带 HTTP range 支持地提供录像                                                                                      | 读视频文件                                                           |
+| `ipc.ts`                          | main↔renderer 的全部契约面:约 40 个 `ipcMain.handle` 频道                                                                                  | 无                                                                   |
+| `ai.ts`                           | 后端选择(`resolveAiClient`)、教练系统提示、Anthropic 流式客户端、`stopAllAiActivity()`                                                     | 无                                                                   |
+| `localAiBackends.ts`              | `claude` / `agy` / `codex` 三个 CLI 后端:纯 argv spawn(不过 shell)、300 秒超时、prompt 落盘中转、失败时附版本线索                          | `os.tmpdir()` 下的临时中转目录                                       |
+| `cliDetect.ts`                    | 找 CLI 可执行文件:先 PATH,再常见安装目录;5 秒超时的轻量 `--version` 探测                                                                   | 无(进程内 memo)                                                      |
+| `deepseekClient.ts`               | DeepSeek 官方 API(OpenAI 兼容 SSE);整体 + 停滞双看门狗;抠掉错误文本里的 key                                                                | 无                                                                   |
+| `obsClient.ts`                    | 收敛到最小的 OBS websocket 面,好让 `recorder.ts` 全走 fake 单测                                                                            | 无                                                                   |
+| `obsAutoConfig.ts`                | 读 OBS 28+ 自己的 websocket 配置 JSON,省得用户手抄密码。**只读** —— OBS 退出时会回写整个文件                                               | 无                                                                   |
+| `aiDebugLog.ts`                   | 最近 10 次 AI 调用(prompt + 原始返回)的内存环形日志,供开发者页用。刻意不落盘                                                               | 无                                                                   |
+| `exportImage.ts`                  | 在离屏窗口里渲染战报并整页截图为 PNG                                                                                                       | 写用户选定的 PNG                                                     |
+| `detectWowDir.ts`                 | 仅 Windows 的 WoW 安装路径猜测,以及 `resolveLogsDir`                                                                                       | 无                                                                   |
+| `e2eEnv.ts`                       | `GLADLOG_E2E=1` 下把 `userData` 指到临时目录 —— 参数不合法时**抛错**,绝不静默回落到真实目录                                                | 无                                                                   |
+| `readNthLine`(在 `matchStore.ts`) | 流式扫 `raw.txt` 找第 n 个 `\n` 并早停,而不是为取一行整读+切分一个 12–70 MB 的文件                                                         | 无                                                                   |
 
 有三个模式反复出现,值得内化:
 
@@ -199,8 +196,8 @@ fixtureBridge.ts           基于一份签入对局的假 GladlogApi,供纯浏�
 batch/batchAnalysis.ts     串行批量分析驱动器(队列、取消、已缓存则跳过)
 batch/autoAnalyze.ts       新对局自动分析;只对 live===true 的 payload 触发
 components/                列表行、筛选、设置、战绩仪表盘、开发者面板、批量条
-report/derive/             38 个非测试模块 —— 纯函数,doc → 视图模型
-report/components/         41 个非测试组件
+report/derive/             纯函数,doc → 视图模型
+report/components/         战报的 React 组件
 report/data/               竞技场地面多边形、专精名、游戏常量
 ```
 
@@ -212,7 +209,7 @@ report/data/               竞技场地面多边形、专精名、游戏常量
 
 ### `toLegacySafe` —— renderer↔analysis 的接缝
 
-analysis 的函数要的是旧的 `ICombatUnit` 形状。`parser-compat` 导出了 `toLegacyMatch(m: GladMatch)` 来产出它,但 renderer 绝不能直接调那个。它调 `toLegacySafe`(`derive/legacySource.ts`,65 行),后者做两件事:
+analysis 的函数要的是旧的 `ICombatUnit` 形状。`parser-compat` 导出了 `toLegacyMatch(m: GladMatch)` 来产出它,但 renderer 绝不能直接调那个。它调 `toLegacySafe`(`derive/legacySource.ts`),后者做两件事:
 
 1. **给缺失的单位事件数组补空数组。** `parser-compat` 的转换器会无条件迭代每个单位的 13 个事件数组。渲染测试的 fixture 为控体积剥掉了 `healIn` / `absorbsIn` / `actionsIn` / `actionsOut`,裸调 `toLegacyMatch` 会直接抛 —— 而外层的 `try/catch` 会让所有 analysis 派生的面板**无声消失、不报任何错**。对生产 doc 而言这个垫片是零影响。
 2. **带一个上限为 2 的有界 LRU。** 不用 `WeakMap`:`ShuffleReport` 会同时强引用全部 6 轮,逐轮点开就攒 6 份 legacy 放大副本(每份约为原轮的 2.5–3 倍)。上限 2 = 「当前轮 + 刚离开的那轮」。
@@ -229,82 +226,82 @@ analysis 的函数要的是旧的 `ICombatUnit` 形状。`parser-compat` 导出�
 
 ### 战报的 tab
 
-`MatchReport.tsx`(579 行)有五个:`report`(战报)、`replay`(回放)、`events`(事件)、`video`(录像,仅在关联到录像时出现)、`ai`(AI 分析)。`ShuffleReport.tsx` 在外面套一层轮次选择。
+`MatchReport.tsx` 有五个:`report`(战报)、`replay`(回放)、`events`(事件)、`video`(录像,仅在关联到录像时出现)、`ai`(AI 分析)。`ShuffleReport.tsx` 在外面套一层轮次选择。
 
 ---
 
 ## 6. `@gladlog/analysis` 内部
 
-35,325 行,分七个子目录。这是最大的包,也是唯一真正懂竞技场 PvP 的那个。非测试部分的分布:
+分七个子目录。这是最大的包,也是唯一真正懂竞技场 PvP 的那个:
 
-| 子目录       | 文件数 |   行数 | 职责                               |
-| ------------ | -----: | -----: | ---------------------------------- |
-| `utils/`     |     39 | 14,141 | 推导「这场发生了什么」的事实       |
-| `context/`   |      9 |  7,786 | 把这些事实渲染成 prompt 文本       |
-| `data/`      |     30 |  4,204 | 游戏数据(外加约 17 MB 的 `.json`)  |
-| `analysis/`  |     10 |  3,069 | LLM findings 闭环及其审计          |
-| `learning/`  |      4 |    495 | 跨场模式挖掘                       |
-| `benchmark/` |      2 |    423 | 离线的语料基线采集                 |
-| `compare/`   |      6 |    362 | 把单个玩家放进已构建好的语料里定位 |
+| 子目录       | 职责                               |
+| ------------ | ---------------------------------- |
+| `utils/`     | 推导「这场发生了什么」的事实       |
+| `context/`   | 把这些事实渲染成 prompt 文本       |
+| `data/`      | 游戏数据(外加约 17 MB 的 `.json`)  |
+| `analysis/`  | LLM findings 闭环及其审计          |
+| `learning/`  | 跨场模式挖掘                       |
+| `benchmark/` | 离线的语料基线采集                 |
+| `compare/`   | 把单个玩家放进已构建好的语料里定位 |
 
 有两组划分容易混。**`utils/` 回答「发生了什么」;`context/` 回答「它在 prompt 字符串里长什么样、落在哪个时间网格上、用多大采样半径」** —— 而门规复算的是后者。另外,**`benchmark/` 是离线*产出*基线的(唯一消费方是 CLI `scripts/collectBenchmarks.ts`),`compare/` 是运行时*读取*已构建语料的**;两者不是彼此的辅助。
 
-### `src/utils/` —— 39 个非测试分析模块
+### `src/utils/` —— 分析模块
 
 它们计算这场对局的事实。绝大多数成对出现:一个返回结构化数据的 `computeX`/`analyzeX`,和一个把它渲染成 prompt 文本的 `formatXForContext`。
 
 **冷却与减伤**
 
-| 模块                                | 行数     | 算什么                                                                                                                                                                                                                                                |
-| ----------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `cooldowns.ts`                      | 1,830    | 主力模块。时点 HP/法力采样、冷却可用性(`cdAvailableAt`、`isCooldownAvailableFromLastUse`)、大冷却提取、承压窗口、恐慌/重叠减伤检测,外加全仓通用的专精助手 `specToString` / `isHealerSpec` / `isMeleeSpec` 和时间渲染器 `fmtTime` / `toRenderSecond`。 |
-| `counterfactual.ts`                 | 386      | 「这个减伤按了能省多少」—— 减伤审计、未按的自保、错过的外抬。                                                                                                                                                                                         |
-| `enemyCDs.ts`                       | 573      | 重建敌方冷却时间线与击杀尝试窗口。                                                                                                                                                                                                                    |
-| `talentBehaviors.ts`                | 353      | 策展的 PvP 天赋 → 行为目录(取自官方 tooltip,不是从日志推断的)。                                                                                                                                                                                       |
-| `talents.ts` / `talentModifiers.ts` | 150 / 17 | 天赋串解码,以及天赋驱动的冷却/充能修正。                                                                                                                                                                                                              |
+| 模块                                | 算什么                                                                                                                                                                                                                                                |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `cooldowns.ts`                      | 主力模块。时点 HP/法力采样、冷却可用性(`cdAvailableAt`、`isCooldownAvailableFromLastUse`)、大冷却提取、承压窗口、恐慌/重叠减伤检测,外加全仓通用的专精助手 `specToString` / `isHealerSpec` / `isMeleeSpec` 和时间渲染器 `fmtTime` / `toRenderSecond`。 |
+| `counterfactual.ts`                 | 「这个减伤按了能省多少」—— 减伤审计、未按的自保、错过的外抬。                                                                                                                                                                                         |
+| `enemyCDs.ts`                       | 重建敌方冷却时间线与击杀尝试窗口。                                                                                                                                                                                                                    |
+| `talentBehaviors.ts`                | 策展的 PvP 天赋 → 行为目录(取自官方 tooltip,不是从日志推断的)。                                                                                                                                                                                       |
+| `talents.ts` / `talentModifiers.ts` | 天赋串解码,以及天赋驱动的冷却/充能修正。                                                                                                                                                                                                              |
 
 **控制、驱散、打断**
 
-| 模块                                  | 行数      | 算什么                                                          |
-| ------------------------------------- | --------- | --------------------------------------------------------------- |
-| `dispelAnalysis.ts`                   | 1,372     | 防御性解控与进攻性驱散的机会/错失分析,带击杀窗口标注与豁免。    |
-| `ccTrinketAnalysis.ts`                | 962       | 打在记录者身上的控制链与饰品使用;判定饰品类型。                 |
-| `drAnalysis.ts`                       | 564       | 按目标按类别的递减状态 —— 为什么这个控制变短了,以及出控链质量。 |
-| `kickAudit.ts` / `enemyInterrupts.ts` | 171 / 108 | 打断审计;每专精的基础打断可用性。                               |
+| 模块                                  | 算什么                                                          |
+| ------------------------------------- | --------------------------------------------------------------- |
+| `dispelAnalysis.ts`                   | 防御性解控与进攻性驱散的机会/错失分析,带击杀窗口标注与豁免。    |
+| `ccTrinketAnalysis.ts`                | 打在记录者身上的控制链与饰品使用;判定饰品类型。                 |
+| `drAnalysis.ts`                       | 按目标按类别的递减状态 —— 为什么这个控制变短了,以及出控链质量。 |
+| `kickAudit.ts` / `enemyInterrupts.ts` | 打断审计;每专精的基础打断可用性。                               |
 
 **走位与视线**
 
-| 模块                        | 行数 | 算什么                                                                      |
-| --------------------------- | ---- | --------------------------------------------------------------------------- |
-| `positionAnalysis.ts`       | 819  | 从真实 X/Y 坐标算记录者的接战状态:什么时候该压上、什么时候该拉开。          |
-| `losAnalysis.ts`            | 395  | 位置插值、`hasLineOfSight`、`distanceBetween`、最近障碍物边缘、断视线选项。 |
-| `positionSampling.ts`       | 34   | **共享采样谓词** —— 见 §9。                                                 |
-| `healerExposureAnalysis.ts` | 835  | 在每个敌方爆发窗口:治疗有没有饰品、在不在控里、和敌人有没有视线?            |
+| 模块                        | 算什么                                                                      |
+| --------------------------- | --------------------------------------------------------------------------- |
+| `positionAnalysis.ts`       | 从真实 X/Y 坐标算记录者的接战状态:什么时候该压上、什么时候该拉开。          |
+| `losAnalysis.ts`            | 位置插值、`hasLineOfSight`、`distanceBetween`、最近障碍物边缘、断视线选项。 |
+| `positionSampling.ts`       | **共享采样谓词** —— 见 §9。                                                 |
+| `healerExposureAnalysis.ts` | 在每个敌方爆发窗口:治疗有没有饰品、在不在控里、和敌人有没有视线?            |
 
 **进攻与窗口**
 
-| 模块                           | 行数 | 算什么                                     |
-| ------------------------------ | ---- | ------------------------------------------ |
-| `healerOffenseAnalysis.ts`     | 914  | 治疗的进攻贡献:空闲段、争夺段、窗口创造。  |
-| `offensiveWindows.ts`          | 527  | 爆发子窗口与进攻窗口。                     |
-| `killWindowTargetSelection.ts` | 461  | 击杀窗口里选对目标了吗(时点 HP、饰品状态)? |
-| `burstLedger.ts`               | 416  | 每次爆发的施法台账与窗口目标审计。         |
-| `offensiveWasteAnalysis.ts`    | 210  | 打在窗口之外的进攻冷却。                   |
+| 模块                           | 算什么                                     |
+| ------------------------------ | ------------------------------------------ |
+| `healerOffenseAnalysis.ts`     | 治疗的进攻贡献:空闲段、争夺段、窗口创造。  |
+| `offensiveWindows.ts`          | 爆发子窗口与进攻窗口。                     |
+| `killWindowTargetSelection.ts` | 击杀窗口里选对目标了吗(时点 HP、饰品状态)? |
+| `burstLedger.ts`               | 每次爆发的施法台账与窗口目标审计。         |
+| `offensiveWasteAnalysis.ts`    | 打在窗口之外的进攻冷却。                   |
 
 **结果、资源、局势**
 
-| 模块                                                                                              | 行数                 | 算什么                                                                  |
-| ------------------------------------------------------------------------------------------------- | -------------------- | ----------------------------------------------------------------------- |
-| `deathOutcomeAnalysis.ts`                                                                         | 543                  | 每次死亡:当时什么是可用的、什么被锁住了。                               |
-| `healingGaps.ts`                                                                                  | 289                  | 治疗覆盖的空档。                                                        |
-| `dampening.ts`                                                                                    | 255                  | 各分段的经验削弱爬升、时间线、危险倍率。                                |
-| `matchArchetype.ts` / `archetypeInference.ts` / `archetypeInjection.ts` / `enemyCompArchetype.ts` | 233 / 153 / 148 / 16 | 对局原始测量,以及查语料 cell 用的粗粒度敌方阵容分桶。                   |
-| `combatStates.ts`                                                                                 | 257                  | 救赎之魂 / 变形 / 静止(Stasis)区间。                                    |
-| `auraIntervals.ts`                                                                                | 163                  | 把光环事件配对成区间 —— 「这个 buff 在 _t_ 时刻在不在身上」的唯一答案。 |
-| `healerMetrics.ts` / `dpsMetrics.ts`                                                              | 204 / 120            | 语料对比用的指标向量。                                                  |
-| `crisisEvents.ts`                                                                                 | 85                   | 危机点周边的手法抽取。                                                  |
-| `spellDanger.ts` / `spellSchools.ts`                                                              | 75 / 54              | 危险度加权与法术学派助手。                                              |
-| `specBaselines.ts`                                                                                | 77                   | 静态的每专精基线锚点。                                                  |
+| 模块                                                                                              | 算什么                                                                  |
+| ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `deathOutcomeAnalysis.ts`                                                                         | 每次死亡:当时什么是可用的、什么被锁住了。                               |
+| `healingGaps.ts`                                                                                  | 治疗覆盖的空档。                                                        |
+| `dampening.ts`                                                                                    | 各分段的经验削弱爬升、时间线、危险倍率。                                |
+| `matchArchetype.ts` / `archetypeInference.ts` / `archetypeInjection.ts` / `enemyCompArchetype.ts` | 对局原始测量,以及查语料 cell 用的粗粒度敌方阵容分桶。                   |
+| `combatStates.ts`                                                                                 | 救赎之魂 / 变形 / 静止(Stasis)区间。                                    |
+| `auraIntervals.ts`                                                                                | 把光环事件配对成区间 —— 「这个 buff 在 _t_ 时刻在不在身上」的唯一答案。 |
+| `healerMetrics.ts` / `dpsMetrics.ts`                                                              | 语料对比用的指标向量。                                                  |
+| `crisisEvents.ts`                                                                                 | 危机点周边的手法抽取。                                                  |
+| `spellDanger.ts` / `spellSchools.ts`                                                              | 危险度加权与法术学派助手。                                              |
+| `specBaselines.ts`                                                                                | 静态的每专精基线锚点。                                                  |
 
 **小型共享原语**
 `stats.ts`(顺序统计量 —— 任何按索引取分位的地方都必须先过 `toSortedFinite`,不要各自 sort)、`binarySearch.ts`、`memoize.ts`(本地替身,免得整包为四个函数拖 215 KB lodash;它**刻意不缓存**后台数据表加载完成前算出的结果)、`utils.ts`。
@@ -323,34 +320,34 @@ analysis 的函数要的是旧的 `ICombatUnit` 形状。`parser-compat` 导出�
 
 `buildMatchContext` 是编排者而非计算者:它从 `utils/` import 约 25 个 `formatXForContext`,把共享的部分(对齐后的爆发窗口、控制/饰品摘要)只算一次再往下递,免得各个 section 各自重算出略有差异的版本。
 
-| 模块                              | 行数    | 职责                                                                                             |
-| --------------------------------- | ------- | ------------------------------------------------------------------------------------------------ |
-| `matchTimeline.ts`                | 2,617   | `buildMatchTimeline` —— 渲染后的事件时间轴,prompt 的主体。                                       |
-| `buildMatchContext.ts`            | 1,241   | `buildMatchContext` —— 顶层 prompt 入口。                                                        |
-| `timelineHelpers.ts`              | 924     | 共享渲染助手;导出 `DMG_SPIKE_THRESHOLD`,renderer 的承压泳道 import 它,以保证泳道数=prompt 行数。 |
-| `matchTimelineSections.ts`        | 820     | `[STATE]` 等各 section 的渲染器。                                                                |
-| `resourceSnapshot.ts`             | 818     | 配装、就绪充能、冷却中的名字,以及 JSON 局势快照。                                                |
-| `matchNarrative.ts`               | 431     | 「Match Flow」叙事,按爆发窗口而非时间片切段,以保住因果顺序。                                     |
-| `criticalWindows.ts` / `utils.ts` | 70 / 52 | 窗口助手。                                                                                       |
+| 模块                              | 职责                                                                                             |
+| --------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `matchTimeline.ts`                | `buildMatchTimeline` —— 渲染后的事件时间轴,prompt 的主体。                                       |
+| `buildMatchContext.ts`            | `buildMatchContext` —— 顶层 prompt 入口。                                                        |
+| `timelineHelpers.ts`              | 共享渲染助手;导出 `DMG_SPIKE_THRESHOLD`,renderer 的承压泳道 import 它,以保证泳道数=prompt 行数。 |
+| `matchTimelineSections.ts`        | `[STATE]` 等各 section 的渲染器。                                                                |
+| `resourceSnapshot.ts`             | 配装、就绪充能、冷却中的名字,以及 JSON 局势快照。                                                |
+| `matchNarrative.ts`               | 「Match Flow」叙事,按爆发窗口而非时间片切段,以保住因果顺序。                                     |
+| `criticalWindows.ts` / `utils.ts` | 窗口助手。                                                                                       |
 
 ### `src/analysis/` —— findings、prompt、审计
 
-| 模块                                                  | 行数         | 职责                                                                                                                                   |
-| ----------------------------------------------------- | ------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `candidateFindings.ts`                                | 1,133        | `extractCandidateFindings` —— 模型被允许谈论的确定性候选(冷却浪费、错失解控/驱散、被控住、吃打断、饰品浪费、死亡布置、未按自保/外抬)。 |
-| `deepDive.ts`                                         | 1,066        | 追问轮:围绕某条 finding 或某个选定窗口的证据包,以及它们的 prompt 与审计。                                                              |
-| `buildFindingsPrompt.ts`                              | 90           | findings prompt。                                                                                                                      |
-| `auditFindings.ts`                                    | 134          | 出模型后的审计:凡带裸数字、编造事件、或违禁因果断言的一律丢弃。                                                                        |
-| `causalLint.ts`                                       | 277          | 纯正则的强因果**措辞**检查(策略禁止),中英双语。它查的是措辞,不是真伪。                                                                 |
-| `spellNameZhLint.ts`                                  | 171          | 防止输出里把技能名译成中文。                                                                                                           |
-| `parseModelJson.ts`                                   | 63           | 容错的 JSON 抽取(带 markdown 围栏也认)—— `bad-json` 误杀那一类的修法。                                                                 |
-| `findingCategories.ts` / `types.ts` / `factFormat.ts` | 81 / 38 / 16 | 类别归一化与共享类型。                                                                                                                 |
+| 模块                                                  | 职责                                                                                                                                   |
+| ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `candidateFindings.ts`                                | `extractCandidateFindings` —— 模型被允许谈论的确定性候选(冷却浪费、错失解控/驱散、被控住、吃打断、饰品浪费、死亡布置、未按自保/外抬)。 |
+| `deepDive.ts`                                         | 追问轮:围绕某条 finding 或某个选定窗口的证据包,以及它们的 prompt 与审计。                                                              |
+| `buildFindingsPrompt.ts`                              | findings prompt。                                                                                                                      |
+| `auditFindings.ts`                                    | 出模型后的审计:凡带裸数字、编造事件、或违禁因果断言的一律丢弃。                                                                        |
+| `causalLint.ts`                                       | 纯正则的强因果**措辞**检查(策略禁止),中英双语。它查的是措辞,不是真伪。                                                                 |
+| `spellNameZhLint.ts`                                  | 防止输出里把技能名译成中文。                                                                                                           |
+| `parseModelJson.ts`                                   | 容错的 JSON 抽取(带 markdown 围栏也认)—— `bad-json` 误杀那一类的修法。                                                                 |
+| `findingCategories.ts` / `types.ts` / `factFormat.ts` | 类别归一化与共享类型。                                                                                                                 |
 
 ### `src/compare/`、`src/benchmark/`、`src/learning/`
 
-- **`compare/`**(362 行):在预先构建的语料 cell 里查你的指标(`cellLookup.ts`),用三个存储锚点算成百分位(`verifiedComparison.ts`),构建 exemplar-led prompt,并强制占位符纪律(`claimChecker.ts` —— 占位符语法在这里单源定义,因为此前三个消费方各写各的正则、已经漂过)。
-- **`benchmark/`**(423 行):`createBenchmarkAccumulator` / `computeBenchmarks` / `toPercentiles`,外加 `stratifiedSample`(按 spec × archetype 分层,每层确定性截断 —— 取前 N,不用随机数)。仅离线:唯一消费方是 CLI `scripts/collectBenchmarks.ts`,其输出被拷进 `src/data/benchmarks.json`。应用里没有任何地方调它。
-- **`learning/`**(495 行):自学习教练闭环,四段 —— 台账(`types.ts`)→ 确定性筛(`patternScan.ts`)→ AI 提炼(`distillRules.ts`)→ 确定性规则应用(`matchRules.ts`)。`patternScan.ts` 是 `PATTERN_MIN_HITS`、`PATTERN_WINDOW_MATCHES`、`RULE_RETIRE_MAX_HITS` 及匹配谓词的唯一权威;规则退役(`main/learning.ts`)与习惯徽章(`matchRules.ts`)都 import 它而不是复制数值,这样「筛出来的模式」与「打上徽章的 finding」才是同一个判定。注意跨场的键是 **`category`(加候选事件类型),不是 `findingKey`** —— `findingKey` 内嵌了每场独有的 event id,按构造永不重复。`distillRules.ts` 允许模型把模式说成人话,但它能写的数字只有 `{{hits}}` 与 `{{windowMatches}}`,由代码插值。
+- **`compare/`**:在预先构建的语料 cell 里查你的指标(`cellLookup.ts`),用三个存储锚点算成百分位(`verifiedComparison.ts`),构建 exemplar-led prompt,并强制占位符纪律(`claimChecker.ts` —— 占位符语法在这里单源定义,因为此前三个消费方各写各的正则、已经漂过)。
+- **`benchmark/`**:`createBenchmarkAccumulator` / `computeBenchmarks` / `toPercentiles`,外加 `stratifiedSample`(按 spec × archetype 分层,每层确定性截断 —— 取前 N,不用随机数)。仅离线:唯一消费方是 CLI `scripts/collectBenchmarks.ts`,其输出被拷进 `src/data/benchmarks.json`。应用里没有任何地方调它。
+- **`learning/`**:自学习教练闭环,四段 —— 台账(`types.ts`)→ 确定性筛(`patternScan.ts`)→ AI 提炼(`distillRules.ts`)→ 确定性规则应用(`matchRules.ts`)。`patternScan.ts` 是 `PATTERN_MIN_HITS`、`PATTERN_WINDOW_MATCHES`、`RULE_RETIRE_MAX_HITS` 及匹配谓词的唯一权威;规则退役(`main/learning.ts`)与习惯徽章(`matchRules.ts`)都 import 它而不是复制数值,这样「筛出来的模式」与「打上徽章的 finding」才是同一个判定。注意跨场的键是 **`category`(加候选事件类型),不是 `findingKey`** —— `findingKey` 内嵌了每场独有的 event id,按构造永不重复。`distillRules.ts` 允许模型把模式说成人话,但它能写的数字只有 `{{hits}}` 与 `{{windowMatches}}`,由代码插值。
 
 ### `src/data/` —— 游戏数据,生成的与策展的
 
@@ -374,13 +371,13 @@ analysis 的函数要的是旧的 `ICombatUnit` 形状。`parser-compat` 导出�
 
 ### 公共 API 面
 
-`packages/analysis/src/index.ts`(92 行)re-export 了 prompt 构建器、`utils/` 的大部分、compare 与 findings 模块,以及具名的数据表。但注意:**main 刻意绕开这个 barrel。** `src/main/analysis.ts` 与 `compare.ts` 都从深路径 import(`@gladlog/analysis/src/analysis/...`),并附了理由 —— `index.ts` 会把那些带顶层 `await` 的数据模块拖进来,顶层 await 使 tree-shaking 失效,main 白付约 13.6 MB 读盘和约 40 MB 常驻堆,而它根本不查这些表。
+`packages/analysis/src/index.ts` re-export 了 prompt 构建器、`utils/` 的大部分、compare 与 findings 模块,以及具名的数据表。但注意:**main 刻意绕开这个 barrel。** `src/main/analysis.ts` 与 `compare.ts` 都从深路径 import(`@gladlog/analysis/src/analysis/...`),并附了理由 —— `index.ts` 会把那些带顶层 `await` 的数据模块拖进来,顶层 await 使 tree-shaking 失效,main 白付约 13.6 MB 读盘和约 40 MB 常驻堆,而它根本不查这些表。
 
 ---
 
 ## 7. `@gladlog/parser` 与 `@gladlog/parser-compat` 内部
 
-### L1 —— 行解码(986 行,`src/l1/`)
+### L1 —— 行解码(`src/l1/`)
 
 纯粹且无状态:一行文本进,一个 `ParsedLine` 出,认不出的一律 `null`(整个分派体被 `try/catch → null` 包住)。
 
@@ -390,7 +387,7 @@ analysis 的函数要的是旧的 `ICombatUnit` 形状。`parser-compat` 导出�
 - `combatantInfo.ts` —— 同样位置无关:它靠扫描下一个括号段来定位天赋 / PvP 天赋 / 装备 / interesting auras。
 - `types.ts` —— `ParsedLine`,它那些可选的解码字段类型写成 `ReturnType<typeof decodeX>`,于是解码器本身就是 schema。`ParsedLine.known` 是未处理事件的信噪比标志。
 
-### L2 —— 分段(197 行,`src/l2/`)
+### L2 —— 分段(`src/l2/`)
 
 `Segmenter` 是三态状态机(`IDLE` / `IN_MATCH` / `IN_SHUFFLE`)。Solo Shuffle 的判据就是 `bracket === "Rated Solo Shuffle"`;它的各轮由连续的 `ARENA_MATCH_START` 行分隔,只有最后一个 `ARENA_MATCH_END` 才闭合整个 lobby。诊断码:`DOUBLE_START`、`ORPHAN_END`、`UNCLOSED_SEGMENT`。
 
@@ -399,7 +396,7 @@ L2 拥有两样对下游要紧的东西:
 - **`lineIndex`** 在这里赋值(`line.lineIndex = currentSegment.rawLines.length`,紧挨着两个数组的 push 之前)。这是「从 UI 里的事件跳回原始日志行」这个功能的锚点。
 - **`onOpen` / `onClose`** 只在真正的 IDLE↔开启转换上触发 —— 整个 shuffle lobby 一对,不是每轮一对。它们存在是为了让 OBS 录像知道对局何时开始、何时结束。
 
-### L3 —— 收集与组装(959 行,`src/l3/`)
+### L3 —— 收集与组装(`src/l3/`)
 
 - `roster.ts` —— 建单位表。单位类型先按 GUID 前缀判、再按 flags;阵营(reaction)按该 GUID 见过的全部 flag 值**多数表决**。宠物经 advanced 的 `ownerGuid` 映射到主人,`SPELL_SUMMON` 是严格更低优先级的兜底。
 - `collect.ts` —— 单趟把每条记录扇出到八个分组;同一个事件对象同时 push 进来源与目标单位的数组(共享引用,不是拷贝)。

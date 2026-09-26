@@ -62,20 +62,17 @@ Two side channels hang off this spine:
 
 ## 2. The seven packages and which way the arrows point
 
-Measured on 2026-08-01, counting `.ts`/`.tsx` under each package's `src/` (this includes co-located `*.test.ts`; each package also has a separate `test/` directory that is not counted here):
+Each package keeps its sources under `src/` (with co-located `*.test.ts`) and a separate `test/` directory. Per-package and per-file size numbers were removed from this document on 2026-09-26 — they had rotted badly since the 2026-08-01 measurement and nobody re-ran it; run `wc -l` if you need a figure today.
 
-| Package                  | Files in `src/` | Lines in `src/` | Runtime deps declared                                     | One-line job                                               |
-| ------------------------ | --------------: | --------------: | --------------------------------------------------------- | ---------------------------------------------------------- |
-| `@gladlog/analysis`      |             128 |          35,325 | `@gladlog/parser-compat`                                  | combat analysis predicates, prompt construction, game data |
-| `@gladlog/desktop`       |             192 |          33,390 | `@gladlog/parser` (see caveat)                            | the Electron app                                           |
-| `@gladlog/eval`          |              18 |           4,242 | parser, parser-compat, analysis, corpus-tools, `fs-extra` | prompt/response quality gates and judging                  |
-| `@gladlog/corpus-tools`  |              25 |           3,944 | analysis, parser-compat, `node-fetch`, `fs-extra`         | reference-corpus build, third-party log archiving          |
-| `@gladlog/parser`        |              20 |           2,653 | **none**                                                  | combat log → typed match documents                         |
-| `@gladlog/log-pipeline`  |              27 |           1,500 | **none**                                                  | cross-machine log relay via a shared folder                |
-| `@gladlog/parser-compat` |               6 |           1,119 | `@gladlog/parser`                                         | new doc shape → legacy `ICombatUnit` shape                 |
-| **total**                |         **416** |      **82,173** |                                                           |                                                            |
-
-Of those 416 files, 317 are non-test and 99 are co-located tests. Separate `test/` directories hold another 59 (analysis), 73 (desktop), 19 (parser), 13 (eval) and 3 (parser-compat) files.
+| Package                  | Runtime deps declared                                     | One-line job                                               |
+| ------------------------ | --------------------------------------------------------- | ---------------------------------------------------------- |
+| `@gladlog/analysis`      | `@gladlog/parser-compat`                                  | combat analysis predicates, prompt construction, game data |
+| `@gladlog/desktop`       | `@gladlog/parser` (see caveat)                            | the Electron app                                           |
+| `@gladlog/eval`          | parser, parser-compat, analysis, corpus-tools, `fs-extra` | prompt/response quality gates and judging                  |
+| `@gladlog/corpus-tools`  | analysis, parser-compat, `node-fetch`, `fs-extra`         | reference-corpus build, third-party log archiving          |
+| `@gladlog/parser`        | **none**                                                  | combat log → typed match documents                         |
+| `@gladlog/log-pipeline`  | **none**                                                  | cross-machine log relay via a shared folder                |
+| `@gladlog/parser-compat` | `@gladlog/parser`                                         | new doc shape → legacy `ICombatUnit` shape                 |
 
 Dependency direction:
 
@@ -91,7 +88,7 @@ Read that as "arrows point at what a package is allowed to import". Three proper
 
 1. **`parser` has zero dependencies.** `packages/parser/package.json` has no `dependencies` key at all, and every module specifier under `packages/parser/src/` is relative. The only platform API it touches is `Intl.DateTimeFormat` (`src/l1/timestamp.ts`). This is what lets the parser be reused in a worker process, in a test harness, and in a benchmark script without dragging anything along.
 2. **`analysis` consumes `parser-compat`, not `parser`.** Analysis code is written against the legacy `ICombatUnit` shape, not against `GladUnit`. `packages/analysis/src/index.ts` states the intent: the entry shape is legacy, and the type design leaves room to migrate utils to the native shape one at a time.
-3. **The renderer calls `analysis` directly.** It does not ask main to compute analysis predicates. `report/derive/*.ts` calls `toLegacySafe(source)` (`src/renderer/src/report/derive/legacySource.ts`) and then calls analysis functions in-process. 24 of the 38 non-test derive modules import `@gladlog/analysis`.
+3. **The renderer calls `analysis` directly.** It does not ask main to compute analysis predicates. `report/derive/*.ts` calls `toLegacySafe(source)` (`src/renderer/src/report/derive/legacySource.ts`) and then calls analysis functions in-process. Most of the derive modules import `@gladlog/analysis`.
 
 ### Caveat: undeclared workspace dependencies
 
@@ -113,13 +110,13 @@ Electron gives four JavaScript contexts, and gladlog uses all of them plus `work
 | **renderer**         | `src/renderer/src/main.tsx`                                               | React UI, derive layer, direct calls into `@gladlog/analysis`                |
 | **`worker_threads`** | `src/main/slimWorker.ts`, plus an inline eval'd worker in `matchStore.ts` | one-off heavy JSON parse / slim-and-rewrite, off the main thread             |
 
-`src/main/index.ts` is the wiring diagram in code — 246 lines, almost all of it constructing services and handing them their dependencies. Reading it top to bottom tells you what exists.
+`src/main/index.ts` is the wiring diagram in code — almost all of it constructing services and handing them their dependencies. Reading it top to bottom tells you what exists.
 
 ### The log-tailing utility process
 
 `WorkerHost` (`src/main/workerHost.ts`) forks `worker.js` via `utilityProcess.fork`, pipes stdout/stderr into `electron-log`, and restarts it one second after any unexpected exit. The reason it is a separate OS process rather than a thread: a parse crash on one malformed log line must not take the UI down, and it must be attributable.
 
-That attribution is `crashPolicy.ts` (28 lines): the worker reports `{fileKey, offset}` in its status messages; if the process dies three times at approximately the same spot (`OFFSET_TOLERANCE = 65536` bytes), that file is **quarantined** — added to `WorkerConfig.quarantined` and skipped from then on. Any successful `match`/`shuffle` message resets the counter.
+That attribution is `crashPolicy.ts`: the worker reports `{fileKey, offset}` in its status messages; if the process dies three times at approximately the same spot (`OFFSET_TOLERANCE = 65536` bytes), that file is **quarantined** — added to `WorkerConfig.quarantined` and skipped from then on. Any successful `match`/`shuffle` message resets the counter.
 
 Inside the worker (`src/worker/`):
 
@@ -134,39 +131,39 @@ Messages back to main are the `WorkerToMain` union in `src/shared/protocol.ts`: 
 
 ## 4. Main-process services
 
-`packages/desktop/src/main/` holds 29 non-test modules (48 files including tests). Everything here is constructed in `index.ts` inside `app.whenReady()` and reached from the renderer through `ipc.ts`.
+`packages/desktop/src/main/` holds the service modules below (tests sit beside them). Everything here is constructed in `index.ts` inside `app.whenReady()` and reached from the renderer through `ipc.ts`.
 
-| Module                             | Lines | What it owns                                                                                                                                    | On-disk state                                                             |
-| ---------------------------------- | ----: | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| `matchStore.ts`                    |   625 | The match library: `store` / `list` / `page` / `get` / `rawLine` / `rebuildIndex`. `get()` returns **raw bytes**, never an object.              | `<userData>/matches/<id>/` + `_index.ndjson`                              |
-| `analysis.ts`                      | 1,207 | AI review: `run`, `deepen`, `analyzeWindow`, `cancel`, `getState`, `getCached`, `getFlags`/`setFlag`, `aggregate`, `notebook`, `listAnalyzed`   | `analysis-v2.<lang>.json`, `windowAnalysis.<lang>.json`, flags, per match |
-| `learning.ts`                      |   461 | Cross-match coaching loop: ledger → deterministic pattern scan → AI distillation → rules                                                        | `<userData>/learning/rules.json` (+ ledger, below)                        |
-| `learningLedger.ts`                |    92 | Append-only NDJSON, one line per analysis run; read is last-run-wins per match; compacts past 1.2× redundancy                                   | `<userData>/learning/ledger.ndjson`                                       |
-| `compare.ts`                       |   280 | Comparison against the reference corpus; `N_FLOOR = 30`; emits streaming deltas                                                                 | `compare.json` per match                                                  |
-| `recorder.ts`                      |   334 | Drives OBS over websocket on `segmentOpen`/`segmentClose`; 40-minute safety stop; serialised through one promise chain                          | none directly (delegates to `recordingsStore`)                            |
-| `recordingsStore.ts`               |   224 | Index of recorded videos and their match association (`TOLERANCE_MS = 60_000` overlap rule); prunes to `recordingKeepCount`                     | `<userData>/recordings/` NDJSON index + the video files                   |
-| `settingsStore.ts`                 |   313 | Typed settings with defaults, patch sanitisation, legacy migration, and `safeStorage` encryption of secret fields                               | `<userData>/settings.json`                                                |
-| `workerHost.ts`                    |    88 | Spawn/restart/reconfigure the log-tailing utility process                                                                                       | none                                                                      |
-| `workerMessageHandler.ts`          |   ~70 | Pure router for `WorkerToMain` messages (store the match, tell the recorder, emit to the window)                                                | none                                                                      |
-| `crashPolicy.ts`                   |    28 | Decide when a repeatedly-crashing log file gets quarantined                                                                                     | none (in memory)                                                          |
-| `quitLifecycle.ts`                 |    93 | `before-quit` handler that suspends the quit, stops the recorder (4 s cap), stops the worker, kills in-flight AI, then really quits             | none                                                                      |
-| `slimWorker.ts`                    |    33 | `worker_threads` entry: read → parse → `slimStoredDoc` → atomic rewrite → report round line offsets                                             | rewrites `match.json` in place                                            |
-| `importLogs.ts`                    |    90 | One-shot streaming import of historical logs (4 MB chunks, manual `\n` split); dedup by match id makes re-import idempotent                     | writes through `MatchStore`                                               |
-| `corpusLoader.ts`                  |    92 | Loads `reference_vectors.json` from a prioritised path list (userData override first, then bundled), with shape validation                      | reads only                                                                |
-| `iconCache.ts`                     |    78 | Spell icons from `wow.zamimg.com`, cached as `<name>.jpg`, returned as data URLs; 512 fetches per session; `offline` mode for tests             | `<userData>/icons/`                                                       |
-| `vodProtocol.ts`                   |    58 | Registers the privileged `vod://` scheme and serves recordings with HTTP range support                                                          | reads video files                                                         |
-| `ipc.ts`                           |   195 | The whole main↔renderer contract: ~40 `ipcMain.handle` channels                                                                                 | none                                                                      |
-| `ai.ts`                            |   123 | Backend selection (`resolveAiClient`), the coach system prompt, the Anthropic streaming client, `stopAllAiActivity()`                           | none                                                                      |
-| `localAiBackends.ts`               |   549 | `claude` / `agy` / `codex` CLI backends: argv-only spawn (no shell), 300 s timeout, prompt spill files, version hints on failure                | temp spill dirs under `os.tmpdir()`                                       |
-| `cliDetect.ts`                     |   225 | Finds the CLI binaries: PATH first, then well-known install locations; light `--version` probe with 5 s timeout                                 | none (memoised in process)                                                |
-| `deepseekClient.ts`                |   247 | DeepSeek official API (OpenAI-compatible SSE); overall + stall watchdogs; scrubs API keys out of error text                                     | none                                                                      |
-| `obsClient.ts`                     |   ~40 | Minimal OBS websocket surface so `recorder.ts` can be tested against a fake                                                                     | none                                                                      |
-| `obsAutoConfig.ts`                 |   105 | Reads OBS 28+'s own websocket config JSON so the user doesn't have to copy the password by hand. **Read-only** — OBS rewrites that file on exit | none                                                                      |
-| `aiDebugLog.ts`                    |    24 | In-memory ring of the last 10 AI calls (prompt + raw response) for the developer panel. Deliberately never written to disk                      | none                                                                      |
-| `exportImage.ts`                   |   ~90 | Renders the report in an off-screen window and captures a full-page PNG                                                                         | writes the chosen PNG                                                     |
-| `detectWowDir.ts`                  |    30 | Windows-only guesses at the WoW install path, plus `resolveLogsDir`                                                                             | none                                                                      |
-| `e2eEnv.ts`                        |    19 | Under `GLADLOG_E2E=1`, redirects `userData` to a throwaway directory — and **throws** rather than silently using the real one                   | none                                                                      |
-| `readNthLine` (in `matchStore.ts`) |     — | Streams `raw.txt` looking for the _n_-th `\n` and stops early, instead of reading and splitting a 12–70 MB file to get one line                 | none                                                                      |
+| Module                             | What it owns                                                                                                                                    | On-disk state                                                             |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `matchStore.ts`                    | The match library: `store` / `list` / `page` / `get` / `rawLine` / `rebuildIndex`. `get()` returns **raw bytes**, never an object.              | `<userData>/matches/<id>/` + `_index.ndjson`                              |
+| `analysis.ts`                      | AI review: `run`, `deepen`, `analyzeWindow`, `cancel`, `getState`, `getCached`, `getFlags`/`setFlag`, `aggregate`, `notebook`, `listAnalyzed`   | `analysis-v2.<lang>.json`, `windowAnalysis.<lang>.json`, flags, per match |
+| `learning.ts`                      | Cross-match coaching loop: ledger → deterministic pattern scan → AI distillation → rules                                                        | `<userData>/learning/rules.json` (+ ledger, below)                        |
+| `learningLedger.ts`                | Append-only NDJSON, one line per analysis run; read is last-run-wins per match; compacts past 1.2× redundancy                                   | `<userData>/learning/ledger.ndjson`                                       |
+| `compare.ts`                       | Comparison against the reference corpus; `N_FLOOR = 30`; emits streaming deltas                                                                 | `compare.json` per match                                                  |
+| `recorder.ts`                      | Drives OBS over websocket on `segmentOpen`/`segmentClose`; 40-minute safety stop; serialised through one promise chain                          | none directly (delegates to `recordingsStore`)                            |
+| `recordingsStore.ts`               | Index of recorded videos and their match association (`TOLERANCE_MS = 60_000` overlap rule); prunes to `recordingKeepCount`                     | `<userData>/recordings/` NDJSON index + the video files                   |
+| `settingsStore.ts`                 | Typed settings with defaults, patch sanitisation, legacy migration, and `safeStorage` encryption of secret fields                               | `<userData>/settings.json`                                                |
+| `workerHost.ts`                    | Spawn/restart/reconfigure the log-tailing utility process                                                                                       | none                                                                      |
+| `workerMessageHandler.ts`          | Pure router for `WorkerToMain` messages (store the match, tell the recorder, emit to the window)                                                | none                                                                      |
+| `crashPolicy.ts`                   | Decide when a repeatedly-crashing log file gets quarantined                                                                                     | none (in memory)                                                          |
+| `quitLifecycle.ts`                 | `before-quit` handler that suspends the quit, stops the recorder (4 s cap), stops the worker, kills in-flight AI, then really quits             | none                                                                      |
+| `slimWorker.ts`                    | `worker_threads` entry: read → parse → `slimStoredDoc` → atomic rewrite → report round line offsets                                             | rewrites `match.json` in place                                            |
+| `importLogs.ts`                    | One-shot streaming import of historical logs (4 MB chunks, manual `\n` split); dedup by match id makes re-import idempotent                     | writes through `MatchStore`                                               |
+| `corpusLoader.ts`                  | Loads `reference_vectors.json` from a prioritised path list (userData override first, then bundled), with shape validation                      | reads only                                                                |
+| `iconCache.ts`                     | Spell icons from `wow.zamimg.com`, cached as `<name>.jpg`, returned as data URLs; 512 fetches per session; `offline` mode for tests             | `<userData>/icons/`                                                       |
+| `vodProtocol.ts`                   | Registers the privileged `vod://` scheme and serves recordings with HTTP range support                                                          | reads video files                                                         |
+| `ipc.ts`                           | The whole main↔renderer contract: ~40 `ipcMain.handle` channels                                                                                 | none                                                                      |
+| `ai.ts`                            | Backend selection (`resolveAiClient`), the coach system prompt, the Anthropic streaming client, `stopAllAiActivity()`                           | none                                                                      |
+| `localAiBackends.ts`               | `claude` / `agy` / `codex` CLI backends: argv-only spawn (no shell), 300 s timeout, prompt spill files, version hints on failure                | temp spill dirs under `os.tmpdir()`                                       |
+| `cliDetect.ts`                     | Finds the CLI binaries: PATH first, then well-known install locations; light `--version` probe with 5 s timeout                                 | none (memoised in process)                                                |
+| `deepseekClient.ts`                | DeepSeek official API (OpenAI-compatible SSE); overall + stall watchdogs; scrubs API keys out of error text                                     | none                                                                      |
+| `obsClient.ts`                     | Minimal OBS websocket surface so `recorder.ts` can be tested against a fake                                                                     | none                                                                      |
+| `obsAutoConfig.ts`                 | Reads OBS 28+'s own websocket config JSON so the user doesn't have to copy the password by hand. **Read-only** — OBS rewrites that file on exit | none                                                                      |
+| `aiDebugLog.ts`                    | In-memory ring of the last 10 AI calls (prompt + raw response) for the developer panel. Deliberately never written to disk                      | none                                                                      |
+| `exportImage.ts`                   | Renders the report in an off-screen window and captures a full-page PNG                                                                         | writes the chosen PNG                                                     |
+| `detectWowDir.ts`                  | Windows-only guesses at the WoW install path, plus `resolveLogsDir`                                                                             | none                                                                      |
+| `e2eEnv.ts`                        | Under `GLADLOG_E2E=1`, redirects `userData` to a throwaway directory — and **throws** rather than silently using the real one                   | none                                                                      |
+| `readNthLine` (in `matchStore.ts`) | Streams `raw.txt` looking for the _n_-th `\n` and stops early, instead of reading and splitting a 12–70 MB file to get one line                 | none                                                                      |
 
 Three patterns recur and are worth internalising:
 
@@ -199,8 +196,8 @@ fixtureBridge.ts           a fake GladlogApi over a checked-in match, for browse
 batch/batchAnalysis.ts     serial batch-analysis driver (queue, cancel, skip-if-cached)
 batch/autoAnalyze.ts       auto-analyse newly recorded matches; only fires on live===true payloads
 components/                list rows, filters, settings, stats dashboard, dev panel, batch bar
-report/derive/             38 non-test modules — pure functions, doc → view model
-report/components/         41 non-test components
+report/derive/             pure functions, doc → view model
+report/components/         the report's React components
 report/data/               arena floor polygons, spec names, game constants
 ```
 
@@ -212,7 +209,7 @@ Representative modules: `timeline.ts`, `meterRows.ts`, `statsTable.ts`, `deathRe
 
 ### `toLegacySafe` — the renderer↔analysis seam
 
-Analysis functions expect the legacy `ICombatUnit` shape. `parser-compat` exports `toLegacyMatch(m: GladMatch)` to produce it, but the renderer must never call that directly. It calls `toLegacySafe` (`derive/legacySource.ts`, 65 lines), which does two things:
+Analysis functions expect the legacy `ICombatUnit` shape. `parser-compat` exports `toLegacyMatch(m: GladMatch)` to produce it, but the renderer must never call that directly. It calls `toLegacySafe` (`derive/legacySource.ts`), which does two things:
 
 1. **Pads missing unit event arrays.** `parser-compat`'s converter iterates 13 per-unit arrays unconditionally. Render-test fixtures have `healIn` / `absorbsIn` / `actionsIn` / `actionsOut` stripped to keep them small, so a bare `toLegacyMatch` throws — and the surrounding `try/catch` then makes every analysis-derived panel silently disappear with no error. On a production doc the padding is a no-op.
 2. **Caches with a bounded LRU of size 2.** Not a `WeakMap`: `ShuffleReport` holds strong references to all six rounds at once, so clicking through them accumulated six legacy blow-up copies (each roughly 2.5–3× the size of the round it came from). Size 2 covers "current round + the one you just left".
@@ -229,82 +226,82 @@ Also from that document: the replay clock stays local to `ReplayView` (hoisting 
 
 ### The report tabs
 
-`MatchReport.tsx` (579 lines) has five: `report` (Report), `replay` (Replay), `events` (Events), `video` (Video, shown only when a recording is associated), `ai` (AI Analysis). `ShuffleReport.tsx` wraps it with round selection.
+`MatchReport.tsx` has five: `report` (Report), `replay` (Replay), `events` (Events), `video` (Video, shown only when a recording is associated), `ai` (AI Analysis). `ShuffleReport.tsx` wraps it with round selection.
 
 ---
 
 ## 6. Inside `@gladlog/analysis`
 
-35,325 lines across seven subdirectories. This is the largest package and the one that actually knows anything about arena PvP. Non-test breakdown:
+Seven subdirectories. This is the largest package and the one that actually knows anything about arena PvP:
 
-| Subdirectory | Files |  Lines | Job                                          |
-| ------------ | ----: | -----: | -------------------------------------------- |
-| `utils/`     |    39 | 14,141 | derive facts about a match                   |
-| `context/`   |     9 |  7,786 | render those facts into prompt text          |
-| `data/`      |    30 |  4,204 | game data (plus ~17 MB of `.json` payloads)  |
-| `analysis/`  |    10 |  3,069 | the LLM findings loop and its audits         |
-| `learning/`  |     4 |    495 | cross-match pattern mining                   |
-| `benchmark/` |     2 |    423 | offline corpus baseline collection           |
-| `compare/`   |     6 |    362 | placing one player inside a pre-built corpus |
+| Subdirectory | Job                                          |
+| ------------ | -------------------------------------------- |
+| `utils/`     | derive facts about a match                   |
+| `context/`   | render those facts into prompt text          |
+| `data/`      | game data (plus ~17 MB of `.json` payloads)  |
+| `analysis/`  | the LLM findings loop and its audits         |
+| `learning/`  | cross-match pattern mining                   |
+| `benchmark/` | offline corpus baseline collection           |
+| `compare/`   | placing one player inside a pre-built corpus |
 
 Two divisions are easy to confuse. **`utils/` answers "what happened"; `context/` answers "how does it appear in the prompt string, on which time grid, at what sampling radius"** — and the second is what the verification gates re-parse. Separately, **`benchmark/` _produces_ baselines offline (its only consumer is `scripts/collectBenchmarks.ts`, a CLI) while `compare/` _reads_ an already-built corpus at runtime**; neither is the other's helper.
 
-### `src/utils/` — 39 non-test analysis modules
+### `src/utils/` — the analysis modules
 
 These compute facts about a match. Almost all of them come in pairs: a `computeX`/`analyzeX` that returns structured data, and a `formatXForContext` that renders it into prompt text.
 
 **Cooldowns and defensives**
 
-| Module                              |    Lines | What it computes                                                                                                                                                                                                                                                                                                                       |
-| ----------------------------------- | -------: | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `cooldowns.ts`                      |    1,830 | The workhorse. HP/mana sampling at an instant, cooldown availability (`cdAvailableAt`, `isCooldownAvailableFromLastUse`), major-cooldown extraction, pressure windows, panic/overlapped defensive detection, plus the spec helpers `specToString` / `isHealerSpec` / `isMeleeSpec` and the time renderer `fmtTime` / `toRenderSecond`. |
-| `counterfactual.ts`                 |      386 | "What would this defensive have saved?" — mitigation audit, unused self-defensives, missed externals.                                                                                                                                                                                                                                  |
-| `enemyCDs.ts`                       |      573 | Reconstructs the enemy cooldown timeline and kill-attempt windows.                                                                                                                                                                                                                                                                     |
-| `talentBehaviors.ts`                |      353 | Curated PvP-talent → behaviour catalogue (from official tooltips, not inferred from logs).                                                                                                                                                                                                                                             |
-| `talents.ts` / `talentModifiers.ts` | 150 / 17 | Talent string decoding and talent-driven cooldown/charge modification.                                                                                                                                                                                                                                                                 |
+| Module                              | What it computes                                                                                                                                                                                                                                                                                                                       |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `cooldowns.ts`                      | The workhorse. HP/mana sampling at an instant, cooldown availability (`cdAvailableAt`, `isCooldownAvailableFromLastUse`), major-cooldown extraction, pressure windows, panic/overlapped defensive detection, plus the spec helpers `specToString` / `isHealerSpec` / `isMeleeSpec` and the time renderer `fmtTime` / `toRenderSecond`. |
+| `counterfactual.ts`                 | "What would this defensive have saved?" — mitigation audit, unused self-defensives, missed externals.                                                                                                                                                                                                                                  |
+| `enemyCDs.ts`                       | Reconstructs the enemy cooldown timeline and kill-attempt windows.                                                                                                                                                                                                                                                                     |
+| `talentBehaviors.ts`                | Curated PvP-talent → behaviour catalogue (from official tooltips, not inferred from logs).                                                                                                                                                                                                                                             |
+| `talents.ts` / `talentModifiers.ts` | Talent string decoding and talent-driven cooldown/charge modification.                                                                                                                                                                                                                                                                 |
 
 **Crowd control, dispels, interrupts**
 
-| Module                                |     Lines | What it computes                                                                                             |
-| ------------------------------------- | --------: | ------------------------------------------------------------------------------------------------------------ |
-| `dispelAnalysis.ts`                   |     1,372 | Defensive cleanse and offensive purge opportunity/miss analysis, with kill-window annotation and exemptions. |
-| `ccTrinketAnalysis.ts`                |       962 | CC chains against the owner and trinket usage; classifies trinket type.                                      |
-| `drAnalysis.ts`                       |       564 | Diminishing-returns state per target per category — why a CC came out short, and outgoing CC chain quality.  |
-| `kickAudit.ts` / `enemyInterrupts.ts` | 171 / 108 | Interrupt audit; per-spec baseline interrupt availability.                                                   |
+| Module                                | What it computes                                                                                             |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `dispelAnalysis.ts`                   | Defensive cleanse and offensive purge opportunity/miss analysis, with kill-window annotation and exemptions. |
+| `ccTrinketAnalysis.ts`                | CC chains against the owner and trinket usage; classifies trinket type.                                      |
+| `drAnalysis.ts`                       | Diminishing-returns state per target per category — why a CC came out short, and outgoing CC chain quality.  |
+| `kickAudit.ts` / `enemyInterrupts.ts` | Interrupt audit; per-spec baseline interrupt availability.                                                   |
 
 **Positioning and line of sight**
 
-| Module                      | Lines | What it computes                                                                                       |
-| --------------------------- | ----: | ------------------------------------------------------------------------------------------------------ |
-| `positionAnalysis.ts`       |   819 | Owner engagement state from real X/Y coordinates: when to push in vs stay back.                        |
-| `losAnalysis.ts`            |   395 | Position interpolation, `hasLineOfSight`, `distanceBetween`, nearest obstacle edge, LoS-break options. |
-| `positionSampling.ts`       |    34 | **The shared sampling predicates** — see §9.                                                           |
-| `healerExposureAnalysis.ts` |   835 | At each enemy burst window: is the healer trinket-less, CC'd, and in line of sight?                    |
+| Module                      | What it computes                                                                                       |
+| --------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `positionAnalysis.ts`       | Owner engagement state from real X/Y coordinates: when to push in vs stay back.                        |
+| `losAnalysis.ts`            | Position interpolation, `hasLineOfSight`, `distanceBetween`, nearest obstacle edge, LoS-break options. |
+| `positionSampling.ts`       | **The shared sampling predicates** — see §9.                                                           |
+| `healerExposureAnalysis.ts` | At each enemy burst window: is the healer trinket-less, CC'd, and in line of sight?                    |
 
 **Offense and windows**
 
-| Module                         | Lines | What it computes                                                                    |
-| ------------------------------ | ----: | ----------------------------------------------------------------------------------- |
-| `healerOffenseAnalysis.ts`     |   914 | Healer offensive contribution: slack segments, contested segments, window creation. |
-| `offensiveWindows.ts`          |   527 | Burst sub-windows and offensive windows.                                            |
-| `killWindowTargetSelection.ts` |   461 | Was the right target picked in a kill window (HP at time, trinket state)?           |
-| `burstLedger.ts`               |   416 | Per-burst cast ledger and window targeting audit.                                   |
-| `offensiveWasteAnalysis.ts`    |   210 | Offensive cooldowns spent outside a window.                                         |
+| Module                         | What it computes                                                                    |
+| ------------------------------ | ----------------------------------------------------------------------------------- |
+| `healerOffenseAnalysis.ts`     | Healer offensive contribution: slack segments, contested segments, window creation. |
+| `offensiveWindows.ts`          | Burst sub-windows and offensive windows.                                            |
+| `killWindowTargetSelection.ts` | Was the right target picked in a kill window (HP at time, trinket state)?           |
+| `burstLedger.ts`               | Per-burst cast ledger and window targeting audit.                                   |
+| `offensiveWasteAnalysis.ts`    | Offensive cooldowns spent outside a window.                                         |
 
 **Outcomes, resources, situation**
 
-| Module                                                                                            |                Lines | What it computes                                                                            |
-| ------------------------------------------------------------------------------------------------- | -------------------: | ------------------------------------------------------------------------------------------- |
-| `deathOutcomeAnalysis.ts`                                                                         |                  543 | For each death: what was available, what was locked out.                                    |
-| `healingGaps.ts`                                                                                  |                  289 | Gaps in healing coverage.                                                                   |
-| `dampening.ts`                                                                                    |                  255 | Dampening ramp per bracket, timeline, and danger multiplier.                                |
-| `matchArchetype.ts` / `archetypeInference.ts` / `archetypeInjection.ts` / `enemyCompArchetype.ts` | 233 / 153 / 148 / 16 | Raw match measurements and the coarse enemy-composition bucket used for corpus cell lookup. |
-| `combatStates.ts`                                                                                 |                  257 | Spirit of Redemption / shapeshift / stasis intervals.                                       |
-| `auraIntervals.ts`                                                                                |                  163 | Pairs aura events into intervals — the single answer to "was this buff up at time _t_".     |
-| `healerMetrics.ts` / `dpsMetrics.ts`                                                              |            204 / 120 | The metric vectors used for corpus comparison.                                              |
-| `crisisEvents.ts`                                                                                 |                   85 | Rotation extraction around crises.                                                          |
-| `spellDanger.ts` / `spellSchools.ts`                                                              |              75 / 54 | Danger weighting and school helpers.                                                        |
-| `specBaselines.ts`                                                                                |                   77 | Static per-spec benchmark anchors.                                                          |
+| Module                                                                                            | What it computes                                                                            |
+| ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `deathOutcomeAnalysis.ts`                                                                         | For each death: what was available, what was locked out.                                    |
+| `healingGaps.ts`                                                                                  | Gaps in healing coverage.                                                                   |
+| `dampening.ts`                                                                                    | Dampening ramp per bracket, timeline, and danger multiplier.                                |
+| `matchArchetype.ts` / `archetypeInference.ts` / `archetypeInjection.ts` / `enemyCompArchetype.ts` | Raw match measurements and the coarse enemy-composition bucket used for corpus cell lookup. |
+| `combatStates.ts`                                                                                 | Spirit of Redemption / shapeshift / stasis intervals.                                       |
+| `auraIntervals.ts`                                                                                | Pairs aura events into intervals — the single answer to "was this buff up at time _t_".     |
+| `healerMetrics.ts` / `dpsMetrics.ts`                                                              | The metric vectors used for corpus comparison.                                              |
+| `crisisEvents.ts`                                                                                 | Rotation extraction around crises.                                                          |
+| `spellDanger.ts` / `spellSchools.ts`                                                              | Danger weighting and school helpers.                                                        |
+| `specBaselines.ts`                                                                                | Static per-spec benchmark anchors.                                                          |
 
 **Small shared primitives**
 `stats.ts` (order statistics — anything taking a percentile by index must go through `toSortedFinite` rather than sorting for itself), `binarySearch.ts`, `memoize.ts` (a local replacement so the package doesn't pull 215 KB of lodash for four functions; it deliberately does **not** cache results computed before the background data tables finished loading), `utils.ts`.
@@ -323,34 +320,34 @@ This is where analysis output becomes the text a model sees. There is no single 
 
 `buildMatchContext` is an orchestrator, not a calculator: it imports roughly 25 `formatXForContext` functions from `utils/`, computes the shared pieces (aligned burst windows, CC/trinket summaries) exactly once, and hands them down so sections cannot each recompute their own slightly different version.
 
-| Module                            |   Lines | Role                                                                                                                                        |
-| --------------------------------- | ------: | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `matchTimeline.ts`                |   2,617 | `buildMatchTimeline` — the rendered event timeline, the bulk of the prompt.                                                                 |
-| `buildMatchContext.ts`            |   1,241 | `buildMatchContext` — the top-level prompt entry point.                                                                                     |
-| `timelineHelpers.ts`              |     924 | Shared rendering helpers; exports `DMG_SPIKE_THRESHOLD`, which the renderer's pressure lanes import so lane count equals prompt line count. |
-| `matchTimelineSections.ts`        |     820 | The `[STATE]` / section renderers.                                                                                                          |
-| `resourceSnapshot.ts`             |     818 | Loadout, charges-ready, on-cooldown names, and the JSON situation snapshot.                                                                 |
-| `matchNarrative.ts`               |     431 | The "Match Flow" narrative, segmented by burst windows rather than time slices, so causal order survives.                                   |
-| `criticalWindows.ts` / `utils.ts` | 70 / 52 | Window helpers.                                                                                                                             |
+| Module                            | Role                                                                                                                                        |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `matchTimeline.ts`                | `buildMatchTimeline` — the rendered event timeline, the bulk of the prompt.                                                                 |
+| `buildMatchContext.ts`            | `buildMatchContext` — the top-level prompt entry point.                                                                                     |
+| `timelineHelpers.ts`              | Shared rendering helpers; exports `DMG_SPIKE_THRESHOLD`, which the renderer's pressure lanes import so lane count equals prompt line count. |
+| `matchTimelineSections.ts`        | The `[STATE]` / section renderers.                                                                                                          |
+| `resourceSnapshot.ts`             | Loadout, charges-ready, on-cooldown names, and the JSON situation snapshot.                                                                 |
+| `matchNarrative.ts`               | The "Match Flow" narrative, segmented by burst windows rather than time slices, so causal order survives.                                   |
+| `criticalWindows.ts` / `utils.ts` | Window helpers.                                                                                                                             |
 
 ### `src/analysis/` — findings, prompts, audits
 
-| Module                                                |        Lines | Role                                                                                                                                                                                                       |
-| ----------------------------------------------------- | -----------: | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `candidateFindings.ts`                                |        1,133 | `extractCandidateFindings` — deterministic candidates the model is allowed to talk about (CD waste, missed cleanse/purge, CC lockout, eaten kick, wasted trinket, death setup, unused defensive/external). |
-| `deepDive.ts`                                         |        1,066 | Follow-up rounds: evidence packs around a finding or a selected window, plus their prompts and audits.                                                                                                     |
-| `buildFindingsPrompt.ts`                              |           90 | The findings prompt.                                                                                                                                                                                       |
-| `auditFindings.ts`                                    |          134 | Post-model audit: drop anything with bare numbers, invented events, or forbidden causal claims.                                                                                                            |
-| `causalLint.ts`                                       |          277 | Regex-only lint for strong causal _language_ (the policy forbids it), in Chinese and English. It checks language, not truth.                                                                               |
-| `spellNameZhLint.ts`                                  |          171 | Guards against spell names being translated into Chinese in output.                                                                                                                                        |
-| `parseModelJson.ts`                                   |           63 | Tolerant JSON extraction (markdown fences and all) — the fix for the `bad-json` false-rejection class.                                                                                                     |
-| `findingCategories.ts` / `types.ts` / `factFormat.ts` | 81 / 38 / 16 | Category normalisation and shared types.                                                                                                                                                                   |
+| Module                                                | Role                                                                                                                                                                                                       |
+| ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `candidateFindings.ts`                                | `extractCandidateFindings` — deterministic candidates the model is allowed to talk about (CD waste, missed cleanse/purge, CC lockout, eaten kick, wasted trinket, death setup, unused defensive/external). |
+| `deepDive.ts`                                         | Follow-up rounds: evidence packs around a finding or a selected window, plus their prompts and audits.                                                                                                     |
+| `buildFindingsPrompt.ts`                              | The findings prompt.                                                                                                                                                                                       |
+| `auditFindings.ts`                                    | Post-model audit: drop anything with bare numbers, invented events, or forbidden causal claims.                                                                                                            |
+| `causalLint.ts`                                       | Regex-only lint for strong causal _language_ (the policy forbids it), in Chinese and English. It checks language, not truth.                                                                               |
+| `spellNameZhLint.ts`                                  | Guards against spell names being translated into Chinese in output.                                                                                                                                        |
+| `parseModelJson.ts`                                   | Tolerant JSON extraction (markdown fences and all) — the fix for the `bad-json` false-rejection class.                                                                                                     |
+| `findingCategories.ts` / `types.ts` / `factFormat.ts` | Category normalisation and shared types.                                                                                                                                                                   |
 
 ### `src/compare/`, `src/benchmark/`, `src/learning/`
 
-- **`compare/`** (362 lines): looks your metrics up in a pre-built corpus cell (`cellLookup.ts`), turns them into percentiles against three stored anchors (`verifiedComparison.ts`), builds an exemplar-led prompt, and enforces placeholder discipline (`claimChecker.ts` — the placeholder syntax is defined once here because three consumers previously each had their own regex and drifted).
-- **`benchmark/`** (423 lines): `createBenchmarkAccumulator` / `computeBenchmarks` / `toPercentiles`, plus `stratifiedSample` (group by spec × archetype, cap each stratum deterministically — first N, no RNG). Offline only: its single consumer is the CLI `scripts/collectBenchmarks.ts`, whose output is copied to `src/data/benchmarks.json`. Nothing in the app calls it.
-- **`learning/`** (495 lines): the self-learning coach loop, in four stages — ledger (`types.ts`) → deterministic scan (`patternScan.ts`) → AI distillation (`distillRules.ts`) → deterministic rule application (`matchRules.ts`). `patternScan.ts` is the authority for `PATTERN_MIN_HITS`, `PATTERN_WINDOW_MATCHES`, `RULE_RETIRE_MAX_HITS` and the matching predicates; rule retirement (`main/learning.ts`) and habit badges (`matchRules.ts`) import them rather than copying values, so "the pattern that was mined" and "the finding that gets badged" are one judgement. Note the cross-match key is **`category` (plus candidate event type), not `findingKey`** — `findingKey` embeds per-match event ids that by construction never repeat. `distillRules.ts` lets the model phrase a pattern in human language, but the only two numbers it may write are `{{hits}}` and `{{windowMatches}}`, interpolated by code.
+- **`compare/`**: looks your metrics up in a pre-built corpus cell (`cellLookup.ts`), turns them into percentiles against three stored anchors (`verifiedComparison.ts`), builds an exemplar-led prompt, and enforces placeholder discipline (`claimChecker.ts` — the placeholder syntax is defined once here because three consumers previously each had their own regex and drifted).
+- **`benchmark/`**: `createBenchmarkAccumulator` / `computeBenchmarks` / `toPercentiles`, plus `stratifiedSample` (group by spec × archetype, cap each stratum deterministically — first N, no RNG). Offline only: its single consumer is the CLI `scripts/collectBenchmarks.ts`, whose output is copied to `src/data/benchmarks.json`. Nothing in the app calls it.
+- **`learning/`**: the self-learning coach loop, in four stages — ledger (`types.ts`) → deterministic scan (`patternScan.ts`) → AI distillation (`distillRules.ts`) → deterministic rule application (`matchRules.ts`). `patternScan.ts` is the authority for `PATTERN_MIN_HITS`, `PATTERN_WINDOW_MATCHES`, `RULE_RETIRE_MAX_HITS` and the matching predicates; rule retirement (`main/learning.ts`) and habit badges (`matchRules.ts`) import them rather than copying values, so "the pattern that was mined" and "the finding that gets badged" are one judgement. Note the cross-match key is **`category` (plus candidate event type), not `findingKey`** — `findingKey` embeds per-match event ids that by construction never repeat. `distillRules.ts` lets the model phrase a pattern in human language, but the only two numbers it may write are `{{hits}}` and `{{windowMatches}}`, interpolated by code.
 
 ### `src/data/` — game data, generated and curated
 
@@ -374,13 +371,13 @@ A third category is worth naming separately: **corpus-derived** data. `dispelObs
 
 ### The public surface
 
-`packages/analysis/src/index.ts` (92 lines) re-exports the prompt builder, most of `utils/`, the compare and findings modules, and named data tables. But note: **main deliberately bypasses this barrel.** `src/main/analysis.ts` and `compare.ts` both import from deep paths (`@gladlog/analysis/src/analysis/...`), with a comment explaining why — `index.ts` pulls in the data modules whose top-level `await` defeats tree-shaking, costing the main process ~13.6 MB of file reads and roughly 40 MB of resident heap for tables it never queries.
+`packages/analysis/src/index.ts` re-exports the prompt builder, most of `utils/`, the compare and findings modules, and named data tables. But note: **main deliberately bypasses this barrel.** `src/main/analysis.ts` and `compare.ts` both import from deep paths (`@gladlog/analysis/src/analysis/...`), with a comment explaining why — `index.ts` pulls in the data modules whose top-level `await` defeats tree-shaking, costing the main process ~13.6 MB of file reads and roughly 40 MB of resident heap for tables it never queries.
 
 ---
 
 ## 7. Inside `@gladlog/parser` and `@gladlog/parser-compat`
 
-### L1 — line decoding (986 lines, `src/l1/`)
+### L1 — line decoding (`src/l1/`)
 
 Pure and stateless: one text line in, one `ParsedLine` out, `null` on anything unrecognised (the whole dispatcher body is wrapped in `try/catch → null`).
 
@@ -390,7 +387,7 @@ Pure and stateless: one text line in, one `ParsedLine` out, `null` on anything u
 - `combatantInfo.ts` — likewise positional-agnostic: it locates talents / PvP talents / equipment / interesting auras by scanning for the next bracketed segment.
 - `types.ts` — `ParsedLine`, whose optional decoded fields are typed as `ReturnType<typeof decodeX>`, making the decoders the schema. `ParsedLine.known` is the signal-to-noise flag for unhandled events.
 
-### L2 — segmentation (197 lines, `src/l2/`)
+### L2 — segmentation (`src/l2/`)
 
 `Segmenter` is a three-state machine (`IDLE` / `IN_MATCH` / `IN_SHUFFLE`). Solo Shuffle is detected by `bracket === "Rated Solo Shuffle"`; its rounds are delimited by successive `ARENA_MATCH_START` lines, and only the final `ARENA_MATCH_END` closes the whole lobby. Diagnostics: `DOUBLE_START`, `ORPHAN_END`, `UNCLOSED_SEGMENT`.
 
@@ -399,7 +396,7 @@ Two things L2 owns that matter downstream:
 - **`lineIndex`** is assigned here (`line.lineIndex = currentSegment.rawLines.length`, immediately before both arrays are pushed). This is the anchor for the "jump from an event in the UI to the original raw log line" feature.
 - **`onOpen` / `onClose`** fire only on real IDLE↔open transitions — one pair per shuffle lobby, not per round. They exist so the OBS recorder knows when a match starts and stops.
 
-### L3 — collection and composition (959 lines, `src/l3/`)
+### L3 — collection and composition (`src/l3/`)
 
 - `roster.ts` — builds the unit table. Unit kind is resolved by GUID prefix first, then by flags; reaction is decided by **majority vote** over all flag values seen for that GUID. Pets map to owners via the advanced `ownerGuid`, with `SPELL_SUMMON` as a strictly lower-priority fallback.
 - `collect.ts` — one pass fanning each record into eight groups; the same event object is pushed to both the source and destination unit's arrays (shared reference, not a copy).

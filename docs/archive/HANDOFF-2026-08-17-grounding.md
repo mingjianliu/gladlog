@@ -1,5 +1,7 @@
 # 交接:教练判断接地(2026-08-17)
 
+> **Archived 2026-09-26** — historical handoff; paths and state may no longer match the repo.
+
 Monolingual Chinese, not yet included in bilingual pairs.
 
 给接手的 agent。前一轮做完了一次全链路审计 + 五条整改里的四条 + 减伤判断的人工接地。
@@ -8,7 +10,7 @@ Monolingual Chinese, not yet included in bilingual pairs.
 先读三份东西,顺序别换:
 
 1. `CLAUDE.md` —— 共享谓词规则、验证规则、双语文档规则
-2. **[`docs/coaching-grounding-audit.md`](coaching-grounding-audit.md)** —— 本轮的核心产出,28 个判断逐条接地台账
+2. **[`docs/coaching-grounding-audit.md`](../coaching-grounding-audit.md)** —— 本轮的核心产出,28 个判断逐条接地台账
 3. 本文件
 
 ---

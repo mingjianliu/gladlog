@@ -1,6 +1,6 @@
 # @gladlog/analysis
 
-**English** · [中文](README.zh-CN.md)
+**English** · [Chinese](README.zh-CN.md)
 
 The combat-analysis core of gladlog: turns a parsed WoW arena/shuffle match into structured facts, an AI-coaching prompt, cohort comparison data, and cross-match learning signals. It has one workspace dependency (`@gladlog/parser-compat`) and no dependency on Electron, React, or any UI framework — it's pure TypeScript, consumed by `packages/desktop` (renderer `derive/` layer) and `packages/eval` (verification gates, corpus building). At roughly 35,000 lines / 128 files under `src/` (including co-located tests), it's the largest package in the repo.
 

@@ -324,4 +324,4 @@ once the catalog is populated, these will automatically be promoted to first-cla
 
 **Coupling note**: Any change alters every prompt; tonight's Layer A three-gate numbers and calibration baselines were measured on
 current state. Rerunning Layer A three gates is cheap (fully automated), calibration is expensive (80 cases). Recommend running Layer A after P1 lands to
-verify no new violations, deferring calibration until `HANDOFF-2026-07-20-judge-variance.md` concludes.
+verify no new violations, deferring calibration until `docs/archive/HANDOFF-2026-07-20-judge-variance.md` concludes.

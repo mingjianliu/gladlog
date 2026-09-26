@@ -2921,7 +2921,7 @@ git commit -m "build(desktop): electron-builder config — mac dmg + win nsis, u
 
 - Modify: `.superpowers/progress.md` (append Subproject 2 completion row: task commits, acceptance results, leftovers)
 - Modify: `README.md` (check off Subproject 2 in roadmap checklist, if present)
-- Modify: `HANDOFF-2026-07-10.md` left untouched (historical doc); new handoffs decided by main session if needed
+- Modify: `HANDOFF-2026-07-10.md` (now `docs/archive/HANDOFF-2026-07-10.md`) left untouched (historical doc); new handoffs decided by main session if needed
 
 - [ ] **Step 1: Update progress.md** (format follows existing ledger: one milestone per row + "Next Steps")
 - [ ] **Step 2: Full repo verification**

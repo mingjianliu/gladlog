@@ -2,7 +2,7 @@
 
 [English](developer-guide.md) · **中文**
 
-面向要读懂/修改这套代码的人。配套阅读:仓库根 `CLAUDE.md`(硬性纪律)、`docs/verifiability-roadmap.zh-CN.md`(验证体系全景)、`docs/plans/`(设计决策的历史与现状文档)。
+面向要读懂/修改这套代码的人。配套阅读:仓库根 `CLAUDE.md`(硬性纪律)、`docs/verifiability-roadmap.zh-CN.md`(验证体系全景)、[`docs/README.zh-CN.md`](README.zh-CN.md)(文档地图 —— 它说明哪些文档持续维护、哪些已冻结;设计史 2026-08-05 之前在 `docs/plans/` + `docs/specs/`,之后在 `docs/superpowers/`)。
 
 ## 开发环境依赖
 
@@ -86,7 +86,7 @@ npm run presubmit
 
 ## eval 体系(prompt/回复质量)
 
-三条工作流(`docs/commands/`),产物落私有仓 `$GLADLOG_EVAL_HOME`:
+eval 的 runbook 在 `docs/commands/`(全部十条、每条一句话的清单见 [`docs/README.zh-CN.md`](README.zh-CN.md)),产物落私有仓 `$GLADLOG_EVAL_HOME`。最常用的三条:
 
 - **/eval-baseline** —— 现状评测找问题:构建语料 → 确定性质量门(覆盖率/噪声/偏向词)→ 生成回复 → 三遍法评分(锚定 rubric + 判别效度)→ 报告 + 台账。
 - **/eval-ab** —— 受控 A/B 验证某个 prompt 构建器改动(同语料、盲评、bootstrap CI)。注意 worktree 必须 `npm ci`(符号链接会静默用回主仓代码)。
@@ -101,6 +101,10 @@ npm run presubmit
 ## 发布
 
 GitHub Actions 在 tag 上原生构建 Windows x64 / macOS 安装包(免 Wine)。electron-builder 的坑(pin electronVersion、别加 `files`、`extraResources`、mac ad-hoc 签名)见 `docs/BUILD-WINDOWS.zh-CN.md` 与提交历史。
+
+## 语言政策
+
+面向用户的文档是双语的:`CLAUDE.md`「双语文档规则」列出的那批(十三份顶层文档,加上每个有 `.zh-CN.md` 副本的 `packages/<pkg>/README.md`)以英文为正本,中文副本必须与之等价 —— 两边一起改,或者都不改。其余一切刻意不做约束、且大多是中文:源码注释、CI 与提交信息、`.claude/skills`、`docs/plans` / `docs/specs` / `docs/superpowers`、`docs/BACKLOG.md`、`docs/commands/` 下的 runbook、以及已归档的交接文档。不要把它们「修」成英文,也不要给不在清单上的文档加 `.zh-CN.md` 副本;新文档若面向用户,就把它加进清单并两种语言一起出。
 
 ## 从哪里开始读代码
 

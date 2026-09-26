@@ -1,6 +1,6 @@
 # ingest-coach-corpus — 把教练视频变成可与候选类型对账的语料
 
-把一个教练站点（现为 Skill Capped）的 VoD 复盘与教程课程转成结构化语料：每条判决/规则都映射到 gladlog 候选类型的**真实谓词**（或标为无对应），教程规则还判「违反它日志今天能不能判」。工具在 `tools/coach-corpus/`（Python，不在 npm workspace 内），数据在 gitignore 的 `tmp/skillcapped-vod/`。背景、结论与逐环追踪示例见 `docs/HANDOFF-2026-09-05-skillcapped-coach-corpus.md`。
+把一个教练站点（现为 Skill Capped）的 VoD 复盘与教程课程转成结构化语料：每条判决/规则都映射到 gladlog 候选类型的**真实谓词**（或标为无对应），教程规则还判「违反它日志今天能不能判」。工具在 `tools/coach-corpus/`（Python，不在 npm workspace 内），数据在 gitignore 的 `tmp/skillcapped-vod/`。背景、结论与逐环追踪示例见 `docs/archive/HANDOFF-2026-09-05-skillcapped-coach-corpus.md`。
 
 **先读三条约定**
 - **不搬凭据。** 只有 master playlist 要 JWT；`/api/video/<uuid>/<bitrate>.m3u8` 与分片不设防。永远不要把浏览器里的 token 搬出来 —— 不需要，且会被安全分类器/Chrome PNA 拦。
