@@ -46,8 +46,7 @@ import {
 } from "@gladlog/analysis/scripts/datagen/lib/wagoCsv";
 import { CURATED_ID_TABLES } from "@gladlog/analysis/src/data/curatedIdRegistry";
 import { PVP_TALENT_POOL_GENERATED } from "@gladlog/analysis/src/data/pvpTalentPoolGenerated";
-
-import { SPEC_NAMES_ZH } from "../../desktop/src/renderer/src/report/data/specNames";
+import { SPEC_NAMES_ZH } from "@gladlog/analysis/src/data/specNames";
 
 const REPO = new URL("../../../", import.meta.url).pathname;
 const DATA = join(REPO, "packages/analysis/src/data/");
