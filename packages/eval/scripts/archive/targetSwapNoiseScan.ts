@@ -17,8 +17,8 @@
  * future estimator; they do not validate one.
  *
  * Usage:
- *   npx tsx packages/eval/scripts/targetSwapNoiseScan.ts [--n 400] [--json]          # local library
- *   npx tsx packages/eval/scripts/targetSwapNoiseScan.ts --manifest <file> [--every N] [--limit N] [--json]
+ *   npx tsx packages/eval/scripts/archive/targetSwapNoiseScan.ts [--n 400] [--json]          # local library
+ *   npx tsx packages/eval/scripts/archive/targetSwapNoiseScan.ts --manifest <file> [--every N] [--limit N] [--json]
  *                                                        # archive: both teams per round are perspectives
  *
  * Columns: `buggy` = the old filter reproduced verbatim; `all` = every real
@@ -40,7 +40,7 @@ import {
   loadLegacyRound,
   pickRows,
   splitTeams,
-} from "../src/explore/storeAccess";
+} from "../../src/explore/storeAccess";
 
 const BUCKET_MS = 3000;
 type Filter = "buggy" | "all" | "direct";

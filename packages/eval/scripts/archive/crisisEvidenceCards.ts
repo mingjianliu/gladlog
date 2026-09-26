@@ -10,13 +10,13 @@
  * unclassified count and every unknown status travel onto the card.
  *
  * Usage:
- *   npx tsx packages/eval/scripts/crisisEvidenceCards.ts [--in <step2 ledger.json>] [--out <cards.json>]
+ *   npx tsx packages/eval/scripts/archive/crisisEvidenceCards.ts [--in <step2 ledger.json>] [--out <cards.json>]
  */
 import { SPELL_NAMES_ZH_GENERATED } from "@gladlog/analysis/src/data/spellNamesZh";
 import { readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 
-import { SPEC_NAMES_ZH } from "../../desktop/src/renderer/src/report/data/specNames";
+import { SPEC_NAMES_ZH } from "../../../desktop/src/renderer/src/report/data/specNames";
 
 const HOME =
   process.env.GLADLOG_EVAL_HOME ??
