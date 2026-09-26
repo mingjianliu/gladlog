@@ -114,7 +114,7 @@ export const SPELL_EFFECT_OVERRIDES: Record<string, IMinedSpell> =
       e("114051", "Ascendance", 180, 15),
       e("205180", "Summon Darkglare", 120, 20),
       e("265187", "Summon Demonic Tyrant", 90, 15),
-      e("191427", "Metamorphosis", 240, 24),
+      e("191427", "Metamorphosis", 120, 24), // GH #119 2026-09-26: 240 was a hand value from the 2026-07-10 port with no provenance; DB2 says 120, and the press (logged as its 200166 landing) recasts no faster than 120 s — recastGapHistogram --spells 200166, every 10th archive file: 314 same-round gaps, min 119 s, p05 120 s
       e("370965", "The Hunt", 90, 6),
       e("359844", "Call of the Wild", 180, 20),
       // ── Cast id → effect duration (codex astra review 2026-09-18) ──
