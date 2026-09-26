@@ -752,6 +752,50 @@ describe("buildDeepDivePack:死亡锚定「可用未用」事实进包", () => {
     expect(prompt).toContain("external-available");
     expect(prompt).toContain("OFF COOLDOWN");
   });
+
+  it("window bounds and item times floor onto the timeline's second (audit 0e06, codex)", () => {
+    // A death at 113.957 s is 1:53 on the timeline: rounding would print
+    // 114.0 for both the window's lower bound and the item sitting on it.
+    const late = {
+      ...combat,
+      endTime: 125_000,
+      units: {
+        ...combat.units,
+        w: mkUnit(
+          "w",
+          "Warr-Area52",
+          true,
+          CombatUnitSpec.Warrior_Arms,
+          113_957,
+        ),
+      },
+    };
+    const lateCandidates = [
+      { ...candidates[0]!, t: 113.957, facts: { t: "113.9" } },
+    ] as unknown as CandidateEvent[];
+    const p = buildDeepDivePack(
+      late,
+      finding,
+      0,
+      lateCandidates,
+      "Owner-Area52",
+      { fromS: 113.957, toS: 120.96 },
+    );
+    expect(p).not.toBeNull();
+    const ext = p!.items.find((i) => i.kind === "external-available");
+    expect(ext!.facts.t).toBe("113.9");
+    for (const mode of ["deepen", "window"] as const) {
+      const prompt = buildDeepDivePrompt(
+        [p!],
+        [finding],
+        "Discipline Priest",
+        "Owner-Area52",
+        mode,
+      );
+      expect(prompt).toContain("(window 113.9s–120.9s;");
+      expect(prompt).not.toContain("114.0");
+    }
+  });
 });
 
 describe("shouldAttemptAuditRepair(全灭反馈重试判据,2026-08-06)", () => {
