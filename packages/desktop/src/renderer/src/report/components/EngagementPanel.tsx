@@ -2,6 +2,7 @@ import { fmtTime } from "@gladlog/analysis";
 import { useState } from "react";
 
 import type { AuraUptime } from "../derive/auraUptime";
+import type { CastControlSummary } from "../derive/castControl";
 import type { CcBreakDash, CcBreakRow } from "../derive/ccBreakDash";
 import type { CCChainRow } from "../derive/ccChainDash";
 import type { DispelDash } from "../derive/dispelDash";
@@ -56,6 +57,7 @@ function CcBreakList({
  */
 export function EngagementPanel({
   kickRows,
+  castControl = null,
   dispelDash,
   auraUptime,
   ccRows,
@@ -67,6 +69,8 @@ export function EngagementPanel({
   roundish = false,
 }: {
   kickRows: KickDashRow[];
+  /** The recorder's own cast control (kick tab); null = unknown / not loaded. */
+  castControl?: CastControlSummary | null;
   dispelDash: DispelDash;
   auraUptime: AuraUptime;
   ccRows: CCChainRow[];
@@ -137,8 +141,12 @@ export function EngagementPanel({
       </div>
       <div className="rpt-engage-body">
         {tab === "kick" &&
-          (kickRows.length > 0 ? (
-            <KickDashboard rows={kickRows} onSeek={onSeek} />
+          (kickRows.length > 0 || castControl ? (
+            <KickDashboard
+              rows={kickRows}
+              castControl={castControl}
+              onSeek={onSeek}
+            />
           ) : (
             empty
           ))}

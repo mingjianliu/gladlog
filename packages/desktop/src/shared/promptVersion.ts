@@ -33,5 +33,17 @@
  *  disarm only on a melee target (user 2026-09-25). 605 files at 9a39c98c:
  *  menu identical; 3,418 contexts change (loadouts / [RES] / cast lines gain
  *  the control kit); [CC BOOKMARK] 412 → 733; context gates 0 → 0.
+ *  v155 (2026-09-26, fake-cast contrast): kick-eaten carries the log
+ *  recorder's own cast control for the round (castCancels.ts) — hardcasts
+ *  stopped by the player (estimated median depth), enemy kicks that went into
+ *  one of those stops (kickAudit juked, by GUID, same cast instance) and when
+ *  this line's kicker was baited; the legend says a stop alone is not a fake,
+ *  the counts are round-wide, never a recommended depth or an
+ *  opponent-adaptation claim. 605 files: 933 menus change (kick-eaten lines and
+ *  legend only; other types and the match context byte-identical); 560 of
+ *  1,482 kick-eaten lines carry the facts (124 with a baited kick, 70 with no
+ *  stop). A/B v1 INCONCLUSIVE (eval-private ab/2026-09-26-fakecast-contrast),
+ *  v3 targeted check 0 misuses in 14 responses; owner ruling 「比较基础 但是
+ *  还是有一点价值 先做出来」.
  */
-export const PROMPT_VERSION = 154;
+export const PROMPT_VERSION = 155;

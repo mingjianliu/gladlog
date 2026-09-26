@@ -1,10 +1,11 @@
-import { ensureAnalysisData } from "@gladlog/analysis";
+import { ensureAnalysisData, type RawStreams } from "@gladlog/analysis";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { bridge } from "../../bridge";
 import { buildWindowAnalysisRequest } from "../derive/analysisInput";
 import { deriveAuraUptime } from "../derive/auraUptime";
 import { deriveBurstLedger } from "../derive/burstLedger";
+import { deriveCastControl } from "../derive/castControl";
 import { deriveCcBreakDash } from "../derive/ccBreakDash";
 import { deriveCCChainDash } from "../derive/ccChainDash";
 import { deriveDampeningSeries } from "../derive/dampeningSeries";
@@ -18,7 +19,10 @@ import { deriveMatchArc } from "../derive/matchArc";
 import type { MeterMode } from "../derive/meterRows";
 import { deriveMistakes, timedAnchorsFromMistakes } from "../derive/mistakes";
 import { derivePressureLanes } from "../derive/pressureLanes";
-import { prefetchRawStreams } from "../derive/rawStreamsCache";
+import {
+  ensureRawStreams,
+  getRawStreamsSync,
+} from "../derive/rawStreamsCache";
 import { deriveStatsTable } from "../derive/statsTable";
 import { deriveSummary } from "../derive/summary";
 import {
@@ -124,8 +128,22 @@ export function MatchReport({
   // than left to the source.id default: this is the ONE place in the render
   // tree that actually has that id, since it already resolves it for the
   // recording lookup below).
+  // The loaded streams are also state, so the kick dashboard's cast-control
+  // strip (deriveCastControl) re-derives once they land.
+  const [rawStreams, setRawStreams] = useState<RawStreams | undefined>(() =>
+    getRawStreamsSync(source.id),
+  );
   useEffect(() => {
-    prefetchRawStreams(source, videoMatchId ?? resolvedMatchId);
+    let live = true;
+    setRawStreams(getRawStreamsSync(source.id));
+    void ensureRawStreams(source, videoMatchId ?? resolvedMatchId).then(
+      (rs) => {
+        if (live) setRawStreams(rs);
+      },
+    );
+    return () => {
+      live = false;
+    };
   }, [source, videoMatchId, resolvedMatchId]);
   const [mode, setMode] = useState<MeterMode>("damage");
   // What the main chart plots (血量 by default). Switching to a metric the
@@ -237,6 +255,10 @@ export function MatchReport({
   const kickRows = useMemo(
     () => (timeRange ? deriveKickDash(source, timeRange) : kickFull),
     [source, timeRange, kickFull],
+  );
+  const castControl = useMemo(
+    () => deriveCastControl(source, rawStreams, timeRange),
+    [source, rawStreams, timeRange],
   );
   const ccChainDash = useMemo(
     () => deriveCCChainDash(source, timeRange),
@@ -842,6 +864,7 @@ export function MatchReport({
                   />
                   <EngagementPanel
                     kickRows={kickRows}
+                    castControl={castControl}
                     dispelDash={dispelDash}
                     auraUptime={auraUptime}
                     ccRows={ccChainDash.rows}

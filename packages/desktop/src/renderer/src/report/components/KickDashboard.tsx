@@ -2,9 +2,9 @@ import { fmtTime } from "@gladlog/analysis";
 import { useState } from "react";
 
 import { classColor } from "../data/gameConstants";
+import type { CastControlSummary } from "../derive/castControl";
 import type { KickDashRow } from "../derive/kickDash";
 import { UnitName } from "./UnitName";
-
 
 /**
  * The kick dashboard (backlog #2): per-player landed/juked/missed kick
@@ -15,12 +15,19 @@ import { UnitName } from "./UnitName";
  */
 export function KickDashboard({
   rows,
+  castControl = null,
   onSeek,
 }: {
   rows: KickDashRow[];
+  /** The log recorder's own cast control (user request 2026-09-26); null =
+   * not the recorder's log / streams not loaded yet — nothing is shown. */
+  castControl?: CastControlSummary | null;
   onSeek?: (tSeconds: number, unitNames: string[]) => void;
 }) {
   const [open, setOpen] = useState<Record<string, boolean>>({});
+  const castStrip = castControl ? (
+    <CastControlStrip c={castControl} onSeek={onSeek} />
+  ) : null;
   // Keep the card shell on empty data (P1-1): the feature stays discoverable
   // in short rounds with no kicks
   if (rows.length === 0)
@@ -32,6 +39,7 @@ export function KickDashboard({
         <p className="rpt-ledger-empty">
           本场双方 0 次打断施放 —— 长局中此处显示两队打断命中/被骗/落空审计。
         </p>
+        {castStrip}
       </div>
     );
   return (
@@ -127,6 +135,62 @@ export function KickDashboard({
           })}
         </tbody>
       </table>
+      {castStrip}
+    </div>
+  );
+}
+
+/**
+ * The recorder's own cast control: hardcasts, the ones they stopped
+ * themselves (median progress), kicks eaten, and the enemy kicks those stops
+ * baited — the same `ownerCastCancels` facts the coach menu's kick-eaten line
+ * carries. A stopped cast is not called a fake: moving stops a cast bar too;
+ * only a baited kick is shown as one.
+ */
+function CastControlStrip({
+  c,
+  onSeek,
+}: {
+  c: CastControlSummary;
+  onSeek?: (tSeconds: number, unitNames: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="rpt-stats-detail-group" data-testid="cast-control">
+      <span className="rpt-stats-detail-item">
+        <UnitName name={c.name} full /> 读条 {c.hardcasts} 次 · 自己停手{" "}
+        {c.cancels.length} 次
+        {c.medianCancelPct !== null && `(中位读到 ${c.medianCancelPct}%)`} ·
+        被打断 {c.kicked} 次 · 骗掉对方打断 {c.baitedKicks.length} 次
+        {c.baitedKicks.length > 0 && (
+          <button
+            className="rpt-stats-detail-jump"
+            title="展开被骗掉的打断"
+            onClick={() => setOpen((o) => !o)}
+          >
+            {open ? "▾" : "▸"}
+          </button>
+        )}
+      </span>
+      {open &&
+        c.baitedKicks.map((b, i) => (
+          <span key={i} className="rpt-stats-detail-item">
+            <span className="rpt-stats-detail-t">{fmtTime(b.atSeconds)}</span>{" "}
+            <UnitName name={b.kickerName} /> 的 {b.kickSpellName} 被你停手的{" "}
+            {b.baitSpellName} 骗掉
+            {onSeek && (
+              <button
+                className="rpt-stats-detail-jump"
+                title="回放此刻"
+                onClick={() =>
+                  onSeek(Math.max(0, b.atSeconds - 3), [c.name, b.kickerName])
+                }
+              >
+                ▶
+              </button>
+            )}
+          </span>
+        ))}
     </div>
   );
 }

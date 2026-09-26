@@ -84,6 +84,7 @@ import * as auraIntervals from "@gladlog/analysis/src/utils/auraIntervals";
 import * as bracketKey from "@gladlog/analysis/src/utils/bracketKey";
 import * as buffDuration from "@gladlog/analysis/src/utils/buffDuration";
 import * as cannotCastIntervals from "@gladlog/analysis/src/utils/cannotCastIntervals";
+import * as castCancels from "@gladlog/analysis/src/utils/castCancels";
 import * as castParam from "@gladlog/analysis/src/utils/castParam";
 import * as ccTargetState from "@gladlog/analysis/src/utils/ccTargetState";
 import * as ccTrinketAnalysis from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
@@ -249,6 +250,16 @@ const INDEX: PredicateRow[] = [
     file: `${A}/analysis/candidates/shared.ts`,
     symbol: "filterIntentGuardEvidence",
     mod: candidatesShared,
+  },
+  {
+    file: `${A}/utils/castCancels.ts`,
+    symbol: "ownerCastCancels",
+    mod: castCancels,
+  },
+  {
+    file: `${A}/utils/castCancels.ts`,
+    symbol: "CAST_INTERRUPTED_REASONS",
+    mod: castCancels,
   },
   // HP sampling
   {

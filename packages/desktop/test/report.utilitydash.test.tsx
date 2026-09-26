@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen } from "@testing-library/react";
+import { vi } from "vitest";
 
 import { DispelDashboard } from "../src/renderer/src/report/components/DispelDashboard";
 import { KickDashboard } from "../src/renderer/src/report/components/KickDashboard";
@@ -236,5 +237,58 @@ describe("战报视图集成", () => {
     // The empty-state card renders no table or rows, only the card shell plus
     // one line of copy
     expect(container.querySelector("table")).toBeNull();
+  });
+});
+
+describe("读条控制条(假读习惯,2026-09-26)", () => {
+  const cc = {
+    name: "Player1-Realm",
+    classId: 7,
+    hardcasts: 40,
+    cancels: [
+      {
+        spellId: "8004",
+        spellName: "Healing Surge",
+        startS: 10,
+        cancelS: 10.6,
+        progressPct: 40,
+      },
+      {
+        spellId: "8004",
+        spellName: "Healing Surge",
+        startS: 30,
+        cancelS: 30.9,
+        progressPct: 60,
+      },
+    ],
+    medianCancelPct: 60,
+    kicked: 2,
+    baitedKicks: [
+      {
+        atSeconds: 31.2,
+        kickerName: "Enemy-Realm",
+        kickSpellName: "Kick",
+        baitSpellName: "Healing Surge",
+      },
+    ],
+  };
+  it("shows counts, expands baited kicks, ▶ seeks to the kick", () => {
+    const onSeek = vi.fn();
+    const { container } = render(
+      <KickDashboard rows={[]} castControl={cc} onSeek={onSeek} />,
+    );
+    const strip = container.querySelector("[data-testid=cast-control]")!;
+    expect(strip.textContent).toContain("读条 40 次");
+    expect(strip.textContent).toContain("自己停手 2 次(中位读到 60%)");
+    expect(strip.textContent).toContain("被打断 2 次");
+    expect(strip.textContent).toContain("骗掉对方打断 1 次");
+    fireEvent.click(screen.getByTitle("展开被骗掉的打断"));
+    expect(strip.textContent).toContain("0:31");
+    fireEvent.click(screen.getByTitle("回放此刻"));
+    expect(onSeek).toHaveBeenCalledWith(28.2, ["Player1-Realm", "Enemy-Realm"]);
+  });
+  it("renders nothing without cast control (not the recorder / not loaded)", () => {
+    const { container } = render(<KickDashboard rows={[]} />);
+    expect(container.querySelector("[data-testid=cast-control]")).toBeNull();
   });
 });

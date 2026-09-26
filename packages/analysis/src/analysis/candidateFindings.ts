@@ -1,11 +1,11 @@
 import type { ICombatUnit } from "@gladlog/parser-compat";
 import { CombatUnitClass, CombatUnitReaction } from "@gladlog/parser-compat";
 
+import { mateHitDuringCc } from "../context/observedConsequences";
 import {
   lookupBacklashPrior,
   lookupBacklashWorth,
 } from "../data/backlashDispelPrior";
-import { mateHitDuringCc } from "../context/observedConsequences";
 import { lookupBehaviorPrior } from "../data/behaviorPrior";
 import { lookupBurstWindowPrior } from "../data/burstWindowPrior";
 import {
@@ -13,11 +13,11 @@ import {
   CANDIDATE_TYPE_FLAGS,
 } from "../data/candidateTypeFlags";
 import { costNormPhrase } from "../data/curatedAbilityFacts";
-import { getEnglishSpellName } from "../data/spellEffectData";
 import { CORPUS_OBSERVED_DISPEL_IDS } from "../data/dispelObservedGenerated";
-import { OFF_GCD_SPELL_IDS } from "../data/offGcdGenerated";
 import { lookupKickPriorityPrior } from "../data/kickPriorityPrior";
 import { resolveMitigation, wallDoorPct } from "../data/mitigationComponents";
+import { OFF_GCD_SPELL_IDS } from "../data/offGcdGenerated";
+import { getEnglishSpellName } from "../data/spellEffectData";
 import { spellSchoolMask } from "../data/spellSchools";
 import { ccSpellIds } from "../data/spellTags";
 import { lookupSyncWindowPrior } from "../data/syncWindowPrior";
@@ -30,6 +30,11 @@ import { buildAuraIntervals } from "../utils/auraIntervals";
 import { bracketKey } from "../utils/bracketKey";
 import { analyzeBurstLedger } from "../utils/burstLedger";
 import {
+  buildCannotCastIntervals,
+  couldRespondFor,
+} from "../utils/cannotCastIntervals";
+import { type OwnerCastCancels,ownerCastCancels } from "../utils/castCancels";
+import {
   analyzePlayerCCAndTrinket,
   applicableCCAvoidanceIds,
   CC_AVOIDANCE_BUFF_SPELLS,
@@ -39,12 +44,9 @@ import {
   REPOSITIONING_SPELL_IDS,
 } from "../utils/ccTrinketAnalysis";
 import {
-  buildCannotCastIntervals,
-  couldRespondFor,
-} from "../utils/cannotCastIntervals";
-import {
   annotateDefensiveTimings,
   cdAvailableAt,
+  cdIsProcOnly,
   DEFENSIVE_TAGS,
   extractMajorCooldowns,
   type IAvailableWindow,
@@ -52,7 +54,7 @@ import {
   isAllyCastableDefensive,
   isHealerSpec,
   isMeleeSpec,
-  cdIsProcOnly,
+  isPassiveProcCast,
   kitSpellReadyAt,
   playerTalentIdSets,
   REACTION_WINDOW_S,
@@ -60,7 +62,6 @@ import {
   USABLE_WHILE_CC_SPELL_IDS,
   USABLE_WHILE_CONFUSED_SPELL_IDS,
   USABLE_WHILE_FEARED_SPELL_IDS,
-  isPassiveProcCast,
 } from "../utils/cooldowns";
 import {
   annotateMissedPurgesWithKillWindows,
@@ -1014,6 +1015,10 @@ export function kickEatenEvents(
    * ready is not listed; every listed kick carries the facts. Absent = no
    * filter and no facts (hand-built fixtures). */
   pressure?: (k: (typeof instances)[number]) => KickPressure,
+  /** The owner's own cancelled hardcasts and the enemy kicks they baited
+   * (`castCancels.ts`) — the "you already fake-cast" contrast. null when the
+   * owner is not the player who recorded the log (no SPELL_CAST_FAILED). */
+  cancels?: OwnerCastCancels | null,
 ): CandidateEvent[] {
   const withPresses = instances
     .map((k) => ({
@@ -1127,8 +1132,34 @@ export function kickEatenEvents(
         // by every text-side facts parser (`checkFactsBlockIntegrity`).
         postKick: postKickFact(k, rejected),
         ...(p ? kickPressureFacts(p) : {}),
+        ...(cancels ? castCancelFacts(cancels, k.sourceName) : {}),
       },
     }));
+}
+
+/** The round's cancel / bait contrast on a kick-eaten line: how many of the
+ * owner's hardcasts they cancelled themselves (and how far in, median), how
+ * many enemy kicks those cancels baited, and which of them were this line's
+ * kicker's (seconds, " + "-joined). */
+function castCancelFacts(
+  c: OwnerCastCancels,
+  kicker: string,
+): Record<string, string> {
+  const pcts = c.cancels
+    .map((x) => x.progressPct)
+    .filter((x): x is number => x !== null)
+    .sort((a, b) => a - b);
+  const mine = c.baitedKicks.filter((b) => b.kickerName === kicker);
+  return {
+    yourCancels: String(c.cancels.length),
+    ...(pcts.length
+      ? { yourCancelMedianPct: String(pcts[Math.floor(pcts.length / 2)]) }
+      : {}),
+    baitedKicks: String(c.baitedKicks.length),
+    ...(mine.length
+      ? { baitedThisKickerT: mine.map((b) => fmtFactTime(b.atSeconds)).join(" + ") }
+      : {}),
+  };
 }
 
 /** GH #113: the pressure facts of one kick. Values never contain ", "
@@ -2201,6 +2232,7 @@ function teamPlayEvents(
             : null;
         },
         kickPressureFor({ combat, owner, friends, enemies }),
+        ownerCastCancels({ owner, friends, enemies, combat, rawStreams }),
       ),
     );
 

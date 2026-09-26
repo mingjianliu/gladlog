@@ -54,6 +54,7 @@ export * from "./utils/healerExposureAnalysis";
 export * from "./utils/healerOffenseAnalysis";
 export * from "./utils/healingGaps";
 export * from "./utils/incomingPressure";
+export * from "./utils/castCancels";
 export * from "./utils/kickAudit";
 export * from "./utils/killAttempts";
 export * from "./utils/killWindowTargetSelection";
