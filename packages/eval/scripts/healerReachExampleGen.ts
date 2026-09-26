@@ -42,6 +42,7 @@ import {
   specToString,
 } from "@gladlog/analysis/src/utils/cooldowns";
 import { hasLineOfSight } from "@gladlog/analysis/src/utils/losAnalysis";
+import { fmtTime } from "@gladlog/analysis/src/utils/renderGrid";
 import { talentModifierOwnershipOf } from "@gladlog/analysis/src/utils/talentOwnership";
 import { GladLogParser } from "@gladlog/parser";
 import { toLegacyMatch, toLegacyShuffle } from "@gladlog/parser-compat";
@@ -53,8 +54,6 @@ const flag = (f: string): string | undefined => {
   const i = argv.indexOf(f);
   return i >= 0 ? argv[i + 1] : undefined;
 };
-const fmtTime = (s: number): string =>
-  `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 const short = (n: string | undefined) => (n ?? "?").split("-")[0];
 
 const TREND_S = 5;

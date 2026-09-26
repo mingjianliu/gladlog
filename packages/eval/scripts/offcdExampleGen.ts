@@ -9,21 +9,22 @@ import {
   ensureAnalysisData,
   extractMajorCooldowns,
 } from "@gladlog/analysis";
-import { lookupSyncWindowPrior } from "@gladlog/analysis/src/data/syncWindowPrior";
-import { OFFENSIVE_CD_SPELL_IDS } from "@gladlog/analysis/src/utils/spellDanger";
 import {
   enemyHealerCcWindows,
   enemyMinHpPctInWindow,
   missedSyncWindowEvents,
 } from "@gladlog/analysis/src/analysis/candidates/cooldownTiming";
+import { lookupSyncWindowPrior } from "@gladlog/analysis/src/data/syncWindowPrior";
 import { PATCH_121_GOLIVE_EPOCH_MS } from "@gladlog/analysis/src/utils/drAnalysis";
+import { fmtTime } from "@gladlog/analysis/src/utils/renderGrid";
+import { OFFENSIVE_CD_SPELL_IDS } from "@gladlog/analysis/src/utils/spellDanger";
 import { GladLogParser } from "@gladlog/parser";
 import {
   CombatUnitReaction,
   toLegacyMatch,
   toLegacyShuffle,
 } from "@gladlog/parser-compat";
-import { readFileSync, readdirSync } from "fs";
+import { readdirSync, readFileSync } from "fs";
 import { basename, join } from "path";
 import { gunzipSync } from "zlib";
 
@@ -61,9 +62,6 @@ function loadLedger(dir: string): Map<string, any> {
   }
   return out;
 }
-
-const fmtTime = (s: number): string =>
-  `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
 async function main(): Promise<void> {
   const manifestPath = flag("--manifest");

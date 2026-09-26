@@ -3,31 +3,31 @@
  * anchor + killability gates (canonical offensive CD ready; target reachable
  * by an attacker; enemy-healer state as a FACT). Product predicates only. */
 import { ensureAnalysisData, extractMajorCooldowns } from "@gladlog/analysis";
+import { enemyHealerCcWindows } from "@gladlog/analysis/src/analysis/candidates/cooldownTiming";
+import { cdAvailableAt } from "@gladlog/analysis/src/utils/cooldowns";
+import { PATCH_121_GOLIVE_EPOCH_MS } from "@gladlog/analysis/src/utils/drAnalysis";
+import { getUnitPositionAtTime } from "@gladlog/analysis/src/utils/losAnalysis";
 import {
   computeBurstSubWindows,
   computeOffensiveWindows,
 } from "@gladlog/analysis/src/utils/offensiveWindows";
-import { enemyHealerCcWindows } from "@gladlog/analysis/src/analysis/candidates/cooldownTiming";
-import { cdAvailableAt } from "@gladlog/analysis/src/utils/cooldowns";
-import { OFFENSIVE_CD_SPELL_IDS } from "@gladlog/analysis/src/utils/spellDanger";
-import { getUnitPositionAtTime } from "@gladlog/analysis/src/utils/losAnalysis";
 import { LOS_SWEEP_GAP_MS } from "@gladlog/analysis/src/utils/positionSampling";
+import { fmtTime } from "@gladlog/analysis/src/utils/renderGrid";
 import { canReachTargetAt } from "@gladlog/analysis/src/utils/rootReachability";
-import { PATCH_121_GOLIVE_EPOCH_MS } from "@gladlog/analysis/src/utils/drAnalysis";
+import { OFFENSIVE_CD_SPELL_IDS } from "@gladlog/analysis/src/utils/spellDanger";
 import { GladLogParser } from "@gladlog/parser";
 import {
   CombatUnitReaction,
   toLegacyMatch,
   toLegacyShuffle,
 } from "@gladlog/parser-compat";
-import { readFileSync, readdirSync } from "fs";
+import { readdirSync, readFileSync } from "fs";
 import { basename, join } from "path";
 import { gunzipSync } from "zlib";
 
 const argv = process.argv.slice(2);
 const flag = (f: string) => { const i = argv.indexOf(f); return i >= 0 ? argv[i + 1] : undefined; };
 const num = (f: string, d: number) => Number(flag(f) ?? d);
-const fmtTime = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
 function loadLedger(dir: string): Map<string, any> {
   const out = new Map<string, any>();

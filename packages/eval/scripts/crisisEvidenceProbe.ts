@@ -37,6 +37,7 @@ import {
   getUnitPositionAtTime,
   hasLineOfSight,
 } from "@gladlog/analysis/src/utils/losAnalysis";
+import { fmtTime } from "@gladlog/analysis/src/utils/renderGrid";
 import type { ICombatUnit } from "@gladlog/parser-compat";
 import { createHash } from "crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "fs";
@@ -57,8 +58,6 @@ import {
 } from "../src/explore/storeAccess";
 
 const RESPONSE_S = 3;
-const fmtTime = (s: number): string =>
-  `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 const pct = (x: number): string => `${Math.round(x * 100)} %`;
 const k = (x: number): string => `${Math.round(x / 1000)}k`;
 

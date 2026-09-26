@@ -11,6 +11,7 @@
 import { ensureAnalysisData } from "@gladlog/analysis";
 import { crisisDecisionPoints } from "@gladlog/analysis/src/analysis/crisisDecisionPoints";
 import { isHealerSpec } from "@gladlog/analysis/src/utils/cooldowns";
+import { fmtTime } from "@gladlog/analysis/src/utils/renderGrid";
 import { GladLogParser, parseLine } from "@gladlog/parser";
 import {
   CombatUnitReaction,
@@ -25,8 +26,6 @@ const flag = (f: string): string | undefined => {
   const i = argv.indexOf(f);
   return i >= 0 ? argv[i + 1] : undefined;
 };
-const fmtTime = (s: number): string =>
-  `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 /** Sample must be this close to the crossing to be quoted at all. */
 const SAMPLE_TOLERANCE_MS = 1000;
 
