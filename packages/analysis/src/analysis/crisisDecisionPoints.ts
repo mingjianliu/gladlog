@@ -23,6 +23,7 @@ import {
   spells as spellMeta,
 } from "../data/spellTags";
 import {
+  cdIsProcOnly,
   cdReadyInTimeAt,
   extractMajorCooldowns,
   // The [STATE] tick's own HP sampler (getUnitHpAtTimestamp +
@@ -34,10 +35,10 @@ import {
   type IMajorCooldownInfo,
   // ...and its companion, the [STATE] tick's `unit:dead` predicate.
   isDeadAtRenderSecond,
-  cdIsProcOnly,
 } from "../utils/cooldowns";
-import { PVP_TRINKET_SPELL_IDS } from "../utils/killWindowTargetSelection";
 import { isEnemyCdWindowSpell } from "../utils/enemyCDs";
+import { PVP_TRINKET_SPELL_IDS } from "../utils/killWindowTargetSelection";
+import { rootIntervalsOf } from "../utils/rootReachability";
 import { OFFENSIVE_CD_SPELL_IDS } from "../utils/spellDanger";
 import { buildFilteredAuraIntervals } from "../utils/utils";
 
@@ -751,11 +752,16 @@ export function crisisDecisionPoints(
   // owner's Defensive-wall / Control-CD ledger, both computed once for the
   // whole round (not per-crossing) the same way `cc`/`silence` are above.
   // Skipped entirely for a healer owner — gate 3 is trivially true there.
-  let rootIntervals: ReturnType<typeof buildFilteredAuraIntervals> = [];
+  let rootIntervals: Array<{ startMs: number; endMs: number }> = [];
   let wallCds: IMajorCooldownInfo[] = [];
   let controlCds: IMajorCooldownInfo[] = [];
   if (role === "dps") {
-    rootIntervals = buildFilteredAuraIntervals(owner, rootSpellIds, combat);
+    // the one root predicate (`rootIntervalsOf`, shared with [ROOT] and the
+    // kick run budget), converted the way buildFilteredAuraIntervals converts
+    rootIntervals = rootIntervalsOf(owner as never, combat).map((iv) => ({
+      startMs: combat.startTime + iv.fromS * 1000,
+      endMs: combat.startTime + iv.toS * 1000,
+    }));
     let cds: IMajorCooldownInfo[] = [];
     try {
       cds = extractMajorCooldowns(owner, combat);

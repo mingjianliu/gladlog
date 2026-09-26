@@ -62,6 +62,15 @@ export const officialSilenceIds: ReadonlySet<string> = new Set(
   ]?.map((e) => e.spellId) ?? [],
 );
 
+/** Roots as a CONTROL / CC-summary id set: the SPELL_CATEGORIES type "roots"
+ * entries (18 ids) — a strict subset of the official `data/rootSpells.ts`
+ * set, which the "could this unit move" predicate (`rootIntervalsOf`) reads.
+ * The 6 official ids it lacks (Ice Nova, Harpoon, Charge's root, Shambling
+ * Rush, Immobilized, Entangling Roots 1287975) were tried here on 2026-09-26
+ * and pulled: a gap-closer's incidental ~1 s root (Charge) then displaced a
+ * real Shockwave as the "[BURST ANSWERED]" response and filled [RES] cc: with
+ * "Charge-0s[root]" — admitting them needs a rule for what counts as a
+ * control response (predicate index, "Not yet unified"). */
 export const rootSpellIds = new Set<string>(
   Object.keys(spells).filter((id) => spells[id].type === "roots"),
 );
