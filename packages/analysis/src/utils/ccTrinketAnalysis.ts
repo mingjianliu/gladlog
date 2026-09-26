@@ -1,3 +1,4 @@
+import { dropAuraRebroadcasts } from "./auraIntervals";
 import {
   CombatExtraSpellAction,
   CombatUnitClass,
@@ -935,7 +936,8 @@ export function analyzePlayerCCAndTrinket(
     removeMs: number;
   }> = [];
 
-  for (const aura of player.auraEvents) {
+  // same-ms REMOVED→APPLIED re-broadcasts are one aura (d78f: a second CC)
+  for (const aura of dropAuraRebroadcasts(player.auraEvents)) {
     const spellId = aura.spellId;
     if (!spellId) continue;
     const isRemovalEvent =

@@ -1,3 +1,4 @@
+import { dropAuraRebroadcasts } from "../utils/auraIntervals";
 import { DRUID_FORM_AURA_IDS, FORM_BOUND_BUFF_IDS } from "../data/druidForms";
 import {
   CombatUnitReaction,
@@ -402,7 +403,9 @@ export function extractOwnerCDBuffExpiry(
     // across all friendly units, sorted ascending.
     const removalTimestampsMs: number[] = [];
     for (const friend of friends) {
-      for (const event of friend.auraEvents) {
+      // a same-ms REMOVED→APPLIED re-broadcast is not the buff ending (3306:
+      // "Obsidian Scales ended early" on a Dracthyr visage swap)
+      for (const event of dropAuraRebroadcasts(friend.auraEvents)) {
         const isMatch = event.spellId === cd.spellId;
         if (
           isMatch &&

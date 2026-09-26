@@ -124,3 +124,31 @@ describe("[BURST ANSWERED] credits an answer that reached the pressured unit thr
     expect(creditedAnswer({ ...base, responseCasts: [gs({ destId: "p", effectEndSec: 34 })] } as never)).toBeDefined();
   });
 });
+
+import { buildAuraIntervals, dropAuraRebroadcasts } from "../src/utils/auraIntervals";
+
+describe("aura re-broadcasts are one aura (rounds 2–3 W2e / N6)", () => {
+  const ev = (event: string, spellId: string, ts: number, src = "s", dest = "d") =>
+    ({ logLine: { event, timestamp: ts, parameters: [] }, timestamp: ts, spellId, spellName: spellId, srcUnitId: src, srcUnitName: src, destUnitId: dest, destUnitName: dest }) as never;
+  it("a same-ms REMOVED → APPLIED pair is dropped; a real removal stays", () => {
+    const evs = [
+      ev("SPELL_AURA_APPLIED", "363916", 1_000),
+      ev("SPELL_AURA_REMOVED", "363916", 5_000),
+      ev("SPELL_AURA_APPLIED", "363916", 5_000),
+      ev("SPELL_AURA_REMOVED", "363916", 9_000),
+    ];
+    const out = dropAuraRebroadcasts(evs);
+    expect(out).toHaveLength(2);
+  });
+  it("a second APPLIED inside the duration with no recast (leaving stealth) keeps one interval", () => {
+    const unit = {
+      id: "d",
+      auraEvents: [ev("SPELL_AURA_APPLIED", "102342", 10_000, "s", "d"), ev("SPELL_AURA_APPLIED", "102342", 14_000, "s", "d"), ev("SPELL_AURA_REMOVED", "102342", 22_000, "s", "d")],
+    } as never;
+    const caster = { spec: "105", info: undefined, spellCastEvents: [{ spellId: "102342", logLine: { event: "SPELL_CAST_SUCCESS", timestamp: 10_000 } }] } as never;
+    const iv = buildAuraIntervals(unit, { startTime: 0, endTime: 60_000 }, new Map([["s", caster]])).filter((i) => i.spellId === "102342");
+    expect(iv).toHaveLength(1);
+    expect(iv[0]!.fromS).toBe(10);
+    expect(iv[0]!.toS).toBe(22);
+  });
+});

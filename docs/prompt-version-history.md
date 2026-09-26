@@ -1585,3 +1585,14 @@ rather than the defenseless window target: 3,559 → 579 lines, the report
 card's chip reads the same flag and the shared ON_TARGET_GOOD_PCT; (3) the
 KILL ATTEMPTS summary says "kills inside an attempt" and states enemy deaths
 outside every attempt window: 735 contexts. Candidate menu unchanged.
+
+v177 (2026-09-26, reliability leftovers batch 9): an aura re-broadcast is one
+aura — a same-ms REMOVED → APPLIED pair of the same spell, source and target
+is dropped (`dropAuraRebroadcasts`, shared by the aura interval builder, the
+CC / trinket builder and the buff-fade pairing), and a second APPLIED inside
+the first application's official duration with no cast of the spell by its
+source (leaving stealth) keeps the interval open: [ENEMY DEF] 21,171 →
+20,162 lines, "ended early" 2,103 → 1,836, "removed early" 7,083 → 5,735,
+[CC ON TEAM] 69,956 → 69,538; candidates +9 (death-setup +6,
+burst-into-mitigation +2, cc-avoidable +1 — merged CCs / walls reach their
+thresholds).

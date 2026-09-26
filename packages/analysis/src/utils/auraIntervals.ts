@@ -118,6 +118,46 @@ export const DUPLICATE_CLOSE_WINDOW_S = 1;
  * Interval set for every aura on this unit (dest = this unit), sorted by
  * ascending fromS.
  */
+/**
+ * An aura the game RE-BROADCASTS — `SPELL_AURA_REMOVED` and `SPELL_AURA_APPLIED`
+ * of the same spell, source and target in the same millisecond (a Dracthyr
+ * visage swap, leaving stealth) — is one continuous aura, not an end and a new
+ * press. Reliability rounds 2–3 (W2e / N6: d78f a second CC, 3306 "Obsidian
+ * Scales ended early", ba44 one Ironbark rendered as two). Returns the events
+ * with every such REMOVED/APPLIED pair dropped, order preserved. The one
+ * predicate every aura consumer filters through.
+ */
+export function dropAuraRebroadcasts<
+  T extends {
+    spellId?: string | null;
+    srcUnitId?: string;
+    destUnitId?: string;
+    timestamp: number;
+    logLine: { event: string };
+  },
+>(events: readonly T[]): T[] {
+  const key = (a: T) =>
+    `${a.spellId}|${a.srcUnitId ?? ""}|${a.destUnitId ?? ""}|${a.timestamp}`;
+  const removed = new Map<string, T[]>();
+  for (const a of events)
+    if (a.logLine.event === LogEvent.SPELL_AURA_REMOVED && a.spellId) {
+      const k = key(a);
+      removed.set(k, [...(removed.get(k) ?? []), a]);
+    }
+  if (removed.size === 0) return [...events];
+  const drop = new Set<T>();
+  for (const a of events) {
+    if (a.logLine.event !== LogEvent.SPELL_AURA_APPLIED || !a.spellId) continue;
+    const list = removed.get(key(a));
+    const r = list?.find((x) => !drop.has(x));
+    if (r) {
+      drop.add(r);
+      drop.add(a);
+    }
+  }
+  return drop.size === 0 ? [...events] : events.filter((a) => !drop.has(a));
+}
+
 export function buildAuraIntervals(
   unit: ICombatUnit,
   combat: { startTime: number; endTime: number },
@@ -154,7 +194,7 @@ export function buildAuraIntervals(
   // whether from a real pairing or an earlier fallback — see module header.
   const lastCloseToSBySpellId = new Map<string, number>();
 
-  const events = [...unit.auraEvents]
+  const events = dropAuraRebroadcasts(unit.auraEvents)
     .filter((a) => a.destUnitId === unit.id && a.spellId)
     .sort((a, b) => a.timestamp - b.timestamp);
 
@@ -165,7 +205,34 @@ export function buildAuraIntervals(
     if (OPEN_EVENTS.has(ev)) {
       const existing = open.get(key);
       const t = rel(a.timestamp);
-      if (existing && ev === LogEvent.SPELL_AURA_APPLIED) {
+      // A second APPLIED while open, with NO cast of the spell by its source
+      // around it and still inside the first application's official
+      // duration, is the aura re-broadcast on leaving stealth (be83: Cloak
+      // re-applied after Vanish with no REMOVED between) — the same aura,
+      // not a new press. Undecidable without the caster's casts or an
+      // official duration: then the anti-artifact split below stands.
+      const caster = casterOf(a.srcUnitId);
+      const dOpen = existing
+        ? officialDurationS(
+            id,
+            caster,
+            combat.startTime + existing.lastSeenS * 1000,
+          )
+        : null;
+      const rebroadcast =
+        existing !== undefined &&
+        ev === LogEvent.SPELL_AURA_APPLIED &&
+        caster !== undefined &&
+        dOpen !== null &&
+        t <= existing.lastSeenS + dOpen &&
+        !(caster.spellCastEvents ?? []).some(
+          (c) =>
+            c.spellId === id &&
+            Math.abs(c.logLine.timestamp - a.timestamp) <= 1000,
+        );
+      if (rebroadcast) {
+        // keep the interval open; its duration cap stays anchored where it was
+      } else if (existing && ev === LogEvent.SPELL_AURA_APPLIED) {
         // 2026-08-21 防伪规则(自 utils.buildFilteredAuraIntervals 上移,
         // GH #17 burst-into-immunity 伪影追查):同 key 再次 **APPLIED** =
         // 上一段已无声掉落(REMOVED 缺失)→ 按官方时长封顶关旧、另开新。
