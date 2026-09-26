@@ -44,6 +44,7 @@ import {
   REPOSITIONING_SPELL_IDS,
 } from "../utils/ccTrinketAnalysis";
 import {
+  isTeamHealCD,
   annotateDefensiveTimings,
   cdAvailableAt,
   cdIsProcOnly,
@@ -2160,6 +2161,28 @@ function teamPlayEvents(
           // could-react predicate (`couldReactWithin`) over the one
           // cannot-cast predicate, plus death.
           couldRespondFor(owner, enemyIds, combat.startTime),
+          {
+            // user ruling 2026-09-26 (item 3): a peel by the owner or a team
+            // save by any friendly answers the crisis
+            ownerPeelCastSeconds: (owner.spellCastEvents ?? [])
+              .filter(
+                (e: any) =>
+                  e.logLine.event === "SPELL_CAST_SUCCESS" &&
+                  e.spellId &&
+                  ccSpellIds.has(e.spellId),
+              )
+              .map((e: any) => (e.logLine.timestamp - combat.startTime) / 1000),
+            teamSaveCastSeconds: friends.flatMap((f: any) =>
+              (f.spellCastEvents ?? [])
+                .filter(
+                  (e: any) =>
+                    e.logLine.event === "SPELL_CAST_SUCCESS" &&
+                    e.spellId &&
+                    isTeamHealCD(e.spellId),
+                )
+                .map((e: any) => (e.logLine.timestamp - combat.startTime) / 1000),
+            ),
+          },
         ),
       );
     } catch {

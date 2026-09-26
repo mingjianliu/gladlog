@@ -1,10 +1,10 @@
 /**
- * Generated at: 2026-09-26T18:04:03.559Z
- * Build: 12.1.5.69952
+ * Generated at: 2026-09-26T20:08:09.537Z
+ * Build: 12.1.0.69587
  * Source: DB2 TraitDefinition.OverridesSpellID (the official replacement relation)
  *   kept when the overridden spell's cooldown ≥ 30 s and the talent is a button
  *   (cooldown > 0); plus a same-name id bridge through classSpells
- * Pairs: 18 (skipped: 124 short-cooldown targets, 40 passive talents, 1 corpus-rejected)
+ * Pairs: 17 (skipped: 124 short-cooldown targets, 40 passive talents, 1 corpus-rejected)
  */
 
 export const TALENT_REPLACES_GENERATED: Record<string, string[]> = {
@@ -47,9 +47,6 @@ export const TALENT_REPLACES_GENERATED: Record<string, string[]> = {
   ],
   "405397": [
     "853"
-  ],
-  "414658": [
-    "45438"
   ],
   "432459": [
     "114165"

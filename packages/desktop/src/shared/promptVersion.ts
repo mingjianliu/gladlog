@@ -83,5 +83,19 @@
  *  healer 260 → 262 (Preservation cleanse reach 30 → 35), kick-eaten
  *  yourReachYd 25 → 30 on 13 Preservation lines; nothing else, the match
  *  context is byte-identical.
+ *  v172 (2026-09-26, reliability leftovers batch 4): (1) Cauterizing Flame out
+ *  of the healer save roster (user ruling): cd-hoarded ready sets naming it
+ *  54 → 0, cd-waste −10; the roster re-emit also admits Discipline Fade and Holy
+ *  Paladin Divine Protection (verdicts landed since the 09-25 table; user chose
+ *  to keep both): cd-waste +2 Fade, cd-hoarded ready sets +2 Fade / +7 Divine
+ *  Protection, [TEAM] [CD] Fade +530 / Divine Protection +195 lines, [BUFF
+ *  FADED] +504; (2) cd-hoarded counts the owner's control cast (a peel) or any
+ *  friendly's team save inside the response window as an answer (user ruling):
+ *  dps 893 → 666, healer 801 → 702 (−433 / +107 refills, (1)+(2) together);
+ *  (3) missed-sync-window needs the owner free for at least half of the lock,
+ *  not 1 s of it (user ruling): dps 634 → 604, healer 317 → 302 (−69 / +24).
+ *  Measured on a tree whose reach change was equivalent to b3e24b29's (12
+ *  kick-eaten yourReachYd 25 → 30 belong to that commit). Tables: sync-window
+ *  (evaluateSyncWindow shared), cdTriggerPrior (roster) on GH #115.
  */
-export const PROMPT_VERSION = 171;
+export const PROMPT_VERSION = 172;

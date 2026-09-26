@@ -2524,7 +2524,10 @@ export function extractMajorCooldowns(
  * B138: spells that carry a Defensive tag but are NOT damage-mitigation/heal substitutes — mobility,
  * dispels, single-spell reflects, and utility. Suggesting one as a "cheaper alternative" to a major
  * survival CD is misleading (e.g. "you could have used Spirit Walk / Cauterizing Flame instead of
- * Emerald Communion"): they neither reduce damage taken nor heal, so they can't cover the same need.
+ * Emerald Communion"): they do not cover the same need (Cauterizing Flame does heal a little, but it
+ * is a dispel; the user ruled it out of the save roster too — `not_save_role`, 2026-09-26). This set
+ * answers "cheaper substitute for a wall", the save roster answers "save cooldown at all"; Stasis is in
+ * both on purpose (user-signed save_role 2026-09-04, never a substitute).
  */
 /** @internal exported for data/curatedIdRegistry (corpus rot scan) */
 // 2026-08-21 S2 corpus scan (10,682 matches): removed 8178 old Grounding Totem id (204336 kept) — 0 occurrences, ability gone in 12.x (eval-private/reports/s2-health-2026-08-21)

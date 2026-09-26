@@ -206,6 +206,25 @@ export function couldReactWithin(
 }
 
 /**
+ * The stricter form for a WINDOW the player is expected to use (an enemy
+ * healer's lock): free for at least half of it and never less than
+ * REACTION_WINDOW_S. User ruling 2026-09-26 (reliability leftovers, sync-window
+ * design question A): an owner stunned for 3 of a 5 s lock with 2.2 s free
+ * does not count as able to enter it — `couldReactWithin`'s 1 s is the
+ * reaction standard for a crisis response, not for spending a lock.
+ */
+export function couldActForMostOf(
+  blocked: ReadonlyArray<{ from: number; to: number }>,
+  fromMs: number,
+  toMs: number,
+): boolean {
+  const span = toMs - fromMs;
+  if (span <= 0) return false;
+  const freeMs = span - coveredMsWithin(blocked, fromMs, toMs);
+  return freeMs >= Math.max(REACTION_WINDOW_S * 1000, span / 2);
+}
+
+/**
  * `couldReactWithin` bound to one unit on the round's clock, with death: the
  * window is cut at the unit's first death, and a unit dead before the window
  * could not respond. Arguments are seconds since `matchStartMs`. When the

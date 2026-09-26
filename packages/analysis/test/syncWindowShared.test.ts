@@ -132,9 +132,18 @@ describe("evaluateSyncWindow — ready needs an owner free to act (B3i)", () => 
     ).toEqual([]);
   });
 
-  it("owner free for ≥ 1 s of the lock → ready", () => {
+  // User ruling 2026-09-26 (reliability leftovers, sync-window question A):
+  // free for 1 s of a lock is not "able to enter it" — the owner must be free
+  // for at least half of the lock (couldActForMostOf). Before this the rule
+  // was couldReactWithin's 1 s (e9ea8a0c: 2.2 s free while rooted was "ready").
+  it("owner stunned for most of the lock (free 1 s of 5) → not ready", () => {
     expect(
       evaluateSyncWindow(lock, [hunt(stunnedOwner(99, 104))]).ready,
+    ).toHaveLength(0);
+  });
+  it("owner free for more than half of the lock → ready", () => {
+    expect(
+      evaluateSyncWindow(lock, [hunt(stunnedOwner(99, 101))]).ready,
     ).toHaveLength(1);
   });
 

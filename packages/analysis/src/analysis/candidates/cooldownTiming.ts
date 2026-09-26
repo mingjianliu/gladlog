@@ -36,7 +36,7 @@ import {
 } from "../../utils/drAnalysis";
 import {
   buildCannotCastIntervals,
-  couldReactWithin,
+  couldActForMostOf,
 } from "../../utils/cannotCastIntervals";
 import { castFailedInWindow, type RawStreams } from "../../utils/rawStreams";
 import {
@@ -378,7 +378,8 @@ export function evaluateSyncWindow(
     }
     const fromMs = cd.matchStartMs + readyAtS * 1000;
     const toMs = cd.matchStartMs + w.toSeconds * 1000;
-    return couldReactWithin(blocked, fromMs, toMs);
+    // user ruling 2026-09-26: free for most of the lock, not merely 1 s of it
+    return couldActForMostOf(blocked, fromMs, toMs);
   });
   const entered = cds.some((cd) =>
     cd.casts.some((c) => {
@@ -929,6 +930,15 @@ export function cdHoardedEvents(
    * predicate `evaluateSyncWindow` and cdTriggerPrior's opportunity set use.
    * Absent ⇒ no owner gate (tests, callers without a combat clock). */
   ownerCouldRespond?: (fromS: number, toS: number) => boolean,
+  /** User ruling 2026-09-26 (reliability leftovers item 3, fa5e): the crisis
+   * counts as answered when the OWNER cast a control (a peel) or ANY friendly
+   * pressed a team save (TEAM_HEAL_CD_IDS: Spirit Link, Barrier, Aura Mastery,
+   * Revival …) inside the response window. Seconds since round start, built by
+   * the caller; absent ⇒ presses of the owner's own save cooldowns only. */
+  teamAnswers?: {
+    ownerPeelCastSeconds: readonly number[];
+    teamSaveCastSeconds: readonly number[];
+  },
 ): CandidateEvent[] {
   const cap = overrides?.cap ?? CD_HOARD_CAP;
   const candidates: Array<{
@@ -1118,16 +1128,19 @@ export function cdHoardedEvents(
         !canHelpAnotherUnit(cd.spellId, cd.tag) ||
         c.targetName === undefined ||
         c.targetName === src.crisisUnit.name;
-      const spent = ownerCds
-        .filter((cd) => isSpendableDefensiveCd(cd) && helps(cd))
-        .some((cd) =>
-          cd.casts.some(
-            (c) =>
-              c.timeSeconds >= p.tSec - RESPONSE_PRE_MS / 1000 &&
-              c.timeSeconds <= p.tSec + CD_HOARD_RESPONSE_S &&
-              reachedThisUnit(cd, c),
-          ),
-        );
+      const inWindow = (t: number) =>
+        t >= p.tSec - RESPONSE_PRE_MS / 1000 &&
+        t <= p.tSec + CD_HOARD_RESPONSE_S;
+      const spent =
+        ownerCds
+          .filter((cd) => isSpendableDefensiveCd(cd) && helps(cd))
+          .some((cd) =>
+            cd.casts.some(
+              (c) => inWindow(c.timeSeconds) && reachedThisUnit(cd, c),
+            ),
+          ) ||
+        (teamAnswers?.ownerPeelCastSeconds ?? []).some(inWindow) ||
+        (teamAnswers?.teamSaveCastSeconds ?? []).some(inWindow);
       if (spent) {
         if (tracing)
           trace.push({

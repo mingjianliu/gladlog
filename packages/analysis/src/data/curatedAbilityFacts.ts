@@ -221,6 +221,15 @@ export const CURATED_ABILITY_FACTS: ICuratedAbilityFact[] = [
     approved: "2026-09-24 user",
   },
   {
+    id: "374251",
+    claim:
+      "烙印之火(Cauterizing Flame,奶龙):60 秒驱散 + 小治疗。官方画像 heals-others 让它进了救人名单(门 Δ16.0 pp),但 NON_SUBSTITUTE_DEFENSIVE_IDS 同时说它不是减伤替代品 —— 两张表一个事实两个答案(可靠性第三轮 ba8c:盗贼 26 % 时 cd-hoarded 点名「Cauterizing Flame 就绪没交」)。用户裁:不算救人牌,也不算回应。",
+    kind: "not_save_role",
+    source:
+      "用户裁定 2026-09-26(可靠性遗留第 5 项,「不算大招 … 整体来说他没那么厉害」)",
+    approved: "2026-09-26 user",
+  },
+  {
     id: "443454",
     claim:
       "先祖迅捷(Ancestral Swiftness,奶萨 Farseer):12.x 是 30 秒冷却,按「30 秒核心治疗不算救人牌」的裁决拿掉;Δ +22 过门,可翻。",

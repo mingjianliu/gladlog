@@ -108,6 +108,10 @@ const RESPONSE_ONLY_IDS = new Set(
 const NOT_SAVE_ROLE_IDS = new Set(
   CURATED_ABILITY_FACTS.filter((f) => f.kind === "not_save_role").map((f) => f.id),
 );
+/** id → the signing date printed in the rejection reason (each fact's own, not one hard-coded day) */
+const notSaveApproved = new Map<string, string>(
+  CURATED_ABILITY_FACTS.filter((f) => f.kind === "not_save_role").map((f) => [f.id, f.approved] as const),
+);
 
 /**
  * "Is this spell part of the healer's own kit" — decided from the corpus,
@@ -359,7 +363,7 @@ async function emitTable(): Promise<void> {
         ...(RESPONSE_ONLY_IDS.has(id) ? { responseOnly: true } : {}),
       };
       if (NOT_SAVE_ROLE_IDS.has(id)) {
-        rej.push({ spellId: id, name, cooldownSeconds: cd, share: entry.share, reason: "user-ruled not a save tool (not_save_role, 2026-09-04)" });
+        rej.push({ spellId: id, name, cooldownSeconds: cd, share: entry.share, reason: `user-ruled not a save tool (not_save_role, ${notSaveApproved.get(id) ?? "date unknown"})` });
         strip.add(id);
         continue;
       }
