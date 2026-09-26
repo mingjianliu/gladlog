@@ -28,6 +28,7 @@ import {
   computePressureWindows,
   extractMajorCooldowns,
   IEnemyCDTimelineForTiming,
+  type IMajorCooldownInfo,
   isHealerSpec,
   specToString,
 } from "../utils/cooldowns";
@@ -326,13 +327,13 @@ export function buildMatchContext(
   // into the death block's availability test — otherwise the two places use
   // separate constants and one prompt states opposite conclusions about the
   // same cooldown (class D).
-  const resolvedCdByUnit = new Map<string, Map<string, number>>();
+  const resolvedCdByUnit = new Map<string, Map<string, IMajorCooldownInfo>>();
   for (const { player, cds } of [
     { player: owner as ICombatUnit, cds: cooldowns },
     ...teammateCooldowns,
   ]) {
-    const bySpell = new Map<string, number>();
-    for (const cd of cds) bySpell.set(cd.spellId, cd.cooldownSeconds);
+    const bySpell = new Map<string, IMajorCooldownInfo>();
+    for (const cd of cds) bySpell.set(cd.spellId, cd);
     resolvedCdByUnit.set(player.id, bySpell);
   }
 

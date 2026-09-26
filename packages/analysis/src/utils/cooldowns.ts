@@ -441,6 +441,77 @@ export function guardianSpiritSaved(
 }
 
 /**
+ * How much earlier than the LOGGED removal Guardian Angel's 60 s starts
+ * counting. Measured, not official (DB2 200209 says only "60"): over 1,470
+ * unsaved within-round repeat presses (08-28 manifest, every 10th file,
+ * offset 5), the next press came at logged removal + 59.0 s at the earliest —
+ * a spike of 38 presses in [59.0, 59.1), 11 below it (58.4–58.9, 0.75 %), none
+ * under 58. Taken as the floor of that spike, not its minimum: at 59 the
+ * ledger calls Guardian Spirit "certainly on cooldown" at 11 real presses,
+ * the old "60 from the press" model at 7 — the same rate — while the old
+ * model called it ready 11 s before the priest could have had it.
+ */
+export const GUARDIAN_ANGEL_LOGGED_EXPIRY_LAG_S = 1;
+
+/**
+ * The cooldown Guardian Angel gives THIS Guardian Spirit press, in seconds
+ * from the press. Saved → the untouched official value (`baseCooldownSeconds`).
+ * Expired → the talent "reduces its remaining cooldown to 60 sec" WHEN THE
+ * BUFF EXPIRES (reliability audit C4, 2026-09-25), so the clock starts at the
+ * buff's end, not the press: (buff end − lag − press) + `fastCooldownSeconds`,
+ * the latter being the entry-level value `CUSTOM_TALENT_MODIFIERS["47788"]`
+ * already resolves to (180 − 120). The buff's end is this priest's first
+ * SPELL_AURA_REMOVED of 47788 after the press, capped at the caster's full
+ * buff duration (`buffFullDurationForCaster`: 10 + Foreseen Circumstances 2);
+ * the full duration when no removal is logged.
+ */
+export function guardianSpiritCastCooldownSeconds(
+  caster: ICombatUnit,
+  units: Iterable<Pick<ICombatUnit, "auraEvents">>,
+  castTimeSeconds: number,
+  matchStartMs: number,
+  baseCooldownSeconds: number,
+  fastCooldownSeconds: number,
+): number {
+  if (guardianSpiritSaved(caster, castTimeSeconds, matchStartMs))
+    return baseCooldownSeconds;
+  const castMs = matchStartMs + castTimeSeconds * 1000;
+  const full =
+    buffFullDurationForCaster(GUARDIAN_SPIRIT_SPELL_ID, caster, castMs) ?? 0;
+  let buffSeconds = full;
+  for (const u of units)
+    for (const a of u.auraEvents)
+      if (
+        a.spellId === GUARDIAN_SPIRIT_SPELL_ID &&
+        a.srcUnitId === caster.id &&
+        a.logLine.event === LogEvent.SPELL_AURA_REMOVED
+      ) {
+        const s = (a.timestamp - castMs) / 1000;
+        if (s >= 0 && s < buffSeconds) buffSeconds = s;
+      }
+  return buffSeconds - GUARDIAN_ANGEL_LOGGED_EXPIRY_LAG_S + fastCooldownSeconds;
+}
+
+/**
+ * The cooldown the ledger gives the press at `castSeconds`: its per-cast
+ * override when it has one, else the entry-level value. The press is matched
+ * to the ledger cast it was merged into (the latest at or before it, within
+ * the ledger's 2 s de-duplication), so a consumer reading raw cast events —
+ * deathOutcomeAnalysis' `isAvailableAt` — prices a press exactly as
+ * `cdAvailableAt` does.
+ */
+export function castCooldownSeconds(
+  cd: Pick<IMajorCooldownInfo, "casts" | "cooldownSeconds">,
+  castSeconds: number,
+): number {
+  let merged: ICooldownCast | undefined;
+  for (const c of cd.casts)
+    if (c.timeSeconds <= castSeconds && castSeconds - c.timeSeconds <= 2)
+      merged = c;
+  return merged?.cooldownSecondsOverride ?? cd.cooldownSeconds;
+}
+
+/**
  * Passive proc spells that emit SPELL_CAST_SUCCESS but are not intentional
  * player casts. Filtering them removes noise from the [YOU] [CAST] timeline,
  * from the cooldown ledger's cast list, and from `extractRotations` (which
@@ -639,9 +710,9 @@ export interface ICooldownCast {
    * Per-cast cooldown in seconds, when THIS press recovers differently from
    * the entry's `cooldownSeconds`. Only Guardian Angel needs it today: the
    * Guardian Spirit press that actually saved someone keeps the official 180s
-   * while the one that expired comes back in 60 (see
-   * `guardianSpiritSaved`). Absent on every other cast — consumers fall back
-   * to the entry-level value.
+   * while the one that expired comes back 60 s after the buff ended (see
+   * `guardianSpiritCastCooldownSeconds`). Absent on every other cast —
+   * consumers fall back to the entry-level value (`castCooldownSeconds`).
    */
   cooldownSecondsOverride?: number;
   /** Timing classification relative to enemy burst activity. Only set for Defensive/External CDs. */
@@ -2198,17 +2269,23 @@ export function extractMajorCooldowns(
       }
     }
 
-    // Guardian Angel's slow branch (see CUSTOM_TALENT_MODIFIERS["47788"]): the
-    // entry-level cooldown is the fast one, so the press that actually saved
-    // somebody gets the untouched official value back, per cast.
+    // Guardian Angel (see CUSTOM_TALENT_MODIFIERS["47788"]): every press gets
+    // its own cooldown — the saved one the untouched official value, the
+    // expired one 60 s from the buff's END (guardianSpiritCastCooldownSeconds).
     if (
       spell.spellId === GUARDIAN_SPIRIT_SPELL_ID &&
       talentedSpellIds?.has(GUARDIAN_ANGEL_TALENT_ID)
     ) {
+      const units = Object.values(combat.units);
       for (const c of casts) {
-        if (guardianSpiritSaved(unit, c.timeSeconds, matchStartMs)) {
-          c.cooldownSecondsOverride = baseCooldownSeconds;
-        }
+        c.cooldownSecondsOverride = guardianSpiritCastCooldownSeconds(
+          unit,
+          units,
+          c.timeSeconds,
+          matchStartMs,
+          baseCooldownSeconds,
+          cooldownSeconds,
+        );
       }
     }
 

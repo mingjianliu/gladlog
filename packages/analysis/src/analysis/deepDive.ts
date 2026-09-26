@@ -232,7 +232,7 @@ export function buildDeepDivePack(
   // Resolved cooldowns (same source as the [RES] ledger, talent modifiers
   // included) — fed to deathOutcome's availability check, injected the same
   // way as buildMatchContext, so two places never disagree about one cooldown.
-  const resolvedCdByUnit = new Map<string, Map<string, number>>();
+  const resolvedCdByUnit = new Map<string, Map<string, IMajorCooldownInfo>>();
   for (const u of friends) {
     try {
       enemyTl = enemyTl ?? reconstructEnemyCDTimeline(enemies, combat);
@@ -243,8 +243,8 @@ export function buildDeepDivePack(
         enemyTl,
       );
       if (u === ownerUnit) ownerCds = cds;
-      const bySpell = new Map<string, number>();
-      for (const cd of cds) bySpell.set(cd.spellId, cd.cooldownSeconds);
+      const bySpell = new Map<string, IMajorCooldownInfo>();
+      for (const cd of cds) bySpell.set(cd.spellId, cd);
       resolvedCdByUnit.set(u.id, bySpell);
       for (const cd of cds) {
         if (!DEFENSIVE_TAGS.has(cd.tag)) continue;

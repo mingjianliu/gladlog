@@ -18,7 +18,9 @@ import {
   extractMajorCooldowns,
   findCheaperDefensiveAlternatives,
   getPressureThreshold,
+  castCooldownSeconds,
   GUARDIAN_SPIRIT_SAVE_HEAL_ID,
+  guardianSpiritCastCooldownSeconds,
   guardianSpiritSaved,
   getUnitHpAtTimestamp,
   IEnemyCDTimelineForTiming,
@@ -1733,6 +1735,65 @@ describe("extractMajorCooldowns", () => {
       };
       expect(cdAvailableAt(slow, 71)).toBe(false);
       expect(cdAvailableAt(slow, 191)).toBe(true);
+    });
+
+    // Reliability audit C4 (2026-09-25): the expired press comes back 60 s
+    // after the BUFF ended (less the measured 1 s logging lag), not 60 s
+    // after the press.
+    describe("the expired branch counts from the buff's end", () => {
+      const removed = (src: string, tMs: number) => ({
+        auraEvents: [
+          {
+            spellId: "47788",
+            srcUnitId: src,
+            timestamp: tMs,
+            logLine: { event: LogEvent.SPELL_AURA_REMOVED },
+          },
+        ],
+      });
+      const gs = (healOut: any[], units: any[]) =>
+        guardianSpiritCastCooldownSeconds(
+          { id: "priest", healOut, auraEvents: [] } as any,
+          units,
+          10,
+          T0,
+          180,
+          60,
+        );
+
+      it("buff removed 4 s after the press → 4 − 1 + 60 = 63", () => {
+        expect(gs([], [removed("priest", T0 + 14_000)])).toBe(63);
+      });
+      it("no removal logged → the full buff duration − 1 + 60", () => {
+        // no COMBATANT_INFO → the typical caster's 12 s (10 + Foreseen
+        // Circumstances, spellEffectOverrides)
+        expect(gs([], [])).toBe(71);
+      });
+      it("another priest's removal, or one before the press, is not this buff's end", () => {
+        expect(
+          gs(
+            [],
+            [removed("other", T0 + 12_000), removed("priest", T0 + 9_000)],
+          ),
+        ).toBe(71);
+      });
+      it("the saved press keeps the official 180", () => {
+        expect(
+          gs(
+            [{ spellId: GUARDIAN_SPIRIT_SAVE_HEAL_ID, timestamp: T0 + 13_000 }],
+            [removed("priest", T0 + 13_000)],
+          ),
+        ).toBe(180);
+      });
+      it("castCooldownSeconds prices a raw press by the ledger cast it merged into", () => {
+        const cd = {
+          cooldownSeconds: 60,
+          casts: [{ timeSeconds: 10, cooldownSecondsOverride: 64 }],
+        };
+        expect(castCooldownSeconds(cd, 10)).toBe(64);
+        expect(castCooldownSeconds(cd, 11.5)).toBe(64); // same 2 s cluster
+        expect(castCooldownSeconds(cd, 13)).toBe(60); // not that cast
+      });
     });
   });
 

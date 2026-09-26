@@ -10,6 +10,8 @@ import { IPlayerCCTrinketSummary } from "./ccTrinketAnalysis";
 import {
   auraOnlyActivationSeconds,
   CD_INSTANT_SLACK_S,
+  castCooldownSeconds,
+  type IMajorCooldownInfo,
   isCooldownAvailableFromLastUse,
   isPressOfCooldown,
   isProcOnlyActivation,
@@ -292,12 +294,18 @@ function lastCastSeconds(
   return Math.max(...casts);
 }
 
+/** A plain number (a table constant), or the ledger's resolved entry — whose
+ * per-cast overrides (Guardian Angel, `castCooldownSeconds`) then price the
+ * last press exactly as `cdAvailableAt` does. */
+export type CooldownSource =
+  number | Pick<IMajorCooldownInfo, "casts" | "cooldownSeconds">;
+
 // BACKLOG #21 item2: exported (only) so the drift-prevention unit test can call this predicate
 // directly alongside cdAvailableAt — not otherwise used outside this module.
 export function isAvailableAt(
   unit: ICombatUnit,
   spellId: string,
-  cooldownSeconds: number,
+  cooldown: CooldownSource,
   atSeconds: number,
   matchStartMs: number,
   resetSpellIds?: string[],
@@ -319,6 +327,12 @@ export function isAvailableAt(
   // (isCooldownAvailableFromLastUse) — each side keeps its own data source
   // (raw spellCastEvents vs the resolved casts ledger) and this side keeps the
   // resetSpellIds extension below; see the comment above that function.
+  const cooldownSeconds =
+    typeof cooldown === "number"
+      ? cooldown
+      : lastCast === null
+        ? cooldown.cooldownSeconds
+        : castCooldownSeconds(cooldown, lastCast);
   if (isCooldownAvailableFromLastUse(lastCast, cooldownSeconds, at))
     return true;
 
@@ -343,7 +357,7 @@ export function isAvailableAt(
 export function isReadyInTimeAt(
   unit: ICombatUnit,
   spellId: string,
-  cooldownSeconds: number,
+  cooldown: CooldownSource,
   atSeconds: number,
   matchStartMs: number,
   resetSpellIds?: string[],
@@ -352,7 +366,7 @@ export function isReadyInTimeAt(
     isAvailableAt(
       unit,
       spellId,
-      cooldownSeconds,
+      cooldown,
       atSeconds,
       matchStartMs,
       resetSpellIds,
@@ -360,7 +374,7 @@ export function isReadyInTimeAt(
     isAvailableAt(
       unit,
       spellId,
-      cooldownSeconds,
+      cooldown,
       atSeconds - REACTION_WINDOW_S - CD_INSTANT_SLACK_S,
       matchStartMs,
       resetSpellIds,
@@ -568,8 +582,9 @@ export function buildDeathOutcomeSummary(
   friends: ICombatUnit[],
   ccSummaries: Pick<IPlayerCCTrinketSummary, "playerName" | "ccInstances">[],
   /**
-   * Returns the **resolved** cooldown seconds for a unit's spell (i.e. the
-   * exact value the `[RES]` ledger renders, talent modifiers included). When
+   * Returns the ledger's **resolved** entry for a unit's spell (i.e. the
+   * exact value the `[RES]` ledger renders, talent modifiers and per-cast
+   * overrides included — Guardian Angel, reliability audit C4). When
    * provided it takes precedence over the constants in the
    * EXTERNAL_DEFENSIVE_SPELLS table below.
    *
@@ -586,7 +601,7 @@ export function buildDeathOutcomeSummary(
   resolvedCooldownSeconds?: (
     unit: ICombatUnit,
     spellId: string,
-  ) => number | undefined,
+  ) => Pick<IMajorCooldownInfo, "casts" | "cooldownSeconds"> | undefined,
 ): IDeathOutcomeSummary {
   const matchStartMs = combat.startTime;
   const events: IDeathOutcomeEvent[] = [];

@@ -319,6 +319,11 @@ const INDEX: PredicateRow[] = [
     mod: cooldowns,
   },
   {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "guardianSpiritCastCooldownSeconds",
+    mod: cooldowns,
+  },
+  {
     file: `${A}/utils/dispelAnalysis.ts`,
     symbol: "cleanseRecoveryOf",
     mod: dispelAnalysis,

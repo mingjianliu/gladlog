@@ -1148,4 +1148,12 @@
 //  defensive auras our side put on the target — the owner's own Touch of
 //  Karma tether read as "Target had a major defensive up". 605 files: 49
 //  lines removed in 40 contexts, menu unchanged.
-export const PROMPT_VERSION = 146;
+//  v147 (2026-09-25, reliability audit C4): Guardian Spirit's expired
+//  press (Guardian Angel) comes back 60 s after the BUFF ended (less a
+//  measured 1 s logging lag), not 60 s after the press; the death block
+//  reads the same per-cast cooldown as the [RES] ledger. 605 files:
+//  cooldown-ledger-consistency gate 26 → 0 (all 26 Guardian Spirit);
+//  cd-hoarded −29, external-unused −19; 4,335 context hunks all on
+//  Guardian Spirit, plus 17 [BURST ANSWERED] / [CD PRIOR] lines whose
+//  feasibility now sees it on cooldown.
+export const PROMPT_VERSION = 147;

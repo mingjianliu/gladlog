@@ -11,9 +11,12 @@ export const CUSTOM_TALENT_MODIFIERS: Record<string, ICDModifier[]> = {
   // Guardian Spirit (base 180s). Guardian Angel is OUTCOME-CONDITIONAL: the
   // press that expires without saving anyone comes back fast, the press that
   // actually prevented a death does not. The value below is the fast branch,
-  // because that is the common one; the slow branch is restored per cast by
-  // the ledger (`guardianSpiritSaved` → ICooldownCast.cooldownSecondsOverride),
-  // since `isConditional` has never been read at runtime (applyCdModifiers
+  // because that is the common one. The ledger then prices EVERY press per
+  // cast (`guardianSpiritCastCooldownSeconds` → ICooldownCast.cooldownSecondsOverride):
+  // saved → the official 180; expired → this 60 counted from the buff's END
+  // (less a measured 1 s logging lag), not from the press — reliability audit
+  // C4, 2026-09-25, where "60 from the press" read the spell ready 11 s early.
+  // Per cast because `isConditional` has never been read at runtime (applyCdModifiers
   // ignores the field) and a scalar cannot express "depends what happened".
   //
   // Why 120 and not the old 60 (i.e. 60s effective, not 120s): measured on 600

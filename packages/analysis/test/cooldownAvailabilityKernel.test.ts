@@ -227,8 +227,18 @@ describe("cdAvailableAt 与 isAvailableAt 对「仅有光环证据」的技能�
     atSeconds: number;
     timerDone: boolean;
   }[] = [
-    { name: "光环刚触发,CD 未转好", auraAt: 10, atSeconds: 40, timerDone: false },
-    { name: "CD 恰好转好(闭区间边界)", auraAt: 10, atSeconds: 100, timerDone: true },
+    {
+      name: "光环刚触发,CD 未转好",
+      auraAt: 10,
+      atSeconds: 40,
+      timerDone: false,
+    },
+    {
+      name: "CD 恰好转好(闭区间边界)",
+      auraAt: 10,
+      atSeconds: 100,
+      timerDone: true,
+    },
     { name: "CD 早已转好", auraAt: 10, atSeconds: 300, timerDone: true },
   ];
 
@@ -265,4 +275,32 @@ describe("cdAvailableAt 与 isAvailableAt 对「仅有光环证据」的技能�
       ).toBe(timerDone);
     });
   }
+});
+
+// Reliability audit C4 (2026-09-25): Guardian Angel's per-cast cooldown
+// (buff end + 60 on the expired branch) must price deathOutcomeAnalysis'
+// raw-event path exactly as it prices the ledger — handed the ledger's entry,
+// isAvailableAt reads the same per-cast override through castCooldownSeconds.
+describe("isAvailableAt 读账本条目时与 cdAvailableAt 同判(守护之魂逐次冷却)", () => {
+  const MATCH_START = 1_000_000;
+  const priest = makeUnit("p1", {
+    spellCastEvents: [makeSpellCastEvent("47788", MATCH_START + 10_000, "p2")],
+  });
+  const ledger = {
+    casts: [{ timeSeconds: 10, cooldownSecondsOverride: 72 }],
+    cooldownSeconds: 60,
+    neverUsed: false,
+    charges: 1,
+  };
+  for (const atSeconds of [60, 75, 81, 82, 83, 90]) {
+    it(`t=${atSeconds}`, () => {
+      expect(
+        isAvailableAt(priest, "47788", ledger, atSeconds, MATCH_START),
+      ).toBe(cdAvailableAt(ledger, atSeconds));
+    });
+  }
+  it("the entry-level number alone would call it ready 12 s early", () => {
+    expect(isAvailableAt(priest, "47788", 60, 75, MATCH_START)).toBe(true);
+    expect(isAvailableAt(priest, "47788", ledger, 75, MATCH_START)).toBe(false);
+  });
 });
