@@ -67,6 +67,7 @@ import {
   pickRows,
   splitTeams,
 } from "../src/explore/storeAccess";
+import { argOf } from "./lib/cli";
 
 /** `CombatResult`(packages/parser-compat/src/enums.ts):其余值(未知/平局)丢弃。 */
 const RESULT_LOSE = 2;
@@ -86,13 +87,6 @@ export interface IncidenceRow {
   deltaPp: number;
 }
 type Row = IncidenceRow;
-
-function argOf(flag: string, dflt: number): number {
-  const i = process.argv.indexOf(flag);
-  if (i < 0) return dflt;
-  const v = Number(process.argv[i + 1]);
-  return Number.isFinite(v) && v > 0 ? v : dflt;
-}
 
 /**
  * Observed candidate incidence over the first `limit` library rounds (≥ 60 s,

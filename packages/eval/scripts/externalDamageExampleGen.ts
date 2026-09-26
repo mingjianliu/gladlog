@@ -49,13 +49,8 @@ import {
   pickRows,
   splitTeams,
 } from "../src/explore/storeAccess";
+import { argOf } from "./lib/cli";
 
-function argOf(flag: string, dflt: number): number {
-  const i = process.argv.indexOf(flag);
-  if (i < 0) return dflt;
-  const v = Number(process.argv[i + 1]);
-  return Number.isFinite(v) && v > 0 ? v : dflt;
-}
 const k = (x: number): string => `${Math.round(x / 1000)}k`;
 
 type Obs = IExternalDamageObservation & {

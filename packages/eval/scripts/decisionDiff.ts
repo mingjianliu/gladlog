@@ -23,12 +23,8 @@ import {
   summarizeDiff,
   type TraceLine,
 } from "../src/explore/decisionDiff";
+import { arg } from "./lib/cli";
 
-const a = process.argv.slice(2);
-const arg = (k: string, d: string) => {
-  const i = a.indexOf(k);
-  return i >= 0 ? (a[i + 1] ?? d) : d;
-};
 const manifest = arg("--manifest", "");
 const every = arg("--every", "30");
 const cfgA = arg("--a", "{}");
