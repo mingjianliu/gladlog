@@ -23,7 +23,7 @@ import { randomUUID } from "crypto";
 import {
   existsSync,
   mkdirSync,
-  readdirSync,
+  promises as fsp,
   readFileSync,
   renameSync,
   writeFileSync,
@@ -135,22 +135,192 @@ function readSlottedDoc(
   },
 ): AnalysisCacheDocV2<AnalysisResult> | null {
   const lang: AiLanguage = settings.aiLanguage ?? "zh";
-  let fp = analysisCachePath(matchesDir, matchId, lang);
-  if (!existsSync(fp)) {
-    // Compatibility: caches written before the language-keyed filenames had
-    // no system prompt, so their output is actually English -- fall back to
-    // them only when English is requested; a Chinese request treats them as
-    // a miss (regenerate).
-    const legacy = join(matchesDir, matchId, "analysis-v2.json");
-    if (lang !== "en" || !existsSync(legacy)) return null;
-    fp = legacy;
-  }
+  const fp = slottedDocCandidatePaths(matchesDir, matchId, lang).find((p) =>
+    existsSync(p),
+  );
+  if (!fp) return null;
   try {
     const raw = JSON.parse(readFileSync(fp, "utf-8"));
     return toSlottedDoc<AnalysisResult>(raw, currentSlotKey(settings));
   } catch {
     return null;
   }
+}
+
+/**
+ * Single-source file predicate for "which cache file does a read for `lang`
+ * accept", in preference order: the language-keyed file, then -- for English
+ * only -- the legacy `analysis-v2.json`. Compatibility: caches written before
+ * the language-keyed filenames had no system prompt, so their output is
+ * actually English; a Chinese request treats them as a miss (regenerate).
+ * readSlottedDoc (sync, per-match) and listAnalyzed (async, whole-library
+ * scan) both consume this list, so the batch "already analyzed" predicate
+ * cannot drift from what the panel's getCached would hit.
+ */
+function slottedDocCandidatePaths(
+  matchesDir: string,
+  matchId: string,
+  lang: AiLanguage,
+): string[] {
+  const paths = [analysisCachePath(matchesDir, matchId, lang)];
+  if (lang === "en") paths.push(join(matchesDir, matchId, "analysis-v2.json"));
+  return paths;
+}
+
+/**
+ * Single-source hit predicate: the slot resolveSlot picks (the active one
+ * unless slotKey names another), and only if it was produced by the current
+ * PROMPT_VERSION. Shared by getCached and the whole-library scan.
+ */
+function currentSlot(
+  doc: AnalysisCacheDocV2<AnalysisResult> | null,
+  slotKey?: string,
+): AnalysisSlot<AnalysisResult> | null {
+  const slot = resolveSlot(doc, slotKey);
+  if (!slot || slot.promptVersion !== PROMPT_VERSION) return null;
+  return slot;
+}
+
+/**
+ * Bounded-concurrency map: at most `limit` calls in flight, results indexed
+ * by input position (never by completion order). Every await inside is a
+ * point where the main process yields to IPC / rendering, which is the whole
+ * reason the library scans below are async.
+ */
+async function mapLimit<T, R>(
+  items: readonly T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const out = new Array<R>(items.length);
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    for (;;) {
+      const i = next++;
+      if (i >= items.length) return;
+      out[i] = await fn(items[i]!);
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, () => worker()),
+  );
+  return out;
+}
+
+/** In-flight file reads for the whole-library scans. */
+const SCAN_CONCURRENCY = 8;
+
+type AnalyzedMatchDir = {
+  /** Directory name under matchesDir (the round id for shuffle rounds). */
+  dir: string;
+  /** The active slot, already checked against PROMPT_VERSION. */
+  slot: AnalysisSlot<AnalysisResult>;
+  /** findingFlags.json, `{}` when absent or unreadable. */
+  flags: Record<string, string>;
+  /** meta.json, null when absent or unreadable. */
+  meta: {
+    id?: string;
+    startTime?: number;
+    zoneId?: string;
+    result?: string;
+    bracket?: string;
+  } | null;
+};
+
+/**
+ * The one whole-library scan behind aggregate / notebook / listAnalyzed:
+ * every match directory under matchesDir (skipping `.`/`_` entries), the
+ * first existing cache file from `candidates(dir)`, parsed and normalized via
+ * toSlottedDoc, kept only when its active slot is at the current
+ * PROMPT_VERSION, plus the sidecar flags and meta.
+ *
+ * Fully async with bounded concurrency: the previous per-method loops did
+ * readdirSync + existsSync + readFileSync + JSON.parse for every directory
+ * with no await inside, so a library of a few hundred matches froze the main
+ * process for the whole call (same class as the rebuildIndex freeze in
+ * matchStore.ts). Output order is the readdir order; a directory with no
+ * candidate file, a stale or unparsable cache is simply absent.
+ */
+async function readAnalyzedMatchDirs(
+  matchesDir: string,
+  candidates: (dir: string) => string[],
+  legacySlotKey: string,
+): Promise<AnalyzedMatchDir[]> {
+  let dirs: string[] = [];
+  try {
+    dirs = (await fsp.readdir(matchesDir)).filter(
+      (d) => !d.startsWith(".") && !d.startsWith("_"),
+    );
+  } catch {
+    return [];
+  }
+  const readJson = async (path: string): Promise<unknown> =>
+    JSON.parse(await fsp.readFile(path, "utf-8"));
+  const rows = await mapLimit(
+    dirs,
+    SCAN_CONCURRENCY,
+    async (dir): Promise<AnalyzedMatchDir | null> => {
+      let file: string | undefined;
+      for (const f of candidates(dir)) {
+        try {
+          await fsp.access(f);
+          file = f;
+          break;
+        } catch {
+          /* try the next candidate */
+        }
+      }
+      if (!file) return null;
+      try {
+        const raw = await readJson(file);
+        const slot = currentSlot(
+          toSlottedDoc<AnalysisResult>(raw, legacySlotKey),
+        );
+        if (!slot) return null;
+        const base = join(matchesDir, dir);
+        let flags: Record<string, string> = {};
+        try {
+          flags = (await readJson(join(base, "findingFlags.json"))) as Record<
+            string,
+            string
+          >;
+        } catch {
+          /* no flags */
+        }
+        let meta: AnalyzedMatchDir["meta"] = null;
+        try {
+          meta = (await readJson(
+            join(base, "meta.json"),
+          )) as AnalyzedMatchDir["meta"];
+        } catch {
+          /* no meta: callers fall back to the directory name */
+        }
+        return { dir, slot, flags, meta };
+      } catch {
+        /* skip corrupt files */
+        return null;
+      }
+    },
+  );
+  return rows.filter((r): r is AnalyzedMatchDir => r !== null);
+}
+
+/**
+ * Candidate cache files for the cross-match views (aggregate / notebook):
+ * when both language caches exist take one, preferring the current lang, so
+ * nothing is double-counted; the legacy unkeyed file is the last resort.
+ */
+function crossMatchCandidatePaths(
+  matchesDir: string,
+  dir: string,
+  lang: AiLanguage,
+): string[] {
+  const base = join(matchesDir, dir);
+  return [
+    join(base, `analysis-v2.${lang}.json`),
+    join(base, `analysis-v2.${lang === "zh" ? "en" : "zh"}.json`),
+    join(base, "analysis-v2.json"),
+  ];
 }
 
 type DeepenInput = {
@@ -1210,14 +1380,11 @@ export function createAnalysisService(deps: {
       }>
     > {
       const lang: AiLanguage = deps.getSettings().aiLanguage ?? "zh";
-      let dirs: string[] = [];
-      try {
-        dirs = readdirSync(deps.matchesDir).filter(
-          (d) => !d.startsWith(".") && !d.startsWith("_"),
-        );
-      } catch {
-        return [];
-      }
+      const rows = await readAnalyzedMatchDirs(
+        deps.matchesDir,
+        (dir) => crossMatchCandidatePaths(deps.matchesDir, dir, lang),
+        "legacy:unknown",
+      );
       const byCategory = new Map<
         string,
         {
@@ -1232,69 +1399,38 @@ export function createAnalysisService(deps: {
           }>;
         }
       >();
-      for (const dir of dirs) {
-        const base = join(deps.matchesDir, dir);
-        const candidates = [
-          `analysis-v2.${lang}.json`,
-          `analysis-v2.${lang === "zh" ? "en" : "zh"}.json`,
-          "analysis-v2.json",
-        ];
-        const file = candidates.find((f) => existsSync(join(base, f)));
-        if (!file) continue;
-        try {
-          const raw = JSON.parse(readFileSync(join(base, file), "utf-8"));
-          const doc2 = toSlottedDoc<AnalysisResult>(raw, "legacy:unknown");
-          const slot = resolveActiveSlot(doc2);
-          if (!slot || slot.promptVersion !== PROMPT_VERSION) continue;
-          const findings: Array<{
-            category: string;
-            title: string;
-            severity: string;
-            eventIds?: string[];
-          }> = slot.result?.findings ?? [];
-          let flags: Record<string, string> = {};
-          try {
-            flags = JSON.parse(
-              readFileSync(join(base, "findingFlags.json"), "utf-8"),
-            );
-          } catch {
-            /* no flags */
-          }
-          let matchId = dir;
-          try {
-            matchId = JSON.parse(
-              readFileSync(join(base, "..", dir, "meta.json"), "utf-8"),
-            ).id;
-          } catch {
-            /* fall back to the directory name */
-          }
-          for (const f of findings) {
-            // The aggregation key is normalized (historical caches from
-            // before enumeration, e.g. SURVIVAL and its localized variants,
-            // merge into the same slug group); flags are still looked up by
-            // the findingKey
-            // exactly as archived, with no migration
-            const cat = normalizeFindingCategory(f.category);
-            const agg = byCategory.get(cat) ?? {
-              count: 0,
-              recurring: 0,
-              done: 0,
-              recent: [],
-            };
-            agg.count++;
-            const flag = flags[findingKey(f)];
-            if (flag === "recurring") agg.recurring++;
-            if (flag === "done") agg.done++;
-            agg.recent.push({
-              matchId,
-              title: f.title,
-              severity: f.severity,
-              createdAt: slot.createdAt,
-            });
-            byCategory.set(cat, agg);
-          }
-        } catch {
-          /* skip corrupt files */
+      for (const { dir, slot, flags, meta } of rows) {
+        const findings: Array<{
+          category: string;
+          title: string;
+          severity: string;
+          eventIds?: string[];
+        }> = slot.result?.findings ?? [];
+        const matchId = meta?.id ?? dir;
+        for (const f of findings) {
+          // The aggregation key is normalized (historical caches from
+          // before enumeration, e.g. SURVIVAL and its localized variants,
+          // merge into the same slug group); flags are still looked up by
+          // the findingKey
+          // exactly as archived, with no migration
+          const cat = normalizeFindingCategory(f.category);
+          const agg = byCategory.get(cat) ?? {
+            count: 0,
+            recurring: 0,
+            done: 0,
+            recent: [],
+          };
+          agg.count++;
+          const flag = flags[findingKey(f)];
+          if (flag === "recurring") agg.recurring++;
+          if (flag === "done") agg.done++;
+          agg.recent.push({
+            matchId,
+            title: f.title,
+            severity: f.severity,
+            createdAt: slot.createdAt,
+          });
+          byCategory.set(cat, agg);
         }
       }
       return [...byCategory.entries()]
@@ -1335,14 +1471,11 @@ export function createAnalysisService(deps: {
       }>
     > {
       const lang: AiLanguage = deps.getSettings().aiLanguage ?? "zh";
-      let dirs: string[] = [];
-      try {
-        dirs = readdirSync(deps.matchesDir).filter(
-          (d) => !d.startsWith(".") && !d.startsWith("_"),
-        );
-      } catch {
-        return [];
-      }
+      const rows = await readAnalyzedMatchDirs(
+        deps.matchesDir,
+        (dir) => crossMatchCandidatePaths(deps.matchesDir, dir, lang),
+        "legacy:unknown",
+      );
       type Entry = {
         matchId: string;
         flagKey: string;
@@ -1356,67 +1489,32 @@ export function createAnalysisService(deps: {
         bracket?: string;
       };
       const byCategory = new Map<string, Entry[]>();
-      for (const dir of dirs) {
-        const base = join(deps.matchesDir, dir);
-        const candidates = [
-          `analysis-v2.${lang}.json`,
-          `analysis-v2.${lang === "zh" ? "en" : "zh"}.json`,
-          "analysis-v2.json",
-        ];
-        const file = candidates.find((f) => existsSync(join(base, f)));
-        if (!file) continue;
-        try {
-          const raw = JSON.parse(readFileSync(join(base, file), "utf-8"));
-          const doc2 = toSlottedDoc<AnalysisResult>(raw, "legacy:unknown");
-          const slot = resolveActiveSlot(doc2);
-          if (!slot || slot.promptVersion !== PROMPT_VERSION) continue;
-          const findings: Array<{
-            category: string;
-            title: string;
-            explanation?: string;
-            severity: string;
-            eventIds?: string[];
-          }> = slot.result?.findings ?? [];
-          if (findings.length === 0) continue;
-          let flags: Record<string, string> = {};
-          try {
-            flags = JSON.parse(
-              readFileSync(join(base, "findingFlags.json"), "utf-8"),
-            );
-          } catch {
-            /* no flags */
-          }
-          let meta: {
-            id?: string;
-            startTime?: number;
-            zoneId?: string;
-            result?: string;
-            bracket?: string;
-          } = {};
-          try {
-            meta = JSON.parse(readFileSync(join(base, "meta.json"), "utf-8"));
-          } catch {
-            /* fall back to the directory name */
-          }
-          for (const f of findings) {
-            const key = findingKey(f);
-            const list = byCategory.get(f.category) ?? [];
-            list.push({
-              matchId: meta.id ?? dir,
-              flagKey: key,
-              flag: flags[key] ?? null,
-              title: f.title,
-              explanation: f.explanation ?? "",
-              severity: f.severity,
-              startTime: meta.startTime ?? slot.createdAt,
-              zoneId: meta.zoneId,
-              result: meta.result,
-              bracket: meta.bracket,
-            });
-            byCategory.set(f.category, list);
-          }
-        } catch {
-          /* skip corrupt files */
+      for (const { dir, slot, flags, meta: metaOrNull } of rows) {
+        const findings: Array<{
+          category: string;
+          title: string;
+          explanation?: string;
+          severity: string;
+          eventIds?: string[];
+        }> = slot.result?.findings ?? [];
+        if (findings.length === 0) continue;
+        const meta = metaOrNull ?? {};
+        for (const f of findings) {
+          const key = findingKey(f);
+          const list = byCategory.get(f.category) ?? [];
+          list.push({
+            matchId: meta.id ?? dir,
+            flagKey: key,
+            flag: flags[key] ?? null,
+            title: f.title,
+            explanation: f.explanation ?? "",
+            severity: f.severity,
+            startTime: meta.startTime ?? slot.createdAt,
+            zoneId: meta.zoneId,
+            result: meta.result,
+            bracket: meta.bracket,
+          });
+          byCategory.set(f.category, list);
         }
       }
       return [...byCategory.entries()]
@@ -1475,35 +1573,24 @@ export function createAnalysisService(deps: {
      * For batch analysis: one disk scan returning the ids of matches that
      * already have a valid cache (current language + PROMPT_VERSION). The hit
      * predicate must be exactly the one getCached uses (single-source
-     * predicate) -- so this calls getCached per directory instead of writing
-     * a second filename/version judgment. The id comes from meta.json's id,
-     * falling back to the directory name (cache directories for non-first
-     * shuffle rounds have no meta, and the directory name is the round id).
+     * predicate) -- so this feeds the same slottedDocCandidatePaths /
+     * currentSlotKey / currentSlot that readSlottedDoc + getCached use into
+     * the shared async scan, instead of writing a second filename/version
+     * judgment (it used to call the synchronous getCached per directory,
+     * which froze main for the whole library). The id comes from meta.json's
+     * id, falling back to the directory name (cache directories for
+     * non-first shuffle rounds have no meta, and the directory name is the
+     * round id).
      */
     async listAnalyzed(): Promise<string[]> {
-      let dirs: string[] = [];
-      try {
-        dirs = readdirSync(deps.matchesDir).filter(
-          (d) => !d.startsWith(".") && !d.startsWith("_"),
-        );
-      } catch {
-        return [];
-      }
-      const out: string[] = [];
-      for (const dir of dirs) {
-        if (!(await this.getCached(dir))) continue;
-        let id = dir;
-        try {
-          id =
-            JSON.parse(
-              readFileSync(join(deps.matchesDir, dir, "meta.json"), "utf-8"),
-            ).id ?? dir;
-        } catch {
-          /* no meta: fall back to the directory name */
-        }
-        out.push(id);
-      }
-      return out;
+      const settings = deps.getSettings();
+      const lang: AiLanguage = settings.aiLanguage ?? "zh";
+      const rows = await readAnalyzedMatchDirs(
+        deps.matchesDir,
+        (dir) => slottedDocCandidatePaths(deps.matchesDir, dir, lang),
+        currentSlotKey(settings),
+      );
+      return rows.map(({ dir, meta }) => meta?.id ?? dir);
     },
     async getState(matchId: string): Promise<{
       cached: AnalysisResult | null;
@@ -1562,8 +1649,8 @@ export function createAnalysisService(deps: {
     ): Promise<AnalysisResult | null> {
       const settings = deps.getSettings();
       const doc = readSlottedDoc(deps.matchesDir, matchId, settings);
-      const slot = resolveSlot(doc, slotKey);
-      if (!slot || slot.promptVersion !== PROMPT_VERSION) return null;
+      const slot = currentSlot(doc, slotKey);
+      if (!slot) return null;
       return slot.result;
     },
   };
