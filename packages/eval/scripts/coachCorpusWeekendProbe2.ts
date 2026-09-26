@@ -54,15 +54,10 @@ import {
   pickRows,
   splitTeams,
 } from "../src/explore/storeAccess";
+import { argOf } from "./lib/cli";
 
 const SPELLS = SPELL_CATEGORIES as Record<string, { type: string }>;
 
-function argOf(flag: string, dflt: number): number {
-  const i = process.argv.indexOf(flag);
-  if (i < 0) return dflt;
-  const v = Number(process.argv[i + 1]);
-  return Number.isFinite(v) && v > 0 ? v : dflt;
-}
 const pct = (a: number, b: number) =>
   b === 0 ? "n/a" : `${((a / b) * 100).toFixed(1)}%`;
 const bump = (m: Map<string, number>, k: string, by = 1) =>

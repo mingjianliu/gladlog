@@ -15,6 +15,7 @@
 import { ensureAnalysisData } from "@gladlog/analysis";
 import { ccFullDurationSeconds } from "@gladlog/analysis/src/data/spellEffectData";
 import { TREMOR_BREAKABLE_CC_IDS } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
+import { fmtTime } from "@gladlog/analysis/src/utils/renderGrid";
 import { parseLine } from "@gladlog/parser";
 import { readFileSync } from "fs";
 import { gunzipSync } from "zlib";
@@ -24,8 +25,6 @@ const flag = (f: string): string | undefined => {
   const i = argv.indexOf(f);
   return i >= 0 ? argv[i + 1] : undefined;
 };
-const fmtTime = (s: number): string =>
-  `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 /** Removal this close after the totem lands counts as the totem's doing. */
 const SAME_INSTANT_MS = 500;
 const SPEC: Record<number, string> = {

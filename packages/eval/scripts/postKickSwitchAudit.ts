@@ -51,6 +51,7 @@ import {
   pickRows,
   splitTeams,
 } from "../src/explore/storeAccess";
+import { argOf } from "./lib/cli";
 
 /** Same window production classifies in (`POST_KICK_WINDOW_S`). */
 const WINDOW_S = 5;
@@ -59,13 +60,6 @@ const WINDOW_S = 5;
 // (ccTrinketAnalysis.ts), and this audit exists to check that field. Two
 // copies would let the audit and the thing it audits drift apart —
 // CLAUDE.md shared-predicate rule.
-
-function argOf(flag: string, dflt: number): number {
-  const i = process.argv.indexOf(flag);
-  if (i < 0) return dflt;
-  const v = Number(process.argv[i + 1]);
-  return Number.isFinite(v) && v > 0 ? v : dflt;
-}
 
 interface SpecRow {
   switched: number;

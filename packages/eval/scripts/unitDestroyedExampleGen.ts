@@ -9,6 +9,7 @@
  * Usage: npx tsx packages/eval/scripts/unitDestroyedExampleGen.ts --manifest <txt> [--offset 0] [--limit 40] [--show 3]
  */
 import { CRITICAL_NON_PLAYER_NPC_NAMES } from "@gladlog/analysis/src/context/timelineHelpers";
+import { fmtTime } from "@gladlog/analysis/src/utils/renderGrid";
 import { GladLogParser, parseLine } from "@gladlog/parser";
 import {
   CombatUnitReaction,
@@ -23,8 +24,6 @@ const flag = (f: string): string | undefined => {
   const i = argv.indexOf(f);
   return i >= 0 ? argv[i + 1] : undefined;
 };
-const fmtTime = (s: number): string =>
-  `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 const parseNonNegativeInt = (name: string, defaultVal: number): number => {
   const raw = flag(name);
   if (raw === undefined) return defaultVal;

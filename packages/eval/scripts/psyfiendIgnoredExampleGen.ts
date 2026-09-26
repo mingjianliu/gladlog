@@ -36,6 +36,7 @@ import {
   summonedAtMs,
 } from "@gladlog/analysis/src/context/timelineHelpers";
 import { gridHpPct, specToString } from "@gladlog/analysis/src/utils/cooldowns";
+import { fmtTime } from "@gladlog/analysis/src/utils/renderGrid";
 import { summonReach } from "@gladlog/analysis/src/utils/summonReachability";
 import { GladLogParser } from "@gladlog/parser";
 import {
@@ -60,8 +61,6 @@ const parseNonNegativeInt = (name: string, defaultVal: number): number => {
   }
   return val;
 };
-const fmtTime = (s: number): string =>
-  `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
 const PSYFIEND_NPC = PSYFIEND_NPC_ID;
 /** Seconds of the window a player must be both in reach and free. A probe

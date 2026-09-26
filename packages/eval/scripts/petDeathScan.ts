@@ -20,6 +20,7 @@
  *
  * Usage: npx tsx packages/eval/scripts/petDeathScan.ts --manifest <txt> [--offset 3000] [--limit 1500] --out <new.json>
  */
+import { fmtTime } from "@gladlog/analysis/src/utils/renderGrid";
 import { parseLine } from "@gladlog/parser";
 import { readFileSync, writeFileSync } from "fs";
 import { gunzipSync } from "zlib";
@@ -88,8 +89,6 @@ const mk = (): Bucket => ({
 const buckets: Record<string, Bucket> = { hunter: mk(), warlock: mk() };
 let scanned = 0;
 const examples: string[] = [];
-const fmtTime = (x: number): string =>
-  `${Math.floor(x / 60)}:${String(Math.floor(x % 60)).padStart(2, "0")}`;
 
 type Round = {
   start: number;

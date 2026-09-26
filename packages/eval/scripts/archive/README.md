@@ -40,3 +40,19 @@ Running one of these still works — paths inside them are relative to the
 package root (`packages/eval/scripts/archive/<name>.ts`), and the two that
 read a corpus directory (`deepDiveDisciplineGen`, `deepDiveYield`) resolve it
 from `$GLADLOG_EVAL_HOME` and accept `--corpus <dir>`.
+
+## Session probes archived 2026-09-26
+
+Not deep-dive tooling: four one-off probes whose only references in the
+repository were their own headers (no `docs/commands/` entry, no skill, no
+workflow, no other script). Kept for the same reason as above — their numbers
+are cited in GitHub issues / commit messages — and moved here so the main
+script directory lists only standing workflows. Relative imports were
+rewritten for the new depth; usage lines in each header carry the new path.
+
+| Script                     | What it did                                                                 |
+| -------------------------- | --------------------------------------------------------------------------- |
+| `candidateCastContext.ts`  | TSV review sheet: the owner's casts around each emitted candidate (audit A2) |
+| `crisisEvidenceCards.ts`   | Re-presents the GH #94 step-2 evidence ledger as Chinese judging cards       |
+| `decisionTraceCount.ts`    | Counts GH #96 D6 decision-trace records per (type, verdict, reason)          |
+| `targetSwapNoiseScan.ts`   | GH #85 corrected target-swap incidence, sign bug shown side by side          |

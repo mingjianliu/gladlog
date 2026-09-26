@@ -54,6 +54,20 @@ const fmtMD = (t: number): string => {
   return `${d.getMonth() + 1}/${d.getDate()}`;
 };
 
+/** Single-pass [min, max]. `Math.min(...values)` pushes every element onto the
+ * call stack and overflows on a long rating history; this walks the array
+ * instead. Empty input yields [Infinity, -Infinity], the same as the spread
+ * form (callers guard on length anyway). */
+const minMax = (values: number[]): [number, number] => {
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (const v of values) {
+    if (v < lo) lo = v;
+    if (v > hi) hi = v;
+  }
+  return [lo, hi];
+};
+
 /** Win-rate bar color bands (shared by the comp and per-zone cards):
  * >=55 green, <=45 red, grey in between. */
 const rateBarColor = (pct: number): string =>
@@ -71,10 +85,8 @@ function RatingCurve({
   if (all.length < 2) {
     return <p className="dash-empty">评分数据不足(需要含评分的对局 ≥2 场)。</p>;
   }
-  const t0 = Math.min(...all.map((p) => p.t));
-  const t1 = Math.max(...all.map((p) => p.t));
-  const r0 = Math.min(...all.map((p) => p.rating));
-  const r1 = Math.max(...all.map((p) => p.rating));
+  const [t0, t1] = minMax(all.map((p) => p.t));
+  const [r0, r1] = minMax(all.map((p) => p.rating));
   const pad = Math.max(20, (r1 - r0) * 0.1);
   const x = (t: number): number =>
     PAD.l + ((t - t0) / Math.max(1, t1 - t0)) * (W - PAD.l - PAD.r);
@@ -171,8 +183,7 @@ function RatingSparkline({
   const P = 3;
   const t0 = points[0]!.t;
   const t1 = points[points.length - 1]!.t;
-  const r0 = Math.min(...points.map((p) => p.rating));
-  const r1 = Math.max(...points.map((p) => p.rating));
+  const [r0, r1] = minMax(points.map((p) => p.rating));
   const x = (t: number) => P + ((t - t0) / Math.max(1, t1 - t0)) * (W - 2 * P);
   const y = (r: number) =>
     H - P - ((r - r0) / Math.max(1, r1 - r0)) * (H - 2 * P);

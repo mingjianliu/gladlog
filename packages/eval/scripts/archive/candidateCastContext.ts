@@ -15,7 +15,7 @@
  * as "+0.8s Ironbark→Target".
  *
  * Usage:
- *   npx tsx packages/eval/scripts/candidateCastContext.ts --manifest <file> \
+ *   npx tsx packages/eval/scripts/archive/candidateCastContext.ts --manifest <file> \
  *     --out <file.tsv> [--every 30] [--type cd-hoarded] [--before 1.5] \
  *     [--after 5] [--raw-streams] [--ids <file of candidate ids>]
  */
@@ -27,7 +27,7 @@ import { toLegacyMatch } from "@gladlog/parser-compat";
 import { readFileSync, writeFileSync } from "fs";
 import { gunzipSync } from "zlib";
 
-import { splitTeams } from "../src/explore/storeAccess";
+import { splitTeams } from "../../src/explore/storeAccess";
 
 const argv = process.argv.slice(2);
 const flag = (n: string) => {

@@ -34,12 +34,8 @@ import { resolve } from "path";
 import { gunzipSync } from "zlib";
 
 import { splitTeams } from "../src/explore/storeAccess";
+import { arg } from "./lib/cli";
 
-const a = process.argv.slice(2);
-const arg = (k: string, d: string) => {
-  const i = a.indexOf(k);
-  return i >= 0 ? (a[i + 1] ?? d) : d;
-};
 const manifest = arg("--manifest", "");
 const every = Number(arg("--every", "90"));
 // `--dump <file>`: skip the in-process rollback and write one JSON line per

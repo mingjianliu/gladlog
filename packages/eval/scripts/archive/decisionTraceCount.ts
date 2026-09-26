@@ -11,7 +11,7 @@
  * from "it fires below the cap".
  *
  * Usage:
- *   npx tsx packages/eval/scripts/decisionTraceCount.ts --manifest <file> \
+ *   npx tsx packages/eval/scripts/archive/decisionTraceCount.ts --manifest <file> \
  *     [--every N] [--types cd-hoarded,crisis-no-response] [--healers-only]
  */
 import { extractCandidateFindings } from "@gladlog/analysis/src/analysis/candidateFindings";

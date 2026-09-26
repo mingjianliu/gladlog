@@ -121,7 +121,7 @@ input: {
   槽位按 `slotKeyOf(backend, model) = "${backend}:${model}"` 拼键,`splitSlotKey()` 拆回去(只按**第一个**冒号切,因为 model id 本身可能含冒号)。`resolveActiveSlot(doc)` —— 读 `doc.slots[doc.lastSlotKey]` —— 是读侧的单一谓词;`upsertSlot()` 把新槽合并进现有槽位,不冲掉其它模型的缓存结果。
 - `src/shared/analysisCache.ts` —— 有 `import { join } from "path"`,所以只能主进程用(注释里记着一次真实生产事故:renderer 的 `slotLabel.ts` 曾经从这个文件 import `splitSlotKey`,由于 Rollup 把整个模块——连同 `path` import——一起拖进浏览器 bundle,打包后的应用报 `"join" is not exported by "__vite-browser-external"`;本地 vitest 和 `tsc` 都测不出来,只有 `electron-vite build` 会炸)。导出 `analysisCachePath(matchesDir, matchId, lang) = join(matchesDir, matchId, "analysis-v2.${lang}.json")` —— 缓存文件既按对局也按语言拆分。
 
-`src/shared/promptVersion.ts` 导出一个 `PROMPT_VERSION = 13` 常量,是分析缓存唯一的失效键:任何 prompt 形状变化都要把它加一,让 `getCached` 把所有既有槽位视为过期。文件自带的注释保留了从 v3 到 v13 的变更记录,追踪每次升版新增了哪些 finding 类别/prompt 段落。
+`src/shared/promptVersion.ts` 导出一个 `PROMPT_VERSION` 常量,是分析缓存唯一的失效键:任何 prompt 形状变化都要把它加一,让 `getCached` 把所有既有槽位视为过期。逐次升版的变更记录(从 v3 起,每次升版新增了哪些 finding 类别/prompt 段落)放在 `docs/prompt-version-history.md`;文件本身只内联保留最近几条。
 
 ## 测试与质检
 

@@ -27,13 +27,7 @@ import {
   pickRows,
   splitTeams,
 } from "../src/explore/storeAccess";
-
-function argOf(flag: string, dflt: number): number {
-  const i = process.argv.indexOf(flag);
-  if (i < 0) return dflt;
-  const v = Number(process.argv[i + 1]);
-  return Number.isFinite(v) && v > 0 ? v : dflt;
-}
+import { argOf } from "./lib/cli";
 
 const pct = (a: number, b: number) =>
   b === 0 ? "n/a" : `${((a / b) * 100).toFixed(1)}%`;

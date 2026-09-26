@@ -14,6 +14,7 @@
  * Usage: npx tsx packages/eval/scripts/uncontestedSummonExampleGen.ts --manifest <txt> [--offset 3000] [--limit 300] [--show 6]
  */
 import { CRITICAL_NON_PLAYER_NPC_NAMES } from "@gladlog/analysis/src/context/timelineHelpers";
+import { fmtTime } from "@gladlog/analysis/src/utils/renderGrid";
 import { parseLine } from "@gladlog/parser";
 import { readFileSync } from "fs";
 import { gunzipSync } from "zlib";
@@ -32,8 +33,6 @@ const parseNonNegativeInt = (name: string, defaultVal: number): number => {
   }
   return val;
 };
-const fmtTime = (s: number): string =>
-  `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
 const manifestPath = flag("--manifest");
 if (!manifestPath) {

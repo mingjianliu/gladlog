@@ -26,11 +26,8 @@ import { readFileSync } from "fs";
 import { resolve } from "path";
 import { gunzipSync } from "zlib";
 
-const a = process.argv.slice(2);
-const arg = (k: string, d: string) => {
-  const i = a.indexOf(k);
-  return i >= 0 ? (a[i + 1] ?? d) : d;
-};
+import { arg } from "./lib/cli";
+
 const manifest = arg("--manifest", "");
 const spell = arg("--spell", "370965");
 const every = Number(arg("--every", "20"));
