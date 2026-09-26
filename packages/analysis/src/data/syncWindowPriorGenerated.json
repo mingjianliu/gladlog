@@ -1,16 +1,16 @@
 {
   "meta": {
-    "corpus": "wowarenalogs archive 2026-09-25",
-    "generatedAt": "2026-09-25",
-    "windows": 107357,
+    "corpus": "wowarenalogs archive 2026-09-14 (12.1+, 63,303-file manifest; main 47f4279b = C4 + #115 + W1g)",
+    "generatedAt": "2026-09-26",
+    "windows": 107358,
     "predicate": "eligible window: enemyHealerCcWindows merged per healer; team burst = countsAsTeamBurst (canonical offensive table, a healer's own only Power Infusion) (mergeHealerCcWindows: one continuous lock = one window), syncWindowEligible (rendered dur>=3s, rendered t>=30s, no enemy death in-window), evaluateSyncWindow: >=1 canonical OFFENSIVE_CD_SPELL_IDS off cooldown at the window start or at a merged component's start, whose owner was then free to act >= REACTION_WINDOW_S of the rest of the lock; entered = such a CD pressed in [from-2s, to] or still active (buffFullDurationForCaster) at the lock start; kill15 = enemy death in (from, from+15s]"
   },
   "cells": {
     "Rated Solo Shuffle": {
-      "nEntered": 32269,
-      "killEntered": 0.09092317704298243,
-      "nUnentered": 18214,
-      "killUnentered": 0.05254200065883386
+      "nEntered": 32268,
+      "killEntered": 0.09092599479360357,
+      "nUnentered": 18216,
+      "killUnentered": 0.05253623188405797
     },
     "2v2": {
       "nEntered": 9841,

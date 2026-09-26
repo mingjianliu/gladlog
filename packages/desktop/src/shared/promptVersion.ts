@@ -9,12 +9,6 @@
  *  Full history in docs/prompt-version-history.md (append new entries there);
  *  the last few entries stay inline so a reader sees the format:
  *
- *  v158 (2026-09-26, reliability round 2 W1f): OFFENSIVE CD OUT OF RANGE measures
- *  each cooldown against its own caster-aware reach plus hitbox slack, abstains
- *  on summons (DB2 SpellEffect 28) and self / pet buffs, needs every enemy
- *  positioned and beyond reach for the whole 5 s (exact closest approach between
- *  position events); the line states "its reach N yd". 605 files at efc522b4:
- *  rendered lines 516 → 2, menu cd-out-of-range −343 / +1; gates 0 → 0.
  *  v159 (2026-09-26, reliability round 3 W1a 6954): kick-priority-missed / -team no
  *  longer credit a melee kicker with a run he could not make — roots cut the run
  *  budget, a kicker who could not move reaches only the kick's range + hitbox
@@ -26,5 +20,10 @@
  *  hard cast at its bar START, so a bar the CC interrupted (no SPELL_CAST_SUCCESS)
  *  no longer leaves a fake "free to react" gap. 605 files at 9eb859c9:
  *  cc-avoidable −3 / +0, contexts unchanged.
+ *  v161 (2026-09-26, sync-window table regenerated after C4 + GH #115 + W1g):
+ *  full 63,303-file archive at 47f4279b (spot-checked equal at ab72caed on 600
+ *  files / 1,658 windows). 107,357 → 107,358 windows; Solo Shuffle nEntered
+ *  −1 / nUnentered +2, every rate and contrast unchanged to 0.1 pp; the only
+ *  rendered change is the Solo Shuffle refN (50,483 → 50,484).
  */
-export const PROMPT_VERSION = 160;
+export const PROMPT_VERSION = 161;
