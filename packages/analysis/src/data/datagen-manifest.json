@@ -94,6 +94,9 @@
     "pvpTalentReplacesGenerated.ts": {
       "pairs": 17
     },
+    "talentReplacesGenerated.ts": {
+      "pairs": 18
+    },
     "pvpTalentPoolGenerated.ts": {
       "specs": 40
     },

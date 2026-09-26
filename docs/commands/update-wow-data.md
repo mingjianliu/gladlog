@@ -261,6 +261,7 @@ npx tsx packages/eval/scripts/kickLockoutScan.ts \
 npx tsx packages/analysis/scripts/datagen/genSpellIcons.ts
 # 6c. PvP talent replacement table (PvpTalent.OverridesSpellID; consumed by cd-waste ledger)
 npx tsx packages/analysis/scripts/datagen/genPvpTalentReplaces.ts
+npx tsx packages/analysis/scripts/datagen/genTalentReplaces.ts   # TraitDefinition.OverridesSpellID → talentReplacesGenerated.ts (2026-09-26)
 # 6d. PvP talent pool (PvpTalent SpecID/SpellID/ActionBarSpellID; consumed by talentOwnershipOf)
 npx tsx packages/analysis/scripts/datagen/genPvpTalentPool.ts
 # 6e. DR category table (SpellCategories.DiminishType; consumed by drAnalysis, aura ID key)
@@ -511,6 +512,15 @@ npx tsx packages/eval/scripts/racialTrinketLockScan.ts \
 #    trees before editing the row). ~10 min on every 30th file. A WALL near the top of the forward list is
 #    a missing defensive; offensive rows belong to the offensive-set owners.
 npx tsx packages/eval/scripts/ledgerGapScan.ts \
+  --manifest $GLADLOG_EVAL_HOME/corpus/manifest-archive-<date>.txt --every 30
+# 8. Talent replacement pairs (2026-09-26, reliability audit C1): TALENT_REPLACES is a hand table for the
+#    CONDITIONAL replacements neither PvpTalent/TraitDefinition.OverridesSpellID nor the aura-332
+#    replace_spell rows encode (Ancestral Swiftness 448861 → Nature's Swiftness 378081). Reverse — every
+#    registered pair re-measured on raw casts (CONTRADICTED = a holder pressed the "replaced" spell; the
+#    table is wrong or the pair became unconditional); forward — nominations (holders never cast Y,
+#    non-holders do), each with counter-evidence, correlated talents and the spell holders press instead.
+#    A nomination enters the table only with the tooltip sentence quoted in its note. ~5 min on every 30th file.
+npx tsx packages/eval/scripts/talentReplaceScan.ts \
   --manifest $GLADLOG_EVAL_HOME/corpus/manifest-archive-<date>.txt --every 30
 ```
 

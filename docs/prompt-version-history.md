@@ -1464,3 +1464,24 @@ mitigation table (kill-live-gated); Lay on Hands is signed burst-answer (data
 only). 605 files: cd-hoarded 1707 → 1700, slow-defensive-response 126 → 118,
 [ENEMY DEF] +996 Divine Protection lines, kill-attempt rows name it; the two
 new walls make no unused-self counterfactual claim (coverage unmodelled).
+
+v168 (2026-09-26, reliability leftovers batch 1): (1) talent replacements — a
+class / hero talent that replaces a button removes it from the ledger
+(hand TALENT_REPLACES: Ancestral Swiftness → Nature's Swiftness; generated
+TALENT_REPLACES_GENERATED from TraitDefinition.OverridesSpellID, 18 pairs);
+605 files: cd-waste "never pressed Nature's Swiftness" 12 → 0, NS [UNUSED]
+in Farseer loadouts 319 → 168, Doom Winds [UNUSED] 6 → 0,
+missed-sync-window −93 / +15 (phantom "ready" Doom Winds / Avenging Wrath /
+Berserk under Ascendance / Sentinel / Incarnation), cd-hoarded −9 / +3.
+(2) two hand cooldowns that already held a talent's reduction (Astral Shift
+90, Psychic Scream 30) go back to DB2 so CD_TALENT_MODIFIERS applies once:
+loadout Astral Shift [60s] → [90s] ×1,159 and [90s] → [120s] ×229, Psychic
+Scream [20s] → [30s] ×3,152 and [30s] → [40s] ×510; burst-into-mitigation
+±1, cc-avoidable −2 / +1, kick-priority −4 / +6. (3) proc-only activations
+render as [YOU]/[TEAM] [PROC] with a conditional legend line, no
+cheaper-available / [UNNECESSARY] / while-CC tag / [HEALING] block, no
+defensive-timing label, no SPEC BASELINES row: Renewing Blaze 191 owner +
+160 teammate lines, Radiant Glory Avenging Wrath 757 owner + 1,484 teammate
+lines, SPEC BASELINES rows Renewing Blaze 114 → 0 / Avenging Wrath 162 → 0;
+candidates unchanged by (3). Perspective line now reads "actions and effects
+on you".

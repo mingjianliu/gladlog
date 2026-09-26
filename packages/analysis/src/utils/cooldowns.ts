@@ -15,6 +15,7 @@ import {
   healerSaveCdStripDefensive,
 } from "../data/healerSaveCd";
 import { PVP_TALENT_REPLACES_GENERATED } from "../data/pvpTalentReplacesGenerated";
+import { replacedSpellIds } from "../data/talentReplaces";
 import { OFFENSIVE_RACIAL_SPELL_IDS } from "../data/racialAbilities";
 import {
   effectiveCooldownSeconds,
@@ -2020,19 +2021,6 @@ export function extractMajorCooldowns(
     : null;
   const talentSets = playerTalentIdSets(unit);
   const { talentedSpellIds, pvpTalentIds } = talentSets;
-  // Spells **replaced** by a selected PvP talent: with the talent taken, the
-  // baseline/class-talent spell no longer exists, so it must not enter the
-  // "never used all match" ledger (2026-07-25 user report: a Holy Paladin who
-  // took Searing Glare was still told they never pressed Blinding Light). The
-  // table only accepts replacement pairs confirmed by a user or the corpus —
-  // do not extend it from memory.
-  const replacedByPvpTalent = new Set<string>();
-  for (const [talentId, replaced] of Object.entries(PVP_TALENT_REPLACES))
-    if (pvpTalentIds.has(talentId))
-      for (const r of replaced) replacedByPvpTalent.add(r);
-  const replacements = talentReplacementsOf(unit);
-  const procOnlyForUnit = replacements.procOnly;
-  const hasCombatantInfo = unit.info !== undefined;
   // Build a fast lookup of all spell IDs the player actually cast this match.
   const castSpellIds = new Set<string>(
     unit.spellCastEvents
@@ -2040,12 +2028,42 @@ export function extractMajorCooldowns(
       .map((e) => e.spellId)
       .filter((id): id is string => id !== null),
   );
+  // Spells **replaced** by a talent the player took: with the talent taken,
+  // the baseline/class-talent spell no longer exists, so it must not enter the
+  // "never used all match" ledger through ANY of the three entry paths below
+  // (static catalog, dynamic discovery, healer save-roster injection).
+  // PvP talents: 2026-07-25 user report, a Holy Paladin who took Searing Glare
+  // was still told they never pressed Blinding Light (official DB2 table).
+  // Class / hero talents: reliability audit C1, 2026-09-26, a Farseer
+  // Restoration Shaman told they never pressed Nature's Swiftness while
+  // pressing Ancestral Swiftness five times (hand table `TALENT_REPLACES`,
+  // tooltip-proven + corpus-nominated pairs only — never from memory).
+  // A cast of the "replaced" spell this round beats both tables for this
+  // player: the button evidently exists (the W1g rule for stale rows).
+  // A pair the GH #106 step-2 model already handles (`pressedAs`: Ice Cold's
+  // casts ARE Ice Block presses; `procOnly`: the button became a proc whose
+  // activations must stay) keeps that model — the official override relation
+  // lists Ice Cold → Ice Block too, and dropping the entry would lose the
+  // presses the death path and the immunity tables key on.
+  const replacements = talentReplacementsOf(unit);
+  const procOnlyForUnit = replacements.procOnly;
+  const replacedByTalent = new Set<string>(
+    [
+      ...replacedSpellIds(talentedSpellIds, pvpTalentIds, PVP_TALENT_REPLACES),
+    ].filter(
+      (id) =>
+        !castSpellIds.has(id) &&
+        !replacements.pressedAs.has(id) &&
+        !procOnlyForUnit.has(id),
+    ),
+  );
+  const hasCombatantInfo = unit.info !== undefined;
 
   // Keep only tagged spells with cooldown data >= MIN_CD_SECONDS that belong to the owner's spec
   const seen = new Set<string>();
   const majorSpells = classData.abilities.filter((spell) => {
     if (seen.has(spell.spellId)) return false;
-    if (replacedByPvpTalent.has(spell.spellId)) return false;
+    if (replacedByTalent.has(spell.spellId)) return false;
     if (spell.tags.length === 0) return false;
     const effectData = spellEffectData[spell.spellId];
     if (!effectData) return false;
@@ -2130,7 +2148,7 @@ export function extractMajorCooldowns(
       if (seen.has(spellId)) continue;
       // Spells replaced by a selected PvP talent must not enter the ledger via
       // the dynamic-discovery path either.
-      if (replacedByPvpTalent.has(spellId)) continue;
+      if (replacedByTalent.has(spellId)) continue;
       // Only discover buttons (active nodes). Passives are handled via CD_TALENT_MODIFIERS.
       if (info.type !== "active") continue;
 
@@ -2190,7 +2208,7 @@ export function extractMajorCooldowns(
       else majorSpells[i] = { ...sp, tags };
     }
     for (const [spellId, entry] of saveRoster) {
-      if (replacedByPvpTalent.has(spellId)) continue;
+      if (replacedByTalent.has(spellId)) continue;
       const aliases = spellAliasIds(spellId);
       const evidence =
         aliases.some((id) => castSpellIds.has(id)) ||
@@ -2591,12 +2609,16 @@ export function findCheaperDefensiveAlternatives(
   atSeconds: number,
   opts: { castTargetIsTeammate?: boolean } = {},
 ): string[] {
+  // Nothing was chosen when a proc fired, so there is no "cheaper" choice to
+  // point at; and a proc is never the cheaper choice (round 3 N5).
+  if (cdIsProcOnly(cd)) return [];
   return ownerCDs
     .filter(
       (other) =>
         other.spellId !== cd.spellId &&
         other.tag === "Defensive" &&
         !other.isThroughput &&
+        !cdIsProcOnly(other) &&
         !NON_SUBSTITUTE_DEFENSIVE_IDS.has(other.spellId) &&
         other.cooldownSeconds < cd.cooldownSeconds &&
         other.availableWindows.some(
@@ -2751,6 +2773,9 @@ export function annotateDefensiveTimings(
 
   for (const cd of cooldowns) {
     if (!DEFENSIVE_TAGS.has(cd.tag)) continue;
+    // A proc-only entry's casts are aura activations — nobody timed them
+    // (reliability round 3 N5: Renewing Blaze labelled "cast during burst").
+    if (cdIsProcOnly(cd)) continue;
 
     for (const cast of cd.casts) {
       const t = cast.timeSeconds;

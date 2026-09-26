@@ -135,6 +135,7 @@ import {
 import spellIdLists from "./spellIdLists";
 import { trinketSpellIds } from "./spellTags";
 import { TALENT_MITIGATION_MODIFIERS } from "./talentMitigationModifiers";
+import { TALENT_REPLACES } from "./talentReplaces";
 import { WARLOCK_PET_CAST_FUNCTION } from "./warlockPets";
 
 /** What kind of id the list holds — decides which corpus event stream can vouch for it. */
@@ -270,6 +271,10 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
     CURATED_ABILITY_FACTS.map((f) => f.id),
   ),
   t("trinketSpellIds", "data/spellTags.ts", "cast", () => trinketSpellIds),
+  t("TALENT_REPLACES", "data/talentReplaces.ts", "mixed", () => [
+    ...keys(TALENT_REPLACES),
+    ...Object.values(TALENT_REPLACES).flat(),
+  ]),
   // utils/cooldowns.ts
   // 2026-09-11: this table was invisible to the rot scans for its whole life —
   // it existed only as eight ENGLISH NAMES (PASSIVE_SPELL_BLOCKLIST), and the

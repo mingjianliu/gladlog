@@ -39,6 +39,7 @@ import {
   IStasisEvent,
 } from "../utils/combatStates";
 import {
+  cdIsProcOnly,
   cdRoleTag,
   findCheaperDefensiveAlternatives,
   getUnitHpAtTimestamp,
@@ -1351,6 +1352,9 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   }
 
   // ── [YOU] [CD] events ───────────────────────────────────────────────────────
+  // Set when any owner / teammate proc-only activation was rendered as [PROC];
+  // the legend line explaining the tag is emitted only then.
+  let procLinesEmitted = false;
 
   // F114 (Variant C): precompute which amplifier-spell casts get a [HEALING] block.
   // Per spell, emit only the first eligible cast and the worst subsequent eligible
@@ -1359,6 +1363,9 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   const healingEmissionTimes = new Map<string, Set<number>>();
   for (const cd of ownerCDs) {
     if (!HEALING_AMPLIFIER_SPELL_IDS.has(cd.spellId)) continue;
+    // A proc-only entry's "casts" are aura activations, not presses — no
+    // [HEALING] verdict on something nobody chose (round 3 N5).
+    if (cdIsProcOnly(cd)) continue;
     const duration = buffFullDurationForCaster(cd.spellId, owner);
     if (!duration) continue;
     const eligible: { timeSeconds: number; score: number }[] = [];
@@ -1479,6 +1486,14 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     // rendering so a self-buff (e.g. Obsidian Scales) logged against the caster's current enemy/ally
     // target is not shown as "→ <unit>" with that unit's HP.
     const forceSelf = isSelfOnlyDefensive(cd.spellId);
+    // Reliability round 3 N5 (02c8 / ba8c / 3306): a proc-only entry (Renewing
+    // Blaze — structurally cast-less; a talent-replaced button) keeps its aura
+    // activations in `casts`, and this loop read them as presses: "[YOU] [CD]
+    // Renewing Blaze … cheaper available: Time Dilation", "[while stunned]".
+    // The activation stays a timeline fact under [PROC]; every press-only
+    // judgement (cheaper alternative, [UNNECESSARY], CC tag, [HEALING]) is off.
+    const isProc = cdIsProcOnly(cd);
+    if (isProc) procLinesEmitted = true;
     for (const cast of cd.casts) {
       const targetPart = getCDTargetAndVelocityPart(
         cd.spellId,
@@ -1528,7 +1543,11 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       );
       if (manaNote) extraLines.push(manaNote);
 
-      const prefix = ccSpellIds.has(cd.spellId) ? "[YOU] [CC]" : "[YOU] [CD]";
+      const prefix = isProc
+        ? "[YOU] [PROC]"
+        : ccSpellIds.has(cd.spellId)
+          ? "[YOU] [CC]"
+          : "[YOU] [CD]";
       let effectiveTargetPart = targetPart;
       if (isCC) {
         const matchingAoe = findAndConsumeAoeCC(
@@ -1568,7 +1587,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       // timingContext is already text rendered by annotateDefensiveTimings via
       // fmtTime, so pass it through verbatim.
       const unnecessaryNote =
-        cast.timingLabel === "Unnecessary" && cast.timingContext
+        !isProc && cast.timingLabel === "Unnecessary" && cast.timingContext
           ? ` [UNNECESSARY — ${cast.timingContext}]`
           : "";
 
@@ -1602,6 +1621,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       let cheaperNote = "";
       if (
         !isCC &&
+        !isProc &&
         cd.tag === "Defensive" &&
         !THROUGHPUT_EMPOWER_DEFENSIVE_IDS.has(cd.spellId)
       ) {
@@ -1692,7 +1712,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
 
       addEntry(
         cast.timeSeconds,
-        `${fmtTime(cast.timeSeconds)}  ${prefix}   ${displayNameWithChannel}${effectiveTargetPart}${outgoingDrNote}${immuneNote}${empowerNote}${dampeningNote}${cheaperNote}${groundingNote}${interruptNote}${ownerHardCcTagAt(cast.timeSeconds)}${unnecessaryNote}`,
+        `${fmtTime(cast.timeSeconds)}  ${prefix}   ${displayNameWithChannel}${effectiveTargetPart}${outgoingDrNote}${immuneNote}${empowerNote}${dampeningNote}${cheaperNote}${groundingNote}${interruptNote}${isProc ? "" : ownerHardCcTagAt(cast.timeSeconds)}${unnecessaryNote}`,
         ...extraLines,
       );
     }
@@ -2234,6 +2254,9 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   for (const { player, spec, cds } of teammateCDs) {
     for (const cd of cds) {
       const isCC = ccSpellIds.has(cd.spellId);
+      // Same as the owner loop: a proc-only entry's activations are not presses.
+      const isProc = cdIsProcOnly(cd);
+      if (isProc) procLinesEmitted = true;
       for (const cast of cd.casts) {
         const groundingNote = groundingAbsorbNote(
           cd.spellId,
@@ -2247,7 +2270,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
         // per-caster, so this cast object can carry the same timingLabel/timingContext. Consume
         // verbatim, no recompute (single-source predicate).
         const unnecessaryNote =
-          cast.timingLabel === "Unnecessary" && cast.timingContext
+          !isProc && cast.timingLabel === "Unnecessary" && cast.timingContext
             ? ` [UNNECESSARY — ${cast.timingContext}]`
             : "";
 
@@ -2279,7 +2302,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
           }
           line = `${fmtTime(cast.timeSeconds)}  [TEAM] [CC]   ${pid(player.name)} (${spec}) cast ${cd.spellName}${effectiveTgt}${groundingNote}${unnecessaryNote}`;
         } else {
-          line = `${fmtTime(cast.timeSeconds)}  [TEAM] [CD]   ${pid(player.name)} (${spec}): ${cd.spellName}${groundingNote}${unnecessaryNote}`;
+          line = `${fmtTime(cast.timeSeconds)}  [TEAM] ${isProc ? "[PROC]" : "[CD]"}   ${pid(player.name)} (${spec}): ${cd.spellName}${groundingNote}${unnecessaryNote}`;
         }
         addEntry(
           cast.timeSeconds,
@@ -3819,9 +3842,14 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     ...(cdPriorEntries.length > 0 ? CD_PRIOR_LEGEND : []),
     ...(stackedDefensiveEntries.length > 0 ? STACKED_DEFENSIVES_LEGEND : []),
     ...(drClashEntries.length > 0 ? DR_CLASH_LEGEND : []),
+    ...(procLinesEmitted
+      ? [
+          "[PROC] = an automatically applied effect (a passive or a talent-replaced button); no button was pressed at that second, so it is never a timing or choice to judge.",
+        ]
+      : []),
     "",
     `[PERSPECTIVE: Log Owner - ${ownerSpec}]`,
-    `(You are the ${ownerSpec} in this match. Your actions are marked with [YOU].)`,
+    `(You are the ${ownerSpec} in this match. Your actions and effects on you are marked with [YOU].)`,
     "",
   ];
   for (const entry of entries) {

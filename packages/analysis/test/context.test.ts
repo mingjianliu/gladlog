@@ -91,7 +91,8 @@ describe("buildMatchContext on real fixture", () => {
     expect(ctx).toContain("Ice Block [150s, lasts 10s]");
     // offensive / control cooldowns keep the old shape
     expect(ctx).toContain("Combustion [60s]");
-    expect(ctx).toContain("Psychic Scream [20s]");
+    // 2026-09-26: 30 s = DB2 40 − Psychic Voice 10, applied once (the hand override used to hold 30 and the talent took 10 again → 20).
+    expect(ctx).toContain("Psychic Scream [30s]");
   });
 
   it("healer owner:timeline 上下文不含 <burst_ledger>(治疗 prompt 不变,D2)", () => {

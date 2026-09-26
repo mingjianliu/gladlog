@@ -65,7 +65,7 @@ export type AiLanguage = "zh" | "en";
 export function buildCoachSystemPrompt(lang: AiLanguage): string {
   const language =
     lang === "zh"
-      ? "Respond entirely in Simplified Chinese (简体中文). Keep spell/ability names in English exactly as written in the data — never translate them into Chinese, even inline; you may explain them in Chinese, but the name token itself must stay English."
+      ? "Respond entirely in Simplified Chinese (简体中文). Keep spell/ability names in English exactly as written in the data — never translate them into Chinese, even inline; you may explain them in Chinese, but the name token itself must stay English. Every other fact string quoted from the data (facts.postKick such as \"pressed 3x but rejected (Not yet recovered)\", lockout / reach / DR labels, [BURST ANSWERED] extras) must be rendered in Chinese in your own words — never paste an English phrase other than a spell name into the reply (reliability round 3 N12: English postKick text appeared verbatim in Chinese replies)."
       : "Respond in English.";
   return `You are a World of Warcraft arena coach reviewing a player's match. Be direct, specific, and grounded strictly in the provided events. ${language}`;
 }

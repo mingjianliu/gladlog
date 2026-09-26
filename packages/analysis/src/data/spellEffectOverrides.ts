@@ -61,7 +61,7 @@ export const SPELL_EFFECT_OVERRIDES: Record<string, IMinedSpell> =
       e("122470", "Touch of Karma", 90, 10),
       e("198589", "Blur", 60, 10),
       e("104773", "Unending Resolve", 180, 8),
-      e("108271", "Astral Shift", 90, 12),
+      { ...SPELL_EFFECTS_GENERATED["108271"]!, durationSeconds: 12 }, // cooldown stays DB2's 120 s (the merge replaces the whole row per id, so the row is built from the generated one): the hand 90: the hand 90 already held Planes Traveler's −30 and CD_TALENT_MODIFIERS subtracted it again → 60 s. Corpus 2026-09-26 (605 files, recastGapHistogram --split-talent 381647): holders floor 90 s (Ele 25 / Enh 36 gaps), non-holders 120–136 s. Reliability round 3 eb80.
       e("186265", "Aspect of the Turtle", 180, 8),
       e("109304", "Exhilaration", 120),
       e("363916", "Obsidian Scales", 90, 12),
@@ -154,7 +154,7 @@ export const SPELL_EFFECT_OVERRIDES: Record<string, IMinedSpell> =
       e("132409", "Spell Lock", 24),
       e("351338", "Quell", 40),
       e("15487", "Silence", 45),
-      e("8122", "Psychic Scream", 30, 6),
+      { ...SPELL_EFFECTS_GENERATED["8122"]!, durationSeconds: 6 }, // cooldown stays DB2's 40 s (row built from the generated one, see Astral Shift): the hand 30: the hand 30 already held Psychic Voice's −10 and CD_TALENT_MODIFIERS subtracted it again → 20 s. Corpus 2026-09-26 (605 files, --split-talent 196704): holders floor 29–30 s (1,909 gaps, 3 specs), non-holders 40 s (187 gaps). Reliability round 2 W2b (7b3c "≥ 30 s observed").
       e("78675", "Solar Beam", 60),
     ].map((s) => [s.spellId, s]),
   );

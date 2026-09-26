@@ -11,6 +11,7 @@ import {
 
 import { PVP_TALENT_POOL_GENERATED } from "../data/pvpTalentPoolGenerated";
 import { PVP_TALENT_REPLACES_GENERATED } from "../data/pvpTalentReplacesGenerated";
+import { replacedSpellIds } from "../data/talentReplaces";
 
 /**
  * Three-state verdict of "does THIS player actually have spell X in THIS
@@ -81,9 +82,22 @@ export function talentOwnershipFromTables(
   // 4. Talent-gated spell: judge by the player's actual selection
   // (choice/subtree nodes count only the chosen entry).
   const talents = unit.info?.talents;
+  const selected =
+    talents && talents.length > 0
+      ? getPlayerTalentedSpellInfo(specId, talents)
+      : null;
+  // 3b. A selected class / hero talent REPLACES the spell → the button no
+  // longer exists, whatever the tree says about the spell's own node
+  // (`TALENT_REPLACES`, tooltip-proven pairs; reliability audit C1 2026-09-26:
+  // a Farseer Restoration Shaman "owned" Nature's Swiftness through its class
+  // node while Ancestral Swiftness had replaced it). Same shape as step 2.
+  if (
+    selected !== null &&
+    replacedSpellIds(new Set(selected.keys()), new Set(), {}).has(spellId)
+  )
+    return "no";
   if (specTree.has(spellId)) {
     if (!talents || talents.length === 0) return "unknown";
-    const selected = getPlayerTalentedSpellInfo(specId, talents);
     if (selected === null) return "unknown";
     if (selected.has(spellId)) return "yes";
     // Auto-granted (free/entry) nodes are not reported in COMBATANT_INFO —

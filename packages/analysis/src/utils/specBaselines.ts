@@ -1,5 +1,5 @@
 import benchmarksJson from '../data/benchmarks.json';
-import { IMajorCooldownInfo } from './cooldowns';
+import { cdIsProcOnly, IMajorCooldownInfo } from './cooldowns';
 import { fmtTime } from './renderGrid';
 
 // benchmarks.json is a copy of packages/analysis/benchmarks/benchmark_data.json (collectBenchmarks.ts default --out).
@@ -44,7 +44,9 @@ export function formatSpecBaselines(ownerSpec: string, ownerCDs: IMajorCooldownI
     );
   }
 
-  const relevantCDs = ownerCDs.filter((cd) => spec.cdUsage[cd.spellName]);
+  // The table promises first-USE timing; a proc-only entry (Renewing Blaze —
+  // its "use" is Obsidian Scales' proc) has no use to time (round 3 N5).
+  const relevantCDs = ownerCDs.filter((cd) => spec.cdUsage[cd.spellName] && !cdIsProcOnly(cd));
   if (relevantCDs.length > 0) {
     lines.push('  CD reference (% of matches used | median first use | p75 first use):');
     for (const cd of relevantCDs) {
