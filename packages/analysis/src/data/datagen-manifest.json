@@ -145,7 +145,7 @@
     },
     "spellReachGenerated.json": {
       "spells": 3017,
-      "bytes": 224629,
+      "bytes": 224626,
       "generator": "scripts/datagen/genSpellReach.ts",
       "consumer": "utils/spellRange.ts (caster + talent range: kicks, externals, cleanse / purge, healer reach, CC threat — GH #83); utils/deathOutcomeAnalysis.ts externalReachYards (GH #34 ②)"
     },

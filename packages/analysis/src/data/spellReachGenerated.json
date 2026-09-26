@@ -32,7 +32,7 @@
     "585": {"rangeYards":40,"radiusYards":0,"reachYards":40,"rangeMods":[{"talent":"459559","pct":15}]},
     "589": {"rangeYards":40,"radiusYards":0,"reachYards":40,"rangeMods":[{"talent":"459559","pct":15}]},
     "596": {"rangeYards":40,"radiusYards":40,"reachYards":80,"rangeMods":[{"talent":"459559","pct":15}]},
-    "605": {"rangeYards":30,"radiusYards":100,"reachYards":130,"rangeMods":[{"talent":"459559","pct":15}]},
+    "605": {"rangeYards":30,"radiusYards":0,"reachYards":30,"rangeMods":[{"talent":"459559","pct":15}]},
     "633": {"rangeYards":40,"radiusYards":0,"reachYards":40},
     "686": {"rangeYards":40,"radiusYards":0,"reachYards":40},
     "688": {"rangeYards":50000,"radiusYards":0,"reachYards":50000,"source":"triggered by 7763"},

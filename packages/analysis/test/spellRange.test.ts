@@ -67,6 +67,18 @@ describe("spellRangeForCaster", () => {
       spellReachForCaster(unit("256", [PHANTOM_REACH]), "32375"),
     ).toBeCloseTo(49.5, 5);
   });
+
+  it("a possession row's radius does not extend reach (Mind Control 34.5, not 134.5)", () => {
+    // Reliability round 3 (1bad): 605's MOD_POSSESS row carries a 100 yd
+    // radius on a single-target row — not an area around the target.
+    expect(
+      spellReachForCaster(unit("258", [PHANTOM_REACH]), "605"),
+    ).toBeCloseTo(34.5, 5);
+    // the rule is aura-type scoped: a caster-centred aura and a placed
+    // area keep their radius
+    expect(spellReachForCaster(unit("1467"), "374227")).toBe(20); // Zephyr
+    expect(spellReachForCaster(unit("250"), "51052")).toBe(38); // AMZ 30 + 8
+  });
 });
 
 describe("healerReachYards", () => {

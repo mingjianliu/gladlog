@@ -108,6 +108,7 @@
     "test/datagen.mitigation.test.ts",
     "test/datagen.simcHotfix.test.ts",
     "test/datagen.spellNamesZh.test.ts",
+    "test/datagen.spellReach.test.ts",
     "test/datagen.talentMitigation.test.ts",
     "test/datagen/classMapValidate.test.ts",
     "test/datagen/lib.test.ts",

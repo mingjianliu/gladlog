@@ -59,6 +59,53 @@ const LINKED_REACH_SPELL: Record<string, string> = {
   "31821": "465", // Aura Mastery → Devotion Aura's 40 yd radius
 };
 
+/** SpellEffect.Effect 6 = APPLY_AURA. */
+const APPLY_AURA = "6";
+/** Aura types whose radius does not extend the spell's initial reach: 2
+ * MOD_POSSESS — Mind Control 605 carries 100 yd on its single-target
+ * possession row (reliability round 3, 1bad: range + that = 130 yd). Only
+ * evidenced types are listed; other ambiguous radii (chain jumps, delayed
+ * areas, BIND_SIGHT) stay as they were (codex astra). */
+const NON_REACH_RADIUS_AURA_TYPES = new Set(["2"]);
+
+/**
+ * Per spell: the largest radius among its effect rows (a row of a
+ * NON_REACH_RADIUS_AURA_TYPES aura contributes none, other rows of the same
+ * spell keep theirs), and which casts trigger it (EffectTriggerSpell — GH
+ * #83: aura ids the log records for a CC, Fear 118699 / Storm Bolt 132169,
+ * carry no range of their own; the cast that triggers them does).
+ */
+export function effectRadiiAndParents(
+  rows: ReadonlyArray<Record<string, unknown>>,
+  radiusCols: readonly string[],
+  radiusById: ReadonlyMap<string, number>,
+  triggerCol: string | undefined,
+): {
+  radiusBySpell: Map<string, number>;
+  parentsOf: Map<string, string[]>;
+} {
+  const radiusBySpell = new Map<string, number>();
+  const parentsOf = new Map<string, string[]>();
+  for (const r of rows) {
+    const id = String(r.SpellID);
+    const nonReach =
+      String(r.Effect) === APPLY_AURA &&
+      NON_REACH_RADIUS_AURA_TYPES.has(String(r.EffectAura));
+    if (!nonReach)
+      for (const c of radiusCols) {
+        const rad = radiusById.get(String(r[c])) ?? 0;
+        if (rad > (radiusBySpell.get(id) ?? 0)) radiusBySpell.set(id, rad);
+      }
+    const trig = triggerCol ? String(r[triggerCol] ?? "0") : "0";
+    if (trig !== "0" && trig !== "" && trig !== id) {
+      const list = parentsOf.get(trig) ?? [];
+      if (!list.includes(id)) list.push(id);
+      parentsOf.set(trig, list);
+    }
+  }
+  return { radiusBySpell, parentsOf };
+}
+
 async function main() {
   const build = await resolveBuild(process.argv[2]);
   const cacheDir = process.env.DATAGEN_CACHE ?? undefined;
@@ -68,7 +115,7 @@ async function main() {
   const rad = parseCsv(await fetchTable("SpellRadius", build, cacheDir));
   assertColumns(misc.header, ["SpellID", "RangeIndex"], "SpellMisc");
   assertColumns(range.header, ["ID"], "SpellRange");
-  assertColumns(eff.header, ["SpellID"], "SpellEffect");
+  assertColumns(eff.header, ["SpellID", "Effect", "EffectAura"], "SpellEffect");
   assertColumns(rad.header, ["ID", "RadiusMax"], "SpellRadius");
   const rangeMaxCol = range.header.find((h) => /^RangeMax[_[]0/.test(h));
   const radiusCols = eff.header.filter((h) => /^EffectRadiusIndex[_[]/.test(h));
@@ -90,25 +137,12 @@ async function main() {
         String(r.SpellID),
         rangeById.get(String(r.RangeIndex)) ?? 0,
       );
-  const radiusBySpell = new Map<string, number>();
-  // GH #83: which casts trigger which spell (SpellEffect.EffectTriggerSpell).
-  // Aura ids the log records for a CC (Fear 118699, Storm Bolt 132169, …)
-  // carry no range of their own; the cast that triggers them does.
-  const triggerCol = eff.header.find((h) => /^EffectTriggerSpell$/.test(h));
-  const parentsOf = new Map<string, string[]>();
-  for (const r of eff.rows) {
-    const id = String(r.SpellID);
-    for (const c of radiusCols) {
-      const rad = radiusById.get(String(r[c])) ?? 0;
-      if (rad > (radiusBySpell.get(id) ?? 0)) radiusBySpell.set(id, rad);
-    }
-    const trig = triggerCol ? String(r[triggerCol] ?? "0") : "0";
-    if (trig !== "0" && trig !== "" && trig !== id) {
-      const list = parentsOf.get(trig) ?? [];
-      if (!list.includes(id)) list.push(id);
-      parentsOf.set(trig, list);
-    }
-  }
+  const { radiusBySpell, parentsOf } = effectRadiiAndParents(
+    eff.rows,
+    radiusCols,
+    radiusById,
+    eff.header.find((h) => /^EffectTriggerSpell$/.test(h)),
+  );
 
   // Universe = the ally-castable externals deathOutcomeAnalysis walks ∪ every
   // interrupt the kit table can assign (GH #78 / #88, 2026-09-12: kick range
@@ -272,7 +306,8 @@ async function main() {
   );
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+if (process.argv[1]?.endsWith("genSpellReach.ts"))
+  main().catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });

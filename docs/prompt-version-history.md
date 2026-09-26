@@ -1440,3 +1440,8 @@ span's first second ("| at m:ss: D yd, DR L[, T PvP trinket …]") — DR can re
 inside the span (52 of 744 rows on the 605-file capture). The legend says the
 snapshot can change later; every counted second still passed every check.
 Rows 744 → 744, nothing else moves.
+
+v165 (2026-09-26, reliability round 3 wave 2, audit 1bad): Mind Control's
+possession radius (100 yd on its single-target MOD_POSSESS row) no longer adds
+to its reach — kick-eaten yourReachYd 135 → 35 (130 → 30 without Phantom
+Reach). 605 files: 49 kick-eaten lines change, nothing else.
