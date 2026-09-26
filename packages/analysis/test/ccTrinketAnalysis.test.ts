@@ -34,12 +34,14 @@ describe("bindBreakToWindow and findBrokenCC", () => {
       expect(bound).toBe(window);
     });
 
-    it("binds a break cast within ±250ms of the active window boundaries", () => {
+    it("binds a break cast up to 250 ms before the apply and up to 50 ms after the removal (trinketBreakOrderScan 2026-09-26)", () => {
       const window: ICCBreakableWindow = { applyMs: 10_000, removeMs: 16_000 };
       // 200ms before apply
       expect(bindBreakToWindow([window], 9_800)).toBe(window);
-      // 200ms after remove
-      expect(bindBreakToWindow([window], 16_200)).toBe(window);
+      // 40ms after remove — the trinket's own removal lands within ±25 ms
+      expect(bindBreakToWindow([window], 16_040)).toBe(window);
+      // 200ms after remove — the CC had already ended some other way (dece)
+      expect(bindBreakToWindow([window], 16_200)).toBeUndefined();
     });
 
     it("binds to the window with the longest duration when multiple windows overlap", () => {
@@ -72,7 +74,7 @@ describe("bindBreakToWindow and findBrokenCC", () => {
       expect(bindBreakToWindow([window], 17_000)).toBeUndefined();
     });
 
-    it("matches exactly at the 250ms tolerance boundary, but not at 251ms", () => {
+    it("matches exactly at the 250 ms before-apply boundary (not 251), and at 50 ms after the removal (not 51)", () => {
       const window: ICCBreakableWindow = { applyMs: 10_000, removeMs: 16_000 };
 
       // Exactly at -250ms (9_750ms) -> matches
@@ -80,10 +82,9 @@ describe("bindBreakToWindow and findBrokenCC", () => {
       // At -251ms (9_749ms) -> undefined
       expect(bindBreakToWindow([window], 9_749)).toBeUndefined();
 
-      // Exactly at +250ms (16_250ms) -> matches
-      expect(bindBreakToWindow([window], 16_250)).toBe(window);
-      // At +251ms (16_251ms) -> undefined
-      expect(bindBreakToWindow([window], 16_251)).toBeUndefined();
+      // After the removal the bound is 50 ms (TRINKET_BREAK_AFTER_REMOVAL_MS)
+      expect(bindBreakToWindow([window], 16_050)).toBe(window);
+      expect(bindBreakToWindow([window], 16_051)).toBeUndefined();
     });
   });
 

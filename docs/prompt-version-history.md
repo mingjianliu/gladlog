@@ -1550,3 +1550,13 @@ dps 87 → 82, healer 110 → 109 (Darkness −4, Ironbark −1, Blessing of
 Protection −1); (2) kick-eaten measures a pet kicker (Felhunter Spell Lock,
 Axe Toss) from the pet's own position: nearestKickerDistYd / kickersInRange
 change on 128 kick-eaten facts, ids unchanged. Context byte-identical.
+
+v174 (2026-09-26, reliability leftovers batch 6): (1) a trinket or break racial
+binds to a CC only when cast ≤ 50 ms after the CC's removal (was 250;
+trinketBreakOrderScan: the trinket's own removals land within ±25 ms of the
+cast, removals earlier than that ended another way, every damage break falls
+before the cast): [ENEMY TRINKET] "out of X" 11,191 → 10,975 lines,
+cc-avoidable 43 → 42; (2) kick-eaten's "pressed N× but rejected" counts every
+rejected press (was the intent-filtered set — HoJ pressed 4× read "1x"); the
+ranking keeps the filtered set: facts change on 83 kick-eaten lines, ids
+unchanged.

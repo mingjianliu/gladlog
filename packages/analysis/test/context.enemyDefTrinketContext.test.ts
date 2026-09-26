@@ -277,8 +277,9 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
       ],
     });
 
-    // CC ended at 42.4s (42400ms).
-    // Raw trinket cast is at 42.6s (42600ms). 42600 - 42400 = 200ms <= 250ms -> matches CC break!
+    // CC ended at 42.58s (42580ms).
+    // Raw trinket cast is at 42.6s (42600ms). 42600 - 42580 = 20ms <= 50ms
+    // (TRINKET_BREAK_AFTER_REMOVAL_MS) -> matches CC break!
     const enemyCCSummaries: IPlayerCCTrinketSummary[] = [
       makeCCTrinketSummary({
         playerName: "EnemyRogue",
@@ -286,7 +287,7 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
         ccInstances: [
           makeCCInstance({
             atSeconds: 38,
-            durationSeconds: 4.4, // ends at 42.4s
+            durationSeconds: 4.58, // ends at 42.58s
             damageTakenDuring: 20_000,
           }),
         ],

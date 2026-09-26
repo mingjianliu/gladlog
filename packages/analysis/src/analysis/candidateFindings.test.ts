@@ -1536,7 +1536,11 @@ describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
     expect(f).toBe("first cast 1.3s later");
   });
 
-  it("kick-eaten: rejected presses go through the shared intent-guard filter (a press that self-resolved into the same spell within 2 s does not count)", () => {
+  // 2026-09-26 (round-1 rerun #4, 825ca842 @263): the TEXT counts every
+  // rejected press — a press the game refused is a press, and "pressed 1x"
+  // for four HoJ presses was false; the intent-guard filter still decides the
+  // RANKING (postKickSeverityRank), as for cd-hoarded.
+  it("kick-eaten: the text states every rejected press, even one that self-resolved into the same spell within 2 s", () => {
     const f = kickEatenEvents(
       [kickInst({ postKick: "acted", firstActionDelayS: 3.0 })],
       { id: "P1", name: "Me" },
@@ -1545,7 +1549,7 @@ describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
         ownerCasts: [{ spellId: "853", tSeconds: 94.13 }],
       },
     )[0]!.facts["postKick"]!;
-    expect(f).not.toContain("rejected");
+    expect(f).toContain("pressed 1x but rejected (Hammer of Justice) inside the lockout");
   });
 
   it("kick-eaten: without raw streams the line is unchanged (old archives)", () => {

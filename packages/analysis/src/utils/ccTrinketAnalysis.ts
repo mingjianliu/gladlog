@@ -123,6 +123,19 @@ const SIGNIFICANT_CC_DAMAGE = 30_000;
  */
 export const TRINKET_BREAK_TOLERANCE_MS = 250;
 
+/**
+ * How far AFTER a CC's removal a break cast may still be the thing that broke
+ * it. Corpus (trinketBreakOrderScan, 605 archive files, 2026-09-26): of 6,017
+ * Gladiator's Medallion casts, the CC removals cluster within ±25 ms of the
+ * cast (1,461 in [−25, 0), 4,281 in [0, 25)); removals 25–500 ms BEFORE the
+ * cast are a flat tail of 641 — the CC ended some other way first — and all
+ * 219 damage breaks (SPELL_AURA_BROKEN / _SPELL) fall before the cast, 91 %
+ * of them by more than 25 ms. The symmetric 250 ms let "used PvP trinket out
+ * of Howl of Terror" name a Howl that Starsurge broke 152 ms earlier (round 2
+ * W2f, dece). 50 ms keeps every bin the trinket's own removal lands in.
+ */
+export const TRINKET_BREAK_AFTER_REMOVAL_MS = 50;
+
 // Position snapshots are event-driven; beyond this gap to the nearest snapshot
 // the interpolated position is fabricated (unit idle/stealthed — worst in openers).
 // T3 grounding guard: 8s allowed linear interpolation through the middle of a
@@ -495,12 +508,13 @@ export function bindBreakToWindow<T extends ICCBreakableWindow>(
   windows: T[],
   castTs: number,
   toleranceMs = TRINKET_BREAK_TOLERANCE_MS,
+  afterRemovalMs = TRINKET_BREAK_AFTER_REMOVAL_MS,
 ): T | undefined {
   let primary: T | undefined;
   let primaryDurationMs = -1;
   for (const w of windows) {
     const activeAtCast =
-      castTs >= w.applyMs - toleranceMs && castTs <= w.removeMs + toleranceMs;
+      castTs >= w.applyMs - toleranceMs && castTs <= w.removeMs + afterRemovalMs;
     if (!activeAtCast) continue;
     const durationMs = w.removeMs - w.applyMs;
     if (durationMs > primaryDurationMs) {

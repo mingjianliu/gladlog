@@ -1030,6 +1030,7 @@ export function kickEatenEvents(
     .map((k) => ({
       k,
       rejected: rejectedPressesAfterKick(k, owner.id, intent),
+      pressed: allRejectedPressesAfterKick(k, owner.id, intent),
       p: pressure?.(k),
     }))
     .filter(({ p }) => !p || !kickIsHarmless(p));
@@ -1044,7 +1045,7 @@ export function kickEatenEvents(
         a.k.atSeconds - b.k.atSeconds,
     )
     .slice(0, KICK_EATEN_CAP)
-    .map(({ k, rejected, p }) => ({
+    .map(({ k, pressed, p }) => ({
       id: `kick-eaten:${owner.id}:${Math.round(k.atSeconds)}`,
       type: "kick-eaten",
       t: k.atSeconds,
@@ -1148,7 +1149,11 @@ export function kickEatenEvents(
         // "instants escape the lockout" — reliability audit D4(c).) The qualifier
         // is joined with "; " not ", ": a ", " inside a facts value is cut off
         // by every text-side facts parser (`checkFactsBlockIntegrity`).
-        postKick: postKickFact(k, rejected),
+        // The TEXT counts every rejected press (round-1 rerun #4, 825ca842
+        // @263: HoJ pressed 4× in the lockout rendered "pressed 1x" — three
+        // were 尚未恢复 GCD presses the intent filter drops); the ranking above
+        // keeps the filtered evidence set, as cd-hoarded does.
+        postKick: postKickFact(k, pressed),
         ...(p ? kickPressureFacts(p) : {}),
         ...(cancels ? castCancelFacts(cancels, k.sourceName) : {}),
       },
@@ -1211,6 +1216,24 @@ function kickPressureFacts(p: KickPressure): Record<string, string> {
  * uses (predicate index: "Which SPELL_CAST_FAILED hits count as genuine
  * pressed-but-rejected evidence") — so a GCD-spam 尚未恢复 or a press that
  * self-resolved into a same-spell cast within 2 s never counts here either. */
+/** Every SPELL_CAST_FAILED of the owner strictly after the kick inside the
+ * post-kick window — unfiltered, for the literal "pressed N×" count (a GCD
+ * press the game refused is still a press). The evidence-grade subset for
+ * ranking is `rejectedPressesAfterKick`. */
+function allRejectedPressesAfterKick(
+  k: { atSeconds: number },
+  ownerId: string,
+  intent: { rawStreams?: RawStreams } | undefined,
+): CastFailedEvent[] {
+  if (!intent?.rawStreams) return [];
+  return castFailedInWindow(
+    intent.rawStreams,
+    ownerId,
+    k.atSeconds,
+    k.atSeconds + POST_KICK_WINDOW_S,
+  ).filter((h) => h.tSeconds > k.atSeconds);
+}
+
 function rejectedPressesAfterKick(
   k: { atSeconds: number },
   ownerId: string,
