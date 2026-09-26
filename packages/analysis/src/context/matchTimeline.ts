@@ -73,6 +73,7 @@ import {
   IDispelEvent,
   IDispelSummary,
   IMissedPurgeWindow,
+  POST_CC_PRESSURE_WINDOW_S,
   wasRemovedByAllyDispel,
 } from "../utils/dispelAnalysis";
 import {
@@ -144,6 +145,7 @@ import {
 import {
   buildKillSequenceBlock,
   buildMatchEndBlock,
+  buildSummonOwnerNames,
   CHANNELED_CD_SPELL_IDS,
   channelWasInterrupted,
   computeHealingInWindow,
@@ -417,6 +419,9 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   );
 
   const _allUnits = allUnits ?? [...friends, ...(enemies ?? [])];
+  // summon GUID → owner name: damage-source labels name a pet / guardian
+  // through its owner (reliability round 3, f4da).
+  const summonOwners = buildSummonOwnerNames(_allUnits);
 
   // criticalWindowSet is built by the caller (buildMatchContext) via
   // buildCriticalWindowSet and passed in — deliberately not built here, or the
@@ -1227,6 +1232,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     pid,
     playerIdMap,
     enemyIdMap,
+    summonOwners,
     counterfactualOf,
     dampeningAt: (atSeconds) =>
       getDampeningPercentage(
@@ -1245,6 +1251,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     enemyPid,
     playerIdMap,
     enemyIdMap,
+    summonOwners,
     dampeningAt: (atSeconds) =>
       getDampeningPercentage(
         params.bracket ?? "3v3",
@@ -1352,7 +1359,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       // stays as the fallback for a bare UNIT_DIED; it cannot serve totems,
       // whose damageIn effectiveAmount is zeroed (pet/guardian target).
       if (kill.finalBlow) {
-        line += ` killed by: ${damageEventLabel(kill.finalBlow, playerIdMap, enemyIdMap)}`;
+        line += ` killed by: ${damageEventLabel(kill.finalBlow, playerIdMap, enemyIdMap, summonOwners)}`;
       } else {
         const topSources = getTopDamageSourcesInWindow(
           unit,
@@ -1361,6 +1368,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
           2,
           playerIdMap,
           enemyIdMap,
+          summonOwners,
         );
         if (topSources.length > 0)
           line += ` killed by: ${topSources.join(", ")}`;
@@ -2952,6 +2960,10 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       )
     )
       continue;
+    // postCcDamage is the first POST_CC_PRESSURE_WINDOW_S after the debuff
+    // landed, not its lifetime — "taken during" beside a 16 s duration was
+    // retold as "took 247k during the 16 s" (reliability round 2, 539f: the
+    // real 16 s figure was 568k).
     const dmgK = Math.round(miss.postCcDamage / 1000);
     const spellName = getEnglishSpellName(miss.spellId, miss.spellName);
     addEntry(
@@ -2959,7 +2971,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       // Exemption context (Fix 5): a missed cleanse while the cleanse was on CD
       // is still rendered (the fact layer hides nothing), but carries a context
       // suffix so the model stops blaming an infeasible dispel as a mistake.
-      `${fmtTime(miss.timeSeconds)}  [UNCLEANSED DEBUFF]   ${spellName} on ${pid(miss.targetName)} | ${miss.durationSeconds.toFixed(0)}s | ${dmgK}k taken during | dispel: ${miss.dispelType}${formatMissedCleanseExemption(miss)}`,
+      `${fmtTime(miss.timeSeconds)}  [UNCLEANSED DEBUFF]   ${spellName} on ${pid(miss.targetName)} | ${miss.durationSeconds.toFixed(0)}s | ${dmgK}k taken in the ${POST_CC_PRESSURE_WINDOW_S}s after it landed | dispel: ${miss.dispelType}${formatMissedCleanseExemption(miss)}`,
     );
   }
 
@@ -3329,6 +3341,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     pid,
     playerIdMap,
     enemyIdMap,
+    summonOwners,
     // 敌方 CC 掩护标注的数据源 —— 与本文件 [CC ON TEAM] 行同一个数组对象
     ccTrinketSummaries,
     ownerName: owner.name,
@@ -3956,6 +3969,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       actorLabel,
       playerIdMap,
       enemyIdMap,
+      summonOwners,
     }),
   );
 

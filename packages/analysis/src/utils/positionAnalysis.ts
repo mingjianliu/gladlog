@@ -47,6 +47,12 @@ import { spellReachToAccuse } from "./spellRange";
 export const CLOSE_RANGE_YARDS = 12; // "in range" of an enemy — shared with rootReachability.ts (melee reach)
 const KITE_DELTA_YARDS = 10; // distance gained that counts as a successful kite(p66,见上)
 const STAY_DELTA_YARDS = 5; // distance gained below this = stayed in(p39,见上)
+/** KITED is the owner's doing only when the owner's own straight-line
+ *  displacement (window start → peak second) is at least this share of the
+ *  distance opened. Reliability round 2 F13 (c540): a Subtlety Rogue
+ *  Hammer-of-Justice'd 92.69–97.18 s stood at (-282.4, -284.8) while the
+ *  Paladin walked 10 yd away — rendered "KITED … opened 7→24.8yd". */
+export const KITE_OWN_SHARE = 0.5;
 const MISSED_PUSH_MELEE_YARDS = 20; // melee parked beyond this = disengaged(≈p95,见上)
 const MISSED_PUSH_RANGED_YARDS = 45; // ranged beyond this = disengaged (max cast range is 40yd — 35–40yd is normal max-range play;实测 0.6% 采样超过,见上)
 // CD_OUT_OF_RANGE: per-spell reach (`cdOutOfRangeReachYards`) since W1f
@@ -172,6 +178,11 @@ export interface IPositionEvent {
    *  enemy's own distance at the end */
   endEnemyName?: string;
   startEnemyEndYards?: number;
+  /** STAYED_IN: the owner's own straight-line displacement between the span's
+   *  first and last render seconds. Reliability round 2 F13 (06bb): the owner
+   *  walked ~18.5 yd while a Death Knight kept up, and "STAYED IN … little
+   *  distance gained" was retold as "stood still" (原地硬抗). */
+  ownerMovedYards?: number;
   /** KITED: when and from whom the peak nearest-enemy distance
    *  (`endDistanceYards`) was measured */
   peakSeconds?: number;
@@ -444,6 +455,12 @@ export function computeOwnerPositionEvents(params: {
     playerName: string;
     ccInstances: Array<Pick<ICCInstance, "atSeconds" | "durationSeconds">>;
   }>;
+  /** CC landed on each enemy (`analyzePlayerCCAndTrinket(enemy, friends…)`):
+   *  a CC'd melee standing next to the healer is not camping them. */
+  enemyCCSummaries?: Array<{
+    playerName: string;
+    ccInstances: Array<Pick<ICCInstance, "atSeconds" | "durationSeconds">>;
+  }>;
   healerExposures?: IHealerBurstExposure[];
   /** B4 fix (optional): damage-spike windows (pre-filtered to >= DMG_SPIKE_THRESHOLD by the
    * caller). When a spike overlaps a burst window, its targetName is the burst-target claim —
@@ -467,6 +484,7 @@ export function computeOwnerPositionEvents(params: {
     friends,
     offensiveWindows,
     friendCCSummaries,
+    enemyCCSummaries,
     healerExposures,
     spikeWindows,
   } = params;
@@ -573,7 +591,37 @@ export function computeOwnerPositionEvents(params: {
       overlappingSpike?.targetName ?? w.mostPressuredTarget?.unitName;
     const burstTargetsOwner =
       targetName !== undefined ? targetName === owner.name : undefined;
-    if (maxDistance - start.distanceYards >= KITE_DELTA_YARDS) {
+    // The owner's own displacement, on the same render-grid seconds.
+    const ownerStartPos = getUnitPositionAtTime(
+      owner,
+      matchStartMs + tStart * 1000,
+      POSITION_MAX_GAP_MS,
+    );
+    const ownerPeakPos =
+      peak.t === tEnd
+        ? ownerEndPos
+        : getUnitPositionAtTime(
+            owner,
+            matchStartMs + peak.t * 1000,
+            POSITION_MAX_GAP_MS,
+          );
+    const ownerMovedToPeak =
+      ownerStartPos && ownerPeakPos
+        ? distanceBetween(ownerStartPos, ownerPeakPos)
+        : undefined;
+    const ownerMovedToEnd =
+      ownerStartPos && ownerEndPos
+        ? Math.round(distanceBetween(ownerStartPos, ownerEndPos) * 10) / 10
+        : undefined;
+    const opened = maxDistance - start.distanceYards;
+    if (opened >= KITE_DELTA_YARDS) {
+      // Who moved (F13 c540): the enemy walking away from a stunned owner is
+      // not a kite. Unknown owner position ⇒ no claim either way.
+      if (
+        ownerMovedToPeak === undefined ||
+        ownerMovedToPeak < opened * KITE_OWN_SHARE
+      )
+        continue;
       events.push({
         type: "KITED",
         atSeconds: w.fromSeconds,
@@ -641,6 +689,7 @@ export function computeOwnerPositionEvents(params: {
         burstTargetName: burstTargetsOwner === false ? targetName : undefined,
         ownerHpStartPct: hpStart === null ? null : Math.round(hpStart),
         ownerHpMinPct: hpMin === null ? null : Math.round(hpMin),
+        ...(ownerMovedToEnd !== undefined ? { ownerMovedYards: ownerMovedToEnd } : {}),
         healerExposureLabel,
       });
     }
@@ -841,6 +890,40 @@ export function computeOwnerPositionEvents(params: {
       // the scanner).
       const trainerMinDist = new Map<string, number>();
       let trainedCount = 0;
+      const friendIds = new Set(friends.map((f) => f.id));
+      const healerWasTopTarget = (
+        trainerName: string,
+        fromS: number,
+        toS: number,
+      ): boolean => {
+        const trainer = enemyMelee.find((e) => e.name === trainerName);
+        if (!trainer) return false;
+        const fromMs = matchStartMs + fromS * 1000;
+        const toMs = matchStartMs + toS * 1000;
+        const byTarget = new Map<string, number>();
+        for (const d of trainer.damageOut ?? []) {
+          if (d.timestamp < fromMs || d.timestamp > toMs) continue;
+          if (!d.destUnitId || !friendIds.has(d.destUnitId)) continue;
+          byTarget.set(
+            d.destUnitId,
+            (byTarget.get(d.destUnitId) ?? 0) + Math.abs(d.amount),
+          );
+        }
+        const onHealer = byTarget.get(healerUnit.id) ?? 0;
+        if (onHealer <= 0) return false;
+        for (const [id, dmg] of byTarget)
+          if (id !== healerUnit.id && dmg > onHealer) return false;
+        return true;
+      };
+      // A melee under our CC is not camping anyone (539f: Chaos Nova held the
+      // rogue 114.84–119.35 s, half the "camp").
+      const enemyCcOf = new Map(
+        (enemyCCSummaries ?? []).map((c) => [c.playerName, c.ccInstances]),
+      );
+      const ccdAt = (name: string, tS: number): boolean =>
+        (enemyCcOf.get(name) ?? []).some(
+          (cc) => tS >= cc.atSeconds && tS < cc.atSeconds + cc.durationSeconds,
+        );
 
       const closeTrainRun = (endSeconds: number) => {
         if (
@@ -855,6 +938,17 @@ export function computeOwnerPositionEvents(params: {
               topTrainer = name;
               topSeconds = secs;
             }
+          }
+          // Proximity is not training (reliability round 2 F13, 539f): the
+          // Assassination Rogue stood 3–9 yd from the Evoker while doing
+          // 209k to the Havoc DH and 48k to the Evoker. The named camper
+          // must have hit the healer at least as hard as any other friendly
+          // over the run.
+          if (!healerWasTopTarget(topTrainer, runStart, endSeconds)) {
+            runStart = null;
+            trainerSeconds.clear();
+            trainerMinDist.clear();
+            return;
           }
           events.push({
             type: "HEALER_TRAINED",
@@ -892,6 +986,7 @@ export function computeOwnerPositionEvents(params: {
           const perEnemyDist = new Map<string, number>();
           for (const e of enemyMelee) {
             if (isDeadAt(e, tMs)) continue;
+            if (ccdAt(e.name, t)) continue;
             const ePos = getUnitPositionAtTime(e, tMs, POSITION_MAX_GAP_MS);
             if (!ePos) continue;
             const d = distanceBetween(healerPos, ePos);
@@ -931,6 +1026,14 @@ export function computeOwnerPositionEvents(params: {
 
 // ─── Formatter ───────────────────────────────────────────────────────────────
 
+/** STAYED_IN: the owner's own displacement (render-grid span ends). The
+ *  positioning gate re-derives it (G4 "you moved"). */
+function movedStr(e: IPositionEvent): string {
+  return e.ownerMovedYards === undefined
+    ? ""
+    : ` — you moved ${e.ownerMovedYards} yd yourself (span start→end)`;
+}
+
 /** STAYED_IN's nearest-enemy range, only when the window left the endpoint
  * span (GH #103 A7); `from <name>` stays adjacent to "yd" for the G4 gate. */
 function rangeStr(e: IPositionEvent): string {
@@ -964,7 +1067,7 @@ export function formatPositionEventsForContext(
 
   if (stayedIn.length > 0) {
     lines.push(
-      "  STAYED IN during enemy burst (close range, little distance gained):",
+      "  STAYED IN during enemy burst (an enemy stayed in close range, little distance gained — says nothing about whether you moved; see 'you moved'):",
     );
     for (const e of stayedIn) {
       const defStr =
@@ -1009,7 +1112,7 @@ export function formatPositionEventsForContext(
           ? `${fmtTime(e.atSeconds)}–${fmtTime(e.toSeconds)}`
           : fmtTime(e.atSeconds);
       lines.push(
-        `    ${spanStr} [${e.dangerLabel} burst] ${e.startDistanceYards}→${e.endDistanceYards}yd from ${stayedEndpointNames(e)}${rangeStr(e)}${targetStr}${exposureStr}${hpStr}${defStr}`,
+        `    ${spanStr} [${e.dangerLabel} burst] ${e.startDistanceYards}→${e.endDistanceYards}yd from ${stayedEndpointNames(e)}${rangeStr(e)}${movedStr(e)}${targetStr}${exposureStr}${hpStr}${defStr}`,
       );
     }
   }

@@ -1596,3 +1596,17 @@ source (leaving stealth) keeps the interval open: [ENEMY DEF] 21,171 →
 [CC ON TEAM] 69,956 → 69,538; candidates +9 (death-setup +6,
 burst-into-mitigation +2, cc-avoidable +1 — merged CCs / walls reach their
 thresholds).
+
+v178 (2026-09-26, reliability leftovers batch 10): position judgements know
+who moved, and nine wording / fact fixes. KITED needs the owner's own
+displacement to cover half the distance opened (1,965 → 1,556 lines);
+STAYED IN states "you moved N yd yourself" (2,084 lines; gate G4b) and the
+header says it is about the enemy staying close; HEALER TRAINED skips campers
+under our CC and needs the healer to be the camper's top damage target
+(2,579 → 1,399). Burst-ledger walls say "already up" (588) or "pressed Ns
+after the burst opened" (2,922); burst-into-mitigation carries wallUp
+(7 before-open / 37 after). The not-ready rejection matches five client
+locales and CRLF logs; kick-eaten names own-cooldown / GCD presses outside
+the locked school (266). [UNCLEANSED DEBUFF] "taken in the 5s after it
+landed"; pillar hints "that enemy only"; damage sources name a summon by
+its owner ("5's guardian"; bare [pet] 4,305 → 5).

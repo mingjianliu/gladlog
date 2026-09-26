@@ -149,6 +149,7 @@ import {
 import {
   filterIntentGuardEvidence,
   INTENT_GUARD_GCD_S,
+  NOT_READY_REASONS,
 } from "./candidates/shared";
 import {
   teammateCrisisIdleEvents,
@@ -1300,13 +1301,51 @@ function postKickFact(
     | "switchSpellName"
     | "switchDelayS"
     | "switchWasHardCast"
-  >,
-  rejected: CastFailedEvent[],
+  > &
+    Partial<
+      Pick<
+        ReturnType<
+          typeof analyzePlayerCCAndTrinket
+        >["interruptInstances"][number],
+        "interruptedSpellId"
+      >
+    >,
+  allRejected: CastFailedEvent[],
 ): string {
   const pressed = (list: CastFailedEvent[]) =>
     `pressed ${list.length}x but rejected (${joinSpellCounts(
       list.map((h) => getEnglishSpellName(String(h.spellId), h.spellName)),
     )})`;
+  // Reliability round 2 (1111 / W2a, "lockout vs own-cooldown rejections"):
+  // a "not ready" press of a spell OUTSIDE the locked school was its own
+  // cooldown, not the kick — the game gives both the same reason text, so
+  // the school decides. Fire Breath rejected 2.0 s after a Disintegrate
+  // kick read as idle time; it is stated apart now.
+  const lockedMask = k.interruptedSpellId
+    ? spellSchoolMask(k.interruptedSpellId)
+    : undefined;
+  const isOwnCd = (h: CastFailedEvent) => {
+    if (lockedMask === undefined || !NOT_READY_REASONS.has(h.reason))
+      return false;
+    const m = spellSchoolMask(String(h.spellId));
+    return m !== undefined && (m & lockedMask) === 0;
+  };
+  const ownCd = allRejected.filter(isOwnCd);
+  const rejected = allRejected.filter((h) => !isOwnCd(h));
+  const ownCdStr =
+    ownCd.length > 0
+      ? `; outside the locked school ${ownCd.length}x not ready yet — its own cooldown or the GCD (${joinSpellCounts(
+          ownCd.map((h) => getEnglishSpellName(String(h.spellId), h.spellName)),
+        )})`
+      : "";
+  return postKickCore(k, rejected, pressed) + ownCdStr;
+}
+
+function postKickCore(
+  k: Parameters<typeof postKickFact>[0],
+  rejected: CastFailedEvent[],
+  pressed: (list: CastFailedEvent[]) => string,
+): string {
   if (k.postKick === "idle")
     return rejected.length > 0
       ? `no successful cast for 5s after the kick; ${pressed(rejected)}`
@@ -1417,6 +1456,7 @@ export function positionMistakeEvents(
     | "nearestEnemyName"
     | "ownerHpStartPct"
     | "ownerHpMinPct"
+    | "ownerMovedYards"
     | "spellName"
     | "startDistanceYards"
   >[],
@@ -1446,6 +1486,10 @@ export function positionMistakeEvents(
       if (e.ownerHpMinPct != null)
         facts.hpMin = String(Math.round(e.ownerHpMinPct));
       if (e.spellName) facts.spell = e.spellName;
+      // Reliability round 2 F13 (06bb): the owner's own displacement, so a
+      // chaser keeping pace is not retold as "stood still".
+      if (e.type === "STAYED_IN" && e.ownerMovedYards !== undefined)
+        facts.moved = String(Math.round(e.ownerMovedYards));
       if (e.startDistanceYards != null)
         facts.dist = String(Math.round(e.startDistanceYards));
       return {
@@ -2978,6 +3022,16 @@ function dpsOwnerEvents(
           mitSpell,
           mitPct: String(mitPct),
           betterTarget: betterTargetName,
+          // a0a4 / 1c12: a wall pressed after the opening is the target's
+          // reaction — the opening was not "into" it
+          ...(hitDef.startOffsetSeconds !== undefined
+            ? {
+                wallUp:
+                  hitDef.startOffsetSeconds <= 0
+                    ? "before-open"
+                    : `+${hitDef.startOffsetSeconds.toFixed(1)}s`,
+              }
+            : {}),
           ...(duringExternal ? { duringExternal } : {}),
         },
       });

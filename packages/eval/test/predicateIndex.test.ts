@@ -2027,12 +2027,27 @@ function fixtureUnit(
 const trainedHealer = (): any =>
   fixtureUnit("1", "Healer-Realm-US", CombatUnitSpec.Paladin_Holy, () => 0);
 
-const trainedEnemy = (): any =>
-  fixtureUnit("2", "Trainer-Realm-US", CombatUnitSpec.Warrior_Arms, (t) => {
-    if (t >= 40 && t <= 50) return 1; // genuinely camped segment
-    if (t < 10 || t > 30) return 40; // not camping
-    return Number.isInteger(t) ? 7.5 : 6; // 7.5 on whole seconds, 6.0 on halves
-  });
+const trainedEnemy = (): any => {
+  const u = fixtureUnit(
+    "2",
+    "Trainer-Realm-US",
+    CombatUnitSpec.Warrior_Arms,
+    (t) => {
+      if (t >= 40 && t <= 50) return 1; // genuinely camped segment
+      if (t < 10 || t > 30) return 40; // not camping
+      return Number.isInteger(t) ? 7.5 : 6; // 7.5 on whole seconds, 6.0 on halves
+    },
+  );
+  // HEALER_TRAINED also needs the camper to be hitting the healer (reliability
+  // round 2 F13: proximity is not training) — one swing a second.
+  u.damageOut = Array.from({ length: 60 }, (_, i) => ({
+    timestamp: FIXTURE_START_MS + i * 1000,
+    destUnitId: "1",
+    amount: -1000,
+    effectiveAmount: -1000,
+  }));
+  return u;
+};
 
 /**
  * Producer side runs the real computeOwnerPositionEvents, then renders prompt

@@ -1503,6 +1503,33 @@ describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
     expect(f).toContain("3.2s");
   });
 
+  it("kick-eaten: a not-ready press outside the locked school is its own cooldown, not the kick (round 2, 1111)", () => {
+    // Disintegrate (Spellfrost) kicked; Fire Breath (Fire) pressed 2.0 s later
+    // and refused "not ready" — the kick did not lock Fire.
+    const f = kickEatenEvents(
+      [
+        kickInst({
+          atSeconds: 33.93,
+          lockoutDurationSeconds: 3,
+          interruptedSpellId: "356995",
+          interruptedSpellName: "Disintegrate",
+          postKick: "switched",
+          switchSpellName: "Fire Breath",
+          switchDelayS: 2.4,
+          switchWasHardCast: false,
+        }),
+      ],
+      { id: "P1", name: "Me" },
+      {
+        rawStreams: streams([failed(35.89, 357208, "尚未恢复")]),
+        ownerCasts: [{ spellId: "357208", tSeconds: 36.33 }],
+      },
+    )[0]!.facts["postKick"]!;
+    expect(f).toContain("acted on another school 2.4s later");
+    expect(f).toContain("outside the locked school 1x not ready yet — its own cooldown or the GCD");
+    expect(f).not.toContain(", ");
+  });
+
   it("kick-eaten: a press rejected at exactly the lockout end is not 'inside the lockout' (same boundary as 'waited out')", () => {
     const f = kickEatenEvents(
       [

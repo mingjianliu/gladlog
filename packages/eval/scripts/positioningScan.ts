@@ -15,6 +15,7 @@
  */
 import fs from "fs-extra";
 import path from "path";
+import { gunzipSync } from "node:zlib";
 import { GladLogParser } from "@gladlog/parser";
 import {
   toLegacyMatch,
@@ -75,7 +76,12 @@ async function main() {
 
   for (const logPath of logPaths) {
     try {
-      const content = await fs.readFile(logPath, "utf-8");
+      // archive manifests list .txt.gz files (2026-09-26: read as text they
+      // parsed to nothing, and every prompt reported "missing from logs")
+      const raw = await fs.readFile(logPath);
+      const content = (
+        logPath.endsWith(".gz") ? gunzipSync(raw) : raw
+      ).toString("utf-8");
       const parser = new GladLogParser();
       parser.on("match", (m: any) => collect(m.id, toLegacyMatch(m)));
       parser.on("shuffle", (sh: any) => {

@@ -85,12 +85,29 @@ export const INTENT_GUARD_GCD_S = 1.5;
  * (fires for GCD as well as real cooldowns). Used ONLY to NARROW the
  * gcd-locked exclusion below — matching this string can only ever KEEP a
  * genuinely blocked press (stunned/silenced adjacent to an own cast) from
- * being swallowed; on a non-zh client the narrowing makes the exclusion a
- * no-op and evidence is kept (status-quo behavior). This is the opposite
+ * being swallowed. Every locale's text is in `NOT_READY_REASONS` below (until
+ * 2026-09-26 only this one was matched, so on other clients the exclusion
+ * was a no-op). This is the opposite
  * direction from the locale trap `extendOomTailWithFailedCasts` once had
  * (mana.ts round-1 fix), where string-matching was REQUIRED for a feature
  * to fire at all. */
 export const NOT_READY_REASON_ZH = "尚未恢复";
+
+/** SPELL_FAILED_NOT_READY in every client locale the corpus carries.
+ * Reliability round 2 (2c6e, 2026-09-26): the gcd-locked exclusion matched
+ * only the zh text, so on an English log a Starsurge spam press 0.13 s after
+ * a successful Starsurge rendered as "pressed 1x but rejected … inside the
+ * lockout". Measured on 60 archive files (every 300th of the 2026-08-28
+ * manifest): share of each reason within 1.5 s after the same unit's own
+ * SPELL_CAST_SUCCESS — en 16,942 / 94.7 %, zh 2,487 / 96.5 %, ko 1,265 /
+ * 96.4 %, de 450 / 91.8 %, pt 225 / 89.8 % (vs 28.9 % for "stunned"). */
+export const NOT_READY_REASONS: ReadonlySet<string> = new Set([
+  NOT_READY_REASON_ZH,
+  "Not yet recovered",
+  "아직 사용 불가",
+  "Noch nicht erholt",
+  "Ainda não recuperado",
+]);
 
 /**
  * Filters `castFailedInWindow` hits down to genuine "pressed but rejected"
@@ -102,7 +119,7 @@ export const NOT_READY_REASON_ZH = "尚未恢复";
  *    (`sameSpellCastSeconds` — the builder's own `cd.casts` timeSeconds).
  *    Whatever blocked that instant self-resolved within 2s: the cast went
  *    through.
- *  - gcd-locked (尚未恢复 only): drop a `NOT_READY_REASON_ZH` hit within
+ *  - gcd-locked (not-ready only): drop a `NOT_READY_REASONS` hit within
  *    `INTENT_GUARD_GCD_S` after any of the player's own successful casts
  *    (`opts.ownCastSuccessSeconds`). Optional — absent means this exclusion
  *    is skipped entirely (graceful degradation, same convention as the
@@ -130,7 +147,7 @@ export function filterIntentGuardEvidence(
         ct <= h.tSeconds + INTENT_GUARD_PRE_CAST_EXCLUSION_S,
     );
     if (preCast) return false;
-    if (h.reason === NOT_READY_REASON_ZH && ownCasts) {
+    if (NOT_READY_REASONS.has(h.reason) && ownCasts) {
       const gcdLocked = ownCasts.some(
         (ct) => ct <= h.tSeconds && ct >= h.tSeconds - INTENT_GUARD_GCD_S,
       );

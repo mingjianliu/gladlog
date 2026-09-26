@@ -1921,8 +1921,9 @@ export function checkTeammateCrisisRefConsistency(lines: string[]): string[] {
  * decimal and rounding is monotone, so a line the producer may print always
  * passes here.
  */
+// A "; outside the locked school …" own-cooldown suffix may follow (2026-09-26).
 const KICK_WAITED_OUT =
-  /^waited out the lockout \(first cast ([\d.]+)s later\)$/;
+  /^waited out the lockout \(first cast ([\d.]+)s later\)(?:;|$)/;
 export function checkKickWaitedOutConsistency(lines: string[]): string[] {
   const failures: string[] = [];
   for (let i = 0; i < lines.length; i++) {

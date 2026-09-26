@@ -85,3 +85,23 @@ describe("filterIntentGuardEvidence(#29 意图守护证据过滤)", () => {
     expect(INTENT_GUARD_GCD_S).toBe(1.5);
   });
 });
+
+describe("gcd-locked exclusion matches every client locale (reliability round 2, 2c6e)", () => {
+  it("an English 'Not yet recovered' 0.13 s after an own cast is the GCD, not a rejection", async () => {
+    const { filterIntentGuardEvidence, NOT_READY_REASONS } = await import("./shared");
+    for (const reason of NOT_READY_REASONS) {
+      const kept = filterIntentGuardEvidence(
+        [{ tSeconds: 16.916, reason, spellId: 1, spellName: "Starsurge", unitGuid: "o" } as never],
+        [],
+        { ownCastSuccessSeconds: [16.784] },
+      );
+      expect(kept).toHaveLength(0);
+    }
+    const stunned = filterIntentGuardEvidence(
+      [{ tSeconds: 16.916, reason: "Can't do that while stunned", spellId: 1, spellName: "Starsurge", unitGuid: "o" } as never],
+      [],
+      { ownCastSuccessSeconds: [16.784] },
+    );
+    expect(stunned).toHaveLength(1);
+  });
+});

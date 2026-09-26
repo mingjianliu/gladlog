@@ -378,3 +378,12 @@ describe("drinkingSegments", () => {
     expect(drinkingSegments(flat, GUID)).toEqual([]);
   });
 });
+
+describe("CRLF logs (reliability leftovers batch 10, 02c8e3ac)", () => {
+  it("the cast-failed reason carries no trailing carriage return", () => {
+    const text = [castFailedLine("04:10:50.000", "尚未恢复")].join("\r\n") + "\r\n";
+    const rs = parseRawStreams(text, BASE_MS);
+    expect(rs.castFailed).toHaveLength(1);
+    expect(rs.castFailed[0]!.reason).toBe("尚未恢复");
+  });
+});

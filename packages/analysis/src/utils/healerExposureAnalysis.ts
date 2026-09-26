@@ -539,7 +539,11 @@ export function formatHealerExposureEntries(
       (e.exposureLabel === "Critical" || e.exposureLabel === "Exposed") &&
       e.losBreak &&
       e.losBreak.repositionYards <= 30
-        ? ` — LoS break ~${e.losBreak.repositionYards}yd away (pillar-blocks ${e.losBreak.blocksEnemyName})`
+        ? // "that enemy only" (reliability round 2, 6fcb): a pillar that blocks
+          // the Hunter was advised against the Rogue's melee Kidney Shot.
+          // Kept outside the parenthesis — the G5 gate captures the name
+          // inside it.
+          ` — LoS break ~${e.losBreak.repositionYards}yd away (pillar-blocks ${e.losBreak.blocksEnemyName}) — that enemy only`
         : "";
 
     const exposed = e.threats.filter((t) => !t.losBlocked);

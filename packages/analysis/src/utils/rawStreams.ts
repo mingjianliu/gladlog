@@ -111,6 +111,11 @@ function parseLineInto(
   baseMs: number,
   roundDurationS: number | undefined,
 ): void {
+  // CRLF logs (a share of the archive): the last field — SPELL_CAST_FAILED's
+  // reason — kept a trailing "\r", so "尚未恢复\r" never equalled the
+  // not-ready text and the GCD-locked exclusion was a no-op on those files
+  // (found 2026-09-26, reliability leftovers batch 10, 02c8e3ac).
+  if (line.endsWith("\r")) line = line.slice(0, -1);
   if (!line) return;
   const split = splitRawLine(line);
   if (!split) return; // malformed line — silently skipped, per Global Constraints

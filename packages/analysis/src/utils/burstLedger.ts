@@ -63,6 +63,20 @@ export interface IBurstDefensiveHit {
   /** name of the unit that cast the aura (GH #96 M3b: talents belong to the
    * caster). Optional for hand-built fixtures. */
   casterName?: string;
+  /** Seconds from the burst's start to the aura's application, one decimal;
+   *  ≤ 0 = already up when the burst opened. Reliability round 2 (a0a4,
+   *  1c12): "Target had a major defensive up" was read as "you opened into
+   *  it" when the wall was the target's reaction (Barkskin 1.24 s after
+   *  Bestial Wrath). Optional for hand-built fixtures. */
+  startOffsetSeconds?: number;
+}
+
+/** "already up when the burst opened" / "pressed 1.2s after the burst opened" */
+export function wallTimingPhrase(offsetS: number | undefined): string {
+  if (offsetS === undefined) return "";
+  return offsetS <= 0
+    ? "already up when the burst opened"
+    : `pressed ${offsetS.toFixed(1)}s after the burst opened`;
 }
 
 export interface IBurstTargetDamage {
@@ -233,6 +247,7 @@ export function analyzeBurstLedger(
           isImmunity: SPELLS[iv.spellId]?.type === "immunities",
           appliedByOther: iv.srcUnitName !== target.name,
           casterName: iv.srcUnitName,
+          startOffsetSeconds: Math.round((iv.startMs - fromMs) / 100) / 10,
         });
       }
       defensivesHit.sort((a, b) => b.overlapSeconds - a.overlapSeconds);
@@ -455,7 +470,7 @@ export function formatBurstLedgerForContext(
         // can only be cast on a teammate → it reasons "so it is not target
         // mitigation"). The subject must be explicit.
         lines.push(
-          `    ${d.isImmunity ? "⚠ Target was IMMUNE" : "Target had a major defensive up"}: ${d.spellName} active ON THE TARGET ${d.overlapSeconds.toFixed(1)}s of this burst`,
+          `    ${d.isImmunity ? "⚠ Target was IMMUNE" : "Target had a major defensive up"}: ${d.spellName} active ON THE TARGET ${d.overlapSeconds.toFixed(1)}s of this burst${d.startOffsetSeconds !== undefined ? ` (${wallTimingPhrase(d.startOffsetSeconds)})` : ""}`,
         );
       }
     } else {

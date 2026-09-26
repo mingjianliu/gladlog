@@ -758,6 +758,7 @@ export function damageEventLabel(
   d: ICombatUnit["damageIn"][number],
   playerIdMap?: Map<string, number>,
   enemyIdMap?: Map<string, number>,
+  summonOwners?: ReadonlyMap<string, string>,
 ): string {
   // B24: pet/guardian units may have localized (non-ASCII) names from non-en-US clients;
   // replace with "[pet]" to keep attribution readable without localization noise.
@@ -791,8 +792,10 @@ export function damageEventLabel(
     )
       srcName = "[pet]";
   } else if (isPet) {
-    srcName = "[pet]";
+    srcName = summonLabel(d, srcType, playerIdMap, enemyIdMap, summonOwners);
   }
+  if (srcName === "[pet]" && !isPet)
+    srcName = summonLabel(d, srcType, playerIdMap, enemyIdMap, summonOwners);
 
   const baseSpellLabel = d.spellId
     ? getEnglishSpellName(d.spellId, d.spellName)
@@ -804,6 +807,43 @@ export function damageEventLabel(
     : baseSpellLabel;
 
   return `${srcName} — ${spellLabel}`;
+}
+
+/** summon GUID → owner's full name, for every unit that carries an owner. */
+export function buildSummonOwnerNames(
+  allUnits: readonly ICombatUnit[],
+): Map<string, string> {
+  const byId = new Map(allUnits.map((u) => [u.id, u]));
+  const out = new Map<string, string>();
+  for (const u of allUnits) {
+    if (!u.ownerId || u.ownerId === "0000000000000000") continue;
+    const owner = byId.get(u.ownerId);
+    if (owner && owner.id !== u.id) out.set(u.id, owner.name);
+  }
+  return out;
+}
+
+/** "5's guardian" / "5's pet" — the summon named through its owner's roster
+ * id (reliability round 3, f4da: a Grimoire Imp Lord's Greater Felbolt as a
+ * bare "[pet]" was credited to the Felguard, the one pet the prompt named).
+ * "[pet]" when the owner cannot be resolved. */
+function summonLabel(
+  d: ICombatUnit["damageIn"][number],
+  srcType: CombatUnitType,
+  playerIdMap?: Map<string, number>,
+  enemyIdMap?: Map<string, number>,
+  summonOwners?: ReadonlyMap<string, string>,
+): string {
+  const ownerName = d.srcUnitId ? summonOwners?.get(d.srcUnitId) : undefined;
+  if (!ownerName) return "[pet]";
+  const short = ownerName.split("-")[0];
+  const id =
+    playerIdMap?.get(ownerName) ??
+    playerIdMap?.get(short) ??
+    enemyIdMap?.get(ownerName) ??
+    enemyIdMap?.get(short);
+  if (id === undefined) return "[pet]";
+  return `${id}'s ${srcType === CombatUnitType.Guardian ? "guardian" : "pet"}`;
 }
 
 /** When the unit was summoned (its own SPELL_SUMMON), or null. */
@@ -931,6 +971,7 @@ export function getTopDamageSourcesInWindow(
   topN = 3,
   playerIdMap?: Map<string, number>,
   enemyIdMap?: Map<string, number>,
+  summonOwners?: ReadonlyMap<string, string>,
 ): string[] {
   const startMs = endMs - windowMs;
   const buckets = new Map<string, number>();
@@ -955,7 +996,7 @@ export function getTopDamageSourcesInWindow(
       ? DEFERRED_DAMAGE_SPELL_IDS.has(d.spellId ?? "")
         ? `deferred ${selfName} (own)`
         : `${selfName} (own)`
-      : damageEventLabel(d, playerIdMap, enemyIdMap);
+      : damageEventLabel(d, playerIdMap, enemyIdMap, summonOwners);
     buckets.set(key, (buckets.get(key) ?? 0) + dmg);
   }
   return [...buckets.entries()]
@@ -1089,6 +1130,8 @@ export function buildKillSequenceBlock(params: {
    * them a player-flagged killer with a localized name read "[pet]") */
   playerIdMap?: Map<string, number>;
   enemyIdMap?: Map<string, number>;
+  /** summon GUID → owner name (`buildSummonOwnerNames`) */
+  summonOwners?: ReadonlyMap<string, string>;
 }): string[] {
   const {
     matchStartMs,
@@ -1259,6 +1302,7 @@ export function buildKillSequenceBlock(params: {
           3,
           params.playerIdMap,
           params.enemyIdMap,
+          params.summonOwners,
         );
         // Reliability round 3 N13 (7d1f): "Killer" was the largest 5 s source
         // (a 93k Scorch 2 s earlier) while the last half second was DK + pets.
@@ -1270,7 +1314,7 @@ export function buildKillSequenceBlock(params: {
         );
         if (topSources.length > 0) {
           const blowPart = blow
-            ? `killing blow: ${damageEventLabel(blow, params.playerIdMap, params.enemyIdMap)}; `
+            ? `killing blow: ${damageEventLabel(blow, params.playerIdMap, params.enemyIdMap, params.summonOwners)}; `
             : "";
           killSeqEntries.push({
             timeSeconds: deathTime,

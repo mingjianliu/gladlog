@@ -25,6 +25,11 @@
  *                     B used to be another enemy's distance). Rendered times are
  *                     floored; TIME_SLACK_SECONDS (= LOS_SWEEP_SLACK_S) is the
  *                     shared tolerance for the sub-second sampling instant.
+ *  G4b OWNER_MOVED  — STAYED "you moved N yd yourself (span start→end)": the
+ *                     owner's own displacement between the span's two seconds
+ *                     (± the same slack) must contain N (reliability round 2
+ *                     F13, 06bb: "little distance gained" was retold as "stood
+ *                     still" while the owner walked ~18.5 yd).
  *  G5 LOS_BREAK     — "LoS break ~N.Nyd away (pillar-blocks <name>)": the map
  *                     must have obstacle data, and at that instant the owner
  *                     and that enemy must actually see each other (you can
@@ -56,7 +61,12 @@ import {
 } from "@gladlog/analysis";
 
 type GeoClaimKind =
-  "CC_DISTANCE" | "TRAINED" | "CD_RANGE" | "STAYED_OR_KITED" | "LOS_BREAK";
+  | "CC_DISTANCE"
+  | "TRAINED"
+  | "CD_RANGE"
+  | "STAYED_OR_KITED"
+  | "OWNER_MOVED"
+  | "LOS_BREAK";
 
 interface GeoClaim {
   kind: GeoClaimKind;
@@ -241,6 +251,19 @@ export function extractGeoClaims(promptText: string): GeoExtraction {
             distanceYards: Number(m[9]),
             unitName: m[8],
             endpoint: "end-own",
+            raw: line,
+          });
+        // G4b: "— you moved N yd yourself (span start→end)" — the owner's
+        // straight-line displacement between the span's two render seconds
+        // (reliability round 2 F13, 06bb).
+        const mv = line.match(/ you moved ([\d.]+) yd yourself \(span start→end\)/);
+        if (mv && m[2])
+          claims.push({
+            kind: "OWNER_MOVED",
+            lineNo,
+            atSeconds: parseTime(m[1]),
+            toSeconds: parseTime(m[2]),
+            distanceYards: Number(mv[1]),
             raw: line,
           });
       }
@@ -556,6 +579,46 @@ export function checkGeoClaims(
             detail: `claimed ${which} ${claim.distanceYards}yd from ${claim.unitName}; span [${span.min.toFixed(1)}, ${span.max.toFixed(1)}]yd (tol ${tol.toFixed(1)})`,
           });
         }
+        break;
+      }
+
+      case "OWNER_MOVED": {
+        // Every displacement between an instant near the span start and one
+        // near the span end (± the shared slack), owner's own coordinates.
+        const near = (tS: number) => {
+          const out: Array<{ x: number; y: number }> = [];
+          for (let dt = -TIME_SLACK_SECONDS; dt <= TIME_SLACK_SECONDS; dt++) {
+            const p = getUnitPositionAtTime(
+              ctx.owner,
+              ctx.matchStartMs + (tS + dt) * 1000,
+              POSITION_MAX_GAP_MS,
+            );
+            if (p) out.push(p);
+          }
+          return out;
+        };
+        const a = near(claim.atSeconds);
+        const b = near(claim.toSeconds ?? claim.atSeconds);
+        if (a.length === 0 || b.length === 0) {
+          unverifiable++;
+          continue;
+        }
+        let min = Infinity;
+        let max = -Infinity;
+        for (const pa of a)
+          for (const pb of b) {
+            const d = distanceBetween(pa, pb);
+            if (d < min) min = d;
+            if (d > max) max = d;
+          }
+        checked++;
+        const tol = tolerance(claim.distanceYards);
+        if (!inSpan(claim.distanceYards, { min, max }, tol))
+          violations.push({
+            claim,
+            code: "G4_OWNER_MOVED",
+            detail: `claimed you moved ${claim.distanceYards}yd; span [${min.toFixed(1)}, ${max.toFixed(1)}]yd (tol ${tol.toFixed(1)})`,
+          });
         break;
       }
 

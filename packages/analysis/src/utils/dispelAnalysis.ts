@@ -71,7 +71,7 @@ const MISSED_PURGE_THRESHOLD_S = 3;
 const PENALTY_WINDOW_MS = 4000;
 
 // Seconds after CC application to measure incoming damage for post-CC pressure weighting
-const POST_CC_PRESSURE_WINDOW_S = 5;
+export const POST_CC_PRESSURE_WINDOW_S = 5;
 
 // Spells that silence + damage the dispeller when removed.
 // VT dispel-damage was removed in Legion; Flame Shock has no dispel penalty.

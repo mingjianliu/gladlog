@@ -450,6 +450,7 @@ export function buildMatchContext(
     friends: friends as ICombatUnit[],
     offensiveWindows,
     friendCCSummaries: ccTrinketSummaries,
+    enemyCCSummaries,
     healerExposures,
     // B4 fix: hand the positioning analysis the same damage-spike windows the timeline's
     // [OFFENSIVE WINDOW]/[DMG SPIKE] headers render, so burst-target claims cannot diverge.
