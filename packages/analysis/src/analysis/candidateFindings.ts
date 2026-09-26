@@ -33,7 +33,7 @@ import {
   buildCannotCastIntervals,
   couldRespondFor,
 } from "../utils/cannotCastIntervals";
-import { type OwnerCastCancels,ownerCastCancels } from "../utils/castCancels";
+import { type OwnerCastCancels, ownerCastCancels } from "../utils/castCancels";
 import {
   analyzePlayerCCAndTrinket,
   applicableCCAvoidanceIds,
@@ -1169,7 +1169,11 @@ function castCancelFacts(
       : {}),
     baitedKicks: String(c.baitedKicks.length),
     ...(mine.length
-      ? { baitedThisKickerT: mine.map((b) => fmtFactTime(b.atSeconds)).join(" + ") }
+      ? {
+          baitedThisKickerT: mine
+            .map((b) => fmtFactTime(b.atSeconds))
+            .join(" + "),
+        }
       : {}),
   };
 }
@@ -1693,6 +1697,37 @@ export function ccCastStartSeconds(
  * the log attributes to the owner also count as GCD — both err toward FEWER
  * accusations, never more.
  */
+/**
+ * The owner's GCD anchors, seconds since `matchStartMs`: every on-GCD
+ * SPELL_CAST_SUCCESS and every on-GCD SPELL_CAST_START — a hard cast's GCD
+ * starts with its bar (reliability round 3 W1a, b12b, codex astra): Sleep
+ * Walk started at 78.96 was interrupted by the Cyclone at 79.87, left no
+ * SPELL_CAST_SUCCESS, and the 79.42–79.87 gap after Naturalize read as "free
+ * to react". Cancelling a cast to react stays possible, so a bar is NOT a
+ * lock beyond its own GCD. Off-GCD spells and passive procs (GH #108:
+ * Reclamation fired 5× at 217.25–217.57) are not anchors.
+ */
+export function ownerGcdAnchorSeconds(
+  owner: {
+    spellCastEvents?: any[];
+    castStartEvents?: any[];
+  },
+  matchStartMs: number,
+): number[] {
+  const onGcdPress = (e: any) =>
+    !OFF_GCD_SPELL_IDS.has(String(e.spellId ?? "")) && !isPassiveProcCast(e);
+  return [
+    ...(owner.spellCastEvents ?? []).filter(
+      (e: any) => e.logLine?.event === "SPELL_CAST_SUCCESS" && onGcdPress(e),
+    ),
+    ...(owner.castStartEvents ?? []).filter(
+      (e: any) => e.logLine?.event === "SPELL_CAST_START" && onGcdPress(e),
+    ),
+  ]
+    .map((e: any) => (e.logLine.timestamp - matchStartMs) / 1000)
+    .sort((a, b) => a - b);
+}
+
 export function ownerCouldReactWith(
   ownerOnGcdCastSeconds: readonly number[],
   castStartS: number,
@@ -2290,18 +2325,10 @@ function teamPlayEvents(
     // play, this candidate specifically coaches a healer's self-preservation
     // kit. Reuses this same try's `cc.ccInstances` (no re-fetch).
     if (isHealerSpec(owner.spec)) {
-      // A4: the owner's own on-GCD successful casts (seconds from start) —
-      // what locks the GCD during an enemy CC cast bar.
-      const ownerOnGcdCastSeconds = (owner.spellCastEvents ?? [])
-        .filter(
-          (e: any) =>
-            e.logLine?.event === "SPELL_CAST_SUCCESS" &&
-            !OFF_GCD_SPELL_IDS.has(String(e.spellId ?? "")) &&
-            // GH #108: a passive proc (Reclamation fired 5× at
-            // 217.25–217.57) is not the owner locking their own GCD.
-            !isPassiveProcCast(e),
-        )
-        .map((e: any) => (e.logLine.timestamp - combat.startTime) / 1000);
+      const ownerOnGcdCastSeconds = ownerGcdAnchorSeconds(
+        owner,
+        combat.startTime,
+      );
       // W1a: the owner's own cannot-cast intervals (CC, silence, kick
       // lockout) — the one predicate every feasibility gate reads.
       let ownerBlockedS: Array<{ from: number; to: number }> = [];

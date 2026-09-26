@@ -9,15 +9,6 @@
  *  Full history in docs/prompt-version-history.md (append new entries there);
  *  the last few entries stay inline so a reader sees the format:
  *
- *  v157 (2026-09-26, reliability round 2 W1g defensive roster + W1e charges): the
- *  ledger admits Greater Invisibility, Alter Time, Survival of the Fittest,
- *  Retribution Divine Protection, Lay on Hands, Spellwarden AMS and
- *  Transcendence: Transfer; a cast / talent overrides a stale
- *  SPEC_EXCLUSIVE_SPELLS row (13 rows fixed); a second charge pressed inside 2 s
- *  is kept; a DB2 shared charge pool spends both spells (Spellwarding puts
- *  Blessing of Protection on cooldown). 605 files at fe5c1714: cd-hoarded
- *  −177 / +187, cd-waste +158, external-unused −13 / +9, questionable-external
- *  +6, slow-defensive-response −5 / +2; context gates 0 → 0.
  *  v158 (2026-09-26, reliability round 2 W1f): OFFENSIVE CD OUT OF RANGE measures
  *  each cooldown against its own caster-aware reach plus hitbox slack, abstains
  *  on summons (DB2 SpellEffect 28) and self / pet buffs, needs every enemy
@@ -31,5 +22,9 @@
  *  DB2 root DR class ∪ official root auras (Ice Nova, Harpoon …). 605 files at
  *  7c6488e1: kick-priority-missed −5 / +1, kick-priority-team −4 / +3, [ROOT]
  *  +17 lines; gates 0 → 0.
+ *  v160 (2026-09-26, reliability round 3 W1a b12b): cc-avoidable's GCD test anchors a
+ *  hard cast at its bar START, so a bar the CC interrupted (no SPELL_CAST_SUCCESS)
+ *  no longer leaves a fake "free to react" gap. 605 files at 9eb859c9:
+ *  cc-avoidable −3 / +0, contexts unchanged.
  */
-export const PROMPT_VERSION = 159;
+export const PROMPT_VERSION = 160;

@@ -1408,3 +1408,8 @@ slack, and the chance must exist before the heal actually landed; roots are the
 DB2 root DR class ∪ official root auras (Ice Nova, Harpoon …). 605 files at
 7c6488e1: kick-priority-missed −5 / +1, kick-priority-team −4 / +3, [ROOT]
 +17 lines; gates 0 → 0.
+
+v160 (2026-09-26, reliability round 3 W1a b12b): cc-avoidable's GCD test anchors a
+hard cast at its bar START, so a bar the CC interrupted (no SPELL_CAST_SUCCESS)
+no longer leaves a fake "free to react" gap. 605 files at 9eb859c9:
+cc-avoidable −3 / +0, contexts unchanged.

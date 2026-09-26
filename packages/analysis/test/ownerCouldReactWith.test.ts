@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 import {
   ccCastStartSeconds,
   ownerCouldReactWith,
+  ownerGcdAnchorSeconds,
 } from "../src/analysis/candidateFindings";
 
 describe("ownerCouldReactWith", () => {
@@ -110,5 +111,37 @@ describe("ownerCouldReactWith — the owner's own CC (reliability round 2 W1a)",
 
   it("without blocked intervals the old (GCD-only) answer stands", () => {
     expect(ownerCouldReactWith([], 80.622, 81.707, false)).toBe(true);
+  });
+});
+
+describe("a hard cast's GCD starts with its bar (reliability round 3 W1a, b12b)", () => {
+  // b12bfef4 @79: Naturalize 77.92 (success), Sleep Walk bar started 78.96 and
+  // was interrupted by the Cyclone landing at 79.87 — no SPELL_CAST_SUCCESS.
+  it("with only the success anchor, 79.42–79.87 reads as free to react", () => {
+    expect(ownerCouldReactWith([77.92], 78.2, 79.87, true)).toBe(true);
+  });
+  it("the bar start is a GCD anchor too: no instant of the window is off the GCD", () => {
+    expect(ownerCouldReactWith([77.92, 78.96], 78.2, 79.87, true)).toBe(false);
+  });
+  it("an off-GCD tool is unaffected by the bar", () => {
+    expect(ownerCouldReactWith([77.92, 78.96], 78.2, 79.87, false)).toBe(true);
+  });
+
+  it("the production anchor collection takes the interrupted bar's START (no success needed)", () => {
+    const T0 = 1_000_000;
+    const ev = (event: string, id: string, s: number) => ({
+      spellId: id,
+      logLine: { event, timestamp: T0 + s * 1000 },
+    });
+    const owner = {
+      spellCastEvents: [ev("SPELL_CAST_SUCCESS", "360823", 77.92)], // Naturalize
+      castStartEvents: [ev("SPELL_CAST_START", "360806", 78.96)], // Sleep Walk, interrupted
+    };
+    const anchors = ownerGcdAnchorSeconds(owner, T0);
+    expect(anchors.map((a) => Math.round(a * 100) / 100)).toEqual([
+      77.92, 78.96,
+    ]);
+    expect(ownerCouldReactWith(anchors, 78.2, 79.87, true)).toBe(false);
+    expect(ownerCouldReactWith(anchors, 78.2, 79.87, false)).toBe(true);
   });
 });
