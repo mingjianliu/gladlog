@@ -140,6 +140,19 @@ export function deathSetupEvents(parts: DeathSetupParts): CandidateEvent[] {
 // 3s→62.6% / 5s→69.6% / 8s→87.1% 指控率 —— 以死亡为锚无法用结果选窗
 // (循环),5/1.5 居中稳健,维持。数字在 issue #16 的三小件接地评论。
 export const EXTERNAL_FREE_WINDOW_S = 5;
+
+/**
+ * Caster-centred zone externals: the protected ally must stand inside this
+ * radius around the CASTER (the reach table carries no radius for them —
+ * spellReachGenerated has Darkness at 0/0/0, its area is an AreaTrigger).
+ * Tooltip (wowhead spell=196718, read 2026-09-26): "Summons darkness around
+ * you in an 8 yd radius". Reliability round 3 W1f (4446): external-unused
+ * named Darkness for a hunter who died 20+ yd from the Demon Hunter.
+ * Registered in curatedIdRegistry.
+ */
+export const ZONE_EXTERNAL_RADIUS_YD: Readonly<Record<string, number>> = {
+  "196718": 8, // Darkness
+};
 export const EXTERNAL_FREE_MIN_GAP_S = 1.5;
 
 /**
@@ -164,6 +177,10 @@ export function externalUnusedEvents(input: {
   >;
   ownerCC: Array<{ atSeconds: number; durationSeconds: number }>;
   ownerAliveAt: (t: number) => boolean;
+  /** Could the owner's external reach the victim at some point of the free
+   * window (reliability round 3 W1f)? Built by the caller from positions and
+   * the external's reach; absent or unknown ⇒ reachable (the pre-W1f test). */
+  canReachVictim?: (spellId: string) => boolean;
 }): CandidateEvent[] {
   const { deathT, victim, owner } = input;
   if (!input.ownerAliveAt(deathT)) return [];
@@ -184,7 +201,11 @@ export function externalUnusedEvents(input: {
   maxGap = Math.max(maxGap, deathT - cursor);
   if (maxGap < EXTERNAL_FREE_MIN_GAP_S) return [];
 
-  const avail = input.ownerExternals.find((cd) => cdReadyInTimeAt(cd, deathT));
+  const avail = input.ownerExternals.find(
+    (cd) =>
+      cdReadyInTimeAt(cd, deathT) &&
+      (input.canReachVictim?.(cd.spellId) ?? true),
+  );
   if (!avail) return [];
   return [
     {

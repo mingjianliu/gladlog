@@ -1,3 +1,5 @@
+import { distanceBetween, getUnitPositionAtTime } from "../utils/losAnalysis";
+import { RANGE_HITBOX_SLACK_YD, spellReachToAccuse } from "../utils/spellRange";
 import type { ICombatUnit } from "@gladlog/parser-compat";
 import { CombatUnitClass, CombatUnitReaction } from "@gladlog/parser-compat";
 
@@ -127,6 +129,8 @@ import {
   deathSetupEvents,
   type DeathSetupParts,
   externalUnusedEvents,
+  ZONE_EXTERNAL_RADIUS_YD,
+  EXTERNAL_FREE_WINDOW_S,
   questionableExternalEvents,
 } from "./candidates/death";
 import {
@@ -2640,6 +2644,32 @@ function extractDeathSetups(
                 !(ownerUnit.deathRecords ?? []).some(
                   (dr: any) => (dr.timestamp - start) / 1000 <= t,
                 ),
+              // W1f: the external must reach the victim at some sampled
+              // second of the free window — a zone external by its radius
+              // around the owner, a targeted one by its cast reach; no
+              // reach or no positions ⇒ reachable (unchanged behaviour)
+              canReachVictim: (spellId: string) => {
+                const zone = ZONE_EXTERNAL_RADIUS_YD[spellId];
+                const reach =
+                  zone !== undefined
+                    ? zone + RANGE_HITBOX_SLACK_YD
+                    : spellReachToAccuse(ownerUnit, spellId);
+                if (reach === null || reach <= RANGE_HITBOX_SLACK_YD) return true;
+                let sampled = false;
+                for (
+                  let t = Math.max(0, deathT - EXTERNAL_FREE_WINDOW_S);
+                  t <= deathT;
+                  t += 0.5
+                ) {
+                  const ms = start + t * 1000;
+                  const a = getUnitPositionAtTime(ownerUnit, ms, 2000);
+                  const b = getUnitPositionAtTime(u, ms, 2000);
+                  if (!a || !b) continue;
+                  sampled = true;
+                  if (distanceBetween(a, b) <= reach) return true;
+                }
+                return !sampled;
+              },
             }),
           );
         } catch {

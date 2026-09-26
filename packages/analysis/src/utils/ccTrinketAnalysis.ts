@@ -39,6 +39,7 @@ import { ccFullDurationForCaster } from "./ccDuration";
 import { isHealerSpec, isPassiveProcCast, specToString } from "./cooldowns";
 import { computeIncomingDR, IDRInfo, matchPendingCcKey } from "./drAnalysis";
 import {
+  kickCastSpellId,
   interruptCooldownRemainingMs,
   interruptForUnit,
 } from "./enemyInterrupts";
@@ -1453,6 +1454,29 @@ export function analyzePlayerCCAndTrinket(
           const range = spellRangeForCaster(enemy, kit.spellId) ?? 5;
           if (dist <= range) {
             countInRange++;
+          }
+        }
+        // Round-1 rerun #3 (7c598eeb ×2): the kick came from a PET (Felhunter
+        // Spell Lock). Pets are skipped above (their kit is read off the
+        // owner, whose position is not the pet's), so "nearest kicker" named
+        // the Ret 23.8 yd away. When the actual interrupter is an enemy pet,
+        // its own position at cast start is the measurement.
+        const petKicker = enemyPets.find((p) => p.id === action.srcUnitId);
+        if (petKicker) {
+          const petPos = getUnitPositionAtTime(
+            petKicker,
+            castStartMs,
+            LOS_SWEEP_GAP_MS,
+          );
+          if (petPos) {
+            const dist = distanceBetween(playerPos, petPos);
+            if (dist < minDist) minDist = dist;
+            const range =
+              spellRangeForCaster(
+                petKicker,
+                kickCastSpellId(kickSpellId),
+              ) ?? 40;
+            if (dist <= range) countInRange++;
           }
         }
         if (minDist !== Infinity) {

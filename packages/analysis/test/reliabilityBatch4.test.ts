@@ -38,3 +38,24 @@ describe("Cauterizing Flame 374251 is out of the save roster (user ruling 2026-0
     expect(rej.find((r) => r.spellId === "374251")?.reason).toContain("not_save_role, 2026-09-26");
   });
 });
+
+import { externalUnusedEvents, ZONE_EXTERNAL_RADIUS_YD } from "../src/analysis/candidates/death";
+
+describe("external-unused needs the external to reach the victim (round 3 W1f, 4446)", () => {
+  const base = {
+    deathT: 91,
+    victim: { id: "h", name: "Hunter" },
+    owner: { id: "d", name: "DemonHunter" },
+    ownerExternals: [{ spellId: "196718", spellName: "Darkness", cooldownSeconds: 300, casts: [], neverUsed: true }],
+    ownerCC: [],
+    ownerAliveAt: () => true,
+  };
+  it("Darkness is a caster-centred 8 yd zone (tooltip), registered", () => {
+    expect(ZONE_EXTERNAL_RADIUS_YD["196718"]).toBe(8);
+  });
+  it("unreachable → no accusation; reachable or unknown → as before", () => {
+    expect(externalUnusedEvents({ ...base, canReachVictim: () => false })).toEqual([]);
+    expect(externalUnusedEvents({ ...base, canReachVictim: () => true })).toHaveLength(1);
+    expect(externalUnusedEvents(base)).toHaveLength(1);
+  });
+});

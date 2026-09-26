@@ -137,6 +137,7 @@ import { trinketSpellIds } from "./spellTags";
 import { TALENT_MITIGATION_MODIFIERS } from "./talentMitigationModifiers";
 import { TALENT_REPLACES } from "./talentReplaces";
 import { DRUID_FORM_AURA_IDS, FORM_BOUND_BUFF_IDS } from "./druidForms";
+import { ZONE_EXTERNAL_RADIUS_YD } from "../analysis/candidates/death";
 import { WARLOCK_PET_CAST_FUNCTION } from "./warlockPets";
 
 /** What kind of id the list holds — decides which corpus event stream can vouch for it. */
@@ -384,6 +385,9 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   ),
   t("FORM_BOUND_BUFF_IDS", "data/druidForms.ts", "aura", () =>
     set(FORM_BOUND_BUFF_IDS),
+  ),
+  t("ZONE_EXTERNAL_RADIUS_YD", "analysis/candidates/death.ts", "cast", () =>
+    keys(ZONE_EXTERNAL_RADIUS_YD),
   ),
   t("COMP_DEPENDENT_PURGE_TARGETS", "utils/dispelAnalysis.ts", "aura", () =>
     set(COMP_DEPENDENT_PURGE_TARGETS),

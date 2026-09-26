@@ -97,5 +97,13 @@
  *  Measured on a tree whose reach change was equivalent to b3e24b29's (12
  *  kick-eaten yourReachYd 25 → 30 belong to that commit). Tables: sync-window
  *  (evaluateSyncWindow shared), cdTriggerPrior (roster) on GH #115.
+ *  v173 (2026-09-26, reliability leftovers batch 5): (1) external-unused needs the
+ *  external to reach the victim at some 0.5 s sample of the free window — a
+ *  caster-centred zone (Darkness, 8 yd around the owner) by its radius, a
+ *  targeted external by its cast reach; no reach / no positions = unchanged:
+ *  dps 87 → 82, healer 110 → 109 (Darkness −4, Ironbark −1, Blessing of
+ *  Protection −1); (2) kick-eaten measures a pet kicker (Felhunter Spell Lock,
+ *  Axe Toss) from the pet's own position: nearestKickerDistYd / kickersInRange
+ *  change on 128 kick-eaten facts, ids unchanged. Context byte-identical.
  */
-export const PROMPT_VERSION = 172;
+export const PROMPT_VERSION = 173;
