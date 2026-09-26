@@ -277,6 +277,9 @@ npx tsx packages/analysis/scripts/datagen/genChanneled.ts
 #      Blessing of Protection ↔ Spellwarding, Holy Bulwark ↔ Sacred Weapon …). A press of one spends the
 #      other's charge in the ledger (spendsSharedChargeOf, reliability round 2 W1e).
 npx tsx packages/analysis/scripts/datagen/genSharedCharges.ts
+# 6f1c. summon spells (SpellEffect 28 SUMMON on the spell or one EffectTriggerSpell hop). CD_OUT_OF_RANGE
+#      abstains on them — the payoff is a pet, not the owner's position (reliability round 2 W1f).
+npx tsx packages/analysis/scripts/datagen/genSummonSpells.ts
 # 6f2. Spell mechanic facts (GH #77, 2026-09-24): CC mechanic (SpellCategories / SpellEffect, one
 #      EffectTriggerSpell hop, else the unique loss-of-control mechanic among same-named observed spells),
 #      base cast time (SpellMisc → SpellCastTimes; 0 = instant), mechanic immunity (aura 77), all-school

@@ -85,6 +85,26 @@ function modified(
   return (base + flat) * (1 + pct / 100);
 }
 
+/**
+ * The reach an ACCUSATION may use ("cast out of range"): `spellReachForCaster`
+ * plus the hitbox slack, or null — abstain — when the table does not know the
+ * spell or when any range / radius talent that could lengthen it has unknown
+ * ownership. `spellReachForCaster` gives an unreadable loadout the base
+ * number, which is conservative for "could reach" and the opposite when the
+ * claim is "could NOT reach" (codex astra, reliability round 2 W1f).
+ */
+export function spellReachToAccuse(
+  caster: Caster | null | undefined,
+  spellId: string,
+): number | null {
+  const e = SPELLS[spellId];
+  if (!e || !caster) return null;
+  for (const m of [...(e.rangeMods ?? []), ...(e.radiusMods ?? [])])
+    if (talentModifierOwnershipOf(caster, m.talent) === "unknown") return null;
+  const reach = spellReachForCaster(caster, spellId);
+  return reach === null ? null : reach + RANGE_HITBOX_SLACK_YD;
+}
+
 /** Cast range of `spellId` for this caster, yards; null when the table has no
  * positive range for it (unknown → callers degrade, never assume). */
 export function spellRangeForCaster(

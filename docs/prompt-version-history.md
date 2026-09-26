@@ -1393,3 +1393,10 @@ is kept; a DB2 shared charge pool spends both spells (Spellwarding puts
 Blessing of Protection on cooldown). 605 files at fe5c1714: cd-hoarded
 −177 / +187, cd-waste +158, external-unused −13 / +9, questionable-external
 +6, slow-defensive-response −5 / +2; context gates 0 → 0.
+
+v158 (2026-09-26, reliability round 2 W1f): OFFENSIVE CD OUT OF RANGE measures
+each cooldown against its own caster-aware reach plus hitbox slack, abstains
+on summons (DB2 SpellEffect 28) and self / pet buffs, needs every enemy
+positioned and beyond reach for the whole 5 s (exact closest approach between
+position events); the line states "its reach N yd". 605 files at efc522b4:
+rendered lines 516 → 2, menu cd-out-of-range −343 / +1; gates 0 → 0.

@@ -58,6 +58,9 @@
     "sharedChargeGenerated.ts": {
       "entries": 92
     },
+    "summonGenerated.ts": {
+      "entries": 185
+    },
     "abilityEffectsGenerated.ts": {
       "entries": 2232,
       "absorbs": 109,

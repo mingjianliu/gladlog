@@ -86,6 +86,7 @@
     "test/cdAvailablePredicateConvergence.test.ts",
     "test/cdHoardedOwnerFeasibility.test.ts",
     "test/cdHoardedSelfOnly.test.ts",
+    "test/cdOutOfRangeReach.test.ts",
     "test/cdWasteGate.test.ts",
     "test/chargeAvailability.test.ts",
     "test/charmedPlayer.test.ts",

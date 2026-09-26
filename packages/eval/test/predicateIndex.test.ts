@@ -72,6 +72,7 @@ import * as outcomeRefs from "@gladlog/analysis/src/data/outcomeRefs";
 import * as racialAbilities from "@gladlog/analysis/src/data/racialAbilities";
 import * as sharedChargeGenerated from "@gladlog/analysis/src/data/sharedChargeGenerated";
 import * as spellCategories from "@gladlog/analysis/src/data/spellCategories";
+import * as summonGenerated from "@gladlog/analysis/src/data/summonGenerated";
 import * as spellEffectData from "@gladlog/analysis/src/data/spellEffectData";
 import * as spellReach from "@gladlog/analysis/src/data/spellReach";
 import * as spellSchools from "@gladlog/analysis/src/data/spellSchools";
@@ -1089,6 +1090,26 @@ const INDEX: PredicateRow[] = [
     file: `${A}/data/sharedChargeGenerated.ts`,
     symbol: "SHARED_CHARGE_CATEGORY",
     mod: sharedChargeGenerated,
+  },
+  {
+    file: `${A}/utils/spellRange.ts`,
+    symbol: "spellReachToAccuse",
+    mod: spellRange,
+  },
+  {
+    file: `${A}/utils/positionAnalysis.ts`,
+    symbol: "cdOutOfRangeReachYards",
+    mod: positionAnalysis,
+  },
+  {
+    file: `${A}/utils/positionAnalysis.ts`,
+    symbol: "beyondReachThroughout",
+    mod: positionAnalysis,
+  },
+  {
+    file: `${A}/data/summonGenerated.ts`,
+    symbol: "SUMMON_SPELL_IDS",
+    mod: summonGenerated,
   },
   {
     file: `${A}/data/spellTags.ts`,

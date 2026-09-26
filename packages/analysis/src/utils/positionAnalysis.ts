@@ -11,6 +11,8 @@
 
 import { AtomicArenaCombat, ICombatUnit } from "@gladlog/parser-compat";
 
+import { abilityProfile } from "../data/abilityProfile";
+import { SUMMON_SPELL_IDS } from "../data/summonGenerated";
 import { ICCInstance } from "./ccTrinketAnalysis";
 import {
   getUnitHpAtTimestamp,
@@ -27,6 +29,7 @@ import {
 } from "./healerExposureAnalysis";
 import { distanceBetween, getUnitPositionAtTime } from "./losAnalysis";
 import { HEALER_TRAINED_YARDS, INTERP_MAX_GAP_MS } from "./positionSampling";
+import { spellReachToAccuse } from "./spellRange";
 
 // Thresholds (yards / seconds) — starting values from the Feature 15 spec.
 //
@@ -46,8 +49,9 @@ const KITE_DELTA_YARDS = 10; // distance gained that counts as a successful kite
 const STAY_DELTA_YARDS = 5; // distance gained below this = stayed in(p39,见上)
 const MISSED_PUSH_MELEE_YARDS = 20; // melee parked beyond this = disengaged(≈p95,见上)
 const MISSED_PUSH_RANGED_YARDS = 45; // ranged beyond this = disengaged (max cast range is 40yd — 35–40yd is normal max-range play;实测 0.6% 采样超过,见上)
-const CD_RANGE_YARDS = 15; // offensive CD cast beyond this = out of position(p81,见上)
-const CD_RANGE_RECHECK_SECONDS = 5; // still out of range this long after the cast(复查通过率 49%,见上)
+// CD_OUT_OF_RANGE: per-spell reach (`cdOutOfRangeReachYards`) since W1f
+// 2026-09-26; the old pooled 15 yd (p81 above) accused ranged specs.
+const CD_RANGE_RECHECK_SECONDS = 5; // beyond reach at every second through this long after the cast
 const BURST_EVAL_SECONDS = 10; // evaluate kite/stay over at most this much of the window
 const MISSED_PUSH_MIN_SECONDS = 10; // sustained disengagement required
 const KILL_PROXIMITY_SECONDS = 15; // ignore disengagement right before an enemy death
@@ -165,6 +169,9 @@ export interface IPositionEvent {
   ownerCcSeconds?: number;
   /** CD_OUT_OF_RANGE only */
   spellName?: string;
+  /** CD_OUT_OF_RANGE only: the reach the claim was measured against
+   *  (`cdOutOfRangeReachYards`, hitbox slack included) */
+  reachYards?: number;
   /** SPLIT_PUSH: melee DPS away from the push target; HEALER_TRAINED: the healer */
   playersInvolved?: string[];
   /** HEALER_TRAINED: true when the trained healer IS the log owner */
@@ -206,6 +213,127 @@ function nearestEnemyAt(
     }
   }
   return best;
+}
+
+/** Every living enemy has a known position at `tMs` — the precondition of any
+ *  "far from ALL enemies" claim: a stealthed / idle enemy with no recent
+ *  snapshot could be anywhere, including on top of the owner. Shared by
+ *  MISSED_PUSH and CD_OUT_OF_RANGE. */
+function allLivingEnemiesKnown(enemies: ICombatUnit[], tMs: number): boolean {
+  return enemies.every(
+    (e) =>
+      isDeadAt(e, tMs) ||
+      getUnitPositionAtTime(e, tMs, POSITION_MAX_GAP_MS) !== null,
+  );
+}
+
+/**
+ * The reach an out-of-range accusation may use for offensive cooldown X, or
+ * null — abstain (reliability round 2 W1f, codex astra start review):
+ *  - a summon (`SUMMON_SPELL_IDS`, DB2 SpellEffect 28): the payoff is a pet
+ *    that walks or casts from range (ba44: Grimoire: Imp Lord at 21 yd, its
+ *    Felbolts landing 2.3 s later);
+ *  - a spell that does not itself hit an enemy (self / pet buff: Avatar,
+ *    Combustion, Dark Transformation): distance at the press does not prove
+ *    the buff was wasted;
+ *  - a targeted / placed spell: its caster-aware reach plus the hitbox slack
+ *    (`spellReachToAccuse`), null when range talents are unreadable.
+ * The old single 15 yd (p81 of pooled melee + ranged casts) accused ranged
+ * specs casting from normal range.
+ */
+export function cdOutOfRangeReachYards(
+  owner: ICombatUnit,
+  spellId: string,
+): number | null {
+  if (SUMMON_SPELL_IDS.has(spellId)) return null;
+  if (!abilityProfile(spellId).hitsEnemy) return null;
+  return spellReachToAccuse(owner, spellId);
+}
+
+/**
+ * The instants CD_OUT_OF_RANGE samples for a press at `castSeconds`: the press
+ * itself, every half-second grid point after it through
+ * CD_RANGE_RECHECK_SECONDS later (so every rendered whole second is included,
+ * and a connection between two of them is not skipped), and that endpoint.
+ * codex astra review, W1f: sampling `cast + 1, cast + 2 …` from a 10.5 s press
+ * never looked at 11.0 and missed a connection there.
+ */
+export function cdRangeSweepSeconds(castSeconds: number): number[] {
+  const end = castSeconds + CD_RANGE_RECHECK_SECONDS;
+  const out = [castSeconds];
+  for (let t = Math.floor(castSeconds * 2 + 1) / 2; t < end; t += 0.5)
+    if (t > castSeconds) out.push(t);
+  out.push(end);
+  return out;
+}
+
+/**
+ * Every enemy stays beyond `reach` for the WHOLE of [castSeconds, castSeconds
+ * + CD_RANGE_RECHECK_SECONDS] — not only at sampled instants (codex astra
+ * review, W1f: a 0.25 s dip into reach between two half-second samples was
+ * missed). Positions are linear between position events
+ * (`getUnitPositionAtTime`), so the window is cut at every position event of
+ * the owner and every enemy plus the rendered grid (`cdRangeSweepSeconds`);
+ * on each piece both units move linearly and their closest approach is exact.
+ * Any unknown position on the way (or an unpositioned living enemy at a
+ * breakpoint) → false: the claim needs every enemy observed.
+ */
+export function beyondReachThroughout(
+  owner: ICombatUnit,
+  enemies: ICombatUnit[],
+  matchStartMs: number,
+  castSeconds: number,
+  reach: number,
+): boolean {
+  const endSeconds = castSeconds + CD_RANGE_RECHECK_SECONDS;
+  const cuts = new Set<number>(cdRangeSweepSeconds(castSeconds));
+  const inWindow = (t: number) => t > castSeconds && t < endSeconds;
+  const gapS = POSITION_MAX_GAP_MS / 1000;
+  for (const u of [owner, ...enemies]) {
+    const ts = (u.advancedActions ?? []).map(
+      (a) => (a.timestamp - matchStartMs) / 1000,
+    );
+    for (let i = 0; i < ts.length; i++) {
+      if (inWindow(ts[i]!)) cuts.add(ts[i]!);
+      // An unknown stretch inside the window must be sampled, not bridged
+      // (codex astra review): the middle of a gap longer than 2 × maxGap has
+      // no position, nor has anything past the last event + maxGap — a cut
+      // there makes getUnitPositionAtTime return null and the claim abstain.
+      const next = ts[i + 1];
+      if (next !== undefined && next - ts[i]! > 2 * gapS) {
+        const mid = (ts[i]! + next) / 2;
+        if (inWindow(mid)) cuts.add(mid);
+      }
+      if (next === undefined && inWindow(ts[i]! + gapS + 0.001))
+        cuts.add(ts[i]! + gapS + 0.001);
+    }
+  }
+  const times = [...cuts].sort((a, b) => a - b);
+  for (const t of times)
+    if (!allLivingEnemiesKnown(enemies, matchStartMs + t * 1000)) return false;
+  for (let i = 1; i < times.length; i++) {
+    const t0Ms = matchStartMs + times[i - 1]! * 1000;
+    const t1Ms = matchStartMs + times[i]! * 1000;
+    const a0 = getUnitPositionAtTime(owner, t0Ms, POSITION_MAX_GAP_MS);
+    const a1 = getUnitPositionAtTime(owner, t1Ms, POSITION_MAX_GAP_MS);
+    if (!a0 || !a1) return false;
+    for (const e of enemies) {
+      if (isDeadAt(e, t0Ms)) continue;
+      const b0 = getUnitPositionAtTime(e, t0Ms, POSITION_MAX_GAP_MS);
+      const b1 = getUnitPositionAtTime(e, t1Ms, POSITION_MAX_GAP_MS);
+      if (!b0 || !b1) return false;
+      // relative position r(s) = r0 + s·d, s ∈ [0, 1]: closest point to 0
+      const r0x = b0.x - a0.x;
+      const r0y = b0.y - a0.y;
+      const dx = b1.x - a1.x - r0x;
+      const dy = b1.y - a1.y - r0y;
+      const dd = dx * dx + dy * dy;
+      const sMin =
+        dd > 0 ? Math.min(1, Math.max(0, -(r0x * dx + r0y * dy) / dd)) : 0;
+      if (Math.hypot(r0x + sMin * dx, r0y + sMin * dy) <= reach) return false;
+    }
+  }
+  return true;
 }
 
 /** Seconds of [fromSeconds, toSeconds] during which the owner was in hard CC.
@@ -473,14 +601,9 @@ export function computeOwnerPositionEvents(params: {
     };
 
     // MISSED_PUSH asserts ">threshold from ALL enemies" — that claim needs every
-    // living enemy's position to be known. A stealthed/idle enemy (no recent
-    // snapshots) could be anywhere, including on top of the owner.
+    // living enemy's position to be known (`allLivingEnemiesKnown`).
     const allLivingEnemiesKnownAt = (tMs: number) =>
-      enemies.every(
-        (e) =>
-          isDeadAt(e, tMs) ||
-          getUnitPositionAtTime(e, tMs, POSITION_MAX_GAP_MS) !== null,
-      );
+      allLivingEnemiesKnown(enemies, tMs);
 
     for (let t = 0; t <= durationSeconds; t += 1) {
       const tMs = matchStartMs + t * 1000;
@@ -511,32 +634,37 @@ export function computeOwnerPositionEvents(params: {
     closeRun(durationSeconds);
   }
 
-  // ── 3. CD_OUT_OF_RANGE: offensive CD cast far from every enemy ────────────
+  // ── 3. CD_OUT_OF_RANGE: offensive CD cast beyond its own reach ───────────
+  // Out of reach of EVERY enemy at every whole second from the press through
+  // CD_RANGE_RECHECK_SECONDS later (a connection at any sample in between is
+  // normal play, not a wasted press), with every living enemy positioned at
+  // each sample; the reach is the spell's own (`cdOutOfRangeReachYards`).
   if (!isHealer) {
     for (const cd of offensiveCDs) {
+      const reach = cdOutOfRangeReachYards(owner, cd.spellId);
+      if (reach === null) continue;
       for (const cast of cd.casts) {
-        const atCast = nearestEnemyAt(
-          enemies,
-          null,
-          matchStartMs + cast.timeSeconds * 1000,
-          owner,
-        );
-        if (!atCast || atCast.distanceYards <= CD_RANGE_YARDS) continue;
-        const later = nearestEnemyAt(
-          enemies,
-          null,
-          matchStartMs + (cast.timeSeconds + CD_RANGE_RECHECK_SECONDS) * 1000,
-          owner,
-        );
-        // Only flag when still out of range shortly after — a cast mid-approach that
-        // connects within seconds is normal play, not wasted uptime.
-        if (later && later.distanceYards > CD_RANGE_YARDS) {
+        const castMs = matchStartMs + cast.timeSeconds * 1000;
+        const atCast = allLivingEnemiesKnown(enemies, castMs)
+          ? nearestEnemyAt(enemies, null, castMs, owner)
+          : null;
+        if (
+          atCast &&
+          beyondReachThroughout(
+            owner,
+            enemies,
+            matchStartMs,
+            cast.timeSeconds,
+            reach,
+          )
+        ) {
           events.push({
             type: "CD_OUT_OF_RANGE",
             atSeconds: cast.timeSeconds,
             startDistanceYards: Math.round(atCast.distanceYards * 10) / 10,
             nearestEnemyName: atCast.enemyName,
             spellName: cd.spellName,
+            reachYards: Math.round(reach * 10) / 10,
           });
         }
       }
@@ -839,11 +967,11 @@ export function formatPositionEventsForContext(
 
   if (outOfRange.length > 0) {
     lines.push(
-      "  OFFENSIVE CD OUT OF RANGE (cast while far from every enemy):",
+      "  OFFENSIVE CD OUT OF RANGE (cast beyond its own reach from every enemy):",
     );
     for (const e of outOfRange) {
       lines.push(
-        `    ${fmtTime(e.atSeconds)} ${e.spellName} cast ${e.startDistanceYards}yd from nearest enemy (still >${CD_RANGE_YARDS}yd ${CD_RANGE_RECHECK_SECONDS}s later)`,
+        `    ${fmtTime(e.atSeconds)} ${e.spellName} cast ${e.startDistanceYards}yd from nearest enemy (its reach ${e.reachYards}yd; beyond it through ${CD_RANGE_RECHECK_SECONDS}s later)`,
       );
     }
   }
