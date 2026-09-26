@@ -26,6 +26,7 @@ import {
   BURST_OUTCOME_FIELDS,
   BURST_RESPONSE_WINDOW_MS,
   BURST_TRIAGE_MIN_HP_DROP_PP,
+  burstExtrasLabel,
   burstWindowDecisionPoints,
 } from "./burstWindowDecisionPoints";
 import { CRISIS_HP_PCT_RENDERED } from "./crisisDecisionPoints";
@@ -741,5 +742,139 @@ describe("burstWindowDecisionPoints — teammate reachability gate (GH #60 tail,
     expect(pts[0]!.feasible).toBe(true);
     // the unreachable teammate is still not credited
     expect(pts[0]!.feasibleUnits).toEqual(["Friend-R"]);
+  });
+});
+
+describe("burstWindowDecisionPoints — reliability round 2 W1a", () => {
+  const enemyWithBurst = (over: Record<string, unknown> = {}) =>
+    hostile({ spellCastEvents: [cast(AR, 10)], ...over });
+  const pressuredFriend = (over: Record<string, unknown> = {}) =>
+    friendly({
+      damageIn: steadyDamage(10, 20),
+      advancedActions: hpTrack("F1", 0, 40, 60),
+      ...over,
+    });
+  const aura = (
+    event: string,
+    spellId: string,
+    tSec: number,
+    srcUnitId: string,
+    destUnitId: string,
+  ) => ({
+    spellId,
+    spellName: spellId,
+    srcUnitId,
+    srcUnitName: srcUnitId,
+    destUnitId,
+    timestamp: T0 + tSec * 1000,
+    logLine: { event, timestamp: T0 + tSec * 1000 },
+  });
+  /** Capacitor Totem: the cast has no target; its totem (owned by F1) stuns
+   * the caster 2 s later with Static Charge 118905 (61740741 @311). */
+  const CAPACITOR = "192058";
+  const STATIC_CHARGE = "118905";
+  const totem = {
+    id: "T1",
+    name: "Capacitor Totem",
+    ownerId: "F1",
+    reaction: CombatUnitReaction.Friendly,
+    spellCastEvents: [],
+    auraEvents: [],
+  };
+
+  it("a ground-cast stun that LANDS on the caster is a control answer, timed at the cast", () => {
+    const pts = burstWindowDecisionPoints(
+      combat([
+        pressuredFriend({
+          spellCastEvents: [cast(CAPACITOR, 17.8, "0000000000000000")],
+        }),
+        totem,
+        enemyWithBurst({
+          auraEvents: [
+            aura(LogEvent.SPELL_AURA_APPLIED, STATIC_CHARGE, 19.8, "T1", "E1"),
+          ],
+        }),
+      ]),
+    );
+    expect(pts[0]!.responses.control).toBe(true);
+    expect(pts[0]!.responded).toBe(true);
+    expect(pts[0]!.responseCasts).toHaveLength(1);
+    expect(pts[0]!.responseCasts[0]!.spellId).toBe(STATIC_CHARGE);
+    expect(pts[0]!.responseCasts[0]!.latencySec).toBe(7.8);
+  });
+
+  it("the same stun from a totem planted after the window is not an answer", () => {
+    const pts = burstWindowDecisionPoints(
+      combat([
+        pressuredFriend({
+          spellCastEvents: [cast(CAPACITOR, 18.5, "0000000000000000")],
+        }),
+        totem,
+        enemyWithBurst({
+          auraEvents: [
+            aura(LogEvent.SPELL_AURA_APPLIED, STATIC_CHARGE, 20.5, "T1", "E1"),
+          ],
+        }),
+      ]),
+    );
+    expect(pts[0]!.responses.control).toBe(false);
+  });
+
+  it("an aimed control cast is counted once, not again when its aura lands", () => {
+    const pts = burstWindowDecisionPoints(
+      combat([
+        pressuredFriend({ spellCastEvents: [cast(STORM_BOLT, 12, "E1")] }),
+        enemyWithBurst({
+          auraEvents: [
+            aura(LogEvent.SPELL_AURA_APPLIED, "132169", 12.3, "F1", "E1"),
+          ],
+        }),
+      ]),
+    );
+    expect(pts[0]!.responseCasts.map((r) => r.category)).toEqual(["control"]);
+  });
+
+  it("CC on the caster from an enemy source is nobody's answer", () => {
+    const pts = burstWindowDecisionPoints(
+      combat([
+        pressuredFriend(),
+        enemyWithBurst({
+          auraEvents: [
+            aura(LogEvent.SPELL_AURA_APPLIED, STATIC_CHARGE, 12, "E2", "E1"),
+          ],
+        }),
+        hostile({ id: "E2", name: "Enemy2-R" }),
+      ]),
+    );
+    expect(pts[0]!.responses.control).toBe(false);
+  });
+
+  it("a friendly silenced across the whole response window does not make it feasible", () => {
+    // Garrote - Silence (1330) is a silence, not hard CC: `inCcAt` alone
+    // never saw it; the shared cannot-cast predicate does.
+    const f = pressuredFriend({
+      spellCastEvents: [cast(BARKSKIN, 120)],
+      auraEvents: [
+        aura(LogEvent.SPELL_AURA_APPLIED, "1330", 9, "E1", "F1"),
+        aura(LogEvent.SPELL_AURA_REMOVED, "1330", 25, "E1", "F1"),
+      ],
+    });
+    const pts = burstWindowDecisionPoints(combat([f, enemyWithBurst()]));
+    expect(pts[0]!.feasible).toBe(false);
+  });
+});
+
+describe("burstExtrasLabel", () => {
+  it("marks each extra pressed after the opener and drops those past the horizon", () => {
+    expect(
+      burstExtrasLabel({
+        tSec: 63,
+        extraCds: [
+          { spellName: "Trueshot", castSec: 63 },
+          { spellName: "Incarnation: Chosen of Elune", castSec: 69 },
+          { spellName: "Avatar", castSec: 84 },
+        ],
+      }),
+    ).toBe("Trueshot; Incarnation: Chosen of Elune 6s later");
   });
 });

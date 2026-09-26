@@ -26,6 +26,7 @@
  */
 import {
   BURST_RESPONSE_WINDOW_SEC,
+  burstExtrasLabel,
   type BurstWindowDecisionPoint,
 } from "../analysis/burstWindowDecisionPoints";
 
@@ -116,14 +117,9 @@ export function formatBurstAnsweredLines(
   return ranked
     .slice(0, cap)
     .map((p) => {
-      // Only the CDs that landed inside the response horizon this line talks
-      // about: a CD cast 20s later belongs to a different exchange and would
-      // read as if it had opened alongside the lead. Same filter, same
-      // imported constant, as `burstWindowResponseEvents`.
-      const extras = p.extraCds
-        .filter((c) => c.castSec <= p.tSec + BURST_RESPONSE_WINDOW_SEC)
-        .map((c) => c.spellName)
-        .join("; ");
+      // Only the CDs inside the response horizon this line talks about, each
+      // offset from the opener — the same helper as `burstWindowResponseEvents`.
+      const extras = burstExtrasLabel(p);
       const extrasPart = extras ? ` (+${extras})` : "";
       const first = p.responseCasts[0];
       // Latency is an INTERVAL between two instants, not a grid-anchored

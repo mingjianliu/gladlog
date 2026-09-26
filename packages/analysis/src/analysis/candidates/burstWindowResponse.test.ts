@@ -240,7 +240,7 @@ describe("burstWindowResponseEvents — the rendered facts", () => {
       leadCdId: "360194",
       casterSpec: "Assassination Rogue",
       caster: "Rogue-R",
-      extras: "Recklessness",
+      extras: "Recklessness 2s later",
       pressured: "Mate-R",
       pressuredHpPct: "31",
       pressuredHpT: "45",

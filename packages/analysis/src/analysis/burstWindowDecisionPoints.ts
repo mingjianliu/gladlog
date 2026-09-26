@@ -59,6 +59,7 @@ import {
 import { getUnitPositionAtTime } from "../utils/losAnalysis";
 import { LOS_SWEEP_GAP_MS } from "../utils/positionSampling";
 import { canReachTargetAt } from "../utils/rootReachability";
+import { buildCannotCastIntervals } from "../utils/cannotCastIntervals";
 import { isOffensiveSpell, spellDangerWeight } from "../utils/spellDanger";
 import { buildFilteredAuraIntervals } from "../utils/utils";
 import {
@@ -223,7 +224,8 @@ export interface BurstWindowResponses {
   /** a friendly pressed a major healing cooldown (`BURST_HEAL_CD_IDS`) */
   healCd: boolean;
   /** a friendly aimed hard CC / a root / an interrupt AT one of the burst's
-   * own casters (dest = caster) */
+   * own casters (dest = caster), or a friendly's hard CC / root LANDED on one
+   * of them from an untargeted or ground cast (`controlLandedResponses`) */
   control: boolean;
   /** the most-pressured friendly opened `KITE_GAIN_YARDS` on the nearest
    * burst caster across the response window */
@@ -468,6 +470,117 @@ const CONTROL_IDS = new Set<string>([
   ...rootSpellIds,
   ...INTERRUPT_IDS,
 ]);
+
+/**
+ * How far before a control aura landed a friendly's untargeted / ground cast
+ * may be and still be the cast that produced it. Capacitor Totem's fuse is
+ * 2 s (61740741: cast 318.844, stun 320.856); an AoE fear or stun lands on
+ * the cast's own millisecond. A trap or Binding Shot armed earlier than this
+ * falls back to the aura's own time.
+ */
+export const GROUND_CONTROL_FUSE_MS = 3000;
+
+const isNoDest = (dest: string | undefined): boolean =>
+  !dest || /^0+$/.test(dest);
+
+/**
+ * The control answers `dest = caster` cannot see: a friendly's hard CC or
+ * root (the aura half of `CONTROL_IDS`) that LANDED on one of the burst's
+ * casters from an untargeted or ground cast — Capacitor Totem, Psychic
+ * Scream, Intimidating Shout, Leg Sweep, traps. Reliability round 2
+ * (61740741 @311): the owner's Capacitor Totem, pressed 7.8 s into an
+ * Incarnation window, stunned the caster and the menu still said nobody
+ * answered.
+ *
+ * The aura's source resolves to a friendly player directly or through
+ * `ownerId` (totems, pets). The response time is that player's latest
+ * untargeted cast (or a cast of the aura's own spell) at most
+ * `GROUND_CONTROL_FUSE_MS` before the aura, else the aura's own time; the
+ * name is the aura's (the cast found may be the totem relocation, not the
+ * totem). An aura that a control cast aimed at a caster could have produced
+ * is skipped: the cast-side test already counts it.
+ */
+export function controlLandedResponses(
+  casters: ReadonlyArray<{
+    auraEvents?: ReadonlyArray<{
+      timestamp: number;
+      spellId?: string;
+      srcUnitId: string;
+      logLine: { event: string };
+    }>;
+  }>,
+  casterIds: ReadonlySet<string>,
+  friendlyPlayerOf: (srcUnitId: string) => string | undefined,
+  friendlyCasts: ReadonlyArray<{
+    unitId: string;
+    spellId: string;
+    dest: string | undefined;
+    tMs: number;
+  }>,
+  w0: number,
+  w1: number,
+): Array<{ unitId: string; spellId: string; tMs: number }> {
+  const out: Array<{ unitId: string; spellId: string; tMs: number }> = [];
+  for (const caster of casters)
+    for (const a of caster.auraEvents ?? []) {
+      if (a.logLine.event !== "SPELL_AURA_APPLIED") continue;
+      const sid = a.spellId ?? "";
+      if (!ccSpellIds.has(sid) && !rootSpellIds.has(sid)) continue;
+      if (a.timestamp < w0 || a.timestamp > w1 + GROUND_CONTROL_FUSE_MS)
+        continue;
+      const unitId = friendlyPlayerOf(a.srcUnitId);
+      if (!unitId) continue;
+      let cast: (typeof friendlyCasts)[number] | undefined;
+      for (const c of friendlyCasts) {
+        if (c.tMs > a.timestamp) break;
+        if (
+          c.unitId === unitId &&
+          c.tMs >= a.timestamp - GROUND_CONTROL_FUSE_MS &&
+          (isNoDest(c.dest) || c.spellId === sid)
+        )
+          cast = c;
+      }
+      // the cast-side test already counted an aimed control from this
+      // friendly that could be this aura's cause
+      const aimed = friendlyCasts.some(
+        (c) =>
+          c.unitId === unitId &&
+          c.tMs >= a.timestamp - GROUND_CONTROL_FUSE_MS &&
+          c.tMs <= a.timestamp &&
+          CONTROL_IDS.has(c.spellId) &&
+          c.dest != null &&
+          casterIds.has(c.dest),
+      );
+      if (aimed) continue;
+      const tMs = cast?.tMs ?? a.timestamp;
+      if (tMs < w0 || tMs > w1) continue;
+      out.push({ unitId, spellId: sid, tMs });
+    }
+  return out;
+}
+
+/**
+ * The window's other CDs as one facts / line value: only those cast inside
+ * the response horizon (a CD 21 s later belongs to a different exchange —
+ * match 2195ab6e round 1, window 2:17–2:58), each marked `Ns later` when it
+ * was not pressed on the opener's own second (61740741: Incarnation 6.7 s
+ * after Volley read as "stacked with it"). "; " joins them — ", " is the
+ * facts separator the gates split on. One helper for the candidate and the
+ * [BURST ANSWERED] line.
+ */
+export function burstExtrasLabel(p: {
+  tSec: number;
+  extraCds: ReadonlyArray<{ spellName: string; castSec: number }>;
+}): string {
+  return p.extraCds
+    .filter((c) => c.castSec <= p.tSec + BURST_RESPONSE_WINDOW_SEC)
+    .map((c) =>
+      c.castSec > p.tSec
+        ? `${c.spellName} ${c.castSec - p.tSec}s later`
+        : c.spellName,
+    )
+    .join("; ");
+}
 
 export interface BoundedSegment {
   fromSeconds: number;
@@ -775,6 +888,37 @@ export function burstWindowDecisionPoints(
       );
   }
 
+  // Feasibility's "could not act" also covers what `inCcAt` never saw:
+  // silences and kick lockouts, from the one cannot-cast predicate the
+  // dispel and healing-gap exemptions use (reliability round 2 W1a). Pets
+  // count as enemies here — a Felhunter's Spell Lock locks as hard as a Kick.
+  const enemyPlayerIds = new Set<string>(enemies.map((u) => u.id));
+  const enemySourceIds = new Set<string>([
+    ...enemyPlayerIds,
+    ...units
+      .filter((u) => u.ownerId && enemyPlayerIds.has(u.ownerId))
+      .map((u) => u.id as string),
+  ]);
+  for (const u of friendlies)
+    ccByUnit.set(u.id, [
+      ...(ccByUnit.get(u.id) ?? []),
+      ...buildCannotCastIntervals(u, enemySourceIds).map((iv) => ({
+        startMs: iv.from,
+        endMs: iv.to,
+      })),
+    ]);
+  const friendlyPlayerIds = new Set<string>(friendlies.map((u) => u.id));
+  const ownerOfUnit = new Map<string, string>(
+    units
+      .filter((u) => u.ownerId && friendlyPlayerIds.has(u.ownerId))
+      .map((u) => [u.id as string, u.ownerId as string]),
+  );
+  const friendlyPlayerOf = (srcUnitId: string): string | undefined =>
+    friendlyPlayerIds.has(srcUnitId) ? srcUnitId : ownerOfUnit.get(srcUnitId);
+  const friendlyNameById = new Map<string, string>(
+    friendlies.map((u) => [u.id, u.name]),
+  );
+
   const out: BurstWindowDecisionPoint[] = [];
   {
     for (const seg of segments) {
@@ -874,6 +1018,24 @@ export function burstWindowDecisionPoints(
             Math.round(((c.tMs - tMs) / 1000 + Number.EPSILON) * 10) / 10,
         });
       }
+      for (const r of controlLandedResponses(
+        casterIds.map((id) => units.find((u) => u.id === id)).filter(Boolean),
+        casterIdSet,
+        friendlyPlayerOf,
+        friendlyCasts,
+        w0,
+        w1,
+      ))
+        responseCasts.push({
+          category: "control",
+          spellId: r.spellId,
+          spellName: getEnglishSpellName(r.spellId),
+          casterName: friendlyNameById.get(r.unitId) ?? "",
+          tSec: Math.floor((r.tMs - start) / 1000),
+          latencySec:
+            Math.round(((r.tMs - tMs) / 1000 + Number.EPSILON) * 10) / 10,
+        });
+      responseCasts.sort((a, b) => a.latencySec - b.latencySec);
       // ── outcomes per friendly, and the ONE pressured friendly ────────────
       // Computed before the kite/feasibility/triage work below, because all
       // three ask about the same unit (see `pressured`).

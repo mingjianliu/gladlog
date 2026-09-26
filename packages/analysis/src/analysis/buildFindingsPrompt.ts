@@ -76,7 +76,7 @@ const CHAIN_LEGENDS: Record<string, string> = {
   // the corpus reference: it is a descriptive contrast between two
   // populations, never a prescription, and the numbers must be cited, not
   // invented.
-  "slow-defensive-response": `- "slow-defensive-response": at facts.t the enemy opened facts.leadCd (+facts.extras): no friendly answered within 8 s although a tool was ready (wall/external/healing CD/control on the caster/kite); facts.pressured fell to facts.pressuredHpPct% inside the window. Corpus reference (n=facts.refN facts.leadCd burst windows): a friendly died inside the window facts.refDeathResp% of the time when answered within 8 s vs facts.refDeathNoResp% when not — descriptive contrast, not causal proof; cite the numbers, do not invent others.`,
+  "slow-defensive-response": `- "slow-defensive-response": at facts.t the enemy opened facts.leadCd (+facts.extras; an extra marked "Ns later" was pressed N s after the opener, not with it): no friendly answered within 8 s although a tool was ready (wall/external/healing CD/control on the caster/kite); facts.pressured fell to facts.pressuredHpPct% inside the window. Corpus reference (n=facts.refN facts.leadCd burst windows): a friendly died inside the window facts.refDeathResp% of the time when answered within 8 s vs facts.refDeathNoResp% when not — descriptive contrast, not causal proof; cite the numbers, do not invent others.`,
   // crisis-no-response (spec 2026-08-29 §1b, GH #58, Task 10, further
   // amended same-day — "不管分数线", the rating line is out entirely): the
   // reference is OUTCOME-based (death-within-10s for responders vs

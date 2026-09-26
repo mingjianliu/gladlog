@@ -225,7 +225,9 @@ describe("formatBurstAnsweredLines — wording", () => {
         ],
       }),
     ]);
-    expect(out[0]!.line).toContain("enemy opened Deathmark (+Recklessness) (");
+    expect(out[0]!.line).toContain(
+      "enemy opened Deathmark (+Recklessness 4s later) (",
+    );
     expect(out[0]!.line).not.toContain("Trueshot");
   });
 

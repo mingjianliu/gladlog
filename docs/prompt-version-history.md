@@ -1301,3 +1301,10 @@ cooldown-ledger-consistency gate 26 → 0 (all 26 Guardian Spirit);
 cd-hoarded −29, external-unused −19; 4,335 context hunks all on
 Guardian Spirit, plus 17 [BURST ANSWERED] / [CD PRIOR] lines whose
 feasibility now sees it on cooldown.
+
+v148 (2026-09-25, reliability round 2 W1a follow-up): a landed ground /
+AoE control on a burst caster answers the burst, feasibility also reads
+silences and kick lockouts, extras say "Ns later"; burst-window reference
+regenerated (C2 included; C4 regen follows). 605 files:
+slow-defensive-response −51 / +34, [BURST ANSWERED] reworded in 2,392
+contexts.

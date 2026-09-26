@@ -1019,6 +1019,21 @@ const INDEX: PredicateRow[] = [
     mod: cooldownTiming,
   },
   {
+    file: `${A}/analysis/burstWindowDecisionPoints.ts`,
+    symbol: "controlLandedResponses",
+    mod: burstWindowDecisionPoints,
+  },
+  {
+    file: `${A}/analysis/burstWindowDecisionPoints.ts`,
+    symbol: "GROUND_CONTROL_FUSE_MS",
+    mod: burstWindowDecisionPoints,
+  },
+  {
+    file: `${A}/analysis/burstWindowDecisionPoints.ts`,
+    symbol: "burstExtrasLabel",
+    mod: burstWindowDecisionPoints,
+  },
+  {
     file: `${A}/data/spellTags.ts`,
     symbol: "officialSilenceIds",
     mod: spellTags,

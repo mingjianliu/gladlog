@@ -33,7 +33,10 @@ import {
   traceDecision,
 } from "../../facts/decisionTrace";
 import type { BurstWindowDecisionPoint } from "../burstWindowDecisionPoints";
-import { BURST_RESPONSE_WINDOW_SEC } from "../burstWindowDecisionPoints";
+import {
+  BURST_RESPONSE_WINDOW_SEC,
+  burstExtrasLabel,
+} from "../burstWindowDecisionPoints";
 import { fmtFactTime } from "../factFormat";
 import type { CandidateEvent } from "../types";
 
@@ -170,15 +173,9 @@ export function burstWindowResponseEvents(
   }
   const out: CandidateEvent[] = [];
   for (const { p, ref } of ranked.slice(0, cap)) {
-    // Only the CDs that landed inside the 8 s this sentence judges: a CD cast
-    // 21 s later belongs to a different exchange and would read as if it had
-    // opened alongside the lead (real case: match 2195ab6e round 1, window
-    // 2:17–2:58).
-    const extras = p.extraCds
-      .filter((c) => c.castSec <= p.tSec + BURST_RESPONSE_WINDOW_SEC)
-      .map((c) => c.spellName)
-      // "; " — ", " is the facts separator the gates split on
-      .join("; ");
+    // Only the CDs inside the 8 s this sentence judges, each offset from the
+    // opener — one helper with the [BURST ANSWERED] line.
+    const extras = burstExtrasLabel(p);
     out.push({
       id: `slow-defensive-response:${owner.id}:${p.tSec}`,
       type: "slow-defensive-response",
