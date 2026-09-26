@@ -192,6 +192,29 @@ export const SHARED_CD_RACIAL_SPELL_IDS: ReadonlySet<string> = new Set([
  */
 export const TRINKET_RACIAL_SHARED_LOCKOUT_MS = 30_000;
 
+/**
+ * Will to Survive locks the trinket longer than the others. Measured
+ * 2026-09-25 (reliability round 3 W1j) on a 1-in-5 sample of the 08-28
+ * new-season manifest: Will to Survive → Medallion successes n = 482, 478 of
+ * them at ≥ 60.1 s (p1 60.1 s); the rejected presses ("Item is not ready
+ * yet", the trinket's own cooldown excluded) n = 17, 14 of them ≤ 57.5 s —
+ * e10c6bea's rejection 50.7 s after Will to Survive, while the ledger said
+ * "trinket: ON CD (18s left)" and then "ready". The same scan confirms the
+ * flat 30 s for Will of the Forsaken (successes min 30.1 s n = 1,404,
+ * rejections max 29.9 s). Open, not suppressed: 4 Will to Survive successes
+ * below 60 s (52.1 / 56.0 / 58.1 / 59.4) and 3 rejections above it (62.1 /
+ * 70.4 / 71.0) are unexplained. Re-measure with
+ * packages/eval/scripts/racialTrinketLockScan.ts (update-wow-data.md §7b).
+ */
+export const WILL_TO_SURVIVE_TRINKET_LOCKOUT_MS = 60_000;
+
+/** How long pressing this racial locks the PvP trinket. */
+export function racialTrinketLockoutMs(spellId: string): number {
+  return spellId === "59752"
+    ? WILL_TO_SURVIVE_TRINKET_LOCKOUT_MS
+    : TRINKET_RACIAL_SHARED_LOCKOUT_MS;
+}
+
 /** English name of a racial spell id, or null when the id is not a racial. */
 export function racialName(spellId: string): string | null {
   return RACIAL_ABILITIES[spellId]?.name ?? null;

@@ -9,14 +9,6 @@
  *  Full history in docs/prompt-version-history.md (append new entries there);
  *  the last few entries stay inline so a reader sees the format:
  *
- *  v147 (2026-09-25, reliability audit C4): Guardian Spirit's expired
- *  press (Guardian Angel) comes back 60 s after the BUFF ended (less a
- *  measured 1 s logging lag), not 60 s after the press; the death block
- *  reads the same per-cast cooldown as the [RES] ledger. 605 files:
- *  cooldown-ledger-consistency gate 26 → 0 (all 26 Guardian Spirit);
- *  cd-hoarded −29, external-unused −19; 4,335 context hunks all on
- *  Guardian Spirit, plus 17 [BURST ANSWERED] / [CD PRIOR] lines whose
- *  feasibility now sees it on cooldown.
  *  v148 (2026-09-25, reliability round 2 W1a follow-up): a landed ground /
  *  AoE control on a burst caster answers the burst, feasibility also reads
  *  silences and kick lockouts, extras say "Ns later"; burst-window reference
@@ -30,5 +22,12 @@
  *  1–16 (Preservation Stasis −16, Holy Paladin −1..−4), no median moves;
  *  the rendered `(n=…)` on [CD PRIOR] lines is the only prompt text that
  *  can change.
+ *  v150 (2026-09-25, reliability round 3 W1j): one PvP-trinket readiness
+ *  predicate (pvpTrinketRemainingSecondsAt) for the [CC ON TEAM] note, the
+ *  [DEATH] line, [HEALER EXPOSURE] and the peel / bookmark target state; a
+ *  Medallion means a DB2 Medallion item equipped or a Medallion cast (else
+ *  "no PvP trinket"); Will to Survive locks the trinket 60 s (corpus), the
+ *  other racials 30 s. 605 files: 401 contexts, [DEATH] "(PvP Trinket
+ *  available)" −74; menu byte-identical; gates 0 → 0.
  */
-export const PROMPT_VERSION = 149;
+export const PROMPT_VERSION = 150;

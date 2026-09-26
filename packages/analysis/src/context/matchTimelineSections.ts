@@ -3,7 +3,10 @@ import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 import { CD_WASTE_PRESSURE_HP_PCT } from "../analysis/candidateFindings";
 import { isDmgSpikeTrough } from "../analysis/crisisDecisionPoints";
 import { getEnglishSpellName } from "../data/spellEffectData";
-import { IPlayerCCTrinketSummary } from "../utils/ccTrinketAnalysis";
+import {
+  IPlayerCCTrinketSummary,
+  pvpTrinketRemainingSecondsAt,
+} from "../utils/ccTrinketAnalysis";
 import {
   cdReadyInTimeAt,
   DEFENSIVE_TAGS,
@@ -747,17 +750,10 @@ export function emitFriendlyDeathEntries<S>(params: {
         (summary.trinketType === "Gladiator" ||
           summary.trinketType === "Adaptation")
       ) {
-        const cooldownSec = summary.trinketCooldownSeconds;
-        let lastUse: number | undefined;
-        for (let i = summary.trinketUseTimes.length - 1; i >= 0; i--) {
-          const t = summary.trinketUseTimes[i];
-          if (t <= death.atSeconds) {
-            lastUse = t;
-            break;
-          }
-        }
+        // The one readiness predicate (W1j): own cooldown AND the racial lock
+        // (e10c6bea: Will to Survive locked the Medallion past this line).
         trinketAvailable =
-          lastUse === undefined || death.atSeconds - lastUse >= cooldownSec;
+          pvpTrinketRemainingSecondsAt(summary, death.atSeconds) === 0;
       }
 
       // F145: Teammate Defensive Persistence Check — find big buttons that were available at death

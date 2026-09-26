@@ -42,10 +42,12 @@ import * as buildExemplarLedPrompt from "@gladlog/analysis/src/compare/buildExem
 import * as cellLookup from "@gladlog/analysis/src/compare/cellLookup";
 import * as claimChecker from "@gladlog/analysis/src/compare/claimChecker";
 import * as burstAnswered from "@gladlog/analysis/src/context/burstAnswered";
+import * as ccUse from "@gladlog/analysis/src/context/ccUse";
 import * as cdPrior from "@gladlog/analysis/src/context/cdPrior";
+import * as forcedTrinket from "@gladlog/analysis/src/context/forcedTrinket";
 import * as matchTimelineSections from "@gladlog/analysis/src/context/matchTimelineSections";
 import * as observedConsequences from "@gladlog/analysis/src/context/observedConsequences";
-import * as charmedPlayer from "@gladlog/analysis/src/utils/charmedPlayer";
+import * as peelOptions from "@gladlog/analysis/src/context/peelOptions";
 import * as resLedgerPrune from "@gladlog/analysis/src/context/resLedgerPrune";
 import * as stackedDefensivesContext from "@gladlog/analysis/src/context/stackedDefensives";
 import * as timelineHelpers from "@gladlog/analysis/src/context/timelineHelpers";
@@ -71,7 +73,6 @@ import * as racialAbilities from "@gladlog/analysis/src/data/racialAbilities";
 import * as spellCategories from "@gladlog/analysis/src/data/spellCategories";
 import * as spellEffectData from "@gladlog/analysis/src/data/spellEffectData";
 import * as spellReach from "@gladlog/analysis/src/data/spellReach";
-import * as spellRange from "@gladlog/analysis/src/utils/spellRange";
 import * as spellSchools from "@gladlog/analysis/src/data/spellSchools";
 import * as spellTags from "@gladlog/analysis/src/data/spellTags";
 import * as spellTargeting from "@gladlog/analysis/src/data/spellTargeting";
@@ -84,12 +85,9 @@ import * as bracketKey from "@gladlog/analysis/src/utils/bracketKey";
 import * as buffDuration from "@gladlog/analysis/src/utils/buffDuration";
 import * as cannotCastIntervals from "@gladlog/analysis/src/utils/cannotCastIntervals";
 import * as castParam from "@gladlog/analysis/src/utils/castParam";
-import * as ccTrinketAnalysis from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
-import * as ccUse from "@gladlog/analysis/src/context/ccUse";
-import * as forcedTrinket from "@gladlog/analysis/src/context/forcedTrinket";
-import * as peelOptions from "@gladlog/analysis/src/context/peelOptions";
 import * as ccTargetState from "@gladlog/analysis/src/utils/ccTargetState";
-import * as spellMechanics from "@gladlog/analysis/src/utils/spellMechanics";
+import * as ccTrinketAnalysis from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
+import * as charmedPlayer from "@gladlog/analysis/src/utils/charmedPlayer";
 import * as cooldowns from "@gladlog/analysis/src/utils/cooldowns";
 import * as counterfactual from "@gladlog/analysis/src/utils/counterfactual";
 import * as deathOutcomeAnalysis from "@gladlog/analysis/src/utils/deathOutcomeAnalysis";
@@ -114,9 +112,10 @@ import * as renderGrid from "@gladlog/analysis/src/utils/renderGrid";
 import * as resourceAt from "@gladlog/analysis/src/utils/resourceAt";
 import * as rootReachability from "@gladlog/analysis/src/utils/rootReachability";
 import * as spellDanger from "@gladlog/analysis/src/utils/spellDanger";
+import * as spellMechanics from "@gladlog/analysis/src/utils/spellMechanics";
+import * as spellRange from "@gladlog/analysis/src/utils/spellRange";
 import * as stats from "@gladlog/analysis/src/utils/stats";
 import * as summonOwner from "@gladlog/analysis/src/utils/summonOwner";
-import * as appCandidates from "../src/corpus/appCandidates";
 import * as summonReachability from "@gladlog/analysis/src/utils/summonReachability";
 import * as talentBehaviors from "@gladlog/analysis/src/utils/talentBehaviors";
 import * as talentOwnership from "@gladlog/analysis/src/utils/talentOwnership";
@@ -169,6 +168,7 @@ import * as collectLogs from "../../log-pipeline/src/collectLogs";
 // argv[1]) and pulls nothing beyond storeAccess + analysis.
 import * as candidateDiagnostics from "../scripts/candidateDiagnostics";
 import * as abCompareStats from "../src/ab/abCompareStats";
+import * as appCandidates from "../src/corpus/appCandidates";
 import * as baselineFindings from "../src/explore/baselineFindings";
 import * as redactOutcome from "../src/halo/redactOutcome";
 import * as checkScoreProvenance from "../src/provenance/checkScoreProvenance";
@@ -1032,6 +1032,21 @@ const INDEX: PredicateRow[] = [
     file: `${A}/analysis/burstWindowDecisionPoints.ts`,
     symbol: "burstExtrasLabel",
     mod: burstWindowDecisionPoints,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "pvpTrinketRemainingSecondsAt",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "detectTrinketType",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/data/racialAbilities.ts`,
+    symbol: "racialTrinketLockoutMs",
+    mod: racialAbilities,
   },
   {
     file: `${A}/data/spellTags.ts`,

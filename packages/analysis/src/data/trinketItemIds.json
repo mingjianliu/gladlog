@@ -1,7 +1,9 @@
 {
-  "generatedAt": "2026-09-05T00:11:27.224Z",
+  "generatedAt": "2026-09-26T01:45:36.845Z",
   "sources": {
-    "itemSparseCsv": "https://wago.tools/db2/ItemSparse/csv?build=12.1.0.69587"
+    "itemSparseCsv": "https://wago.tools/db2/ItemSparse/csv?build=12.1.0.69587",
+    "itemEffectCsv": "https://wago.tools/db2/ItemEffect/csv?build=12.1.0.69587",
+    "itemXItemEffectCsv": "https://wago.tools/db2/ItemXItemEffect/csv?build=12.1.0.69587"
   },
   "adaptationNameFragment": "Sigil of Adaptation",
   "relentlessNameFragment": "Relentless",
@@ -46,5 +48,44 @@
     "186967",
     "192299",
     "192413"
+  ],
+  "gladiatorMedallionSpellId": "336126",
+  "gladiatorItemIds": [
+    "181333",
+    "184052",
+    "184055",
+    "184058",
+    "185304",
+    "185309",
+    "186869",
+    "186966",
+    "192298",
+    "192412",
+    "201450",
+    "201810",
+    "203375",
+    "204164",
+    "205711",
+    "205779",
+    "208307",
+    "209346",
+    "209764",
+    "211606",
+    "216282",
+    "216369",
+    "218422",
+    "218716",
+    "219931",
+    "229492",
+    "229783",
+    "230353",
+    "230641",
+    "245751",
+    "255327",
+    "255616",
+    "267076",
+    "270556",
+    "270605",
+    "280118"
   ]
 }

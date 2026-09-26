@@ -9,6 +9,27 @@ import { writeArtifact } from "./lib/emit";
 export const ADAPTATION_NAME_FRAGMENT = "Sigil of Adaptation";
 export const RELENTLESS_NAME_FRAGMENT = "Relentless";
 export const TRINKET_INVENTORY_TYPE = "12";
+/** Gladiator's Medallion on-use spell. Items carrying it are found through
+ * ItemEffect.SpellID → ItemXItemEffect.ItemID — the official link, not a name
+ * match (reliability round 3 W1j: a player with no Medallion equipped was
+ * rendered "PvP Trinket available"). */
+export const GLADIATOR_MEDALLION_SPELL_ID = "336126";
+
+/** Item ids whose on-use effect is `spellId`. */
+export function extractItemsWithOnUse(
+  itemEffectRows: Record<string, string>[],
+  itemXItemEffectRows: Record<string, string>[],
+  spellId: string,
+): string[] {
+  const effectIds = new Set(
+    itemEffectRows.filter((r) => r["SpellID"] === spellId).map((r) => r["ID"]),
+  );
+  return uniqueSortedIds(
+    itemXItemEffectRows
+      .filter((r) => effectIds.has(r["ItemEffectID"] ?? ""))
+      .map((r) => r["ItemID"] ?? ""),
+  );
+}
 
 function uniqueSortedIds(ids: string[]): string[] {
   return Array.from(new Set(ids.filter((id) => /^\d+$/.test(id)))).sort(
@@ -64,10 +85,32 @@ export async function main(): Promise<void> {
     itemSparseParsed.rows,
   );
 
+  const itemEffect = parseCsv(await fetchTable("ItemEffect", build, cacheDir));
+  assertColumns(itemEffect.header, ["ID", "SpellID"], "ItemEffect");
+  const itemXItemEffect = parseCsv(
+    await fetchTable("ItemXItemEffect", build, cacheDir),
+  );
+  assertColumns(
+    itemXItemEffect.header,
+    ["ItemEffectID", "ItemID"],
+    "ItemXItemEffect",
+  );
+  const gladiatorItemIds = extractItemsWithOnUse(
+    itemEffect.rows,
+    itemXItemEffect.rows,
+    GLADIATOR_MEDALLION_SPELL_ID,
+  );
+
   const output = {
     generatedAt: new Date().toISOString(),
     sources: {
       itemSparseCsv: `https://wago.tools/db2/ItemSparse/csv?build=${encodeURIComponent(
+        build,
+      )}`,
+      itemEffectCsv: `https://wago.tools/db2/ItemEffect/csv?build=${encodeURIComponent(
+        build,
+      )}`,
+      itemXItemEffectCsv: `https://wago.tools/db2/ItemXItemEffect/csv?build=${encodeURIComponent(
         build,
       )}`,
     },
@@ -75,6 +118,8 @@ export async function main(): Promise<void> {
     relentlessNameFragment: RELENTLESS_NAME_FRAGMENT,
     adaptationItemIds,
     relentlessItemIds,
+    gladiatorMedallionSpellId: GLADIATOR_MEDALLION_SPELL_ID,
+    gladiatorItemIds,
   };
 
   const outPath = new URL("../../src/data/trinketItemIds.json", import.meta.url)

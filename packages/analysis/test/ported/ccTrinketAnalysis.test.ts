@@ -10,6 +10,7 @@ import {
   analyzePlayerCCAndTrinket,
   applicableCCAvoidanceIds,
   detectTrinketType,
+  pvpTrinketRemainingSecondsAt,
 } from "../../src/utils/ccTrinketAnalysis";
 import {
   makeAdvancedAction,
@@ -27,6 +28,7 @@ vi.mock("../../src/data/trinketItemIds.json", () => ({
   default: {
     adaptationItemIds: ["TEST_ADAPT_1", "181816"],
     relentlessItemIds: ["TEST_RELENTLESS_1", "181335"],
+    gladiatorItemIds: ["TEST_GLAD_1"],
   },
 }));
 
@@ -87,8 +89,31 @@ describe("detectTrinketType", () => {
     expect(detectTrinketType(unitWithTrinket("181335"))).toBe("Relentless");
   });
 
-  it("returns Gladiator when equipment is present but ID is not in either set", () => {
-    expect(detectTrinketType(unitWithTrinket("99999"))).toBe("Gladiator");
+  it("returns Gladiator when a trinket slot holds a Medallion item", () => {
+    expect(detectTrinketType(unitWithTrinket("99999", "TEST_GLAD_1"))).toBe(
+      "Gladiator",
+    );
+  });
+
+  it("W1j: two non-PvP trinkets and no Medallion cast → None, not Gladiator (0e0663e6)", () => {
+    expect(detectTrinketType(unitWithTrinket("99999", "88888"))).toBe("None");
+  });
+
+  it("W1j: a Medallion cast proves a Medallion even without a known item", () => {
+    const u = unitWithTrinket("99999");
+    (u as any).spellCastEvents = [
+      makeSpellCastEvent(
+        "336126",
+        1_000,
+        "p1",
+        "Self",
+        "p1",
+        "Self",
+        0,
+        "Gladiator's Medallion",
+      ),
+    ];
+    expect(detectTrinketType(u)).toBe("Gladiator");
   });
 
   it("returns Unknown when unit has no equipment info", () => {
@@ -2391,5 +2416,44 @@ describe("a CC with no REMOVED event closes at its full duration, not at match e
     const poly = result.ccInstances.find((c) => c.spellId === "118");
     expect(poly).toBeDefined();
     expect(poly!.durationSeconds).toBeCloseTo(6, 5);
+  });
+});
+
+describe("pvpTrinketRemainingSecondsAt — the one trinket readiness predicate (W1j)", () => {
+  const base = {
+    trinketType: "Gladiator" as const,
+    trinketUseTimes: [] as number[],
+    trinketCooldownSeconds: 120,
+  };
+  it("Will to Survive locks the Medallion 60 s, not 30 s (e10c6bea: rejected 50.7 s after it)", () => {
+    const s = {
+      ...base,
+      racialTrinketLocks: [{ atSeconds: 113.3, lockSeconds: 60 }],
+    };
+    expect(pvpTrinketRemainingSecondsAt(s, 164)).toBeCloseTo(9.3, 6);
+    expect(pvpTrinketRemainingSecondsAt(s, 174)).toBe(0);
+  });
+  it("the later-ending lock wins: own cooldown vs racial", () => {
+    const s = {
+      ...base,
+      trinketUseTimes: [10],
+      racialTrinketLocks: [{ atSeconds: 100, lockSeconds: 60 }],
+    };
+    expect(pvpTrinketRemainingSecondsAt(s, 120)).toBe(40);
+  });
+  it("no PvP trinket to press → null (Relentless, None)", () => {
+    expect(
+      pvpTrinketRemainingSecondsAt({ ...base, trinketType: "None" }, 50),
+    ).toBeNull();
+    expect(
+      pvpTrinketRemainingSecondsAt({ ...base, trinketType: "Relentless" }, 50),
+    ).toBeNull();
+  });
+  it("renderGrid: a use at 10.8 s counts from second 10", () => {
+    const s = { ...base, trinketUseTimes: [10.8] };
+    expect(pvpTrinketRemainingSecondsAt(s, 10)).toBe(0);
+    expect(
+      pvpTrinketRemainingSecondsAt(s, 10, { renderGrid: true }),
+    ).toBeCloseTo(120.8, 6);
   });
 });

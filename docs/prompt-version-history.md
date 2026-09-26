@@ -1316,3 +1316,11 @@ Guardian Spirit cells identical). 27 of the table's n values change by
 1–16 (Preservation Stasis −16, Holy Paladin −1..−4), no median moves;
 the rendered `(n=…)` on [CD PRIOR] lines is the only prompt text that
 can change.
+
+v150 (2026-09-25, reliability round 3 W1j): one PvP-trinket readiness
+predicate (pvpTrinketRemainingSecondsAt) for the [CC ON TEAM] note, the
+[DEATH] line, [HEALER EXPOSURE] and the peel / bookmark target state; a
+Medallion means a DB2 Medallion item equipped or a Medallion cast (else
+"no PvP trinket"); Will to Survive locks the trinket 60 s (corpus), the
+other racials 30 s. 605 files: 401 contexts, [DEATH] "(PvP Trinket
+available)" −74; menu byte-identical; gates 0 → 0.

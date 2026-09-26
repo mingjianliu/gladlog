@@ -25,6 +25,7 @@ import { ccSpellIds } from "../data/spellTags";
 import {
   analyzePlayerCCAndTrinket,
   IPlayerCCTrinketSummary,
+  pvpTrinketRemainingSecondsAt,
 } from "./ccTrinketAnalysis";
 import { isHealerSpec, specToString } from "./cooldowns";
 import { ccThreatRadiusYards } from "./spellRange";
@@ -148,7 +149,7 @@ export interface IHealerCCThreat {
 export interface IHealerBurstExposure {
   atSeconds: number;
   burstDangerLabel: string;
-  trinketState: "available" | "on_cooldown" | "passive";
+  trinketState: "available" | "on_cooldown" | "passive" | "none";
   /** Seconds from match start when trinket returns, if on_cooldown */
   trinketAvailableAtSeconds: number | null;
   /** All non-Immune threats (both exposed and pillar-blocked) */
@@ -167,32 +168,35 @@ function getTrinketStateAtSeconds(
   summary: IPlayerCCTrinketSummary,
   atSeconds: number,
 ): {
-  state: "available" | "on_cooldown" | "passive";
+  state: "available" | "on_cooldown" | "passive" | "none";
   availableAtSeconds: number | null;
 } {
+  // No PvP trinket equipped (W1j, 0e0663e6): nothing to press, never "ready"
+  if (summary.trinketType === "None")
+    return { state: "none", availableAtSeconds: null };
   // Relentless = passive DR reduction; Adaptation = auto-proc break — neither has a manual CD
   if (
     summary.trinketType === "Relentless" ||
     summary.trinketType === "Adaptation"
   )
     return { state: "passive", availableAtSeconds: null };
-  const lastUse =
-    [...summary.trinketUseTimes].reverse().find((t) => t <= atSeconds) ?? null;
-  if (lastUse === null) return { state: "available", availableAtSeconds: null };
-  const readyAt = lastUse + summary.trinketCooldownSeconds;
-  if (readyAt <= atSeconds)
-    return { state: "available", availableAtSeconds: null };
-  return { state: "on_cooldown", availableAtSeconds: readyAt };
+  // The one readiness predicate (W1j): own cooldown AND the racial lock —
+  // e10c6bea printed "healer trinket ready" while the game was still
+  // rejecting the Medallion press after Will to Survive.
+  const remaining = pvpTrinketRemainingSecondsAt(summary, atSeconds) ?? 0;
+  if (remaining <= 0) return { state: "available", availableAtSeconds: null };
+  return { state: "on_cooldown", availableAtSeconds: atSeconds + remaining };
 }
 
 function computeExposureLabel(
-  trinketState: "available" | "on_cooldown" | "passive",
+  trinketState: "available" | "on_cooldown" | "passive" | "none",
   exposedThreats: IHealerCCThreat[],
 ): HealerExposureLabel {
   if (exposedThreats.length === 0) return "Safe";
   const hasFullDR = exposedThreats.some((t) => t.healerDRLevel === "Full");
   const has50DR = exposedThreats.some((t) => t.healerDRLevel === "50%");
-  const trinketUnavailable = trinketState === "on_cooldown";
+  const trinketUnavailable =
+    trinketState === "on_cooldown" || trinketState === "none";
   if (hasFullDR && trinketUnavailable) return "Critical";
   if (hasFullDR) return "Exposed";
   if (has50DR && trinketUnavailable) return "Exposed";
@@ -507,15 +511,23 @@ export function formatHealerExposureEntries(
         ? "healer trinket ready"
         : e.trinketState === "passive"
           ? "healer trinket passive"
-          : `healer trinket on CD${e.trinketAvailableAtSeconds !== null ? ` (back ${fmtTime(e.trinketAvailableAtSeconds)})` : ""}`;
+          : e.trinketState === "none"
+            ? "healer has no PvP trinket"
+            : `healer trinket on CD${e.trinketAvailableAtSeconds !== null ? ` (back ${fmtTime(e.trinketAvailableAtSeconds)})` : ""}`;
 
-    const trinketUnavailable = e.trinketState === "on_cooldown";
+    const trinketUnavailable =
+      e.trinketState === "on_cooldown" || e.trinketState === "none";
+    const noTrinket = e.trinketState === "none";
     const labelStr =
       e.exposureLabel === "Critical"
-        ? "exposure: Full DR, trinket on CD"
+        ? noTrinket
+          ? "exposure: Full DR, no trinket"
+          : "exposure: Full DR, trinket on CD"
         : e.exposureLabel === "Exposed"
           ? trinketUnavailable
-            ? "exposure: 50% DR, trinket on CD"
+            ? noTrinket
+              ? "exposure: 50% DR, no trinket"
+              : "exposure: 50% DR, trinket on CD"
             : "exposure: Full DR, trinket ready"
           : e.exposureLabel === "Pressured"
             ? "exposure: 50% DR, trinket ready"

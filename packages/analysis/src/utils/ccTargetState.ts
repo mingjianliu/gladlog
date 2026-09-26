@@ -37,6 +37,7 @@ import type { AtomicArenaCombat, ICombatUnit } from "@gladlog/parser-compat";
 import { ccSpellIds } from "../data/spellTags";
 import { buildAuraIntervals, type IAuraInterval } from "./auraIntervals";
 import { buildCannotCastIntervals } from "./cannotCastIntervals";
+import { pvpTrinketRemainingSecondsAt } from "./ccTrinketAnalysis";
 import {
   cdReadyInTimeAt,
   type IMajorCooldownInfo,
@@ -96,14 +97,16 @@ type Interval = { from: number; to: number };
  * PEEL OPTIONS and the CC USE bookmarks. null when the unit has no summary.
  */
 export function pvpTrinketReadyAtSecond(
-  summary:
-    { trinketUseTimes: number[]; trinketCooldownSeconds: number } | undefined,
+  summary: Parameters<typeof pvpTrinketRemainingSecondsAt>[0] | undefined,
   s: number,
 ): boolean | null {
   if (!summary) return null;
-  return !summary.trinketUseTimes.some(
-    (u) => Math.floor(u) <= s && s < u + summary.trinketCooldownSeconds,
-  );
+  // The one readiness predicate (racial lock + equipped trinket, W1j) on the
+  // render grid; null when the unit has no PvP trinket to press.
+  const remaining = pvpTrinketRemainingSecondsAt(summary, s, {
+    renderGrid: true,
+  });
+  return remaining === null ? null : remaining <= 0;
 }
 
 /** The target's own abilities that break (or make it ignore) a CC of `mech`. */

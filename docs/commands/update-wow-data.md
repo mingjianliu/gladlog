@@ -473,6 +473,12 @@ npx tsx packages/eval/scripts/offensiveCdGapScan.ts scan \
   --out $GLADLOG_EVAL_HOME/reports/offensive-cd-gap-<date>/cells.json
 npx tsx packages/eval/scripts/offensiveCdGapScan.ts report \
   --in $GLADLOG_EVAL_HOME/reports/offensive-cd-gap-<date>/cells.json --min-n 50 --min-share 0.1
+# 6. Racial → PvP trinket lock (2026-09-25, reliability round 3 W1j): racialTrinketLockoutMs (Will to
+#    Survive 60 s, the rest 30 s) is corpus-measured, not DB2. Successes bound the lock from above,
+#    rejections ("Item is not ready yet", the trinket's own cooldown excluded) from below; a success
+#    well under the table or a rejection well over it is a FLAG to adjudicate. ~5 min on every 5th file.
+npx tsx packages/eval/scripts/racialTrinketLockScan.ts \
+  --manifest $GLADLOG_EVAL_HOME/corpus/manifest-archive-<date>.txt --every 5
 ```
 
 npm aliases for the same three (identical flags): `npm run -w @gladlog/eval scan:rot` ·
