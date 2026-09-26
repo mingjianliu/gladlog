@@ -9,12 +9,6 @@
  *  Full history in docs/prompt-version-history.md (append new entries there);
  *  the last few entries stay inline so a reader sees the format:
  *
- *  v164 (2026-09-26, reliability round 3 wave 2, audit 121c): a [PEEL OPTION]
- *  row's distance, DR and target-trinket facts are one snapshot stamped with the
- *  span's first second ("| at m:ss: D yd, DR L[, T PvP trinket …]") — DR can reset
- *  inside the span (52 of 744 rows on the 605-file capture). The legend says the
- *  snapshot can change later; every counted second still passed every check.
- *  Rows 744 → 744, nothing else moves.
  *  v165 (2026-09-26, reliability round 3 wave 2, audit 1bad): Mind Control's
  *  possession radius (100 yd on its single-target MOD_POSSESS row) no longer adds
  *  to its reach — kick-eaten yourReachYd 135 → 35 (130 → 30 without Phantom
@@ -25,5 +19,9 @@
  *  dive's item times and window bounds. 605 files: 27 menu `t` values stop
  *  pointing one second past their timeline row, 302 change only their tenths;
  *  nothing else moves.
+ *  v167 (2026-09-26, range audit): kick-eaten's kickRangeYd reads the kick's
+ *  cast id (kickCastSpellId) — Skull Bash 100 → 13 yd, Solar Beam 105 → 45 yd
+ *  (the effect ids carry DB2's 100 yd placeholder). 605 files: 33 kick-eaten
+ *  lines change, nothing else.
  */
-export const PROMPT_VERSION = 166;
+export const PROMPT_VERSION = 167;

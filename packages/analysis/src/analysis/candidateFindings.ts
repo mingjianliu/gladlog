@@ -99,6 +99,7 @@ import {
   type RawStreams,
 } from "../utils/rawStreams";
 import { toRenderSecond } from "../utils/renderGrid";
+import { kickCastSpellId } from "../utils/enemyInterrupts";
 import { spellRangeForCaster, spellReachForCaster } from "../utils/spellRange";
 import { getSpellSchoolName } from "../utils/spellSchools";
 import { getTalentAvoidanceTriggers } from "../utils/talentBehaviors";
@@ -2273,7 +2274,12 @@ function teamPlayEvents(
             ? ((combat.units ?? {})[k.sourceId] ?? null)
             : null;
           const yourReachYd = spellReachForCaster(owner, k.interruptedSpellId);
-          const kickRangeYd = spellRangeForCaster(kicker, k.kickSpellId);
+          // the kick's CAST id — the event may carry the interrupt effect id,
+          // whose range row is the 100 yd placeholder (Skull Bash 93985)
+          const kickRangeYd = spellRangeForCaster(
+            kicker,
+            kickCastSpellId(k.kickSpellId),
+          );
           return yourReachYd !== null && kickRangeYd !== null
             ? { yourReachYd, kickRangeYd }
             : null;

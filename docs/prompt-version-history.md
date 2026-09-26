@@ -1452,3 +1452,8 @@ burst-into-mitigation, questionable-external, crisis-no-response, and the deep
 dive's item times and window bounds. 605 files: 27 menu `t` values stop
 pointing one second past their timeline row, 302 change only their tenths;
 nothing else moves.
+
+v167 (2026-09-26, range audit): kick-eaten's kickRangeYd reads the kick's
+cast id (kickCastSpellId) — Skull Bash 100 → 13 yd, Solar Beam 105 → 45 yd
+(the effect ids carry DB2's 100 yd placeholder). 605 files: 33 kick-eaten
+lines change, nothing else.

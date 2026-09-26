@@ -56,6 +56,34 @@ const KIT = (kitRaw as unknown as { interrupts: Record<string, KitEntry> })
  * resolves official cast ranges for. */
 export const INTERRUPT_SPELL_IDS: readonly string[] = Object.keys(KIT);
 
+const castable = (e: KitEntry): boolean =>
+  e.classBaseline.length > 0 ||
+  e.specBaseline.length > 0 ||
+  Object.keys(e.talent).length > 0 ||
+  e.pet;
+
+/**
+ * The CAST id behind a kick event's spell id. SPELL_INTERRUPT carries the
+ * interrupt EFFECT id for some kits (Skull Bash 93985 → 106839, Solar Beam
+ * 97547 → 78675, Spell Lock 119910 / 132409 → 19647); those rows sit in the
+ * kit with no baseline, talent or pet source, and their SpellMisc range is
+ * DB2's 100 yd vision-range placeholder. An effect-only entry resolves to the
+ * one same-named castable entry; anything else (a castable id, an effect-only
+ * id with no castable twin, an id outside the kit) is returned unchanged.
+ * Pure data, no unit: the kicker demonstrably kicked, so its talent reading
+ * must not decide which row names the spell (agy review). `kickersInRange`
+ * reads castable kit ids (`interruptForUnit`), so kick-eaten's `kickRangeYd`
+ * keyed on this resolver measures the same spell.
+ */
+export function kickCastSpellId(eventSpellId: string): string {
+  const e = KIT[eventSpellId];
+  if (!e || castable(e)) return eventSpellId;
+  const twins = Object.entries(KIT).filter(
+    ([id, k]) => id !== eventSpellId && k.name === e.name && castable(k),
+  );
+  return twins.length === 1 ? twins[0]![0] : eventSpellId;
+}
+
 /** Exact ms of cooldown left on `spellId` for this unit at `atMs` (0 = ready),
  * from its most recent successful cast (own or pet) and the official
  * cooldown. The one predicate behind both the timeline's whole-second display

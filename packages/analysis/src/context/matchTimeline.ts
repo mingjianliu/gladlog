@@ -91,6 +91,7 @@ import {
   computeEnemyInterruptAvailability,
   interruptCooldownSeconds,
   interruptForUnit,
+  kickCastSpellId,
 } from "../utils/enemyInterrupts";
 import {
   externalDamageForApplication,
@@ -3143,8 +3144,10 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     /** Cooldown behind an enemy kick. SPELL_INTERRUPT carries the interrupt
      * EFFECT id, which for some kits is not the cast id the cooldown lives on
      * (Skull Bash 93985 vs 106839, Solar Beam 97547 vs 78675) — fall back to
-     * the kicker's kit entry (`interruptForUnit`, what the "enemy interrupts
-     * UP" ledger keys on) when it is the same spell by name. */
+     * the cast id (`kickCastSpellId`, the same resolver kick-eaten's range
+     * reads), then to the kicker's kit entry (`interruptForUnit`, what the
+     * "enemy interrupts UP" ledger keys on) when it is the same spell by
+     * name. */
     const enemyKickCooldown = (
       unit: ICombatUnit,
       spellId: string,
@@ -3152,6 +3155,10 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     ): number | undefined => {
       const direct = interruptCooldownSeconds(spellId);
       if (direct !== undefined) return direct;
+      const cast = kickCastSpellId(spellId);
+      const viaCast =
+        cast !== spellId ? interruptCooldownSeconds(cast) : undefined;
+      if (viaCast !== undefined) return viaCast;
       const def = interruptForUnit(unit);
       return def && getEnglishSpellName(def.spellId, def.name) === kickSpell
         ? interruptCooldownSeconds(def.spellId)

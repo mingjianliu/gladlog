@@ -1234,6 +1234,11 @@ const INDEX: PredicateRow[] = [
   },
   {
     file: `${A}/utils/enemyInterrupts.ts`,
+    symbol: "kickCastSpellId",
+    mod: enemyInterrupts,
+  },
+  {
+    file: `${A}/utils/enemyInterrupts.ts`,
     symbol: "computeEnemyInterruptAvailability",
     mod: enemyInterrupts,
   },
