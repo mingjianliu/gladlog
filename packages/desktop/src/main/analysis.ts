@@ -1590,7 +1590,11 @@ export function createAnalysisService(deps: {
         (dir) => slottedDocCandidatePaths(deps.matchesDir, dir, lang),
         currentSlotKey(settings),
       );
-      return rows.map(({ dir, meta }) => meta?.id ?? dir);
+      // getCached returns `slot.result`, so a current slot whose stored
+      // result is missing was never "analyzed" for the batch either.
+      return rows
+        .filter(({ slot }) => Boolean(slot.result))
+        .map(({ dir, meta }) => meta?.id ?? dir);
     },
     async getState(matchId: string): Promise<{
       cached: AnalysisResult | null;
