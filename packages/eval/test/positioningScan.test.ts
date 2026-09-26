@@ -72,6 +72,101 @@ describe("extractGeoClaims", () => {
   });
 });
 
+describe("G4 endpoint identity (2026-09-26, audits 483f / eb80)", () => {
+  it("a STAYED span with a switched nearest enemy yields start on X, end on Y, and X's own end distance", () => {
+    const { claims } = extractGeoClaims(
+      "    0:55–1:05 [High burst] 10→2.1yd from Bad-Realm-US→Buddy-Realm-US (Bad-Realm-US 22.7yd at the end) — you were the burst target",
+    );
+    expect(
+      claims.map((c) => [c.endpoint, c.unitName, c.atSeconds, c.distanceYards]),
+    ).toEqual([
+      ["start", "Bad-Realm-US", 55, 10],
+      ["end", "Buddy-Realm-US", 65, 2.1],
+      ["end-own", "Bad-Realm-US", 65, 22.7],
+    ]);
+  });
+
+  it("a wrong 'X Dyd at the end' is caught (codex review: 22.7 → 999 used to pass)", () => {
+    const bad = extractGeoClaims(
+      "    0:55–1:05 [High burst] 10→10yd from Bad-Realm-US→Bad-Realm-US (Bad-Realm-US 999yd at the end)",
+    ).claims;
+    expect(checkGeoClaims(bad, ctx).violations.map((v) => v.code)).toEqual([
+      "G4_END_DISTANCE",
+    ]);
+  });
+
+  it("a name with parentheses parses (realm Aggra(Português)) and keeps its peak claim", () => {
+    const { claims } = extractGeoClaims(
+      "    0:17 [Low burst] opened 10.5→20.8yd from Duibz-Aggra(Português)-EU (peak at 0:25, from Kámí-Stormscale-EU) — burst targeted X",
+    );
+    expect(claims.map((c) => [c.endpoint, c.unitName])).toEqual([
+      ["start", "Duibz-Aggra(Português)-EU"],
+      ["peak", "Kámí-Stormscale-EU"],
+    ]);
+  });
+
+  it("a KITED line's B is checked at its peak, against the peak's enemy", () => {
+    const { claims } = extractGeoClaims(
+      "    0:55 [High burst] opened 4→18yd from Bad-Realm-US (peak at 0:59, from Buddy-Realm-US)",
+    );
+    expect(
+      claims.map((c) => [c.endpoint, c.unitName, c.atSeconds, c.distanceYards]),
+    ).toEqual([
+      ["start", "Bad-Realm-US", 55, 4],
+      ["peak", "Buddy-Realm-US", 59, 18],
+    ]);
+  });
+
+  it("a wrong end distance is a G4_END_DISTANCE violation (static units)", () => {
+    const ok = extractGeoClaims(
+      "    0:55–1:05 [High burst] 10→10yd from Bad-Realm-US",
+    ).claims;
+    expect(checkGeoClaims(ok, ctx).violations).toEqual([]);
+    const bad = extractGeoClaims(
+      "    0:55–1:05 [High burst] 10→25yd from Bad-Realm-US",
+    ).claims;
+    expect(checkGeoClaims(bad, ctx).violations.map((v) => v.code)).toEqual([
+      "G4_END_DISTANCE",
+    ]);
+  });
+});
+
+describe("G4 on a moving unit with a fractional sampling instant", () => {
+  // The enemy walks away 10 yd/s along x from t = 60 s. Analysis samples the
+  // end ON the render grid (1:05 → 65.0 s, 60 yd) — the value the line shows
+  // is the rendered second's own (codex review: a raw 65.9 s sample relied on
+  // the 2 s slack, which also admits 40 yd).
+  const walker: any = {
+    name: "Runner-Realm-US",
+    advancedActions: Array.from({ length: 121 }, (_, i) => i * 1_000).map(
+      (dt) => ({
+        timestamp: START + dt,
+        advancedActorCurrentHp: 100,
+        advancedActorMaxHp: 100,
+        advancedActorPositionX: dt < 60_000 ? 10 : 10 + (dt - 60_000) / 100,
+        advancedActorPositionY: 0,
+        advanced: true,
+        advancedActorPowers: [],
+      }),
+    ),
+  };
+  const mctx = { ...ctx, enemies: [walker] };
+  it("the rendered second's own distance passes", () => {
+    const c = extractGeoClaims(
+      "    0:55–1:05 [High burst] 10→60yd from Runner-Realm-US",
+    ).claims;
+    expect(checkGeoClaims(c, mctx).violations).toEqual([]);
+  });
+  it("…and still rejects a value no instant near the rendered second supports", () => {
+    const c = extractGeoClaims(
+      "    0:55–1:05 [High burst] 10→20yd from Runner-Realm-US",
+    ).claims;
+    expect(checkGeoClaims(c, mctx).violations.map((v) => v.code)).toEqual([
+      "G4_END_DISTANCE",
+    ]);
+  });
+});
+
 describe("checkGeoClaims on static fixture", () => {
   it("true claims pass with 0 violations", () => {
     const { claims } = extractGeoClaims(PROMPT);

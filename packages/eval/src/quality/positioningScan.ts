@@ -17,8 +17,14 @@
  *  G3 CD_RANGE      — "OFFENSIVE CD OUT OF RANGE … cast Nyd from nearest
  *                     enemy": recompute the distance to the nearest enemy at
  *                     the cast instant.
- *  G4 STAYED/KITED  — "[X burst] A→Byd from <name>": recompute the distance to
- *                     that enemy at the window start (A).
+ *  G4 STAYED/KITED  — "[X burst] A→Byd from <name>": recompute A to that enemy
+ *                     at the window start, and B to whoever it names — STAYED:
+ *                     "from X→Y" = Y at the span end (else X); KITED: "(peak at
+ *                     m:ss[, from Z])" = Z (else X) at the peak; "(X Dyd at the
+ *                     end)" = X at the span end (2026-09-26, audits 483f / eb80:
+ *                     B used to be another enemy's distance). Rendered times are
+ *                     floored; TIME_SLACK_SECONDS (= LOS_SWEEP_SLACK_S) is the
+ *                     shared tolerance for the sub-second sampling instant.
  *  G5 LOS_BREAK     — "LoS break ~N.Nyd away (pillar-blocks <name>)": the map
  *                     must have obstacle data, and at that instant the owner
  *                     and that enemy must actually see each other (you can
@@ -68,6 +74,8 @@ interface GeoClaim {
    * corpus, recomputing against the owner yields nothing but false violations
    * (27 of them measured in D2). */
   subjectName?: string;
+  /** G4: which distance of "A→B" this claim is (start A, STAYED end B, KITED peak B) */
+  endpoint?: "start" | "end" | "end-own" | "peak";
   raw: string;
 }
 
@@ -187,18 +195,55 @@ export function extractGeoClaims(promptText: string): GeoExtraction {
     // the pattern used to require a bare timestamp, so no STAYED line was ever
     // checked (found 2026-09-23, GH #103 A7). The start distance still anchors
     // on the span's first second.
+    // Names may carry parentheses (realm "Aggra(Português)"), never spaces.
     m = line.match(
-      /^ +(\d+:\d{2})(?:–\d+:\d{2})? \[[^\]]+ burst\] (?:opened )?([\d.]+)→([\d.]+)yd from (\S+)/,
+      /^ +(\d+:\d{2})(?:–(\d+:\d{2}))? \[[^\]]+ burst\] (opened )?([\d.]+)→([\d.]+)yd from ([^\s→]+)(?:→(\S+))?(?: \((\S+) ([\d.]+)yd at the end\))?(?:.*? \(peak at (\d+:\d{2})(?:, from (.+?))?\)(?=\s|$))?/,
     );
     if (m) {
+      const startName = m[6]!;
       claims.push({
         kind: "STAYED_OR_KITED",
         lineNo,
         atSeconds: parseTime(m[1]),
-        distanceYards: Number(m[2]),
-        unitName: m[4],
+        distanceYards: Number(m[4]),
+        unitName: startName,
+        endpoint: "start",
         raw: line,
       });
+      if (m[3] && m[10]) {
+        // KITED: B is the peak, measured to Z (else the start enemy)
+        claims.push({
+          kind: "STAYED_OR_KITED",
+          lineNo,
+          atSeconds: parseTime(m[10]),
+          distanceYards: Number(m[5]),
+          unitName: m[11] ?? startName,
+          endpoint: "peak",
+          raw: line,
+        });
+      } else if (!m[3] && m[2]) {
+        // STAYED: B at the span end, measured to Y (else the start enemy)
+        claims.push({
+          kind: "STAYED_OR_KITED",
+          lineNo,
+          atSeconds: parseTime(m[2]),
+          distanceYards: Number(m[5]),
+          unitName: m[7] ?? startName,
+          endpoint: "end",
+          raw: line,
+        });
+        // …and the start enemy's own end distance, when another was nearest
+        if (m[8] && m[9])
+          claims.push({
+            kind: "STAYED_OR_KITED",
+            lineNo,
+            atSeconds: parseTime(m[2]),
+            distanceYards: Number(m[9]),
+            unitName: m[8],
+            endpoint: "end-own",
+            raw: line,
+          });
+      }
       continue;
     }
 
@@ -499,10 +544,16 @@ export function checkGeoClaims(
         checked++;
         const tol = tolerance(claim.distanceYards);
         if (!inSpan(claim.distanceYards, span, tol)) {
+          const which = claim.endpoint ?? "start";
           violations.push({
             claim,
-            code: "G4_START_DISTANCE",
-            detail: `claimed window-start ${claim.distanceYards}yd from ${claim.unitName}; window span [${span.min.toFixed(1)}, ${span.max.toFixed(1)}]yd (tol ${tol.toFixed(1)})`,
+            code:
+              which === "start"
+                ? "G4_START_DISTANCE"
+                : which === "peak"
+                  ? "G4_PEAK_DISTANCE"
+                  : "G4_END_DISTANCE",
+            detail: `claimed ${which} ${claim.distanceYards}yd from ${claim.unitName}; span [${span.min.toFixed(1)}, ${span.max.toFixed(1)}]yd (tol ${tol.toFixed(1)})`,
           });
         }
         break;

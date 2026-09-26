@@ -21,7 +21,7 @@ import {
   isHealerSpec,
   isMeleeSpec,
 } from "./cooldowns";
-import { fmtTime } from "./renderGrid";
+import { fmtTime, toRenderSecond } from "./renderGrid";
 import { IAlignedBurstWindow } from "./enemyCDs";
 import {
   HealerExposureLabel,
@@ -167,6 +167,15 @@ export interface IPositionEvent {
    *  this" whenever this was ≥ half the window, and the responder quoted it as
    *  "CC-locked the whole time" beside the owner's own 1:08 Apotheosis. */
   ownerCcSeconds?: number;
+  /** STAYED_IN: the enemy nearest at the evaluated end (`endDistanceYards`
+   *  is its distance), and — when it is not `nearestEnemyName` — that start
+   *  enemy's own distance at the end */
+  endEnemyName?: string;
+  startEnemyEndYards?: number;
+  /** KITED: when and from whom the peak nearest-enemy distance
+   *  (`endDistanceYards`) was measured */
+  peakSeconds?: number;
+  peakEnemyName?: string;
   /** CD_OUT_OF_RANGE only */
   spellName?: string;
   /** CD_OUT_OF_RANGE only: the reach the claim was measured against
@@ -336,6 +345,41 @@ export function beyondReachThroughout(
   return true;
 }
 
+/**
+ * "X" when the nearest enemy at the end is still the start's, else "X→Y"
+ * plus the start enemy's own end distance — the two distances of
+ * "A→B yd from …" name whoever they were measured to (audit eb80: "10→2.1yd
+ * from Pressbro" while Pressbro was 22.7 yd away and 2.1 yd was Mastutinho).
+ * positioningScan G4 parses this form.
+ */
+export function stayedEndpointNames(
+  e: Pick<
+    IPositionEvent,
+    "nearestEnemyName" | "endEnemyName" | "startEnemyEndYards"
+  >,
+): string {
+  if (!e.endEnemyName || e.endEnemyName === e.nearestEnemyName)
+    return `${e.nearestEnemyName}`;
+  const own =
+    e.startEnemyEndYards !== undefined
+      ? ` (${e.nearestEnemyName} ${e.startEnemyEndYards}yd at the end)`
+      : "";
+  return `${e.nearestEnemyName}→${e.endEnemyName}${own}`;
+}
+
+/** KITED's B is the PEAK nearest-enemy distance: say when, and from whom
+ *  when it is not the start enemy. positioningScan G4 parses this form. */
+export function kitedPeakStr(
+  e: Pick<IPositionEvent, "nearestEnemyName" | "peakSeconds" | "peakEnemyName">,
+): string {
+  if (e.peakSeconds === undefined) return "";
+  const who =
+    e.peakEnemyName && e.peakEnemyName !== e.nearestEnemyName
+      ? `, from ${e.peakEnemyName}`
+      : "";
+  return ` (peak at ${fmtTime(e.peakSeconds)}${who})`;
+}
+
 /** Seconds of [fromSeconds, toSeconds] during which the owner was in hard CC.
  *  Overlapping CC instances (simultaneous stun + silence) are merged, not
  *  summed — otherwise stacked CCs could exceed the window length. */
@@ -454,18 +498,21 @@ export function computeOwnerPositionEvents(params: {
     if (ccOverlapSeconds(ccInstances, w.fromSeconds, evalEnd) >= evalSpan / 2)
       continue;
 
+    // Every distance this line renders is sampled ON the render grid (whole
+    // seconds, floored like fmtTime) — the gate re-checks the rendered second
+    // (CLAUDE.md shared-predicate rule; codex astra review 2026-09-26: a
+    // raw-instant sample plus the gate's 2 s slack let a moving enemy's 40 yd
+    // pass for a 60 yd second).
+    const tStart = toRenderSecond(w.fromSeconds);
+    const tEnd = toRenderSecond(evalEnd);
+    if (tEnd <= tStart) continue;
     const start = nearestEnemyAt(
       enemies,
       null,
-      matchStartMs + w.fromSeconds * 1000,
+      matchStartMs + tStart * 1000,
       owner,
     );
-    const end = nearestEnemyAt(
-      enemies,
-      null,
-      matchStartMs + evalEnd * 1000,
-      owner,
-    );
+    const end = nearestEnemyAt(enemies, null, matchStartMs + tEnd * 1000, owner);
     if (!start || !end) continue;
     if (start.distanceYards > CLOSE_RANGE_YARDS) continue; // was not in range to begin with
 
@@ -473,7 +520,13 @@ export function computeOwnerPositionEvents(params: {
     // shows up as a mid-window peak that endpoint-only checks would miss.
     let maxDistance = Math.max(start.distanceYards, end.distanceYards);
     let minDistance = Math.min(start.distanceYards, end.distanceYards);
-    for (let t = Math.ceil(w.fromSeconds) + 1; t < evalEnd; t += 1) {
+    // the peak's own identity and time (KITED renders it; audit 483f / eb80:
+    // "A→B yd from X" used to pair X with another enemy's distance)
+    let peak =
+      end.distanceYards > start.distanceYards
+        ? { d: end.distanceYards, enemy: end.enemyName, t: tEnd }
+        : { d: start.distanceYards, enemy: start.enemyName, t: tStart };
+    for (let t = tStart + 1; t < tEnd; t += 1) {
       const sample = nearestEnemyAt(
         enemies,
         null,
@@ -483,8 +536,29 @@ export function computeOwnerPositionEvents(params: {
       if (sample) {
         maxDistance = Math.max(maxDistance, sample.distanceYards);
         minDistance = Math.min(minDistance, sample.distanceYards);
+        if (sample.distanceYards > peak.d)
+          peak = { d: sample.distanceYards, enemy: sample.enemyName, t };
       }
     }
+    // the start enemy's own distance at the end, when someone else is nearest
+    const startEnemy = enemies.find((e) => e.name === start.enemyName);
+    const startEnemyEndPos =
+      startEnemy && end.enemyName !== start.enemyName
+        ? getUnitPositionAtTime(
+            startEnemy,
+            matchStartMs + tEnd * 1000,
+            POSITION_MAX_GAP_MS,
+          )
+        : null;
+    const ownerEndPos = getUnitPositionAtTime(
+      owner,
+      matchStartMs + tEnd * 1000,
+      POSITION_MAX_GAP_MS,
+    );
+    const startEnemyEndYards =
+      startEnemyEndPos && ownerEndPos
+        ? Math.round(distanceBetween(ownerEndPos, startEnemyEndPos) * 10) / 10
+        : undefined;
 
     const delta = end.distanceYards - start.distanceYards;
     // B4 fix: prefer the overlapping damage-spike's target (identical ±5s overlap rule to the
@@ -508,6 +582,8 @@ export function computeOwnerPositionEvents(params: {
         // Peak distance, not endpoint — a hit-and-run kite re-engages before the window ends
         endDistanceYards: Math.round(maxDistance * 10) / 10,
         nearestEnemyName: start.enemyName,
+        peakSeconds: peak.t,
+        peakEnemyName: peak.enemy,
         dangerLabel: w.dangerLabel,
         dampeningPct: w.dampeningPct,
         burstTargetsOwner,
@@ -553,6 +629,8 @@ export function computeOwnerPositionEvents(params: {
         minDistanceYards: Math.round(minDistance * 10) / 10,
         maxDistanceYards: Math.round(maxDistance * 10) / 10,
         nearestEnemyName: start.enemyName,
+        endEnemyName: end.enemyName,
+        ...(startEnemyEndYards !== undefined ? { startEnemyEndYards } : {}),
         dangerLabel: w.dangerLabel,
         dampeningPct: w.dampeningPct,
         ownerDefensiveAvailable:
@@ -931,7 +1009,7 @@ export function formatPositionEventsForContext(
           ? `${fmtTime(e.atSeconds)}–${fmtTime(e.toSeconds)}`
           : fmtTime(e.atSeconds);
       lines.push(
-        `    ${spanStr} [${e.dangerLabel} burst] ${e.startDistanceYards}→${e.endDistanceYards}yd from ${e.nearestEnemyName}${rangeStr(e)}${targetStr}${exposureStr}${hpStr}${defStr}`,
+        `    ${spanStr} [${e.dangerLabel} burst] ${e.startDistanceYards}→${e.endDistanceYards}yd from ${stayedEndpointNames(e)}${rangeStr(e)}${targetStr}${exposureStr}${hpStr}${defStr}`,
       );
     }
   }
@@ -949,7 +1027,7 @@ export function formatPositionEventsForContext(
         ? ` — healer exposure: ${e.healerExposureLabel}`
         : "";
       lines.push(
-        `    ${fmtTime(e.atSeconds)} [${e.dangerLabel} burst] opened ${e.startDistanceYards}→${e.endDistanceYards}yd from ${e.nearestEnemyName}${targetStr}${exposureStr}`,
+        `    ${fmtTime(e.atSeconds)} [${e.dangerLabel} burst] opened ${e.startDistanceYards}→${e.endDistanceYards}yd from ${e.nearestEnemyName}${kitedPeakStr(e)}${targetStr}${exposureStr}`,
       );
     }
   }

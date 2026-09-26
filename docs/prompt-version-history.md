@@ -1419,3 +1419,11 @@ full 63,303-file archive at 47f4279b (spot-checked equal at ab72caed on 600
 files / 1,658 windows). 107,357 → 107,358 windows; Solo Shuffle nEntered
 −1 / nUnentered +2, every rate and contrast unchanged to 0.1 pp; the only
 rendered change is the Solo Shuffle refN (50,483 → 50,484).
+
+v162 (2026-09-26, reliability round 3 wave 2, endpoint identity): POSITIONING
+STAYED IN names whoever each distance was measured to ("from X→Y (X Dyd at the
+end)" when another enemy is nearest at the end), KITED labels B as the peak
+("(peak at m:ss[, from Z])"), and every rendered distance is sampled on the
+render grid. 605 files at ab72caed: STAYED/KITED lines 4,165 → 4,079,
+position-mistake(stayed-in) 295 → 298 (−36 / +39); positioningScan G4 end
+violations 350 → 0.

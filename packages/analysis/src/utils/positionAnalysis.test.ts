@@ -1,9 +1,44 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  kitedPeakStr,
   STAYED_IN_NEAR_DEATH_PCT,
+  stayedEndpointNames,
   stayedInHadRealCost,
 } from "./positionAnalysis";
+
+describe("endpoint identity of 'A→B yd from …' (2026-09-26, audits 483f / eb80)", () => {
+  it("STAYED: same nearest enemy at both ends → just X", () => {
+    expect(
+      stayedEndpointNames({ nearestEnemyName: "X", endEnemyName: "X" }),
+    ).toBe("X");
+  });
+  it("STAYED: another enemy nearest at the end → X→Y plus X's own end distance", () => {
+    expect(
+      stayedEndpointNames({
+        nearestEnemyName: "Pressbro",
+        endEnemyName: "Mastutinho",
+        startEnemyEndYards: 22.7,
+      }),
+    ).toBe("Pressbro→Mastutinho (Pressbro 22.7yd at the end)");
+  });
+  it("KITED: the peak says when, and from whom when it is someone else", () => {
+    expect(
+      kitedPeakStr({
+        nearestEnemyName: "X",
+        peakSeconds: 59.4,
+        peakEnemyName: "X",
+      }),
+    ).toBe(" (peak at 0:59)");
+    expect(
+      kitedPeakStr({
+        nearestEnemyName: "X",
+        peakSeconds: 59.4,
+        peakEnemyName: "Z",
+      }),
+    ).toBe(" (peak at 0:59, from Z)");
+  });
+});
 
 /**
  * This predicate is **shared** between the context formatter's "(no real cost)"
