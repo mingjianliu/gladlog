@@ -52,13 +52,13 @@ Dragon's Breath / Binding Shot" class in old caches are void.
 v16: moment deep dive snapshot opt-in (2026-08-05) -- the deep dive pack
 gained a `snapshot` mode (castFlow / GCD-gap context added to the window
 pack); the default (non-snapshot) path stays byte-identical, but the pack
-*shape* the prompt builder accepts changed, so this counts as a
+_shape_ the prompt builder accepts changed, so this counts as a
 prompt-generation change under this cache's own rule and the version rolls
 regardless of whether a given cached entry happens to be a
 snapshot-affected one. Note this is orthogonal to the window cache's own
 `:snap` windowKey suffix (see analysis.ts's analyzeWindow) -- that suffix
-keeps snapshot-on/off runs of the *same* window from colliding with each
-other; this version bump is what invalidates *every* previously-cached
+keeps snapshot-on/off runs of the _same_ window from colliding with each
+other; this version bump is what invalidates _every_ previously-cached
 window/run/deepen/coach-chat-resume entry (all consumers of
 PROMPT_VERSION), snapshot or not, because they were all produced by the
 pre-v16 prompt builder.
@@ -228,45 +228,45 @@ whose target could not reach anyone for >= ROOT_UNREACHABLE_MIN_S (3 s)
 render; no candidate/accusation → prompt 变 → 旧缓存作废。
 
 v43 (2026-08-30): five A/B-approved menu changes land together (GH #34).
-1. healing-gap (HEAL-001) regated on the lowest friendly HP% reached during
-  the gap instead of gap seconds — 3,000-match outcome probe:
-  friendly-death-within-10s is flat across gap length but keyed on lowest
-  HP <=40% 13.0% vs 40-70% 2.8% vs >70% 0.8%. HEAL_GAP_FREE_MIN_S (>=4s)
-  replaced by HEAL_GAP_CRISIS_HP_PCT (<=40%, the same line as
-  crisisDecisionPoints' CRISIS_HP_PCT); events gained facts.lowestAllyHp
-  and sort by lowest HP ascending instead of damage descending; the legend
-  now also states facts.t is the gap START.
-2. cd-hoarded rewritten decision-point shaped (3,000-match outcome probe) —
-  "a teammate (or you) hit a crisis while a usable major defensive CD was
-  ready and it wasn't spent within 5 s", replacing the retired
-  availableWindows/CD_HOARD_MIN_LATE_S shape whose own intent guard
-  measured 35.6% of accusations wrong. facts change completely (lateS/
-  crisisT/castT/unresolved gone; t/crisisUnit/crisisHpPct/dmg2sPct/
-  readyCds/own/refDeathSpent/refDeathHeld/refN new) and only
-  Defensive-tagged, non-throughput cooldowns count now.
-  Crisis decision points are additionally re-anchored onto the prompt's
-  render grid (crisisDecisionPoints' anchorToRenderGrid + the shared
-  `gridHpPct` sampler in utils/cooldowns.ts, the same one matchTimeline's
-  [STATE] tick uses): cd-hoarded's `crisisHpPct` / crisis-no-response's
-  `hpPct` are now the [STATE] tick's own reading at the displayed second
-  instead of the raw advancedAction sample, `t` is a whole second on both
-  types (crisis-no-response used to render one decimal, e.g. `t=116.9`),
-  and a crossing no whole second can see is dropped. Measured
-  contradiction against the same-second [STATE] line over the 309-prompt
-  A/B corpus: cd-hoarded 155/167 covered lines → 0, crisis-no-response
-  7/8 → 0 (packages/eval/scripts/crisisHpStateScan.ts).
-3. cd-spent-idle retired from the candidate menu (signal outcome probe
-  2026-08-30, user ruling — no measurable cost): CANDIDATE_TYPE_FLAGS
-  .cdSpentIdle = false, so the menu loses one type.
-4. attempt-into-trinket cites the corpus outcome contrast (6.8% vs 3.8%) —
-  data/outcomeRefs.ts renders the reference numbers into the fact line and
-  the legend, gated by checkOutcomeRefConsistency.
-5. candidate-menu time facts floor to the render grid instead of rounding
-  past it (kick-eaten `t`, death `t`, missed-cleanse `t`, death-setup
-  `deathT`), so a menu line's second can never sit one second ahead of the
-  `fmtTime`-floored timeline marker it points at.
-菜单构成变(少一类)+ 多类 facts/legend 全变 → prompt 变 → 旧缓存作废。
 
+1. healing-gap (HEAL-001) regated on the lowest friendly HP% reached during
+   the gap instead of gap seconds — 3,000-match outcome probe:
+   friendly-death-within-10s is flat across gap length but keyed on lowest
+   HP <=40% 13.0% vs 40-70% 2.8% vs >70% 0.8%. HEAL_GAP_FREE_MIN_S (>=4s)
+   replaced by HEAL_GAP_CRISIS_HP_PCT (<=40%, the same line as
+   crisisDecisionPoints' CRISIS_HP_PCT); events gained facts.lowestAllyHp
+   and sort by lowest HP ascending instead of damage descending; the legend
+   now also states facts.t is the gap START.
+2. cd-hoarded rewritten decision-point shaped (3,000-match outcome probe) —
+   "a teammate (or you) hit a crisis while a usable major defensive CD was
+   ready and it wasn't spent within 5 s", replacing the retired
+   availableWindows/CD_HOARD_MIN_LATE_S shape whose own intent guard
+   measured 35.6% of accusations wrong. facts change completely (lateS/
+   crisisT/castT/unresolved gone; t/crisisUnit/crisisHpPct/dmg2sPct/
+   readyCds/own/refDeathSpent/refDeathHeld/refN new) and only
+   Defensive-tagged, non-throughput cooldowns count now.
+   Crisis decision points are additionally re-anchored onto the prompt's
+   render grid (crisisDecisionPoints' anchorToRenderGrid + the shared
+   `gridHpPct` sampler in utils/cooldowns.ts, the same one matchTimeline's
+   [STATE] tick uses): cd-hoarded's `crisisHpPct` / crisis-no-response's
+   `hpPct` are now the [STATE] tick's own reading at the displayed second
+   instead of the raw advancedAction sample, `t` is a whole second on both
+   types (crisis-no-response used to render one decimal, e.g. `t=116.9`),
+   and a crossing no whole second can see is dropped. Measured
+   contradiction against the same-second [STATE] line over the 309-prompt
+   A/B corpus: cd-hoarded 155/167 covered lines → 0, crisis-no-response
+   7/8 → 0 (packages/eval/scripts/crisisHpStateScan.ts).
+3. cd-spent-idle retired from the candidate menu (signal outcome probe
+   2026-08-30, user ruling — no measurable cost): CANDIDATE_TYPE_FLAGS
+   .cdSpentIdle = false, so the menu loses one type.
+4. attempt-into-trinket cites the corpus outcome contrast (6.8% vs 3.8%) —
+   data/outcomeRefs.ts renders the reference numbers into the fact line and
+   the legend, gated by checkOutcomeRefConsistency.
+5. candidate-menu time facts floor to the render grid instead of rounding
+   past it (kick-eaten `t`, death `t`, missed-cleanse `t`, death-setup
+   `deathT`), so a menu line's second can never sit one second ahead of the
+   `fmtTime`-floored timeline marker it points at.
+   菜单构成变(少一类)+ 多类 facts/legend 全变 → prompt 变 → 旧缓存作废。
 
 v44 (2026-09-01, GH #60 phase 2): slow-defensive-response rewritten to
 decision-point form. The type name is unchanged and every fact under it is
@@ -287,13 +287,13 @@ data/burstWindowPriorGenerated.json. Power Infusion (10060) can no longer
 open a window at all. Old caches carry the retired facts under the same
 type name, which the new legend does not describe — they must be void.
 
-
 v45 (2026-09-01, GH #60 phase 2c): two approved doors narrow which burst
 windows reach the menu. The facts are unchanged — the POPULATION is not,
 so a v44 cache carries slow-defensive-response lines this build refuses to
 produce (and one of the two, the contrast door, is now a hardFailure in
 checkBurstWindowRefConsistency, i.e. a v44 line replayed against a v45 gate
 goes red).
+
 1. Minimum-contrast door (data/burstWindowPrior.ts's
    BURST_REF_MIN_CONTRAST_PP = 3 + burstRefClearsMinContrast, imported by
    both the producer and the gate): a window only becomes a candidate when
@@ -310,7 +310,6 @@ goes red).
    fired on somebody who was already low when the burst opened — a
    sentence about the previous exchange. The reference table is untouched:
    it is built over FEASIBLE windows and never reads `triaged`.
-
 
 v46 (2026-09-01, GH #60 follow-up — the POSITIVE side): the match timeline
 gained `[BURST ANSWERED]` context lines. Same engine, opposite sign: a
@@ -337,6 +336,7 @@ The prompt text changed, so the version rolls; old caches carry no
 
 v47 (2026-09-02, GH #60 tail — chg9): three coupled changes, all of which
 move rendered text or the candidate population, so v46 caches are void.
+
 1. Teammate reachability gate on burst-window feasibility branch (b):
    a teammate's ready ally-reaching tool now counts only if the teammate
    could DELIVER it to the pressured friendly at the window-start render
@@ -1516,3 +1516,13 @@ enemy-window consumers move — slow-defensive-response +16 / −9, kick-eaten
 window facts on 35 ids (ids ±2/4 cap), position-mistake −19 / +17,
 questionable-external −6 / +3, burst-into-mitigation −2; Demonic Tyrant's
 20 s (Reign of Tyranny) now reaches those windows.
+
+v171 (2026-09-26, range audit, GH #120): the reach table's spec passives
+carry `specIds` and are owned by spec (Preservation aura +5 yd, Holy
+Paladin aura +10 yd on Divine Toll — dead on arrival before), a SpellMod
+on a spell only a trigger reaches is an aura's and stays out (Sniper's
+Advantage), and a triggered id's placeholder range (100 / 50000) yields to
+its cast's. 605 files (base 28cbee6f): missed-cleanse dps 199 → 200 /
+healer 260 → 262 (Preservation cleanse reach 30 → 35), kick-eaten
+yourReachYd 25 → 30 on 13 Preservation lines; nothing else, the match
+context is byte-identical.

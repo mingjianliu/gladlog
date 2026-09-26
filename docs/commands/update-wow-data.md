@@ -275,6 +275,9 @@ npx tsx packages/analysis/scripts/datagen/genDrCategories.ts
 # externals, cleanse / purge reach, healer reach. Sanity: Flash Heal 2061 must
 # carry Phantom Reach 459559 +15 %; the eval check is
 # packages/eval/scripts/healReachGroundTruth.ts (successful casts vs the model).
+# Spec passives (SpecializationSpells, e.g. the Preservation aura 356810 +5 yd)
+# come out with `specIds` — the runtime owns them by spec, not by loadout (GH
+# #120); Living Flame 361469 must carry 356810 with specIds ["1468"].
 # Darkness 196718 has no radius in DB2 (stays on the hand fallback in code).
 npx tsx packages/analysis/scripts/datagen/genSpellReach.ts
 # Interrupt kit per spec (GH #78, 2026-09-12): SkillLineAbility class baseline + SpecializationSpells +
@@ -522,6 +525,19 @@ npx tsx packages/eval/scripts/ledgerGapScan.ts \
 #    A nomination enters the table only with the tooltip sentence quoted in its note. ~5 min on every 30th file.
 npx tsx packages/eval/scripts/talentReplaceScan.ts \
   --manifest $GLADLOG_EVAL_HOME/corpus/manifest-archive-<date>.txt --every 30
+# 9. Cast ranges vs the game (2026-09-26, range audit, GH #120): every targeted SPELL_CAST_SUCCESS on a
+#    player is the game accepting the range at that instant; the scan compares caster → target distance
+#    with spellRangeForCaster (DB2 range + held range talents + spec passives), per spell × spec. SHORT =
+#    ≥ 2 % of casts land > model + 5 yd (a missing range talent / spec passive / wrong row — a "could not
+#    reach" claim built on it is false); PLACEHOLDER = model ≥ 100 yd (DB2's vision-range row sits on a
+#    triggered or effect id — the kick-eaten Skull Bash 100 yd bug); LONG is weak evidence (players rarely
+#    use full range). Stealth openers, Charge, Shadowstep and other gap-closers read SHORT because the cast
+#    line's position is sampled before the teleport — noise, not a range fact. Fix a real SHORT in datagen
+#    with the DB2 mechanism (Game-Behaviour Rule: row + mask + this corpus split), never by hand. ~15 min
+#    on every 20th file.
+npx tsx packages/eval/scripts/spellRangeGroundTruth.ts \
+  --manifest $GLADLOG_EVAL_HOME/corpus/manifest-archive-<date>.txt --every 20 --limit 1000 \
+  --out $GLADLOG_EVAL_HOME/reports/spell-range-<date>.json
 ```
 
 npm aliases for the same three (identical flags): `npm run -w @gladlog/eval scan:rot` ·

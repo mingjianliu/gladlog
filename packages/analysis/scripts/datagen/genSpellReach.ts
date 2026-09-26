@@ -39,6 +39,7 @@ import observedSpellIds from "../../src/data/observedSpellIdsGenerated.json";
 import spellIdLists from "../../src/data/spellIdLists";
 import inventory from "../../src/data/talentEffectInventoryGenerated.json";
 import { INTERRUPT_SPELL_IDS } from "../../src/utils/enemyInterrupts";
+import { PLACEHOLDER_RANGE_YD } from "../../src/utils/spellRange";
 import { writeArtifact } from "./lib/emit";
 import {
   AURA_ADD_FLAT_MODIFIER,
@@ -67,6 +68,50 @@ const APPLY_AURA = "6";
  * evidenced types are listed; other ambiguous radii (chain jumps, delayed
  * areas, BIND_SIGHT) stay as they were (codex astra). */
 const NON_REACH_RADIUS_AURA_TYPES = new Set(["2"]);
+
+/**
+ * The cast among `parents` (the ids whose EffectTriggerSpell points at a
+ * spell) whose reach the triggered id inherits. Tiers, best first: a real
+ * cast range beats DB2's placeholder (100 / 50000, `PLACEHOLDER_RANGE_YD`);
+ * then a parent the corpus has seen cast (`observed`) beats one it never
+ * has — Solar Beam 97547 is triggered by the player's 78675 (45 yd) and by
+ * an NPC-side 311930 (50 yd), and "farthest" alone picked the NPC (codex
+ * astra, GH #120); within a tier the farthest reach wins. `observed` is any
+ * corpus event carrying the id (auras, damage, pets included), so this tier
+ * is a heuristic for player-cast provenance, not proof of it. With
+ * `realOnly` the placeholder parents are no evidence at all. null when
+ * nothing qualifies.
+ */
+export function farthestTriggeringCast(
+  parents: readonly string[],
+  rangeBySpell: ReadonlyMap<string, number>,
+  radiusBySpell: ReadonlyMap<string, number>,
+  observed: ReadonlySet<string>,
+  realOnly = false,
+): { id: string; range: number; radius: number } | null {
+  let best: { id: string; range: number; radius: number } | null = null;
+  let bestRank: readonly number[] = [];
+  const reachOf = (range: number, radius: number) =>
+    radius > 0 ? (range > 0 ? range + radius : radius) : range;
+  const beats = (a: readonly number[], b: readonly number[]) => {
+    for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i]! > b[i]!;
+    return false;
+  };
+  for (const pid of parents) {
+    const range = rangeBySpell.get(pid) ?? 0;
+    const placeholder = range >= PLACEHOLDER_RANGE_YD;
+    if (realOnly && placeholder) continue;
+    const radius = radiusBySpell.get(pid) ?? 0;
+    const reach = reachOf(range, radius);
+    if (reach <= 0) continue;
+    const rank = [placeholder ? 0 : 1, observed.has(pid) ? 1 : 0, reach];
+    if (!best || beats(rank, bestRank)) {
+      best = { id: pid, range, radius };
+      bestRank = rank;
+    }
+  }
+  return best;
+}
 
 /**
  * Per spell: the largest radius among its effect rows (a row of a
@@ -104,6 +149,134 @@ export function effectRadiiAndParents(
     }
   }
   return { radiusBySpell, parentsOf };
+}
+
+/** One passive range / radius modifier as the table stores it. `specIds`
+ * marks a spec passive (DB2 SpecializationSpells, e.g. the Preservation aura
+ * 356810): every player of those specs owns it — it sits in no talent tree,
+ * so the runtime must not ask the loadout reader (`utils/spellRange.ts`
+ * `holds`). Same contract as `ICDModifier.specIds` (GH #106). */
+export type ReachMod = {
+  talent: string;
+  flat?: number;
+  pct?: number;
+  specIds?: string[];
+};
+
+export type ReachInventory = {
+  rows: {
+    spellId: string;
+    aura: number;
+    misc0: number;
+    basePoints: number;
+    pvpMultiplier: number;
+    activation: string;
+    targets: { spellId: string }[];
+  }[];
+  edges: {
+    talentSpellId: string;
+    spellId: string;
+    hop: number;
+    path: string;
+    specIds?: number[];
+  }[];
+};
+
+/**
+ * Passive range (SpellModOp 5) / radius (op 6) modifiers by TARGET spell,
+ * read off the talent inventory — class-mask and SpellLabel encodings alike,
+ * value × PvpMultiplier. Buff-gated rows (activation ≠ passive) are skipped
+ * and counted.
+ *
+ * `talent` is the id the RUNTIME can own (`talentModifierOwnershipOf` reads
+ * the spec's talent trees and PvP pool) — GH #120, found by the range ground
+ * truth: a spec passive (357715dd put SpecializationSpells rows in the
+ * inventory) sits in no tree, so the loadout reader said "no" to everyone and
+ * the row was dead on arrival; it carries the owning `specIds` instead. A
+ * SpellMod on a spell that only a trigger reaches (Sniper's Advantage: PvP
+ * talent 1217102 → 1217104, +30 % range, up only during Trueshot / Volley) is
+ * an aura's, not a passive, and is skipped — see `triggerApplied` below.
+ */
+export function passiveReachMods(inventory: ReachInventory): {
+  rangeMods: Map<string, ReachMod[]>;
+  radiusMods: Map<string, ReachMod[]>;
+  buffGated: number;
+  triggerApplied: number;
+} {
+  // effect-row spell → how the runtime owns it: a talent / spec passive at
+  // hop 0 is owned directly (spec passives by `specIds`); a spell only
+  // reached through a trigger hop is APPLIED by that trigger — an aura, not
+  // a passive — and is skipped below
+  const ownerOf = new Map<string, { talent: string; specIds?: string[] }>();
+  for (const e of inventory.edges)
+    if (e.hop === 0)
+      ownerOf.set(e.spellId, {
+        talent: e.talentSpellId,
+        ...(e.path === "spec" && e.specIds
+          ? { specIds: e.specIds.map(String) }
+          : {}),
+      });
+  const triggered = new Set<string>();
+  for (const e of inventory.edges)
+    if (e.hop > 0 && !ownerOf.has(e.spellId)) triggered.add(e.spellId);
+  const rangeMods = new Map<string, ReachMod[]>();
+  const radiusMods = new Map<string, ReachMod[]>();
+  let buffGated = 0;
+  let triggerApplied = 0;
+  for (const r of inventory.rows) {
+    const flat =
+      r.aura === AURA_ADD_FLAT_MODIFIER ||
+      r.aura === AURA_ADD_FLAT_MODIFIER_BY_LABEL;
+    const pct =
+      r.aura === AURA_ADD_PCT_MODIFIER ||
+      r.aura === AURA_ADD_PCT_MODIFIER_BY_LABEL;
+    if (!flat && !pct) continue;
+    const table =
+      r.misc0 === SPELLMOD_RANGE
+        ? rangeMods
+        : r.misc0 === SPELLMOD_RADIUS
+          ? radiusMods
+          : null;
+    if (!table || r.basePoints === 0) continue;
+    if (r.activation !== "passive") {
+      buffGated++;
+      continue;
+    }
+    // A SpellMod on a spell that only a trigger reaches is granted by an
+    // AURA the trigger applies, whatever DB2's duration row says: Sniper's
+    // Advantage (PvP talent 1217102 → 1217104, +30 % range) is up only
+    // during Trueshot / Volley — the log shows it applied and removed —
+    // yet its duration reads indefinite and the inventory calls it passive.
+    // Keying it on the talent made a holder's Aimed Shot 52 yd for the whole
+    // match (codex astra caught the 605-file sample's one such line landing
+    // while the buff was down). Buff-gated modifiers are not modelled here.
+    if (triggered.has(r.spellId)) {
+      triggerApplied++;
+      continue;
+    }
+    const value = r.basePoints * (r.pvpMultiplier || 1);
+    // a row no edge reaches (not in the inventory's talent universe) keeps
+    // its own id — the runtime will say "no", which is the pre-#120 state
+    const owner = ownerOf.get(r.spellId) ?? { talent: r.spellId };
+    const mod: ReachMod = {
+      talent: owner.talent,
+      ...(flat ? { flat: value } : { pct: value }),
+      ...(owner.specIds ? { specIds: owner.specIds } : {}),
+    };
+    for (const t of r.targets) {
+      const list = table.get(t.spellId) ?? [];
+      // the same talent reaching a spell through both encodings counts once
+      if (
+        !list.some(
+          (m) =>
+            m.talent === mod.talent && m.flat === mod.flat && m.pct === mod.pct,
+        )
+      )
+        list.push(mod);
+      table.set(t.spellId, list);
+    }
+  }
+  return { rangeMods, radiusMods, buffGated, triggerApplied };
 }
 
 async function main() {
@@ -159,58 +332,10 @@ async function main() {
   ];
 
   // Passive range / radius SpellMods by target spell (GH #83).
-  type Mod = { talent: string; flat?: number; pct?: number };
-  const rangeMods = new Map<string, Mod[]>();
-  const radiusMods = new Map<string, Mod[]>();
-  let buffGated = 0;
-  for (const r of (
-    inventory as {
-      rows: {
-        spellId: string;
-        aura: number;
-        misc0: number;
-        basePoints: number;
-        pvpMultiplier: number;
-        activation: string;
-        targets: { spellId: string }[];
-      }[];
-    }
-  ).rows) {
-    const flat =
-      r.aura === AURA_ADD_FLAT_MODIFIER ||
-      r.aura === AURA_ADD_FLAT_MODIFIER_BY_LABEL;
-    const pct =
-      r.aura === AURA_ADD_PCT_MODIFIER ||
-      r.aura === AURA_ADD_PCT_MODIFIER_BY_LABEL;
-    if (!flat && !pct) continue;
-    const table =
-      r.misc0 === SPELLMOD_RANGE
-        ? rangeMods
-        : r.misc0 === SPELLMOD_RADIUS
-          ? radiusMods
-          : null;
-    if (!table || r.basePoints === 0) continue;
-    if (r.activation !== "passive") {
-      buffGated++;
-      continue;
-    }
-    const value = r.basePoints * (r.pvpMultiplier || 1);
-    const mod: Mod = flat
-      ? { talent: r.spellId, flat: value }
-      : { talent: r.spellId, pct: value };
-    for (const t of r.targets) {
-      const list = table.get(t.spellId) ?? [];
-      // the same talent reaching a spell through both encodings counts once
-      if (
-        !list.some(
-          (m) =>
-            m.talent === mod.talent && m.flat === mod.flat && m.pct === mod.pct,
-        )
-      )
-        list.push(mod);
-      table.set(t.spellId, list);
-    }
-  }
+  const { rangeMods, radiusMods, buffGated, triggerApplied } = passiveReachMods(
+    inventory as ReachInventory,
+  );
+  const observedSet = new Set((observedSpellIds as number[]).map(String));
 
   const out: Record<
     string,
@@ -219,12 +344,13 @@ async function main() {
       radiusYards: number;
       reachYards: number;
       source?: string;
-      rangeMods?: Mod[];
-      radiusMods?: Mod[];
+      rangeMods?: ReachMod[];
+      radiusMods?: ReachMod[];
     }
   > = {};
   const curatedSet = new Set(curated);
   let triggeredFromParent = 0;
+  let placeholderFromParent = 0;
   for (const id of ids) {
     let rangeYards = rangeBySpell.get(id) ?? 0;
     let radiusYards = radiusBySpell.get(id) ?? 0;
@@ -235,29 +361,31 @@ async function main() {
       source = `radius from linked spell ${LINKED_REACH_SPELL[id]}`;
     }
     // no reach of its own → the farthest-reaching cast that triggers it (one
-    // EffectTriggerSpell hop, like genSpellTargeting)
-    if (rangeYards === 0 && radiusYards === 0) {
-      let best: { id: string; range: number; radius: number } | null = null;
-      for (const pid of parentsOf.get(id) ?? []) {
-        const range = rangeBySpell.get(pid) ?? 0;
-        const radius = radiusBySpell.get(pid) ?? 0;
-        const reach =
-          radius > 0 ? (range > 0 ? range + radius : radius) : range;
-        const bestReach = best
-          ? best.radius > 0
-            ? best.range > 0
-              ? best.range + best.radius
-              : best.radius
-            : best.range
-          : -1;
-        if (reach > 0 && reach > bestReach) best = { id: pid, range, radius };
-      }
+    // EffectTriggerSpell hop, like genSpellTargeting). GH #120: a PLACEHOLDER
+    // range (DB2's 100 yd vision row / 50000 "anywhere") on a triggered id is
+    // not a cast range either — Throw Glaive 393035 (100) is thrown by 337819
+    // (30), Charge 126664 (50000) by 100 (25), Skull Bash 93985 (100) by
+    // 106839 (13); the ground truth puts every one of them inside the parent's
+    // range. A placeholder with no triggering cast stays as it is (Tricks of
+    // the Trade 57934 really is 100 yd; pet commands are cast from anywhere).
+    const placeholder = rangeYards >= PLACEHOLDER_RANGE_YD;
+    if ((rangeYards === 0 && radiusYards === 0) || placeholder) {
+      // a placeholder of its own is only replaced by a REAL parent range;
+      // a spell with no reach at all takes what it can get, as before
+      const best = farthestTriggeringCast(
+        parentsOf.get(id) ?? [],
+        rangeBySpell,
+        radiusBySpell,
+        observedSet,
+        placeholder,
+      );
       if (best) {
         rangeYards = best.range;
         radiusYards = best.radius;
         modsFrom = best.id;
         source = `triggered by ${best.id}`;
-        triggeredFromParent++;
+        if (placeholder) placeholderFromParent++;
+        else triggeredFromParent++;
       }
     }
     // an observed id with neither a range nor a radius carries no reach
@@ -300,8 +428,8 @@ async function main() {
   const withRadiusMods = Object.values(out).filter((v) => v.radiusMods).length;
   console.log(
     `spellReachGenerated.json: ${Object.keys(out).length} spells (${curated.length} curated, ${ids.length} candidates); ` +
-      `${withRangeMods} with range talents, ${withRadiusMods} with radius talents; ${buffGated} buff-gated modifier rows skipped; ` +
-      `${triggeredFromParent} take their reach from the cast that triggers them; ` +
+      `${withRangeMods} with range talents, ${withRadiusMods} with radius talents; ${buffGated} buff-gated modifier rows skipped, ${triggerApplied} trigger-applied rows skipped; ` +
+      `${triggeredFromParent + placeholderFromParent} take their reach from the cast that triggers them (${placeholderFromParent} of them off a placeholder range); ` +
       `curated reach 0: ${zero.join(",")}`,
   );
 }

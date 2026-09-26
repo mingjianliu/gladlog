@@ -30,6 +30,19 @@ export const CD_TALENT_MODIFIERS: Record<string, ICDModifier[]> =
   talentModifiersJson as Record<string, ICDModifier[]>;
 
 /**
+ * Does a player of `specId` own a spec-passive modifier (`specIds` set)? The
+ * one predicate for spec membership, read by the cooldown model
+ * (`applyCdModifiers`) and the reach table (`spellRange.ts` `holds`) — GH
+ * #120 (codex astra: the two had grown their own copies).
+ */
+export function specPassiveOwned(
+  specIds: readonly string[],
+  specId: string | undefined,
+): boolean {
+  return specId !== undefined && specIds.includes(specId);
+}
+
+/**
  * Multi-rank talents whose cooldown row is PER RANK: the arena reduction is
  * `value × rank` (rank read from COMBATANT_INFO), not `value` once.
  *

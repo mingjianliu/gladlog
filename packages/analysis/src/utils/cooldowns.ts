@@ -7,6 +7,7 @@ import {
 } from "@gladlog/parser-compat";
 
 import { isSurvivalWall } from "../data/abilityProfile";
+import CD_RECAST_FLOORS from "../data/cdRecastFloorGenerated.json";
 import { classMetadata } from "../data/classSpells";
 import { CURATED_ABILITY_FACTS } from "../data/curatedAbilityFacts";
 import { DISCOVERY_TAG_RULES } from "../data/discoveryRules";
@@ -17,21 +18,20 @@ import {
 import { PVP_TALENT_REPLACES_GENERATED } from "../data/pvpTalentReplacesGenerated";
 import { replacedSpellIds } from "../data/talentReplaces";
 import { OFFENSIVE_RACIAL_SPELL_IDS } from "../data/racialAbilities";
+import { SHARED_CHARGE_CATEGORY } from "../data/sharedChargeGenerated";
 import {
   effectiveCooldownSeconds,
   getEnglishSpellName,
   spellEffectData,
 } from "../data/spellEffectData";
-import CD_RECAST_FLOORS from "../data/cdRecastFloorGenerated.json";
 import { CORPUS_COOLDOWN_PATCHES } from "../data/spellEffectOverrides";
 import spellIdListsData from "../data/spellIdLists";
 import { reachesAlly } from "../data/spellTargeting";
 import { SpellTag } from "../data/spellTypes";
-import { SHARED_CHARGE_CATEGORY } from "../data/sharedChargeGenerated";
 import { USABLE_WHILE_CC_GENERATED } from "../data/usableWhileCcGenerated";
-import { buffFullDurationForCaster } from "./buffDuration";
-import { binarySearchClosest } from "./binarySearch";
 import { getSortedAdvancedActions } from "./advancedActions";
+import { binarySearchClosest } from "./binarySearch";
+import { buffFullDurationForCaster } from "./buffDuration";
 import { COPY_CAST_IDS } from "./castPress";
 import { incomingPressureEvents } from "./incomingPressure";
 import { fmtTime, toRenderSecond } from "./renderGrid";
@@ -40,6 +40,7 @@ import {
   CD_TALENT_MODIFIERS,
   type ICDModifier,
   PER_RANK_COOLDOWN_TALENTS,
+  specPassiveOwned,
 } from "./talentModifiers";
 import {
   getPlayerTalentedSpellInfo,
@@ -1788,7 +1789,7 @@ export function applyCdModifiers(
   let pctMultiplier = 1;
   for (const mod of modifiers) {
     const owned = mod.specIds
-      ? specId !== undefined && mod.specIds.includes(specId)
+      ? specPassiveOwned(mod.specIds, specId)
       : !!talentedSpellIds?.has(mod.talentSpellId) ||
         pvpTalentIds.has(mod.talentSpellId);
     if (!owned) continue;

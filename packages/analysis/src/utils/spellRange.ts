@@ -27,12 +27,19 @@ import type { ICombatUnit } from "@gladlog/parser-compat";
 import closeInRaw from "../data/ccCloseInGenerated.json";
 import raw from "../data/spellReachGenerated.json";
 import { CC_MAX_CAST_RANGE_YARDS } from "./positionSampling";
+import { specPassiveOwned } from "./talentModifiers";
 import { talentModifierOwnershipOf } from "./talentOwnership";
 
 interface RangeMod {
   talent: string;
   flat?: number;
   pct?: number;
+  /** set when the source is a spec passive (DB2 SpecializationSpells — the
+   * Preservation aura 356810 +5 yd, the Holy Paladin aura 1258016 +10 yd on
+   * Divine Toll): every player of these specs owns it. It sits in no talent
+   * tree, so `talentModifierOwnershipOf` would say "no" to everyone
+   * (GH #120). Same contract as `ICDModifier.specIds`. */
+  specIds?: string[];
 }
 interface ReachEntry {
   rangeYards: number;
@@ -55,16 +62,18 @@ export const RANGE_HITBOX_SLACK_YD = 2;
 type Caster = Pick<ICombatUnit, "spec" | "info" | "spellCastEvents">;
 
 const held = new WeakMap<object, Map<string, boolean>>();
-function holds(caster: Caster, talent: string): boolean {
+function holds(caster: Caster, mod: RangeMod): boolean {
+  // a spec passive is owned by spec membership, never by the loadout
+  if (mod.specIds) return specPassiveOwned(mod.specIds, String(caster.spec));
   let m = held.get(caster);
   if (!m) {
     m = new Map();
     held.set(caster, m);
   }
-  let v = m.get(talent);
+  let v = m.get(mod.talent);
   if (v === undefined) {
-    v = talentModifierOwnershipOf(caster, talent) === "yes";
-    m.set(talent, v);
+    v = talentModifierOwnershipOf(caster, mod.talent) === "yes";
+    m.set(mod.talent, v);
   }
   return v;
 }
@@ -78,7 +87,7 @@ function modified(
   let flat = 0;
   let pct = 0;
   for (const m of mods) {
-    if (!holds(caster, m.talent)) continue;
+    if (!holds(caster, m)) continue;
     flat += m.flat ?? 0;
     pct += m.pct ?? 0;
   }
@@ -100,7 +109,8 @@ export function spellReachToAccuse(
   const e = SPELLS[spellId];
   if (!e || !caster) return null;
   for (const m of [...(e.rangeMods ?? []), ...(e.radiusMods ?? [])])
-    if (talentModifierOwnershipOf(caster, m.talent) === "unknown") return null;
+    if (!m.specIds && talentModifierOwnershipOf(caster, m.talent) === "unknown")
+      return null;
   const reach = spellReachForCaster(caster, spellId);
   return reach === null ? null : reach + RANGE_HITBOX_SLACK_YD;
 }
@@ -154,8 +164,9 @@ export function healerReachYards(
 
 /** DB2's "Vision Range (AOI)" row (100 yd) sits on triggered auras and
  * area-trigger payloads (Binding Shot 117526, Freezing Trap 3355): it is a
- * placeholder, not a cast range. */
-const PLACEHOLDER_RANGE_YD = 100;
+ * placeholder, not a cast range. The generator (genSpellReach.ts) reads the
+ * same bound when it lets a triggered id inherit its cast's range (GH #120). */
+export const PLACEHOLDER_RANGE_YD = 100;
 
 /**
  * How far a crowd control reaches from its caster, for "could this enemy CC

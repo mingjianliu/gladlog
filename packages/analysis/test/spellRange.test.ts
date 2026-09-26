@@ -7,19 +7,20 @@
 import { describe, expect, it, vi } from "vitest";
 
 const held = new Set<string>();
+const unreadable = new Set<string>();
 vi.mock("../src/utils/talentOwnership", () => ({
   talentModifierOwnershipOf: (_u: unknown, talent: string) =>
-    held.has(talent) ? "yes" : "no",
+    unreadable.has(talent) ? "unknown" : held.has(talent) ? "yes" : "no",
 }));
 
+import closeIn from "../src/data/ccCloseInGenerated.json";
 import {
   CLEANSE_SPELLS_BY_TYPE,
   dispelReachYards,
   PURGE_SPELLS_BY_SPEC,
 } from "../src/utils/dispelAnalysis";
-import closeIn from "../src/data/ccCloseInGenerated.json";
-import { SPEC_PRIMARY_CC } from "../src/utils/healerExposureAnalysis";
 import { DR_CATEGORY_MAP } from "../src/utils/drAnalysis";
+import { SPEC_PRIMARY_CC } from "../src/utils/healerExposureAnalysis";
 import { CC_MAX_CAST_RANGE_YARDS } from "../src/utils/positionSampling";
 import {
   CC_CLOSE_IN_MELEE_YD,
@@ -29,15 +30,20 @@ import {
   healerReachYards,
   spellRangeForCaster,
   spellReachForCaster,
+  spellReachToAccuse,
 } from "../src/utils/spellRange";
 
 const PHANTOM_REACH = "459559";
 const ASTRAL_INFLUENCE = "197524";
 const ARCANE_REACH = "454983";
+/** the Preservation spec aura (SpecializationSpells, not a talent) */
+const PRESERVATION_AURA = "356810";
 
-function unit(spec: string, talents: string[] = []) {
+function unit(spec: string, talents: string[] = [], unknown: string[] = []) {
   held.clear();
+  unreadable.clear();
   for (const t of talents) held.add(t);
+  for (const t of unknown) unreadable.add(t);
   // a fresh object per call: the ownership cache is keyed on the unit
   return { spec, info: {}, spellCastEvents: [] } as never;
 }
@@ -78,6 +84,44 @@ describe("spellRangeForCaster", () => {
     // area keep their radius
     expect(spellReachForCaster(unit("1467"), "374227")).toBe(20); // Zephyr
     expect(spellReachForCaster(unit("250"), "51052")).toBe(38); // AMZ 30 + 8
+  });
+
+  // GH #120: 357715dd put spec passives (SpecializationSpells) into the
+  // talent inventory; the reach table now carries them with `specIds`. A
+  // spec aura is nobody's talent — `talentModifierOwnershipOf` says "no" for
+  // every player — so it is owned by SPEC MEMBERSHIP, never by the loadout
+  // reader. The game agrees: Preservation Living Flame lands at p99 35.3 yd
+  // on a 25 yd row (spellRangeGroundTruth.ts, 2026-09-26).
+  it("a spec passive is held by every player of that spec, no loadout needed", () => {
+    // Living Flame 25 + Preservation aura 5
+    expect(spellRangeForCaster(unit("1468"), "361469")).toBe(30);
+    // … and Arcane Reach stacks on top
+    expect(spellRangeForCaster(unit("1468", [ARCANE_REACH]), "361469")).toBe(
+      35,
+    );
+    // Devastation casts the same spell without the Preservation aura
+    expect(spellRangeForCaster(unit("1467"), "361469")).toBe(25);
+    // Holy Paladin aura: Divine Toll 30 → 40; Retribution keeps 30
+    expect(spellRangeForCaster(unit("65"), "375576")).toBe(40);
+    expect(spellRangeForCaster(unit("70"), "375576")).toBe(30);
+  });
+
+  // GH #120 (codex astra): Sniper's Advantage's +30 % sits on 1217104, an aura
+  // up only during Trueshot / Volley — a buff-gated modifier the table does
+  // not carry. A holder of the PvP talent 1217102 keeps the official 40.
+  it("a buff-gated range modifier is not attributed to the talent that grants the buff", () => {
+    expect(spellRangeForCaster(unit("254", ["1217102"]), "19434")).toBe(40);
+  });
+
+  it("an accusation never abstains over a spec passive — only over an unreadable talent", () => {
+    // the loadout reader cannot read a spec aura; that is not "unknown"
+    expect(
+      spellReachToAccuse(unit("1468", [], [PRESERVATION_AURA]), "361469"),
+    ).toBe(32); // 30 + RANGE_HITBOX_SLACK_YD
+    // an unreadable range TALENT still abstains
+    expect(
+      spellReachToAccuse(unit("1468", [], [ARCANE_REACH]), "361469"),
+    ).toBeNull();
   });
 });
 

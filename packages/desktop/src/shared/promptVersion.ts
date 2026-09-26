@@ -74,5 +74,14 @@
  *  window facts on 35 ids (ids ±2/4 cap), position-mistake −19 / +17,
  *  questionable-external −6 / +3, burst-into-mitigation −2; Demonic Tyrant's
  *  20 s (Reign of Tyranny) now reaches those windows.
+ *  v171 (2026-09-26, range audit, GH #120): the reach table's spec passives
+ *  carry `specIds` and are owned by spec (Preservation aura +5 yd, Holy
+ *  Paladin aura +10 yd on Divine Toll — dead on arrival before), a SpellMod
+ *  on a spell only a trigger reaches is an aura's and stays out (Sniper's
+ *  Advantage), and a triggered id's placeholder range (100 / 50000) yields to
+ *  its cast's. 605 files (base 28cbee6f): missed-cleanse dps 199 → 200 /
+ *  healer 260 → 262 (Preservation cleanse reach 30 → 35), kick-eaten
+ *  yourReachYd 25 → 30 on 13 Preservation lines; nothing else, the match
+ *  context is byte-identical.
  */
-export const PROMPT_VERSION = 170;
+export const PROMPT_VERSION = 171;
