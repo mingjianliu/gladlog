@@ -9,7 +9,7 @@ _English-only developer index, generated 2026-09-26 (`git log -1 -- <file>` for 
 | File | Size | Note |
 |---|---|---|
 | `abilityEffectsGenerated.json` | 92 KB |  |
-| `abilityEffectsGenerated.ts` | 2 KB | Generated at: 2026-09-05T03:29:42.267Z |
+| `abilityEffectsGenerated.ts` | 2 KB | datagen output |
 | `backlashDispelPriorGenerated.json` | 1 KB |  |
 | `behaviorPriorGenerated.json` | 4 KB |  |
 | `burstWindowPriorGenerated.json` | 50 KB |  |
@@ -18,7 +18,7 @@ _English-only developer index, generated 2026-09-26 (`git log -1 -- <file>` for 
 | `cdTriggerPriorGenerated.json` | 18 KB |  |
 | `datagen-manifest.json` | 5 KB |  |
 | `dispelObservedGenerated.ts` | 10 KB | Corpus-attested dispellable id set (GENERATED — do not hand-edit): spellIds |
-| `drCategoriesGenerated.ts` | 19 KB | Generated at: 2026-09-05T00:11:50.985Z |
+| `drCategoriesGenerated.ts` | 19 KB | datagen output |
 | `healerSaveCdGenerated.json` | 40 KB |  |
 | `hotfixOverlayGenerated.json` | 18 KB |  |
 | `interruptKitGenerated.json` | 5 KB |  |
@@ -28,28 +28,28 @@ _English-only developer index, generated 2026-09-26 (`git log -1 -- <file>` for 
 | `kickPriorityPriorGenerated.json` | 402 B |  |
 | `mitigationGenerated.json` | 2 KB |  |
 | `observedSpellIdsGenerated.json` | 42 KB |  |
-| `offGcdGenerated.ts` | 4 KB | Generated at: 2026-09-05T00:11:56.533Z |
-| `pvpTalentPoolGenerated.ts` | 11 KB | Generated at: 2026-09-05T00:11:50.396Z |
-| `pvpTalentReplacesGenerated.ts` | 861 B | Generated at: 2026-09-05T00:11:49.298Z |
+| `offGcdGenerated.ts` | 4 KB | datagen output |
+| `pvpTalentPoolGenerated.ts` | 11 KB | datagen output |
+| `pvpTalentReplacesGenerated.ts` | 861 B | datagen output |
 | `specIconsGenerated.ts` | 2 KB | GENERATED — do not hand-edit. Produced by |
-| `spellClassMapGenerated.ts` | 10 KB | Generated at: 2026-09-05T00:11:38.524Z |
+| `spellClassMapGenerated.ts` | 10 KB | datagen output |
 | `spellEffectGenerated.json` | 639 KB |  |
-| `spellEffectGenerated.ts` | 462 B | Generated at: 2026-09-05T00:10:44.762Z |
+| `spellEffectGenerated.ts` | 462 B | datagen output |
 | `spellIconsGenerated.json` | 803 KB |  |
-| `spellIconsGenerated.ts` | 812 B | Generated at: 2026-09-05T00:11:43.532Z |
+| `spellIconsGenerated.ts` | 812 B | datagen output |
 | `spellManaCostGenerated.json` | 22 KB |  |
 | `spellMechanicsGenerated.json` | 202 KB |  |
 | `spellNamesZhGenerated.json` | 983 KB |  |
 | `spellReachGenerated.json` | 219 KB |  |
 | `spellSchoolsGenerated.json` | 142 KB |  |
-| `spellSchoolsGenerated.ts` | 2 KB | Generated at: 2026-09-05T00:12:16.291Z |
+| `spellSchoolsGenerated.ts` | 2 KB | datagen output |
 | `spellTargetingGenerated.json` | 78 KB |  |
-| `spellTargetingGenerated.ts` | 1 KB | Generated at: 2026-09-05T00:12:12.455Z |
+| `spellTargetingGenerated.ts` | 1 KB | datagen output |
 | `syncWindowPriorGenerated.json` | 1 KB |  |
 | `talentEffectInventoryGenerated.json` | 3610 KB |  |
 | `talentMitigationGenerated.json` | 14 KB |  |
 | `teammateCrisisPriorGenerated.json` | 3 KB |  |
-| `usableWhileCcGenerated.ts` | 13 KB | Generated at: 2026-09-05T01:39:41.512Z |
+| `usableWhileCcGenerated.ts` | 13 KB | datagen output |
 
 ## Hand-maintained
 
