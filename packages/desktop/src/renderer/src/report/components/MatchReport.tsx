@@ -226,6 +226,10 @@ export function MatchReport({
   const pressure = useMemo(() => derivePressureLanes(source), [source]);
   const dampening = useMemo(() => deriveDampeningSeries(source), [source]);
   const ledger = useMemo(() => deriveBurstLedger(source), [source]);
+  // Death recaps are derived once per match: the auto-open effect below and
+  // every death-mark click read the same list instead of re-running the
+  // derive per click.
+  const deathRecaps = useMemo(() => deriveDeathRecaps(source), [source]);
   // Compute the whole-match basis first (KPI chips always use it); when
   // timeRange is empty the windowed version just reuses that reference instead
   // of running the same derive twice with identical args (agy review #7).
@@ -324,20 +328,19 @@ export function MatchReport({
   const [recap, setRecap] = useState<DeathRecap | null>(null);
   // P1-3: on entering a report / switching matches, expand the most recent death
   // recap by default (friendly first). The effect runs once per match (memoized
-  // by ref), so after the user closes it with ✕ it won't reopen for this match;
-  // the derive is lazy and stays out of the render path.
+  // by ref), so after the user closes it with ✕ it won't reopen for this match.
   const autoRecapKey = useRef<string | null>(null);
   useEffect(() => {
     const key = `${source.startTime}:${source.endTime}`;
     if (autoRecapKey.current === key) return;
     autoRecapKey.current = key;
     setRecap(null);
-    const all = deriveDeathRecaps(source);
+    const all = deathRecaps;
     if (all.length === 0) return;
     const friendly = all.filter((r) => isFriendlyUnit(source, r.unitId));
     const pool = friendly.length > 0 ? friendly : all;
     setRecap(pool.reduce((a, b) => (b.deathS > a.deathS ? b : a)));
-  }, [source]);
+  }, [deathRecaps, source]);
   // Replay cursor projection (1c): show the last position when switching back
   // from replay to the report
   const [lastReplayT, setLastReplayT] = useState<number | null>(null);
@@ -597,15 +600,14 @@ export function MatchReport({
     void runWindowAi(range);
   };
 
-  // Death-mark click → find that unit's nearest recap (lazy; derived only on
-  // click). The recap has exactly one home: the persistent right column of the
+  // Death-mark click → find that unit's nearest recap (from the per-match
+  // memo). The recap has exactly one home: the persistent right column of the
   // report (2026-07-26 user feedback: the popover duplicated the persistent
   // column) — clicking in from replay/events switches back to the report view
   // instead of opening a popover.
   const openRecap = (unitId: string, tMs: number) => {
     const tS = (tMs - source.startTime) / 1000;
-    const all = deriveDeathRecaps(source);
-    const hit = all
+    const hit = deathRecaps
       .filter((r) => r.unitId === unitId)
       .sort((a, b) => Math.abs(a.deathS - tS) - Math.abs(b.deathS - tS))[0];
     if (hit) {
