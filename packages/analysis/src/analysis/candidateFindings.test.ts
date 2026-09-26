@@ -1219,6 +1219,58 @@ describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
     expect(evts[1]!.facts["postKick"]).toContain("4.1s");
   });
 
+  // GH #113 (user rulings 2026-09-25): a kick with both sides calm and no
+  // burst of ours ready is not listed; the others carry both sides' pressure.
+  it("kick-eaten: drops a harmless kick, keeps a pressured one with both sides' facts (GH #113)", () => {
+    const k = (at: number) => ({
+      atSeconds: at,
+      lockoutDurationSeconds: 3,
+      kickSpellName: "Kick",
+      interruptedSpellName: "Flash Heal",
+      sourceName: "Rogue",
+      postKick: "acted" as const,
+      firstActionDelayS: 3.5,
+      switchSpellName: null,
+      switchDelayS: null,
+      switchWasHardCast: null,
+    });
+    const calm = { burstAgainst: [] as string[] };
+    const evts = kickEatenEvents(
+      [k(10), k(40), k(70)],
+      { id: "P1", name: "Me" },
+      undefined,
+      undefined,
+      (x) =>
+        x.atSeconds === 10
+          ? { ours: calm, theirs: calm, burstReady: [] }
+          : x.atSeconds === 40
+            ? {
+                ours: {
+                  low: { unit: "Mate", pct: 13, atSec: 42 },
+                  death: { unit: "Mate", atSec: 44.96 },
+                  burstAgainst: ["Bestial Wrath", "Recklessness"],
+                },
+                theirs: calm,
+                burstReady: [],
+              }
+            : { ours: calm, theirs: calm, burstReady: ["Summon Infernal"] },
+    );
+    expect(evts.map((e) => e.t)).toEqual([40, 70]);
+    expect(evts[0]!.facts).toMatchObject({
+      ourLowUnit: "Mate",
+      ourLowPct: "13",
+      ourLowT: "42",
+      ourDeathUnit: "Mate",
+      ourDeathT: "44.9",
+      enemyBurst: "Bestial Wrath + Recklessness",
+    });
+    expect(evts[0]!.facts["burstReady"]).toBeUndefined();
+    expect(evts[1]!.facts["burstReady"]).toBe("Summon Infernal");
+    expect(Object.values(evts[0]!.facts).some((v) => v.includes(", "))).toBe(
+      false,
+    );
+  });
+
   // 2026-09-06(postKickSwitchAudit):这一行以前断言 "kept playing through
   // the lockout",而 `switched` 只要求学派掩码不重叠、不要求硬读条 —— 语料
   // 276/292 是瞬发(猫形态 / 悬空 / 生存意志 / 甚至 PvP 徽章)。分类不变,

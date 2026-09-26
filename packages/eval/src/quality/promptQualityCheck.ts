@@ -2083,13 +2083,17 @@ const STATE_TOKEN = /(\d+)\([^)]*\):(\d+|dead|ghost)\b/g;
  * because its HP fact is a MIN over the window, not the value at the window
  * start, so it renders (and is checked at) its own `pressuredHpT`. */
 const CRISIS_HP_FACT_KEYS = {
-  "cd-hoarded": { unit: "crisisUnit", hp: "crisisHpPct", at: "t" },
-  "crisis-no-response": { unit: "unit", hp: "hpPct", at: "t" },
-  "slow-defensive-response": {
-    unit: "pressured",
-    hp: "pressuredHpPct",
-    at: "pressuredHpT",
-  },
+  "cd-hoarded": [{ unit: "crisisUnit", hp: "crisisHpPct", at: "t" }],
+  "crisis-no-response": [{ unit: "unit", hp: "hpPct", at: "t" }],
+  "slow-defensive-response": [
+    { unit: "pressured", hp: "pressuredHpPct", at: "pressuredHpT" },
+  ],
+  // GH #113: both sides' lowest unit during the kick's lockout, read with
+  // gridHpMinInWindow — the [STATE] sampler.
+  "kick-eaten": [
+    { unit: "ourLowUnit", hp: "ourLowPct", at: "ourLowT" },
+    { unit: "theirLowUnit", hp: "theirLowPct", at: "theirLowT" },
+  ],
 } as const;
 
 export interface CrisisHpStateProbe {
@@ -2138,30 +2142,32 @@ export function crisisHpStateProbes(lines: string[]): CrisisHpStateProbe[] {
 
   const probes: CrisisHpStateProbe[] = [];
   lines.forEach((line, i) => {
-    for (const [type, keys] of Object.entries(CRISIS_HP_FACT_KEYS)) {
+    for (const [type, keySets] of Object.entries(CRISIS_HP_FACT_KEYS)) {
       if (!line.includes(`type=${type}`)) continue;
       const m = line.match(/facts=\{(.*)\}\s*$/);
       if (!m) continue;
       const f = parseFactsBlock(m[1]!);
-      const t = Number(f[keys.at]);
-      const hp = Number(f[keys.hp]);
-      const unitName = f[keys.unit];
-      if (!Number.isFinite(t) || !Number.isFinite(hp) || !unitName) continue;
-      // The fact is rendered on the fmtFactNum scale (crisis-no-response keeps
-      // one decimal); [STATE] is rendered by fmtTime, i.e. floored.
-      const tSecond = Math.floor(t);
-      const unitId = idByName.get(unitName) ?? null;
-      const tick =
-        unitId === null ? undefined : stateAt.get(tSecond)?.get(unitId);
-      probes.push({
-        type: type as keyof typeof CRISIS_HP_FACT_KEYS,
-        lineIndex: i,
-        tSecond,
-        unitName,
-        unitId,
-        factHp: hp,
-        stateHp: tick === undefined || tick === "ghost" ? null : tick,
-      });
+      for (const keys of keySets) {
+        const t = Number(f[keys.at]);
+        const hp = Number(f[keys.hp]);
+        const unitName = f[keys.unit];
+        if (!Number.isFinite(t) || !Number.isFinite(hp) || !unitName) continue;
+        // The fact is rendered on the fmtFactNum scale (crisis-no-response keeps
+        // one decimal); [STATE] is rendered by fmtTime, i.e. floored.
+        const tSecond = Math.floor(t);
+        const unitId = idByName.get(unitName) ?? null;
+        const tick =
+          unitId === null ? undefined : stateAt.get(tSecond)?.get(unitId);
+        probes.push({
+          type: type as keyof typeof CRISIS_HP_FACT_KEYS,
+          lineIndex: i,
+          tSecond,
+          unitName,
+          unitId,
+          factHp: hp,
+          stateHp: tick === undefined || tick === "ghost" ? null : tick,
+        });
+      }
     }
   });
   return probes;

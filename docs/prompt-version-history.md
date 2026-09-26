@@ -1324,3 +1324,12 @@ Medallion means a DB2 Medallion item equipped or a Medallion cast (else
 "no PvP trinket"); Will to Survive locks the trinket 60 s (corpus), the
 other racials 30 s. 605 files: 401 contexts, [DEATH] "(PvP Trinket
 available)" −74; menu byte-identical; gates 0 → 0.
+
+v151 (2026-09-25, GH #113): kick-eaten reads both sides' pressure during
+the lockout (kickPressure.ts) — lowest unit at or below the crisis line,
+first death up to 5 s after, the other side's offensive cooldowns running —
+and, when neither side was pressed, which of our offensive cooldowns were
+ready; a kick with both sides calm and no burst ready is not listed. 605
+files: kick-eaten dps 1030 → 998, healer 506 → 475 (other types and the
+match context byte-identical); 560 new HP facts, 241 with a same-second
+[STATE] tick, 0 mismatches.

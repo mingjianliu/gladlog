@@ -152,6 +152,12 @@ import {
 } from "./candidates/teammateCrisisIdle";
 import { CRISIS_HP_PCT, crisisDecisionPoints } from "./crisisDecisionPoints";
 import { fmtFactNum as fmt, fmtFactTime } from "./factFormat";
+import {
+  kickIsHarmless,
+  type KickPressure,
+  kickPressureFor,
+  type KickSidePressure,
+} from "./kickPressure";
 import { majorWallIntervals } from "./stackedDefensives";
 import { teammateCrisisPoints } from "./teammateCrisis";
 import type { CandidateEvent } from "./types";
@@ -998,11 +1004,19 @@ export function kickEatenEvents(
     yourReachYd: number;
     kickRangeYd: number;
   } | null,
+  /** GH #113 (2026-09-25): both sides' pressure during the lockout
+   * (`kickPressure.ts`). A kick with both sides calm and no burst of ours
+   * ready is not listed; every listed kick carries the facts. Absent = no
+   * filter and no facts (hand-built fixtures). */
+  pressure?: (k: (typeof instances)[number]) => KickPressure,
 ): CandidateEvent[] {
-  const withPresses = instances.map((k) => ({
-    k,
-    rejected: rejectedPressesAfterKick(k, owner.id, intent),
-  }));
+  const withPresses = instances
+    .map((k) => ({
+      k,
+      rejected: rejectedPressesAfterKick(k, owner.id, intent),
+      p: pressure?.(k),
+    }))
+    .filter(({ p }) => !p || !kickIsHarmless(p));
   return withPresses
     .sort(
       (a, b) =>
@@ -1014,7 +1028,7 @@ export function kickEatenEvents(
         a.k.atSeconds - b.k.atSeconds,
     )
     .slice(0, KICK_EATEN_CAP)
-    .map(({ k, rejected }) => ({
+    .map(({ k, rejected, p }) => ({
       id: `kick-eaten:${owner.id}:${Math.round(k.atSeconds)}`,
       type: "kick-eaten",
       t: k.atSeconds,
@@ -1103,8 +1117,31 @@ export function kickEatenEvents(
         // is joined with "; " not ", ": a ", " inside a facts value is cut off
         // by every text-side facts parser (`checkFactsBlockIntegrity`).
         postKick: postKickFact(k, rejected),
+        ...(p ? kickPressureFacts(p) : {}),
       },
     }));
+}
+
+/** GH #113: the pressure facts of one kick. Values never contain ", "
+ * (`checkFactsBlockIntegrity`); lists are joined with " + ". */
+function kickPressureFacts(p: KickPressure): Record<string, string> {
+  const f: Record<string, string> = {};
+  const sideFacts = (prefix: string, s: KickSidePressure, burstKey: string) => {
+    if (s.low) {
+      f[`${prefix}LowUnit`] = s.low.unit;
+      f[`${prefix}LowPct`] = String(s.low.pct);
+      f[`${prefix}LowT`] = String(s.low.atSec);
+    }
+    if (s.death) {
+      f[`${prefix}DeathUnit`] = s.death.unit;
+      f[`${prefix}DeathT`] = fmtFactTime(s.death.atSec);
+    }
+    if (s.burstAgainst.length) f[burstKey] = s.burstAgainst.join(" + ");
+  };
+  sideFacts("our", p.ours, "enemyBurst");
+  sideFacts("their", p.theirs, "ourBurst");
+  if (p.burstReady.length) f.burstReady = p.burstReady.join(" + ");
+  return f;
 }
 
 /** The owner's rejected presses in `[kick, kick + POST_KICK_WINDOW_S]`,
@@ -2154,6 +2191,7 @@ function teamPlayEvents(
             ? { yourReachYd, kickRangeYd }
             : null;
         },
+        kickPressureFor({ combat, owner, friends, enemies }),
       ),
     );
 
