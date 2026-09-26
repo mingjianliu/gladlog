@@ -9,10 +9,6 @@
  *  Full history in docs/prompt-version-history.md (append new entries there);
  *  the last few entries stay inline so a reader sees the format:
  *
- *  v146 (2026-09-25, reliability round 2 W1h i): the burst ledger skips
- *  defensive auras our side put on the target — the owner's own Touch of
- *  Karma tether read as "Target had a major defensive up". 605 files: 49
- *  lines removed in 40 contexts, menu unchanged.
  *  v147 (2026-09-25, reliability audit C4): Guardian Spirit's expired
  *  press (Guardian Angel) comes back 60 s after the BUFF ended (less a
  *  measured 1 s logging lag), not 60 s after the press; the death block
@@ -27,5 +23,12 @@
  *  regenerated (C2 included; C4 regen follows). 605 files:
  *  slow-defensive-response −51 / +34, [BURST ANSWERED] reworded in 2,392
  *  contexts.
+ *  v149 (2026-09-26, cdTriggerPrior regenerated at a3a23a04): the [CD
+ *  PRIOR] reference catches up with the round-end ledger cut (3eb635fb) and
+ *  the passive-proc press filter (ab68f275); C4 moved no cell (Holy Priest
+ *  Guardian Spirit cells identical). 27 of the table's n values change by
+ *  1–16 (Preservation Stasis −16, Holy Paladin −1..−4), no median moves;
+ *  the rendered `(n=…)` on [CD PRIOR] lines is the only prompt text that
+ *  can change.
  */
-export const PROMPT_VERSION = 148;
+export const PROMPT_VERSION = 149;

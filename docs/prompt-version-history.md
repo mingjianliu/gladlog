@@ -1308,3 +1308,11 @@ silences and kick lockouts, extras say "Ns later"; burst-window reference
 regenerated (C2 included; C4 regen follows). 605 files:
 slow-defensive-response −51 / +34, [BURST ANSWERED] reworded in 2,392
 contexts.
+
+v149 (2026-09-26, cdTriggerPrior regenerated at a3a23a04): the [CD
+PRIOR] reference catches up with the round-end ledger cut (3eb635fb) and
+the passive-proc press filter (ab68f275); C4 moved no cell (Holy Priest
+Guardian Spirit cells identical). 27 of the table's n values change by
+1–16 (Preservation Stasis −16, Holy Paladin −1..−4), no median moves;
+the rendered `(n=…)` on [CD PRIOR] lines is the only prompt text that
+can change.

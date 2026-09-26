@@ -1,11 +1,11 @@
 {
   "meta": {
-    "generatedAt": "2026-09-25",
-    "corpus": "wowarenalogs archive 2026-09-25 (12.1+, 18,134-file manifest; roster = healerSaveCdGenerated incl. the C2 response-only Barkskin / Frenzied Regeneration, main 41ef7d55)",
+    "generatedAt": "2026-09-26",
+    "corpus": "wowarenalogs archive 2026-09-25 (12.1+, 18,134-file manifest; roster = healerSaveCdGenerated incl. the C2 response-only Barkskin / Frenzied Regeneration; main a3a23a04 = round-end ledger cut 3eb635fb + passive procs ab68f275 + C4)",
     "command": "npx tsx packages/eval/scripts/cdTriggerPriorScan.ts emit-table --in <scan.jsonl> --out <file.json>",
     "cohort": "all",
     "cohortRule": "all 12.1+ healer rounds in the archive",
-    "rows": 285546,
+    "rows": 285510,
     "nFloor": 50,
     "predicateVersion": 1
   },
@@ -86,7 +86,7 @@
       "spellName": "Power Word: Barrier"
     },
     "Holy Paladin|*|1022": {
-      "n": 2926,
+      "n": 2925,
       "medianHpPct": 42,
       "spellName": "Blessing of Protection"
     },
@@ -101,22 +101,22 @@
       "spellName": "Blessing of Spellwarding"
     },
     "Holy Paladin|*|216331": {
-      "n": 11519,
+      "n": 11517,
       "medianHpPct": 54,
       "spellName": "Avenging Crusader"
     },
     "Holy Paladin|*|31821": {
-      "n": 8164,
+      "n": 8163,
       "medianHpPct": 54,
       "spellName": "Aura Mastery"
     },
     "Holy Paladin|*|31884": {
-      "n": 4159,
+      "n": 4156,
       "medianHpPct": 53,
       "spellName": "Avenging Wrath"
     },
     "Holy Paladin|*|375576": {
-      "n": 8277,
+      "n": 8273,
       "medianHpPct": 55,
       "spellName": "Divine Toll"
     },
@@ -126,22 +126,22 @@
       "spellName": "Lay on Hands"
     },
     "Holy Paladin|*|633": {
-      "n": 184,
+      "n": 183,
       "medianHpPct": 36,
       "spellName": "Lay on Hands"
     },
     "Holy Paladin|*|642": {
-      "n": 6077,
+      "n": 6076,
       "medianHpPct": 38,
       "spellName": "Divine Shield"
     },
     "Holy Paladin|*|6940": {
-      "n": 10037,
+      "n": 10036,
       "medianHpPct": 54,
       "spellName": "Blessing of Sacrifice"
     },
     "Holy Paladin|Herald of the Sun|1022": {
-      "n": 1018,
+      "n": 1017,
       "medianHpPct": 43,
       "spellName": "Blessing of Protection"
     },
@@ -161,17 +161,17 @@
       "spellName": "Avenging Crusader"
     },
     "Holy Paladin|Herald of the Sun|31821": {
-      "n": 2748,
+      "n": 2747,
       "medianHpPct": 55,
       "spellName": "Aura Mastery"
     },
     "Holy Paladin|Herald of the Sun|31884": {
-      "n": 3895,
+      "n": 3892,
       "medianHpPct": 53,
       "spellName": "Avenging Wrath"
     },
     "Holy Paladin|Herald of the Sun|375576": {
-      "n": 8277,
+      "n": 8273,
       "medianHpPct": 55,
       "spellName": "Divine Toll"
     },
@@ -181,17 +181,17 @@
       "spellName": "Lay on Hands"
     },
     "Holy Paladin|Herald of the Sun|633": {
-      "n": 126,
+      "n": 125,
       "medianHpPct": 36,
       "spellName": "Lay on Hands"
     },
     "Holy Paladin|Herald of the Sun|642": {
-      "n": 2068,
+      "n": 2067,
       "medianHpPct": 39,
       "spellName": "Divine Shield"
     },
     "Holy Paladin|Herald of the Sun|6940": {
-      "n": 3510,
+      "n": 3509,
       "medianHpPct": 53,
       "spellName": "Blessing of Sacrifice"
     },
@@ -211,7 +211,7 @@
       "spellName": "Blessing of Spellwarding"
     },
     "Holy Paladin|Lightsmith|216331": {
-      "n": 11339,
+      "n": 11337,
       "medianHpPct": 54,
       "spellName": "Avenging Crusader"
     },
@@ -341,7 +341,7 @@
       "spellName": "Fortifying Brew"
     },
     "Mistweaver Monk|*|115310": {
-      "n": 336,
+      "n": 335,
       "medianHpPct": 43,
       "spellName": "Revival"
     },
@@ -401,7 +401,7 @@
       "spellName": "Fortifying Brew"
     },
     "Mistweaver Monk|Master of Harmony|115310": {
-      "n": 269,
+      "n": 268,
       "medianHpPct": 43,
       "spellName": "Revival"
     },
@@ -421,7 +421,7 @@
       "spellName": "Restoral"
     },
     "Preservation Evoker|*|357170": {
-      "n": 6871,
+      "n": 6870,
       "medianHpPct": 50,
       "spellName": "Time Dilation"
     },
@@ -436,7 +436,7 @@
       "spellName": "Obsidian Scales"
     },
     "Preservation Evoker|*|370537": {
-      "n": 2644,
+      "n": 2628,
       "medianHpPct": 53,
       "spellName": "Stasis"
     },
@@ -461,7 +461,7 @@
       "spellName": "Cauterizing Flame"
     },
     "Preservation Evoker|Chronowarden|357170": {
-      "n": 4025,
+      "n": 4024,
       "medianHpPct": 49,
       "spellName": "Time Dilation"
     },
@@ -476,7 +476,7 @@
       "spellName": "Obsidian Scales"
     },
     "Preservation Evoker|Chronowarden|370537": {
-      "n": 1552,
+      "n": 1540,
       "medianHpPct": 52,
       "spellName": "Stasis"
     },
@@ -516,7 +516,7 @@
       "spellName": "Obsidian Scales"
     },
     "Preservation Evoker|Flameshaper|370537": {
-      "n": 1092,
+      "n": 1088,
       "medianHpPct": 54,
       "spellName": "Stasis"
     },
@@ -651,12 +651,12 @@
       "spellName": "Astral Shift"
     },
     "Restoration Shaman|*|108280": {
-      "n": 8717,
+      "n": 8716,
       "medianHpPct": 52,
       "spellName": "Healing Tide Totem"
     },
     "Restoration Shaman|*|378081": {
-      "n": 10528,
+      "n": 10525,
       "medianHpPct": 52,
       "spellName": "Nature's Swiftness"
     },
@@ -686,12 +686,12 @@
       "spellName": "Astral Shift"
     },
     "Restoration Shaman|Totemic|108280": {
-      "n": 6392,
+      "n": 6391,
       "medianHpPct": 52,
       "spellName": "Healing Tide Totem"
     },
     "Restoration Shaman|Totemic|378081": {
-      "n": 10528,
+      "n": 10525,
       "medianHpPct": 52,
       "spellName": "Nature's Swiftness"
     },
