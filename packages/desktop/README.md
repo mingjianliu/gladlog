@@ -1,6 +1,6 @@
 # @gladlog/desktop
 
-**English** · [中文](README.zh-CN.md)
+**English** · [Chinese](README.zh-CN.md)
 
 The gladlog desktop application: an Electron app that watches World of Warcraft arena combat logs in real time, stores completed matches, renders the report/replay UI, and (optionally) drives an AI coach and OBS-based recording. This is the largest package in the repo — roughly 33,000 lines / 192 files under `src/`.
 

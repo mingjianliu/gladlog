@@ -1,6 +1,6 @@
 # @gladlog/parser
 
-**English** · [中文](README.zh-CN.md)
+**English** · [Chinese](README.zh-CN.md)
 
 The zero-dependency combat log parsing engine of gladlog: transforms raw World of Warcraft arena combat logs (`WoWCombatLog*.txt`) into structured, typed match documents (`GladMatch` and `GladShuffle`). It is pure TypeScript and executes in Node.js utility processes, worker threads, and browser environments.
 

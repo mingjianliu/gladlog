@@ -1,6 +1,6 @@
 # @gladlog/corpus-tools
 
-**English** · [中文](README.zh-CN.md)
+**English** · [Chinese](README.zh-CN.md)
 
 **Offline maintainer tools** — not shipped in the desktop app package. Uses gladlog's own parser + analysis metrics to recompute all cohort baselines from the wowarenalogs.com public feed, producing a version-stamped, embedding-free static `data/reference_vectors.json` consumed by SP-B2's compare engine.
 

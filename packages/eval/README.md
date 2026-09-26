@@ -1,6 +1,6 @@
 # @gladlog/eval
 
-**English** · [中文](README.zh-CN.md)
+**English** · [Chinese](README.zh-CN.md)
 
 The evaluation, quality gating, and benchmarking engine of gladlog: verifies prompt fidelity, calibrates LLM judges, enforces deterministic quality gates, and conducts statistically sound A/B evaluations across match corpora. Consumed exclusively in offline maintainer and CI workflows — never bundled into the desktop application.
 

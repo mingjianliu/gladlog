@@ -1,6 +1,6 @@
 # Combat-log observability audit
 
-**English** | [简体中文](log-observability-audit.zh-CN.md)
+**English** · [Chinese](log-observability-audit.zh-CN.md)
 
 ## Purpose and scope
 
