@@ -100,6 +100,12 @@ export const OFFENSIVE_CD_DEAD_IDS: ReadonlySet<string> = new Set([
  *   - Reaper's Mark, Goremaw's Bite, Execution Sentence, Tip the Scales,
  *     Champion's Spear: coPressed 67–90 % or lift < 1.5 — the scan cannot
  *     separate them from the cooldown they are pressed with.
+ *   - Fury's Berserk 1269349 (Rampaging Berserker 1269308, 8 s: 3,531
+ *     applications / 91 player-rounds ≈ 39 each, lift 5.4, coPressed 0.20)
+ *     and Subtlety's Shadow Dance aura 185422 (6 s, 1,115 applications,
+ *     coPressed 0.99) — `offensiveEffectGapScan` 605 files, 2026-09-26. User
+ *     ruling the same day (GH #119): 「应该不算 这些一般是跟着别的技能走的」 —
+ *     frequent short effects that ride another cooldown are not bursts.
  * KNOWN SPLIT, not fixable by membership: Colossus Smash, Touch of the Magi
  * and Kingsbane put their aura on the TARGET. Cast-side consumers (enemy-CD
  * timeline, [RES]) see them; aura-on-caster consumers

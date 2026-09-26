@@ -2,7 +2,7 @@
 
 _English-only developer index, regenerated 2026-09-26 from the file set; `lib/` holds the shared CLI helpers, `archive/` the retired one-off probes (see `archive/README.md`). Grouped by name suffix; a script is listed once. Run any of them with `npx tsx packages/eval/scripts/<name>.ts` from the repo root (artifacts go to `$GLADLOG_EVAL_HOME`)._
 
-## Scans (re-runnable corpus scans; the season runbook ones live in `docs/commands/update-wow-data.md` §7b) — 64
+## Scans (re-runnable corpus scans; the season runbook ones live in `docs/commands/update-wow-data.md` §7b) — 65
 
 | Script | Note |
 |---|---|
@@ -53,6 +53,7 @@ _English-only developer index, regenerated 2026-09-26 from the file set; `lib/` 
 | `newCandidateScan.ts` | Corpus-empirical scan of the three new candidate types (arenacoach batch 1 |
 | `npcRosterScan.ts` | Direction 4 of the log-observability audit (GH #100): the observed NPC |
 | `offensiveCdGapScan.ts` | offensiveCdGapScan.ts — FORWARD completeness scan for the canonical |
+| `offensiveEffectGapScan.ts` | offensiveEffectGapScan.ts — completeness scan for offensive-cooldown EFFECTS under another id (GH #119) |
 | `petDeathScan.ts` | petDeathScan.ts — GH #100 follow-up. User, 2026-09-20: a hunter's or |
 | `petSideScan.ts` | petSideScan.ts — 宠物/召唤物归因的边一致性扫描(GH #99)。 |
 | `positioningScan.ts` | Positioning grounding scan CLI (backlog #3 hard gate). |

@@ -538,6 +538,21 @@ npx tsx packages/eval/scripts/talentReplaceScan.ts \
 npx tsx packages/eval/scripts/spellRangeGroundTruth.ts \
   --manifest $GLADLOG_EVAL_HOME/corpus/manifest-archive-<date>.txt --every 20 --limit 1000 \
   --out $GLADLOG_EVAL_HOME/reports/spell-range-<date>.json
+# 10. Offensive-cooldown EFFECTS under another id (2026-09-26, GH #119): the completeness pair of
+#    OFFENSIVE_EFFECT_ACTIVATION_IDS. Candidates come from DB2 only (EffectTriggerSpell ≤ 2 hops from every
+#    registered cooldown, AURA_ONLY_ACTIVATION_IDS, registered activations); everything is counted inside the
+#    round. Per candidate: the nearest cast of each root within ±3 s of every application (signed, exact id
+#    vs same-name cast with its actual id, ambiguity counted — temporal association, never inferred from the
+#    aura itself), presses followed by the aura, observed lifetimes from buildAuraIntervals vs the DB2 base
+#    and the effective duration, raw-event patterns with examples, casters / unit-rounds, lift. Then the
+#    forward residual (every aura id on a player the relations do not explain, one exclusion bucket per
+#    application, all ids in the JSON), a self-applied / DPS / DB2 6–40 s slice ranked by lift with coPressed
+#    and overlap with recognized offensive auras, and the auras that land on PETS (outside every aura
+#    consumer). Admissions are a user ruling on the printed tables — no cut. ~6 min on every 30th file.
+npx tsx packages/eval/scripts/offensiveEffectGapScan.ts \
+  --manifest $GLADLOG_EVAL_HOME/corpus/manifest-archive-<date>.txt --every 30 \
+  --out $GLADLOG_EVAL_HOME/reports/offensive-effect-gap-<date>.json \
+  --md $GLADLOG_EVAL_HOME/reports/offensive-effect-gap-<date>.md
 ```
 
 npm aliases for the same three (identical flags): `npm run -w @gladlog/eval scan:rot` ·
