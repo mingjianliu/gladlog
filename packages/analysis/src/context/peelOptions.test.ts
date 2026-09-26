@@ -185,4 +185,26 @@ describe("peelOptionsForDeaths (GH #77)", () => {
     });
     expect(out.some((o) => o.spellId === "118")).toBe(false);
   });
+
+  it("does not count an immunity the attacker casts on OTHERS (Imprison) as their own breaker", () => {
+    const monk = {
+      ownerSpec: CombatUnitSpec.Monk_Windwalker,
+      ownerClass: CombatUnitClass.Monk,
+      ccSpellId: "115078", // Paralysis — instant incapacitate
+      attackerSpec: CombatUnitSpec.DemonHunter_Havoc,
+    };
+    // Imprison (immune to everything, 45 s) cast at 2 s: ready in the window,
+    // but its aura lands on the Imprison TARGET — it breaks nothing for the DH.
+    const imprison = makeSpellCastEvent(
+      "221527",
+      at(2),
+      "e1",
+      "Attacker",
+      "p1",
+      "Owner",
+    );
+    const out = scenario({ ...monk, attackerCasts: [imprison] });
+    expect(out.some((o) => o.spellId === "115078")).toBe(true);
+  });
 });
+

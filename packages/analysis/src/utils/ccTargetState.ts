@@ -34,6 +34,7 @@
  */
 import type { AtomicArenaCombat, ICombatUnit } from "@gladlog/parser-compat";
 
+import { abilityProfile } from "../data/abilityProfile";
 import { ccSpellIds } from "../data/spellTags";
 import { buildAuraIntervals, type IAuraInterval } from "./auraIntervals";
 import { buildCannotCastIntervals } from "./cannotCastIntervals";
@@ -127,10 +128,16 @@ function breakToolsFor(target: ICombatUnit, mech: number): string[] {
   // a full-school immunity (Ice Block, Divine Shield) only where the official
   // usable-while attribute says it can be pressed in that state (user ruling
   // 2026-09-04: neither is usable while stunned).
+  // An immunity only counts when it lands on its caster: Cyclone, Imprison
+  // and Banish make their TARGET immune (official ImplicitTarget = enemy;
+  // corpus: Cyclone's aura on the caster 5 times of 1,052, Imprison 0 / 38,
+  // Banish 0 / 4) — a druid with Cyclone ready cannot break a Paralysis
+  // with it.
   return [...ids].filter(
     (id) =>
       explicitlyBreaksMechanic(id, mech) ||
       (auraBlocksMechanic(id, mech) === true &&
+        !abilityProfile(id).hitsEnemy &&
         (usableIn === null || usableIn.has(id))),
   );
 }
