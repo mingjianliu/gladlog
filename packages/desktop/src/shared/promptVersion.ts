@@ -9,10 +9,6 @@
  *  Full history in docs/prompt-version-history.md (append new entries there);
  *  the last few entries stay inline so a reader sees the format:
  *
- *  v160 (2026-09-26, reliability round 3 W1a b12b): cc-avoidable's GCD test anchors a
- *  hard cast at its bar START, so a bar the CC interrupted (no SPELL_CAST_SUCCESS)
- *  no longer leaves a fake "free to react" gap. 605 files at 9eb859c9:
- *  cc-avoidable −3 / +0, contexts unchanged.
  *  v161 (2026-09-26, sync-window table regenerated after C4 + GH #115 + W1g):
  *  full 63,303-file archive at 47f4279b (spot-checked equal at ab72caed on 600
  *  files / 1,658 windows). 107,357 → 107,358 windows; Solo Shuffle nEntered
@@ -25,5 +21,10 @@
  *  render grid. 605 files at ab72caed: STAYED/KITED lines 4,165 → 4,079,
  *  position-mistake(stayed-in) 295 → 298 (−36 / +39); positioningScan G4 end
  *  violations 350 → 0.
+ *  v163 (2026-09-26, kick-priority reference table): regenerated at 9eb859c9 (the
+ *  rooted-kicker fix e8305ed2 and everything since the 2026-09-12 table) over the
+ *  same 21,101-file every-3rd archive subset: completed 7,060 → 7,327, kicked
+ *  1,110 → 1,191; kill-target death within 10 s 11 % completed / 32 → 33 %
+ *  kicked. The kick-priority facts quote the new rates.
  */
-export const PROMPT_VERSION = 162;
+export const PROMPT_VERSION = 163;

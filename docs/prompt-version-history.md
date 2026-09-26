@@ -1427,3 +1427,9 @@ end)" when another enemy is nearest at the end), KITED labels B as the peak
 render grid. 605 files at ab72caed: STAYED/KITED lines 4,165 → 4,079,
 position-mistake(stayed-in) 295 → 298 (−36 / +39); positioningScan G4 end
 violations 350 → 0.
+
+v163 (2026-09-26, kick-priority reference table): regenerated at 9eb859c9 (the
+rooted-kicker fix e8305ed2 and everything since the 2026-09-12 table) over the
+same 21,101-file every-3rd archive subset: completed 7,060 → 7,327, kicked
+1,110 → 1,191; kill-target death within 10 s 11 % completed / 32 → 33 %
+kicked. The kick-priority facts quote the new rates.
