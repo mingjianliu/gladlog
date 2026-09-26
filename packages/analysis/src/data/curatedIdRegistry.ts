@@ -92,6 +92,7 @@ import { HEALER_AVOIDANCE_SPELLS } from "../utils/healerExposureAnalysis";
 import { PVP_TRINKET_SPELL_IDS } from "../utils/killWindowTargetSelection";
 import {
   OFFENSIVE_CD_SPELL_IDS,
+  OFFENSIVE_EFFECT_ACTIVATION_IDS,
   SPELL_EFFECT_OVERRIDES as SPELL_DANGER_OVERRIDES,
 } from "../utils/spellDanger";
 import {
@@ -504,6 +505,13 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   t("OFFENSIVE_CD_SPELL_IDS", "utils/spellDanger.ts", "mixed", () =>
     set(OFFENSIVE_CD_SPELL_IDS),
   ),
+  // GH #115 (2026-09-26): activations of an offensive cooldown's EFFECT that
+  // arrive under another id (Radiant Glory's Avenging Wrath 454351 → 31884).
+  // Both sides are hand-keyed ids a patch can renumber.
+  t("OFFENSIVE_EFFECT_ACTIVATION_IDS", "utils/spellDanger.ts", "mixed", () => [
+    ...OFFENSIVE_EFFECT_ACTIVATION_IDS.keys(),
+    ...OFFENSIVE_EFFECT_ACTIVATION_IDS.values(),
+  ]),
   // CC full-duration predicate (GH #44 tail, 2026-09-02): the corpus-vs-DB2
   // duration corrections and the one aura that lengthens CC in arena. Both are
   // hand-keyed ids a patch can renumber, so both sit under the rot scans.

@@ -33,7 +33,7 @@ import { getSortedAdvancedActions } from "./advancedActions";
 import { COPY_CAST_IDS } from "./castPress";
 import { incomingPressureEvents } from "./incomingPressure";
 import { fmtTime, toRenderSecond } from "./renderGrid";
-import { OFFENSIVE_CD_SPELL_IDS } from "./spellDanger";
+import { isOffensiveSpell } from "./spellDanger";
 import {
   CD_TALENT_MODIFIERS,
   type ICDModifier,
@@ -392,7 +392,8 @@ export function selfForbearanceActiveAt(
 // `isOffensiveSpell` (41 ids) on 22+6 live ids; both sides now read ONE
 // export, so the aura evidence (`hasOffensiveSpellActive` → `threatActiveAt`,
 // panic-press) and the enemy-CD window builder can no longer drift apart.
-const OFFENSIVE_SPELL_IDS = OFFENSIVE_CD_SPELL_IDS;
+// Since GH #115 both read `isOffensiveSpell`, which also admits a registered
+// activation of a cooldown's effect (Radiant Glory's Avenging Wrath 454351).
 
 /** Only track cooldowns at or above this threshold.
  *
@@ -3224,7 +3225,7 @@ export interface IPanicDefensive {
  * - Pass the `enemyIds` set to restrict to enemy-sourced auras (used for debuffs on friendlies).
  *
  * Exported (was panic-press-private) for `threatAssessment.ts`'s `threatActiveAt`
- * — real aura-interval evidence off the same OFFENSIVE_SPELL_IDS table, not a
+ * — real aura-interval evidence off the same `isOffensiveSpell` table, not a
  * second cast+duration estimate (predicate-index.md: "Threat / pressure").
  */
 export function hasOffensiveSpellActive(
@@ -3238,7 +3239,7 @@ export function hasOffensiveSpellActive(
 
   for (const aura of unit.auraEvents) {
     const spellId = aura.spellId;
-    if (!spellId || !OFFENSIVE_SPELL_IDS.has(spellId)) continue;
+    if (!spellId || !isOffensiveSpell(spellId)) continue;
     if (requiredSourceIds !== null && !requiredSourceIds.has(aura.srcUnitId))
       continue;
     if (spellIdFilter !== undefined && !spellIdFilter(spellId)) continue;
@@ -3303,14 +3304,14 @@ function offensiveThreatStartedAfter(
   for (const enemy of enemies) {
     for (const aura of enemy.auraEvents) {
       if (aura.logLine.event !== LogEvent.SPELL_AURA_APPLIED) continue;
-      if (!aura.spellId || !OFFENSIVE_SPELL_IDS.has(aura.spellId)) continue;
+      if (!aura.spellId || !isOffensiveSpell(aura.spellId)) continue;
       if (aura.timestamp > castMs && aura.timestamp <= windowEnd) return true;
     }
   }
 
   for (const aura of target.auraEvents) {
     if (aura.logLine.event !== LogEvent.SPELL_AURA_APPLIED) continue;
-    if (!aura.spellId || !OFFENSIVE_SPELL_IDS.has(aura.spellId)) continue;
+    if (!aura.spellId || !isOffensiveSpell(aura.spellId)) continue;
     if (!enemyIds.has(aura.srcUnitId)) continue;
     if (aura.timestamp > castMs && aura.timestamp <= windowEnd) return true;
   }

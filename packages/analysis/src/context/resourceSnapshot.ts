@@ -212,7 +212,13 @@ export function buildPlayerLoadout(
     for (const cd of player.offensiveCDs) {
       if (kitNames.has(cd.spellName) || seen.has(cd.spellName)) continue;
       seen.add(cd.spellName);
-      observedOnly.push(`${cd.spellName} [${cd.cooldownSeconds}s]`);
+      // an activation of another cooldown's effect has no cooldown of its
+      // own to print (Radiant Glory's Avenging Wrath, GH #115)
+      observedOnly.push(
+        cd.availableAgainAtSeconds === null
+          ? `${cd.spellName} [proc]`
+          : `${cd.spellName} [${cd.cooldownSeconds}s]`,
+      );
     }
     const enemyUnit = enemyUnitFor(player.playerName);
     const parts = [

@@ -42,14 +42,14 @@ import {
   purgePriorityForTest,
 } from "@gladlog/analysis/src/utils/dispelAnalysis";
 import { reconstructEnemyCDTimeline } from "@gladlog/analysis/src/utils/enemyCDs";
-import { OFFENSIVE_CD_SPELL_IDS } from "@gladlog/analysis/src/utils/spellDanger";
+import { isOffensiveSpell } from "@gladlog/analysis/src/utils/spellDanger";
 import { GladLogParser } from "@gladlog/parser";
 import {
   CombatUnitReaction,
   toLegacyMatch,
   toLegacyShuffle,
 } from "@gladlog/parser-compat";
-import { appendFileSync, existsSync, readdirSync,readFileSync } from "fs";
+import { appendFileSync, existsSync, readdirSync, readFileSync } from "fs";
 import { basename, join } from "path";
 import { gunzipSync } from "zlib";
 
@@ -96,8 +96,8 @@ function loadLedger(dir: string): Map<string, any> {
  * `castStartEvents`, max HP only exists on `advancedActions` samples). */
 // Canonical offensive-cooldown table (unified 2026-09-02, GH #60 tail) — was
 // a private classMetadata-only copy, one of the three consumers the
-// unification pointed at the shared export.
-const OFFENSIVE_CD_IDS = OFFENSIVE_CD_SPELL_IDS;
+// unification pointed at the shared export. Since GH #115 through
+// `isOffensiveSpell`, which also admits a registered effect activation.
 const EXTERNAL_IDS = new Set<string>(
   (spellIdLists as any).externalDefensiveSpellIds.map(String),
 );
@@ -167,7 +167,7 @@ function exposureOf(legacy: any, owner: any, friends: any[]): RoundExposure {
     for (const c of (u.spellCastEvents ?? []) as any[]) {
       const sid = String(c.spellId ?? "");
       if (!sid) continue;
-      if (friendIds.has(u.id) && OFFENSIVE_CD_IDS.has(sid))
+      if (friendIds.has(u.id) && isOffensiveSpell(sid))
         e.teamOffensiveCdCasts++;
       if (u.id === owner.id && EXTERNAL_IDS.has(sid)) e.ownerExternalCasts++;
       if (!friendIds.has(u.id) && sid === CYCLONE_ID) e.enemyCyclones++;

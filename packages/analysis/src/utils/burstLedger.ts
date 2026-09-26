@@ -99,7 +99,9 @@ export interface IBurstLedgerEntry {
 
 /** Active span of one offensive CD cast: buff duration when known, grouping reach otherwise.
  * Exported for the replay burst visual — the pulse must cover exactly the span the ledger audits. */
-export function burstCastSpan(cd: IEnemyCDCast): { from: number; to: number } {
+export function burstCastSpan(
+  cd: Pick<IEnemyCDCast, "castTimeSeconds" | "buffEndSeconds">,
+): { from: number; to: number } {
   const to = Math.max(cd.buffEndSeconds, cd.castTimeSeconds + MIN_BURST_SPAN_S);
   return { from: cd.castTimeSeconds, to };
 }

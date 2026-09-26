@@ -60,7 +60,7 @@ import { getUnitPositionAtTime } from "../utils/losAnalysis";
 import { LOS_SWEEP_GAP_MS } from "../utils/positionSampling";
 import { canReachTargetAt } from "../utils/rootReachability";
 import { buildCannotCastIntervals } from "../utils/cannotCastIntervals";
-import { isOffensiveSpell, spellDangerWeight } from "../utils/spellDanger";
+import { isOffensiveSpell } from "../utils/spellDanger";
 import { buildFilteredAuraIntervals } from "../utils/utils";
 import {
   CRISIS_HP_PCT_RENDERED,
@@ -588,13 +588,13 @@ export interface BoundedSegment {
   casts: IAlignedBurstWindow["activeCDs"];
 }
 
-/** cast key into the per-player offensive-CD ledger (buff end + cooldown) */
+/** cast key into the per-player offensive-CD ledger (buff end + danger weight) */
 const castKey = (playerName: string, spellId: string, castSeconds: number) =>
   `${playerName}|${spellId}|${castSeconds}`;
 
 interface CastFacts {
   buffEndSeconds: number;
-  cooldownSeconds: number;
+  dangerWeight: number;
 }
 
 function castFactsOf(timeline: IEnemyCDTimeline): Map<string, CastFacts> {
@@ -603,18 +603,20 @@ function castFactsOf(timeline: IEnemyCDTimeline): Map<string, CastFacts> {
     for (const cd of p.offensiveCDs)
       out.set(castKey(p.playerName, cd.spellId, cd.castTimeSeconds), {
         buffEndSeconds: cd.buffEndSeconds,
-        cooldownSeconds: cd.cooldownSeconds,
+        dangerWeight: cd.dangerWeight,
       });
   return out;
 }
 
-/** `spellDangerWeight` of a cast, 0 when the ledger has no cooldown for it. */
+/** The timeline's `dangerWeight` of a cast (`offensiveDangerWeight` — an
+ * activation weighs its canonical cooldown, GH #115), 0 when the timeline
+ * does not know the cast. */
 function weightOf(
   c: IAlignedBurstWindow["activeCDs"][number],
   facts: Map<string, CastFacts>,
 ): number {
   const f = facts.get(castKey(c.playerName, c.spellId, c.castSeconds));
-  return f ? spellDangerWeight(c.spellId, f.cooldownSeconds) : 0;
+  return f ? f.dangerWeight : 0;
 }
 
 /**

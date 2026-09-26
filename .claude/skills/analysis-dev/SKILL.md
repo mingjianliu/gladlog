@@ -36,7 +36,7 @@ description: 改 packages/analysis 的任何东西之前读这个 —— 谓词�
 
 - **谓词单源**:同一事实在 analysis 与 eval 门规之间、以及 analysis 内部两个消费者之间,import 同一个函数/常量。
   查 `docs/predicate-index.md`;新配对登记进去(中英两份),`packages/eval/test/predicateIndex.test.ts` 会钉住符号名。
-- **新增手工 id 表 → 登记 `packages/analysis/src/data/curatedIdRegistry.ts`**(92 张),否则 rotScan /
+- **新增手工 id 表 → 登记 `packages/analysis/src/data/curatedIdRegistry.ts`**(93 张),否则 rotScan /
   gapScan 看不见它。往已登记的表(`SPELL_CATEGORIES`、`MITIGATION_TABLE`…)里加条目不用再登记,
   从它们派生的集合(`ccSpellIds`、`rootSpellIds`)也已覆盖 —— 先 `grep` 注册表再决定。
   删掉的手工时长要有测试拒绝回填(`test/ccFullDuration.test.ts` 的形状)。

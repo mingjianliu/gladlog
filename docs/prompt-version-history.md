@@ -1340,3 +1340,14 @@ kick — kick-eaten carries phase=channel + channelS instead of a clamped
 kickDepthPct, and the legend / consequence rule no longer say it "never
 landed" or invite fake-casting. 605 files: 273 of 1,536 kick-eaten lines
 are channel kicks, 33 lose kickDepthPct; nothing else moves.
+
+v153 (2026-09-26, GH #115): Radiant Glory's proc Avenging Wrath (454351)
+is Avenging Wrath's EFFECT for every burst consumer (offensiveEffectCdId /
+isOffensiveSpell; not a press) — weighted like 31884, its own 8 s, no
+"available again"; our own Ret's proc into a wall is accused like a press
+(user 2026-09-26 「指控」: 1,406 / 1,406 procs follow a Wake of Ashes press
+within 0.02 s). 605 files at ccb3db74: slow-defensive-response healer
+101 → 129 (+33 / −5, 28 led by 454351), position-mistake dps 615 → 654 /
+healer 10 → 12 (57 stayed-in), burst-into-mitigation dps 35 → 44 (all
+Avenging Wrath), missed-cleanse −4 (the 08-19 timing gate now sees the
+burst), cd-hoarded 9 swapped; [ENEMY CD] Avenging Wrath lines appear.

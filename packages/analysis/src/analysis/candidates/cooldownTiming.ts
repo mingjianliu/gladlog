@@ -597,11 +597,7 @@ export function unsyncedBurstEvents(
   }> = [];
   for (const cast of casts) {
     const span = burstCastSpan({
-      spellId: cast.spellId,
-      spellName: cast.spellName,
       castTimeSeconds: cast.castTimeSeconds,
-      cooldownSeconds: cast.cooldownSeconds,
-      availableAgainAtSeconds: cast.castTimeSeconds + cast.cooldownSeconds,
       // 单一谓词(2026-09-06):`casts` 是队伍的进攻施放清单,不带单位,
       // 所以拿不到施法者;传 undefined 与原先直读同值。
       buffEndSeconds:

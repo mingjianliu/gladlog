@@ -40,7 +40,7 @@ import {
   INTERP_MAX_GAP_MS,
   LOS_SWEEP_GAP_MS,
 } from "@gladlog/analysis/src/utils/positionSampling";
-import { OFFENSIVE_CD_SPELL_IDS } from "@gladlog/analysis/src/utils/spellDanger";
+import { isOffensiveSpell } from "@gladlog/analysis/src/utils/spellDanger";
 import type { ICombatUnit } from "@gladlog/parser-compat";
 
 export const WINDOW_MS = 3000;
@@ -391,7 +391,7 @@ export function buildCrisisAnswerEvidence(
     iv: ReturnType<typeof buildAuraIntervals>[number],
     recipient: string,
   ) => {
-    if (!OFFENSIVE_CD_SPELL_IDS.has(iv.spellId)) return;
+    if (!isOffensiveSpell(iv.spellId)) return;
     if (!(iv.fromS <= tRel && iv.toS >= tRel)) return;
     const key = `${iv.spellId}|${iv.srcUnitName}|${recipient}`;
     if (seenOff.has(key)) return;
@@ -407,7 +407,7 @@ export function buildCrisisAnswerEvidence(
       atMs: [appliedMs],
       detail: { recipient, source: iv.srcUnitName, ageS, remaining: null },
       text: `${nameOf(iv.spellId, iv.spellName)} active on ${recipient === ownerAtT.name ? "the owner" : recipient} (from ${iv.srcUnitName}), applied ${ageS} s before t; remaining duration not rendered`,
-      source: "auraIntervals (truncated at t) ∩ OFFENSIVE_CD_SPELL_IDS",
+      source: "auraIntervals (truncated at t) ∩ isOffensiveSpell",
     });
   };
   // Only the ENEMY team's own offensive effects on an attacker: our side's
@@ -439,7 +439,7 @@ export function buildCrisisAnswerEvidence(
       for (const c of eu.spellCastEvents ?? []) {
         if (
           c.logLine.event !== "SPELL_CAST_SUCCESS" ||
-          !OFFENSIVE_CD_SPELL_IDS.has(c.spellId)
+          !isOffensiveSpell(c.spellId)
         )
           continue;
         if (!(c.timestamp > fromMs && c.timestamp <= toMs)) continue;
@@ -467,7 +467,7 @@ export function buildCrisisAnswerEvidence(
             phase === "at-t"
               ? `${eu.name}${isAttacker ? " (attacker)" : ""} cast ${nameOf(c.spellId, c.spellName)} ${Math.round((tMs - c.timestamp) / 100) / 10} s before t — a cast, not proof the effect is still running`
               : `${eu.name}${isAttacker ? " (attacker)" : ""} cast ${nameOf(c.spellId, c.spellName)} at t + ${Math.round((c.timestamp - tMs) / 100) / 10} s — enemy activity, not necessarily aimed at the owner`,
-          source: `spellCastEvents SPELL_CAST_SUCCESS ∩ OFFENSIVE_CD_SPELL_IDS (${phase === "at-t" ? "[t − 8 s, t]" : "(t, t + 3 s]"})`,
+          source: `spellCastEvents SPELL_CAST_SUCCESS ∩ isOffensiveSpell (${phase === "at-t" ? "[t − 8 s, t]" : "(t, t + 3 s]"})`,
         });
       }
     }

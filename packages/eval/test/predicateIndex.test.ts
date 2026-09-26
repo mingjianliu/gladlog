@@ -1249,6 +1249,11 @@ const INDEX: PredicateRow[] = [
     mod: spellDanger,
   },
   {
+    file: `${A}/utils/spellDanger.ts`,
+    symbol: "offensiveEffectCdId",
+    mod: spellDanger,
+  },
+  {
     file: `${A}/analysis/burstWindowDecisionPoints.ts`,
     symbol: "BURST_LEAD_CD_EXCLUDED_IDS",
     mod: burstWindowDecisionPoints,

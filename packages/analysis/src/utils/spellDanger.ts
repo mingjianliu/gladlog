@@ -138,13 +138,47 @@ export const OFFENSIVE_CD_SPELL_IDS: ReadonlySet<string> = new Set(
 );
 
 /**
- * Returns true if the canonical offensive-cooldown table holds this spell.
- * (The pre-2026-09-02 comment claimed "covers all 120 tagged offensive
- * spells" — that was wrong on both counts; the real membership is
- * `OFFENSIVE_CD_SPELL_IDS`, 60 ids.)
+ * GH #115: offensive-cooldown EFFECTS that some builds receive under another
+ * spell id — activation id → the canonical cooldown in `OFFENSIVE_CD_SPELL_IDS`.
+ *
+ * Radiant Glory removes Avenging Wrath's button and grants it as an 8 s proc
+ * (454351, no cooldown of its own in DB2) off Wake of Ashes. Measured with
+ * `offensiveCdGapScan`'s method (08-28 manifest every 10th file: 1,814 files,
+ * 3,450 rounds, all ratings): in 74.8 % of Retribution rounds, damage lift
+ * p50 2.44 against the pressed 31884's 2.39 (24.4 % of rounds) and the
+ * registered yardstick's 2.12, coPressed 0; consecutive procs ≥ 30.0 s apart
+ * (Wake of Ashes' 30 s recharge, 605 files). Before this table every enemy
+ * burst consumer was blind to it (825ca842: 11 procs, no window).
+ *
+ * EFFECT identity only — "this cooldown's effect became active". It is
+ * deliberately NOT `SPELL_CANONICAL_IDS` (cooldowns.ts): that table makes an
+ * event a PRESS of the cooldown (`isPressOfCooldown`), and a proc is not a
+ * button (GH #106 step 2 keeps 31884 proc-only for such a unit). Consumers
+ * price its danger from the canonical cooldown (`offensiveDangerWeight` — a
+ * recurrence floor is not potency: at 30 s `cdTierWeight` is 0, codex astra
+ * 2026-09-26) and keep the activation's own id, duration and the absence of
+ * an "available again" time. Registered in `curatedIdRegistry.ts`.
+ */
+export const OFFENSIVE_EFFECT_ACTIVATION_IDS: ReadonlyMap<string, string> =
+  new Map([['454351', '31884']]);
+
+/** The canonical offensive cooldown whose effect this cast / aura id is:
+ * itself for a table member, its cooldown for a registered activation
+ * (`OFFENSIVE_EFFECT_ACTIVATION_IDS`), undefined otherwise. */
+export function offensiveEffectCdId(spellId: string): string | undefined {
+  if (OFFENSIVE_CD_SPELL_IDS.has(spellId)) return spellId;
+  return OFFENSIVE_EFFECT_ACTIVATION_IDS.get(spellId);
+}
+
+/**
+ * Is this cast / aura id an offensive cooldown's effect — a member of the
+ * canonical table or a registered activation of one (GH #115). Every
+ * membership consumer reads this, never the raw set, so an activation is
+ * seen the same way everywhere. (The pre-2026-09-02 comment claimed "covers
+ * all 120 tagged offensive spells" — that was wrong on both counts.)
  */
 export function isOffensiveSpell(spellId: string): boolean {
-  return OFFENSIVE_CD_SPELL_IDS.has(spellId);
+  return offensiveEffectCdId(spellId) !== undefined;
 }
 
 /**
@@ -165,6 +199,21 @@ export function spellDangerWeight(spellId: string, cooldownSeconds: number): num
   const effects = SPELL_EFFECT_OVERRIDES[spellId] ?? [SpellEffectType.DamageAmp];
   const effectWeight = effects.reduce((sum, e) => sum + EFFECT_TYPE_WEIGHTS[e], 0);
   return cdTierWeight(cooldownSeconds) * effectWeight;
+}
+
+/**
+ * Danger weight of an offensive cast from its effect: the canonical
+ * cooldown's weight (`spellDangerWeight` at that cooldown's
+ * `effectiveCooldownSeconds`, passed in by the caller that owns the effect
+ * table). An activation (`OFFENSIVE_EFFECT_ACTIVATION_IDS`) weighs what its
+ * cooldown weighs; a plain member is unchanged.
+ */
+export function offensiveDangerWeight(
+  spellId: string,
+  cooldownOf: (id: string) => number,
+): number {
+  const cdId = offensiveEffectCdId(spellId) ?? spellId;
+  return spellDangerWeight(cdId, cooldownOf(cdId));
 }
 
 /** Score label for display */

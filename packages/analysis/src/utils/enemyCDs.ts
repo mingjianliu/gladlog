@@ -27,8 +27,8 @@ import {
 } from "./dampening";
 import {
   dangerLabel,
-  isOffensiveSpell,
-  spellDangerWeight,
+  offensiveDangerWeight,
+  offensiveEffectCdId,
 } from "./spellDanger";
 
 /** Two offensive CD casts within this window are considered an aligned burst.
@@ -42,12 +42,20 @@ export const BURST_CLUSTER_SECONDS = 10;
 export const SOLO_WINDOW_MIN_WEIGHT = 1.3;
 
 export interface IEnemyCDCast {
+  /** the id that was cast — an activation keeps its own (GH #115) */
   spellId: string;
   spellName: string;
   castTimeSeconds: number;
+  /** this id's own cooldown; 0 for an activation of another cooldown's
+   * effect (Radiant Glory's 454351 has none — GH #115) */
   cooldownSeconds: number;
-  /** When this CD will be available again (may exceed match duration) */
-  availableAgainAtSeconds: number;
+  /** When this CD will be available again (may exceed match duration);
+   * null for an activation, which has no button to come back (GH #115) */
+  availableAgainAtSeconds: number | null;
+  /** `offensiveDangerWeight` — the effect's weight, the canonical cooldown's
+   * for an activation. The one number window qualification and threat
+   * scoring read. */
+  dangerWeight: number;
   /**
    * When the buff granted by this CD expires. Computed from spellEffectData.durationSeconds
    * when available; falls back to castTimeSeconds when duration data is missing.
@@ -110,13 +118,16 @@ export const ENEMY_CD_MAX_SECONDS = 360;
  * table also admits `debuffs_offensive` rows with no cooldown at all (Curse
  * of Weakness 702, Curse of Tongues 1714, Ignite 12654), which are not
  * something a cooldown tracker shows. Official cooldown (or charge recharge)
- * inside [MIN_CD_SECONDS, ENEMY_CD_MAX_SECONDS].
+ * inside [MIN_CD_SECONDS, ENEMY_CD_MAX_SECONDS] — of the EFFECT's cooldown:
+ * a registered activation (`OFFENSIVE_EFFECT_ACTIVATION_IDS`, Radiant Glory's
+ * Avenging Wrath 454351) is admitted on its canonical cooldown (GH #115).
  */
 export function isEnemyCdWindowSpell(spellId: string): boolean {
-  if (!isOffensiveSpell(spellId)) return false;
+  const cdId = offensiveEffectCdId(spellId);
+  if (cdId === undefined) return false;
   const effectData = spellEffectData[spellId];
   if (!effectData) return false;
-  const cooldownSeconds = effectiveCooldownSeconds(spellId) ?? 0;
+  const cooldownSeconds = effectiveCooldownSeconds(cdId) ?? 0;
   return (
     cooldownSeconds >= MIN_CD_SECONDS && cooldownSeconds <= ENEMY_CD_MAX_SECONDS
   );
@@ -147,7 +158,12 @@ export function reconstructEnemyCDTimeline(
       if (!spellId) continue;
       if (!isEnemyCdWindowSpell(spellId)) continue;
       const effectData = spellEffectData[spellId]!;
-      const cooldownSeconds = effectiveCooldownSeconds(spellId) ?? 0;
+      // an activation of another cooldown's effect (GH #115) has no button:
+      // no cooldown of its own, nothing to come "available again"
+      const isActivation = offensiveEffectCdId(spellId) !== spellId;
+      const cooldownSeconds = isActivation
+        ? 0
+        : (effectiveCooldownSeconds(spellId) ?? 0);
 
       const castTimeSeconds = (cast.logLine.timestamp - matchStartMs) / 1000;
       const buffDuration = effectData.durationSeconds ?? 0;
@@ -165,8 +181,14 @@ export function reconstructEnemyCDTimeline(
         spellName: effectData.name,
         castTimeSeconds,
         cooldownSeconds,
-        availableAgainAtSeconds: castTimeSeconds + cooldownSeconds,
+        availableAgainAtSeconds: isActivation
+          ? null
+          : castTimeSeconds + cooldownSeconds,
         buffEndSeconds: castTimeSeconds + buffDuration,
+        dangerWeight: offensiveDangerWeight(
+          spellId,
+          (id) => effectiveCooldownSeconds(id) ?? 0,
+        ),
       });
     }
 
@@ -190,7 +212,7 @@ export function reconstructEnemyCDTimeline(
         playerName: p.playerName,
         spellName: cd.spellName,
         spellId: cd.spellId,
-        cooldownSeconds: cd.cooldownSeconds,
+        dangerWeight: cd.dangerWeight,
       })),
     )
     .sort((a, b) => a.time - b.time);
@@ -234,11 +256,7 @@ export function reconstructEnemyCDTimeline(
   for (const inWindow of groups) {
     const qualifies =
       inWindow.length >= 2 ||
-      inWindow.some(
-        (c) =>
-          spellDangerWeight(c.spellId, c.cooldownSeconds) >=
-          SOLO_WINDOW_MIN_WEIGHT,
-      );
+      inWindow.some((c) => c.dangerWeight >= SOLO_WINDOW_MIN_WEIGHT);
     if (qualifies) {
       const windowStart = inWindow[0].time;
       // toSeconds = when the last buff in this window actually expires, not just when it was cast.
@@ -246,10 +264,7 @@ export function reconstructEnemyCDTimeline(
       const windowEnd = Math.max(...inWindow.map((c) => c.buffEndSeconds));
 
       // Compute CD-based danger score
-      const cdScore = inWindow.reduce(
-        (sum, c) => sum + spellDangerWeight(c.spellId, c.cooldownSeconds),
-        0,
-      );
+      const cdScore = inWindow.reduce((sum, c) => sum + c.dangerWeight, 0);
       const alignmentMultiplier = inWindow.length >= 3 ? 1.5 : 1.0;
 
       // Damage over the ACTUAL window span [start, end], compared as a rate to the match average.
@@ -507,7 +522,10 @@ export function formatEnemyCDTimelineForContext(
   const unusedByCDId = new Set<string>();
   for (const player of timeline.players) {
     for (const cd of player.offensiveCDs) {
-      if (cd.availableAgainAtSeconds > matchDurationSeconds) {
+      if (
+        cd.availableAgainAtSeconds !== null &&
+        cd.availableAgainAtSeconds > matchDurationSeconds
+      ) {
         unusedByCDId.add(
           `${player.specName}: ${cd.spellName} — not used again after ${fmtTime(cd.castTimeSeconds)}`,
         );
