@@ -717,30 +717,52 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   // to the cast that produced it (codex astra 2026-09-25: with only a window,
   // a Polymorph reflected at 31.55 s tagged the landed 30.0 s cast and left
   // the reflected 31.5 s cast bare).
-  const ownerCastMsBySpell = new Map<string, number[]>();
-  for (const e of owner.spellCastEvents ?? []) {
-    if (e.logLine?.event !== LogEvent.SPELL_CAST_SUCCESS || !e.spellId)
-      continue;
-    const list = ownerCastMsBySpell.get(e.spellId) ?? [];
-    list.push(e.timestamp);
-    ownerCastMsBySpell.set(e.spellId, list);
+  // Per CASTER (codex review of batch 3, 2026-09-26: a teammate's tag must
+  // read the teammate's casts, not the owner's — otherwise the owner's
+  // Polymorph at 31.52 s suppressed the teammate's 31.5 s tag and vice versa).
+  const castMsBySpellByUnit = new Map<string, Map<string, number[]>>();
+  function castMsBySpellOf(unit: ICombatUnit): Map<string, number[]> {
+    let m = castMsBySpellByUnit.get(unit.id);
+    if (m) return m;
+    m = new Map<string, number[]>();
+    for (const e of unit.spellCastEvents ?? []) {
+      if (e.logLine?.event !== LogEvent.SPELL_CAST_SUCCESS || !e.spellId)
+        continue;
+      const list = m.get(e.spellId) ?? [];
+      list.push(e.timestamp);
+      m.set(e.spellId, list);
+    }
+    castMsBySpellByUnit.set(unit.id, m);
+    return m;
   }
   /** The miss falls in the cast's window AND no later cast of the same spell
-   * happened at or before it — it belongs to the latest cast before it. */
+   * by the same caster happened at or before it — it belongs to the latest
+   * cast before it. */
   function missBelongsToCast(
+    unit: ICombatUnit,
     spellId: string,
     castMs: number,
     missMs: number,
   ): boolean {
     if (missMs < castMs - 100 || missMs > castMs + 2500) return false;
-    return !(ownerCastMsBySpell.get(spellId) ?? []).some(
+    return !(castMsBySpellOf(unit).get(spellId) ?? []).some(
       (t) => t > castMs + 5 && t <= missMs + 100,
     );
   }
 
   const consumedImmuneMisses = new Set<unknown>();
   function ownerCcImmuneTag(spellId: string, castTimeSeconds: number): string {
-    const misses = owner.missesOut;
+    return ccImmuneTagFor(owner, spellId, castTimeSeconds);
+  }
+  // Reliability round 3 N10 (483f): a teammate's Storm Bolt the game rejected
+  // as IMMUNE rendered as a plain [TEAM] [CC] cast — same predicate as the
+  // owner's tag, read from that unit's own SPELL_MISSED stream.
+  function ccImmuneTagFor(
+    unit: ICombatUnit,
+    spellId: string,
+    castTimeSeconds: number,
+  ): string {
+    const misses = unit.missesOut;
     if (!misses || misses.length === 0) return "";
     const castMs = matchStartMs + castTimeSeconds * 1000;
     const miss = misses.find(
@@ -748,7 +770,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
         m.missType === "IMMUNE" &&
         m.spellId === spellId &&
         !consumedImmuneMisses.has(m) &&
-        missBelongsToCast(spellId, castMs, m.timestamp),
+        missBelongsToCast(unit, spellId, castMs, m.timestamp),
     );
     if (!miss) return "";
     consumedImmuneMisses.add(miss);
@@ -816,7 +838,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
         !word ||
         m.spellId !== spellId ||
         consumedCcMisses.has(m) ||
-        !missBelongsToCast(spellId, castMs, m.timestamp)
+        !missBelongsToCast(owner, spellId, castMs, m.timestamp)
       )
         continue;
       consumedCcMisses.add(m);
@@ -2302,7 +2324,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
           if (matchingAoe) {
             effectiveTgt = formatAoeTargetPart(matchingAoe, tgt);
           }
-          line = `${fmtTime(cast.timeSeconds)}  [TEAM] [CC]   ${pid(player.name)} (${spec}) cast ${cd.spellName}${effectiveTgt}${groundingNote}${unnecessaryNote}`;
+          line = `${fmtTime(cast.timeSeconds)}  [TEAM] [CC]   ${pid(player.name)} (${spec}) cast ${cd.spellName}${effectiveTgt}${groundingNote}${ccImmuneTagFor(player, cd.spellId, cast.timeSeconds)}${unnecessaryNote}`;
         } else {
           line = `${fmtTime(cast.timeSeconds)}  [TEAM] ${isProc ? "[PROC]" : "[CD]"}   ${pid(player.name)} (${spec}): ${cd.spellName}${groundingNote}${unnecessaryNote}`;
         }
@@ -2557,20 +2579,78 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   // ── F170: [ENEMY HARD CAST] — hard-cast kill spells (Chaos Bolt, Pyroblast) ─
   {
     const HARD_CAST_KILL_SPELLS = new Set(["116858", "11366", "1254294"]); // Chaos Bolt, Pyroblast
+    /** below this a START→SUCCESS pair is an instant (Hot Streak), not a bar */
+    const HARD_CAST_MIN_MS = 300;
+    /** above this the success belongs to a later press, not this bar */
+    const HARD_CAST_MAX_MS = 12_000;
     for (const enemy of enemies ?? []) {
-      for (const event of enemy.castStartEvents ?? []) {
-        if (event.logLine.event !== LogEvent.SPELL_CAST_START) continue;
+      // A success belongs to one bar (codex: START 5 s / SUCCESS 7.5 s /
+      // START 7.5 s / SUCCESS 10 s — the second START must not re-read the
+      // first bar's 7.5 s success as a 0 s "instant").
+      const consumedSuccess = new Set<object>();
+      const starts = [...(enemy.castStartEvents ?? [])]
+        .filter((e) => e.logLine.event === LogEvent.SPELL_CAST_START)
+        .sort(
+          (a, b) =>
+            a.timestamp - b.timestamp ||
+            (a.logLine.lineIndex ?? 0) - (b.logLine.lineIndex ?? 0),
+        );
+      for (const event of starts) {
         if (!event.spellId || !HARD_CAST_KILL_SPELLS.has(event.spellId))
           continue;
         const timeSeconds = (event.timestamp - matchStartMs) / 1000;
         if (timeSeconds < 0 || timeSeconds > matchEndSeconds) continue;
+        // Reliability round 3 N10 (7d1f): every SPELL_CAST_START rendered — an
+        // instant Hot Streak Pyroblast (START → SUCCESS 3–27 ms) and a bar the
+        // mage aborted both read as "kept hard-casting Pyroblast". A line now
+        // needs the same spell's SUCCESS ≥ HARD_CAST_MIN_MS after the start
+        // and before the next start of it; instants and aborted bars are not
+        // hard casts (a kick that stopped one shows on the [kick] line).
+        // You cannot run two bars at once: ANY later START by this enemy
+        // (any spell) ends this bar's window — the rule hardCastOccupancyWithin
+        // uses (codex: an abandoned Pyroblast followed by a Fireball bar and a
+        // Hot Streak instant read "3.0s cast, landed").
+        const nextStart = starts.find(
+          (e) =>
+            e.timestamp > event.timestamp ||
+            (e.timestamp === event.timestamp &&
+              (e.logLine.lineIndex ?? 0) > (event.logLine.lineIndex ?? 0)),
+        );
+        // event order, not bare timestamps (codex: an instant START and its
+        // SUCCESS at the same ms must not be read as the previous bar's end)
+        const beforeNextStart = (e: { timestamp: number; logLine: { lineIndex?: number } }) =>
+          nextStart === undefined ||
+          e.timestamp < nextStart.timestamp ||
+          (e.timestamp === nextStart.timestamp &&
+            (e.logLine.lineIndex ?? 0) < (nextStart.logLine.lineIndex ?? 0));
+        // The FIRST same-spell success after the start is this bar's outcome
+        // (codex: skipping a 20 ms success to a later instant printed "3.0s
+        // cast, landed"); an instant (< HARD_CAST_MIN_MS), no success before
+        // the next start, or a success further than a bar can run
+        // (HARD_CAST_MAX_MS) all mean "not a landed hard cast".
+        const first = enemy.spellCastEvents.find(
+          (e) =>
+            e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+            e.spellId === event.spellId &&
+            !consumedSuccess.has(e) &&
+            (e.timestamp > event.timestamp ||
+              (e.timestamp === event.timestamp &&
+                (e.logLine.lineIndex ?? 0) >= (event.logLine.lineIndex ?? 0))) &&
+            beforeNextStart(e),
+        );
+        if (!first) continue;
+        consumedSuccess.add(first);
+        const castMs = first.timestamp - event.timestamp;
+        if (castMs < HARD_CAST_MIN_MS || castMs > HARD_CAST_MAX_MS) continue;
+        const landed = first;
         const spellName = getEnglishSpellName(event.spellId, event.spellName);
         const target = event.destUnitName
           ? ` → ${pid(event.destUnitName)}`
           : "";
+        const castS = ((landed.timestamp - event.timestamp) / 1000).toFixed(1);
         addEntry(
           timeSeconds,
-          `${fmtTime(timeSeconds)}  [ENEMY HARD CAST]   ${enemyPid(enemy.name)}: ${spellName}${target}`,
+          `${fmtTime(timeSeconds)}  [ENEMY HARD CAST]   ${enemyPid(enemy.name)}: ${spellName}${target} (${castS}s cast, landed)`,
         );
       }
     }

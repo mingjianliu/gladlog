@@ -132,7 +132,18 @@ export function formatBurstAnsweredLines(
           ? `${Math.abs(first.latencySec).toFixed(1)}s before it opened`
           : `in ${first.latencySec.toFixed(1)}s`;
       const pressured = p.pressured!;
-      const diedPart = pressured.died ? ` — ${pressured.name} still died` : "";
+      // Reliability round 3 N4 (483f): a friendly OTHER than the pressured
+      // unit died inside the window and the line said nothing — the window
+      // read as a clean answer. Same observable-consequence shape as the
+      // pressured suffix (GH #70), never a verdict on the answer.
+      const otherDeath = !pressured.died && p.anyFriendlyDeath
+        ? (p.friendlyOutcomes.find((f) => f.died)?.name ?? "a friendly")
+        : null;
+      const diedPart = pressured.died
+        ? ` — ${pressured.name} still died`
+        : otherDeath
+          ? ` — ${otherDeath} died inside it`
+          : "";
       return {
         atSeconds: p.tSec,
         line:

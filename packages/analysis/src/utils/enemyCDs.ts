@@ -1,3 +1,4 @@
+import { buffFullDurationForCaster } from "./buffDuration";
 import {
   AtomicArenaCombat,
   ICombatUnit,
@@ -166,7 +167,14 @@ export function reconstructEnemyCDTimeline(
         : (effectiveCooldownSeconds(spellId) ?? 0);
 
       const castTimeSeconds = (cast.logLine.timestamp - matchStartMs) / 1000;
-      const buffDuration = effectData.durationSeconds ?? 0;
+      // Caster-aware: DB2 base + the caster's duration talents (the same
+      // predicate the owner's ledger reads). Reliability round 3 N7 (f4da):
+      // Summon Demonic Tyrant rendered 15 s while Reign of Tyranny holders run
+      // 20 s (three windows 20.0 s).
+      const buffDuration =
+        buffFullDurationForCaster(spellId, enemy) ??
+        effectData.durationSeconds ??
+        0;
 
       // Deduplicate: same player + same spellName within 1s = one cast (guards against double-parsed events and multi-target buffs)
       const isDuplicate = offensiveCDs.some(

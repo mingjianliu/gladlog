@@ -110,7 +110,27 @@ describe("F170 [ENEMY HARD CAST]", () => {
       CombatUnitSpec.Warlock_Destruction,
       {
         class: CombatUnitClass.Warlock,
-        spellCastEvents: [],
+        // 2026-09-26 (round 3 N10): a line needs the bar to have LANDED — the
+        // same spell's SUCCESS ≥ 300 ms after the START (2.5 s here).
+        spellCastEvents: [
+          {
+            spellId: CHAOS_BOLT_ID,
+            spellName: "Chaos Bolt",
+            timestamp: MATCH_START_MS + 7_500,
+            srcUnitFlags: 0,
+            destUnitFlags: 0,
+            srcUnitId: "e",
+            srcUnitName: "Emage-Area52",
+            destUnitId: "o",
+            destUnitName: "Healer-Area52",
+            logLine: {
+              event: LogEvent.SPELL_CAST_SUCCESS,
+              timestamp: MATCH_START_MS + 7_500,
+              parameters: [],
+              lineIndex: 1,
+            },
+          },
+        ],
         castStartEvents: [
           {
             spellId: CHAOS_BOLT_ID,
@@ -137,6 +157,88 @@ describe("F170 [ENEMY HARD CAST]", () => {
 
     expect(timeline).toContain("[ENEMY HARD CAST]");
     expect(timeline).toContain("Chaos Bolt");
+    expect(timeline).toContain("(2.5s cast, landed)");
+  });
+
+  it("an instant (SUCCESS 20 ms after START) or an aborted bar (no SUCCESS) is not a hard cast", () => {
+    const owner = mkUnit("o", "Healer-Area52", CombatUnitReaction.Friendly, CombatUnitSpec.Priest_Discipline, { class: CombatUnitClass.Priest });
+    const mk = (startMs: number, successMs?: number) =>
+      mkUnit("e", "Emage-Area52", CombatUnitReaction.Hostile, CombatUnitSpec.Warlock_Destruction, {
+        class: CombatUnitClass.Warlock,
+        spellCastEvents: successMs === undefined ? [] : [{
+          spellId: CHAOS_BOLT_ID, spellName: "Chaos Bolt", timestamp: successMs, srcUnitFlags: 0, destUnitFlags: 0,
+          srcUnitId: "e", srcUnitName: "Emage-Area52", destUnitId: "o", destUnitName: "Healer-Area52",
+          logLine: { event: LogEvent.SPELL_CAST_SUCCESS, timestamp: successMs, parameters: [], lineIndex: 1 },
+        }],
+        castStartEvents: [{
+          spellId: CHAOS_BOLT_ID, spellName: "Chaos Bolt", timestamp: startMs, srcUnitFlags: 0, destUnitFlags: 0,
+          srcUnitId: "e", srcUnitName: "Emage-Area52", destUnitId: "o", destUnitName: "Healer-Area52",
+          logLine: { event: LogEvent.SPELL_CAST_START, timestamp: startMs, parameters: [], lineIndex: 0 },
+        }],
+      });
+    expect(buildMatchTimeline(baseParams(owner, mk(MATCH_START_MS + 5_000, MATCH_START_MS + 5_020)))).not.toContain("[ENEMY HARD CAST]");
+    expect(buildMatchTimeline(baseParams(owner, mk(MATCH_START_MS + 5_000)))).not.toContain("[ENEMY HARD CAST]");
+  });
+
+  it("an instant followed by a later SUCCESS-only instant, or an aborted bar followed by one 25 s later, is not a landed hard cast (codex)", () => {
+    const owner = mkUnit("o", "Healer-Area52", CombatUnitReaction.Friendly, CombatUnitSpec.Priest_Discipline, { class: CombatUnitClass.Priest });
+    const succ = (ms: number, i: number) => ({
+      spellId: CHAOS_BOLT_ID, spellName: "Chaos Bolt", timestamp: ms, srcUnitFlags: 0, destUnitFlags: 0,
+      srcUnitId: "e", srcUnitName: "Emage-Area52", destUnitId: "o", destUnitName: "Healer-Area52",
+      logLine: { event: LogEvent.SPELL_CAST_SUCCESS, timestamp: ms, parameters: [], lineIndex: i },
+    });
+    const start = (ms: number) => ({
+      spellId: CHAOS_BOLT_ID, spellName: "Chaos Bolt", timestamp: ms, srcUnitFlags: 0, destUnitFlags: 0,
+      srcUnitId: "e", srcUnitName: "Emage-Area52", destUnitId: "o", destUnitName: "Healer-Area52",
+      logLine: { event: LogEvent.SPELL_CAST_START, timestamp: ms, parameters: [], lineIndex: 0 },
+    });
+    const mk = (starts: number[], succs: number[]) =>
+      mkUnit("e", "Emage-Area52", CombatUnitReaction.Hostile, CombatUnitSpec.Warlock_Destruction, {
+        class: CombatUnitClass.Warlock, spellCastEvents: succs.map(succ), castStartEvents: starts.map(start),
+      });
+    expect(buildMatchTimeline(baseParams(owner, mk([MATCH_START_MS + 5_000], [MATCH_START_MS + 5_020, MATCH_START_MS + 8_000])))).not.toContain("[ENEMY HARD CAST]");
+    expect(buildMatchTimeline(baseParams(owner, mk([MATCH_START_MS + 5_000], [MATCH_START_MS + 30_000])))).not.toContain("[ENEMY HARD CAST]");
+  });
+
+  it("an abandoned bar followed by ANOTHER spell's bar and a later instant is not landed; back-to-back bars sharing a timestamp both render (codex)", () => {
+    const owner = mkUnit("o", "Healer-Area52", CombatUnitReaction.Friendly, CombatUnitSpec.Priest_Discipline, { class: CombatUnitClass.Priest });
+    const ev = (kind: "start" | "succ", spellId: string, ms: number, i: number) => ({
+      spellId, spellName: spellId, timestamp: ms, srcUnitFlags: 0, destUnitFlags: 0,
+      srcUnitId: "e", srcUnitName: "Emage-Area52", destUnitId: "o", destUnitName: "Healer-Area52",
+      logLine: { event: kind === "start" ? LogEvent.SPELL_CAST_START : LogEvent.SPELL_CAST_SUCCESS, timestamp: ms, parameters: [], lineIndex: i },
+    });
+    const mk = (starts: ReturnType<typeof ev>[], succs: ReturnType<typeof ev>[]) =>
+      mkUnit("e", "Emage-Area52", CombatUnitReaction.Hostile, CombatUnitSpec.Warlock_Destruction, {
+        class: CombatUnitClass.Warlock, spellCastEvents: succs, castStartEvents: starts,
+      });
+    // abandoned Chaos Bolt at 5 s, a Fireball-like bar 6–7.5 s, Chaos Bolt instant at 8 s → no line
+    const a = mk(
+      [ev("start", CHAOS_BOLT_ID, MATCH_START_MS + 5_000, 1), ev("start", "133", MATCH_START_MS + 6_000, 2)],
+      [ev("succ", "133", MATCH_START_MS + 7_500, 3), ev("succ", CHAOS_BOLT_ID, MATCH_START_MS + 8_000, 4)],
+    );
+    expect(buildMatchTimeline(baseParams(owner, a))).not.toContain("[ENEMY HARD CAST]");
+    // START 5 / SUCCESS 7.5 / START 7.5 / SUCCESS 10 → two landed lines
+    const b = mk(
+      [ev("start", CHAOS_BOLT_ID, MATCH_START_MS + 5_000, 1), ev("start", CHAOS_BOLT_ID, MATCH_START_MS + 7_500, 3)],
+      [ev("succ", CHAOS_BOLT_ID, MATCH_START_MS + 7_500, 2), ev("succ", CHAOS_BOLT_ID, MATCH_START_MS + 10_000, 4)],
+    );
+    const tl = buildMatchTimeline(baseParams(owner, b));
+    expect(tl.split("\n").filter((l) => l.includes("[ENEMY HARD CAST]"))).toHaveLength(2);
+  });
+
+  it("an abandoned START followed by an instant START+SUCCESS at one ms does not steal that success (codex)", () => {
+    const owner = mkUnit("o", "Healer-Area52", CombatUnitReaction.Friendly, CombatUnitSpec.Priest_Discipline, { class: CombatUnitClass.Priest });
+    const ev = (kind: "start" | "succ", ms: number, i: number) => ({
+      spellId: CHAOS_BOLT_ID, spellName: "Chaos Bolt", timestamp: ms, srcUnitFlags: 0, destUnitFlags: 0,
+      srcUnitId: "e", srcUnitName: "Emage-Area52", destUnitId: "o", destUnitName: "Healer-Area52",
+      logLine: { event: kind === "start" ? LogEvent.SPELL_CAST_START : LogEvent.SPELL_CAST_SUCCESS, timestamp: ms, parameters: [], lineIndex: i },
+    });
+    const enemy = mkUnit("e", "Emage-Area52", CombatUnitReaction.Hostile, CombatUnitSpec.Warlock_Destruction, {
+      class: CombatUnitClass.Warlock,
+      castStartEvents: [ev("start", MATCH_START_MS + 5_000, 1), ev("start", MATCH_START_MS + 8_000, 2)],
+      spellCastEvents: [ev("succ", MATCH_START_MS + 8_000, 3)],
+    });
+    expect(buildMatchTimeline(baseParams(owner, enemy))).not.toContain("[ENEMY HARD CAST]");
   });
 
   it("同一法术只在 spellCastEvents(SUCCESS)里、没有 castStartEvents 时不产出", () => {

@@ -3,6 +3,7 @@ import { AtomicArenaCombat, ICombatUnit } from "@gladlog/parser-compat";
 import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { getUnitHpAtTimestamp, HP_SAMPLE_RADIUS_MS } from "./cooldowns";
+import { SELF_CAST_NOOP_EXTERNAL_IDS } from "./cooldowns";
 import {
   BURST_CLUSTER_SECONDS,
   IEnemyCDCast,
@@ -211,6 +212,15 @@ export function analyzeBurstLedger(
         // ON the enemy) read as "Target had a major defensive up" (reliability
         // round 2 W1h, d78f). An enemy teammate's external still counts.
         if (attackingSide.has(iv.srcUnitName)) continue;
+        // A redirect external (Blessing of Sacrifice) also puts an aura on its
+        // CASTER — that copy means the caster is taking extra damage, not
+        // mitigating (reliability round 3 N4, 483f: the Ret who gave BoSac to
+        // the hunter read as "a major defensive up ON THE TARGET").
+        if (
+          SELF_CAST_NOOP_EXTERNAL_IDS.has(iv.spellId) &&
+          iv.srcUnitName === target.name
+        )
+          continue;
         const overlapMs =
           Math.min(iv.endMs, toMs) - Math.max(iv.startMs, fromMs);
         if (overlapMs / 1000 < MIN_DEFENSIVE_OVERLAP_S) continue;

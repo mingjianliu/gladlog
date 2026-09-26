@@ -208,11 +208,12 @@ describe("formatBurstAnsweredLines — wording", () => {
     expect(out[0]!.line).toContain("Mate-R bottomed at 4% — Mate-R still died");
   });
 
-  it("does not append the suffix when a DIFFERENT friendly died", () => {
+  it("a DIFFERENT friendly's death inside the window is stated as a fact, not as the pressured unit dying (round 3 N4, 483f)", () => {
     const out = formatBurstAnsweredLines([
       point({ anyFriendlyDeath: true, deathsInWindow: 1 }),
     ]);
     expect(out[0]!.line).not.toContain("still died");
+    expect(out[0]!.line).toContain("died inside it");
   });
 
   it("lists only the extra CDs cast inside the response horizon", () => {

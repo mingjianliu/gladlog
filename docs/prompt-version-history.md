@@ -1498,3 +1498,21 @@ consumed only when the success ends the bar), treats a same-ms success as an
 instant and drops any bar whose earliest end is > 12 s away — missed-cleanse
 casting facts change on 80 windows (ownerCastingPreCommitted yes → no on 62,
 no → yes on 58; ids unchanged), no other candidate moves.
+
+v170 (2026-09-26, reliability leftovers batch 3): (1) [ENEMY HARD CAST]
+renders only a bar that LANDED — the same spell's first SUCCESS ≥ 0.3 s and
+≤ 12 s after the START, before any later START by that enemy, successes
+consumed per bar in event order — and appends "(2.5s cast, landed)";
+Hot Streak instants and aborted bars no longer render: 13,297 → 2,302 lines
+on 605 files (Pyroblast 9,683 → 155, Chaos Bolt 3,614 → 2,147). (2) [TEAM] [CC]
+lines carry the owner's IMMUNE tag, per caster's own SPELL_MISSED stream and
+cast history: 0 → 1,450 tagged casts. (3) the burst ledger skips the
+caster-side copy of a redirect external (Blessing of Sacrifice on the paladin
+who gave it): "active ON THE TARGET" 546 → 436. (4) [BURST ANSWERED] states
+when a friendly other than the pressured unit died inside the window
+("— X died inside it"): 1,303 lines. (5) enemy burst windows read the
+caster-aware duration (buffFullDurationForCaster) instead of the DB2 base:
+enemy-window consumers move — slow-defensive-response +16 / −9, kick-eaten
+window facts on 35 ids (ids ±2/4 cap), position-mistake −19 / +17,
+questionable-external −6 / +3, burst-into-mitigation −2; Demonic Tyrant's
+20 s (Reign of Tyranny) now reaches those windows.
