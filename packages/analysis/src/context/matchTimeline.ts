@@ -1724,9 +1724,11 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     // and can tell a consumed absorb (ended early) from an expired one. "(estimated)" is retained for
     // expiries inferred from duration (no removal event logged).
     const causeNote =
-      expiry.cause === "ended_early"
-        ? " (ended early — absorbed, dispelled, or cancelled)"
-        : expiry.isEstimated
+      expiry.cause === "form_shift"
+        ? " (ended by your own shapeshift)"
+        : expiry.cause === "ended_early"
+          ? " (ended early — absorbed, dispelled, or cancelled)"
+          : expiry.isEstimated
           ? " (expired, estimated)"
           : " (expired)";
     addEntry(

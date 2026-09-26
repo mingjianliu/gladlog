@@ -45,5 +45,17 @@
  *  lines, SPEC BASELINES rows Renewing Blaze 114 → 0 / Avenging Wrath 162 → 0;
  *  candidates unchanged by (3). Perspective line now reads "actions and effects
  *  on you".
+ *  v169 (2026-09-26, reliability leftovers batch 2): (1) [BUFF FADED] says
+ *  "(ended by your own shapeshift)" when a form-bound buff (Frenzied
+ *  Regeneration, Ironfur, Tiger's Fury) on the owner is removed within 250 ms of
+ *  the owner's form removal — 17 lines on 605 files, all Frenzied Regeneration;
+ *  (2) SPEC BASELINES names the owner's rating next to the ≥2100 bracket and,
+ *  below it, says the rates are what higher-rated players do, not a norm —
+ *  2,966 contexts below, 237 at or above, 308 without a rating; (3)
+ *  hardCastOccupancyWithin pairs each bar with its own success (event identity,
+ *  consumed only when the success ends the bar), treats a same-ms success as an
+ *  instant and drops any bar whose earliest end is > 12 s away — missed-cleanse
+ *  casting facts change on 80 windows (ownerCastingPreCommitted yes → no on 62,
+ *  no → yes on 58; ids unchanged), no other candidate moves.
  */
-export const PROMPT_VERSION = 168;
+export const PROMPT_VERSION = 169;

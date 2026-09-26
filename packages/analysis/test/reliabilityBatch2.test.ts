@@ -1,0 +1,140 @@
+/**
+ * Reliability leftovers batch 2 (2026-09-26): shapeshift-ended buffs, the
+ * owner's rating beside the ≥2100 baselines, hard-cast occupancy bounds.
+ */
+import {
+  CombatUnitClass,
+  CombatUnitSpec,
+  type ICombatUnit,
+  LogEvent,
+} from "@gladlog/parser-compat";
+import { beforeAll, describe, expect, it } from "vitest";
+
+import { extractOwnerCDBuffExpiry } from "../src/context/timelineHelpers";
+import { ensureAnalysisData } from "../src/data/ensure";
+import { hardCastOccupancyWithin } from "../src/utils/dispelAnalysis";
+import { formatSpecBaselines } from "../src/utils/specBaselines";
+import { makeAuraEvent, makeSpellCastEvent, makeUnit } from "./ported/testHelpers";
+
+const T0 = 1_700_000_000_000;
+
+beforeAll(async () => {
+  await ensureAnalysisData();
+});
+
+describe("[BUFF FADED] — a buff removed with the druid's own form is 'form_shift'", () => {
+  const FR = "22842"; // Frenzied Regeneration (Bear Form only)
+  function druid(withFormRemoval: boolean) {
+    const auraEvents = [
+      makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, FR, T0 + 10_000, "player-1", "player-1", "BUFF"),
+      makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, FR, T0 + 10_400, "player-1", "player-1", "BUFF"),
+      ...(withFormRemoval
+        ? [makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, "5487", T0 + 10_410, "player-1", "player-1", "BUFF")]
+        : []),
+    ];
+    return makeUnit("player-1", {
+      class: CombatUnitClass.Druid,
+      spec: CombatUnitSpec.Druid_Restoration,
+      spellCastEvents: [makeSpellCastEvent(FR, T0 + 10_000, "player-1")],
+      auraEvents,
+    }) as ICombatUnit;
+  }
+  const cds = [
+    { spellId: FR, spellName: "Frenzied Regeneration", tag: "Defensive", casts: [{ timeSeconds: 10 }], cooldownSeconds: 36, neverUsed: false, availableWindows: [] },
+  ] as never;
+  it("a non-form-bound buff on a TEAMMATE removed at the form's instant stays ended_early (codex)", () => {
+    const owner = druid(true);
+    const mate = makeUnit("player-2", {
+      class: CombatUnitClass.Warrior,
+      spec: CombatUnitSpec.Warrior_Arms,
+      auraEvents: [
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "102342", T0 + 10_000, "player-1", "player-2", "BUFF"),
+        makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, "102342", T0 + 10_400, "player-1", "player-2", "BUFF"),
+      ],
+    }) as ICombatUnit;
+    const ironbark = [
+      { spellId: "102342", spellName: "Ironbark", tag: "Defensive", casts: [{ timeSeconds: 10 }], cooldownSeconds: 90, neverUsed: false, availableWindows: [] },
+    ] as never;
+    const r = extractOwnerCDBuffExpiry(ironbark, "player-1", [owner, mate], T0, owner);
+    expect(r.map((e) => e.cause)).toEqual(["ended_early"]);
+  });
+  it("form removal within 250 ms → form_shift; without it → ended_early", () => {
+    const withForm = druid(true);
+    const a = extractOwnerCDBuffExpiry(cds, "player-1", [withForm], T0, withForm);
+    expect(a.map((e) => e.cause)).toEqual(["form_shift"]);
+    const noForm = druid(false);
+    const b = extractOwnerCDBuffExpiry(cds, "player-1", [noForm], T0, noForm);
+    expect(b.map((e) => e.cause)).toEqual(["ended_early"]);
+  });
+});
+
+describe("SPEC BASELINES names the owner's rating against the reference bracket", () => {
+  const data = {
+    bySpec: {
+      "Holy Priest": { sampleCount: 10, defensiveTiming: null, cdUsage: { "Guardian Spirit": { neverUsedRate: 0.1, medianFirstUseSeconds: 30, p75FirstUseSeconds: 60 } } },
+    },
+  };
+  const cds = [{ spellId: "47788", spellName: "Guardian Spirit", tag: "Defensive", casts: [], cooldownSeconds: 180, neverUsed: true, availableWindows: [] }] as never;
+  it("below 2100 → the header says so; above → rating only; unknown → nothing", () => {
+    expect(formatSpecBaselines("Holy Priest", cds, data, 1650)[0]).toContain("1650 MMR, below the reference bracket");
+    expect(formatSpecBaselines("Holy Priest", cds, data, 2350)[0]).toMatch(/2350 MMR:$/);
+    expect(formatSpecBaselines("Holy Priest", cds, data, 0)[0]).toMatch(/\(n=10\):$/);
+  });
+});
+
+describe("hardCastOccupancyWithin — instants and unbounded successes", () => {
+  function caster(starts: { spellId: string; ms: number }[], successes: { spellId: string; ms: number }[]) {
+    const u = makeUnit("player-1", {
+      class: CombatUnitClass.Priest,
+      spec: CombatUnitSpec.Priest_Holy,
+      spellCastEvents: successes.map((s) => makeSpellCastEvent(s.spellId, s.ms, "player-1")),
+    }) as ICombatUnit;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (u as any).castStartEvents = starts.map((s) => ({ spellId: s.spellId, timestamp: s.ms, spellName: s.spellId }));
+    return u;
+  }
+  it("a CAST_SUCCESS at the bar's own ms is an instant — zero occupancy, not 'until the next bar'", () => {
+    const u = caster([{ spellId: "585", ms: T0 + 1_000 }, { spellId: "585", ms: T0 + 9_000 }], [{ spellId: "585", ms: T0 + 1_000 }]);
+    const occ = hardCastOccupancyWithin(u, new Set(), T0, T0 + 10_000);
+    expect(occ?.occupiedMs).toBe(0);
+  });
+  it("a bar with no success inside 12 s is not paired with the same spell a minute later", () => {
+    const u = caster([{ spellId: "585", ms: T0 + 1_000 }], [{ spellId: "585", ms: T0 + 61_000 }]);
+    const occ = hardCastOccupancyWithin(u, new Set(), T0, T0 + 30_000);
+    expect(occ?.occupiedMs).toBe(0);
+  });
+  it("consecutive bars pair with their own successes — bar 2 is not an instant because bar 1 succeeded at its start ms (codex)", () => {
+    const u = caster(
+      [{ spellId: "585", ms: T0 + 1_000 }, { spellId: "585", ms: T0 + 3_000 }, { spellId: "585", ms: T0 + 5_000 }],
+      [{ spellId: "585", ms: T0 + 3_000 }, { spellId: "585", ms: T0 + 5_000 }, { spellId: "585", ms: T0 + 7_000 }],
+    );
+    expect(hardCastOccupancyWithin(u, new Set(), T0 + 3_000, T0 + 5_000)?.occupiedMs).toBe(2_000);
+  });
+  it("an abandoned bar whose only end is the next start a minute later is dropped (codex)", () => {
+    const u = caster(
+      [{ spellId: "585", ms: T0 + 1_000 }, { spellId: "585", ms: T0 + 59_000 }],
+      [{ spellId: "585", ms: T0 + 61_000 }],
+    );
+    expect(hardCastOccupancyWithin(u, new Set(), T0, T0 + 30_000)?.occupiedMs).toBe(0);
+  });
+  it("a cancelled bar does not consume the next bar's success (codex): fail 1.5 s, restart 3 s, succeed 5 s", () => {
+    const u = caster(
+      [{ spellId: "585", ms: T0 + 1_000 }, { spellId: "585", ms: T0 + 3_000 }],
+      [{ spellId: "585", ms: T0 + 5_000 }],
+    );
+    const occ = hardCastOccupancyWithin(u, new Set(), T0 + 3_000, T0 + 5_000, [{ spellId: "585", ms: T0 + 1_500 }]);
+    expect(occ?.occupiedMs).toBe(2_000);
+  });
+  it("consumption is by event, not by ms (codex): A succeeds at 3 s, B is an instant at 3 s", () => {
+    const u = caster(
+      [{ spellId: "585", ms: T0 + 1_000 }, { spellId: "17", ms: T0 + 3_000 }, { spellId: "585", ms: T0 + 5_000 }],
+      [{ spellId: "585", ms: T0 + 3_000 }, { spellId: "17", ms: T0 + 3_000 }, { spellId: "585", ms: T0 + 7_000 }],
+    );
+    expect(hardCastOccupancyWithin(u, new Set(), T0 + 3_000, T0 + 5_000)?.occupiedMs).toBe(0);
+  });
+  it("a normal 2 s bar still counts", () => {
+    const u = caster([{ spellId: "585", ms: T0 + 1_000 }], [{ spellId: "585", ms: T0 + 3_000 }]);
+    const occ = hardCastOccupancyWithin(u, new Set(), T0, T0 + 10_000);
+    expect(occ?.occupiedMs).toBe(2_000);
+  });
+});

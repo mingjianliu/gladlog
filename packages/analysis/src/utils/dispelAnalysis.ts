@@ -1051,6 +1051,10 @@ export interface IHardCastOccupancy {
  * If a feasibility gate on this quantity is ever adopted (#34(b2) question
  * ②), it MUST consume this export — do not restate the predicate.
  */
+/** Longest bar a player can be committed to (empowers and long hardcasts
+ * are ≤ ~5 s at base; 12 s leaves room for pushback and slow-cast effects). */
+const HARD_CAST_MAX_MS = 12_000;
+
 export function hardCastOccupancyWithin(
   unit: ICombatUnit,
   enemyIds: Set<string>,
@@ -1079,12 +1083,35 @@ export function hardCastOccupancyWithin(
   const sorted = [...starts].sort((a, b) => a.timestamp - b.timestamp);
   const successes = unit.spellCastEvents ?? [];
   const out: IHardCastOccupancy = { ...none, spellNames: [] };
+  // A success already paired with an earlier bar is not this bar's success
+  // (codex review 2026-09-26: 585 starts 1/3/5 s, successes 3/5/7 s — bar 2
+  // must pair with 5 s, not re-read bar 1's 3 s).
+  // A success already paired with an earlier bar is not this bar's success
+  // (codex review 2026-09-26: 585 starts 1/3/5 s, successes 3/5/7 s — bar 2
+  // must pair with 5 s, not re-read bar 1's 3 s). Tracked by event identity
+  // (two different spells' successes can share a ms) and consumed only once
+  // the success is established as THIS bar's end (a cancelled bar must not
+  // eat the next bar's success).
+  const consumed = new Set<object>();
   for (let i = 0; i < sorted.length; i++) {
     const from = sorted[i].timestamp;
     if (from >= windowEndMs) break;
+    // Reliability round 2 W2c (9d89 / 21cc / 539f): (a) a CAST_SUCCESS at the
+    // bar's own ms is an instant (zero-length bar) — it must not fall through
+    // to the next bar / window end and count as a long commit; (b) the success
+    // lookup is bounded — a bar cancelled without a FAILED line must not be
+    // paired with the same spell's success a minute later.
     const succ = successes.find(
-      (e) => e.spellId === sorted[i].spellId && e.timestamp >= from,
+      (e) =>
+        e.spellId === sorted[i].spellId &&
+        e.timestamp >= from &&
+        e.timestamp - from <= HARD_CAST_MAX_MS &&
+        !consumed.has(e),
     );
+    if (succ !== undefined && succ.timestamp === from) {
+      consumed.add(succ);
+      continue;
+    }
     const cut = cutters.find((c) => c > from);
     const nextStart = sorted[i + 1]?.timestamp;
     // A5: the bar's own cancel — a same-spell failure before the next bar,
@@ -1105,8 +1132,15 @@ export function hardCastOccupancyWithin(
       (x): x is number => typeof x === "number" && x > from,
     );
     if (ends.length === 0) continue;
+    const end = Math.min(...ends);
+    // The success completed this bar only if nothing ended the bar first.
+    if (succ !== undefined && succ.timestamp === end) consumed.add(succ);
+    // Whatever supplies the end, a bar cannot run longer than a bar can: an
+    // abandoned start whose only end is the next start a minute later is
+    // unsupported and dropped (the lower-bound rule above).
+    if (end - from > HARD_CAST_MAX_MS) continue;
     const overlap =
-      Math.min(Math.min(...ends), windowEndMs) - Math.max(from, windowStartMs);
+      Math.min(end, windowEndMs) - Math.max(from, windowStartMs);
     if (overlap <= 0) continue;
     out.occupiedMs += overlap;
     if (from < windowStartMs) out.startedBeforeWindow = true;

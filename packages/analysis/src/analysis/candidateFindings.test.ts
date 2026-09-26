@@ -1068,7 +1068,10 @@ describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
       false,
       { enemyIds: new Set(), matchStartMs: 0 },
     );
-    expect(noCancel[0]!.facts["ownerCastingS"]).toBe("6.0"); // pre-A5 reading
+    // 2026-09-26 batch 2 (W2c): a bar whose only end is the next start 16 s
+    // later is unsupported and dropped (HARD_CAST_MAX_MS) — before that the
+    // "pre-A5 reading" here was 6.0 s, i.e. the bar was counted to the next start.
+    expect(noCancel[0]!.facts["ownerCastingS"]).toBeUndefined();
     const cancelled = missedCleanseEvents(
       [w()],
       cancelOwner,

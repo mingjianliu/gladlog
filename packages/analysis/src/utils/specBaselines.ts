@@ -30,12 +30,30 @@ export interface IBenchmarkData {
 
 export const benchmarks: IBenchmarkData = benchmarksJson as unknown as IBenchmarkData;
 
-export function formatSpecBaselines(ownerSpec: string, ownerCDs: IMajorCooldownInfo[], data: IBenchmarkData): string[] {
+/** The rating floor of the benchmark corpus (collectBenchmarks --min-rating). */
+export const BASELINE_MMR_FLOOR = 2100;
+
+export function formatSpecBaselines(
+  ownerSpec: string,
+  ownerCDs: IMajorCooldownInfo[],
+  data: IBenchmarkData,
+  /** the log owner's rating this match (COMBATANT_INFO personalRating; 0 / undefined = unknown) */
+  ownerRating?: number,
+): string[] {
   const spec = data.bySpec[ownerSpec];
   if (!spec) return [];
 
   const lines: string[] = [];
-  lines.push(`SPEC BASELINES — ${ownerSpec} at ≥2100 MMR (n=${spec.sampleCount}):`);
+  // Reliability round 1 rerun #8: the ≥2100 reference was quoted as the norm for
+  // 1.5–1.7k matches. State the owner's own rating next to the bracket so the
+  // model reads the rates as what higher-rated players do, not as a target.
+  const ratingNote =
+    ownerRating && ownerRating > 0
+      ? ownerRating < BASELINE_MMR_FLOOR
+        ? ` — you played this match at ${ownerRating} MMR, below the reference bracket: read the rates as what higher-rated players do, not as a norm for this match`
+        : ` — you played this match at ${ownerRating} MMR`
+      : "";
+  lines.push(`SPEC BASELINES — ${ownerSpec} at ≥${BASELINE_MMR_FLOOR} MMR (n=${spec.sampleCount})${ratingNote}:`);
 
   const dt = spec.defensiveTiming;
   if (dt) {

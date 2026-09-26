@@ -136,6 +136,7 @@ import spellIdLists from "./spellIdLists";
 import { trinketSpellIds } from "./spellTags";
 import { TALENT_MITIGATION_MODIFIERS } from "./talentMitigationModifiers";
 import { TALENT_REPLACES } from "./talentReplaces";
+import { DRUID_FORM_AURA_IDS, FORM_BOUND_BUFF_IDS } from "./druidForms";
 import { WARLOCK_PET_CAST_FUNCTION } from "./warlockPets";
 
 /** What kind of id the list holds — decides which corpus event stream can vouch for it. */
@@ -377,6 +378,12 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   // casts, others (Phantasm) only ever appear as the SPELL_DISPEL source spell.
   t("MOVEMENT_ROOT_BREAK_DISPEL_IDS", "utils/dispelKind.ts", "mixed", () =>
     set(MOVEMENT_ROOT_BREAK_DISPEL_IDS),
+  ),
+  t("DRUID_FORM_AURA_IDS", "data/druidForms.ts", "aura", () =>
+    set(DRUID_FORM_AURA_IDS),
+  ),
+  t("FORM_BOUND_BUFF_IDS", "data/druidForms.ts", "aura", () =>
+    set(FORM_BOUND_BUFF_IDS),
   ),
   t("COMP_DEPENDENT_PURGE_TARGETS", "utils/dispelAnalysis.ts", "aura", () =>
     set(COMP_DEPENDENT_PURGE_TARGETS),

@@ -1,3 +1,4 @@
+import { DRUID_FORM_AURA_IDS, FORM_BOUND_BUFF_IDS } from "../data/druidForms";
 import {
   CombatUnitReaction,
   CombatUnitType,
@@ -291,8 +292,10 @@ export interface ICDExpiryEvent {
    * these stops the model from inventing a dispel for a naturally-expired buff and lets it tell a
    * consumed absorb (e.g. Life Cocoon) from an expired one.
    */
-  cause: "expired" | "ended_early";
+  cause: "expired" | "ended_early" | "form_shift";
 }
+
+const FORM_SHIFT_PAIR_MS = 250;
 
 // 2026-08-21 S2 corpus scan (10,682 matches): removed Zen Meditation 115176; 421116 was a "Push Loot [DNT]" placeholder, not Ultimate Penitence (421453 is the real id) — 0 occurrences, ability gone in 12.x (eval-private/reports/s2-health-2026-08-21)
 export const CHANNELED_CD_SPELL_IDS = new Set<string>([
@@ -352,8 +355,18 @@ export function extractOwnerCDBuffExpiry(
    * contain the owner degrades loudly at the call site instead of silently
    * dropping every talent-lengthened duration back to its base value.
    */
-  owner?: Pick<ICombatUnit, "spec" | "info" | "spellCastEvents">,
+  owner?: Pick<ICombatUnit, "spec" | "info" | "spellCastEvents"> &
+    Partial<Pick<ICombatUnit, "auraEvents">>,
 ): ICDExpiryEvent[] {
+  // Owner's own form removals (ms) — a buff removed at the same instant was
+  // ended by the shapeshift, not dispelled or consumed.
+  const formRemovalsMs = (owner?.auraEvents ?? [])
+    .filter(
+      (a) =>
+        DRUID_FORM_AURA_IDS.has(a.spellId) &&
+        (a.logLine.event as LogEvent) === LogEvent.SPELL_AURA_REMOVED,
+    )
+    .map((a) => a.logLine.timestamp as number);
   const result: ICDExpiryEvent[] = [];
 
   for (const cd of ownerCDs) {
@@ -465,12 +478,30 @@ export function extractOwnerCDBuffExpiry(
       // Channels are never dispelled; whether one was interrupted is stated on
       // the [YOU] line from kick/CC evidence (matchTimeline), so here they
       // always read "expired".
-      const cause: ICDExpiryEvent["cause"] =
+      let cause: ICDExpiryEvent["cause"] =
         !CHANNELED_CD_SPELL_IDS.has(cd.spellId) &&
         !isEstimated &&
         expiresAtSeconds < naturalEndSeconds - BUFF_FADE_EARLY_TOLERANCE_S
           ? "ended_early"
           : "expired";
+      // Only a form-bound buff on the owner: the removal must be in the
+      // owner's own aura events (dest = owner) and the spell one that cannot
+      // outlive the form (FORM_BOUND_BUFF_IDS); then a form removal within
+      // FORM_SHIFT_PAIR_MS explains it.
+      if (cause === "ended_early" && FORM_BOUND_BUFF_IDS.has(cd.spellId)) {
+        const removedMs = matchStartMs + expiresAtSeconds * 1000;
+        const onOwner = (owner?.auraEvents ?? []).some(
+          (a) =>
+            a.spellId === cd.spellId &&
+            (a.logLine.event as LogEvent) === LogEvent.SPELL_AURA_REMOVED &&
+            (a.logLine.timestamp as number) === removedMs,
+        );
+        if (
+          onOwner &&
+          formRemovalsMs.some((t) => Math.abs(t - removedMs) <= FORM_SHIFT_PAIR_MS)
+        )
+          cause = "form_shift";
+      }
 
       result.push({
         spellId: cd.spellId,

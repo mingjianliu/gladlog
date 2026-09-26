@@ -498,7 +498,12 @@ export function buildMatchContext(
     `  Team purgers: ${teamPurgers.length > 0 ? teamPurgers.join(", ") : "none"}`,
   );
 
-  const baselineLines = formatSpecBaselines(ownerSpec, cooldowns, benchmarks);
+  const baselineLines = formatSpecBaselines(
+    ownerSpec,
+    cooldowns,
+    benchmarks,
+    (owner as ICombatUnit).info?.personalRating,
+  );
   if (baselineLines.length > 0) {
     tLines.push("");
     baselineLines.forEach((l) => tLines.push(l));
