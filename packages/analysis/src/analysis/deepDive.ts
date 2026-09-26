@@ -36,7 +36,7 @@ import {
 } from "../utils/positionAnalysis";
 import { fmtTime } from "../utils/renderGrid";
 import { causalLint } from "./causalLint";
-import { fmtFactNum as fmt, serializeFactsBlock } from "./factFormat";
+import { fmtFactTime, serializeFactsBlock } from "./factFormat";
 import { repairSpellNameZh } from "./spellNameZhLint";
 import type { CandidateEvent, Finding } from "./types";
 
@@ -213,7 +213,7 @@ export function buildDeepDivePack(
           label: `${cc.spellName} → ${u.name.split("-")[0]}(${cc.durationSeconds.toFixed(1)}s)`,
           unitNames: [u.name],
           facts: {
-            t: fmt(cc.atSeconds),
+            t: fmtFactTime(cc.atSeconds),
             spell: cc.spellName,
             unit: sn(u.name),
             role: friendlyRole(u.name),
@@ -257,7 +257,7 @@ export function buildDeepDivePack(
             label: `${cd.spellName}(${u.name.split("-")[0]})`,
             unitNames: [u.name],
             facts: {
-              t: fmt(cast.timeSeconds),
+              t: fmtFactTime(cast.timeSeconds),
               spell: cd.spellName,
               unit: sn(u.name),
               role: friendlyRole(u.name),
@@ -286,7 +286,7 @@ export function buildDeepDivePack(
           label: `敌 ${cd.spellName}(${p.playerName.split("-")[0]})`,
           unitNames: [p.playerName],
           facts: {
-            t: fmt(cd.castTimeSeconds),
+            t: fmtFactTime(cd.castTimeSeconds),
             spell: cd.spellName,
             player: sn(p.playerName),
             role: "enemy",
@@ -337,7 +337,7 @@ export function buildDeepDivePack(
           label: `${sn(u.name)} HP ${Math.round(pct)}%`,
           unitNames: [u.name],
           facts: {
-            t: fmt(tPt),
+            t: fmtFactTime(tPt),
             unit: sn(u.name),
             role: friendlyRole(u.name),
             hp: String(Math.round(pct)),
@@ -367,7 +367,7 @@ export function buildDeepDivePack(
         label: `${e.dispelSpellName} 解 ${e.removedSpellName}`,
         unitNames: [e.sourceName, e.targetName],
         facts: {
-          t: fmt(e.timeSeconds),
+          t: fmtFactTime(e.timeSeconds),
           spell: e.dispelSpellName,
           removed: e.removedSpellName,
           src: sn(e.sourceName),
@@ -406,7 +406,7 @@ export function buildDeepDivePack(
           label: `${imm.spellName} 可用未按(${sn(ev.deadPlayer)})`,
           unitNames: [ev.deadPlayer],
           facts: {
-            t: fmt(ev.atSeconds),
+            t: fmtFactTime(ev.atSeconds),
             spell: imm.spellName,
             unit: sn(ev.deadPlayer),
             role: friendlyRole(ev.deadPlayer),
@@ -422,7 +422,7 @@ export function buildDeepDivePack(
           label: `${ext.spellName} 可用未给(${sn(ext.casterName)}→${sn(ev.deadPlayer)})`,
           unitNames: [ext.casterName, ev.deadPlayer],
           facts: {
-            t: fmt(ev.atSeconds),
+            t: fmtFactTime(ev.atSeconds),
             spell: ext.spellName,
             unit: sn(ev.deadPlayer),
             role: friendlyRole(ev.deadPlayer),
@@ -457,7 +457,7 @@ export function buildDeepDivePack(
         if (!POSITION_MISTAKES.has(e.type)) continue;
         if (!inWin(e.atSeconds)) continue;
         const f: Record<string, string> = {
-          t: fmt(e.atSeconds),
+          t: fmtFactTime(e.atSeconds),
           role: "owner",
           kind:
             e.type === "STAYED_IN"
@@ -562,7 +562,7 @@ export function offensivePackItems(
           label: `${sn(t.unitName)} HP`,
           unitNames: [t.unitName],
           facts: {
-            t: fmt(e.fromSeconds),
+            t: fmtFactTime(e.fromSeconds),
             hp: String(t.hpStartPct),
             unit: sn(t.unitName),
             role: "enemy-target",
@@ -575,7 +575,7 @@ export function offensivePackItems(
           label: `${sn(t.unitName)} HP`,
           unitNames: [t.unitName],
           facts: {
-            t: fmt(e.toSeconds),
+            t: fmtFactTime(e.toSeconds),
             hp: String(t.hpEndPct),
             unit: sn(t.unitName),
             role: "enemy-target",
@@ -596,7 +596,7 @@ export function offensivePackItems(
             label: `${d.spellName}(${sn(t.unitName)})`,
             unitNames: [t.unitName],
             facts: {
-              t: fmt(e.fromSeconds),
+              t: fmtFactTime(e.fromSeconds),
               spell: d.spellName,
               unit: sn(t.unitName),
               role: "enemy",
@@ -614,7 +614,7 @@ export function offensivePackItems(
           label: `${s.spellName}`,
           unitNames: inp.ownerName ? [inp.ownerName] : [],
           facts: {
-            t: fmt(s.castTimeSeconds),
+            t: fmtFactTime(s.castTimeSeconds),
             spell: s.spellName,
             unit: ownerShort ?? "owner",
             role: "owner",
@@ -628,7 +628,7 @@ export function offensivePackItems(
           label: `${a.spellName}(${sn(a.playerName)})`,
           unitNames: [a.playerName],
           facts: {
-            t: fmt(e.fromSeconds),
+            t: fmtFactTime(e.fromSeconds),
             spell: a.spellName,
             unit: sn(a.playerName),
             role: role(a.playerName),
@@ -647,7 +647,7 @@ export function offensivePackItems(
         label: `${app.spellName} → ${sn(chain.targetName)}`,
         unitNames: [app.casterName],
         facts: {
-          t: fmt(app.atSeconds),
+          t: fmtFactTime(app.atSeconds),
           spell: app.spellName,
           unit: sn(chain.targetName),
           caster: sn(app.casterName),
@@ -860,12 +860,12 @@ export function buildDeepDivePrompt(
       mode === "window"
         ? [
             `SELECTED WINDOW ${p.findingIndex}: ${f.title} — ${f.explanation}`,
-            `EVIDENCE PACK ${p.findingIndex} (window ${fmt(p.anchorFrom)}s–${fmt(p.anchorTo)}s; the ONLY additional evidence you may reference):`,
+            `EVIDENCE PACK ${p.findingIndex} (window ${fmtFactTime(p.anchorFrom)}s–${fmtFactTime(p.anchorTo)}s; the ONLY additional evidence you may reference):`,
             listing,
           ]
         : [
             `FINDING ${p.findingIndex}: [${f.severity}] ${f.title} — ${f.explanation}`,
-            `EVIDENCE PACK ${p.findingIndex} (window ${fmt(p.anchorFrom)}s–${fmt(p.anchorTo)}s; the ONLY additional evidence you may reference):`,
+            `EVIDENCE PACK ${p.findingIndex} (window ${fmtFactTime(p.anchorFrom)}s–${fmtFactTime(p.anchorTo)}s; the ONLY additional evidence you may reference):`,
             listing,
           ];
     return base.join("\n");

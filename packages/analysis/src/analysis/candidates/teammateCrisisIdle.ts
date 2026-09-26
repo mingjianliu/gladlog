@@ -34,7 +34,7 @@ import {
 } from "../../facts/decisionTrace";
 import { fmtTime } from "../../utils/renderGrid";
 import { RESPONSE_PRE_MS, RESPONSE_WINDOW_MS } from "../crisisDecisionPoints";
-import { fmtFactNum as fmt } from "../factFormat";
+import { fmtFactTime } from "../factFormat";
 import {
   TEAMMATE_CRISIS_CUE_MIN_S,
   type TeammateCrisisPoint,
@@ -153,7 +153,7 @@ export function teammateCrisisIdleEvents(
       t: p.tSec,
       unitNames: [owner.name, p.mateName],
       facts: {
-        t: fmt(p.tSec),
+        t: fmtFactTime(p.tSec),
         unit: owner.name,
         mate: p.mateName,
         mateHpPct: String(p.hpPct),
@@ -294,7 +294,7 @@ export function teammateCrisisTriageEvents(
       t: p.tSec,
       unitNames: [owner.name, p.mateName, p.busyOn!.name],
       facts: {
-        t: fmt(p.tSec),
+        t: fmtFactTime(p.tSec),
         unit: owner.name,
         mate: p.mateName,
         mateHpPct: String(p.hpPct),

@@ -1445,3 +1445,10 @@ v165 (2026-09-26, reliability round 3 wave 2, audit 1bad): Mind Control's
 possession radius (100 yd on its single-target MOD_POSSESS row) no longer adds
 to its reach — kick-eaten yourReachYd 135 → 35 (130 → 30 without Phantom
 Reach). 605 files: 49 kick-eaten lines change, nothing else.
+
+v166 (2026-09-26, reliability round 3 wave 2, audit 0e06): every time fact
+`t` floors onto the timeline's second (fmtFactTime) — death-setup,
+burst-into-mitigation, questionable-external, crisis-no-response, and the deep
+dive's item times and window bounds. 605 files: 27 menu `t` values stop
+pointing one second past their timeline row, 302 change only their tenths;
+nothing else moves.

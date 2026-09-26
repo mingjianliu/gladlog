@@ -149,7 +149,7 @@ import {
   teammateCrisisTriageEvents,
 } from "./candidates/teammateCrisisIdle";
 import { CRISIS_HP_PCT, crisisDecisionPoints } from "./crisisDecisionPoints";
-import { fmtFactNum as fmt, fmtFactTime } from "./factFormat";
+import { fmtFactTime } from "./factFormat";
 import {
   kickIsHarmless,
   type KickPressure,
@@ -931,7 +931,7 @@ export function missedPurgeEvents(
       spell: w.spellName,
       spellId: w.spellId,
       facts: {
-        t: fmt(w.timeSeconds),
+        t: fmtFactTime(w.timeSeconds),
         enemy: w.enemyName,
         buff: w.spellName,
         duration: w.durationSeconds.toFixed(1),
@@ -2882,7 +2882,7 @@ function dpsOwnerEvents(
         spell: b.spells[0]?.spellName,
         spellId: b.spells[0]?.spellId,
         facts: {
-          t: fmt(b.fromSeconds),
+          t: fmtFactTime(b.fromSeconds),
           spell: b.spells.map((s) => s.spellName).join(" + "),
           target: t.unitName,
           mitSpell,

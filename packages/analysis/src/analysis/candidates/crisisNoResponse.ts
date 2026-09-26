@@ -18,7 +18,7 @@ import {
   traceDecision,
 } from "../../facts/decisionTrace";
 import type { DecisionPoint } from "../crisisDecisionPoints";
-import { fmtFactNum as fmt } from "../factFormat";
+import { fmtFactTime } from "../factFormat";
 import type { CandidateEvent } from "../types";
 
 export const CRISIS_NO_RESPONSE_CAP = 2;
@@ -153,7 +153,7 @@ export function crisisNoResponseEvents(
       t: p.tSec,
       unitNames: [owner.name],
       facts: {
-        t: fmt(p.tSec),
+        t: fmtFactTime(p.tSec),
         unit: owner.name,
         hpPct: String(p.hpPct),
         dmg2sPct: String(Math.round(p.dmg2s * 100)),

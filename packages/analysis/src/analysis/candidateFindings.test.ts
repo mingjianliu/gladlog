@@ -555,6 +555,26 @@ describe("deathSetupEvents(死亡前因链,纯函数)", () => {
     expect(e.unitNames).toEqual(["Healer-R", "Victim-R"]);
   });
 
+  it("healer-locked t floors onto the timeline's second (audit 0e06: 113.957 is 1:53, not 114.0)", () => {
+    const evts = deathSetupEvents({
+      deathT: 120.96,
+      victim,
+      healerCC: {
+        healerName: "Healer-R",
+        ccInstances: [
+          {
+            atSeconds: 113.957,
+            durationSeconds: 5,
+            spellName: "Freezing Trap",
+            sourceName: "E",
+          },
+        ],
+      },
+    });
+    expect(evts[0]!.facts["t"]).toBe("113.9");
+    expect(evts[0]!.facts["deathT"]).toBe("120.9");
+  });
+
   it("healer CC 过短(<3s)或在窗口外 → 不出", () => {
     const short = deathSetupEvents({
       deathT: 150,

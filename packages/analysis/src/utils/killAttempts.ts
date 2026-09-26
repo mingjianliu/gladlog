@@ -90,6 +90,7 @@ import {
   WALL_IN_HAND_MIT_IDS,
 } from "./killWindowTargetSelection";
 import { KW_BURST_MIN_DAMAGE } from "./offensiveWindows";
+import { fmtFactTime } from "../analysis/factFormat";
 import { fmtTime } from "./renderGrid";
 
 // The defensive sets live in enemyDefensives.ts since GH #97 (2026-09-15):
@@ -611,7 +612,7 @@ export function attemptIntoTrinketEvents(
       unitNames: [a.targetName, alt.name],
       spell: a.stuns[0].spellName,
       facts: {
-        t: fmtTime(a.fromSeconds),
+        t: fmtFactTime(a.fromSeconds),
         target: a.targetName,
         stun: a.stuns[0].spellName,
         stunsN: String(a.stuns.length),

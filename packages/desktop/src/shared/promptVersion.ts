@@ -9,11 +9,6 @@
  *  Full history in docs/prompt-version-history.md (append new entries there);
  *  the last few entries stay inline so a reader sees the format:
  *
- *  v163 (2026-09-26, kick-priority reference table): regenerated at 9eb859c9 (the
- *  rooted-kicker fix e8305ed2 and everything since the 2026-09-12 table) over the
- *  same 21,101-file every-3rd archive subset: completed 7,060 → 7,327, kicked
- *  1,110 → 1,191; kill-target death within 10 s 11 % completed / 32 → 33 %
- *  kicked. The kick-priority facts quote the new rates.
  *  v164 (2026-09-26, reliability round 3 wave 2, audit 121c): a [PEEL OPTION]
  *  row's distance, DR and target-trinket facts are one snapshot stamped with the
  *  span's first second ("| at m:ss: D yd, DR L[, T PvP trinket …]") — DR can reset
@@ -24,5 +19,11 @@
  *  possession radius (100 yd on its single-target MOD_POSSESS row) no longer adds
  *  to its reach — kick-eaten yourReachYd 135 → 35 (130 → 30 without Phantom
  *  Reach). 605 files: 49 kick-eaten lines change, nothing else.
+ *  v166 (2026-09-26, reliability round 3 wave 2, audit 0e06): every time fact
+ *  `t` floors onto the timeline's second (fmtFactTime) — death-setup,
+ *  burst-into-mitigation, questionable-external, crisis-no-response, and the deep
+ *  dive's item times and window bounds. 605 files: 27 menu `t` values stop
+ *  pointing one second past their timeline row, 302 change only their tenths;
+ *  nothing else moves.
  */
-export const PROMPT_VERSION = 165;
+export const PROMPT_VERSION = 166;

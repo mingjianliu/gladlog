@@ -111,7 +111,7 @@ export function deathSetupEvents(parts: DeathSetupParts): CandidateEvent[] {
       spell: lock.spellName,
       spellId: lock.spellId,
       facts: {
-        t: fmt(lock.atSeconds),
+        t: fmtFactTime(lock.atSeconds),
         kind: "healer-locked",
         // Render-grid fix (2026-08-30, same bug/fix as kick-eaten): deathT
         // names the SAME instant the later "death" candidate's own t names,
@@ -241,7 +241,7 @@ export function questionableExternalEvents(
         spell: cd.spellName,
         spellId: cd.spellId,
         facts: {
-          t: fmt(t),
+          t: fmtFactTime(t),
           spell: cd.spellName,
           caster: caster.name,
           target: cast.targetName ?? caster.name,
