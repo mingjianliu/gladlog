@@ -880,7 +880,14 @@ export function buildMatchContext(
   // passed without noticing. Wired here alongside the v2 burst anchor.
   // `killAttempts` is computed once, before the timeline (GH #69).
   {
-    const attemptLines = formatKillAttemptsForContext(killAttempts);
+    const attemptLines = formatKillAttemptsForContext(
+      killAttempts,
+      (enemies as ICombatUnit[]).filter((e) =>
+        (e.deathRecords ?? []).some(
+          (r) => r.timestamp >= combat.startTime && r.timestamp <= combat.endTime,
+        ),
+      ).length,
+    );
     if (attemptLines.length > 0) {
       tLines.push("");
       attemptLines.forEach((l) => tLines.push(l));

@@ -105,3 +105,22 @@ describe("team saves answer cd-hoarded (codex review of a75d53a2)", () => {
     expect(isTeamSaveCD("33206")).toBe(false); // Pain Suppression is single-target
   });
 });
+
+import { creditedAnswer } from "../src/context/burstAnswered";
+
+describe("[BURST ANSWERED] credits an answer that reached the pressured unit through its trough (round 3 4446 / 6954)", () => {
+  const base = {
+    pressured: { unitId: "p", name: "Pressured", minHpPct: 20, minHpSec: 30, startHpPct: 90, startHpSec: 20, died: false },
+    responseCasts: [] as unknown[],
+  };
+  const gs = (over: Record<string, unknown>) => ({ category: "external", spellId: "47788", spellName: "Guardian Spirit", casterName: "Priest", tSec: 22, latencySec: 2, casterId: "h", ...over });
+  it("an external on ANOTHER unit is not the answer", () => {
+    expect(creditedAnswer({ ...base, responseCasts: [gs({ destId: "other", effectEndSec: 34 })] } as never)).toBeUndefined();
+  });
+  it("an external that expired before the trough is not the answer", () => {
+    expect(creditedAnswer({ ...base, responseCasts: [gs({ destId: "p", effectEndSec: 29 })] } as never)).toBeUndefined();
+  });
+  it("an external on the pressured unit, still up at the trough, is", () => {
+    expect(creditedAnswer({ ...base, responseCasts: [gs({ destId: "p", effectEndSec: 34 })] } as never)).toBeDefined();
+  });
+});

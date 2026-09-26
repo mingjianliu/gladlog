@@ -519,6 +519,11 @@ function failureText(attr: IKillAttemptAttribution): string {
  */
 export function formatKillAttemptsForContext(
   attempts: IKillAttempt[],
+  /** Enemy players who died this round — round 2 W2g (138e, 6174): the
+   * summary said "0 kills" while the Feral died 10 s after a saved attempt
+   * (a kill outside every attempt window). Stated so the block cannot read
+   * as "nobody died". Absent ⇒ the old summary. */
+  enemyDeathsThisRound?: number,
 ): string[] {
   if (attempts.length === 0) return [];
   const lines: string[] = [];
@@ -567,7 +572,10 @@ export function formatKillAttemptsForContext(
     );
   }
   lines.push(
-    `  Summary: ${attempts.length} attempts (${attempts.length - burstAnchored} stun-anchored, ${burstAnchored} burst-anchored; ${onPrime} on PRIME targets), ${kills} kill${kills === 1 ? "" : "s"}; ${withSofter} opened while a softer target existed.`,
+    `  Summary: ${attempts.length} attempts (${attempts.length - burstAnchored} stun-anchored, ${burstAnchored} burst-anchored; ${onPrime} on PRIME targets), ${kills} kill${kills === 1 ? "" : "s"} inside an attempt; ${withSofter} opened while a softer target existed.` +
+      (enemyDeathsThisRound !== undefined && enemyDeathsThisRound > kills
+        ? ` Enemy deaths this round: ${enemyDeathsThisRound} (${enemyDeathsThisRound - kills} outside every attempt window).`
+        : ""),
   );
   return lines;
 }

@@ -292,6 +292,12 @@ export interface IWindowTargetingAudit {
   onTargetPct: number;
   /** Biggest non-window-target recipient of the player's damage, if any. */
   topOffTarget: IBurstTargetDamage | null;
+  /** The player's damage went where the TEAM's went (the enemy receiving the
+   * most friendly damage in the window), not to the window's defenseless
+   * target — following the focus is not an individual off-target problem
+   * (reliability round 3 24b6 / 6954: 85–87 % of team damage on Saérox while
+   * the ledger named the enemy healer as "the target"). */
+  followedTeamFocus?: boolean;
 }
 
 /**
@@ -360,6 +366,28 @@ export function auditWindowTargeting(
       }
     }
 
+    // team focus: the enemy that took the most damage from the player's side
+    const teamDamage = new Map<string, number>();
+    for (const u of Object.values(combat.units ?? {}) as ICombatUnit[]) {
+      if (!u.info || u.reaction !== player.reaction) continue;
+      for (const d of u.damageOut ?? []) {
+        if (d.logLine.timestamp < fromMs || d.logLine.timestamp > toMs) continue;
+        if (!enemyById.has(d.destUnitId)) continue;
+        teamDamage.set(
+          d.destUnitId,
+          (teamDamage.get(d.destUnitId) ?? 0) + Math.abs(d.effectiveAmount),
+        );
+      }
+    }
+    let teamFocusId: string | undefined;
+    for (const [id, dmg] of teamDamage)
+      if (teamFocusId === undefined || dmg > (teamDamage.get(teamFocusId) ?? 0))
+        teamFocusId = id;
+    const followedTeamFocus =
+      teamFocusId !== undefined &&
+      teamFocusId !== w.targetUnitId &&
+      topOffTarget?.unitId === teamFocusId;
+
     audits.push({
       windowFromSeconds: w.fromSeconds,
       windowToSeconds: (toMs - matchStartMs) / 1000,
@@ -369,6 +397,7 @@ export function auditWindowTargeting(
       playerDamageToTarget: onTarget,
       onTargetPct: Math.round((100 * onTarget) / total),
       topOffTarget,
+      followedTeamFocus,
     });
   }
 
@@ -439,7 +468,9 @@ export function formatBurstLedgerForContext(
     );
   });
 
-  const offTarget = targeting.filter((w) => w.onTargetPct < ON_TARGET_GOOD_PCT);
+  const offTarget = targeting.filter(
+    (w) => w.onTargetPct < ON_TARGET_GOOD_PCT && !w.followedTeamFocus,
+  );
   for (const w of offTarget) {
     lines.push(
       `  Off-target: window ${fmtTime(w.windowFromSeconds)}–${fmtTime(w.windowToSeconds)} target ${w.windowTargetName} — only ${w.onTargetPct}% of your damage on target` +

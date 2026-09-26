@@ -88,11 +88,38 @@ export interface BurstAnsweredEntry {
  * with X in Ns") cannot be written for it. Those windows are silently skipped
  * in v1 rather than rendered in a second wording.
  */
+/**
+ * The response the line credits: the first one that reached the pressured
+ * unit and was still up at its trough (reliability round 3: 4446 credited a
+ * Guardian Spirit that went on another unit; 6954 one that expired before the
+ * trough). An external must target the pressured unit; a personal wall must
+ * be the pressured unit's own; healing CDs and control answer the window as a
+ * whole. An effect with a known end must reach the trough second.
+ */
+export function creditedAnswer(p: BurstWindowDecisionPoint) {
+  const pr = p.pressured;
+  if (!pr) return undefined;
+  return p.responseCasts.find((r) => {
+    if (r.category === "external" && r.destId !== undefined && r.destId !== pr.unitId)
+      return false;
+    if (r.category === "wall" && r.casterId !== undefined && r.casterId !== pr.unitId)
+      return false;
+    if (
+      (r.category === "external" || r.category === "wall") &&
+      r.effectEndSec !== undefined &&
+      pr.minHpSec !== null &&
+      r.effectEndSec < pr.minHpSec
+    )
+      return false;
+    return true;
+  });
+}
+
 function isCreditable(p: BurstWindowDecisionPoint): boolean {
   return (
     p.feasible &&
     p.responded &&
-    p.responseCasts.length > 0 &&
+    creditedAnswer(p) !== undefined &&
     p.pressured !== null &&
     p.pressured.minHpPct !== null &&
     p.pressured.minHpPct <= BURST_ANSWERED_MAX_HP_PCT
@@ -121,7 +148,7 @@ export function formatBurstAnsweredLines(
       // offset from the opener — the same helper as `burstWindowResponseEvents`.
       const extras = burstExtrasLabel(p);
       const extrasPart = extras ? ` (+${extras})` : "";
-      const first = p.responseCasts[0];
+      const first = creditedAnswer(p)!;
       // Latency is an INTERVAL between two instants, not a grid-anchored
       // instant, so one decimal is legitimate here where a rendered timestamp
       // would have to be floored (the engine already rounds it to 0.1s).

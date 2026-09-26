@@ -31,6 +31,7 @@ import { type ICombatUnit } from "@gladlog/parser-compat";
 
 import { HEALING_VERDICTS } from "../data/healingVerdicts";
 import { getEnglishSpellName } from "../data/spellEffectData";
+import { buffFullDurationForCaster } from "../utils/buffDuration";
 import spellIdLists from "../data/spellIdLists";
 import {
   ccSpellIds,
@@ -251,9 +252,18 @@ export interface BurstResponseCast {
   casterName: string;
   /** whole second the cast lands on (the second `fmtTime` displays) */
   tSec: number;
-  /** seconds after the window start; may be negative down to
-   * `-BURST_RESPONSE_PRE_MS/1000` (a pre-wall) */
+  /** seconds after the window's LEAD CAST (both raw instants — an interval,
+   * reliability round 3 4446 / 7d1f: from the floored window second it read
+   * "Chastise 0.6s before" for a 1.55 s gap); may be negative (a pre-wall) */
   latencySec: number;
+  /** the cast's target unit id (externals: who received it) */
+  destId?: string;
+  /** the caster's unit id */
+  casterId?: string;
+  /** whole second the effect ends (cast + the caster's full buff duration),
+   * when the spell has one — an answer that expired before the trough did
+   * not answer it (round 3 6954) */
+  effectEndSec?: number;
 }
 
 /**
@@ -950,6 +960,7 @@ export function burstWindowDecisionPoints(
       // M:SS. Without an excluded opener they are the same second.
       const tSec = Math.floor(leadRaw.castSeconds);
       const tMs = start + tSec * 1000;
+      const leadRawMs = start + leadRaw.castSeconds * 1000;
       const endSec = Math.max(tSec, Math.floor(seg.toSeconds));
       // Outcome horizon: the bounded window, but never shorter than the
       // response window it is judged against — a piece whose only CD carries
@@ -1010,6 +1021,10 @@ export function burstWindowDecisionPoints(
                   ? "control"
                   : null;
         if (!category) continue;
+        const casterUnit = units.find((u) => u.id === c.unitId);
+        const dur = casterUnit
+          ? buffFullDurationForCaster(c.spellId, casterUnit)
+          : undefined;
         responseCasts.push({
           category,
           spellId: c.spellId,
@@ -1017,7 +1032,13 @@ export function burstWindowDecisionPoints(
           casterName: c.unitName,
           tSec: Math.floor((c.tMs - start) / 1000),
           latencySec:
-            Math.round(((c.tMs - tMs) / 1000 + Number.EPSILON) * 10) / 10,
+            Math.round(((c.tMs - leadRawMs) / 1000 + Number.EPSILON) * 10) /
+            10,
+          ...(c.dest ? { destId: c.dest } : {}),
+          casterId: c.unitId,
+          ...(dur
+            ? { effectEndSec: Math.floor((c.tMs - start) / 1000 + dur) }
+            : {}),
         });
       }
       for (const r of controlLandedResponses(

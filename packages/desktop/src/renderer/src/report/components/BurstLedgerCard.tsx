@@ -1,4 +1,4 @@
-import { fmtTime } from "@gladlog/analysis";
+import { fmtTime, ON_TARGET_GOOD_PCT } from "@gladlog/analysis";
 import { useContext, useMemo, useState } from "react";
 
 import type { IKillWindowTargetEval } from "@gladlog/analysis";
@@ -198,10 +198,10 @@ export function BurstLedgerCard({
                   {fmtTime(w.windowFromSeconds)}–{fmtTime(w.windowToSeconds)}
                 </span>
                 <span>窗口目标 {w.windowTargetName}</span>
-                <Chip kind={w.onTargetPct >= 50 ? "good" : "bad"}>
+                <Chip kind={w.onTargetPct >= ON_TARGET_GOOD_PCT || w.followedTeamFocus ? "good" : "bad"}>
                   命中 {w.onTargetPct}%
                 </Chip>
-                {w.topOffTarget && w.onTargetPct < 50 && (
+                {w.topOffTarget && w.onTargetPct < ON_TARGET_GOOD_PCT && !w.followedTeamFocus && (
                   <span className="rpt-stats-dim">
                     最大分流 {w.topOffTarget.unitName}(
                     {fmtDmg(w.topOffTarget.damage)})

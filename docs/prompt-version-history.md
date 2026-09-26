@@ -1573,3 +1573,15 @@ answers use a real TEAM_SAVE_CD_IDS (team heals + Spirit Link, Barrier, Aura
 Mastery, AMZ, Rallying Cry, Darkness, Zephyr): dps 666 → 642, healer
 702 → 679 (−53 / +6); external-unused samples reach only while the owner is
 free; a pet kicker must have its interrupt ready at cast start.
+
+v176 (2026-09-26, reliability leftovers batch 8): (1) [BURST ANSWERED] credits
+the first response that reached the pressured unit and was still up at its
+trough (an external on another unit or one that expired before the trough no
+longer counts), and its latency is measured from the raw lead cast, not the
+floored window second: 4,572 → 4,299 lines, "before it opened" 716 → 802;
+(2) the burst ledger's "Off-target" lines skip windows where the player's
+damage followed the team's focus (the enemy taking the most friendly damage)
+rather than the defenseless window target: 3,559 → 579 lines, the report
+card's chip reads the same flag and the shared ON_TARGET_GOOD_PCT; (3) the
+KILL ATTEMPTS summary says "kills inside an attempt" and states enemy deaths
+outside every attempt window: 735 contexts. Candidate menu unchanged.
