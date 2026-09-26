@@ -23,7 +23,7 @@
 | [`pvp-log-archive.zh-CN.md`](pvp-log-archive.zh-CN.md)             | PvP log 长期归档                                                                       |
 | [`predicate-index.zh-CN.md`](predicate-index.zh-CN.md)             | 每条共享谓词住在哪(analysis ↔ 门规 ↔ 战报 UI);CI 校验                                |
 | [`log-observability-audit.zh-CN.md`](log-observability-audit.zh-CN.md) | 战斗日志能观测到什么、观测不到什么                                                 |
-| [`rule-history.zh-CN.md`](rule-history.zh-CN.md)                   | 规则史(CLAUDE.md 各条规则背后的事故叙事)                                              |
+| [`rule-history.md`](rule-history.md)（仅英文）                          | 规则史(CLAUDE.md 各条规则背后的事故叙事;开发者历史,不做双语)                          |
 
 各包的 README 遵循同一规则 —— `packages/<pkg>/README.md` 是正本,`README.zh-CN.md` 是副本:
 [`analysis`](../packages/analysis/README.zh-CN.md) ·
