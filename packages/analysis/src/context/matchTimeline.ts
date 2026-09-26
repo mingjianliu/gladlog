@@ -3954,6 +3954,8 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       isHealer,
       pid,
       actorLabel,
+      playerIdMap,
+      enemyIdMap,
     }),
   );
 

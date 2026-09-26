@@ -862,6 +862,21 @@ export interface INonPlayerUnitKill {
  *    is not a kill;
  *  - a `UNIT_DIED` death record, still honoured for the units that get one.
  */
+/** The blow that killed a player: the last damage event with overkill > 0 at
+ * or before the death (+500 ms log slack), else undefined. */
+export function playerKillingBlow(
+  unit: ICombatUnit,
+  deathMs: number,
+): ICombatUnit["damageIn"][number] | undefined {
+  let best: ICombatUnit["damageIn"][number] | undefined;
+  for (const d of unit.damageIn) {
+    if ((d.overkill ?? 0) <= 0) continue;
+    if (d.logLine.timestamp > deathMs + 500) continue;
+    if (!best || d.logLine.timestamp >= best.logLine.timestamp) best = d;
+  }
+  return best;
+}
+
 export function nonPlayerUnitKill(
   unit: ICombatUnit,
 ): INonPlayerUnitKill | null {
@@ -894,6 +909,18 @@ export function summonLifetimeAtKillS(
  * Extracts the top-N damage sources that hit `unit` within the `windowMs` window
  * ending at `deathMs`. Returns an array of formatted "source — spell (Xk)" strings.
  */
+/** Self → self periodic damage that is damage DELAYED from earlier hits.
+ * Time Dilation's deferral (361029) — b12b: 255k in the last 10 s of a death.
+ * Registered in curatedIdRegistry. */
+export const DEFERRED_DAMAGE_SPELL_IDS: ReadonlySet<string> = new Set([
+  // selfDamageScan.ts (every 60th of the 12.1 archive, 303 files, 2026-09-26):
+  // the self → self periodic damage that is damage delayed from earlier hits.
+  // Refraction / Tempered in Battle / Blessing of Dawn / Fel Armor and
+  // reflected own spells are the unit's own damage too, but not deferred.
+  "361029", // Time Dilation — deferred damage (2,642 ticks, every spec)
+  "413924", // Stretch Time — deferred damage (1,005 ticks, Devastation)
+]);
+
 export function getTopDamageSourcesInWindow(
   unit: ICombatUnit,
   endMs: number,
@@ -906,11 +933,26 @@ export function getTopDamageSourcesInWindow(
   const buckets = new Map<string, number>();
   for (const d of unit.damageIn) {
     if (d.logLine.timestamp < startMs || d.logLine.timestamp > endMs) continue;
+    // (Absorbed parts of a hit are not here: they arrive as separate
+    // SPELL_ABSORBED events keyed by the shield owner — reliability round 3
+    // N13 b12b "Starsurge 43k vs 151k" is open, see FIX-PLAN-3.)
     const dmg = Math.abs(d.effectiveAmount);
     if (dmg <= 0) continue;
     // B20: exclude same-team sources (e.g. Time Dilation from Preservation Evoker buff)
-    if (getUnitReaction(d.srcUnitFlags) === unit.reaction) continue;
-    const key = damageEventLabel(d, playerIdMap, enemyIdMap);
+    // — except the unit's OWN deferred damage (Time Dilation's delayed
+    // ticks 361029 land as self → self periodic damage: b12b, 255k in the
+    // last 10 s, previously invisible here).
+    const self = !!d.srcUnitId && d.srcUnitId === unit.id;
+    if (!self && getUnitReaction(d.srcUnitFlags) === unit.reaction) continue;
+    // "deferred" only for an identified delayed-damage effect — a direct
+    // self-hit (Shadow Word: Death) is the unit's own, not deferred (codex
+    // review of batch 7)
+    const selfName = getEnglishSpellName(d.spellId ?? "", d.spellName ?? "");
+    const key = self
+      ? DEFERRED_DAMAGE_SPELL_IDS.has(d.spellId ?? "")
+        ? `deferred ${selfName} (own)`
+        : `${selfName} (own)`
+      : damageEventLabel(d, playerIdMap, enemyIdMap);
     buckets.set(key, (buckets.get(key) ?? 0) + dmg);
   }
   return [...buckets.entries()]
@@ -1040,6 +1082,10 @@ export function buildKillSequenceBlock(params: {
    * this was the third path that got missed.
    */
   actorLabel: (name: string, side: "friendly" | "enemy") => string;
+  /** roster ids for damage-event labels (codex review of batch 7: without
+   * them a player-flagged killer with a localized name read "[pet]") */
+  playerIdMap?: Map<string, number>;
+  enemyIdMap?: Map<string, number>;
 }): string[] {
   const {
     matchStartMs,
@@ -1207,12 +1253,26 @@ export function buildKillSequenceBlock(params: {
           dyingUnit,
           matchStartMs + deathTime * 1000,
           5000,
+          3,
+          params.playerIdMap,
+          params.enemyIdMap,
+        );
+        // Reliability round 3 N13 (7d1f): "Killer" was the largest 5 s source
+        // (a 93k Scorch 2 s earlier) while the last half second was DK + pets.
+        // The killing blow is the overkill hit — the same evidence
+        // `nonPlayerUnitKill` reads — and the largest source is named as such.
+        const blow = playerKillingBlow(
+          dyingUnit,
+          matchStartMs + deathTime * 1000,
         );
         if (topSources.length > 0) {
+          const blowPart = blow
+            ? `killing blow: ${damageEventLabel(blow, params.playerIdMap, params.enemyIdMap)}; `
+            : "";
           killSeqEntries.push({
             timeSeconds: deathTime,
             label: "[KILL]",
-            text: `${pid(firstDeath.name)} (${firstDeath.spec}) dead (Killer: ${topSources[0]})`,
+            text: `${pid(firstDeath.name)} (${firstDeath.spec}) dead (${blowPart}most damage in final 5s: ${topSources[0]})`,
           });
         }
       }

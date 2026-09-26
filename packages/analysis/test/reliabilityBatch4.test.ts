@@ -59,3 +59,49 @@ describe("external-unused needs the external to reach the victim (round 3 W1f, 4
     expect(externalUnusedEvents(base)).toHaveLength(1);
   });
 });
+
+import { getTopDamageSourcesInWindow, playerKillingBlow } from "../src/context/timelineHelpers";
+import { formatMitigationAuditLine } from "../src/context/matchTimelineSections";
+import { CombatUnitReaction, LogEvent as LE } from "@gladlog/parser-compat";
+
+describe("death block (round 3 N13)", () => {
+  const dmg = (ms: number, src: string, srcName: string, spellId: string, spellName: string, eff: number, overkill?: number) => ({
+    logLine: { event: LE.SPELL_DAMAGE, timestamp: ms, parameters: [] },
+    timestamp: ms, srcUnitId: src, srcUnitName: srcName, srcUnitFlags: src === "v" ? 0x511 : 0x548,
+    destUnitId: "v", destUnitName: "Victim", destUnitFlags: 0x511,
+    spellId, spellName, amount: eff, effectiveAmount: eff, ...(overkill ? { overkill } : {}),
+  });
+  const victim = {
+    id: "v", name: "Victim", reaction: CombatUnitReaction.Friendly,
+    damageIn: [
+      dmg(1_000, "m", "Mage", "2948", "Scorch", 93_000),
+      dmg(2_500, "v", "Victim", "361029", "Time Dilation", 40_000),
+      dmg(2_900, "d", "DK", "343294", "Soul Reaper", 17_000, 5_000),
+    ],
+  } as never;
+  it("the killing blow is the overkill hit, not the largest source", () => {
+    expect((playerKillingBlow(victim, 3_000) as { spellId: string }).spellId).toBe("343294");
+  });
+  it("the unit's own deferred damage (Time Dilation) is counted and labelled", () => {
+    const top = getTopDamageSourcesInWindow(victim, 3_000, 10_000, 3);
+    expect(top.some((t) => t.startsWith("deferred Time Dilation (own)"))).toBe(true);
+  });
+  it("a school-limited immunity reports all damage taken and the off-school part", () => {
+    const line = formatMitigationAuditLine({
+      spellId: "1022", spellName: "Blessing of Protection", kind: "immunity", activeOverlapS: 1.6,
+      damageTakenDuringImmunity: 115_220, damageOutsideImmunitySchool: 115_220,
+    });
+    expect(line).toContain("still took ~115k during it");
+    expect(line).toContain("~115k of it outside the immunity's school");
+  });
+});
+
+import { isTeamSaveCD } from "../src/utils/cooldowns";
+
+describe("team saves answer cd-hoarded (codex review of a75d53a2)", () => {
+  it("the group walls the ruling named are team saves, as are the team heals", () => {
+    for (const id of ["98008", "62618", "31821", "51052", "97462", "196718", "374227", "64843", "115310"])
+      expect(isTeamSaveCD(id), id).toBe(true);
+    expect(isTeamSaveCD("33206")).toBe(false); // Pain Suppression is single-target
+  });
+});

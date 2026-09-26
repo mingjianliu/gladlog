@@ -1476,7 +1476,16 @@ export function analyzePlayerCCAndTrinket(
         // the Ret 23.8 yd away. When the actual interrupter is an enemy pet,
         // its own position at cast start is the measurement.
         const petKicker = enemyPets.find((p) => p.id === action.srcUnitId);
-        if (petKicker) {
+        // same contract as the player kickers above: ready at cast start
+        // (codex review of 8513a101)
+        if (
+          petKicker &&
+          interruptCooldownRemainingMs(
+            petKicker,
+            kickCastSpellId(kickSpellId),
+            castStartMs,
+          ) <= 0
+        ) {
           const petPos = getUnitPositionAtTime(
             petKicker,
             castStartMs,

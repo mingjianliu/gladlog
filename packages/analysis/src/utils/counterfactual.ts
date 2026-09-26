@@ -191,8 +191,11 @@ export interface IMitigationAuditRow {
   /** kind=arith: blocked amount (absolute) and its share of maxHp. */
   blockedAmount?: number;
   blockedPctMaxHp?: number;
-  /** kind=immunity: damage observed during the immunity coverage (should be ≈0; reported as-is). */
+  /** kind=immunity: ALL damage taken during the immunity coverage (reported as-is). */
   damageTakenDuringImmunity?: number;
+  /** kind=immunity: the part of it outside the immunity's schools (a physical
+   * immunity under magic damage) — 0 for a full immunity. */
+  damageOutsideImmunitySchool?: number;
   /** kind=absorb: damage the shield actually ate inside the window, i.e. the
    * effective HP it was worth. Measured from SPELL_ABSORBED, so a shield that
    * expired unconsumed contributes nothing — see absorbShields.ts. */
@@ -326,12 +329,25 @@ export function computeMitigationAudit(
       if (pct >= 100) {
         // Immunity: the divisor is zero — never back-compute; report the coverage
         // seconds and the damage observed during it, as-is.
+        // Reliability round 3 N13 (eb80): a school-limited immunity (Blessing
+        // of Protection) read "still took ~0k" while 115k off-school landed —
+        // `observed` is the immunity's own schools only. Report all damage
+        // taken during the coverage and how much of it was outside those
+        // schools.
+        const allSchools = windowDamage(
+          victim,
+          overlapFrom,
+          overlapTo,
+          0x7f,
+          combat.startTime,
+        );
         rows.push({
           spellId: iv.spellId,
           spellName,
           kind: "immunity",
           activeOverlapS,
-          damageTakenDuringImmunity: observed,
+          damageTakenDuringImmunity: allSchools,
+          damageOutsideImmunitySchool: Math.max(0, allSchools - observed),
         });
         continue;
       }

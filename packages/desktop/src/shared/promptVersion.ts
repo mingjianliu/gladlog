@@ -114,5 +114,17 @@
  *  rejected press (was the intent-filtered set — HoJ pressed 4× read "1x"); the
  *  ranking keeps the filtered set: facts change on 83 kick-eaten lines, ids
  *  unchanged.
+ *  v175 (2026-09-26, reliability leftovers batch 7): death block (round 3 N13)
+ *  — the [KILL] line names the killing blow (the overkill hit) and the largest
+ *  5 s source separately, both through the roster id maps: 675 lines; top damage
+ *  sources include the unit's own damage — "deferred X (own)" for Time Dilation
+ *  / Stretch Time, "X (own)" otherwise (reflected own spells, Refraction,
+ *  Tempered in Battle …): 466 deferred + 1,093 own mentions; a school-limited
+ *  immunity's mitigation audit reports all damage taken and the part outside
+ *  its school: 66 lines. Codex review of batches 4–5: cd-hoarded's team-save
+ *  answers use a real TEAM_SAVE_CD_IDS (team heals + Spirit Link, Barrier, Aura
+ *  Mastery, AMZ, Rallying Cry, Darkness, Zephyr): dps 666 → 642, healer
+ *  702 → 679 (−53 / +6); external-unused samples reach only while the owner is
+ *  free; a pet kicker must have its interrupt ready at cast start.
  */
-export const PROMPT_VERSION = 174;
+export const PROMPT_VERSION = 175;

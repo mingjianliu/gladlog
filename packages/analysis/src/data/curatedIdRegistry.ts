@@ -1,3 +1,4 @@
+import { DEFERRED_DAMAGE_SPELL_IDS } from "../context/timelineHelpers";
 /**
  * Registry of every HAND-MAINTAINED table keyed by (or containing) WoW spell
  * ids. Exists for one purpose: the Curated-List Completeness Rule's **reverse
@@ -53,6 +54,7 @@ import {
 } from "../utils/ccTrinketAnalysis";
 import { STASIS_STORABLE_HEAL_IDS } from "../utils/combatStates";
 import {
+  TEAM_SAVE_CD_IDS,
   ADDITIONAL_OVERLAP_DEFENSIVE_IDS,
   AURA_IS_THE_PRESS_IDS,
   AURA_ONLY_ACTIVATION_IDS,
@@ -388,6 +390,12 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   ),
   t("ZONE_EXTERNAL_RADIUS_YD", "analysis/candidates/death.ts", "cast", () =>
     keys(ZONE_EXTERNAL_RADIUS_YD),
+  ),
+  t("TEAM_SAVE_CD_IDS", "utils/cooldowns.ts", "cast", () =>
+    set(TEAM_SAVE_CD_IDS),
+  ),
+  t("DEFERRED_DAMAGE_SPELL_IDS", "context/timelineHelpers.ts", "cast", () =>
+    set(DEFERRED_DAMAGE_SPELL_IDS),
   ),
   t("COMP_DEPENDENT_PURGE_TARGETS", "utils/dispelAnalysis.ts", "aura", () =>
     set(COMP_DEPENDENT_PURGE_TARGETS),

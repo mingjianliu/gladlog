@@ -643,7 +643,10 @@ export function formatMitigationAuditLine(row: IMitigationAuditRow): string {
   }
   if (row.kind === "immunity") {
     const dmgK = Math.round((row.damageTakenDuringImmunity ?? 0) / 1000);
-    return `Mitigation audit: ${row.spellName} immunity covered ${overlap}s (still took ~${dmgK}k during it — dmg the immunity did not block)`;
+    const outsideK = Math.round((row.damageOutsideImmunitySchool ?? 0) / 1000);
+    const outsidePart =
+      outsideK > 0 ? `; ~${outsideK}k of it outside the immunity's school` : "";
+    return `Mitigation audit: ${row.spellName} immunity covered ${overlap}s (still took ~${dmgK}k during it — dmg the immunity did not block${outsidePart})`;
   }
   return `Mitigation audit: ${row.spellName} active ${overlap}s (mechanic — redirect/reflect, not modeled in the arithmetic)`;
 }

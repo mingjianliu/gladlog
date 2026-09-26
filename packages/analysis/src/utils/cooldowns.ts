@@ -183,6 +183,28 @@ export function isTeamHealCD(spellId: string): boolean {
   return TEAM_HEAL_CD_IDS.has(spellId);
 }
 
+/**
+ * Team saves — the user ruling of 2026-09-26 ("a team save by any friendly
+ * answers the crisis", cd-hoarded): the team-wide heals above plus the
+ * group walls. Codex review of a75d53a2: that ruling was wired to
+ * `isTeamHealCD`, which has none of the walls it named (Spirit Link, Barrier,
+ * Aura Mastery), so those presses never answered. Registered.
+ */
+export const TEAM_SAVE_CD_IDS: ReadonlySet<string> = new Set<string>([
+  ...TEAM_HEAL_CD_IDS,
+  "98008", // Spirit Link Totem — Restoration Shaman
+  "62618", // Power Word: Barrier — Discipline Priest
+  "31821", // Aura Mastery — Holy Paladin
+  "51052", // Anti-Magic Zone — Death Knight
+  "97462", // Rallying Cry — Warrior
+  "196718", // Darkness — Demon Hunter
+  "374227", // Zephyr — Evoker
+]);
+
+export function isTeamSaveCD(spellId: string): boolean {
+  return TEAM_SAVE_CD_IDS.has(spellId);
+}
+
 /** @internal exported for data/curatedIdRegistry (corpus rot scan) */
 // 2026-08-21 S2 corpus scan (10,682 matches): removed Diffuse Magic 122783, Dampen Harm 122278, Earthen Wall 201633, Netherwalk 196555, Rapture 47536 — 0 occurrences, ability gone in 12.x (eval-private/reports/s2-health-2026-08-21)
 export const ADDITIONAL_OVERLAP_DEFENSIVE_IDS = new Set<string>([

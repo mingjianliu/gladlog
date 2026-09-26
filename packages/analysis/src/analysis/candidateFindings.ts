@@ -46,7 +46,7 @@ import {
   REPOSITIONING_SPELL_IDS,
 } from "../utils/ccTrinketAnalysis";
 import {
-  isTeamHealCD,
+  isTeamSaveCD,
   annotateDefensiveTimings,
   cdAvailableAt,
   cdIsProcOnly,
@@ -2205,7 +2205,7 @@ function teamPlayEvents(
                   (e: any) =>
                     e.logLine.event === "SPELL_CAST_SUCCESS" &&
                     e.spellId &&
-                    isTeamHealCD(e.spellId),
+                    isTeamSaveCD(e.spellId),
                 )
                 .map((e: any) => (e.logLine.timestamp - combat.startTime) / 1000),
             ),
@@ -2678,12 +2678,20 @@ function extractDeathSetups(
                     ? zone + RANGE_HITBOX_SLACK_YD
                     : spellReachToAccuse(ownerUnit, spellId);
                 if (reach === null || reach <= RANGE_HITBOX_SLACK_YD) return true;
+                // codex review of 8513a101: reachable AND free at the same
+                // sample — near while stunned, far once free is no chance
+                const ownerCcNow = (t: number) =>
+                  ccOf(ownerUnit).ccInstances.some(
+                    (c: { atSeconds: number; durationSeconds: number }) =>
+                      t >= c.atSeconds && t < c.atSeconds + c.durationSeconds,
+                  );
                 let sampled = false;
                 for (
                   let t = Math.max(0, deathT - EXTERNAL_FREE_WINDOW_S);
                   t <= deathT;
                   t += 0.5
                 ) {
+                  if (ownerCcNow(t)) continue;
                   const ms = start + t * 1000;
                   const a = getUnitPositionAtTime(ownerUnit, ms, 2000);
                   const b = getUnitPositionAtTime(u, ms, 2000);
