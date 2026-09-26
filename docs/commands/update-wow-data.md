@@ -273,6 +273,10 @@ npx tsx packages/analysis/scripts/datagen/genOffGcd.ts
 # 6f1. channelled spells (SpellMisc Attributes_1 bit 2 "Is Channelled"; kick-eaten's phase=channel,
 #      reliability round 3 W1k). Restricted to the observed universe like 6f.
 npx tsx packages/analysis/scripts/datagen/genChanneled.ts
+# 6f1b. shared charge pools (SpellCategories.ChargeCategory shared by ≥ 2 observed spells with charges;
+#      Blessing of Protection ↔ Spellwarding, Holy Bulwark ↔ Sacred Weapon …). A press of one spends the
+#      other's charge in the ledger (spendsSharedChargeOf, reliability round 2 W1e).
+npx tsx packages/analysis/scripts/datagen/genSharedCharges.ts
 # 6f2. Spell mechanic facts (GH #77, 2026-09-24): CC mechanic (SpellCategories / SpellEffect, one
 #      EffectTriggerSpell hop, else the unique loss-of-control mechanic among same-named observed spells),
 #      base cast time (SpellMisc → SpellCastTimes; 0 = instant), mechanic immunity (aura 77), all-school
@@ -482,6 +486,14 @@ npx tsx packages/eval/scripts/offensiveCdGapScan.ts report \
 #    well under the table or a rejection well over it is a FLAG to adjudicate. ~5 min on every 5th file.
 npx tsx packages/eval/scripts/racialTrinketLockScan.ts \
   --manifest $GLADLOG_EVAL_HOME/corpus/manifest-archive-<date>.txt --every 5
+# 7. Major-cooldown ledger roster (2026-09-26, reliability round 2 W1g): forward — every cast with an
+#    official cooldown ≥ MIN_CD_SECONDS that the player's ledger (extractMajorCooldowns) never admits,
+#    with its official ability profile (WALL = mitigation / absorb / immunity); reverse — every
+#    SPEC_EXCLUSIVE_SPELLS row a cast from an excluded spec contradicts (check it against the DB2 talent
+#    trees before editing the row). ~10 min on every 30th file. A WALL near the top of the forward list is
+#    a missing defensive; offensive rows belong to the offensive-set owners.
+npx tsx packages/eval/scripts/ledgerGapScan.ts \
+  --manifest $GLADLOG_EVAL_HOME/corpus/manifest-archive-<date>.txt --every 30
 ```
 
 npm aliases for the same three (identical flags): `npm run -w @gladlog/eval scan:rot` ·

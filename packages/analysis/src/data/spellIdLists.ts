@@ -28,6 +28,15 @@ const spellIdLists = {
     "19236",
     "47585",
     "498",
+    // Reliability round 2 W1g (2026-09-26), from ledgerGapScan: Survival of
+    // the Fittest moved here from attributedMitigationSpellIds — it is a
+    // pressed 90 s cooldown (25 %), not a held stance (1d52). Greater
+    // Invisibility 110959 (aura 113862, −60 %) and Retribution's Divine
+    // Protection 403876 (−20 %) belong here too, but joining this list puts
+    // them in MITIGATION_TABLE, whose every entry needs a user-signed
+    // mitigation verdict — pending; until then they are ledger-only
+    // (classMetadata Defensive).
+    "264735", // Survival of the Fittest (Hunter)
     // 2026-08-23 用户裁定「复苏烈焰是大技能,虽然不是减伤」。它是**结构性无施法行**
     // 的被动 proc(见 cooldowns.ts 的 AURA_ONLY_ACTIVATION_IDS),证据只存在于光环
     // 374349:归档 400 个文件里上身 347 次、周期治疗 3,145 次、出现在 52 个文件。
@@ -53,7 +62,6 @@ const spellIdLists = {
     // two new missed-purge anchors at 60.1s and 76.8s). Percentages are mined
     // from the official DB2 table, never typed in.
     "586", // Fade (Priest) — the talented version reduces damage taken
-    "264735", // Survival of the Fittest (Hunter)
     "1966", // Feint (Rogue)
     "107574", // Avatar (Warrior) — offensive burst that ALSO mitigates
     "11426", // Ice Barrier (Mage) — absorb shield

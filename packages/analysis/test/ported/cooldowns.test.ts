@@ -1490,7 +1490,10 @@ describe("extractMajorCooldowns", () => {
     expect(cds.find((c) => c.spellId === "31821")).toBeDefined();
   });
 
-  it("does not include Aura Mastery for Retribution Paladin (SPEC_EXCLUSIVE_SPELLS guard)", () => {
+  it("lets a cast override SPEC_EXCLUSIVE_SPELLS — casting it proves the player has it (W1g)", () => {
+    // The table is a hand list and rots (13 stale rows on 2026-09-26: a
+    // Windwalker's Fortifying Brew, a Retribution's Blessing of Sacrifice…);
+    // a cast is ground truth, so it wins over the row.
     const owner = makeUnit("player-1", {
       class: CombatUnitClass.Paladin,
       spec: CombatUnitSpec.Paladin_Retribution,
@@ -1499,7 +1502,31 @@ describe("extractMajorCooldowns", () => {
     const combat = makeCombatFull({ "player-1": owner });
 
     const cds = extractMajorCooldowns(owner, combat);
+    expect(cds.find((c) => c.spellId === "31821")).toBeDefined();
+  });
+
+  it("keeps a table-excluded spell out without evidence (no cast, not talented)", () => {
+    const owner = makeUnit("player-1", {
+      class: CombatUnitClass.Paladin,
+      spec: CombatUnitSpec.Paladin_Retribution,
+      spellCastEvents: [],
+    });
+    const combat = makeCombatFull({ "player-1": owner });
+
+    const cds = extractMajorCooldowns(owner, combat);
     expect(cds.find((c) => c.spellId === "31821")).toBeUndefined();
+  });
+
+  it("admits a Windwalker's Fortifying Brew (the stale Brewmaster-only row, W1g)", () => {
+    const owner = makeUnit("player-1", {
+      class: CombatUnitClass.Monk,
+      spec: CombatUnitSpec.Monk_Windwalker,
+      spellCastEvents: [makeSpellCastEvent("115203", T0 + 60_000, "player-1")],
+    });
+    const combat = makeCombatFull({ "player-1": owner });
+
+    const cds = extractMajorCooldowns(owner, combat);
+    expect(cds.find((c) => c.spellId === "115203")?.tag).toBe("Defensive");
   });
 
   it("includes Ardent Defender (31850) for Protection Paladin who cast it", () => {
@@ -1528,11 +1555,12 @@ describe("extractMajorCooldowns", () => {
     expect(gs?.cooldownSeconds).toBe(180);
   });
 
-  it("does NOT include Guardian Spirit for Priest Discipline (SPEC_EXCLUSIVE guard)", () => {
+  it("does NOT include Guardian Spirit for Priest Discipline without evidence (SPEC_EXCLUSIVE guard)", () => {
     const owner = makeUnit("player-1", {
       class: CombatUnitClass.Priest,
       spec: CombatUnitSpec.Priest_Discipline,
-      spellCastEvents: [makeSpellCastEvent("47788", T0 + 30_000, "friendly-1")],
+      // No cast: a cast would prove ownership and override the row (W1g).
+      spellCastEvents: [],
     });
     const combat = makeCombatFull({ "player-1": owner });
     const cds = extractMajorCooldowns(owner, combat);
@@ -1553,11 +1581,12 @@ describe("extractMajorCooldowns", () => {
     expect(dh?.cooldownSeconds).toBe(180);
   });
 
-  it("does NOT include Divine Hymn for Priest Discipline (SPEC_EXCLUSIVE guard)", () => {
+  it("does NOT include Divine Hymn for Priest Discipline without evidence (SPEC_EXCLUSIVE guard)", () => {
     const owner = makeUnit("player-1", {
       class: CombatUnitClass.Priest,
       spec: CombatUnitSpec.Priest_Discipline,
-      spellCastEvents: [makeSpellCastEvent("64843", T0 + 45_000, "player-1")],
+      // No cast: a cast would prove ownership and override the row (W1g).
+      spellCastEvents: [],
     });
     const combat = makeCombatFull({ "player-1": owner });
     const cds = extractMajorCooldowns(owner, combat);
@@ -1578,11 +1607,12 @@ describe("extractMajorCooldowns", () => {
     expect(tranq?.cooldownSeconds).toBe(180);
   });
 
-  it("does NOT include Tranquility for Druid Balance (SPEC_EXCLUSIVE guard)", () => {
+  it("does NOT include Tranquility for Druid Balance without evidence (SPEC_EXCLUSIVE guard)", () => {
     const owner = makeUnit("player-1", {
       class: CombatUnitClass.Druid,
       spec: CombatUnitSpec.Druid_Balance,
-      spellCastEvents: [makeSpellCastEvent("740", T0 + 60_000, "player-1")],
+      // No cast: a cast would prove ownership and override the row (W1g).
+      spellCastEvents: [],
     });
     const combat = makeCombatFull({ "player-1": owner });
     const cds = extractMajorCooldowns(owner, combat);

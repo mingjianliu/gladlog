@@ -64,6 +64,8 @@ export const classMetadata: IClassSpellMetadata[] = [
       a("204018", "Blessing of Spellwarding", D),
       a("6940", "Blessing of Sacrifice", D),
       a("498", "Divine Protection", D),
+      a("403876", "Divine Protection", D), // W1g 2026-09-26: a defensive players press that the ledger never admitted (ledgerGapScan, 605 archive files: Retribution's id, 372 rounds)
+      a("471195", "Lay on Hands", D), // W1g 2026-09-26: a defensive players press that the ledger never admitted (ledgerGapScan, 605 archive files: 244 rounds; 633 is its pre-12.x alias)
       a("216331", "Avenging Crusader", D),
       a("31821", "Aura Mastery", D),
       a("31884", "Avenging Wrath", O),
@@ -81,6 +83,7 @@ export const classMetadata: IClassSpellMetadata[] = [
       a("260243", "Volley", O), // 45 s, lift 2.23, coPressed 9 %
       a("186265", "Aspect of the Turtle", D),
       a("109304", "Exhilaration", D),
+      a("264735", "Survival of the Fittest", D), // W1g 2026-09-26: a defensive players press that the ledger never admitted (ledgerGapScan, 605 archive files: 457 rounds)
       a("19574", "Bestial Wrath", O),
       a("288613", "Trueshot", O),
       a("266779", "Coordinated Assault", O),
@@ -146,6 +149,7 @@ export const classMetadata: IClassSpellMetadata[] = [
       a("48792", "Icebound Fortitude", D),
       a("55233", "Vampiric Blood", D),
       a("48707", "Anti-Magic Shell", D),
+      a("410358", "Anti-Magic Shell", D), // W1g 2026-09-26: a defensive players press that the ledger never admitted (ledgerGapScan, 605 archive files: Spellwarden's ally-cast id, 224 rounds)
       a("51052", "Anti-Magic Zone", D),
       a("51271", "Pillar of Frost", O),
       a("47568", "Empower Rune Weapon", O),
@@ -181,6 +185,8 @@ export const classMetadata: IClassSpellMetadata[] = [
       a("321507", "Touch of the Magi", O), // 45 s, lift 1.76
       a("45438", "Ice Block", D),
       a("11426", "Ice Barrier", D),
+      a("110959", "Greater Invisibility", D), // W1g 2026-09-26: a defensive players press that the ledger never admitted (ledgerGapScan, 605 archive files: 407 rounds)
+      a("342245", "Alter Time", D), // W1g 2026-09-26: a defensive players press that the ledger never admitted (ledgerGapScan, 605 archive files: 397 rounds)
       a("190319", "Combustion", O),
       a("365350", "Arcane Surge", O),
       a("118", "Polymorph", C),
@@ -212,6 +218,7 @@ export const classMetadata: IClassSpellMetadata[] = [
     unitClass: CombatUnitClass.Monk,
     abilities: [
       a("115203", "Fortifying Brew", D),
+      a("119996", "Transcendence: Transfer", D), // W1g 2026-09-26: a defensive players press that the ledger never admitted (ledgerGapScan, 605 archive files: 108 rounds; an escape, see CD_ROLE_TAGS)
       a("122470", "Touch of Karma", D),
       a("116849", "Life Cocoon", D),
       a("123904", "Invoke Xuen, the White Tiger", O),

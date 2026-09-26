@@ -55,6 +55,9 @@
     "channeledGenerated.ts": {
       "entries": 83
     },
+    "sharedChargeGenerated.ts": {
+      "entries": 92
+    },
     "abilityEffectsGenerated.ts": {
       "entries": 2232,
       "absorbs": 109,

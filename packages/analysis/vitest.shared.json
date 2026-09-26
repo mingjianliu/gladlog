@@ -172,6 +172,7 @@
     "test/reactionWindow.test.ts",
     "test/resLedgerPrune.test.ts",
     "test/rootReachability.test.ts",
+    "test/sharedCharge.test.ts",
     "test/smoke.test.ts",
     "test/spellDurationOverrideAgreement.test.ts",
     "test/spellNameLookup.test.ts",

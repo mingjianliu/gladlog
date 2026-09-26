@@ -26,6 +26,7 @@ import { CORPUS_COOLDOWN_PATCHES } from "../data/spellEffectOverrides";
 import spellIdListsData from "../data/spellIdLists";
 import { reachesAlly } from "../data/spellTargeting";
 import { SpellTag } from "../data/spellTypes";
+import { SHARED_CHARGE_CATEGORY } from "../data/sharedChargeGenerated";
 import { USABLE_WHILE_CC_GENERATED } from "../data/usableWhileCcGenerated";
 import { buffFullDurationForCaster } from "./buffDuration";
 import { binarySearchClosest } from "./binarySearch";
@@ -150,6 +151,8 @@ export const CD_ROLE_TAGS: Record<string, string> = {
   "357170": "ally heal-over-time", // Time Dilation — delayed healing on an ally; throughput
   "370553": "cast-time modifier", // Tip the Scales — makes next Empower instant; cheap modifier
   "358267": "mobility", // Hover — cast while moving; not a defensive
+  // Windwalker / Mistweaver (W1g 2026-09-26)
+  "119996": "escape (teleports to the spirit)", // Transcendence: Transfer
 };
 
 /** Returns a role descriptor for a throughput/modifier CD, or undefined if none is tagged. */
@@ -408,6 +411,10 @@ export function selfForbearanceActiveAt(
 // one fact ("what counts as a major cooldown"), one predicate.
 export const MIN_CD_SECONDS = 30;
 
+/** Two presses of a multi-charge spell closer than this are one press logged
+ *  twice, not two charges (extractMajorCooldowns' 2 s dedupe; W1e). */
+const MULTI_CHARGE_MIN_GAP_S = 0.05;
+
 export const GUARDIAN_SPIRIT_SPELL_ID = "47788";
 /** Guardian Angel — the talent that makes Guardian Spirit's recovery depend on
  * what happened. Held by 98-100% of Holy Priests in the S2 corpus. */
@@ -589,12 +596,21 @@ export function isPassiveProcCast(e: {
  */
 /** @internal exported for data/curatedIdRegistry (corpus rot scan) */
 // 2026-08-21 S2 corpus scan (10,682 matches): removed Rapture 47536, Psychic Horror 64044, Dark Soul: Instability 113858, Shadowy Duel 207736, Icy Veins 12472, Wyvern Sting 19386, Fel Eruption 211881; 79140 Vendetta → Deathmark 360194/1248010 — 0 occurrences, ability gone in 12.x (eval-private/reports/s2-health-2026-08-21)
+// Reliability round 2 W1g (2026-09-26): `ledgerGapScan` (605 archive files)
+// found 13 rows contradicted by casts from excluded specs; each was checked
+// against the DB2 talent trees (every spec whose tree holds the spell) and,
+// for spells no tree holds, the corpus casters. Deleted as class-wide: Gouge,
+// Blind, Evasion, Smoke Bomb (all three rogues), Blessing of Sacrifice,
+// Fortifying Brew (Windwalker 83 rounds, Mistweaver 65), Spirit Walk, Sigil of
+// Misery, Rescue, Scatter Shot (BM 167, Survival 46). Widened: Intimidation
+// (+Survival), Shadowstep (+Subtlety), Skull Bash (+Guardian). The ledger now
+// also lets cast / talent / PvP-talent evidence override a row.
 export const SPEC_EXCLUSIVE_SPELLS: Record<string, CombatUnitSpec[]> = {
   // Druid
   "102560": [CombatUnitSpec.Druid_Balance], // Incarnation: Chosen of Elune
   "194223": [CombatUnitSpec.Druid_Balance], // Celestial Alignment
   "102543": [CombatUnitSpec.Druid_Feral], // Incarnation: King of the Jungle
-  "106839": [CombatUnitSpec.Druid_Feral], // Skull Bash
+  "106839": [CombatUnitSpec.Druid_Feral, CombatUnitSpec.Druid_Guardian], // Skull Bash (DB2 trees: Feral + Guardian)
   "106951": [CombatUnitSpec.Druid_Feral], // Berserk
   "102558": [CombatUnitSpec.Druid_Guardian], // Incarnation: Guardian of Ursoc
   "18562": [CombatUnitSpec.Druid_Restoration], // Swiftmend
@@ -603,7 +619,6 @@ export const SPEC_EXCLUSIVE_SPELLS: Record<string, CombatUnitSpec[]> = {
   "236696": [CombatUnitSpec.Druid_Restoration], // Thorns
   "740": [CombatUnitSpec.Druid_Restoration], // Tranquility
   // Monk
-  "115203": [CombatUnitSpec.Monk_Brewmaster], // Fortifying Brew
   "122470": [CombatUnitSpec.Monk_Windwalker], // Touch of Karma
   "123904": [CombatUnitSpec.Monk_Windwalker], // Invoke Xuen, the White Tiger
   "137639": [CombatUnitSpec.Monk_Windwalker], // Storm, Earth, and Fire
@@ -611,7 +626,6 @@ export const SPEC_EXCLUSIVE_SPELLS: Record<string, CombatUnitSpec[]> = {
   "116849": [CombatUnitSpec.Monk_Mistweaver], // Life Cocoon
   // Paladin
   "498": [CombatUnitSpec.Paladin_Holy], // Divine Protection
-  "6940": [CombatUnitSpec.Paladin_Holy], // Blessing of Sacrifice
   "199448": [CombatUnitSpec.Paladin_Holy], // Blessing of Sacrifice
   "210294": [CombatUnitSpec.Paladin_Holy], // Divine Favor
   "31821": [CombatUnitSpec.Paladin_Holy], // Aura Mastery
@@ -635,22 +649,17 @@ export const SPEC_EXCLUSIVE_SPELLS: Record<string, CombatUnitSpec[]> = {
   "64843": [CombatUnitSpec.Priest_Holy], // Divine Hymn
   "47585": [CombatUnitSpec.Priest_Shadow], // Dispersion
   // Rogue
-  "5277": [CombatUnitSpec.Rogue_Assassination], // Evasion
-  "36554": [CombatUnitSpec.Rogue_Assassination], // Shadowstep
+  "36554": [CombatUnitSpec.Rogue_Assassination, CombatUnitSpec.Rogue_Subtlety], // Shadowstep (corpus: Subtlety casts it)
   "360194": [CombatUnitSpec.Rogue_Assassination], // Deathmark (2026-08-21: was 79140 Vendetta, wrong id)
   "1248010": [CombatUnitSpec.Rogue_Assassination], // Deathmark (12.1 variant id)
-  "1776": [CombatUnitSpec.Rogue_Outlaw], // Gouge
-  "2094": [CombatUnitSpec.Rogue_Outlaw], // Blind
   "13750": [CombatUnitSpec.Rogue_Outlaw], // Adrenaline Rush
   "51690": [CombatUnitSpec.Rogue_Outlaw], // Killing Spree
   "121471": [CombatUnitSpec.Rogue_Subtlety], // Shadow Blades
   "185313": [CombatUnitSpec.Rogue_Subtlety], // Shadow Dance
   "185422": [CombatUnitSpec.Rogue_Subtlety], // Shadow Dance
-  "212182": [CombatUnitSpec.Rogue_Subtlety], // Smoke Bomb
   "213981": [CombatUnitSpec.Rogue_Subtlety], // Cold Blood
   // Shaman
   "191634": [CombatUnitSpec.Shaman_Elemental], // Stormkeeper
-  "58875": [CombatUnitSpec.Shaman_Enhancement], // Spirit Walk
   "98008": [CombatUnitSpec.Shaman_Restoration], // Spirit Link Totem
   "204293": [CombatUnitSpec.Shaman_Restoration], // Spirit Link
   "204336": [
@@ -663,11 +672,8 @@ export const SPEC_EXCLUSIVE_SPELLS: Record<string, CombatUnitSpec[]> = {
   "190319": [CombatUnitSpec.Mage_Fire], // Combustion
   // Hunter
   "19574": [CombatUnitSpec.Hunter_BeastMastery], // Bestial Wrath
-  "24394": [CombatUnitSpec.Hunter_BeastMastery], // Intimidation
-  "19577": [CombatUnitSpec.Hunter_BeastMastery], // Intimidation
-  "213691": [CombatUnitSpec.Hunter_Marksmanship], // Scatter Shot
-  // Demon Hunter
-  "207684": [CombatUnitSpec.DemonHunter_Vengeance], // Sigil of Misery
+  "24394": [CombatUnitSpec.Hunter_BeastMastery, CombatUnitSpec.Hunter_Survival], // Intimidation
+  "19577": [CombatUnitSpec.Hunter_BeastMastery, CombatUnitSpec.Hunter_Survival], // Intimidation (DB2 trees: BM + Survival)
   // Death Knight
   "55233": [CombatUnitSpec.DeathKnight_Blood], // Vampiric Blood
   "49028": [CombatUnitSpec.DeathKnight_Blood], // Dancing Rune Weapon
@@ -696,7 +702,6 @@ export const SPEC_EXCLUSIVE_SPELLS: Record<string, CombatUnitSpec[]> = {
   "363534": [CombatUnitSpec.Evoker_Preservation], // Rewind
   "370960": [CombatUnitSpec.Evoker_Preservation], // Emerald Communion
   "370537": [CombatUnitSpec.Evoker_Preservation], // Stasis
-  "370665": [CombatUnitSpec.Evoker_Preservation], // Rescue
   "403631": [CombatUnitSpec.Evoker_Augmentation], // Breath of Eons
   "404977": [CombatUnitSpec.Evoker_Augmentation], // Time Skip
   "360828": [CombatUnitSpec.Evoker_Augmentation], // Blistering Scales
@@ -966,6 +971,10 @@ export interface IMajorCooldownInfo {
    * back-compat with hand-built fixtures; absent means 1. */
   charges?: number;
   casts: ICooldownCast[];
+  /** Presses of OTHER spells from the same DB2 charge pool
+   *  (`spendsSharedChargeOf`) — they spend this spell's charge but are not its
+   *  casts. Availability reads `lockCastsOf` (casts ∪ sharedCasts). */
+  sharedCasts?: ICooldownCast[];
   /** Periods when the CD was available but the player did not use it */
   availableWindows: IAvailableWindow[];
   neverUsed: boolean;
@@ -1026,10 +1035,26 @@ export function isCooldownAvailableFromLastUse(
  * this side is the complementary consumer (death-unused-defensive /
  * external-unused decide "available at death yet never pressed").
  */
+/** The presses that spend X's charges: its own casts plus shared-pool
+ *  presses (`sharedCasts`), in time order. */
+export function lockCastsOf(
+  cd: Pick<IMajorCooldownInfo, "casts" | "sharedCasts">,
+): ICooldownCast[] {
+  if (!cd.sharedCasts?.length) return cd.casts;
+  return [...cd.casts, ...cd.sharedCasts].sort(
+    (a, b) => a.timeSeconds - b.timeSeconds,
+  );
+}
+
 export function cdAvailableAt(
   cd: Pick<
     IMajorCooldownInfo,
-    "casts" | "cooldownSeconds" | "neverUsed" | "charges" | "isProcOnly"
+    | "casts"
+    | "cooldownSeconds"
+    | "neverUsed"
+    | "charges"
+    | "isProcOnly"
+    | "sharedCasts"
   >,
   tSeconds: number,
 ): boolean {
@@ -1044,17 +1069,18 @@ export function cdAvailableAt(
   // Rendered-second slack (CD_INSTANT_SLACK_S, GH #61): the instant this
   // predicate answers for is the same one the [RES] ledger renders.
   const t = tSeconds + CD_INSTANT_SLACK_S;
+  const lock = lockCastsOf(cd);
   if ((cd.charges ?? 1) > 1) {
     return (
       chargesAvailableAt(
-        cd.casts.map((c) => c.timeSeconds),
+        lock.map((c) => c.timeSeconds),
         cd.cooldownSeconds,
         cd.charges as number,
         t,
       ) > 0
     );
   }
-  const last = [...cd.casts].filter((c) => c.timeSeconds <= t).pop();
+  const last = [...lock].filter((c) => c.timeSeconds <= t).pop();
   return isCooldownAvailableFromLastUse(
     last ? last.timeSeconds : null,
     // Per-cast override wins (Guardian Angel's outcome-conditional branch).
@@ -1080,6 +1106,7 @@ export function cdMaybeAvailableAt(
     | "charges"
     | "isProcOnly"
     | "earliestCooldownSeconds"
+    | "sharedCasts"
   >,
   tSeconds: number,
 ): boolean {
@@ -1107,7 +1134,12 @@ export function cdMaybeAvailableAt(
 export function cdSecondsUntilReady(
   cd: Pick<
     IMajorCooldownInfo,
-    "casts" | "cooldownSeconds" | "neverUsed" | "charges" | "isProcOnly"
+    | "casts"
+    | "cooldownSeconds"
+    | "neverUsed"
+    | "charges"
+    | "isProcOnly"
+    | "sharedCasts"
   >,
   tSeconds: number,
   cooldown: number = cd.cooldownSeconds,
@@ -1115,16 +1147,17 @@ export function cdSecondsUntilReady(
   const view = { ...cd, cooldownSeconds: cooldown };
   if (cdAvailableAt(view, tSeconds)) return 0;
   const t = tSeconds + CD_INSTANT_SLACK_S;
+  const lock = lockCastsOf(cd);
   if ((cd.charges ?? 1) > 1) {
     const { nextRecharge } = chargeStateAt(
-      cd.casts.map((c) => c.timeSeconds),
+      lock.map((c) => c.timeSeconds),
       cooldown,
       cd.charges as number,
       t,
     );
     return Number.isFinite(nextRecharge) ? nextRecharge - tSeconds : 0;
   }
-  const last = [...cd.casts].filter((c) => c.timeSeconds <= t).pop();
+  const last = [...lock].filter((c) => c.timeSeconds <= t).pop();
   if (!last) return 0;
   // a per-cast override (Guardian Angel's saved branch) wins, as in
   // cdAvailableAt — also over an `earliestCooldownSeconds` argument, so the
@@ -1136,12 +1169,15 @@ export function cdSecondsUntilReady(
 /** Charges of X in hand at `tSeconds` — the [RES] `[k/N]` suffix; N is the
  *  talent-resolved `charges`, the simulation `cdAvailableAt` runs. */
 export function cdChargesReadyAt(
-  cd: Pick<IMajorCooldownInfo, "casts" | "cooldownSeconds" | "charges">,
+  cd: Pick<
+    IMajorCooldownInfo,
+    "casts" | "cooldownSeconds" | "charges" | "sharedCasts"
+  >,
   tSeconds: number,
   cooldown: number = cd.cooldownSeconds,
 ): number {
   return chargesAvailableAt(
-    cd.casts.map((c) => c.timeSeconds),
+    lockCastsOf(cd).map((c) => c.timeSeconds),
     cooldown,
     cd.charges ?? 1,
     tSeconds + CD_INSTANT_SLACK_S,
@@ -1594,6 +1630,29 @@ export function isPressOfCooldown(
 }
 
 /**
+ * A press of ANOTHER spell that spends X's charge: both draw on one DB2
+ * charge pool (`SHARED_CHARGE_CATEGORY`, SpellCategories.ChargeCategory —
+ * Blessing of Protection / Blessing of Spellwarding, Holy Bulwark / Sacred
+ * Weapon, Intervene / Interpose …). Not a press OF X (the ledger never lists
+ * it as X's cast); it only makes X unavailable. Shared by the ledger's
+ * availability (`extractMajorCooldowns` → `sharedCasts`) and the death-outcome
+ * path (`deathOutcomeAnalysis.isAvailableAt`) — reliability round 2 W1e.
+ */
+export function spendsSharedChargeOf(
+  e: { spellId?: string | null; logLine: { event: string } },
+  spellId: string,
+): boolean {
+  if (e.logLine.event !== LogEvent.SPELL_CAST_SUCCESS || !e.spellId)
+    return false;
+  const pool = SHARED_CHARGE_CATEGORY[spellId];
+  return (
+    pool !== undefined &&
+    canonicalSpellId(e.spellId) !== canonicalSpellId(spellId) &&
+    SHARED_CHARGE_CATEGORY[e.spellId] === pool
+  );
+}
+
+/**
  * Match-relative-second timestamps of every self-applied buff aura that
  * counts as an activation of `spellId`, per AURA_ONLY_ACTIVATION_IDS. Empty
  * when `spellId` has no registered aura-only mapping.
@@ -1746,7 +1805,13 @@ export function applyCdModifiers(
   }
 
   return {
-    cooldownSeconds: (baseCooldownSeconds - flatReduceSeconds) * pctMultiplier,
+    // Rounded to the millisecond: a % modifier leaves float noise ((60 + 30)
+    // × 0.7 = 62.99999999999999) that the <cooldowns> loadout printed verbatim
+    // (Retribution Divine Protection, 1,096 lines on 605 files, W1g).
+    cooldownSeconds:
+      Math.round(
+        (baseCooldownSeconds - flatReduceSeconds) * pctMultiplier * 1000,
+      ) / 1000,
     charges,
   };
 }
@@ -1986,8 +2051,19 @@ export function extractMajorCooldowns(
     if (!effectData) return false;
     const cd = effectiveCooldownSeconds(spell.spellId) ?? 0;
     if (cd < MIN_CD_SECONDS) return false;
+    // Evidence beats the hand table: a player who cast the spell, took it as
+    // a talent or picked it as a PvP talent has it, whatever the table says
+    // (reliability round 2 W1g: 13 stale rows hid Windwalker Fortifying Brew,
+    // Retribution Blessing of Sacrifice, Subtlety Evasion … from the ledger).
     const allowedSpecs = SPEC_EXCLUSIVE_SPELLS[spell.spellId];
-    if (allowedSpecs && !allowedSpecs.includes(unit.spec)) return false;
+    if (
+      allowedSpecs &&
+      !allowedSpecs.includes(unit.spec) &&
+      !castSpellIds.has(spell.spellId) &&
+      !pvpTalentIds.has(spell.spellId) &&
+      !talentedSpellIds?.has(spell.spellId)
+    )
+      return false;
 
     const isInTalentTree = specTalentTreeSpellIds.has(spell.spellId);
 
@@ -2271,13 +2347,48 @@ export function extractMajorCooldowns(
       .filter((c) => c.timeSeconds <= matchDurationSeconds)
       .sort((a, b) => a.timeSeconds - b.timeSeconds);
 
+    // Collapse duplicates within 2 s (an aura activation logged next to its
+    // cast, a double-logged press) — except a genuine second press of a
+    // multi-charge spell: two SPELL_CAST_SUCCESS lines inside the window are
+    // two charges when the talent-resolved cap allows it (reliability round 3
+    // W1e, f4da: Ice Barrier's second charge at +0.73 s was dropped, so the
+    // model kept a charge that was spent and cd-hoarded called it ready).
+    const pressed = new Set<ICooldownCast>(castRawCasts);
     const casts: ICooldownCast[] = [];
     for (const c of rawCasts) {
       const last = casts[casts.length - 1];
       if (!last || c.timeSeconds - last.timeSeconds > 2) {
         casts.push(c);
+        continue;
       }
+      const pressesInWindow = casts.filter(
+        (k) => pressed.has(k) && c.timeSeconds - k.timeSeconds <= 2,
+      ).length;
+      // A duplicate line at the same instant is one press, not two charges
+      // (codex astra review): a human's second press lands ≥ 0.485 s later
+      // on the corpus (33 kept pairs, none under 0.05 s).
+      if (
+        baselineCharges > 1 &&
+        pressed.has(c) &&
+        pressed.has(last) &&
+        c.timeSeconds - last.timeSeconds >= MULTI_CHARGE_MIN_GAP_S &&
+        pressesInWindow < baselineCharges
+      )
+        casts.push(c);
     }
+
+    // Presses of another spell from the same DB2 charge pool
+    // (`spendsSharedChargeOf`): not X's casts, but they spend X's charge.
+    const sharedCasts: ICooldownCast[] = unit.spellCastEvents
+      .filter((e) => spendsSharedChargeOf(e, spell.spellId))
+      .map((e) => ({
+        timeSeconds: (e.logLine.timestamp - matchStartMs) / 1000,
+      }))
+      .filter(
+        (c) =>
+          c.timeSeconds <= matchDurationSeconds &&
+          !casts.some((k) => Math.abs(k.timeSeconds - c.timeSeconds) < 0.05),
+      );
 
     // Guardian Angel (see CUSTOM_TALENT_MODIFIERS["47788"]): every press gets
     // its own cooldown — the saved one the untouched official value, the
@@ -2319,22 +2430,24 @@ export function extractMajorCooldowns(
       }
     };
 
-    if (casts.length === 0) {
+    // A shared-pool press closes X's window like X's own press would.
+    const lockCasts = lockCastsOf({ casts, sharedCasts });
+    if (lockCasts.length === 0) {
       // Never used — available the entire match
       pushWindow(0, matchDurationSeconds);
     } else {
       // Window before first cast
-      if (casts[0].timeSeconds > GRACE_SECONDS) {
-        pushWindow(0, casts[0].timeSeconds);
+      if (lockCasts[0]!.timeSeconds > GRACE_SECONDS) {
+        pushWindow(0, lockCasts[0]!.timeSeconds);
       }
       // Windows between casts (and from last cast to match end)
-      for (let i = 0; i < casts.length; i++) {
+      for (let i = 0; i < lockCasts.length; i++) {
         const cdReadyAt =
-          casts[i].timeSeconds +
-          (casts[i].cooldownSecondsOverride ?? cooldownSeconds);
+          lockCasts[i]!.timeSeconds +
+          (lockCasts[i]!.cooldownSecondsOverride ?? cooldownSeconds);
         const nextCastAt =
-          i + 1 < casts.length
-            ? casts[i + 1].timeSeconds
+          i + 1 < lockCasts.length
+            ? lockCasts[i + 1]!.timeSeconds
             : matchDurationSeconds;
         if (cdReadyAt < matchDurationSeconds - GRACE_SECONDS) {
           pushWindow(cdReadyAt, nextCastAt);
@@ -2361,6 +2474,7 @@ export function extractMajorCooldowns(
         maxChargesDetected,
         charges: baselineCharges,
         casts,
+        ...(sharedCasts.length > 0 ? { sharedCasts } : {}),
         availableWindows,
         neverUsed: casts.length === 0,
         isThroughput: spell.tags.includes(SpellTag.Offensive),

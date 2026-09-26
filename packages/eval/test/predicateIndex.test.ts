@@ -70,6 +70,7 @@ import * as kickPriorityPrior from "@gladlog/analysis/src/data/kickPriorityPrior
 import * as mitigationComponents from "@gladlog/analysis/src/data/mitigationComponents";
 import * as outcomeRefs from "@gladlog/analysis/src/data/outcomeRefs";
 import * as racialAbilities from "@gladlog/analysis/src/data/racialAbilities";
+import * as sharedChargeGenerated from "@gladlog/analysis/src/data/sharedChargeGenerated";
 import * as spellCategories from "@gladlog/analysis/src/data/spellCategories";
 import * as spellEffectData from "@gladlog/analysis/src/data/spellEffectData";
 import * as spellReach from "@gladlog/analysis/src/data/spellReach";
@@ -1073,6 +1074,21 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/drAnalysis.ts`,
     symbol: "CC_CAST_EFFECT_AURA",
     mod: drAnalysis,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "spendsSharedChargeOf",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "lockCastsOf",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/data/sharedChargeGenerated.ts`,
+    symbol: "SHARED_CHARGE_CATEGORY",
+    mod: sharedChargeGenerated,
   },
   {
     file: `${A}/data/spellTags.ts`,

@@ -30,6 +30,7 @@ _English-only developer index, generated 2026-09-26 (`git log -1 -- <file>` for 
 | `observedSpellIdsGenerated.json` | 42 KB |  |
 | `offGcdGenerated.ts` | 4 KB | datagen output |
 | `channeledGenerated.ts` | 1 KB | datagen output (SpellMisc "Is Channelled") |
+| `sharedChargeGenerated.ts` | 2 KB | datagen output (SpellCategories.ChargeCategory shared by ≥ 2 observed spells — one charge pool) |
 | `pvpTalentPoolGenerated.ts` | 11 KB | datagen output |
 | `pvpTalentReplacesGenerated.ts` | 861 B | datagen output |
 | `specIconsGenerated.ts` | 2 KB | GENERATED — do not hand-edit. Produced by |

@@ -78,14 +78,18 @@ describe("talent replacements (DB2 replace_spell)", () => {
     });
     // 20 s after Ice Cold: Ice Block is on cooldown, not "available at death"
     expect(isAvailableAt(mage, "45438", 240, 30, START)).toBe(false);
-    // without the talent the same cast id is not an Ice Block press
+    // Without the talent on record the same cast still spends Ice Block: the
+    // two share DB2 charge pool 1560 (spendsSharedChargeOf, W1e 2026-09-26) —
+    // a logged Ice Cold press proves the talent whatever COMBATANT_INFO says.
     const plain = makeUnit("p2", {
       class: CombatUnitClass.Mage,
       spec: CombatUnitSpec.Mage_Fire,
       info: { talents: [], pvpTalents: [] },
       spellCastEvents: [makeSpellCastEvent("414658", at(10), "p2")],
     });
-    expect(isAvailableAt(plain, "45438", 240, 30, START)).toBe(true);
+    expect(isAvailableAt(plain, "45438", 240, 30, START)).toBe(false);
+    // …and nothing else spends it: 240 s later Ice Block is back
+    expect(isAvailableAt(plain, "45438", 240, 251, START)).toBe(true);
   });
 });
 

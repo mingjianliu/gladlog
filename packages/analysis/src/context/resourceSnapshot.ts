@@ -10,6 +10,7 @@ import {
   cdMaybeAvailableAt,
   cdSecondsUntilReady,
   IMajorCooldownInfo,
+  lockCastsOf,
   specToString,
 } from "../utils/cooldowns";
 import { IEnemyCDTimeline } from "../utils/enemyCDs";
@@ -325,7 +326,7 @@ function onCdKey(
   cd: IMajorCooldownInfo,
   timeSeconds: number,
 ): string {
-  const last = cd.casts
+  const last = lockCastsOf(cd)
     .filter((c) => c.timeSeconds <= timeSeconds + CD_INSTANT_SLACK_S)
     .reduce((m, c) => Math.max(m, c.timeSeconds), Number.NEGATIVE_INFINITY);
   return `${displayName}@${Math.round(last * 10) / 10}`;
@@ -341,7 +342,9 @@ function resStateOf(
   cd: IMajorCooldownInfo,
   timeSeconds: number,
 ): "ready" | "onCd" | "skip" {
-  const pressed = cd.casts.some(
+  // A shared-pool press (Spellwarding for Blessing of Protection) counts:
+  // the cooldown is running even though X itself was never pressed.
+  const pressed = lockCastsOf(cd).some(
     (c) => c.timeSeconds <= timeSeconds + CD_INSTANT_SLACK_S,
   );
   if (!pressed) return timeSeconds > 5 ? "ready" : "skip";

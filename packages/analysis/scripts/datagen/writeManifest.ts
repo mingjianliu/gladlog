@@ -143,6 +143,18 @@ export async function main(): Promise<void> {
       "offGcdGenerated.ts": {
         entries: countQuotedIds("offGcdGenerated.ts"),
       },
+      "channeledGenerated.ts": {
+        entries: countQuotedIds("channeledGenerated.ts"),
+      },
+      // spell → charge pool pairs: count the keys, not every quoted number
+      // (each row also quotes its category id).
+      "sharedChargeGenerated.ts": {
+        entries: (
+          readFileSync(dataDir + "sharedChargeGenerated.ts", "utf-8").match(
+            /"\d+": "\d+"/g,
+          ) ?? []
+        ).length,
+      },
       // GH #28 (2026-08-22): official "does this spell reach a friendly unit
       // other than the caster" flags. `reaching` is tracked next to `entries`
       // because the interesting failure is one-sided — a decode regression

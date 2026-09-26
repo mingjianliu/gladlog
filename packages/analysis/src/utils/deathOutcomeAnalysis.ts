@@ -17,6 +17,7 @@ import {
   isProcOnlyActivation,
   REACTION_WINDOW_S,
   specToString,
+  spendsSharedChargeOf,
   talentReplacementsOf,
 } from "./cooldowns";
 import { isStunCcInstance } from "./drAnalysis";
@@ -285,8 +286,15 @@ function lastCastSeconds(
   // press (Ultimate Sacrifice's Blessing of Sacrifice) are presses here too.
   const replacements = talentReplacementsOf(unit);
   const name = getEnglishSpellName(spellId, "");
+  // …and a press of another spell from the same DB2 charge pool
+  // (spendsSharedChargeOf — Spellwarding spends Blessing of Protection), the
+  // ledger's `sharedCasts` (reliability round 2 W1e).
   const castSeconds = unit.spellCastEvents
-    .filter((e) => isPressOfCooldown(e, spellId, name, replacements))
+    .filter(
+      (e) =>
+        isPressOfCooldown(e, spellId, name, replacements) ||
+        spendsSharedChargeOf(e, spellId),
+    )
     .map((e) => (e.logLine.timestamp - matchStartMs) / 1000);
   const auraSeconds = auraOnlyActivationSeconds(unit, spellId, matchStartMs);
   const casts = [...castSeconds, ...auraSeconds].filter((t) => t <= atSeconds);
