@@ -24,6 +24,7 @@
  *   DATAGEN_BUILD=12.1.0.69587 DATAGEN_CACHE=~/.cache/gladlog-datagen \
  *     npx tsx packages/eval/scripts/talentCatalog.ts
  * Output: $GLADLOG_EVAL_HOME/reports/talent-catalog-2026-09-13/catalog.json
+ *   (or $TALENT_CATALOG_OUT/catalog.json)
  */
 import {
   mkdirSync,
@@ -901,11 +902,15 @@ async function main(): Promise<void> {
       return a;
     }, {}),
   };
-  const outDir = join(
-    process.env.GLADLOG_EVAL_HOME ??
-      join(process.env.HOME ?? "", "code/gladlog-eval-private"),
-    "reports/talent-catalog-2026-09-13",
-  );
+  // TALENT_CATALOG_OUT: a later rebuild (new build) must not overwrite the
+  // 09-13 catalog the M-series reports cite.
+  const outDir =
+    process.env.TALENT_CATALOG_OUT ??
+    join(
+      process.env.GLADLOG_EVAL_HOME ??
+        join(process.env.HOME ?? "", "code/gladlog-eval-private"),
+      "reports/talent-catalog-2026-09-13",
+    );
   mkdirSync(outDir, { recursive: true });
   writeFileSync(
     join(outDir, "catalog.json"),
