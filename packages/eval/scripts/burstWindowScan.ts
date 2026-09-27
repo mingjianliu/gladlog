@@ -53,6 +53,9 @@ import {
   existsSync,
   mkdirSync,
   readdirSync,
+  closeSync,
+  openSync,
+  readSync,
   readFileSync,
   writeFileSync,
 } from "fs";
@@ -384,10 +387,32 @@ async function sweep(): Promise<void> {
 }
 
 // ───────────────────────────────────────────────────────────── report ──────
+/** Every line of a file, read in 64 MB chunks: the full-archive windows file
+ * outgrew V8's 512 MB string limit (2026-09-27 regen, 3 shards ≈ 570 MB —
+ * "Cannot create a string longer than 0x1fffffe8 characters"). */
+function* linesOf(path: string): Generator<string> {
+  const fd = openSync(path, "r");
+  const buf = Buffer.alloc(64 * 1024 * 1024);
+  let rest = "";
+  try {
+    for (;;) {
+      const n = readSync(fd, buf, 0, buf.length, null);
+      if (n === 0) break;
+      const text = rest + buf.toString("utf8", 0, n);
+      const parts = text.split("\n");
+      rest = parts.pop() ?? "";
+      yield* parts;
+    }
+    if (rest) yield rest;
+  } finally {
+    closeSync(fd);
+  }
+}
+
 function readRows(inPath: string): { rows: Row[]; rounds: RoundRow[] } {
   const rows: Row[] = [];
   const rounds: RoundRow[] = [];
-  for (const l of readFileSync(inPath, "utf8").split("\n")) {
+  for (const l of linesOf(inPath)) {
     if (!l.trim()) continue;
     try {
       const r = JSON.parse(l) as AnyRow;

@@ -1,19 +1,19 @@
 {
  "meta": {
-  "corpus": "wowarenalogs archive 2026-09-14 every-3rd (21,101 files; kick 6954 rooted-kicker fix, 9eb859c9)",
-  "generatedAt": "2026-09-26T13:20:51.822Z",
+  "corpus": "wowarenalogs archive 2026-09-27",
+  "generatedAt": "2026-09-27T14:14:21.937Z",
   "files": 21101,
-  "points": 48911,
+  "points": 43952,
   "hpGate": 50,
   "generator": "kickPriorityOutcomeProbe.ts emit-table",
   "nFloor": 50
  },
  "cells": {
   "all": {
-   "nCompleted": 7327,
-   "nInterrupted": 1191,
-   "deathCompletedPct": 11,
-   "deathInterruptedPct": 33
+   "nCompleted": 6097,
+   "nInterrupted": 1232,
+   "deathCompletedPct": 12,
+   "deathInterruptedPct": 35
   }
  }
 }

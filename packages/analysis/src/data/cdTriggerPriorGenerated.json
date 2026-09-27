@@ -1,11 +1,11 @@
 {
   "meta": {
-    "generatedAt": "2026-09-26",
-    "corpus": "wowarenalogs archive 2026-09-25 (12.1+, 18,134-file manifest; roster = healerSaveCdGenerated incl. the C2 response-only Barkskin / Frenzied Regeneration; main a3a23a04 = round-end ledger cut 3eb635fb + passive procs ab68f275 + C4)",
+    "generatedAt": "2026-09-27",
+    "corpus": "wowarenalogs archive 2026-09-27",
     "command": "npx tsx packages/eval/scripts/cdTriggerPriorScan.ts emit-table --in <scan.jsonl> --out <file.json>",
     "cohort": "all",
     "cohortRule": "all 12.1+ healer rounds in the archive",
-    "rows": 285510,
+    "rows": 301025,
     "nFloor": 50,
     "predicateVersion": 1
   },
@@ -16,7 +16,7 @@
       "spellName": "Desperate Prayer"
     },
     "Discipline Priest|*|33206": {
-      "n": 12061,
+      "n": 12071,
       "medianHpPct": 49,
       "spellName": "Pain Suppression"
     },
@@ -30,6 +30,11 @@
       "medianHpPct": 52,
       "spellName": "Evangelism"
     },
+    "Discipline Priest|*|586": {
+      "n": 7983,
+      "medianHpPct": 54,
+      "spellName": "Fade"
+    },
     "Discipline Priest|*|62618": {
       "n": 34,
       "medianHpPct": 52,
@@ -41,7 +46,7 @@
       "spellName": "Desperate Prayer"
     },
     "Discipline Priest|Oracle|33206": {
-      "n": 9894,
+      "n": 9903,
       "medianHpPct": 49,
       "spellName": "Pain Suppression"
     },
@@ -55,6 +60,11 @@
       "medianHpPct": 52,
       "spellName": "Evangelism"
     },
+    "Discipline Priest|Oracle|586": {
+      "n": 6510,
+      "medianHpPct": 54,
+      "spellName": "Fade"
+    },
     "Discipline Priest|Oracle|62618": {
       "n": 32,
       "medianHpPct": 52,
@@ -66,7 +76,7 @@
       "spellName": "Desperate Prayer"
     },
     "Discipline Priest|Voidweaver|33206": {
-      "n": 2167,
+      "n": 2168,
       "medianHpPct": 50,
       "spellName": "Pain Suppression"
     },
@@ -79,6 +89,11 @@
       "n": 2264,
       "medianHpPct": 50,
       "spellName": "Evangelism"
+    },
+    "Discipline Priest|Voidweaver|586": {
+      "n": 1473,
+      "medianHpPct": 52,
+      "spellName": "Fade"
     },
     "Discipline Priest|Voidweaver|62618": {
       "n": 2,
@@ -124,6 +139,11 @@
       "n": 6858,
       "medianHpPct": 28,
       "spellName": "Lay on Hands"
+    },
+    "Holy Paladin|*|498": {
+      "n": 8674,
+      "medianHpPct": 53,
+      "spellName": "Divine Protection"
     },
     "Holy Paladin|*|633": {
       "n": 183,
@@ -180,6 +200,11 @@
       "medianHpPct": 28,
       "spellName": "Lay on Hands"
     },
+    "Holy Paladin|Herald of the Sun|498": {
+      "n": 2855,
+      "medianHpPct": 55,
+      "spellName": "Divine Protection"
+    },
     "Holy Paladin|Herald of the Sun|633": {
       "n": 125,
       "medianHpPct": 36,
@@ -229,6 +254,11 @@
       "n": 4727,
       "medianHpPct": 28,
       "spellName": "Lay on Hands"
+    },
+    "Holy Paladin|Lightsmith|498": {
+      "n": 5819,
+      "medianHpPct": 53,
+      "spellName": "Divine Protection"
     },
     "Holy Paladin|Lightsmith|633": {
       "n": 58,
@@ -421,7 +451,7 @@
       "spellName": "Restoral"
     },
     "Preservation Evoker|*|357170": {
-      "n": 6870,
+      "n": 6873,
       "medianHpPct": 50,
       "spellName": "Time Dilation"
     },
@@ -431,7 +461,7 @@
       "spellName": "Rewind"
     },
     "Preservation Evoker|*|363916": {
-      "n": 3063,
+      "n": 3064,
       "medianHpPct": 54,
       "spellName": "Obsidian Scales"
     },
@@ -455,13 +485,8 @@
       "medianHpPct": 47,
       "spellName": "Zephyr"
     },
-    "Preservation Evoker|*|374251": {
-      "n": 1156,
-      "medianHpPct": 54,
-      "spellName": "Cauterizing Flame"
-    },
     "Preservation Evoker|Chronowarden|357170": {
-      "n": 4024,
+      "n": 4025,
       "medianHpPct": 49,
       "spellName": "Time Dilation"
     },
@@ -471,7 +496,7 @@
       "spellName": "Rewind"
     },
     "Preservation Evoker|Chronowarden|363916": {
-      "n": 1647,
+      "n": 1648,
       "medianHpPct": 54,
       "spellName": "Obsidian Scales"
     },
@@ -495,13 +520,8 @@
       "medianHpPct": 44,
       "spellName": "Zephyr"
     },
-    "Preservation Evoker|Chronowarden|374251": {
-      "n": 675,
-      "medianHpPct": 54,
-      "spellName": "Cauterizing Flame"
-    },
     "Preservation Evoker|Flameshaper|357170": {
-      "n": 2846,
+      "n": 2848,
       "medianHpPct": 51,
       "spellName": "Time Dilation"
     },
@@ -534,11 +554,6 @@
       "n": 6,
       "medianHpPct": 57,
       "spellName": "Zephyr"
-    },
-    "Preservation Evoker|Flameshaper|374251": {
-      "n": 481,
-      "medianHpPct": 54,
-      "spellName": "Cauterizing Flame"
     },
     "Restoration Druid|*|102342": {
       "n": 11452,
