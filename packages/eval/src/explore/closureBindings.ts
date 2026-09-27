@@ -456,10 +456,17 @@ export function pruneImports(
   const refCount = new Map<ts.Symbol, number>();
   const visit = (n: ts.Node): void => {
     if (ts.isIdentifier(n) && !ts.findAncestor(n, ts.isImportDeclaration)) {
+      // `export { imported }` re-exports the import: resolve the specifier to
+      // its LOCAL target, or the import looks unused (batch 4's first run
+      // pruned PEAK_SPIKE_MARKERS / peakSpikePlacement this way)
       const sym =
-        ts.isShorthandPropertyAssignment(n.parent) && n.parent.name === n
-          ? checker.getShorthandAssignmentValueSymbol(n.parent)
-          : checker.getSymbolAtLocation(n);
+        ts.isExportSpecifier(n.parent) &&
+        !n.parent.parent.parent.moduleSpecifier &&
+        (n.parent.propertyName ?? n.parent.name) === n
+          ? checker.getExportSpecifierLocalTargetSymbol(n.parent)
+          : ts.isShorthandPropertyAssignment(n.parent) && n.parent.name === n
+            ? checker.getShorthandAssignmentValueSymbol(n.parent)
+            : checker.getSymbolAtLocation(n);
       if (sym) refCount.set(sym, (refCount.get(sym) ?? 0) + 1);
     }
     n.forEachChild(visit);

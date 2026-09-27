@@ -17,8 +17,13 @@ import type { ICombatUnit } from "@gladlog/parser-compat";
 
 import type { IPlayerCCTrinketSummary } from "../../utils/ccTrinketAnalysis";
 import type { IAoeCCEvent } from "../../utils/drAnalysis";
+import type { IEnemyCDCast } from "../../utils/enemyCDs";
 import type { BuildMatchTimelineParams } from "../matchTimeline";
-import type { extractOwnerCDBuffExpiry } from "../timelineHelpers";
+import type {
+  extractEnemyMajorBuffIntervals,
+  extractOwnerCDBuffExpiry,
+  IEnemyBuffInterval,
+} from "../timelineHelpers";
 
 /** A [STATE]/[RES] snapshot requested at a time; resolved after all sections
  * have run (it can be debounced away or forced full). */
@@ -52,10 +57,14 @@ export interface TimelineCtx {
   teammateCDs: P["teammateCDs"];
   pressureWindows: P["pressureWindows"];
   enemies: P["enemies"];
+  enemyCDTimeline: P["enemyCDTimeline"];
+  bracket: P["bracket"];
 
   // ── derived values ──
   /** params.allUnits, or friends + enemies when absent */
   _allUnits: ICombatUnit[];
+  /** friends + enemies (dampening, rot pressure) */
+  allPlayers: ICombatUnit[];
   /** AoE CC casts from outgoingCCChains; [] when there are none */
   aoeCCEvents: IAoeCCEvent[];
   /** AoE CC events already folded into a cast line (shared: owner casts,
@@ -67,6 +76,14 @@ export interface TimelineCtx {
   cdExpiryEvents: ReturnType<typeof extractOwnerCDBuffExpiry>;
   /** the owner's own CC / trinket summary, if any */
   ownerCCSummary: IPlayerCCTrinketSummary | undefined;
+  /** enemies' major buff intervals by enemy name ([ENEMY BUFF]) */
+  enemyBuffIntervals: ReturnType<typeof extractEnemyMajorBuffIntervals>;
+  /** GH #99 Rules B & C: enemy buff intervals folded away into a cast line */
+  droppedBuffIntervals: Set<IEnemyBuffInterval>;
+  /** GH #99 Rules B & C: missed-purge notes attached to an enemy buff line */
+  buffPurgeAnnotations: Map<IEnemyBuffInterval, string>;
+  /** GH #99 Rules B & C: missed-purge notes attached to an enemy CD cast line */
+  cdPurgeAnnotations: Map<IEnemyCDCast, string>;
 
   // ── threaded (in / out) ──
   /** set when any owner / teammate proc-only activation rendered as [PROC];

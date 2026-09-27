@@ -208,6 +208,20 @@ describe("pruneImports", () => {
     );
   });
 
+  it("an import that is re-exported (`export { x }`) is still used", () => {
+    const r = pruneImports(
+      "/virtual/r.ts",
+      [
+        'import { kept, type KeptType, dropped } from "./m";',
+        "export { kept, type KeptType };",
+        "",
+      ].join("\n"),
+      new Set(["kept", "KeptType", "dropped"]),
+    );
+    expect(r.removed).toEqual(["dropped"]);
+    expect(r.text).toContain('import { kept, type KeptType } from "./m";');
+  });
+
   it("an already-unused import that is not a candidate stays", () => {
     expect(prune(["b"]).text).toContain("unusedBefore");
   });

@@ -44,10 +44,7 @@ import {
   isTeamHealCD,
   specToString,
 } from "../utils/cooldowns";
-import {
-  buildDampeningEvents,
-  getDampeningPercentage,
-} from "../utils/dampening";
+import { getDampeningPercentage } from "../utils/dampening";
 import {
   canOffensivePurge,
   canRemoveFrom,
@@ -161,8 +158,12 @@ import { emitBuffFadedEntries } from "./timelineSections/buffFaded";
 import { emitCcBrokenEntries } from "./timelineSections/ccBroken";
 import { emitCcCastEntries } from "./timelineSections/ccCast";
 import type { DeferredSnapshot } from "./timelineSections/ctx";
+import { emitDampeningEntries } from "./timelineSections/dampening";
+import { emitEnemyBuffEntries } from "./timelineSections/enemyBuff";
+import { emitEnemyCdEntries } from "./timelineSections/enemyCd";
 import { emitHealerCastGapFillerEntries } from "./timelineSections/healerCastGapFiller";
 import { emitMinorDispelEntries } from "./timelineSections/minorDispels";
+import { emitOffensiveWindowEntries } from "./timelineSections/offensiveWindow";
 import { emitOwnerCdEntries } from "./timelineSections/ownerCd";
 import { emitPurgeEntries } from "./timelineSections/purges";
 import { emitTeamCdEntries } from "./timelineSections/teamCd";
@@ -1122,38 +1123,12 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
 
   // ── Dampening Milestone Alerts (F149) ──────────────────────────────────────
   const allPlayers = friends.concat(enemies ?? []);
-  const initialDampening = getDampeningPercentage(
-    bracket ?? "3v3",
+  emitDampeningEntries({
+    bracket,
     allPlayers,
     matchStartMs,
-  );
-  const emittedMilestones = new Set<number>();
-  const milestones = [30, 50, 70, 90];
-
-  for (const milestone of milestones) {
-    if (initialDampening >= milestone) {
-      addEntry(0, `${fmtTime(0)}  [DAMPENING ALERT: ${milestone}%]`);
-      emittedMilestones.add(milestone);
-    }
-  }
-
-  const events = buildDampeningEvents(allPlayers);
-  const dampeningEvents = events.map((e) => ({
-    timeSeconds: (e.timestamp - matchStartMs) / 1000,
-    stacks: e.stacks,
-  }));
-
-  for (const milestone of milestones) {
-    if (emittedMilestones.has(milestone)) continue;
-    const firstCrossing = dampeningEvents.find((e) => e.stacks >= milestone);
-    if (firstCrossing) {
-      addEntry(
-        firstCrossing.timeSeconds,
-        `${fmtTime(firstCrossing.timeSeconds)}  [DAMPENING ALERT: ${milestone}%]`,
-      );
-      emittedMilestones.add(milestone);
-    }
-  }
+    addEntry,
+  });
 
   // ── Rot Pressure Detection (F147) ──────────────────────────────────────────
   emitRotPressureEntries({
@@ -1167,50 +1142,12 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
 
   // ── [OFFENSIVE WINDOW] synthesized headers ─────────────────────────────────
 
-  for (const burst of enemyCDTimeline.alignedBurstWindows) {
-    // Take the highest-damage spike inside the window — matching the rendered
-    // wording "peak spike". The old .find() also returned the maximum, but only
-    // because of the implicit behaviour that **pressureWindows happens to be
-    // sorted by totalDamage descending** (the other qualifyingSpikes site in
-    // this file has already been bitten by the same ordering dependency).
-    // State the criterion explicitly here: if the sort changes, the semantics
-    // will not silently change with it.
-    const candidates = pressureWindows.filter(
-      (pw) =>
-        pw.totalDamage >= DMG_SPIKE_THRESHOLD &&
-        pw.fromSeconds >= burst.fromSeconds - 5 &&
-        pw.fromSeconds <= burst.toSeconds + 5,
-    );
-    const overlappingSpike = candidates.reduce<
-      (typeof candidates)[number] | undefined
-    >(
-      (best, pw) => (!best || pw.totalDamage > best.totalDamage ? pw : best),
-      undefined,
-    );
-    if (!overlappingSpike) continue;
-    const dmgM = (overlappingSpike.totalDamage / 1_000_000).toFixed(2);
-    // Each CD carries its actual cast time — the window is a union, and without
-    // per-CD times it gets read as "all popped together at the start" (059)
-    const cdNames = burst.activeCDs
-      .map((c) => `${c.spellName}@${fmtTime(c.castSeconds)}`)
-      .join(" + ");
-    const placement = peakSpikePlacement(
-      burst.toSeconds,
-      overlappingSpike.fromSeconds,
-      overlappingSpike.toSeconds,
-    );
-    const marker = PEAK_SPIKE_MARKERS[placement];
-    addEntry(
-      burst.fromSeconds,
-      // The damage number is the total of **that DMG SPIKE window**, not the
-      // damage inside this burst window — the two intervals differ. Previously
-      // only the burst's start/end were printed, so a reader inevitably read the
-      // number as "damage during this window" (class I: the ord 017 responder
-      // drew a wrong conclusion from exactly this). Label the window the damage
-      // belongs to explicitly so number and interval line up.
-      `${fmtTime(burst.fromSeconds)}  [OFFENSIVE WINDOW]   ${fmtTime(burst.fromSeconds)}–${fmtTime(burst.toSeconds)} | peak spike ${dmgM}M on ${pid(overlappingSpike.targetName)} (${overlappingSpike.targetSpec}) over ${fmtTime(overlappingSpike.fromSeconds)}–${fmtTime(overlappingSpike.toSeconds)}${marker} | CDs: ${cdNames}`,
-    );
-  }
+  emitOffensiveWindowEntries({
+    enemyCDTimeline,
+    pressureWindows,
+    addEntry,
+    pid,
+  });
 
   // ── [DEATH] events ────────────────────────────────────────────────────────
 
@@ -1691,49 +1628,24 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
 
   // ── [ENEMY BUFF] / [ENEMY BUFF END] events (F67b) ─────────────────────────
 
-  for (const [enemyName, intervals] of enemyBuffIntervals) {
-    for (const interval of intervals) {
-      if (!droppedBuffIntervals.has(interval)) {
-        const purgeNote = buffPurgeAnnotations.get(interval) ?? "";
-        addEntry(
-          interval.startSeconds,
-          `${fmtTime(interval.startSeconds)}  [ENEMY BUFF]   ${enemyPid(enemyName)}: ${interval.spellName}${purgeNote}`,
-        );
-      }
-      addEntry(
-        interval.endSeconds,
-        `${fmtTime(interval.endSeconds)}  [ENEMY BUFF END]   ${enemyPid(enemyName)}: ${interval.spellName}`,
-      );
-    }
-  }
+  emitEnemyBuffEntries({
+    enemyBuffIntervals,
+    droppedBuffIntervals,
+    buffPurgeAnnotations,
+    addEntry,
+    enemyPid,
+  });
 
   // ── [ENEMY CD] events ──────────────────────────────────────────────────────
   // B107: annotate each cast with a per-spell sequence index (e.g. `Bestial Wrath [2/4]`)
   // so the model can't collapse short-interval repeats of the same CD into one window.
 
-  for (const player of enemyCDTimeline.players) {
-    // GH #119: timeline-only facts (a Demonic Metamorphosis form) render here
-    // too; they are never in offensiveCDs, so no burst reader sees them
-    const shown = [...player.offensiveCDs, ...(player.offensiveFacts ?? [])].sort(
-      (x, y) => x.castTimeSeconds - y.castTimeSeconds,
-    );
-    const totalBySpell = new Map<string, number>();
-    for (const cd of shown) {
-      totalBySpell.set(cd.spellName, (totalBySpell.get(cd.spellName) ?? 0) + 1);
-    }
-    const seqBySpell = new Map<string, number>();
-    for (const cd of shown) {
-      const total = totalBySpell.get(cd.spellName) ?? 1;
-      const seq = (seqBySpell.get(cd.spellName) ?? 0) + 1;
-      seqBySpell.set(cd.spellName, seq);
-      const seqAnnotation = total > 1 ? ` [${seq}/${total}]` : "";
-      const purgeNote = cdPurgeAnnotations.get(cd) ?? "";
-      addEntry(
-        cd.castTimeSeconds,
-        `${fmtTime(cd.castTimeSeconds)}  [ENEMY CD]   ${enemyPid(player.playerName)} (${player.specName}): ${cd.spellName}${seqAnnotation}${purgeNote}`,
-      );
-    }
-  }
+  emitEnemyCdEntries({
+    enemyCDTimeline,
+    cdPurgeAnnotations,
+    addEntry,
+    enemyPid,
+  });
 
   // ── [ENEMY DEF] events (GH #97, 2026-09-15) ────────────────────────────────
   // Enemy defensives used to exist only in the KILL ATTEMPTS summary
