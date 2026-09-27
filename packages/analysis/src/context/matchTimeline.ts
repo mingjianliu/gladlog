@@ -33,26 +33,16 @@ import {
 } from "../utils/combatStates";
 import {
   cdIsProcOnly,
-  cdRoleTag,
-  findCheaperDefensiveAlternatives,
   getUnitHpAtTimestamp,
-  // The [STATE] tick's HP predicate. Shared with
-  // analysis/crisisDecisionPoints.ts so a crisis fact rendered at a
-  // displayed second is the same number this loop prints there (CLAUDE.md
-  // Shared-Predicate Rule) — see gridHpPct's doc comment in cooldowns.ts.
   gridHpPct,
   hasOffensiveSpellActive,
   HP_SAMPLE_RADIUS_MS,
   IDamageBucket,
   IMajorCooldownInfo,
-  // The [STATE] tick's `unit:dead` predicate — shared with
-  // crisisDecisionPoints.ts for the same reason gridHpPct is.
   isDeadAtRenderSecond,
   isHealerSpec,
-  isSelfOnlyDefensive,
   isTeamHealCD,
   specToString,
-  THROUGHPUT_EMPOWER_DEFENSIVE_IDS,
 } from "../utils/cooldowns";
 import {
   buildDampeningEvents,
@@ -83,7 +73,6 @@ import {
 } from "../utils/enemyCDs";
 import { enemyDefensiveEvents } from "../utils/enemyDefensives";
 import {
-  computeEnemyInterruptAvailability,
   interruptCooldownSeconds,
   interruptForUnit,
   kickCastSpellId,
@@ -146,8 +135,6 @@ import {
   buildKillSequenceBlock,
   buildMatchEndBlock,
   buildSummonOwnerNames,
-  CHANNELED_CD_SPELL_IDS,
-  channelWasInterrupted,
   computeHealingInWindow,
   CONTESTABLE_ENEMY_SUMMON_NPC_IDS,
   CRITICAL_NON_PLAYER_NPC_NAMES,
@@ -170,12 +157,15 @@ import {
   summonedAtMs,
   summonLifetimeAtKillS,
 } from "./timelineHelpers";
+import { emitBuffFadedEntries } from "./timelineSections/buffFaded";
 import { emitCcBrokenEntries } from "./timelineSections/ccBroken";
 import { emitCcCastEntries } from "./timelineSections/ccCast";
 import type { DeferredSnapshot } from "./timelineSections/ctx";
 import { emitHealerCastGapFillerEntries } from "./timelineSections/healerCastGapFiller";
 import { emitMinorDispelEntries } from "./timelineSections/minorDispels";
+import { emitOwnerCdEntries } from "./timelineSections/ownerCd";
 import { emitPurgeEntries } from "./timelineSections/purges";
+import { emitTeamCdEntries } from "./timelineSections/teamCd";
 
 function isDeferredSnapshot(line: unknown): line is DeferredSnapshot {
   return !!(
@@ -1521,261 +1511,39 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       ?.reason;
   }
 
-  for (const cd of ownerCDs) {
-    // B112/B127: a big personal defensive that cannot be cast on an ally is self-only — force (self)
-    // rendering so a self-buff (e.g. Obsidian Scales) logged against the caster's current enemy/ally
-    // target is not shown as "→ <unit>" with that unit's HP.
-    const forceSelf = isSelfOnlyDefensive(cd.spellId);
-    // Reliability round 3 N5 (02c8 / ba8c / 3306): a proc-only entry (Renewing
-    // Blaze — structurally cast-less; a talent-replaced button) keeps its aura
-    // activations in `casts`, and this loop read them as presses: "[YOU] [CD]
-    // Renewing Blaze … cheaper available: Time Dilation", "[while stunned]".
-    // The activation stays a timeline fact under [PROC]; every press-only
-    // judgement (cheaper alternative, [UNNECESSARY], CC tag, [HEALING]) is off.
-    const isProc = cdIsProcOnly(cd);
-    if (isProc) procLinesEmitted = true;
-    for (const cast of cd.casts) {
-      const targetPart = getCDTargetAndVelocityPart(
-        cd.spellId,
-        cast.timeSeconds,
-        cast.targetName,
-        cast.targetHpPct,
-        forceSelf,
-      );
-
-      const isCC = ccSpellIds.has(cd.spellId);
-      const extraLines: (string | DeferredSnapshot)[] = [
-        // T3: delta form (non-CC used to force a full snapshot, the main source of
-        // [RES] tokens; full snapshots are reserved for death snapshots and the
-        // periodic 60s refresh)
-        requestSnapshotPlaceholder(cast.timeSeconds),
-      ];
-
-      if (
-        HEALING_AMPLIFIER_SPELL_IDS.has(cd.spellId) &&
-        healingEmissionTimes.get(cd.spellId)?.has(cast.timeSeconds)
-      ) {
-        const duration = buffFullDurationForCaster(cd.spellId, owner);
-        if (duration) {
-          const fromMs = matchStartMs + cast.timeSeconds * 1000;
-          const toMs = fromMs + duration * 1000;
-          const healStats = computeHealingInWindow(owner.healOut, fromMs, toMs);
-          if (healStats) {
-            const bucketParts = healStats.buckets.map(
-              (b) =>
-                `${b.fromSeconds}–${b.toSeconds}s: ${(b.hps / 1000).toFixed(1)}k HPS`,
-            );
-            extraLines.push(
-              `      [HEALING]    ${bucketParts.join(" | ")} | Overheal: ${healStats.overhealPct}%`,
-            );
-          } else {
-            extraLines.push(
-              `      [HEALING]    No healing logged during this window`,
-            );
-          }
-        }
-      }
-
-      const manaNote = manaCooldownNote(
-        cd.spellId,
-        cast.timeSeconds,
-        cast.targetName,
-      );
-      if (manaNote) extraLines.push(manaNote);
-
-      const prefix = isProc
-        ? "[YOU] [PROC]"
-        : ccSpellIds.has(cd.spellId)
-          ? "[YOU] [CC]"
-          : "[YOU] [CD]";
-      let effectiveTargetPart = targetPart;
-      if (isCC) {
-        const matchingAoe = findAndConsumeAoeCC(
-          cast.timeSeconds,
-          owner.name,
-          cd.spellName,
-          true,
-        );
-        if (matchingAoe) {
-          effectiveTargetPart = formatAoeTargetPart(matchingAoe, targetPart);
-        }
-      }
-      // Class F (2026-07-20 eval): [CC ON TEAM] carries [DR: category level]
-      // while CC the player casts did not — an asymmetric information gap that
-      // led the model to transfer the semantics of enemy lines onto its own.
-      // Outgoing DR is already computed (drInfo on outgoingCCChains); align the
-      // rendering here.
-      const outgoingDrNote = isCC ? outgoingDrTag(cd.spellId, cast) : "";
-      const immuneNote = isCC
-        ? ownerCcImmuneTag(cd.spellId, cast.timeSeconds) +
-          ownerCcMissTag(cd.spellId, cast.timeSeconds)
-        : "";
-      const empowerNote = ownerEmpowerTag(cd.spellId, cast.timeSeconds);
-      const groundingNote = groundingAbsorbNote(
-        cd.spellId,
-        cd.spellName,
-        owner.id,
-        cast.timeSeconds,
-      );
-
-      // 17c: surface the Unnecessary defensive-timing tier (17a) on the timeline cast line —
-      // the legacy SUPPORTING DATA/COOLDOWN USAGE branch already rendered this, but that branch
-      // is dead in production (useTimelinePrompt is hardcoded true). Single-source
-      // predicate: consume the timingLabel/timingContext that annotateDefensiveTimings
-      // already computed and attached to this very cast object — do not re-judge,
-      // re-sample, or recompute the burst-window distance. Every time value inside
-      // timingContext is already text rendered by annotateDefensiveTimings via
-      // fmtTime, so pass it through verbatim.
-      const unnecessaryNote =
-        !isProc && cast.timingLabel === "Unnecessary" && cast.timingContext
-          ? ` [UNNECESSARY — ${cast.timingContext}]`
-          : "";
-
-      let dampeningNote = "";
-      if (!isCC) {
-        dampeningNote = ` | dampening: ${getDampeningPercentage(params.bracket ?? "3v3", _allUnits, matchStartMs + cast.timeSeconds * 1000)}%`;
-        // pressureWindows is sorted by totalDamage descending (see computePressureWindows),
-        // so Array.find() would return the biggest future spike rather than the nearest one.
-        // Select by minimum fromSeconds among qualifying spikes instead of relying on order.
-        const qualifyingSpikes = pressureWindows.filter(
-          (pw) =>
-            pw.fromSeconds >= cast.timeSeconds &&
-            pw.totalDamage >= DMG_SPIKE_THRESHOLD,
-        );
-        const nextSpike = qualifyingSpikes.reduce<IDamageBucket | undefined>(
-          (nearest, pw) =>
-            nearest === undefined || pw.fromSeconds < nearest.fromSeconds
-              ? pw
-              : nearest,
-          undefined,
-        );
-        if (nextSpike) {
-          dampeningNote += `, next spike in ${Math.round(nextSpike.fromSeconds - cast.timeSeconds)}s on ${pid(nextSpike.targetName)}`;
-        }
-      }
-
-      // F166: "cheaper-tool-available" tag — if a shorter-CD defensive was available, flag it.
-      // Throughput CDs (e.g. Power Infusion) are excluded by findCheaperDefensiveAlternatives.
-      // H11: when this cast was an external thrown on a teammate, only suggest alternatives
-      // that can themselves target a teammate — a self-only tool (e.g. Barkskin) can't help.
-      let cheaperNote = "";
-      if (
-        !isCC &&
-        !isProc &&
-        cd.tag === "Defensive" &&
-        !THROUGHPUT_EMPOWER_DEFENSIVE_IDS.has(cd.spellId)
-      ) {
-        // B142: a team/raid heal (Divine Hymn, Tranquility, …) covers an injured ALLY, so a
-        // self-only tool (Desperate Prayer, Frenzied Regeneration) can't substitute for it — treat it
-        // like an external cast so only team-capable alternatives are offered (extends the H11 guard).
-        const castTargetIsTeammate =
-          isTeamHealCD(cd.spellId) ||
-          (!!cast.targetName &&
-            cast.targetName !== "nil" &&
-            cast.targetName.split("-")[0] !== owner.name.split("-")[0]);
-        const cheaperAvailable = findCheaperDefensiveAlternatives(
-          cd,
-          ownerCDs,
-          cast.timeSeconds,
-          {
-            castTargetIsTeammate,
-          },
-        );
-        if (cheaperAvailable.length > 0) {
-          cheaperNote = ` | cheaper available: ${cheaperAvailable.join(", ")}`;
-        }
-      }
-
-      let channelSuffix = "";
-      if (CHANNELED_CD_SPELL_IDS.has(cd.spellId)) {
-        const expiry = cdExpiryEvents.find(
-          (e) =>
-            e.spellId === cd.spellId &&
-            Math.abs(e.castAtSeconds - cast.timeSeconds) < 0.01,
-        );
-        if (expiry) {
-          const actualDuration = expiry.expiresAtSeconds - cast.timeSeconds;
-          // GH #34 ① (2026-08-29): channel length is haste-dependent (Divine Hymn
-          // 2.3–4.6 s, p50 3.8, n=190; Tranquility 0.5–5.2 s) and the hand table
-          // said 8 s, so every channel read "channeled 3.8s of 8.0s" — an
-          // incomplete-channel claim on 190/190 Divine Hymns. Without a per-cast
-          // expected length we state only what the log shows: the channel
-          // length and its end; "interrupted" only on kick/CC evidence.
-          if (expiry.isEstimated) {
-            channelSuffix = ` (channel end not logged)`;
-          } else {
-            const interrupted = channelWasInterrupted(
-              ownerCCSummary,
-              cast.timeSeconds,
-              cast.timeSeconds + actualDuration,
-            );
-            const channelEnd = fmtTime(cast.timeSeconds + actualDuration);
-            channelSuffix = interrupted
-              ? ` (interrupted at ${actualDuration.toFixed(1)}s, ended ${channelEnd})`
-              : ` (channeled ${actualDuration.toFixed(1)}s, ended ${channelEnd})`;
-          }
-        }
-      }
-      // B113/B130: append a role tag for throughput/mana/modifier CDs so the model does not invent
-      // a mechanic (e.g. "Restoral breaks stuns") for a CD it otherwise sees only as a [YOU] [CD] cast.
-      const ownerRole = cdRoleTag(cd.spellId);
-      const roleSuffix = ownerRole ? ` [${ownerRole}]` : "";
-      const displayNameWithChannel = `${cd.spellName}${roleSuffix}${channelSuffix}`;
-
-      // B128: for the owner's CHANNELED CDs, state whether any enemy had an interrupt available at the
-      // cast — so the model can decide "was this a lockout reaction" and "would this have been kicked"
-      // instead of guessing. A completed channel with kicks up is skill; an interrupted one with all
-      // kicks down was not a kick.
-      let interruptNote = "";
-      if (
-        CHANNELED_CD_SPELL_IDS.has(cd.spellId) &&
-        enemies &&
-        enemies.length > 0
-      ) {
-        const immuneReason = ownerInterruptImmuneReasonAt(cast.timeSeconds);
-        if (immuneReason) {
-          // B139: kicks can't land — a PvP talent grants interrupt/silence immunity here.
-          interruptNote = ` | interrupt-immune (${immuneReason})`;
-        } else {
-          const states = computeEnemyInterruptAvailability(
-            enemies,
-            matchStartMs + cast.timeSeconds * 1000,
-          );
-          const upKicks = states.filter((s) => s.cdRemainingSeconds === 0);
-          if (upKicks.length > 0) {
-            interruptNote = ` | enemy interrupts UP: ${upKicks.map((s) => (s.assumedReady ? `${s.spellName}/${s.spec} (assumed)` : `${s.spellName}/${s.spec}`)).join(", ")}`;
-          } else if (states.length > 0) {
-            interruptNote = " | no enemy interrupt available (all on CD)";
-          }
-        }
-      }
-
-      addEntry(
-        cast.timeSeconds,
-        `${fmtTime(cast.timeSeconds)}  ${prefix}   ${displayNameWithChannel}${effectiveTargetPart}${outgoingDrNote}${immuneNote}${empowerNote}${dampeningNote}${cheaperNote}${groundingNote}${interruptNote}${isProc ? "" : ownerHardCcTagAt(cast.timeSeconds)}${unnecessaryNote}`,
-        ...extraLines,
-      );
-    }
-  }
+  ({ procLinesEmitted } = emitOwnerCdEntries({
+    ownerCDs,
+    procLinesEmitted,
+    getCDTargetAndVelocityPart,
+    requestSnapshotPlaceholder,
+    healingEmissionTimes,
+    owner,
+    matchStartMs,
+    manaCooldownNote,
+    findAndConsumeAoeCC,
+    formatAoeTargetPart,
+    outgoingDrTag,
+    ownerCcImmuneTag,
+    ownerCcMissTag,
+    ownerEmpowerTag,
+    groundingAbsorbNote,
+    params,
+    _allUnits,
+    pressureWindows,
+    pid,
+    cdExpiryEvents,
+    ownerCCSummary,
+    enemies,
+    ownerInterruptImmuneReasonAt,
+    addEntry,
+    ownerHardCcTagAt,
+  }));
 
   // ── [BUFF FADED] events (F70, B31: renamed from [CD EXPIRED]) ──────────────
-  for (const expiry of cdExpiryEvents) {
-    // B129: tag the fade cause so the model does not invent a dispel for a buff that simply expired,
-    // and can tell a consumed absorb (ended early) from an expired one. "(estimated)" is retained for
-    // expiries inferred from duration (no removal event logged).
-    const causeNote =
-      expiry.cause === "form_shift"
-        ? " (ended by your own shapeshift)"
-        : expiry.cause === "ended_early"
-          ? " (ended early — absorbed, dispelled, or cancelled)"
-          : expiry.isEstimated
-          ? " (expired, estimated)"
-          : " (expired)";
-    addEntry(
-      expiry.expiresAtSeconds,
-      `${fmtTime(expiry.expiresAtSeconds)}  [BUFF FADED]   ${expiry.spellName}${causeNote}`,
-    );
-  }
+  emitBuffFadedEntries({
+    cdExpiryEvents,
+    addEntry,
+  });
 
   // ── [YOU] [CAST] healer gap-filler (F61) ────────────────────────────────────
 
@@ -1806,67 +1574,18 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
 
   // ── [TEAM] [CD] events ────────────────────────────────────────────────────
 
-  for (const { player, spec, cds } of teammateCDs) {
-    for (const cd of cds) {
-      const isCC = ccSpellIds.has(cd.spellId);
-      // Same as the owner loop: a proc-only entry's activations are not presses.
-      const isProc = cdIsProcOnly(cd);
-      if (isProc) procLinesEmitted = true;
-      for (const cast of cd.casts) {
-        const groundingNote = groundingAbsorbNote(
-          cd.spellId,
-          cd.spellName,
-          player.id,
-          cast.timeSeconds,
-        );
-
-        // 17c: same [UNNECESSARY] surfacing as the [YOU] [CD] block above — an externally-cast
-        // defensive (e.g. Pain Suppression on a teammate) also runs through annotateDefensiveTimings
-        // per-caster, so this cast object can carry the same timingLabel/timingContext. Consume
-        // verbatim, no recompute (single-source predicate).
-        const unnecessaryNote =
-          !isProc && cast.timingLabel === "Unnecessary" && cast.timingContext
-            ? ` [UNNECESSARY — ${cast.timingContext}]`
-            : "";
-
-        // B112(a): "[TEAM] [CC] N (Spec): X" was misread as teammate N BEING CC'd. It is actually N
-        // CASTING an offensive CC on an enemy — render it in active voice ("cast") with the enemy
-        // target so the caster is never confused with the victim. [TEAM] [CD] (buffs/defensives on
-        // self) keeps the ": X" form.
-        let line: string;
-        if (isCC) {
-          const tgtLabel =
-            cast.targetName && cast.targetName !== "nil"
-              ? enemyPid(cast.targetName)
-              : "";
-          // Suppress localized (non-ASCII) totem/pet/NPC target names — never leak
-          // a client-locale unit name into the English prompt.
-          const tgt =
-            tgtLabel && ![...tgtLabel].some((c) => c.charCodeAt(0) > 127)
-              ? ` → ${tgtLabel}`
-              : "";
-          let effectiveTgt = tgt;
-          const matchingAoe = findAndConsumeAoeCC(
-            cast.timeSeconds,
-            player.name,
-            cd.spellName,
-            false,
-          );
-          if (matchingAoe) {
-            effectiveTgt = formatAoeTargetPart(matchingAoe, tgt);
-          }
-          line = `${fmtTime(cast.timeSeconds)}  [TEAM] [CC]   ${pid(player.name)} (${spec}) cast ${cd.spellName}${effectiveTgt}${groundingNote}${ccImmuneTagFor(player, cd.spellId, cast.timeSeconds)}${unnecessaryNote}`;
-        } else {
-          line = `${fmtTime(cast.timeSeconds)}  [TEAM] ${isProc ? "[PROC]" : "[CD]"}   ${pid(player.name)} (${spec}): ${cd.spellName}${groundingNote}${unnecessaryNote}`;
-        }
-        addEntry(
-          cast.timeSeconds,
-          line,
-          requestSnapshotPlaceholder(cast.timeSeconds),
-        );
-      }
-    }
-  }
+  ({ procLinesEmitted } = emitTeamCdEntries({
+    teammateCDs,
+    procLinesEmitted,
+    groundingAbsorbNote,
+    enemyPid,
+    findAndConsumeAoeCC,
+    formatAoeTargetPart,
+    pid,
+    ccImmuneTagFor,
+    addEntry,
+    requestSnapshotPlaceholder,
+  }));
 
   // ── [CC CAST] events — AoE CC cast by friendly players on enemies ──────────
 

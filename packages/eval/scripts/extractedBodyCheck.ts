@@ -44,16 +44,34 @@ let afterDestructure = emitter.slice(m.index + m[0].length);
 // destructuring and `return { … };` right before the closing brace. They are
 // the only statements that may differ, so strip exactly those — the body has
 // no `return` of its own at that indentation (the extractor refuses one).
+// Both must be the plain shorthand form over the SAME names: `let { a, b } =
+// ctx;` … `return { a, b };` — `return { a: false }` is not stripped.
+const names = (list: string) =>
+  list
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+const isNameList = (xs: string[]) =>
+  xs.length > 0 && xs.every((x) => /^[A-Za-z_$][\w$]*$/.test(x));
 const threadedLet =
-  /^\s*\/\/ threaded: [^\n]*\n\s*let \{[^}]*\} =\s*ctx;\n/.exec(
+  /^\s*\/\/ threaded: [^\n]*\n\s*let \{([^}]*)\} =\s*ctx;\n/.exec(
     afterDestructure,
   );
-if (threadedLet)
+if (threadedLet) {
+  if (!isNameList(names(threadedLet[1]!)))
+    throw new Error(`threaded let is not a plain name list: ${threadedLet[0]}`);
   afterDestructure = afterDestructure.slice(threadedLet[0].length);
+}
 let extracted = afterDestructure.slice(0, afterDestructure.lastIndexOf("\n}"));
 if (threadedLet) {
-  const ret = /\n {2}return \{[^}]*\};\s*$/.exec(extracted);
+  const ret = /\n {2}return \{([^}]*)\};\s*$/.exec(extracted);
   if (!ret) throw new Error("threaded emitter without its `return { … };`");
+  const letNames = names(threadedLet[1]!).sort().join(",");
+  const retNames = names(ret[1]!);
+  if (!isNameList(retNames) || retNames.sort().join(",") !== letNames)
+    throw new Error(
+      `threaded return { ${ret[1]} } does not return exactly the let names (${letNames})`,
+    );
   extracted = extracted.slice(0, ret.index);
 }
 

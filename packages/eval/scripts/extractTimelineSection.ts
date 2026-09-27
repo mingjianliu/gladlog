@@ -14,8 +14,10 @@
  *     buildMatchTimeline. Those need a hand-written path; closureBindingAudit.ts
  *     prints the detail. One exception, opted into per binding: a written
  *     binding listed in `threaded` is passed in, held in a local `let`,
- *     returned and re-assigned by the caller — exact as long as no closure
- *     outside the range can read it meanwhile, which is checked.
+ *     returned and re-assigned by the caller — exact as long as no nested
+ *     function references it (outside the range one could read it mid-update;
+ *     inside, one could capture the local copy and outlive the emitter),
+ *     which is checked.
  *  2. ctx fields = the outer bindings the range uses (first-use order);
  *     imports = the file's imports the range uses, specifiers rebased one
  *     directory down.
@@ -63,9 +65,9 @@ interface Config {
   /** outer bindings the range WRITES that are threaded through the emitter:
    * passed in via ctx, held in a local `let`, returned at the end and
    * re-assigned by the caller (callText must do the assignment, e.g.
-   * `({ procLinesEmitted } = emitX($CTX));`). Allowed only when no closure
-   * outside the range references the binding (it would see a stale value
-   * while the emitter runs). */
+   * `({ procLinesEmitted } = emitX($CTX));`). Allowed only when no nested
+   * function of buildMatchTimeline references the binding, in the range or
+   * out (see OuterBinding.closureRefs). */
   threaded?: string[];
 }
 
@@ -94,9 +96,9 @@ for (const t of threaded) {
   const o = r.outer.find((x) => x.name === t);
   if (!o?.classes.has("WRITE"))
     problems.push(`threaded ${t} is not written by the range`);
-  else if (o.closureRefsOutside.length)
+  else if (o.closureRefs.length)
     problems.push(
-      `threaded ${t} is referenced by a closure outside the range (L${o.closureRefsOutside.join(",")})`,
+      `threaded ${t} is referenced by a nested function (L${o.closureRefs.join(",")}) — it could observe the binding mid-update, or capture the emitter's local copy and outlive it`,
     );
 }
 for (const o of r.outer) {

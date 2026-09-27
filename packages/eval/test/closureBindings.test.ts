@@ -90,10 +90,16 @@ describe("analyzeRange: member mutation, calls, types", () => {
 
   it("a closure outside the range that references a binding is reported", () => {
     const { r } = analyse("a++;\nb++;");
-    const refs = (n: string) =>
-      r.outer.find((o) => o.name === n)!.closureRefsOutside;
+    const refs = (n: string) => r.outer.find((o) => o.name === n)!.closureRefs;
     expect(refs("a")).toHaveLength(1); // helper() returns a
     expect(refs("b")).toEqual([]);
+  });
+
+  it("a closure created IN the range that captures a binding is reported", () => {
+    // codex 2026-09-27: threading b through an emitter would leave this
+    // callback holding the emitter's local copy (result 2 -> 1)
+    const { r } = analyse("b = 1;\nobj.list.push(() => b);");
+    expect(r.outer.find((o) => o.name === "b")!.closureRefs).toHaveLength(1);
   });
 
   it("closure calls are CALL", () => {

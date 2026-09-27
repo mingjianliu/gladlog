@@ -24,10 +24,12 @@ export interface OuterBinding {
   declLine: number;
   classes: Set<UseClass>;
   lines: number[];
-  /** lines OUTSIDE the range where a nested function (a closure of the
-   * enclosing function) references this binding — such a closure could run
-   * during the range and observe the binding mid-update */
-  closureRefsOutside: number[];
+  /** lines where a nested function (a closure of the enclosing function)
+   * references this binding — outside the range (it could run during the
+   * range and observe the binding mid-update) or inside it (a closure created
+   * in the range can escape it and would capture a moved copy's local, which
+   * stops tracking the caller's binding: codex review 2026-09-27) */
+  closureRefs: number[];
 }
 
 export interface ImportUse {
@@ -296,7 +298,7 @@ export function analyzeRange(
               declLine: lineOf(dp),
               classes: new Set(),
               lines: [],
-              closureRefsOutside: [],
+              closureRefs: [],
             };
             outer.set(sym, u);
           }
@@ -338,15 +340,16 @@ export function analyzeRange(
   };
   sf.forEachChild(visit);
 
-  // second pass: references to the outer bindings from closures outside the range
+  // second pass: references to the outer bindings from any nested function of
+  // the enclosing function, inside the range or out
   const closureScan = (n: ts.Node): void => {
     if (ts.isIdentifier(n) && !isNameNotReference(n)) {
       const pos = n.getStart(sf);
       const sym = symbolFor(n);
       const u = sym ? outer.get(sym) : undefined;
-      if (u && !inRange(pos) && inFn(pos) && nearestFunction(n) !== fn) {
+      if (u && inFn(pos) && nearestFunction(n) !== fn) {
         const l = lineOf(pos);
-        if (!u.closureRefsOutside.includes(l)) u.closureRefsOutside.push(l);
+        if (!u.closureRefs.includes(l)) u.closureRefs.push(l);
       }
     }
     n.forEachChild(closureScan);

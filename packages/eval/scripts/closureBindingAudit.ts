@@ -62,7 +62,7 @@ for (const u of rows) {
   const cls = order.filter((c) => u.classes.has(c)).join("+");
   const ls = [...u.lines].sort((a, b) => a - b);
   console.log(
-    `  ${cls.padEnd(24)} ${u.name.padEnd(34)} decl L${u.declLine}  used L${ls.slice(0, 6).join(",")}${ls.length > 6 ? ` (+${ls.length - 6})` : ""}`,
+    `  ${cls.padEnd(24)} ${u.name.padEnd(34)} decl L${u.declLine}  used L${ls.slice(0, 6).join(",")}${ls.length > 6 ? ` (+${ls.length - 6})` : ""}${u.closureRefs.length ? `  closure refs L${u.closureRefs.join(",")}` : ""}`,
   );
 }
 const list = (xs: Array<{ name: string; declLine: number }>) =>
