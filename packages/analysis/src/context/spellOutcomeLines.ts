@@ -117,9 +117,15 @@ export function reflectedSpells(
       const t0 = m.logLine.timestamp;
       const t1 = t0 + REFLECT_DAMAGE_WINDOW_S * 1000;
       let back = 0;
+      // only what the reflect sent back: the reflector, or the caster's own
+      // DoT ticking on itself — not another enemy casting the same spell at
+      // the caster inside the window (agy review of batch 13)
+      const fromReflect = (src: string | undefined) =>
+        src === reflector.id || src === caster.id;
       for (const d of caster.damageIn ?? [])
         if (
           d.spellId === m.spellId &&
+          fromReflect(d.srcUnitId) &&
           d.logLine.timestamp >= t0 &&
           d.logLine.timestamp <= t1
         )
@@ -127,6 +133,7 @@ export function reflectedSpells(
       for (const a of caster.absorbsIn ?? [])
         if (
           a.attackSpellId === m.spellId &&
+          fromReflect(a.attackerId) &&
           a.timestamp >= t0 &&
           a.timestamp <= t1
         )
@@ -168,6 +175,9 @@ export interface ICcRemovedBySanctuary {
   ccSpellId: string;
   ccSpellName: string;
   ccSourceName: string;
+  /** the CC's caster by GUID — a same-named summon on both teams (Capacitor
+   *  Totem) must not resolve by name (agy review, the GH #99 class) */
+  ccSourceId?: string;
 }
 
 /** A control that left its target within 50 ms of Blessing of Sanctuary
@@ -198,6 +208,7 @@ export function sanctuaryRemovals(
           ccSpellId: a.spellId,
           ccSpellName: getEnglishSpellName(a.spellId, a.spellName),
           ccSourceName: a.srcUnitName ?? "",
+          ...(a.srcUnitId ? { ccSourceId: a.srcUnitId } : {}),
         });
       }
     }

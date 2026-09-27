@@ -429,6 +429,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   // summon GUID → owner name: damage-source labels name a pet / guardian
   // through its owner (reliability round 3, f4da).
   const summonOwners = buildSummonOwnerNames(_allUnits);
+  const unitNames = new Map(_allUnits.map((u) => [u.id, u.name]));
 
   // criticalWindowSet is built by the caller (buildMatchContext) via
   // buildCriticalWindowSet and passed in — deliberately not built here, or the
@@ -1250,6 +1251,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     playerIdMap,
     enemyIdMap,
     summonOwners,
+    unitNames,
     counterfactualOf,
     dampeningAt: (atSeconds) =>
       getDampeningPercentage(
@@ -1269,6 +1271,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     playerIdMap,
     enemyIdMap,
     summonOwners,
+    unitNames,
     dampeningAt: (atSeconds) =>
       getDampeningPercentage(
         params.bracket ?? "3v3",
@@ -1386,6 +1389,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
           playerIdMap,
           enemyIdMap,
           summonOwners,
+          unitNames,
         );
         if (topSources.length > 0)
           line += ` killed by: ${topSources.join(", ")}`;
@@ -3033,10 +3037,18 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       if (!inMatch(x.atSeconds)) continue;
       const pal = byId.get(x.paladinId)!;
       const target = byId.get(x.targetId)!;
-      const src = _allUnits.find((u) => u.name === x.ccSourceName);
+      // by GUID (a summon resolves to its owner through actorLabel); the
+      // CC came from the side opposing the unit it was removed from
+      const srcLabel = x.ccSourceName
+        ? actorLabel(
+            x.ccSourceName,
+            target.reaction === owner.reaction ? "enemy" : "friendly",
+            x.ccSourceId,
+          )
+        : "";
       addEntry(
         x.atSeconds,
-        `${fmtTime(x.atSeconds)}  [CC REMOVED]   ${unitLabel(pal)}'s Blessing of Sanctuary removed ${src ? `${unitLabel(src)}'s ` : ""}${x.ccSpellName} from ${unitLabel(target)}`,
+        `${fmtTime(x.atSeconds)}  [CC REMOVED]   ${unitLabel(pal)}'s Blessing of Sanctuary removed ${srcLabel ? `${srcLabel}'s ` : ""}${x.ccSpellName} from ${unitLabel(target)}`,
       );
     }
     if (rawStreams?.available) {
@@ -3457,6 +3469,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     playerIdMap,
     enemyIdMap,
     summonOwners,
+    unitNames,
     // 敌方 CC 掩护标注的数据源 —— 与本文件 [CC ON TEAM] 行同一个数组对象
     ccTrinketSummaries,
     ownerName: owner.name,
@@ -4085,6 +4098,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       playerIdMap,
       enemyIdMap,
       summonOwners,
+      unitNames,
     }),
   );
 

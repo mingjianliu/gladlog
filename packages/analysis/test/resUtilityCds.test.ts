@@ -58,12 +58,14 @@ describe("ownerResUtilityCds", () => {
       ownerResUtilityCds(unit(13, CombatUnitSpec.Evoker_Preservation), T0),
     ).toHaveLength(0);
   });
-  it("a Death Knight gets Death Grip beside its kick", () => {
+  it("a Death Knight gets Death Grip beside its kick (Mind Freeze taken)", () => {
     const names = ownerResUtilityCds(
-      unit(6, CombatUnitSpec.DeathKnight_Unholy, { info: { talents: [] } }),
+      unit(6, CombatUnitSpec.DeathKnight_Unholy, {
+        info: { talents: [{ id1: 76084, id2: 96213 }] },
+      }),
       T0,
     ).map((c) => c.spellName);
-    expect(names).toContain("Death Grip");
+    expect(names).toEqual(["Mind Freeze", "Death Grip"]);
   });
   it("[RES] shows the kick ready, then on cooldown after a press", () => {
     const owner = unit(8, CombatUnitSpec.Mage_Frost, {

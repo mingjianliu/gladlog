@@ -378,8 +378,21 @@ function syncCdReachable(
   fromS: number,
   toS: number,
 ): boolean {
-  if (!cd.owner || !cd.reachTargets?.length || cd.matchStartMs === undefined)
+  if (!cd.owner || !cd.reachTargets || cd.matchStartMs === undefined)
     return true;
+  // no non-healer enemy at all, or every one of them dead through the lock:
+  // there is no burst target to sync onto (agy review of batch 11 — a 2v2
+  // whose enemy DPS died earlier was accused against the lone healer)
+  if (cd.reachTargets.length === 0) return false;
+  const anyAlive = (() => {
+    for (let t = fromS; t <= toS + 1e-9; t += 0.5)
+      if (
+        cd.reachTargets!.some((e) => !isDeadAt(e, cd.matchStartMs! + t * 1000))
+      )
+        return true;
+    return false;
+  })();
+  if (!anyAlive) return false;
   const reach = cdOutOfRangeReachYards(cd.owner, cd.spellId);
   if (reach === null) return true;
   let sawPair = false;
@@ -570,18 +583,25 @@ export function missedSyncWindowEvents(
     const ready = ev.ready.map((cd) => cd.spellName);
     if (ready.length === 0) continue;
     if (ev.entered) continue;
-    const sameHold = ev.ready.every((cd) => {
-      const prev = accused.get(cd);
-      return (
-        prev !== undefined &&
-        !cd.casts.some(
-          (c) => c.timeSeconds > prev.end && c.timeSeconds < w.fromSeconds,
-        )
-      );
-    });
+    // the SAME hold: exactly the accused candidate's ready set, none of it
+    // pressed since (agy review of batch 11 — a subset or a mix of two
+    // earlier accusations folded in and claimed a spent CD was still held)
+    const firstCand = accused.get(ev.ready[0]!)?.cand;
+    const sameHold =
+      firstCand !== undefined &&
+      firstCand.ready.length === ev.ready.length &&
+      ev.ready.every((cd) => {
+        const prev = accused.get(cd);
+        return (
+          prev !== undefined &&
+          prev.cand === firstCand &&
+          !cd.casts.some(
+            (c) => c.timeSeconds > prev.end && c.timeSeconds < w.fromSeconds,
+          )
+        );
+      });
     if (sameHold) {
-      const owner = accused.get(ev.ready[0]!)!.cand;
-      owner.alsoHeld.push(toRenderSecond(w.fromSeconds));
+      firstCand!.alsoHeld.push(toRenderSecond(w.fromSeconds));
       for (const cd of ev.ready)
         accused.set(cd, { end: w.toSeconds, cand: accused.get(cd)!.cand });
       continue;

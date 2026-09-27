@@ -1666,3 +1666,9 @@ enemy Summon Infernal "(Ns left)" entries 16 → 1,283, "[friendly offensive
 CD active]" 22,672 → 23,107, windows unchanged 11,659; missed-cleanse dps
 194 → 190 / healer 257 → 255, kick-eaten dps 1003 → 1004 / healer 487 → 488,
 position-mistake dps 292 → 293.
+
+v187 (2026-09-27, agy review of batches 11–14): absorbed-hit attackers named
+by GUID (1,228 "Unknown" → 11) and swing absorbs merged into the Melee line;
+missed-sync-window folds a later lock only with the same ready set and needs
+a living non-healer enemy; reflect damage counts only what the reflect sent
+back ([REFLECTED] 773 → 728); Sanctuary CC caster by GUID.

@@ -981,8 +981,13 @@ export function getTopDamageSourcesInWindow(
   playerIdMap?: Map<string, number>,
   enemyIdMap?: Map<string, number>,
   summonOwners?: ReadonlyMap<string, string>,
+  unitNames?: ReadonlyMap<string, string>,
 ): string[] {
   const startMs = endMs - windowMs;
+  // a melee swing is spellId "0" on a damage event and no attack spell on an
+  // absorb — one key for both (agy review of batch 12: 70 "melee" lines split
+  // from their "Melee" hits)
+  const hitSpellKey = (id: string | undefined) => (!id || id === "0" ? "" : id);
   const buckets = new Map<string, number>();
   /** bucket → the part of it a shield absorbed */
   const absorbedIn = new Map<string, number>();
@@ -1008,7 +1013,8 @@ export function getTopDamageSourcesInWindow(
         ? `deferred ${selfName} (own)`
         : `${selfName} (own)`
       : damageEventLabel(d, playerIdMap, enemyIdMap, summonOwners);
-    if (d.srcUnitId) keyOfHit.set(`${d.srcUnitId}|${d.spellId ?? ""}`, key);
+    if (d.srcUnitId)
+      keyOfHit.set(`${d.srcUnitId}|${hitSpellKey(d.spellId)}`, key);
     buckets.set(key, (buckets.get(key) ?? 0) + dmg);
   }
   // Absorbed parts of hits (reliability round 3 N13, b12b: "Starsurge 43k"
@@ -1021,17 +1027,20 @@ export function getTopDamageSourcesInWindow(
     if (getUnitReaction(a.srcUnitFlags) === unit.reaction) continue;
     const amt = Math.abs(a.absorbedAmount);
     if (amt <= 0) continue;
+    const swing = hitSpellKey(a.attackSpellId) === "";
     const key =
-      keyOfHit.get(`${a.attackerId}|${a.attackSpellId ?? ""}`) ??
+      keyOfHit.get(`${a.attackerId}|${hitSpellKey(a.attackSpellId)}`) ??
       damageEventLabel(
         {
           srcUnitId: a.attackerId,
-          srcUnitName: String(
-            (a.logLine.parameters as unknown[] | undefined)?.[1] ?? "",
-          ),
+          // the attacker by GUID — the raw name parameter is empty on stored
+          // (slimmed) documents and was not the attacker's here anyway: 1,228
+          // "Unknown — … absorbed" mentions on the 605-file slice (agy review)
+          srcUnitName: unitNames?.get(a.attackerId) ?? "",
           srcUnitFlags: a.srcUnitFlags,
-          spellId: a.attackSpellId,
-          spellName: a.attackSpellName,
+          spellId: swing ? undefined : a.attackSpellId,
+          spellName: swing ? "Melee" : a.attackSpellName,
+          spellSchoolId: swing ? "0x1" : undefined,
         } as ICombatUnit["damageIn"][number],
         playerIdMap,
         enemyIdMap,
@@ -1176,6 +1185,8 @@ export function buildKillSequenceBlock(params: {
   enemyIdMap?: Map<string, number>;
   /** summon GUID → owner name (`buildSummonOwnerNames`) */
   summonOwners?: ReadonlyMap<string, string>;
+  /** unit GUID → name (absorbed-hit attackers) */
+  unitNames?: ReadonlyMap<string, string>;
 }): string[] {
   const {
     matchStartMs,
@@ -1347,6 +1358,7 @@ export function buildKillSequenceBlock(params: {
           params.playerIdMap,
           params.enemyIdMap,
           params.summonOwners,
+          params.unitNames,
         );
         // Reliability round 3 N13 (7d1f): "Killer" was the largest 5 s source
         // (a 93k Scorch 2 s earlier) while the last half second was DK + pets.

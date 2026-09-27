@@ -291,6 +291,8 @@ export function emitDmgSpikeEntries(params: {
   enemyIdMap?: Map<string, number>;
   /** summon GUID → owner name (`buildSummonOwnerNames`) */
   summonOwners?: ReadonlyMap<string, string>;
+  /** unit GUID → name, to label an attacker known only by id (absorbs) */
+  unitNames?: ReadonlyMap<string, string>;
   /** 与 [CC ON TEAM] 行同源的 CC 实例(analyzePlayerCCAndTrinket 产出)——
    *  「敌方 CC 掩护」标注只做窗口重叠 join,不重新推导任何 CC 事实。
    *  缺省时不渲染标注(手搭 fixture 兼容;生产调用点总是传)。 */
@@ -309,6 +311,7 @@ export function emitDmgSpikeEntries(params: {
     playerIdMap,
     enemyIdMap,
     summonOwners,
+    unitNames,
     ccTrinketSummaries,
     ownerName,
     healerNames,
@@ -412,6 +415,7 @@ export function emitDmgSpikeEntries(params: {
           playerIdMap,
           enemyIdMap,
           summonOwners,
+    unitNames,
         )
       : [];
     const sourceStr =
@@ -700,6 +704,8 @@ export function emitFriendlyDeathEntries<S>(params: {
   enemyIdMap?: Map<string, number>;
   /** summon GUID → owner name (`buildSummonOwnerNames`) */
   summonOwners?: ReadonlyMap<string, string>;
+  /** unit GUID → name, to label an attacker known only by id (absorbs) */
+  unitNames?: ReadonlyMap<string, string>;
   /** GH #103 A1: the dampening at the death instant, same getter as the
    * `[CD] … | dampening: N%` lines. Without it the responder quoted the value
    * of a neighbouring line ("died at 3:15 at 66%" — 66% was 3:16's). Omitted
@@ -742,6 +748,7 @@ export function emitFriendlyDeathEntries<S>(params: {
     playerIdMap,
     enemyIdMap,
     summonOwners,
+    unitNames,
     counterfactualOf,
     requestSnapshotPlaceholder,
     addEntry,
@@ -890,6 +897,7 @@ export function emitFriendlyDeathEntries<S>(params: {
         playerIdMap,
         enemyIdMap,
         summonOwners,
+    unitNames,
       );
       if (topSources.length > 0) {
         deathLines.push(
@@ -932,6 +940,8 @@ export function emitEnemyDeathEntries<S>(params: {
   enemyIdMap?: Map<string, number>;
   /** summon GUID → owner name (`buildSummonOwnerNames`) */
   summonOwners?: ReadonlyMap<string, string>;
+  /** unit GUID → name, to label an attacker known only by id (absorbs) */
+  unitNames?: ReadonlyMap<string, string>;
   /** GH #103 A1 (see emitFriendlyDeathEntries): the dampening at the death instant, same getter as the
    * `[CD] … | dampening: N%` lines. Without it the responder quoted the value
    * of a neighbouring line ("died at 3:15 at 66%" — 66% was 3:16's). Omitted
@@ -952,6 +962,7 @@ export function emitEnemyDeathEntries<S>(params: {
     playerIdMap,
     enemyIdMap,
     summonOwners,
+    unitNames,
     dampeningAt,
     requestSnapshotPlaceholder,
     addEntry,
@@ -1011,6 +1022,7 @@ export function emitEnemyDeathEntries<S>(params: {
         playerIdMap,
         enemyIdMap,
         summonOwners,
+    unitNames,
       );
       if (topSources.length > 0) {
         deathLines.push(

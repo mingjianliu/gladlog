@@ -3132,6 +3132,20 @@ describe("missed-sync-window / unsynced-burst 接线(extractCandidateFindings,20
           info: { teamId: "1" },
           ...commonUnitFields,
         },
+        // a living burst target: with no non-healer enemy there is nothing
+        // to sync onto (agy review of batch 11, 2026-09-27)
+        x: {
+          id: "x",
+          name: "Enemy-Dps",
+          type: 1,
+          reaction: 2,
+          spec: "71", // Warrior_Arms
+          class: CombatUnitClass.Warrior,
+          spellCastEvents: [],
+          auraEvents: [],
+          info: { teamId: "1" },
+          ...commonUnitFields,
+        },
       },
     };
   }

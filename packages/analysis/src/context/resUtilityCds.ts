@@ -17,7 +17,7 @@
  */
 import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
-import { spellEffectData } from "../data/spellEffectData";
+import { effectiveCooldownSeconds } from "../data/spellEffectData";
 import type { IMajorCooldownInfo } from "../utils/cooldowns";
 import {
   interruptCooldownSeconds,
@@ -82,13 +82,9 @@ export function ownerResUtilityCds(
       );
   }
   if (Number(owner.class) === DEATH_KNIGHT_CLASS_ID) {
-    const e = spellEffectData[DEATH_GRIP_ID] as
-      | {
-          charges?: { chargeCooldownSeconds?: number };
-          cooldownSeconds?: number;
-        }
-      | undefined;
-    const cd = e?.cooldownSeconds ?? e?.charges?.chargeCooldownSeconds;
+    // the shared cooldown predicate (charge recharge, not charge spacing —
+    // agy review of batch 14)
+    const cd = effectiveCooldownSeconds(DEATH_GRIP_ID);
     if (cd !== undefined)
       out.push(
         entry(

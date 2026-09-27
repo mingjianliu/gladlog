@@ -79,6 +79,7 @@ describe("reflectedSpells (0051f0c9)", () => {
   it("a reflected damage spell only when it came back for ≥ 5 % of the caster's max HP", () => {
     const hitBack = (amt: number) => ({
       spellId: "686",
+      srcUnitId: "Player-W",
       effectiveAmount: -amt,
       logLine: { timestamp: T0 + 5_100 },
     });
