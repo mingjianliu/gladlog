@@ -1686,3 +1686,9 @@ swings only on documents that record it; roster numbers by full name before
 reaction flags; "redirected into" a Grounding Totem; one [REFLECTED] line per
 channel; Sanctuary credit needs no competing break; [REJECTED] runs split by a
 same-spell refusal of another kind; [RES] cooldowns and charges per owner.
+
+v190 (2026-09-27, codex post-hoc review of batches 10 and 14): KITED needs the
+owner's own opening; HEALER TRAINED names a camper for its own span; "you moved
+N yd" shared with gate G4b at the rendered endpoints; a press inside the kick
+lockout is never "waited out"; [RES] kicks and Death Grip carry charges and
+event reductions.

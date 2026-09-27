@@ -242,5 +242,15 @@
  *  kicks / Death Grip use the owner's talent-resolved cooldown and charges.
  *  605 files: candidates byte-identical; [REFLECTED] 728 → 642 (merged
  *  duplicates only), [CC REMOVED] 786 → 768, [REJECTED] 2,181 → 2,071.
+ *  v190 (2026-09-27, codex post-hoc review of batches 10 and 14): KITED needs
+ *  the distance the owner opened from the enemy's starting spot (a chase no
+ *  longer reads as a kite); HEALER TRAINED names a camper only for its own
+ *  span and seconds; "you moved N yd" is one shared predicate
+ *  (ownerDisplacementYards) re-derived by gate G4b at the rendered endpoints;
+ *  a press inside the kick lockout is never "waited out"; [RES] kicks / Death
+ *  Grip carry their charge cap and the ledger's event reductions (Storm
+ *  Conduit). 605 files: candidates identical but one kick-eaten fact; KITED
+ *  1,229 → 1,056, camped-by 1,423 → 1,387; Death Grip charges shown 0 → 355;
+ *  positioning gate 0 / 6,109 geo claims, a +0.4 yd mutation caught.
  */
-export const PROMPT_VERSION = 189;
+export const PROMPT_VERSION = 190;

@@ -1318,7 +1318,7 @@ function rejectedPressesAfterKick(
  * Spell names are English (`getEnglishSpellName`) and joined by
  * `joinSpellCounts`, never with ", " (`checkFactsBlockIntegrity`); the
  * localized reject reasons stay out of the line (`checkCjkLeak`). */
-function postKickFact(
+export function postKickFact(
   k: Pick<
     ReturnType<typeof analyzePlayerCCAndTrinket>["interruptInstances"][number],
     | "atSeconds"
@@ -1365,13 +1365,21 @@ function postKickFact(
           ownCd.map((h) => getEnglishSpellName(String(h.spellId), h.spellName)),
         )})`
       : "";
-  return postKickCore(k, rejected, pressed) + ownCdStr;
+  // any press inside the lockout — the outside-school ones included — is
+  // an attempt to act, never "waited out" (codex review of batch 10: Fire
+  // Breath not ready at 11 s after a 10 s Disintegrate kick read "waited out
+  // the lockout" beside "outside the locked school 1x not ready yet")
+  const triedInLockout = allRejected.some(
+    (h) => h.tSeconds < k.atSeconds + k.lockoutDurationSeconds,
+  );
+  return postKickCore(k, rejected, pressed, triedInLockout) + ownCdStr;
 }
 
 function postKickCore(
   k: Parameters<typeof postKickFact>[0],
   rejected: CastFailedEvent[],
   pressed: (list: CastFailedEvent[]) => string,
+  triedInLockout = false,
 ): string {
   if (k.postKick === "idle")
     return rejected.length > 0
@@ -1399,6 +1407,7 @@ function postKickCore(
     k.firstActionDelayS < k.lockoutDurationSeconds
   )
     return `first cast ${first}s later`;
+  if (triedInLockout) return `first successful cast ${first}s later`;
   return `waited out the lockout (first cast ${first}s later)`;
 }
 

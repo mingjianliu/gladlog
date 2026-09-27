@@ -47,9 +47,10 @@ import { spellReachToAccuse } from "./spellRange";
 export const CLOSE_RANGE_YARDS = 12; // "in range" of an enemy — shared with rootReachability.ts (melee reach)
 const KITE_DELTA_YARDS = 10; // distance gained that counts as a successful kite(p66,见上)
 const STAY_DELTA_YARDS = 5; // distance gained below this = stayed in(p39,见上)
-/** KITED is the owner's doing only when the owner's own straight-line
- *  displacement (window start → peak second) is at least this share of the
- *  distance opened. Reliability round 2 F13 (c540): a Subtlety Rogue
+/** KITED is the owner's doing only when the distance the owner opened from
+ *  the start enemy's starting spot (window start → peak second; the enemy
+ *  held still) is at least this share of the distance opened — codex review
+ *  of batch 10 replaced the raw displacement, which credited a chase. Reliability round 2 F13 (c540): a Subtlety Rogue
  *  Hammer-of-Justice'd 92.69–97.18 s stood at (-282.4, -284.8) while the
  *  Paladin walked 10 yd away — rendered "KITED … opened 7→24.8yd". */
 export const KITE_OWN_SHARE = 0.5;
@@ -245,6 +246,31 @@ function allLivingEnemiesKnown(enemies: ICombatUnit[], tMs: number): boolean {
       isDeadAt(e, tMs) ||
       getUnitPositionAtTime(e, tMs, POSITION_MAX_GAP_MS) !== null,
   );
+}
+
+/** The owner's straight-line displacement between two rendered seconds,
+ *  one decimal — the "you moved N yd yourself (span start→end)" fact. The
+ *  producer (STAYED IN) and the positioning gate's G4b both call this, at the
+ *  rendered endpoints with the analysis' position gap (codex review of batch
+ *  10: the gate checked every pairing within ±2 s at a 3 s gap, so a claim
+ *  mutated 20 → 12 yd still passed). undefined when either end is unknown. */
+export function ownerDisplacementYards(
+  owner: ICombatUnit,
+  matchStartMs: number,
+  fromRenderS: number,
+  toRenderS: number,
+): number | undefined {
+  const a = getUnitPositionAtTime(
+    owner,
+    matchStartMs + fromRenderS * 1000,
+    POSITION_MAX_GAP_MS,
+  );
+  const b = getUnitPositionAtTime(
+    owner,
+    matchStartMs + toRenderS * 1000,
+    POSITION_MAX_GAP_MS,
+  );
+  return a && b ? Math.round(distanceBetween(a, b) * 10) / 10 : undefined;
 }
 
 /**
@@ -530,7 +556,12 @@ export function computeOwnerPositionEvents(params: {
       matchStartMs + tStart * 1000,
       owner,
     );
-    const end = nearestEnemyAt(enemies, null, matchStartMs + tEnd * 1000, owner);
+    const end = nearestEnemyAt(
+      enemies,
+      null,
+      matchStartMs + tEnd * 1000,
+      owner,
+    );
     if (!start || !end) continue;
     if (start.distanceYards > CLOSE_RANGE_YARDS) continue; // was not in range to begin with
 
@@ -605,22 +636,35 @@ export function computeOwnerPositionEvents(params: {
             matchStartMs + peak.t * 1000,
             POSITION_MAX_GAP_MS,
           );
-    const ownerMovedToPeak =
-      ownerStartPos && ownerPeakPos
-        ? distanceBetween(ownerStartPos, ownerPeakPos)
+    // The distance the OWNER opened: from the start enemy's starting spot to
+    // where the owner stood at the peak, minus the starting gap — the gap had
+    // the enemy stood still. Displacement magnitude alone credited a chase
+    // (codex review of batch 10: owner 0→10 yd after an enemy running 5→35
+    // read "KITED 5→25yd"); the peak is measured to the nearest enemy, which
+    // may be another one, so this is the owner's own share of the opening.
+    const startEnemyStartPos = startEnemy
+      ? getUnitPositionAtTime(
+          startEnemy,
+          matchStartMs + tStart * 1000,
+          POSITION_MAX_GAP_MS,
+        )
+      : null;
+    const ownerOpened =
+      ownerStartPos && ownerPeakPos && startEnemyStartPos
+        ? distanceBetween(ownerPeakPos, startEnemyStartPos) -
+          distanceBetween(ownerStartPos, startEnemyStartPos)
         : undefined;
-    const ownerMovedToEnd =
-      ownerStartPos && ownerEndPos
-        ? Math.round(distanceBetween(ownerStartPos, ownerEndPos) * 10) / 10
-        : undefined;
+    const ownerMovedToEnd = ownerDisplacementYards(
+      owner,
+      matchStartMs,
+      tStart,
+      tEnd,
+    );
     const opened = maxDistance - start.distanceYards;
     if (opened >= KITE_DELTA_YARDS) {
       // Who moved (F13 c540): the enemy walking away from a stunned owner is
       // not a kite. Unknown owner position ⇒ no claim either way.
-      if (
-        ownerMovedToPeak === undefined ||
-        ownerMovedToPeak < opened * KITE_OWN_SHARE
-      )
+      if (ownerOpened === undefined || ownerOpened < opened * KITE_OWN_SHARE)
         continue;
       events.push({
         type: "KITED",
@@ -689,7 +733,9 @@ export function computeOwnerPositionEvents(params: {
         burstTargetName: burstTargetsOwner === false ? targetName : undefined,
         ownerHpStartPct: hpStart === null ? null : Math.round(hpStart),
         ownerHpMinPct: hpMin === null ? null : Math.round(hpMin),
-        ...(ownerMovedToEnd !== undefined ? { ownerMovedYards: ownerMovedToEnd } : {}),
+        ...(ownerMovedToEnd !== undefined
+          ? { ownerMovedYards: ownerMovedToEnd }
+          : {}),
         healerExposureLabel,
       });
     }
@@ -884,6 +930,10 @@ export function computeOwnerPositionEvents(params: {
           ?.ccInstances ?? [];
       let runStart: number | null = null;
       const trainerSeconds = new Map<string, number>();
+      // each camper's own first / last second inside the radius this run:
+      // the named camper's span, not the run's (codex review of batch 10 —
+      // a warrior there 2 s was named for a 12 s run a rogue kept going)
+      const trainerSpan = new Map<string, { from: number; to: number }>();
       // T3 grounding: the N in "camped by X (closest N yd)" must be X's own
       // closest distance — it used to be the global minimum over ANY melee,
       // pinning another unit's number on the named trainer (2 cases proven by
@@ -935,11 +985,13 @@ export function computeOwnerPositionEvents(params: {
           // whose main target over the run was the healer
           const topTrainer =
             [...trainerSeconds]
+              .filter(([, s]) => s >= HEALER_TRAINED_MIN_SECONDS)
               .sort((a, b) => b[1] - a[1])
               .map(([name]) => name)
-              .find((name) =>
-                healerWasTopTarget(name, runStart!, endSeconds),
-              ) ?? "";
+              .find((name) => {
+                const sp = trainerSpan.get(name)!;
+                return healerWasTopTarget(name, sp.from, sp.to + 1);
+              }) ?? "";
           // Proximity is not training (reliability round 2 F13, 539f): the
           // Assassination Rogue stood 3–9 yd from the Evoker while doing
           // 209k to the Havoc DH and 48k to the Evoker. The named camper
@@ -948,13 +1000,17 @@ export function computeOwnerPositionEvents(params: {
           if (!topTrainer) {
             runStart = null;
             trainerSeconds.clear();
+            trainerSpan.clear();
             trainerMinDist.clear();
             return;
           }
+          const span = trainerSpan.get(topTrainer)!;
+          const spanFrom = span.from;
+          const spanTo = Math.min(span.to + 1, endSeconds);
           events.push({
             type: "HEALER_TRAINED",
-            atSeconds: runStart,
-            toSeconds: endSeconds,
+            atSeconds: spanFrom,
+            toSeconds: spanTo,
             nearestEnemyName: topTrainer,
             startDistanceYards:
               Math.round((trainerMinDist.get(topTrainer) ?? Infinity) * 10) /
@@ -962,14 +1018,15 @@ export function computeOwnerPositionEvents(params: {
             playersInvolved: [healerUnit.name],
             ownerIsSubject: healerUnit.id === owner.id,
             ownerCcLocked:
-              ccOverlapSeconds(healerCC, runStart, endSeconds) >=
-              (endSeconds - runStart) / 2,
-            ownerCcSeconds: ccOverlapSeconds(healerCC, runStart, endSeconds),
+              ccOverlapSeconds(healerCC, spanFrom, spanTo) >=
+              (spanTo - spanFrom) / 2,
+            ownerCcSeconds: ccOverlapSeconds(healerCC, spanFrom, spanTo),
           });
           trainedCount++;
         }
         runStart = null;
         trainerSeconds.clear();
+        trainerSpan.clear();
         trainerMinDist.clear();
       };
 
@@ -1002,8 +1059,12 @@ export function computeOwnerPositionEvents(params: {
             // of batch 10: warrior on the healer + rogue at 2 yd hitting the
             // DH → no event at all)
             for (const [name, d] of perEnemyDist)
-              if (d <= HEALER_TRAINED_YARDS)
+              if (d <= HEALER_TRAINED_YARDS) {
                 trainerSeconds.set(name, (trainerSeconds.get(name) ?? 0) + 1);
+                const sp = trainerSpan.get(name);
+                if (sp) sp.to = t;
+                else trainerSpan.set(name, { from: t, to: t });
+              }
             // Every melee records ITS OWN closest distance for the window —
             // the named trainer's closest must not be masked by "someone else
             // was nearer that second" (scanner proof: 5.7 reported vs 2.7

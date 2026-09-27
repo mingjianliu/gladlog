@@ -372,3 +372,60 @@ describe("batch 13 — outcome lines need their own evidence (codex P2)", () => 
     expect(ownerRejectRuns(other, "Player-O")[0]?.count).toBe(3);
   });
 });
+
+describe("batch 14 — [RES] kick / Death Grip follow the shared cooldown predicate (codex P2)", () => {
+  const T0 = 1_000_000;
+  const cast = (spellId: string, s: number) => ({
+    spellId,
+    spellName: "x",
+    logLine: { event: LogEvent.SPELL_CAST_SUCCESS, timestamp: T0 + s * 1000 },
+  });
+  it("Storm Conduit's Lightning Bolts bring Wind Shear back exactly when interruptCooldownRemainingMs says", async () => {
+    const { ownerResUtilityCds } = await import("../src/context/resUtilityCds");
+    const { interruptCooldownRemainingMs } =
+      await import("../src/utils/enemyInterrupts");
+    const { cdAvailableAt, CD_INSTANT_SLACK_S } =
+      await import("../src/utils/cooldowns");
+    const shaman = {
+      id: "Player-S",
+      name: "Sham-R-US",
+      class: 7,
+      spec: "262",
+      info: { pvpTalents: ["1217092"], talents: [] },
+      spellCastEvents: [
+        cast("57994", 10),
+        cast("188196", 12),
+        cast("188196", 14),
+        cast("188196", 16),
+      ],
+      petSpellCastEvents: [],
+    } as unknown as ICombatUnit;
+    const shear = ownerResUtilityCds(shaman, T0).find(
+      (e) => e.spellId === "57994",
+    );
+    expect(shear).toBeDefined();
+    // the ledger's shared press slack (CD_INSTANT_SLACK_S) is the only gap
+    // between the [RES] line and the exact interrupt predicate
+    for (let t = 10.5; t <= 25; t += 0.5)
+      expect(cdAvailableAt(shear!, t)).toBe(
+        interruptCooldownRemainingMs(shaman, "57994", T0 + t * 1000) <=
+          CD_INSTANT_SLACK_S * 1000,
+      );
+    expect(cdAvailableAt(shear!, 18)).toBe(false); // 22 s without the bolts
+    expect(cdAvailableAt(shear!, 19)).toBe(true);
+  });
+  it("the entry carries the talent-resolved charge cap where cdAvailableAt reads it", async () => {
+    const { ownerResUtilityCds } = await import("../src/context/resUtilityCds");
+    const dk = {
+      id: "Player-D",
+      name: "Dk-R-US",
+      class: 6,
+      spec: "252",
+      info: { pvpTalents: [], talents: [] },
+      spellCastEvents: [cast("49576", 10)],
+      petSpellCastEvents: [],
+    } as unknown as ICombatUnit;
+    const grip = ownerResUtilityCds(dk, T0).find((e) => e.spellId === "49576")!;
+    expect(grip.charges).toBe(grip.maxChargesDetected);
+  });
+});

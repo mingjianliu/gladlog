@@ -204,9 +204,8 @@ describe("HEALER TRAINED needs a free camper hitting the healer (F13 539f)", () 
 
 describe("damage-source labels name a summon through its owner (round 3, f4da)", () => {
   it("a guardian reads '<owner id>'s guardian', a pet '<owner id>'s pet', unresolved stays [pet]", async () => {
-    const { buildSummonOwnerNames, damageEventLabel } = await import(
-      "../src/context/timelineHelpers"
-    );
+    const { buildSummonOwnerNames, damageEventLabel } =
+      await import("../src/context/timelineHelpers");
     const units: any[] = [
       { id: "Player-1", name: "Lock-R-US" },
       { id: "Creature-imp", name: "小鬼领主", ownerId: "Player-1" },
@@ -222,22 +221,68 @@ describe("damage-source labels name a summon through its owner (round 3, f4da)",
       spellName: "Greater Felbolt",
     });
     // 0x2000 guardian / 0x1000 pet, 0x40 hostile
-    expect(damageEventLabel(hit("Creature-imp", 0x2048), undefined, enemyIds, owners)).toMatch(/^5's guardian — /);
-    expect(damageEventLabel(hit("Pet-fg", 0x1048), undefined, enemyIds, owners)).toMatch(/^5's pet — /);
-    expect(damageEventLabel(hit("Creature-other", 0x2048), undefined, enemyIds, owners)).toMatch(/^\[pet\] — /);
+    expect(
+      damageEventLabel(
+        hit("Creature-imp", 0x2048),
+        undefined,
+        enemyIds,
+        owners,
+      ),
+    ).toMatch(/^5's guardian — /);
+    expect(
+      damageEventLabel(hit("Pet-fg", 0x1048), undefined, enemyIds, owners),
+    ).toMatch(/^5's pet — /);
+    expect(
+      damageEventLabel(
+        hit("Creature-other", 0x2048),
+        undefined,
+        enemyIds,
+        owners,
+      ),
+    ).toMatch(/^\[pet\] — /);
   });
 });
 
 describe("codex review 2026-09-26 counterexamples (batch 10)", () => {
   it("a nearer melee hitting someone else does not hide the one training the healer", () => {
     const h = unit("h", "Healer-R-US", CombatUnitSpec.Paladin_Holy, () => 0);
-    const f = unit("f", "Friend-R-US", CombatUnitSpec.DemonHunter_Havoc, () => 2);
-    const rogue = unit("a", "Rogue-R-US", CombatUnitSpec.Rogue_Assassination, () => 2);
-    const warrior = unit("b", "Warrior-R-US", CombatUnitSpec.Warrior_Arms, () => 3);
+    const f = unit(
+      "f",
+      "Friend-R-US",
+      CombatUnitSpec.DemonHunter_Havoc,
+      () => 2,
+    );
+    const rogue = unit(
+      "a",
+      "Rogue-R-US",
+      CombatUnitSpec.Rogue_Assassination,
+      () => 2,
+    );
+    const warrior = unit(
+      "b",
+      "Warrior-R-US",
+      CombatUnitSpec.Warrior_Arms,
+      () => 3,
+    );
     for (let t = 0; t < 60; t++) {
-      rogue.damageOut.push({ timestamp: T0 + t * 1000, destUnitId: "h", amount: -100, effectiveAmount: -100 });
-      rogue.damageOut.push({ timestamp: T0 + t * 1000, destUnitId: "f", amount: -1000, effectiveAmount: -1000 });
-      warrior.damageOut.push({ timestamp: T0 + t * 1000, destUnitId: "h", amount: -1000, effectiveAmount: -1000 });
+      rogue.damageOut.push({
+        timestamp: T0 + t * 1000,
+        destUnitId: "h",
+        amount: -100,
+        effectiveAmount: -100,
+      });
+      rogue.damageOut.push({
+        timestamp: T0 + t * 1000,
+        destUnitId: "f",
+        amount: -1000,
+        effectiveAmount: -1000,
+      });
+      warrior.damageOut.push({
+        timestamp: T0 + t * 1000,
+        destUnitId: "h",
+        amount: -1000,
+        effectiveAmount: -1000,
+      });
     }
     const ev = computeOwnerPositionEvents({
       owner: h,
@@ -254,19 +299,138 @@ describe("codex review 2026-09-26 counterexamples (batch 10)", () => {
   });
 
   it("a short name both rosters share does not pick the friendly id for an enemy's summon", async () => {
-    const { buildSummonOwnerNames, damageEventLabel } = await import("../src/context/timelineHelpers");
-    const friends = new Map([["Alex-Friendly-US", 1], ["Alex", 1]]);
-    const enemies = new Map([["Alex-Enemy-US", 5], ["Alex", 5]]);
+    const { buildSummonOwnerNames, damageEventLabel } =
+      await import("../src/context/timelineHelpers");
+    const friends = new Map([
+      ["Alex-Friendly-US", 1],
+      ["Alex", 1],
+    ]);
+    const enemies = new Map([
+      ["Alex-Enemy-US", 5],
+      ["Alex", 5],
+    ]);
     const owners = buildSummonOwnerNames([
       { id: "enemy", name: "Alex-Enemy-US" },
       { id: "pet", name: "Imp", ownerId: "enemy" },
     ] as any);
     const label = damageEventLabel(
-      { srcUnitId: "pet", srcUnitName: "Imp", srcUnitFlags: 0x2048, spellId: "", spellName: "Greater Felbolt" } as any,
+      {
+        srcUnitId: "pet",
+        srcUnitName: "Imp",
+        srcUnitFlags: 0x2048,
+        spellId: "",
+        spellName: "Greater Felbolt",
+      } as any,
       friends,
       enemies,
       owners,
     );
     expect(label.startsWith("5's guardian")).toBe(true);
+  });
+});
+
+describe("codex post-hoc review 2026-09-27 (batch 10)", () => {
+  it("chasing an enemy that runs away is not a kite (owner 0→10, enemy 5→35)", () => {
+    const owner = unit("1", "Owner-R-US", CombatUnitSpec.Rogue_Subtlety, (t) =>
+      t < 10 ? 0 : Math.min(10, t - 10),
+    );
+    const enemy = unit(
+      "2",
+      "Pally-R-US",
+      CombatUnitSpec.Paladin_Retribution,
+      (t) => (t < 10 ? 5 : Math.min(35, 5 + (t - 10) * 3)),
+    );
+    expect(run(owner, [enemy]).filter((e) => e.type === "KITED")).toHaveLength(
+      0,
+    );
+  });
+
+  it("a camper there 2 s is not named for a 12 s run another melee kept going", () => {
+    const h = unit("h", "Healer-R-US", CombatUnitSpec.Paladin_Holy, () => 0);
+    const f = unit(
+      "f",
+      "Friend-R-US",
+      CombatUnitSpec.DemonHunter_Havoc,
+      () => 20,
+    );
+    const warrior = unit(
+      "b",
+      "Warrior-R-US",
+      CombatUnitSpec.Warrior_Arms,
+      (t) => (t < 2 ? 3 : 30),
+    );
+    warrior.deathRecords = [{ timestamp: T0 + 2_000 }];
+    const rogue = unit(
+      "a",
+      "Rogue-R-US",
+      CombatUnitSpec.Rogue_Assassination,
+      (t) => (t < 12 ? 2 : 40),
+    );
+    warrior.damageOut.push({
+      timestamp: T0 + 1_000,
+      destUnitId: "h",
+      amount: -1000,
+      effectiveAmount: -1000,
+    });
+    for (let t = 0; t < 12; t++)
+      rogue.damageOut.push({
+        timestamp: T0 + t * 1000,
+        destUnitId: "f",
+        amount: -1000,
+        effectiveAmount: -1000,
+      });
+    const ev = computeOwnerPositionEvents({
+      owner: h,
+      enemies: [rogue, warrior],
+      combat: { startTime: T0, endTime: END },
+      burstWindows: [],
+      ownerCooldowns: [],
+      isHealer: true,
+      ownerIsMelee: false,
+      friends: [h, f],
+    }).filter((e) => e.type === "HEALER_TRAINED");
+    expect(ev).toHaveLength(0);
+  });
+
+  it("the gate and STAYED IN share one displacement at the rendered endpoints", async () => {
+    const { ownerDisplacementYards } =
+      await import("../src/utils/positionAnalysis");
+    const owner = unit(
+      "1",
+      "Owner-R-US",
+      CombatUnitSpec.Paladin_Holy,
+      (t) => 2 * t,
+    );
+    expect(ownerDisplacementYards(owner, T0, 10, 20)).toBe(20);
+    expect(ownerDisplacementYards(owner, T0, 10, 70)).toBeUndefined();
+  });
+});
+
+describe("codex post-hoc review 2026-09-27 (batch 10) — kick-eaten", () => {
+  it("an outside-school not-ready press in the lockout is an attempt, never 'waited out'", async () => {
+    const { postKickFact } = await import("../src/analysis/candidateFindings");
+    const { ensureAnalysisData } = await import("../src/data/ensure");
+    await ensureAnalysisData();
+    const k = {
+      atSeconds: 10,
+      lockoutDurationSeconds: 3,
+      postKick: "acted" as const,
+      firstActionDelayS: 4,
+      switchSpellName: null,
+      switchDelayS: null,
+      switchWasHardCast: null,
+      interruptedSpellId: "356995", // Disintegrate (Magic)
+    } as unknown as Parameters<typeof postKickFact>[0];
+    const fireBreath = {
+      tSeconds: 11,
+      unitGuid: "P",
+      spellId: 357208, // Fire Breath (Fire)
+      spellName: "Fire Breath",
+      reason: "Not yet recovered",
+    };
+    const withPress = postKickFact(k, [fireBreath]);
+    expect(withPress).not.toMatch(/waited out/);
+    expect(withPress).toMatch(/outside the locked school 1x not ready yet/);
+    expect(postKickFact(k, [])).toMatch(/^waited out the lockout/);
   });
 });
