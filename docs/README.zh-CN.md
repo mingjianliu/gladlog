@@ -70,7 +70,7 @@
 
 读它们是为了看当时的推理;不要指望路径、数字、状态与今天的代码树一致。
 
-- [`plans/`](plans/) 与 [`specs/`](specs/) —— 截至 **2026-08-05** 的设计计划与规格。之后的计划与规格在 [`superpowers/plans/`](superpowers/plans/) 与 [`superpowers/specs/`](superpowers/specs/)。
+- [`plans/`](plans/) 与 [`specs/`](specs/) —— 截至 **2026-08-05** 的设计计划与规格。之后的计划与规格在 [`superpowers/plans/`](superpowers/plans/) 与 [`superpowers/specs/`](superpowers/specs/) —— 这个目录**仍在写入**(它是 superpowers 的 brainstorming / writing-plans 技能的默认输出位置),所以留在原处、不进 `archive/`;其中每份文件仍是某个时间点的记录。
 - [`reports/`](reports/) —— 带日期的实验报告。
 - [`archive/`](archive/) —— 会话交接文档(`HANDOFF-*.md`,含原本放在仓库根的 2026-07-10 重写交接)以及 2026-09-18 的待裁清单。每份都带「Archived」横幅。
-- [`../retrospective/`](../retrospective/) —— 从 git 历史与会话记录重建的开发过程档案。
+- [`archive/retrospective/`](archive/retrospective/) —— 从 git 历史与会话记录重建的开发过程档案(2026-09-27 从仓库根迁入,GH #117)。

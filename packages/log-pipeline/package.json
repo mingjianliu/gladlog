@@ -10,7 +10,7 @@
   "scripts": {
     "stream": "tsx src/streamCli.ts",
     "collect": "tsx src/collectCli.ts",
-    "test": "vitest run --passWithNoTests",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit"
   }
 }

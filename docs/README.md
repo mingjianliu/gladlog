@@ -71,7 +71,7 @@ Living reference material; each states its own measurement date.
 
 Read for the reasoning at the time; do not expect paths, numbers or state to match today's tree.
 
-- [`plans/`](plans/) and [`specs/`](specs/) — design plans and specs up to **2026-08-05**. Later plans and specs live in [`superpowers/plans/`](superpowers/plans/) and [`superpowers/specs/`](superpowers/specs/).
+- [`plans/`](plans/) and [`specs/`](specs/) — design plans and specs up to **2026-08-05**. Later plans and specs live in [`superpowers/plans/`](superpowers/plans/) and [`superpowers/specs/`](superpowers/specs/) — that directory is **still written to** (it is the default output of the superpowers brainstorming / writing-plans skills), so it stays here rather than under `archive/`; each file in it is still a point-in-time record.
 - [`reports/`](reports/) — dated experiment reports.
 - [`archive/`](archive/) — session handoffs (`HANDOFF-*.md`, including the original 2026-07-10 rewrite handoff that used to sit at the repo root) and the 2026-09-18 pending-rulings list. Each carries an "Archived" banner.
-- [`../retrospective/`](../retrospective/) — the development-process archive reconstructed from git history and session records.
+- [`archive/retrospective/`](archive/retrospective/) — the development-process archive reconstructed from git history and session records (moved from the repo root 2026-09-27, GH #117).
