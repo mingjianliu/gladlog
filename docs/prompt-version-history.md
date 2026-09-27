@@ -1619,3 +1619,11 @@ inside the lock entered it (f4eb Demonic Tyrant); one held CD across several
 locks is one accusation, the later locks listed as facts.alsoHeldAt (24b6).
 Per-owner menu rows: dps 604 → 506, healer 302 → 253 (unique: 47 same-hold
 locks folded, 11 unreachable / bar-started, 9 cap refills).
+
+v180 (2026-09-26, reliability leftovers batch 12): (1) death-block top damage
+sources count the absorbed part of each hit — "5 — Starsurge (151k; 108k of
+it absorbed)" (round 3 N13, b12b; 33,462 mentions on the 605-file slice);
+(2) burst-into-mitigation accuses only a wall already up when the burst
+opened — user ruling, a wall the target pressed in response is not "opened
+into" (dps 44 → 7); (3) an enemy's [KILL] line names it through the enemy
+roster (433 lines printed the bare, often CJK / Cyrillic, character name).

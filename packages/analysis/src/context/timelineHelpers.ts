@@ -975,11 +975,13 @@ export function getTopDamageSourcesInWindow(
 ): string[] {
   const startMs = endMs - windowMs;
   const buckets = new Map<string, number>();
+  /** bucket → the part of it a shield absorbed */
+  const absorbedIn = new Map<string, number>();
+  /** `${attackerId}|${spellId}` → the bucket its damage events went to, so
+   *  an absorbed part joins the same line as the hit's landed part */
+  const keyOfHit = new Map<string, string>();
   for (const d of unit.damageIn) {
     if (d.logLine.timestamp < startMs || d.logLine.timestamp > endMs) continue;
-    // (Absorbed parts of a hit are not here: they arrive as separate
-    // SPELL_ABSORBED events keyed by the shield owner — reliability round 3
-    // N13 b12b "Starsurge 43k vs 151k" is open, see FIX-PLAN-3.)
     const dmg = Math.abs(d.effectiveAmount);
     if (dmg <= 0) continue;
     // B20: exclude same-team sources (e.g. Time Dilation from Preservation Evoker buff)
@@ -997,12 +999,45 @@ export function getTopDamageSourcesInWindow(
         ? `deferred ${selfName} (own)`
         : `${selfName} (own)`
       : damageEventLabel(d, playerIdMap, enemyIdMap, summonOwners);
+    if (d.srcUnitId) keyOfHit.set(`${d.srcUnitId}|${d.spellId ?? ""}`, key);
     buckets.set(key, (buckets.get(key) ?? 0) + dmg);
+  }
+  // Absorbed parts of hits (reliability round 3 N13, b12b: "Starsurge 43k"
+  // for 151k of Starsurge, most of it eaten by shields). The victim-keyed
+  // stream carries the attacker and its spell; `srcUnitFlags` there describe
+  // the ATTACKER (parser-compat convert.ts), so the same-side rule applies.
+  for (const a of unit.absorbsIn ?? []) {
+    if (a.timestamp < startMs || a.timestamp > endMs) continue;
+    if (!a.attackerId || a.attackerId === unit.id) continue;
+    if (getUnitReaction(a.srcUnitFlags) === unit.reaction) continue;
+    const amt = Math.abs(a.absorbedAmount);
+    if (amt <= 0) continue;
+    const key =
+      keyOfHit.get(`${a.attackerId}|${a.attackSpellId ?? ""}`) ??
+      damageEventLabel(
+        {
+          srcUnitId: a.attackerId,
+          srcUnitName: String(
+            (a.logLine.parameters as unknown[] | undefined)?.[1] ?? "",
+          ),
+          srcUnitFlags: a.srcUnitFlags,
+          spellId: a.attackSpellId,
+          spellName: a.attackSpellName,
+        } as ICombatUnit["damageIn"][number],
+        playerIdMap,
+        enemyIdMap,
+        summonOwners,
+      );
+    buckets.set(key, (buckets.get(key) ?? 0) + amt);
+    absorbedIn.set(key, (absorbedIn.get(key) ?? 0) + amt);
   }
   return [...buckets.entries()]
     .sort((a, b) => b[1] - a[1])
     .slice(0, topN)
-    .map(([k, v]) => `${k} (${Math.round(v / 1000)}k)`);
+    .map(([k, v]) => {
+      const abs = Math.round((absorbedIn.get(k) ?? 0) / 1000);
+      return `${k} (${Math.round(v / 1000)}k${abs > 0 ? `; ${abs}k of it absorbed` : ""})`;
+    });
 }
 
 // ── [MATCH END] block (F96) ───────────────────────────────────────────────────
@@ -1319,7 +1354,11 @@ export function buildKillSequenceBlock(params: {
           killSeqEntries.push({
             timeSeconds: deathTime,
             label: "[KILL]",
-            text: `${pid(firstDeath.name)} (${firstDeath.spec}) dead (${blowPart}most damage in final 5s: ${topSources[0]})`,
+            // an ENEMY death through the enemy roster: `pid` maps friendly
+            // units only and fell back to the bare (often CJK / Cyrillic)
+            // character name — 433 [KILL] lines on the 605-file slice
+            // (found 2026-09-26, reliability leftovers batch 12)
+            text: `${actorLabel(firstDeath.name, isFriendlyDeath ? "friendly" : "enemy")} (${firstDeath.spec}) dead (${blowPart}most damage in final 5s: ${topSources[0]})`,
           });
         }
       }

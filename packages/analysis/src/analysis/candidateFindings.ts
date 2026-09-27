@@ -2895,7 +2895,17 @@ function dpsOwnerEvents(
           spanS > 0 &&
           d.overlapSeconds / spanS >= BURST_INTO_MITIGATION_MIN_COVERAGE,
       );
-      const hit = covered[0];
+      // USER RULING 2026-09-26 ("不算"): a wall the target pressed AFTER the
+      // burst opened is its reaction, not something the owner opened into —
+      // only a wall already up at the opening is accused. 605-file slice at
+      // c5af5985: 44 candidates, 7 before-open, 37 pressed after (1c12:
+      // Barkskin 1.24 s after Bestial Wrath, 80 % coverage). Fixtures with no
+      // offset keep the pre-ruling behaviour.
+      const upAtOpen = covered.filter(
+        ({ d }) =>
+          d.startOffsetSeconds === undefined || d.startOffsetSeconds <= 0,
+      );
+      const hit = upAtOpen[0];
       const bimFacts = () => ({
         fromSeconds: b.fromSeconds,
         target: t.unitId,
@@ -2917,9 +2927,11 @@ function dpsOwnerEvents(
             opportunityId: bimOpp(b),
             ownerId: owner.id,
             verdict: "suppressed",
-            reason: hits.length
-              ? "wall-covers-too-little"
-              : "no-mitigation-over-door",
+            reason: covered.length
+              ? "wall-pressed-after-open"
+              : hits.length
+                ? "wall-covers-too-little"
+                : "no-mitigation-over-door",
             facts: bimFacts(),
             candidateIds: [],
           });
@@ -3026,16 +3038,6 @@ function dpsOwnerEvents(
           mitSpell,
           mitPct: String(mitPct),
           betterTarget: betterTargetName,
-          // a0a4 / 1c12: a wall pressed after the opening is the target's
-          // reaction — the opening was not "into" it
-          ...(hitDef.startOffsetSeconds !== undefined
-            ? {
-                wallUp:
-                  hitDef.startOffsetSeconds <= 0
-                    ? "before-open"
-                    : `+${hitDef.startOffsetSeconds.toFixed(1)}s`,
-              }
-            : {}),
           ...(duringExternal ? { duringExternal } : {}),
         },
       });

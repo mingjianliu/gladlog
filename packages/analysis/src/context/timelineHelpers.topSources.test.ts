@@ -59,3 +59,34 @@ describe("getTopDamageSourcesInWindow — summon labels", () => {
     expect(out[0]).toBe("4 — Death Order (90k)");
   });
 });
+
+describe("getTopDamageSourcesInWindow — absorbed parts of hits (round 3 N13, b12b)", () => {
+  it("a shield-eaten part joins its hit's line and is stated; a friendly attacker's absorb is not counted", () => {
+    const dmg = {
+      logLine: { timestamp: T0 + 5_000 },
+      effectiveAmount: -43_000,
+      srcUnitId: "Player-B",
+      srcUnitName: "Boomy-Illidan-US",
+      srcUnitFlags: HOSTILE_PLAYER,
+      spellId: "78674",
+      spellName: "Starsurge",
+    };
+    const absorb = (amt: number, flags: number) => ({
+      timestamp: T0 + 5_000,
+      absorbedAmount: amt,
+      attackerId: "Player-B",
+      attackSpellId: "78674",
+      attackSpellName: "Starsurge",
+      srcUnitFlags: flags,
+      logLine: { timestamp: T0 + 5_000, parameters: ["Player-B", "Boomy-Illidan-US"] },
+    });
+    const unit = {
+      id: "Player-V",
+      reaction: CombatUnitReaction.Friendly,
+      damageIn: [dmg],
+      absorbsIn: [absorb(108_000, HOSTILE_PLAYER), absorb(50_000, 0x511)],
+    } as never;
+    const out = getTopDamageSourcesInWindow(unit, T0 + 10_000, 10_000, 3, new Map(), new Map([["Boomy-Illidan-US", 5]]));
+    expect(out).toEqual(["5 — Starsurge (151k; 108k of it absorbed)"]);
+  });
+});
