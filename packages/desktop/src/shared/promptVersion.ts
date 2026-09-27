@@ -185,5 +185,11 @@
  *  position-mistake dps 290 → 292, missed-cleanse dps 200 → 198 / healer
  *  262 → 258, slow-defensive-response 125 → 128, kick-eaten dps 1001 → 1003 /
  *  healer 483 → 487; kick-eaten burst facts name a Metamorphosis on 161 rows.
+ *  v182 (2026-09-26, reliability leftovers batch 13): four outcome fact lines
+ *  (user ruling): [GROUNDED] a control eaten by a Grounding Totem (504);
+ *  [REFLECTED] a reflected control, or a reflected damage spell that came back
+ *  for >= 5 % of the caster's max HP (672); [CC REMOVED] a control removed by
+ *  Blessing of Sanctuary (786); [REJECTED] the owner's runs of >= 3 presses
+ *  refused for range / movement / line of sight.
  */
-export const PROMPT_VERSION = 181;
+export const PROMPT_VERSION = 182;

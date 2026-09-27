@@ -104,6 +104,12 @@ import { sumIncomingPressure } from "../utils/incomingPressure";
 import { getHpPercentAtTime } from "../utils/killWindowTargetSelection";
 import { fmtTime, toRenderSecond } from "../utils/renderGrid";
 import type { RawStreams } from "../utils/rawStreams";
+import {
+  groundedControls,
+  ownerRejectRuns,
+  reflectedSpells,
+  sanctuaryRemovals,
+} from "./spellOutcomeLines";
 import { resourceDeltaPct } from "../utils/resourceAt";
 import { SUMMON_REACH_MIN_S, summonReach } from "../utils/summonReachability";
 import { getInterruptImmunityConditions } from "../utils/talentBehaviors";
@@ -2965,6 +2971,82 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
         addEntry(
           cc.atSeconds,
           `${fmtTime(cc.atSeconds)}  [CC ON ENEMY]   ${enemyPid(summary.playerName)} ← ${cc.spellName} (by ${actorLabel(cc.sourceName, "friendly", cc.sourceId)})${durStr}`,
+        );
+      }
+    }
+  }
+
+  // ── Spell outcomes the log records and the timeline did not state ─────────
+  // User ruling 2026-09-26 (reliability round 3 N10 / N18, ASK-batch10 with
+  // real examples): a control eaten by a Grounding Totem, a reflected spell
+  // (controls always; damage spells only when they came back for real
+  // damage), a control removed by Blessing of Sanctuary, and the owner's own
+  // repeated rejections outside CC. Builders: spellOutcomeLines.ts.
+  {
+    const unitLabel = (u: ICombatUnit): string =>
+      actorLabel(
+        u.name,
+        u.reaction === owner.reaction ? "friendly" : "enemy",
+        u.id,
+      );
+    const byId = new Map(_allUnits.map((u) => [u.id, u]));
+    const inMatch = (t: number) => t >= 0 && t <= matchEndSeconds;
+    for (const g of groundedControls(_allUnits, matchStartMs, new Set([owner.id]))) {
+      if (!inMatch(g.atSeconds)) continue;
+      const caster = byId.get(g.casterId);
+      const totemOwner = resolveSummonOwner({
+        allUnits: _allUnits,
+        friends,
+        enemies,
+        name: "",
+        sourceId: g.totemId,
+      });
+      const totemOf = totemOwner
+        ? `${friends.some((f) => f.id === totemOwner.id) ? pid(totemOwner.name) : enemyPid(totemOwner.name)}'s Grounding Totem`
+        : "a Grounding Totem";
+      addEntry(
+        g.atSeconds,
+        `${fmtTime(g.atSeconds)}  [GROUNDED]   ${caster ? unitLabel(caster) : "?"}'s ${g.spellName} was eaten by ${totemOf}`,
+      );
+    }
+    for (const r of reflectedSpells(_allUnits, matchStartMs)) {
+      if (!inMatch(r.atSeconds)) continue;
+      const caster = byId.get(r.casterId)!;
+      const reflector = byId.get(r.reflectorId)!;
+      const back = r.isControl
+        ? " (a control — sent back at the caster)"
+        : ` (came back for ${Math.round(r.damageBack / 1000)}k)`;
+      addEntry(
+        r.atSeconds,
+        `${fmtTime(r.atSeconds)}  [REFLECTED]   ${unitLabel(caster)}'s ${r.spellName} reflected by ${unitLabel(reflector)}${back}`,
+      );
+    }
+    for (const x of sanctuaryRemovals(_allUnits, matchStartMs)) {
+      if (!inMatch(x.atSeconds)) continue;
+      const pal = byId.get(x.paladinId)!;
+      const target = byId.get(x.targetId)!;
+      const src = _allUnits.find((u) => u.name === x.ccSourceName);
+      addEntry(
+        x.atSeconds,
+        `${fmtTime(x.atSeconds)}  [CC REMOVED]   ${unitLabel(pal)}'s Blessing of Sanctuary removed ${src ? `${unitLabel(src)}'s ` : ""}${x.ccSpellName} from ${unitLabel(target)}`,
+      );
+    }
+    if (rawStreams?.available) {
+      for (const run of ownerRejectRuns(rawStreams.castFailed, owner.id)) {
+        if (!inMatch(run.fromSeconds)) continue;
+        const why =
+          run.kind === "out of range"
+            ? "out of range"
+            : run.kind === "moving"
+              ? "can't cast while moving"
+              : "target not in line of sight";
+        const span =
+          toRenderSecond(run.toSeconds) > toRenderSecond(run.fromSeconds)
+            ? ` (${fmtTime(run.fromSeconds)}–${fmtTime(run.toSeconds)})`
+            : "";
+        addEntry(
+          run.fromSeconds,
+          `${fmtTime(run.fromSeconds)}  [REJECTED]   your ${run.spellName} ×${run.count} — ${why}${span}`,
         );
       }
     }

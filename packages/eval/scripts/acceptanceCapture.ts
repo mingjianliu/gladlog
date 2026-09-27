@@ -44,7 +44,10 @@ import { mkdirSync, readFileSync, writeFileSync } from "fs";
 import { resolve } from "path";
 import { gunzipSync } from "zlib";
 
-import { candidatesAsTheAppRuns } from "../src/corpus/appCandidates";
+import {
+  candidatesAsTheAppRuns,
+  roundRawStreams,
+} from "../src/corpus/appCandidates";
 
 import { splitTeams } from "../src/explore/storeAccess";
 
@@ -161,7 +164,14 @@ for (const f of files) {
       }
       let ctx = "";
       try {
-        ctx = buildMatchContext(legacy, friends, enemies, { owner });
+        // the app hands the context builder the same raw pass
+        // (analysisInput.ts); without it the timeline's raw-stream lines
+        // ([REJECTED], the [MANA] fallback) never appeared in a capture
+        // (found 2026-09-26, reliability leftovers batch 13)
+        ctx = buildMatchContext(legacy, friends, enemies, {
+          owner,
+          rawStreams: roundRawStreams(legacy, args.rawStreams ? text : null),
+        });
       } catch {
         continue;
       }
