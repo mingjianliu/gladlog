@@ -1655,3 +1655,14 @@ v184 (2026-09-26, codex counterexamples to batch 10): HEALER TRAINED names
 the in-radius camper with the most seconds whose main target was the healer
 (a nearer off-target melee no longer hides it; 1,399 → 1,423 lines); a
 summon's owner is never matched by a short name both rosters share.
+
+v186 (2026-09-27, GH #119 follow-up, user 「都做了吧」): the aura twins of
+three canonical casts are read — Summon Infernal 1122 → 111685, Arcane Surge
+365350 → 365362, Elemental Ascendance 114050 → 1219480. A pressed twin
+keeps its cast and takes the aura's end (Summon Infernal was 0.25 s — DB2's
+cast row — now its 30 s), and the aura path sees all three; an aura with no
+press is a minor burst "(no press)" (weight 0, availability ?). 605 files:
+enemy Summon Infernal "(Ns left)" entries 16 → 1,283, "[friendly offensive
+CD active]" 22,672 → 23,107, windows unchanged 11,659; missed-cleanse dps
+194 → 190 / healer 257 → 255, kick-eaten dps 1003 → 1004 / healer 487 → 488,
+position-mistake dps 292 → 293.

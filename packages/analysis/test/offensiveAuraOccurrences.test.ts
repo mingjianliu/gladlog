@@ -275,6 +275,122 @@ describe("codex re-review 2026-09-26", () => {
   });
 });
 
+describe("aura twins of canonical casts (user 2026-09-27 「都做了吧」)", () => {
+  const lock = (casts: any[], auras: any[]) =>
+    makeUnit("wl", {
+      name: "Lock",
+      spec: CombatUnitSpec.Warlock_Destruction,
+      spellCastEvents: casts,
+      auraEvents: auras,
+    });
+  const wlAura = (ev: LogEvent, id: string, sec: number) =>
+    makeAuraEvent(ev, id, s(sec), "wl", "wl", "BUFF");
+  const wlCast = (id: string, sec: number) =>
+    makeSpellCastEvent(id, s(sec), "wl", "Self", "wl");
+
+  it("Summon Infernal: the cast keeps its place and takes the 30 s aura end — not DB2's 0.25 s cast row", () => {
+    const u = lock(
+      [wlCast("1122", 20)],
+      [
+        wlAura(LogEvent.SPELL_AURA_APPLIED, "111685", 21),
+        wlAura(LogEvent.SPELL_AURA_REMOVED, "111685", 51),
+      ],
+    );
+    const tl = reconstructEnemyCDTimeline([u], COMBAT);
+    const inf = tl.players[0]!.offensiveCDs.filter(
+      (c) => c.spellName === "Summon Infernal",
+    );
+    expect(inf).toHaveLength(1);
+    expect([inf[0]!.castTimeSeconds, inf[0]!.buffEndSeconds]).toEqual([20, 51]);
+  });
+
+  it("the aura path starts AT THE CAST, not ≈ 1 s later at the aura (agy review)", () => {
+    const u = lock(
+      [wlCast("1122", 20)],
+      [
+        wlAura(LogEvent.SPELL_AURA_APPLIED, "111685", 21),
+        wlAura(LogEvent.SPELL_AURA_REMOVED, "111685", 51),
+      ],
+    );
+    expect(hasOffensiveSpellActive(u, s(20.5), null, undefined, COMBAT)).toBe(
+      true,
+    );
+    expect(hasOffensiveSpellActive(u, s(52), null, undefined, COMBAT)).toBe(
+      false,
+    );
+  });
+
+  it("an inferred aura end only lengthens the cast estimate — a re-application cannot cut Ascendance's 15 s to 5 s (agy review)", () => {
+    const sham = makeUnit("sh2", {
+      name: "Ele",
+      spec: CombatUnitSpec.Shaman_Elemental,
+      // the second application carries a cast of the aura id itself (a
+      // proc cast), so the interval builder closes the first segment at
+      // 25 s — without one it keeps a same-spell re-apply open (batch 9)
+      spellCastEvents: [
+        makeSpellCastEvent("114050", s(20), "sh2", "Self", "sh2"),
+        makeSpellCastEvent("1219480", s(25), "sh2", "Self", "sh2"),
+      ],
+      auraEvents: [
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          "1219480",
+          s(20),
+          "sh2",
+          "sh2",
+          "BUFF",
+        ),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          "1219480",
+          s(25),
+          "sh2",
+          "sh2",
+          "BUFF",
+        ),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_REMOVED,
+          "1219480",
+          s(31),
+          "sh2",
+          "sh2",
+          "BUFF",
+        ),
+      ],
+    });
+    const cds = reconstructEnemyCDTimeline([sham], COMBAT).players[0]!
+      .offensiveCDs;
+    const pressed = cds.find((c) => c.castTimeSeconds === 20)!;
+    expect(pressed.buffEndSeconds).toBeGreaterThanOrEqual(35);
+    // the re-application with no press is its own minor burst, keyed on the
+    // cooldown id like the pressed twin
+    const proc = cds.find((c) => c.spellName === "Ascendance (no press)")!;
+    expect(proc.spellId).toBe("114050");
+    expect(proc.dangerWeight).toBe(0);
+  });
+
+  it("an aura with no press is a minor burst: weight 0, '?' availability, no window alone", () => {
+    const u = lock(
+      [],
+      [
+        wlAura(LogEvent.SPELL_AURA_APPLIED, "111685", 40),
+        wlAura(LogEvent.SPELL_AURA_REMOVED, "111685", 45),
+      ],
+    );
+    const [o] = auraOffensiveOccurrences(u, COMBAT).occurrences;
+    expect(o).toMatchObject({
+      spellName: "Summon Infernal (no press)",
+      provenance: "unresolved",
+      dangerWeight: 0,
+      availabilityUnknown: true,
+      burstRole: "burst",
+    });
+    expect(
+      reconstructEnemyCDTimeline([u], COMBAT).alignedBurstWindows,
+    ).toHaveLength(0);
+  });
+});
+
 describe("Doom Winds 466772", () => {
   it("no logged press and no Ascendance: an ordinary Doom Winds occurrence (user ruling), 60 s weight", () => {
     const u = enh(

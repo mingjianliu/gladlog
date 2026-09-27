@@ -42,11 +42,28 @@ import { offensiveDangerWeight } from "./spellDanger";
  * module extracts, never the cast ids). */
 export const OFFENSIVE_AURA_EVIDENCE: ReadonlyMap<
   string,
-  { cooldownId: string; name: string }
+  { cooldownId: string; name: string; twin?: true }
 > = new Map([
   ["162264", { cooldownId: "191427", name: "Metamorphosis" }],
   ["466772", { cooldownId: "384352", name: "Doom Winds" }],
+  // AURA TWINS of canonical casts (GH #119 follow-up, user 2026-09-27
+  // 「都做了吧」): the cast id is in OFFENSIVE_CD_SPELL_IDS, the aura id never
+  // was, so aura consumers could not see the effect. 605 files: every
+  // aura application follows its cast by the same unit (Infernal 207 / 209,
+  // gap ≈ 1.0 s — DB2 1122 triggers 111685; Arcane Surge 203 / 203 and
+  // Ascendance 146 / 146 at the same ms — both casts are DB2 dummies whose
+  // script applies the aura). Cast-backed lifetimes 30 / 15 / 15 s. The
+  // timeline priced Summon Infernal at DB2's 0.25 s cast row until now.
+  ["111685", { cooldownId: "1122", name: "Summon Infernal", twin: true }],
+  ["365362", { cooldownId: "365350", name: "Arcane Surge", twin: true }],
+  ["1219480", { cooldownId: "114050", name: "Ascendance", twin: true }],
 ]);
+/** A twin's cast is logged at most this long before its aura (Infernal:
+ * ≈ 1.0 s, the summon landing — p90 1.02 s on 207 pairs) or 0.5 s after
+ * (log order). Not widened for lag: the only cast-less applications in 605
+ * files lasted 0.4–10.3 s, i.e. short procs, not late-landing presses. */
+const TWIN_CAST_BEFORE_S = 3;
+const TWIN_CAST_AFTER_S = 0.5;
 
 /** Cast ids read as evidence (registered with the table above). */
 export const METAMORPHOSIS_PRESS_CAST_IDS: ReadonlySet<string> = new Set([
@@ -297,6 +314,61 @@ export function auraOffensiveOccurrences(
         burstRole: "burst",
         provenance: "press-inferred",
       });
+      continue;
+    }
+
+    const twin = OFFENSIVE_AURA_EVIDENCE.get(iv.spellId);
+    if (twin?.twin) {
+      const cdId = twin.cooldownId;
+      const cast = near(
+        castTimes(unit, new Set([cdId])),
+        startMs,
+        -TWIN_CAST_BEFORE_S * 1000,
+        TWIN_CAST_AFTER_S * 1000,
+      );
+      const cd = effectiveCooldownSeconds(cdId) ?? 0;
+      if (cast !== undefined) {
+        // the press: anchored AT THE CAST (agy review: the Infernal aura lands
+        // ≈ 1 s later — the timeline and the aura path must start together);
+        // the timeline folds this into the logged cast and takes the end
+        result.occurrences.push({
+          spellId: cdId,
+          spellName: twin.name,
+          startMs: Math.min(cast, startMs),
+          endMs,
+          endObserved,
+          cooldownSeconds: cd,
+          availableAgainAtMs: cast + cd * 1000,
+          availabilityUnknown: false,
+          dangerWeight: offensiveDangerWeight(
+            cdId,
+            (id) => effectiveCooldownSeconds(id) ?? 0,
+          ),
+          burstRole: "burst",
+          provenance: "press-logged",
+        });
+      } else {
+        // no press: a short talent proc (605 files: 14 such applications,
+        // 0.4–10.3 s against the pressed 15 / 30 s — e.g. Time Anomaly's
+        // Arcane Surge). A MINOR burst, priced like the Demonic ruling by
+        // what produced it (a talent with no cooldown → 0): never a window
+        // on its own, no claim a cooldown was spent.
+        result.occurrences.push({
+          // the COOLDOWN id, like the pressed twin — every id filter
+          // (isEnemyCdWindowSpell) reads the same id for both (agy review)
+          spellId: cdId,
+          spellName: `${twin.name} (no press)`,
+          startMs,
+          endMs,
+          endObserved,
+          cooldownSeconds: 0,
+          availableAgainAtMs: null,
+          availabilityUnknown: true,
+          dangerWeight: 0,
+          burstRole: "burst",
+          provenance: "unresolved",
+        });
+      }
       continue;
     }
 

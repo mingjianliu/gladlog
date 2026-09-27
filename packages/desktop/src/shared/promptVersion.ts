@@ -211,5 +211,15 @@
  *  Instincts. 605-file capture: kick-priority dps 106/86 → 93/63, healer
  *  12/82 → 2/75, missed-cleanse dps 200 → 196 / healer 262 → 261,
  *  burst-into-mitigation 42 → 43, cd-hoarded 666 → 667.
+ *  v186 (2026-09-27, GH #119 follow-up, user 「都做了吧」): the aura twins of
+ *  three canonical casts are read — Summon Infernal 1122 → 111685, Arcane Surge
+ *  365350 → 365362, Elemental Ascendance 114050 → 1219480. A pressed twin
+ *  keeps its cast and takes the aura's end (Summon Infernal was 0.25 s — DB2's
+ *  cast row — now its 30 s), and the aura path sees all three; an aura with no
+ *  press is a minor burst "(no press)" (weight 0, availability ?). 605 files:
+ *  enemy Summon Infernal "(Ns left)" entries 16 → 1,283, "[friendly offensive
+ *  CD active]" 22,672 → 23,107, windows unchanged 11,659; missed-cleanse dps
+ *  194 → 190 / healer 257 → 255, kick-eaten dps 1003 → 1004 / healer 487 → 488,
+ *  position-mistake dps 292 → 293.
  */
-export const PROMPT_VERSION = 185;
+export const PROMPT_VERSION = 186;

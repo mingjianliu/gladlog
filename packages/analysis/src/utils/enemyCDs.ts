@@ -250,8 +250,14 @@ export function reconstructEnemyCDTimeline(
             AURA_EVIDENCE_WINDOW_S,
       );
       if (logged) {
-        if (o.endObserved)
-          logged.buffEndSeconds = (o.endMs - matchStartMs) / 1000;
+        // an observed aura end replaces the estimate; an INFERRED one (the
+        // aura's own official length — Summon Infernal's cast row is 0.25 s)
+        // may only lengthen it: a re-application closes the interval early
+        // and must not cut a correct 15 s estimate to 5 s (agy review)
+        const auraEnd = (o.endMs - matchStartMs) / 1000;
+        if (o.endObserved) logged.buffEndSeconds = auraEnd;
+        else if (o.provenance === "press-logged")
+          logged.buffEndSeconds = Math.max(logged.buffEndSeconds, auraEnd);
         continue;
       }
       (o.burstRole === "fact" ? offensiveFacts : offensiveCDs).push({
