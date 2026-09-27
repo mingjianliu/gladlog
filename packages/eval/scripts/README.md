@@ -124,7 +124,7 @@ _English-only developer index, regenerated 2026-09-26 from the file set; `lib/` 
 | `uncontestedSummonExampleGen.ts` | uncontestedSummonExampleGen.ts — value-gate example generator for BACKLOG #51's |
 | `unitDestroyedExampleGen.ts` | unitDestroyedExampleGen.ts — value-gate example generator (GH #100 |
 
-## Audits / captures / acceptance / A-B — 14
+## Audits / captures / acceptance / A-B — 15
 
 | Script | Note |
 |---|---|
@@ -133,6 +133,7 @@ _English-only developer index, regenerated 2026-09-26 from the file set; `lib/` 
 | `acceptanceCapture.ts` | acceptanceCapture.ts — 归档日志上的验收采集(常驻,2026-09-02 从 scratchpad 的 |
 | `acceptanceDpsCount.ts` | acceptanceDpsCount.ts — DPS 视角验收计数(常驻,2026-08-19 从 zz-tmp 转正)。 |
 | `acceptanceHash.ts` | acceptanceHash.ts — 验收基准工具(常驻,2026-08-19 从 zz-tmp 转正)。 |
+| `closureBindingAudit.ts` | closureBindingAudit.ts — before cutting a line range out of a big function: every outer binding it reads / writes / mutates / calls, escaping returns (GH #116) |
 | `confidenceAudit.ts` | Candidate-evidence confidence audit (permanent tool, 2026-07-24): the |
 | `decisionTraceCapture.ts` | decisionTraceCapture.ts — replay a manifest under ONE fact configuration and |
 | `deepDiveOffensiveValueAudit.ts` | Offensive deep-dive value A/B — parse + audit + emit a blind-judging bundle. |
@@ -143,7 +144,7 @@ _English-only developer index, regenerated 2026-09-26 from the file set; `lib/` 
 | `modelFormatAudit.ts` | CLI: audit of the model output's SHAPE (the findings JSON path). |
 | `postKickSwitchAudit.ts` | `postKick="switched"` 语义体检:**它到底在说「打穿了锁定」,还是「按了个瞬发」? |
 
-## Everything else (CLI shells, one-offs, corpus tooling) — 42
+## Everything else (CLI shells, one-offs, corpus tooling) — 44
 
 | Script | Note |
 |---|---|
@@ -163,6 +164,8 @@ _English-only developer index, regenerated 2026-09-26 from the file set; `lib/` 
 | `demo37.ts` | #37 value-gate demo: build cells from real archive healer rounds through the |
 | `durationCandidatesFromInventory.ts` | durationCandidatesFromInventory.ts — build a `durationTalentScan --candidates` |
 | `evidenceDist.ts` | Corpus evidence (a permanent tool): run extractCandidateFindings over the |
+| `extractedBodyCheck.ts` | extractedBodyCheck.ts — an emitter cut out of buildMatchTimeline is the original code token for token (GH #116) |
+| `extractTimelineSection.ts` | extractTimelineSection.ts — cut one section out of buildMatchTimeline into timelineSections/, refusing unsafe ranges (GH #116) |
 | `familyBias.ts` | familyBias.ts CLI — D1 同族偏差 2×2 双差分(子项目 D)三子命令: |
 | `fetchPublicLogs.ts` | CLI: fetch raw match logs where "the recorder is a DPS" from the public |
 | `followupExamples.ts` | Value-gate examples for the follow-up wirings, from real archive rounds: |
