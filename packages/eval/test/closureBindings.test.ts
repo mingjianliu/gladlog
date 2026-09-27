@@ -88,6 +88,14 @@ describe("analyzeRange: member mutation, calls, types", () => {
     expect(analyse("void set.has(1);").classes("set")).toEqual(["READ"]);
   });
 
+  it("a closure outside the range that references a binding is reported", () => {
+    const { r } = analyse("a++;\nb++;");
+    const refs = (n: string) =>
+      r.outer.find((o) => o.name === n)!.closureRefsOutside;
+    expect(refs("a")).toHaveLength(1); // helper() returns a
+    expect(refs("b")).toEqual([]);
+  });
+
   it("closure calls are CALL", () => {
     expect(analyse("void helper();").classes("helper")).toEqual(["CALL"]);
   });

@@ -15,8 +15,10 @@
  */
 import type { ICombatUnit } from "@gladlog/parser-compat";
 
+import type { IPlayerCCTrinketSummary } from "../../utils/ccTrinketAnalysis";
 import type { IAoeCCEvent } from "../../utils/drAnalysis";
 import type { BuildMatchTimelineParams } from "../matchTimeline";
+import type { extractOwnerCDBuffExpiry } from "../timelineHelpers";
 
 /** A [STATE]/[RES] snapshot requested at a time; resolved after all sections
  * have run (it can be debounced away or forced full). */
@@ -43,12 +45,47 @@ export interface TimelineCtx {
   stasisEvents: NonNullable<P["stasisEvents"]>;
   /** params.criticalWindowSeconds */
   criticalWindowSet: P["criticalWindowSeconds"];
+  enemyDispelSummary: P["enemyDispelSummary"];
+  /** the whole params object — a few sections read a field of it directly
+   * (`params.ccBreakEvents`) instead of the destructured name */
+  params: P;
+  teammateCDs: P["teammateCDs"];
+  pressureWindows: P["pressureWindows"];
+  enemies: P["enemies"];
 
   // ── derived values ──
   /** params.allUnits, or friends + enemies when absent */
   _allUnits: ICombatUnit[];
+  /** AoE CC casts from outgoingCCChains; [] when there are none */
+  aoeCCEvents: IAoeCCEvent[];
+  /** AoE CC events already folded into a cast line (shared: owner casts,
+   * teammate casts and the remaining [CC CAST] lines all consume it) */
+  consumedAoeEvents: Set<IAoeCCEvent>;
+  /** F114: per amplifier spell, the cast times that get a [HEALING] block */
+  healingEmissionTimes: Map<string, Set<number>>;
+  /** the owner's cooldown buffs fading ([BUFF FADED]); also read by [YOU] [CD] */
+  cdExpiryEvents: ReturnType<typeof extractOwnerCDBuffExpiry>;
+  /** the owner's own CC / trinket summary, if any */
+  ownerCCSummary: IPlayerCCTrinketSummary | undefined;
+
+  // ── threaded (in / out) ──
+  /** set when any owner / teammate proc-only activation rendered as [PROC];
+   * the legend line for the tag is emitted only then. Emitters that set it
+   * take the current value and return the new one. */
+  procLinesEmitted: boolean;
 
   // ── closure helpers ──
+  /** friendly player name -> short id (+ spec tag) */
+  pid: (name: string) => string;
+  /** enemy player name -> short id (+ spec tag) */
+  enemyPid: (name: string) => string;
+  outgoingDrTag: (spellId: string, cast: { timeSeconds: number }) => string;
+  ccImmuneTagFor: (
+    unit: ICombatUnit,
+    spellId: string,
+    castTimeSeconds: number,
+  ) => string;
+  ownerInterruptImmuneReasonAt: (timeSeconds: number) => string | undefined;
   addEntry: (
     timeSeconds: number,
     ...lines: (string | DeferredSnapshot)[]

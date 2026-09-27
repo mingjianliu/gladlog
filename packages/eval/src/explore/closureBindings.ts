@@ -24,6 +24,10 @@ export interface OuterBinding {
   declLine: number;
   classes: Set<UseClass>;
   lines: number[];
+  /** lines OUTSIDE the range where a nested function (a closure of the
+   * enclosing function) references this binding — such a closure could run
+   * during the range and observe the binding mid-update */
+  closureRefsOutside: number[];
 }
 
 export interface ImportUse {
@@ -292,6 +296,7 @@ export function analyzeRange(
               declLine: lineOf(dp),
               classes: new Set(),
               lines: [],
+              closureRefsOutside: [],
             };
             outer.set(sym, u);
           }
@@ -332,6 +337,21 @@ export function analyzeRange(
     n.forEachChild(visit);
   };
   sf.forEachChild(visit);
+
+  // second pass: references to the outer bindings from closures outside the range
+  const closureScan = (n: ts.Node): void => {
+    if (ts.isIdentifier(n) && !isNameNotReference(n)) {
+      const pos = n.getStart(sf);
+      const sym = symbolFor(n);
+      const u = sym ? outer.get(sym) : undefined;
+      if (u && !inRange(pos) && inFn(pos) && nearestFunction(n) !== fn) {
+        const l = lineOf(pos);
+        if (!u.closureRefsOutside.includes(l)) u.closureRefsOutside.push(l);
+      }
+    }
+    n.forEachChild(closureScan);
+  };
+  fn.forEachChild(closureScan);
 
   return {
     outer: [...outer.values()],

@@ -12,7 +12,10 @@
  *     after it, uses a module-scope declaration of matchTimeline.ts itself (a
  *     runtime import cycle once moved — move that first), or returns from
  *     buildMatchTimeline. Those need a hand-written path; closureBindingAudit.ts
- *     prints the detail.
+ *     prints the detail. One exception, opted into per binding: a written
+ *     binding listed in `threaded` is passed in, held in a local `let`,
+ *     returned and re-assigned by the caller — exact as long as no closure
+ *     outside the range can read it meanwhile, which is checked.
  *  2. ctx fields = the outer bindings the range uses (first-use order);
  *     imports = the file's imports the range uses, specifiers rebased one
  *     directory down.
@@ -57,6 +60,13 @@ interface Config {
   header: string;
   callText: string;
   ctxIndent: number;
+  /** outer bindings the range WRITES that are threaded through the emitter:
+   * passed in via ctx, held in a local `let`, returned at the end and
+   * re-assigned by the caller (callText must do the assignment, e.g.
+   * `({ procLinesEmitted } = emitX($CTX));`). Allowed only when no closure
+   * outside the range references the binding (it would see a stale value
+   * while the emitter runs). */
+  threaded?: string[];
 }
 
 const cfg = JSON.parse(fs.readFileSync(process.argv[2]!, "utf8")) as Config;
@@ -78,9 +88,19 @@ const r = analyzeRange(
   cfg.bodyEnd,
 );
 
+const threaded = new Set(cfg.threaded ?? []);
 const problems: string[] = [];
+for (const t of threaded) {
+  const o = r.outer.find((x) => x.name === t);
+  if (!o?.classes.has("WRITE"))
+    problems.push(`threaded ${t} is not written by the range`);
+  else if (o.closureRefsOutside.length)
+    problems.push(
+      `threaded ${t} is referenced by a closure outside the range (L${o.closureRefsOutside.join(",")})`,
+    );
+}
 for (const o of r.outer) {
-  if (o.classes.has("WRITE"))
+  if (o.classes.has("WRITE") && !threaded.has(o.name))
     problems.push(`writes outer binding ${o.name} (L${o.lines.join(",")})`);
   if (o.classes.has("TYPE"))
     problems.push(
@@ -135,6 +155,8 @@ for (const [spec, e] of [...r.imports].sort(([a], [b]) => a.localeCompare(b))) {
 
 const lines = sf.getFullText().split("\n");
 const fieldNames = r.outer.map((o) => o.name);
+const threadedNames = fieldNames.filter((f) => threaded.has(f));
+const constNames = fieldNames.filter((f) => !threaded.has(f));
 const pad = " ".repeat(cfg.dedent);
 const bodyLines = lines.slice(cfg.bodyStart - 1, cfg.bodyEnd).map((l, i) => {
   if (l.trim() === "") return "";
@@ -154,10 +176,21 @@ const out = [
   "",
   `export function ${cfg.exportName}(`,
   `  ctx: Pick<TimelineCtx, ${fieldNames.map((f) => `"${f}"`).join(" | ")}>,`,
-  "): void {",
-  `  const { ${fieldNames.join(", ")} } = ctx;`,
+  threadedNames.length
+    ? `): Pick<TimelineCtx, ${threadedNames.map((f) => `"${f}"`).join(" | ")}> {`
+    : "): void {",
+  `  const { ${constNames.join(", ")} } = ctx;`,
+  ...(threadedNames.length
+    ? [
+        "  // threaded: read from ctx, returned to the caller (GH #116)",
+        `  let { ${threadedNames.join(", ")} } = ctx;`,
+      ]
+    : []),
   "",
   ...bodyLines,
+  ...(threadedNames.length
+    ? ["", `  return { ${threadedNames.join(", ")} };`]
+    : []),
   "}",
   "",
 ].join("\n");
@@ -174,15 +207,22 @@ const newLines = [
   ...call.split("\n"),
   ...lines.slice(cfg.cutEnd),
 ];
-// emitter import: after the last top-level import declaration (the cut is
-// inside the function, so that line number is unaffected)
-const lastImport = sf.statements.filter(ts.isImportDeclaration).at(-1)!;
-const lastImportLine =
-  sf.getLineAndCharacterOfPosition(lastImport.getEnd()).line + 1;
+// emitter import, in simple-import-sort order: after the last relative import
+// whose specifier sorts before it (else after the last import). The cut is
+// inside the function, so that line number is unaffected.
+const newSpec = `./timelineSections/${cfg.outFile}`;
+const importDecls = sf.statements.filter(ts.isImportDeclaration);
+const before = importDecls.filter((d) => {
+  const s = (d.moduleSpecifier as ts.StringLiteral).text;
+  return s.startsWith("./") && s.localeCompare(newSpec) < 0;
+});
+const anchorImport = before.at(-1) ?? importDecls.at(-1)!;
+const anchorLine =
+  sf.getLineAndCharacterOfPosition(anchorImport.getEnd()).line + 1;
 newLines.splice(
-  lastImportLine,
+  anchorLine,
   0,
-  `import { ${cfg.exportName} } from "./timelineSections/${cfg.outFile}";`,
+  `import { ${cfg.exportName} } from "${newSpec}";`,
 );
 // imports whose only uses were in the moved body are now unused in
 // matchTimeline.ts (a lint error): prune exactly those

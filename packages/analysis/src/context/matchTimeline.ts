@@ -170,8 +170,12 @@ import {
   summonedAtMs,
   summonLifetimeAtKillS,
 } from "./timelineHelpers";
+import { emitCcBrokenEntries } from "./timelineSections/ccBroken";
+import { emitCcCastEntries } from "./timelineSections/ccCast";
 import type { DeferredSnapshot } from "./timelineSections/ctx";
 import { emitHealerCastGapFillerEntries } from "./timelineSections/healerCastGapFiller";
+import { emitMinorDispelEntries } from "./timelineSections/minorDispels";
+import { emitPurgeEntries } from "./timelineSections/purges";
 
 function isDeferredSnapshot(line: unknown): line is DeferredSnapshot {
   return !!(
@@ -1866,21 +1870,13 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
 
   // ── [CC CAST] events — AoE CC cast by friendly players on enemies ──────────
 
-  if (aoeCCEvents.length > 0) {
-    for (const event of aoeCCEvents) {
-      if (consumedAoeEvents.has(event)) continue;
-      const casterLabel = pid(event.casterName);
-      const targetLabels = event.targets
-        .map((t) => enemyPid(t.name))
-        .join(", ");
-      const countNote =
-        event.targets.length > 1 ? ` [${event.targets.length} enemies]` : "";
-      addEntry(
-        event.atSeconds,
-        `${fmtTime(event.atSeconds)}  [CC CAST]   ${event.spellName} (by ${casterLabel}) → ${targetLabels}${countNote}`,
-      );
-    }
-  }
+  emitCcCastEntries({
+    aoeCCEvents,
+    consumedAoeEvents,
+    pid,
+    enemyPid,
+    addEntry,
+  });
 
   // ── GH #99 item 3 (Rules B & C): ENEMY BUFF, ENEMY CD, and MISSED PURGE folding ──
 
@@ -2201,16 +2197,12 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   // squander quadrant is ~48% of them — CC discipline is coachable, but the
   // prompt used to show the CC landing and then silently ending, so the model
   // could not tell "the sheep ran its course" from "your teammate cleaved it".
-  for (const ev of params.ccBreakEvents ?? []) {
-    const early =
-      ev.remainingSeconds != null
-        ? ` — ${ev.remainingSeconds.toFixed(1)}s of CC wasted`
-        : "";
-    addEntry(
-      ev.atSeconds,
-      `${fmtTime(ev.atSeconds)}  [CC BROKEN]   ${pid(ev.breakerName)}'s ${ev.breakSpellName} broke own team's ${ev.ccSpellName} on ${enemyPid(ev.holderName)}${early}`,
-    );
-  }
+  emitCcBrokenEntries({
+    params,
+    addEntry,
+    pid,
+    enemyPid,
+  });
 
   // ── [TRINKET] and [CC ON TEAM] events ──────────────────────────────────────
 
@@ -2670,162 +2662,27 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   // invisible; same F163 de-noising as [CLEANSE] (Critical/High only) and the
   // same B14 same-second same-source merge. The owner's own purges are already
   // annotated on their cast lines ([removed: …]), so they are not repeated.
-  {
-    const purgeGroups = new Map<string, IDispelEvent[]>();
-    for (const purge of dispelSummary.ourPurges) {
-      // Pet-cast dispels (Devour Magic, …) have no owner cast line to annotate,
-      // so they must not be skipped
-      if (purge.sourceName === owner.name && !purge.isPetDispel) continue;
-      if (purge.priority !== "Critical" && purge.priority !== "High") continue;
-      const key = `${Math.round(purge.timeSeconds)}|${purge.sourceName}`;
-      const group = purgeGroups.get(key) ?? [];
-      group.push(purge);
-      purgeGroups.set(key, group);
-    }
-    for (const group of purgeGroups.values()) {
-      const first = group[0];
-      const viaTag = first.dispelSpellName ? ` (${first.dispelSpellName})` : "";
-      const effects = group
-        .map(
-          (c) =>
-            `${getEnglishSpellName(c.removedSpellId, c.removedSpellName)} off ${enemyPid(c.targetName)}`,
-        )
-        .join(", ");
-      addEntry(
-        first.timeSeconds,
-        `${fmtTime(first.timeSeconds)}  [PURGE]   ${pid(first.sourceName)} purged ${effects}${viaTag}`,
-      );
-    }
-
-    const hostileGroups = new Map<string, IDispelEvent[]>();
-    for (const purge of dispelSummary.hostilePurges) {
-      if (purge.priority !== "Critical" && purge.priority !== "High") continue;
-      const key = `${Math.round(purge.timeSeconds)}|${purge.sourceName}`;
-      const group = hostileGroups.get(key) ?? [];
-      group.push(purge);
-      hostileGroups.set(key, group);
-    }
-    for (const group of hostileGroups.values()) {
-      const first = group[0];
-      const viaTag = first.dispelSpellName ? ` (${first.dispelSpellName})` : "";
-      const effects = group
-        .map(
-          (c) =>
-            `${getEnglishSpellName(c.removedSpellId, c.removedSpellName)} off ${pid(c.targetName)}`,
-        )
-        .join(", ");
-      addEntry(
-        first.timeSeconds,
-        `${fmtTime(first.timeSeconds)}  [ENEMY PURGE]   ${enemyPid(first.sourceName)} stripped ${effects}${viaTag}`,
-      );
-    }
-
-    // [ENEMY CLEANSE]: the enemy team removing our CC/dots from their own
-    // teammates (key coaching information — "your Hex was dispelled instantly";
-    // 2026-07-18 baseline investigation: the whole class was invisible, 42/176
-    // matches missing Purify). Same Critical/High filter + same-second
-    // same-source merge.
-    if (enemyDispelSummary) {
-      const enemyCleanseGroups = new Map<string, IDispelEvent[]>();
-      for (const c of enemyDispelSummary.allyCleanse) {
-        if (c.priority !== "Critical" && c.priority !== "High") continue;
-        const key = `${Math.round(c.timeSeconds)}|${c.sourceName}`;
-        const group = enemyCleanseGroups.get(key) ?? [];
-        group.push(c);
-        enemyCleanseGroups.set(key, group);
-      }
-      for (const group of enemyCleanseGroups.values()) {
-        const first = group[0];
-        const viaTag = first.dispelSpellName
-          ? ` (${first.dispelSpellName})`
-          : "";
-        const effects = group
-          .map(
-            (c) =>
-              `${getEnglishSpellName(c.removedSpellId, c.removedSpellName)} off ${enemyPid(c.targetName)}`,
-          )
-          .join(", ");
-        addEntry(
-          first.timeSeconds,
-          `${fmtTime(first.timeSeconds)}  [ENEMY CLEANSE]   ${enemyPid(first.sourceName)} cleansed ${effects}${viaTag}`,
-        );
-      }
-    }
-  }
+  emitPurgeEntries({
+    dispelSummary,
+    owner,
+    enemyPid,
+    addEntry,
+    pid,
+    enemyDispelSummary,
+  });
 
   // ── [MINOR DISPELS] folded lines (T5 dispel coverage) ─────────────────────
   // low/medium dispels filtered out by F163 do not get one timeline line each,
   // but are folded by (source, dispel spell) into a single counted line — the
   // dispel workload and the spells used stay visible to the coach at a token
   // cost of O(number of distinct spells).
-  {
-    const minor = new Map<
-      string,
-      {
-        sourceLabel: string;
-        spellName: string;
-        count: number;
-        firstSeconds: number;
-      }
-    >();
-    const foldMinor = (
-      events: IDispelEvent[],
-      labelOf: (name: string) => string,
-    ) => {
-      for (const e of events) {
-        // High/Critical riders are NOT on a [CLEANSE] line (D1), so they fold
-        // here as "(passive)" instead of vanishing.
-        if (
-          (e.priority === "Critical" || e.priority === "High") &&
-          e.dispelKind !== "rider"
-        )
-          continue;
-        const spellName = e.dispelSpellName || "unknown";
-        // UI review 2026-08-21 #3: passive procs / riders fold into their own
-        // line with a "(passive)" tag so 92 Cleanse the Weak procs never read
-        // as 92 cleanse decisions. Same predicate as the desktop counts.
-        const passive = e.dispelKind !== "deliberate";
-        const key = `${e.sourceName}|${spellName}|${passive ? "p" : "d"}`;
-        const cur = minor.get(key);
-        if (cur) {
-          cur.count++;
-          cur.firstSeconds = Math.min(cur.firstSeconds, e.timeSeconds);
-        } else {
-          minor.set(key, {
-            sourceLabel: labelOf(e.sourceName),
-            spellName: passive ? `${spellName} (passive)` : spellName,
-            count: 1,
-            firstSeconds: e.timeSeconds,
-          });
-        }
-      }
-    };
-    foldMinor(dispelSummary.allyCleanse, pid);
-    foldMinor(dispelSummary.ourPurges, pid);
-    foldMinor(dispelSummary.hostilePurges, enemyPid);
-    if (enemyDispelSummary) foldMinor(enemyDispelSummary.allyCleanse, enemyPid);
-
-    const bySource = new Map<
-      string,
-      Array<{ spellName: string; count: number; firstSeconds: number }>
-    >();
-    for (const m of minor.values()) {
-      const list = bySource.get(m.sourceLabel) ?? [];
-      list.push(m);
-      bySource.set(m.sourceLabel, list);
-    }
-    for (const [sourceLabel, list] of bySource) {
-      list.sort((a, b) => a.firstSeconds - b.firstSeconds);
-      const firstSeconds = list[0].firstSeconds;
-      const parts = list
-        .map((m) => (m.count > 1 ? `${m.spellName} x${m.count}` : m.spellName))
-        .join(", ");
-      addEntry(
-        firstSeconds,
-        `${fmtTime(firstSeconds)}  [MINOR DISPELS]   ${sourceLabel}: ${parts} (low-priority, folded)`,
-      );
-    }
-  }
+  emitMinorDispelEntries({
+    dispelSummary,
+    pid,
+    enemyPid,
+    enemyDispelSummary,
+    addEntry,
+  });
 
   // ── [KICK] events ───────────────────────────────────────────────────────────
   // F20 pilot: landed SPELL_INTERRUPT events from either team. Availability notes
