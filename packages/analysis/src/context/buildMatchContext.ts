@@ -883,11 +883,12 @@ export function buildMatchContext(
   {
     const attemptLines = formatKillAttemptsForContext(
       killAttempts,
-      (enemies as ICombatUnit[]).filter((e) =>
-        (e.deathRecords ?? []).some(
-          (r) => r.timestamp >= combat.startTime && r.timestamp <= combat.endTime,
-        ),
-      ).length,
+      (enemies as ICombatUnit[]).flatMap((e) => {
+        const r = (e.deathRecords ?? []).find(
+          (d) => d.timestamp >= combat.startTime && d.timestamp <= combat.endTime,
+        );
+        return r ? [(r.timestamp - combat.startTime) / 1000] : [];
+      }),
     );
     if (attemptLines.length > 0) {
       tLines.push("");

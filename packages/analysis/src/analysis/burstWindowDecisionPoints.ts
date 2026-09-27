@@ -1055,8 +1055,12 @@ export function burstWindowDecisionPoints(
           spellName: getEnglishSpellName(r.spellId),
           casterName: friendlyNameById.get(r.unitId) ?? "",
           tSec: Math.floor((r.tMs - start) / 1000),
+          // the same origin as a direct cast (the raw lead press) — the
+          // window's tMs mixed two clocks and sorted a later Barkskin ahead
+          // of an earlier landed Capacitor Totem (codex review of batch 8)
           latencySec:
-            Math.round(((r.tMs - tMs) / 1000 + Number.EPSILON) * 10) / 10,
+            Math.round(((r.tMs - leadRawMs) / 1000 + Number.EPSILON) * 10) /
+            10,
         });
       responseCasts.sort((a, b) => a.latencySec - b.latencySec);
       // ── outcomes per friendly, and the ONE pressured friendly ────────────

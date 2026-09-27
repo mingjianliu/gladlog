@@ -100,7 +100,16 @@ export function creditedAnswer(p: BurstWindowDecisionPoint) {
   const pr = p.pressured;
   if (!pr) return undefined;
   return p.responseCasts.find((r) => {
-    if (r.category === "external" && r.destId !== undefined && r.destId !== pr.unitId)
+    // an external aimed at another unit went to the wrong unit; an
+    // untargeted / ground destination (Spirit Link, Barrier — the empty GUID
+    // "0000000000000000") is a group effect and may cover the pressured unit
+    // (codex review of batch 8)
+    if (
+      r.category === "external" &&
+      r.destId !== undefined &&
+      !/^0+$/.test(r.destId) &&
+      r.destId !== pr.unitId
+    )
       return false;
     if (r.category === "wall" && r.casterId !== undefined && r.casterId !== pr.unitId)
       return false;

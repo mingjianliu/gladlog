@@ -4,6 +4,9 @@ import { CC_DURATION_TALENT_MODIFIERS } from "../data/spellEffectData";
 import { buffFullDurationForCaster } from "./buffDuration";
 import type { CastParamCaster } from "./castParam";
 import { ccFullDurationForCaster } from "./ccDuration";
+// runtime-only use (inside buildAuraIntervals); drAnalysis → cooldowns →
+// auraIntervals is a cycle, safe because no module-level code calls across it
+import { CC_CAST_EFFECT_AURA } from "./drAnalysis";
 
 
 /**
@@ -145,21 +148,23 @@ export function dropAuraRebroadcasts<
 >(events: readonly T[]): T[] {
   const key = (a: T) =>
     `${a.spellId}|${a.srcUnitId ?? ""}|${a.destUnitId ?? ""}|${a.timestamp}`;
-  const removed = new Map<string, T[]>();
-  for (const a of events)
-    if (a.logLine.event === LogEvent.SPELL_AURA_REMOVED && a.spellId) {
-      const k = key(a);
-      removed.set(k, [...(removed.get(k) ?? []), a]);
-    }
-  if (removed.size === 0) return [...events];
+  // A rebroadcast is a REMOVED FOLLOWED BY an APPLIED (log order). An APPLIED
+  // then a REMOVED at the same ms is a duplicate application and then the
+  // real end — codex review of batch 9: Ironbark applied at 10 s, a duplicate
+  // APPLIED and its actual REMOVED at 14 s read as [10, 22].
+  const pendingRemoved = new Map<string, T[]>();
   const drop = new Set<T>();
   for (const a of events) {
-    if (a.logLine.event !== LogEvent.SPELL_AURA_APPLIED || !a.spellId) continue;
-    const list = removed.get(key(a));
-    const r = list?.find((x) => !drop.has(x));
-    if (r) {
-      drop.add(r);
-      drop.add(a);
+    if (!a.spellId) continue;
+    const k = key(a);
+    if (a.logLine.event === LogEvent.SPELL_AURA_REMOVED) {
+      pendingRemoved.set(k, [...(pendingRemoved.get(k) ?? []), a]);
+    } else if (a.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
+      const r = pendingRemoved.get(k)?.shift();
+      if (r) {
+        drop.add(r);
+        drop.add(a);
+      }
     }
   }
   return drop.size === 0 ? [...events] : events.filter((a) => !drop.has(a));
@@ -247,7 +252,11 @@ export function buildAuraIntervals(
         t <= existing.lastSeenS + dOpen &&
         !(caster.spellCastEvents ?? []).some(
           (c) =>
-            c.spellId === id &&
+            // Fear casts 5782 and applies 118699 (codex review of batch 9:
+            // a real second Fear was swallowed as a rebroadcast)
+            (c.spellId === id ||
+              (c.spellId !== undefined &&
+                CC_CAST_EFFECT_AURA[c.spellId] === id)) &&
             Math.abs(c.logLine.timestamp - a.timestamp) <= 1000,
         );
       if (rebroadcast) {

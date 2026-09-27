@@ -1672,3 +1672,8 @@ by GUID (1,228 "Unknown" → 11) and swing absorbs merged into the Melee line;
 missed-sync-window folds a later lock only with the same ready set and needs
 a living non-healer enemy; reflect damage counts only what the reflect sent
 back ([REFLECTED] 773 → 728); Sanctuary CC caster by GUID.
+
+v188 (2026-09-27, codex review of batches 8–9): group externals (Spirit Link,
+Barrier) answer a burst; one latency clock for landed controls; "outside every
+attempt window" is a time test; a cast whose aura has another id (Fear) is a
+real recast; APPLIED-then-REMOVED at one ms is a real end.

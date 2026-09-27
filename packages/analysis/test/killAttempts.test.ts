@@ -616,3 +616,17 @@ describe("extractKillAttempts — 大招锚定(v2)", () => {
     expect(text).not.toContain("星界转移");
   });
 });
+
+describe("formatKillAttemptsForContext — enemy deaths outside attempt windows are a time test (codex review of batch 8)", () => {
+  it("a death inside an attempt's window on ANOTHER target is not 'outside every attempt window'", () => {
+    const e1 = unit("e1", { auraEvents: stunAuras("e1", KIDNEY, 5, 5) });
+    const e2 = unit("e2");
+    const f1 = unit("f1", { reaction: 1, damageOut: [dmg("f1", "e1", 7, 50_000)] });
+    const [a] = extractKillAttempts([f1], [e1, e2], makeCombat(f1, e1, [e2]));
+    const inside = formatKillAttemptsForContext([a!], [a!.fromSeconds + 1]).join("\n");
+    expect(inside).toContain("Enemy deaths this round: 1.");
+    expect(inside).not.toContain("outside every attempt window");
+    const after = formatKillAttemptsForContext([a!], [a!.toSeconds + 20]).join("\n");
+    expect(after).toContain("(1 outside every attempt window)");
+  });
+});

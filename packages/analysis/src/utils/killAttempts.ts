@@ -522,8 +522,11 @@ export function formatKillAttemptsForContext(
   /** Enemy players who died this round — round 2 W2g (138e, 6174): the
    * summary said "0 kills" while the Feral died 10 s after a saved attempt
    * (a kill outside every attempt window). Stated so the block cannot read
-   * as "nobody died". Absent ⇒ the old summary. */
-  enemyDeathsThisRound?: number,
+   * as "nobody died". Absent ⇒ the old summary. Match-relative seconds of
+   * each enemy player's death, so "outside every attempt window" is a time
+   * test, not deaths minus kills (codex review of batch 8: an attempt on A at
+   * 10–30 s with B dying at 20 s read "1 outside every attempt window"). */
+  enemyDeathSeconds?: readonly number[],
 ): string[] {
   if (attempts.length === 0) return [];
   const lines: string[] = [];
@@ -573,9 +576,13 @@ export function formatKillAttemptsForContext(
   }
   lines.push(
     `  Summary: ${attempts.length} attempts (${attempts.length - burstAnchored} stun-anchored, ${burstAnchored} burst-anchored; ${onPrime} on PRIME targets), ${kills} kill${kills === 1 ? "" : "s"} inside an attempt; ${withSofter} opened while a softer target existed.` +
-      (enemyDeathsThisRound !== undefined && enemyDeathsThisRound > kills
-        ? ` Enemy deaths this round: ${enemyDeathsThisRound} (${enemyDeathsThisRound - kills} outside every attempt window).`
-        : ""),
+      (() => {
+        if (!enemyDeathSeconds || enemyDeathSeconds.length <= kills) return "";
+        const outside = enemyDeathSeconds.filter(
+          (d) => !attempts.some((a) => d >= a.fromSeconds && d <= a.toSeconds),
+        ).length;
+        return ` Enemy deaths this round: ${enemyDeathSeconds.length}${outside > 0 ? ` (${outside} outside every attempt window)` : ""}.`;
+      })(),
   );
   return lines;
 }
