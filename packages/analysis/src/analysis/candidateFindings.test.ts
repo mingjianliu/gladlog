@@ -2384,9 +2384,12 @@ describe("missedSyncWindowEvents(P1 起爆-1,2026-08-15,纯函数)", () => {
     expect(evts[0]!.id).toBe("missed-sync-window:Enemy-Healer:118:439");
     expect(evts[0]!.facts["cc"]).toBe("Polymorph→Fear");
 
+    // two DIFFERENT held CDs: one held CD across two locks is one
+    // accusation (round 3 W1a, 24b6 — pinned in its own test below)
     const twoHealers = missedSyncWindowEvents(
       [polyWindow, { ...fearWindow, healerName: "Other-Healer" }],
-      [readyHammer],
+      // the second CD is back at 440 (439.5 with the 0.5 s slack) — ready for the second lock only
+      [readyHammer, { ...readyHammer, spellId: "1719", spellName: "Recklessness", casts: [{ timeSeconds: 400 }], cooldownSeconds: 40 }],
       probes(50),
     );
     expect(new Set(twoHealers.map((e) => e.id)).size).toBe(2);
@@ -2411,13 +2414,34 @@ describe("missedSyncWindowEvents(P1 起爆-1,2026-08-15,纯函数)", () => {
       toSeconds: 306,
       healerName: "H3",
     }; // 6s
+    // each window pressed-and-returned in between (a cast between locks
+    // makes each lock its own hold decision)
+    const hammer = {
+      ...readyHammer,
+      cooldownSeconds: 30,
+      casts: [{ timeSeconds: 0 }, { timeSeconds: 150 }, { timeSeconds: 250 }],
+    };
     const evts = missedSyncWindowEvents(
       [short, long, mid],
-      [readyHammer],
+      [hammer],
       probes(50),
     );
     expect(evts).toHaveLength(2);
     expect(evts.map((e) => e.facts["healer"])).toEqual(["H2", "H3"]);
+  });
+
+  it("one held CD across back-to-back locks is ONE accusation; a press between them makes two (round 3 W1a, 24b6)", () => {
+    const trap = { ...ccWindow, fromSeconds: 204, toSeconds: 208.1, healerName: "H1", spellId: "3355", spellName: "Freezing Trap" };
+    const cyclone = { ...ccWindow, fromSeconds: 210.6, toSeconds: 216.6, healerName: "H1", spellId: "33786", spellName: "Cyclone" };
+    const one = missedSyncWindowEvents([trap, cyclone], [readyHammer], probes(50));
+    expect(one).toHaveLength(1);
+    expect(one[0]!.facts["alsoHeldAt"]).toBe("210");
+    const pressedBetween = {
+      ...readyHammer,
+      cooldownSeconds: 1,
+      casts: [{ timeSeconds: 0 }, { timeSeconds: 208.3 }],
+    };
+    expect(missedSyncWindowEvents([trap, cyclone], [pressedBetween], probes(50))).toHaveLength(2);
   });
 });
 

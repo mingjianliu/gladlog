@@ -9,6 +9,9 @@
  * which is why the shared window predicates live here with them.
  */
 import { buffFullDurationForCaster } from "../../utils/buffDuration";
+import { distanceBetween, getUnitPositionAtTime } from "../../utils/losAnalysis";
+import { cdOutOfRangeReachYards, isDeadAt } from "../../utils/positionAnalysis";
+import { INTERP_MAX_GAP_MS } from "../../utils/positionSampling";
 import { costNormPhrase } from "../../data/curatedAbilityFacts";
 import { reachesAlly } from "../../data/spellTargeting";
 import {
@@ -329,7 +332,87 @@ export type SyncWindowCd = Pick<
   ownerEnemyIds?: Set<string>;
   /** absolute ms of match start (the owner's intervals are absolute) */
   matchStartMs?: number;
+  /** The enemies a burst in this lock would land on — every enemy but the
+   *  healers (the lock is on a healer). With them, a CD that hits an enemy
+   *  is ready only if its owner was within the spell's own reach
+   *  (`cdOutOfRangeReachYards`, the CD_OUT_OF_RANGE predicate) of one of
+   *  them at some half-second of the free part of the lock. */
+  reachTargets?: readonly any[];
 };
+
+/** Hard-cast bars a START → SUCCESS pair can span (the [ENEMY HARD CAST] /
+ *  hardCastOccupancyWithin bound). */
+const SYNC_CAST_BAR_MAX_S = 12;
+
+/** One SyncWindowCd per friendly offensive CD — the candidate and
+ *  syncWindowScan (the reference table) build it the same way. */
+export function syncWindowCdFor<T extends object>(
+  cd: T,
+  owner: any,
+  enemies: readonly any[],
+  ownerEnemyIds: Set<string>,
+  matchStartMs: number,
+): T & {
+  owner: any;
+  ownerEnemyIds: Set<string>;
+  matchStartMs: number;
+  reachTargets: readonly any[];
+} {
+  return {
+    ...cd,
+    owner,
+    ownerEnemyIds,
+    matchStartMs,
+    reachTargets: enemies.filter((e) => !isHealerSpec(e.spec)),
+  };
+}
+
+/** Could the CD's owner reach any burst target with it during [fromS, toS]?
+ *  true when unknowable (no reach for the spell, no positions) — fail-open,
+ *  like CD_OUT_OF_RANGE's abstentions. Reliability round 3 W1a: 82a2 (a
+ *  Warrior knocked 16–26 yd away by Thunderstorm, his Colossus Smash
+ *  "ready"), fd45 (a Rogue on the healer he Gouged, the kill target out of
+ *  Deathmark's reach — Mutilate "Out of range" 82.284). */
+function syncCdReachable(
+  cd: SyncWindowCd,
+  fromS: number,
+  toS: number,
+): boolean {
+  if (!cd.owner || !cd.reachTargets?.length || cd.matchStartMs === undefined)
+    return true;
+  const reach = cdOutOfRangeReachYards(cd.owner, cd.spellId);
+  if (reach === null) return true;
+  let sawPair = false;
+  for (let t = fromS; t <= toS + 1e-9; t += 0.5) {
+    const tMs = cd.matchStartMs + t * 1000;
+    const o = getUnitPositionAtTime(cd.owner, tMs, INTERP_MAX_GAP_MS);
+    if (!o) continue;
+    for (const e of cd.reachTargets) {
+      if (isDeadAt(e, tMs)) continue;
+      const p = getUnitPositionAtTime(e, tMs, INTERP_MAX_GAP_MS);
+      if (!p) continue;
+      sawPair = true;
+      if (distanceBetween(o, p) <= reach) return true;
+    }
+  }
+  return !sawPair;
+}
+
+/** When the press of `c` began: the owner's SPELL_CAST_START of the same
+ *  spell ≤ SYNC_CAST_BAR_MAX_S before the success, else the success. */
+function syncPressStartS(cd: SyncWindowCd, successS: number): number {
+  const starts = cd.owner?.castStartEvents;
+  if (!starts?.length || cd.matchStartMs === undefined) return successS;
+  // the LATEST start of the spell before the success is this bar
+  let latest = -Infinity;
+  for (const e of starts) {
+    if (e.spellId !== cd.spellId) continue;
+    const s = (e.timestamp - cd.matchStartMs) / 1000;
+    if (s <= successS && s >= successS - SYNC_CAST_BAR_MAX_S && s > latest)
+      latest = s;
+  }
+  return latest === -Infinity ? successS : latest;
+}
 
 /**
  * Which offensive CDs were READY for this lock, and did the team ENTER it.
@@ -379,7 +462,8 @@ export function evaluateSyncWindow(
     const fromMs = cd.matchStartMs + readyAtS * 1000;
     const toMs = cd.matchStartMs + w.toSeconds * 1000;
     // user ruling 2026-09-26: free for most of the lock, not merely 1 s of it
-    return couldActForMostOf(blocked, fromMs, toMs);
+    if (!couldActForMostOf(blocked, fromMs, toMs)) return false;
+    return syncCdReachable(cd, readyAtS, w.toSeconds);
   });
   const entered = cds.some((cd) =>
     cd.casts.some((c) => {
@@ -389,9 +473,14 @@ export function evaluateSyncWindow(
       // a press leading the lock by ≤ SYNC_ENTER_LEAD_S (the old test), or a
       // burst still ACTIVE when the lock starts — a burst that ended before
       // the lock is not in it, however close
+      // a hard-cast CD enters when its bar STARTS inside the lock (round 3
+      // W1a, f4eb: Summon Demonic Tyrant started 166.724 inside a lock
+      // ending 167.143, landed 167.861 — "none entered")
+      const startS = syncPressStartS(cd, c.timeSeconds);
       const pressedIn =
-        c.timeSeconds >= w.fromSeconds - SYNC_ENTER_LEAD_S &&
-        c.timeSeconds <= w.toSeconds;
+        (c.timeSeconds >= w.fromSeconds - SYNC_ENTER_LEAD_S &&
+          c.timeSeconds <= w.toSeconds) ||
+        (startS >= w.fromSeconds - SYNC_ENTER_LEAD_S && startS <= w.toSeconds);
       const activeIn = c.timeSeconds <= w.toSeconds && spanEnd > w.fromSeconds;
       return pressedIn || activeIn;
     }),
@@ -461,20 +550,52 @@ export function missedSyncWindowEvents(
     w: (typeof ccWindows)[number];
     ready: string[];
     minHp: number | null;
+    /** later locks the same ready CDs were still held through */
+    alsoHeld: number[];
   }> = [];
+  // One accusation per held CD (round 3 W1a, 24b6: Freezing Trap broken
+  // 108.149, Cyclone 110.635 — two accusations against one held Volley).
+  // A lock whose every ready CD was already accused in an earlier lock and
+  // not pressed since is the same hold, not a new one.
+  // Measured on the 605-file slice (2026-09-26): the same hold recurs 0–88 s
+  // later (median ~20 s), so the later locks are not dropped silently — the
+  // accusation lists them (facts.alsoHeldAt).
+  const accused = new Map<
+    SyncWindowCd,
+    { end: number; cand: (typeof candidates)[number] }
+  >();
   for (const w of mergeHealerCcWindows(ccWindows)) {
     if (!syncWindowEligible(w, probes.enemyDeathS)) continue;
     const ev = evaluateSyncWindow(w, offensiveCds);
     const ready = ev.ready.map((cd) => cd.spellName);
     if (ready.length === 0) continue;
     if (ev.entered) continue;
-    candidates.push({
+    const sameHold = ev.ready.every((cd) => {
+      const prev = accused.get(cd);
+      return (
+        prev !== undefined &&
+        !cd.casts.some(
+          (c) => c.timeSeconds > prev.end && c.timeSeconds < w.fromSeconds,
+        )
+      );
+    });
+    if (sameHold) {
+      const owner = accused.get(ev.ready[0]!)!.cand;
+      owner.alsoHeld.push(toRenderSecond(w.fromSeconds));
+      for (const cd of ev.ready)
+        accused.set(cd, { end: w.toSeconds, cand: accused.get(cd)!.cand });
+      continue;
+    }
+    const cand = {
       w,
       ready,
       // B8: this value only ever feeds `facts` below — it is read AFTER the
       // ready/castDuring gates above have already decided emission.
       minHp: probes.enemyMinHpPctAt(w.fromSeconds, w.toSeconds),
-    });
+      alsoHeld: [] as number[],
+    };
+    candidates.push(cand);
+    for (const cd of ev.ready) accused.set(cd, { end: w.toSeconds, cand });
   }
   return candidates
     .sort(
@@ -483,7 +604,7 @@ export function missedSyncWindowEvents(
         renderedWindowSeconds(a.w.fromSeconds, a.w.toSeconds),
     )
     .slice(0, cap)
-    .map(({ w, ready, minHp }) => {
+    .map(({ w, ready, minHp, alsoHeld }) => {
       const t = toRenderSecond(w.fromSeconds);
       const windowEndT = toRenderSecond(w.toSeconds);
       return {
@@ -508,6 +629,9 @@ export function missedSyncWindowEvents(
           durationS: String(windowEndT - t),
           readyCds: ready.join("、"),
           ...(minHp !== null ? { enemyMinHpPct: fmt(minHp) } : {}),
+          // the same held CDs through later healer locks (rendered seconds,
+          // "、"-joined — a ", " would cut the facts value)
+          ...(alsoHeld.length ? { alsoHeldAt: alsoHeld.join("、") } : {}),
           // Corpus reference (syncWindowPrior.ts) — the gate
           // (checkSyncWindowRefConsistency) redoes the lookup from cellKey
           // and re-checks every one of these numbers plus the door.

@@ -34,6 +34,7 @@ import {
 } from "@gladlog/analysis";
 import {
   countsAsTeamBurst,
+  syncWindowCdFor,
   enemyHealerCcWindows,
   enemyMinHpPctInWindow,
   evaluateSyncWindow,
@@ -174,12 +175,9 @@ async function scan(): Promise<void> {
         try {
           for (const cd of extractMajorCooldowns(f, combat)) {
             if (!countsAsTeamBurst(f, String(cd.spellId))) continue;
-            teamCds.push({
-              ...cd,
-              owner: f,
-              ownerEnemyIds: enemyAndPetIds,
-              matchStartMs: startMs,
-            });
+            teamCds.push(
+              syncWindowCdFor(cd, f, enemies, enemyAndPetIds, startMs),
+            );
           }
         } catch {
           /* torn/unparseable — skip */
@@ -344,7 +342,7 @@ function emitTable(): void {
           generatedAt: new Date().toISOString().slice(0, 10),
           windows: rows.length,
           predicate:
-            "eligible window: enemyHealerCcWindows merged per healer; team burst = countsAsTeamBurst (canonical offensive table, a healer's own only Power Infusion) (mergeHealerCcWindows: one continuous lock = one window), syncWindowEligible (rendered dur>=3s, rendered t>=30s, no enemy death in-window), evaluateSyncWindow: >=1 canonical OFFENSIVE_CD_SPELL_IDS off cooldown at the window start or at a merged component's start, whose owner was then free to act >= REACTION_WINDOW_S of the rest of the lock; entered = such a CD pressed in [from-2s, to] or still active (buffFullDurationForCaster) at the lock start; kill15 = enemy death in (from, from+15s]",
+            "eligible window: enemyHealerCcWindows merged per healer; team burst = countsAsTeamBurst (canonical offensive table, a healer's own only Power Infusion) (mergeHealerCcWindows: one continuous lock = one window), syncWindowEligible (rendered dur>=3s, rendered t>=30s, no enemy death in-window), evaluateSyncWindow: >=1 canonical OFFENSIVE_CD_SPELL_IDS off cooldown at the window start or at a merged component's start, whose owner was then free to act for most of the rest of the lock (couldActForMostOf) and, for a CD that hits an enemy, within its reach (cdOutOfRangeReachYards) of a non-healer enemy at some half-second of it; entered = such a CD pressed (cast START or success) in [from-2s, to] or still active (buffFullDurationForCaster) at the lock start; kill15 = enemy death in (from, from+15s]",
         },
         cells: outCells,
       },

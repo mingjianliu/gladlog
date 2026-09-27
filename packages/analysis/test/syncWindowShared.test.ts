@@ -233,3 +233,68 @@ describe("countsAsTeamBurst (B3iii, user ruling 2026-09-25)", () => {
     expect(countsAsTeamBurst(ret, "642")).toBe(false); // Divine Shield
   });
 });
+
+describe("evaluateSyncWindow — round 3 W1a legs (reliability leftovers batch 11)", () => {
+  const START = 1_000_000;
+  const at = (id: string, name: string, spec: unknown, xAt: (s: number) => number) =>
+    ({
+      id,
+      name,
+      spec,
+      info: undefined,
+      spellCastEvents: [],
+      castStartEvents: [],
+      auraEvents: [],
+      actionIn: [],
+      deathRecords: [],
+      advancedActions: Array.from({ length: 401 }, (_, i) => ({
+        timestamp: START + i * 500,
+        logLine: { timestamp: START + i * 500 },
+        advanced: true,
+        advancedActorCurrentHp: 100,
+        advancedActorMaxHp: 100,
+        advancedActorPositionX: xAt(i / 2),
+        advancedActorPositionY: 0,
+        advancedActorPowers: [],
+      })),
+    }) as unknown as ICombatUnit;
+  const lock = win(100, 105, "Polymorph");
+  const smash = (owner: ICombatUnit, target: ICombatUnit) => ({
+    spellId: "167105",
+    spellName: "Colossus Smash",
+    casts: [] as { timeSeconds: number }[],
+    cooldownSeconds: 45,
+    neverUsed: true,
+    owner,
+    ownerEnemyIds: new Set(["Enemy-1"]),
+    matchStartMs: START,
+    reachTargets: [target],
+  });
+
+  it("a melee CD whose owner never came within its reach of a burst target → not ready (82a2 Thunderstorm)", () => {
+    const warrior = at("Player-1", "War-R", 71, () => 0);
+    const far = at("Enemy-1", "Dk-R", 252, () => 20);
+    const near = at("Enemy-1", "Dk-R", 252, () => 3);
+    expect(evaluateSyncWindow(lock, [smash(warrior, far)]).ready).toHaveLength(0);
+    expect(evaluateSyncWindow(lock, [smash(warrior, near)]).ready).toHaveLength(1);
+  });
+
+  it("a hard-cast CD whose bar STARTS inside the lock entered it (f4eb Demonic Tyrant)", () => {
+    const lock2 = win(163.807, 167.143, "Mortal Coil");
+    const lock2Warlock = at("Player-2", "Lock-R", 266, () => 0) as any;
+    const tyrant = {
+      spellId: "265187",
+      spellName: "Summon Demonic Tyrant",
+      casts: [{ timeSeconds: 167.861 }],
+      cooldownSeconds: 90,
+      neverUsed: false,
+      owner: lock2Warlock,
+      matchStartMs: START,
+    };
+    expect(evaluateSyncWindow(lock2, [tyrant]).entered).toBe(false);
+    lock2Warlock.castStartEvents = [
+      { spellId: "265187", timestamp: START + 166_724 },
+    ];
+    expect(evaluateSyncWindow(lock2, [tyrant]).entered).toBe(true);
+  });
+});

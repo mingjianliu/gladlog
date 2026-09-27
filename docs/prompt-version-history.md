@@ -1610,3 +1610,12 @@ locales and CRLF logs; kick-eaten names own-cooldown / GCD presses outside
 the locked school (266). [UNCLEANSED DEBUFF] "taken in the 5s after it
 landed"; pillar hints "that enemy only"; damage sources name a summon by
 its owner ("5's guardian"; bare [pet] 4,305 → 5).
+
+v179 (2026-09-26, reliability leftovers batch 11): missed-sync-window
+(round 3 W1a legs). A CD that hits an enemy is ready only if its owner came
+within its own reach (cdOutOfRangeReachYards) of a non-healer enemy during
+the free part of the lock (82a2, fd45); a hard-cast CD whose bar STARTS
+inside the lock entered it (f4eb Demonic Tyrant); one held CD across several
+locks is one accusation, the later locks listed as facts.alsoHeldAt (24b6).
+Per-owner menu rows: dps 604 → 506, healer 302 → 253 (unique: 47 same-hold
+locks folded, 11 unreachable / bar-started, 9 cap refills).

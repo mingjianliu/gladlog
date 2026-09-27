@@ -118,6 +118,7 @@ import {
   cdHoardedEvents,
   cdSpentIdleEvents,
   countsAsTeamBurst,
+  syncWindowCdFor,
   enemyHealerCcWindows,
   enemyMinHpPctInWindow,
   friendlyCrisisMomentInWindow,
@@ -2106,15 +2107,18 @@ function teamPlayEvents(
               // B3iii (2026-09-25): a healer's own CD counts only if it is
               // Power Infusion — the shared countsAsTeamBurst.
               if (!countsAsTeamBurst(f, String(cd.spellId))) continue;
-              teamOffensiveCds.push({
-                ...cd,
-                ownerName: f.name,
-                // B3i / B3iii (2026-09-25): who can press it, for the
-                // shared evaluateSyncWindow feasibility + active-span test
-                owner: f,
-                ownerEnemyIds: enemyAndPetIds,
-                matchStartMs: combat.startTime,
-              });
+              // B3i / B3iii (2026-09-25): who can press it, for the
+              // shared evaluateSyncWindow feasibility + active-span test;
+              // round 3 W1a: and whom it could reach
+              teamOffensiveCds.push(
+                syncWindowCdFor(
+                  { ...cd, ownerName: f.name },
+                  f,
+                  enemies,
+                  enemyAndPetIds,
+                  combat.startTime,
+                ),
+              );
             }
           } catch {
             /* this friend's CD ledger not computable → their CDs absent */
