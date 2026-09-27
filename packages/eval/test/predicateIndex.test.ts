@@ -742,6 +742,11 @@ const INDEX: PredicateRow[] = [
     mod: losAnalysis,
   },
   {
+    file: `${A}/utils/positionAnalysis.ts`,
+    symbol: "ownerDisplacementYards",
+    mod: positionAnalysis,
+  },
+  {
     file: `${A}/utils/losAnalysis.ts`,
     symbol: "hasLineOfSight",
     mod: losAnalysis,
