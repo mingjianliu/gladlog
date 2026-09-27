@@ -1645,3 +1645,8 @@ v182 (2026-09-26, reliability leftovers batch 13): four outcome fact lines
 for >= 5 % of the caster's max HP (672); [CC REMOVED] a control removed by
 Blessing of Sanctuary (786); [REJECTED] the owner's runs of >= 3 presses
 refused for range / movement / line of sight.
+
+v183 (2026-09-26, reliability leftovers batch 14): [RES] lists the owner's
+own interrupt (own or pet, official kit ownership) and a Death Knight's Death
+Grip — user ruling; they sit under the major-CD floor and were invisible
+(f4eb Spell Lock, f4da Counterspell). [RES]-only: no other consumer sees them.

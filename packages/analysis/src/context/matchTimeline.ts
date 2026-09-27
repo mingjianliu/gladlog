@@ -104,6 +104,7 @@ import { sumIncomingPressure } from "../utils/incomingPressure";
 import { getHpPercentAtTime } from "../utils/killWindowTargetSelection";
 import { fmtTime, toRenderSecond } from "../utils/renderGrid";
 import type { RawStreams } from "../utils/rawStreams";
+import { ownerResUtilityCds } from "./resUtilityCds";
 import {
   groundedControls,
   ownerRejectRuns,
@@ -1037,6 +1038,13 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   }
 
   const snapshotFn = buildResourceSnapshot;
+  // [RES] only (user ruling 2026-09-26, round 3 N14): the owner's kick (own
+  // or pet) and Death Grip sit under MIN_CD_SECONDS and never entered the
+  // ledger; they join the [RES] line and nothing else (resUtilityCds.ts).
+  const resOwnerCDs = [
+    ...ownerCDs,
+    ...ownerResUtilityCds(owner, matchStartMs),
+  ];
 
   const matchEndSeconds = (matchEndMs - matchStartMs) / 1000;
   // GH #119: the round the aura-evidenced bursts are read over (the same
@@ -3867,12 +3875,12 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     }));
     const currentReadyNames = computeReadyNames(
       timeSeconds,
-      ownerCDs,
+      resOwnerCDs,
       teammateCDsWithLabel,
     );
     const currentOnCDNames = computeOnCDDisplayNames(
       timeSeconds,
-      ownerCDs,
+      resOwnerCDs,
       teammateCDsWithLabel,
     );
     const forceFullRefresh =
@@ -3890,7 +3898,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
 
     const snapshotStr = snapshotFn({
       timeSeconds,
-      ownerCDs,
+      ownerCDs: resOwnerCDs,
       ownerName: owner.name,
       ownerSpec,
       teammateCDs,
@@ -3970,7 +3978,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     // **not track** that ability (1 cast across a thousand-match corpus, no
     // empirical basis for tracking it), and "not listed" was indistinguishable
     // from "not available".
-    "  [RES] lists TRACKED major cooldowns only — an ability absent from both `rdy:` and `cd:`",
+    "  [RES] lists TRACKED major cooldowns (plus your own interrupt and Death Grip) — an ability absent from both `rdy:` and `cd:`",
     "    is one this ledger does not track, NOT one that was unavailable. Other sections may still cite it.",
     "  [RES] rdy: = abilities READY at that instant. `rdy:Δ` = unchanged since the previous [RES];",
     "    a leading `-<spell>` marks one that just LEFT the ready set. `cd:<spell>(Ns)` = seconds until it returns.",
