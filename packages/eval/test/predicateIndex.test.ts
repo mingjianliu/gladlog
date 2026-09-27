@@ -102,6 +102,7 @@ import * as drAnalysis from "@gladlog/analysis/src/utils/drAnalysis";
 import * as enemyCDs from "@gladlog/analysis/src/utils/enemyCDs";
 import * as enemyDefensives from "@gladlog/analysis/src/utils/enemyDefensives";
 import * as enemyInterrupts from "@gladlog/analysis/src/utils/enemyInterrupts";
+import * as offensiveAuraOccurrences from "@gladlog/analysis/src/utils/offensiveAuraOccurrences";
 import * as externalDamage from "@gladlog/analysis/src/utils/externalDamage";
 import * as healerOffenseAnalysis from "@gladlog/analysis/src/utils/healerOffenseAnalysis";
 import * as incomingPressure from "@gladlog/analysis/src/utils/incomingPressure";
@@ -1236,6 +1237,11 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/enemyInterrupts.ts`,
     symbol: "kickCastSpellId",
     mod: enemyInterrupts,
+  },
+  {
+    file: `${A}/utils/offensiveAuraOccurrences.ts`,
+    symbol: "auraOffensiveOccurrences",
+    mod: offensiveAuraOccurrences,
   },
   {
     file: `${A}/utils/enemyInterrupts.ts`,

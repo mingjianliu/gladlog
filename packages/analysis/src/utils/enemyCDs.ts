@@ -1,15 +1,15 @@
-import { buffFullDurationForCaster } from "./buffDuration";
 import {
   AtomicArenaCombat,
   ICombatUnit,
   LogEvent,
 } from "@gladlog/parser-compat";
 
+import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
 import {
   effectiveCooldownSeconds,
   spellEffectData,
 } from "../data/spellEffectData";
-import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
+import { buffFullDurationForCaster } from "./buffDuration";
 import {
   getUnitHpAtTimestamp,
   HP_SAMPLE_RADIUS_MS,
@@ -26,6 +26,10 @@ import {
   dampeningDangerMultiplier,
   fmtDampening,
 } from "./dampening";
+import {
+  AURA_EVIDENCE_WINDOW_S,
+  auraOffensiveOccurrences,
+} from "./offensiveAuraOccurrences";
 import {
   dangerLabel,
   offensiveDangerWeight,
@@ -62,12 +66,24 @@ export interface IEnemyCDCast {
    * when available; falls back to castTimeSeconds when duration data is missing.
    */
   buffEndSeconds: number;
+  /** GH #119: "fact" = shown, never part of a burst window (a Demonic
+   * Metamorphosis form under OFFENSIVE_AURA_FLAGS.demonic "fact"). Absent =
+   * "burst". */
+  burstRole?: "burst" | "fact";
+  /** GH #119: nothing tells whether a cooldown was spent (a Metamorphosis
+   * form with neither a press nor an Eye Beam) — render "?" not "[proc]" */
+  availabilityUnknown?: boolean;
 }
 
 export interface IEnemyPlayerTimeline {
   readonly playerName: string;
   readonly specName: string;
   readonly offensiveCDs: readonly IEnemyCDCast[];
+  /** GH #119: occurrences shown on the timeline but never a burst anywhere
+   * (a Demonic Metamorphosis form under OFFENSIVE_AURA_FLAGS.demonic
+   * "fact"). Kept OUT of offensiveCDs so no reader of the burst list can
+   * pick one up by accident; only the [ENEMY CD] renderer reads this. */
+  readonly offensiveFacts?: readonly IEnemyCDCast[];
 }
 
 export interface IAlignedBurstWindow {
@@ -200,13 +216,63 @@ export function reconstructEnemyCDTimeline(
       });
     }
 
+    // GH #119: effects whose only evidence is an aura (Havoc Metamorphosis —
+    // the button never logs —, Demonic, a Doom Winds with no logged press),
+    // from the same round-bounded aura intervals the aura path reads
+    const aura = auraOffensiveOccurrences(enemy, combat);
+    for (const [castMs, endMs] of aura.observedEndOfCast) {
+      const t = (castMs - matchStartMs) / 1000;
+      const cast = offensiveCDs.find(
+        (c) =>
+          c.spellId === "384352" && Math.abs(c.castTimeSeconds - t) < 0.001,
+      );
+      if (cast) cast.buffEndSeconds = (endMs - matchStartMs) / 1000;
+    }
+    const offensiveFacts: IEnemyCDCast[] = [];
+    // only casts that were LOGGED — never an aura occurrence appended below
+    // (codex re-review: two source-unknown forms [10,11] and [12,17] merged
+    // into one [10,17] when the second matched the first)
+    const loggedCasts = [...offensiveCDs];
+    for (const o of aura.occurrences) {
+      const castTimeSeconds = (o.startMs - matchStartMs) / 1000;
+      // a LOGGED press of the same cooldown already stands for this effect
+      // (a 191427 button cast, should one ever log): merge the aura's end
+      // into it instead of adding a second occurrence (codex review)
+      const logged = loggedCasts.find(
+        (c) =>
+          c.spellId === o.spellId &&
+          Math.abs(c.castTimeSeconds - castTimeSeconds) <=
+            AURA_EVIDENCE_WINDOW_S,
+      );
+      if (logged) {
+        if (o.endObserved)
+          logged.buffEndSeconds = (o.endMs - matchStartMs) / 1000;
+        continue;
+      }
+      (o.burstRole === "fact" ? offensiveFacts : offensiveCDs).push({
+        spellId: o.spellId,
+        spellName: o.spellName,
+        castTimeSeconds,
+        cooldownSeconds: o.cooldownSeconds,
+        availableAgainAtSeconds:
+          o.availableAgainAtMs === null
+            ? null
+            : (o.availableAgainAtMs - matchStartMs) / 1000,
+        buffEndSeconds: (o.endMs - matchStartMs) / 1000,
+        dangerWeight: o.dangerWeight,
+        ...(o.burstRole === "fact" ? { burstRole: "fact" as const } : {}),
+        ...(o.availabilityUnknown ? { availabilityUnknown: true } : {}),
+      });
+    }
+
     offensiveCDs.sort((a, b) => a.castTimeSeconds - b.castTimeSeconds);
 
-    if (offensiveCDs.length > 0) {
+    if (offensiveCDs.length > 0 || offensiveFacts.length > 0) {
       players.push({
         playerName: enemy.name,
         specName: specToString(enemy.spec),
         offensiveCDs,
+        ...(offensiveFacts.length > 0 ? { offensiveFacts } : {}),
       });
     }
   }

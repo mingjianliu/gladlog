@@ -103,6 +103,13 @@ import {
   TALENT_BEHAVIORS,
 } from "../utils/talentBehaviors";
 import { PER_RANK_COOLDOWN_TALENTS } from "../utils/talentModifiers";
+import {
+  ASCENDANCE_ENH_ID,
+  DOOM_WINDS_PRESS_ID,
+  EYE_BEAM_ID,
+  METAMORPHOSIS_PRESS_CAST_IDS,
+  OFFENSIVE_AURA_EVIDENCE,
+} from "../utils/offensiveAuraOccurrences";
 import { KW_MAJOR_DEFENSIVE_IDS } from "./abilityProfile";
 import { CAST_PARAM_DURATIONS } from "./castParamDurations";
 import { classMetadata } from "./classSpells";
@@ -539,6 +546,18 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   t("OFFENSIVE_EFFECT_ACTIVATION_IDS", "utils/spellDanger.ts", "mixed", () => [
     ...OFFENSIVE_EFFECT_ACTIVATION_IDS.keys(),
     ...OFFENSIVE_EFFECT_ACTIVATION_IDS.values(),
+  ]),
+  // GH #119 (2026-09-26): offensive effects whose only evidence is an aura —
+  // the aura ids, the cooldowns they map to, and every cast id read as
+  // evidence (Metamorphosis landing / button, Eye Beam, Doom Winds press,
+  // Ascendance). All hand-keyed ids a patch can renumber.
+  t("OFFENSIVE_AURA_EVIDENCE", "utils/offensiveAuraOccurrences.ts", "mixed", () => [
+    ...OFFENSIVE_AURA_EVIDENCE.keys(),
+    ...[...OFFENSIVE_AURA_EVIDENCE.values()].map((v) => v.cooldownId),
+    ...METAMORPHOSIS_PRESS_CAST_IDS,
+    EYE_BEAM_ID,
+    DOOM_WINDS_PRESS_ID,
+    ASCENDANCE_ENH_ID,
   ]),
   // CC full-duration predicate (GH #44 tail, 2026-09-02): the corpus-vs-DB2
   // duration corrections and the one aura that lengthens CC in arena. Both are

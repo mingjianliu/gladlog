@@ -175,5 +175,15 @@
  *  opened — user ruling, a wall the target pressed in response is not "opened
  *  into" (dps 44 → 7); (3) an enemy's [KILL] line names it through the enemy
  *  roster (433 lines printed the bare, often CJK / Cyrillic, character name).
+ *  v181 (2026-09-26, GH #119): enemy bursts see effects whose only evidence is
+ *  an aura — Havoc Metamorphosis (the 191427 button never logs; a press shows as
+ *  its 200166 landing), the Eye Beam Demonic form as a MINOR burst (user ruling
+ *  「算小爆发」: Eye Beam's 30 s weight 0 — joins aligned windows, opens none
+ *  alone), a Doom Winds with no logged press; an Ascendance-granted Doom Winds
+ *  stays Ascendance's. 605 files: [ENEMY CD] Metamorphosis lines 0 → 1,447,
+ *  Doom Winds 37 → 132, aligned burst windows 11,472 → 11,659; candidates
+ *  position-mistake dps 290 → 292, missed-cleanse dps 200 → 198 / healer
+ *  262 → 258, slow-defensive-response 125 → 128, kick-eaten dps 1001 → 1003 /
+ *  healer 483 → 487; kick-eaten burst facts name a Metamorphosis on 161 rows.
  */
-export const PROMPT_VERSION = 180;
+export const PROMPT_VERSION = 181;

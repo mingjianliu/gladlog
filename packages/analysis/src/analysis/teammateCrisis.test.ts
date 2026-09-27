@@ -31,8 +31,12 @@ const EXTERNAL = [...CRISIS_EXTERNAL_IDS][0]!;
 // the burst FACT needs a real cooldown (TEAMMATE_CRISIS_BURST_MIN_CD_S) —
 // pick one from the canonical set rather than the first entry, which may be
 // a debuffs_offensive row with no cooldown (Curse of Weakness)
-const BURST = [...CRISIS_OFFENSIVE_CD_IDS].find((id) => isEnemyCdWindowSpell(id))!;
-const NO_CD_BURST = [...CRISIS_OFFENSIVE_CD_IDS].find((id) => !isEnemyCdWindowSpell(id));
+const BURST = [...CRISIS_OFFENSIVE_CD_IDS].find((id) =>
+  isEnemyCdWindowSpell(id),
+)!;
+const NO_CD_BURST = [...CRISIS_OFFENSIVE_CD_IDS].find(
+  (id) => !isEnemyCdWindowSpell(id),
+);
 
 const sample = (
   actorId: string,
@@ -369,6 +373,40 @@ describe("teammateCrisisPoints", () => {
         teammateCrisisPoints(h2, combat([h2, mate(), e2]), [])[0]!.enemyBurst,
       ).toBeNull();
     }
+  });
+
+  // GH #119: the Havoc Metamorphosis button never logs; the press shows as
+  // the 162264 aura + its 200166 landing — the same occurrence the enemy-CD
+  // timeline shows is the burst fact here
+  it("an aura-evidenced enemy burst (Havoc Metamorphosis press) is the burst fact", () => {
+    const auraEv = (event: LogEvent, t: number) => ({
+      timestamp: T0 + t,
+      spellId: "162264",
+      srcUnitId: "E1",
+      destUnitId: "E1",
+      logLine: { event, timestamp: T0 + t, parameters: [] },
+    });
+    const e = enemy({
+      spec: CombatUnitSpec.DemonHunter_Havoc,
+      spellCastEvents: [cast(-500, "200166", "E1")],
+      auraEvents: [
+        auraEv(LogEvent.SPELL_AURA_APPLIED, -1000),
+        auraEv(LogEvent.SPELL_AURA_REMOVED, 29_000),
+      ],
+    });
+    const h = healer();
+    // the aura goes up 1 s before T0: the round must include it (aura
+    // evidence is round-bounded, casts never were)
+    const [p] = teammateCrisisPoints(
+      h,
+      combat([h, mate(), e], { startTime: T0 - 5000 }),
+      [],
+    );
+    expect(p!.enemyBurst).toMatchObject({
+      casterName: "Foe-R",
+      spellId: "191427",
+      secondsBefore: 3,
+    });
   });
 
   it("a non-healer owner yields nothing", () => {

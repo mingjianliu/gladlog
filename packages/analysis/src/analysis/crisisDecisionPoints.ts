@@ -38,6 +38,7 @@ import {
 } from "../utils/cooldowns";
 import { isEnemyCdWindowSpell } from "../utils/enemyCDs";
 import { PVP_TRINKET_SPELL_IDS } from "../utils/killWindowTargetSelection";
+import { auraOffensiveOccurrences } from "../utils/offensiveAuraOccurrences";
 import { rootIntervalsOf } from "../utils/rootReachability";
 import { OFFENSIVE_CD_SPELL_IDS } from "../utils/spellDanger";
 import { buildFilteredAuraIntervals } from "../utils/utils";
@@ -790,6 +791,11 @@ export function crisisDecisionPoints(
       if (friendIds.has(u.id) && u.id !== owner.id && CONTROL_IDS.has(sid))
         friendControlCasts.push({ t: c.timestamp, dest: c.destUnitId });
     }
+    // GH #119: aura-evidenced bursts (Havoc Metamorphosis, an unlogged Doom
+    // Winds press) — the same occurrences the enemy-CD timeline shows
+    if (!friendIds.has(u.id))
+      for (const o of auraOffensiveOccurrences(u, combat).occurrences)
+        if (o.burstRole === "burst") enemyBurstCasts.push(o.startMs);
   }
 
   // BACKLOG #43: proc marker auras applied to the owner (self-sourced)

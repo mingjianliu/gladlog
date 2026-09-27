@@ -1033,6 +1033,9 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   const snapshotFn = buildResourceSnapshot;
 
   const matchEndSeconds = (matchEndMs - matchStartMs) / 1000;
+  // GH #119: the round the aura-evidenced bursts are read over (the same
+  // bounds reconstructEnemyCDTimeline uses)
+  const roundBounds = { startTime: matchStartMs, endTime: matchEndMs };
 
   let nextPlaceholderId = 0;
   function requestSnapshotPlaceholder(
@@ -2478,12 +2481,17 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   // so the model can't collapse short-interval repeats of the same CD into one window.
 
   for (const player of enemyCDTimeline.players) {
+    // GH #119: timeline-only facts (a Demonic Metamorphosis form) render here
+    // too; they are never in offensiveCDs, so no burst reader sees them
+    const shown = [...player.offensiveCDs, ...(player.offensiveFacts ?? [])].sort(
+      (x, y) => x.castTimeSeconds - y.castTimeSeconds,
+    );
     const totalBySpell = new Map<string, number>();
-    for (const cd of player.offensiveCDs) {
+    for (const cd of shown) {
       totalBySpell.set(cd.spellName, (totalBySpell.get(cd.spellName) ?? 0) + 1);
     }
     const seqBySpell = new Map<string, number>();
-    for (const cd of player.offensiveCDs) {
+    for (const cd of shown) {
       const total = totalBySpell.get(cd.spellName) ?? 1;
       const seq = (seqBySpell.get(cd.spellName) ?? 0) + 1;
       seqBySpell.set(cd.spellName, seq);
@@ -2522,9 +2530,17 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
         const tMs = matchStartMs + tSec * 1000;
         const friendlyIds = new Set(friends.map((f) => f.id));
         const hasBurst =
-          friends.some((f) => hasOffensiveSpellActive(f, tMs, friendlyIds)) ||
+          friends.some((f) =>
+            hasOffensiveSpellActive(f, tMs, friendlyIds, undefined, roundBounds),
+          ) ||
           (enemies ?? []).some((e) =>
-            hasOffensiveSpellActive(e, tMs, friendlyIds, isEnemyCdWindowSpell),
+            hasOffensiveSpellActive(
+              e,
+              tMs,
+              friendlyIds,
+              isEnemyCdWindowSpell,
+              roundBounds,
+            ),
           );
         const burstStr = hasBurst ? " [friendly offensive CD active]" : "";
         const targetUnit =
@@ -2883,9 +2899,17 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
           : "";
         const friendlyIds = new Set(friends.map((f) => f.id));
         const hasBurst =
-          friends.some((f) => hasOffensiveSpellActive(f, tMs, friendlyIds)) ||
+          friends.some((f) =>
+            hasOffensiveSpellActive(f, tMs, friendlyIds, undefined, roundBounds),
+          ) ||
           (enemies ?? []).some((e) =>
-            hasOffensiveSpellActive(e, tMs, friendlyIds, isEnemyCdWindowSpell),
+            hasOffensiveSpellActive(
+              e,
+              tMs,
+              friendlyIds,
+              isEnemyCdWindowSpell,
+              roundBounds,
+            ),
           );
         const burstPart = hasBurst ? " [friendly offensive CD active]" : "";
         const enemyUnit = enemies?.find((e) => e.name === summary.playerName);

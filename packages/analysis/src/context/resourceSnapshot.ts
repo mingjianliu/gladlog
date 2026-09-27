@@ -215,10 +215,14 @@ export function buildPlayerLoadout(
       seen.add(cd.spellName);
       // an activation of another cooldown's effect has no cooldown of its
       // own to print (Radiant Glory's Avenging Wrath, GH #115)
+      // GH #119: a form with neither a press nor a proc source says nothing
+      // about a cooldown — "?" rather than claiming a proc
       observedOnly.push(
-        cd.availableAgainAtSeconds === null
-          ? `${cd.spellName} [proc]`
-          : `${cd.spellName} [${cd.cooldownSeconds}s]`,
+        cd.availabilityUnknown
+          ? `${cd.spellName} [?]`
+          : cd.availableAgainAtSeconds === null
+            ? `${cd.spellName} [proc]`
+            : `${cd.spellName} [${cd.cooldownSeconds}s]`,
       );
     }
     const enemyUnit = enemyUnitFor(player.playerName);

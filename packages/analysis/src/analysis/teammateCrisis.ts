@@ -64,6 +64,7 @@ import {
 } from "../utils/cooldowns";
 import { isEnemyCdWindowSpell } from "../utils/enemyCDs";
 import { hasLineOfSight } from "../utils/losAnalysis";
+import { auraOffensiveOccurrences } from "../utils/offensiveAuraOccurrences";
 import { healerReachYards } from "../utils/spellRange";
 import {
   actionBlockedAt,
@@ -314,6 +315,14 @@ export function teammateCrisisPoints(
           spellId: sid,
         });
     }
+    // GH #119: aura-evidenced bursts — the timeline's occurrences
+    for (const o of auraOffensiveOccurrences(e, combat).occurrences)
+      if (o.burstRole === "burst")
+        enemyBurstCasts.push({
+          t: o.startMs,
+          casterName: e.name,
+          spellId: o.spellId,
+        });
   }
   const nameOfUnit = (id: string | undefined): string | null => {
     if (!id) return null;

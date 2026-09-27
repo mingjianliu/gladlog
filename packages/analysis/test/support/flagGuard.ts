@@ -29,6 +29,7 @@ type FlagObject = Record<string, boolean | string>;
  * singleton cannot silently escape the guard. */
 export const MUTABLE_FLAG_NAMES = [
   "CANDIDATE_TYPE_FLAGS",
+  "OFFENSIVE_AURA_FLAGS",
   "TIMELINE_LINE_FLAGS",
 ] as const;
 
@@ -38,20 +39,23 @@ export interface FlagGuardState {
 }
 
 export async function loadFlagGuardState(): Promise<FlagGuardState> {
-  const [flags, registry, timeline] = await Promise.all([
+  const [flags, registry, timeline, auraOcc] = await Promise.all([
     import("../../src/data/candidateTypeFlags"),
     import("../../src/data/candidateTypeRegistry"),
     import("../../src/data/timelineLineFlags"),
+    import("../../src/utils/offensiveAuraOccurrences"),
   ]);
   const objects: Record<string, FlagObject> = {
     CANDIDATE_TYPE_FLAGS: flags.CANDIDATE_TYPE_FLAGS,
     TIMELINE_LINE_FLAGS: timeline.TIMELINE_LINE_FLAGS,
+    OFFENSIVE_AURA_FLAGS: auraOcc.OFFENSIVE_AURA_FLAGS,
   };
   const g = globalThis as {
     __gladlogFlagSnapshots?: Record<string, FlagObject>;
   };
   g.__gladlogFlagSnapshots ??= {
     TIMELINE_LINE_FLAGS: { ...timeline.TIMELINE_LINE_FLAGS },
+    OFFENSIVE_AURA_FLAGS: { ...auraOcc.OFFENSIVE_AURA_FLAGS },
   };
   const snapshots = g.__gladlogFlagSnapshots;
   return {

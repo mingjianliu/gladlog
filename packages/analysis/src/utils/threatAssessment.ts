@@ -78,7 +78,8 @@ export function threatActiveAt(
   tSeconds: number,
   enemies: ICombatUnit[],
   friendlies: ICombatUnit[],
-  combat: Pick<AtomicArenaCombat, "startTime">,
+  combat: Pick<AtomicArenaCombat, "startTime"> &
+    Partial<Pick<AtomicArenaCombat, "endTime">>,
   // Calibration-only override (Task 5, packages/eval/src/explore/
   // candidateCalibration.ts): defaults to the module constant, so every
   // production call site (unparameterized) is byte-identical to before this
@@ -90,7 +91,17 @@ export function threatActiveAt(
   const windowMs = overrides?.damageWindowMs ?? THREAT_DAMAGE_WINDOW_MS;
   const tMs = combat.startTime + tSeconds * 1000;
 
-  if (enemies.some((e) => hasOffensiveSpellActive(e, tMs, null))) return true;
+  // GH #119: the round, so aura-evidenced bursts read the timeline's bounds
+  const round =
+    typeof combat.endTime === "number"
+      ? { startTime: combat.startTime, endTime: combat.endTime }
+      : undefined;
+  if (
+    enemies.some((e) =>
+      hasOffensiveSpellActive(e, tMs, null, undefined, round),
+    )
+  )
+    return true;
 
   const fromMs = tMs - windowMs;
   const toMs = tMs + windowMs;

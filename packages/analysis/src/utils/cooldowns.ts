@@ -16,7 +16,6 @@ import {
   healerSaveCdStripDefensive,
 } from "../data/healerSaveCd";
 import { PVP_TALENT_REPLACES_GENERATED } from "../data/pvpTalentReplacesGenerated";
-import { replacedSpellIds } from "../data/talentReplaces";
 import { OFFENSIVE_RACIAL_SPELL_IDS } from "../data/racialAbilities";
 import { SHARED_CHARGE_CATEGORY } from "../data/sharedChargeGenerated";
 import {
@@ -28,12 +27,17 @@ import { CORPUS_COOLDOWN_PATCHES } from "../data/spellEffectOverrides";
 import spellIdListsData from "../data/spellIdLists";
 import { reachesAlly } from "../data/spellTargeting";
 import { SpellTag } from "../data/spellTypes";
+import { replacedSpellIds } from "../data/talentReplaces";
 import { USABLE_WHILE_CC_GENERATED } from "../data/usableWhileCcGenerated";
 import { getSortedAdvancedActions } from "./advancedActions";
 import { binarySearchClosest } from "./binarySearch";
 import { buffFullDurationForCaster } from "./buffDuration";
 import { COPY_CAST_IDS } from "./castPress";
 import { incomingPressureEvents } from "./incomingPressure";
+import {
+  auraOffensiveActiveAt,
+  OFFENSIVE_AURA_EVIDENCE,
+} from "./offensiveAuraOccurrences";
 import { fmtTime, toRenderSecond } from "./renderGrid";
 import { isOffensiveSpell } from "./spellDanger";
 import {
@@ -3407,13 +3411,28 @@ export function hasOffensiveSpellActive(
   timestampMs: number,
   requiredSourceIds: Set<string> | null,
   spellIdFilter?: (spellId: string) => boolean,
+  /** the round, when the caller has it (GH #119: the aura-evidenced effects
+   * are read over the same bounds the enemy-CD timeline uses) */
+  combat?: { startTime: number; endTime: number },
 ): boolean {
+  // GH #119: the aura-evidenced offensive effects (Havoc Metamorphosis,
+  // Doom Winds) are answered from the SAME occurrence intervals the enemy-CD
+  // timeline uses — observed end, else a duration cap — never by the open-
+  // ended "applied, no removal = active forever" loop below. They are
+  // self-sourced, so only a filter that admits the unit itself sees them.
+  if (
+    (requiredSourceIds === null || requiredSourceIds.has(unit.id)) &&
+    auraOffensiveActiveAt(unit, timestampMs, spellIdFilter, combat)
+  )
+    return true;
+
   const applied = new Map<string, number[]>();
   const removed = new Map<string, number[]>();
 
   for (const aura of unit.auraEvents) {
     const spellId = aura.spellId;
     if (!spellId || !isOffensiveSpell(spellId)) continue;
+    if (OFFENSIVE_AURA_EVIDENCE.has(spellId)) continue;
     if (requiredSourceIds !== null && !requiredSourceIds.has(aura.srcUnitId))
       continue;
     if (spellIdFilter !== undefined && !spellIdFilter(spellId)) continue;
@@ -3506,8 +3525,12 @@ function offensiveThreatStartedAfter(
 export function detectPanicDefensives(
   friends: ICombatUnit[],
   enemies: ICombatUnit[],
-  combat: { startTime: number },
+  combat: { startTime: number; endTime?: number },
 ): IPanicDefensive[] {
+  const round =
+    typeof combat.endTime === "number"
+      ? { startTime: combat.startTime, endTime: combat.endTime }
+      : undefined;
   const friendlyIds = new Set(friends.map((u) => u.id));
   const enemyIds = new Set(enemies.map((u) => u.id));
   const unitMap = new Map(friends.map((u) => [u.id, u]));
@@ -3526,11 +3549,18 @@ export function detectPanicDefensives(
       const targetUnit = unitMap.get(action.destUnitId);
 
       // 1. Enemy self-buffs: Combustion, Recklessness, etc.
-      if (enemies.some((e) => hasOffensiveSpellActive(e, castMs, null)))
+      if (
+        enemies.some((e) =>
+          hasOffensiveSpellActive(e, castMs, null, undefined, round),
+        )
+      )
         continue;
 
       // 2. Offensive debuffs on the target from enemies: Deathmark, Colossus Smash, etc.
-      if (targetUnit && hasOffensiveSpellActive(targetUnit, castMs, enemyIds))
+      if (
+        targetUnit &&
+        hasOffensiveSpellActive(targetUnit, castMs, enemyIds, undefined, round)
+      )
         continue;
 
       // 3. Local pressure: raw damage to target in the 3s before this cast
