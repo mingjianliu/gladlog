@@ -195,5 +195,9 @@
  *  own interrupt (own or pet, official kit ownership) and a Death Knight's Death
  *  Grip — user ruling; they sit under the major-CD floor and were invisible
  *  (f4eb Spell Lock, f4da Counterspell). [RES]-only: no other consumer sees them.
+ *  v184 (2026-09-26, codex counterexamples to batch 10): HEALER TRAINED names
+ *  the in-radius camper with the most seconds whose main target was the healer
+ *  (a nearer off-target melee no longer hides it; 1,399 → 1,423 lines); a
+ *  summon's owner is never matched by a short name both rosters share.
  */
-export const PROMPT_VERSION = 183;
+export const PROMPT_VERSION = 184;

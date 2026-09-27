@@ -931,20 +931,21 @@ export function computeOwnerPositionEvents(params: {
           endSeconds - runStart >= HEALER_TRAINED_MIN_SECONDS &&
           trainedCount < MAX_ITER3_EVENTS
         ) {
-          let topTrainer = "";
-          let topSeconds = -1;
-          for (const [name, secs] of trainerSeconds) {
-            if (secs > topSeconds) {
-              topTrainer = name;
-              topSeconds = secs;
-            }
-          }
+          // the camper with the most seconds inside the radius among those
+          // whose main target over the run was the healer
+          const topTrainer =
+            [...trainerSeconds]
+              .sort((a, b) => b[1] - a[1])
+              .map(([name]) => name)
+              .find((name) =>
+                healerWasTopTarget(name, runStart!, endSeconds),
+              ) ?? "";
           // Proximity is not training (reliability round 2 F13, 539f): the
           // Assassination Rogue stood 3–9 yd from the Evoker while doing
           // 209k to the Havoc DH and 48k to the Evoker. The named camper
           // must have hit the healer at least as hard as any other friendly
           // over the run.
-          if (!healerWasTopTarget(topTrainer, runStart, endSeconds)) {
+          if (!topTrainer) {
             runStart = null;
             trainerSeconds.clear();
             trainerMinDist.clear();
@@ -982,7 +983,6 @@ export function computeOwnerPositionEvents(params: {
         let camped = false;
         if (healerPos && !isDeadAt(healerUnit, tMs)) {
           let bestDist = Infinity;
-          let bestName = "";
           const perEnemyDist = new Map<string, number>();
           for (const e of enemyMelee) {
             if (isDeadAt(e, tMs)) continue;
@@ -991,18 +991,19 @@ export function computeOwnerPositionEvents(params: {
             if (!ePos) continue;
             const d = distanceBetween(healerPos, ePos);
             perEnemyDist.set(e.name, d);
-            if (d < bestDist) {
-              bestDist = d;
-              bestName = e.name;
-            }
+            if (d < bestDist) bestDist = d;
           }
           if (bestDist <= HEALER_TRAINED_YARDS) {
             camped = true;
             if (runStart === null) runStart = t;
-            trainerSeconds.set(
-              bestName,
-              (trainerSeconds.get(bestName) ?? 0) + 1,
-            );
+            // every melee within the radius counts its own seconds — not only
+            // the nearest: a nearer melee hitting someone else must not hide
+            // the one actually training the healer (codex review 2026-09-26
+            // of batch 10: warrior on the healer + rogue at 2 yd hitting the
+            // DH → no event at all)
+            for (const [name, d] of perEnemyDist)
+              if (d <= HEALER_TRAINED_YARDS)
+                trainerSeconds.set(name, (trainerSeconds.get(name) ?? 0) + 1);
             // Every melee records ITS OWN closest distance for the window —
             // the named trainer's closest must not be masked by "someone else
             // was nearer that second" (scanner proof: 5.7 reported vs 2.7

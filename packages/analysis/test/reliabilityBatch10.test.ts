@@ -227,3 +227,46 @@ describe("damage-source labels name a summon through its owner (round 3, f4da)",
     expect(damageEventLabel(hit("Creature-other", 0x2048), undefined, enemyIds, owners)).toMatch(/^\[pet\] — /);
   });
 });
+
+describe("codex review 2026-09-26 counterexamples (batch 10)", () => {
+  it("a nearer melee hitting someone else does not hide the one training the healer", () => {
+    const h = unit("h", "Healer-R-US", CombatUnitSpec.Paladin_Holy, () => 0);
+    const f = unit("f", "Friend-R-US", CombatUnitSpec.DemonHunter_Havoc, () => 2);
+    const rogue = unit("a", "Rogue-R-US", CombatUnitSpec.Rogue_Assassination, () => 2);
+    const warrior = unit("b", "Warrior-R-US", CombatUnitSpec.Warrior_Arms, () => 3);
+    for (let t = 0; t < 60; t++) {
+      rogue.damageOut.push({ timestamp: T0 + t * 1000, destUnitId: "h", amount: -100, effectiveAmount: -100 });
+      rogue.damageOut.push({ timestamp: T0 + t * 1000, destUnitId: "f", amount: -1000, effectiveAmount: -1000 });
+      warrior.damageOut.push({ timestamp: T0 + t * 1000, destUnitId: "h", amount: -1000, effectiveAmount: -1000 });
+    }
+    const ev = computeOwnerPositionEvents({
+      owner: h,
+      enemies: [rogue, warrior],
+      combat: { startTime: T0, endTime: END },
+      burstWindows: [],
+      ownerCooldowns: [],
+      isHealer: true,
+      ownerIsMelee: false,
+      friends: [h, f],
+    }).filter((e) => e.type === "HEALER_TRAINED");
+    expect(ev).toHaveLength(1);
+    expect(ev[0]!.nearestEnemyName).toBe("Warrior-R-US");
+  });
+
+  it("a short name both rosters share does not pick the friendly id for an enemy's summon", async () => {
+    const { buildSummonOwnerNames, damageEventLabel } = await import("../src/context/timelineHelpers");
+    const friends = new Map([["Alex-Friendly-US", 1], ["Alex", 1]]);
+    const enemies = new Map([["Alex-Enemy-US", 5], ["Alex", 5]]);
+    const owners = buildSummonOwnerNames([
+      { id: "enemy", name: "Alex-Enemy-US" },
+      { id: "pet", name: "Imp", ownerId: "enemy" },
+    ] as any);
+    const label = damageEventLabel(
+      { srcUnitId: "pet", srcUnitName: "Imp", srcUnitFlags: 0x2048, spellId: "", spellName: "Greater Felbolt" } as any,
+      friends,
+      enemies,
+      owners,
+    );
+    expect(label.startsWith("5's guardian")).toBe(true);
+  });
+});

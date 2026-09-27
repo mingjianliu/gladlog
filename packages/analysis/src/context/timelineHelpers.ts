@@ -836,12 +836,21 @@ function summonLabel(
 ): string {
   const ownerName = d.srcUnitId ? summonOwners?.get(d.srcUnitId) : undefined;
   if (!ownerName) return "[pet]";
+  // the full name in either roster first; a short name only when exactly one
+  // roster has it (codex review 2026-09-26: an enemy "Alex-Enemy-US" and a
+  // friendly "Alex-Friendly-US" both map "Alex" — the friendly-first short
+  // lookup labelled the enemy's Imp "1's guardian")
   const short = ownerName.split("-")[0];
+  const full = playerIdMap?.get(ownerName) ?? enemyIdMap?.get(ownerName);
+  const fs = playerIdMap?.get(short);
+  const es = enemyIdMap?.get(short);
   const id =
-    playerIdMap?.get(ownerName) ??
-    playerIdMap?.get(short) ??
-    enemyIdMap?.get(ownerName) ??
-    enemyIdMap?.get(short);
+    full ??
+    (fs !== undefined && es === undefined
+      ? fs
+      : es !== undefined && fs === undefined
+        ? es
+        : undefined);
   if (id === undefined) return "[pet]";
   return `${id}'s ${srcType === CombatUnitType.Guardian ? "guardian" : "pet"}`;
 }
