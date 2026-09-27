@@ -76,4 +76,34 @@ export const PER_RANK_COOLDOWN_TALENTS: ReadonlySet<string> = new Set([
   "270581", // Natural Mending
   "382424", // Winter's Protection
   "1270900", // Eternal Hunt
+  // Master of Time (Alter Time −5/rank). Talent impact audit 2026-09-26,
+  // new-season archive every 10th file (ledgerImpossibleCastScan ranks2),
+  // Alter Time floors: rank 0 62.4 s, rank 1 + Time Twist 45.0, rank 2 50.0
+  // (160 units, 50.0 × 3 at the bottom), rank 2 + Time Twist 40.3 = 60 −
+  // 5 × rank − 10. Value-once modelled rank 2 at 55 / 45: 266 impossible
+  // casts, the most of any ledger spell.
+  "342249",
+  // Static Charge (Capacitor Totem) — 10 s per rank, see RULED_COOLDOWN_VALUES.
+  "265046",
 ]);
+
+/**
+ * User-ruled per-rank values that replace the DB2 row's number (the row says
+ * one thing, the game does another). Read by `applyCdModifiers` before the
+ * rank scaling; every id here is also in PER_RANK_COOLDOWN_TALENTS.
+ */
+export const RULED_COOLDOWN_VALUES: Readonly<
+  Record<string, { secondsPerRank: number; note: string }>
+> = {
+  // Static Charge 265046: DB2 row 708963 is −15 000 ms once. User ruling
+  // 2026-09-26: first 「静电充能是5秒一级」, revised the same day to 10 s per
+  // rank on the corpus split (「嗯 改成10」): Capacitor Totem shortest recast,
+  // Enhancement with Totemic Surge (−5), new-season archive every 10th file,
+  // ranks from COMBATANT_INFO — rank 0 55.0 s (286 gaps), rank 1 45.0 s (60),
+  // rank 2 35.0 s (36); Restoration rank 2 35.0 s (251). At 5 s per rank the
+  // impossible-cast count on the totem rose 101 → 231.
+  "265046": {
+    secondsPerRank: 10,
+    note: "Static Charge — user ruling 2026-09-26: 10 s per rank",
+  },
+};

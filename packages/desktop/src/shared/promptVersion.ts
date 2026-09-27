@@ -199,5 +199,17 @@
  *  the in-radius camper with the most seconds whose main target was the healer
  *  (a nearer off-target melee no longer hides it; 1,399 → 1,423 lines); a
  *  summon's owner is never matched by a short name both rosters share.
+ *  v185 (2026-09-27, talent impact fixes): consumers read each unit's
+ *  talent-resolved cooldown / charges / buff length / reach (interrupts, enemy
+ *  vulnerability windows, walls in hand, md-cyclone immunities, death block,
+ *  healer CC and avoidance tools, kill-window reach); Master of Time per rank,
+ *  Static Charge 10 s per rank (user ruling), Escape from Reality free recast,
+ *  Storm Conduit per-cast reductions, buff-conditional cooldowns; dispel types
+ *  gated by talents, interrupt-immunity auras in kick-priority, CC cast ids as
+ *  crisis answers, Avenger's Shield out of the kit, Bladestorm casting locks
+ *  (Unrelenting Onslaught), Light's Revocation, Oakskin → Survival
+ *  Instincts. 605-file capture: kick-priority dps 106/86 → 93/63, healer
+ *  12/82 → 2/75, missed-cleanse dps 200 → 196 / healer 262 → 261,
+ *  burst-into-mitigation 42 → 43, cd-hoarded 666 → 667.
  */
-export const PROMPT_VERSION = 184;
+export const PROMPT_VERSION = 185;

@@ -24,14 +24,12 @@
  * The thresholds are hypotheses, not facts (skill: 用户给的数字是假设):
  * the probe reports sensitivity; the product keys on the constants here.
  */
+import { hardcastHealSpell } from "../../data/kickPriorityHealSpells";
 import { getEnglishSpellName } from "../../data/spellEffectData";
 import { MELEE_RANGE_YD, spellRangeYards } from "../../data/spellReach";
-import {
-  RANGE_HITBOX_SLACK_YD,
-  spellRangeForCaster,
-} from "../../utils/spellRange";
-import { hardcastHealSpell } from "../../data/kickPriorityHealSpells";
+import { buildAuraIntervals } from "../../utils/auraIntervals";
 import { buildCannotCastIntervals } from "../../utils/cannotCastIntervals";
+import { castingLockIntervalsOf } from "../../utils/castingLocks";
 import { gridHpPct, isHealerSpec } from "../../utils/cooldowns";
 import {
   interruptCooldownRemainingMs,
@@ -48,6 +46,11 @@ import {
   canReachTargetAt,
   rootIntervalsOf,
 } from "../../utils/rootReachability";
+import { auraBlocksMechanic } from "../../utils/spellMechanics";
+import {
+  RANGE_HITBOX_SLACK_YD,
+  spellRangeForCaster,
+} from "../../utils/spellRange";
 import { fmtFactNum as fmt, fmtFactTime } from "../factFormat";
 import type { CandidateEvent } from "../types";
 
@@ -180,6 +183,9 @@ interface UnitLike {
   advancedActions: any[];
 }
 
+/** SpellMechanic 26 — interrupted (DB2 SpellMechanic table). */
+const MECH_INTERRUPT = 26;
+
 export function kickPriorityDecisionPoints(
   friends: any[],
   enemies: any[],
@@ -235,11 +241,43 @@ export function kickPriorityDecisionPoints(
   const healers = enemyPlayers.filter((e) => isHealerSpec(e.spec as never));
   const lockedCache = new Map<string, Array<{ from: number; to: number }>>();
   const rootedCache = new Map<string, Array<{ from: number; to: number }>>();
+  // Talent impact audit 2026-09-26: a healer carrying an interrupt-immunity
+  // aura (official DB2 aura 77 mechanic 26, or a full school immunity —
+  // Spiritwalker's Aegis 378078, Zen Focus Tea, Precognition, Obsidian
+  // Mettle's Obsidian Scales, Unending Resolve …) cannot be kicked, so no
+  // one "could have kicked" that cast. `auraBlocksMechanic` is the same
+  // official table the CC-immunity predicates read.
+  const immuneCache = new Map<string, Array<{ from: number; to: number }>>();
+  const interruptImmuneAt = (u: UnitLike, ms: number): boolean => {
+    let iv = immuneCache.get(u.id);
+    if (!iv) {
+      try {
+        iv = buildAuraIntervals(u as never, combat)
+          .filter((a) => auraBlocksMechanic(a.spellId, MECH_INTERRUPT) === true)
+          .map((a) => ({
+            from: startMs + a.fromS * 1000,
+            to: startMs + a.toS * 1000,
+          }));
+      } catch {
+        iv = [];
+      }
+      immuneCache.set(u.id, iv);
+    }
+    return iv.some((x) => x.from <= ms && ms <= x.to);
+  };
   const cannotCastOf = (f: UnitLike) => {
     let iv = lockedCache.get(f.id);
     if (!iv) {
       try {
-        iv = buildCannotCastIntervals(f as never, enemyIds);
+        // CC from enemies, plus the friend's own casting locks (Bladestorm,
+        // Ice Block, Dispersion …) — Pummel stays free in Bladestorm for an
+        // Unrelenting Onslaught holder (castingLockIntervalsOf). Talent
+        // impact audit 2026-09-26.
+        const kit = interruptForUnit(f as never);
+        iv = [
+          ...buildCannotCastIntervals(f as never, enemyIds),
+          ...castingLockIntervalsOf(f as never, combat, kit?.spellId),
+        ];
       } catch {
         iv = [];
       }
@@ -402,6 +440,7 @@ export function kickPriorityDecisionPoints(
         startMs + toRenderSecond(startS) * 1000,
       );
       if (hp == null || hp > hpGate) continue;
+      if (interruptImmuneAt(healer, sMs)) continue;
 
       // Both arms: eligibility comes from the corpus table (or the bootstrap
       // rule for the probe that builds it) — never from what this cast or this

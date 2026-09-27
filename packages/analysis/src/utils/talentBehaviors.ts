@@ -209,11 +209,13 @@ export const TALENT_BEHAVIORS: ITalentBehavior[] = [
     note: "next cast is immune to interrupt/silence",
   },
   {
-    talentSpellId: "355584",
+    // 355584 / 131558 were pre-12.x ids with zero corpus occurrences (talent
+    // impact audit 2026-09-26); the live talent is 378077, its aura 378078
+    talentSpellId: "378077",
     name: "Spiritwalker's Aegis",
     specs: ["Restoration Shaman"],
     kind: "interrupt_immunity",
-    conditionAuraId: "131558",
+    conditionAuraId: "378078",
     conditionName: "Spiritwalker's Aegis",
     toolLabel:
       "Spiritwalker's Aegis (interrupt/silence immunity during Spiritwalker's Grace)",
@@ -221,11 +223,11 @@ export const TALENT_BEHAVIORS: ITalentBehavior[] = [
     note: "immune to silence/interrupt while Spiritwalker's Aegis is active",
   },
   {
-    talentSpellId: "131558",
+    talentSpellId: "378078",
     name: "Spiritwalker's Aegis",
     specs: ["Restoration Shaman"],
     kind: "interrupt_immunity",
-    conditionAuraId: "131558",
+    conditionAuraId: "378078",
     conditionName: "Spiritwalker's Aegis",
     toolLabel:
       "Spiritwalker's Aegis (interrupt/silence immunity during Spiritwalker's Grace)",

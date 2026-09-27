@@ -11,6 +11,7 @@ import {
   getPressureThreshold,
   isHealerSpec,
   isMeleeSpec,
+  playerTalentIdSets,
   specToString,
 } from "./cooldowns";
 import {
@@ -25,12 +26,15 @@ import {
   hasLineOfSight,
 } from "./losAnalysis";
 import { DISPEL_MAX_RANGE_YARDS, LOS_SWEEP_GAP_MS } from "./positionSampling";
-import { spellRangeForCaster } from "./spellRange";
 import { fmtTime } from "./renderGrid";
+import { spellRangeForCaster } from "./spellRange";
 import { hasOffensivePurgeTalent } from "./talentBehaviors";
 import {
+  choiceSelectionResolved,
   getPlayerTalentedSpellIds,
+  getSpecFreeOrEntrySpellIds,
   getSpecTalentTreeSpellIds,
+  isLoadoutFullyResolved,
 } from "./talents";
 import { threatActiveAt } from "./threatAssessment";
 
@@ -178,27 +182,39 @@ export const DEFAULT_CLEANSE_CD_S = 8;
  *     the priest locked out while a charge was in hand SUPPRESSES real
  *     missed-cleanse findings.
  *
- * `talentedSpellIds` is null on purpose: this call site knows the dispeller's
- * PvP talents (COMBATANT_INFO) and nothing else. The ids live in the generated
- * table, not here — naming them again locally is how the two copies drift.
+ * Class / hero talent rows need the dispeller's talent tree (`casterTalents`,
+ * `playerTalentIdSets`): Interwoven Threads −10 % on Naturalize / Expunge /
+ * Cauterizing Flame was dropped while only PvP talents were passed (talent
+ * impact audit 2026-09-26). Omitted → PvP + spec rows only, as before. The
+ * ids live in the generated table, not here — naming them again locally is
+ * how the two copies drift.
  */
 export function cleanseRecoveryOf(
   dispelSpellId: string,
   casterPvpTalentIds?: ReadonlySet<string>,
   /** the dispeller's spec — owns spec-passive rows (GH #106) */
   casterSpecId?: string,
+  casterTalents?: {
+    talentedSpellIds: Set<string> | null;
+    talentRanks: ReadonlyMap<string, number> | null;
+  },
 ): { cooldownSeconds: number; charges: number } {
   const base =
     DISPEL_COOLDOWNS_BY_SPELL.get(dispelSpellId) ?? DEFAULT_CLEANSE_CD_S;
-  if (base === 0 || (!casterPvpTalentIds?.size && !casterSpecId))
+  if (
+    base === 0 ||
+    (!casterPvpTalentIds?.size &&
+      !casterSpecId &&
+      !casterTalents?.talentedSpellIds)
+  )
     return { cooldownSeconds: base, charges: 1 };
   return applyCdTalentModifiers(
     dispelSpellId,
     base,
     1,
-    null,
+    casterTalents?.talentedSpellIds ?? null,
     new Set(casterPvpTalentIds ?? []),
-    { specId: casterSpecId },
+    { specId: casterSpecId, talentRanks: casterTalents?.talentRanks ?? null },
   );
 }
 
@@ -528,6 +544,107 @@ function hasTalentedAbility(unit: ICombatUnit, spellId: string): boolean {
 }
 
 /**
+ * Debuff types a spec removes ONLY through a talent (any one of the listed
+ * talent spells). The spec sets above say what the spec's cleanse CAN reach;
+ * this table says which of those types need a talent the player may have
+ * skipped. Talent impact audit 2026-09-26 (pick rates from COMBATANT_INFO,
+ * 09-13 scan): Improved Purify is taken by 8 % of Discipline and 15 % of
+ * Holy priests, Cleanse Toxins by 6 % of Retribution paladins, Improved
+ * Purify Spirit by 88 % of Restoration shamans, Remove Corruption by 78 % of
+ * Balance druids, Remove Curse by 68 % of Arcane mages, Detox by 66 % of
+ * Windwalkers — the sets used to assume all of them. A confirmed "did not
+ * take it" removes the type; unknown talents keep it (never filter on
+ * missing data). Registered in curatedIdRegistry.
+ * @internal exported for data/curatedIdRegistry
+ */
+export const DISPEL_TYPE_TALENT_GATES: Readonly<
+  Partial<Record<CombatUnitSpec, Partial<Record<DispelType, readonly string[]>>>>
+> = {
+  [CombatUnitSpec.Shaman_Restoration]: { Curse: ["383016"] }, // Improved Purify Spirit
+  [CombatUnitSpec.Priest_Discipline]: { Disease: ["390632"] }, // Improved Purify
+  [CombatUnitSpec.Priest_Holy]: { Disease: ["390632"] },
+  [CombatUnitSpec.Monk_Mistweaver]: {
+    Poison: ["388874"], // Improved Detox
+    Disease: ["388874"],
+  },
+  [CombatUnitSpec.Monk_Windwalker]: { Poison: ["218164"], Disease: ["218164"] }, // Detox
+  [CombatUnitSpec.Monk_Brewmaster]: { Poison: ["218164"], Disease: ["218164"] },
+  [CombatUnitSpec.Paladin_Holy]: {
+    Poison: ["393024"], // Improved Cleanse
+    Disease: ["393024"],
+  },
+  [CombatUnitSpec.Paladin_Protection]: {
+    Poison: ["213644"], // Cleanse Toxins
+    Disease: ["213644"],
+  },
+  [CombatUnitSpec.Paladin_Retribution]: {
+    Poison: ["213644"],
+    Disease: ["213644"],
+  },
+  [CombatUnitSpec.Druid_Restoration]: {
+    Curse: ["392378"], // Improved Nature's Cure
+    Poison: ["392378"],
+  },
+  [CombatUnitSpec.Druid_Balance]: { Curse: ["2782"], Poison: ["2782"] }, // Remove Corruption
+  [CombatUnitSpec.Druid_Feral]: { Curse: ["2782"], Poison: ["2782"] },
+  [CombatUnitSpec.Druid_Guardian]: { Curse: ["2782"], Poison: ["2782"] },
+  [CombatUnitSpec.Mage_Arcane]: { Curse: ["475"] }, // Remove Curse
+  [CombatUnitSpec.Mage_Fire]: { Curse: ["475"] },
+  [CombatUnitSpec.Mage_Frost]: { Curse: ["475"] },
+  // Evoker: Naturalize (Preservation baseline) covers Poison; Expunge /
+  // Cauterizing Flame are class talents
+  [CombatUnitSpec.Evoker_Devastation]: {
+    Poison: ["365585", "374251"],
+    Curse: ["374251"],
+    Disease: ["374251"],
+    Bleed: ["374251"],
+  },
+  [CombatUnitSpec.Evoker_Augmentation]: {
+    Poison: ["365585", "374251"],
+    Curse: ["374251"],
+    Disease: ["374251"],
+    Bleed: ["374251"],
+  },
+  [CombatUnitSpec.Evoker_Preservation]: {
+    Curse: ["374251"],
+    Disease: ["374251"],
+    Bleed: ["374251"],
+  },
+};
+
+/** false only when the unit's talents are known and it holds none of the
+ * gating talents for this type. */
+function passesDispelTalentGate(
+  unit: ICombatUnit,
+  dispelType: DispelType,
+): boolean {
+  const gate = DISPEL_TYPE_TALENT_GATES[unit.spec]?.[dispelType];
+  if (!gate) return true;
+  // the same talent reads as hasTalentedAbility: a gate talent is judged
+  // only when it is in the spec's tree and the loadout is parsed
+  const specIdNum = parseInt(unit.spec, 10);
+  const tree = getSpecTalentTreeSpellIds(specIdNum);
+  const judged = gate.filter((t) => tree.has(t));
+  if (judged.length < gate.length) return true;
+  // a free / entry node is never listed in the loadout (Improved Nature's
+  // Cure, Expunge are granted to every Restoration druid / Devastation and
+  // Augmentation evoker) — held, not "skipped"
+  const free = getSpecFreeOrEntrySpellIds(specIdNum);
+  if (gate.some((t) => free.has(t))) return true;
+  // the talentOwnership "unknown" guards (codex review 2026-09-26): an empty
+  // loadout, a loadout with node ids this build cannot resolve, or an
+  // unreadable choice selection proves nothing about the gate talent
+  const talents = unit.info?.talents;
+  if (!talents || talents.length === 0) return true;
+  if (!isLoadoutFullyResolved(specIdNum, talents)) return true;
+  if (gate.some((t) => !choiceSelectionResolved(specIdNum, talents, t)))
+    return true;
+  const talented = getPlayerTalentedSpellIds(specIdNum, talents);
+  if (talented === null) return true;
+  return judged.some((t) => talented.has(t));
+}
+
+/**
  * Returns true if the unit can defensively cleanse the given debuff type from an ally,
  * accounting for talent-gated abilities (e.g. Shadow Priest Purify Disease).
  *
@@ -538,6 +655,7 @@ export function canDefensiveCleanse(
   unit: ICombatUnit,
   dispelType: DispelType,
 ): boolean {
+  if (!passesDispelTalentGate(unit, dispelType)) return false;
   switch (dispelType) {
     case "Magic":
       return MAGIC_REMOVERS.has(unit.spec);
@@ -2134,6 +2252,9 @@ export function reconstructDispelSummary(
             const specByName = new Map(
               activeDispellers.map((u) => [u.name, u.spec as string]),
             );
+            const talentsByName = new Map(
+              activeDispellers.map((u) => [u.name, playerTalentIdSets(u)]),
+            );
             // Look back dynamically based on the spell ID of each dispel event
             const recentCleanses = allyCleanse.filter((c) => {
               if (!activeDispellerNames.has(c.sourceName)) return false;
@@ -2149,6 +2270,7 @@ export function reconstructDispelSummary(
                 c.dispelSpellId,
                 pvpTalentsByName.get(c.sourceName),
                 specByName.get(c.sourceName),
+                talentsByName.get(c.sourceName),
               );
               if (cooldownSeconds === 0) return false;
               return c.timeSeconds + cooldownSeconds > applyRelative;
@@ -2169,6 +2291,7 @@ export function reconstructDispelSummary(
                 c.dispelSpellId,
                 pvpTalentsByName.get(c.sourceName),
                 specByName.get(c.sourceName),
+                talentsByName.get(c.sourceName),
               );
               chargesByName.set(
                 c.sourceName,

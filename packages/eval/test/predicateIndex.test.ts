@@ -91,6 +91,7 @@ import * as castCancels from "@gladlog/analysis/src/utils/castCancels";
 import * as castParam from "@gladlog/analysis/src/utils/castParam";
 import * as ccTargetState from "@gladlog/analysis/src/utils/ccTargetState";
 import * as ccTrinketAnalysis from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
+import * as castingLocks from "@gladlog/analysis/src/utils/castingLocks";
 import * as charmedPlayer from "@gladlog/analysis/src/utils/charmedPlayer";
 import * as cooldowns from "@gladlog/analysis/src/utils/cooldowns";
 import * as counterfactual from "@gladlog/analysis/src/utils/counterfactual";
@@ -347,6 +348,21 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/cooldowns.ts`,
     symbol: "chargesAvailableAt",
     mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "unitCooldownOf",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "chargeAvailabilityTransitions",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/castingLocks.ts`,
+    symbol: "castingLockIntervalsOf",
+    mod: castingLocks,
   },
   {
     file: `${A}/utils/cooldowns.ts`,

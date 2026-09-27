@@ -201,6 +201,10 @@
     "kickPriorityHealSpellsGenerated.json": {
       "entries": 9,
       "producer": "packages/eval/scripts/kickPriorityOutcomeProbe.ts emit-heal-spells"
+    },
+    "conditionalCooldownsGenerated.json": {
+      "entries": 19,
+      "modifiers": 26
     }
   }
 }

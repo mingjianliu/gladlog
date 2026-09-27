@@ -125,6 +125,15 @@ export const TALENT_MITIGATION_MODIFIERS: readonly ITalentMitigationModifier[] =
         "Astral Shift + Astral Bulwark: holders 0.400 (0.398–0.409), 34 units, non-holders 0.600 (171), expected 0.40; S2 archive every 30, run 2 2026-09-13",
     },
     {
+      auraSpellId: "61336",
+      talentSpellId: "449191",
+      schoolMask: 127,
+      modPct: 10,
+      validation: "promoted",
+      evidence:
+        "Survival Instincts + Oakskin: holders 0.401 (0.400–0.405), 103 units / 80 players, expected 0.40; new-season archive every 10 (1,814 files), talent impact audit 2026-09-26",
+    },
+    {
       auraSpellId: "186265",
       talentSpellId: "1267218",
       schoolMask: 127,

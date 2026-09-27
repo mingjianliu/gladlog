@@ -39,6 +39,10 @@ vi.mock("../../src/data/spellEffectData", () => {
   };
   return {
     spellEffectData,
+    // the caster-aware duration predicate reads these (talent impact audit
+    // 2026-09-26: buff length now comes from buffFullDurationForCaster)
+    BUFF_DURATION_TALENT_MODIFIERS: {},
+    CC_DURATION_TALENT_MODIFIERS: {},
     // Same arithmetic as the real predicate, over the mocked table (the mock
     // replaces the whole module, so the shared accessor has to come along).
     effectiveCooldownSeconds: (id: string): number | undefined => {

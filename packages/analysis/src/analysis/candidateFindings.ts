@@ -1,7 +1,9 @@
-import { distanceBetween, getUnitPositionAtTime } from "../utils/losAnalysis";
-import { RANGE_HITBOX_SLACK_YD, spellReachToAccuse } from "../utils/spellRange";
 import type { ICombatUnit } from "@gladlog/parser-compat";
-import { CombatUnitClass, CombatUnitReaction } from "@gladlog/parser-compat";
+import {
+  CombatUnitClass,
+  CombatUnitReaction,
+  LogEvent,
+} from "@gladlog/parser-compat";
 
 import { mateHitDuringCc } from "../context/observedConsequences";
 import {
@@ -62,6 +64,8 @@ import {
   playerTalentIdSets,
   REACTION_WINDOW_S,
   specToString,
+  talentReplacementsOf,
+  unitCooldownOf,
   USABLE_WHILE_CC_SPELL_IDS,
   USABLE_WHILE_CONFUSED_SPELL_IDS,
   USABLE_WHILE_FEARED_SPELL_IDS,
@@ -76,6 +80,7 @@ import {
 } from "../utils/dispelAnalysis";
 import { drResetMsAt } from "../utils/drAnalysis";
 import { reconstructEnemyCDTimeline } from "../utils/enemyCDs";
+import { kickCastSpellId } from "../utils/enemyInterrupts";
 import {
   externalDamageForApplication,
   formatDuringExternalForOwner,
@@ -89,6 +94,7 @@ import {
   analyzeKillWindowTargetSelection,
   matchMinHpPct,
 } from "../utils/killWindowTargetSelection";
+import { distanceBetween, getUnitPositionAtTime } from "../utils/losAnalysis";
 import { computeOffensiveWindows } from "../utils/offensiveWindows";
 import {
   computeOwnerPositionEvents,
@@ -102,7 +108,7 @@ import {
   type RawStreams,
 } from "../utils/rawStreams";
 import { toRenderSecond } from "../utils/renderGrid";
-import { kickCastSpellId } from "../utils/enemyInterrupts";
+import { RANGE_HITBOX_SLACK_YD, spellReachToAccuse } from "../utils/spellRange";
 import { spellRangeForCaster, spellReachForCaster } from "../utils/spellRange";
 import { getSpellSchoolName } from "../utils/spellSchools";
 import { getTalentAvoidanceTriggers } from "../utils/talentBehaviors";
@@ -129,10 +135,10 @@ import { crisisNoResponseEvents } from "./candidates/crisisNoResponse";
 import {
   deathSetupEvents,
   type DeathSetupParts,
-  externalUnusedEvents,
-  ZONE_EXTERNAL_RADIUS_YD,
   EXTERNAL_FREE_WINDOW_S,
+  externalUnusedEvents,
   questionableExternalEvents,
+  ZONE_EXTERNAL_RADIUS_YD,
 } from "./candidates/death";
 import {
   kickPriorityDecisionPoints,
@@ -140,6 +146,7 @@ import {
   kickPriorityTeamEvents,
 } from "./candidates/kickPriority";
 import {
+  COLD_SNAP_SPELL_ID,
   CYCLONE_SPELL_ID,
   DIVINE_SHIELD_SPELL_ID,
   ICE_BLOCK_SPELL_ID,
@@ -2303,6 +2310,25 @@ function teamPlayEvents(
               ? DIVINE_SHIELD_SPELL_ID
               : null;
         if (spellId === null) return [];
+        // An Ice Cold mage (414658 replaces Ice Block) carries NO immunity to
+        // hold Mass Dispel for — not "spent", not "ready": out of the list.
+        if (
+          spellId === ICE_BLOCK_SPELL_ID &&
+          talentReplacementsOf(e).pressedAs.has(ICE_BLOCK_SPELL_ID)
+        )
+          return [];
+        // The holder's own cooldown / charges (Winter's Protection, Glacial
+        // Bulwark, Unbreakable Spirit …) and Cold Snap resets — talent impact
+        // audit 2026-09-26 (base 240 / 300 called a returned immunity spent).
+        const own = unitCooldownOf(e, spellId);
+        const secondsOf = (id: string) =>
+          (e.spellCastEvents ?? [])
+            .filter(
+              (c: any) =>
+                c.spellId === id &&
+                c.logLine?.event === LogEvent.SPELL_CAST_SUCCESS,
+            )
+            .map((c: any) => (c.timestamp - combat.startTime) / 1000);
         return [
           {
             unitName: e.name as string,
@@ -2310,6 +2336,12 @@ function teamPlayEvents(
             castSeconds: (e.spellCastEvents ?? [])
               .filter((c: any) => c.spellId === spellId)
               .map((c: any) => (c.timestamp - combat.startTime) / 1000),
+            ...(own
+              ? { cooldownSeconds: own.cooldownSeconds, charges: own.charges }
+              : {}),
+            ...(spellId === ICE_BLOCK_SPELL_ID
+              ? { resetSeconds: secondsOf(COLD_SNAP_SPELL_ID) }
+              : {}),
           },
         ];
       });
@@ -2323,6 +2355,8 @@ function teamPlayEvents(
           ownerMdCastSeconds: (owner.spellCastEvents ?? [])
             .filter((c: any) => c.spellId === MD_SPELL_ID)
             .map((c: any) => (c.timestamp - combat.startTime) / 1000),
+          ownerMdCooldownS: unitCooldownOf(owner as ICombatUnit, MD_SPELL_ID)
+            ?.cooldownSeconds,
           enemyStrategics,
           chainGapS: drResetMsAt(combat.startTime) / 1000,
           probes: {

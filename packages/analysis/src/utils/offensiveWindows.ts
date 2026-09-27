@@ -14,7 +14,13 @@ import {
 import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
 import { spellEffectData } from "../data/spellEffectData";
 import { SpellTag } from "../data/spellTypes";
-import { extractMajorCooldowns, specToString } from "./cooldowns";
+import { buffFullDurationForCaster } from "./buffDuration";
+import {
+  chargeAvailabilityTransitions,
+  extractMajorCooldowns,
+  specToString,
+  unitCooldownOf,
+} from "./cooldowns";
 import { fmtTime, renderedWindowSeconds } from "./renderGrid";
 
 type SpellEntry = { type: string };
@@ -151,6 +157,9 @@ interface IStateEvent {
   kind: EventKind;
   spellId: string;
   spellName: string;
+  /** CD_USED only: this press spent the spell's LAST charge in hand (−1 to
+   * the available count); a press with a charge left keeps it available. */
+  spendsLast?: boolean;
 }
 
 // ── Public interface ──────────────────────────────────────────────────────────
@@ -271,6 +280,14 @@ function ccSecondsInWindow(
  *
  * Vulnerability = Available == 0 AND Active == 0.
  */
+/** Consume one emptying flip recorded at `t` (see computeOffensiveWindows). */
+function takeFlip(flips: Map<number, number>, t: number): boolean {
+  const n = flips.get(t) ?? 0;
+  if (n <= 0) return false;
+  flips.set(t, n - 1);
+  return true;
+}
+
 export function computeOffensiveWindows(
   enemies: ICombatUnit[],
   friendlies: ICombatUnit[],
@@ -297,43 +314,70 @@ export function computeOffensiveWindows(
     const events: IStateEvent[] = [];
 
     // Scan spellCastEvents directly — do not use extractMajorCooldowns on enemies
+    const castsBySpell = new Map<string, number[]>();
     for (const cast of enemy.spellCastEvents) {
       if (cast.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
       const { spellId } = cast;
       if (!spellId || !isKillWindowMajorDefensive(spellId)) continue;
+      if (!spellEffectData[spellId]) continue;
+      // Admission on the official number the predicate itself reads
+      // (kwCooldownSeconds) — it already enforced >= KW_MAJOR_DEF_MIN_CD_S.
+      if (kwCooldownSeconds(spellId) < KW_MAJOR_DEF_MIN_CD_S) continue;
+      const list = castsBySpell.get(spellId) ?? [];
+      list.push((cast.logLine.timestamp - matchStartMs) / 1000);
+      castsBySpell.set(spellId, list);
+    }
 
-      const effectData = spellEffectData[spellId];
-      if (!effectData) continue;
-      // Same official source the predicate itself reads (kwCooldownSeconds) —
-      // the predicate already enforced >= KW_MAJOR_DEF_MIN_CD_S.
-      const cooldownSeconds = kwCooldownSeconds(spellId);
-      if (cooldownSeconds < KW_MAJOR_DEF_MIN_CD_S) continue;
-
-      const castTimeSeconds = (cast.logLine.timestamp - matchStartMs) / 1000;
-      const buffDuration =
-        effectData.durationSeconds && effectData.durationSeconds > 0
-          ? effectData.durationSeconds
-          : DEFAULT_BUFF_DURATION_S;
-      const buffExpiry = castTimeSeconds + buffDuration;
-      const cdReady = castTimeSeconds + cooldownSeconds;
-
-      events.push({
-        time: castTimeSeconds,
-        kind: "CD_USED",
-        spellId,
-        spellName: effectData.name,
-      });
-      events.push({
-        time: buffExpiry,
-        kind: "BUFF_EXPIRED",
-        spellId,
-        spellName: effectData.name,
-      });
-      // CD_READY only matters within the match
-      if (cdReady < matchDurationSeconds) {
+    for (const [spellId, casts] of castsBySpell) {
+      const effectData = spellEffectData[spellId]!;
+      casts.sort((a, b) => a - b);
+      // The enemy's own cooldown and charge cap (`unitCooldownOf`: talents,
+      // PvP talents, spec passives) and buff length (`buffFullDurationForCaster`)
+      // — talent impact audit 2026-09-26: base numbers opened a window while a
+      // second Pain Suppression / Obsidian Scales charge or a talent-shortened
+      // Blessing of Sacrifice was back in hand.
+      const own = unitCooldownOf(enemy, spellId);
+      const cooldownSeconds = own?.cooldownSeconds ?? kwCooldownSeconds(spellId);
+      const cap = Math.max(1, own?.charges ?? 1);
+      // Charge-state transitions — the shared sequential-recharge timeline
+      // (`chargeAvailabilityTransitions`, chargesAvailableAt's rules).
+      const flips = chargeAvailabilityTransitions(
+        casts,
+        cooldownSeconds,
+        cap,
+        matchDurationSeconds,
+      );
+      for (const f of flips)
+        if (f.available && f.atSeconds < matchDurationSeconds)
+          events.push({
+            time: f.atSeconds,
+            kind: "CD_READY",
+            spellId,
+            spellName: effectData.name,
+          });
+      // one flip per emptying press, even when two presses share a timestamp
+      const emptiedAt = new Map<number, number>();
+      for (const f of flips)
+        if (!f.available)
+          emptiedAt.set(f.atSeconds, (emptiedAt.get(f.atSeconds) ?? 0) + 1);
+      for (const castTimeSeconds of casts) {
+        const castBuff = buffFullDurationForCaster(
+          spellId,
+          enemy,
+          matchStartMs + castTimeSeconds * 1000,
+        );
+        const buffDuration =
+          castBuff && castBuff > 0 ? castBuff : DEFAULT_BUFF_DURATION_S;
         events.push({
-          time: cdReady,
-          kind: "CD_READY",
+          time: castTimeSeconds,
+          kind: "CD_USED",
+          spellId,
+          spellName: effectData.name,
+          spendsLast: takeFlip(emptiedAt, castTimeSeconds),
+        });
+        events.push({
+          time: castTimeSeconds + buffDuration,
+          kind: "BUFF_EXPIRED",
           spellId,
           spellName: effectData.name,
         });
@@ -384,7 +428,7 @@ export function computeOffensiveWindows(
 
       switch (ev.kind) {
         case "CD_USED":
-          available = Math.max(0, available - 1);
+          if (ev.spendsLast) available = Math.max(0, available - 1);
           active++;
           break;
         case "BUFF_EXPIRED":

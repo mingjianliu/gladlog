@@ -40,9 +40,9 @@ describe("talentBehaviors — getInterruptImmunityConditions", () => {
     expect(withDivineFavor[0].conditionAuraId).toBe("210294");
     expect(withDivineFavor[0].name).toBe("Divine Favor");
 
-    const withAegis = getInterruptImmunityConditions(["131558"]);
+    const withAegis = getInterruptImmunityConditions(["378078"]);
     expect(withAegis).toHaveLength(1);
-    expect(withAegis[0].conditionAuraId).toBe("131558");
+    expect(withAegis[0].conditionAuraId).toBe("378078");
     expect(withAegis[0].name).toBe("Spiritwalker's Aegis");
   });
 

@@ -27,9 +27,12 @@ import {
   IPlayerCCTrinketSummary,
   pvpTrinketRemainingSecondsAt,
 } from "./ccTrinketAnalysis";
-import { isHealerSpec, specToString } from "./cooldowns";
-import { ccThreatRadiusYards } from "./spellRange";
-import { fmtTime } from "./renderGrid";
+import {
+  chargeAvailabilityTransitions,
+  isHealerSpec,
+  specToString,
+  unitCooldownOf,
+} from "./cooldowns";
 import { DR_CATEGORY_MAP, DRLevel, getDRLevelAtTime } from "./drAnalysis";
 import { IAlignedBurstWindow, reconstructEnemyCDTimeline } from "./enemyCDs";
 import {
@@ -46,6 +49,8 @@ import {
   LOS_SWEEP_GAP_MS,
   LOS_SWEEP_SLACK_S,
 } from "./positionSampling";
+import { fmtTime } from "./renderGrid";
+import { ccThreatRadiusYards } from "./spellRange";
 
 // An enemy standing outside cast range cannot land a CC, line of sight or not.
 // The range is the single-source export from positionSampling — note that it and
@@ -695,19 +700,44 @@ export interface IHealerCCReceived {
   avoidanceSurveyed: boolean;
 }
 
-function lastAvoidanceCastSeconds(
+/** Presses of an avoidance tool at or before `atSeconds` (match seconds,
+ * sorted). Truncated at the query instant: until 2026-09-26 this took the
+ * match-wide LAST cast, so one later press made every earlier CC read "tool on
+ * cooldown" (the deathOutcome lastCastSeconds bug of 2026-07-31, again). */
+function avoidanceCastSeconds(
   unit: ICombatUnit,
   spellId: string,
   matchStartMs: number,
+  atSeconds: number,
+): number[] {
+  return unit.spellCastEvents
+    .filter(
+      (e) =>
+        e.spellId === spellId &&
+        e.logLine.event === LogEvent.SPELL_CAST_SUCCESS,
+    )
+    .map((e) => (e.logLine.timestamp - matchStartMs) / 1000)
+    .filter((t) => t <= atSeconds)
+    .sort((a, b) => a - b);
+}
+
+/** Since when a tool has had a charge in hand at `atSeconds` (0 = since the
+ * start), or null when it has none — read off the shared charge timeline
+ * (`chargeAvailabilityTransitions`). */
+function inHandSince(
+  casts: readonly number[],
+  cooldownSeconds: number,
+  cap: number,
+  atSeconds: number,
 ): number | null {
-  const casts = unit.spellCastEvents.filter(
-    (e) =>
-      e.spellId === spellId && e.logLine.event === LogEvent.SPELL_CAST_SUCCESS,
-  );
-  if (casts.length === 0) return null;
-  return (
-    (Math.max(...casts.map((e) => e.logLine.timestamp)) - matchStartMs) / 1000
-  );
+  const last = chargeAvailabilityTransitions(
+    casts,
+    cooldownSeconds,
+    cap,
+    atSeconds,
+  ).pop();
+  if (!last) return 0;
+  return last.available ? last.atSeconds : null;
 }
 
 function anyTeammateLowHp(
@@ -770,19 +800,19 @@ export function buildHealerCCReceivedEvents(
 
     const avoidanceToolsAvailable: IHealerAvoidanceTool[] = [];
     for (const spell of avoidanceSpells) {
-      const lastCast = lastAvoidanceCastSeconds(
-        healer,
-        spell.spellId,
-        matchStartMs,
+      // The healer's talent-resolved cooldown and charges (`unitCooldownOf`):
+      // the hand numbers missed Improved Fade rank 2 (20 s) and Obsidian
+      // Bulwark's second charge, and Grounding Totem's 25 already held Totemic
+      // Surge (DB2 30) — talent impact audit 2026-09-26. The table value is
+      // only the fallback for a spell DB2 has no row for.
+      const own = unitCooldownOf(healer, spell.spellId);
+      const availableSince = inHandSince(
+        avoidanceCastSeconds(healer, spell.spellId, matchStartMs, cc.atSeconds),
+        own?.cooldownSeconds ?? spell.cooldownSeconds,
+        own?.charges ?? 1,
+        cc.atSeconds,
       );
-      let availableSince: number;
-      if (lastCast === null) {
-        availableSince = 0;
-      } else {
-        const cdReadyAt = lastCast + spell.cooldownSeconds;
-        if (cdReadyAt > cc.atSeconds) continue;
-        availableSince = cdReadyAt;
-      }
+      if (availableSince === null) continue;
       const idleDuration = cc.atSeconds - availableSince;
       if (idleDuration < 1.5) continue;
       avoidanceToolsAvailable.push({

@@ -9,6 +9,7 @@ import {
 import { isSurvivalWall } from "../data/abilityProfile";
 import CD_RECAST_FLOORS from "../data/cdRecastFloorGenerated.json";
 import { classMetadata } from "../data/classSpells";
+import CONDITIONAL_COOLDOWNS from "../data/conditionalCooldownsGenerated.json";
 import { CURATED_ABILITY_FACTS } from "../data/curatedAbilityFacts";
 import { DISCOVERY_TAG_RULES } from "../data/discoveryRules";
 import {
@@ -28,8 +29,14 @@ import spellIdListsData from "../data/spellIdLists";
 import { reachesAlly } from "../data/spellTargeting";
 import { SpellTag } from "../data/spellTypes";
 import { replacedSpellIds } from "../data/talentReplaces";
+import {
+  eventReducedCooldownSeconds,
+  eventReductionsFor,
+  freeRecastWindowFor,
+} from "../data/talentScriptedCooldowns";
 import { USABLE_WHILE_CC_GENERATED } from "../data/usableWhileCcGenerated";
 import { getSortedAdvancedActions } from "./advancedActions";
+import { buildAuraIntervals, type IAuraInterval } from "./auraIntervals";
 import { binarySearchClosest } from "./binarySearch";
 import { buffFullDurationForCaster } from "./buffDuration";
 import { COPY_CAST_IDS } from "./castPress";
@@ -44,6 +51,7 @@ import {
   CD_TALENT_MODIFIERS,
   type ICDModifier,
   PER_RANK_COOLDOWN_TALENTS,
+  RULED_COOLDOWN_VALUES,
   specPassiveOwned,
 } from "./talentModifiers";
 import {
@@ -394,6 +402,22 @@ export const FORBEARANCE_GATED_IDS = new Set<string>([
 // covering it and two of 309 prompts accused a paladin who had just cast Divine
 // Shield of leaving Lay on Hands "Unused" at death. `cooldowns.layOnHands.test.ts`
 // pins that every alias of a gated id is gated.
+/** Light's Revocation (Holy / Protection / Retribution talent): "Divine
+ * Shield may now be cast while Forbearance is active". For a holder the
+ * Forbearance gate does not remove Divine Shield. Talent impact audit
+ * 2026-09-26. */
+export const LIGHTS_REVOCATION_TALENT_ID = "146956";
+export const DIVINE_SHIELD_SPELL_ID = "642";
+
+/** Is `spellId` blocked by an active Forbearance for this paladin? */
+export function forbearanceBlocks(unit: ICombatUnit, spellId: string): boolean {
+  if (!FORBEARANCE_GATED_IDS.has(spellId)) return false;
+  if (spellId !== DIVINE_SHIELD_SPELL_ID) return true;
+  return !playerTalentIdSets(unit).talentedSpellIds?.has(
+    LIGHTS_REVOCATION_TALENT_ID,
+  );
+}
+
 export function selfForbearanceActiveAt(
   unit: ICombatUnit,
   allUnits: ICombatUnit[],
@@ -405,8 +429,14 @@ export function selfForbearanceActiveAt(
       if (cast.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
       if (!cast.spellId || !FORBEARANCE_GATED_IDS.has(cast.spellId)) continue;
       const castSec = (cast.timestamp - matchStartMs) / 1000;
-      if (castSec > atSeconds || atSeconds - castSec > FORBEARANCE_SECONDS)
-        continue;
+      // The applying paladin's Forbearance length — Holy Reprieve takes it to
+      // 20 s (BUFF_DURATION_TALENT_MODIFIERS 25771; talent impact audit
+      // 2026-09-26: the flat 30 s kept BoP / LoH / Divine Shield off the
+      // death Unused list 10 s too long).
+      const forbearanceS =
+        buffFullDurationForCaster("25771", u, cast.timestamp) ??
+        FORBEARANCE_SECONDS;
+      if (castSec > atSeconds || atSeconds - castSec > forbearanceS) continue;
       if (cast.spellId === "642") {
         if (u.id === unit.id) return true;
       } else {
@@ -758,6 +788,19 @@ export interface ICooldownCast {
    * consumers fall back to the entry-level value (`castRecovery`).
    */
   cooldownSecondsOverride?: number;
+  /** A press that opened a free-recast window (`FREE_RECAST_WINDOWS`,
+   * Escape from Reality): until this instant the spell can be pressed again
+   * ignoring its cooldown, so it is available while the window is unused. */
+  freeRecastUntil?: number;
+  /** This press WAS the free recast: it neither spends nor restarts the
+   * cooldown (its override is anchored on the press that opened the window). */
+  freeRecast?: boolean;
+  /** Event reductions that pulled this press's ready instant in (Storm
+   * Conduit's Lightning Bolts): `cooldownSecondsOverride` is the final
+   * R − press, right for "available at t" (R ≤ t); "seconds until ready" at t
+   * must subtract only the reductions that had happened by t (agy review
+   * 2026-09-26 — the override alone counts later bolts early). */
+  reductions?: ReadonlyArray<{ atSeconds: number; seconds: number }>;
   /** Timing classification relative to enemy burst activity. Only set for Defensive/External CDs. */
   timingLabel?: DefensiveTimingLabel;
   /** One-line reason for the timing label */
@@ -1026,6 +1069,72 @@ export interface IMajorCooldownInfo {
    *  `cdRecastFloorGenerated.json`). `cooldownSeconds` stays the latest: past
    *  it the spell is certainly ready; between the two it MAY be. */
   earliestCooldownSeconds?: number;
+  /** Batch C (talent impact audit 2026-09-26): stretches when a buff of the
+   *  unit's own made this cooldown recover `mult` × faster (Time Skip →
+   *  Obsidian Scales, Berserk → Frenzied Regeneration). Every availability
+   *  question runs on the warped clock (`warpClock`). */
+  rateWindows?: ReadonlyArray<IRateWindow>;
+}
+
+export interface IRateWindow {
+  fromSeconds: number;
+  toSeconds: number;
+  mult: number;
+}
+
+/**
+ * The warped cooldown clock of a set of rate windows: τ(x) = x + Σ (mult − 1)
+ * × |window ∩ [0, x]| (monotone; reads only windows before x, so no future
+ * event changes the answer at x), and its inverse. Overlapping windows add
+ * their extra rates.
+ */
+export function warpClock(windows: ReadonlyArray<IRateWindow>): {
+  tau: (x: number) => number;
+  inverse: (y: number) => number;
+} {
+  const ws = [...windows].sort((a, b) => a.fromSeconds - b.fromSeconds);
+  const tau = (x: number) => {
+    let y = x;
+    for (const w of ws) {
+      const o = Math.min(x, w.toSeconds) - w.fromSeconds;
+      if (o > 0) y += (w.mult - 1) * o;
+    }
+    return y;
+  };
+  const inverse = (y: number) => {
+    // piecewise linear, monotone: bisection is exact enough (1e-6 s)
+    let lo = Math.min(0, y);
+    let hi = Math.max(y, 0) + 1;
+    while (tau(hi) < y) hi *= 2;
+    for (let i = 0; i < 60; i++) {
+      const mid = (lo + hi) / 2;
+      if (tau(mid) < y) lo = mid;
+      else hi = mid;
+    }
+    return hi;
+  };
+  return { tau, inverse };
+}
+
+/** The same entry with every time on the warped clock (casts, shared casts,
+ *  free-recast window ends) and no rate windows left. */
+function warpedView<
+  T extends Pick<IMajorCooldownInfo, "casts"> &
+    Partial<Pick<IMajorCooldownInfo, "sharedCasts" | "rateWindows">>,
+>(cd: T, tau: (x: number) => number): T {
+  const w = (c: ICooldownCast): ICooldownCast => ({
+    ...c,
+    timeSeconds: tau(c.timeSeconds),
+    ...(c.freeRecastUntil !== undefined
+      ? { freeRecastUntil: tau(c.freeRecastUntil) }
+      : {}),
+  });
+  return {
+    ...cd,
+    rateWindows: undefined,
+    casts: cd.casts.map(w),
+    ...(cd.sharedCasts ? { sharedCasts: cd.sharedCasts.map(w) } : {}),
+  };
 }
 
 /**
@@ -1083,12 +1192,20 @@ export function cdAvailableAt(
     | "charges"
     | "isProcOnly"
     | "sharedCasts"
+    | "rateWindows"
   >,
   tSeconds: number,
 ): boolean {
   // No button, nothing to have ready (GH #106 step 2): a proc-only entry keeps
   // its activations for "did it fire", never answers "could it be pressed".
   if (cd.isProcOnly) return false;
+  if (cd.rateWindows?.length) {
+    const { tau } = warpClock(cd.rateWindows);
+    return cdAvailableAt(
+      warpedView(cd, tau),
+      tau(tSeconds + CD_INSTANT_SLACK_S) - CD_INSTANT_SLACK_S,
+    );
+  }
   // GH #22: multi-charge entries go through the shared sequential-recharge
   // simulation — "last cast + cooldown" alone calls a 2-charge ability with one
   // charge spent unavailable. At <=1 charge the two agree point-by-point
@@ -1109,6 +1226,10 @@ export function cdAvailableAt(
     );
   }
   const last = [...lock].filter((c) => c.timeSeconds <= t).pop();
+  // an open, unused free-recast window (Escape from Reality) — talent impact
+  // audit 2026-09-26
+  if (last?.freeRecastUntil !== undefined && t <= last.freeRecastUntil)
+    return true;
   return isCooldownAvailableFromLastUse(
     last ? last.timeSeconds : null,
     // Per-cast override wins (Guardian Angel's outcome-conditional branch).
@@ -1145,9 +1266,29 @@ export function cdMaybeAvailableAt(
   const last = [...cd.casts]
     .filter((c) => c.timeSeconds <= tSeconds + CD_INSTANT_SLACK_S)
     .pop();
-  if (last?.cooldownSecondsOverride !== undefined) return false;
+  // An event-reduced press (Storm Conduit) carries the MODELLED reductions as
+  // its override; the corpus floor still bounds it from below, so the "maybe"
+  // view takes the shorter of the two (talent impact audit 2026-09-26: the
+  // override alone silenced the floor on 12 Healing Tide Totem presses).
+  const earliest = cd.earliestCooldownSeconds;
+  if (last?.cooldownSecondsOverride !== undefined && !last.reductions)
+    return false;
   return cdAvailableAt(
-    { ...cd, cooldownSeconds: cd.earliestCooldownSeconds },
+    {
+      ...cd,
+      cooldownSeconds: earliest,
+      casts: cd.casts.map((c) =>
+        c.reductions && c.cooldownSecondsOverride !== undefined
+          ? {
+              ...c,
+              cooldownSecondsOverride: Math.min(
+                c.cooldownSecondsOverride,
+                earliest,
+              ),
+            }
+          : c,
+      ),
+    },
     tSeconds,
   );
 }
@@ -1168,10 +1309,24 @@ export function cdSecondsUntilReady(
     | "charges"
     | "isProcOnly"
     | "sharedCasts"
+    | "rateWindows"
   >,
   tSeconds: number,
   cooldown: number = cd.cooldownSeconds,
 ): number {
+  if (cd.rateWindows?.length) {
+    // remaining on the warped clock, read as real seconds from t: assumes no
+    // further buff after t (never counts a future window — the "not yet" side)
+    const { tau } = warpClock(cd.rateWindows);
+    // the same sampling instant cdAvailableAt uses (slack applied BEFORE the
+    // warp — codex review 2026-09-26: a press inside the slack window was
+    // missed and a freshly spent cooldown rendered "(1s)")
+    const tq = tau(tSeconds + CD_INSTANT_SLACK_S) - CD_INSTANT_SLACK_S;
+    const inner = cdSecondsUntilReady(warpedView(cd, tau), tq, cooldown);
+    // inner = ready − tq on the warped clock; the remaining time AT t is
+    // ready − τ(t) (agy review: tq sits up to slack × (mult − 1) past τ(t))
+    return inner > 0 ? inner + (tq - tau(tSeconds)) : 0;
+  }
   const view = { ...cd, cooldownSeconds: cooldown };
   if (cdAvailableAt(view, tSeconds)) return 0;
   const t = tSeconds + CD_INSTANT_SLACK_S;
@@ -1190,6 +1345,15 @@ export function cdSecondsUntilReady(
   // a per-cast override (Guardian Angel's saved branch) wins, as in
   // cdAvailableAt — also over an `earliestCooldownSeconds` argument, so the
   // (a–Ns) range can never invert on such a cast
+  if (last.reductions?.length) {
+    // event-reduced press: only the reductions that happened by t count
+    let ready = last.timeSeconds + cooldown;
+    for (const r of last.reductions) {
+      if (r.atSeconds > tSeconds || r.atSeconds >= ready) break;
+      ready = Math.max(r.atSeconds, ready - r.seconds);
+    }
+    return Math.max(0, ready - tSeconds);
+  }
   const own = last.cooldownSecondsOverride ?? cooldown;
   return Math.max(0, last.timeSeconds + own - tSeconds);
 }
@@ -1199,11 +1363,19 @@ export function cdSecondsUntilReady(
 export function cdChargesReadyAt(
   cd: Pick<
     IMajorCooldownInfo,
-    "casts" | "cooldownSeconds" | "charges" | "sharedCasts"
+    "casts" | "cooldownSeconds" | "charges" | "sharedCasts" | "rateWindows"
   >,
   tSeconds: number,
   cooldown: number = cd.cooldownSeconds,
 ): number {
+  if (cd.rateWindows?.length) {
+    const { tau } = warpClock(cd.rateWindows);
+    return cdChargesReadyAt(
+      warpedView(cd, tau),
+      tau(tSeconds + CD_INSTANT_SLACK_S) - CD_INSTANT_SLACK_S,
+      cooldown,
+    );
+  }
   return chargesAvailableAt(
     lockCastsOf(cd).map((c) => c.timeSeconds),
     cooldown,
@@ -1271,7 +1443,12 @@ export const REACTION_WINDOW_S = 1;
 export function cdReadyInTimeAt(
   cd: Pick<
     IMajorCooldownInfo,
-    "casts" | "cooldownSeconds" | "neverUsed" | "charges" | "isProcOnly"
+    | "casts"
+    | "cooldownSeconds"
+    | "neverUsed"
+    | "charges"
+    | "isProcOnly"
+    | "rateWindows"
   >,
   tSeconds: number,
 ): boolean {
@@ -1826,7 +2003,10 @@ export function applyCdModifiers(
       const rank = PER_RANK_COOLDOWN_TALENTS.has(mod.talentSpellId)
         ? Math.max(1, owner?.talentRanks?.get(mod.talentSpellId) ?? 1)
         : 1;
-      flatReduceSeconds += mod.value * rank;
+      // a user-ruled per-rank value replaces the DB2 row's number
+      const value =
+        RULED_COOLDOWN_VALUES[mod.talentSpellId]?.secondsPerRank ?? mod.value;
+      flatReduceSeconds += value * rank;
     } else if (mod.effect === "reduce_cd_pct") {
       pctMultiplier *= 1 - mod.value / 100;
     }
@@ -1879,7 +2059,7 @@ export function chargesAvailableAt(
 
 /** `chargesAvailableAt`'s simulation, also returning when the next charge
  *  lands (+∞ at full charges) — GH #106 step 3's "seconds until ready". */
-function chargeStateAt(
+export function chargeStateAt(
   castSeconds: readonly number[],
   rechargeSeconds: number,
   maxCharges: number,
@@ -1920,6 +2100,57 @@ function chargeStateAt(
   }
   advanceTo(atSeconds);
   return { charges, nextRecharge };
+}
+
+/**
+ * When an ability flips between "a charge in hand" and "nothing in hand", up
+ * to `untilSeconds` — the same sequential-recharge rules as `chargeStateAt`
+ * (one timer; a press with nothing in hand is the log's proof a charge existed
+ * and re-anchors the timer), as a timeline. For consumers that walk events
+ * (enemy vulnerability windows) or ask "available since when" (healer
+ * avoidance idle time) instead of sampling one instant; pinned against
+ * `chargesAvailableAt` in chargeAvailability.test.ts. `available: false`
+ * lands on the press that spends the last charge; `true` on the recharge
+ * that ends a zero stretch. Starts full (no entry at 0).
+ */
+export function chargeAvailabilityTransitions(
+  castSeconds: readonly number[],
+  rechargeSeconds: number,
+  maxCharges: number,
+  untilSeconds: number,
+): Array<{ atSeconds: number; available: boolean }> {
+  const cap = Math.max(1, Math.floor(maxCharges));
+  const out: Array<{ atSeconds: number; available: boolean }> = [];
+  if (!(rechargeSeconds > 0)) return out;
+  const casts = [...castSeconds]
+    .filter((t) => t <= untilSeconds)
+    .sort((a, b) => a - b);
+  let charges = cap;
+  let nextRecharge = Number.POSITIVE_INFINITY;
+  const advanceTo = (t: number): void => {
+    while (charges < cap && nextRecharge <= t) {
+      if (charges === 0) out.push({ atSeconds: nextRecharge, available: true });
+      charges++;
+      nextRecharge =
+        charges < cap
+          ? nextRecharge + rechargeSeconds
+          : Number.POSITIVE_INFINITY;
+    }
+  };
+  for (const c of casts) {
+    advanceTo(c);
+    if (charges > 0) {
+      charges--;
+      if (charges === 0) out.push({ atSeconds: c, available: false });
+      if (charges < cap && nextRecharge === Number.POSITIVE_INFINITY) {
+        nextRecharge = c + rechargeSeconds;
+      }
+    } else {
+      nextRecharge = c + rechargeSeconds;
+    }
+  }
+  advanceTo(untilSeconds);
+  return out;
 }
 
 /**
@@ -2014,6 +2245,87 @@ export function applyCdTalentModifiers(
     pvpTalentIds,
     owner,
   );
+}
+
+/**
+ * Talent-resolved cooldown and charge cap of ONE spell for ONE unit — the
+ * per-entry arithmetic `extractMajorCooldowns` uses (official cooldown / charge
+ * recharge + DB2 charges, then `applyCdTalentModifiers` with the unit's talents,
+ * PvP talents, spec passives and purchased ranks), exported so consumers that
+ * never see a ledger entry (interrupts, CC, cleanses, avoidance tools, enemy
+ * walls outside the ledger) stop reading the untalented base (talent impact
+ * audit 2026-09-26: 10 consumers read `spellEffectData.cooldownSeconds` or a
+ * hand constant — Resto Wind Shear 12 s instead of 30, Ironbark 45 s instead
+ * of 90 …).
+ *
+ * `talentsKnown` is false when COMBATANT_INFO carried no talent blob: talent
+ * rows are then NOT applied (spec passives still are) and the number is the
+ * base — a caller whose claim is hurt by a too-short cooldown can tell a
+ * verified value from that fallback. Undefined when DB2 has no row.
+ *
+ * A spell the ledger admits should be read from its ledger entry
+ * (`extractMajorCooldowns`): per-cast overrides and dynamic floors live there.
+ */
+export interface IUnitCooldown {
+  cooldownSeconds: number;
+  charges: number;
+  talentsKnown: boolean;
+}
+export function unitCooldownOf(
+  unit: ICombatUnit,
+  spellId: string,
+): IUnitCooldown | undefined {
+  const effectData = spellEffectData[spellId];
+  if (!effectData) return undefined;
+  const talentSets = playerTalentIdSets(unit);
+  const { cooldownSeconds, charges } = applyCdTalentModifiers(
+    spellId,
+    effectiveCooldownSeconds(spellId) ?? 0,
+    effectData.charges?.charges ?? 1,
+    talentSets.talentedSpellIds,
+    talentSets.pvpTalentIds,
+    talentSets,
+  );
+  return {
+    cooldownSeconds,
+    charges,
+    talentsKnown: talentSets.talentedSpellIds !== null,
+  };
+}
+
+/** Batch C table lookup (generated; see genConditionalCooldowns.ts). */
+type ConditionalMod =
+  | { carrier: string; kind: "rate"; mult: number }
+  | { carrier: string; kind: "snapshot"; flatS?: number; pct?: number };
+function conditionalCooldownsOf(spellId: string): readonly ConditionalMod[] {
+  return (
+    (CONDITIONAL_COOLDOWNS.byTarget as Record<string, ConditionalMod[]>)[
+      spellId
+    ] ?? []
+  );
+}
+
+/** Self-applied buff intervals of a unit, by aura id — the carriers of the
+ * batch C modifiers. Memoised per (unit, combat). */
+const selfBuffCache = new WeakMap<
+  ICombatUnit,
+  { combat: AtomicArenaCombat; byId: Map<string, IAuraInterval[]> }
+>();
+function selfBuffIntervalsOf(
+  unit: ICombatUnit,
+  combat: AtomicArenaCombat,
+): Map<string, IAuraInterval[]> {
+  const hit = selfBuffCache.get(unit);
+  if (hit && hit.combat === combat) return hit.byId;
+  const byId = new Map<string, IAuraInterval[]>();
+  for (const iv of buildAuraIntervals(unit, combat)) {
+    if (iv.srcUnitName !== unit.name) continue;
+    const l = byId.get(iv.spellId) ?? [];
+    l.push(iv);
+    byId.set(iv.spellId, l);
+  }
+  selfBuffCache.set(unit, { combat, byId });
+  return byId;
 }
 
 export function extractMajorCooldowns(
@@ -2305,19 +2617,12 @@ export function extractMajorCooldowns(
     const effectData = spellEffectData[spell.spellId];
     if (!effectData) return [];
 
-    const baseCooldownSeconds = effectiveCooldownSeconds(spell.spellId) ?? 0;
-    const baseCharges = effectData.charges?.charges ?? 1;
-
-    // Apply talent-based modifications if the player's talents are known
-    const { cooldownSeconds, charges: baselineCharges } =
-      applyCdTalentModifiers(
-        spell.spellId,
-        baseCooldownSeconds,
-        baseCharges,
-        talentedSpellIds,
-        pvpTalentIds,
-        talentSets,
-      );
+    // Talent-resolved cooldown + charge cap: the one per-spell arithmetic,
+    // shared with every consumer outside the ledger (`unitCooldownOf`).
+    const { cooldownSeconds, charges: baselineCharges } = unitCooldownOf(
+      unit,
+      spell.spellId,
+    )!;
 
     const castEvents = unit.spellCastEvents.filter((e) =>
       isPressOfCooldown(e, spell.spellId, spell.name, replacements),
@@ -2449,11 +2754,116 @@ export function extractMajorCooldowns(
           units,
           c.timeSeconds,
           matchStartMs,
-          baseCooldownSeconds,
+          effectiveCooldownSeconds(spell.spellId) ?? 0,
           cooldownSeconds,
         );
       }
     }
+
+    // Scripted talent effects on this cooldown (data/talentScriptedCooldowns,
+    // talent impact audit 2026-09-26). Talents unknown → neither applies.
+    const holds = (t: string) =>
+      !!talentedSpellIds?.has(t) || pvpTalentIds.has(t);
+    // Event reductions (Storm Conduit): each press's real ready instant, from
+    // the holder's trigger casts. Single-charge spells only — a charge
+    // simulation takes no per-press override.
+    const reductions = eventReductionsFor(spell.spellId, holds);
+    if (reductions.length && baselineCharges <= 1) {
+      const triggerSeconds = (r: { triggerCastIds: readonly string[] }) =>
+        unit.spellCastEvents
+          .filter(
+            (e) =>
+              e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+              r.triggerCastIds.includes(String(e.spellId)),
+          )
+          .map((e) => (e.logLine.timestamp - matchStartMs) / 1000);
+      for (const c of casts) {
+        if (c.cooldownSecondsOverride !== undefined) continue;
+        const eff = eventReducedCooldownSeconds(
+          c.timeSeconds,
+          cooldownSeconds,
+          reductions,
+          triggerSeconds,
+        );
+        if (eff < cooldownSeconds) {
+          c.cooldownSecondsOverride = eff;
+          c.reductions = reductions
+            .flatMap((r) =>
+              triggerSeconds(r)
+                .filter(
+                  (t) => t > c.timeSeconds && t < c.timeSeconds + eff + 1e-9,
+                )
+                .map((t) => ({ atSeconds: t, seconds: r.seconds })),
+            )
+            .sort((a, b) => a.atSeconds - b.atSeconds);
+        }
+      }
+    }
+    // Free recast (Escape from Reality): the press that opens the window
+    // carries it; a press inside an unused window is free and stays anchored
+    // on the opener's cooldown.
+    const freeWindow = freeRecastWindowFor(spell.spellId, holds);
+    if (freeWindow) {
+      let opener: ICooldownCast | undefined;
+      let used = false;
+      for (const c of casts) {
+        if (
+          opener?.freeRecastUntil !== undefined &&
+          !used &&
+          c.timeSeconds <= opener.freeRecastUntil
+        ) {
+          c.freeRecast = true;
+          c.cooldownSecondsOverride =
+            opener.timeSeconds +
+            (opener.cooldownSecondsOverride ?? cooldownSeconds) -
+            c.timeSeconds;
+          used = true;
+          continue;
+        }
+        opener = c;
+        used = false;
+        c.freeRecastUntil = c.timeSeconds + freeWindow.windowS;
+      }
+    }
+
+    // Batch C: modifiers that hold only while one of the unit's own buffs is
+    // up (conditionalCooldownsGenerated.json). Snapshot rows price a press
+    // made under the buff (single-charge spells); rate rows warp the clock.
+    const conditional = conditionalCooldownsOf(spell.spellId);
+    let rateWindows: IRateWindow[] | undefined;
+    if (conditional.length) {
+      const carriers = selfBuffIntervalsOf(unit, combat);
+      for (const m of conditional) {
+        const ivs = carriers.get(m.carrier) ?? [];
+        if (!ivs.length) continue;
+        if (m.kind === "rate") {
+          rateWindows = [
+            ...(rateWindows ?? []),
+            ...ivs.map((iv) => ({
+              fromSeconds: iv.fromS,
+              toSeconds: iv.toS,
+              mult: m.mult,
+            })),
+          ];
+        } else if (baselineCharges <= 1) {
+          for (const c of casts) {
+            if (c.cooldownSecondsOverride !== undefined) continue;
+            if (!ivs.some((iv) => iv.fromS <= c.timeSeconds && c.timeSeconds <= iv.toS))
+              continue;
+            c.cooldownSecondsOverride = Math.max(
+              0,
+              (cooldownSeconds - (m.flatS ?? 0)) * (1 - (m.pct ?? 0) / 100),
+            );
+          }
+        }
+      }
+    }
+    const readyAfter = (c: ICooldownCast): number => {
+      const own = c.cooldownSecondsOverride ?? cooldownSeconds;
+      if (!rateWindows) return c.timeSeconds + own;
+      const { tau, inverse } = warpClock(rateWindows);
+      return inverse(tau(c.timeSeconds) + own);
+    };
 
     const availableWindows: IAvailableWindow[] = [];
     const procOnly =
@@ -2487,9 +2897,7 @@ export function extractMajorCooldowns(
       }
       // Windows between casts (and from last cast to match end)
       for (let i = 0; i < lockCasts.length; i++) {
-        const cdReadyAt =
-          lockCasts[i]!.timeSeconds +
-          (lockCasts[i]!.cooldownSecondsOverride ?? cooldownSeconds);
+        const cdReadyAt = readyAfter(lockCasts[i]!);
         const nextCastAt =
           i + 1 < lockCasts.length
             ? lockCasts[i + 1]!.timeSeconds
@@ -2504,6 +2912,7 @@ export function extractMajorCooldowns(
     // the player must have had at least 2 charges (e.g. double Pain Suppression via PvP talent).
     let maxChargesDetected = Math.max(1, baselineCharges);
     for (let i = 1; i < casts.length; i++) {
+      if (casts[i].freeRecast) continue; // a free recast is not a charge
       const prevCd = casts[i - 1].cooldownSecondsOverride ?? cooldownSeconds;
       if (casts[i].timeSeconds - casts[i - 1].timeSeconds < prevCd) {
         maxChargesDetected = Math.max(maxChargesDetected, 2);
@@ -2521,6 +2930,7 @@ export function extractMajorCooldowns(
         casts,
         ...(sharedCasts.length > 0 ? { sharedCasts } : {}),
         availableWindows,
+        ...(rateWindows ? { rateWindows } : {}),
         neverUsed: casts.length === 0,
         isThroughput: spell.tags.includes(SpellTag.Offensive),
         isProcOnly: procOnly,

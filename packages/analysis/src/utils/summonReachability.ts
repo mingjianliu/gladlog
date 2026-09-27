@@ -22,6 +22,7 @@ import type { ICombatUnit } from "@gladlog/parser-compat";
 import { LogEvent } from "@gladlog/parser-compat";
 
 import { spellEffectData } from "../data/spellEffectData";
+import { buffFullDurationForCaster } from "./buffDuration";
 import { buildCannotCastIntervals } from "./cannotCastIntervals";
 import { isHealerSpec, isMeleeSpec } from "./cooldowns";
 import { KW_REACH_YARDS } from "./killWindowFacts";
@@ -57,10 +58,14 @@ export function summonReach(
     (a) => a.logLine.event === LogEvent.SPELL_SUMMON,
   );
   if (!summonEvent) return null;
+  const fromMs = summonEvent.logLine.timestamp;
+  // the summoner's own duration talents (Reign of Tyranny +5 s on Demonic
+  // Tyrant) — the caster-aware predicate; talent impact audit 2026-09-26
+  const summoner = enemies.find((e) => e.id === summonEvent.srcUnitId);
   const durationS =
+    buffFullDurationForCaster(String(summonEvent.spellId), summoner, fromMs) ??
     spellEffectData[String(summonEvent.spellId)]?.durationSeconds;
   if (!durationS) return null;
-  const fromMs = summonEvent.logLine.timestamp;
   const toMs = Math.min(fromMs + durationS * 1000, combat.endTime);
   const windows: Array<{ secStart: number; secEnd: number; t: number }> = [];
   for (let t = fromMs; t + 1000 <= toMs; t += 1000) {

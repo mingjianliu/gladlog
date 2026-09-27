@@ -1,7 +1,9 @@
 import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
+import { CC_DURATION_TALENT_MODIFIERS } from "../data/spellEffectData";
 import { buffFullDurationForCaster } from "./buffDuration";
 import type { CastParamCaster } from "./castParam";
+import { ccFullDurationForCaster } from "./ccDuration";
 
 
 /**
@@ -103,7 +105,12 @@ function officialDurationS(
    * points; GH #65 item 1) be priced by the cast that produced it. */
   atMs?: number,
 ): number | null {
-  const d = buffFullDurationForCaster(spellId, caster, atMs);
+  // A CC aura is priced by the CC predicate (its talent table —
+  // Boneshaker, Resonant Voice, Tar-Coated Bindings — lives there, and the
+  // buff predicate never reads it); talent impact audit 2026-09-26.
+  const d = CC_DURATION_TALENT_MODIFIERS[spellId]
+    ? ccFullDurationForCaster(spellId, caster)
+    : buffFullDurationForCaster(spellId, caster, atMs);
   return typeof d === "number" && d > 0 ? d : null;
 }
 
@@ -160,19 +167,32 @@ export function dropAuraRebroadcasts<
 
 export function buildAuraIntervals(
   unit: ICombatUnit,
-  combat: { startTime: number; endTime: number },
+  combat: {
+    startTime: number;
+    endTime: number;
+    /** When the combat carries its units (every AtomicArenaCombat does) and
+     * no `castersById` is passed, the aura's source is looked up here. */
+    units?: Readonly<Record<string, ICombatUnit>>;
+  },
   /**
    * Optional unitId → unit lookup for the aura's SOURCE, used only to price
-   * talent-lengthened durations at the cap above. Omit it and every cap falls
-   * back to the no-caster duration, i.e. the behaviour before 2026-09-06.
+   * talent-lengthened durations at the cap above. Omitted, it is built from
+   * `combat.units` (talent impact audit 2026-09-26: 13 callers passed none,
+   * so Ironbark capped at 12 s instead of 16, Overpowered Barrier at 60
+   * instead of 4); with neither, every cap is the no-caster duration.
    */
   castersById?: ReadonlyMap<
     string,
     Pick<ICombatUnit, "spec" | "info" | "spellCastEvents"> & CastParamCaster
   >,
 ): IAuraInterval[] {
+  const casters =
+    castersById ??
+    (combat.units
+      ? new Map(Object.values(combat.units).map((u) => [u.id, u]))
+      : undefined);
   const casterOf = (srcUnitId: string | undefined) =>
-    srcUnitId ? castersById?.get(srcUnitId) : undefined;
+    srcUnitId ? casters?.get(srcUnitId) : undefined;
   const durationS = (combat.endTime - combat.startTime) / 1000;
   const rel = (ts: number) =>
     Math.min(durationS, Math.max(0, (ts - combat.startTime) / 1000));

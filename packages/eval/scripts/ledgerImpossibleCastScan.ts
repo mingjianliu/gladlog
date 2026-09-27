@@ -25,6 +25,7 @@
 import { ensureAnalysisData } from "@gladlog/analysis";
 import {
   cdAvailableAt,
+  cdMaybeAvailableAt,
   extractMajorCooldowns,
   playerTalentIdSets,
 } from "@gladlog/analysis/src/utils/cooldowns";
@@ -126,13 +127,8 @@ for (const f of files) {
           };
           if (!before.casts.length && !before.sharedCasts.length) continue;
           if (cdAvailableAt(before, c)) continue;
-          if (
-            cd.earliestCooldownSeconds !== undefined &&
-            cdAvailableAt(
-              { ...before, cooldownSeconds: cd.earliestCooldownSeconds },
-              c,
-            )
-          ) {
+          // the product's own "may be ready" predicate (dynamic floor)
+          if (cdMaybeAvailableAt(before, c)) {
             floorExplained++;
             continue;
           }

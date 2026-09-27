@@ -10,7 +10,7 @@ import {
 import {
   cdReadyInTimeAt,
   DEFENSIVE_TAGS,
-  FORBEARANCE_GATED_IDS,
+  forbearanceBlocks,
   getUnitHpAtTimestamp,
   gridHpMinInWindow,
   HP_SAMPLE_RADIUS_MS,
@@ -23,7 +23,6 @@ import {
   specToString,
   usableWhileStunned,
 } from "../utils/cooldowns";
-import { fmtTime, toRenderSecond } from "../utils/renderGrid";
 import {
   COUNTERFACTUAL_WINDOW_S,
   DECISIVE_MARGIN_PCT,
@@ -36,6 +35,7 @@ import {
 } from "../utils/deathOutcomeAnalysis";
 import { sumAbsorbedPressure } from "../utils/incomingPressure";
 import { getHpPercentAtTime } from "../utils/killWindowTargetSelection";
+import { fmtTime, toRenderSecond } from "../utils/renderGrid";
 import { type ManaFallback, manaReadingAt } from "../utils/resourceAt";
 import { benchmarks } from "../utils/specBaselines";
 import {
@@ -807,14 +807,19 @@ export function emitFriendlyDeathEntries<S>(params: {
         .filter(
           (cd) =>
             !isLockedOut ||
-            // 同 death.ts:走谓词而不是直接查无条件集合(单源)。这里没有
-            // 玩家天赋上下文,传 undefined —— 谓词对条件层返回 false,与改动
-            // 前逐字节一致;等这条路径拿得到天赋时,条件层自动生效。
-            (isLockedOutStunOnly && usableWhileStunned(cd.spellId, undefined)),
+            // 同 death.ts:走谓词而不是直接查无条件集合(单源)。条件层要看
+            // 死者的 PvP 天赋(2026-09-26 天赋影响审计:之前传 undefined,
+            // 条件层在死亡行里永远不生效)。
+            (isLockedOutStunOnly &&
+              usableWhileStunned(
+                cd.spellId,
+                new Set<string>(dyingUnit.info?.pvpTalents ?? []),
+              )),
         )
         // Forbearance: a paladin can't press Spellwarding/BoP/LoH/Divine Shield if it self-applied
         // Forbearance in the last 30s — don't list those as "unused" (false accusation).
-        .filter((cd) => !(forbearance && FORBEARANCE_GATED_IDS.has(cd.spellId)))
+        // Light's Revocation holders keep Divine Shield (forbearanceBlocks).
+        .filter((cd) => !(forbearance && forbearanceBlocks(dyingUnit, cd.spellId)))
         // Damage-redirect externals are a mechanical no-op on yourself (Blessing
         // of Sacrifice sends 30% of the damage TO the caster), so listing one as
         // a wall this player failed to press at their own death blames them for

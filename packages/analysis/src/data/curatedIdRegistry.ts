@@ -20,6 +20,8 @@ import { DEFERRED_DAMAGE_SPELL_IDS } from "../context/timelineHelpers";
  * index, and the rule has never been the missing piece (CLAUDE.md).
  */
 import { BURST_LEAD_CD_EXCLUDED_IDS } from "../analysis/burstWindowDecisionPoints";
+import { HEALER_TEAM_BURST_IDS } from "../analysis/candidates/cooldownTiming";
+import { ZONE_EXTERNAL_RADIUS_YD } from "../analysis/candidates/death";
 import {
   CRISIS_MOBILITY_PRESS_IDS,
   CRISIS_PROC_ANSWERS,
@@ -29,7 +31,6 @@ import {
   HIGH_VALUE_PURGEABLE_BUFFS,
   PURGE_WHITELIST_DATA_BLOCKED,
 } from "../context/matchTimeline";
-import { HEALER_TEAM_BURST_IDS } from "../analysis/candidates/cooldownTiming";
 import { DOT_SPELL_IDS } from "../context/matchTimelineSections";
 import {
   CHANNELED_CD_SPELL_IDS,
@@ -39,8 +40,12 @@ import {
   MANA_COOLDOWN_SPELL_IDS,
 } from "../context/timelineHelpers";
 import { SPELL_DURATION_OVERRIDES } from "../utils/buffDuration";
+import {
+  BLADESTORM_AURA_IDS,
+  UNRELENTING_ONSLAUGHT_TALENT_ID,
+  USABLE_IN_BLADESTORM_WITH_TALENT,
+} from "../utils/castingLocks";
 import { COPY_CAST_IDS } from "../utils/castPress";
-import { UNUSED_SELF_COVERAGE_UNMODELLED } from "../utils/counterfactual";
 import {
   BREAKABLE_CC_SPELL_IDS,
   CC_AVOIDANCE_BUFF_SPELLS,
@@ -72,6 +77,7 @@ import {
   USABLE_WHILE_CC_GAP_IDS,
   USABLE_WHILE_FEARED_GAP_IDS,
 } from "../utils/cooldowns";
+import { UNUSED_SELF_COVERAGE_UNMODELLED } from "../utils/counterfactual";
 import {
   EXTERNAL_DEFENSIVE_SPELLS,
   IMMUNITY_SPELLS,
@@ -82,15 +88,16 @@ import {
   COMP_DEPENDENT_PURGE_TARGETS,
   DISPEL_COOLDOWNS_BY_SPELL,
   DISPEL_PENALTY_SPELLS,
+  DISPEL_TYPE_TALENT_GATES,
   PURGE_BLOCKLIST,
   PURGE_SPELLS_BY_SPEC,
   STELLAR_PROTECTION_PENALIZED_SPELLS,
 } from "../utils/dispelAnalysis";
-import { HEALER_REACH_SPELLS } from "../utils/spellRange";
-import { SPEC_PRIMARY_CC } from "../utils/healerExposureAnalysis";
 import { MOVEMENT_ROOT_BREAK_DISPEL_IDS } from "../utils/dispelKind";
 import { AOE_CC_SPELL_IDS, CC_CAST_EFFECT_AURA } from "../utils/drAnalysis";
+import { NON_PLAYER_INTERRUPT_IDS } from "../utils/enemyInterrupts";
 import { EXTERNAL_DAMAGE_SHIELD_IDS } from "../utils/externalDamage";
+import { SPEC_PRIMARY_CC } from "../utils/healerExposureAnalysis";
 import { HEALER_AVOIDANCE_SPELLS } from "../utils/healerExposureAnalysis";
 import { PVP_TRINKET_SPELL_IDS } from "../utils/killWindowTargetSelection";
 import {
@@ -98,11 +105,11 @@ import {
   OFFENSIVE_EFFECT_ACTIVATION_IDS,
   SPELL_EFFECT_OVERRIDES as SPELL_DANGER_OVERRIDES,
 } from "../utils/spellDanger";
+import { HEALER_REACH_SPELLS } from "../utils/spellRange";
 import {
   OFFENSIVE_PURGE_TALENT_IDS,
   TALENT_BEHAVIORS,
 } from "../utils/talentBehaviors";
-import { PER_RANK_COOLDOWN_TALENTS } from "../utils/talentModifiers";
 import {
   ASCENDANCE_ENH_ID,
   DOOM_WINDS_PRESS_ID,
@@ -110,12 +117,17 @@ import {
   METAMORPHOSIS_PRESS_CAST_IDS,
   OFFENSIVE_AURA_EVIDENCE,
 } from "../utils/offensiveAuraOccurrences";
+import {
+  PER_RANK_COOLDOWN_TALENTS,
+  RULED_COOLDOWN_VALUES,
+} from "../utils/talentModifiers";
 import { KW_MAJOR_DEFENSIVE_IDS } from "./abilityProfile";
 import { CAST_PARAM_DURATIONS } from "./castParamDurations";
 import { classMetadata } from "./classSpells";
 import { CURATED_ABILITY_FACTS } from "./curatedAbilityFacts";
 import { DISPEL_VERDICTS } from "./dispelVerdicts";
 import { spellClassMap } from "./drCategories";
+import { DRUID_FORM_AURA_IDS, FORM_BOUND_BUFF_IDS } from "./druidForms";
 import { HEALING_VERDICTS, PROPOSED_HEALING_VERDICTS } from "./healingVerdicts";
 import {
   KICKED_CONTROL_OVERRIDE_IDS,
@@ -145,8 +157,10 @@ import spellIdLists from "./spellIdLists";
 import { trinketSpellIds } from "./spellTags";
 import { TALENT_MITIGATION_MODIFIERS } from "./talentMitigationModifiers";
 import { TALENT_REPLACES } from "./talentReplaces";
-import { DRUID_FORM_AURA_IDS, FORM_BOUND_BUFF_IDS } from "./druidForms";
-import { ZONE_EXTERNAL_RADIUS_YD } from "../analysis/candidates/death";
+import {
+  EVENT_COOLDOWN_REDUCTIONS,
+  FREE_RECAST_WINDOWS,
+} from "./talentScriptedCooldowns";
 import { WARLOCK_PET_CAST_FUNCTION } from "./warlockPets";
 
 /** What kind of id the list holds — decides which corpus event stream can vouch for it. */
@@ -361,6 +375,22 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   ),
   t("DISPEL_COOLDOWNS_BY_SPELL", "utils/dispelAnalysis.ts", "cast", () =>
     set(DISPEL_COOLDOWNS_BY_SPELL.keys()),
+  ),
+  // talent impact audit 2026-09-26: dispel types that need a talent
+  t("BLADESTORM_AURA_IDS", "utils/castingLocks.ts", "aura", () =>
+    set(BLADESTORM_AURA_IDS),
+  ),
+  t("USABLE_IN_BLADESTORM_WITH_TALENT", "utils/castingLocks.ts", "cast", () => [
+    ...USABLE_IN_BLADESTORM_WITH_TALENT,
+    UNRELENTING_ONSLAUGHT_TALENT_ID,
+  ]),
+  t("NON_PLAYER_INTERRUPT_IDS", "utils/enemyInterrupts.ts", "cast", () =>
+    set(NON_PLAYER_INTERRUPT_IDS),
+  ),
+  t("DISPEL_TYPE_TALENT_GATES", "utils/dispelAnalysis.ts", "talent", () =>
+    Object.values(DISPEL_TYPE_TALENT_GATES).flatMap((g) =>
+      Object.values(g ?? {}).flat(),
+    ),
   ),
   t("PURGE_BLOCKLIST", "utils/dispelAnalysis.ts", "aura", () =>
     set(PURGE_BLOCKLIST),
@@ -583,6 +613,27 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   t("PER_RANK_COOLDOWN_TALENTS", "utils/talentModifiers.ts", "talent", () => [
     ...PER_RANK_COOLDOWN_TALENTS,
   ]),
+  t("RULED_COOLDOWN_VALUES", "utils/talentModifiers.ts", "talent", () =>
+    Object.keys(RULED_COOLDOWN_VALUES),
+  ),
+  // Talent impact audit (2026-09-26): scripted cooldown effects — the talents
+  // (vouched by COMBATANT_INFO) and the spells they act on (vouched by casts).
+  t("FREE_RECAST_WINDOWS", "data/talentScriptedCooldowns.ts", "mixed", () => [
+    ...Object.keys(FREE_RECAST_WINDOWS),
+    ...Object.values(FREE_RECAST_WINDOWS).map((w) => w.spellId),
+  ]),
+  t(
+    "EVENT_COOLDOWN_REDUCTIONS",
+    "data/talentScriptedCooldowns.ts",
+    "mixed",
+    () => [
+      ...Object.keys(EVENT_COOLDOWN_REDUCTIONS),
+      ...Object.values(EVENT_COOLDOWN_REDUCTIONS).flatMap((r) => [
+        ...r.targets,
+        ...r.triggerCastIds,
+      ]),
+    ],
+  ),
   t("OPPRESSING_ROAR_SPELL_ID", "data/spellEffectData.ts", "aura", () => [
     OPPRESSING_ROAR_SPELL_ID,
   ]),

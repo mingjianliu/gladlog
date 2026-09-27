@@ -15,15 +15,15 @@ import {
   spellEffectData,
 } from "../data/spellEffectData";
 import { getSortedAdvancedActions } from "./advancedActions";
+import { buffFullDurationForCaster } from "./buffDuration";
 import {
-  applyCdTalentModifiers,
   cdAvailableAt,
   chargesAvailableAt,
   getUnitHpAtTimestamp,
   HP_SAMPLE_RADIUS_MS,
   isHealerSpec,
-  playerTalentIdSets,
   specToString,
+  unitCooldownOf,
 } from "./cooldowns";
 import { IOffensiveWindow } from "./offensiveWindows";
 import { fmtTime } from "./renderGrid";
@@ -234,15 +234,6 @@ function getDefensiveStateAtTime(
     castsBySpell.set(spellId, existing);
   }
 
-  // This enemy's talents, for the cooldown numbers below (2026-08-18, user
-  // ruling 「这些数值要做成活的,根据玩家的天赋适应」). Unconditional: the
-  // predicate already degrades safely — no COMBATANT_INFO yields
-  // `talentedSpellIds: null` ("unknown", never "took none") and an empty PvP
-  // set, which `applyCdTalentModifiers` renders as the base numbers, i.e.
-  // exactly the old behaviour.
-  const talentSets = playerTalentIdSets(enemy);
-  const { talentedSpellIds, pvpTalentIds } = talentSets;
-
   // For each tracked defensive, determine state at window start
   for (const [spellId, casts] of castsBySpell) {
     const effectData = spellEffectData[spellId];
@@ -260,19 +251,20 @@ function getDefensiveStateAtTime(
     // Suppression 678 (Protector of the Frail, +1 charge), Time Dilation 695
     // (Just in Time, +1 charge / −10s), Blessing of Sacrifice 490 (Sacrifice
     // of the Just, −60s), Obsidian Scales 385 (Obsidian Bulwark, +1 charge).
-    const { cooldownSeconds: cdSeconds, charges: maxCharges } =
-      applyCdTalentModifiers(
-        spellId,
-        effectiveCooldownSeconds(spellId) ?? 0,
-        effectData.charges?.charges ?? 1,
-        talentedSpellIds,
-        pvpTalentIds,
-        talentSets,
-      );
-    const buffSeconds =
-      effectData.durationSeconds && effectData.durationSeconds > 0
-        ? effectData.durationSeconds
-        : 8;
+    // (2026-08-18, user ruling 「这些数值要做成活的,根据玩家的天赋适应」;
+    // since 2026-09-26 through the one per-unit resolver, `unitCooldownOf` —
+    // no COMBATANT_INFO degrades to the base numbers, the old behaviour.)
+    const { cooldownSeconds: cdSeconds, charges: maxCharges } = unitCooldownOf(
+      enemy,
+      spellId,
+    )!;
+    // The caster's buff length (Ironbark 16 s with Regenerative Heartwood,
+    // not 12) — the talent-aware duration predicate every "when did this buff
+    // end" consumer reads (talent impact audit 2026-09-26).
+    const lastCastMs =
+      matchStartMs + casts[casts.length - 1]!.castSeconds * 1000;
+    const castBuff = buffFullDurationForCaster(spellId, enemy, lastCastMs);
+    const buffSeconds = castBuff && castBuff > 0 ? castBuff : 8;
 
     // Charge state comes from the shared predicate (2026-08-18). This used to
     // be a hand-rolled sequential-regen loop — the same algorithm
@@ -446,11 +438,22 @@ function wallsInHandAt(
   const ready: string[] = [];
   for (const [spellId, casts] of castsBySpell) {
     const effectData = spellEffectData[spellId];
-    const cdSeconds = effectiveCooldownSeconds(spellId) ?? 0;
-    if (cdSeconds < 30) continue;
+    // admission on the official number, like every other ≥ 30 s gate
+    if ((effectiveCooldownSeconds(spellId) ?? 0) < 30) continue;
+    // The enemy's talent-resolved cooldown and charges, as the sibling
+    // getDefensiveStateAtTime reads them: a second charge or a talented
+    // cooldown was read as "spent" and the tier went prime instead of gated
+    // (talent impact audit 2026-09-26).
+    const own = unitCooldownOf(enemy, spellId);
+    if (!own) continue;
     if (
       cdAvailableAt(
-        { casts, cooldownSeconds: cdSeconds, neverUsed: false },
+        {
+          casts,
+          cooldownSeconds: own.cooldownSeconds,
+          charges: own.charges,
+          neverUsed: false,
+        },
         atSeconds,
       )
     ) {

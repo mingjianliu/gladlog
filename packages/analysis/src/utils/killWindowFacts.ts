@@ -21,20 +21,53 @@
  *   healer   enemyHealerCcWindows overlap (fact only, never a gate — a free
  *            healer does not make a target unkillable)
  */
-import type { ICombatUnit } from "@gladlog/parser-compat";
+import { CombatUnitClass, type ICombatUnit } from "@gladlog/parser-compat";
 
 import { enemyHealerCcWindows } from "../analysis/candidates/cooldownTiming";
-import { cdAvailableAt, extractMajorCooldowns } from "./cooldowns";
+import { cdAvailableAt, extractMajorCooldowns, isMeleeSpec } from "./cooldowns";
 import { getUnitPositionAtTime } from "./losAnalysis";
+import { CLOSE_RANGE_YARDS } from "./positionAnalysis";
 import { LOS_SWEEP_GAP_MS } from "./positionSampling";
 import { fmtTime } from "./renderGrid";
 import { canReachTargetAt } from "./rootReachability";
 import { OFFENSIVE_CD_SPELL_IDS } from "./spellDanger";
+import { RANGE_HITBOX_SLACK_YD, spellRangeForCaster } from "./spellRange";
 
-/** Reach used for "some attacker could reach the target": the caster range,
- * the generous end of the melee-12/caster-40 convention [ROOT] uses — an
- * accusation predicate errs toward acquittal. */
+/** Caster reach for "some attacker could reach the target" — the caster end
+ * of the melee-12 / caster-40 convention [ROOT] uses. */
 export const KW_REACH_YARDS = 40;
+
+/** Evoker damage reach: Living Flame's talent-resolved range (25 yd; +5 with
+ * Arcane Reach or the Preservation aura). */
+const EVOKER_REACH_SPELL_ID = "361469";
+
+/**
+ * Whether friendly `f` at `pos` reaches `target` with damage at `tMs` — the
+ * [ROOT] roles (melee `CLOSE_RANGE_YARDS` without a LoS test, casters with
+ * one), and an Evoker's own 25/30 yd instead of 40. Until 2026-09-26 every
+ * friendly got 40 yd: `reachable === true` is the ACCUSING side of this gate
+ * (it makes the window accountable), so the flat 40 called a melee at 38 yd
+ * or a Devastation Evoker at 35 yd able to deliver (talent impact audit).
+ */
+function friendlyReachesAt(
+  f: ICombatUnit,
+  pos: NonNullable<ReturnType<typeof getUnitPositionAtTime>>,
+  target: ICombatUnit,
+  tMs: number,
+  zoneId: string | undefined,
+): boolean | null {
+  if (isMeleeSpec(f.spec))
+    return canReachTargetAt(pos, target, tMs, zoneId, CLOSE_RANGE_YARDS, false);
+  // an Evoker's own range plus the hitbox slack every reach claim adds
+  // (RANGE_HITBOX_SLACK_YD, the spellReachToAccuse convention)
+  const evokerRange =
+    f.class === CombatUnitClass.Evoker
+      ? spellRangeForCaster(f, EVOKER_REACH_SPELL_ID)
+      : null;
+  const yards =
+    evokerRange !== null ? evokerRange + RANGE_HITBOX_SLACK_YD : KW_REACH_YARDS;
+  return canReachTargetAt(pos, target, tMs, zoneId, yards, true);
+}
 
 export interface IKillWindowGateFacts {
   /** Canonical friendly offensive CDs ready at the span/burst start. */
@@ -103,13 +136,12 @@ export function createKillWindowFactsComputer(
       for (const f of friends) {
         const pos = getUnitPositionAtTime(f, tMs, LOS_SWEEP_GAP_MS);
         if (!pos) continue;
-        const r = canReachTargetAt(
+        const r = friendlyReachesAt(
+          f,
           pos,
           target,
           tMs,
           combat.startInfo?.zoneId,
-          KW_REACH_YARDS,
-          true,
         );
         if (r !== false) {
           reachable = true;

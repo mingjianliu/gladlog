@@ -208,12 +208,6 @@ export function deriveDeathRecaps(source: ReportSource): DeathRecap[] {
       startTime: legacy.startTime,
       zoneId: legacy.startInfo.zoneId,
     };
-    const outcomeEvents = [
-      ...buildDeathOutcomeSummary(outcomeCombat, friendlyPlayers, ccSummaries)
-        .events,
-      ...buildDeathOutcomeSummary(outcomeCombat, hostilePlayers, ccSummaries)
-        .events,
-    ];
     // Mitigation audit / counterfactuals (#17b Task4): victimCds/ccSummary are
     // aligned by unit.id with what was already computed above, not recomputed
     // -- legacy already carries startTime/endTime/units, so feed it straight
@@ -222,6 +216,26 @@ export function deriveDeathRecaps(source: ReportSource): DeathRecap[] {
     const cdsByUnit = new Map<string, IMajorCooldownInfo[]>(
       players.map((p) => [p.id, extractMajorCooldowns(p, legacy)]),
     );
+    // The same resolved ledger the prompt's death block reads
+    // (buildMatchContext): without it the card priced externals from the hand
+    // table (Ironbark 45 s against the ledger's 90) — the 2026-07-20 class of
+    // bug, fixed on the prompt path only (talent impact audit 2026-09-26).
+    const resolved = (unit: { id: string }, spellId: string) =>
+      cdsByUnit.get(unit.id)?.find((c) => c.spellId === spellId);
+    const outcomeEvents = [
+      ...buildDeathOutcomeSummary(
+        outcomeCombat,
+        friendlyPlayers,
+        ccSummaries,
+        resolved,
+      ).events,
+      ...buildDeathOutcomeSummary(
+        outcomeCombat,
+        hostilePlayers,
+        ccSummaries,
+        resolved,
+      ).events,
+    ];
     const ccSummaryByUnit = new Map(
       players.map((p, i) => [p.id, ccSummaries[i]!]),
     );

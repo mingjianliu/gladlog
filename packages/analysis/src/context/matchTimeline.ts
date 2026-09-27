@@ -6,10 +6,10 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
-import { BACKLASH_AURA_CC_TYPE } from "../data/backlashCc";
 import { type BurstWindowDecisionPoint } from "../analysis/burstWindowDecisionPoints";
 import type { CdPriorHoldEpisode } from "../analysis/cdTriggerPrior";
 import type { StackedDefensivePair } from "../analysis/stackedDefensives";
+import { BACKLASH_AURA_CC_TYPE } from "../data/backlashCc";
 import {
   effectiveCooldownSeconds,
   getEnglishSpellName,
@@ -21,6 +21,7 @@ import {
   TIMELINE_LINE_FLAGS,
 } from "../data/timelineLineFlags";
 import { buffFullDurationForCaster } from "../utils/buffDuration";
+import { silenceIntervals } from "../utils/cannotCastIntervals";
 import { COPY_CAST_IDS } from "../utils/castPress";
 import type { ICcBreakEvent } from "../utils/ccBreakAnalysis";
 import {
@@ -31,7 +32,6 @@ import {
   IPlayerCCTrinketSummary,
   tremorTotemBreak,
 } from "../utils/ccTrinketAnalysis";
-import { silenceIntervals } from "../utils/cannotCastIntervals";
 import { isControlledPlayerFlags } from "../utils/charmedPlayer";
 import {
   IFormInterval,
@@ -66,8 +66,8 @@ import {
   getDampeningPercentage,
 } from "../utils/dampening";
 import {
-  canRemoveFrom,
   canOffensivePurge,
+  canRemoveFrom,
   formatMissedCleanseExemption,
   formatMissedPurgeExemption,
   IDispelEvent,
@@ -102,7 +102,6 @@ import {
 import { IHealingGap } from "../utils/healingGaps";
 import { sumIncomingPressure } from "../utils/incomingPressure";
 import { getHpPercentAtTime } from "../utils/killWindowTargetSelection";
-import { fmtTime, toRenderSecond } from "../utils/renderGrid";
 import type { RawStreams } from "../utils/rawStreams";
 import { ownerResUtilityCds } from "./resUtilityCds";
 import {
@@ -111,6 +110,7 @@ import {
   reflectedSpells,
   sanctuaryRemovals,
 } from "./spellOutcomeLines";
+import { fmtTime, toRenderSecond } from "../utils/renderGrid";
 import { resourceDeltaPct } from "../utils/resourceAt";
 import { SUMMON_REACH_MIN_S, summonReach } from "../utils/summonReachability";
 import { getInterruptImmunityConditions } from "../utils/talentBehaviors";
@@ -133,11 +133,11 @@ import {
   peakSpikePlacement,
 } from "./peakSpikePlacement";
 import { pruneZeroLossResRows } from "./resLedgerPrune";
-import { abbrevSpec } from "./unitLabel";
 import {
   formatStackedDefensiveLines,
   STACKED_DEFENSIVES_LEGEND,
 } from "./stackedDefensives";
+import { abbrevSpec } from "./unitLabel";
 export {
   PEAK_SPIKE_MARKERS,
   peakSpikeMarker,
@@ -3384,15 +3384,15 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       spellId: string,
       kickSpell: string,
     ): number | undefined => {
-      const direct = interruptCooldownSeconds(spellId);
+      const direct = interruptCooldownSeconds(spellId, unit);
       if (direct !== undefined) return direct;
       const cast = kickCastSpellId(spellId);
       const viaCast =
-        cast !== spellId ? interruptCooldownSeconds(cast) : undefined;
+        cast !== spellId ? interruptCooldownSeconds(cast, unit) : undefined;
       if (viaCast !== undefined) return viaCast;
       const def = interruptForUnit(unit);
       return def && getEnglishSpellName(def.spellId, def.name) === kickSpell
-        ? interruptCooldownSeconds(def.spellId)
+        ? interruptCooldownSeconds(def.spellId, unit)
         : undefined;
     };
     const seenKicks = new Set<string>();
@@ -3423,8 +3423,9 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
             : "";
         // GH #103 A3: an ENEMY kick says when it is back — the responder
         // otherwise estimated the return ("Disrupt would have been coming back
-        // around the time you were free") from nothing. Official cooldown
-        // only (`interruptCooldownSeconds`, the same table the "enemy
+        // around the time you were free") from nothing. The kicker's cooldown
+        // (`interruptCooldownSeconds` with the kicker: their talent-resolved
+        // cooldown, the same number the "enemy
         // interrupts UP" ledger reads); no row → no suffix.
         const enemyKicker = enemyKickerUnit(
           action.srcUnitName,

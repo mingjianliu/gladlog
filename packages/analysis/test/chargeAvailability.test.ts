@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   CD_INSTANT_SLACK_S,
   cdAvailableAt,
+  chargeAvailabilityTransitions,
   chargesAvailableAt,
 } from "../src/utils/cooldowns";
 
@@ -144,5 +145,38 @@ describe("WALL_IN_HAND_MIT_IDS — 官方基础数据无多充能条目(wallsInH
       (id) => (spellEffectData[id]?.charges?.charges ?? 1) > 1,
     );
     expect(multi).toEqual([]);
+  });
+});
+
+/**
+ * `chargeAvailabilityTransitions` is the timeline form of the same
+ * simulation (talent impact audit 2026-09-26: enemy vulnerability windows
+ * and healer avoidance idle time each carried a hand copy). One predicate:
+ * at every sampled instant, "available" read off the timeline must equal
+ * `chargesAvailableAt(...) > 0`.
+ */
+describe("chargeAvailabilityTransitions — 与 chargesAvailableAt 同一口径", () => {
+  it("随机施放序列,逐点一致(含同一时刻两次按、无充能时的强行施放)", () => {
+    let seed = 12345;
+    const rnd = () => (seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31;
+    for (let trial = 0; trial < 300; trial++) {
+      const cap = 1 + Math.floor(rnd() * 3);
+      const cd = 5 + Math.floor(rnd() * 40);
+      const casts: number[] = [];
+      let t = 0;
+      for (let i = 0; i < 8; i++) {
+        t += rnd() < 0.15 ? 0 : Math.floor(rnd() * cd * 1.5 * 10) / 10;
+        casts.push(t);
+      }
+      const until = t + cd * 3;
+      const flips = chargeAvailabilityTransitions(casts, cd, cap, until);
+      for (let q = 0; q <= until; q += 0.5) {
+        const last = flips.filter((f) => f.atSeconds <= q).pop();
+        const fromTimeline = last ? last.available : true;
+        expect(fromTimeline, `trial ${trial} cap ${cap} cd ${cd} t=${q}`).toBe(
+          chargesAvailableAt(casts, cd, cap, q) > 0,
+        );
+      }
+    }
   });
 });

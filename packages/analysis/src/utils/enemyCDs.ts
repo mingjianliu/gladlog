@@ -16,6 +16,7 @@ import {
   isHealerSpec,
   MIN_CD_SECONDS,
   specToString,
+  unitCooldownOf,
 } from "./cooldowns";
 import { fmtTime } from "./renderGrid";
 
@@ -178,9 +179,13 @@ export function reconstructEnemyCDTimeline(
       // an activation of another cooldown's effect (GH #115) has no button:
       // no cooldown of its own, nothing to come "available again"
       const isActivation = offensiveEffectCdId(spellId) !== spellId;
+      // the enemy's own talent-resolved cooldown (`unitCooldownOf`: Summon
+      // Infernal 90 with Inferno, not 120) — talent impact audit 2026-09-26
       const cooldownSeconds = isActivation
         ? 0
-        : (effectiveCooldownSeconds(spellId) ?? 0);
+        : (unitCooldownOf(enemy, spellId)?.cooldownSeconds ??
+          effectiveCooldownSeconds(spellId) ??
+          0);
 
       const castTimeSeconds = (cast.logLine.timestamp - matchStartMs) / 1000;
       // Caster-aware: DB2 base + the caster's duration talents (the same

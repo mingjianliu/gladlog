@@ -144,6 +144,74 @@ const CANDIDATES: Array<{
     basePct: 30,
     modPct: 20,
   },
+  // Talent impact audit 2026-09-26: value rows on the effect index that
+  // carries the reduction, not yet in TALENT_MITIGATION_MODIFIERS.
+  {
+    aura: "403876",
+    name: "Divine Protection (Retribution)",
+    talent: "1261562",
+    talentName: "Shield of Vengeance",
+    school: 127,
+    basePct: 20,
+    modPct: 10,
+  },
+  {
+    aura: "386208",
+    name: "Defensive Stance",
+    talent: "1235047",
+    talentName: "Unyielding Stance",
+    school: 127,
+    basePct: 15,
+    modPct: 6,
+  },
+  {
+    aura: "386208",
+    name: "Defensive Stance (magic)",
+    talent: "452494",
+    talentName: "Fight Through the Flames",
+    school: 126,
+    basePct: 15,
+    modPct: 8,
+  },
+  {
+    aura: "115203",
+    name: "Fortifying Brew",
+    talent: "388814",
+    talentName: "Ironshell Brew",
+    school: 127,
+    basePct: 20,
+    modPct: 10,
+  },
+  {
+    aura: "61336",
+    name: "Survival Instincts",
+    talent: "449191",
+    talentName: "Oakskin",
+    school: 127,
+    basePct: 50,
+    modPct: 10,
+  },
+  // Elusiveness 79008: SpellMod op 12 (effect #2 points) −20 on the Evasion /
+  // Feint mask — the aura 87 slot those spells carry at 0 becomes 20 %
+  // damage taken (user 2026-09-26 「3可以做」).
+  {
+    aura: "5277",
+    name: "Evasion",
+    talent: "79008",
+    talentName: "Elusiveness",
+    school: 127,
+    basePct: 0,
+    modPct: 20,
+  },
+  {
+    aura: "1966",
+    name: "Feint",
+    talent: "79008",
+    talentName: "Elusiveness",
+    school: 127,
+    basePct: 0,
+    modPct: 20,
+  },
 ];
 const TRACK = new Set([
   ...Object.keys(MITIGATION_TABLE),

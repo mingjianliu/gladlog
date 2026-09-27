@@ -1,0 +1,176 @@
+{
+ "_meta": {
+  "build": "12.1.5.69594",
+  "generator": "scripts/datagen/genConditionalCooldowns.ts"
+ },
+ "byTarget": {
+  "845": [
+   {
+    "carrier": "1261189",
+    "kind": "snapshot",
+    "pct": 100
+   }
+  ],
+  "6343": [
+   {
+    "carrier": "107574",
+    "kind": "snapshot",
+    "pct": 50
+   }
+  ],
+  "6795": [
+   {
+    "carrier": "50334",
+    "kind": "snapshot",
+    "pct": 50
+   },
+   {
+    "carrier": "102558",
+    "kind": "snapshot",
+    "pct": 50
+   }
+  ],
+  "17364": [
+   {
+    "carrier": "114051",
+    "kind": "rate",
+    "mult": 2.5
+   }
+  ],
+  "19434": [
+   {
+    "carrier": "288613",
+    "kind": "rate",
+    "mult": 1.4
+   }
+  ],
+  "22842": [
+   {
+    "carrier": "50334",
+    "kind": "rate",
+    "mult": 20
+   },
+   {
+    "carrier": "102558",
+    "kind": "rate",
+    "mult": 20
+   },
+   {
+    "carrier": "329042",
+    "kind": "rate",
+    "mult": 5
+   }
+  ],
+  "33917": [
+   {
+    "carrier": "50334",
+    "kind": "rate",
+    "mult": 2
+   },
+   {
+    "carrier": "102558",
+    "kind": "rate",
+    "mult": 2
+   }
+  ],
+  "61336": [
+   {
+    "carrier": "329042",
+    "kind": "rate",
+    "mult": 5
+   }
+  ],
+  "77758": [
+   {
+    "carrier": "50334",
+    "kind": "snapshot",
+    "pct": 50
+   },
+   {
+    "carrier": "102558",
+    "kind": "snapshot",
+    "pct": 50
+   }
+  ],
+  "115356": [
+   {
+    "carrier": "114051",
+    "kind": "rate",
+    "mult": 2.5
+   }
+  ],
+  "205644": [
+   {
+    "carrier": "50334",
+    "kind": "snapshot",
+    "pct": 50
+   },
+   {
+    "carrier": "102558",
+    "kind": "snapshot",
+    "pct": 50
+   }
+  ],
+  "259495": [
+   {
+    "carrier": "470488",
+    "kind": "rate",
+    "mult": 1.6
+   }
+  ],
+  "357208": [
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   }
+  ],
+  "358267": [
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   }
+  ],
+  "363916": [
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   }
+  ],
+  "382266": [
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   }
+  ],
+  "409311": [
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   }
+  ],
+  "435222": [
+   {
+    "carrier": "107574",
+    "kind": "snapshot",
+    "pct": 50
+   }
+  ],
+  "1253489": [
+   {
+    "carrier": "50334",
+    "kind": "snapshot",
+    "pct": 50
+   },
+   {
+    "carrier": "102558",
+    "kind": "snapshot",
+    "pct": 50
+   }
+  ]
+ }
+}

@@ -9,16 +9,20 @@ import { getEnglishSpellName } from "../data/spellEffectData";
 import { IPlayerCCTrinketSummary } from "./ccTrinketAnalysis";
 import {
   auraOnlyActivationSeconds,
-  CD_INSTANT_SLACK_S,
   castRecovery,
+  CD_INSTANT_SLACK_S,
+  chargesAvailableAt,
+  forbearanceBlocks,
   type IMajorCooldownInfo,
   isCooldownAvailableFromLastUse,
   isPressOfCooldown,
   isProcOnlyActivation,
+  lockCastsOf,
   REACTION_WINDOW_S,
   specToString,
   spendsSharedChargeOf,
   talentReplacementsOf,
+  unitCooldownOf,
 } from "./cooldowns";
 import { isStunCcInstance } from "./drAnalysis";
 import {
@@ -281,6 +285,21 @@ function lastCastSeconds(
   matchStartMs: number,
   atSeconds: number,
 ): number | null {
+  const casts = pressSeconds(unit, spellId, matchStartMs).filter(
+    (t) => t <= atSeconds,
+  );
+  if (casts.length === 0) return null;
+  return Math.max(...casts);
+}
+
+/** Every press of X's cooldown (the ledger's press predicate, shared-pool
+ * presses, aura-only activations) in match seconds — `lastCastSeconds`'s
+ * input, and the charge simulation's when X holds more than one charge. */
+function pressSeconds(
+  unit: ICombatUnit,
+  spellId: string,
+  matchStartMs: number,
+): number[] {
   // The ledger's press predicate (GH #106 step 2, agy review): a talent's
   // pressable replacement (Ice Cold for Ice Block) and a same-named variant
   // press (Ultimate Sacrifice's Blessing of Sacrifice) are presses here too.
@@ -297,16 +316,51 @@ function lastCastSeconds(
     )
     .map((e) => (e.logLine.timestamp - matchStartMs) / 1000);
   const auraSeconds = auraOnlyActivationSeconds(unit, spellId, matchStartMs);
-  const casts = [...castSeconds, ...auraSeconds].filter((t) => t <= atSeconds);
-  if (casts.length === 0) return null;
-  return Math.max(...casts);
+  return [...castSeconds, ...auraSeconds].sort((a, b) => a - b);
 }
 
 /** A plain number (a table constant), or the ledger's resolved entry — whose
  * per-cast overrides (Guardian Angel, `castRecovery`) then price the
  * last press exactly as `cdAvailableAt` does. */
 export type CooldownSource =
-  number | Pick<IMajorCooldownInfo, "casts" | "cooldownSeconds">;
+  | number
+  | Pick<
+      IMajorCooldownInfo,
+      "casts" | "cooldownSeconds" | "charges" | "sharedCasts"
+    >;
+
+/** The cooldown this block prices X at for this unit: the ledger's resolved
+ * entry when the caller has one (the [RES] number, per-cast overrides
+ * included), else the unit's talent-resolved cooldown and charges
+ * (`unitCooldownOf` — talents, PvP talents, spec passives, ranks), and only
+ * for a spell DB2 has no row for, the table constant. Talent impact audit
+ * 2026-09-26: without a resolver (the desktop Death Recap) the tables ruled —
+ * Ironbark 45 s against 90 — and immunities never consulted it at all (Ice
+ * Block 240 for a Winter's Protection rank-2 holder at 180). */
+function cooldownSourceOf(
+  unit: ICombatUnit,
+  spellId: string,
+  tableSeconds: number,
+  resolved:
+    | Pick<IMajorCooldownInfo, "casts" | "cooldownSeconds" | "charges">
+    | undefined,
+  matchStartMs: number,
+): CooldownSource {
+  if (resolved) return resolved;
+  const own = unitCooldownOf(unit, spellId);
+  if (!own) return tableSeconds;
+  // the fallback carries its own presses from the log, so every entry the
+  // charge path sees has its presses in `casts` (a resolved entry whose own
+  // casts are empty can still hold shared-pool presses — agy review
+  // 2026-09-26)
+  return {
+    casts: pressSeconds(unit, spellId, matchStartMs).map((t) => ({
+      timeSeconds: t,
+    })),
+    cooldownSeconds: own.cooldownSeconds,
+    charges: own.charges,
+  };
+}
 
 // BACKLOG #21 item2: exported (only) so the drift-prevention unit test can call this predicate
 // directly alongside cdAvailableAt — not otherwise used outside this module.
@@ -331,24 +385,39 @@ export function isAvailableAt(
   )
     return false;
   const lastCast = lastCastSeconds(unit, spellId, matchStartMs, at);
-  // The core predicate is shared with cdAvailableAt in cooldowns.ts
-  // (isCooldownAvailableFromLastUse) — each side keeps its own data source
-  // (raw spellCastEvents vs the resolved casts ledger) and this side keeps the
-  // resetSpellIds extension below; see the comment above that function.
-  const recovery =
-    typeof cooldown === "number"
-      ? { fromSeconds: lastCast, cooldownSeconds: cooldown }
-      : lastCast === null
-        ? { fromSeconds: null, cooldownSeconds: cooldown.cooldownSeconds }
-        : castRecovery(cooldown, lastCast);
-  if (
-    isCooldownAvailableFromLastUse(
-      recovery.fromSeconds,
-      recovery.cooldownSeconds,
-      at,
+  const charges = typeof cooldown === "number" ? 1 : (cooldown.charges ?? 1);
+  if (typeof cooldown !== "number" && charges > 1) {
+    // A second charge in hand is "available" (Pain Suppression + Protector of
+    // the Frail, Time Dilation + Just in Time, Ice Block + Glacial Bulwark) —
+    // the shared sequential-recharge simulation, as cdAvailableAt runs it.
+    // a resolved ledger entry carries the deduplicated presses (two
+    // SPELL_CAST_SUCCESS lines of one press are one press — codex review
+    // 2026-09-26); only the unitCooldownOf fallback (no casts) reads the raw log
+    const presses = lockCastsOf(cooldown)
+      .map((c) => c.timeSeconds)
+      .filter((t) => t <= at);
+    if (chargesAvailableAt(presses, cooldown.cooldownSeconds, charges, at) > 0)
+      return true;
+  } else {
+    // The core predicate is shared with cdAvailableAt in cooldowns.ts
+    // (isCooldownAvailableFromLastUse) — each side keeps its own data source
+    // (raw spellCastEvents vs the resolved casts ledger) and this side keeps
+    // the resetSpellIds extension below; see the comment above that function.
+    const recovery =
+      typeof cooldown === "number"
+        ? { fromSeconds: lastCast, cooldownSeconds: cooldown }
+        : lastCast === null
+          ? { fromSeconds: null, cooldownSeconds: cooldown.cooldownSeconds }
+          : castRecovery(cooldown, lastCast);
+    if (
+      isCooldownAvailableFromLastUse(
+        recovery.fromSeconds,
+        recovery.cooldownSeconds,
+        at,
+      )
     )
-  )
-    return true;
+      return true;
+  }
 
   // B30: if a reset spell was cast between the last use and atSeconds, the cooldown was reset.
   // Treat the reset cast as the new "last cast" and check availability from there.
@@ -615,7 +684,12 @@ export function buildDeathOutcomeSummary(
   resolvedCooldownSeconds?: (
     unit: ICombatUnit,
     spellId: string,
-  ) => Pick<IMajorCooldownInfo, "casts" | "cooldownSeconds"> | undefined,
+  ) =>
+    | Pick<
+        IMajorCooldownInfo,
+        "casts" | "cooldownSeconds" | "charges" | "sharedCasts"
+      >
+    | undefined,
 ): IDeathOutcomeSummary {
   const matchStartMs = combat.startTime;
   const events: IDeathOutcomeEvent[] = [];
@@ -651,7 +725,13 @@ export function buildDeathOutcomeSummary(
           !isReadyInTimeAt(
             unit,
             spellId,
-            spell.cooldownSeconds,
+            cooldownSourceOf(
+              unit,
+              spellId,
+              spell.cooldownSeconds,
+              resolvedCooldownSeconds?.(unit, spellId),
+              matchStartMs,
+            ),
             atSeconds,
             matchStartMs,
             spell.resetSpellIds,
@@ -660,6 +740,12 @@ export function buildDeathOutcomeSummary(
           continue;
         if (
           spell.lockoutSpellId &&
+          // Light's Revocation: a holder casts Divine Shield through
+          // Forbearance (forbearanceBlocks, the death-line gate's predicate)
+          !(
+            spell.lockoutSpellId === "25771" &&
+            !forbearanceBlocks(unit, spellId)
+          ) &&
           isLockedOutAt(
             getLockoutIntervals(unit, spell.lockoutSpellId),
             atSeconds,
@@ -731,8 +817,13 @@ export function buildDeathOutcomeSummary(
             !isReadyInTimeAt(
               teammate,
               spellId,
-              resolvedCooldownSeconds?.(teammate, spellId) ??
+              cooldownSourceOf(
+                teammate,
+                spellId,
                 spell.cooldownSeconds,
+                resolvedCooldownSeconds?.(teammate, spellId),
+                matchStartMs,
+              ),
               atSeconds,
               matchStartMs,
             )

@@ -245,6 +245,15 @@ export function whitelistedIntervalsInDeathWindow(
  * victim inside the death window (independent measure; interaction between
  * multiple entries is not modelled).
  */
+/** The round's unit with this name (players first), for talent attribution. */
+function unitByName(
+  units: Record<string, ICombatUnit> | undefined,
+  name: string | undefined,
+): ICombatUnit | undefined {
+  if (!units || !name) return undefined;
+  return Object.values(units).find((u) => u.name === name);
+}
+
 export function computeMitigationAudit(
   victim: ICombatUnit,
   combat: {
@@ -274,8 +283,13 @@ export function computeMitigationAudit(
     // an ally-applied Flameshaper Obsidian Scales is 15 %, the Evoker's own 30 %.
     const res = resolveMitigation(iv.spellId, {
       carrierIsCaster: iv.srcUnitName === victim.name,
-      // M3b: talents are attributable only to a self-cast here (no roster)
-      caster: iv.srcUnitName === victim.name ? victim : undefined,
+      // the caster by name from the round's roster (talent impact audit
+      // 2026-09-26: an ally-cast external was priced without its caster's
+      // talents)
+      caster:
+        iv.srcUnitName === victim.name
+          ? victim
+          : unitByName(combat.units, iv.srcUnitName),
     });
 
     if (!res) {
@@ -507,7 +521,7 @@ export function computeUnusedSelfCounterfactuals(
 export function computeMissedExternalCounterfactuals(
   missedExternals: IMissedExternal[],
   victim: ICombatUnit,
-  combat: { startTime: number },
+  combat: { startTime: number; units?: Record<string, ICombatUnit> },
   deathS: number,
 ): ICounterfactualHit[] {
   const windowStartS = windowStartSecondsOf(deathS);
@@ -522,7 +536,12 @@ export function computeMissedExternalCounterfactuals(
     // GH #96 M3a: an external is carried by the victim but cast by somebody
     // else. Before M3a this path read `entry.pct` raw (ignoring pctOnOthers);
     // no entry with pctOnOthers is an external today, so output is unchanged.
-    const res = resolveMitigation(m.spellId, { carrierIsCaster: false });
+    // the external's caster's talents (Foreseen Circumstances → Pain
+    // Suppression 50 %) — talent impact audit 2026-09-26
+    const res = resolveMitigation(m.spellId, {
+      carrierIsCaster: false,
+      caster: unitByName(combat.units, m.casterName),
+    });
     if (!res || res.positional) continue; // skip off-table / positional
 
     const saved = savedByComponents(res, victim, windowStartS, deathS, combat);

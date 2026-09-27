@@ -43,6 +43,7 @@ import {
   effectiveCooldownSeconds,
   spellEffectData,
 } from "../../data/spellEffectData";
+import { chargesAvailableAt } from "../../utils/cooldowns";
 import { toRenderSecond } from "../../utils/renderGrid";
 import { CandidateEvent } from "../types";
 import { CD_HOARD_CRISIS_HP_PCT, type ICrisisMoment } from "./cooldownTiming";
@@ -89,12 +90,24 @@ export interface IStrategicHolder {
   unitName: string;
   spellId: typeof ICE_BLOCK_SPELL_ID | typeof DIVINE_SHIELD_SPELL_ID;
   castSeconds: number[];
+  /** The holder's talent-resolved cooldown and charge cap (`unitCooldownOf`:
+   * Winter's Protection / Glacial Bulwark / Unbreakable Spirit …). Omitted →
+   * the official single-charge number. Talent impact audit 2026-09-26. */
+  cooldownSeconds?: number;
+  charges?: number;
+  /** Reset presses that bring the immunity straight back (Cold Snap 235219
+   * for Ice Block), seconds. */
+  resetSeconds?: number[];
 }
 
 const STRATEGIC_CD_S: Record<string, number> = {
   [ICE_BLOCK_SPELL_ID]: ICE_BLOCK_CD_S,
   [DIVINE_SHIELD_SPELL_ID]: DIVINE_SHIELD_CD_S,
 };
+
+/** Cold Snap — resets Ice Block (the reset table deathOutcomeAnalysis's
+ * IMMUNITY_SPELLS carries for the same spell). */
+export const COLD_SNAP_SPELL_ID = "235219";
 
 /** Gate 3: every strategic immunity in the enemy comp was spent before
  * `fromS` and stays down past `toS`. Vacuously true on an empty list (comp
@@ -106,8 +119,15 @@ function allStrategicsSpent(
   toS: number,
 ): boolean {
   return holders.every((h) => {
-    const cd = STRATEGIC_CD_S[h.spellId];
-    return h.castSeconds.some((c) => c <= fromS && c + cd > toS);
+    const cd = h.cooldownSeconds ?? STRATEGIC_CD_S[h.spellId]!;
+    const before = h.castSeconds.filter((c) => c <= fromS);
+    if (!before.length) return false;
+    // a reset after the last press brings it back
+    const last = Math.max(...before);
+    if ((h.resetSeconds ?? []).some((r) => r > last && r <= toS)) return false;
+    // spent = no charge in hand at fromS, and none recharges by toS (charges
+    // only grow without presses) — the shared sequential-recharge simulation
+    return chargesAvailableAt(before, cd, h.charges ?? 1, toS) === 0;
   });
 }
 
@@ -118,6 +138,9 @@ export function mdCycloneWindowEvents(opts: {
   cycloneHits: ICycloneHit[];
   /** The owner's own MD cast instants (seconds). */
   ownerMdCastSeconds: number[];
+  /** The owner's talent-resolved Mass Dispel cooldown (`unitCooldownOf`);
+   * omitted → the official number. */
+  ownerMdCooldownS?: number;
   /** Every strategic-immunity holder in the ENEMY comp (one entry per
    * mage/paladin), with their observed casts. */
   enemyStrategics: IStrategicHolder[];
@@ -167,9 +190,11 @@ export function mdCycloneWindowEvents(opts: {
     // The candidate's moment: when the chain became a chain (second landing).
     const tS = toRenderSecond(chain[1].atS);
 
-    // Gate 4: MD ready at window start…
+    // Gate 4: MD ready at window start (the owner's own cooldown —
+    // Improved Mass Dispel makes it 60 s)…
+    const mdCooldownS = opts.ownerMdCooldownS ?? MD_COOLDOWN_S;
     const mdReady = !ownerMdCastSeconds.some(
-      (c) => c > fromS - MD_COOLDOWN_S && c <= fromS,
+      (c) => c > fromS - mdCooldownS && c <= fromS,
     );
     if (!mdReady) continue;
     // …not pressed during the window or the follow-up grace…

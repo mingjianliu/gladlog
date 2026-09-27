@@ -36,6 +36,7 @@ import {
   // ...and its companion, the [STATE] tick's `unit:dead` predicate.
   isDeadAtRenderSecond,
 } from "../utils/cooldowns";
+import { CC_CAST_EFFECT_AURA } from "../utils/drAnalysis";
 import { isEnemyCdWindowSpell } from "../utils/enemyCDs";
 import { PVP_TRINKET_SPELL_IDS } from "../utils/killWindowTargetSelection";
 import { auraOffensiveOccurrences } from "../utils/offensiveAuraOccurrences";
@@ -277,10 +278,22 @@ const INTERRUPT_IDS = new Set<string>(
     .map(([id]) => id),
 );
 /** "stop the damage" tools the owner can point at an enemy */
-const CONTROL_IDS = new Set<string>([
+const CONTROL_AURA_IDS = new Set<string>([
   ...ccSpellIds,
   ...rootSpellIds,
   ...INTERRUPT_IDS,
+]);
+// The owner's PRESS is a cast id, and some CC casts apply a differently
+// numbered aura (Blinding Light 115750 → 105421, Shockwave → 132168, Capacitor
+// Totem → 118905 …): add the cast ids whose effect aura is a control aura, from
+// the one cast→aura table (CC_CAST_EFFECT_AURA). Talent impact audit
+// 2026-09-26: a Holy Paladin who pressed Blinding Light was told "no CC on an
+// enemy".
+const CONTROL_IDS = new Set<string>([
+  ...CONTROL_AURA_IDS,
+  ...Object.entries(CC_CAST_EFFECT_AURA)
+    .filter(([, aura]) => CONTROL_AURA_IDS.has(aura))
+    .map(([cast]) => cast),
 ]);
 // C1 (2026-08-29): the hand-typed `interrupts` set alone covered 3/61 of the
 // official DR `silence` category (measured) — Strangulate 47476,

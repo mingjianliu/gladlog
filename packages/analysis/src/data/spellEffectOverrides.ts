@@ -137,9 +137,12 @@ export const SPELL_EFFECT_OVERRIDES: Record<string, IMinedSpell> =
       // disagrees with its official value: mode 6, p50 6.10 against a p25 of
       // 5.04, where every other kick's p50 sits 0.2–0.9 s above its lockout
       // (kickLockoutObservedGenerated.json). An explicit override duration is
-      // how `kickLockoutOfficialSeconds` is patched; the mechanism behind the
-      // extra second (a mage-side modifier is the likely one) is NOT yet
-      // identified — see test/kickLockout.test.ts RULED_LOCKOUTS.
+      // how `kickLockoutOfficialSeconds` is patched. The extra second is
+      // Improved Counterspell 1270865 ("the target cannot cast for 1 sec
+      // longer", taken by 94.6 % of mages — talent impact audit 2026-09-26),
+      // so 6 is the holder's value; the lockout path takes no caster, so a
+      // non-holder still reads 6 (one second long, the "locked" side) — see
+      // test/kickLockout.test.ts RULED_LOCKOUTS.
       e("2139", "Counterspell", 24, 6),
       e("6552", "Pummel", 15),
       e("47528", "Mind Freeze", 15),

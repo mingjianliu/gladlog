@@ -1,12 +1,17 @@
 import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
-import { getEnglishSpellName, spellEffectData } from "../data/spellEffectData";
+import { getEnglishSpellName } from "../data/spellEffectData";
 import { ccSpellIds } from "../data/spellTags";
-import { isHealerSpec, specToString } from "./cooldowns";
 import {
-  DRLevel,
+  chargesAvailableAt,
+  isHealerSpec,
+  specToString,
+  unitCooldownOf,
+} from "./cooldowns";
+import {
   drCategoryOfCast,
+  DRLevel,
   getDRLevelAtTime,
   IDRInfo,
 } from "./drAnalysis";
@@ -479,6 +484,8 @@ interface IOwnerCCSpell {
   spellId: string;
   spellName: string;
   cooldownSeconds: number;
+  /** talent-resolved charge cap (1 for most CC) */
+  charges: number;
   castTimesSeconds: number[];
 }
 
@@ -491,10 +498,16 @@ function collectOwnerCCSpells(
   for (const e of owner.spellCastEvents) {
     if (e.logLine.event !== LogEvent.SPELL_CAST_SUCCESS || !e.spellId) continue;
     if (!ccSpellIds.has(e.spellId)) continue;
+    // The owner's talent-resolved cooldown and charges (`unitCooldownOf`):
+    // Psychic Voice, Fist of Justice, Ancient Arts, Voodoo Mastery … were
+    // ignored, and a charge-only CC row (no plain cooldown) read 0 = "always
+    // ready" (talent impact audit 2026-09-26).
+    const own = unitCooldownOf(owner, e.spellId);
     const entry = bySpell.get(e.spellId) ?? {
       spellId: e.spellId,
       spellName: getEnglishSpellName(e.spellId, e.spellName),
-      cooldownSeconds: spellEffectData[e.spellId]?.cooldownSeconds ?? 0,
+      cooldownSeconds: own?.cooldownSeconds ?? 0,
+      charges: own?.charges ?? 1,
       castTimesSeconds: [],
     };
     entry.castTimesSeconds.push((e.logLine.timestamp - matchStartMs) / 1000);
@@ -508,6 +521,15 @@ function collectOwnerCCSpells(
 
 function isCCReadyAt(spell: IOwnerCCSpell, atSeconds: number): boolean {
   if (spell.cooldownSeconds <= 0) return true; // spammable CC (no CD data) is always ready
+  if (spell.charges > 1)
+    return (
+      chargesAvailableAt(
+        spell.castTimesSeconds.filter((t) => t < atSeconds),
+        spell.cooldownSeconds,
+        spell.charges,
+        atSeconds,
+      ) > 0
+    );
   let lastBefore: number | undefined;
   for (const t of spell.castTimesSeconds) {
     if (t < atSeconds) lastBefore = t;

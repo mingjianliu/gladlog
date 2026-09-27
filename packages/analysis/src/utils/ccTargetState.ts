@@ -38,6 +38,7 @@ import { abilityProfile } from "../data/abilityProfile";
 import { ccSpellIds } from "../data/spellTags";
 import { buildAuraIntervals, type IAuraInterval } from "./auraIntervals";
 import { buildCannotCastIntervals } from "./cannotCastIntervals";
+import { castingLockIntervalsOf } from "./castingLocks";
 import { pvpTrinketRemainingSecondsAt } from "./ccTrinketAnalysis";
 import {
   cdReadyInTimeAt,
@@ -62,7 +63,6 @@ import {
 import { INTERP_MAX_GAP_MS } from "./positionSampling";
 import {
   auraBlocksMechanic,
-  auraLocksCasting,
   ccMechanicOf,
   explicitlyBreaksMechanic,
   mechanicStateOf,
@@ -188,12 +188,9 @@ export function ccSamplerFor(params: {
   };
   const ownerDeath = deathS(owner);
   const cannot = buildCannotCastIntervals(owner, new Set(params.enemyIds));
-  const locks: Interval[] = buildAuraIntervals(owner, combat)
-    .filter((iv) => auraLocksCasting(iv.spellId))
-    .map((iv) => ({
-      from: start + iv.fromS * 1000,
-      to: start + iv.toS * 1000,
-    }));
+  // the one casting-lock predicate (Unrelenting Onslaught lets a holder
+  // Storm Bolt inside Bladestorm)
+  const locks: Interval[] = castingLockIntervalsOf(owner, combat, cd.spellId);
   // Any overlap with the rendered second [s, s+1).
   const overlapsMs = (ivs: Interval[], ms: number) =>
     ivs.some((w) => w.from < ms + 1000 && ms < w.to);

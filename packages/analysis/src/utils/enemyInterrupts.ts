@@ -2,7 +2,13 @@ import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import kitRaw from "../data/interruptKitGenerated.json";
 import { spellEffectData } from "../data/spellEffectData";
-import { specToString } from "./cooldowns";
+import { eventReductionsFor } from "../data/talentScriptedCooldowns";
+import {
+  chargeStateAt,
+  playerTalentIdSets,
+  specToString,
+  unitCooldownOf,
+} from "./cooldowns";
 
 /**
  * Which interrupt a combatant HAS — from official data, per player (GH #78,
@@ -88,34 +94,96 @@ export function kickCastSpellId(eventSpellId: string): string {
  * from its most recent successful cast (own or pet) and the official
  * cooldown. The one predicate behind both the timeline's whole-second display
  * and kick-priority's feasibility. */
-/** An interrupt's cooldown from the official table, or undefined when the
- * table has no row — shared by the availability ledger below (which falls
- * back to 15 s) and the timeline's `[KICK] … back M:SS` suffix (which renders
- * nothing rather than a guess). GH #103 A3. */
-export function interruptCooldownSeconds(spellId: string): number | undefined {
-  return spellEffectData[spellId]?.cooldownSeconds;
+/** An interrupt's cooldown, or undefined when the official table has no row
+ * — shared by the availability ledger below (which falls back to 15 s) and
+ * the timeline's `[KICK] … back M:SS` suffix (which renders nothing rather
+ * than a guess). GH #103 A3. With the kicker it is THEIR cooldown
+ * (`unitCooldownOf`: talents, PvP talents, spec passives — Restoration
+ * Shaman's Wind Shear is 30 s, not 12; Quick Witted, Honed Reflexes …),
+ * talent impact audit 2026-09-26; without one, the untalented official row. */
+export function interruptCooldownSeconds(
+  spellId: string,
+  unit?: ICombatUnit,
+): number | undefined {
+  const base = spellEffectData[spellId]?.cooldownSeconds;
+  if (base === undefined) return undefined;
+  return (unit && unitCooldownOf(unit, spellId)?.cooldownSeconds) ?? base;
 }
 
+/** Exact ms of cooldown left on `spellId` for this unit at `atMs` (0 = ready),
+ * from its successful casts (own or pet) and the unit's talent-resolved
+ * cooldown and charge cap. The one predicate behind both the timeline's
+ * whole-second display and kick-priority's feasibility. Exact — no rendered-
+ * second slack: 0.4 s left is NOT ready. */
 export function interruptCooldownRemainingMs(
   unit: ICombatUnit,
   spellId: string,
   atMs: number,
 ): number {
-  const cooldownSeconds = interruptCooldownSeconds(spellId) ?? 15;
-  let lastCastMs = -Infinity;
+  const cooldownSeconds = interruptCooldownSeconds(spellId, unit) ?? 15;
+  const charges = unitCooldownOf(unit, spellId)?.charges ?? 1;
+  const castMs: number[] = [];
   for (const e of [
     ...unit.spellCastEvents,
     ...(unit.petSpellCastEvents ?? []),
   ]) {
     if (e.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
     if (e.spellId !== spellId) continue;
-    const ts = e.logLine.timestamp;
-    if (ts <= atMs && ts > lastCastMs) lastCastMs = ts;
+    if (e.logLine.timestamp <= atMs) castMs.push(e.logLine.timestamp);
   }
-  return lastCastMs === -Infinity
-    ? 0
-    : Math.max(0, cooldownSeconds * 1000 - (atMs - lastCastMs));
+  if (!castMs.length) return 0;
+  if (charges > 1) {
+    // the shared sequential-recharge simulation, in seconds from atMs
+    const st = chargeStateAt(
+      castMs.map((ms) => (ms - atMs) / 1000),
+      cooldownSeconds,
+      charges,
+      0,
+    );
+    return st.charges > 0 ? 0 : Math.max(0, st.nextRecharge * 1000);
+  }
+  const lastCastMs = Math.max(...castMs);
+  // event reductions the kicker holds (Storm Conduit: every Lightning Bolt /
+  // Chain Lightning −1 s on Wind Shear), only those that happened by atMs —
+  // the ledger's rule (data/talentScriptedCooldowns)
+  const sets = playerTalentIdSets(unit);
+  const reductions = eventReductionsFor(
+    spellId,
+    (t) => !!sets.talentedSpellIds?.has(t) || sets.pvpTalentIds.has(t),
+  );
+  let readyMs = lastCastMs + cooldownSeconds * 1000;
+  if (reductions.length) {
+    const events = reductions
+      .flatMap((r) =>
+        unit.spellCastEvents
+          .filter(
+            (e) =>
+              e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+              r.triggerCastIds.includes(String(e.spellId)) &&
+              e.logLine.timestamp > lastCastMs &&
+              e.logLine.timestamp <= atMs,
+          )
+          .map((e) => ({ t: e.logLine.timestamp, ms: r.seconds * 1000 })),
+      )
+      .sort((a, b) => a.t - b.t);
+    for (const e of events) {
+      if (e.t >= readyMs) break;
+      readyMs = Math.max(e.t, readyMs - e.ms);
+    }
+  }
+  return Math.max(0, readyMs - atMs);
 }
+
+/**
+ * Kit entries that interrupt only NON-PLAYER targets (tooltip: "interrupts and
+ * silences non-player targets") — no arena coaching claim can rest on them.
+ * Avenger's Shield 31935 sat before Rebuke 96231 in the kit's numeric order,
+ * so every Protection Paladin's interrupt read as Avenger's Shield (talent
+ * impact audit 2026-09-26). Registered in curatedIdRegistry.
+ */
+export const NON_PLAYER_INTERRUPT_IDS: ReadonlySet<string> = new Set([
+  "31935", // Avenger's Shield
+]);
 
 /** The interrupt this unit has, or null (Holy Paladin, Preservation Evoker,
  * Restoration Druid, Mistweaver, Disc/Holy Priest, a Retribution Paladin who
@@ -128,6 +196,7 @@ export function interruptForUnit(unit: ICombatUnit): InterruptDef | null {
   let pet: InterruptDef | null = null;
   let talentPick: InterruptDef | null = null;
   for (const [spellId, e] of Object.entries(KIT)) {
+    if (NON_PLAYER_INTERRUPT_IDS.has(spellId)) continue;
     if (
       e.classBaseline.includes(classId) ||
       e.specBaseline.includes(Number(specId))

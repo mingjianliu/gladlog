@@ -27,6 +27,9 @@ vi.mock("../../src/utils/talents", () => ({
     return null;
   },
   getSpecTalentTreeSpellIds: () => new Set(["213634", "278326", "30146"]),
+  isLoadoutFullyResolved: () => true,
+  choiceSelectionResolved: () => true,
+  getSpecFreeOrEntrySpellIds: () => new Set(),
 }));
 
 const MATCH_START = 1_000_000;

@@ -117,6 +117,19 @@ export async function main(): Promise<void> {
           ._meta.truncatedTriggerEdges,
         bytes: statSync(dataDir + "talentEffectInventoryGenerated.json").size,
       },
+      // Talent impact audit batch C (2026-09-26): buff-conditional cooldown
+      // modifiers (genConditionalCooldowns.ts). `modifiers` beside `entries`:
+      // a decode regression can drop one kind while the targets stay.
+      "conditionalCooldownsGenerated.json": {
+        entries: Object.keys(readJson("conditionalCooldownsGenerated.json").byTarget)
+          .length,
+        modifiers: Object.values(
+          readJson("conditionalCooldownsGenerated.json").byTarget as Record<
+            string,
+            unknown[]
+          >,
+        ).flat().length,
+      },
       "mitigationGenerated.json": {
         entries: Object.keys(readJson("mitigationGenerated.json").entries)
           .length,

@@ -82,9 +82,9 @@ export const NO_MITIGATION_IDS: ReadonlySet<string> = new Set([
   "47788", // Guardian Spirit: +60% healing received (aura118) + death prevention, no percentage mitigation (the same-named new id 1247928 has a -10 row but is not observed, see the pending-decision section note)
   "97462", // Rallying Cry: +10% max health (the actual buff is 97463), no mitigation
   "116849", // Life Cocoon: pure absorb shield (aura69) + healing bonus, no percentage mitigation
+  "1966", // Feint: AoE-only damage reduction (aura229, like Zephyr below), plus a 0-point aura87 dead slot on the cast id — this table's shape cannot express AoE-conditional mitigation (2026-08-12 audit). Elusiveness 79008 fills the slot with 20 % (corpus 2026-09-26: holders 0.800, 1,331 units) — entering the table needs a signed verdict; user 2026-09-26: not ruled yet 「先不裁定 有点复杂」
+  "5277", // Evasion: dodge/parry chance, not percentage mitigation — the cast id's two aura87 rows are both 0-point dead slots (2026-08-12 audit). Elusiveness 79008 fills one with 20 % (corpus 2026-09-26: holders 0.800, 860 units) — not entered: user 2026-09-26 「打进去 尤其是给晕 等于白打 我觉得先不裁定 有点复杂」 (as Feint)
   "122470", // Touch of Karma: absorb + damage transfer to the target (aura69), not percentage mitigation
-  "1966", // Feint: AoE-only damage reduction (aura229, like Zephyr below), plus a 0-point aura87 dead slot on the cast id — this table's shape cannot express AoE-conditional mitigation (2026-08-12 audit)
-  "5277", // Evasion: dodge/parry chance, not percentage mitigation — the cast id's two aura87 rows are both 0-point dead slots (2026-08-12 audit)
   "11426", // Ice Barrier: absorb shield (aura69); its only aura87 row is a 0-point dead slot. Absorbs are accounted for as effective HP from the log's own SPELL_ABSORBED events, not through this percentage table (2026-08-12)
   "974", // Earth Shield: the cast id's aura87 is a 0-point dead slot; the same-named -10/-15/-20 ids belong to other spells and none is corroborated by this library's logs, so no value is pinned (2026-08-12 audit)
   "17", // Power Word: Shield: pure absorb (aura69) — accounted as effective HP from SPELL_ABSORBED, see absorbShields.ts (2026-08-12)

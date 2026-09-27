@@ -6,6 +6,8 @@ vi.mock("../data/spellEffectData", () => ({
   spellEffectData: {
     "123": { durationSeconds: 5 },
   },
+  // read by the caster-aware duration predicate (buffFullDurationForCaster)
+  BUFF_DURATION_TALENT_MODIFIERS: {},
 }));
 
 vi.mock("./cannotCastIntervals", () => ({
