@@ -9,11 +9,13 @@
  */
 import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
+import { BREAK_RACIAL_SPELL_IDS } from "../data/racialAbilities";
 import { ROOT_SPELL_IDS } from "../data/rootSpells";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { ccSpellIds } from "../data/spellTags";
 import { getSortedAdvancedActions } from "../utils/advancedActions";
 import { binarySearchClosest } from "../utils/binarySearch";
+import { PVP_TRINKET_SPELL_IDS } from "../utils/killWindowTargetSelection";
 import type { CastFailedEvent } from "../utils/rawStreams";
 import { GROUNDING_TOTEM_NPC_ID, getNpcIdFromGuid } from "./timelineHelpers";
 
@@ -33,9 +35,15 @@ export interface IGroundedCc {
   totemId: string;
 }
 
-/** Every control cast whose target was a Grounding Totem (the totem takes
- *  the spell; 7d1f: a Cyclone and a Polymorph eaten). `skipCasterIds`: the
- *  log owner's own casts already carry "[absorbed: Grounding Totem]". */
+/** Every control cast whose destination was a Grounding Totem — the log's
+ *  own statement that the server redirected it (7d1f: a Cyclone and a
+ *  Polymorph). Whether it then landed on the totem is not always logged: a
+ *  Hammer of Justice into a totem leaves no SPELL_MISSED and totem deaths are
+ *  never logged (0 in 200 files, 2026-09-27) — so the line says "redirected
+ *  into", not "eaten" (codex review of batch 13: a projectile can outlive the
+ *  totem; requiring the miss line dropped 115 of 504 true redirects).
+ *  `skipCasterIds`: the log owner's own casts already carry "[absorbed:
+ *  Grounding Totem]". */
 export function groundedControls(
   units: readonly ICombatUnit[],
   matchStartMs: number,
@@ -97,31 +105,55 @@ function maxHpNear(unit: ICombatUnit, tMs: number): number | null {
   return a.advancedActorMaxHp;
 }
 
+/** Reflects of one caster's spell by one reflector this close together are
+ *  one reflect event — a channel's bolts (Penance) each log their own
+ *  REFLECT; 0051f0c9-style four identical "came back for 59k" lines. */
+export const REFLECT_CHAIN_GAP_MS = 3000;
+
 export function reflectedSpells(
   units: readonly ICombatUnit[],
   matchStartMs: number,
 ): IReflected[] {
   const byId = new Map(units.map((u) => [u.id, u]));
   const out: IReflected[] = [];
-  // one reflect can be logged once per spell effect (a Fear showed twice at
-  // the same ms) — keyed on caster / spell / reflector / ms
-  const seen = new Set<string>();
   for (const caster of units) {
-    for (const m of caster.missesOut ?? []) {
-      if (m.missType !== "REFLECT" || !m.spellId) continue;
-      const key = `${caster.id}|${m.spellId}|${m.destUnitId}|${m.logLine.timestamp}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
+    const reflects = (caster.missesOut ?? [])
+      .filter((m) => m.missType === "REFLECT" && !!m.spellId)
+      .sort((a, b) => a.logLine.timestamp - b.logLine.timestamp);
+    // chains: same spell, same reflector, ≤ REFLECT_CHAIN_GAP_MS apart (this
+    // also folds one reflect logged once per effect at the same ms)
+    const chains: Array<{ first: (typeof reflects)[number]; last: number }> =
+      [];
+    for (const m of reflects) {
+      const c = [...chains]
+        .reverse()
+        .find(
+          (x) =>
+            x.first.spellId === m.spellId &&
+            x.first.destUnitId === m.destUnitId,
+        );
+      if (c && m.logLine.timestamp - c.last <= REFLECT_CHAIN_GAP_MS)
+        c.last = m.logLine.timestamp;
+      else chains.push({ first: m, last: m.logLine.timestamp });
+    }
+    for (const { first: m } of chains) {
       const reflector = byId.get(m.destUnitId ?? "");
       if (!reflector) continue;
       const t0 = m.logLine.timestamp;
-      const t1 = t0 + REFLECT_DAMAGE_WINDOW_S * 1000;
-      let back = 0;
-      // only what the reflect sent back: the reflector, or the caster's own
-      // DoT ticking on itself — not another enemy casting the same spell at
-      // the caster inside the window (agy review of batch 13)
+      // a hit belongs to the latest reflect event of the spell before it —
+      // never to two (codex review of batch 13: two warriors' reflects of one
+      // priest's Shadow Word: Pain both claimed the same 100k); within the
+      // window only what the reflect sent back: the reflector, or the
+      // caster's own DoT ticking on itself — not another enemy casting the
+      // same spell at the caster (agy review of batch 13)
+      const next = chains
+        .map((c) => c.first)
+        .filter((x) => x.spellId === m.spellId && x.logLine.timestamp > t0)
+        .reduce((lo, x) => Math.min(lo, x.logLine.timestamp), Infinity);
+      const t1 = Math.min(t0 + REFLECT_DAMAGE_WINDOW_S * 1000, next - 1);
       const fromReflect = (src: string | undefined) =>
         src === reflector.id || src === caster.id;
+      let back = 0;
       for (const d of caster.damageIn ?? [])
         if (
           d.spellId === m.spellId &&
@@ -138,7 +170,7 @@ export function reflectedSpells(
           a.timestamp <= t1
         )
           back += Math.abs(a.absorbedAmount);
-      const isControl = isControlSpell(m.spellId);
+      const isControl = isControlSpell(m.spellId!);
       if (!isControl) {
         const maxHp = maxHpNear(caster, t0);
         if (maxHp === null || (back / maxHp) * 100 < REFLECT_MIN_DAMAGE_PCT)
@@ -150,8 +182,8 @@ export function reflectedSpells(
         casterName: caster.name,
         reflectorId: reflector.id,
         reflectorName: reflector.name,
-        spellId: m.spellId,
-        spellName: getEnglishSpellName(m.spellId, m.spellName),
+        spellId: m.spellId!,
+        spellName: getEnglishSpellName(m.spellId!, m.spellName),
         isControl,
         damageBack: back,
       });
@@ -180,8 +212,12 @@ export interface ICcRemovedBySanctuary {
   ccSourceId?: string;
 }
 
-/** A control that left its target within 50 ms of Blessing of Sanctuary
- *  landing on it (0035285c: Kidney Shot removed at the Sanctuary's ms). */
+/** A control that left its target within 50 ms AFTER Blessing of Sanctuary
+ *  landed on it (0035285c: Kidney Shot removed at the Sanctuary's ms), with
+ *  no competing cause: a removal before the landing, or at an instant the
+ *  target itself pressed a PvP trinket / break racial, is not the
+ *  Sanctuary's (codex review of batch 13 — a trinket at 10.000 s credited to
+ *  a Sanctuary at 10.030 s). */
 export function sanctuaryRemovals(
   units: readonly ICombatUnit[],
   matchStartMs: number,
@@ -198,7 +234,17 @@ export function sanctuaryRemovals(
       for (const a of target.auraEvents ?? []) {
         if (a.logLine.event !== LogEvent.SPELL_AURA_REMOVED) continue;
         if (!a.spellId || !isControlSpell(a.spellId)) continue;
-        if (Math.abs(a.logLine.timestamp - t) > SANCTUARY_PAIR_MS) continue;
+        const rm = a.logLine.timestamp;
+        if (rm < t || rm - t > SANCTUARY_PAIR_MS) continue;
+        const selfBreak = (target.spellCastEvents ?? []).some(
+          (s) =>
+            s.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+            !!s.spellId &&
+            (PVP_TRINKET_SPELL_IDS.has(s.spellId) ||
+              BREAK_RACIAL_SPELL_IDS.has(s.spellId)) &&
+            Math.abs(s.logLine.timestamp - rm) <= SANCTUARY_PAIR_MS,
+        );
+        if (selfBreak) continue;
         out.push({
           atSeconds: (t - matchStartMs) / 1000,
           paladinId: pal.id,
@@ -279,11 +325,23 @@ export function ownerRejectRuns(
     if (cur && cur.count >= REJECT_RUN_MIN) runs.push(cur);
     cur = null;
   };
+  // every owner failure takes part — the same spell refused for a reason
+  // outside the three kinds ends the run instead of vanishing from between
+  // two that match
+  // (codex review of batch 13: Out of range / Not yet recovered / Out of
+  // range … read as three consecutive out-of-range presses)
   const hits = castFailed
-    .filter((h) => h.unitGuid === ownerId && KIND_OF.has(h.reason))
+    .filter((h) => h.unitGuid === ownerId)
     .sort((a, b) => a.tSeconds - b.tSeconds);
   for (const h of hits) {
-    const kind = KIND_OF.get(h.reason)!;
+    const kind = KIND_OF.get(h.reason);
+    if (!kind) {
+      // the same spell refused for another reason splits its run; another
+      // spell's not-ready press does not (it never did for a matching kind
+      // either — only a different spell/kind WITH a kind flushed)
+      if (cur && cur.spellId === String(h.spellId)) flush();
+      continue;
+    }
     const id = String(h.spellId);
     if (
       cur &&

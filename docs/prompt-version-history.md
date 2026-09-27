@@ -1677,3 +1677,12 @@ v188 (2026-09-27, codex review of batches 8–9): group externals (Spirit Link,
 Barrier) answer a burst; one latency clock for landed controls; "outside every
 attempt window" is a time test; a cast whose aura has another id (Fear) is a
 real recast; APPLIED-then-REMOVED at one ms is a real end.
+
+v189 (2026-09-27, codex post-hoc review of batches 11–13, agy re-review of
+batch 14): sync-window reach only while the owner can act, abstaining for a
+target never positioned then; folded locks obey the Shuffle round end; the
+wall-up-at-opening test on the raw offset; absorbs without an attack spell are
+swings only on documents that record it; roster numbers by full name before
+reaction flags; "redirected into" a Grounding Totem; one [REFLECTED] line per
+channel; Sanctuary credit needs no competing break; [REJECTED] runs split by a
+same-spell refusal of another kind; [RES] cooldowns and charges per owner.

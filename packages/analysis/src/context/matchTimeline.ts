@@ -11,10 +11,7 @@ import type { StackedDefensivePair } from "../analysis/stackedDefensives";
 import { BACKLASH_AURA_CC_TYPE } from "../data/backlashCc";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { ccSpellIds } from "../data/spellTags";
-import {
-  DEATH_WINDOW_S,
-  TIMELINE_LINE_FLAGS,
-} from "../data/timelineLineFlags";
+import { DEATH_WINDOW_S, TIMELINE_LINE_FLAGS } from "../data/timelineLineFlags";
 import { buffFullDurationForCaster } from "../utils/buffDuration";
 import { silenceIntervals } from "../utils/cannotCastIntervals";
 import type { ICcBreakEvent } from "../utils/ccBreakAnalysis";
@@ -1022,10 +1019,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   // [RES] only (user ruling 2026-09-26, round 3 N14): the owner's kick (own
   // or pet) and Death Grip sit under MIN_CD_SECONDS and never entered the
   // ledger; they join the [RES] line and nothing else (resUtilityCds.ts).
-  const resOwnerCDs = [
-    ...ownerCDs,
-    ...ownerResUtilityCds(owner, matchStartMs),
-  ];
+  const resOwnerCDs = [...ownerCDs, ...ownerResUtilityCds(owner, matchStartMs)];
 
   const matchEndSeconds = (matchEndMs - matchStartMs) / 1000;
   // GH #119: the round the aura-evidenced bursts are read over (the same
@@ -1674,7 +1668,13 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
         const friendlyIds = new Set(friends.map((f) => f.id));
         const hasBurst =
           friends.some((f) =>
-            hasOffensiveSpellActive(f, tMs, friendlyIds, undefined, roundBounds),
+            hasOffensiveSpellActive(
+              f,
+              tMs,
+              friendlyIds,
+              undefined,
+              roundBounds,
+            ),
           ) ||
           (enemies ?? []).some((e) =>
             hasOffensiveSpellActive(
@@ -1785,7 +1785,10 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
         );
         // event order, not bare timestamps (codex: an instant START and its
         // SUCCESS at the same ms must not be read as the previous bar's end)
-        const beforeNextStart = (e: { timestamp: number; logLine: { lineIndex?: number } }) =>
+        const beforeNextStart = (e: {
+          timestamp: number;
+          logLine: { lineIndex?: number };
+        }) =>
           nextStart === undefined ||
           e.timestamp < nextStart.timestamp ||
           (e.timestamp === nextStart.timestamp &&
@@ -1802,7 +1805,8 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
             !consumedSuccess.has(e) &&
             (e.timestamp > event.timestamp ||
               (e.timestamp === event.timestamp &&
-                (e.logLine.lineIndex ?? 0) >= (event.logLine.lineIndex ?? 0))) &&
+                (e.logLine.lineIndex ?? 0) >=
+                  (event.logLine.lineIndex ?? 0))) &&
             beforeNextStart(e),
         );
         if (!first) continue;
@@ -2039,7 +2043,13 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
         const friendlyIds = new Set(friends.map((f) => f.id));
         const hasBurst =
           friends.some((f) =>
-            hasOffensiveSpellActive(f, tMs, friendlyIds, undefined, roundBounds),
+            hasOffensiveSpellActive(
+              f,
+              tMs,
+              friendlyIds,
+              undefined,
+              roundBounds,
+            ),
           ) ||
           (enemies ?? []).some((e) =>
             hasOffensiveSpellActive(
@@ -2124,7 +2134,11 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       );
     const byId = new Map(_allUnits.map((u) => [u.id, u]));
     const inMatch = (t: number) => t >= 0 && t <= matchEndSeconds;
-    for (const g of groundedControls(_allUnits, matchStartMs, new Set([owner.id]))) {
+    for (const g of groundedControls(
+      _allUnits,
+      matchStartMs,
+      new Set([owner.id]),
+    )) {
       if (!inMatch(g.atSeconds)) continue;
       const caster = byId.get(g.casterId);
       const totemOwner = resolveSummonOwner({
@@ -2139,7 +2153,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
         : "a Grounding Totem";
       addEntry(
         g.atSeconds,
-        `${fmtTime(g.atSeconds)}  [GROUNDED]   ${caster ? unitLabel(caster) : "?"}'s ${g.spellName} was eaten by ${totemOf}`,
+        `${fmtTime(g.atSeconds)}  [GROUNDED]   ${caster ? unitLabel(caster) : "?"}'s ${g.spellName} was redirected into ${totemOf}`,
       );
     }
     for (const r of reflectedSpells(_allUnits, matchStartMs)) {

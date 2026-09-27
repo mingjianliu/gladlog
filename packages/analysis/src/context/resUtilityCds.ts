@@ -18,7 +18,7 @@
 import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import { effectiveCooldownSeconds } from "../data/spellEffectData";
-import type { IMajorCooldownInfo } from "../utils/cooldowns";
+import { type IMajorCooldownInfo, unitCooldownOf } from "../utils/cooldowns";
 import {
   interruptCooldownSeconds,
   interruptForUnit,
@@ -47,13 +47,14 @@ function entry(
   spellName: string,
   cooldownSeconds: number,
   casts: Array<{ timeSeconds: number }>,
+  charges = 1,
 ): IMajorCooldownInfo {
   return {
     spellId,
     spellName,
     tag: "Utility",
     cooldownSeconds,
-    maxChargesDetected: 1,
+    maxChargesDetected: charges,
     casts,
     availableWindows: [],
     neverUsed: casts.length === 0,
@@ -70,7 +71,10 @@ export function ownerResUtilityCds(
     kick &&
     (kick.confirmed || castsOf(owner, kick.spellId, matchStartMs).length > 0)
   ) {
-    const cd = interruptCooldownSeconds(kick.spellId);
+    // the owner's talent-resolved cooldown and charges — the predicate
+    // interruptCooldownRemainingMs reads (agy re-review of batch 14: the
+    // base cooldown ignored talent reductions, charges were fixed at 1)
+    const cd = interruptCooldownSeconds(kick.spellId, owner);
     if (cd !== undefined)
       out.push(
         entry(
@@ -78,13 +82,15 @@ export function ownerResUtilityCds(
           kick.name,
           cd,
           castsOf(owner, kick.spellId, matchStartMs),
+          unitCooldownOf(owner, kick.spellId)?.charges ?? 1,
         ),
       );
   }
   if (Number(owner.class) === DEATH_KNIGHT_CLASS_ID) {
     // the shared cooldown predicate (charge recharge, not charge spacing —
     // agy review of batch 14)
-    const cd = effectiveCooldownSeconds(DEATH_GRIP_ID);
+    const own = unitCooldownOf(owner, DEATH_GRIP_ID);
+    const cd = own?.cooldownSeconds ?? effectiveCooldownSeconds(DEATH_GRIP_ID);
     if (cd !== undefined)
       out.push(
         entry(
@@ -92,6 +98,7 @@ export function ownerResUtilityCds(
           "Death Grip",
           cd,
           castsOf(owner, DEATH_GRIP_ID, matchStartMs),
+          own?.charges ?? 1,
         ),
       );
   }

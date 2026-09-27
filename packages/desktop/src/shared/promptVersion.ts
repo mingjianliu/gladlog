@@ -230,5 +230,17 @@
  *  Barrier) answer a burst; one latency clock for landed controls; "outside every
  *  attempt window" is a time test; a cast whose aura has another id (Fear) is a
  *  real recast; APPLIED-then-REMOVED at one ms is a real end.
+ *  v189 (2026-09-27, codex post-hoc review of batches 11–13 + agy re-review of
+ *  batch 14): missed-sync-window reach counts only while the owner can act and
+ *  abstains for a burst target never positioned then; folded locks obey the
+ *  Solo Shuffle round end; the wall-up-at-opening test reads the raw offset;
+ *  a spell-less absorb is a swing only on documents that record attack spells;
+ *  a mind-controlled attacker keeps its roster number; [GROUNDED] says
+ *  "redirected into"; a channel's reflects are one [REFLECTED] line; Sanctuary
+ *  credit needs the removal at/after its landing and no self trinket/racial;
+ *  a same-spell refusal for another reason splits a [REJECTED] run; [RES]
+ *  kicks / Death Grip use the owner's talent-resolved cooldown and charges.
+ *  605 files: candidates byte-identical; [REFLECTED] 728 → 642 (merged
+ *  duplicates only), [CC REMOVED] 786 → 768, [REJECTED] 2,181 → 2,071.
  */
-export const PROMPT_VERSION = 188;
+export const PROMPT_VERSION = 189;

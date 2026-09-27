@@ -69,14 +69,36 @@ export interface IBurstDefensiveHit {
    *  it" when the wall was the target's reaction (Barkskin 1.24 s after
    *  Bestial Wrath). Optional for hand-built fixtures. */
   startOffsetSeconds?: number;
+  /** The same offset, raw ms — the up-at-opening decision reads THIS, not the
+   *  rounded display value (codex review of batch 12: a wall 30 ms after the
+   *  opening rounded to 0.0 and read "already up"). */
+  startOffsetMs?: number;
+}
+
+/** Was the wall already up when the burst opened? One predicate for the
+ *  ledger line and burst-into-mitigation (user ruling 2026-09-26: only a wall
+ *  up at the opening is accused). undefined when the offset is unknown. */
+export function wallUpAtOpen(d: {
+  startOffsetMs?: number;
+  startOffsetSeconds?: number;
+}): boolean | undefined {
+  if (d.startOffsetMs !== undefined) return d.startOffsetMs <= 0;
+  if (d.startOffsetSeconds !== undefined) return d.startOffsetSeconds <= 0;
+  return undefined;
 }
 
 /** "already up when the burst opened" / "pressed 1.2s after the burst opened" */
-export function wallTimingPhrase(offsetS: number | undefined): string {
-  if (offsetS === undefined) return "";
-  return offsetS <= 0
-    ? "already up when the burst opened"
-    : `pressed ${offsetS.toFixed(1)}s after the burst opened`;
+export function wallTimingPhrase(
+  d: { startOffsetMs?: number; startOffsetSeconds?: number } | undefined,
+): string {
+  if (!d) return "";
+  const up = wallUpAtOpen(d);
+  if (up === undefined) return "";
+  if (up) return "already up when the burst opened";
+  const s = d.startOffsetSeconds ?? (d.startOffsetMs ?? 0) / 1000;
+  return s < 0.05
+    ? "pressed <0.1s after the burst opened"
+    : `pressed ${s.toFixed(1)}s after the burst opened`;
 }
 
 export interface IBurstTargetDamage {
@@ -248,6 +270,7 @@ export function analyzeBurstLedger(
           appliedByOther: iv.srcUnitName !== target.name,
           casterName: iv.srcUnitName,
           startOffsetSeconds: Math.round((iv.startMs - fromMs) / 100) / 10,
+          startOffsetMs: iv.startMs - fromMs,
         });
       }
       defensivesHit.sort((a, b) => b.overlapSeconds - a.overlapSeconds);
@@ -386,7 +409,8 @@ export function auditWindowTargeting(
     for (const u of Object.values(combat.units ?? {}) as ICombatUnit[]) {
       if (!u.info || u.reaction !== player.reaction) continue;
       for (const d of u.damageOut ?? []) {
-        if (d.logLine.timestamp < fromMs || d.logLine.timestamp > toMs) continue;
+        if (d.logLine.timestamp < fromMs || d.logLine.timestamp > toMs)
+          continue;
         if (!enemyById.has(d.destUnitId)) continue;
         teamDamage.set(
           d.destUnitId,
@@ -470,7 +494,7 @@ export function formatBurstLedgerForContext(
         // can only be cast on a teammate → it reasons "so it is not target
         // mitigation"). The subject must be explicit.
         lines.push(
-          `    ${d.isImmunity ? "⚠ Target was IMMUNE" : "Target had a major defensive up"}: ${d.spellName} active ON THE TARGET ${d.overlapSeconds.toFixed(1)}s of this burst${d.startOffsetSeconds !== undefined ? ` (${wallTimingPhrase(d.startOffsetSeconds)})` : ""}`,
+          `    ${d.isImmunity ? "⚠ Target was IMMUNE" : "Target had a major defensive up"}: ${d.spellName} active ON THE TARGET ${d.overlapSeconds.toFixed(1)}s of this burst${wallUpAtOpen(d) !== undefined ? ` (${wallTimingPhrase(d)})` : ""}`,
         );
       }
     } else {

@@ -501,7 +501,9 @@ export function extractOwnerCDBuffExpiry(
         );
         if (
           onOwner &&
-          formRemovalsMs.some((t) => Math.abs(t - removedMs) <= FORM_SHIFT_PAIR_MS)
+          formRemovalsMs.some(
+            (t) => Math.abs(t - removedMs) <= FORM_SHIFT_PAIR_MS,
+          )
         )
           cause = "form_shift";
       }
@@ -771,7 +773,17 @@ export function damageEventLabel(
     const cleanSrcName = d.srcUnitName.split("-")[0];
     const isSrcFriendly =
       getUnitReaction(d.srcUnitFlags) === CombatUnitReaction.Friendly;
-    if (isSrcFriendly && playerIdMap) {
+    // The full name (name-realm) identifies the player whatever the event's
+    // reaction flags say — a mind-controlled enemy logs as friendly, and the
+    // flag-chosen roster then matched a same-named teammate by short name
+    // (codex review of batch 12: enemy 4's Starsurge credited to friendly 1).
+    const fullF = playerIdMap?.get(d.srcUnitName);
+    const fullE = enemyIdMap?.get(d.srcUnitName);
+    if (fullF !== undefined && fullE === undefined) {
+      srcName = String(fullF);
+    } else if (fullE !== undefined && fullF === undefined) {
+      srcName = String(fullE);
+    } else if (isSrcFriendly && playerIdMap) {
       const id =
         playerIdMap.get(d.srcUnitName) ?? playerIdMap.get(cleanSrcName);
       srcName = id !== undefined ? String(id) : cleanSrcName;
@@ -841,7 +853,11 @@ function summonLabel(
   // friendly "Alex-Friendly-US" both map "Alex" — the friendly-first short
   // lookup labelled the enemy's Imp "1's guardian")
   const short = ownerName.split("-")[0];
-  const full = playerIdMap?.get(ownerName) ?? enemyIdMap?.get(ownerName);
+  // a name without a realm IS a short name — never the unambiguous full key
+  // (agy re-review: a short owner name hit the friendly roster first)
+  const full = ownerName.includes("-")
+    ? (playerIdMap?.get(ownerName) ?? enemyIdMap?.get(ownerName))
+    : undefined;
   const fs = playerIdMap?.get(short);
   const es = enemyIdMap?.get(short);
   const id =
@@ -1021,13 +1037,23 @@ export function getTopDamageSourcesInWindow(
   // for 151k of Starsurge, most of it eaten by shields). The victim-keyed
   // stream carries the attacker and its spell; `srcUnitFlags` there describe
   // the ATTACKER (parser-compat convert.ts), so the same-side rule applies.
+  // A missing attackSpellId means a swing only on documents that record the
+  // field at all (parsed on or after 2026-09-20, convert.ts): older stored
+  // documents lack it for spell absorbs too, and a fully absorbed Starsurge
+  // read "Melee [Physical]" (codex review of batch 12). The document's era
+  // is read off this unit's own absorbs; unknown → no ability named.
+  const recordsAttackSpell = (unit.absorbsIn ?? []).some(
+    (a) => a.attackSpellId !== undefined,
+  );
   for (const a of unit.absorbsIn ?? []) {
     if (a.timestamp < startMs || a.timestamp > endMs) continue;
     if (!a.attackerId || a.attackerId === unit.id) continue;
     if (getUnitReaction(a.srcUnitFlags) === unit.reaction) continue;
     const amt = Math.abs(a.absorbedAmount);
     if (amt <= 0) continue;
-    const swing = hitSpellKey(a.attackSpellId) === "";
+    const noSpell = hitSpellKey(a.attackSpellId) === "";
+    const swing = noSpell && recordsAttackSpell;
+    const unknownAttack = noSpell && !recordsAttackSpell;
     const key =
       keyOfHit.get(`${a.attackerId}|${hitSpellKey(a.attackSpellId)}`) ??
       damageEventLabel(
@@ -1038,8 +1064,12 @@ export function getTopDamageSourcesInWindow(
           // "Unknown — … absorbed" mentions on the 605-file slice (agy review)
           srcUnitName: unitNames?.get(a.attackerId) ?? "",
           srcUnitFlags: a.srcUnitFlags,
-          spellId: swing ? undefined : a.attackSpellId,
-          spellName: swing ? "Melee" : a.attackSpellName,
+          spellId: noSpell ? undefined : a.attackSpellId,
+          spellName: swing
+            ? "Melee"
+            : unknownAttack
+              ? "unrecorded ability"
+              : a.attackSpellName,
           spellSchoolId: swing ? "0x1" : undefined,
         } as ICombatUnit["damageIn"][number],
         playerIdMap,

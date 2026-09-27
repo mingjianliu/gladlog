@@ -40,8 +40,17 @@ const unit = (id: string, over: Record<string, unknown> = {}): any => ({
 describe("groundedControls (7d1f)", () => {
   const TOTEM = "Creature-0-4222-1911-5458-5925-0000050C82";
   it("a Polymorph into a Grounding Totem is stated; a damage spell and the owner's own cast are not", () => {
+    // the totem's outcome line (SPELL_MISSED IMMUNE, as in 7d1f) — required
+    // since the codex review of batch 13
+    const immune = (spellId: string, s: number) => ({
+      spellId,
+      destUnitId: TOTEM,
+      missType: "IMMUNE",
+      logLine: { timestamp: T0 + s * 1000 },
+    });
     const mage = unit("Player-M", {
       spellCastEvents: [cast("118", 6.4, TOTEM), cast("108853", 7.8, TOTEM)],
+      missesOut: [immune("118", 6.4), immune("108853", 7.8)],
     });
     const owner = unit("Player-O", {
       spellCastEvents: [cast("33786", 9, TOTEM)],

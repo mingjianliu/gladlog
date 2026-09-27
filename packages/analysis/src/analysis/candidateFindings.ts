@@ -32,7 +32,7 @@ import {
 } from "../facts/decisionTrace";
 import { buildAuraIntervals } from "../utils/auraIntervals";
 import { bracketKey } from "../utils/bracketKey";
-import { analyzeBurstLedger } from "../utils/burstLedger";
+import { analyzeBurstLedger, wallUpAtOpen } from "../utils/burstLedger";
 import {
   buildCannotCastIntervals,
   couldRespondFor,
@@ -492,7 +492,9 @@ export function extractCandidateFindings(
   // Deaths themselves stay; every other event must be at or before it.
   const roundEnded = afterShuffleRoundEnd(combat, units, start);
   const inRound = roundEnded
-    ? out.filter((e) => e.type === "death" || !roundEnded(e.t))
+    ? out
+        .filter((e) => e.type === "death" || !roundEnded(e.t))
+        .map((e) => trimFoldedLocksAfter(e, roundEnded))
     : out;
 
   // Per-bracket allow-list (GH #18 ruling 2026-08-30): a listed bracket keeps
@@ -500,6 +502,23 @@ export function extractCandidateFindings(
   const bk = bracketKey(combat?.startInfo?.bracket);
   const allow = bk ? BRACKET_TYPE_ALLOWLIST[bk] : undefined;
   return allow ? inRound.filter((e) => allow.has(e.type)) : inRound;
+}
+
+/** missed-sync-window folds later locks of the same hold into
+ *  facts.alsoHeldAt (rendered seconds); the round-end cut applies to them as
+ *  to any event — codex review of batch 11: a lock at 448 s after a
+ *  round-ending death at 445 s survived inside the 439 s accusation. */
+export function trimFoldedLocksAfter<
+  E extends { facts?: Record<string, unknown> },
+>(e: E, roundEnded: (t: number) => boolean): E {
+  const held = e.facts?.alsoHeldAt;
+  if (typeof held !== "string") return e;
+  const kept = held.split("、").filter((s) => !roundEnded(Number(s)));
+  if (kept.length === held.split("、").length) return e;
+  const facts = { ...e.facts };
+  if (kept.length) facts.alsoHeldAt = kept.join("、");
+  else delete facts.alsoHeldAt;
+  return { ...e, facts };
 }
 
 /**
@@ -2262,7 +2281,9 @@ function teamPlayEvents(
                     e.spellId &&
                     isTeamSaveCD(e.spellId),
                 )
-                .map((e: any) => (e.logLine.timestamp - combat.startTime) / 1000),
+                .map(
+                  (e: any) => (e.logLine.timestamp - combat.startTime) / 1000,
+                ),
             ),
           },
         ),
@@ -2759,7 +2780,8 @@ function extractDeathSetups(
                   zone !== undefined
                     ? zone + RANGE_HITBOX_SLACK_YD
                     : spellReachToAccuse(ownerUnit, spellId);
-                if (reach === null || reach <= RANGE_HITBOX_SLACK_YD) return true;
+                if (reach === null || reach <= RANGE_HITBOX_SLACK_YD)
+                  return true;
                 // codex review of 8513a101: reachable AND free at the same
                 // sample — near while stunned, far once free is no chance
                 const ownerCcNow = (t: number) =>
@@ -2935,10 +2957,9 @@ function dpsOwnerEvents(
       // c5af5985: 44 candidates, 7 before-open, 37 pressed after (1c12:
       // Barkskin 1.24 s after Bestial Wrath, 80 % coverage). Fixtures with no
       // offset keep the pre-ruling behaviour.
-      const upAtOpen = covered.filter(
-        ({ d }) =>
-          d.startOffsetSeconds === undefined || d.startOffsetSeconds <= 0,
-      );
+      // the ledger line's own predicate on the raw offset (codex review of
+      // batch 12: the rounded 0.0 of a wall pressed 30 ms late was "up")
+      const upAtOpen = covered.filter(({ d }) => wallUpAtOpen(d) !== false);
       const hit = upAtOpen[0];
       const bimFacts = () => ({
         fromSeconds: b.fromSeconds,

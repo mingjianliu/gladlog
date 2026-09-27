@@ -9,7 +9,10 @@
  * which is why the shared window predicates live here with them.
  */
 import { buffFullDurationForCaster } from "../../utils/buffDuration";
-import { distanceBetween, getUnitPositionAtTime } from "../../utils/losAnalysis";
+import {
+  distanceBetween,
+  getUnitPositionAtTime,
+} from "../../utils/losAnalysis";
 import { cdOutOfRangeReachYards, isDeadAt } from "../../utils/positionAnalysis";
 import { INTERP_MAX_GAP_MS } from "../../utils/positionSampling";
 import { costNormPhrase } from "../../data/curatedAbilityFacts";
@@ -377,6 +380,10 @@ function syncCdReachable(
   cd: SyncWindowCd,
   fromS: number,
   toS: number,
+  /** the owner's cannot-cast intervals (ms): reach counts only at an instant
+   *  the owner could also act (codex review of batch 11 — a Warrior close to
+   *  the enemy only while stunned, 25 yd away once free, was "ready") */
+  blocked: ReadonlyArray<{ from: number; to: number }> = [],
 ): boolean {
   if (!cd.owner || !cd.reachTargets || cd.matchStartMs === undefined)
     return true;
@@ -395,20 +402,36 @@ function syncCdReachable(
   if (!anyAlive) return false;
   const reach = cdOutOfRangeReachYards(cd.owner, cd.spellId);
   if (reach === null) return true;
-  let sawPair = false;
+  // Unreachable only when the owner was observed free at some instant AND
+  // every burst target alive during the free part was observed at least once
+  // then — never in reach. A target never positioned while the owner was free
+  // could be the one in reach (codex review of batch 11: a missing nearby
+  // enemy plus a far one read as "out of reach"); a sample gap of either
+  // side is bridged by the samples around it (probe 2026-09-27, 545-1: a
+  // rogue 23–38 yd off both targets with a 2 s gap of his own must stay
+  // unreachable). Samples inside the owner's cannot-cast intervals do not
+  // count at all (codex: a Warrior close only while stunned).
+  const seen = new Set<NonNullable<SyncWindowCd["reachTargets"]>[number]>();
+  const alive = new Set<NonNullable<SyncWindowCd["reachTargets"]>[number]>();
+  let sawOwner = false;
   for (let t = fromS; t <= toS + 1e-9; t += 0.5) {
     const tMs = cd.matchStartMs + t * 1000;
+    if (blocked.some((b) => tMs >= b.from && tMs < b.to)) continue;
     const o = getUnitPositionAtTime(cd.owner, tMs, INTERP_MAX_GAP_MS);
     if (!o) continue;
+    sawOwner = true;
     for (const e of cd.reachTargets) {
       if (isDeadAt(e, tMs)) continue;
+      alive.add(e);
       const p = getUnitPositionAtTime(e, tMs, INTERP_MAX_GAP_MS);
       if (!p) continue;
-      sawPair = true;
+      seen.add(e);
       if (distanceBetween(o, p) <= reach) return true;
     }
   }
-  return !sawPair;
+  if (!sawOwner) return true;
+  for (const e of alive) if (!seen.has(e)) return true;
+  return false;
 }
 
 /** When the press of `c` began: the owner's SPELL_CAST_START of the same
@@ -476,7 +499,7 @@ export function evaluateSyncWindow(
     const toMs = cd.matchStartMs + w.toSeconds * 1000;
     // user ruling 2026-09-26: free for most of the lock, not merely 1 s of it
     if (!couldActForMostOf(blocked, fromMs, toMs)) return false;
-    return syncCdReachable(cd, readyAtS, w.toSeconds);
+    return syncCdReachable(cd, readyAtS, w.toSeconds, blocked);
   });
   const entered = cds.some((cd) =>
     cd.casts.some((c) => {
