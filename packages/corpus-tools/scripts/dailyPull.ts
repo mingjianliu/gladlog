@@ -169,7 +169,7 @@ async function main() {
   if (status === "auth-expired") {
     notify(
       "gladlog daily pull: 登录已过期",
-      "wowarenalogs 会话失效,请重新登录并更新 ~/.gladlog/wal-session-cookie",
+      "wowarenalogs 拒绝了会话,请重新登录并更新 ~/.gladlog/wal-session-cookie(若次日同一 cookie 又成功,则是上游偶发)",
     );
   } else if (status === "error") {
     notify("gladlog daily pull: 失败", `见 ${RUN_LOG}`);

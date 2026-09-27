@@ -5,6 +5,7 @@
 // 2100+ (the highest reachable filter tier), any spec, any uploader — 10 Solo
 // Shuffle matches (one shuffle object = six rounds for one quota unit; revised
 // from 5 the same day) and 3v3 for the rest. Be very careful with paging and every other request.
+import { FeedError } from "./feedClient";
 import { type QuotaState, remainingGrantsToday } from "./pvpLogFetch";
 
 /** The upstream's flat daily quota (their accessLimits.ts, 2026-09-13). */
@@ -17,6 +18,16 @@ export const DAILY_MIN_RATING = 2100;
 export const DAILY_MAX_PAGES = 3;
 /** fetchPvpLogs exit code for "no usable Battle.net session" (missing/stale cookie). */
 export const EXIT_AUTH = 3;
+
+/**
+ * Exit code for an error escaping fetchPvpLogs. Any upstream UNAUTHENTICATED
+ * counts as a session problem wherever it surfaces — search *or* the per-log
+ * grant (2026-09-22 the search passed and the grant was refused, which used to
+ * fall through to a generic exit 1 and skip the re-login notification).
+ */
+export function fetchErrorExitCode(e: unknown): number {
+  return e instanceof FeedError && e.code === "UNAUTHENTICATED" ? EXIT_AUTH : 1;
+}
 
 export interface PullStep {
   bracket: "Rated Solo Shuffle" | "3v3";

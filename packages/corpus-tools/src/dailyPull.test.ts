@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 
+import { FeedError, LogQuotaExceededError } from "./feedClient";
+
 import {
   classifyExit,
   DAILY_SHUFFLE_SHARE,
   EXIT_AUTH,
+  fetchErrorExitCode,
   parseFreshCount,
   planSteps,
   remainingToday,
@@ -92,5 +95,23 @@ describe("classifyExit", () => {
     expect(classifyExit(EXIT_AUTH)).toBe("auth-expired");
     expect(classifyExit(1)).toBe("error");
     expect(classifyExit(null)).toBe("error");
+  });
+});
+
+describe("fetchErrorExitCode", () => {
+  it("treats UNAUTHENTICATED from any call site as a session problem", () => {
+    // The 2026-09-22 failure: search passed, the per-log grant was refused.
+    const grant = new FeedError(
+      "log grant for 5cca22f16b49fb31ffbe73ad0ac50fa8",
+      "UNAUTHENTICATED",
+      "Sign in with Battle.net to view matches.",
+    );
+    expect(fetchErrorExitCode(grant)).toBe(EXIT_AUTH);
+    expect(fetchErrorExitCode(new FeedError("feed-detailed", "UNAUTHENTICATED", "x"))).toBe(EXIT_AUTH);
+  });
+  it("keeps every other failure generic", () => {
+    expect(fetchErrorExitCode(new FeedError("feed-detailed", "INTERNAL_SERVER_ERROR", "x"))).toBe(1);
+    expect(fetchErrorExitCode(new LogQuotaExceededError("grant", "x", 15, 15))).toBe(1);
+    expect(fetchErrorExitCode(new Error("ECONNRESET"))).toBe(1);
   });
 });

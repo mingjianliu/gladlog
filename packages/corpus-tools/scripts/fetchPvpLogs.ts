@@ -12,14 +12,13 @@ import path from "path";
 import {
   decodeRawPayload,
   downloadRaw,
-  FeedError,
   fetchDetailedStubs,
   type LogDownloadGrant,
   LogQuotaExceededError,
   requestLogGrant,
   sessionCookieHeader,
 } from "../src/feedClient";
-import { EXIT_AUTH } from "../src/dailyPull";
+import { EXIT_AUTH, fetchErrorExitCode } from "../src/dailyPull";
 import {
   buildCompQueryString,
   buildGcsMeta,
@@ -208,27 +207,19 @@ async function main() {
     // the real setTimeout loop is not covered by an extra test -- if it ever
     // breaks, the page intervals in a real run's log will show it.
     if (shouldSleepBeforePage(page)) await sleep(PAGE_SLEEP_MS);
-    let stubs;
-    try {
-      ({ stubs } = await fetchDetailedStubs({
-        bracket: BRACKET,
-        minRating: MIN_RATING > 0 ? MIN_RATING : undefined,
-        // Server-side comp pre-filter (some team contains these specs); the
-        // recorder semantics are refined client-side
-        compQueryString: specIds.length
-          ? buildCompQueryString(specIds)
-          : undefined,
-        offset: page * 50,
-        count: 50,
-        cookie,
-      }));
-    } catch (e) {
-      if (e instanceof FeedError && e.code === "UNAUTHENTICATED") {
-        console.error(`session rejected (${e.message}) — the cookie is stale or wrong.\n${COOKIE_HELP}`);
-        process.exit(EXIT_AUTH);
-      }
-      throw e;
-    }
+    // An UNAUTHENTICATED here or at the grant below exits via main().catch.
+    const { stubs } = await fetchDetailedStubs({
+      bracket: BRACKET,
+      minRating: MIN_RATING > 0 ? MIN_RATING : undefined,
+      // Server-side comp pre-filter (some team contains these specs); the
+      // recorder semantics are refined client-side
+      compQueryString: specIds.length
+        ? buildCompQueryString(specIds)
+        : undefined,
+      offset: page * 50,
+      count: 50,
+      cookie,
+    });
     if (stubs.length === 0) break;
     pagesFetched++;
     scanned += stubs.length;
@@ -334,6 +325,13 @@ async function main() {
 }
 
 main().catch((e) => {
-  console.error("fetchPvpLogs failed:", e);
-  process.exit(1);
+  const code = fetchErrorExitCode(e);
+  if (code === EXIT_AUTH) {
+    console.error(
+      `session rejected (${(e as Error).message}) — the cookie is stale or wrong (if tomorrow's run succeeds with the same cookie, it was a transient upstream refusal).\n${COOKIE_HELP}`,
+    );
+  } else {
+    console.error("fetchPvpLogs failed:", e);
+  }
+  process.exit(code);
 });
