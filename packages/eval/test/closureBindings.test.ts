@@ -199,10 +199,87 @@ describe("pruneImports", () => {
         "  d,",
         "  f,",
         '} from "./two";',
+        // a value import with nothing left still loads its module in place
+        'import "./three";',
         'import type { T } from "./types";',
         'import { unusedBefore } from "./four";',
         "",
         "export const x: T = a + d + f;",
+        "",
+      ].join("\n"),
+    );
+  });
+
+  it("a type-only import with nothing left is deleted, not kept bare", () => {
+    const r = pruneImports(
+      "/virtual/t.ts",
+      [
+        'import type { Gone } from "./t1";',
+        'import { type AlsoGone } from "./t2";',
+        "export const y = 1;",
+        "",
+      ].join("\n"),
+      new Set(["Gone", "AlsoGone"]),
+    );
+    expect(r.text).toBe(["export const y = 1;", ""].join("\n"));
+  });
+
+  it("the bare import keeps import attributes", () => {
+    // codex 2026-09-28: `import "./data.json";` without them throws
+    // ERR_IMPORT_ATTRIBUTE_MISSING
+    const r = pruneImports(
+      "/virtual/j.ts",
+      ['import moved from "./data.json" with { type: "json" };', ""].join("\n"),
+      new Set(["moved"]),
+    );
+    expect(r.text).toBe(
+      ['import "./data.json" with { type: "json" };', ""].join("\n"),
+    );
+  });
+
+  it("joining onto one line keeps a still-used default import", () => {
+    // codex 2026-09-28: the first version rewrote the whole declaration
+    const r = pruneImports(
+      "/virtual/d.ts",
+      [
+        "import def, {",
+        "  kept,",
+        "  moved,",
+        '} from "./m";',
+        "void def;",
+        "void kept;",
+        "",
+      ].join("\n"),
+      new Set(["moved"]),
+    );
+    expect(r.text).toBe(
+      ['import def, { kept } from "./m";', "void def;", "void kept;", ""].join(
+        "\n",
+      ),
+    );
+  });
+
+  it("indentation comes from whitespace only when an element shares the `{` line", () => {
+    // codex 2026-09-28: the old indent was `import { ` and injected code
+    const r = pruneImports(
+      "/virtual/i.ts",
+      [
+        "import { kept,",
+        '  other, moved } from "./m";',
+        "void kept;",
+        "void other;",
+        "",
+      ].join("\n"),
+      new Set(["moved"]),
+    );
+    expect(r.text).toBe(
+      [
+        "import {",
+        "  kept,",
+        "  other,",
+        '} from "./m";',
+        "void kept;",
+        "void other;",
         "",
       ].join("\n"),
     );

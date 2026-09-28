@@ -443,10 +443,11 @@ export function sameStatements(aText: string, bText: string): Equivalence {
 
 /** Remove the import bindings named in `candidates` that `text` no longer
  * references (a cut moved their only uses away). Only candidates are touched,
- * so an import that was already unused stays as it was. Formatting: a
- * specifier is removed with its comma; an import left with no bindings is
- * deleted with its line; a multi-line named list left with one name is joined
- * onto one line when that fits in 80 columns (prettier's shape). */
+ * so an import that was already unused stays as it was. A specifier is removed
+ * with its comma; an import left with no bindings becomes a bare
+ * `import "…";` (a type-only one is deleted); a multi-line named list left
+ * with one name is joined onto one line when the declaration then fits in 80
+ * columns (prettier's shape). */
 export function pruneImports(
   fileName: string,
   text: string,
@@ -505,10 +506,32 @@ export function pruneImports(
     const keepsDefault = !!clause.name && !dropDefault;
     const keepsNs = !!ns && !dropNs;
     if (!keepsDefault && !keepsNs && keep.length === 0) {
-      // the whole declaration, with its line
-      let end = decl.getEnd();
-      if (text[end] === "\n") end++;
-      edits.push({ start: decl.getStart(sf), end, insert: "" });
+      // Nothing left to bind. A type-only declaration is erased at runtime:
+      // delete it with its line. A value import still LOADS its module here,
+      // and module initialisation order can matter (codex 2026-09-28: deleting
+      // one moved a registration after its consumer, true -> false) — keep a
+      // bare `import "…";` in its place.
+      const typeOnly =
+        clause.isTypeOnly ||
+        (!clause.name && !ns && elements.every((e) => e.isTypeOnly));
+      if (typeOnly) {
+        let end = decl.getEnd();
+        if (text[end] === "\n") end++;
+        edits.push({ start: decl.getStart(sf), end, insert: "" });
+      } else {
+        // everything after the specifier is kept verbatim — import attributes
+        // (`with { type: "json" }`) are required to load the module (codex:
+        // dropping them throws ERR_IMPORT_ATTRIBUTE_MISSING)
+        const afterSpecifier = text.slice(
+          decl.moduleSpecifier.getEnd(),
+          decl.getEnd(),
+        );
+        edits.push({
+          start: decl.getStart(sf),
+          end: decl.getEnd(),
+          insert: `import ${decl.moduleSpecifier.getText(sf)}${afterSpecifier}`,
+        });
+      }
       continue;
     }
     if (dropDefault || dropNs)
@@ -517,14 +540,21 @@ export function pruneImports(
       );
     const multiLine = named!.getText(sf).includes("\n");
     if (multiLine && keep.length === 1) {
-      const src = decl.moduleSpecifier.getText(sf);
-      const typeKw = clause.isTypeOnly ? "type " : "";
-      const one = `import ${typeKw}{ ${keep[0]!.getText(sf)} } from ${src};`;
-      if (one.length <= 80) {
+      // join onto one line by rewriting ONLY the `{ … }` span — the default
+      // binding, `type` keyword and specifier stay as they are (codex: the
+      // first version rebuilt the whole declaration and dropped `def,`)
+      const oneList = `{ ${keep[0]!.getText(sf)} }`;
+      const declStart = decl.getStart(sf);
+      const declText = decl.getText(sf);
+      const joined =
+        declText.slice(0, named!.getStart(sf) - declStart) +
+        oneList +
+        declText.slice(named!.getEnd() - declStart);
+      if (!joined.includes("\n") && joined.length <= 80) {
         edits.push({
-          start: decl.getStart(sf),
-          end: decl.getEnd(),
-          insert: one,
+          start: named!.getStart(sf),
+          end: named!.getEnd(),
+          insert: oneList,
         });
         continue;
       }
@@ -532,9 +562,15 @@ export function pruneImports(
     // rebuild the `{ … }` list from the kept names, in the list's own layout
     let rebuilt: string;
     if (multiLine) {
-      const first = elements[0]!;
-      const lineStart = text.lastIndexOf("\n", first.getStart(sf)) + 1;
-      const indent = text.slice(lineStart, first.getStart(sf));
+      // indentation from whitespace only (codex: an element sharing the `{`
+      // line made the "indent" `import { ` and injected code into the list)
+      const indentOf = (e: ts.ImportSpecifier) => {
+        const lineStart = text.lastIndexOf("\n", e.getStart(sf)) + 1;
+        const pre = text.slice(lineStart, e.getStart(sf));
+        return /^[ \t]*$/.test(pre) ? pre : undefined;
+      };
+      const indent =
+        elements.map(indentOf).find((x) => x !== undefined) ?? "  ";
       rebuilt = `{\n${keep.map((e) => `${indent}${e.getText(sf)},`).join("\n")}\n}`;
     } else {
       rebuilt = `{ ${keep.map((e) => e.getText(sf)).join(", ")} }`;
