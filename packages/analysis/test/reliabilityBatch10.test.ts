@@ -434,3 +434,20 @@ describe("codex post-hoc review 2026-09-27 (batch 10) — kick-eaten", () => {
     expect(postKickFact(k, [])).toMatch(/^waited out the lockout/);
   });
 });
+
+describe("codex re-check 2026-09-28 — KITED", () => {
+  it("chasing past the enemy's starting spot (owner 0→20, enemy 5→40) is not a kite", () => {
+    const owner = unit("1", "Owner-R-US", CombatUnitSpec.Rogue_Subtlety, (t) =>
+      t < 10 ? 0 : Math.min(20, (t - 10) * 2),
+    );
+    const enemy = unit(
+      "2",
+      "Pally-R-US",
+      CombatUnitSpec.Paladin_Retribution,
+      (t) => (t < 10 ? 5 : Math.min(40, 5 + (t - 10) * 3.5)),
+    );
+    expect(run(owner, [enemy]).filter((e) => e.type === "KITED")).toHaveLength(
+      0,
+    );
+  });
+});

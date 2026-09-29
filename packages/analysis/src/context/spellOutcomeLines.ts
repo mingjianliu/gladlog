@@ -136,44 +136,60 @@ export function reflectedSpells(
         c.last = m.logLine.timestamp;
       else chains.push({ first: m, last: m.logLine.timestamp });
     }
-    for (const { first: m } of chains) {
+    // Each hit of the spell on its caster goes to ONE chain (codex reviews
+    // of batch 13): a hit sourced from a reflector → that reflector's latest
+    // chain before it; the caster's own tick → the latest chain of the spell
+    // before it; never past REFLECT_DAMAGE_WINDOW_S. A later reflector no
+    // longer cuts off an earlier reflector's explicitly attributed damage.
+    const back = new Map<(typeof chains)[number], number>();
+    const owning = (spellId: string, src: string | undefined, ts: number) => {
+      let best: (typeof chains)[number] | undefined;
+      for (const c of chains) {
+        if (c.first.spellId !== spellId) continue;
+        const t0 = c.first.logLine.timestamp;
+        if (t0 > ts || ts - t0 > REFLECT_DAMAGE_WINDOW_S * 1000) continue;
+        if (src !== caster.id && src !== c.first.destUnitId) continue;
+        if (!best || t0 > best.first.logLine.timestamp) best = c;
+      }
+      return best;
+    };
+    const credit = (
+      spellId: string | undefined,
+      src: string | undefined,
+      ts: number,
+      amt: number,
+    ) => {
+      if (!spellId) return;
+      const c = owning(spellId, src, ts);
+      if (c) back.set(c, (back.get(c) ?? 0) + amt);
+    };
+    for (const d of caster.damageIn ?? [])
+      credit(
+        d.spellId ?? undefined,
+        d.srcUnitId,
+        d.logLine.timestamp,
+        Math.abs(d.effectiveAmount),
+      );
+    for (const a of caster.absorbsIn ?? [])
+      credit(
+        a.attackSpellId,
+        a.attackerId,
+        a.timestamp,
+        Math.abs(a.absorbedAmount),
+      );
+    for (const chain of chains) {
+      const m = chain.first;
       const reflector = byId.get(m.destUnitId ?? "");
       if (!reflector) continue;
       const t0 = m.logLine.timestamp;
-      // a hit belongs to the latest reflect event of the spell before it —
-      // never to two (codex review of batch 13: two warriors' reflects of one
-      // priest's Shadow Word: Pain both claimed the same 100k); within the
-      // window only what the reflect sent back: the reflector, or the
-      // caster's own DoT ticking on itself — not another enemy casting the
-      // same spell at the caster (agy review of batch 13)
-      const next = chains
-        .map((c) => c.first)
-        .filter((x) => x.spellId === m.spellId && x.logLine.timestamp > t0)
-        .reduce((lo, x) => Math.min(lo, x.logLine.timestamp), Infinity);
-      const t1 = Math.min(t0 + REFLECT_DAMAGE_WINDOW_S * 1000, next - 1);
-      const fromReflect = (src: string | undefined) =>
-        src === reflector.id || src === caster.id;
-      let back = 0;
-      for (const d of caster.damageIn ?? [])
-        if (
-          d.spellId === m.spellId &&
-          fromReflect(d.srcUnitId) &&
-          d.logLine.timestamp >= t0 &&
-          d.logLine.timestamp <= t1
-        )
-          back += Math.abs(d.effectiveAmount);
-      for (const a of caster.absorbsIn ?? [])
-        if (
-          a.attackSpellId === m.spellId &&
-          fromReflect(a.attackerId) &&
-          a.timestamp >= t0 &&
-          a.timestamp <= t1
-        )
-          back += Math.abs(a.absorbedAmount);
+      const damageBack = back.get(chain) ?? 0;
       const isControl = isControlSpell(m.spellId!);
       if (!isControl) {
         const maxHp = maxHpNear(caster, t0);
-        if (maxHp === null || (back / maxHp) * 100 < REFLECT_MIN_DAMAGE_PCT)
+        if (
+          maxHp === null ||
+          (damageBack / maxHp) * 100 < REFLECT_MIN_DAMAGE_PCT
+        )
           continue;
       }
       out.push({
@@ -185,7 +201,7 @@ export function reflectedSpells(
         spellId: m.spellId!,
         spellName: getEnglishSpellName(m.spellId!, m.spellName),
         isControl,
-        damageBack: back,
+        damageBack,
       });
     }
   }

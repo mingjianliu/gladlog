@@ -429,3 +429,67 @@ describe("batch 14 — [RES] kick / Death Grip follow the shared cooldown predic
     expect(grip.charges).toBe(grip.maxChargesDetected);
   });
 });
+
+describe("codex re-check of the PV189/190 judgment calls (2026-09-28)", () => {
+  const T0 = 1_000_000;
+  it("[REFLECTED] A's explicitly sourced hit after B's later reflect still counts for A", () => {
+    const refl = (dest: string, ms: number) => ({
+      spellId: "116858", // Chaos Bolt
+      spellName: "x",
+      missType: "REFLECT",
+      destUnitId: dest,
+      logLine: { timestamp: T0 + ms },
+    });
+    const caster = {
+      id: "Player-C",
+      name: "C-R-US",
+      spellCastEvents: [],
+      auraEvents: [],
+      missesOut: [refl("Player-A", 10_000), refl("Player-B", 11_000)],
+      damageIn: [
+        {
+          spellId: "116858",
+          srcUnitId: "Player-A",
+          effectiveAmount: -60_000,
+          logLine: { timestamp: T0 + 11_200 },
+        },
+      ],
+      absorbsIn: [],
+      advancedActions: [0, 10_000, 20_000].map((ms) => ({
+        advancedActorId: "Player-C",
+        advancedActorMaxHp: 1_000_000,
+        advancedActorCurrentHp: 1_000_000,
+        logLine: { timestamp: T0 + ms },
+      })),
+    } as unknown as ICombatUnit;
+    const u = (id: string) =>
+      ({
+        ...(caster as object),
+        id,
+        name: id,
+        missesOut: [],
+        damageIn: [],
+      }) as unknown as ICombatUnit;
+    const out = reflectedSpells([caster, u("Player-A"), u("Player-B")], T0);
+    expect(out.map((r) => [r.reflectorId, r.damageBack])).toEqual([
+      ["Player-A", 60_000],
+    ]);
+  });
+
+  it("missed-sync reach: a target alive only while the owner was unpositioned abstains", () => {
+    const owner = unitAt("Player-1", 71, () => 0);
+    // owner positions only from 105 s on
+    (
+      owner as unknown as { advancedActions: { timestamp: number }[] }
+    ).advancedActions = (
+      owner as unknown as { advancedActions: { timestamp: number }[] }
+    ).advancedActions.filter((a) => a.timestamp >= START + 105_000);
+    const unseenA = unitAt("Enemy-2", 70, null, {
+      deathRecords: [{ timestamp: START + 103_000 }],
+    });
+    const farB = unitAt("Enemy-1", 252, () => 30);
+    expect(
+      evaluateSyncWindow(lock, [smash(owner, [unseenA, farB])]).ready,
+    ).toHaveLength(1);
+  });
+});

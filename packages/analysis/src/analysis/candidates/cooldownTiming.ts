@@ -417,12 +417,16 @@ function syncCdReachable(
   for (let t = fromS; t <= toS + 1e-9; t += 0.5) {
     const tMs = cd.matchStartMs + t * 1000;
     if (blocked.some((b) => tMs >= b.from && tMs < b.to)) continue;
+    // a target alive while the owner is free must be seen at an instant the
+    // owner is seen too — enumerate it whether or not the owner has a
+    // position now (codex re-check: a target alive only while the owner
+    // was unpositioned never entered the set and read "out of reach")
+    for (const e of cd.reachTargets) if (!isDeadAt(e, tMs)) alive.add(e);
     const o = getUnitPositionAtTime(cd.owner, tMs, INTERP_MAX_GAP_MS);
     if (!o) continue;
     sawOwner = true;
     for (const e of cd.reachTargets) {
       if (isDeadAt(e, tMs)) continue;
-      alive.add(e);
       const p = getUnitPositionAtTime(e, tMs, INTERP_MAX_GAP_MS);
       if (!p) continue;
       seen.add(e);

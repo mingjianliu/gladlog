@@ -1692,3 +1692,7 @@ owner's own opening; HEALER TRAINED names a camper for its own span; "you moved
 N yd" shared with gate G4b at the rendered endpoints; a press inside the kick
 lockout is never "waited out"; [RES] kicks and Death Grip carry charges and
 event reductions.
+
+v191 (2026-09-28, codex re-check of the PV189/190 judgment calls): KITED by the
+owner's Shapley share of the gap change; one chain per reflected hit;
+missed-sync reach abstains for a target never seen together with the free owner.

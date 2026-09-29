@@ -252,5 +252,13 @@
  *  Conduit). 605 files: candidates identical but one kick-eaten fact; KITED
  *  1,229 → 1,056, camped-by 1,423 → 1,387; Death Grip charges shown 0 → 355;
  *  positioning gate 0 / 6,109 geo claims, a +0.4 yd mutation caught.
+ *  v191 (2026-09-28, codex re-check of the PV189/190 judgment calls): KITED
+ *  credits the owner's Shapley share of the gap change to the start enemy
+ *  (start and peak spots averaged — neither one-ended difference nor a
+ *  projection); a reflected hit belongs to one chain (its named reflector's,
+ *  else the latest); missed-sync reach abstains for a target alive while the
+ *  owner was free but never seen together with the owner. 605 files:
+ *  candidates identical; KITED 1,056 → 916 (a projection tried first gave
+ *  512 — lateral kites lost, pulled); [REFLECTED] 642 → 642.
  */
-export const PROMPT_VERSION = 190;
+export const PROMPT_VERSION = 191;

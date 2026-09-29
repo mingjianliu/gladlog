@@ -47,10 +47,12 @@ import { spellReachToAccuse } from "./spellRange";
 export const CLOSE_RANGE_YARDS = 12; // "in range" of an enemy — shared with rootReachability.ts (melee reach)
 const KITE_DELTA_YARDS = 10; // distance gained that counts as a successful kite(p66,见上)
 const STAY_DELTA_YARDS = 5; // distance gained below this = stayed in(p39,见上)
-/** KITED is the owner's doing only when the distance the owner opened from
- *  the start enemy's starting spot (window start → peak second; the enemy
- *  held still) is at least this share of the distance opened — codex review
- *  of batch 10 replaced the raw displacement, which credited a chase. Reliability round 2 F13 (c540): a Subtlety Rogue
+/** KITED is the owner's doing only when the owner's Shapley share of the gap
+ *  change to the start enemy (window start → peak second: the owner's move
+ *  measured against the enemy's start spot and its peak spot, averaged) is
+ *  at least this share of the distance opened — codex reviews of batch 10
+ *  replaced the raw displacement and a one-ended difference, both of which
+ *  credited a chase. Reliability round 2 F13 (c540): a Subtlety Rogue
  *  Hammer-of-Justice'd 92.69–97.18 s stood at (-282.4, -284.8) while the
  *  Paladin walked 10 yd away — rendered "KITED … opened 7→24.8yd". */
 export const KITE_OWN_SHARE = 0.5;
@@ -649,10 +651,26 @@ export function computeOwnerPositionEvents(params: {
           POSITION_MAX_GAP_MS,
         )
       : null;
+    // …as the owner's Shapley share of the gap change: the average of what
+    // the owner's move did with the enemy at its start spot and with the
+    // enemy at its peak spot. Either end alone credits a chase (codex
+    // re-check: owner 0→20 after an enemy 5→40 passed the old spot and read
+    // +10), and a projection on the start direction zeroed lateral kites
+    // around a pillar (KITED 1,056 → 512 on 605 files — pulled).
+    const startEnemyPeakPos = startEnemy
+      ? getUnitPositionAtTime(
+          startEnemy,
+          matchStartMs + peak.t * 1000,
+          POSITION_MAX_GAP_MS,
+        )
+      : null;
     const ownerOpened =
-      ownerStartPos && ownerPeakPos && startEnemyStartPos
-        ? distanceBetween(ownerPeakPos, startEnemyStartPos) -
-          distanceBetween(ownerStartPos, startEnemyStartPos)
+      ownerStartPos && ownerPeakPos && startEnemyStartPos && startEnemyPeakPos
+        ? (distanceBetween(ownerPeakPos, startEnemyStartPos) -
+            distanceBetween(ownerStartPos, startEnemyStartPos) +
+            (distanceBetween(ownerPeakPos, startEnemyPeakPos) -
+              distanceBetween(ownerStartPos, startEnemyPeakPos))) /
+          2
         : undefined;
     const ownerMovedToEnd = ownerDisplacementYards(
       owner,
