@@ -61,3 +61,16 @@ describe("resolveAiModel", () => {
   });
 });
 
+describe("Claude Sonnet 5.5 (added 2026-09-29)", () => {
+  it("is selectable on both Anthropic backends — an id missing from the list silently fell back to the default", () => {
+    for (const backend of ["claudeCli", "anthropic"] as const) {
+      expect(isKnownModel(backend, "claude-sonnet-5-5")).toBe(true);
+      expect(
+        resolveAiModel({
+          aiBackend: backend,
+          aiModels: { [backend]: "claude-sonnet-5-5" },
+        }),
+      ).toBe("claude-sonnet-5-5");
+    }
+  });
+});
