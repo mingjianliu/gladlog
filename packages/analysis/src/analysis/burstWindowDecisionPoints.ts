@@ -566,6 +566,7 @@ const isNoDest = (dest: string | undefined): boolean =>
  */
 export function controlLandedResponses(
   casters: ReadonlyArray<{
+    id?: string;
     auraEvents?: ReadonlyArray<{
       timestamp: number;
       spellId?: string;
@@ -594,16 +595,38 @@ export function controlLandedResponses(
         continue;
       const unitId = friendlyPlayerOf(a.srcUnitId);
       if (!unitId) continue;
-      let cast: (typeof friendlyCasts)[number] | undefined;
+      // F-B8 (triage sync-burst): the cast that produced this aura times it
+      // — its own spell, or its cast id through CC_CAST_EFFECT_AURA (Ring of
+      // Frost 113724 → 82691, Lasso 305483 → 305485), or the same English
+      // name — before a control cast aimed at the aura's target, before any
+      // untargeted cast. 7d1f14af timed a Lasso root from an unrelated
+      // untargeted press 1.9 s earlier while the aimed cast came 40 ms
+      // before the aura. Codex review: a non-control cast aimed at the target
+      // (a Frostbolt between Ring of Frost and its aura) never times it.
+      const sidName = getEnglishSpellName(sid, "");
+      const producesAura = (castId: string): boolean =>
+        castId === sid ||
+        CC_CAST_EFFECT_AURA[castId] === sid ||
+        (sidName !== "" && getEnglishSpellName(castId, "") === sidName);
+      let family: (typeof friendlyCasts)[number] | undefined;
+      let aimedControl: (typeof friendlyCasts)[number] | undefined;
+      let untargeted: (typeof friendlyCasts)[number] | undefined;
       for (const c of friendlyCasts) {
         if (c.tMs > a.timestamp) break;
-        if (
-          c.unitId === unitId &&
-          c.tMs >= a.timestamp - GROUND_CONTROL_FUSE_MS &&
-          (isNoDest(c.dest) || c.spellId === sid)
+        if (c.unitId !== unitId || c.tMs < a.timestamp - GROUND_CONTROL_FUSE_MS)
+          continue;
+        if (producesAura(c.spellId)) family = c;
+        else if (
+          caster.id !== undefined &&
+          c.dest === caster.id &&
+          (CONTROL_IDS.has(c.spellId) ||
+            ccSpellIds.has(c.spellId) ||
+            rootSpellIds.has(c.spellId))
         )
-          cast = c;
+          aimedControl = c;
+        else if (isNoDest(c.dest)) untargeted = c;
       }
+      const cast = family ?? aimedControl ?? untargeted;
       // the cast-side test already counted an aimed control from this
       // friendly that could be this aura's cause
       const aimed = friendlyCasts.some(
@@ -1149,8 +1172,13 @@ export function burstWindowDecisionPoints(
             minHpSec = s;
           }
         }
+        // F-B6 (triage sync-burst, codex 09-30): the window the line prints
+        // ends at the END of its last rendered second — a lethal burst's
+        // segment ends at the death, which falls in the fractional part of
+        // the floored `outcomeEndSec` (0777a8e0 1:19: death at 88.892, end
+        // second 88). Render-grid reading, no new threshold.
         const died = ((f.deathRecords ?? []) as any[]).some(
-          (d) => d.timestamp >= tMs && d.timestamp <= outcomeEndMs,
+          (d) => d.timestamp >= tMs && d.timestamp < outcomeEndMs + 1000,
         );
         return {
           unitId: f.id,

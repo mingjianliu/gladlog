@@ -28,6 +28,7 @@ import {
   BURST_TRIAGE_MIN_HP_DROP_PP,
   burstExtrasLabel,
   burstWindowDecisionPoints,
+  controlLandedResponses,
 } from "./burstWindowDecisionPoints";
 import { CRISIS_HP_PCT_RENDERED } from "./crisisDecisionPoints";
 
@@ -466,6 +467,26 @@ describe("burstWindowDecisionPoints — outcomes are table-only", () => {
     expect(dead.feasibleUnits).toEqual(alive.feasibleUnits);
   });
 
+  it("F-B6: a death in the window's last rendered second counts; one after it does not", () => {
+    const base = {
+      damageIn: steadyDamage(10, 20),
+      advancedActions: hpTrack("F1", 0, 40, 60),
+    };
+    const at = (deathSec: number) =>
+      burstWindowDecisionPoints(
+        combat([
+          friendly({
+            ...base,
+            deathRecords: [{ timestamp: T0 + deathSec * 1000 }],
+          }),
+          hostile({ spellCastEvents: [cast(AR, 10)] }),
+        ]),
+      )[0]!;
+    const end = at(40).endSec; // the death is outside; read the window's end second
+    expect(at(end + 0.5).anyFriendlyDeath).toBe(true);
+    expect(at(end + 1.2).anyFriendlyDeath).toBe(false);
+  });
+
   it("the outcome-field list is exactly the three fields the producer must not read", () => {
     // `anyFriendlyDeath` left this list on 2026-09-01 (approved correction 2):
     // it is the triage door AND `facts.diedInWindow`, and it is deliberately
@@ -876,5 +897,65 @@ describe("burstExtrasLabel", () => {
         ],
       }),
     ).toBe("Trueshot; Incarnation: Chosen of Elune 6s later");
+  });
+});
+
+describe("controlLandedResponses — which cast times a landed control (F-B8)", () => {
+  const LASSO_CAST = "305483";
+  const LASSO_AURA = "305485";
+  const auraOn = (spellId: string, tMs: number) => ({
+    id: "E1",
+    auraEvents: [
+      {
+        timestamp: tMs,
+        spellId,
+        srcUnitId: "F1",
+        logLine: { event: "SPELL_AURA_APPLIED" },
+      },
+    ],
+  });
+  it("7d1f14af: the cast that produced the aura beats an earlier untargeted press", () => {
+    const casts = [
+      { unitId: "F1", spellId: "1223412", dest: undefined, tMs: 28_014 },
+      { unitId: "F1", spellId: LASSO_CAST, dest: "E1", tMs: 29_896 },
+    ];
+    const out = controlLandedResponses(
+      [auraOn(LASSO_AURA, 29_936)],
+      new Set(["E1"]),
+      (id) => id,
+      casts,
+      20_000,
+      40_000,
+    );
+    expect(out).toEqual([{ unitId: "F1", spellId: LASSO_AURA, tMs: 29_896 }]);
+    // with no producing cast the untargeted one still times it (Capacitor Totem)
+    expect(
+      controlLandedResponses(
+        [auraOn(LASSO_AURA, 29_936)],
+        new Set(["E1"]),
+        (id) => id,
+        [casts[0]!],
+        20_000,
+        40_000,
+      ),
+    ).toEqual([{ unitId: "F1", spellId: LASSO_AURA, tMs: 28_014 }]);
+  });
+  it("codex review: a non-control cast aimed at the target between Ring of Frost and its aura does not time it", () => {
+    // opener 10 s, response deadline 18 s: Ring of Frost (untargeted) 17.5 s,
+    // Frostbolt at E1 18.5 s, the Ring's aura 82691 on E1 at 19 s
+    const casts = [
+      { unitId: "F1", spellId: "113724", dest: undefined, tMs: 17_500 },
+      { unitId: "F1", spellId: "116", dest: "E1", tMs: 18_500 },
+    ];
+    expect(
+      controlLandedResponses(
+        [auraOn("82691", 19_000)],
+        new Set(["E1"]),
+        (id) => id,
+        casts,
+        10_000,
+        18_000,
+      ),
+    ).toEqual([{ unitId: "F1", spellId: "82691", tMs: 17_500 }]);
   });
 });

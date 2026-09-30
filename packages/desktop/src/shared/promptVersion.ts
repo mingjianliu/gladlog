@@ -424,5 +424,9 @@
  *  from the owner ≤ DEATH_CASCADE_MS (100 ms, editorial) before the owner's
  *  death reads `(removed at your death)`, not "ended early" / "own
  *  shapeshift"; a removal from a teammate keeps its cause (codex c2).
+ *  v226 (2026-09-30, triage sync-burst F-B6 / F-B8): a death in a burst
+ *  window's last rendered second counts (`died`, hence `deathsInWindow` /
+ *  `anyFriendlyDeath` / the death suffix); a landed control is timed from a
+ *  cast aimed at its target (or of its own spell) before any untargeted cast.
  */
-export const PROMPT_VERSION = 225;
+export const PROMPT_VERSION = 226;
