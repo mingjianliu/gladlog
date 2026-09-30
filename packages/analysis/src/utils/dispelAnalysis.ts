@@ -1830,6 +1830,22 @@ export function wasRemovedByAllyDispel(
  * above), shared by both removal matchers. */
 const ALLY_DISPEL_MATCH_TOLERANCE_S = 0.05;
 
+/**
+ * One cleanse press removing several debuffs logs one SPELL_DISPEL per
+ * removal at the same instant — `allyCleanse` then holds that press several
+ * times. A cooldown / charge replay must count PRESSES (triage
+ * missed-cleanse F-B2, codex review: a two-charge Purify taking two debuffs
+ * at t = 10 read as both charges spent). Removal times within the dispel
+ * pairing tolerance of the previous kept one are the same press.
+ */
+export function distinctDispelPressSeconds(times: readonly number[]): number[] {
+  const out: number[] = [];
+  for (const t of [...times].sort((a, b) => a - b))
+    if (!out.length || t - out[out.length - 1]! > ALLY_DISPEL_MATCH_TOLERANCE_S)
+      out.push(t);
+  return out;
+}
+
 /** Did the debuffed unit free ITSELF with a rider (its own form shift /
  * movement ability, or a form expiring) at this removal? User ruling
  * 2026-09-24 (reliability audit D1): 「自己变形解掉的，当然不算」 — such a

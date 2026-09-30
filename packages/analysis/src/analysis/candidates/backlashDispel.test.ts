@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 
+import { chargeStateAt } from "../../utils/cooldowns";
+import { distinctDispelPressSeconds } from "../../utils/dispelAnalysis";
+
 import {
   BACKLASH_UA_MAX_STACKS,
   BACKLASH_UA_SAFE_HP_PCT,
@@ -96,7 +99,7 @@ describe("isAccusableBacklashDispel — the archive-measured stratum", () => {
 
 describe("backlashDispelEvents", () => {
   it("emits the owner's dispel with the round's own numbers and the corpus reference", () => {
-    const ev = backlashDispelEvents([point({ cdCcHit: { targetName: "Mage", spellName: "Fear", atS: 70, durationS: 6, drLevel: "Full" } })], owner, probes);
+    const ev = backlashDispelEvents([point({ cdCcHit: { targetName: "Mage", spellName: "Fear", atS: 70, durationS: 6, drLevel: "Full", blockedS: 0.328 } })], owner, probes);
     expect(ev).toHaveLength(1);
     expect(ev[0]!.type).toBe("backlash-dispel");
     expect(ev[0]!.facts).toMatchObject({
@@ -112,6 +115,7 @@ describe("backlashDispelEvents", () => {
       cdCcTarget: "Mage",
       cdCcSpell: "Fear",
       cdCcDurationS: "6",
+      cdCcBlockedS: "0.3", // F-B1: fmtFactNum of the overlap
       cdCcDr: "Full",
       refKey: UA,
       refN: "6031",
@@ -159,5 +163,17 @@ describe("backlashDispelWindowEvents", () => {
     expect(backlashDispelWindowEvents([left()], owner, { lookup: () => vtRef, lookupWorth: () => null })).toHaveLength(0);
     // an immune window with no ":immune" cell is silent too
     expect(backlashDispelWindowEvents([left({ targetHpPct: 85, dotCountPre: 1, immuneBuffIds: ["642"] })], owner, { lookup: () => vtRef, lookupWorth: (_s, kind) => (kind === "worth" ? worthRef : null) })).toHaveLength(0);
+  });
+});
+
+describe("F-B2 charge replay counts presses, not removals (codex review)", () => {
+  it("one cast removing two debuffs is one press", () => {
+    expect(distinctDispelPressSeconds([10, 10, 10.03, 25])).toEqual([10, 25]);
+    // a two-charge Purify (8 s) that took two debuffs at t = 10 still has a
+    // charge at t = 11 — the raw removal times would read both spent
+    expect(chargeStateAt([10, 10], 8, 2, 11).charges).toBe(0);
+    expect(
+      chargeStateAt(distinctDispelPressSeconds([10, 10]), 8, 2, 11).charges,
+    ).toBe(1);
   });
 });

@@ -479,5 +479,9 @@
  *  a zero-damage must shows worth), unsigned ids keep priority= plus
  *  verdict=unsigned; the legend names worth / verdict, calls the debuff a
  *  "CC, root or curse" and says the owner "has no dispel spell" for it.
+ *  v237 (2026-09-30, triage missed-cleanse F-B1 / F-B2): backlash-dispel's
+ *  "every cleanse still on cooldown" reads `cleanseRecoveryOf` per dispeller
+ *  (PvP +4 s Cleanse, Purify's 2nd charge), and the point gains
+ *  cdCcBlockedS (how long the CC ran with every cleanse down), in the legend.
  */
-export const PROMPT_VERSION = 236;
+export const PROMPT_VERSION = 237;

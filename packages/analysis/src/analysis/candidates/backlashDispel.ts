@@ -32,7 +32,7 @@
  * dispeller's 4 s damage window come from `reconstructDispelSummary`
  * (the same object the [DISPEL] context lines render from); cleanse
  * availability replays that summary's `cleanseWasOnCD` rule
- * (`canDefensiveCleanse` × `DISPEL_COOLDOWNS_BY_SPELL`); HP facts are
+ * (`canDefensiveCleanse` × `cleanseRecoveryOf`); HP facts are
  * `gridHpPct` at a whole rendered second; incoming CC with DR level is
  * `analyzeOutgoingCCChains` mirrored; hard-CC membership is
  * `HARD_CC_CATEGORIES`. The archive probe imports `backlashDispelDecisionPoints`
@@ -44,12 +44,18 @@ import {
   type BacklashWorthRef,
 } from "../../data/backlashDispelPrior";
 import { getEnglishSpellName } from "../../data/spellEffectData";
-import { gridHpPct, isHealerSpec } from "../../utils/cooldowns";
+import {
+  chargeStateAt,
+  gridHpPct,
+  isHealerSpec,
+  playerTalentIdSets,
+} from "../../utils/cooldowns";
 import {
   canDefensiveCleanse,
-  DISPEL_COOLDOWNS_BY_SPELL,
+  cleanseRecoveryOf,
   DISPEL_PENALTY_SPELLS,
   type DispelPriority,
+  distinctDispelPressSeconds,
   getDispelType,
   type IDispelEvent,
   reconstructDispelSummary,
@@ -107,6 +113,9 @@ export interface BacklashCcHit {
   atS: number;
   durationS: number;
   drLevel: string;
+  /** F-B1: seconds of the CC during which every capable cleanse was still
+   * on cooldown — min(CC end, first cleanse back) − landing. */
+  blockedS: number;
 }
 
 export interface IBacklashDispelPoint {
@@ -250,14 +259,45 @@ export function backlashDispelDecisionPoints(
     friendPlayers.filter((f) =>
       canDefensiveCleanse(f as never, dtype as never),
     );
-  const offCd = (f: UnitLike, atRel: number): boolean => {
+  // F-B2 (triage missed-cleanse): the cleanse-cooldown fact is
+  // `cleanseRecoveryOf`'s — per dispeller, with the PvP-talent +4 s on
+  // Cleanse (199330) and Purify's second charge (196439) — not the bare
+  // table value; charge-aware through the ledger's `chargeStateAt`.
+  // Returns when the dispeller's cleanse is back (≤ atRel = ready now).
+  const readyAt = (f: UnitLike, atRel: number): number => {
+    const bySpell = new Map<string, number[]>();
     for (const c of cleanses) {
       if (c.sourceName !== f.name || c.timeSeconds >= atRel) continue;
-      const cd = DISPEL_COOLDOWNS_BY_SPELL.get(c.dispelSpellId) ?? 8;
-      if (cd > 0 && c.timeSeconds + cd > atRel) return false;
+      bySpell.set(c.dispelSpellId, [
+        ...(bySpell.get(c.dispelSpellId) ?? []),
+        c.timeSeconds,
+      ]);
     }
-    return true;
+    let back = -Infinity;
+    for (const [spellId, times] of bySpell) {
+      const { cooldownSeconds, charges } = cleanseRecoveryOf(
+        spellId,
+        new Set(
+          ((f.info as { pvpTalents?: unknown[] } | undefined)?.pvpTalents ?? []).map(
+            String,
+          ),
+        ),
+        String(f.spec),
+        playerTalentIdSets(f as never),
+      );
+      if (!(cooldownSeconds > 0)) continue;
+      const st = chargeStateAt(
+        distinctDispelPressSeconds(times),
+        cooldownSeconds,
+        charges,
+        atRel,
+      );
+      if (st.charges === 0) back = Math.max(back, st.nextRecharge);
+    }
+    return back;
   };
+  const offCd = (f: UnitLike, atRel: number): boolean =>
+    readyAt(f, atRel) <= atRel;
   const activeBuffIds = (u: UnitLike, atMs: number): Set<string> => {
     const on = new Map<string, boolean>();
     for (const b of u.auraEvents ?? []) {
@@ -399,12 +439,18 @@ export function backlashDispelDecisionPoints(
         const cap = capableFor(ct);
         if (cap.length === 0) continue;
         if (cap.some((f) => offCd(f, app.atSeconds))) continue;
+        // F-B1: how long the CC ran with every cleanse still down — "on
+        // cooldown at landing" alone hid a cleanse back 0.33 s later
+        // (9d899d10: Purify Spirit back 123.467, Coil 123.139 for 3.0 s).
+        const back = Math.min(...cap.map((f) => readyAt(f, app.atSeconds)));
         cdCcHit = {
           targetName: app.targetName,
           spellName: getEnglishSpellName(app.spellId, app.spellName),
           atS: app.atSeconds,
           durationS: app.durationSeconds,
           drLevel: app.drLevel,
+          blockedS:
+            Math.min(app.atSeconds + app.durationSeconds, back) - app.atSeconds,
         };
         break;
       }
@@ -568,6 +614,7 @@ export function backlashDispelEvents(
               cdCcSpell: p.cdCcHit.spellName,
               cdCcT: fmtFactTime(p.cdCcHit.atS),
               cdCcDurationS: fmt(p.cdCcHit.durationS),
+              cdCcBlockedS: fmt(p.cdCcHit.blockedS),
               cdCcDr: p.cdCcHit.drLevel,
             }
           : {}),
