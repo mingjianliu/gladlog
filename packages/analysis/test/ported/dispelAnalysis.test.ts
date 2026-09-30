@@ -766,8 +766,20 @@ describe("dispelAnalysis — summary reconstruction", () => {
       },
     );
     (purger as any).actionOut = [firstPurge];
+    // F-P7 (triage 2026-09-29): readiness reads the cooldown-consuming CAST,
+    // which a real log always carries next to the removal.
+    (purger as any).spellCastEvents = [
+      {
+        spellId: "278326",
+        spellName: "Consume Magic",
+        timestamp: MATCH_START + 5_000,
+        srcUnitId: "dh1",
+        destUnitId: "e1",
+        logLine: { event: LogEvent.SPELL_CAST_SUCCESS, timestamp: MATCH_START + 5_000 },
+      },
+    ];
 
-    // BOP applied at 10s (DH purge on CD for 8s until 13s)
+    // BOP applied at 10s (Consume Magic's DB2 10 s cooldown: back at 15s)
     const buffApply = makeAuraEvent(
       LogEvent.SPELL_AURA_APPLIED,
       "1022",
@@ -793,6 +805,7 @@ describe("dispelAnalysis — summary reconstruction", () => {
     );
     expect(res.missedPurgeWindows).toHaveLength(1);
     expect(res.missedPurgeWindows[0].purgeWasOnCD).toBe(true);
+    expect(res.missedPurgeWindows[0].purgeReadyAtSeconds).toBe(15);
     expect(res.missedPurgeWindows[0].cdBurnedOn?.spellName).toBe(
       "Blessing of Protection",
     );

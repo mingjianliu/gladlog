@@ -483,5 +483,13 @@
  *  "every cleanse still on cooldown" reads `cleanseRecoveryOf` per dispeller
  *  (PvP +4 s Cleanse, Purify's 2nd charge), and the point gains
  *  cdCcBlockedS (how long the CC ran with every cleanse down), in the legend.
+ *  v238 (2026-09-30, triage missed-cleanse F-P5 + F-P7, ruling A19 = C):
+ *  the Devourer DH and every Hunter spec are offensive purgers (talent-gated
+ *  like DH); the "Critical only" gate reads each purger's purge spell DB2
+ *  cooldown (`isCdGatedPurger`, replaces the CD_GATED_PURGERS spec list:
+ *  Greater Purge 12 s and Tranquilizing Shot 10 s now gate); a missed purge
+ *  says when the purge came back, from cooldown-consuming casts
+ *  (`purgeReadyAtSeconds`: "purge on cooldown for the whole buff" /
+ *  "… at application — ready at m:ss (Ns of the buff left)").
  */
-export const PROMPT_VERSION = 237;
+export const PROMPT_VERSION = 238;

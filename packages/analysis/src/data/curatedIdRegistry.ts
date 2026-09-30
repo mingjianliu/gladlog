@@ -1,4 +1,3 @@
-import { DEFERRED_DAMAGE_SPELL_IDS } from "../context/timelineHelpers";
 /**
  * Registry of every HAND-MAINTAINED table keyed by (or containing) WoW spell
  * ids. Exists for one purpose: the Curated-List Completeness Rule's **reverse
@@ -33,6 +32,7 @@ import {
   PURGE_WHITELIST_DATA_BLOCKED,
 } from "../context/matchTimeline";
 import { DOT_SPELL_IDS } from "../context/matchTimelineSections";
+import { DEFERRED_DAMAGE_SPELL_IDS } from "../context/timelineHelpers";
 import {
   CHANNELED_CD_SPELL_IDS,
   ENEMY_MAJOR_BUFF_SPELL_IDS,
@@ -64,10 +64,8 @@ import {
 } from "../utils/ccTrinketAnalysis";
 import { STASIS_STORABLE_HEAL_IDS } from "../utils/combatStates";
 import {
-  TEAM_SAVE_CD_IDS,
   ADDITIONAL_OVERLAP_DEFENSIVE_IDS,
   ALLY_REACH_REQUIRES_PVP_TALENT,
-  RESPONSE_ONLY_DEFENSIVE_IDS,
   AURA_ACTIVATION_PROVES_BUTTON_IDS,
   AURA_IS_THE_PRESS_IDS,
   AURA_ONLY_ACTIVATION_IDS,
@@ -76,17 +74,18 @@ import {
   NON_SUBSTITUTE_DEFENSIVE_IDS,
   PASSIVE_PROC_CAST_IDS,
   PROC_ONLY_ACTIVATION_IDS,
+  RESPONSE_ONLY_DEFENSIVE_IDS,
   SELF_CAST_NOOP_EXTERNAL_IDS,
   SPEC_EXCLUSIVE_SPELLS,
   SPELL_CANONICAL_IDS,
   TEAM_HEAL_CD_IDS,
+  TEAM_SAVE_CD_IDS,
   THROUGHPUT_EMPOWER_DEFENSIVE_IDS,
   USABLE_WHILE_CC_CONDITIONAL,
   USABLE_WHILE_CC_GAP_IDS,
   USABLE_WHILE_FEARED_GAP_IDS,
 } from "../utils/cooldowns";
 import { UNUSED_SELF_COVERAGE_UNMODELLED } from "../utils/counterfactual";
-import { FREE_CAST_AURA_IDS } from "../utils/resourceAt";
 import {
   EXTERNAL_DEFENSIVE_SPELLS,
   IMMUNITY_SPELLS,
@@ -98,7 +97,9 @@ import {
   DISPEL_COOLDOWNS_BY_SPELL,
   DISPEL_PENALTY_SPELLS,
   DISPEL_TYPE_TALENT_GATES,
+  GREATER_PURGE_SPELL_ID,
   PURGE_BLOCKLIST,
+  PURGE_GATE_SPELL_BY_SPEC,
   PURGE_SPELLS_BY_SPEC,
   STELLAR_PROTECTION_PENALIZED_SPELLS,
 } from "../utils/dispelAnalysis";
@@ -110,6 +111,14 @@ import { SPEC_PRIMARY_CC } from "../utils/healerExposureAnalysis";
 import { HEALER_AVOIDANCE_SPELLS } from "../utils/healerExposureAnalysis";
 import { PVP_TRINKET_SPELL_IDS } from "../utils/killWindowTargetSelection";
 import {
+  ASCENDANCE_ENH_ID,
+  DOOM_WINDS_PRESS_ID,
+  EYE_BEAM_ID,
+  METAMORPHOSIS_PRESS_CAST_IDS,
+  OFFENSIVE_AURA_EVIDENCE,
+} from "../utils/offensiveAuraOccurrences";
+import { FREE_CAST_AURA_IDS } from "../utils/resourceAt";
+import {
   OFFENSIVE_CD_SPELL_IDS,
   OFFENSIVE_EFFECT_ACTIVATION_IDS,
   SPELL_EFFECT_OVERRIDES as SPELL_DANGER_OVERRIDES,
@@ -119,13 +128,6 @@ import {
   OFFENSIVE_PURGE_TALENT_IDS,
   TALENT_BEHAVIORS,
 } from "../utils/talentBehaviors";
-import {
-  ASCENDANCE_ENH_ID,
-  DOOM_WINDS_PRESS_ID,
-  EYE_BEAM_ID,
-  METAMORPHOSIS_PRESS_CAST_IDS,
-  OFFENSIVE_AURA_EVIDENCE,
-} from "../utils/offensiveAuraOccurrences";
 import {
   PER_RANK_COOLDOWN_TALENTS,
   RULED_COOLDOWN_VALUES,
@@ -147,11 +149,11 @@ import {
 } from "./kickedSpellCategories";
 import { MITIGATION_OVERRIDES, NO_MITIGATION_IDS } from "./mitigationData";
 import { MITIGATION_VERDICTS } from "./mitigationVerdicts";
+import { CHANNEL_PROXY_IDS, DRINK_AURA_IDS } from "./occupancyAuras";
 import {
   RACIAL_ABILITIES,
   SHARED_CD_RACIAL_SPELL_IDS,
 } from "./racialAbilities";
-import { CHANNEL_PROXY_IDS, DRINK_AURA_IDS } from "./occupancyAuras";
 import { SPELL_CATEGORIES } from "./spellCategories";
 import {
   BUFF_DURATION_TALENT_MODIFIERS,
@@ -442,6 +444,10 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   t("HEALER_REACH_SPELLS", "utils/spellRange.ts", "cast", () =>
     set(Object.values(HEALER_REACH_SPELLS).flat()),
   ),
+  t("PURGE_GATE_SPELL_BY_SPEC", "utils/dispelAnalysis.ts", "cast", () => [
+    ...Object.values(PURGE_GATE_SPELL_BY_SPEC),
+    GREATER_PURGE_SPELL_ID,
+  ]),
   t("PURGE_SPELLS_BY_SPEC", "utils/dispelAnalysis.ts", "cast", () =>
     set(Object.values(PURGE_SPELLS_BY_SPEC).flatMap((ids) => [...(ids ?? [])])),
   ),

@@ -8,12 +8,17 @@ import {
 import { CHANNEL_PROXY_IDS, DRINK_AURA_IDS } from "../data/occupancyAuras";
 import { ROOT_SPELL_IDS } from "../data/rootSpells";
 import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
-import { getEnglishSpellName, spellEffectData } from "../data/spellEffectData";
+import {
+  effectiveCooldownSeconds,
+  getEnglishSpellName,
+  spellEffectData,
+} from "../data/spellEffectData";
 import spellIdListsData from "../data/spellIdLists";
 import { buildCannotCastIntervals } from "./cannotCastIntervals";
 import { charmedThrough } from "./charmedPlayer";
 import {
   applyCdTalentModifiers,
+  chargeStateAt,
   getPressureThreshold,
   isHealerSpec,
   isMeleeSpec,
@@ -351,6 +356,14 @@ const OFFENSIVE_PURGERS = new Set<CombatUnitSpec>([
   CombatUnitSpec.Mage_Frost, // Spellsteal
   CombatUnitSpec.DemonHunter_Havoc, // Consume Magic
   CombatUnitSpec.DemonHunter_Vengeance, // Consume Magic
+  // Triage 2026-09-29 missed-cleanse F-P5: the Devourer DH (Consume Magic
+  // 278326) and every Hunter spec (Tranquilizing Shot 19801) purge in the log
+  // (8c5b6ec5, f94a7604, 1b930c17) and read "CANNOT offensive purge". Both
+  // are talent-gated like DH (`PURGE_TALENT_GATE`).
+  CombatUnitSpec.DemonHunter_Devourer, // Consume Magic
+  CombatUnitSpec.Hunter_BeastMastery, // Tranquilizing Shot
+  CombatUnitSpec.Hunter_Marksmanship, // Tranquilizing Shot
+  CombatUnitSpec.Hunter_Survival, // Tranquilizing Shot
   CombatUnitSpec.Warlock_Affliction, // Devour Magic (Felhunter)
   CombatUnitSpec.Warlock_Demonology, // Devour Magic (Felhunter)
   CombatUnitSpec.Warlock_Destruction, // Devour Magic (Felhunter)
@@ -448,6 +461,10 @@ export const PURGE_SPELLS_BY_SPEC: Readonly<
   [CombatUnitSpec.Mage_Frost]: ["30449"],
   [CombatUnitSpec.DemonHunter_Havoc]: ["278326"], // Consume Magic
   [CombatUnitSpec.DemonHunter_Vengeance]: ["278326"],
+  [CombatUnitSpec.DemonHunter_Devourer]: ["278326"], // F-P5
+  [CombatUnitSpec.Hunter_BeastMastery]: ["19801"], // Tranquilizing Shot (F-P5)
+  [CombatUnitSpec.Hunter_Marksmanship]: ["19801"],
+  [CombatUnitSpec.Hunter_Survival]: ["19801"],
 };
 
 /** A dispeller's reach with the spells it would use: the longest of their
@@ -465,19 +482,129 @@ export function dispelReachYards(
   return best ?? DISPEL_MAX_RANGE_YARDS;
 }
 
-// Purge specs whose purge ability has a meaningful cooldown (>= 8s).
-// For these, only flag Critical priority missed purges — they can't freely spam purge
-// every GCD so holding the ability for a better target is often correct.
-const CD_GATED_PURGERS = new Set<CombatUnitSpec>([
-  CombatUnitSpec.Evoker_Preservation, // Naturalize: 10s CD
-  CombatUnitSpec.Evoker_Devastation, // Naturalize: 10s CD
-  CombatUnitSpec.Evoker_Augmentation, // Naturalize: 10s CD
-  CombatUnitSpec.Warlock_Affliction, // Devour Magic: ~8s CD
-  CombatUnitSpec.Warlock_Demonology,
-  CombatUnitSpec.Warlock_Destruction,
-  CombatUnitSpec.DemonHunter_Havoc, // Consume Magic: 8s CD
-  CombatUnitSpec.DemonHunter_Vengeance,
-]);
+/**
+ * The offensive-purge spell a purger presses (user ruling A19 = C,
+ * 2026-09-30; triage missed-cleanse F-P5 / F-P7). Its DB2 cooldown decides
+ * the "Critical only" gate (`isCdGatedPurger`) — this replaced the hand spec
+ * list CD_GATED_PURGERS, which missed the 12 s Greater Purge and the Hunters.
+ * Priest 528 / Mage 30449 / Shaman 370 have no cooldown; Shaman 378773 (when
+ * talented or cast) 12 s, DH 278326 10 s, Warlock 19505 15 s, Evoker
+ * (Scouring Flame → Fire Breath) 357208 30 s, Hunter 19801 10 s.
+ */
+export const PURGE_GATE_SPELL_BY_SPEC: Readonly<Partial<Record<string, string>>> = {
+  [CombatUnitSpec.Priest_Discipline]: "528", // Dispel Magic
+  [CombatUnitSpec.Priest_Holy]: "528",
+  [CombatUnitSpec.Priest_Shadow]: "528",
+  [CombatUnitSpec.Mage_Arcane]: "30449", // Spellsteal
+  [CombatUnitSpec.Mage_Fire]: "30449",
+  [CombatUnitSpec.Mage_Frost]: "30449",
+  [CombatUnitSpec.Shaman_Restoration]: "370", // Purge (378773 when talented / cast)
+  [CombatUnitSpec.Shaman_Elemental]: "370",
+  [CombatUnitSpec.Shaman_Enhancement]: "370",
+  [CombatUnitSpec.DemonHunter_Havoc]: "278326", // Consume Magic
+  [CombatUnitSpec.DemonHunter_Vengeance]: "278326",
+  [CombatUnitSpec.DemonHunter_Devourer]: "278326",
+  [CombatUnitSpec.Warlock_Affliction]: "19505", // Devour Magic (Felhunter)
+  [CombatUnitSpec.Warlock_Demonology]: "19505",
+  [CombatUnitSpec.Warlock_Destruction]: "19505",
+  [CombatUnitSpec.Evoker_Preservation]: "357208", // Scouring Flame → Fire Breath
+  [CombatUnitSpec.Evoker_Devastation]: "357208",
+  [CombatUnitSpec.Evoker_Augmentation]: "357208",
+  [CombatUnitSpec.Hunter_BeastMastery]: "19801", // Tranquilizing Shot
+  [CombatUnitSpec.Hunter_Marksmanship]: "19801",
+  [CombatUnitSpec.Hunter_Survival]: "19801",
+};
+export function purgeSpellOf(unit: ICombatUnit): string | null {
+  const base = PURGE_GATE_SPELL_BY_SPEC[unit.spec] ?? null;
+  if (
+    base === "370" &&
+    (playerTalentIdSets(unit).talentedSpellIds?.has(GREATER_PURGE_SPELL_ID) ||
+      unitCastSpellIds(unit).has(GREATER_PURGE_SPELL_ID))
+  )
+    return GREATER_PURGE_SPELL_ID;
+  return base;
+}
+export const GREATER_PURGE_SPELL_ID = "378773";
+
+/** The purger's purge cooldown and charges as it plays it: the DB2 value
+ *  through the ledger's talent layer (`applyCdTalentModifiers`, the
+ *  `cleanseRecoveryOf` shape). */
+function purgeRecoveryOf(
+  unit: ICombatUnit,
+  spellId: string,
+): { cooldownSeconds: number; charges: number } {
+  const base = effectiveCooldownSeconds(spellId) ?? 0;
+  if (!(base > 0)) return { cooldownSeconds: 0, charges: 1 };
+  const t = playerTalentIdSets(unit);
+  return applyCdTalentModifiers(
+    spellId,
+    base,
+    1,
+    t.talentedSpellIds,
+    new Set((unit.info?.pvpTalents ?? []).map(String)),
+    { specId: unit.spec, talentRanks: t.talentRanks },
+  );
+}
+
+/** A19 = C: a purger whose purge spell has a cooldown only answers Critical
+ *  buffs ("they can't spam purge every GCD"). */
+export function isCdGatedPurger(unit: ICombatUnit): boolean {
+  const sp = purgeSpellOf(unit);
+  return sp !== null && purgeRecoveryOf(unit, sp).cooldownSeconds > 0;
+}
+
+/**
+ * F-P7 (codex r2 09-30): when this purger's purge is next usable, from its
+ * cooldown-consuming CASTS (a purge that removes nothing still spends it —
+ * f94a7604 243.483), in match seconds; −∞ = ready at `atMs`. The ability set
+ * is the purger's purge spell(s) plus any dispel spell it removed something
+ * with; a Felhunter's casts count for its warlock. Charge-aware.
+ */
+export function purgeReadyAtSeconds(
+  unit: ICombatUnit,
+  extraSpellIds: ReadonlySet<string>,
+  atMs: number,
+  matchStartMs: number,
+): number {
+  // The purge abilities this unit HAS: its purge spell (Greater Purge
+  // replaces Purge), else the spec's list. One of them that was never cast,
+  // or has no cooldown, is ready — an unused Dispel Magic keeps a priest
+  // ready whatever its Mass Dispel is doing (codex review of F-P7).
+  const own = purgeSpellOf(unit);
+  const listed = PURGE_SPELLS_BY_SPEC[unit.spec] ?? [];
+  const available = new Set<string>(
+    own !== null && !listed.includes(own) ? [own] : listed,
+  );
+  if (own !== null) available.add(own);
+  const ids = new Set<string>([...available, ...extraSpellIds]);
+  const casts = [
+    ...(unit.spellCastEvents ?? []),
+    ...(unit.petSpellCastEvents ?? []),
+  ].filter(
+    (c) =>
+      c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+      !!c.spellId &&
+      ids.has(c.spellId) &&
+      c.logLine.timestamp < atMs,
+  );
+  const atS = (atMs - matchStartMs) / 1000;
+  let back = -Infinity;
+  for (const id of ids) {
+    const times = casts
+      .filter((c) => c.spellId === id)
+      .map((c) => (c.logLine.timestamp - matchStartMs) / 1000);
+    if (!times.length) {
+      if (available.has(id)) return -Infinity; // held and never pressed
+      continue; // a dispel spell it used elsewhere, no press on record
+    }
+    const { cooldownSeconds, charges } = purgeRecoveryOf(unit, id);
+    if (!(cooldownSeconds > 0)) return -Infinity; // a free purge is always there
+    const st = chargeStateAt(times, cooldownSeconds, charges, atS);
+    if (st.charges > 0) return -Infinity;
+    back = back === -Infinity ? st.nextRecharge : Math.min(back, st.nextRecharge);
+  }
+  return back;
+}
 
 // Spell IDs that have Magic dispelType in the game DB but cannot actually be targeted
 // by player offensive purge abilities in practice. Covers three categories:
@@ -540,7 +667,14 @@ const WARLOCK_SPECS = new Set<CombatUnitSpec>([
 const DH_SPECS = new Set<CombatUnitSpec>([
   CombatUnitSpec.DemonHunter_Havoc,
   CombatUnitSpec.DemonHunter_Vengeance,
+  CombatUnitSpec.DemonHunter_Devourer,
 ]);
+const HUNTER_SPECS = new Set<CombatUnitSpec>([
+  CombatUnitSpec.Hunter_BeastMastery,
+  CombatUnitSpec.Hunter_Marksmanship,
+  CombatUnitSpec.Hunter_Survival,
+]);
+const TRANQUILIZING_SHOT_SPELL_ID = "19801";
 
 /** Returns the set of spell IDs the unit successfully cast during the match. */
 function unitCastSpellIds(unit: ICombatUnit): Set<string> {
@@ -805,14 +939,19 @@ export function canOffensivePurge(unit: ICombatUnit): boolean {
     return castSpellIds;
   };
 
-  // DH: Consume Magic is talent-gated.
-  if (DH_SPECS.has(unit.spec) && talentTreeIds.has(CONSUME_MAGIC_SPELL_ID)) {
-    if (talentedIds !== null && !talentedIds.has(CONSUME_MAGIC_SPELL_ID))
-      return false;
+  // DH: Consume Magic is talent-gated; Hunters: Tranquilizing Shot (F-P5),
+  // the same reading.
+  const gateId = DH_SPECS.has(unit.spec)
+    ? CONSUME_MAGIC_SPELL_ID
+    : HUNTER_SPECS.has(unit.spec)
+      ? TRANQUILIZING_SHOT_SPELL_ID
+      : null;
+  if (gateId !== null && talentTreeIds.has(gateId)) {
+    if (talentedIds !== null && !talentedIds.has(gateId)) return false;
     if (
       talentedIds === null &&
       hasCombatantInfo &&
-      !getCastSpellIds().has(CONSUME_MAGIC_SPELL_ID)
+      !getCastSpellIds().has(gateId)
     )
       return false;
   }
@@ -1030,6 +1169,9 @@ export interface IMissedPurgeWindow {
   priority: DispelPriority;
   /** True if all eligible purgers had their purge ability on CD at the start of the miss window */
   purgeWasOnCD: boolean;
+  /** F-P7: when the team's purge came back (match seconds), only when it
+   * was on cooldown at application. */
+  purgeReadyAtSeconds?: number;
   /** What the purger last used their ability on before the miss (only set when purgeWasOnCD) */
   cdBurnedOn?: {
     spellName: string;
@@ -1908,13 +2050,29 @@ export function formatMissedCleanseExemption(
 /** Feasibility-exemption suffix for the [MISSED PURGE OPPORTUNITY] line (same
  *  treatment as the cleanse side). */
 export function formatMissedPurgeExemption(
-  w: Pick<IMissedPurgeWindow, "purgersLockedOut" | "losReachable">,
+  w: Pick<
+    IMissedPurgeWindow,
+    | "purgersLockedOut"
+    | "losReachable"
+    | "purgeReadyAtSeconds"
+    | "timeSeconds"
+    | "durationSeconds"
+  >,
 ): string {
   let out = "";
   if (w.purgersLockedOut)
     out += " | purgers were CC'd/locked out — not actionable";
   if (w.losReachable === false)
     out += " | no purger had range/line of sight — not actionable";
+  // F-P7 (codex r2 09-30): say WHEN the purge came back — "on cooldown at
+  // application" alone hides 9 s of a buff that was purgeable after.
+  if (w.purgeReadyAtSeconds !== undefined) {
+    const left = w.timeSeconds + w.durationSeconds - w.purgeReadyAtSeconds;
+    out +=
+      left < MISSED_PURGE_THRESHOLD_S
+        ? ` | purge on cooldown for the whole buff (ready ${fmtTime(w.purgeReadyAtSeconds)}) — not actionable`
+        : ` | purge on cooldown at application — ready at ${fmtTime(w.purgeReadyAtSeconds)} (${Math.round(left)}s of the buff left)`;
+  }
   return out;
 }
 
@@ -2776,7 +2934,7 @@ export function reconstructDispelSummary(
             // only get flagged for Critical misses — they can't spam purge every GCD).
             const windowEndMs = removalTs ?? combat.endTime;
             const eligiblePurgers = friendlyPurgers.filter(
-              (p) => priority === "Critical" || !CD_GATED_PURGERS.has(p.spec),
+              (p) => priority === "Critical" || !isCdGatedPurger(p),
             );
             const allPurgersBlocked =
               eligiblePurgers.length === 0 ||
@@ -2789,14 +2947,25 @@ export function reconstructDispelSummary(
                 ),
               );
             if (!allPurgersBlocked) {
-              // Expected buff duration from spell data
-              // Purge CD state: look back at ourPurges for each eligible purger.
-              // Only meaningful for CD-gated purgers (Evoker 10s, DH/Warlock/Priest 8s).
-              // Free-purge specs (Shaman, Mage) never have their CD "burned" — skip them.
-              const cdGatedEligible = eligiblePurgers.filter((p) =>
-                CD_GATED_PURGERS.has(p.spec),
+              // F-P7 (codex r1 / r2 09-30, ruling A19 = C): the team's purge
+              // is back at the earliest eligible purger's readiness, read from
+              // its cooldown-consuming casts — not a constant 8 s, not only
+              // when every purger is CD-gated, not from removals only.
+              const teamReadyAt = Math.min(
+                ...eligiblePurgers.map((p) =>
+                  purgeReadyAtSeconds(
+                    p,
+                    new Set(
+                      ourPurges
+                        .filter((x) => x.sourceName === p.name)
+                        .map((x) => x.dispelSpellId),
+                    ),
+                    applyTs,
+                    combat.startTime,
+                  ),
+                ),
               );
-              let purgeWasOnCD = false;
+              const purgeWasOnCD = teamReadyAt > applyRelative;
               let cdBurnedOn:
                 | {
                     spellName: string;
@@ -2804,32 +2973,20 @@ export function reconstructDispelSummary(
                     secondsBefore: number;
                   }
                 | undefined;
-              if (
-                cdGatedEligible.length > 0 &&
-                eligiblePurgers.every((p) => CD_GATED_PURGERS.has(p.spec))
-              ) {
-                // Only meaningful when ALL eligible purgers are CD-gated
-                const purgeCD = 8; // seconds — conservative; Evoker is 10s
-                const recentPurges = ourPurges.filter(
-                  (p) =>
-                    cdGatedEligible.some((pu) => pu.name === p.sourceName) &&
-                    p.timeSeconds < applyRelative &&
-                    p.timeSeconds >= applyRelative - purgeCD,
-                );
-                const purgersWhoUsedCD = new Set(
-                  recentPurges.map((p) => p.sourceName),
-                );
-                if (
-                  cdGatedEligible.every((p) => purgersWhoUsedCD.has(p.name))
-                ) {
-                  purgeWasOnCD = true;
-                  const lastPurge = recentPurges[recentPurges.length - 1];
+              if (purgeWasOnCD) {
+                const lastPurge = ourPurges
+                  .filter(
+                    (p) =>
+                      eligiblePurgers.some((pu) => pu.name === p.sourceName) &&
+                      p.timeSeconds < applyRelative,
+                  )
+                  .at(-1);
+                if (lastPurge)
                   cdBurnedOn = {
                     spellName: lastPurge.removedSpellName,
                     priority: lastPurge.priority,
                     secondsBefore: applyRelative - lastPurge.timeSeconds,
                   };
-                }
               }
 
               // Healing pressure: was the friendly team taking significant damage at the moment of application?
@@ -2860,6 +3017,7 @@ export function reconstructDispelSummary(
                 spellId,
                 priority,
                 purgeWasOnCD,
+                ...(purgeWasOnCD ? { purgeReadyAtSeconds: teamReadyAt } : {}),
                 cdBurnedOn,
                 teamUnderPressure,
                 purgersLockedOut: dispellersLockedOutForWindow(

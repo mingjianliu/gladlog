@@ -436,6 +436,9 @@ npx tsx packages/eval/scripts/dispelCompletenessScan.ts <dispel-counts.txt>
 #    the 08-19 skip / timing gates. Corpus leg always; the archive leg (--manifest) counts their windows and menu
 #    items. After A41-签: 22 unsigned ids (Earthgrab ×11,359 first) — the next drafting batch.
 npx tsx packages/eval/scripts/dispelVerdictForwardScan.ts --manifest <newseason manifest> --every 30
+#    Purger roster (2026-09-30, triage missed-cleanse F-P5): specs that removed an enemy buff in the corpus but
+#    canOffensivePurge rejects (the Devourer DH and all Hunters were missing). Expect 0 rejected rows.
+npx tsx packages/eval/scripts/purgerRosterScan.ts --manifest <newseason manifest> --every 30
 # 3b. DR sharing (2026-09-25, reliability audit C5): does each DR override in DR_CATEGORY_MAP — and
 #    any CC DB2 files under no category — really share (or not share) DR the way the table says?
 #    Per spell under test: its full-duration rate right after each DB2 category vs with no
