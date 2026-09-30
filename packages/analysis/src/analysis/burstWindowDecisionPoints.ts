@@ -39,7 +39,7 @@ import {
   spells as spellMeta,
 } from "../data/spellTags";
 import {
-  canHelpAnotherUnit,
+  cdCanHelpAnotherUnit,
   cdReadyInTimeAt,
   extractMajorCooldowns,
   gridHpPct,
@@ -890,7 +890,7 @@ export function burstWindowDecisionPoints(
     );
     allyCdsByUnit.set(
       u.id,
-      answers.filter((cd) => canHelpAnotherUnit(cd.spellId, cd.tag)),
+      answers.filter((cd) => cdCanHelpAnotherUnit(cd)),
     );
     ccByUnit.set(u.id, buildFilteredAuraIntervals(u, ccSpellIds, combat));
     if (opts.collectSpend)
@@ -1032,8 +1032,7 @@ export function burstWindowDecisionPoints(
           casterName: c.unitName,
           tSec: Math.floor((c.tMs - start) / 1000),
           latencySec:
-            Math.round(((c.tMs - leadRawMs) / 1000 + Number.EPSILON) * 10) /
-            10,
+            Math.round(((c.tMs - leadRawMs) / 1000 + Number.EPSILON) * 10) / 10,
           ...(c.dest ? { destId: c.dest } : {}),
           casterId: c.unitId,
           ...(dur
@@ -1059,8 +1058,7 @@ export function burstWindowDecisionPoints(
           // window's tMs mixed two clocks and sorted a later Barkskin ahead
           // of an earlier landed Capacitor Totem (codex review of batch 8)
           latencySec:
-            Math.round(((r.tMs - leadRawMs) / 1000 + Number.EPSILON) * 10) /
-            10,
+            Math.round(((r.tMs - leadRawMs) / 1000 + Number.EPSILON) * 10) / 10,
         });
       responseCasts.sort((a, b) => a.latencySec - b.latencySec);
       // ── outcomes per friendly, and the ONE pressured friendly ────────────

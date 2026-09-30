@@ -187,6 +187,18 @@ export const classMetadata: IClassSpellMetadata[] = [
       a("11426", "Ice Barrier", D),
       a("110959", "Greater Invisibility", D), // W1g 2026-09-26: a defensive players press that the ledger never admitted (ledgerGapScan, 605 archive files: 407 rounds)
       a("342245", "Alter Time", D), // W1g 2026-09-26: a defensive players press that the ledger never admitted (ledgerGapScan, 605 archive files: 397 rounds)
+      // Mass Invisibility — user ruling 2026-09-30 (triage R13 / A9-2): a
+      // Defensive the ledger admits and cd-hoarded may name ("可指控"; the
+      // recommended fact-only option was not taken). Game-Behaviour note
+      // (runs/triage-2026-09-29/probes/a9/A9-EVIDENCE.md §2): DB2 has NO
+      // mitigation / absorb / heal effect — aura 18 (invisibility), 335, 260,
+      // Effect 176, caster-centred friendly area 40 yd, 12 s, cd 300 s; allies
+      // in combat are covered only with PvP talent 415945 (the `$?a415945`
+      // description branch), gated per player by ALLY_REACH_REQUIRES_PVP_TALENT
+      // (cooldowns.ts). Friendly invisibility lasts a median 0.59 s (every-6
+      // archive, 6,501 in-combat casts). Missed by W1g's ledgerGapScan pass
+      // because its official profile is no survival wall.
+      a("414664", "Mass Invisibility", D),
       a("190319", "Combustion", O),
       a("365350", "Arcane Surge", O),
       a("118", "Polymorph", C),

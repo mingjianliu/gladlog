@@ -40,7 +40,7 @@ import { CombatUnitReaction } from "@gladlog/parser-compat";
 import type { CdTriggerPriorRef } from "../data/cdTriggerPrior";
 import { buildCannotCastIntervals } from "../utils/cannotCastIntervals";
 import {
-  canHelpAnotherUnit,
+  cdCanHelpAnotherUnit,
   cdReadyInTimeAt,
   extractMajorCooldowns,
   gridHpPct,
@@ -347,7 +347,7 @@ export function cdPriorHoldEpisodes(
       const minIsOwner = min.unit.id === owner.id;
       const helps = minIsOwner
         ? !SELF_CAST_NOOP_EXTERNAL_IDS.has(cd.spellId)
-        : canHelpAnotherUnit(cd.spellId, cd.tag);
+        : cdCanHelpAnotherUnit(cd);
       if (!helps) {
         skipTo();
         continue;

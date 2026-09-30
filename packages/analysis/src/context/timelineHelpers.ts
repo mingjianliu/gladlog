@@ -13,7 +13,7 @@ import { getEnglishSpellName } from "../data/spellEffectData";
 import { buffFullDurationForCaster } from "../utils/buffDuration";
 import { IPlayerCCTrinketSummary } from "../utils/ccTrinketAnalysis";
 import {
-  canHelpAnotherUnit,
+  cdCanHelpAnotherUnit,
   CD_INSTANT_SLACK_S,
   cdReadyInTimeAt,
   IMajorCooldownInfo,
@@ -1350,8 +1350,7 @@ export function buildKillSequenceBlock(params: {
             // Cry / Anti-Magic Zone now qualifies, which the healer-only rule
             // silently dropped).
             const isDyingPlayer = player.name === dyingUnit.name;
-            if (!isDyingPlayer && !canHelpAnotherUnit(cd.spellId, cd.tag))
-              return false;
+            if (!isDyingPlayer && !cdCanHelpAnotherUnit(cd)) return false;
 
             // Single-source predicate (BACKLOG #18 Minor #3): shares the same
             // judgement as matchTimelineSections' [DEATH] Unused and

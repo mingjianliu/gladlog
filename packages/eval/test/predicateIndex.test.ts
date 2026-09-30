@@ -866,6 +866,16 @@ const INDEX: PredicateRow[] = [
     mod: cooldowns,
   },
   {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "cdCanHelpAnotherUnit",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "ALLY_REACH_REQUIRES_PVP_TALENT",
+    mod: cooldowns,
+  },
+  {
     file: `${A}/data/spellTargeting.ts`,
     symbol: "reachesAlly",
     mod: spellTargeting,

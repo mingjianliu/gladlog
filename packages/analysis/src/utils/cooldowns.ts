@@ -175,6 +175,33 @@ export function cdRoleTag(spellId: string): string | undefined {
 }
 
 /**
+ * Ally effects the game grants only with a PvP talent: cast id → talent.
+ * Mass Invisibility 414664 (user ruling 2026-09-30, triage R13 / A9-2): its
+ * DB2 targets are the caster-centred friendly area (so `reachesAlly` is
+ * true), but the description's "does not affect allies in combat" is lifted
+ * only by `$?a415945` Improved Mass Invisibility — every-6 archive: 54 % of
+ * 6,241 in-combat casts with 415945 cover a friendly player, 30 of 260
+ * without (A9-EVIDENCE §2). Read by `extractMajorCooldowns` (per-player
+ * `allyReach: false`) and so by `cdCanHelpAnotherUnit`. Registered in
+ * curatedIdRegistry.
+ */
+export const ALLY_REACH_REQUIRES_PVP_TALENT: Readonly<Record<string, string>> =
+  {
+    "414664": "415945", // Mass Invisibility ← Improved Mass Invisibility
+  };
+
+/** `canHelpAnotherUnit` for THIS player's cooldown: the id-level answer, and
+ * not when the player lacks the talent that grants the ally effect
+ * (`allyReach: false`). The one reader for a ledger entry. */
+export function cdCanHelpAnotherUnit(cd: {
+  spellId: string;
+  tag?: string;
+  allyReach?: false;
+}): boolean {
+  return cd.allyReach !== false && canHelpAnotherUnit(cd.spellId, cd.tag);
+}
+
+/**
  * B136: team-wide healing throughput CDs. These have no single target, so the timeline would
  * otherwise render the CASTER's own HP (usually ~100%), making the model read the cast as
  * "premature". For these the relevant context is the lowest-HP ally at cast time, not the healer.
@@ -1098,6 +1125,11 @@ export interface IMajorCooldownInfo {
    *  凡是「你当时本可以按它」形状的判断都必须跳过它:玩家没有那个选择,指控无法
    *  被满足。可选是为了兼容手搭 fixture,生产路径一定会设。 */
   isProcOnly?: boolean;
+  /** `false` when THIS player's cooldown cannot reach an ally although the
+   * spell id can (a talent-gated ally effect the player did not take —
+   * `ALLY_REACH_REQUIRES_PVP_TALENT`). Absent = the id-level answer
+   * (`canHelpAnotherUnit`). Read through `cdCanHelpAnotherUnit`. */
+  allyReach?: false;
   /** A healer save cooldown the user ruled RESPONSE-ONLY (Barkskin / Frenzied
    * Regeneration for Restoration Druid, 2026-09-25 「不指控」): pressing it
    * answers a crisis and it counts as a defensive the player has, but no
@@ -2994,6 +3026,15 @@ export function extractMajorCooldowns(
         neverUsed: casts.length === 0,
         isThroughput: spell.tags.includes(SpellTag.Offensive),
         isProcOnly: procOnly,
+        // A9-2: an ally effect gated on a PvP talent the log shows the
+        // player did not take (talents unknown → no gate)
+        // PvP talents known = COMBATANT_INFO carried the list (agy review:
+        // an info object without it must not read as "talent absent")
+        ...(Array.isArray(unit.info?.pvpTalents) &&
+        ALLY_REACH_REQUIRES_PVP_TALENT[spell.spellId] !== undefined &&
+        !pvpTalentIds.has(ALLY_REACH_REQUIRES_PVP_TALENT[spell.spellId]!)
+          ? { allyReach: false as const }
+          : {}),
         ...(spellAliasIds(spell.spellId).some(
           (id) => saveRoster?.get(id)?.responseOnly,
         )
@@ -3134,7 +3175,7 @@ export function findCheaperDefensiveAlternatives(
         // Apotheosis as helping an ally (it does, indirectly), but "press Apotheosis
         // instead of Pain Suppression" is not a cheaper substitute for a mitigation cast.
         (!opts.castTargetIsTeammate ||
-          (canHelpAnotherUnit(other.spellId, other.tag) &&
+          (cdCanHelpAnotherUnit(other) &&
             !THROUGHPUT_EMPOWER_DEFENSIVE_IDS.has(other.spellId))) &&
         // Self-cast context: exclude damage-redirect externals that do nothing when
         // caster === target (verified mechanic, not a broad External exclusion).

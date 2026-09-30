@@ -23,7 +23,7 @@ import {
 } from "../../data/syncWindowPrior";
 import { burstCastSpan } from "../../utils/burstLedger";
 import {
-  canHelpAnotherUnit,
+  cdCanHelpAnotherUnit,
   cdAvailableAt,
   cdReadyInTimeAt,
   DEFENSIVE_TAGS,
@@ -1232,7 +1232,7 @@ export function cdHoardedEvents(
       const helps = (cd: CdHoardCandidateCd) =>
         src.own
           ? !SELF_CAST_NOOP_EXTERNAL_IDS.has(cd.spellId)
-          : canHelpAnotherUnit(cd.spellId, cd.tag);
+          : cdCanHelpAnotherUnit(cd);
       const offCooldown = readyDefensiveCds(ownerCds, p.tSec, helps);
       // The ACCUSATION set: a response-only save (Barkskin / Frenzied
       // Regeneration, user ruling 2026-09-25 「不指控」) is never named as
@@ -1335,7 +1335,7 @@ export function cdHoardedEvents(
         cd: CdHoardCandidateCd,
         c: { targetName?: string },
       ) =>
-        !canHelpAnotherUnit(cd.spellId, cd.tag) ||
+        !cdCanHelpAnotherUnit(cd) ||
         c.targetName === undefined ||
         c.targetName === src.crisisUnit.name;
       const inWindow = (t: number) =>
@@ -1434,11 +1434,7 @@ export function cdHoardedEvents(
       // crisis — but it WAS pressed, so the line says where it went, or the
       // model reads "ready" as "held the whole time".
       const spentElsewhere = ownerCds
-        .filter(
-          (cd) =>
-            isSpendableDefensiveCd(cd) &&
-            canHelpAnotherUnit(cd.spellId, cd.tag),
-        )
+        .filter((cd) => isSpendableDefensiveCd(cd) && cdCanHelpAnotherUnit(cd))
         .flatMap((cd) =>
           cd.casts
             .filter(
@@ -1497,8 +1493,7 @@ export function cdHoardedEvents(
         cds
           .filter(
             (cd) =>
-              isSpendableDefensiveCd(cd) &&
-              (!ally || canHelpAnotherUnit(cd.spellId, cd.tag)),
+              isSpendableDefensiveCd(cd) && (!ally || cdCanHelpAnotherUnit(cd)),
           )
           .flatMap((cd) =>
             cd.casts
@@ -1506,7 +1501,7 @@ export function cdHoardedEvents(
                 (c) =>
                   c.timeSeconds >= windowFromS &&
                   c.timeSeconds <= windowToS &&
-                  (!canHelpAnotherUnit(cd.spellId, cd.tag) ||
+                  (!cdCanHelpAnotherUnit(cd) ||
                     c.targetName === undefined ||
                     c.targetName === crisisUnit.name),
               )

@@ -61,6 +61,7 @@ import { STASIS_STORABLE_HEAL_IDS } from "../utils/combatStates";
 import {
   TEAM_SAVE_CD_IDS,
   ADDITIONAL_OVERLAP_DEFENSIVE_IDS,
+  ALLY_REACH_REQUIRES_PVP_TALENT,
   AURA_IS_THE_PRESS_IDS,
   AURA_ONLY_ACTIVATION_IDS,
   CD_ROLE_TAGS,
@@ -315,6 +316,15 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   ),
   t("FREE_CAST_AURA_IDS", "utils/resourceAt.ts", "aura", () =>
     set(FREE_CAST_AURA_IDS),
+  ),
+  t("ALLY_REACH_REQUIRES_PVP_TALENT", "utils/cooldowns.ts", "cast", () =>
+    keys(ALLY_REACH_REQUIRES_PVP_TALENT),
+  ),
+  t(
+    "ALLY_REACH_REQUIRES_PVP_TALENT.talent",
+    "utils/cooldowns.ts",
+    "talent",
+    () => set(Object.values(ALLY_REACH_REQUIRES_PVP_TALENT)),
   ),
   t("ADDITIONAL_OVERLAP_DEFENSIVE_IDS", "utils/cooldowns.ts", "cast", () =>
     set(ADDITIONAL_OVERLAP_DEFENSIVE_IDS),

@@ -52,7 +52,7 @@ import {
 import {
   isTeamSaveCD,
   annotateDefensiveTimings,
-  canHelpAnotherUnit,
+  cdCanHelpAnotherUnit,
   cdAvailableAt,
   cdIsProcOnly,
   cdNeverSpent,
@@ -2831,8 +2831,7 @@ function teamPlayEvents(
                 // spendable ∩ help-another set cd-hoarded's teammate side uses
                 tools: ownerCds.filter(
                   (cd: IMajorCooldownInfo) =>
-                    isSpendableDefensiveCd(cd) &&
-                    canHelpAnotherUnit(cd.spellId, cd.tag),
+                    isSpendableDefensiveCd(cd) && cdCanHelpAnotherUnit(cd),
                 ),
                 // #29's gcd-locked exclusion input, as cd-hoarded passes it
                 ownCastSuccessSeconds: (owner.spellCastEvents ?? []).map(

@@ -319,5 +319,9 @@
  *  Communion is a team heal / save (TEAM_HEAL_CD_IDS): its press answers a
  *  teammate crisis and it can be named ready for one. 605 files:
  *  cd-hoarded +9 / −10, slow-defensive-response −1.
+ *  v203 (2026-09-30, triage cd-hoarded-waste F-H16, ruling A9-2): Mass
+ *  Invisibility is a Defensive in the Mage ledger and can be accused; for a
+ *  teammate it counts only with PvP talent 415945 (`cdCanHelpAnotherUnit`).
+ *  605 files: cd-hoarded +31 / −13, cd-waste +51.
  */
-export const PROMPT_VERSION = 202;
+export const PROMPT_VERSION = 203;

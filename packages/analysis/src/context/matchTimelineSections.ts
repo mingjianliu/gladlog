@@ -8,7 +8,7 @@ import {
   pvpTrinketRemainingSecondsAt,
 } from "../utils/ccTrinketAnalysis";
 import {
-  canHelpAnotherUnit,
+  cdCanHelpAnotherUnit,
   cdIsProcOnly,
   cdNeverSpent,
   cdReadyInTimeAt,
@@ -632,7 +632,7 @@ export function lowPressureUnusedDefensiveNote(
       !cdIsProcOnly(cd) &&
       !cd.isThroughput &&
       (cd.tag === undefined || DEFENSIVE_TAGS.has(cd.tag)) &&
-      !canHelpAnotherUnit(cd.spellId, cd.tag),
+      !cdCanHelpAnotherUnit(cd),
   );
   if (held.length === 0) return null;
   return `  NOTE: the log owner's lowest HP this match was ${Math.floor(minHpPct)}% — they were never under meaningful pressure themselves. Their never-used self-only defensive cooldowns (${held.map((cd) => cd.spellName).join(", ")}) were correctly HELD, not wasted.`;

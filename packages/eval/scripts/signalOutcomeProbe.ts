@@ -40,7 +40,7 @@
  */
 import {
   analyzePlayerCCAndTrinket,
-  canHelpAnotherUnit,
+  cdCanHelpAnotherUnit,
   cdAvailableAt,
   classMetadata,
   DEFENSIVE_TAGS,
@@ -267,9 +267,7 @@ function probeCdHoarded(ctx: RoundCtx, emit: Emit): void {
     (cd) => DEFENSIVE_TAGS.has(cd.tag) && !cdIsProcOnly(cd),
   );
   if (!defensive.length) return;
-  const allyCapable = defensive.filter((cd) =>
-    canHelpAnotherUnit(cd.spellId, cd.tag),
-  );
+  const allyCapable = defensive.filter((cd) => cdCanHelpAnotherUnit(cd));
 
   for (const unit of ctx.friends) {
     const isSelf = unit.id === ctx.owner.id;
