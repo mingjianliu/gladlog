@@ -288,5 +288,12 @@
  *  ally-reaching saves inside the judged window — with its own legend note
  *  (the line's spell is the enemy opener). 605 files: ids identical, 4 of 131
  *  lines gain attempted.
+ *  v197 (2026-09-30, triage cd-hoarded-waste F-H18 + F-H19 + F-H17): a
+ *  [STATE] tick at every friendly crisis anchor second (gate
+ *  checkCrisisStateTickPresent); the owner's casts on the crisis unit stay
+ *  unfolded inside a cd-hoarded window; Alter Time's return is rendered
+ *  (`| returned +Ns`, a [TEAM] return line). 605 files: menus identical;
+ *  crisis lines without a tick 735 → 0; [STATE] +2.1 %, [YOU] [CAST] +5.8 %;
+ *  returns rendered 0 → 553.
  */
-export const PROMPT_VERSION = 196;
+export const PROMPT_VERSION = 197;

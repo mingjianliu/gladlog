@@ -8,8 +8,13 @@
  * is pinned by the 605-file acceptanceCapture context hash.
  */
 import { ccSpellIds } from "../../data/spellTags";
-import { cdIsProcOnly } from "../../utils/cooldowns";
-import { fmtTime } from "../../utils/renderGrid";
+import {
+  cdIsProcOnly,
+  gridHpPct,
+  isDeadAtRenderSecond,
+} from "../../utils/cooldowns";
+import { fmtTime, toRenderSecond } from "../../utils/renderGrid";
+import { ALTER_TIME_CAST_ID, alterTimeReturnSeconds } from "./alterTime";
 import type { TimelineCtx } from "./ctx";
 
 export function emitTeamCdEntries(
@@ -25,6 +30,7 @@ export function emitTeamCdEntries(
     | "ccImmuneTagFor"
     | "addEntry"
     | "requestSnapshotPlaceholder"
+    | "matchStartMs"
   >,
 ): Pick<TimelineCtx, "procLinesEmitted"> {
   const {
@@ -37,6 +43,7 @@ export function emitTeamCdEntries(
     ccImmuneTagFor,
     addEntry,
     requestSnapshotPlaceholder,
+    matchStartMs,
   } = ctx;
   // threaded: read from ctx, returned to the caller (GH #116)
   let { procLinesEmitted } = ctx;
@@ -99,6 +106,33 @@ export function emitTeamCdEntries(
           line,
           requestSnapshotPlaceholder(cast.timeSeconds),
         );
+        // H17 (triage 2026-09-29): a teammate's Alter Time return is its own
+        // moment (138e632d: the Frost Mage snapped back at 0:28 from 31 %) —
+        // a line at the return, with the HP the [STATE] sampler reads at the
+        // next whole second (never a raw sample).
+        if (cd.spellId === ALTER_TIME_CAST_ID) {
+          const ret = alterTimeReturnSeconds(
+            player,
+            cast.timeSeconds,
+            matchStartMs,
+          );
+          if (ret !== null) {
+            const next = toRenderSecond(ret) + 1;
+            // the [STATE] tick's own two predicates: `unit:dead` first, then
+            // the HP sampler (codex review: a unit dead by the next second
+            // printed a positive HP)
+            const hpPart = isDeadAtRenderSecond(player, matchStartMs, next)
+              ? ` (dead at ${fmtTime(next)})`
+              : (() => {
+                  const hp = gridHpPct(player, matchStartMs + next * 1000);
+                  return hp === null ? "" : ` (${hp}% HP at ${fmtTime(next)})`;
+                })();
+            addEntry(
+              ret,
+              `${fmtTime(ret)}  [TEAM] [CD]   ${pid(player.name)} (${spec}): Alter Time returned${hpPart}`,
+            );
+          }
+        }
       }
     }
   }

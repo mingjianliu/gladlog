@@ -272,6 +272,30 @@ export interface BuildMatchTimelineParams {
    */
   criticalWindowSeconds: ReadonlySet<number>;
   /**
+   * Triage 2026-09-29 H18: every friendly's `crisisDecisionPoints` anchor
+   * second (the second a cd-hoarded / crisis-no-response line cites, built by
+   * buildMatchContext from the same function). A [STATE] tick is always
+   * emitted there — outside a critical window too, and exempt from the gap
+   * and 10-point rules like any key moment — so the cited `crisisHpPct` has
+   * its own tick (it is the same `gridHpPct` reading by construction).
+   * Before: 16 of 28 cd-hoarded lines in the 60 HEAD prompts (14 of 28 on
+   * re-parsed data) had no same-second [STATE].
+   */
+  crisisAnchorSeconds?: ReadonlySet<number>;
+  /**
+   * Triage 2026-09-29 H19: the windows a cd-hoarded line judges
+   * ([t, t + CD_HOARD_RESPONSE_S] on each dangerous, not-CC'd crisis point,
+   * built by buildMatchContext). The healer gap-filler never folds the
+   * owner's casts on that unit inside them — up to DEATH_WINDOW_UNFOLD_CAP per
+   * window, the friendly-death unfold's budget — so "held" cannot read as
+   * "did nothing for them" when the heals went there.
+   */
+  crisisUnfoldWindows?: ReadonlyArray<{
+    unitName: string;
+    fromSeconds: number;
+    toSeconds: number;
+  }>;
+  /**
    * Mitigation audit / counterfactual (#17b Task4): passed through verbatim to
    * emitFriendlyDeathEntries — wired by buildMatchContext, which consumes the three
    * functions from Task1 counterfactual.ts and formats the wording. Optional; emits no
@@ -386,6 +410,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     shapeshiftIntervals = [],
     spiritOfRedemptionIntervals = [],
     criticalWindowSeconds: criticalWindowSet,
+    crisisAnchorSeconds,
     counterfactualOf,
     burstWindows,
     cdPriorEpisodes,
@@ -1501,6 +1526,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       groundingAbsorbNote,
       ownerHardCcTagAt,
       criticalWindowSet,
+      crisisUnfoldWindows: params.crisisUnfoldWindows ?? [],
     });
 
   // ── [TEAM] [CD] events ────────────────────────────────────────────────────
@@ -1516,6 +1542,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     ccImmuneTagFor,
     addEntry,
     requestSnapshotPlaceholder,
+    matchStartMs,
   }));
 
   // ── [CC CAST] events — AoE CC cast by friendly players on enemies ──────────
@@ -2743,14 +2770,18 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     );
     const isFirstDeathTick = someoneDied && !wasSomeoneDead;
 
+    // H18: a crisis anchor second is cited by a candidate — its tick is
+    // always printed
+    const isCrisisAnchor = crisisAnchorSeconds?.has(t) ?? false;
+
     // Only emit if inside critical window, or death. No time anchors!
-    if (!isInCritical && !isFirstDeathTick) continue;
+    if (!isInCritical && !isFirstDeathTick && !isCrisisAnchor) continue;
 
     // Decide if it's a key moment or delta change
     let shouldEmit = false;
     if (t === 0) {
       shouldEmit = true; // Always emit first tick
-    } else if (keyMomentSeconds.has(t)) {
+    } else if (keyMomentSeconds.has(t) || isCrisisAnchor) {
       shouldEmit = true; // Key moment snapshot
     } else if (
       t - lastStateEmitT < STATE_MIN_GAP_SECONDS &&

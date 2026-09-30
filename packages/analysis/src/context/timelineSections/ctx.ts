@@ -50,6 +50,8 @@ export interface TimelineCtx {
   stasisEvents: NonNullable<P["stasisEvents"]>;
   /** params.criticalWindowSeconds */
   criticalWindowSet: P["criticalWindowSeconds"];
+  /** params.crisisUnfoldWindows, defaulted to [] */
+  crisisUnfoldWindows: NonNullable<P["crisisUnfoldWindows"]>;
   enemyDispelSummary: P["enemyDispelSummary"];
   /** the whole params object — a few sections read a field of it directly
    * (`params.ccBreakEvents`) instead of the destructured name */

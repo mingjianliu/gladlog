@@ -1613,6 +1613,11 @@ const INDEX: PredicateRow[] = [
   },
   {
     file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkCrisisStateTickPresent",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
     symbol: "checkConseqHpStateConsistency",
     mod: promptQualityCheck,
   },

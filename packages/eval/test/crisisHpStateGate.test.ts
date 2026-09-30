@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   checkCrisisHpStateConsistency,
+  checkCrisisStateTickPresent,
   crisisHpStateProbes,
 } from "../src/quality/promptQualityCheck";
 
@@ -115,6 +116,43 @@ describe("checkCrisisHpStateConsistency (11th hardFailure class)", () => {
       checkCrisisHpStateConsistency([
         STATE_27,
         cdHoarded("27", "Tank-T", "99"),
+      ]),
+    ).toEqual([]);
+  });
+});
+
+// triage 2026-09-29 H18: the crisis second always has a [STATE] tick
+describe("checkCrisisStateTickPresent", () => {
+  it("a tick carrying the crisis unit → passes", () => {
+    expect(
+      checkCrisisStateTickPresent([
+        ...ROSTER,
+        STATE_27,
+        STATE_77,
+        cdHoarded("27", "Tank-T", "38"),
+        crisisNoResponse("77.0", "Heals-R", "39"),
+      ]),
+    ).toEqual([]);
+  });
+
+  it("no tick at the crisis second, or one without the unit → red", () => {
+    const fails = checkCrisisStateTickPresent([
+      ...ROSTER,
+      STATE_27,
+      cdHoarded("31", "Tank-T", "12"),
+      "0:40  [STATE]   friends 1(RShaman):71",
+      cdHoarded("40", "Tank-T", "33"),
+    ]);
+    expect(fails).toHaveLength(2);
+    expect(fails[0]).toContain("0:31");
+    expect(fails[1]).toContain("0:40");
+  });
+
+  it("other crisis-HP types (slow-defensive-response's window minimum) are not anchors → not checked", () => {
+    expect(
+      checkCrisisStateTickPresent([
+        ...ROSTER,
+        "  - id=slow-defensive-response:P1:40 type=slow-defensive-response t=40s units=Heals-R facts={t=40, pressured=Tank-T, pressuredHpPct=31, pressuredHpT=45}",
       ]),
     ).toEqual([]);
   });

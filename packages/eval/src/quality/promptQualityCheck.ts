@@ -2157,6 +2157,9 @@ export interface CrisisHpStateProbe {
    * normal and is NOT a failure). "ghost" (Spirit of Redemption) is also
    * reported as null: it is a third state that no HP fact can equal. */
   stateHp: number | "dead" | null;
+  /** whether a same-second [STATE] line carries this unit at all (any
+   * token, "ghost" included) — `checkCrisisStateTickPresent` */
+  stateSeen: boolean;
 }
 
 /**
@@ -2210,6 +2213,7 @@ export function crisisHpStateProbes(lines: string[]): CrisisHpStateProbe[] {
           unitId,
           factHp: hp,
           stateHp: tick === undefined || tick === "ghost" ? null : tick,
+          stateSeen: tick !== undefined,
         });
       }
     }
@@ -2244,6 +2248,35 @@ export function checkCrisisHpStateConsistency(lines: string[]): string[] {
     failures.push(
       `line ${p.lineIndex + 1}: ${p.type} 声称 ${p.unitName} 在 ${fmtMmSs(p.tSecond)} 为 ${p.factHp}%,` +
         `而同秒 [STATE] 报 ${p.stateHp === "dead" ? "dead" : `${p.stateHp}%`}`,
+    );
+  }
+  return failures;
+}
+
+/** The crisis types whose `t` is a `crisisDecisionPoints` anchor second —
+ * the seconds the timeline always ticks (`crisisAnchorSeconds`). */
+const CRISIS_ANCHOR_TYPES: ReadonlySet<string> = new Set([
+  "cd-hoarded",
+  "crisis-no-response",
+]);
+
+/**
+ * Hard invariant (triage 2026-09-29 H18): a `cd-hoarded` / `crisis-no-response`
+ * line's crisis second has a `[STATE]` tick that carries the crisis unit, so
+ * the cited HP is on the page and `checkCrisisHpStateConsistency` can compare
+ * it. buildMatchTimeline admits every friendly's `crisisDecisionPoints`
+ * anchor as a key moment for exactly this; before that, 16 of 28 cd-hoarded
+ * lines in the 60 HEAD prompts (14 of 28 re-parsed) had no same-second tick
+ * (a crisis outside every critical window, or thinned by the 3 s gap rule).
+ * A unit the roster block does not name is not checked (no id to look for).
+ */
+export function checkCrisisStateTickPresent(lines: string[]): string[] {
+  const failures: string[] = [];
+  for (const p of crisisHpStateProbes(lines)) {
+    if (!CRISIS_ANCHOR_TYPES.has(p.type) || p.unitId === null) continue;
+    if (p.stateSeen) continue;
+    failures.push(
+      `line ${p.lineIndex + 1}: ${p.type} 引用 ${p.unitName} 在 ${fmtMmSs(p.tSecond)} 的 HP,但该秒没有带这个单位的 [STATE] 行`,
     );
   }
   return failures;
@@ -2794,6 +2827,7 @@ export function checkMatch(
   hardFailures.push(...checkCdPriorRefConsistency(lines));
   hardFailures.push(...checkTeammateCrisisRefConsistency(lines));
   hardFailures.push(...checkCrisisHpStateConsistency(lines));
+  hardFailures.push(...checkCrisisStateTickPresent(lines));
   hardFailures.push(...checkOutcomeRefConsistency(lines));
   hardFailures.push(...checkMenuTRenderGrid(lines));
   hardFailures.push(...checkCjkLeak(lines));

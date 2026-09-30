@@ -49,6 +49,7 @@
     "src/context/matchTimelineSections.trough.test.ts",
     "src/context/peelOptions.test.ts",
     "src/context/timelineHelpers.topSources.test.ts",
+    "src/context/timelineSections/alterTime.test.ts",
     "src/data/behaviorPrior.test.ts",
     "src/data/candidateTypeRegistry.test.ts",
     "src/data/cdTriggerPrior.test.ts",

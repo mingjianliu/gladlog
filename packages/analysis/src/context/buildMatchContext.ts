@@ -8,6 +8,8 @@ import {
   type CdPriorHoldEpisode,
   cdPriorHoldEpisodes,
 } from "../analysis/cdTriggerPrior";
+import { CD_HOARD_RESPONSE_S } from "../analysis/candidates/cooldownTiming";
+import { crisisDecisionPoints } from "../analysis/crisisDecisionPoints";
 import {
   type StackedDefensivePair,
   stackedDefensivePairs,
@@ -308,6 +310,33 @@ export function buildMatchContext(
     ccTrinketSummaries,
     matchDurationSeconds: durationSeconds,
   });
+  // H18 (triage 2026-09-29): the seconds a crisis candidate can cite — every
+  // friendly's crisis anchor, from the function the candidates themselves
+  // call — each get a [STATE] tick.
+  const crisisAnchorSeconds = new Set<number>();
+  // H19: the windows a cd-hoarded line judges — [t, t + CD_HOARD_RESPONSE_S]
+  // on a crisis point cd-hoarded can cite (dangerous, crisis unit not CC'd) —
+  // in which the owner's casts on that unit are never folded away.
+  const crisisUnfoldWindows: Array<{
+    unitName: string;
+    fromSeconds: number;
+    toSeconds: number;
+  }> = [];
+  for (const f of friends) {
+    try {
+      for (const p of crisisDecisionPoints(f, combat)) {
+        crisisAnchorSeconds.add(p.tSec);
+        if (p.dangerous && !p.inCC)
+          crisisUnfoldWindows.push({
+            unitName: f.name,
+            fromSeconds: p.tSec,
+            toSeconds: p.tSec + CD_HOARD_RESPONSE_S,
+          });
+      }
+    } catch {
+      /* no crisis points for this unit → no extra ticks */
+    }
+  }
   const healerUnit = friends.find((p) => isHealerSpec(p.spec)) as
     ICombatUnit | undefined;
   // Single-source orchestration (#4): hand the orchestrator the pieces already
@@ -803,6 +832,8 @@ export function buildMatchContext(
     bracket: combat.startInfo.bracket,
     stasisEvents,
     criticalWindowSeconds,
+    crisisAnchorSeconds,
+    crisisUnfoldWindows,
     counterfactualOf,
     burstWindows,
     cdPriorEpisodes,
@@ -885,7 +916,8 @@ export function buildMatchContext(
       killAttempts,
       (enemies as ICombatUnit[]).flatMap((e) => {
         const r = (e.deathRecords ?? []).find(
-          (d) => d.timestamp >= combat.startTime && d.timestamp <= combat.endTime,
+          (d) =>
+            d.timestamp >= combat.startTime && d.timestamp <= combat.endTime,
         );
         return r ? [(r.timestamp - combat.startTime) / 1000] : [];
       }),

@@ -32,6 +32,7 @@ import {
   DMG_SPIKE_THRESHOLD,
   HEALING_AMPLIFIER_SPELL_IDS,
 } from "../timelineHelpers";
+import { ALTER_TIME_CAST_ID, alterTimeReturnSeconds } from "./alterTime";
 import type { DeferredSnapshot } from "./ctx";
 import type { TimelineCtx } from "./ctx";
 
@@ -323,9 +324,21 @@ export function emitOwnerCdEntries(
         }
       }
 
+      // H17 (triage 2026-09-29): when the owner snapped back, and how soon
+      let returnNote = "";
+      if (cd.spellId === ALTER_TIME_CAST_ID) {
+        const ret = alterTimeReturnSeconds(
+          owner,
+          cast.timeSeconds,
+          matchStartMs,
+        );
+        if (ret !== null)
+          returnNote = ` | returned +${(ret - cast.timeSeconds).toFixed(1)}s`;
+      }
+
       addEntry(
         cast.timeSeconds,
-        `${fmtTime(cast.timeSeconds)}  ${prefix}   ${displayNameWithChannel}${effectiveTargetPart}${outgoingDrNote}${immuneNote}${empowerNote}${dampeningNote}${cheaperNote}${groundingNote}${interruptNote}${isProc ? "" : ownerHardCcTagAt(cast.timeSeconds)}${unnecessaryNote}`,
+        `${fmtTime(cast.timeSeconds)}  ${prefix}   ${displayNameWithChannel}${effectiveTargetPart}${outgoingDrNote}${immuneNote}${empowerNote}${dampeningNote}${cheaperNote}${groundingNote}${interruptNote}${returnNote}${isProc ? "" : ownerHardCcTagAt(cast.timeSeconds)}${unnecessaryNote}`,
         ...extraLines,
       );
     }

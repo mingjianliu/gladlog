@@ -61,6 +61,7 @@ export function emitHealerCastGapFillerEntries(
     | "groundingAbsorbNote"
     | "ownerHardCcTagAt"
     | "criticalWindowSet"
+    | "crisisUnfoldWindows"
   >,
 ): void {
   const {
@@ -85,6 +86,7 @@ export function emitHealerCastGapFillerEntries(
     groundingAbsorbNote,
     ownerHardCcTagAt,
     criticalWindowSet,
+    crisisUnfoldWindows,
   } = ctx;
 
   const trackedCastsBySpellId = new Map<string, Set<number>>();
@@ -165,6 +167,31 @@ export function emitHealerCastGapFillerEntries(
   const deathWindowAt = (t: number) =>
     deathWindows.find((w) => t >= w.fromSeconds && t <= w.toSeconds) ?? null;
   const deathWindowUnfolded = new Map<(typeof deathWindows)[number], number>();
+  // Triage 2026-09-29 H19: a cd-hoarded window ([t, t + 5 s] on a crisis
+  // point) keeps the owner's casts ON THAT UNIT unfolded, with the death
+  // window's per-window budget — b711d4ac's Swiftmend / Rejuvenation /
+  // Regrowth on the crisis unit read "(x8 over 104s) → various".
+  const crisisWindowFor = (t: number, destUnitName: string | undefined) =>
+    destUnitName
+      ? (crisisUnfoldWindows.find(
+          (w) =>
+            w.unitName === destUnitName &&
+            t >= w.fromSeconds &&
+            t <= w.toSeconds,
+        ) ?? null)
+      : null;
+  const crisisWindowUnfolded = new Map<
+    (typeof crisisUnfoldWindows)[number],
+    number
+  >();
+  const takeCrisisUnfold = (t: number, destUnitName: string | undefined) => {
+    const w = crisisWindowFor(t, destUnitName);
+    if (!w) return false;
+    const n = crisisWindowUnfolded.get(w) ?? 0;
+    if (n >= DEATH_WINDOW_UNFOLD_CAP) return false;
+    crisisWindowUnfolded.set(w, n + 1);
+    return true;
+  };
   const castTargetHpTag = (
     destUnitName: string | undefined,
     rawTimeSeconds: number,
@@ -497,6 +524,19 @@ export function emitHealerCastGapFillerEntries(
       );
       continue;
     }
+    // H19: the spam fold also steps aside for a cast on the crisis unit
+    // inside a cd-hoarded window
+    if (
+      !hasAnnotation &&
+      (ownerCastCountByName.get(displayName) ?? 0) >= SPAM_FOLD_THRESHOLD &&
+      takeCrisisUnfold(timeSeconds, e.destUnitName)
+    ) {
+      addEntry(
+        timeSeconds,
+        `${fmtTime(timeSeconds)}  [YOU] [CAST]   ${displayName}${targetPart}`,
+      );
+      continue;
+    }
     if (
       !hasAnnotation &&
       (ownerCastCountByName.get(displayName) ?? 0) >= SPAM_FOLD_THRESHOLD
@@ -521,7 +561,9 @@ export function emitHealerCastGapFillerEntries(
     // F151 Repetitive Cast Folding:
     // Simple casts outside critical windows are foldable.
     const isFoldable =
-      !hasAnnotation && !criticalWindowSet.has(Math.floor(timeSeconds));
+      !hasAnnotation &&
+      !criticalWindowSet.has(Math.floor(timeSeconds)) &&
+      !takeCrisisUnfold(timeSeconds, e.destUnitName);
 
     if (isFoldable) {
       if (
