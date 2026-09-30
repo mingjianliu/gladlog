@@ -45,11 +45,40 @@ export function buildCannotCastIntervals(
   unit: ICombatUnit,
   enemyIds: Set<string>,
 ): Array<{ from: number; to: number }> {
-  const intervals: Array<{ from: number; to: number }> =
-    castBlockingAuraIntervals(unit, enemyIds).map((a) => ({
-      from: a.from,
-      to: a.to,
-    }));
+  return namedCannotCastIntervals(unit, enemyIds).map((iv) => ({
+    from: iv.from,
+    to: iv.to,
+  }));
+}
+
+/** One `buildCannotCastIntervals` interval with what caused it. */
+export interface NamedCannotCastInterval {
+  from: number;
+  to: number;
+  /** the cast-blocking aura, or for a lockout the kick (SPELL_INTERRUPT's
+   * own `spellId`) */
+  spellId: string;
+  lockout: boolean;
+}
+
+/**
+ * `buildCannotCastIntervals` with each interval's cause — the same intervals
+ * in the same order (it is the implementation), for a fact that has to NAME
+ * what blocked the unit (cd-hoarded `facts.ownerCc`, triage 2026-09-29 H1).
+ */
+export function namedCannotCastIntervals(
+  unit: ICombatUnit,
+  enemyIds: Set<string>,
+): NamedCannotCastInterval[] {
+  const intervals: NamedCannotCastInterval[] = castBlockingAuraIntervals(
+    unit,
+    enemyIds,
+  ).map((a) => ({
+    from: a.from,
+    to: a.to,
+    spellId: a.spellId,
+    lockout: false,
+  }));
 
   for (const action of unit.actionIn ?? []) {
     if (action.logLine.event !== LogEvent.SPELL_INTERRUPT) continue;
@@ -58,6 +87,8 @@ export function buildCannotCastIntervals(
     intervals.push({
       from: action.timestamp,
       to: action.timestamp + kickLockoutSeconds(kickSpellId) * 1000,
+      spellId: kickSpellId,
+      lockout: true,
     });
   }
 
@@ -278,11 +309,51 @@ export function couldRespondFor(
   matchStartMs: number,
   roundEndMs: number = Infinity,
 ): (fromS: number, toS: number) => boolean {
-  let blocked: Array<{ from: number; to: number }>;
+  return actWindowFor(unit, enemyIds, matchStartMs, roundEndMs).couldRespond;
+}
+
+/** What blocked a unit around an anchor second, and how long it was free. */
+export interface ActWindowState {
+  /** the cannot-cast intervals overlapping [fromS, toS] cut at death and the
+   * round end (the gate's window), seconds since round start, unclipped
+   * (`toS` Infinity = never removed), in start order */
+  blocks: Array<{
+    spellId: string;
+    lockout: boolean;
+    fromS: number;
+    toS: number;
+  }>;
+  /** seconds of (anchorS, toS] — cut at death and the round end, like
+   * `couldRespond` — outside every cannot-cast interval */
+  freeAfterS: number;
+}
+
+/**
+ * `couldRespondFor`'s predicate and its explanation from ONE set of inputs
+ * (same intervals, same death and round-end cut): `couldRespond` is the owner
+ * gate, `stateIn` the fact that says what the gate saw — cd-hoarded's
+ * `ownerCc` / `ownerFreeS` (triage 2026-09-29 H1: the gate passes an owner
+ * CC'd for most of the window by ruling, and the line then read "held").
+ * `stateIn` is null when the intervals cannot be built.
+ */
+export function actWindowFor(
+  unit: ICombatUnit,
+  enemyIds: Set<string>,
+  matchStartMs: number,
+  roundEndMs: number = Infinity,
+): {
+  couldRespond: (fromS: number, toS: number) => boolean;
+  stateIn: (
+    fromS: number,
+    toS: number,
+    anchorS: number,
+  ) => ActWindowState | null;
+} {
+  let named: NamedCannotCastInterval[];
   try {
-    blocked = buildCannotCastIntervals(unit, enemyIds);
+    named = namedCannotCastIntervals(unit, enemyIds);
   } catch {
-    return () => true;
+    return { couldRespond: () => true, stateIn: () => null };
   }
   const deathMs = Math.min(
     ...((unit.deathRecords ?? []) as Array<{ timestamp: number }>).map(
@@ -290,10 +361,39 @@ export function couldRespondFor(
     ),
     Infinity,
   );
-  return (fromS, toS) => {
-    const fromMs = matchStartMs + fromS * 1000;
-    const toMs = Math.min(matchStartMs + toS * 1000, deathMs, roundEndMs);
-    if (toMs <= fromMs) return false;
-    return couldReactWithin(blocked, fromMs, toMs);
+  const endMs = (toS: number) =>
+    Math.min(matchStartMs + toS * 1000, deathMs, roundEndMs);
+  return {
+    couldRespond: (fromS, toS) => {
+      const fromMs = matchStartMs + fromS * 1000;
+      const toMs = endMs(toS);
+      if (toMs <= fromMs) return false;
+      return couldReactWithin(named, fromMs, toMs);
+    },
+    stateIn: (fromS, toS, anchorS) => {
+      const fromMs = matchStartMs + fromS * 1000;
+      // the gate's own window: cut at death and the round end, so a CC that
+      // landed after the round was over is never named (agy review of F-H1)
+      const toMs = endMs(toS);
+      const blocks = named
+        .filter((iv) => iv.to > fromMs && iv.from < toMs)
+        .sort((a, b) => a.from - b.from)
+        .map((iv) => ({
+          spellId: iv.spellId,
+          lockout: iv.lockout,
+          fromS: (iv.from - matchStartMs) / 1000,
+          toS: (iv.to - matchStartMs) / 1000,
+        }));
+      const anchorMs = matchStartMs + anchorS * 1000;
+      const freeEndMs = toMs;
+      const freeAfterS =
+        freeEndMs > anchorMs
+          ? (freeEndMs -
+              anchorMs -
+              coveredMsWithin(named, anchorMs, freeEndMs)) /
+            1000
+          : 0;
+      return { blocks, freeAfterS };
+    },
   };
 }

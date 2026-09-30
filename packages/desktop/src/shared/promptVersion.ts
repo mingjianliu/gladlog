@@ -266,5 +266,11 @@
  *  sources (`enemySourceIds`); the cd-hoarded owner gate stops at the match
  *  end / Solo Shuffle round-ending death. 605 files: cd-hoarded 679 → 665,
  *  missed-cleanse 445 → 438, healing-gap 48 → 46, kick-priority −4 / +1.
+ *  v193 (2026-09-30, triage cd-hoarded-waste F-H1): cd-hoarded carries what
+ *  the owner gate saw — facts.ownerCc (the blocking CC / kick lockouts,
+ *  offsets from t) and facts.ownerFreeS (free seconds after t, cut at death
+ *  and the round end) — from the gate's own inputs (`actWindowFor`); the
+ *  legend says to coach only the free part. 605 files: ids and contexts
+ *  identical; 640 of 1,308 cd-hoarded lines gain ownerCc.
  */
-export const PROMPT_VERSION = 192;
+export const PROMPT_VERSION = 193;

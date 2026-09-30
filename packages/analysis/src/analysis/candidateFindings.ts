@@ -34,8 +34,8 @@ import { buildAuraIntervals } from "../utils/auraIntervals";
 import { bracketKey } from "../utils/bracketKey";
 import { analyzeBurstLedger, wallUpAtOpen } from "../utils/burstLedger";
 import {
+  actWindowFor,
   buildCannotCastIntervals,
-  couldRespondFor,
   enemySourceIds,
 } from "../utils/cannotCastIntervals";
 import { type OwnerCastCancels, ownerCastCancels } from "../utils/castCancels";
@@ -2259,6 +2259,15 @@ function teamPlayEvents(
           (d) => (d.timestamp - combat.startTime) / 1000,
         );
       const wallsOn = majorWallsOnFor(combat);
+      // Reliability round 2 W1a: the owner's own feasibility — the one
+      // could-react predicate over the one cannot-cast predicate, plus death
+      // and the round end — and (H1) the facts explaining it, from one call.
+      const ownerAct = actWindowFor(
+        owner,
+        cannotCastSrcIds,
+        combat.startTime,
+        roundEndMs,
+      );
       const cdHoardSources = [
         {
           crisisUnit: { id: owner.id, name: owner.name },
@@ -2290,15 +2299,7 @@ function teamPlayEvents(
           (owner.spellCastEvents ?? []).map(
             (e: any) => (e.logLine.timestamp - combat.startTime) / 1000,
           ),
-          // Reliability round 2 W1a: the owner's own feasibility — the one
-          // could-react predicate (`couldReactWithin`) over the one
-          // cannot-cast predicate, plus death.
-          couldRespondFor(
-            owner,
-            cannotCastSrcIds,
-            combat.startTime,
-            roundEndMs,
-          ),
+          ownerAct.couldRespond,
           {
             // user ruling 2026-09-26 (item 3): a peel by the owner or a team
             // save by any friendly answers the crisis
@@ -2323,6 +2324,8 @@ function teamPlayEvents(
                 ),
             ),
           },
+          // H1: the facts that say what that gate saw (same inputs)
+          ownerAct.stateIn,
         ),
       );
     } catch {

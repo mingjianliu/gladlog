@@ -41,9 +41,11 @@ import {
   type DRLevel,
 } from "../../utils/drAnalysis";
 import {
+  type ActWindowState,
   buildCannotCastIntervals,
   couldActForMostOf,
 } from "../../utils/cannotCastIntervals";
+import { getEnglishSpellName } from "../../data/spellEffectData";
 import { castFailedInWindow, type RawStreams } from "../../utils/rawStreams";
 import {
   type DecisionRecord,
@@ -1110,6 +1112,16 @@ export function cdHoardedEvents(
     ownerPeelCastSeconds: readonly number[];
     teamSaveCastSeconds: readonly number[];
   },
+  /** Triage 2026-09-29 H1: what the owner gate saw — `actWindowFor(...)
+   * .stateIn` over the SAME inputs as `ownerCouldRespond`. The gate passes an
+   * owner free for 1 s of the window (ruling 2026-09-23/26) even when CC'd for
+   * the rest; the facts then say so (`ownerCc`, `ownerFreeS`) instead of the
+   * line reading "held". Absent ⇒ neither fact. */
+  ownerActState?: (
+    fromS: number,
+    toS: number,
+    anchorS: number,
+  ) => ActWindowState | null,
 ): CandidateEvent[] {
   const cap = overrides?.cap ?? CD_HOARD_CAP;
   const candidates: Array<{
@@ -1414,6 +1426,24 @@ export function cdHoardedEvents(
         .sort((a, b) => a.at - b.at)
         .map((x) => x.text)
         .join("; ");
+      // H1: the owner's cannot-cast intervals overlapping the response
+      // window, offsets from the anchor second, and the free seconds after
+      // it. Only when something blocked them — a free owner gets neither.
+      // anchored on the rendered second `t` (facts.t), which the legend
+      // measures the offsets and ownerFreeS from
+      const act = ownerActState?.(windowFromS, windowToS, t) ?? null;
+      const off = (s: number) => {
+        const d = s - t;
+        return `${d >= 0 ? "+" : ""}${d.toFixed(1)}`;
+      };
+      const ownerCc = act?.blocks.length
+        ? act.blocks
+            .map(
+              (b) =>
+                `${getEnglishSpellName(b.spellId)}${b.lockout ? " lockout" : ""} ${off(b.fromS)}…${Number.isFinite(b.toS) ? `${off(b.toS)}s` : "(no end logged)"}`,
+            )
+            .join("; ")
+        : "";
       return {
         id: `cd-hoarded:${owner.id}:${crisisUnit.id}:${t}`,
         type: "cd-hoarded",
@@ -1436,6 +1466,9 @@ export function cdHoardedEvents(
           ...CD_HOARDED_OUTCOME_REF,
           ...(attempted ? { attempted } : {}),
           ...(spentElsewhere ? { spentElsewhere } : {}),
+          ...(ownerCc && act
+            ? { ownerCc, ownerFreeS: act.freeAfterS.toFixed(1) }
+            : {}),
         },
       };
     })
