@@ -24,14 +24,19 @@ import { REACTION_WINDOW_S } from "./cooldowns";
  *
  * Two sources, both enemy-inflicted:
  *   1. cast-blocking auras (hard CC + silence; `isCastBlockingAuraType`)
- *      from APPLIED to the first REMOVED/BROKEN at or after it (open-ended
- *      when never removed);
+ *      from APPLIED to the first REMOVED/BROKEN after it in log order
+ *      (open-ended when never removed);
  *   2. school lockouts from SPELL_INTERRUPT (`kickLockoutSeconds`, the
  *      corpus-observed table — GH #62). In SPELL_INTERRUPT `spellId` IS the
  *      kick (same source as matchTimeline's [KICK]; gate-predicate divergence
  *      case 13: do NOT read extraSpellId here). The school itself is not
  *      checked — the locked school is almost always the healing one, and a
  *      wrong exemption costs far less than a wrong accusation.
+ *
+ * "Enemy" means `enemyIds` — pass `enemySourceIds(...)` (the enemy players
+ * plus everything they summoned) so a pet's stun or a totem's silence counts;
+ * a players-only set drops them (e5b3534b: a Hunter pet's Intimidation on the
+ * owner, triage 2026-09-29 H23).
  *
  * Intervals are raw (unclipped, possibly overlapping); `coveredMsWithin`
  * clips them to a window and merges before summing.
@@ -59,6 +64,23 @@ export function buildCannotCastIntervals(
   return intervals;
 }
 
+/**
+ * The source set `buildCannotCastIntervals` expects: the enemy players plus
+ * every unit whose `ownerId` is one of them (pets, totems, guardians — the
+ * summon-GUID attribution of GH #99). One definition for every caller; until
+ * 2026-09-30 some passed players only and lost pet CC (triage H23), others
+ * built this set inline (burst-window feasibility, missed-sync-window).
+ */
+export function enemySourceIds(
+  enemyPlayers: ReadonlyArray<{ id: string }>,
+  units: ReadonlyArray<{ id: string; ownerId?: string }>,
+): Set<string> {
+  const ids = new Set<string>(enemyPlayers.map((u) => u.id));
+  const players = new Set(ids);
+  for (const u of units) if (u.ownerId && players.has(u.ownerId)) ids.add(u.id);
+  return ids;
+}
+
 export interface CastBlockingAura {
   spellId: string;
   spellName: string;
@@ -66,14 +88,15 @@ export interface CastBlockingAura {
   srcUnitName: string;
   /** SPELL_AURA_APPLIED, epoch ms */
   from: number;
-  /** first REMOVED / BROKEN at or after `from`; Infinity when never removed */
+  /** first REMOVED / BROKEN after the APPLIED in log order; Infinity when
+   * never removed */
   to: number;
 }
 
 /**
  * The enemy-applied cast-blocking auras on `unit` (hard CC + silence,
  * `isCastBlockingAuraType`), APPLIED paired with the first REMOVED/BROKEN of
- * the same spell at or after it. The aura half of `buildCannotCastIntervals`,
+ * the same spell after it in log order. The aura half of `buildCannotCastIntervals`,
  * exported so a renderer can name what blocked the unit without a second
  * predicate (2026-09-25, reliability round 2 W1b).
  */
@@ -81,16 +104,30 @@ export function castBlockingAuraIntervals(
   unit: ICombatUnit,
   enemyIds: Set<string>,
 ): CastBlockingAura[] {
+  // `seq` is the position in the unit's aura stream (log order). Pairing is by
+  // position, not by timestamp: a Cyclone re-applied in the same millisecond
+  // as the previous one's REMOVED (e5b3534b 23.317, REMOVED logged first) used
+  // to pair with that earlier REMOVED — `r >= a.ts` — and became a zero-length
+  // interval, so the owner read as free for the whole 4.8 s (triage
+  // 2026-09-29 H23).
   const applied = new Map<
     string,
-    Array<{ ts: number; name: string; srcId: string; srcName: string }>
+    Array<{
+      seq: number;
+      ts: number;
+      name: string;
+      srcId: string;
+      srcName: string;
+    }>
   >();
-  const removedTimes = new Map<string, number[]>();
+  const removals = new Map<string, Array<{ seq: number; ts: number }>>();
 
   // Fixture-built units may lack either stream (momentSnapshot.test.ts has
   // healers with no actionIn) — an absent stream is "nothing happened", not a
   // throw that the caller's try/catch would turn into "no gaps at all".
+  let seq = 0;
   for (const aura of unit.auraEvents ?? []) {
+    seq++;
     const spellId = aura.spellId;
     if (!spellId) continue;
     if (!enemyIds.has(aura.srcUnitId)) continue;
@@ -100,6 +137,7 @@ export function castBlockingAuraIntervals(
     if (aura.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
       const bucket = applied.get(spellId) ?? [];
       bucket.push({
+        seq,
         ts: aura.timestamp,
         name: aura.spellName ?? spellId,
         srcId: aura.srcUnitId,
@@ -111,17 +149,17 @@ export function castBlockingAuraIntervals(
       aura.logLine.event === LogEvent.SPELL_AURA_BROKEN ||
       aura.logLine.event === LogEvent.SPELL_AURA_BROKEN_SPELL
     ) {
-      const bucket = removedTimes.get(spellId) ?? [];
-      bucket.push(aura.timestamp);
-      removedTimes.set(spellId, bucket);
+      const bucket = removals.get(spellId) ?? [];
+      bucket.push({ seq, ts: aura.timestamp });
+      removals.set(spellId, bucket);
     }
   }
 
   const out: CastBlockingAura[] = [];
   for (const [spellId, applications] of applied) {
-    const removals = removedTimes.get(spellId) ?? [];
+    const removed = removals.get(spellId) ?? [];
     for (const a of applications) {
-      const removalTs = removals.find((r) => r >= a.ts);
+      const removalTs = removed.find((r) => r.seq > a.seq)?.ts;
       out.push({
         spellId,
         spellName: a.name,
@@ -226,8 +264,10 @@ export function couldActForMostOf(
 
 /**
  * `couldReactWithin` bound to one unit on the round's clock, with death: the
- * window is cut at the unit's first death, and a unit dead before the window
- * could not respond. Arguments are seconds since `matchStartMs`. When the
+ * window is cut at the unit's first death and at `roundEndMs` (the match end,
+ * or a Solo Shuffle round's ending death — time after it is not playable,
+ * triage 2026-09-29 H4), and a unit dead before the window could not
+ * respond. Arguments are seconds since `matchStartMs`. When the
  * intervals cannot be built the answer is "could respond" — a missing input
  * must never manufacture an exemption silently, but neither may it throw the
  * caller's candidate away (the caller's try/catch would drop the whole type).
@@ -236,6 +276,7 @@ export function couldRespondFor(
   unit: ICombatUnit,
   enemyIds: Set<string>,
   matchStartMs: number,
+  roundEndMs: number = Infinity,
 ): (fromS: number, toS: number) => boolean {
   let blocked: Array<{ from: number; to: number }>;
   try {
@@ -251,7 +292,7 @@ export function couldRespondFor(
   );
   return (fromS, toS) => {
     const fromMs = matchStartMs + fromS * 1000;
-    const toMs = Math.min(matchStartMs + toS * 1000, deathMs);
+    const toMs = Math.min(matchStartMs + toS * 1000, deathMs, roundEndMs);
     if (toMs <= fromMs) return false;
     return couldReactWithin(blocked, fromMs, toMs);
   };

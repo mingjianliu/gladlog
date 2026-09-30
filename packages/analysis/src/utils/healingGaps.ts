@@ -2,6 +2,7 @@ import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import {
   buildCannotCastIntervals,
+  enemySourceIds,
   coveredMsWithin,
 } from "./cannotCastIntervals";
 import { isHealerSpec, isPassiveProcCast, specToString } from "./cooldowns";
@@ -114,12 +115,19 @@ export function detectHealingGaps(
   healer: ICombatUnit,
   friends: ICombatUnit[],
   enemies: ICombatUnit[],
-  combat: { startTime: number; endTime: number },
+  combat: {
+    startTime: number;
+    endTime: number;
+    units?: Record<string, { id: string; ownerId?: string }>;
+  },
 ): IHealingGap[] {
-  const enemyIds = new Set(enemies.map((u) => u.id));
   // One predicate for "could not cast" (auras ∪ kick lockouts), built once
-  // per healer and clipped per gap below.
-  const cannotCast = buildCannotCastIntervals(healer, enemyIds);
+  // per healer and clipped per gap below; pets and totems count as sources
+  // (triage 2026-09-29 H23).
+  const cannotCast = buildCannotCastIntervals(
+    healer,
+    enemySourceIds(enemies, Object.values(combat.units ?? {})),
+  );
   const teammates = friends.filter((u) => u.id !== healer.id);
   const matchStartMs = combat.startTime;
   const matchEndMs = combat.endTime;

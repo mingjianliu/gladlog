@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildCannotCastIntervals,
   coveredMsWithin,
+  enemySourceIds,
   silenceIntervals,
 } from "../src/utils/cannotCastIntervals";
 
@@ -253,5 +254,59 @@ describe("cannotCastIntervals — silenceIntervals (reliability round 2 W1b)", (
     expect(silences).toHaveLength(1);
     for (const s of silences)
       expect(blocked).toContainEqual({ from: s.from, to: s.to });
+  });
+});
+
+// triage 2026-09-29 H23 (e5b3534b round 0): Cyclone re-applied in the same
+// millisecond as the previous Cyclone's REMOVED, then a Hunter pet's
+// Intimidation — the owner read as free for the whole window.
+describe("cannotCastIntervals — log-order pairing and pet sources (H23)", () => {
+  const ev = (spellId: string, src: string, ts: number, event: LogEvent) => ({
+    spellId,
+    spellName: spellId,
+    srcUnitId: src,
+    srcUnitName: src,
+    timestamp: ts,
+    logLine: { event },
+  });
+
+  it("a same-millisecond re-application pairs with the NEXT removal, not the one logged before it", () => {
+    const unit = {
+      id: "Player-1",
+      auraEvents: [
+        ev("33786", "Enemy-1", 23_103, LogEvent.SPELL_AURA_APPLIED),
+        ev("33786", "Enemy-1", 23_317, LogEvent.SPELL_AURA_REMOVED),
+        ev("33786", "Enemy-1", 23_317, LogEvent.SPELL_AURA_APPLIED),
+        ev("33786", "Enemy-1", 28_109, LogEvent.SPELL_AURA_REMOVED),
+      ],
+      actionIn: [],
+    } as unknown as ICombatUnit;
+    expect(buildCannotCastIntervals(unit, new Set(["Enemy-1"]))).toEqual([
+      { from: 23_103, to: 23_317 },
+      { from: 23_317, to: 28_109 },
+    ]);
+  });
+
+  it("a pet's stun counts once the pet is in the source set (enemySourceIds)", () => {
+    const unit = {
+      id: "Player-1",
+      auraEvents: [
+        ev("24394", "Pet-1", 28_231, LogEvent.SPELL_AURA_APPLIED),
+        ev("24394", "Pet-1", 29_596, LogEvent.SPELL_AURA_REMOVED),
+      ],
+      actionIn: [],
+    } as unknown as ICombatUnit;
+    const players = [{ id: "Enemy-1" }];
+    const units = [
+      { id: "Enemy-1" },
+      { id: "Pet-1", ownerId: "Enemy-1" },
+      { id: "Pet-2", ownerId: "Friend-1" },
+    ];
+    expect(buildCannotCastIntervals(unit, new Set(["Enemy-1"]))).toEqual([]);
+    const src = enemySourceIds(players, units);
+    expect([...src].sort()).toEqual(["Enemy-1", "Pet-1"]);
+    expect(buildCannotCastIntervals(unit, src)).toEqual([
+      { from: 28_231, to: 29_596 },
+    ]);
   });
 });

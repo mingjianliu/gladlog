@@ -558,7 +558,9 @@ function hasTalentedAbility(unit: ICombatUnit, spellId: string): boolean {
  * @internal exported for data/curatedIdRegistry
  */
 export const DISPEL_TYPE_TALENT_GATES: Readonly<
-  Partial<Record<CombatUnitSpec, Partial<Record<DispelType, readonly string[]>>>>
+  Partial<
+    Record<CombatUnitSpec, Partial<Record<DispelType, readonly string[]>>>
+  >
 > = {
   [CombatUnitSpec.Shaman_Restoration]: { Curse: ["383016"] }, // Improved Purify Spirit
   [CombatUnitSpec.Priest_Discipline]: { Disease: ["390632"] }, // Improved Purify
@@ -1257,8 +1259,7 @@ export function hardCastOccupancyWithin(
     // abandoned start whose only end is the next start a minute later is
     // unsupported and dropped (the lower-bound rule above).
     if (end - from > HARD_CAST_MAX_MS) continue;
-    const overlap =
-      Math.min(end, windowEndMs) - Math.max(from, windowStartMs);
+    const overlap = Math.min(end, windowEndMs) - Math.max(from, windowStartMs);
     if (overlap <= 0) continue;
     out.occupiedMs += overlap;
     if (from < windowStartMs) out.startedBeforeWindow = true;
@@ -1643,6 +1644,11 @@ export function reconstructDispelSummary(
   // B45: pets are also considered friendly sources; owner lookup is via ownerId
   const friendlyPetIds = new Set(friendlyPets.map((u) => u.id));
   const enemyPetIds = new Set(enemyPets.map((u) => u.id));
+  // "dispeller / purger was locked out" reads the one cannot-cast predicate
+  // with pets and totems as sources (a Felhunter's Spell Lock locks as hard
+  // as a Kick; triage 2026-09-29 H23) — `enemyIds` stays players-only for its
+  // other readers here (DR history, aura attribution).
+  const cannotCastSrcIds = new Set([...enemyIds, ...enemyPetIds]);
   const friendlyPlayerById = new Map(friends.map((u) => [u.id, u]));
   const enemyPlayerById = new Map(enemies.map((u) => [u.id, u]));
   const teamDispelTypes = buildTeamDispelTypes(friends);
@@ -2093,7 +2099,7 @@ export function reconstructDispelSummary(
                 ),
                 applyTs,
                 removal.ts,
-                enemyIds,
+                cannotCastSrcIds,
                 MISSED_CLEANSE_THRESHOLD_S * 1000,
               ),
               losReachable: true,
@@ -2199,7 +2205,7 @@ export function reconstructDispelSummary(
                 dispeller,
                 applyTs,
                 removal.ts,
-                enemyIds,
+                cannotCastSrcIds,
               ),
             );
           if (allDispellersBlocked) {
@@ -2235,7 +2241,7 @@ export function reconstructDispelSummary(
                   d,
                   applyTs,
                   removal.ts,
-                  enemyIds,
+                  cannotCastSrcIds,
                 ),
             );
 
@@ -2345,7 +2351,7 @@ export function reconstructDispelSummary(
               capableDispellers,
               applyTs,
               removal.ts,
-              enemyIds,
+              cannotCastSrcIds,
               MISSED_CLEANSE_THRESHOLD_S * 1000,
             ),
             losReachable: anyDispellerReachable(
@@ -2460,7 +2466,7 @@ export function reconstructDispelSummary(
                   purger,
                   applyTs,
                   windowEndMs,
-                  enemyIds,
+                  cannotCastSrcIds,
                 ),
               );
             if (!allPurgersBlocked) {
@@ -2541,7 +2547,7 @@ export function reconstructDispelSummary(
                   eligiblePurgers,
                   applyTs,
                   windowEndMs,
-                  enemyIds,
+                  cannotCastSrcIds,
                   MISSED_PURGE_THRESHOLD_S * 1000,
                 ),
                 losReachable: anyDispellerReachable(

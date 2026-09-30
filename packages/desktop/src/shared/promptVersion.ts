@@ -260,5 +260,11 @@
  *  owner was free but never seen together with the owner. 605 files:
  *  candidates identical; KITED 1,056 → 916 (a projection tried first gave
  *  512 — lateral kites lost, pulled); [REFLECTED] 642 → 642.
+ *  v192 (2026-09-30, triage 2026-09-29 cd-hoarded-waste H23 + H4): the
+ *  cannot-cast intervals pair an aura in log order (a same-millisecond
+ *  re-application no longer lasts 0 ms) and count enemy pets / totems as
+ *  sources (`enemySourceIds`); the cd-hoarded owner gate stops at the match
+ *  end / Solo Shuffle round-ending death. 605 files: cd-hoarded 679 → 665,
+ *  missed-cleanse 445 → 438, healing-gap 48 → 46, kick-priority −4 / +1.
  */
-export const PROMPT_VERSION = 191;
+export const PROMPT_VERSION = 192;

@@ -28,7 +28,10 @@ import { hardcastHealSpell } from "../../data/kickPriorityHealSpells";
 import { getEnglishSpellName } from "../../data/spellEffectData";
 import { MELEE_RANGE_YD, spellRangeYards } from "../../data/spellReach";
 import { buildAuraIntervals } from "../../utils/auraIntervals";
-import { buildCannotCastIntervals } from "../../utils/cannotCastIntervals";
+import {
+  buildCannotCastIntervals,
+  enemySourceIds,
+} from "../../utils/cannotCastIntervals";
 import { castingLockIntervalsOf } from "../../utils/castingLocks";
 import { gridHpPct, isHealerSpec } from "../../utils/cooldowns";
 import {
@@ -213,9 +216,11 @@ export function kickPriorityDecisionPoints(
   const startMs = combat.startTime;
   const rel = (ms: number) => (ms - startMs) / 1000;
   const zoneId = combat.startInfo?.zoneId;
-  const enemyIds = new Set(enemyPlayers.map((e) => e.id));
   const friendIds = new Set(friendPlayers.map((f) => f.id));
   const units: UnitLike[] = Object.values(combat.units ?? {});
+  // the friend's cannot-cast sources include enemy pets and totems (triage
+  // 2026-09-29 H23)
+  const cannotCastSrcIds = enemySourceIds(enemyPlayers, units);
   const friendPetIds = new Set(
     units.filter((u) => !u.info && friendIds.has(u.ownerId)).map((u) => u.id),
   );
@@ -275,7 +280,7 @@ export function kickPriorityDecisionPoints(
         // impact audit 2026-09-26.
         const kit = interruptForUnit(f as never);
         iv = [
-          ...buildCannotCastIntervals(f as never, enemyIds),
+          ...buildCannotCastIntervals(f as never, cannotCastSrcIds),
           ...castingLockIntervalsOf(f as never, combat, kit?.spellId),
         ];
       } catch {
@@ -293,9 +298,9 @@ export function kickPriorityDecisionPoints(
     if (!iv) {
       try {
         iv = rootIntervalsOf(f as never, combat).map((x) => ({
-            from: startMs + x.fromS * 1000,
-            to: startMs + x.toS * 1000,
-          }));
+          from: startMs + x.fromS * 1000,
+          to: startMs + x.toS * 1000,
+        }));
       } catch {
         iv = [];
       }

@@ -36,6 +36,7 @@ import { analyzeBurstLedger, wallUpAtOpen } from "../utils/burstLedger";
 import {
   buildCannotCastIntervals,
   couldRespondFor,
+  enemySourceIds,
 } from "../utils/cannotCastIntervals";
 import { type OwnerCastCancels, ownerCastCancels } from "../utils/castCancels";
 import {
@@ -532,15 +533,28 @@ export function afterShuffleRoundEnd(
   units: any[],
   start: number,
 ): ((t: number) => boolean) | undefined {
+  const endMs = shuffleRoundEndMs(combat, units);
+  if (endMs === undefined) return undefined;
+  const firstDeathS = (endMs - start) / 1000;
+  return (t) => t > firstDeathS;
+}
+
+/** Solo Shuffle only: the round-ending (first) player death, epoch ms, or
+ * undefined for other brackets / a round with no player death. The one
+ * definition behind `afterShuffleRoundEnd` and the owner gate's round-end
+ * clip. */
+export function shuffleRoundEndMs(
+  combat: any,
+  units: any[],
+): number | undefined {
   if (combat?.startInfo?.bracket !== "Rated Solo Shuffle") return undefined;
-  let firstDeathS = Infinity;
+  let firstDeathMs = Infinity;
   for (const u of units) {
     if (!u.info) continue;
     for (const d of (u.deathRecords ?? []) as any[])
-      firstDeathS = Math.min(firstDeathS, ((d.timestamp ?? 0) - start) / 1000);
+      firstDeathMs = Math.min(firstDeathMs, d.timestamp ?? 0);
   }
-  if (!Number.isFinite(firstDeathS)) return undefined;
-  return (t) => t > firstDeathS;
+  return Number.isFinite(firstDeathMs) ? firstDeathMs : undefined;
 }
 
 /** Per-match cap for each team-play type (sorted by coaching value, then
@@ -1962,6 +1976,18 @@ function teamPlayEvents(
     (u) => u.ownerId && friendIds.has(u.ownerId),
   );
   const enemyPets = units.filter((u) => u.ownerId && enemyIds.has(u.ownerId));
+  // The owner's cannot-cast sources: enemy players plus their pets and totems
+  // (triage 2026-09-29 H23 — a players-only set dropped a Hunter pet's
+  // Intimidation from the cd-hoarded owner gate).
+  const cannotCastSrcIds = enemySourceIds(enemies, units);
+  // Time after the match end — or a Solo Shuffle round's ending death — is
+  // not playable, so no "could respond" window reaches past it (H4).
+  const roundEndMs = Math.min(
+    typeof combat?.endTime === "number" && combat.endTime > 0
+      ? combat.endTime
+      : Infinity,
+    shuffleRoundEndMs(combat, units) ?? Infinity,
+  );
 
   try {
     const ds = reconstructDispelSummary(
@@ -2007,7 +2033,7 @@ function teamPlayEvents(
         // entirely — the facts must never appear on a guessed clock.
         typeof combat?.startTime === "number"
           ? {
-              enemyIds,
+              enemyIds: cannotCastSrcIds,
               matchStartMs: combat.startTime,
               failedCasts: rawStreams?.available
                 ? rawStreams.castFailed
@@ -2118,10 +2144,7 @@ function teamPlayEvents(
       if (ccWindows.length > 0) {
         // B3i: enemy CC can come from a pet or totem (Capacitor Totem,
         // e9ea8a0c @298), so the owner's cannot-cast sources include them.
-        const enemyAndPetIds = new Set<string>([
-          ...enemyIds,
-          ...enemyPets.map((u: any) => u.id as string),
-        ]);
+        const enemyAndPetIds = cannotCastSrcIds;
         const teamOffensiveCds: Array<
           IMajorCooldownInfo & {
             ownerName: string;
@@ -2270,7 +2293,12 @@ function teamPlayEvents(
           // Reliability round 2 W1a: the owner's own feasibility — the one
           // could-react predicate (`couldReactWithin`) over the one
           // cannot-cast predicate, plus death.
-          couldRespondFor(owner, enemyIds, combat.startTime),
+          couldRespondFor(
+            owner,
+            cannotCastSrcIds,
+            combat.startTime,
+            roundEndMs,
+          ),
           {
             // user ruling 2026-09-26 (item 3): a peel by the owner or a team
             // save by any friendly answers the crisis
@@ -2501,10 +2529,12 @@ function teamPlayEvents(
       // lockout) — the one predicate every feasibility gate reads.
       let ownerBlockedS: Array<{ from: number; to: number }> = [];
       try {
-        ownerBlockedS = buildCannotCastIntervals(owner, enemyIds).map((b) => ({
-          from: (b.from - combat.startTime) / 1000,
-          to: (b.to - combat.startTime) / 1000,
-        }));
+        ownerBlockedS = buildCannotCastIntervals(owner, cannotCastSrcIds).map(
+          (b) => ({
+            from: (b.from - combat.startTime) / 1000,
+            to: (b.to - combat.startTime) / 1000,
+          }),
+        );
       } catch {
         ownerBlockedS = [];
       }

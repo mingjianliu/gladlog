@@ -134,4 +134,22 @@ describe("couldRespondFor — the one could-react predicate (W1a)", () => {
     const u = unitWith([], 50);
     expect(couldRespondFor(u, enemyIds, T0)(58.5, 65)).toBe(false);
   });
+
+  // triage 2026-09-29 H4: time after the match end is not playable
+  it("free only after the match end → could not respond", () => {
+    const u = unitWith([
+      ["1330", 58, LogEvent.SPELL_AURA_APPLIED],
+      ["1330", 62, LogEvent.SPELL_AURA_REMOVED],
+    ]);
+    expect(couldRespondFor(u, enemyIds, T0, at(61.5))(58.5, 65)).toBe(false);
+    // without the round end the post-end seconds counted (the old answer)
+    expect(couldRespondFor(u, enemyIds, T0)(58.5, 65)).toBe(true);
+  });
+
+  it("1.87 s free before the match end → could respond (9c6ab747 shape)", () => {
+    const u = unitWith([]);
+    expect(couldRespondFor(u, enemyIds, T0, at(116.371))(114.5, 121)).toBe(
+      true,
+    );
+  });
 });
