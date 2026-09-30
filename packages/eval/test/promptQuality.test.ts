@@ -15,6 +15,7 @@ import {
   checkDeathTrinketCcConsistency,
   checkDuringExternalConsistency,
   checkForcedTrinketConsistency,
+  checkFreeOfWindowConsistency,
   checkHeaderHpPromise,
   checkMatch,
   checkPeelOptionConsistency,
@@ -1048,5 +1049,12 @@ describe("checkBurstAnsweredBottomConsistency — the credit line's bottom secon
   });
   it("a bottom before the line's own second fails", () => {
     expect(checkBurstAnsweredBottomConsistency([roster, line("0:03")])).toHaveLength(1);
+  });
+});
+
+describe("checkFreeOfWindowConsistency (F-C11)", () => {
+  it("free X s of Y s with X > Y fails; X ≤ Y passes", () => {
+    expect(checkFreeOfWindowConsistency(["  0:40–0:56 … free 17s of 16s"])).toHaveLength(1);
+    expect(checkFreeOfWindowConsistency(["  0:40–0:56 … free 16s of 16s"])).toEqual([]);
   });
 });

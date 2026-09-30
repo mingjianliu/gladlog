@@ -2277,6 +2277,24 @@ export function crisisHpStateProbes(lines: string[]): CrisisHpStateProbe[] {
 }
 
 /**
+ * `free Xs of Ys` (healer-offense windows, triage 2026-09-29 res-readiness
+ * F-C11): the free seconds can never exceed the window's rendered length —
+ * X used to round the raw window while Y is the rendered one ("17s of 16s").
+ */
+const FREE_OF = /\bfree (\d+)s of (\d+)s\b/g;
+export function checkFreeOfWindowConsistency(lines: string[]): string[] {
+  const failures: string[] = [];
+  lines.forEach((line, i) => {
+    for (const m of line.matchAll(FREE_OF))
+      if (Number(m[1]) > Number(m[2]))
+        failures.push(
+          `line ${i + 1}: free ${m[1]}s of ${m[2]}s —— 空闲秒数超过窗口渲染长度`,
+        );
+  });
+  return failures;
+}
+
+/**
  * `[BURST ANSWERED] … <name> bottomed at P% at M:SS` (triage 2026-09-29
  * sync-burst F-B3). The bottom is the engine's `pressured.minHpSec` /
  * `minHpPct` — a `gridHpPct` reading at a whole second over the window's
@@ -2947,6 +2965,7 @@ export function checkMatch(
   hardFailures.push(...checkCcAvoidedLandedConsistency(lines));
   hardFailures.push(...checkDeathTrinketCcConsistency(lines));
   hardFailures.push(...checkBurstAnsweredBottomConsistency(lines));
+  hardFailures.push(...checkFreeOfWindowConsistency(lines));
   hardFailures.push(...checkPeelOptionConsistency(lines));
   hardFailures.push(...checkCcBookmarkConsistency(lines));
   hardFailures.push(...checkForcedTrinketConsistency(lines));
