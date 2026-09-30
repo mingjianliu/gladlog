@@ -54,6 +54,50 @@ describe("createIconCache", () => {
     expect(f).toHaveBeenCalledTimes(1);
   });
 
+  it("白名单放行 CDN 上带空格/撇号的真实图标名(回归:冰霜之环永远拿不到图标)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "gl-icon-"));
+    const f = fakeFetch(200, PNG_BYTES);
+    const cache = createIconCache({ cacheDir: dir, fetchImpl: f });
+
+    // Exact base names from spellIconsGenerated.json: Ring of Frost's art file
+    // carries a space, so a plain-identifier whitelist rejected it and every
+    // Ring of Frost in the report fell back to an empty placeholder.
+    expect(await cache.get("spell_frost_ring of frost")).toContain(
+      "data:image/jpeg;base64,",
+    );
+    expect(await cache.get("inv_misc_fork&knife")).toContain(
+      "data:image/jpeg;base64,",
+    );
+    expect(await cache.get("ability_druid_mangle.tga")).toContain(
+      "data:image/jpeg;base64,",
+    );
+    expect(f).toHaveBeenCalledTimes(3);
+    expect(existsSync(join(dir, "spell_frost_ring of frost.jpg"))).toBe(true);
+  });
+
+  it("放行真实名的同时仍拒绝路径穿越与 URL/格式元字符", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "gl-icon-"));
+    const f = fakeFetch(200, PNG_BYTES);
+    const cache = createIconCache({ cacheDir: dir, fetchImpl: f });
+
+    for (const bad of [
+      "../etc/passwd",
+      "..",
+      "a..b",
+      "sub/dir",
+      "sub\\dir",
+      "icon?query",
+      "icon#frag",
+      "icon%2e%2e",
+      "icon+plus",
+      "icon\x00null",
+      "",
+    ]) {
+      expect(await cache.get(bad)).toBeNull();
+    }
+    expect(f).not.toHaveBeenCalled();
+  });
+
   it("会话拉取预算:超限后不再 fetch(防 renderer 滥用)", async () => {
     const dir = mkdtempSync(join(tmpdir(), "gl-icon-"));
     const f = fakeFetch(200, PNG_BYTES);
