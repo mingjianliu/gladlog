@@ -272,5 +272,11 @@
  *  and the round end) — from the gate's own inputs (`actWindowFor`); the
  *  legend says to coach only the free part. 605 files: ids and contexts
  *  identical; 640 of 1,308 cd-hoarded lines gain ownerCc.
+ *  v194 (2026-09-30, triage cd-hoarded-waste F-W2 + F-W4): "never pressed"
+ *  (cd-waste, loadout [UNUSED], the low-pressure NOTE) counts a press of the
+ *  same DB2 charge pool (`cdNeverSpent`); the NOTE names only never-spent,
+ *  pressable, self-only defensives and no longer says "do NOT coach pressing
+ *  defensives". 605 files: cd-waste 983 → 938, [UNUSED] 27,145 → 26,642,
+ *  NOTE 1,033 → 938.
  */
-export const PROMPT_VERSION = 193;
+export const PROMPT_VERSION = 194;

@@ -1183,6 +1183,22 @@ export function lockCastsOf(
   );
 }
 
+/**
+ * "Never spent all round": no press of the cooldown's own spell AND none of
+ * its shared DB2 charge pool (`sharedCasts`, e.g. Spellwarding ↔ Blessing of
+ * Protection) — i.e. `lockCastsOf(cd)` is empty. `neverUsed` stays the
+ * own-cast field; this is what the "you never pressed it" surfaces read
+ * (cd-waste, the loadout `[UNUSED]` tag, the low-pressure NOTE). Before
+ * 2026-09-30 they read `neverUsed`, so a Spellwarding press left BoP
+ * `[UNUSED]` while [RES] showed it on cooldown (triage 2026-09-29 W2).
+ */
+export function cdNeverSpent(
+  cd: Pick<IMajorCooldownInfo, "neverUsed"> &
+    Partial<Pick<IMajorCooldownInfo, "sharedCasts">>,
+): boolean {
+  return cd.neverUsed && !cd.sharedCasts?.length;
+}
+
 export function cdAvailableAt(
   cd: Pick<
     IMajorCooldownInfo,
@@ -2848,7 +2864,11 @@ export function extractMajorCooldowns(
         } else if (baselineCharges <= 1) {
           for (const c of casts) {
             if (c.cooldownSecondsOverride !== undefined) continue;
-            if (!ivs.some((iv) => iv.fromS <= c.timeSeconds && c.timeSeconds <= iv.toS))
+            if (
+              !ivs.some(
+                (iv) => iv.fromS <= c.timeSeconds && c.timeSeconds <= iv.toS,
+              )
+            )
               continue;
             c.cooldownSecondsOverride = Math.max(
               0,

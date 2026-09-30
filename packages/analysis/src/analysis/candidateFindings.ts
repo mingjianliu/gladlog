@@ -53,6 +53,7 @@ import {
   annotateDefensiveTimings,
   cdAvailableAt,
   cdIsProcOnly,
+  cdNeverSpent,
   DEFENSIVE_TAGS,
   extractMajorCooldowns,
   type IAvailableWindow,
@@ -266,6 +267,7 @@ export function cdWasteEvents(
     IMajorCooldownInfo,
     "spellId" | "spellName" | "neverUsed" | "isThroughput"
   > &
+    Partial<Pick<IMajorCooldownInfo, "sharedCasts">> &
     /** GH #29 第 5 项(2026-08-23,DPS 视角实测):这条指控在 prompt 图例里写的是
      *  「a major **defensive** cooldown the player never pressed」,而判据用的是
      *  `!isThroughput` —— 那只等于「不是 Offensive-tagged」,于是**整个 Control
@@ -286,7 +288,8 @@ export function cdWasteEvents(
     // A response-only save (Barkskin / Frenzied Regeneration, user ruling
     // 2026-09-25 「不指控」) is never "never used".
     if (cd.responseOnly) continue;
-    if (cd.neverUsed && !cd.isThroughput && isDefensive) {
+    // W2 (triage 2026-09-29): a press of the same DB2 charge pool spends it
+    if (cdNeverSpent(cd) && !cd.isThroughput && isDefensive) {
       // Cost-norm guard (#25, 2026-08-14): a never-used major defensive is
       // exactly the shape of fact that tempts the model into "you should
       // have used your X" — for a signed-off cost_norm ability (Divine

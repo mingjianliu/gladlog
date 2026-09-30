@@ -44,11 +44,64 @@ describe("cd-waste 承压门", () => {
  * [UNUSED] tag on the prompt side. It shares its predicate with the cd-waste
  * candidate gate, and at the threshold the two must be exactly
  * complementary. */
+// W2 (triage 2026-09-29): Spellwarding pressed, Blessing of Protection not —
+// the shared DB2 charge pool spent BoP too (e5b3534b / 69546267 / 06bb9860)
+describe("cd-waste / NOTE — shared charge pool (W2)", () => {
+  const bop = {
+    spellId: "1022",
+    spellName: "Blessing of Protection",
+    neverUsed: true,
+    isThroughput: false,
+    sharedCasts: [{ timeSeconds: 75.6 }] as never[],
+  };
+  it("a pool press is a press: no cd-waste, not named by the NOTE", () => {
+    expect(cdWasteEvents([bop], me, 40)).toEqual([]);
+    expect(cdWasteEvents([{ ...bop, sharedCasts: [] }], me, 40)).toHaveLength(
+      1,
+    );
+    expect(lowPressureUnusedDefensiveNote([bop, DP], 82)).not.toContain(
+      "Blessing of Protection",
+    );
+  });
+});
+
 describe("lowPressureUnusedDefensiveNote", () => {
   it("低承压 + 有未用减伤墙 → 出注(含 floor 后的 minHP)", () => {
     const note = lowPressureUnusedDefensiveNote([DP], 82.7);
     expect(note).toContain("82%");
-    expect(note).toContain("do NOT coach pressing defensives");
+    expect(note).toContain("(Desperate Prayer) were correctly HELD");
+    // W4 (triage 2026-09-29): no blanket "do NOT coach pressing defensives"
+    expect(note).not.toContain("do NOT coach");
+  });
+
+  // W4: the owner's HP gate speaks only for what protects the owner
+  // (ba8c0510: Stasis named, Rewind — ally-reaching — not)
+  it("names only never-spent cooldowns that cannot help another unit", () => {
+    const rewind = {
+      spellId: "363534",
+      spellName: "Rewind",
+      neverUsed: true,
+      isThroughput: false,
+      tag: "Defensive" as const,
+    };
+    const note = lowPressureUnusedDefensiveNote([DP, rewind], 96);
+    expect(note).toContain("(Desperate Prayer)");
+    expect(note).not.toContain("Rewind");
+    expect(lowPressureUnusedDefensiveNote([rewind], 96)).toBeNull();
+  });
+
+  it("a proc-only entry (Renewing Blaze, [PASSIVE]) is never 'held'", () => {
+    const blaze = {
+      spellId: "374348",
+      spellName: "Renewing Blaze",
+      neverUsed: true,
+      isThroughput: false,
+      tag: "Defensive" as const,
+    };
+    expect(lowPressureUnusedDefensiveNote([blaze], 96)).toBeNull();
+    expect(lowPressureUnusedDefensiveNote([blaze, DP], 96)).not.toContain(
+      "Renewing Blaze",
+    );
   });
 
   it("真承压 / 承压未知 / 无未用墙 / 只有吞吐 CD → 不出注", () => {

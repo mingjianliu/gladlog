@@ -8,6 +8,9 @@ import {
   pvpTrinketRemainingSecondsAt,
 } from "../utils/ccTrinketAnalysis";
 import {
+  canHelpAnotherUnit,
+  cdIsProcOnly,
+  cdNeverSpent,
   cdReadyInTimeAt,
   DEFENSIVE_TAGS,
   forbearanceBlocks,
@@ -415,7 +418,7 @@ export function emitDmgSpikeEntries(params: {
           playerIdMap,
           enemyIdMap,
           summonOwners,
-    unitNames,
+          unitNames,
         )
       : [];
     const sourceStr =
@@ -596,8 +599,13 @@ function dampeningSuffix(
  * 数字 —— 目前没有。
  */
 export function lowPressureUnusedDefensiveNote(
-  cds: (Pick<IMajorCooldownInfo, "neverUsed" | "isThroughput"> &
-    Partial<Pick<IMajorCooldownInfo, "tag">>)[],
+  cds: (Pick<
+    IMajorCooldownInfo,
+    "spellId" | "spellName" | "neverUsed" | "isThroughput"
+  > &
+    Partial<Pick<IMajorCooldownInfo, "tag" | "sharedCasts">> & {
+      isProcOnly?: boolean;
+    })[],
   minHpPct: number | null,
 ): string | null {
   if (minHpPct === null || minHpPct < CD_WASTE_PRESSURE_HP_PCT) return null;
@@ -606,16 +614,28 @@ export function lowPressureUnusedDefensiveNote(
   // 于是一个没放的雷鸣怒吼 / 压迫怒吼 / 心灵尖啸就能让这句话冒出来 —— 与 cd-waste
   // 同一个洞、同一个改法。实测(S2 归档非本人治疗 396 轮):这句注出现 218 轮,
   // 其中 **12 轮(5.5%)未用的 CD 里一个 Defensive 都没有**。tag 可选,缺省退回原判据。
-  if (
-    !cds.some(
-      (cd) =>
-        cd.neverUsed &&
-        !cd.isThroughput &&
-        (cd.tag === undefined || DEFENSIVE_TAGS.has(cd.tag)),
-    )
-  )
-    return null;
-  return `  NOTE: the log owner's lowest HP this match was ${Math.floor(minHpPct)}% — they were never under meaningful pressure. Their never-used defensive cooldowns were correctly HELD, not wasted: do NOT coach pressing defensives in this match.`;
+  // Triage 2026-09-29 W4: the gate is the OWNER's HP, so it only speaks for
+  // what protects the owner. It names the never-spent cooldowns that cannot
+  // help another unit (`canHelpAnotherUnit`, the gate cd-hoarded itself uses)
+  // and no longer says "do NOT coach pressing defensives" for the whole
+  // match — ba8c0510 printed that beside a teammate cd-hoarded line accusing
+  // a held Time Dilation. An ally-reaching cooldown is never called "held
+  // correctly" here: the owner's HP says nothing about the teammate's.
+  // (`!isSelfOnlyDefensive` is NOT the selector: it is true for Tranquility,
+  // Divine Hymn and Apotheosis.)
+  const held = cds.filter(
+    (cd) =>
+      cdNeverSpent(cd) &&
+      // a proc-only entry has no button to hold (`PROC_ONLY_ACTIVATION_IDS`;
+      // the loadout marks it [PASSIVE]) — agy review: Renewing Blaze was
+      // named "correctly HELD" in 27 NOTEs
+      !cdIsProcOnly(cd) &&
+      !cd.isThroughput &&
+      (cd.tag === undefined || DEFENSIVE_TAGS.has(cd.tag)) &&
+      !canHelpAnotherUnit(cd.spellId, cd.tag),
+  );
+  if (held.length === 0) return null;
+  return `  NOTE: the log owner's lowest HP this match was ${Math.floor(minHpPct)}% — they were never under meaningful pressure themselves. Their never-used self-only defensive cooldowns (${held.map((cd) => cd.spellName).join(", ")}) were correctly HELD, not wasted.`;
 }
 
 /**
@@ -826,7 +846,9 @@ export function emitFriendlyDeathEntries<S>(params: {
         // Forbearance: a paladin can't press Spellwarding/BoP/LoH/Divine Shield if it self-applied
         // Forbearance in the last 30s — don't list those as "unused" (false accusation).
         // Light's Revocation holders keep Divine Shield (forbearanceBlocks).
-        .filter((cd) => !(forbearance && forbearanceBlocks(dyingUnit, cd.spellId)))
+        .filter(
+          (cd) => !(forbearance && forbearanceBlocks(dyingUnit, cd.spellId)),
+        )
         // Damage-redirect externals are a mechanical no-op on yourself (Blessing
         // of Sacrifice sends 30% of the damage TO the caster), so listing one as
         // a wall this player failed to press at their own death blames them for
@@ -897,7 +919,7 @@ export function emitFriendlyDeathEntries<S>(params: {
         playerIdMap,
         enemyIdMap,
         summonOwners,
-    unitNames,
+        unitNames,
       );
       if (topSources.length > 0) {
         deathLines.push(
@@ -1022,7 +1044,7 @@ export function emitEnemyDeathEntries<S>(params: {
         playerIdMap,
         enemyIdMap,
         summonOwners,
-    unitNames,
+        unitNames,
       );
       if (topSources.length > 0) {
         deathLines.push(

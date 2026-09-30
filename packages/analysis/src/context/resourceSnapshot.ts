@@ -7,6 +7,7 @@ import {
   cdAvailableAt,
   cdChargesReadyAt,
   cdIsProcOnly,
+  cdNeverSpent,
   cdMaybeAvailableAt,
   cdSecondsUntilReady,
   IMajorCooldownInfo,
@@ -128,7 +129,7 @@ export function buildPlayerLoadout(
     // (Radiant Glory's Avenging Wrath every Wake of Ashes → "2 Charges"), not
     // something the player holds — not printed (GH #106 step 2)
     `${cd.spellName} [${cd.cooldownSeconds}s${(cd.charges ?? 1) > 1 && !cdIsProcOnly(cd) ? `, ${cd.charges} Charges` : ""}${lastsPart(cd, caster)}]${
-      cdIsProcOnly(cd) ? " [PASSIVE]" : cd.neverUsed ? " [UNUSED]" : ""
+      cdIsProcOnly(cd) ? " [PASSIVE]" : cdNeverSpent(cd) ? " [UNUSED]" : ""
     }`;
 
   const ownerId = nextId++;

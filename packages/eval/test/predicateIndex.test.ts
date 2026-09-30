@@ -1140,6 +1140,11 @@ const INDEX: PredicateRow[] = [
     mod: cooldowns,
   },
   {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "cdNeverSpent",
+    mod: cooldowns,
+  },
+  {
     file: `${A}/data/sharedChargeGenerated.ts`,
     symbol: "SHARED_CHARGE_CATEGORY",
     mod: sharedChargeGenerated,
