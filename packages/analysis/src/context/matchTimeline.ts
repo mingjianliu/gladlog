@@ -3020,6 +3020,11 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     }
   }
 
+  // F-C16 (triage res-readiness): the `next spike in Ns on X` suffix on
+  // [YOU] [CD] lines is hindsight — legend it whenever one is rendered.
+  const nextSpikeRendered = entries.some((e) =>
+    e.lines.some((l) => typeof l === "string" && l.includes(", next spike in ")),
+  );
   const outputLines: string[] = [
     ...summaryLines,
     "MATCH TIMELINE",
@@ -3098,13 +3103,21 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
           "    `(target at N% HP)` reflects the target's HP at the displayed second.",
         ]
       : []),
-    ...(TIMELINE_LINE_FLAGS.deathWindowUnfold === "perCast"
+    ...(nextSpikeRendered
+      ? [
+          "  `next spike in Ns on X` on a [YOU] [CD] line = the next damage spike after that press, known only in hindsight —",
+          "    the player could not see it coming.",
+        ]
+      : []),
+    // F-C17 (triage res-readiness): the per-cast lines come from the healer
+    // gap filler only, so only a healer owner gets their legend.
+    ...(isHealer && TIMELINE_LINE_FLAGS.deathWindowUnfold === "perCast"
       ? [
           `  [YOU] [CAST] lines inside the ${DEATH_WINDOW_S}s before a friendly death are printed per cast with the target's HP`,
           "    at that second, even for spells that are folded `(xN over Ns)` elsewhere; the fold still counts them.",
         ]
       : []),
-    ...(TIMELINE_LINE_FLAGS.deathWindowUnfold === "summary"
+    ...(isHealer && TIMELINE_LINE_FLAGS.deathWindowUnfold === "summary"
       ? [
           `  [YOU] [HEALS] = every cast you made in the ${DEATH_WINDOW_S}s before a friendly death, counted by spell and target.`,
         ]

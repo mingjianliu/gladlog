@@ -368,5 +368,8 @@
  *  of a cooldown ready at that press and never cast later in the window is
  *  an attempt in cd-hoarded's `facts.attempted` (accusation not waived).
  *  605 files: 4 cd-hoarded lines gain it, no id changes.
+ *  v214 (2026-09-30, triage res-readiness F-C16 / F-C17): a legend line for
+ *  `next spike in Ns on X` (hindsight) whenever one is rendered; the
+ *  per-cast [YOU] [CAST] legend only for healer owners (its emitter's gate).
  */
-export const PROMPT_VERSION = 213;
+export const PROMPT_VERSION = 214;

@@ -89,7 +89,13 @@ function aura(
   };
 }
 
-function render(): string {
+function render(
+  over: {
+    isHealer?: boolean;
+    ownerCDs?: any[];
+    pressureWindows?: any[];
+  } = {},
+): string {
   // 14 Riptides ≥ SPAM_FOLD_THRESHOLD (12) so the fold engages; the last
   // three sit inside the death window (DEATH_AT − 10 … DEATH_AT).
   const castTimes = [2, 5, 8, 11, 14, 17, 20, 23, 26, 29, 32, 52, 55, 58];
@@ -137,7 +143,7 @@ function render(): string {
   return buildMatchTimeline({
     owner,
     ownerSpec: "Restoration Shaman",
-    ownerCDs: [],
+    ownerCDs: over.ownerCDs ?? [],
     teammateCDs: [],
     enemyCDTimeline: { players: [], alignedBurstWindows: [] } as any,
     ccTrinketSummaries: [],
@@ -148,14 +154,14 @@ function render(): string {
       { spec: "Beast Mastery Hunter", name: "Alice", atSeconds: DEATH_AT },
     ],
     enemyDeaths: [],
-    pressureWindows: [],
+    pressureWindows: over.pressureWindows ?? [],
     healingGaps: [],
     friends: [owner, alice],
     enemies: [enemy],
     allUnits: [owner, alice, enemy],
     matchStartMs: START,
     matchEndMs: ms(120),
-    isHealer: true,
+    isHealer: over.isHealer ?? true,
     playerIdMap: new Map([
       ["PlayerYou", 1],
       ["Alice", 2],
@@ -289,5 +295,57 @@ describe("GH #97 timeline flags", () => {
       expect(text).toContain("popped Barkskin");
       expect(text).not.toContain("Barkskin@");
     }
+  });
+});
+
+// Triage 2026-09-29 res-readiness F-C16 / F-C17 (agy review: pin the legend
+// conditions).
+describe("legends follow the lines they explain (F-C16 / F-C17)", () => {
+  beforeAll(async () => {
+    await ensureAnalysisData();
+  });
+  const PER_CAST_LEGEND = "[YOU] [CAST] lines inside the";
+  const SPIKE_LEGEND = "`next spike in Ns on X` on a [YOU] [CD] line";
+  const astralShift = {
+    spellId: "108271",
+    spellName: "Astral Shift",
+    tag: "Defensive",
+    cooldownSeconds: 90,
+    maxChargesDetected: 1,
+    casts: [{ timeSeconds: 20 }],
+    availableWindows: [],
+    neverUsed: false,
+  };
+
+  it("F-C17: the per-cast / summary legend is printed for a healer owner only", () => {
+    for (const mode of ["perCast", "summary"] as const) {
+      TIMELINE_LINE_FLAGS.deathWindowUnfold = mode;
+      const legend = mode === "perCast" ? PER_CAST_LEGEND : "[YOU] [HEALS]";
+      expect(render({ isHealer: true })).toContain(legend);
+      expect(render({ isHealer: false })).not.toContain(legend);
+    }
+  });
+
+  it("F-C16: the hindsight legend appears exactly when a [YOU] [CD] line carries `next spike in`", () => {
+    const withSpike = render({
+      ownerCDs: [astralShift],
+      pressureWindows: [
+        {
+          fromSeconds: 27,
+          toSeconds: 37,
+          totalDamage: 500_000,
+          targetName: "Alice",
+          targetSpec: "Beast Mastery Hunter",
+        },
+      ],
+    });
+    expect(withSpike).toMatch(
+      /0:20 {2}\[YOU\] \[CD\] .*Astral Shift.*, next spike in 7s on 2/,
+    );
+    expect(withSpike).toContain(SPIKE_LEGEND);
+    const noSpike = render({ ownerCDs: [astralShift] });
+    expect(noSpike).toMatch(/0:20 {2}\[YOU\] \[CD\] .*Astral Shift/);
+    expect(noSpike).not.toContain("next spike in");
+    expect(noSpike).not.toContain(SPIKE_LEGEND);
   });
 });
