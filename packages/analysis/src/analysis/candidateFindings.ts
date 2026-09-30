@@ -76,7 +76,7 @@ import {
 import {
   annotateMissedPurgesWithKillWindows,
   canRemoveFrom,
-  hardCastOccupancyWithin,
+  occupancyWithin,
   type IMissedCleanseWindow,
   type IMissedPurgeWindow,
   reconstructDispelSummary,
@@ -984,6 +984,11 @@ export function missedCleanseEvents(
     matchStartMs: number;
     /** A5: the owner's SPELL_CAST_FAILED (absolute ms) — cuts a cancelled bar. */
     failedCasts?: ReadonlyArray<{ spellId: string; ms: number }>;
+    /** the same, per teammate (F-C11's dispeller occupancy) */
+    failedCastsByUnit?: ReadonlyMap<
+      string,
+      ReadonlyArray<{ spellId: string; ms: number }>
+    >;
   },
   /** Facts-only inputs (never gates). */
   extra?: {
@@ -1021,15 +1026,62 @@ export function missedCleanseEvents(
         w.targetCharmed,
         w.targetName,
       );
+      // F-C11 (A43 = B): one occupancy predicate — hard casts, a channel
+      // shown only as a self-aura, drinking — for the owner and for the
+      // teammate dispellers alike.
+      const winFrom = (occupancy?.matchStartMs ?? 0) + w.timeSeconds * 1000;
+      const winTo =
+        (occupancy?.matchStartMs ?? 0) +
+        (w.timeSeconds + w.durationSeconds) * 1000;
       const occ = occupancy
-        ? hardCastOccupancyWithin(
+        ? occupancyWithin(
             owner,
             occupancy.enemyIds,
-            occupancy.matchStartMs + w.timeSeconds * 1000,
-            occupancy.matchStartMs + (w.timeSeconds + w.durationSeconds) * 1000,
+            winFrom,
+            winTo,
             occupancy.failedCasts,
           )
         : null;
+      const eligible = friends.filter(
+        (f) =>
+          f.id !== owner.id &&
+          canRemoveFrom(f, w.dispelType, w.targetCharmed, w.targetName) &&
+          (occupancy?.matchStartMs === undefined ||
+            !((f.deathRecords ?? []) as any[]).some(
+              (d) => d.timestamp <= winFrom,
+            )),
+      );
+      // When only teammates can remove it: the LEAST-occupied eligible
+      // dispeller, so the fact reads "every eligible dispeller was busy for
+      // at least N s" (a free one → no fact).
+      const dispOcc =
+        occupancy && !ownerCanDispel && eligible.length > 0
+          ? eligible
+              .map((f) =>
+                occupancyWithin(
+                  f,
+                  occupancy.enemyIds,
+                  winFrom,
+                  winTo,
+                  occupancy.failedCastsByUnit?.get(f.id),
+                ),
+              )
+              .reduce<ReturnType<typeof occupancyWithin>>(
+                (best, o) =>
+                  o === null
+                    ? best
+                    : best === null || o.occupiedMs < best.occupiedMs
+                      ? o
+                      : best,
+                null,
+              )
+          : null;
+      // a dispeller with no stream at all is unknown — only a full set speaks
+      const dispOccKnown =
+        dispOcc !== null &&
+        eligible.every((f) => Array.isArray(f.castStartEvents) || Array.isArray(f.auraEvents));
+      const dispS =
+        dispOcc && dispOccKnown ? (dispOcc.occupiedMs / 1000).toFixed(1) : "0.0";
       // Rendering floor anchored to the rendered value itself: attach only
       // when the one-decimal rendering is non-zero. Zero is also what a
       // window full of instants looks like (instants emit no CAST_START), so
@@ -1098,26 +1150,18 @@ export function missedCleanseEvents(
                 // W1a (2026-09-25): a teammate already dead when the CC landed
                 // cannot be asked to dispel it (1e37).
                 eligibleDispellers:
-                  friends
-                    .filter(
-                      (f) =>
-                        f.id !== owner.id &&
-                        canRemoveFrom(
-                          f,
-                          w.dispelType,
-                          w.targetCharmed,
-                          w.targetName,
-                        ) &&
-                        (occupancy?.matchStartMs === undefined ||
-                          !((f.deathRecords ?? []) as any[]).some(
-                            (d) =>
-                              d.timestamp <=
-                              occupancy.matchStartMs + w.timeSeconds * 1000,
-                          )),
-                    )
-                    .map((f) => specToString(f.spec))
-                    .join(", ") || "no one on your team",
+                  eligible.map((f) => specToString(f.spec)).join(", ") ||
+                  "no one on your team",
               }),
+          ...(dispOcc && dispS !== "0.0"
+            ? {
+                dispellerCastingS: dispS,
+                dispellerCastingSpells: joinSpellCounts(dispOcc.spellNames),
+                dispellerCastingPreCommitted: dispOcc.startedBeforeWindow
+                  ? "yes"
+                  : "no",
+              }
+            : {}),
         },
       };
     });
@@ -2245,6 +2289,16 @@ function teamPlayEvents(
                       spellId: String(f.spellId),
                       ms: combat.startTime + f.tSeconds * 1000,
                     }))
+                : undefined,
+              failedCastsByUnit: rawStreams?.available
+                ? rawStreams.castFailed.reduce((m, f) => {
+                    const l = m.get(f.unitGuid) ?? [];
+                    l.push({
+                      spellId: String(f.spellId),
+                      ms: combat.startTime + f.tSeconds * 1000,
+                    });
+                    return m.set(f.unitGuid, l);
+                  }, new Map<string, Array<{ spellId: string; ms: number }>>())
                 : undefined,
             }
           : undefined,

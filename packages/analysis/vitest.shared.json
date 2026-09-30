@@ -131,6 +131,7 @@
     "test/dispelGates.test.ts",
     "test/dispelVerdictWiring.test.ts",
     "test/dispelVerdicts.test.ts",
+    "test/dispellerOccupancy.test.ts",
     "test/drCategoryIds.test.ts",
     "test/drOutgoingCCReverse.test.ts",
     "test/enemyDefensives.test.ts",

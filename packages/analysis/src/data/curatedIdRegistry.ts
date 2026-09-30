@@ -151,6 +151,7 @@ import {
   RACIAL_ABILITIES,
   SHARED_CD_RACIAL_SPELL_IDS,
 } from "./racialAbilities";
+import { CHANNEL_PROXY_IDS, DRINK_AURA_IDS } from "./occupancyAuras";
 import { SPELL_CATEGORIES } from "./spellCategories";
 import {
   BUFF_DURATION_TALENT_MODIFIERS,
@@ -738,6 +739,12 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   ),
   t("ENEMY_HEAL_CD_IDS", "data/enemyHealCds.ts", "cast", () =>
     set(ENEMY_HEAL_CD_IDS),
+  ),
+  t("CHANNEL_PROXY_IDS", "data/occupancyAuras.ts", "aura", () =>
+    set(CHANNEL_PROXY_IDS),
+  ),
+  t("DRINK_AURA_IDS", "data/occupancyAuras.ts", "aura", () =>
+    set(DRINK_AURA_IDS),
   ),
   // GH #79 / B4: classification overrides for interrupted spells.
   t("KICKED_SPELL_OVERRIDES", "data/kickedSpellCategories.ts", "cast", () => [

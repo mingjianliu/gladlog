@@ -1,6 +1,7 @@
 import { CombatUnitSpec, ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import { dispelVerdictOf } from "../data/dispelVerdicts";
+import { CHANNEL_PROXY_IDS, DRINK_AURA_IDS } from "../data/occupancyAuras";
 import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
 import { getEnglishSpellName, spellEffectData } from "../data/spellEffectData";
 import spellIdListsData from "../data/spellIdLists";
@@ -1180,6 +1181,46 @@ export function hardCastOccupancyWithin(
   enemyIds: Set<string>,
   windowStartMs: number,
   windowEndMs: number,
+  failedCasts?: ReadonlyArray<{ spellId: string; ms: number }>,
+): IHardCastOccupancy | null {
+  const bars = hardCastBarsWithin(
+    unit,
+    enemyIds,
+    windowStartMs,
+    windowEndMs,
+    failedCasts,
+  );
+  if (bars === null) return null;
+  const out: IHardCastOccupancy = {
+    occupiedMs: 0,
+    startedBeforeWindow: false,
+    spellNames: [],
+  };
+  for (const b of bars) {
+    out.occupiedMs +=
+      Math.min(b.to, windowEndMs) - Math.max(b.from, windowStartMs);
+    if (b.from < windowStartMs) out.startedBeforeWindow = true;
+    out.spellNames.push(b.spellName);
+  }
+  return out;
+}
+
+/** One counted bar of `hardCastBarsWithin` (overlapping the window). */
+export interface IOccupancyInterval {
+  from: number;
+  to: number;
+  spellId: string;
+  /** English (F-C17: the log's localized name leaked into the facts) */
+  spellName: string;
+}
+
+/** `hardCastOccupancyWithin`'s bars, each as an interval; null when the unit
+ *  carries no cast-start stream. */
+function hardCastBarsWithin(
+  unit: ICombatUnit,
+  enemyIds: Set<string>,
+  windowStartMs: number,
+  windowEndMs: number,
   /** Reliability audit A5 (2026-09-25): the unit's own SPELL_CAST_FAILED
    * (absolute ms, from the raw stream). A same-spell failure after a bar
    * started, with no same-spell success before the next bar, is that bar
@@ -1188,21 +1229,16 @@ export function hardCastOccupancyWithin(
    * as running through the 9.18–14.78 Mind Control window ("you were mid
    * hard cast", preCommitted=yes). Absent = the pre-A5 cuts only. */
   failedCasts?: ReadonlyArray<{ spellId: string; ms: number }>,
-): IHardCastOccupancy | null {
+): IOccupancyInterval[] | null {
   const starts = unit.castStartEvents;
   if (!Array.isArray(starts)) return null;
-  const none: IHardCastOccupancy = {
-    occupiedMs: 0,
-    startedBeforeWindow: false,
-    spellNames: [],
-  };
-  if (windowEndMs <= windowStartMs || starts.length === 0) return none;
+  if (windowEndMs <= windowStartMs || starts.length === 0) return [];
   const cutters = buildCannotCastIntervals(unit, enemyIds)
     .map((iv) => iv.from)
     .sort((a, b) => a - b);
   const sorted = [...starts].sort((a, b) => a.timestamp - b.timestamp);
   const successes = unit.spellCastEvents ?? [];
-  const out: IHardCastOccupancy = { ...none, spellNames: [] };
+  const out: IOccupancyInterval[] = [];
   // A success already paired with an earlier bar is not this bar's success
   // (codex review 2026-09-26: 585 starts 1/3/5 s, successes 3/5/7 s — bar 2
   // must pair with 5 s, not re-read bar 1's 3 s).
@@ -1261,10 +1297,125 @@ export function hardCastOccupancyWithin(
     if (end - from > HARD_CAST_MAX_MS) continue;
     const overlap = Math.min(end, windowEndMs) - Math.max(from, windowStartMs);
     if (overlap <= 0) continue;
-    out.occupiedMs += overlap;
-    if (from < windowStartMs) out.startedBeforeWindow = true;
-    out.spellNames.push(sorted[i].spellName);
+    out.push({
+      from,
+      to: end,
+      spellId: String(sorted[i].spellId),
+      spellName: getEnglishSpellName(
+        String(sorted[i].spellId),
+        sorted[i].spellName,
+      ),
+    });
   }
+  return out;
+}
+
+/** What occupied a unit, for the acceptance split (F-C11). */
+export type OccupancyKind = "hardcast" | "proxy" | "drink";
+
+export interface IOccupancy extends IHardCastOccupancy {
+  kinds: OccupancyKind[];
+}
+
+/** The unit's own self-aura intervals for `ids` (APPLIED → REMOVED, open
+ *  ones closed at `openEndMs`). */
+function selfAuraIntervals(
+  unit: ICombatUnit,
+  ids: ReadonlySet<string>,
+  openEndMs: number,
+): IOccupancyInterval[] {
+  const out: IOccupancyInterval[] = [];
+  const open = new Map<string, { from: number; name: string }>();
+  for (const a of unit.auraEvents ?? []) {
+    if (!a.spellId || !ids.has(a.spellId) || a.srcUnitId !== unit.id) continue;
+    const ev = a.logLine.event;
+    if (ev === LogEvent.SPELL_AURA_APPLIED && !open.has(a.spellId))
+      open.set(a.spellId, { from: a.logLine.timestamp, name: a.spellName });
+    else if (ev === LogEvent.SPELL_AURA_REMOVED) {
+      const o = open.get(a.spellId);
+      if (!o) continue;
+      open.delete(a.spellId);
+      out.push({
+        from: o.from,
+        to: a.logLine.timestamp,
+        spellId: a.spellId,
+        spellName: getEnglishSpellName(a.spellId, o.name),
+      });
+    }
+  }
+  for (const [id, o] of open)
+    out.push({
+      from: o.from,
+      to: openEndMs,
+      spellId: id,
+      spellName: getEnglishSpellName(id, o.name),
+    });
+  return out;
+}
+
+/**
+ * The one "was this player busy" predicate (triage missed-cleanse F-C11,
+ * user ruling A43 = B, 2026-09-30) — the owner's `ownerCasting*` and a
+ * teammate dispeller's `dispellerCasting*` both read it. The union of:
+ *  - `hardCastOccupancyWithin`'s bars;
+ *  - a channel the log shows only as the caster's self-aura
+ *    (`CHANNEL_PROXY_IDS`, Ultimate Penitence 421453);
+ *  - drinking (`DRINK_AURA_IDS`).
+ * (Channels of `CHANNELED_SPELL_IDS` paired with their self-aura are
+ * missed-cleanse F-C10's half — the G6 parser/compat session.)
+ * occupiedMs is the union's overlap with the window; startedBeforeWindow is
+ * true when any counted interval began before it. null = no cast-start
+ * stream and no aura (unknown, not idle).
+ */
+export function occupancyWithin(
+  unit: ICombatUnit,
+  enemyIds: Set<string>,
+  windowStartMs: number,
+  windowEndMs: number,
+  failedCasts?: ReadonlyArray<{ spellId: string; ms: number }>,
+): IOccupancy | null {
+  const bars = hardCastBarsWithin(
+    unit,
+    enemyIds,
+    windowStartMs,
+    windowEndMs,
+    failedCasts,
+  );
+  if (bars === null && !Array.isArray(unit.auraEvents)) return null;
+  const tagged: Array<IOccupancyInterval & { kind: OccupancyKind }> = [
+    ...(bars ?? []).map((b) => ({ ...b, kind: "hardcast" as const })),
+    ...selfAuraIntervals(unit, CHANNEL_PROXY_IDS, windowEndMs).map((b) => ({
+      ...b,
+      kind: "proxy" as const,
+    })),
+    ...selfAuraIntervals(unit, DRINK_AURA_IDS, windowEndMs).map((b) => ({
+      ...b,
+      kind: "drink" as const,
+    })),
+  ]
+    .filter((b) => b.to > windowStartMs && b.from < windowEndMs && b.to > b.from)
+    .sort((a, b) => a.from - b.from);
+  const out: IOccupancy = {
+    occupiedMs: 0,
+    startedBeforeWindow: false,
+    spellNames: [],
+    kinds: [],
+  };
+  let curFrom = -Infinity;
+  let curTo = -Infinity;
+  for (const b of tagged) {
+    const from = Math.max(b.from, windowStartMs);
+    const to = Math.min(b.to, windowEndMs);
+    if (from > curTo) {
+      if (curTo > curFrom) out.occupiedMs += curTo - curFrom;
+      curFrom = from;
+      curTo = to;
+    } else curTo = Math.max(curTo, to);
+    if (b.from < windowStartMs) out.startedBeforeWindow = true;
+    out.spellNames.push(b.spellName);
+    if (!out.kinds.includes(b.kind)) out.kinds.push(b.kind);
+  }
+  if (curTo > curFrom) out.occupiedMs += curTo - curFrom;
   return out;
 }
 

@@ -1021,7 +1021,8 @@ describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
     });
     expect(evts).toHaveLength(1);
     expect(evts[0]!.facts["ownerCastingS"]).toBe("3.0");
-    expect(evts[0]!.facts["ownerCastingSpells"]).toBe("精神控制×2");
+    // F-C17 (triage 2026-09-29): English names, not the log's localized ones
+    expect(evts[0]!.facts["ownerCastingSpells"]).toBe("Mind Control×2");
     expect(evts[0]!.facts["ownerCastingPreCommitted"]).toBe("no");
 
     // 读条从窗口前 1s 起手 → 只计窗口内重叠(1.5s),preCommitted=yes

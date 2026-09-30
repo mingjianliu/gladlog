@@ -461,5 +461,10 @@
  *  predicate's own sweep proved the rooted player could reach their targets
  *  on every non-hard-CC second (hard-CC seconds leave N), with a legend
  *  sentence; the [ROOT] line and menu membership are unchanged.
+ *  v234 (2026-09-30, triage missed-cleanse F-C11 + F-C17, ruling A43 = B):
+ *  one occupancy predicate (`occupancyWithin`: hard casts ∪ Ultimate
+ *  Penitence's self-aura ∪ drinking) for ownerCasting* and the new
+ *  dispellerCasting* (ownerCanDispel=no: the least-occupied eligible
+ *  dispeller), with a legend sentence; occupancy spell names are English.
  */
-export const PROMPT_VERSION = 233;
+export const PROMPT_VERSION = 234;
