@@ -1131,6 +1131,16 @@ export function cdHoardedEvents(
     unit: { id: string; name: string };
     cds: CdHoardCandidateCd[];
   }>,
+  /** Triage 2026-09-29 F-H6 (user ruling 2026-09-30, with res-readiness
+   * R2 = A): could the owner pay this cooldown's mana at any sample in
+   * [fromS, toS] (`affordableWithin`, the shared affordability predicate)?
+   * `false` keeps it out of the ACCUSATION set; `null` (unknown) and an
+   * absent callback do not gate. The response set is untouched. */
+  ownerAffordable?: (
+    spellId: string,
+    fromS: number,
+    toS: number,
+  ) => boolean | null,
 ): CandidateEvent[] {
   const cap = overrides?.cap ?? CD_HOARD_CAP;
   const candidates: Array<{
@@ -1232,11 +1242,19 @@ export function cdHoardedEvents(
       // magic — `MITIGATION_TABLE`'s official school mask) is named only when
       // it covers at least SCHOOL_SAVE_MIN_SHARE of the 2 s of damage that
       // made this a crisis. The response set below is untouched.
+      // F-H6: a cooldown the owner could not pay for at any mana sample in
+      // [t, t + CD_HOARD_RESPONSE_S] is not "ready" to accuse (7f67e778 @378:
+      // Restoral costs 11,482 while the owner held 1,398).
       const ready = offCooldown.filter(
         (cd) =>
           !cd.responseOnly &&
           cdReadyInTimeAt(cd, p.tSec) &&
-          coversCrisisSchool(cd.spellId, p),
+          coversCrisisSchool(cd.spellId, p) &&
+          ownerAffordable?.(
+            cd.spellId,
+            p.tSec,
+            p.tSec + CD_HOARD_RESPONSE_S,
+          ) !== false,
       );
       if (ready.length === 0) {
         if (tracing)

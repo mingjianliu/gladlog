@@ -39,6 +39,7 @@ import {
   enemySourceIds,
 } from "../utils/cannotCastIntervals";
 import { type OwnerCastCancels, ownerCastCancels } from "../utils/castCancels";
+import { affordableWithin } from "../utils/resourceAt";
 import {
   analyzePlayerCCAndTrinket,
   applicableCCAvoidanceIds,
@@ -2441,6 +2442,17 @@ function teamPlayEvents(
               }
             return { unit: { id: f.id, name: f.name }, cds };
           }),
+          // F-H6: the shared affordability predicate, with the timeline's
+          // raw mana fallback
+          (spellId: string, fromS: number, toS: number) =>
+            affordableWithin(
+              owner,
+              spellId,
+              combat.startTime + fromS * 1000,
+              combat.startTime + toS * 1000,
+              { rawStreams, matchStartMs: combat.startTime },
+              combat,
+            ),
         ),
       );
     } catch {

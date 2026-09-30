@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 
 import { HP_SAMPLE_RADIUS_MS } from "../src/utils/cooldowns";
 import {
+  affordableAt,
+  affordableWithin,
   getUnitResourceAtTimestamp,
   MANA_POWER_TYPE,
   manaReadingAt,
@@ -371,5 +373,100 @@ describe("resourceAt — manaReadingAt raw-pass fallback (reliability audit D2)"
       }),
     ).toBeNull();
     expect(manaReadingAt(u, START + 10_000)?.pct).toBe(50);
+  });
+});
+
+// Triage 2026-09-29 F-H6 × res F-C3 (user ruling 2026-09-30): one
+// affordability predicate. 7f67e778: Restoral 388615 costs 4.374 % of
+// 262,500 = 11,482 while the Mistweaver held 1,398.
+describe("resourceAt — affordableAt / affordableWithin", () => {
+  const MW = "270"; // Mistweaver Monk
+  const sample = (t: number, mana: number) => ({
+    advancedActorId: "Player-1234",
+    logLine: { timestamp: t },
+    advancedActorPowers: [
+      { type: CombatUnitPowerType.Mana, current: mana, max: 262_500 },
+    ],
+  });
+  const unit = (samples: unknown[]) =>
+    ({ id: "Player-1234", spec: MW, advancedActions: samples }) as never;
+
+  it("affordableAt reads the [MANA] sampler against the official cost", () => {
+    const u = unit([sample(10_000, 1_398)]);
+    const r = affordableAt(u, "388615", 10_000)!;
+    expect(r.affordable).toBe(false);
+    expect(Math.round(r.cost)).toBe(11_482);
+    expect(r.mana).toBe(1_398);
+  });
+
+  it("affordableWithin: any sample in the window that covers the cost", () => {
+    const u = unit([sample(10_000, 1_398), sample(13_000, 12_000)]);
+    expect(affordableWithin(u, "388615", 10_000, 12_000)).toBe(false);
+    expect(affordableWithin(u, "388615", 10_000, 15_000)).toBe(true);
+  });
+
+  it("raw.txt fallback when the advanced stream carries no mana", () => {
+    const u = unit([]);
+    const fallback = {
+      matchStartMs: 0,
+      rawStreams: {
+        available: true,
+        castFailed: [],
+        manaSamples: [
+          {
+            tSeconds: 10,
+            unitGuid: "Player-1234",
+            mana: 1_398,
+            manaMax: 262_500,
+          },
+          {
+            tSeconds: 13,
+            unitGuid: "Player-1234",
+            mana: 12_000,
+            manaMax: 262_500,
+          },
+        ],
+      },
+    };
+    expect(affordableWithin(u, "388615", 10_000, 12_000, fallback)).toBe(false);
+    expect(affordableWithin(u, "388615", 10_000, 15_000, fallback)).toBe(true);
+  });
+
+  it("under Innervate (FREE_CAST_AURA_IDS) the cost does not apply → null", () => {
+    const u = {
+      ...(unit([sample(10_000, 1_398)]) as object),
+      auraEvents: [
+        {
+          spellId: "29166",
+          spellName: "Innervate",
+          srcUnitId: "Druid-1",
+          srcUnitName: "Druid",
+          destUnitId: "Player-1234",
+          timestamp: 9_000,
+          logLine: { event: "SPELL_AURA_APPLIED", timestamp: 9_000 },
+        },
+        {
+          spellId: "29166",
+          spellName: "Innervate",
+          srcUnitId: "Druid-1",
+          srcUnitName: "Druid",
+          destUnitId: "Player-1234",
+          timestamp: 17_000,
+          logLine: { event: "SPELL_AURA_REMOVED", timestamp: 17_000 },
+        },
+      ],
+    } as never;
+    const combat = { startTime: 0, endTime: 60_000 };
+    expect(
+      affordableWithin(u, "388615", 10_000, 12_000, undefined, combat),
+    ).toBeNull();
+    expect(affordableWithin(u, "388615", 10_000, 12_000)).toBe(false);
+  });
+
+  it("unknown cost or no sample → null (no gate)", () => {
+    const u = unit([sample(10_000, 1_398)]);
+    expect(affordableWithin(u, "115203", 10_000, 15_000)).toBeNull(); // Fortifying Brew: no mana cost
+    expect(affordableWithin(unit([]), "388615", 10_000, 15_000)).toBeNull();
+    expect(affordableAt(unit([]), "388615", 10_000)).toBeNull();
   });
 });

@@ -311,5 +311,9 @@
  *  decision, one card — a cd-hoarded card for an external-unused card's
  *  victim within 5 s of that death (on the render grid) is dropped; the
  *  external-unused card stays. 605 files: cd-hoarded −63, nothing added.
+ *  v201 (2026-09-30, triage cd-hoarded-waste F-H6, ruling A8): a cooldown
+ *  the owner could not pay for at any mana sample in [t, t+5]
+ *  (`affordableWithin`, shared with [RES] F-C3) is not named ready by
+ *  cd-hoarded. 605 files: cd-hoarded −1, nothing added.
  */
-export const PROMPT_VERSION = 200;
+export const PROMPT_VERSION = 201;

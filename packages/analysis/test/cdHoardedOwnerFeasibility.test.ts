@@ -506,3 +506,32 @@ describe("dropCdHoardedBesideExternalUnused", () => {
     expect(dropCdHoardedBesideExternalUnused(menu)).toBe(menu);
   });
 });
+
+// F-H6 (ruling 2026-09-30 A8): an unaffordable cooldown is not named ready;
+// unknown (null) does not gate; the response set is untouched
+describe("cdHoardedEvents — ownerAffordable (F-H6)", () => {
+  const run = (afford: (id: string) => boolean | null) =>
+    cdHoardedEvents(
+      [{ crisisUnit: MATE, own: false, points: [point(60)] }],
+      [cd()],
+      OWNER,
+      undefined,
+      undefined,
+      [],
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      (spellId, fromS, toS) => {
+        expect([fromS, toS]).toEqual([60, 65]);
+        return afford(spellId);
+      },
+    );
+  it("false → not ready → no line", () => {
+    expect(run(() => false)).toHaveLength(0);
+  });
+  it("null (unknown) or true → the line stands", () => {
+    expect(run(() => null)).toHaveLength(1);
+    expect(run(() => true)).toHaveLength(1);
+  });
+});

@@ -1,5 +1,7 @@
 import { CombatUnitPowerType, ICombatUnit } from "@gladlog/parser-compat";
 
+import { manaCostForCast } from "../data/spellManaCost";
+import { buildAuraIntervals } from "./auraIntervals";
 import { binarySearchClosest } from "./binarySearch";
 import { HP_SAMPLE_RADIUS_MS } from "./cooldowns";
 import { getSortedAdvancedActions } from "./advancedActions";
@@ -182,4 +184,122 @@ export function resourceDeltaPct(
   const b = manaReadingAt(unit, toMs, fallback);
   if (!a || !b) return null;
   return { fromPct: a.pct, toPct: b.pct, deltaPct: b.pct - a.pct };
+}
+
+/** The unit's mana samples inside [fromMs, toMs], by the same precedence as
+ * `manaReadingAt`: advanced samples when the unit's advanced stream carries
+ * mana at all, otherwise the raw.txt pass. */
+function manaSamplesWithin(
+  unit: Pick<ICombatUnit, "id" | "advancedActions">,
+  fromMs: number,
+  toMs: number,
+  fallback?: ManaFallback,
+): Array<{ current: number; max: number }> {
+  const advanced = samplesBearing(
+    unit.id,
+    getSortedAdvancedActions(unit),
+    MANA_POWER_TYPE,
+  );
+  if (advanced.length > 0 || !fallback?.rawStreams?.available)
+    return advanced
+      .filter(
+        (a) => a.logLine.timestamp >= fromMs && a.logLine.timestamp <= toMs,
+      )
+      .map((a) => powerEntry(a, MANA_POWER_TYPE)!)
+      .filter((e) => e && e.max > 0 && Number.isFinite(e.current))
+      .map((e) => ({ current: e.current, max: e.max }));
+  const fromS = (fromMs - fallback.matchStartMs) / 1000;
+  const toS = (toMs - fallback.matchStartMs) / 1000;
+  return rawManaSamplesOf(fallback.rawStreams, unit.id)
+    .filter(
+      (m) =>
+        m.tSeconds >= fromS && m.tSeconds <= toS && Number.isFinite(m.mana),
+    )
+    .map((m) => ({ current: m.mana, max: m.manaMax }));
+}
+
+/**
+ * Auras under which the carrier's spells cost no mana — the static DB2 cost
+ * does not apply, so affordability is unknown (no gate). Innervate 29166
+ * ("mana costs reduced by 100 %", observed in the S2 archive): agy review of
+ * F-H6. Other partial reductions are not modelled; a missing one can only
+ * over-state the cost, i.e. excuse, never accuse. Registered in
+ * curatedIdRegistry.
+ */
+export const FREE_CAST_AURA_IDS: ReadonlySet<string> = new Set([
+  "29166", // Innervate
+]);
+
+function freeCastWithin(
+  unit: ICombatUnit,
+  fromMs: number,
+  toMs: number,
+  combat?: { startTime: number; endTime: number },
+): boolean {
+  if (!combat) return false;
+  const fromS = (fromMs - combat.startTime) / 1000;
+  const toS = (toMs - combat.startTime) / 1000;
+  return buildAuraIntervals(unit, combat).some(
+    (iv) =>
+      FREE_CAST_AURA_IDS.has(iv.spellId) && iv.fromS <= toS && iv.toS >= fromS,
+  );
+}
+
+const costFor = (
+  unit: Pick<ICombatUnit, "spec">,
+  spellId: string,
+  manaMax: number,
+) => manaCostForCast(spellId, String(unit.spec ?? ""), manaMax);
+
+/**
+ * "Could the unit pay for this spell's mana at `tMs`" — the ONE affordability
+ * predicate (triage 2026-09-29 F-H6 × res-readiness F-C3, user ruling
+ * 2026-09-30, res R2 = A). The reading is `manaReadingAt` (the [MANA]
+ * sampler); the cost is the official `manaCostForCast` against that reading's
+ * max. Null = unknown (no cost row, or no reading): callers must not gate on
+ * it. [RES] (res F-C3) keeps an unaffordable cooldown `rdy` and annotates it
+ * with `mana` / `cost`.
+ */
+export function affordableAt(
+  unit: ICombatUnit,
+  spellId: string,
+  tMs: number,
+  fallback?: ManaFallback,
+  /** the round, for the free-cast auras (`FREE_CAST_AURA_IDS`); absent = not checked */
+  combat?: { startTime: number; endTime: number },
+): { affordable: boolean; mana: number; cost: number } | null {
+  if (freeCastWithin(unit, tMs, tMs, combat)) return null;
+  const r = manaReadingAt(unit, tMs, fallback);
+  if (!r) return null;
+  const cost = costFor(unit, spellId, r.max);
+  if (cost === null || !(cost > 0)) return null;
+  return { affordable: r.current >= cost, mana: r.current, cost };
+}
+
+/**
+ * `affordableAt`'s window form for an accusation: affordable if ANY mana
+ * sample in [fromMs, toMs] covers the cost (F-H6: [t, t + CD_HOARD_RESPONSE_S]
+ * — the player could have waited a second for the mana). Same cost, same
+ * sample sources, same comparison. Null = unknown (no cost row or no sample
+ * in the window): no gate.
+ */
+export function affordableWithin(
+  unit: ICombatUnit,
+  spellId: string,
+  fromMs: number,
+  toMs: number,
+  fallback?: ManaFallback,
+  /** the round, for the free-cast auras (`FREE_CAST_AURA_IDS`); absent = not checked */
+  combat?: { startTime: number; endTime: number },
+): boolean | null {
+  if (freeCastWithin(unit, fromMs, toMs, combat)) return null;
+  const samples = manaSamplesWithin(unit, fromMs, toMs, fallback);
+  let known = false;
+  for (const s of samples) {
+    const cost = costFor(unit, spellId, s.max);
+    if (cost === null || !(cost > 0)) return null;
+    known = true;
+    if (s.current >= cost) return true;
+  }
+  return known ? false : null;
 }

@@ -896,6 +896,16 @@ const INDEX: PredicateRow[] = [
     mod: resourceAt,
   },
   {
+    file: `${A}/utils/resourceAt.ts`,
+    symbol: "affordableAt",
+    mod: resourceAt,
+  },
+  {
+    file: `${A}/utils/resourceAt.ts`,
+    symbol: "affordableWithin",
+    mod: resourceAt,
+  },
+  {
     file: `${A}/analysis/candidates/cooldownTiming.ts`,
     symbol: "evaluateSyncWindow",
     mod: cooldownTiming,

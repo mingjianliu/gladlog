@@ -78,6 +78,7 @@ import {
   USABLE_WHILE_FEARED_GAP_IDS,
 } from "../utils/cooldowns";
 import { UNUSED_SELF_COVERAGE_UNMODELLED } from "../utils/counterfactual";
+import { FREE_CAST_AURA_IDS } from "../utils/resourceAt";
 import {
   EXTERNAL_DEFENSIVE_SPELLS,
   IMMUNITY_SPELLS,
@@ -311,6 +312,9 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   t("CD_ROLE_TAGS", "utils/cooldowns.ts", "cast", () => keys(CD_ROLE_TAGS)),
   t("TEAM_HEAL_CD_IDS", "utils/cooldowns.ts", "cast", () =>
     set(TEAM_HEAL_CD_IDS),
+  ),
+  t("FREE_CAST_AURA_IDS", "utils/resourceAt.ts", "aura", () =>
+    set(FREE_CAST_AURA_IDS),
   ),
   t("ADDITIONAL_OVERLAP_DEFENSIVE_IDS", "utils/cooldowns.ts", "cast", () =>
     set(ADDITIONAL_OVERLAP_DEFENSIVE_IDS),
@@ -581,14 +585,19 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   // the aura ids, the cooldowns they map to, and every cast id read as
   // evidence (Metamorphosis landing / button, Eye Beam, Doom Winds press,
   // Ascendance). All hand-keyed ids a patch can renumber.
-  t("OFFENSIVE_AURA_EVIDENCE", "utils/offensiveAuraOccurrences.ts", "mixed", () => [
-    ...OFFENSIVE_AURA_EVIDENCE.keys(),
-    ...[...OFFENSIVE_AURA_EVIDENCE.values()].map((v) => v.cooldownId),
-    ...METAMORPHOSIS_PRESS_CAST_IDS,
-    EYE_BEAM_ID,
-    DOOM_WINDS_PRESS_ID,
-    ASCENDANCE_ENH_ID,
-  ]),
+  t(
+    "OFFENSIVE_AURA_EVIDENCE",
+    "utils/offensiveAuraOccurrences.ts",
+    "mixed",
+    () => [
+      ...OFFENSIVE_AURA_EVIDENCE.keys(),
+      ...[...OFFENSIVE_AURA_EVIDENCE.values()].map((v) => v.cooldownId),
+      ...METAMORPHOSIS_PRESS_CAST_IDS,
+      EYE_BEAM_ID,
+      DOOM_WINDS_PRESS_ID,
+      ASCENDANCE_ENH_ID,
+    ],
+  ),
   // CC full-duration predicate (GH #44 tail, 2026-09-02): the corpus-vs-DB2
   // duration corrections and the one aura that lengthens CC in arena. Both are
   // hand-keyed ids a patch can renumber, so both sit under the rot scans.
