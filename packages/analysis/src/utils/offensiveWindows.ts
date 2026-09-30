@@ -4,8 +4,6 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
-// GH #31 ② (2026-09-02): the hand list is replaced by the shared official-face
-// predicate; the curated remainder lives as its registered fallback floor.
 import {
   isKillWindowMajorDefensive,
   KW_MAJOR_DEF_MIN_CD_S,
@@ -22,6 +20,9 @@ import {
   unitCooldownOf,
 } from "./cooldowns";
 import { fmtTime, renderedWindowSeconds } from "./renderGrid";
+// GH #31 ② (2026-09-02): the hand list is replaced by the shared official-face
+// predicate; the curated remainder lives as its registered fallback floor.
+import { summonOwnerById } from "./summonOwner";
 
 type SpellEntry = { type: string };
 const SPELLS = spellsData as Record<string, SpellEntry>;
@@ -308,6 +309,17 @@ export function computeOffensiveWindows(
     ),
   }));
 
+  // F-C10 (triage res-readiness, user ruling A47 2026-09-30): the team's
+  // damage in a window counts owned pets / guardians, attributed by the
+  // source GUID (GH #99, `summonOwnerById` — the one owner predicate).
+  const allUnits = Object.values(combat.units ?? {}) as ICombatUnit[];
+  const friendlySources = new Set<string>([
+    ...friendlies.map((f) => f.id),
+    ...allUnits
+      .filter((u) => summonOwnerById(allUnits, u.id, friendlies) !== undefined)
+      .map((u) => u.id),
+  ]);
+
   for (const enemy of enemies) {
     // ── 1. Build event list for this enemy's major defensives ─────────────────
 
@@ -463,7 +475,7 @@ export function computeOffensiveWindows(
       // Friendly damage dealt to this specific enemy during the window
       const windowDmgEvents: Array<{ t: number; amount: number }> = [];
       for (const d of enemy.damageIn) {
-        if (!friendlies.some((f) => f.id === d.srcUnitId)) continue;
+        if (!friendlySources.has(d.srcUnitId)) continue;
         const t = (d.logLine.timestamp - matchStartMs) / 1000;
         if (t < vw.from || t > vw.to) continue;
         windowDmgEvents.push({ t, amount: Math.abs(d.effectiveAmount) });

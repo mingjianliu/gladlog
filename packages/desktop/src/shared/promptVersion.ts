@@ -442,5 +442,8 @@
  *  +N)`, ×N = casts); a healer owner's cast line annotates every removal it
  *  matched; the owner's Critical/High purges render as [PURGE] unless that
  *  same match put them on a healer cast line (`purgeMatchesCast`).
+ *  v230 (2026-09-30, triage res-readiness F-C10, ruling A47): the kill /
+ *  vulnerable window's team damage (bursts, `team damage Nk`) counts owned
+ *  pets and guardians, attributed by source GUID (`summonOwnerById`).
  */
-export const PROMPT_VERSION = 229;
+export const PROMPT_VERSION = 230;
