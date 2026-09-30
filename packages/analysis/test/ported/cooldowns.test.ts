@@ -2147,7 +2147,9 @@ describe("findCheaperDefensiveAlternatives (review C2)", () => {
     });
 
     it("does NOT classify self-oriented or defensive CDs as team heals", () => {
-      expect(isTeamHealCD("370960")).toBe(false); // Emerald Communion — self mana/heal channel
+      // Emerald Communion 370960 moved IN on 2026-09-30 (user ruling A9-1:
+      // its overheal lands on an ally as 370984 — A9-EVIDENCE §1)
+      expect(isTeamHealCD("370960")).toBe(true);
       expect(isTeamHealCD("642")).toBe(false); // Divine Shield — self defensive
       expect(isTeamHealCD("")).toBe(false);
     });

@@ -188,6 +188,15 @@ export const TEAM_HEAL_CD_IDS = new Set<string>([
   "325197", // Invoke Chi-Ji, the Red Crane — Mistweaver Monk
   "740", // Tranquility — Restoration Druid
   "108280", // Healing Tide Totem — Restoration Shaman
+  // Emerald Communion — Preservation Evoker PvP talent. User ruling
+  // 2026-09-30 (triage R13 / A9-1: "is a save"). Game-Behaviour evidence
+  // (runs/triage-2026-09-29/probes/a9/A9-EVIDENCE.md §1): the cast's own
+  // effects all target the caster, so `reachesAlly(370960)` is false, but its
+  // overheal is re-cast as 370984 (Effect 10 HEAL, ImplicitTarget 21 = ally,
+  // 40 yd, unconditional text); every-6 archive: 1,496 of 1,582 casts
+  // (94.6 %) land 370984 on another unit, median 700k per cast, 68 % reach an
+  // ally under 50 % HP.
+  "370960",
 ]);
 
 /** True for team-wide healing CDs whose timeline context should be the lowest ally, not the caster. */

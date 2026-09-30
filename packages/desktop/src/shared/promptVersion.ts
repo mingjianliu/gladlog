@@ -315,5 +315,9 @@
  *  the owner could not pay for at any mana sample in [t, t+5]
  *  (`affordableWithin`, shared with [RES] F-C3) is not named ready by
  *  cd-hoarded. 605 files: cd-hoarded −1, nothing added.
+ *  v202 (2026-09-30, triage cd-hoarded-waste F-H10, ruling A9-1): Emerald
+ *  Communion is a team heal / save (TEAM_HEAL_CD_IDS): its press answers a
+ *  teammate crisis and it can be named ready for one. 605 files:
+ *  cd-hoarded +9 / −10, slow-defensive-response −1.
  */
-export const PROMPT_VERSION = 201;
+export const PROMPT_VERSION = 202;

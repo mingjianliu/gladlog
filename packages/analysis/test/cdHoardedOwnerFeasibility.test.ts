@@ -535,3 +535,14 @@ describe("cdHoardedEvents — ownerAffordable (F-H6)", () => {
     expect(run(() => true)).toHaveLength(1);
   });
 });
+
+// F-H10 (ruling 2026-09-30 A9-1): Emerald Communion is a save — its press
+// answers a teammate crisis and it can be named ready for one
+describe("Emerald Communion 370960 (F-H10)", () => {
+  it("reaches another unit and counts as a team save", async () => {
+    const { canHelpAnotherUnit, isTeamSaveCD } =
+      await import("../src/utils/cooldowns");
+    expect(canHelpAnotherUnit("370960", "Defensive")).toBe(true);
+    expect(isTeamSaveCD("370960")).toBe(true);
+  });
+});
