@@ -1,5 +1,11 @@
+import type { RawStreams } from "@gladlog/analysis";
 import { describe, expect, it } from "vitest";
-import { prescreen, seededShuffle } from "../src/explore/buildSession";
+
+import {
+  makeRoundQuery,
+  prescreen,
+  seededShuffle,
+} from "../src/explore/buildSession";
 
 describe("prescreen", () => {
   const query = (argv: string[]) => {
@@ -31,5 +37,35 @@ describe("seededShuffle", () => {
     const a = seededShuffle([1, 2, 3, 4, 5, 6, 7, 8], "s1");
     expect(seededShuffle([1, 2, 3, 4, 5, 6, 7, 8], "s1")).toEqual(a);
     expect(a.slice().sort((x, y) => x - y)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+  });
+});
+
+describe("makeRoundQuery", () => {
+  const legacy = {} as Parameters<typeof makeRoundQuery>[0];
+  const raw = { available: true } as unknown as RawStreams;
+  it("hands mana/drink the round's raw streams, loaded once", () => {
+    let loads = 0;
+    const seen: Array<RawStreams | undefined> = [];
+    const q = makeRoundQuery(
+      legacy,
+      () => (loads++, raw),
+      (_l, _argv, r) => (seen.push(r), []),
+    );
+    q(["mana", "--unit", "X"]);
+    q(["drink"]);
+    expect(seen).toEqual([raw, raw]);
+    expect(loads).toBe(1);
+  });
+  it("never loads raw streams for the other subcommands", () => {
+    let loads = 0;
+    const seen: Array<RawStreams | undefined> = [];
+    const q = makeRoundQuery(
+      legacy,
+      () => (loads++, raw),
+      (_l, _argv, r) => (seen.push(r), []),
+    );
+    q(["cd", "--t", "93"]);
+    expect(seen).toEqual([undefined]);
+    expect(loads).toBe(0);
   });
 });

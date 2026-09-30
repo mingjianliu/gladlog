@@ -30,7 +30,10 @@ import { join } from "node:path";
 import {
   fmtTime,
   isHealerSpec,
+  parseRawStreams,
+  type RawStreams,
   renderedWindowSeconds,
+  roundDurationSOf,
 } from "@gladlog/analysis";
 import type { GladMatch } from "@gladlog/parser";
 import {
@@ -181,6 +184,31 @@ export function readRawText(
   } catch {
     return null;
   }
+}
+
+/** The only `runQuery` subcommands that read raw.txt's parsed streams. */
+export const RAW_STREAM_SUBCOMMANDS: ReadonlySet<string> = new Set([
+  "mana",
+  "drink",
+]);
+
+/**
+ * The `RawStreams` a `mana`/`drink` query of this round runs against —
+ * single source for the exploration CLI and `buildSession`'s prescreen, so the
+ * prescreen re-runs an evidence line against exactly what the deep-dive agent
+ * saw. baseMs = the round's OWN `startTime`, clamped to its OWN duration (see
+ * `matchExplore.ts`'s module header for why no other base works).
+ */
+export function rawStreamsForRound(
+  matchesDir: string,
+  matchId: string,
+  legacy: Pick<LegacyRound, "startTime" | "endTime">,
+): RawStreams {
+  return parseRawStreams(
+    readRawText(matchesDir, matchId),
+    legacy.startTime,
+    roundDurationSOf(legacy.startTime, legacy.endTime),
+  );
 }
 
 /** Splits a round's player units into friendly/hostile teams, plus the

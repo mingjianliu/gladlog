@@ -620,10 +620,9 @@ function flagStr(argv: string[], name: string): string | undefined {
  * individual `*Lines` functions directly — so the two never drift on how a
  * subcommand's flags are parsed or validated. Pure: no I/O of its own, never
  * exits the process; illegal input always throws `Error("usage: …")`.
- * `rawStreams` is optional and only consulted by `mana`/`drink` — every
- * caller that never touches those two subcommands (all of `buildSession.ts`'s
- * existing evidence lines, today) can go on passing two arguments exactly as
- * before.
+ * `rawStreams` is optional and only consulted by `mana`/`drink`; both callers
+ * (the CLI and `buildSession.ts`'s prescreen) load it through
+ * `storeAccess.ts`'s `rawStreamsForRound` for exactly those two subcommands.
  */
 export function runQuery(
   legacy: LegacyRound,
