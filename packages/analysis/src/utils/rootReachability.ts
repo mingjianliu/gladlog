@@ -31,7 +31,12 @@ import { CombatUnitReaction } from "@gladlog/parser-compat";
 import { resolveSummonOwner } from "../context/timelineHelpers";
 import { ROOT_DR_IDS, ROOT_SPELL_IDS } from "../data/rootSpells";
 import { getEnglishSpellName } from "../data/spellEffectData";
+import { ccSpellIds } from "../data/spellTags";
 import { buildAuraIntervals, type IAuraInterval } from "./auraIntervals";
+import {
+  castBlockingAuraIntervals,
+  coveredMsWithin,
+} from "./cannotCastIntervals";
 import { isHealerSpec, isMeleeSpec } from "./cooldowns";
 import {
   distanceBetween,
@@ -101,6 +106,38 @@ export interface IRootInstance {
   worstAlly?: { name: string; seconds: number };
   /** `unreachableSeconds >= ROOT_UNREACHABLE_MIN_S` */
   significant: boolean;
+  /**
+   * The fact side of the same sweep (triage missed-cleanse F-C5, rulings A40 =
+   * B and U7, 2026-09-30); `[ROOT]` / `significant` never read these. Each
+   * swept second (≥ 0.5 s of it inside the root) is exactly one of:
+   *  - hard-CC: the rooted unit was under enemy hard CC (the cannot-cast
+   *    predicate minus silences) for ≥ 0.5 s of it — cleansing the root
+   *    would not have freed them (U7);
+   *  - proven: melee / ranged — some enemy was reachable; healer — every
+   *    damaged ally was (no false, no unknown);
+   *  - unreachable (the fact's own count, hard-CC seconds excluded);
+   *  - unknown: no position for the rooted unit, or no determinable
+   *    counterpart (`canReachTargetAt` → null).
+   */
+  reachSweep: {
+    swept: number;
+    hardCc: number;
+    proven: number;
+    unreachable: number;
+    unknown: number;
+  };
+}
+
+/** `rootReachProvenS=<proven>/<swept>`: written only when no swept second
+ *  was unreachable or unknown and at least one was proven — "absent" means
+ *  unknown or it mattered, never "harmless" (A40 = B; U7 reading 2026-09-30). */
+export function rootReachProvenFact(
+  r: Pick<IRootInstance, "reachSweep">,
+): string | null {
+  const x = r.reachSweep;
+  return x.unreachable === 0 && x.unknown === 0 && x.proven > 0
+    ? `${x.proven}/${x.swept}`
+    : null;
 }
 
 function roleOf(unit: ICombatUnit): RootedRole {
@@ -194,6 +231,16 @@ export function computeRootReachability(
     const enemies = players.filter((u) => u.reaction !== X.reaction);
     const role = roleOf(X);
     const intervals = rootIntervalsOf(X, combat);
+    // U7: enemy hard CC on the rooted unit — the cannot-cast predicate's
+    // auras filtered to the official hard-CC set (silences out).
+    const hardCc = intervals.length
+      ? castBlockingAuraIntervals(
+          X,
+          new Set(
+            allUnits.filter((u) => u.reaction !== X.reaction).map((u) => u.id),
+          ),
+        ).filter((a) => ccSpellIds.has(a.spellId))
+      : [];
     for (const iv of intervals) {
       const dur = iv.toS - iv.fromS;
       if (dur < ROOT_MIN_DURATION_S) continue;
@@ -211,14 +258,33 @@ export function computeRootReachability(
       const allyBad = new Map<string, number>();
       let sampled = 0;
       let unreachable = 0;
+      const sweep = {
+        swept: 0,
+        hardCc: 0,
+        proven: 0,
+        unreachable: 0,
+        unknown: 0,
+      };
       // Render grid: whole seconds [s, s+1) that overlap the root by at least
       // half a second, so the count can never exceed the rendered duration
       // (a 6.0 s root sweeps 6 seconds, not 7).
       for (let s = Math.floor(iv.fromS); s < iv.toS; s++) {
-        if (Math.min(s + 1, iv.toS) - Math.max(s, iv.fromS) < 0.5) continue;
+        const lo = Math.max(s, iv.fromS);
+        const hi = Math.min(s + 1, iv.toS);
+        if (hi - lo < 0.5) continue;
+        sweep.swept++;
+        const a0 = combat.startTime + lo * 1000;
+        const a1 = combat.startTime + hi * 1000;
+        // union, not sum: a stun inside another hard CC must not count
+        // its overlap twice (codex review)
+        const inHardCc = coveredMsWithin(hardCc, a0, a1) >= 500;
+        if (inHardCc) sweep.hardCc++;
         const t = combat.startTime + s * 1000;
         const p = getUnitPositionAtTime(X, t, LOS_SWEEP_GAP_MS);
-        if (!p) continue;
+        if (!p) {
+          if (!inHardCc) sweep.unknown++;
+          continue;
+        }
         sampled++;
         const inReach = (T: ICombatUnit): boolean | null =>
           role === "melee"
@@ -226,16 +292,30 @@ export function computeRootReachability(
             : canReachTargetAt(p, T, t, zoneId, CC_MAX_CAST_RANGE_YARDS, true);
         if (role === "healer") {
           let bad = false;
+          let allTrue = true;
           for (const a of hitAllies) {
-            if (inReach(a) === false) {
+            const r = inReach(a);
+            if (r !== true) allTrue = false;
+            if (r === false) {
               bad = true;
               allyBad.set(a.name, (allyBad.get(a.name) ?? 0) + 1);
             }
           }
           if (bad) unreachable++;
+          if (!inHardCc) {
+            if (bad) sweep.unreachable++;
+            else if (allTrue) sweep.proven++;
+            else sweep.unknown++;
+          }
         } else {
           const results = enemies.map(inReach).filter((r) => r !== null);
-          if (results.length > 0 && !results.some(Boolean)) unreachable++;
+          const bad = results.length > 0 && !results.some(Boolean);
+          if (bad) unreachable++;
+          if (!inHardCc) {
+            if (bad) sweep.unreachable++;
+            else if (results.some(Boolean)) sweep.proven++;
+            else sweep.unknown++;
+          }
         }
       }
       const worst = [...allyBad.entries()].sort((a, b) => b[1] - a[1])[0];
@@ -259,6 +339,7 @@ export function computeRootReachability(
         sampledSeconds: sampled,
         worstAlly: worst ? { name: worst[0], seconds: worst[1] } : undefined,
         significant: unreachable >= ROOT_UNREACHABLE_MIN_S,
+        reachSweep: sweep,
       });
     }
   }

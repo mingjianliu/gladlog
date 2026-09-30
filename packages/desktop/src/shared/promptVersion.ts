@@ -456,5 +456,10 @@
  *  "ready", msw entered / ready); talentModifiers.json drops Shamanism's row
  *  301624 (replace_spell → 8, no such spell), so the lusts are pressed
  *  buttons, not procs; datagen rejects such rows.
+ *  v233 (2026-09-30, triage missed-cleanse F-C5, rulings A40 = B / U7): a
+ *  root missed-cleanse item carries rootReachProvenS=N/M when the [ROOT]
+ *  predicate's own sweep proved the rooted player could reach their targets
+ *  on every non-hard-CC second (hard-CC seconds leave N), with a legend
+ *  sentence; the [ROOT] line and menu membership are unchanged.
  */
-export const PROMPT_VERSION = 232;
+export const PROMPT_VERSION = 233;

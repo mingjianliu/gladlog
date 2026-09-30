@@ -5,6 +5,7 @@ import {
   formatRootReachabilityEntries,
   ROOT_SPELL_IDS,
   ROOT_UNREACHABLE_MIN_S,
+  rootReachProvenFact,
 } from "../src/utils/rootReachability";
 import { CLOSE_RANGE_YARDS } from "../src/utils/positionAnalysis";
 
@@ -163,5 +164,75 @@ describe("rootReachability (GH #24)", () => {
     expect(
       formatRootReachabilityEntries([withHit], "Priest")[0].line,
     ).toContain("Hit (taking damage) out of range/LoS for 6s");
+  });
+});
+
+describe("rootReachProvenS (triage missed-cleanse F-C5, A40 = B, U7)", () => {
+  const rooted = () =>
+    unit(
+      "Rogue",
+      CombatUnitSpec.Rogue_Assassination,
+      CombatUnitReaction.Friendly,
+      0,
+      {
+        rootedBy: "Mage",
+      },
+    );
+  const near = () =>
+    unit("Mage", CombatUnitSpec.Mage_Frost, CombatUnitReaction.Hostile, 2);
+  const aura = (event: string, s: number, spellId: string) => ({
+    timestamp: T0 + s * 1000,
+    spellId,
+    spellName: "Incapacitating Roar",
+    destUnitId: "Rogue",
+    srcUnitId: "Mage",
+    srcUnitName: "Mage",
+    logLine: { event, timestamp: T0 + s * 1000, parameters: [] },
+  });
+  it("every second reachable → N/N; the [ROOT] counts are unchanged", () => {
+    const [r] = computeRootReachability(combat, [rooted(), near()]);
+    expect(r.unreachableSeconds).toBe(0);
+    expect(rootReachProvenFact(r)).toBe("6/6");
+  });
+  it("6062daf2 shape: a 3 s incapacitate inside the 6 s root → 3/6", () => {
+    const me = rooted();
+    me.auraEvents.push(
+      aura("SPELL_AURA_APPLIED", 6.207, "99"),
+      aura("SPELL_AURA_REMOVED", 9.209, "99"),
+    );
+    me.auraEvents.sort((a: any, b: any) => a.timestamp - b.timestamp);
+    const [r] = computeRootReachability(combat, [me, near()]);
+    expect(r.reachSweep).toMatchObject({ swept: 6, hardCc: 3, proven: 3 });
+    expect(rootReachProvenFact(r)).toBe("3/6");
+  });
+  it("codex review: two hard CCs covering the same 0.3 s are 0.3 s of hard CC, not 0.6", () => {
+    const me = rooted();
+    me.auraEvents.push(
+      aura("SPELL_AURA_APPLIED", 6.7, "99"),
+      aura("SPELL_AURA_REMOVED", 7.0, "99"),
+      aura("SPELL_AURA_APPLIED", 6.7, "408"),
+      aura("SPELL_AURA_REMOVED", 7.0, "408"),
+    );
+    me.auraEvents.sort((a: any, b: any) => a.timestamp - b.timestamp);
+    const [r] = computeRootReachability(combat, [me, near()]);
+    // 300 ms < the 500 ms threshold → that second stays a reach second
+    expect(r.reachSweep).toMatchObject({ swept: 6, hardCc: 0, proven: 6 });
+    expect(rootReachProvenFact(r)).toBe("6/6");
+  });
+  it("positions removed → unknown seconds → no fact", () => {
+    const me = rooted();
+    me.advancedActions = [];
+    const [r] = computeRootReachability(combat, [me, near()]);
+    expect(rootReachProvenFact(r)).toBeNull();
+  });
+  it("an unreachable second → no fact", () => {
+    const far = unit(
+      "Mage",
+      CombatUnitSpec.Mage_Frost,
+      CombatUnitReaction.Hostile,
+      CLOSE_RANGE_YARDS + 10,
+    );
+    const [r] = computeRootReachability(combat, [rooted(), far]);
+    expect(rootReachProvenFact(r)).toBeNull();
   });
 });

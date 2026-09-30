@@ -39,7 +39,6 @@ import {
   enemySourceIds,
 } from "../utils/cannotCastIntervals";
 import { type OwnerCastCancels, ownerCastCancels } from "../utils/castCancels";
-import { affordableWithin } from "../utils/resourceAt";
 import {
   analyzePlayerCCAndTrinket,
   applicableCCAvoidanceIds,
@@ -50,10 +49,9 @@ import {
   REPOSITIONING_SPELL_IDS,
 } from "../utils/ccTrinketAnalysis";
 import {
-  isTeamSaveCD,
   annotateDefensiveTimings,
-  cdCanHelpAnotherUnit,
   cdAvailableAt,
+  cdCanHelpAnotherUnit,
   cdIsProcOnly,
   cdNeverSpent,
   DEFENSIVE_TAGS,
@@ -64,6 +62,7 @@ import {
   isHealerSpec,
   isMeleeSpec,
   isPassiveProcCast,
+  isTeamSaveCD,
   kitSpellReadyAt,
   playerTalentIdSets,
   REACTION_WINDOW_S,
@@ -113,6 +112,12 @@ import {
   type RawStreams,
 } from "../utils/rawStreams";
 import { toRenderSecond } from "../utils/renderGrid";
+import { affordableWithin } from "../utils/resourceAt";
+import {
+  computeRootReachability,
+  type IRootInstance,
+  rootReachProvenFact,
+} from "../utils/rootReachability";
 import { RANGE_HITBOX_SLACK_YD, spellReachToAccuse } from "../utils/spellRange";
 import { spellRangeForCaster, spellReachForCaster } from "../utils/spellRange";
 import { getSpellSchoolName } from "../utils/spellSchools";
@@ -130,13 +135,13 @@ import {
   cdHoardedEvents,
   cdSpentIdleEvents,
   countsAsTeamBurst,
-  syncWindowCdFor,
   enemyHealerCcWindows,
   enemyMinHpInWindow,
   enemyMinHpPctInWindow,
   friendlyCrisisMomentInWindow,
   isSpendableDefensiveCd,
   missedSyncWindowEvents,
+  syncWindowCdFor,
   unsyncedBurstEvents,
 } from "./candidates/cooldownTiming";
 import { crisisNoResponseEvents } from "./candidates/crisisNoResponse";
@@ -934,6 +939,20 @@ const BURST_INTO_MITIGATION_CAP = 2;
  *    "call it out" suggestion instead of blaming the owner for an ability
  *    they don't have (guard note in buildFindingsPrompt's CHAIN_LEGENDS).
  */
+/** The `[ROOT]` predicate's instances for this round; [] when it cannot run. */
+function rootReachFor(combat: any): IRootInstance[] {
+  try {
+    const all = Object.values(combat?.units ?? {}) as ICombatUnit[];
+    return computeRootReachability(
+      combat,
+      all.filter((u) => u.info),
+      all,
+    );
+  } catch {
+    return [];
+  }
+}
+
 export function missedCleanseEvents(
   windows: Pick<
     IMissedCleanseWindow,
@@ -965,6 +984,15 @@ export function missedCleanseEvents(
     matchStartMs: number;
     /** A5: the owner's SPELL_CAST_FAILED (absolute ms) — cuts a cancelled bar. */
     failedCasts?: ReadonlyArray<{ spellId: string; ms: number }>;
+  },
+  /** Facts-only inputs (never gates). */
+  extra?: {
+    /** `computeRootReachability` — the `[ROOT]` predicate's instances, for
+     * F-C5's `rootReachProvenS` (rulings A40 = B, U7). */
+    rootReach?: readonly Pick<
+      IRootInstance,
+      "rootedName" | "spellId" | "atSeconds" | "reachSweep"
+    >[];
   },
 ): CandidateEvent[] {
   return windows
@@ -1007,6 +1035,13 @@ export function missedCleanseEvents(
       // window full of instants looks like (instants emit no CAST_START), so
       // zero must never be shown — it would read as "was idle".
       const occS = occ ? (occ.occupiedMs / 1000).toFixed(1) : "0.0";
+      const rootInst = extra?.rootReach?.find(
+        (r) =>
+          r.rootedName === w.targetName &&
+          r.spellId === w.spellId &&
+          Math.abs(r.atSeconds - w.timeSeconds) < 1,
+      );
+      const rootFact = rootInst ? rootReachProvenFact(rootInst) : null;
       return {
         id: `missed-cleanse:${w.targetName}:${Math.round(w.timeSeconds)}`,
         type: "missed-cleanse",
@@ -1033,6 +1068,9 @@ export function missedCleanseEvents(
           // annotation, keeping both channels consistent).
           drChainRisk: w.drChainRisk ? "yes" : "no",
           dispelType: w.dispelType,
+          // F-C5 (A40 = B, U7): the same root instance the [ROOT] predicate
+          // swept — rooted unit + spell + floored start within 1 s.
+          ...(rootFact ? { rootReachProvenS: rootFact } : {}),
           // #34(b2): what the owner's hands were doing during the window.
           // preCommitted "yes" = a counted cast started BEFORE the window
           // opened (couldn't have known); "no" = every counted cast started
@@ -2210,6 +2248,7 @@ function teamPlayEvents(
                 : undefined,
             }
           : undefined,
+        { rootReach: rootReachFor(combat) },
       ),
     );
     if (CANDIDATE_TYPE_FLAGS.missedPurge) {
