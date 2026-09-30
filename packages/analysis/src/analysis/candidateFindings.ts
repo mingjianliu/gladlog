@@ -2334,6 +2334,19 @@ function teamPlayEvents(
           },
           // H1: the facts that say what that gate saw (same inputs)
           ownerAct.stateIn,
+          // F-H7 / F-H9: every friendly's own ledger (the owner's is the
+          // one already computed), for the stated-not-credited saves
+          friends.map((f: any) => {
+            let cds: IMajorCooldownInfo[] = [];
+            if (f.id === owner.id) cds = ownerCds;
+            else
+              try {
+                cds = extractMajorCooldowns(f, combat);
+              } catch {
+                cds = [];
+              }
+            return { unit: { id: f.id, name: f.name }, cds };
+          }),
         ),
       );
     } catch {

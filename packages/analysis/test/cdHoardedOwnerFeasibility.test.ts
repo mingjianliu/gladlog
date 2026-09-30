@@ -286,3 +286,184 @@ describe("cdHoardedEvents — ownerCc / ownerFreeS facts (H1)", () => {
     expect(act.stateIn(58.5, 65, 60)!.freeAfterS).toBeCloseTo(1.375, 3);
   });
 });
+
+// Triage 2026-09-29 F-H2 / F-H5 / F-H7 / F-H9, user rulings 2026-09-30
+// (R1 = B, R3 = A, R4 = B, R5 = B): facts only, the verdict is unchanged.
+describe("cdHoardedEvents — signed 09-30 facts", () => {
+  const T0 = 1_000_000;
+  const at = (s: number) => T0 + s * 1000;
+  const stunned = (fromS: number, toS: number, deathS?: number) =>
+    ({
+      id: "h",
+      auraEvents: [
+        {
+          spellId: "119381",
+          spellName: "Leg Sweep",
+          srcUnitId: "e",
+          timestamp: at(fromS),
+          logLine: { event: LogEvent.SPELL_AURA_APPLIED },
+        },
+        {
+          spellId: "119381",
+          spellName: "Leg Sweep",
+          srcUnitId: "e",
+          timestamp: at(toS),
+          logLine: { event: LogEvent.SPELL_AURA_REMOVED },
+        },
+      ],
+      actionIn: [],
+      deathRecords: deathS === undefined ? [] : [{ timestamp: at(deathS) }],
+    }) as unknown as ICombatUnit;
+  const run = (
+    u: ICombatUnit,
+    extra: {
+      rawStreams?: unknown;
+      teamLedgers?: Parameters<typeof cdHoardedEvents>[9];
+    } = {},
+  ) => {
+    const act = actWindowFor(u, new Set(["e"]), T0);
+    return cdHoardedEvents(
+      [{ crisisUnit: MATE, own: false, points: [point(60)] }],
+      [cd()],
+      OWNER,
+      undefined,
+      extra.rawStreams as never,
+      [],
+      act.couldRespond,
+      undefined,
+      act.stateIn,
+      extra.teamLedgers,
+    );
+  };
+
+  it("F-H2: rejected presses carry their offsets and the free seconds after the last one", () => {
+    const rawStreams = {
+      available: true,
+      manaSamples: [],
+      castFailed: [58.6, 59.4].map((tSeconds) => ({
+        tSeconds,
+        unitGuid: "h",
+        spellId: 33206,
+        spellName: "Pain Suppression",
+        reason: "Can't do that while stunned",
+      })),
+    };
+    const [e] = run(stunned(58, 59.8), { rawStreams });
+    expect(e!.facts!.attempted).toContain("stunned×2");
+    expect(e!.facts!.attemptedAt).toBe("-1.4…-0.6s");
+    // free from the 59.8 stun end to 65: 5.2 s
+    expect(e!.facts!.freeAfterAttemptS).toBe("5.2");
+  });
+
+  it("F-H2: freeAfterAttemptS is floored so 0.96 s never renders as 1.0 (the legend threshold)", () => {
+    const rawStreams = {
+      available: true,
+      manaSamples: [],
+      castFailed: [
+        {
+          tSeconds: 64.04,
+          unitGuid: "h",
+          spellId: 33206,
+          spellName: "Pain Suppression",
+          reason: "Can't do that while stunned",
+        },
+      ],
+    };
+    const [e] = run(stunned(50, 51), { rawStreams });
+    expect(e!.facts!.freeAfterAttemptS).toBe("0.9");
+  });
+
+  it("F-H5: windowS only when the owner's death (or the round end) cuts the 5 s", () => {
+    const [short] = run(stunned(50, 51, 61.4));
+    expect(short!.facts!.windowS).toBe("1.4");
+    const [full] = run(stunned(50, 51));
+    expect(full!.facts!.windowS).toBeUndefined();
+  });
+
+  it("F-H7 / F-H9: the crisis unit's own save and another teammate's ally save are stated, not credited", () => {
+    const save = (spellId: string, spellName: string, s: number) => ({
+      spellId,
+      spellName,
+      tag: "Defensive",
+      cooldownSeconds: 180,
+      casts: [{ timeSeconds: s }],
+      neverUsed: false,
+    });
+    const out = run(stunned(50, 51), {
+      teamLedgers: [
+        { unit: OWNER, cds: [cd()] },
+        { unit: MATE, cds: [save("45438", "Ice Block", 61.1)] },
+        {
+          unit: { id: "p", name: "Priest-R" },
+          cds: [save("47788", "Guardian Spirit", 60.2)],
+        },
+      ],
+    });
+    expect(out).toHaveLength(1);
+    expect(out[0]!.facts!.crisisUnitSaved).toBe("Ice Block +1.1s");
+    expect(out[0]!.facts!.teamAnswered).toBe(
+      "Guardian Spirit (Priest-R) +0.2s",
+    );
+  });
+
+  it("F-H7 / F-H9: an ally save aimed at someone else is not listed; a self wall aimed at an enemy is (it lands on its caster)", () => {
+    const save = (
+      spellId: string,
+      spellName: string,
+      s: number,
+      targetName?: string,
+    ) => ({
+      spellId,
+      spellName,
+      tag: "Defensive",
+      cooldownSeconds: 180,
+      casts: [{ timeSeconds: s, targetName }],
+      neverUsed: false,
+    });
+    const [e] = run(stunned(50, 51), {
+      teamLedgers: [
+        {
+          unit: MATE,
+          cds: [save("363916", "Obsidian Scales", 61.1, "Enemy-R")],
+        },
+        {
+          unit: { id: "p", name: "Priest-R" },
+          cds: [save("47788", "Guardian Spirit", 60.2, "Other-R")],
+        },
+      ],
+    });
+    expect(e!.facts!.crisisUnitSaved).toBe("Obsidian Scales +1.1s");
+    expect(e!.facts!.teamAnswered).toBeUndefined();
+  });
+
+  it("F-H7: an own=yes line never carries crisisUnitSaved", () => {
+    const act = actWindowFor(stunned(50, 51), new Set(["e"]), T0);
+    const [e] = cdHoardedEvents(
+      [{ crisisUnit: OWNER, own: true, points: [point(60)] }],
+      [{ ...cd(), spellId: "45438", spellName: "Ice Block" }],
+      OWNER,
+      undefined,
+      undefined,
+      [],
+      act.couldRespond,
+      undefined,
+      act.stateIn,
+      [
+        {
+          unit: OWNER,
+          cds: [
+            {
+              spellId: "22812",
+              spellName: "Barkskin",
+              tag: "Defensive",
+              cooldownSeconds: 60,
+              casts: [{ timeSeconds: 70 }],
+              neverUsed: false,
+            },
+          ],
+        },
+      ],
+    );
+    expect(e?.facts?.crisisUnitSaved).toBeUndefined();
+  });
+});

@@ -1122,6 +1122,15 @@ export function cdHoardedEvents(
     toS: number,
     anchorS: number,
   ) => ActWindowState | null,
+  /** Triage 2026-09-29 F-H7 / F-H9 (user ruling 2026-09-30, R4 = B, R5 = B):
+   * every friendly's own major-cooldown ledger. A save the crisis unit
+   * pressed on itself (`crisisUnitSaved`) or another teammate pressed for it
+   * (`teamAnswered`) inside the window is STATED, never counted as the
+   * player's answer — the verdict is unchanged. Absent ⇒ neither fact. */
+  teamLedgers?: ReadonlyArray<{
+    unit: { id: string; name: string };
+    cds: CdHoardCandidateCd[];
+  }>,
 ): CandidateEvent[] {
   const cap = overrides?.cap ?? CD_HOARD_CAP;
   const candidates: Array<{
@@ -1396,6 +1405,12 @@ export function cdHoardedEvents(
           )
         : [];
       const attempted = formatAttemptedFact(failedHits);
+      // F-H2 (ruling 2026-09-30, R1 = B): the rejected presses stay counted,
+      // but the line says WHEN (offsets from t) and how long the owner could
+      // still act after the last one — pressing once while stunned does not
+      // excuse the rest of the window (95127ab4: six rejects in Leg Sweep
+      // before t, then 5.2 s free with the cooldown in hand).
+      const rejectAt = failedHits.map((h) => h.tSeconds).sort((a, b) => a - b);
       // A2 step 2 (user ruling 2026-09-25 「给别人也算回应不行」): a save the
       // owner pressed in this window on ANOTHER unit did not answer this
       // crisis — but it WAS pressed, so the line says where it went, or the
@@ -1436,6 +1451,65 @@ export function cdHoardedEvents(
         const d = s - t;
         return `${d >= 0 ? "+" : ""}${d.toFixed(1)}`;
       };
+      const attemptedAt = rejectAt.length
+        ? rejectAt.length === 1 || off(rejectAt[0]!) === off(rejectAt.at(-1)!)
+          ? `${off(rejectAt[0]!)}s`
+          : `${off(rejectAt[0]!)}…${off(rejectAt.at(-1)!)}s`
+        : "";
+      const afterReject =
+        rejectAt.length && ownerActState
+          ? ownerActState(windowFromS, windowToS, rejectAt.at(-1)!)
+          : null;
+      // F-H5 (ruling 2026-09-30, R3 = A): the window really available after
+      // t — cut at the owner's death or the round end, the gate's own cut —
+      // stated only when shorter than CD_HOARD_RESPONSE_S.
+      // (compared as rendered: 4.96 s would print "5.0", which says nothing)
+      const windowRendered = act ? Math.max(0, act.endS - t).toFixed(1) : "";
+      const windowS =
+        act && Number(windowRendered) < CD_HOARD_RESPONSE_S
+          ? windowRendered
+          : "";
+      // F-H7 / F-H9 (ruling 2026-09-30, R4 = B, R5 = B): saves pressed for
+      // the crisis unit by someone other than the player — the unit itself,
+      // or another teammate's ally-reaching save — stated, not credited.
+      const pressedFor = (
+        cds: CdHoardCandidateCd[],
+        ally: boolean,
+      ): Array<{ at: number; name: string }> =>
+        cds
+          .filter(
+            (cd) =>
+              isSpendableDefensiveCd(cd) &&
+              (!ally || canHelpAnotherUnit(cd.spellId, cd.tag)),
+          )
+          .flatMap((cd) =>
+            cd.casts
+              .filter(
+                (c) =>
+                  c.timeSeconds >= windowFromS &&
+                  c.timeSeconds <= windowToS &&
+                  (!canHelpAnotherUnit(cd.spellId, cd.tag) ||
+                    c.targetName === undefined ||
+                    c.targetName === crisisUnit.name),
+              )
+              .map((c) => ({ at: c.timeSeconds, name: cd.spellName })),
+          );
+      const crisisUnitSaved = own
+        ? ""
+        : (teamLedgers ?? [])
+            .filter((l) => l.unit.id === crisisUnit.id)
+            .flatMap((l) => pressedFor(l.cds, false))
+            .sort((a, b) => a.at - b.at)
+            .map((x) => `${x.name} ${off(x.at)}s`)
+            .join("; ");
+      const teamAnswered = (teamLedgers ?? [])
+        .filter((l) => l.unit.id !== crisisUnit.id && l.unit.id !== owner.id)
+        .flatMap((l) =>
+          pressedFor(l.cds, true).map((x) => ({ ...x, who: l.unit.name })),
+        )
+        .sort((a, b) => a.at - b.at)
+        .map((x) => `${x.name} (${x.who}) ${off(x.at)}s`)
+        .join("; ");
       const ownerCc = act?.blocks.length
         ? act.blocks
             .map(
@@ -1465,6 +1539,20 @@ export function cdHoardedEvents(
           own: own ? "yes" : "no",
           ...CD_HOARDED_OUTCOME_REF,
           ...(attempted ? { attempted } : {}),
+          ...(attempted && attemptedAt ? { attemptedAt } : {}),
+          // floored, not rounded: the legend compares the RENDERED value
+          // with REACTION_WINDOW_S, so 0.96 s must read 0.9, never 1.0
+          // (codex check of F-H2; CLAUDE.md render-grid rule)
+          ...(attempted && afterReject
+            ? {
+                freeAfterAttemptS: (
+                  Math.floor(afterReject.freeAfterS * 10 + 1e-9) / 10
+                ).toFixed(1),
+              }
+            : {}),
+          ...(windowS ? { windowS } : {}),
+          ...(crisisUnitSaved ? { crisisUnitSaved } : {}),
+          ...(teamAnswered ? { teamAnswered } : {}),
           ...(spentElsewhere ? { spentElsewhere } : {}),
           ...(ownerCc && act
             ? { ownerCc, ownerFreeS: act.freeAfterS.toFixed(1) }

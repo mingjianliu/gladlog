@@ -295,5 +295,13 @@
  *  (`| returned +Ns`, a [TEAM] return line). 605 files: menus identical;
  *  crisis lines without a tick 735 → 0; [STATE] +2.1 %, [YOU] [CAST] +5.8 %;
  *  returns rendered 0 → 553.
+ *  v198 (2026-09-30, triage cd-hoarded-waste F-H2 + F-H5 + F-H7 + F-H9,
+ *  user rulings of the same day): cd-hoarded states when a rejected press
+ *  happened and the free time after it (facts.attemptedAt,
+ *  facts.freeAfterAttemptS — the legend forbids "held" only below
+ *  REACTION_WINDOW_S), the window really left (facts.windowS), and saves
+ *  the crisis unit or another teammate pressed (facts.crisisUnitSaved,
+ *  facts.teamAnswered — stated, not credited). 605 files: ids identical,
+ *  634 of 1,313 lines gain facts.
  */
-export const PROMPT_VERSION = 197;
+export const PROMPT_VERSION = 198;

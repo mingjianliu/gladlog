@@ -326,6 +326,9 @@ export interface ActWindowState {
   /** seconds of (anchorS, toS] — cut at death and the round end, like
    * `couldRespond` — outside every cannot-cast interval */
   freeAfterS: number;
+  /** the window's end after that cut, seconds since round start (F-H5
+   * `windowS` = endS − t) */
+  endS: number;
 }
 
 /**
@@ -393,7 +396,7 @@ export function actWindowFor(
               coveredMsWithin(named, anchorMs, freeEndMs)) /
             1000
           : 0;
-      return { blocks, freeAfterS };
+      return { blocks, freeAfterS, endS: (toMs - matchStartMs) / 1000 };
     },
   };
 }
