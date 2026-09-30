@@ -209,3 +209,21 @@ describe("matchMinHpPct", () => {
     expect(matchMinHpPct(makeUnit("p2"))).toBeNull();
   });
 });
+
+// User ruling 2026-09-30: Mass Invisibility is accusable in cd-hoarded only
+// (A9 simulated cd-hoarded, not "never pressed it all match")
+describe("cd-waste never names Mass Invisibility", () => {
+  const mi = {
+    spellId: "414664",
+    spellName: "Mass Invisibility",
+    neverUsed: true,
+    isThroughput: false,
+    tag: "Defensive",
+  };
+  it("a never-pressed Mass Invisibility under pressure → no cd-waste", () => {
+    expect(cdWasteEvents([mi], me, 40)).toEqual([]);
+    expect(cdWasteEvents([mi, DP], me, 40).map((e) => e.spellId)).toEqual([
+      "19236",
+    ]);
+  });
+});

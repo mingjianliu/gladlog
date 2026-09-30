@@ -273,6 +273,18 @@ export const ATTEMPTED_GUARD_TYPES: ReadonlySet<string> = new Set([
  */
 export const CD_WASTE_PRESSURE_HP_PCT = 60;
 
+/**
+ * Defensives cd-hoarded may name but cd-waste never does (user ruling
+ * 2026-09-30, triage cd-hoarded-waste, answer to the batch-12 question):
+ * Mass Invisibility 414664 was made accusable on the A9 evidence, and that
+ * evidence simulated cd-hoarded only — "never pressed Mass Invisibility the
+ * whole match" (51 cd-waste lines on the 605-file capture) is a claim nobody
+ * validated. Registered in curatedIdRegistry.
+ */
+export const CD_WASTE_EXCLUDED_IDS: ReadonlySet<string> = new Set([
+  "414664", // Mass Invisibility
+]);
+
 export function cdWasteEvents(
   cds: (Pick<
     IMajorCooldownInfo,
@@ -309,6 +321,7 @@ export function cdWasteEvents(
     // A response-only save (Barkskin / Frenzied Regeneration, user ruling
     // 2026-09-25 「不指控」) is never "never used".
     if (cd.responseOnly) continue;
+    if (CD_WASTE_EXCLUDED_IDS.has(cd.spellId)) continue;
     // W2 (triage 2026-09-29): a press of the same DB2 charge pool spends it
     if (cdNeverSpent(cd) && !cd.isThroughput && isDefensive) {
       // Cost-norm guard (#25, 2026-08-14): a never-used major defensive is

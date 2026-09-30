@@ -20,6 +20,7 @@ import { DEFERRED_DAMAGE_SPELL_IDS } from "../context/timelineHelpers";
  * index, and the rule has never been the missing piece (CLAUDE.md).
  */
 import { BURST_LEAD_CD_EXCLUDED_IDS } from "../analysis/burstWindowDecisionPoints";
+import { CD_WASTE_EXCLUDED_IDS } from "../analysis/candidateFindings";
 import { HEALER_TEAM_BURST_IDS } from "../analysis/candidates/cooldownTiming";
 import { ZONE_EXTERNAL_RADIUS_YD } from "../analysis/candidates/death";
 import {
@@ -324,6 +325,9 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   ),
   t("AURA_ACTIVATION_PROVES_BUTTON_IDS", "utils/cooldowns.ts", "cast", () =>
     set(AURA_ACTIVATION_PROVES_BUTTON_IDS),
+  ),
+  t("CD_WASTE_EXCLUDED_IDS", "analysis/candidateFindings.ts", "cast", () =>
+    set(CD_WASTE_EXCLUDED_IDS),
   ),
   t("RESPONSE_ONLY_DEFENSIVE_IDS", "utils/cooldowns.ts", "cast", () =>
     set(RESPONSE_ONLY_DEFENSIVE_IDS),

@@ -328,5 +328,8 @@
  *  ownership evidence (`AURA_ACTIVATION_PROVES_BUTTON_IDS`); it is a
  *  response only (`RESPONSE_ONLY_DEFENSIVE_IDS`) — a press answers the
  *  owner's own crisis, no accusation or `cheaper available:` names it.
+ *  v205 (2026-09-30, triage cd-hoarded-waste F-H16 follow-up, user ruling):
+ *  cd-waste never names Mass Invisibility (`CD_WASTE_EXCLUDED_IDS`) — it is
+ *  accusable in cd-hoarded only. 605 files: cd-waste −51.
  */
-export const PROMPT_VERSION = 204;
+export const PROMPT_VERSION = 205;
