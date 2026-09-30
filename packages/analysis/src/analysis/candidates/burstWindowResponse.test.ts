@@ -273,3 +273,50 @@ describe("burstWindowResponseEvents — the rendered facts", () => {
     expect(evts[0]!.facts["diedInWindow"]).toBe("yes");
   });
 });
+
+// triage 2026-09-29 S1 (e10c6bea @156: Blessing of Sacrifice rejected
+// "stunned" ×2 at 162.551 / 162.693; two more at 164.259 / 164.401 fall
+// after the judged window [154.5, 164.0])
+describe("burstWindowResponseEvents — facts.attempted (S1)", () => {
+  const fail = (tSeconds: number) => ({
+    tSeconds,
+    unitGuid: "h1",
+    spellId: 6940,
+    spellName: "Blessing of Sacrifice",
+    reason: "无法在昏迷时那样做",
+  });
+  const attempts = {
+    rawStreams: {
+      available: true,
+      manaSamples: [],
+      castFailed: [fail(162.551), fail(162.693), fail(164.259), fail(164.401)],
+    },
+    ownerId: "h1",
+    tools: [{ spellId: "6940", casts: [] }],
+  };
+  it("counts only the rejects inside [tSec − 1.5 s, tSec + 8 s]", () => {
+    const [e] = burstWindowResponseEvents(
+      [point({ tSec: 156 })],
+      owner,
+      probes(),
+      undefined,
+      attempts,
+    );
+    expect(e!.facts!.attempted).toBe("曾尝试施放被拒(无法在昏迷时那样做×2)");
+  });
+  it("no rejects, or no raw streams → no fact", () => {
+    expect(
+      burstWindowResponseEvents([point({ tSec: 156 })], owner, probes())[0]!
+        .facts!.attempted,
+    ).toBeUndefined();
+    expect(
+      burstWindowResponseEvents(
+        [point({ tSec: 120 })],
+        owner,
+        probes(),
+        undefined,
+        attempts,
+      )[0]!.facts!.attempted,
+    ).toBeUndefined();
+  });
+});

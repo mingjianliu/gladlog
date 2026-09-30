@@ -131,6 +131,32 @@ describe("buildFindingsPrompt", () => {
       expect(p).toMatch(/facts\.attempted/);
       expect(p).toMatch(/never phrase this as hoarding/);
     });
+
+    // triage 2026-09-29 F-S1 (codex review): the line's spell is the ENEMY's
+    // opener, so the note must point at the owner's own defensives
+    it("slow-defensive-response's note names the player's own ally defensives, not 'this ability'", () => {
+      const p = buildFindingsPrompt(
+        [
+          ...candidates,
+          {
+            id: "slow-defensive-response:p1:156",
+            type: "slow-defensive-response",
+            t: 156,
+            unitNames: ["Me-R"],
+            spell: "Summon Darkglare",
+            facts: {
+              t: "2:36",
+              leadCd: "Summon Darkglare",
+              attempted: "曾尝试施放被拒(无法在昏迷时那样做×2)",
+            },
+          },
+        ],
+        "",
+        "Holy Paladin",
+      );
+      expect(p).toMatch(/one of their own ally-reaching defensive cooldowns/);
+      expect(p).not.toMatch(/DID try to press this ability/);
+    });
   });
 
   describe("信号扩容批 1 图例(2026-08-06,healing-gap/position-mistake/cc-held)", () => {

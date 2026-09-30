@@ -32,13 +32,17 @@ import {
   isDecisionTraceActive,
   traceDecision,
 } from "../../facts/decisionTrace";
+import { castFailedInWindow, type RawStreams } from "../../utils/rawStreams";
 import type { BurstWindowDecisionPoint } from "../burstWindowDecisionPoints";
 import {
+  BURST_RESPONSE_PRE_MS,
+  BURST_RESPONSE_WINDOW_MS,
   BURST_RESPONSE_WINDOW_SEC,
   burstExtrasLabel,
 } from "../burstWindowDecisionPoints";
 import { fmtFactTime } from "../factFormat";
 import type { CandidateEvent } from "../types";
+import { filterIntentGuardEvidence, formatAttemptedFact } from "./shared";
 
 /** At most this many windows per round reach the menu. Same cap as
  * `crisisNoResponse` / the retired predicate — two is what a coach can act on
@@ -67,6 +71,21 @@ export function burstWindowResponseEvents(
   owner: { id: string; name: string },
   probes: { lookup: (leadCdSpellId: string) => BurstWindowPriorRef | null },
   overrides?: { cap?: number },
+  /** Intent guard (triage 2026-09-29 S1, BACKLOG #26's "pressed but rejected
+   * ≠ never pressed"): the owner's ally-reaching save tools and their
+   * rejected presses inside the judged window [tSec − BURST_RESPONSE_PRE_MS,
+   * tSec + BURST_RESPONSE_WINDOW_MS] become `facts.attempted`, through the
+   * same `castFailedInWindow` + `filterIntentGuardEvidence` cd-hoarded uses.
+   * The verdict (`responded`) is untouched. Absent ⇒ no fact. */
+  ownerAttempts?: {
+    rawStreams: RawStreams;
+    ownerId: string;
+    tools: ReadonlyArray<{
+      spellId: string;
+      casts: ReadonlyArray<{ timeSeconds: number }>;
+    }>;
+    ownCastSuccessSeconds?: number[];
+  },
 ): CandidateEvent[] {
   const cap = overrides?.cap ?? BURST_WINDOW_RESPONSE_CAP;
   // The reference lookup happens BEFORE the cap, not after: a window with no
@@ -176,6 +195,27 @@ export function burstWindowResponseEvents(
     // Only the CDs inside the 8 s this sentence judges, each offset from the
     // opener — one helper with the [BURST ANSWERED] line.
     const extras = burstExtrasLabel(p);
+    // Read off the decision point's own (floored) second, never the raw lead
+    // cast — the window the sentence judges.
+    const attempted = ownerAttempts
+      ? formatAttemptedFact(
+          ownerAttempts.tools.flatMap((tool) =>
+            filterIntentGuardEvidence(
+              castFailedInWindow(
+                ownerAttempts.rawStreams,
+                ownerAttempts.ownerId,
+                p.tSec - BURST_RESPONSE_PRE_MS / 1000,
+                p.tSec + BURST_RESPONSE_WINDOW_MS / 1000,
+                Number(tool.spellId),
+              ),
+              tool.casts.map((c) => c.timeSeconds),
+              {
+                ownCastSuccessSeconds: ownerAttempts.ownCastSuccessSeconds,
+              },
+            ),
+          ),
+        )
+      : undefined;
     out.push({
       id: `slow-defensive-response:${owner.id}:${p.tSec}`,
       type: "slow-defensive-response",
@@ -210,6 +250,7 @@ export function burstWindowResponseEvents(
         refTop: ref.topResponses.map(([k, v]) => `${k} ${v}%`).join("; "),
         cellKey: ref.cellKey,
         fellBack: ref.fellBack ? "yes" : "no",
+        ...(attempted ? { attempted } : {}),
       },
     });
   }

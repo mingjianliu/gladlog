@@ -283,5 +283,10 @@
  *  `gridHpPct` used (`gridHpSample`), never past the anchor second, instead
  *  of the 2 s up to the whole second; legends say so. 605 files: cd-hoarded
  *  +16 / −11 (10 up / 5 down across the dangerous floor, 6 swaps).
+ *  v196 (2026-09-30, triage cd-hoarded-waste F-S1): slow-defensive-response
+ *  carries facts.attempted — the owner's rejected presses of their
+ *  ally-reaching saves inside the judged window — with its own legend note
+ *  (the line's spell is the enemy opener). 605 files: ids identical, 4 of 131
+ *  lines gain attempted.
  */
-export const PROMPT_VERSION = 195;
+export const PROMPT_VERSION = 196;

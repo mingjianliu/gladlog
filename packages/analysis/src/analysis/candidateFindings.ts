@@ -51,6 +51,7 @@ import {
 import {
   isTeamSaveCD,
   annotateDefensiveTimings,
+  canHelpAnotherUnit,
   cdAvailableAt,
   cdIsProcOnly,
   cdNeverSpent,
@@ -130,6 +131,7 @@ import {
   enemyHealerCcWindows,
   enemyMinHpPctInWindow,
   friendlyCrisisMomentInWindow,
+  isSpendableDefensiveCd,
   missedSyncWindowEvents,
   unsyncedBurstEvents,
 } from "./candidates/cooldownTiming";
@@ -242,6 +244,9 @@ export {
  * downgrading severity too. */
 export const ATTEMPTED_GUARD_TYPES: ReadonlySet<string> = new Set([
   "cd-hoarded",
+  // triage 2026-09-29 S1: the owner's rejected ally-reaching save presses
+  // inside the judged 8 s window
+  "slow-defensive-response",
 ]);
 
 /**
@@ -2698,6 +2703,24 @@ function teamPlayEvents(
             lookup: (leadCdSpellId) =>
               lookupBurstWindowPrior(bracket, leadCdSpellId),
           },
+          undefined,
+          rawStreams
+            ? {
+                rawStreams,
+                ownerId: owner.id,
+                // the owner's ally-reaching save tools (S1) — the same
+                // spendable ∩ help-another set cd-hoarded's teammate side uses
+                tools: ownerCds.filter(
+                  (cd: IMajorCooldownInfo) =>
+                    isSpendableDefensiveCd(cd) &&
+                    canHelpAnotherUnit(cd.spellId, cd.tag),
+                ),
+                // #29's gcd-locked exclusion input, as cd-hoarded passes it
+                ownCastSuccessSeconds: (owner.spellCastEvents ?? []).map(
+                  (e: any) => (e.logLine.timestamp - combat.startTime) / 1000,
+                ),
+              }
+            : undefined,
         ),
       );
     } catch {
