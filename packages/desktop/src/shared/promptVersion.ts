@@ -331,5 +331,10 @@
  *  v205 (2026-09-30, triage cd-hoarded-waste F-H16 follow-up, user ruling):
  *  cd-waste never names Mass Invisibility (`CD_WASTE_EXCLUDED_IDS`) — it is
  *  accusable in cd-hoarded only. 605 files: cd-waste −51.
+ *  v206 (2026-09-30, triage cd-hoarded-waste F-H20, user ruling): the
+ *  crisis school gate reads `saveSchoolMask` — the signed MITIGATION_TABLE
+ *  mask, else the DB2 absorb mask — so Anti-Magic Shell (0x7e) is a ready
+ *  save only for a crisis at least half magic. 605 files: cd-hoarded −7 / +3
+ *  (cap substitutions), 1 line loses AMS.
  */
-export const PROMPT_VERSION = 205;
+export const PROMPT_VERSION = 206;

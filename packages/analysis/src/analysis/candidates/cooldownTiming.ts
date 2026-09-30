@@ -55,6 +55,7 @@ import {
 import { renderedWindowSeconds, toRenderSecond } from "../../utils/renderGrid";
 import { OFFENSIVE_CD_SPELL_IDS } from "../../utils/spellDanger";
 import { type MatchThreatLevel } from "../../utils/threatAssessment";
+import { ABILITY_EFFECTS_GENERATED } from "../../data/abilityEffectsGenerated";
 import { MITIGATION_TABLE } from "../../data/mitigationData";
 import {
   type DecisionPoint,
@@ -881,8 +882,22 @@ const CD_HOARD_CAP = 2;
 export const CD_HOARD_RESPONSE_S = 5;
 
 /**
- * A school-limited save (its `MITIGATION_TABLE` school mask is not all
- * schools) is a relevant "ready" save for a crisis only when it covers at
+ * The schools a save covers: its signed `MITIGATION_TABLE` row's mask, else —
+ * for an absorb with no percentage row — the DB2 absorb school mask (aura 69
+ * MiscValue_0, `abilityEffectsGenerated.absorbSchoolMask`). Anti-Magic Shell
+ * 48707 / 410358 = 0x7e, magic only (triage F-H20, user ruling 2026-09-30:
+ * read the DB2 mask, no hand-signed percentage). Undefined = no school claim.
+ */
+export function saveSchoolMask(spellId: string): number | undefined {
+  return (
+    MITIGATION_TABLE[spellId]?.schoolMask ??
+    ABILITY_EFFECTS_GENERATED[spellId]?.absorbSchoolMask
+  );
+}
+
+/**
+ * A school-limited save (`saveSchoolMask` is not all schools) is a relevant
+ * "ready" save for a crisis only when it covers at
  * least this share of the crisis's 2 s of damage — a majority, so the save
  * named would have stopped most of what put the unit there. Editorial, not
  * measured; the audited misses sat far from it (Blessing of Protection vs
@@ -895,7 +910,7 @@ export function coversCrisisSchool(
   spellId: string,
   point: Pick<DecisionPoint, "dmg2sBySchool">,
 ): boolean {
-  const mask = MITIGATION_TABLE[spellId]?.schoolMask;
+  const mask = saveSchoolMask(spellId);
   if (mask === undefined || (mask & ALL_SCHOOLS) === ALL_SCHOOLS) return true;
   const share = schoolShareCoveredBy(point, mask);
   return share === null || share >= SCHOOL_SAVE_MIN_SHARE;
@@ -1239,7 +1254,8 @@ export function cdHoardedEvents(
       // "ready" — it still answers the crisis through `spent` below.
       // W1e (reliability round 2): a save that only blocks some schools
       // (Blessing of Protection physical, Spellwarding / Cloak of Shadows
-      // magic — `MITIGATION_TABLE`'s official school mask) is named only when
+      // magic — `MITIGATION_TABLE`'s official school mask; Anti-Magic Shell
+      // magic via its DB2 absorb mask, F-H20 — `saveSchoolMask`) is named only when
       // it covers at least SCHOOL_SAVE_MIN_SHARE of the 2 s of damage that
       // made this a crisis. The response set below is untouched.
       // F-H6: a cooldown the owner could not pay for at any mana sample in

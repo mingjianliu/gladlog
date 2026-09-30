@@ -1106,6 +1106,11 @@ const INDEX: PredicateRow[] = [
   },
   {
     file: `${A}/analysis/candidates/cooldownTiming.ts`,
+    symbol: "saveSchoolMask",
+    mod: cooldownTiming,
+  },
+  {
+    file: `${A}/analysis/candidates/cooldownTiming.ts`,
     symbol: "SCHOOL_SAVE_MIN_SHARE",
     mod: cooldownTiming,
   },

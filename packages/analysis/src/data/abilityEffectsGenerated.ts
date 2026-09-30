@@ -1,7 +1,7 @@
 /**
- * Generated at: 2026-09-05T03:29:42.267Z
+ * Generated at: 2026-09-30T21:24:43.386Z
  * Build: 12.1.0.69587
- * Source: DB2 SpellEffect — aura 69 (absorb), Effect 10/136 + aura 8/20
+ * Source: DB2 SpellEffect — aura 69 (absorb, school mask = MiscValue_0), Effect 10/136 + aura 8/20
  *   (healing, split self vs ally by ImplicitTarget), aura 118/259
  *   (healing received %), aura 31 (movement speed %). One EffectTriggerSpell hop,
  *   dummy rows ignored unless they are all the spell has.
@@ -9,7 +9,7 @@
  * Absent field = the official rows do not show that effect. Treat as
  *   "not known to do this", never as proof of absence for a spell whose
  *   implementation is a dummy row + server script.
- * ids: 2232 — absorb 109, heals self 119, heals others 264, healing-received 9, moveSpeed 70, hits enemy 1638, enemy AoE 567, deals damage 1166
+ * ids: 2231 — absorb 109, heals self 119, heals others 264, healing-received 9, moveSpeed 70, hits enemy 1637, enemy AoE 567, deals damage 1166
  * The data lives in the .json of the same name (vite json.stringify ->
  * JSON.parse loading — the big-JSON lesson).
  */
@@ -23,6 +23,8 @@ import raw from "./abilityEffectsGenerated.json";
 
 export type AbilityEffectFacts = {
   absorbs?: true;
+  /** School bits the absorb covers (aura 69 MiscValue_0; 127 = all). */
+  absorbSchoolMask?: number;
   healsSelf?: true;
   healsOthers?: true;
   healingReceivedPct?: number;
