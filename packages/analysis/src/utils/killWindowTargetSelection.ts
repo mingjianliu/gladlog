@@ -26,6 +26,7 @@ import {
   unitCooldownOf,
 } from "./cooldowns";
 import { IOffensiveWindow } from "./offensiveWindows";
+import { pvpTrinketUses, trinketUseRemainingSeconds } from "./pvpTrinketUses";
 import { fmtTime } from "./renderGrid";
 import { DPS_TRINKET_CD_S, HEALER_TRINKET_CD_S } from "./trinketCooldown";
 
@@ -36,6 +37,9 @@ import { DPS_TRINKET_CD_S, HEALER_TRINKET_CD_S } from "./trinketCooldown";
 export const PVP_TRINKET_SPELL_IDS = new Set<string>([
   "336126", // Gladiator's Medallion (active break-CC)
 ]);
+// "Did X use their trinket" is `pvpTrinketUses` (G7-P2): the Medallion's cast
+// above plus Adaptation's 283167 trigger aura. This set stays the list of
+// trinket PRESS ids (a press-to-answer set in crisisDecisionPoints).
 
 /** Minimum window duration to bother comparing (mirrors MIN_VULN_SECONDS in offensiveWindows).
  * Shared with burstLedger's targeting audit — same "window long enough to judge" fact. */
@@ -315,20 +319,28 @@ export function getTrinketStateAtTime(
   isHealer: boolean,
 ): boolean {
   const trinketCD = isHealer ? HEALER_TRINKET_CD_S : DPS_TRINKET_CD_S;
-  let lastUseSeconds: number | null = null;
-
-  for (const cast of enemy.spellCastEvents) {
-    if (cast.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
-    if (!cast.spellId || !PVP_TRINKET_SPELL_IDS.has(cast.spellId)) continue;
-
-    const castSeconds = (cast.logLine.timestamp - matchStartMs) / 1000;
-    if (castSeconds >= windowStartSeconds) break;
-
-    lastUseSeconds = castSeconds;
-  }
-
-  if (lastUseSeconds === null) return true; // never observed → arena-start reset ⇒ available
-  return lastUseSeconds + trinketCD <= windowStartSeconds;
+  // G7-P2 (triage F-E19 / F-C15): the shared use predicate — an Adaptation
+  // trigger aura counts, and its lockout interval says when it is back.
+  // The state AT the attempt's raw start, through the shared use primitive in
+  // its exact-time mode (the mode the [CC ON TEAM] note and the death line
+  // read). Deliberately NOT the render grid: a trinket pressed in the same
+  // second as the opener is the target's RESPONSE to it — on the grid 259
+  // attempts of the 605-file capture read "PRIME (no trinket)" on a line
+  // whose outcome is "target trinketed out" (measured 2026-10-01).
+  return (
+    trinketUseRemainingSeconds(
+      pvpTrinketUses(enemy).map((u) => ({
+        atSeconds: (u.atMs - matchStartMs) / 1000,
+        readyAtSeconds:
+          u.readyAtMs !== undefined
+            ? (u.readyAtMs - matchStartMs) / 1000
+            : undefined,
+      })),
+      trinketCD,
+      windowStartSeconds,
+      false,
+    ) <= 0
+  );
 }
 
 /**

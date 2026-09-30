@@ -110,6 +110,7 @@ import * as incomingPressure from "@gladlog/analysis/src/utils/incomingPressure"
 import * as killAttempts from "@gladlog/analysis/src/utils/killAttempts";
 import * as killWindowFactsMod from "@gladlog/analysis/src/utils/killWindowFacts";
 import * as killWindowTargetSelection from "@gladlog/analysis/src/utils/killWindowTargetSelection";
+import * as pvpTrinketUsesMod from "@gladlog/analysis/src/utils/pvpTrinketUses";
 import * as losAnalysis from "@gladlog/analysis/src/utils/losAnalysis";
 import * as positionAnalysis from "@gladlog/analysis/src/utils/positionAnalysis";
 import * as positionSampling from "@gladlog/analysis/src/utils/positionSampling";
@@ -348,6 +349,11 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/dispelAnalysis.ts`,
     symbol: "cleanseRecoveryOf",
     mod: dispelAnalysis,
+  },
+  {
+    file: `${A}/utils/pvpTrinketUses.ts`,
+    symbol: "pvpTrinketUses",
+    mod: pvpTrinketUsesMod,
   },
   {
     file: `${A}/utils/cooldowns.ts`,

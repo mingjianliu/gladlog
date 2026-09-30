@@ -1261,23 +1261,21 @@ describe("analyzePlayerCCAndTrinket — further branches", () => {
     const player = makeUnit("p1", {
       spec: CombatUnitSpec.Warrior_Arms,
       info: { equipment } as any,
-      spellCastEvents: [
-        {
-          logLine: {
-            event: LogEvent.SPELL_CAST_SUCCESS,
-            timestamp: MATCH_START + 6100,
-          },
-          spellId: "195756", // Adaptation
-          spellName: "Adaptation",
-          srcUnitId: "p1",
-        },
-      ] as any,
+      // G7-P2 (triage F-E19): Adaptation logs no cast — its trigger is the
+      // self-aura 283167 (the old 195756 cast id has 0 corpus rows)
       auraEvents: [
         makeAuraEvent(
           LogEvent.SPELL_AURA_APPLIED,
           "853",
           MATCH_START + 6000,
           "e1",
+          "p1",
+        ),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          "283167",
+          MATCH_START + 6100,
+          "p1",
           "p1",
         ),
       ],

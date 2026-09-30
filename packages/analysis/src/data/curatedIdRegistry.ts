@@ -117,6 +117,10 @@ import {
   METAMORPHOSIS_PRESS_CAST_IDS,
   OFFENSIVE_AURA_EVIDENCE,
 } from "../utils/offensiveAuraOccurrences";
+import {
+  ADAPTATION_LOCKOUT_AURA_ID,
+  ADAPTATION_TRIGGER_AURA_ID,
+} from "../utils/pvpTrinketUses";
 import { FREE_CAST_AURA_IDS } from "../utils/resourceAt";
 import {
   OFFENSIVE_CD_SPELL_IDS,
@@ -591,6 +595,10 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   // generated data/interruptKitGenerated.json (DB2 SkillLineAbility +
   // SpecializationSpells + talent trees) — its id universe is SPELL_CATEGORIES
   // type "interrupts", already registered above.
+  t("ADAPTATION_TRINKET_AURAS", "utils/pvpTrinketUses.ts", "aura", () => [
+    ADAPTATION_TRIGGER_AURA_ID,
+    ADAPTATION_LOCKOUT_AURA_ID,
+  ]),
   t("PVP_TRINKET_SPELL_IDS", "utils/killWindowTargetSelection.ts", "cast", () =>
     set(PVP_TRINKET_SPELL_IDS),
   ),

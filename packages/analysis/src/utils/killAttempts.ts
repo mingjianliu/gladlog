@@ -63,6 +63,7 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
+import { fmtFactTime } from "../analysis/factFormat";
 import { CandidateEvent } from "../analysis/types";
 import {
   resolveMitigation,
@@ -86,11 +87,10 @@ import {
   IKillOpportunity,
   killOpportunityAt,
   KillOpportunityTier,
-  PVP_TRINKET_SPELL_IDS,
   WALL_IN_HAND_MIT_IDS,
 } from "./killWindowTargetSelection";
 import { KW_BURST_MIN_DAMAGE } from "./offensiveWindows";
-import { fmtFactTime } from "../analysis/factFormat";
+import { pvpTrinketUses } from "./pvpTrinketUses";
 import { fmtTime } from "./renderGrid";
 
 // The defensive sets live in enemyDefensives.ts since GH #97 (2026-09-15):
@@ -664,15 +664,8 @@ function attributeFailure(
   const inSpan = (ts: number): boolean => ts >= spanFromMs && ts <= spanToMs;
   const secondsOf = (ts: number): number => (ts - matchStartMs) / 1000;
 
-  let trinketed = false;
-  for (const cast of target.spellCastEvents) {
-    if (cast.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
-    if (!cast.spellId || !PVP_TRINKET_SPELL_IDS.has(cast.spellId)) continue;
-    if (inSpan(cast.logLine.timestamp)) {
-      trinketed = true;
-      break;
-    }
-  }
+  // G7-P2: the shared use predicate (an Adaptation proc is a trinket too)
+  const trinketed = pvpTrinketUses(target).some((u) => inSpan(u.atMs));
 
   let immunityBaited = false;
   const defensivePopped: string[] = [];

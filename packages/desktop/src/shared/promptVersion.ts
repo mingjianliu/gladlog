@@ -491,5 +491,10 @@
  *  says when the purge came back, from cooldown-consuming casts
  *  (`purgeReadyAtSeconds`: "purge on cooldown for the whole buff" /
  *  "… at application — ready at m:ss (Ns of the buff left)").
+ *  v239 (2026-09-30, triage G7-P2: enemy-def F-E19 + res-readiness F-C15):
+ *  one "used the PvP trinket" predicate (`pvpTrinketUses`: Medallion 336126
+ *  cast ∪ Adaptation's 283167 trigger aura — the 195756 cast id is dead) for
+ *  [TRINKET] / [ENEMY TRINKET], every trinket-readiness reader, KA and
+ *  Sanctuary; Adaptation's return is its 336139 lockout interval.
  */
-export const PROMPT_VERSION = 238;
+export const PROMPT_VERSION = 239;

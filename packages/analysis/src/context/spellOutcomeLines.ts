@@ -15,8 +15,8 @@ import { getEnglishSpellName } from "../data/spellEffectData";
 import { ccSpellIds } from "../data/spellTags";
 import { getSortedAdvancedActions } from "../utils/advancedActions";
 import { binarySearchClosest } from "../utils/binarySearch";
-import { PVP_TRINKET_SPELL_IDS } from "../utils/killWindowTargetSelection";
 import { groundingRedirects } from "../utils/groundingRedirects";
+import { pvpTrinketUses } from "../utils/pvpTrinketUses";
 import type { CastFailedEvent } from "../utils/rawStreams";
 
 /** A control: the official hard-CC set or a root ("控制要写"). */
@@ -253,14 +253,17 @@ export function sanctuaryRemovals(
         if (!a.spellId || !isControlSpell(a.spellId)) continue;
         const rm = a.logLine.timestamp;
         if (rm < t || rm - t > SANCTUARY_PAIR_MS) continue;
-        const selfBreak = (target.spellCastEvents ?? []).some(
-          (s) =>
-            s.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
-            !!s.spellId &&
-            (PVP_TRINKET_SPELL_IDS.has(s.spellId) ||
-              BREAK_RACIAL_SPELL_IDS.has(s.spellId)) &&
-            Math.abs(s.logLine.timestamp - rm) <= SANCTUARY_PAIR_MS,
-        );
+        const selfBreak =
+          pvpTrinketUses(target).some(
+            (u) => Math.abs(u.atMs - rm) <= SANCTUARY_PAIR_MS,
+          ) ||
+          (target.spellCastEvents ?? []).some(
+            (s) =>
+              s.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+              !!s.spellId &&
+              BREAK_RACIAL_SPELL_IDS.has(s.spellId) &&
+              Math.abs(s.logLine.timestamp - rm) <= SANCTUARY_PAIR_MS,
+          );
         if (selfBreak) continue;
         out.push({
           atSeconds: (t - matchStartMs) / 1000,
