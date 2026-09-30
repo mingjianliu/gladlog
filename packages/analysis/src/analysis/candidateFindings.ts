@@ -76,10 +76,12 @@ import {
 import {
   annotateMissedPurgesWithKillWindows,
   canRemoveFrom,
-  occupancyWithin,
+  cleanseSpellNamesFor,
   type IMissedCleanseWindow,
   type IMissedPurgeWindow,
+  occupancyWithin,
   reconstructDispelSummary,
+  removalSpellIdsFor,
 } from "../utils/dispelAnalysis";
 import { computeDampening } from "../utils/dampening";
 import { drResetMsAt } from "../utils/drAnalysis";
@@ -970,6 +972,7 @@ export function missedCleanseEvents(
     | "dispelType"
     | "lateDispelSeconds"
     | "targetCharmed"
+    | "coRemovesBacklash"
   >[],
   owner: any,
   friends: any[],
@@ -989,6 +992,9 @@ export function missedCleanseEvents(
       string,
       ReadonlyArray<{ spellId: string; ms: number }>
     >;
+    /** F-C14: the raw pass, for the owner's rejected cleanse presses
+     * (`attempted`, the cd-hoarded intent-guard shape). */
+    rawStreams?: RawStreams;
   },
   /** Facts-only inputs (never gates). */
   extra?: {
@@ -1094,6 +1100,18 @@ export function missedCleanseEvents(
           Math.abs(r.atSeconds - w.timeSeconds) < 1,
       );
       const rootFact = rootInst ? rootReachProvenFact(rootInst) : null;
+      const dispelSpells = ownerCanDispel
+        ? cleanseSpellNamesFor(owner, w.dispelType, w.targetCharmed)
+        : [];
+      const attempted =
+        ownerCanDispel && occupancy?.rawStreams
+          ? cleanseAttemptedFact(
+              owner,
+              w,
+              occupancy.matchStartMs,
+              occupancy.rawStreams,
+            )
+          : undefined;
       return {
         id: `missed-cleanse:${w.targetName}:${Math.round(w.timeSeconds)}`,
         type: "missed-cleanse",
@@ -1123,6 +1141,16 @@ export function missedCleanseEvents(
           // F-C5 (A40 = B, U7): the same root instance the [ROOT] predicate
           // swept — rooted unit + spell + floored start within 1 s.
           ...(rootFact ? { rootReachProvenS: rootFact } : {}),
+          // F-C13 (A44 = A): a fact, never an exemption
+          ...(w.coRemovesBacklash
+            ? { coRemovesBacklash: w.coRemovesBacklash }
+            : {}),
+          // F-C12: which button (the owner can dispel this type)
+          ...(ownerCanDispel && dispelSpells.length
+            ? { ownerDispelSpell: dispelSpells.join("、") }
+            : {}),
+          // F-C14: the owner pressed the cleanse and was rejected
+          ...(attempted ? { attempted } : {}),
           // #34(b2): what the owner's hands were doing during the window.
           // preCommitted "yes" = a counted cast started BEFORE the window
           // opened (couldn't have known); "no" = every counted cast started
@@ -1165,6 +1193,45 @@ export function missedCleanseEvents(
         },
       };
     });
+}
+
+/**
+ * F-C14 (triage missed-cleanse): the owner pressed their cleanse during the
+ * window and was rejected (95127ab4: Detox ×2 "无法在昏迷时那样做" under a
+ * stun). The cd-hoarded intent guard's own evidence filter and wording
+ * (`filterIntentGuardEvidence` / `formatAttemptedFact`): a press just before
+ * a same-spell success, or a not-ready inside the owner's own GCD, is not
+ * blocked intent.
+ */
+function cleanseAttemptedFact(
+  owner: any,
+  w: Pick<
+    IMissedCleanseWindow,
+    "timeSeconds" | "durationSeconds" | "dispelType" | "targetCharmed"
+  >,
+  matchStartMs: number,
+  rawStreams: RawStreams,
+): string | undefined {
+  const successes = ((owner.spellCastEvents ?? []) as any[]).filter(
+    (c) => c.logLine?.event === LogEvent.SPELL_CAST_SUCCESS,
+  );
+  const sec = (c: any) => (c.logLine.timestamp - matchStartMs) / 1000;
+  const ownCastSuccessSeconds = successes.map(sec);
+  const ids = removalSpellIdsFor(owner, w.dispelType, w.targetCharmed);
+  const hits = ids.flatMap((id) =>
+    filterIntentGuardEvidence(
+      castFailedInWindow(
+        rawStreams,
+        owner.id,
+        w.timeSeconds,
+        w.timeSeconds + w.durationSeconds,
+        Number(id),
+      ),
+      successes.filter((c) => c.spellId === id).map(sec),
+      { ownCastSuccessSeconds },
+    ),
+  );
+  return formatAttemptedFact(hits);
 }
 
 /** "精神控制, 精神控制, 快速治疗" → "精神控制×2, 快速治疗" */
@@ -2290,6 +2357,7 @@ function teamPlayEvents(
                       ms: combat.startTime + f.tSeconds * 1000,
                     }))
                 : undefined,
+              rawStreams: rawStreams?.available ? rawStreams : undefined,
               failedCastsByUnit: rawStreams?.available
                 ? rawStreams.castFailed.reduce((m, f) => {
                     const l = m.get(f.unitGuid) ?? [];

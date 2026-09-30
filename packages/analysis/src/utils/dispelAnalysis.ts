@@ -2,6 +2,7 @@ import { CombatUnitSpec, ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import { dispelVerdictOf } from "../data/dispelVerdicts";
 import { CHANNEL_PROXY_IDS, DRINK_AURA_IDS } from "../data/occupancyAuras";
+import { ROOT_SPELL_IDS } from "../data/rootSpells";
 import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
 import { getEnglishSpellName, spellEffectData } from "../data/spellEffectData";
 import spellIdListsData from "../data/spellIdLists";
@@ -17,6 +18,7 @@ import {
 } from "./cooldowns";
 import {
   buildCcCategoryHistory,
+  DR_CATEGORY_MAP,
   getDRCategory,
   getDRLevelAtTime,
   PATCH_121_GOLIVE_EPOCH_MS,
@@ -148,6 +150,45 @@ function getDispelPenalty(
   if (!casterMayBeBalanceDruid || epochMs < PATCH_121_GOLIVE_EPOCH_MS)
     return undefined;
   return STELLAR_PROTECTION_PENALIZED_SPELLS.get(removedSpellId);
+}
+
+/**
+ * F-C13: the backlash debuffs (the one penalty predicate, `getDispelPenalty`)
+ * of dispel type `dispelType` that enemies had on `target` at `atMs` — a
+ * defensive dispel removes every same-type debuff, so these go with the CC.
+ */
+function coPresentBacklash(
+  target: ICombatUnit,
+  dispelType: string,
+  atMs: number,
+  enemyPlayerById: ReadonlyMap<string, ICombatUnit>,
+): string[] {
+  const up = new Map<string, { name: string; src: string }>();
+  for (const a of target.auraEvents ?? []) {
+    if (a.logLine.timestamp > atMs) continue;
+    if (!a.spellId) continue;
+    const key = `${a.spellId}|${a.srcUnitId}`;
+    const ev = a.logLine.event;
+    if (
+      ev === LogEvent.SPELL_AURA_APPLIED ||
+      ev === LogEvent.SPELL_AURA_REFRESH ||
+      ev === LogEvent.SPELL_AURA_APPLIED_DOSE
+    )
+      up.set(key, { name: a.spellName, src: a.srcUnitId });
+    else if (ev === LogEvent.SPELL_AURA_REMOVED) up.delete(key);
+  }
+  const names: string[] = [];
+  for (const [key, a] of up) {
+    const id = key.split("|")[0]!;
+    const caster = enemyPlayerById.get(a.src);
+    if (!caster) continue;
+    if (getDispelType(id) !== dispelType) continue;
+    const isBalance = caster.spec === CombatUnitSpec.Druid_Balance;
+    if (!getDispelPenalty(id, isBalance, atMs)) continue;
+    const name = getEnglishSpellName(id, a.name);
+    if (!names.includes(name)) names.push(name);
+  }
+  return names;
 }
 
 const teamHasBalanceDruid = (team: readonly ICombatUnit[]): boolean =>
@@ -683,6 +724,44 @@ export function canDefensiveCleanse(
  * charmed (reliability round 2 W1d, `charmedPlayer.ts`). One predicate for
  * the dispel windows, the missed-cleanse menu and the timeline lines.
  */
+/**
+ * The dispel spell(s) `unit` would press for a `dispelType` debuff (triage
+ * missed-cleanse F-C12): the spec's `CLEANSE_SPELLS_BY_TYPE` list, and where
+ * it lists several, only those that are baseline for the spec or talented
+ * (the `hasTalentedAbility` reading `passesDispelTalentGate` uses). English
+ * names.
+ */
+export function removalSpellIdsFor(
+  unit: ICombatUnit,
+  dispelType: DispelType,
+  targetCharmed = false,
+): readonly string[] {
+  // a charmed teammate is hostile: only the offensive purge reaches them
+  // (`canRemoveFrom`'s W1d distinction; codex review of F-C12 — a Discipline
+  // priest's spell there is Dispel Magic, not Purify)
+  if (targetCharmed) return PURGE_SPELLS_BY_SPEC[unit.spec] ?? [];
+  const ids = CLEANSE_SPELLS_BY_TYPE[dispelType]?.[unit.spec] ?? [];
+  if (ids.length <= 1) return ids;
+  const specIdNum = parseInt(unit.spec, 10);
+  const tree = getSpecTalentTreeSpellIds(specIdNum);
+  // a free / entry node is never listed in the loadout (Expunge for
+  // Devastation / Augmentation) — held, as `passesDispelTalentGate` reads it
+  const free = getSpecFreeOrEntrySpellIds(specIdNum);
+  const f = ids.filter(
+    (id) => !tree.has(id) || free.has(id) || hasTalentedAbility(unit, id),
+  );
+  return f.length ? f : ids;
+}
+export function cleanseSpellNamesFor(
+  unit: ICombatUnit,
+  dispelType: DispelType,
+  targetCharmed = false,
+): string[] {
+  return removalSpellIdsFor(unit, dispelType, targetCharmed).map((id) =>
+    getEnglishSpellName(id),
+  );
+}
+
 export function canRemoveFrom(
   unit: ICombatUnit,
   dispelType: DispelType,
@@ -891,6 +970,11 @@ export interface IMissedCleanseWindow {
    * window: only a friendly offensive purge could remove anything on them
    * (`canRemoveFrom`). Absent on hand-built fixtures = false. */
   targetCharmed?: boolean;
+  /** Triage missed-cleanse F-C13 (ruling A44 = A): English names of the
+   * backlash debuffs (`getDispelPenalty`) of the same dispel type on the
+   * target when the CC landed — a cleanse would have removed them too and
+   * the dispeller would eat the penalty. A fact, never an exemption. */
+  coRemovesBacklash?: string;
   /** Feasibility gate a (tri-state): true = at least one dispeller was in
    * reach during the reaction window (≤40 yd and LoS not false); false =
    * position data exists and nobody was in reach; null = no position data, so
@@ -1612,7 +1696,7 @@ function drLevelAtApply(
   );
 }
 
-function computeDrChainRisk(
+export function computeDrChainRisk(
   target: ICombatUnit,
   ccSpellId: string,
   applyTs: number,
@@ -1620,8 +1704,15 @@ function computeDrChainRisk(
   enemyIds: Set<string>,
   matchStartMs: number,
 ): boolean {
+  // Triage missed-cleanse F-C16: an id no DR family claims (a curse) falls
+  // back to `spell:<id>` self-DR, and a curse re-applied 0.08 s after its
+  // dispel then read "DR was fresh and the enemy re-CC'd right after"
+  // (9d899d10 Curse of Tongues). Only roots keep that self-DR (#24 ruling).
+  // (`getDRCategory` never returns empty, so the old `!category` test was
+  // dead.)
+  if (!(ccSpellId in DR_CATEGORY_MAP) && !ROOT_SPELL_IDS.has(ccSpellId))
+    return false;
   const category = getDRCategory(ccSpellId);
-  if (!category) return false;
 
   // Single source for instance history: buildCcCategoryHistory (drAnalysis) —
   // it shares the same pairing logic ccBreakAnalysis uses for remaining-
@@ -2494,6 +2585,15 @@ export function reconstructDispelSummary(
             postCcDamage,
             cleanseWasOnCD,
             cdBurnedOn,
+            ...(() => {
+              const co = coPresentBacklash(
+                unit,
+                windowDispelType,
+                applyTs,
+                enemyPlayerById,
+              );
+              return co.length ? { coRemovesBacklash: co.join("、") } : {};
+            })(),
             // Feasibility / value gates (user-decided 2026-08-02; measured on
             // a 150-match corpus, together they hold back ~24% of the blame
             // candidates):

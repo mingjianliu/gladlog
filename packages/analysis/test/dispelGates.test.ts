@@ -27,6 +27,8 @@ import {
 } from "../src/analysis/candidateFindings";
 import { kickLockoutSeconds } from "../src/data/spellEffectData";
 import {
+  cleanseSpellNamesFor,
+  computeDrChainRisk,
   formatMissedCleanseExemption,
   formatMissedPurgeExemption,
   purgePriorityForTest,
@@ -496,5 +498,130 @@ describe("自由祝福:按我方阵容决定是否值得驱散(用户裁定)", (
   it("非上下文相关的目标不受阵容影响(真言术盾始终 High)", () => {
     const allMelee = [mkUnit(CombatUnitSpec.Warrior_Arms, "w")];
     expect(purgePriorityForTest("17", allMelee)).toBe("High");
+  });
+});
+
+describe("triage missed-cleanse F-C13 / F-C16", () => {
+  it("F-C13: a same-type backlash debuff on the target when the CC lands → coRemovesBacklash (UA; VT)", () => {
+    for (const [id, name] of [
+      ["1259790", "Unstable Affliction"],
+      ["34914", "Vampiric Touch"],
+    ]) {
+      const t1 = targetWithBinding(10, 16, [
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, id!, S(5), "e1", "t1"),
+      ]);
+      (t1 as any).auraEvents.sort((a: any, b: any) => a.timestamp - b.timestamp);
+      const ds = summarize([t1, discPriest("h1")]);
+      const w = ds.missedCleanseWindows[0]!;
+      expect(w.coRemovesBacklash).toBe(name);
+      expect(
+        missedCleanseEvents(ds.missedCleanseWindows, DISPEL_OWNER, [], false)[0]!
+          .facts.coRemovesBacklash,
+      ).toBe(name);
+    }
+    // removed before the CC landed → nothing
+    const t2 = targetWithBinding(10, 16, [
+      makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "1259790", S(2), "e1", "t1"),
+      makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, "1259790", S(4), "e1", "t1"),
+    ]);
+    (t2 as any).auraEvents.sort((a: any, b: any) => a.timestamp - b.timestamp);
+    expect(summarize([t2, discPriest("h1")]).missedCleanseWindows[0]!.coRemovesBacklash).toBeUndefined();
+  });
+
+  it("F-C16: an id with no DR family (a curse) never reads drChainRisk; a root keeps its self-DR", () => {
+    const curse = "1714"; // Curse of Tongues
+    const t1 = makeUnit("t1", {
+      auraEvents: [
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, curse, S(10), "e1", "t1"),
+        makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, curse, S(16), "e1", "t1"),
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, curse, S(16.08), "e1", "t1"),
+      ],
+    });
+    expect(
+      computeDrChainRisk(t1 as any, curse, S(10), S(16), new Set(["e1"]), MATCH_START),
+    ).toBe(false);
+    const root = "122"; // Frost Nova
+    const t2 = makeUnit("t2", {
+      auraEvents: [
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, root, S(10), "e1", "t2"),
+        makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, root, S(16), "e1", "t2"),
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, root, S(18), "e1", "t2"),
+      ],
+    });
+    expect(
+      computeDrChainRisk(t2 as any, root, S(10), S(16), new Set(["e1"]), MATCH_START),
+    ).toBe(true);
+  });
+});
+
+describe("triage missed-cleanse F-C14 / F-C12 (owner's cleanse facts)", () => {
+  it("95127ab4 rows: Detox rejected ×2 while stunned → attempted; the not-ready press inside the owner's GCD is dropped; ownerDispelSpell names Detox", () => {
+    const owner = makeUnit("mw", {
+      spec: CombatUnitSpec.Monk_Mistweaver,
+      spellCastEvents: [
+        {
+          spellId: "115078",
+          spellName: "Paralysis",
+          timestamp: S(48.285),
+          logLine: { event: LogEvent.SPELL_CAST_SUCCESS, timestamp: S(48.285) },
+        },
+      ],
+    });
+    const failed = (t: number, reason: string) => ({
+      tSeconds: t,
+      unitGuid: "mw",
+      spellId: 115450,
+      spellName: "清创生血",
+      reason,
+    });
+    const rawStreams = {
+      available: true,
+      manaSamples: [],
+      castFailed: [
+        failed(49.157, "尚未恢复"),
+        failed(49.458, "无法在昏迷时那样做"),
+        failed(49.967, "无法在昏迷时那样做"),
+      ],
+    } as any;
+    const w = {
+      timeSeconds: 45.793,
+      durationSeconds: 6,
+      targetName: "t1",
+      spellName: "Psychic Scream",
+      spellId: "8122",
+      priority: "Critical",
+      postCcDamage: 10_000,
+      cleanseWasOnCD: false,
+      dispellersLockedOut: false,
+      losReachable: null,
+      drChainRisk: false,
+      dispelType: "Magic",
+    } as any;
+    const [c] = missedCleanseEvents([w], owner, [owner], false, {
+      enemyIds: new Set(),
+      matchStartMs: MATCH_START,
+      rawStreams,
+    });
+    expect(c!.facts.attempted).toBe("曾尝试施放被拒(无法在昏迷时那样做×2)");
+    expect(c!.facts.ownerDispelSpell).toBe("Detox");
+  });
+
+  it("codex review: a charmed teammate is reached by the offensive purge — Dispel Magic, not Purify", () => {
+    const disc = makeUnit("h1", { spec: CombatUnitSpec.Priest_Discipline });
+    expect(cleanseSpellNamesFor(disc as any, "Magic")).toEqual(["Purify"]);
+    expect(cleanseSpellNamesFor(disc as any, "Magic", true)).toEqual([
+      "Dispel Magic",
+    ]);
+  });
+
+  it("codex review: a free / entry node counts as held — Devastation with Cauterizing Flame talented still has Expunge", () => {
+    // talentIdMap 1467: Cauterizing Flame = node 93294 / entry 115602;
+    // Expunge (node 93306) is an entry node, never listed in a loadout
+    const dev = makeUnit("e1", { spec: CombatUnitSpec.Evoker_Devastation });
+    (dev as any).info = { talents: [{ id1: 93294, id2: 115602, count: 1 }] };
+    expect(cleanseSpellNamesFor(dev as any, "Poison")).toEqual([
+      "Expunge",
+      "Cauterizing Flame",
+    ]);
   });
 });

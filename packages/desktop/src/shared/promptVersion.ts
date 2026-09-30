@@ -466,5 +466,11 @@
  *  Penitence's self-aura ∪ drinking) for ownerCasting* and the new
  *  dispellerCasting* (ownerCanDispel=no: the least-occupied eligible
  *  dispeller), with a legend sentence; occupancy spell names are English.
+ *  v235 (2026-09-30, triage missed-cleanse F-C13 / F-C12 / F-C14 / F-C16):
+ *  missed-cleanse facts gain coRemovesBacklash (same-type backlash debuffs on
+ *  the target, `getDispelPenalty`, ruling A44), ownerDispelSpell (the
+ *  owner's button, talent-gated), attempted (rejected cleanse presses, the
+ *  intent-guard filter), with legend sentences; drChainRisk is no for ids
+ *  no DR family claims (curses), roots keep their self-DR.
  */
-export const PROMPT_VERSION = 234;
+export const PROMPT_VERSION = 235;
