@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import {
+  cliSpawnEnv,
   detectCliForBackend,
   detectLocalCli,
   parseCliVersionOutput,
@@ -212,5 +213,31 @@ describe("probeCliVersionCached(#21 item6:同一 tool 本进程只探测一次)"
     expect(first).toEqual({ ok: true, version: "4.0.0" });
     expect(second).toEqual({ ok: true, version: "4.0.0" });
     expect(calls).toBe(1);
+  });
+});
+
+describe("cliSpawnEnv(打包 GUI 应用从 Dock 启动时的 PATH 缺口)", () => {
+  const savedPath = process.env.PATH;
+  const withPath = (p: string) => {
+    process.env.PATH = p;
+    return cliSpawnEnv("/usr/bin/cbc").PATH ?? "";
+  };
+  afterEach(() => {
+    process.env.PATH = savedPath;
+  });
+
+  it("追加 CLI 所在目录:node 能被 shebang 找到", () => {
+    const p = withPath("/bin");
+    expect(p.split(":")).toContain("/usr/bin");
+  });
+
+  it("纯追加:原有 PATH 段落一个都不丢", () => {
+    const p = withPath("/bin:/sbin");
+    expect(p.startsWith("/bin:/sbin")).toBe(true);
+  });
+
+  it("已存在的目录不重复追加", () => {
+    const p = withPath("/usr/bin:/bin");
+    expect(p.split(":").filter((s) => s === "/usr/bin")).toHaveLength(1);
   });
 });
