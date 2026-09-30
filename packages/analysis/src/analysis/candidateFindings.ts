@@ -132,6 +132,7 @@ import {
   countsAsTeamBurst,
   syncWindowCdFor,
   enemyHealerCcWindows,
+  enemyMinHpInWindow,
   enemyMinHpPctInWindow,
   friendlyCrisisMomentInWindow,
   isSpendableDefensiveCd,
@@ -2357,6 +2358,9 @@ function teamPlayEvents(
             ...missedSyncWindowEvents(ccWindows, teamOffensiveCds, {
               enemyMinHpPctAt: (from, to) =>
                 enemyMinHpPctInWindow(enemies, combat, from, to),
+              enemyMinHpUnitAt: (from, to) =>
+                enemyMinHpInWindow(enemies, combat, from, to)?.unitName ??
+                null,
               enemyDeathS,
               ref: lookupSyncWindowPrior(combat?.startInfo?.bracket ?? ""),
             }),

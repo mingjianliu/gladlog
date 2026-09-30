@@ -428,5 +428,10 @@
  *  window's last rendered second counts (`died`, hence `deathsInWindow` /
  *  `anyFriendlyDeath` / the death suffix); a landed control is timed from a
  *  cast aimed at its target (or of its own spell) before any untargeted cast.
+ *  v227 (2026-09-30, triage sync-burst F-S2 / F-S6 / F-S7): the
+ *  missed-sync-window line gains facts pressedAfter (a ready CD pressed ≤ 2 s
+ *  after the lock, A36 = A), readyFrom (a CD back within the 2 s lead or
+ *  mid-lock, raw return), holderCc (the holder's own cannot-cast intervals
+ *  in the lock) and enemyMinHpUnit, with legend sentences. Ids unchanged.
  */
-export const PROMPT_VERSION = 226;
+export const PROMPT_VERSION = 227;

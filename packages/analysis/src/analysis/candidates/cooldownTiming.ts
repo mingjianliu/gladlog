@@ -27,6 +27,8 @@ import {
   cdAvailableAt,
   cdReadyInTimeAt,
   CD_INSTANT_SLACK_S,
+  chargeStateAt,
+  lockCastsOf,
   DEFENSIVE_TAGS,
   getUnitHpAtTimestamp,
   HP_SAMPLE_RADIUS_MS,
@@ -171,14 +173,35 @@ export function enemyMinHpPctInWindow(
     maxDtMs: number,
   ) => number | null = getUnitHpAtTimestamp,
 ): number | null {
+  return (
+    enemyMinHpInWindow(enemies, combat, fromSeconds, toSeconds, hpLookup)
+      ?.pct ?? null
+  );
+}
+
+/** `enemyMinHpPctInWindow`'s scan, also naming whose reading it was (triage
+ *  sync-burst F-S7: `enemyMinHpPct=63` read as the healer's HP; d692582c's
+ *  minimum was Adriels, not the locked healer). The first unit to reach the
+ *  minimum in scan order (second, then roster) is named. */
+export function enemyMinHpInWindow(
+  enemies: any[],
+  combat: { startTime: number },
+  fromSeconds: number,
+  toSeconds: number,
+  hpLookup: (
+    unit: any,
+    timestampMs: number,
+    maxDtMs: number,
+  ) => number | null = getUnitHpAtTimestamp,
+): { pct: number; unitName: string } | null {
   const fromR = toRenderSecond(fromSeconds);
   const toR = toRenderSecond(toSeconds);
-  let min: number | null = null;
+  let min: { pct: number; unitName: string } | null = null;
   for (let t = fromR; t <= toR; t++) {
     for (const e of enemies) {
       const hp = hpLookup(e, combat.startTime + t * 1000, HP_SAMPLE_RADIUS_MS);
       if (hp === null) continue;
-      if (min === null || hp < min) min = hp;
+      if (min === null || hp < min.pct) min = { pct: hp, unitName: e.name };
     }
   }
   return min;
@@ -558,6 +581,96 @@ export function countsAsTeamBurst(
   );
 }
 
+/** Signed one-decimal offset, the `attemptedAt` convention. */
+const signedS = (d: number): string => `${d >= 0 ? "+" : ""}${d.toFixed(1)}`;
+
+/**
+ * The per-CD timing a `missed-sync-window` line cannot show with names
+ * alone (triage sync-burst F-S2 / F-S6; facts only — the verdict, the gates
+ * and the 09-02 window are unchanged). Offsets are intervals between raw
+ * instants (one decimal), relative to the lock's raw start or end:
+ *
+ *  - `pressedAfter` (A36 = A, 2026-09-30): a ready CD whose first press after
+ *    the lock falls in (end, end + SYNC_ENTER_LEAD_S] — b711d4ac's Kingsbane
+ *    0.28 s after the Cyclone ended.
+ *  - `readyFrom`: a ready CD that came back from cooldown within the
+ *    SYNC_ENTER_LEAD_S before the lock or during it, at its RAW return (last
+ *    press + cooldown, charge-aware) — not `cdAvailableAt`'s first true
+ *    instant, which includes the 0.5 s slack (e10c6bea Kingsbane: +0.4, the
+ *    slack would print −0.1). Omitted for a rate-warped cooldown.
+ *  - `holderCc`: the ready CD's holder's own cannot-cast intervals (the gate's
+ *    `buildCannotCastIntervals`, no second predicate) that overlap the lock,
+ *    unclipped. A disarm is not one.
+ */
+export function syncReadyTimingFacts(
+  w: { fromSeconds: number; toSeconds: number },
+  ready: readonly SyncWindowCd[],
+): { pressedAfter?: string; readyFrom?: string; holderCc?: string } {
+  const pressedAfter: string[] = [];
+  const readyFrom: string[] = [];
+  const holderCc: string[] = [];
+  for (const cd of ready) {
+    const after = cd.casts.find(
+      (c) =>
+        c.timeSeconds > w.toSeconds &&
+        c.timeSeconds <= w.toSeconds + SYNC_ENTER_LEAD_S,
+    );
+    if (after)
+      pressedAfter.push(
+        `${cd.spellName} ${signedS(after.timeSeconds - w.toSeconds)}s`,
+      );
+    const ret = rawReturnAfter(cd, w.fromSeconds - SYNC_ENTER_LEAD_S);
+    if (ret !== null && ret <= w.toSeconds)
+      readyFrom.push(`${cd.spellName} ${signedS(ret - w.fromSeconds)}s`);
+    if (cd.owner && cd.ownerEnemyIds && cd.matchStartMs !== undefined) {
+      let blocked: Array<{ from: number; to: number }> = [];
+      try {
+        blocked = buildCannotCastIntervals(cd.owner, cd.ownerEnemyIds);
+      } catch {
+        blocked = [];
+      }
+      const fromMs = cd.matchStartMs + w.fromSeconds * 1000;
+      const toMs = cd.matchStartMs + w.toSeconds * 1000;
+      const spans = blocked
+        .filter((b) => b.from < toMs && b.to > fromMs)
+        .sort((a, b) => a.from - b.from)
+        .map(
+          (b) =>
+            `${signedS((b.from - fromMs) / 1000)}…${signedS((b.to - fromMs) / 1000)}s`,
+        );
+      if (spans.length) holderCc.push(`${cd.spellName} ${spans.join(" ")}`);
+    }
+  }
+  return {
+    ...(pressedAfter.length ? { pressedAfter: pressedAfter.join("; ") } : {}),
+    ...(readyFrom.length ? { readyFrom: readyFrom.join("; ") } : {}),
+    ...(holderCc.length ? { holderCc: holderCc.join("; ") } : {}),
+  };
+}
+
+/** When `cd` came back if it was NOT available at `probeS` (raw, no slack):
+ *  the last press ≤ probeS + its cooldown, or the next charge; null when it
+ *  was available at probeS (or its clock is rate-warped). */
+function rawReturnAfter(cd: SyncWindowCd, probeS: number): number | null {
+  if ((cd as { rateWindows?: unknown[] }).rateWindows?.length) return null;
+  const lock = lockCastsOf(cd as IMajorCooldownInfo).filter(
+    (c) => c.timeSeconds <= probeS,
+  );
+  if ((cd.charges ?? 1) > 1) {
+    const st = chargeStateAt(
+      lock.map((c) => c.timeSeconds),
+      cd.cooldownSeconds,
+      cd.charges as number,
+      probeS,
+    );
+    return st.charges > 0 ? null : st.nextRecharge;
+  }
+  const last = lock.at(-1);
+  if (!last) return null;
+  const ret = last.timeSeconds + (last.cooldownSecondsOverride ?? cd.cooldownSeconds);
+  return ret > probeS ? ret : null;
+}
+
 export const SYNC_WINDOW_MIN_T_S = 30;
 export const SYNC_WINDOW_MIN_DUR_S = 3;
 export const SYNC_ENTER_LEAD_S = 2;
@@ -576,6 +689,9 @@ export function missedSyncWindowEvents(
     /** Wired to enemyMinHpPctInWindow in production. Accelerator-only, see
      * the B8 doc comment above — must NEVER gate the candidate. */
     enemyMinHpPctAt: (fromSeconds: number, toSeconds: number) => number | null;
+    /** Whose reading `enemyMinHpPctAt` returned (`enemyMinHpInWindow`);
+     * optional — absent, the unit fact is omitted. Facts only (F-S7). */
+    enemyMinHpUnitAt?: (fromSeconds: number, toSeconds: number) => string | null;
     /** seconds (match-relative) of every enemy deathRecord. */
     enemyDeathS: number[];
     /** The bracket's reference cell, or null when the bracket has no cell,
@@ -593,7 +709,9 @@ export function missedSyncWindowEvents(
   const candidates: Array<{
     w: (typeof ccWindows)[number];
     ready: string[];
+    readyCds: SyncWindowCd[];
     minHp: number | null;
+    minHpUnit: string | null;
     /** later locks the same ready CDs were still held through */
     alsoHeld: number[];
   }> = [];
@@ -640,9 +758,11 @@ export function missedSyncWindowEvents(
     const cand = {
       w,
       ready,
+      readyCds: ev.ready,
       // B8: this value only ever feeds `facts` below — it is read AFTER the
       // ready/castDuring gates above have already decided emission.
       minHp: probes.enemyMinHpPctAt(w.fromSeconds, w.toSeconds),
+      minHpUnit: probes.enemyMinHpUnitAt?.(w.fromSeconds, w.toSeconds) ?? null,
       alsoHeld: [] as number[],
     };
     candidates.push(cand);
@@ -655,9 +775,10 @@ export function missedSyncWindowEvents(
         renderedWindowSeconds(a.w.fromSeconds, a.w.toSeconds),
     )
     .slice(0, cap)
-    .map(({ w, ready, minHp, alsoHeld }) => {
+    .map(({ w, ready, readyCds, minHp, minHpUnit, alsoHeld }) => {
       const t = toRenderSecond(w.fromSeconds);
       const windowEndT = toRenderSecond(w.toSeconds);
+      const timing = syncReadyTimingFacts(w, readyCds);
       return {
         // spellId disambiguates two CC windows on the same healer that floor
         // to the same rendered second (review fix round 2, 2026-08-15) — the
@@ -680,6 +801,8 @@ export function missedSyncWindowEvents(
           durationS: String(windowEndT - t),
           readyCds: ready.join("、"),
           ...(minHp !== null ? { enemyMinHpPct: fmt(minHp) } : {}),
+          ...(minHp !== null && minHpUnit ? { enemyMinHpUnit: minHpUnit } : {}),
+          ...timing,
           // the same held CDs through later healer locks (rendered seconds,
           // "、"-joined — a ", " would cut the facts value)
           ...(alsoHeld.length ? { alsoHeldAt: alsoHeld.join("、") } : {}),
