@@ -129,6 +129,7 @@
     "test/deathOutcome.whitelist.test.ts",
     "test/deathTrinketTag.test.ts",
     "test/dispelGates.test.ts",
+    "test/dispelReachGrid.test.ts",
     "test/dispelVerdictWiring.test.ts",
     "test/dispelVerdicts.test.ts",
     "test/dispellerOccupancy.test.ts",

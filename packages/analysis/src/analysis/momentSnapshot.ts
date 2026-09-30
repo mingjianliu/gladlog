@@ -307,7 +307,12 @@ export function buildMomentSnapshotItems(
         if (ownerRaw) {
           const otherRaw = getUnitRawPositionAtTime(u, midMs, LOS_SWEEP_GAP_MS);
           if (otherRaw) {
-            const los = hasLineOfSight(combat?.zoneId, ownerRaw, otherRaw);
+            // the legacy match keeps the zone under startInfo (triage F-C9)
+            const los = hasLineOfSight(
+              combat?.zoneId ?? combat?.startInfo?.zoneId,
+              ownerRaw,
+              otherRaw,
+            );
             if (los !== null) facts.los = los ? "有" : "被挡";
           }
         }

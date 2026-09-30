@@ -35,6 +35,7 @@ import {
 import {
   distanceBetween,
   getUnitPositionAtTime,
+  getUnitRawPositionAtTime,
   hasLineOfSight,
 } from "./losAnalysis";
 import { DISPEL_MAX_RANGE_YARDS, LOS_SWEEP_GAP_MS } from "./positionSampling";
@@ -1653,7 +1654,9 @@ export function occupancyWithin(
       kind: "drink" as const,
     })),
   ]
-    .filter((b) => b.to > windowStartMs && b.from < windowEndMs && b.to > b.from)
+    .filter(
+      (b) => b.to > windowStartMs && b.from < windowEndMs && b.to > b.from,
+    )
     .sort((a, b) => a.from - b.from);
   const out: IOccupancy = {
     occupiedMs: 0,
@@ -1797,7 +1800,7 @@ function intersectIntervalSets(
  * pair exists at all → null (do not change the verdict; the tri-state rule —
  * see the losAnalysis / ccTrinketAnalysis precedents).
  */
-function anyDispellerReachable(
+export function anyDispellerReachable(
   dispellers: ICombatUnit[],
   target: ICombatUnit,
   applyTs: number,
@@ -1805,12 +1808,11 @@ function anyDispellerReachable(
   zoneId: string | undefined,
   /** this dispeller's reach for the removal in question (GH #83) */
   reachOf: (dispeller: ICombatUnit) => number,
+  /** the round's start (absolute ms) — the render grid is round-relative */
+  matchStartMs: number,
 ): boolean | null {
   if (dispellers.length === 0) return null;
-  // Anchored to the render grid: sweep on whole seconds (fmtTime floors to the
-  // second and gates recompute on the rendered grid — same family as
-  // healerExposureAnalysis's G5 semantics).
-  const t0 = Math.floor(applyTs / 1000) * 1000;
+  const t0 = dispelReachSweepStartMs(applyTs, matchStartMs);
   let sawSamplePair = false;
   for (let t = t0; t <= applyTs + reactMs; t += 1000) {
     const targetPos = getUnitPositionAtTime(target, t, LOS_SWEEP_GAP_MS);
@@ -1820,11 +1822,39 @@ function anyDispellerReachable(
       if (!dPos) continue;
       sawSamplePair = true;
       if (distanceBetween(dPos, targetPos) > reachOf(d)) continue;
-      const los = zoneId ? hasLineOfSight(zoneId, dPos, targetPos) : null;
+      // LoS is topological — it reads the nearest RAW samples, never the
+      // interpolated point (`losAnalysis` contract; codex review of F-C9: an
+      // interpolated position between two in-LoS samples can sit inside a
+      // pillar and wrongly exempt the window). Distance keeps interpolating.
+      // No raw sample in reach of this second = LoS not disproven.
+      const dRaw = zoneId
+        ? getUnitRawPositionAtTime(d, t, LOS_SWEEP_GAP_MS)
+        : null;
+      const targetRaw = zoneId
+        ? getUnitRawPositionAtTime(target, t, LOS_SWEEP_GAP_MS)
+        : null;
+      const los =
+        zoneId && dRaw && targetRaw
+          ? hasLineOfSight(zoneId, dRaw, targetRaw)
+          : null;
       if (los !== false) return true; // in range and LoS not disproven
     }
   }
   return sawSamplePair ? false : null;
+}
+
+/**
+ * First instant of the reach sweep (user ruling A42 = A, 2026-09-30; triage
+ * missed-cleanse F-C8): the round-relative whole second `start + k·1000`,
+ * from ceil(applyRel) — never a sample before the CC landed. Flooring the
+ * ABSOLUTE epoch ms put the grid at "second + the match's ms remainder" and
+ * could sample before the debuff (95127ab4: 45.317 for a fear at 45.793).
+ */
+export function dispelReachSweepStartMs(
+  applyTs: number,
+  matchStartMs: number,
+): number {
+  return matchStartMs + Math.ceil((applyTs - matchStartMs) / 1000) * 1000;
 }
 
 /** Look-ahead window (seconds) for value gate d's re-CC check: only if the
@@ -2080,8 +2110,15 @@ export function reconstructDispelSummary(
   friends: ICombatUnit[],
   enemies: ICombatUnit[],
   // zoneId lets feasibility gate a look up arena geometry (LoS); omit it and
-  // the gate judges on range alone (still tri-state).
-  combat: { startTime: number; endTime: number; zoneId?: string },
+  // the gate judges on range alone (still tri-state). The legacy match carries
+  // it under startInfo (triage missed-cleanse F-C9: every caller passed the
+  // legacy match, so LoS was never evaluated).
+  combat: {
+    startTime: number;
+    endTime: number;
+    zoneId?: string;
+    startInfo?: { zoneId?: string };
+  },
   // B45: friendly pet/guardian units whose dispels should be attributed to their owner player
   friendlyPets: ICombatUnit[] = [],
   // Coverage tail fix: dispels by enemy pets (Felhunter Devour Magic etc.)
@@ -2089,6 +2126,7 @@ export function reconstructDispelSummary(
   // purges — completed symmetrically with friendlyPets.
   enemyPets: ICombatUnit[] = [],
 ): IDispelSummary {
+  const zoneId = combat.zoneId ?? combat.startInfo?.zoneId;
   const friendlyIds = new Set(friends.map((u) => u.id));
   const enemyIds = new Set(enemies.map((u) => u.id));
   // B45: pets are also considered friendly sources; owner lookup is via ownerId
@@ -2836,12 +2874,13 @@ export function reconstructDispelSummary(
               unit,
               applyTs,
               MISSED_CLEANSE_THRESHOLD_S * 1000,
-              combat.zoneId,
+              zoneId,
               (d) =>
                 dispelReachYards(
                   d,
                   CLEANSE_SPELLS_BY_TYPE[windowDispelType][d.spec],
                 ),
+              combat.startTime,
             ),
             drChainRisk: computeDrChainRisk(
               unit,
@@ -3032,8 +3071,9 @@ export function reconstructDispelSummary(
                   enemy,
                   applyTs,
                   MISSED_PURGE_THRESHOLD_S * 1000,
-                  combat.zoneId,
+                  zoneId,
                   (d) => dispelReachYards(d, PURGE_SPELLS_BY_SPEC[d.spec]),
+                  combat.startTime,
                 ),
               });
             }

@@ -496,5 +496,10 @@
  *  cast ∪ Adaptation's 283167 trigger aura — the 195756 cast id is dead) for
  *  [TRINKET] / [ENEMY TRINKET], every trinket-readiness reader, KA and
  *  Sanctuary; Adaptation's return is its 336139 lockout interval.
+ *  v240 (2026-09-30, triage missed-cleanse F-C8 / F-C9, ruling A42): the
+ *  dispel reach sweep samples round-relative whole seconds from
+ *  ceil(applyRel) (`dispelReachSweepStartMs`), and reads the zone from
+ *  `startInfo.zoneId` so line of sight is actually evaluated (also
+ *  momentSnapshot's facts.los).
  */
-export const PROMPT_VERSION = 239;
+export const PROMPT_VERSION = 240;
