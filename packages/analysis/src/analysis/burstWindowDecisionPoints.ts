@@ -61,6 +61,7 @@ import { getUnitPositionAtTime } from "../utils/losAnalysis";
 import { LOS_SWEEP_GAP_MS } from "../utils/positionSampling";
 import { canReachTargetAt } from "../utils/rootReachability";
 import { buildCannotCastIntervals } from "../utils/cannotCastIntervals";
+import { CC_CAST_EFFECT_AURA } from "../utils/drAnalysis";
 import { isOffensiveSpell } from "../utils/spellDanger";
 import { buildFilteredAuraIntervals } from "../utils/utils";
 import {
@@ -264,6 +265,59 @@ export interface BurstResponseCast {
    * when the spell has one — an answer that expired before the trough did
    * not answer it (round 3 6954) */
   effectEndSec?: number;
+  /** An aimed control (cc / root, not an interrupt) cast BEFORE the lead
+   * cast: whether its own aura was still on the target at the lead cast's
+   * ms (triage sync-burst F-B4: 95127ab4's Paralysis was trinketed 0.5 s
+   * before the Zenith it was credited against). Credit-line only —
+   * `responded` never reads it. Absent on every other response. */
+  preOpenerStillUp?: boolean;
+}
+
+/**
+ * F-B4: is the control `casterId` aimed at `dest` (cast `castSpellId` at
+ * `castMs`) still applied at `atMs`? Keyed on the cast id and its effect aura
+ * (`CC_CAST_EFFECT_AURA`, the one cast→aura table), sourced from the caster.
+ */
+export function aimedControlUpAt(
+  dest:
+    | {
+        auraEvents?: ReadonlyArray<{
+          timestamp: number;
+          spellId?: string;
+          srcUnitId: string;
+          logLine: { event: string };
+        }>;
+      }
+    | undefined,
+  casterId: string,
+  castSpellId: string,
+  castMs: number,
+  atMs: number,
+): boolean {
+  const ids = new Set(
+    [castSpellId, CC_CAST_EFFECT_AURA[castSpellId]].filter(
+      (x): x is string => !!x,
+    ),
+  );
+  let up = false;
+  for (const a of dest?.auraEvents ?? []) {
+    if (a.timestamp < castMs || a.timestamp > atMs) continue;
+    if (a.srcUnitId !== casterId || !ids.has(a.spellId ?? "")) continue;
+    const ev = a.logLine.event;
+    if (
+      ev === "SPELL_AURA_APPLIED" ||
+      ev === "SPELL_AURA_REFRESH" ||
+      ev === "SPELL_AURA_APPLIED_DOSE"
+    )
+      up = true;
+    else if (
+      ev === "SPELL_AURA_REMOVED" ||
+      ev === "SPELL_AURA_BROKEN" ||
+      ev === "SPELL_AURA_BROKEN_SPELL"
+    )
+      up = false;
+  }
+  return up;
 }
 
 /**
@@ -1025,6 +1079,18 @@ export function burstWindowDecisionPoints(
         const dur = casterUnit
           ? buffFullDurationForCaster(c.spellId, casterUnit)
           : undefined;
+        const preOpenerStillUp =
+          category === "control" &&
+          c.tMs < leadRawMs &&
+          !INTERRUPT_IDS.has(c.spellId)
+            ? aimedControlUpAt(
+                units.find((u) => u.id === c.dest),
+                c.unitId,
+                c.spellId,
+                c.tMs,
+                leadRawMs,
+              )
+            : undefined;
         responseCasts.push({
           category,
           spellId: c.spellId,
@@ -1038,6 +1104,7 @@ export function burstWindowDecisionPoints(
           ...(dur
             ? { effectEndSec: Math.floor((c.tMs - start) / 1000 + dur) }
             : {}),
+          ...(preOpenerStillUp !== undefined ? { preOpenerStillUp } : {}),
         });
       }
       for (const r of controlLandedResponses(

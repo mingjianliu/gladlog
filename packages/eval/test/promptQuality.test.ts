@@ -10,6 +10,7 @@ import type { CoverageManifest } from "../src/quality/coverageManifest";
 import {
   checkBehaviorPriorConsistency,
   checkCcAvoidedLandedConsistency,
+  checkBurstAnsweredBottomConsistency,
   checkCcBookmarkConsistency,
   checkDeathTrinketCcConsistency,
   checkDuringExternalConsistency,
@@ -1030,5 +1031,22 @@ describe("checkDeathTrinketCcConsistency — the death line's trinket tag vs [CC
     const old = "2:22  [CC ON TEAM]   1(UDKnight) ← Fear (by 6(AWarlock)) | 8s";
     const other = "2:50  [CC ON TEAM]   2(RDruid) ← Fear (by 6(AWarlock)) | 8s";
     expect(checkDeathTrinketCcConsistency([old, other, death(none)])).toEqual([]);
+  });
+});
+
+describe("checkBurstAnsweredBottomConsistency — the credit line's bottom second (F-B3)", () => {
+  const roster = '  <unit id="1" name="Sgarbossa-Tortheldrin-US" spec="Windwalker Monk" role="log owner">';
+  const line = (at: string) =>
+    `0:04  [BURST ANSWERED]   enemy opened The Hunt (Havoc Demon Hunter Irridanz-Sargeras-US): Botobumps-Illidan-US answered with Earthgrab 0.6s before it opened; Sgarbossa-Tortheldrin-US bottomed at 42% at ${at}`;
+  it("passes when the same-second [STATE] agrees, fails when it does not", () => {
+    expect(
+      checkBurstAnsweredBottomConsistency([roster, "0:55  [STATE]   friends 1(WMonk):42 / enemies 4(HDHunter):90", line("0:55")]),
+    ).toEqual([]);
+    expect(
+      checkBurstAnsweredBottomConsistency([roster, "0:55  [STATE]   friends 1(WMonk):47 / enemies 4(HDHunter):90", line("0:55")]),
+    ).toHaveLength(1);
+  });
+  it("a bottom before the line's own second fails", () => {
+    expect(checkBurstAnsweredBottomConsistency([roster, line("0:03")])).toHaveLength(1);
   });
 });

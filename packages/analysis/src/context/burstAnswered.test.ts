@@ -19,6 +19,7 @@ import {
 import { beforeAll, describe, expect, it } from "vitest";
 
 import {
+  aimedControlUpAt,
   type BurstWindowDecisionPoint,
   burstWindowDecisionPoints,
 } from "../analysis/burstWindowDecisionPoints";
@@ -96,7 +97,7 @@ describe("formatBurstAnsweredLines — which windows earn a credit line", () => 
     expect(out[0]!.atSeconds).toBe(40);
     expect(out[0]!.line).toBe(
       `${BURST_ANSWERED_TAG}   enemy opened Deathmark (Assassination Rogue Rogue-R): ` +
-        `Me-R answered with Pain Suppression in 2.4s; Mate-R bottomed at 31%`,
+        `Me-R answered with Pain Suppression in 2.4s; Mate-R bottomed at 31% at 0:45`,
     );
   });
 
@@ -197,6 +198,74 @@ describe("formatBurstAnsweredLines — cap and selection order", () => {
   });
 });
 
+describe("triage sync-burst F-B7 / F-B4 — which answer is credited", () => {
+  const heal = (casterId: string) => ({
+    category: "healCd" as const,
+    spellId: "108416", // Dark Pact: HEALING_VERDICTS healsOthers false
+    spellName: "Dark Pact",
+    casterName: casterId,
+    casterId,
+    tSec: 46,
+    latencySec: 6.3,
+  });
+  it("F-B7: another friendly's self-only heal CD is not credited; the pressured unit's own is", () => {
+    const other = formatBurstAnsweredLines([
+      point({ responseCasts: [heal("f9")] }),
+    ]);
+    expect(other).toEqual([]);
+    const own = formatBurstAnsweredLines([
+      point({ responseCasts: [heal("f9"), heal("f2")] }),
+    ]);
+    expect(own[0]!.line).toContain("f2 answered with Dark Pact in 6.3s");
+  });
+  it("F-B4: a pre-opener aimed control whose aura was gone at the lead cast is skipped", () => {
+    const ctl = (still: boolean) => ({
+      category: "control" as const,
+      spellId: "115078",
+      spellName: "Paralysis",
+      casterName: "Monk-R",
+      casterId: "f3",
+      destId: "e1",
+      tSec: 38,
+      latencySec: -1.1,
+      preOpenerStillUp: still,
+    });
+    const pw = point().responseCasts[0]!;
+    expect(
+      formatBurstAnsweredLines([point({ responseCasts: [ctl(false), pw] })])[0]!
+        .line,
+    ).toContain("Me-R answered with Pain Suppression in 2.4s");
+    expect(
+      formatBurstAnsweredLines([point({ responseCasts: [ctl(true), pw] })])[0]!
+        .line,
+    ).toContain("Monk-R answered with Paralysis 1.1s before it opened");
+  });
+});
+
+describe("aimedControlUpAt (F-B4)", () => {
+  const ev = (event: string, ms: number, spellId = "115078", src = "f3") => ({
+    timestamp: ms,
+    spellId,
+    srcUnitId: src,
+    logLine: { event },
+  });
+  it("95127ab4: Paralysis 18.059, trinketed 18.662 → gone at the 19.168 Zenith, up at 18.5", () => {
+    const dest = {
+      auraEvents: [
+        ev("SPELL_AURA_APPLIED", 18_059),
+        ev("SPELL_AURA_REMOVED", 18_662),
+      ],
+    };
+    expect(aimedControlUpAt(dest, "f3", "115078", 18_059, 19_168)).toBe(false);
+    expect(aimedControlUpAt(dest, "f3", "115078", 18_059, 18_500)).toBe(true);
+    expect(aimedControlUpAt(dest, "f9", "115078", 18_059, 18_500)).toBe(false);
+  });
+  it("reads the cast's effect aura (Fear 5782 → 118699)", () => {
+    const dest = { auraEvents: [ev("SPELL_AURA_APPLIED", 10_000, "118699")] };
+    expect(aimedControlUpAt(dest, "f3", "5782", 9_900, 11_000)).toBe(true);
+  });
+});
+
 describe("formatBurstAnsweredLines — wording", () => {
   it("appends the died-anyway suffix when the pressured friendly died", () => {
     const out = formatBurstAnsweredLines([
@@ -205,7 +274,7 @@ describe("formatBurstAnsweredLines — wording", () => {
         pressured: { ...point().pressured!, died: true, minHpPct: 4 },
       }),
     ]);
-    expect(out[0]!.line).toContain("Mate-R bottomed at 4% — Mate-R still died");
+    expect(out[0]!.line).toContain("Mate-R bottomed at 4% at 0:45 — Mate-R still died");
   });
 
   it("a DIFFERENT friendly's death inside the window is stated as a fact, not as the pressured unit dying (round 3 N4, 483f)", () => {

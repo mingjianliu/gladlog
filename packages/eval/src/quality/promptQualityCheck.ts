@@ -2277,6 +2277,55 @@ export function crisisHpStateProbes(lines: string[]): CrisisHpStateProbe[] {
 }
 
 /**
+ * `[BURST ANSWERED] … <name> bottomed at P% at M:SS` (triage 2026-09-29
+ * sync-burst F-B3). The bottom is the engine's `pressured.minHpSec` /
+ * `minHpPct` — a `gridHpPct` reading at a whole second over the window's
+ * outcome span — so its second can never precede the line's own second, and
+ * a same-second `[STATE]` tick for that unit must print the same number
+ * (the `checkCrisisHpStateConsistency` rule: same sampler, exact).
+ */
+const BURST_ANSWERED_BOTTOM =
+  /^\s*(\d+):(\d{2})\s+\[BURST ANSWERED\].*;\s+(\S+) bottomed at (\d+)% at (\d+):(\d{2})/;
+export function checkBurstAnsweredBottomConsistency(lines: string[]): string[] {
+  const idByName = new Map<string, number>();
+  const stateAt = new Map<number, Map<number, number | "dead" | "ghost">>();
+  for (const line of lines) {
+    const roster = line.match(UNIT_ROSTER_LINE);
+    if (roster) {
+      idByName.set(roster[2]!, Number(roster[1]));
+      continue;
+    }
+    const st = line.match(STATE_LINE);
+    if (!st) continue;
+    const units = new Map<number, number | "dead" | "ghost">();
+    for (const tok of st[3]!.matchAll(STATE_TOKEN)) {
+      const v = tok[2]!;
+      units.set(Number(tok[1]), v === "dead" || v === "ghost" ? v : Number(v));
+    }
+    stateAt.set(Number(st[1]) * 60 + Number(st[2]), units);
+  }
+  const failures: string[] = [];
+  lines.forEach((line, i) => {
+    const m = line.match(BURST_ANSWERED_BOTTOM);
+    if (!m) return;
+    const t = Number(m[1]) * 60 + Number(m[2]);
+    const b = Number(m[5]) * 60 + Number(m[6]);
+    const pct = Number(m[4]);
+    if (b < t)
+      failures.push(
+        `line ${i + 1}: [BURST ANSWERED] 触底时刻 ${fmtTime(b)} 早于本行 ${fmtTime(t)}`,
+      );
+    const id = idByName.get(m[3]!);
+    const tick = id === undefined ? undefined : stateAt.get(b)?.get(id);
+    if (tick === "dead" || (typeof tick === "number" && tick !== pct))
+      failures.push(
+        `line ${i + 1}: [BURST ANSWERED] 说 ${m[3]} 在 ${fmtTime(b)} 触底 ${pct}%,同秒 [STATE] 为 ${tick}`,
+      );
+  });
+  return failures;
+}
+
+/**
  * Hard invariant (2026-08-30): a `cd-hoarded` / `crisis-no-response` menu line
  * claims a unit's HP at a rendered second; when the timeline also emits a
  * `[STATE]` tick for that unit at that same rendered second, the two numbers
@@ -2897,6 +2946,7 @@ export function checkMatch(
   hardFailures.push(...checkConseqHpStateConsistency(lines));
   hardFailures.push(...checkCcAvoidedLandedConsistency(lines));
   hardFailures.push(...checkDeathTrinketCcConsistency(lines));
+  hardFailures.push(...checkBurstAnsweredBottomConsistency(lines));
   hardFailures.push(...checkPeelOptionConsistency(lines));
   hardFailures.push(...checkCcBookmarkConsistency(lines));
   hardFailures.push(...checkForcedTrinketConsistency(lines));

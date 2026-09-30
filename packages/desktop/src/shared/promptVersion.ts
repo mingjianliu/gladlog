@@ -359,5 +359,10 @@
  *  CC in the last 10 s)` unless a [CC ON TEAM] instance on them rendered
  *  ≥ 2 s overlaps the 10 s before (`breakableCcBeforeDeath`, gate
  *  `checkDeathTrinketCcConsistency`).
+ *  v212 (2026-09-30, triage sync-burst F-B3 / F-B7 / F-B4): [BURST ANSWERED]
+ *  prints its bottom's second (`bottomed at P% at M:SS`, gate
+ *  `checkBurstAnsweredBottomConsistency`); another friendly's self-only heal
+ *  CD is not credited; a pre-opener aimed control whose aura was gone at the
+ *  lead cast is not credited (`aimedControlUpAt`). `responded` unchanged.
  */
-export const PROMPT_VERSION = 211;
+export const PROMPT_VERSION = 212;

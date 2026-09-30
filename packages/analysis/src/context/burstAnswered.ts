@@ -29,6 +29,17 @@ import {
   burstExtrasLabel,
   type BurstWindowDecisionPoint,
 } from "../analysis/burstWindowDecisionPoints";
+import { HEALING_VERDICTS } from "../data/healingVerdicts";
+import { fmtTime } from "../utils/renderGrid";
+
+/** A healing CD whose official effect heals only its caster (Divine
+ *  Protection, Exhilaration, Desperate Prayer …). Keyed on the response
+ *  CATEGORY `healCd` at the call site, not on this set alone: Guardian Spirit
+ *  and Life Cocoon are also `healsOthers:false` but classify as `external`
+ *  first (triage sync-burst F-B7). */
+function healsOnlyItsCaster(spellId: string): boolean {
+  return HEALING_VERDICTS[spellId]?.official.healsOthers === false;
+}
 
 export const BURST_ANSWERED_TAG = "[BURST ANSWERED]";
 
@@ -113,6 +124,20 @@ export function creditedAnswer(p: BurstWindowDecisionPoint) {
       return false;
     if (r.category === "wall" && r.casterId !== undefined && r.casterId !== pr.unitId)
       return false;
+    // F-B7: a self-only heal CD answers only its caster's own pressure — the
+    // wall rule, carried to `healCd` (06bb9860: Qqii's Dark Pact credited for
+    // Bumbiing's dip; 3df6ccf8: Shawts' Exhilaration for Invios's).
+    if (
+      r.category === "healCd" &&
+      healsOnlyItsCaster(r.spellId) &&
+      r.casterId !== undefined &&
+      r.casterId !== pr.unitId
+    )
+      return false;
+    // F-B4: an aimed control pressed before the opener answers it only if it
+    // was still on the target when the lead cast went out (95127ab4: the
+    // Paralysis was trinketed 0.5 s before the Zenith).
+    if (r.category === "control" && r.preOpenerStillUp === false) return false;
     if (
       (r.category === "external" || r.category === "wall") &&
       r.effectEndSec !== undefined &&
@@ -186,7 +211,11 @@ export function formatBurstAnsweredLines(
           `${BURST_ANSWERED_TAG}   enemy opened ${p.leadCd.spellName}${extrasPart} ` +
           `(${p.leadCd.casterSpec} ${p.leadCd.casterName}): ` +
           `${first.casterName} answered with ${first.spellName} ${when}; ` +
-          `${pressured.name} bottomed at ${pressured.minHpPct}%${diedPart}`,
+          `${pressured.name} bottomed at ${pressured.minHpPct}%` +
+          // F-B3: the bottom is the minimum over the whole bounded window (up
+          // to 55 s) — its second says whether it belongs to this go. Already
+          // on the render grid (`minHpSec` is a whole second).
+          `${pressured.minHpSec !== null ? ` at ${fmtTime(pressured.minHpSec)}` : ""}${diedPart}`,
       };
     })
     .sort((a, b) => a.atSeconds - b.atSeconds);
