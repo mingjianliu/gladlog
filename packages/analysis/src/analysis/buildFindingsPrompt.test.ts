@@ -74,7 +74,13 @@ describe("buildFindingsPrompt", () => {
     // owner's own class cannot remove.
     expect(p).toMatch(/ownerCanDispel/);
     expect(p).toMatch(/eligibleDispellers/);
-    expect(p).toMatch(/CANNOT remove this debuff type/);
+    // F-C7 (triage 2026-09-29): the owner has no dispel SPELL for the type —
+    // not "the class CANNOT remove it" (a rogue's Cloak of Shadows can).
+    expect(p).toMatch(/has no dispel spell for this debuff type/);
+    expect(p).not.toMatch(/CANNOT remove this debuff type/);
+    // F-C15: a curse is not a CC
+    expect(p).toMatch(/high-value enemy debuff \(a CC, root or curse/);
+    expect(p).not.toMatch(/high-value enemy CC/);
     expect(p).toMatch(/call-out|call for a dispel/);
   });
 

@@ -973,6 +973,7 @@ export function missedCleanseEvents(
     | "lateDispelSeconds"
     | "targetCharmed"
     | "coRemovesBacklash"
+    | "worth"
   >[],
   owner: any,
   friends: any[],
@@ -1009,7 +1010,12 @@ export function missedCleanseEvents(
   return windows
     .filter(
       (w) =>
-        (w.priority === "Critical" || w.priority === "High") &&
+        // F-C4 (A39 = B, U4 = B-all, 2026-09-30): a signed id is admitted by
+        // its 08-19 cell — every cell that survived the collection gates
+        // (skip never reaches here); an unsigned id keeps the legacy tier.
+        (w.worth !== undefined
+          ? w.worth !== "skip"
+          : w.priority === "Critical" || w.priority === "High") &&
         !w.cleanseWasOnCD &&
         // Feasibility gate (2026-08-02): windows where the dispellers were
         // CC'd/locked out with no reaction window, or where position data
@@ -1130,7 +1136,9 @@ export function missedCleanseEvents(
           target: w.targetName,
           cc: w.spellName,
           duration: w.durationSeconds.toFixed(1),
-          priority: w.priority,
+          ...(w.worth !== undefined
+            ? { worth: w.worth }
+            : { priority: w.priority, verdict: "unsigned" }),
           postCcDamageK: (w.postCcDamage / 1000).toFixed(0),
           // Value gate d: DR was fully fresh and the target did get re-CC'd
           // afterwards — the coach must phrase this as a cautious suggestion,

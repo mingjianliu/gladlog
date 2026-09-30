@@ -2,7 +2,8 @@
  * 驱散裁定册的防腐测试 —— 照 `mitigationVerdicts.test.ts` 的纪律。
  *
  * 钉三件事:签字格式、值域、以及**键集恰好等于 2026-08-19 签字页上的
- * 27 个 id + 2026-08-30 用户单独裁定的 1 个(Landslide 355689)= 28** —— 少一行是丢签字,
+ * 27 个 id + 2026-08-30 用户单独裁定的 1 个(Landslide 355689)+ 2026-09-30 补签的 16 个
+ * (A41-签)= 44** —— 少一行是丢签字,
  * 多一行是没签字就进表,两个方向都得红。
  */
 import {
@@ -42,18 +43,37 @@ const SIGNED_IDS = [
   "105421",
   "31661",
   "605",
+  // 2026-09-30 补签(A41-签):变形术 8 个变体、妖术 6 个变体
+  "161354",
+  "391622",
+  "61305",
+  "161353",
+  "460392",
+  "61721",
+  "277792",
+  "277787",
+  "210873",
+  "211015",
+  "269352",
+  "277784",
+  "277778",
+  "309328",
   // 定身
   "122",
   "355689", // Landslide — 2026-08-30 user, same tier as Frost Nova (GH #24 tail)
   "102359",
   "339",
+  "114404", // Void Tendrils — 2026-09-30 user (A41-签), root row
   // 诅咒
   "1714",
   "702",
   // 签字退出
   "12654",
   "392983",
+  "360194", // Deathmark — 2026-09-30 user (A41-签), damage row, exit
 ];
+/** 硬控行(晕 / 眩晕 / 变形 / 恐惧 / 迷惑)的个数 —— SIGNED_IDS 的前段。 */
+const HARD_CC_ROWS = 34;
 
 describe("驱散裁定册:签字纪律", () => {
   it("签字日期与每条 approved/source 合规", () => {
@@ -77,17 +97,17 @@ describe("驱散裁定册:签字纪律", () => {
     }
   });
 
-  it("键集恰好 = 签字页的 27 个 id + 2026-08-30 裁定的 1 个 = 28(双向)", () => {
+  it("键集恰好 = 签字页的 27 个 id + 2026-08-30 裁定的 1 个 + 2026-09-30 补签的 16 个 = 44(双向)", () => {
     const have = [...DISPEL_VERDICT_IDS].sort();
     expect(have).toEqual([...SIGNED_IDS].sort());
-    expect(have).toHaveLength(28);
+    expect(have).toHaveLength(44);
   });
 
   it("结构裁定成立:每个 self-impossible 行都是硬控,每个保留 healer 格的行都不禁施法", () => {
     // 硬控 = 晕/眩晕/恐惧组;保留 = 定身/诅咒/退出组。用组的划分钉住,
     // 防止未来新行忘了做「治疗能不能自驱」的判断。
-    const selfImpossible = SIGNED_IDS.slice(0, 20);
-    const healerJudged = SIGNED_IDS.slice(20);
+    const selfImpossible = SIGNED_IDS.slice(0, HARD_CC_ROWS);
+    const healerJudged = SIGNED_IDS.slice(HARD_CC_ROWS);
     for (const id of selfImpossible)
       expect(DISPEL_VERDICTS[id].healer, `${id} 应为 self-impossible`).toBe(
         "self-impossible",

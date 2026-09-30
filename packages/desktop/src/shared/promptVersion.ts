@@ -472,5 +472,12 @@
  *  owner's button, talent-gated), attempted (rejected cleanse presses, the
  *  intent-guard filter), with legend sentences; drChainRisk is no for ids
  *  no DR family claims (curses), roots keep their self-DR.
+ *  v236 (2026-09-30, triage missed-cleanse F-C6 / F-C4 / F-C7 / F-C15;
+ *  rulings A41-签, A39 = B, U4 = B-all, U6): 16 signed dispel-verdict rows
+ *  (Polymorph / Hex variants, Void Tendrils, Deathmark exit); a signed id's
+ *  missed-cleanse item is admitted by and renders its 08-19 cell (worth=,
+ *  a zero-damage must shows worth), unsigned ids keep priority= plus
+ *  verdict=unsigned; the legend names worth / verdict, calls the debuff a
+ *  "CC, root or curse" and says the owner "has no dispel spell" for it.
  */
-export const PROMPT_VERSION = 235;
+export const PROMPT_VERSION = 236;

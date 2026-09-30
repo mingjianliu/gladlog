@@ -57,6 +57,12 @@ export const DISPEL_VERDICTS_SIGNED_ON = "2026-08-19";
 
 const SRC = "裁定矩阵签字 2026-08-19(artifact 002e4626);语料 n=300/1178 回合";
 const OK = "2026-08-19 user";
+/** 2026-09-30 补签(triage missed-cleanse F-C6,用户裁决 A41 = A,A41-签整份批准
+ * 16 格):正向扫描找到的变形术 / 妖术变体照 118 / 51514,虚空触须按定身行,
+ * 死亡印记按伤害类退出。草稿与证据在 eval-private
+ * runs/triage-2026-09-29/issues/missed-cleanse-purge.md「A41 signed verdict cells」。 */
+const SRC_A41 = "裁定矩阵补签 2026-09-30(A41 草稿)";
+const OK_A41 = "2026-09-30 user";
 
 export const DISPEL_VERDICTS: Record<string, IDispelVerdict> = {
   // ── 晕(Stun 递减)──────────────────────────────────────────────────────
@@ -249,6 +255,133 @@ export const DISPEL_VERDICTS: Record<string, IDispelVerdict> = {
     source: SRC,
     approved: OK,
   },
+  // ── 2026-09-30 补签(A41-签):变形术 / 妖术变体(照 118 / 51514)──────────────
+  "161354": {
+    zh: "变形术(小猴)",
+    healer: "self-impossible",
+    melee: "must",
+    ranged: "must",
+    afterDR: "skip",
+    source: SRC_A41,
+    approved: OK_A41,
+  },
+  "391622": {
+    zh: "变形术(鸭子)",
+    healer: "self-impossible",
+    melee: "must",
+    ranged: "must",
+    afterDR: "skip",
+    source: SRC_A41,
+    approved: OK_A41,
+  },
+  "61305": {
+    zh: "变形术(黑猫)",
+    healer: "self-impossible",
+    melee: "must",
+    ranged: "must",
+    afterDR: "skip",
+    source: SRC_A41,
+    approved: OK_A41,
+  },
+  "161353": {
+    zh: "变形术(北极熊宝宝)",
+    healer: "self-impossible",
+    melee: "must",
+    ranged: "must",
+    afterDR: "skip",
+    source: SRC_A41,
+    approved: OK_A41,
+  },
+  "460392": {
+    zh: "变形术(苔绒羱)",
+    healer: "self-impossible",
+    melee: "must",
+    ranged: "must",
+    afterDR: "skip",
+    source: SRC_A41,
+    approved: OK_A41,
+  },
+  "61721": {
+    zh: "变形术(兔子)",
+    healer: "self-impossible",
+    melee: "must",
+    ranged: "must",
+    afterDR: "skip",
+    source: SRC_A41,
+    approved: OK_A41,
+  },
+  "277792": {
+    zh: "变形术(大黄蜂)",
+    healer: "self-impossible",
+    melee: "must",
+    ranged: "must",
+    afterDR: "skip",
+    source: SRC_A41,
+    approved: OK_A41,
+  },
+  "277787": {
+    zh: "变形术(恐角龙)",
+    healer: "self-impossible",
+    melee: "must",
+    ranged: "must",
+    afterDR: "skip",
+    source: SRC_A41,
+    approved: OK_A41,
+  },
+  "210873": {
+    zh: "妖术(掠食龙)",
+    healer: "self-impossible",
+    melee: "worth",
+    ranged: "worth",
+    afterDR: "skip",
+    source: SRC_A41,
+    approved: OK_A41,
+  },
+  "211015": {
+    zh: "妖术(蟑螂)",
+    healer: "self-impossible",
+    melee: "worth",
+    ranged: "worth",
+    afterDR: "skip",
+    source: SRC_A41,
+    approved: OK_A41,
+  },
+  "269352": {
+    zh: "妖术(骸骨幼体)",
+    healer: "self-impossible",
+    melee: "worth",
+    ranged: "worth",
+    afterDR: "skip",
+    source: SRC_A41,
+    approved: OK_A41,
+  },
+  "277784": {
+    zh: "妖术(混血柳魔)",
+    healer: "self-impossible",
+    melee: "worth",
+    ranged: "worth",
+    afterDR: "skip",
+    source: SRC_A41,
+    approved: OK_A41,
+  },
+  "277778": {
+    zh: "妖术(赞达拉碎肉者)",
+    healer: "self-impossible",
+    melee: "worth",
+    ranged: "worth",
+    afterDR: "skip",
+    source: SRC_A41,
+    approved: OK_A41,
+  },
+  "309328": {
+    zh: "妖术(活体蜂蜜)",
+    healer: "self-impossible",
+    melee: "worth",
+    ranged: "worth",
+    afterDR: "skip",
+    source: SRC_A41,
+    approved: OK_A41,
+  },
   // ── 定身(root,无 DR 档位,#24 裁定;不禁施法 → healer 格 = 自驱)──────
   "122": {
     zh: "冰霜新星",
@@ -288,6 +421,16 @@ export const DISPEL_VERDICTS: Record<string, IDispelVerdict> = {
     afterDR: null,
     source: SRC,
     approved: OK,
+  },
+  // 2026-09-30 补签(A41-签):虚空触须按定身行(照 122 / 355689 / 102359 / 339)
+  "114404": {
+    zh: "虚空触须",
+    healer: "situational",
+    melee: "worth",
+    ranged: "skip",
+    afterDR: null,
+    source: SRC_A41,
+    approved: OK_A41,
   },
   // ── 诅咒(非控制,不禁施法)────────────────────────────────────────────
   "1714": {
@@ -329,6 +472,17 @@ export const DISPEL_VERDICTS: Record<string, IDispelVerdict> = {
     exitCandidate: true,
     source: SRC,
     approved: OK,
+  },
+  // 2026-09-30 补签(A41-签):死亡印记本身伤害约 5.6k,驱掉它也驱不掉毒 —— 伤害类退出
+  "360194": {
+    zh: "死亡印记",
+    healer: "skip",
+    melee: "skip",
+    ranged: "skip",
+    afterDR: null,
+    exitCandidate: true,
+    source: SRC_A41,
+    approved: OK_A41,
   },
 };
 

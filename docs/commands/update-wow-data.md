@@ -431,6 +431,11 @@ npx tsx packages/eval/scripts/curatedRotScan.ts \
 #    ground truth vs getDispelType (the awk extraction from the Notes below, over .gz via gzip -dc).
 npx tsx packages/eval/scripts/drGapScan.ts $GLADLOG_EVAL_HOME/corpus/observedSpellIds-S<n>-archive-<date>.json
 npx tsx packages/eval/scripts/dispelCompletenessScan.ts <dispel-counts.txt>
+# 3a. Signed dispel-verdict completeness (2026-09-30, triage missed-cleanse F-C6 / ruling A41): observed-dispelled
+#    debuff ids with no signed row in data/dispelVerdicts.ts render the legacy tier as `verdict=unsigned` and skip
+#    the 08-19 skip / timing gates. Corpus leg always; the archive leg (--manifest) counts their windows and menu
+#    items. After A41-签: 22 unsigned ids (Earthgrab ×11,359 first) — the next drafting batch.
+npx tsx packages/eval/scripts/dispelVerdictForwardScan.ts --manifest <newseason manifest> --every 30
 # 3b. DR sharing (2026-09-25, reliability audit C5): does each DR override in DR_CATEGORY_MAP — and
 #    any CC DB2 files under no category — really share (or not share) DR the way the table says?
 #    Per spell under test: its full-duration rate right after each DB2 category vs with no

@@ -1,6 +1,10 @@
 import { CombatUnitSpec, ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
-import { dispelVerdictOf } from "../data/dispelVerdicts";
+import {
+  dispelVerdictOf,
+  type DispelWorth,
+  type HealerCell,
+} from "../data/dispelVerdicts";
 import { CHANNEL_PROXY_IDS, DRINK_AURA_IDS } from "../data/occupancyAuras";
 import { ROOT_SPELL_IDS } from "../data/rootSpells";
 import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
@@ -975,6 +979,10 @@ export interface IMissedCleanseWindow {
    * target when the CC landed — a cleanse would have removed them too and
    * the dispeller would eat the penalty. A fact, never an exemption. */
   coRemovesBacklash?: string;
+  /** F-C4 (A39 = B): the signed 08-19 cell, after DR and U6's zero-damage
+   * demotion — replaces `priority` for both rendering and menu admission.
+   * Absent for ids with no signed row (they keep the legacy tier). */
+  worth?: DispelWorth | HealerCell;
   /** Feasibility gate a (tri-state): true = at least one dispeller was in
    * reach during the reaction window (≤40 yd and LoS not false); false =
    * position data exists and nobody was in reach; null = no position data, so
@@ -1143,10 +1151,36 @@ export function consequenceGatedPriority(
   postCcDamage: number,
   targetDied: boolean,
 ): { priority: DispelPriority; consequenceDemoted: boolean } {
-  if (priority === "Critical" && postCcDamage <= 0 && !targetDied) {
+  if (priority === "Critical" && consequenceDemotes(postCcDamage, targetDied)) {
     return { priority: "High", consequenceDemoted: true };
   }
   return { priority, consequenceDemoted: false };
+}
+
+/** #39's consequence test, one predicate for the legacy tier and the signed
+ *  cell: no damage after the CC landed and the target did not die. */
+export function consequenceDemotes(
+  postCcDamage: number,
+  targetDied: boolean,
+): boolean {
+  return !(postCcDamage > 0) && !targetDied;
+}
+
+/**
+ * The signed 08-19 cell a window renders and is admitted by (triage
+ * missed-cleanse F-C4; user rulings 2026-09-30: A39 = B, U4 = B-all, U6).
+ * A `must` cell renders one tier down (`worth`) when #39's consequence test
+ * says nothing came of it — the legacy Critical → High rule carried onto the
+ * signed tier. worth / situational never demote.
+ */
+export function consequenceGatedWorth(
+  cell: DispelWorth | HealerCell,
+  postCcDamage: number,
+  targetDied: boolean,
+): { worth: DispelWorth | HealerCell; demoted: boolean } {
+  return cell === "must" && consequenceDemotes(postCcDamage, targetDied)
+    ? { worth: "worth", demoted: true }
+    : { worth: cell, demoted: false };
 }
 
 /** #39: did the CC'd target die during the CC or its pressure window (+ the
@@ -2264,8 +2298,9 @@ export function reconstructDispelSummary(
             // cleanseCount++ 之后:驱散确实发生了,效率统计照记,只有
             // 「批评窗口」被拦。
             const lateVerdict = dispelVerdictOf(spellId);
+            let lateCell: DispelWorth | HealerCell | undefined;
             if (lateVerdict !== null) {
-              let lateWorth: string =
+              let lateWorth: DispelWorth | HealerCell =
                 role === "healer"
                   ? lateVerdict.healer
                   : role === "melee"
@@ -2284,6 +2319,7 @@ export function reconstructDispelSummary(
                 lateWorth = lateVerdict.afterDR;
               }
               if (lateWorth === "skip") continue;
+              lateCell = lateWorth;
               {
                 const fromS = Math.floor((applyTs - combat.startTime) / 1000);
                 const toS = Math.floor((removal.ts - combat.startTime) / 1000);
@@ -2306,12 +2342,18 @@ export function reconstructDispelSummary(
                   d.logLine.timestamp <= windowEndMs,
               )
               .reduce((sum, d) => sum + Math.abs(d.effectiveAmount), 0);
+            const lateDied = targetDiedAround(unit, applyTs, removal.ts);
             const lateGate = consequenceGatedPriority(
               priority,
               postCcDamage,
-              targetDiedAround(unit, applyTs, removal.ts),
+              lateDied,
             );
+            const lateW =
+              lateCell !== undefined
+                ? consequenceGatedWorth(lateCell, postCcDamage, lateDied)
+                : undefined;
             lateCleanseWindows.push({
+              ...(lateW ? { worth: lateW.worth } : {}),
               timeSeconds: (applyTs - combat.startTime) / 1000,
               durationSeconds,
               targetName: unit.name,
@@ -2319,7 +2361,8 @@ export function reconstructDispelSummary(
               spellName,
               spellId,
               priority: lateGate.priority,
-              consequenceDemoted: lateGate.consequenceDemoted,
+              consequenceDemoted:
+                lateGate.consequenceDemoted || (lateW?.demoted ?? false),
               dispelType: windowDispelType,
               postCcDamage,
               cleanseWasOnCD: false,
@@ -2385,8 +2428,9 @@ export function reconstructDispelSummary(
           // 晚了」适用于所有签字档位。未签字 id 不受此门(走旧优先级,无
           // 裁定依据不豁免)。
           const windowVerdict = dispelVerdictOf(spellId);
+          let windowCell: DispelWorth | HealerCell | undefined;
           if (windowVerdict !== null) {
-            let effectiveWorth: string =
+            let effectiveWorth: DispelWorth | HealerCell =
               role === "healer"
                 ? windowVerdict.healer
                 : role === "melee"
@@ -2405,6 +2449,7 @@ export function reconstructDispelSummary(
               effectiveWorth = windowVerdict.afterDR;
             }
             if (effectiveWorth === "skip") continue;
+            windowCell = effectiveWorth;
             {
               const fromS = Math.floor((applyTs - combat.startTime) / 1000);
               const toS = Math.floor((removal.ts - combat.startTime) / 1000);
@@ -2567,12 +2612,18 @@ export function reconstructDispelSummary(
             }
           }
 
+          const missDied = targetDiedAround(unit, applyTs, removal.ts);
           const missGate = consequenceGatedPriority(
             priority,
             postCcDamage,
-            targetDiedAround(unit, applyTs, removal.ts),
+            missDied,
           );
+          const missW =
+            windowCell !== undefined
+              ? consequenceGatedWorth(windowCell, postCcDamage, missDied)
+              : undefined;
           missedCleanseWindows.push({
+            ...(missW ? { worth: missW.worth } : {}),
             timeSeconds: (applyTs - combat.startTime) / 1000,
             durationSeconds,
             targetName: unit.name,
@@ -2580,7 +2631,8 @@ export function reconstructDispelSummary(
             spellName,
             spellId,
             priority: missGate.priority,
-            consequenceDemoted: missGate.consequenceDemoted,
+            consequenceDemoted:
+              missGate.consequenceDemoted || (missW?.demoted ?? false),
             dispelType: windowDispelType,
             postCcDamage,
             cleanseWasOnCD,

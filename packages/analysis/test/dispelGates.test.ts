@@ -29,6 +29,7 @@ import { kickLockoutSeconds } from "../src/data/spellEffectData";
 import {
   cleanseSpellNamesFor,
   computeDrChainRisk,
+  consequenceGatedWorth,
   formatMissedCleanseExemption,
   formatMissedPurgeExemption,
   purgePriorityForTest,
@@ -623,5 +624,46 @@ describe("triage missed-cleanse F-C14 / F-C12 (owner's cleanse facts)", () => {
       "Expunge",
       "Cauterizing Flame",
     ]);
+  });
+});
+
+describe("triage missed-cleanse F-C4 (A39 = B, U4 = B-all, U6)", () => {
+  const base = {
+    timeSeconds: 10,
+    durationSeconds: 5,
+    targetName: "t1",
+    spellName: "X",
+    spellId: "1",
+    postCcDamage: 1_000,
+    cleanseWasOnCD: false,
+    dispellersLockedOut: false,
+    losReachable: null,
+    drChainRisk: false,
+    dispelType: "Magic",
+  } as any;
+  it("a signed cell renders worth=<cell> and admits situational; an unsigned id keeps its legacy tier and says so", () => {
+    const signed = missedCleanseEvents(
+      [{ ...base, priority: "Low", worth: "situational" }],
+      DISPEL_OWNER,
+      [],
+      false,
+    );
+    expect(signed).toHaveLength(1);
+    expect(signed[0]!.facts.worth).toBe("situational");
+    expect(signed[0]!.facts.priority).toBeUndefined();
+    const unsigned = missedCleanseEvents(
+      [{ ...base, priority: "High" }, { ...base, timeSeconds: 40, priority: "Medium" }],
+      DISPEL_OWNER,
+      [],
+      false,
+    );
+    expect(unsigned).toHaveLength(1);
+    expect(unsigned[0]!.facts).toMatchObject({ priority: "High", verdict: "unsigned" });
+  });
+  it("U6: a zero-damage, no-death must renders worth; worth / situational never demote", () => {
+    expect(consequenceGatedWorth("must", 0, false)).toEqual({ worth: "worth", demoted: true });
+    expect(consequenceGatedWorth("must", 0, true).worth).toBe("must");
+    expect(consequenceGatedWorth("must", 5, false).worth).toBe("must");
+    expect(consequenceGatedWorth("situational", 0, false).worth).toBe("situational");
   });
 });
