@@ -83,6 +83,12 @@ export const classMetadata: IClassSpellMetadata[] = [
       a("260243", "Volley", O), // 45 s, lift 2.23, coPressed 9 %
       a("186265", "Aspect of the Turtle", D),
       a("109304", "Exhilaration", D),
+      // Feign Death — triage H15, user ruling 2026-09-30 (R13 / A9-3): a
+      // self response only (RESPONSE_ONLY_DEFENSIVE_IDS), never an ally save.
+      // Its press is never logged; Survival Tactics 202748 is the activation
+      // evidence (AURA_ONLY_ACTIVATION_IDS) and, since the same day, ownership
+      // evidence too. DB2: aura 66 FEIGN_DEATH on the caster, 30 s cooldown.
+      a("5384", "Feign Death", D),
       a("264735", "Survival of the Fittest", D), // W1g 2026-09-26: a defensive players press that the ledger never admitted (ledgerGapScan, 605 archive files: 457 rounds)
       a("19574", "Bestial Wrath", O),
       a("288613", "Trueshot", O),

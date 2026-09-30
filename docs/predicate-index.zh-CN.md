@@ -444,6 +444,8 @@
 
 ## 尚未统一
 
+**2026-09-30 登记,未收口(分诊 H15,裁决 A9-3)** —— 把激活当作拥有证据。`extractMajorCooldowns` 的拥有过滤现在把光环激活(`auraOnlyActivationSeconds`)当作与日志施放同等的证据,但只限 `AURA_ACTIVATION_PROVES_BUTTON_IDS` 里的键 —— 只可能由按键产生的光环(假死的生存战术 202748、毁灭之风);可由触发产生的 `AURA_ONLY_ACTIVATION_IDS` 键仍然要有施放。`packages/analysis/src/utils/talentOwnership.ts` → `talentOwnershipOf`(死亡结局路径)的「本回合施放证据」仍只认 SPELL_CAST_SUCCESS,所以只通过光环看得到的假死,在账本里算拥有,在那边是 `unknown` / `no`。
+
 **2026-09-30 登记,未收口(分诊 F-H16,裁决 A9-2)** —— 受天赋门控的「能帮到队友」。所有拿着账本条目的读者(cd-hoarded、cdTriggerPrior、燃烧窗口的应对、低压 NOTE、`[DEFENSIVE AVAILABLE]`)都读 `cdCanHelpAnotherUnit`,所以群体隐形只有带 415945 时才算能帮队友。`findCheaperDefensiveAlternatives`(`cheaper available:` 注)和 eval 探针 `signalOutcomeProbe.ts` 也读它。仍按 id 读 `canHelpAnotherUnit` 的只剩门规 `checkSelfOnlyDefensiveClaims`(它重解析文本,没有天赋表),偏向允许「没带天赋的群体隐形能帮队友」这种说法。
 
 **2026-09-30 登记,未收口(分诊 F-H6 × res-readiness F-C3)** —— 法力付不付得起。`affordableAt` / `affordableWithin` 已经门住 cd-hoarded 的指控集合;[RES] 的 `rdy:` 仍列出付不起的冷却且没有标注。按 2026-09-30 裁定(res R2 = A),[RES] 保留就绪并用 `affordableAt` 标注(如 `Restoral(no mana 7.0k/11.5k)`)—— 属 res F-C3,由 res-readiness 的修复会话实施。

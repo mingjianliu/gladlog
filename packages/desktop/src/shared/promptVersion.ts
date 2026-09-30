@@ -323,5 +323,10 @@
  *  Invisibility is a Defensive in the Mage ledger and can be accused; for a
  *  teammate it counts only with PvP talent 415945 (`cdCanHelpAnotherUnit`).
  *  605 files: cd-hoarded +31 / −13, cd-waste +51.
+ *  v204 (2026-09-30, triage cd-hoarded-waste H15, ruling A9-3): Feign Death
+ *  is in the Hunter ledger; its Survival Tactics aura is activation AND
+ *  ownership evidence (`AURA_ACTIVATION_PROVES_BUTTON_IDS`); it is a
+ *  response only (`RESPONSE_ONLY_DEFENSIVE_IDS`) — a press answers the
+ *  owner's own crisis, no accusation or `cheaper available:` names it.
  */
-export const PROMPT_VERSION = 203;
+export const PROMPT_VERSION = 204;

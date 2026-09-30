@@ -24,6 +24,21 @@ export const SPELL_DURATION_OVERRIDES: Record<string, number> = {
 };
 
 /**
+ * Auras whose DB2 duration is only an upper bound — the tooltip says "lasts
+ * up to $d" and the aura ends on the holder's own action — so no fixed length
+ * exists and `buffFullDurationForCaster` answers undefined ("unknown": every
+ * consumer's no-duration path; the ledger label prints no "lasts").
+ * Feign Death 5384 (triage H15, 2026-09-30): DB2 360 s, 「装死……持续最多$d」;
+ * the ledger printed "Feign Death [25s, lasts 360s]" on 1,345 `<cooldowns>`
+ * labels of the 605-file capture — the only defensive ≥ 60 s there, and the
+ * only ledger Defensive whose zhCN tooltip reads 「持续最多」. Registered in
+ * curatedIdRegistry.
+ */
+export const NO_FIXED_DURATION_IDS: ReadonlySet<string> = new Set([
+  "5384", // Feign Death
+]);
+
+/**
  * Duration of a non-CC buff AS CAST BY THIS UNIT — the buff/CD twin of
  * `ccDuration.ts` → `ccFullDurationForCaster`, and the single predicate every
  * "when did this buff end" consumer should call.
@@ -55,6 +70,7 @@ export function buffFullDurationForCaster(
     | undefined,
   atMs?: number,
 ): number | undefined {
+  if (NO_FIXED_DURATION_IDS.has(spellId)) return undefined;
   const noCasterValue =
     SPELL_DURATION_OVERRIDES[spellId] ??
     spellEffectData[spellId]?.durationSeconds;

@@ -39,7 +39,10 @@ import {
   HEALING_AMPLIFIER_SPELL_IDS,
   MANA_COOLDOWN_SPELL_IDS,
 } from "../context/timelineHelpers";
-import { SPELL_DURATION_OVERRIDES } from "../utils/buffDuration";
+import {
+  NO_FIXED_DURATION_IDS,
+  SPELL_DURATION_OVERRIDES,
+} from "../utils/buffDuration";
 import {
   BLADESTORM_AURA_IDS,
   UNRELENTING_ONSLAUGHT_TALENT_ID,
@@ -62,6 +65,8 @@ import {
   TEAM_SAVE_CD_IDS,
   ADDITIONAL_OVERLAP_DEFENSIVE_IDS,
   ALLY_REACH_REQUIRES_PVP_TALENT,
+  RESPONSE_ONLY_DEFENSIVE_IDS,
+  AURA_ACTIVATION_PROVES_BUTTON_IDS,
   AURA_IS_THE_PRESS_IDS,
   AURA_ONLY_ACTIVATION_IDS,
   CD_ROLE_TAGS,
@@ -317,6 +322,12 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   t("FREE_CAST_AURA_IDS", "utils/resourceAt.ts", "aura", () =>
     set(FREE_CAST_AURA_IDS),
   ),
+  t("AURA_ACTIVATION_PROVES_BUTTON_IDS", "utils/cooldowns.ts", "cast", () =>
+    set(AURA_ACTIVATION_PROVES_BUTTON_IDS),
+  ),
+  t("RESPONSE_ONLY_DEFENSIVE_IDS", "utils/cooldowns.ts", "cast", () =>
+    set(RESPONSE_ONLY_DEFENSIVE_IDS),
+  ),
   t("ALLY_REACH_REQUIRES_PVP_TALENT", "utils/cooldowns.ts", "cast", () =>
     keys(ALLY_REACH_REQUIRES_PVP_TALENT),
   ),
@@ -506,6 +517,9 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   ),
   t("CHANNELED_CD_SPELL_IDS", "context/timelineHelpers.ts", "cast", () =>
     set(CHANNELED_CD_SPELL_IDS),
+  ),
+  t("NO_FIXED_DURATION_IDS", "utils/buffDuration.ts", "cast", () =>
+    set(NO_FIXED_DURATION_IDS),
   ),
   t("SPELL_DURATION_OVERRIDES", "utils/buffDuration.ts", "mixed", () =>
     keys(SPELL_DURATION_OVERRIDES),

@@ -24,6 +24,7 @@ import {
 } from "../src/data/spellEffectData";
 import {
   buffFullDurationForCaster,
+  NO_FIXED_DURATION_IDS,
   SPELL_DURATION_OVERRIDES,
 } from "../src/utils/buffDuration";
 import { talentOwnershipOf, talentRankOf } from "../src/utils/talentOwnership";
@@ -616,7 +617,10 @@ describe("buffFullDurationForCaster — 天赋条件的增益时长", () => {
     // 相同,所以那几处是零差改动。任何人以后往 SPELL_DURATION_OVERRIDES 里加一
     // 条与 DB2 不同的值,都会在这里变红 —— 那正是他必须先想清楚「这几个消费点
     // 也会跟着变」的时刻。
-    const exempt = new Set(Object.keys(SPELL_DURATION_OVERRIDES));
+    const exempt = new Set([
+      ...Object.keys(SPELL_DURATION_OVERRIDES),
+      ...NO_FIXED_DURATION_IDS,
+    ]);
     let checked = 0;
     for (const [id, mined] of Object.entries(spellEffectData)) {
       if (exempt.has(id)) continue;
@@ -628,10 +632,19 @@ describe("buffFullDurationForCaster — 天赋条件的增益时长", () => {
     expect(checked).toBeGreaterThan(3000);
     // 唯一的一条覆盖(终极苦修 6.5)如今与 DB2 同值 —— 它已经冗余,所以今天
     // 连豁免项都没有实际差异。
-    for (const id of exempt)
+    for (const id of Object.keys(SPELL_DURATION_OVERRIDES))
       expect(buffFullDurationForCaster(id, undefined)).toBe(
         spellEffectData[id]?.durationSeconds,
       );
+    // NO_FIXED_DURATION_IDS(分诊 H15,2026-09-30):DB2 时长只是上限(「持续最多
+    // $d」),答 undefined。当时逐个查过消费点:auraIntervals 无时长 = 推断边界
+    // 不封顶(竞技场回合极少超过假死的 360 s 上限),enemyDefensives 只看免疫 /
+    // 减伤光环,其余是法力 / 治疗 / 进攻表;605 场采集除 `<cooldowns>` 标签外
+    // 零差。
+    for (const id of NO_FIXED_DURATION_IDS) {
+      expect(spellEffectData[id]?.durationSeconds).toBeGreaterThan(0);
+      expect(buffFullDurationForCaster(id, undefined)).toBeUndefined();
+    }
   });
 
   it("未登记的技能不受影响;每条只用一种量纲", () => {

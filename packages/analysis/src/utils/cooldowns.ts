@@ -175,6 +175,20 @@ export function cdRoleTag(spellId: string): string | undefined {
 }
 
 /**
+ * Defensives the user ruled RESPONSE-ONLY outside the healer save roster
+ * (which carries the healers' own, Barkskin / Frenzied Regeneration): a press
+ * answers the owner's own crisis, but no accusation names it. Feign Death
+ * 5384 (ruling 2026-09-30, triage R13 / A9-3): not an ally save
+ * (`canHelpAnotherUnit` false — aura 66 on the caster) and 60 % of its 20,704
+ * archive activations are not self-saves (median HP 84 %: CC dodges, target
+ * drops), so naming it "ready" would be noise (A9-EVIDENCE §3). Registered
+ * in curatedIdRegistry.
+ */
+export const RESPONSE_ONLY_DEFENSIVE_IDS: ReadonlySet<string> = new Set([
+  "5384", // Feign Death — Hunter
+]);
+
+/**
  * Ally effects the game grants only with a PvP talent: cast id → talent.
  * Mass Invisibility 414664 (user ruling 2026-09-30, triage R13 / A9-2): its
  * DB2 targets are the caster-centred friendly area (so `reachesAlly` is
@@ -1757,6 +1771,12 @@ export const AURA_ONLY_ACTIVATION_IDS: Record<string, string[]> = {
   // one "cast" every 2+ s, the last one ~6 s after the real press); since GH
   // #106 step 2 they are not presses at all, so the buff is the evidence.
   "384352": ["466772"],
+  // Feign Death (Hunter, 30 s): the press is never logged as a success (0 in
+  // the library; 7,240 SPELL_CAST_FAILED in the every-6 archive) — Survival
+  // Tactics 202748 (PvP talent 202746), self-applied at the feign, is the
+  // evidence: 20,704 activations in the every-6 archive, 20,166 with the aura
+  // (A9-EVIDENCE §3). Hunters without Survival Tactics stay invisible here.
+  "5384": ["202748"],
 };
 
 /**
@@ -1771,6 +1791,19 @@ export const AURA_ONLY_ACTIVATION_IDS: Record<string, string[]> = {
  * restart a pressed cooldown.
  */
 export const AURA_IS_THE_PRESS_IDS: ReadonlySet<string> = new Set(["384352"]);
+
+/**
+ * `AURA_ONLY_ACTIVATION_IDS` keys whose aura can only come from pressing the
+ * button, so an activation also proves the player HAS it (the ledger's
+ * ownership filter, triage H15 / ruling 2026-09-30 A9-3). Feign Death's
+ * Survival Tactics 202748 goes up only at a feign; Doom Winds' buff IS the
+ * press. Not the proc-capable keys (Avenging Wrath's Herald procs, Riptide
+ * Ascendance, Renewing Blaze). Registered in curatedIdRegistry.
+ */
+export const AURA_ACTIVATION_PROVES_BUTTON_IDS: ReadonlySet<string> = new Set([
+  "5384", // Feign Death ← Survival Tactics 202748
+  ...AURA_IS_THE_PRESS_IDS,
+]);
 
 /**
  * **根本没有按键的能力** —— `AURA_ONLY_ACTIVATION_IDS` 上面那段注释里的「第 1 种」
@@ -2485,6 +2518,18 @@ export function extractMajorCooldowns(
     ),
   );
   const hasCombatantInfo = unit.info !== undefined;
+  // Aura-backed activations (AURA_ONLY_ACTIVATION_IDS) prove the button
+  // exists exactly as a logged cast does — H15 (ruling 2026-09-30 A9-3):
+  // Feign Death never logs a cast, so without this the ownership filter
+  // below dropped it even with its Survival Tactics aura on the log.
+  // Only where the aura can come from nothing but the press
+  // (AURA_ACTIVATION_PROVES_BUTTON_IDS): a proc-capable mapping (Herald of
+  // the Sun's Avenging Wrath, a Riptide Ascendance) would let a proc prove a
+  // button a talent removed when the talents are not decoded (codex review).
+  const activatedSpellIds = new Set<string>(castSpellIds);
+  for (const id of AURA_ACTIVATION_PROVES_BUTTON_IDS)
+    if (auraOnlyActivationSeconds(unit, id, matchStartMs).length > 0)
+      activatedSpellIds.add(id);
 
   // Keep only tagged spells with cooldown data >= MIN_CD_SECONDS that belong to the owner's spec
   const seen = new Set<string>();
@@ -2504,7 +2549,7 @@ export function extractMajorCooldowns(
     if (
       allowedSpecs &&
       !allowedSpecs.includes(unit.spec) &&
-      !castSpellIds.has(spell.spellId) &&
+      !activatedSpellIds.has(spell.spellId) &&
       !pvpTalentIds.has(spell.spellId) &&
       !talentedSpellIds?.has(spell.spellId)
     )
@@ -2522,7 +2567,7 @@ export function extractMajorCooldowns(
       if (
         talentedSpellIds === null &&
         hasCombatantInfo &&
-        !castSpellIds.has(spell.spellId)
+        !activatedSpellIds.has(spell.spellId)
       ) {
         return false;
       }
@@ -2535,7 +2580,7 @@ export function extractMajorCooldowns(
       // silently excluded — acceptable trade-off to avoid false "never used X" reports.
       if (
         !pvpTalentIds.has(spell.spellId) &&
-        !castSpellIds.has(spell.spellId)
+        !activatedSpellIds.has(spell.spellId)
       ) {
         return false;
       }
@@ -3037,7 +3082,7 @@ export function extractMajorCooldowns(
           : {}),
         ...(spellAliasIds(spell.spellId).some(
           (id) => saveRoster?.get(id)?.responseOnly,
-        )
+        ) || RESPONSE_ONLY_DEFENSIVE_IDS.has(spell.spellId)
           ? { responseOnly: true }
           : {}),
         ...(procOnly
@@ -3160,6 +3205,13 @@ export function findCheaperDefensiveAlternatives(
         other.tag === "Defensive" &&
         !other.isThroughput &&
         !cdIsProcOnly(other) &&
+        // Feign Death is a response only (ruling 2026-09-30 A9-3) and never
+        // the button to coach — codex review of H15. Deliberately NOT every
+        // `responseOnly` entry: the healer roster's Barkskin / Frenzied
+        // Regeneration (2026-09-25 「不指控」) would lose 507 `cheaper
+        // available:` mentions on the 605 files, which that ruling did not
+        // decide — left for the user.
+        !RESPONSE_ONLY_DEFENSIVE_IDS.has(other.spellId) &&
         !NON_SUBSTITUTE_DEFENSIVE_IDS.has(other.spellId) &&
         other.cooldownSeconds < cd.cooldownSeconds &&
         other.availableWindows.some(
