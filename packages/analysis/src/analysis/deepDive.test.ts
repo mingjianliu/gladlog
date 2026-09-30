@@ -416,7 +416,7 @@ describe("offensivePackItems(进攻证据映射,纯函数)", () => {
   const entry: IBurstLedgerEntry = {
     fromSeconds: 40,
     toSeconds: 44,
-    spells: [{ spellId: "1", spellName: "Combustion", castTimeSeconds: 40 }],
+    spells: [{ spellId: "1", spellName: "Combustion", castTimeSeconds: 40, spanToSeconds: 50 }],
     totalDamage: 500000,
     damageByTarget: [
       { unitId: "e1", unitName: "Rdruid-Area52", damage: 500000 },

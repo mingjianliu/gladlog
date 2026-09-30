@@ -81,6 +81,7 @@
     "test/base-utils.test.ts",
     "test/benchmark.test.ts",
     "test/buffDuration.test.ts",
+    "test/burstLedgerHeader.test.ts",
     "test/ccBreakAnalysis.test.ts",
     "test/ccBrokenRemovalPairing.test.ts",
     "test/ccDuration.test.ts",

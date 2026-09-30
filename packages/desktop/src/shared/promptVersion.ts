@@ -433,5 +433,9 @@
  *  after the lock, A36 = A), readyFrom (a CD back within the 2 s lead or
  *  mid-lock, raw return), holderCc (the holder's own cannot-cast intervals
  *  in the lock) and enemyMinHpUnit, with legend sentences. Ids unchanged.
+ *  v228 (2026-09-30, triage sync-burst F-L4 / F-L7): a multi-CD burst
+ *  ledger header gives each CD its own span (`Name m:ss–m:ss`); the KILL
+ *  SEQUENCE `[ENEMY CD]` line gives each CD cast after the window's first
+ *  second its own `@m:ss`.
  */
-export const PROMPT_VERSION = 227;
+export const PROMPT_VERSION = 228;

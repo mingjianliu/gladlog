@@ -115,6 +115,9 @@ export interface IBurstLedgerEntry {
     spellId: string;
     spellName: string;
     castTimeSeconds: number;
+    /** end of this CD's own active span (`burstCastSpan`) — the header's
+     *  span is the union (triage sync-burst F-L4) */
+    spanToSeconds: number;
   }>;
   /** Player damage to enemy players inside the span (pets excluded from targeting). */
   totalDamage: number;
@@ -303,6 +306,8 @@ export function analyzeBurstLedger(
         spellId: cd.spellId,
         spellName: cd.spellName,
         castTimeSeconds: cd.castTimeSeconds,
+        // clipped like the header's own end (the round can end mid-burst)
+        spanToSeconds: Math.min(burstCastSpan(cd).to, toSeconds),
       })),
       totalDamage,
       damageByTarget,
@@ -462,6 +467,19 @@ export const ON_TARGET_GOOD_PCT = 50;
 
 const fmtM = (n: number): string => `${(n / 1_000_000).toFixed(2)}M`;
 
+/** The header's CD list: with two or more CDs each carries its own span
+ *  (triage sync-burst F-L4: `Dark Transformation + Army of the Dead` under
+ *  one 0:11–0:41 span, while DT's own span ended at 0:26). */
+function formatBurstSpells(spells: IBurstLedgerEntry["spells"]): string {
+  if (spells.length < 2) return spells.map((s) => s.spellName).join(" + ");
+  return spells
+    .map(
+      (s) =>
+        `${s.spellName} ${fmtTime(s.castTimeSeconds)}–${fmtTime(s.spanToSeconds)}`,
+    )
+    .join(" + ");
+}
+
 /**
  * Renders the burst ledger as plain text for the AI context (DPS owners).
  * Times via fmtTime (floored render grid), percentages as ints — any future
@@ -477,7 +495,7 @@ export function formatBurstLedgerForContext(
 
   bursts.forEach((b, i) => {
     lines.push(
-      `  Burst #${i + 1} — ${fmtTime(b.fromSeconds)}–${fmtTime(b.toSeconds)} | ${b.spells.map((s) => s.spellName).join(" + ")}`,
+      `  Burst #${i + 1} — ${fmtTime(b.fromSeconds)}–${fmtTime(b.toSeconds)} | ${formatBurstSpells(b.spells)}`,
     );
     const t = b.dominantTarget;
     if (t) {

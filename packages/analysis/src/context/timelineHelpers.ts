@@ -1325,9 +1325,16 @@ export function buildKillSequenceBlock(params: {
           (w) => w.fromSeconds <= deathTime && w.toSeconds >= deathTime - 12,
         );
         if (activeBurst) {
+          // F-L7 (triage sync-burst): each CD at its own cast second — the
+          // line is stamped at the window's first second, and a bare list read
+          // as "everything popped then" (ba8c0510 0:21: Ray of Frost was 0:39).
           const cdNames = activeBurst.activeCDs
-            .map((c) => c.spellName)
-            .join(" + ");
+            .map((c) =>
+              Math.floor(c.castSeconds) === Math.floor(activeBurst.fromSeconds)
+                ? c.spellName
+                : `${c.spellName} @${fmtTime(c.castSeconds)}`,
+            )
+            .join(", ");
           killSeqEntries.push({
             timeSeconds: activeBurst.fromSeconds,
             label: "[ENEMY CD]",
