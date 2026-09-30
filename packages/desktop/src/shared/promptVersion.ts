@@ -307,5 +307,9 @@
  *  says "never successfully cast" and carries facts.attempted (rejected
  *  presses up to the owner's playable end); audit downgrade. 605 files: ids
  *  identical, 15 of 938 lines gain attempted.
+ *  v200 (2026-09-30, triage cd-hoarded-waste F-H21, ruling R11 = B): one
+ *  decision, one card — a cd-hoarded card for an external-unused card's
+ *  victim within 5 s of that death (on the render grid) is dropped; the
+ *  external-unused card stays. 605 files: cd-hoarded −63, nothing added.
  */
-export const PROMPT_VERSION = 199;
+export const PROMPT_VERSION = 200;

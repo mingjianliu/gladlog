@@ -124,6 +124,7 @@ import {
 } from "./candidates/backlashDispel";
 import { burstWindowResponseEvents } from "./candidates/burstWindowResponse";
 import {
+  CD_HOARD_RESPONSE_S,
   cdHoardedEvents,
   cdSpentIdleEvents,
   countsAsTeamBurst,
@@ -569,7 +570,41 @@ export function extractCandidateFindings(
   // only its named types; the rest of the menu becomes context.
   const bk = bracketKey(combat?.startInfo?.bracket);
   const allow = bk ? BRACKET_TYPE_ALLOWLIST[bk] : undefined;
-  return allow ? inRound.filter((e) => allow.has(e.type)) : inRound;
+  return dropCdHoardedBesideExternalUnused(
+    allow ? inRound.filter((e) => allow.has(e.type)) : inRound,
+  );
+}
+
+/**
+ * One decision, one card (triage 2026-09-29 F-H21, user ruling 2026-09-30
+ * R11 = B — not the recommended A): an external-unused card (a teammate died
+ * while the player held an external) and a cd-hoarded card for the SAME
+ * victim within CD_HOARD_RESPONSE_S of that death are the same decision
+ * (ba8c0510: `external-unused …:48` + `cd-hoarded …:47`, both the held Time
+ * Dilation). The external-unused card stays; the cd-hoarded card goes. Runs
+ * on the final menu, after the bracket allow-list, so where external-unused
+ * is not on the menu (2v2) nothing is removed; a removed card frees no cap
+ * slot (no new accusation comes out of the dedupe).
+ */
+export function dropCdHoardedBesideExternalUnused(
+  events: CandidateEvent[],
+): CandidateEvent[] {
+  const deaths = events
+    .filter((e) => e.type === "external-unused")
+    // the death instant is fractional; compare on the render grid the
+    // cd-hoarded second already sits on (agy review: 48.2 vs 43 read 5.2)
+    .map((e) => ({ victim: e.facts?.victim, t: toRenderSecond(e.t) }));
+  if (deaths.length === 0) return events;
+  return events.filter(
+    (e) =>
+      e.type !== "cd-hoarded" ||
+      !deaths.some(
+        (d) =>
+          d.victim !== undefined &&
+          d.victim === e.facts?.crisisUnit &&
+          Math.abs(d.t - e.t) <= CD_HOARD_RESPONSE_S,
+      ),
+  );
 }
 
 /** missed-sync-window folds later locks of the same hold into

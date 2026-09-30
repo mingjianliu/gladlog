@@ -1,7 +1,10 @@
 import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 import { describe, expect, it } from "vitest";
 
-import { afterShuffleRoundEnd } from "../src/analysis/candidateFindings";
+import {
+  afterShuffleRoundEnd,
+  dropCdHoardedBesideExternalUnused,
+} from "../src/analysis/candidateFindings";
 import { cdHoardedEvents } from "../src/analysis/candidates/cooldownTiming";
 import {
   actWindowFor,
@@ -465,5 +468,41 @@ describe("cdHoardedEvents — signed 09-30 facts", () => {
       ],
     );
     expect(e?.facts?.crisisUnitSaved).toBeUndefined();
+  });
+});
+
+// F-H21 (triage 2026-09-29, ruling 2026-09-30 R11 = B): one decision, one
+// card — external-unused stays, the cd-hoarded card for the same victim
+// within 5 s of the death goes (ba8c0510 :47 / :48)
+describe("dropCdHoardedBesideExternalUnused", () => {
+  const ev = (type: string, t: number, facts: Record<string, string>) =>
+    ({ id: `${type}:${t}`, type, t, unitNames: [], facts }) as never;
+  it("drops the same victim's cd-hoarded within 5 s, keeps the rest", () => {
+    const out = dropCdHoardedBesideExternalUnused([
+      ev("external-unused", 48, { victim: "Zug-R" }),
+      ev("cd-hoarded", 47, { crisisUnit: "Zug-R" }),
+      ev("cd-hoarded", 30, { crisisUnit: "Zug-R" }),
+      ev("cd-hoarded", 46, { crisisUnit: "Other-R" }),
+    ]) as Array<{ id: string }>;
+    expect(out.map((e) => e.id)).toEqual([
+      "external-unused:48",
+      "cd-hoarded:30",
+      "cd-hoarded:46",
+    ]);
+  });
+  it("the death's fractional instant is compared on the render grid (48.9 vs 43 → 5 s)", () => {
+    const out = dropCdHoardedBesideExternalUnused([
+      ev("external-unused", 48.9, { victim: "Zug-R" }),
+      ev("cd-hoarded", 43, { crisisUnit: "Zug-R" }),
+      ev("cd-hoarded", 42, { crisisUnit: "Zug-R" }),
+    ]) as Array<{ id: string }>;
+    expect(out.map((e) => e.id)).toEqual([
+      "external-unused:48.9",
+      "cd-hoarded:42",
+    ]);
+  });
+  it("no external-unused on the menu (e.g. 2v2) → nothing removed", () => {
+    const menu = [ev("cd-hoarded", 47, { crisisUnit: "Zug-R" })];
+    expect(dropCdHoardedBesideExternalUnused(menu)).toBe(menu);
   });
 });
