@@ -1679,11 +1679,13 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   // B107: annotate each cast with a per-spell sequence index (e.g. `Bestial Wrath [2/4]`)
   // so the model can't collapse short-interval repeats of the same CD into one window.
 
-  emitEnemyCdEntries({
+  const enemyCdRender = emitEnemyCdEntries({
     enemyCDTimeline,
     cdPurgeAnnotations,
     addEntry,
     enemyPid,
+    enemies,
+    matchStartMs,
   });
 
   // ── [ENEMY DEF] events (GH #97, 2026-09-15) ────────────────────────────────
@@ -3101,6 +3103,19 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
           "  [ENEMY TRINKET] = an enemy used PvP trinket; `out of <spell> (by <source>)` indicates breaking out of that CC.",
           "    `[friendly offensive CD active]` indicates at least one friendly offensive cooldown was active at that displayed second.",
           "    `(target at N% HP)` reflects the target's HP at the displayed second.",
+        ]
+      : []),
+    // F-C2 (triage res-readiness): the cast ordinal has its own notation
+    ...(enemyCdRender.ordinalRendered
+      ? [
+          "  `(cast k of N)` on [ENEMY CD] / [ENEMY HEAL CD] = the k-th of N casts of that spell this round (not charges).",
+        ]
+      : []),
+    // F-E8 (A26 = A): the healer throughput tag, outside the burst windows
+    ...(enemyCdRender.healCdRendered
+      ? [
+          "  [ENEMY HEAL CD] = an enemy healer pressed a major healing / throughput cooldown (Divine Hymn, Apotheosis,",
+          "    Avenging Crusader, …); it is not an offensive burst and opens no [OFFENSIVE WINDOW].",
         ]
       : []),
     ...(nextSpikeRendered

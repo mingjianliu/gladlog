@@ -136,6 +136,7 @@ import { CURATED_ABILITY_FACTS } from "./curatedAbilityFacts";
 import { DISPEL_VERDICTS } from "./dispelVerdicts";
 import { spellClassMap } from "./drCategories";
 import { DRUID_FORM_AURA_IDS, FORM_BOUND_BUFF_IDS } from "./druidForms";
+import { ENEMY_HEAL_CD_IDS } from "./enemyHealCds";
 import { HEALING_VERDICTS, PROPOSED_HEALING_VERDICTS } from "./healingVerdicts";
 import {
   KICKED_CONTROL_OVERRIDE_IDS,
@@ -730,6 +731,9 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
       ...TALENT_MITIGATION_MODIFIERS.map((m) => m.auraSpellId),
       ...TALENT_MITIGATION_MODIFIERS.map((m) => m.talentSpellId),
     ],
+  ),
+  t("ENEMY_HEAL_CD_IDS", "data/enemyHealCds.ts", "cast", () =>
+    set(ENEMY_HEAL_CD_IDS),
   ),
   // GH #79 / B4: classification overrides for interrupted spells.
   t("KICKED_SPELL_OVERRIDES", "data/kickedSpellCategories.ts", "cast", () => [

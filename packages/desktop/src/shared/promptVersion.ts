@@ -371,5 +371,11 @@
  *  v214 (2026-09-30, triage res-readiness F-C16 / F-C17): a legend line for
  *  `next spike in Ns on X` (hindsight) whenever one is rendered; the
  *  per-cast [YOU] [CAST] legend only for healer owners (its emitter's gate).
+ *  v215 (2026-09-30, triage G7-P3: res-readiness F-C2 + enemy-def F-E8 /
+ *  F-E10, rulings A26 = A, A27 = B): the [ENEMY CD] cast ordinal reads
+ *  `(cast k of N)` (`[k/N]` is the charges notation), with a legend line; an
+ *  enemy healer's throughput majors (ENEMY_HEAL_CD_IDS: the team heals,
+ *  Apotheosis, Serenity, Spirit of the Redeemer, Time Spiral, Stasis) and
+ *  Avenging Crusader render as `[ENEMY HEAL CD]`, outside every burst window.
  */
-export const PROMPT_VERSION = 214;
+export const PROMPT_VERSION = 215;
