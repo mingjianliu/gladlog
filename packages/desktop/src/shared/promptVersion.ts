@@ -437,5 +437,10 @@
  *  ledger header gives each CD its own span (`Name m:ss–m:ss`); the KILL
  *  SEQUENCE `[ENEMY CD]` line gives each CD cast after the window's first
  *  second its own `@m:ss`.
+ *  v229 (2026-09-30, triage missed-cleanse F-P3 / F-P2 / F-P1, ruling A18):
+ *  [MINOR DISPELS] parts list their casts (`Spell ×N (m:ss removed names; …,
+ *  +N)`, ×N = casts); a healer owner's cast line annotates every removal it
+ *  matched; the owner's Critical/High purges render as [PURGE] unless that
+ *  same match put them on a healer cast line (`purgeMatchesCast`).
  */
-export const PROMPT_VERSION = 228;
+export const PROMPT_VERSION = 229;

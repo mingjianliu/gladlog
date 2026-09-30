@@ -10,8 +10,11 @@
  */
 import { getEnglishSpellName } from "../../data/spellEffectData";
 import type { IDispelEvent } from "../../utils/dispelAnalysis";
+import { LogEvent } from "@gladlog/parser-compat";
+
 import { fmtTime } from "../../utils/renderGrid";
 import type { TimelineCtx } from "./ctx";
+import { purgeMatchesCast } from "./healerCastGapFiller";
 
 export function emitPurgeEntries(
   ctx: Pick<
@@ -22,16 +25,46 @@ export function emitPurgeEntries(
     | "addEntry"
     | "pid"
     | "enemyDispelSummary"
+    | "isHealer"
+    | "matchStartMs"
   >,
 ): void {
-  const { dispelSummary, owner, enemyPid, addEntry, pid, enemyDispelSummary } =
-    ctx;
+  const {
+    dispelSummary,
+    owner,
+    enemyPid,
+    addEntry,
+    pid,
+    enemyDispelSummary,
+    isHealer,
+    matchStartMs,
+  } = ctx;
+
+  // F-P1 (triage missed-cleanse): the owner's purge is skipped only when it is
+  // already on a cast line — cast lines with `[removed: …]` exist only for a
+  // healer owner (the gap filler), and only for a targeted cast that matches
+  // (the gap filler's own predicate). fa5e6c66's Shadow Priest's Mass Dispel
+  // of Divine Shield + Ice Block rendered nowhere.
+  const ownerCastTimes = (owner.spellCastEvents ?? [])
+    .filter((c) => c.logLine.event === LogEvent.SPELL_CAST_SUCCESS)
+    .map((c) => ({
+      destUnitName: c.destUnitName,
+      timeSeconds: (c.logLine.timestamp - matchStartMs) / 1000,
+      spellId: c.spellId,
+    }));
+  const onOwnerCastLine = (purge: IDispelEvent): boolean =>
+    isHealer && ownerCastTimes.some((c) => purgeMatchesCast(purge, c));
 
   const purgeGroups = new Map<string, IDispelEvent[]>();
   for (const purge of dispelSummary.ourPurges) {
     // Pet-cast dispels (Devour Magic, …) have no owner cast line to annotate,
     // so they must not be skipped
-    if (purge.sourceName === owner.name && !purge.isPetDispel) continue;
+    if (
+      purge.sourceName === owner.name &&
+      !purge.isPetDispel &&
+      onOwnerCastLine(purge)
+    )
+      continue;
     if (purge.priority !== "Critical" && purge.priority !== "High") continue;
     const key = `${Math.round(purge.timeSeconds)}|${purge.sourceName}`;
     const group = purgeGroups.get(key) ?? [];

@@ -26,11 +26,7 @@ import { fmtFactNum } from "../../analysis/factFormat";
 import { dropAuraRebroadcasts } from "../../utils/auraIntervals";
 import { COPY_CAST_IDS } from "../../utils/castPress";
 import { isControlledPlayerFlags } from "../../utils/charmedPlayer";
-import {
-  cdRoleTag,
-  gridHpPct,
-  rendersOnCaster,
-} from "../../utils/cooldowns";
+import { cdRoleTag, gridHpPct, rendersOnCaster } from "../../utils/cooldowns";
 import { fmtTime, toRenderSecond } from "../../utils/renderGrid";
 import {
   getNpcIdFromGuid,
@@ -39,6 +35,48 @@ import {
   isPassiveProcCast,
 } from "../timelineHelpers";
 import type { TimelineCtx } from "./ctx";
+
+/** A purge removal belongs to an owner cast when it hit that cast's target
+ *  at essentially the same instant (F159 / M-i: 50 ms, keyed on the raw
+ *  destUnitName). One predicate: the `[removed: …]` annotation here and
+ *  `[PURGE]`'s "already annotated on the cast line" skip (triage F-P1). */
+export const PURGE_MATCH_TOLERANCE_SECONDS = 0.05;
+export function purgeMatchesCast(
+  purge: {
+    targetName: string;
+    timeSeconds: number;
+    dispelSpellId?: string;
+  },
+  cast: {
+    destUnitName?: string | null;
+    timeSeconds: number;
+    spellId?: string | null;
+  },
+): boolean {
+  // and the cast must be the dispel itself when both ids are known: a Holy
+  // Fire landing on the same target in the same 50 ms read
+  // "[removed: Hot Streak!]" (5677ba13 1:08) once every removal was annotated
+  // (F-P3). Names, not ids: a talent / rank variant may log another id —
+  // but only a RESOLVED name can make two different ids the same spell
+  // (codex review: two ids missing from the name table both read "").
+  if (
+    purge.dispelSpellId &&
+    cast.spellId &&
+    purge.dispelSpellId !== cast.spellId
+  ) {
+    const dispelName = getEnglishSpellName(purge.dispelSpellId, "");
+    if (
+      dispelName === "" ||
+      dispelName !== getEnglishSpellName(cast.spellId, "")
+    )
+      return false;
+  }
+  return (
+    purge.targetName === cast.destUnitName &&
+    Math.abs(purge.timeSeconds - cast.timeSeconds) <=
+      PURGE_MATCH_TOLERANCE_SECONDS
+  );
+}
 
 export function emitHealerCastGapFillerEntries(
   ctx: Pick<
@@ -151,12 +189,11 @@ export function emitHealerCastGapFillerEntries(
     return cutBy ? (removeMs - castMs) / 1000 : null;
   };
 
-  // F159: Track owner's successful offensive purges
-  // F163: Filter out low/medium priority purges to de-noise the timeline
+  // F159: Track owner's successful offensive purges. Every removal is
+  // annotated (triage missed-cleanse F-P3, ruling A18 2026-09-30): the old
+  // Critical/High filter (F163) left a Low/Medium removal nowhere but a count.
   const ownerPurges = dispelSummary.ourPurges.filter(
-    (p) =>
-      p.sourceName === owner.name &&
-      (p.priority === "Critical" || p.priority === "High"),
+    (p) => p.sourceName === owner.name,
   );
 
   const seenCasts: Array<{
@@ -452,16 +489,17 @@ export function emitHealerCastGapFillerEntries(
     // on the cast target (raw destUnitName) so only the buff removed at essentially the
     // same instant on the same target is attached. join(', ') then only fires when one
     // cast genuinely removed multiple buffs at once.
-    const PURGE_MATCH_TOLERANCE_SECONDS = 0.05;
     let purgeNote = "";
-    const matchingPurges = ownerPurges.filter(
-      (p) =>
-        p.targetName === e.destUnitName &&
-        Math.abs(p.timeSeconds - timeSeconds) <= PURGE_MATCH_TOLERANCE_SECONDS,
+    const matchingPurges = ownerPurges.filter((p) =>
+      purgeMatchesCast(p, {
+        destUnitName: e.destUnitName,
+        timeSeconds,
+        spellId: e.spellId,
+      }),
     );
     if (matchingPurges.length > 0) {
       const removedNames = matchingPurges
-        .map((p) => p.removedSpellName)
+        .map((p) => getEnglishSpellName(p.removedSpellId, p.removedSpellName))
         .join(", ");
       purgeNote = ` [removed: ${removedNames}]`;
     }

@@ -2362,8 +2362,9 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   // ── [PURGE] / [ENEMY PURGE] events (T5 dispel coverage) ───────────────────
   // Teammates' offensive purges and enemies stripping our buffs were previously
   // invisible; same F163 de-noising as [CLEANSE] (Critical/High only) and the
-  // same B14 same-second same-source merge. The owner's own purges are already
-  // annotated on their cast lines ([removed: …]), so they are not repeated.
+  // same B14 same-second same-source merge. The owner's own purges already
+  // annotated on a healer owner's cast line ([removed: …]) are not repeated
+  // (F-P1: only those).
   emitPurgeEntries({
     dispelSummary,
     owner,
@@ -2371,6 +2372,8 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     addEntry,
     pid,
     enemyDispelSummary,
+    isHealer,
+    matchStartMs,
   });
 
   // ── [MINOR DISPELS] folded lines (T5 dispel coverage) ─────────────────────
