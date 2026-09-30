@@ -18,6 +18,7 @@ import {
   isPressOfCooldown,
   isProcOnlyActivation,
   lockCastsOf,
+  pressSpentBy,
   REACTION_WINDOW_S,
   specToString,
   spendsSharedChargeOf,
@@ -377,6 +378,11 @@ export function isAvailableAt(
   // "pressed" (too late is not "never pressed"), exactly as the ledger shows
   // it on cd: for the same rendered second.
   const at = atSeconds + CD_INSTANT_SLACK_S;
+  // A45 (triage res-readiness F-C1): a press rendered at or before
+  // atSeconds is spent — the shared `pressSpentBy`; one spent only by that
+  // rule is read at `at` (the `gridConsumedView` clamp), so this predicate
+  // and cdAvailableAt agree on a latter-half-second press.
+  const spentBy = Math.floor(atSeconds) + 1;
   // Same gate as cdAvailableAt (GH #106 step 2): no button, never "available"
   // — the spell-level list and this unit's talent replacements alike.
   if (
@@ -384,7 +390,15 @@ export function isAvailableAt(
     talentReplacementsOf(unit).procOnly.has(spellId)
   )
     return false;
-  const lastCast = lastCastSeconds(unit, spellId, matchStartMs, at);
+  // every press ≤ this bound is spent by `pressSpentBy` (≤ at, or rendered
+  // in atSeconds' second)
+  const lastCastRaw = lastCastSeconds(
+    unit,
+    spellId,
+    matchStartMs,
+    Math.max(at, spentBy - 1e-6),
+  );
+  const lastCast = lastCastRaw === null ? null : Math.min(lastCastRaw, at);
   const charges = typeof cooldown === "number" ? 1 : (cooldown.charges ?? 1);
   if (typeof cooldown !== "number" && charges > 1) {
     // A second charge in hand is "available" (Pain Suppression + Protector of
@@ -395,7 +409,8 @@ export function isAvailableAt(
     // 2026-09-26); only the unitCooldownOf fallback (no casts) reads the raw log
     const presses = lockCastsOf(cooldown)
       .map((c) => c.timeSeconds)
-      .filter((t) => t <= at);
+      .filter((t) => pressSpentBy(t, atSeconds))
+      .map((t) => Math.min(t, at));
     if (chargesAvailableAt(presses, cooldown.cooldownSeconds, charges, at) > 0)
       return true;
   } else {

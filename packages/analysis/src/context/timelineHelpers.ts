@@ -1,5 +1,3 @@
-import { dropAuraRebroadcasts } from "../utils/auraIntervals";
-import { DRUID_FORM_AURA_IDS, FORM_BOUND_BUFF_IDS } from "../data/druidForms";
 import {
   CombatUnitReaction,
   CombatUnitType,
@@ -9,17 +7,19 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
+import { DRUID_FORM_AURA_IDS, FORM_BOUND_BUFF_IDS } from "../data/druidForms";
 import { getEnglishSpellName } from "../data/spellEffectData";
+import { dropAuraRebroadcasts } from "../utils/auraIntervals";
 import { buffFullDurationForCaster } from "../utils/buffDuration";
 import { IPlayerCCTrinketSummary } from "../utils/ccTrinketAnalysis";
 import {
   cdCanHelpAnotherUnit,
-  CD_INSTANT_SLACK_S,
   cdReadyInTimeAt,
   IMajorCooldownInfo,
   isHealerSpec,
   isPassiveProcCast,
   PASSIVE_SPELL_BLOCKLIST,
+  pressSpentBy,
   specToString,
 } from "../utils/cooldowns";
 import { getDampeningPercentage } from "../utils/dampening";
@@ -35,13 +35,14 @@ export { isPassiveProcCast, PASSIVE_SPELL_BLOCKLIST };
 
 /** Returns the last cast at or before `timeSeconds`, or undefined if none. */
 /** Most recent cast at or before the rendered instant — reads casts through
- * CD_INSTANT_SLACK_S like every other "available at t" predicate (GH #61), so
+ * `pressSpentBy` like every other "available at t" predicate (GH #61, A45), so
  * the "on CD since / ready since" copy built from it agrees with cdAvailableAt
  * and the [RES] ledger. Consumers: matchNarrative,
  * candidates/death. */
 export function lastCastBefore(cd: IMajorCooldownInfo, timeSeconds: number) {
+  // A45 (triage res-readiness F-C1): the shared consumption rule
   return cd.casts
-    .filter((c) => c.timeSeconds <= timeSeconds + CD_INSTANT_SLACK_S)
+    .filter((c) => pressSpentBy(c.timeSeconds, timeSeconds))
     .slice(-1)[0];
 }
 

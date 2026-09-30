@@ -1306,17 +1306,29 @@ export function cdNeverSpent(
   return cd.neverUsed && !cd.sharedCasts?.length;
 }
 
+type CdAvailabilityInput = Pick<
+  IMajorCooldownInfo,
+  | "casts"
+  | "cooldownSeconds"
+  | "neverUsed"
+  | "charges"
+  | "isProcOnly"
+  | "sharedCasts"
+  | "rateWindows"
+>;
+
 export function cdAvailableAt(
-  cd: Pick<
-    IMajorCooldownInfo,
-    | "casts"
-    | "cooldownSeconds"
-    | "neverUsed"
-    | "charges"
-    | "isProcOnly"
-    | "sharedCasts"
-    | "rateWindows"
-  >,
+  cd: CdAvailabilityInput,
+  tSeconds: number,
+): boolean {
+  return cdAvailableAtConsumed(gridConsumedView(cd, tSeconds), tSeconds);
+}
+
+/** `cdAvailableAt` on a view whose render-rule presses are already clamped
+ *  (`gridConsumedView`) — the warped-clock recursion must not re-clamp on
+ *  the warped clock. */
+function cdAvailableAtConsumed(
+  cd: CdAvailabilityInput,
   tSeconds: number,
 ): boolean {
   // No button, nothing to have ready (GH #106 step 2): a proc-only entry keeps
@@ -1324,7 +1336,7 @@ export function cdAvailableAt(
   if (cd.isProcOnly) return false;
   if (cd.rateWindows?.length) {
     const { tau } = warpClock(cd.rateWindows);
-    return cdAvailableAt(
+    return cdAvailableAtConsumed(
       warpedView(cd, tau),
       tau(tSeconds + CD_INSTANT_SLACK_S) - CD_INSTANT_SLACK_S,
     );
@@ -1383,6 +1395,8 @@ export function cdMaybeAvailableAt(
   tSeconds: number,
 ): boolean {
   if (cd.earliestCooldownSeconds === undefined) return false;
+  const earliestCd = cd.earliestCooldownSeconds;
+  cd = gridConsumedView(cd, tSeconds);
   if (cdAvailableAt(cd, tSeconds)) return false;
   // a per-cast override (Guardian Angel's saved branch) is an exact number
   // for that cast, not a statistical one — no "maybe" on top of it
@@ -1393,7 +1407,7 @@ export function cdMaybeAvailableAt(
   // its override; the corpus floor still bounds it from below, so the "maybe"
   // view takes the shorter of the two (talent impact audit 2026-09-26: the
   // override alone silenced the floor on 12 Healing Tide Totem presses).
-  const earliest = cd.earliestCooldownSeconds;
+  const earliest = earliestCd;
   if (last?.cooldownSecondsOverride !== undefined && !last.reductions)
     return false;
   return cdAvailableAt(
@@ -1437,6 +1451,18 @@ export function cdSecondsUntilReady(
   tSeconds: number,
   cooldown: number = cd.cooldownSeconds,
 ): number {
+  return cdSecondsUntilReadyConsumed(
+    gridConsumedView(cd, tSeconds),
+    tSeconds,
+    cooldown,
+  );
+}
+
+function cdSecondsUntilReadyConsumed(
+  cd: Parameters<typeof cdSecondsUntilReady>[0],
+  tSeconds: number,
+  cooldown: number,
+): number {
   if (cd.rateWindows?.length) {
     // remaining on the warped clock, read as real seconds from t: assumes no
     // further buff after t (never counts a future window — the "not yet" side)
@@ -1445,13 +1471,13 @@ export function cdSecondsUntilReady(
     // warp — codex review 2026-09-26: a press inside the slack window was
     // missed and a freshly spent cooldown rendered "(1s)")
     const tq = tau(tSeconds + CD_INSTANT_SLACK_S) - CD_INSTANT_SLACK_S;
-    const inner = cdSecondsUntilReady(warpedView(cd, tau), tq, cooldown);
+    const inner = cdSecondsUntilReadyConsumed(warpedView(cd, tau), tq, cooldown);
     // inner = ready − tq on the warped clock; the remaining time AT t is
     // ready − τ(t) (agy review: tq sits up to slack × (mult − 1) past τ(t))
     return inner > 0 ? inner + (tq - tau(tSeconds)) : 0;
   }
   const view = { ...cd, cooldownSeconds: cooldown };
-  if (cdAvailableAt(view, tSeconds)) return 0;
+  if (cdAvailableAtConsumed(view, tSeconds)) return 0;
   const t = tSeconds + CD_INSTANT_SLACK_S;
   const lock = lockCastsOf(cd);
   if ((cd.charges ?? 1) > 1) {
@@ -1491,9 +1517,21 @@ export function cdChargesReadyAt(
   tSeconds: number,
   cooldown: number = cd.cooldownSeconds,
 ): number {
+  return cdChargesReadyAtConsumed(
+    gridConsumedView(cd, tSeconds),
+    tSeconds,
+    cooldown,
+  );
+}
+
+function cdChargesReadyAtConsumed(
+  cd: Parameters<typeof cdChargesReadyAt>[0],
+  tSeconds: number,
+  cooldown: number,
+): number {
   if (cd.rateWindows?.length) {
     const { tau } = warpClock(cd.rateWindows);
-    return cdChargesReadyAt(
+    return cdChargesReadyAtConsumed(
       warpedView(cd, tau),
       tau(tSeconds + CD_INSTANT_SLACK_S) - CD_INSTANT_SLACK_S,
       cooldown,
@@ -1539,6 +1577,45 @@ export function earliestCooldownSecondsFor(
  * "cooldown ledger consistency"). One constant, three consumers.
  */
 export const CD_INSTANT_SLACK_S = 0.5;
+
+/**
+ * The consumption side of every "is X available at t" predicate (user
+ * ruling A45 = A, 2026-09-30; triage res-readiness F-C1): a press counts as
+ * spent at t when it falls inside t's slack OR is RENDERED at or before t
+ * (floor(press) ≤ t). A press in (s + slack, s + 1) used to be "not yet
+ * spent" on the row anchored at s — the [RES] line printed under that very
+ * press still called it ready (0068182d Alter Time at 14.514, row 0:14). The
+ * return side keeps CD_INSTANT_SLACK_S. One rule for cdAvailableAt /
+ * cdSecondsUntilReady / cdChargesReadyAt / cdMaybeAvailableAt, the [RES]
+ * ledger (`resourceSnapshot.ts`), `lastCastBefore` and the death block's
+ * `isAvailableAt`.
+ */
+export function pressSpentBy(pressSeconds: number, tSeconds: number): boolean {
+  return (
+    pressSeconds <= tSeconds + CD_INSTANT_SLACK_S ||
+    Math.floor(pressSeconds) <= tSeconds
+  );
+}
+
+/** `pressSpentBy`'s view of X at query t: a press spent only by the render
+ *  rule (after t + slack, same rendered second) is read at t + slack, so the
+ *  slack-based consumption below it counts it. Idempotent. */
+export function gridConsumedView<
+  T extends Pick<IMajorCooldownInfo, "casts"> &
+    Partial<Pick<IMajorCooldownInfo, "sharedCasts">>,
+>(cd: T, tSeconds: number): T {
+  const at = tSeconds + CD_INSTANT_SLACK_S;
+  const late = (c: ICooldownCast) =>
+    c.timeSeconds > at && pressSpentBy(c.timeSeconds, tSeconds);
+  if (!cd.casts.some(late) && !(cd.sharedCasts ?? []).some(late)) return cd;
+  const clamp = (c: ICooldownCast): ICooldownCast =>
+    late(c) ? { ...c, timeSeconds: at } : c;
+  return {
+    ...cd,
+    casts: cd.casts.map(clamp),
+    ...(cd.sharedCasts ? { sharedCasts: cd.sharedCasts.map(clamp) } : {}),
+  };
+}
 
 /**
  * Reaction window for every "X was ready and you did not press it" claim —

@@ -445,5 +445,10 @@
  *  v230 (2026-09-30, triage res-readiness F-C10, ruling A47): the kill /
  *  vulnerable window's team damage (bursts, `team damage Nk`) counts owned
  *  pets and guardians, attributed by source GUID (`summonOwnerById`).
+ *  v231 (2026-09-30, triage res-readiness F-C1, ruling A45 = A): a press
+ *  is spent from the second it is rendered at (`pressSpentBy`: floor(press)
+ *  ≤ t, besides the 0.5 s slack) in every availability predicate — the
+ *  cdAvailableAt family, the [RES] ledger, lastCastBefore, isAvailableAt —
+ *  so the [RES] row under a cast line no longer lists that cast ready.
  */
-export const PROMPT_VERSION = 230;
+export const PROMPT_VERSION = 231;

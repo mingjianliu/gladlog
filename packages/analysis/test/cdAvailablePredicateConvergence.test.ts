@@ -128,9 +128,10 @@ describe("cdAvailableAt 消费点防漂移一致性(BACKLOG #18 Minor #3 + 追�
     },
   ];
 
-  it("GH #61 容差方向钉死:0.3s 后不可用、0.6s 后可用", () => {
+  it("GH #61 + A45(2026-09-30,triage res-readiness F-C1)容差方向钉死:同一渲染秒内的按键(0.3s / 0.6s 后)都算已按,下一秒的不算", () => {
     expect(cdAvailableAt(makeCd([DEATH_T + 0.3], 60), DEATH_T)).toBe(false);
-    expect(cdAvailableAt(makeCd([DEATH_T + 0.6], 60), DEATH_T)).toBe(true);
+    expect(cdAvailableAt(makeCd([DEATH_T + 0.6], 60), DEATH_T)).toBe(false);
+    expect(cdAvailableAt(makeCd([DEATH_T + 1.1], 60), DEATH_T)).toBe(true);
   });
 
   it.each(cases)("$label", ({ cd }) => {

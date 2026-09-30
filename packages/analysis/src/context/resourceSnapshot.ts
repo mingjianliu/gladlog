@@ -3,15 +3,15 @@ import { ICombatUnit } from "@gladlog/parser-compat";
 import { buffFullDurationForCaster } from "../utils/buffDuration";
 import { IPlayerCCTrinketSummary } from "../utils/ccTrinketAnalysis";
 import {
-  CD_INSTANT_SLACK_S,
   cdAvailableAt,
   cdChargesReadyAt,
   cdIsProcOnly,
-  cdNeverSpent,
   cdMaybeAvailableAt,
+  cdNeverSpent,
   cdSecondsUntilReady,
   IMajorCooldownInfo,
   lockCastsOf,
+  pressSpentBy,
   specToString,
 } from "../utils/cooldowns";
 import { IEnemyCDTimeline } from "../utils/enemyCDs";
@@ -332,7 +332,7 @@ function onCdKey(
   timeSeconds: number,
 ): string {
   const last = lockCastsOf(cd)
-    .filter((c) => c.timeSeconds <= timeSeconds + CD_INSTANT_SLACK_S)
+    .filter((c) => pressSpentBy(c.timeSeconds, timeSeconds))
     .reduce((m, c) => Math.max(m, c.timeSeconds), Number.NEGATIVE_INFINITY);
   return `${displayName}@${Math.round(last * 10) / 10}`;
 }
@@ -349,8 +349,8 @@ function resStateOf(
 ): "ready" | "onCd" | "skip" {
   // A shared-pool press (Spellwarding for Blessing of Protection) counts:
   // the cooldown is running even though X itself was never pressed.
-  const pressed = lockCastsOf(cd).some(
-    (c) => c.timeSeconds <= timeSeconds + CD_INSTANT_SLACK_S,
+  const pressed = lockCastsOf(cd).some((c) =>
+    pressSpentBy(c.timeSeconds, timeSeconds),
   );
   if (!pressed) return timeSeconds > 5 ? "ready" : "skip";
   return cdAvailableAt(cd, timeSeconds) ? "ready" : "onCd";

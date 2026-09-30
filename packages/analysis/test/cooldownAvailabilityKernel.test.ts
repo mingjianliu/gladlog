@@ -121,7 +121,7 @@ describe("cdAvailableAt 与 isAvailableAt 在重叠语义上必须同判(断言�
     },
   ];
 
-  it("GH #61:查询后 0.3s 内的施放算已按下(不可用),0.6s 后的不算(可用)—— 与 [RES] 台账同容差", () => {
+  it("GH #61 + A45(triage res-readiness F-C1):查询秒内的施放(0.3s / 0.6s 后)都算已按下(不可用),下一秒的不算(可用)—— 两谓词断言相等", () => {
     expect(cdAvailableAt(cdWith([40.3]), 40)).toBe(false);
     expect(
       isAvailableAt(
@@ -132,10 +132,21 @@ describe("cdAvailableAt 与 isAvailableAt 在重叠语义上必须同判(断言�
         MATCH_START,
       ),
     ).toBe(false);
-    expect(cdAvailableAt(cdWith([40.6]), 40)).toBe(true);
+    // the latter-half-second press (the F-C1 case): spent on both sides
+    expect(cdAvailableAt(cdWith([40.6]), 40)).toBe(false);
     expect(
       isAvailableAt(
         unitWith([40.6]),
+        SPELL_ID,
+        COOLDOWN_SECONDS,
+        40,
+        MATCH_START,
+      ),
+    ).toBe(false);
+    expect(cdAvailableAt(cdWith([41.1]), 40)).toBe(true);
+    expect(
+      isAvailableAt(
+        unitWith([41.1]),
         SPELL_ID,
         COOLDOWN_SECONDS,
         40,
