@@ -160,6 +160,7 @@ import {
 } from "./candidates/massDispel";
 import {
   filterIntentGuardEvidence,
+  formatAttemptedFact,
   INTENT_GUARD_GCD_S,
   NOT_READY_REASONS,
 } from "./candidates/shared";
@@ -244,6 +245,9 @@ export {
  * downgrading severity too. */
 export const ATTEMPTED_GUARD_TYPES: ReadonlySet<string> = new Set([
   "cd-hoarded",
+  // triage 2026-09-29 F-W1 (ruling 2026-09-30 R7 = A): pressed and rejected
+  // is not "never pressed"
+  "cd-waste",
   // triage 2026-09-29 S1: the owner's rejected ally-reaching save presses
   // inside the judged 8 s window
   "slow-defensive-response",
@@ -282,6 +286,16 @@ export function cdWasteEvents(
     Partial<Pick<IMajorCooldownInfo, "tag" | "responseOnly">>)[],
   healer: { id: string; name: string },
   minHpPct: number | null,
+  /** Triage 2026-09-29 F-W1 (user ruling 2026-09-30, R7 = A): the owner's
+   * rejected presses of the never-cast cooldown over the round —
+   * `castFailedInWindow` from 0 to `untilS` (the match end, or a Solo Shuffle
+   * round's ending death) through `filterIntentGuardEvidence`, as cd-hoarded
+   * feeds it — become `facts.attempted`. The line still fires. */
+  attempts?: {
+    rawStreams: RawStreams;
+    untilS: number;
+    ownCastSuccessSeconds?: number[];
+  },
 ): CandidateEvent[] {
   if (minHpPct !== null && minHpPct >= CD_WASTE_PRESSURE_HP_PCT) return [];
   const out: CandidateEvent[] = [];
@@ -303,6 +317,21 @@ export function cdWasteEvents(
       // capability gates (candidateFindings.ts's missed-cleanse
       // ownerCanDispel): the fact carries the guard, the prompt explains it.
       const costNorm = costNormPhrase(cd.spellId);
+      const attempted = attempts
+        ? formatAttemptedFact(
+            filterIntentGuardEvidence(
+              castFailedInWindow(
+                attempts.rawStreams,
+                healer.id,
+                0,
+                attempts.untilS,
+                Number(cd.spellId),
+              ),
+              [],
+              { ownCastSuccessSeconds: attempts.ownCastSuccessSeconds },
+            ),
+          )
+        : undefined;
       out.push({
         id: `cd-waste:${healer.id}:${cd.spellId}`,
         type: "cd-waste",
@@ -314,6 +343,7 @@ export function cdWasteEvents(
           spell: cd.spellName,
           unit: healer.name,
           ...(costNorm ? { costNorm } : {}),
+          ...(attempted ? { attempted } : {}),
         },
       });
     }
@@ -464,7 +494,36 @@ export function extractCandidateFindings(
     } catch {
       ownerCds = [];
     }
-    out.push(...cdWasteEvents(ownerCds, owner, matchMinHpPct(owner)));
+    out.push(
+      ...cdWasteEvents(
+        ownerCds,
+        owner,
+        matchMinHpPct(owner),
+        rawStreams
+          ? {
+              rawStreams,
+              // the owner's playable end: the match end, the Solo Shuffle
+              // round-ending death (the menu's own cut) or the owner's own
+              // death — the owner gate's cut; "You are dead" is no attempt
+              untilS:
+                (Math.min(
+                  typeof combat?.endTime === "number" && combat.endTime > 0
+                    ? combat.endTime
+                    : Infinity,
+                  shuffleRoundEndMs(combat, units) ?? Infinity,
+                  ...((owner.deathRecords ?? []) as any[]).map(
+                    (d) => d.timestamp ?? Infinity,
+                  ),
+                ) -
+                  start) /
+                1000,
+              ownCastSuccessSeconds: (owner.spellCastEvents ?? []).map(
+                (e: any) => (e.logLine.timestamp - start) / 1000,
+              ),
+            }
+          : undefined,
+      ),
+    );
   }
 
   // --- DPS owner events (D2) — healer owners skip this whole branch ---

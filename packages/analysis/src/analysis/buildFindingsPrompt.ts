@@ -27,6 +27,12 @@ const LEGACY_TYPES_LIST = [...LEGACY_TOPIC_TYPES]
  * what the field MEANS to the model, same split as ownerCanDispel above. */
 const COST_NORM_LEGEND_NOTE = ` When facts.costNorm is present, the named ability (e.g. Divine Shield/Ice Block) is mechanically usable but its real-game cost is too high to recommend as a routine reaction — echo the costNorm caveat and suggest it only as a last-resort/emergency option, never as "you should press this to block/mitigate".`;
 
+/** Intent guard (BACKLOG #26 Task 2 — "pressed but rejected ≠ never
+ * pressed"), for a line whose facts.spell IS the pressed ability: cd-waste
+ * (triage 2026-09-29 F-W1, ruling 2026-09-30 R7 = A). The fact is set by
+ * `formatAttemptedFact`; auditFindings.ts downgrades the severity. */
+const ATTEMPTED_LEGEND_NOTE = ` When facts.attempted is present, the player DID try to press this ability and the game rejected the cast (facts.attempted names the reason(s), e.g. still on GCD/silenced/stunned/out of range) — never phrase this as "never pressed", hoarding or negligence; phrase it as the attempt being blocked and, if relevant, coach clearing that blocker (positioning/CC break) sooner.`;
+
 /** The intent-guard note for cd-hoarded (BACKLOG #26 Task 2; triage 2026-09-29 F-H2, user
  * ruling 2026-09-30 R1 = B): a rejected press excuses "held" only while the
  * player could not act afterwards. facts.freeAfterAttemptS is measured by the
@@ -201,7 +207,7 @@ export function buildFindingsPrompt(
     ``,
     `Event legend:`,
     `- "death": a player died. facts.side=friendly means it was one of YOUR team's deaths (a loss to coach around); facts.side=enemy means your team scored the kill (reinforce what worked).`,
-    `- "cd-waste": a major defensive cooldown the player never pressed the entire match (facts.spell names it). This is a whole-round observation with no timestamp.${COST_NORM_LEGEND_NOTE}`,
+    `- "cd-waste": a major defensive cooldown the player never successfully cast the entire match (facts.spell names it). This is a whole-round observation with no timestamp.${COST_NORM_LEGEND_NOTE}${ATTEMPTED_LEGEND_NOTE}`,
     // Legends for DPS-owner event types are emitted only when the menu
     // contains that type -- a healer menu has none of them, so the healer
     // prompt stays byte-identical (D2).

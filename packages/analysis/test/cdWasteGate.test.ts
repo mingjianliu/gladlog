@@ -2,6 +2,7 @@ import {
   CD_WASTE_PRESSURE_HP_PCT,
   cdWasteEvents,
 } from "../src/analysis/candidateFindings";
+import { buildFindingsPrompt } from "../src/analysis/buildFindingsPrompt";
 import { lowPressureUnusedDefensiveNote } from "../src/context/matchTimelineSections";
 import { matchMinHpPct } from "../src/utils/killWindowTargetSelection";
 import { makeUnit } from "./ported/testHelpers";
@@ -62,6 +63,64 @@ describe("cd-waste / NOTE — shared charge pool (W2)", () => {
     expect(lowPressureUnusedDefensiveNote([bop, DP], 82)).not.toContain(
       "Blessing of Protection",
     );
+  });
+});
+
+// F-W1 (triage 2026-09-29, ruling 2026-09-30 R7 = A): e5b3534b's Lay on Hands
+// was rejected 11 times in Cyclone before the round-ending death — still a
+// cd-waste line, now with facts.attempted; rejects after the round end and
+// GCD-locked ones do not count
+describe("cd-waste — facts.attempted (F-W1)", () => {
+  const LOH = {
+    spellId: "471195",
+    spellName: "Lay on Hands",
+    neverUsed: true,
+    isThroughput: false,
+  };
+  const fail = (tSeconds: number, reason = "无法在放逐时那样做") => ({
+    tSeconds,
+    unitGuid: "p1",
+    spellId: 471195,
+    spellName: "Lay on Hands",
+    reason,
+  });
+  const rawStreams = {
+    available: true,
+    manaSamples: [],
+    castFailed: [fail(118.4), fail(119.2), fail(120.4), fail(120.6)],
+  };
+  it("counts the rejects up to the round end; the line still fires", () => {
+    const [e] = cdWasteEvents([LOH], me, 40, { rawStreams, untilS: 120.408 });
+    expect(e!.facts!.attempted).toBe("曾尝试施放被拒(无法在放逐时那样做×3)");
+  });
+  it("the caller's window ends at the owner's own death — \"You are dead\" is no attempt", () => {
+    const [e] = cdWasteEvents([LOH], me, 40, { rawStreams, untilS: 119.0 });
+    expect(e!.facts!.attempted).toBe("曾尝试施放被拒(无法在放逐时那样做×1)");
+  });
+  it("a not-ready reject within 1.5 s after an own success is a GCD miss-press, not an attempt (fe1a9355 shape)", () => {
+    const [e] = cdWasteEvents([LOH], me, 40, {
+      rawStreams: {
+        ...rawStreams,
+        castFailed: [fail(168.57, "尚未恢复")],
+      },
+      untilS: 200,
+      ownCastSuccessSeconds: [167.783],
+    });
+    expect(e!.facts!.attempted).toBeUndefined();
+  });
+  it("the legend says never successfully cast, with the intent-guard note", () => {
+    const [e] = cdWasteEvents([LOH], me, 40, { rawStreams, untilS: 120.408 });
+    const p = buildFindingsPrompt([e!], "", "Holy Paladin");
+    const legend = p.split("\n").find((l) => l.startsWith('- "cd-waste":'))!;
+    expect(legend).toMatch(/never successfully cast the entire match/);
+    expect(legend).toMatch(/DID try to press this ability/);
+  });
+  it("no rejects → no fact", () => {
+    const [e] = cdWasteEvents([LOH], me, 40, {
+      rawStreams: { ...rawStreams, castFailed: [] },
+      untilS: 200,
+    });
+    expect(e!.facts!.attempted).toBeUndefined();
   });
 });
 

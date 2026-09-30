@@ -154,8 +154,13 @@ describe("buildFindingsPrompt", () => {
         "",
         "Holy Paladin",
       );
-      expect(p).toMatch(/one of their own ally-reaching defensive cooldowns/);
-      expect(p).not.toMatch(/DID try to press this ability/);
+      const legend = p
+        .split("\n")
+        .find((l) => l.startsWith('- "slow-defensive-response":'))!;
+      expect(legend).toMatch(
+        /one of their own ally-reaching defensive cooldowns/,
+      );
+      expect(legend).not.toMatch(/DID try to press this ability/);
     });
   });
 

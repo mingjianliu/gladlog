@@ -303,5 +303,9 @@
  *  the crisis unit or another teammate pressed (facts.crisisUnitSaved,
  *  facts.teamAnswered — stated, not credited). 605 files: ids identical,
  *  634 of 1,313 lines gain facts.
+ *  v199 (2026-09-30, triage cd-hoarded-waste F-W1, ruling R7 = A): cd-waste
+ *  says "never successfully cast" and carries facts.attempted (rejected
+ *  presses up to the owner's playable end); audit downgrade. 605 files: ids
+ *  identical, 15 of 938 lines gain attempted.
  */
-export const PROMPT_VERSION = 198;
+export const PROMPT_VERSION = 199;
