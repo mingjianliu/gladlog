@@ -1,8 +1,10 @@
 import { ensureAnalysisData } from "@gladlog/analysis";
+import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 
 import { bridge } from "../../bridge";
 import { buildAnalysisInput } from "../derive/analysisInput";
+import { renderMarkdown } from "../derive/markdown";
 import type { ReportSource } from "../derive/types";
 
 type ChatMessage = { role: "user" | "assistant"; content: string; at: number };
@@ -28,9 +30,14 @@ type ChatState =
 export function CoachChatCard({
   source,
   matchId,
+  rich,
 }: {
   source: ReportSource;
   matchId: string;
+  /** Optional per-passage rich-text renderer (inlineRich.makeRichText) so spell
+   * names inside Markdown keep their icons. Without it the reply still renders
+   * as Markdown, just without icons. */
+  rich?: (text?: string | null) => ReactNode;
 }) {
   const [chatState, setChatState] = useState<ChatState | null>(null);
   const [pending, setPending] = useState<string | null>(null);
@@ -177,6 +184,13 @@ export function CoachChatCard({
     );
   }
 
+  // Coach replies are Markdown (see derive/markdown): they routinely come back
+  // with **bold** / headings / lists / tables, which used to reach the user as
+  // literal characters. The user's own turn stays plain text — what they typed
+  // is what they should see, not something re-interpreted as markup.
+  const renderCoachReply = (content: string) =>
+    renderMarkdown(content, rich ? (t: string) => rich(t) : undefined);
+
   return (
     <div className="coach-chat-card" data-testid="coach-chat-card">
       <div className="coach-chat-head">
@@ -192,7 +206,7 @@ export function CoachChatCard({
                 : "coach-chat-msg coach-chat-msg--coach"
             }
           >
-            {m.content}
+            {m.role === "assistant" ? renderCoachReply(m.content) : m.content}
           </div>
         ))}
         {pending && (

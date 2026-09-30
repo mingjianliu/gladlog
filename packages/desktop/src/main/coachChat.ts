@@ -214,7 +214,10 @@ export function createCoachChatService(deps: {
     for await (const ev of client.stream({
       model: p.model,
       max_tokens: API_MAX_TOKENS.coachChat,
-      system: buildCoachSystemPrompt(p.lang),
+      // Follow-up chat is rendered as Markdown in the bubble (derive/markdown),
+      // so it asks for structure the renderer understands. The other call sites
+      // of this prompt want JSON and leave the flag off.
+      system: buildCoachSystemPrompt(p.lang, { markdown: true }),
       messages: [{ role: "user", content: prompt }],
       // Final review F1: stopping during the seeding phase used not to kill the
       // CLI child process — seedNewSession took a signal parameter but never
