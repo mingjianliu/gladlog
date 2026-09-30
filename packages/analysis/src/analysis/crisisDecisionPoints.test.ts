@@ -828,6 +828,57 @@ describe("crisisDecisionPoints — role='dps' gate 3 (spec §1d, GH #59)", () =>
  * change to either side can only move both together.
  */
 describe("crisisDecisionPoints — render-grid anchoring", () => {
+  // triage 2026-09-29 H3 (95127ab4 @23: sample 23.093, dmg2s 12 % → 33 %)
+  it("dmg2s is the damage in the 2 s before the HP reading, which can sit after the whole second", () => {
+    const o = unit({
+      advancedActions: [hp(0, 100), hp(1000, 70), hp(2090, 38), hp(4000, 35)],
+      damageIn: [
+        {
+          timestamp: T0 + 1500,
+          srcUnitId: "E1",
+          amount: -10,
+          effectiveAmount: -10,
+        },
+        // the crossing hit: after the whole second 2, before the 2.09 reading
+        {
+          timestamp: T0 + 2050,
+          srcUnitId: "E1",
+          amount: -22,
+          effectiveAmount: -22,
+        },
+      ],
+    });
+    const p = crisisDecisionPoints(o, combat(o, [enemy()]))[0]!;
+    expect(p.tSec).toBe(2);
+    expect(p.hpPct).toBe(38);
+    expect(p.dmg2s).toBe(0.32);
+  });
+
+  // codex review of F-H3: the reading can sit seconds after t (±3 s radius);
+  // damage after the displayed second is never "prior" to the crossing
+  it("the damage window never passes the anchor second, however late the sample", () => {
+    const o = unit({
+      advancedActions: [hp(0, 100), hp(800, 38), hp(900, 70), hp(4700, 38)],
+      damageIn: [
+        {
+          timestamp: T0 + 700,
+          srcUnitId: "E1",
+          amount: -8,
+          effectiveAmount: -8,
+        },
+        {
+          timestamp: T0 + 4600,
+          srcUnitId: "E1",
+          amount: -32,
+          effectiveAmount: -32,
+        },
+      ],
+    });
+    const p = crisisDecisionPoints(o, combat(o, [enemy()]))[0]!;
+    expect(p.tSec).toBeLessThan(4);
+    expect(p.dmg2s).toBeLessThan(0.32);
+  });
+
   it("a crossing sampled between two whole seconds reports the grid second, not the raw instant", () => {
     const o = unit({
       advancedActions: [hp(0, 100), hp(1000, 70), hp(2400, 38), hp(3000, 35)],

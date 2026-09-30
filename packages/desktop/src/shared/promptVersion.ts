@@ -278,5 +278,10 @@
  *  pressable, self-only defensives and no longer says "do NOT coach pressing
  *  defensives". 605 files: cd-waste 983 → 938, [UNUSED] 27,145 → 26,642,
  *  NOTE 1,033 → 938.
+ *  v195 (2026-09-30, triage cd-hoarded-waste F-H3): a crisis point's
+ *  dmg2s / attackers / school split sum the 2 s up to the HP reading
+ *  `gridHpPct` used (`gridHpSample`), never past the anchor second, instead
+ *  of the 2 s up to the whole second; legends say so. 605 files: cd-hoarded
+ *  +16 / −11 (10 up / 5 down across the dangerous floor, 6 swaps).
  */
-export const PROMPT_VERSION = 194;
+export const PROMPT_VERSION = 195;

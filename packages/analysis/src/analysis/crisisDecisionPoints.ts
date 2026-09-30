@@ -26,12 +26,13 @@ import {
   cdIsProcOnly,
   cdReadyInTimeAt,
   extractMajorCooldowns,
-  // The [STATE] tick's own HP sampler (getUnitHpAtTimestamp +
-  // HP_SAMPLE_RADIUS_MS + the 100 clamp), imported rather than re-derived so
-  // a crisis fact and the same-second [STATE] line cannot disagree —
-  // CLAUDE.md Shared-Predicate Rule; see gridHpPct's doc comment for the
-  // measured cost of the two sides sampling separately.
-  gridHpPct,
+  // The [STATE] tick's own HP sampler (`gridHpPct` = getUnitHpAtTimestamp +
+  // HP_SAMPLE_RADIUS_MS + the 100 clamp; `gridHpSample` is the same pick with
+  // its sample instant, the H3 damage window's end), imported rather than
+  // re-derived so a crisis fact and the same-second [STATE] line cannot
+  // disagree — CLAUDE.md Shared-Predicate Rule; see gridHpPct's doc comment
+  // for the measured cost of the two sides sampling separately.
+  gridHpSample,
   type IMajorCooldownInfo,
   // ...and its companion, the [STATE] tick's `unit:dead` predicate.
   isDeadAtRenderSecond,
@@ -408,7 +409,7 @@ function anchorToRenderGrid(
   unit: any,
   startMs: number,
   rawMs: number,
-): { tMs: number; tSec: number; hpPct: number } | null {
+): { tMs: number; tSec: number; hpPct: number; sampleMs: number } | null {
   const s0 = Math.floor((rawMs - startMs) / 1000);
   for (let s = s0; s <= s0 + GRID_ANCHOR_MAX_S; s++) {
     if (s < 0) continue;
@@ -418,11 +419,12 @@ function anchorToRenderGrid(
     // once the unit is dead; stop rather than search past it.
     if (isDeadAtRenderSecond(unit, startMs, s)) break;
     const tMs = startMs + s * 1000;
-    const hp = gridHpPct(unit, tMs);
+    const sample = gridHpSample(unit, tMs);
+    const hp = sample?.pct ?? null;
     // `hp > 0` mirrors the raw crossing's own `c.hp > 0` guard: 0% is a
     // corpse, not a crisis.
-    if (hp !== null && hp > 0 && hp <= CRISIS_HP_PCT_RENDERED)
-      return { tMs, tSec: s, hpPct: hp };
+    if (sample && hp !== null && hp > 0 && hp <= CRISIS_HP_PCT_RENDERED)
+      return { tMs, tSec: s, hpPct: hp, sampleMs: sample.sampleMs };
   }
   return null;
 }
@@ -851,7 +853,23 @@ export function crisisDecisionPoints(
     const w0 = t - RESPONSE_PRE_MS,
       w1 = t + RESPONSE_WINDOW_MS;
     const inWin = (tt: number) => tt >= w0 && tt <= w1;
-    const recent = dmgIn.filter((d) => d.t > t - DMG_WINDOW_MS && d.t <= t);
+    // Triage 2026-09-29 H3: the damage "in the prior 2 s" is the 2 s before
+    // the HP reading `hpPct` is — the advanced action `gridHpPct` picked
+    // (±HP_SAMPLE_RADIUS_MS, possibly after `t`) — not before the whole
+    // second. Ending at `t` dropped the hit that caused the crossing whenever
+    // it landed just after the second (95127ab4: 12 % beside a reading that
+    // had just taken 33 %). Attackers and the school split read the same
+    // window; the anchor second and `hpPct` are untouched. The end never
+    // passes the displayed second itself (t + 999 ms): the reading can sit up
+    // to HP_SAMPLE_RADIUS_MS away, and a sample seconds after t would count
+    // damage that landed after the crossing — inside the response window the
+    // candidates judge from t (codex review of F-H3: a crisis-no-response
+    // whose "prior 2 s" hit came 2.7 s after t, and whose self-heal 0.4 s
+    // after that hit fell outside the window).
+    const dmgEnd = Math.min(anchor.sampleMs, t + 999);
+    const recent = dmgIn.filter(
+      (d) => d.t > dmgEnd - DMG_WINDOW_MS && d.t <= dmgEnd,
+    );
     const attackers = new Set(
       recent
         .map((d) => resolveAttackerId(d.src, unitById))

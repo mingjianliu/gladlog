@@ -870,6 +870,22 @@ export function getUnitHpAtTimestamp(
   timestampMs: number,
   maxDtMs = HP_SAMPLE_RADIUS_MS,
 ): number | null {
+  return unitHpSampleAt(unit, timestampMs, maxDtMs)?.pct ?? null;
+}
+
+/**
+ * `getUnitHpAtTimestamp` plus WHEN the reading was taken: the advanced action
+ * it picked can sit up to `maxDtMs` either side of the asked instant. A fact
+ * that pairs the reading with "the damage just before it" must end that
+ * window at `sampleMs`, not at the asked instant (triage 2026-09-29 H3:
+ * 95127ab4's crossing hit landed 93 ms after the whole second, so `dmg2s`
+ * said 12 % for a reading that had just taken 33 %).
+ */
+export function unitHpSampleAt(
+  unit: ICombatUnit,
+  timestampMs: number,
+  maxDtMs = HP_SAMPLE_RADIUS_MS,
+): { pct: number; sampleMs: number } | null {
   const closestAction = binarySearchClosest(
     getSortedAdvancedActions(unit),
     timestampMs,
@@ -893,10 +909,14 @@ export function getUnitHpAtTimestamp(
     return null;
   }
 
-  return Math.round(
-    (closestAction.advancedActorCurrentHp / closestAction.advancedActorMaxHp) *
-      100,
-  );
+  return {
+    pct: Math.round(
+      (closestAction.advancedActorCurrentHp /
+        closestAction.advancedActorMaxHp) *
+        100,
+    ),
+    sampleMs: closestAction.logLine.timestamp,
+  };
 }
 
 /**
@@ -925,8 +945,19 @@ export function getUnitHpAtTimestamp(
  * @param tMs must already be on the render grid (`matchStartMs + s * 1000`).
  */
 export function gridHpPct(unit: ICombatUnit, tMs: number): number | null {
-  const pct = getUnitHpAtTimestamp(unit, tMs, HP_SAMPLE_RADIUS_MS);
-  return pct === null ? null : Math.min(pct, 100);
+  return gridHpSample(unit, tMs)?.pct ?? null;
+}
+
+/** `gridHpPct` with the timestamp of the advanced action it read — the same
+ * pick, the same clamp. */
+export function gridHpSample(
+  unit: ICombatUnit,
+  tMs: number,
+): { pct: number; sampleMs: number } | null {
+  const s = unitHpSampleAt(unit, tMs, HP_SAMPLE_RADIUS_MS);
+  return s === null
+    ? null
+    : { pct: Math.min(s.pct, 100), sampleMs: s.sampleMs };
 }
 
 /**

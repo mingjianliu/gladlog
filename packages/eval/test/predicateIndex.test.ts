@@ -284,6 +284,11 @@ const INDEX: PredicateRow[] = [
   },
   {
     file: `${A}/utils/cooldowns.ts`,
+    symbol: "gridHpSample",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
     symbol: "gridHpMinInWindow",
     mod: cooldowns,
   },
