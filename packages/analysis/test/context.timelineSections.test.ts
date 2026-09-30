@@ -1031,7 +1031,7 @@ describe("context.timelineSections.test.ts", () => {
       const lines = entries[0][1];
       expect(lines).toHaveLength(4);
       expect(lines[0]).toBe(
-        "0:15  [DEATH]  p-Player1 (Restoration Druid — friendly) (PvP Trinket available) [Lethal]",
+        "0:15  [DEATH]  p-Player1 (Restoration Druid — friendly) (PvP Trinket available; no breakable CC in the last 10 s) [Lethal]",
       );
       expect(lines[1]).toEqual({ placeholder: "snap-15" });
       expect(lines[2]).toBe(

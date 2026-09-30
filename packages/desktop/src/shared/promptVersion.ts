@@ -354,5 +354,10 @@
  *  only hits on the target in the 3 s before an ally-applied external were
  *  periodic now qualifies for `[ENEMY DEF] … | during it:` (and the owner's
  *  burst-into-mitigation `facts.duringExternal`).
+ *  v211 (2026-09-30, triage enemy-def F-E28, ruling A28): a friendly
+ *  [DEATH] line's trinket tag reads `(PvP Trinket available; no breakable
+ *  CC in the last 10 s)` unless a [CC ON TEAM] instance on them rendered
+ *  ≥ 2 s overlaps the 10 s before (`breakableCcBeforeDeath`, gate
+ *  `checkDeathTrinketCcConsistency`).
  */
-export const PROMPT_VERSION = 210;
+export const PROMPT_VERSION = 211;

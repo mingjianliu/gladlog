@@ -67,7 +67,11 @@ import {
   teammateCrisisDmgBinOf,
 } from "@gladlog/analysis/src/data/teammateCrisisPrior";
 import { KILL_CREDIT_SLACK_S } from "@gladlog/analysis/src/utils/burstLedger";
-import { CC_LANDED_MATCH_WINDOW_MS } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
+import {
+  CC_LANDED_MATCH_WINDOW_MS,
+  DEATH_BREAKABLE_CC_LOOKBACK_S,
+  DEATH_BREAKABLE_CC_MIN_S,
+} from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
 import {
   PEEL_LOOKBACK_S,
   PEEL_MIN_USABLE_S,
@@ -916,6 +920,57 @@ export function checkCcAvoidedLandedConsistency(lines: string[]): string[] {
     if (twin !== undefined)
       failures.push(
         `line ${i + 1}: [CC AVOIDED?] 说 ${m[4]} 没落在 ${m[3]} 身上,但 ${fmtTime(twin)} 有同名 [CC ON TEAM] 落地行 —— ${line.trim().slice(0, 140)}`,
+      );
+  });
+  return failures;
+}
+
+/**
+ * `[DEATH] … (PvP Trinket available)` vs the `[CC ON TEAM]` lines (triage
+ * 2026-09-29 enemy-def F-E28, user ruling A28 2026-09-30). The bare tag
+ * claims a breakable CC was on the dying player; the
+ * `(PvP Trinket available; no breakable CC in the last 10 s)` form claims
+ * none. Breakable = a `[CC ON TEAM]` line on that player whose rendered span
+ * (m:ss start + its printed `| Ns` / "after Ns") overlaps
+ * [death − DEATH_BREAKABLE_CC_LOOKBACK_S, death] with N ≥
+ * DEATH_BREAKABLE_CC_MIN_S — the producer's `breakableCcBeforeDeath`, same
+ * constants, read back from the text.
+ */
+const CC_ON_TEAM_RENDERED_S = /\) \| (\d+)s\b|after (\d+)s \(cut short/;
+const DEATH_TRINKET_TAG =
+  /\(PvP Trinket available(; no breakable CC in the last (\d+) s)?\)/;
+export function checkDeathTrinketCcConsistency(lines: string[]): string[] {
+  const ccByVictim = new Map<string, Array<{ at: number; n: number }>>();
+  for (const line of lines) {
+    const m = line.match(CC_ON_TEAM_LINE);
+    if (!m) continue;
+    const d = line.match(CC_ON_TEAM_RENDERED_S);
+    if (!d) continue;
+    const at = Number(m[1]) * 60 + Number(m[2]);
+    const n = Number(d[1] ?? d[2]);
+    ccByVictim.set(m[3]!, [...(ccByVictim.get(m[3]!) ?? []), { at, n }]);
+  }
+  const failures: string[] = [];
+  lines.forEach((line, i) => {
+    const m = line.match(FRIENDLY_DEATH_LINE);
+    if (!m) return;
+    const tag = line.match(DEATH_TRINKET_TAG);
+    if (!tag) return;
+    const death = Number(m[1]) * 60 + Number(m[2]);
+    const breakable = (ccByVictim.get(m[3]!) ?? []).some(
+      (c) =>
+        c.n >= DEATH_BREAKABLE_CC_MIN_S &&
+        c.at <= death &&
+        c.at + c.n >= death - DEATH_BREAKABLE_CC_LOOKBACK_S,
+    );
+    const saysNone = tag[1] !== undefined;
+    if (saysNone && Number(tag[2]) !== DEATH_BREAKABLE_CC_LOOKBACK_S)
+      failures.push(
+        `line ${i + 1}: [DEATH] 的饰品标签写 last ${tag[2]} s,口径是 ${DEATH_BREAKABLE_CC_LOOKBACK_S} s —— ${line.trim().slice(0, 140)}`,
+      );
+    if (saysNone === breakable)
+      failures.push(
+        `line ${i + 1}: [DEATH] 说${saysNone ? "死前 10 s 没有" : "死前 10 s 有"}可解控制,但 [CC ON TEAM] 行${breakable ? "有" : "没有"}(渲染时长 ≥ ${DEATH_BREAKABLE_CC_MIN_S} s 且与 [死亡 − ${DEATH_BREAKABLE_CC_LOOKBACK_S} s, 死亡] 相交) —— ${line.trim().slice(0, 140)}`,
       );
   });
   return failures;
@@ -2841,6 +2896,7 @@ export function checkMatch(
   hardFailures.push(...checkDuringExternalConsistency(lines));
   hardFailures.push(...checkConseqHpStateConsistency(lines));
   hardFailures.push(...checkCcAvoidedLandedConsistency(lines));
+  hardFailures.push(...checkDeathTrinketCcConsistency(lines));
   hardFailures.push(...checkPeelOptionConsistency(lines));
   hardFailures.push(...checkCcBookmarkConsistency(lines));
   hardFailures.push(...checkForcedTrinketConsistency(lines));

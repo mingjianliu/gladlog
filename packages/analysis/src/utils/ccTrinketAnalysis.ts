@@ -866,6 +866,40 @@ export function pvpTrinketRemainingSecondsAt(
   return remaining;
 }
 
+/** The whole seconds a `[CC ON TEAM]` line prints for this instance — its
+ *  `| Ns`, or the "after Ns" of a trinket / racial / Tremor break. One
+ *  rounding for the line and every predicate that reads it back. */
+export function renderedCcSeconds(cc: Pick<ICCInstance, "durationSeconds">): number {
+  return Number(cc.durationSeconds.toFixed(0));
+}
+
+/** A `[DEATH] … (PvP Trinket available)` line says whether a CC worth
+ *  breaking was on the dying player (user ruling 2026-09-30, A28 / triage
+ *  enemy-def F-E28): a `[CC ON TEAM]` instance on them whose rendered span
+ *  overlaps [death − LOOKBACK, death] and whose rendered length is ≥ MIN.
+ *  Silences and roots never render as `[CC ON TEAM]`, so they never count.
+ *  Read on the render grid (the line's m:ss start + its printed seconds) so
+ *  `checkDeathTrinketCcConsistency` can re-parse it. */
+export const DEATH_BREAKABLE_CC_LOOKBACK_S = 10;
+export const DEATH_BREAKABLE_CC_MIN_S = 2;
+
+export function breakableCcBeforeDeath(
+  summary: Pick<IPlayerCCTrinketSummary, "ccInstances">,
+  deathAtSeconds: number,
+): boolean {
+  const deathS = Math.floor(deathAtSeconds);
+  return summary.ccInstances.some((cc) => {
+    if (cc.durationSeconds === 0) return false; // never rendered
+    const n = renderedCcSeconds(cc);
+    const startS = Math.floor(cc.atSeconds);
+    return (
+      n >= DEATH_BREAKABLE_CC_MIN_S &&
+      startS <= deathS &&
+      startS + n >= deathS - DEATH_BREAKABLE_CC_LOOKBACK_S
+    );
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Main analysis
 // ---------------------------------------------------------------------------

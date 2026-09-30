@@ -21,6 +21,7 @@ import {
   GROUNDING_TOTEM_SPELL_ID,
   GROUNDING_TOTEM_WINDOW_S,
   IPlayerCCTrinketSummary,
+  renderedCcSeconds,
   tremorTotemBreak,
 } from "../utils/ccTrinketAnalysis";
 import {
@@ -1903,11 +1904,11 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
         // suppressed below and this note states how long the player endured and that the CC had NOT
         // expired on its own — otherwise the coach misreads a trinket-shortened "1s" as a trivial CC
         // that was not worth trinketing (see 294 Finding "trinketed a 1-second Hammer").
-        trinketNote = ` | trinket broke this CC after ${cc.durationSeconds.toFixed(0)}s (cut short — it had not expired)`;
+        trinketNote = ` | trinket broke this CC after ${renderedCcSeconds(cc)}s (cut short — it had not expired)`;
       } else if (cc.trinketState === "racial_break") {
         // Same truncated-duration semantics as the trinket break, but state
         // what actually happened: the racial was pressed, not the trinket.
-        trinketNote = ` | ${cc.breakRacialName ?? "racial"} broke this CC after ${cc.durationSeconds.toFixed(0)}s (cut short — it had not expired); PvP trinket NOT used`;
+        trinketNote = ` | ${cc.breakRacialName ?? "racial"} broke this CC after ${renderedCcSeconds(cc)}s (cut short — it had not expired); PvP trinket NOT used`;
       } else if (cc.trinketState === "on_cooldown") {
         const cdLeft =
           cc.trinketCDSecondsLeft !== undefined
@@ -1936,7 +1937,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
           ? tremorTotemBreak(cc, matchStartMs, friends)
           : null;
       const tremorNote = tremor
-        ? ` | Tremor Totem from ${pid(tremor.shamanName)} ended this CC after ${cc.durationSeconds.toFixed(0)}s (cut short — it had not expired)`
+        ? ` | Tremor Totem from ${pid(tremor.shamanName)} ended this CC after ${renderedCcSeconds(cc)}s (cut short — it had not expired)`
         : "";
 
       // `spell:<id>` is getDRCategory's self-DR fallback for a CC no DR
@@ -1964,7 +1965,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
         cc.trinketState === "racial_break" ||
         tremor
           ? ""
-          : ` | ${cc.durationSeconds.toFixed(0)}s`;
+          : ` | ${renderedCcSeconds(cc)}s`;
 
       // B124: surface the caster→target range (and LoS) already computed at CC application, so claims
       // like "walked into the CC" / "should have LoS'd it" become checkable instead of inferred. Only

@@ -11,6 +11,7 @@ import {
   checkBehaviorPriorConsistency,
   checkCcAvoidedLandedConsistency,
   checkCcBookmarkConsistency,
+  checkDeathTrinketCcConsistency,
   checkDuringExternalConsistency,
   checkForcedTrinketConsistency,
   checkHeaderHpPromise,
@@ -1002,5 +1003,32 @@ describe("checkDuringExternalConsistency — the [ENEMY DEF] during-it annotatio
         "0:55  [STATE]   x",
       ]),
     ).toEqual([]);
+  });
+});
+
+describe("checkDeathTrinketCcConsistency — the death line's trinket tag vs [CC ON TEAM] (F-E28, A28)", () => {
+  const death = (tag: string) =>
+    `2:53  [DEATH]  1(UDKnight) (Unholy Death Knight — friendly)${tag}`;
+  const bare = " (PvP Trinket available)";
+  const none = " (PvP Trinket available; no breakable CC in the last 10 s)";
+  it("a 1 s Lasso 5 s before (82a2d681) is not breakable: the 'none' form passes, the bare tag fails", () => {
+    const lasso =
+      "2:48  [CC ON TEAM]   1(UDKnight) ← Lightning Lasso (by 5(EShaman)) | 1s [DR: Stun Full]";
+    expect(checkDeathTrinketCcConsistency([lasso, death(none)])).toEqual([]);
+    expect(checkDeathTrinketCcConsistency([lasso, death(bare)])).toHaveLength(1);
+  });
+  it("a 5 s Kidney Shot 7 s before (539b6ed0) is breakable, also when a trinket cut it short", () => {
+    const ks =
+      "2:46  [CC ON TEAM]   1(UDKnight) ← Kidney Shot (by 4(ARogue)) | 5s [DR: Stun Full] | 3.1yd from caster";
+    expect(checkDeathTrinketCcConsistency([ks, death(bare)])).toEqual([]);
+    expect(checkDeathTrinketCcConsistency([ks, death(none)])).toHaveLength(1);
+    const broken =
+      "2:40  [CC ON TEAM]   1(UDKnight) ← Kidney Shot (by 4(ARogue)) [DR: Stun Full] | trinket broke this CC after 3s (cut short — it had not expired)";
+    expect(checkDeathTrinketCcConsistency([broken, death(bare)])).toEqual([]);
+  });
+  it("a CC ending more than 10 s before, or on another player, does not count", () => {
+    const old = "2:22  [CC ON TEAM]   1(UDKnight) ← Fear (by 6(AWarlock)) | 8s";
+    const other = "2:50  [CC ON TEAM]   2(RDruid) ← Fear (by 6(AWarlock)) | 8s";
+    expect(checkDeathTrinketCcConsistency([old, other, death(none)])).toEqual([]);
   });
 });

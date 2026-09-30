@@ -5,6 +5,8 @@ import { isDmgSpikeTrough } from "../analysis/crisisDecisionPoints";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import {
   IPlayerCCTrinketSummary,
+  breakableCcBeforeDeath,
+  DEATH_BREAKABLE_CC_LOOKBACK_S,
   pvpTrinketRemainingSecondsAt,
 } from "../utils/ccTrinketAnalysis";
 import {
@@ -864,7 +866,16 @@ export function emitFriendlyDeathEntries<S>(params: {
       }
     }
 
-    const trinketPart = trinketAvailable ? " (PvP Trinket available)" : "";
+    // A28 (user 2026-09-30, triage F-E28): say whether a CC worth breaking
+    // was on them — a bare "available" invited "should have trinketed".
+    const trinketSummary = ccTrinketSummaries.find(
+      (s) => s.playerName === death.name,
+    );
+    const trinketPart = !trinketAvailable
+      ? ""
+      : trinketSummary && breakableCcBeforeDeath(trinketSummary, death.atSeconds)
+        ? " (PvP Trinket available)"
+        : ` (PvP Trinket available; no breakable CC in the last ${DEATH_BREAKABLE_CC_LOOKBACK_S} s)`;
     const notePart = death.note ? ` [${death.note}]` : "";
     const deathLines: (string | S)[] = [
       `${fmtTime(death.atSeconds)}  [DEATH]  ${pid(death.name)} (${death.spec} — friendly)${unusedDefensives}${trinketPart}${notePart}${dampeningSuffix(params.dampeningAt, death.atSeconds)}`,

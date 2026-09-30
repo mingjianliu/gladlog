@@ -124,6 +124,7 @@
     "test/datagen/usableWhileCc.test.ts",
     "test/datagenManifest.test.ts",
     "test/deathOutcome.whitelist.test.ts",
+    "test/deathTrinketTag.test.ts",
     "test/dispelGates.test.ts",
     "test/dispelVerdictWiring.test.ts",
     "test/dispelVerdicts.test.ts",
