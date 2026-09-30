@@ -371,14 +371,6 @@
       ]
     }
   ],
-  "2825": [
-    {
-      "talentSpellId": "193876",
-      "effect": "replace_spell",
-      "value": 8,
-      "sourceRowId": "301624"
-    }
-  ],
   "2983": [
     {
       "talentSpellId": "197000",
@@ -967,14 +959,6 @@
       "specIds": [
         "70"
       ]
-    }
-  ],
-  "32182": [
-    {
-      "talentSpellId": "193876",
-      "effect": "replace_spell",
-      "value": 8,
-      "sourceRowId": "301624"
     }
   ],
   "32375": [
@@ -3158,22 +3142,6 @@
       "effect": "reduce_cd",
       "value": 5,
       "sourceRowId": "1012979"
-    }
-  ],
-  "204361": [
-    {
-      "talentSpellId": "193876",
-      "effect": "replace_spell",
-      "value": 8,
-      "sourceRowId": "301624"
-    }
-  ],
-  "204362": [
-    {
-      "talentSpellId": "193876",
-      "effect": "replace_spell",
-      "value": 8,
-      "sourceRowId": "301624"
     }
   ],
   "204596": [

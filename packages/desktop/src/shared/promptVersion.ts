@@ -450,5 +450,11 @@
  *  ≤ t, besides the 0.5 s slack) in every availability predicate — the
  *  cdAvailableAt family, the [RES] ledger, lastCastBefore, isAvailableAt —
  *  so the [RES] row under a cast line no longer lists that cast ready.
+ *  v232 (2026-09-30, triage G7-P9: res-readiness F-C20 + sync-burst F-S4,
+ *  ruling A′1 = A): Army of the Dead, Dark Transformation, Bloodlust 204361
+ *  and Heroism 204362 join the class rosters (loadout, [RES], kill-window
+ *  "ready", msw entered / ready); talentModifiers.json drops Shamanism's row
+ *  301624 (replace_spell → 8, no such spell), so the lusts are pressed
+ *  buttons, not procs; datagen rejects such rows.
  */
-export const PROMPT_VERSION = 231;
+export const PROMPT_VERSION = 232;

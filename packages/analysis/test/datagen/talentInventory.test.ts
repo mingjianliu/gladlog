@@ -261,3 +261,37 @@ describe("category-cooldown and label SpellMods (GH #96 M6)", () => {
     expect(compileCooldownModifiers(inv, base.trackedSpellIds)).toEqual({});
   });
 });
+
+// Triage 2026-09-29 res-readiness F-C20 / G7-P9: an aura-332 override whose
+// base points are not a spell (Shamanism 193876 row 301624, value 8) must not
+// become a replace_spell — it turned every Bloodlust / Heroism id proc-only.
+describe("replace_spell must name a real spell (G7-P9)", () => {
+  const inv = {
+    meta: { maxTriggerHops: 0, truncatedTriggerEdges: 0 },
+    classFamily: {},
+    rows: [
+      {
+        rowId: "301624",
+        spellId: "193876",
+        effectIndex: 1,
+        effect: 6,
+        aura: 332,
+        misc0: 0,
+        basePoints: 8,
+        pvpMultiplier: 1,
+        schoolMask: 0,
+        masks: [0, 64, 0, 0],
+        targets: [{ spellId: "204361", via: "mask" as const }],
+        activation: "passive" as const,
+      },
+    ],
+    edges: [
+      { talentSpellId: "193876", spellId: "193876", hop: 0, path: "pvp" as const, classId: 7 },
+    ],
+    chargedSpellIds: new Set<string>(),
+  };
+  it("dropped when the SpellName table has no such spell; kept without the table (synthetic tests)", () => {
+    expect(compileCooldownModifiers(inv, new Set(["204361"]), new Set(["204361", "2825"]))).toEqual({});
+    expect(compileCooldownModifiers(inv, new Set(["204361"]))["204361"]?.[0]?.effect).toBe("replace_spell");
+  });
+});

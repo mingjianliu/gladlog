@@ -160,6 +160,13 @@ export const classMetadata: IClassSpellMetadata[] = [
       a("51271", "Pillar of Frost", O),
       a("47568", "Empower Rune Weapon", O),
       a("275699", "Apocalypse", O),
+      // Triage 2026-09-29 res-readiness F-C20 × sync-burst F-S4 (user ruling
+      // A′1 = A, 2026-09-30; G7-P9): in OFFENSIVE_CD_SPELL_IDS already, but no
+      // roster listed them, so msw's `entered` / `ready` never saw an Army
+      // covering a lock (82a2d681 @33). DB2 cooldowns: Army 90 s, DT 45 s.
+      // Unholy talents (in 252's tree only): other specs need cast evidence.
+      a("42650", "Army of the Dead", O),
+      a("1233448", "Dark Transformation", O),
       a("207289", "Unholy Assault", O),
       a("221562", "Asphyxiate", C),
       a("207167", "Blinding Sleet", C),
@@ -177,6 +184,12 @@ export const classMetadata: IClassSpellMetadata[] = [
       a("98008", "Spirit Link Totem", D),
       a("114050", "Ascendance", O),
       a("114051", "Ascendance", O),
+      // G7-P9 (A′1 = A): the Shamanism PvP-talent lusts players actually press
+      // (DB2 RecoveryTime 60 s; every-6 archive: 6,947 presses, gap median
+      // 67.1 s). The base 2825 / 32182 are never cast in arena. Not in any
+      // talent tree: a Shaman needs cast evidence to own them.
+      a("204361", "Bloodlust", O),
+      a("204362", "Heroism", O),
       a("51514", "Hex", C),
       a("305483", "Lightning Lasso", C), // W1g 2026-09-25: control kit a player cast in the corpus (DB2 control mechanic, ≥ 30 s cooldown) that no roster listed
       a("192058", "Capacitor Totem", C), // W1g 2026-09-25: cast id (was the aura id, which is never cast — the ledger's cast-evidence gate never admitted it)

@@ -452,6 +452,14 @@ export function buildTalentInventory(input: {
 export function compileCooldownModifiers(
   inv: ITalentInventory,
   trackedSpellIds: ReadonlySet<string>,
+  /**
+   * Spell ids with a SpellName row. When given, a `replace_spell` whose value
+   * is not one of them is rejected (triage 2026-09-29 res-readiness F-C20,
+   * G7-P9): Shamanism 193876's aura-332 row 301624 carries base points 8 —
+   * no such spell — and made every Bloodlust / Heroism id a proc-only
+   * button, although the corpus shows 6,947 presses with the 60 s cooldown.
+   */
+  knownSpellIds?: ReadonlySet<string>,
 ): Record<string, ICDModifier[]> {
   const hop0 = new Set(
     inv.edges.filter((e) => e.hop === 0).map((e) => e.spellId),
@@ -544,6 +552,16 @@ export function compileCooldownModifiers(
       type = "replace_spell";
     }
     if (!type) continue;
+    if (
+      type === "replace_spell" &&
+      knownSpellIds !== undefined &&
+      !knownSpellIds.has(String(value))
+    ) {
+      console.warn(
+        `[talentInventory] replace_spell with no such spell dropped: talent=${row.spellId} row=${row.rowId ?? "?"} value=${value}`,
+      );
+      continue;
+    }
     if (type !== "replace_spell" && row.activation === "whileAura") continue;
     // a no-op in the arena (base 0, or PvpMultiplier 0 = "off in PvP")
     if ((type === "reduce_cd" || type === "reduce_cd_pct") && value === 0)

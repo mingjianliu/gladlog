@@ -78,7 +78,12 @@ export function extractTalentModifiers(
     temporarySpellIds: temporarySourceIds,
     trackedSpellIds,
   });
-  return compileCooldownModifiers(inventory, trackedSpellIds);
+  // G7-P9: a replace_spell must name a real spell (SpellName row) — only
+  // checked when the caller supplies the table (synthetic tests may not)
+  const knownSpellIds = _spellNameRows.length
+    ? new Set(_spellNameRows.map((r) => r.ID ?? "").filter(Boolean))
+    : undefined;
+  return compileCooldownModifiers(inventory, trackedSpellIds, knownSpellIds);
 }
 
 export async function main(): Promise<void> {
