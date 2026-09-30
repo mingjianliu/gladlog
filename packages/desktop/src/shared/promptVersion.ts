@@ -336,5 +336,9 @@
  *  mask, else the DB2 absorb mask — so Anti-Magic Shell (0x7e) is a ready
  *  save only for a crisis at least half magic. 605 files: cd-hoarded −7 / +3
  *  (cap substitutions), 1 line loses AMS.
+ *  v207 (2026-09-30, triage G7-P1: enemy-def F-E10b + missed-cleanse F-P4):
+ *  Heroism 204362 (the Alliance PvP-talent twin of Bloodlust 204361) is an
+ *  offensive buff in SPELL_CATEGORIES — enemy Heroism renders as [ENEMY CD]
+ *  and feeds the offensive windows; a purge of it is High ([ENEMY PURGE]).
  */
-export const PROMPT_VERSION = 206;
+export const PROMPT_VERSION = 207;

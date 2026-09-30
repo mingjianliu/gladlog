@@ -302,6 +302,10 @@ export const SPELL_CATEGORIES: Record<string, ISpellCategoryEntry> = {
   "41635": { type: "buffs_defensive" }, // Prayer of Mending(牧师,180 段)——弹射治疗
   "81700": { type: "buffs_offensive" }, // Archangel(戒律,140 段)——治疗量爆发
   "204361": { type: "buffs_offensive" }, // Bloodlust(69 段)——急速爆发
+  // Heroism:204361 的联盟侧 PvP 天赋孪生(同一法术另一阵营)。曾漏登 → 敌方英勇
+  // 从不出 [ENEMY CD]、被驱散时折叠成 Low(triage 2026-09-29 enemy-def F-E10b ×
+  // missed-cleanse F-P4,14055cb2 / 2abc9185 实测;语料 observed)。
+  "204362": { type: "buffs_offensive" }, // Heroism(PvP 天赋)——急速爆发
   // Decided 2026-07-22: missed cleanse only takes "discrete active
   // cooldowns", not permanent HoTs/shields (opening it up to permanent auras
   // measured 103 -> 892 rows, 59% of which was Rejuvenation-class noise --
