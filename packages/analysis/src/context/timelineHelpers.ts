@@ -293,10 +293,18 @@ export interface ICDExpiryEvent {
    * these stops the model from inventing a dispel for a naturally-expired buff and lets it tell a
    * consumed absorb (e.g. Life Cocoon) from an expired one.
    */
-  cause: "expired" | "ended_early" | "form_shift";
+  cause: "expired" | "ended_early" | "form_shift" | "death";
 }
 
 const FORM_SHIFT_PAIR_MS = 250;
+/**
+ * Triage 2026-09-29 death-kill F-B1: a buff removed from the OWNER this
+ * shortly before the owner's UNIT_DIED was stripped by the death cascade —
+ * neither dispelled nor ended by a shapeshift. Editorial (measured, not a
+ * game constant): repro gaps 7–45 ms (bd790c92, 121c7e15, 6062daf2); the
+ * nearest non-cascade removal is 390 ms (0e0663e6 Pillar of Frost).
+ */
+export const DEATH_CASCADE_MS = 100;
 
 // 2026-08-21 S2 corpus scan (10,682 matches): removed Zen Meditation 115176; 421116 was a "Push Loot [DNT]" placeholder, not Ultimate Penitence (421453 is the real id) — 0 occurrences, ability gone in 12.x (eval-private/reports/s2-health-2026-08-21)
 export const CHANNELED_CD_SPELL_IDS = new Set<string>([
@@ -357,8 +365,11 @@ export function extractOwnerCDBuffExpiry(
    * dropping every talent-lengthened duration back to its base value.
    */
   owner?: Pick<ICombatUnit, "spec" | "info" | "spellCastEvents"> &
-    Partial<Pick<ICombatUnit, "auraEvents">>,
+    Partial<Pick<ICombatUnit, "auraEvents" | "deathRecords" | "id">>,
 ): ICDExpiryEvent[] {
+  const ownerDeathsMs = (owner?.deathRecords ?? []).map(
+    (d) => d.timestamp as number,
+  );
   // Owner's own form removals (ms) — a buff removed at the same instant was
   // ended by the shapeshift, not dispelled or consumed.
   const formRemovalsMs = (owner?.auraEvents ?? [])
@@ -401,7 +412,9 @@ export function extractOwnerCDBuffExpiry(
 
     // Collect all SPELL_AURA_REMOVED timestamps for this spell cast by the owner,
     // across all friendly units, sorted ascending.
-    const removalTimestampsMs: number[] = [];
+    // the recipient travels with each removal (codex c2 09-30): only a
+    // removal from the owner can be the owner's death cascade
+    const removals: Array<{ ms: number; unitId: string }> = [];
     for (const friend of friends) {
       // a same-ms REMOVED→APPLIED re-broadcast is not the buff ending (3306:
       // "Obsidian Scales ended early" on a Dracthyr visage swap)
@@ -412,11 +425,15 @@ export function extractOwnerCDBuffExpiry(
           event.srcUnitId === ownerId &&
           (event.logLine.event as LogEvent) === LogEvent.SPELL_AURA_REMOVED
         ) {
-          removalTimestampsMs.push(event.logLine.timestamp as number);
+          removals.push({
+            ms: event.logLine.timestamp as number,
+            unitId: friend.id,
+          });
         }
       }
     }
-    removalTimestampsMs.sort((a, b) => a - b);
+    removals.sort((a, b) => a.ms - b.ms);
+    const removalTimestampsMs = removals.map((r) => r.ms);
 
     // Match each cast (ascending) to the chronologically-next removal after the cast.
     let removalIndex = 0;
@@ -461,10 +478,12 @@ export function extractOwnerCDBuffExpiry(
             castMs + (duration + BUFF_EXPIRY_PAIRING_TOLERANCE_S) * 1000,
           );
 
+      let removedFromId: string | undefined;
       if (withinWindow) {
         expiresAtSeconds =
           (removalTimestampsMs[removalIndex] - matchStartMs) / 1000;
         isEstimated = false;
+        removedFromId = removals[removalIndex]!.unitId;
         removalIndex++;
       } else {
         expiresAtSeconds = cast.timeSeconds + duration;
@@ -487,6 +506,20 @@ export function extractOwnerCDBuffExpiry(
         expiresAtSeconds < naturalEndSeconds - BUFF_FADE_EARLY_TOLERANCE_S
           ? "ended_early"
           : "expired";
+      // F-B1 (triage death-kill): removed from the owner and the owner died
+      // within DEATH_CASCADE_MS after — the death stripped it. Checked before
+      // the shapeshift reading.
+      const removedMsForDeath = matchStartMs + expiresAtSeconds * 1000;
+      if (
+        !isEstimated &&
+        removedFromId !== undefined &&
+        removedFromId === (owner?.id ?? ownerId) &&
+        ownerDeathsMs.some(
+          (d) =>
+            d >= removedMsForDeath && d - removedMsForDeath <= DEATH_CASCADE_MS,
+        )
+      )
+        cause = "death";
       // Only a form-bound buff on the owner: the removal must be in the
       // owner's own aura events (dest = owner) and the spell one that cannot
       // outlive the form (FORM_BOUND_BUFF_IDS); then a form removal within

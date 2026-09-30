@@ -66,6 +66,33 @@ describe("[BUFF FADED] — a buff removed with the druid's own form is 'form_shi
     const b = extractOwnerCDBuffExpiry(cds, "player-1", [noForm], T0, noForm);
     expect(b.map((e) => e.cause)).toEqual(["ended_early"]);
   });
+  // triage 2026-09-29 death-kill F-B1: the death cascade
+  it("F-B1: removed from the owner ≤ 100 ms before the owner's death → death (before the form reading)", () => {
+    const withForm = druid(true);
+    (withForm as { deathRecords: unknown[] }).deathRecords = [{ timestamp: T0 + 10_445 }];
+    const r = extractOwnerCDBuffExpiry(cds, "player-1", [withForm], T0, withForm);
+    expect(r.map((e) => e.cause)).toEqual(["death"]);
+    const late = druid(false);
+    (late as { deathRecords: unknown[] }).deathRecords = [{ timestamp: T0 + 10_790 }];
+    expect(extractOwnerCDBuffExpiry(cds, "player-1", [late], T0, late).map((e) => e.cause)).toEqual(["ended_early"]);
+  });
+  it("F-B1 negative (codex c2): an owner-cast external removed from a TEAMMATE just before the owner dies stays ended_early", () => {
+    const owner = druid(false);
+    (owner as { deathRecords: unknown[] }).deathRecords = [{ timestamp: T0 + 10_450 }];
+    const mate = makeUnit("player-2", {
+      class: CombatUnitClass.Warrior,
+      spec: CombatUnitSpec.Warrior_Arms,
+      auraEvents: [
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "102342", T0 + 10_000, "player-1", "player-2", "BUFF"),
+        makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, "102342", T0 + 10_400, "player-1", "player-2", "BUFF"),
+      ],
+    }) as ICombatUnit;
+    const ironbark = [
+      { spellId: "102342", spellName: "Ironbark", tag: "Defensive", casts: [{ timeSeconds: 10 }], cooldownSeconds: 90, neverUsed: false, availableWindows: [] },
+    ] as never;
+    const r = extractOwnerCDBuffExpiry(ironbark, "player-1", [owner, mate], T0, owner);
+    expect(r.map((e) => e.cause)).toEqual(["ended_early"]);
+  });
 });
 
 describe("SPEC BASELINES names the owner's rating against the reference bracket", () => {

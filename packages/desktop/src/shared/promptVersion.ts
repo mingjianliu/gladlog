@@ -420,5 +420,9 @@
  *  aura is named only when DB2 marks it interrupt-immune and it covered the
  *  miss (shared pairing `buildAuraIntervals`); two at once are both named
  *  ("A + B"); none known = bare IMMUNE.
+ *  v225 (2026-09-30, triage death-kill F-B1): a [BUFF FADED] buff removed
+ *  from the owner ≤ DEATH_CASCADE_MS (100 ms, editorial) before the owner's
+ *  death reads `(removed at your death)`, not "ended early" / "own
+ *  shapeshift"; a removal from a teammate keeps its cause (codex c2).
  */
-export const PROMPT_VERSION = 224;
+export const PROMPT_VERSION = 225;

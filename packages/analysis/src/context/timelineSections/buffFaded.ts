@@ -20,7 +20,9 @@ export function emitBuffFadedEntries(
     // and can tell a consumed absorb (ended early) from an expired one. "(estimated)" is retained for
     // expiries inferred from duration (no removal event logged).
     const causeNote =
-      expiry.cause === "form_shift"
+      expiry.cause === "death"
+        ? " (removed at your death)"
+        : expiry.cause === "form_shift"
         ? " (ended by your own shapeshift)"
         : expiry.cause === "ended_early"
           ? " (ended early — absorbed, dispelled, or cancelled)"
