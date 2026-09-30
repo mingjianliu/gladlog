@@ -59,6 +59,60 @@ describe("groundedControls (7d1f)", () => {
     expect(out).toHaveLength(1);
     expect(out[0]).toMatchObject({ casterId: "Player-M", spellId: "118" });
   });
+
+  it("F-E27: a trap eaten by the totem (IMMUNE miss, no cast aimed at it) is stated — the owner's too", () => {
+    // c2058ed4 L5985: Freezing Trap cast 187650 has no destination; the only
+    // trace is `SPELL_MISSED … Grounding Totem … 3355 IMMUNE`.
+    const trapMiss = (s: number) => ({
+      spellId: "3355",
+      spellName: "冰冻陷阱",
+      destUnitId: TOTEM,
+      missType: "IMMUNE",
+      logLine: { timestamp: T0 + s * 1000 },
+    });
+    const hunter = unit("Player-H", {
+      spellCastEvents: [cast("187650", 53.9, "")],
+      missesOut: [trapMiss(54.407), trapMiss(115.204)],
+    });
+    const out = groundedControls([hunter], T0, new Set(["Player-H"]));
+    expect(out.map((g) => [g.spellId, g.spellName, g.atSeconds])).toEqual([
+      ["3355", "Freezing Trap", 54.407],
+      ["3355", "Freezing Trap", 115.204],
+    ]);
+  });
+
+  it("F-E27: a miss following the caster's own cast into that totem is the same redirect", () => {
+    const mage = unit("Player-M", {
+      spellCastEvents: [cast("118", 6.4, TOTEM)],
+      missesOut: [
+        {
+          spellId: "118",
+          destUnitId: TOTEM,
+          missType: "IMMUNE",
+          logLine: { timestamp: T0 + 7_000 },
+        },
+      ],
+    });
+    expect(groundedControls([mage], T0, new Set())).toHaveLength(1);
+  });
+
+  it("F-E27 (codex review): a cast and its miss logged under another id of the same spell are one redirect", () => {
+    // Fear: cast 5782 into the totem, the IMMUNE miss on the aura id 118699
+    const lock = unit("Player-W", {
+      spellCastEvents: [cast("5782", 10, TOTEM)],
+      missesOut: [
+        {
+          spellId: "118699",
+          destUnitId: TOTEM,
+          missType: "IMMUNE",
+          logLine: { timestamp: T0 + 10_100 },
+        },
+      ],
+    });
+    const out = groundedControls([lock], T0, new Set());
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ spellId: "5782" });
+  });
 });
 
 describe("reflectedSpells (0051f0c9)", () => {

@@ -346,5 +346,9 @@
  *  a Spirit of Redemption carrying Divine Hymn gets no `cheaper available:`;
  *  KILL WINDOW free ≤ window; aura cap ranks offensive CDs; audit drops a
  *  finding with no string title/explanation. Numbers in the commit.
+ *  v209 (2026-09-30, triage enemy-def F-E27): a control that reaches a
+ *  Grounding Totem as an IMMUNE miss with no cast aimed at the totem (a
+ *  trap) is a redirect too (`groundingRedirects`, shared by [GROUNDED] and
+ *  the shaman's [CC AVOIDED?] credit).
  */
-export const PROMPT_VERSION = 208;
+export const PROMPT_VERSION = 209;

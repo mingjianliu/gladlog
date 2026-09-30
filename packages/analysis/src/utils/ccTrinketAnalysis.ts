@@ -54,6 +54,7 @@ import {
   INTERP_MAX_GAP_MS,
   LOS_SWEEP_GAP_MS,
 } from "./positionSampling";
+import { groundingRedirects as groundingRedirectsOf } from "./groundingRedirects";
 import { fmtTime } from "./renderGrid";
 import { spellRangeForCaster } from "./spellRange";
 import { medianFinite } from "./stats";
@@ -1854,15 +1855,16 @@ export function analyzePlayerCCAndTrinket(
       )
       .map((e) => e.logLine.timestamp);
     for (const enemy of enemies) {
-      for (const cast of enemy.spellCastEvents) {
-        if (cast.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
-        if (!cast.spellId || !ccSpellIds.has(cast.spellId)) continue;
-
-        const isGroundingTotem =
-          cast.destUnitName?.toLowerCase().includes("grounding totem") ||
-          (cast.destUnitId?.startsWith("Creature-") &&
-            cast.destUnitId.split("-")[5] === "5925");
-        if (isGroundingTotem && !landedOnPlayer(cast)) {
+      // F-E27: the shared redirect predicate — a cast aimed at the totem, or
+      // an IMMUNE miss on it with no such cast (a trap has no destination).
+      for (const g of groundingRedirectsOf(enemy)) {
+        if (!ccSpellIds.has(g.spellId)) continue;
+        const cast = {
+          spellId: g.spellId,
+          spellName: g.spellName,
+          logLine: { timestamp: g.timestampMs },
+        };
+        if (!landedOnPlayer(cast)) {
           const castTimeMs = cast.logLine.timestamp;
           if (
             !ownGroundingCastsMs.some(

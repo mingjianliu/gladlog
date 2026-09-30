@@ -16,8 +16,8 @@ import { ccSpellIds } from "../data/spellTags";
 import { getSortedAdvancedActions } from "../utils/advancedActions";
 import { binarySearchClosest } from "../utils/binarySearch";
 import { PVP_TRINKET_SPELL_IDS } from "../utils/killWindowTargetSelection";
+import { groundingRedirects } from "../utils/groundingRedirects";
 import type { CastFailedEvent } from "../utils/rawStreams";
-import { GROUNDING_TOTEM_NPC_ID, getNpcIdFromGuid } from "./timelineHelpers";
 
 /** A control: the official hard-CC set or a root ("控制要写"). */
 export function isControlSpell(spellId: string): boolean {
@@ -35,15 +35,19 @@ export interface IGroundedCc {
   totemId: string;
 }
 
-/** Every control cast whose destination was a Grounding Totem — the log's
- *  own statement that the server redirected it (7d1f: a Cyclone and a
- *  Polymorph). Whether it then landed on the totem is not always logged: a
- *  Hammer of Justice into a totem leaves no SPELL_MISSED and totem deaths are
- *  never logged (0 in 200 files, 2026-09-27) — so the line says "redirected
- *  into", not "eaten" (codex review of batch 13: a projectile can outlive the
- *  totem; requiring the miss line dropped 115 of 504 true redirects).
- *  `skipCasterIds`: the log owner's own casts already carry "[absorbed:
- *  Grounding Totem]". */
+/** Every control that went into a Grounding Totem — a cast aimed at it (the
+ *  log's own statement that the server redirected it; 7d1f: a Cyclone and a
+ *  Polymorph), or an IMMUNE miss on it with no such cast (a trap has no cast
+ *  destination: c2058ed4's Freezing Trap, triage F-E27). One predicate:
+ *  `groundingRedirects`, shared with the shaman's `[CC AVOIDED?]` credit.
+ *  Whether a redirected cast then landed on the totem is not always logged:
+ *  a Hammer of Justice into a totem leaves no SPELL_MISSED and totem deaths
+ *  are never logged (0 in 200 files, 2026-09-27) — so the line says
+ *  "redirected into", not "eaten" (codex review of batch 13: a projectile can
+ *  outlive the totem; requiring the miss line dropped 115 of 504 true
+ *  redirects). `skipCasterIds`: the log owner's own targeted casts already
+ *  carry "[absorbed: Grounding Totem]" — the miss-only shape carries nothing
+ *  there, so it is kept for the owner too. */
 export function groundedControls(
   units: readonly ICombatUnit[],
   matchStartMs: number,
@@ -51,19 +55,16 @@ export function groundedControls(
 ): IGroundedCc[] {
   const out: IGroundedCc[] = [];
   for (const u of units) {
-    if (skipCasterIds.has(u.id)) continue;
-    for (const c of u.spellCastEvents ?? []) {
-      if (c.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
-      if (!c.spellId || !isControlSpell(c.spellId)) continue;
-      if (getNpcIdFromGuid(c.destUnitId ?? "") !== GROUNDING_TOTEM_NPC_ID)
-        continue;
+    for (const g of groundingRedirects(u)) {
+      if (g.via === "cast" && skipCasterIds.has(u.id)) continue;
+      if (!isControlSpell(g.spellId)) continue;
       out.push({
-        atSeconds: (c.logLine.timestamp - matchStartMs) / 1000,
+        atSeconds: (g.timestampMs - matchStartMs) / 1000,
         casterId: u.id,
         casterName: u.name,
-        spellId: c.spellId,
-        spellName: getEnglishSpellName(c.spellId, c.spellName),
-        totemId: c.destUnitId!,
+        spellId: g.spellId,
+        spellName: getEnglishSpellName(g.spellId, g.spellName),
+        totemId: g.totemId,
       });
     }
   }
