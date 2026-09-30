@@ -134,6 +134,7 @@ describe("externalDamage — damage kept on a target under an ally-applied exter
       nPeriodic: 10_000,
       dAll: 120_000,
       preDirect: 50_000,
+      prePeriodic: 0,
       kind: "continues",
     });
     expect(o!.X).toBeCloseTo(83.33, 1);
@@ -145,17 +146,23 @@ describe("externalDamage — damage kept on a target under an ally-applied exter
     );
   });
 
-  it("an ally without a direct hit in the PRE_HIT_S before the application does not qualify", () => {
+  it("an ally without a hit on the target in the PRE_HIT_S before the application does not qualify", () => {
     const e1 = enemy("E1", psOn("E1"));
     const late = ally("A2", [
       dmg(LogEvent.SPELL_DAMAGE, 20 - EXTERNAL_DAMAGE_PRE_HIT_S - 0.5, "E1", 50_000),
       dmg(LogEvent.SPELL_DAMAGE, 22, "E1", 30_000),
     ]);
+    expect(externalDamageObservations(e1, [late], [e1], combat)).toEqual([]);
+  });
+
+  it("F-E14 (A30, 2026-09-30): a periodic hit in the PRE_HIT_S qualifies — a DoT ticking is the ally hitting the target", () => {
+    const e1 = enemy("E1", psOn("E1"));
     const dotOnly = ally("A3", [
-      dmg(LogEvent.SPELL_PERIODIC_DAMAGE, 19, "E1", 50_000), // periodic pre-hit does not qualify
+      dmg(LogEvent.SPELL_PERIODIC_DAMAGE, 19, "E1", 50_000),
       dmg(LogEvent.SPELL_DAMAGE, 22, "E1", 30_000),
     ]);
-    expect(externalDamageObservations(e1, [late, dotOnly], [e1], combat)).toEqual([]);
+    const [o] = externalDamageObservations(e1, [dotOnly], [e1], combat);
+    expect(o).toMatchObject({ allyId: "A3", preDirect: 0, prePeriodic: 50_000, nDirect: 30_000 });
   });
 
   it("a qualifying ally with no damage on anyone in the window is the 'empty' shape", () => {

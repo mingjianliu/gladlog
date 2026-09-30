@@ -350,5 +350,9 @@
  *  Grounding Totem as an IMMUNE miss with no cast aimed at the totem (a
  *  trap) is a redirect too (`groundingRedirects`, shared by [GROUNDED] and
  *  the shaman's [CC AVOIDED?] credit).
+ *  v210 (2026-09-30, triage enemy-def F-E14, ruling A30): a friendly whose
+ *  only hits on the target in the 3 s before an ally-applied external were
+ *  periodic now qualifies for `[ENEMY DEF] … | during it:` (and the owner's
+ *  burst-into-mitigation `facts.duringExternal`).
  */
-export const PROMPT_VERSION = 209;
+export const PROMPT_VERSION = 210;

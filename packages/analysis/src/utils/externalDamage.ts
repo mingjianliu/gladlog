@@ -64,7 +64,11 @@ import { MITIGATION_TABLE, NO_MITIGATION_IDS } from "../data/mitigationData";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { buildAuraIntervals, type IAuraInterval } from "./auraIntervals";
 
-/** Seconds before the application in which a direct hit makes an ally "qualifying". */
+/** Seconds before the application in which a hit on the target makes an ally
+ *  "qualifying". Direct or periodic (user ruling 2026-09-30, A30 / triage
+ *  enemy-def F-E14): a DoT ticking on the target is the ally hitting it —
+ *  d4634bf1's owner had 5 periodic rows (20k) and 0 direct in the 3 s before
+ *  a Pain Suppression, then 117k absorbed inside it, and was left out. */
 export const EXTERNAL_DAMAGE_PRE_HIT_S = 3;
 /** K/M at or above this = the ally kept hitting through the external ("continues"). */
 export const EXTERNAL_DAMAGE_CONTINUES_SHARE = 0.5;
@@ -155,6 +159,8 @@ export interface IExternalDamageObservation {
   X: number | null;
   /** Direct damage on the target in the PRE_HIT_S before the application. */
   preDirect: number;
+  /** Periodic damage on the target in the same PRE_HIT_S (F-E14). */
+  prePeriodic: number;
   kind: ExternalDamageKind;
 }
 
@@ -215,6 +221,7 @@ export function externalDamageForApplication(
     const wTo = Math.min(wToTarget, Math.floor(aDeath ?? Infinity));
     if (wTo <= wFrom) continue;
     let preDirect = 0;
+    let prePeriodic = 0;
     let nDirect = 0;
     let nPeriodic = 0;
     let dAll = 0;
@@ -245,11 +252,12 @@ export function externalDamageForApplication(
       const onTarget = d.destUnitId === target.id;
       if (
         onTarget &&
-        DIRECT_EVENTS.has(ev) &&
         tS >= iv.fromS - EXTERNAL_DAMAGE_PRE_HIT_S &&
         tS < iv.fromS
-      )
-        preDirect += amt;
+      ) {
+        if (DIRECT_EVENTS.has(ev)) preDirect += amt;
+        else if (ev === PERIODIC_EVENT) prePeriodic += amt;
+      }
       if (tS < wFrom || tS >= wTo) continue;
       dAll += amt;
       if (!onTarget) continue;
@@ -260,7 +268,7 @@ export function externalDamageForApplication(
         inSchool += amt;
       if (amt >= EXTERNAL_DAMAGE_BIN_MIN_HIT) bins.add(Math.floor(tS));
     }
-    if (preDirect <= 0) continue; // not a qualifying ally
+    if (preDirect + prePeriodic <= 0) continue; // not a qualifying ally
     const M = wTo - wFrom;
     let G = 0;
     let run = 0;
@@ -294,6 +302,7 @@ export function externalDamageForApplication(
       absorbed,
       X: dAll > 0 ? (100 * (nDirect + nPeriodic)) / dAll : null,
       preDirect,
+      prePeriodic,
     };
     out.push({ ...base, kind: classifyExternalDamage(base) });
   }
