@@ -82,6 +82,7 @@ import {
   type IMissedPurgeWindow,
   reconstructDispelSummary,
 } from "../utils/dispelAnalysis";
+import { computeDampening } from "../utils/dampening";
 import { drResetMsAt } from "../utils/drAnalysis";
 import { reconstructEnemyCDTimeline } from "../utils/enemyCDs";
 import { kickCastSpellId } from "../utils/enemyInterrupts";
@@ -2811,6 +2812,8 @@ function teamPlayEvents(
           {
             lookup: (dmg2s) => lookupBehaviorPrior(bracket, "healer", dmg2s),
             majorWalls: majorWallsOnFor(combat)(owner),
+            dampeningAt: (tMs) =>
+              computeDampening(tMs, bracket, [...friends, ...enemies]),
           },
         ),
       );
@@ -2849,7 +2852,11 @@ function teamPlayEvents(
           crisisDecisionPoints(owner, combat, "dps"),
           owner,
           bracket,
-          { lookup: (dmg2s) => lookupBehaviorPrior(bracket, "dps", dmg2s) },
+          {
+            lookup: (dmg2s) => lookupBehaviorPrior(bracket, "dps", dmg2s),
+            dampeningAt: (tMs) =>
+              computeDampening(tMs, bracket, [...friends, ...enemies]),
+          },
         ),
       );
     } catch {

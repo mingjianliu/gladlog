@@ -179,3 +179,30 @@ describe("crisis-no-response: a major wall already up abstains (reliability audi
     expect(ev.map((e) => e.t)).toEqual([120.2, 150.1]);
   });
 });
+
+// crisis-external F-C1 (user ruling A48 = C, 2026-09-30): facts only — the
+// predicate and the reference are untouched, the line says what was pressed.
+describe("crisis-no-response — what the owner did press (F-C1)", () => {
+  it("carries the fresh self-heal %, its cast count and the dampening at the crossing", () => {
+    const [ev] = crisisNoResponseEvents(
+      [pt({ tMs: 228_000, selfHealFreshPct: 4, selfHealCasts: 2 })],
+      owner,
+      "3v3",
+      { ...probes, dampeningAt: (tMs) => (tMs === 228_000 ? 0.79 : 0) },
+    );
+    expect(ev!.facts).toMatchObject({
+      selfHealPct: "4",
+      selfHealCasts: "2",
+      dampeningPct: "79",
+    });
+    // the id and every reference fact are what they were
+    expect(ev!.id).toBe("crisis-no-response:H:72");
+    expect(ev!.facts.refDeathNoResp).toBe("22");
+  });
+
+  it("a point without the fields (hand-built) and a call without the probe render neither fact", () => {
+    const [ev] = crisisNoResponseEvents([pt()], owner, "3v3", probes);
+    expect("selfHealPct" in ev!.facts).toBe(false);
+    expect("dampeningPct" in ev!.facts).toBe(false);
+  });
+});

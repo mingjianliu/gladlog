@@ -181,6 +181,17 @@ export interface DecisionPoint {
    * name — for the "you auto-triggered X" phrasing; empty when none */
   procNames: string[];
   selfHealPct: number;
+  /** `selfHealFresh` as a whole percent of max HP — the value the `selfHeal`
+   * response test compares with SELF_HEAL_BIG: heals from spells the owner
+   * pressed inside the window, a proc's healing and HoTs already ticking
+   * excluded (GH #93). Not `selfHealPct`, which counts all of those. Floored,
+   * not rounded: 14.6 % is not a response and must not print as 15 on a line
+   * that says the bar is 15.
+   * Optional (as `dmg2sBySchool`) so hand-built fixtures need not carry it. */
+  selfHealFreshPct?: number;
+  /** How many of the owner's presses in the window healed the owner in it —
+   * the presses behind `selfHealFreshPct` (crisis-external F-C1). */
+  selfHealCasts?: number;
   /** gate 3, "has a tool" (spec §1d, GH #59): trivially true for a healer
    * (self-heal always exists). For a DPS owner: `!rooted || wallReady ||
    * controlReady` — not rooted (still free to move/act), or a personal wall
@@ -1054,6 +1065,11 @@ export function crisisDecisionPoints(
       responded,
       procNames: [...new Set(procsIn.map((m) => m.name))],
       selfHealPct: Math.round(selfHeal * 100),
+      selfHealFreshPct: Math.floor(selfHealFresh * 100),
+      selfHealCasts: castsIn.filter(
+        (c) =>
+          !procHealIds.has(c.id) && ownHealInWin.some((h) => h.id === c.id),
+      ).length,
       hasTool,
       feasible: !inCC && !lockedOut && !diedInWindow && hasTool,
     });

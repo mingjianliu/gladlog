@@ -409,5 +409,10 @@
  *  lists every permanent pet a warlock ran, in order (`Sayaad — …; Felhunter
  *  from 0:36 — …`), from Pet- GUIDs only — a temporary Creature- summon no
  *  longer names the pet.
+ *  v223 (2026-10-01, triage crisis-external F-C1, ruling A48 = C):
+ *  crisis-no-response says "did not answer it by this measure", not "did
+ *  NOTHING", and its facts carry what the owner pressed — selfHealPct (fresh
+ *  self-heal landed, % of max HP), selfHealCasts and dampeningPct. Predicate,
+ *  ids and the reference table unchanged.
  */
-export const PROMPT_VERSION = 222;
+export const PROMPT_VERSION = 223;

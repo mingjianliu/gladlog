@@ -32,6 +32,9 @@ export function crisisNoResponseEvents(
     /** Major walls friendlies had up on the owner (`majorWallIntervals`,
      * seconds). A crossing inside one abstains (A2b below); absent = none. */
     majorWalls?: ReadonlyArray<{ fromS: number; toS: number }>;
+    /** Dampening (0–1) at a crossing's instant (`computeDampening`), for the
+     * `dampeningPct` fact; absent = the fact is not rendered. */
+    dampeningAt?: (tMs: number) => number;
   },
   overrides?: { cap?: number },
 ): CandidateEvent[] {
@@ -168,6 +171,21 @@ export function crisisNoResponseEvents(
         refTop: ref.top.map(([k, v]) => `${k} ${v}%`).join("; "), // "; " — ", " is the facts separator the gate splits on
         cellKey: ref.cellKey,
         fellBack: ref.fellBack ? "yes" : "no",
+        // crisis-external F-C1 (user ruling A48 = C, 2026-09-30): what the
+        // owner DID press — the predicate and the reference table are
+        // unchanged, the line just stops hiding two self-heals that landed
+        // 4 % into 79 % dampening (bd790c92 3:48) behind "did NOTHING".
+        ...(p.selfHealFreshPct !== undefined && p.selfHealCasts !== undefined
+          ? {
+              selfHealPct: String(p.selfHealFreshPct),
+              selfHealCasts: String(p.selfHealCasts),
+            }
+          : {}),
+        ...(probes.dampeningAt
+          ? {
+              dampeningPct: String(Math.round(probes.dampeningAt(p.tMs) * 100)),
+            }
+          : {}),
       },
     });
   }

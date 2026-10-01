@@ -488,6 +488,12 @@ describe("crisis-no-response 图例(spec 2026-08-29 §1b,GH #58):条件渲染 + 
       /For DPS the counted outcome is always "this player died within 10 s" \(DPS are the kill target\); for healers in Solo Shuffle it is a teammate's death within 15 s\./,
     );
     expect(p).toMatch(/not causal proof/);
+    // crisis-external F-C1 (ruling A48 = C): "did NOTHING" is gone — the line
+    // says what the measure is and what the player did press.
+    expect(p).not.toMatch(/did NOTHING/);
+    expect(p).toContain(
+      "did not answer it by this measure — no self-heal that reached 15% of max HP (facts.selfHealPct% landed from facts.selfHealCasts self-heal casts at facts.dampeningPct% dampening)",
+    );
   });
 
   it("图例说明两种结果口径(spec §1c):ownDeath10s = 本人 10 秒内阵亡,teamDeath15s = 含本人在内任意队友 15 秒内阵亡(单排常见击杀目标是队友)", () => {

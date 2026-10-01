@@ -126,6 +126,70 @@ describe("crisisDecisionPoints", () => {
     expect(p.responses.carriedHeal).toBe(false);
     expect(p.selfHealPct).toBe(20);
     expect(p.responded).toBe(true);
+    // crisis-external F-C1: the value the test above compares, and its presses
+    expect(p.selfHealFreshPct).toBe(20);
+    expect(p.selfHealCasts).toBe(1);
+  });
+
+  // crisis-external F-C1 (ruling A48 = C): bd790c92 3:48 — two self-heals
+  // pressed in the window landed 4 % of max HP into 79 % dampening. Not a
+  // response (unchanged), but the point says what was pressed.
+  it("two small self-heals in the window: not a selfHeal response, selfHealFreshPct / selfHealCasts report them; a HoT already ticking is in neither", () => {
+    const o = unit({
+      spellCastEvents: [
+        { timestamp: T0 + 1800, spellId: "774" },
+        { timestamp: T0 + 3200, spellId: "18562" },
+      ],
+      healIn: [
+        {
+          timestamp: T0 + 2200,
+          srcUnitId: "H",
+          spellId: "774",
+          amount: 2,
+          effectiveAmount: 2,
+        },
+        {
+          timestamp: T0 + 3300,
+          srcUnitId: "H",
+          spellId: "18562",
+          amount: 2,
+          effectiveAmount: 2,
+        },
+        // a HoT pressed long before the window keeps ticking
+        {
+          timestamp: T0 + 2600,
+          srcUnitId: "H",
+          spellId: "33763",
+          amount: 3,
+          effectiveAmount: 3,
+        },
+      ],
+    });
+    const p = crisisDecisionPoints(o, combat(o))[0]!;
+    expect(p.responses.selfHeal).toBe(false);
+    expect(p.selfHealFreshPct).toBe(4);
+    expect(p.selfHealCasts).toBe(2);
+    expect(p.selfHealPct).toBe(7); // all own healing, the carried HoT included
+  });
+
+  // The rendered % sits on a line that names the 15 % bar, so it is floored:
+  // 14.6 % is not a response and must not read 15.
+  it("selfHealFreshPct is floored to the bar's grid: 14.6 % of max HP reads 14, and is not a selfHeal response", () => {
+    const o = unit({
+      spellCastEvents: [{ timestamp: T0 + 1800, spellId: "18562" }],
+      healIn: [
+        {
+          timestamp: T0 + 2200,
+          srcUnitId: "H",
+          spellId: "18562",
+          amount: 14.6,
+          effectiveAmount: 14.6,
+        },
+      ],
+    });
+    const p = crisisDecisionPoints(o, combat(o))[0]!;
+    expect(p.responses.selfHeal).toBe(false);
+    expect(p.selfHealFreshPct).toBe(14);
   });
 
   // BACKLOG #43 (user ruling 2026-09-14/17): a low-HP talent proc answers the
