@@ -31,6 +31,7 @@ import {
   isSelfOnlyDefensive,
   isTeamHealCD,
   MAJOR_DEFENSIVE_IDS,
+  rendersOnCaster,
   specToString,
   THROUGHPUT_EMPOWER_DEFENSIVE_IDS,
 } from "../../src/utils/cooldowns";
@@ -2233,6 +2234,30 @@ describe("isSelfOnlyDefensive", () => {
     }
     expect(isSelfOnlyDefensive("12345")).toBe(false);
     expect(MAJOR_DEFENSIVE_IDS.has("12345")).toBe(false);
+  });
+});
+
+// ─── rendersOnCaster (triage 2026-09-29, hp-state F-S1) ───────────────────────
+
+describe("rendersOnCaster", () => {
+  it("covers every self-only big defensive", () => {
+    for (const id of ["22812", "642", "45438"]) {
+      expect(isSelfOnlyDefensive(id)).toBe(true);
+      expect(rendersOnCaster(id)).toBe(true);
+    }
+  });
+
+  it("adds an officially self-only Defensive outside the big-defensive roster", () => {
+    // Survival of the Fittest: the cast line names the hunter's current target
+    expect(isSelfOnlyDefensive("264735")).toBe(false);
+    expect(rendersOnCaster("264735")).toBe(true);
+  });
+
+  it("stays false for an external and for a cooldown outside the static catalog", () => {
+    expect(rendersOnCaster("33206")).toBe(false); // Pain Suppression
+    expect(rendersOnCaster("6940")).toBe(false); // Blessing of Sacrifice
+    expect(rendersOnCaster("421453")).toBe(false); // Ultimate Penitence — injected at runtime
+    expect(rendersOnCaster("190319")).toBe(false); // Combustion — not a defensive
   });
 });
 

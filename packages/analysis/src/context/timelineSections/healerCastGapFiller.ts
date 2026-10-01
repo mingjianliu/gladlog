@@ -26,7 +26,7 @@ import { isControlledPlayerFlags } from "../../utils/charmedPlayer";
 import {
   cdRoleTag,
   gridHpPct,
-  isSelfOnlyDefensive,
+  rendersOnCaster,
 } from "../../utils/cooldowns";
 import { fmtTime, toRenderSecond } from "../../utils/renderGrid";
 import {
@@ -453,7 +453,7 @@ export function emitHealerCastGapFillerEntries(
         timeSeconds,
         e.destUnitName,
         undefined,
-        isSelfOnlyDefensive(e.spellId),
+        rendersOnCaster(e.spellId),
       );
       const promotedRole = cdRoleTag(e.spellId);
       const promotedDisplayName = promotedRole

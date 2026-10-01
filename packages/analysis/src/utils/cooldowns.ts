@@ -26,7 +26,7 @@ import {
 } from "../data/spellEffectData";
 import { CORPUS_COOLDOWN_PATCHES } from "../data/spellEffectOverrides";
 import spellIdListsData from "../data/spellIdLists";
-import { reachesAlly } from "../data/spellTargeting";
+import { hasOfficialTargeting, reachesAlly } from "../data/spellTargeting";
 import { SpellTag } from "../data/spellTypes";
 import { replacedSpellIds } from "../data/talentReplaces";
 import {
@@ -84,6 +84,27 @@ const EXTERNAL_DEFENSIVE_IDS = new Set<string>(
 export function isSelfOnlyDefensive(spellId: string): boolean {
   return (
     MAJOR_DEFENSIVE_IDS.has(spellId) && !EXTERNAL_DEFENSIVE_IDS.has(spellId)
+  );
+}
+
+/**
+ * Triage 2026-09-29, hp-state F-S1: should a `[YOU] [CD]` line render on the
+ * caster (`self: N% HP`) whatever unit the cast was logged against?
+ * `isSelfOnlyDefensive` answers it for the big-defensive roster only, so an
+ * officially self-only Defensive outside that roster — Survival of the
+ * Fittest 264735, whose cast line names the hunter's current target while
+ * the aura lands on the hunter and the pet — rendered `→ <enemy> (that
+ * unit's HP)`. The second arm is official data: a defensive-class cooldown
+ * (`DEFENSIVE_CLASS_IDS`) whose DB2 targeting is known and reaches no ally.
+ * A runtime-injected cooldown (Ultimate Penitence 421453, whose logged target
+ * is real — the channel damages it) is in neither set and keeps its target.
+ */
+export function rendersOnCaster(spellId: string): boolean {
+  return (
+    isSelfOnlyDefensive(spellId) ||
+    (DEFENSIVE_CLASS_IDS.has(spellId) &&
+      hasOfficialTargeting(spellId) &&
+      !reachesAlly(spellId))
   );
 }
 

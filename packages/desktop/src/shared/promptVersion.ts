@@ -377,5 +377,10 @@
  *  enemy healer's throughput majors (ENEMY_HEAL_CD_IDS: the team heals,
  *  Apotheosis, Serenity, Spirit of the Redeemer, Time Spiral, Stasis) and
  *  Avenging Crusader render as `[ENEMY HEAL CD]`, outside every burst window.
+ *  v216 (2026-10-01, triage hp-state F-S1): a defensive whose official
+ *  targeting cannot reach an ally renders its HP part on the caster
+ *  (`rendersOnCaster`) — Survival of the Fittest's [YOU] [CD] line reads
+ *  `(self: N% HP, …)` instead of its cast target's HP. 605 files: 474 lines,
+ *  no id changes.
  */
-export const PROMPT_VERSION = 215;
+export const PROMPT_VERSION = 216;

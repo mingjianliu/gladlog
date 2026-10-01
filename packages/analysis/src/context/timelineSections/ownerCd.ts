@@ -18,8 +18,8 @@ import {
   cdRoleTag,
   findCheaperDefensiveAlternatives,
   type IDamageBucket,
-  isSelfOnlyDefensive,
   isTeamHealCD,
+  rendersOnCaster,
   THROUGHPUT_EMPOWER_DEFENSIVE_IDS,
 } from "../../utils/cooldowns";
 import { getDampeningPercentage } from "../../utils/dampening";
@@ -126,8 +126,9 @@ export function emitOwnerCdEntries(
   for (const cd of ownerCDs) {
     // B112/B127: a big personal defensive that cannot be cast on an ally is self-only — force (self)
     // rendering so a self-buff (e.g. Obsidian Scales) logged against the caster's current enemy/ally
-    // target is not shown as "→ <unit>" with that unit's HP.
-    const forceSelf = isSelfOnlyDefensive(cd.spellId);
+    // target is not shown as "→ <unit>" with that unit's HP. `rendersOnCaster` (hp-state F-S1)
+    // adds the officially self-only Defensives outside the big-defensive roster.
+    const forceSelf = rendersOnCaster(cd.spellId);
     // Reliability round 3 N5 (02c8 / ba8c / 3306): a proc-only entry (Renewing
     // Blaze — structurally cast-less; a talent-replaced button) keeps its aura
     // activations in `casts`, and this loop read them as presses: "[YOU] [CD]
