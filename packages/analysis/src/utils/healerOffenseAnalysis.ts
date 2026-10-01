@@ -962,7 +962,12 @@ export function formatHealerOffenseForContext(
       ? "you cast CC in this window"
       : "you cast no CC";
     const dmg = `your damage ${(w.ownerDamageInWindow / 1000).toFixed(0)}k`;
-    const free = `free ${Math.round(w.ownerFreeSeconds)}s of ${renderedWindowSeconds(w.fromSeconds, w.toSeconds)}s`;
+    // The denominator is the rendered (floored) window; the free time is
+    // continuous, so it can round past it ("free 21s of 20s", 193 of 3,956
+    // KILL WINDOW lines on the 2026-09-30 605-file capture). Free time cannot
+    // exceed the window it sits in — cap it at the number the line prints.
+    const windowS = renderedWindowSeconds(w.fromSeconds, w.toSeconds);
+    const free = `free ${Math.min(Math.round(w.ownerFreeSeconds), windowS)}s of ${windowS}s`;
     const teamHp =
       w.teamMinHpPct !== null
         ? `, team min HP ${Math.round(w.teamMinHpPct)}%`

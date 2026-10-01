@@ -780,10 +780,27 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     const misses = unit.missesOut;
     if (!misses || misses.length === 0) return "";
     const castMs = matchStartMs + castTimeSeconds * 1000;
+    // Whose immunity counts: a player's, or the unit the cast itself was
+    // aimed at. An AoE CC (Psychic Scream, Leg Sweep) logs an IMMUNE miss for
+    // every immune pet / totem it sweeps — ghouls, Army of the Dead, totems —
+    // while the line names only the player targets; 2026-09-30 corpus
+    // (605 files): 818 Psychic Scream lines carried a bare [IMMUNE] that way,
+    // e.g. 5dc8b136 0:53 "[DR: Disorient Full] [IMMUNE]" with all three
+    // player targets feared.
+    const aimedAt = (unit.spellCastEvents ?? []).find(
+      (e) =>
+        e.logLine?.event === LogEvent.SPELL_CAST_SUCCESS &&
+        e.spellId === spellId &&
+        Math.abs(e.timestamp - castMs) <= 100,
+    )?.destUnitId;
+    const counts = (destId: string | undefined) =>
+      !!destId &&
+      (destId === aimedAt || allPlayers.some((p) => p.id === destId));
     const miss = misses.find(
       (m) =>
         m.missType === "IMMUNE" &&
         m.spellId === spellId &&
+        counts(m.destUnitId) &&
         !consumedImmuneMisses.has(m) &&
         missBelongsToCast(unit, spellId, castMs, m.timestamp),
     );

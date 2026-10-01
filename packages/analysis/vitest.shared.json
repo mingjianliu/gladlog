@@ -45,6 +45,7 @@
     "src/context/matchTimeline.hardCast.test.ts",
     "src/context/matchTimeline.manaCd.test.ts",
     "src/context/matchTimeline.purgeWhitelist.test.ts",
+    "src/context/matchTimeline.spiritHymn.test.ts",
     "src/context/matchTimelineSections.ccCover.test.ts",
     "src/context/matchTimelineSections.trough.test.ts",
     "src/context/peelOptions.test.ts",
@@ -189,6 +190,7 @@
     "test/talentScriptedCooldowns.test.ts",
     "test/talentWhitelistClassification.test.ts",
     "test/threatAssessment.test.ts",
+    "test/threesDecided.test.ts",
     "test/tremorTotemBreak.test.ts",
     "test/usableWhileCcShim.test.ts"
   ]

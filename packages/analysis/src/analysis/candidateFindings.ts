@@ -517,15 +517,16 @@ export function extractCandidateFindings(
         rawStreams
           ? {
               rawStreams,
-              // the owner's playable end: the match end, the Solo Shuffle
-              // round-ending death (the menu's own cut) or the owner's own
-              // death — the owner gate's cut; "You are dead" is no attempt
+              // the owner's playable end: the match end, the playable end
+              // (Shuffle round-ending / 3v3 deciding death — the menu's own
+              // cut) or the owner's own death — the owner gate's cut; "You
+              // are dead" is no attempt
               untilS:
                 (Math.min(
                   typeof combat?.endTime === "number" && combat.endTime > 0
                     ? combat.endTime
                     : Infinity,
-                  shuffleRoundEndMs(combat, units) ?? Infinity,
+                  playableEndMs(combat, units) ?? Infinity,
                   ...((owner.deathRecords ?? []) as any[]).map(
                     (d) => d.timestamp ?? Infinity,
                   ),
@@ -574,11 +575,27 @@ export function extractCandidateFindings(
   // response and cd-hoarded at 1:47 after the round-ending death at 1:46.4).
   // Deaths themselves stay; every other event must be at or before it.
   const roundEnded = afterShuffleRoundEnd(combat, units, start);
-  const inRound = roundEnded
+  const shuffleCut = roundEnded
     ? out
         .filter((e) => e.type === "death" || !roundEnded(e.t))
         .map((e) => trimFoldedLocksAfter(e, roundEnded))
     : out;
+  // 3v3 (user ruling 2026-09-30): the match is decided at the first friendly
+  // player death — what follows is a 2v3 nobody plays (the video of the
+  // user's own losses: surrendering, typing). Unlike Shuffle, later deaths go
+  // too, and an event counts by its LAST anchor (`candidateAnchorEndS` — a
+  // death-setup sits at the lock but names a later death).
+  const decidedMs = threesDecidedMs(combat, units);
+  const inRound =
+    decidedMs === undefined
+      ? shuffleCut
+      : (() => {
+          const decidedS = (decidedMs - start) / 1000;
+          const after = (t: number) => t > decidedS;
+          return shuffleCut
+            .filter((e) => !after(candidateAnchorEndS(e)))
+            .map((e) => trimFoldedLocksAfter(e, after));
+        })();
 
   // Per-bracket allow-list (GH #18 ruling 2026-08-30): a listed bracket keeps
   // only its named types; the rest of the menu becomes context.
@@ -671,6 +688,35 @@ export function shuffleRoundEndMs(
       firstDeathMs = Math.min(firstDeathMs, d.timestamp ?? 0);
   }
   return Number.isFinite(firstDeathMs) ? firstDeathMs : undefined;
+}
+
+/** 3v3 only: the first friendly player death, epoch ms — the instant the
+ * match is decided (user ruling 2026-09-30) — or undefined for other brackets
+ * / a match with no friendly player death. "Friendly" is the log's own side,
+ * the same reaction the death candidates tag `side=friendly`. */
+export function threesDecidedMs(combat: any, units: any[]): number | undefined {
+  if (bracketKey(combat?.startInfo?.bracket) !== "3v3") return undefined;
+  let firstMs = Infinity;
+  for (const u of units) {
+    if (!u.info || u.reaction !== CombatUnitReaction.Friendly) continue;
+    for (const d of (u.deathRecords ?? []) as any[])
+      firstMs = Math.min(firstMs, d.timestamp ?? Infinity);
+  }
+  return Number.isFinite(firstMs) ? firstMs : undefined;
+}
+
+/** The last playable instant, epoch ms: a Solo Shuffle round's ending death
+ * or a 3v3's deciding friendly death — the one definition behind the menu
+ * cut, the owner gate's `untilS` and the could-respond window's round end. */
+export function playableEndMs(combat: any, units: any[]): number | undefined {
+  return shuffleRoundEndMs(combat, units) ?? threesDecidedMs(combat, units);
+}
+
+/** The latest instant a candidate is about: its `t`, or a later death it
+ * names (`facts.deathT` — death-setup anchors at the healer lock before it). */
+export function candidateAnchorEndS(e: CandidateEvent): number {
+  const deathT = Number.parseFloat(e.facts?.deathT ?? "");
+  return Number.isFinite(deathT) ? Math.max(e.t, deathT) : e.t;
 }
 
 /** Per-match cap for each team-play type (sorted by coaching value, then
@@ -2096,13 +2142,14 @@ function teamPlayEvents(
   // (triage 2026-09-29 H23 — a players-only set dropped a Hunter pet's
   // Intimidation from the cd-hoarded owner gate).
   const cannotCastSrcIds = enemySourceIds(enemies, units);
-  // Time after the match end — or a Solo Shuffle round's ending death — is
-  // not playable, so no "could respond" window reaches past it (H4).
+  // Time after the match end — or the playable end (a Solo Shuffle round's
+  // ending death, a 3v3's deciding death) — is not playable, so no "could
+  // respond" window reaches past it (H4).
   const roundEndMs = Math.min(
     typeof combat?.endTime === "number" && combat.endTime > 0
       ? combat.endTime
       : Infinity,
-    shuffleRoundEndMs(combat, units) ?? Infinity,
+    playableEndMs(combat, units) ?? Infinity,
   );
 
   try {
@@ -2738,7 +2785,9 @@ function teamPlayEvents(
     try {
       out.push(
         ...healingGapEvents(
-          detectHealingGaps(owner, friends, enemies, combat),
+          detectHealingGaps(owner, friends, enemies, combat, {
+            playableEndMs: playableEndMs(combat, units),
+          }),
           owner,
         ),
       );

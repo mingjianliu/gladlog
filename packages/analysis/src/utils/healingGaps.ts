@@ -120,6 +120,10 @@ export function detectHealingGaps(
     endTime: number;
     units?: Record<string, { id: string; ownerId?: string }>;
   },
+  /** The last playable instant, epoch ms (`playableEndMs`: a Solo Shuffle
+   * round's ending death, a 3v3's deciding death) — gaps are bounded by it
+   * exactly as by the healer's own death (B137). Absent = the match end. */
+  opts: { playableEndMs?: number } = {},
 ): IHealingGap[] {
   // One predicate for "could not cast" (auras ∪ kick lockouts), built once
   // per healer and clipped per gap below; pets and totems count as sources
@@ -181,9 +185,12 @@ export function detectHealingGaps(
   const deathTimestamps = healer.deathRecords
     .map((r) => r.timestamp)
     .filter((ts) => ts >= matchStartMs && ts <= matchEndMs);
-  const firstDeathMs = deathTimestamps.length
-    ? Math.min(...deathTimestamps)
-    : Infinity;
+  // Same bound for the end of play (2026-09-30, agy review): a 3v3 gap from
+  // 0:38 ran on to 0:50 past the deciding 0:40 death and was charged whole.
+  const firstDeathMs = Math.min(
+    deathTimestamps.length ? Math.min(...deathTimestamps) : Infinity,
+    opts.playableEndMs ?? Infinity,
+  );
 
   for (const { fromMs, toMs } of rawGaps) {
     // B19: skip gaps at match start — pre-combat initialization artifact

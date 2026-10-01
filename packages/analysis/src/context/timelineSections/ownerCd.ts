@@ -36,6 +36,10 @@ import { ALTER_TIME_CAST_ID, alterTimeReturnSeconds } from "./alterTime";
 import type { DeferredSnapshot } from "./ctx";
 import type { TimelineCtx } from "./ctx";
 
+const DIVINE_HYMN_ID = "64843";
+/** Spirit of Redemption, the pressed PvP-talent version (not the death proc). */
+const SPIRIT_OF_REDEMPTION_PRESSED_ID = "215769";
+
 export function emitOwnerCdEntries(
   ctx: Pick<
     TimelineCtx,
@@ -94,6 +98,30 @@ export function emitOwnerCdEntries(
   } = ctx;
   // threaded: read from ctx, returned to the caller (GH #116)
   let { procLinesEmitted } = ctx;
+
+  // User ruling 2026-09-30: the pressed Spirit of Redemption (PvP talent,
+  // 215769) that carries a Divine Hymn is part of the Hymn throughput combo,
+  // not a survival cooldown — no "cheaper available: Guardian Spirit,
+  // Desperate Prayer" on it. "Carries" = the owner started Divine Hymn while
+  // still in spirit form (cast … logged expiry). Pressed alone it stays a
+  // defensive. 2026-09-30 capture (605 files): 483 owner SoR lines, the next
+  // Hymn 0–1 s later on 279 of them.
+  const hymnCastSeconds =
+    ownerCDs
+      .find((c) => c.spellId === DIVINE_HYMN_ID)
+      ?.casts.map((c) => c.timeSeconds) ?? [];
+  function spiritCarriesHymn(spellId: string, castAtSeconds: number): boolean {
+    if (spellId !== SPIRIT_OF_REDEMPTION_PRESSED_ID) return false;
+    const form = cdExpiryEvents.find(
+      (e) =>
+        e.spellId === spellId &&
+        Math.abs(e.castAtSeconds - castAtSeconds) < 0.01,
+    );
+    if (!form) return false;
+    return hymnCastSeconds.some(
+      (h) => h >= castAtSeconds && h <= form.expiresAtSeconds,
+    );
+  }
 
   for (const cd of ownerCDs) {
     // B112/B127: a big personal defensive that cannot be cast on an ally is self-only — force (self)
@@ -237,7 +265,8 @@ export function emitOwnerCdEntries(
         !isCC &&
         !isProc &&
         cd.tag === "Defensive" &&
-        !THROUGHPUT_EMPOWER_DEFENSIVE_IDS.has(cd.spellId)
+        !THROUGHPUT_EMPOWER_DEFENSIVE_IDS.has(cd.spellId) &&
+        !spiritCarriesHymn(cd.spellId, cast.timeSeconds)
       ) {
         // B142: a team/raid heal (Divine Hymn, Tranquility, …) covers an injured ALLY, so a
         // self-only tool (Desperate Prayer, Frenzied Regeneration) can't substitute for it — treat it

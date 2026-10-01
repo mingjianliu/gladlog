@@ -65,6 +65,18 @@ export function auditFindings(
   const dropped: AuditResult["dropped"] = [];
 
   for (const f of raw) {
+    // Layer 0: shape. Same untrusted-JSON rule as eventIds below: a finding
+    // whose title or explanation is missing / not a string is dropped, not
+    // dereferenced — 2026-09-30 headlessAnalyze run: one such finding threw
+    // "Cannot read properties of undefined (reading 'replace')" out of the
+    // prose check and failed the whole analysis (1 of 7 runs).
+    if (typeof f.title !== "string" || typeof f.explanation !== "string") {
+      dropped.push({
+        finding: f,
+        reason: "schema: missing / non-string title or explanation",
+      });
+      continue;
+    }
     // Layer 1: grounding — the finding must anchor to >=1 event, and every
     // eventId must resolve. (Empty eventIds is unanchored → drop.)
     // The model's JSON is untrusted input: a finding that omits `eventIds`

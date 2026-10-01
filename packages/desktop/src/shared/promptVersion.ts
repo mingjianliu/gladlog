@@ -340,5 +340,11 @@
  *  Heroism 204362 (the Alliance PvP-talent twin of Bloodlust 204361) is an
  *  offensive buff in SPELL_CATEGORIES — enemy Heroism renders as [ENEMY CD]
  *  and feeds the offensive windows; a purge of it is High ([ENEMY PURGE]).
+ *  v208 (2026-10-01, the user's own 3v3 loss review, rulings 2026-09-30):
+ *  3v3 menu stops at the first friendly death (playableEndMs, healing gaps
+ *  clipped there too); [IMMUNE] only for a player / the cast's own target;
+ *  a Spirit of Redemption carrying Divine Hymn gets no `cheaper available:`;
+ *  KILL WINDOW free ≤ window; aura cap ranks offensive CDs; audit drops a
+ *  finding with no string title/explanation. Numbers in the commit.
  */
-export const PROMPT_VERSION = 207;
+export const PROMPT_VERSION = 208;

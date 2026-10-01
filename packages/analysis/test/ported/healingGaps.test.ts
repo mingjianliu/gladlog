@@ -342,6 +342,33 @@ describe("healingGaps — main detection", () => {
     expect(res[0].mostDamagedAmount).toBe(100_000); // the 200k post-death hit is excluded
   });
 
+  it("clips a gap at the playable end like at the healer's own death (3v3 deciding death, 2026-09-30)", () => {
+    // Healer alive all match; last cast at 10s, next at 50s. A teammate's
+    // deciding death at 20s ends the playable match: the 10–50s gap is
+    // charged only up to 20s.
+    const healer = makeUnit("h", {
+      spec: CombatUnitSpec.Priest_Holy,
+      spellCastEvents: [
+        makeSpellCastEvent("2061", MATCH_START + 10_000, "f1", "Friend", "h", "Priest"),
+        makeSpellCastEvent("2061", MATCH_START + 50_000, "f1", "Friend", "h", "Priest"),
+      ],
+    });
+    const friend = makeUnit("f1", {
+      spec: CombatUnitSpec.Warrior_Arms,
+      damageIn: [
+        { logLine: { timestamp: MATCH_START + 15_000 }, effectiveAmount: -100_000 },
+        { logLine: { timestamp: MATCH_START + 30_000 }, effectiveAmount: -200_000 },
+      ] as any,
+    });
+    const enemy = makeUnit("e1");
+    const args = [healer as any, [healer, friend] as any, [enemy] as any, makeCombat()] as const;
+    expect(detectHealingGaps(...args)[0].toSeconds).toBe(50);
+    const res = detectHealingGaps(...args, { playableEndMs: MATCH_START + 20_000 });
+    expect(res).toHaveLength(1);
+    expect(res[0].toSeconds).toBe(20);
+    expect(res[0].mostDamagedAmount).toBe(100_000);
+  });
+
   it("drops a phantom tail gap opened by a post-death HoT tick (B137)", () => {
     // Healer's last cast is 10s; it dies at 15s; a pre-death HoT ticks at 18s (post-mortem), which
     // would otherwise start a phantom gap 18s -> match end. That gap begins after death and must be

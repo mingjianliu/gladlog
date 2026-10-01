@@ -719,6 +719,37 @@ describe("buildHealerOffenseSummary + formatHealerOffenseForContext", () => {
   });
 });
 
+describe("[KILL WINDOW] free seconds vs the rendered window (2026-09-30)", () => {
+  it("never prints more free seconds than the window it sits in", () => {
+    // 40.1–60.7: the rendered window floors to 60 − 40 = 20 s while the
+    // continuous span is 20.6 s — the old line read "free 21s of 20s".
+    const enemyHealer = makeUnit("enemy-h", {
+      reaction: CombatUnitReaction.Hostile,
+      spec: CombatUnitSpec.Shaman_Restoration,
+      name: "Rsham",
+    });
+    const owner = makeFriend("owner", {});
+    const summary = buildHealerOffenseSummary(
+      combat,
+      owner,
+      [owner],
+      [enemyHealer],
+      [makeWindow(40.1, 60.7)],
+      emptyEnemyTimeline(),
+      [],
+      [],
+      [],
+    );
+    const line = formatHealerOffenseForContext(summary).find((l) =>
+      l.includes("[KILL WINDOW]"),
+    );
+    const m = line?.match(/free (\d+)s of (\d+)s/);
+    expect(m).not.toBeNull();
+    expect(Number(m![2])).toBe(20);
+    expect(Number(m![1])).toBeLessThanOrEqual(Number(m![2]));
+  });
+});
+
 import { MAX_KILL_WINDOW_LINES } from "../../src/utils/healerOffenseAnalysis";
 
 // GH #31 ① test stub: an always-accountable facts computer so pre-existing

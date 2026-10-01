@@ -273,6 +273,46 @@ describe("aurasActiveAt", () => {
     expect(auras).toContain("Freezing Trap");
     expect(auras).toContain("Divine Shield");
   });
+
+  it("an enemy's offensive cooldown on the victim outranks cosmetic buffs (c57aeb42 0:46, Deathmark + Kingsbane, 2026-09-30)", () => {
+    const events: Record<string, unknown>[] = [];
+    for (let i = 0; i < 10; i++) {
+      events.push(
+        auraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          0,
+          `${9_000_000 + i}`,
+          "o",
+          "o",
+          `Buff${i}`,
+        ),
+        auraEvent(
+          LogEvent.SPELL_AURA_REMOVED,
+          100_000,
+          `${9_000_000 + i}`,
+          "o",
+          "o",
+          `Buff${i}`,
+        ),
+      );
+    }
+    for (const [id, name] of [
+      ["360194", "Deathmark"],
+      ["385627", "Kingsbane"],
+    ]) {
+      events.push(
+        auraEvent(LogEvent.SPELL_AURA_APPLIED, 40_000, id, "o", "e", name),
+        auraEvent(LogEvent.SPELL_AURA_REMOVED, 60_000, id, "o", "e", name),
+      );
+    }
+    const u = mkUnit("o", "Owner-Area52", true, CombatUnitSpec.Mage_Frost, {
+      auraEvents: events,
+    });
+    const auras = aurasActiveAt(u, combat, 50);
+    expect(auras).toHaveLength(10);
+    expect(auras).toContain("Deathmark");
+    expect(auras).toContain("Kingsbane");
+  });
 });
 
 describe("buildCastFlowLines", () => {

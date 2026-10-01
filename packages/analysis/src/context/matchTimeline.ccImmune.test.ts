@@ -223,6 +223,66 @@ describe("[IMMUNE] on the owner's CC casts", () => {
       .filter((l) => l.includes("[IMMUNE]")).length;
     expect(tagged).toBe(1);
   });
+
+  it("an AoE CC's IMMUNE miss on a pet it swept is not the player targets' immunity (2026-09-30)", () => {
+    const enemy = mkUnit("e", "Enemy-Realm", {
+      reaction: CombatUnitReaction.Hostile,
+    });
+    const ghoulMiss = {
+      ...missImmune(PSYCHIC_SCREAM, "Psychic Scream", 30_000),
+      destUnitId: "Creature-0-1-2-3-237409-0",
+      destUnitName: "Lesser Ghoul",
+    };
+    const ledger = [
+      {
+        spellId: PSYCHIC_SCREAM,
+        spellName: "Psychic Scream",
+        tag: "CC" as const,
+        cooldownSeconds: 30,
+        maxChargesDetected: 1,
+        casts: [{ timeSeconds: 30 }],
+        availableWindows: [],
+        neverUsed: false,
+      },
+    ];
+    const swept = buildMatchTimeline(
+      baseParams(
+        mkUnit("o", "Me-Realm", { missesOut: [ghoulMiss] as never }),
+        enemy,
+        ledger,
+      ),
+    );
+    expect(swept).not.toContain("[IMMUNE");
+    // The same miss on the player target still tags.
+    const onPlayer = buildMatchTimeline(
+      baseParams(
+        mkUnit("o", "Me-Realm", {
+          missesOut: [
+            missImmune(PSYCHIC_SCREAM, "Psychic Scream", 30_000),
+          ] as never,
+        }),
+        enemy,
+        ledger,
+      ),
+    );
+    expect(onPlayer).toContain("[IMMUNE]");
+  });
+
+  it("a single-target CC aimed at a pet keeps its IMMUNE tag", () => {
+    const enemy = mkUnit("e", "Enemy-Realm", {
+      reaction: CombatUnitReaction.Hostile,
+    });
+    const pet = "Creature-0-1-2-3-417-0";
+    const owner = mkUnit("o", "Me-Realm", {
+      spellCastEvents: [
+        { ...cast(POLYMORPH, "Polymorph", 30_000), destUnitId: pet },
+      ] as never,
+      missesOut: [
+        { ...missImmune(POLYMORPH, "Polymorph", 30_900), destUnitId: pet },
+      ] as never,
+    });
+    expect(buildMatchTimeline(baseParams(owner, enemy))).toContain("[IMMUNE]");
+  });
 });
 
 describe("[MISSED on …] / [REFLECTED by …] on the owner's CC casts (2026-09-25)", () => {

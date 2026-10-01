@@ -30,14 +30,20 @@ describe("auditFindings", () => {
   it("roster lint(2026-09-22):点名阵容外职业的 finding 被丢弃,未传阵容时不检查", () => {
     const wrong: RawFinding = {
       ...base,
-      explanation: "对方圣骑士这一手几乎每次冷却好就往你脸上砸;你在 {{t}}s 倒下。",
+      explanation:
+        "对方圣骑士这一手几乎每次冷却好就往你脸上砸;你在 {{t}}s 倒下。",
     };
-    const r = auditFindings([wrong], candidates, { rosterSpecs: ["257", "103"] });
+    const r = auditFindings([wrong], candidates, {
+      rosterSpecs: ["257", "103"],
+    });
     expect(r.findings).toHaveLength(0);
-    expect(r.dropped[0].reason).toBe('roster: names Paladin ("圣骑") — not on the roster');
+    expect(r.dropped[0].reason).toBe(
+      'roster: names Paladin ("圣骑") — not on the roster',
+    );
     // 阵容里真有圣骑 → 保留
     expect(
-      auditFindings([wrong], candidates, { rosterSpecs: ["65", "103"] }).findings,
+      auditFindings([wrong], candidates, { rosterSpecs: ["65", "103"] })
+        .findings,
     ).toHaveLength(1);
     // 没传阵容 → 老行为,不检查
     expect(auditFindings([wrong], candidates).findings).toHaveLength(1);
@@ -800,5 +806,27 @@ describe("agy 复核采纳(2026-07-25)", () => {
     expect(res.findings).toHaveLength(0);
     expect(res.dropped).toHaveLength(1);
     expect(res.dropped[0]!.reason).toBe("grounding: missing eventIds");
+  });
+
+  it("a finding without a string title / explanation is dropped, not a crash (headlessAnalyze, 2026-09-30)", () => {
+    const id = candidates[0]!.id;
+    const shapes = [
+      { title: "t" },
+      { explanation: "e" },
+      { title: 3, explanation: { a: 1 } },
+    ];
+    for (const s of shapes) {
+      const bad = {
+        severity: "high",
+        category: "x",
+        eventIds: [id],
+        ...s,
+      } as unknown as RawFinding;
+      const res = auditFindings([bad], candidates);
+      expect(res.findings).toHaveLength(0);
+      expect(res.dropped[0]!.reason).toBe(
+        "schema: missing / non-string title or explanation",
+      );
+    }
   });
 });

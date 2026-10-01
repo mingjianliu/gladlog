@@ -35,6 +35,7 @@ import {
   getLowestHpPercentInWindow,
 } from "../utils/killWindowTargetSelection";
 import { buildAuraIntervals } from "../utils/auraIntervals";
+import { OFFENSIVE_CD_SPELL_IDS } from "../utils/spellDanger";
 import {
   distanceBetween,
   getUnitPositionAtTime,
@@ -82,17 +83,24 @@ function roleOf(u: any, ownerName?: string): Role {
  *     Shield 642, Ice Block 45438, Dispersion 47585, Aspect of the Turtle
  *     186265, …) is already inside `externalOrBigDefensiveSpellIds`, so
  *     `MAJOR_DEFENSIVE_IDS` alone covers both without a second set.
- *  2. Everything else, original `buildAuraIntervals` order.
+ *  2. Offensive cooldowns — `spellId` ∈ `OFFENSIVE_CD_SPELL_IDS`
+ *     (spellDanger.ts, the enemy-CD timeline's own set): an enemy's
+ *     Deathmark / Kingsbane on the victim, a burst buff on its caster.
+ *  3. Everything else, original `buildAuraIntervals` order.
  *
  * Historical damage (BACKLOG #27): match 76ea5f90, owner frozen in Freezing
  * Trap (spellId 3355, a DR_CATEGORY_MAP stun entry) 2:48-2:53 — the trap aura
  * was pushed out of the raw top-10 by cosmetic buffs, and two deep-dive
  * rounds concluded "he could act" from the truncated aura list.
+ * Tier 2 (2026-09-30): c57aeb42 0:46 — the frost mage's top-10 was Fortitude,
+ * Arcane Intellect, renews… and dropped the Deathmark + Kingsbane that killed
+ * him nine seconds later.
  */
-function auraPriority(spellId: string): 0 | 1 | 2 {
+function auraPriority(spellId: string): 0 | 1 | 2 | 3 {
   if (spellId in DR_CATEGORY_MAP) return 0;
   if (MAJOR_DEFENSIVE_IDS.has(spellId)) return 1;
-  return 2;
+  if (OFFENSIVE_CD_SPELL_IDS.has(spellId)) return 2;
+  return 3;
 }
 
 /**
@@ -100,8 +108,8 @@ function auraPriority(spellId: string): 0 | 1 | 2 {
  * point-in-time filter over the single-source interval builder, capped at 10
  * names so a long buff list can't blow out a facts field. Sorted by
  * `auraPriority` (stable — ties keep `buildAuraIntervals`' original order)
- * before the cap so a hard-CC or major/immunity aura is never displaced by
- * cosmetic buffs.
+ * before the cap so a hard-CC, major/immunity or offensive-cooldown aura is never
+ * displaced by cosmetic buffs.
  */
 export function aurasActiveAt(
   unit: any,
