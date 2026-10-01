@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { checkEnemyDefRefConsistency } from "../src/quality/promptQualityCheck";
+import {
+  checkBrokeOutRefConsistency,
+  checkEnemyDefRefConsistency,
+} from "../src/quality/promptQualityCheck";
 
 /**
  * GH #97: KILL ATTEMPTS `popped X` / `saved by external (X)` ⇒ an
@@ -14,6 +17,13 @@ const LEGEND =
   "  [ENEMY DEF] = an enemy pressed a defensive at that second: `(N%, Ts)` = official damage reduction and the";
 const ATTEMPT = (span: string, tail: string) =>
   `  [${span}] on Osiklm-Archimonde-EU — Avatar burst (no stun) | opportunity: trinket up (no softer target) | team focus 55% (1.23M on target) | FAILED: ${tail}`;
+
+/** the roster lines a rendered unit name is resolved through */
+const ROSTER = [
+  '  <unit id="4" name="Osiklm-Archimonde-EU" spec="Outlaw Rogue" role="enemy">',
+  '  <unit id="5" name="Chrisyo-TwistingNether-EU" spec="Restoration Druid" role="enemy">',
+  '  <unit id="6" name="Aesque-DefiasBrotherhood-EU" spec="Holy Priest" role="enemy">',
+];
 
 describe("checkEnemyDefRefConsistency", () => {
   it("B4a (2026-09-25): `self-saved (X)` needs a `(self-save)` [ENEMY DEF] line for X in the span", () => {
@@ -142,6 +152,103 @@ describe("checkEnemyDefRefConsistency", () => {
   it("is silent without the legend (the [ENEMY DEF] line is off)", () => {
     expect(
       checkEnemyDefRefConsistency([ATTEMPT("0:42–1:02", "popped Ironbark")]),
+    ).toEqual([]);
+  });
+  it("compares the unit when the roster resolves the target: the same spell on ANOTHER enemy is no cause", () => {
+    const wall = (pid: string) =>
+      `1:44  [ENEMY DEF]   ${pid} (Restoration Druid): Barkskin (20%, 12.0s)`;
+    const external = (to: string) =>
+      `1:42  [ENEMY DEF]   5(RDruid) (Restoration Druid): Ironbark → ${to} (6.6s)`;
+    const run = (...defs: string[]) =>
+      checkEnemyDefRefConsistency([
+        LEGEND,
+        ...ROSTER,
+        ...defs,
+        ATTEMPT("1:41–1:44", "popped Barkskin/Ironbark"),
+      ]);
+    // the target (Osiklm = unit 4) pressed the wall and received the external
+    expect(run(wall("4(ORogue)"), external("4(ORogue)"))).toEqual([]);
+    // the druid's own Barkskin, and an Ironbark thrown on unit 6
+    const f = run(wall("5(RDruid)"), external("6(HPriest)"));
+    expect(f).toHaveLength(2);
+    expect(f[0]).toContain('"Barkskin"');
+    expect(f[1]).toContain('"Ironbark"');
+    // an area save is on nobody in particular: not compared
+    expect(
+      checkEnemyDefRefConsistency([
+        LEGEND,
+        ...ROSTER,
+        "1:42  [ENEMY DEF]   5(RDruid) (Restoration Druid): Rallying Cry (area)",
+        ATTEMPT("1:41–1:44", "popped Rallying Cry"),
+      ]),
+    ).toEqual([]);
+    // no roster → the name cannot be resolved → spell and time only
+    expect(
+      checkEnemyDefRefConsistency([
+        LEGEND,
+        wall("5(RDruid)"),
+        ATTEMPT("1:41–1:44", "popped Barkskin"),
+      ]),
+    ).toEqual([]);
+  });
+});
+
+/** Triage 2026-09-29, enemy-def F-E21: `broke out (X)` ⇒ an `[ENEMY TRINKET]`
+ * line showing X breaking a control inside the attempt's credit window. */
+describe("checkBrokeOutRefConsistency", () => {
+  it("passes when the break line sits in [from, to + slack], names the ability and says what it broke", () => {
+    const lines = [
+      "3:12  [ENEMY TRINKET]   4(HPaladin) used Will to Survive out of Leg Sweep (by 1(MMonk)) (target at 80% HP)",
+      ATTEMPT("3:11–3:12", "broke out (Will to Survive)"),
+      "2:21  [ENEMY TRINKET]   3(FWarrior) used Berserker Shout out of Paralysis (by 1(MMonk)) [friendly offensive CD active] (target at 62% HP)",
+      ATTEMPT(
+        "2:15–2:19",
+        "broke out (Berserker Shout); forced a full immunity (a win — re-open after it drops)",
+      ),
+    ];
+    expect(checkBrokeOutRefConsistency(lines)).toEqual([]);
+  });
+
+  it("fails when the only line is a trinket, is outside the window, or broke nothing", () => {
+    const lines = [
+      "3:12  [ENEMY TRINKET]   4(HPaladin) used PvP trinket out of Leg Sweep (by 1(MMonk))",
+      "4:40  [ENEMY TRINKET]   4(HPaladin) used Will to Survive out of Maim (by 2(FDruid))",
+      "3:13  [ENEMY TRINKET]   5(DPriest) used Will of the Forsaken (target at 80% HP)",
+      ATTEMPT("3:11–3:12", "broke out (Will to Survive)"),
+      ATTEMPT("3:11–3:12", "broke out (Will of the Forsaken)"),
+    ];
+    const f = checkBrokeOutRefConsistency(lines);
+    expect(f).toHaveLength(2);
+    expect(f[0]).toContain('"Will to Survive"');
+    expect(f[1]).toContain('"Will of the Forsaken"');
+  });
+
+  it("compares the unit when the roster resolves the target: another enemy's break is not this target's", () => {
+    const line = (pid: string) =>
+      `3:12  [ENEMY TRINKET]   ${pid} used Blink out of Leg Sweep (by 1(MMonk)) (target at 80% HP)`;
+    const attempt = ATTEMPT("3:11–3:12", "broke out (Blink)");
+    expect(
+      checkBrokeOutRefConsistency([...ROSTER, line("4(ORogue)"), attempt]),
+    ).toEqual([]);
+    const f = checkBrokeOutRefConsistency([
+      ...ROSTER,
+      line("6(HPriest)"),
+      attempt,
+    ]);
+    expect(f).toHaveLength(1);
+    expect(f[0]).toContain("that unit");
+    // no roster → not compared
+    expect(checkBrokeOutRefConsistency([line("6(HPriest)"), attempt])).toEqual(
+      [],
+    );
+  });
+
+  it("ignores every other FAILED cause", () => {
+    expect(
+      checkBrokeOutRefConsistency([
+        ATTEMPT("0:42–1:02", "target trinketed out"),
+        ATTEMPT("1:41–1:44", "popped Barkskin"),
+      ]),
     ).toEqual([]);
   });
 });

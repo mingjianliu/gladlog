@@ -869,5 +869,15 @@
  *  as an [ENEMY DEF] external and counts in KILL ATTEMPTS. On the friendly
  *  side 199448 is an alias of 6940 (ruling P-A9 = A): one roster row, no
  *  second "Blessing of Sacrifice" line.
+ *  v300 (2026-10-01, triage enemy-def F-E21, ruling A′15): a racial or class
+ *  ability that removed a control (Will to Survive, Will of the Forsaken,
+ *  Blink, Berserker Shout …) renders `[ENEMY TRINKET] … used X out of <CC>`,
+ *  is the KILL ATTEMPTS cause `broke out (X)`, and on a friendly CC line
+ *  reads `X broke this CC` — only for a CC whose mechanic the ability's DB2
+ *  mechanic-immunity aura lists. Stoneform / Fireblood are read from their
+ *  buffs (a press line, the trinket lock; they name no CC). A [CC ON TEAM]
+ *  line states the trinket-equivalent racial is `ON CD` while its own
+ *  cooldown or a trinket press's shared lock runs. The kill-opportunity tier
+ *  does not read the racial's trinket lock (ruling P-b7).
  */
-export const PROMPT_VERSION = 299;
+export const PROMPT_VERSION = 300;

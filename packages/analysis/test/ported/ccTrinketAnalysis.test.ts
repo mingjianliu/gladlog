@@ -902,8 +902,16 @@ describe("analyzePlayerCCAndTrinket — edge cases and corner branches", () => {
       spellName: "Will to Survive",
       srcUnitId: "player-1",
     };
+    // 解控在按下的那一刻把控制移除(F-E21:非饰品的解控只认「按下即结束」的控制)
+    const ccRemove = makeAuraEvent(
+      LogEvent.SPELL_AURA_REMOVED,
+      "853",
+      MATCH_START + 11_000,
+      "enemy-1",
+      "player-1",
+    );
     const player = makeUnit("player-1", {
-      auraEvents: [ccApply],
+      auraEvents: [ccApply, ccRemove],
       spellCastEvents: [racialCast] as any,
     });
     const result = analyzePlayerCCAndTrinket(

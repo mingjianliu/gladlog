@@ -76,8 +76,10 @@ import { TIMELINE_LINE_FLAGS } from "../data/timelineLineFlags";
 import { burstCastSpan, KILL_CREDIT_SLACK_S } from "./burstLedger";
 import {
   analyzePlayerCCAndTrinket,
+  breakAbilityPresses,
   findBrokenCC,
   type ICCInstance,
+  type IPlayerCCTrinketSummary,
 } from "./ccTrinketAnalysis";
 import { analyzeOutgoingCCChains, DRLevel, drResetMsAt } from "./drAnalysis";
 import { reconstructEnemyCDTimeline } from "./enemyCDs";
@@ -96,6 +98,7 @@ import {
   MITIGATION_AURA_MIN_PCT,
   SAVE_CAST_AURA_PAIR_S,
   saveAuraIntervals,
+  SELF_SAVE_IDS,
   selfSaveCasts,
   wallTableIdOfAura,
 } from "./enemyDefensives";
@@ -136,6 +139,12 @@ export interface IKillAttemptStun {
  * see `attributeFailure`. */
 export interface IKillAttemptAttribution {
   trinketed: boolean;
+  /** Enemy-def F-E21 (ruling A′15): racials / class abilities that removed a
+   * control of this attempt (Will to Survive, Blink, Berserker Shout …) —
+   * `breakAbilityUses` bound by the same binder as the trinket. A break that
+   * is itself a wall or a self-save (Icebound Fortitude, Lichborne) is not
+   * listed here: it is credited as that. Optional for hand-built fixtures. */
+  brokeOut?: string[];
   immunityBaited: boolean;
   /** Round seconds the immunity went up, set only when it was already up when
    * the attempt began and none went up inside the credit window (F-E22
@@ -155,6 +164,7 @@ export interface IKillAttemptAttribution {
   outhealed: boolean;
   primary:
     | "trinketed"
+    | "broke-out"
     | "immunity-baited"
     | "defensive"
     | "external"
@@ -572,6 +582,10 @@ function failureText(
       return attr.immunityBaited
         ? `target trinketed out; ${immunity}`
         : "target trinketed out";
+    case "broke-out":
+      // Named like the trinket's cause; an immunity in the same attempt is
+      // listed with it, as for the trinket (A29).
+      return `broke out (${(attr.brokeOut ?? []).join("/")})${attr.immunityBaited ? `; ${immunity}` : ""}`;
     case "immunity-baited":
       return immunity;
     case "defensive":
@@ -621,7 +635,7 @@ export function formatKillAttemptsForContext(
   );
   // F-E22 / F-E22b (rulings A29, A′4): what a FAILED cause is allowed to be.
   lines.push(
-    "  A FAILED wall / external / self-save went up inside the attempt, or was already up when it began (`[up since m:ss]`) — one pressed after the attempt was over is not its cause; an immunity or the trinket in the next 5 s still is. `target trinketed out` = the trinket broke a control of this attempt.",
+    "  A FAILED wall / external / self-save went up inside the attempt, or was already up when it began (`[up since m:ss]`) — one pressed after the attempt was over is not its cause; an immunity, the trinket or a break in the next 5 s still is. `target trinketed out` / `broke out (X)` = the trinket / a racial or class ability removed a control of this attempt.",
   );
   let kills = 0;
   let withSofter = 0;
@@ -741,12 +755,12 @@ type AttemptAnchor =
   { kind: "stun"; stuns: readonly StunApp[] } | { kind: "burst" };
 
 /** What `attributeFailure` reads about one target that does not depend on the
- * attempt: its save auras and its CC instances. Built once per target per
+ * attempt: its save auras and its CC / break summary. Built once per target per
  * match, on first use — 28k attempts over the 605-file capture each rebuilt
  * the aura intervals (twice) and the CC analysis. */
 interface ITargetReadings {
   saveIntervals: () => ISaveAuraInterval[];
-  ccInstances: () => ICCInstance[];
+  ccSummary: () => IPlayerCCTrinketSummary;
   /** The externals this target received, as the `[ENEMY DEF]` external
    * lines render them (`enemyDefensiveEvents` of its teammates) — a cast on
    * it, or an aura on it whose cast the log missed. */
@@ -763,7 +777,7 @@ function targetReadingsFactory(
   combat: IArenaMatch | IShuffleRound,
 ): (target: ICombatUnit) => ITargetReadings {
   const intervals = new Map<string, ISaveAuraInterval[]>();
-  const cc = new Map<string, ICCInstance[]>();
+  const cc = new Map<string, IPlayerCCTrinketSummary>();
   let externals: IEnemyDefensiveEvent[] | undefined;
   let rosterSides: RosterSides | undefined;
   let attackSpellRecorded: boolean | undefined;
@@ -776,10 +790,10 @@ function targetReadingsFactory(
       }
       return v;
     },
-    ccInstances: () => {
+    ccSummary: () => {
       let v = cc.get(target.id);
       if (!v) {
-        v = targetCcInstances(target, friendlies, combat);
+        v = targetCcSummary(target, friendlies, combat);
         cc.set(target.id, v);
       }
       return v;
@@ -871,24 +885,46 @@ function attributeFailure(
 
   // Rule 1: the trinket, bound to the CC it broke. The uses come from the
   // shared predicate (G7-P2: an Adaptation proc is a trinket use too).
+  /** Is this CC — the one a break was bound to — a control of THIS attempt:
+   * one of its stuns, or for a burst anchor a CC active inside [from, to]. */
+  const ofThisAttempt = (
+    cc: Pick<ICCInstance, "atSeconds" | "durationSeconds" | "spellId">,
+  ): boolean =>
+    anchor.kind === "stun"
+      ? anchor.stuns.some(
+          (st) =>
+            st.spellId === cc.spellId &&
+            Math.abs(st.atSeconds - cc.atSeconds) < 0.01,
+        )
+      : matchStartMs + cc.atSeconds * 1000 <= toMs &&
+        matchStartMs + (cc.atSeconds + cc.durationSeconds) * 1000 >= fromMs;
+
   let trinketed = false;
   for (const use of pvpTrinketUses(target)) {
     if (!inCredit(use.atMs)) continue;
-    const bound = findBrokenCC(readings.ccInstances(), matchStartMs, use.atMs);
-    if (!bound) continue;
-    const ofThisAttempt =
-      anchor.kind === "stun"
-        ? anchor.stuns.some(
-            (st) =>
-              st.spellId === bound.spellId &&
-              Math.abs(st.atSeconds - bound.atSeconds) < 0.01,
-          )
-        : matchStartMs + bound.atSeconds * 1000 <= toMs &&
-          matchStartMs + (bound.atSeconds + bound.durationSeconds) * 1000 >=
-            fromMs;
-    if (ofThisAttempt) {
+    const bound = findBrokenCC(
+      readings.ccSummary().ccInstances,
+      matchStartMs,
+      use.atMs,
+    );
+    if (bound && ofThisAttempt(bound)) {
       trinketed = true;
       break;
+    }
+  }
+
+  // F-E21 (ruling A′15): a racial or class ability that removed a control of
+  // this attempt — the trinket's rule, the trinket's binder. 9e9f9565 3:11:
+  // Will to Survive ended the Leg Sweep and the line read "healed through".
+  const brokeOut: string[] = [];
+  if (breakAbilityPresses(target).some((p) => inCredit(p.ts))) {
+    for (const u of readings.ccSummary().breakAbilityUses ?? []) {
+      if (!u.brokenCc || !inCredit(matchStartMs + u.atSeconds * 1000)) continue;
+      // a break that is also a wall or a self-save is credited as that
+      if (MITIGATION_AURA_IDS.has(u.spellId) || SELF_SAVE_IDS.has(u.spellId))
+        continue;
+      if (ofThisAttempt(u.brokenCc) && !brokeOut.includes(u.name))
+        brokeOut.push(u.name);
     }
   }
 
@@ -1092,20 +1128,23 @@ function attributeFailure(
 
   const primary: IKillAttemptAttribution["primary"] = trinketed
     ? "trinketed"
-    : immunityBaited
-      ? "immunity-baited"
-      : defensivePopped.length > 0
-        ? "defensive"
-        : externalReceived.length > 0
-          ? "external"
-          : selfSaved.length > 0
-            ? "self-saved"
-            : outhealed
-              ? "outhealed"
-              : "pressure";
+    : brokeOut.length > 0
+      ? "broke-out"
+      : immunityBaited
+        ? "immunity-baited"
+        : defensivePopped.length > 0
+          ? "defensive"
+          : externalReceived.length > 0
+            ? "external"
+            : selfSaved.length > 0
+              ? "self-saved"
+              : outhealed
+                ? "outhealed"
+                : "pressure";
 
   return {
     trinketed,
+    brokeOut,
     immunityBaited,
     ...(immunityBaited && !immunityInside && immunityUpSinceS !== undefined
       ? { immunityUpSinceS }
@@ -1121,15 +1160,15 @@ function attributeFailure(
   };
 }
 
-/** The target's CC instances — the ones `analyzePlayerCCAndTrinket` builds
- * for `[ENEMY TRINKET]` / `[CC ON ENEMY]`, with the attackers' pets as
- * sources — so `findBrokenCC` here binds a trinket to the same CC the
- * timeline names. */
-function targetCcInstances(
+/** The target's CC / break summary — the one `analyzePlayerCCAndTrinket`
+ * builds for `[ENEMY TRINKET]` / `[CC ON ENEMY]`, with the attackers' pets as
+ * sources — so a trinket or break is bound here to the same CC the timeline
+ * names. */
+function targetCcSummary(
   target: ICombatUnit,
   friendlies: readonly ICombatUnit[],
   combat: IArenaMatch | IShuffleRound,
-): ICCInstance[] {
+): IPlayerCCTrinketSummary {
   const friendlyPets = Object.values(combat.units ?? {}).filter(
     (u) => u.ownerId && friendlies.some((f) => f.id === u.ownerId),
   );
@@ -1138,5 +1177,5 @@ function targetCcInstances(
     friendlies as ICombatUnit[],
     combat,
     friendlyPets,
-  ).ccInstances;
+  );
 }

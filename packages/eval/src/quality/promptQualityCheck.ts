@@ -65,6 +65,7 @@ import {
   type TeammateCrisisDmgBin,
   teammateCrisisDmgBinOf,
 } from "@gladlog/analysis/src/data/teammateCrisisPrior";
+import { KILL_CREDIT_SLACK_S } from "@gladlog/analysis/src/utils/burstLedger";
 import {
   CC_LANDED_MATCH_WINDOW_MS,
   DEATH_BREAKABLE_CC_LOOKBACK_S,
@@ -1701,10 +1702,27 @@ const ENEMY_DEF_LEGEND = /^\s*\[ENEMY DEF\] = /;
  * `… | FAILED: saved by external (A/B)` or (B4a, 2026-09-25)
  * `… | FAILED: self-saved (A/B)`; names may carry `@m:ss` (stamp mode). */
 const KILL_ATTEMPT_DEFENSIVE =
-  /^\s*\[(\d+):(\d\d)–(\d+):(\d\d)\] on .*\| FAILED: (?:popped |saved by external \(|self-saved \()([^|()]+?)\)?\s*$/;
+  /^\s*\[(\d+):(\d\d)–(\d+):(\d\d)\] on (\S+) — .*\| FAILED: (?:popped |saved by external \(|self-saved \()([^|()]+?)\)?\s*$/;
 /** `m:ss  [ENEMY DEF]   <pid> (<spec>): <Spell> (…)` / `: <Spell> → <pid> (…)` */
 const ENEMY_DEF_LINE =
   /^(\d+):(\d\d) {2}\[ENEMY DEF\] {3}[^:]+: (.+?)(?: \(| → |$)/;
+/** The unit a `[ENEMY DEF]` line's save is ON: the recipient of an external
+ * (`… → 4(ORogue) …`), else the unit that pressed it (the line's own id). */
+const ENEMY_DEF_RECIPIENT_ID = / → (\d+)\(/;
+const ENEMY_DEF_CASTER_ID = /\[ENEMY DEF\] {3}(\d+)\(/;
+
+/** Rendered unit name → rendered id, from the roster (`<unit id="4" name=…>`).
+ * KILL ATTEMPTS names its target; the timeline lines carry the id. A gate
+ * that pairs the two compares units only when the roster resolves the name —
+ * no roster, no unit claim. */
+function unitIdsByName(lines: readonly string[]): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const line of lines) {
+    const m = UNIT_LEGEND_LINE.exec(line);
+    if (m) out.set(m[2]!, m[1]!);
+  }
+  return out;
+}
 /** The aura APPLIED that KILL ATTEMPTS attributes and the `[ENEMY DEF]` line
  * both render from the same log instant, but one is floored from the aura
  * event and the other from a paired cast ≤ 1.5 s away (externals), so the
@@ -1738,10 +1756,20 @@ const KILL_ATTEMPT_IMMUNITY_UP_SINCE =
  */
 export function checkEnemyDefRefConsistency(lines: string[]): string[] {
   if (!lines.some((l) => ENEMY_DEF_LEGEND.test(l))) return [];
-  const defs: Array<{ atS: number; spell: string }> = [];
+  const idOf = unitIdsByName(lines);
+  const defs: Array<{ atS: number; spell: string; onId?: string }> = [];
   for (const line of lines) {
     const m = ENEMY_DEF_LINE.exec(line);
-    if (m) defs.push({ atS: Number(m[1]) * 60 + Number(m[2]), spell: m[3]! });
+    if (m)
+      defs.push({
+        atS: Number(m[1]) * 60 + Number(m[2]),
+        spell: m[3]!,
+        // an area save (`X (area)`) is on nobody in particular
+        onId: line.includes(" (area)")
+          ? undefined
+          : (ENEMY_DEF_RECIPIENT_ID.exec(line) ??
+              ENEMY_DEF_CASTER_ID.exec(line))?.[1],
+      });
   }
   const failures: string[] = [];
   lines.forEach((line, i) => {
@@ -1757,7 +1785,10 @@ export function checkEnemyDefRefConsistency(lines: string[]): string[] {
     if (!m) return;
     const spanFromS = Number(m[1]) * 60 + Number(m[2]);
     const spanToS = Number(m[3]) * 60 + Number(m[4]);
-    for (const raw of m[5]!.split("/")) {
+    // the attempt's target, as the timeline numbers it (undefined = the
+    // roster does not resolve the name → the unit is not compared)
+    const targetId = idOf.get(m[5]!);
+    for (const raw of m[6]!.split("/")) {
       let spell = raw.replace(/@\d+:\d\d$/, "").trim();
       const up = KILL_ATTEMPT_UP_SINCE.exec(spell);
       if (up) spell = spell.slice(0, up.index).trim();
@@ -1767,12 +1798,78 @@ export function checkEnemyDefRefConsistency(lines: string[]): string[] {
       const hit = defs.some(
         (d) =>
           d.spell === spell &&
+          (targetId === undefined ||
+            d.onId === undefined ||
+            d.onId === targetId) &&
           d.atS >= lo - ENEMY_DEF_PAIR_SLACK_S &&
           d.atS <= hi + ENEMY_DEF_PAIR_SLACK_S,
       );
       if (!hit)
         failures.push(
-          `line ${i + 1}: KILL ATTEMPTS attributes "${spell}" in [${fmtTime(lo)}–${fmtTime(hi)}] but no [ENEMY DEF] line names it there: "${line.trim()}"`,
+          `line ${i + 1}: KILL ATTEMPTS attributes "${spell}" in [${fmtTime(lo)}–${fmtTime(hi)}] but no [ENEMY DEF] line names it there on that unit: "${line.trim()}"`,
+        );
+    }
+  });
+  return failures;
+}
+
+/** `  [m:ss–m:ss] on <unit> — … | FAILED: broke out (A/B)[; forced a full immunity …]` */
+const KILL_ATTEMPT_BROKE_OUT =
+  /^\s*\[(\d+):(\d\d)–(\d+):(\d\d)\] on (\S+) — .*\| FAILED: broke out \(([^()|]+)\)/;
+/** `m:ss  [ENEMY TRINKET]   <pid> used <ability>[ out of …]` */
+const ENEMY_BREAK_LINE =
+  /^(\d+):(\d\d) {2}\[ENEMY TRINKET\] {3}(\S+) used (.+?)(?: out of | \[| \(|$)/;
+
+/**
+ * KILL ATTEMPTS `broke out (X)` ⇒ an `[ENEMY TRINKET] … used X out of …` line
+ * inside the attempt's credit window `[from, to + KILL_CREDIT_SLACK_S]` — the
+ * window `attributeFailure` reads a break over (the trinket's window; triage
+ * enemy-def F-E21). Both render from `analyzePlayerCCAndTrinket`'s
+ * `breakAbilityUses`, so a miss is a producer bug: the summary names a break
+ * the timeline never showed. Keyed on the `[ENEMY TRINKET]` legend line.
+ */
+export function checkBrokeOutRefConsistency(lines: string[]): string[] {
+  const idOf = unitIdsByName(lines);
+  const breaks: Array<{
+    atS: number;
+    what: string;
+    outOf: boolean;
+    byId?: string;
+  }> = [];
+  for (const line of lines) {
+    const m = ENEMY_BREAK_LINE.exec(line);
+    if (m)
+      breaks.push({
+        atS: Number(m[1]) * 60 + Number(m[2]),
+        what: m[4]!,
+        outOf: line.includes(" out of "),
+        byId: /^(\d+)\(/.exec(m[3]!)?.[1],
+      });
+  }
+  const failures: string[] = [];
+  lines.forEach((line, i) => {
+    const m = KILL_ATTEMPT_BROKE_OUT.exec(line);
+    if (!m) return;
+    const fromS = Number(m[1]) * 60 + Number(m[2]);
+    const toS = Number(m[3]) * 60 + Number(m[4]) + KILL_CREDIT_SLACK_S;
+    // the target as the timeline numbers it; unresolved → unit not compared
+    const targetId = idOf.get(m[5]!);
+    for (const raw of m[6]!.split("/")) {
+      const what = raw.trim();
+      if (!what) continue;
+      const hit = breaks.some(
+        (b) =>
+          b.what === what &&
+          b.outOf &&
+          (targetId === undefined ||
+            b.byId === undefined ||
+            b.byId === targetId) &&
+          b.atS >= fromS &&
+          b.atS <= toS,
+      );
+      if (!hit)
+        failures.push(
+          `line ${i + 1}: KILL ATTEMPTS says the target broke out with "${what}" in [${fmtTime(fromS)}–${fmtTime(toS)}] but no [ENEMY TRINKET] line shows that unit breaking a control with it there: "${line.trim()}"`,
         );
     }
   });
@@ -3166,6 +3263,7 @@ export function checkMatch(
   hardFailures.push(...checkCjkLeak(lines));
   hardFailures.push(...checkKickWaitedOutConsistency(lines));
   hardFailures.push(...checkEnemyDefRefConsistency(lines));
+  hardFailures.push(...checkBrokeOutRefConsistency(lines));
   hardFailures.push(...checkFactsBlockIntegrity(lines));
   hardFailures.push(...checkPetCreditSide(lines));
   hardFailures.push(...checkHeaderHpPromise(lines));

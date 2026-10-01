@@ -109,13 +109,19 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
           spellId: "185313",
           srcUnitId: "P1",
           timestamp: T0 + 40_000,
-          logLine: { event: LogEvent.SPELL_AURA_APPLIED, timestamp: T0 + 40_000 },
+          logLine: {
+            event: LogEvent.SPELL_AURA_APPLIED,
+            timestamp: T0 + 40_000,
+          },
         },
         {
           spellId: "185313",
           srcUnitId: "P1",
           timestamp: T0 + 48_000,
-          logLine: { event: LogEvent.SPELL_AURA_REMOVED, timestamp: T0 + 48_000 },
+          logLine: {
+            event: LogEvent.SPELL_AURA_REMOVED,
+            timestamp: T0 + 48_000,
+          },
         },
       ] as any,
     });
@@ -163,7 +169,9 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
     });
 
     expect(timeline).toContain("[ENEMY TRINKET]");
-    expect(timeline).toContain("used PvP trinket out of Kidney Shot (by 1(SRogue))");
+    expect(timeline).toContain(
+      "used PvP trinket out of Kidney Shot (by 1(SRogue))",
+    );
     expect(timeline).toContain("[friendly offensive CD active]");
     expect(timeline).toContain("(target at 31% HP)");
     expect(timeline).toMatch(
@@ -180,13 +188,19 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
           spellId: "185313",
           srcUnitId: "P1",
           timestamp: T0 + 40_000,
-          logLine: { event: LogEvent.SPELL_AURA_APPLIED, timestamp: T0 + 40_000 },
+          logLine: {
+            event: LogEvent.SPELL_AURA_APPLIED,
+            timestamp: T0 + 40_000,
+          },
         },
         {
           spellId: "185313",
           srcUnitId: "P1",
           timestamp: T0 + 48_000,
-          logLine: { event: LogEvent.SPELL_AURA_REMOVED, timestamp: T0 + 48_000 },
+          logLine: {
+            event: LogEvent.SPELL_AURA_REMOVED,
+            timestamp: T0 + 48_000,
+          },
         },
       ] as any,
     });
@@ -247,6 +261,72 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
     );
   });
 
+  it("2b. a break racial renders on every press — Escape Artist too, which locks nothing and names no CC; a class break only when it broke one", () => {
+    const owner = makeUnit({ id: "P1", name: "OwnerPlayer" });
+    const enemyRogue = makeUnit({
+      id: "E1",
+      name: "EnemyRogue",
+      reaction: CombatUnitReaction.Hostile,
+      spec: CombatUnitSpec.Rogue_Subtlety,
+      advancedActions: [hpTick("E1", 42, 68)],
+    });
+    const enemyCCSummaries: IPlayerCCTrinketSummary[] = [
+      makeCCTrinketSummary({
+        playerName: "EnemyRogue",
+        trinketUseTimes: [],
+        ccInstances: [],
+        breakAbilityUses: [
+          {
+            atSeconds: 42,
+            spellId: "20589",
+            name: "Escape Artist",
+            sharesTrinketLock: false,
+          },
+          // a Blink that broke nothing is just a Blink
+          {
+            atSeconds: 50,
+            spellId: "1953",
+            name: "Blink",
+            sharesTrinketLock: false,
+          },
+        ],
+      }),
+    ];
+    const timeline = buildMatchTimeline({
+      owner,
+      ownerSpec: "Subtlety Rogue",
+      friends: [owner],
+      enemies: [enemyRogue],
+      allUnits: [owner, enemyRogue],
+      playerIdMap: new Map([["OwnerPlayer", 1]]),
+      enemyIdMap: new Map([["EnemyRogue", 2]]),
+      matchStartMs: T0,
+      matchEndMs: T0 + 60_000,
+      isHealer: false,
+      ownerCDs: [],
+      teammateCDs: [],
+      enemyCDTimeline: { players: [], alignedBurstWindows: [] },
+      ccTrinketSummaries: [],
+      enemyCCSummaries,
+      dispelSummary: emptyDispel as any,
+      enemyDispelSummary: emptyDispel as any,
+      pressureWindows: [],
+      healingGaps: [],
+      friendlyDeaths: [],
+      enemyDeaths: [],
+      criticalWindowSeconds: new Set(),
+      outgoingCCChains: [],
+    });
+    const lines = timeline
+      .split("\n")
+      .filter((l) => l.includes("[ENEMY TRINKET]   "));
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatch(
+      /0:42\s+\[ENEMY TRINKET\]\s+2\(SRogue\) used Escape Artist/,
+    );
+    expect(lines[0]).not.toContain("out of");
+  });
+
   it("3. Fractional-second snapping: samples HP and offensive CD at second 42, evaluates CC break at raw ms ±250ms", () => {
     // Friendly offensive CD active only at 42.0s (42000ms), ended at 42.2s (before raw 42.6s = 42600ms)
     const owner = makeUnit({
@@ -257,13 +337,19 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
           spellId: "185313",
           srcUnitId: "P1",
           timestamp: T0 + 41_000,
-          logLine: { event: LogEvent.SPELL_AURA_APPLIED, timestamp: T0 + 41_000 },
+          logLine: {
+            event: LogEvent.SPELL_AURA_APPLIED,
+            timestamp: T0 + 41_000,
+          },
         },
         {
           spellId: "185313",
           srcUnitId: "P1",
           timestamp: T0 + 42_200,
-          logLine: { event: LogEvent.SPELL_AURA_REMOVED, timestamp: T0 + 42_200 },
+          logLine: {
+            event: LogEvent.SPELL_AURA_REMOVED,
+            timestamp: T0 + 42_200,
+          },
         },
       ] as any,
     });
@@ -274,10 +360,7 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
       name: "EnemyRogue",
       reaction: CombatUnitReaction.Hostile,
       spec: CombatUnitSpec.Rogue_Subtlety,
-      advancedActions: [
-        hpTick("E1", 42, 50),
-        hpTick("E1", 43, 10),
-      ],
+      advancedActions: [hpTick("E1", 42, 50), hpTick("E1", 43, 10)],
     });
 
     // CC ended at 42.58s (42580ms).
@@ -404,13 +487,19 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
           spellId: "185313",
           srcUnitId: "P1",
           timestamp: T0 + 40_000,
-          logLine: { event: LogEvent.SPELL_AURA_APPLIED, timestamp: T0 + 40_000 },
+          logLine: {
+            event: LogEvent.SPELL_AURA_APPLIED,
+            timestamp: T0 + 40_000,
+          },
         },
         {
           spellId: "185313",
           srcUnitId: "P1",
           timestamp: T0 + 50_000,
-          logLine: { event: LogEvent.SPELL_AURA_REMOVED, timestamp: T0 + 50_000 },
+          logLine: {
+            event: LogEvent.SPELL_AURA_REMOVED,
+            timestamp: T0 + 50_000,
+          },
         },
       ] as any,
     });
@@ -430,7 +519,10 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
           destUnitId: "E1",
           destUnitName: "EnemyRogue",
           timestamp: T0 + 45_000,
-          logLine: { event: LogEvent.SPELL_AURA_APPLIED, timestamp: T0 + 45_000 },
+          logLine: {
+            event: LogEvent.SPELL_AURA_APPLIED,
+            timestamp: T0 + 45_000,
+          },
         },
         {
           spellId: "31224",
@@ -440,7 +532,10 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
           destUnitId: "E1",
           destUnitName: "EnemyRogue",
           timestamp: T0 + 50_000,
-          logLine: { event: LogEvent.SPELL_AURA_REMOVED, timestamp: T0 + 50_000 },
+          logLine: {
+            event: LogEvent.SPELL_AURA_REMOVED,
+            timestamp: T0 + 50_000,
+          },
         },
       ] as any,
       advancedActions: [hpTick("E1", 44.9, 28)],
@@ -472,7 +567,9 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
     });
 
     expect(timeline).toContain("[ENEMY DEF]");
-    expect(timeline).toContain("Cloak of Shadows (immune, 5.0s) [friendly offensive CD active] (at 28% HP)");
+    expect(timeline).toContain(
+      "Cloak of Shadows (immune, 5.0s) [friendly offensive CD active] (at 28% HP)",
+    );
     expect(timeline).toMatch(
       /0:45\s+\[ENEMY DEF\]\s+2\(SRogue\) \(Subtlety Rogue\): Cloak of Shadows \(immune, 5\.0s\) \[friendly offensive CD active\] \(at 28% HP\)/,
     );
@@ -489,13 +586,19 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
           spellId: "185313",
           srcUnitId: "P1",
           timestamp: T0 + 40_000,
-          logLine: { event: LogEvent.SPELL_AURA_APPLIED, timestamp: T0 + 40_000 },
+          logLine: {
+            event: LogEvent.SPELL_AURA_APPLIED,
+            timestamp: T0 + 40_000,
+          },
         },
         {
           spellId: "185313",
           srcUnitId: "P1",
           timestamp: T0 + 50_000,
-          logLine: { event: LogEvent.SPELL_AURA_REMOVED, timestamp: T0 + 50_000 },
+          logLine: {
+            event: LogEvent.SPELL_AURA_REMOVED,
+            timestamp: T0 + 50_000,
+          },
         },
       ] as any,
     });
@@ -515,7 +618,10 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
           destUnitId: "E1",
           destUnitName: "EnemyRogue",
           timestamp: T0 + 46_000,
-          logLine: { event: LogEvent.SPELL_AURA_APPLIED, timestamp: T0 + 46_000 },
+          logLine: {
+            event: LogEvent.SPELL_AURA_APPLIED,
+            timestamp: T0 + 46_000,
+          },
         },
         {
           spellId: "33206",
@@ -525,7 +631,10 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
           destUnitId: "E1",
           destUnitName: "EnemyRogue",
           timestamp: T0 + 54_000,
-          logLine: { event: LogEvent.SPELL_AURA_REMOVED, timestamp: T0 + 54_000 },
+          logLine: {
+            event: LogEvent.SPELL_AURA_REMOVED,
+            timestamp: T0 + 54_000,
+          },
         },
       ] as any,
     });
@@ -599,13 +708,19 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
           spellId: "185313",
           srcUnitId: "P1",
           timestamp: T0 + 40_000,
-          logLine: { event: LogEvent.SPELL_AURA_APPLIED, timestamp: T0 + 40_000 },
+          logLine: {
+            event: LogEvent.SPELL_AURA_APPLIED,
+            timestamp: T0 + 40_000,
+          },
         },
         {
           spellId: "185313",
           srcUnitId: "P1",
           timestamp: T0 + 50_000,
-          logLine: { event: LogEvent.SPELL_AURA_REMOVED, timestamp: T0 + 50_000 },
+          logLine: {
+            event: LogEvent.SPELL_AURA_REMOVED,
+            timestamp: T0 + 50_000,
+          },
         },
       ] as any,
     });
@@ -626,7 +741,10 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
           destUnitId: "E1",
           destUnitName: "EnemyRogue",
           timestamp: T0 + 45_000,
-          logLine: { event: LogEvent.SPELL_AURA_APPLIED, timestamp: T0 + 45_000 },
+          logLine: {
+            event: LogEvent.SPELL_AURA_APPLIED,
+            timestamp: T0 + 45_000,
+          },
         },
         {
           spellId: "31224",
@@ -636,7 +754,10 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
           destUnitId: "E1",
           destUnitName: "EnemyRogue",
           timestamp: T0 + 50_000,
-          logLine: { event: LogEvent.SPELL_AURA_REMOVED, timestamp: T0 + 50_000 },
+          logLine: {
+            event: LogEvent.SPELL_AURA_REMOVED,
+            timestamp: T0 + 50_000,
+          },
         },
       ] as any,
     });
@@ -739,13 +860,19 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
           spellId: DEATHMARK,
           srcUnitId: "E1", // Enemy cast it
           timestamp: T0 + 10_000,
-          logLine: { event: LogEvent.SPELL_AURA_APPLIED, timestamp: T0 + 10_000 },
+          logLine: {
+            event: LogEvent.SPELL_AURA_APPLIED,
+            timestamp: T0 + 10_000,
+          },
         },
         {
           spellId: DEATHMARK,
           srcUnitId: "E1",
           timestamp: T0 + 26_000,
-          logLine: { event: LogEvent.SPELL_AURA_REMOVED, timestamp: T0 + 26_000 },
+          logLine: {
+            event: LogEvent.SPELL_AURA_REMOVED,
+            timestamp: T0 + 26_000,
+          },
         },
       ] as any,
     });
@@ -764,7 +891,10 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
           destUnitId: "E1",
           destUnitName: "EnemyRogue",
           timestamp: T0 + 12_000,
-          logLine: { event: LogEvent.SPELL_AURA_APPLIED, timestamp: T0 + 12_000 },
+          logLine: {
+            event: LogEvent.SPELL_AURA_APPLIED,
+            timestamp: T0 + 12_000,
+          },
         },
         {
           spellId: "31224",
@@ -774,7 +904,10 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
           destUnitId: "E1",
           destUnitName: "EnemyRogue",
           timestamp: T0 + 17_000,
-          logLine: { event: LogEvent.SPELL_AURA_REMOVED, timestamp: T0 + 17_000 },
+          logLine: {
+            event: LogEvent.SPELL_AURA_REMOVED,
+            timestamp: T0 + 17_000,
+          },
         },
       ] as any,
     });
@@ -827,13 +960,19 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
           spellId: DEATHMARK,
           srcUnitId: "P1", // Friendly cast it
           timestamp: T0 + 10_000,
-          logLine: { event: LogEvent.SPELL_AURA_APPLIED, timestamp: T0 + 10_000 },
+          logLine: {
+            event: LogEvent.SPELL_AURA_APPLIED,
+            timestamp: T0 + 10_000,
+          },
         },
         {
           spellId: DEATHMARK,
           srcUnitId: "P1",
           timestamp: T0 + 26_000,
-          logLine: { event: LogEvent.SPELL_AURA_REMOVED, timestamp: T0 + 26_000 },
+          logLine: {
+            event: LogEvent.SPELL_AURA_REMOVED,
+            timestamp: T0 + 26_000,
+          },
         },
         {
           spellId: "31224", // Cloak of Shadows (immune)
@@ -843,7 +982,10 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
           destUnitId: "E1",
           destUnitName: "EnemyRogue",
           timestamp: T0 + 12_000,
-          logLine: { event: LogEvent.SPELL_AURA_APPLIED, timestamp: T0 + 12_000 },
+          logLine: {
+            event: LogEvent.SPELL_AURA_APPLIED,
+            timestamp: T0 + 12_000,
+          },
         },
         {
           spellId: "31224",
@@ -853,7 +995,10 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
           destUnitId: "E1",
           destUnitName: "EnemyRogue",
           timestamp: T0 + 17_000,
-          logLine: { event: LogEvent.SPELL_AURA_REMOVED, timestamp: T0 + 17_000 },
+          logLine: {
+            event: LogEvent.SPELL_AURA_REMOVED,
+            timestamp: T0 + 17_000,
+          },
         },
       ] as any,
     });
@@ -1188,7 +1333,9 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
         outgoingCCChains: [],
       });
 
-      const ccLine = timeline.split("\n").find((l) => l.includes("[CC ON ENEMY]"));
+      const ccLine = timeline
+        .split("\n")
+        .find((l) => l.includes("[CC ON ENEMY]"));
       expect(ccLine).toBeDefined();
       expect(ccLine).toContain("Psychic Scream");
       expect(ccLine).not.toContain("Tremor Totem");

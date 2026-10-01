@@ -1367,3 +1367,92 @@ describe("attributeFailure — windows, bound trinket, school gates", () => {
     expect(a.attribution?.primary).toBe("pressure");
   });
 });
+
+/** enemy-def F-E21 (ruling A′15): a racial or class ability that removed a
+ * stun of the attempt is its cause, like the trinket; and a trinket-equivalent
+ * racial locks the trinket for the kill-opportunity tier. */
+describe("extractKillAttempts — broke out with a racial / class ability", () => {
+  const press = (spellId: string, atS: number): any => ({
+    spellId,
+    spellName: `S${spellId}`,
+    destUnitId: "0000000000000000",
+    destUnitName: "nil",
+    timestamp: ms(atS),
+    logLine: {
+      event: LogEvent.SPELL_CAST_SUCCESS,
+      timestamp: ms(atS),
+      parameters: [],
+    },
+  });
+  const attacker = () =>
+    unit("f1", { reaction: 1, damageOut: [dmg("f1", "e1", 11, 50_000)] });
+
+  it("Will to Survive ending the stun → broke out (Will to Survive); the racial's trinket lock does NOT change the next attempt's tier (ruling P-b7)", async () => {
+    await ensureAnalysisData();
+    const e1 = unit("e1", {
+      // first stun broken at 12 s by Will to Survive; a second one at 40 s
+      auraEvents: [
+        ...stunAuras("e1", KIDNEY, 10, 2),
+        ...stunAuras("e1", KIDNEY, 40, 5),
+      ],
+      spellCastEvents: [press("59752", 12)],
+    });
+    const f1 = unit("f1", {
+      reaction: 1,
+      damageOut: [dmg("f1", "e1", 11, 50_000), dmg("f1", "e1", 42, 50_000)],
+    });
+    const [first, second] = extractKillAttempts(
+      [f1],
+      [e1],
+      makeCombat(f1, e1),
+    );
+    expect(first.attribution?.primary).toBe("broke-out");
+    expect(formatKillAttemptsForContext([first]).join("\n")).toContain(
+      "FAILED: broke out (Will to Survive)",
+    );
+    expect(first.opportunity.tier).toBe("locked"); // trinket up at 10 s
+    // 40 s is inside the racial's shared lock (12 + 60). User ruling P-b7
+    // (2026-10-01): that lock must not make the target "trinket-less".
+    expect(second.opportunity.trinketAvailable).toBe(true);
+    expect(second.opportunity.tier).toBe("locked");
+  });
+
+  it("Blink out of the stun → broke out (Blink); Icebound Fortitude stays a popped wall", async () => {
+    await ensureAnalysisData();
+    const mage = unit("e1", {
+      auraEvents: stunAuras("e1", KIDNEY, 10, 2),
+      spellCastEvents: [press("1953", 12)],
+    });
+    const f1 = attacker();
+    expect(
+      extractKillAttempts([f1], [mage], makeCombat(f1, mage))[0].attribution
+        ?.primary,
+    ).toBe("broke-out");
+    const dk = unit("e1", {
+      spec: "252",
+      auraEvents: [
+        ...stunAuras("e1", KIDNEY, 10, 2),
+        {
+          spellId: "48792",
+          spellName: "Icebound Fortitude",
+          srcUnitId: "e1",
+          srcUnitName: "e1",
+          destUnitId: "e1",
+          destUnitName: "e1",
+          timestamp: ms(12),
+          logLine: {
+            event: LogEvent.SPELL_AURA_APPLIED,
+            timestamp: ms(12),
+            parameters: [],
+          },
+          auraType: "BUFF",
+        },
+      ],
+      spellCastEvents: [press("48792", 12)],
+    });
+    const f2 = attacker();
+    const a = extractKillAttempts([f2], [dk], makeCombat(f2, dk))[0];
+    expect(a.attribution?.brokeOut).toEqual([]);
+    expect(a.attribution?.primary).toBe("defensive");
+  });
+});

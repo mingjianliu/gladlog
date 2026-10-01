@@ -159,6 +159,10 @@ import {
   KICKED_OTHER_OVERRIDE_IDS,
 } from "./kickedSpellCategories";
 import {
+  AURA_KEYED_BREAK_RACIALS,
+  CLASS_CC_BREAK_ABILITIES,
+} from "./ccBreakAbilities";
+import {
   MITIGATION_OVERRIDES,
   NO_MITIGATION_IDS,
   SELF_WALL_AURA_TO_CAST_ID,
@@ -318,6 +322,14 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
       ...keys(ENEMY_IMMUNITY_EXTERNAL_CASTS),
       ...Object.values(ENEMY_IMMUNITY_EXTERNAL_CASTS),
     ],
+  ),
+  // enemy-def F-E21 (ruling A′15): class abilities that remove control, and
+  // the break racials logged only as a buff (buff id → racial cast id).
+  t("CLASS_CC_BREAK_ABILITIES", "data/ccBreakAbilities.ts", "cast", () =>
+    keys(CLASS_CC_BREAK_ABILITIES),
+  ),
+  t("AURA_KEYED_BREAK_RACIALS", "data/ccBreakAbilities.ts", "aura", () =>
+    keys(AURA_KEYED_BREAK_RACIALS),
   ),
   // enemy-def F-E1a: logged aura id → the cast id its wall row is keyed by.
   t("SELF_WALL_AURA_TO_CAST_ID", "data/mitigationData.ts", "mixed", () => [

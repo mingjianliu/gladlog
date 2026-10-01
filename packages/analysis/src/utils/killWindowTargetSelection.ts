@@ -335,6 +335,17 @@ export function getTrinketStateAtTime(
   isHealer: boolean,
 ): boolean {
   const trinketCD = isHealer ? HEALER_TRINKET_CD_S : DPS_TRINKET_CD_S;
+  // A trinket-equivalent racial (Will to Survive, Will of the Forsaken …)
+  // locks the trinket for 30–90 s, and this predicate deliberately does NOT
+  // read that lock. User ruling P-b7 (2026-10-01): the shared lock is short,
+  // the enemy who pressed the racial was usually being controlled rather than
+  // focused, and "softer" is not established by it (they have other tools) —
+  // so a racial press must not turn a target into the trinket-less PRIME
+  // tier. On the 605 S2 files honouring the lock re-tiered 1,227 of 28,154
+  // KILL ATTEMPTS lines and added one burst-into-mitigation candidate. The
+  // press itself is rendered as a fact (`[ENEMY TRINKET] … used X`). A study
+  // of racial × trinket shared cooldowns and "softer target" is on the
+  // brainstorm list.
   // G7-P2 (triage F-E19 / F-C15): the shared use predicate — an Adaptation
   // trigger aura counts, and its lockout interval says when it is back.
   // The state AT the attempt's raw start, through the shared use primitive in

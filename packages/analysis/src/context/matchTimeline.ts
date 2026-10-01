@@ -10,6 +10,7 @@ import type { CdPriorHoldEpisode } from "../analysis/cdTriggerPrior";
 import type { StackedDefensivePair } from "../analysis/stackedDefensives";
 import { BACKLASH_AURA_CC_TYPE } from "../data/backlashCc";
 import { castAndEffectIds } from "../data/castEffectAuras";
+import { BREAK_RACIAL_SPELL_IDS } from "../data/racialAbilities";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { ccSpellIds } from "../data/spellTags";
 import { DEATH_WINDOW_S, TIMELINE_LINE_FLAGS } from "../data/timelineLineFlags";
@@ -28,6 +29,7 @@ import {
   findBrokenDisarm,
   GROUNDING_TOTEM_SPELL_ID,
   GROUNDING_TOTEM_WINDOW_S,
+  type ICCInstance,
   immunityBreak,
   IPlayerCCTrinketSummary,
   renderedCcSeconds,
@@ -2180,6 +2182,17 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
             : "on CD";
         trinketNote = ` | trinket: ON CD (${cdLeft})`;
       }
+      // F-E21: the player's trinket-equivalent racial not back when this CC
+      // landed — on its own cooldown from an earlier press (9c6ab747 1:37:
+      // Will of the Forsaken broke the 0:18 Song, and the later Song said
+      // only "trinket: ON CD"), or held by a trinket press's shared lock.
+      // Not on a CC that was itself broken — that note says who did.
+      if (
+        cc.breakRacialOnCd &&
+        cc.trinketState !== "used" &&
+        cc.trinketState !== "racial_break"
+      )
+        trinketNote += `${trinketNote ? ";" : " |"} ${cc.breakRacialOnCd.name}: ON CD (${cc.breakRacialOnCd.secondsLeft}s left)`;
 
       // F148: Cleanse Success Verification — check if this CC was removed by a friendly dispel
       const isCleansed = wasRemovedByAllyDispel(
@@ -2368,20 +2381,23 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       // — "did the target trinket or not" is the core fact of a burst-conversion
       // audit, and without it the coach can only downgrade confidence with
       // "trinket state never observed".
-      for (const t of summary.trinketUseTimes) {
-        enemyTrinketCount++;
+      const enemyUnit = enemies?.find((e) => e.name === summary.playerName);
+      const friendlyIds = new Set(friends.map((f) => f.id));
+      /** One `[ENEMY TRINKET]` line: `used <what>[ out of <CC> (by <src>)]`. */
+      const addEnemyBreakLine = (
+        t: number,
+        what: string,
+        /** the press's own id — the HP is read AT the press (F-E11) */
+        pressSpellId: string,
+        brokenCC:
+          | Pick<ICCInstance, "spellName" | "sourceName" | "sourceId">
+          | undefined,
+      ) => {
         const tSec = toRenderSecond(t);
         const tMs = matchStartMs + tSec * 1000;
-        const rawCastMs = matchStartMs + Math.round(t * 1000);
-        const brokenCC = findBrokenCC(
-          summary.ccInstances,
-          matchStartMs,
-          rawCastMs,
-        );
         const ccPart = brokenCC
           ? ` out of ${brokenCC.spellName} (by ${actorLabel(brokenCC.sourceName, "friendly", brokenCC.sourceId)})`
           : "";
-        const friendlyIds = new Set(friends.map((f) => f.id));
         const hasBurst =
           friends.some((f) =>
             hasOffensiveSpellActive(
@@ -2402,10 +2418,9 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
             ),
           );
         const burstPart = hasBurst ? " [friendly offensive CD active]" : "";
-        const enemyUnit = enemies?.find((e) => e.name === summary.playerName);
         const hpPct = enemyUnit
-          ? hpAtPress(enemyUnit, rawCastMs, {
-              spellId: MEDALLION_SPELL_ID,
+          ? hpAtPress(enemyUnit, matchStartMs + Math.round(t * 1000), {
+              spellId: pressSpellId,
               srcUnitId: enemyUnit.id,
             })
           : null;
@@ -2413,8 +2428,34 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
           hpPct !== null ? ` (target at ${hpPct.toFixed(0)}% HP)` : "";
         addEntry(
           t,
-          `${fmtTime(t)}  [ENEMY TRINKET]   ${enemyPid(summary.playerName)} used PvP trinket${ccPart}${burstPart}${hpPart}`,
+          `${fmtTime(t)}  [ENEMY TRINKET]   ${enemyPid(summary.playerName)} used ${what}${ccPart}${burstPart}${hpPart}`,
         );
+      };
+      for (const t of summary.trinketUseTimes) {
+        enemyTrinketCount++;
+        addEnemyBreakLine(
+          t,
+          "PvP trinket",
+          MEDALLION_SPELL_ID,
+          findBrokenCC(
+            summary.ccInstances,
+            matchStartMs,
+            matchStartMs + Math.round(t * 1000),
+          ),
+        );
+      }
+      // F-E21 / ruling A′15: the same line for a break that was not the
+      // trinket. A break RACIAL renders on every press — the trinket
+      // equivalents, and Escape Artist, which locks nothing and names no CC
+      // (`breakRemovesCc`) but is still the racial pressed (codex review,
+      // 2026-10-03: keyed on the trinket lock, it never rendered). A class
+      // ability (Blink, Berserker Shout …) only when it broke a control —
+      // every other Blink is not a break.
+      for (const u of summary.breakAbilityUses ?? []) {
+        if (u.atSeconds < 0 || u.atSeconds > matchEndSeconds) continue;
+        if (!BREAK_RACIAL_SPELL_IDS.has(u.spellId) && !u.brokenCc) continue;
+        enemyTrinketCount++; // keeps the [ENEMY TRINKET] legend in the prompt
+        addEnemyBreakLine(u.atSeconds, u.name, u.spellId, u.brokenCc);
       }
       for (const cc of summary.ccInstances) {
         // F148: Cleanse Success Verification — check if this CC was removed by an enemy dispel
@@ -3582,6 +3623,9 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     ...(enemyTrinketCount > 0
       ? [
           "  [ENEMY TRINKET] = an enemy used PvP trinket; `out of <spell> (by <source>)` indicates breaking out of that CC.",
+          "    `used <ability>` in place of `PvP trinket` = a racial press (Will to Survive, Will of the Forsaken, Stoneform and",
+          "    Fireblood also lock the trinket for 30–60 s; Escape Artist locks nothing) or a class ability (Blink, Berserker",
+          "    Shout, Icebound Fortitude …) that removed that CC.",
           "    `[friendly offensive CD active]` indicates at least one friendly offensive cooldown was active at that displayed second.",
           "    `(target at N% HP)` reflects the target's HP at the press, not the [STATE] reading of that second.",
         ]

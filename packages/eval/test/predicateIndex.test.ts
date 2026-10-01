@@ -70,6 +70,7 @@ import * as kickPriorityHealSpells from "@gladlog/analysis/src/data/kickPriority
 import * as kickPriorityPrior from "@gladlog/analysis/src/data/kickPriorityPrior";
 import * as mitigationComponents from "@gladlog/analysis/src/data/mitigationComponents";
 import * as outcomeRefs from "@gladlog/analysis/src/data/outcomeRefs";
+import * as ccBreakAbilities from "@gladlog/analysis/src/data/ccBreakAbilities";
 import * as racialAbilities from "@gladlog/analysis/src/data/racialAbilities";
 import * as rootAuraGenerated from "@gladlog/analysis/src/data/rootAuraGenerated";
 import * as scopedPurges from "@gladlog/analysis/src/data/scopedPurges";
@@ -585,6 +586,21 @@ const INDEX: PredicateRow[] = [
     file: `${A}/data/racialAbilities.ts`,
     symbol: "BREAK_RACIAL_SPELL_IDS",
     mod: racialAbilities,
+  },
+  {
+    file: `${A}/data/ccBreakAbilities.ts`,
+    symbol: "CC_BREAK_CAST_IDS",
+    mod: ccBreakAbilities,
+  },
+  {
+    file: `${A}/data/ccBreakAbilities.ts`,
+    symbol: "breakRemovesCc",
+    mod: ccBreakAbilities,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "breakAbilityPresses",
+    mod: ccTrinketAnalysis,
   },
   {
     file: `${A}/data/racialAbilities.ts`,
@@ -2007,6 +2023,11 @@ const INDEX: PredicateRow[] = [
   {
     file: `${E}/quality/promptQualityCheck.ts`,
     symbol: "checkEnemyDefRefConsistency",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkBrokeOutRefConsistency",
     mod: promptQualityCheck,
   },
   {

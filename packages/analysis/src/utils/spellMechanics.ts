@@ -74,6 +74,13 @@ export function explicitlyBreaksMechanic(
   return SPELLS[spellId]?.immuneMech?.includes(mech) === true;
 }
 
+/** The mechanics on this spell's own mechanic-immunity aura (aura 77) — what
+ * `explicitlyBreaksMechanic` answers one at a time. Empty when DB2 lists
+ * none. */
+export function mechanicsBrokenBy(spellId: string): readonly number[] {
+  return SPELLS[spellId]?.immuneMech ?? [];
+}
+
 /** Does this aura stop its carrier casting its other abilities (Ice Block,
  * Dispersion, Bladestorm)? */
 export function auraLocksCasting(auraId: string): boolean {
