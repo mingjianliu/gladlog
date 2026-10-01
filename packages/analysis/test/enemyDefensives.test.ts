@@ -6,15 +6,20 @@ import { ensureAnalysisData } from "../src/data/ensure";
 import { MITIGATION_TABLE } from "../src/data/mitigationData";
 import spellIdLists, {
   ENEMY_HEAL_SAVE_IDS,
+  ENEMY_IMMUNITY_SAVE_AURAS,
   ENEMY_REDIRECT_SAVE_IDS,
   ENEMY_SELF_SAVE_ONLY_IDS,
 } from "../src/data/spellIdLists";
+import { AURA_ONLY_ACTIVATION_IDS } from "../src/utils/cooldowns";
 import { EXTERNAL_DEFENSIVE_SPELLS } from "../src/utils/deathOutcomeAnalysis";
 import {
   enemyDefensiveEvents,
   EXTERNAL_DEF_IDS,
   IMMUNITY_IDS,
+  IMMUNITY_SAVE_AURA_NAMES,
   isExternalSaveId,
+  isImmunitySaveAura,
+  joinReappliedIntervals,
   MITIGATION_AURA_IDS,
   MITIGATION_AURA_MIN_PCT,
   REMOVED_EARLY_SLACK_S,
@@ -385,12 +390,10 @@ describe("enemy-only saves: self-saves, instant heals, grips / redirects", () =>
       startTime: ms(0),
       endTime: ms(300),
     });
-    expect(evs.map((e) => [e.kind, e.recipientId, e.observedSeconds])).toEqual(
-      [
-        ["external", "e2", undefined],
-        ["self-save", undefined, undefined],
-      ],
-    );
+    expect(evs.map((e) => [e.kind, e.recipientId, e.observedSeconds])).toEqual([
+      ["external", "e2", undefined],
+      ["self-save", undefined, undefined],
+    ]);
   });
 
   it("a grip renders the move, not its 1 s aura: no duration, no removed-early, no paired interval", () => {
@@ -424,5 +427,213 @@ describe("enemy-only saves: self-saves, instant heals, grips / redirects", () =>
     const mate = unit("e2");
     const evs = enemyDefensiveEvents(hunter, [hunter, mate], combat);
     expect(evs.map((e) => e.kind)).toEqual(["self-save", "external"]);
+  });
+});
+
+/**
+ * Triage 2026-09-29, enemy-def F-E5 / F-E6 (ruling A25): untargetable, feigned
+ * and cheat-death saves are kind `immune` — from enemy-only tables, never from
+ * `MITIGATION_TABLE`, so `IMMUNITY_IDS` stays the pct-100 slice other
+ * predicates read.
+ */
+describe("immunity-kind saves (Burrow, Time Stop, Vanish, Feign Death, Guardian of the Forgotten Queen …)", () => {
+  const TIME_STOP = "378441";
+  const BURROW = "409293";
+  const SURVIVAL_TACTICS = "202748";
+  const GOTFQ_CAST = "228049";
+  const GOTFQ_AURA = "228050";
+  const NATURES_GUARDIAN = "31616";
+
+  beforeAll(async () => {
+    await ensureAnalysisData();
+  });
+
+  it("IMMUNITY_IDS is untouched; the save auras are a separate, table-free set", () => {
+    for (const id of IMMUNITY_SAVE_AURA_NAMES.keys()) {
+      expect(IMMUNITY_IDS.has(id), id).toBe(false);
+      expect(id in MITIGATION_TABLE, id).toBe(false);
+      expect(isImmunitySaveAura(id), id).toBe(true);
+    }
+    for (const id of Object.keys(ENEMY_IMMUNITY_SAVE_AURAS))
+      expect(IMMUNITY_SAVE_AURA_NAMES.has(id), id).toBe(true);
+    expect(isImmunitySaveAura(DIVINE_SHIELD)).toBe(true);
+    expect(isImmunitySaveAura(BARKSKIN)).toBe(false);
+  });
+
+  it("Feign Death is read from the ledger's own aura table, not a second copy", () => {
+    const auras = AURA_ONLY_ACTIVATION_IDS["5384"];
+    expect(auras).toContain(SURVIVAL_TACTICS);
+    for (const a of auras)
+      expect(IMMUNITY_SAVE_AURA_NAMES.get(a)).toBe("Feign Death");
+  });
+
+  it("a self Burrow / Time Stop / Feign Death aura is one `immune` event named after the ability", () => {
+    const u = unit("e1", {
+      auraEvents: [
+        applied(BURROW, "e1", "e1", 10),
+        removed(BURROW, "e1", "e1", 15),
+        applied(TIME_STOP, "e1", "e1", 30.35),
+        removed(TIME_STOP, "e1", "e1", 35.35),
+        applied(SURVIVAL_TACTICS, "e1", "e1", 52.6),
+        removed(SURVIVAL_TACTICS, "e1", "e1", 54.1),
+      ],
+      // the Time Stop cast itself (dest = the caster) adds nothing
+      spellCastEvents: [cast(TIME_STOP, "e1", 30.35)],
+    });
+    const evs = enemyDefensiveEvents(u, [u], combat);
+    expect(evs.map((e) => [e.kind, e.spellName, e.atSeconds])).toEqual([
+      ["immune", "Burrow", 10],
+      ["immune", "Time Stop", 30.35],
+      ["immune", "Feign Death", 52.6],
+    ]);
+    expect(evs[0].observedSeconds).toBeCloseTo(5, 5);
+  });
+
+  it("Time Stop cast on an ally is an external timed by the ally's aura, with no during-it interval", () => {
+    const evoker = unit("e1", { spellCastEvents: [cast(TIME_STOP, "e2", 40)] });
+    const ally = unit("e2", {
+      auraEvents: [
+        applied(TIME_STOP, "e1", "e2", 40),
+        removed(TIME_STOP, "e1", "e2", 45),
+      ],
+    });
+    const evs = enemyDefensiveEvents(evoker, [evoker, ally], combat);
+    expect(evs).toHaveLength(1);
+    expect(evs[0]).toMatchObject({ kind: "external", recipientId: "e2" });
+    expect(evs[0].observedSeconds).toBeCloseTo(5, 5);
+    expect(evs[0].auraFromS).toBeUndefined();
+    // the ally itself did not press anything
+    expect(enemyDefensiveEvents(ally, [evoker, ally], combat)).toEqual([]);
+  });
+
+  it("Guardian of the Forgotten Queen: the paladin's cast is the external, timed by the guardian's 228050 on the ally", () => {
+    // dfcccbf2 round 5: cast 47.549 → 228050 from the summoned guardian 47.777
+    const pal = unit("e1", {
+      spellCastEvents: [cast(GOTFQ_CAST, "e2", 47.549)],
+    });
+    const warrior = unit("e2", {
+      auraEvents: [
+        applied(GOTFQ_AURA, "guardian", "e2", 47.777),
+        removed(GOTFQ_AURA, "guardian", "e2", 53.777),
+      ],
+    });
+    const evs = enemyDefensiveEvents(pal, [pal, warrior], combat);
+    expect(evs).toHaveLength(1);
+    expect(evs[0]).toMatchObject({
+      kind: "external",
+      spellId: GOTFQ_CAST,
+      recipientId: "e2",
+      atSeconds: 47.549,
+    });
+    expect(evs[0].observedSeconds).toBeCloseTo(6, 5);
+    // the guardian-sourced aura is not "the warrior pressed an immunity"
+    expect(enemyDefensiveEvents(warrior, [pal, warrior], combat)).toEqual([]);
+  });
+
+  it("Nature's Guardian: the self heal is an `immune` event without a duration", () => {
+    const sham = unit("e1", {
+      healIn: [
+        {
+          spellId: NATURES_GUARDIAN,
+          srcUnitId: "e1",
+          destUnitId: "e1",
+          effectiveAmount: 150_000,
+          logLine: {
+            event: LogEvent.SPELL_HEAL,
+            timestamp: ms(77),
+            parameters: [],
+          },
+        },
+        // somebody else's heal with a different id is nothing
+        {
+          spellId: "8004",
+          srcUnitId: "e2",
+          destUnitId: "e1",
+          effectiveAmount: 50_000,
+          logLine: {
+            event: LogEvent.SPELL_HEAL,
+            timestamp: ms(78),
+            parameters: [],
+          },
+        },
+      ],
+    });
+    const evs = enemyDefensiveEvents(sham, [sham], combat);
+    expect(evs.map((e) => [e.kind, e.spellName, e.atSeconds])).toEqual([
+      ["immune", "Nature's Guardian", 77],
+    ]);
+    expect(evs[0].observedSeconds).toBeUndefined();
+  });
+});
+
+/**
+ * Triage 2026-09-29, enemy-def F-E12: a second APPLIED of an aura that is
+ * still up is the same press re-announced, not a second press.
+ */
+describe("a re-applied aura with no REMOVED between is one press (F-E12)", () => {
+  const GUARDIAN_SPIRIT = "47788";
+
+  beforeAll(async () => {
+    await ensureAnalysisData();
+  });
+
+  it("f4eb8c87 2:47: Divine Shield applied, re-applied 0.87 s later, removed at 8.0 s → one 8.0 s immunity", () => {
+    const pal = unit("e1", {
+      spellCastEvents: [cast(DIVINE_SHIELD, "e1", 47.295)],
+      auraEvents: [
+        applied(DIVINE_SHIELD, "e1", "e1", 47.293),
+        applied(DIVINE_SHIELD, "e1", "e1", 48.159),
+        removed(DIVINE_SHIELD, "e1", "e1", 55.299),
+      ],
+    });
+    const evs = enemyDefensiveEvents(pal, [pal], combat);
+    expect(evs).toHaveLength(1);
+    expect(evs[0]).toMatchObject({ kind: "immune", atSeconds: 47.293 });
+    expect(evs[0].observedSeconds).toBeCloseTo(8.006, 3);
+    expect(evs[0].removedEarly).toBe(false);
+  });
+
+  it("69546267 2:05: Guardian Spirit on an ally, re-applied 1.6 s later → one external, full duration, not removed early", () => {
+    const priest = unit("e1", {
+      spellCastEvents: [cast(GUARDIAN_SPIRIT, "e2", 5.975)],
+    });
+    const mage = unit("e2", {
+      auraEvents: [
+        applied(GUARDIAN_SPIRIT, "e1", "e2", 5.975),
+        applied(GUARDIAN_SPIRIT, "e1", "e2", 7.587),
+        removed(GUARDIAN_SPIRIT, "e1", "e2", 17.973),
+      ],
+    });
+    const evs = enemyDefensiveEvents(priest, [priest, mage], combat);
+    expect(evs).toHaveLength(1);
+    expect(evs[0]).toMatchObject({ kind: "external", recipientId: "e2" });
+    expect(evs[0].observedSeconds).toBeCloseTo(11.998, 3);
+    expect(evs[0].removedEarly).toBe(false);
+  });
+
+  it("two real presses stay two: a second cast behind the second APPLIED keeps the split", () => {
+    const iv = (fromS: number, toS: number, inferredEnd: boolean) => ({
+      spellId: BARKSKIN,
+      spellName: "Barkskin",
+      srcUnitName: "e1",
+      fromS,
+      toS,
+      inferredStart: false,
+      inferredEnd,
+    });
+    const split = [iv(10, 14, true), iv(14, 26, false)];
+    expect(joinReappliedIntervals(split, () => [10])).toEqual([
+      iv(10, 26, false),
+    ]);
+    expect(joinReappliedIntervals(split, () => [])).toEqual([
+      iv(10, 26, false),
+    ]);
+    expect(joinReappliedIntervals(split, () => [10, 14])).toEqual(split);
+    // a real end (REMOVED logged) followed by a new application is never joined
+    const ended = [iv(10, 14, false), iv(14, 26, false)];
+    expect(joinReappliedIntervals(ended, () => [10])).toEqual(ended);
+    // a gap between the two is not a re-announce
+    const gap = [iv(10, 14, true), iv(15, 26, false)];
+    expect(joinReappliedIntervals(gap, () => [10])).toEqual(gap);
   });
 });

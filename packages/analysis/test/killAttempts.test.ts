@@ -707,3 +707,80 @@ describe("extractKillAttempts — enemy-only saves are failure causes", () => {
     ).toBe("pressure");
   });
 });
+
+/** enemy-def F-E5 / F-E6 (ruling A25): an immunity-kind save inside the span
+ * reads "forced a full immunity", whoever applied the aura. */
+describe("extractKillAttempts — immunity-kind saves are immunity-baited", () => {
+  const auraOn = (spellId: string, src: string, atS: number): any => ({
+    spellId,
+    spellName: `S${spellId}`,
+    srcUnitId: src,
+    srcUnitName: src,
+    destUnitId: "e1",
+    destUnitName: "e1",
+    timestamp: ms(atS),
+    logLine: {
+      event: LogEvent.SPELL_AURA_APPLIED,
+      timestamp: ms(atS),
+      parameters: [],
+    },
+    auraType: "BUFF",
+  });
+  const attempt = (e1: any) => {
+    const f1 = unit("f1", {
+      reaction: 1,
+      damageOut: [dmg("f1", "e1", 12, 50_000)],
+    });
+    return extractKillAttempts([f1], [e1], makeCombat(f1, e1))[0];
+  };
+
+  it.each([
+    ["378441", "e1", "Time Stop on itself"],
+    ["202748", "e1", "Feign Death (Survival Tactics)"],
+    ["11327", "e1", "Vanish"],
+    [
+      "228050",
+      "guardian",
+      "Guardian of the Forgotten Queen, applied by the summon",
+    ],
+  ])("aura %s from %s (%s) → immunity-baited", async (id, src) => {
+    await ensureAnalysisData();
+    const a = attempt(
+      unit("e1", {
+        auraEvents: [...stunAuras("e1", KIDNEY, 10, 5), auraOn(id, src, 12)],
+      }),
+    );
+    expect(a.attribution?.primary).toBe("immunity-baited");
+  });
+
+  it("a Nature's Guardian heal on itself inside the span → immunity-baited; outside it → not", async () => {
+    await ensureAnalysisData();
+    const heal = (atS: number): any => ({
+      spellId: "31616",
+      srcUnitId: "e1",
+      destUnitId: "e1",
+      effectiveAmount: 10,
+      logLine: {
+        event: LogEvent.SPELL_HEAL,
+        timestamp: ms(atS),
+        parameters: [],
+      },
+    });
+    expect(
+      attempt(
+        unit("e1", {
+          auraEvents: stunAuras("e1", KIDNEY, 10, 5),
+          healIn: [heal(13)],
+        }),
+      ).attribution?.primary,
+    ).toBe("immunity-baited");
+    expect(
+      attempt(
+        unit("e1", {
+          auraEvents: stunAuras("e1", KIDNEY, 10, 5),
+          healIn: [heal(60)],
+        }),
+      ).attribution?.immunityBaited,
+    ).toBe(false);
+  });
+});

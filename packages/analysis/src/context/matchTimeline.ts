@@ -3179,6 +3179,8 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       ? [
           "  [ENEMY DEF] = an enemy pressed a defensive at that second: `(N%, Ts)` = official damage reduction (with the",
           "    caster's own talents where the log shows them) and the OBSERVED duration in this round; `immune` = full",
+          "    immunity, or the unit could not be hit or killed for that moment (Burrow, Time Stop, Mass Invisibility, Vanish,",
+          "    Feign Death, a Cheat Death / Cauterize / Nature's Guardian proc) — KILL ATTEMPTS counts each as a forced",
           "    immunity; `— removed early` = it ended before its full duration (dispelled, broken or cancelled);",
           "    `X → unit` = an external put on that unit; one with no duration is an instant heal (Lay on Hands) or a grip /",
           "    redirect (Leap of Faith, Intervene, Roar of Sacrifice, Master's Call). Absent = not pressed.",

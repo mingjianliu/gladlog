@@ -223,3 +223,43 @@ export const ENEMY_REDIRECT_SAVE_IDS: ReadonlySet<string> = new Set([
   "1241871", // Master's Call, the second player-cast id — 169 (153 self, 16 ally); 53271 / 54216 / 62305 are the pet's effect ids, not presses
   "3411", // Intervene — 596, all on an ally (147833 / 316531 are the same press logged again as its buff and charge)
 ]);
+
+// —— Enemy immunity-kind saves (enemy-def F-E5 / F-E6; user ruling A25,
+// 2026-09-30: "遁地、时间停止、群体隐形、假死、消失、装死、灼烧、自然守护
+// 都当免疫") ————————————————————————————————————————————————————————————————
+// Same reader as the sets above (`utils/enemyDefensives.ts` only). These are
+// NOT `MITIGATION_TABLE` rows: that table prices friendly mitigation
+// arithmetic and feeds `IMMUNITY_IDS`, which other predicates read as "a
+// pct-100 aura" (kick-eaten's low-HP facts). Here an id only says: the
+// `[ENEMY DEF]` line prints it as `immune`, and a kill attempt that ran into
+// it reads "forced a full immunity".
+
+/** Keyed by the LOGGED AURA id (the cast ids 31230 Cheat Death and 86949
+ * Cauterize are never logged; Vanish casts 1856 and logs the aura 11327) →
+ * the ability name the line prints. Applications in the 605-file capture.
+ * Feign Death is not listed here: its aura comes from the ledger's own
+ * table (`AURA_ONLY_ACTIVATION_IDS["5384"]`), joined in enemyDefensives.ts. */
+export const ENEMY_IMMUNITY_SAVE_AURAS: Readonly<Record<string, string>> = {
+  "409293": "Burrow", // 90, all self
+  "378441": "Time Stop", // 35 (31 self, 4 on an ally)
+  "414664": "Mass Invisibility", // 465 casts; the aura lands on the mage and on allies
+  "11327": "Vanish", // 1,084, one per 1856 cast
+  "45182": "Cheat Death", // 10 (the proc's aura, "Cheating Death")
+  "87023": "Cauterize", // 77 (the proc's aura)
+  "228050": "Guardian of the Forgotten Queen", // 2 — applied by the summoned guardian, see the cast map below
+};
+
+/** An immunity that leaves no aura: the save is a SPELL_HEAL of this id on the
+ * unit itself. Nature's Guardian — 306 heals in 107 files, no cast, no aura. */
+export const ENEMY_IMMUNITY_HEAL_PROCS: Readonly<Record<string, string>> = {
+  "31616": "Nature's Guardian",
+};
+
+/** A cast that puts an immunity aura on ANOTHER unit (cast id → aura id).
+ * Guardian of the Forgotten Queen: the paladin casts 228049 on an ally and
+ * the summoned guardian applies 228050, so the aura's source is never the
+ * paladin. Time Stop is cast on an ally in 4 of 35 casts. */
+export const ENEMY_IMMUNITY_EXTERNAL_CASTS: Readonly<Record<string, string>> = {
+  "228049": "228050",
+  "378441": "378441",
+};

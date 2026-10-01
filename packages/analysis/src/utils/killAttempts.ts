@@ -76,8 +76,9 @@ import { burstCastSpan, KILL_CREDIT_SLACK_S } from "./burstLedger";
 import { analyzeOutgoingCCChains, DRLevel, drResetMsAt } from "./drAnalysis";
 import { reconstructEnemyCDTimeline } from "./enemyCDs";
 import {
-  IMMUNITY_IDS,
+  immunityProcHeals,
   isExternalSaveId,
+  isImmunitySaveAura,
   MITIGATION_AURA_IDS,
   MITIGATION_AURA_MIN_PCT,
   selfSaveCasts,
@@ -682,7 +683,7 @@ function attributeFailure(
     if ((aura.logLine.event as string) !== LogEvent.SPELL_AURA_APPLIED)
       continue;
     if (!aura.spellId || !inSpan(aura.logLine.timestamp)) continue;
-    if (IMMUNITY_IDS.has(aura.spellId)) immunityBaited = true;
+    if (isImmunitySaveAura(aura.spellId)) immunityBaited = true;
     // The wall-in-hand subset is called out by name — those are the cards the
     // gated tier told the coach to bait; seeing one here closes that loop.
     if (
@@ -711,6 +712,14 @@ function attributeFailure(
       defensivePoppedAtS.push(secondsOf(aura.logLine.timestamp));
     }
   }
+
+  // An immunity-kind save that leaves no aura (Nature's Guardian's heal).
+  if (
+    immunityProcHeals(target, matchStartMs).some((h) =>
+      inSpan(matchStartMs + h.atSeconds * 1000),
+    )
+  )
+    immunityBaited = true;
 
   const externalReceived: string[] = [];
   const externalReceivedAtS: number[] = [];

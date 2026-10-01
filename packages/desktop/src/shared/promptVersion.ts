@@ -508,5 +508,11 @@
  *  render as [ENEMY DEF] lines and are KILL ATTEMPTS failure causes, from
  *  enemy-only id sets no friendly roster reads. Anti-Magic Shell follows with
  *  its school gate. Menu ids unchanged.
+ *  v242 (2026-10-01, triage enemy-def F-E5 / F-E6 / F-E12, ruling A25):
+ *  [ENEMY DEF] prints Burrow, Time Stop, Mass Invisibility, Vanish, Feign
+ *  Death, Cheat Death, Cauterize, Nature's Guardian and Guardian of the
+ *  Forgotten Queen as `immune`, and KILL ATTEMPTS reads each as a forced
+ *  immunity; an aura re-announced with no REMOVED between is one press
+ *  (`joinReappliedIntervals`), not two lines. Menu ids unchanged.
  */
-export const PROMPT_VERSION = 241;
+export const PROMPT_VERSION = 242;

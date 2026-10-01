@@ -172,6 +172,9 @@ import {
 } from "./spellEffectOverrides";
 import spellIdLists, {
   ENEMY_HEAL_SAVE_IDS,
+  ENEMY_IMMUNITY_EXTERNAL_CASTS,
+  ENEMY_IMMUNITY_HEAL_PROCS,
+  ENEMY_IMMUNITY_SAVE_AURAS,
   ENEMY_REDIRECT_SAVE_IDS,
   ENEMY_SELF_SAVE_ONLY_IDS,
 } from "./spellIdLists";
@@ -271,6 +274,30 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
     "data/spellIdLists.ts",
     "cast",
     () => set(ENEMY_REDIRECT_SAVE_IDS),
+  ),
+  // enemy-def F-E5 / F-E6 (ruling A25): the immunity-kind saves. Aura-keyed
+  // (Cheat Death and Cauterize log only their proc aura), a heal-proc id, and
+  // the cast → aura pairs of immunities put on an ally.
+  t(
+    "spellIdLists.ENEMY_IMMUNITY_SAVE_AURAS",
+    "data/spellIdLists.ts",
+    "aura",
+    () => keys(ENEMY_IMMUNITY_SAVE_AURAS),
+  ),
+  t(
+    "spellIdLists.ENEMY_IMMUNITY_HEAL_PROCS",
+    "data/spellIdLists.ts",
+    "aura",
+    () => keys(ENEMY_IMMUNITY_HEAL_PROCS),
+  ),
+  t(
+    "spellIdLists.ENEMY_IMMUNITY_EXTERNAL_CASTS",
+    "data/spellIdLists.ts",
+    "mixed",
+    () => [
+      ...keys(ENEMY_IMMUNITY_EXTERNAL_CASTS),
+      ...Object.values(ENEMY_IMMUNITY_EXTERNAL_CASTS),
+    ],
   ),
   // GH #91 round 2 (2026-09-22): the ally-applied absorb shields the
   // during-external contract admits (one member, Life Cocoon).
