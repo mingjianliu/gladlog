@@ -196,11 +196,27 @@ export function getLowestHpPercentInWindow(
   return lowest;
 }
 
-/** Lowest HP% of the whole match (delegates to the windowed predicate, single
+/** Lowest HP% of the round (delegates to the windowed predicate, single
  * source). Consumed by "was this match actually dangerous" decisions such as
- * the cd-waste pressure gate; no advanced samples → null. */
-export function matchMinHpPct(unit: ICombatUnit): number | null {
-  return getLowestHpPercentInWindow(unit, -Infinity, Infinity, 0);
+ * the cd-waste pressure gate; no advanced samples → null.
+ *
+ * `combat` bounds the read to the round (triage 2026-09-29, hp-state F-M1): a
+ * round's unit carries advanced samples logged AFTER its end in 20 of the 60
+ * triage rounds, and the NOTE "lowest HP this match was 81%" of d692582c was
+ * a sample 3.7 s past the round end (92 % inside it). Both production
+ * callers pass it; without it the read is unbounded, as before. */
+export function matchMinHpPct(
+  unit: ICombatUnit,
+  combat?: { startTime: number; endTime: number },
+): number | null {
+  return combat
+    ? getLowestHpPercentInWindow(
+        unit,
+        0,
+        (combat.endTime - combat.startTime) / 1000,
+        combat.startTime,
+      )
+    : getLowestHpPercentInWindow(unit, -Infinity, Infinity, 0);
 }
 
 /**

@@ -522,7 +522,7 @@ export function extractCandidateFindings(
       ...cdWasteEvents(
         ownerCds,
         owner,
-        matchMinHpPct(owner),
+        matchMinHpPct(owner, combat),
         rawStreams
           ? {
               rawStreams,

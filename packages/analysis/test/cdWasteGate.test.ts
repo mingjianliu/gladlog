@@ -208,6 +208,28 @@ describe("matchMinHpPct", () => {
     expect(matchMinHpPct(u)).toBe(35);
     expect(matchMinHpPct(makeUnit("p2"))).toBeNull();
   });
+
+  it("bounded to the round when the combat is passed (triage hp-state F-M1)", () => {
+    const sample = (timestamp: number, hp: number) => ({
+      logLine: { timestamp },
+      advancedActorCurrentHp: hp,
+      advancedActorMaxHp: 1000,
+    });
+    const u = makeUnit("p1", {
+      advancedActions: [
+        sample(900, 300), // before the round
+        sample(2000, 920),
+        sample(4000, 950),
+        sample(6000, 810), // after the round ended
+      ] as never[],
+    });
+    const round = { startTime: 1000, endTime: 5000 };
+    expect(matchMinHpPct(u, round)).toBe(92);
+    // without the bounds every sample counts, as before
+    expect(matchMinHpPct(u)).toBe(30);
+    // the boundary instants are inside the round
+    expect(matchMinHpPct(u, { startTime: 900, endTime: 6000 })).toBe(30);
+  });
 });
 
 // User ruling 2026-09-30: Mass Invisibility is accusable in cd-hoarded only

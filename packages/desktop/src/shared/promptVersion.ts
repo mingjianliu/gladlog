@@ -544,5 +544,8 @@
  *  reach tested (`kickRangeYd`, `reachYd`), how long the kick had been back
  *  (`kickReadyForS`), and `rooted through the cast` instead of `out of range`
  *  for a rooted owner; legends reworded. Detector unchanged.
+ *  v247 (2026-10-01, triage hp-state F-M1): the NOTE's "lowest HP this match"
+ *  and the cd-waste pressure gate read the round only (`matchMinHpPct(unit,
+ *  combat)`), not samples logged after its end.
  */
-export const PROMPT_VERSION = 246;
+export const PROMPT_VERSION = 247;

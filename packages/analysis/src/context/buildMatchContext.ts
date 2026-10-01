@@ -680,7 +680,7 @@ export function buildMatchContext(
   // lowPressureUnusedDefensiveNote).
   const unusedNoteTimeline = lowPressureUnusedDefensiveNote(
     cooldowns,
-    matchMinHpPct(owner as ICombatUnit),
+    matchMinHpPct(owner as ICombatUnit, combat),
   );
   if (unusedNoteTimeline) tLines.push(unusedNoteTimeline);
 
