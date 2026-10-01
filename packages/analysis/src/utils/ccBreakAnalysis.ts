@@ -9,6 +9,7 @@ import { SPELL_CATEGORIES } from "../data/spellCategories";
 import { ccFullDurationForCaster } from "./ccDuration";
 import {
   buildCcCategoryHistory,
+  drDurationFactor,
   getDRCategory,
   matchPendingCcKey,
   getDRLevelAtTime,
@@ -231,7 +232,7 @@ export function analyzeCcBreaks(
               (entry.applyMs - combat.startTime) / 1000,
               combat.startTime,
             );
-            factor = level === "50%" ? 0.5 : level === "Immune" ? 0 : 1;
+            factor = drDurationFactor(level);
           }
           remainingSeconds = Math.max(0, tableDuration * factor - heldSeconds);
         }

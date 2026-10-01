@@ -7,9 +7,11 @@ import {
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { ensureAnalysisData } from "../src/data/ensure";
+import { ccFullDurationSeconds } from "../src/data/spellEffectData";
 import {
   analyzePlayerCCAndTrinket,
   bindBreakToWindow,
+  castEndedCcWindow,
   findBrokenCC,
   ICCBreakableWindow,
   ICCInstance,
@@ -65,6 +67,100 @@ describe("bindBreakToWindow and findBrokenCC", () => {
         11_000,
       );
       expect(bound).toBe(longWindow);
+    });
+
+    // Triage 2026-09-29, enemy-def F-E15: with official ends on the windows,
+    // the break belongs to the CC with the most official time left.
+    it("binds to the window with the most official time left, not the longest-active one (bd790c92 1:38)", () => {
+      // Leg Sweep 94.901 (4 s official, 0.09 s left at the 98.813 trinket);
+      // Cyclone 97.976 (5 s official, 4.16 s left). Both removed by the trinket.
+      const legSweep: ICCBreakableWindow = {
+        applyMs: 94_901,
+        removeMs: 98_812,
+        officialEndMs: 98_901,
+      };
+      const cyclone: ICCBreakableWindow = {
+        applyMs: 97_976,
+        removeMs: 98_812,
+        officialEndMs: 102_976,
+      };
+      expect(bindBreakToWindow([legSweep, cyclone], 98_813)).toBe(cyclone);
+      expect(bindBreakToWindow([cyclone, legSweep], 98_813)).toBe(cyclone);
+    });
+
+    it("the DR-shortened length decides: a 50 % DR Psychic Scream (3 s) loses to a full Dragon's Breath with more left", () => {
+      // Dragon's Breath 22.0 (4 s at Full DR → ends 26.0); Psychic Scream 22.5
+      // at 50 % DR (6 s × 0.5 → ends 25.5). Trinket at 24.4: 1.6 s vs 1.1 s left.
+      const breath: ICCBreakableWindow = {
+        applyMs: 22_000,
+        removeMs: 24_400,
+        officialEndMs: 26_000,
+      };
+      const scream: ICCBreakableWindow = {
+        applyMs: 22_500,
+        removeMs: 24_400,
+        officialEndMs: 25_500,
+      };
+      expect(bindBreakToWindow([breath, scream], 24_400)).toBe(breath);
+    });
+
+    it("a CC with no official duration counts as 0 s left: it wins only when no known-length CC had time left (24b6a229 0:43)", () => {
+      // Maim scales with combo points → no official end; Cyclone had 4.55 s left.
+      const maim: ICCBreakableWindow = { applyMs: 38_799, removeMs: 43_803 };
+      const cyclone: ICCBreakableWindow = {
+        applyMs: 43_358,
+        removeMs: 43_803,
+        officialEndMs: 48_358,
+      };
+      expect(bindBreakToWindow([maim, cyclone], 43_803)).toBe(cyclone);
+      // a known-length CC that had already run out ties at 0 → the longer
+      // observed window wins, the pre-F-E15 rule
+      const expired: ICCBreakableWindow = {
+        applyMs: 41_000,
+        removeMs: 43_803,
+        officialEndMs: 43_000,
+      };
+      expect(bindBreakToWindow([maim, expired], 43_803)).toBe(maim);
+    });
+
+    // 7a24f4b3 0:59: the trinket ends a Kidney Shot and a Cheap Shot lands
+    // 173 ms later. The Cheap Shot is "active at the cast" (the 250 ms
+    // tolerance) with all of its official time left — and is not what the
+    // trinket broke.
+    it("a CC that ended at the cast beats one that landed just after it, whatever its time left", () => {
+      const kidney: ICCBreakableWindow = {
+        applyMs: 56_000,
+        removeMs: 59_000,
+        officialEndMs: 62_000,
+      };
+      const cheapShot: ICCBreakableWindow = {
+        applyMs: 59_173,
+        removeMs: 61_335,
+        officialEndMs: 63_173,
+      };
+      expect(bindBreakToWindow([kidney, cheapShot], 59_000)).toBe(kidney);
+      expect(bindBreakToWindow([cheapShot, kidney], 59_000)).toBe(kidney);
+      expect(castEndedCcWindow(kidney, 59_000)).toBe(true);
+      expect(castEndedCcWindow(cheapShot, 59_000)).toBe(false);
+      // nothing ended at the cast → the ranking alone, as before
+      expect(bindBreakToWindow([cheapShot], 59_000)).toBe(cheapShot);
+    });
+
+    // Review finding: the 10–50 ms band. A Maim removed 30 ms before the press
+    // is inside the binder's own after-removal tolerance but outside the
+    // 10 ms "ended at the cast" lag, and has no official length (0 s left).
+    // It was on the unit; the Cheap Shot that lands 100 ms AFTER the press
+    // was not — and must not take the label on its 4 s of official time.
+    it("a CC that was on the unit at the cast beats one that landed after it, even with no time left", () => {
+      const maim: ICCBreakableWindow = { applyMs: 55_000, removeMs: 58_970 };
+      const lateCheapShot: ICCBreakableWindow = {
+        applyMs: 59_100,
+        removeMs: 61_300,
+        officialEndMs: 63_100,
+      };
+      expect(castEndedCcWindow(maim, 59_000)).toBe(false);
+      expect(bindBreakToWindow([maim, lateCheapShot], 59_000)).toBe(maim);
+      expect(bindBreakToWindow([lateCheapShot, maim], 59_000)).toBe(maim);
     });
 
     it("returns undefined when cast is outside ±250ms tolerance", () => {
@@ -129,6 +225,23 @@ describe("bindBreakToWindow and findBrokenCC", () => {
         matchStartMs + 20_000,
       );
       expect(none).toBeUndefined();
+    });
+
+    it("with official durations on the instances, names the CC with the most time left (F-E15, 0777a8e0 0:51)", () => {
+      const matchStartMs = 1_000_000;
+      // Hammer of Justice 46.943 (5 s official → 0.13 s left at 51.814);
+      // Psychic Scream 49.679 (6 s official → 3.87 s left). The trinket ends both.
+      const hoj = {
+        ...makeCC(46.943, 4.868, "Hammer of Justice"),
+        expectedDurationSeconds: 5,
+      };
+      const scream = {
+        ...makeCC(49.679, 2.132, "Psychic Scream"),
+        expectedDurationSeconds: 6,
+      };
+      expect(
+        findBrokenCC([hoj, scream], matchStartMs, matchStartMs + 51_814),
+      ).toBe(scream);
     });
 
     it("picks the longest duration CC when multiple instances overlap at cast time", () => {
@@ -218,6 +331,9 @@ describe("analyzePlayerCCAndTrinket — structured data contract (N4)", () => {
     expect(result.ccInstances[0]).toEqual({
       atSeconds: 10,
       durationSeconds: 6,
+      // the official PvP length of Polymorph at Full DR (F-E15: what the
+      // break binder ranks "time left" by)
+      expectedDurationSeconds: ccFullDurationSeconds("118"),
       spellId: "118",
       spellName: "Polymorph",
       sourceName: "EnemyMage",

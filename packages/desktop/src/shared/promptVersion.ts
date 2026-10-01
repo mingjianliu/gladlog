@@ -610,5 +610,9 @@
  *  then time; kicks with a death or a crisis-HP fact do not count toward
  *  KICK_EATEN_CAP and have a cap of their own (2), so a round lists at most
  *  2 + 2 kick-eaten lines.
+ *  v257 (2026-10-01, triage enemy-def F-E15): a trinket / racial break is
+ *  credited to the active CC with the most official time left
+ *  (`bindBreakToWindow`), not the longest-running one — [CC ON TEAM] `trinket
+ *  broke this CC` and [ENEMY TRINKET] `out of X` name that CC.
  */
-export const PROMPT_VERSION = 256;
+export const PROMPT_VERSION = 257;

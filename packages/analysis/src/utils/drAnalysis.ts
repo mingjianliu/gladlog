@@ -204,6 +204,15 @@ export interface IAoeCCEvent {
 
 export type DRLevel = "Full" | "50%" | "25%" | "Immune";
 
+/** The share of its full duration a CC lasts at a DR level: half at 50 %,
+ * nothing when immune. One mapping for "how long was this CC going to last"
+ * — the CC-break remaining time (`ccBreakAnalysis`) and the trinket break
+ * binder's "time left" (`ccTrinketAnalysis`, enemy-def F-E15). The 25 % tier
+ * left the game in 12.0 and is never assigned. */
+export function drDurationFactor(level: DRLevel): number {
+  return level === "50%" ? 0.5 : level === "Immune" ? 0 : 1;
+}
+
 export interface IDRInfo {
   /** DR category name (Stun / Incapacitate / Disorient / etc.) */
   category: string;

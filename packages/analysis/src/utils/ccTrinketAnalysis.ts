@@ -42,7 +42,12 @@ import {
 import { ccFullDurationForCaster } from "./ccDuration";
 import { stasisReplayWindows } from "./combatStates";
 import { isHealerSpec, isPassiveProcCast, specToString } from "./cooldowns";
-import { computeIncomingDR, IDRInfo, matchPendingCcKey } from "./drAnalysis";
+import {
+  computeIncomingDR,
+  drDurationFactor,
+  IDRInfo,
+  matchPendingCcKey,
+} from "./drAnalysis";
 import { IMMUNITY_IDS } from "./enemyDefensives";
 import { gapCloserStateOver, type GapCloserState } from "./gapClosers";
 import {
@@ -547,6 +552,11 @@ export type TrinketType =
 export interface ICCInstance {
   atSeconds: number;
   durationSeconds: number;
+  /** How long this application was going to run: the CC's official full
+   * duration for its caster (`ccFullDurationForCaster`) × its DR level's share
+   * (`drDurationFactor`) — what the break binder ranks "time left" by.
+   * Undefined when the game has no fixed duration for it (Maim). */
+  expectedDurationSeconds?: number;
   spellId: string;
   spellName: string;
   sourceName: string;
@@ -596,12 +606,48 @@ export interface ICCInstance {
 export interface ICCBreakableWindow {
   applyMs: number;
   removeMs: number;
+  /** `applyMs` + the length this CC was going to run: its official full
+   * duration for its caster × its DR level's share (`drDurationFactor`).
+   * Absent when the game has no fixed duration for it (Maim scales with
+   * combo points). */
+  officialEndMs?: number;
 }
 
 /**
  * Generic CC break attribution binder (B111).
- * Given a list of breakable windows and a break cast timestamp, binds the cast to the
- * longest-duration active CC window within toleranceMs.
+ * Given a list of breakable windows and a break cast timestamp, binds the cast
+ * to ONE CC window active at the cast (within the tolerances).
+ *
+ * Which one, when several are active (triage 2026-09-29, enemy-def F-E15): the
+ * CC with the most OFFICIAL time left at the cast — that is the control the
+ * break was pressed against. The old rule, "longest-active", credited a Leg
+ * Sweep 0.09 s from its natural end over a Cyclone with 4.16 s left
+ * (bd790c92 1:38), and a Hammer of Justice with 0.13 s left over a Psychic
+ * Scream with 3.87 s (0777a8e0 0:51). A window with no official duration
+ * counts as 0 s left, so it is credited only when no CC of known length had
+ * time left; ties (and windows that carry no `officialEndMs` at all) fall back
+ * to the longest observed window, i.e. the old rule. "Official" is the full
+ * duration for the caster shortened by the application's DR level — a
+ * Psychic Scream at 50 % DR was going to last 3 s, not 6.
+ *
+ * Before any of that, three tiers: a CC that ENDED at the cast
+ * (`castEndedCcWindow`, the F-E20 predicate — the press is at or after the
+ * landing and within `PRESS_ENDED_CC_LAG_MS` of the removal) beats one that
+ * was merely on the unit when the cast was made, and that beats one that
+ * landed AFTER the cast — a CC applied after the cast line cannot be what the
+ * press removed. "Active at the cast" includes a CC that lands up to 250 ms
+ * after it, and such a CC always has the most official time left — so ranked
+ * on time left alone, a player who trinkets a Kidney Shot and eats a Cheap
+ * Shot 173 ms later (7a24f4b3 0:59) reads "trinket broke Cheap Shot" over a
+ * Cheap Shot that ran its course, and the Kidney Shot the trinket did end
+ * reads as sat through. 101 of the 605 S2 files (fix-KA/breakBindProbe.ts,
+ * 2026-10-01): 7 of 983 trinket-bound CCs outlived the press by 0.6–6.1 s,
+ * each pressed 22–173 ms before it landed, 6 of them with another CC ending
+ * at the press. The middle tier keeps a CC removed 10–50 ms before the press
+ * (inside the binder's own `afterRemovalMs`, outside the 10 ms lag) ahead of
+ * the late lander too — 7 of 992 trinket-bound CCs sit in that band (Fable
+ * review of this change). With every candidate in one tier the ranking is
+ * the time-left rule alone.
  */
 export function bindBreakToWindow<T extends ICCBreakableWindow>(
   windows: T[],
@@ -610,14 +656,28 @@ export function bindBreakToWindow<T extends ICCBreakableWindow>(
   afterRemovalMs = TRINKET_BREAK_AFTER_REMOVAL_MS,
 ): T | undefined {
   let primary: T | undefined;
+  let primaryTier = -1;
+  let primaryLeftMs = -1;
   let primaryDurationMs = -1;
   for (const w of windows) {
     const activeAtCast =
       castTs >= w.applyMs - toleranceMs &&
       castTs <= w.removeMs + afterRemovalMs;
     if (!activeAtCast) continue;
+    // 2 = ended at the cast; 1 = on the unit when the cast was made (it may
+    // have been removed up to `afterRemovalMs` earlier); 0 = landed after it.
+    const tier = castEndedCcWindow(w, castTs) ? 2 : w.applyMs <= castTs ? 1 : 0;
+    if (tier < primaryTier) continue;
+    const leftMs =
+      w.officialEndMs === undefined ? 0 : Math.max(0, w.officialEndMs - castTs);
     const durationMs = w.removeMs - w.applyMs;
-    if (durationMs > primaryDurationMs) {
+    if (
+      tier > primaryTier ||
+      leftMs > primaryLeftMs ||
+      (leftMs === primaryLeftMs && durationMs > primaryDurationMs)
+    ) {
+      primaryTier = tier;
+      primaryLeftMs = leftMs;
       primaryDurationMs = durationMs;
       primary = w;
     }
@@ -630,12 +690,18 @@ export function findBrokenCC(
   matchStartMs: number,
   castTsMs: number,
 ): ICCInstance | undefined {
-  const breakable = instances.map((cc) => ({
-    cc,
-    applyMs: matchStartMs + Math.round(cc.atSeconds * 1000),
-    removeMs:
-      matchStartMs + Math.round((cc.atSeconds + cc.durationSeconds) * 1000),
-  }));
+  const breakable = instances.map((cc) => {
+    const applyMs = matchStartMs + Math.round(cc.atSeconds * 1000);
+    return {
+      cc,
+      applyMs,
+      removeMs:
+        matchStartMs + Math.round((cc.atSeconds + cc.durationSeconds) * 1000),
+      ...(cc.expectedDurationSeconds !== undefined
+        ? { officialEndMs: applyMs + cc.expectedDurationSeconds * 1000 }
+        : {}),
+    };
+  });
   return bindBreakToWindow(breakable, castTsMs)?.cc;
 }
 
@@ -1355,8 +1421,46 @@ export function analyzePlayerCCAndTrinket(
   // / Adaptation) removes loss-of-control, so it can only break a CC that was still ACTIVE at
   // the cast instant (applyMs ≤ castTs ≤ removeMs). The old window mis-tagged CCs that had
   // already expired before the trinket press, so the coach blamed a trivial / DR'd-to-0 CC
-  // rather than the real one. When several CCs are active at once, credit the longest-active.
-  const indexedCCWindows = filteredCCWindows.map((w, idx) => ({ ...w, idx }));
+  // rather than the real one. When several CCs are active at once, credit the one with the
+  // most official time left (F-E15, see bindBreakToWindow).
+  // The length each window was going to run: official full duration for its
+  // caster × its DR level's share. The DR levels come from the same
+  // `computeIncomingDR` walk, over the same chronological order, that
+  // annotates the instances below.
+  const byApply = filteredCCWindows
+    .map((w, idx) => ({ w, idx }))
+    .sort((a, b) => a.w.applyMs - b.w.applyMs);
+  const drLevelOfIdx = new Map<number, IDRInfo | null>();
+  computeIncomingDR(
+    byApply.map(({ w }) => ({
+      atSeconds: (w.applyMs - matchStartMs) / 1000,
+      durationSeconds: (w.removeMs - w.applyMs) / 1000,
+      spellId: w.spellId,
+    })),
+    matchStartMs,
+  ).forEach((dr, k) => drLevelOfIdx.set(byApply[k]!.idx, dr));
+  const expectedDurationS = (
+    w: { spellId: string; srcUnitId: string },
+    idx: number,
+  ): number | undefined => {
+    const full = ccFullDurationForCaster(
+      w.spellId,
+      [...enemies, ...enemyPets].find((u) => u.id === w.srcUnitId),
+    );
+    if (full === undefined) return undefined;
+    const dr = drLevelOfIdx.get(idx);
+    return full * (dr ? drDurationFactor(dr.level) : 1);
+  };
+  const indexedCCWindows = filteredCCWindows.map((w, idx) => {
+    const expected = expectedDurationS(w, idx);
+    return {
+      ...w,
+      idx,
+      ...(expected !== undefined
+        ? { officialEndMs: w.applyMs + expected * 1000 }
+        : {}),
+    };
+  });
   const trinketBrokenWindowIdx = new Set<number>();
   for (const trinketTs of trinketCastTimestamps) {
     const bound = bindBreakToWindow(indexedCCWindows, trinketTs);
@@ -1472,9 +1576,13 @@ export function analyzePlayerCCAndTrinket(
             })()
           : null;
 
+      const expectedDurationSeconds = expectedDurationS(w, idx);
       return {
         atSeconds: (w.applyMs - matchStartMs) / 1000,
         durationSeconds: (w.removeMs - w.applyMs) / 1000,
+        ...(expectedDurationSeconds !== undefined
+          ? { expectedDurationSeconds }
+          : {}),
         spellId: w.spellId,
         spellName: w.spellName,
         sourceName: w.srcName,
