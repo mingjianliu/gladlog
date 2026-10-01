@@ -22,7 +22,7 @@ beforeAll(async () => {
 });
 
 describe("enemy self-saves (B4a)", () => {
-  it("the set is the major lists ∩ NO_MITIGATION_IDS: Guardian Spirit and Desperate Prayer are in, a %-wall is not", () => {
+  it("the set holds the major lists ∩ NO_MITIGATION_IDS: Guardian Spirit and Desperate Prayer are in, a %-wall is not", () => {
     expect(SELF_SAVE_IDS.has("47788")).toBe(true); // Guardian Spirit
     expect(SELF_SAVE_IDS.has("19236")).toBe(true); // Desperate Prayer
     expect(SELF_SAVE_IDS.has("33206")).toBe(false); // Pain Suppression (a % wall)

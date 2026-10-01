@@ -155,3 +155,71 @@ const spellIdLists = {
   ],
 };
 export default spellIdLists;
+
+// —— Enemy-side saves (triage 2026-09-29, enemy-def F-E7 / F-E4 / F-E9) ————————
+// The three sets below are read ONLY by `utils/enemyDefensives.ts`: the
+// `[ENEMY DEF]` line and the KILL ATTEMPTS failure attribution. They are kept
+// out of the lists above on purpose. `bigDefensiveSpellIds` members are "a wall
+// this player could have pressed" (cd-hoarded, and dispelAnalysis.getPriority
+// treats each as a Critical purge target); `externalDefensiveSpellIds` members
+// become "an ally could have thrown you this" missed-option lines and are
+// pinned to deathOutcomeAnalysis's roster. An id here states one thing: when an
+// ENEMY presses it, that is a save the timeline shows and KILL ATTEMPTS may
+// name. It can never produce a "you did not press X" accusation.
+//
+// Every id is the SPELL_CAST_SUCCESS id the game logs. Counts are from the
+// 605-file S2 every-30 capture (eval-private runs/triage-2026-09-29/fix-KA/
+// idscan.out + idscan2.out, 2026-10-01); same-named ids with zero casts there
+// are not listed.
+
+/** F-E7 (user ruling A11, 2026-09-30: "全部出行,并作为 KA 失败原因"): an
+ * enemy's own absorb / heal / avoidance saves that carry no percentage
+ * mitigation and sit in neither major list. All are cast with a nil dest.
+ * Anti-Magic Shell is not here: its credit is school-gated (ruling A7-补). */
+export const ENEMY_SELF_SAVE_ONLY_IDS: ReadonlySet<string> = new Set([
+  "48743", // Death Pact — 196 casts
+  "49039", // Lichborne — 231
+  "108416", // Dark Pact — 1,063
+  "5277", // Evasion — 484
+  "6262", // Healthstone — 178
+  "452930", // Demonic Healthstone — 425
+  "212295", // Nether Ward — 534
+  "11426", // Ice Barrier — 722
+  "342245", // Alter Time (the press; 342247 is the return) — 804
+  "185311", // Crimson Vial — 1,060
+  "109304", // Exhilaration — 597
+  "22842", // Frenzied Regeneration — 346
+  "58875", // Spirit Walk — 202
+]);
+
+/** F-E4 + the ally-castable half of F-E7: an instant heal thrown on an ally
+ * (rendered as an external, `X → unit`, no aura so no duration) or on the
+ * caster itself (`(self-save)`). Lay on Hands' signed tier lives in
+ * `healingVerdicts.ts` (471195, burst-answer, 2026-09-26); the friendly side
+ * already reads it from classSpells — nothing here feeds that. */
+export const ENEMY_HEAL_SAVE_IDS: ReadonlySet<string> = new Set([
+  "471195", // Lay on Hands, live 12.x id — 528 casts (135 self, 393 ally)
+  "633", // Lay on Hands, pre-12.x id still logged — 17 (3 self, 14 ally)
+  // Gift of the Naaru: one racial, one cast id per class. These five are the
+  // ids cast in the capture; 59543 / 59548 / 121093 / 370626 / 416250 have 0.
+  "59542", // 11 (7 self, 4 ally)
+  "59544", // 5 (3 self, 2 ally)
+  "59547", // 5 (3 self, 2 ally)
+  "28880", // 2 (1 self, 1 ally)
+  "59545", // 2 (1 self, 1 ally)
+]);
+
+/** F-E9 (user rulings A20 + U3, 2026-09-30): grips and redirects render and
+ * count in KILL ATTEMPTS, and go ONLY here — "拉人/替伤只进击杀判定专用表,
+ * 不进 externalDefensiveSpellIds,不产生「没交」指控". On an ally they render
+ * `X → unit` with no duration and no "removed early" (a 1 s Leap of Faith
+ * aura is the pull, not a buff that was cut short); Roar of Sacrifice and
+ * Master's Call cast on oneself render `(self-save)`. The set is
+ * side-agnostic: enemy kill attempts on our team credit our grips too. */
+export const ENEMY_REDIRECT_SAVE_IDS: ReadonlySet<string> = new Set([
+  "73325", // Leap of Faith — 648 casts, all on an ally
+  "53480", // Roar of Sacrifice — 350 (235 self, 115 ally)
+  "272682", // Master's Call — 435 (395 self, 40 ally)
+  "1241871", // Master's Call, the second player-cast id — 169 (153 self, 16 ally); 53271 / 54216 / 62305 are the pet's effect ids, not presses
+  "3411", // Intervene — 596, all on an ally (147833 / 316531 are the same press logged again as its buff and charge)
+]);

@@ -170,7 +170,11 @@ import {
   DISPEL_TYPES,
   SPELL_EFFECT_OVERRIDES,
 } from "./spellEffectOverrides";
-import spellIdLists from "./spellIdLists";
+import spellIdLists, {
+  ENEMY_HEAL_SAVE_IDS,
+  ENEMY_REDIRECT_SAVE_IDS,
+  ENEMY_SELF_SAVE_ONLY_IDS,
+} from "./spellIdLists";
 import { trinketSpellIds } from "./spellTags";
 import { TALENT_MITIGATION_MODIFIERS } from "./talentMitigationModifiers";
 import { TALENT_REPLACES } from "./talentReplaces";
@@ -250,6 +254,23 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
     "data/spellIdLists.ts",
     "cast",
     () => spellIdLists.externalDefensiveSpellIds,
+  ),
+  // Triage 2026-09-29 (enemy-def F-E7 / F-E4 / F-E9): the enemy-only save
+  // sets — read by enemyDefensives.ts alone ([ENEMY DEF] + KILL ATTEMPTS).
+  t(
+    "spellIdLists.ENEMY_SELF_SAVE_ONLY_IDS",
+    "data/spellIdLists.ts",
+    "cast",
+    () => set(ENEMY_SELF_SAVE_ONLY_IDS),
+  ),
+  t("spellIdLists.ENEMY_HEAL_SAVE_IDS", "data/spellIdLists.ts", "cast", () =>
+    set(ENEMY_HEAL_SAVE_IDS),
+  ),
+  t(
+    "spellIdLists.ENEMY_REDIRECT_SAVE_IDS",
+    "data/spellIdLists.ts",
+    "cast",
+    () => set(ENEMY_REDIRECT_SAVE_IDS),
   ),
   // GH #91 round 2 (2026-09-22): the ally-applied absorb shields the
   // during-external contract admits (one member, Life Cocoon).

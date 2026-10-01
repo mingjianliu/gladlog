@@ -12,7 +12,11 @@ import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 import { wallDoorPct } from "../data/mitigationComponents";
 import { MITIGATION_TABLE, NO_MITIGATION_IDS } from "../data/mitigationData";
 import { getEnglishSpellName } from "../data/spellEffectData";
-import spellIdListsData from "../data/spellIdLists";
+import spellIdListsData, {
+  ENEMY_HEAL_SAVE_IDS,
+  ENEMY_REDIRECT_SAVE_IDS,
+  ENEMY_SELF_SAVE_ONLY_IDS,
+} from "../data/spellIdLists";
 import { buildAuraIntervals } from "./auraIntervals";
 import { buffFullDurationForCaster } from "./buffDuration";
 
@@ -45,6 +49,21 @@ export const MITIGATION_AURA_IDS = new Set<string>(
     .map(([id]) => id),
 );
 
+/** An external save: a cast that helps the ALLY it is cast on. The friendly
+ * roster (`EXTERNAL_DEF_IDS`) plus the two enemy-only sets — instant heals
+ * (Lay on Hands; enemy-def F-E4) and grips / redirects (Leap of Faith,
+ * Intervene, Roar of Sacrifice, Master's Call; F-E9, rulings A20 + U3). One
+ * test for the `[ENEMY DEF]` external branch, the KILL ATTEMPTS
+ * `saved by external (X)` attribution and `selfSaveCasts`' "on an ally it is
+ * an external, not a self-save" rule. */
+export function isExternalSaveId(spellId: string): boolean {
+  return (
+    EXTERNAL_DEF_IDS.has(spellId) ||
+    ENEMY_HEAL_SAVE_IDS.has(spellId) ||
+    ENEMY_REDIRECT_SAVE_IDS.has(spellId)
+  );
+}
+
 /** Reliability audit B4a (2026-09-25): an enemy's own save that carries no
  * percentage mitigation — Guardian Spirit on itself, Desperate Prayer, Touch
  * of Karma, Renewing Blaze, Life Cocoon on itself, Rallying Cry, Zephyr — the
@@ -53,21 +72,32 @@ export const MITIGATION_AURA_IDS = new Set<string>(
  * kill attempt the target survived with one was attributed "not enough
  * damage" (a9bc48b5 @2:14: the priest's self Guardian Spirit at 2:16 and
  * Desperate Prayer at 2:20). Both lists are already registered in
- * curatedIdRegistry. */
-export const SELF_SAVE_IDS: ReadonlySet<string> = new Set<string>(
-  [
+ * curatedIdRegistry.
+ *
+ * Triage 2026-09-29 (enemy-def F-E7 / F-E4 / F-E9; rulings A11, A20): plus the
+ * enemy-only sets of `data/spellIdLists.ts` — absorb / heal / avoidance saves
+ * outside the major lists (Dark Pact, Evasion, Healthstone, Ice Barrier …),
+ * and the ally-castable heals and redirects when cast on oneself (Lay on
+ * Hands, Roar of Sacrifice, Master's Call). a0a48716: Death Pact at 1:39 and
+ * Lichborne at 1:41 had no line; ae9d6fbc: "Dark Pact" 0 times in the prompt. */
+export const SELF_SAVE_IDS: ReadonlySet<string> = new Set<string>([
+  ...[
     ...EXTERNAL_DEF_IDS,
     ...(
       (spellIdListsData as unknown as { bigDefensiveSpellIds?: string[] })
         .bigDefensiveSpellIds ?? []
     ).map(String),
   ].filter((id) => NO_MITIGATION_IDS.has(id)),
-);
+  ...ENEMY_SELF_SAVE_ONLY_IDS,
+  ...ENEMY_HEAL_SAVE_IDS,
+  ...ENEMY_REDIRECT_SAVE_IDS,
+]);
 
 /** The enemy's own presses of a `SELF_SAVE_IDS` save on itself, in cast
  * order (seconds from match start). An external-capable one (Guardian
- * Spirit, Life Cocoon) counts only when its cast target is the caster — cast
- * on an ally it is an external, which the external branch already reports. */
+ * Spirit, Life Cocoon, Lay on Hands, Roar of Sacrifice) counts only when its
+ * cast target is the caster — cast on an ally it is an external, which the
+ * external branch already reports. */
 export function selfSaveCasts(
   enemy: ICombatUnit,
   matchStartMs: number,
@@ -77,7 +107,7 @@ export function selfSaveCasts(
   for (const cast of enemy.spellCastEvents ?? []) {
     if (cast.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
     if (!cast.spellId || !SELF_SAVE_IDS.has(cast.spellId)) continue;
-    if (EXTERNAL_DEF_IDS.has(cast.spellId) && cast.destUnitId !== enemy.id)
+    if (isExternalSaveId(cast.spellId) && cast.destUnitId !== enemy.id)
       continue;
     out.push({
       atSeconds: (cast.logLine.timestamp - matchStartMs) / 1000,
@@ -176,16 +206,22 @@ export function enemyDefensiveEvents(
 
   for (const cast of enemy.spellCastEvents ?? []) {
     if (cast.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
-    if (!cast.spellId || !EXTERNAL_DEF_IDS.has(cast.spellId)) continue;
+    if (!cast.spellId || !isExternalSaveId(cast.spellId)) continue;
     const recipient = enemies.find(
       (e) => e.id === cast.destUnitId && e.id !== enemy.id,
     );
     if (!recipient) continue;
     const atSeconds = (cast.logLine.timestamp - combat.startTime) / 1000;
-    const paired = intervalsOf(recipient).find(
-      (iv) =>
-        iv.spellId === cast.spellId && Math.abs(iv.fromS - atSeconds) <= 1.5,
-    );
+    // A grip / redirect is the move itself: its aura (Leap of Faith's is
+    // ~1 s) is no buff with a duration to report or to call "removed early",
+    // and nothing was "done during it" (rulings A20 + U3; CROSS-THEME §3).
+    const paired = ENEMY_REDIRECT_SAVE_IDS.has(cast.spellId)
+      ? undefined
+      : intervalsOf(recipient).find(
+          (iv) =>
+            iv.spellId === cast.spellId &&
+            Math.abs(iv.fromS - atSeconds) <= 1.5,
+        );
     const observed = paired ? paired.toS - paired.fromS : undefined;
     out.push({
       atSeconds,

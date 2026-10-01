@@ -4,10 +4,17 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 import { ensureAnalysisData } from "../src/data/ensure";
 import { MITIGATION_TABLE } from "../src/data/mitigationData";
+import spellIdLists, {
+  ENEMY_HEAL_SAVE_IDS,
+  ENEMY_REDIRECT_SAVE_IDS,
+  ENEMY_SELF_SAVE_ONLY_IDS,
+} from "../src/data/spellIdLists";
+import { EXTERNAL_DEFENSIVE_SPELLS } from "../src/utils/deathOutcomeAnalysis";
 import {
   enemyDefensiveEvents,
   EXTERNAL_DEF_IDS,
   IMMUNITY_IDS,
+  isExternalSaveId,
   MITIGATION_AURA_IDS,
   MITIGATION_AURA_MIN_PCT,
   REMOVED_EARLY_SLACK_S,
@@ -304,5 +311,118 @@ describe("Greater Invisibility is never double-counted (signed 2026-09-26, codex
       endTime: 60_000,
     });
     expect(events.length).toBeLessThanOrEqual(1);
+  });
+});
+
+/**
+ * Triage 2026-09-29, enemy-def F-E7 / F-E4 / F-E9 (rulings A11, A20, U3).
+ * The enemy-only save sets render and count in KILL ATTEMPTS, and must never
+ * reach a friendly roster: every list they are kept out of is an accusation
+ * source ("had X available", cd-hoarded, a Critical purge target).
+ */
+describe("enemy-only saves: self-saves, instant heals, grips / redirects", () => {
+  const LAY_ON_HANDS = "471195";
+  const LEAP_OF_FAITH = "73325";
+  const ROAR_OF_SACRIFICE = "53480";
+  const DARK_PACT = "108416";
+  const NIL = "0000000000000000";
+
+  beforeAll(async () => {
+    await ensureAnalysisData();
+  });
+
+  it("the enemy-only sets stay out of every friendly roster", () => {
+    const friendly = new Set<string>([
+      ...spellIdLists.externalDefensiveSpellIds,
+      ...spellIdLists.bigDefensiveSpellIds,
+      ...Object.keys(EXTERNAL_DEFENSIVE_SPELLS),
+    ]);
+    for (const id of [...ENEMY_HEAL_SAVE_IDS, ...ENEMY_REDIRECT_SAVE_IDS])
+      expect(friendly.has(id), id).toBe(false);
+    for (const id of ENEMY_SELF_SAVE_ONLY_IDS) {
+      expect(spellIdLists.externalDefensiveSpellIds.includes(id), id).toBe(
+        false,
+      );
+      expect(spellIdLists.bigDefensiveSpellIds.includes(id), id).toBe(false);
+    }
+  });
+
+  it("no enemy-only save is also a %-wall or an immunity (it would render twice)", () => {
+    for (const id of [
+      ...ENEMY_SELF_SAVE_ONLY_IDS,
+      ...ENEMY_HEAL_SAVE_IDS,
+      ...ENEMY_REDIRECT_SAVE_IDS,
+    ]) {
+      expect(MITIGATION_AURA_IDS.has(id), id).toBe(false);
+      expect(IMMUNITY_IDS.has(id), id).toBe(false);
+      expect(SELF_SAVE_IDS.has(id), id).toBe(true);
+    }
+    expect(isExternalSaveId(LAY_ON_HANDS)).toBe(true);
+    expect(isExternalSaveId(LEAP_OF_FAITH)).toBe(true);
+    expect(isExternalSaveId(DARK_PACT)).toBe(false);
+    // the friendly roster itself is unchanged by the enemy-only sets
+    expect(EXTERNAL_DEF_IDS.has(LAY_ON_HANDS)).toBe(false);
+    expect(EXTERNAL_DEF_IDS.has(LEAP_OF_FAITH)).toBe(false);
+  });
+
+  it("a nil-dest self-save (Dark Pact) is one self-save event", () => {
+    const lock = unit("e1", { spellCastEvents: [cast(DARK_PACT, NIL, 7)] });
+    const evs = enemyDefensiveEvents(lock, [lock], combat);
+    expect(evs.map((e) => [e.kind, e.spellId, e.atSeconds])).toEqual([
+      ["self-save", DARK_PACT, 7],
+    ]);
+  });
+
+  it("Lay on Hands on an ally is an external without a duration; on oneself a self-save", () => {
+    const pal = unit("e1", {
+      spellCastEvents: [
+        cast(LAY_ON_HANDS, "e2", 127.19),
+        cast(LAY_ON_HANDS, "e1", 200),
+      ],
+    });
+    const lock = unit("e2");
+    const evs = enemyDefensiveEvents(pal, [pal, lock], {
+      startTime: ms(0),
+      endTime: ms(300),
+    });
+    expect(evs.map((e) => [e.kind, e.recipientId, e.observedSeconds])).toEqual(
+      [
+        ["external", "e2", undefined],
+        ["self-save", undefined, undefined],
+      ],
+    );
+  });
+
+  it("a grip renders the move, not its 1 s aura: no duration, no removed-early, no paired interval", () => {
+    const priest = unit("e1", {
+      spellCastEvents: [cast(LEAP_OF_FAITH, "e2", 66.9)],
+    });
+    const dk = unit("e2", {
+      auraEvents: [
+        applied(LEAP_OF_FAITH, "e1", "e2", 66.9),
+        removed(LEAP_OF_FAITH, "e1", "e2", 67.9),
+      ],
+    });
+    const evs = enemyDefensiveEvents(priest, [priest, dk], combat);
+    expect(evs).toHaveLength(1);
+    expect(evs[0]).toMatchObject({
+      kind: "external",
+      recipientId: "e2",
+      removedEarly: false,
+    });
+    expect(evs[0].observedSeconds).toBeUndefined();
+    expect(evs[0].auraFromS).toBeUndefined();
+  });
+
+  it("Roar of Sacrifice on oneself is a self-save; on an ally an external", () => {
+    const hunter = unit("e1", {
+      spellCastEvents: [
+        cast(ROAR_OF_SACRIFICE, "e1", 17.8),
+        cast(ROAR_OF_SACRIFICE, "e2", 80),
+      ],
+    });
+    const mate = unit("e2");
+    const evs = enemyDefensiveEvents(hunter, [hunter, mate], combat);
+    expect(evs.map((e) => e.kind)).toEqual(["self-save", "external"]);
   });
 });

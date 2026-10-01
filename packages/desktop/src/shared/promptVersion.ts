@@ -501,5 +501,12 @@
  *  ceil(applyRel) (`dispelReachSweepStartMs`), and reads the zone from
  *  `startInfo.zoneId` so line of sight is actually evaluated (also
  *  momentSnapshot's facts.los).
+ *  v241 (2026-10-01, triage enemy-def F-E7 / F-E4 / F-E9, rulings A11 / A20 /
+ *  U3): an enemy's absorb / heal / avoidance self-saves (Dark Pact, Evasion,
+ *  Healthstone, Ice Barrier, Death Pact …), Lay on Hands and the grips /
+ *  redirects (Leap of Faith, Intervene, Roar of Sacrifice, Master's Call)
+ *  render as [ENEMY DEF] lines and are KILL ATTEMPTS failure causes, from
+ *  enemy-only id sets no friendly roster reads. Anti-Magic Shell follows with
+ *  its school gate. Menu ids unchanged.
  */
-export const PROMPT_VERSION = 240;
+export const PROMPT_VERSION = 241;

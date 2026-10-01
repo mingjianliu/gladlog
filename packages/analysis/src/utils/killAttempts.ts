@@ -76,8 +76,8 @@ import { burstCastSpan, KILL_CREDIT_SLACK_S } from "./burstLedger";
 import { analyzeOutgoingCCChains, DRLevel, drResetMsAt } from "./drAnalysis";
 import { reconstructEnemyCDTimeline } from "./enemyCDs";
 import {
-  EXTERNAL_DEF_IDS,
   IMMUNITY_IDS,
+  isExternalSaveId,
   MITIGATION_AURA_IDS,
   MITIGATION_AURA_MIN_PCT,
   selfSaveCasts,
@@ -718,12 +718,14 @@ function attributeFailure(
     if (mate.id === target.id) continue;
     for (const cast of mate.spellCastEvents) {
       if (cast.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
-      if (!cast.spellId || !EXTERNAL_DEF_IDS.has(cast.spellId)) continue;
+      if (!cast.spellId || !isExternalSaveId(cast.spellId)) continue;
       if (cast.destUnitId !== target.id) continue;
       if (inSpan(cast.logLine.timestamp)) {
-        externalReceived.push(
-          getEnglishSpellName(cast.spellId, cast.spellName),
-        );
+        // One name per spell, as for walls and self-saves: two Intervenes or
+        // two Leaps of Faith in one span read "Leap of Faith/Leap of Faith".
+        const name = getEnglishSpellName(cast.spellId, cast.spellName);
+        if (externalReceived.includes(name)) continue;
+        externalReceived.push(name);
         externalReceivedAtS.push(secondsOf(cast.logLine.timestamp));
       }
     }

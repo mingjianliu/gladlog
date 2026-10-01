@@ -630,3 +630,80 @@ describe("formatKillAttemptsForContext — enemy deaths outside attempt windows 
     expect(after).toContain("(1 outside every attempt window)");
   });
 });
+
+/**
+ * Triage 2026-09-29, enemy-def F-E7 / F-E4 / F-E9 (rulings A11, A20, U3): the
+ * enemy-only save sets are failure causes, through the same predicate the
+ * [ENEMY DEF] line renders from.
+ */
+describe("extractKillAttempts — enemy-only saves are failure causes", () => {
+  const press = (spellId: string, dest: string, atS: number): any => ({
+    spellId,
+    spellName: `S${spellId}`,
+    destUnitId: dest,
+    destUnitName: dest,
+    logLine: {
+      event: LogEvent.SPELL_CAST_SUCCESS,
+      timestamp: ms(atS),
+      parameters: [],
+    },
+  });
+  const attacker = () =>
+    unit("f1", { reaction: 1, damageOut: [dmg("f1", "e1", 12, 50_000)] });
+
+  it("the target's own Dark Pact inside the span → self-saved (Dark Pact)", async () => {
+    await ensureAnalysisData();
+    const e1 = unit("e1", {
+      auraEvents: stunAuras("e1", KIDNEY, 10, 5),
+      spellCastEvents: [press("108416", "0000000000000000", 11)],
+    });
+    const f1 = attacker();
+    const [a] = extractKillAttempts([f1], [e1], makeCombat(f1, e1));
+    expect(a.attribution?.primary).toBe("self-saved");
+    expect(formatKillAttemptsForContext([a]).join("\n")).toContain(
+      "FAILED: self-saved (Dark Pact)",
+    );
+  });
+
+  it("a teammate's Lay on Hands or Leap of Faith on the target → saved by external, one name per spell", async () => {
+    await ensureAnalysisData();
+    const e1 = unit("e1", { auraEvents: stunAuras("e1", KIDNEY, 10, 5) });
+    const e2 = unit("e2", {
+      spellCastEvents: [
+        press("73325", "e1", 11),
+        press("73325", "e1", 13),
+        press("471195", "e1", 14),
+      ],
+    });
+    const f1 = attacker();
+    const [a] = extractKillAttempts([f1], [e1, e2], makeCombat(f1, e1, [e2]));
+    expect(a.attribution?.primary).toBe("external");
+    expect(a.attribution?.externalReceived).toEqual([
+      "Leap of Faith",
+      "Lay on Hands",
+    ]);
+  });
+
+  it("Roar of Sacrifice the target cast on ITSELF is its self-save; cast on a teammate it is not this target's save", async () => {
+    await ensureAnalysisData();
+    const onSelf = unit("e1", {
+      auraEvents: stunAuras("e1", KIDNEY, 10, 5),
+      spellCastEvents: [press("53480", "e1", 11)],
+    });
+    const f1 = attacker();
+    expect(
+      extractKillAttempts([f1], [onSelf], makeCombat(f1, onSelf))[0].attribution
+        ?.primary,
+    ).toBe("self-saved");
+    const onMate = unit("e1", {
+      auraEvents: stunAuras("e1", KIDNEY, 10, 5),
+      spellCastEvents: [press("53480", "e2", 11)],
+    });
+    const e2 = unit("e2");
+    const f2 = attacker();
+    expect(
+      extractKillAttempts([f2], [onMate, e2], makeCombat(f2, onMate, [e2]))[0]
+        .attribution?.primary,
+    ).toBe("pressure");
+  });
+});
