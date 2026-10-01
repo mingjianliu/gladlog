@@ -9,6 +9,7 @@ import {
   KW_MAJOR_DEF_MIN_CD_S,
   kwCooldownSeconds,
 } from "../data/abilityProfile";
+import { SELF_WALL_AURA_TO_CAST_ID } from "../data/mitigationData";
 import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
 import { spellEffectData } from "../data/spellEffectData";
 import { SpellTag } from "../data/spellTypes";
@@ -19,6 +20,7 @@ import {
   specToString,
   unitCooldownOf,
 } from "./cooldowns";
+import { enemyDefensiveEvents, renderedExternalSpanS } from "./enemyDefensives";
 import { fmtTime, renderedWindowSeconds } from "./renderGrid";
 // GH #31 ② (2026-09-02): the hand list is replaced by the shared official-face
 // predicate; the curated remainder lives as its registered fallback floor.
@@ -289,6 +291,39 @@ function takeFlip(flips: Map<number, number>, t: number): boolean {
   return true;
 }
 
+/** `spans` minus every interval of `cuts` (both in seconds; `cuts` may
+ * overlap each other). Pieces keep their order. */
+export function subtractIntervals(
+  spans: ReadonlyArray<{ from: number; to: number }>,
+  cuts: ReadonlyArray<{ from: number; to: number }>,
+): Array<{ from: number; to: number }> {
+  let out = spans.map((s) => ({ ...s }));
+  for (const c of cuts) {
+    // an empty cut removes nothing — it must not split a span in two
+    if (!(c.to > c.from)) continue;
+    const next: Array<{ from: number; to: number }> = [];
+    for (const s of out) {
+      if (c.to <= s.from || c.from >= s.to) {
+        next.push(s);
+        continue;
+      }
+      if (c.from > s.from) next.push({ from: s.from, to: c.from });
+      if (c.to < s.to) next.push({ from: c.to, to: s.to });
+    }
+    out = next;
+  }
+  return out;
+}
+
+/** Inverse of `SELF_WALL_AURA_TO_CAST_ID`: a cast-keyed wall → its logged aura. */
+const WALL_CAST_TO_AURA_ID: Readonly<Record<string, string>> =
+  Object.fromEntries(
+    Object.entries(SELF_WALL_AURA_TO_CAST_ID).map(([aura, cast]) => [
+      cast,
+      aura,
+    ]),
+  );
+
 export function computeOffensiveWindows(
   enemies: ICombatUnit[],
   friendlies: ICombatUnit[],
@@ -320,6 +355,26 @@ export function computeOffensiveWindows(
       .map((u) => u.id),
   ]);
 
+  // Externals each enemy RECEIVED, as [from, to] seconds from the round's
+  // start (step 2b): the pair the `[ENEMY DEF]` line prints for that press —
+  // its rendered second and its printed length (`renderedExternalSpanS`), so
+  // a `defenseless …–m:ss` end and the next span's start are what a reader
+  // gets from the line itself.
+  const externalsReceived = new Map<
+    string,
+    Array<{ from: number; to: number }>
+  >();
+  for (const caster of enemies) {
+    for (const d of enemyDefensiveEvents(caster, enemies, combat)) {
+      if (d.kind !== "external" || !d.recipientId) continue;
+      const span = renderedExternalSpanS(d);
+      if (!span) continue;
+      const list = externalsReceived.get(d.recipientId) ?? [];
+      list.push(span);
+      externalsReceived.set(d.recipientId, list);
+    }
+  }
+
   for (const enemy of enemies) {
     // ── 1. Build event list for this enemy's major defensives ─────────────────
 
@@ -349,7 +404,8 @@ export function computeOffensiveWindows(
       // second Pain Suppression / Obsidian Scales charge or a talent-shortened
       // Blessing of Sacrifice was back in hand.
       const own = unitCooldownOf(enemy, spellId);
-      const cooldownSeconds = own?.cooldownSeconds ?? kwCooldownSeconds(spellId);
+      const cooldownSeconds =
+        own?.cooldownSeconds ?? kwCooldownSeconds(spellId);
       const cap = Math.max(1, own?.charges ?? 1);
       // Charge-state transitions — the shared sequential-recharge timeline
       // (`chargeAvailabilityTransitions`, chargesAvailableAt's rules).
@@ -373,8 +429,11 @@ export function computeOffensiveWindows(
         if (!f.available)
           emptiedAt.set(f.atSeconds, (emptiedAt.get(f.atSeconds) ?? 0) + 1);
       for (const castTimeSeconds of casts) {
+        // A wall whose DB2 duration sits on its logged aura, not on the cast
+        // (Greater Invisibility 110959 → 110960, 20 s), is timed by that aura
+        // — the length the [ENEMY DEF] line prints for the same press.
         const castBuff = buffFullDurationForCaster(
-          spellId,
+          WALL_CAST_TO_AURA_ID[spellId] ?? spellId,
           enemy,
           matchStartMs + castTimeSeconds * 1000,
         );
@@ -467,9 +526,24 @@ export function computeOffensiveWindows(
 
     if (vulnWindows.length === 0) continue;
 
+    // ── 2b. An external RECEIVED is not "defenseless" either ──────────────────
+    // Enemy-def F-E2: the state machine above reads only the target's own
+    // presses, so a Guardian Spirit / Pain Suppression / Blessing of
+    // Protection a teammate put on the target left the span open (69546267:
+    // `defenseless 1:47–2:51` across a 12 s Guardian Spirit). The intervals
+    // are the `[ENEMY DEF]` external events' own (`enemyDefensiveEvents`), so
+    // the span and the timeline line agree on when the external was up.
+    const received = externalsReceived.get(enemy.id) ?? [];
+    const cutWindows =
+      received.length === 0
+        ? vulnWindows
+        : subtractIntervals(vulnWindows, received).filter(
+            (w) => w.to - w.from >= MIN_VULN_SECONDS,
+          );
+
     // ── 3. Per-window metrics ──────────────────────────────────────────────────
 
-    for (const vw of vulnWindows) {
+    for (const vw of cutWindows) {
       const windowDuration = vw.to - vw.from;
 
       // Friendly damage dealt to this specific enemy during the window

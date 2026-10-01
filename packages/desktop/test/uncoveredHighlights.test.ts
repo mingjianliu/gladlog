@@ -64,7 +64,7 @@ describe("deriveUncoveredHighlights —— 真实 fixture 集成", () => {
     expect(highlights[0]!.summary.length).toBeGreaterThan(0);
   });
 
-  it("去重:真实失误清单的 timed 锚点(与 MatchReport 生产接线一致)—— 幸存的只有 0–30s(其余窗口都被 ±5s 容差内的某条失误覆盖)", () => {
+  it("去重:真实失误清单的 timed 锚点(与 MatchReport 生产接线一致)—— 幸存的只有 80–90s(其余窗口都被 ±5s 容差内的某条失误覆盖)", () => {
     // timedAnchorsFromMistakes rather than a bare .map(mk => mk.tS): a
     // review-round fix — sentinel tS values from "whole-match observation"
     // classes such as cd-waste must not enter the anchor set (see the red→green
@@ -120,17 +120,20 @@ describe("deriveUncoveredHighlights —— 真实 fixture 集成", () => {
     // → Freezing Trap) only ~0.1 s was free: Avenging Wrath was never
     // pressable there (evaluateSyncWindow's owner-could-act gate,
     // REACTION_WINDOW_S). 80–90 is uncovered again.
+    // Triage enemy-def F-E3 / F-E2 (2026-10-01, rulings A24 / A25): Greater
+    // Invisibility is a kill-window roster wall, and the enemy Frost Mage
+    // opens the round with it at 1.5 s — so from 21.5 s (its 20 s gone, 120 s
+    // cooldown running) the mage is "defenseless", cut by the externals it
+    // received (21.5–28.7, 36.7–59.2). The Archangel left on the enemy priest
+    // at 22.2 s now falls inside a kill window: a missed-purge-kill-window
+    // anchor that covers 0–20 and 10–30. Before, the mage had no tracked
+    // defensive at all and so no kill window.
     expect(coverage.filter((c) => !c.covered).map((c) => c.window)).toEqual([
-      "0-20",
-      "10-30",
       "80-90",
     ]);
 
     const highlights = deriveUncoveredHighlights(m, durationS, anchors);
-    expect(highlights.map((h) => h.range)).toEqual([
-      { fromS: 0, toS: 30 },
-      { fromS: 80, toS: 90 },
-    ]);
+    expect(highlights.map((h) => h.range)).toEqual([{ fromS: 80, toS: 90 }]);
   });
 
   it("零亮点(零噪音):锚点每 10s 密布全场 → 每个滑窗 ±5s 容差内必有锚点,全丢", () => {

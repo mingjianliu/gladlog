@@ -165,6 +165,7 @@
     "test/mitigationVerdicts.test.ts",
     "test/nonPlayerUnitKill.test.ts",
     "test/observedEffectEnd.test.ts",
+    "test/offensiveWindowsExternals.test.ts",
     "test/ported/archetypeInference.test.ts",
     "test/ported/auraIntervals.test.ts",
     "test/ported/binarySearch.test.ts",

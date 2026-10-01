@@ -30,6 +30,7 @@ import { immunitySchoolMask } from "../data/spellSchools";
 import { buildAuraIntervals, type IAuraInterval } from "./auraIntervals";
 import { buffFullDurationForCaster } from "./buffDuration";
 import { AURA_ONLY_ACTIVATION_IDS } from "./cooldowns";
+import { toRenderSecond } from "./renderGrid";
 
 const ALL_SCHOOLS = 0x7f;
 
@@ -382,6 +383,31 @@ export function joinReappliedIntervals(
 export const PRESS_TO_AURA_MAX_S = 1;
 /** …and how long AFTER its aura the press's own cast line may be logged. */
 export const AURA_BEFORE_CAST_MAX_S = 0.05;
+
+/** An observed duration as the `[ENEMY DEF]` line prints it: one decimal. */
+export function renderedObservedSeconds(observedSeconds: number): number {
+  return Math.round(observedSeconds * 10) / 10;
+}
+
+/**
+ * An external as its `[ENEMY DEF]` line prints it — `m:ss … (N.Ns)`: the
+ * rendered second and the printed length. A reader adding the two gets the
+ * end the kill-window span is cut at, to the second (codex review of
+ * enemy-def F-E2, 2026-10-03: an external at 24.9 s lasting 11.2 s prints
+ * `0:24 … (11.2s)`; cut at the raw 36.1 s the next span read `0:36`, the
+ * printed facts give 0:35). Undefined when the line prints no length, or a
+ * length that rounds to 0.0 s (codex review, 2026-10-04).
+ */
+export function renderedExternalSpanS(
+  d: Pick<IEnemyDefensiveEvent, "atSeconds" | "observedSeconds">,
+): { from: number; to: number } | undefined {
+  if (d.observedSeconds === undefined) return undefined;
+  // a length that prints as 0.0s protected nothing the reader can see
+  const length = renderedObservedSeconds(d.observedSeconds);
+  if (length <= 0) return undefined;
+  const from = toRenderSecond(d.atSeconds);
+  return { from, to: from + length };
+}
 
 /** An observed aura ended this much before its full duration → "removed
  * early" (dispelled, broken by damage/immunity rules, or cancelled). One

@@ -81,7 +81,10 @@ import {
   IEnemyCDTimeline,
   isEnemyCdWindowSpell,
 } from "../utils/enemyCDs";
-import { enemyDefensiveEvents } from "../utils/enemyDefensives";
+import {
+  enemyDefensiveEvents,
+  renderedObservedSeconds,
+} from "../utils/enemyDefensives";
 import {
   INTERRUPT_SPELL_IDS,
   interruptCooldownSeconds,
@@ -1920,7 +1923,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
         const who = `${enemyPid(enemy.name)} (${specToString(enemy.spec)})`;
         const dur =
           d.observedSeconds !== undefined
-            ? `${d.observedSeconds.toFixed(1)}s${d.removedEarly ? " — removed early" : ""}`
+            ? `${renderedObservedSeconds(d.observedSeconds).toFixed(1)}s${d.removedEarly ? " — removed early" : ""}`
             : "";
         const tSec = toRenderSecond(d.atSeconds);
         const tMs = matchStartMs + tSec * 1000;

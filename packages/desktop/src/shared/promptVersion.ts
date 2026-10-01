@@ -879,5 +879,12 @@
  *  line states the trinket-equivalent racial is `ON CD` while its own
  *  cooldown or a trinket press's shared lock runs. The kill-opportunity tier
  *  does not read the racial's trinket lock (ruling P-b7).
+ *  v301 (2026-10-01, triage enemy-def F-E2 / F-E3, rulings A24 / A25): a
+ *  [KILL WINDOW] `defenseless` span ends at Blur, Greater Invisibility,
+ *  Burrow and Time Stop (not Mass Invisibility — ruling P-b8), and at an
+ *  external the target received (the [ENEMY DEF] line's rendered second
+ *  and printed length).
+ *  Removes kick-priority menu candidates whose window no longer exists —
+ *  counts in the commit.
  */
-export const PROMPT_VERSION = 300;
+export const PROMPT_VERSION = 301;
