@@ -153,6 +153,38 @@ describe("manaLines", () => {
     expect(lines.some((l) => l.includes("3000/20000"))).toBe(false);
   });
 
+  it("walks the product's mana series: advanced samples past the last cast are in the trajectory (triage other F-OT)", () => {
+    // the raw pass only sees cast lines (last cast 20.3 s); the unit's own
+    // advanced samples — heal ticks, damage taken — carry mana to 29 s
+    const adv = (s: number, mana: number) => ({
+      advancedActorId: HEALER_GUID,
+      advancedActorPowers: [{ type: 0, current: mana, max: 20000 }],
+      advancedActorCurrentHp: 1,
+      advancedActorMaxHp: 1,
+      logLine: { timestamp: BASE_MS + s * 1000, parameters: [] },
+      timestamp: BASE_MS + s * 1000,
+    });
+    const sampled = unit({
+      id: HEALER_GUID,
+      name: HEALER_NAME,
+      reaction: CombatUnitReaction.Friendly,
+      advancedActions: [
+        adv(10.2, 15000),
+        adv(20.3, 4000),
+        adv(29, 900),
+      ] as never,
+    });
+    const lines = manaLines(legacyOf([sampled]), streams, HEALER_NAME, 10, 30);
+    expect(
+      lines.some((l) => l.includes("终局蓝量") && l.includes("900/20000")),
+    ).toBe(true);
+    expect(
+      lines.some((l) => l.includes("0:29") && l.includes("900/20000")),
+    ).toBe(true);
+    // and the OOM window now reaches that sample (900 / 20000 < threshold)
+    expect(lines.some((l) => l.includes("窗内最低蓝 900"))).toBe(true);
+  });
+
   it("reports the terminal mana reading at --to via manaAt (60ab-style headline stat)", () => {
     const lines = manaLines(legacy, streams, HEALER_NAME, 10, 21);
     expect(

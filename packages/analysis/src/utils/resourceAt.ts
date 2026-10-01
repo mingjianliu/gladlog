@@ -124,6 +124,42 @@ function rawManaSamplesOf(rs: RawStreams, unitId: string): ManaSample[] {
 }
 
 /**
+ * The unit's whole mana series, from the SAME source `manaReadingAt` answers
+ * from: its advanced samples that carry mana, and only when there are none
+ * the raw.txt pass (cast-success lines only). For tools that walk the
+ * trajectory instead of asking one instant (triage 2026-09-29, other F-OT:
+ * `matchExplore mana` read the cast-only raw pass, so a healer's trajectory
+ * stopped at their last cast — 7f67e778 ended at 6:22 while heal lines carried
+ * the monk's power to 6:30). Seconds from `matchStartMs`, time-ordered.
+ */
+export function manaSeriesOf(
+  unit: Pick<ICombatUnit, "id" | "advancedActions">,
+  fallback: ManaFallback,
+): ManaSample[] {
+  const advanced = samplesBearing(
+    unit.id,
+    getSortedAdvancedActions(unit),
+    MANA_POWER_TYPE,
+  );
+  if (advanced.length === 0)
+    return fallback.rawStreams?.available
+      ? rawManaSamplesOf(fallback.rawStreams, unit.id)
+      : [];
+  const out: ManaSample[] = [];
+  for (const a of advanced) {
+    const e = powerEntry(a, MANA_POWER_TYPE);
+    if (!e || !Number.isFinite(e.current) || !(e.max > 0)) continue;
+    out.push({
+      tSeconds: (a.logLine.timestamp - fallback.matchStartMs) / 1000,
+      unitGuid: unit.id,
+      mana: e.current,
+      manaMax: e.max,
+    });
+  }
+  return out;
+}
+
+/**
  * The unit's MANA reading at `timestampMs` — the one mana sampler the context
  * lines read (reliability audit D2, 2026-09-25).
  *

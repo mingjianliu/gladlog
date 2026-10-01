@@ -297,12 +297,23 @@ export function oomWindows(
   thresholdPct: number,
 ): Array<{ fromS: number; toS: number; minMana: number }> {
   if (!s.available) return [];
+  return oomWindowsOf(
+    s.manaSamples.filter((sample) => sample.unitGuid === unitGuid),
+    thresholdPct,
+  );
+}
+
+/** `oomWindows` over one unit's time-ordered mana series, whatever its source
+ * (`manaSeriesOf` in resourceAt.ts hands the advanced-sample series here). */
+export function oomWindowsOf(
+  samples: readonly ManaSample[],
+  thresholdPct: number,
+): Array<{ fromS: number; toS: number; minMana: number }> {
   const windows: Array<{ fromS: number; toS: number; minMana: number }> = [];
   let fromS: number | null = null;
   let toS = 0;
   let minMana = Infinity;
-  for (const sample of s.manaSamples) {
-    if (sample.unitGuid !== unitGuid) continue;
+  for (const sample of samples) {
     const pct = manaPct(sample);
     if (pct < thresholdPct) {
       if (fromS === null) {
