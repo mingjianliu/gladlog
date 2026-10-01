@@ -94,6 +94,8 @@ function render(
     isHealer?: boolean;
     ownerCDs?: any[];
     pressureWindows?: any[];
+    /** advanced samples of the owner (mana readings for the F-C3 legend) */
+    ownerAdvancedActions?: any[];
   } = {},
 ): string {
   // 14 Riptides ≥ SPAM_FOLD_THRESHOLD (12) so the fold engages; the last
@@ -102,6 +104,9 @@ function render(
   const owner = makeUnit("PlayerYou", {
     spec: CombatUnitSpec.Shaman_Restoration,
     spellCastEvents: castTimes.map((t) => cast(t, "Alice")),
+    ...(over.ownerAdvancedActions
+      ? { advancedActions: over.ownerAdvancedActions }
+      : {}),
   });
   const alice = makeUnit("Alice", {
     spec: CombatUnitSpec.Hunter_BeastMastery,
@@ -347,5 +352,42 @@ describe("legends follow the lines they explain (F-C16 / F-C17)", () => {
     expect(noSpike).toMatch(/0:20 {2}\[YOU\] \[CD\] .*Astral Shift/);
     expect(noSpike).not.toContain("next spike in");
     expect(noSpike).not.toContain(SPIKE_LEGEND);
+  });
+
+  it("F-C3: the `(no mana a/b)` legend appears exactly when a [RES] row carries the tag", () => {
+    const NO_MANA_LEGEND = "`X(no mana a/b)` = X is off cooldown";
+    // Restoral 388615 costs 4.374 % of max mana (11,482 of 262,500)
+    const restoral = {
+      spellId: "388615",
+      spellName: "Restoral",
+      tag: "Defensive",
+      cooldownSeconds: 180,
+      maxChargesDetected: 1,
+      casts: [],
+      availableWindows: [],
+      neverUsed: true,
+    };
+    const mana = (current: number) =>
+      Array.from({ length: 60 }, (_, s) => ({
+        advancedActorId: "PlayerYou",
+        timestamp: ms(s),
+        logLine: { timestamp: ms(s) },
+        advancedActorCurrentHp: 100,
+        advancedActorMaxHp: 100,
+        advancedActorPowers: [{ type: 0, current, max: 262_500 }],
+      }));
+    const low = render({
+      ownerCDs: [astralShift, restoral],
+      ownerAdvancedActions: mana(6_055),
+    });
+    expect(low).toContain("Restoral(no mana 6.1k/11.5k)");
+    expect(low).toContain(NO_MANA_LEGEND);
+    const full = render({
+      ownerCDs: [astralShift, restoral],
+      ownerAdvancedActions: mana(200_000),
+    });
+    expect(full).toContain("Restoral");
+    expect(full).not.toContain("(no mana");
+    expect(full).not.toContain(NO_MANA_LEGEND);
   });
 });

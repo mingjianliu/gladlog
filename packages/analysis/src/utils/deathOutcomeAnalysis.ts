@@ -5,6 +5,7 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
+import { MITIGATION_TABLE } from "../data/mitigationData";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { IPlayerCCTrinketSummary } from "./ccTrinketAnalysis";
 import {
@@ -31,6 +32,7 @@ import {
   getUnitPositionAtTime,
   hasLineOfSight,
 } from "./losAnalysis";
+import { LOS_SWEEP_GAP_MS } from "./positionSampling";
 import { fmtTime } from "./renderGrid";
 import { spellReachForCaster } from "./spellRange";
 import { talentOwnershipOf } from "./talentOwnership";
@@ -673,6 +675,30 @@ export function externalReachYards(
   const hand = EXTERNAL_REACH_HAND_OVERRIDES[spellId];
   if (hand !== undefined) return hand;
   return spellReachForCaster(caster, spellId) ?? EXTERNAL_REACH_FALLBACK_YARDS;
+}
+
+/**
+ * Could a POSITIONAL wall (`MITIGATION_TABLE` `positional`: Darkness' 8 yd
+ * zone) have covered ANOTHER unit — did its holder stand within the wall's
+ * reach of that unit at `atMs`? The 2026-07-30 ruling ("Darkness counts as
+ * 40 % but position MUST be evaluated") for every consumer that names such a
+ * wall on somebody else's behalf (triage menu-coverage F-MC1, ruling A58:
+ * cd-hoarded's accusation set; the kill sequence's [DEFENSIVE AVAILABLE]).
+ * Non-positional spells always pass. A missing position sample fails CLOSED:
+ * a sampling gap must not put a wall in somebody's hand.
+ */
+export function positionalWallReaches(
+  spellId: string,
+  holder: ICombatUnit,
+  target: ICombatUnit,
+  atMs: number,
+): boolean {
+  if (!MITIGATION_TABLE[spellId]?.positional) return true;
+  const a = getUnitPositionAtTime(holder, atMs, LOS_SWEEP_GAP_MS);
+  const b = getUnitPositionAtTime(target, atMs, LOS_SWEEP_GAP_MS);
+  return (
+    !!a && !!b && distanceBetween(a, b) <= externalReachYards(spellId, holder)
+  );
 }
 
 export function buildDeathOutcomeSummary(

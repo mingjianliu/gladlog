@@ -547,5 +547,12 @@
  *  v247 (2026-10-01, triage hp-state F-M1): the NOTE's "lowest HP this match"
  *  and the cd-waste pressure gate read the round only (`matchMinHpPct(unit,
  *  combat)`), not samples logged after its end.
+ *  v248 (2026-10-01, triage G7-P4: res-readiness F-C3 + menu-coverage F-MC1,
+ *  rulings A8 / A58 / U8 / P-G7P4): [RES] `rdy:` tags a ready cooldown the
+ *  owner cannot pay for, `X(no mana a/b)`, with a legend when one is
+ *  rendered; Darkness is a Defensive (cd-waste may name it), and a positional
+ *  wall is named for another unit — cd-hoarded, [DEFENSIVE AVAILABLE] — only
+ *  when its holder stood inside the zone; a burst window is not answerable on
+ *  seconds after the pressured friendly died.
  */
-export const PROMPT_VERSION = 247;
+export const PROMPT_VERSION = 248;

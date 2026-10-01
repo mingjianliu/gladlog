@@ -1,4 +1,5 @@
 import {
+  CombatUnitPowerType,
   CombatUnitReaction,
   CombatUnitSpec,
   LogEvent,
@@ -589,5 +590,87 @@ describe("context.resourceSnapshot unit tests", () => {
       // Verify the two are byte-identical at render precision
       expect(snapshot10_2).toBe(snapshot10_0);
     });
+  });
+});
+
+// Triage 2026-09-29, res-readiness F-C3 (user ruling 2026-09-30, res R2 = A):
+// an owner cooldown that is off cooldown but costs more mana than the owner
+// has at that rendered second stays `rdy` and carries `(no mana a/b)`.
+describe("[RES] rdy: (no mana a/b) on an unaffordable owner cooldown (res-readiness F-C3)", () => {
+  const T0 = 1_000_000;
+  const mana = (s: number, current: number) => ({
+    advancedActorId: "Player-MW",
+    logLine: { timestamp: T0 + s * 1000 },
+    advancedActorPowers: [
+      { type: CombatUnitPowerType.Mana, current, max: 262_500 },
+    ],
+  });
+  const owner = (samples: unknown[]) =>
+    ({
+      id: "Player-MW",
+      name: "Monk-Realm",
+      spec: "270",
+      advancedActions: samples,
+      damageIn: [],
+      absorbsIn: [],
+    }) as never;
+  const cd = (spellId: string, spellName: string): IMajorCooldownInfo => ({
+    spellId,
+    spellName,
+    tag: "Defensive",
+    cooldownSeconds: 180,
+    maxChargesDetected: 1,
+    casts: [],
+    availableWindows: [],
+    neverUsed: true,
+  });
+  const snapshot = (
+    ownerUnit: unknown,
+    extra: Partial<Parameters<typeof buildResourceSnapshot>[0]> = {},
+  ) =>
+    buildResourceSnapshot({
+      timeSeconds: 374.6,
+      ownerCDs: [cd("388615", "Restoral"), cd("115203", "Fortifying Brew")],
+      ownerName: "Monk-Realm",
+      ownerSpec: "Mistweaver Monk",
+      teammateCDs: [],
+      ccTrinketSummaries: [],
+      enemyCDTimeline: { players: [], alignedBurstWindows: [] },
+      matchStartMs: T0,
+      ownerUnit: ownerUnit as never,
+      ...extra,
+    });
+
+  it("full form: the unaffordable cooldown stays ready and is tagged with mana / cost at the rendered second", () => {
+    // the reading of the rendered second 374 (not of 374.6)
+    const line = snapshot(owner([mana(374, 6_055), mana(374.6, 200_000)]));
+    expect(line).toContain("rdy:Restoral(no mana 6.1k/11.5k),Fortifying Brew");
+  });
+
+  it("delta form: the tag rides on the +added entry; the delta keys are the bare names", () => {
+    const line = snapshot(owner([mana(374, 6_055)]), {
+      prevReadyNames: ["Fortifying Brew"],
+    });
+    expect(line).toContain("rdy:Δ +Restoral(no mana 6.1k/11.5k)");
+    // already-ready and unchanged → nothing re-printed
+    expect(
+      snapshot(owner([mana(374, 6_055)]), {
+        prevReadyNames: ["Restoral", "Fortifying Brew"],
+      }),
+    ).not.toContain("no mana");
+    expect(
+      computeReadyNames(
+        374,
+        [cd("388615", "Restoral"), cd("115203", "Fortifying Brew")],
+        [],
+      ),
+    ).toEqual(["Restoral", "Fortifying Brew"]);
+  });
+
+  it("enough mana, no reading, or a spell without a mana cost → no tag (fail open)", () => {
+    expect(snapshot(owner([mana(374, 200_000)]))).toContain(
+      "rdy:Restoral,Fortifying Brew",
+    );
+    expect(snapshot(owner([]))).toContain("rdy:Restoral,Fortifying Brew");
   });
 });

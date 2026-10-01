@@ -1292,10 +1292,11 @@ export function burstWindowDecisionPoints(
       // `externalReachYards` (official DB2 reach, 40 yd fallback — never
       // lower, so an unlisted spell cannot start acquitting or accusing
       // silently). Fail OPEN on missing data: no pressured friendly, no
-      // position sample for the helper, or an unknown reach (`null`: target
-      // dead / no target sample) all count as reachable — sampling gaps must
-      // not manufacture infeasibility, only a position pair the log actually
-      // recorded may remove a window.
+      // position sample for the helper, or an unknown reach (`null`: no
+      // target sample) all count as reachable — sampling gaps must not
+      // manufacture infeasibility, only a position pair the log actually
+      // recorded may remove a window. A DEAD target is not such a gap: the
+      // loop below skips those seconds (U8).
       const teammateCanDeliver = (
         u: any,
         readyCds: IMajorCooldownInfo[],
@@ -1322,6 +1323,13 @@ export function burstWindowDecisionPoints(
         const allyCds = allyCdsByUnit.get(u.id) ?? [];
         if (!allyCds.length) continue;
         for (const sec of windowSecs) {
+          // U8 (user ruling 2026-09-30): a second at which the pressured
+          // friendly is already dead is not a chance to answer for them —
+          // `teammateCanDeliver`'s fail-open on an unknown reach only covers
+          // a living target without a sample (4446729d 1:27: Xandarya died
+          // 91.388, every "reachable" second was after it)
+          if (pressuredUnit && isDeadAtRenderSecond(pressuredUnit, start, sec))
+            continue;
           const ms = start + sec * 1000;
           if (inCcAt(u, ms)) continue;
           const deliverable = allyCds.find(

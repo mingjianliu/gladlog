@@ -1280,6 +1280,19 @@ export function cdHoardedEvents(
     fromS: number,
     toS: number,
   ) => boolean | null,
+  /** Triage 2026-09-29 menu-coverage F-MC1 (user ruling 2026-09-30, A58;
+   * executes the 2026-07-30 ruling "Darkness counts as 40 % but position
+   * MUST be evaluated"): for a TEAMMATE's crisis, was the owner within the
+   * positional wall's reach of the crisis unit at `tSec`? `false` — including
+   * a missing position sample, which fails CLOSED here: a gap must not create
+   * an accusation — keeps a `MITIGATION_TABLE` `positional` cooldown out of
+   * the ACCUSATION set. An absent callback does not gate. The response set
+   * is untouched. */
+  reachesCrisisUnit?: (
+    spellId: string,
+    crisisUnitId: string,
+    tSec: number,
+  ) => boolean,
 ): CandidateEvent[] {
   const cap = overrides?.cap ?? CD_HOARD_CAP;
   const candidates: Array<{
@@ -1394,7 +1407,13 @@ export function cdHoardedEvents(
             cd.spellId,
             p.tSec,
             p.tSec + CD_HOARD_RESPONSE_S,
-          ) !== false,
+          ) !== false &&
+          // F-MC1: a positional wall (Darkness' 8 yd zone) is "ready" for a
+          // teammate only when the owner stood within its reach of them
+          (src.own ||
+            !MITIGATION_TABLE[cd.spellId]?.positional ||
+            reachesCrisisUnit?.(cd.spellId, src.crisisUnit.id, p.tSec) !==
+              false),
       );
       if (ready.length === 0) {
         if (tracing)

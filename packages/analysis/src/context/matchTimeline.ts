@@ -3126,6 +3126,8 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       prevOnCDNames,
       matchStartMs,
       ownerUnit: owner,
+      manaFallback,
+      roundBounds,
     });
     snapshotResults.set(req.id, snapshotStr);
   }
@@ -3174,10 +3176,18 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     }
   }
 
+  // F-C3 (triage res-readiness): the `(no mana a/b)` tag on a [RES] `rdy:`
+  // entry is legended only when a row carries it (snapshots are resolved to
+  // strings above).
+  const noManaRendered = entries.some((e) =>
+    e.lines.some((l) => typeof l === "string" && l.includes("(no mana ")),
+  );
   // F-C16 (triage res-readiness): the `next spike in Ns on X` suffix on
   // [YOU] [CD] lines is hindsight — legend it whenever one is rendered.
   const nextSpikeRendered = entries.some((e) =>
-    e.lines.some((l) => typeof l === "string" && l.includes(", next spike in ")),
+    e.lines.some(
+      (l) => typeof l === "string" && l.includes(", next spike in "),
+    ),
   );
   const outputLines: string[] = [
     ...summaryLines,
@@ -3203,6 +3213,13 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     "  [RES] lists TRACKED major cooldowns (plus your own interrupt and Death Grip) — an ability absent from both `rdy:` and `cd:`",
     "    is one this ledger does not track, NOT one that was unavailable. Other sections may still cite it.",
     "  [RES] rdy: = abilities READY at that instant. `rdy:Δ` = unchanged since the previous [RES];",
+    // res-readiness F-C3 (ruling res R2 = A): off cooldown, but not payable —
+    // legended only when a row carries the tag (the F-C16 convention)
+    ...(noManaRendered
+      ? [
+          "    `X(no mana a/b)` = X is off cooldown but your mana (a) was below its cost (b) at that second — not pressable as it stood.",
+        ]
+      : []),
     "    a leading `-<spell>` marks one that just LEFT the ready set. `cd:<spell>(Ns)` = seconds until it returns.",
     // GH #106 step 3: cooldowns combat shortens (rage spent, resets, procs)
     // print a range — the static number is only the latest they can return.

@@ -23,6 +23,7 @@ import {
   specToString,
 } from "../utils/cooldowns";
 import { getDampeningPercentage } from "../utils/dampening";
+import { positionalWallReaches } from "../utils/deathOutcomeAnalysis";
 import { IEnemyCDTimeline } from "../utils/enemyCDs";
 import { getHpPercentAtTime } from "../utils/killWindowTargetSelection";
 import { fmtTime } from "../utils/renderGrid";
@@ -1392,6 +1393,22 @@ export function buildKillSequenceBlock(params: {
             // silently dropped).
             const isDyingPlayer = player.name === dyingUnit.name;
             if (!isDyingPlayer && !cdCanHelpAnotherUnit(cd)) return false;
+            // …and a positional wall (Darkness' zone) only when its holder
+            // stood within reach of the dying player — the 2026-07-30 ruling;
+            // one predicate with cd-hoarded (F-MC1). Without it the retag of
+            // Darkness as a Defensive printed "Darkness available but unused"
+            // at a teammate's death wherever the Demon Hunter stood (605-file
+            // capture: 9 of the 20 new lines).
+            if (
+              !isDyingPlayer &&
+              !positionalWallReaches(
+                cd.spellId,
+                player as ICombatUnit,
+                dyingUnit as ICombatUnit,
+                matchStartMs + deathTime * 1000,
+              )
+            )
+              return false;
 
             // Single-source predicate (BACKLOG #18 Minor #3): shares the same
             // judgement as matchTimelineSections' [DEATH] Unused and

@@ -73,6 +73,7 @@ import {
   USABLE_WHILE_CONFUSED_SPELL_IDS,
   USABLE_WHILE_FEARED_SPELL_IDS,
 } from "../utils/cooldowns";
+import { positionalWallReaches } from "../utils/deathOutcomeAnalysis";
 import {
   annotateMissedPurgesWithKillWindows,
   canRemoveFrom,
@@ -2687,6 +2688,20 @@ function teamPlayEvents(
               { rawStreams, matchStartMs: combat.startTime },
               combat,
             ),
+          // F-MC1: owner ↔ crisis unit within the positional wall's reach at
+          // the crisis second; a missing sample is "no" (fails closed)
+          (spellId: string, crisisUnitId: string, tSec: number) => {
+            const mate = friends.find((f: any) => f.id === crisisUnitId);
+            return (
+              !!mate &&
+              positionalWallReaches(
+                spellId,
+                owner,
+                mate,
+                combat.startTime + tSec * 1000,
+              )
+            );
+          },
         ),
       );
     } catch {

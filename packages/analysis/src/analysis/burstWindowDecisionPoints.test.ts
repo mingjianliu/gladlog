@@ -764,6 +764,47 @@ describe("burstWindowDecisionPoints — teammate reachability gate (GH #60 tail,
     // the unreachable teammate is still not credited
     expect(pts[0]!.feasibleUnits).toEqual(["Friend-R"]);
   });
+
+  describe("U8 (user ruling 2026-09-30): seconds after the pressured friendly died are not chances to answer for them", () => {
+    // F1 dies 2.4 s into the window; F2 is 500 yd away while F1 lives. After
+    // the death F1 has no reach (`canReachTargetAt` → null), which used to
+    // fail open and credit F2 on post-death seconds only (4446729d 1:27).
+    const f1Dying = (over: Record<string, unknown> = {}) =>
+      friendly({
+        damageIn: steadyDamage(10, 20),
+        advancedActions: trackAt("F1", 0, 12, 25, 0, 0),
+        deathRecords: [{ timestamp: T0 + 12_400 }],
+        ...over,
+      });
+    const mate = (y: number) =>
+      friendly({
+        id: "F2",
+        name: "Mate-R",
+        spec: CombatUnitSpec.Druid_Restoration,
+        info: { teamId: "0", specId: "105" },
+        spellCastEvents: [cast(TRANQUILITY, 120)],
+        advancedActions: trackAt("F2", 0, 40, 95, 0, y),
+      });
+    const enemy = () => hostile({ spellCastEvents: [cast(AR, 10)] });
+
+    it("out of reach while the target lived → not feasible, however long the window runs after the death", () => {
+      const pts = burstWindowDecisionPoints(
+        combat([f1Dying(), mate(500), enemy()]),
+      );
+      expect(pts[0]!.pressured?.name).toBe("Friend-R");
+      expect(pts[0]!.anyFriendlyDeath).toBe(true);
+      expect(pts[0]!.feasible).toBe(false);
+      expect(pts[0]!.feasibleUnits).toEqual([]);
+    });
+
+    it("in reach while the target lived → still feasible (the death itself removes nothing)", () => {
+      const pts = burstWindowDecisionPoints(
+        combat([f1Dying(), mate(10), enemy()]),
+      );
+      expect(pts[0]!.feasible).toBe(true);
+      expect(pts[0]!.feasibleUnits).toEqual(["Mate-R"]);
+    });
+  });
 });
 
 describe("burstWindowDecisionPoints — reliability round 2 W1a", () => {

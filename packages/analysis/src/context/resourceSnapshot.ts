@@ -17,6 +17,7 @@ import {
 import { IEnemyCDTimeline } from "../utils/enemyCDs";
 import { sumIncomingPressure } from "../utils/incomingPressure";
 import { toRenderSecond } from "../utils/renderGrid";
+import { affordableAt, type ManaFallback } from "../utils/resourceAt";
 import { getPvpToolkit } from "../utils/talentBehaviors";
 
 // F169: number of friendly units with an active Atonement (194384) at a given time. Disc Priest
@@ -446,6 +447,10 @@ interface ResourceSnapshotParams {
   prevOnCDNames?: string[];
   matchStartMs?: number;
   ownerUnit?: ICombatUnit;
+  /** the timeline's mana fallback (raw.txt pass) and the round's bounds, for
+   * the `(no mana …)` tag on the owner's ready cooldowns (`affordableAt`) */
+  manaFallback?: ManaFallback;
+  roundBounds?: { startTime: number; endTime: number };
 }
 
 export function buildResourceSnapshot({
@@ -461,6 +466,8 @@ export function buildResourceSnapshot({
   prevOnCDNames,
   matchStartMs,
   ownerUnit,
+  manaFallback,
+  roundBounds,
 }: ResourceSnapshotParams): string {
   // Render-grid anchor (CLAUDE.md shared-predicate rule; GH #63, 2026-09-04):
   // callers hand in the cast's fractional instant, but the line is printed
@@ -546,6 +553,30 @@ export function buildResourceSnapshot({
     }
   }
 
+  // Triage res-readiness F-C3 (user ruling 2026-09-30, res R2 = A): an owner
+  // cooldown that is off cooldown but costs more mana than the owner has at
+  // this rendered second stays `rdy` and says so — `X(no mana 6.1k/11.5k)`.
+  // Display only: the ready set, the delta keys and `computeReadyNames` are
+  // unchanged. `affordableAt` is the one affordability predicate (cd-hoarded
+  // F-H6 reads its window form); unknown cost or no reading → no tag.
+  const noManaTag = new Map<string, string>();
+  if (ownerUnit && matchStartMs !== undefined) {
+    const k = (n: number) => `${(n / 1000).toFixed(1)}k`;
+    for (const cd of ownerCDs) {
+      if (cdIsProcOnly(cd)) continue;
+      const a = affordableAt(
+        ownerUnit,
+        cd.spellId,
+        matchStartMs + timeSeconds * 1000,
+        manaFallback,
+        roundBounds,
+      );
+      if (a && !a.affordable)
+        noManaTag.set(cd.spellName, `(no mana ${k(a.mana)}/${k(a.cost)})`);
+    }
+  }
+  const rdyDisplay = (n: string) => `${n}${noManaTag.get(n) ?? ""}`;
+
   // ── rdy: — full form first time, delta form on subsequent calls ─────────────
   let rdyPart: string;
   if (prevReadyNames !== undefined) {
@@ -557,14 +588,14 @@ export function buildResourceSnapshot({
     // `+a,b-c,d` form used a bare '-' as the added/removed boundary, which collided with
     // the hyphens inside spell names (e.g. "Anti-Magic Zone"), making the delta unparseable.
     const parts = [
-      ...added.map((n) => `+${n}`),
+      ...added.map((n) => `+${rdyDisplay(n)}`),
       ...removed.map((n) => `-${n}`),
     ];
     rdyPart = parts.length > 0 ? `rdy:Δ ${parts.join(" ")}` : "rdy:Δ";
   } else {
     // B114: annotate multi-charge CDs with their ready-charge count in the full ready list.
     const readyDisplay = readyNames.map(
-      (n) => `${n}${chargeSuffix.get(n) ?? ""}`,
+      (n) => `${rdyDisplay(n)}${chargeSuffix.get(n) ?? ""}`,
     );
     rdyPart = `rdy:${readyDisplay.length > 0 ? readyDisplay.join(",") : "—"}`;
   }
