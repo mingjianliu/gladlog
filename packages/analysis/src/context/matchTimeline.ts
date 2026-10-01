@@ -45,6 +45,7 @@ import {
   gridHpPct,
   hasOffensiveSpellActive,
   HP_SAMPLE_RADIUS_MS,
+  hpAtPress,
   IDamageBucket,
   IMajorCooldownInfo,
   isDeadAtRenderSecond,
@@ -92,7 +93,7 @@ import {
 import { IHealingGap } from "../utils/healingGaps";
 import { sumIncomingPressure } from "../utils/incomingPressure";
 import { buildRosterSides } from "../utils/rosterSide";
-import { getHpPercentAtTime } from "../utils/killWindowTargetSelection";
+import { MEDALLION_SPELL_ID } from "../utils/pvpTrinketUses";
 import type { RawStreams } from "../utils/rawStreams";
 import { ownerResUtilityCds } from "./resUtilityCds";
 import {
@@ -1141,14 +1142,17 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     spellId: string,
     rawTimeSeconds: number,
     targetName: string | undefined,
-    overrideHpPct?: number,
     forceSelf = false,
   ): string {
-    // This line's timestamp is floored by fmtTime while [STATE] samples on whole
-    // seconds — the inline HP must be queried at the same instant, or two HP
-    // values contradict each other under the same displayed second (class C;
-    // see the notes on toRenderSecond).
-    const timeSeconds = toRenderSecond(rawTimeSeconds);
+    // HP on a press line is the HP AT THE PRESS (`hpAtPress`), just before the
+    // press's own heal — user ruling 2026-09-30 (triage A21, hp-state F-R8),
+    // the signed exception to the whole-second grid: the `[STATE]` tick of the
+    // displayed second can read differently, the legend says so and the gate
+    // exempts `PRESS_HP_LINE_TAGS`. Every number this helper prints (HP,
+    // velocity, the 2 s DPS window) is anchored on that one instant, so a line
+    // never mixes two.
+    const castMs = matchStartMs + Math.round(rawTimeSeconds * 1000);
+    const press = { spellId, srcUnitId: owner.id };
     // B112/B127: self-only defensives (Obsidian Scales, Divine Shield, Ice Block, …) log whatever
     // unit the caster was targeting — often an enemy — as their "target". forceSelf overrides that so
     // the line renders (self) with the caster's own HP, never "→ <enemy>" with that enemy's HP.
@@ -1172,20 +1176,16 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
 
     let velocityStr = "";
     if (targetUnit && !targetIsEnemy && !ccSpellIds.has(spellId)) {
-      const hpNow = getUnitHpAtTimestamp(
-        targetUnit,
-        matchStartMs + timeSeconds * 1000,
-        HP_SAMPLE_RADIUS_MS,
-      );
+      const hpNow = hpAtPress(targetUnit, castMs, press);
       const hpBefore = getUnitHpAtTimestamp(
         targetUnit,
-        matchStartMs + (timeSeconds - 2) * 1000,
+        castMs - 2000,
         HP_SAMPLE_RADIUS_MS,
       );
 
       // Preceding 2-second lookback window for incoming DPS
-      const fromMs = matchStartMs + (timeSeconds - 2) * 1000;
-      const toMs = matchStartMs + timeSeconds * 1000;
+      const fromMs = castMs - 2000;
+      const toMs = castMs;
       const incomingDpsK = Math.round(
         sumIncomingPressure(targetUnit, fromMs, toMs, rosterSides) / 2 / 1000,
       );
@@ -1213,7 +1213,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
           u.reaction !== CombatUnitReaction.Friendly
         )
           continue;
-        const hp = getHpPercentAtTime(u, timeSeconds, matchStartMs);
+        const hp = hpAtPress(u, castMs, press);
         if (hp !== null && hp < lowHp) {
           lowHp = hp;
           lowUnit = u;
@@ -1222,7 +1222,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       if (lowUnit) {
         targetPart = ` (team; lowest ally ${lowHp.toFixed(0)}% HP on ${pid(lowUnit.name)})`;
       } else {
-        const hpNow = getHpPercentAtTime(owner, timeSeconds, matchStartMs);
+        const hpNow = hpAtPress(owner, castMs, press);
         if (hpNow !== null)
           targetPart = ` (self: ${hpNow.toFixed(0)}% HP${velocityStr})`;
       }
@@ -1247,18 +1247,14 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
         ? (npcEnglish ?? "[pet/NPC]")
         : resolved;
       targetPart = ` → ${targetLabel}`;
-      const hpPct =
-        overrideHpPct ??
-        (targetUnit
-          ? getHpPercentAtTime(targetUnit, timeSeconds, matchStartMs)?.toFixed(
-              0,
-            )
-          : undefined);
+      const hpPct = targetUnit
+        ? hpAtPress(targetUnit, castMs, press)?.toFixed(0)
+        : undefined;
       if (hpPct !== undefined || velocityStr !== "") {
         targetPart += ` (${hpPct ?? "?"}% HP${velocityStr})`;
       }
     } else if (velocityStr !== "") {
-      const hpNow = getHpPercentAtTime(owner, timeSeconds, matchStartMs);
+      const hpNow = hpAtPress(owner, castMs, press);
       if (hpNow !== null) {
         targetPart = ` (self: ${hpNow.toFixed(0)}% HP${velocityStr})`;
       }
@@ -1952,8 +1948,15 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
             ? (enemies?.find((e) => e.id === d.recipientId) ??
               enemies?.find((e) => e.name === d.recipientName))
             : enemy;
+        // HP at the press (A21, enemy-def F-E11) — the same sampler as the
+        // owner's press lines; c2058ed4's Turtle read 26 % on the grid
         const hpPct = targetUnit
-          ? getHpPercentAtTime(targetUnit, tSec, matchStartMs)
+          ? hpAtPress(
+              targetUnit,
+              // the cast that put an aura up, when logged — not the aura
+              matchStartMs + Math.round((d.pressSeconds ?? d.atSeconds) * 1000),
+              { spellId: d.spellId, srcUnitId: enemy.id },
+            )
           : null;
         let line: string;
         if (d.kind === "external") {
@@ -2401,7 +2404,10 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
         const burstPart = hasBurst ? " [friendly offensive CD active]" : "";
         const enemyUnit = enemies?.find((e) => e.name === summary.playerName);
         const hpPct = enemyUnit
-          ? getHpPercentAtTime(enemyUnit, tSec, matchStartMs)
+          ? hpAtPress(enemyUnit, rawCastMs, {
+              spellId: MEDALLION_SPELL_ID,
+              srcUnitId: enemyUnit.id,
+            })
           : null;
         const hpPart =
           hpPct !== null ? ` (target at ${hpPct.toFixed(0)}% HP)` : "";
@@ -3519,6 +3525,14 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     "    surviving [RES] shows, a CC no [CC ON …] line covers at that second, an enemy CD with no [ENEMY CD] line);",
     "    a `rdy:Δ  cd:—` row whose facts are all stated elsewhere is omitted, so its absence means nothing changed.",
     "  [DMG SPIKE] `START–END` = the window's exact bounds; its `A% -> B% HP` maps directly to those two timestamps.",
+    // A21 (user ruling 2026-09-30): HP on press lines is read at the press
+    // (worded without the literal line tags: tests and scans find press
+    // lines by their tag)
+    "  HP printed on your own press lines (the lines tagged [YOU]) — `(self: N% HP …)`, `→ X (N% HP …)`, `lowest ally N% HP`,",
+    "    `(N% HP)` — is that unit's HP at the moment of the press (just before the press's own heal), not the [STATE]",
+    "    reading of that second; the two can differ, and inside one second the press value is the one to quote about the press.",
+    "    The `at N% HP` inside a cooldown line's unnecessary-press note is the same press reading — on your own lines",
+    "    and on a teammate's cooldown line alike.",
     "  Window durations `(Ns)` are computed from the displayed start/end timestamps, so they always match what you see.",
     // GH #24 (2026-08-30): roots carry no DR and are not hard CC; a [ROOT]
     // line appears only when the rooted player could not reach anyone.
@@ -3541,7 +3555,8 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
           "    Spirit on itself, Desperate Prayer, Touch of Karma, Dark Pact, Evasion, Healthstone, Ice Barrier…) — KILL",
           "    ATTEMPTS `self-saved (X)` names these.",
           "    `[friendly offensive CD active]` indicates at least one friendly offensive cooldown was active at that displayed second.",
-          "    `(at N% HP)` / `(target at N% HP)` reflects the target's HP at the displayed second.",
+          "    `(at N% HP)` / `(target at N% HP)` reflects the target's HP at the press (just before the press's own",
+          "    heal), not the [STATE] reading of that second.",
           ...(TIMELINE_LINE_FLAGS.duringExternal === "annotate"
             ? [
                 "    `| during it: A Nk on target · X% of their enemy-player damage · direct/periodic · damage in K of M s` = what each",
@@ -3568,7 +3583,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       ? [
           "  [ENEMY TRINKET] = an enemy used PvP trinket; `out of <spell> (by <source>)` indicates breaking out of that CC.",
           "    `[friendly offensive CD active]` indicates at least one friendly offensive cooldown was active at that displayed second.",
-          "    `(target at N% HP)` reflects the target's HP at the displayed second.",
+          "    `(target at N% HP)` reflects the target's HP at the press, not the [STATE] reading of that second.",
         ]
       : []),
     // F-C2 (triage res-readiness): the cast ordinal has its own notation
@@ -3602,7 +3617,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     ...(isHealer && TIMELINE_LINE_FLAGS.deathWindowUnfold === "perCast"
       ? [
           `  [YOU] [CAST] lines inside the ${DEATH_WINDOW_S}s before a friendly death are printed per cast with the target's HP`,
-          "    at that second, even for spells that are folded `(xN over Ns)` elsewhere; the fold still counts them.",
+          "    at the press, even for spells that are folded `(xN over Ns)` elsewhere; the fold still counts them.",
         ]
       : []),
     ...(isHealer && TIMELINE_LINE_FLAGS.deathWindowUnfold === "summary"

@@ -40,6 +40,9 @@ function makeUnit(overrides: Partial<ICombatUnit> = {}): ICombatUnit {
   } as ICombatUnit;
 }
 
+// HP on [ENEMY DEF] / [ENEMY TRINKET] is the HP at the press (`hpAtPress`,
+// ruling A21): the last sample strictly BEFORE the press, so the fixtures put
+// the reading 0.1 s ahead of the press it describes.
 function hpTick(unitId: string, atSec: number, pct: number) {
   return {
     advancedActorId: unitId,
@@ -122,7 +125,7 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
       name: "EnemyRogue",
       reaction: CombatUnitReaction.Hostile,
       spec: CombatUnitSpec.Rogue_Subtlety,
-      advancedActions: [hpTick("E1", 42, 31)],
+      advancedActions: [hpTick("E1", 41.9, 31)],
     });
 
     const enemyCCSummaries: IPlayerCCTrinketSummary[] = [
@@ -193,7 +196,7 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
       name: "EnemyRogue",
       reaction: CombatUnitReaction.Hostile,
       spec: CombatUnitSpec.Rogue_Subtlety,
-      advancedActions: [hpTick("E1", 42, 68)],
+      advancedActions: [hpTick("E1", 41.9, 68)],
     });
 
     const enemyCCSummaries: IPlayerCCTrinketSummary[] = [
@@ -440,7 +443,7 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
           logLine: { event: LogEvent.SPELL_AURA_REMOVED, timestamp: T0 + 50_000 },
         },
       ] as any,
-      advancedActions: [hpTick("E1", 45, 28)],
+      advancedActions: [hpTick("E1", 44.9, 28)],
     });
 
     const timeline = buildMatchTimeline({
@@ -502,7 +505,7 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
       name: "EnemyRogue",
       reaction: CombatUnitReaction.Hostile,
       spec: CombatUnitSpec.Rogue_Subtlety,
-      advancedActions: [hpTick("E1", 46, 24)],
+      advancedActions: [hpTick("E1", 45.9, 24)],
       auraEvents: [
         {
           spellId: "33206",
@@ -532,7 +535,7 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
       name: "EnemyPriest",
       reaction: CombatUnitReaction.Hostile,
       spec: CombatUnitSpec.Priest_Discipline,
-      advancedActions: [hpTick("E2", 46, 90)], // Caster HP is 90%, target HP is 24%
+      advancedActions: [hpTick("E2", 45.9, 90)], // Caster HP is 90%, target HP is 24%
       spellCastEvents: [
         {
           spellId: "33206",

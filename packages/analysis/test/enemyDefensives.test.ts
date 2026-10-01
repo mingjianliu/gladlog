@@ -125,6 +125,29 @@ describe("enemyDefensiveEvents", () => {
     for (const id of IMMUNITY_IDS) expect(MITIGATION_TABLE[id].pct).toBe(100);
   });
 
+  it("an aura kind carries its press: the nearest logged cast, up to 1 s before or 50 ms after the aura", () => {
+    const at = (castS: number | null) => {
+      const u = unit("e1", {
+        auraEvents: [
+          applied(BARKSKIN, "e1", "e1", 10),
+          removed(BARKSKIN, "e1", "e1", 22),
+        ],
+        spellCastEvents: castS === null ? [] : [cast(BARKSKIN, "e1", castS)],
+      });
+      // the caster is looked up among the enemies passed in
+      return enemyDefensiveEvents(u, [u], combat)[0]!.pressSeconds;
+    };
+    expect(at(9.8)).toBeCloseTo(9.8, 6);
+    // the cast line logged a few ms AFTER its aura (review of F-E11)
+    expect(at(10.02)).toBeCloseTo(10.02, 6);
+    // exactly 50 ms after (10.05 - 10 is not 0.05 in floating point)
+    expect(at(10.05)).toBeCloseTo(10.05, 6);
+    // too far either side: no press, the line falls back to the aura time
+    expect(at(8.5)).toBeUndefined();
+    expect(at(10.2)).toBeUndefined();
+    expect(at(null)).toBeUndefined();
+  });
+
   it("self wall / immunity / external, in cast order, with observed duration", () => {
     const druid = unit("e1", {
       auraEvents: [

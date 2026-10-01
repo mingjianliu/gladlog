@@ -88,7 +88,10 @@ import {
   forcedFollowUpGapOk,
   renderedInsideSpan,
 } from "@gladlog/analysis/src/context/forcedTrinket";
-import { canHelpAnotherUnit } from "@gladlog/analysis/src/utils/cooldowns";
+import {
+  canHelpAnotherUnit,
+  PRESS_HP_LINE_TAGS,
+} from "@gladlog/analysis/src/utils/cooldowns";
 import { fmtTime } from "@gladlog/analysis/src/utils/renderGrid";
 import fs from "fs-extra";
 import path from "path";
@@ -293,15 +296,12 @@ const SPIKE_HP =
 // "0:15  [YOU] [CD]   Holy Word: Chastise → 6(RPaladin) (68% HP)" — the
 // class-C inline HP form
 const INLINE_HP = /^(\d+):(\d+)\s+.*?→\s*(\S+)\s*\((\d+)%\s*HP/;
-// "1:20  [ENEMY DEF]   2(ERogue) (Subtlety Rogue): Cloak of Shadows (immune) (at 28% HP)"
-const ENEMY_DEF_SELF_HP =
-  /^(\d+):(\d+)\s+\[ENEMY DEF\]\s+(\S+)(?:\s+\([^)]*\))?:.*?\(at\s+(\d+)%\s*HP/;
-// "1:20  [ENEMY DEF]   3(HPriest) (Holy Priest): Pain Suppression → 2(ERogue) (target at 24% HP)"
-const ENEMY_DEF_EXT_HP =
-  /^(\d+):(\d+)\s+\[ENEMY DEF\]\s+.*?:.*?(?:→|->)\s*(\S+).*?\(target at\s+(\d+)%\s*HP/;
-// "1:20  [ENEMY TRINKET]   2(ERogue) used PvP trinket ... (target at 31% HP)"
-const ENEMY_TRINKET_HP =
-  /^(\d+):(\d+)\s+\[ENEMY TRINKET\]\s+(\S+)\s+used PvP trinket.*?\(target at\s+(\d+)%\s*HP/;
+// Press lines — "[YOU] [CD] … → 6(RPaladin) (68% HP)", "[ENEMY DEF] … (at 28% HP)",
+// "[ENEMY TRINKET] … (target at 31% HP)" — are NOT checked here: their HP is the
+// HP at the press (analysis `hpAtPress`), the signed exception to the grid
+// (user ruling 2026-09-30, triage A21). One list, exported by the analysis side.
+const isPressHpLine = (line: string): boolean =>
+  PRESS_HP_LINE_TAGS.some((tag) => line.includes(tag));
 // "0:21  [STATE]   friends 1(HPriest):99 2(SHunter):76 / enemies 4(AWarrior):90"
 const STATE_LINE = /^(\d+):(\d+)\s+\[STATE\]\s+(.*)$/;
 /** Benign sampling jitter allowed, in percentage points. Anything above this is
@@ -319,6 +319,15 @@ const HP_AGREEMENT_TOLERANCE_PP = 3;
  * sampling radius" fix moved not a single number — the radius only controls
  * accept/reject, it does not change which sample is picked. The criterion must
  * be anchored on the **rendered text** for the real effect to be measurable.
+ *
+ * Exception (user ruling 2026-09-30, triage A21 — hp-state F-R8 / enemy-def
+ * F-E11): HP printed on a PRESS line (`PRESS_HP_LINE_TAGS`) is the HP at the
+ * press, just before the press's own heal, and may legitimately differ from
+ * the `[STATE]` tick of the displayed second (bd790c92 Bear Form: 8 % at the
+ * press, 23 % on the grid). Those lines are skipped. The press ms is not
+ * rendered, so the text cannot re-derive that number; the analysis-side
+ * guarantee is `hpAtPress`'s own unit test. Without the exemption 43 press
+ * lines of the 60 triage prompts would fail here.
  */
 export function checkSameSecondHpConsistency(lines: string[]): string[] {
   const stateAt = new Map<number, Map<string, number>>();
@@ -335,22 +344,14 @@ export function checkSameSecondHpConsistency(lines: string[]): string[] {
   lines.forEach((line, i) => {
     // [DMG SPIKE]'s "X% -> Y% HP" (class A) and the inline "→ target (X% HP)"
     // (class C) are two rendered forms of the same invariant and share one
-    // criterion. Extended to check HP claims from [ENEMY DEF] (self/external)
-    // and [ENEMY TRINKET].
+    // criterion. Press lines are exempt (see above).
     let m: RegExpMatchArray | null = null;
     let label = "行内嵌";
     if (line.includes("[DMG SPIKE]")) {
       m = line.match(SPIKE_HP);
       label = "[DMG SPIKE]";
-    } else if (line.includes("[ENEMY DEF]")) {
-      m =
-        line.includes("→") || line.includes("->")
-          ? line.match(ENEMY_DEF_EXT_HP)
-          : line.match(ENEMY_DEF_SELF_HP);
-      label = "[ENEMY DEF]";
-    } else if (line.includes("[ENEMY TRINKET]")) {
-      m = line.match(ENEMY_TRINKET_HP);
-      label = "[ENEMY TRINKET]";
+    } else if (isPressHpLine(line)) {
+      return;
     } else {
       m = line.match(INLINE_HP);
       label = "行内嵌";
@@ -368,6 +369,41 @@ export function checkSameSecondHpConsistency(lines: string[]): string[] {
     }
   });
   return violations;
+}
+
+// "… [UNNECESSARY — no pressure: target Name-Realm at 90% HP, no damage spike …]"
+const UNNECESSARY_NOTE_HP =
+  /\[UNNECESSARY — no pressure: target .+? at (\d+)% HP/;
+// "… [CD]   Barkskin (self: 71% HP, …)" — the self-cast form of a press line
+const SELF_PRESS_HP = /\(self: (\d+)% HP/;
+
+/**
+ * Hard invariant: one press line carries ONE reading of its target's HP. The
+ * `→ X (N% HP …)` / `(self: N% HP …)` of a `[CD]` line and the `at N% HP`
+ * inside its `[UNNECESSARY — …]` note both come from the analysis-side
+ * `hpAtPress` of the same cast (hp-state F-R8 and its 2026-10-01 extension),
+ * through two call sites: the timeline helper looks the target up by name
+ * with the cooldown's id, the ledger by GUID with the cast's own id. The
+ * press line is exempt from `checkSameSecondHpConsistency` (the press ms is
+ * not rendered), so this is the text check that is still possible: the two
+ * numbers on the line must be equal. Before the extension the note was the
+ * `[STATE]` grid reading and could disagree with the press reading next to
+ * it (review 2026-10-02: a 75 % press under a 90 % note). A teammate's
+ * `[TEAM] [CD]` line prints only the note and is not checked here.
+ */
+export function checkUnnecessaryNoteHpAgreement(lines: string[]): string[] {
+  const failures: string[] = [];
+  lines.forEach((line, i) => {
+    const note = line.match(UNNECESSARY_NOTE_HP);
+    if (!note) return;
+    const inline = line.match(INLINE_HP)?.[4] ?? line.match(SELF_PRESS_HP)?.[1];
+    if (inline === undefined) return;
+    if (Number(inline) !== Number(note[1]))
+      failures.push(
+        `line ${i + 1}: 同一按键行两个目标血量不一致 — 行内 ${inline}% 而 [UNNECESSARY] 注记 ${note[1]}%: ${line.trim().slice(0, 160)}`,
+      );
+  });
+  return failures;
 }
 
 // "2:57–3:15 (19s)" — window endpoints + labelled duration. A decimal label
@@ -2937,6 +2973,7 @@ export function checkMatch(
   }
   hardFailures.push(...checkPercentileMonotonicity(lines));
   hardFailures.push(...checkSameSecondHpConsistency(lines));
+  hardFailures.push(...checkUnnecessaryNoteHpAgreement(lines));
   hardFailures.push(...checkWindowSpanConsistency(lines));
   hardFailures.push(...checkCooldownLedgerConsistency(lines));
   hardFailures.push(...checkSnapshotFactsConsistency(promptText));

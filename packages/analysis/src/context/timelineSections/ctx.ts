@@ -146,7 +146,6 @@ export interface TimelineCtx {
     spellId: string,
     rawTimeSeconds: number,
     targetName: string | undefined,
-    overrideHpPct?: number,
     forceSelf?: boolean,
   ) => string;
   requestSnapshotPlaceholder: (

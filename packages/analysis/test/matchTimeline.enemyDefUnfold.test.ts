@@ -111,9 +111,11 @@ function render(
   const alice = makeUnit("Alice", {
     spec: CombatUnitSpec.Hunter_BeastMastery,
     advancedActions: [
-      hpTick("Alice", 52, 70),
-      hpTick("Alice", 55, 40),
-      hpTick("Alice", 58, 15),
+      // the reading just before each press (HP on a press line is the HP at
+      // the press, ruling A21)
+      hpTick("Alice", 51.9, 70),
+      hpTick("Alice", 54.9, 40),
+      hpTick("Alice", 57.9, 15),
     ],
   });
   const enemy = makeUnit("Enemy1", {
@@ -196,7 +198,7 @@ describe("GH #97 timeline flags", () => {
     }
   });
 
-  it("death-window unfold: perCast lines carry the target's grid HP and stop at the cap; off keeps the fold", () => {
+  it("death-window unfold: perCast lines carry the target's HP at the press and stop at the cap; off keeps the fold", () => {
     TIMELINE_LINE_FLAGS.deathWindowUnfold = "perCast";
     const on = render();
     expect(on).toContain("0:52  [YOU] [CAST]   Riptide → 2 (70% HP)");

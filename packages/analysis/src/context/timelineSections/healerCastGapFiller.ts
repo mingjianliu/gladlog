@@ -26,8 +26,8 @@ import { fmtFactNum } from "../../analysis/factFormat";
 import { dropAuraRebroadcasts } from "../../utils/auraIntervals";
 import { COPY_CAST_IDS } from "../../utils/castPress";
 import { isControlledPlayerFlags } from "../../utils/charmedPlayer";
-import { cdRoleTag, gridHpPct, rendersOnCaster } from "../../utils/cooldowns";
-import { fmtTime, toRenderSecond } from "../../utils/renderGrid";
+import { cdRoleTag, hpAtPress, rendersOnCaster } from "../../utils/cooldowns";
+import { fmtTime } from "../../utils/renderGrid";
 import {
   getNpcIdFromGuid,
   GROUNDING_TOTEM_NPC_ID,
@@ -269,10 +269,15 @@ export function emitHealerCastGapFillerEntries(
     crisisWindowUnfolded.set(w, n + 1);
     return true;
   };
-  const castTargetHpTag = (
-    destUnitName: string | undefined,
-    rawTimeSeconds: number,
-  ): string => {
+  // HP at the press (`hpAtPress`, ruling A21 / hp-state F-R8), like the
+  // [YOU] [CD] lines: the cast event supplies the press ms and the spell /
+  // caster whose own heal must not be read back as "HP at the press".
+  const castTargetHpTag = (e: {
+    destUnitName?: string;
+    spellId?: string | null;
+    timestamp: number;
+  }): string => {
+    const destUnitName = e.destUnitName;
     const isSelf =
       !destUnitName ||
       destUnitName === "nil" ||
@@ -282,10 +287,10 @@ export function emitHealerCastGapFillerEntries(
       ? owner
       : _allUnits.find((u) => u.name === destUnitName);
     if (!unit) return "";
-    const hp = gridHpPct(
-      unit,
-      matchStartMs + toRenderSecond(rawTimeSeconds) * 1000,
-    );
+    const hp = hpAtPress(unit, e.timestamp, {
+      spellId: e.spellId ?? "",
+      srcUnitId: owner.id,
+    });
     return hp === null ? "" : ` (${hp}% HP)`;
   };
 
@@ -553,7 +558,6 @@ export function emitHealerCastGapFillerEntries(
         e.spellId,
         timeSeconds,
         e.destUnitName,
-        undefined,
         rendersOnCaster(e.spellId),
       );
       const promotedRole = cdRoleTag(e.spellId);
@@ -621,7 +625,7 @@ export function emitHealerCastGapFillerEntries(
       );
       addEntry(
         timeSeconds,
-        `${fmtTime(timeSeconds)}  [YOU] [CAST]   ${displayName}${targetPart}${castTargetHpTag(e.destUnitName, timeSeconds)}`,
+        `${fmtTime(timeSeconds)}  [YOU] [CAST]   ${displayName}${targetPart}${castTargetHpTag(e)}`,
       );
       continue;
     }
@@ -691,7 +695,7 @@ export function emitHealerCastGapFillerEntries(
       const windowHpTag =
         TIMELINE_LINE_FLAGS.deathWindowUnfold === "perCast" &&
         deathWindowAt(timeSeconds) !== null
-          ? castTargetHpTag(e.destUnitName, timeSeconds)
+          ? castTargetHpTag(e)
           : "";
       addEntry(
         timeSeconds,

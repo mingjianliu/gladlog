@@ -46,7 +46,7 @@ import {
   auraOffensiveActiveAt,
   OFFENSIVE_AURA_EVIDENCE,
 } from "./offensiveAuraOccurrences";
-import { fmtTime, toRenderSecond } from "./renderGrid";
+import { fmtTime } from "./renderGrid";
 import { isOffensiveSpell } from "./spellDanger";
 import {
   CD_TALENT_MODIFIERS,
@@ -876,7 +876,9 @@ export interface ICooldownCast {
   timingLabel?: DefensiveTimingLabel;
   /** One-line reason for the timing label */
   timingContext?: string;
-  /** HP% of the target unit at cast time, 0–100, when available from advanced logging */
+  /** HP% of the target unit AT THE PRESS (`hpAtPress`), 0–100, when
+   * available from advanced logging. Readers: the [UNNECESSARY] threshold and
+   * the questionable-external facts (A21 extension, 2026-10-01). */
   targetHpPct?: number;
   /** Name of the unit the spell was cast on (from destUnitName), when available */
   targetName?: string;
@@ -988,6 +990,91 @@ export function unitHpSampleAt(
     ),
     sampleMs: closestAction.logLine.timestamp,
   };
+}
+
+/**
+ * A press's own instant heal is logged up to this long BEFORE the press's
+ * SPELL_CAST_SUCCESS line (06bb9860 Lay on Hands: SPELL_HEAL 18.487, SUCCESS
+ * 18.488; a few ms on every instant self-heal measured). Editorial bound for
+ * "this heal belongs to this press".
+ */
+export const PRESS_EFFECT_LEAD_MS = 50;
+
+/**
+ * The timeline tags whose inline HP number is the HP AT THE PRESS
+ * (`hpAtPress`), not the `[STATE]` reading of the displayed second — the one
+ * signed exception to "HP is sampled on the rendered whole-second grid"
+ * (user ruling 2026-09-30, triage A21: enemy-def R8 × hp-state X-R8). The
+ * gate `checkSameSecondHpConsistency` imports this list and does not compare
+ * those lines with the same-second `[STATE]` tick; every other HP number in
+ * the prompt stays on the grid.
+ */
+export const PRESS_HP_LINE_TAGS: readonly string[] = [
+  "[YOU] [CD]",
+  "[YOU] [CC]",
+  "[YOU] [PROC]",
+  "[YOU] [CAST]",
+  "[ENEMY DEF]",
+  "[ENEMY TRINKET]",
+];
+
+/**
+ * HP% (0–100) of `unit` at a press — the reading the log holds JUST BEFORE
+ * the press took effect (triage hp-state F-R8 / enemy-def F-E11, ruling A21).
+ * A press made in the closest call of a round read like an ordinary moment
+ * on the whole-second grid: bd790c92's Bear Form "23% HP" was 8 % at the
+ * press, 64a7a24d's Restoral "lowest ally 64%" was the Restoral heal itself
+ * (40 % before it).
+ *
+ * Rule: the unit's last advanced sample strictly before the press — and, when
+ * the press's own heal on that unit (same spell, same caster) is logged in
+ * the `PRESS_EFFECT_LEAD_MS` before the cast line, before the earliest such
+ * heal. NOT the nearest sample at the press ms: an instant heal's healed
+ * sample sits a millisecond before its own SUCCESS line, so the nearest
+ * sample is the press's own effect (06bb9860 Lay on Hands 32 % → would read
+ * 89 %). Bounded by `HP_SAMPLE_RADIUS_MS` like every other HP claim; null
+ * when no sample is that near.
+ */
+export function hpAtPress(
+  unit: ICombatUnit,
+  pressMs: number,
+  cast: { spellId: string; srcUnitId: string },
+): number | null {
+  let cutMs = pressMs;
+  for (const h of unit.healIn ?? []) {
+    const t = h.logLine.timestamp;
+    if (t < pressMs - PRESS_EFFECT_LEAD_MS || t > pressMs) continue;
+    if (h.spellId !== cast.spellId || h.srcUnitId !== cast.srcUnitId) continue;
+    // the press's OWN heal is a direct one; a periodic tick of an earlier
+    // application of the same spell is not this press (review of F-R8,
+    // 2026-10-03: a refresh 30 ms after a HoT tick read the pre-tick HP)
+    if (h.logLine.event === LogEvent.SPELL_PERIODIC_HEAL) continue;
+    if (t < cutMs) cutMs = t;
+  }
+  const actions = getSortedAdvancedActions(unit);
+  // last index with timestamp < cutMs
+  let lo = 0;
+  let hi = actions.length - 1;
+  let k = -1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (actions[mid]!.logLine.timestamp < cutMs) {
+      k = mid;
+      lo = mid + 1;
+    } else hi = mid - 1;
+  }
+  for (let j = k; j >= 0; j--) {
+    const a = actions[j]!;
+    // freshness is measured from the press, not from the heal cut: a cut
+    // must not let a sample older than the radius stand for the press
+    if (pressMs - a.logLine.timestamp > HP_SAMPLE_RADIUS_MS) return null;
+    if (a.advancedActorId !== unit.id || !(a.advancedActorMaxHp > 0)) continue;
+    const pct = Math.round(
+      (a.advancedActorCurrentHp / a.advancedActorMaxHp) * 100,
+    );
+    return Math.min(100, Math.max(0, pct));
+  }
+  return null;
 }
 
 /**
@@ -1476,7 +1563,11 @@ function cdSecondsUntilReadyConsumed(
     // warp — codex review 2026-09-26: a press inside the slack window was
     // missed and a freshly spent cooldown rendered "(1s)")
     const tq = tau(tSeconds + CD_INSTANT_SLACK_S) - CD_INSTANT_SLACK_S;
-    const inner = cdSecondsUntilReadyConsumed(warpedView(cd, tau), tq, cooldown);
+    const inner = cdSecondsUntilReadyConsumed(
+      warpedView(cd, tau),
+      tq,
+      cooldown,
+    );
     // inner = ready − tq on the warped clock; the remaining time AT t is
     // ready − τ(t) (agy review: tq sits up to slack × (mult − 1) past τ(t))
     return inner > 0 ? inner + (tq - tau(tSeconds)) : 0;
@@ -2907,17 +2998,25 @@ export function extractMajorCooldowns(
           cast.targetName = e.destUnitName;
           const targetUnit = combat.units[e.destUnitId];
           if (targetUnit) {
-            // This value is ultimately rendered in `[CD] … → target (N% HP)`,
-            // side by side with the [STATE] line for the same second. It used to
-            // sample at the raw log millisecond with its own 2s radius (a third
-            // independent HP path), so two HP numbers under the same displayed
-            // second contradicted each other (class C). Now snapped to the render
-            // grid and using the shared radius constant.
-            const hp = getUnitHpAtTimestamp(
-              targetUnit,
-              matchStartMs + toRenderSecond(timeSeconds) * 1000,
-              HP_SAMPLE_RADIUS_MS,
-            );
+            // The target's HP AT THE PRESS (`hpAtPress`: the last reading
+            // before the press and before the press's own heal) — user ruling
+            // 2026-10-01, the A21 extension (hp-state F-R8): the two readers
+            // of this field, the [UNNECESSARY] threshold
+            // (`UNNECESSARY_TARGET_HP_PCT`, and the "at N% HP" it prints) and
+            // the questionable-external facts, judge the press, so they read
+            // the press's HP like the press line itself. It was the [STATE]
+            // grid reading of the displayed second — the sample NEAREST the
+            // whole second, which inside a fast drop or a heal-up can sit up
+            // to a second away from the press on either side (605 files: 3
+            // casts read 90 → 87, 87 → 85, 94 → 97). The heal cut of
+            // `hpAtPress` never fires in this layer: no external in
+            // `externalDefensiveSpellIds` lands a same-id heal at its press.
+            // `→ X (N% HP)` on the cast's own line reads the same predicate;
+            // the gate `checkUnnecessaryNoteHpAgreement` holds the two equal.
+            const hp = hpAtPress(targetUnit, e.logLine.timestamp, {
+              spellId: String(e.spellId ?? spell.spellId),
+              srcUnitId: unit.id,
+            });
             if (hp !== null) cast.targetHpPct = hp;
           }
         }

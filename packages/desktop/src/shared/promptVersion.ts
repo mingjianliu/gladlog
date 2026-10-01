@@ -837,5 +837,13 @@
  *  end (own id or a G3 cast→effect aura, any unit, applied by the caster,
  *  re-applications within 0.5 s extend it), else at the official duration.
  *  kick-eaten's silenced test reads the same cast→effect table.
+ *  v296 (2026-10-06, triage G7-P8: hp-state F-R8 + enemy-def F-E11, ruling
+ *  A21): the HP on a press line ([YOU] [CD] / [CC] / [PROC] / [CAST], [ENEMY
+ *  DEF], [ENEMY TRINKET]) is the HP at the press (`hpAtPress`: the last
+ *  reading before the press and before its own heal), not the [STATE] reading
+ *  of that second; legend says so; the gate exempts those tags
+ *  (`PRESS_HP_LINE_TAGS`). The ledger's cast.targetHpPct (the [UNNECESSARY]
+ *  threshold and note, questionable-external) is the same press reading; an
+ *  [ENEMY DEF] aura is read at its cast.
  */
-export const PROMPT_VERSION = 295;
+export const PROMPT_VERSION = 296;

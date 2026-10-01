@@ -522,55 +522,46 @@ describe("checkHeaderHpPromise — an HP floor promised in a header binds the li
 });
 
 describe("checkSameSecondHpConsistency", () => {
-  it("flags external-recipient HP contradiction on [ENEMY DEF]", () => {
-    const lines = [
+  // User ruling 2026-09-30 (triage A21, enemy-def F-E11): `[ENEMY DEF]` and
+  // `[ENEMY TRINKET]` print the target's HP at the press, the signed
+  // exception to the render grid — these three shapes used to be flagged
+  // against the same-second [STATE] tick and are now exempt
+  // (`PRESS_HP_LINE_TAGS`).
+  it("does not compare an [ENEMY DEF] external's (target at N% HP) with [STATE]", () => {
+    expect(
+      checkSameSecondHpConsistency([
+        "0:15  [STATE]   friends 1(HPriest):99 / enemies 2(ERogue):80",
+        "0:15  [ENEMY DEF]   3(HPriest) (Holy Priest): Pain Suppression → 2(ERogue) (target at 24% HP)",
+      ]),
+    ).toEqual([]);
+  });
+
+  it("does not compare an [ENEMY DEF] self wall's (at N% HP) with [STATE]", () => {
+    expect(
+      checkSameSecondHpConsistency([
+        "0:20  [STATE]   friends 1(HPriest):99 / enemies 2(ERogue):70",
+        "0:20  [ENEMY DEF]   2(ERogue) (Subtlety Rogue): Cloak of Shadows (immune) (at 28% HP)",
+      ]),
+    ).toEqual([]);
+  });
+
+  it("does not compare an [ENEMY TRINKET]'s (target at N% HP) with [STATE]", () => {
+    expect(
+      checkSameSecondHpConsistency([
+        "0:25  [STATE]   friends 1(HPriest):99 / enemies 2(ERogue):90",
+        "0:25  [ENEMY TRINKET]   2(ERogue) used PvP trinket (target at 31% HP)",
+      ]),
+    ).toEqual([]);
+  });
+
+  it("still flags a [DMG SPIKE] endpoint on the same second as an exempt press line", () => {
+    const out = checkSameSecondHpConsistency([
       "0:15  [STATE]   friends 1(HPriest):99 / enemies 2(ERogue):80",
       "0:15  [ENEMY DEF]   3(HPriest) (Holy Priest): Pain Suppression → 2(ERogue) (target at 24% HP)",
-    ];
-    const out = checkSameSecondHpConsistency(lines);
+      "0:15–0:25  [DMG SPIKE]   2(ERogue) (Subtlety Rogue): 0.9M in 10s (90k DPS) (24% -> 60% HP)",
+    ]);
     expect(out).toHaveLength(1);
-    expect(out[0]).toContain("[ENEMY DEF]");
-    expect(out[0]).toContain("2(ERogue)");
-    expect(out[0]).toContain("24%");
-    expect(out[0]).toContain("80%");
-  });
-
-  it("flags self-defensive HP contradiction on [ENEMY DEF]", () => {
-    const lines = [
-      "0:20  [STATE]   friends 1(HPriest):99 / enemies 2(ERogue):70",
-      "0:20  [ENEMY DEF]   2(ERogue) (Subtlety Rogue): Cloak of Shadows (immune) (at 28% HP)",
-    ];
-    const out = checkSameSecondHpConsistency(lines);
-    expect(out).toHaveLength(1);
-    expect(out[0]).toContain("[ENEMY DEF]");
-    expect(out[0]).toContain("2(ERogue)");
-    expect(out[0]).toContain("28%");
-    expect(out[0]).toContain("70%");
-  });
-
-  it("flags enemy trinket HP contradiction on [ENEMY TRINKET]", () => {
-    const lines = [
-      "0:25  [STATE]   friends 1(HPriest):99 / enemies 2(ERogue):90",
-      "0:25  [ENEMY TRINKET]   2(ERogue) used PvP trinket (target at 31% HP)",
-    ];
-    const out = checkSameSecondHpConsistency(lines);
-    expect(out).toHaveLength(1);
-    expect(out[0]).toContain("[ENEMY TRINKET]");
-    expect(out[0]).toContain("2(ERogue)");
-    expect(out[0]).toContain("31%");
-    expect(out[0]).toContain("90%");
-  });
-
-  it("passes when HP values agree within 3pp", () => {
-    const lines = [
-      "0:15  [STATE]   friends 1(HPriest):99 / enemies 2(ERogue):25",
-      "0:15  [ENEMY DEF]   3(HPriest) (Holy Priest): Pain Suppression → 2(ERogue) (target at 24% HP)",
-      "0:20  [STATE]   friends 1(HPriest):99 / enemies 2(ERogue):30",
-      "0:20  [ENEMY DEF]   2(ERogue) (Subtlety Rogue): Cloak of Shadows (immune) (at 28% HP)",
-      "0:25  [STATE]   friends 1(HPriest):99 / enemies 2(ERogue):33",
-      "0:25  [ENEMY TRINKET]   2(ERogue) used PvP trinket (target at 31% HP)",
-    ];
-    expect(checkSameSecondHpConsistency(lines)).toEqual([]);
+    expect(out[0]).toContain("[DMG SPIKE]");
   });
 });
 
@@ -1036,7 +1027,9 @@ describe("checkDeathTrinketCcConsistency — the death line's trinket tag vs [CC
     const lasso =
       "2:48  [CC ON TEAM]   1(UDKnight) ← Lightning Lasso (by 5(EShaman)) | 1s [DR: Stun Full]";
     expect(checkDeathTrinketCcConsistency([lasso, death(none)])).toEqual([]);
-    expect(checkDeathTrinketCcConsistency([lasso, death(bare)])).toHaveLength(1);
+    expect(checkDeathTrinketCcConsistency([lasso, death(bare)])).toHaveLength(
+      1,
+    );
   });
   it("a 5 s Kidney Shot 7 s before (539b6ed0) is breakable, also when a trinket cut it short", () => {
     const ks =
@@ -1050,24 +1043,37 @@ describe("checkDeathTrinketCcConsistency — the death line's trinket tag vs [CC
   it("a CC ending more than 10 s before, or on another player, does not count", () => {
     const old = "2:22  [CC ON TEAM]   1(UDKnight) ← Fear (by 6(AWarlock)) | 8s";
     const other = "2:50  [CC ON TEAM]   2(RDruid) ← Fear (by 6(AWarlock)) | 8s";
-    expect(checkDeathTrinketCcConsistency([old, other, death(none)])).toEqual([]);
+    expect(checkDeathTrinketCcConsistency([old, other, death(none)])).toEqual(
+      [],
+    );
   });
 });
 
 describe("checkBurstAnsweredBottomConsistency — the credit line's bottom second (F-B3)", () => {
-  const roster = '  <unit id="1" name="Sgarbossa-Tortheldrin-US" spec="Windwalker Monk" role="log owner">';
+  const roster =
+    '  <unit id="1" name="Sgarbossa-Tortheldrin-US" spec="Windwalker Monk" role="log owner">';
   const line = (at: string) =>
     `0:04  [BURST ANSWERED]   enemy opened The Hunt (Havoc Demon Hunter Irridanz-Sargeras-US): Botobumps-Illidan-US answered with Earthgrab 0.6s before it opened; Sgarbossa-Tortheldrin-US bottomed at 42% at ${at}`;
   it("passes when the same-second [STATE] agrees, fails when it does not", () => {
     expect(
-      checkBurstAnsweredBottomConsistency([roster, "0:55  [STATE]   friends 1(WMonk):42 / enemies 4(HDHunter):90", line("0:55")]),
+      checkBurstAnsweredBottomConsistency([
+        roster,
+        "0:55  [STATE]   friends 1(WMonk):42 / enemies 4(HDHunter):90",
+        line("0:55"),
+      ]),
     ).toEqual([]);
     expect(
-      checkBurstAnsweredBottomConsistency([roster, "0:55  [STATE]   friends 1(WMonk):47 / enemies 4(HDHunter):90", line("0:55")]),
+      checkBurstAnsweredBottomConsistency([
+        roster,
+        "0:55  [STATE]   friends 1(WMonk):47 / enemies 4(HDHunter):90",
+        line("0:55"),
+      ]),
     ).toHaveLength(1);
   });
   it("a bottom before the line's own second fails", () => {
-    expect(checkBurstAnsweredBottomConsistency([roster, line("0:03")])).toHaveLength(1);
+    expect(
+      checkBurstAnsweredBottomConsistency([roster, line("0:03")]),
+    ).toHaveLength(1);
   });
 });
 

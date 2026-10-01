@@ -306,6 +306,12 @@ export function joinReappliedIntervals(
   return out;
 }
 
+/** How long before its aura a logged cast can still be the press that put
+ * it up (an `[ENEMY DEF]` aura kind's `pressSeconds`). */
+export const PRESS_TO_AURA_MAX_S = 1;
+/** …and how long AFTER its aura the press's own cast line may be logged. */
+export const AURA_BEFORE_CAST_MAX_S = 0.05;
+
 /** An observed aura ended this much before its full duration → "removed
  * early" (dispelled, broken by damage/immunity rules, or cancelled). One
  * second of slack absorbs the log's aura-event jitter. */
@@ -313,6 +319,14 @@ export const REMOVED_EARLY_SLACK_S = 1;
 
 export interface IEnemyDefensiveEvent {
   atSeconds: number;
+  /** An aura kind's PRESS: the logged cast of the same button by the same
+   * enemy that put the aura up — the one nearest the aura, at most
+   * `PRESS_TO_AURA_MAX_S` before it or `AURA_BEFORE_CAST_MAX_S` after.
+   * The `[ENEMY DEF]` line reads HP at this instant (`hpAtPress`, A21) —
+   * the aura can land a few ms after damage the press already took.
+   * Undefined when no such cast is logged (a proc / an aura-only press):
+   * the line falls back to `atSeconds`. */
+  pressSeconds?: number;
   spellId: string;
   spellName: string;
   /** the enemy who pressed it */
@@ -389,8 +403,30 @@ export function enemyDefensiveEvents(
     if (!immune && !MITIGATION_AURA_IDS.has(tableId)) continue;
     const observed = iv.toS - iv.fromS;
     const saveName = IMMUNITY_SAVE_AURA_NAMES.get(iv.spellId);
+    const press = [
+      ...castSecondsOf(enemy.name, tableId),
+      ...(tableId === iv.spellId ? [] : castSecondsOf(enemy.name, iv.spellId)),
+    ]
+      // the cast line can also be logged a few ms AFTER its aura (review of
+      // F-E11, 2026-10-03: aura 10.000 s, SUCCESS 10.020 s); the nearest
+      // candidate is the press
+      // in whole log milliseconds: 10.05 - 10 is 0.05000000000000071 in
+      // floating point, which rejected a cast exactly 50 ms after its aura
+      .filter((t) => {
+        const dMs = Math.round(t * 1000) - Math.round(iv.fromS * 1000);
+        return (
+          dMs <= AURA_BEFORE_CAST_MAX_S * 1000 &&
+          -dMs <= PRESS_TO_AURA_MAX_S * 1000
+        );
+      })
+      .reduce(
+        (best, t) =>
+          Math.abs(t - iv.fromS) < Math.abs(best - iv.fromS) ? t : best,
+        Number.POSITIVE_INFINITY,
+      );
     out.push({
       atSeconds: iv.fromS,
+      ...(Number.isFinite(press) ? { pressSeconds: press } : {}),
       spellId: iv.spellId,
       spellName: saveName ?? getEnglishSpellName(iv.spellId, iv.spellName),
       casterName: enemy.name,

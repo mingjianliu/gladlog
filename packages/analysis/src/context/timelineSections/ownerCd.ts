@@ -149,11 +149,14 @@ export function emitOwnerCdEntries(
     const isProc = cdIsProcOnly(cd);
     if (isProc) procLinesEmitted = true;
     for (const cast of cd.casts) {
+      // No `cast.targetHpPct` override (hp-state F-R8): the helper reads
+      // `hpAtPress` itself. The ledger field is the same press reading since
+      // the A21 extension (2026-10-01) — one sampler for the line, the
+      // [UNNECESSARY] threshold and the questionable-external facts.
       const targetPart = getCDTargetAndVelocityPart(
         cd.spellId,
         cast.timeSeconds,
         cast.targetName,
-        cast.targetHpPct,
         forceSelf,
       );
 
