@@ -65,7 +65,6 @@ import {
   type TeammateCrisisDmgBin,
   teammateCrisisDmgBinOf,
 } from "@gladlog/analysis/src/data/teammateCrisisPrior";
-import { KILL_CREDIT_SLACK_S } from "@gladlog/analysis/src/utils/burstLedger";
 import {
   CC_LANDED_MATCH_WINDOW_MS,
   DEATH_BREAKABLE_CC_LOOKBACK_S,
@@ -1712,10 +1711,27 @@ const ENEMY_DEF_LINE =
  * gate allows that pairing radius on either side of the attribution span. */
 const ENEMY_DEF_PAIR_SLACK_S = 2;
 
+/** `X [up since m:ss]` — a cause that was already up when the attempt began
+ * (killAttempts.ts `stampNames`, enemy-def F-E22 rule 2). */
+const KILL_ATTEMPT_UP_SINCE = / \[up since (\d+):(\d\d)\]$/;
+/** `… | FAILED: [target trinketed out; ]forced a full immunity [up since m:ss] (…)`
+ * — an immunity already up when the attempt began (`failureText`). The cause
+ * carries no spell name, so the gate can only ask for a `[ENEMY DEF]` line at
+ * that second. */
+const KILL_ATTEMPT_IMMUNITY_UP_SINCE =
+  /\| FAILED: .*forced a full immunity \[up since (\d+):(\d\d)\]/;
+
 /**
- * KILL ATTEMPTS `popped X` / `saved by external (X)` ⇒ a `[ENEMY DEF]` line
- * naming X inside the attribution span (`[from, to + KILL_CREDIT_SLACK_S]`,
- * the same window killAttempts.ts attributes over — imported, not copied).
+ * KILL ATTEMPTS `popped X` / `saved by external (X)` / `self-saved (X)` ⇒ a
+ * `[ENEMY DEF]` line naming X where the attribution says it went up:
+ *  - inside the attempt's own span `[from, to]` — since triage 2026-09-29
+ *    (enemy-def F-E22 rule 3′ / crisis-external F-E22b, ruling A′4) a wall,
+ *    external or self-save pressed in the kill-credit slack after the span is
+ *    no longer a cause, so the gate no longer looks there either;
+ *  - or, for a cause rendered `X [up since m:ss]` (already up when the
+ *    attempt began, rule 2), at that second.
+ * `forced a full immunity [up since m:ss]` names no spell: it needs some
+ * `[ENEMY DEF]` line at that second.
  * Both sides render from `enemyDefensives.ts`'s one predicate (GH #97), so a
  * miss here is a producer bug: the summary claims a wall the timeline never
  * showed, and the model is back to "check the VOD".
@@ -1729,23 +1745,34 @@ export function checkEnemyDefRefConsistency(lines: string[]): string[] {
   }
   const failures: string[] = [];
   lines.forEach((line, i) => {
+    const imm = KILL_ATTEMPT_IMMUNITY_UP_SINCE.exec(line);
+    if (imm) {
+      const atS = Number(imm[1]) * 60 + Number(imm[2]);
+      if (!defs.some((d) => Math.abs(d.atS - atS) <= ENEMY_DEF_PAIR_SLACK_S))
+        failures.push(
+          `line ${i + 1}: KILL ATTEMPTS says an immunity was up since ${fmtTime(atS)} but no [ENEMY DEF] line sits at that second: "${line.trim()}"`,
+        );
+    }
     const m = KILL_ATTEMPT_DEFENSIVE.exec(line);
     if (!m) return;
-    const fromS = Number(m[1]) * 60 + Number(m[2]) - ENEMY_DEF_PAIR_SLACK_S;
-    const toS =
-      Number(m[3]) * 60 +
-      Number(m[4]) +
-      KILL_CREDIT_SLACK_S +
-      ENEMY_DEF_PAIR_SLACK_S;
+    const spanFromS = Number(m[1]) * 60 + Number(m[2]);
+    const spanToS = Number(m[3]) * 60 + Number(m[4]);
     for (const raw of m[5]!.split("/")) {
-      const spell = raw.replace(/@\d+:\d\d$/, "").trim();
+      let spell = raw.replace(/@\d+:\d\d$/, "").trim();
+      const up = KILL_ATTEMPT_UP_SINCE.exec(spell);
+      if (up) spell = spell.slice(0, up.index).trim();
       if (!spell) continue;
+      const lo = up ? Number(up[1]) * 60 + Number(up[2]) : spanFromS;
+      const hi = up ? lo : spanToS;
       const hit = defs.some(
-        (d) => d.spell === spell && d.atS >= fromS && d.atS <= toS,
+        (d) =>
+          d.spell === spell &&
+          d.atS >= lo - ENEMY_DEF_PAIR_SLACK_S &&
+          d.atS <= hi + ENEMY_DEF_PAIR_SLACK_S,
       );
       if (!hit)
         failures.push(
-          `line ${i + 1}: KILL ATTEMPTS attributes "${spell}" in [${fmtTime(fromS + ENEMY_DEF_PAIR_SLACK_S)}–${fmtTime(toS - ENEMY_DEF_PAIR_SLACK_S)}] but no [ENEMY DEF] line names it there: "${line.trim()}"`,
+          `line ${i + 1}: KILL ATTEMPTS attributes "${spell}" in [${fmtTime(lo)}–${fmtTime(hi)}] but no [ENEMY DEF] line names it there: "${line.trim()}"`,
         );
     }
   });

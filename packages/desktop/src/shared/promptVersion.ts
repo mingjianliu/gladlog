@@ -852,5 +852,17 @@
  *  same rule now decides [DMG SPIKE]'s `low N% @m:ss` — and names the burst's
  *  other victim (`| also hit: Y DIED m:ss (+N.Ns)`); gate
  *  `checkBurstTargetHpConsistency`.
+ *  v298 (2026-10-01, triage enemy-def F-E22 / F-E24 / F-E7 (AMS),
+ *  crisis-external F-E22b / F-A7; rulings A29, A30, A′4, A7-补): a KILL
+ *  ATTEMPTS failure cause is a save that went up INSIDE the attempt or was
+ *  already up when it began (`X [up since m:ss]`), not one pressed in the
+ *  kill-credit slack; a trinket counts only when it broke a control of that
+ *  attempt; a trinket plus an immunity names both; a school-limited immunity
+ *  is "full" only when ≥ 50 % of the damage aimed at the target (landed plus
+ *  absorbed, every source) was in its schools; Anti-Magic Shell renders
+ *  ([ENEMY DEF]) and is credited under the same 50 % rule on its DB2 absorb
+ *  mask. An immunity already up counts only when its aura is the immunity
+ *  (the pct-100 rows, Time Stop, Guardian of the Forgotten Queen). One
+ *  legend line added to the block.
  */
-export const PROMPT_VERSION = 297;
+export const PROMPT_VERSION = 298;

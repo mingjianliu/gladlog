@@ -9,6 +9,7 @@
  */
 import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
+import { saveSchoolMask } from "../analysis/candidates/cooldownTiming";
 import { wallDoorPct } from "../data/mitigationComponents";
 import {
   MITIGATION_TABLE,
@@ -17,17 +18,20 @@ import {
 } from "../data/mitigationData";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import spellIdListsData, {
+  ENEMY_ALLY_SAVE_IDS,
   ENEMY_AREA_SAVE_IDS,
-  ENEMY_HEAL_SAVE_IDS,
   ENEMY_IMMUNITY_EXTERNAL_CASTS,
   ENEMY_IMMUNITY_HEAL_PROCS,
   ENEMY_IMMUNITY_SAVE_AURAS,
   ENEMY_REDIRECT_SAVE_IDS,
   ENEMY_SELF_SAVE_ONLY_IDS,
 } from "../data/spellIdLists";
+import { immunitySchoolMask } from "../data/spellSchools";
 import { buildAuraIntervals, type IAuraInterval } from "./auraIntervals";
 import { buffFullDurationForCaster } from "./buffDuration";
 import { AURA_ONLY_ACTIVATION_IDS } from "./cooldowns";
+
+const ALL_SCHOOLS = 0x7f;
 
 export const EXTERNAL_DEF_IDS = new Set<string>(
   (spellIdListsData as unknown as { externalDefensiveSpellIds?: string[] })
@@ -103,6 +107,45 @@ export const IMMUNITY_SAVE_AURA_NAMES: ReadonlyMap<string, string> = new Map([
  * the KILL ATTEMPTS `immunity-baited` attribution share. */
 export function isImmunitySaveAura(spellId: string): boolean {
   return IMMUNITY_IDS.has(spellId) || IMMUNITY_SAVE_AURA_NAMES.has(spellId);
+}
+
+/**
+ * Does this immunity hold for as long as its aura is up? KILL ATTEMPTS may
+ * count an immunity that was "already up when the attempt began" only then.
+ * True for
+ *  - the pct-100 table rows (Divine Shield, Ice Block, Blessing of
+ *    Protection …), and
+ *  - an immunity-kind save whose own aura carries DB2's all-school
+ *    SCHOOL_IMMUNITY (aura 39, mask 127 — `immunitySchoolMask`): Time Stop
+ *    378441 and Guardian of the Forgotten Queen 228050.
+ * The rest of the enemy-only aura list marks the MOMENT a unit could not be
+ * killed, and its aura outlasts that moment. Corpus leg, the 605 S2 files
+ * (fix-KA/immAuraProbe.ts, 2026-10-02 — damage that LANDED on the carrier
+ * while the aura was up, 0.3 s after it went up to 0.1 s before it dropped):
+ *
+ *   Divine Shield     408 auras, 0 with a landed hit      (table row)
+ *   Ice Block         343,       1                         (table row)
+ *   Time Stop          35,       1 (one 33k hit); 533 IMMUNE misses
+ *   Forgotten Queen     2,       0;                53 IMMUNE misses
+ *   Burrow             89,      80 (909 hits, 5.3M) — DB2 gives it mechanic
+ *                                immunities only (root / snare), no school
+ *   Vanish            533,     264
+ *   Cauterize          72,      66
+ *   Cheat Death        10,       7
+ *   Mass Invisibility 691,     138 (median aura 0.6 s; on allies too)
+ *
+ * The first cut applied the rule to every immunity-kind aura: 334 attempts
+ * became "forced a full immunity" on a target a stun had just landed on, 250
+ * of them an enemy mage's opening Mass Invisibility (fix-KA/immcheck.py,
+ * 2026-10-01). Needs the official spell facts loaded (`ensureAnalysisData`);
+ * before that only the table rows answer true.
+ */
+export function immunityLastsItsAura(spellId: string): boolean {
+  if (IMMUNITY_IDS.has(spellId)) return true;
+  return (
+    IMMUNITY_SAVE_AURA_NAMES.has(spellId) &&
+    ((immunitySchoolMask(spellId) ?? 0) & ALL_SCHOOLS) === ALL_SCHOOLS
+  );
 }
 
 /** The unit's immunity-kind saves that leave no aura — a heal proc on itself
@@ -184,6 +227,34 @@ export function wallTableIdOfAura(auraSpellId: string): string {
   return SELF_WALL_AURA_TO_CAST_ID[auraSpellId] ?? auraSpellId;
 }
 
+/** A school-limited IMMUNITY's mask: a pct-100 `MITIGATION_TABLE` row that
+ * does not cover every school (Blessing of Protection 0x1, Spellwarding and
+ * Cloak of Shadows 0x7e). KILL ATTEMPTS calls it a full immunity only when
+ * the team's damage was mostly in those schools (ruling A30). Undefined = a
+ * full immunity, an immunity-kind save, or no immunity at all. */
+export function limitedImmunitySchoolMask(spellId: string): number | undefined {
+  const row = MITIGATION_TABLE[spellId];
+  if (!row || row.pct < 100) return undefined;
+  return (row.schoolMask & ALL_SCHOOLS) === ALL_SCHOOLS
+    ? undefined
+    : row.schoolMask;
+}
+
+/** A school-limited ABSORB's mask: a save with no `MITIGATION_TABLE` row
+ * whose DB2 absorb covers only some schools — Anti-Magic Shell 48707 / 410358,
+ * 0x7e (ruling A7-补: no percentage row; "学派判断直接读 DB2 吸收学派掩码").
+ * Read through `saveSchoolMask`, the reader cd-hoarded's `coversCrisisSchool`
+ * uses (F-H20), so the two sides cannot disagree on what AMS covers. KILL
+ * ATTEMPTS credits such a save only when the team's damage was mostly in its
+ * schools. Undefined = not a table-less school-limited absorb. */
+export function limitedAbsorbSchoolMask(spellId: string): number | undefined {
+  if (MITIGATION_TABLE[spellId]) return undefined;
+  const mask = saveSchoolMask(spellId);
+  return mask === undefined || (mask & ALL_SCHOOLS) === ALL_SCHOOLS
+    ? undefined
+    : mask;
+}
+
 /** An external save: a cast that helps the ALLY it is cast on. The friendly
  * roster (`EXTERNAL_DEF_IDS`) plus the enemy-only sets — instant heals (Lay on
  * Hands; enemy-def F-E4), grips / redirects (Leap of Faith, Intervene, Roar
@@ -195,7 +266,7 @@ export function wallTableIdOfAura(auraSpellId: string): string {
 export function isExternalSaveId(spellId: string): boolean {
   return (
     EXTERNAL_DEF_IDS.has(spellId) ||
-    ENEMY_HEAL_SAVE_IDS.has(spellId) ||
+    ENEMY_ALLY_SAVE_IDS.has(spellId) ||
     ENEMY_REDIRECT_SAVE_IDS.has(spellId) ||
     spellId in ENEMY_IMMUNITY_EXTERNAL_CASTS
   );
@@ -226,7 +297,7 @@ export const SELF_SAVE_IDS: ReadonlySet<string> = new Set<string>([
     ).map(String),
   ].filter((id) => NO_MITIGATION_IDS.has(id)),
   ...ENEMY_SELF_SAVE_ONLY_IDS,
-  ...ENEMY_HEAL_SAVE_IDS,
+  ...ENEMY_ALLY_SAVE_IDS,
   ...ENEMY_REDIRECT_SAVE_IDS,
 ]);
 
@@ -257,7 +328,7 @@ export function selfSaveCasts(
 
 /** How close to an aura's start its cast is logged, either side. The same
  * pairing radius the external branch uses to tie a cast to its aura. */
-const CAST_AURA_PAIR_S = 1.5;
+export const SAVE_CAST_AURA_PAIR_S = 1.5;
 
 /**
  * Enemy-def F-E12: a second `SPELL_AURA_APPLIED` of an aura that is still up,
@@ -291,8 +362,8 @@ export function joinReappliedIntervals(
       Math.abs(prev.toS - iv.fromS) < 1e-6 &&
       castSecondsOf(iv.srcUnitName, iv.spellId).filter(
         (t) =>
-          t >= prev.fromS - CAST_AURA_PAIR_S &&
-          t <= iv.fromS + CAST_AURA_PAIR_S,
+          t >= prev.fromS - SAVE_CAST_AURA_PAIR_S &&
+          t <= iv.fromS + SAVE_CAST_AURA_PAIR_S,
       ).length <= 1
     ) {
       prev.toS = iv.toS;
@@ -331,6 +402,7 @@ export interface IEnemyDefensiveEvent {
   spellName: string;
   /** the enemy who pressed it */
   casterName: string;
+  casterId?: string;
   /** "self" = a wall on the caster (pct < 100); "immune" = pct 100; "external" = cast on another enemy; "self-save" = the caster's own no-%-mitigation save (`SELF_SAVE_IDS`); "area" = an area save anchored on its cast (`ENEMY_AREA_SAVE_IDS`): who pressed it and when, nothing else */
   kind: "self" | "immune" | "external" | "self-save" | "area";
   /** official mitigation pct (self / immune); undefined for externals and for an immunity-kind save, which has no table row */
@@ -353,6 +425,116 @@ export interface IEnemyDefensiveEvent {
 }
 
 /**
+ * The aura intervals on `unit` that the enemy-save predicate reads: the
+ * builder's intervals with a re-announced aura joined back into one press
+ * (F-E12). The aura's source is looked up among `team` (the unit's own side):
+ * a talent-lengthened duration caps an unclosed aura, and the join reads the
+ * source's casts. One builder for the `[ENEMY DEF]` events and for the KILL
+ * ATTEMPTS attribution's "applied inside the span / up at its start" tests,
+ * so the two agree on when a save began and ended.
+ */
+export function saveAuraIntervals(
+  unit: ICombatUnit,
+  team: readonly ICombatUnit[],
+  combat: { startTime: number; endTime: number },
+): ISaveAuraInterval[] {
+  const castersById = new Map(team.map((e) => [e.id, e]));
+  // The log's own id for each source name on this unit's auras. A name is not
+  // a key: one player can be logged under two (138e632d: "Antagonist" in 9
+  // lines, "Antagonist-Balnazzar-US" in 20,778), and the unit keeps one.
+  const srcIdByName = new Map<string, string>();
+  for (const a of unit.auraEvents ?? []) {
+    if (a.destUnitId !== unit.id || !a.srcUnitId) continue;
+    if (!srcIdByName.has(a.srcUnitName))
+      srcIdByName.set(a.srcUnitName, a.srcUnitId);
+  }
+  const castSecondsOf = (srcUnitName: string, spellId: string): number[] => {
+    const srcId = srcIdByName.get(srcUnitName);
+    return (
+      (srcId !== undefined
+        ? castersById.get(srcId)
+        : team.find((e) => e.name === srcUnitName)
+      )?.spellCastEvents ?? []
+    )
+      .filter(
+        (c) =>
+          c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+          c.spellId === spellId,
+      )
+      .map((c) => (c.logLine.timestamp - combat.startTime) / 1000);
+  };
+  return joinReappliedIntervals(
+    buildAuraIntervals(unit, combat, castersById),
+    castSecondsOf,
+  ).map((iv) => {
+    const srcUnitId = srcIdByName.get(iv.srcUnitName);
+    return srcUnitId === undefined ? iv : { ...iv, srcUnitId };
+  });
+}
+
+/** An aura interval that also carries its source's unit id (the builder's
+ * `IAuraInterval` has the logged name only). */
+export type ISaveAuraInterval = IAuraInterval & { srcUnitId?: string };
+
+/**
+ * Did `unit` apply this aura? By unit id — the logged name is compared only
+ * when the interval carries no id. 138e632d: every aura of the Demon Hunter
+ * "Antagonist" is logged from "Antagonist-Balnazzar-US", so compared by name
+ * none of his own walls rendered an `[ENEMY DEF]` line while KILL ATTEMPTS
+ * (which reads the aura, not the name) said `popped Blur`. On 101 of the 605
+ * S2 files 1 of 1,285 player-rounds is logged under two names
+ * (fix-KA/nameProbe.ts, 2026-10-01).
+ */
+export function isIntervalFrom(
+  iv: ISaveAuraInterval,
+  unit: Pick<ICombatUnit, "id" | "name">,
+): boolean {
+  return iv.srcUnitId !== undefined
+    ? iv.srcUnitId === unit.id
+    : iv.srcUnitName === unit.name;
+}
+
+/**
+ * The aura an external cast put on its recipient: the interval of the cast's
+ * aura id (the cast id itself, or the immunity a summon applies —
+ * `ENEMY_IMMUNITY_EXTERNAL_CASTS`) that starts within `SAVE_CAST_AURA_PAIR_S`
+ * of the cast — from THIS caster (the aura's source id), the nearest one:
+ * two Death Knights' Anti-Magic Shells on one ally 0.8 s apart are two
+ * presses, not one (codex review, 2026-10-03). The caster test is skipped
+ * for an immunity a summon applies (Guardian of the Forgotten Queen's aura
+ * comes from the guardian). Undefined for a grip / redirect — the move
+ * itself, its aura (Leap of Faith's is ~1 s) is no buff with a duration
+ * (rulings A20 + U3) — and for a cast that leaves no aura (Lay on Hands).
+ * One pairing for the `[ENEMY DEF]` external line's duration and for KILL
+ * ATTEMPTS' "the external was still on the target when the attempt began".
+ */
+export function externalAuraOf(
+  castSpellId: string,
+  castAtSeconds: number,
+  recipientIntervals: readonly ISaveAuraInterval[],
+  casterId?: string,
+): ISaveAuraInterval | undefined {
+  if (ENEMY_REDIRECT_SAVE_IDS.has(castSpellId)) return undefined;
+  const summoned = castSpellId in ENEMY_IMMUNITY_EXTERNAL_CASTS;
+  const auraId = ENEMY_IMMUNITY_EXTERNAL_CASTS[castSpellId] ?? castSpellId;
+  let best: ISaveAuraInterval | undefined;
+  for (const iv of recipientIntervals) {
+    if (iv.spellId !== auraId) continue;
+    const gap = Math.abs(iv.fromS - castAtSeconds);
+    if (gap > SAVE_CAST_AURA_PAIR_S) continue;
+    if (
+      !summoned &&
+      casterId !== undefined &&
+      iv.srcUnitId !== undefined &&
+      iv.srcUnitId !== casterId
+    )
+      continue;
+    if (!best || gap < Math.abs(best.fromS - castAtSeconds)) best = iv;
+  }
+  return best;
+}
+
+/**
  * Every defensive an enemy unit pressed this round, in cast order — the
  * events the `[ENEMY DEF]` line renders. Self-mitigation and immunities come
  * from the enemy's OWN aura intervals (source = the enemy itself, so a
@@ -367,26 +549,11 @@ export function enemyDefensiveEvents(
   combat: { startTime: number; endTime: number },
 ): IEnemyDefensiveEvent[] {
   const out: IEnemyDefensiveEvent[] = [];
-  const intervalsByUnit = new Map<string, IAuraInterval[]>();
-  // The aura's source is looked up among the enemies: a talent-lengthened
-  // duration caps an unclosed aura, and the re-apply join reads the source's
-  // casts (F-E12).
-  const castersById = new Map(enemies.map((e) => [e.id, e]));
-  const castSecondsOf = (srcUnitName: string, spellId: string): number[] =>
-    (enemies.find((e) => e.name === srcUnitName)?.spellCastEvents ?? [])
-      .filter(
-        (c) =>
-          c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
-          c.spellId === spellId,
-      )
-      .map((c) => (c.logLine.timestamp - combat.startTime) / 1000);
+  const intervalsByUnit = new Map<string, ISaveAuraInterval[]>();
   const intervalsOf = (u: ICombatUnit) => {
     let iv = intervalsByUnit.get(u.id);
     if (!iv) {
-      iv = joinReappliedIntervals(
-        buildAuraIntervals(u, combat, castersById),
-        castSecondsOf,
-      );
+      iv = saveAuraIntervals(u, enemies, combat);
       intervalsByUnit.set(u.id, iv);
     }
     return iv;
@@ -395,9 +562,24 @@ export function enemyDefensiveEvents(
     const full = buffFullDurationForCaster(spellId, enemy);
     return full !== undefined && observed < full - REMOVED_EARLY_SLACK_S;
   };
+  /** A unit's own SPELL_CAST_SUCCESS seconds of a spell — the press search
+   * of an aura kind (`pressSeconds`, F-E11). */
+  const castSecondsOf = (srcUnitName: string, spellId: string): number[] =>
+    (
+      (srcUnitName === enemy.name
+        ? enemy
+        : enemies.find((e) => e.name === srcUnitName)
+      )?.spellCastEvents ?? []
+    )
+      .filter(
+        (c) =>
+          c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+          c.spellId === spellId,
+      )
+      .map((c) => (c.logLine.timestamp - combat.startTime) / 1000);
 
   for (const iv of intervalsOf(enemy)) {
-    if (iv.srcUnitName !== enemy.name) continue;
+    if (!isIntervalFrom(iv, enemy)) continue;
     const immune = isImmunitySaveAura(iv.spellId);
     const tableId = wallTableIdOfAura(iv.spellId);
     if (!immune && !MITIGATION_AURA_IDS.has(tableId)) continue;
@@ -430,6 +612,7 @@ export function enemyDefensiveEvents(
       spellId: iv.spellId,
       spellName: saveName ?? getEnglishSpellName(iv.spellId, iv.spellName),
       casterName: enemy.name,
+      casterId: enemy.id,
       kind: immune ? "immune" : "self",
       // Priced through the one pricing path (predicate index: "the mitigation
       // % an aura is worth on the unit that carries it"), with the caster's
@@ -450,6 +633,7 @@ export function enemyDefensiveEvents(
       spellId: h.spellId,
       spellName: h.spellName,
       casterName: enemy.name,
+      casterId: enemy.id,
       kind: "immune",
       removedEarly: false,
     });
@@ -468,6 +652,7 @@ export function enemyDefensiveEvents(
         spellId: cast.spellId,
         spellName: getEnglishSpellName(cast.spellId, cast.spellName),
         casterName: enemy.name,
+        casterId: enemy.id,
         kind: "area",
         removedEarly: false,
       });
@@ -483,8 +668,8 @@ export function enemyDefensiveEvents(
       const own = intervalsOf(enemy).find(
         (iv) =>
           iv.spellId === immunityAuraId &&
-          iv.srcUnitName !== enemy.name &&
-          Math.abs(iv.fromS - atSeconds) <= 1.5,
+          !isIntervalFrom(iv, enemy) &&
+          Math.abs(iv.fromS - atSeconds) <= SAVE_CAST_AURA_PAIR_S,
       );
       if (own) {
         const observed = own.toS - own.fromS;
@@ -493,6 +678,7 @@ export function enemyDefensiveEvents(
           spellId: cast.spellId,
           spellName: getEnglishSpellName(cast.spellId, cast.spellName),
           casterName: enemy.name,
+          casterId: enemy.id,
           kind: "immune",
           observedSeconds: observed,
           removedEarly:
@@ -505,23 +691,22 @@ export function enemyDefensiveEvents(
       (e) => e.id === cast.destUnitId && e.id !== enemy.id,
     );
     if (!recipient) continue;
-    // A grip / redirect is the move itself: its aura (Leap of Faith's is
-    // ~1 s) is no buff with a duration to report or to call "removed early",
-    // and nothing was "done during it" (rulings A20 + U3; CROSS-THEME §3).
+    // A grip / redirect is the move itself: no duration to report or to call
+    // "removed early", and nothing was "done during it" (`externalAuraOf`).
     const pairedAuraId = immunityAuraId ?? cast.spellId;
-    const paired = ENEMY_REDIRECT_SAVE_IDS.has(cast.spellId)
-      ? undefined
-      : intervalsOf(recipient).find(
-          (iv) =>
-            iv.spellId === pairedAuraId &&
-            Math.abs(iv.fromS - atSeconds) <= 1.5,
-        );
+    const paired = externalAuraOf(
+      cast.spellId,
+      atSeconds,
+      intervalsOf(recipient),
+      enemy.id,
+    );
     const observed = paired ? paired.toS - paired.fromS : undefined;
     out.push({
       atSeconds,
       spellId: cast.spellId,
       spellName: getEnglishSpellName(cast.spellId, cast.spellName),
       casterName: enemy.name,
+      casterId: enemy.id,
       kind: "external",
       recipientId: recipient.id,
       recipientName: recipient.name,
@@ -552,6 +737,7 @@ export function enemyDefensiveEvents(
       spellId: c.spellId,
       spellName: c.spellName,
       casterName: enemy.name,
+      casterId: enemy.id,
       kind: "self-save",
       removedEarly: false,
     });
@@ -569,14 +755,24 @@ export function enemyDefensiveEvents(
   for (const mate of enemies) {
     if (mate.id === enemy.id) continue;
     for (const iv of intervalsOf(mate)) {
-      if (iv.srcUnitName !== enemy.name) continue;
-      if (!EXTERNAL_DEF_IDS.has(iv.spellId) || iv.inferredStart) continue;
+      if (!isIntervalFrom(iv, enemy)) continue;
+      // The friendly roster plus the enemy-only ally saves (Anti-Magic Shell
+      // 410358 on an ally): the same aura evidence, the same missing cast.
+      if (
+        !(
+          EXTERNAL_DEF_IDS.has(iv.spellId) ||
+          ENEMY_ALLY_SAVE_IDS.has(iv.spellId)
+        ) ||
+        iv.inferredStart
+      )
+        continue;
       const paired = out.some(
         (d) =>
           d.kind === "external" &&
           d.recipientId === mate.id &&
           d.spellId === iv.spellId &&
-          Math.abs((d.auraFromS ?? d.atSeconds) - iv.fromS) <= 1.5,
+          Math.abs((d.auraFromS ?? d.atSeconds) - iv.fromS) <=
+            SAVE_CAST_AURA_PAIR_S,
       );
       if (paired) continue;
       const observed = iv.toS - iv.fromS;
@@ -585,6 +781,7 @@ export function enemyDefensiveEvents(
         spellId: iv.spellId,
         spellName: getEnglishSpellName(iv.spellId, iv.spellName),
         casterName: enemy.name,
+        casterId: enemy.id,
         kind: "external",
         recipientId: mate.id,
         recipientName: mate.name,

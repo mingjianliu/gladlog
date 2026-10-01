@@ -191,7 +191,7 @@ import {
 } from "./spellEffectOverrides";
 import spellIdLists, {
   ENEMY_AREA_SAVE_IDS,
-  ENEMY_HEAL_SAVE_IDS,
+  ENEMY_ALLY_SAVE_IDS,
   ENEMY_IMMUNITY_EXTERNAL_CASTS,
   ENEMY_IMMUNITY_HEAL_PROCS,
   ENEMY_IMMUNITY_SAVE_AURAS,
@@ -286,8 +286,8 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
     "cast",
     () => set(ENEMY_SELF_SAVE_ONLY_IDS),
   ),
-  t("spellIdLists.ENEMY_HEAL_SAVE_IDS", "data/spellIdLists.ts", "cast", () =>
-    set(ENEMY_HEAL_SAVE_IDS),
+  t("spellIdLists.ENEMY_ALLY_SAVE_IDS", "data/spellIdLists.ts", "cast", () =>
+    set(ENEMY_ALLY_SAVE_IDS),
   ),
   t(
     "spellIdLists.ENEMY_REDIRECT_SAVE_IDS",

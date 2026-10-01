@@ -2,31 +2,40 @@
 import { LogEvent } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
+import { saveSchoolMask } from "../src/analysis/candidates/cooldownTiming";
+import { ABILITY_EFFECTS_GENERATED } from "../src/data/abilityEffectsGenerated";
 import { ensureAnalysisData } from "../src/data/ensure";
 import {
   MITIGATION_TABLE,
   SELF_WALL_AURA_TO_CAST_ID,
 } from "../src/data/mitigationData";
 import spellIdLists, {
+  ENEMY_ALLY_SAVE_IDS,
   ENEMY_AREA_SAVE_IDS,
-  ENEMY_HEAL_SAVE_IDS,
   ENEMY_IMMUNITY_SAVE_AURAS,
   ENEMY_REDIRECT_SAVE_IDS,
   ENEMY_SELF_SAVE_ONLY_IDS,
 } from "../src/data/spellIdLists";
+import { immunitySchoolMask } from "../src/data/spellSchools";
 import { AURA_ONLY_ACTIVATION_IDS } from "../src/utils/cooldowns";
 import { EXTERNAL_DEFENSIVE_SPELLS } from "../src/utils/deathOutcomeAnalysis";
 import {
   enemyDefensiveEvents,
   EXTERNAL_DEF_IDS,
+  externalAuraOf,
   IMMUNITY_IDS,
   IMMUNITY_SAVE_AURA_NAMES,
+  immunityLastsItsAura,
   isExternalSaveId,
   isImmunitySaveAura,
+  isIntervalFrom,
   joinReappliedIntervals,
+  limitedAbsorbSchoolMask,
+  limitedImmunitySchoolMask,
   MITIGATION_AURA_IDS,
   MITIGATION_AURA_MIN_PCT,
   REMOVED_EARLY_SLACK_S,
+  saveAuraIntervals,
   SELF_SAVE_IDS,
   wallTableIdOfAura,
 } from "../src/utils/enemyDefensives";
@@ -204,6 +213,30 @@ describe("enemyDefensiveEvents", () => {
     expect(enemyDefensiveEvents(a, [a, b], combat)).toEqual([]);
   });
 
+  // 138e632d: the Demon Hunter's unit is named "Antagonist" (9 log lines) and
+  // every one of his aura events says "Antagonist-Balnazzar-US" (20,778). The
+  // unit id is the same on both; the name is not a key.
+  it("the unit's own wall is recognised by unit id when the log names the player two ways", () => {
+    const withRealm = (e: any) => ({ ...e, srcUnitName: "e1-Balnazzar-US" });
+    const a = unit("e1", {
+      auraEvents: [
+        withRealm(applied(BARKSKIN, "e1", "e1", 5)),
+        withRealm(removed(BARKSKIN, "e1", "e1", 17)),
+      ],
+    });
+    const ev = enemyDefensiveEvents(a, [a], combat);
+    expect(ev.map((d) => [d.kind, d.spellId, d.casterName])).toEqual([
+      ["self", BARKSKIN, "e1"],
+    ]);
+    const iv = saveAuraIntervals(a, [a], combat)[0]!;
+    expect(iv.srcUnitId).toBe("e1");
+    expect(isIntervalFrom(iv, a)).toBe(true);
+    // an interval with no id falls back to the name
+    expect(isIntervalFrom({ ...iv, srcUnitId: undefined }, a)).toBe(false);
+    // and an ally's copy is still not the unit's own (same test as above, by id)
+    expect(isIntervalFrom(iv, unit("e2"))).toBe(false);
+  });
+
   it("removedEarly needs a real REMOVED event and more than the slack short", () => {
     // no REMOVED → the interval end is inferred (round end) → never "early"
     const inferred = unit("e1", {
@@ -370,7 +403,7 @@ describe("enemy-only saves: self-saves, instant heals, grips / redirects", () =>
       ...spellIdLists.bigDefensiveSpellIds,
       ...Object.keys(EXTERNAL_DEFENSIVE_SPELLS),
     ]);
-    for (const id of [...ENEMY_HEAL_SAVE_IDS, ...ENEMY_REDIRECT_SAVE_IDS])
+    for (const id of [...ENEMY_ALLY_SAVE_IDS, ...ENEMY_REDIRECT_SAVE_IDS])
       expect(friendly.has(id), id).toBe(false);
     for (const id of ENEMY_SELF_SAVE_ONLY_IDS) {
       expect(spellIdLists.externalDefensiveSpellIds.includes(id), id).toBe(
@@ -383,7 +416,7 @@ describe("enemy-only saves: self-saves, instant heals, grips / redirects", () =>
   it("no enemy-only save is also a %-wall or an immunity (it would render twice)", () => {
     for (const id of [
       ...ENEMY_SELF_SAVE_ONLY_IDS,
-      ...ENEMY_HEAL_SAVE_IDS,
+      ...ENEMY_ALLY_SAVE_IDS,
       ...ENEMY_REDIRECT_SAVE_IDS,
     ]) {
       expect(MITIGATION_AURA_IDS.has(id), id).toBe(false);
@@ -769,5 +802,140 @@ describe("area saves are anchored on the cast (F-E1b / F-A1b)", () => {
     expect(evs[0].observedSeconds).toBeUndefined();
     expect(evs[0].pct).toBeUndefined();
     expect(enemyDefensiveEvents(mate, [caster, mate], combat)).toEqual([]);
+  });
+});
+
+/**
+ * Triage 2026-09-29: Anti-Magic Shell (enemy-def F-E7's AMS half, crisis-
+ * external F-A7; rulings A7, A11, A7-补) and the school masks KILL ATTEMPTS
+ * gates on (F-E24, ruling A30).
+ */
+describe("Anti-Magic Shell routing and the school-limited save masks", () => {
+  const AMS_SELF = "48707";
+  const AMS_ALLY = "410358";
+  const BOP = "1022";
+  const SPELLWARDING = "204018";
+
+  beforeAll(async () => {
+    await ensureAnalysisData();
+  });
+
+  it("48707 is a self-save only; 410358 is an external on an ally and a self-save on oneself; neither is a table row", () => {
+    expect(SELF_SAVE_IDS.has(AMS_SELF)).toBe(true);
+    expect(isExternalSaveId(AMS_SELF)).toBe(false);
+    expect(SELF_SAVE_IDS.has(AMS_ALLY)).toBe(true);
+    expect(isExternalSaveId(AMS_ALLY)).toBe(true);
+    expect(MITIGATION_TABLE[AMS_SELF]).toBeUndefined();
+    expect(MITIGATION_TABLE[AMS_ALLY]).toBeUndefined();
+    // and it stays out of the friendly missed-options roster
+    expect(spellIdLists.externalDefensiveSpellIds.includes(AMS_ALLY)).toBe(
+      false,
+    );
+  });
+
+  it("410358 on an ally renders as an external timed by the ally's aura; on oneself as a self-save", () => {
+    const dk = unit("e1", {
+      spellCastEvents: [cast(AMS_ALLY, "e2", 9.684), cast(AMS_ALLY, "e1", 47)],
+      auraEvents: [
+        applied(AMS_ALLY, "e1", "e1", 47),
+        removed(AMS_ALLY, "e1", "e1", 52),
+      ],
+    });
+    const evoker = unit("e2", {
+      auraEvents: [
+        applied(AMS_ALLY, "e1", "e2", 9.684),
+        removed(AMS_ALLY, "e1", "e2", 15.684),
+      ],
+    });
+    const evs = enemyDefensiveEvents(dk, [dk, evoker], combat);
+    expect(evs.map((e) => [e.kind, e.recipientId])).toEqual([
+      ["external", "e2"],
+      ["self-save", undefined],
+    ]);
+    expect(evs[0].observedSeconds).toBeCloseTo(6, 5);
+  });
+
+  it("an external's aura is the one from THAT caster, nearest to its cast (two Death Knights' shells 0.8 s apart)", () => {
+    const iv = (src: string, fromS: number, toS: number) => ({
+      spellId: AMS_ALLY,
+      spellName: "Anti-Magic Shell",
+      srcUnitName: src,
+      srcUnitId: src,
+      fromS,
+      toS,
+      inferredStart: false,
+      inferredEnd: false,
+    });
+    const intervals = [iv("dk1", 8.8, 9.2), iv("dk2", 9.6, 15.6)];
+    expect(externalAuraOf(AMS_ALLY, 8.8, intervals, "dk1")?.toS).toBe(9.2);
+    expect(externalAuraOf(AMS_ALLY, 9.0, intervals, "dk2")?.toS).toBe(15.6);
+    // no caster known: the nearest application
+    expect(externalAuraOf(AMS_ALLY, 9.5, intervals)?.toS).toBe(15.6);
+  });
+
+  it("410358 seen only as the ally's aura (the cast is missing from the log) still lists, once", () => {
+    const dk = unit("e1", {});
+    const evoker = unit("e2", {
+      auraEvents: [
+        applied(AMS_ALLY, "e1", "e2", 9.684),
+        removed(AMS_ALLY, "e1", "e2", 15.684),
+      ],
+    });
+    const evs = enemyDefensiveEvents(dk, [dk, evoker], combat);
+    expect(evs.map((e) => [e.kind, e.recipientId, e.atSeconds])).toEqual([
+      ["external", "e2", 9.684],
+    ]);
+    // with the cast logged, the aura is that cast's — no second line
+    const logged = unit("e1", {
+      spellCastEvents: [cast(AMS_ALLY, "e2", 9.684)],
+    });
+    expect(enemyDefensiveEvents(logged, [logged, evoker], combat)).toHaveLength(
+      1,
+    );
+  });
+
+  it("an immunity lasts its aura only for a pct-100 table row or an aura with DB2's all-school immunity", () => {
+    // table rows
+    for (const id of ["642", "45438", BOP, SPELLWARDING])
+      expect(immunityLastsItsAura(id), id).toBe(true);
+    // Time Stop, Guardian of the Forgotten Queen: aura 39, every school
+    for (const id of ["378441", "228050"]) {
+      expect(immunitySchoolMask(id), id).toBe(0x7f);
+      expect(immunityLastsItsAura(id), id).toBe(true);
+    }
+    // Burrow (mechanic immunities only), Vanish, Mass Invisibility, Cheat
+    // Death, Cauterize: the moment, not the aura
+    for (const id of ["409293", "11327", "414664", "45182", "87023"]) {
+      expect(isImmunitySaveAura(id), id).toBe(true);
+      expect(immunityLastsItsAura(id), id).toBe(false);
+    }
+  });
+
+  it("the absorb mask is the DB2 one (datagen), read through cd-hoarded's saveSchoolMask — no literal", () => {
+    for (const id of [AMS_SELF, AMS_ALLY]) {
+      const db2 = ABILITY_EFFECTS_GENERATED[id]?.absorbSchoolMask;
+      expect(db2, id).toBeDefined();
+      expect(limitedAbsorbSchoolMask(id)).toBe(db2);
+      expect(limitedAbsorbSchoolMask(id)).toBe(saveSchoolMask(id));
+      // magic only: every school bit but physical
+      expect((db2! & 0x1) === 0 && (db2! & 0x7e) === 0x7e).toBe(true);
+      // not an immunity
+      expect(limitedImmunitySchoolMask(id)).toBeUndefined();
+    }
+    // an all-school absorb and a %-wall are not gated
+    expect(limitedAbsorbSchoolMask("11426")).toBeUndefined(); // Ice Barrier
+    expect(limitedAbsorbSchoolMask(BARKSKIN)).toBeUndefined();
+  });
+
+  it("a school-limited immunity's mask is its pct-100 table row's; a full immunity and a wall have none", () => {
+    expect(limitedImmunitySchoolMask(BOP)).toBe(
+      MITIGATION_TABLE[BOP].schoolMask,
+    );
+    expect(limitedImmunitySchoolMask(BOP)).toBe(0x1);
+    expect(limitedImmunitySchoolMask(SPELLWARDING)).toBe(0x7e);
+    expect(limitedImmunitySchoolMask(DIVINE_SHIELD)).toBeUndefined();
+    expect(limitedImmunitySchoolMask(BARKSKIN)).toBeUndefined();
+    // a table row is never read as an absorb
+    expect(limitedAbsorbSchoolMask(BOP)).toBeUndefined();
   });
 });

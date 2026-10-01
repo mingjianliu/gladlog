@@ -60,9 +60,10 @@ import {
   IArenaMatch,
   ICombatUnit,
   IShuffleRound,
-  LogEvent,
 } from "@gladlog/parser-compat";
 
+import { SCHOOL_SAVE_MIN_SHARE } from "../analysis/candidates/cooldownTiming";
+import { schoolShareCoveredBy } from "../analysis/crisisDecisionPoints";
 import { fmtFactTime } from "../analysis/factFormat";
 import { CandidateEvent } from "../analysis/types";
 import {
@@ -73,17 +74,35 @@ import { ATTEMPT_INTO_TRINKET_OUTCOME_REF } from "../data/outcomeRefs";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { TIMELINE_LINE_FLAGS } from "../data/timelineLineFlags";
 import { burstCastSpan, KILL_CREDIT_SLACK_S } from "./burstLedger";
+import {
+  analyzePlayerCCAndTrinket,
+  findBrokenCC,
+  type ICCInstance,
+} from "./ccTrinketAnalysis";
 import { analyzeOutgoingCCChains, DRLevel, drResetMsAt } from "./drAnalysis";
 import { reconstructEnemyCDTimeline } from "./enemyCDs";
 import {
+  enemyDefensiveEvents,
+  externalAuraOf,
+  type IEnemyDefensiveEvent,
+  immunityLastsItsAura,
   immunityProcHeals,
-  isExternalSaveId,
+  type ISaveAuraInterval,
   isImmunitySaveAura,
+  isIntervalFrom,
+  limitedAbsorbSchoolMask,
+  limitedImmunitySchoolMask,
   MITIGATION_AURA_IDS,
   MITIGATION_AURA_MIN_PCT,
+  SAVE_CAST_AURA_PAIR_S,
+  saveAuraIntervals,
   selfSaveCasts,
   wallTableIdOfAura,
 } from "./enemyDefensives";
+import {
+  documentRecordsAttackSpell,
+  incomingPressureBySchool,
+} from "./incomingPressure";
 import {
   getHpPercentAtTime,
   IKillOpportunity,
@@ -93,7 +112,8 @@ import {
 } from "./killWindowTargetSelection";
 import { KW_BURST_MIN_DAMAGE } from "./offensiveWindows";
 import { pvpTrinketUses } from "./pvpTrinketUses";
-import { fmtTime } from "./renderGrid";
+import { fmtTime, toRenderSecond } from "./renderGrid";
+import { buildRosterSides, type RosterSides } from "./rosterSide";
 
 // The defensive sets live in enemyDefensives.ts since GH #97 (2026-09-15):
 // the timeline's [ENEMY DEF] line and this attribution must agree on what a
@@ -110,10 +130,18 @@ export interface IKillAttemptStun {
 /** Why a non-converted attempt failed. Flags are independently observable;
  * `primary` picks the first true one in declaration order (trinket beats
  * defensive beats external beats healing), `"pressure"` is the residual —
- * nothing visible saved the target, the damage simply wasn't enough. */
+ * nothing visible saved the target, the damage simply wasn't enough. When
+ * both `trinketed` and `immunityBaited` hold the rendered cause names both
+ * (ruling A29); `primary` stays `"trinketed"`. What each flag's window is:
+ * see `attributeFailure`. */
 export interface IKillAttemptAttribution {
   trinketed: boolean;
   immunityBaited: boolean;
+  /** Round seconds the immunity went up, set only when it was already up when
+   * the attempt began and none went up inside the credit window (F-E22
+   * rule 2) — rendered `forced a full immunity [up since m:ss]`. Optional for
+   * hand-built fixtures. */
+  immunityUpSinceS?: number;
   defensivePopped: string[];
   /** round seconds of each `defensivePopped` entry's aura start (parallel array) */
   defensivePoppedAtS: number[];
@@ -181,6 +209,7 @@ export interface IKillAttempt {
 interface StunApp {
   atSeconds: number;
   durationSeconds: number;
+  spellId: string;
   spellName: string;
   casterName: string;
   drLevel: DRLevel;
@@ -261,6 +290,7 @@ export function extractKillAttempts(
   const matchStartMs = combat.startTime;
   const chainGapS = drResetMsAt(matchStartMs) / 1000;
   const enemyByName = new Map(enemies.map((e) => [e.name, e]));
+  const readingsOf = targetReadingsFactory(enemies, friendlies, combat);
 
   // 1) Stun landings per target (Full/50% only — an Immune landing has no
   //    duration and anchors nothing).
@@ -274,6 +304,7 @@ export function extractKillAttempts(
       arr.push({
         atSeconds: app.atSeconds,
         durationSeconds: app.durationSeconds,
+        spellId: app.spellId,
         spellName: app.spellName,
         casterName: app.casterName,
         drLevel: app.drInfo.level,
@@ -357,9 +388,15 @@ export function extractKillAttempts(
         attempt.attribution = attributeFailure(
           target,
           enemies,
-          spanFromMs,
-          spanToMs,
-          matchStartMs,
+          friendlies,
+          combat,
+          {
+            fromMs: spanFromMs,
+            toMs: matchStartMs + toSeconds * 1000,
+            creditToMs: spanToMs,
+          },
+          { kind: "stun", stuns: group },
+          readingsOf(target),
         );
       }
       attempts.push(attempt);
@@ -467,9 +504,15 @@ export function extractKillAttempts(
         attempt.attribution = attributeFailure(
           target,
           enemies,
-          spanFromMs,
-          spanToMs,
-          matchStartMs,
+          friendlies,
+          combat,
+          {
+            fromMs: spanFromMs,
+            toMs: matchStartMs + toSeconds * 1000,
+            creditToMs: spanToMs,
+          },
+          { kind: "burst" },
+          readingsOf(target),
         );
       }
       attempts.push(attempt);
@@ -483,8 +526,25 @@ export function extractKillAttempts(
 /** GH #97 cheap alternative to the [ENEMY DEF] timeline line: the summary
  * names WHEN the wall went up (`popped Barkskin@2:17`) instead of a timeline
  * line. Only one of the two renders (TIMELINE_LINE_FLAGS.enemyDef). */
-function stampNames(names: string[], atS: number[]): string {
-  if (TIMELINE_LINE_FLAGS.enemyDef !== "stamp") return names.join("/");
+function stampNames(
+  names: string[],
+  atS: number[],
+  spanFromSeconds: number,
+): string {
+  if (TIMELINE_LINE_FLAGS.enemyDef !== "stamp")
+    return names
+      .map((n, i) => {
+        // F-E22 rule 2: a save that was already up when the attempt began is
+        // marked with the second it went up — the second its [ENEMY DEF] line
+        // sits at, so the gate can find that line outside the span. One that
+        // went up inside the span's own first second needs no mark.
+        const at = atS[i];
+        return at !== undefined &&
+          toRenderSecond(at) < toRenderSecond(spanFromSeconds)
+          ? `${n} [up since ${fmtTime(at)}]`
+          : n;
+      })
+      .join("/");
   return names
     .map((n, i) => (atS[i] !== undefined ? `${n}@${fmtTime(atS[i]!)}` : n))
     .join("/");
@@ -492,18 +552,34 @@ function stampNames(names: string[], atS: number[]): string {
 
 /** Short English cause for prompt/facts rendering. immunity-baited is worded
  * as a win per the user ruling — never a reproach. */
-function failureText(attr: IKillAttemptAttribution): string {
+function failureText(
+  attr: IKillAttemptAttribution,
+  spanFromSeconds: number,
+): string {
+  // Rule 2, as for a wall (`stampNames`): an immunity that was already up
+  // when the attempt began says since when — this attempt did not force it.
+  const upSince =
+    TIMELINE_LINE_FLAGS.enemyDef !== "stamp" &&
+    attr.immunityUpSinceS !== undefined &&
+    toRenderSecond(attr.immunityUpSinceS) < toRenderSecond(spanFromSeconds)
+      ? ` [up since ${fmtTime(attr.immunityUpSinceS)}]`
+      : "";
+  const immunity = `forced a full immunity${upSince} (a win — re-open after it drops)`;
   switch (attr.primary) {
     case "trinketed":
-      return "target trinketed out";
+      // User ruling A29 (2026-09-30, "两个都写"): an attempt that met both a
+      // trinket bound to one of its stuns and an immunity names both.
+      return attr.immunityBaited
+        ? `target trinketed out; ${immunity}`
+        : "target trinketed out";
     case "immunity-baited":
-      return "forced a full immunity (a win — re-open after it drops)";
+      return immunity;
     case "defensive":
-      return `popped ${stampNames(attr.defensivePopped, attr.defensivePoppedAtS)}`;
+      return `popped ${stampNames(attr.defensivePopped, attr.defensivePoppedAtS, spanFromSeconds)}`;
     case "external":
-      return `saved by external (${stampNames(attr.externalReceived, attr.externalReceivedAtS)})`;
+      return `saved by external (${stampNames(attr.externalReceived, attr.externalReceivedAtS, spanFromSeconds)})`;
     case "self-saved":
-      return `self-saved (${stampNames(attr.selfSaved, attr.selfSavedAtS)})`;
+      return `self-saved (${stampNames(attr.selfSaved, attr.selfSavedAtS, spanFromSeconds)})`;
     case "outhealed":
       return "healed through";
     case "pressure":
@@ -543,6 +619,10 @@ export function formatKillAttemptsForContext(
   lines.push(
     "  Trinket up is the default state (cooldowns reset at the gates): a stun on a trinket-up target is how the trinket gets forced, not a targeting error. Only a line naming a softer target raises a targeting question.",
   );
+  // F-E22 / F-E22b (rulings A29, A′4): what a FAILED cause is allowed to be.
+  lines.push(
+    "  A FAILED wall / external / self-save went up inside the attempt, or was already up when it began (`[up since m:ss]`) — one pressed after the attempt was over is not its cause; an immunity or the trinket in the next 5 s still is. `target trinketed out` = the trinket broke a control of this attempt.",
+  );
   let kills = 0;
   let withSofter = 0;
   let onPrime = 0;
@@ -567,7 +647,7 @@ export function formatKillAttemptsForContext(
           : `trinket up (${softer})`;
     const outcome = a.killed
       ? "KILL"
-      : `FAILED: ${failureText(a.attribution!)}`;
+      : `FAILED: ${failureText(a.attribution!, a.fromSeconds)}`;
     const opener =
       a.anchor === "stun"
         ? `${a.anchorSpellName} opener (${a.openingDrLevel} DR), ${a.stuns.length} stun${a.stuns.length > 1 ? "s" : ""}`
@@ -656,22 +736,202 @@ export function attemptIntoTrinketEvents(
     .slice(0, ATTEMPT_INTO_TRINKET_CAP);
 }
 
+/** What anchored the attempt, for the bound-trinket test (F-E22 rule 1). */
+type AttemptAnchor =
+  { kind: "stun"; stuns: readonly StunApp[] } | { kind: "burst" };
+
+/** What `attributeFailure` reads about one target that does not depend on the
+ * attempt: its save auras and its CC instances. Built once per target per
+ * match, on first use — 28k attempts over the 605-file capture each rebuilt
+ * the aura intervals (twice) and the CC analysis. */
+interface ITargetReadings {
+  saveIntervals: () => ISaveAuraInterval[];
+  ccInstances: () => ICCInstance[];
+  /** The externals this target received, as the `[ENEMY DEF]` external
+   * lines render them (`enemyDefensiveEvents` of its teammates) — a cast on
+   * it, or an aura on it whose cast the log missed. */
+  externalsReceived: () => IEnemyDefensiveEvent[];
+  /** the round's units by roster side (`buildRosterSides`) */
+  sides: () => RosterSides;
+  /** `documentRecordsAttackSpell` over the round's units */
+  recordsAttackSpell: () => boolean;
+}
+
+function targetReadingsFactory(
+  enemies: ICombatUnit[],
+  friendlies: readonly ICombatUnit[],
+  combat: IArenaMatch | IShuffleRound,
+): (target: ICombatUnit) => ITargetReadings {
+  const intervals = new Map<string, ISaveAuraInterval[]>();
+  const cc = new Map<string, ICCInstance[]>();
+  let externals: IEnemyDefensiveEvent[] | undefined;
+  let rosterSides: RosterSides | undefined;
+  let attackSpellRecorded: boolean | undefined;
+  return (target) => ({
+    saveIntervals: () => {
+      let v = intervals.get(target.id);
+      if (!v) {
+        v = saveAuraIntervals(target, enemies, combat);
+        intervals.set(target.id, v);
+      }
+      return v;
+    },
+    ccInstances: () => {
+      let v = cc.get(target.id);
+      if (!v) {
+        v = targetCcInstances(target, friendlies, combat);
+        cc.set(target.id, v);
+      }
+      return v;
+    },
+    externalsReceived: () => {
+      externals ??= enemies.flatMap((mate) =>
+        enemyDefensiveEvents(mate, enemies, combat).filter(
+          (d) => d.kind === "external",
+        ),
+      );
+      return externals.filter((d) => d.recipientId === target.id);
+    },
+    sides: () =>
+      (rosterSides ??= buildRosterSides(Object.values(combat.units ?? {}))),
+    recordsAttackSpell: () =>
+      (attackSpellRecorded ??= documentRecordsAttackSpell(
+        Object.values(combat.units ?? {}),
+      )),
+  });
+}
+
+/**
+ * Why a non-converted attempt failed, from what the log shows around its span.
+ * Three windows, each a different question (triage 2026-09-29, enemy-def
+ * F-E22 + crisis-external F-E22b; user rulings A29, A30, A′4, A7-补):
+ *
+ *  - **[from, to]** — the attempt itself (first stun → last stun's expiry, or
+ *    the burst cluster). A wall, an external or a self-save is "the save" only
+ *    when it was applied / cast INSIDE it, or was already up at `from`
+ *    (rule 2: Guardian Spirit pressed 0.14 s before the first stun, 537209d8).
+ *    Pressed after the attempt was over — in the kill-credit slack — it is not
+ *    why the attempt failed (rule 3′ = A′4: fa5e6c66 named a Divine Protection
+ *    popped 2.8 s after the span; 69546267 a Guardian Spirit 3.3 s after).
+ *  - **[from, to + KILL_CREDIT_SLACK_S]** — unchanged for the kill itself, for
+ *    the healing / damage balance, for a bound trinket, and for an immunity
+ *    (an immunity popped in the slack still ends the go; A29 lists it).
+ *  - **the trinket's own CC** — a trinket counts only when the break binder
+ *    (`bindBreakToWindow` over the target's CC instances, the ones
+ *    `[ENEMY TRINKET]` names) ties it to a stun of THIS attempt; for a burst
+ *    anchor, to a CC active inside [from, to] (rule 1: 95127ab4's trinket at
+ *    18.66 broke a Paralysis, not the Rake chain that ended at 15.30).
+ *
+ * School gates, both on the share of the damage aimed at the target over
+ * [from, to + slack] that falls in the save's schools, floor
+ * `SCHOOL_SAVE_MIN_SHARE` (the 50 % cd-hoarded's `coversCrisisSchool` uses):
+ *  - a school-limited IMMUNITY (Blessing of Protection, Spellwarding, Cloak —
+ *    `limitedImmunitySchoolMask`) is "a full immunity" only above the floor
+ *    (A30; b711d4ac: Blessing of Protection against a go that was 24 %
+ *    physical). Below it, it is still an external if an ally cast it inside
+ *    the span.
+ *  - a school-limited ABSORB with no table row (Anti-Magic Shell —
+ *    `limitedAbsorbSchoolMask`) is a self-save / external only above the
+ *    floor (A7-补); below it the attempt falls through to the next cause.
+ * The share is `incomingPressureBySchool` over the TARGET's record — what
+ * landed plus what a shield ate, from every source (pets and guardians
+ * included). A shield judged on landed damage alone deletes its own evidence:
+ * the better Anti-Magic Shell works, the lower the magic share. A window with
+ * no damage of any kind reads differently per save: an immunity still counts
+ * (an immune hit is a MISS line with no amount, so "nothing landed" is what a
+ * working immunity looks like), an absorb does not (a shield nothing hit
+ * saved nobody — cd-hoarded's reading of the same null).
+ *
+ * `readings` are the target's per-match readings every attempt on it shares.
+ */
 function attributeFailure(
   target: ICombatUnit,
   enemies: ICombatUnit[],
-  spanFromMs: number,
-  spanToMs: number,
-  matchStartMs: number,
+  friendlies: readonly ICombatUnit[],
+  combat: IArenaMatch | IShuffleRound,
+  span: { fromMs: number; toMs: number; creditToMs: number },
+  anchor: AttemptAnchor,
+  readings: ITargetReadings,
 ): IKillAttemptAttribution {
-  const inSpan = (ts: number): boolean => ts >= spanFromMs && ts <= spanToMs;
-  const secondsOf = (ts: number): number => (ts - matchStartMs) / 1000;
+  const matchStartMs = combat.startTime;
+  const { fromMs, toMs, creditToMs } = span;
+  const inCredit = (ts: number): boolean => ts >= fromMs && ts <= creditToMs;
+  // The save window as the attempt renders it, `[m:ss–m:ss]`: a save is
+  // inside when its rendered second is (codex review, 2026-10-03: with the
+  // span ending at 15.5 s, a Barkskin at 15.6 s also reads 0:15 and the
+  // `checkEnemyDefRefConsistency` gate finds it there).
+  const renderedS = (ms: number): number =>
+    toRenderSecond((ms - matchStartMs) / 1000);
+  const fromR = renderedS(fromMs);
+  const toR = renderedS(toMs);
+  const inSave = (ts: number): boolean => {
+    const r = renderedS(ts);
+    return r >= fromR && r <= toR;
+  };
 
-  // G7-P2: the shared use predicate (an Adaptation proc is a trinket too)
-  const trinketed = pvpTrinketUses(target).some((u) => inSpan(u.atMs));
+  // Rule 1: the trinket, bound to the CC it broke. The uses come from the
+  // shared predicate (G7-P2: an Adaptation proc is a trinket use too).
+  let trinketed = false;
+  for (const use of pvpTrinketUses(target)) {
+    if (!inCredit(use.atMs)) continue;
+    const bound = findBrokenCC(readings.ccInstances(), matchStartMs, use.atMs);
+    if (!bound) continue;
+    const ofThisAttempt =
+      anchor.kind === "stun"
+        ? anchor.stuns.some(
+            (st) =>
+              st.spellId === bound.spellId &&
+              Math.abs(st.atSeconds - bound.atSeconds) < 0.01,
+          )
+        : matchStartMs + bound.atSeconds * 1000 <= toMs &&
+          matchStartMs + (bound.atSeconds + bound.durationSeconds) * 1000 >=
+            fromMs;
+    if (ofThisAttempt) {
+      trinketed = true;
+      break;
+    }
+  }
+
+  // A30 / A7-补: is a school-limited save's school what was aimed at the
+  // target? `whenNoDamage` is the answer for a window with no damage at all.
+  let damageBySchool: Record<string, number> | undefined;
+  const coversIncomingDamage = (
+    mask: number | undefined,
+    whenNoDamage: boolean,
+  ): boolean => {
+    if (mask === undefined) return true;
+    damageBySchool ??= incomingPressureBySchool(
+      target,
+      fromMs,
+      creditToMs,
+      readings.sides(),
+      readings.recordsAttackSpell(),
+    );
+    const share = schoolShareCoveredBy({ dmg2sBySchool: damageBySchool }, mask);
+    return share === null ? whenNoDamage : share >= SCHOOL_SAVE_MIN_SHARE;
+  };
+  const immunityCovers = (spellId: string): boolean =>
+    coversIncomingDamage(limitedImmunitySchoolMask(spellId), true);
+  const absorbCovers = (spellId: string): boolean =>
+    coversIncomingDamage(limitedAbsorbSchoolMask(spellId), false);
+  const upAtFrom = (iv: ISaveAuraInterval): boolean =>
+    matchStartMs + iv.fromS * 1000 < fromMs &&
+    matchStartMs + iv.toS * 1000 > fromMs;
+  /** A save pressed BEFORE the attempt counts through its aura: one that went
+   * up inside the span, or was up when it began. One rule for the external
+   * and the self-save branch (codex review, 2026-10-06: an ally's
+   * Anti-Magic Shell cast at 9.9 s, aura 10.1 s, attempt from 10 s). */
+  const auraSavesSpan = (iv: ISaveAuraInterval): boolean =>
+    inSave(matchStartMs + iv.fromS * 1000) || upAtFrom(iv);
 
   let immunityBaited = false;
+  /** an immunity went up inside the credit window (or a proc heal fired) */
+  let immunityInside = false;
+  let immunityUpSinceS: number | undefined;
   const defensivePopped: string[] = [];
   const defensivePoppedAtS: number[] = [];
+  const selfSaved: string[] = [];
+  const selfSavedAtS: number[] = [];
   // One name per spell: a shapeshift-type defensive re-applies its aura
   // whenever the form refreshes (Ancient of Lore 473909 in S2 archive match
   // ad329f4a: 3 casts, 23 SPELL_AURA_APPLIED, same-millisecond REMOVED+APPLIED
@@ -679,86 +939,154 @@ function attributeFailure(
   // inside one attempt — without this guard the ledger rendered
   // "popped Ancient of Lore/Ancient of Lore/Ancient of Lore" (GH #44, 2026-09-01).
   const poppedIds = new Set<string>();
-  for (const aura of target.auraEvents) {
-    if (aura.destUnitId !== target.id) continue;
-    if ((aura.logLine.event as string) !== LogEvent.SPELL_AURA_APPLIED)
-      continue;
-    if (!aura.spellId || !inSpan(aura.logLine.timestamp)) continue;
-    if (isImmunitySaveAura(aura.spellId)) immunityBaited = true;
+  // The target's auras, as the [ENEMY DEF] line sees them (`saveAuraIntervals`:
+  // a re-announced aura is one press). An interval whose start was inferred
+  // (up before the log saw it) is skipped — only a logged application counts.
+  const targetIntervals = readings.saveIntervals();
+  for (const iv of targetIntervals) {
+    if (iv.inferredStart) continue;
+    const startMs = matchStartMs + iv.fromS * 1000;
+    const upAtStart = upAtFrom(iv);
+    const bySelf = isIntervalFrom(iv, target);
+    // An immunity that went up inside the credit window, or (rule 2) one
+    // that was already up when the attempt began — the second only when the
+    // aura IS the immunity (`immunityLastsItsAura`): Mass Invisibility on a
+    // mage's ally, Feign Death or Cauterize are still "up" long after the
+    // moment they saved anyone, and a stun landing on the target shows it.
+    const immunityInSpan = inCredit(startMs);
+    if (
+      isImmunitySaveAura(iv.spellId) &&
+      (immunityInSpan || (upAtStart && immunityLastsItsAura(iv.spellId))) &&
+      immunityCovers(iv.spellId)
+    ) {
+      immunityBaited = true;
+      if (immunityInSpan) immunityInside = true;
+      else immunityUpSinceS = Math.max(immunityUpSinceS ?? 0, iv.fromS);
+    }
+    if (!inSave(startMs) && !upAtStart) continue;
     // The wall-in-hand subset is called out by name — those are the cards the
     // gated tier told the coach to bait; seeing one here closes that loop.
     // F-E1a: a wall whose table row is keyed by its cast (Blur, Greater
     // Invisibility) is found here under its logged aura id.
-    const wallId = wallTableIdOfAura(aura.spellId);
+    const wallId = wallTableIdOfAura(iv.spellId);
     if (
       (MITIGATION_AURA_IDS.has(wallId) || WALL_IN_HAND_MIT_IDS.has(wallId)) &&
-      !poppedIds.has(aura.spellId) &&
+      !poppedIds.has(iv.spellId) &&
       // A wall applied ON the target by somebody else (Flameshaper Obsidian
       // Scales on an ally, 15 %) is not the target popping a defensive.
       // GH #96 M3a: priced through the component resolver (lower bound).
       (strongestComponentPct(
         resolveMitigation(wallId, {
-          carrierIsCaster: aura.srcUnitId === target.id,
+          carrierIsCaster: bySelf,
           // M3b: talents are attributable only to a self-cast here (no roster)
-          caster: aura.srcUnitId === target.id ? target : undefined,
+          caster: bySelf ? target : undefined,
         })!,
         { includeImmunity: true },
       )?.pctMin ?? 0) >= MITIGATION_AURA_MIN_PCT
     ) {
-      poppedIds.add(aura.spellId);
+      poppedIds.add(iv.spellId);
       // The logged name is client-locale text ("树皮术" on a zh client); the
       // prompt is English everywhere else, so resolve it the way every other
       // renderer does. 2026-09-15 Opus baseline: 230/309 prompts carried a
       // CJK name, 328 of the runs came from this line and 93 from the
       // external one below.
-      defensivePopped.push(getEnglishSpellName(aura.spellId, aura.spellName));
-      defensivePoppedAtS.push(secondsOf(aura.logLine.timestamp));
+      defensivePopped.push(getEnglishSpellName(iv.spellId, iv.spellName));
+      defensivePoppedAtS.push(iv.fromS);
     }
   }
 
   // An immunity-kind save that leaves no aura (Nature's Guardian's heal).
   if (
     immunityProcHeals(target, matchStartMs).some((h) =>
-      inSpan(matchStartMs + h.atSeconds * 1000),
+      inCredit(matchStartMs + h.atSeconds * 1000),
     )
-  )
+  ) {
     immunityBaited = true;
+    immunityInside = true;
+  }
 
   const externalReceived: string[] = [];
   const externalReceivedAtS: number[] = [];
-  for (const mate of enemies) {
-    if (mate.id === target.id) continue;
-    for (const cast of mate.spellCastEvents) {
-      if (cast.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
-      if (!cast.spellId || !isExternalSaveId(cast.spellId)) continue;
-      if (cast.destUnitId !== target.id) continue;
-      if (inSpan(cast.logLine.timestamp)) {
-        // One name per spell, as for walls and self-saves: two Intervenes or
-        // two Leaps of Faith in one span read "Leap of Faith/Leap of Faith".
-        const name = getEnglishSpellName(cast.spellId, cast.spellName);
-        if (externalReceived.includes(name)) continue;
-        externalReceived.push(name);
-        externalReceivedAtS.push(secondsOf(cast.logLine.timestamp));
-      }
+  // The externals the `[ENEMY DEF]` lines show on this target — one source,
+  // so an external seen only as its aura (the cast missing from the log)
+  // counts here exactly where it renders (codex review, 2026-10-03).
+  for (const d of readings.externalsReceived()) {
+    const castMs = matchStartMs + d.atSeconds * 1000;
+    if (!inSave(castMs)) {
+      // Rule 2, as for a wall and a self-save: thrown before the attempt
+      // and its aura still on the target when the attempt began (an
+      // Anti-Magic Shell put on the ally half a second before the first
+      // stun). The aura is the one the `[ENEMY DEF]` external line pairs
+      // (`externalAuraOf`); a grip / redirect or an instant heal has none —
+      // it is a moment, and a moment before the attempt is not its cause.
+      if (castMs >= fromMs) continue; // after the span
+      const aura = externalAuraOf(
+        d.spellId,
+        d.atSeconds,
+        targetIntervals,
+        d.casterId,
+      );
+      if (!aura || !auraSavesSpan(aura)) continue;
     }
+    // A school-limited immunity thrown BEFORE the attempt began — merely
+    // still up, against a go in the other school — did nothing in this
+    // attempt (c2058ed4: Blessing of Spellwarding at 117.04 s, span 117.18–
+    // 119.87 s, 89 % physical → stays `healed through`). Decided on the raw
+    // instant: the two floor to the same rendered second, which must not
+    // turn the press into one "inside" the attempt (codex review,
+    // 2026-10-04). Thrown INSIDE the span it is still the external the target
+    // received (b711d4ac, below).
+    if (castMs < fromMs) {
+      const auraId =
+        externalAuraOf(d.spellId, d.atSeconds, targetIntervals, d.casterId)
+          ?.spellId ?? d.spellId;
+      if (!immunityCovers(auraId)) continue;
+    }
+    // Only a table-less absorb is gated here (Anti-Magic Shell on an ally).
+    // A school-limited immunity that failed the test above is still an
+    // external the target received when it was thrown inside the span
+    // (b711d4ac: Blessing of Protection).
+    if (!absorbCovers(d.spellId)) continue;
+    // One name per spell, as for walls and self-saves: two Intervenes or
+    // two Leaps of Faith in one span read "Leap of Faith/Leap of Faith".
+    if (externalReceived.includes(d.spellName)) continue;
+    externalReceived.push(d.spellName);
+    externalReceivedAtS.push(d.atSeconds);
   }
 
-  const selfSaved: string[] = [];
-  const selfSavedAtS: number[] = [];
+  // The target's own no-%-mitigation saves: pressed inside the span, or
+  // (rule 2) pressed before it with the save's aura still up when it began.
+  // Read from the CASTS, so "on itself" is the cast's own target — Blessing
+  // of Sacrifice leaves an aura on the paladin who threw it at an ally, and
+  // that is not the paladin saving himself.
   for (const c of selfSaveCasts(target, matchStartMs)) {
-    if (!inSpan(matchStartMs + c.atSeconds * 1000)) continue;
+    const castMs = matchStartMs + c.atSeconds * 1000;
+    if (!inSave(castMs)) {
+      if (castMs >= fromMs) continue; // after the span: not its cause
+      const stillUp = targetIntervals.some(
+        (iv) =>
+          iv.spellId === c.spellId &&
+          isIntervalFrom(iv, target) &&
+          Math.abs(iv.fromS - c.atSeconds) <= SAVE_CAST_AURA_PAIR_S &&
+          // an aura that only starts after the span is no save of it (codex
+          // review, 2026-10-06: cast 9.8 s, aura 11.1 s, attempt 10–10.2 s)
+          auraSavesSpan(iv),
+      );
+      if (!stillUp) continue;
+    }
     if (selfSaved.includes(c.spellName)) continue;
+    if (!absorbCovers(c.spellId)) continue;
     selfSaved.push(c.spellName);
     selfSavedAtS.push(c.atSeconds);
   }
 
   let healedIn = 0;
   for (const h of target.healIn) {
-    if (inSpan(h.logLine.timestamp)) healedIn += Math.abs(h.effectiveAmount);
+    if (inCredit(h.logLine.timestamp)) healedIn += Math.abs(h.effectiveAmount);
   }
   let damageIn = 0;
   for (const d of target.damageIn) {
-    if (inSpan(d.logLine.timestamp)) damageIn += Math.abs(d.effectiveAmount);
+    if (inCredit(d.logLine.timestamp)) damageIn += Math.abs(d.effectiveAmount);
   }
   const outhealed = healedIn > damageIn;
 
@@ -779,6 +1107,9 @@ function attributeFailure(
   return {
     trinketed,
     immunityBaited,
+    ...(immunityBaited && !immunityInside && immunityUpSinceS !== undefined
+      ? { immunityUpSinceS }
+      : {}),
     defensivePopped,
     defensivePoppedAtS,
     externalReceived,
@@ -788,4 +1119,24 @@ function attributeFailure(
     outhealed,
     primary,
   };
+}
+
+/** The target's CC instances — the ones `analyzePlayerCCAndTrinket` builds
+ * for `[ENEMY TRINKET]` / `[CC ON ENEMY]`, with the attackers' pets as
+ * sources — so `findBrokenCC` here binds a trinket to the same CC the
+ * timeline names. */
+function targetCcInstances(
+  target: ICombatUnit,
+  friendlies: readonly ICombatUnit[],
+  combat: IArenaMatch | IShuffleRound,
+): ICCInstance[] {
+  const friendlyPets = Object.values(combat.units ?? {}).filter(
+    (u) => u.ownerId && friendlies.some((f) => f.id === u.ownerId),
+  );
+  return analyzePlayerCCAndTrinket(
+    target,
+    friendlies as ICombatUnit[],
+    combat,
+    friendlyPets,
+  ).ccInstances;
 }

@@ -174,9 +174,12 @@ export default spellIdLists;
 
 /** F-E7 (user ruling A11, 2026-09-30: "全部出行,并作为 KA 失败原因"): an
  * enemy's own absorb / heal / avoidance saves that carry no percentage
- * mitigation and sit in neither major list. All are cast with a nil dest.
- * Anti-Magic Shell is not here: its credit is school-gated (ruling A7-补). */
+ * mitigation and sit in neither major list. All are cast with a nil dest. */
 export const ENEMY_SELF_SAVE_ONLY_IDS: ReadonlySet<string> = new Set([
+  // Anti-Magic Shell, the self-only id (ruling A7-补, 2026-09-30: no
+  // MITIGATION_TABLE row — its KILL ATTEMPTS credit is gated on the DB2
+  // absorb school mask, `gatedSaveSchoolMask`; the line always renders).
+  "48707", // 141 casts, all nil-dest, aura on the caster
   "48743", // Death Pact — 196 casts
   "49039", // Lichborne — 231
   "108416", // Dark Pact — 1,063
@@ -192,12 +195,21 @@ export const ENEMY_SELF_SAVE_ONLY_IDS: ReadonlySet<string> = new Set([
   "58875", // Spirit Walk — 202
 ]);
 
-/** F-E4 + the ally-castable half of F-E7: an instant heal thrown on an ally
- * (rendered as an external, `X → unit`, no aura so no duration) or on the
- * caster itself (`(self-save)`). Lay on Hands' signed tier lives in
+/** F-E4, the ally-castable half of F-E7 and crisis-external F-A7: an instant
+ * heal or an absorb thrown on an ally (rendered as an external, `X → unit`) or
+ * on the caster itself (`(self-save)`). Lay on Hands' signed tier lives in
  * `healingVerdicts.ts` (471195, burst-answer, 2026-09-26); the friendly side
  * already reads it from classSpells — nothing here feeds that. */
-export const ENEMY_HEAL_SAVE_IDS: ReadonlySet<string> = new Set([
+export const ENEMY_ALLY_SAVE_IDS: ReadonlySet<string> = new Set([
+  // Anti-Magic Shell, the 12.x id that goes on self or an ally (rulings A7 +
+  // A7-补). A7 words it "410358 仍留 EXTERNAL_DEF_IDS"; the id was never in
+  // that roster (`externalDefensiveSpellIds` is the FRIENDLY one — a member
+  // there is a cooldown the ledger tracks and cd-hoarded / external-unused
+  // can charge), so it is an external HERE: `isExternalSaveId` reads this set
+  // for the `[ENEMY DEF]` external line, the aura-only fallback and KILL
+  // ATTEMPTS, and no friendly accusation is added. The ally's 410358 aura
+  // times the external; KILL ATTEMPTS credit is school-gated like 48707's.
+  "410358", // 742 casts (541 self, 201 ally)
   "471195", // Lay on Hands, live 12.x id — 528 casts (135 self, 393 ally)
   "633", // Lay on Hands, pre-12.x id still logged — 17 (3 self, 14 ally)
   // Gift of the Naaru: one racial, one cast id per class. These five are the

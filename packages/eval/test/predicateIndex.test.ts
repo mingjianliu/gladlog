@@ -555,6 +555,16 @@ const INDEX: PredicateRow[] = [
     symbol: "isSameSideSource",
     mod: rosterSide,
   },
+  {
+    file: `${A}/utils/incomingPressure.ts`,
+    symbol: "incomingPressureBySchool",
+    mod: incomingPressure,
+  },
+  {
+    file: `${A}/utils/incomingPressure.ts`,
+    symbol: "logSchoolMask",
+    mod: incomingPressure,
+  },
   // Talent ownership
   {
     file: `${A}/utils/talentOwnership.ts`,

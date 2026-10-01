@@ -1,5 +1,6 @@
 import { ICombatUnit } from "@gladlog/parser-compat";
 
+import { SCHOOL_PHYSICAL, spellSchoolMask } from "../data/spellSchools";
 import { isSameSideSource, type RosterSides } from "./rosterSide";
 
 /**
@@ -53,6 +54,24 @@ export const REDISTRIBUTION_DAMAGE_IDS: ReadonlySet<string> = new Set([
   "451963", // Void Leech (Shadow Priest draining an ally)
 ]);
 
+/** A `REDISTRIBUTION_DAMAGE_IDS` row from the unit's own side — moved
+ * health, not an enemy hitting it. The one test every reader of incoming
+ * damage applies (`incomingPressureEvents`, `incomingPressureBySchool`). */
+function isRedistributionRow(
+  unit: Pick<ICombatUnit, "id" | "reaction">,
+  spellId: string | undefined,
+  srcUnitId: string | undefined,
+  srcUnitFlags: number | undefined,
+  destUnitFlags: number | undefined,
+  sides: RosterSides | undefined,
+): boolean {
+  return (
+    !!spellId &&
+    REDISTRIBUTION_DAMAGE_IDS.has(spellId) &&
+    isSameSideSource(unit, srcUnitId, srcUnitFlags, sides, destUnitFlags)
+  );
+}
+
 export interface IPressureEvent {
   timestamp: number;
   /** Positive magnitude of effective HP lost, or that would have been lost. */
@@ -99,9 +118,14 @@ export function incomingPressureEvents(
     srcUnitFlags: number | undefined,
     destUnitFlags: number | undefined,
   ) =>
-    !!spellId &&
-    REDISTRIBUTION_DAMAGE_IDS.has(spellId) &&
-    isSameSideSource(unit, srcUnitId, srcUnitFlags, sides, destUnitFlags);
+    isRedistributionRow(
+      unit,
+      spellId,
+      srcUnitId,
+      srcUnitFlags,
+      destUnitFlags,
+      sides,
+    );
   for (const d of unit.damageIn ?? []) {
     const amount = Math.abs(d.effectiveAmount);
     if (!Number.isFinite(amount)) continue;
@@ -169,4 +193,109 @@ export function sumAbsorbedPressure(
     sum += e.amount;
   }
   return sum;
+}
+
+/** The log's own school bits of one hit record (`spellSchoolId` is the hex
+ * string of the line; a swing is 0x1). 0 = the line carried none. The one
+ * reading cd-hoarded's `dmg2sBySchool` and `incomingPressureBySchool` share. */
+export function logSchoolMask(spellSchoolId: string | undefined): number {
+  return Number.parseInt(String(spellSchoolId ?? "0x0"), 16) || 0;
+}
+
+/**
+ * Incoming pressure in [fromMs, toMs] per school mask, with the same
+ * redistribution rule as `incomingPressureEvents` — the shape
+ * `schoolShareCoveredBy` reads (key = the decimal school mask). Damage that
+ * landed AND damage a shield ate: a shield judged by "was the team dealing
+ * its school" would otherwise delete its own evidence — the better an
+ * Anti-Magic Shell works, the less magic damage lands (Fable review of
+ * triage enemy-def F-E22 / F-E24, 2026-10-02).
+ *
+ * The school of an absorbed hit: the SPELL_ABSORBED line's own attack-school
+ * field (spell form, `parameters[10]`), else the attack spell's official
+ * SpellMisc.SchoolMask; a swing absorb is physical. An absorb whose school
+ * cannot be told (a stored document from before the attack spell was
+ * recorded, or a slimmed line of a spell DB2 does not list) is left out —
+ * unknown is not a school.
+ */
+export function incomingPressureBySchool(
+  unit: PressureUnit,
+  fromMs: number,
+  toMs: number,
+  sides?: RosterSides,
+  /** Does this document record the absorbed attack's spell at all
+   * (`documentRecordsAttackSpell` over the round's units)? Decided from
+   * this unit alone when omitted — wrong for a unit whose only absorbs are
+   * swings (codex review, 2026-10-03). */
+  recordsAttackSpell?: boolean,
+): Record<string, number> {
+  const by: Record<string, number> = {};
+  const add = (mask: number, amount: number): void => {
+    if (!(amount > 0) || !Number.isFinite(amount)) return;
+    by[String(mask)] = (by[String(mask)] ?? 0) + amount;
+  };
+  for (const d of unit.damageIn ?? []) {
+    const t = d.logLine.timestamp;
+    if (t < fromMs || t > toMs) continue;
+    if (
+      isRedistributionRow(
+        unit,
+        d.spellId,
+        d.srcUnitId,
+        d.srcUnitFlags,
+        d.destUnitFlags,
+        sides,
+      )
+    )
+      continue;
+    add(logSchoolMask(d.spellSchoolId), Math.abs(d.effectiveAmount));
+  }
+  const absorbs = unit.absorbsIn ?? [];
+  // A missing attackSpellId means a swing only on documents that record the
+  // field at all (parsed on or after 2026-09-20) — the era rule of
+  // `timelineHelpers`' absorbed-hit labels.
+  const swingWhenNoSpell =
+    recordsAttackSpell ?? absorbs.some((a) => a.attackSpellId !== undefined);
+  for (const a of absorbs) {
+    const t = a.logLine.timestamp;
+    if (t < fromMs || t > toMs) continue;
+    if (
+      isRedistributionRow(
+        unit,
+        a.attackSpellId,
+        a.attackerId,
+        a.srcUnitFlags,
+        a.destUnitFlags,
+        sides,
+      )
+    )
+      continue;
+    let mask: number | undefined;
+    if (a.attackSpellId === undefined) {
+      mask = swingWhenNoSpell ? SCHOOL_PHYSICAL : undefined;
+    } else {
+      const logged = a.logLine.parameters?.[10];
+      mask =
+        (typeof logged === "string" && /^0x/i.test(logged)
+          ? logSchoolMask(logged)
+          : 0) ||
+        spellSchoolMask(a.attackSpellId) ||
+        undefined;
+    }
+    if (mask === undefined) continue;
+    add(mask, Math.abs(Number(a.absorbedAmount) || 0));
+  }
+  return by;
+}
+
+/** Does this document record the absorbed attack's spell (parsed on or after
+ * 2026-09-20)? Then an absorb without one is a swing. Read off every unit of
+ * the round: a single unit's absorbs may all be swings. */
+export function documentRecordsAttackSpell(
+  units: Iterable<Pick<ICombatUnit, "absorbsIn">>,
+): boolean {
+  for (const u of units)
+    if ((u.absorbsIn ?? []).some((a) => a.attackSpellId !== undefined))
+      return true;
+  return false;
 }

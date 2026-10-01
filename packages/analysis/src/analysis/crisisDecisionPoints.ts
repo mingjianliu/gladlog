@@ -39,6 +39,7 @@ import {
 } from "../utils/cooldowns";
 import { castEffectPairs } from "../data/castEffectAuras";
 import { isEnemyCdWindowSpell } from "../utils/enemyCDs";
+import { logSchoolMask } from "../utils/incomingPressure";
 import { PVP_TRINKET_SPELL_IDS } from "../utils/killWindowTargetSelection";
 import { auraOffensiveOccurrences } from "../utils/offensiveAuraOccurrences";
 import { rootIntervalsOf } from "../utils/rootReachability";
@@ -721,7 +722,7 @@ export function crisisDecisionPoints(
     t: d.timestamp,
     src: d.srcUnitId,
     a: Math.abs(d.effectiveAmount ?? d.amount ?? 0),
-    school: Number.parseInt(String(d.spellSchoolId ?? "0x0"), 16) || 0,
+    school: logSchoolMask(d.spellSchoolId),
   }));
   const healIn = ((owner.healIn ?? []) as any[]).map((h) => ({
     t: h.timestamp,
