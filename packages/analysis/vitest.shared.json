@@ -41,6 +41,7 @@
     "src/context/matchTimeline.ccBreak.test.ts",
     "src/context/matchTimeline.ccImmune.test.ts",
     "src/context/matchTimeline.channelCut.test.ts",
+    "src/context/matchTimeline.cheaperNote.test.ts",
     "src/context/matchTimeline.empower.test.ts",
     "src/context/matchTimeline.forcedKeep.test.ts",
     "src/context/matchTimeline.hardCast.test.ts",

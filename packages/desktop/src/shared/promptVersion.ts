@@ -532,5 +532,11 @@
  *  Arcane Torrent and Shiv never produce a line. A purge landing at the
  *  buff's end now counts (float boundary), so those buffs no longer read
  *  "unpurged". General purgers' lines are otherwise unchanged.
+ *  v245 (2026-10-01, triage hp-state F-T1 + enemy-def F-E20): `cheaper
+ *  available:` offers a nil-destination team save (Spirit Link Totem, Aura
+ *  Mastery …) only tools that can help another unit, and a press made while
+ *  stunned — or the press that ended the stun — only cooldowns usable while
+ *  stunned; a [CC ON TEAM] instance ended by the unit's own immunity press
+ *  reads `| <spell> broke this CC after Ns`.
  */
-export const PROMPT_VERSION = 244;
+export const PROMPT_VERSION = 245;

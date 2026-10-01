@@ -17,10 +17,12 @@ import { buffFullDurationForCaster } from "../utils/buffDuration";
 import { silenceIntervals } from "../utils/cannotCastIntervals";
 import type { ICcBreakEvent } from "../utils/ccBreakAnalysis";
 import {
+  castEndedCcWindow,
   CC_AVOIDANCE_BUFF_SPELLS,
   findBrokenCC,
   GROUNDING_TOTEM_SPELL_ID,
   GROUNDING_TOTEM_WINDOW_S,
+  immunityBreak,
   IPlayerCCTrinketSummary,
   renderedCcSeconds,
   tremorTotemBreak,
@@ -61,6 +63,7 @@ import {
   extractAoeCCEvents,
   IAoeCCEvent,
   IOutgoingCCChain,
+  isStunCcInstance,
   ITeammateDrClash,
 } from "../utils/drAnalysis";
 import {
@@ -1447,6 +1450,30 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     }
     return "";
   }
+  // Triage enemy-def F-E20: "stunned at the cast" for the cheaper-alternative
+  // note. The tag above is strict-inside; a cast that ENDED the stun (Divine
+  // Shield out of Hammer of Justice) is logged a millisecond after the stun's
+  // REMOVED and matches no instance strictly, so it also counts when it is
+  // the cast that ended a stun (`castEndedCcWindow`, the predicate of the
+  // `[CC ON TEAM]` break note). Stun only: the usable-while table has no
+  // incapacitate dimension.
+  const ownerStunWindows = (ownerCCSummary?.ccInstances ?? [])
+    .filter(isStunCcInstance)
+    .map((cc) => ({
+      cc,
+      applyMs: matchStartMs + Math.round(cc.atSeconds * 1000),
+      removeMs:
+        matchStartMs + Math.round((cc.atSeconds + cc.durationSeconds) * 1000),
+    }));
+  function ownerStunnedAtCast(timeSeconds: number): boolean {
+    const castMs = matchStartMs + Math.round(timeSeconds * 1000);
+    return ownerStunWindows.some(
+      (w) =>
+        (timeSeconds > w.cc.atSeconds &&
+          timeSeconds < w.cc.atSeconds + w.cc.durationSeconds) ||
+        castEndedCcWindow(w, castMs),
+    );
+  }
 
   // B139: interrupt/silence-immunity windows granted by the owner's PvP talents (Obsidian Mettle → Obsidian
   // Scales, Zen Focus Tea → Thunder Focus Tea). Each is a passive with no marker aura gated on a normal CD
@@ -1522,6 +1549,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     ownerInterruptImmuneReasonAt,
     addEntry,
     ownerHardCcTagAt,
+    ownerStunnedAtCast,
   }));
 
   // ── [BUFF FADED] events (F70, B31: renamed from [CD EXPIRED]) ──────────────
@@ -1961,6 +1989,18 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       const tremorNote = tremor
         ? ` | Tremor Totem from ${pid(tremor.shamanName)} ended this CC after ${renderedCcSeconds(cc)}s (cut short — it had not expired)`
         : "";
+      // Triage enemy-def F-E20: the player's own immunity ended it (Divine
+      // Shield out of a stun). The trinket / racial / Tremor notes above name
+      // their own break first; the `| Ns` duration stays, this note says why
+      // the CC ended there.
+      const ccdUnit = friends.find((f) => f.name === summary.playerName);
+      const immunity =
+        !trinketBroke && !isCleansed && !tremor && ccdUnit
+          ? immunityBreak(cc, matchStartMs, ccdUnit)
+          : null;
+      const immunityNote = immunity
+        ? ` | ${immunity.spellName} broke this CC after ${renderedCcSeconds(cc)}s`
+        : "";
 
       // `spell:<id>` is getDRCategory's self-DR fallback for a CC no DR
       // family claims (Infernal Awakening 22703 — drShareScan 2026-09-25: full
@@ -2002,7 +2042,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       addEntry(
         cc.atSeconds,
         // B112: "(by N)" not "(N)" — the bare "(6)" caster-id was misread as a "6s" duration.
-        `${fmtTime(cc.atSeconds)}  [CC ON TEAM]   ${pid(summary.playerName)} ← ${cc.spellName} (by ${actorLabel(cc.sourceName, "enemy", cc.sourceId)})${durStr}${drStr}${backlashStr}${posStr}${trinketNote}${tremorNote}${cleansedNote}`,
+        `${fmtTime(cc.atSeconds)}  [CC ON TEAM]   ${pid(summary.playerName)} ← ${cc.spellName} (by ${actorLabel(cc.sourceName, "enemy", cc.sourceId)})${durStr}${drStr}${backlashStr}${posStr}${trinketNote}${tremorNote}${immunityNote}${cleansedNote}`,
       );
     }
 

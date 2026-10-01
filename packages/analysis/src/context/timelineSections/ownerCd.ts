@@ -18,7 +18,7 @@ import {
   cdRoleTag,
   findCheaperDefensiveAlternatives,
   type IDamageBucket,
-  isTeamHealCD,
+  isTeamSaveCD,
   rendersOnCaster,
   THROUGHPUT_EMPOWER_DEFENSIVE_IDS,
 } from "../../utils/cooldowns";
@@ -68,6 +68,7 @@ export function emitOwnerCdEntries(
     | "ownerInterruptImmuneReasonAt"
     | "addEntry"
     | "ownerHardCcTagAt"
+    | "ownerStunnedAtCast"
   >,
 ): Pick<TimelineCtx, "procLinesEmitted"> {
   const {
@@ -95,6 +96,7 @@ export function emitOwnerCdEntries(
     ownerInterruptImmuneReasonAt,
     addEntry,
     ownerHardCcTagAt,
+    ownerStunnedAtCast,
   } = ctx;
   // threaded: read from ctx, returned to the caller (GH #116)
   let { procLinesEmitted } = ctx;
@@ -122,6 +124,8 @@ export function emitOwnerCdEntries(
       (h) => h >= castAtSeconds && h <= form.expiresAtSeconds,
     );
   }
+
+  const ownerPvpTalentIds = new Set<string>(owner.info?.pvpTalents ?? []);
 
   for (const cd of ownerCDs) {
     // B112/B127: a big personal defensive that cannot be cast on an ally is self-only — force (self)
@@ -272,8 +276,11 @@ export function emitOwnerCdEntries(
         // B142: a team/raid heal (Divine Hymn, Tranquility, …) covers an injured ALLY, so a
         // self-only tool (Desperate Prayer, Frenzied Regeneration) can't substitute for it — treat it
         // like an external cast so only team-capable alternatives are offered (extends the H11 guard).
+        // Triage hp-state F-T1: the test is the team-SAVE set (the heals plus the group walls of
+        // the 2026-09-26 ruling) — a nil-dest Spirit Link Totem / Aura Mastery read as a self-cast
+        // and was offered Astral Shift / Divine Protection.
         const castTargetIsTeammate =
-          isTeamHealCD(cd.spellId) ||
+          isTeamSaveCD(cd.spellId) ||
           (!!cast.targetName &&
             cast.targetName !== "nil" &&
             cast.targetName.split("-")[0] !== owner.name.split("-")[0]);
@@ -283,6 +290,10 @@ export function emitOwnerCdEntries(
           cast.timeSeconds,
           {
             castTargetIsTeammate,
+            // F-E20: a stunned owner can only be offered what a stunned player can press.
+            stunnedCaster: ownerStunnedAtCast(cast.timeSeconds)
+              ? { pvpTalentIds: ownerPvpTalentIds }
+              : undefined,
           },
         );
         if (cheaperAvailable.length > 0) {

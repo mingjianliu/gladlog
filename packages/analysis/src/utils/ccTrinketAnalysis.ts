@@ -39,6 +39,7 @@ import {
 import { ccFullDurationForCaster } from "./ccDuration";
 import { isHealerSpec, isPassiveProcCast, specToString } from "./cooldowns";
 import { computeIncomingDR, IDRInfo, matchPendingCcKey } from "./drAnalysis";
+import { IMMUNITY_IDS } from "./enemyDefensives";
 import {
   interruptCooldownRemainingMs,
   interruptForUnit,
@@ -391,6 +392,77 @@ export function tremorTotemBreak(
 }
 
 /**
+ * How far a press that ended a CC sits from that CC's REMOVED line. Measured
+ * on the 605-file capture slice (2026-10-01, `fix-T1015/immbreak.py`): of the
+ * caster's CC endings within ±500 ms of an own Divine Shield cast (417
+ * casts), 259 are 0–3 ms before the cast line, 9 are 3–10 ms before, 7 are
+ * 10–50 ms before, 30 earlier still — and none after it; Ice Block 74 / 1 / 2
+ * / 5 (343 casts). The 0–10 ms group ends CCs far short of their length (a
+ * 0.66 s Psychic Scream, a 1.2 s Hammer of Justice); the 10–50 ms group
+ * already holds CCs that simply ran out (a 3.0 s Dragon's Breath, 29 ms
+ * before the press). So 10, not the trinket binder's 50 / 250: a press right
+ * after a CC expired on its own must not read as having broken it.
+ */
+export const PRESS_ENDED_CC_LAG_MS = 10;
+
+/**
+ * Did this cast END the CC window — is its line the one sitting at the
+ * window's removal? (Triage 2026-09-29, enemy-def F-E20.) A press that purges
+ * a CC is logged right AFTER the CC's own REMOVED, so it is never "inside"
+ * the CC and no strict-inside test can see it. True when the cast is at or
+ * after the CC landed and within `PRESS_ENDED_CC_LAG_MS` of its removal; a
+ * press in the middle of a CC that then runs on ended nothing, and neither
+ * did a press made before the CC landed.
+ */
+export function castEndedCcWindow(
+  window: ICCBreakableWindow,
+  castMs: number,
+): boolean {
+  return (
+    castMs >= window.applyMs &&
+    Math.abs(castMs - window.removeMs) <= PRESS_ENDED_CC_LAG_MS
+  );
+}
+
+/**
+ * The CC'd player's own immunity press that ended this CC, or null (F-E20):
+ * e10c6bea's Hammer of Justice is REMOVED at 165.286 inside Divine Shield's
+ * debuff purge (SPELL_CAST_SUCCESS 165.287), and the `[CC ON TEAM]` line read
+ * as a 3 s stun that ran out. `IMMUNITY_IDS` is the `[ENEMY DEF]` immune set.
+ */
+export function immunityBreak(
+  cc: Pick<ICCInstance, "atSeconds" | "durationSeconds">,
+  matchStartMs: number,
+  player: Pick<ICombatUnit, "id" | "spellCastEvents">,
+): { spellId: string; spellName: string; castMs: number } | null {
+  const window = {
+    applyMs: matchStartMs + Math.round(cc.atSeconds * 1000),
+    removeMs:
+      matchStartMs + Math.round((cc.atSeconds + cc.durationSeconds) * 1000),
+  };
+  for (const e of player.spellCastEvents) {
+    if (e.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
+    if (!e.spellId || !IMMUNITY_IDS.has(e.spellId)) continue;
+    // on the player themselves: a Blessing of Protection thrown on a teammate
+    // the instant the paladin's own stun ran out ended nothing of his
+    if (
+      e.destUnitId &&
+      e.destUnitId !== "0000000000000000" &&
+      e.destUnitId !== player.id
+    )
+      continue;
+    const castMs = e.logLine.timestamp;
+    if (!castEndedCcWindow(window, castMs)) continue;
+    return {
+      spellId: e.spellId,
+      spellName: getEnglishSpellName(e.spellId, e.spellName),
+      castMs,
+    };
+  }
+  return null;
+}
+
+/**
  * DEFENSIVE-001 (cc-avoidable, 2026-08-07, BACKLOG #18 second batch): pure
  * derivation of "which avoidance spell ids would explain dodging this CC
  * application" — the identical gating rules the CC Avoidance Correlation
@@ -533,7 +605,8 @@ export function bindBreakToWindow<T extends ICCBreakableWindow>(
   let primaryDurationMs = -1;
   for (const w of windows) {
     const activeAtCast =
-      castTs >= w.applyMs - toleranceMs && castTs <= w.removeMs + afterRemovalMs;
+      castTs >= w.applyMs - toleranceMs &&
+      castTs <= w.removeMs + afterRemovalMs;
     if (!activeAtCast) continue;
     const durationMs = w.removeMs - w.applyMs;
     if (durationMs > primaryDurationMs) {
@@ -894,7 +967,9 @@ export function pvpTrinketRemainingSecondsAt(
 /** The whole seconds a `[CC ON TEAM]` line prints for this instance — its
  *  `| Ns`, or the "after Ns" of a trinket / racial / Tremor break. One
  *  rounding for the line and every predicate that reads it back. */
-export function renderedCcSeconds(cc: Pick<ICCInstance, "durationSeconds">): number {
+export function renderedCcSeconds(
+  cc: Pick<ICCInstance, "durationSeconds">,
+): number {
   return Number(cc.durationSeconds.toFixed(0));
 }
 
@@ -1560,10 +1635,8 @@ export function analyzePlayerCCAndTrinket(
             const dist = distanceBetween(playerPos, petPos);
             if (dist < minDist) minDist = dist;
             const range =
-              spellRangeForCaster(
-                petKicker,
-                kickCastSpellId(kickSpellId),
-              ) ?? 40;
+              spellRangeForCaster(petKicker, kickCastSpellId(kickSpellId)) ??
+              40;
             if (dist <= range) countInRange++;
           }
         }

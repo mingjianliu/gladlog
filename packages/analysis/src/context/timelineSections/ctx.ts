@@ -144,4 +144,7 @@ export interface TimelineCtx {
   ) => IAoeCCEvent | undefined;
   formatAoeTargetPart: (aoe: IAoeCCEvent, existingTargetPart: string) => string;
   ownerHardCcTagAt: (timeSeconds: number) => string;
+  /** The owner was stunned at this cast: strictly inside a stun, or the cast
+   * is the one that ended it (triage enemy-def F-E20). */
+  ownerStunnedAtCast: (timeSeconds: number) => boolean;
 }

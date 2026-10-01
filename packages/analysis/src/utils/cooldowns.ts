@@ -3291,7 +3291,13 @@ export function findCheaperDefensiveAlternatives(
   cd: IMajorCooldownInfo,
   ownerCDs: IMajorCooldownInfo[],
   atSeconds: number,
-  opts: { castTargetIsTeammate?: boolean } = {},
+  opts: {
+    castTargetIsTeammate?: boolean;
+    /** Set when the caster was stunned at this cast (strictly inside the
+     * stun, or the stun this very cast ended): only buttons the game lets a
+     * stunned player press are alternatives (triage enemy-def F-E20). */
+    stunnedCaster?: { pvpTalentIds: ReadonlySet<string> };
+  } = {},
 ): string[] {
   // Nothing was chosen when a proc fired, so there is no "cheaper" choice to
   // point at; and a proc is never the cheaper choice (round 3 N5).
@@ -3330,7 +3336,9 @@ export function findCheaperDefensiveAlternatives(
         // Self-cast context: exclude damage-redirect externals that do nothing when
         // caster === target (verified mechanic, not a broad External exclusion).
         (!!opts.castTargetIsTeammate ||
-          !SELF_CAST_NOOP_EXTERNAL_IDS.has(other.spellId)),
+          !SELF_CAST_NOOP_EXTERNAL_IDS.has(other.spellId)) &&
+        (!opts.stunnedCaster ||
+          usableWhileStunned(other.spellId, opts.stunnedCaster.pvpTalentIds)),
     )
     .map((other) => other.spellName);
 }
