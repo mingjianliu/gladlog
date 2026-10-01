@@ -3241,6 +3241,8 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     ...(noManaRendered
       ? [
           "    `X(no mana a/b)` = X is off cooldown but your mana (a) was below its cost (b) at that second — not pressable as it stood.",
+          "    The tag is printed where X is listed: a full `rdy:` row or the `Δ` row where X came back. A later `Δ` row that",
+          "    does not list X says nothing about its mana.",
         ]
       : []),
     "    a leading `-<spell>` marks one that just LEFT the ready set. `cd:<spell>(Ns)` = seconds until it returns.",

@@ -10,8 +10,8 @@ export const DISCOVERY_TAG_RULES: { pattern: RegExp; tags: SpellTag[] }[] = [
     // a 40 % group wall in this repo's own tables (`MITIGATION_TABLE`,
     // `TEAM_SAVE_CD_IDS`); the name rule had it under Offensive, so it was
     // ledgered as throughput and no "never used" / cd-hoarded line could name
-    // it. test/data.test.ts pins: nothing in those two tables discovers as
-    // Offensive.
+    // it. test/discoveryWallTags.test.ts pins: nothing in those two tables
+    // discovers as Offensive.
     pattern:
       /unending|resolv|embrace|fortitude|cloak|shell|bark|cocoon|spirit|suppress|protection|ward|block|wall|shield|darkness/,
     tags: [SpellTag.Defensive],

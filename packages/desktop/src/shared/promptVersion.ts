@@ -694,5 +694,7 @@
  *  kick-priority's facts.reachYd appears only when the kicker stood outside
  *  the kick's range and had to run; legend: kickReadyForS is absent when the
  *  kick was never used or never ran out of charges.
+ *  v267 (2026-10-03, triage G7-P4 follow-up): the [RES] legend says a delta
+ *  row carries the (no mana a/b) tag only where the cooldown is listed.
  */
-export const PROMPT_VERSION = 266;
+export const PROMPT_VERSION = 267;

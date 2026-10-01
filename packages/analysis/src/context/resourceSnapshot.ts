@@ -17,9 +17,9 @@ import {
 } from "../utils/cooldowns";
 import { IEnemyCDTimeline } from "../utils/enemyCDs";
 import { sumIncomingPressure } from "../utils/incomingPressure";
-import type { RosterSides } from "../utils/rosterSide";
 import { toRenderSecond } from "../utils/renderGrid";
 import { affordableAt, type ManaFallback } from "../utils/resourceAt";
+import type { RosterSides } from "../utils/rosterSide";
 import { getPvpToolkit } from "../utils/talentBehaviors";
 import { isDeadAt } from "../utils/unitDeath";
 
