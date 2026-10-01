@@ -4,7 +4,7 @@ import {
   BUFF_DURATION_TALENT_MODIFIERS,
   spellEffectData,
 } from "../data/spellEffectData";
-import { castParamBaseSeconds,type CastParamCaster } from "./castParam";
+import { castParamBaseSeconds, type CastParamCaster } from "./castParam";
 import { talentModifierOwnershipOf, talentRankOf } from "./talentOwnership";
 
 /**
@@ -21,6 +21,15 @@ import { talentModifierOwnershipOf, talentRankOf } from "./talentOwnership";
  */
 export const SPELL_DURATION_OVERRIDES: Record<string, number> = {
   "421453": 6.5, // Ultimate Penitence
+  // Alter Time (triage other F-O8, 2026-10-01). The ledger keys on the press
+  // 342245, whose DB2 row says 20 s; the aura it puts up is 342246, and THAT
+  // row says 10 s (a test pins this value to it). Corpus, 60 library files:
+  // 152 of 153 342246 applications end within 11.43 s (median 6.35 — the
+  // mage snaps back early); one ran 15.13 s — FLAG, not explained. Downward
+  // with a mechanism (Game-Behaviour rule 7): the aura's own official row.
+  // buffDurationScan cannot see this class: it measures aura ids, and 342245
+  // never appears as an aura.
+  "342245": 10,
 };
 
 /**

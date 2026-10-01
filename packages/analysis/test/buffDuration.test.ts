@@ -630,12 +630,18 @@ describe("buffFullDurationForCaster — 天赋条件的增益时长", () => {
       checked++;
     }
     expect(checked).toBeGreaterThan(3000);
-    // 唯一的一条覆盖(终极苦修 6.5)如今与 DB2 同值 —— 它已经冗余,所以今天
-    // 连豁免项都没有实际差异。
+    // 终极苦修 6.5 如今与 DB2 同值 —— 它已经冗余。操控时间 342245(分诊 other
+    // F-O8,2026-10-01)是真覆盖:台账记的是按键 342245(DB2 20 s),它挂的光环
+    // 是 342246(DB2 10 s),覆盖值必须等于**光环那一行**的官方时长 —— 钉在这里,
+    // DB2 一改就红。消费点当时逐个量过:605 场采集只动 `<cooldowns>` 的
+    // 「lasts」标签(提交信息里有数字)。
+    const AURA_ROW_OF: Record<string, string> = { "342245": "342246" };
     for (const id of Object.keys(SPELL_DURATION_OVERRIDES))
       expect(buffFullDurationForCaster(id, undefined)).toBe(
-        spellEffectData[id]?.durationSeconds,
+        spellEffectData[AURA_ROW_OF[id] ?? id]?.durationSeconds,
       );
+    expect(spellEffectData["342245"]?.durationSeconds).toBe(20);
+    expect(buffFullDurationForCaster("342245", undefined)).toBe(10);
     // NO_FIXED_DURATION_IDS(分诊 H15,2026-09-30):DB2 时长只是上限(「持续最多
     // $d」),答 undefined。当时逐个查过消费点:auraIntervals 无时长 = 推断边界
     // 不封顶(竞技场回合极少超过假死的 360 s 上限),enemyDefensives 只看免疫 /

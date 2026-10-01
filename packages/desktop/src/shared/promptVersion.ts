@@ -391,5 +391,9 @@
  *  zh-TW, es-MX, fr-FR and ru-RU client strings for out of range / moving /
  *  line of sight (official GlobalStrings). 605 files: +69 lines in 31 owner
  *  files, no id changes.
+ *  v219 (2026-10-01, triage other F-O8): Alter Time's loadout label reads
+ *  `lasts 10s` (the official duration of the aura 342246 the press 342245
+ *  applies; the press row's 20 s was printed). 605 files: 1,512 loadout
+ *  lines, no id changes.
  */
-export const PROMPT_VERSION = 218;
+export const PROMPT_VERSION = 219;
