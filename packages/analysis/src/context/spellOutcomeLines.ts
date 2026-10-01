@@ -283,30 +283,52 @@ export function sanctuaryRemovals(
 
 export type RejectKind = "out of range" | "moving" | "no line of sight";
 
-/** SPELL_CAST_FAILED reason texts per kind, every client locale the corpus
- *  carries (60-file scan, 2026-09-26). */
+/** SPELL_CAST_FAILED reason texts per kind, for every client locale the
+ *  corpus carries. The texts are the client's own strings (wago.tools
+ *  GlobalStrings 12.1.0.69587: SPELL_FAILED_OUT_OF_RANGE / _MOVING /
+ *  _LINE_OF_SIGHT), not translations. Forward check (Curated-List rule,
+ *  triage position F-J1, 2026-10-01): every SPELL_CAST_FAILED reason on the
+ *  605-file capture slice — before, the fr / ru / es / zh-TW clients' rejects
+ *  were unmapped (out of range 255, moving 226, no line of sight 102 presses)
+ *  and never formed a `[REJECTED]` run; after, 0. it-IT has official strings
+ *  too but no press in that slice, so it is not listed. The German "Die Sicht
+ *  auf Euer Ziel ist behindert." is SPELL_FAILED_VISION_OBSCURED (Smoke Bomb),
+ *  not a pillar — 0 presses in the slice; left in place, open in the triage
+ *  file (position Needs E1). */
 export const REJECT_REASONS: Readonly<Record<RejectKind, readonly string[]>> = {
   "out of range": [
     "Out of range",
     "超出范围",
+    "超出範圍",
     "목표가 사정거리를 벗어났습니다.",
     "Außer Reichweite",
     "Fora de alcance",
+    "Fuera de alcance",
+    "Hors de portée",
+    "Вне зоны действия.",
   ],
   moving: [
     "Can't do that while moving",
     "不能在移动中实施该动作",
+    "不能在移動中執行該動作",
     "이동 중에는 사용할 수 없습니다.",
     "Das ist während einer Bewegung nicht möglich.",
     "Você não pode fazer isso em movimento",
+    "No puedes hacer eso en movimiento",
+    "Impossible en cours de déplacement",
+    "Невозможно делать это на ходу.",
   ],
   "no line of sight": [
     "Target not in line of sight",
     "目标不在视野中",
+    "目標不在視野中",
     "대상이 시야에 없습니다.",
     "Ziel ist nicht im Sichtfeld.",
     "Die Sicht auf Euer Ziel ist behindert.",
     "Alvo fora do campo de visão.",
+    "No puedes ver al objetivo",
+    "Cible hors du champ de vision",
+    "Цель вне поля зрения.",
   ],
 };
 const KIND_OF = new Map<string, RejectKind>(

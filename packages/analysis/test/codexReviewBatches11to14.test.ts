@@ -371,6 +371,42 @@ describe("batch 13 — outcome lines need their own evidence (codex P2)", () => 
     ];
     expect(ownerRejectRuns(other, "Player-O")[0]?.count).toBe(3);
   });
+
+  it("reads the fr / ru / es / zh-TW clients' texts (triage position F-J1)", () => {
+    const f = (s: number, reason: string) => ({
+      tSeconds: s,
+      unitGuid: "Player-O",
+      spellId: 6789,
+      spellName: "Mortal Coil",
+      reason,
+    });
+    const kindOf = (reason: string) =>
+      ownerRejectRuns(
+        [f(10, reason), f(10.5, reason), f(11, reason)],
+        "Player-O",
+      )[0]?.kind;
+    for (const r of [
+      "超出範圍",
+      "Fuera de alcance",
+      "Hors de portée",
+      "Вне зоны действия.",
+    ])
+      expect(kindOf(r)).toBe("out of range");
+    for (const r of [
+      "不能在移動中執行該動作",
+      "No puedes hacer eso en movimiento",
+      "Impossible en cours de déplacement",
+      "Невозможно делать это на ходу.",
+    ])
+      expect(kindOf(r)).toBe("moving");
+    for (const r of [
+      "目標不在視野中",
+      "No puedes ver al objetivo",
+      "Cible hors du champ de vision",
+      "Цель вне поля зрения.",
+    ])
+      expect(kindOf(r)).toBe("no line of sight");
+  });
 });
 
 describe("batch 14 — [RES] kick / Death Grip follow the shared cooldown predicate (codex P2)", () => {

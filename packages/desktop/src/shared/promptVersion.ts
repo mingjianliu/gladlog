@@ -387,5 +387,9 @@
  *  with HP_SAMPLE_RADIUS_MS; the missed-sync-window legend calls
  *  facts.cellKey a game mode, not a rating tier. 605 files: 4,266 trail lines
  *  reworded, 0 values, no id changes.
+ *  v218 (2026-10-01, triage position F-J1): [REJECTED] runs recognise the
+ *  zh-TW, es-MX, fr-FR and ru-RU client strings for out of range / moving /
+ *  line of sight (official GlobalStrings). 605 files: +69 lines in 31 owner
+ *  files, no id changes.
  */
-export const PROMPT_VERSION = 217;
+export const PROMPT_VERSION = 218;
