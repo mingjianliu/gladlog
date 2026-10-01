@@ -24,6 +24,10 @@ const friend = (over: Partial<KickPriorityFriend> = {}): KickPriorityFriend => (
   inRange: true,
   feasible: true,
   reachableBeforeLanding: true,
+  rootedThroughCast: false,
+  rangeYd: 5,
+  reachYd: 12,
+  kickReadyForS: 20.4,
   ...over,
 });
 const point = (over: Partial<IKickPriorityPoint> = {}): IKickPriorityPoint => ({
@@ -152,3 +156,48 @@ describe("owner card: othersFeasible needs the landing predicate too (codex revi
     expect(ev[0]!.facts.othersFeasible).toBe("none");
   });
 });
+
+describe("the detector's span, the kick's range and reach, how long it had been back (triage kick-priority F-P1 / F-P3 / F-P5)", () => {
+  it("owner form: windowFrom / windowTo on the render grid, kickRangeYd, reachYd for a melee kick, kickReadyForS", () => {
+    const f = kickPriorityMissedEvents([point({ windowFromS: 187.95, windowToS: 360.4 })], owner, probes)[0]!.facts;
+    expect(f).toMatchObject({ windowFrom: "3:07", windowTo: "6:00", kickRangeYd: "5", reachYd: "12", kickReadyForS: "20.4" });
+  });
+  it("a ranged kick has no reachYd; a never-used kick has no kickReadyForS", () => {
+    const f = kickPriorityMissedEvents(
+      [point({ friends: [friend({ kickSpellName: "Counter Shot", rangeYd: 40, reachYd: null, kickReadyForS: null, neverObserved: true })] })],
+      owner,
+      probes,
+    )[0]!.facts;
+    expect(f.kickRangeYd).toBe("40");
+    expect(f.kickNeverUsed).toBe("yes");
+    expect("reachYd" in f).toBe(false);
+    expect("kickReadyForS" in f).toBe(false);
+  });
+  it("no fact value carries the facts separator", () => {
+    const f = kickPriorityMissedEvents([point()], owner, probes)[0]!.facts;
+    for (const v of Object.values(f)) expect(v).not.toContain(", ");
+  });
+  it("team form carries the same span", () => {
+    const mate = friend({ id: "P2", name: "Mage2", distanceYd: 31 });
+    const f = kickPriorityTeamEvents([point({ windowFromS: 107.46, windowToS: 171.25, friends: [friend({ cdRemainingS: 6, feasible: false }), mate] })], owner, probes)[0]!.facts;
+    expect(f).toMatchObject({ windowFrom: "1:47", windowTo: "2:51" });
+  });
+});
+
+describe("team form: a rooted melee kicker (triage kick-priority F-P2)", () => {
+  const mate = friend({ id: "P2", name: "Mage2", distanceYd: 31 });
+  const why = (over: Partial<KickPriorityFriend>) =>
+    kickPriorityTeamEvents([point({ friends: [friend({ feasible: false, ...over }), mate] })], owner, probes)[0]!.facts.ownerWhy;
+  it("ready, castable, rooted for the whole cast → named as rooted, with the distance", () => {
+    expect(why({ inRange: false, rootedThroughCast: true, distanceYd: 8.41 })).toBe("rooted through the cast (8 yd)");
+  });
+  it("out of range without the root stays out of range; cooldown and lock outrank the root", () => {
+    expect(why({ inRange: false, distanceYd: 20 })).toBe("out of range (20 yd)");
+    expect(why({ inRange: false, rootedThroughCast: true, cdRemainingS: 6 })).toBe("on cooldown (6s)");
+    expect(why({ inRange: false, rootedThroughCast: true, locked: true })).toBe("locked");
+  });
+  it("a rooted owner whose range is unknown is not relabelled", () => {
+    expect(why({ inRange: null, rootedThroughCast: true })).toBe("unknown");
+  });
+});
+

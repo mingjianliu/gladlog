@@ -37,6 +37,7 @@ import { gridHpPct, isHealerSpec } from "../../utils/cooldowns";
 import {
   interruptCooldownRemainingMs,
   interruptForUnit,
+  interruptReadySinceMs,
 } from "../../utils/enemyInterrupts";
 import {
   distanceBetween,
@@ -44,7 +45,7 @@ import {
 } from "../../utils/losAnalysis";
 import { computeOffensiveWindows } from "../../utils/offensiveWindows";
 import { LOS_SWEEP_GAP_MS } from "../../utils/positionSampling";
-import { toRenderSecond } from "../../utils/renderGrid";
+import { fmtTime, toRenderSecond } from "../../utils/renderGrid";
 import {
   canReachTargetAt,
   rootIntervalsOf,
@@ -141,6 +142,22 @@ export interface KickPriorityFriend {
   /** Completed casts: still castable and in reach inside the ACTUAL cast
    * (start → landing), not only the nominal one. Accusations need both. */
   reachableBeforeLanding: boolean;
+  /** A melee kicker who was castable but rooted for the whole cast: the run
+   * budget is zero, so the reach collapsed to kick range + slack (triage
+   * kick-priority F-P2). */
+  rootedThroughCast: boolean;
+  /** This kicker's interrupt range (official + their range talents); null
+   * when unknown. */
+  rangeYd: number | null;
+  /** Melee kicks only: the reach the feasibility tests used — the run
+   * envelope from the cast start (the smaller of the nominal-cast and the
+   * before-landing one when both ran). null for a ranged kick or without a
+   * position sample (triage kick-priority F-P3). */
+  reachYd: number | null;
+  /** Seconds the kick had been off cooldown at the cast start; null when it
+   * was never observed before the cast, or not ready (triage kick-priority
+   * F-P5, ruling A′3). */
+  kickReadyForS: number | null;
 }
 
 export interface IKickPriorityPoint {
@@ -497,6 +514,13 @@ export function kickPriorityDecisionPoints(
             e.logLine.event === "SPELL_CAST_SUCCESS" &&
             e.logLine.timestamp < sMs,
         );
+        // how long the kick had been back (F-P5): the cooldown predicate's
+        // own ready instant, so it cannot disagree with `cdRemainingS`
+        const readySinceMs = neverObserved
+          ? null
+          : interruptReadySinceMs(f as never, kit.spellId, sMs);
+        const kickReadyForS =
+          readySinceMs === null ? null : (sMs - readySinceMs) / 1000;
         // an unconfirmed kit (tree-availability fallback, pet) is
         // observed-or-nothing; a confirmed one (baseline / talent in the log)
         // needs no prior cast — codex round-1: the prior-cast rule was
@@ -522,6 +546,8 @@ export function kickPriorityDecisionPoints(
         const range = spellRangeForCaster(f as never, kit.spellId);
         let inRange: boolean | null = null;
         let reachableBeforeLanding = true;
+        let rootedThroughCast = false;
+        let reachYd: number | null = null;
         if (
           pos &&
           baseRange != null &&
@@ -531,6 +557,10 @@ export function kickPriorityDecisionPoints(
           // melee is a property of the spell, not of the talented number: a
           // talented melee kick still needs no line of sight
           const melee = baseRange <= MELEE_RANGE_YD;
+          // castable (not locked) with no runnable stretch = rooted through
+          // the cast: `runBlocked` is cannot-cast ∪ rooted
+          rootedThroughCast = melee && !locked && runS <= 0;
+          if (melee) reachYd = meleeKickReachYd(runS, range, baseRange);
           // run budget = the runnable stretch (castable and not rooted), not
           // the cast length: a friendly stunned for 1.5 s of a 2 s cast can
           // run for 0.5 s, a rooted one not at all
@@ -549,6 +579,12 @@ export function kickPriorityDecisionPoints(
           if (outcome === "completed" && endMs < nominalEndMs) {
             const freeB = longestOutside(cannotCastOf(f), sMs, endMs);
             const runB = longestOutside(runBlocked, sMs, endMs);
+            // the number both accusation tests passed is the smaller reach
+            if (melee)
+              reachYd = Math.min(
+                reachYd ?? Infinity,
+                meleeKickReachYd(runB, range, baseRange),
+              );
             reachableBeforeLanding =
               freeB >= Math.min(KICK_MIN_FREE_S, durationS) &&
               true ===
@@ -577,6 +613,10 @@ export function kickPriorityDecisionPoints(
           // round is not evidence of a kick at all. Observed-or-nothing.
           feasible: kitOk && cdRemainingS <= 0 && !locked && inRange === true,
           reachableBeforeLanding,
+          rootedThroughCast,
+          rangeYd: range ?? null,
+          reachYd,
+          kickReadyForS,
         });
       }
 
@@ -681,10 +721,21 @@ export function kickPriorityMissedEvents(
         targetHpPct: String(p.targetHpPct),
         healK: k(p.healAmount),
         healedWhom: healedWhom(p),
+        // the detector's span (F-P1): the whole defenseless span of the
+        // target, which the rendered KILL WINDOW lines (the bursts) sit inside
+        windowFrom: fmtTime(p.windowFromS),
+        windowTo: fmtTime(p.windowToS),
         kick: me.kickSpellName,
+        ...(me.rangeYd === null ? {} : { kickRangeYd: String(me.rangeYd) }),
         kickNeverUsed: me.neverObserved ? "yes" : "no",
+        ...(me.kickReadyForS === null
+          ? {}
+          : { kickReadyForS: fmt(me.kickReadyForS) }),
         distanceYd:
           me.distanceYd == null ? "?" : String(Math.round(me.distanceYd)),
+        ...(me.reachYd === null
+          ? {}
+          : { reachYd: String(Math.round(me.reachYd)) }),
         othersFeasible: others.length ? others.join("; ") : "none",
         refNCompleted: String(ref.nCompleted),
         refNInterrupted: String(ref.nInterrupted),
@@ -729,7 +780,12 @@ export function kickPriorityTeamEvents(
         : me.locked
           ? "locked"
           : me.inRange === false
-            ? `out of range (${me.distanceYd == null ? "?" : Math.round(me.distanceYd)} yd)`
+            ? // F-P2: a castable melee kicker rooted for the whole cast is not
+              // "out of range" by the same rule as the teammates listed at a
+              // larger distance — say what held them
+              me.rootedThroughCast
+              ? `rooted through the cast (${me.distanceYd == null ? "?" : Math.round(me.distanceYd)} yd)`
+              : `out of range (${me.distanceYd == null ? "?" : Math.round(me.distanceYd)} yd)`
             : "unknown";
     out.push({
       id: `kick-priority-team:${owner.id}:${Math.round(p.castStartS)}`,
@@ -747,6 +803,8 @@ export function kickPriorityTeamEvents(
         targetHpPct: String(p.targetHpPct),
         healK: k(p.healAmount),
         healedWhom: healedWhom(p),
+        windowFrom: fmtTime(p.windowFromS),
+        windowTo: fmtTime(p.windowToS),
         ownerWhy,
         teammates: mates
           // name + distance only (user ruling 2026-09-15): the interrupt's

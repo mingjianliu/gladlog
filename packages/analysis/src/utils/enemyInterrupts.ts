@@ -110,18 +110,13 @@ export function interruptCooldownSeconds(
   return (unit && unitCooldownOf(unit, spellId)?.cooldownSeconds) ?? base;
 }
 
-/** Exact ms of cooldown left on `spellId` for this unit at `atMs` (0 = ready),
- * from its successful casts (own or pet) and the unit's talent-resolved
- * cooldown and charge cap. The one predicate behind both the timeline's
- * whole-second display and kick-priority's feasibility. Exact — no rendered-
- * second slack: 0.4 s left is NOT ready. */
-export function interruptCooldownRemainingMs(
+/** The unit's successful casts of `spellId` (own or pet) up to `atMs`, in
+ * time order — the cast list both cooldown readers below work from. */
+function interruptCastsUpTo(
   unit: ICombatUnit,
   spellId: string,
   atMs: number,
-): number {
-  const cooldownSeconds = interruptCooldownSeconds(spellId, unit) ?? 15;
-  const charges = unitCooldownOf(unit, spellId)?.charges ?? 1;
+): number[] {
   const castMs: number[] = [];
   for (const e of [
     ...unit.spellCastEvents,
@@ -131,21 +126,21 @@ export function interruptCooldownRemainingMs(
     if (e.spellId !== spellId) continue;
     if (e.logLine.timestamp <= atMs) castMs.push(e.logLine.timestamp);
   }
-  if (!castMs.length) return 0;
-  if (charges > 1) {
-    // the shared sequential-recharge simulation, in seconds from atMs
-    const st = chargeStateAt(
-      castMs.map((ms) => (ms - atMs) / 1000),
-      cooldownSeconds,
-      charges,
-      0,
-    );
-    return st.charges > 0 ? 0 : Math.max(0, st.nextRecharge * 1000);
-  }
-  const lastCastMs = Math.max(...castMs);
-  // event reductions the kicker holds (Storm Conduit: every Lightning Bolt /
-  // Chain Lightning −1 s on Wind Shear), only those that happened by atMs —
-  // the ledger's rule (data/talentScriptedCooldowns)
+  return castMs.sort((a, b) => a - b);
+}
+
+/** When a single-charge interrupt cast at `lastCastMs` comes back, as known
+ * at `atMs`: last cast + cooldown, minus the event reductions the kicker
+ * holds (Storm Conduit: every Lightning Bolt / Chain Lightning −1 s on Wind
+ * Shear), only those that happened by `atMs` — the ledger's rule
+ * (data/talentScriptedCooldowns). */
+function singleChargeReadyMs(
+  unit: ICombatUnit,
+  spellId: string,
+  lastCastMs: number,
+  atMs: number,
+  cooldownSeconds: number,
+): number {
   const sets = playerTalentIdSets(unit);
   const reductions = eventReductionsFor(
     spellId,
@@ -171,7 +166,84 @@ export function interruptCooldownRemainingMs(
       readyMs = Math.max(e.t, readyMs - e.ms);
     }
   }
+  return readyMs;
+}
+
+/** Exact ms of cooldown left on `spellId` for this unit at `atMs` (0 = ready),
+ * from its successful casts (own or pet) and the unit's talent-resolved
+ * cooldown and charge cap. The one predicate behind both the timeline's
+ * whole-second display and kick-priority's feasibility. Exact — no rendered-
+ * second slack: 0.4 s left is NOT ready. */
+export function interruptCooldownRemainingMs(
+  unit: ICombatUnit,
+  spellId: string,
+  atMs: number,
+): number {
+  const cooldownSeconds = interruptCooldownSeconds(spellId, unit) ?? 15;
+  const charges = unitCooldownOf(unit, spellId)?.charges ?? 1;
+  const castMs = interruptCastsUpTo(unit, spellId, atMs);
+  if (!castMs.length) return 0;
+  if (charges > 1) {
+    // the shared sequential-recharge simulation, in seconds from atMs
+    const st = chargeStateAt(
+      castMs.map((ms) => (ms - atMs) / 1000),
+      cooldownSeconds,
+      charges,
+      0,
+    );
+    return st.charges > 0 ? 0 : Math.max(0, st.nextRecharge * 1000);
+  }
+  const readyMs = singleChargeReadyMs(
+    unit,
+    spellId,
+    castMs[castMs.length - 1]!,
+    atMs,
+    cooldownSeconds,
+  );
   return Math.max(0, readyMs - atMs);
+}
+
+/**
+ * Since when the interrupt had been ready at `atMs`: the last instant
+ * `<= atMs` at which `interruptCooldownRemainingMs` reached 0, or null when
+ * that cannot be said — it is not ready at `atMs`, the unit never cast it
+ * before `atMs`, or it is a multi-charge interrupt that never ran out of
+ * charges (ready since before its first logged cast). Triage 2026-09-29,
+ * kick-priority F-P5 (ruling A′3). One predicate with the cooldown above:
+ * the same cast list, cooldown, charge simulation and event reductions, so
+ * the fact can never contradict the feasibility test.
+ */
+export function interruptReadySinceMs(
+  unit: ICombatUnit,
+  spellId: string,
+  atMs: number,
+): number | null {
+  if (interruptCooldownRemainingMs(unit, spellId, atMs) > 0) return null;
+  const castMs = interruptCastsUpTo(unit, spellId, atMs);
+  if (!castMs.length) return null;
+  const cooldownSeconds = interruptCooldownSeconds(spellId, unit) ?? 15;
+  const charges = unitCooldownOf(unit, spellId)?.charges ?? 1;
+  if (charges > 1) {
+    // the last cast that left nothing in hand, and when a charge came back
+    let since: number | null = null;
+    for (const c of castMs) {
+      const st = chargeStateAt(
+        castMs.map((ms) => (ms - c) / 1000),
+        cooldownSeconds,
+        charges,
+        0,
+      );
+      if (st.charges === 0) since = c + st.nextRecharge * 1000;
+    }
+    return since !== null && since <= atMs ? since : null;
+  }
+  return singleChargeReadyMs(
+    unit,
+    spellId,
+    castMs[castMs.length - 1]!,
+    atMs,
+    cooldownSeconds,
+  );
 }
 
 /**

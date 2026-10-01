@@ -146,6 +146,7 @@
     "test/healingVerdicts.test.ts",
     "test/immunityTables.test.ts",
     "test/incomingPressure.test.ts",
+    "test/interruptReadySince.test.ts",
     "test/kickLockout.test.ts",
     "test/killAttempts.test.ts",
     "test/matchNarrative.arc.test.ts",

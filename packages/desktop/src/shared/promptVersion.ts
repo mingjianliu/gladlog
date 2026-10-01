@@ -538,5 +538,11 @@
  *  stunned — or the press that ended the stun — only cooldowns usable while
  *  stunned; a [CC ON TEAM] instance ended by the unit's own immunity press
  *  reads `| <spell> broke this CC after Ns`.
+ *  v246 (2026-10-01, triage kick-priority F-P1 / F-P2 / F-P3 / F-P5, rulings
+ *  A57 = A, A'3 = A): kick-priority facts state the defenseless span the
+ *  detector used (`windowFrom` / `windowTo`), the kick's range and the melee
+ *  reach tested (`kickRangeYd`, `reachYd`), how long the kick had been back
+ *  (`kickReadyForS`), and `rooted through the cast` instead of `out of range`
+ *  for a rooted owner; legends reworded. Detector unchanged.
  */
-export const PROMPT_VERSION = 245;
+export const PROMPT_VERSION = 246;
