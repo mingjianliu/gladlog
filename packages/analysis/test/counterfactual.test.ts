@@ -322,6 +322,37 @@ describe("computeUnusedSelfCounterfactuals(窄门)", () => {
     expect(hits[0].source).toBe("unused-self");
   });
 
+  test("a row owned on the spec baseline alone is never priced (Fable review of F-W6, round 8; ruling P-W6)", () => {
+    // the decisive load above, with the same Barkskin row flagged baselineOnly
+    const victim = mkVictim(
+      "v8c",
+      [
+        { atS: 55, amount: 700_000, school: "0x1" },
+        { atS: 56, amount: 10_000, school: "0x20" },
+      ],
+      [],
+      [
+        { atS: 50, hp: 100_000, maxHp: 200_000 },
+        { atS: 60, hp: 100, maxHp: 200_000 },
+      ],
+    );
+    const run = (baselineOnly: boolean) =>
+      computeUnusedSelfCounterfactuals(
+        victim,
+        [
+          {
+            ...neverUsedCd("22812", "Barkskin"),
+            ...(baselineOnly ? { baselineOnly } : {}),
+          },
+        ],
+        noLockoutCC,
+        combatOf(),
+        60,
+      );
+    expect(run(false)).toHaveLength(1);
+    expect(run(true)).toEqual([]);
+  });
+
   test("walls whose coverage is unmodelled stay silent (GI 110959, Retribution DP 403876 — codex 2026-09-26)", () => {
     // The same load that makes a 20 % Barkskin decisive would make a 60 %
     // Greater Invisibility decisive under the full-window discount — but GI

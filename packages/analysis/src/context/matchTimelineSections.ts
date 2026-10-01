@@ -15,7 +15,7 @@ import {
   cdNeverSpent,
   cdReadyInTimeAt,
   DEFENSIVE_TAGS,
-  forbearanceBlocks,
+  forbearanceStopsPress,
   getUnitHpAtTimestamp,
   gridHpMinInWindow,
   HP_SAMPLE_RADIUS_MS,
@@ -24,7 +24,6 @@ import {
   isHealerSpec,
   isHpTroughWorthPrinting,
   SELF_CAST_NOOP_EXTERNAL_IDS,
-  selfForbearanceActiveAt,
   specToBenchmarkKey,
   specToString,
   usableWhileStunned,
@@ -36,6 +35,7 @@ import {
   IMitigationAuditRow,
 } from "../utils/counterfactual";
 import {
+  enemyTargetReaches,
   wasLockedOutByStunOnly,
   wasLockedOutThroughWindow,
 } from "../utils/deathOutcomeAnalysis";
@@ -735,6 +735,10 @@ export function emitFriendlyDeathEntries<S>(params: {
     spec: string;
     cds: IMajorCooldownInfo[];
   }>;
+  /** Enemy players: a defensive pressed ON AN ENEMY (Touch of Karma) is
+   * "Unused" only with a living enemy in reach (`enemyTargetReaches`).
+   * Omitted → none in reach, so such a defensive is never listed. */
+  enemies?: readonly ICombatUnit[];
   matchStartMs: number;
   pid: (name: string) => string;
   playerIdMap?: Map<string, number>;
@@ -782,6 +786,7 @@ export function emitFriendlyDeathEntries<S>(params: {
     owner,
     ownerCDs,
     teammateCDs,
+    enemies = [],
     matchStartMs,
     pid,
     playerIdMap,
@@ -833,15 +838,15 @@ export function emitFriendlyDeathEntries<S>(params: {
       const isLockedOutStunOnly = summary
         ? wasLockedOutByStunOnly(summary, death.atSeconds)
         : false;
-      const forbearance = selfForbearanceActiveAt(
-        dyingUnit,
-        Array.from(unitsByName.values()),
-        death.atSeconds,
-        matchStartMs,
-      );
+      const allUnits = Array.from(unitsByName.values());
 
       const readyAtDeath = allPlayerCDs
         .filter((cd) => cd.tag === "Defensive")
+        // a row owned on the spec baseline alone is cd-hoarded's only (ruling
+        // P-W6): this list has no school gate for a button never shown
+        // (Fable review of F-W6, round 9: an Unholy DK killed by pure
+        // physical damage read "Unused: Anti-Magic Shell")
+        .filter((cd) => !cd.baselineOnly)
         // Single-source predicate (BACKLOG #18 Minor #3): availability at the
         // death instant shares one decision with candidateFindings'
         // death-unused-defensive / external-unused, and no longer goes through
@@ -866,8 +871,18 @@ export function emitFriendlyDeathEntries<S>(params: {
         // Forbearance: a paladin can't press Spellwarding/BoP/LoH/Divine Shield if it self-applied
         // Forbearance in the last 30s — don't list those as "unused" (false accusation).
         // Light's Revocation holders keep Divine Shield (forbearanceBlocks).
+        // One predicate with cd-hoarded and the kill sequence
+        // (`forbearanceStopsPress`, recipient = the dying unit itself).
         .filter(
-          (cd) => !(forbearance && forbearanceBlocks(dyingUnit, cd.spellId)),
+          (cd) =>
+            !forbearanceStopsPress(
+              dyingUnit,
+              cd.spellId,
+              dyingUnit,
+              allUnits,
+              death.atSeconds,
+              matchStartMs,
+            ),
         )
         // Damage-redirect externals are a mechanical no-op on yourself (Blessing
         // of Sacrifice sends 30% of the damage TO the caster), so listing one as
@@ -877,6 +892,18 @@ export function emitFriendlyDeathEntries<S>(params: {
         // already guards the "cheaper available" advice in cooldowns.ts; both
         // sides import it rather than each keeping a list.
         .filter((cd) => !SELF_CAST_NOOP_EXTERNAL_IDS.has(cd.spellId))
+        // A defensive pressed ON AN ENEMY (Touch of Karma) only with a living
+        // enemy in its reach — cd-hoarded's and the kill sequence's predicate
+        // (codex review of F-W6, round 7: a Windwalker with no Karma cast
+        // died with the only enemy 40 yd away, "Unused: Touch of Karma")
+        .filter((cd) =>
+          enemyTargetReaches(
+            cd.spellId,
+            dyingUnit,
+            enemies as ICombatUnit[],
+            matchStartMs + death.atSeconds * 1000,
+          ),
+        )
         .map((cd) => cd.spellName);
 
       if (readyAtDeath.length > 0) {

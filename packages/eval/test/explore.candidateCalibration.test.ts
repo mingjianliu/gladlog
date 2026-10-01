@@ -263,6 +263,10 @@ function makeCtx(overrides: Partial<RoundContext> = {}): RoundContext {
     rawStreams: { available: false, manaSamples: [], castFailed: [] },
     ownerResolvable: true,
     ...overrides,
+    // cd-hoarded reads the ledger with the baseline rows; a test that hands
+    // in `ownerCds` means that one ledger for both
+    ownerCdsWithBaseline:
+      overrides.ownerCdsWithBaseline ?? overrides.ownerCds ?? [],
   };
 }
 

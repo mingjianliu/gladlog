@@ -7,6 +7,7 @@ import {
 } from "@gladlog/parser-compat";
 
 import { isSurvivalWall } from "../data/abilityProfile";
+import baselineDefensivesGenerated from "../data/baselineDefensivesGenerated.json";
 import CD_RECAST_FLOORS from "../data/cdRecastFloorGenerated.json";
 import { classMetadata } from "../data/classSpells";
 import CONDITIONAL_COOLDOWNS from "../data/conditionalCooldownsGenerated.json";
@@ -209,6 +210,56 @@ export function cdRoleTag(spellId: string): string | undefined {
 export const RESPONSE_ONLY_DEFENSIVE_IDS: ReadonlySet<string> = new Set([
   "5384", // Feign Death — Hunter
 ]);
+
+/**
+ * Catalog defensives a spec owns WITHOUT a talent: spec id → spell ids
+ * (triage 2026-09-29 cd-hoarded F-W6, user ruling 2026-09-30 C4). The ledger's
+ * baseline branch kept an ability that is in no talent tree only on a
+ * PvP-talent pick or a cast in THIS round, so a round where the player never
+ * pressed Divine Shield lost it from the loadout, `[UNUSED]`, [RES] `rdy` and
+ * cd-hoarded's ready set (06bb9860 round 5, cast in rounds 1–4).
+ *
+ * Official, not hand-typed: `data/baselineDefensivesGenerated.json`
+ * (genBaselineDefensives.ts — catalog Defensive, cooldown ≥ MIN_CD_SECONDS,
+ * in no talent tree of the spec, and DB2 SpecializationSpells for the spec or
+ * SkillLineAbility on the class line with AcquireMethod ≠ 3). Response-only
+ * buttons are left out: Feign Death keeps its own aura proof and is never
+ * named as held. Not covered (DB2 does not prove them this way; none is
+ * guessed in): Lay on Hands 471195, Fortifying Brew 115203, Blessing of
+ * Spellwarding 204018, Anti-Magic Shell 410358. Registered in
+ * curatedIdRegistry.
+ */
+export const BASELINE_DEFENSIVE_BY_SPEC: Readonly<
+  Record<string, readonly string[]>
+> = Object.fromEntries(
+  Object.entries(
+    (
+      baselineDefensivesGenerated as {
+        bySpec: Record<string, Array<{ id: string }>>;
+      }
+    ).bySpec,
+  ).map(([spec, rows]) => [
+    spec,
+    rows.map((r) => r.id).filter((id) => !RESPONSE_ONLY_DEFENSIVE_IDS.has(id)),
+  ]),
+);
+
+/**
+ * Defensives pressed ON AN ENEMY — DB2 ImplicitTarget 6, UNIT_TARGET_ENEMY,
+ * on a real effect row (Touch of Karma): one is "ready" only with a living
+ * enemy in reach (`enemyTargetReaches`). Official, from
+ * `baselineDefensivesGenerated.json`'s `enemyTargetDefensives`
+ * (genBaselineDefensives.ts, both directions asserted). Codex review of
+ * cd-hoarded F-W6, round 6: a rooted Windwalker was accused of holding
+ * Karma with the only enemy 40 yd away.
+ */
+export const ENEMY_TARGET_DEFENSIVE_IDS: ReadonlySet<string> = new Set(
+  (
+    baselineDefensivesGenerated as {
+      enemyTargetDefensives: Array<{ id: string }>;
+    }
+  ).enemyTargetDefensives.map((r) => r.id),
+);
 
 /**
  * Ally effects the game grants only with a PvP talent: cast id → talent.
@@ -488,6 +539,28 @@ export function forbearanceBlocks(unit: ICombatUnit, spellId: string): boolean {
   return !playerTalentIdSets(unit).talentedSpellIds?.has(
     LIGHTS_REVOCATION_TALENT_ID,
   );
+}
+
+/** Would Forbearance stop `holder` pressing `spellId` for `recipient` at
+ * `atSeconds`? Forbearance sits on the unit that RECEIVES the button — the
+ * holder for Divine Shield, the target for Blessing of Protection / Lay on
+ * Hands / Spellwarding — and Light's Revocation keeps Divine Shield
+ * (`forbearanceBlocks`). One predicate for every reader that names a save as
+ * pressable: cd-hoarded's ready set, the kill sequence's `[DEFENSIVE
+ * AVAILABLE]` and the `[DEATH]` "(Unused: …)" list (recipient = the dying
+ * unit). Review of cd-hoarded F-W6, 2026-10-03 (the `[DEATH]` list since
+ * Fable round 9). */
+export function forbearanceStopsPress(
+  holder: ICombatUnit,
+  spellId: string,
+  recipient: ICombatUnit,
+  allUnits: ICombatUnit[],
+  atSeconds: number,
+  matchStartMs: number,
+): boolean {
+  if (!forbearanceBlocks(holder, spellId)) return false;
+  const target = spellId === DIVINE_SHIELD_SPELL_ID ? holder : recipient;
+  return selfForbearanceActiveAt(target, allUnits, atSeconds, matchStartMs);
 }
 
 export function selfForbearanceActiveAt(
@@ -1296,6 +1369,27 @@ export interface IMajorCooldownInfo {
    * accusation may name it (cd-waste "never used", cd-hoarded "was ready").
    * Read from the generated save roster. */
   responseOnly?: boolean;
+  /** The ledger holds this row on the spec's baseline ownership alone
+   * (`BASELINE_DEFENSIVE_BY_SPEC`, triage cd-hoarded F-W6): the player owns
+   * the button but neither pressed it, talented it nor picked it this round.
+   * User ruling 2026-10-01 (P-W6): such a row is in the ledger — loadout,
+   * [RES], cd-hoarded's ready set — but only cd-hoarded accuses with it:
+   * cd-waste never names it ("never pressed X all match" was 423 new
+   * accusations on the 605-file capture, cd-waste +44 %), the burst-window
+   * engine does not count it as an answer (slow-defensive-response
+   * feasibility stays on evidence-owned cooldowns), and neither the kill
+   * sequence's "available but unused", POSITIONING's "a defensive CD was
+   * available" nor the "cheaper available:" note reads it (codex review 2026-10-03: those lines have no CC /
+   * Forbearance gate of their own for a button never shown). Since the Fable
+   * round 8 review the row reaches only callers that ask for it
+   * (`extractMajorCooldowns(…, { withBaselineOnly: true })`): the ledger in
+   * buildMatchContext — rendered as the loadout, [RES] and [UNUSED], and
+   * read by the low-pressure "correctly HELD" NOTE and the SPEC BASELINES
+   * CD reference, all statements of what the player held — and cd-hoarded.
+   * Of that ledger's other consumers the decisive counterfactual and the
+   * [DEATH] "(Unused: …)" list skip it (Fable rounds 8 and 9: neither has
+   * cd-hoarded's school gate). */
+  baselineOnly?: boolean;
   /** GH #106 step 3: the EARLIEST this cooldown can be back after a use —
    *  set only for spells whose cooldown combat events shorten (corpus floor,
    *  `cdRecastFloorGenerated.json`). `cooldownSeconds` stays the latest: past
@@ -2698,7 +2792,25 @@ function selfBuffIntervalsOf(
   return byId;
 }
 
+/**
+ * The unit's cooldown ledger. A row owned on the spec baseline ALONE
+ * (`baselineOnly`, ruling P-W6) is returned only to a caller that asks for
+ * it — the ledger render (loadout / [RES] / [UNUSED]) and cd-hoarded. Every
+ * other reader gets the evidence-owned ledger it had before F-W6, so a new
+ * reader cannot start naming a never-shown button by accident (Fable review
+ * of F-W6, round 8: the decisive counterfactual, [CD PRIOR] and the crisis
+ * feasibility walls had each picked the rows up).
+ */
 export function extractMajorCooldowns(
+  unit: ICombatUnit,
+  combat: AtomicArenaCombat,
+  opts?: { withBaselineOnly?: boolean },
+): IMajorCooldownInfo[] {
+  const all = extractMajorCooldownsAll(unit, combat);
+  return opts?.withBaselineOnly ? all : all.filter((cd) => !cd.baselineOnly);
+}
+
+function extractMajorCooldownsAll(
   unit: ICombatUnit,
   combat: AtomicArenaCombat,
 ): IMajorCooldownInfo[] {
@@ -2782,8 +2894,13 @@ export function extractMajorCooldowns(
 
   // Keep only tagged spells with cooldown data >= MIN_CD_SECONDS that belong to the owner's spec
   const seen = new Set<string>();
-  const majorSpells = classData.abilities.filter((spell) => {
-    if (seen.has(spell.spellId)) return false;
+  const specBaseline = new Set(BASELINE_DEFENSIVE_BY_SPEC[unit.spec] ?? []);
+  /** `baselineOwned`: names already in the ledger on evidence — set on the
+   * second pass, where a spec-baseline row may enter without a cast. */
+  const qualifies = (
+    spell: (typeof classData.abilities)[number],
+    baselineOwned?: ReadonlySet<string>,
+  ): boolean => {
     if (replacedByTalent.has(spell.spellId)) return false;
     if (spell.tags.length === 0) return false;
     const effectData = spellEffectData[spell.spellId];
@@ -2825,16 +2942,36 @@ export function extractMajorCooldowns(
       // Accept if: (a) the player selected it as a PvP talent, OR (b) they actually cast it
       // this match (proof they have it regardless of talent source).
       // This filters out PvP talents the player didn't pick while keeping baseline abilities
-      // that were used. Baseline abilities that were never used and aren't PvP talents will be
-      // silently excluded — acceptable trade-off to avoid false "never used X" reports.
+      // that were used.
+      // F-W6 (user ruling 2026-09-30 C4): (c) the spec owns it as a baseline
+      // defensive per DB2 (`BASELINE_DEFENSIVE_BY_SPEC`) — unless the ledger
+      // already holds a row of the same NAME on evidence (a Death Knight with
+      // the 410358 Anti-Magic Shell row must not list the button twice).
       if (
         !pvpTalentIds.has(spell.spellId) &&
-        !activatedSpellIds.has(spell.spellId)
+        !activatedSpellIds.has(spell.spellId) &&
+        !(
+          baselineOwned &&
+          specBaseline.has(spell.spellId) &&
+          !baselineOwned.has(spell.name)
+        )
       ) {
         return false;
       }
     }
 
+    return true;
+  };
+  const evidencedNames = new Set(
+    classData.abilities.filter((spell) => qualifies(spell)).map((s) => s.name),
+  );
+  /** Rows the ledger holds on spec-baseline ownership ALONE (no cast, no
+   * talent, no PvP-talent pick this round) — flagged `baselineOnly`. */
+  const baselineOnlyIds = new Set<string>();
+  const majorSpells = classData.abilities.filter((spell) => {
+    if (seen.has(spell.spellId)) return false;
+    if (!qualifies(spell, evidencedNames)) return false;
+    if (!qualifies(spell)) baselineOnlyIds.add(spell.spellId);
     seen.add(spell.spellId);
     return true;
   });
@@ -3350,6 +3487,7 @@ export function extractMajorCooldowns(
         ) || RESPONSE_ONLY_DEFENSIVE_IDS.has(spell.spellId)
           ? { responseOnly: true }
           : {}),
+        ...(baselineOnlyIds.has(spell.spellId) ? { baselineOnly: true } : {}),
         ...(procOnly
           ? {}
           : (() => {
@@ -3475,6 +3613,9 @@ export function findCheaperDefensiveAlternatives(
         other.spellId !== cd.spellId &&
         other.tag === "Defensive" &&
         !other.isThroughput &&
+        // a row owned on the spec baseline alone is cd-hoarded's only
+        // (ruling P-W6) — never offered as the cheaper alternative
+        !other.baselineOnly &&
         !cdIsProcOnly(other) &&
         // Feign Death is a response only (ruling 2026-09-30 A9-3) and never
         // the button to coach — codex review of H15. Deliberately NOT every

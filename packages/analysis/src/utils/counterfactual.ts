@@ -492,6 +492,10 @@ export function computeUnusedSelfCounterfactuals(
 
   const hits: ICounterfactualHit[] = [];
   for (const cd of victimCds) {
+    // a row owned on the spec baseline alone is cd-hoarded's only (ruling
+    // P-W6); this line has no Forbearance gate for a button never shown
+    // (Fable review of F-W6, round 8)
+    if (cd.baselineOnly) continue;
     if (UNUSED_SELF_COVERAGE_UNMODELLED.has(cd.spellId)) continue;
     if (!cdReadyInTimeAt(cd, deathS)) continue;
     // GH #96 M3a: hypothetical ADDED protection: observed × p per component

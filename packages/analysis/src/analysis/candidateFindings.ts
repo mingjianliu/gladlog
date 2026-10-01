@@ -60,6 +60,7 @@ import {
   computePressureWindows,
   DEFENSIVE_TAGS,
   extractMajorCooldowns,
+  forbearanceStopsPress,
   type IAvailableWindow,
   type IMajorCooldownInfo,
   isAllyCastableDefensive,
@@ -77,7 +78,10 @@ import {
   USABLE_WHILE_CONFUSED_SPELL_IDS,
   USABLE_WHILE_FEARED_SPELL_IDS,
 } from "../utils/cooldowns";
-import { positionalWallReaches } from "../utils/deathOutcomeAnalysis";
+import {
+  enemyTargetReaches,
+  positionalWallReaches,
+} from "../utils/deathOutcomeAnalysis";
 import {
   annotateMissedPurgesWithKillWindows,
   canRemoveFrom,
@@ -321,7 +325,9 @@ export function cdWasteEvents(
      *  集合**被当成「你整局没交的保命技能」。治疗视角看不到(0/17),换 DPS 视角
      *  立刻暴露:**58/176(33%)**引用的是 Control CD(致盲 13、龙息 7、雷鸣怒吼 6、
      *  恐惧嚎叫 4、变形术 4、焦油陷阱 4、震荡波 3…)。tag 可选,缺省退回原判据。 */
-    Partial<Pick<IMajorCooldownInfo, "tag" | "responseOnly">>)[],
+    Partial<
+      Pick<IMajorCooldownInfo, "tag" | "responseOnly" | "baselineOnly">
+    >)[],
   healer: { id: string; name: string },
   minHpPct: number | null,
   /** Triage 2026-09-29 F-W1 (user ruling 2026-09-30, R7 = A): the owner's
@@ -346,6 +352,9 @@ export function cdWasteEvents(
     // 2026-09-25 「不指控」) is never "never used".
     if (cd.responseOnly) continue;
     if (CD_WASTE_EXCLUDED_IDS.has(cd.spellId)) continue;
+    // A row held on spec-baseline ownership alone (F-W6) is cd-hoarded's to
+    // name at a crisis, never cd-waste's (user ruling 2026-10-01, P-W6).
+    if (cd.baselineOnly) continue;
     // W2 (triage 2026-09-29): a press of the same DB2 charge pool spends it
     if (cdNeverSpent(cd) && !cd.isThroughput && isDefensive) {
       // Cost-norm guard (#25, 2026-08-14): a never-used major defensive is
@@ -527,9 +536,14 @@ export function extractCandidateFindings(
   // Hoisted out of the block below (2026-08-06) so team-play events (POSITION-001 /
   // COOLDOWN-001) can reuse the same computation instead of re-fetching it.
   let ownerCds: IMajorCooldownInfo[] = [];
+  // the spec-baseline rows (ruling P-W6) go to cd-hoarded only
+  let ownerCdsWithBaseline: IMajorCooldownInfo[] = [];
   if (owner) {
     try {
-      ownerCds = extractMajorCooldowns(owner, combat);
+      ownerCdsWithBaseline = extractMajorCooldowns(owner, combat, {
+        withBaselineOnly: true,
+      });
+      ownerCds = ownerCdsWithBaseline.filter((cd) => !cd.baselineOnly);
     } catch {
       ownerCds = [];
     }
@@ -586,7 +600,14 @@ export function extractCandidateFindings(
   if (owner) {
     try {
       out.push(
-        ...teamPlayEvents(combat, owner, units, ownerCds, out, rawStreams),
+        ...teamPlayEvents(
+          combat,
+          owner,
+          units,
+          ownerCdsWithBaseline,
+          out,
+          rawStreams,
+        ),
       );
     } catch {
       /* no analysis throw may take down the rest of the menu */
@@ -2701,7 +2722,9 @@ function teamPlayEvents(
   combat: any,
   owner: any,
   units: any[],
-  ownerCds: IMajorCooldownInfo[],
+  /** the ledger WITH the spec-baseline rows (ruling P-W6): cd-hoarded reads
+   * it; every other type here gets `ownerCds`, the rows filtered out */
+  ownerCdsWithBaseline: IMajorCooldownInfo[],
   priorEvents: Pick<CandidateEvent, "type" | "t">[],
   /** Intent guard (BACKLOG #26 Task 2): threaded down to `cdHoardedEvents`
    * (intent guard, `facts.attempted`) — absent/`available:false` degrades
@@ -2709,6 +2732,7 @@ function teamPlayEvents(
   rawStreams?: RawStreams,
 ): CandidateEvent[] {
   const out: CandidateEvent[] = [];
+  const ownerCds = ownerCdsWithBaseline.filter((cd) => !cd.baselineOnly);
   // (The `ccSummary` / `enemyTlShared` hoists that used to live here were the
   // retired slow-defensive-response's; its 2026-09-01 rewrite reads neither —
   // it runs `burstWindowDecisionPoints` on the combat directly. BACKLOG #18's
@@ -3052,7 +3076,7 @@ function teamPlayEvents(
       out.push(
         ...cdHoardedEvents(
           cdHoardSources,
-          ownerCds,
+          ownerCdsWithBaseline,
           owner,
           undefined,
           rawStreams,
@@ -3093,10 +3117,12 @@ function teamPlayEvents(
           // one already computed), for the stated-not-credited saves
           friends.map((f: any) => {
             let cds: IMajorCooldownInfo[] = [];
-            if (f.id === owner.id) cds = ownerCds;
+            if (f.id === owner.id) cds = ownerCdsWithBaseline;
             else
               try {
-                cds = extractMajorCooldowns(f, combat);
+                cds = extractMajorCooldowns(f, combat, {
+                  withBaselineOnly: true,
+                });
               } catch {
                 cds = [];
               }
@@ -3127,6 +3153,30 @@ function teamPlayEvents(
               )
             );
           },
+          // review of F-W6: a Forbearance-gated save under Forbearance is
+          // not ready — the [DEATH] "Unused:" gate's predicates
+          (spellId: string, tSec: number, crisisUnitId: string) => {
+            const all = Object.values(combat.units ?? {}) as ICombatUnit[];
+            const recipient =
+              all.find((u) => u.id === crisisUnitId) ?? (owner as ICombatUnit);
+            return forbearanceStopsPress(
+              owner,
+              spellId,
+              recipient,
+              all,
+              tSec,
+              combat.startTime,
+            );
+          },
+          // codex round 6 on F-W6: Touch of Karma needs a living enemy in
+          // reach; the kill sequence's predicate
+          (spellId: string, tSec: number) =>
+            enemyTargetReaches(
+              spellId,
+              owner,
+              enemies,
+              combat.startTime + tSec * 1000,
+            ),
         ),
       );
     } catch {

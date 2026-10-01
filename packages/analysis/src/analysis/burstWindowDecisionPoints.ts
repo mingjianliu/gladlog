@@ -1059,6 +1059,11 @@ export function burstWindowDecisionPoints(
     } catch {
       cds = [];
     }
+    // The default ledger has no baseline-only row (owned by the spec, never
+    // pressed / talented / picked this round — cd-hoarded F-W6): user ruling
+    // 2026-10-01 (P-W6) gives those rows to cd-hoarded alone, and
+    // feasibility that counted them would widen slow-defensive-response and
+    // drift from the reference table's population (cast evidence).
     const answers = cds.filter(
       (cd) =>
         !cdIsProcOnly(cd) &&

@@ -95,7 +95,7 @@ export function buildPlayerLoadout(
   // in the model's own head (bare-fact bypass lesson, 8fba412 precedent), so
   // the semantics are stated in-band where the kit is rendered.
   lines.push(
-    "  NOTE: each unit's kit below lists only abilities there is evidence this player actually has THIS round (talent selection, PvP talents, or casts). Do not base coaching on class/spec abilities absent from these lists — talents differ per player and, in Solo Shuffle, per round.",
+    "  NOTE: each unit's kit below lists only abilities there is evidence this player actually has THIS round (talent selection, PvP talents, casts, or a defensive every player of that spec owns without a talent). Do not base coaching on class/spec abilities absent from these lists — talents differ per player and, in Solo Shuffle, per round.",
   );
 
   // Use separate maps to prevent a friendly and enemy sharing a display name from

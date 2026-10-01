@@ -496,6 +496,11 @@ const INDEX: PredicateRow[] = [
     mod: cooldowns,
   },
   {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "forbearanceStopsPress",
+    mod: cooldowns,
+  },
+  {
     file: `${A}/utils/deathOutcomeAnalysis.ts`,
     symbol: "externalReachYards",
     mod: deathOutcomeAnalysis,
@@ -503,6 +508,11 @@ const INDEX: PredicateRow[] = [
   {
     file: `${A}/utils/deathOutcomeAnalysis.ts`,
     symbol: "positionalWallReaches",
+    mod: deathOutcomeAnalysis,
+  },
+  {
+    file: `${A}/utils/deathOutcomeAnalysis.ts`,
+    symbol: "enemyTargetReaches",
     mod: deathOutcomeAnalysis,
   },
   {

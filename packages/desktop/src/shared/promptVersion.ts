@@ -886,5 +886,12 @@
  *  and printed length).
  *  Removes kick-priority menu candidates whose window no longer exists —
  *  counts in the commit.
+ *  v302 (2026-10-06, triage cd-hoarded F-W6, rulings C4 + P-W6 + P-W6b): a
+ *  spec's baseline defensives (DB2-generated table) stay in the cooldown
+ *  ledger in a round where they were not pressed — loadout, [RES], [UNUSED],
+ *  cd-hoarded's ready set; only cd-hoarded may name such a row
+ *  (extractMajorCooldowns returns it on request only); cd-hoarded's ready set
+ *  drops a save Forbearance blocks on its recipient and Touch of Karma with
+ *  no living enemy in reach.
  */
-export const PROMPT_VERSION = 301;
+export const PROMPT_VERSION = 302;

@@ -216,14 +216,19 @@ export function buildMatchContext(
     .sort((a, b) => a.atSeconds - b.atSeconds);
 
   // Compute all feature data upfront
-  const cooldowns = extractMajorCooldowns(owner, combat);
+  const cooldowns = extractMajorCooldowns(owner, combat, {
+    withBaselineOnly: true,
+  });
   // B126: Evoker Stasis load/release/expiry + stored-spell contents. The timeline already renders
   // [STASIS STORED] / [YOU] [STASIS RELEASE] → contents, but the events were never computed here, so
   // "incomplete Stasis" / "ended holding stored heals" findings were previously unverifiable.
   const stasisEvents = extractStasisEvents(owner, combat);
   const teammateCooldowns = friends
     .filter((p) => p.id !== owner.id)
-    .map((p) => ({ player: p, cds: extractMajorCooldowns(p, combat) }));
+    .map((p) => ({
+      player: p,
+      cds: extractMajorCooldowns(p, combat, { withBaselineOnly: true }),
+    }));
   // Enemy kits go through the **same extractor** (2026-07-21 evidence-gap
   // survey, P1).
   //
@@ -246,7 +251,9 @@ export function buildMatchContext(
   // and those **must stay cast-driven** — never-cast CDs must not leak in.
   const enemyCooldowns = (enemies ?? []).map((e) => ({
     player: e,
-    cds: extractMajorCooldowns(e as ICombatUnit, combat),
+    cds: extractMajorCooldowns(e as ICombatUnit, combat, {
+      withBaselineOnly: true,
+    }),
   }));
   const enemyCDTimeline = reconstructEnemyCDTimeline(
     enemies,

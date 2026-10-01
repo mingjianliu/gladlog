@@ -259,7 +259,11 @@ type Emit = (
 function probeCdHoarded(ctx: RoundCtx, emit: Emit): void {
   let cds: IMajorCooldownInfo[];
   try {
-    cds = extractMajorCooldowns(ctx.owner, ctx.combat);
+    // cd-hoarded's ledger, with the spec-baseline rows (ruling P-W6) — the
+    // population CD_HOARDED_OUTCOME_REF describes
+    cds = extractMajorCooldowns(ctx.owner, ctx.combat, {
+      withBaselineOnly: true,
+    });
   } catch {
     return;
   }

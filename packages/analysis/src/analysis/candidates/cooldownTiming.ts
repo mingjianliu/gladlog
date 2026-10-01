@@ -1079,6 +1079,11 @@ export function coversCrisisSchool(
  * 1,858). Both removals are answered-or-protected crises, so the "held" arm
  * was, if anything, diluted with safer points; the numbers are kept as the
  * last measured reference until the probe is re-run on the new partition.
+ * ⚠ Also measured before triage F-W6 (2026-10-06, ruling P-W6) put the
+ * spec-baseline defensives into cd-hoarded's ledger: the own crises that now
+ * name an unpressed Divine Shield / Unending Resolve / Turtle were outside
+ * this population. `signalOutcomeProbe.ts` reads the same ledger since; the
+ * re-run is GH #115's.
  */
 export const CD_HOARDED_OUTCOME_REF = {
   refDeathSpent: "4.5",
@@ -1302,6 +1307,26 @@ export function cdHoardedEvents(
     crisisUnitId: string,
     tSec: number,
   ) => boolean,
+  /** Could Forbearance stop the owner pressing this cooldown at `tSec`
+   * (`forbearanceBlocks` ∧ `selfForbearanceActiveAt` — the predicates the
+   * `[DEATH]` "Unused:" gate reads)? `true` keeps it out of the ACCUSATION
+   * set: a Divine Shield under Forbearance was not "ready" (review of
+   * cd-hoarded F-W6, 2026-10-03: a Holy Paladin's unpressed Divine Shield,
+   * owned on the spec baseline, named 10 s after a self Lay on Hands). The
+   * caller checks the RECIPIENT (`forbearanceStopsPress`: the crisis unit
+   * for an external such as Lay on Hands). An absent callback does not
+   * gate; the response set is untouched. */
+  ownerForbearanceBlocks?: (
+    spellId: string,
+    tSec: number,
+    crisisUnitId: string,
+  ) => boolean,
+  /** Codex review of F-W6, round 6: could the owner press a defensive that
+   * is cast ON AN ENEMY (`enemyTargetReaches`: Touch of Karma) at `tSec` —
+   * a living enemy within its reach? `false` (a missing sample fails closed)
+   * keeps it out of the ACCUSATION set, the own crisis included. An absent
+   * callback does not gate; the response set is untouched. */
+  ownerReachesEnemyTarget?: (spellId: string, tSec: number) => boolean,
 ): CandidateEvent[] {
   const cap = overrides?.cap ?? CD_HOARD_CAP;
   const candidates: Array<{
@@ -1422,7 +1447,10 @@ export function cdHoardedEvents(
           (src.own ||
             !MITIGATION_TABLE[cd.spellId]?.positional ||
             reachesCrisisUnit?.(cd.spellId, src.crisisUnit.id, p.tSec) !==
-              false),
+              false) &&
+          ownerForbearanceBlocks?.(cd.spellId, p.tSec, src.crisisUnit.id) !==
+            true &&
+          ownerReachesEnemyTarget?.(cd.spellId, p.tSec) !== false,
       );
       if (ready.length === 0) {
         if (tracing)

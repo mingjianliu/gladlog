@@ -1,0 +1,199 @@
+{
+  "generatedAt": "2026-10-06T15:18:04.851Z",
+  "build": "12.1.0.69587",
+  "bySpec": {
+    "65": [
+      {
+        "id": "642",
+        "name": "Divine Shield",
+        "source": "SkillLineAbility"
+      },
+      {
+        "id": "498",
+        "name": "Divine Protection",
+        "source": "SpecializationSpells"
+      }
+    ],
+    "66": [
+      {
+        "id": "642",
+        "name": "Divine Shield",
+        "source": "SkillLineAbility"
+      }
+    ],
+    "70": [
+      {
+        "id": "642",
+        "name": "Divine Shield",
+        "source": "SkillLineAbility"
+      },
+      {
+        "id": "403876",
+        "name": "Divine Protection",
+        "source": "SpecializationSpells"
+      }
+    ],
+    "102": [
+      {
+        "id": "22812",
+        "name": "Barkskin",
+        "source": "SkillLineAbility"
+      }
+    ],
+    "103": [
+      {
+        "id": "22812",
+        "name": "Barkskin",
+        "source": "SkillLineAbility"
+      }
+    ],
+    "104": [
+      {
+        "id": "22812",
+        "name": "Barkskin",
+        "source": "SkillLineAbility"
+      }
+    ],
+    "105": [
+      {
+        "id": "22812",
+        "name": "Barkskin",
+        "source": "SkillLineAbility"
+      }
+    ],
+    "250": [
+      {
+        "id": "48707",
+        "name": "Anti-Magic Shell",
+        "source": "SkillLineAbility"
+      }
+    ],
+    "251": [
+      {
+        "id": "48707",
+        "name": "Anti-Magic Shell",
+        "source": "SkillLineAbility"
+      }
+    ],
+    "252": [
+      {
+        "id": "48707",
+        "name": "Anti-Magic Shell",
+        "source": "SkillLineAbility"
+      }
+    ],
+    "253": [
+      {
+        "id": "186265",
+        "name": "Aspect of the Turtle",
+        "source": "SkillLineAbility"
+      },
+      {
+        "id": "109304",
+        "name": "Exhilaration",
+        "source": "SkillLineAbility"
+      },
+      {
+        "id": "5384",
+        "name": "Feign Death",
+        "source": "SkillLineAbility"
+      }
+    ],
+    "254": [
+      {
+        "id": "186265",
+        "name": "Aspect of the Turtle",
+        "source": "SkillLineAbility"
+      },
+      {
+        "id": "109304",
+        "name": "Exhilaration",
+        "source": "SkillLineAbility"
+      },
+      {
+        "id": "5384",
+        "name": "Feign Death",
+        "source": "SkillLineAbility"
+      }
+    ],
+    "255": [
+      {
+        "id": "186265",
+        "name": "Aspect of the Turtle",
+        "source": "SkillLineAbility"
+      },
+      {
+        "id": "109304",
+        "name": "Exhilaration",
+        "source": "SkillLineAbility"
+      },
+      {
+        "id": "5384",
+        "name": "Feign Death",
+        "source": "SkillLineAbility"
+      }
+    ],
+    "258": [
+      {
+        "id": "47585",
+        "name": "Dispersion",
+        "source": "SpecializationSpells"
+      }
+    ],
+    "265": [
+      {
+        "id": "104773",
+        "name": "Unending Resolve",
+        "source": "SkillLineAbility"
+      }
+    ],
+    "266": [
+      {
+        "id": "104773",
+        "name": "Unending Resolve",
+        "source": "SkillLineAbility"
+      }
+    ],
+    "267": [
+      {
+        "id": "104773",
+        "name": "Unending Resolve",
+        "source": "SkillLineAbility"
+      }
+    ],
+    "269": [
+      {
+        "id": "122470",
+        "name": "Touch of Karma",
+        "source": "SpecializationSpells"
+      }
+    ],
+    "577": [
+      {
+        "id": "198589",
+        "name": "Blur",
+        "source": "SpecializationSpells"
+      }
+    ],
+    "581": [
+      {
+        "id": "187827",
+        "name": "Metamorphosis",
+        "source": "SpecializationSpells"
+      }
+    ],
+    "1480": [
+      {
+        "id": "198589",
+        "name": "Blur",
+        "source": "SpecializationSpells"
+      }
+    ]
+  },
+  "enemyTargetDefensives": [
+    {
+      "id": "122470",
+      "name": "Touch of Karma"
+    }
+  ]
+}

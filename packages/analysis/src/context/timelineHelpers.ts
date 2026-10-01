@@ -23,6 +23,7 @@ import { isControlledPlayerFlags } from "../utils/charmedPlayer";
 import {
   cdCanHelpAnotherUnit,
   cdReadyInTimeAt,
+  forbearanceStopsPress,
   IMajorCooldownInfo,
   isHealerSpec,
   isPassiveProcCast,
@@ -31,7 +32,10 @@ import {
   specToString,
 } from "../utils/cooldowns";
 import { getDampeningPercentage } from "../utils/dampening";
-import { positionalWallReaches } from "../utils/deathOutcomeAnalysis";
+import {
+  enemyTargetReaches,
+  positionalWallReaches,
+} from "../utils/deathOutcomeAnalysis";
 import { IEnemyCDTimeline } from "../utils/enemyCDs";
 import { getHpPercentAtTime } from "../utils/killWindowTargetSelection";
 import { fmtTime } from "../utils/renderGrid";
@@ -1490,6 +1494,10 @@ export function buildKillSequenceBlock(params: {
             // silently dropped).
             const isDyingPlayer = player.name === dyingUnit.name;
             if (!isDyingPlayer && !cdCanHelpAnotherUnit(cd)) return false;
+            // a row owned on the spec baseline alone (never pressed this
+            // round) is cd-hoarded's only (ruling P-W6) — not "available but
+            // unused" here, where no CC / usability gate stands behind it
+            if (cd.baselineOnly) return false;
             // …and a positional wall (Darkness' zone) only when its holder
             // stood within reach of the dying player — the 2026-07-30 ruling;
             // one predicate with cd-hoarded (F-MC1). Without it the retag of
@@ -1507,6 +1515,33 @@ export function buildKillSequenceBlock(params: {
             )
               return false;
 
+            // …and a defensive cast ON AN ENEMY (Touch of Karma) only with a
+            // living enemy in its reach — cd-hoarded's predicate (codex
+            // round 6 on F-W6)
+            if (
+              !enemyTargetReaches(
+                cd.spellId,
+                player as ICombatUnit,
+                enemies as ICombatUnit[],
+                matchStartMs + deathTime * 1000,
+              )
+            )
+              return false;
+
+            // …and not a save Forbearance stops for the unit it would land
+            // on (review of cd-hoarded F-W6: an unpressed baseline Divine
+            // Shield named 10 s after a self Lay on Hands)
+            if (
+              forbearanceStopsPress(
+                player as ICombatUnit,
+                cd.spellId,
+                dyingUnit as ICombatUnit,
+                [...friends, ...enemies],
+                deathTime,
+                matchStartMs,
+              )
+            )
+              return false;
             // Single-source predicate (BACKLOG #18 Minor #3): shares the same
             // judgement as matchTimelineSections' [DEATH] Unused and
             // candidateFindings' death-unused-defensive / external-unused; we

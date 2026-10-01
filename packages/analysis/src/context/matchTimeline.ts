@@ -1411,6 +1411,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     owner,
     ownerCDs,
     teammateCDs,
+    enemies: enemies ?? [],
     matchStartMs,
     pid,
     playerIdMap,

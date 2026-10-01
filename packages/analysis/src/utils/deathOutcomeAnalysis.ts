@@ -14,6 +14,7 @@ import {
   castRecovery,
   CD_INSTANT_SLACK_S,
   chargesAvailableAt,
+  ENEMY_TARGET_DEFENSIVE_IDS,
   forbearanceBlocks,
   type IMajorCooldownInfo,
   isCooldownAvailableFromLastUse,
@@ -37,6 +38,7 @@ import { LOS_SWEEP_GAP_MS } from "./positionSampling";
 import { fmtTime } from "./renderGrid";
 import { spellReachForCaster } from "./spellRange";
 import { talentOwnershipOf } from "./talentOwnership";
+import { isDeadAt } from "./unitDeath";
 
 interface IImmunitySpell {
   name: string;
@@ -801,6 +803,35 @@ export function positionalWallReaches(
   return (
     !!a && !!b && distanceBetween(a, b) <= externalReachYards(spellId, holder)
   );
+}
+
+/**
+ * Could a defensive that is pressed ON AN ENEMY (`ENEMY_TARGET_DEFENSIVE_IDS`:
+ * Touch of Karma) have been pressed at `atMs` — did a living enemy stand
+ * within the holder's reach (`spellReachForCaster`) of them? Codex review of
+ * cd-hoarded F-W6, round 6: a rooted Windwalker was named for holding Karma
+ * while the only enemy stood 40 yd away. Every other spell passes. Like
+ * `positionalWallReaches` and for the same consumers (cd-hoarded's
+ * accusation set, the kill sequence's [DEFENSIVE AVAILABLE]) plus the
+ * `[DEATH] (Unused: …)` list (codex round 7); a missing
+ * position sample or an unknown reach fails CLOSED. Line of sight is not
+ * checked.
+ */
+export function enemyTargetReaches(
+  spellId: string,
+  holder: ICombatUnit,
+  enemies: readonly ICombatUnit[],
+  atMs: number,
+): boolean {
+  if (!ENEMY_TARGET_DEFENSIVE_IDS.has(spellId)) return true;
+  const reach = spellReachForCaster(holder, spellId);
+  const a = getUnitPositionAtTime(holder, atMs, LOS_SWEEP_GAP_MS);
+  if (reach === null || !a) return false;
+  return enemies.some((e) => {
+    if (isDeadAt(e, atMs)) return false;
+    const b = getUnitPositionAtTime(e, atMs, LOS_SWEEP_GAP_MS);
+    return !!b && distanceBetween(a, b) <= reach;
+  });
 }
 
 export function buildDeathOutcomeSummary(

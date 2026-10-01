@@ -73,6 +73,9 @@ export interface RoundContext {
   enemies: ICombatUnit[];
   owner: ICombatUnit;
   ownerCds: IMajorCooldownInfo[];
+  /** the ledger with the spec-baseline rows — cd-hoarded's alone (ruling
+   * P-W6), as production's candidateFindings wires it */
+  ownerCdsWithBaseline: IMajorCooldownInfo[];
   ccWindows: IEnemyHealerCcWindow[];
   teamOffensiveCds: Array<IMajorCooldownInfo & { ownerName: string }>;
   /** unsynced-burst 可行性门:此刻队伍有没有硬控转好(与生产同一判据)。 */
@@ -171,12 +174,15 @@ export function buildRoundContext(
   if (friends.length === 0 || enemies.length === 0) return null;
   const owner = friends.find((u) => isHealerSpec(u.spec)) ?? friends[0];
 
-  let ownerCds: IMajorCooldownInfo[] = [];
+  let ownerCdsWithBaseline: IMajorCooldownInfo[] = [];
   try {
-    ownerCds = extractMajorCooldowns(owner, legacy);
+    ownerCdsWithBaseline = extractMajorCooldowns(owner, legacy, {
+      withBaselineOnly: true,
+    });
   } catch {
-    ownerCds = [];
+    ownerCdsWithBaseline = [];
   }
+  const ownerCds = ownerCdsWithBaseline.filter((cd) => !cd.baselineOnly);
 
   const ccWindows = enemyHealerCcWindows(friends, enemies, legacy);
   const teamOffensiveCds: Array<IMajorCooldownInfo & { ownerName: string }> =
@@ -208,6 +214,7 @@ export function buildRoundContext(
     enemies,
     owner,
     ownerCds,
+    ownerCdsWithBaseline,
     ccWindows,
     teamOffensiveCds,
     teamCcReadyAt: (tSeconds: number) =>
@@ -260,7 +267,8 @@ export function countsAtThresholds(
     threatOverrides?: IThreatLevelOverrides;
   } = {},
 ): RoundCandidateCounts {
-  const { friends, enemies, owner, ownerCds, legacy } = ctx;
+  const { friends, enemies, owner, ownerCds, ownerCdsWithBaseline, legacy } =
+    ctx;
 
   let threatLevel: MatchThreatLevel = "low";
   try {
@@ -296,8 +304,12 @@ export function countsAtThresholds(
           points: crisisDecisionPoints(f, legacy),
         })),
     ];
-    cdHoardedCapped = cdHoardedEvents(sources, ownerCds, owner).length;
-    cdHoardedRaw = cdHoardedEvents(sources, ownerCds, owner, {
+    cdHoardedCapped = cdHoardedEvents(
+      sources,
+      ownerCdsWithBaseline,
+      owner,
+    ).length;
+    cdHoardedRaw = cdHoardedEvents(sources, ownerCdsWithBaseline, owner, {
       cap: UNCAPPED,
     }).length;
   } catch {

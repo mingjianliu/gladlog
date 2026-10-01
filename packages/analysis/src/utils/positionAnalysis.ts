@@ -602,7 +602,11 @@ export function computeOwnerPositionEvents(params: {
     owner,
     enemySourceIds(enemies, combatUnits),
   );
-  const defensiveCDs = ownerCooldowns.filter((cd) => cd.tag === "Defensive");
+  // baseline-only rows are cd-hoarded's alone (ruling P-W6): "a defensive CD
+  // was available" reads only buttons the owner showed this round
+  const defensiveCDs = ownerCooldowns.filter(
+    (cd) => cd.tag === "Defensive" && !cd.baselineOnly,
+  );
   const offensiveCDs = ownerCooldowns.filter((cd) => cd.tag === "Offensive");
 
   // ── 1. Burst-window engagement: STAYED_IN / KITED ─────────────────────────

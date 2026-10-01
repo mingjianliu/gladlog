@@ -11,6 +11,7 @@ _English-only developer index, generated 2026-09-26 (`git log -1 -- <file>` for 
 | `abilityEffectsGenerated.json` | 92 KB |  |
 | `abilityEffectsGenerated.ts` | 2 KB | datagen output |
 | `backlashDispelPriorGenerated.json` | 1 KB |  |
+| `baselineDefensivesGenerated.json` | 4 KB | Spec → catalog defensives owned without a talent (DB2; `genBaselineDefensives.ts`) |
 | `behaviorPriorGenerated.json` | 4 KB |  |
 | `burstWindowPriorGenerated.json` | 50 KB |  |
 | `ccCloseInGenerated.json` | 2 KB |  |

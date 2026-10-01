@@ -108,6 +108,21 @@ function friendly(over: Record<string, unknown> = {}) {
     ...over,
   };
 }
+/** A friendly that owns NO cooldown: an Arms Warrior with no talents and no
+ * casts. The default Balance Druid owns Barkskin as a spec baseline (triage
+ * cd-hoarded F-W6, 2026-10-01); the default ledger this engine reads leaves
+ * that row out, but "nobody had a tool" cases should not lean on it. */
+const NO_KIT = {
+  class: CombatUnitClass.Warrior,
+  spec: CombatUnitSpec.Warrior_Arms,
+  info: { teamId: "0", specId: "71" },
+};
+const DRUID = {
+  class: CombatUnitClass.Druid,
+  spec: CombatUnitSpec.Druid_Balance,
+  info: { teamId: "0", specId: "102" },
+};
+
 function hostile(over: Record<string, unknown> = {}) {
   return friendly({
     id: "E1",
@@ -378,6 +393,22 @@ describe("burstWindowDecisionPoints — feasibility gate", () => {
 
   it("a team with no relevant cooldown at all is NOT feasible — nobody is accused of not being psychic", () => {
     const f = friendly({
+      ...NO_KIT,
+      damageIn: steadyDamage(10, 20),
+      advancedActions: hpTrack("F1", 0, 40, 60),
+    });
+    const pts = burstWindowDecisionPoints(
+      combat([f, hostile({ spellCastEvents: [cast(AR, 10)] })]),
+    );
+    expect(pts[0]!.feasible).toBe(false);
+    expect(pts[0]!.feasibleUnits).toEqual([]);
+  });
+
+  it("a wall owned on the spec baseline alone (never pressed this round) is not an answer either", () => {
+    // the default Balance Druid owns Barkskin without a talent; with no cast
+    // this round the row is `baselineOnly` — cd-hoarded's alone (ruling
+    // P-W6), so the default ledger this engine reads does not carry it
+    const f = friendly({
       damageIn: steadyDamage(10, 20),
       advancedActions: hpTrack("F1", 0, 40, 60),
     });
@@ -506,6 +537,7 @@ describe("burstWindowDecisionPoints — the pressured friendly (correction 1)", 
    * it. `over1`/`over2` add whatever the case under test needs. */
   const twoFriendlies = (over1: any = {}, over2: any = {}) => [
     friendly({
+      ...NO_KIT,
       damageIn: steadyDamage(10, 20),
       advancedActions: hpTrack("F1", 0, 40, 25),
       ...over1,
@@ -548,7 +580,9 @@ describe("burstWindowDecisionPoints — the pressured friendly (correction 1)", 
 
   it("the pressured friendly's OWN wall makes it feasible even with a useless team", () => {
     const pts = burstWindowDecisionPoints(
-      combat(twoFriendlies({ spellCastEvents: [cast(BARKSKIN, 120)] })),
+      combat(
+        twoFriendlies({ ...DRUID, spellCastEvents: [cast(BARKSKIN, 120)] }),
+      ),
     );
     expect(pts[0]!.feasible).toBe(true);
     expect(pts[0]!.feasibleUnits).toEqual(["Friend-R"]);
@@ -702,6 +736,7 @@ describe("burstWindowDecisionPoints — teammate reachability gate (GH #60 tail,
    * position each case varies. */
   const withMateAt = (mateOver: Record<string, unknown>) => [
     friendly({
+      ...NO_KIT,
       damageIn: steadyDamage(10, 20),
       advancedActions: trackAt("F1", 0, 40, 25, 0, 0),
     }),
@@ -773,6 +808,7 @@ describe("burstWindowDecisionPoints — teammate reachability gate (GH #60 tail,
     // fail open and credit F2 on post-death seconds only (4446729d 1:27).
     const f1Dying = (over: Record<string, unknown> = {}) =>
       friendly({
+        ...NO_KIT,
         damageIn: steadyDamage(10, 20),
         advancedActions: trackAt("F1", 0, 12, 25, 0, 0),
         deathRecords: [{ timestamp: T0 + 12_400 }],

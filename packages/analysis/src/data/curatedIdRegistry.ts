@@ -72,7 +72,9 @@ import {
   AURA_ACTIVATION_PROVES_BUTTON_IDS,
   AURA_IS_THE_PRESS_IDS,
   AURA_ONLY_ACTIVATION_IDS,
+  BASELINE_DEFENSIVE_BY_SPEC,
   CD_ROLE_TAGS,
+  ENEMY_TARGET_DEFENSIVE_IDS,
   FORBEARANCE_GATED_IDS,
   NON_SUBSTITUTE_DEFENSIVE_IDS,
   PASSIVE_PROC_CAST_IDS,
@@ -429,6 +431,17 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   ),
   t("RESPONSE_ONLY_DEFENSIVE_IDS", "utils/cooldowns.ts", "cast", () =>
     set(RESPONSE_ONLY_DEFENSIVE_IDS),
+  ),
+  // generated (data/baselineDefensivesGenerated.json), registered all the
+  // same: a renumbered baseline button would sit in every such spec's ledger
+  // as "never used" (triage cd-hoarded F-W6)
+  t("BASELINE_DEFENSIVE_BY_SPEC", "utils/cooldowns.ts", "cast", () => [
+    ...new Set(Object.values(BASELINE_DEFENSIVE_BY_SPEC).flat()),
+  ]),
+  // generated too: a renumbered Touch of Karma would drop out of the
+  // enemy-in-reach gate and come back as a held save (codex round 6, F-W6)
+  t("ENEMY_TARGET_DEFENSIVE_IDS", "utils/cooldowns.ts", "cast", () =>
+    set(ENEMY_TARGET_DEFENSIVE_IDS),
   ),
   t("ALLY_REACH_REQUIRES_PVP_TALENT", "utils/cooldowns.ts", "cast", () =>
     keys(ALLY_REACH_REQUIRES_PVP_TALENT),

@@ -284,6 +284,11 @@ npx tsx packages/analysis/scripts/datagen/genSpellReach.ts
 # the talent trees (talentIdMap.json) → interruptKitGenerated.json. Rerun after fetchTalents.ts as well —
 # a moved talent node changes who can kick. Corpus cross-check: every spec with no entry casts none.
 npx tsx packages/analysis/scripts/datagen/genInterruptKit.ts
+# Baseline defensives per spec (triage cd-hoarded F-W6, 2026-10-01): catalog Defensive ids (classSpells.ts) in no
+# talent tree of the spec that DB2 says the spec owns (SpecializationSpells, or SkillLineAbility on the class line
+# with AcquireMethod != 3) → baselineDefensivesGenerated.json. Rerun after fetchTalents.ts and after any Defensive
+# row is added to classSpells.ts — a spell that moves INTO a talent tree must leave this table.
+npx tsx packages/analysis/scripts/datagen/genBaselineDefensives.ts
 # 6f. off-GCD active abilities table (SpellCooldowns StartRecoveryTime==0; consumed by swimlane folding)
 npx tsx packages/analysis/scripts/datagen/genOffGcd.ts
 # 6f1. channelled spells (SpellMisc Attributes_1 bit 2 "Is Channelled"; kick-eaten's phase=channel,

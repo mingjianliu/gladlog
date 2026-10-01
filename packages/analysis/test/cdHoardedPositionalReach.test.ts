@@ -124,6 +124,31 @@ describe("cd-hoarded: a positional wall must reach the teammate in crisis (F-MC1
     expect(run(mateSrc, [darkness()])).toHaveLength(1);
   });
 
+  it("a cooldown Forbearance blocks at the crisis is not ready (review of F-W6); others stay", () => {
+    const asked: Array<[string, number]> = [];
+    const evts = cdHoardedEvents(
+      [{ crisisUnit: OWNER, own: true, points: [point()] }],
+      [darkness(), rallyingCry],
+      OWNER,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      (spellId, tSec) => {
+        asked.push([spellId, tSec]);
+        return spellId === "196718";
+      },
+    );
+    expect(evts).toHaveLength(1);
+    expect(evts[0]!.facts["readyCds"]).toBe("Rallying Cry");
+    expect(asked).toContainEqual(["196718", 82]);
+  });
+
   it("the response set is untouched: Darkness pressed in the window answers the crisis even when out of reach", () => {
     const evts = run(mateSrc, [darkness([82.5]), rallyingCry], () => false);
     expect(evts).toEqual([]);

@@ -203,6 +203,10 @@
       "entries": 23,
       "producer": "packages/analysis/scripts/datagen/genInterruptKit.ts"
     },
+    "baselineDefensivesGenerated.json": {
+      "entries": 21,
+      "producer": "packages/analysis/scripts/datagen/genBaselineDefensives.ts"
+    },
     "kickPriorityPriorGenerated.json": {
       "entries": 1,
       "producer": "packages/eval/scripts/kickPriorityOutcomeProbe.ts emit-table"
