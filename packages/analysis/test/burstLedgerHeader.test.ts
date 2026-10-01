@@ -17,6 +17,7 @@ const entry = (spells: IBurstLedgerEntry["spells"]): IBurstLedgerEntry => ({
   damageByTarget: [],
   dominantTarget: null,
   allyCDsOverlapping: [],
+  otherDeaths: [],
 });
 
 describe("formatBurstLedgerForContext — header (F-L4)", () => {

@@ -5,9 +5,14 @@
  * HP — healed through` while the target's own `[STATE]` tick inside the
  * window read 37% (73/309 prompts). The minimum now comes from the `[STATE]`
  * tick's sampler (`gridHpMinInWindow` = `gridHpPct` at every whole second)
- * and "worth printing" from `isDmgSpikeTrough` — the eval gate
+ * and "worth printing" from `isHpTroughWorthPrinting` — the eval gate
  * `checkHealedThroughConsistency` re-asks both of the rendered ticks, so the
  * two sides are pinned here through the SAME exported sampler.
+ *
+ * 2026-10-01 (user ruling A′14, triage hp-state F-N5): "worth printing" is a
+ * low at least `HP_TROUGH_MIN_DROP_PTS` (10) under BOTH endpoints — the
+ * 09-15 crisis-line rule (≤ 40 %) hid 19 of 32 "healed through" dips of the
+ * 60 triage rounds and printed 1-point dips under a falling window.
  */
 import {
   CombatUnitClass,
@@ -16,11 +21,13 @@ import {
 } from "@gladlog/parser-compat";
 import { describe, expect, it } from "vitest";
 
+import { CRISIS_HP_PCT_RENDERED } from "../analysis/crisisDecisionPoints";
 import {
-  CRISIS_HP_PCT_RENDERED,
-  isDmgSpikeTrough,
-} from "../analysis/crisisDecisionPoints";
-import { gridHpMinInWindow, gridHpPct } from "../utils/cooldowns";
+  gridHpMinInWindow,
+  gridHpPct,
+  HP_TROUGH_MIN_DROP_PTS,
+  isHpTroughWorthPrinting,
+} from "../utils/cooldowns";
 import { emitDmgSpikeEntries } from "./matchTimelineSections";
 
 const T0 = 1_000_000;
@@ -85,8 +92,8 @@ function render(unit: ReturnType<typeof friend>) {
   return out.join("\n");
 }
 
-describe("[DMG SPIKE] trough — endpoints must not hide a crisis-line dip", () => {
-  it("a dip to the crisis line inside the window prints `low N% @m:ss` and drops the word", () => {
+describe("[DMG SPIKE] trough — endpoints must not hide a dip of 10 points or more", () => {
+  it("a deep dip inside the window prints `low N% @m:ss` and drops the word", () => {
     const u = friend({ 0: 81, 14: 37, 18: 87 });
     const line = render(u as never);
     expect(line).toContain("(81% -> 87% HP");
@@ -96,7 +103,7 @@ describe("[DMG SPIKE] trough — endpoints must not hide a crisis-line dip", () 
     const low = gridHpMinInWindow(u as never, T0, 10, 20)!;
     expect(low).toEqual({ pct: 37, atSec: 14 });
     expect(gridHpPct(u as never, T0 + 14_000)).toBe(37);
-    expect(isDmgSpikeTrough(81, 87, 37)).toBe(true);
+    expect(isHpTroughWorthPrinting(81, 87, 37)).toBe(true);
   });
 
   it("no dip → the labelBias outcome word stays", () => {
@@ -105,12 +112,29 @@ describe("[DMG SPIKE] trough — endpoints must not hide a crisis-line dip", () 
     expect(line).not.toContain("low ");
   });
 
-  it("a dip that never reaches the crisis line is not a trough", () => {
-    const dip = CRISIS_HP_PCT_RENDERED + 5;
-    const line = render(friend({ 0: 81, 14: dip, 18: 87 }) as never);
+  it("a dip above the crisis line is a trough too (A′14: no ≤ 40 % condition) — 0777a8e0's 82 → 82 over 43", () => {
+    const dip = CRISIS_HP_PCT_RENDERED + 3;
+    const line = render(friend({ 0: 82, 14: dip, 18: 82 }) as never);
+    expect(line).toContain(`(82% -> 82% HP, 0%/s, low ${dip}% @0:14)`);
+    expect(line).not.toContain("healed through");
+    expect(isHpTroughWorthPrinting(82, 82, dip)).toBe(true);
+  });
+
+  it("the cut is 10 points under BOTH endpoints: 9 under the lower one is not a trough", () => {
+    expect(HP_TROUGH_MIN_DROP_PTS).toBe(10);
+    expect(isHpTroughWorthPrinting(81, 87, 71)).toBe(true);
+    expect(isHpTroughWorthPrinting(81, 87, 72)).toBe(false);
+    expect(isHpTroughWorthPrinting(87, 81, 72)).toBe(false);
+    const line = render(friend({ 0: 81, 14: 72, 18: 87 }) as never);
     expect(line).toContain("— healed through");
     expect(line).not.toContain("low ");
-    expect(isDmgSpikeTrough(81, 87, dip)).toBe(false);
+  });
+
+  it("a small dip under a falling window is no longer printed, even below the crisis line (121c7e15: 99 → 24, low 22)", () => {
+    const line = render(friend({ 0: 99, 15: 22, 18: 24 }) as never);
+    expect(line).toContain("(99% -> 24% HP");
+    expect(line).not.toContain("low ");
+    expect(line).not.toContain("healed through");
   });
 
   it("a window that ends at its own minimum has nothing hidden — no `low`, no word", () => {

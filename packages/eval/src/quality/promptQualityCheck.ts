@@ -34,7 +34,6 @@ import {
   PEAK_SPIKE_MARKERS,
   peakSpikePlacement,
 } from "@gladlog/analysis";
-import { isDmgSpikeTrough } from "@gladlog/analysis/src/analysis/crisisDecisionPoints";
 import { fmtFactNum } from "@gladlog/analysis/src/analysis/factFormat";
 import {
   lookupBacklashPrior,
@@ -90,6 +89,7 @@ import {
 } from "@gladlog/analysis/src/context/forcedTrinket";
 import {
   canHelpAnotherUnit,
+  isHpTroughWorthPrinting,
   PRESS_HP_LINE_TAGS,
 } from "@gladlog/analysis/src/utils/cooldowns";
 import { fmtTime } from "@gladlog/analysis/src/utils/renderGrid";
@@ -728,7 +728,7 @@ export function checkDmgSpikeCcCoverConsistency(lines: string[]): string[] {
  * Trough half (2026-09-15, first Opus 5 baseline — 73/309 prompts read
  * `81% -> 87% HP — healed through` while the unit's own `[STATE]` tick inside
  * the window read 37%): the renderer now prints `, low N% @m:ss` instead of
- * the word whenever `isDmgSpikeTrough(A, B, min)` holds for the window's
+ * the word whenever `isHpTroughWorthPrinting(A, B, min)` holds for the window's
  * `gridHpMinInWindow`. Every rendered `[STATE]` tick is one sample of that
  * same grid (same sampler, same clamp), so the text alone certifies:
  *   - a printed `low N%` must satisfy the predicate, sit inside the window,
@@ -744,15 +744,21 @@ const SPIKE_OUTCOME =
 const SPIKE_LOW = /, low (\d+)% @(\d+):(\d+)/;
 export function checkHealedThroughConsistency(lines: string[]): string[] {
   const ticks: Array<{ s: number; hp: Map<number, number> }> = [];
+  /** second → units a `dead` tick names (a printed low there is no low) */
+  const deadAt = new Map<number, Set<number>>();
   for (const line of lines) {
     const st = line.match(STATE_LINE);
     if (!st) continue;
     const hp = new Map<number, number>();
+    const s = Number(st[1]) * 60 + Number(st[2]);
     for (const tok of st[3]!.matchAll(STATE_TOKEN)) {
       const v = tok[2]!;
-      if (v !== "dead" && v !== "ghost") hp.set(Number(tok[1]), Number(v));
+      if (v === "dead") {
+        if (!deadAt.has(s)) deadAt.set(s, new Set());
+        deadAt.get(s)!.add(Number(tok[1]));
+      } else if (v !== "ghost") hp.set(Number(tok[1]), Number(v));
     }
-    ticks.push({ s: Number(st[1]) * 60 + Number(st[2]), hp });
+    ticks.push({ s, hp });
   }
 
   const failures: string[] = [];
@@ -792,11 +798,22 @@ export function checkHealedThroughConsistency(lines: string[]): string[] {
     if (low) {
       const L = Number(low[1]);
       const lowS = Number(low[2]) * 60 + Number(low[3]);
-      if (!isDmgSpikeTrough(A, B, L))
+      if (!isHpTroughWorthPrinting(A, B, L))
         failures.push(`${at} low ${L}% 不满足低谷判据(${A}% -> ${B}%)`);
       if (lowS < from || lowS > to)
         failures.push(
           `${at} low @${fmtTime(lowS)} 落在窗口 ${fmtTime(from)}–${fmtTime(to)} 之外`,
+        );
+      // same rule as the burst ledger's gate: the printed second's tick is L
+      // (and not `dead`)
+      if (deadAt.get(lowS)?.has(unitId))
+        failures.push(
+          `${at} 标注 low ${L}% @${fmtTime(lowS)},但该秒 [STATE] 报 dead`,
+        );
+      const atLow = inWindow.find((t) => t.s === lowS)?.hp.get(unitId);
+      if (atLow !== undefined && atLow !== L)
+        failures.push(
+          `${at} 标注 low ${L}% @${fmtTime(lowS)},但该秒 [STATE] 报 ${atLow}%`,
         );
       for (const t of inWindow)
         if (t.hp.get(unitId)! < L)
@@ -805,7 +822,7 @@ export function checkHealedThroughConsistency(lines: string[]): string[] {
           );
     } else {
       const tick = inWindow.find((t) =>
-        isDmgSpikeTrough(A, B, t.hp.get(unitId)!),
+        isHpTroughWorthPrinting(A, B, t.hp.get(unitId)!),
       );
       if (tick)
         failures.push(
@@ -813,6 +830,132 @@ export function checkHealedThroughConsistency(lines: string[]): string[] {
         );
     }
   });
+  return failures;
+}
+
+// "  Burst #1 — 0:27–0:48 | Power Infusion + Voidform"
+const BURST_HEAD = /^\s*Burst #\d+ — (\d+):(\d+)–(\d+):(\d+) \|/;
+// "    Target: Cloudz-LaughingSkull-US 95% → 69% (low 39% at 0:38) | your damage 0.52M"
+const BURST_TARGET_HP =
+  /^\s*Target: (.+?) (\d+)% → (\d+)%(?: \(low (\d+)% at (\d+):(\d+)\))? \| your damage/;
+
+/**
+ * Hard invariant: the burst ledger's `Target: X A% → B% (low L% at m:ss)`
+ * line agrees with the `[STATE]` ticks of the seconds its `Burst #` header
+ * prints (triage 2026-09-29, group G15: hp-state F-B1, sync-burst F-L5 /
+ * F-L5b, hp-state F-N5).
+ *
+ * Before: the endpoints were sampled at the raw cast / span-end millisecond,
+ * off the render grid — 115 of 142 ledger targets on the 60 triage rounds
+ * disagreed with `gridHpPct` at the displayed second (537209d8: "95% → 62%"
+ * beside a `[STATE]` 69 % at 0:48), and no low was printed at all
+ * (69546267: "100% → 100%" over a 37 % low). The analysis side now reads
+ * `gridHpPct` / `gridHpMinInWindow`, the `[STATE]` tick's own sampler, so the
+ * text certifies, exactly (every rendered tick IS one sample of that grid):
+ *   - a tick for the target at the start / end second equals A / B (a `dead`
+ *     tick at the end second means B = 0);
+ *   - a printed low satisfies `isHpTroughWorthPrinting(A, B, L)` — the one
+ *     trough rule, shared with `[DMG SPIKE]` — sits inside the span, and no
+ *     tick inside the span reads below it;
+ *   - with no low printed, no tick inside the span satisfies the rule.
+ * A target the roster block does not name is not checked (no id to look
+ * for). The reverse ("a trough at a second no tick shows") is invisible in
+ * the text and is not adjudicated here.
+ */
+export function checkBurstTargetHpConsistency(lines: string[]): string[] {
+  const { idByName } = parseRoster(lines);
+  const ticks = new Map<number, Map<string, number | "dead">>();
+  for (const line of lines) {
+    const st = line.match(STATE_LINE);
+    if (!st) continue;
+    const hp = new Map<string, number | "dead">();
+    for (const tok of st[3]!.matchAll(STATE_TOKEN)) {
+      const v = tok[2]!;
+      if (v === "dead") hp.set(tok[1]!, "dead");
+      else if (v !== "ghost") hp.set(tok[1]!, Number(v));
+    }
+    ticks.set(Number(st[1]) * 60 + Number(st[2]), hp);
+  }
+
+  const failures: string[] = [];
+  for (let i = 0; i + 1 < lines.length; i++) {
+    const head = lines[i]!.match(BURST_HEAD);
+    if (!head) continue;
+    // this burst's own `Target:` line: the first one before the next header
+    // or the end of the block — not "the next line", so a line added between
+    // the two cannot make the gate fail open
+    let m: RegExpMatchArray | null = null;
+    let targetLine = i + 1;
+    for (; targetLine < lines.length; targetLine++) {
+      const l = lines[targetLine]!;
+      if (!l.trim() || BURST_HEAD.test(l)) break;
+      m = l.match(BURST_TARGET_HP);
+      if (m) break;
+    }
+    if (!m) continue;
+    const id = idByName.get(m[1]!);
+    if (id === undefined) continue;
+    const from = Number(head[1]) * 60 + Number(head[2]);
+    const to = Number(head[3]) * 60 + Number(head[4]);
+    const A = Number(m[2]);
+    const B = Number(m[3]);
+    const at = `line ${targetLine + 1}: Burst Target ${m[1]}`;
+    const tickAt = (s: number) => ticks.get(s)?.get(id);
+
+    const startTick = tickAt(from);
+    if (typeof startTick === "number" && startTick !== A)
+      failures.push(
+        `${at} 起点 ${A}% 而 ${fmtTime(from)} [STATE] 报 ${startTick}%`,
+      );
+    if (startTick === "dead" && A !== 0)
+      failures.push(`${at} 起点 ${A}% 而 ${fmtTime(from)} [STATE] 报 dead`);
+    const endTick = tickAt(to);
+    if (typeof endTick === "number" && endTick !== B)
+      failures.push(
+        `${at} 终点 ${B}% 而 ${fmtTime(to)} [STATE] 报 ${endTick}%`,
+      );
+    if (endTick === "dead" && B !== 0)
+      failures.push(`${at} 终点 ${B}% 而 ${fmtTime(to)} [STATE] 报 dead`);
+
+    const inSpan: Array<{ s: number; hp: number }> = [];
+    for (const [s, hp] of ticks) {
+      const v = hp.get(id);
+      if (s >= from && s <= to && typeof v === "number")
+        inSpan.push({ s, hp: v });
+    }
+    if (m[4] !== undefined) {
+      const L = Number(m[4]);
+      const lowS = Number(m[5]) * 60 + Number(m[6]);
+      if (!isHpTroughWorthPrinting(A, B, L))
+        failures.push(`${at} low ${L}% 不满足低谷判据(${A}% → ${B}%)`);
+      if (lowS < from || lowS > to)
+        failures.push(
+          `${at} low at ${fmtTime(lowS)} 落在 ${fmtTime(from)}–${fmtTime(to)} 之外`,
+        );
+      // the tick of the printed second IS that low (same sampler) — a low
+      // with the wrong second passed when only "no tick below it" was asked
+      if (tickAt(lowS) === "dead")
+        failures.push(
+          `${at} 标注 low ${L}% at ${fmtTime(lowS)},但该秒 [STATE] 报 dead`,
+        );
+      const atLow = inSpan.find((t) => t.s === lowS);
+      if (atLow && atLow.hp !== L)
+        failures.push(
+          `${at} 标注 low ${L}% at ${fmtTime(lowS)},但该秒 [STATE] 报 ${atLow.hp}%`,
+        );
+      for (const t of inSpan)
+        if (t.hp < L)
+          failures.push(
+            `${at} 标注 low ${L}% 但 ${fmtTime(t.s)} [STATE] 报 ${t.hp}%`,
+          );
+    } else {
+      const tick = inSpan.find((t) => isHpTroughWorthPrinting(A, B, t.hp));
+      if (tick)
+        failures.push(
+          `${at} ${A}% → ${B}% 未标注低谷,但 ${fmtTime(tick.s)} [STATE] 报 ${tick.hp}%`,
+        );
+    }
+  }
   return failures;
 }
 
@@ -2980,6 +3123,7 @@ export function checkMatch(
   hardFailures.push(...checkSelfOnlyDefensiveClaims(lines));
   hardFailures.push(...checkDmgSpikeCcCoverConsistency(lines));
   hardFailures.push(...checkHealedThroughConsistency(lines));
+  hardFailures.push(...checkBurstTargetHpConsistency(lines));
   hardFailures.push(...checkBehaviorPriorConsistency(lines));
   hardFailures.push(...checkBurstWindowRefConsistency(lines));
   hardFailures.push(...checkOffensiveWindowSpikeMarker(lines));

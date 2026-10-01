@@ -1,7 +1,6 @@
 import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import { CD_WASTE_PRESSURE_HP_PCT } from "../analysis/candidateFindings";
-import { isDmgSpikeTrough } from "../analysis/crisisDecisionPoints";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import {
   IPlayerCCTrinketSummary,
@@ -23,6 +22,7 @@ import {
   IDamageBucket,
   IMajorCooldownInfo,
   isHealerSpec,
+  isHpTroughWorthPrinting,
   SELF_CAST_NOOP_EXTERNAL_IDS,
   selfForbearanceActiveAt,
   specToBenchmarkKey,
@@ -374,12 +374,15 @@ export function emitDmgSpikeEntries(params: {
       // prompts read `81% -> 87% — healed through` over a window whose own
       // [STATE] tick showed 37%). The minimum comes from the [STATE] tick's
       // sampler (gridHpMinInWindow) and the "worth printing" question from
-      // isDmgSpikeTrough — the eval gate re-asks both on the rendered ticks.
+      // isHpTroughWorthPrinting (≥ 10 points under both endpoints, ruling
+      // A′14) — the eval gate re-asks both on the rendered ticks.
       const low = targetUnit
         ? gridHpMinInWindow(targetUnit, matchStartMs, fromSec, toSec)
         : null;
       const trough =
-        low !== null && isDmgSpikeTrough(hpFrom, hpTo, low.pct) ? low : null;
+        low !== null && isHpTroughWorthPrinting(hpFrom, hpTo, low.pct)
+          ? low
+          : null;
       const troughTag = trough
         ? `, low ${trough.pct}% @${fmtTime(trough.atSec)}`
         : "";

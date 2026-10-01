@@ -308,9 +308,9 @@ const INDEX: PredicateRow[] = [
     mod: cooldowns,
   },
   {
-    file: `${A}/analysis/crisisDecisionPoints.ts`,
-    symbol: "isDmgSpikeTrough",
-    mod: crisisDecisionPoints,
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "isHpTroughWorthPrinting",
+    mod: cooldowns,
   },
   {
     file: `${A}/context/observedConsequences.ts`,
@@ -1782,6 +1782,11 @@ const INDEX: PredicateRow[] = [
   {
     file: `${E}/quality/promptQualityCheck.ts`,
     symbol: "checkUnnecessaryNoteHpAgreement",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkBurstTargetHpConsistency",
     mod: promptQualityCheck,
   },
   {

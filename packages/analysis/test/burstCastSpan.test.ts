@@ -59,6 +59,7 @@ describe("burst ledger: a zero-length burst", () => {
     damageByTarget: [],
     dominantTarget: null,
     allyCDsOverlapping: [],
+    otherDeaths: [],
   });
   const NO_DAMAGE = "No damage dealt to enemy players during this burst.";
 

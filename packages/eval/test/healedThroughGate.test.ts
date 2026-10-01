@@ -80,7 +80,35 @@ describe("checkHealedThroughConsistency — trough half (2026-09-15)", () => {
 
   it("a printed low that is not a trough by the shared predicate → red", () => {
     const fails = checkHealedThroughConsistency([
-      TROUGH.replace("low 37% @0:14", "low 60% @0:14"),
+      TROUGH.replace("low 37% @0:14", "low 75% @0:14"),
+    ]);
+    expect(fails.some((f) => f.includes("不满足低谷判据"))).toBe(true);
+  });
+
+  // User ruling 2026-09-30 (triage A′14, hp-state F-N5): a trough is a low
+  // ≥ 10 points under BOTH endpoints, with no ≤ 40 % condition — the gate
+  // imports the renderer's predicate, so both move together.
+  it("A′14: a tick 10+ points under both endpoints with the word → red, above the crisis line too", () => {
+    const fails = checkHealedThroughConsistency([
+      "0:10–0:20  [DMG SPIKE]   2(AWarrior) (Arms Warrior): 0.50M in 10s (82% -> 82% HP, 0%/s — healed through)",
+      state("0:14", 43),
+    ]);
+    expect(fails).toHaveLength(1);
+    expect(fails[0]).toContain("0:14 [STATE] 报 43%");
+  });
+
+  it("A′14: a tick 9 points under the lower endpoint is not a trough → the word stands", () => {
+    expect(
+      checkHealedThroughConsistency([
+        "0:10–0:20  [DMG SPIKE]   2(AWarrior) (Arms Warrior): 0.50M in 10s (81% -> 87% HP, +1%/s — healed through)",
+        state("0:14", 72),
+      ]),
+    ).toEqual([]);
+  });
+
+  it("A′14: a printed low under 10 points below a falling window's end → red (the old crisis-line rule printed it)", () => {
+    const fails = checkHealedThroughConsistency([
+      "0:10–0:20  [DMG SPIKE]   2(AWarrior) (Arms Warrior): 0.80M in 10s (99% -> 24% HP, -8%/s, low 22% @0:19)",
     ]);
     expect(fails.some((f) => f.includes("不满足低谷判据"))).toBe(true);
   });

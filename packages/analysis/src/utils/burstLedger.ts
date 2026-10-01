@@ -2,13 +2,18 @@ import { AtomicArenaCombat, ICombatUnit } from "@gladlog/parser-compat";
 
 import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
 import { getEnglishSpellName } from "../data/spellEffectData";
-import { getUnitHpAtTimestamp, HP_SAMPLE_RADIUS_MS } from "./cooldowns";
-import { SELF_CAST_NOOP_EXTERNAL_IDS } from "./cooldowns";
+import {
+  gridHpMinInWindow,
+  gridHpPct,
+  isDeadAtRenderSecond,
+  isHpTroughWorthPrinting,
+  SELF_CAST_NOOP_EXTERNAL_IDS,
+} from "./cooldowns";
 import { IEnemyCDCast, reconstructEnemyCDTimeline } from "./enemyCDs";
 import type { IKickAuditEntry } from "./kickAudit";
 import { MIN_WINDOW_SECONDS } from "./killWindowTargetSelection";
 import { IOffensiveWindow } from "./offensiveWindows";
-import { fmtTime } from "./renderGrid";
+import { fmtTime, toRenderSecond } from "./renderGrid";
 import { FULL_IMMUNITY_IDS } from "./enemyDefensives";
 import { buildFilteredAuraIntervals } from "./utils";
 
@@ -121,13 +126,29 @@ export interface IBurstLedgerEntry {
   dominantTarget: {
     unitId: string;
     unitName: string;
+    /** The `[STATE]`-grid reading (`gridHpPct`) at the burst's rendered
+     * start / end second — the numbers the same-second `[STATE]` ticks print
+     * (triage hp-state F-B1; the raw-millisecond samples disagreed with the
+     * tick on 115 of 142 ledger targets). `hpEndPct` is 0 when the target is
+     * dead at the end second. */
     hpStartPct: number | null;
     hpEndPct: number | null;
+    /** The grid low inside the rendered span and its second, when it is a
+     * trough worth printing (`isHpTroughWorthPrinting`, the `[DMG SPIKE]`
+     * rule); null otherwise, and whenever an endpoint is unknown or dead. */
+    hpLow: { pct: number; atSeconds: number } | null;
     damage: number;
     defensivesHit: IBurstDefensiveHit[];
     /** Target died inside [from, to + KILL_CREDIT_SLACK_S]. */
     died: boolean;
   } | null;
+  /** Enemy players OTHER than the dominant target that this burst damaged and
+   * that died inside [from, to + KILL_CREDIT_SLACK_S] — the window `died`
+   * uses (triage sync-burst F-L1: a burst whose first victim died early was
+   * named after the survivor who took the rest, and printed no death). Keyed
+   * on the burst's own damage, not a cast target. `dominantTarget.died` and
+   * every conversion count are unchanged. */
+  otherDeaths: Array<{ unitName: string; atSeconds: number }>;
   /** Ally offensive CDs whose active span overlaps this burst (alignment evidence). */
   allyCDsOverlapping: Array<{ playerName: string; spellName: string }>;
 }
@@ -315,16 +336,60 @@ export function analyzeBurstLedger(
           dr.timestamp <= toMs + KILL_CREDIT_SLACK_S * 1000,
       );
 
+      // Endpoints on the render grid: the line prints `fmtTime(from)–
+      // fmtTime(to)` (floored), so its HP pair is the `[STATE]` reading of
+      // those two seconds.
+      const fromSec = toRenderSecond(fromSeconds);
+      const toSec = toRenderSecond(toSeconds);
+      const deadAtEnd = isDeadAtRenderSecond(target, matchStartMs, toSec);
+      // a death inside the burst's first rendered second: that second's
+      // [STATE] tick already reads `dead`, so the start reads 0 like the end
+      const deadAtStart = isDeadAtRenderSecond(target, matchStartMs, fromSec);
+      const hpStartPct = deadAtStart
+        ? 0
+        : gridHpPct(target, matchStartMs + fromSec * 1000);
+      const hpEndPct = deadAtEnd
+        ? 0
+        : gridHpPct(target, matchStartMs + toSec * 1000);
+      const low =
+        hpStartPct !== null && hpEndPct !== null && !deadAtEnd
+          ? gridHpMinInWindow(target, matchStartMs, fromSec, toSec)
+          : null;
+
       dominantTarget = {
         unitId: top.unitId,
         unitName: top.unitName,
-        hpStartPct: getUnitHpAtTimestamp(target, fromMs, HP_SAMPLE_RADIUS_MS),
-        hpEndPct: getUnitHpAtTimestamp(target, toMs, HP_SAMPLE_RADIUS_MS),
+        hpStartPct,
+        hpEndPct,
+        hpLow:
+          low !== null &&
+          isHpTroughWorthPrinting(hpStartPct!, hpEndPct!, low.pct)
+            ? { pct: low.pct, atSeconds: low.atSec }
+            : null,
         damage: top.damage,
         defensivesHit,
         died,
       };
     }
+
+    const otherDeaths: IBurstLedgerEntry["otherDeaths"] = [];
+    for (const t of damageByTarget) {
+      if (t.unitId === top?.unitId) continue;
+      // "also hit" means hit: a fully absorbed tick (effective damage 0) on
+      // a unit the rest of the team then killed is not this burst's victim
+      if (t.damage <= 0) continue;
+      const death = enemyById
+        .get(t.unitId)
+        ?.deathRecords.map((dr) => dr.timestamp)
+        .filter((ms) => ms >= fromMs && ms <= toMs + KILL_CREDIT_SLACK_S * 1000)
+        .sort((a, b) => a - b)[0];
+      if (death !== undefined)
+        otherDeaths.push({
+          unitName: t.unitName,
+          atSeconds: (death - matchStartMs) / 1000,
+        });
+    }
+    otherDeaths.sort((a, b) => a.atSeconds - b.atSeconds);
 
     const allyCDsOverlapping = allyCDSpans
       .filter((s) => s.from <= toSeconds && s.to >= fromSeconds)
@@ -343,6 +408,7 @@ export function analyzeBurstLedger(
       totalDamage,
       damageByTarget,
       dominantTarget,
+      otherDeaths,
       allyCDsOverlapping,
     });
   }
@@ -530,12 +596,30 @@ export function formatBurstLedgerForContext(
     );
     const t = b.dominantTarget;
     if (t) {
+      const lowStr = t.hpLow
+        ? ` (low ${t.hpLow.pct}% at ${fmtTime(t.hpLow.atSeconds)})`
+        : "";
       const hpStr =
         t.hpStartPct !== null && t.hpEndPct !== null
-          ? ` ${Math.round(t.hpStartPct)}% → ${Math.round(t.hpEndPct)}%`
+          ? ` ${Math.round(t.hpStartPct)}% → ${Math.round(t.hpEndPct)}%${lowStr}`
+          : "";
+      // F-L1: the burst's other victim(s) — a fact about who else it hit
+      // and killed; the target above is unchanged
+      const alsoStr =
+        b.otherDeaths.length > 0
+          ? ` | also hit: ${b.otherDeaths
+              .map(
+                (d) =>
+                  // `+N.Ns` is from the burst's raw start, like the
+                  // dominant target's own DIED offset and `defensivesHit`:
+                  // an interval, not a grid reading (the header and DIED
+                  // stamps are floored, so 27.95 → 28.05 reads 0:28 (+0.1s))
+                  `${d.unitName} DIED ${fmtTime(d.atSeconds)} (+${(d.atSeconds - b.fromSeconds).toFixed(1)}s)`,
+              )
+              .join("; ")}`
           : "";
       lines.push(
-        `    Target: ${t.unitName}${hpStr} | your damage ${fmtM(t.damage)}${t.died ? " | target DIED" : ""}`,
+        `    Target: ${t.unitName}${hpStr} | your damage ${fmtM(t.damage)}${t.died ? " | target DIED" : ""}${alsoStr}`,
       );
       for (const d of t.defensivesHit) {
         // 2026-07-16 smoke test: without spelling out "on the target", the

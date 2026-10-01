@@ -4,7 +4,9 @@ import { CombatUnitSpec, LogEvent } from "@gladlog/parser-compat";
 import {
   analyzeBurstLedger,
   auditWindowTargeting,
+  formatBurstLedgerForContext,
 } from "../../src/utils/burstLedger";
+import { gridHpPct } from "../../src/utils/cooldowns";
 import type { IOffensiveWindow } from "../../src/utils/offensiveWindows";
 import {
   makeAdvancedAction,
@@ -402,6 +404,187 @@ describe("burstLedger — burst grouping and audit", () => {
     const entries = analyzeBurstLedger(player, [], [e1], makeCombat());
     expect(entries[0].dominantTarget?.hpStartPct).toBe(90);
     expect(entries[0].dominantTarget?.hpEndPct).toBe(35);
+  });
+});
+
+// Triage 2026-09-29, group G15: hp-state F-B1 (Target HP on the render grid),
+// sync-burst F-L5 + F-L5b / hp-state F-N5 (the low, by the one trough rule,
+// ruling A′14) and sync-burst F-L1 (the burst's other victim).
+describe("analyzeBurstLedger — Target HP on the render grid, the low, other deaths", () => {
+  const ret = (castAtMs: number, damageOut: unknown[]) =>
+    makeUnit("p1", {
+      name: "Ret",
+      spec: CombatUnitSpec.Paladin_Retribution,
+      info,
+      spellCastEvents: [
+        makeSpellCastEvent(
+          "31884",
+          castAtMs,
+          "p1",
+          "Self",
+          "p1",
+          "Ret",
+          0,
+          "Avenging Wrath",
+        ),
+      ],
+      damageOut,
+    } as any);
+  const hpAt = (s: number, pct: number) =>
+    makeAdvancedAction(MATCH_START + s * 1000, 0, 0, 100, pct);
+
+  it("a cast at a fractional second reads the [STATE] grid of the rendered seconds, not the raw instants", () => {
+    // cast 10.8 s → span 10.8–30.8, rendered 0:10–0:30. Raw-instant samples
+    // (the old read) would pick 62 % at 10.8 and 50 % at 30.8.
+    const player = ret(MATCH_START + 10_800, [
+      dmgOut(MATCH_START + 12_000, -50_000, "e1"),
+    ]);
+    const e1 = makeUnit("e1", {
+      name: "Victim",
+      info,
+      advancedActions: [
+        hpAt(10.0, 95),
+        hpAt(10.8, 62),
+        hpAt(30.0, 69),
+        hpAt(30.8, 50),
+      ],
+    } as any);
+    const t = analyzeBurstLedger(player, [], [e1], makeCombat())[0]
+      .dominantTarget!;
+    expect(t.hpStartPct).toBe(gridHpPct(e1, MATCH_START + 10_000));
+    expect(t.hpStartPct).toBe(95);
+    expect(t.hpEndPct).toBe(gridHpPct(e1, MATCH_START + 30_000));
+    expect(t.hpEndPct).toBe(69);
+  });
+
+  it("the low prints only as a trough: ≥ 10 points under both grid endpoints", () => {
+    const player = ret(MATCH_START + 10_000, [
+      dmgOut(MATCH_START + 12_000, -50_000, "e1"),
+    ]);
+    const run = (points: Array<[number, number]>) => {
+      const e1 = makeUnit("e1", {
+        name: "Victim",
+        info,
+        advancedActions: points.map(([s, pct]) => hpAt(s, pct)),
+      } as any);
+      const bursts = analyzeBurstLedger(player, [], [e1], makeCombat());
+      return {
+        low: bursts[0].dominantTarget!.hpLow,
+        line: formatBurstLedgerForContext(bursts, [], []).find((l) =>
+          l.includes("Target:"),
+        )!,
+      };
+    };
+    // 100 → 98 with a 37 % dip at 0:18
+    const deep = run([
+      [10, 100],
+      [17, 100],
+      [18, 37],
+      [19, 60],
+      [21, 90],
+      [30, 98],
+    ]);
+    expect(deep.low).toEqual({ pct: 37, atSeconds: 18 });
+    expect(deep.line).toContain(
+      "Target: Victim 100% → 98% (low 37% at 0:18) |",
+    );
+    // a 9-point dip under the lower endpoint is not a trough
+    const shallow = run([
+      [10, 100],
+      [17, 100],
+      [18, 61],
+      [19, 80],
+      [21, 90],
+      [30, 70],
+    ]);
+    expect(shallow.low).toBeNull();
+    expect(shallow.line).toContain("Target: Victim 100% → 70% |");
+    // the low IS the start value: nothing hidden (f4da82c5's 35 → 70)
+    const atStart = run([
+      [10, 35],
+      [30, 70],
+    ]);
+    expect(atStart.low).toBeNull();
+  });
+
+  it("a target dead inside the burst's first rendered second reads 0 at the start too", () => {
+    const player = ret(MATCH_START + 10_100, [
+      dmgOut(MATCH_START + 10_600, -50_000, "e1"),
+    ]);
+    const e1 = makeUnit("e1", {
+      name: "Victim",
+      info,
+      advancedActions: [hpAt(10, 95)],
+      deathRecords: [{ timestamp: MATCH_START + 10_800 } as any],
+    } as any);
+    const bursts = analyzeBurstLedger(player, [], [e1], {
+      ...makeCombat(),
+      endTime: MATCH_START + 10_900,
+    });
+    const t = bursts[0].dominantTarget!;
+    expect(t.hpStartPct).toBe(0);
+    expect(t.hpEndPct).toBe(0);
+  });
+
+  it("a target dead at the end second reads 0 and prints no low", () => {
+    const player = ret(MATCH_START + 10_000, [
+      dmgOut(MATCH_START + 12_000, -50_000, "e1"),
+    ]);
+    const e1 = makeUnit("e1", {
+      name: "Victim",
+      info,
+      advancedActions: [hpAt(10, 80), hpAt(20, 12)],
+      deathRecords: [{ timestamp: MATCH_START + 21_300 } as any],
+    } as any);
+    const bursts = analyzeBurstLedger(player, [], [e1], makeCombat());
+    const t = bursts[0].dominantTarget!;
+    expect(t.hpEndPct).toBe(0);
+    expect(t.hpLow).toBeNull();
+    expect(t.died).toBe(true);
+    expect(formatBurstLedgerForContext(bursts, [], [])[2]).toContain(
+      "Target: Victim 80% → 0% | your damage 0.05M | target DIED",
+    );
+  });
+
+  it("another enemy the burst hit and that died inside it is named; the target is unchanged", () => {
+    const player = ret(MATCH_START + 10_600, [
+      dmgOut(MATCH_START + 11_000, -300_000, "e2"),
+      dmgOut(MATCH_START + 15_000, -700_000, "e1"),
+    ]);
+    const e1 = makeUnit("e1", { name: "Kegrunner", info } as any);
+    const e2 = makeUnit("e2", {
+      name: "Shatters",
+      info,
+      deathRecords: [{ timestamp: MATCH_START + 11_945 } as any],
+    } as any);
+    const e3 = makeUnit("e3", {
+      // died in the span, but this burst never touched it
+      name: "Bystander",
+      info,
+      deathRecords: [{ timestamp: MATCH_START + 14_000 } as any],
+    } as any);
+    const e4 = makeUnit("e4", {
+      // a fully absorbed tick (effective damage 0), then killed by the rest
+      // of the team: not this burst's victim
+      name: "Shielded",
+      info,
+      deathRecords: [{ timestamp: MATCH_START + 13_000 } as any],
+    } as any);
+    player.damageOut.push(dmgOut(MATCH_START + 12_000, 0, "e4") as never);
+    const bursts = analyzeBurstLedger(
+      player,
+      [],
+      [e1, e2, e3, e4],
+      makeCombat(),
+    );
+    expect(bursts[0].dominantTarget?.unitName).toBe("Kegrunner");
+    expect(bursts[0].dominantTarget?.died).toBe(false);
+    expect(bursts[0].otherDeaths).toEqual([
+      { unitName: "Shatters", atSeconds: 11.945 },
+    ]);
+    expect(formatBurstLedgerForContext(bursts, [], [])[2]).toMatch(
+      /Target: Kegrunner \| your damage 0\.70M \| also hit: Shatters DIED 0:11 \(\+1\.3s\)$/,
+    );
   });
 });
 

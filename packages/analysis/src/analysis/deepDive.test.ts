@@ -426,6 +426,7 @@ describe("offensivePackItems(进攻证据映射,纯函数)", () => {
       unitName: "Rdruid-Area52",
       hpStartPct: 70,
       hpEndPct: 18,
+      hpLow: null,
       damage: 500000,
       defensivesHit: [
         {
@@ -437,6 +438,7 @@ describe("offensivePackItems(进攻证据映射,纯函数)", () => {
       ],
       died: false,
     },
+    otherDeaths: [],
     allyCDsOverlapping: [
       { playerName: "Mate-Area52", spellName: "Power Infusion" },
     ],

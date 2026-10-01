@@ -845,5 +845,12 @@
  *  (`PRESS_HP_LINE_TAGS`). The ledger's cast.targetHpPct (the [UNNECESSARY]
  *  threshold and note, questionable-external) is the same press reading; an
  *  [ENEMY DEF] aura is read at its cast.
+ *  v297 (2026-10-06, triage G15: hp-state F-B1 / F-N5, sync-burst F-L5 /
+ *  F-L5b / F-L1, ruling A'14): the burst ledger's `Target: X A% → B%` is the
+ *  [STATE] grid reading of the printed seconds (0 when dead), prints `(low L%
+ *  at m:ss)` when the low is at least 10 points under both endpoints — the
+ *  same rule now decides [DMG SPIKE]'s `low N% @m:ss` — and names the burst's
+ *  other victim (`| also hit: Y DIED m:ss (+N.Ns)`); gate
+ *  `checkBurstTargetHpConsistency`.
  */
-export const PROMPT_VERSION = 296;
+export const PROMPT_VERSION = 297;

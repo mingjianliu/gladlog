@@ -13,6 +13,7 @@
     "test/backlashRefGate.test.ts",
     "test/behaviorPriorTable.test.ts",
     "test/buildCorpus.test.ts",
+    "test/burstTargetHpGate.test.ts",
     "test/burstWindowPriorTable.test.ts",
     "test/burstWindowRefGate.test.ts",
     "test/calibration.test.ts",

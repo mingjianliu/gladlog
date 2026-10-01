@@ -1156,6 +1156,39 @@ export function gridHpMinInWindow(
   return best;
 }
 
+/** A trough is worth printing from this many points under BOTH endpoints. */
+export const HP_TROUGH_MIN_DROP_PTS = 10;
+
+/**
+ * Whether a rendered window whose endpoints read `hpFrom% → hpTo%` hid a
+ * trough at `minPct` worth printing: the grid low sits at least
+ * `HP_TROUGH_MIN_DROP_PTS` points under BOTH endpoints (a window that starts
+ * or ends at — or within a few points of — its own minimum has nothing
+ * hidden).
+ *
+ * User ruling 2026-09-30 (triage A′14, hp-state F-N5 + sync-burst F-L5b):
+ * this replaces the 2026-09-15 crisis-line rule (`low ≤ 40 %` and below both
+ * endpoints), under which 19 of the 32 "healed through" `[DMG SPIKE]` lines
+ * of the 60 triage rounds hid a dip of 10 points or more (0777a8e0: 82% →
+ * 82% over a 43 % low) and a 1-point dip under a falling window printed
+ * (85% → 2%, low 1%). 10 is the user's number; it equals
+ * `CONSEQ_DROP_MIN_PCT` but is a different fact and is not aliased.
+ *
+ * One predicate, three consumers (CLAUDE.md Shared-Predicate Rule): the
+ * `[DMG SPIKE]` renderer decides `, low N% @m:ss` vs `— healed through`
+ * with it, the burst ledger's `Target:` line decides `(low N% at m:ss)` with
+ * it, and the eval gates `checkHealedThroughConsistency` /
+ * `checkBurstTargetHpConsistency` ask the same question of every rendered
+ * `[STATE]` tick inside the window.
+ */
+export function isHpTroughWorthPrinting(
+  hpFrom: number,
+  hpTo: number,
+  minPct: number,
+): boolean {
+  return Math.min(hpFrom, hpTo) - minPct >= HP_TROUGH_MIN_DROP_PTS;
+}
+
 /**
  * The `[STATE]` tick's death predicate — the companion to `gridHpPct`, and
  * the second half of "what does the prompt show for this unit at this
