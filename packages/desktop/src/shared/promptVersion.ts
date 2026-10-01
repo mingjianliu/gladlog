@@ -682,5 +682,13 @@
  *  acquittal `target unreachable` are decided over the whole span, one
  *  rendered second at a time — reachable as soon as any living friendly could
  *  reach the target on any second — instead of at the span's first instant.
+ *  v265 (2026-10-03, triage G7-P6: death-kill F-T1 + hp-state F-D1): the side
+ *  of a damage source is its roster's (a charm flips the per-event flags),
+ *  and a row that flags its source or victim as a charmed player is never
+ *  same-side; Top sources / the final-5 s block / [KILL] keep enemy damage
+ *  and a Mind-Controlled teammate's hits (named as that player,
+ *  mind-controlled); a team's own redistribution (Spirit Link, Void Leech) is
+ *  not incoming pressure for [DMG SPIKE], [OFFENSIVE WINDOW], the [YOU] DPS
+ *  part or [RES] focus.
  */
-export const PROMPT_VERSION = 264;
+export const PROMPT_VERSION = 265;

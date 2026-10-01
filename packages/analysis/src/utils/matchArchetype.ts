@@ -17,6 +17,7 @@ import { AtomicArenaCombat, ICombatUnit } from "@gladlog/parser-compat";
 import { IPlayerCCTrinketSummary } from "./ccTrinketAnalysis";
 import { isHealerSpec, isMeleeSpec, specToString } from "./cooldowns";
 import { incomingPressureEvents } from "./incomingPressure";
+import { buildRosterSides, type RosterSides } from "./rosterSide";
 import { IAlignedBurstWindow } from "./enemyCDs";
 import { IHealerBurstExposure } from "./healerExposureAnalysis";
 
@@ -70,20 +71,28 @@ interface IMatchArchetypeMeasurements {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function totalDamageReceived(unit: ICombatUnit): number {
+function totalDamageReceived(unit: ICombatUnit, sides: RosterSides): number {
   // Damage taken + damage a shield ate, through the shared predicate.
   // `absorbsIn` used to be keyed by the ATTACKER, so the hand-merge here was
   // adding "damage this unit DEALT that ran into a shield" to its own intake.
-  return incomingPressureEvents(unit).reduce((sum, e) => sum + e.amount, 0);
+  return incomingPressureEvents(unit, sides).reduce(
+    (sum, e) => sum + e.amount,
+    0,
+  );
 }
 
 const PEAK_WINDOW_MS = 5000;
 
 /** Max total damage received by a single unit in any PEAK_WINDOW_MS sliding window. */
-function peakDamageInWindow(unit: ICombatUnit, matchStartMs: number): number {
+function peakDamageInWindow(
+  unit: ICombatUnit,
+  matchStartMs: number,
+  sides: RosterSides,
+): number {
   // Flat list of (timestamp, amount), already time-ordered by the predicate.
   const events: Array<{ t: number; dmg: number }> = incomingPressureEvents(
     unit,
+    sides,
   ).map((e) => ({ t: e.timestamp - matchStartMs, dmg: e.amount }));
 
   if (events.length === 0) return 0;
@@ -117,6 +126,7 @@ export function computeMatchArchetype(
   healerExposures: IHealerBurstExposure[],
 ): IMatchArchetypeMeasurements {
   const durationSeconds = (combat.endTime - combat.startTime) / 1000;
+  const rosterSides = buildRosterSides(Object.values(combat.units ?? {}));
 
   // First friendly death
   const allFriendlyDeaths = friends
@@ -166,7 +176,8 @@ export function computeMatchArchetype(
 
   // Peak 5s damage pressure — max damage on any single friendly in any 5s window
   const peakDamagePressure5s = friends.reduce(
-    (max, p) => Math.max(max, peakDamageInWindow(p, combat.startTime)),
+    (max, p) =>
+      Math.max(max, peakDamageInWindow(p, combat.startTime, rosterSides)),
     0,
   );
 
@@ -174,7 +185,7 @@ export function computeMatchArchetype(
   const friendlyDamageTotals = friends.map((p) => ({
     spec: specToString(p.spec),
     name: p.name,
-    dmg: totalDamageReceived(p),
+    dmg: totalDamageReceived(p, rosterSides),
   }));
   const totalDmg = friendlyDamageTotals.reduce((sum, p) => sum + p.dmg, 0);
   const friendlyDamageShare = friendlyDamageTotals
@@ -205,4 +216,3 @@ export function computeMatchArchetype(
 // ---------------------------------------------------------------------------
 // Formatter
 // ---------------------------------------------------------------------------
-

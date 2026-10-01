@@ -123,6 +123,7 @@ import * as rawStreams from "@gladlog/analysis/src/utils/rawStreams";
 import * as renderGrid from "@gladlog/analysis/src/utils/renderGrid";
 import * as resourceAt from "@gladlog/analysis/src/utils/resourceAt";
 import * as rootReachability from "@gladlog/analysis/src/utils/rootReachability";
+import * as rosterSide from "@gladlog/analysis/src/utils/rosterSide";
 import * as spellDanger from "@gladlog/analysis/src/utils/spellDanger";
 import * as spellMechanics from "@gladlog/analysis/src/utils/spellMechanics";
 import * as spellRange from "@gladlog/analysis/src/utils/spellRange";
@@ -541,6 +542,11 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/incomingPressure.ts`,
     symbol: "incomingPressureEvents",
     mod: incomingPressure,
+  },
+  {
+    file: `${A}/utils/rosterSide.ts`,
+    symbol: "isSameSideSource",
+    mod: rosterSide,
   },
   // Talent ownership
   {

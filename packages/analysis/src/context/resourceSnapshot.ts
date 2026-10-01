@@ -17,6 +17,7 @@ import {
 } from "../utils/cooldowns";
 import { IEnemyCDTimeline } from "../utils/enemyCDs";
 import { sumIncomingPressure } from "../utils/incomingPressure";
+import type { RosterSides } from "../utils/rosterSide";
 import { toRenderSecond } from "../utils/renderGrid";
 import { affordableAt, type ManaFallback } from "../utils/resourceAt";
 import { getPvpToolkit } from "../utils/talentBehaviors";
@@ -496,6 +497,9 @@ interface ResourceSnapshotParams {
   prevOnCDNames?: string[];
   matchStartMs?: number;
   ownerUnit?: ICombatUnit;
+  /** unit GUID → roster side (`buildRosterSides`), for the focus pick's
+   * incoming-pressure read */
+  rosterSides?: RosterSides;
   /** the timeline's mana fallback (raw.txt pass) and the round's bounds, for
    * the `(no mana …)` tag on the owner's ready cooldowns (`affordableAt`) */
   manaFallback?: ManaFallback;
@@ -515,6 +519,7 @@ export function buildResourceSnapshot({
   prevOnCDNames,
   matchStartMs,
   ownerUnit,
+  rosterSides,
   manaFallback,
   roundBounds,
 }: ResourceSnapshotParams): string {
@@ -710,7 +715,12 @@ export function buildResourceSnapshot({
     );
     const atMs = matchStartMs + timeSeconds * 1000;
     for (const f of allFriends) {
-      const dmg = sumIncomingPressure(f, atMs - focusLookbackMs, atMs);
+      const dmg = sumIncomingPressure(
+        f,
+        atMs - focusLookbackMs,
+        atMs,
+        rosterSides,
+      );
       if (dmg > maxDmg) {
         maxDmg = dmg;
         focusFriendName = f.name;

@@ -12,6 +12,7 @@ import { getEnglishSpellName } from "../data/spellEffectData";
 import { dropAuraRebroadcasts } from "../utils/auraIntervals";
 import { buffFullDurationForCaster } from "../utils/buffDuration";
 import { IPlayerCCTrinketSummary } from "../utils/ccTrinketAnalysis";
+import { isControlledPlayerFlags } from "../utils/charmedPlayer";
 import {
   cdCanHelpAnotherUnit,
   cdReadyInTimeAt,
@@ -27,6 +28,7 @@ import { positionalWallReaches } from "../utils/deathOutcomeAnalysis";
 import { IEnemyCDTimeline } from "../utils/enemyCDs";
 import { getHpPercentAtTime } from "../utils/killWindowTargetSelection";
 import { fmtTime } from "../utils/renderGrid";
+import { isSameSideSource, type RosterSides } from "../utils/rosterSide";
 import { getSpellSchoolName } from "../utils/spellSchools";
 import { summonOwnerById } from "../utils/summonOwner";
 
@@ -800,8 +802,13 @@ export function damageEventLabel(
   // B24: pet/guardian units may have localized (non-ASCII) names from non-en-US clients;
   // replace with "[pet]" to keep attribution readable without localization noise.
   const srcType = getUnitType(d.srcUnitFlags);
+  // A Mind-Controlled PLAYER logs with the PET type for as long as the charm
+  // lasts (`isControlledPlayerFlags`): it is that player, not somebody's pet
+  // (605-file slice: "[pet] — Rune of Unleashed Fire" for a charmed teammate).
+  const charmed = isControlledPlayerFlags(d.srcUnitId, d.srcUnitFlags);
   const isPet =
-    srcType === CombatUnitType.Pet || srcType === CombatUnitType.Guardian;
+    !charmed &&
+    (srcType === CombatUnitType.Pet || srcType === CombatUnitType.Guardian);
 
   let srcName = "Unknown";
   if (!isPet && d.srcUnitName) {
@@ -841,8 +848,9 @@ export function damageEventLabel(
   } else if (isPet) {
     srcName = summonLabel(d, srcType, playerIdMap, enemyIdMap, summonOwners);
   }
-  if (srcName === "[pet]" && !isPet)
+  if (srcName === "[pet]" && !isPet && !charmed)
     srcName = summonLabel(d, srcType, playerIdMap, enemyIdMap, summonOwners);
+  if (charmed) srcName = `${srcName} (mind-controlled)`;
 
   const baseSpellLabel = d.spellId
     ? getEnglishSpellName(d.spellId, d.spellName)
@@ -1033,6 +1041,8 @@ export function getTopDamageSourcesInWindow(
   enemyIdMap?: Map<string, number>,
   summonOwners?: ReadonlyMap<string, string>,
   unitNames?: ReadonlyMap<string, string>,
+  /** roster side by GUID (`buildRosterSides`); see the B20 note below */
+  sides?: RosterSides,
 ): string[] {
   const startMs = endMs - windowMs;
   // a melee swing is spellId "0" on a damage event and no attack spell on an
@@ -1053,8 +1063,22 @@ export function getTopDamageSourcesInWindow(
     // — except the unit's OWN deferred damage (Time Dilation's delayed
     // ticks 361029 land as self → self periodic damage: b12b, 255k in the
     // last 10 s, previously invisible here).
+    // The side is the ROSTER's (triage death-kill F-T1): while the log owner
+    // is charmed the log flips every reaction flag, and the flag test dropped
+    // the enemy's damage as "same team" (ba8c0510: 113k of a 199k Ray of
+    // Frost; 17 of the 60 triage rounds carry flipped rows).
     const self = !!d.srcUnitId && d.srcUnitId === unit.id;
-    if (!self && getUnitReaction(d.srcUnitFlags) === unit.reaction) continue;
+    if (
+      !self &&
+      isSameSideSource(
+        unit,
+        d.srcUnitId,
+        d.srcUnitFlags,
+        sides,
+        d.destUnitFlags,
+      )
+    )
+      continue;
     // "deferred" only for an identified delayed-damage effect — a direct
     // self-hit (Shadow Word: Death) is the unit's own, not deferred (codex
     // review of batch 7)
@@ -1083,7 +1107,16 @@ export function getTopDamageSourcesInWindow(
   for (const a of unit.absorbsIn ?? []) {
     if (a.timestamp < startMs || a.timestamp > endMs) continue;
     if (!a.attackerId || a.attackerId === unit.id) continue;
-    if (getUnitReaction(a.srcUnitFlags) === unit.reaction) continue;
+    if (
+      isSameSideSource(
+        unit,
+        a.attackerId,
+        a.srcUnitFlags,
+        sides,
+        a.destUnitFlags,
+      )
+    )
+      continue;
     const amt = Math.abs(a.absorbedAmount);
     if (amt <= 0) continue;
     const noSpell = hitSpellKey(a.attackSpellId) === "";
@@ -1250,6 +1283,8 @@ export function buildKillSequenceBlock(params: {
   enemyIdMap?: Map<string, number>;
   /** summon GUID → owner name (`buildSummonOwnerNames`) */
   summonOwners?: ReadonlyMap<string, string>;
+  /** unit GUID → roster side (`buildRosterSides`) */
+  rosterSides?: RosterSides;
   /** unit GUID → name (absorbed-hit attackers) */
   unitNames?: ReadonlyMap<string, string>;
 }): string[] {
@@ -1446,6 +1481,7 @@ export function buildKillSequenceBlock(params: {
           params.enemyIdMap,
           params.summonOwners,
           params.unitNames,
+          params.rosterSides,
         );
         // Reliability round 3 N13 (7d1f): "Killer" was the largest 5 s source
         // (a 93k Scorch 2 s earlier) while the last half second was DK + pets.

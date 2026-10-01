@@ -88,6 +88,7 @@ import {
 } from "../utils/externalDamage";
 import { IHealingGap } from "../utils/healingGaps";
 import { sumIncomingPressure } from "../utils/incomingPressure";
+import { buildRosterSides } from "../utils/rosterSide";
 import { getHpPercentAtTime } from "../utils/killWindowTargetSelection";
 import type { RawStreams } from "../utils/rawStreams";
 import { ownerResUtilityCds } from "./resUtilityCds";
@@ -450,6 +451,9 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   // summon GUID → owner name: damage-source labels name a pet / guardian
   // through its owner (reliability round 3, f4da).
   const summonOwners = buildSummonOwnerNames(_allUnits);
+  // unit GUID → roster side: "same team" is a roster fact, not the event's
+  // reaction flags, which flip while someone is charmed (death-kill F-T1)
+  const rosterSides = buildRosterSides(_allUnits);
   const unitNames = new Map(_allUnits.map((u) => [u.id, u.name]));
 
   // criticalWindowSet is built by the caller (buildMatchContext) via
@@ -1026,7 +1030,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       const fromMs = matchStartMs + (timeSeconds - 2) * 1000;
       const toMs = matchStartMs + timeSeconds * 1000;
       const incomingDpsK = Math.round(
-        sumIncomingPressure(targetUnit, fromMs, toMs) / 2 / 1000,
+        sumIncomingPressure(targetUnit, fromMs, toMs, rosterSides) / 2 / 1000,
       );
 
       if (hpNow !== null && hpBefore !== null) {
@@ -1252,6 +1256,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     enemyIdMap,
     summonOwners,
     unitNames,
+    rosterSides,
     counterfactualOf,
     dampeningAt: (atSeconds) =>
       getDampeningPercentage(
@@ -1272,6 +1277,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     enemyIdMap,
     summonOwners,
     unitNames,
+    rosterSides,
     dampeningAt: (atSeconds) =>
       getDampeningPercentage(
         params.bracket ?? "3v3",
@@ -1390,6 +1396,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
           enemyIdMap,
           summonOwners,
           unitNames,
+          rosterSides,
         );
         if (topSources.length > 0)
           line += ` killed by: ${topSources.join(", ")}`;
@@ -2668,6 +2675,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     enemyIdMap,
     summonOwners,
     unitNames,
+    rosterSides,
     // 敌方 CC 掩护标注的数据源 —— 与本文件 [CC ON TEAM] 行同一个数组对象
     ccTrinketSummaries,
     ownerName: owner.name,
@@ -3130,6 +3138,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       prevOnCDNames,
       matchStartMs,
       ownerUnit: owner,
+      rosterSides,
       manaFallback,
       roundBounds,
     });
@@ -3371,6 +3380,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       enemyIdMap,
       summonOwners,
       unitNames,
+      rosterSides,
     }),
   );
 

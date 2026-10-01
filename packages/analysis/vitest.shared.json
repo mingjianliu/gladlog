@@ -192,6 +192,7 @@
     "test/resLedgerPrune.test.ts",
     "test/rootIntervals.test.ts",
     "test/rootReachability.test.ts",
+    "test/rosterSide.test.ts",
     "test/sharedCharge.test.ts",
     "test/smoke.test.ts",
     "test/spellDurationOverrideAgreement.test.ts",

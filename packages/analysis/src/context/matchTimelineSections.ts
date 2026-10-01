@@ -39,6 +39,7 @@ import {
   wasLockedOutThroughWindow,
 } from "../utils/deathOutcomeAnalysis";
 import { sumAbsorbedPressure } from "../utils/incomingPressure";
+import type { RosterSides } from "../utils/rosterSide";
 import { getHpPercentAtTime } from "../utils/killWindowTargetSelection";
 import { fmtTime, toRenderSecond } from "../utils/renderGrid";
 import { type ManaFallback, manaReadingAt } from "../utils/resourceAt";
@@ -296,6 +297,8 @@ export function emitDmgSpikeEntries(params: {
   enemyIdMap?: Map<string, number>;
   /** summon GUID → owner name (`buildSummonOwnerNames`) */
   summonOwners?: ReadonlyMap<string, string>;
+  /** unit GUID → roster side (`buildRosterSides`) */
+  rosterSides?: RosterSides;
   /** unit GUID → name, to label an attacker known only by id (absorbs) */
   unitNames?: ReadonlyMap<string, string>;
   /** 与 [CC ON TEAM] 行同源的 CC 实例(analyzePlayerCCAndTrinket 产出)——
@@ -317,6 +320,7 @@ export function emitDmgSpikeEntries(params: {
     enemyIdMap,
     summonOwners,
     unitNames,
+    rosterSides,
     ccTrinketSummaries,
     ownerName,
     healerNames,
@@ -403,7 +407,7 @@ export function emitDmgSpikeEntries(params: {
     // shared incoming-pressure predicate now, same source the window itself
     // is built from.
     const totalAbsorbed = targetUnit
-      ? sumAbsorbedPressure(targetUnit, fromMs, toMs)
+      ? sumAbsorbedPressure(targetUnit, fromMs, toMs, rosterSides)
       : 0;
 
     const absorbStr =
@@ -421,6 +425,7 @@ export function emitDmgSpikeEntries(params: {
           enemyIdMap,
           summonOwners,
           unitNames,
+          rosterSides,
         )
       : [];
     const sourceStr =
@@ -726,6 +731,8 @@ export function emitFriendlyDeathEntries<S>(params: {
   enemyIdMap?: Map<string, number>;
   /** summon GUID → owner name (`buildSummonOwnerNames`) */
   summonOwners?: ReadonlyMap<string, string>;
+  /** unit GUID → roster side (`buildRosterSides`) */
+  rosterSides?: RosterSides;
   /** unit GUID → name, to label an attacker known only by id (absorbs) */
   unitNames?: ReadonlyMap<string, string>;
   /** GH #103 A1: the dampening at the death instant, same getter as the
@@ -771,6 +778,7 @@ export function emitFriendlyDeathEntries<S>(params: {
     enemyIdMap,
     summonOwners,
     unitNames,
+    rosterSides,
     counterfactualOf,
     requestSnapshotPlaceholder,
     addEntry,
@@ -873,7 +881,8 @@ export function emitFriendlyDeathEntries<S>(params: {
     );
     const trinketPart = !trinketAvailable
       ? ""
-      : trinketSummary && breakableCcBeforeDeath(trinketSummary, death.atSeconds)
+      : trinketSummary &&
+          breakableCcBeforeDeath(trinketSummary, death.atSeconds)
         ? " (PvP Trinket available)"
         : ` (PvP Trinket available; no breakable CC in the last ${DEATH_BREAKABLE_CC_LOOKBACK_S} s)`;
     const notePart = death.note ? ` [${death.note}]` : "";
@@ -936,6 +945,7 @@ export function emitFriendlyDeathEntries<S>(params: {
         enemyIdMap,
         summonOwners,
         unitNames,
+        rosterSides,
       );
       if (topSources.length > 0) {
         deathLines.push(
@@ -978,6 +988,8 @@ export function emitEnemyDeathEntries<S>(params: {
   enemyIdMap?: Map<string, number>;
   /** summon GUID → owner name (`buildSummonOwnerNames`) */
   summonOwners?: ReadonlyMap<string, string>;
+  /** unit GUID → roster side (`buildRosterSides`) */
+  rosterSides?: RosterSides;
   /** unit GUID → name, to label an attacker known only by id (absorbs) */
   unitNames?: ReadonlyMap<string, string>;
   /** GH #103 A1 (see emitFriendlyDeathEntries): the dampening at the death instant, same getter as the
@@ -1001,6 +1013,7 @@ export function emitEnemyDeathEntries<S>(params: {
     enemyIdMap,
     summonOwners,
     unitNames,
+    rosterSides,
     dampeningAt,
     requestSnapshotPlaceholder,
     addEntry,
@@ -1066,6 +1079,7 @@ export function emitEnemyDeathEntries<S>(params: {
         enemyIdMap,
         summonOwners,
         unitNames,
+        rosterSides,
       );
       if (topSources.length > 0) {
         deathLines.push(

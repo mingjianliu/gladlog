@@ -41,6 +41,7 @@ import { binarySearchClosest } from "./binarySearch";
 import { buffFullDurationForCaster } from "./buffDuration";
 import { COPY_CAST_IDS } from "./castPress";
 import { incomingPressureEvents } from "./incomingPressure";
+import { buildRosterSides } from "./rosterSide";
 import {
   auraOffensiveActiveAt,
   OFFENSIVE_AURA_EVIDENCE,
@@ -3699,9 +3700,10 @@ export function computePressureWindows(
 ): IDamageBucket[] {
   const matchStartMs = combat.startTime;
   const allSpikes: IDamageBucket[] = [];
+  const rosterSides = buildRosterSides(Object.values(combat.units ?? {}));
 
   for (const player of friendlyPlayers) {
-    const damageEvents = incomingPressureEvents(player)
+    const damageEvents = incomingPressureEvents(player, rosterSides)
       .map((a) => ({
         timeSec: (a.timestamp - matchStartMs) / 1000,
         amount: a.amount,
