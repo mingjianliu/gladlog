@@ -3,8 +3,12 @@ import { LogEvent } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { ensureAnalysisData } from "../src/data/ensure";
-import { MITIGATION_TABLE } from "../src/data/mitigationData";
+import {
+  MITIGATION_TABLE,
+  SELF_WALL_AURA_TO_CAST_ID,
+} from "../src/data/mitigationData";
 import spellIdLists, {
+  ENEMY_AREA_SAVE_IDS,
   ENEMY_HEAL_SAVE_IDS,
   ENEMY_IMMUNITY_SAVE_AURAS,
   ENEMY_REDIRECT_SAVE_IDS,
@@ -24,6 +28,7 @@ import {
   MITIGATION_AURA_MIN_PCT,
   REMOVED_EARLY_SLACK_S,
   SELF_SAVE_IDS,
+  wallTableIdOfAura,
 } from "../src/utils/enemyDefensives";
 
 /**
@@ -635,5 +640,111 @@ describe("a re-applied aura with no REMOVED between is one press (F-E12)", () =>
     // a gap between the two is not a re-announce
     const gap = [iv(10, 14, true), iv(15, 26, false)];
     expect(joinReappliedIntervals(gap, () => [10])).toEqual(gap);
+  });
+});
+
+/**
+ * Triage 2026-09-29, enemy-def F-E1a: Blur and Greater Invisibility are table
+ * rows keyed by the cast id; the log carries another aura id on the caster.
+ */
+describe("a wall keyed by its cast is found under its logged aura (F-E1a)", () => {
+  const BLUR_CAST = "198589";
+  const BLUR_AURA = "212800";
+  const GI_CAST = "110959";
+  const GI_AURA = "110960";
+
+  beforeAll(async () => {
+    await ensureAnalysisData();
+  });
+
+  it("the alias points at real table rows and never at an aura that is itself a row", () => {
+    for (const [aura, castId] of Object.entries(SELF_WALL_AURA_TO_CAST_ID)) {
+      expect(MITIGATION_TABLE[castId], castId).toBeDefined();
+      expect(MITIGATION_TABLE[aura], aura).toBeUndefined();
+      expect(MITIGATION_AURA_IDS.has(castId), castId).toBe(true);
+      expect(wallTableIdOfAura(aura)).toBe(castId);
+    }
+    expect(wallTableIdOfAura(BARKSKIN)).toBe(BARKSKIN);
+  });
+
+  it("an enemy Blur: one self wall at 25 %, timed by the 212800 aura", () => {
+    const dh = unit("e1", {
+      spec: "577",
+      spellCastEvents: [cast(BLUR_CAST, "0000000000000000", 82)],
+      auraEvents: [
+        applied(BLUR_AURA, "e1", "e1", 82),
+        removed(BLUR_AURA, "e1", "e1", 92),
+      ],
+    });
+    const evs = enemyDefensiveEvents(dh, [dh], combat);
+    expect(evs).toHaveLength(1);
+    expect(evs[0]).toMatchObject({
+      kind: "self",
+      spellId: BLUR_AURA,
+      pct: MITIGATION_TABLE[BLUR_CAST].pct,
+      atSeconds: 82,
+    });
+    expect(evs[0].observedSeconds).toBeCloseTo(10, 5);
+  });
+
+  it("an enemy Greater Invisibility: one self wall at the signed 60 %, from the 110960 aura", () => {
+    const mage = unit("e1", {
+      spec: "63",
+      spellCastEvents: [cast(GI_CAST, "0000000000000000", 40)],
+      auraEvents: [
+        applied(GI_AURA, "e1", "e1", 40),
+        removed(GI_AURA, "e1", "e1", 60),
+      ],
+    });
+    const evs = enemyDefensiveEvents(mage, [mage], combat);
+    expect(evs.map((e) => [e.kind, e.pct])).toEqual([["self", 60]]);
+  });
+});
+
+/**
+ * Triage 2026-09-29, enemy-def F-E1b + crisis-external F-A1b (ruling A15):
+ * an area save is one `area` event per cast — the caster and the second.
+ */
+describe("area saves are anchored on the cast (F-E1b / F-A1b)", () => {
+  beforeAll(async () => {
+    await ensureAnalysisData();
+  });
+
+  it("the area saves are friendly-roster externals with a nil-dest cast", () => {
+    for (const id of ENEMY_AREA_SAVE_IDS)
+      expect(EXTERNAL_DEF_IDS.has(id), id).toBe(true);
+  });
+
+  it.each([
+    ["51052", "Anti-Magic Zone"],
+    ["196718", "Darkness"],
+    ["97462", "Rallying Cry"],
+    // user ruling P-E1b2 (2026-10-01): the same shape, the same line
+    ["98008", "Spirit Link Totem"],
+    ["62618", "Power Word: Barrier"],
+  ])("%s (%s): one `area` event, no recipient, no duration", (id) => {
+    const caster = unit("e1", {
+      spellCastEvents: [cast(id, "0000000000000000", 99.55)],
+    });
+    const mate = unit("e2", {
+      // Rallying Cry's 97463 / Anti-Magic Zone's 145629 / Spirit Link's 325174
+      // / Barrier's 81782 on a teammate add nothing
+      auraEvents: [
+        applied("97463", "e1", "e2", 99.55),
+        applied("325174", "totem", "e2", 99.6),
+        applied("81782", "barrier", "e2", 99.6),
+      ],
+    });
+    const evs = enemyDefensiveEvents(caster, [caster, mate], combat);
+    expect(evs).toHaveLength(1);
+    expect(evs[0]).toMatchObject({
+      kind: "area",
+      spellId: id,
+      atSeconds: 99.55,
+    });
+    expect(evs[0].recipientId).toBeUndefined();
+    expect(evs[0].observedSeconds).toBeUndefined();
+    expect(evs[0].pct).toBeUndefined();
+    expect(enemyDefensiveEvents(mate, [caster, mate], combat)).toEqual([]);
   });
 });

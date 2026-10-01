@@ -98,7 +98,8 @@ describe("wallDoorPct (GH #114 — one price for [ENEMY DEF] and the burst-into-
       join(__dirname, "../src/utils/enemyDefensives.ts"),
       "utf8",
     );
-    expect(src).toContain("pct: wallDoorPct(iv.spellId");
+    // the aura is resolved to its table key first (F-E1a: Blur's 212800 → 198589)
+    expect(src).toContain("pct: wallDoorPct(tableId");
     expect(src).not.toMatch(/pct:\s*MITIGATION_TABLE\[/);
   });
 });

@@ -784,3 +784,41 @@ describe("extractKillAttempts — immunity-kind saves are immunity-baited", () =
     ).toBe(false);
   });
 });
+
+/** enemy-def F-E1a: Blur's wall is logged as aura 212800 while its table row
+ * is the cast 198589 — the attribution resolves the aura to that row. */
+describe("extractKillAttempts — a cast-keyed wall found under its aura id", () => {
+  it("Blur (aura 212800) inside the span → popped Blur", async () => {
+    await ensureAnalysisData();
+    const e1 = unit("e1", {
+      spec: "577",
+      auraEvents: [
+        ...stunAuras("e1", KIDNEY, 10, 5),
+        {
+          spellId: "212800",
+          spellName: "疾影",
+          srcUnitId: "e1",
+          srcUnitName: "e1",
+          destUnitId: "e1",
+          destUnitName: "e1",
+          timestamp: ms(12),
+          logLine: {
+            event: LogEvent.SPELL_AURA_APPLIED,
+            timestamp: ms(12),
+            parameters: [],
+          },
+          auraType: "BUFF",
+        },
+      ],
+    });
+    const f1 = unit("f1", {
+      reaction: 1,
+      damageOut: [dmg("f1", "e1", 12, 50_000)],
+    });
+    const [a] = extractKillAttempts([f1], [e1], makeCombat(f1, e1));
+    expect(a.attribution?.primary).toBe("defensive");
+    expect(formatKillAttemptsForContext([a]).join("\n")).toContain(
+      "FAILED: popped Blur",
+    );
+  });
+});

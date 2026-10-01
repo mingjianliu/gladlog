@@ -10,9 +10,14 @@
 import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import { wallDoorPct } from "../data/mitigationComponents";
-import { MITIGATION_TABLE, NO_MITIGATION_IDS } from "../data/mitigationData";
+import {
+  MITIGATION_TABLE,
+  NO_MITIGATION_IDS,
+  SELF_WALL_AURA_TO_CAST_ID,
+} from "../data/mitigationData";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import spellIdListsData, {
+  ENEMY_AREA_SAVE_IDS,
   ENEMY_HEAL_SAVE_IDS,
   ENEMY_IMMUNITY_EXTERNAL_CASTS,
   ENEMY_IMMUNITY_HEAL_PROCS,
@@ -100,6 +105,15 @@ export const MITIGATION_AURA_IDS = new Set<string>(
     .filter(([, e]) => e.pct >= MITIGATION_AURA_MIN_PCT && e.pct < 100)
     .map(([id]) => id),
 );
+
+/** The `MITIGATION_TABLE` key behind an aura found on a unit: the aura id
+ * itself, or — for a wall whose row is keyed by its cast (Blur 198589 logs
+ * aura 212800, Greater Invisibility 110959 logs 110960) — that cast id.
+ * Enemy-def F-E1a: the `[ENEMY DEF]` aura loop and the KILL ATTEMPTS `popped
+ * X` test both resolve an aura through this before asking any wall set. */
+export function wallTableIdOfAura(auraSpellId: string): string {
+  return SELF_WALL_AURA_TO_CAST_ID[auraSpellId] ?? auraSpellId;
+}
 
 /** An external save: a cast that helps the ALLY it is cast on. The friendly
  * roster (`EXTERNAL_DEF_IDS`) plus the enemy-only sets — instant heals (Lay on
@@ -234,8 +248,8 @@ export interface IEnemyDefensiveEvent {
   spellName: string;
   /** the enemy who pressed it */
   casterName: string;
-  /** "self" = a wall on the caster (pct < 100); "immune" = pct 100; "external" = cast on another enemy; "self-save" = the caster's own no-%-mitigation save (`SELF_SAVE_IDS`) */
-  kind: "self" | "immune" | "external" | "self-save";
+  /** "self" = a wall on the caster (pct < 100); "immune" = pct 100; "external" = cast on another enemy; "self-save" = the caster's own no-%-mitigation save (`SELF_SAVE_IDS`); "area" = an area save anchored on its cast (`ENEMY_AREA_SAVE_IDS`): who pressed it and when, nothing else */
+  kind: "self" | "immune" | "external" | "self-save" | "area";
   /** official mitigation pct (self / immune); undefined for externals and for an immunity-kind save, which has no table row */
   pct?: number;
   /** who received an external */
@@ -302,7 +316,8 @@ export function enemyDefensiveEvents(
   for (const iv of intervalsOf(enemy)) {
     if (iv.srcUnitName !== enemy.name) continue;
     const immune = isImmunitySaveAura(iv.spellId);
-    if (!immune && !MITIGATION_AURA_IDS.has(iv.spellId)) continue;
+    const tableId = wallTableIdOfAura(iv.spellId);
+    if (!immune && !MITIGATION_AURA_IDS.has(tableId)) continue;
     const observed = iv.toS - iv.fromS;
     const saveName = IMMUNITY_SAVE_AURA_NAMES.get(iv.spellId);
     out.push({
@@ -317,7 +332,7 @@ export function enemyDefensiveEvents(
       // aura. The raw table value printed Barkskin 20 % while the candidate
       // priced it 30 % (GH #114). An immunity-kind save has no table row, so
       // no pct — the line prints `immune` for it.
-      pct: wallDoorPct(iv.spellId, { carrierIsCaster: true, caster: enemy }),
+      pct: wallDoorPct(tableId, { carrierIsCaster: true, caster: enemy }),
       observedSeconds: observed,
       removedEarly: !iv.inferredEnd && removedEarly(iv.spellId, observed),
     });
@@ -339,6 +354,20 @@ export function enemyDefensiveEvents(
     if (cast.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
     if (!cast.spellId || !isExternalSaveId(cast.spellId)) continue;
     const atSeconds = (cast.logLine.timestamp - combat.startTime) / 1000;
+    // F-E1b / F-A1b (ruling A15): an area save is anchored on the cast — its
+    // aura names no source (Anti-Magic Zone), is never applied (Darkness) or
+    // lands on the whole team (Rallying Cry).
+    if (ENEMY_AREA_SAVE_IDS.has(cast.spellId)) {
+      out.push({
+        atSeconds,
+        spellId: cast.spellId,
+        spellName: getEnglishSpellName(cast.spellId, cast.spellName),
+        casterName: enemy.name,
+        kind: "area",
+        removedEarly: false,
+      });
+      continue;
+    }
     // F-E6: an immunity the caster's summon applies (Guardian of the
     // Forgotten Queen: cast 228049, aura 228050 from the guardian). Cast on
     // an ally it is an external timed by that aura; cast on oneself the aura

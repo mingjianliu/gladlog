@@ -263,3 +263,22 @@ export const ENEMY_IMMUNITY_EXTERNAL_CASTS: Readonly<Record<string, string>> = {
   "228049": "228050",
   "378441": "378441",
 };
+
+/** Enemy-def F-E1b + crisis-external F-A1b (user ruling A15, 2026-09-30:
+ * "只写「X 在 m:ss 放了」"): an area save whose press has no dest and whose
+ * aura cannot be tied to a recipient — Anti-Magic Zone's 145629 has a nil
+ * source, Darkness's 209426 is never APPLIED (only SPELL_ABSORBED), Rallying
+ * Cry's 97463 lands on the whole team. The `[ENEMY DEF]` line is anchored on
+ * the cast and says `(area)`: who pressed it and when — no %, no recipients,
+ * no duration. All are members of `externalDefensiveSpellIds`; every cast in
+ * the 605-file capture has a nil dest (168 / 145 / 356 / 158 / 1).
+ * User ruling P-E1b2 (2026-10-01, "照 A15"): Spirit Link Totem and Power
+ * Word: Barrier have the same shape — a nil-dest cast, and an aura (325174 /
+ * 81782) applied by the totem / the barrier, never by the caster. */
+export const ENEMY_AREA_SAVE_IDS: ReadonlySet<string> = new Set([
+  "51052", // Anti-Magic Zone
+  "196718", // Darkness
+  "97462", // Rallying Cry
+  "98008", // Spirit Link Totem — 158 casts / 76 files
+  "62618", // Power Word: Barrier — 1 cast / 1 file
+]);

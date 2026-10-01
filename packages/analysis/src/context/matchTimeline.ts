@@ -1784,6 +1784,10 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
               duringStr = ` | during it: ${obs.map((o) => formatDuringExternal(o, pid)).join("; ")}`;
           }
           line = `${d.spellName} → ${enemyPid(d.recipientName ?? "")}${dur ? ` (${dur})` : ""}${burstStr}${hpStr}${duringStr}`;
+        } else if (d.kind === "area") {
+          // Ruling A15 (2026-09-30): who pressed it and when — no %, no
+          // recipients, no duration, no HP (nobody is "the target").
+          line = `${d.spellName} (area)`;
         } else if (d.kind === "self-save") {
           const hpStr = hpPct !== null ? ` (at ${hpPct.toFixed(0)}% HP)` : "";
           line = `${d.spellName} (self-save)${burstStr}${hpStr}`;
@@ -3183,7 +3187,8 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
           "    Feign Death, a Cheat Death / Cauterize / Nature's Guardian proc) — KILL ATTEMPTS counts each as a forced",
           "    immunity; `— removed early` = it ended before its full duration (dispelled, broken or cancelled);",
           "    `X → unit` = an external put on that unit; one with no duration is an instant heal (Lay on Hands) or a grip /",
-          "    redirect (Leap of Faith, Intervene, Roar of Sacrifice, Master's Call). Absent = not pressed.",
+          "    redirect (Leap of Faith, Intervene, Roar of Sacrifice, Master's Call); `(area)` = an area save pressed at that",
+          "    second (Anti-Magic Zone, Darkness, Rallying Cry, Spirit Link Totem, Power Word: Barrier) — who was inside it is not stated. Absent = not pressed.",
           "    `(self-save)` = the enemy's own save that carries no damage reduction — an absorb, a heal or avoidance (Guardian",
           "    Spirit on itself, Desperate Prayer, Touch of Karma, Dark Pact, Evasion, Healthstone, Ice Barrier…) — KILL",
           "    ATTEMPTS `self-saved (X)` names these.",

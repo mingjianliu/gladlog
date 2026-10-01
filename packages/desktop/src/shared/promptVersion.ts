@@ -514,5 +514,11 @@
  *  Forgotten Queen as `immune`, and KILL ATTEMPTS reads each as a forced
  *  immunity; an aura re-announced with no REMOVED between is one press
  *  (`joinReappliedIntervals`), not two lines. Menu ids unchanged.
+ *  v243 (2026-10-01, triage enemy-def F-E1a / F-E1b, crisis-external F-A1b,
+ *  ruling A15): an enemy Blur / Greater Invisibility renders and counts as a
+ *  popped wall (the logged aura is resolved to its cast-keyed table row);
+ *  Anti-Magic Zone, Darkness, Rallying Cry, Spirit Link Totem and Power
+ *  Word: Barrier render `X (area)` at the cast (rulings A15, P-E1b2).
+ *  Menu ids unchanged.
  */
-export const PROMPT_VERSION = 242;
+export const PROMPT_VERSION = 243;

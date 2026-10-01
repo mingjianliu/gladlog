@@ -310,7 +310,7 @@ export const MITIGATION_VERDICTS: Record<string, IMitigationVerdict> = {
     zh: "强化隐形术",
     officialPct: 60,
     verdict: "kill-live-gated",
-    note: "用户原话(2026-09-26,与惩戒圣佑术、圣疗术一并裁):「都可以继续打 没法说的太绝对 但是要看有没有后续伤害 对面治疗的状态 位置 冷却 徽章 等等」,随后确认落在 kill-live-gated。**注意**:本表的「击杀是否成立」判据(下方 KILL_LIVE_HP_PCT)只看血线;用户列的后续伤害、对面治疗状态、位置、冷却、徽章目前都不在判据里 —— 这是已记账的后续改进(GH #109),不是本条的实现。减伤挂在 buff 113862 上(`aura87 pts=-60 misc=127`),MITIGATION_TABLE 里是按施法 id 登记的覆盖项(疾影术 198589 同形态)。",
+    note: "用户原话(2026-09-26,与惩戒圣佑术、圣疗术一并裁):「都可以继续打 没法说的太绝对 但是要看有没有后续伤害 对面治疗的状态 位置 冷却 徽章 等等」,随后确认落在 kill-live-gated。**注意**:本表的「击杀是否成立」判据(下方 KILL_LIVE_HP_PCT)只看血线;用户列的后续伤害、对面治疗状态、位置、冷却、徽章目前都不在判据里 —— 这是已记账的后续改进(GH #109),不是本条的实现。减伤挂在 buff 113862 上(`aura87 pts=-60 misc=127`),MITIGATION_TABLE 里是按施法 id 登记的覆盖项(疾影术 198589 同形态)。\n\n**FLAG(2026-09-30,分诊 tier-C C2):** 113862 在 605 场 S2 采集 / 713 次施放里从未出现,日志里只有光环 110960;带 110960 期间与其后 3 秒的承伤是基线的 0.98×。用户 2026-09-30 裁定维持本条(60%、kill-live-gated),不重开。",
     source:
       "官方 DB2 SpellEffect(113862 的 aura87 = -60/127,PvpMultiplier 1)+ 可靠性第二轮 W1g ledgerGapScan(605 场)发现它在冷却账本里却不在减伤体系里;档位由用户 2026-09-26 裁定",
     approved: "2026-09-26 user",

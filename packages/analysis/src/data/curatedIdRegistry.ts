@@ -151,7 +151,11 @@ import {
   KICKED_HEAL_OVERRIDE_IDS,
   KICKED_OTHER_OVERRIDE_IDS,
 } from "./kickedSpellCategories";
-import { MITIGATION_OVERRIDES, NO_MITIGATION_IDS } from "./mitigationData";
+import {
+  MITIGATION_OVERRIDES,
+  NO_MITIGATION_IDS,
+  SELF_WALL_AURA_TO_CAST_ID,
+} from "./mitigationData";
 import { MITIGATION_VERDICTS } from "./mitigationVerdicts";
 import { CHANNEL_PROXY_IDS, DRINK_AURA_IDS } from "./occupancyAuras";
 import {
@@ -171,6 +175,7 @@ import {
   SPELL_EFFECT_OVERRIDES,
 } from "./spellEffectOverrides";
 import spellIdLists, {
+  ENEMY_AREA_SAVE_IDS,
   ENEMY_HEAL_SAVE_IDS,
   ENEMY_IMMUNITY_EXTERNAL_CASTS,
   ENEMY_IMMUNITY_HEAL_PROCS,
@@ -298,6 +303,15 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
       ...keys(ENEMY_IMMUNITY_EXTERNAL_CASTS),
       ...Object.values(ENEMY_IMMUNITY_EXTERNAL_CASTS),
     ],
+  ),
+  // enemy-def F-E1a: logged aura id → the cast id its wall row is keyed by.
+  t("SELF_WALL_AURA_TO_CAST_ID", "data/mitigationData.ts", "mixed", () => [
+    ...keys(SELF_WALL_AURA_TO_CAST_ID),
+    ...Object.values(SELF_WALL_AURA_TO_CAST_ID),
+  ]),
+  // enemy-def F-E1b / crisis-external F-A1b (ruling A15): cast-anchored area saves.
+  t("spellIdLists.ENEMY_AREA_SAVE_IDS", "data/spellIdLists.ts", "cast", () =>
+    set(ENEMY_AREA_SAVE_IDS),
   ),
   // GH #91 round 2 (2026-09-22): the ally-applied absorb shields the
   // during-external contract admits (one member, Life Cocoon).

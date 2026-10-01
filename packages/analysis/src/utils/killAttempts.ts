@@ -82,6 +82,7 @@ import {
   MITIGATION_AURA_IDS,
   MITIGATION_AURA_MIN_PCT,
   selfSaveCasts,
+  wallTableIdOfAura,
 } from "./enemyDefensives";
 import {
   getHpPercentAtTime,
@@ -686,15 +687,17 @@ function attributeFailure(
     if (isImmunitySaveAura(aura.spellId)) immunityBaited = true;
     // The wall-in-hand subset is called out by name — those are the cards the
     // gated tier told the coach to bait; seeing one here closes that loop.
+    // F-E1a: a wall whose table row is keyed by its cast (Blur, Greater
+    // Invisibility) is found here under its logged aura id.
+    const wallId = wallTableIdOfAura(aura.spellId);
     if (
-      (MITIGATION_AURA_IDS.has(aura.spellId) ||
-        WALL_IN_HAND_MIT_IDS.has(aura.spellId)) &&
+      (MITIGATION_AURA_IDS.has(wallId) || WALL_IN_HAND_MIT_IDS.has(wallId)) &&
       !poppedIds.has(aura.spellId) &&
       // A wall applied ON the target by somebody else (Flameshaper Obsidian
       // Scales on an ally, 15 %) is not the target popping a defensive.
       // GH #96 M3a: priced through the component resolver (lower bound).
       (strongestComponentPct(
-        resolveMitigation(aura.spellId, {
+        resolveMitigation(wallId, {
           carrierIsCaster: aura.srcUnitId === target.id,
           // M3b: talents are attributable only to a self-cast here (no roster)
           caster: aura.srcUnitId === target.id ? target : undefined,
