@@ -93,7 +93,7 @@ import {
   formatSpecBaselines,
 } from "../utils/specBaselines";
 import { heroBuildGroupOf } from "../utils/talents";
-import { warlockPetFunction } from "../utils/warlockPet";
+import { warlockPetFunctions } from "../utils/warlockPet";
 import { buildCriticalWindowSet } from "./criticalWindows";
 import { formatObservedConsequences } from "./observedConsequences";
 import { ccUseSummary, formatCcUse } from "./ccUse";
@@ -147,8 +147,24 @@ export function buildMatchContext(
   // / purge is on the table. Predicate: utils/warlockPet.ts.
   const allUnitsForPets = Object.values(combat.units ?? {});
   const rosterEntry = (p: ICombatUnit): string => {
-    const pet = warlockPetFunction(p, allUnitsForPets);
-    return `${specToString(p.spec)} (${p.name})${pet ? ` [pet: ${pet.pet} — ${pet.does}]` : ""}`;
+    // F-PS1 (triage 2026-09-29): a warlock who swapped pets mid-round lists
+    // every permanent pet, in order, the later ones with the second they
+    // first show up (no end time — GH #86).
+    // Permanent pets only, for one pet as for several: the single-unit
+    // lookup (`warlockPetFunction`) takes the first owned unit it can name,
+    // and a Demonology warlock's temporary `Creature-` summon listed ahead of
+    // the real pet put "Imp — Singe Magic (friendly dispel)" on the roster
+    // of a warlock running a Felguard (agy review 2026-10-01, verified on
+    // archive ff310053: Wild Imps beside Pet-…-58965).
+    const pets = warlockPetFunctions(p, allUnitsForPets, combat.startTime);
+    return pets.length === 0
+      ? `${specToString(p.spec)} (${p.name})`
+      : `${specToString(p.spec)} (${p.name}) [pet: ${pets
+          .map(
+            (x, i) =>
+              `${x.fn.pet}${i > 0 && x.fromSeconds !== null ? ` from ${fmtTime(Math.max(0, x.fromSeconds))}` : ""} — ${x.fn.does}`,
+          )
+          .join("; ")}]`;
   };
   const myTeam = friends.map(rosterEntry).join(", ");
   const enemyTeam = enemies.map(rosterEntry).join(", ");

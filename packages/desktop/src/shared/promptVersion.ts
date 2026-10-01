@@ -405,5 +405,9 @@
  *  tool; a channel whose own aura ends within 250 ms after a CC lands on the
  *  owner reads `[channel cut by CC after N.Ns]` on its [YOU] [CAST] line
  *  instead of `[cast succeeded before CC landed]`.
+ *  v222 (2026-10-01, triage pets-summons F-PS1): the roster `[pet: …]` tag
+ *  lists every permanent pet a warlock ran, in order (`Sayaad — …; Felhunter
+ *  from 0:36 — …`), from Pet- GUIDs only — a temporary Creature- summon no
+ *  longer names the pet.
  */
-export const PROMPT_VERSION = 221;
+export const PROMPT_VERSION = 222;

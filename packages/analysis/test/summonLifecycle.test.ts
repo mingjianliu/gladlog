@@ -23,7 +23,10 @@ import {
   nonPlayerUnitKill,
   summonLifetimeAtKillS,
 } from "../src/context/timelineHelpers";
-import { warlockPetFunction } from "../src/utils/warlockPet";
+import {
+  warlockPetFunction,
+  warlockPetFunctions,
+} from "../src/utils/warlockPet";
 import { loadLegacyMatchFixture } from "./helpers/legacyFixture";
 
 const T0 = 1_000_000;
@@ -210,6 +213,96 @@ describe("warlockPetFunction — the roster names a warlock's pet by what it doe
     expect(warlockPetFunction(lock, [lock])).toBeNull();
   });
 
+  describe("warlockPetFunctions — a mid-round pet swap (triage pets-summons F-PS1)", () => {
+    const petAt = (guid: string, firstS: number | null, ownerId = "W1") =>
+      unit({
+        id: guid,
+        name: "x",
+        type: CombatUnitType.Pet,
+        ownerId,
+        damageOut:
+          firstS === null
+            ? []
+            : ([
+                {
+                  timestamp: T0 + firstS * 1000,
+                  logLine: { timestamp: T0 + firstS * 1000 },
+                },
+              ] as never),
+      });
+    const sayaad = petAt("Pet-0-1-1-1-1863-0A01", 2);
+    const felhunter = petAt("Pet-0-1-1-1-417-0A02", 36.4);
+
+    it("every permanent pet, in first-appearance order, with when the later ones show up", () => {
+      const pets = warlockPetFunctions(lock, [felhunter, lock, sayaad], T0);
+      expect(pets.map((p) => p.fn.pet)).toEqual(["Sayaad", "Felhunter"]);
+      expect(pets[1]!.fromSeconds).toBeCloseTo(36.4, 5);
+    });
+
+    it("one entry per pet kind; a temporary Creature- summon with a pet's npc id is not a pet", () => {
+      const again = petAt("Pet-0-1-1-1-417-0A03", 80);
+      const wildImp = petAt("Creature-0-1-1-1-416-0B01", 5);
+      expect(
+        warlockPetFunctions(lock, [sayaad, felhunter, again, wildImp], T0).map(
+          (p) => p.fn.pet,
+        ),
+      ).toEqual(["Sayaad", "Felhunter"]);
+    });
+
+    it("a pet that logged no event of its own is listed last, with no time", () => {
+      const silent = petAt("Pet-0-1-1-1-416-0A04", null);
+      const pets = warlockPetFunctions(lock, [silent, felhunter], T0);
+      expect(pets.map((p) => p.fn.pet)).toEqual(["Felhunter", "Imp"]);
+      expect(pets[1]!.fromSeconds).toBeNull();
+    });
+
+    it("another warlock's pet and a non-warlock owner are not counted", () => {
+      expect(
+        warlockPetFunctions(lock, [petAt("Pet-0-1-1-1-417-0A05", 3, "W2")], T0),
+      ).toEqual([]);
+      expect(warlockPetFunctions(unit({ id: "M1" }), [sayaad], T0)).toEqual([]);
+    });
+  });
+
+  it("buildMatchContext roster: a swap renders both pets, the second with its first second", () => {
+    const match = loadLegacyMatchFixture();
+    const players = Object.values(match.units).filter((u) => u.info);
+    const friends = players.filter(
+      (u) => u.reaction === CombatUnitReaction.Friendly,
+    );
+    const enemies = players.filter(
+      (u) => u.reaction === CombatUnitReaction.Hostile,
+    );
+    const lockPlayer = enemies[0]!;
+    lockPlayer.spec = CombatUnitSpec.Warlock_Affliction;
+    const at = (s: number) =>
+      [
+        {
+          timestamp: match.startTime + s * 1000,
+          logLine: { timestamp: match.startTime + s * 1000 },
+        },
+      ] as never;
+    match.units["Pet-0-1-1-1-1863-0C01"] = unit({
+      id: "Pet-0-1-1-1-1863-0C01",
+      name: "a",
+      type: CombatUnitType.Pet,
+      ownerId: lockPlayer.id,
+      damageOut: at(1),
+    });
+    match.units["Pet-0-1-1-1-417-0C02"] = unit({
+      id: "Pet-0-1-1-1-417-0C02",
+      name: "b",
+      type: CombatUnitType.Pet,
+      ownerId: lockPlayer.id,
+      damageOut: at(36.4),
+    });
+    const ctx = buildMatchContext(match, friends, enemies, {});
+    const roster = ctx.split("\n").find((l) => l.startsWith("  Enemy team:"));
+    expect(roster).toContain(
+      `(${lockPlayer.name}) [pet: Sayaad — Seduction (incapacitate); Felhunter from 0:36 — Spell Lock (kick), Devour Magic (purge)]`,
+    );
+  });
+
   it("buildMatchContext roster: '[pet: Felhunter — …]' after the warlock, absent for everyone else", () => {
     const match = loadLegacyMatchFixture();
     const players = Object.values(match.units).filter((u) => u.info);
@@ -229,5 +322,51 @@ describe("warlockPetFunction — the roster names a warlock's pet by what it doe
       `(${lockPlayer.name}) [pet: Felhunter — Spell Lock (kick), Devour Magic (purge)]`,
     );
     expect((ctx.match(/\[pet: /g) ?? []).length).toBe(1);
+  });
+
+  it("buildMatchContext roster: a temporary Creature- summon never names the pet — not ahead of the real one, not alone", () => {
+    const build = (withRealPet: boolean) => {
+      const match = loadLegacyMatchFixture();
+      const players = Object.values(match.units).filter((u) => u.info);
+      const friends = players.filter(
+        (u) => u.reaction === CombatUnitReaction.Friendly,
+      );
+      const enemies = players.filter(
+        (u) => u.reaction === CombatUnitReaction.Hostile,
+      );
+      const lockPlayer = enemies[0]!;
+      lockPlayer.spec = CombatUnitSpec.Warlock_Demonology;
+      // a Creature- summon carrying the Imp's npc id, inserted BEFORE the pet
+      const units: typeof match.units = {
+        "Creature-0-1-1-1-416-0B01": unit({
+          id: "Creature-0-1-1-1-416-0B01",
+          name: "Wild Imp",
+          ownerId: lockPlayer.id,
+        }),
+        ...match.units,
+      };
+      if (withRealPet) {
+        units["Pet-0-1-1-1-17252-0C0E"] = petOf("17252");
+        units["Pet-0-1-1-1-17252-0C0E"]!.ownerId = lockPlayer.id;
+      }
+      match.units = units;
+      const ctx = buildMatchContext(match, friends, enemies, {});
+      return ctx.split("\n").find((l) => l.startsWith("  Enemy team:"))!;
+    };
+    expect(build(true)).toContain("[pet: Felguard — ");
+    expect(build(true)).not.toContain("[pet: Imp");
+    expect(build(false)).not.toContain("[pet: ");
+  });
+
+  it("warlockPetFunctions: two pets with no event of their own keep a defined order", () => {
+    const silent = (guid: string) =>
+      unit({ id: guid, name: "x", type: CombatUnitType.Pet, ownerId: "W1" });
+    const pets = warlockPetFunctions(
+      lock,
+      [silent("Pet-0-1-1-1-416-0A06"), silent("Pet-0-1-1-1-417-0A07")],
+      T0,
+    );
+    expect(pets.map((p) => p.fn.pet)).toEqual(["Imp", "Felhunter"]);
+    expect(pets.every((p) => p.fromSeconds === null)).toBe(true);
   });
 });
