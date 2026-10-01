@@ -53,6 +53,12 @@ const EXEMPT_GENERATED_ARTIFACTS: Record<string, string> = {
     " update-wow-data 覆盖范围。",
   "archetypes/archetype_model_solo_shuffle.json":
     "同 archetype_model_3v3.json。",
+  // 同目录的 archetype_prompts_{3v3,solo_shuffle}.json(各簇的标签与叙述)不命中
+  // 本测试的生成物判据,所以不在此豁免表里,出处记在这里:上游 wowarenalogs
+  // packages/tools/archetypes/finalize_prompts.py + src/buildArchetypePrompts.ts,
+  // 对某一次聚类的簇手工命名。它与模型文件只靠 cluster_<i> 的下标拼接,必须出自
+  // 同一次聚类 —— 现在不是(prompts 2026-05-20、model 2026-05-27,分诊 other F-O1),
+  // 由 test/archetypeLabelAlignment.test.ts 钉住,[MATCH PATTERN] 因此停印。
 };
 
 function listDataFiles(dir: string, base = ""): string[] {

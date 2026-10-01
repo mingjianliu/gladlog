@@ -64,6 +64,27 @@ const MIN_DURATION_SECONDS_FOR_INJECTION = 30;
  */
 const MAX_DISTANCE_SD = 4.5;
 
+/**
+ * Do the published cluster LABELS (`archetype_prompts_*.json`, generated
+ * 2026-05-20) describe the clusters of the MODEL the classifier runs
+ * (`archetype_model_*.json`, generated 2026-05-27)? They do not: the two files
+ * come from different clustering runs and are joined only by the index in
+ * `cluster_<i>`, so the label printed is the name of whatever the 05-20 run
+ * called its i-th cluster. Triage 2026-09-29, other F-O1: on the model's own
+ * centroids the printed label is not the nearest published cluster for 7 of 8
+ * clusters per bracket (identity vs best assignment distance 15.18 vs 5.68 in
+ * 3v3, 15.45 vs 5.48 in Solo Shuffle); all 7 flagged rounds were `cluster_5`
+ * labelled against a `dampening_burst_cycle`-shaped centroid.
+ *
+ * User ruling 2026-09-30 (A59 = C then A): stop printing the header until the
+ * upstream `finalize_prompts.py` re-labels the 05-27 centroids. Flip this to
+ * true ONLY together with regenerated prompt files —
+ * `test/archetypeLabelAlignment.test.ts` computes the alignment from the two
+ * files and fails whenever this flag and the data disagree, in either
+ * direction.
+ */
+export const ARCHETYPE_LABELS_MATCH_MODEL = false;
+
 // ── Bracket detection ─────────────────────────────────────────────────────────
 
 type ArchetypeBracket = "3v3" | "solo_shuffle";
@@ -138,6 +159,8 @@ function classifyMatchArchetype(
  * Build the [MATCH TYPE: label] header line for prompt injection.
  *
  * Returns empty string when injection should be skipped:
+ *   - The published labels do not describe the model's clusters
+ *     (`ARCHETYPE_LABELS_MATCH_MODEL`)
  *   - Bracket unsupported
  *   - Duration below the minimum (too little signal in short rounds)
  *   - Classification landed in a noise cluster (one-sided fast wins, no coaching value)
@@ -147,6 +170,7 @@ export function buildArchetypeInjectionHeader(
   bracket: string | undefined | null,
   dynamics: IMatchDynamicFeatures,
 ): string {
+  if (!ARCHETYPE_LABELS_MATCH_MODEL) return "";
   if (dynamics.durationSeconds < MIN_DURATION_SECONDS_FOR_INJECTION) return "";
 
   const result = classifyMatchArchetype(bracket, dynamics);

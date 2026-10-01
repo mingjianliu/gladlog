@@ -395,5 +395,10 @@
  *  `lasts 10s` (the official duration of the aura 342246 the press 342245
  *  applies; the press row's 20 s was printed). 605 files: 1,512 loadout
  *  lines, no id changes.
+ *  v220 (2026-10-01, triage other F-O1, ruling A59 = C then A): no `[MATCH
+ *  PATTERN]` header — its labels came from a different clustering run than
+ *  the model (`ARCHETYPE_LABELS_MATCH_MODEL` false;
+ *  test/archetypeLabelAlignment.test.ts requires the flag to equal the
+ *  computed alignment).
  */
-export const PROMPT_VERSION = 219;
+export const PROMPT_VERSION = 220;
