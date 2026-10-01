@@ -5,6 +5,7 @@ import {
   extractPlaceholderKeys,
   interpolate,
 } from "../compare/claimChecker";
+import { dmgSpikeWindowsOf } from "../context/timelineHelpers";
 import {
   analyzeBurstLedger,
   type IBurstLedgerEntry,
@@ -15,6 +16,7 @@ import {
 } from "../utils/ccTrinketAnalysis";
 import {
   annotateDefensiveTimings,
+  computePressureWindows,
   DEFENSIVE_TAGS,
   extractMajorCooldowns,
   type IMajorCooldownInfo,
@@ -452,6 +454,9 @@ export function buildDeepDivePack(
         isHealer: isHealerSpec(ownerUnit.spec),
         ownerIsMelee: isMeleeSpec(ownerUnit.spec),
         friends,
+        spikeWindows: dmgSpikeWindowsOf(
+          computePressureWindows(friends, combat),
+        ),
       });
       for (const e of posEvents) {
         if (!POSITION_MISTAKES.has(e.type)) continue;

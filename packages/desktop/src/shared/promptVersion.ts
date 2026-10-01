@@ -701,5 +701,14 @@
  *  unit from being read as low in kick-eaten's `ourLow*` / `theirLow*`; under
  *  Blessing of Protection, Blessing of Spellwarding or Cloak of Shadows it is
  *  read as low again, and the legend says so. Interim until enemy-def F-E24.
+ *  v269 (2026-10-03, triage G14: sync-burst F-L2 / F-L2b, position F-S1–F-S5,
+ *  rulings A'12 / A'13 = C / A60 = B / P-G14 / F-K9b-B): a POSITIONING line's
+ *  burst target is the one of its own span (the header spike only when it
+ *  covers half the span, else the most-pressured friendly); STAYED IN states
+ *  `CC'd Ns of Ns`, `rooted Ns` (with `(Ns in all)` when both), `(you could
+ *  not cast for Ns of it)` and `(HP stayed at or above 35%)` in place of `(no
+ *  real cost)`; windows mostly spent CC'd, rooted or inside the owner's own
+ *  FULL immunity are skipped; stayed-in menu facts gain endDist / minDist /
+ *  maxDist / endEnemy / ccS / rootS.
  */
-export const PROMPT_VERSION = 268;
+export const PROMPT_VERSION = 269;

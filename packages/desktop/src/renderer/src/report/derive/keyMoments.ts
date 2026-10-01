@@ -2,9 +2,11 @@ import {
   analyzeBurstLedger,
   analyzePlayerCCAndTrinket,
   computeOwnerPositionEvents,
+  computePressureWindows,
   DEFENSIVE_TAGS,
   detectHealingGaps,
   detectPanicDefensives,
+  dmgSpikeWindowsOf,
   DR_LEVEL_LABEL,
   extractMajorCooldowns,
   type IDRInfo,
@@ -357,6 +359,9 @@ export function deriveKeyMoments(
         isHealer: isHealerSpec(owner.spec),
         ownerIsMelee: isMeleeSpec(owner.spec),
         friends,
+        spikeWindows: dmgSpikeWindowsOf(
+          computePressureWindows(friends, legacy),
+        ),
       });
       for (const e of posEvents) {
         // Single-source whitelist (analysis's POSITION_MISTAKES, the same one

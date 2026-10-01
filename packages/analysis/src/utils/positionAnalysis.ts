@@ -13,6 +13,12 @@ import { AtomicArenaCombat, ICombatUnit } from "@gladlog/parser-compat";
 
 import { abilityProfile } from "../data/abilityProfile";
 import { SUMMON_SPELL_IDS } from "../data/summonGenerated";
+import { buildAuraIntervals } from "./auraIntervals";
+import {
+  buildCannotCastIntervals,
+  coveredMsWithin,
+  enemySourceIds,
+} from "./cannotCastIntervals";
 import { ICCInstance } from "./ccTrinketAnalysis";
 import {
   getUnitHpAtTimestamp,
@@ -21,14 +27,17 @@ import {
   isHealerSpec,
   isMeleeSpec,
 } from "./cooldowns";
-import { fmtTime, toRenderSecond } from "./renderGrid";
 import { IAlignedBurstWindow } from "./enemyCDs";
+import { isOwnImmunityInterval } from "./enemyDefensives";
 import {
   HealerExposureLabel,
   IHealerBurstExposure,
 } from "./healerExposureAnalysis";
+import { sumIncomingPressure } from "./incomingPressure";
 import { distanceBetween, getUnitPositionAtTime } from "./losAnalysis";
 import { HEALER_TRAINED_YARDS, INTERP_MAX_GAP_MS } from "./positionSampling";
+import { fmtTime, toRenderSecond } from "./renderGrid";
+import { buildRosterSides, type RosterSides } from "./rosterSide";
 import { spellReachToAccuse } from "./spellRange";
 import { isDeadAt } from "./unitDeath";
 
@@ -172,11 +181,26 @@ export interface IPositionEvent {
   /** HEALER_TRAINED only: healer was hard-CC'd for most of the camp → could not
    *  self-reposition (team must peel), so don't advise "reposition". */
   ownerCcLocked?: boolean;
-  /** HEALER_TRAINED only: merged hard-CC seconds inside the camp window
-   *  (`ccOverlapSeconds`). GH #103: the line used to say "CC-locked through
-   *  this" whenever this was ≥ half the window, and the responder quoted it as
-   *  "CC-locked the whole time" beside the owner's own 1:08 Apotheosis. */
+  /** HEALER_TRAINED / STAYED_IN: merged hard-CC seconds inside the window
+   *  (`ccOverlapSeconds`). GH #103: the HEALER TRAINED line used to say
+   *  "CC-locked through this" whenever this was ≥ half the window, and the
+   *  responder quoted it as "CC-locked the whole time" beside the owner's own
+   *  1:08 Apotheosis. STAYED_IN (triage position F-S2): movement coaching was
+   *  generated for spans the owner spent stunned. `undefined` = no CC summary
+   *  was passed (unknown), never 0. */
   ownerCcSeconds?: number;
+  /** STAYED_IN (F-S2): merged seconds of the span the owner was rooted
+   *  (`analyzePlayerCCAndTrinket`'s `rootInstances`, same merge). `undefined`
+   *  = no root summary was passed. */
+  ownerRootSeconds?: number;
+  /** STAYED_IN: merged seconds of the span the owner was hard-CC'd OR rooted
+   *  — the union the two figures above overlap into (a root inside a stun
+   *  counts in both). Set only when both summaries were passed. */
+  ownerCcOrRootSeconds?: number;
+  /** STAYED_IN (F-S5): merged seconds of the span the owner could not cast
+   *  (`buildCannotCastIntervals` — CC, silence, kick lockout: the one
+   *  feasibility predicate), read beside "a defensive CD was available". */
+  ownerCannotCastSeconds?: number;
   /** STAYED_IN: the enemy nearest at the evaluated end (`endDistanceYards`
    *  is its distance), and — when it is not `nearestEnemyName` — that start
    *  enemy's own distance at the end */
@@ -449,6 +473,30 @@ function ccOverlapSeconds(
   return total;
 }
 
+/** A header spike names the burst target of a POSITIONING line only when it
+ *  covers at least this share of the line's own span (user ruling 2026-09-30,
+ *  A′12; 4446729d: 1.26 s of 10 s is not "the burst of this span"). */
+export const SPIKE_SPAN_MIN_SHARE = 0.5;
+
+/** The friendly under the most incoming pressure in [fromMs, toMs] —
+ *  `sumIncomingPressure` (damage taken + absorbed, same-side redistribution
+ *  out), the one "how hard was this unit hit" predicate. `undefined` when no
+ *  friendlies were passed or nobody was hit. Ties keep the roster order. */
+export function mostPressuredInSpan(
+  friends: readonly ICombatUnit[] | undefined,
+  fromMs: number,
+  toMs: number,
+  sides?: RosterSides,
+): string | undefined {
+  let best: { name: string; pressure: number } | undefined;
+  for (const f of friends ?? []) {
+    const pressure = sumIncomingPressure(f, fromMs, toMs, sides);
+    if (pressure > 0 && (!best || pressure > best.pressure))
+      best = { name: f.name, pressure };
+  }
+  return best?.name;
+}
+
 function isAvailableAt(cd: IMajorCooldownInfo, atSeconds: number): boolean {
   return cd.availableWindows.some(
     (w) => atSeconds >= w.fromSeconds && atSeconds <= w.toSeconds,
@@ -458,11 +506,19 @@ function isAvailableAt(cd: IMajorCooldownInfo, atSeconds: number): boolean {
 export function computeOwnerPositionEvents(params: {
   owner: ICombatUnit;
   enemies: ICombatUnit[];
-  combat: Pick<AtomicArenaCombat, "startTime" | "endTime">;
+  /** `units` (every AtomicArenaCombat has them) feeds the roster side and the
+   *  enemy summons' ids; absent in bare fixtures, where the flag fallback and
+   *  the enemy players alone are used. */
+  combat: Pick<AtomicArenaCombat, "startTime" | "endTime"> & {
+    units?: Readonly<Record<string, ICombatUnit>>;
+  };
   burstWindows: readonly IAlignedBurstWindow[];
   ownerCooldowns: IMajorCooldownInfo[];
+  /** The owner's `analyzePlayerCCAndTrinket` summary. `rootInstances` (same
+   *  summary) feed the STAYED_IN / KITED skip rule and the root seconds. */
   ownerCCSummary?: {
     ccInstances: Array<Pick<ICCInstance, "atSeconds" | "durationSeconds">>;
+    rootInstances?: Array<{ atSeconds: number; durationSeconds: number }>;
   };
   isHealer: boolean;
   ownerIsMelee: boolean;
@@ -489,9 +545,10 @@ export function computeOwnerPositionEvents(params: {
   }>;
   healerExposures?: IHealerBurstExposure[];
   /** B4 fix (optional): damage-spike windows (pre-filtered to >= DMG_SPIKE_THRESHOLD by the
-   * caller). When a spike overlaps a burst window, its targetName is the burst-target claim —
-   * the SAME source the [OFFENSIVE WINDOW] timeline header renders — so the POSITIONING line
-   * can never contradict the timeline about who the burst hit. */
+   * caller) — the SAME source the [OFFENSIVE WINDOW] timeline header renders. A spike that
+   * covers at least `SPIKE_SPAN_MIN_SHARE` of the line's own span names the burst target;
+   * below that the target is the friendly under the most pressure in the span (ruling A′12),
+   * so the POSITIONING line and the header CAN name different units for a short overlap. */
   spikeWindows?: Array<{
     fromSeconds: number;
     toSeconds: number;
@@ -521,6 +578,30 @@ export function computeOwnerPositionEvents(params: {
   if ((owner.advancedActions ?? []).length === 0) return [];
 
   const ccInstances = ownerCCSummary?.ccInstances ?? [];
+  const rootInstances = ownerCCSummary?.rootInstances;
+  // The owner's OWN all-school immunities (Ice Block, Divine Shield, Aspect
+  // of the Turtle): `isOwnImmunityInterval`.
+  // (bare fixtures carry no aura stream)
+  const ownImmunities = (
+    owner.auraEvents ? buildAuraIntervals(owner, combat) : []
+  )
+    .filter((iv) => isOwnImmunityInterval(owner, iv))
+    .map((iv) => ({ atSeconds: iv.fromS, durationSeconds: iv.toS - iv.fromS }));
+  // No free choice of where to stand (user ruling 2026-09-30, A′13 = C):
+  // hard CC, roots, and the owner's own immunity all enter the skip rule.
+  const noChoiceIntervals = [
+    ...ccInstances,
+    ...(rootInstances ?? []),
+    ...ownImmunities,
+  ];
+  const combatUnits = Object.values(combat.units ?? {});
+  const rosterSides: RosterSides | undefined = combatUnits.length
+    ? buildRosterSides(combatUnits)
+    : undefined;
+  const ownerCannotCast = buildCannotCastIntervals(
+    owner,
+    enemySourceIds(enemies, combatUnits),
+  );
   const defensiveCDs = ownerCooldowns.filter((cd) => cd.tag === "Defensive");
   const offensiveCDs = ownerCooldowns.filter((cd) => cd.tag === "Offensive");
 
@@ -538,8 +619,17 @@ export function computeOwnerPositionEvents(params: {
         : undefined;
     const healerExposureLabel = exposure?.exposureLabel;
 
-    // CC'd for most of the window → could not choose to kite; not a decision
-    if (ccOverlapSeconds(ccInstances, w.fromSeconds, evalEnd) >= evalSpan / 2)
+    // CC'd, rooted or inside their own immunity for most of the window →
+    // could not choose to kite (or had nothing to kite from); not a decision.
+    // Dropped before the branch, so STAYED_IN and KITED both skip (A′13 = C:
+    // dfcccbf2 2:54 Storm Bolt 3.0 s + own Ice Block 2.3 s of 10 s; fe1a9355
+    // 1:03 rooted 6.0 of 10 s). A school-limited immunity does not count
+    // (`isOwnImmunityInterval`): 06bb9860 3:17 own Spellwarding 6.0 of 10 s
+    // keeps its line until the A30 / E24 damage-share predicate lands.
+    if (
+      ccOverlapSeconds(noChoiceIntervals, w.fromSeconds, evalEnd) >=
+      evalSpan / 2
+    )
       continue;
 
     // Every distance this line renders is sampled ON the render grid (whole
@@ -618,8 +708,29 @@ export function computeOwnerPositionEvents(params: {
         pw.fromSeconds >= w.fromSeconds - 5 &&
         pw.fromSeconds <= w.toSeconds + 5,
     );
+    // …but only while that spike is about THIS line's span (triage sync-burst
+    // F-L2 + F-L2b, user ruling 2026-09-30 A′12): the spike array is not
+    // time-ordered and the ±5 s rule admits a spike that starts after the
+    // span ended (f4eb8c87 1:27–1:37 named a teammate hit at 1:42 while the
+    // owner took 1.04M in the span). A spike covering less than half of the
+    // span yields to the friendly under the most incoming pressure inside it.
+    const spikeOverlapS = overlappingSpike
+      ? Math.min(overlappingSpike.toSeconds, evalEnd) -
+        Math.max(overlappingSpike.fromSeconds, w.fromSeconds)
+      : -1;
+    const spanTarget =
+      overlappingSpike && spikeOverlapS >= evalSpan * SPIKE_SPAN_MIN_SHARE
+        ? undefined
+        : mostPressuredInSpan(
+            friends,
+            matchStartMs + w.fromSeconds * 1000,
+            matchStartMs + evalEnd * 1000,
+            rosterSides,
+          );
     const targetName =
-      overlappingSpike?.targetName ?? w.mostPressuredTarget?.unitName;
+      spanTarget ??
+      overlappingSpike?.targetName ??
+      w.mostPressuredTarget?.unitName;
     const burstTargetsOwner =
       targetName !== undefined ? targetName === owner.name : undefined;
     // The owner's own displacement, on the same render-grid seconds.
@@ -752,6 +863,36 @@ export function computeOwnerPositionEvents(params: {
         ...(ownerMovedToEnd !== undefined
           ? { ownerMovedYards: ownerMovedToEnd }
           : {}),
+        // three-state: no summary passed ⇒ unknown, not 0
+        ...(ownerCCSummary
+          ? {
+              ownerCcSeconds: ccOverlapSeconds(
+                ccInstances,
+                w.fromSeconds,
+                evalEnd,
+              ),
+            }
+          : {}),
+        ...(rootInstances
+          ? {
+              ownerRootSeconds: ccOverlapSeconds(
+                rootInstances,
+                w.fromSeconds,
+                evalEnd,
+              ),
+              ownerCcOrRootSeconds: ccOverlapSeconds(
+                [...ccInstances, ...rootInstances],
+                w.fromSeconds,
+                evalEnd,
+              ),
+            }
+          : {}),
+        ownerCannotCastSeconds:
+          coveredMsWithin(
+            ownerCannotCast,
+            matchStartMs + w.fromSeconds * 1000,
+            matchStartMs + evalEnd * 1000,
+          ) / 1000,
         healerExposureLabel,
       });
     }
@@ -1114,6 +1255,31 @@ function movedStr(e: IPositionEvent): string {
 
 /** STAYED_IN's nearest-enemy range, only when the window left the endpoint
  * span (GH #103 A7); `from <name>` stays adjacent to "yd" for the G4 gate. */
+/** Seconds as the HEALER TRAINED line prints them: `<1` below half a second. */
+function lockSeconds(s: number): string {
+  return s > 0 && s < 0.5 ? "<1" : String(Math.round(s));
+}
+
+/** STAYED_IN: how much of the span the owner could not choose where to stand
+ *  (triage position F-S2). After `movedStr`, so the positioning gate's
+ *  "A→Byd from X" and "you moved … (span start→end)" anchors are untouched. */
+function lockStr(e: IPositionEvent): string {
+  const span = Math.round((e.toSeconds ?? e.atSeconds) - e.atSeconds);
+  const cc = e.ownerCcSeconds ?? 0;
+  const root = e.ownerRootSeconds ?? 0;
+  // the two can overlap (a root inside a stun): with both printed, say how
+  // long it was in all, so they are not read as a sum
+  const both =
+    cc > 0 && root > 0 && e.ownerCcOrRootSeconds !== undefined
+      ? ` (${lockSeconds(e.ownerCcOrRootSeconds)}s in all)`
+      : "";
+  return (
+    (cc > 0 ? ` — CC'd ${lockSeconds(cc)}s of ${span}s` : "") +
+    (root > 0 ? ` — rooted ${lockSeconds(root)}s` : "") +
+    both
+  );
+}
+
 function rangeStr(e: IPositionEvent): string {
   if (
     e.minDistanceYards === undefined ||
@@ -1148,11 +1314,14 @@ export function formatPositionEventsForContext(
       "  STAYED IN during enemy burst (an enemy stayed in close range, little distance gained — says nothing about whether you moved; see 'you moved'):",
     );
     for (const e of stayedIn) {
+      // F-S5: availability is sampled at the span start; say how long of the
+      // span the owner could not have pressed it
+      const blockedS = e.ownerCannotCastSeconds ?? 0;
       const defStr =
         e.ownerDefensiveAvailable === undefined
           ? ""
           : e.ownerDefensiveAvailable
-            ? " — a defensive CD was available"
+            ? ` — a defensive CD was available${blockedS >= 1 ? ` (you could not cast for ${Math.round(blockedS)}s of it)` : ""}`
             : " — no defensive CD available";
       const targetStr =
         e.burstTargetsOwner === true
@@ -1164,12 +1333,13 @@ export function formatPositionEventsForContext(
       // whether the stay was a mistake, replacing the old hedge-pileup.
       let hpStr = "";
       if (e.ownerHpMinPct !== null && e.ownerHpMinPct !== undefined) {
-        const tag =
-          e.ownerHpMinPct <= STAYED_IN_NEAR_DEATH_PCT
-            ? " (near-death — the stay was costly)"
-            : !stayedInHadRealCost(e.ownerHpMinPct, e.ownerHpStartPct)
-              ? " (no real cost)"
-              : "";
+        // One predicate for the tag and the menu gate (`stayedInHadRealCost`,
+        // GH #16): at hpMin = 35 the old `<=` tagged "near-death" a stay the
+        // gate did not count. The other side states the fact instead of the
+        // verdict "(no real cost)" (user ruling 2026-09-30, A60 = B).
+        const tag = stayedInHadRealCost(e.ownerHpMinPct, e.ownerHpStartPct)
+          ? " (near-death — the stay was costly)"
+          : ` (HP stayed at or above ${STAYED_IN_NEAR_DEATH_PCT}%)`;
         hpStr = ` — your HP ${e.ownerHpStartPct}%→${e.ownerHpMinPct}% (min over window)${tag}`;
       } else {
         // No HP data — fall back to the dampening context hedge.
@@ -1190,7 +1360,7 @@ export function formatPositionEventsForContext(
           ? `${fmtTime(e.atSeconds)}–${fmtTime(e.toSeconds)}`
           : fmtTime(e.atSeconds);
       lines.push(
-        `    ${spanStr} [${e.dangerLabel} burst] ${e.startDistanceYards}→${e.endDistanceYards}yd from ${stayedEndpointNames(e)}${rangeStr(e)}${movedStr(e)}${targetStr}${exposureStr}${hpStr}${defStr}`,
+        `    ${spanStr} [${e.dangerLabel} burst] ${e.startDistanceYards}→${e.endDistanceYards}yd from ${stayedEndpointNames(e)}${rangeStr(e)}${movedStr(e)}${lockStr(e)}${targetStr}${exposureStr}${hpStr}${defStr}`,
       );
     }
   }

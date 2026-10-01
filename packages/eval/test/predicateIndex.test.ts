@@ -844,6 +844,21 @@ const INDEX: PredicateRow[] = [
     symbol: "stayedInHadRealCost",
     mod: positionAnalysis,
   },
+  {
+    file: `${A}/utils/positionAnalysis.ts`,
+    symbol: "mostPressuredInSpan",
+    mod: positionAnalysis,
+  },
+  {
+    file: `${A}/context/timelineHelpers.ts`,
+    symbol: "dmgSpikeWindowsOf",
+    mod: timelineHelpers,
+  },
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "isOwnImmunityInterval",
+    mod: enemyDefensives,
+  },
   // Order statistics
   { file: `${A}/utils/stats.ts`, symbol: "toSortedFinite", mod: stats },
   { file: `${A}/utils/stats.ts`, symbol: "medianFinite", mod: stats },

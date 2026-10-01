@@ -6,6 +6,7 @@ import {
 } from "@gladlog/parser-compat";
 
 import { mateHitDuringCc } from "../context/observedConsequences";
+import { dmgSpikeWindowsOf } from "../context/timelineHelpers";
 import {
   lookupBacklashPrior,
   lookupBacklashWorth,
@@ -55,6 +56,7 @@ import {
   cdCanHelpAnotherUnit,
   cdIsProcOnly,
   cdNeverSpent,
+  computePressureWindows,
   DEFENSIVE_TAGS,
   extractMajorCooldowns,
   type IAvailableWindow,
@@ -2217,6 +2219,12 @@ export function positionMistakeEvents(
     | "ownerMovedYards"
     | "spellName"
     | "startDistanceYards"
+    | "endDistanceYards"
+    | "minDistanceYards"
+    | "maxDistanceYards"
+    | "endEnemyName"
+    | "ownerCcSeconds"
+    | "ownerRootSeconds"
   >[],
   owner: { id: string; name: string },
 ): CandidateEvent[] {
@@ -2250,6 +2258,24 @@ export function positionMistakeEvents(
         facts.moved = String(Math.round(e.ownerMovedYards));
       if (e.startDistanceYards != null)
         facts.dist = String(Math.round(e.startDistanceYards));
+      // Triage position F-S1 / F-S2: `dist` is the span START; a stay is a
+      // span. Same event fields the POSITIONING line renders (and the
+      // positioning gate re-checks), same rounding as `dist`. Missed-push's
+      // `dist` is its threshold and stays alone.
+      if (e.type === "STAYED_IN") {
+        if (e.endDistanceYards != null)
+          facts.endDist = String(Math.round(e.endDistanceYards));
+        if (e.minDistanceYards != null)
+          facts.minDist = String(Math.round(e.minDistanceYards));
+        if (e.maxDistanceYards != null)
+          facts.maxDist = String(Math.round(e.maxDistanceYards));
+        if (e.endEnemyName && e.endEnemyName !== e.nearestEnemyName)
+          facts.endEnemy = e.endEnemyName;
+        if (e.ownerCcSeconds !== undefined)
+          facts.ccS = String(Math.round(e.ownerCcSeconds));
+        if (e.ownerRootSeconds !== undefined)
+          facts.rootS = String(Math.round(e.ownerRootSeconds));
+      }
       return {
         id: `position-mistake:${owner.id}:${t}:${kind}`,
         type: "position-mistake",
@@ -3256,6 +3282,11 @@ function teamPlayEvents(
           isHealer: isHealerSpec(owner.spec),
           ownerIsMelee: isMeleeSpec(owner.spec),
           friends,
+          // the prompt's own spikes: one burst target for the line and the
+          // menu (sync-burst F-L2 / position X-L2)
+          spikeWindows: dmgSpikeWindowsOf(
+            computePressureWindows(friends, combat),
+          ),
         }),
         owner,
       ),

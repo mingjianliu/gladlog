@@ -274,6 +274,24 @@ describe("buildFindingsPrompt", () => {
       expect(p).toMatch(/stayed-in/);
       expect(p).toMatch(/missed-push/);
       expect(p).toMatch(/cd-out-of-range/);
+      // triage position F-S1 / F-S2 / F-S3: every stayed-in fact the mapper
+      // emits is defined, and `moved` is a displacement, not a path
+      for (const key of [
+        "enemy",
+        "dist",
+        "endDist",
+        "endEnemy",
+        "minDist",
+        "maxDist",
+        "moved",
+        "ccS",
+        "rootS",
+      ])
+        expect(p).toMatch(new RegExp(`facts\\.${key}\\b`));
+      expect(p).toContain(
+        "facts.moved = the owner's straight-line displacement from span start to end",
+      );
+      expect(p).not.toContain("yards the owner itself moved");
     });
 
     it("cc-held 图例把「长期可用未使用」表述为事实层,明确禁止因果断言", () => {

@@ -14,7 +14,10 @@ vi.mock("./cannotCastIntervals", () => ({
   buildCannotCastIntervals: vi.fn(() => []),
 }));
 
-vi.mock("./cooldowns", () => ({
+// Partial mock: positionAnalysis → enemyDefensives reads ./cooldowns tables
+// (AURA_ONLY_ACTIVATION_IDS) at module load, so every other export stays real.
+vi.mock("./cooldowns", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./cooldowns")>()),
   isHealerSpec: vi.fn((spec) => spec === CombatUnitSpec.Priest_Discipline),
   isMeleeSpec: vi.fn((spec) => spec === CombatUnitSpec.Rogue_Assassination),
 }));

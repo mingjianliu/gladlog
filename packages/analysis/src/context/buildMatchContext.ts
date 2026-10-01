@@ -111,7 +111,7 @@ import {
 } from "./matchTimelineSections";
 import { buildMatchTimeline, BuildMatchTimelineParams } from "./matchTimeline";
 import { buildPlayerLoadout } from "./resourceSnapshot";
-import { DMG_SPIKE_THRESHOLD, mergeTimestampedLines } from "./timelineHelpers";
+import { dmgSpikeWindowsOf, mergeTimestampedLines } from "./timelineHelpers";
 import { unitLabeler } from "./unitLabel";
 import type { RawStreams } from "../utils/rawStreams";
 
@@ -499,14 +499,9 @@ export function buildMatchContext(
     enemyCCSummaries,
     healerExposures,
     // B4 fix: hand the positioning analysis the same damage-spike windows the timeline's
-    // [OFFENSIVE WINDOW]/[DMG SPIKE] headers render, so burst-target claims cannot diverge.
-    spikeWindows: pressureWindows
-      .filter((pw) => pw.totalDamage >= DMG_SPIKE_THRESHOLD)
-      .map((pw) => ({
-        fromSeconds: pw.fromSeconds,
-        toSeconds: pw.toSeconds,
-        targetName: pw.targetName,
-      })),
+    // [OFFENSIVE WINDOW]/[DMG SPIKE] headers render. Since ruling A′12 a spike names the
+    // POSITIONING burst target only when it covers at least half of the line's span.
+    spikeWindows: dmgSpikeWindowsOf(pressureWindows),
   });
   const positionLines = formatPositionEventsForContext(positionEvents);
 

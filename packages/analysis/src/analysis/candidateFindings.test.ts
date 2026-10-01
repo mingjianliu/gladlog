@@ -1752,7 +1752,9 @@ describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
       },
     )[0]!.facts["postKick"]!;
     expect(f).toContain("acted on another school 2.4s later");
-    expect(f).toContain("outside the locked school 1x not ready yet — its own cooldown or the GCD");
+    expect(f).toContain(
+      "outside the locked school 1x not ready yet — its own cooldown or the GCD",
+    );
     expect(f).not.toContain(", ");
   });
 
@@ -2314,6 +2316,52 @@ describe("positionMistakeEvents(POSITION-001,2026-08-06 信号扩容批 1)", () 
     expect(evts).toHaveLength(1);
     expect(evts[0]!.facts["kind"]).toBe("missed-push");
     expect(evts[0]!.facts["dist"]).toBe("45");
+    // the span facts are stayed-in's alone
+    expect(evts[0]!.facts["endDist"]).toBeUndefined();
+  });
+
+  it("stayed-in carries the span: end / min / max distance, the end enemy when it changed, CC and root seconds (triage position F-S1 / F-S2)", () => {
+    const base = {
+      type: "STAYED_IN" as const,
+      atSeconds: 130,
+      nearestEnemyName: "Pressbro-Illidan-US",
+      ownerHpStartPct: 80,
+      ownerHpMinPct: 20,
+      startDistanceYards: 10.3,
+      endDistanceYards: 3.2,
+      minDistanceYards: 2.6,
+      maxDistanceYards: 18.9,
+    };
+    const [changed] = positionMistakeEvents(
+      [
+        {
+          ...base,
+          endEnemyName: "Mastutinho-Azralon-US",
+          ownerCcSeconds: 2.4,
+          ownerRootSeconds: 0,
+        },
+      ],
+      owner,
+    );
+    expect(changed!.facts).toMatchObject({
+      dist: "10",
+      endDist: "3",
+      minDist: "3",
+      maxDist: "19",
+      endEnemy: "Mastutinho-Azralon-US",
+      ccS: "2",
+      rootS: "0",
+    });
+    // same enemy at both ends → no endEnemy; no CC summary → no ccS / rootS
+    const [same] = positionMistakeEvents(
+      [{ ...base, endEnemyName: "Pressbro-Illidan-US" }],
+      owner,
+    );
+    expect(same!.facts["endEnemy"]).toBeUndefined();
+    expect(same!.facts["ccS"]).toBeUndefined();
+    expect(same!.facts["rootS"]).toBeUndefined();
+    // id / order are untouched by the new facts
+    expect(same!.id).toBe(changed!.id);
   });
 
   it("CD_OUT_OF_RANGE 直接报,facts.spell/顶层 spell 都带技能名", () => {
@@ -2997,7 +3045,16 @@ describe("missedSyncWindowEvents(P1 起爆-1,2026-08-15,纯函数)", () => {
     const twoHealers = missedSyncWindowEvents(
       [polyWindow, { ...fearWindow, healerName: "Other-Healer" }],
       // the second CD is back at 440 (439.5 with the 0.5 s slack) — ready for the second lock only
-      [readyHammer, { ...readyHammer, spellId: "1719", spellName: "Recklessness", casts: [{ timeSeconds: 400 }], cooldownSeconds: 40 }],
+      [
+        readyHammer,
+        {
+          ...readyHammer,
+          spellId: "1719",
+          spellName: "Recklessness",
+          casts: [{ timeSeconds: 400 }],
+          cooldownSeconds: 40,
+        },
+      ],
       probes(50),
     );
     expect(new Set(twoHealers.map((e) => e.id)).size).toBe(2);
@@ -3039,9 +3096,27 @@ describe("missedSyncWindowEvents(P1 起爆-1,2026-08-15,纯函数)", () => {
   });
 
   it("one held CD across back-to-back locks is ONE accusation; a press between them makes two (round 3 W1a, 24b6)", () => {
-    const trap = { ...ccWindow, fromSeconds: 204, toSeconds: 208.1, healerName: "H1", spellId: "3355", spellName: "Freezing Trap" };
-    const cyclone = { ...ccWindow, fromSeconds: 210.6, toSeconds: 216.6, healerName: "H1", spellId: "33786", spellName: "Cyclone" };
-    const one = missedSyncWindowEvents([trap, cyclone], [readyHammer], probes(50));
+    const trap = {
+      ...ccWindow,
+      fromSeconds: 204,
+      toSeconds: 208.1,
+      healerName: "H1",
+      spellId: "3355",
+      spellName: "Freezing Trap",
+    };
+    const cyclone = {
+      ...ccWindow,
+      fromSeconds: 210.6,
+      toSeconds: 216.6,
+      healerName: "H1",
+      spellId: "33786",
+      spellName: "Cyclone",
+    };
+    const one = missedSyncWindowEvents(
+      [trap, cyclone],
+      [readyHammer],
+      probes(50),
+    );
     expect(one).toHaveLength(1);
     expect(one[0]!.facts["alsoHeldAt"]).toBe("210");
     const pressedBetween = {
@@ -3049,7 +3124,9 @@ describe("missedSyncWindowEvents(P1 起爆-1,2026-08-15,纯函数)", () => {
       cooldownSeconds: 1,
       casts: [{ timeSeconds: 0 }, { timeSeconds: 208.3 }],
     };
-    expect(missedSyncWindowEvents([trap, cyclone], [pressedBetween], probes(50))).toHaveLength(2);
+    expect(
+      missedSyncWindowEvents([trap, cyclone], [pressedBetween], probes(50)),
+    ).toHaveLength(2);
   });
 });
 

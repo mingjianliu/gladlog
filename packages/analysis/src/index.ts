@@ -133,5 +133,8 @@ export { OFF_GCD_SPELL_IDS } from "./data/offGcdGenerated";
 export * from "./context/peakSpikePlacement";
 export * from "./context/resLedgerPrune";
 export * from "./utils/externalDamage";
-export { DMG_SPIKE_THRESHOLD } from "./context/timelineHelpers";
+export {
+  DMG_SPIKE_THRESHOLD,
+  dmgSpikeWindowsOf,
+} from "./context/timelineHelpers";
 export * from "./data/kickedSpellCategories";

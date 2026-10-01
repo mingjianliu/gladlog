@@ -140,6 +140,26 @@ export function fullImmunityIntervals(
     .map((iv) => ({ spellId: iv.spellId, fromS: iv.fromS, toS: iv.toS }));
 }
 
+/** A unit's OWN full immunity: a `FULL_IMMUNITY_IDS` aura the unit put on
+ * itself — the POSITIONING skip rule's test (the owner inside their own Ice
+ * Block had nothing to kite from; user ruling 2026-09-30, A′13 = C).
+ *
+ * It reads the shared FULL half (user ruling F-K9b-B, 2026-10-02 — the same
+ * names kick-eaten's low-HP skip imports), so two things are out:
+ *  - a SCHOOL-LIMITED immunity (`SCHOOL_LIMITED_IMMUNITY_IDS`): a Cloak of
+ *    Shadows under a physical burst blocks nothing — on the 605-file slice
+ *    three Rogues inside their own Cloak fell to 34 %, 23 % and 32 %. The
+ *    finer rule (enemy-def F-E24, ruling A30) is decided when it lands;
+ *  - the immunity-kind saves `isImmunitySaveAura` adds for `[ENEMY DEF]`
+ *    kind="immune" (Vanish, Feign Death, Cheat Death, Cauterize, … —
+ *    enemy-def F-E5 / F-E6): a unit under Cauterize can still move. */
+export function isOwnImmunityInterval(
+  unit: Pick<ICombatUnit, "name">,
+  iv: { spellId: string; srcUnitName: string },
+): boolean {
+  return iv.srcUnitName === unit.name && FULL_IMMUNITY_IDS.has(iv.spellId);
+}
+
 /** Floor for "a real defensive": the same 20 % door as the kill-opportunity
  * gated tier (WALL_IN_HAND_MIT_IDS). Applied twice — to the table value when
  * building MITIGATION_AURA_IDS, and again per aura through `resolveMitigation`

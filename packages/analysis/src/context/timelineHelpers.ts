@@ -674,6 +674,29 @@ export function mergeTimestampedLines(
  */
 export const DMG_SPIKE_THRESHOLD = 300_000;
 
+/** The damage-spike windows a burst-target claim reads: the pressure windows
+ * at or above `DMG_SPIKE_THRESHOLD` — the set the [DMG SPIKE] / [OFFENSIVE
+ * WINDOW] headers render. Every `computeOwnerPositionEvents` caller (prompt,
+ * menu, deep dive, report) passes this, so the melee STAYED_IN suppression
+ * reads one burst target and a menu event cannot lose its POSITIONING line
+ * (triage sync-burst F-L2, position X-L2). */
+export function dmgSpikeWindowsOf(
+  pressureWindows: ReadonlyArray<{
+    fromSeconds: number;
+    toSeconds: number;
+    targetName: string;
+    totalDamage: number;
+  }>,
+): Array<{ fromSeconds: number; toSeconds: number; targetName: string }> {
+  return pressureWindows
+    .filter((pw) => pw.totalDamage >= DMG_SPIKE_THRESHOLD)
+    .map((pw) => ({
+      fromSeconds: pw.fromSeconds,
+      toSeconds: pw.toSeconds,
+      targetName: pw.targetName,
+    }));
+}
+
 /**
  * Spell IDs for healing-amplifier CDs where we measure throughput during the buff window
  * and append a [HEALING] line (per-5s HPS + overheal %). Restricted to pure healing amps.
