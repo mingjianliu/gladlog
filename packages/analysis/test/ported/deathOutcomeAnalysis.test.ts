@@ -1,8 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { CombatUnitSpec, LogEvent } from "@gladlog/parser-compat";
 
+import { canonicalSpellId } from "../../src/utils/cooldowns";
 import {
   buildDeathOutcomeSummary,
+  EXTERNAL_DEFENSIVE_SPELLS,
   formatDeathOutcomeForContext,
   wasLockedOutByStunOnly,
   wasLockedOutThroughWindow,
@@ -248,6 +250,42 @@ describe("buildDeathOutcomeSummary — external defensive checks", () => {
     );
     const names = result.events[0].missedExternals.map((e) => e.spellName);
     expect(names).toContain("Blessing of Sacrifice");
+  });
+
+  // Triage crisis-external F-A9 (user ruling P-A9 = A, 2026-10-01): 199448 is
+  // the id the Ultimate Sacrifice PvP talent swaps in for 6940 — one button.
+  // A press of it is a press of the one roster row; there is no second row.
+  it("a Blessing of Sacrifice pressed as 199448 puts the one 6940 row on cooldown, and never lists twice", () => {
+    expect(canonicalSpellId("199448")).toBe("6940");
+    expect(EXTERNAL_DEFENSIVE_SPELLS["199448"]).toBeUndefined();
+    const warrior = makeDeadUnit("w1", MATCH_START + 90_000, {
+      spec: CombatUnitSpec.Warrior_Arms,
+      name: "Warrior",
+    });
+    const pressedAt = (ms: number) =>
+      makeUnit("p1", {
+        spec: CombatUnitSpec.Paladin_Holy,
+        name: "Paladin",
+        spellCastEvents: [
+          makeSpellCastEvent("199448", ms, "w1", "Warrior", "p1", "Paladin"),
+        ],
+      });
+    const namesWith = (paladin: unknown) =>
+      buildDeathOutcomeSummary(
+        makeCombat() as any,
+        [warrior, paladin as any],
+        [makeCCSummary("Warrior"), makeCCSummary("Paladin")],
+      ).events[0].missedExternals.map((e) => e.spellName);
+    // pressed 30 s before the death: on cooldown, not "available"
+    expect(namesWith(pressedAt(MATCH_START + 60_000))).not.toContain(
+      "Blessing of Sacrifice",
+    );
+    // pressed long ago: available again — once
+    expect(
+      namesWith(pressedAt(MATCH_START - 500_000)).filter(
+        (n) => n === "Blessing of Sacrifice",
+      ),
+    ).toHaveLength(1);
   });
 
   it("flags missed external when teammate cast the spell this match (B113)", () => {

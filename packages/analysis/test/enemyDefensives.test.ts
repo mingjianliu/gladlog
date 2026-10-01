@@ -939,3 +939,39 @@ describe("Anti-Magic Shell routing and the school-limited save masks", () => {
     expect(limitedAbsorbSchoolMask(BOP)).toBeUndefined();
   });
 });
+
+/** crisis-external F-A9: the Ultimate Sacrifice cast id of Blessing of
+ * Sacrifice is an enemy external, and stays out of the friendly roster (a
+ * second roster row for the same button doubled the missed-option line). */
+describe("Blessing of Sacrifice 199448 (Ultimate Sacrifice)", () => {
+  const BOSAC_HOLY = "199448";
+
+  beforeAll(async () => {
+    await ensureAnalysisData();
+  });
+
+  it("is an external save for the enemy predicate and absent from the friendly rosters", () => {
+    expect(isExternalSaveId(BOSAC_HOLY)).toBe(true);
+    expect(EXTERNAL_DEF_IDS.has(BOSAC_HOLY)).toBe(false);
+    expect(spellIdLists.externalDefensiveSpellIds.includes(BOSAC_HOLY)).toBe(
+      false,
+    );
+    expect(BOSAC_HOLY in EXTERNAL_DEFENSIVE_SPELLS).toBe(false);
+  });
+
+  it("renders as an external timed by the recipient's 199448 aura (7f67e778 4:46)", () => {
+    const pal = unit("e1", {
+      spellCastEvents: [cast(BOSAC_HOLY, "e2", 46)],
+    });
+    const warrior = unit("e2", {
+      auraEvents: [
+        applied(BOSAC_HOLY, "e1", "e2", 46),
+        removed(BOSAC_HOLY, "e1", "e2", 52),
+      ],
+    });
+    const evs = enemyDefensiveEvents(pal, [pal, warrior], combat);
+    expect(evs).toHaveLength(1);
+    expect(evs[0]).toMatchObject({ kind: "external", recipientId: "e2" });
+    expect(evs[0].observedSeconds).toBeCloseTo(6, 5);
+  });
+});

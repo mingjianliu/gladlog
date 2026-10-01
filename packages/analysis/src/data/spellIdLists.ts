@@ -210,6 +210,14 @@ export const ENEMY_ALLY_SAVE_IDS: ReadonlySet<string> = new Set([
   // ATTEMPTS, and no friendly accusation is added. The ally's 410358 aura
   // times the external; KILL ATTEMPTS credit is school-gated like 48707's.
   "410358", // 742 casts (541 self, 201 ally)
+  // Blessing of Sacrifice as cast under the Holy PvP talent Ultimate Sacrifice
+  // (crisis-external F-A9): 56 casts in 20 files, all by Holy Paladins, all on
+  // an ally; aura 199448 on the recipient, 6 s. Enemy side only. It is NOT in
+  // `externalDefensiveSpellIds` next to 6940: a second roster row for the same
+  // button printed the friendly "had Blessing of Sacrifice available" line
+  // twice (e5b3534b 2:00, a Holy Paladin who casts 6940) — how the friendly
+  // side should know the two ids are one button is an open ruling.
+  "199448",
   "471195", // Lay on Hands, live 12.x id — 528 casts (135 self, 393 ally)
   "633", // Lay on Hands, pre-12.x id still logged — 17 (3 self, 14 ally)
   // Gift of the Naaru: one racial, one cast id per class. These five are the

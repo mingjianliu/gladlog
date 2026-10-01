@@ -1898,6 +1898,13 @@ export const SPELL_CANONICAL_IDS: Record<string, string> = {
   // — 605 archive files: 1,188 loadout lines, 2,613 [RES] lines and 1,246
   // duplicated [YOU]/[TEAM] [CD] lines.
   "227847": "446035",
+  // Blessing of Sacrifice (triage crisis-external F-A9, user ruling P-A9 = A,
+  // 2026-10-01): 199448 is the id the Ultimate Sacrifice PvP talent swaps in
+  // for 6940 — one button, one cooldown, one roster row. A 199448 press was
+  // already read as 6940's by NAME (`isPressOfCooldown`'s variant-press
+  // branch); the alias makes it an id fact, so no reader can grow a second
+  // "Blessing of Sacrifice" entry or line.
+  "199448": "6940",
 };
 
 export function canonicalSpellId(spellId: string): string {
@@ -2937,9 +2944,17 @@ export function extractMajorCooldowns(
       const observedId = aliases.find((id) => castSpellIds.has(id));
       if (idx >= 0) {
         const existing = majorSpells[idx]!;
-        if (observedId) existing.spellId = observedId;
+        // A copy, never a write: `existing` is the SHARED class-roster object
+        // (`classData.abilities`). Writing the observed alias into it changed
+        // the roster for every unit processed afterwards — with 199448 an
+        // alias of 6940, the first Holy Paladin who pressed 199448 turned the
+        // paladin roster's Blessing of Sacrifice into 199448, and
+        // SPEC_EXCLUSIVE_SPELLS["199448"] (Holy) then removed it from every
+        // later Retribution / Protection kit (605-file capture: 2,468 → 1,269
+        // loadout lines). Same shape as the tag strip above.
         majorSpells[idx] = {
           ...existing,
+          ...(observedId ? { spellId: observedId } : {}),
           tags: [
             SpellTag.Defensive,
             ...existing.tags.filter(

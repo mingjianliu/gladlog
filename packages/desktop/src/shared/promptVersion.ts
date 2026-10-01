@@ -864,5 +864,10 @@
  *  mask. An immunity already up counts only when its aura is the immunity
  *  (the pct-100 rows, Time Stop, Guardian of the Forgotten Queen). One
  *  legend line added to the block.
+ *  v299 (2026-10-01, triage crisis-external F-A9, enemy half): an enemy Holy
+ *  Paladin's Blessing of Sacrifice cast as 199448 (Ultimate Sacrifice) renders
+ *  as an [ENEMY DEF] external and counts in KILL ATTEMPTS. On the friendly
+ *  side 199448 is an alias of 6940 (ruling P-A9 = A): one roster row, no
+ *  second "Blessing of Sacrifice" line.
  */
-export const PROMPT_VERSION = 298;
+export const PROMPT_VERSION = 299;
