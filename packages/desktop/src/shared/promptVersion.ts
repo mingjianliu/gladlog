@@ -400,5 +400,10 @@
  *  the model (`ARCHETYPE_LABELS_MATCH_MODEL` false;
  *  test/archetypeLabelAlignment.test.ts requires the flag to equal the
  *  computed alignment).
+ *  v221 (2026-10-01, triage other F-O13 + F-O14): a Blessing of Freedom /
+ *  Tiger's Lust cast on a teammate is not the caster's own `[CC AVOIDED?]`
+ *  tool; a channel whose own aura ends within 250 ms after a CC lands on the
+ *  owner reads `[channel cut by CC after N.Ns]` on its [YOU] [CAST] line
+ *  instead of `[cast succeeded before CC landed]`.
  */
-export const PROMPT_VERSION = 220;
+export const PROMPT_VERSION = 221;

@@ -292,6 +292,21 @@ export const PHYSICAL_CC_IDS = new Set<string>([
 // reads it; editorial, not measured.
 const GROUNDING_DEDUPE_SECONDS = 6;
 
+/**
+ * Mobility that works on its CAST TARGET, not on the caster: Blessing of
+ * Freedom and Tiger's Lust free / speed up whoever they are cast on. Thrown
+ * on a teammate they are not how the caster dodged a CC — e5b3534b 0:10 read
+ * "Capacitor Totem did not land; Blessing of Freedom (own) active" for a
+ * Freedom the paladin had put on a teammate (triage other F-O13). The other
+ * `REPOSITIONING_SPELL_IDS` that name another unit (Wild Charge, Rescue)
+ * carry the caster there, so their destination does not matter. Registered
+ * in curatedIdRegistry.
+ */
+export const TARGET_BOUND_MOBILITY_IDS: ReadonlySet<string> = new Set([
+  "1044", // Blessing of Freedom
+  "116841", // Tiger's Lust
+]);
+
 export const REPOSITIONING_SPELL_IDS = new Map<string, string>([
   ["119996", "Transcendence: Transfer"],
   ["109132", "Roll"],
@@ -1851,7 +1866,13 @@ export function analyzePlayerCCAndTrinket(
               e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
               e.spellId &&
               REPOSITIONING_SPELL_IDS.has(e.spellId) &&
-              Math.abs(e.logLine.timestamp - castTimeMs) <= 1500,
+              Math.abs(e.logLine.timestamp - castTimeMs) <= 1500 &&
+              // a target-bound mobility must have gone on the avoiding
+              // player themselves (triage other F-O13)
+              (!TARGET_BOUND_MOBILITY_IDS.has(e.spellId) ||
+                !e.destUnitId ||
+                e.destUnitId === "0000000000000000" ||
+                e.destUnitId === player.id),
           );
           if (
             mobilityCast &&

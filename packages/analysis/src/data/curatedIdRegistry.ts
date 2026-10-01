@@ -56,6 +56,7 @@ import {
   DRUID_FORM_BUFFS,
   GROUND_CC_SPELL_IDS,
   MAGIC_ONLY_IMMUNITY_IDS,
+  TARGET_BOUND_MOBILITY_IDS,
   PHYSICAL_CC_IDS,
   REPOSITIONING_SPELL_IDS,
   TARGETED_CC_DODGE_SPELLS,
@@ -482,6 +483,9 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   ),
   t("MAGIC_ONLY_IMMUNITY_IDS", "utils/ccTrinketAnalysis.ts", "aura", () =>
     set(MAGIC_ONLY_IMMUNITY_IDS),
+  ),
+  t("TARGET_BOUND_MOBILITY_IDS", "utils/ccTrinketAnalysis.ts", "cast", () =>
+    set(TARGET_BOUND_MOBILITY_IDS),
   ),
   t(
     "BURST_LEAD_CD_EXCLUDED_IDS",

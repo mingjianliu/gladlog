@@ -15,12 +15,15 @@ import {
   effectiveCooldownSeconds,
   getEnglishSpellName,
 } from "../../data/spellEffectData";
+import { CHANNELED_SPELL_IDS } from "../../data/channeledGenerated";
 import { ccSpellIds } from "../../data/spellTags";
 import {
   DEATH_WINDOW_S,
   DEATH_WINDOW_UNFOLD_CAP,
   TIMELINE_LINE_FLAGS,
 } from "../../data/timelineLineFlags";
+import { fmtFactNum } from "../../analysis/factFormat";
+import { dropAuraRebroadcasts } from "../../utils/auraIntervals";
 import { COPY_CAST_IDS } from "../../utils/castPress";
 import { isControlledPlayerFlags } from "../../utils/charmedPlayer";
 import {
@@ -112,6 +115,41 @@ export function emitHealerCastGapFillerEntries(
     .flatMap((s) =>
       s.ccInstances.map((cc) => Math.round(matchStartMs + cc.atSeconds * 1000)),
     );
+
+  /** Seconds a channel ran before an owner CC cut it, or null (F-O14). */
+  const CHANNEL_AURA_AT_CAST_MS = 250;
+  const CHANNEL_CUT_BY_CC_MS = 250;
+  // Re-broadcast REMOVED/APPLIED pairs dropped first (the one predicate
+  // every aura consumer filters through): a visage swap mid-channel must not
+  // read as the channel's end (agy review 2026-10-01).
+  const ownerAuras = dropAuraRebroadcasts(owner.auraEvents ?? []);
+  const channelCutByCc = (spellId: string, castMs: number): number | null => {
+    if (!CHANNELED_SPELL_IDS.has(spellId)) return null;
+    const own = ownerAuras.filter(
+      (a) => a.spellId === spellId && a.srcUnitId === owner.id,
+    );
+    const applied = own.find(
+      (a) =>
+        a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+        Math.abs(a.logLine.timestamp - castMs) <= CHANNEL_AURA_AT_CAST_MS,
+    );
+    if (!applied) return null;
+    const removeMs = own
+      .filter(
+        (a) =>
+          a.logLine.event === LogEvent.SPELL_AURA_REMOVED &&
+          a.logLine.timestamp >= applied.logLine.timestamp,
+      )
+      .reduce((min, a) => Math.min(min, a.logLine.timestamp), Infinity);
+    if (!Number.isFinite(removeMs)) return null;
+    const cutBy = ownerCCMsTimestamps.some(
+      (ccMs) =>
+        ccMs > castMs &&
+        removeMs >= ccMs &&
+        removeMs - ccMs <= CHANNEL_CUT_BY_CC_MS,
+    );
+    return cutBy ? (removeMs - castMs) / 1000 : null;
+  };
 
   // F159: Track owner's successful offensive purges
   // F163: Filter out low/medium priority purges to de-noise the timeline
@@ -345,7 +383,18 @@ export function emitHealerCastGapFillerEntries(
       }
     }
     let orderNote = "";
-    if (nearestCC !== undefined) {
+    // Triage other F-O14: a CHANNEL the CC cut. SPELL_CAST_SUCCESS fires at
+    // the channel's start, so "[cast succeeded before CC landed]" said nothing
+    // about a Mana Tea that Hammer of Justice ended after 0.76 s (7f67e778:
+    // aura 363.771, stun 364.498, aura removed 364.531). Evidence, all from
+    // the log: the spell is a channel (official table — an instant self-buff
+    // dropping right after a CC is not a cut channel), it put its own aura on
+    // the owner at the cast, and that aura went within CHANNEL_CUT_BY_CC_MS
+    // after a CC landed on the owner.
+    const cut = e.spellId ? channelCutByCc(e.spellId, tsMs) : null;
+    if (cut !== null) {
+      orderNote = ` [channel cut by CC after ${fmtFactNum(cut)}s]`;
+    } else if (nearestCC !== undefined) {
       if (tsMs < nearestCC) {
         // "succeeded", not "completed": SPELL_CAST_SUCCESS fires at channel
         // START for channeled spells, so a channel broken by this very CC

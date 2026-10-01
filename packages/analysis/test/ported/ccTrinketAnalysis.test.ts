@@ -2281,6 +2281,66 @@ describe("CC 规避门控真单源交叉校验(2026-08-07,矩阵:CC × 规避技
   });
 });
 
+describe("a target-bound mobility counts only on the avoiding player (triage other F-O13)", () => {
+  const MATCH_START = 1_000_000;
+  const CAST_AT = MATCH_START + 10_000;
+  const combat = {
+    startTime: MATCH_START,
+    endTime: MATCH_START + 300_000,
+    startInfo: { zoneId: "1672" },
+  };
+  // enemy Freezing Trap (a ground CC) that never landed on the player
+  const avoided = (avoidId: string, destUnitId: string) => {
+    const player = makeUnit("player-1", {
+      class: CombatUnitClass.Paladin,
+      spec: CombatUnitSpec.Paladin_Holy,
+      spellCastEvents: [
+        makeSpellCastEvent(
+          avoidId,
+          CAST_AT - 500,
+          destUnitId,
+          "X",
+          "player-1",
+          "Player",
+        ),
+      ] as any,
+    });
+    const enemy = makeUnit("enemy-1", {
+      name: "EnemyA",
+      reaction: CombatUnitReaction.Hostile,
+      spec: CombatUnitSpec.Hunter_Survival,
+    });
+    enemy.spellCastEvents = [
+      makeSpellCastEvent(
+        "3355",
+        CAST_AT,
+        "player-1",
+        "Player",
+        "enemy-1",
+        "EnemyA",
+      ) as any,
+    ];
+    return analyzePlayerCCAndTrinket(player, [enemy], combat as any)
+      .ccAvoidedInstances.length;
+  };
+
+  it("Blessing of Freedom / Tiger's Lust on a teammate is not the caster's avoidance", () => {
+    expect(avoided("1044", "mate-1")).toBe(0);
+    expect(avoided("116841", "mate-1")).toBe(0);
+  });
+
+  it("on the player, or with no destination, it still is", () => {
+    expect(avoided("1044", "player-1")).toBe(1);
+    expect(avoided("1044", "0000000000000000")).toBe(1);
+    expect(avoided("116841", "player-1")).toBe(1);
+  });
+
+  it("a mobility that carries the caster to another unit keeps counting (Wild Charge, Rescue)", () => {
+    expect(avoided("102401", "mate-1")).toBe(1);
+    expect(avoided("370665", "mate-1")).toBe(1);
+  });
+});
+
 describe("GH #105: a landed CC is never also 'avoided'", () => {
   const MATCH_START = 1_000_000;
   const makeCombat = () => ({
