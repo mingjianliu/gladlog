@@ -690,5 +690,9 @@
  *  mind-controlled); a team's own redistribution (Spirit Link, Void Leech) is
  *  not incoming pressure for [DMG SPIKE], [OFFENSIVE WINDOW], the [YOU] DPS
  *  part or [RES] focus.
+ *  v266 (2026-10-03, triage kick-priority F-P3 / F-P5 follow-ups):
+ *  kick-priority's facts.reachYd appears only when the kicker stood outside
+ *  the kick's range and had to run; legend: kickReadyForS is absent when the
+ *  kick was never used or never ran out of charges.
  */
-export const PROMPT_VERSION = 265;
+export const PROMPT_VERSION = 266;

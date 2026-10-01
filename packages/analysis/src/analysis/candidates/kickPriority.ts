@@ -149,10 +149,12 @@ export interface KickPriorityFriend {
   /** This kicker's interrupt range (official + their range talents); null
    * when unknown. */
   rangeYd: number | null;
-  /** Melee kicks only: the reach the feasibility tests used — the run
-   * envelope from the cast start (the smaller of the nominal-cast and the
-   * before-landing one when both ran). null for a ranged kick or without a
-   * position sample (triage kick-priority F-P3). */
+  /** Melee kicks only, and only when the feasibility tests leaned on it: the
+   * run envelope from the cast start (the smaller of the nominal-cast and
+   * the before-landing one when both ran) for a kicker who stood outside the
+   * kick's standing reach. null for a ranged kick, without a position
+   * sample, for a kicker already inside range + hitbox slack, and for one
+   * rooted through the cast (triage kick-priority F-P3). */
   reachYd: number | null;
   /** Seconds the kick had been off cooldown at the cast start; null when it
    * was never observed before the cast, or not ready (triage kick-priority
@@ -598,6 +600,19 @@ export function kickPriorityDecisionPoints(
                 );
           }
         }
+        // reachYd is a fact only when the accusation leaned on the run
+        // envelope: the kicker stood outside the kick's standing reach (range
+        // + hitbox slack) and the envelope is wider than it. Standing inside
+        // that reach, or rooted through the cast (envelope = standing reach),
+        // "could have closed in" is not what happened (review 2026-10-02).
+        const standingReachYd =
+          range == null ? null : range + RANGE_HITBOX_SLACK_YD;
+        const leanedOnRun =
+          reachYd !== null &&
+          standingReachYd !== null &&
+          distanceYd !== null &&
+          distanceYd > standingReachYd &&
+          reachYd > standingReachYd;
         friendsOut.push({
           id: f.id,
           name: f.name,
@@ -615,7 +630,7 @@ export function kickPriorityDecisionPoints(
           reachableBeforeLanding,
           rootedThroughCast,
           rangeYd: range ?? null,
-          reachYd,
+          reachYd: leanedOnRun ? reachYd : null,
           kickReadyForS,
         });
       }
