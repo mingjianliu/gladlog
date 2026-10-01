@@ -12,6 +12,7 @@ import { BACKLASH_AURA_CC_TYPE } from "../data/backlashCc";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { ccSpellIds } from "../data/spellTags";
 import { DEATH_WINDOW_S, TIMELINE_LINE_FLAGS } from "../data/timelineLineFlags";
+import { buildAuraIntervals } from "../utils/auraIntervals";
 import { buffFullDurationForCaster } from "../utils/buffDuration";
 import { silenceIntervals } from "../utils/cannotCastIntervals";
 import type { ICcBreakEvent } from "../utils/ccBreakAnalysis";
@@ -68,6 +69,7 @@ import {
 } from "../utils/enemyCDs";
 import { enemyDefensiveEvents } from "../utils/enemyDefensives";
 import {
+  INTERRUPT_SPELL_IDS,
   interruptCooldownSeconds,
   interruptForUnit,
   kickCastSpellId,
@@ -165,6 +167,10 @@ import { emitOffensiveWindowEntries } from "./timelineSections/offensiveWindow";
 import { emitOwnerCdEntries } from "./timelineSections/ownerCd";
 import { emitPurgeEntries } from "./timelineSections/purges";
 import { emitTeamCdEntries } from "./timelineSections/teamCd";
+import {
+  auraBlocksMechanic,
+  INTERRUPT_MECHANIC,
+} from "../utils/spellMechanics";
 
 function isDeferredSnapshot(line: unknown): line is DeferredSnapshot {
   return !!(
@@ -176,6 +182,10 @@ function isDeferredSnapshot(line: unknown): line is DeferredSnapshot {
 }
 
 // ── buildMatchTimeline ─────────────────────────────────────────────────────
+
+/** Two SPELL_MISSED rows of one kick (Skull Bash logs 93985 and 106839
+ * 1 ms apart) are one `[KICK] … missed — IMMUNE` line. */
+const IMMUNE_KICK_DEDUPE_MS = 50;
 
 export const DR_CLASH_LEGEND = [
   "  [DR CLASH] = a friendly CC landed at diminished DR (50% or Immune) because another teammate",
@@ -2501,6 +2511,97 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
           `${fmtTime(atSeconds)}  [KICK]   ${kicker} interrupted ${victim}${
             stoppedSpell ? `'s ${stoppedSpell}` : ""
           } (${kickSpell}${backSuffix})`,
+        );
+      }
+    }
+
+    // Triage 2026-09-29 kick-eaten F-K14a: an ENEMY kick the game rejected as
+    // IMMUNE on a friendly player rendered nothing — the kick was spent into
+    // an interrupt immunity and the timeline showed only the buff and the
+    // cast (5e8b11c1 2:10: Mind Freeze into Spiritwalker's Aegis). "Kick" =
+    // the interrupt kit (`INTERRUPT_SPELL_IDS`), the same ids the "enemy
+    // interrupts UP" ledger calls an interrupt. The immunity is named only
+    // when an aura on the victim is officially interrupt-immune (DB2 aura 77
+    // mechanic 26, `auraBlocksMechanic`); otherwise bare IMMUNE, never a
+    // guess.
+    const kickKitIds = new Set(INTERRUPT_SPELL_IDS);
+    const castersById = new Map(_allUnits.map((u) => [u.id, u]));
+    const immuneAuraCache = new Map<
+      string,
+      Array<{ fromMs: number; toMs: number; name: string }>
+    >();
+    /** The unit's interrupt-immune auras as [fromMs, toMs], through the shared
+     * pairing (`buildAuraIntervals`: BROKEN closes too, an aura with no
+     * REMOVED ends at its official duration, events are sorted). The pairing
+     * clamps every event to its `startTime`, so an aura put up in the prep
+     * room and never REMOVED would restart its official duration at 0:00 and
+     * read as up for the first seconds of the round; the origin is therefore
+     * moved back to the unit's earliest aura event and the result is kept in
+     * absolute milliseconds. */
+    const immuneAurasOf = (unit: ICombatUnit) => {
+      let hit = immuneAuraCache.get(unit.id);
+      if (!hit) {
+        const originMs = (unit.auraEvents ?? []).reduce(
+          (lo, a) => Math.min(lo, a.timestamp),
+          matchStartMs,
+        );
+        hit = buildAuraIntervals(
+          unit,
+          { startTime: originMs, endTime: matchEndMs },
+          castersById,
+        )
+          .filter(
+            (i) => auraBlocksMechanic(i.spellId, INTERRUPT_MECHANIC) === true,
+          )
+          .map((i) => ({
+            fromMs: originMs + i.fromS * 1000,
+            toMs: originMs + i.toS * 1000,
+            name: getEnglishSpellName(i.spellId, i.spellName),
+          }));
+        immuneAuraCache.set(unit.id, hit);
+      }
+      return hit;
+    };
+    const seenImmuneKicks: Array<{ key: string; ms: number }> = [];
+    for (const friend of friends) {
+      for (const m of friend.missesIn ?? []) {
+        if (m.missType !== "IMMUNE" || !m.spellId) continue;
+        if (!kickKitIds.has(m.spellId)) continue;
+        if (!enemyKickerUnit(m.srcUnitName, m.srcUnitId)) continue;
+        const atSeconds = (m.timestamp - matchStartMs) / 1000;
+        if (atSeconds < 0) continue;
+        // one kick, one line: Skull Bash logs its two ids 1 ms apart
+        const key = `${m.srcUnitId}|${friend.id}|${kickCastSpellId(m.spellId)}`;
+        if (
+          seenImmuneKicks.some(
+            (s) =>
+              s.key === key &&
+              Math.abs(s.ms - m.timestamp) <= IMMUNE_KICK_DEDUPE_MS,
+          )
+        )
+          continue;
+        seenImmuneKicks.push({ key, ms: m.timestamp });
+        // every interrupt-immune aura on the victim that covers the miss
+        // (inclusive: one removed in the miss's own millisecond was still
+        // up; 0.5 ms absorbs the seconds round trip), in the order applied —
+        // with two up at once either is a true reason, so both are named
+        const why = [
+          ...new Set(
+            immuneAurasOf(friend)
+              .filter(
+                (i) =>
+                  i.fromMs - 0.5 <= m.timestamp && m.timestamp <= i.toMs + 0.5,
+              )
+              .sort((a, b) => a.fromMs - b.fromMs)
+              .map((i) => i.name),
+          ),
+        ].join(" + ");
+        addEntry(
+          atSeconds,
+          `${fmtTime(atSeconds)}  [KICK]   ${resolveKicker(m.srcUnitName, m.srcUnitId)}'s ${getEnglishSpellName(
+            m.spellId,
+            m.spellName ?? "interrupt",
+          )} on ${pid(friend.name)} missed — IMMUNE${why ? ` (${why})` : ""}`,
         );
       }
     }

@@ -52,6 +52,11 @@ export function auraBlocksMechanic(
   return false;
 }
 
+/** SpellMechanic 26: interrupt. An aura that is immune to it makes an enemy
+ * kick miss IMMUNE (Spiritwalker's Aegis 378078, Precognition 377362,
+ * Unending Resolve 104773 — DB2 aura 77 misc 26). */
+export const INTERRUPT_MECHANIC = 26;
+
 /** Is `mech` listed on this spell's own mechanic-immunity aura (aura 77)?
  * Those are the designed CC breakers, and the corpus confirms they are pressed
  * from inside that CC (S2 archive 1 in 30, cast within the CC or at its

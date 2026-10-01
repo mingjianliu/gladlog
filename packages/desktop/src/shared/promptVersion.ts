@@ -414,5 +414,11 @@
  *  NOTHING", and its facts carry what the owner pressed — selfHealPct (fresh
  *  self-heal landed, % of max HP), selfHealCasts and dampeningPct. Predicate,
  *  ids and the reference table unchanged.
+ *  v224 (2026-10-01): triage kick-eaten F-K14a. An enemy interrupt the game
+ *  rejected as IMMUNE on a friendly player is a timeline line:
+ *  `[KICK] <kicker>'s <Kick> on <victim> missed — IMMUNE (<aura>)`. The
+ *  aura is named only when DB2 marks it interrupt-immune and it covered the
+ *  miss (shared pairing `buildAuraIntervals`); two at once are both named
+ *  ("A + B"); none known = bare IMMUNE.
  */
-export const PROMPT_VERSION = 223;
+export const PROMPT_VERSION = 224;

@@ -84,6 +84,130 @@ describe("buildMatchContext on real fixture", () => {
     }
   });
 
+  it("triage F-K14a: an enemy kick that missed IMMUNE on a friendly player is a [KICK] line; the immunity is named only when DB2 marks the aura interrupt-immune", () => {
+    const victim = friends[0]!;
+    const enemy = enemies[0]!;
+    const at = match.startTime + 10_500; // the fixture round lasts 15.5 s
+    const miss = (spellId: string, ms: number) =>
+      ({
+        logLine: { event: "SPELL_MISSED", timestamp: ms, parameters: [] },
+        timestamp: ms,
+        spellId,
+        spellName: spellId,
+        srcUnitId: enemy.id,
+        srcUnitName: enemy.name,
+        destUnitId: victim.id,
+        destUnitName: victim.name,
+        missType: "IMMUNE",
+        amount: 0,
+      }) as never;
+    const saved = { missesIn: victim.missesIn, auraEvents: victim.auraEvents };
+    const lines = () =>
+      buildMatchContext(match, friends, enemies, {})
+        .split("\n")
+        .filter((l) => l.includes("missed — IMMUNE"));
+    try {
+      // Skull Bash logs its two ids 1 ms apart: one line. No immunity aura
+      // on the victim: bare IMMUNE.
+      victim.missesIn = [miss("93985", at), miss("106839", at + 1)];
+      expect(lines()).toHaveLength(1);
+      expect(lines()[0]).toMatch(
+        /^0:10 {2}\[KICK\] {3}.+'s Skull Bash on .+ missed — IMMUNE$/,
+      );
+      // Spiritwalker's Aegis 378078 (DB2 aura 77, mechanic 26) up at the miss
+      victim.missesIn = [miss("47528", at)]; // Mind Freeze
+      victim.auraEvents = [
+        ...(saved.auraEvents ?? []),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          "378078",
+          at - 300,
+          victim.id,
+          victim.id,
+          "BUFF",
+        ),
+      ].sort((a, b) => a.timestamp - b.timestamp) as never;
+      expect(lines()).toHaveLength(1);
+      expect(lines()[0]).toContain("'s Mind Freeze on ");
+      expect(lines()[0]).toMatch(/missed — IMMUNE \(Spiritwalker's Aegis\)$/);
+      // The aura is read through the shared pairing (`buildAuraIntervals`),
+      // not a private replay (agy review of the batch, 2026-10-01):
+      const aura = (ev: LogEvent, id: string, ms: number) =>
+        makeAuraEvent(ev, id, ms, victim.id, victim.id, "BUFF");
+      // sorted in with the fixture's own events unless `unsorted` puts them
+      // first, in the order given
+      const withAuras = (evs: ReturnType<typeof aura>[], unsorted = false) => {
+        victim.auraEvents = (
+          unsorted
+            ? [...evs, ...(saved.auraEvents ?? [])]
+            : [...(saved.auraEvents ?? []), ...evs].sort(
+                (a, b) => a.timestamp - b.timestamp,
+              )
+        ) as never;
+        return lines();
+      };
+      // … a BROKEN event ends it like a REMOVED
+      expect(
+        withAuras([
+          aura(LogEvent.SPELL_AURA_APPLIED, "378078", at - 3000),
+          aura(LogEvent.SPELL_AURA_BROKEN_SPELL, "378078", at - 1000),
+        ])[0],
+      ).toMatch(/missed — IMMUNE$/);
+      // … with no REMOVED at all it ends at its official 5 s
+      expect(
+        withAuras([aura(LogEvent.SPELL_AURA_APPLIED, "378078", at - 8000)])[0],
+      ).toMatch(/missed — IMMUNE$/);
+      // … events out of time order are sorted before pairing
+      expect(
+        withAuras(
+          [
+            aura(LogEvent.SPELL_AURA_REMOVED, "378078", at - 1000),
+            aura(LogEvent.SPELL_AURA_APPLIED, "378078", at - 3000),
+          ],
+          true,
+        )[0],
+      ).toMatch(/missed — IMMUNE$/);
+      // … an aura removed in the miss's own millisecond was still up
+      expect(
+        withAuras([
+          aura(LogEvent.SPELL_AURA_APPLIED, "378078", at - 3000),
+          aura(LogEvent.SPELL_AURA_REMOVED, "378078", at),
+        ])[0],
+      ).toMatch(/missed — IMMUNE \(Spiritwalker's Aegis\)$/);
+      // … two up at once: both are named, in the order applied
+      expect(
+        withAuras([
+          aura(LogEvent.SPELL_AURA_APPLIED, "378078", at - 3000),
+          aura(LogEvent.SPELL_AURA_APPLIED, "377362", at - 2000),
+          aura(LogEvent.SPELL_AURA_REFRESH, "378078", at - 500),
+        ])[0],
+      ).toMatch(/missed — IMMUNE \(Spiritwalker's Aegis \+ Precognition\)$/);
+      // … an aura put up in the prep room (8 s before the round, official
+      // 5 s, never REMOVED) is not up 2 s into the round
+      victim.missesIn = [miss("47528", match.startTime + 2000)];
+      expect(
+        withAuras([
+          aura(LogEvent.SPELL_AURA_APPLIED, "378078", match.startTime - 8000),
+        ])[0],
+      ).toMatch(/^0:02 .+ missed — IMMUNE$/);
+      // … while one put up 3 s before the round still is
+      expect(
+        withAuras([
+          aura(LogEvent.SPELL_AURA_APPLIED, "378078", match.startTime - 3000),
+        ])[0],
+      ).toMatch(/^0:02 .+ missed — IMMUNE \(Spiritwalker's Aegis\)$/);
+      // not an interrupt (Polymorph 118), or not IMMUNE: no line
+      victim.missesIn = [
+        miss("118", at),
+        { ...(miss("47528", at + 500) as object), missType: "MISS" } as never,
+      ];
+      expect(lines()).toHaveLength(0);
+    } finally {
+      victim.missesIn = saved.missesIn;
+      victim.auraEvents = saved.auraEvents;
+    }
+  });
+
   it("GH #103 A5: Defensive loadout entries state how long the effect lasts", () => {
     const ctx = buildMatchContext(match, friends, enemies, {});
     expect(ctx).toContain("Pain Suppression [180s, 2 Charges, lasts 8s]");
