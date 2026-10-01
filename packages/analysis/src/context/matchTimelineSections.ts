@@ -897,23 +897,28 @@ export function emitFriendlyDeathEntries<S>(params: {
       const checkpoints = [15, 10, 5, 3, 2, 1];
       const trajectory: string[] = [];
       for (const secondsBefore of checkpoints) {
-        // Deaths are critical windows: the surrounding [STATE] ticks sample at
-        // ±1.5s — use the identical radius so a trace checkpoint and a STATE
-        // line about the same second resolve to the same advanced sample.
-        // Integer-second grid (floor) — the same instants the [STATE] ticks
-        // sample — so a checkpoint and a co-second STATE line resolve to the
-        // SAME advanced sample and can never print different numbers.
+        // Integer-second grid (floor) and the one sampling radius — the same
+        // instants and the same sampler as the [STATE] ticks — so a checkpoint
+        // and a co-second STATE line resolve to the SAME advanced sample and
+        // can never print different numbers. (The literal 1 500 ms here was a
+        // leftover of the second radius deleted on 07-20; 0 of 540 checkpoints
+        // on the 60 triage rounds differ under HP_SAMPLE_RADIUS_MS.)
         const pct = getHpPercentAtTime(
           dyingUnit,
           Math.floor(death.atSeconds) - secondsBefore,
           matchStartMs,
-          1_500,
+          HP_SAMPLE_RADIUS_MS,
         );
         if (pct !== null)
           trajectory.push(`${Math.round(pct)}% at T-${secondsBefore}s`);
       }
       if (trajectory.length > 0) {
-        deathLines.push(`               HP: ${trajectory.join(" → ")} → dead`);
+        // Triage hp-state F-L1: T is the rendered death second, not the death
+        // instant — a reader took "T-5s" of a 1:35.8 death as 1:30.8. (No
+        // literal line tag in the wording: scans find death lines by it.)
+        deathLines.push(
+          `               HP (T = ${fmtTime(death.atSeconds)}, the death line's second): ${trajectory.join(" → ")} → dead`,
+        );
       }
 
       // Top damage sources in final COUNTERFACTUAL_WINDOW_S seconds — same
@@ -1025,23 +1030,28 @@ export function emitEnemyDeathEntries<S>(params: {
       const checkpoints = [15, 10, 5, 3, 2, 1];
       const trajectory: string[] = [];
       for (const secondsBefore of checkpoints) {
-        // Deaths are critical windows: the surrounding [STATE] ticks sample at
-        // ±1.5s — use the identical radius so a trace checkpoint and a STATE
-        // line about the same second resolve to the same advanced sample.
-        // Integer-second grid (floor) — the same instants the [STATE] ticks
-        // sample — so a checkpoint and a co-second STATE line resolve to the
-        // SAME advanced sample and can never print different numbers.
+        // Integer-second grid (floor) and the one sampling radius — the same
+        // instants and the same sampler as the [STATE] ticks — so a checkpoint
+        // and a co-second STATE line resolve to the SAME advanced sample and
+        // can never print different numbers. (The literal 1 500 ms here was a
+        // leftover of the second radius deleted on 07-20; 0 of 540 checkpoints
+        // on the 60 triage rounds differ under HP_SAMPLE_RADIUS_MS.)
         const pct = getHpPercentAtTime(
           dyingUnit,
           Math.floor(death.atSeconds) - secondsBefore,
           matchStartMs,
-          1_500,
+          HP_SAMPLE_RADIUS_MS,
         );
         if (pct !== null)
           trajectory.push(`${Math.round(pct)}% at T-${secondsBefore}s`);
       }
       if (trajectory.length > 0) {
-        deathLines.push(`               HP: ${trajectory.join(" → ")} → dead`);
+        // Triage hp-state F-L1: T is the rendered death second, not the death
+        // instant — a reader took "T-5s" of a 1:35.8 death as 1:30.8. (No
+        // literal line tag in the wording: scans find death lines by it.)
+        deathLines.push(
+          `               HP (T = ${fmtTime(death.atSeconds)}, the death line's second): ${trajectory.join(" → ")} → dead`,
+        );
       }
 
       // Top damage sources in final COUNTERFACTUAL_WINDOW_S seconds — derived

@@ -382,5 +382,10 @@
  *  (`rendersOnCaster`) — Survival of the Fittest's [YOU] [CD] line reads
  *  `(self: N% HP, …)` instead of its cast target's HP. 605 files: 474 lines,
  *  no id changes.
+ *  v217 (2026-10-01, triage hp-state F-L1 + other F-O3): the HP trail under a
+ *  death line reads `HP (T = m:ss, the death line's second): …` and samples
+ *  with HP_SAMPLE_RADIUS_MS; the missed-sync-window legend calls
+ *  facts.cellKey a game mode, not a rating tier. 605 files: 4,266 trail lines
+ *  reworded, 0 values, no id changes.
  */
-export const PROMPT_VERSION = 216;
+export const PROMPT_VERSION = 217;

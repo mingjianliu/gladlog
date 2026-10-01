@@ -1035,7 +1035,7 @@ describe("context.timelineSections.test.ts", () => {
       );
       expect(lines[1]).toEqual({ placeholder: "snap-15" });
       expect(lines[2]).toBe(
-        "               HP: 100% at T-15s → 90% at T-10s → 70% at T-5s → 50% at T-3s → 30% at T-2s → 10% at T-1s → dead",
+        "               HP (T = 0:15, the death line's second): 100% at T-15s → 90% at T-10s → 70% at T-5s → 50% at T-3s → 30% at T-2s → 10% at T-1s → dead",
       );
       expect(lines[3]).toBe(
         "               Top damage in final 10s: Enemy1 — Touch of Karma (300k)",
@@ -1618,7 +1618,7 @@ describe("context.timelineSections.test.ts", () => {
       expect(lines[1]).toBe("0:15  [ROSTER]  enemy e-Enemy1 removed (dead)");
       expect(lines[2]).toEqual({ placeholder: "snap-15" });
       expect(lines[3]).toBe(
-        "               HP: 100% at T-15s → 90% at T-10s → 70% at T-5s → 50% at T-3s → 30% at T-2s → 10% at T-1s → dead",
+        "               HP (T = 0:15, the death line's second): 100% at T-15s → 90% at T-10s → 70% at T-5s → 50% at T-3s → 30% at T-2s → 10% at T-1s → dead",
       );
       expect(lines[4]).toBe(
         "               Top damage in final 10s: Player1 — Touch of Karma (300k)",
