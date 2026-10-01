@@ -105,3 +105,57 @@ describe("gcd-locked exclusion matches every client locale (reliability round 2,
     expect(stunned).toHaveLength(1);
   });
 });
+
+// Triage F-H12 (user ruling 2026-09-30 C1, cd-hoarded only): a ready
+// cooldown's GCD-rejected press that is never followed by the same spell's
+// cast in the window is an attempt (64a7a24d @200: Restoral 199.481 /
+// 199.639, 0.16 / 0.32 s after Sheilun's Gift 199.32, never cast)
+describe("keepGcdLockedUntilS (F-H12)", () => {
+  const restoral = [
+    hit(199.481, NOT_READY_REASON_ZH, 388615),
+    hit(199.639, NOT_READY_REASON_ZH, 388615),
+  ];
+  const opts = { ownCastSuccessSeconds: [199.32] };
+  it("kept when the spell is never cast in (hit, until]; dropped without the option", () => {
+    expect(filterIntentGuardEvidence(restoral, [], opts)).toEqual([]);
+    expect(
+      filterIntentGuardEvidence(restoral, [], {
+        ...opts,
+        keepGcdLockedUntilS: 205,
+      }),
+    ).toEqual(restoral);
+  });
+  it("a later cast inside the window still drops it; one after the window does not", () => {
+    // cast 2.4 s later: outside the 2 s pre-cast exclusion, inside the window
+    expect(
+      filterIntentGuardEvidence(restoral, [202.1], {
+        ...opts,
+        keepGcdLockedUntilS: 205,
+      }),
+    ).toEqual([]);
+    expect(
+      filterIntentGuardEvidence(restoral, [206], {
+        ...opts,
+        keepGcdLockedUntilS: 205,
+      }),
+    ).toEqual(restoral);
+  });
+  it("the pre-cast exclusion still comes first", () => {
+    expect(
+      filterIntentGuardEvidence(restoral, [200.5], {
+        ...opts,
+        keepGcdLockedUntilS: 205,
+      }),
+    ).toEqual([]);
+  });
+  it("a press whose own cooldown was still recovering stays dropped (readyAt)", () => {
+    const readyFrom = 199.6; // Restoral back at 199.6: only the second press was a ready one
+    expect(
+      filterIntentGuardEvidence(restoral, [], {
+        ...opts,
+        keepGcdLockedUntilS: 205,
+        readyAt: (s) => s >= readyFrom,
+      }).map((h) => h.tSeconds),
+    ).toEqual([199.639]);
+  });
+});

@@ -124,6 +124,16 @@ export const NOT_READY_REASONS: ReadonlySet<string> = new Set([
  *    (`opts.ownCastSuccessSeconds`). Optional — absent means this exclusion
  *    is skipped entirely (graceful degradation, same convention as the
  *    guard's own `rawStreams?` param).
+ *    `opts.keepGcdLockedUntilS` (triage F-H12, user ruling 2026-09-30 C1 —
+ *    cd-hoarded only): a gcd-locked hit is KEPT when the same spell has no
+ *    success in `(hit, keepGcdLockedUntilS]` — the press of a ready
+ *    cooldown that the GCD rejected and that was then never cast in the
+ *    window is an attempt (64a7a24d @200: Restoral rejected 0.16 / 0.32 s
+ *    after Sheilun's Gift, never cast, owner dead at 201.4). The ruling
+ *    covers a READY cooldown only, so the caller also passes
+ *    `opts.readyAt` (the ledger's `cdAvailableAt` at the press): a hit
+ *    whose cooldown was itself still recovering stays dropped. Absent = the
+ *    #29 behaviour for every other caller.
  *
  * Known tail (agy flash review, 2026-08-17, accepted): `cd.casts` is the
  * ledger's 2s-DEDUP'D cast list, so a double-charge spell cast twice within
@@ -137,9 +147,14 @@ export const NOT_READY_REASONS: ReadonlySet<string> = new Set([
 export function filterIntentGuardEvidence(
   hits: CastFailedEvent[],
   sameSpellCastSeconds: number[],
-  opts?: { ownCastSuccessSeconds?: number[] },
+  opts?: {
+    ownCastSuccessSeconds?: number[];
+    keepGcdLockedUntilS?: number;
+    readyAt?: (tSeconds: number) => boolean;
+  },
 ): CastFailedEvent[] {
   const ownCasts = opts?.ownCastSuccessSeconds;
+  const keepUntil = opts?.keepGcdLockedUntilS;
   return hits.filter((h) => {
     const preCast = sameSpellCastSeconds.some(
       (ct) =>
@@ -151,7 +166,14 @@ export function filterIntentGuardEvidence(
       const gcdLocked = ownCasts.some(
         (ct) => ct <= h.tSeconds && ct >= h.tSeconds - INTENT_GUARD_GCD_S,
       );
-      if (gcdLocked) return false;
+      if (gcdLocked) {
+        if (keepUntil === undefined) return false;
+        const castLater = sameSpellCastSeconds.some(
+          (ct) => ct > h.tSeconds && ct <= keepUntil,
+        );
+        if (castLater) return false;
+        if (opts?.readyAt && !opts.readyAt(h.tSeconds)) return false;
+      }
     }
     return true;
   });

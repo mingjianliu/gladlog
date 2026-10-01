@@ -364,5 +364,9 @@
  *  `checkBurstAnsweredBottomConsistency`); another friendly's self-only heal
  *  CD is not credited; a pre-opener aimed control whose aura was gone at the
  *  lead cast is not credited (`aimedControlUpAt`). `responded` unchanged.
+ *  v213 (2026-10-01, triage cd-hoarded-waste F-H12, ruling C1): a GCD reject
+ *  of a cooldown ready at that press and never cast later in the window is
+ *  an attempt in cd-hoarded's `facts.attempted` (accusation not waived).
+ *  605 files: 4 cd-hoarded lines gain it, no id changes.
  */
-export const PROMPT_VERSION = 212;
+export const PROMPT_VERSION = 213;

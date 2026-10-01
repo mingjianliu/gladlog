@@ -26,6 +26,7 @@ import {
   cdCanHelpAnotherUnit,
   cdAvailableAt,
   cdReadyInTimeAt,
+  CD_INSTANT_SLACK_S,
   DEFENSIVE_TAGS,
   getUnitHpAtTimestamp,
   HP_SAMPLE_RADIUS_MS,
@@ -1433,8 +1434,22 @@ export function cdHoardedEvents(
                 windowToS,
                 Number(cd.spellId),
               ),
+              // Feign Death's casts are its Survival Tactics 202748
+              // activations (AURA_ONLY_ACTIVATION_IDS), so "cast later" sees
+              // a feign that is never logged as a press
               cd.casts.map((c) => c.timeSeconds),
-              { ownCastSuccessSeconds },
+              // F-H12 (ruling 2026-09-30 C1): a GCD reject of a cooldown
+              // ready at that press, never followed by its cast in the
+              // window, counts as an attempt; the accusation is not waived
+              {
+                ownCastSuccessSeconds,
+                keepGcdLockedUntilS: windowToS,
+                // at the press itself: cdAvailableAt adds the rendered-
+                // second slack, which here would admit a cooldown that
+                // only came back up to 0.5 s after the reject (codex
+                // review of F-H12)
+                readyAt: (s) => cdAvailableAt(cd, s - CD_INSTANT_SLACK_S),
+              },
             ),
           )
         : [];

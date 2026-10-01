@@ -2859,7 +2859,11 @@ describe("cdHoardedEvents 意图守护(BACKLOG #26 Task 2,按了被拒不算屯�
     expect(evts[0]!.facts["attempted"]).toBeUndefined();
   });
 
-  it("⑤ #29:自己刚成功施放 ≤1.5s 内的「尚未恢复」是 GCD 不算证据;同时刻的昏迷理由保留(理由收窄)", () => {
+  // F-H12(用户裁决 2026-09-30 C1)推翻了 #29 在 cd-hoarded 里的这一半:就绪
+  // 技能在 GCD 内被拒、窗口内之后再没放出来,算尝试(指控照出)。「之后放了」
+  // 那一侧 cd-hoarded 本身判 spent 不出行,由 shared.test.ts 的
+  // keepGcdLockedUntilS 用例钉住。
+  it("⑤ 自己刚成功施放 ≤1.5s 内的「尚未恢复」:就绪且之后没放 → 算尝试(F-H12 / C1);同时刻的昏迷理由照旧保留", () => {
     const rawStreams: RawStreams = {
       available: true,
       manaSamples: [],
@@ -2892,8 +2896,47 @@ describe("cdHoardedEvents 意图守护(BACKLOG #26 Task 2,按了被拒不算屯�
     );
     expect(evts).toHaveLength(1);
     expect(evts[0]!.facts["attempted"]).toBe(
-      "曾尝试施放被拒(无法在昏迷时那样做×1)",
+      "曾尝试施放被拒(尚未恢复×1、无法在昏迷时那样做×1)",
     );
+  });
+
+  it("⑤b F-H12:被拒那一刻冷却还没转好(0.5 s 后才好)→ 不算尝试;转好之后的被拒 → 算(真实 cdAvailableAt,codex 复审)", () => {
+    // used at 79 with a 120 s cooldown → back up at 199 (= t − 1, so it is
+    // in readyCds for the crisis at 200); own unrelated cast at 198.4
+    const cd = {
+      ...HOARDED_CD,
+      cooldownSeconds: 120,
+      casts: [{ timeSeconds: 79 }],
+      neverUsed: false,
+    };
+    const reject = (tSeconds: number) => ({
+      available: true,
+      manaSamples: [],
+      castFailed: [
+        {
+          tSeconds,
+          unitGuid: "h",
+          spellId: 642,
+          spellName: "Divine Shield",
+          reason: "尚未恢复",
+        },
+      ],
+    });
+    const run = (rejectAt: number, ownCast: number) =>
+      cdHoardedEvents(
+        [ownSource(200, 34)],
+        [cd],
+        OWNER,
+        undefined,
+        reject(rejectAt) as RawStreams,
+        [ownCast],
+      );
+    const early = run(198.5, 198.4);
+    expect(early).toHaveLength(1);
+    expect(early[0]!.facts["attempted"]).toBeUndefined();
+    const ready = run(199.3, 199.2);
+    expect(ready).toHaveLength(1);
+    expect(ready[0]!.facts["attempted"]).toBe("曾尝试施放被拒(尚未恢复×1)");
   });
 
   it("⑥ 新增(2026-08-30 多技能合并):两个 ready CD 各自的 CAST_FAILED 一起并入 facts.attempted,不是只看第一个", () => {
