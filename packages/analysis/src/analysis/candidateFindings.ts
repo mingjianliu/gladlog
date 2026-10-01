@@ -1524,6 +1524,56 @@ export function kickEatenEvents(
     }));
 }
 
+/** `kickEatenEvents` with the product's own inputs: the owner's rejected
+ * presses, the reach pair, both sides' pressure and the owner's cast cancels.
+ * The product passes every kick on the owner (`interruptInstances`); a scan
+ * passes one kick at a time to read that kick's line with the per-round cap
+ * bypassed (`packages/eval/scripts/kickEatenScan.ts`) — a line the cap drops
+ * is otherwise invisible to a before/after diff. */
+export function ownerKickEatenEvents(
+  ctx: {
+    combat: any;
+    owner: any;
+    friends: any[];
+    enemies: any[];
+    rawStreams?: RawStreams;
+  },
+  instances: Parameters<typeof kickEatenEvents>[0],
+): CandidateEvent[] {
+  const { combat, owner, friends, enemies, rawStreams } = ctx;
+  return kickEatenEvents(
+    instances,
+    owner,
+    {
+      rawStreams,
+      // Same seconds base and same source list as cd-hoarded's
+      // `ownCastSuccessSeconds` (teamPlayEvents above).
+      ownerCasts: (owner.spellCastEvents ?? []).map((e: any) => ({
+        spellId: String(e.spellId ?? ""),
+        tSeconds: (e.logLine.timestamp - combat.startTime) / 1000,
+      })),
+    },
+    (k) => {
+      if (!k.interruptedSpellId || !k.kickSpellId) return null;
+      const kicker = k.sourceId
+        ? ((combat.units ?? {})[k.sourceId] ?? null)
+        : null;
+      const yourReachYd = spellReachForCaster(owner, k.interruptedSpellId);
+      // the kick's CAST id — the event may carry the interrupt effect id,
+      // whose range row is the 100 yd placeholder (Skull Bash 93985)
+      const kickRangeYd = spellRangeForCaster(
+        kicker,
+        kickCastSpellId(k.kickSpellId),
+      );
+      return yourReachYd !== null && kickRangeYd !== null
+        ? { yourReachYd, kickRangeYd }
+        : null;
+    },
+    kickPressureFor({ combat, owner, friends, enemies }),
+    ownerCastCancels({ owner, friends, enemies, combat, rawStreams }),
+  );
+}
+
 /** The round's cancel / bait contrast on a kick-eaten line: how many of the
  * owner's hardcasts they cancelled themselves (and how far in, median), how
  * many enemy kicks those cancels baited, and which of them were this line's
@@ -2825,36 +2875,9 @@ function teamPlayEvents(
     // [CC ON TEAM] 行完整供给模型;其产出函数与测试已于 2026-09-24 删除
     // (旧版本缓存从不被读取,渲染也不调产出函数)。
     out.push(
-      ...kickEatenEvents(
+      ...ownerKickEatenEvents(
+        { combat, owner, friends, enemies, rawStreams },
         cc.interruptInstances,
-        owner,
-        {
-          rawStreams,
-          // Same seconds base and same source list as cd-hoarded's
-          // `ownCastSuccessSeconds` (teamPlayEvents above).
-          ownerCasts: (owner.spellCastEvents ?? []).map((e: any) => ({
-            spellId: String(e.spellId ?? ""),
-            tSeconds: (e.logLine.timestamp - combat.startTime) / 1000,
-          })),
-        },
-        (k) => {
-          if (!k.interruptedSpellId || !k.kickSpellId) return null;
-          const kicker = k.sourceId
-            ? ((combat.units ?? {})[k.sourceId] ?? null)
-            : null;
-          const yourReachYd = spellReachForCaster(owner, k.interruptedSpellId);
-          // the kick's CAST id — the event may carry the interrupt effect id,
-          // whose range row is the 100 yd placeholder (Skull Bash 93985)
-          const kickRangeYd = spellRangeForCaster(
-            kicker,
-            kickCastSpellId(k.kickSpellId),
-          );
-          return yourReachYd !== null && kickRangeYd !== null
-            ? { yourReachYd, kickRangeYd }
-            : null;
-        },
-        kickPressureFor({ combat, owner, friends, enemies }),
-        ownerCastCancels({ owner, friends, enemies, combat, rawStreams }),
       ),
     );
 
