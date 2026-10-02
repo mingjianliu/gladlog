@@ -677,5 +677,10 @@
  *  [VULNERABLE] acquittal with a maybe-ready cooldown reads `no offensive CD
  *  certainly ready (may already be back: …)`. The accusation gate still reads
  *  the certain list only.
+ *  v264 (2026-10-02, triage position F-K1, ruling A61 = A): the kill-window
+ *  `target unreachable (positions recorded)` part and the [VULNERABLE]
+ *  acquittal `target unreachable` are decided over the whole span, one
+ *  rendered second at a time — reachable as soon as any living friendly could
+ *  reach the target on any second — instead of at the span's first instant.
  */
-export const PROMPT_VERSION = 263;
+export const PROMPT_VERSION = 264;

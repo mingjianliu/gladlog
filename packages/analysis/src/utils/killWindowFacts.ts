@@ -108,8 +108,10 @@ export interface IKillWindowGateFacts {
   backInside?: IKillWindowCdAt[];
   /** Presses of a team offensive CD after the start's second, up to the end. */
   pressedInside?: IKillWindowCdAt[];
-  /** false only when positions WERE recorded and no friendly could reach the
-   * target (range+LoS); true when reachable; null when no position data. */
+  /** Over the span's rendered seconds (ruling A61): true when a living
+   * friendly could reach the target (range+LoS) on any of them; false only
+   * when positions WERE recorded and none could on every second; null when
+   * no position data. */
   reachable: boolean | null;
   /** Enemy healer sat in hard CC overlapping the rendered span. */
   healerLocked: boolean;
@@ -222,22 +224,27 @@ export function createKillWindowFactsComputer(
       );
       // Fail OPEN: reachable stays null until a recorded position pair
       // actually disproves reach for EVERY sampled friendly.
+      //
+      // position F-K1 (ruling A61 = A, 2026-09-30): over the WHOLE span, one
+      // rendered second at a time — reachable as soon as any living friendly
+      // reaches on any second. The single sample at the span start called
+      // 539fef93's 1:34–1:50 "target unreachable" with the owner 3.0 yd from
+      // the target at 1:37. A friendly dead at a second (`isDeadAt`) is not
+      // sampled there: a corpse keeps its last position.
       let reachable: boolean | null = null;
-      for (const f of friends) {
-        const pos = getUnitPositionAtTime(f, tMs, LOS_SWEEP_GAP_MS);
-        if (!pos) continue;
-        const r = friendlyReachesAt(
-          f,
-          pos,
-          target,
-          tMs,
-          combat.startInfo?.zoneId,
-        );
-        if (r !== false) {
-          reachable = true;
-          break;
+      const zoneId = combat.startInfo?.zoneId;
+      scan: for (let s = readyAtSecond; s <= lastSecond; s++) {
+        const sMs = startMs + s * 1000;
+        for (const f of friends) {
+          if (isDeadAt(f, sMs)) continue;
+          const pos = getUnitPositionAtTime(f, sMs, LOS_SWEEP_GAP_MS);
+          if (!pos) continue;
+          if (friendlyReachesAt(f, pos, target, sMs, zoneId) !== false) {
+            reachable = true;
+            break scan;
+          }
+          reachable = false;
         }
-        reachable = false;
       }
       return {
         readyOffCds,

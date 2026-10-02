@@ -224,3 +224,66 @@ describe("kill-window readiness grammar", () => {
     });
   });
 });
+
+// Triage position F-K1 (ruling A61 = A, 2026-09-30): "target unreachable"
+// rested on one instant at the span start.
+describe("kill-window reach over the span", () => {
+  const START = 1_000_000;
+  /** positions every 0.5 s for 200 s, x from `xAt(seconds)`, y = 0 */
+  const positions = (xAt: (s: number) => number) =>
+    Array.from({ length: 401 }, (_, i) => ({
+      timestamp: START + i * 500,
+      logLine: { timestamp: START + i * 500 },
+      advancedActorPositionX: xAt(i / 2),
+      advancedActorPositionY: 0,
+    }));
+  const unit = (
+    id: string,
+    xAt: ((s: number) => number) | null,
+    extra: Parameters<typeof makeUnit>[1] = {},
+  ) =>
+    makeUnit(id, {
+      class: CombatUnitClass.Mage,
+      spec: CombatUnitSpec.Mage_Frost,
+      advancedActions: xAt ? positions(xAt) : [],
+      ...extra,
+    });
+  const reach = (friends: ReturnType<typeof unit>[], from = 94.4, to = 110) => {
+    const target = unit("E1", () => 0);
+    return createKillWindowFactsComputer(
+      {
+        startTime: START,
+        endTime: START + 300_000,
+        units: Object.fromEntries([...friends, target].map((u) => [u.id, u])),
+      } as unknown as AtomicArenaCombat,
+      friends,
+      [target],
+    ).facts(target, from, to).reachable;
+  };
+
+  it("539fef93's shape: out of reach at the span start, in reach three seconds later → reachable", () => {
+    // 60 yd away until 97 s, then 3 yd
+    expect(reach([unit("P1", (s) => (s < 97 ? 60 : 3))])).toBe(true);
+  });
+
+  it("out of reach on every second of the span → unreachable", () => {
+    expect(reach([unit("P1", () => 60)])).toBe(false);
+  });
+
+  it("a dead friendly is not sampled: the corpse in range does not make the target reachable", () => {
+    const corpse = unit("P1", () => 3, {
+      deathRecords: [{ timestamp: START + 90_000 }],
+    });
+    const far = unit("P2", () => 60);
+    expect(reach([corpse, far])).toBe(false);
+    // alive for the first seconds of the span and in range then → reachable
+    const diesInside = unit("P1", () => 3, {
+      deathRecords: [{ timestamp: START + 96_500 }],
+    });
+    expect(reach([diesInside, far])).toBe(true);
+  });
+
+  it("no recorded position on any second → null (fail open, nothing rendered)", () => {
+    expect(reach([unit("P1", null)])).toBeNull();
+  });
+});
