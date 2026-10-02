@@ -3193,6 +3193,16 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       (l) => typeof l === "string" && l.includes(", next spike in "),
     ),
   );
+  // F-C5b (triage res-readiness, ruling A′16): "UP" means usable at that
+  // instant, which the bare word does not say — legend it when rendered.
+  const interruptNoteRendered = entries.some((e) =>
+    e.lines.some(
+      (l) =>
+        typeof l === "string" &&
+        (l.includes(" | enemy interrupts UP: ") ||
+          l.includes(" | no enemy interrupt usable (")),
+    ),
+  );
   const outputLines: string[] = [
     ...summaryLines,
     "MATCH TIMELINE",
@@ -3300,6 +3310,13 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       ? [
           "  `next spike in Ns on X` on a [YOU] [CD] line = the next damage spike after that press, known only in hindsight —",
           "    the player could not see it coming.",
+        ]
+      : []),
+    ...(interruptNoteRendered
+      ? [
+          "  `enemy interrupts UP: X` on a channeled [YOU] [CD] line = enemy kicks that were off cooldown AND usable at that",
+          "    instant (the kicker alive and not in a cast-blocking CC); `no enemy interrupt usable (CC'd: X)` = off cooldown,",
+          "    but the kicker was crowd-controlled or silenced right then.",
         ]
       : []),
     // F-C17 (triage res-readiness): the per-cast lines come from the healer

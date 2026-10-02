@@ -23,7 +23,10 @@ import {
   THROUGHPUT_EMPOWER_DEFENSIVE_IDS,
 } from "../../utils/cooldowns";
 import { getDampeningPercentage } from "../../utils/dampening";
-import { computeEnemyInterruptAvailability } from "../../utils/enemyInterrupts";
+import {
+  computeEnemyInterruptAvailability,
+  isInterruptUsable,
+} from "../../utils/enemyInterrupts";
 import { fmtTime } from "../../utils/renderGrid";
 import {
   CHANNELED_CD_SPELL_IDS,
@@ -352,13 +355,26 @@ export function emitOwnerCdEntries(
           // B139: kicks can't land — a PvP talent grants interrupt/silence immunity here.
           interruptNote = ` | interrupt-immune (${immuneReason})`;
         } else {
+          // F-C5 / F-C5b (ruling A′16): UP = usable at this instant — the
+          // kicker alive and not in a cast-blocking CC, not merely off
+          // cooldown. The CC test is at the exact instant, like kick-priority.
           const states = computeEnemyInterruptAvailability(
             enemies,
             matchStartMs + cast.timeSeconds * 1000,
+            _allUnits,
           );
-          const upKicks = states.filter((s) => s.cdRemainingSeconds === 0);
+          const kickLabel = (s: (typeof states)[number]) =>
+            s.assumedReady
+              ? `${s.spellName}/${s.spec} (assumed)`
+              : `${s.spellName}/${s.spec}`;
+          const upKicks = states.filter(isInterruptUsable);
+          const ccdKicks = states.filter(
+            (s) => s.cdRemainingSeconds === 0 && s.ccd,
+          );
           if (upKicks.length > 0) {
-            interruptNote = ` | enemy interrupts UP: ${upKicks.map((s) => (s.assumedReady ? `${s.spellName}/${s.spec} (assumed)` : `${s.spellName}/${s.spec}`)).join(", ")}`;
+            interruptNote = ` | enemy interrupts UP: ${upKicks.map(kickLabel).join(", ")}`;
+          } else if (ccdKicks.length > 0) {
+            interruptNote = ` | no enemy interrupt usable (CC'd: ${ccdKicks.map(kickLabel).join(", ")})`;
           } else if (states.length > 0) {
             interruptNote = " | no enemy interrupt available (all on CD)";
           }

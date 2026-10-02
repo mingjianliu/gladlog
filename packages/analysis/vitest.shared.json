@@ -209,6 +209,7 @@
     "test/threesDecided.test.ts",
     "test/tremorTotemBreak.test.ts",
     "test/triageG4DeadAt.test.ts",
+    "test/triageG4Kickers.test.ts",
     "test/usableWhileCcShim.test.ts"
   ]
 }

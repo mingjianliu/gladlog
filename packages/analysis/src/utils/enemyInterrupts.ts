@@ -3,12 +3,14 @@ import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 import kitRaw from "../data/interruptKitGenerated.json";
 import { spellEffectData } from "../data/spellEffectData";
 import { eventReductionsFor } from "../data/talentScriptedCooldowns";
+import { castBlockingAuraAt, enemySourceIds } from "./cannotCastIntervals";
 import {
   chargeStateAt,
   playerTalentIdSets,
   specToString,
   unitCooldownOf,
 } from "./cooldowns";
+import { isDeadAt } from "./unitDeath";
 
 /**
  * Which interrupt a combatant HAS — from official data, per player (GH #78,
@@ -116,6 +118,7 @@ function interruptCastsUpTo(
   unit: ICombatUnit,
   spellId: string,
   atMs: number,
+  strictlyBefore = false,
 ): number[] {
   const castMs: number[] = [];
   for (const e of [
@@ -124,7 +127,10 @@ function interruptCastsUpTo(
   ]) {
     if (e.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
     if (e.spellId !== spellId) continue;
-    if (e.logLine.timestamp <= atMs) castMs.push(e.logLine.timestamp);
+    if (
+      strictlyBefore ? e.logLine.timestamp < atMs : e.logLine.timestamp <= atMs
+    )
+      castMs.push(e.logLine.timestamp);
   }
   return castMs.sort((a, b) => a - b);
 }
@@ -178,10 +184,14 @@ export function interruptCooldownRemainingMs(
   unit: ICombatUnit,
   spellId: string,
   atMs: number,
+  /** kick-eaten F-K5c: count only kicks logged strictly BEFORE `atMs` ("was
+   * the kick in hand when the cast began"); cooldown reductions up to and at
+   * `atMs` still apply. Default: kicks at `atMs` are spent. */
+  opts?: { kicksBefore?: boolean },
 ): number {
   const cooldownSeconds = interruptCooldownSeconds(spellId, unit) ?? 15;
   const charges = unitCooldownOf(unit, spellId)?.charges ?? 1;
-  const castMs = interruptCastsUpTo(unit, spellId, atMs);
+  const castMs = interruptCastsUpTo(unit, spellId, atMs, opts?.kicksBefore);
   if (!castMs.length) return 0;
   if (charges > 1) {
     // the shared sequential-recharge simulation, in seconds from atMs
@@ -304,6 +314,45 @@ export interface IEnemyInterruptState {
   seen: boolean;
   /** Whether this interrupt is assumed ready (ready on cooldown, but never yet observed cast in this match at or before atMs). */
   assumedReady: boolean;
+  /** The unit that casts this kick is inside a cast-blocking aura at atMs
+   * (`castBlockingAuraAt`): off cooldown or not, the kick cannot be thrown
+   * now (triage res-readiness F-C5b, ruling A′16). false when the round's
+   * units were not handed in — unknown is never "blocked". */
+  ccd: boolean;
+}
+
+/** Of several units (an owner's pets over a round), the one present at
+ * `atMs`: not dead by then, and with the latest own event (cast, aura,
+ * advanced sample) at or before it. Undefined when none was seen yet. */
+function activeUnitAt(
+  units: ReadonlyArray<ICombatUnit>,
+  atMs: number,
+): ICombatUnit | undefined {
+  let best: ICombatUnit | undefined;
+  let bestTs = -Infinity;
+  for (const u of units) {
+    if (isDeadAt(u, atMs)) continue;
+    let last = -Infinity;
+    for (const list of [
+      u.spellCastEvents ?? [],
+      u.auraEvents ?? [],
+      u.advancedActions ?? [],
+    ] as ReadonlyArray<ReadonlyArray<{ timestamp: number }>>)
+      for (const e of list)
+        if (e.timestamp <= atMs && e.timestamp > last) last = e.timestamp;
+    if (last > bestTs) {
+      bestTs = last;
+      best = u;
+    }
+  }
+  return best;
+}
+
+/** Is this state a kick the enemy could throw at that instant — off cooldown
+ * and its caster able to cast. The one reading of "enemy interrupts UP"
+ * (ruling A′16, 2026-09-30: "usable now", not "off cooldown"). */
+export function isInterruptUsable(s: IEnemyInterruptState): boolean {
+  return s.cdRemainingSeconds === 0 && !s.ccd;
 }
 
 /**
@@ -311,15 +360,66 @@ export interface IEnemyInterruptState {
  * An interrupt is on cooldown when the enemy cast it within its cooldown window; otherwise it is ready.
  * If it has never yet been cast at or before atMs, it is marked as `assumedReady: true` and `seen: false`,
  * preventing consumers from falsely accusing the player of hardcasting in range when the enemy never kicks.
+ *
+ * Triage res-readiness F-C5 / F-C5b:
+ *  - an enemy dead at atMs (`isDeadAt`, the one dead-at predicate) has no
+ *    interrupt and is not in the result — 141470d0 7:21 listed Solar Beam for
+ *    a Balance Druid dead for 52 s;
+ *  - `ccd` says the kick's caster cannot cast at atMs. It needs the round's
+ *    units (`allUnits`): the sources hostile to the kicker are the other
+ *    side's players and their summons (`enemySourceIds`), and a pet kick
+ *    (Spell Lock, Axe Toss) is asked of the pet(s) that cast it, not of the
+ *    owner — a Warlock commands Spell Lock while stunned. The predicate is
+ *    kick-eaten's (`castBlockingAuraAt`: hard CC stops every kick, a silence
+ *    only a silenceable one, a school lockout none). Without `allUnits`
+ *    nothing is `ccd`.
  */
 export function computeEnemyInterruptAvailability(
   enemies: ICombatUnit[],
   atMs: number,
+  allUnits?: ReadonlyArray<ICombatUnit>,
 ): IEnemyInterruptState[] {
   const result: IEnemyInterruptState[] = [];
+  const enemyIds = new Set(enemies.map((e) => e.id));
+  const hostileIds = allUnits
+    ? enemySourceIds(
+        allUnits.filter((u) => u.info && !enemyIds.has(u.id)),
+        allUnits,
+      )
+    : undefined;
   for (const enemy of enemies) {
+    if (isDeadAt(enemy, atMs)) continue;
     const def = interruptForUnit(enemy);
     if (!def) continue;
+    // who throws it: the enemy, or the pet(s) seen casting a pet kick
+    const petCasterIds = new Set(
+      (enemy.petSpellCastEvents ?? [])
+        .filter(
+          (c) =>
+            c.spellId === def.spellId &&
+            c.logLine.event === LogEvent.SPELL_CAST_SUCCESS,
+        )
+        .map((c) => c.srcUnitId),
+    );
+    const ownCast = (enemy.spellCastEvents ?? []).some(
+      (c) =>
+        c.spellId === def.spellId &&
+        c.logLine.event === LogEvent.SPELL_CAST_SUCCESS,
+    );
+    // the pet out at `atMs`: alive then, and the one last seen at or before
+    // it — a pet that died earlier or was summoned later has no aura at
+    // `atMs` and must not read "free" for the active one (codex review)
+    const caster: ICombatUnit | undefined =
+      petCasterIds.size > 0 && !ownCast
+        ? activeUnitAt(
+            (allUnits ?? []).filter((u) => petCasterIds.has(u.id)),
+            atMs,
+          )
+        : enemy;
+    const ccd =
+      hostileIds !== undefined &&
+      caster !== undefined &&
+      castBlockingAuraAt(caster, hostileIds, atMs, def.spellId) !== undefined;
     // whole-second for the timeline's display; the exact value lives in
     // interruptCooldownRemainingMs (kick-priority reads that one — 0.4 s left
     // is NOT ready)
@@ -342,6 +442,7 @@ export function computeEnemyInterruptAvailability(
       cdRemainingSeconds,
       seen,
       assumedReady: cdRemainingSeconds === 0 && !seen,
+      ccd,
     });
   }
   return result;

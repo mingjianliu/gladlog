@@ -979,6 +979,31 @@ export interface ICCAvoidedInstance {
  * was over by then. */
 const KICK_READY_SLACK_MS = 100;
 
+/**
+ * A kicker's interrupt cooldown left when a cast BEGAN, from its kicks
+ * strictly before that instant (triage kick-eaten F-K5c).
+ * `interruptCooldownRemainingMs` counts a kick logged at `atMs` as spent —
+ * right for "what is left at t" — but the cast-start question is "was the
+ * kick in hand when the bar appeared", and a kick thrown in the cast-start
+ * millisecond was: 5e8b11c1 r4, Mind Freeze and the Healing Wave start share
+ * 157.283, and the Death Knight 2.1 yd away read as "on cooldown at cast
+ * start", so `kickersInRange` was 0 for the cast that kick interrupted. The
+ * helper's default `<=` is untouched for its other readers. Only the KICKS
+ * are taken strictly
+ * before the start; a cooldown reduction logged in that millisecond (Storm
+ * Conduit's Lightning Bolt) still counts — asking 1 ms earlier dropped it
+ * (codex review).
+ */
+function kickCdLeftAtCastStartMs(
+  unit: ICombatUnit,
+  spellId: string,
+  castStartMs: number,
+): number {
+  return interruptCooldownRemainingMs(unit, spellId, castStartMs, {
+    kicksBefore: true,
+  });
+}
+
 /** BACKLOG #36(b): how long after a kick the player's behavior is judged.
  * 5s = the research criterion (healer-study school_probe, 500 matches): it
  * straddles the fixed 3–4s lockout, so "idle" is damning — nothing was cast
@@ -1901,7 +1926,7 @@ export function analyzePlayerCCAndTrinket(
         enemies.find((e) => e.id === action.srcUnitId) ??
         enemyPets.find((p) => p.id === action.srcUnitId);
       if (sourceUnit) {
-        const cdLeftMs = interruptCooldownRemainingMs(
+        const cdLeftMs = kickCdLeftAtCastStartMs(
           sourceUnit,
           kickCastSpellId(kickSpellId),
           castStartMs,
@@ -1937,7 +1962,7 @@ export function analyzePlayerCCAndTrinket(
           // not the owner; unconfirmed kits (kit.confirmed === false) are pet abilities
           // or unobserved fallbacks whose range cannot be reliably judged from owner pos.
           if (kit.confirmed === false) continue;
-          const cdLeft = interruptCooldownRemainingMs(
+          const cdLeft = kickCdLeftAtCastStartMs(
             enemy,
             kit.spellId,
             castStartMs,
@@ -2005,7 +2030,7 @@ export function analyzePlayerCCAndTrinket(
         // (codex review of 8513a101)
         if (
           petKicker &&
-          interruptCooldownRemainingMs(
+          kickCdLeftAtCastStartMs(
             petKicker,
             kickCastSpellId(kickSpellId),
             castStartMs,

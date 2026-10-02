@@ -655,5 +655,16 @@
  *  from the second after its death, with no `-X` for them. (3) kick-eaten
  *  `postKick` ends at the player's death: `no cast before dying Ns after the
  *  kick`, and a button pressed after the death is not a rejected press.
+ *  v262 (2026-10-02, triage G4 kickers: kick-eaten F-K5c, res-readiness
+ *  F-C5 + F-C5b, ruling A′16): (1) kick-eaten's cast-start kicker facts
+ *  (`kickersInRange`, `nearestKicker*`, `maxKickRangeYd`) read a kicker's
+ *  cooldown from its kicks strictly BEFORE the cast start — a kick thrown in
+ *  the cast-start millisecond was ready when the cast began. (2) `enemy
+ *  interrupts UP` on a channeled [YOU] [CD] line and [CONTESTED] `enemy
+ *  interrupts ready: N` mean usable at that instant: a dead enemy is not
+ *  listed, and a kicker inside a cast-blocking CC (a silence only for a
+ *  silenceable kick; a pet kick is asked of the pet) is not UP — when every
+ *  off-cooldown kicker is held the note reads `no enemy interrupt usable
+ *  (CC'd: X)`. A legend line is printed with the note.
  */
-export const PROMPT_VERSION = 261;
+export const PROMPT_VERSION = 262;

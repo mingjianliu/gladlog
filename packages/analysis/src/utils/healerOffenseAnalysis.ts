@@ -16,7 +16,10 @@ import {
   IDRInfo,
 } from "./drAnalysis";
 import { IEnemyCDTimeline } from "./enemyCDs";
-import { computeEnemyInterruptAvailability } from "./enemyInterrupts";
+import {
+  computeEnemyInterruptAvailability,
+  isInterruptUsable,
+} from "./enemyInterrupts";
 import {
   createKillWindowFactsComputer,
   type IKillWindowFactsComputer,
@@ -372,12 +375,18 @@ export interface IContestedTradeFact {
   enemyHealerTrinket: string;
   ownerHealing: number;
   ownerCCCasts: number;
-  /** Enemy interrupts ready (cdRemainingSeconds === 0) at segment start — cast-risk context. */
+  /** Enemy interrupts usable at segment start (`isInterruptUsable`: off
+   * cooldown, kicker alive and not in a cast-blocking CC) — cast-risk context. */
   enemyInterruptsReady: number;
 }
 
 export function computeContestedTradeFacts(
-  combat: { startTime: number; endTime: number },
+  combat: {
+    startTime: number;
+    endTime: number;
+    /** the round's units, for "is the kicker CC'd" (F-C5b); absent = unknown */
+    units?: Record<string, ICombatUnit>;
+  },
   owner: ICombatUnit,
   enemies: ICombatUnit[],
   contestedSegments: IContestedSegment[],
@@ -422,10 +431,9 @@ export function computeContestedTradeFacts(
     const interrupts = computeEnemyInterruptAvailability(
       enemies,
       matchStartMs + seg.fromSeconds * 1000,
+      combat.units ? Object.values(combat.units) : undefined,
     );
-    const enemyInterruptsReady = interrupts.filter(
-      (i) => i.cdRemainingSeconds === 0,
-    ).length;
+    const enemyInterruptsReady = interrupts.filter(isInterruptUsable).length;
 
     facts.push({
       fromSeconds: seg.fromSeconds,
@@ -781,6 +789,7 @@ export function buildHealerOffenseSummary(
     startTime: number;
     endTime: number;
     startInfo?: { zoneId?: string };
+    units?: Record<string, ICombatUnit>;
   },
   owner: ICombatUnit,
   friends: ICombatUnit[],
