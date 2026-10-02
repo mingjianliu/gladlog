@@ -437,7 +437,11 @@ npx tsx packages/eval/scripts/dispelCompletenessScan.ts <dispel-counts.txt>
 #    items. After A41-签: 22 unsigned ids (Earthgrab ×11,359 first) — the next drafting batch.
 npx tsx packages/eval/scripts/dispelVerdictForwardScan.ts --manifest <newseason manifest> --every 30
 #    Purger roster (2026-09-30, triage missed-cleanse F-P5): specs that removed an enemy buff in the corpus but
-#    canOffensivePurge rejects (the Devourer DH and all Hunters were missing). Expect 0 rejected rows.
+#    canOffensivePurge rejects (the Devourer DH and all Hunters were missing). Since 2026-10-01 (ruling P-P5b = C)
+#    it is per removal: explained by the Magic-purge roster, by a scoped tool covering the removed aura
+#    (Shattering Throw → immunity shields, Shiv → enrage, an observed Arcane Torrent → Magic buffs), or as a
+#    cleanse of the player's own dispel types. Expect 0 in the "unexplained" column; a non-zero row is a new
+#    tool or an id missing from SHATTERING_THROW_REMOVES / SHIV_REMOVES (data/scopedPurges.ts).
 npx tsx packages/eval/scripts/purgerRosterScan.ts --manifest <newseason manifest> --every 30
 # 3b. DR sharing (2026-09-25, reliability audit C5): does each DR override in DR_CATEGORY_MAP — and
 #    any CC DB2 files under no category — really share (or not share) DR the way the table says?

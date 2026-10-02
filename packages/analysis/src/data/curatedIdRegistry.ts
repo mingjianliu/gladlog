@@ -162,6 +162,14 @@ import {
   RACIAL_ABILITIES,
   SHARED_CD_RACIAL_SPELL_IDS,
 } from "./racialAbilities";
+import {
+  DISENTANGLEMENT_EFFECT_ID,
+  SHATTERING_THROW_CAST_ID,
+  SHATTERING_THROW_DISPEL_ID,
+  SHATTERING_THROW_REMOVES,
+  SHIV_REMOVES,
+  SHIV_SPELL_ID,
+} from "./scopedPurges";
 import { SPELL_CATEGORIES } from "./spellCategories";
 import {
   BUFF_DURATION_TALENT_MODIFIERS,
@@ -517,6 +525,19 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   t("PURGE_SPELLS_BY_SPEC", "utils/dispelAnalysis.ts", "cast", () =>
     set(Object.values(PURGE_SPELLS_BY_SPEC).flatMap((ids) => [...(ids ?? [])])),
   ),
+  // P-P5b = C (2026-10-01): scoped removals — what Shattering Throw and Shiv
+  // take off (auras), and the spells themselves (64380 / 233674 appear only
+  // as a SPELL_DISPEL source, hence "mixed")
+  t("SCOPED_PURGE_REMOVES", "data/scopedPurges.ts", "aura", () => [
+    ...SHATTERING_THROW_REMOVES,
+    ...SHIV_REMOVES,
+  ]),
+  t("SCOPED_PURGE_SPELLS", "data/scopedPurges.ts", "mixed", () => [
+    SHATTERING_THROW_CAST_ID,
+    SHATTERING_THROW_DISPEL_ID,
+    SHIV_SPELL_ID,
+    DISENTANGLEMENT_EFFECT_ID,
+  ]),
   // Dispelling-spell ids of movement/form riders (UI review 2026-08-21 #3;
   // moved here from eval's coverageManifest). "mixed": some (Cat Form) are
   // casts, others (Phantasm) only ever appear as the SPELL_DISPEL source spell.

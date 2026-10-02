@@ -71,6 +71,7 @@ import * as mitigationComponents from "@gladlog/analysis/src/data/mitigationComp
 import * as outcomeRefs from "@gladlog/analysis/src/data/outcomeRefs";
 import * as racialAbilities from "@gladlog/analysis/src/data/racialAbilities";
 import * as rootAuraGenerated from "@gladlog/analysis/src/data/rootAuraGenerated";
+import * as scopedPurges from "@gladlog/analysis/src/data/scopedPurges";
 import * as sharedChargeGenerated from "@gladlog/analysis/src/data/sharedChargeGenerated";
 import * as spellCategories from "@gladlog/analysis/src/data/spellCategories";
 import * as summonGenerated from "@gladlog/analysis/src/data/summonGenerated";
@@ -1099,6 +1100,41 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/dispelAnalysis.ts`,
     symbol: "canRemoveFrom",
     mod: dispelAnalysis,
+  },
+  {
+    file: `${A}/utils/dispelAnalysis.ts`,
+    symbol: "canOffensivePurge",
+    mod: dispelAnalysis,
+  },
+  {
+    file: `${A}/utils/dispelAnalysis.ts`,
+    symbol: "scopedPurgeToolsOf",
+    mod: dispelAnalysis,
+  },
+  {
+    file: `${A}/utils/dispelAnalysis.ts`,
+    symbol: "scopedToolRemoves",
+    mod: dispelAnalysis,
+  },
+  {
+    file: `${A}/utils/dispelAnalysis.ts`,
+    symbol: "isMagicPurgeTarget",
+    mod: dispelAnalysis,
+  },
+  {
+    file: `${A}/utils/dispelAnalysis.ts`,
+    symbol: "missedPurgesFor",
+    mod: dispelAnalysis,
+  },
+  {
+    file: `${A}/data/scopedPurges.ts`,
+    symbol: "SHATTERING_THROW_REMOVES",
+    mod: scopedPurges,
+  },
+  {
+    file: `${A}/data/scopedPurges.ts`,
+    symbol: "SHIV_REMOVES",
+    mod: scopedPurges,
   },
   {
     file: `${A}/analysis/crisisDecisionPoints.ts`,

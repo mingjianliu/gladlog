@@ -6,7 +6,16 @@ import {
   type HealerCell,
 } from "../data/dispelVerdicts";
 import { CHANNEL_PROXY_IDS, DRINK_AURA_IDS } from "../data/occupancyAuras";
+import { racialName } from "../data/racialAbilities";
 import { ROOT_SPELL_IDS } from "../data/rootSpells";
+import {
+  ARCANE_TORRENT_NAME,
+  SHATTERING_THROW_CAST_ID,
+  SHATTERING_THROW_CAST_S,
+  SHATTERING_THROW_REMOVES,
+  SHIV_REMOVES,
+  SHIV_SPELL_ID,
+} from "../data/scopedPurges";
 import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
 import {
   effectiveCooldownSeconds,
@@ -40,7 +49,7 @@ import {
 } from "./losAnalysis";
 import { DISPEL_MAX_RANGE_YARDS, LOS_SWEEP_GAP_MS } from "./positionSampling";
 import { fmtTime } from "./renderGrid";
-import { spellRangeForCaster } from "./spellRange";
+import { spellRangeForCaster, spellReachForCaster } from "./spellRange";
 import { hasOffensivePurgeTalent } from "./talentBehaviors";
 import {
   choiceSelectionResolved,
@@ -577,6 +586,25 @@ export function purgeReadyAtSeconds(
     own !== null && !listed.includes(own) ? [own] : listed,
   );
   if (own !== null) available.add(own);
+  return abilitiesReadyAtSeconds(
+    unit,
+    available,
+    extraSpellIds,
+    atMs,
+    matchStartMs,
+  );
+}
+
+/** `purgeReadyAtSeconds`'s ledger over an explicit ability set: `available`
+ *  are abilities the unit holds (never pressed ⇒ ready), `extraSpellIds` ones
+ *  it was only seen using. */
+function abilitiesReadyAtSeconds(
+  unit: ICombatUnit,
+  available: ReadonlySet<string>,
+  extraSpellIds: ReadonlySet<string>,
+  atMs: number,
+  matchStartMs: number,
+): number {
   const ids = new Set<string>([...available, ...extraSpellIds]);
   const casts = [
     ...(unit.spellCastEvents ?? []),
@@ -602,9 +630,137 @@ export function purgeReadyAtSeconds(
     if (!(cooldownSeconds > 0)) return -Infinity; // a free purge is always there
     const st = chargeStateAt(times, cooldownSeconds, charges, atS);
     if (st.charges > 0) return -Infinity;
-    back = back === -Infinity ? st.nextRecharge : Math.min(back, st.nextRecharge);
+    back =
+      back === -Infinity ? st.nextRecharge : Math.min(back, st.nextRecharge);
   }
   return back;
+}
+
+/**
+ * A removal that is not a spec's Magic purge (user ruling P-P5b = C,
+ * 2026-10-01; evidence in `data/scopedPurges.ts`). It counts only inside its
+ * own scope and never makes its holder a general purger (`canOffensivePurge`
+ * stays the Magic-purge roster).
+ */
+export type ScopedPurgeScope = "immunity" | "enrage" | "magic";
+export interface IScopedPurgeTool {
+  /** the press — its cooldown and reach are the tool's */
+  castSpellId: string;
+  name: string;
+  scope: ScopedPurgeScope;
+  /** what it removes, as the prompt states it */
+  note: string;
+  /** its cast time — a buff must outlast the reaction bar PLUS this to be a
+   *  miss (0 for an instant) */
+  castSeconds: number;
+}
+const WARRIOR_SPECS = new Set<CombatUnitSpec>([
+  CombatUnitSpec.Warrior_Arms,
+  CombatUnitSpec.Warrior_Fury,
+  CombatUnitSpec.Warrior_Protection,
+]);
+const ROGUE_SPECS = new Set<CombatUnitSpec>([
+  CombatUnitSpec.Rogue_Assassination,
+  CombatUnitSpec.Rogue_Outlaw,
+  CombatUnitSpec.Rogue_Subtlety,
+]);
+
+/** How far the tool reaches from its holder: Shattering Throw's cast range,
+ *  Arcane Torrent's radius around the caster (`spellReachForCaster`). */
+export function scopedToolReachYards(
+  unit: ICombatUnit,
+  tool: Pick<IScopedPurgeTool, "castSpellId">,
+): number {
+  return spellReachForCaster(unit, tool.castSpellId) ?? DISPEL_MAX_RANGE_YARDS;
+}
+
+/**
+ * The scoped removals `unit` holds this match:
+ *  - a Warrior with Shattering Throw (a choice node: talented, or — whatever
+ *    the loadout says — observed casting it) → immunity shields;
+ *  - a Rogue (Shiv is every Rogue's) → enrage effects;
+ *  - anyone OBSERVED casting Arcane Torrent this match who has no Magic purge
+ *    of their own → one Magic buff, enemies within its radius (the log has no
+ *    race field, so an unpressed racial is not asserted).
+ */
+export function scopedPurgeToolsOf(unit: ICombatUnit): IScopedPurgeTool[] {
+  const tools: IScopedPurgeTool[] = [];
+  const cast = unitCastSpellIds(unit);
+  if (
+    WARRIOR_SPECS.has(unit.spec) &&
+    (cast.has(SHATTERING_THROW_CAST_ID) ||
+      hasTalentedAbility(unit, SHATTERING_THROW_CAST_ID))
+  )
+    tools.push({
+      castSpellId: SHATTERING_THROW_CAST_ID,
+      name: getEnglishSpellName(SHATTERING_THROW_CAST_ID),
+      scope: "immunity",
+      note: `immunity shields only, ${SHATTERING_THROW_CAST_S}s cast`,
+      castSeconds: SHATTERING_THROW_CAST_S,
+    });
+  if (ROGUE_SPECS.has(unit.spec))
+    tools.push({
+      castSpellId: SHIV_SPELL_ID,
+      name: getEnglishSpellName(SHIV_SPELL_ID),
+      scope: "enrage",
+      note: "enrage effects only",
+      castSeconds: 0,
+    });
+  if (!canOffensivePurge(unit)) {
+    const torrent = [...cast].find(
+      (id) => racialName(id) === ARCANE_TORRENT_NAME,
+    );
+    if (torrent !== undefined)
+      tools.push({
+        castSpellId: torrent,
+        name: ARCANE_TORRENT_NAME,
+        scope: "magic",
+        note: `one Magic buff from enemies within ${scopedToolReachYards(unit, { castSpellId: torrent })} yd of the caster`,
+        castSeconds: 0,
+      });
+  }
+  return tools;
+}
+
+/** A Magic buff an offensive purge can take: officially Magic and not on the
+ *  blocklist. One predicate for the missed-purge universe and the "magic"
+ *  scope. */
+export function isMagicPurgeTarget(spellId: string): boolean {
+  return getDispelType(spellId) === "Magic" && !PURGE_BLOCKLIST.has(spellId);
+}
+
+/**
+ * Is that aura inside this scoped tool's scope — what `purgerRosterScan`
+ * accepts as the explanation of an OBSERVED removal. "magic" is the dispel
+ * type alone (Arcane Torrent did strip Power Word: Fortitude); whether a
+ * tool can carry a missed-purge window is `scopedToolAnswers`.
+ */
+export function scopedToolRemoves(
+  tool: Pick<IScopedPurgeTool, "scope">,
+  auraSpellId: string,
+): boolean {
+  switch (tool.scope) {
+    case "immunity":
+      return SHATTERING_THROW_REMOVES.has(auraSpellId);
+    case "enrage":
+      return SHIV_REMOVES.has(auraSpellId);
+    case "magic":
+      return getDispelType(auraSpellId) === "Magic";
+  }
+}
+
+/**
+ * Could a missed-purge window on that buff be this tool's. Only Shattering
+ * Throw accuses (user ruling P-P5b-land, 2026-10-02): Arcane Torrent is
+ * stated in the PURGE RESPONSIBILITY header and never produces a
+ * [MISSED PURGE OPPORTUNITY] line — its caster cannot choose which buff it
+ * strips; Shiv's enrage effects carry no purge priority.
+ */
+export function scopedToolAnswers(
+  tool: Pick<IScopedPurgeTool, "scope">,
+  auraSpellId: string,
+): boolean {
+  return tool.scope === "immunity" && scopedToolRemoves(tool, auraSpellId);
 }
 
 // Spell IDs that have Magic dispelType in the game DB but cannot actually be targeted
@@ -1193,6 +1349,74 @@ export interface IMissedPurgeWindow {
   purgersLockedOut: boolean;
   /** Feasibility gate a (tri-state, same semantics as the cleanse side). */
   losReachable: boolean | null;
+  /**
+   * P-P5b = C: friends whose SCOPED removal answers this buff (Shattering
+   * Throw on an immunity shield) and who were
+   * not locked out for the whole window — each with ITS OWN feasibility, read
+   * off its tool's cooldown and reach. The window-level facts above stay the
+   * general Magic purgers' whenever one carried the window; a window no
+   * general purger carried lives in `scopedMissedPurgeWindows`, its
+   * window-level facts the scoped holders'.
+   */
+  scopedPurgers?: IScopedPurgerFacts[];
+  /** Set by `missedPurgesFor`: the removal the asked-about player holds for
+   *  this buff when it is a scoped one. */
+  viaScopedTool?: Pick<
+    IScopedPurgeTool,
+    "name" | "scope" | "note" | "castSeconds"
+  >;
+}
+
+export interface IScopedPurgerFacts {
+  purgerName: string;
+  tool: Pick<IScopedPurgeTool, "name" | "scope" | "note" | "castSeconds">;
+  /** when the tool came back, only when it was on cooldown at application */
+  purgeReadyAtSeconds?: number;
+  lockedOut: boolean;
+  losReachable: boolean | null;
+}
+
+/**
+ * The missed-purge windows `unit` itself could have answered, with the
+ * feasibility facts that apply to IT (Value-Gate feasibility: "could the
+ * player have done it"). A general purger keeps the team's windows exactly as
+ * they are; a player who holds only a scoped removal gets the windows that
+ * tool covers, judged on that tool's cooldown and reach.
+ */
+export function missedPurgesFor(
+  unit: ICombatUnit,
+  summary: Pick<
+    IDispelSummary,
+    "missedPurgeWindows" | "scopedMissedPurgeWindows"
+  >,
+): IMissedPurgeWindow[] {
+  if (canOffensivePurge(unit)) return summary.missedPurgeWindows;
+  return [
+    ...summary.missedPurgeWindows,
+    ...(summary.scopedMissedPurgeWindows ?? []),
+  ]
+    .sort((a, b) => a.timeSeconds - b.timeSeconds)
+    .flatMap((w) => {
+      const mine = w.scopedPurgers?.find((p) => p.purgerName === unit.name);
+      if (!mine) return [];
+      const {
+        purgeReadyAtSeconds: _teamReadyAt,
+        cdBurnedOn: _teamBurn,
+        ...rest
+      } = w;
+      return [
+        {
+          ...rest,
+          purgeWasOnCD: mine.purgeReadyAtSeconds !== undefined,
+          ...(mine.purgeReadyAtSeconds !== undefined
+            ? { purgeReadyAtSeconds: mine.purgeReadyAtSeconds }
+            : {}),
+          purgersLockedOut: mine.lockedOut,
+          losReachable: mine.losReachable,
+          viaScopedTool: mine.tool,
+        },
+      ];
+    });
 }
 
 /** Marks missed purges that fell inside a friendly kill window. Mutates in place;
@@ -1231,6 +1455,16 @@ export interface IDispelSummary {
   ccEfficiency: ICCEfficiencyStat[];
   /** Critical/High magic buffs on enemies that sat >3s while we had an offensive purger */
   missedPurgeWindows: IMissedPurgeWindow[];
+  /**
+   * P-P5b = C: windows NO general purger carried — only a scoped removal
+   * (Shattering Throw on an immunity shield) could have answered. A separate
+   * array on purpose, the `lateCleanseWindows` reasoning: every reader of
+   * `missedPurgeWindows` (the desktop dispel dashboard and mistakes card, the
+   * retired missed-purge candidate) keeps exactly the universe it had; only
+   * the timeline's owner view (`missedPurgesFor`) reads this one. Optional so
+   * hand-built summaries need not carry it.
+   */
+  scopedMissedPurgeWindows?: IMissedPurgeWindow[];
 }
 
 /**
@@ -2087,9 +2321,14 @@ export function formatMissedPurgeExemption(
     | "purgeReadyAtSeconds"
     | "timeSeconds"
     | "durationSeconds"
+    | "viaScopedTool"
   >,
 ): string {
   let out = "";
+  // P-P5b = C: the owner's removal for this buff is a scoped one — name it,
+  // the facts after it are that tool's cooldown and reach
+  if (w.viaScopedTool)
+    out += ` | your removal for it: ${w.viaScopedTool.name} (${w.viaScopedTool.note})`;
   if (w.purgersLockedOut)
     out += " | purgers were CC'd/locked out — not actionable";
   if (w.losReachable === false)
@@ -2099,7 +2338,7 @@ export function formatMissedPurgeExemption(
   if (w.purgeReadyAtSeconds !== undefined) {
     const left = w.timeSeconds + w.durationSeconds - w.purgeReadyAtSeconds;
     out +=
-      left < MISSED_PURGE_THRESHOLD_S
+      left < MISSED_PURGE_THRESHOLD_S + (w.viaScopedTool?.castSeconds ?? 0)
         ? ` | purge on cooldown for the whole buff (ready ${fmtTime(w.purgeReadyAtSeconds)}) — not actionable`
         : ` | purge on cooldown at application — ready at ${fmtTime(w.purgeReadyAtSeconds)} (${Math.round(left)}s of the buff left)`;
   }
@@ -2902,9 +3141,29 @@ export function reconstructDispelSummary(
   // Missed offensive purge detection: Critical/High magic buffs on enemies that sat >threshold
   // without being purged, when our team had the capability to purge.
   const missedPurgeWindows: IMissedPurgeWindow[] = [];
+  const scopedMissedPurgeWindows: IMissedPurgeWindow[] = [];
   // (friendlyPurgers: declared once at the top of this function, W1d)
+  // P-P5b = C: friends holding a scoped removal — each answers only what its
+  // scope covers, and only Shattering Throw answers at all
+  // (`scopedToolAnswers`).
+  const scopedHolders = friends
+    .map((unit) => ({ unit, tools: scopedPurgeToolsOf(unit) }))
+    .filter((h) => h.tools.length > 0);
+  /** the scoped tool this holder would answer `spellId` with; like any purge
+   *  with a cooldown it answers Critical buffs only (A19 = C) */
+  const scopedToolFor = (
+    h: (typeof scopedHolders)[number],
+    spellId: string,
+    priority: DispelPriority,
+  ): IScopedPurgeTool | undefined =>
+    h.tools.find(
+      (t) =>
+        scopedToolAnswers(t, spellId) &&
+        (priority === "Critical" ||
+          !(purgeRecoveryOf(h.unit, t.castSpellId).cooldownSeconds > 0)),
+    );
 
-  if (friendlyPurgers.length > 0) {
+  if (friendlyPurgers.length > 0 || scopedHolders.length > 0) {
     for (const enemy of enemies) {
       const appliedTimes = new Map<
         string,
@@ -2922,10 +3181,13 @@ export function reconstructDispelSummary(
         // weirdness) is not something our offensive purge should handle.
         const auraType = getAuraType(aura);
         if (auraType !== null && auraType !== "BUFF") continue;
-        if (getDispelType(spellId) !== "Magic") continue;
-        if (PURGE_BLOCKLIST.has(spellId)) continue;
         const priority = getPriority(spellId, friends);
         if (priority !== "Critical" && priority !== "High") continue;
+        if (
+          !(friendlyPurgers.length > 0 && isMagicPurgeTarget(spellId)) &&
+          !scopedHolders.some((h) => scopedToolFor(h, spellId, priority))
+        )
+          continue;
 
         if (aura.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
           const bucket = appliedTimes.get(spellId) ?? [];
@@ -2959,12 +3221,20 @@ export function reconstructDispelSummary(
 
           // Was it actually purged by our team within this window?
           const applyRelative = (applyTs - combat.startTime) / 1000;
+          // The window's end on the purge events' own clock: a purge shares
+          // its timestamp with the removal it causes, and `applyRelative +
+          // durationSeconds` is not that number in floating point (75.922 +
+          // 6.933 = 82.85499999999999 < the purge's 82.855 — a Shattering
+          // Throw that took Blessing of Protection off read "unpurged for
+          // 7s", 17664ae3 round 1).
+          const endRelative =
+            ((removalTs ?? combat.endTime) - combat.startTime) / 1000;
           const purgedByUs = ourPurges.some(
             (p) =>
               p.removedSpellId === spellId &&
               p.targetName === enemy.name &&
               p.timeSeconds >= applyRelative &&
-              p.timeSeconds <= applyRelative + durationSeconds,
+              p.timeSeconds <= endRelative,
           );
 
           if (!purgedByUs) {
@@ -2972,12 +3242,14 @@ export function reconstructDispelSummary(
             // the priority meets the bar for that purger's spec (CD-gated purgers
             // only get flagged for Critical misses — they can't spam purge every GCD).
             const windowEndMs = removalTs ?? combat.endTime;
-            const eligiblePurgers = friendlyPurgers.filter(
-              (p) => priority === "Critical" || !isCdGatedPurger(p),
-            );
-            const allPurgersBlocked =
-              eligiblePurgers.length === 0 ||
-              eligiblePurgers.every((purger) =>
+            const generalPurgers = isMagicPurgeTarget(spellId)
+              ? friendlyPurgers.filter(
+                  (p) => priority === "Critical" || !isCdGatedPurger(p),
+                )
+              : [];
+            const generalOpen =
+              generalPurgers.length > 0 &&
+              !generalPurgers.every((purger) =>
                 isPurgerFullyBlockedDuringWindow(
                   purger,
                   applyTs,
@@ -2985,14 +3257,46 @@ export function reconstructDispelSummary(
                   cannotCastSrcIds,
                 ),
               );
-            if (!allPurgersBlocked) {
-              // F-P7 (codex r1 / r2 09-30, ruling A19 = C): the team's purge
-              // is back at the earliest eligible purger's readiness, read from
-              // its cooldown-consuming casts — not a constant 8 s, not only
-              // when every purger is CD-gated, not from removals only.
-              const teamReadyAt = Math.min(
-                ...eligiblePurgers.map((p) =>
-                  purgeReadyAtSeconds(
+            // P-P5b = C: scoped holders whose tool covers this buff and who
+            // were not locked out for the whole window
+            const scoped = scopedHolders.flatMap((h) => {
+              const tool = scopedToolFor(h, spellId, priority);
+              return tool !== undefined &&
+                // a cast-time removal needs the reaction bar plus its cast
+                // (Shattering Throw: 1.5 s; fastest observed removal 2.3 s
+                // after the shield, median 3.1 s)
+                durationSeconds >=
+                  MISSED_PURGE_THRESHOLD_S + tool.castSeconds &&
+                !isPurgerFullyBlockedDuringWindow(
+                  h.unit,
+                  applyTs,
+                  windowEndMs,
+                  cannotCastSrcIds,
+                )
+                ? [{ unit: h.unit, tool }]
+                : [];
+            });
+            const scopedToolOf = new Map(
+              scoped.map((x) => [x.unit.id, x.tool]),
+            );
+            // the purgers the window-level facts speak for: the general Magic
+            // purgers when one carried the window (unchanged by P-P5b), else
+            // the scoped holders — and then the window goes to
+            // `scopedMissedPurgeWindows`, not to the team's list
+            const eligiblePurgers = generalOpen
+              ? generalPurgers
+              : scoped.map((x) => x.unit);
+            const readyAtOf = (p: ICombatUnit): number => {
+              const tool = generalOpen ? undefined : scopedToolOf.get(p.id);
+              return tool !== undefined
+                ? abilitiesReadyAtSeconds(
+                    p,
+                    new Set([tool.castSpellId]),
+                    new Set(),
+                    applyTs,
+                    combat.startTime,
+                  )
+                : purgeReadyAtSeconds(
                     p,
                     new Set(
                       ourPurges
@@ -3001,9 +3305,26 @@ export function reconstructDispelSummary(
                     ),
                     applyTs,
                     combat.startTime,
-                  ),
-                ),
-              );
+                  );
+            };
+            const reachOf = (d: ICombatUnit): number => {
+              const tool = generalOpen ? undefined : scopedToolOf.get(d.id);
+              return tool !== undefined
+                ? scopedToolReachYards(d, tool)
+                : dispelReachYards(d, PURGE_SPELLS_BY_SPEC[d.spec]);
+            };
+            // "free for less than the reaction bar" — for a cast-time tool
+            // the bar is the reaction time PLUS the cast (codex review of
+            // P-P5b: a warrior stunned until 3.5 s before an Ice Block ended
+            // could not have thrown it off)
+            const freeBarMs = (tool?: IScopedPurgeTool): number =>
+              (MISSED_PURGE_THRESHOLD_S + (tool?.castSeconds ?? 0)) * 1000;
+            if (eligiblePurgers.length > 0) {
+              // F-P7 (codex r1 / r2 09-30, ruling A19 = C): the team's purge
+              // is back at the earliest eligible purger's readiness, read from
+              // its cooldown-consuming casts — not a constant 8 s, not only
+              // when every purger is CD-gated, not from removals only.
+              const teamReadyAt = Math.min(...eligiblePurgers.map(readyAtOf));
               const purgeWasOnCD = teamReadyAt > applyRelative;
               let cdBurnedOn:
                 | {
@@ -3047,7 +3368,10 @@ export function reconstructDispelSummary(
                 return dmg >= threshold;
               });
 
-              missedPurgeWindows.push({
+              (generalOpen
+                ? missedPurgeWindows
+                : scopedMissedPurgeWindows
+              ).push({
                 timeSeconds: applyRelative,
                 durationSeconds,
                 enemyName: enemy.name,
@@ -3059,22 +3383,74 @@ export function reconstructDispelSummary(
                 ...(purgeWasOnCD ? { purgeReadyAtSeconds: teamReadyAt } : {}),
                 cdBurnedOn,
                 teamUnderPressure,
-                purgersLockedOut: dispellersLockedOutForWindow(
-                  eligiblePurgers,
-                  applyTs,
-                  windowEndMs,
-                  cannotCastSrcIds,
-                  MISSED_PURGE_THRESHOLD_S * 1000,
-                ),
+                purgersLockedOut: generalOpen
+                  ? dispellersLockedOutForWindow(
+                      eligiblePurgers,
+                      applyTs,
+                      windowEndMs,
+                      cannotCastSrcIds,
+                      MISSED_PURGE_THRESHOLD_S * 1000,
+                    )
+                  : // scoped holders: each against its own tool's bar
+                    scoped.every(({ unit, tool }) =>
+                      dispellersLockedOutForWindow(
+                        [unit],
+                        applyTs,
+                        windowEndMs,
+                        cannotCastSrcIds,
+                        freeBarMs(tool),
+                      ),
+                    ),
                 losReachable: anyDispellerReachable(
                   eligiblePurgers,
                   enemy,
                   applyTs,
                   MISSED_PURGE_THRESHOLD_S * 1000,
                   zoneId,
-                  (d) => dispelReachYards(d, PURGE_SPELLS_BY_SPEC[d.spec]),
+                  reachOf,
                   combat.startTime,
                 ),
+                ...(scoped.length > 0
+                  ? {
+                      scopedPurgers: scoped.map(({ unit, tool }) => {
+                        const readyAt = abilitiesReadyAtSeconds(
+                          unit,
+                          new Set([tool.castSpellId]),
+                          new Set(),
+                          applyTs,
+                          combat.startTime,
+                        );
+                        return {
+                          purgerName: unit.name,
+                          tool: {
+                            name: tool.name,
+                            scope: tool.scope,
+                            note: tool.note,
+                            castSeconds: tool.castSeconds,
+                          },
+                          ...(readyAt > applyRelative
+                            ? { purgeReadyAtSeconds: readyAt }
+                            : {}),
+                          lockedOut: dispellersLockedOutForWindow(
+                            [unit],
+                            applyTs,
+                            windowEndMs,
+                            cannotCastSrcIds,
+                            freeBarMs(tool),
+                          ),
+                          losReachable: anyDispellerReachable(
+                            [unit],
+                            enemy,
+                            applyTs,
+                            MISSED_PURGE_THRESHOLD_S * 1000,
+                            zoneId,
+                            () => scopedToolReachYards(unit, tool),
+                            combat.startTime,
+                          ),
+                        };
+                      }),
+                    }
+                  : {}),
               });
             }
           }
@@ -3083,6 +3459,7 @@ export function reconstructDispelSummary(
     }
 
     missedPurgeWindows.sort((a, b) => a.timeSeconds - b.timeSeconds);
+    scopedMissedPurgeWindows.sort((a, b) => a.timeSeconds - b.timeSeconds);
   }
 
   const ccEfficiency: ICCEfficiencyStat[] = [...efficiencyMap.values()]
@@ -3106,6 +3483,7 @@ export function reconstructDispelSummary(
     lateCleanseWindows,
     ccEfficiency,
     missedPurgeWindows,
+    scopedMissedPurgeWindows,
   };
 }
 

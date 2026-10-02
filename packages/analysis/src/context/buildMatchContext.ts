@@ -49,6 +49,7 @@ import {
   annotateMissedPurgesWithKillWindows,
   canOffensivePurge,
   reconstructDispelSummary,
+  scopedPurgeToolsOf,
 } from "../utils/dispelAnalysis";
 import { analyzeOutgoingCCChains } from "../utils/drAnalysis";
 import { reconstructEnemyCDTimeline } from "../utils/enemyCDs";
@@ -510,10 +511,26 @@ export function buildMatchContext(
   const positionLines = formatPositionEventsForContext(positionEvents);
 
   // Purge responsibility attribution
+  // P-P5b = C: a scoped removal (Shattering Throw, an observed Arcane
+  // Torrent) is named with what it removes — it is not a general purge.
+  // Shiv's enrage scope is not stated (ruling P-P5b-land, 2026-10-02: it
+  // never carries a line, so the clause was noise in every Rogue header).
+  const scopedPurgeNote = (p: ICombatUnit): string =>
+    scopedPurgeToolsOf(p)
+      .filter((t) => t.scope !== "enrage")
+      .map((t) => `${t.name}: ${t.note}`)
+      .join("; ");
   const ownerCanPurge = canOffensivePurge(owner as ICombatUnit);
+  const ownerScopedNote = ownerCanPurge
+    ? ""
+    : scopedPurgeNote(owner as ICombatUnit);
   const teamPurgers = friends
-    .filter((p) => p.id !== owner.id && canOffensivePurge(p as ICombatUnit))
-    .map((p) => specToString(p.spec));
+    .filter((p) => p.id !== owner.id)
+    .flatMap((p) => {
+      if (canOffensivePurge(p as ICombatUnit)) return [specToString(p.spec)];
+      const note = scopedPurgeNote(p as ICombatUnit);
+      return note ? [`${specToString(p.spec)} (${note})`] : [];
+    });
 
   const allTeamCDsWithSpec = teammateCooldowns.map(({ player, cds }) => ({
     player: player as ICombatUnit,
@@ -538,7 +555,7 @@ export function buildMatchContext(
 
   tLines.push("PURGE RESPONSIBILITY");
   tLines.push(
-    `  Log owner (${ownerSpec}): ${ownerCanPurge ? "CAN offensive purge" : "CANNOT offensive purge"}`,
+    `  Log owner (${ownerSpec}): ${ownerCanPurge ? "CAN offensive purge" : ownerScopedNote ? `CANNOT offensive purge, except ${ownerScopedNote}` : "CANNOT offensive purge"}`,
   );
   tLines.push(
     `  Team purgers: ${teamPurgers.length > 0 ? teamPurgers.join(", ") : "none"}`,

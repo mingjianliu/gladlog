@@ -520,5 +520,17 @@
  *  Anti-Magic Zone, Darkness, Rallying Cry, Spirit Link Totem and Power
  *  Word: Barrier render `X (area)` at the cast (rulings A15, P-E1b2).
  *  Menu ids unchanged.
+ *  v244 (2026-10-02, triage missed-cleanse F-P5 forward check, rulings
+ *  P-P5b = C / P-P5b-land): removals that are not a spec's Magic purge count
+ *  inside their own scope (`scopedPurgeToolsOf`). A Warrior holding
+ *  Shattering Throw gets `[MISSED PURGE OPPORTUNITY]` lines for immunity
+ *  shields that lasted the 3 s reaction bar plus its 1.5 s cast, read off
+ *  the throw's own cooldown and reach ("your removal for it: Shattering
+ *  Throw (immunity shields only, 1.5s cast)"); the PURGE RESPONSIBILITY
+ *  header states the scope ("CANNOT offensive purge, except Shattering
+ *  Throw: …" / "except Arcane Torrent: …" for a player observed casting it).
+ *  Arcane Torrent and Shiv never produce a line. A purge landing at the
+ *  buff's end now counts (float boundary), so those buffs no longer read
+ *  "unpurged". General purgers' lines are otherwise unchanged.
  */
-export const PROMPT_VERSION = 243;
+export const PROMPT_VERSION = 244;

@@ -9,13 +9,32 @@
  * except players whose talent gate genuinely failed (reported with their
  * dispel spell so a stale gate id shows).
  *
+ * User ruling P-P5b = C (2026-10-01): each REMOVAL counts within its own
+ * scope. A removal is explained by the Magic-purge roster, or by a scoped tool
+ * its player holds that covers the removed aura (`scopedPurgeToolsOf` /
+ * `scopedToolRemoves`: Shattering Throw → immunity shields, Shiv → enrage,
+ * an observed Arcane Torrent → Magic buffs). Disentanglement and a defensive
+ * cleanse landing on an enemy unit (one a teammate Mind-Controlled) count by
+ * what they can dispel: Disentanglement by its id (snares off its own side),
+ * a cleanse spell when the removed aura's dispel type is one the player
+ * defensively cleanses (`canDefensiveCleanse`). Those are cleanses, counted
+ * in their own column, never a roster gap. Anything left is a gap: a new
+ * tool, or a scope set (`SHATTERING_THROW_REMOVES`, `SHIV_REMOVES`) missing
+ * an id.
+ *
  *   npx tsx packages/eval/scripts/purgerRosterScan.ts \
  *     --manifest $GLADLOG_EVAL_HOME/corpus/manifest-archive-<date>.txt --every 30
  */
 import { ensureAnalysisData, specToString } from "@gladlog/analysis";
+import { DISENTANGLEMENT_EFFECT_ID } from "@gladlog/analysis/src/data/scopedPurges";
 import {
+  canDefensiveCleanse,
   canOffensivePurge,
+  CLEANSE_SPELLS_BY_TYPE,
+  getDispelType,
   reconstructDispelSummary,
+  scopedPurgeToolsOf,
+  scopedToolRemoves,
 } from "@gladlog/analysis/src/utils/dispelAnalysis";
 import { GladLogParser, type GladMatch } from "@gladlog/parser";
 import { type ICombatUnit, toLegacyMatch } from "@gladlog/parser-compat";
@@ -44,8 +63,33 @@ const files = readFileSync(manifest, "utf8")
 
 const bySpec = new Map<
   string,
-  { players: number; rejected: number; spells: Map<string, number> }
+  {
+    removals: number;
+    roster: number;
+    scoped: number;
+    cleanses: number;
+    rejected: number;
+    spells: Map<string, number>;
+  }
 >();
+/** every defensive cleanse spell of any spec */
+const CLEANSE_SPELL_IDS = new Set<string>(
+  Object.values(CLEANSE_SPELLS_BY_TYPE).flatMap((bySpecIds) =>
+    Object.values(bySpecIds ?? {}).flatMap((ids) => [...(ids ?? [])]),
+  ),
+);
+/** A cleanse counted by what it can dispel (P-P5b = C): Disentanglement, or a
+ *  cleanse spell removing a dispel type this player defensively cleanses. */
+function isOwnTypeCleanse(
+  u: ICombatUnit,
+  dispelSpellId: string,
+  removedSpellId: string,
+): boolean {
+  if (dispelSpellId === DISENTANGLEMENT_EFFECT_ID) return true;
+  if (!CLEANSE_SPELL_IDS.has(dispelSpellId)) return false;
+  const type = getDispelType(removedSpellId);
+  return type !== null && canDefensiveCleanse(u, type);
+}
 for (const f of files) {
   let text: string;
   try {
@@ -86,21 +130,30 @@ for (const f of files) {
     const byName = new Map<string, ICombatUnit>(
       [...friends, ...enemies].map((u) => [u.name, u]),
     );
-    const seen = new Set<string>();
+    const toolsOf = new Map<string, ReturnType<typeof scopedPurgeToolsOf>>();
     for (const p of [...ds.ourPurges, ...ds.hostilePurges]) {
       const u = byName.get(p.sourceName);
-      if (!u || seen.has(u.id)) continue;
-      seen.add(u.id);
+      if (!u) continue;
       const k = `${u.spec} ${specToString(u.spec)}`;
       const e = bySpec.get(k) ?? {
-        players: 0,
+        removals: 0,
+        roster: 0,
+        scoped: 0,
+        cleanses: 0,
         rejected: 0,
         spells: new Map<string, number>(),
       };
-      e.players++;
-      if (!canOffensivePurge(u)) {
+      e.removals++;
+      const tools = toolsOf.get(u.id) ?? scopedPurgeToolsOf(u);
+      toolsOf.set(u.id, tools);
+      if (canOffensivePurge(u)) e.roster++;
+      else if (tools.some((t) => scopedToolRemoves(t, p.removedSpellId)))
+        e.scoped++;
+      else if (isOwnTypeCleanse(u, p.dispelSpellId, p.removedSpellId))
+        e.cleanses++;
+      else {
         e.rejected++;
-        const sk = `${p.dispelSpellId} ${p.dispelSpellName}`;
+        const sk = `${p.dispelSpellId} ${p.dispelSpellName} → ${p.removedSpellId} ${p.removedSpellName}`;
         e.spells.set(sk, (e.spells.get(sk) ?? 0) + 1);
       }
       bySpec.set(k, e);
@@ -109,9 +162,12 @@ for (const f of files) {
 }
 console.log(`files=${files.length}`);
 console.log(
-  "spec\tpurging players\trejected by canOffensivePurge\trejected players' purge spells",
+  "spec\tremovals\tby the Magic-purge roster\tby a scoped tool\tcleanses on an enemy unit\tunexplained\tunexplained: dispel spell → removed aura",
 );
 for (const [k, e] of [...bySpec].sort((a, b) => b[1].rejected - a[1].rejected))
   console.log(
-    `${k}\t${e.players}\t${e.rejected}\t${[...e.spells].map(([s, n]) => `${s}×${n}`).join("; ")}`,
+    `${k}\t${e.removals}\t${e.roster}\t${e.scoped}\t${e.cleanses}\t${e.rejected}\t${[...e.spells]
+      .sort((a, b) => b[1] - a[1])
+      .map(([s, n]) => `${s}×${n}`)
+      .join("; ")}`,
   );

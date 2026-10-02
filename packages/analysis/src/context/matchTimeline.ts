@@ -52,6 +52,7 @@ import {
   IDispelEvent,
   IDispelSummary,
   IMissedPurgeWindow,
+  missedPurgesFor,
   POST_CC_PRESSURE_WINDOW_S,
   wasRemovedByAllyDispel,
 } from "../utils/dispelAnalysis";
@@ -1592,11 +1593,16 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     return false;
   }
 
-  const qualifyingMissedPurges = canOffensivePurge(owner)
-    ? dispelSummary.missedPurgeWindows.filter((m) =>
-        HIGH_VALUE_PURGEABLE_BUFFS.has(m.spellId),
-      )
-    : [];
+  // The windows the OWNER could have answered (`missedPurgesFor`): a general
+  // purger's are the team's; an owner holding only a scoped removal (P-P5b =
+  // C: Shattering Throw) gets the ones that tool answers, with that tool's
+  // cooldown and reach. An immunity shield is worth the line by
+  // itself; everything else stays behind the high-value whitelist.
+  const qualifyingMissedPurges = missedPurgesFor(owner, dispelSummary).filter(
+    (m) =>
+      HIGH_VALUE_PURGEABLE_BUFFS.has(m.spellId) ||
+      m.viaScopedTool?.scope === "immunity",
+  );
 
   function formatPurgeAnnotationWithMiss(miss: IMissedPurgeWindow): string {
     const rawExemption = formatMissedPurgeExemption(miss);
@@ -2301,16 +2307,14 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   // owner can actually offensive-purge. Mistweaver/Evoker/Holy Priest/Paladin etc. spammed this tag
   // for enemy buffs (e.g. Power Infusion) they had no tool to remove — the weakest, lowest-confidence
   // findings in the corpus. Gate the whole block to owners who can purge.
-  if (canOffensivePurge(owner)) {
-    for (const miss of dispelSummary.missedPurgeWindows) {
-      if (consumedMissedPurges.has(miss)) continue;
-      if (HIGH_VALUE_PURGEABLE_BUFFS.has(miss.spellId)) {
-        addEntry(
-          miss.timeSeconds,
-          `${fmtTime(miss.timeSeconds)}  [MISSED PURGE OPPORTUNITY]   ${miss.spellName} active on ${enemyPid(miss.enemyName)} (unpurged for ${Math.round(miss.durationSeconds)}s)${formatMissedPurgeExemption(miss)}`,
-        );
-      }
-    }
+  // (P-P5b = C: `qualifyingMissedPurges` is already the owner's — an owner
+  // with no removal for the buff has none.)
+  for (const miss of qualifyingMissedPurges) {
+    if (consumedMissedPurges.has(miss)) continue;
+    addEntry(
+      miss.timeSeconds,
+      `${fmtTime(miss.timeSeconds)}  [MISSED PURGE OPPORTUNITY]   ${miss.spellName} active on ${enemyPid(miss.enemyName)} (unpurged for ${Math.round(miss.durationSeconds)}s)${formatMissedPurgeExemption(miss)}`,
+    );
   }
 
   // B14: Consolidate same-second same-source cleanses (e.g. Mass Dispel) into one line.
