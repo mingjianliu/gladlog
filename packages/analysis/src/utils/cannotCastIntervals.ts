@@ -4,9 +4,11 @@ import {
   isCastBlockingAuraType,
   SPELL_CATEGORIES as SPELLS,
 } from "../data/spellCategories";
-import { kickLockoutSeconds } from "../data/spellEffectData";
+import { BACKLASH_AURA_CC_TYPE } from "../data/backlashCc";
+
 import { ccSpellIds, officialSilenceIds } from "../data/spellTags";
 import { REACTION_WINDOW_S } from "./cooldowns";
+import { kickLockoutSecondsFor } from "./kickLockout";
 import { isSilenceableCast } from "./spellMechanics";
 import { firstDeathMs } from "./unitDeath";
 
@@ -86,9 +88,14 @@ export function namedCannotCastIntervals(
     if (action.logLine.event !== LogEvent.SPELL_INTERRUPT) continue;
     if (!enemyIds.has(action.srcUnitId)) continue;
     const kickSpellId = action.spellId ?? "";
+    // kick-eaten F-K8 (A23): the lockout THIS unit sat in — a Storm Conduit
+    // holder's interrupted Lightning Bolt locks for ×0.6
+    const interrupted = (action as { extraSpellId?: string }).extraSpellId;
     intervals.push({
       from: action.timestamp,
-      to: action.timestamp + kickLockoutSeconds(kickSpellId) * 1000,
+      to:
+        action.timestamp +
+        kickLockoutSecondsFor(kickSpellId, unit, interrupted) * 1000,
       spellId: kickSpellId,
       lockout: true,
     });
@@ -163,9 +170,21 @@ export function castBlockingAuraIntervals(
     seq++;
     const spellId = aura.spellId;
     if (!spellId) continue;
-    if (!enemyIds.has(aura.srcUnitId)) continue;
+    // cc-dr F-SR1 (ruling A52 = A, 2026-09-30): a CC / silence whose source
+    // is the unit itself was sent back to it (Diffuse Magic, Reverse Magic,
+    // Spell Reflection) and locks it like any enemy's — 82a2d681's Death
+    // Knight sat in his own reflected Strangulate 57.33–60.31 and read free.
+    if (!enemyIds.has(aura.srcUnitId) && aura.srcUnitId !== unit.id) continue;
+    // cc-dr F-BK1: the dispel-backlash auras (Unstable Affliction's silence
+    // 196364, Vampiric Touch's horror 87204 — DB2 aura 7 / mechanic 24,
+    // tier-C 09-30) have no SPELL_CATEGORIES row; the one registered table is
+    // `BACKLASH_AURA_CC_TYPE`, which `ccInstances` already reads.
     const spell = SPELLS[spellId];
-    if (!spell || !isCastBlockingAuraType(spell.type)) continue;
+    if (
+      !BACKLASH_AURA_CC_TYPE.has(spellId) &&
+      (!spell || !isCastBlockingAuraType(spell.type))
+    )
+      continue;
 
     if (aura.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
       const bucket = applied.get(spellId) ?? [];

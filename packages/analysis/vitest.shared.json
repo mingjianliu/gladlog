@@ -210,6 +210,7 @@
     "test/threatAssessment.test.ts",
     "test/threesDecided.test.ts",
     "test/tremorTotemBreak.test.ts",
+    "test/triageG12CannotCast.test.ts",
     "test/triageG4DeadAt.test.ts",
     "test/triageG4Kickers.test.ts",
     "test/usableWhileCcShim.test.ts"

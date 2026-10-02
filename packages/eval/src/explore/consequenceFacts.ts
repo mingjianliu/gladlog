@@ -27,10 +27,8 @@ import {
   gridHpPct,
   isHealerSpec,
 } from "@gladlog/analysis/src/utils/cooldowns";
-import {
-  getEnglishSpellName,
-  kickLockoutSeconds,
-} from "@gladlog/analysis/src/data/spellEffectData";
+import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
+import { kickLockoutSecondsFor } from "@gladlog/analysis/src/utils/kickLockout";
 import { fmtTime } from "@gladlog/analysis/src/utils/renderGrid";
 import {
   MITIGATION_AURA_IDS,
@@ -132,7 +130,13 @@ export function buildConsequenceLines(
       seen.add(key);
       const t = sec(a.timestamp);
       if (t < 0) continue;
-      const lockS = kickLockoutSeconds(String(a.spellId ?? ""));
+      // the victim's own lockout (kick-eaten F-K8: Storm Conduit ×0.6) — the
+      // production [CONSEQ] reader's number
+      const lockS = kickLockoutSecondsFor(
+        String(a.spellId ?? ""),
+        victim,
+        a.extraSpellId,
+      );
       const next = ((victim.spellCastEvents ?? []) as any[]).find(
         (c) =>
           c.logLine?.event === LogEvent.SPELL_CAST_SUCCESS &&

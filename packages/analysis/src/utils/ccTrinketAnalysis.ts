@@ -1,6 +1,7 @@
 import {
   CombatExtraSpellAction,
   CombatUnitClass,
+  CombatUnitReaction,
   ICombatUnit,
   LogEvent,
 } from "@gladlog/parser-compat";
@@ -14,10 +15,7 @@ import {
   racialTrinketLockoutMs,
   SHARED_CD_RACIAL_SPELL_IDS,
 } from "../data/racialAbilities";
-import {
-  getEnglishSpellName,
-  kickLockoutSeconds,
-} from "../data/spellEffectData";
+import { getEnglishSpellName } from "../data/spellEffectData";
 import {
   immunityCoversSpell,
   isPhysicalSpell,
@@ -80,6 +78,7 @@ import { medianFinite } from "./stats";
 import { interruptImmuneWindows } from "./talentBehaviors";
 import { getTalentAvoidanceBuffs } from "./talentBehaviors";
 import { DPS_TRINKET_CD_S, HEALER_TRINKET_CD_S } from "./trinketCooldown";
+import { kickLockoutSecondsFor } from "./kickLockout";
 import { firstDeathMs } from "./unitDeath";
 
 // ---------------------------------------------------------------------------
@@ -1322,9 +1321,24 @@ export function analyzePlayerCCAndTrinket(
     // that never closes inflates its duration all the way to match end (fixed
     // 2026-08-02; the pairing semantics live in the single source
     // matchPendingCcKey).
-    if (!isRemovalEvent && !enemyIds.has(aura.srcUnitId)) continue;
+    // cc-dr F-SR1 (ruling A52 = A): a CC whose source is the holder itself
+    // was reflected back onto it (Diffuse Magic, Reverse Magic, Spell
+    // Reflection) and is a CC on it. Friendly holders only: the enemy side's
+    // reflected CC already has its `[REFLECTED]` line, and `[CC ON ENEMY]`
+    // would name the enemy as its own source. Roots keep their self-root
+    // guard (`rootIntervalsOf`), so the exception is the CC set alone.
+    const reflectedOntoHolder =
+      !isRemovalEvent &&
+      aura.srcUnitId === player.id &&
+      player.reaction === CombatUnitReaction.Friendly &&
+      ccSpellIds.has(spellId);
+    if (!isRemovalEvent && !enemyIds.has(aura.srcUnitId) && !reflectedOntoHolder)
+      continue;
 
-    if (rootSpellIds.has(spellId) || disarmSpellIds.has(spellId)) {
+    if (
+      !reflectedOntoHolder &&
+      (rootSpellIds.has(spellId) || disarmSpellIds.has(spellId))
+    ) {
       const isRoot = rootSpellIds.has(spellId);
       const pending = isRoot ? pendingRoot : pendingDisarm;
       const windows = isRoot ? rootWindows : disarmWindows;
@@ -1807,12 +1821,18 @@ export function analyzePlayerCCAndTrinket(
     // forking, surfaced by the ledger-vs-timeline contradiction in the
     // 2026-07-16 DPS baseline.
     const kickSpellId = action.spellId ?? "";
-    // Single-source predicate for kick lockout duration (kickLockoutSeconds):
+    // Single-source predicate for kick lockout duration (kickLockoutSecondsFor
+    // over kickLockoutSeconds):
     // dispelAnalysis's "dispeller locked out" gate and this site must use the
     // same table and the same fallback — inlining it on each side is a breeding
     // ground for divergence.
-    const lockoutDurationSeconds = kickLockoutSeconds(kickSpellId);
     const interruptedSpellId = extraAction.extraSpellId ?? "";
+    // kick-eaten F-K8 (A23): the victim's own lockout (Storm Conduit)
+    const lockoutDurationSeconds = kickLockoutSecondsFor(
+      kickSpellId,
+      player,
+      interruptedSpellId,
+    );
 
     // B6: Find cast start to measure positioning/spacing at cast start
     const castStartEvent = (player.castStartEvents ?? [])

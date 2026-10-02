@@ -732,5 +732,12 @@
  *  CC ready", "you cast CC", the CC counts), and `[BURST ANSWERED]` credits
  *  an aimed control only when it landed (its own aura, an effect aura, or
  *  for an interrupt the SPELL_INTERRUPT).
+ *  v273 (2026-10-02, triage G12 cannot-cast inputs: cc-dr F-SR1 (A52) +
+ *  F-BK1, kick-eaten F-K8 (A23)): a CC / silence a unit's reflect sent back
+ *  onto it locks it — `[CC ON TEAM] … (reflected back)` / `[SILENCE] …
+ *  (reflected back)` — and counts in its DR; the dispel-backlash silence /
+ *  horror (196364, 87204) locks the dispeller; a Storm Conduit holder's
+ *  interrupted Lightning Bolt / Chain Lightning locks for ×0.6 (kick-eaten
+ *  `lockout=`, [CONSEQ], [RES] `cc:[kick]`, cannot-cast feasibility).
  */
-export const PROMPT_VERSION = 272;
+export const PROMPT_VERSION = 273;

@@ -2155,17 +2155,26 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       // B124: surface the caster→target range (and LoS) already computed at CC application, so claims
       // like "walked into the CC" / "should have LoS'd it" become checkable instead of inferred. Only
       // shown when advanced logging supplied positions.
+      // cc-dr F-SR1 (ruling A52 = A): the holder's own CC sent back to it —
+      // no caster to name and no caster distance to measure
+      const reflectedBack =
+        cc.sourceId !== undefined &&
+        cc.sourceId ===
+          friends.find((u) => u.name === summary.playerName)?.id;
       let posStr = "";
-      if (cc.distanceYards !== null) {
+      if (cc.distanceYards !== null && !reflectedBack) {
         const losTag = cc.losBlocked === true ? ", LoS blocked" : "";
         posStr = ` | ${cc.distanceYards}yd from caster${losTag}`;
       }
+      const byStr = reflectedBack
+        ? "(reflected back)"
+        : `(by ${actorLabel(cc.sourceName, "enemy", cc.sourceId)})`;
 
       // passive_trinket → player has no active trinket, no annotation
       addEntry(
         cc.atSeconds,
         // B112: "(by N)" not "(N)" — the bare "(6)" caster-id was misread as a "6s" duration.
-        `${fmtTime(cc.atSeconds)}  [CC ON TEAM]   ${pid(summary.playerName)} ← ${cc.spellName} (by ${actorLabel(cc.sourceName, "enemy", cc.sourceId)})${durStr}${drStr}${backlashStr}${posStr}${trinketNote}${tremorNote}${immunityNote}${cleansedNote}`,
+        `${fmtTime(cc.atSeconds)}  [CC ON TEAM]   ${pid(summary.playerName)} ← ${cc.spellName} ${byStr}${durStr}${drStr}${backlashStr}${posStr}${trinketNote}${tremorNote}${immunityNote}${cleansedNote}`,
       );
     }
 
@@ -2223,14 +2232,18 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
               ? ` | trinket broke this silence after ${(trinketAt - at).toFixed(0)}s (cut short — it had not expired)`
               : ` | ${durS.toFixed(0)}s`;
           const who = side === "friendly" ? pid(u.name) : enemyPid(u.name);
-          const by = actorLabel(
-            s.srcUnitName,
-            side === "friendly" ? "enemy" : "friendly",
-            s.srcUnitId,
-          );
+          // cc-dr F-SR1: a silence the unit's own reflect sent back to it
+          const by =
+            s.srcUnitId === u.id
+              ? "(reflected back)"
+              : `(by ${actorLabel(
+                  s.srcUnitName,
+                  side === "friendly" ? "enemy" : "friendly",
+                  s.srcUnitId,
+                )})`;
           addEntry(
             at,
-            `${fmtTime(at)}  [SILENCE]   ${who} ← ${getEnglishSpellName(s.spellId, s.spellName)} (by ${by})${tail}`,
+            `${fmtTime(at)}  [SILENCE]   ${who} ← ${getEnglishSpellName(s.spellId, s.spellName)} ${by}${tail}`,
           );
           silenceLineCount++;
         }

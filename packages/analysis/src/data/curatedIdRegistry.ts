@@ -109,6 +109,7 @@ import {
 import { MOVEMENT_ROOT_BREAK_DISPEL_IDS } from "../utils/dispelKind";
 import { AOE_CC_SPELL_IDS } from "../utils/drAnalysis";
 import { NON_PLAYER_INTERRUPT_IDS } from "../utils/enemyInterrupts";
+import { KICK_LOCKOUT_VICTIM_MODIFIERS } from "../utils/kickLockout";
 import { EXTERNAL_DAMAGE_SHIELD_IDS } from "../utils/externalDamage";
 import { SPEC_PRIMARY_CC } from "../utils/healerExposureAnalysis";
 import { HEALER_AVOIDANCE_SPELLS } from "../utils/healerExposureAnalysis";
@@ -497,6 +498,15 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
     ...USABLE_IN_BLADESTORM_WITH_TALENT,
     UNRELENTING_ONSLAUGHT_TALENT_ID,
   ]),
+  // kick-eaten F-K8 (ruling A23, 2026-09-30): a victim talent that shortens a
+  // kick's lockout for some interrupted spells (Storm Conduit 1217092 on
+  // Lightning Bolt / Chain Lightning)
+  t("KICK_LOCKOUT_VICTIM_MODIFIERS", "utils/kickLockout.ts", "mixed", () =>
+    KICK_LOCKOUT_VICTIM_MODIFIERS.flatMap((m) => [
+      m.talentId,
+      ...m.interruptedSpellIds,
+    ]),
+  ),
   t("NON_PLAYER_INTERRUPT_IDS", "utils/enemyInterrupts.ts", "cast", () =>
     set(NON_PLAYER_INTERRUPT_IDS),
   ),

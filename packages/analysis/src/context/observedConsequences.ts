@@ -34,12 +34,10 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
-import {
-  getEnglishSpellName,
-  kickLockoutSeconds,
-} from "../data/spellEffectData";
+import { getEnglishSpellName } from "../data/spellEffectData";
 import { IPlayerCCTrinketSummary } from "../utils/ccTrinketAnalysis";
 import { gridHpMinInWindow, gridHpPct, isHealerSpec } from "../utils/cooldowns";
+import { kickLockoutSecondsFor } from "../utils/kickLockout";
 import { fmtTime } from "../utils/renderGrid";
 
 /** A CC shorter than this is a GCD-sized blip — nothing to report inside it. */
@@ -169,7 +167,12 @@ export function formatObservedConsequences(params: {
       seen.add(key);
       const t = (a.timestamp - start) / 1000;
       if (t < 0) continue;
-      const lockS = kickLockoutSeconds(String(a.spellId ?? ""));
+      // kick-eaten F-K8 (A23): the victim's own lockout (Storm Conduit)
+      const lockS = kickLockoutSecondsFor(
+        String(a.spellId ?? ""),
+        victim,
+        (a as { extraSpellId?: string }).extraSpellId,
+      );
       const { team, label, who } = sideOf(victim);
       const from = Math.floor(t);
       const to = Math.floor(t + lockS);

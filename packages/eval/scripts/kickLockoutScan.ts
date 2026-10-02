@@ -30,7 +30,20 @@
  * pairs): Counterspell 6, Spell Lock 5, Quell 4, Wind Shear 2, Shambling Rush 2,
  * every other kick 3 — melee kicks are genuinely 3 s in 12.1, so the old
  * fallback was right by accident for them and wrong for the five above.
+ *
+ * Victim modifiers (triage kick-eaten F-K8, ruling A23): every pair is also
+ * split by the victim lockout modifiers of `KICK_LOCKOUT_VICTIM_MODIFIERS`
+ * (utils/kickLockout.ts — Storm Conduit 1217092 on an interrupted Lightning
+ * Bolt / Chain Lightning, DB2 ×0.6), the holder read from the victim's
+ * COMBATANT_INFO PvP talents. Printed only — the table above is the kick's
+ * own lockout and is unchanged by it. The split is what keeps the A23 FLAG
+ * re-runnable: holder × modified spell, holder × other spell, non-holder ×
+ * modified spell, each with its gap / table-lockout ratios (2026-09-30: 21/21
+ * holder pairs at 0.344–0.350 against DB2's 0.6).
  */
+import { kickLockoutSeconds } from "@gladlog/analysis/src/data/spellEffectData";
+import { schoolLockedBy } from "@gladlog/analysis/src/data/spellSchools";
+import { KICK_LOCKOUT_VICTIM_MODIFIERS } from "@gladlog/analysis/src/utils/kickLockout";
 import { readFileSync, writeFileSync } from "fs";
 import { resolve } from "path";
 import { gunzipSync } from "zlib";
@@ -100,6 +113,8 @@ const all = readFileSync(args.manifest, "utf8")
 const files = all.filter((_, i) => i % args.every === 0);
 
 const stats = new Map<string, { name: string; gaps: number[] }>();
+/** "<talent> holder|non-holder × modified|other spell" → gap / table lockout */
+const victimSplit = new Map<string, number[]>();
 let interrupts = 0;
 let paired = 0;
 let read = 0;
@@ -114,14 +129,35 @@ for (const f of files) {
   read++;
   const pending = new Map<
     string,
-    { at: number; school: number; kick: string }
+    { at: number; school: number; kick: string; interrupted: string }
   >();
+  // the modifier split's own pairing: the first cast the lock really covers
+  // (`schoolLockedBy`, the production all-bits rule — codex review: the
+  // table's any-overlap pairing took a Fire/Nature Flame Shock 0.83 s into a
+  // Nature lock as the unlock)
+  const pendingSplit = new Map<
+    string,
+    { at: number; school: number; kick: string; interrupted: string }
+  >();
+  // victim GUID → PvP talent ids (COMBATANT_INFO's "(a,b,c,d)" group)
+  const pvp = new Map<string, Set<string>>();
   for (const line of text.split("\n")) {
     const sep = line.indexOf("  ");
     if (sep < 0) continue;
     const body = line.slice(sep + 2);
     if (body.startsWith("ARENA_MATCH_")) {
       pending.clear();
+      pendingSplit.clear();
+      pvp.clear();
+      continue;
+    }
+    if (body.startsWith("COMBATANT_INFO,")) {
+      const guid = body.split(",")[1] ?? "";
+      const held = new Set<string>();
+      for (const m of KICK_LOCKOUT_VICTIM_MODIFIERS)
+        if (new RegExp(`[(,]${m.talentId}[,)]`).test(body))
+          held.add(m.talentId);
+      pvp.set(guid, held);
       continue;
     }
     if (body.startsWith("SPELL_INTERRUPT,")) {
@@ -134,7 +170,8 @@ for (const f of files) {
       if (at === null || !Number.isFinite(school) || school === 0) continue;
       interrupts++;
       if (!stats.has(kick)) stats.set(kick, { name, gaps: [] });
-      pending.set(dst, { at, school, kick });
+      pending.set(dst, { at, school, kick, interrupted: p[12] ?? "" });
+      pendingSplit.set(dst, { at, school, kick, interrupted: p[12] ?? "" });
       continue;
     }
     if (
@@ -142,6 +179,27 @@ for (const f of files) {
       body.startsWith("SPELL_CAST_SUCCESS,")
     ) {
       const p = body.split(",");
+      const split = pendingSplit.get(p[1]);
+      const castSchool = Number(p[11]);
+      if (
+        split &&
+        Number.isFinite(castSchool) &&
+        schoolLockedBy(castSchool, split.school)
+      ) {
+        const at = tsMs(line);
+        pendingSplit.delete(p[1]);
+        const gap = at === null ? -1 : (at - split.at) / 1000;
+        if (gap >= 0 && gap <= MAX_GAP_S)
+          for (const m of KICK_LOCKOUT_VICTIM_MODIFIERS) {
+            const holder = pvp.get(p[1] ?? "")?.has(m.talentId) ?? false;
+            const onSpell = m.interruptedSpellIds.has(split.interrupted);
+            if (!holder && !onSpell) continue;
+            const key = `${m.talentId} ${holder ? "holder" : "non-holder"} × ${onSpell ? "modified spell" : "other spell"}`;
+            const list = victimSplit.get(key) ?? [];
+            list.push(gap / kickLockoutSeconds(split.kick));
+            victimSplit.set(key, list);
+          }
+      }
       const pend = pending.get(p[1]);
       if (!pend) continue;
       const school = Number(p[11]);
@@ -200,3 +258,13 @@ for (const [id, e] of Object.entries(entries))
     `  ${id}\t${e.name}\t${e.lockoutSeconds}s\tn=${e.n}\tp25=${e.p25}\tp50=${e.p50}`,
   );
 if (skipped.length) console.log(`skipped (fallback 3s): ${skipped.join(", ")}`);
+console.log(
+  "victim lockout modifiers (gap / table lockout; < 0.9 = ended early):",
+);
+for (const [key, ratios] of [...victimSplit.entries()].sort()) {
+  const sorted = [...ratios].sort((a, b) => a - b);
+  const early = sorted.filter((r) => r < 0.9).length;
+  console.log(
+    `  ${key}: n=${sorted.length} early=${early}/${sorted.length} p50=${quantile(sorted, 0.5)?.toFixed(3)} min=${sorted[0]?.toFixed(3)}`,
+  );
+}
