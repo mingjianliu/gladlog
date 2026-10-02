@@ -35,7 +35,11 @@
  *    the shared set) are not its low HP (0068182d @72.5: `ourLowPct=40` was a
  *    mage inside Ice Block from 69.6 to 75.9).
  */
-import type { AtomicArenaCombat, ICombatUnit } from "@gladlog/parser-compat";
+import {
+  type AtomicArenaCombat,
+  type ICombatUnit,
+  LogEvent,
+} from "@gladlog/parser-compat";
 
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { burstCastSpan } from "../utils/burstLedger";
@@ -156,6 +160,26 @@ export function kickPressureFor(params: {
         for (const id of kit) {
           if (!OFFENSIVE_CD_SPELL_IDS.has(id)) continue;
           if (!kitSpellReadyAt(u, id, s, start, talents.get(u.id)!)) continue;
+          // readiness is read on the rendered second (`s` = floor of the
+          // kick); a cooldown pressed between that second and the kick is
+          // spent, not ready. Unreachable while every span ran at least
+          // 10 s (the cast was then "running"); with the floor gone, a
+          // zero-length cooldown cast 0.7 s before the kick was named ready
+          // (pre-review: a teammate's Soul Fire at 60.2, kick at 60.9).
+          // A press is a SPELL_CAST_SUCCESS, the event `kitSpellReadyAt`
+          // prices; the stream holds nothing else today.
+          if (
+            (u.spellCastEvents ?? []).some((e) => {
+              const tS = (e.logLine.timestamp - start) / 1000;
+              return (
+                e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+                String(e.spellId ?? "") === id &&
+                tS > s &&
+                tS <= t0
+              );
+            })
+          )
+            continue;
           const name = getEnglishSpellName(
             id,
             u.spellCastEvents?.find((e) => e.spellId === id)?.spellName,

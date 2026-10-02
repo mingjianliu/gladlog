@@ -4,11 +4,7 @@ import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { getUnitHpAtTimestamp, HP_SAMPLE_RADIUS_MS } from "./cooldowns";
 import { SELF_CAST_NOOP_EXTERNAL_IDS } from "./cooldowns";
-import {
-  BURST_CLUSTER_SECONDS,
-  IEnemyCDCast,
-  reconstructEnemyCDTimeline,
-} from "./enemyCDs";
+import { IEnemyCDCast, reconstructEnemyCDTimeline } from "./enemyCDs";
 import type { IKickAuditEntry } from "./kickAudit";
 import { MIN_WINDOW_SECONDS } from "./killWindowTargetSelection";
 import { IOffensiveWindow } from "./offensiveWindows";
@@ -32,8 +28,6 @@ const DEF_OR_IMMUNE_IDS = new Set<string>([
   ...Object.keys(SPELLS).filter((id) => SPELLS[id]?.type === "immunities"),
 ]);
 
-/** A burst with no buff-duration data still gets this measurement span (= the grouping reach). */
-const MIN_BURST_SPAN_S = BURST_CLUSTER_SECONDS;
 /** A target death up to this long after the burst ends still credits the burst. */
 /** Death within this many seconds after a span still credits the span as the
  * kill. Exported 2026-08-18: killAttempts.ts judges "did this attempt convert"
@@ -137,13 +131,41 @@ export interface IBurstLedgerEntry {
   allyCDsOverlapping: Array<{ playerName: string; spellName: string }>;
 }
 
-/** Active span of one offensive CD cast: buff duration when known, grouping reach otherwise.
- * Exported for the replay burst visual — the pulse must cover exactly the span the ledger audits. */
+/**
+ * Active span of one offensive CD cast: from the cast to the end of its
+ * effect (`buffEndSeconds`, the official duration for the caster), nothing
+ * more. One predicate for every reader of "is this cooldown running": the
+ * burst ledger's grouping / span / ally overlap, the kill-attempt burst
+ * clusters (`killAttempts.ts`), kick-eaten's `enemyBurst` / `ourBurst`
+ * (`kickPressure.ts`), `unsyncedBurstEvents`' effect window, and the replay
+ * burst pulse (desktop `replayHighlights.ts` — the pulse covers exactly the
+ * span the ledger audits).
+ *
+ * Until 2026-10-01 the span was `max(buffEnd, cast + 10 s)` — a 10 s floor
+ * borrowed from the clustering reach (`BURST_CLUSTER_SECONDS`). User ruling
+ * A14 = B (2026-09-30, triage kick-eaten F-K1 × sync-burst F-L3): the floor
+ * goes, globally. It named cooldowns whose effect had ended seconds earlier
+ * as "running": c2058ed4 @18.2 `enemyBurst=Boomstick` (a 3 s effect cast at
+ * 10.9), and 2abc9185's `Aligned with: … (Doom Winds)` credited from the
+ * tail of a Strike of the Windlord that had ended 3 s before. An instant
+ * cooldown is now a zero-length span: it is "running" for nobody and groups
+ * only with casts in its own instant.
+ *
+ * NOT done here (waits for the cast→effect table of CROSS-THEME G3, ruling
+ * A10): ending the span at the OBSERVED aura chain — an effect that ended
+ * early (The Hunt's 0.4 s caster buff) or that re-application kept alive
+ * past its nominal end (02c8e3ac Dragonrage) still reads the official length.
+ * `enemyCDs.ts`' aligned-window clustering keeps its own reach
+ * (`BURST_CLUSTER_SECONDS`): "which casts form one go" is a different
+ * question from "how long does one cast's effect run".
+ */
 export function burstCastSpan(
   cd: Pick<IEnemyCDCast, "castTimeSeconds" | "buffEndSeconds">,
 ): { from: number; to: number } {
-  const to = Math.max(cd.buffEndSeconds, cd.castTimeSeconds + MIN_BURST_SPAN_S);
-  return { from: cd.castTimeSeconds, to };
+  return {
+    from: cd.castTimeSeconds,
+    to: Math.max(cd.buffEndSeconds, cd.castTimeSeconds),
+  };
 }
 
 /**
@@ -151,8 +173,8 @@ export function burstCastSpan(
  * where the damage went, whether the dominant target had an immunity/major
  * defensive running, whether any ally CD overlapped, and whether the target died.
  *
- * CD detection and clustering share the enemy-side predicates
- * (reconstructEnemyCDTimeline / BURST_CLUSTER_SECONDS) — same facts, one spec.
+ * CD detection shares the enemy-side predicate (reconstructEnemyCDTimeline);
+ * casts group while their effect spans overlap (`burstCastSpan`).
  */
 export function analyzeBurstLedger(
   player: ICombatUnit,
@@ -187,7 +209,8 @@ export function analyzeBurstLedger(
   const enemyPlayers = enemies.filter((e) => e.info);
   const enemyById = new Map(enemyPlayers.map((e) => [e.id, e]));
 
-  // Group own casts by active-span overlap — same reach rule as enemyCDs' aligned windows.
+  // Group own casts by active-span overlap (`burstCastSpan`: the effect's own
+  // length, no floor — ruling A14).
   const groups: IEnemyCDCast[][] = [];
   {
     let current: IEnemyCDCast[] = [];
@@ -515,9 +538,15 @@ export function formatBurstLedgerForContext(
           `    ${d.isImmunity ? "⚠ Target was IMMUNE" : "Target had a major defensive up"}: ${d.spellName} active ON THE TARGET ${d.overlapSeconds.toFixed(1)}s of this burst${wallUpAtOpen(d) !== undefined ? ` (${wallTimingPhrase(d)})` : ""}`,
         );
       }
-    } else {
+    } else if (b.toSeconds > b.fromSeconds) {
       lines.push(`    No damage dealt to enemy players during this burst.`);
     }
+    // A zero-length burst (an offensive cooldown with no tracked buff — Soul
+    // Fire, whose hit lands after the cast) has no window damage could fall
+    // into: saying "No damage dealt" there contradicted the KILL ATTEMPTS
+    // row of the same cast (pre-review of the burst-span batch: 50 owner
+    // files on 605). Until the observed-chain half (CROSS-THEME G3) gives
+    // such a cast its effect, the line says nothing about its damage.
     lines.push(
       b.allyCDsOverlapping.length > 0
         ? `    Aligned with: ${b.allyCDsOverlapping.map((a) => `${a.playerName} (${a.spellName})`).join(", ")}`

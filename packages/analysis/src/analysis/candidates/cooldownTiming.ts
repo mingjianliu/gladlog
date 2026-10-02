@@ -843,10 +843,9 @@ const UNSYNCED_BURST_CAP = 2; // <标定定稿 2026-08-15,报告 p1p2-calibratio
  *
  * Effect window: `burstCastSpan` — the exact predicate the burst ledger
  * already uses for "how long is this CD's effect active", built from
- * `spellEffectData[spellId].durationSeconds` with a documented fallback
- * (`MIN_BURST_SPAN_S` = `BURST_CLUSTER_SECONDS`, enemyCDs.ts/burstLedger.ts's
- * own established default for a CD whose buff duration is unknown/instant) —
- * reused here rather than inventing a second duration-with-fallback rule.
+ * `spellEffectData[spellId].durationSeconds`. Since 2026-10-01 (ruling A14)
+ * there is no 10 s fallback: a CD whose buff duration is unknown / instant
+ * has a zero-length window.
  *
  * Severity/cap: sorted by the cooldown's own length (`cooldownSeconds`
  * descending) — the biggest-cooldown CDs are the highest-value presses to

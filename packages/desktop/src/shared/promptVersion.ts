@@ -593,5 +593,11 @@
  *  cast that was then recast is "JUKED", not "hit nothing". kick-eaten: new
  *  fact `stoppedJustBefore`; a cast broken by an enemy displacement is not
  *  one of `yourCancels`; `baitedKicks` follows the juke rule.
+ *  v254 (2026-10-01): triage G16, ruling A14 = B — `burstCastSpan` loses its
+ *  10 s floor for every reader: burst ledger groups / spans / `Aligned with`,
+ *  KILL ATTEMPTS burst clusters, kick-eaten `enemyBurst` / `ourBurst`. An
+ *  instant cooldown is no longer "running" for 10 s, and a zero-length burst
+ *  (Soul Fire) prints no "No damage dealt" line. The observed-aura half of
+ *  the ruling waits for the cast→effect table (G3).
  */
-export const PROMPT_VERSION = 253;
+export const PROMPT_VERSION = 254;

@@ -80,7 +80,8 @@ describe("回放爆发红光 + 同秒集火(DPS D1)", () => {
     const spans = auras[enemyId] ?? [];
     const hit = spans.find((sp) => sp.fromMs === t0);
     expect(hit).toBeTruthy();
-    // AW buff lasts 20s → the span must reach at least t0+10s (the minimum span)
+    // AW's buff lasts 20 s → the span reaches at least t0+10s (the span is the
+    // buff's own length: the 10 s minimum is gone since ruling A14)
     expect(hit!.toMs).toBeGreaterThanOrEqual(t0 + 10_000);
     expect(hit!.spellName).toBe("Avenging Wrath");
   });
@@ -98,7 +99,8 @@ describe("回放爆发红光 + 同秒集火(DPS D1)", () => {
     const auras = deriveBurstAuras(m);
     for (const spans of Object.values(auras)) {
       for (const sp of spans) {
-        expect(sp.toMs).toBeGreaterThan(sp.fromMs);
+        // a cooldown with no tracked buff is a zero-length span (ruling A14)
+        expect(sp.toMs).toBeGreaterThanOrEqual(sp.fromMs);
       }
     }
     const ff = deriveFocusFire(m);

@@ -186,3 +186,68 @@ describe("kickPressureFor", () => {
     expect(p.ours.low).toEqual({ unit: "Mage", pct: low, atSec: 74 });
   });
 });
+
+/**
+ * The burst span has no 10 s floor (ruling A14, G16): what that does to the
+ * pressure facts for a cooldown with no tracked buff. Soul Fire 6353 is the
+ * one admitted offensive cooldown with no duration.
+ */
+describe("kickPressureFor with a zero-length cooldown (Soul Fire)", () => {
+  beforeAll(async () => {
+    await ensureAnalysisData();
+  });
+  const SOUL_FIRE = "6353";
+  const lock = (
+    id: string,
+    reaction: CombatUnitReaction,
+    castSeconds: number[],
+  ) =>
+    makeUnit(id, {
+      name: "Lock",
+      spec: CombatUnitSpec.Warlock_Destruction,
+      reaction,
+      info: {},
+      advancedActions: hpWalk({ 0: 100 }),
+      spellCastEvents: castSeconds.map((s) =>
+        makeSpellCastEvent(
+          SOUL_FIRE,
+          T0 + s * 1000,
+          id,
+          "Lock",
+          id,
+          "Lock",
+          0,
+          "Soul Fire",
+        ),
+      ),
+    });
+  const kick = { atSeconds: 60.9, lockoutDurationSeconds: 3 };
+
+  it("is never 'running': an enemy Soul Fire in the kick's own millisecond is no enemyBurst", () => {
+    const p = kickPressureFor({
+      combat,
+      owner,
+      friends: [owner],
+      enemies: [lock("e9", CombatUnitReaction.Hostile, [60.9])],
+    })(kick);
+    expect(p.ours.burstAgainst).toEqual([]);
+  });
+
+  it("a teammate's Soul Fire that was up is 'ready'; one pressed 0.7 s before the kick, in the kick's own second, is spent — not ready (pre-review of the batch)", () => {
+    const ready = kickPressureFor({
+      combat,
+      owner,
+      friends: [owner, lock("f9", CombatUnitReaction.Friendly, [10])],
+      enemies: [enemyRet([])],
+    })(kick);
+    expect(ready.burstReady).toEqual(["Lock: Soul Fire"]);
+    const spent = kickPressureFor({
+      combat,
+      owner,
+      friends: [owner, lock("f9", CombatUnitReaction.Friendly, [10, 60.2])],
+      enemies: [enemyRet([])],
+    })(kick);
+    expect(spent.burstReady).toEqual([]);
+    expect(kickIsHarmless(spent)).toBe(true);
+  });
+});
