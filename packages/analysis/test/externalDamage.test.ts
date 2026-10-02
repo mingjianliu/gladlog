@@ -195,7 +195,7 @@ describe("externalDamage — damage kept on a target under an ally-applied exter
     });
     const a1 = ally("A1", [
       dmg(LogEvent.SPELL_DAMAGE, 19, "E1", 40_000),
-      dmg(LogEvent.SPELL_DAMAGE, 21, "E1", 1), // a fully absorbed hit leaves an effective −1
+      dmg(LogEvent.SPELL_DAMAGE, 21, "E1", 1), // a fully absorbed hit: its damage row is the ≈ 0 health it removed
       dmg(LogEvent.SPELL_DAMAGE, 25, "E3", 20_000),
     ]);
     const [o] = externalDamageObservations(e1, [a1], [e1, enemy("E3")], combat);

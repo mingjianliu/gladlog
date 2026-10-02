@@ -44,11 +44,13 @@ export interface IPressureEvent {
 /**
  * Damage taken plus damage absorbed, in one time-ordered list.
  *
- * Partial absorbs are the one overlap: those emit a damage record carrying an
- * `absorbed` field AND their own `SPELL_ABSORBED`. `convert.ts` already
- * subtracts the absorbed portion out of the damage record's effectiveAmount, so
- * adding the absorb event back is not double counting. Measured at 0.29% of
- * summed damage either way.
+ * A partly absorbed hit emits a damage record AND its own `SPELL_ABSORBED`.
+ * They do not overlap: the damage record's `amount` is already net of the
+ * absorb (so its effectiveAmount is the health lost), and the absorb event is
+ * the part the shield ate — together, the whole hit. Until 2026-10-01
+ * `convert.ts` subtracted the absorbed part from the damage record a second
+ * time, so this sum under-read every partly absorbed hit by the absorbed
+ * amount (user ruling A38, triage missed-cleanse F-C2).
  */
 export function incomingPressureEvents(
   unit: Pick<ICombatUnit, "damageIn" | "absorbsIn">,

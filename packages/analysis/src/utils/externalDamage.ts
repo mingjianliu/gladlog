@@ -48,8 +48,8 @@
  *   mergePetEvents
  *   absorbed (2026-09-22 amendment, recorded on the issue): what the target's
  *   shields ate from this ally inside W — read from the TARGET's victim-keyed
- *   `absorbsIn` (attacker = the ally; the attacker's own damageOut only sees
- *   a fully absorbed hit as effective ≈ 0, or a positive residual, never the
+ *   `absorbsIn` (attacker = the ally; the attacker's own damage rows carry only
+ *   the health the hit removed — ≈ 0 for a fully absorbed hit — never the
  *   absorbed amount) — is reported SEPARATELY as `(+Ak absorbed)`, and a
  *   second with an absorbed hit counts in K. N / D / X are unchanged. Without
  *   it a Feral Druid hitting a shielded Havoc DH under Time Dilation rendered
@@ -74,8 +74,8 @@ export const EXTERNAL_DAMAGE_PRE_HIT_S = 3;
 export const EXTERNAL_DAMAGE_CONTINUES_SHARE = 0.5;
 /**
  * A hit counts as "a second with damage" (K) only at or above this effective
- * amount. A fully absorbed hit leaves an effective residual of 0–1 in the
- * attacker's damageOut; when the absorb cannot be matched back to the ally
+ * amount. A fully absorbed hit leaves a damage row of ≈ 0 (the health it
+ * removed) in the attacker's damageOut; when the absorb cannot be matched back to the ally
  * (a pet's hit is merged into the owner, but the victim's absorb names the
  * pet as attacker) that residual would otherwise render as `0k on target ·
  * damage in 1 of 8 s`. N still sums every hit.

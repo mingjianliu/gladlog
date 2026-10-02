@@ -154,6 +154,24 @@ function overkillField(event: { amount: number; effectiveAmount: number }): {
   return overkill > 0 ? { overkill } : {};
 }
 
+/**
+ * The health a damage event actually removed: `amount − overkill`.
+ *
+ * The log's `amount` is ALREADY net of what a shield absorbed — the absorbed
+ * part travels separately, as the line's `absorbed` field and as its own
+ * SPELL_ABSORBED event. Until 2026-10-01 this subtracted `absorbed` a second
+ * time (adjudication #13, inherited from the old parser), so every partly
+ * absorbed hit read as less damage than the health bar lost: on 4 logs the
+ * victim's HP drop equalled `amount` in 455 of 455 hits and `amount −
+ * absorbed` in 0. Reversed by user ruling A38 (triage missed-cleanse F-C2).
+ *
+ * Consequence for sums: damage rows + absorb rows now add up to the whole
+ * hit (health lost + shield eaten); before, they added up to `amount` alone.
+ */
+function hpLost(event: { effectiveAmount: number }): number {
+  return event.effectiveAmount;
+}
+
 function isPetOrGuardian(
   destId: string | undefined,
   allUnits: Record<string, GladUnit> | undefined,
@@ -301,9 +319,7 @@ function convertUnit(
         destUnitId: event.destId,
         destUnitName: event.destName,
         amount: -event.amount,
-        effectiveAmount: isPetDest
-          ? -0
-          : -(event.effectiveAmount - (event.absorbed ?? 0)),
+        effectiveAmount: isPetDest ? -0 : -hpLost(event),
         ...overkillField(event),
         spellSchoolId: getSpellSchoolId(event.eventName, event.params),
         logLine: {
@@ -365,9 +381,7 @@ function convertUnit(
         destUnitId: event.destId,
         destUnitName: event.destName,
         amount: -event.amount,
-        effectiveAmount: isPetDest
-          ? -0
-          : -(event.effectiveAmount - (event.absorbed ?? 0)),
+        effectiveAmount: isPetDest ? -0 : -hpLost(event),
         ...overkillField(event),
         spellSchoolId: getSpellSchoolId(event.eventName, event.params),
         logLine: {

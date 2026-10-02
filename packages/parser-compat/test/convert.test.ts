@@ -200,7 +200,7 @@ describe("event-name fidelity + SWING dedup (adjudication #10/#12)", () => {
   });
 });
 
-describe("absorb attribution + damage effective semantics (adjudication #13, real lines)", () => {
+describe("absorb attribution + damage effective semantics (adjudication #13 as amended by ruling A38, real lines)", () => {
   // Real log line: Pakoartisti attacks Envenum and Vierforfear's shield absorbs
   // 21986 (spell form, 22 fields)
   const ABS_SPELL =
@@ -209,13 +209,15 @@ describe("absorb attribution + damage effective semantics (adjudication #13, rea
   const ABS_SWING =
     'SPELL_ABSORBED,Player-1-ATK,"Atk-X",0x548,0x80000000,Player-2-VIC,"Vic-Y",0x10512,0x80000000,Player-3-OWN,"Own-Z",0x511,0x80000000,17,"Power Word: Shield",0x2,814,4755,nil';
   // Damage line carrying an absorbed field: amount=100, overkill=-1,
-  // absorbed=30 → legacy eff = -(100-0-30) = -70
+  // absorbed=30. `amount` is already net of the absorb, so the health lost is
+  // 100 — the old rule subtracted the 30 again (-70).
   const DMG_ABS =
     'SPELL_DAMAGE,Player-1-ATK,"Atk-X",0x548,0x80000000,Player-2-VIC,"Vic-Y",0x10512,0x80000000,50622,"Bladestorm",0x1,Player-2-VIC,0000000000000000,900,1000,0,0,0,0,0,0,0,100,100,0,1.0,-1.0,0,1.0,70,100,120,-1,1,0,0,30,nil,nil,nil';
 
   const { matches } = parseLines([
     "ARENA_MATCH_START,1825,41,3v3,1",
     CI("Player-1-ATK", 0, 71, 2000),
+    CI("Player-2-VIC", 1, 257, 2380),
     DMG_ABS,
     ABS_SPELL,
     ABS_SWING,
@@ -256,12 +258,31 @@ describe("absorb attribution + damage effective semantics (adjudication #13, rea
     ]);
   });
 
-  it("legacy damage effectiveAmount subtracts the absorbed param: -(100-0-30) = -70", () => {
+  it("damage effectiveAmount is the health lost (amount − overkill); the absorbed param is NOT subtracted again (ruling A38)", () => {
     const dmg = atk.damageOut.filter(
       (e) => e.logLine.event === LogEvent.SPELL_DAMAGE,
     );
-    expect(dmg[0]!.effectiveAmount).toBe(-70);
+    expect(dmg[0]!.effectiveAmount).toBe(-100);
     expect(dmg[0]!.amount).toBe(-100);
+    // The victim's intake reads the same event the same way.
+    const vicIn = legacy.units["Player-2-VIC"]!.damageIn.filter(
+      (e) => e.logLine.event === LogEvent.SPELL_DAMAGE,
+    );
+    expect(vicIn[0]!.effectiveAmount).toBe(-100);
+  });
+
+  it("overkill is still removed: a 100 hit with 40 overkill and 30 absorbed lost 60 health", () => {
+    const OVERKILL = DMG_ABS.replace(",100,120,-1,1,0,0,30,", ",100,120,40,1,0,0,30,");
+    expect(OVERKILL).not.toBe(DMG_ABS);
+    const { matches: m2 } = parseLines([
+      "ARENA_MATCH_START,1825,41,3v3,1",
+      CI("Player-1-ATK", 0, 71, 2000),
+      OVERKILL,
+      "ARENA_MATCH_END,0,30,1500,1501",
+    ]);
+    const row = toLegacyMatch(m2[0]!).units["Player-1-ATK"]!.damageOut[0]!;
+    expect(row.effectiveAmount).toBe(-60);
+    expect(row.overkill).toBe(40);
   });
 });
 

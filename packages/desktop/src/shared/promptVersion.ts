@@ -636,5 +636,15 @@
  *  external); KILL ATTEMPTS rows 29,055 -> 28,115 with the target changed in
  *  117 rounds, burst-ledger `Target:` changed on 314 owner files; Off-target,
  *  [KILL WINDOW] and [VULNERABLE] damage follow.
+ *  v260 (2026-10-01, triage missed-cleanse F-C2, ruling A38 = A — reverses
+ *  adjudication #13): a damage event's effectiveAmount is the health it
+ *  removed, `amount − overkill`. The log's `amount` is already net of the
+ *  absorb; subtracting `absorbed` again under-read every partly absorbed hit
+ *  (25.9 % of player hits; +6.96 % overall, up to +19 % for specs with their
+ *  own shields) and gave hits with absorbed > amount the wrong sign. Every
+ *  damage reading moves. 605 files: menu +22 / -17 (cd-hoarded +19 -5,
+ *  slow-defensive-response +1, position-mistake +2, missed-cleanse -6,
+ *  questionable-external -6), 683 fact-only changes, KILL ATTEMPTS outcome
+ *  flips in 219 rounds (healed through 4,479 -> 3,954).
  */
-export const PROMPT_VERSION = 259;
+export const PROMPT_VERSION = 260;
