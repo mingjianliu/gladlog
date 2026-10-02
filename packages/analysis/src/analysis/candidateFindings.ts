@@ -191,7 +191,9 @@ import { fmtFactTime } from "./factFormat";
 import {
   kickIsHarmless,
   type KickPressure,
+  KICK_CAP_EXEMPT_MAX_TIER,
   kickPressureFor,
+  kickPressureTier,
   type KickSidePressure,
 } from "./kickPressure";
 import { majorWallIntervals } from "./stackedDefensives";
@@ -767,6 +769,26 @@ export function candidateAnchorEndS(e: CandidateEvent): number {
 const MISSED_CLEANSE_CAP = 2;
 const MISSED_PURGE_CAP = 2;
 const KICK_EATEN_CAP = 2;
+/** kick-eaten's second pool (triage 2026-09-29 F-K12a). Ruling A34
+ * (2026-09-30) took kicks with a death or a crisis-HP fact out of the cap
+ * above; uncapped, that put up to 11 kick-eaten lines into one round (605
+ * files: 30 % of the rounds with a kick-eaten line went past 2). User ruling
+ * 2026-10-01: "豁免条目另设上限:每回合常规 2 条 + 死亡/危机豁免最多 2 条
+ * (共 ≤4),按压力排序". It is the EXEMPTION that is capped: the first two
+ * death / crisis-HP kicks in the menu order do not count toward
+ * `KICK_EATEN_CAP`; a third one is an ordinary kick again and competes for
+ * the regular two, where the pressure order still puts it ahead of a
+ * burst-only kick of the same coachability rank.
+ *
+ * 605-file capture (1,270 rounds, 3,520 owner menus), before -> after:
+ * kick-eaten 1,450 -> 1,850 lines, 18.7 % -> 22.7 % of menu entries
+ * (missed-cleanse + missed-purge 5.7 % -> 5.4 %); of the 913 owner-rounds
+ * with a kick-eaten line, 537 (59 %) sat exactly at the cap before; after,
+ * 269 list two, 139 three and 130 four, never more. The other reading —
+ * drop every death / crisis kick past the second — gives 22.5 % but removes
+ * 8 crisis-HP kicks the menu listed BEFORE this entry, with regular slots
+ * left empty; measured and rejected. */
+const KICK_EATEN_EXEMPT_CAP = 2;
 
 /** Single-source predicate (CLAUDE.md shared-predicate rule): the
  * candidate-menu types this repo has repeatedly measured the SELECTION layer
@@ -1458,6 +1480,20 @@ export function kickEatenEvents(
       p: pressure?.(k),
     }))
     .filter(({ p }) => !p || !kickIsHarmless(p));
+  // Ruling A34 (2026-09-30, triage F-K12a): inside a coachability tier the
+  // kicks are ordered by what was at stake (`kickPressureTier`: death, then
+  // crisis HP, then a burst running, then only a burst ready), then by time —
+  // the cap used to keep the EARLIEST two, so a kick with a teammate at 38 %
+  // lost to two earlier burst-only kicks (eb8041ce @87.6). And a kick with a
+  // death or a crisis-HP fact does not count toward that cap — for the first
+  // `KICK_EATEN_EXEMPT_CAP` of them (user ruling 2026-10-01); past that it
+  // counts like any other kick, so a round lists at most 2 + 2. Without the
+  // pressure closure (hand-built fixtures) every kick is tier 2: the old
+  // order, the old cap.
+  const tierOf = (p: KickPressure | undefined) =>
+    p ? kickPressureTier(p) : 2;
+  let capped = 0;
+  let exempt = 0;
   return withPresses
     .sort(
       (a, b) =>
@@ -1466,9 +1502,19 @@ export function kickEatenEvents(
         // ordering and the field it reads must not be able to drift apart.
         postKickSeverityRank(a.k, a.rejected.length) -
           postKickSeverityRank(b.k, b.rejected.length) ||
+        tierOf(a.p) - tierOf(b.p) ||
         a.k.atSeconds - b.k.atSeconds,
     )
-    .slice(0, KICK_EATEN_CAP)
+    .filter(({ p }) => {
+      if (
+        tierOf(p) <= KICK_CAP_EXEMPT_MAX_TIER &&
+        exempt < KICK_EATEN_EXEMPT_CAP
+      ) {
+        exempt++;
+        return true;
+      }
+      return capped++ < KICK_EATEN_CAP;
+    })
     .map(({ k, pressed, p }) => ({
       id: `kick-eaten:${owner.id}:${Math.round(k.atSeconds)}`,
       type: "kick-eaten",
@@ -1713,12 +1759,29 @@ export function ownerKickEatenEvents(
     friends: any[];
     enemies: any[];
     rawStreams?: RawStreams;
+    /** `playableEndMs(combat, units)`: kicks after it are dropped BEFORE the
+     * sort and the cap. The menu cuts every candidate past the playable end
+     * anyway (a Solo Shuffle round's ending death, a 3v3's deciding death),
+     * but it does so after this builder — so kicks from the unplayed tail
+     * took the cap's slots and were then removed with nothing in their
+     * place. The pressure order made that the common case: the 2v3 after a
+     * deciding death is all deaths and crisis HP (triage F-K12a, found by
+     * the pre-review of the batch: kicks at 30 / 50 and three after the
+     * deciding death listed only `[30]`). Absent = no cut (the per-kick scan
+     * asks about every kick). */
+    playableEndMs?: number;
   },
   instances: Parameters<typeof kickEatenEvents>[0],
 ): CandidateEvent[] {
   const { combat, owner, friends, enemies, rawStreams } = ctx;
+  // the menu's own comparison (`afterShuffleRoundEnd`, the 3v3 cut): an event
+  // is after the end when its `t` is greater than the end's second
+  const endS =
+    ctx.playableEndMs === undefined
+      ? Infinity
+      : (ctx.playableEndMs - combat.startTime) / 1000;
   return kickEatenEvents(
-    instances,
+    instances.filter((k) => !(k.atSeconds > endS)),
     owner,
     {
       rawStreams,
@@ -3121,7 +3184,14 @@ function teamPlayEvents(
     // (旧版本缓存从不被读取,渲染也不调产出函数)。
     out.push(
       ...ownerKickEatenEvents(
-        { combat, owner, friends, enemies, rawStreams },
+        {
+          combat,
+          owner,
+          friends,
+          enemies,
+          rawStreams,
+          playableEndMs: playableEndMs(combat, units),
+        },
         cc.interruptInstances,
       ),
     );

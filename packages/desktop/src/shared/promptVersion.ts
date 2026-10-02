@@ -604,5 +604,11 @@
  *  override and the Offensive tag are gone (12.x: 2 charges / 30 s, a damage
  *  button with no aura), so it opens no `[ENEMY CD]` / `[OFFENSIVE WINDOW]`
  *  / `enemyBurst` any more and leaves the Frost Death Knight ledger.
+ *  v256 (2026-10-01): triage kick-eaten F-K12a (ruling A34, and the user's
+ *  2026-10-01 ruling on the exempt pool). Inside a coachability tier the cap
+ *  orders kicks by pressure (death, crisis HP, burst running, burst ready),
+ *  then time; kicks with a death or a crisis-HP fact do not count toward
+ *  KICK_EATEN_CAP and have a cap of their own (2), so a round lists at most
+ *  2 + 2 kick-eaten lines.
  */
-export const PROMPT_VERSION = 255;
+export const PROMPT_VERSION = 256;

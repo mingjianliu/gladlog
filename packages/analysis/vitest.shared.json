@@ -151,6 +151,7 @@
     "test/immunityTables.test.ts",
     "test/incomingPressure.test.ts",
     "test/interruptReadySince.test.ts",
+    "test/kickEatenPlayableEnd.test.ts",
     "test/kickLockout.test.ts",
     "test/kickPressure.test.ts",
     "test/killAttempts.test.ts",

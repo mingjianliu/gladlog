@@ -88,6 +88,30 @@ export function kickIsHarmless(p: KickPressure): boolean {
   );
 }
 
+/**
+ * How much was at stake while the kick had the school locked — lower sorts
+ * first. One predicate over the fields the facts print (`kickPressureFacts`),
+ * for kick-eaten's cap (triage 2026-09-29 F-K12a, user ruling A34,
+ * 2026-09-30):
+ *   0  a death on either side (`*DeathUnit`)
+ *   1  a unit at the crisis line on either side (`*LowUnit`)
+ *   2  an offensive cooldown running against either side, nothing else
+ *   3  only a burst of ours ready (`burstReady`)
+ * A kick with none of these is harmless and never reaches the cap.
+ */
+export function kickPressureTier(p: KickPressure): 0 | 1 | 2 | 3 {
+  if (p.ours.death !== undefined || p.theirs.death !== undefined) return 0;
+  if (p.ours.low !== undefined || p.theirs.low !== undefined) return 1;
+  if (p.ours.burstAgainst.length > 0 || p.theirs.burstAgainst.length > 0)
+    return 2;
+  return 3;
+}
+
+/** Tiers the regular per-round cap may leave uncounted: a kick with a death
+ * or a crisis-HP fact (ruling A34's exemption; since 2026-10-01 only the
+ * first `KICK_EATEN_EXEMPT_CAP` of them per round). */
+export const KICK_CAP_EXEMPT_MAX_TIER = 1;
+
 export function kickPressureFor(params: {
   combat: AtomicArenaCombat;
   owner: ICombatUnit;

@@ -1805,6 +1805,129 @@ describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
     expect(f).toContain("pressed 1x but rejected (Hammer of Justice +2.3s) inside the lockout");
   });
 
+  // Triage 2026-09-29 F-K12a, user rulings A34 (2026-09-30) and the exempt
+  // pool's own cap (2026-10-01).
+  describe("kick-eaten: the cap orders by pressure; the first two death / crisis-HP kicks do not count toward it", () => {
+    const calm = { burstAgainst: [] as string[] };
+    const burstOnly = {
+      ours: { burstAgainst: ["Bestial Wrath"] },
+      theirs: calm,
+      burstReady: [],
+    };
+    const lowHp = {
+      ours: {
+        low: { unit: "Mate", pct: 38, atSec: 87 },
+        burstAgainst: ["Bloodlust"],
+      },
+      theirs: calm,
+      burstReady: [],
+    };
+    const death = {
+      ours: { death: { unit: "Mate", atSec: 140.2 }, burstAgainst: [] },
+      theirs: calm,
+      burstReady: [],
+    };
+    const readyOnly = { ours: calm, theirs: calm, burstReady: ["Combustion"] };
+    const acted = (atSeconds: number) =>
+      kickInst({ atSeconds, postKick: "acted", firstActionDelayS: 4.1 });
+    const menu = (
+      kicks: Array<[number, typeof burstOnly | typeof lowHp | typeof death | typeof readyOnly]>,
+    ) =>
+      kickEatenEvents(
+        kicks.map(([t]) => acted(t)),
+        { id: "P1", name: "Me" },
+        undefined,
+        undefined,
+        (k) => kicks.find(([t]) => t === k.atSeconds)![1] as never,
+      ).map((e) => e.t);
+
+    it("a crisis-HP kick is listed on top of the two capped ones (eb8041ce: 87.6 enters, nothing leaves)", () => {
+      expect(
+        menu([
+          [10, burstOnly],
+          [25.2, burstOnly],
+          [87.6, lowHp],
+        ]),
+      ).toEqual([87.6, 10, 25.2]);
+    });
+
+    it("exempt kicks do not count toward the regular two: three burst-only kicks still keep the earliest two", () => {
+      expect(
+        menu([
+          [10, burstOnly],
+          [25, burstOnly],
+          [40, burstOnly],
+          [60, death],
+          [87, lowHp],
+        ]),
+      ).toEqual([60, 87, 10, 25]);
+    });
+
+    it("only two kicks are exempt: a third death / crisis kick competes for the regular two, ahead of burst-only kicks (user ruling 2026-10-01: at most 2 + 2)", () => {
+      expect(
+        menu([
+          [10, lowHp],
+          [20, lowHp],
+          [30, burstOnly],
+          [40, lowHp],
+          [50, death],
+          [60, burstOnly],
+          [70, burstOnly],
+        ]),
+      ).toEqual([50, 10, 20, 40]);
+    });
+
+    it("a round never lists more than four, and a kick the old cap kept is not lost to the exemption cap (crisis kicks at 10 / 20 stay next to a later death)", () => {
+      expect(
+        menu([
+          [10, lowHp],
+          [20, lowHp],
+          [50, death],
+        ]),
+      ).toEqual([50, 10, 20]);
+      expect(
+        menu([
+          [10, lowHp],
+          [20, lowHp],
+          [40, lowHp],
+          [50, lowHp],
+          [55, lowHp],
+          [60, burstOnly],
+        ]),
+      ).toEqual([10, 20, 40, 50]);
+    });
+
+    it("inside the cap a burst-running kick outranks a ready-burst-only one, whatever the time (dfcccbf2: 79.3 loses to 137.6)", () => {
+      expect(
+        menu([
+          [79.3, readyOnly],
+          [137.6, burstOnly],
+          [150.8, burstOnly],
+        ]),
+      ).toEqual([137.6, 150.8]);
+    });
+
+    it("the coachability rank still sorts first: an idle burst-only kick precedes an acted crisis kick, and both are listed", () => {
+      const evts = kickEatenEvents(
+        [acted(10), kickInst({ atSeconds: 50 }), acted(30), acted(70)],
+        { id: "P1", name: "Me" },
+        undefined,
+        undefined,
+        (k) => (k.atSeconds === 70 ? lowHp : burstOnly) as never,
+      );
+      expect(evts.map((e) => e.t)).toEqual([50, 70, 10]);
+    });
+
+    it("without the pressure closure the old order and cap stand", () => {
+      expect(
+        kickEatenEvents([acted(30), acted(10), acted(20)], {
+          id: "P1",
+          name: "Me",
+        }).map((e) => e.t),
+      ).toEqual([10, 20]);
+    });
+  });
+
   // Triage 2026-09-29 F-K10a, user ruling A35 (0.5 s window, fact only).
   it("kick-eaten: a cast the owner stopped just before the kicked one is a fact (5e8b11c1 @157.3, 2c6e85ec @15.0)", () => {
     const cancelsOf = (startS: number, cancelS: number) => ({

@@ -12,8 +12,8 @@
  * Per row: file, round index and start, owner (name / spec / whether this
  * owner recorded the log — only the recorder has SPELL_CAST_FAILED), the
  * instance's classification fields, `facts` (null = harmless, not listed in
- * any case), `listed` (kept by `kickEatenEvents`' own sort and cap — the
- * final menu also drops events after the round's playable end) and
+ * any case), `listed` (on the product's menu: before the round's playable
+ * end and kept by `kickEatenEvents`' sort and cap) and
  * `lockout` / `lockEndedBySuccessS` and `rejects` (the owner's raw rejected
  * presses after the kick: offset, spell, not-ready reason, dropped as a key
  * repeat), and
@@ -36,6 +36,7 @@ import {
   analyzePlayerCCAndTrinket,
   ensureAnalysisData,
   ownerKickEatenEvents,
+  playableEndMs,
   specToString,
 } from "@gladlog/analysis";
 import {
@@ -124,8 +125,20 @@ for (const f of files) {
         );
         if (cc.interruptInstances.length === 0) continue;
         const ctx = { combat: legacy, owner, friends, enemies, rawStreams };
+        // `listed` = the product's own call: kicks past the playable end are
+        // dropped before the sort and the cap (the per-kick call below keeps
+        // them, so every kick still has its line)
         const menuIds = new Set(
-          ownerKickEatenEvents(ctx, cc.interruptInstances).map((e) => e.id),
+          ownerKickEatenEvents(
+            {
+              ...ctx,
+              playableEndMs: playableEndMs(
+                legacy,
+                Object.values(legacy.units) as never[],
+              ),
+            },
+            cc.interruptInstances,
+          ).map((e) => e.id),
         );
         const ownerCasts = (owner.spellCastEvents ?? []).map((e) => ({
           spellId: String(e.spellId ?? ""),
