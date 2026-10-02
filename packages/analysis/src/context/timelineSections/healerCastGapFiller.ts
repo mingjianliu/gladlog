@@ -96,6 +96,7 @@ export function emitHealerCastGapFillerEntries(
     | "formatAoeTargetPart"
     | "ownerCcImmuneTag"
     | "ownerCcMissTag"
+    | "ownerNoCcAuraTag"
     | "requestSnapshotPlaceholder"
     | "getCDTargetAndVelocityPart"
     | "manaCooldownNote"
@@ -121,6 +122,7 @@ export function emitHealerCastGapFillerEntries(
     formatAoeTargetPart,
     ownerCcImmuneTag,
     ownerCcMissTag,
+    ownerNoCcAuraTag,
     requestSnapshotPlaceholder,
     getCDTargetAndVelocityPart,
     manaCooldownNote,
@@ -510,6 +512,12 @@ export function emitHealerCastGapFillerEntries(
     if (ccSpellIds.has(e.spellId)) {
       flushFold();
       let effectiveTargetPart = targetPart;
+      // enemy-def F-E26: the units this line names, for the IMMUNE tag (the
+      // same wiring as the cooldown-ledger emitter, codex 35-CD-07)
+      const named = new Set<string>(
+        e.destUnitName && e.destUnitName !== "nil" ? [e.destUnitName] : [],
+      );
+      if (e.destUnitId) named.add(e.destUnitId);
       const matchingAoe = findAndConsumeAoeCC(
         timeSeconds,
         owner.name,
@@ -518,10 +526,16 @@ export function emitHealerCastGapFillerEntries(
       );
       if (matchingAoe) {
         effectiveTargetPart = formatAoeTargetPart(matchingAoe, targetPart);
+        for (const t of matchingAoe.targets) named.add(t.name);
       }
+      // cc-dr F-NE1: no aura and no miss on the aimed target
+      const failTags =
+        ownerCcImmuneTag(e.spellId, timeSeconds, named) +
+        ownerCcMissTag(e.spellId, timeSeconds);
+      const ccNote = failTags || ownerNoCcAuraTag(e.spellId, timeSeconds);
       addEntry(
         timeSeconds,
-        `${fmtTime(timeSeconds)}  [YOU] [CC]   ${displayName}${effectiveTargetPart}${totemNote}${orderNote}${purgeNote}${ownerCcImmuneTag(e.spellId, timeSeconds)}${ownerCcMissTag(e.spellId, timeSeconds)}`,
+        `${fmtTime(timeSeconds)}  [YOU] [CC]   ${displayName}${effectiveTargetPart}${totemNote}${orderNote}${purgeNote}${ccNote}`,
         requestSnapshotPlaceholder(timeSeconds),
       );
       continue;

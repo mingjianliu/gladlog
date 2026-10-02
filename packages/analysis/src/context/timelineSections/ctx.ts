@@ -96,10 +96,21 @@ export interface TimelineCtx {
   // ── closure helpers ──
   /** friendly player name -> short id (+ spec tag) */
   pid: (name: string) => string;
+  /** friendly player name -> short id (+ spec tag); undefined for a name that
+   * is no friendly player (crisis-external F-T1) */
+  friendlyPid: (name: string) => string | undefined;
   /** enemy player name -> short id (+ spec tag) */
   enemyPid: (name: string) => string;
   outgoingDrTag: (spellId: string, cast: { timeSeconds: number }) => string;
+  /** `named`: the unit names the line names (enemy-def F-E26) */
   ccImmuneTagFor: (
+    unit: ICombatUnit,
+    spellId: string,
+    castTimeSeconds: number,
+    named?: ReadonlySet<string>,
+  ) => string;
+  /** cc-dr F-TM1: MISS / REFLECT / … on that caster's CC cast */
+  ccMissTagFor: (
     unit: ICombatUnit,
     spellId: string,
     castTimeSeconds: number,
@@ -121,8 +132,15 @@ export interface TimelineCtx {
     castSeconds: number,
   ) => string;
   resolveTarget: (destUnitName: string | null | undefined) => string;
-  ownerCcImmuneTag: (spellId: string, castTimeSeconds: number) => string;
+  ownerCcImmuneTag: (
+    spellId: string,
+    castTimeSeconds: number,
+    named?: ReadonlySet<string>,
+  ) => string;
   ownerCcMissTag: (spellId: string, castTimeSeconds: number) => string;
+  /** cc-dr F-NE1: ` [no CC aura logged]` for an aimed owner CC with no aura
+   * and no miss on its target (shared by both owner-CC emitters) */
+  ownerNoCcAuraTag: (spellId: string, castTimeSeconds: number) => string;
   ownerEmpowerTag: (spellId: string, castTimeSeconds: number) => string;
   getCDTargetAndVelocityPart: (
     spellId: string,

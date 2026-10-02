@@ -9,6 +9,7 @@ import { type BurstWindowDecisionPoint } from "../analysis/burstWindowDecisionPo
 import type { CdPriorHoldEpisode } from "../analysis/cdTriggerPrior";
 import type { StackedDefensivePair } from "../analysis/stackedDefensives";
 import { BACKLASH_AURA_CC_TYPE } from "../data/backlashCc";
+import { castAndEffectIds } from "../data/castEffectAuras";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { ccSpellIds } from "../data/spellTags";
 import { DEATH_WINDOW_S, TIMELINE_LINE_FLAGS } from "../data/timelineLineFlags";
@@ -630,6 +631,16 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   }
 
   /** Returns the short numeric ID for an *enemy* player name, falling back to name. */
+  /** crisis-external F-T1: the friendly player's pid, or undefined for a name
+   * that is no friendly player (a pet, an NPC, an enemy) — `pid` falls back
+   * to the raw name and cannot tell. `playerIdMap` holds the friendly
+   * players, owner included. */
+  function friendlyPid(name: string): string | undefined {
+    if (!playerIdMap) return undefined;
+    const id = playerIdMap.get(name) ?? playerIdMap.get(name.split("-")[0]);
+    return id !== undefined ? `${id}${tagFor(name)}` : undefined;
+  }
+
   function enemyPid(name: string): string {
     if (!enemyIdMap) return name.split("-")[0];
     const id = enemyIdMap.get(name) ?? enemyIdMap.get(name.split("-")[0]);
@@ -789,16 +800,35 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   }
 
   const consumedImmuneMisses = new Set<unknown>();
-  function ownerCcImmuneTag(spellId: string, castTimeSeconds: number): string {
-    return ccImmuneTagFor(owner, spellId, castTimeSeconds);
+  function ownerCcImmuneTag(
+    spellId: string,
+    castTimeSeconds: number,
+    named?: ReadonlySet<string>,
+  ): string {
+    return ccImmuneTagFor(owner, spellId, castTimeSeconds, named);
   }
   // Reliability round 3 N10 (483f): a teammate's Storm Bolt the game rejected
   // as IMMUNE rendered as a plain [TEAM] [CC] cast — same predicate as the
   // owner's tag, read from that unit's own SPELL_MISSED stream.
+  //
+  // Triage 2026-09-29 G3:
+  //  - enemy-def F-E25b: a miss is the cast's when its id is the cast's own or
+  //    one of the cast's effect auras (`castAndEffectIds`, the one cast→effect
+  //    table): Storm Bolt's IMMUNE is logged under its stun 132169, Freezing
+  //    Trap's under 3355 / 203337, Maim's under 203123.
+  //  - enemy-def F-E26: `named` = the unit names the line names (its target,
+  //    plus an AoE fold's landed targets). On such a line a miss on a named
+  //    target is the line's own `[IMMUNE]`; a miss on a PLAYER the line does
+  //    not name is said with that player's label (`[IMMUNE: 6(UDKnight)]` —
+  //    d692582c's Leg Sweep landed on the named priest and was immune only on
+  //    the Death Knight); a miss on anything else says nothing (its
+  //    Intimidating Shout was immune only on summons and a pet). Without
+  //    `named` (a line that names no one) the rule is as before.
   function ccImmuneTagFor(
     unit: ICombatUnit,
     spellId: string,
     castTimeSeconds: number,
+    named?: ReadonlySet<string>,
   ): string {
     const misses = unit.missesOut;
     if (!misses || misses.length === 0) return "";
@@ -819,14 +849,40 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     const counts = (destId: string | undefined) =>
       !!destId &&
       (destId === aimedAt || allPlayers.some((p) => p.id === destId));
-    const miss = misses.find(
+    const family = castAndEffectIds(spellId);
+    const candidates = misses.filter(
       (m) =>
         m.missType === "IMMUNE" &&
-        m.spellId === spellId &&
+        m.spellId !== undefined &&
+        family.has(m.spellId) &&
         counts(m.destUnitId) &&
         !consumedImmuneMisses.has(m) &&
         missBelongsToCast(unit, spellId, castMs, m.timestamp),
     );
+    let miss: (typeof candidates)[number] | undefined = candidates[0];
+    let unnamedLabel = "";
+    if (miss && named && named.size > 0) {
+      // `named` holds the line's unit names and/or ids: a miss's dest name
+      // need not spell the roster's (realm suffix), its id does
+      const onNamed = candidates.find(
+        (m) =>
+          (!!m.destUnitName && named.has(m.destUnitName)) ||
+          (!!m.destUnitId && named.has(m.destUnitId)),
+      );
+      const onPlayer = candidates.find((m) =>
+        allPlayers.some((p) => p.id === m.destUnitId),
+      );
+      miss = onNamed ?? onPlayer;
+      if (!onNamed && onPlayer) {
+        // the roster label, resolved by id on the player's own side (a bare
+        // character name never prints — 605: `[IMMUNE: Mashiyyds]`)
+        const pl = allPlayers.find((p) => p.id === onPlayer.destUnitId)!;
+        unnamedLabel =
+          pl.reaction === CombatUnitReaction.Friendly
+            ? pid(pl.name)
+            : enemyPid(pl.name);
+      }
+    }
     if (!miss) return "";
     consumedImmuneMisses.add(miss);
 
@@ -855,7 +911,8 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       }
       immunityName = [...active.values()][0] ?? "";
     }
-    return immunityName ? ` [IMMUNE — ${immunityName} was up]` : " [IMMUNE]";
+    const word = unnamedLabel ? `IMMUNE: ${unnamedLabel}` : "IMMUNE";
+    return immunityName ? ` [${word} — ${immunityName} was up]` : ` [${word}]`;
   }
 
   /**
@@ -883,17 +940,70 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   };
   const consumedCcMisses = new Set<unknown>();
   function ownerCcMissTag(spellId: string, castTimeSeconds: number): string {
-    const misses = owner.missesOut;
+    return ccMissTagFor(owner, spellId, castTimeSeconds);
+  }
+  // cc-dr F-NE1 (codex 35-CD-07: one helper for both owner-CC emitters —
+  // the cooldown ledger (ownerCd) and the cast gap-filler): the owner and
+  // the owner's summons (a Hunter's pet applies
+  // Intimidation's stun) — whose aura on the target counts as the cast's
+  const ownCcSources = new Set<string>([
+    owner.id,
+    ...(allUnits ?? []).filter((u) => u.ownerId === owner.id).map((u) => u.id),
+  ]);
+  function ownerNoCcAuraTag(spellId: string, castTimeSeconds: number): string {
+    const castMs = matchStartMs + castTimeSeconds * 1000;
+    const ev = owner.spellCastEvents.find(
+      (e) =>
+        e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+        e.spellId === spellId &&
+        Math.abs(e.logLine.timestamp - castMs) <= 1,
+    );
+    // an aimed cast at an enemy player only — a ground / untargeted cast has
+    // no unit to read
+    const dest = ev && (enemies ?? []).find((u) => u.id === ev.destUnitId);
+    if (!ev || !dest) return "";
+    const t0 = ev.logLine.timestamp;
+    const inWindow = (ms: number) => ms >= t0 - 100 && ms <= t0 + 2500;
+    const own = castAndEffectIds(spellId);
+    const landed = (dest.auraEvents ?? []).some(
+      (x) =>
+        ownCcSources.has(x.srcUnitId) &&
+        x.spellId !== undefined &&
+        (ccSpellIds.has(x.spellId) || own.has(x.spellId)) &&
+        (x.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
+          x.logLine.event === LogEvent.SPELL_AURA_REFRESH) &&
+        inWindow(x.timestamp),
+    );
+    if (landed) return "";
+    const missed = (owner.missesOut ?? []).some(
+      (m) => m.destUnitId === dest.id && inWindow(m.timestamp),
+    );
+    return missed ? "" : " [no CC aura logged]";
+  }
+
+  // cc-dr F-TM1 (ruling A53, 2026-09-30): the same tag on a teammate's
+  // `[TEAM] [CC]` line, from that unit's own SPELL_MISSED stream, with the
+  // cause looked up for that caster. A miss's id is the cast's own or one of
+  // its effect auras (F-E25b: Maim's MISS logged under its stun 203123).
+  // IMMUNE never comes here — `ccImmuneTagFor` owns it.
+  function ccMissTagFor(
+    unit: ICombatUnit,
+    spellId: string,
+    castTimeSeconds: number,
+  ): string {
+    const misses = unit.missesOut;
     if (!misses || misses.length === 0) return "";
     const castMs = matchStartMs + castTimeSeconds * 1000;
+    const family = castAndEffectIds(spellId);
     const parts: string[] = [];
     for (const m of misses) {
       const word = m.missType ? OWNER_CC_MISS_WORD[m.missType] : undefined;
       if (
         !word ||
-        m.spellId !== spellId ||
+        m.spellId === undefined ||
+        !family.has(m.spellId) ||
         consumedCcMisses.has(m) ||
-        !missBelongsToCast(owner, spellId, castMs, m.timestamp)
+        !missBelongsToCast(unit, spellId, castMs, m.timestamp)
       )
         continue;
       consumedCcMisses.add(m);
@@ -908,7 +1018,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
         ?.find((x) => x.playerName === m.destUnitName)
         ?.ccAvoidedInstances?.find(
           (a) =>
-            a.sourceName === owner.name &&
+            a.sourceName === unit.name &&
             a.spellId === spellId &&
             Math.abs(a.atSeconds - castTimeSeconds) < 0.01,
         );
@@ -919,7 +1029,10 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
           : ` [${word} ${who}${cause}]`,
       );
     }
-    return parts.join("");
+    // one cast can log the same failure twice — under its cast id and its
+    // effect id (95127ab4: Maim 22570 and its stun 203123, 4 ms apart): say
+    // it once
+    return [...new Set(parts)].join("");
   }
 
   /**
@@ -1543,6 +1656,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     outgoingDrTag,
     ownerCcImmuneTag,
     ownerCcMissTag,
+    ownerNoCcAuraTag,
     ownerEmpowerTag,
     groundingAbsorbNote,
     params,
@@ -1583,6 +1697,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       formatAoeTargetPart,
       ownerCcImmuneTag,
       ownerCcMissTag,
+    ownerNoCcAuraTag,
       requestSnapshotPlaceholder,
       getCDTargetAndVelocityPart,
       manaCooldownNote,
@@ -1602,7 +1717,9 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     findAndConsumeAoeCC,
     formatAoeTargetPart,
     pid,
+    friendlyPid,
     ccImmuneTagFor,
+    ccMissTagFor,
     addEntry,
     requestSnapshotPlaceholder,
     matchStartMs,

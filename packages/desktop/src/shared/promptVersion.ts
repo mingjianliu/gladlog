@@ -717,5 +717,14 @@
  *  control-cast sets of the crisis and burst-window decision points, the
  *  aura-interval rebroadcast test — now also know Storm Bolt → 132169,
  *  Freezing Trap → 203337 (Diamond Ice) and the other verified pairs.
+ *  v271 (2026-10-02, triage G3 timeline tags: enemy-def F-E25b / F-E25a /
+ *  F-E26, cc-dr F-TM1 (A53) / F-NE1 (A55), crisis-external F-T1): an IMMUNE
+ *  / MISS logged under a cast's effect id tags the cast; a line that names
+ *  its targets says `[IMMUNE: <pid>]` for an immune player it does not name
+ *  and nothing for an unnamed non-player; a non-CC hostile press into an
+ *  immunity is tagged; a teammate's CC that missed says `[MISSED on …]`; a
+ *  teammate's ally-reaching press on another friendly names it (` →
+ *  <pid>`); an aimed owner CC with no aura and no miss says `[no CC aura
+ *  logged]`.
  */
-export const PROMPT_VERSION = 270;
+export const PROMPT_VERSION = 271;

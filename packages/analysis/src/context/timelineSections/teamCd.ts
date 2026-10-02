@@ -2,11 +2,19 @@
  * [TEAM] [CD] — teammates' major cooldown presses (and proc-only activations as
  * [PROC]), with target, HP, AoE CC folding and CC-immune tags.
  *
+ * Triage 2026-09-29 G3 (one template, CROSS-THEME §3): the non-CC line names
+ * the recipient when it is another friendly player (crisis-external F-T1) and
+ * carries the IMMUNE tag like the CC line (enemy-def F-E25a: a Freezing Trap
+ * or a disarm into an immunity); the CC line adds the MISS / REFLECT tag after
+ * the IMMUNE one (cc-dr F-TM1), and both tags read only the units the line
+ * names (enemy-def F-E26).
+ *
  * Cut out of buildMatchTimeline verbatim (GH #116); the body is unchanged, only
  * its closure inputs now arrive through `ctx`. `procLinesEmitted` is threaded:
  * the caller passes its current value and assigns back the returned one. Output
  * is pinned by the 605-file acceptanceCapture context hash.
  */
+import { reachesAlly } from "../../data/spellTargeting";
 import { ccSpellIds } from "../../data/spellTags";
 import {
   cdIsProcOnly,
@@ -27,7 +35,9 @@ export function emitTeamCdEntries(
     | "findAndConsumeAoeCC"
     | "formatAoeTargetPart"
     | "pid"
+    | "friendlyPid"
     | "ccImmuneTagFor"
+    | "ccMissTagFor"
     | "addEntry"
     | "requestSnapshotPlaceholder"
     | "matchStartMs"
@@ -40,7 +50,9 @@ export function emitTeamCdEntries(
     findAndConsumeAoeCC,
     formatAoeTargetPart,
     pid,
+    friendlyPid,
     ccImmuneTagFor,
+    ccMissTagFor,
     addEntry,
     requestSnapshotPlaceholder,
     matchStartMs,
@@ -73,8 +85,12 @@ export function emitTeamCdEntries(
 
         // B112(a): "[TEAM] [CC] N (Spec): X" was misread as teammate N BEING CC'd. It is actually N
         // CASTING an offensive CC on an enemy — render it in active voice ("cast") with the enemy
-        // target so the caster is never confused with the victim. [TEAM] [CD] (buffs/defensives on
-        // self) keeps the ": X" form.
+        // target so the caster is never confused with the victim. [TEAM] [CD] keeps the ": X" form,
+        // with ` → <pid>` when it went to another friendly player (F-T1).
+        // The units this line names, for the tags (F-E26).
+        const named = new Set<string>(
+          cast.targetName && cast.targetName !== "nil" ? [cast.targetName] : [],
+        );
         let line: string;
         if (isCC) {
           const tgtLabel =
@@ -96,10 +112,32 @@ export function emitTeamCdEntries(
           );
           if (matchingAoe) {
             effectiveTgt = formatAoeTargetPart(matchingAoe, tgt);
+            for (const t of matchingAoe.targets) named.add(t.name);
           }
-          line = `${fmtTime(cast.timeSeconds)}  [TEAM] [CC]   ${pid(player.name)} (${spec}) cast ${cd.spellName}${effectiveTgt}${groundingNote}${ccImmuneTagFor(player, cd.spellId, cast.timeSeconds)}${unnecessaryNote}`;
+          line = `${fmtTime(cast.timeSeconds)}  [TEAM] [CC]   ${pid(player.name)} (${spec}) cast ${cd.spellName}${effectiveTgt}${groundingNote}${ccImmuneTagFor(player, cd.spellId, cast.timeSeconds, named)}${ccMissTagFor(player, cd.spellId, cast.timeSeconds)}${unnecessaryNote}`;
         } else {
-          line = `${fmtTime(cast.timeSeconds)}  [TEAM] ${isProc ? "[PROC]" : "[CD]"}   ${pid(player.name)} (${spec}): ${cd.spellName}${groundingNote}${unnecessaryNote}`;
+          // F-T1: another friendly player as the recipient — only for a spell
+          // that officially reaches allies (`reachesAlly`: a self-only wall
+          // such as Obsidian Scales logs the caster's current target), never
+          // the caster itself, never an unmapped name (a pet / NPC / a
+          // localized name)
+          const recipient =
+            reachesAlly(cd.spellId) &&
+            cast.targetName &&
+            cast.targetName !== "nil" &&
+            cast.targetName !== player.name
+              ? friendlyPid(cast.targetName)
+              : undefined;
+          const recipientPart = recipient ? ` → ${recipient}` : "";
+          // F-E25a: a hostile press into an immunity. A proc-only activation
+          // is not a press, and a spell that reaches allies is not aimed at
+          // the enemy its stray miss names (Mass Invisibility logs IMMUNE on
+          // enemies standing in it).
+          const immunePart =
+            isProc || reachesAlly(cd.spellId)
+              ? ""
+              : ccImmuneTagFor(player, cd.spellId, cast.timeSeconds, named);
+          line = `${fmtTime(cast.timeSeconds)}  [TEAM] ${isProc ? "[PROC]" : "[CD]"}   ${pid(player.name)} (${spec}): ${cd.spellName}${recipientPart}${groundingNote}${immunePart}${unnecessaryNote}`;
         }
         addEntry(
           cast.timeSeconds,

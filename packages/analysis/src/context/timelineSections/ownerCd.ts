@@ -11,6 +11,8 @@
  * the caller passes its current value and assigns back the returned one. Output
  * is pinned by the 605-file acceptanceCapture context hash.
  */
+
+import { reachesAlly } from "../../data/spellTargeting";
 import { ccSpellIds } from "../../data/spellTags";
 import { buffFullDurationForCaster } from "../../utils/buffDuration";
 import {
@@ -59,6 +61,7 @@ export function emitOwnerCdEntries(
     | "outgoingDrTag"
     | "ownerCcImmuneTag"
     | "ownerCcMissTag"
+    | "ownerNoCcAuraTag"
     | "ownerEmpowerTag"
     | "groundingAbsorbNote"
     | "params"
@@ -87,6 +90,7 @@ export function emitOwnerCdEntries(
     outgoingDrTag,
     ownerCcImmuneTag,
     ownerCcMissTag,
+    ownerNoCcAuraTag,
     ownerEmpowerTag,
     groundingAbsorbNote,
     params,
@@ -199,6 +203,10 @@ export function emitOwnerCdEntries(
           ? "[YOU] [CC]"
           : "[YOU] [CD]";
       let effectiveTargetPart = targetPart;
+      // enemy-def F-E26: the units this line names, for the IMMUNE tag
+      const named = new Set<string>(
+        cast.targetName && cast.targetName !== "nil" ? [cast.targetName] : [],
+      );
       if (isCC) {
         const matchingAoe = findAndConsumeAoeCC(
           cast.timeSeconds,
@@ -208,6 +216,7 @@ export function emitOwnerCdEntries(
         );
         if (matchingAoe) {
           effectiveTargetPart = formatAoeTargetPart(matchingAoe, targetPart);
+          for (const t of matchingAoe.targets) named.add(t.name);
         }
       }
       // Class F (2026-07-20 eval): [CC ON TEAM] carries [DR: category level]
@@ -216,10 +225,29 @@ export function emitOwnerCdEntries(
       // Outgoing DR is already computed (drInfo on outgoingCCChains); align the
       // rendering here.
       const outgoingDrNote = isCC ? outgoingDrTag(cd.spellId, cast) : "";
-      const immuneNote = isCC
-        ? ownerCcImmuneTag(cd.spellId, cast.timeSeconds) +
-          ownerCcMissTag(cd.spellId, cast.timeSeconds)
-        : "";
+      // enemy-def F-E25a: a non-CC press into an immunity (Grapple Weapon
+      // into Bladestorm, a Freezing Trap the roster does not class as CC) is
+      // tagged too; the MISS / REFLECT tag stays a CC tag. A proc-only
+      // activation is not a press and gets neither.
+      // (a spell that reaches allies is not aimed at an enemy — Mass
+      // Invisibility logs IMMUNE on the enemies standing in it)
+      const failTags = isProc
+        ? ""
+        : isCC
+          ? ownerCcImmuneTag(cd.spellId, cast.timeSeconds, named) +
+            ownerCcMissTag(cd.spellId, cast.timeSeconds)
+          : reachesAlly(cd.spellId)
+            ? ""
+            : ownerCcImmuneTag(cd.spellId, cast.timeSeconds, named);
+      // cc-dr F-NE1 (wording ruling A55): an aimed CC cast that left no CC
+      // aura on its target and no miss either is said to have no logged
+      // effect — an absence of evidence, never "it missed". Probe p12's rule:
+      // no CC aura (any id, or the cast's own effect auras) from the owner or
+      // the owner's summons on the target within [cast − 0.1 s, cast + 2.5 s],
+      // and no owner miss on it in that window.
+      const immuneNote =
+        failTags ||
+        (isCC && !isProc ? ownerNoCcAuraTag(cd.spellId, cast.timeSeconds) : "");
       const empowerNote = ownerEmpowerTag(cd.spellId, cast.timeSeconds);
       const groundingNote = groundingAbsorbNote(
         cd.spellId,
