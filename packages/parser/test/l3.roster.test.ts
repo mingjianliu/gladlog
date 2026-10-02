@@ -131,6 +131,38 @@ describe("SPELL_SUMMON owner linkage (adjudication #18: totems/guardians)", () =
     expect(totem.ownerId).toBe("Player-1-A");
   });
 
+  // A totem dropped before the round's first logged line has no SPELL_SUMMON
+  // in the round; its own advanced blocks still name the owner.
+  const TOTEM = "Creature-0-1-1-1-61245-0001";
+  const totemHit = (owner: string, i: number) =>
+    L(
+      `SPELL_DAMAGE,${TOTEM},"Capacitor Totem",0x2148,0x80000000,Player-1-B,"Bob-X",0x548,0x80000000,118905,"Static Charge",0x8,${TOTEM},${owner},100,100,0,0,0,-1,0,0,0,0.00,0.00,0,0.0000,0,50,50,-1,8,0,0,0,nil,nil,nil`,
+      i,
+    );
+
+  it("a guardian with no SPELL_SUMMON takes its owner from its advanced block", () => {
+    const r = buildRoster([totemHit("Player-1-A", 1)]);
+    const totem = r.units.get(TOTEM)!;
+    expect(totem.kind).toBe("Guardian");
+    expect(totem.ownerId).toBe("Player-1-A");
+  });
+
+  it("a SPELL_SUMMON owner is not overwritten by a guardian's advanced owner", () => {
+    const r = buildRoster([
+      L(
+        `SPELL_SUMMON,Player-1-A,"Alice-X",0x511,0x80000000,${TOTEM},"Capacitor Totem",0x2148,0x80000000,192058,"Capacitor Totem",0x8`,
+        1,
+      ),
+      totemHit("Player-1-C", 2),
+    ]);
+    expect(r.units.get(TOTEM)!.ownerId).toBe("Player-1-A");
+  });
+
+  it("a guardian's advanced owner is taken only when it is a player", () => {
+    const r = buildRoster([totemHit("Creature-0-1-1-1-999-0002", 1)]);
+    expect(r.units.get(TOTEM)!.ownerId).toBeUndefined();
+  });
+
   // GH #57: a Creature- GUID whose flags carry the PET bit (0x1000, e.g. the
   // Primal Fire Elemental's 0x1112) must be a Pet, not an NPC — otherwise
   // mergePetEvents never folds its damage into the owner (old parser credited

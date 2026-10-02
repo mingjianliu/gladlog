@@ -133,8 +133,10 @@ export function buildRoster(records: ParsedLine[]): {
       if (srcGuid && destGuid && destGuid !== "0000000000000000") {
         const destUnit = units.get(destGuid);
         if (destUnit) {
-          // SUMMON priority is lower; do not overwrite existing ownerId if already set.
-          // This keeps the rule deterministic and ensures advanced ownerGuid takes precedence.
+          // First SUMMON wins; never overwrite an ownerId that is already set.
+          // The roster loop below then treats the two kinds differently: a
+          // Pet's advanced ownerGuid OVERWRITES this, a Guardian's only fills
+          // an empty one (the SPELL_SUMMON owner stays authoritative there).
           if (!destUnit.ownerId) {
             destUnit.ownerId = srcGuid;
           }
@@ -220,6 +222,16 @@ export function buildRoster(records: ParsedLine[]): {
     if (kind === "Pet") {
       const ownerGuid = petOwnersMap.get(id);
       if (ownerGuid) {
+        unit.ownerId = ownerGuid;
+      }
+    } else if (kind === "Guardian" && !unit.ownerId) {
+      // A totem / guardian summoned before the round's first logged line has
+      // no SPELL_SUMMON to take an owner from, yet every advanced block it
+      // emits names one. Fill only an EMPTY ownerId (a SPELL_SUMMON owner
+      // stays authoritative, unlike the Pet branch's overwrite), and only with
+      // a player: GH #99 attributes a summon through this field.
+      const ownerGuid = petOwnersMap.get(id);
+      if (ownerGuid && ownerGuid.startsWith("Player-")) {
         unit.ownerId = ownerGuid;
       }
     }
