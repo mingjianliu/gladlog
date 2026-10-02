@@ -44,6 +44,7 @@ import {
   applicableCCAvoidanceIds,
   CC_AVOIDANCE_BUFF_SPELLS,
   type ICCInstance,
+  type IInterruptInstance,
   POST_KICK_WINDOW_S,
   postKickSeverityRank,
   REPOSITIONING_SPELL_IDS,
@@ -122,7 +123,11 @@ import {
   rootReachProvenFact,
 } from "../utils/rootReachability";
 import { RANGE_HITBOX_SLACK_YD, spellReachToAccuse } from "../utils/spellRange";
-import { spellRangeForCaster, spellReachForCaster } from "../utils/spellRange";
+import {
+  isCasterCentredSpell,
+  spellRangeForCaster,
+  spellReachForCaster,
+} from "../utils/spellRange";
 import { getSpellSchoolName } from "../utils/spellSchools";
 import { getTalentAvoidanceTriggers } from "../utils/talentBehaviors";
 import { matchThreatLevel, threatActiveAt } from "../utils/threatAssessment";
@@ -1347,6 +1352,21 @@ export function kickEatenEvents(
         ReturnType<
           typeof analyzePlayerCCAndTrinket
         >["interruptInstances"][number],
+        | "nearestKickerName"
+        | "maxKickRangeYd"
+        | "maxKickRangeSlackYd"
+        | "maxKickRangeLateYd"
+        | "sourceDistYd"
+        | "sourceKickReadyInS"
+        | "sourceGapCloser"
+        | "ownerImmobileBy"
+      >
+    > &
+    Partial<
+      Pick<
+        ReturnType<
+          typeof analyzePlayerCCAndTrinket
+        >["interruptInstances"][number],
         "channelS"
       >
     > &
@@ -1378,10 +1398,16 @@ export function kickEatenEvents(
   /** Reliability audit D4(d) (2026-09-25): the interrupted spell's reach
    * for the owner and the kick's cast range for the kicker (official DB2
    * ranges with talents, `spellReachForCaster` / `spellRangeForCaster`).
-   * The legend may coach "cast from outside kick range" only when the first
-   * exceeds the second; null when either is unknown. */
+   * null when the kick's range is unknown. `yourReachYd` is absent for a
+   * caster-centred spell (`isCasterCentredSpell`, F-K6c: Ebon Might printed
+   * `yourReachYd=500`, the radius of its effect) and when it is unknown.
+   * The legend may coach "cast from outside kick range" only through
+   * `facts.outRangeable` (`outRangeFact`). */
   reach?: (k: (typeof instances)[number]) => {
-    yourReachYd: number;
+    yourReachYd?: number;
+    /** the spell's cast range without an area's radius — what the out-range
+     * verdict compares with the kick (`outRangeFact` condition 1) */
+    yourCastRangeYd?: number;
     kickRangeYd: number;
   } | null,
   /** GH #113 (2026-09-25): both sides' pressure during the lockout
@@ -1460,18 +1486,37 @@ export function kickEatenEvents(
         })(),
         ...((): Record<string, string> => {
           const r = reach?.(k);
-          return r
-            ? {
-                yourReachYd: String(Math.round(r.yourReachYd)),
-                kickRangeYd: String(Math.round(r.kickRangeYd)),
-              }
-            : {};
+          if (!r) return {};
+          return {
+            ...(r.yourReachYd !== undefined && Number.isFinite(r.yourReachYd)
+              ? { yourReachYd: String(Math.round(r.yourReachYd)) }
+              : {}),
+            kickRangeYd: String(Math.round(r.kickRangeYd)),
+            ...outRangeFact(k, r),
+          };
         })(),
+        ...(k.sourceDistYd != null
+          ? { sourceDistYd: k.sourceDistYd.toFixed(1) }
+          : {}),
+        ...(k.sourceKickReadyInS != null
+          ? {
+              sourceKickReadyAtCastStart: `no (ready ${k.sourceKickReadyInS.toFixed(1)}s later)`,
+            }
+          : {}),
         ...(k.nearestKickerDistYd != null
           ? { nearestKickerDistYd: k.nearestKickerDistYd.toFixed(1) }
           : {}),
+        ...(k.nearestKickerDistYd != null && k.nearestKickerName
+          ? { nearestKicker: k.nearestKickerName }
+          : {}),
         ...(k.kickersInRange != null
           ? { kickersInRange: String(k.kickersInRange) }
+          : {}),
+        ...(k.maxKickRangeYd != null
+          ? { maxKickRangeYd: String(Math.round(k.maxKickRangeYd)) }
+          : {}),
+        ...(k.ownerImmobileBy
+          ? { youImmobileAtCastStart: k.ownerImmobileBy }
           : {}),
         ...(k.kickDepthPct != null
           ? { kickDepthPct: String(k.kickDepthPct) }
@@ -1528,6 +1573,97 @@ export function kickEatenEvents(
     }));
 }
 
+/** Could the player have cast this from outside the kick's range? One fact,
+ * `outRangeable=yes (…)` / `no (…)`, with the first reason that closes it —
+ * the only thing the legend may hang "cast from outside kick range" on
+ * (triage 2026-09-29 F-K6a / F-K6b / F-K6c / F-K6d, user ruling A12 = B with
+ * U2, 2026-09-30). The advice is a permission, so anything unknown closes
+ * it. In order:
+ *  1. the spell must reach farther than the source's kick (no `yourReachYd`
+ *     for a caster-centred spell) — by its CAST range (`yourCastRangeYd`):
+ *     `yourReachYd` adds an area's radius (Ring of Frost 30 + 8, Arcane
+ *     Surge 40 + 8), and the radius does not let the caster stand farther
+ *     from a kicker; a kick during the CHANNEL (`channelS`) is closed too —
+ *     the facts are from the cast's start and the kicker had the whole
+ *     channel to walk in;
+ *  2. the SOURCE must have stood outside its own kick range at cast start
+ *     (`sourceDistYd`; no distance = closed) — outside by more than
+ *     `RANGE_HITBOX_SLACK_YD`: positions are model centres and the game
+ *     measures to the hitbox, so a Paladin 5.6 yd away is inside a 5 yd
+ *     Rebuke (605 S2 files: 60 of the 188 lines the nominal range left
+ *     open had the kicker 0.1–2 yd beyond it, 27 of them Rebuke);
+ *  3. it must not have used a gap-closer in the second before
+ *     (`GAP_CLOSER_USED_WINDOW_S`), nor have had one ready, nor cast one or
+ *     got one back during the cast, nor one whose state is unknown
+ *     (`gapCloserStateOver`);
+ *  4. no other ready, free kicker stood inside — or within the same hitbox
+ *     slack of — a kick that reaches as far as the spell
+ *     (`maxKickRangeSlackYd`), nor one whose kick came back between the
+ *     cast's start and this kick (`maxKickRangeLateYd`);
+ *  5. the player was not rooted or in hard CC (`ownerImmobileBy`).
+ * A gap-closer the kicker never cast this round is not in its kit as far as
+ * the log shows, and the legend says `yes` covers only the ones it was seen
+ * using. Values never contain ", " (`checkFactsBlockIntegrity`). */
+function outRangeFact(
+  k: {
+    sourceDistYd?: number | null;
+    maxKickRangeYd?: number | null;
+    maxKickRangeSlackYd?: number | null;
+    maxKickRangeLateYd?: number | null;
+    sourceGapCloser?: IInterruptInstance["sourceGapCloser"];
+    ownerImmobileBy?: string | null;
+    channelS?: number | null;
+  },
+  r: { yourReachYd?: number; yourCastRangeYd?: number; kickRangeYd: number },
+): { outRangeable: string } {
+  const no = (why: string) => ({ outRangeable: `no (${why})` });
+  if (r.yourReachYd === undefined || !Number.isFinite(r.yourReachYd))
+    return no("the spell has no cast range of its own");
+  if (!(r.yourReachYd > r.kickRangeYd))
+    return no("the spell does not reach farther than the kick");
+  // how far from the kicker the caster can stand: the cast range, without
+  // the radius `yourReachYd` adds for an area
+  const castYd = r.yourCastRangeYd ?? r.yourReachYd;
+  if (!(castYd > r.kickRangeYd))
+    return no(
+      `the spell's ${Math.round(castYd)} yd cast range does not exceed the kick's`,
+    );
+  if (k.channelS != null)
+    return no(
+      `kicked ${k.channelS.toFixed(1)}s into the channel — the kicker had the cast and the channel to close in`,
+    );
+  if (k.sourceDistYd == null) return no("kicker distance unknown");
+  if (!(k.sourceDistYd > r.kickRangeYd))
+    return no("kicker already inside kick range at cast start");
+  if (!(k.sourceDistYd > r.kickRangeYd + RANGE_HITBOX_SLACK_YD))
+    return no(
+      `kicker within ${RANGE_HITBOX_SLACK_YD} yd of kick range at cast start — inside it once hitboxes count`,
+    );
+  const g = k.sourceGapCloser;
+  if (g?.state === "used")
+    return no(`${g.spellName} used ${g.agoS.toFixed(1)}s before cast start`);
+  if (g?.state === "ready") return no(`${g.spellName} ready`);
+  if (g?.state === "used-during")
+    return no(`${g.spellName} used ${g.afterS.toFixed(1)}s into the cast`);
+  if (g?.state === "ready-during")
+    return no(`${g.spellName} ready before the kick landed`);
+  if (g?.state === "unknown") return no(`${g.spellName} ready state unknown`);
+  const otherKickYd = k.maxKickRangeSlackYd ?? k.maxKickRangeYd;
+  if (otherKickYd != null && !(castYd > otherKickYd))
+    return no(
+      `another ready kicker in range with a ${Math.round(otherKickYd)} yd kick`,
+    );
+  if (k.maxKickRangeLateYd != null && !(castYd > k.maxKickRangeLateYd))
+    return no(
+      `another kicker in range got its ${Math.round(k.maxKickRangeLateYd)} yd kick back during the cast`,
+    );
+  if (k.ownerImmobileBy) return no(`you were held by ${k.ownerImmobileBy}`);
+  return {
+    outRangeable:
+      "yes (kicker outside kick range; no gap-closer of theirs just used or ready)",
+  };
+}
+
 /** `kickEatenEvents` with the product's own inputs: the owner's rejected
  * presses, the reach pair, both sides' pressure and the owner's cast cancels.
  * The product passes every kick on the owner (`interruptInstances`); a scan
@@ -1569,9 +1705,13 @@ export function ownerKickEatenEvents(
         kicker,
         kickCastSpellId(k.kickSpellId),
       );
-      return yourReachYd !== null && kickRangeYd !== null
-        ? { yourReachYd, kickRangeYd }
-        : null;
+      if (yourReachYd === null || kickRangeYd === null) return null;
+      // a caster-centred spell's "reach" is its radius, not a distance the
+      // player could keep from the kicker (F-K6c)
+      if (isCasterCentredSpell(k.interruptedSpellId)) return { kickRangeYd };
+      const yourCastRangeYd =
+        spellRangeForCaster(owner, k.interruptedSpellId) ?? undefined;
+      return { yourReachYd, yourCastRangeYd, kickRangeYd };
     },
     kickPressureFor({ combat, owner, friends, enemies }),
     ownerCastCancels({ owner, friends, enemies, combat, rawStreams }),

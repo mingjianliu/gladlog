@@ -1388,6 +1388,231 @@ describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
     expect(unknown[0]!.facts["kickRangeYd"]).toBeUndefined();
   });
 
+  // Triage 2026-09-29 F-K6a / F-K6b / F-K6c / F-K6d / F-K5a / F-K5b
+  // (ruling A12 = B with U2): one out-range verdict, with the first reason.
+  describe("kick-eaten: outRangeable", () => {
+    const facts = (
+      inst: Record<string, unknown>,
+      r: {
+        yourReachYd?: number;
+        yourCastRangeYd?: number;
+        kickRangeYd: number;
+      } | null = {
+        yourReachYd: 40,
+        kickRangeYd: 5,
+      },
+    ) =>
+      kickEatenEvents(
+        [switchedInst(inst)],
+        { id: "P1", name: "Me" },
+        undefined,
+        () => r,
+      )[0]!.facts;
+
+    it("is absent when the ranges are unknown (the legend then forbids the advice)", () => {
+      expect(facts({ sourceDistYd: 20 }, null)["outRangeable"]).toBeUndefined();
+    });
+
+    it("yes: source outside its range, no gap-closer, nobody else in range, owner free", () => {
+      const f = facts({ sourceDistYd: 18.4, sourceGapCloser: null });
+      expect(f["outRangeable"]).toMatch(/^yes \(/);
+      expect(f["sourceDistYd"]).toBe("18.4");
+      expect(f["outRangeable"]).not.toContain(", ");
+    });
+
+    it("no: the spell does not reach farther than the kick", () => {
+      expect(
+        facts({ sourceDistYd: 45 }, { yourReachYd: 40, kickRangeYd: 40 })[
+          "outRangeable"
+        ],
+      ).toBe("no (the spell does not reach farther than the kick)");
+    });
+
+    it("no: a caster-centred spell prints no yourReachYd — and never NaN (F-K6c, Ebon Might)", () => {
+      const f = facts({ sourceDistYd: 13.4 }, { kickRangeYd: 40 });
+      expect(f["yourReachYd"]).toBeUndefined();
+      expect(f["kickRangeYd"]).toBe("40");
+      expect(f["outRangeable"]).toBe(
+        "no (the spell has no cast range of its own)",
+      );
+      expect(JSON.stringify(f)).not.toContain("NaN");
+    });
+
+    it("no: without the source's distance (a channel kick has no cast start) the branch is closed", () => {
+      expect(facts({})["outRangeable"]).toBe("no (kicker distance unknown)");
+    });
+
+    it("no: the source was already inside its kick range (condition 1, f4eb8c87 @173)", () => {
+      expect(facts({ sourceDistYd: 1.0 })["outRangeable"]).toBe(
+        "no (kicker already inside kick range at cast start)",
+      );
+      // exactly at the range is inside
+      expect(facts({ sourceDistYd: 5 })["outRangeable"]).toMatch(/^no /);
+      // model centres vs hitboxes: 5.6 yd from a 5 yd kick is not out of it
+      // (c2058ed4 @18.2), 7.1 yd is
+      expect(facts({ sourceDistYd: 5.6 })["outRangeable"]).toBe(
+        "no (kicker within 2 yd of kick range at cast start — inside it once hitboxes count)",
+      );
+      expect(facts({ sourceDistYd: 7.1 })["outRangeable"]).toMatch(/^yes /);
+    });
+
+    it("no: a gap-closer used in the second before (condition 2, dfcccbf2 @79.3)", () => {
+      expect(
+        facts({
+          sourceDistYd: 10.5,
+          sourceGapCloser: {
+            state: "used",
+            spellId: "100",
+            spellName: "Charge",
+            agoS: 0.328,
+          },
+        })["outRangeable"],
+      ).toBe("no (Charge used 0.3s before cast start)");
+    });
+
+    it("no: a gap-closer ready, even though it was not used (condition 3 alone)", () => {
+      expect(
+        facts({
+          sourceDistYd: 10.5,
+          sourceGapCloser: { state: "ready", spellId: "100", spellName: "Charge" },
+        })["outRangeable"],
+      ).toBe("no (Charge ready)");
+    });
+
+    it("no: a gap-closer whose cooldown is unknown closes the advice (c2058ed4 @194.9, Shadowstep)", () => {
+      expect(
+        facts({
+          sourceDistYd: 15.4,
+          sourceGapCloser: {
+            state: "unknown",
+            spellId: "36554",
+            spellName: "Shadowstep",
+          },
+        })["outRangeable"],
+      ).toBe("no (Shadowstep ready state unknown)");
+    });
+
+    it("no: another ready kicker in range whose kick reaches as far as the spell (F-K6a)", () => {
+      const f = facts(
+        { sourceDistYd: 20, maxKickRangeYd: 40 },
+        { yourReachYd: 30, kickRangeYd: 15 },
+      );
+      expect(f["maxKickRangeYd"]).toBe("40");
+      expect(f["outRangeable"]).toBe(
+        "no (another ready kicker in range with a 40 yd kick)",
+      );
+      // a longer spell than every in-range kick stays open
+      expect(
+        facts(
+          { sourceDistYd: 20, maxKickRangeYd: 30 },
+          { yourReachYd: 40, kickRangeYd: 15 },
+        )["outRangeable"],
+      ).toMatch(/^yes /);
+    });
+
+    it("no: the gate is the CAST range — an area's radius does not let the caster stand farther (pre-review: Summon Demonic Tyrant reach 45, cast 40, Counter Shot 40)", () => {
+      const f = facts(
+        { sourceDistYd: 42.5 },
+        { yourReachYd: 45, yourCastRangeYd: 40, kickRangeYd: 40 },
+      );
+      expect(f["yourReachYd"]).toBe("45");
+      expect(f["outRangeable"]).toBe(
+        "no (the spell's 40 yd cast range does not exceed the kick's)",
+      );
+      // and against another kicker's longer kick too
+      expect(
+        facts(
+          { sourceDistYd: 20, maxKickRangeYd: 40 },
+          { yourReachYd: 48, yourCastRangeYd: 40, kickRangeYd: 15 },
+        )["outRangeable"],
+      ).toBe("no (another ready kicker in range with a 40 yd kick)");
+    });
+
+    it("no: a kick during the channel — the cast-start facts are stale and the kicker had the channel to walk in (pre-review: five Mind Control lines read yes)", () => {
+      const f = facts(
+        { sourceDistYd: 17.3, channelS: 3.6 },
+        { yourReachYd: 30, kickRangeYd: 5 },
+      );
+      expect(f["outRangeable"]).toBe(
+        "no (kicked 3.6s into the channel — the kicker had the cast and the channel to close in)",
+      );
+      expect(f["outRangeable"]).not.toContain(", ");
+    });
+
+    it("no: a gap-closer cast during the cast, or back up before the kick landed (pre-review)", () => {
+      expect(
+        facts({
+          sourceDistYd: 12,
+          sourceGapCloser: {
+            state: "used-during",
+            spellId: "100",
+            spellName: "Charge",
+            afterS: 0.7,
+          },
+        })["outRangeable"],
+      ).toBe("no (Charge used 0.7s into the cast)");
+      expect(
+        facts({
+          sourceDistYd: 12,
+          sourceGapCloser: {
+            state: "ready-during",
+            spellId: "100",
+            spellName: "Charge",
+          },
+        })["outRangeable"],
+      ).toBe("no (Charge ready before the kick landed)");
+    });
+
+    it("no: another kicker within hitbox slack of its kick closes like one inside it (`maxKickRangeSlackYd`)", () => {
+      expect(
+        facts(
+          { sourceDistYd: 20, maxKickRangeYd: null, maxKickRangeSlackYd: 40 },
+          { yourReachYd: 40, kickRangeYd: 5 },
+        )["outRangeable"],
+      ).toBe("no (another ready kicker in range with a 40 yd kick)");
+    });
+
+    it("no: another kicker in range whose kick came back during the cast closes, with its own reason (`maxKickRangeLateYd`)", () => {
+      expect(
+        facts(
+          { sourceDistYd: 20, maxKickRangeYd: null, maxKickRangeLateYd: 40 },
+          { yourReachYd: 40, kickRangeYd: 5 },
+        )["outRangeable"],
+      ).toBe(
+        "no (another kicker in range got its 40 yd kick back during the cast)",
+      );
+      // a shorter kick than the spell leaves it open
+      expect(
+        facts(
+          { sourceDistYd: 20, maxKickRangeYd: null, maxKickRangeLateYd: 15 },
+          { yourReachYd: 40, kickRangeYd: 5 },
+        )["outRangeable"],
+      ).toMatch(/^yes/);
+    });
+
+    it("no: the owner was rooted at cast start (F-K6d, 9c9d8601 @63.9)", () => {
+      const f = facts(
+        { sourceDistYd: 35, ownerImmobileBy: "Entangling Roots" },
+        { yourReachYd: 46, kickRangeYd: 30 },
+      );
+      expect(f["youImmobileAtCastStart"]).toBe("Entangling Roots");
+      expect(f["outRangeable"]).toBe("no (you were held by Entangling Roots)");
+    });
+
+    it("prints who the nearest ready kicker was, and when the source's kick came back (F-K5a / F-K5b)", () => {
+      const f = facts({
+        sourceDistYd: 20.8,
+        nearestKickerDistYd: 17.6,
+        nearestKickerName: "Rogue-Realm",
+        kickersInRange: 0,
+        sourceKickReadyInS: 2.38,
+      });
+      expect(f["nearestKicker"]).toBe("Rogue-Realm");
+      expect(f["nearestKickerDistYd"]).toBe("17.6");
+      expect(f["sourceKickReadyAtCastStart"]).toBe("no (ready 2.4s later)");
+    });
+  });
+
   it("kick-eaten: carries nearestKickerDistYd and kickersInRange facts when present (GH #73, B6)", () => {
     const evts = kickEatenEvents(
       [

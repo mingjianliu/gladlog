@@ -234,6 +234,16 @@ export function ccThreatRadiusYards(
   );
 }
 
+/** Is the spell centred on its caster — no cast range, only a radius (Ebon
+ * Might 395152: range 0, radius 500)? For such a spell `spellReachForCaster`
+ * is how far its effect spreads, not how far from a kicker the caster could
+ * stand: kick-eaten prints no `yourReachYd` for it (triage 2026-09-29
+ * F-K6c). False when the table has no row. */
+export function isCasterCentredSpell(spellId: string): boolean {
+  const e = SPELLS[spellId];
+  return !!e && !(e.rangeYards > 0) && e.radiusYards > 0;
+}
+
 /** How far from the caster the spell can take effect: range for a targeted
  * spell, range + radius for a placed area, radius for a caster-centred one —
  * the `reachYards` semantics of the generated table, with the caster's range

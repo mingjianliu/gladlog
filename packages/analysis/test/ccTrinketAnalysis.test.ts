@@ -1,4 +1,5 @@
 import {
+  CombatUnitClass,
   CombatUnitReaction,
   CombatUnitSpec,
   LogEvent,
@@ -440,7 +441,15 @@ describe("analyzePlayerCCAndTrinket — structured data contract (N4)", () => {
       kickDepthPct: null,
       channelS: null,
       kickersInRange: null,
+      maxKickRangeYd: null,
+      maxKickRangeSlackYd: null,
+      maxKickRangeLateYd: null,
       nearestKickerDistYd: null,
+      nearestKickerName: null,
+      ownerImmobileBy: null,
+      sourceDistYd: null,
+      sourceGapCloser: null,
+      sourceKickReadyInS: null,
       firstActionDelayS: null,
       lockEndedBySuccessS: null,
       switchDelayS: null,
@@ -505,6 +514,275 @@ describe("analyzePlayerCCAndTrinket — structured data contract (N4)", () => {
       false,
     );
     expect(resInstantSwitch.interruptInstances[0].postKick).toBe("switched");
+  });
+
+  // Triage 2026-09-29 kick-eaten F-K5a / F-K5b / F-K5d / F-K6d.
+  describe("kicker facts at the kicked cast's start", () => {
+    const CAST_START = MATCH_START + 18_500;
+    const KICK_AT = MATCH_START + 20_000;
+    const pos = (x: number, y: number) =>
+      [
+        {
+          timestamp: CAST_START,
+          advancedActorPositionX: x,
+          advancedActorPositionY: y,
+        },
+      ] as any;
+    const castStart = [
+      {
+        spellId: "116",
+        logLine: { event: LogEvent.SPELL_CAST_START, timestamp: CAST_START },
+      },
+    ] as any;
+    const aura = (
+      event: LogEvent,
+      spellId: string,
+      atMs: number,
+      src: string,
+      dest: string,
+    ) => ({ ...makeAuraEvent(event, spellId, atMs, src, dest), spellName: spellId });
+    /** Owner hard-casting Frostbolt from 18.5 s, kicked at 20 s by the Rogue
+     * (5 yd away, Kick 5 yd); a Warrior with Pummel stands 2 yd away. */
+    const scene = (o: {
+      ownerAuras?: any[];
+      ownerActionIn?: any[];
+      rogueCasts?: any[];
+      warriorAuras?: any[];
+      warriorActionIn?: any[];
+      warriorCasts?: any[];
+      /** the second enemy as a Mage (Counterspell, a silenceable kick) */
+      secondIsMage?: boolean;
+      /** where the second enemy stands (default 2 yd away) */
+      secondPos?: [number, number];
+    }) => {
+      const owner = makeUnit("player-1", {
+        actionIn: [
+          makeInterruptEvent(
+            "1766",
+            "Kick",
+            "116",
+            "Frostbolt",
+            KICK_AT,
+            "enemy-1",
+            "Rogue",
+          ),
+          ...(o.ownerActionIn ?? []),
+        ],
+        castStartEvents: castStart,
+        advancedActions: pos(0, 0),
+        auraEvents: o.ownerAuras ?? [],
+      });
+      const rogue = makeUnit("enemy-1", {
+        name: "Rogue",
+        reaction: CombatUnitReaction.Hostile,
+        class: CombatUnitClass.Rogue,
+        spec: CombatUnitSpec.Rogue_Assassination,
+        advancedActions: pos(3, 4),
+        spellCastEvents: o.rogueCasts ?? [],
+      });
+      const warrior = makeUnit("enemy-2", {
+        name: "Warrior",
+        reaction: CombatUnitReaction.Hostile,
+        class: o.secondIsMage ? CombatUnitClass.Mage : CombatUnitClass.Warrior,
+        spec: o.secondIsMage
+          ? CombatUnitSpec.Mage_Frost
+          : CombatUnitSpec.Warrior_Arms,
+        advancedActions: pos(...(o.secondPos ?? [0, 2])),
+        auraEvents: o.warriorAuras ?? [],
+        actionIn: o.warriorActionIn ?? [],
+        spellCastEvents: o.warriorCasts ?? [],
+      });
+      return analyzePlayerCCAndTrinket(
+        owner,
+        [rogue, warrior],
+        makeCombat(),
+      ).interruptInstances.find((i) => i.atSeconds === 20)!;
+    };
+
+    it("the source's own distance is a fact of its own; the nearest ready kicker is named (F-K5a)", () => {
+      const k = scene({});
+      expect(k.sourceDistYd).toBe(5);
+      expect(k.nearestKickerDistYd).toBe(2);
+      expect(k.nearestKickerName).toBe("Warrior");
+      expect(k.kickersInRange).toBe(2);
+      expect(k.maxKickRangeYd).toBe(5);
+    });
+
+    it("a kicker stunned at cast start is neither counted nor the nearest (F-K5d, 3306e8ee @18.4)", () => {
+      const k = scene({
+        warriorAuras: [
+          aura(LogEvent.SPELL_AURA_APPLIED, "853", MATCH_START + 18_000, "friend-1", "enemy-2"),
+          aura(LogEvent.SPELL_AURA_REMOVED, "853", MATCH_START + 19_500, "friend-1", "enemy-2"),
+        ],
+      });
+      expect(k.kickersInRange).toBe(1);
+      expect(k.nearestKickerDistYd).toBe(5);
+      expect(k.nearestKickerName).toBe("Rogue");
+    });
+
+    it("a silence stops a silenceable kick only: a silenced Warrior still has Pummel, a silenced Mage has no Counterspell (6062daf2 @32.7)", () => {
+      const silence = [
+        aura(LogEvent.SPELL_AURA_APPLIED, "1330", MATCH_START + 18_000, "friend-1", "enemy-2"),
+        aura(LogEvent.SPELL_AURA_REMOVED, "1330", MATCH_START + 19_500, "friend-1", "enemy-2"),
+      ];
+      const melee = scene({ warriorAuras: silence });
+      expect(melee.kickersInRange).toBe(2);
+      expect(melee.nearestKickerName).toBe("Warrior");
+      const caster = scene({ warriorAuras: silence, secondIsMage: true });
+      expect(caster.kickersInRange).toBe(1);
+      expect(caster.nearestKickerName).toBe("Rogue");
+      // and unsilenced, the Mage counts
+      expect(scene({ secondIsMage: true }).kickersInRange).toBe(2);
+    });
+
+    it("a kicker under a school lockout is still a kicker — only auras count (codex fixture: fa5e6c66's Frost-locked Mage)", () => {
+      const k = scene({
+        warriorActionIn: [
+          {
+            ...makeInterruptEvent("2139", "Counterspell", "116", "Frostbolt", MATCH_START + 17_500, "friend-1", "Friend"),
+            destUnitId: "enemy-2",
+          },
+        ],
+      });
+      expect(k.kickersInRange).toBe(2);
+      expect(k.nearestKickerName).toBe("Warrior");
+    });
+
+    it("the source's kick still on cooldown at cast start: not a ready kicker, and `sourceKickReadyInS` says when it came back (F-K5b, 1bad0a5c @27.4)", () => {
+      // Kick (15 s) cast at 5 s → back at 20.0 s, the instant it landed
+      const k = scene({
+        rogueCasts: [
+          makeSpellCastEvent("1766", MATCH_START + 5_000, "player-1", "Owner", "enemy-1", "Rogue", 0, "Kick"),
+        ],
+      });
+      expect(k.sourceKickReadyInS).toBeCloseTo(1.5, 5);
+      expect(k.sourceDistYd).toBe(5); // the source's distance does not depend on readiness
+      expect(k.kickersInRange).toBe(1); // only the Warrior
+      expect(k.nearestKickerName).toBe("Warrior");
+    });
+
+    it("a modelled cooldown that would end after the kick landed is not claimed", () => {
+      // Kick cast at 10 s → the 15 s model says 25 s, but it landed at 20 s
+      const k = scene({
+        rogueCasts: [
+          makeSpellCastEvent("1766", MATCH_START + 10_000, "player-1", "Owner", "enemy-1", "Rogue", 0, "Kick"),
+        ],
+      });
+      expect(k.sourceKickReadyInS).toBeNull();
+    });
+
+    it("the owner rooted at cast start is immobile (F-K6d, 9c9d8601 @63.9)", () => {
+      const k = scene({
+        ownerAuras: [
+          aura(LogEvent.SPELL_AURA_APPLIED, "339", MATCH_START + 17_000, "enemy-1", "player-1"),
+          aura(LogEvent.SPELL_AURA_REMOVED, "339", MATCH_START + 19_000, "enemy-1", "player-1"),
+        ],
+      });
+      expect(k.ownerImmobileBy).toBe("Entangling Roots");
+    });
+
+    it("the owner's roots are the shared predicate (`rootIntervalsOf`): an Ice Nova or the 12.x Entangling Roots id holds like the old one (pre-review: this file's own root list lacks them)", () => {
+      for (const [id, name] of [
+        ["157997", "Ice Nova"],
+        ["1287975", "Entangling Roots"],
+      ]) {
+        const k = scene({
+          ownerAuras: [
+            aura(LogEvent.SPELL_AURA_APPLIED, id!, MATCH_START + 17_000, "enemy-1", "player-1"),
+            aura(LogEvent.SPELL_AURA_REMOVED, id!, MATCH_START + 19_500, "enemy-1", "player-1"),
+          ],
+        });
+        expect(k.ownerImmobileBy).toBe(name);
+      }
+    });
+
+    it("a kick-lockout aura on a kicker is not hard CC: a Warrior under Shambling Rush 91807 is still a kicker (pre-review)", () => {
+      const k = scene({
+        warriorAuras: [
+          aura(LogEvent.SPELL_AURA_APPLIED, "91807", MATCH_START + 18_000, "friend-1", "enemy-2"),
+          aura(LogEvent.SPELL_AURA_REMOVED, "91807", MATCH_START + 19_500, "friend-1", "enemy-2"),
+        ],
+      });
+      expect(k.kickersInRange).toBe(2);
+      expect(k.nearestKickerName).toBe("Warrior");
+    });
+
+    it("the source's gap-closer is read over the whole cast: a Shadowstep pressed between the cast's start and the Kick closes (pre-review)", () => {
+      const k = scene({
+        rogueCasts: [
+          makeSpellCastEvent("36554", MATCH_START + 19_200, "enemy-1", "Rogue", "player-1", "Owner", 0, "Shadowstep"),
+        ],
+      });
+      expect(k.sourceGapCloser).toMatchObject({
+        state: "used-during",
+        spellName: "Shadowstep",
+      });
+      expect(
+        k.sourceGapCloser?.state === "used-during"
+          ? k.sourceGapCloser.afterS
+          : NaN,
+      ).toBeCloseTo(0.7, 3);
+      // and nothing when the source cast no gap-closer this round
+      expect(scene({}).sourceGapCloser).toBeNull();
+    });
+
+    it("`maxKickRangeSlackYd` counts a second kicker just past its nominal range, `maxKickRangeYd` and `kickersInRange` do not (pre-review: condition 4 had no hitbox slack)", () => {
+      const past = scene({ secondIsMage: true, secondPos: [0, 41.5] });
+      expect(past.kickersInRange).toBe(1); // only the Rogue, at 5 yd
+      expect(past.maxKickRangeYd).toBe(5);
+      expect(past.maxKickRangeSlackYd).toBe(40);
+      const far = scene({ secondIsMage: true, secondPos: [0, 43] });
+      expect(far.maxKickRangeSlackYd).toBe(5);
+    });
+
+    it("`maxKickRangeLateYd`: another kicker whose kick came back between the cast's start and this kick is not 'ready at cast start', and the verdict still hears of it (Fable review)", () => {
+      const pummel = (atS: number) =>
+        makeSpellCastEvent("6552", MATCH_START + atS * 1000, "player-1", "Owner", "enemy-2", "Warrior", 0, "Pummel");
+      // Pummel (15 s) pressed at 4 s → back at 19 s; the cast ran 18.5 → 20
+      const back = scene({ warriorCasts: [pummel(4)] });
+      expect(back.kickersInRange).toBe(1); // the Rogue only
+      expect(back.nearestKickerName).toBe("Rogue");
+      expect(back.maxKickRangeLateYd).toBe(5);
+      // back only after the kick landed: not a kicker of this cast
+      expect(scene({ warriorCasts: [pummel(6)] }).maxKickRangeLateYd).toBeNull();
+      // back in time but beyond its range and the hitbox slack
+      expect(
+        scene({ warriorCasts: [pummel(4)], secondPos: [0, 9] }).maxKickRangeLateYd,
+      ).toBeNull();
+      // ready at cast start: the cast-start facts carry it, not this one
+      expect(scene({}).maxKickRangeLateYd).toBeNull();
+      // stunned at cast start (18.5 s) but free when the Pummel came back
+      // (19 s): still a kicker of this cast
+      const stun = (fromS: number, toS: number) => [
+        aura(LogEvent.SPELL_AURA_APPLIED, "853", MATCH_START + fromS * 1000, "friend-1", "enemy-2"),
+        aura(LogEvent.SPELL_AURA_REMOVED, "853", MATCH_START + toS * 1000, "friend-1", "enemy-2"),
+      ];
+      expect(
+        scene({ warriorCasts: [pummel(4)], warriorAuras: stun(18, 18.8) })
+          .maxKickRangeLateYd,
+      ).toBe(5);
+      // held from before the Pummel came back until after the kick landed
+      expect(
+        scene({ warriorCasts: [pummel(4)], warriorAuras: stun(18, 20.5) })
+          .maxKickRangeLateYd,
+      ).toBeNull();
+    });
+
+    it("a silence or a school lockout on the owner does not stop movement (codex fixture)", () => {
+      const silenced = scene({
+        ownerAuras: [
+          aura(LogEvent.SPELL_AURA_APPLIED, "15487", MATCH_START + 17_000, "enemy-1", "player-1"),
+          aura(LogEvent.SPELL_AURA_REMOVED, "15487", MATCH_START + 19_000, "enemy-1", "player-1"),
+        ],
+      });
+      expect(silenced.ownerImmobileBy).toBeNull();
+      const locked = scene({
+        ownerActionIn: [
+          makeInterruptEvent("6552", "Pummel", "133", "Fireball", MATCH_START + 17_000, "enemy-2", "Warrior"),
+        ],
+      });
+      expect(locked.ownerImmobileBy).toBeNull();
+    });
   });
 
   // Triage 2026-09-29 kick-eaten F-K7b / F-K7a (rulings C5, A23).

@@ -12,7 +12,15 @@
  * Per row: file, round index and start, owner (name / spec / whether this
  * owner recorded the log — only the recorder has SPELL_CAST_FAILED), the
  * instance's classification fields, `facts` (null = harmless, not listed in
- * any case) and `listed`.
+ * any case), `listed` (kept by `kickEatenEvents`' own sort and cap — the
+ * final menu also drops events after the round's playable end) and
+ * `lockout` / `lockEndedBySuccessS` and `rejects` (the owner's raw rejected
+ * presses after the kick: offset, spell, not-ready reason, dropped as a key
+ * repeat), and
+ * `srcCasts` (what the kick's source cast in the 3 s before the kick: the
+ * forward check for `GAP_CLOSER_SPELL_IDS` — a spell that recurs on kicks
+ * whose `sourceDistYd` exceeded `kickRangeYd` and is not on the list is a
+ * candidate).
  *
  * Same walk as `acceptanceCapture.ts`: every round of every file, every
  * friendly owner, raw streams on. Run it before and after a change with the
@@ -30,6 +38,12 @@ import {
   ownerKickEatenEvents,
   specToString,
 } from "@gladlog/analysis";
+import {
+  dropKeyRepeatRejects,
+  NOT_READY_REASONS,
+} from "@gladlog/analysis/src/analysis/candidates/shared";
+import { POST_KICK_WINDOW_S } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
+import { castFailedInWindow } from "@gladlog/analysis/src/utils/rawStreams";
 import { GladLogParser, type GladMatch } from "@gladlog/parser";
 import { type ICombatUnit, toLegacyMatch } from "@gladlog/parser-compat";
 import { readFileSync, writeFileSync } from "fs";
@@ -50,6 +64,9 @@ if (!manifest || !outPath) {
   );
   process.exit(1);
 }
+
+/** How far before the kick the source's casts are listed (`srcCasts`). */
+const SRC_CAST_LOOKBACK_MS = 3_000;
 
 await ensureAnalysisData();
 const files = readFileSync(manifest, "utf8")
@@ -113,6 +130,39 @@ for (const f of files) {
           kicks++;
           const isListed = ev !== null && menuIds.has(ev.id);
           if (isListed) listed++;
+          // forward check for GAP_CLOSER_SPELL_IDS: what the source cast in
+          // the 3 s before its kick landed (the kick itself excluded)
+          const kickMs = legacy.startTime + k.atSeconds * 1000;
+          const src = (legacy.units as Record<string, ICombatUnit>)[k.sourceId];
+          const srcCasts = (src?.spellCastEvents ?? [])
+            .filter(
+              (e) =>
+                e.logLine.event === "SPELL_CAST_SUCCESS" &&
+                e.logLine.timestamp <= kickMs &&
+                e.logLine.timestamp >= kickMs - SRC_CAST_LOOKBACK_MS &&
+                e.spellId !== k.kickSpellId,
+            )
+            .map((e) => String(e.spellId ?? ""));
+          // the owner's rejected presses in the post-kick window, raw: `nr`
+          // = a not-ready reason, `kr` = dropped from the text as a key
+          // repeat (`dropKeyRepeatRejects`)
+          const raw = rawStreams
+            ? castFailedInWindow(
+                rawStreams,
+                owner.id,
+                k.atSeconds,
+                k.atSeconds + POST_KICK_WINDOW_S,
+              ).filter((h) => h.tSeconds > k.atSeconds)
+            : [];
+          const kept = new Set(
+            dropKeyRepeatRejects(
+              raw,
+              (owner.spellCastEvents ?? []).map((e) => ({
+                spellId: String(e.spellId ?? ""),
+                tSeconds: (e.logLine.timestamp - legacy.startTime) / 1000,
+              })),
+            ),
+          );
           rows.push(
             JSON.stringify({
               file: f,
@@ -127,6 +177,15 @@ for (const f of files) {
               postKick: k.postKick,
               switchWasHardCast: k.switchWasHardCast,
               listed: isListed,
+              lockout: k.lockoutDurationSeconds,
+              lockEndedBySuccessS: k.lockEndedBySuccessS ?? null,
+              rejects: raw.map((h) => ({
+                dt: Math.round((h.tSeconds - k.atSeconds) * 1000) / 1000,
+                id: String(h.spellId),
+                nr: NOT_READY_REASONS.has(h.reason),
+                kr: !kept.has(h),
+              })),
+              srcCasts,
               facts: ev?.facts ?? null,
             }),
           );

@@ -88,6 +88,7 @@ import * as auraIntervals from "@gladlog/analysis/src/utils/auraIntervals";
 import * as bracketKey from "@gladlog/analysis/src/utils/bracketKey";
 import * as buffDuration from "@gladlog/analysis/src/utils/buffDuration";
 import * as cannotCastIntervals from "@gladlog/analysis/src/utils/cannotCastIntervals";
+import * as gapClosers from "@gladlog/analysis/src/utils/gapClosers";
 import * as castCancels from "@gladlog/analysis/src/utils/castCancels";
 import * as castParam from "@gladlog/analysis/src/utils/castParam";
 import * as ccTargetState from "@gladlog/analysis/src/utils/ccTargetState";
@@ -706,6 +707,16 @@ const INDEX: PredicateRow[] = [
     file: `${A}/data/spellSchools.ts`,
     symbol: "schoolLockedBy",
     mod: spellSchools,
+  },
+  {
+    file: `${A}/utils/gapClosers.ts`,
+    symbol: "gapCloserStateAt",
+    mod: gapClosers,
+  },
+  {
+    file: `${A}/utils/cannotCastIntervals.ts`,
+    symbol: "castBlockingAuraAt",
+    mod: cannotCastIntervals,
   },
   {
     file: `${E}/quality/promptQualityCheck.ts`,
@@ -2298,6 +2309,13 @@ const RAW_STREAMS_REAL_LINES = [
   "7/19/2026 04:19:25.190-4  ARENA_MATCH_END,1,518,2414,2385",
   '7/19/2026 04:19:12.536-4  SPELL_CAST_FAILED,Player-57-0E0CB0B6,"Minilay-Illidan-US",0x10511,0x80000000,0000000000000000,nil,0x80000000,0x80000000,156322,"永恒之火",0x6,"尚未恢复"',
 ];
+
+describe("谓词索引:刻意不统一的配对,两边的符号都还在", () => {
+  it("kick-eaten 的突进门(gapCloserStateAt)与 kick-priority 的跑动模型(meleeKickReachYd)—— 方向相反的保守,见「Not yet unified」(triage F-K6b × F-P3)", () => {
+    expect(typeof gapClosers.gapCloserStateAt).toBe("function");
+    expect(typeof kickPriority.meleeKickReachYd).toBe("function");
+  });
+});
 
 describe("谓词索引:无法共享 export 的配对,断言相等", () => {
   it("rawStreams 的 splitRawLine / parseRawTimestamp / mirrorDecodeAdvanced 自 2026-09-26 起就是 parser 的 splitLine / parseTimestamp / decodeAdvanced 本身(经 parser-compat 重导出,同一引用),不再是镜像", () => {

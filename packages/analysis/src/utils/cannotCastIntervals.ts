@@ -7,6 +7,7 @@ import {
 import { kickLockoutSeconds } from "../data/spellEffectData";
 import { ccSpellIds, officialSilenceIds } from "../data/spellTags";
 import { REACTION_WINDOW_S } from "./cooldowns";
+import { isSilenceableCast } from "./spellMechanics";
 
 /**
  * "When could this unit not cast?" — ONE predicate for the two consumers that
@@ -204,6 +205,71 @@ export function castBlockingAuraIntervals(
   return out;
 }
 
+/** A cast-blocking aura that is a silence and not hard CC — the same split
+ * `silenceIntervals` renders `[SILENCE]` from. */
+const isSilenceOnlyAura = (auraId: string): boolean =>
+  officialSilenceIds.has(auraId) && !ccSpellIds.has(auraId);
+
+/**
+ * "Could this unit press `spellId` at `tMs`, as far as auras go?" — the
+ * cast-blocking aura (`castBlockingAuraIntervals`) that stops it at that
+ * instant, or undefined when it was free.
+ *
+ *  - Hard CC stops everything.
+ *  - A silence stops only a cast DB2 marks silenceable (`isSilenceableCast`).
+ *    Kick, Pummel, Skull Bash, Rebuke, Disrupt, Counter Shot are not: on 605
+ *    S2 files those were cast under a silence aura 31 times, the silenceable
+ *    kicks (Counterspell, Wind Shear, Mind Freeze, Strangulate, Solar Beam,
+ *    Spell Lock) twice in ~3,900 casts. 6062daf2 @32.7: a Feral Druid inside
+ *    Garrote - Silence at cast start is still a kicker. Without `spellId`
+ *    every cast-blocking aura counts.
+ *  - The AURA half only, on purpose. `buildCannotCastIntervals` also carries
+ *    school lockouts with no school on them, and an interrupt is rarely of
+ *    the locked school: fa5e6c66's Frost-locked Mage (152.7–154.7) cast an
+ *    Arcane Counterspell at 154.25. A kicker under a lockout is still a
+ *    kicker.
+ *
+ * One predicate for "is this enemy's kick usable now": kick-eaten's
+ * `kickersInRange` / `nearestKickerDistYd` (triage 2026-09-29 F-K5d) and the
+ * `enemy interrupts UP` readers (res-readiness F-C5b). Ask it of the unit
+ * that casts the kick — the pet for a pet kick (a Warlock commands Spell
+ * Lock while stunned). `hostileIds` = the ids that may have applied the aura
+ * (the other side's players and their summons, `enemySourceIds`).
+ */
+export function castBlockingAuraAt(
+  unit: ICombatUnit,
+  hostileIds: Set<string>,
+  tMs: number,
+  spellId?: string,
+): CastBlockingAura | undefined {
+  const silenceStops = spellId === undefined || isSilenceableCast(spellId);
+  // hard CC stops every cast, a silence a silenceable one. An aura of the
+  // cast-blocking TYPES that is neither — the lockout aura a kick leaves
+  // (Shambling Rush 91807: type "interrupts", not in the official silence
+  // category, not CC) — is the lockout half this predicate leaves out, and
+  // used to be read as hard CC (pre-review of the batch: a Warrior in Pummel
+  // range under 91807 dropped out of `kickersInRange`).
+  return castBlockingAuraIntervals(unit, hostileIds).find(
+    (a) =>
+      a.from <= tMs &&
+      tMs < a.to &&
+      (ccSpellIds.has(a.spellId) ||
+        (silenceStops && officialSilenceIds.has(a.spellId))),
+  );
+}
+
+/** The root-like half of the same question for MOVEMENT: the hard CC (never
+ * a silence — it does not stop walking) holding `unit` at `tMs`. */
+export function hardCcAuraAt(
+  unit: ICombatUnit,
+  hostileIds: Set<string>,
+  tMs: number,
+): CastBlockingAura | undefined {
+  return castBlockingAuraIntervals(unit, hostileIds).find(
+    (a) => a.from <= tMs && tMs < a.to && ccSpellIds.has(a.spellId),
+  );
+}
+
 /**
  * Silences on `unit`: the cast-blocking auras (the same predicate as
  * `buildCannotCastIntervals`, which already locks the unit for them) that are
@@ -220,9 +286,7 @@ export function silenceIntervals(
   enemyIds: Set<string>,
 ): CastBlockingAura[] {
   return castBlockingAuraIntervals(unit, enemyIds)
-    .filter(
-      (a) => officialSilenceIds.has(a.spellId) && !ccSpellIds.has(a.spellId),
-    )
+    .filter((a) => isSilenceOnlyAura(a.spellId))
     .sort((x, y) => x.from - y.from);
 }
 

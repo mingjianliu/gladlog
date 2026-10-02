@@ -35,13 +35,16 @@ import { dropAuraRebroadcasts } from "./auraIntervals";
 import { upperBound } from "./binarySearch";
 import {
   buildCannotCastIntervals,
+  castBlockingAuraAt,
   coveredMsWithin,
+  hardCcAuraAt,
 } from "./cannotCastIntervals";
 import { ccFullDurationForCaster } from "./ccDuration";
 import { stasisReplayWindows } from "./combatStates";
 import { isHealerSpec, isPassiveProcCast, specToString } from "./cooldowns";
 import { computeIncomingDR, IDRInfo, matchPendingCcKey } from "./drAnalysis";
 import { IMMUNITY_IDS } from "./enemyDefensives";
+import { gapCloserStateOver, type GapCloserState } from "./gapClosers";
 import {
   interruptCooldownRemainingMs,
   interruptForUnit,
@@ -66,7 +69,8 @@ import {
 } from "./pvpTrinketUses";
 import { fmtTime } from "./renderGrid";
 import { isSilenceableCast } from "./spellMechanics";
-import { spellRangeForCaster } from "./spellRange";
+import { rootIntervalsOf } from "./rootReachability";
+import { RANGE_HITBOX_SLACK_YD, spellRangeForCaster } from "./spellRange";
 import { medianFinite } from "./stats";
 import { getTalentAvoidanceBuffs } from "./talentBehaviors";
 import { DPS_TRINKET_CD_S, HEALER_TRINKET_CD_S } from "./trinketCooldown";
@@ -793,10 +797,57 @@ export interface IInterruptInstance {
    * trinket — while the prompt asserted "kept playing through the lockout".
    * The classification itself is unchanged; only what the line may CLAIM is. */
   switchWasHardCast: boolean | null;
-  /** Distance in yards to the nearest enemy kicker at cast start (GH #73, B6). */
+  /** Distance in yards to the nearest enemy kicker at cast start (GH #73, B6).
+   * "Kicker" here and in `kickersInRange` = an enemy whose kick was READY at
+   * cast start and whom no aura stopped from using it then — hard CC, or a
+   * silence for a silenceable kick
+   * (`castBlockingAuraAt` on the unit that casts the kick — triage F-K5d:
+   * 3306e8ee @18.4 counted two enemies stunned by Terror of the Skies and
+   * named the stunned one as nearest). It is not necessarily the source. */
   nearestKickerDistYd?: number | null;
+  /** Who that nearest kicker was (F-K5a: c2058ed4 @18.2 printed the Hunter's
+   * 1.7 yd next to the Rogue's 5 yd Kick). */
+  nearestKickerName?: string | null;
   /** Number of enemy kickers in kick range with interrupt available at cast start (GH #73, B6). */
   kickersInRange?: number | null;
+  /** The longest kick range among those in-range kickers (F-K6a: a0a48716
+   * @107.7, a 30 yd cast against a 15 yd Mind Freeze while a Hunter with a
+   * 40 yd Counter Shot stood 18 yd away). null when none was in range. */
+  maxKickRangeYd?: number | null;
+  /** The same maximum with `RANGE_HITBOX_SLACK_YD` added to every kicker's
+   * range — what the out-range verdict reads (`outRangeFact` condition 4),
+   * so a second kicker 1.5 yd past a 40 yd kick closes it the way the
+   * source's own slack does in condition 2. `kickersInRange` and
+   * `maxKickRangeYd` keep the nominal ranges they print. */
+  maxKickRangeSlackYd?: number | null;
+  /** The same maximum over the OTHER kickers whose kick was still on
+   * cooldown at cast start and came back before this kick landed (the test
+   * `sourceKickReadyInS` applies to the source): out-ranging the source
+   * would not have avoided a kick from one of those. Read by the out-range
+   * verdict only — `kickersInRange` / `maxKickRangeYd` stay "ready at cast
+   * start", the definition the legend states. null when there was none. */
+  maxKickRangeLateYd?: number | null;
+  /** The SOURCE's own distance at cast start, whether or not its kick was
+   * ready (F-K5a). null without a cast start or a position. */
+  sourceDistYd?: number | null;
+  /** The source's kick was still on cooldown at cast start and came back
+   * this many seconds into the cast (F-K5b: 1bad0a5c @27.4 read
+   * `kickersInRange=0` for a Wind Shear that landed 2.4 s later). null when
+   * it was ready, and when the modelled cooldown would end after the kick
+   * actually landed (the model is wrong there, so nothing is claimed). */
+  sourceKickReadyInS?: number | null;
+  /** The source's gap-closer state from cast start to the kick
+   * (`gapCloserStateOver`, F-K6b): used in the second before, ready at the
+   * start, or cast / back up during the cast. */
+  sourceGapCloser?: GapCloserState | null;
+  /** The root or hard CC holding the OWNER at cast start (F-K6d: 9c9d8601
+   * @63.9 was told to step out of range while in Entangling Roots). Roots
+   * are the shared "could this unit move" predicate (`rootIntervalsOf` over
+   * `ROOT_SPELL_IDS` — not this file's own `rootSpellIds`, which lacks
+   * Entangling Roots 1287975, Ice Nova 157997 and Immobilized 45334), hard
+   * CC is `hardCcAuraAt` — a silence or a school lockout does not stop
+   * movement. */
+  ownerImmobileBy?: string | null;
   /** Percentage of nominal cast elapsed before interruption (GH #87, B7).
    * null for a channel kick (`channelS` set): the cast had already finished. */
   kickDepthPct?: number | null;
@@ -830,6 +881,11 @@ export interface ICCAvoidedInstance {
   sourceId: string;
   sourceSpec: string;
 }
+
+/** How far past the kick a modelled "kick ready again" instant may fall and
+ * still be believed (`sourceKickReadyInS`): the kick landed, so its cooldown
+ * was over by then. */
+const KICK_READY_SLACK_MS = 100;
 
 /** BACKLOG #36(b): how long after a kick the player's behavior is judged.
  * 5s = the research criterion (healer-study school_probe, 500 matches): it
@@ -1107,6 +1163,9 @@ export function analyzePlayerCCAndTrinket(
     string,
     { applyMs: number; spellName: string; srcId: string; srcName: string }
   >();
+  // F-K6d's "could the owner move" reads the shared root predicate, not the
+  // `rootWindows` below (this file's own id list, for [ROOT] instances)
+  const ownerRootIntervals = rootIntervalsOf(player, combat);
   const rootWindows: Array<{
     spellId: string;
     spellName: string;
@@ -1558,6 +1617,15 @@ export function analyzePlayerCCAndTrinket(
     return result;
   };
 
+  // Who may have put a cast-blocking aura on an enemy kicker: every source
+  // seen on the enemies' aura streams that is not on their own side (the
+  // owner's team and its summons — this function is not handed the friends).
+  const hostileToEnemies = new Set<string>();
+  for (const e of [...enemies, ...enemyPets])
+    for (const a of e.auraEvents ?? [])
+      if (a.srcUnitId && !enemyIds.has(a.srcUnitId))
+        hostileToEnemies.add(a.srcUnitId);
+
   const interruptInstances: IInterruptInstance[] = [];
   for (const action of player.actionIn) {
     if (action.logLine.event !== LogEvent.SPELL_INTERRUPT) continue;
@@ -1589,7 +1657,15 @@ export function analyzePlayerCCAndTrinket(
       .sort((a, b) => b.logLine.timestamp - a.logLine.timestamp)[0];
 
     let nearestKickerDistYd: number | null = null;
+    let nearestKickerName: string | null = null;
     let kickersInRange: number | null = null;
+    let maxKickRangeYd: number | null = null;
+    let maxKickRangeSlackYd: number | null = null;
+    let maxKickRangeLateYd: number | null = null;
+    let sourceDistYd: number | null = null;
+    let sourceKickReadyInS: number | null = null;
+    let sourceGapCloser: GapCloserState | null = null;
+    let ownerImmobileBy: string | null = null;
     let kickDepthPct: number | null = null;
 
     // W1k: for an officially channelled spell (CHANNELED_SPELL_IDS, DB2
@@ -1638,9 +1714,56 @@ export function analyzePlayerCCAndTrinket(
         LOS_SWEEP_GAP_MS,
       );
 
+      // F-K6d: the owner could not have stepped away while rooted or in hard
+      // CC at cast start
+      const castStartS = (castStartMs - matchStartMs) / 1000;
+      const root = ownerRootIntervals.find(
+        (r) => r.fromS <= castStartS && castStartS < r.toS,
+      );
+      ownerImmobileBy = root
+        ? getEnglishSpellName(root.spellId, root.spellName)
+        : null;
+      if (ownerImmobileBy === null) {
+        const held = hardCcAuraAt(player, enemyIds, castStartMs);
+        if (held)
+          ownerImmobileBy = getEnglishSpellName(held.spellId, held.spellName);
+      }
+
+      // The source's own state at cast start (F-K5a / F-K5b / F-K6b) — read
+      // whether or not its kick was ready, off the unit that cast the kick.
+      const sourceUnit =
+        enemies.find((e) => e.id === action.srcUnitId) ??
+        enemyPets.find((p) => p.id === action.srcUnitId);
+      if (sourceUnit) {
+        const cdLeftMs = interruptCooldownRemainingMs(
+          sourceUnit,
+          kickCastSpellId(kickSpellId),
+          castStartMs,
+        );
+        // a modelled cooldown that ends after the kick landed contradicts
+        // the kick itself: say nothing
+        if (
+          cdLeftMs > 0 &&
+          castStartMs + cdLeftMs <= action.timestamp + KICK_READY_SLACK_MS
+        )
+          sourceKickReadyInS = cdLeftMs / 1000;
+        sourceGapCloser = gapCloserStateOver(
+          sourceUnit,
+          castStartMs,
+          action.timestamp,
+          matchStartMs,
+        );
+      }
+
       if (playerPos) {
         let countInRange = 0;
         let minDist = Infinity;
+        const sourcePos = sourceUnit
+          ? getUnitPositionAtTime(sourceUnit, castStartMs, LOS_SWEEP_GAP_MS)
+          : null;
+        if (sourcePos)
+          sourceDistYd =
+            Math.round(distanceBetween(playerPos, sourcePos) * 10) / 10;
         for (const enemy of enemies) {
           const kit = interruptForUnit(enemy);
           if (!kit) continue;
@@ -1653,7 +1776,31 @@ export function analyzePlayerCCAndTrinket(
             kit.spellId,
             castStartMs,
           );
-          if (cdLeft > 0) continue; // kick was on CD at cast start
+          // on CD at cast start and still on CD when this kick landed: not
+          // a kicker of this cast. Back in between (`late`): not one of the
+          // "ready at cast start" facts, but the out-range verdict has to
+          // know (Fable review of the batch: a Hunter 20 yd away whose
+          // Counter Shot returned 0.3 s into the cast, `outRangeable=yes`).
+          const late = cdLeft > 0;
+          if (
+            late &&
+            castStartMs + cdLeft > action.timestamp + KICK_READY_SLACK_MS
+          )
+            continue;
+          // F-K5d: a kicker in hard CC cannot kick; one in a silence cannot
+          // use a silenceable kick. A `late` kicker is asked at the instants
+          // that matter for it — when its kick came back and when this kick
+          // landed — and dropped only when held at both: a stun that ended
+          // 0.1 s into the cast says nothing about a kick that returned
+          // 0.3 s in (Fable re-review of the batch).
+          const heldAt = (ms: number) =>
+            castBlockingAuraAt(enemy, hostileToEnemies, ms, kit.spellId);
+          if (
+            late
+              ? heldAt(castStartMs + cdLeft) && heldAt(action.timestamp)
+              : heldAt(castStartMs)
+          )
+            continue;
           const enemyPos = getUnitPositionAtTime(
             enemy,
             castStartMs,
@@ -1661,14 +1808,26 @@ export function analyzePlayerCCAndTrinket(
           );
           if (!enemyPos) continue;
           const dist = distanceBetween(playerPos, enemyPos);
-          if (dist < minDist) {
-            minDist = dist;
-          }
           // this kicker's range, range talents included (GH #83)
           const range = spellRangeForCaster(enemy, kit.spellId) ?? 5;
+          if (late) {
+            if (
+              enemy.id !== action.srcUnitId &&
+              dist <= range + RANGE_HITBOX_SLACK_YD
+            )
+              maxKickRangeLateYd = Math.max(maxKickRangeLateYd ?? 0, range);
+            continue;
+          }
+          if (dist < minDist) {
+            minDist = dist;
+            nearestKickerName = enemy.name;
+          }
           if (dist <= range) {
             countInRange++;
+            maxKickRangeYd = Math.max(maxKickRangeYd ?? 0, range);
           }
+          if (dist <= range + RANGE_HITBOX_SLACK_YD)
+            maxKickRangeSlackYd = Math.max(maxKickRangeSlackYd ?? 0, range);
         }
         // Round-1 rerun #3 (7c598eeb ×2): the kick came from a PET (Felhunter
         // Spell Lock). Pets are skipped above (their kit is read off the
@@ -1684,7 +1843,13 @@ export function analyzePlayerCCAndTrinket(
             petKicker,
             kickCastSpellId(kickSpellId),
             castStartMs,
-          ) <= 0
+          ) <= 0 &&
+          !castBlockingAuraAt(
+            petKicker,
+            hostileToEnemies,
+            castStartMs,
+            kickCastSpellId(kickSpellId),
+          )
         ) {
           const petPos = getUnitPositionAtTime(
             petKicker,
@@ -1693,16 +1858,33 @@ export function analyzePlayerCCAndTrinket(
           );
           if (petPos) {
             const dist = distanceBetween(playerPos, petPos);
-            if (dist < minDist) minDist = dist;
+            if (dist < minDist) {
+              minDist = dist;
+              // a pet's own name is client-localized and in no roster
+              // (`checkCjkLeak`): name it through its owner
+              const petOwner = enemies.find((e) => e.id === petKicker.ownerId);
+              nearestKickerName = petOwner
+                ? `${petOwner.name}'s pet`
+                : petKicker.name;
+            }
             const range =
-              spellRangeForCaster(petKicker, kickCastSpellId(kickSpellId)) ??
-              40;
-            if (dist <= range) countInRange++;
+              spellRangeForCaster(
+                petKicker,
+                kickCastSpellId(kickSpellId),
+              ) ?? 40;
+            if (dist <= range) {
+              countInRange++;
+              maxKickRangeYd = Math.max(maxKickRangeYd ?? 0, range);
+            }
+            if (dist <= range + RANGE_HITBOX_SLACK_YD)
+              maxKickRangeSlackYd = Math.max(maxKickRangeSlackYd ?? 0, range);
           }
         }
         if (minDist !== Infinity) {
           nearestKickerDistYd = Math.round(minDist * 10) / 10;
           kickersInRange = countInRange;
+        } else {
+          nearestKickerName = null;
         }
       }
     }
@@ -1715,7 +1897,15 @@ export function analyzePlayerCCAndTrinket(
       switchDelayS: null,
       switchWasHardCast: null,
       nearestKickerDistYd,
+      nearestKickerName,
       kickersInRange,
+      maxKickRangeYd,
+      maxKickRangeSlackYd,
+      maxKickRangeLateYd,
+      sourceDistYd,
+      sourceKickReadyInS,
+      sourceGapCloser,
+      ownerImmobileBy,
       kickDepthPct,
       channelS,
       firstActionDelayS: null,

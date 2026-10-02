@@ -569,5 +569,16 @@
  *  when the kick landed (one pressed inside the lockout afterwards is not
  *  listed, so a kick can become harmless and leave the menu), and a unit's
  *  ticks inside an immunity are not its low HP. Legend updated.
+ *  v251 (2026-10-01): triage kick-eaten F-K5a / F-K5b / F-K5d / F-K6a /
+ *  F-K6b / F-K6c / F-K6d (ruling A12 = B with U2). New kick-eaten facts at
+ *  cast start: `sourceDistYd`, `nearestKicker`, `maxKickRangeYd`,
+ *  `sourceKickReadyAtCastStart`, `youImmobileAtCastStart`, and the single
+ *  out-range verdict `outRangeable=yes|no (reason)` the legend now gates the
+ *  "cast from outside kick range" advice on (closed, among others, by a
+ *  gap-closer used or back up at any point of the cast, a kick during the
+ *  channel, a cast range that does not exceed the kick, and another kicker
+ *  in range whose kick came back during the cast); a kicker in
+ *  hard CC or a silence is no longer counted; no `yourReachYd` for a
+ *  caster-centred spell.
  */
-export const PROMPT_VERSION = 250;
+export const PROMPT_VERSION = 251;

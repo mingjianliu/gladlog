@@ -128,6 +128,7 @@ import {
   OFFENSIVE_EFFECT_ACTIVATION_IDS,
   SPELL_EFFECT_OVERRIDES as SPELL_DANGER_OVERRIDES,
 } from "../utils/spellDanger";
+import { GAP_CLOSER_SPELL_IDS } from "../utils/gapClosers";
 import { HEALER_REACH_SPELLS } from "../utils/spellRange";
 import {
   OFFENSIVE_PURGE_TALENT_IDS,
@@ -515,6 +516,11 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   // GH #83: the fallback CC per class for enemies not yet seen casting one
   t("SPEC_PRIMARY_CC", "utils/healerExposureAnalysis.ts", "aura", () =>
     SPEC_PRIMARY_CC.map((e) => e.spellId),
+  ),
+  // Triage 2026-09-29 F-K6b (ruling A12 + U2): caster-displacing abilities
+  // an enemy kicker can close a gap with — kick-eaten's out-range gate.
+  t("GAP_CLOSER_SPELL_IDS", "utils/gapClosers.ts", "cast", () =>
+    set(GAP_CLOSER_SPELL_IDS),
   ),
   t("HEALER_REACH_SPELLS", "utils/spellRange.ts", "cast", () =>
     set(Object.values(HEALER_REACH_SPELLS).flat()),
