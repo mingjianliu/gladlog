@@ -1,0 +1,2733 @@
+{
+ "meta": {
+  "producer": "packages/eval/scripts/castEffectAuraScan.ts",
+  "nominations": "castEffectNominationsGenerated.json (build 12.1.0.69587)",
+  "manifest": "/Users/mingjianliu/code/gladlog-eval-private/corpus/manifest-archive-2026-08-28-newseason.txt",
+  "every": 10,
+  "filesRead": 1814,
+  "rule": "a cast hits a nominated aura when the same root caster (summons resolved) applies it within 60 s after the cast (once per cast); a pair is kept when hits >= 10 the aura's covered share (applications with a nominating cast by the same root caster in the window before them / all applications) >= 0.5, and >= 0.5 of the hits come within 3 s of the cast",
+  "generatedAt": "2026-10-03T04:36:40.752Z"
+ },
+ "casts": {
+  "66": [
+   {
+    "aura": "32612",
+    "casts": 12,
+    "hits": 11,
+    "hitsWithin3s": 11,
+    "medianDelayS": 2,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "100": [
+   {
+    "aura": "105771",
+    "casts": 8816,
+    "hits": 8568,
+    "hitsWithin3s": 7883,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "136": [
+   {
+    "aura": "290819",
+    "casts": 1059,
+    "hits": 727,
+    "hitsWithin3s": 721,
+    "medianDelayS": 0.01,
+    "coveredShare": 0.939,
+    "via": "name"
+   }
+  ],
+  "172": [
+   {
+    "aura": "146739",
+    "casts": 3717,
+    "hits": 3706,
+    "hitsWithin3s": 3570,
+    "medianDelayS": 0,
+    "coveredShare": 0.728,
+    "via": "name+trigger"
+   }
+  ],
+  "348": [
+   {
+    "aura": "157736",
+    "casts": 40,
+    "hits": 40,
+    "hitsWithin3s": 37,
+    "medianDelayS": 0,
+    "coveredShare": 0.886,
+    "via": "name"
+   }
+  ],
+  "783": [
+   {
+    "aura": "165961",
+    "casts": 1580,
+    "hits": 1580,
+    "hitsWithin3s": 1580,
+    "medianDelayS": 0,
+    "coveredShare": 0.988,
+    "via": "name"
+   }
+  ],
+  "1122": [
+   {
+    "aura": "111685",
+    "casts": 562,
+    "hits": 560,
+    "hitsWithin3s": 560,
+    "medianDelayS": 1.01,
+    "coveredShare": 1,
+    "via": "name+trigger"
+   },
+   {
+    "aura": "22703",
+    "casts": 562,
+    "hits": 515,
+    "hitsWithin3s": 515,
+    "medianDelayS": 1.01,
+    "coveredShare": 1,
+    "via": "trigger"
+   }
+  ],
+  "1706": [
+   {
+    "aura": "111759",
+    "casts": 17,
+    "hits": 17,
+    "hitsWithin3s": 17,
+    "medianDelayS": 0,
+    "coveredShare": 0.85,
+    "via": "name"
+   }
+  ],
+  "1822": [
+   {
+    "aura": "155722",
+    "casts": 6291,
+    "hits": 6281,
+    "hitsWithin3s": 6204,
+    "medianDelayS": 0,
+    "coveredShare": 0.957,
+    "via": "name+trigger"
+   }
+  ],
+  "1856": [
+   {
+    "aura": "11327",
+    "casts": 3075,
+    "hits": 3073,
+    "hitsWithin3s": 3073,
+    "medianDelayS": 0,
+    "coveredShare": 0.999,
+    "via": "name"
+   }
+  ],
+  "1953": [
+   {
+    "aura": "119415",
+    "casts": 5862,
+    "hits": 741,
+    "hitsWithin3s": 741,
+    "medianDelayS": 0,
+    "coveredShare": 0.999,
+    "via": "name"
+   }
+  ],
+  "3411": [
+   {
+    "aura": "147833",
+    "casts": 1588,
+    "hits": 1564,
+    "hitsWithin3s": 1553,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "5782": [
+   {
+    "aura": "118699",
+    "casts": 4918,
+    "hits": 4584,
+    "hitsWithin3s": 4050,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "6343": [
+   {
+    "aura": "435203",
+    "casts": 2554,
+    "hits": 2446,
+    "hitsWithin3s": 2150,
+    "medianDelayS": 0,
+    "coveredShare": 0.906,
+    "via": "name"
+   }
+  ],
+  "8921": [
+   {
+    "aura": "164812",
+    "casts": 6677,
+    "hits": 6644,
+    "hitsWithin3s": 6471,
+    "medianDelayS": 0,
+    "coveredShare": 0.995,
+    "via": "name"
+   }
+  ],
+  "16979": [
+   {
+    "aura": "45334",
+    "casts": 237,
+    "hits": 223,
+    "hitsWithin3s": 220,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "trigger"
+   }
+  ],
+  "17877": [
+   {
+    "aura": "1311913",
+    "casts": 372,
+    "hits": 355,
+    "hitsWithin3s": 351,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name+trigger"
+   }
+  ],
+  "19505": [
+   {
+    "aura": "1276610",
+    "casts": 2281,
+    "hits": 11,
+    "hitsWithin3s": 11,
+    "medianDelayS": 0,
+    "coveredShare": 0.917,
+    "via": "name"
+   }
+  ],
+  "19574": [
+   {
+    "aura": "186254",
+    "casts": 4207,
+    "hits": 4207,
+    "hitsWithin3s": 4207,
+    "medianDelayS": 0,
+    "coveredShare": 0.992,
+    "via": "name"
+   },
+   {
+    "aura": "1285912",
+    "casts": 4207,
+    "hits": 4175,
+    "hitsWithin3s": 4163,
+    "medianDelayS": 0.51,
+    "coveredShare": 0.996,
+    "via": "name"
+   },
+   {
+    "aura": "1235388",
+    "casts": 4207,
+    "hits": 4052,
+    "hitsWithin3s": 2882,
+    "medianDelayS": 1.31,
+    "coveredShare": 0.998,
+    "via": "name"
+   }
+  ],
+  "19577": [
+   {
+    "aura": "24394",
+    "casts": 2777,
+    "hits": 2529,
+    "hitsWithin3s": 2392,
+    "medianDelayS": 0,
+    "coveredShare": 0.929,
+    "via": "name"
+   }
+  ],
+  "20271": [
+   {
+    "aura": "197277",
+    "casts": 15677,
+    "hits": 15598,
+    "hitsWithin3s": 13743,
+    "medianDelayS": 0.57,
+    "coveredShare": 0.981,
+    "via": "name"
+   }
+  ],
+  "22570": [
+   {
+    "aura": "203123",
+    "casts": 1866,
+    "hits": 1783,
+    "hitsWithin3s": 1731,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "23920": [
+   {
+    "aura": "385391",
+    "casts": 4278,
+    "hits": 4277,
+    "hitsWithin3s": 4276,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name+trigger"
+   }
+  ],
+  "26573": [
+   {
+    "aura": "188370",
+    "casts": 74,
+    "hits": 44,
+    "hitsWithin3s": 22,
+    "medianDelayS": 6.8,
+    "coveredShare": 0.96,
+    "via": "name"
+   }
+  ],
+  "30449": [
+   {
+    "aura": "1270828",
+    "casts": 3393,
+    "hits": 740,
+    "hitsWithin3s": 716,
+    "medianDelayS": 0,
+    "coveredShare": 0.992,
+    "via": "name"
+   }
+  ],
+  "31821": [
+   {
+    "aura": "317929",
+    "casts": 1164,
+    "hits": 63,
+    "hitsWithin3s": 63,
+    "medianDelayS": 0,
+    "coveredShare": 0.976,
+    "via": "name"
+   }
+  ],
+  "33076": [
+   {
+    "aura": "41635",
+    "casts": 49669,
+    "hits": 49650,
+    "hitsWithin3s": 48586,
+    "medianDelayS": 0.23,
+    "coveredShare": 0.936,
+    "via": "name"
+   }
+  ],
+  "33763": [
+   {
+    "aura": "1227806",
+    "casts": 8569,
+    "hits": 8419,
+    "hitsWithin3s": 7180,
+    "medianDelayS": 0.01,
+    "coveredShare": 0.993,
+    "via": "name"
+   }
+  ],
+  "43265": [
+   {
+    "aura": "188290",
+    "casts": 1424,
+    "hits": 1374,
+    "hitsWithin3s": 1022,
+    "medianDelayS": 0.09,
+    "coveredShare": 0.544,
+    "via": "name"
+   }
+  ],
+  "46968": [
+   {
+    "aura": "132168",
+    "casts": 2681,
+    "hits": 2520,
+    "hitsWithin3s": 2438,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "49376": [
+   {
+    "aura": "50259",
+    "casts": 1691,
+    "hits": 1691,
+    "hitsWithin3s": 1691,
+    "medianDelayS": 0,
+    "coveredShare": 0.936,
+    "via": "trigger"
+   }
+  ],
+  "53271": [
+   {
+    "aura": "62305",
+    "casts": 588,
+    "hits": 588,
+    "hitsWithin3s": 586,
+    "medianDelayS": 0,
+    "coveredShare": 0.993,
+    "via": "name"
+   },
+   {
+    "aura": "54216",
+    "casts": 588,
+    "hits": 588,
+    "hitsWithin3s": 586,
+    "medianDelayS": 0.01,
+    "coveredShare": 0.999,
+    "via": "name"
+   }
+  ],
+  "54216": [
+   {
+    "aura": "62305",
+    "casts": 1613,
+    "hits": 1605,
+    "hitsWithin3s": 1597,
+    "medianDelayS": 0,
+    "coveredShare": 0.993,
+    "via": "name"
+   }
+  ],
+  "57934": [
+   {
+    "aura": "221630",
+    "casts": 480,
+    "hits": 388,
+    "hitsWithin3s": 370,
+    "medianDelayS": 0.37,
+    "coveredShare": 0.983,
+    "via": "name"
+   },
+   {
+    "aura": "59628",
+    "casts": 480,
+    "hits": 88,
+    "hitsWithin3s": 85,
+    "medianDelayS": 0.28,
+    "coveredShare": 0.979,
+    "via": "name"
+   }
+  ],
+  "62305": [
+   {
+    "aura": "54216",
+    "casts": 1614,
+    "hits": 1613,
+    "hitsWithin3s": 1612,
+    "medianDelayS": 0.01,
+    "coveredShare": 0.999,
+    "via": "name"
+   }
+  ],
+  "64843": [
+   {
+    "aura": "64844",
+    "casts": 2398,
+    "hits": 2396,
+    "hitsWithin3s": 2396,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name+trigger"
+   }
+  ],
+  "64844": [
+   {
+    "aura": "64843",
+    "casts": 9625,
+    "hits": 2398,
+    "hitsWithin3s": 2398,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "77575": [
+   {
+    "aura": "191587",
+    "casts": 2782,
+    "hits": 2663,
+    "hitsWithin3s": 1770,
+    "medianDelayS": 0,
+    "coveredShare": 0.739,
+    "via": "trigger"
+   },
+   {
+    "aura": "1240996",
+    "casts": 2782,
+    "hits": 2542,
+    "hitsWithin3s": 2058,
+    "medianDelayS": 0,
+    "coveredShare": 0.849,
+    "via": "trigger"
+   }
+  ],
+  "77606": [
+   {
+    "aura": "77616",
+    "casts": 43,
+    "hits": 40,
+    "hitsWithin3s": 26,
+    "medianDelayS": 1.56,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "77758": [
+   {
+    "aura": "192090",
+    "casts": 288,
+    "hits": 277,
+    "hitsWithin3s": 246,
+    "medianDelayS": 0,
+    "coveredShare": 0.998,
+    "via": "name"
+   }
+  ],
+  "81262": [
+   {
+    "aura": "1232285",
+    "casts": 33866,
+    "hits": 33716,
+    "hitsWithin3s": 31400,
+    "medianDelayS": -0.01,
+    "coveredShare": 0.994,
+    "via": "name"
+   }
+  ],
+  "88625": [
+   {
+    "aura": "200200",
+    "casts": 9317,
+    "hits": 7719,
+    "hitsWithin3s": 7360,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name"
+   },
+   {
+    "aura": "200196",
+    "casts": 9317,
+    "hits": 1273,
+    "hitsWithin3s": 1204,
+    "medianDelayS": 0,
+    "coveredShare": 0.999,
+    "via": "name"
+   }
+  ],
+  "89808": [
+   {
+    "aura": "1276623",
+    "casts": 185,
+    "hits": 168,
+    "hitsWithin3s": 168,
+    "medianDelayS": -0.01,
+    "coveredShare": 0.977,
+    "via": "name"
+   }
+  ],
+  "93402": [
+   {
+    "aura": "164815",
+    "casts": 5920,
+    "hits": 5914,
+    "hitsWithin3s": 5826,
+    "medianDelayS": 0,
+    "coveredShare": 0.998,
+    "via": "name"
+   }
+  ],
+  "97462": [
+   {
+    "aura": "97463",
+    "casts": 969,
+    "hits": 969,
+    "hitsWithin3s": 969,
+    "medianDelayS": 0,
+    "coveredShare": 0.998,
+    "via": "name"
+   }
+  ],
+  "98008": [
+   {
+    "aura": "325174",
+    "casts": 478,
+    "hits": 476,
+    "hitsWithin3s": 476,
+    "medianDelayS": 0.03,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "101545": [
+   {
+    "aura": "123586",
+    "casts": 713,
+    "hits": 560,
+    "hitsWithin3s": 516,
+    "medianDelayS": 0.91,
+    "coveredShare": 0.998,
+    "via": "name"
+   }
+  ],
+  "102543": [
+   {
+    "aura": "252071",
+    "casts": 681,
+    "hits": 681,
+    "hitsWithin3s": 681,
+    "medianDelayS": 0,
+    "coveredShare": 0.957,
+    "via": "name+trigger"
+   }
+  ],
+  "102793": [
+   {
+    "aura": "127797",
+    "casts": 1172,
+    "hits": 1148,
+    "hitsWithin3s": 1135,
+    "medianDelayS": 0.05,
+    "coveredShare": 0.998,
+    "via": "name"
+   }
+  ],
+  "104773": [
+   {
+    "aura": "449587",
+    "casts": 795,
+    "hits": 154,
+    "hitsWithin3s": 154,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "trigger"
+   }
+  ],
+  "107570": [
+   {
+    "aura": "132169",
+    "casts": 4972,
+    "hits": 4729,
+    "hitsWithin3s": 4421,
+    "medianDelayS": 0.35,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "109248": [
+   {
+    "aura": "117405",
+    "casts": 3546,
+    "hits": 3407,
+    "hitsWithin3s": 3229,
+    "medianDelayS": 0.06,
+    "coveredShare": 0.979,
+    "via": "name"
+   },
+   {
+    "aura": "117526",
+    "casts": 3546,
+    "hits": 3225,
+    "hitsWithin3s": 2662,
+    "medianDelayS": 0.99,
+    "coveredShare": 0.975,
+    "via": "name"
+   }
+  ],
+  "110959": [
+   {
+    "aura": "110960",
+    "casts": 2048,
+    "hits": 2048,
+    "hitsWithin3s": 2048,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name+trigger"
+   }
+  ],
+  "113724": [
+   {
+    "aura": "82691",
+    "casts": 1471,
+    "hits": 1214,
+    "hitsWithin3s": 1000,
+    "medianDelayS": 0.12,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "114050": [
+   {
+    "aura": "1219480",
+    "casts": 417,
+    "hits": 417,
+    "hitsWithin3s": 417,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "114051": [
+   {
+    "aura": "466772",
+    "casts": 487,
+    "hits": 474,
+    "hitsWithin3s": 473,
+    "medianDelayS": 0.03,
+    "coveredShare": 0.899,
+    "via": "trigger"
+   }
+  ],
+  "115008": [
+   {
+    "aura": "119085",
+    "casts": 1264,
+    "hits": 1209,
+    "hitsWithin3s": 1125,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name+trigger"
+   }
+  ],
+  "115151": [
+   {
+    "aura": "119611",
+    "casts": 2321,
+    "hits": 2247,
+    "hitsWithin3s": 1526,
+    "medianDelayS": 0,
+    "coveredShare": 0.772,
+    "via": "name"
+   }
+  ],
+  "115175": [
+   {
+    "aura": "198533",
+    "casts": 3604,
+    "hits": 3183,
+    "hitsWithin3s": 2771,
+    "medianDelayS": 0,
+    "coveredShare": 0.986,
+    "via": "name"
+   }
+  ],
+  "115203": [
+   {
+    "aura": "120954",
+    "casts": 563,
+    "hits": 562,
+    "hitsWithin3s": 562,
+    "medianDelayS": 0,
+    "coveredShare": 0.998,
+    "via": "name"
+   }
+  ],
+  "115546": [
+   {
+    "aura": "116189",
+    "casts": 705,
+    "hits": 418,
+    "hitsWithin3s": 418,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "115750": [
+   {
+    "aura": "105421",
+    "casts": 2114,
+    "hits": 2010,
+    "hitsWithin3s": 2010,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "116095": [
+   {
+    "aura": "116706",
+    "casts": 2933,
+    "hits": 2267,
+    "hitsWithin3s": 1275,
+    "medianDelayS": 1.01,
+    "coveredShare": 0.908,
+    "via": "name"
+   }
+  ],
+  "119909": [
+   {
+    "aura": "6358",
+    "casts": 1209,
+    "hits": 1078,
+    "hitsWithin3s": 869,
+    "medianDelayS": 1.12,
+    "coveredShare": 0.738,
+    "via": "name"
+   }
+  ],
+  "119914": [
+   {
+    "aura": "89766",
+    "casts": 429,
+    "hits": 406,
+    "hitsWithin3s": 339,
+    "medianDelayS": 0.44,
+    "coveredShare": 0.591,
+    "via": "name"
+   }
+  ],
+  "120517": [
+   {
+    "aura": "449840",
+    "casts": 11,
+    "hits": 11,
+    "hitsWithin3s": 11,
+    "medianDelayS": 2.6,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "120644": [
+   {
+    "aura": "453094",
+    "casts": 289,
+    "hits": 289,
+    "hitsWithin3s": 289,
+    "medianDelayS": 2.6,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "121536": [
+   {
+    "aura": "121557",
+    "casts": 9753,
+    "hits": 9483,
+    "hitsWithin3s": 9015,
+    "medianDelayS": 0,
+    "coveredShare": 0.999,
+    "via": "name"
+   }
+  ],
+  "122470": [
+   {
+    "aura": "125174",
+    "casts": 454,
+    "hits": 447,
+    "hitsWithin3s": 447,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name"
+   },
+   {
+    "aura": "124280",
+    "casts": 454,
+    "hits": 447,
+    "hitsWithin3s": 442,
+    "medianDelayS": 0.4,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "124007": [
+   {
+    "aura": "124009",
+    "casts": 31,
+    "hits": 30,
+    "hitsWithin3s": 30,
+    "medianDelayS": 0.81,
+    "coveredShare": 1,
+    "via": "trigger"
+   }
+  ],
+  "132764": [
+   {
+    "aura": "1306960",
+    "casts": 10179,
+    "hits": 10178,
+    "hitsWithin3s": 10173,
+    "medianDelayS": 0,
+    "coveredShare": 0.999,
+    "via": "name"
+   }
+  ],
+  "157982": [
+   {
+    "aura": "740",
+    "casts": 945,
+    "hits": 251,
+    "hitsWithin3s": 251,
+    "medianDelayS": 0,
+    "coveredShare": 0.988,
+    "via": "name"
+   }
+  ],
+  "167105": [
+   {
+    "aura": "208086",
+    "casts": 4254,
+    "hits": 4223,
+    "hitsWithin3s": 4184,
+    "medianDelayS": 0.55,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "185313": [
+   {
+    "aura": "185422",
+    "casts": 3221,
+    "hits": 3221,
+    "hitsWithin3s": 3219,
+    "medianDelayS": 0,
+    "coveredShare": 0.995,
+    "via": "name"
+   }
+  ],
+  "186257": [
+   {
+    "aura": "356781",
+    "casts": 1256,
+    "hits": 43,
+    "hitsWithin3s": 42,
+    "medianDelayS": 0,
+    "coveredShare": 0.95,
+    "via": "name"
+   }
+  ],
+  "187650": [
+   {
+    "aura": "3355",
+    "casts": 5968,
+    "hits": 5187,
+    "hitsWithin3s": 4399,
+    "medianDelayS": 0.59,
+    "coveredShare": 0.982,
+    "via": "name"
+   },
+   {
+    "aura": "203337",
+    "casts": 5968,
+    "hits": 363,
+    "hitsWithin3s": 295,
+    "medianDelayS": 0.71,
+    "coveredShare": 0.985,
+    "via": "name"
+   }
+  ],
+  "187698": [
+   {
+    "aura": "135299",
+    "casts": 366,
+    "hits": 335,
+    "hitsWithin3s": 252,
+    "medianDelayS": 0.81,
+    "coveredShare": 0.985,
+    "via": "name"
+   }
+  ],
+  "187874": [
+   {
+    "aura": "1252415",
+    "casts": 2637,
+    "hits": 2624,
+    "hitsWithin3s": 2177,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "190784": [
+   {
+    "aura": "221883",
+    "casts": 6598,
+    "hits": 3718,
+    "hitsWithin3s": 3718,
+    "medianDelayS": 0,
+    "coveredShare": 0.999,
+    "via": "name"
+   },
+   {
+    "aura": "221886",
+    "casts": 6598,
+    "hits": 1428,
+    "hitsWithin3s": 1428,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name"
+   },
+   {
+    "aura": "221885",
+    "casts": 6598,
+    "hits": 369,
+    "hitsWithin3s": 369,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name"
+   },
+   {
+    "aura": "276111",
+    "casts": 6598,
+    "hits": 289,
+    "hitsWithin3s": 289,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name"
+   },
+   {
+    "aura": "276112",
+    "casts": 6598,
+    "hits": 280,
+    "hitsWithin3s": 280,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name"
+   },
+   {
+    "aura": "254474",
+    "casts": 6598,
+    "hits": 148,
+    "hitsWithin3s": 148,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name"
+   },
+   {
+    "aura": "254472",
+    "casts": 6598,
+    "hits": 91,
+    "hitsWithin3s": 91,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name"
+   },
+   {
+    "aura": "254473",
+    "casts": 6598,
+    "hits": 66,
+    "hitsWithin3s": 66,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name"
+   },
+   {
+    "aura": "294133",
+    "casts": 6598,
+    "hits": 63,
+    "hitsWithin3s": 63,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name"
+   },
+   {
+    "aura": "221887",
+    "casts": 6598,
+    "hits": 55,
+    "hitsWithin3s": 55,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name"
+   },
+   {
+    "aura": "363608",
+    "casts": 6598,
+    "hits": 47,
+    "hitsWithin3s": 47,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name"
+   },
+   {
+    "aura": "254471",
+    "casts": 6598,
+    "hits": 39,
+    "hitsWithin3s": 39,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "192058": [
+   {
+    "aura": "118905",
+    "casts": 2592,
+    "hits": 2182,
+    "hitsWithin3s": 2095,
+    "medianDelayS": 2.01,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "198137": [
+   {
+    "aura": "1236942",
+    "casts": 3328,
+    "hits": 2903,
+    "hitsWithin3s": 2171,
+    "medianDelayS": 0.73,
+    "coveredShare": 0.997,
+    "via": "name"
+   }
+  ],
+  "198533": [
+   {
+    "aura": "115175",
+    "casts": 3483,
+    "hits": 3483,
+    "hitsWithin3s": 3483,
+    "medianDelayS": 0,
+    "coveredShare": 0.863,
+    "via": "name"
+   }
+  ],
+  "198589": [
+   {
+    "aura": "212800",
+    "casts": 1665,
+    "hits": 1663,
+    "hitsWithin3s": 1663,
+    "medianDelayS": 0,
+    "coveredShare": 0.999,
+    "via": "name+trigger"
+   }
+  ],
+  "198793": [
+   {
+    "aura": "198813",
+    "casts": 4138,
+    "hits": 1339,
+    "hitsWithin3s": 1106,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name+trigger"
+   }
+  ],
+  "198898": [
+   {
+    "aura": "198909",
+    "casts": 669,
+    "hits": 615,
+    "hitsWithin3s": 572,
+    "medianDelayS": 0.06,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "200166": [
+   {
+    "aura": "247121",
+    "casts": 925,
+    "hits": 709,
+    "hitsWithin3s": 709,
+    "medianDelayS": 0.01,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "202246": [
+   {
+    "aura": "202244",
+    "casts": 10,
+    "hits": 10,
+    "hitsWithin3s": 9,
+    "medianDelayS": 0.71,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "204019": [
+   {
+    "aura": "204301",
+    "casts": 45,
+    "hits": 40,
+    "hitsWithin3s": 25,
+    "medianDelayS": 1.69,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "204066": [
+   {
+    "aura": "1270292",
+    "casts": 26,
+    "hits": 26,
+    "hitsWithin3s": 26,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name+trigger"
+   }
+  ],
+  "205636": [
+   {
+    "aura": "205644",
+    "casts": 1185,
+    "hits": 69,
+    "hitsWithin3s": 55,
+    "medianDelayS": 0.02,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "207684": [
+   {
+    "aura": "207685",
+    "casts": 842,
+    "hits": 609,
+    "hitsWithin3s": 608,
+    "medianDelayS": 2.07,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "212382": [
+   {
+    "aura": "1306960",
+    "casts": 15,
+    "hits": 15,
+    "hitsWithin3s": 15,
+    "medianDelayS": 0,
+    "coveredShare": 0.999,
+    "via": "name"
+   }
+  ],
+  "212396": [
+   {
+    "aura": "1306960",
+    "casts": 96,
+    "hits": 96,
+    "hitsWithin3s": 96,
+    "medianDelayS": 0,
+    "coveredShare": 0.999,
+    "via": "name"
+   }
+  ],
+  "212459": [
+   {
+    "aura": "212460",
+    "casts": 79,
+    "hits": 79,
+    "hitsWithin3s": 79,
+    "medianDelayS": 0.02,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "212653": [
+   {
+    "aura": "236645",
+    "casts": 2339,
+    "hits": 283,
+    "hitsWithin3s": 283,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "215652": [
+   {
+    "aura": "217824",
+    "casts": 11,
+    "hits": 11,
+    "hitsWithin3s": 9,
+    "medianDelayS": 0.35,
+    "coveredShare": 0.895,
+    "via": "name+trigger"
+   }
+  ],
+  "217200": [
+   {
+    "aura": "246152",
+    "casts": 13853,
+    "hits": 13768,
+    "hitsWithin3s": 11185,
+    "medianDelayS": 0,
+    "coveredShare": 0.995,
+    "via": "name"
+   }
+  ],
+  "219199": [
+   {
+    "aura": "1306960",
+    "casts": 1657,
+    "hits": 1657,
+    "hitsWithin3s": 1655,
+    "medianDelayS": 0,
+    "coveredShare": 0.999,
+    "via": "name"
+   }
+  ],
+  "228260": [
+   {
+    "aura": "194249",
+    "casts": 813,
+    "hits": 813,
+    "hitsWithin3s": 813,
+    "medianDelayS": 0.01,
+    "coveredShare": 0.998,
+    "via": "name"
+   }
+  ],
+  "255654": [
+   {
+    "aura": "255723",
+    "casts": 563,
+    "hits": 412,
+    "hitsWithin3s": 412,
+    "medianDelayS": 0.08,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "255937": [
+   {
+    "aura": "403695",
+    "casts": 5228,
+    "hits": 5138,
+    "hitsWithin3s": 4910,
+    "medianDelayS": 0.02,
+    "coveredShare": 1,
+    "via": "trigger"
+   },
+   {
+    "aura": "255941",
+    "casts": 5228,
+    "hits": 1240,
+    "hitsWithin3s": 952,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "258860": [
+   {
+    "aura": "320338",
+    "casts": 1184,
+    "hits": 1132,
+    "hitsWithin3s": 1085,
+    "medianDelayS": 0.32,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "259495": [
+   {
+    "aura": "269747",
+    "casts": 2935,
+    "hits": 2797,
+    "hitsWithin3s": 2727,
+    "medianDelayS": 0.31,
+    "coveredShare": 0.998,
+    "via": "name"
+   },
+   {
+    "aura": "1253171",
+    "casts": 2935,
+    "hits": 128,
+    "hitsWithin3s": 122,
+    "medianDelayS": 0.28,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "263165": [
+   {
+    "aura": "289577",
+    "casts": 974,
+    "hits": 965,
+    "hitsWithin3s": 952,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name+trigger"
+   }
+  ],
+  "264130": [
+   {
+    "aura": "334581",
+    "casts": 372,
+    "hits": 372,
+    "hitsWithin3s": 372,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "271877": [
+   {
+    "aura": "271896",
+    "casts": 145,
+    "hits": 145,
+    "hitsWithin3s": 145,
+    "medianDelayS": 0.06,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "272682": [
+   {
+    "aura": "54216",
+    "casts": 1118,
+    "hits": 1058,
+    "hitsWithin3s": 1027,
+    "medianDelayS": 0.01,
+    "coveredShare": 0.999,
+    "via": "name"
+   },
+   {
+    "aura": "62305",
+    "casts": 1118,
+    "hits": 1053,
+    "hitsWithin3s": 1018,
+    "medianDelayS": 0,
+    "coveredShare": 0.993,
+    "via": "name"
+   }
+  ],
+  "274837": [
+   {
+    "aura": "274838",
+    "casts": 1456,
+    "hits": 1449,
+    "hitsWithin3s": 1439,
+    "medianDelayS": 0.21,
+    "coveredShare": 0.701,
+    "via": "name"
+   }
+  ],
+  "275779": [
+   {
+    "aura": "197277",
+    "casts": 104,
+    "hits": 103,
+    "hitsWithin3s": 88,
+    "medianDelayS": 0.55,
+    "coveredShare": 0.981,
+    "via": "name"
+   }
+  ],
+  "279302": [
+   {
+    "aura": "279303",
+    "casts": 195,
+    "hits": 188,
+    "hitsWithin3s": 180,
+    "medianDelayS": 0.05,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "304051": [
+   {
+    "aura": "1306960",
+    "casts": 348,
+    "hits": 347,
+    "hitsWithin3s": 347,
+    "medianDelayS": 0,
+    "coveredShare": 0.999,
+    "via": "name"
+   }
+  ],
+  "305483": [
+   {
+    "aura": "305485",
+    "casts": 964,
+    "hits": 892,
+    "hitsWithin3s": 874,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "316531": [
+   {
+    "aura": "147833",
+    "casts": 1177,
+    "hits": 1156,
+    "hitsWithin3s": 1148,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "317792": [
+   {
+    "aura": "1292107",
+    "casts": 8244,
+    "hits": 7742,
+    "hitsWithin3s": 3996,
+    "medianDelayS": 2.33,
+    "coveredShare": 0.989,
+    "via": "name"
+   }
+  ],
+  "321507": [
+   {
+    "aura": "210824",
+    "casts": 1009,
+    "hits": 995,
+    "hitsWithin3s": 986,
+    "medianDelayS": 0.01,
+    "coveredShare": 0.996,
+    "via": "name+trigger"
+   }
+  ],
+  "335096": [
+   {
+    "aura": "113344",
+    "casts": 1320,
+    "hits": 1308,
+    "hitsWithin3s": 1282,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "342245": [
+   {
+    "aura": "342246",
+    "casts": 2337,
+    "hits": 2337,
+    "hitsWithin3s": 2337,
+    "medianDelayS": 0,
+    "coveredShare": 0.997,
+    "via": "name+trigger"
+   }
+  ],
+  "343294": [
+   {
+    "aura": "1241521",
+    "casts": 2160,
+    "hits": 2132,
+    "hitsWithin3s": 2089,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name+trigger"
+   }
+  ],
+  "343527": [
+   {
+    "aura": "1234189",
+    "casts": 841,
+    "hits": 830,
+    "hitsWithin3s": 830,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name+trigger"
+   },
+   {
+    "aura": "1260251",
+    "casts": 841,
+    "hits": 828,
+    "hitsWithin3s": 828,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name+trigger"
+   }
+  ],
+  "352278": [
+   {
+    "aura": "353703",
+    "casts": 215,
+    "hits": 214,
+    "hitsWithin3s": 214,
+    "medianDelayS": 1,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "353082": [
+   {
+    "aura": "353084",
+    "casts": 15,
+    "hits": 11,
+    "hitsWithin3s": 9,
+    "medianDelayS": 0.21,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "353294": [
+   {
+    "aura": "353293",
+    "casts": 26,
+    "hits": 26,
+    "hitsWithin3s": 26,
+    "medianDelayS": 0.03,
+    "coveredShare": 1,
+    "via": "name"
+   },
+   {
+    "aura": "353821",
+    "casts": 26,
+    "hits": 19,
+    "hitsWithin3s": 19,
+    "medianDelayS": 2.06,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "353703": [
+   {
+    "aura": "352278",
+    "casts": 215,
+    "hits": 215,
+    "hitsWithin3s": 215,
+    "medianDelayS": -0.01,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "353753": [
+   {
+    "aura": "353807",
+    "casts": 43,
+    "hits": 43,
+    "hitsWithin3s": 39,
+    "medianDelayS": 0.02,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "355936": [
+   {
+    "aura": "355941",
+    "casts": 2139,
+    "hits": 2127,
+    "hitsWithin3s": 2015,
+    "medianDelayS": 0.49,
+    "coveredShare": 0.99,
+    "via": "name"
+   },
+   {
+    "aura": "376788",
+    "casts": 2139,
+    "hits": 1961,
+    "hitsWithin3s": 1583,
+    "medianDelayS": 0.53,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "356719": [
+   {
+    "aura": "356723",
+    "casts": 2084,
+    "hits": 1922,
+    "hitsWithin3s": 1922,
+    "medianDelayS": 0.2,
+    "coveredShare": 0.997,
+    "via": "trigger"
+   }
+  ],
+  "357208": [
+   {
+    "aura": "357209",
+    "casts": 2451,
+    "hits": 2390,
+    "hitsWithin3s": 2160,
+    "medianDelayS": 0.7,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "357210": [
+   {
+    "aura": "353759",
+    "casts": 423,
+    "hits": 393,
+    "hitsWithin3s": 393,
+    "medianDelayS": 0.77,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "358385": [
+   {
+    "aura": "355689",
+    "casts": 479,
+    "hits": 418,
+    "hitsWithin3s": 418,
+    "medianDelayS": 0.31,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "360995": [
+   {
+    "aura": "409895",
+    "casts": 3934,
+    "hits": 2066,
+    "hitsWithin3s": 2049,
+    "medianDelayS": 0.31,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "361195": [
+   {
+    "aura": "409895",
+    "casts": 4885,
+    "hits": 2539,
+    "hitsWithin3s": 2408,
+    "medianDelayS": 0.03,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "361469": [
+   {
+    "aura": "361500",
+    "casts": 1657,
+    "hits": 19,
+    "hitsWithin3s": 15,
+    "medianDelayS": 0.49,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "364342": [
+   {
+    "aura": "381750",
+    "casts": 215,
+    "hits": 39,
+    "hitsWithin3s": 39,
+    "medianDelayS": 0,
+    "coveredShare": 0.5,
+    "via": "name+trigger"
+   },
+   {
+    "aura": "381752",
+    "casts": 215,
+    "hits": 37,
+    "hitsWithin3s": 37,
+    "medianDelayS": 0,
+    "coveredShare": 0.521,
+    "via": "name+trigger"
+   },
+   {
+    "aura": "381757",
+    "casts": 215,
+    "hits": 21,
+    "hitsWithin3s": 21,
+    "medianDelayS": 0,
+    "coveredShare": 0.564,
+    "via": "name+trigger"
+   }
+  ],
+  "365350": [
+   {
+    "aura": "365362",
+    "casts": 582,
+    "hits": 582,
+    "hitsWithin3s": 582,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "366155": [
+   {
+    "aura": "367364",
+    "casts": 1154,
+    "hits": 1085,
+    "hitsWithin3s": 891,
+    "medianDelayS": 0.01,
+    "coveredShare": 0.682,
+    "via": "name"
+   }
+  ],
+  "370665": [
+   {
+    "aura": "370666",
+    "casts": 364,
+    "hits": 364,
+    "hitsWithin3s": 364,
+    "medianDelayS": 0.01,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "370965": [
+   {
+    "aura": "370969",
+    "casts": 1652,
+    "hits": 1632,
+    "hitsWithin3s": 1632,
+    "medianDelayS": 0.17,
+    "coveredShare": 1,
+    "via": "name+trigger"
+   },
+   {
+    "aura": "370970",
+    "casts": 1652,
+    "hits": 1450,
+    "hitsWithin3s": 1450,
+    "medianDelayS": 0.27,
+    "coveredShare": 1,
+    "via": "name+trigger"
+   }
+  ],
+  "370966": [
+   {
+    "aura": "370969",
+    "casts": 1598,
+    "hits": 1499,
+    "hitsWithin3s": 1497,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name+trigger"
+   },
+   {
+    "aura": "370970",
+    "casts": 1598,
+    "hits": 1450,
+    "hitsWithin3s": 1450,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name+trigger"
+   }
+  ],
+  "374968": [
+   {
+    "aura": "375234",
+    "casts": 279,
+    "hits": 279,
+    "hitsWithin3s": 279,
+    "medianDelayS": 0,
+    "coveredShare": 0.997,
+    "via": "name"
+   },
+   {
+    "aura": "375254",
+    "casts": 279,
+    "hits": 64,
+    "hitsWithin3s": 64,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name"
+   },
+   {
+    "aura": "375238",
+    "casts": 279,
+    "hits": 53,
+    "hitsWithin3s": 52,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name"
+   },
+   {
+    "aura": "375230",
+    "casts": 279,
+    "hits": 42,
+    "hitsWithin3s": 42,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name"
+   },
+   {
+    "aura": "375258",
+    "casts": 279,
+    "hits": 40,
+    "hitsWithin3s": 40,
+    "medianDelayS": 0,
+    "coveredShare": 0.977,
+    "via": "name"
+   },
+   {
+    "aura": "375255",
+    "casts": 279,
+    "hits": 39,
+    "hitsWithin3s": 39,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name"
+   },
+   {
+    "aura": "375240",
+    "casts": 279,
+    "hits": 33,
+    "hitsWithin3s": 33,
+    "medianDelayS": 0,
+    "coveredShare": 0.971,
+    "via": "name"
+   },
+   {
+    "aura": "375256",
+    "casts": 279,
+    "hits": 33,
+    "hitsWithin3s": 33,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name"
+   },
+   {
+    "aura": "375226",
+    "casts": 279,
+    "hits": 26,
+    "hitsWithin3s": 26,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name"
+   },
+   {
+    "aura": "375253",
+    "casts": 279,
+    "hits": 24,
+    "hitsWithin3s": 24,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name"
+   },
+   {
+    "aura": "375252",
+    "casts": 279,
+    "hits": 20,
+    "hitsWithin3s": 20,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name"
+   },
+   {
+    "aura": "375229",
+    "casts": 279,
+    "hits": 19,
+    "hitsWithin3s": 19,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name"
+   },
+   {
+    "aura": "375257",
+    "casts": 279,
+    "hits": 19,
+    "hitsWithin3s": 19,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "376079": [
+   {
+    "aura": "376080",
+    "casts": 2398,
+    "hits": 2289,
+    "hitsWithin3s": 2289,
+    "medianDelayS": 0.41,
+    "coveredShare": 1,
+    "via": "name+trigger"
+   }
+  ],
+  "382266": [
+   {
+    "aura": "357209",
+    "casts": 200,
+    "hits": 194,
+    "hitsWithin3s": 180,
+    "medianDelayS": 0.6,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "382614": [
+   {
+    "aura": "355941",
+    "casts": 38,
+    "hits": 37,
+    "hitsWithin3s": 36,
+    "medianDelayS": 0.4,
+    "coveredShare": 0.99,
+    "via": "name"
+   },
+   {
+    "aura": "376788",
+    "casts": 38,
+    "hits": 36,
+    "hitsWithin3s": 31,
+    "medianDelayS": 0.43,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "384100": [
+   {
+    "aura": "384102",
+    "casts": 1340,
+    "hits": 1340,
+    "hitsWithin3s": 1340,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name+trigger"
+   },
+   {
+    "aura": "1219209",
+    "casts": 1340,
+    "hits": 488,
+    "hitsWithin3s": 488,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "trigger"
+   }
+  ],
+  "384352": [
+   {
+    "aura": "466772",
+    "casts": 85,
+    "hits": 85,
+    "hitsWithin3s": 85,
+    "medianDelayS": 0.01,
+    "coveredShare": 0.899,
+    "via": "name+trigger"
+   }
+  ],
+  "385059": [
+   {
+    "aura": "385060",
+    "casts": 526,
+    "hits": 515,
+    "hitsWithin3s": 507,
+    "medianDelayS": 0.11,
+    "coveredShare": 1,
+    "via": "name+trigger"
+   }
+  ],
+  "385627": [
+   {
+    "aura": "394095",
+    "casts": 2224,
+    "hits": 2156,
+    "hitsWithin3s": 2131,
+    "medianDelayS": 0.24,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "385899": [
+   {
+    "aura": "387626",
+    "casts": 3767,
+    "hits": 3767,
+    "hitsWithin3s": 3767,
+    "medianDelayS": 0,
+    "coveredShare": 0.999,
+    "via": "name+trigger"
+   }
+  ],
+  "386951": [
+   {
+    "aura": "399680",
+    "casts": 28,
+    "hits": 28,
+    "hitsWithin3s": 28,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "389794": [
+   {
+    "aura": "390171",
+    "casts": 329,
+    "hits": 320,
+    "hitsWithin3s": 312,
+    "medianDelayS": 0.09,
+    "coveredShare": 1,
+    "via": "name"
+   },
+   {
+    "aura": "389823",
+    "casts": 329,
+    "hits": 316,
+    "hitsWithin3s": 307,
+    "medianDelayS": 0.09,
+    "coveredShare": 1,
+    "via": "name"
+   },
+   {
+    "aura": "389831",
+    "casts": 329,
+    "hits": 256,
+    "hitsWithin3s": 209,
+    "medianDelayS": 2.11,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "389823": [
+   {
+    "aura": "390171",
+    "casts": 1761,
+    "hits": 1715,
+    "hitsWithin3s": 1694,
+    "medianDelayS": 0.01,
+    "coveredShare": 1,
+    "via": "name"
+   },
+   {
+    "aura": "389831",
+    "casts": 1761,
+    "hits": 1249,
+    "hitsWithin3s": 1079,
+    "medianDelayS": 2.01,
+    "coveredShare": 1,
+    "via": "name"
+   },
+   {
+    "aura": "389794",
+    "casts": 1761,
+    "hits": 732,
+    "hitsWithin3s": 414,
+    "medianDelayS": -0.02,
+    "coveredShare": 0.711,
+    "via": "name"
+   }
+  ],
+  "390171": [
+   {
+    "aura": "389823",
+    "casts": 3310,
+    "hits": 2785,
+    "hitsWithin3s": 2495,
+    "medianDelayS": 0.02,
+    "coveredShare": 1,
+    "via": "name"
+   },
+   {
+    "aura": "389831",
+    "casts": 3310,
+    "hits": 2421,
+    "hitsWithin3s": 2145,
+    "medianDelayS": 1.01,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "395152": [
+   {
+    "aura": "395296",
+    "casts": 97,
+    "hits": 97,
+    "hitsWithin3s": 97,
+    "medianDelayS": 0,
+    "coveredShare": 0.972,
+    "via": "name"
+   }
+  ],
+  "396286": [
+   {
+    "aura": "431620",
+    "casts": 140,
+    "hits": 21,
+    "hitsWithin3s": 15,
+    "medianDelayS": 1.14,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "399491": [
+   {
+    "aura": "399497",
+    "casts": 4360,
+    "hits": 4321,
+    "hitsWithin3s": 2573,
+    "medianDelayS": 2.51,
+    "coveredShare": 0.817,
+    "via": "name"
+   },
+   {
+    "aura": "399510",
+    "casts": 4360,
+    "hits": 4321,
+    "hitsWithin3s": 2588,
+    "medianDelayS": 2.5,
+    "coveredShare": 0.817,
+    "via": "name"
+   }
+  ],
+  "406732": [
+   {
+    "aura": "406789",
+    "casts": 49,
+    "hits": 46,
+    "hitsWithin3s": 46,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "407028": [
+   {
+    "aura": "407032",
+    "casts": 238,
+    "hits": 225,
+    "hitsWithin3s": 224,
+    "medianDelayS": 0.21,
+    "coveredShare": 0.982,
+    "via": "name+trigger"
+   }
+  ],
+  "407480": [
+   {
+    "aura": "406648",
+    "casts": 549,
+    "hits": 547,
+    "hitsWithin3s": 537,
+    "medianDelayS": 0.01,
+    "coveredShare": 0.987,
+    "via": "trigger"
+   },
+   {
+    "aura": "1266331",
+    "casts": 549,
+    "hits": 547,
+    "hitsWithin3s": 537,
+    "medianDelayS": 0.01,
+    "coveredShare": 0.987,
+    "via": "trigger"
+   }
+  ],
+  "409311": [
+   {
+    "aura": "410089",
+    "casts": 149,
+    "hits": 149,
+    "hitsWithin3s": 147,
+    "medianDelayS": 0,
+    "coveredShare": 0.997,
+    "via": "name"
+   }
+  ],
+  "410126": [
+   {
+    "aura": "410201",
+    "casts": 1239,
+    "hits": 1188,
+    "hitsWithin3s": 1173,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name+trigger"
+   }
+  ],
+  "426591": [
+   {
+    "aura": "426593",
+    "casts": 864,
+    "hits": 854,
+    "hitsWithin3s": 852,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name+trigger"
+   }
+  ],
+  "427917": [
+   {
+    "aura": "427912",
+    "casts": 181,
+    "hits": 181,
+    "hitsWithin3s": 180,
+    "medianDelayS": 0.01,
+    "coveredShare": 0.955,
+    "via": "name"
+   }
+  ],
+  "428545": [
+   {
+    "aura": "164812",
+    "casts": 22121,
+    "hits": 21684,
+    "hitsWithin3s": 17007,
+    "medianDelayS": 0.01,
+    "coveredShare": 0.995,
+    "via": "name"
+   }
+  ],
+  "431044": [
+   {
+    "aura": "468655",
+    "casts": 3317,
+    "hits": 3275,
+    "hitsWithin3s": 3152,
+    "medianDelayS": 0.43,
+    "coveredShare": 1,
+    "via": "name+trigger"
+   }
+  ],
+  "431398": [
+   {
+    "aura": "431625",
+    "casts": 6594,
+    "hits": 6405,
+    "hitsWithin3s": 4432,
+    "medianDelayS": 0.93,
+    "coveredShare": 0.993,
+    "via": "name"
+   }
+  ],
+  "432459": [
+   {
+    "aura": "432496",
+    "casts": 2000,
+    "hits": 2000,
+    "hitsWithin3s": 2000,
+    "medianDelayS": 0,
+    "coveredShare": 0.941,
+    "via": "name+trigger"
+   },
+   {
+    "aura": "432607",
+    "casts": 2000,
+    "hits": 1996,
+    "hitsWithin3s": 1955,
+    "medianDelayS": 0,
+    "coveredShare": 0.943,
+    "via": "name"
+   }
+  ],
+  "432472": [
+   {
+    "aura": "432502",
+    "casts": 1713,
+    "hits": 1713,
+    "hitsWithin3s": 1713,
+    "medianDelayS": 0,
+    "coveredShare": 0.796,
+    "via": "name+trigger"
+   }
+  ],
+  "433874": [
+   {
+    "aura": "1236943",
+    "casts": 797,
+    "hits": 797,
+    "hitsWithin3s": 797,
+    "medianDelayS": 0.01,
+    "coveredShare": 0.954,
+    "via": "name"
+   },
+   {
+    "aura": "353759",
+    "casts": 797,
+    "hits": 781,
+    "hitsWithin3s": 750,
+    "medianDelayS": 1.02,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "433895": [
+   {
+    "aura": "433925",
+    "casts": 108,
+    "hits": 107,
+    "hitsWithin3s": 80,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "trigger"
+   }
+  ],
+  "434242": [
+   {
+    "aura": "439209",
+    "casts": 19,
+    "hits": 19,
+    "hitsWithin3s": 19,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "439209": [
+   {
+    "aura": "434242",
+    "casts": 19,
+    "hits": 19,
+    "hitsWithin3s": 19,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "439843": [
+   {
+    "aura": "434765",
+    "casts": 277,
+    "hits": 272,
+    "hitsWithin3s": 271,
+    "medianDelayS": 0.01,
+    "coveredShare": 1,
+    "via": "name+trigger"
+   }
+  ],
+  "442204": [
+   {
+    "aura": "409560",
+    "casts": 38,
+    "hits": 36,
+    "hitsWithin3s": 36,
+    "medianDelayS": 1.2,
+    "coveredShare": 0.926,
+    "via": "trigger"
+   }
+  ],
+  "444740": [
+   {
+    "aura": "444741",
+    "casts": 10711,
+    "hits": 10710,
+    "hitsWithin3s": 10708,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "445468": [
+   {
+    "aura": "445474",
+    "casts": 6229,
+    "hits": 6216,
+    "hitsWithin3s": 5844,
+    "medianDelayS": 0,
+    "coveredShare": 0.972,
+    "via": "name+trigger"
+   }
+  ],
+  "452538": [
+   {
+    "aura": "452917",
+    "casts": 9782,
+    "hits": 9481,
+    "hitsWithin3s": 7783,
+    "medianDelayS": 0.02,
+    "coveredShare": 0.999,
+    "via": "name"
+   }
+  ],
+  "458128": [
+   {
+    "aura": "1241077",
+    "casts": 2886,
+    "hits": 2861,
+    "hitsWithin3s": 2749,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "466930": [
+   {
+    "aura": "468572",
+    "casts": 1987,
+    "hits": 1979,
+    "hitsWithin3s": 1930,
+    "medianDelayS": 0.25,
+    "coveredShare": 0.967,
+    "via": "name"
+   }
+  ],
+  "474421": [
+   {
+    "aura": "24394",
+    "casts": 1131,
+    "hits": 1057,
+    "hitsWithin3s": 1021,
+    "medianDelayS": 0,
+    "coveredShare": 0.929,
+    "via": "name"
+   }
+  ],
+  "1233448": [
+   {
+    "aura": "1235391",
+    "casts": 1968,
+    "hits": 1967,
+    "hitsWithin3s": 1967,
+    "medianDelayS": 0,
+    "coveredShare": 0.999,
+    "via": "name"
+   }
+  ],
+  "1236943": [
+   {
+    "aura": "433874",
+    "casts": 1670,
+    "hits": 1594,
+    "hitsWithin3s": 1594,
+    "medianDelayS": -0.01,
+    "coveredShare": 1,
+    "via": "name"
+   },
+   {
+    "aura": "353759",
+    "casts": 1670,
+    "hits": 1562,
+    "hitsWithin3s": 1502,
+    "medianDelayS": 1.01,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "1237885": [
+   {
+    "aura": "1238467",
+    "casts": 30,
+    "hits": 29,
+    "hitsWithin3s": 29,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name+trigger"
+   },
+   {
+    "aura": "1238474",
+    "casts": 30,
+    "hits": 23,
+    "hitsWithin3s": 23,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name+trigger"
+   }
+  ],
+  "1241871": [
+   {
+    "aura": "1224810",
+    "casts": 471,
+    "hits": 470,
+    "hitsWithin3s": 470,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "1243807": [
+   {
+    "aura": "1244079",
+    "casts": 11,
+    "hits": 11,
+    "hitsWithin3s": 11,
+    "medianDelayS": 0.49,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "1244023": [
+   {
+    "aura": "1244079",
+    "casts": 55,
+    "hits": 55,
+    "hitsWithin3s": 55,
+    "medianDelayS": 0.01,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "1245470": [
+   {
+    "aura": "1245523",
+    "casts": 845,
+    "hits": 629,
+    "hitsWithin3s": 330,
+    "medianDelayS": 2.66,
+    "coveredShare": 0.732,
+    "via": "name"
+   }
+  ],
+  "1246167": [
+   {
+    "aura": "1246168",
+    "casts": 286,
+    "hits": 285,
+    "hitsWithin3s": 282,
+    "medianDelayS": 0.24,
+    "coveredShare": 1,
+    "via": "name+trigger"
+   },
+   {
+    "aura": "370970",
+    "casts": 286,
+    "hits": 272,
+    "hitsWithin3s": 249,
+    "medianDelayS": 0.37,
+    "coveredShare": 1,
+    "via": "name+trigger"
+   }
+  ],
+  "1246169": [
+   {
+    "aura": "1246168",
+    "casts": 682,
+    "hits": 667,
+    "hitsWithin3s": 641,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name+trigger"
+   },
+   {
+    "aura": "370970",
+    "casts": 682,
+    "hits": 642,
+    "hitsWithin3s": 598,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name+trigger"
+   }
+  ],
+  "1247078": [
+   {
+    "aura": "1247117",
+    "casts": 866,
+    "hits": 825,
+    "hitsWithin3s": 805,
+    "medianDelayS": 0.01,
+    "coveredShare": 0.945,
+    "via": "name+trigger"
+   }
+  ],
+  "1259431": [
+   {
+    "aura": "1246168",
+    "casts": 424,
+    "hits": 418,
+    "hitsWithin3s": 411,
+    "medianDelayS": 0.2,
+    "coveredShare": 1,
+    "via": "trigger"
+   },
+   {
+    "aura": "370970",
+    "casts": 424,
+    "hits": 386,
+    "hitsWithin3s": 349,
+    "medianDelayS": 0.36,
+    "coveredShare": 1,
+    "via": "trigger"
+   }
+  ],
+  "1262763": [
+   {
+    "aura": "1262766",
+    "casts": 20159,
+    "hits": 19526,
+    "hitsWithin3s": 12387,
+    "medianDelayS": 0.02,
+    "coveredShare": 0.838,
+    "via": "name"
+   }
+  ],
+  "1263884": [
+   {
+    "aura": "1271863",
+    "casts": 4709,
+    "hits": 4693,
+    "hitsWithin3s": 4570,
+    "medianDelayS": 0.01,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "1265384": [
+   {
+    "aura": "279303",
+    "casts": 165,
+    "hits": 144,
+    "hitsWithin3s": 143,
+    "medianDelayS": 0.69,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "1267068": [
+   {
+    "aura": "1267765",
+    "casts": 2838,
+    "hits": 2838,
+    "hitsWithin3s": 2838,
+    "medianDelayS": 0.01,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "1269383": [
+   {
+    "aura": "1269394",
+    "casts": 5991,
+    "hits": 5759,
+    "hitsWithin3s": 3235,
+    "medianDelayS": 0.22,
+    "coveredShare": 0.996,
+    "via": "trigger"
+   }
+  ],
+  "1270292": [
+   {
+    "aura": "204066",
+    "casts": 26,
+    "hits": 26,
+    "hitsWithin3s": 26,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "1271980": [
+   {
+    "aura": "376080",
+    "casts": 695,
+    "hits": 119,
+    "hitsWithin3s": 108,
+    "medianDelayS": -0.08,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "1283718": [
+   {
+    "aura": "1283719",
+    "casts": 37,
+    "hits": 34,
+    "hitsWithin3s": 34,
+    "medianDelayS": 0,
+    "coveredShare": 1,
+    "via": "name"
+   }
+  ],
+  "1292321": [
+   {
+    "aura": "359618",
+    "casts": 745,
+    "hits": 740,
+    "hitsWithin3s": 685,
+    "medianDelayS": 0,
+    "coveredShare": 0.558,
+    "via": "trigger"
+   }
+  ],
+  "1297055": [
+   {
+    "aura": "1297086",
+    "casts": 3044,
+    "hits": 2913,
+    "hitsWithin3s": 1638,
+    "medianDelayS": 1.44,
+    "coveredShare": 0.988,
+    "via": "name"
+   }
+  ]
+ }
+}

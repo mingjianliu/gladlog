@@ -10,6 +10,8 @@ import {
   unitCooldownOf,
 } from "./cooldowns";
 import {
+  auraIdsAppliedBy,
+  drCategoryKnown,
   drCategoryOfCast,
   DRLevel,
   getDRLevelAtTime,
@@ -397,6 +399,9 @@ export function computeContestedTradeFacts(
   const enemyHealer = enemies.find((e) => isHealerSpec(e.spec));
   if (!enemyHealer) return [];
   const ccSpells = collectOwnerCCSpells(owner, matchStartMs);
+  // the caster evidence for a CC cast with variants in different DR
+  // families (Chastise: stun / incapacitate)
+  const ownerApplied = auraIdsAppliedBy(owner.id, enemies);
   if (ccSpells.length === 0) return [];
 
   const overlapsKillWindow = (seg: IContestedSegment) =>
@@ -408,12 +413,15 @@ export function computeContestedTradeFacts(
   for (const seg of contestedSegments) {
     if (overlapsKillWindow(seg)) continue;
 
+    // an unknown DR family (Chastise without caster evidence) is never "at
+    // Full DR" (codex 35-CD-13b: getDRLevelAtTime reads no history as Full)
     const readyAtFullDR = ccSpells.find(
       (s) =>
         isCCReadyAt(s, seg.fromSeconds) &&
+        drCategoryKnown(s.spellId, ownerApplied) &&
         getDRLevelAtTime(
           enemyHealerCCInstances,
-          drCategoryOfCast(s.spellId),
+          drCategoryOfCast(s.spellId, ownerApplied),
           seg.fromSeconds,
           matchStartMs,
         ) === "Full",
@@ -567,6 +575,9 @@ export function computeWindowContributions(
   const matchStartMs = combat.startTime;
   const enemyHealer = enemies.find((e) => isHealerSpec(e.spec)) ?? null;
   const ccSpells = collectOwnerCCSpells(owner, matchStartMs);
+  // the caster evidence for a CC cast with variants in different DR
+  // families (Chastise: stun / incapacitate)
+  const ownerApplied = auraIdsAppliedBy(owner.id, enemies);
   const enemyIds = new Set(enemies.map((e) => e.id));
 
   // One contribution per damage burst (kill attempt) inside each vulnerability
@@ -583,14 +594,16 @@ export function computeWindowContributions(
       .filter((s) => isCCReadyAt(s, fromSeconds))
       .map((s) => ({
         spellName: s.spellName,
-        enemyHealerDR: enemyHealer
-          ? getDRLevelAtTime(
-              enemyHealerCCInstances,
-              drCategoryOfCast(s.spellId),
-              fromSeconds,
-              matchStartMs,
-            )
-          : null,
+        // unknown DR family → no DR said (codex 35-CD-13b), never "Full"
+        enemyHealerDR:
+          enemyHealer && drCategoryKnown(s.spellId, ownerApplied)
+            ? getDRLevelAtTime(
+                enemyHealerCCInstances,
+                drCategoryOfCast(s.spellId, ownerApplied),
+                fromSeconds,
+                matchStartMs,
+              )
+            : null,
       }));
 
     const ownerCastCCInWindow = owner.spellCastEvents.some((e) => {
@@ -709,6 +722,9 @@ export function computeWindowCreationFacts(
   const enemyHealer = enemies.find((e) => isHealerSpec(e.spec));
   if (!enemyHealer) return [];
   const ccSpells = collectOwnerCCSpells(owner, matchStartMs);
+  // the caster evidence for a CC cast with variants in different DR
+  // families (Chastise: stun / incapacitate)
+  const ownerApplied = auraIdsAppliedBy(owner.id, enemies);
   if (ccSpells.length === 0) return [];
 
   const overlapsKillWindow = (seg: ISlackSegment) =>
@@ -720,12 +736,15 @@ export function computeWindowCreationFacts(
   for (const seg of slackSegments) {
     if (overlapsKillWindow(seg)) continue;
 
+    // an unknown DR family (Chastise without caster evidence) is never "at
+    // Full DR" (codex 35-CD-13b: getDRLevelAtTime reads no history as Full)
     const readyAtFullDR = ccSpells.find(
       (s) =>
         isCCReadyAt(s, seg.fromSeconds) &&
+        drCategoryKnown(s.spellId, ownerApplied) &&
         getDRLevelAtTime(
           enemyHealerCCInstances,
-          drCategoryOfCast(s.spellId),
+          drCategoryOfCast(s.spellId, ownerApplied),
           seg.fromSeconds,
           matchStartMs,
         ) === "Full",

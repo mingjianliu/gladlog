@@ -107,7 +107,7 @@ import {
   STELLAR_PROTECTION_PENALIZED_SPELLS,
 } from "../utils/dispelAnalysis";
 import { MOVEMENT_ROOT_BREAK_DISPEL_IDS } from "../utils/dispelKind";
-import { AOE_CC_SPELL_IDS, CC_CAST_EFFECT_AURA } from "../utils/drAnalysis";
+import { AOE_CC_SPELL_IDS } from "../utils/drAnalysis";
 import { NON_PLAYER_INTERRUPT_IDS } from "../utils/enemyInterrupts";
 import { EXTERNAL_DAMAGE_SHIELD_IDS } from "../utils/externalDamage";
 import { SPEC_PRIMARY_CC } from "../utils/healerExposureAnalysis";
@@ -141,6 +141,7 @@ import {
   RULED_COOLDOWN_VALUES,
 } from "../utils/talentModifiers";
 import { KW_MAJOR_DEFENSIVE_IDS } from "./abilityProfile";
+import { castEffectPairs } from "./castEffectAuras";
 import { CAST_PARAM_DURATIONS } from "./castParamDurations";
 import { classMetadata } from "./classSpells";
 import { CURATED_ABILITY_FACTS } from "./curatedAbilityFacts";
@@ -680,12 +681,14 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   t("AOE_CC_SPELL_IDS", "utils/drAnalysis.ts", "cast", () =>
     set(AOE_CC_SPELL_IDS),
   ),
-  // GH #111 (2026-09-25): CC cast id → the debuff aura the log applies, so a
-  // cast-keyed DR lookup reaches the aura-keyed DR table.
-  t("CC_CAST_EFFECT_AURA", "utils/drAnalysis.ts", "mixed", () => [
-    ...Object.keys(CC_CAST_EFFECT_AURA),
-    ...Object.values(CC_CAST_EFFECT_AURA),
-  ]),
+  // Triage G3 (2026-10-02, ruling A10 = both): the one cast id → effect aura
+  // table, which absorbed GH #111's hand list `CC_CAST_EFFECT_AURA`. Generated
+  // — but from a CORPUS measurement over DB2 nominations, so its pairs are a
+  // season's snapshot like a hand list's: registered (ruling A10) so the
+  // reverse pass sees a renumbered cast or aura.
+  t("castEffectAuraGenerated", "data/castEffectAuras.ts", "mixed", () =>
+    castEffectPairs().flatMap(([cast, aura]) => [cast, aura]),
+  ),
   t("IMMUNITY_SPELLS", "utils/deathOutcomeAnalysis.ts", "mixed", () =>
     Object.entries(IMMUNITY_SPELLS).flatMap(([k, v]) => [
       k,

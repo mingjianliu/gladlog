@@ -299,6 +299,18 @@ npx tsx packages/analysis/scripts/datagen/genSummonSpells.ts
 # 6f1d. root auras (SpellEffect aura 26 / 455 on the spell itself). ROOT_SPELL_IDS = the root DR class ∪
 #      these — the DR class misses roots with no DR (Ice Nova); read by [ROOT] and the kick run budget.
 npx tsx packages/analysis/scripts/datagen/genRootAuras.ts
+# 6f1e. cast → effect-aura table (triage G3, ruling A10 = both: DB2 nominates, the corpus verifies). Two
+#      stages; the second is a corpus scan (raw lines, one process, a few minutes per ~1,800 files):
+#      (1) nominations: same SpellName or an EffectTriggerSpell chain (≤ 3 hops) to an aura-bearing spell,
+#          the cast end in the observed universe → castEffectNominationsGenerated.json;
+#      (2) verification: a pair is kept when the cast's caster (summons resolved) applies the aura after
+#          the cast ≥ 10 times, ≥ 50 % of the aura's applications follow a nominating cast, and ≥ 50 % of
+#          the hits come within 3 s → castEffectAuraGenerated.json (read by data/castEffectAuras.ts).
+#      test/castEffectAuras.test.ts pins the former hand rows (CC_CAST_EFFECT_AURA) — a row that fails the
+#      new season's verification is a renumbered spell: find its live id, do not loosen the rule.
+npx tsx packages/analysis/scripts/datagen/genCastEffectNominations.ts
+npx tsx packages/eval/scripts/castEffectAuraScan.ts \
+  --manifest $GLADLOG_EVAL_HOME/corpus/manifest-archive-2026-08-28-newseason.txt --every 10 --emit
 # 6f2. Spell mechanic facts (GH #77, 2026-09-24): CC mechanic (SpellCategories / SpellEffect, one
 #      EffectTriggerSpell hop, else the unique loss-of-control mechanic among same-named observed spells),
 #      base cast time (SpellMisc → SpellCastTimes; 0 = instant), mechanic immunity (aura 77), all-school

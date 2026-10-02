@@ -61,7 +61,8 @@ import { getUnitPositionAtTime } from "../utils/losAnalysis";
 import { LOS_SWEEP_GAP_MS } from "../utils/positionSampling";
 import { canReachTargetAt } from "../utils/rootReachability";
 import { buildCannotCastIntervals } from "../utils/cannotCastIntervals";
-import { CC_CAST_EFFECT_AURA } from "../utils/drAnalysis";
+import { isCastOrEffect } from "../data/castEffectAuras";
+import { drEffectAurasOfCast } from "../utils/drAnalysis";
 import { isOffensiveSpell } from "../utils/spellDanger";
 import { buildFilteredAuraIntervals } from "../utils/utils";
 import {
@@ -277,7 +278,8 @@ export interface BurstResponseCast {
 /**
  * F-B4: is the control `casterId` aimed at `dest` (cast `castSpellId` at
  * `castMs`) still applied at `atMs`? Keyed on the cast id and its effect aura
- * (`CC_CAST_EFFECT_AURA`, the one cast→aura table), sourced from the caster.
+ * (its DR-bearing effect auras in `castEffectAuras.ts`, the one cast→effect
+ * table), sourced from the caster.
  */
 export function aimedControlUpAt(
   dest:
@@ -295,11 +297,7 @@ export function aimedControlUpAt(
   castMs: number,
   atMs: number,
 ): boolean {
-  const ids = new Set(
-    [castSpellId, CC_CAST_EFFECT_AURA[castSpellId]].filter(
-      (x): x is string => !!x,
-    ),
-  );
+  const ids = new Set([castSpellId, ...drEffectAurasOfCast(castSpellId)]);
   let up = false;
   for (const a of dest?.auraEvents ?? []) {
     if (a.timestamp < castMs || a.timestamp > atMs) continue;
@@ -597,7 +595,7 @@ export function controlLandedResponses(
       const unitId = friendlyPlayerOf(a.srcUnitId);
       if (!unitId) continue;
       // F-B8 (triage sync-burst): the cast that produced this aura times it
-      // — its own spell, or its cast id through CC_CAST_EFFECT_AURA (Ring of
+      // — its own spell, or its cast id through the cast→effect table (Ring of
       // Frost 113724 → 82691, Lasso 305483 → 305485), or the same English
       // name — before a control cast aimed at the aura's target, before any
       // untargeted cast. 7d1f14af timed a Lasso root from an unrelated
@@ -607,7 +605,7 @@ export function controlLandedResponses(
       const sidName = getEnglishSpellName(sid, "");
       const producesAura = (castId: string): boolean =>
         castId === sid ||
-        CC_CAST_EFFECT_AURA[castId] === sid ||
+        isCastOrEffect(castId, sid) ||
         (sidName !== "" && getEnglishSpellName(castId, "") === sidName);
       let family: (typeof friendlyCasts)[number] | undefined;
       let aimedControl: (typeof friendlyCasts)[number] | undefined;

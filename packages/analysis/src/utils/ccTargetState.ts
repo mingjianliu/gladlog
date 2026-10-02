@@ -51,6 +51,7 @@ import {
 } from "./cooldowns";
 import {
   drCategoryKnown,
+  auraIdsAppliedBy,
   drCategoryOfCast,
   getDRCategory,
   getDRLevel,
@@ -178,10 +179,16 @@ export function ccSamplerFor(params: {
   const zone = String(combat.startInfo?.zoneId ?? "");
   // The cooldown is a CAST id; the DR history below is keyed by the aura ids
   // the log applies (GH #111).
-  const cat = drCategoryOfCast(cd.spellId);
+  // a cast with variants in different DR families resolves from the
+  // owner's own applications (codex 35-CD-06: Chastise)
+  const ownerApplied = auraIdsAppliedBy(
+    owner.id,
+    Object.values(combat.units ?? {}).filter((u) => params.enemyIds.has(u.id)),
+  );
+  const cat = drCategoryOfCast(cd.spellId, ownerApplied);
   // An unmapped cast (spell:<id> fallback, not self-DR) has no DR history to
   // read: "n/a", never a fabricated "Full" (W1g).
-  const catKnown = drCategoryKnown(cd.spellId);
+  const catKnown = drCategoryKnown(cd.spellId, ownerApplied);
   const deathS = (u: ICombatUnit) => {
     const d = u.deathRecords[0];
     return d ? (d.timestamp - start) / 1000 : Infinity;

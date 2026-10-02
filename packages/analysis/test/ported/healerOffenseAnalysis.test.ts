@@ -16,6 +16,7 @@ import {
 } from "../../src/utils/healerOffenseAnalysis";
 import {
   makeAdvancedAction,
+  makeAuraEvent,
   makeSpellCastEvent,
   makeUnit,
 } from "./testHelpers";
@@ -495,6 +496,53 @@ describe("computeWindowCreationFacts", () => {
     expect(facts[0].enemyHealerTrinketOnCD).toBe(true);
   });
 
+  it("codex 35-CD-13b: a CC whose DR family is unknown (Chastise, no caster evidence) is never 'ready at Full DR'", () => {
+    const chastise = (extra: object = {}) =>
+      makeFriend("owner", {
+        spellCastEvents: [
+          makeSpellCastEvent(
+            "88625",
+            T0 + 100_000,
+            "enemy-h",
+            "Rsham",
+            "owner",
+            "Owner",
+          ),
+        ],
+        ...extra,
+      });
+    const run = (healer: ReturnType<typeof makeUnit>) =>
+      computeWindowCreationFacts(
+        combat,
+        chastise(),
+        [healer],
+        [slackSeg(40, 50)],
+        [],
+        [],
+      );
+    expect(run(enemyHealerWithTrinketDown)).toEqual([]);
+    // control: the priest's stun variant 200200 on record (after the
+    // segment, so no DR history at 40 s) → the family is known → Full
+    const withEvidence = makeUnit("enemy-h", {
+      reaction: CombatUnitReaction.Hostile,
+      spec: CombatUnitSpec.Shaman_Restoration,
+      name: "Rsham",
+      spellCastEvents: enemyHealerWithTrinketDown.spellCastEvents,
+      auraEvents: [
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          "200200",
+          T0 + 100_010,
+          "owner",
+          "enemy-h",
+        ),
+      ],
+    });
+    const facts = run(withEvidence);
+    expect(facts.length).toBe(1);
+    expect(facts[0].enemyHealerDRLevel).toBe("Full");
+  });
+
   it("suppresses facts during an active kill window, at decayed DR, and caps at 2 by slack length", () => {
     const owner = makeFriend("owner", {
       spellCastEvents: [
@@ -763,7 +811,6 @@ const stubFactsComputer = {
     accountable: true,
   }),
 };
-
 
 describe("burst sub-windows (2026-07-17 kill-window redesign)", () => {
   it("computeBurstSubWindows: splits on gaps, drops sub-threshold clusters, caps count, clamps to span", () => {

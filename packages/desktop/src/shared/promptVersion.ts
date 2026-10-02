@@ -710,5 +710,12 @@
  *  real cost)`; windows mostly spent CC'd, rooted or inside the owner's own
  *  FULL immunity are skipped; stayed-in menu facts gain endDist / minDist /
  *  maxDist / endEnemy / ccS / rootS.
+ *  v270 (2026-10-02, triage G3 table, ruling A10 = both): the one cast →
+ *  effect-aura table (`data/castEffectAuras.ts`, DB2-nominated by name /
+ *  trigger chain, corpus-verified — 148 casts / 189 pairs) replaces the hand
+ *  list `CC_CAST_EFFECT_AURA`. Its readers — a cast's DR category, the
+ *  control-cast sets of the crisis and burst-window decision points, the
+ *  aura-interval rebroadcast test — now also know Storm Bolt → 132169,
+ *  Freezing Trap → 203337 (Diamond Ice) and the other verified pairs.
  */
-export const PROMPT_VERSION = 269;
+export const PROMPT_VERSION = 270;

@@ -24,6 +24,7 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
+import { effectAurasOfCast } from "../data/castEffectAuras";
 import { spellClassMap } from "../data/drCategories";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { ccSpellIds } from "../data/spellTags";
@@ -344,42 +345,36 @@ export function getDRCategory(spellId: string): string {
 }
 
 /**
- * CC casts whose logged CAST id is not the debuff aura the log applies for
- * it. `DR_CATEGORY_MAP` is keyed by aura id on purpose (drCategories.ts), so
- * looking one of these casts up directly lands on the `spell:<castId>`
- * self-DR fallback, and a consumer that filters the target's CC auras by that
- * key finds none — DR read Full forever (GH #111: `[PEEL OPTION]` and
- * `[CC BOOKMARK]` offered Shockwave at Full DR right after a stun).
+ * The CC aura a CC CAST applies, when its logged cast id is not that aura's:
+ * the most-applied effect aura of the cast (`castEffectAuras.ts`, the one
+ * cast→effect table — DB2 nominates, the corpus verifies, ruling A10) that
+ * HAS an official DR category; undefined when none does (the cast id then
+ * answers for itself). `DR_CATEGORY_MAP` is keyed by aura id on purpose
+ * (drCategories.ts), so looking one of these casts up directly lands on the
+ * `spell:<castId>` self-DR fallback, and a consumer that filters the target's
+ * CC auras by that key finds none — DR read Full forever (GH #111:
+ * `[PEEL OPTION]` and `[CC BOOKMARK]` offered Shockwave at Full DR right after
+ * a stun). Binding Shot's tether 117405 is in the table and has no DR
+ * category; its stun 117526 does.
  *
- * Measured 2026-09-25 (new-season archive, every 300th file): the CC aura the
- * same caster (or its totem) applied within 3 s of the cast — Shockwave →
- * 132168 on 316 of 355 casts, Capacitor Totem → 118905 on 258 / 319, Fear →
- * 118699 on 382 / 480 (the rest are other CCs of the same caster). Registered
- * in `curatedIdRegistry.ts`; `test/drCategoryIds.test.ts` fails when a CC id
- * with a known mechanic resolves to no DR category and is not a declared
- * self-DR spell. Infernal Awakening 22703 is NOT here: its cast and aura id
+ * Until triage G3 (2026-10-02) this was the hand list `CC_CAST_EFFECT_AURA`
+ * (14 rows, single-valued, measured 2026-09-25); the generated table holds all
+ * 14 (`test/castEffectAuras.test.ts`), plus Storm Bolt 107570 → 132169 and
+ * Freezing Trap's Diamond Ice 203337 it could not. `test/drCategoryIds.test.ts`
+ * fails when a CC id with a known mechanic resolves to no DR category and is
+ * not a declared self-DR spell. Infernal Awakening 22703: its cast and aura id
  * are the same, and drShareScan shows it shares no DR family (5d6347e3).
  */
-export const CC_CAST_EFFECT_AURA: Readonly<Record<string, string>> = {
-  "46968": "132168", // Shockwave → stun aura
-  "192058": "118905", // Capacitor Totem → Static Charge
-  "5782": "118699", // Fear → Fear debuff
-  // Reliability round 2 W1g (2026-09-25): the control cooldowns the roster now
-  // lists by their CAST id. Same method, every 40th file of the 08-28
-  // new-season manifest; traps / Binding Shot / Ring of Frost / Sigil of Misery
-  // measured over 30 s (they fire when stepped on), Snowdrift 10 s.
-  "187650": "3355", // Freezing Trap → Freezing Trap (962 / 1,271)
-  "109248": "117526", // Binding Shot → stun (635 / 771)
-  "19577": "24394", // Intimidation → stun (543 / 579)
-  "474421": "24394", // Intimidation (12.x id) → stun (231 / 262)
-  "115750": "105421", // Blinding Light → disorient (462 / 488)
-  "113724": "82691", // Ring of Frost → incapacitate (284 / 373)
-  "207684": "207685", // Sigil of Misery → fear (119 / 174)
-  "22570": "203123", // Maim → stun (446 / 476)
-  "305483": "305485", // Lightning Lasso → stun (196 / 220)
-  "198898": "198909", // Song of Chi-Ji → disorient (132 / 155)
-  "389794": "389831", // Snowdrift → stun (41 / 54)
-};
+export function drEffectAuraOfCast(castSpellId: string): string | undefined {
+  return drEffectAurasOfCast(castSpellId)[0];
+}
+
+/** Every effect aura of the cast that has an official DR category, most
+ * applied first — the set form of `drEffectAuraOfCast` (Freezing Trap: 3355
+ * and Diamond Ice's 203337). */
+export function drEffectAurasOfCast(castSpellId: string): readonly string[] {
+  return effectAurasOfCast(castSpellId).filter((a) => DR_CATEGORY_MAP[a]);
+}
 
 /**
  * Spells whose own id IS their DR family (no shared category) — the
@@ -395,16 +390,56 @@ export const SELF_DR_SPELL_IDS: ReadonlySet<string> = new Set(["22703"]);
  * nothing about DR ("n/a"), never "Full" (reliability round 2 W1g: every
  * trap / totem / grip whose cast id was unmapped read "DR Full" forever).
  */
-export function drCategoryKnown(castSpellId: string): boolean {
-  const cat = drCategoryOfCast(castSpellId);
+export function drCategoryKnown(
+  castSpellId: string,
+  casterApplied?: ReadonlySet<string>,
+): boolean {
+  const cat = drCategoryOfCast(castSpellId, casterApplied);
   return !cat.startsWith("spell:") || SELF_DR_SPELL_IDS.has(castSpellId);
 }
 
 /** The DR category of the CC a CAST applies — the single source for any
  * consumer that starts from a spell the player can press (a cooldown, a kit
- * entry) rather than from an aura in the log. */
-export function drCategoryOfCast(castSpellId: string): string {
-  return getDRCategory(CC_CAST_EFFECT_AURA[castSpellId] ?? castSpellId);
+ * entry) rather than from an aura in the log.
+ *
+ * When the cast's effect auras sit in DIFFERENT DR families (Holy Word:
+ * Chastise 88625: the stun 200200 or, with its talent, the incapacitate
+ * 200196), corpus popularity does not decide (codex 35-CD-06): the caster's
+ * own applications do (`casterApplied`, `auraIdsAppliedBy`). Without evidence
+ * of exactly one family the category is unknown — the `spell:<castId>`
+ * fallback, which `drCategoryKnown` reports as unknown ("n/a", never "Full"),
+ * what the cast read before the table existed. */
+export function drCategoryOfCast(
+  castSpellId: string,
+  casterApplied?: ReadonlySet<string>,
+): string {
+  const auras = drEffectAurasOfCast(castSpellId);
+  const families = new Set(auras.map(getDRCategory));
+  if (families.size <= 1) return getDRCategory(auras[0] ?? castSpellId);
+  const seen = new Set(
+    auras.filter((a) => casterApplied?.has(a)).map(getDRCategory),
+  );
+  return seen.size === 1 ? [...seen][0]! : `spell:${castSpellId}`;
+}
+
+/** The aura ids `casterId` applied (APPLIED / REFRESH) on any of `units` —
+ * the caster evidence `drCategoryOfCast` reads for a cast with variants in
+ * different DR families. */
+export function auraIdsAppliedBy(
+  casterId: string,
+  units: ReadonlyArray<Pick<ICombatUnit, "auraEvents">>,
+): Set<string> {
+  const out = new Set<string>();
+  for (const u of units)
+    for (const a of u.auraEvents ?? [])
+      if (
+        a.srcUnitId === casterId &&
+        a.spellId &&
+        (a.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
+          a.logLine.event === LogEvent.SPELL_AURA_REFRESH)
+      )
+        out.add(a.spellId);
+  return out;
 }
 
 /**

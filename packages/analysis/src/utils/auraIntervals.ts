@@ -6,7 +6,7 @@ import type { CastParamCaster } from "./castParam";
 import { ccFullDurationForCaster } from "./ccDuration";
 // runtime-only use (inside buildAuraIntervals); drAnalysis → cooldowns →
 // auraIntervals is a cycle, safe because no module-level code calls across it
-import { CC_CAST_EFFECT_AURA } from "./drAnalysis";
+import { isCastOrEffect } from "../data/castEffectAuras";
 
 
 /**
@@ -254,9 +254,8 @@ export function buildAuraIntervals(
           (c) =>
             // Fear casts 5782 and applies 118699 (codex review of batch 9:
             // a real second Fear was swallowed as a rebroadcast)
-            (c.spellId === id ||
-              (c.spellId !== undefined &&
-                CC_CAST_EFFECT_AURA[c.spellId] === id)) &&
+            c.spellId !== undefined &&
+            isCastOrEffect(c.spellId, id) &&
             Math.abs(c.logLine.timestamp - a.timestamp) <= 1000,
         );
       if (rebroadcast) {

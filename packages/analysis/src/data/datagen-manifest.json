@@ -64,6 +64,10 @@
     "rootAuraGenerated.ts": {
       "entries": 28
     },
+    "castEffectNominationsGenerated.json": {
+      "casts": 3830,
+      "pairs": 40642
+    },
     "abilityEffectsGenerated.ts": {
       "entries": 2232,
       "absorbs": 109,
@@ -114,6 +118,11 @@
     "behaviorPriorGenerated.json": {
       "entries": 9,
       "producer": "packages/eval/scripts/behaviorPriorScan.ts emit-table"
+    },
+    "castEffectAuraGenerated.json": {
+      "casts": 148,
+      "pairs": 189,
+      "producer": "packages/eval/scripts/castEffectAuraScan.ts --emit"
     },
     "burstWindowPriorGenerated.json": {
       "entries": 157,

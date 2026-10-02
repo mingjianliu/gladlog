@@ -58,6 +58,7 @@ import * as backlashCc from "@gladlog/analysis/src/data/backlashCc";
 import * as backlashDispelPrior from "@gladlog/analysis/src/data/backlashDispelPrior";
 import * as behaviorPrior from "@gladlog/analysis/src/data/behaviorPrior";
 import * as burstWindowPrior from "@gladlog/analysis/src/data/burstWindowPrior";
+import * as castEffectAuras from "@gladlog/analysis/src/data/castEffectAuras";
 import { CANDIDATE_TYPE_FLAGS } from "@gladlog/analysis/src/data/candidateTypeFlags";
 import * as candidateTypeRegistry from "@gladlog/analysis/src/data/candidateTypeRegistry";
 import * as cdTriggerPriorData from "@gladlog/analysis/src/data/cdTriggerPrior";
@@ -1291,9 +1292,9 @@ const INDEX: PredicateRow[] = [
     mod: drAnalysis,
   },
   {
-    file: `${A}/utils/drAnalysis.ts`,
-    symbol: "CC_CAST_EFFECT_AURA",
-    mod: drAnalysis,
+    file: `${A}/data/castEffectAuras.ts`,
+    symbol: "effectAurasOfCast",
+    mod: castEffectAuras,
   },
   {
     file: `${A}/utils/cooldowns.ts`,
