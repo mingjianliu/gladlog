@@ -39,6 +39,15 @@
  *                    (DISABLE_CASTING_EXCEPT_ABILITIES). Ice Block, Dispersion,
  *                    Bladestorm — the probe once offered a Shockwave to a
  *                    Warrior who was inside Bladestorm.
+ *   · silenceable  — `SpellCategories.PreventionType` has the silence bit (1):
+ *                    the cast is one a silence — and so an interrupt's school
+ *                    lockout — prevents. A successful cast of a silenceable
+ *                    spell of a locked school is evidence that the lock was
+ *                    over (kick-eaten's first-success cut, triage 2026-09-29
+ *                    F-K7a / ruling A23). A spell with no SpellCategories row
+ *                    (Shadowy Apparition 341263: 125 successes inside a Shadow
+ *                    lock on 605 files) gets no flag, and no flag means "no
+ *                    evidence", never "not lockable".
  *
  * Universe = observedSpellIdsGenerated.json (every id the corpus has seen), so
  * the table cannot be incomplete relative to what a log can contain. An id
@@ -62,6 +71,8 @@ const AURA_SCHOOL_IMMUNITY = "39";
 const AURA_MOD_PACIFY_SILENCE = "60";
 const AURA_DISABLE_CASTING_EXCEPT_ABILITIES = "263";
 const ALL_SCHOOLS = 127;
+/** SpellCategories.PreventionType bit 1: the cast is prevented by silence. */
+const PREVENTION_TYPE_SILENCE = 1;
 /** SpellMechanic ids that take control away: charmed 1, disoriented 2,
  * fleeing 5, rooted 7, asleep 10, stunned 12, frozen 13, incapacitated 14,
  * polymorphed 17, banished 18, shackled 20, turned 23, horrified 24,
@@ -77,6 +88,7 @@ interface Entry {
   immuneMechMask?: number;
   immuneAll?: true;
   locksCasting?: true;
+  silenceable?: true;
 }
 
 async function main() {
@@ -109,7 +121,7 @@ async function main() {
   assertColumns(castTimes.header, ["ID", "Base"], "SpellCastTimes");
   assertColumns(
     cats.header,
-    ["SpellID", "Mechanic", "DifficultyID"],
+    ["SpellID", "Mechanic", "PreventionType", "DifficultyID"],
     "SpellCategories",
   );
   assertColumns(
@@ -139,6 +151,8 @@ async function main() {
     if (r.DifficultyID !== "0" || !observed.has(r.SpellID)) continue;
     const m = Number(r.Mechanic);
     if (m > 0) entry(r.SpellID).mech = m;
+    if ((Number(r.PreventionType) & PREVENTION_TYPE_SILENCE) !== 0)
+      entry(r.SpellID).silenceable = true;
   }
   for (const r of eff.rows) {
     if (r.DifficultyID !== "0" || !observed.has(r.SpellID)) continue;
@@ -248,6 +262,16 @@ async function main() {
   expect(!!out["227847"]?.locksCasting, "Bladestorm 227847 locks casting");
   expect(!out["853"]?.immuneMech, "Hammer of Justice grants no immunity");
   expect(!out["18499"]?.locksCasting, "Berserker Rage does not lock casting");
+  expect(!!out["61295"]?.silenceable, "Riptide 61295 is prevented by silence");
+  expect(!!out["118"]?.silenceable, "Polymorph 118 is prevented by silence");
+  expect(
+    !out["6552"]?.silenceable,
+    "Pummel 6552 is a physical ability (pacify, not silence)",
+  );
+  expect(
+    !out["341263"]?.silenceable,
+    "Shadowy Apparition 341263 has no SpellCategories row",
+  );
 
   const outPath = new URL(
     "../../src/data/spellMechanicsGenerated.json",

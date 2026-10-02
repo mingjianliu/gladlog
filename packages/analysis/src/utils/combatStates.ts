@@ -156,6 +156,34 @@ export const STASIS_STORABLE_HEAL_IDS = new Set([
   // derived) remains the ground truth; keep it ≥ spells.length as invariant.
 ]);
 
+/** Stasis' second aura: up while the stored spells wait. Its removal replays
+ * them as the Evoker's own SPELL_CAST_SUCCESS events — casts nobody pressed. */
+const STASIS_READY_AURA_ID = "370562";
+
+/** How long after the ready aura's removal a cast may be a replay. 605 S2
+ * files, 222 removals: the three replays sit at p50 +0.01 / +0.38 / +0.71 s
+ * (third p90 +0.93 s); 141470d0, replayed inside a Nature lockout, spaced them
+ * +0.02 / +0.74 / +1.40 s. Too long only keeps a real press from counting as
+ * evidence, which is the safe side for every caller. */
+export const STASIS_REPLAY_WINDOW_S = 1.5;
+
+/** Spans (ms, log clock) in which the unit's successful casts may be Stasis
+ * replays rather than presses. */
+export function stasisReplayWindows(
+  unit: Pick<ICombatUnit, "auraEvents">,
+): Array<{ from: number; to: number }> {
+  return (unit.auraEvents ?? [])
+    .filter(
+      (e) =>
+        e.spellId === STASIS_READY_AURA_ID &&
+        e.logLine.event === LogEvent.SPELL_AURA_REMOVED,
+    )
+    .map((e) => ({
+      from: e.logLine.timestamp,
+      to: e.logLine.timestamp + STASIS_REPLAY_WINDOW_S * 1000,
+    }));
+}
+
 export function extractStasisEvents(
   unit: ICombatUnit,
   combat: AtomicArenaCombat,

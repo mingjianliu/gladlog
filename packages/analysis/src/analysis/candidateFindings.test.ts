@@ -1587,6 +1587,177 @@ describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
       ],
     ).toBe("no cast for 5s after the kick");
   });
+
+  // Triage 2026-09-29, kick-eaten F-K7d / F-K7b / F-K7c / F-K7a.
+  // Cyclone 33786 = Nature. Verdant Embrace 360995 / Riptide 61295 / Surging
+  // Totem 444995 = Nature; Reversion 366155 = Arcane-side (64); Starsurge
+  // 78674 = Arcane + Nature (72).
+  const natureKick = (over: Record<string, unknown> = {}) =>
+    kickInst({
+      atSeconds: 100,
+      lockoutDurationSeconds: 3,
+      interruptedSpellId: "33786",
+      interruptedSpellName: "Cyclone",
+      ...over,
+    });
+  const postKickOf = (
+    inst: ReturnType<typeof kickInst>,
+    castFailed: ReturnType<typeof failed>[],
+    ownerCasts: { spellId: string; tSeconds: number }[] = [],
+  ) =>
+    kickEatenEvents(
+      [inst],
+      { id: "P1", name: "Me" },
+      { rawStreams: streams(castFailed), ownerCasts },
+    )[0]!.facts["postKick"]!;
+
+  it("kick-eaten: a switched line prints the presses rejected inside the lockout, and none after it (F-K7d, b12bfef4 @169)", () => {
+    const f = postKickOf(
+      natureKick({
+        postKick: "switched",
+        switchSpellName: "Echo",
+        switchDelayS: 1.4,
+        switchWasHardCast: false,
+      }),
+      [
+        failed(100.998, 360995), // Verdant Embrace, the locked school
+        failed(101.168, 360995),
+        failed(102.678, 366155, "超出范围"), // Reversion, out of range
+        failed(102.792, 366155, "超出范围"),
+        failed(103.886, 366155, "超出范围"), // after the 3.0 s lockout
+        failed(104.2, 366155), // not ready, a school the kick did not lock
+      ],
+    );
+    expect(f).toBe(
+      "acted on another school 1.4s later (Echo; not a hard cast); pressed 4x but rejected (Verdant Embrace×2、Reversion×2) inside the lockout; outside the locked school 1x not ready yet — its own cooldown or the GCD (Reversion)",
+    );
+    expect(f).not.toContain(", ");
+  });
+
+  it("kick-eaten: a switched line with no in-lockout reject is unchanged (F-K7d)", () => {
+    const f = postKickOf(
+      natureKick({
+        postKick: "switched",
+        switchSpellName: "Echo",
+        switchDelayS: 1.4,
+        switchWasHardCast: false,
+      }),
+      [failed(103.886, 366155, "超出范围")],
+    );
+    expect(f).toBe("acted on another school 1.4s later (Echo; not a hard cast)");
+  });
+
+  it("kick-eaten: a not-ready press of a spell with one school outside the lock is its own cooldown, not a lockout reject (F-K7b, 2c6e85ec @15)", () => {
+    const f = postKickOf(
+      natureKick({
+        postKick: "switched",
+        switchSpellName: "Starsurge",
+        switchDelayS: 0.8,
+        switchWasHardCast: false,
+      }),
+      [failed(101.5, 78674), failed(102.4, 78674)],
+      [{ spellId: "78674", tSeconds: 100.8 }],
+    );
+    expect(f).toBe(
+      "acted on another school 0.8s later (Starsurge; not a hard cast); outside the locked school 2x not ready yet — its own cooldown or the GCD (Starsurge×2)",
+    );
+  });
+
+  it("kick-eaten: a not-ready reject within 0.3 s of the same spell's success is a key repeat and is not counted (F-K7c, ruling A32)", () => {
+    const f = postKickOf(
+      natureKick({
+        postKick: "switched",
+        switchSpellName: "Reversion",
+        switchDelayS: 1.3,
+        switchWasHardCast: false,
+      }),
+      [
+        failed(101.366, 366155), // 66 ms after the success → dropped
+        failed(101.65, 366155), // 350 ms after → a press
+        failed(101.4, 366155, "超出范围"), // not a not-ready reason → a press
+      ],
+      [{ spellId: "366155", tSeconds: 101.3 }],
+    );
+    expect(f).toBe(
+      "acted on another school 1.3s later (Reversion; not a hard cast); pressed 1x but rejected (Reversion) inside the lockout; outside the locked school 1x not ready yet — its own cooldown or the GCD (Reversion)",
+    );
+  });
+
+  it("kick-eaten: a line whose only reject was a key repeat loses its not-ready clause (F-K7c, 02c8e3ac @10)", () => {
+    const f = postKickOf(
+      natureKick({
+        postKick: "switched",
+        switchSpellName: "Reversion",
+        switchDelayS: 1.3,
+        switchWasHardCast: false,
+      }),
+      [failed(101.332, 366155)],
+      [{ spellId: "366155", tSeconds: 101.3 }],
+    );
+    expect(f).toBe(
+      "acted on another school 1.3s later (Reversion; not a hard cast)",
+    );
+  });
+
+  it("kick-eaten: the in-lockout rejects stop at the first successful cast of the locked school (F-K7a, ruling A23, 1b930c17 @237)", () => {
+    const f = postKickOf(
+      kickInst({
+        atSeconds: 237.691,
+        lockoutDurationSeconds: 2,
+        interruptedSpellId: "33786",
+        interruptedSpellName: "Cyclone",
+        postKick: "acted",
+        firstActionDelayS: 0.982,
+        lockEndedBySuccessS: 0.982,
+      }),
+      [
+        failed(238.158, 444995), // Surging Totem, before it went out
+        failed(239.231, 61295), // Riptide, after the Nature success
+        failed(239.396, 61295),
+      ],
+      [{ spellId: "444995", tSeconds: 238.673 }],
+    );
+    expect(f).toBe(
+      "pressed 1x but rejected (Surging Totem) inside the lockout; first successful cast 1.0s later",
+    );
+  });
+
+  it("kick-eaten: a reject in the same millisecond as the cast that ended the lock is after it, whatever the float round trip says (F-K7a)", () => {
+    // 0.177 + (0.838 − 0.177) is 0.8380000000000001
+    expect(0.177 + (0.838 - 0.177)).toBeGreaterThan(0.838);
+    const f = postKickOf(
+      kickInst({
+        atSeconds: 0.177,
+        lockoutDurationSeconds: 2,
+        interruptedSpellId: "33786",
+        interruptedSpellName: "Cyclone",
+        postKick: "acted",
+        firstActionDelayS: 0.838 - 0.177,
+        lockEndedBySuccessS: 0.838 - 0.177,
+      }),
+      [failed(0.838, 61295)],
+      [{ spellId: "444995", tSeconds: 0.838 }],
+    );
+    expect(f).toBe("first cast 0.7s later");
+  });
+
+  it("kick-eaten: without a locked-school success the modelled lockout bounds the rejects as before (F-K7a)", () => {
+    const f = postKickOf(
+      kickInst({
+        atSeconds: 237.691,
+        lockoutDurationSeconds: 2,
+        interruptedSpellId: "33786",
+        interruptedSpellName: "Cyclone",
+        postKick: "acted",
+        firstActionDelayS: 2.4,
+        lockEndedBySuccessS: null,
+      }),
+      [failed(238.158, 444995), failed(239.231, 61295), failed(239.8, 61295)],
+    );
+    expect(f).toBe(
+      "pressed 2x but rejected (Surging Totem、Riptide) inside the lockout; first successful cast 2.4s later",
+    );
+  });
 });
 
 describe("healingGapEvents(HEAL-001,2026-08-30 HP-crisis 门 change 1/5)", () => {

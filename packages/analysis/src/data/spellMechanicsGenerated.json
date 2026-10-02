@@ -2,74 +2,92 @@
  "build": "12.1.0.69587",
  "spells": {
   "1": {
-   "castMs": 10000
+   "castMs": 10000,
+   "silenceable": true
   },
   "17": {
    "castMs": 0,
-   "mech": 19
+   "mech": 19,
+   "silenceable": true
   },
   "53": {
    "castMs": 0
   },
   "66": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "75": {
    "castMs": 0
   },
   "99": {
    "castMs": 0,
-   "mech": 14
+   "mech": 14,
+   "silenceable": true
   },
   "100": {
    "castMs": 0,
    "mech": 7
   },
   "116": {
-   "castMs": 1750
+   "castMs": 1750,
+   "silenceable": true
   },
   "118": {
    "castMs": 1700,
-   "mech": 17
+   "mech": 17,
+   "silenceable": true
   },
   "120": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "122": {
    "castMs": 0,
+   "silenceable": true,
    "mech": 7
   },
   "126": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "130": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "133": {
-   "castMs": 1750
+   "castMs": 1750,
+   "silenceable": true
   },
   "136": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "139": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "172": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "339": {
    "castMs": 1700,
-   "mech": 7
+   "mech": 7,
+   "silenceable": true
   },
   "348": {
-   "castMs": 1500
+   "castMs": 1500,
+   "silenceable": true
   },
   "355": {
    "castMs": 0,
-   "mech": 36
+   "mech": 36,
+   "silenceable": true
   },
   "370": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "379": {
    "castMs": 0
@@ -79,14 +97,16 @@
    "mech": 12
   },
   "453": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "458": {
    "castMs": 1500,
    "mech": 21
   },
   "465": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "470": {
    "castMs": 1500,
@@ -97,61 +117,79 @@
    "mech": 21
   },
   "475": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "498": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "527": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "528": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "546": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "585": {
-   "castMs": 1500
+   "castMs": 1500,
+   "silenceable": true
   },
   "586": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "589": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "596": {
-   "castMs": 2500
+   "castMs": 2500,
+   "silenceable": true
   },
   "605": {
    "castMs": 1800,
-   "mech": 1
+   "mech": 1,
+   "silenceable": true
   },
   "633": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "642": {
    "castMs": 0,
    "mech": 29,
+   "silenceable": true,
    "immuneAll": true
   },
   "686": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "688": {
-   "castMs": 6000
+   "castMs": 6000,
+   "silenceable": true
   },
   "691": {
-   "castMs": 6000
+   "castMs": 6000,
+   "silenceable": true
   },
   "697": {
-   "castMs": 6000
+   "castMs": 6000,
+   "silenceable": true
   },
   "698": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "702": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "703": {
    "castMs": 0,
@@ -160,10 +198,12 @@
   "710": {
    "castMs": 1500,
    "mech": 18,
+   "silenceable": true,
    "immuneAll": true
   },
   "740": {
    "castMs": 0,
+   "silenceable": true,
    "immuneMechMask": 2347
   },
   "768": {
@@ -177,7 +217,8 @@
    "mech": 15
   },
   "774": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "781": {
    "castMs": 0
@@ -193,7 +234,8 @@
   },
   "853": {
    "castMs": 0,
-   "mech": 12
+   "mech": 12,
+   "silenceable": true
   },
   "871": {
    "castMs": 0
@@ -205,27 +247,32 @@
    "castMs": 0
   },
   "974": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "980": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "982": {
    "castMs": 2500
   },
   "1022": {
    "castMs": 0,
-   "mech": 29
+   "mech": 29,
+   "silenceable": true
   },
   "1044": {
    "castMs": 0,
+   "silenceable": true,
    "immuneMech": [
     7,
     11
    ]
   },
   "1064": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "1079": {
    "castMs": 0,
@@ -233,13 +280,16 @@
   },
   "1122": {
    "castMs": 0,
+   "silenceable": true,
    "mech": 12
   },
   "1126": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1160": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1329": {
    "castMs": 0
@@ -249,23 +299,28 @@
    "mech": 9
   },
   "1449": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1459": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1464": {
    "castMs": 0
   },
   "1490": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1513": {
    "castMs": 1500,
-   "mech": 5
+   "mech": 5,
+   "silenceable": true
   },
   "1543": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1604": {
    "castMs": 0,
@@ -275,10 +330,12 @@
    "castMs": 0
   },
   "1706": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1714": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1715": {
    "castMs": 0,
@@ -289,7 +346,8 @@
   },
   "1725": {
    "castMs": 0,
-   "mech": 4
+   "mech": 4,
+   "silenceable": true
   },
   "1752": {
    "castMs": 0
@@ -325,6 +383,7 @@
   },
   "1953": {
    "castMs": 0,
+   "silenceable": true,
    "immuneMech": [
     7,
     12
@@ -334,39 +393,47 @@
    "castMs": 0
   },
   "2006": {
-   "castMs": 10000
+   "castMs": 10000,
+   "silenceable": true
   },
   "2008": {
-   "castMs": 10000
+   "castMs": 10000,
+   "silenceable": true
   },
   "2050": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "2061": {
-   "castMs": 1500
+   "castMs": 1500,
+   "silenceable": true
   },
   "2094": {
    "castMs": 0,
    "mech": 2
   },
   "2096": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "2098": {
    "castMs": 0
   },
   "2120": {
-   "castMs": 3500
+   "castMs": 3500,
+   "silenceable": true
   },
   "2139": {
    "castMs": 0,
-   "mech": 26
+   "mech": 26,
+   "silenceable": true
   },
   "2383": {
    "castMs": 0
   },
   "2484": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "2565": {
    "castMs": 0
@@ -376,23 +443,28 @@
   },
   "2637": {
    "castMs": 1500,
-   "mech": 10
+   "mech": 10,
+   "silenceable": true
   },
   "2641": {
    "castMs": 3000
   },
   "2645": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "2649": {
    "castMs": 0,
-   "mech": 16
+   "mech": 16,
+   "silenceable": true
   },
   "2782": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "2812": {
-   "castMs": 1500
+   "castMs": 1500,
+   "silenceable": true
   },
   "2818": {
    "castMs": 0
@@ -401,23 +473,28 @@
    "castMs": 1500
   },
   "2825": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "2908": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "2948": {
-   "castMs": 1500
+   "castMs": 1500,
+   "silenceable": true
   },
   "2983": {
    "castMs": 0
   },
   "3110": {
-   "castMs": 1750
+   "castMs": 1750,
+   "silenceable": true
   },
   "3355": {
    "castMs": 0,
-   "mech": 13
+   "mech": 13,
+   "silenceable": true
   },
   "3363": {
    "castMs": 1500,
@@ -436,7 +513,8 @@
   },
   "3600": {
    "castMs": 0,
-   "mech": 11
+   "mech": 11,
+   "silenceable": true
   },
   "3606": {
    "castMs": 2000
@@ -445,10 +523,12 @@
    "castMs": 0
   },
   "3716": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "4987": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "5019": {
    "castMs": 500
@@ -458,10 +538,12 @@
    "mech": 11
   },
   "5143": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "5176": {
-   "castMs": 1500
+   "castMs": 1500,
+   "silenceable": true
   },
   "5211": {
    "castMs": 0,
@@ -481,7 +563,8 @@
   },
   "5246": {
    "castMs": 0,
-   "mech": 5
+   "mech": 5,
+   "silenceable": true
   },
   "5277": {
    "castMs": 0
@@ -499,11 +582,13 @@
    "castMs": 0
   },
   "5394": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "5484": {
    "castMs": 0,
-   "mech": 5
+   "mech": 5,
+   "silenceable": true
   },
   "5487": {
    "castMs": 0,
@@ -515,13 +600,16 @@
    "castMs": 0
   },
   "5672": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "5697": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "5740": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "5760": {
    "castMs": 0
@@ -531,6 +619,7 @@
   },
   "5782": {
    "castMs": 1700,
+   "silenceable": true,
    "mech": 5
   },
   "5784": {
@@ -541,7 +630,8 @@
    "castMs": 0
   },
   "6201": {
-   "castMs": 3000
+   "castMs": 3000,
+   "silenceable": true
   },
   "6262": {
    "castMs": 0
@@ -550,14 +640,17 @@
    "castMs": 0
   },
   "6353": {
-   "castMs": 3000
+   "castMs": 3000,
+   "silenceable": true
   },
   "6358": {
    "castMs": 1700,
-   "mech": 10
+   "mech": 10,
+   "silenceable": true
   },
   "6360": {
    "castMs": 0,
+   "silenceable": true,
    "mech": 11
   },
   "6544": {
@@ -575,7 +668,8 @@
    "mech": 21
   },
   "6673": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "6770": {
    "castMs": 0,
@@ -583,11 +677,13 @@
   },
   "6789": {
    "castMs": 0,
+   "silenceable": true,
    "mech": 24
   },
   "6795": {
    "castMs": 0,
-   "mech": 36
+   "mech": 36,
+   "silenceable": true
   },
   "6807": {
    "castMs": 0
@@ -597,16 +693,19 @@
    "mech": 21
   },
   "6940": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "6962": {
    "castMs": 0
   },
   "7268": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "7328": {
-   "castMs": 10000
+   "castMs": 10000,
+   "silenceable": true
   },
   "7384": {
    "castMs": 0
@@ -624,23 +723,29 @@
    "castMs": 0
   },
   "7870": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "8004": {
-   "castMs": 1500
+   "castMs": 1500,
+   "silenceable": true
   },
   "8042": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "8092": {
-   "castMs": 1500
+   "castMs": 1500,
+   "silenceable": true
   },
   "8122": {
    "castMs": 0,
-   "mech": 5
+   "mech": 5,
+   "silenceable": true
   },
   "8143": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "8222": {
    "castMs": 0
@@ -662,21 +767,26 @@
    "castMs": 10000
   },
   "8921": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "8936": {
-   "castMs": 1500
+   "castMs": 1500,
+   "silenceable": true
   },
   "9484": {
    "castMs": 1500,
-   "mech": 20
+   "mech": 20,
+   "silenceable": true
   },
   "10060": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "10326": {
    "castMs": 1500,
-   "mech": 23
+   "mech": 23,
+   "silenceable": true
   },
   "10444": {
    "castMs": 0
@@ -700,17 +810,20 @@
    "castMs": 0
   },
   "11366": {
-   "castMs": 4000
+   "castMs": 4000,
+   "silenceable": true
   },
   "11426": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "12294": {
    "castMs": 0
   },
   "12323": {
    "castMs": 0,
-   "mech": 11
+   "mech": 11,
+   "silenceable": true
   },
   "12654": {
    "castMs": 0
@@ -735,27 +848,32 @@
    "castMs": 0
   },
   "14914": {
-   "castMs": 1500
+   "castMs": 1500,
+   "silenceable": true
   },
   "15286": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "15290": {
    "castMs": 0
   },
   "15407": {
    "castMs": 0,
+   "silenceable": true,
    "mech": 11
   },
   "15487": {
    "castMs": 0,
-   "mech": 9
+   "mech": 9,
+   "silenceable": true
   },
   "16827": {
    "castMs": 0
   },
   "16870": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "16953": {
    "castMs": 0
@@ -765,7 +883,8 @@
    "mech": 7
   },
   "17057": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "17229": {
    "castMs": 1500,
@@ -791,19 +910,23 @@
   },
   "17735": {
    "castMs": 0,
-   "mech": 16
+   "mech": 16,
+   "silenceable": true
   },
   "17767": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "17877": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "17941": {
    "castMs": 0
   },
   "17962": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "18499": {
    "castMs": 0,
@@ -815,10 +938,12 @@
    ]
   },
   "18562": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "19236": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "19434": {
    "castMs": 2500
@@ -827,24 +952,28 @@
    "castMs": 0
   },
   "19505": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "19574": {
    "castMs": 0
   },
   "19577": {
    "castMs": 0,
+   "silenceable": true,
    "mech": 12
   },
   "19647": {
    "castMs": 0,
+   "silenceable": true,
    "mech": 26
   },
   "19658": {
    "castMs": 0
   },
   "19750": {
-   "castMs": 1500
+   "castMs": 1500,
+   "silenceable": true
   },
   "19801": {
    "castMs": 0
@@ -856,10 +985,12 @@
    "castMs": 0
   },
   "20473": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "20484": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "20549": {
    "castMs": 500,
@@ -881,7 +1012,8 @@
    "castMs": 0
   },
   "21562": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "22482": {
    "castMs": 0
@@ -895,6 +1027,7 @@
   },
   "22703": {
    "castMs": 0,
+   "silenceable": true,
    "mech": 12
   },
   "22719": {
@@ -995,14 +1128,16 @@
    "mech": 21
   },
   "24275": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "24394": {
    "castMs": 0,
    "mech": 12
   },
   "24423": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "24450": {
    "castMs": 0
@@ -1014,7 +1149,8 @@
    ]
   },
   "25046": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "25504": {
    "castMs": 0
@@ -1027,22 +1163,27 @@
    ]
   },
   "25912": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "25914": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "26297": {
    "castMs": 0
   },
   "26573": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "27243": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "27285": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "27576": {
    "castMs": 0
@@ -1055,29 +1196,37 @@
   },
   "28271": {
    "castMs": 1700,
-   "mech": 17
+   "mech": 17,
+   "silenceable": true
   },
   "28272": {
    "castMs": 1700,
-   "mech": 17
+   "mech": 17,
+   "silenceable": true
   },
   "28730": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "28880": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "29166": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "29722": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "29893": {
-   "castMs": 3000
+   "castMs": 3000,
+   "silenceable": true
   },
   "30146": {
-   "castMs": 6000
+   "castMs": 6000,
+   "silenceable": true
   },
   "30151": {
    "castMs": 0
@@ -1093,16 +1242,20 @@
   },
   "30283": {
    "castMs": 1500,
-   "mech": 12
+   "mech": 12,
+   "silenceable": true
   },
   "30449": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "30451": {
-   "castMs": 2250
+   "castMs": 2250,
+   "silenceable": true
   },
   "30455": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "31117": {
    "castMs": 0
@@ -1112,29 +1265,35 @@
   },
   "31589": {
    "castMs": 0,
-   "mech": 11
+   "mech": 11,
+   "silenceable": true
   },
   "31616": {
    "castMs": 0
   },
   "31661": {
    "castMs": 0,
+   "silenceable": true,
    "mech": 2
   },
   "31687": {
-   "castMs": 1500
+   "castMs": 1500,
+   "silenceable": true
   },
   "31707": {
-   "castMs": 2500
+   "castMs": 2500,
+   "silenceable": true
   },
   "31821": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "31850": {
    "castMs": 0
   },
   "31884": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "31935": {
    "castMs": 0,
@@ -1147,22 +1306,27 @@
    "castMs": 0
   },
   "32182": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "32216": {
    "castMs": 0
   },
   "32223": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "32375": {
-   "castMs": 1500
+   "castMs": 1500,
+   "silenceable": true
   },
   "32379": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "32592": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "32612": {
    "castMs": 0
@@ -1178,16 +1342,19 @@
    "mech": 12
   },
   "33076": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "33110": {
    "castMs": 0
   },
   "33206": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "33395": {
    "castMs": 0,
+   "silenceable": true,
    "mech": 7
   },
   "33697": {
@@ -1200,7 +1367,8 @@
    "castMs": 0
   },
   "33763": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "33778": {
    "castMs": 0
@@ -1208,6 +1376,7 @@
   "33786": {
    "castMs": 1700,
    "mech": 18,
+   "silenceable": true,
    "immuneAll": true
   },
   "33891": {
@@ -1220,7 +1389,8 @@
    "castMs": 0
   },
   "34026": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "34406": {
    "castMs": 1500,
@@ -1244,7 +1414,8 @@
    "mech": 21
   },
   "34861": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "34896": {
    "castMs": 1500,
@@ -1263,13 +1434,15 @@
    "mech": 21
   },
   "34914": {
-   "castMs": 1500
+   "castMs": 1500,
+   "silenceable": true
   },
   "35079": {
    "castMs": 0
   },
   "35346": {
    "castMs": 0,
+   "silenceable": true,
    "mech": 11
   },
   "35395": {
@@ -1338,7 +1511,8 @@
    "mech": 21
   },
   "39897": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "40120": {
    "castMs": 0,
@@ -1365,20 +1539,23 @@
    "castMs": 0
   },
   "41635": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "42223": {
    "castMs": 0
   },
   "42650": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "42777": {
    "castMs": 1500,
    "mech": 21
   },
   "43265": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "43308": {
    "castMs": 0
@@ -1392,16 +1569,19 @@
    "mech": 21
   },
   "43991": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "44425": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "44544": {
    "castMs": 0
   },
   "44614": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "44949": {
    "castMs": 0
@@ -1416,10 +1596,12 @@
    "castMs": 0
   },
   "45284": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "45297": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "45334": {
    "castMs": 0,
@@ -1428,6 +1610,7 @@
   "45438": {
    "castMs": 0,
    "mech": 29,
+   "silenceable": true,
    "immuneAll": true,
    "locksCasting": true
   },
@@ -1436,17 +1619,20 @@
   },
   "45524": {
    "castMs": 0,
-   "mech": 11
+   "mech": 11,
+   "silenceable": true
   },
   "46199": {
    "castMs": 1500,
    "mech": 21
   },
   "46584": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "46585": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "46628": {
    "castMs": 1500,
@@ -1461,7 +1647,8 @@
   },
   "47476": {
    "castMs": 0,
-   "mech": 9
+   "mech": 9,
+   "silenceable": true
   },
   "47481": {
    "castMs": 0,
@@ -1469,13 +1656,16 @@
   },
   "47528": {
    "castMs": 0,
+   "silenceable": true,
    "mech": 26
   },
   "47540": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "47541": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "47568": {
    "castMs": 0
@@ -1489,19 +1679,24 @@
    ]
   },
   "47632": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "47633": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "47666": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "47750": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "47753": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "47755": {
    "castMs": 0
@@ -1510,13 +1705,16 @@
    "castMs": 0
   },
   "47788": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "48018": {
-   "castMs": 500
+   "castMs": 500,
+   "silenceable": true
   },
   "48020": {
    "castMs": 0,
+   "silenceable": true,
    "immuneMech": [
     11
    ]
@@ -1539,14 +1737,16 @@
    "castMs": 0
   },
   "48181": {
-   "castMs": 1500
+   "castMs": 1500,
+   "silenceable": true
   },
   "48265": {
    "castMs": 0,
    "immuneMechMask": 1887
   },
   "48438": {
-   "castMs": 1500
+   "castMs": 1500,
+   "silenceable": true
   },
   "48517": {
    "castMs": 0
@@ -1555,7 +1755,8 @@
    "castMs": 0
   },
   "48707": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "48743": {
    "castMs": 0
@@ -1566,6 +1767,7 @@
   },
   "48792": {
    "castMs": 0,
+   "silenceable": true,
    "immuneMech": [
     12
    ]
@@ -1577,7 +1779,8 @@
    "castMs": 0
   },
   "49028": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "49039": {
    "castMs": 0,
@@ -1595,7 +1798,8 @@
    "castMs": 0
   },
   "49184": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "49206": {
    "castMs": 0
@@ -1614,7 +1818,8 @@
   },
   "49576": {
    "castMs": 0,
-   "mech": 6
+   "mech": 6,
+   "silenceable": true
   },
   "49966": {
    "castMs": 0
@@ -1632,7 +1837,8 @@
   },
   "50285": {
    "castMs": 0,
-   "mech": 11
+   "mech": 11,
+   "silenceable": true
   },
   "50334": {
    "castMs": 0,
@@ -1642,22 +1848,27 @@
    "castMs": 0
   },
   "50613": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "50622": {
    "castMs": 0
   },
   "50769": {
-   "castMs": 10000
+   "castMs": 10000,
+   "silenceable": true
   },
   "50842": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "50977": {
-   "castMs": 4000
+   "castMs": 4000,
+   "silenceable": true
   },
   "51052": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "51124": {
    "castMs": 0
@@ -1677,18 +1888,22 @@
    "castMs": 0
   },
   "51485": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "51490": {
    "castMs": 0,
+   "silenceable": true,
    "mech": 11
   },
   "51505": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "51514": {
    "castMs": 1700,
    "mech": 17,
+   "silenceable": true,
    "locksCasting": true
   },
   "51637": {
@@ -1707,28 +1922,33 @@
    "castMs": 0
   },
   "51886": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "51963": {
-   "castMs": 2500
+   "castMs": 2500,
+   "silenceable": true
   },
   "52042": {
    "castMs": 0
   },
   "52127": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "52128": {
    "castMs": 0
   },
   "52150": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "52174": {
    "castMs": 0
   },
   "52212": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "52437": {
    "castMs": 0
@@ -1752,10 +1972,12 @@
    "castMs": 0
   },
   "53480": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "53563": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "53595": {
    "castMs": 0
@@ -1764,10 +1986,12 @@
    "castMs": 0
   },
   "53652": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "54049": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "54149": {
    "castMs": 0
@@ -1781,7 +2005,8 @@
   },
   "54644": {
    "castMs": 0,
-   "mech": 11
+   "mech": 11,
+   "silenceable": true
   },
   "54680": {
    "castMs": 0
@@ -1806,7 +2031,8 @@
    "castMs": 0
   },
   "55342": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "55531": {
    "castMs": 1500,
@@ -1814,7 +2040,8 @@
   },
   "56222": {
    "castMs": 0,
-   "mech": 36
+   "mech": 36,
+   "silenceable": true
   },
   "56641": {
    "castMs": 1700
@@ -1841,10 +2068,12 @@
    "castMs": 0
   },
   "57984": {
-   "castMs": 3000
+   "castMs": 3000,
+   "silenceable": true
   },
   "57994": {
    "castMs": 0,
+   "silenceable": true,
    "mech": 26
   },
   "58180": {
@@ -1865,31 +2094,39 @@
    "castMs": 0
   },
   "59052": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "59542": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "59543": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "59544": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "59545": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "59547": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "59548": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "59628": {
    "castMs": 0
   },
   "59638": {
    "castMs": 2000,
+   "silenceable": true,
    "mech": 11
   },
   "59752": {
@@ -1942,11 +2179,13 @@
    "mech": 21
   },
   "61295": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "61305": {
    "castMs": 1700,
-   "mech": 17
+   "mech": 17,
+   "silenceable": true
   },
   "61309": {
    "castMs": 1500,
@@ -1976,28 +2215,33 @@
    "mech": 21
   },
   "61648": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "61684": {
    "castMs": 0
   },
   "61721": {
    "castMs": 1700,
-   "mech": 17
+   "mech": 17,
+   "silenceable": true
   },
   "61818": {
    "castMs": 0
   },
   "61882": {
    "castMs": 0,
+   "silenceable": true,
    "mech": 12
   },
   "61999": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "62124": {
    "castMs": 0,
-   "mech": 36
+   "mech": 36,
+   "silenceable": true
   },
   "62305": {
    "castMs": 0,
@@ -2007,14 +2251,16 @@
    ]
   },
   "62618": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "63232": {
    "castMs": 1500,
    "mech": 21
   },
   "63619": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "63636": {
    "castMs": 1500,
@@ -2047,7 +2293,8 @@
    "mech": 7
   },
   "64843": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "64844": {
    "castMs": 0
@@ -2130,7 +2377,8 @@
    "castMs": 0
   },
   "69179": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "69369": {
    "castMs": 0
@@ -2162,19 +2410,23 @@
   },
   "73325": {
    "castMs": 0,
-   "mech": 6
+   "mech": 6,
+   "silenceable": true
   },
   "73685": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "73899": {
    "castMs": 0
   },
   "73920": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "73921": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "75614": {
    "castMs": 1500,
@@ -2185,19 +2437,23 @@
    "mech": 21
   },
   "77130": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "77443": {
    "castMs": 0
   },
   "77451": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "77472": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "77478": {
    "castMs": 0,
+   "silenceable": true,
    "mech": 12
   },
   "77489": {
@@ -2211,10 +2467,12 @@
    "castMs": 0
   },
   "77575": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "77606": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "77616": {
    "castMs": 0
@@ -2224,29 +2482,36 @@
    "mech": 15
   },
   "77761": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "77762": {
    "castMs": 0
   },
   "77764": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "78674": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "78675": {
    "castMs": 0,
+   "silenceable": true,
    "mech": 26
   },
   "79206": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "80240": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "80353": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "80354": {
    "castMs": 0
@@ -2258,7 +2523,8 @@
    "castMs": 1000
   },
   "80483": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "81141": {
    "castMs": 0
@@ -2274,6 +2540,7 @@
   },
   "81281": {
    "castMs": 0,
+   "silenceable": true,
    "mech": 11
   },
   "81297": {
@@ -2283,7 +2550,8 @@
    "castMs": 0
   },
   "81700": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "81751": {
    "castMs": 0
@@ -2292,7 +2560,8 @@
    "castMs": 0
   },
   "82326": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "82691": {
    "castMs": 0,
@@ -2317,7 +2586,8 @@
    "castMs": 100
   },
   "84714": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "84721": {
    "castMs": 0
@@ -2326,7 +2596,8 @@
    "castMs": 0
   },
   "85222": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "85256": {
    "castMs": 0
@@ -2341,7 +2612,8 @@
    "castMs": 0
   },
   "85673": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "85739": {
    "castMs": 0
@@ -2350,13 +2622,15 @@
    "castMs": 0
   },
   "86040": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "86392": {
    "castMs": 0
   },
   "86659": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "87023": {
    "castMs": 0
@@ -2366,7 +2640,8 @@
   },
   "87204": {
    "castMs": 0,
-   "mech": 24
+   "mech": 24,
+   "silenceable": true
   },
   "87840": {
    "castMs": 1500,
@@ -2376,13 +2651,16 @@
    "castMs": 0
   },
   "88423": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "88625": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "88747": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "88748": {
    "castMs": 1500,
@@ -2393,7 +2671,8 @@
    "mech": 21
   },
   "88751": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "88852": {
    "castMs": 0
@@ -2411,19 +2690,22 @@
   },
   "89792": {
    "castMs": 0,
+   "silenceable": true,
    "immuneMech": [
     7,
     12
    ]
   },
   "89808": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "90328": {
    "castMs": 0
   },
   "90361": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "90621": {
    "castMs": 1500,
@@ -2477,10 +2759,12 @@
    "mech": 21
   },
   "93282": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "93402": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "93622": {
    "castMs": 0
@@ -2523,7 +2807,8 @@
    "mech": 21
   },
   "97462": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "97463": {
    "castMs": 0
@@ -2533,7 +2818,8 @@
    "mech": 26
   },
   "98008": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "98021": {
    "castMs": 0
@@ -2581,14 +2867,16 @@
    "mech": 21
   },
   "101643": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "101821": {
    "castMs": 1500,
    "mech": 21
   },
   "102342": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "102346": {
    "castMs": 1500,
@@ -2596,7 +2884,8 @@
   },
   "102359": {
    "castMs": 0,
-   "mech": 7
+   "mech": 7,
+   "silenceable": true
   },
   "102383": {
    "castMs": 0
@@ -2625,10 +2914,12 @@
    "castMs": 0
   },
   "102693": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "102793": {
    "castMs": 0,
+   "silenceable": true,
    "mech": 11
   },
   "103081": {
@@ -2647,26 +2938,31 @@
    "castMs": 0
   },
   "104316": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "104317": {
    "castMs": 0
   },
   "104318": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "104773": {
    "castMs": 0,
+   "silenceable": true,
    "immuneMech": [
     9,
     26
    ]
   },
   "105174": {
-   "castMs": 1500
+   "castMs": 1500,
+   "silenceable": true
   },
   "105421": {
    "castMs": 0,
+   "silenceable": true,
    "mech": 2
   },
   "105771": {
@@ -2680,7 +2976,8 @@
    "castMs": 0
   },
   "106898": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "106951": {
    "castMs": 0
@@ -2716,6 +3013,7 @@
   },
   "108199": {
    "castMs": 0,
+   "silenceable": true,
    "mech": 6
   },
   "108211": {
@@ -2725,10 +3023,12 @@
    "castMs": 0
   },
   "108280": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "108287": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "108366": {
    "castMs": 0
@@ -2744,16 +3044,20 @@
    "castMs": 0
   },
   "108446": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "108503": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "108843": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "108853": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "109132": {
    "castMs": 0
@@ -2769,25 +3073,30 @@
    "castMs": 0
   },
   "110959": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "110960": {
    "castMs": 0
   },
   "111400": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "111685": {
    "castMs": 0
   },
   "111759": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "111771": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "112042": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "112942": {
    "castMs": 0
@@ -2802,6 +3111,7 @@
   },
   "113724": {
    "castMs": 2000,
+   "silenceable": true,
    "mech": 13
   },
   "113746": {
@@ -2820,13 +3130,16 @@
    "castMs": 0
   },
   "114050": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "114051": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "114052": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "114089": {
    "castMs": 0
@@ -2835,16 +3148,19 @@
    "castMs": 0
   },
   "114108": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "114113": {
    "castMs": 0
   },
   "114165": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "114214": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "114216": {
    "castMs": 0
@@ -2863,10 +3179,12 @@
    "mech": 7
   },
   "114852": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "114871": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "114942": {
    "castMs": 0
@@ -2887,19 +3205,24 @@
    "mech": 14
   },
   "115098": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "115129": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "115151": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "115175": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "115178": {
-   "castMs": 10000
+   "castMs": 10000,
+   "silenceable": true
   },
   "115181": {
    "castMs": 0
@@ -2921,10 +3244,12 @@
    "castMs": 0
   },
   "115310": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "115313": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "115356": {
    "castMs": 0
@@ -2939,16 +3264,19 @@
    "castMs": 0
   },
   "115450": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "115464": {
    "castMs": 0
   },
   "115546": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "115750": {
    "castMs": 0,
+   "silenceable": true,
    "mech": 2
   },
   "115804": {
@@ -2963,13 +3291,16 @@
   },
   "116189": {
    "castMs": 0,
-   "mech": 36
+   "mech": 36,
+   "silenceable": true
   },
   "116670": {
-   "castMs": 1500
+   "castMs": 1500,
+   "silenceable": true
   },
   "116680": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "116705": {
    "castMs": 0,
@@ -2980,29 +3311,36 @@
    "mech": 7
   },
   "116768": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "116841": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "116844": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "116849": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "116858": {
-   "castMs": 3000
+   "castMs": 3000,
+   "silenceable": true
   },
   "116888": {
    "castMs": 0
   },
   "116947": {
    "castMs": 0,
-   "mech": 11
+   "mech": 11,
+   "silenceable": true
   },
   "117014": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "117313": {
    "castMs": 0
@@ -3019,7 +3357,8 @@
    "mech": 12
   },
   "117588": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "117679": {
    "castMs": 0
@@ -3028,7 +3367,8 @@
    "castMs": 0
   },
   "117952": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "118038": {
    "castMs": 0
@@ -3038,10 +3378,12 @@
    "mech": 21
   },
   "118291": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "118297": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "118323": {
    "castMs": 0
@@ -3061,7 +3403,8 @@
   },
   "118699": {
    "castMs": 0,
-   "mech": 5
+   "mech": 5,
+   "silenceable": true
   },
   "118905": {
    "castMs": 2000,
@@ -3079,6 +3422,7 @@
   },
   "119415": {
    "castMs": 0,
+   "silenceable": true,
    "immuneMech": [
     7,
     12
@@ -3113,20 +3457,23 @@
    "castMs": 0
   },
   "119996": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "120043": {
    "castMs": 1500,
    "mech": 21
   },
   "120517": {
-   "castMs": 1500
+   "castMs": 1500,
+   "silenceable": true
   },
   "120588": {
    "castMs": 2000
   },
   "120644": {
-   "castMs": 1500
+   "castMs": 1500,
+   "silenceable": true
   },
   "120692": {
    "castMs": 0
@@ -3142,7 +3489,8 @@
    "castMs": 0
   },
   "121093": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "121147": {
    "castMs": 0
@@ -3151,7 +3499,8 @@
    "castMs": 0
   },
   "121183": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "121253": {
    "castMs": 0,
@@ -3161,7 +3510,8 @@
    "castMs": 0
   },
   "121536": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "121557": {
    "castMs": 0
@@ -3194,24 +3544,28 @@
    "mech": 21
   },
   "123040": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "123051": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "123586": {
    "castMs": 0,
    "mech": 11
   },
   "123725": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "123886": {
    "castMs": 1500,
    "mech": 21
   },
   "123904": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "123981": {
    "castMs": 0
@@ -3220,17 +3574,20 @@
    "castMs": 0
   },
   "123986": {
-   "castMs": 1000
+   "castMs": 1000,
+   "silenceable": true
   },
   "123992": {
    "castMs": 1500,
    "mech": 21
   },
   "123996": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "124007": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "124009": {
    "castMs": 0
@@ -3245,7 +3602,8 @@
    "castMs": 0
   },
   "124280": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "124503": {
    "castMs": 0
@@ -3257,13 +3615,15 @@
    "castMs": 0
   },
   "124682": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "125050": {
    "castMs": 100
   },
   "125174": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "125355": {
    "castMs": 0
@@ -3272,7 +3632,8 @@
    "castMs": 0
   },
   "125883": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "126507": {
    "castMs": 1500,
@@ -3372,7 +3733,8 @@
    "castMs": 0
   },
   "129597": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "129836": {
    "castMs": 0
@@ -3406,7 +3768,8 @@
   },
   "130616": {
    "castMs": 0,
-   "mech": 5
+   "mech": 5,
+   "silenceable": true
   },
   "130654": {
    "castMs": 0
@@ -3433,10 +3796,12 @@
    "castMs": 0
   },
   "132157": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "132158": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "132168": {
    "castMs": 0,
@@ -3454,13 +3819,16 @@
   },
   "132409": {
    "castMs": 0,
+   "silenceable": true,
    "mech": 26
   },
   "132411": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "132413": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "132463": {
    "castMs": 0
@@ -3473,6 +3841,7 @@
   },
   "132469": {
    "castMs": 0,
+   "silenceable": true,
    "mech": 6
   },
   "132563": {
@@ -3485,7 +3854,8 @@
    "castMs": 0
   },
   "132578": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "132764": {
    "castMs": 0
@@ -3501,10 +3871,12 @@
    "mech": 21
   },
   "134477": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "135029": {
    "castMs": 1000,
+   "silenceable": true,
    "mech": 11
   },
   "135299": {
@@ -3512,7 +3884,8 @@
    "mech": 11
   },
   "135700": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "136471": {
    "castMs": 1500,
@@ -3556,7 +3929,8 @@
    "castMs": 0
   },
   "142421": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "142641": {
    "castMs": 1500,
@@ -3579,10 +3953,12 @@
    "castMs": 0
   },
   "145153": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "145205": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "145629": {
    "castMs": 0
@@ -3596,7 +3972,8 @@
    "mech": 21
   },
   "146739": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "147362": {
    "castMs": 0,
@@ -3622,7 +3999,8 @@
    "castMs": 0
   },
   "152108": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "152175": {
    "castMs": 0
@@ -3632,19 +4010,22 @@
    "mech": 21
   },
   "153561": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "153564": {
    "castMs": 0
   },
   "153595": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "153596": {
    "castMs": 0
   },
   "153626": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "153640": {
    "castMs": 0
@@ -3659,69 +4040,85 @@
    "castMs": 0
   },
   "155145": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "155158": {
    "castMs": 0
   },
   "155166": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "155625": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "155722": {
    "castMs": 0,
    "mech": 15
   },
   "155777": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "156287": {
    "castMs": 0
   },
   "156322": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "156327": {
    "castMs": 0
   },
   "156910": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "157128": {
    "castMs": 0
   },
   "157228": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "157299": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "157319": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "157331": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "157348": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "157375": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "157736": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "157980": {
    "castMs": 0,
+   "silenceable": true,
    "mech": 6
   },
   "157982": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "157997": {
    "castMs": 0,
+   "silenceable": true,
    "mech": 7
   },
   "158221": {
@@ -3731,10 +4128,12 @@
    "castMs": 0
   },
   "159535": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "159786": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "160018": {
    "castMs": 0
@@ -3754,18 +4153,22 @@
    "mech": 11
   },
   "160124": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "161353": {
    "castMs": 1700,
-   "mech": 17
+   "mech": 17,
+   "silenceable": true
   },
   "161354": {
    "castMs": 1700,
-   "mech": 17
+   "mech": 17,
+   "silenceable": true
   },
   "161691": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "162264": {
    "castMs": 0,
@@ -3783,7 +4186,8 @@
    "mech": 21
   },
   "163073": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "163201": {
    "castMs": 0
@@ -3803,10 +4207,12 @@
   },
   "164812": {
    "castMs": 0,
+   "silenceable": true,
    "mech": 11
   },
   "164815": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "164862": {
    "castMs": 0
@@ -3847,7 +4253,8 @@
   },
   "170855": {
    "castMs": 0,
-   "mech": 7
+   "mech": 7,
+   "silenceable": true
   },
   "171557": {
    "castMs": 0
@@ -4023,6 +4430,7 @@
   },
   "179057": {
    "castMs": 0,
+   "silenceable": true,
    "mech": 12
   },
   "179478": {
@@ -4079,10 +4487,12 @@
   },
   "184662": {
    "castMs": 0,
-   "mech": 19
+   "mech": 19,
+   "silenceable": true
   },
   "184689": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "184707": {
    "castMs": 0
@@ -4098,7 +4508,8 @@
   },
   "185245": {
    "castMs": 0,
-   "mech": 36
+   "mech": 36,
+   "silenceable": true
   },
   "185311": {
    "castMs": 0
@@ -4132,7 +4543,8 @@
    "castMs": 0
   },
   "186263": {
-   "castMs": 1500
+   "castMs": 1500,
+   "silenceable": true
   },
   "186265": {
    "castMs": 0,
@@ -4164,7 +4576,8 @@
    "castMs": 0
   },
   "187464": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "187650": {
    "castMs": 0,
@@ -4182,7 +4595,8 @@
    "mech": 12
   },
   "187874": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "187878": {
    "castMs": 0
@@ -4191,10 +4605,12 @@
    "castMs": 1000
   },
   "188046": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "188196": {
-   "castMs": 2500
+   "castMs": 2500,
+   "silenceable": true
   },
   "188290": {
    "castMs": 0
@@ -4203,10 +4619,12 @@
    "castMs": 0
   },
   "188389": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "188443": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "188499": {
    "castMs": 0
@@ -4215,10 +4633,12 @@
    "castMs": 0
   },
   "188592": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "188616": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "189112": {
    "castMs": 0
@@ -4228,22 +4648,27 @@
    "mech": 21
   },
   "190319": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "190336": {
-   "castMs": 3000
+   "castMs": 3000,
+   "silenceable": true
   },
   "190356": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "190357": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "190411": {
    "castMs": 0
   },
   "190446": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "190456": {
    "castMs": 0
@@ -4256,10 +4681,12 @@
    "mech": 7
   },
   "190984": {
-   "castMs": 1500
+   "castMs": 1500,
+   "silenceable": true
   },
   "191034": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "191037": {
    "castMs": 0
@@ -4272,39 +4699,47 @@
    "castMs": 0
   },
   "191634": {
-   "castMs": 1500
+   "castMs": 1500,
+   "silenceable": true
   },
   "191877": {
    "castMs": 0
   },
   "191894": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "192058": {
    "castMs": 0,
+   "silenceable": true,
    "mech": 12
   },
   "192063": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "192077": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "192081": {
    "castMs": 0
   },
   "192082": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "192090": {
    "castMs": 0,
    "mech": 15
   },
   "192106": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "192109": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "192611": {
    "castMs": 0
@@ -4338,6 +4773,7 @@
   },
   "193473": {
    "castMs": 0,
+   "silenceable": true,
    "mech": 11
   },
   "193486": {
@@ -4347,22 +4783,26 @@
    "castMs": 0
   },
   "194153": {
-   "castMs": 2250
+   "castMs": 2250,
+   "silenceable": true
   },
   "194192": {
    "castMs": 0
   },
   "194223": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "194249": {
    "castMs": 0
   },
   "194384": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "194509": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "194594": {
    "castMs": 0
@@ -4371,19 +4811,22 @@
    "castMs": 0
   },
   "194913": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "195072": {
    "castMs": 0
   },
   "195181": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "195182": {
    "castMs": 0
   },
   "195292": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "195457": {
    "castMs": 0
@@ -4424,7 +4867,8 @@
    "castMs": 0
   },
   "196277": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "196278": {
    "castMs": 0
@@ -4440,17 +4884,20 @@
    "castMs": 0
   },
   "196448": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "196681": {
    "castMs": 1500,
    "mech": 21
   },
   "196718": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "196728": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "196733": {
    "castMs": 0,
@@ -4485,6 +4932,7 @@
   },
   "196840": {
    "castMs": 0,
+   "silenceable": true,
    "mech": 11
   },
   "196881": {
@@ -4494,7 +4942,8 @@
    "castMs": 0
   },
   "196910": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "196911": {
    "castMs": 0
@@ -4521,10 +4970,12 @@
    "castMs": 0
   },
   "197626": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "197628": {
-   "castMs": 2500
+   "castMs": 2500,
+   "silenceable": true
   },
   "197834": {
    "castMs": 0
@@ -4533,16 +4984,19 @@
    "castMs": 0
   },
   "197871": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "197874": {
    "castMs": 0
   },
   "197916": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "197919": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "197922": {
    "castMs": 0,
@@ -4561,25 +5015,30 @@
    "castMs": 0
   },
   "198030": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "198034": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "198069": {
    "castMs": 0
   },
   "198100": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "198103": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "198137": {
    "castMs": 0
   },
   "198149": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "198222": {
    "castMs": 0,
@@ -4589,22 +5048,26 @@
    "castMs": 0
   },
   "198487": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "198533": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "198589": {
    "castMs": 0
   },
   "198590": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "198688": {
    "castMs": 0
   },
   "198715": {
-   "castMs": 2500
+   "castMs": 2500,
+   "silenceable": true
   },
   "198793": {
    "castMs": 0,
@@ -4622,11 +5085,13 @@
   },
   "198898": {
    "castMs": 1800,
+   "silenceable": true,
    "mech": 10
   },
   "198909": {
    "castMs": 0,
-   "mech": 10
+   "mech": 10,
+   "silenceable": true
   },
   "199042": {
    "castMs": 0,
@@ -4642,13 +5107,16 @@
    "castMs": 0
   },
   "199423": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "199427": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "199448": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "199450": {
    "castMs": 0
@@ -4660,10 +5128,12 @@
    "castMs": 0
   },
   "199507": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "199508": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "199544": {
    "castMs": 0,
@@ -4671,6 +5141,7 @@
   },
   "199545": {
    "castMs": 0,
+   "silenceable": true,
    "immuneMechMask": 2044
   },
   "199547": {
@@ -4698,7 +5169,8 @@
    "castMs": 0
   },
   "199786": {
-   "castMs": 1750
+   "castMs": 1750,
+   "silenceable": true
   },
   "199824": {
    "castMs": 0
@@ -4726,38 +5198,45 @@
    "castMs": 0
   },
   "200025": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "200166": {
    "castMs": 0,
    "mech": 12
   },
   "200174": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "200183": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "200196": {
    "castMs": 0,
+   "silenceable": true,
    "mech": 2
   },
   "200200": {
    "castMs": 0,
+   "silenceable": true,
    "mech": 12
   },
   "200389": {
    "castMs": 0
   },
   "200546": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "200587": {
    "castMs": 0,
    "mech": 11
   },
   "200652": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "200654": {
    "castMs": 0
@@ -4769,7 +5248,8 @@
    "castMs": 0
   },
   "200829": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "201363": {
    "castMs": 0
@@ -4787,7 +5267,8 @@
    "castMs": 0
   },
   "201664": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "201671": {
    "castMs": 0
@@ -4810,7 +5291,8 @@
    "mech": 2
   },
   "202138": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "202147": {
    "castMs": 0
@@ -4845,7 +5327,8 @@
    "mech": 12
   },
   "202347": {
-   "castMs": 1500
+   "castMs": 1500,
+   "silenceable": true
   },
   "202370": {
    "castMs": 0
@@ -4857,36 +5340,43 @@
    "castMs": 0
   },
   "202636": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "202644": {
    "castMs": 0
   },
   "202719": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "202748": {
    "castMs": 0
   },
   "202770": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "203123": {
    "castMs": 0,
    "mech": 12
   },
   "203173": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "203174": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "203286": {
-   "castMs": 4000
+   "castMs": 4000,
+   "silenceable": true
   },
   "203337": {
    "castMs": 0,
    "mech": 13,
+   "silenceable": true,
    "immuneAll": true
   },
   "203534": {
@@ -4918,16 +5408,19 @@
   },
   "204018": {
    "castMs": 0,
-   "mech": 29
+   "mech": 29,
+   "silenceable": true
   },
   "204019": {
    "castMs": 0
   },
   "204021": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "204066": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "204069": {
    "castMs": 0
@@ -4937,7 +5430,8 @@
   },
   "204085": {
    "castMs": 0,
-   "mech": 7
+   "mech": 7,
+   "silenceable": true
   },
   "204090": {
    "castMs": 0
@@ -4946,7 +5440,8 @@
    "castMs": 0
   },
   "204215": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "204242": {
    "castMs": 0,
@@ -4959,26 +5454,32 @@
    "castMs": 0
   },
   "204330": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "204331": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "204336": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "204361": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "204362": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "204395": {
    "castMs": 0,
    "mech": 6
   },
   "204596": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "204598": {
    "castMs": 0
@@ -4988,26 +5489,31 @@
    "mech": 11
   },
   "205021": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "205025": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "205180": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "205196": {
    "castMs": 0
   },
   "205231": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "205292": {
    "castMs": 0
   },
   "205364": {
    "castMs": 1800,
-   "mech": 1
+   "mech": 1,
+   "silenceable": true
   },
   "205473": {
    "castMs": 0
@@ -5021,16 +5527,19 @@
   "205630": {
    "castMs": 0,
    "mech": 12,
+   "silenceable": true,
    "immuneMech": [
     26
    ]
   },
   "205636": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "205644": {
    "castMs": 0,
-   "mech": 16
+   "mech": 16,
+   "silenceable": true
   },
   "205655": {
    "castMs": 0
@@ -5040,7 +5549,8 @@
    "mech": 11
   },
   "205800": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "206572": {
    "castMs": 0,
@@ -5073,26 +5583,32 @@
    "castMs": 0
   },
   "207017": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "207018": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "207025": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "207028": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "207062": {
    "castMs": 0
   },
   "207150": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "207167": {
    "castMs": 0,
-   "mech": 2
+   "mech": 2,
+   "silenceable": true
   },
   "207203": {
    "castMs": 0
@@ -5101,10 +5617,12 @@
    "castMs": 0
   },
   "207317": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "207349": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "207400": {
    "castMs": 0
@@ -5117,6 +5635,7 @@
   },
   "207684": {
    "castMs": 0,
+   "silenceable": true,
    "mech": 5
   },
   "207685": {
@@ -5137,7 +5656,8 @@
    "mech": 3
   },
   "207778": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "208086": {
    "castMs": 0
@@ -5161,10 +5681,12 @@
    "castMs": 0
   },
   "208770": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "208772": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "208819": {
    "castMs": 0
@@ -5199,7 +5721,8 @@
   },
   "209749": {
    "castMs": 0,
-   "mech": 3
+   "mech": 3,
+   "silenceable": true
   },
   "209754": {
    "castMs": 0
@@ -5226,7 +5749,8 @@
    "castMs": 0
   },
   "210128": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "210141": {
    "castMs": 2000,
@@ -5242,7 +5766,8 @@
    "castMs": 0
   },
   "210256": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "210380": {
    "castMs": 0
@@ -5251,7 +5776,8 @@
    "castMs": 0
   },
   "210712": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "210738": {
    "castMs": 0
@@ -5265,16 +5791,19 @@
   "210873": {
    "castMs": 1700,
    "mech": 17,
+   "silenceable": true,
    "locksCasting": true
   },
   "211004": {
    "castMs": 1700,
    "mech": 17,
+   "silenceable": true,
    "locksCasting": true
   },
   "211015": {
    "castMs": 1700,
    "mech": 17,
+   "silenceable": true,
    "locksCasting": true
   },
   "211094": {
@@ -5290,7 +5819,8 @@
    "castMs": 0
   },
   "211522": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "211545": {
    "castMs": 0
@@ -5306,13 +5836,16 @@
    "castMs": 0
   },
   "212036": {
-   "castMs": 10000
+   "castMs": 10000,
+   "silenceable": true
   },
   "212040": {
-   "castMs": 10000
+   "castMs": 10000,
+   "silenceable": true
   },
   "212051": {
-   "castMs": 10000
+   "castMs": 10000,
+   "silenceable": true
   },
   "212084": {
    "castMs": 0,
@@ -5330,7 +5863,8 @@
    "castMs": 0
   },
   "212295": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "212382": {
    "castMs": 0
@@ -5342,7 +5876,8 @@
    "castMs": 0
   },
   "212459": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "212460": {
    "castMs": 0
@@ -5359,7 +5894,8 @@
    "mech": 16
   },
   "212653": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "212680": {
    "castMs": 0
@@ -5372,7 +5908,8 @@
    ]
   },
   "212739": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "212743": {
    "castMs": 0
@@ -5414,10 +5951,12 @@
    "mech": 11
   },
   "213634": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "213644": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "213680": {
    "castMs": 0
@@ -5474,6 +6013,7 @@
   },
   "215769": {
    "castMs": 0,
+   "silenceable": true,
    "immuneMech": [
     9
    ]
@@ -5485,10 +6025,12 @@
    "castMs": 0
   },
   "216331": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "216371": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "216521": {
    "castMs": 0
@@ -5509,10 +6051,12 @@
   },
   "217832": {
    "castMs": 0,
-   "mech": 30
+   "mech": 30,
+   "silenceable": true
   },
   "218164": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "218558": {
    "castMs": 0
@@ -5541,11 +6085,13 @@
   "221527": {
    "castMs": 0,
    "mech": 18,
+   "silenceable": true,
    "immuneAll": true
   },
   "221562": {
    "castMs": 0,
-   "mech": 12
+   "mech": 12,
+   "silenceable": true
   },
   "221630": {
    "castMs": 0
@@ -5610,7 +6156,8 @@
    "mech": 21
   },
   "223819": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "224125": {
    "castMs": 0
@@ -5625,7 +6172,8 @@
    "castMs": 0
   },
   "224871": {
-   "castMs": 10000
+   "castMs": 10000,
+   "silenceable": true
   },
   "225119": {
    "castMs": 0
@@ -5689,7 +6237,8 @@
    "immuneAll": true
   },
   "228260": {
-   "castMs": 1500
+   "castMs": 1500,
+   "silenceable": true
   },
   "228354": {
    "castMs": 0
@@ -5713,13 +6262,16 @@
    "castMs": 0
   },
   "228597": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "228598": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "228600": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "228601": {
    "castMs": 0
@@ -5800,10 +6352,12 @@
    "mech": 11
   },
   "232633": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "232698": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "232752": {
    "castMs": 0
@@ -5813,13 +6367,15 @@
   },
   "233395": {
    "castMs": 0,
-   "mech": 7
+   "mech": 7,
+   "silenceable": true
   },
   "233397": {
    "castMs": 0
   },
   "233433": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "233674": {
    "castMs": 0
@@ -5832,7 +6388,8 @@
    "castMs": 0
   },
   "234153": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "234278": {
    "castMs": 0
@@ -5844,13 +6401,15 @@
    "castMs": 0
   },
   "235313": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "235314": {
    "castMs": 0
   },
   "235450": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "235764": {
    "castMs": 1500,
@@ -5881,7 +6440,8 @@
    "castMs": 0
   },
   "236645": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "236716": {
    "castMs": 0
@@ -5955,7 +6515,8 @@
    "mech": 21
   },
   "247454": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "247455": {
    "castMs": 0
@@ -5974,7 +6535,8 @@
    "castMs": 0
   },
   "248280": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "250768": {
    "castMs": 0
@@ -6086,7 +6648,8 @@
    "castMs": 0
   },
   "255647": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "255654": {
    "castMs": 0,
@@ -6121,10 +6684,12 @@
    "castMs": 0
   },
   "256893": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "256896": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "256948": {
    "castMs": 0
@@ -6165,7 +6730,8 @@
    "castMs": 0
   },
   "258920": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "258921": {
    "castMs": 0
@@ -6184,7 +6750,8 @@
    "castMs": 0
   },
   "259489": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "259495": {
    "castMs": 0
@@ -6223,7 +6790,8 @@
    "castMs": 0
   },
   "260734": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "260798": {
    "castMs": 0
@@ -6265,7 +6833,8 @@
    "castMs": 0
   },
   "263165": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "263423": {
    "castMs": 0,
@@ -6288,7 +6857,8 @@
    "castMs": 0
   },
   "263806": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "263840": {
    "castMs": 0,
@@ -6340,13 +6910,15 @@
    "castMs": 0
   },
   "264130": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "264173": {
    "castMs": 0
   },
   "264178": {
-   "castMs": 4500
+   "castMs": 4500,
+   "silenceable": true
   },
   "264211": {
    "castMs": 0
@@ -6520,7 +7092,8 @@
    "castMs": 0
   },
   "265187": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "265189": {
    "castMs": 0
@@ -6572,14 +7145,16 @@
    "castMs": 0
   },
   "267997": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "267999": {
    "castMs": 0
   },
   "268475": {
    "castMs": 0,
-   "mech": 6
+   "mech": 6,
+   "silenceable": true
   },
   "268877": {
    "castMs": 0
@@ -6590,6 +7165,7 @@
   "269352": {
    "castMs": 1700,
    "mech": 17,
+   "silenceable": true,
    "locksCasting": true
   },
   "269513": {
@@ -6610,7 +7186,8 @@
    "castMs": 0
   },
   "270481": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "270501": {
    "castMs": 0
@@ -6673,7 +7250,8 @@
    "castMs": 0
   },
   "272678": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "272682": {
    "castMs": 0
@@ -6703,16 +7281,20 @@
    "castMs": 0
   },
   "274062": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "274281": {
-   "castMs": 1000
+   "castMs": 1000,
+   "silenceable": true
   },
   "274282": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "274283": {
-   "castMs": 3000
+   "castMs": 3000,
+   "silenceable": true
   },
   "274738": {
    "castMs": 0
@@ -6760,23 +7342,28 @@
   "277778": {
    "castMs": 1700,
    "mech": 17,
+   "silenceable": true,
    "locksCasting": true
   },
   "277784": {
    "castMs": 1700,
    "mech": 17,
+   "silenceable": true,
    "locksCasting": true
   },
   "277787": {
    "castMs": 1700,
-   "mech": 17
+   "mech": 17,
+   "silenceable": true
   },
   "277792": {
    "castMs": 1700,
-   "mech": 17
+   "mech": 17,
+   "silenceable": true
   },
   "278326": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "278454": {
    "castMs": 0
@@ -6792,14 +7379,16 @@
    "castMs": 0
   },
   "279302": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "279303": {
    "castMs": 0,
    "mech": 11
   },
   "279362": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "279400": {
    "castMs": 0
@@ -6862,13 +7451,15 @@
    "mech": 21
   },
   "281265": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "281327": {
    "castMs": 0
   },
   "281465": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "281469": {
    "castMs": 0
@@ -6942,7 +7533,8 @@
    "mech": 21
   },
   "288613": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "288712": {
    "castMs": 1500,
@@ -6973,7 +7565,8 @@
    "mech": 21
   },
   "289241": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "289277": {
    "castMs": 2500
@@ -6987,13 +7580,15 @@
   },
   "289655": {
    "castMs": 0,
+   "silenceable": true,
    "immuneMech": [
     9,
     26
    ]
   },
   "289666": {
-   "castMs": 3000
+   "castMs": 3000,
+   "silenceable": true
   },
   "290121": {
    "castMs": 0
@@ -7021,13 +7616,15 @@
    "mech": 21
   },
   "290754": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "290793": {
    "castMs": 0
   },
   "290819": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "291843": {
    "castMs": 0
@@ -7120,21 +7717,25 @@
   },
   "305483": {
    "castMs": 0,
+   "silenceable": true,
    "mech": 12
   },
   "305484": {
    "castMs": 0,
+   "silenceable": true,
    "mech": 12
   },
   "305485": {
    "castMs": 0,
-   "mech": 12
+   "mech": 12,
+   "silenceable": true
   },
   "305496": {
    "castMs": 0
   },
   "305497": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "305592": {
    "castMs": 1500,
@@ -7154,6 +7755,7 @@
   "309328": {
    "castMs": 1700,
    "mech": 17,
+   "silenceable": true,
    "locksCasting": true
   },
   "309805": {
@@ -7282,10 +7884,12 @@
    "castMs": 0
   },
   "317791": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "317792": {
    "castMs": 2000,
+   "silenceable": true,
    "mech": 11
   },
   "317821": {
@@ -7296,10 +7900,12 @@
    "mech": 11
   },
   "317920": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "317929": {
    "castMs": 0,
+   "silenceable": true,
    "immuneMech": [
     9,
     26
@@ -7318,7 +7924,8 @@
    "castMs": 0
   },
   "319836": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "320334": {
    "castMs": 0
@@ -7327,14 +7934,16 @@
    "castMs": 0
   },
   "321297": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "321329": {
    "castMs": 0,
    "mech": 11
   },
   "321507": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "321529": {
    "castMs": 0
@@ -7347,13 +7956,15 @@
    "castMs": 0
   },
   "322101": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "322109": {
    "castMs": 0
   },
   "322118": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "322507": {
    "castMs": 0
@@ -7362,7 +7973,8 @@
    "castMs": 0
   },
   "323673": {
-   "castMs": 1500
+   "castMs": 1500,
+   "silenceable": true
   },
   "324393": {
    "castMs": 0
@@ -7377,7 +7989,8 @@
    "castMs": 0
   },
   "325197": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "325202": {
    "castMs": 0
@@ -7386,7 +7999,8 @@
    "castMs": 0
   },
   "325386": {
-   "castMs": 2500
+   "castMs": 2500,
+   "silenceable": true
   },
   "325461": {
    "castMs": 0
@@ -7508,7 +8122,8 @@
    "mech": 21
   },
   "333889": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "333974": {
    "castMs": 0
@@ -7521,7 +8136,8 @@
   },
   "334275": {
    "castMs": 0,
-   "mech": 11
+   "mech": 11,
+   "silenceable": true
   },
   "334294": {
    "castMs": 0
@@ -7574,7 +8190,8 @@
    "mech": 21
   },
   "334581": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "334713": {
    "castMs": 0
@@ -7613,7 +8230,8 @@
    "castMs": 0
   },
   "335467": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "335913": {
    "castMs": 0
@@ -7664,19 +8282,23 @@
    "mech": 21
   },
   "342242": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "342245": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "342246": {
    "castMs": 0
   },
   "342247": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "342601": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "342671": {
    "castMs": 1500,
@@ -7707,7 +8329,8 @@
    "castMs": 0
   },
   "343527": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "343648": {
    "castMs": 0
@@ -7722,7 +8345,8 @@
    "castMs": 0
   },
   "343737": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "343769": {
    "castMs": 0,
@@ -7824,7 +8448,8 @@
    "castMs": 0
   },
   "347765": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "347812": {
    "castMs": 1500,
@@ -7883,7 +8508,8 @@
    "castMs": 0
   },
   "352278": {
-   "castMs": 1500
+   "castMs": 1500,
+   "silenceable": true
   },
   "353036": {
    "castMs": 1500,
@@ -7891,17 +8517,21 @@
   },
   "353082": {
    "castMs": 2000,
+   "silenceable": true,
    "mech": 14
   },
   "353084": {
    "castMs": 0,
+   "silenceable": true,
    "mech": 14
   },
   "353128": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "353129": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "353132": {
    "castMs": 0,
@@ -7919,7 +8549,8 @@
    "castMs": 0
   },
   "353294": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "353319": {
    "castMs": 0
@@ -7935,7 +8566,8 @@
    "mech": 29
   },
   "353753": {
-   "castMs": 1500
+   "castMs": 1500,
+   "silenceable": true
   },
   "353759": {
    "castMs": 0
@@ -7997,7 +8629,8 @@
   },
   "354812": {
    "castMs": 0,
-   "mech": 11
+   "mech": 11,
+   "silenceable": true
   },
   "354827": {
    "castMs": 0
@@ -8007,7 +8640,8 @@
    "mech": 11
   },
   "355580": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "355634": {
    "castMs": 0
@@ -8023,19 +8657,24 @@
    "castMs": 0
   },
   "355897": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "355898": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "355913": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "355916": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "355936": {
    "castMs": 0,
+   "silenceable": true,
    "immuneMechMask": 1808
   },
   "355941": {
@@ -8093,7 +8732,8 @@
    "castMs": 0
   },
   "356995": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "357021": {
    "castMs": 0,
@@ -8110,31 +8750,37 @@
    "castMs": 0
   },
   "357170": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "357208": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "357209": {
    "castMs": 0
   },
   "357210": {
    "castMs": 0,
+   "silenceable": true,
    "locksCasting": true,
    "immuneMechMask": 2360
   },
   "357211": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "357212": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "357214": {
    "castMs": 0,
    "mech": 11
   },
   "357650": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "357714": {
    "castMs": 0,
@@ -8159,6 +8805,7 @@
   },
   "358385": {
    "castMs": 0,
+   "silenceable": true,
    "mech": 7
   },
   "358733": {
@@ -8166,7 +8813,8 @@
   },
   "358861": {
    "castMs": 0,
-   "mech": 24
+   "mech": 24,
+   "silenceable": true
   },
   "359013": {
    "castMs": 1500,
@@ -8176,10 +8824,12 @@
    "castMs": 0
   },
   "359073": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "359077": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "359078": {
    "castMs": 0,
@@ -8238,10 +8888,12 @@
    "mech": 21
   },
   "359618": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "359816": {
    "castMs": 0,
+   "silenceable": true,
    "locksCasting": true,
    "immuneMechMask": 2360
   },
@@ -8267,13 +8919,16 @@
   },
   "360806": {
    "castMs": 1700,
-   "mech": 10
+   "mech": 10,
+   "silenceable": true
   },
   "360823": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "360827": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "360828": {
    "castMs": 0
@@ -8283,10 +8938,12 @@
    "mech": 21
   },
   "360995": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "361021": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "361029": {
    "castMs": 0
@@ -8301,19 +8958,24 @@
    "castMs": 0
   },
   "361237": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "361361": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "361469": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "361500": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "361509": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "361584": {
    "castMs": 0
@@ -8322,10 +8984,12 @@
    "castMs": 0
   },
   "362877": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "362969": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "363136": {
    "castMs": 1500,
@@ -8340,10 +9004,12 @@
    "mech": 21
   },
   "363502": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "363534": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "363608": {
    "castMs": 0
@@ -8369,22 +9035,26 @@
   },
   "363916": {
    "castMs": 0,
+   "silenceable": true,
    "immuneMech": [
     9,
     26
    ]
   },
   "364342": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "364343": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "365080": {
    "castMs": 0
   },
   "365350": {
-   "castMs": 2500
+   "castMs": 2500,
+   "silenceable": true
   },
   "365362": {
    "castMs": 0
@@ -8394,16 +9064,19 @@
    "mech": 21
   },
   "365585": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "365677": {
    "castMs": 0
   },
   "366155": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "366222": {
-   "castMs": 6000
+   "castMs": 6000,
+   "silenceable": true
   },
   "366249": {
    "castMs": 0
@@ -8442,7 +9115,8 @@
    "mech": 21
   },
   "367364": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "367673": {
    "castMs": 1500,
@@ -8490,10 +9164,12 @@
    "castMs": 0
   },
   "369299": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "369374": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "369451": {
    "castMs": 1500,
@@ -8516,19 +9192,23 @@
    "castMs": 0
   },
   "370454": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "370537": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "370553": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "370562": {
    "castMs": 0
   },
   "370564": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "370568": {
    "castMs": 0
@@ -8537,13 +9217,15 @@
    "castMs": 0
   },
   "370626": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "370665": {
    "castMs": 0
   },
   "370666": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "370667": {
    "castMs": 0
@@ -8559,7 +9241,8 @@
    "mech": 11
   },
   "370901": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "370960": {
    "castMs": 0,
@@ -8586,16 +9269,19 @@
    "mech": 7
   },
   "370984": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "371441": {
    "castMs": 0
   },
   "371807": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "371838": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "371982": {
    "castMs": 0
@@ -8604,20 +9290,23 @@
    "castMs": 0
   },
   "372048": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "372152": {
    "castMs": 0
   },
   "372234": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "372245": {
    "castMs": 0,
    "mech": 12
   },
   "372470": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "372505": {
    "castMs": 0
@@ -8659,16 +9348,19 @@
    "castMs": 0
   },
   "373279": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "373316": {
    "castMs": 0
   },
   "373442": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "373861": {
-   "castMs": 1500
+   "castMs": 1500,
+   "silenceable": true
   },
   "373862": {
    "castMs": 0
@@ -8682,14 +9374,16 @@
    "mech": 21
   },
   "374227": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "374247": {
    "castMs": 1500,
    "mech": 21
   },
   "374251": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "374349": {
    "castMs": 0
@@ -8711,10 +9405,12 @@
    "mech": 9
   },
   "374968": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "375087": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "375226": {
    "castMs": 0
@@ -8756,16 +9452,19 @@
    "castMs": 0
   },
   "375576": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "375583": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "375802": {
    "castMs": 0
   },
   "375901": {
-   "castMs": 1500
+   "castMs": 1500,
+   "silenceable": true
   },
   "375904": {
    "castMs": 0
@@ -8792,10 +9491,12 @@
    "castMs": 0
   },
   "376788": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "376850": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "376875": {
    "castMs": 1500,
@@ -8832,7 +9533,8 @@
    "mech": 21
   },
   "377077": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "377081": {
    "castMs": 0,
@@ -8891,7 +9593,8 @@
    "immuneMechMask": 1887
   },
   "377509": {
-   "castMs": 500
+   "castMs": 500,
+   "silenceable": true
   },
   "377543": {
    "castMs": 0
@@ -8906,7 +9609,8 @@
    "castMs": 0
   },
   "377913": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "378001": {
    "castMs": 0
@@ -8922,27 +9626,32 @@
    ]
   },
   "378081": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "378105": {
    "castMs": 0
   },
   "378213": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "378286": {
    "castMs": 0
   },
   "378412": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "378441": {
    "castMs": 0,
    "mech": 29,
+   "silenceable": true,
    "immuneAll": true
   },
   "378464": {
    "castMs": 1500,
+   "silenceable": true,
    "immuneMech": [
     1,
     2,
@@ -8964,7 +9673,8 @@
    "castMs": 0
   },
   "378773": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "378777": {
    "castMs": 0
@@ -9010,46 +9720,59 @@
    "castMs": 0
   },
   "381732": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "381741": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "381746": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "381748": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "381749": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "381750": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "381751": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "381752": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "381753": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "381754": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "381755": {
    "castMs": 0
   },
   "381756": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "381757": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "381758": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "381783": {
    "castMs": 0
@@ -9073,25 +9796,30 @@
    "castMs": 0
   },
   "382266": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "382311": {
    "castMs": 0
   },
   "382411": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "382484": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "382538": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "382551": {
    "castMs": 0
   },
   "382614": {
    "castMs": 0,
+   "silenceable": true,
    "immuneMechMask": 1808
   },
   "382889": {
@@ -9101,13 +9829,16 @@
    "castMs": 0
   },
   "383005": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "383013": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "383014": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "383015": {
    "castMs": 0
@@ -9117,7 +9848,8 @@
   },
   "383121": {
    "castMs": 1700,
-   "mech": 17
+   "mech": 17,
+   "silenceable": true
   },
   "383169": {
    "castMs": 0
@@ -9129,7 +9861,8 @@
    "castMs": 0
   },
   "383269": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "383313": {
    "castMs": 0
@@ -9138,7 +9871,8 @@
    "castMs": 0
   },
   "383332": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "383346": {
    "castMs": 0
@@ -9147,7 +9881,8 @@
    "castMs": 0
   },
   "383410": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "383414": {
    "castMs": 0
@@ -9156,7 +9891,8 @@
    "castMs": 0
   },
   "383648": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "383701": {
    "castMs": 0
@@ -9192,7 +9928,8 @@
    "castMs": 0
   },
   "383921": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "383978": {
    "castMs": 0
@@ -9234,7 +9971,8 @@
    "castMs": 0
   },
   "384784": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "384810": {
    "castMs": 0
@@ -9244,7 +9982,8 @@
    "mech": 21
   },
   "384965": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "385042": {
    "castMs": 0,
@@ -9265,7 +10004,8 @@
    "castMs": 0
   },
   "385093": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "385131": {
    "castMs": 1500,
@@ -9305,7 +10045,8 @@
    "castMs": 0
   },
   "385899": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "385952": {
    "castMs": 0,
@@ -9323,7 +10064,8 @@
   },
   "386071": {
    "castMs": 0,
-   "mech": 36
+   "mech": 36,
+   "silenceable": true
   },
   "386081": {
    "castMs": 0
@@ -9393,7 +10135,8 @@
    "castMs": 0
   },
   "386951": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "386959": {
    "castMs": 0
@@ -9470,19 +10213,23 @@
    "castMs": 0
   },
   "387999": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "388024": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "388025": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "388044": {
    "castMs": 0
   },
   "388215": {
    "castMs": 0,
+   "silenceable": true,
    "mech": 26
   },
   "388367": {
@@ -9523,7 +10270,8 @@
    "castMs": 0
   },
   "388615": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "388867": {
    "castMs": 0
@@ -9535,10 +10283,12 @@
    "castMs": 0
   },
   "389325": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "389328": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "389372": {
    "castMs": 0
@@ -9550,7 +10300,8 @@
    "castMs": 0
   },
   "389539": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "389581": {
    "castMs": 0
@@ -9559,16 +10310,19 @@
    "castMs": 0
   },
   "389713": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "389714": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "389787": {
    "castMs": 0
   },
   "389794": {
    "castMs": 0,
+   "silenceable": true,
    "mech": 12
   },
   "389820": {
@@ -9576,10 +10330,12 @@
   },
   "389823": {
    "castMs": 0,
-   "mech": 11
+   "mech": 11,
+   "silenceable": true
   },
   "389831": {
    "castMs": 0,
+   "silenceable": true,
    "mech": 12
   },
   "389839": {
@@ -9607,10 +10363,12 @@
    "castMs": 0
   },
   "390163": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "390171": {
    "castMs": 0,
+   "silenceable": true,
    "mech": 12
   },
   "390181": {
@@ -9644,7 +10402,8 @@
    "castMs": 0
   },
   "390386": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "390414": {
    "castMs": 0
@@ -9656,7 +10415,8 @@
    "castMs": 0
   },
   "390612": {
-   "castMs": 1500
+   "castMs": 1500,
+   "silenceable": true
   },
   "390614": {
    "castMs": 0
@@ -9692,7 +10452,8 @@
    "castMs": 0
   },
   "391054": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "391092": {
    "castMs": 0
@@ -9731,23 +10492,27 @@
   },
   "391403": {
    "castMs": 0,
+   "silenceable": true,
    "mech": 11
   },
   "391459": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "391481": {
    "castMs": 0
   },
   "391528": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "391568": {
    "castMs": 0
   },
   "391622": {
    "castMs": 1700,
-   "mech": 17
+   "mech": 17,
+   "silenceable": true
   },
   "391710": {
    "castMs": 0
@@ -9765,10 +10530,12 @@
    "castMs": 0
   },
   "391822": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "391862": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "391873": {
    "castMs": 0
@@ -9783,13 +10550,16 @@
    "castMs": 0
   },
   "391886": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "391897": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "391906": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "392054": {
    "castMs": 0
@@ -9808,7 +10578,8 @@
    "castMs": 0
   },
   "392268": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "392329": {
    "castMs": 0
@@ -9855,7 +10626,8 @@
    "castMs": 0
   },
   "392996": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "393009": {
    "castMs": 0
@@ -9876,10 +10648,12 @@
    "castMs": 0
   },
   "393108": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "393256": {
-   "castMs": 10000
+   "castMs": 10000,
+   "silenceable": true
   },
   "393438": {
    "castMs": 0
@@ -9915,10 +10689,12 @@
    "castMs": 0
   },
   "393942": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "393944": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "393951": {
    "castMs": 0
@@ -10024,26 +10800,32 @@
   },
   "394976": {
    "castMs": 0,
+   "silenceable": true,
    "mech": 11
   },
   "394979": {
    "castMs": 0,
+   "silenceable": true,
    "mech": 11
   },
   "395110": {
    "castMs": 0
   },
   "395152": {
-   "castMs": 1500
+   "castMs": 1500,
+   "silenceable": true
   },
   "395160": {
-   "castMs": 2500
+   "castMs": 2500,
+   "silenceable": true
   },
   "395290": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "395296": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "395424": {
    "castMs": 0
@@ -10072,10 +10854,12 @@
    "castMs": 0
   },
   "396286": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "396288": {
    "castMs": 0,
+   "silenceable": true,
    "mech": 6
   },
   "396358": {
@@ -10092,25 +10876,31 @@
    "mech": 21
   },
   "397744": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "397827": {
    "castMs": 2000
   },
   "399491": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "399497": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "399510": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "399680": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "399685": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "400126": {
    "castMs": 0
@@ -10142,16 +10932,19 @@
    "castMs": 0
   },
   "401382": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "402916": {
    "castMs": 0
   },
   "403264": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "403265": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "403295": {
    "castMs": 0
@@ -10163,10 +10956,12 @@
    "castMs": 0
   },
   "403516": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "403631": {
    "castMs": 0,
+   "silenceable": true,
    "locksCasting": true,
    "immuneMechMask": 2360
   },
@@ -10175,13 +10970,16 @@
    "mech": 11
   },
   "403760": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "403876": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "403922": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "404184": {
    "castMs": 0
@@ -10202,10 +11000,12 @@
    "castMs": 0
   },
   "404908": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "404977": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "405069": {
    "castMs": 0
@@ -10246,10 +11046,12 @@
    "castMs": 0
   },
   "406139": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "406220": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "406430": {
    "castMs": 0,
@@ -10262,7 +11064,8 @@
    "castMs": 0
   },
   "406732": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "406789": {
    "castMs": 0
@@ -10274,7 +11077,8 @@
    "castMs": 0
   },
   "406971": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "407028": {
    "castMs": 0,
@@ -10282,7 +11086,8 @@
   },
   "407031": {
    "castMs": 0,
-   "mech": 3
+   "mech": 3,
+   "silenceable": true
   },
   "407032": {
    "castMs": 0,
@@ -10320,20 +11125,23 @@
    "castMs": 0
   },
   "408233": {
-   "castMs": 3000
+   "castMs": 3000,
+   "silenceable": true
   },
   "408234": {
    "castMs": 1000
   },
   "408383": {
    "castMs": 0,
-   "mech": 11
+   "mech": 11,
+   "silenceable": true
   },
   "408385": {
    "castMs": 0
   },
   "408458": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "408518": {
    "castMs": 0
@@ -10379,7 +11187,8 @@
    "mech": 6
   },
   "409311": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "409560": {
    "castMs": 0
@@ -10397,13 +11206,15 @@
    "castMs": 0
   },
   "409895": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "410089": {
    "castMs": 0
   },
   "410126": {
-   "castMs": 1250
+   "castMs": 1250,
+   "silenceable": true
   },
   "410127": {
    "castMs": 0
@@ -10440,7 +11251,8 @@
    "castMs": 0
   },
   "410358": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "410364": {
    "castMs": 0,
@@ -10453,7 +11265,8 @@
    "castMs": 0
   },
   "410651": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "410681": {
    "castMs": 0
@@ -10495,7 +11308,8 @@
    "castMs": 0
   },
   "411251": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "411267": {
    "castMs": 0
@@ -10547,7 +11361,8 @@
    "castMs": 0
   },
   "414022": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "414143": {
    "castMs": 0
@@ -10559,7 +11374,8 @@
    "castMs": 0
   },
   "414273": {
-   "castMs": 1500
+   "castMs": 1500,
+   "silenceable": true
   },
   "414327": {
    "castMs": 1500,
@@ -10570,7 +11386,8 @@
    "mech": 21
   },
   "414407": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "414448": {
    "castMs": 0
@@ -10584,10 +11401,12 @@
   "414658": {
    "castMs": 0,
    "mech": 29,
+   "silenceable": true,
    "locksCasting": true
   },
   "414664": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "415091": {
    "castMs": 0
@@ -10612,7 +11431,8 @@
    "mech": 11
   },
   "416250": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "417245": {
    "castMs": 1500,
@@ -10625,7 +11445,8 @@
    "castMs": 0
   },
   "417737": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "417805": {
    "castMs": 0
@@ -10663,15 +11484,18 @@
   },
   "421453": {
    "castMs": 1500,
+   "silenceable": true,
    "immuneMech": [
     7
    ]
   },
   "421543": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "421544": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "421976": {
    "castMs": 0
@@ -10680,7 +11504,8 @@
    "castMs": 0
   },
   "422090": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "422284": {
    "castMs": 10000
@@ -10761,7 +11586,8 @@
    "mech": 21
   },
   "424588": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "424597": {
    "castMs": 0,
@@ -10796,7 +11622,8 @@
    "castMs": 0
   },
   "425804": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "426401": {
    "castMs": 0
@@ -10912,22 +11739,27 @@
    "castMs": 0
   },
   "427912": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "427913": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "427914": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "427915": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "427916": {
    "castMs": 0
   },
   "427917": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "428005": {
    "castMs": 1500,
@@ -11039,13 +11871,15 @@
    "castMs": 0
   },
   "431044": {
-   "castMs": 1750
+   "castMs": 1750,
+   "silenceable": true
   },
   "431177": {
    "castMs": 0
   },
   "431186": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "431280": {
    "castMs": 3000
@@ -11081,13 +11915,15 @@
    "castMs": 0
   },
   "431443": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "431462": {
    "castMs": 0
   },
   "431483": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "431522": {
    "castMs": 0
@@ -11096,16 +11932,20 @@
    "castMs": 0
   },
   "431582": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "431583": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "431584": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "431620": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "431625": {
    "castMs": 0
@@ -11271,6 +12111,7 @@
   },
   "433874": {
    "castMs": 0,
+   "silenceable": true,
    "locksCasting": true,
    "immuneMechMask": 2360
   },
@@ -11293,7 +12134,8 @@
    "castMs": 0
   },
   "434034": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "434132": {
    "castMs": 0
@@ -11349,7 +12191,8 @@
    "castMs": 0
   },
   "434506": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "434559": {
    "castMs": 0
@@ -11364,10 +12207,12 @@
    "castMs": 0
   },
   "434589": {
-   "castMs": 3000
+   "castMs": 3000,
+   "silenceable": true
   },
   "434635": {
-   "castMs": 1500
+   "castMs": 1500,
+   "silenceable": true
   },
   "434636": {
    "castMs": 0
@@ -11376,16 +12221,19 @@
    "castMs": 0
   },
   "434763": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "434765": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "434766": {
    "castMs": 0
   },
   "434767": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "435044": {
    "castMs": 1500,
@@ -11475,13 +12323,15 @@
    "castMs": 0
   },
   "438653": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "438822": {
    "castMs": 0
   },
   "438823": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "438973": {
    "castMs": 1500
@@ -11529,16 +12379,20 @@
    "castMs": 0
   },
   "440006": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "440012": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "440013": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "440015": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "440121": {
    "castMs": 0
@@ -11644,7 +12498,8 @@
   },
   "441662": {
    "castMs": 0,
-   "mech": 4
+   "mech": 4,
+   "silenceable": true
   },
   "441668": {
    "castMs": 0,
@@ -11683,6 +12538,7 @@
   },
   "442204": {
    "castMs": 0,
+   "silenceable": true,
    "locksCasting": true,
    "immuneMechMask": 2360
   },
@@ -11740,13 +12596,15 @@
    "castMs": 0
   },
   "442804": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "442808": {
    "castMs": 0
   },
   "443028": {
    "castMs": 0,
+   "silenceable": true,
    "immuneMech": [
     26
    ]
@@ -11764,13 +12622,15 @@
    "castMs": 0
   },
   "443111": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "443112": {
    "castMs": 0
   },
   "443113": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "443126": {
    "castMs": 0
@@ -11788,7 +12648,8 @@
    "castMs": 0
   },
   "443454": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "443510": {
    "castMs": 2000
@@ -11834,10 +12695,12 @@
    "mech": 21
   },
   "443722": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "443763": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "444017": {
    "castMs": 0
@@ -11862,10 +12725,12 @@
    "immuneMechMask": 1887
   },
   "444474": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "444487": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "444490": {
    "castMs": 0
@@ -11883,13 +12748,16 @@
    "castMs": 0
   },
   "444720": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "444740": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "444741": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "444754": {
    "castMs": 0
@@ -11905,6 +12773,7 @@
   },
   "444826": {
    "castMs": 0,
+   "silenceable": true,
    "mech": 11
   },
   "444828": {
@@ -11912,6 +12781,7 @@
   },
   "444834": {
    "castMs": 0,
+   "silenceable": true,
    "mech": 11
   },
   "444929": {
@@ -11921,7 +12791,8 @@
    "castMs": 0
   },
   "444995": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "445134": {
    "castMs": 0
@@ -11933,10 +12804,12 @@
    "castMs": 3500
   },
   "445468": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "445474": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "445495": {
    "castMs": 0
@@ -12189,7 +13062,8 @@
    "castMs": 0
   },
   "449559": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "449560": {
    "castMs": 0
@@ -12234,7 +13108,8 @@
    "castMs": 0
   },
   "450215": {
-   "castMs": 1500
+   "castMs": 1500,
+   "silenceable": true
   },
   "450342": {
    "castMs": 0,
@@ -12256,13 +13131,16 @@
    "castMs": 0
   },
   "450462": {
-   "castMs": 3500
+   "castMs": 3500,
+   "silenceable": true
   },
   "450499": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "450500": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "450521": {
    "castMs": 0
@@ -12283,7 +13161,8 @@
    "castMs": 0
   },
   "450591": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "450596": {
    "castMs": 0,
@@ -12323,7 +13202,8 @@
    "castMs": 0
   },
   "450983": {
-   "castMs": 1500
+   "castMs": 1500,
+   "silenceable": true
   },
   "451021": {
    "castMs": 0
@@ -12354,7 +13234,8 @@
    "castMs": 0
   },
   "451235": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "451250": {
    "castMs": 0
@@ -12369,10 +13250,12 @@
    "castMs": 0
   },
   "451299": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "451435": {
-   "castMs": 1500
+   "castMs": 1500,
+   "silenceable": true
   },
   "451447": {
    "castMs": 0
@@ -12440,7 +13323,8 @@
    "castMs": 0
   },
   "451968": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "451985": {
    "castMs": 0
@@ -12458,7 +13342,8 @@
    "castMs": 0
   },
   "452201": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "452307": {
    "castMs": 0
@@ -12473,7 +13358,8 @@
    "castMs": 0
   },
   "452487": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "452497": {
    "castMs": 0,
@@ -12516,7 +13402,8 @@
    "castMs": 0
   },
   "453094": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "453112": {
    "castMs": 0
@@ -12553,7 +13440,8 @@
    "castMs": 0
   },
   "453326": {
-   "castMs": 2500
+   "castMs": 2500,
+   "silenceable": true
   },
   "453334": {
    "castMs": 0
@@ -12574,7 +13462,8 @@
    "castMs": 0
   },
   "453773": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "453804": {
    "castMs": 0
@@ -12631,7 +13520,8 @@
    "castMs": 0
   },
   "454863": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "454871": {
    "castMs": 0
@@ -12664,7 +13554,8 @@
    "castMs": 0
   },
   "455465": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "455466": {
    "castMs": 0
@@ -12676,7 +13567,8 @@
    "castMs": 0
   },
   "455476": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "455489": {
    "castMs": 0
@@ -12694,7 +13586,8 @@
    "castMs": 0
   },
   "455962": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "455979": {
    "castMs": 0
@@ -12718,7 +13611,8 @@
    "castMs": 0
   },
   "456366": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "456369": {
    "castMs": 0
@@ -12755,7 +13649,8 @@
    ]
   },
   "456640": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "456779": {
    "castMs": 0
@@ -12816,7 +13711,8 @@
    "castMs": 0
   },
   "457578": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "457650": {
    "castMs": 1500,
@@ -12865,7 +13761,8 @@
    "mech": 21
   },
   "458357": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "458386": {
    "castMs": 0
@@ -12949,10 +13846,12 @@
   },
   "460392": {
    "castMs": 1700,
-   "mech": 17
+   "mech": 17,
+   "silenceable": true
   },
   "460475": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "460476": {
    "castMs": 3500
@@ -12971,7 +13870,8 @@
   },
   "460614": {
    "castMs": 0,
-   "mech": 7
+   "mech": 7,
+   "silenceable": true
   },
   "460670": {
    "castMs": 0
@@ -13001,7 +13901,8 @@
    "castMs": 0
   },
   "461432": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "461499": {
    "castMs": 0
@@ -13019,10 +13920,12 @@
    "castMs": 0
   },
   "461867": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "461885": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "462138": {
    "castMs": 1500
@@ -13080,10 +13983,12 @@
    "castMs": 0
   },
   "462603": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "462620": {
    "castMs": 0,
+   "silenceable": true,
    "mech": 12
   },
   "462765": {
@@ -13094,7 +13999,8 @@
    "castMs": 0
   },
   "462854": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "463025": {
    "castMs": 1500,
@@ -13185,7 +14091,8 @@
    "castMs": 0
   },
   "466904": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "466930": {
    "castMs": 0
@@ -13241,10 +14148,12 @@
    "castMs": 0
   },
   "468655": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "468938": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "469169": {
    "castMs": 0
@@ -13256,10 +14165,12 @@
    "castMs": 0
   },
   "469322": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "469332": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "469413": {
    "castMs": 0
@@ -13286,13 +14197,15 @@
    "castMs": 0
   },
   "470057": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "470077": {
    "castMs": 0
   },
   "470411": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "470466": {
    "castMs": 0
@@ -13352,7 +14265,8 @@
    "castMs": 0
   },
   "471195": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "471491": {
    "castMs": 0
@@ -13408,7 +14322,8 @@
    "castMs": 0
   },
   "472433": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "472479": {
    "castMs": 1500,
@@ -13434,7 +14349,8 @@
    "mech": 21
   },
   "473662": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "473671": {
    "castMs": 0
@@ -13459,6 +14375,7 @@
   },
   "473909": {
    "castMs": 1500,
+   "silenceable": true,
    "immuneMech": [
     1,
     2,
@@ -13489,13 +14406,15 @@
   },
   "474421": {
    "castMs": 0,
+   "silenceable": true,
    "mech": 12
   },
   "474683": {
    "castMs": 0
   },
   "474750": {
-   "castMs": 1500
+   "castMs": 1500,
+   "silenceable": true
   },
   "474754": {
    "castMs": 0
@@ -13507,13 +14426,16 @@
    "castMs": 0
   },
   "1213649": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1214467": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1214595": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1214676": {
    "castMs": 0
@@ -13548,6 +14470,7 @@
   },
   "1215279": {
    "castMs": 0,
+   "silenceable": true,
    "mech": 21
   },
   "1216099": {
@@ -13594,7 +14517,8 @@
    "castMs": 0
   },
   "1217610": {
-   "castMs": 1500
+   "castMs": 1500,
+   "silenceable": true
   },
   "1217760": {
    "castMs": 1500,
@@ -13658,7 +14582,8 @@
    "castMs": 0
   },
   "1219480": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1219545": {
    "castMs": 0
@@ -13678,7 +14603,8 @@
    "castMs": 0
   },
   "1221150": {
-   "castMs": 3000
+   "castMs": 3000,
+   "silenceable": true
   },
   "1221162": {
    "castMs": 0
@@ -13706,7 +14632,8 @@
    "castMs": 2000
   },
   "1223147": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1223157": {
    "castMs": 0
@@ -13772,7 +14699,8 @@
    "castMs": 2000
   },
   "1226019": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1226421": {
    "castMs": 1500,
@@ -13801,7 +14729,8 @@
    "mech": 21
   },
   "1227280": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1227338": {
    "castMs": 0
@@ -13813,7 +14742,8 @@
    "castMs": 0
   },
   "1227806": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1228321": {
    "castMs": 0
@@ -13869,7 +14799,8 @@
    "castMs": 0
   },
   "1231112": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1231411": {
    "castMs": 0
@@ -13878,13 +14809,15 @@
    "castMs": 0
   },
   "1231479": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1232024": {
    "castMs": 0
   },
   "1232285": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1232310": {
    "castMs": 0
@@ -13905,10 +14838,12 @@
    "castMs": 0
   },
   "1232567": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1232571": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1232585": {
    "castMs": 0
@@ -13920,7 +14855,8 @@
    "castMs": 0
   },
   "1233152": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1233272": {
    "castMs": 0
@@ -13935,7 +14871,8 @@
    "castMs": 0
   },
   "1233448": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1233502": {
    "castMs": 0
@@ -13976,6 +14913,7 @@
   },
   "1234195": {
    "castMs": 0,
+   "silenceable": true,
    "mech": 12
   },
   "1234303": {
@@ -14086,7 +15024,8 @@
    "castMs": 2000
   },
   "1236211": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1236262": {
    "castMs": 1500,
@@ -14104,10 +15043,12 @@
   },
   "1236943": {
    "castMs": 0,
+   "silenceable": true,
    "immuneMechMask": 2360
   },
   "1236970": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1236994": {
    "castMs": 0
@@ -14116,10 +15057,12 @@
    "castMs": 0
   },
   "1237128": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1237172": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1237388": {
    "castMs": 0
@@ -14147,7 +15090,8 @@
    "castMs": 0
   },
   "1238686": {
-   "castMs": 10000
+   "castMs": 10000,
+   "silenceable": true
   },
   "1238729": {
    "castMs": 1500,
@@ -14253,7 +15197,8 @@
    "castMs": 0
   },
   "1241462": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "1241502": {
    "castMs": 0
@@ -14319,7 +15264,8 @@
    "castMs": 0
   },
   "1241937": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1241982": {
    "castMs": 0
@@ -14361,7 +15307,8 @@
    "castMs": 0
   },
   "1242173": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1242174": {
    "castMs": 0
@@ -14370,7 +15317,8 @@
    "castMs": 0
   },
   "1242189": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1242197": {
    "castMs": 0
@@ -14382,7 +15330,8 @@
    "castMs": 0
   },
   "1242230": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1242272": {
    "castMs": 1500,
@@ -14395,7 +15344,8 @@
    "castMs": 0
   },
   "1242475": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1242504": {
    "castMs": 0
@@ -14453,7 +15403,8 @@
    "castMs": 0
   },
   "1243460": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1243582": {
    "castMs": 1500,
@@ -14489,7 +15440,8 @@
    "castMs": 0
   },
   "1244157": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1244235": {
    "castMs": 0
@@ -14532,7 +15484,8 @@
    "castMs": 0
   },
   "1244893": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1244918": {
    "castMs": 0
@@ -14566,7 +15519,8 @@
    "castMs": 0
   },
   "1245453": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1245455": {
    "castMs": 0
@@ -14620,6 +15574,7 @@
   },
   "1246033": {
    "castMs": 0,
+   "silenceable": true,
    "mech": 11
   },
   "1246042": {
@@ -14645,7 +15600,8 @@
   },
   "1246768": {
    "castMs": 0,
-   "mech": 19
+   "mech": 19,
+   "silenceable": true
   },
   "1246781": {
    "castMs": 1500,
@@ -14659,6 +15615,7 @@
   },
   "1246965": {
    "castMs": 0,
+   "silenceable": true,
    "immuneMech": [
     1,
     2,
@@ -14745,7 +15702,8 @@
    "castMs": 0
   },
   "1248829": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "1248971": {
    "castMs": 0
@@ -14766,10 +15724,12 @@
    "castMs": 0
   },
   "1249625": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1249658": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1249753": {
    "castMs": 0
@@ -14848,7 +15808,8 @@
    "mech": 21
   },
   "1250581": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1250646": {
    "castMs": 0
@@ -14865,6 +15826,7 @@
   },
   "1251059": {
    "castMs": 0,
+   "silenceable": true,
    "mech": 11
   },
   "1251300": {
@@ -14898,7 +15860,8 @@
    "mech": 21
   },
   "1251613": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "1251630": {
    "castMs": 1500,
@@ -14916,7 +15879,8 @@
    "castMs": 0
   },
   "1251781": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1251877": {
    "castMs": 0
@@ -14928,10 +15892,12 @@
    "castMs": 0
   },
   "1251951": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1251989": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "1252202": {
    "castMs": 0
@@ -14946,7 +15912,8 @@
    "castMs": 0
   },
   "1252431": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1252486": {
    "castMs": 0
@@ -15024,7 +15991,8 @@
   },
   "1253593": {
    "castMs": 0,
-   "mech": 19
+   "mech": 19,
+   "silenceable": true
   },
   "1253600": {
    "castMs": 0
@@ -15092,10 +16060,12 @@
    "castMs": 0
   },
   "1254559": {
-   "castMs": 10000
+   "castMs": 10000,
+   "silenceable": true
   },
   "1254563": {
-   "castMs": 10000
+   "castMs": 10000,
+   "silenceable": true
   },
   "1254567": {
    "castMs": 0
@@ -15116,7 +16086,8 @@
    "castMs": 0
   },
   "1254851": {
-   "castMs": 3500
+   "castMs": 3500,
+   "silenceable": true
   },
   "1255200": {
    "castMs": 0
@@ -15160,7 +16131,8 @@
    "castMs": 0
   },
   "1255624": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1255801": {
    "castMs": 5000
@@ -15208,10 +16180,12 @@
    "castMs": 0
   },
   "1256579": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1256581": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1256617": {
    "castMs": 0
@@ -15229,13 +16203,15 @@
    "castMs": 0
   },
   "1256688": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1256697": {
    "castMs": 0
   },
   "1257052": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1257058": {
    "castMs": 1500,
@@ -15305,7 +16281,8 @@
    "castMs": 0
   },
   "1258667": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "1258845": {
    "castMs": 0
@@ -15330,7 +16307,8 @@
    "castMs": 0
   },
   "1259101": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1259128": {
    "castMs": 0
@@ -15342,13 +16320,16 @@
    "castMs": 0
   },
   "1259172": {
-   "castMs": 2500
+   "castMs": 2500,
+   "silenceable": true
   },
   "1259190": {
-   "castMs": 10000
+   "castMs": 10000,
+   "silenceable": true
   },
   "1259194": {
-   "castMs": 10000
+   "castMs": 10000,
+   "silenceable": true
   },
   "1259218": {
    "castMs": 0
@@ -15384,7 +16365,8 @@
    "castMs": 0
   },
   "1259790": {
-   "castMs": 1500
+   "castMs": 1500,
+   "silenceable": true
   },
   "1259999": {
    "castMs": 1500
@@ -15393,13 +16375,15 @@
    "castMs": 0
   },
   "1260251": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1260269": {
    "castMs": 0
   },
   "1260277": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1260279": {
    "castMs": 0
@@ -15433,7 +16417,8 @@
    "castMs": 0
   },
   "1260681": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1260880": {
    "castMs": 0
@@ -15442,23 +16427,27 @@
    "castMs": 0
   },
   "1261153": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1261155": {
    "castMs": 1500,
    "mech": 21
   },
   "1261158": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1261160": {
    "castMs": 0
   },
   "1261166": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1261176": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1261185": {
    "castMs": 0
@@ -15550,7 +16539,8 @@
    "castMs": 0
   },
   "1261573": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1261579": {
    "castMs": 1500,
@@ -15572,14 +16562,16 @@
    "castMs": 0
   },
   "1261700": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1261702": {
    "castMs": 0
   },
   "1261704": {
    "castMs": 4000,
-   "mech": 5
+   "mech": 5,
+   "silenceable": true
   },
   "1261710": {
    "castMs": 0
@@ -15646,7 +16638,8 @@
    "castMs": 0
   },
   "1262763": {
-   "castMs": 1500
+   "castMs": 1500,
+   "silenceable": true
   },
   "1262765": {
    "castMs": 0
@@ -15671,13 +16664,16 @@
    "castMs": 0
   },
   "1262860": {
-   "castMs": 2750
+   "castMs": 2750,
+   "silenceable": true
   },
   "1262862": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1262863": {
-   "castMs": 4000
+   "castMs": 4000,
+   "silenceable": true
   },
   "1262886": {
    "castMs": 1500,
@@ -15699,7 +16695,8 @@
    "castMs": 0
   },
   "1263137": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1263141": {
    "castMs": 0
@@ -15723,7 +16720,8 @@
    "castMs": 0
   },
   "1263363": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1263382": {
    "castMs": 0
@@ -15806,7 +16804,8 @@
    "castMs": 0
   },
   "1263962": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1263963": {
    "castMs": 0
@@ -15839,7 +16838,8 @@
    "castMs": 0
   },
   "1264177": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1264184": {
    "castMs": 1500,
@@ -15861,10 +16861,12 @@
    "castMs": 0
   },
   "1264345": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1264353": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1264355": {
    "castMs": 0
@@ -15882,7 +16884,8 @@
    "castMs": 0
   },
   "1264376": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1264379": {
    "castMs": 0
@@ -15912,26 +16915,31 @@
    "castMs": 0
   },
   "1264618": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1264623": {
    "castMs": 0,
+   "silenceable": true,
    "immuneMechMask": 2347
   },
   "1264659": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1264664": {
    "castMs": 0
   },
   "1264671": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1264676": {
    "castMs": 0
   },
   "1264677": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "1264680": {
    "castMs": 0
@@ -15943,7 +16951,8 @@
    "castMs": 0
   },
   "1264911": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1264946": {
    "castMs": 0
@@ -15985,7 +16994,8 @@
    "castMs": 0
   },
   "1265384": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1265399": {
    "castMs": 0
@@ -16058,7 +17068,8 @@
    "castMs": 0
   },
   "1265804": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1265808": {
    "castMs": 0
@@ -16070,10 +17081,12 @@
    "castMs": 0
   },
   "1265872": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1265884": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1265918": {
    "castMs": 0
@@ -16109,7 +17122,8 @@
    "castMs": 0
   },
   "1266165": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1266182": {
    "castMs": 0
@@ -16160,10 +17174,12 @@
    "castMs": 0
   },
   "1266617": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1266618": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1266619": {
    "castMs": 0
@@ -16200,7 +17216,8 @@
    "mech": 21
   },
   "1267068": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1267077": {
    "castMs": 1500,
@@ -16216,7 +17233,8 @@
    "castMs": 0
   },
   "1267765": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1268058": {
    "castMs": 0
@@ -16401,7 +17419,8 @@
    "castMs": 0
   },
   "1270617": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1270673": {
    "castMs": 1500,
@@ -16418,7 +17437,8 @@
    "castMs": 10000
   },
   "1270828": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1270840": {
    "castMs": 0
@@ -16448,7 +17468,8 @@
    "castMs": 0
   },
   "1271173": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1271198": {
    "castMs": 0
@@ -16457,13 +17478,15 @@
    "castMs": 0
   },
   "1271222": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1271226": {
    "castMs": 0
   },
   "1271335": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1271383": {
    "castMs": 0
@@ -16487,22 +17510,26 @@
    "castMs": 0
   },
   "1271748": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1271783": {
    "castMs": 0
   },
   "1271798": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1271799": {
    "castMs": 0
   },
   "1271802": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1271803": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1271863": {
    "castMs": 0,
@@ -16512,7 +17539,8 @@
    "castMs": 0
   },
   "1271967": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1271975": {
    "castMs": 0
@@ -16530,10 +17558,12 @@
    "castMs": 0
   },
   "1272122": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1272123": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1272178": {
    "castMs": 0
@@ -16623,10 +17653,12 @@
    "castMs": 0
   },
   "1276452": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1276467": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1276488": {
    "castMs": 0
@@ -16642,7 +17674,8 @@
    "mech": 21
   },
   "1276672": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1276677": {
    "castMs": 0
@@ -16678,10 +17711,12 @@
    "castMs": 0
   },
   "1277116": {
-   "castMs": 1750
+   "castMs": 1750,
+   "silenceable": true
   },
   "1277117": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1277297": {
    "castMs": 0
@@ -16717,7 +17752,8 @@
    "castMs": 0
   },
   "1277879": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1277933": {
    "castMs": 0
@@ -16732,7 +17768,8 @@
    "castMs": 0
   },
   "1278079": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1278149": {
    "castMs": 0
@@ -16766,7 +17803,8 @@
    "castMs": 0
   },
   "1279408": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1279437": {
    "castMs": 0
@@ -16775,22 +17813,27 @@
    "castMs": 0
   },
   "1279686": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1280078": {
    "castMs": 0
   },
   "1280134": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1280172": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1280212": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1280213": {
    "castMs": 0,
+   "silenceable": true,
    "mech": 11
   },
   "1280352": {
@@ -16800,10 +17843,12 @@
    "castMs": 0
   },
   "1280457": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1280460": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1280757": {
    "castMs": 0
@@ -16838,13 +17883,16 @@
    "castMs": 0
   },
   "1282507": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "1282533": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "1282534": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1282535": {
    "castMs": 0
@@ -16868,10 +17916,12 @@
    "castMs": 0
   },
   "1283718": {
-   "castMs": 1000
+   "castMs": 1000,
+   "silenceable": true
   },
   "1283719": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1283908": {
    "castMs": 1500,
@@ -16974,7 +18024,8 @@
    "castMs": 0
   },
   "1287949": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1287955": {
    "castMs": 0
@@ -17030,13 +18081,15 @@
    "castMs": 0
   },
   "1291636": {
-   "castMs": 1500
+   "castMs": 1500,
+   "silenceable": true
   },
   "1291657": {
    "castMs": 0
   },
   "1291678": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1291723": {
    "castMs": 0
@@ -17058,6 +18111,7 @@
   },
   "1292107": {
    "castMs": 2000,
+   "silenceable": true,
    "mech": 11
   },
   "1292159": {
@@ -17073,10 +18127,12 @@
    "castMs": 0
   },
   "1292321": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1292322": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1292323": {
    "castMs": 0
@@ -17086,10 +18142,12 @@
    "mech": 21
   },
   "1292384": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "1292391": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1292687": {
    "castMs": 0
@@ -17193,7 +18251,8 @@
    "castMs": 0
   },
   "1295924": {
-   "castMs": 2500
+   "castMs": 2500,
+   "silenceable": true
   },
   "1295939": {
    "castMs": 0
@@ -17242,14 +18301,17 @@
   },
   "1297055": {
    "castMs": 2000,
+   "silenceable": true,
    "mech": 11
   },
   "1297086": {
    "castMs": 2000,
+   "silenceable": true,
    "mech": 11
   },
   "1297091": {
-   "castMs": 2000
+   "castMs": 2000,
+   "silenceable": true
   },
   "1297099": {
    "castMs": 0
@@ -17311,11 +18373,13 @@
   },
   "1300008": {
    "castMs": 0,
-   "mech": 19
+   "mech": 19,
+   "silenceable": true
   },
   "1300009": {
    "castMs": 0,
-   "mech": 19
+   "mech": 19,
+   "silenceable": true
   },
   "1300330": {
    "castMs": 0
@@ -17421,7 +18485,8 @@
    "castMs": 0
   },
   "1304485": {
-   "castMs": 0
+   "castMs": 0,
+   "silenceable": true
   },
   "1305230": {
    "castMs": 0
@@ -17500,7 +18565,8 @@
   },
   "1308655": {
    "castMs": 1500,
-   "mech": 11
+   "mech": 11,
+   "silenceable": true
   },
   "1308693": {
    "castMs": 0

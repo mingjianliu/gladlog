@@ -2,10 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import type { CastFailedEvent } from "../../utils/rawStreams";
 import {
+  dropKeyRepeatRejects,
   filterIntentGuardEvidence,
   INTENT_GUARD_GCD_S,
   INTENT_GUARD_PRE_CAST_EXCLUSION_S,
+  KEY_REPEAT_AFTER_SUCCESS_S,
   NOT_READY_REASON_ZH,
+  NOT_READY_REASONS,
 } from "./shared";
 
 const hit = (
@@ -157,5 +160,52 @@ describe("keepGcdLockedUntilS (F-H12)", () => {
         readyAt: (s) => s >= readyFrom,
       }).map((h) => h.tSeconds),
     ).toEqual([199.639]);
+  });
+});
+
+/**
+ * Triage 2026-09-29 kick-eaten F-K7c and the pre-review of that batch
+ * (2026-10-01).
+ */
+describe("NOT_READY_REASONS / dropKeyRepeatRejects", () => {
+  it("carries SPELL_FAILED_NOT_READY in every client locale the 605-file sample shows (forward check 2026-10-01: fr, es, ru and zh-TW were missing)", () => {
+    for (const text of [
+      "尚未恢复",
+      "Not yet recovered",
+      "아직 사용 불가",
+      "Noch nicht erholt",
+      "Ainda não recuperado",
+      "Récupération incomplète",
+      "Aún no recuperado",
+      "Еще не готово.",
+      "尚未恢復",
+    ])
+      expect(NOT_READY_REASONS.has(text)).toBe(true);
+    expect(NOT_READY_REASONS.size).toBe(9);
+  });
+
+  it("a French or Russian not-ready press right after its own success is a key repeat like an English one", () => {
+    const casts = [{ spellId: "421453", tSeconds: 10 }];
+    for (const reason of ["Récupération incomplète", "Еще не готово."])
+      expect(dropKeyRepeatRejects([hit(10.2, reason)], casts)).toEqual([]);
+    // another reason is a press, whatever the timing
+    expect(
+      dropKeyRepeatRejects([hit(10.2, "Hors de portée")], casts),
+    ).toHaveLength(1);
+  });
+
+  it("the window is closed at exactly 300 ms, whatever float the two seconds make", () => {
+    expect(KEY_REPEAT_AFTER_SUCCESS_S).toBe(0.3);
+    // 5.437 - 5.137 = 0.3000000000000007 as floats
+    for (const t0 of [5.137, 10.0, 101.3, 0.001, 263.999]) {
+      const casts = [{ spellId: "421453", tSeconds: t0 }];
+      const at = (ms: number) => Math.round(t0 * 1000 + ms) / 1000;
+      expect(
+        dropKeyRepeatRejects([hit(at(300), "Not yet recovered")], casts),
+      ).toEqual([]);
+      expect(
+        dropKeyRepeatRejects([hit(at(301), "Not yet recovered")], casts),
+      ).toHaveLength(1);
+    }
   });
 });

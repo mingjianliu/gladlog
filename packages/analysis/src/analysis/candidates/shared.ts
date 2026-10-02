@@ -100,14 +100,63 @@ export const NOT_READY_REASON_ZH = "尚未恢复";
  * lockout". Measured on 60 archive files (every 300th of the 2026-08-28
  * manifest): share of each reason within 1.5 s after the same unit's own
  * SPELL_CAST_SUCCESS — en 16,942 / 94.7 %, zh 2,487 / 96.5 %, ko 1,265 /
- * 96.4 %, de 450 / 91.8 %, pt 225 / 89.8 % (vs 28.9 % for "stunned"). */
+ * 96.4 %, de 450 / 91.8 %, pt 225 / 89.8 % (vs 28.9 % for "stunned").
+ *
+ * Forward check on the wider sample (Curated-List Completeness Rule,
+ * 2026-10-01; `SPELL_CAST_FAILED` reasons on 605 S2 files, 291,377 rows, 313
+ * distinct texts): four client locales were missing — fr 2,048 rows in 6
+ * files, es 1,902 / 2, ru 1,582 / 5, zh-TW 739 / 3 — so on those 16 logs a
+ * GCD or own-cooldown press was no "not ready" press anywhere: the
+ * gcd-locked exclusion and the key-repeat filter did nothing, and the
+ * kick-eaten line printed such presses as "rejected inside the lockout"
+ * (30846f8e @68: Shadowmeld "rejected" 0.2–0.75 s after Shadowmeld itself
+ * succeeded). `context/spellOutcomeLines.ts` `REJECT_REASONS` already
+ * carried all nine locales for its own kinds. */
 export const NOT_READY_REASONS: ReadonlySet<string> = new Set([
   NOT_READY_REASON_ZH,
   "Not yet recovered",
   "아직 사용 불가",
   "Noch nicht erholt",
   "Ainda não recuperado",
+  "Récupération incomplète",
+  "Aún no recuperado",
+  "Еще не готово.",
+  "尚未恢復",
 ]);
+
+/** A not-ready reject this soon after a success of the SAME spell is the key
+ * repeating, not a second attempt (triage 2026-09-29 kick-eaten F-K7c, user
+ * ruling A32 = B, 2026-09-30, the 0.3 s signed): 02c8e3ac — Living Flame
+ * succeeded at 10.800 and "not ready" at 10.866, Dragonrage 13.703 / 13.735,
+ * and the kick-eaten line counted both as "2x not ready yet". The kick-eaten
+ * TEXT drops these; the ranking evidence (`filterIntentGuardEvidence`) is a
+ * different, wider filter and is unchanged. */
+export const KEY_REPEAT_AFTER_SUCCESS_S = 0.3;
+
+/** `hits` without the key-repeat rejects: a `NOT_READY_REASONS` hit at most
+ * `KEY_REPEAT_AFTER_SUCCESS_S` after a success of the same spell id. */
+export function dropKeyRepeatRejects(
+  hits: CastFailedEvent[],
+  ownerCasts: { spellId: string; tSeconds: number }[],
+): CastFailedEvent[] {
+  return hits.filter(
+    (h) =>
+      !(
+        NOT_READY_REASONS.has(h.reason) &&
+        ownerCasts.some(
+          (c) =>
+            c.spellId === String(h.spellId) &&
+            c.tSeconds <= h.tSeconds &&
+            // in whole milliseconds, the log's own grid: as float seconds a
+            // reject exactly 300 ms after the success was inside the window
+            // or outside it depending on the pair (5.137 -> 5.437 gives
+            // 0.3000000000000007)
+            Math.round((h.tSeconds - c.tSeconds) * 1000) <=
+              KEY_REPEAT_AFTER_SUCCESS_S * 1000,
+        )
+      ),
+  );
+}
 
 /**
  * Filters `castFailedInWindow` hits down to genuine "pressed but rejected"

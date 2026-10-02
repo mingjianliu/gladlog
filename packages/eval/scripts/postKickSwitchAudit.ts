@@ -35,7 +35,10 @@
  */
 import { ensureAnalysisData, specToString } from "@gladlog/analysis";
 import { buildFindingsPrompt, extractCandidateFindings } from "@gladlog/analysis";
-import { spellSchoolMask } from "@gladlog/analysis/src/data/spellSchools";
+import {
+  schoolLockedBy,
+  spellSchoolMask,
+} from "@gladlog/analysis/src/data/spellSchools";
 import {
   analyzePlayerCCAndTrinket,
   CAST_START_LOOKBACK_S,
@@ -199,7 +202,7 @@ export async function collect(limit: number): Promise<{
           c.t <= inst.atSeconds + WINDOW_S &&
           lockedMask !== undefined &&
           spellSchoolMask(c.spellId) !== undefined &&
-          (spellSchoolMask(c.spellId)! & lockedMask) === 0,
+          !schoolLockedBy(spellSchoolMask(c.spellId)!, lockedMask),
       );
       if (!trigger) { row.unknown++; continue; }
       if (!haveStarts) { row.unknown++; continue; }
@@ -303,7 +306,7 @@ async function examples(limit: number, want: number): Promise<void> {
           c.t <= inst.atSeconds + WINDOW_S &&
           lockedMask !== undefined &&
           spellSchoolMask(c.spellId) !== undefined &&
-          (spellSchoolMask(c.spellId)! & lockedMask) === 0,
+          !schoolLockedBy(spellSchoolMask(c.spellId)!, lockedMask),
       );
       if (!trigger) continue;
       const isHard = starts.some(

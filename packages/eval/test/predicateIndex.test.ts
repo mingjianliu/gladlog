@@ -703,6 +703,11 @@ const INDEX: PredicateRow[] = [
     mod: candidateFindings,
   },
   {
+    file: `${A}/data/spellSchools.ts`,
+    symbol: "schoolLockedBy",
+    mod: spellSchools,
+  },
+  {
     file: `${E}/quality/promptQualityCheck.ts`,
     symbol: "checkKickWaitedOutConsistency",
     mod: promptQualityCheck,

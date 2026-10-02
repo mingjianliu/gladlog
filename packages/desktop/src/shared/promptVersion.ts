@@ -554,5 +554,15 @@
  *  wall is named for another unit — cd-hoarded, [DEFENSIVE AVAILABLE] — only
  *  when its holder stood inside the zone; a burst window is not answerable on
  *  seconds after the pressured friendly died.
+ *  v249 (2026-10-01): triage kick-eaten F-K7d / F-K7b / F-K7c / F-K7a
+ *  (rulings C5, A32, A23, A′18). `postKick`: a spell is locked only when
+ *  every school it belongs to is locked (Starsurge under a Nature lock is a
+ *  switch, and its not-ready presses are its own cooldown); the switched
+ *  line also prints the presses rejected inside the lock; a not-ready reject
+ *  ≤ 0.3 s after the same spell succeeded is a key repeat and is not
+ *  counted; "inside the lockout" ends at the first successful cast of the
+ *  locked school (not on a cast that goes out inside a holding lock: Demonic
+ *  Circle: Teleport, Holy Fire, passive rows). "Not ready" is recognised in
+ *  fr / es / ru / zh-TW logs too. Legend updated to match.
  */
-export const PROMPT_VERSION = 248;
+export const PROMPT_VERSION = 249;

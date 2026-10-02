@@ -15,6 +15,7 @@ interface Entry {
   immuneMechMask?: number;
   immuneAll?: boolean;
   locksCasting?: boolean;
+  silenceable?: boolean;
 }
 
 const SPELLS = (raw as unknown as { spells: Record<string, Entry | undefined> })
@@ -77,6 +78,14 @@ export function explicitlyBreaksMechanic(
  * Dispersion, Bladestorm)? */
 export function auraLocksCasting(auraId: string): boolean {
   return SPELLS[auraId]?.locksCasting === true;
+}
+
+/** Does DB2 say a silence — and so an interrupt's school lockout — prevents
+ * this cast (`SpellCategories.PreventionType` silence bit)? False also means
+ * "no row": a caller may treat `true` as evidence, never `false` as "cannot
+ * be locked". */
+export function isSilenceableCast(spellId: string): boolean {
+  return SPELLS[spellId]?.silenceable === true;
 }
 
 /** Which official usable-while-CC state a mechanic puts its victim in, or

@@ -442,6 +442,7 @@ describe("analyzePlayerCCAndTrinket — structured data contract (N4)", () => {
       kickersInRange: null,
       nearestKickerDistYd: null,
       firstActionDelayS: null,
+      lockEndedBySuccessS: null,
       switchDelayS: null,
       switchSpellName: null,
       switchWasHardCast: null,
@@ -504,6 +505,146 @@ describe("analyzePlayerCCAndTrinket — structured data contract (N4)", () => {
       false,
     );
     expect(resInstantSwitch.interruptInstances[0].postKick).toBe("switched");
+  });
+
+  // Triage 2026-09-29 kick-eaten F-K7b / F-K7a (rulings C5, A23).
+  describe("post-kick school rule and the first-success cut", () => {
+    const enemy = makeUnit("enemy-1", {
+      name: "EnemyRogue",
+      spec: CombatUnitSpec.Rogue_Subtlety,
+      reaction: CombatUnitReaction.Hostile,
+    });
+    // Kick at 10 s on `interrupted`, then the owner's casts (id, seconds after
+    // the kick); `auraRemovedAt` = a Stasis-ready aura removal (seconds after).
+    const kicked = (
+      interrupted: [string, string],
+      casts: Array<[string, number]>,
+      stasisRemovedAfterS?: number,
+    ) => {
+      const player = makeUnit("player-1", {
+        name: "Owner",
+        spec: CombatUnitSpec.Shaman_Restoration,
+        reaction: CombatUnitReaction.Friendly,
+        actionIn: [
+          makeInterruptEvent(
+            "1766",
+            "Kick",
+            interrupted[0],
+            interrupted[1],
+            MATCH_START + 10_000,
+            "enemy-1",
+            "EnemyRogue",
+          ),
+        ],
+        spellCastEvents: casts.map(([id, dt]) =>
+          makeSpellCastEvent(
+            id,
+            MATCH_START + 10_000 + dt * 1000,
+            "player-1",
+            "Owner",
+            "player-1",
+            "Owner",
+            0,
+            `spell-${id}`,
+          ),
+        ),
+        auraEvents:
+          stasisRemovedAfterS === undefined
+            ? []
+            : [
+                {
+                  logLine: {
+                    event: LogEvent.SPELL_AURA_REMOVED,
+                    timestamp: MATCH_START + 10_000 + stasisRemovedAfterS * 1000,
+                    parameters: [],
+                  },
+                  timestamp: MATCH_START + 10_000 + stasisRemovedAfterS * 1000,
+                  spellId: "370562",
+                  spellName: "Stasis",
+                  srcUnitId: "player-1",
+                  destUnitId: "player-1",
+                } as any,
+              ],
+      });
+      return analyzePlayerCCAndTrinket(player, [enemy], makeCombat())
+        .interruptInstances[0]!;
+    };
+
+    it("a spell with one school outside the lock is a switch (Starsurge, Arcane + Nature, under a Nature lock)", () => {
+      // Cyclone 33786 = Nature (8); Starsurge 78674 = Arcane + Nature (72)
+      const k = kicked(["33786", "Cyclone"], [["78674", 0.8]]);
+      expect(k.postKick).toBe("switched");
+      expect(k.switchDelayS).toBeCloseTo(0.8, 5);
+      // … and it does not end the lock: it was never locked
+      expect(k.lockEndedBySuccessS).toBeNull();
+    });
+
+    it("a fully locked spell is not a switch; its success inside the lockout ends the lock for the text", () => {
+      // Riptide 61295 = Nature, silenceable
+      const k = kicked(["33786", "Cyclone"], [["61295", 1.0]]);
+      expect(k.postKick).toBe("acted");
+      expect(k.lockEndedBySuccessS).toBeCloseTo(1.0, 5);
+      // the modelled lockout is untouched ([RES], CONSEQ, cannot-cast)
+      expect(k.lockoutDurationSeconds).toBe(3);
+    });
+
+    it("a locked-school success at or after the modelled lockout end is not a cut", () => {
+      const k = kicked(["33786", "Cyclone"], [["61295", 3.0]]);
+      expect(k.lockEndedBySuccessS).toBeNull();
+    });
+
+    it("Demonic Circle: Teleport inside a Shadow lock does not prove the lock ended (FLAG, LOCK_IGNORING_CAST_IDS)", () => {
+      // Fear 5782 = Shadow; Demonic Circle: Teleport 48020 = Shadow, silenceable
+      const k = kicked(["5782", "Fear"], [["48020", 2.6]]);
+      expect(k.postKick).toBe("acted");
+      expect(k.lockEndedBySuccessS).toBeNull();
+    });
+
+    it("Holy Fire inside a Holy lock does not prove the lock ended, nor do the rows a passive writes (LOCK_IGNORING_CAST_IDS, forward check 2026-10-01)", () => {
+      // Smite 585 = Holy; Holy Fire 14914 = Holy, silenceable — 50ebee26:
+      // it went out at +0.14 while Smite stayed rejected to +2.77
+      expect(
+        kicked(["585", "Smite"], [["14914", 0.14]]).lockEndedBySuccessS,
+      ).toBeNull();
+      // Frostbolt 116 = Frost; Snowdrift 390171 / 389823 = Frost passive rows
+      expect(
+        kicked(["116", "Frostbolt"], [["390171", 0.4]]).lockEndedBySuccessS,
+      ).toBeNull();
+      expect(
+        kicked(["116", "Frostbolt"], [["389823", 0.4]]).lockEndedBySuccessS,
+      ).toBeNull();
+      // Sanctified Ground 289655 = Holy passive row
+      expect(
+        kicked(["585", "Smite"], [["289655", 0.5]]).lockEndedBySuccessS,
+      ).toBeNull();
+      // control: another Holy press does cut (Flash Heal 2061)
+      expect(
+        kicked(["585", "Smite"], [["2061", 1.2]]).lockEndedBySuccessS,
+      ).toBeCloseTo(1.2, 5);
+    });
+
+    it("a cast DB2 does not mark silenceable is not evidence (Shadowy Apparition has no SpellCategories row)", () => {
+      const k = kicked(["5782", "Fear"], [["341263", 0.5]]);
+      expect(k.lockEndedBySuccessS).toBeNull();
+    });
+
+    it("a Stasis replay is not a press: locked-school casts right after the ready aura's removal do not cut (141470d0 @198)", () => {
+      // Verdant Embrace 360995 = Nature. Replays at +1.04 / +1.76 / +2.42 s,
+      // the ready aura removed at +1.02 s.
+      const replayed = kicked(
+        ["33786", "Cyclone"],
+        [
+          ["360995", 1.04],
+          ["360995", 1.76],
+          ["360995", 2.42],
+        ],
+        1.02,
+      );
+      expect(replayed.lockEndedBySuccessS).toBeNull();
+      // without the removal the same casts are presses
+      const pressed = kicked(["33786", "Cyclone"], [["360995", 1.04]]);
+      expect(pressed.lockEndedBySuccessS).toBeCloseTo(1.04, 5);
+    });
   });
 
   it("A3 (2026-09-25): a PvP trinket pressed in the post-kick window is a CC break, not 'acting on another school'; ccInWindowS counts the CC", () => {

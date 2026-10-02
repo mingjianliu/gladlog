@@ -55,6 +55,7 @@ import {
   CC_AVOIDANCE_BUFF_SPELLS,
   DRUID_FORM_BUFFS,
   GROUND_CC_SPELL_IDS,
+  LOCK_IGNORING_CAST_IDS,
   MAGIC_ONLY_IMMUNITY_IDS,
   TARGET_BOUND_MOBILITY_IDS,
   PHYSICAL_CC_IDS,
@@ -604,6 +605,11 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   ),
   t("TREMOR_BREAKABLE_CC_IDS", "utils/ccTrinketAnalysis.ts", "aura", () =>
     set(TREMOR_BREAKABLE_CC_IDS),
+  ),
+  // Triage 2026-09-29 F-K7a: casts that succeed inside a lock on their own
+  // school (Demonic Circle: Teleport — FLAG, no DB2 mechanism).
+  t("LOCK_IGNORING_CAST_IDS", "utils/ccTrinketAnalysis.ts", "cast", () =>
+    set(LOCK_IGNORING_CAST_IDS),
   ),
   // context/
   t("HIGH_VALUE_PURGEABLE_BUFFS", "context/matchTimeline.ts", "aura", () =>

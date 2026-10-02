@@ -22,7 +22,7 @@ import { lookupKickPriorityPrior } from "../data/kickPriorityPrior";
 import { resolveMitigation, wallDoorPct } from "../data/mitigationComponents";
 import { OFF_GCD_SPELL_IDS } from "../data/offGcdGenerated";
 import { getEnglishSpellName } from "../data/spellEffectData";
-import { spellSchoolMask } from "../data/spellSchools";
+import { schoolLockedBy, spellSchoolMask } from "../data/spellSchools";
 import { ccSpellIds } from "../data/spellTags";
 import { lookupSyncWindowPrior } from "../data/syncWindowPrior";
 import {
@@ -171,6 +171,7 @@ import {
   mdCycloneWindowEvents,
 } from "./candidates/massDispel";
 import {
+  dropKeyRepeatRejects,
   filterIntentGuardEvidence,
   formatAttemptedFact,
   INTENT_GUARD_GCD_S,
@@ -1354,7 +1355,10 @@ export function kickEatenEvents(
         ReturnType<
           typeof analyzePlayerCCAndTrinket
         >["interruptInstances"][number],
-        "interruptedSpellId" | "kickSpellId" | "sourceId"
+        | "interruptedSpellId"
+        | "kickSpellId"
+        | "sourceId"
+        | "lockEndedBySuccessS"
       >
     >)[],
   owner: { id: string; name: string },
@@ -1631,21 +1635,31 @@ function kickPressureFacts(p: KickPressure): Record<string, string> {
  * pressed-but-rejected evidence") — so a GCD-spam 尚未恢复 or a press that
  * self-resolved into a same-spell cast within 2 s never counts here either. */
 /** Every SPELL_CAST_FAILED of the owner strictly after the kick inside the
- * post-kick window — unfiltered, for the literal "pressed N×" count (a GCD
- * press the game refused is still a press). The evidence-grade subset for
- * ranking is `rejectedPressesAfterKick`. */
+ * post-kick window, for the literal "pressed N×" count (a GCD press the game
+ * refused is still a press) — minus key repeats (`dropKeyRepeatRejects`,
+ * ruling A32: a not-ready reject ≤ 0.3 s after the same spell succeeded is
+ * the key bouncing, not an attempt). The evidence-grade subset for ranking is
+ * `rejectedPressesAfterKick`. */
 function allRejectedPressesAfterKick(
   k: { atSeconds: number },
   ownerId: string,
-  intent: { rawStreams?: RawStreams } | undefined,
+  intent:
+    | {
+        rawStreams?: RawStreams;
+        ownerCasts: { spellId: string; tSeconds: number }[];
+      }
+    | undefined,
 ): CastFailedEvent[] {
   if (!intent?.rawStreams) return [];
-  return castFailedInWindow(
-    intent.rawStreams,
-    ownerId,
-    k.atSeconds,
-    k.atSeconds + POST_KICK_WINDOW_S,
-  ).filter((h) => h.tSeconds > k.atSeconds);
+  return dropKeyRepeatRejects(
+    castFailedInWindow(
+      intent.rawStreams,
+      ownerId,
+      k.atSeconds,
+      k.atSeconds + POST_KICK_WINDOW_S,
+    ).filter((h) => h.tSeconds > k.atSeconds),
+    intent.ownerCasts,
+  );
 }
 
 function rejectedPressesAfterKick(
@@ -1720,7 +1734,7 @@ export function postKickFact(
         ReturnType<
           typeof analyzePlayerCCAndTrinket
         >["interruptInstances"][number],
-        "interruptedSpellId"
+        "interruptedSpellId" | "lockEndedBySuccessS"
       >
     >,
   allRejected: CastFailedEvent[],
@@ -1741,7 +1755,11 @@ export function postKickFact(
     if (lockedMask === undefined || !NOT_READY_REASONS.has(h.reason))
       return false;
     const m = spellSchoolMask(String(h.spellId));
-    return m !== undefined && (m & lockedMask) === 0;
+    // the classifier's predicate: a spell with one school still open is not
+    // locked, so its "not ready" is its own cooldown or the GCD (F-K7b:
+    // 2c6e85ec, Starsurge ×4 under a Nature lock read "rejected inside the
+    // lockout" right after two Starsurges had gone out)
+    return m !== undefined && !schoolLockedBy(m, lockedMask);
   };
   const ownCd = allRejected.filter(isOwnCd);
   const rejected = allRejected.filter((h) => !isOwnCd(h));
@@ -1771,6 +1789,33 @@ function postKickCore(
     return rejected.length > 0
       ? `no successful cast for 5s after the kick; ${pressed(rejected)}`
       : "no cast for 5s after the kick";
+  // Strict `<`: the lockout's end instant belongs to "after", the same
+  // boundary the "waited out" test below uses for successful casts (a first
+  // cast at exactly the lockout end IS a wait) — codex astra review 2026-09-24.
+  //
+  // The lock the TEXT speaks of ends at the modelled lockout or, earlier, at
+  // the first successful press of a spell that lock covers
+  // (`lockEndedBySuccessS`, ruling A23): a reject after that cast was not the
+  // lockout's doing, and a reject after the lock is not printed in either
+  // branch (ruling A′18).
+  //
+  // Compared in whole milliseconds, like `dropKeyRepeatRejects`:
+  // `lockEndedBySuccessS` is `cast − kick`, and adding the kick back is one
+  // ulp above the cast's own instant when the subtraction was inexact (kick
+  // 0.177 s, cast 0.838 s → 0.8380000000000001), so a reject logged in the
+  // cast's own millisecond read as inside the lockout.
+  const lockEndMs = Math.round(
+    (k.atSeconds +
+      Math.min(k.lockoutDurationSeconds, k.lockEndedBySuccessS ?? Infinity)) *
+      1000,
+  );
+  const inLockout = rejected.filter(
+    (h) => Math.round(h.tSeconds * 1000) < lockEndMs,
+  );
+  // F-K7d: the switched line used to print only the switching cast, so a
+  // player who pressed the locked school four times first read as someone
+  // who calmly changed school (b12bfef4 @169: Verdant Embrace ×2 not ready,
+  // Reversion ×2 out of range, all inside the 3 s Nature lock).
   if (k.postKick === "switched")
     return `acted on another school ${k.switchDelayS?.toFixed(1) ?? "?"}s later (${k.switchSpellName ?? "?"}${
       k.switchWasHardCast === true
@@ -1778,13 +1823,7 @@ function postKickCore(
         : k.switchWasHardCast === false
           ? "; not a hard cast"
           : ""
-    })`;
-  // Strict `<`: the lockout's end instant belongs to "after", the same
-  // boundary the "waited out" test below uses for successful casts (a first
-  // cast at exactly the lockout end IS a wait) — codex astra review 2026-09-24.
-  const inLockout = rejected.filter(
-    (h) => h.tSeconds < k.atSeconds + k.lockoutDurationSeconds,
-  );
+    })${inLockout.length > 0 ? `; ${pressed(inLockout)} inside the lockout` : ""}`;
   const first = k.firstActionDelayS?.toFixed(1) ?? "?";
   if (inLockout.length > 0)
     return `${pressed(inLockout)} inside the lockout; first successful cast ${first}s later`;

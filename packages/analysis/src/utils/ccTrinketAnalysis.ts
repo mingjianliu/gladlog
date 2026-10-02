@@ -21,6 +21,7 @@ import {
 import {
   immunityCoversSpell,
   isPhysicalSpell,
+  schoolLockedBy,
   spellSchoolMask,
 } from "../data/spellSchools";
 import {
@@ -37,6 +38,7 @@ import {
   coveredMsWithin,
 } from "./cannotCastIntervals";
 import { ccFullDurationForCaster } from "./ccDuration";
+import { stasisReplayWindows } from "./combatStates";
 import { isHealerSpec, isPassiveProcCast, specToString } from "./cooldowns";
 import { computeIncomingDR, IDRInfo, matchPendingCcKey } from "./drAnalysis";
 import { IMMUNITY_IDS } from "./enemyDefensives";
@@ -63,6 +65,7 @@ import {
   trinketUseRemainingSeconds,
 } from "./pvpTrinketUses";
 import { fmtTime } from "./renderGrid";
+import { isSilenceableCast } from "./spellMechanics";
 import { spellRangeForCaster } from "./spellRange";
 import { medianFinite } from "./stats";
 import { getTalentAvoidanceBuffs } from "./talentBehaviors";
@@ -651,10 +654,12 @@ export interface IRootInstance {
  * eating a kick. The lockout duration itself carries no information (840
  * corpus kicks all land in 3–4s — modern school lockouts are fixed), so the
  * teachable severity axis is the BEHAVIOR while locked:
- *   - "switched": cast something whose official school mask shares no bits
- *     with the interrupted spell's
- *   - "acted": cast something, but same/unknown school (waited the lockout
- *     out, or masks unavailable — three-state data, never guessed)
+ *   - "switched": cast something the lock does not cover — a spell with at
+ *     least one school outside the interrupted spell's (`schoolLockedBy`;
+ *     until 2026-10-01 the test was "shares no bit", which called Starsurge
+ *     locked by a Nature lock while the log shows it going out)
+ *   - "acted": cast something, but a fully locked or unknown school (waited
+ *     the lockout out, or masks unavailable — three-state data, never guessed)
  *   - "idle": zero casts for the whole window — the paralysis case
  *
  * ⚠ **"switched" is NOT "kept playing through the lockout"** — that reading
@@ -742,6 +747,20 @@ export interface IInterruptInstance {
   postKick: PostKickBehavior;
   /** Seconds until the first cast after the kick; null when idle. */
   firstActionDelayS: number | null;
+  /** Seconds after the kick at which the log shows the lock was already
+   * over, before its modelled end: the first successful press of a spell the
+   * lock fully covers (`schoolLockedBy`) that a lockout does prevent
+   * (`isSilenceableCast`). Triage 2026-09-29 F-K7a, user ruling A23
+   * (2026-09-30): 1b930c17 @237 printed "pressed 3x but rejected (Surging
+   * Totem、Riptide×2) inside the lockout; first successful cast 1.0s later" —
+   * the two Riptide rejects came after Surging Totem had gone out.
+   *
+   * Read by the kick-eaten TEXT only. `lockoutDurationSeconds` stays the
+   * modelled lockout for [RES], CONSEQ and the cannot-cast intervals.
+   * null / absent = the log shows no such cast. Never set by a cast that does
+   * not prove it: `LOCK_IGNORING_CAST_IDS`, a Stasis replay
+   * (`stasisReplayWindows`), or a spell DB2 does not mark silenceable. */
+  lockEndedBySuccessS?: number | null;
   /** Reliability audit A3 (2026-09-25): seconds of the `POST_KICK_WINDOW_S`
    * window the player could NOT act for another reason than this kick's own
    * lockout (hard CC, silence, another kick — the shared
@@ -817,6 +836,47 @@ export interface ICCAvoidedInstance {
  * straddles the fixed 3–4s lockout, so "idle" is damning — nothing was cast
  * even once the lockout ended. */
 export const POST_KICK_WINDOW_S = 5;
+
+/**
+ * Casts that go out inside a lock on their own school, so their success says
+ * nothing about the lock (kick-eaten first-success cut, F-K7a).
+ *
+ * Game-Behaviour Rule, **FLAG kept open**: DB2 gives Demonic Circle: Teleport
+ * 48020 PreventionType 1 and school Shadow — by the official row it should be
+ * locked — but on 605 S2 files it succeeds inside a Shadow lock 41× (0.27–
+ * 0.89 of the lockout, spread out, against 22 lock-free rejects) while the
+ * same warlocks' other Shadow buttons hold the lock (Fear 2 successes / 37
+ * rejects, Unstable Affliction 3 / 93, Curse of Exhaustion 2 / 64). No DB2
+ * mechanism found (triage tier-C C6, `probes/tierc/out_c6_spells.txt`).
+ *
+ * The forward check — the same table: fully-locked silenceable spells by
+ * in-lock successes (all victims) against lock-free rejects — names four
+ * more ids of the same kind, added 2026-10-01 after the pre-review of the
+ * batch found the cut firing on them:
+ *  - Holy Fire 14914 (school Holy in the log, 0x2): 48 in-lock successes
+ *    against 5 lock-free rejects. 50ebee26 round 1: Mind Freeze on Smite
+ *    (3 s Holy lock), Holy Fire succeeds at +0.14 and +1.32 while Smite is
+ *    rejected six times up to +2.77 and starts again at +3.04 — the lock held
+ *    its full length, and the cut dropped all eight presses from the line.
+ *  - Snowdrift 390171 / 389823 (19 / 9 in-lock successes, 0 rejects) and
+ *    Sanctified Ground 289655 (7, 0): rows a passive writes, not presses.
+ * Left off, evidence mixed: Benediction 1262763 (24 in-lock successes but 47
+ * lock-free rejects), Void Shield 1253593 (7 / 6), Glacial Spike 199786
+ * (6 / 3). Lightning Bolt / Chain Lightning are the Storm Conduit lockout
+ * (F-K8), a real shorter lock.
+ * Being on the list restores the modelled lockout for that spell — what the
+ * line did before the cut existed — so a wrong member costs one missed cut,
+ * never a shortened lockout. Re-run `probes/tierc/corpus.py` §C6 when a new
+ * id is suspected.
+ */
+/** @internal exported for data/curatedIdRegistry (corpus rot scan) */
+export const LOCK_IGNORING_CAST_IDS: ReadonlySet<string> = new Set([
+  "48020", // Demonic Circle: Teleport
+  "14914", // Holy Fire
+  "390171", // Snowdrift (passive row)
+  "389823", // Snowdrift (passive row)
+  "289655", // Sanctified Ground (passive row)
+]);
 
 /** How far before a `SPELL_CAST_SUCCESS` its own `SPELL_CAST_START` may sit
  * when deciding `switchWasHardCast`. The longest arena hardcasts are ~3s;
@@ -1659,6 +1719,7 @@ export function analyzePlayerCCAndTrinket(
       kickDepthPct,
       channelS,
       firstActionDelayS: null,
+      lockEndedBySuccessS: null,
       kickSpellId,
       kickSpellName: getEnglishSpellName(kickSpellId, action.spellName),
       interruptedSpellId,
@@ -1696,10 +1757,12 @@ export function analyzePlayerCCAndTrinket(
       )
       .map((e) => ({
         t: (e.logLine.timestamp - matchStartMs) / 1000,
+        ms: e.logLine.timestamp,
         spellId: e.spellId ?? "",
         spellName: getEnglishSpellName(e.spellId ?? "", e.spellName),
       }))
       .sort((a, b) => a.t - b.t);
+    const replays = stasisReplayWindows(player);
     // Optional field: absent on old archives. Absence is "unknown", never
     // "instant" — see IInterruptInstance.switchWasHardCast.
     const rawCastStarts = player.castStartEvents;
@@ -1743,9 +1806,26 @@ export function analyzePlayerCCAndTrinket(
           ? undefined
           : after.find((c) => {
               const m = spellSchoolMask(c.spellId);
-              return m !== undefined && (m & lockedMask) === 0;
+              return m !== undefined && !schoolLockedBy(m, lockedMask);
             });
       inst.postKick = switchCast !== undefined ? "switched" : "acted";
+      const lockEndS = inst.atSeconds + inst.lockoutDurationSeconds;
+      const endedBy =
+        lockedMask === undefined
+          ? undefined
+          : after.find((c) => {
+              if (c.t >= lockEndS) return false;
+              const m = spellSchoolMask(c.spellId);
+              return (
+                m !== undefined &&
+                schoolLockedBy(m, lockedMask) &&
+                isSilenceableCast(c.spellId) &&
+                !LOCK_IGNORING_CAST_IDS.has(c.spellId) &&
+                !replays.some((w) => c.ms >= w.from && c.ms <= w.to)
+              );
+            });
+      inst.lockEndedBySuccessS =
+        endedBy !== undefined ? endedBy.t - inst.atSeconds : null;
       if (switchCast !== undefined) {
         inst.switchSpellName = switchCast.spellName;
         inst.switchDelayS = switchCast.t - inst.atSeconds;

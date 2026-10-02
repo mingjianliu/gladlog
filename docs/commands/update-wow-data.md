@@ -303,7 +303,8 @@ npx tsx packages/analysis/scripts/datagen/genRootAuras.ts
 #      EffectTriggerSpell hop, else the unique loss-of-control mechanic among same-named observed spells),
 #      base cast time (SpellMisc → SpellCastTimes; 0 = instant), mechanic immunity (aura 77), all-school
 #      immunity (aura 39 misc 127), casting lockout (aura 60 / 263). Aura 147 masks are kept raw and read as
-#      UNKNOWN (bit order contradicted by the corpus). Controls are asserted before writing.
+#      UNKNOWN (bit order contradicted by the corpus). `silenceable` = SpellCategories.PreventionType silence
+#      bit (2026-10-01, kick-eaten first-success cut). Controls are asserted before writing.
 npx tsx packages/analysis/scripts/datagen/genSpellMechanics.ts
 # 6g. Damage mitigation table (#17 foundation; whitelist = big ∪ external 35 items, curated overrides in mitigationData.ts).
 #     Percentages are PvP-scaled: aura87 EffectBasePointsF × SpellEffect.PvpMultiplier via lib/pvpMultiplier.ts
