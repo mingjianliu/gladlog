@@ -49,6 +49,7 @@ import {
   UNRELENTING_ONSLAUGHT_TALENT_ID,
   USABLE_IN_BLADESTORM_WITH_TALENT,
 } from "../utils/castingLocks";
+import { DISPLACEMENT_EVIDENCE_IDS } from "../utils/castCancels";
 import { COPY_CAST_IDS } from "../utils/castPress";
 import {
   BREAKABLE_CC_SPELL_IDS,
@@ -516,6 +517,11 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   // GH #83: the fallback CC per class for enemies not yet seen casting one
   t("SPEC_PRIMARY_CC", "utils/healerExposureAnalysis.ts", "aura", () =>
     SPEC_PRIMARY_CC.map((e) => e.spellId),
+  ),
+  // Triage 2026-09-29 F-K10b (ruling A′17): enemy displacements that break a
+  // cast bar — the knockback family plus Typhoon's daze aura.
+  t("DISPLACEMENT_EVIDENCE_IDS", "utils/castCancels.ts", "mixed", () =>
+    set(DISPLACEMENT_EVIDENCE_IDS),
   ),
   // Triage 2026-09-29 F-K6b (ruling A12 + U2): caster-displacing abilities
   // an enemy kicker can close a gap with — kick-eaten's out-range gate.

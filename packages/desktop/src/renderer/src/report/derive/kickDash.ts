@@ -13,10 +13,16 @@ export interface KickDashRow {
   landed: number;
   juked: number;
   missed: number;
+  /** The kick's own silence went onto a target that was not casting
+   *  (Silence, Strangulate): no cast stopped, but not a miss either. */
+  silenced: number;
   unknown: number;
   total: number;
-  /** landed / (landed+juked+missed); unknown (old archives with no cast-bar
-   *  data) is excluded from the denominator. null = no decidable kick. */
+  /** landed / (landed+juked+missed+silenced); unknown (old archives with no
+   *  cast-bar data) is excluded from the denominator. null = no decidable
+   *  kick. A silenced kick stays in the denominator, as it did while the
+   *  audit still called it "missed" or "juked" — the rate is unchanged by
+   *  the label (the audit says "silenced" only where cast-bar data exists). */
   landedRate: number | null;
   entries: IKickAuditEntry[];
 }
@@ -60,7 +66,8 @@ export function deriveKickDash(
       const landed = count("landed");
       const juked = count("juked");
       const missed = count("missed");
-      const decided = landed + juked + missed;
+      const silenced = count("silenced");
+      const decided = landed + juked + missed + silenced;
       rows.push({
         unitId: p.id,
         name: p.name,
@@ -70,6 +77,7 @@ export function deriveKickDash(
         landed,
         juked,
         missed,
+        silenced,
         unknown: count("unknown"),
         total: entries.length,
         landedRate: decided > 0 ? landed / decided : null,

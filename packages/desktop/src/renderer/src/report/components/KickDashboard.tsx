@@ -95,6 +95,7 @@ export function KickDashboard({
                   {r.landedRate === null
                     ? "—"
                     : `${Math.round(r.landedRate * 100)}%`}
+                  {r.silenced > 0 ? `(${r.silenced} 沉默生效)` : ""}
                   {r.unknown > 0 ? `(${r.unknown} 未知)` : ""}
                 </td>
               </tr>,
@@ -112,6 +113,10 @@ export function KickDashboard({
                             ` 打断 ${k.interruptedSpellName ?? ""}`}
                           {k.result === "juked" &&
                             ` 被假读条骗掉(${k.jukedBySpellName ?? ""})`}
+                          {k.result === "silenced" &&
+                            (k.openCastSpellName
+                              ? ` 沉默生效(${k.openCastSpellName} 读条未完成)`
+                              : ` 沉默生效(未打断读条)`)}
                           {k.result === "missed" && " 落空"}
                           {k.result === "unknown" && " 旧档无读条数据"}
                           {onSeek && (

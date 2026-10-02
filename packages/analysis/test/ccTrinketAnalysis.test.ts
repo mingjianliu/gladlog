@@ -429,6 +429,7 @@ describe("analyzePlayerCCAndTrinket — structured data contract (N4)", () => {
     expect(resNoSwitch.interruptInstances).toHaveLength(1);
     expect(resNoSwitch.interruptInstances[0]).toEqual({
       atSeconds: 10,
+      castStartS: null,
       kickSpellId: "1766",
       kickSpellName: "Kick",
       sourceName: "EnemyRogue",

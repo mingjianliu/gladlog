@@ -1805,6 +1805,34 @@ describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
     expect(f).toContain("pressed 1x but rejected (Hammer of Justice +2.3s) inside the lockout");
   });
 
+  // Triage 2026-09-29 F-K10a, user ruling A35 (0.5 s window, fact only).
+  it("kick-eaten: a cast the owner stopped just before the kicked one is a fact (5e8b11c1 @157.3, 2c6e85ec @15.0)", () => {
+    const cancelsOf = (startS: number, cancelS: number) => ({
+      hardcasts: 5,
+      cancels: [
+        { spellId: "51514", spellName: "妖术", startS, cancelS, progressPct: 31 },
+      ],
+      baitedKicks: [],
+    });
+    const f = (castStartS: number | null, startS: number, cancelS: number) =>
+      kickEatenEvents(
+        [kickInst({ atSeconds: 157.287, castStartS })],
+        { id: "P1", name: "Me" },
+        undefined,
+        undefined,
+        undefined,
+        cancelsOf(startS, cancelS),
+      )[0]!.facts["stoppedJustBefore"];
+    // Hex started 156.662, stopped 157.156; the kicked cast started 157.283
+    expect(f(157.283, 156.662, 157.156)).toBe("Hex 0.1s before (~0.5s in)");
+    // stopped more than 0.5 s before: not "just before"
+    expect(f(157.283, 155.9, 156.5)).toBeUndefined();
+    // a stop AFTER the kicked cast's start is not it
+    expect(f(157.283, 157.29, 157.5)).toBeUndefined();
+    // a channel kick has no cast start: no fact
+    expect(f(null, 156.662, 157.156)).toBeUndefined();
+  });
+
   it("kick-eaten: without raw streams the line is unchanged (old archives)", () => {
     expect(
       kickEatenEvents([kickInst()], { id: "P1", name: "Me" })[0]!.facts[

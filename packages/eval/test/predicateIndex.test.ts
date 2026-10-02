@@ -89,6 +89,7 @@ import * as bracketKey from "@gladlog/analysis/src/utils/bracketKey";
 import * as buffDuration from "@gladlog/analysis/src/utils/buffDuration";
 import * as cannotCastIntervals from "@gladlog/analysis/src/utils/cannotCastIntervals";
 import * as gapClosers from "@gladlog/analysis/src/utils/gapClosers";
+import * as kickAudit from "@gladlog/analysis/src/utils/kickAudit";
 import * as castCancels from "@gladlog/analysis/src/utils/castCancels";
 import * as castParam from "@gladlog/analysis/src/utils/castParam";
 import * as ccTargetState from "@gladlog/analysis/src/utils/ccTargetState";
@@ -712,6 +713,16 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/gapClosers.ts`,
     symbol: "gapCloserStateAt",
     mod: gapClosers,
+  },
+  {
+    file: `${A}/utils/kickAudit.ts`,
+    symbol: "analyzeKickAudit",
+    mod: kickAudit,
+  },
+  {
+    file: `${A}/utils/kickAudit.ts`,
+    symbol: "CAST_QUEUE_TOLERANCE_MS",
+    mod: kickAudit,
   },
   {
     file: `${A}/utils/cannotCastIntervals.ts`,

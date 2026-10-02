@@ -14,10 +14,17 @@
  *  - a SPELL_CAST_FAILED of that spell (raw streams) → cancelled when the
  *    reason is an interruption (CAST_INTERRUPTED_REASONS, every client locale
  *    the corpus shows) and no control or silence aura (ccSpellIds,
- *    officialSilenceIds) landed on the owner within CANCEL_CC_NEAR_S of it; any other reason (line of sight, range,
- *    "another action is in progress") is not a cancel.
+ *    officialSilenceIds) landed on the owner within CANCEL_CC_NEAR_S of it,
+ *    nor an enemy displacement (`DISPLACEMENT_EVIDENCE_IDS`: a knockback
+ *    moves the caster and breaks the bar — user ruling A′17, 2026-09-30:
+ *    "被敌方位移(台风等)打断的读条不算骗踢"); any other reason (line of
+ *    sight, range, "another action is in progress") is not a cancel.
  * The window for all three is the next start or JUKE_LOOKBACK_MS, whichever is
- * first — the cast-bar pairing rule `kickAudit` uses.
+ * first — `kickAudit`'s cast-bar pairing rule WITHOUT its queue tolerance
+ * (`CAST_QUEUE_TOLERANCE_MS`): here a success past the next start would pair
+ * with two starts at once (codex review 2026-09-26), so a queued completion
+ * simply does not count as this start's and stays out of the median behind
+ * `progressPct`.
  *
  * `progressPct` = elapsed ÷ the owner's median completed duration of the same
  * spell in the round (haste included, since it is the owner's own cast time)
@@ -38,6 +45,7 @@
  */
 import type { AtomicArenaCombat, ICombatUnit } from "@gladlog/parser-compat";
 
+import { spellClassMap } from "../data/drCategories";
 import { ccSpellIds, officialSilenceIds } from "../data/spellTags";
 import { analyzeKickAudit, JUKE_LOOKBACK_MS } from "./kickAudit";
 import type { RawStreams } from "./rawStreams";
@@ -60,6 +68,24 @@ export const CAST_INTERRUPTED_REASONS: ReadonlySet<string> = new Set([
 
 /** A control aura this close to the failure means CC broke the cast. */
 export const CANCEL_CC_NEAR_S = 0.3;
+
+/**
+ * Enemy displacements that break a cast bar by moving the caster: the hand
+ * knockback family (`drCategories.ts`: Thunderstorm 51490, Typhoon 132469,
+ * Gorefiend's Grasp 108199) plus the daze aura Typhoon leaves, 61391 — the
+ * only trace on the victim when the knockback row itself is not logged
+ * against them (138e632d @116.9, 141470d0 @344.0).
+ *
+ * Only LANDED evidence counts (codex review of the triage entry, 10-01): the
+ * aura applied on the owner, or damage of one of these ids taken by the
+ * owner. A displacement that MISSED (IMMUNE, MISS) did not move the owner, so
+ * a stop next to it is still the owner's own.
+ */
+/** @internal exported for data/curatedIdRegistry (corpus rot scan) */
+export const DISPLACEMENT_EVIDENCE_IDS: ReadonlySet<string> = new Set([
+  ...spellClassMap.diminishingReturns.knockback.map((k) => k.spellId),
+  "61391", // Typhoon (daze aura)
+]);
 
 /** A juked kick counts as baited by a cancel when it went out from this long
  * before the cancel (the same tick) to this long after it. */
@@ -118,6 +144,19 @@ export function ownerCastCancels(params: {
         (ccSpellIds.has(a.spellId) || officialSilenceIds.has(a.spellId)),
     )
     .map((a) => sec(a.timestamp));
+  // F-K10b: landed enemy displacements on the owner (aura applied, or damage
+  // of the displacement taken)
+  const displacedAt = [
+    ...(owner.auraEvents ?? []).filter(
+      (a) =>
+        a.logLine.event === "SPELL_AURA_APPLIED" &&
+        !!a.spellId &&
+        DISPLACEMENT_EVIDENCE_IDS.has(a.spellId),
+    ),
+    ...(owner.damageIn ?? []).filter(
+      (d) => !!d.spellId && DISPLACEMENT_EVIDENCE_IDS.has(d.spellId),
+    ),
+  ].map((e) => sec(e.timestamp));
   const starts = (owner.castStartEvents ?? [])
     .map((e) => ({
       id: e.spellId ?? "",
@@ -161,6 +200,10 @@ export function ownerCastCancels(params: {
     if (kicked || !fail) return;
     if (!CAST_INTERRUPTED_REASONS.has(fail.reason.trim())) return;
     if (ccAt.some((t) => Math.abs(t - fail.tSeconds) <= CANCEL_CC_NEAR_S))
+      return;
+    if (
+      displacedAt.some((t) => Math.abs(t - fail.tSeconds) <= CANCEL_CC_NEAR_S)
+    )
       return;
     pending.push({ ...s, failS: fail.tSeconds });
   });

@@ -128,6 +128,64 @@ describe("ownerCastCancels", () => {
       rawStreams: { ...streams, castFailed: failed },
     })!;
 
+  // Triage 2026-09-29 kick-eaten F-K10b, user ruling A′17.
+  it("a cast broken by a landed enemy displacement is not the owner's own stop (138e632d @116.9, Typhoon)", () => {
+    // one completed bar (1.5 s), then a bar stopped at 10.6 s
+    const base = {
+      ...owner,
+      castStartEvents: [0, 10].map((s) => start("2061", s)),
+      spellCastEvents: [
+        makeSpellCastEvent("2061", at(1.5), "p1", "Me", "p1", "Me"),
+      ],
+      auraEvents: [],
+    };
+    const failed = [fail("2061", 10.6, "Interrupted")];
+    // control: nothing around it → a cancel
+    expect(run(base, [enemy], failed).cancels).toHaveLength(1);
+    // the Typhoon daze aura lands on the owner at the same instant
+    const dazed = {
+      ...base,
+      auraEvents: [
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "61391", at(10.6), "e1", "p1"),
+      ],
+    };
+    expect(run(dazed, [enemy], failed).cancels).toHaveLength(0);
+    // damage of a knockback (Thunderstorm 51490) taken by the owner
+    const knocked = {
+      ...base,
+      damageIn: [
+        { timestamp: at(10.5), spellId: "51490", srcUnitId: "e1", destUnitId: "p1" },
+      ],
+    };
+    expect(run(knocked as never, [enemy], failed).cancels).toHaveLength(0);
+    // a displacement outside CANCEL_CC_NEAR_S does not explain the stop
+    const late = {
+      ...base,
+      auraEvents: [
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "61391", at(11.2), "e1", "p1"),
+      ],
+    };
+    expect(run(late, [enemy], failed).cancels).toHaveLength(1);
+  });
+
+  it("a displacement that MISSED the owner does not excuse the stop — the owner was not moved (codex fixture)", () => {
+    const immune = {
+      ...owner,
+      castStartEvents: [0, 10].map((s) => start("2061", s)),
+      spellCastEvents: [
+        makeSpellCastEvent("2061", at(1.5), "p1", "Me", "p1", "Me"),
+      ],
+      auraEvents: [],
+      // Typhoon 132469 logged as SPELL_MISSED IMMUNE on the owner
+      missesIn: [
+        { timestamp: at(10.6), spellId: "132469", srcUnitId: "e1", destUnitId: "p1", missType: "IMMUNE", amount: 0 },
+      ],
+    };
+    expect(
+      run(immune as never, [enemy], [fail("2061", 10.6, "Interrupted")]).cancels,
+    ).toHaveLength(1);
+  });
+
   it("pairs a success only inside its own start window", () => {
     // Starts at 0 and 1 s, one success at 2 s: only the 1 s start completed
     // (1.0 s), so a 0.5 s cancel at 10 s is 50 % — not 25 % (the old lookup

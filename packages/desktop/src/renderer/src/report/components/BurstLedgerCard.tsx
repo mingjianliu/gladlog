@@ -243,6 +243,13 @@ export function BurstLedgerCard({
               {kk.result === "juked" && (
                 <Chip kind="bad">被假读条骗掉({kk.jukedBySpellName})</Chip>
               )}
+              {kk.result === "silenced" && (
+                <Chip kind="dim">
+                  {kk.openCastSpellName
+                    ? `沉默生效(${kk.openCastSpellName} 读条未完成)`
+                    : "沉默生效(未打断读条)"}
+                </Chip>
+              )}
               {kk.result === "missed" && <Chip kind="warn">落空</Chip>}
               {kk.result === "unknown" && (
                 <Chip kind="dim">旧档无读条数据</Chip>

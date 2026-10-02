@@ -1,3 +1,5 @@
+import { CAST_QUEUE_TOLERANCE_MS } from "@gladlog/analysis";
+
 import type { ReportSource } from "./types";
 
 /** Fallback duration (ms) for a cast bar with no matching end event -- arena
@@ -12,8 +14,13 @@ const PAIR_WINDOW_MS = 12_000;
  * A/B over 10 user matches on 2026-07-25: 10 falsely-cut bars fixed, 0
  * regressions; the more aggressive variant ("constrain by the next start of the
  * same spell + fall back to same name") fixed 8 but broke 42 (SUCCESSes from
- * proc'd instant casts get mispaired) and was rejected. */
-const QUEUE_TOLERANCE_MS = 400;
+ * proc'd instant casts get mispaired) and was rejected.
+ *
+ * The number lives in analysis (`kickAudit.ts` → `CAST_QUEUE_TOLERANCE_MS`):
+ * the kick audit's juke test bounds a cast's completion by the same rule, so
+ * a bar drawn as "cut" here and a kick called "juked" there are one fact
+ * (triage 2026-09-29, kick-priority F-B1). */
+const QUEUE_TOLERANCE_MS = CAST_QUEUE_TOLERANCE_MS;
 
 interface CastBar {
   unitId: string;

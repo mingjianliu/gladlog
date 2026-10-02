@@ -750,6 +750,10 @@ export interface IInterruptInstance {
   sourceId: string;
   sourceSpec: string;
   postKick: PostKickBehavior;
+  /** When the kicked cast's bar started, seconds since the match start; null
+   * for a channel kick with no cast start. (F-K10a reads it to find a cast
+   * the owner stopped just before.) */
+  castStartS?: number | null;
   /** Seconds until the first cast after the kick; null when idle. */
   firstActionDelayS: number | null;
   /** Seconds after the kick at which the log shows the lock was already
@@ -1956,6 +1960,9 @@ export function analyzePlayerCCAndTrinket(
       kickImmunityEnded,
       kickDepthPct,
       channelS,
+      castStartS: castStartEvent
+        ? (castStartEvent.logLine.timestamp - matchStartMs) / 1000
+        : null,
       firstActionDelayS: null,
       lockEndedBySuccessS: null,
       kickSpellId,

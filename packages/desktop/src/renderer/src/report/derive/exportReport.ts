@@ -80,12 +80,12 @@ export function buildReportMarkdown(
       "",
       "## 打断",
       "",
-      "| 玩家 | 施放 | 打断 | 被骗 | 落空 |",
-      "| --- | ---: | ---: | ---: | ---: |",
+      "| 玩家 | 施放 | 打断 | 沉默生效 | 被骗 | 落空 |",
+      "| --- | ---: | ---: | ---: | ---: | ---: |",
     );
     for (const r of kicks) {
       lines.push(
-        `| ${shortUnitName(r.name)} | ${r.total} | ${r.landed} | ${r.juked} | ${r.missed} |`,
+        `| ${shortUnitName(r.name)} | ${r.total} | ${r.landed} | ${r.silenced} | ${r.juked} | ${r.missed} |`,
       );
     }
   }

@@ -543,6 +543,14 @@ export function formatBurstLedgerForContext(
       switch (k.result) {
         case "landed":
           return `${at} ${k.kickSpellName} → interrupted ${k.interruptedSpellName}`;
+        case "silenced":
+          // "no cast interrupted" only when the target had no open cast:
+          // a silence stops a bar without a SPELL_INTERRUPT row
+          return `${at} ${k.kickSpellName} → silenced ${k.silencedTargetName} (${
+            k.openCastSpellName
+              ? `their ${k.openCastSpellName} cast did not finish`
+              : "no cast interrupted"
+          })`;
         case "juked":
           return `${at} ${k.kickSpellName} → JUKED by fake ${k.jukedBySpellName}`;
         case "missed":

@@ -585,5 +585,13 @@
  *  kick ("Riptide×3 +0.2/+0.9/+1.4s"); an empowered switching cast reads
  *  "empowered cast"; new fact `kickImmunityEnded`; the legend says which
  *  side was under pressure, never whom the kick helped.
+ *  v253 (2026-10-01): triage G11 kick audit — other F-O4, sync-burst F-L6,
+ *  kick-priority F-B1, kick-eaten F-K10a / F-K10b (rulings A35, A′17).
+ *  `Kicks:` — one entry per kick (Skull Bash's two ids), a landed silence
+ *  reads "silenced <target> (no cast interrupted)" — or "(their <spell> cast
+ *  did not finish)" when the target was mid-cast — and a kick into a stopped
+ *  cast that was then recast is "JUKED", not "hit nothing". kick-eaten: new
+ *  fact `stoppedJustBefore`; a cast broken by an enemy displacement is not
+ *  one of `yourCancels`; `baitedKicks` follows the juke rule.
  */
-export const PROMPT_VERSION = 252;
+export const PROMPT_VERSION = 253;

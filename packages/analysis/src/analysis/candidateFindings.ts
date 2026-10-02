@@ -1389,6 +1389,7 @@ export function kickEatenEvents(
         | "ownerImmobileBy"
         | "kickImmunityEnded"
         | "switchWasEmpowered"
+        | "castStartS"
       >
     > &
     Partial<
@@ -1603,6 +1604,7 @@ export function kickEatenEvents(
         postKick: postKickFact(k, pressed),
         ...(p ? kickPressureFacts(p) : {}),
         ...(cancels ? castCancelFacts(cancels, k.sourceName) : {}),
+        ...(cancels ? stoppedJustBeforeFact(cancels, k.castStartS) : {}),
       },
     }));
 }
@@ -1778,6 +1780,36 @@ function castCancelFacts(
             .join(" + "),
         }
       : {}),
+  };
+}
+
+/** How close before the kicked cast's start a self-stopped cast counts as
+ * "just before" (user ruling A35, 2026-09-30: 0.5 s). */
+export const STOPPED_JUST_BEFORE_S = 0.5;
+
+/** `stoppedJustBefore=<spell> Ns before (~Ms in)`: the owner stopped a cast
+ * themselves at most `STOPPED_JUST_BEFORE_S` before starting the cast that
+ * was kicked — N s before that start, M s into the stopped bar. A fact only
+ * (ruling A35): the round-wide counts could not say that the player had just
+ * stopped a cast when the kick landed on the next one, so "fake first" was
+ * coached to someone who had (5e8b11c1 @157.3: Hex stopped 0.13 s before the
+ * Healing Wave that was kicked). Read off the same `cancels` list as the
+ * other cast-control facts (`ownerCastCancels`). */
+function stoppedJustBeforeFact(
+  c: OwnerCastCancels,
+  castStartS: number | null | undefined,
+): Record<string, string> {
+  if (castStartS == null) return {};
+  const stop = c.cancels
+    .filter(
+      (x) =>
+        x.cancelS <= castStartS &&
+        castStartS - x.cancelS <= STOPPED_JUST_BEFORE_S,
+    )
+    .sort((a, b) => b.cancelS - a.cancelS)[0];
+  if (!stop) return {};
+  return {
+    stoppedJustBefore: `${getEnglishSpellName(stop.spellId, stop.spellName)} ${(castStartS - stop.cancelS).toFixed(1)}s before (~${(stop.cancelS - stop.startS).toFixed(1)}s in)`,
   };
 }
 
