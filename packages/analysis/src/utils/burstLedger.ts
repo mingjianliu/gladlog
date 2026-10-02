@@ -9,6 +9,7 @@ import type { IKickAuditEntry } from "./kickAudit";
 import { MIN_WINDOW_SECONDS } from "./killWindowTargetSelection";
 import { IOffensiveWindow } from "./offensiveWindows";
 import { fmtTime } from "./renderGrid";
+import { FULL_IMMUNITY_IDS } from "./enemyDefensives";
 import { buildFilteredAuraIntervals } from "./utils";
 
 type SpellEntry = { type: string };
@@ -292,7 +293,12 @@ export function analyzeBurstLedger(
           // must be English (lesson from the CJK leak audit)
           spellName: getEnglishSpellName(iv.spellId, iv.spellName),
           overlapSeconds: Math.round(overlapMs / 100) / 10,
-          isImmunity: SPELLS[iv.spellId]?.type === "immunities",
+          // User ruling F-BI-full (2026-10-02, same rule as F-K9b-B): only a
+          // FULL immunity (Ice Block, Divine Shield, Aspect of the Turtle) is
+          // "IMMUNE". Cloak of Shadows / Blessing of Protection / Spellwarding
+          // stop one kind of damage — a burst through Cloak still lands its
+          // physical part — so they show as the target's defensive.
+          isImmunity: FULL_IMMUNITY_IDS.has(iv.spellId),
           appliedByOther: iv.srcUnitName !== target.name,
           casterName: iv.srcUnitName,
           startOffsetSeconds: Math.round((iv.startMs - fromMs) / 100) / 10,

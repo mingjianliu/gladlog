@@ -89,6 +89,7 @@ import {
 } from "../utils/dispelAnalysis";
 import { computeDampening } from "../utils/dampening";
 import { drResetMsAt } from "../utils/drAnalysis";
+import { SCHOOL_LIMITED_IMMUNITY_IDS } from "../utils/enemyDefensives";
 import { reconstructEnemyCDTimeline } from "../utils/enemyCDs";
 import { kickCastSpellId } from "../utils/enemyInterrupts";
 import {
@@ -3761,8 +3762,13 @@ function dpsOwnerEvents(
       // Priced on the unit that CARRIES the aura: a Flameshaper's Obsidian
       // Scales is 30 % on the Evoker and 15 % on the ally it was cast on, and
       // the ally's copy sat exactly on this door until 2026-09-12.
+      // A school-limited immunity (Cloak / BoP / Spellwarding) is no longer
+      // `isImmunity` (ruling F-BI-full) but is not a mitigation wall either:
+      // it stays out of this accusation, exactly as before.
       const hits = t.defensivesHit
-        .filter((d) => !d.isImmunity)
+        .filter(
+          (d) => !d.isImmunity && !SCHOOL_LIMITED_IMMUNITY_IDS.has(d.spellId),
+        )
         .map((d) => {
           // GH #96 M3a: priced through the component resolver (door = the
           // strongest component's lower bound; immunity components included,

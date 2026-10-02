@@ -739,5 +739,11 @@
  *  horror (196364, 87204) locks the dispeller; a Storm Conduit holder's
  *  interrupted Lightning Bolt / Chain Lightning locks for ×0.6 (kick-eaten
  *  `lockout=`, [CONSEQ], [RES] `cc:[kick]`, cannot-cast feasibility).
+ *  v274 (2026-10-02, user ruling F-BI-full): the burst ledger's "⚠ Target
+ *  was IMMUNE" (and the desktop 打进免疫 chip) counts only a FULL immunity —
+ *  Ice Block, Divine Shield, Aspect of the Turtle (`FULL_IMMUNITY_IDS`, the
+ *  F-K9b-B split). Cloak of Shadows, Blessing of Protection and Blessing of
+ *  Spellwarding show as the target's defensive ("Target had a major
+ *  defensive up"); burst-into-mitigation still ignores them.
  */
-export const PROMPT_VERSION = 273;
+export const PROMPT_VERSION = 274;
