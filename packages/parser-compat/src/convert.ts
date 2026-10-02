@@ -315,15 +315,29 @@ function convertUnit(
       };
     }),
     ...unit.absorbsIn.map((event) => {
-      const isPetDest = isPetOrGuardian(event.srcId, allUnits);
+      // The row's dest is the unit that was HIT, not the unit whose shield ate
+      // the hit: with the shield owner there, a healer's Power Word: Shield on
+      // a teammate turned the healer into the target of every hit it absorbed
+      // (kill-attempt focus, burst-ledger target, off-target damage). An event
+      // stored before `victimId` existed has only the shield owner to offer.
+      const victimId =
+        event.victimId && event.victimId !== "0000000000000000"
+          ? event.victimId
+          : event.srcId;
+      const isPetDest = isPetOrGuardian(victimId, allUnits);
       return {
         spellId: String(event.spellId),
         spellName: event.spellName,
         timestamp: event.timestamp,
         srcUnitId: event.attackerId,
         srcUnitName: event.destName,
-        destUnitId: event.srcId,
-        destUnitName: event.srcName,
+        destUnitId: victimId,
+        // GladAbsorbEvent carries no victim name (srcName is the shield
+        // owner, destName the attacker), so it comes from the roster.
+        destUnitName:
+          victimId === event.srcId
+            ? event.srcName
+            : (allUnits?.[victimId]?.name ?? ""),
         amount: event.absorbedAmount,
         effectiveAmount: isPetDest ? 0 : event.absorbedAmount,
         absorbedAmount: event.absorbedAmount,

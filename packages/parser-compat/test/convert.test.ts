@@ -239,12 +239,72 @@ describe("absorb attribution + damage effective semantics (adjudication #13, rea
     expect(abs).toEqual([814, 21986]);
   });
 
+  it("absorb rows name the unit that was HIT as dest, not the shield owner", () => {
+    // Own-Z's shield ate the hit on Vic-Y. With the shield owner as dest, a
+    // healer's shield on a teammate made the healer the "target" of the hit.
+    const abs = atk.damageOut.filter(
+      (e) => e.logLine.event === LogEvent.SPELL_ABSORBED,
+    );
+    expect(abs.map((e) => e.destUnitId)).toEqual([
+      "Player-2-VIC",
+      "Player-2-VIC",
+    ]);
+    expect(abs.map((e) => e.destUnitName)).toEqual(["Vic-Y", "Vic-Y"]);
+    expect(abs.map((e) => e.srcUnitId)).toEqual([
+      "Player-1-ATK",
+      "Player-1-ATK",
+    ]);
+  });
+
   it("legacy damage effectiveAmount subtracts the absorbed param: -(100-0-30) = -70", () => {
     const dmg = atk.damageOut.filter(
       (e) => e.logLine.event === LogEvent.SPELL_DAMAGE,
     );
     expect(dmg[0]!.effectiveAmount).toBe(-70);
     expect(dmg[0]!.amount).toBe(-100);
+  });
+});
+
+describe("damageOut absorb rows: pet zeroing follows the victim, not the shield owner", () => {
+  const PET = "Pet-0-1-1-1-165189-01P";
+  const TOTEM = "Creature-0-1-1-1-100943-01T";
+  // A player's shield eats a hit on a PET: a row onto a pet is zeroed
+  // (adjudication #17), whoever owns the shield.
+  const ABS_ON_PET = `SPELL_ABSORBED,Player-1-ATK,"Atk-X",0x548,0x80000000,${PET},"Kitty",0x1112,0x80000000,50622,"Bladestorm",0x1,Player-3-OWN,"Own-Z",0x511,0x80000000,17,"Power Word: Shield",0x2,500,900,nil`;
+  // A GUARDIAN's shield (Earthen Wall Totem) eats a hit on a PLAYER: the hit
+  // was on a player, so it counts.
+  const ABS_BY_TOTEM = `SPELL_ABSORBED,Player-1-ATK,"Atk-X",0x548,0x80000000,Player-2-VIC,"Vic-Y",0x10512,0x80000000,50622,"Bladestorm",0x1,${TOTEM},"Earthen Wall Totem",0x2112,0x80000000,201633,"Earthen Wall",0x8,700,900,nil`;
+  // Give the roster the pet and the totem (a SPELL_ABSORBED alone names no
+  // base units), each with the flags that decide its kind.
+  const PET_SEEN = `SPELL_AURA_APPLIED,${PET},"Kitty",0x1112,0x80000000,${PET},"Kitty",0x1112,0x80000000,136,"Mend Pet",0x8,BUFF`;
+  const TOTEM_SEEN = `SPELL_AURA_APPLIED,${TOTEM},"Earthen Wall Totem",0x2112,0x80000000,Player-2-VIC,"Vic-Y",0x10512,0x80000000,201633,"Earthen Wall",0x8,BUFF`;
+  const { matches } = parseLines([
+    "ARENA_MATCH_START,1825,41,3v3,1",
+    CI("Player-1-ATK", 0, 71, 2000),
+    CI("Player-2-VIC", 1, 257, 2380),
+    CI("Player-3-OWN", 1, 256, 2380),
+    PET_SEEN,
+    TOTEM_SEEN,
+    ABS_ON_PET,
+    ABS_BY_TOTEM,
+    "ARENA_MATCH_END,0,30,1500,1501",
+  ]);
+  const legacy = toLegacyMatch(matches[0]!);
+  const rows = legacy.units["Player-1-ATK"]!.damageOut.filter(
+    (e) => e.logLine.event === LogEvent.SPELL_ABSORBED,
+  );
+
+  it("a hit absorbed on a pet is zeroed even though a player owns the shield", () => {
+    const onPet = rows.find((e) => e.destUnitId === PET)!;
+    expect(onPet.destUnitName).toBe("Kitty");
+    expect(onPet.effectiveAmount).toBe(0);
+    expect(onPet.amount).toBe(500);
+  });
+
+  it("a hit absorbed on a player counts even though a guardian owns the shield", () => {
+    const onPlayer = rows.find((e) => e.destUnitId === "Player-2-VIC")!;
+    expect(onPlayer.destUnitName).toBe("Vic-Y");
+    expect(onPlayer.effectiveAmount).toBe(700);
   });
 });
 

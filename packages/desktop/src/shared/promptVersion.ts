@@ -629,5 +629,12 @@
  *  not-released tags, 4 [EMPOWER L?] tags move to the press that released, 38
  *  missed-cleanse items change casting facts (25 owner, 13 teammate), +3
  *  [CC ON TEAM] lines.
+ *  v259 (2026-10-01, triage death-kill F-K3, user-approved): a hit a shield
+ *  ate is damage to the unit that was HIT — the attacker's absorb rows named
+ *  the shield's owner, so a healer shielding a teammate became the "target".
+ *  605 files: +1 burst-into-mitigation (the burst's real target sat in an
+ *  external); KILL ATTEMPTS rows 29,055 -> 28,115 with the target changed in
+ *  117 rounds, burst-ledger `Target:` changed on 314 owner files; Off-target,
+ *  [KILL WINDOW] and [VULNERABLE] damage follow.
  */
-export const PROMPT_VERSION = 258;
+export const PROMPT_VERSION = 259;
