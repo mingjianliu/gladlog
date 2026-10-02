@@ -406,6 +406,57 @@ export function getInterruptImmunityConditions(
   }));
 }
 
+/**
+ * When the owner was interrupt-immune through a PvP talent
+ * (`getInterruptImmunityConditions`): the condition aura's APPLIED / REFRESH
+ * to its REMOVED on the owner, epoch ms; an aura still up at the end closes
+ * at `endMs`. One builder for the timeline's "enemy interrupts UP" correction
+ * (B139) and kick-eaten's `kickImmunityEnded` fact (triage F-K14b).
+ */
+export function interruptImmuneWindows(
+  owner: {
+    info?: { pvpTalents?: string[] } | null;
+    auraEvents?: ReadonlyArray<{
+      spellId?: string | null;
+      timestamp: number;
+      logLine: { event: string };
+    }>;
+  },
+  endMs: number,
+): Array<{ from: number; to: number; reason: string; auraName: string }> {
+  const out: Array<{
+    from: number;
+    to: number;
+    reason: string;
+    auraName: string;
+  }> = [];
+  for (const cond of getInterruptImmunityConditions(owner.info?.pvpTalents)) {
+    const reason = cond.conditionName
+      ? `${cond.name} + ${cond.conditionName}`
+      : cond.name;
+    const auraName = cond.conditionName || cond.name;
+    let openFrom: number | null = null;
+    for (const a of owner.auraEvents ?? []) {
+      if (a.spellId !== cond.conditionAuraId) continue;
+      if (
+        a.logLine.event === "SPELL_AURA_APPLIED" ||
+        a.logLine.event === "SPELL_AURA_REFRESH"
+      ) {
+        if (openFrom === null) openFrom = a.timestamp;
+      } else if (
+        a.logLine.event === "SPELL_AURA_REMOVED" &&
+        openFrom !== null
+      ) {
+        out.push({ from: openFrom, to: a.timestamp, reason, auraName });
+        openFrom = null;
+      }
+    }
+    if (openFrom !== null)
+      out.push({ from: openFrom, to: endMs, reason, auraName });
+  }
+  return out;
+}
+
 /** PvP talents that grant an OFFENSIVE purge (dispelling beneficial effects from ENEMIES). */
 /** @internal exported for data/curatedIdRegistry (corpus rot scan) */
 export const OFFENSIVE_PURGE_TALENT_IDS = new Set([

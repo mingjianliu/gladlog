@@ -580,5 +580,10 @@
  *  in range whose kick came back during the cast); a kicker in
  *  hard CC or a silence is no longer counted; no `yourReachYd` for a
  *  caster-centred spell.
+ *  v252 (2026-10-01): triage kick-eaten F-K7f / F-K13 / F-K14b / F-K4
+ *  (rulings A′2 = B, U1). `postKick` presses carry their offset after the
+ *  kick ("Riptide×3 +0.2/+0.9/+1.4s"); an empowered switching cast reads
+ *  "empowered cast"; new fact `kickImmunityEnded`; the legend says which
+ *  side was under pressure, never whom the kick helped.
  */
-export const PROMPT_VERSION = 251;
+export const PROMPT_VERSION = 252;

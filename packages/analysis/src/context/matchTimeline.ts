@@ -96,7 +96,7 @@ import {
 import { fmtTime, toRenderSecond } from "../utils/renderGrid";
 import { resourceDeltaPct } from "../utils/resourceAt";
 import { SUMMON_REACH_MIN_S, summonReach } from "../utils/summonReachability";
-import { getInterruptImmunityConditions } from "../utils/talentBehaviors";
+import { interruptImmuneWindows as interruptImmuneWindowsOf } from "../utils/talentBehaviors";
 import {
   BURST_ANSWERED_LEGEND,
   formatBurstAnsweredLines,
@@ -1479,41 +1479,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   // Scales, Zen Focus Tea → Thunder Focus Tea). Each is a passive with no marker aura gated on a normal CD
   // aura, so it's driven by the talentBehaviors catalog (gated on pvpTalents). Used to correct the "enemy
   // interrupts UP" note on the owner's channels — a kick that cannot land is not a risk.
-  const interruptImmunityConditions = getInterruptImmunityConditions(
-    owner.info?.pvpTalents,
-  );
-  const interruptImmuneWindows: Array<{
-    from: number;
-    to: number;
-    reason: string;
-  }> = [];
-  for (const cond of interruptImmunityConditions) {
-    const reason = cond.conditionName
-      ? `${cond.name} + ${cond.conditionName}`
-      : cond.name;
-    let openFrom: number | null = null;
-    for (const a of owner.auraEvents ?? []) {
-      if (a.spellId !== cond.conditionAuraId) continue;
-      if (
-        a.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
-        a.logLine.event === LogEvent.SPELL_AURA_REFRESH
-      ) {
-        if (openFrom === null) openFrom = a.timestamp;
-      } else if (
-        a.logLine.event === LogEvent.SPELL_AURA_REMOVED &&
-        openFrom !== null
-      ) {
-        interruptImmuneWindows.push({
-          from: openFrom,
-          to: a.timestamp,
-          reason,
-        });
-        openFrom = null;
-      }
-    }
-    if (openFrom !== null)
-      interruptImmuneWindows.push({ from: openFrom, to: matchEndMs, reason });
-  }
+  const interruptImmuneWindows = interruptImmuneWindowsOf(owner, matchEndMs);
   function ownerInterruptImmuneReasonAt(
     timeSeconds: number,
   ): string | undefined {

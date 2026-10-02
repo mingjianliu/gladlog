@@ -42,6 +42,10 @@ import {
   dropKeyRepeatRejects,
   NOT_READY_REASONS,
 } from "@gladlog/analysis/src/analysis/candidates/shared";
+import {
+  schoolLockedBy,
+  spellSchoolMask,
+} from "@gladlog/analysis/src/data/spellSchools";
 import { POST_KICK_WINDOW_S } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
 import { castFailedInWindow } from "@gladlog/analysis/src/utils/rawStreams";
 import { GladLogParser, type GladMatch } from "@gladlog/parser";
@@ -123,6 +127,10 @@ for (const f of files) {
         const menuIds = new Set(
           ownerKickEatenEvents(ctx, cc.interruptInstances).map((e) => e.id),
         );
+        const ownerCasts = (owner.spellCastEvents ?? []).map((e) => ({
+          spellId: String(e.spellId ?? ""),
+          tSeconds: (e.logLine.timestamp - legacy.startTime) / 1000,
+        }));
         const recorder =
           rawStreams?.castFailed.some((e) => e.unitGuid === owner.id) ?? false;
         for (const k of cc.interruptInstances) {
@@ -154,15 +162,8 @@ for (const f of files) {
                 k.atSeconds + POST_KICK_WINDOW_S,
               ).filter((h) => h.tSeconds > k.atSeconds)
             : [];
-          const kept = new Set(
-            dropKeyRepeatRejects(
-              raw,
-              (owner.spellCastEvents ?? []).map((e) => ({
-                spellId: String(e.spellId ?? ""),
-                tSeconds: (e.logLine.timestamp - legacy.startTime) / 1000,
-              })),
-            ),
-          );
+          const kept = new Set(dropKeyRepeatRejects(raw, ownerCasts));
+          const lockMask = spellSchoolMask(k.interruptedSpellId);
           rows.push(
             JSON.stringify({
               file: f,
@@ -179,12 +180,31 @@ for (const f of files) {
               listed: isListed,
               lockout: k.lockoutDurationSeconds,
               lockEndedBySuccessS: k.lockEndedBySuccessS ?? null,
-              rejects: raw.map((h) => ({
-                dt: Math.round((h.tSeconds - k.atSeconds) * 1000) / 1000,
-                id: String(h.spellId),
-                nr: NOT_READY_REASONS.has(h.reason),
-                kr: !kept.has(h),
-              })),
+              rejects: raw.map((h) => {
+                const m = spellSchoolMask(String(h.spellId));
+                const lastOwn = ownerCasts
+                  .filter(
+                    (c) =>
+                      c.spellId === String(h.spellId) &&
+                      c.tSeconds <= h.tSeconds,
+                  )
+                  .reduce((a, c) => Math.max(a, c.tSeconds), -Infinity);
+                return {
+                  dt: Math.round((h.tSeconds - k.atSeconds) * 1000) / 1000,
+                  id: String(h.spellId),
+                  nr: NOT_READY_REASONS.has(h.reason),
+                  kr: !kept.has(h),
+                  // seconds since the same spell last succeeded (null = never)
+                  gap: Number.isFinite(lastOwn)
+                    ? Math.round((h.tSeconds - lastOwn) * 1000) / 1000
+                    : null,
+                  // does the kick's lock cover this spell (null = unknown school)
+                  sl:
+                    lockMask === undefined || m === undefined
+                      ? null
+                      : schoolLockedBy(m, lockMask),
+                };
+              }),
               srcCasts,
               facts: ev?.facts ?? null,
             }),

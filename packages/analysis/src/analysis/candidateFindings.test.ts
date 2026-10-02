@@ -1802,7 +1802,7 @@ describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
         ownerCasts: [{ spellId: "853", tSeconds: 94.13 }],
       },
     )[0]!.facts["postKick"]!;
-    expect(f).toContain("pressed 1x but rejected (Hammer of Justice) inside the lockout");
+    expect(f).toContain("pressed 1x but rejected (Hammer of Justice +2.3s) inside the lockout");
   });
 
   it("kick-eaten: without raw streams the line is unchanged (old archives)", () => {
@@ -1854,7 +1854,7 @@ describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
       ],
     );
     expect(f).toBe(
-      "acted on another school 1.4s later (Echo; not a hard cast); pressed 4x but rejected (Verdant Embrace×2、Reversion×2) inside the lockout; outside the locked school 1x not ready yet — its own cooldown or the GCD (Reversion)",
+      "acted on another school 1.4s later (Echo; not a hard cast); pressed 4x but rejected (Verdant Embrace×2 +0.9/+1.1s、Reversion×2 +2.6/+2.7s) inside the lockout; outside the locked school 1x not ready yet — its own cooldown or the GCD (Reversion +4.2s)",
     );
     expect(f).not.toContain(", ");
   });
@@ -1884,7 +1884,7 @@ describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
       [{ spellId: "78674", tSeconds: 100.8 }],
     );
     expect(f).toBe(
-      "acted on another school 0.8s later (Starsurge; not a hard cast); outside the locked school 2x not ready yet — its own cooldown or the GCD (Starsurge×2)",
+      "acted on another school 0.8s later (Starsurge; not a hard cast); outside the locked school 2x not ready yet — its own cooldown or the GCD (Starsurge×2 +1.5/+2.4s)",
     );
   });
 
@@ -1904,7 +1904,7 @@ describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
       [{ spellId: "366155", tSeconds: 101.3 }],
     );
     expect(f).toBe(
-      "acted on another school 1.3s later (Reversion; not a hard cast); pressed 1x but rejected (Reversion) inside the lockout; outside the locked school 1x not ready yet — its own cooldown or the GCD (Reversion)",
+      "acted on another school 1.3s later (Reversion; not a hard cast); pressed 1x but rejected (Reversion +1.4s) inside the lockout; outside the locked school 1x not ready yet — its own cooldown or the GCD (Reversion +1.6s)",
     );
   });
 
@@ -1943,7 +1943,7 @@ describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
       [{ spellId: "444995", tSeconds: 238.673 }],
     );
     expect(f).toBe(
-      "pressed 1x but rejected (Surging Totem) inside the lockout; first successful cast 1.0s later",
+      "pressed 1x but rejected (Surging Totem +0.4s) inside the lockout; first successful cast 1.0s later",
     );
   });
 
@@ -1966,6 +1966,66 @@ describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
     expect(f).toBe("first cast 0.7s later");
   });
 
+  it("kick-eaten: every press carries its offset after the kick; a repeated spell lists them in order (F-K7f, 141470d0 @198)", () => {
+    const f = postKickOf(
+      natureKick({
+        atSeconds: 198.268,
+        postKick: "switched",
+        switchSpellName: "Echo",
+        switchDelayS: 1.3,
+        switchWasHardCast: false,
+      }),
+      [
+        failed(200.818, 366155), // Reversion, +2.55 s → floored +2.5
+        failed(202.248, 355913), // Emerald Blossom-side id, +3.98 s → +3.9
+        failed(198.3, 360995),
+        failed(198.61, 360995),
+        failed(200.1, 360995),
+      ],
+    );
+    expect(f).toContain(
+      "pressed 3x but rejected (Verdant Embrace×3 +0.0/+0.3/+1.8s) inside the lockout",
+    );
+    expect(f).toContain("(Reversion +2.5s");
+    expect(f).not.toContain(", ");
+  });
+
+  it("kick-eaten: an empowered switching cast is not 'not a hard cast' (F-K13, 02c8e3ac @33.9)", () => {
+    const base = {
+      postKick: "switched" as const,
+      switchSpellName: "Fire Breath",
+      switchDelayS: 2.4,
+      switchWasHardCast: false,
+    };
+    expect(postKickOf(natureKick({ ...base, switchWasEmpowered: true }), [])).toBe(
+      "acted on another school 2.4s later (Fire Breath; empowered cast)",
+    );
+    // no empower data (old archive) or not an empower: today's qualifier
+    expect(postKickOf(natureKick({ ...base, switchWasEmpowered: null }), [])).toBe(
+      "acted on another school 2.4s later (Fire Breath; not a hard cast)",
+    );
+    expect(postKickOf(natureKick({ ...base, switchWasEmpowered: false }), [])).toBe(
+      "acted on another school 2.4s later (Fire Breath; not a hard cast)",
+    );
+  });
+
+  it("kick-eaten: a cast started under an interrupt immunity that ran out is a fact (F-K14b, 3306e8ee @40.3)", () => {
+    const f = kickEatenEvents(
+      [
+        natureKick({
+          kickImmunityEnded: { auraName: "Obsidian Scales", intoCastS: 0.158 },
+        }),
+      ],
+      { id: "P1", name: "Me" },
+    )[0]!.facts;
+    expect(f["kickImmunityEnded"]).toBe("Obsidian Scales 0.2s into the cast");
+    expect(
+      kickEatenEvents([natureKick()], { id: "P1", name: "Me" })[0]!.facts[
+        "kickImmunityEnded"
+      ],
+    ).toBeUndefined();
+  });
+
   it("kick-eaten: without a locked-school success the modelled lockout bounds the rejects as before (F-K7a)", () => {
     const f = postKickOf(
       kickInst({
@@ -1980,7 +2040,7 @@ describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
       [failed(238.158, 444995), failed(239.231, 61295), failed(239.8, 61295)],
     );
     expect(f).toBe(
-      "pressed 2x but rejected (Surging Totem、Riptide) inside the lockout; first successful cast 2.4s later",
+      "pressed 2x but rejected (Surging Totem +0.4s、Riptide +1.5s) inside the lockout; first successful cast 2.4s later",
     );
   });
 });

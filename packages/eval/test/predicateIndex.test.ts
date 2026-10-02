@@ -719,6 +719,11 @@ const INDEX: PredicateRow[] = [
     mod: cannotCastIntervals,
   },
   {
+    file: `${A}/utils/talentBehaviors.ts`,
+    symbol: "interruptImmuneWindows",
+    mod: talentBehaviors,
+  },
+  {
     file: `${E}/quality/promptQualityCheck.ts`,
     symbol: "checkKickWaitedOutConsistency",
     mod: promptQualityCheck,

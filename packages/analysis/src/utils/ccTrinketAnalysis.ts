@@ -72,6 +72,7 @@ import { isSilenceableCast } from "./spellMechanics";
 import { rootIntervalsOf } from "./rootReachability";
 import { RANGE_HITBOX_SLACK_YD, spellRangeForCaster } from "./spellRange";
 import { medianFinite } from "./stats";
+import { interruptImmuneWindows } from "./talentBehaviors";
 import { getTalentAvoidanceBuffs } from "./talentBehaviors";
 import { DPS_TRINKET_CD_S, HEALER_TRINKET_CD_S } from "./trinketCooldown";
 
@@ -797,6 +798,19 @@ export interface IInterruptInstance {
    * trinket — while the prompt asserted "kept playing through the lockout".
    * The classification itself is unchanged; only what the line may CLAIM is. */
   switchWasHardCast: boolean | null;
+  /** `switched` only: the switching cast was an EMPOWERED cast — its
+   * SPELL_EMPOWER_END follows within `CAST_START_LOOKBACK_S`. An empower
+   * logs SPELL_EMPOWER_START, never SPELL_CAST_START, so `switchWasHardCast`
+   * is false for it and the line said "not a hard cast" of a held Fire
+   * Breath (triage F-K13, 02c8e3ac @33.9). null when the unit carries no
+   * empower data (old archives) — then nothing is claimed. The severity rank
+   * reads `switchWasHardCast` only and is unchanged. */
+  switchWasEmpowered?: boolean | null;
+  /** The cast began while a PvP-talent interrupt immunity was up
+   * (`interruptImmuneWindows`) and the immunity ended this many seconds into
+   * it, before the kick (triage F-K14b, 3306e8ee @40.3: Eruption started
+   * 0.16 s before Obsidian Scales fell off). null otherwise. */
+  kickImmunityEnded?: { auraName: string; intoCastS: number } | null;
   /** Distance in yards to the nearest enemy kicker at cast start (GH #73, B6).
    * "Kicker" here and in `kickersInRange` = an enemy whose kick was READY at
    * cast start and whom no aura stopped from using it then — hard CC, or a
@@ -940,6 +954,10 @@ export const LOCK_IGNORING_CAST_IDS: ReadonlySet<string> = new Set([
  * instant a hardcast — the conservative direction for a line whose whole
  * point is not to over-claim "kept casting". */
 export const CAST_START_LOOKBACK_S = 6;
+
+/** An empower's END may be logged a few ms before the SUCCESS row it belongs
+ * to is read (same-tick ordering). */
+const EMPOWER_START_SLACK_MS = 50;
 
 export interface IPlayerCCTrinketSummary {
   playerName: string;
@@ -1626,6 +1644,11 @@ export function analyzePlayerCCAndTrinket(
       if (a.srcUnitId && !enemyIds.has(a.srcUnitId))
         hostileToEnemies.add(a.srcUnitId);
 
+  const ownerInterruptImmuneWindows = interruptImmuneWindows(
+    player,
+    combat.endTime,
+  );
+
   const interruptInstances: IInterruptInstance[] = [];
   for (const action of player.actionIn) {
     if (action.logLine.event !== LogEvent.SPELL_INTERRUPT) continue;
@@ -1666,6 +1689,8 @@ export function analyzePlayerCCAndTrinket(
     let sourceKickReadyInS: number | null = null;
     let sourceGapCloser: GapCloserState | null = null;
     let ownerImmobileBy: string | null = null;
+    let kickImmunityEnded: { auraName: string; intoCastS: number } | null =
+      null;
     let kickDepthPct: number | null = null;
 
     // W1k: for an officially channelled spell (CHANNELED_SPELL_IDS, DB2
@@ -1696,6 +1721,13 @@ export function analyzePlayerCCAndTrinket(
     if (castStartEvent) {
       const castStartMs = castStartEvent.logLine.timestamp;
       const elapsedS = Math.max(0, (action.timestamp - castStartMs) / 1000);
+      // The divisor is a median on purpose. Triage F-K11 proposed the nearest
+      // completed cast of the same spell (the same haste buffs); measured
+      // leave-one-out on 605 S2 files (36,330 completed bars) it predicts a
+      // bar's own length WORSE than the round median: mean error 9.7 % vs
+      // 8.9 %, p95 39.8 % vs 32.2 % (per-cast procs change cast times more
+      // than slow haste buffs do). A haste-aware divisor needs the haste
+      // auras themselves, not a neighbour.
       const nominalS =
         hardcastHealSpell(interruptedSpellId)?.medianCastS ??
         getPlayerCompletedMedian(interruptedSpellId);
@@ -1713,6 +1745,20 @@ export function analyzePlayerCCAndTrinket(
         castStartMs,
         LOS_SWEEP_GAP_MS,
       );
+
+      // F-K14b: the cast started under an interrupt immunity that ran out
+      // before the kick
+      const immune = ownerInterruptImmuneWindows.find(
+        (w) =>
+          w.from <= castStartMs &&
+          castStartMs < w.to &&
+          w.to <= action.timestamp,
+      );
+      if (immune)
+        kickImmunityEnded = {
+          auraName: immune.auraName,
+          intoCastS: (immune.to - castStartMs) / 1000,
+        };
 
       // F-K6d: the owner could not have stepped away while rooted or in hard
       // CC at cast start
@@ -1896,6 +1942,7 @@ export function analyzePlayerCCAndTrinket(
       switchSpellName: null,
       switchDelayS: null,
       switchWasHardCast: null,
+      switchWasEmpowered: null,
       nearestKickerDistYd,
       nearestKickerName,
       kickersInRange,
@@ -1906,6 +1953,7 @@ export function analyzePlayerCCAndTrinket(
       sourceKickReadyInS,
       sourceGapCloser,
       ownerImmobileBy,
+      kickImmunityEnded,
       kickDepthPct,
       channelS,
       firstActionDelayS: null,
@@ -2025,6 +2073,17 @@ export function analyzePlayerCCAndTrinket(
                 st.spellId === switchCast.spellId &&
                 st.t <= switchCast.t &&
                 st.t >= switchCast.t - CAST_START_LOOKBACK_S,
+            )
+          : null;
+        // An empower's SPELL_CAST_SUCCESS is logged when the hold BEGINS
+        // (with SPELL_EMPOWER_START); its SPELL_EMPOWER_END follows at the
+        // release.
+        inst.switchWasEmpowered = Array.isArray(player.empowerEnds)
+          ? player.empowerEnds.some(
+              (e) =>
+                e.spellId === switchCast.spellId &&
+                e.timestamp >= switchCast.ms - EMPOWER_START_SLACK_MS &&
+                e.timestamp <= switchCast.ms + CAST_START_LOOKBACK_S * 1000,
             )
           : null;
       }

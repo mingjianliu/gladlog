@@ -1261,6 +1261,33 @@ function joinSpellCounts(names: string[]): string {
   return [...counts].map(([n, c]) => (c > 1 ? `${n}×${c}` : n)).join("、");
 }
 
+/** `joinSpellCounts` for presses made after a kick, with WHEN each was made:
+ * "Reversion +2.5s、Rescue +3.9s", a repeated spell as
+ * "Riptide×5 +0.0/+0.3/+1.8/+1.9/+2.1s". Offsets are seconds after the
+ * kick, floored to 0.1 s. Without them the model invented an order (triage
+ * 2026-09-29 F-K7f, 141470d0 @198: Reversion at +2.5 s and Rescue at +3.9 s
+ * read as presses made at once). No ", " inside (`checkFactsBlockIntegrity`). */
+function joinPressesWithOffsets(
+  presses: CastFailedEvent[],
+  kickS: number,
+): string {
+  const bySpell = new Map<string, number[]>();
+  for (const h of [...presses].sort((a, b) => a.tSeconds - b.tSeconds)) {
+    const name = getEnglishSpellName(String(h.spellId), h.spellName);
+    const list = bySpell.get(name) ?? [];
+    list.push(h.tSeconds - kickS);
+    bySpell.set(name, list);
+  }
+  // the epsilon keeps 101.3 − 100 (= 1.2999…) from flooring to +1.2
+  const off = (d: number) => `+${(Math.floor(d * 10 + 1e-6) / 10).toFixed(1)}`;
+  return [...bySpell]
+    .map(
+      ([n, ds]) =>
+        `${n}${ds.length > 1 ? `×${ds.length}` : ""} ${ds.map(off).join("/")}s`,
+    )
+    .join("、");
+}
+
 /** missed-purge mapping (pure function): a high-value enemy buff ran its full
  * duration without being purged. Only Critical/High, or windows falling inside
  * one of our kill windows, are reported; windows where purge was on cooldown
@@ -1360,6 +1387,8 @@ export function kickEatenEvents(
         | "sourceKickReadyInS"
         | "sourceGapCloser"
         | "ownerImmobileBy"
+        | "kickImmunityEnded"
+        | "switchWasEmpowered"
       >
     > &
     Partial<
@@ -1520,6 +1549,11 @@ export function kickEatenEvents(
           : {}),
         ...(k.kickDepthPct != null
           ? { kickDepthPct: String(k.kickDepthPct) }
+          : {}),
+        ...(k.kickImmunityEnded
+          ? {
+              kickImmunityEnded: `${k.kickImmunityEnded.auraName} ${k.kickImmunityEnded.intoCastS.toFixed(1)}s into the cast`,
+            }
           : {}),
         // W1k: the kick hit the channel after the spell had gone out
         ...(k.channelS != null
@@ -1874,15 +1908,13 @@ export function postKickFact(
         ReturnType<
           typeof analyzePlayerCCAndTrinket
         >["interruptInstances"][number],
-        "interruptedSpellId" | "lockEndedBySuccessS"
+        "interruptedSpellId" | "lockEndedBySuccessS" | "switchWasEmpowered"
       >
     >,
   allRejected: CastFailedEvent[],
 ): string {
   const pressed = (list: CastFailedEvent[]) =>
-    `pressed ${list.length}x but rejected (${joinSpellCounts(
-      list.map((h) => getEnglishSpellName(String(h.spellId), h.spellName)),
-    )})`;
+    `pressed ${list.length}x but rejected (${joinPressesWithOffsets(list, k.atSeconds)})`;
   // Reliability round 2 (1111 / W2a, "lockout vs own-cooldown rejections"):
   // a "not ready" press of a spell OUTSIDE the locked school was its own
   // cooldown, not the kick — the game gives both the same reason text, so
@@ -1905,9 +1937,7 @@ export function postKickFact(
   const rejected = allRejected.filter((h) => !isOwnCd(h));
   const ownCdStr =
     ownCd.length > 0
-      ? `; outside the locked school ${ownCd.length}x not ready yet — its own cooldown or the GCD (${joinSpellCounts(
-          ownCd.map((h) => getEnglishSpellName(String(h.spellId), h.spellName)),
-        )})`
+      ? `; outside the locked school ${ownCd.length}x not ready yet — its own cooldown or the GCD (${joinPressesWithOffsets(ownCd, k.atSeconds)})`
       : "";
   // any press inside the lockout — the outside-school ones included — is
   // an attempt to act, never "waited out" (codex review of batch 10: Fire
@@ -1958,11 +1988,15 @@ function postKickCore(
   // Reversion ×2 out of range, all inside the 3 s Nature lock).
   if (k.postKick === "switched")
     return `acted on another school ${k.switchDelayS?.toFixed(1) ?? "?"}s later (${k.switchSpellName ?? "?"}${
-      k.switchWasHardCast === true
-        ? "; hard cast"
-        : k.switchWasHardCast === false
-          ? "; not a hard cast"
-          : ""
+      // an empower logs no SPELL_CAST_START, so "not a hard cast" was said of
+      // a held Fire Breath (F-K13)
+      k.switchWasEmpowered === true
+        ? "; empowered cast"
+        : k.switchWasHardCast === true
+          ? "; hard cast"
+          : k.switchWasHardCast === false
+            ? "; not a hard cast"
+            : ""
     })${inLockout.length > 0 ? `; ${pressed(inLockout)} inside the lockout` : ""}`;
   const first = k.firstActionDelayS?.toFixed(1) ?? "?";
   if (inLockout.length > 0)

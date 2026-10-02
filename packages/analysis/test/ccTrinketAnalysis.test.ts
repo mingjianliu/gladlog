@@ -441,6 +441,7 @@ describe("analyzePlayerCCAndTrinket — structured data contract (N4)", () => {
       kickDepthPct: null,
       channelS: null,
       kickersInRange: null,
+      kickImmunityEnded: null,
       maxKickRangeYd: null,
       maxKickRangeSlackYd: null,
       maxKickRangeLateYd: null,
@@ -454,6 +455,7 @@ describe("analyzePlayerCCAndTrinket — structured data contract (N4)", () => {
       lockEndedBySuccessS: null,
       switchDelayS: null,
       switchSpellName: null,
+      switchWasEmpowered: null,
       switchWasHardCast: null,
       ccInWindowS: 0,
     });
@@ -782,6 +784,79 @@ describe("analyzePlayerCCAndTrinket — structured data contract (N4)", () => {
         ],
       });
       expect(locked.ownerImmobileBy).toBeNull();
+    });
+  });
+
+  // Triage 2026-09-29 kick-eaten F-K13 / F-K14b.
+  describe("empowered switch, immunity that ran out", () => {
+    const enemy = makeUnit("enemy-1", {
+      name: "Rogue",
+      reaction: CombatUnitReaction.Hostile,
+      class: CombatUnitClass.Rogue,
+      spec: CombatUnitSpec.Rogue_Assassination,
+    });
+    const start = (spellId: string, s: number) =>
+      ({
+        spellId,
+        logLine: {
+          event: LogEvent.SPELL_CAST_START,
+          timestamp: MATCH_START + s * 1000,
+        },
+      }) as any;
+    const success = (spellId: string, s: number) =>
+      makeSpellCastEvent(spellId, MATCH_START + s * 1000, "enemy-1", "Rogue", "player-1", "Owner");
+    const kickAt = (interrupted: string, s: number) =>
+      makeInterruptEvent("1766", "Kick", interrupted, interrupted, MATCH_START + s * 1000, "enemy-1", "Rogue");
+
+    it("a switching cast with a SPELL_EMPOWER_END after it is an empowered cast (F-K13, 02c8e3ac @33.9)", () => {
+      // Disintegrate 356995 (Spellfrost) kicked; Fire Breath 357208 (Fire)
+      // begins 2.4 s later — SUCCESS at the start of the hold, END at release
+      const mk = (empowerEnds: any[] | undefined) =>
+        analyzePlayerCCAndTrinket(
+          {
+            ...makeUnit("player-1", {
+              actionIn: [kickAt("356995", 33.93)],
+              castStartEvents: [start("356995", 33.0)],
+              spellCastEvents: [success("357208", 36.333)],
+            }),
+            empowerEnds,
+          } as any,
+          [enemy],
+          makeCombat(),
+        ).interruptInstances[0]!;
+      const empowered = mk([
+        { spellId: "357208", timestamp: MATCH_START + 37_015, level: 1 },
+      ]);
+      expect(empowered.postKick).toBe("switched");
+      expect(empowered.switchWasHardCast).toBe(false);
+      expect(empowered.switchWasEmpowered).toBe(true);
+      expect(mk([]).switchWasEmpowered).toBe(false);
+      // an old archive carries no empower data: nothing is claimed
+      expect(mk(undefined).switchWasEmpowered).toBeNull();
+    });
+
+    it("a cast begun under Obsidian Scales with Obsidian Mettle, the buff gone before the kick (F-K14b, 3306e8ee @40.3)", () => {
+      const mk = (pvpTalents: string[], removedAtS: number) =>
+        analyzePlayerCCAndTrinket(
+          makeUnit("player-1", {
+            info: { pvpTalents },
+            actionIn: [kickAt("395160", 40.322)],
+            castStartEvents: [start("395160", 39.286)],
+            auraEvents: [
+              makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "363916", MATCH_START + 25_614, "player-1", "player-1", "BUFF"),
+              makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, "363916", MATCH_START + removedAtS * 1000, "player-1", "player-1", "BUFF"),
+            ],
+          }),
+          [enemy],
+          makeCombat(),
+        ).interruptInstances[0]!;
+      const k = mk(["378444"], 39.444);
+      expect(k.kickImmunityEnded?.auraName).toBe("Obsidian Scales");
+      expect(k.kickImmunityEnded?.intoCastS).toBeCloseTo(0.158, 3);
+      // without the PvP talent Obsidian Scales grants no interrupt immunity
+      expect(mk([], 39.444).kickImmunityEnded).toBeNull();
+      // the buff ended before the cast began: the cast never was immune
+      expect(mk(["378444"], 39.0).kickImmunityEnded).toBeNull();
     });
   });
 
