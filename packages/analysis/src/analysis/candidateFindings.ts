@@ -1412,6 +1412,7 @@ export function kickEatenEvents(
         | "kickImmunityEnded"
         | "switchWasEmpowered"
         | "castStartS"
+        | "diedAfterKickS"
       >
     > &
     Partial<
@@ -1910,7 +1911,7 @@ function kickPressureFacts(p: KickPressure): Record<string, string> {
  * the key bouncing, not an attempt). The evidence-grade subset for ranking is
  * `rejectedPressesAfterKick`. */
 function allRejectedPressesAfterKick(
-  k: { atSeconds: number },
+  k: { atSeconds: number; diedAfterKickS?: number },
   ownerId: string,
   intent:
     | {
@@ -1921,18 +1922,41 @@ function allRejectedPressesAfterKick(
 ): CastFailedEvent[] {
   if (!intent?.rawStreams) return [];
   return dropKeyRepeatRejects(
-    castFailedInWindow(
-      intent.rawStreams,
-      ownerId,
-      k.atSeconds,
-      k.atSeconds + POST_KICK_WINDOW_S,
-    ).filter((h) => h.tSeconds > k.atSeconds),
+    pressesInPostKickWindow(intent.rawStreams, ownerId, k),
     intent.ownerCasts,
   );
 }
 
+/** The owner's SPELL_CAST_FAILED strictly after the kick and inside the
+ * post-kick window — which ends at the owner's death when they died inside
+ * it (`diedAfterKickS`, F-K7e): a button pressed by a dead player ("You are
+ * dead") is not a press the kick refused. One window for the literal count
+ * and for the ranking set. */
+function pressesInPostKickWindow(
+  rawStreams: RawStreams,
+  ownerId: string,
+  k: { atSeconds: number; diedAfterKickS?: number },
+): CastFailedEvent[] {
+  // in whole milliseconds, like the lockout boundary below: `kick + (death −
+  // kick)` is one ulp past the death when the subtraction was inexact (kick
+  // 0.177 s, death 0.838 s → 0.8380000000000001), and a "You are dead"
+  // logged in the death's own millisecond passed the strict test
+  const deathMs =
+    k.diedAfterKickS === undefined
+      ? Infinity
+      : Math.round((k.atSeconds + k.diedAfterKickS) * 1000);
+  return castFailedInWindow(
+    rawStreams,
+    ownerId,
+    k.atSeconds,
+    k.atSeconds + POST_KICK_WINDOW_S,
+  ).filter(
+    (h) => h.tSeconds > k.atSeconds && Math.round(h.tSeconds * 1000) < deathMs,
+  );
+}
+
 function rejectedPressesAfterKick(
-  k: { atSeconds: number },
+  k: { atSeconds: number; diedAfterKickS?: number },
   ownerId: string,
   intent:
     | {
@@ -1946,12 +1970,7 @@ function rejectedPressesAfterKick(
   // inst.atSeconds`): the interrupted cast itself logs a same-millisecond
   // SPELL_CAST_FAILED "interrupted" (7c598eeb r0 @91.13, 1262763) — that is
   // the kick, not a press made after it.
-  const hits = castFailedInWindow(
-    intent.rawStreams,
-    ownerId,
-    k.atSeconds,
-    k.atSeconds + POST_KICK_WINDOW_S,
-  ).filter((h) => h.tSeconds > k.atSeconds);
+  const hits = pressesInPostKickWindow(intent.rawStreams, ownerId, k);
   const ownCastSuccessSeconds = intent.ownerCasts.map((c) => c.tSeconds);
   const bySpell = new Map<number, CastFailedEvent[]>();
   for (const h of hits) {
@@ -2003,7 +2022,10 @@ export function postKickFact(
         ReturnType<
           typeof analyzePlayerCCAndTrinket
         >["interruptInstances"][number],
-        "interruptedSpellId" | "lockEndedBySuccessS" | "switchWasEmpowered"
+        | "interruptedSpellId"
+        | "lockEndedBySuccessS"
+        | "switchWasEmpowered"
+        | "diedAfterKickS"
       >
     >,
   allRejected: CastFailedEvent[],
@@ -2050,10 +2072,16 @@ function postKickCore(
   pressed: (list: CastFailedEvent[]) => string,
   triedInLockout = false,
 ): string {
-  if (k.postKick === "idle")
+  if (k.postKick === "idle") {
+    // F-K7e: a player who died inside the window had that long, not 5 s
+    const span =
+      k.diedAfterKickS === undefined
+        ? "for 5s after the kick"
+        : `before dying ${k.diedAfterKickS.toFixed(1)}s after the kick`;
     return rejected.length > 0
-      ? `no successful cast for 5s after the kick; ${pressed(rejected)}`
-      : "no cast for 5s after the kick";
+      ? `no successful cast ${span}; ${pressed(rejected)}`
+      : `no cast ${span}`;
+  }
   // Strict `<`: the lockout's end instant belongs to "after", the same
   // boundary the "waited out" test below uses for successful casts (a first
   // cast at exactly the lockout end IS a wait) — codex astra review 2026-09-24.

@@ -32,6 +32,7 @@ import { fmtTime } from "./renderGrid";
 import { canReachTargetAt } from "./rootReachability";
 import { OFFENSIVE_CD_SPELL_IDS } from "./spellDanger";
 import { RANGE_HITBOX_SLACK_YD, spellRangeForCaster } from "./spellRange";
+import { isDeadAt } from "./unitDeath";
 
 /** Caster reach for "some attacker could reach the target" — the caster end
  * of the melee-12 / caster-40 convention [ROOT] uses. */
@@ -101,9 +102,9 @@ export function createKillWindowFactsComputer(
       return extractMajorCooldowns(
         f,
         combat as Parameters<typeof extractMajorCooldowns>[1],
-      ).filter((cd) =>
-        OFFENSIVE_CD_SPELL_IDS.has(String(cd.spellId)),
-      );
+      )
+        .filter((cd) => OFFENSIVE_CD_SPELL_IDS.has(String(cd.spellId)))
+        .map((cd) => ({ cd, holder: f }));
     } catch {
       return [];
     }
@@ -126,10 +127,18 @@ export function createKillWindowFactsComputer(
       fromSeconds: number,
       toSeconds: number,
     ): IKillWindowGateFacts {
-      const readyOffCds = teamCds
-        .filter((cd) => cdAvailableAt(cd, fromSeconds))
-        .map((cd) => cd.spellName);
       const tMs = startMs + fromSeconds * 1000;
+      // F-KW2 (triage sync-burst): a friendly dead at the instant holds no
+      // cooldown — 539b6ed0's [VULNERABLE] 1:23 accused the team of holding
+      // Incarnation for a Druid who died at 67.0. `isDeadAt` is the one
+      // dead-at predicate (missed-sync-window's ready filter and [RES] read
+      // the same one).
+      const readyOffCds = teamCds
+        .filter(
+          ({ cd, holder }) =>
+            !isDeadAt(holder, tMs) && cdAvailableAt(cd, fromSeconds),
+        )
+        .map(({ cd }) => cd.spellName);
       // Fail OPEN: reachable stays null until a recorded position pair
       // actually disproves reach for EVERY sampled friendly.
       let reachable: boolean | null = null;

@@ -19,6 +19,7 @@ import { sumIncomingPressure } from "../utils/incomingPressure";
 import { toRenderSecond } from "../utils/renderGrid";
 import { affordableAt, type ManaFallback } from "../utils/resourceAt";
 import { getPvpToolkit } from "../utils/talentBehaviors";
+import { isDeadAt } from "../utils/unitDeath";
 
 // F169: number of friendly units with an active Atonement (194384) at a given time. Disc Priest
 // healing scales with Atonement count, so this is a core throughput signal for the spec.
@@ -357,32 +358,91 @@ function resStateOf(
   return cdAvailableAt(cd, timeSeconds) ? "ready" : "onCd";
 }
 
+/**
+ * Whose deaths the ledger reads (triage res-readiness F-C4): with it, a
+ * holder dead before the row's rendered second holds nothing — 539b6ed0's
+ * `rdy:` kept a Druid's Incarnation and Stampeding Roar 16 s after he died.
+ * Absent (hand-built fixtures) = nobody is dead.
+ */
+export interface ResHolderDeaths {
+  matchStartMs: number;
+  ownerUnit?: ICombatUnit;
+}
+
+type ResTeammateCds = {
+  cds: IMajorCooldownInfo[];
+  playerLabel?: string;
+  /** the holder, for `ResHolderDeaths` */
+  player?: ICombatUnit;
+};
+
+/**
+ * Every friendly cooldown the [RES] ledger tracks, attributed, with whether
+ * its holder is dead at the row — the ONE list `rdy:`, `cd:` and both delta
+ * trackers are built from.
+ *
+ * No button → not on the ledger line at all (GH #106 step 2): "rdy:X" would
+ * tell the model the player could press X.
+ *
+ * `holderDead` is `isDeadAt` (the one dead-at predicate) at the row's rendered
+ * second: a death at 67.03 leaves the 1:07 row untouched — that row is how
+ * the death block shows what the dying unit held — and empties the holder's
+ * entries from 1:08 on.
+ */
+function friendlyResCds(
+  timeSeconds: number,
+  ownerCDs: IMajorCooldownInfo[],
+  teammateCDs: ResTeammateCds[],
+  deaths: ResHolderDeaths | undefined,
+): Array<{ displayName: string; cd: IMajorCooldownInfo; holderDead: boolean }> {
+  // "dead before the row's second": `isDeadAt` 1 ms before it, so a death at
+  // exactly 67.000 keeps the 1:07 row like one at 67.030 (codex review — the
+  // shared predicate's own `<=` is unchanged)
+  const rowMs =
+    deaths === undefined
+      ? undefined
+      : deaths.matchStartMs + toRenderSecond(timeSeconds) * 1000 - 1;
+  const dead = (unit: ICombatUnit | undefined) =>
+    rowMs !== undefined && unit !== undefined && isDeadAt(unit, rowMs);
+  const ownerDead = dead(deaths?.ownerUnit);
+  return [
+    ...ownerCDs
+      .filter((cd) => !cdIsProcOnly(cd))
+      .map((cd) => ({
+        displayName: cd.spellName,
+        cd,
+        holderDead: ownerDead,
+      })),
+    ...teammateCDs.flatMap(({ cds, playerLabel, player }) => {
+      const holderDead = dead(player);
+      return cds
+        .filter((cd) => !cdIsProcOnly(cd))
+        .map((cd) => ({
+          displayName: playerLabel
+            ? `${playerLabel}:${cd.spellName}`
+            : cd.spellName,
+          cd,
+          holderDead,
+        }));
+    }),
+  ];
+}
+
 export function computeReadyNames(
   timeSeconds: number,
   ownerCDs: IMajorCooldownInfo[],
-  teammateCDs: Array<{ cds: IMajorCooldownInfo[]; playerLabel?: string }>,
+  teammateCDs: ResTeammateCds[],
+  deaths?: ResHolderDeaths,
 ): string[] {
   const readyNames: string[] = [];
-  // No button → not on the ledger line at all (GH #106 step 2): "rdy:X" would
-  // tell the model the player could press X.
-  const allFriendlyCDs: Array<{ displayName: string; cd: IMajorCooldownInfo }> =
-    [
-      ...ownerCDs
-        .filter((cd) => !cdIsProcOnly(cd))
-        .map((cd) => ({ displayName: cd.spellName, cd })),
-      ...teammateCDs.flatMap(({ cds, playerLabel }) =>
-        cds
-          .filter((cd) => !cdIsProcOnly(cd))
-          .map((cd) => ({
-            displayName: playerLabel
-              ? `${playerLabel}:${cd.spellName}`
-              : cd.spellName,
-            cd,
-          })),
-      ),
-    ];
-  for (const { displayName, cd } of allFriendlyCDs)
-    if (resStateOf(cd, timeSeconds) === "ready") readyNames.push(displayName);
+  for (const { displayName, cd, holderDead } of friendlyResCds(
+    timeSeconds,
+    ownerCDs,
+    teammateCDs,
+    deaths,
+  ))
+    if (!holderDead && resStateOf(cd, timeSeconds) === "ready")
+      readyNames.push(displayName);
   return readyNames;
 }
 
@@ -396,29 +456,17 @@ export function computeReadyNames(
 export function computeOnCDDisplayNames(
   timeSeconds: number,
   ownerCDs: IMajorCooldownInfo[],
-  teammateCDs: Array<{ cds: IMajorCooldownInfo[]; playerLabel?: string }>,
+  teammateCDs: ResTeammateCds[],
+  deaths?: ResHolderDeaths,
 ): string[] {
   const onCDNames: string[] = [];
-  // No button → not on the ledger line at all (GH #106 step 2): "rdy:X" would
-  // tell the model the player could press X.
-  const allFriendlyCDs: Array<{ displayName: string; cd: IMajorCooldownInfo }> =
-    [
-      ...ownerCDs
-        .filter((cd) => !cdIsProcOnly(cd))
-        .map((cd) => ({ displayName: cd.spellName, cd })),
-      ...teammateCDs.flatMap(({ cds, playerLabel }) =>
-        cds
-          .filter((cd) => !cdIsProcOnly(cd))
-          .map((cd) => ({
-            displayName: playerLabel
-              ? `${playerLabel}:${cd.spellName}`
-              : cd.spellName,
-            cd,
-          })),
-      ),
-    ];
-  for (const { displayName, cd } of allFriendlyCDs)
-    if (resStateOf(cd, timeSeconds) === "onCd")
+  for (const { displayName, cd, holderDead } of friendlyResCds(
+    timeSeconds,
+    ownerCDs,
+    teammateCDs,
+    deaths,
+  ))
+    if (!holderDead && resStateOf(cd, timeSeconds) === "onCd")
       onCDNames.push(onCdKey(displayName, cd, timeSeconds));
   return onCDNames;
 }
@@ -486,13 +534,18 @@ export function buildResourceSnapshot({
 
   // ── rdy / cd — B34: attribute teammate CDs with player pid prefix ──────────
   // Owner CDs: plain "SpellName"; teammate CDs: "pid:SpellName"
+  const labelledTeammates = teammateCDs.map(({ player, cds }) => ({
+    cds,
+    player,
+    playerLabel: pid(player.name),
+  }));
+  const deaths: ResHolderDeaths | undefined =
+    matchStartMs !== undefined ? { matchStartMs, ownerUnit } : undefined;
   const readyNames = computeReadyNames(
     timeSeconds,
     ownerCDs,
-    teammateCDs.map(({ player, cds }) => ({
-      cds,
-      playerLabel: pid(player.name),
-    })),
+    labelledTeammates,
+    deaths,
   );
 
   // Build on-CD display list with player attribution (B34) and delta filtering (B35).
@@ -500,22 +553,18 @@ export function buildResourceSnapshot({
   const prevOnCDSet =
     prevOnCDNames !== undefined ? new Set(prevOnCDNames) : null;
 
-  // No button → not on the ledger line at all (GH #106 step 2): "rdy:X" would
-  // tell the model the player could press X.
-  const allFriendlyCDs: Array<{ displayName: string; cd: IMajorCooldownInfo }> =
-    [
-      ...ownerCDs
-        .filter((cd) => !cdIsProcOnly(cd))
-        .map((cd) => ({ displayName: cd.spellName, cd })),
-      ...teammateCDs.flatMap(({ player, cds }) =>
-        cds
-          .filter((cd) => !cdIsProcOnly(cd))
-          .map((cd) => ({
-            displayName: `${pid(player.name)}:${cd.spellName}`,
-            cd,
-          })),
-      ),
-    ];
+  const everyFriendlyCd = friendlyResCds(
+    timeSeconds,
+    ownerCDs,
+    labelledTeammates,
+    deaths,
+  );
+  // F-C4: a dead holder's entries leave the line without a `-X` — the delta
+  // reports cooldowns that were SPENT, and a death is on its own line.
+  const deadHolderNames = new Set(
+    everyFriendlyCd.filter((x) => x.holderDead).map((x) => x.displayName),
+  );
+  const allFriendlyCDs = everyFriendlyCd.filter((x) => !x.holderDead);
 
   // B114: per-charge readiness suffix "[k/N]" for multi-charge CDs, so the model can tell a partly
   // available CD (1/2) from a fully spent one (0/2) or a fully available one (2/2). Only applied to
@@ -583,7 +632,9 @@ export function buildResourceSnapshot({
     const prevSet = new Set(prevReadyNames);
     const currentSet = new Set(readyNames);
     const added = readyNames.filter((n) => !prevSet.has(n));
-    const removed = prevReadyNames.filter((n) => !currentSet.has(n));
+    const removed = prevReadyNames.filter(
+      (n) => !currentSet.has(n) && !deadHolderNames.has(n),
+    );
     // H1: prefix each item with its own +/- sign and space-separate them. The previous
     // `+a,b-c,d` form used a bare '-' as the added/removed boundary, which collided with
     // the hyphens inside spell names (e.g. "Anti-Magic Zone"), making the delta unparseable.

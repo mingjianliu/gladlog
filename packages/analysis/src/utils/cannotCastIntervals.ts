@@ -8,6 +8,7 @@ import { kickLockoutSeconds } from "../data/spellEffectData";
 import { ccSpellIds, officialSilenceIds } from "../data/spellTags";
 import { REACTION_WINDOW_S } from "./cooldowns";
 import { isSilenceableCast } from "./spellMechanics";
+import { firstDeathMs } from "./unitDeath";
 
 /**
  * "When could this unit not cast?" — ONE predicate for the two consumers that
@@ -422,12 +423,7 @@ export function actWindowFor(
   } catch {
     return { couldRespond: () => true, stateIn: () => null };
   }
-  const deathMs = Math.min(
-    ...((unit.deathRecords ?? []) as Array<{ timestamp: number }>).map(
-      (d) => d.timestamp,
-    ),
-    Infinity,
-  );
+  const deathMs = firstDeathMs(unit);
   const endMs = (toS: number) =>
     Math.min(matchStartMs + toS * 1000, deathMs, roundEndMs);
   return {

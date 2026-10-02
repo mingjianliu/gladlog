@@ -518,6 +518,16 @@ export function evaluateSyncWindow(
   const ready = cds.filter((cd) => {
     const readyAtS = starts.find((s) => cdAvailableAt(cd, s));
     if (readyAtS === undefined) return false;
+    // F-S1 (triage sync-burst): a holder dead at the instant its cooldown
+    // counts as ready holds nothing — 539b6ed0, Incarnation "ready" for a
+    // lock starting 1.3 s after its Druid died. `isDeadAt` is the one dead-at
+    // predicate (the kill-window facts, [RES] and the cd-hoarded gate read it).
+    if (
+      cd.owner &&
+      cd.matchStartMs !== undefined &&
+      isDeadAt(cd.owner, cd.matchStartMs + readyAtS * 1000)
+    )
+      return false;
     if (!cd.owner || !cd.ownerEnemyIds || cd.matchStartMs === undefined)
       return true;
     let blocked: Array<{ from: number; to: number }>;

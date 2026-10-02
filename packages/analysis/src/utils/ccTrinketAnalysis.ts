@@ -80,6 +80,7 @@ import { medianFinite } from "./stats";
 import { interruptImmuneWindows } from "./talentBehaviors";
 import { getTalentAvoidanceBuffs } from "./talentBehaviors";
 import { DPS_TRINKET_CD_S, HEALER_TRINKET_CD_S } from "./trinketCooldown";
+import { firstDeathMs } from "./unitDeath";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -842,6 +843,13 @@ export interface IInterruptInstance {
    * `buildCannotCastIntervals`). 825ca842 @303: Intimidation into Freezing
    * Trap ate ~2.6 s of the window and the line read as a choice. */
   ccInWindowS?: number;
+  /** The player died this many seconds after the kick, inside the
+   * `POST_KICK_WINDOW_S` window — the window ends there (triage kick-eaten
+   * F-K7e, f4eb8c87 @173.4: a Dark Pact pressed 0.3 s after the player's own
+   * death, reason "You are dead", read as "pressed 1x but rejected").
+   * `firstDeathMs` is the one dead-at source. Absent when the player outlived
+   * the window. */
+  diedAfterKickS?: number;
   /** `switched` only: the cast that actually made the classification
    * "switched" — the first one in the window on a disjoint school. It is NOT
    * always `firstActionDelayS`'s cast: a same-school cast can come first
@@ -2126,7 +2134,15 @@ export function analyzePlayerCCAndTrinket(
       spellId: e.spellId ?? "",
     }));
     let cannotCast: Array<{ from: number; to: number }> | null = null;
+    const deathS = (firstDeathMs(player) - matchStartMs) / 1000;
     for (const inst of interruptInstances) {
+      // a death in the kick's own millisecond closes the window too (codex
+      // review: 0 s, every later press was by a dead player)
+      if (
+        deathS >= inst.atSeconds &&
+        deathS <= inst.atSeconds + POST_KICK_WINDOW_S
+      )
+        inst.diedAfterKickS = deathS - inst.atSeconds;
       try {
         cannotCast = cannotCast ?? buildCannotCastIntervals(player, enemyIds);
         const kickMs = matchStartMs + inst.atSeconds * 1000;

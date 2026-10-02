@@ -208,6 +208,7 @@
     "test/threatAssessment.test.ts",
     "test/threesDecided.test.ts",
     "test/tremorTotemBreak.test.ts",
+    "test/triageG4DeadAt.test.ts",
     "test/usableWhileCcShim.test.ts"
   ]
 }

@@ -646,5 +646,14 @@
  *  slow-defensive-response +1, position-mistake +2, missed-cleanse -6,
  *  questionable-external -6), 683 fact-only changes, KILL ATTEMPTS outcome
  *  flips in 219 rounds (healed through 4,479 -> 3,954).
+ *  v261 (2026-10-02, triage G4 dead-at: sync-burst F-S1 + F-KW2,
+ *  res-readiness F-C4, kick-eaten F-K7e): one dead-at predicate
+ *  (`utils/unitDeath.ts`). (1) A cooldown whose holder is dead at the instant
+ *  is not "ready" for a missed-sync-window lock nor on a [KILL WINDOW] /
+ *  [VULNERABLE] line — a span whose only ready cooldown was a dead player's
+ *  stops being accountable. (2) [RES] `rdy:` / `cd:` drop a holder's entries
+ *  from the second after its death, with no `-X` for them. (3) kick-eaten
+ *  `postKick` ends at the player's death: `no cast before dying Ns after the
+ *  kick`, and a button pressed after the death is not a rejected press.
  */
-export const PROMPT_VERSION = 260;
+export const PROMPT_VERSION = 261;

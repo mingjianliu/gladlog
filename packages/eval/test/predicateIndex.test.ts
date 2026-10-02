@@ -134,6 +134,7 @@ import * as talentOwnership from "@gladlog/analysis/src/utils/talentOwnership";
 import * as talents from "@gladlog/analysis/src/utils/talents";
 import * as threatAssessment from "@gladlog/analysis/src/utils/threatAssessment";
 import * as trinketCooldown from "@gladlog/analysis/src/utils/trinketCooldown";
+import * as unitDeath from "@gladlog/analysis/src/utils/unitDeath";
 import * as warlockPet from "@gladlog/analysis/src/utils/warlockPet";
 import {
   decodeAdvanced as parserDecodeAdvanced,
@@ -617,9 +618,9 @@ const INDEX: PredicateRow[] = [
     mod: positionAnalysis,
   },
   {
-    file: `${A}/utils/positionAnalysis.ts`,
+    file: `${A}/utils/unitDeath.ts`,
     symbol: "isDeadAt",
-    mod: positionAnalysis,
+    mod: unitDeath,
   },
   {
     file: `${A}/utils/rootReachability.ts`,

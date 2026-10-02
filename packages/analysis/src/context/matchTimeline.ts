@@ -3089,15 +3089,20 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
         ? String(playerIdMap.get(player.name) ?? player.name)
         : player.name,
     }));
+    // F-C4: the same dead-holder cut the snapshot applies, so the delta state
+    // never carries a dead holder's entries forward.
+    const resDeaths = { matchStartMs, ownerUnit: owner };
     const currentReadyNames = computeReadyNames(
       timeSeconds,
       resOwnerCDs,
       teammateCDsWithLabel,
+      resDeaths,
     );
     const currentOnCDNames = computeOnCDDisplayNames(
       timeSeconds,
       resOwnerCDs,
       teammateCDsWithLabel,
+      resDeaths,
     );
     const forceFullRefresh =
       forceFull ||

@@ -30,6 +30,7 @@ import {
 import { distanceBetween, getUnitPositionAtTime } from "./losAnalysis";
 import { HEALER_TRAINED_YARDS, INTERP_MAX_GAP_MS } from "./positionSampling";
 import { spellReachToAccuse } from "./spellRange";
+import { isDeadAt } from "./unitDeath";
 
 // Thresholds (yards / seconds) — starting values from the Feature 15 spec.
 //
@@ -208,13 +209,10 @@ interface INearestEnemy {
   enemyName: string;
 }
 
-/** True when the unit has died at or before the given timestamp. A corpse's
- *  last-known position is returned by getUnitPositionAtTime indefinitely, so
- *  dead enemies must be excluded from distance checks. */
-/** Shared with rootReachability.ts (2026-08-30). */
-export function isDeadAt(unit: ICombatUnit, tMs: number): boolean {
-  return (unit.deathRecords ?? []).some((d) => d.timestamp <= tMs);
-}
+/** Shared with rootReachability.ts (2026-08-30); the definition moved to the
+ * leaf module `unitDeath.ts` (triage G4) so the modules below this one in the
+ * import graph read the same predicate. */
+export { isDeadAt };
 
 function nearestEnemyAt(
   enemies: ICombatUnit[],
