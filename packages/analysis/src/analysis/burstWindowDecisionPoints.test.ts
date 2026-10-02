@@ -22,6 +22,8 @@ import { ensureAnalysisData } from "../data/ensure";
 import { extractMajorCooldowns } from "../utils/cooldowns";
 import {
   BURST_HEAL_CD_IDS,
+  aimedControlUpAt,
+  landedPreOpenerStillUp,
   BURST_LEAD_CD_EXCLUDED_IDS,
   BURST_OUTCOME_FIELDS,
   BURST_RESPONSE_WINDOW_MS,
@@ -968,7 +970,9 @@ describe("controlLandedResponses — which cast times a landed control (F-B8)", 
       20_000,
       40_000,
     );
-    expect(out).toEqual([{ unitId: "F1", spellId: LASSO_AURA, tMs: 29_896 }]);
+    expect(out).toMatchObject([
+      { unitId: "F1", spellId: LASSO_AURA, tMs: 29_896 },
+    ]);
     // with no producing cast the untargeted one still times it (Capacitor Totem)
     expect(
       controlLandedResponses(
@@ -979,7 +983,7 @@ describe("controlLandedResponses — which cast times a landed control (F-B8)", 
         20_000,
         40_000,
       ),
-    ).toEqual([{ unitId: "F1", spellId: LASSO_AURA, tMs: 28_014 }]);
+    ).toMatchObject([{ unitId: "F1", spellId: LASSO_AURA, tMs: 28_014 }]);
   });
   it("codex review: a non-control cast aimed at the target between Ring of Frost and its aura does not time it", () => {
     // opener 10 s, response deadline 18 s: Ring of Frost (untargeted) 17.5 s,
@@ -997,6 +1001,129 @@ describe("controlLandedResponses — which cast times a landed control (F-B8)", 
         10_000,
         18_000,
       ),
-    ).toEqual([{ unitId: "F1", spellId: "82691", tMs: 17_500 }]);
+    ).toMatchObject([{ unitId: "F1", spellId: "82691", tMs: 17_500 }]);
+  });
+  it("codex 35-CD-08: a failed aimed control does not swallow a landed AoE one", () => {
+    // burst 10 s; the monk's Spear Hand Strike at E1 11 s (no interrupt),
+    // then an untargeted Leg Sweep at 12 s whose stun 119381 lands on E1
+    const casts = [
+      { unitId: "F1", spellId: "116705", dest: "E1", tMs: 11_000 },
+      { unitId: "F1", spellId: "119381", dest: undefined, tMs: 12_000 },
+    ];
+    expect(
+      controlLandedResponses(
+        [auraOn("119381", 12_000)],
+        new Set(["E1"]),
+        (id) => id,
+        casts,
+        10_000,
+        18_000,
+      ),
+    ).toMatchObject([{ unitId: "F1", spellId: "119381", tMs: 12_000 }]);
+  });
+  it("codex 35-CD-13f: a landed response carries its holder, source and time for the pre-opener check", () => {
+    // Mass Entanglement at E1 9.0 s; its root on E2 9.001–9.5 s; burst at 10 s
+    const holder = {
+      id: "E2",
+      auraEvents: [
+        {
+          timestamp: 9_001,
+          spellId: "102359",
+          srcUnitId: "F1",
+          logLine: { event: "SPELL_AURA_APPLIED" },
+        },
+        {
+          timestamp: 9_500,
+          spellId: "102359",
+          srcUnitId: "F1",
+          logLine: { event: "SPELL_AURA_REMOVED" },
+        },
+      ],
+    };
+    const [r] = controlLandedResponses(
+      [holder],
+      new Set(["E1", "E2"]),
+      (id) => id,
+      [{ unitId: "F1", spellId: "102359", dest: "E1", tMs: 9_000 }],
+      8_000,
+      18_000,
+    );
+    expect(r).toMatchObject({
+      holderId: "E2",
+      auraSrcId: "F1",
+      auraAtMs: 9_001,
+      tMs: 9_000,
+    });
+    // the decision point's check: expired before the opener → not up
+    expect(
+      aimedControlUpAt(holder, r!.auraSrcId!, r!.spellId, r!.auraAtMs!, 10_000),
+    ).toBe(false);
+    // control: still up at the opener
+    expect(aimedControlUpAt(holder, "F1", "102359", 9_001, 9_400)).toBe(true);
+  });
+  it("codex 35-CD-13g: the pre-opener check is for auras applied before the opener only", () => {
+    const r = {
+      unitId: "F1",
+      spellId: "118905",
+      tMs: 9_000,
+      holderId: "E1",
+      auraSrcId: "totem",
+      auraAtMs: 11_000,
+    };
+    // Capacitor Totem cast 9 s, burst 10 s, stun lands 11 s → no check
+    expect(landedPreOpenerStillUp(r, { auraEvents: [] }, 10_000)).toBe(
+      undefined,
+    );
+    // an aura applied at 9.001 s and removed at 9.5 s → expired
+    expect(
+      landedPreOpenerStillUp(
+        { ...r, auraAtMs: 9_001 },
+        {
+          auraEvents: [
+            {
+              timestamp: 9_001,
+              spellId: "118905",
+              srcUnitId: "totem",
+              logLine: { event: "SPELL_AURA_APPLIED" },
+            },
+            {
+              timestamp: 9_500,
+              spellId: "118905",
+              srcUnitId: "totem",
+              logLine: { event: "SPELL_AURA_REMOVED" },
+            },
+          ],
+        },
+        10_000,
+      ),
+    ).toBe(false);
+  });
+  it("codex 35-CD-13d: an aimed control at another caster does not swallow the aura that landed on this one", () => {
+    // Mass Entanglement 102359 aimed at E1 (immune, no aura), its root on E2
+    const casts = [
+      { unitId: "F1", spellId: "102359", dest: "E1", tMs: 12_000 },
+    ];
+    const onE2 = { ...auraOn("102359", 12_001), id: "E2" };
+    expect(
+      controlLandedResponses(
+        [onE2],
+        new Set(["E1", "E2"]),
+        (id) => id,
+        casts,
+        10_000,
+        18_000,
+      ),
+    ).toMatchObject([{ unitId: "F1", spellId: "102359", tMs: 12_000 }]);
+    // control: aimed at E2 itself → the cast side credits it, no duplicate
+    expect(
+      controlLandedResponses(
+        [onE2],
+        new Set(["E1", "E2"]),
+        (id) => id,
+        [{ ...casts[0]!, dest: "E2" }],
+        10_000,
+        18_000,
+      ),
+    ).toEqual([]);
   });
 });

@@ -16,8 +16,9 @@ import { kickCastSpellId } from "./enemyInterrupts";
 type SpellEntry = { type: string };
 const SPELLS = spellsData as Record<string, SpellEntry>;
 
-/** A landed kick's SPELL_INTERRUPT event pairs with the cast within this window. */
-const LANDED_PAIR_MS = 1_000;
+/** A landed kick's SPELL_INTERRUPT event pairs with the cast within this
+ * window. Also the burst-answered landed test's (sync-burst F-B1). */
+export const LANDED_PAIR_MS = 1_000;
 /** Two SPELL_CAST_SUCCESS rows of ONE kick: Skull Bash logs its cast id
  * 106839 and its effect id 93985 a millisecond apart (58 / 58 casts in the 60
  * triage rounds, none between 0.05 and 1 s). Kept apart from `LANDED_PAIR_MS`

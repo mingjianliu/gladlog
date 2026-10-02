@@ -138,6 +138,10 @@ export function creditedAnswer(p: BurstWindowDecisionPoint) {
     // was still on the target when the lead cast went out (95127ab4: the
     // Paralysis was trinketed 0.5 s before the Zenith).
     if (r.category === "control" && r.preOpenerStillUp === false) return false;
+    // F-B1: an aimed control that did not land answered nothing (9c6ab747:
+    // an Imprison with no aura; 8c5b6ec5: a Hammer of Justice into an
+    // immunity; 9d899d10: a reflected Counterspell).
+    if (r.category === "control" && r.landed === false) return false;
     if (
       (r.category === "external" || r.category === "wall") &&
       r.effectEndSec !== undefined &&

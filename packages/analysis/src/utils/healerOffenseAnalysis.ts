@@ -1,5 +1,6 @@
 import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
+import { castInAuraSet } from "../data/castEffectAuras";
 import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { ccSpellIds } from "../data/spellTags";
@@ -35,6 +36,18 @@ import {
 } from "./killWindowTargetSelection";
 import { IOffensiveWindow } from "./offensiveWindows";
 import { fmtTime, renderedWindowSeconds } from "./renderGrid";
+
+/**
+ * Is this owner CAST a CC — by its own id, or through the one cast → effect
+ * table when the CC is listed by the aura it leaves (triage res-readiness
+ * F-C23: Song of Chi-Ji 198898 → 198909, Lightning Lasso 305483 → 305485 —
+ * `ccSpellIds` lists them by aura, so a Mistweaver who pressed Song read "you
+ * cast no CC"). The one test for the roster, the window's "you cast CC" and
+ * the per-segment CC counts.
+ */
+function isOwnerCcCast(spellId: string): boolean {
+  return castInAuraSet(spellId, ccSpellIds);
+}
 
 type SpellEntry = { type: string };
 const SPELLS = spellsData as Record<string, SpellEntry>;
@@ -215,7 +228,7 @@ export function computeSlackSegments(
           e.spellId,
       );
       const ownerCCCasts = casts.filter((e) =>
-        ccSpellIds.has(e.spellId as string),
+        isOwnerCcCast(e.spellId as string),
       ).length;
       const ownerKickCasts = casts.filter(
         (e) => SPELLS[e.spellId as string]?.type === "interrupts",
@@ -324,7 +337,7 @@ export function computeContestedSegments(
           e.spellId,
       );
       const ownerCCCasts = casts.filter((e) =>
-        ccSpellIds.has(e.spellId as string),
+        isOwnerCcCast(e.spellId as string),
       ).length;
       const ownerKickCasts = casts.filter(
         (e) => SPELLS[e.spellId as string]?.type === "interrupts",
@@ -513,7 +526,7 @@ function collectOwnerCCSpells(
   const bySpell = new Map<string, IOwnerCCSpell>();
   for (const e of owner.spellCastEvents) {
     if (e.logLine.event !== LogEvent.SPELL_CAST_SUCCESS || !e.spellId) continue;
-    if (!ccSpellIds.has(e.spellId)) continue;
+    if (!isOwnerCcCast(e.spellId)) continue;
     // The owner's talent-resolved cooldown and charges (`unitCooldownOf`):
     // Psychic Voice, Fist of Justice, Ancient Arts, Voodoo Mastery … were
     // ignored, and a charge-only CC row (no plain cooldown) read 0 = "always
@@ -610,7 +623,7 @@ export function computeWindowContributions(
       if (
         e.logLine.event !== LogEvent.SPELL_CAST_SUCCESS ||
         !e.spellId ||
-        !ccSpellIds.has(e.spellId)
+        !isOwnerCcCast(e.spellId)
       )
         return false;
       const t = (e.logLine.timestamp - matchStartMs) / 1000;

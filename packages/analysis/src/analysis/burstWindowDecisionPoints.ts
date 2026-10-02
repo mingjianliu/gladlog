@@ -61,8 +61,9 @@ import { getUnitPositionAtTime } from "../utils/losAnalysis";
 import { LOS_SWEEP_GAP_MS } from "../utils/positionSampling";
 import { canReachTargetAt } from "../utils/rootReachability";
 import { buildCannotCastIntervals } from "../utils/cannotCastIntervals";
-import { isCastOrEffect } from "../data/castEffectAuras";
+import { castAndEffectIds, isCastOrEffect } from "../data/castEffectAuras";
 import { drEffectAurasOfCast } from "../utils/drAnalysis";
+import { LANDED_PAIR_MS } from "../utils/kickAudit";
 import { isOffensiveSpell } from "../utils/spellDanger";
 import { buildFilteredAuraIntervals } from "../utils/utils";
 import {
@@ -273,6 +274,68 @@ export interface BurstResponseCast {
    * before the Zenith it was credited against). Credit-line only —
    * `responded` never reads it. Absent on every other response. */
   preOpenerStillUp?: boolean;
+  /** An aimed control (cc / root / interrupt cast AT a burst caster): did it
+   * land? A CC or root landed when its own aura — the cast's id or one of its
+   * effect auras (`castEffectAuras.ts`) — went on the target from the caster
+   * or the caster's pet; an interrupt when the caster interrupted the target
+   * (SPELL_INTERRUPT within `LANDED_PAIR_MS`) or its own silence aura went
+   * on. Triage sync-burst F-B1: Imprison with no aura, a Hammer of Justice
+   * into an immunity, a reflected Counterspell and a Wind Shear that hit no
+   * cast were credited as "answered with X". Credit-line only — `responded`
+   * never reads it (slow-defensive-response is unchanged). Absent on every
+   * other response. */
+  landed?: boolean;
+}
+
+/**
+ * F-B1: did the aimed control `castSpellId` cast by `casterId` at `castMs`
+ * land on `dest`? See `BurstResponseCast.landed`.
+ */
+export function aimedControlLanded(
+  dest:
+    | {
+        auraEvents?: ReadonlyArray<{
+          timestamp: number;
+          spellId?: string;
+          srcUnitId: string;
+          logLine: { event: string };
+        }>;
+        actionIn?: ReadonlyArray<{
+          timestamp: number;
+          srcUnitId: string;
+          logLine: { event: string };
+        }>;
+      }
+    | undefined,
+  casterId: string,
+  castSpellId: string,
+  castMs: number,
+  friendlyPlayerOf: (srcUnitId: string) => string | undefined,
+  isInterrupt: boolean,
+): boolean {
+  if (!dest) return true; // unknown target: never withhold credit
+  const own = castAndEffectIds(castSpellId);
+  const fromCaster = (src: string) =>
+    src === casterId || friendlyPlayerOf(src) === casterId;
+  const auraLanded = (dest.auraEvents ?? []).some(
+    (a) =>
+      (a.logLine.event === "SPELL_AURA_APPLIED" ||
+        a.logLine.event === "SPELL_AURA_REFRESH") &&
+      a.spellId !== undefined &&
+      own.has(a.spellId) &&
+      fromCaster(a.srcUnitId) &&
+      a.timestamp >= castMs - 100 &&
+      a.timestamp <= castMs + GROUND_CONTROL_FUSE_MS,
+  );
+  if (auraLanded) return true;
+  if (!isInterrupt) return false;
+  return (dest.actionIn ?? []).some(
+    (x) =>
+      x.logLine.event === "SPELL_INTERRUPT" &&
+      fromCaster(x.srcUnitId) &&
+      x.timestamp >= castMs - 100 &&
+      x.timestamp <= castMs + LANDED_PAIR_MS,
+  );
 }
 
 /**
@@ -563,6 +626,36 @@ const isNoDest = (dest: string | undefined): boolean =>
  * totem). An aura that a control cast aimed at a caster could have produced
  * is skipped: the cast-side test already counts it.
  */
+/** One landed control from `controlLandedResponses`: who answered, the
+ * aura, when it counts, and — for the pre-opener lifetime check (codex
+ * 35-CD-13f) — the aura's holder, its own source unit and its time. */
+export interface LandedControlResponse {
+  unitId: string;
+  spellId: string;
+  tMs: number;
+  holderId?: string;
+  auraSrcId?: string;
+  auraAtMs?: number;
+}
+
+/**
+ * F-B4's pre-opener check for a landed control (codex 35-CD-13f / 13g): only
+ * an aura APPLIED before the lead cast can have expired before it — was it
+ * still on its holder at the lead cast? Undefined (no check) for an aura
+ * that landed at or after the lead cast, whatever its cast time: a ground
+ * control cast before the opener whose stun landed inside the burst (a
+ * Capacitor Totem's fuse) answers it.
+ */
+export function landedPreOpenerStillUp(
+  r: LandedControlResponse,
+  holder: Parameters<typeof aimedControlUpAt>[0],
+  leadMs: number,
+): boolean | undefined {
+  if (r.auraAtMs === undefined || r.auraAtMs >= leadMs || !r.auraSrcId)
+    return undefined;
+  return aimedControlUpAt(holder, r.auraSrcId, r.spellId, r.auraAtMs, leadMs);
+}
+
 export function controlLandedResponses(
   casters: ReadonlyArray<{
     id?: string;
@@ -583,8 +676,8 @@ export function controlLandedResponses(
   }>,
   w0: number,
   w1: number,
-): Array<{ unitId: string; spellId: string; tMs: number }> {
-  const out: Array<{ unitId: string; spellId: string; tMs: number }> = [];
+): LandedControlResponse[] {
+  const out: LandedControlResponse[] = [];
   for (const caster of casters)
     for (const a of caster.auraEvents ?? []) {
       if (a.logLine.event !== "SPELL_AURA_APPLIED") continue;
@@ -627,20 +720,34 @@ export function controlLandedResponses(
       }
       const cast = family ?? aimedControl ?? untargeted;
       // the cast-side test already counted an aimed control from this
-      // friendly that could be this aura's cause
+      // friendly that could be this aura's cause — one that produces THIS
+      // aura and was aimed at THIS aura's holder, the only case where the
+      // cast side credits it (since F-B1 it credits an aimed control only
+      // when it landed on its target). An unrelated aimed control (a Spear
+      // Hand Strike that missed before a Leg Sweep landed, codex 35-CD-08)
+      // or one aimed at another caster (Mass Entanglement at an immune E1
+      // whose root landed on E2, codex 35-CD-13d) must not swallow it.
       const aimed = friendlyCasts.some(
         (c) =>
           c.unitId === unitId &&
           c.tMs >= a.timestamp - GROUND_CONTROL_FUSE_MS &&
           c.tMs <= a.timestamp &&
           CONTROL_IDS.has(c.spellId) &&
-          c.dest != null &&
-          casterIds.has(c.dest),
+          producesAura(c.spellId) &&
+          caster.id !== undefined &&
+          c.dest === caster.id,
       );
       if (aimed) continue;
       const tMs = cast?.tMs ?? a.timestamp;
       if (tMs < w0 || tMs > w1) continue;
-      out.push({ unitId, spellId: sid, tMs });
+      out.push({
+        unitId,
+        spellId: sid,
+        tMs,
+        ...(caster.id !== undefined ? { holderId: caster.id } : {}),
+        auraSrcId: a.srcUnitId,
+        auraAtMs: a.timestamp,
+      });
     }
   return out;
 }
@@ -1113,6 +1220,17 @@ export function burstWindowDecisionPoints(
                 leadRawMs,
               )
             : undefined;
+        const landed =
+          category === "control"
+            ? aimedControlLanded(
+                units.find((u) => u.id === c.dest),
+                c.unitId,
+                c.spellId,
+                c.tMs,
+                friendlyPlayerOf,
+                INTERRUPT_IDS.has(c.spellId),
+              )
+            : undefined;
         responseCasts.push({
           category,
           spellId: c.spellId,
@@ -1127,6 +1245,7 @@ export function burstWindowDecisionPoints(
             ? { effectEndSec: Math.floor((c.tMs - start) / 1000 + dur) }
             : {}),
           ...(preOpenerStillUp !== undefined ? { preOpenerStillUp } : {}),
+          ...(landed !== undefined ? { landed } : {}),
         });
       }
       for (const r of controlLandedResponses(
@@ -1143,6 +1262,18 @@ export function burstWindowDecisionPoints(
           spellName: getEnglishSpellName(r.spellId),
           casterName: friendlyNameById.get(r.unitId) ?? "",
           tSec: Math.floor((r.tMs - start) / 1000),
+          // F-B4's pre-opener check, as for an aimed control: a landed control
+          // from before the lead cast answers only if its aura was still on
+          // its holder then (codex 35-CD-13f: a root that ended 0.5 s before
+          // the opener was credited)
+          ...(() => {
+            const up = landedPreOpenerStillUp(
+              r,
+              units.find((u) => u.id === r.holderId),
+              leadRawMs,
+            );
+            return up === undefined ? {} : { preOpenerStillUp: up };
+          })(),
           // the same origin as a direct cast (the raw lead press) — the
           // window's tMs mixed two clocks and sorted a later Barkskin ahead
           // of an earlier landed Capacitor Totem (codex review of batch 8)

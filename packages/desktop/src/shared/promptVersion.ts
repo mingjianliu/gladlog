@@ -726,5 +726,11 @@
  *  teammate's ally-reaching press on another friendly names it (` →
  *  <pid>`); an aimed owner CC with no aura and no miss says `[no CC aura
  *  logged]`.
+ *  v272 (2026-10-02, triage G3 table consumers: res-readiness F-C23,
+ *  sync-burst F-B1): healer offense counts an owner CC cast through the cast
+ *  → effect table (Song of Chi-Ji, Lightning Lasso, Blinding Light …: "your
+ *  CC ready", "you cast CC", the CC counts), and `[BURST ANSWERED]` credits
+ *  an aimed control only when it landed (its own aura, an effect aura, or
+ *  for an interrupt the SPELL_INTERRUPT).
  */
-export const PROMPT_VERSION = 271;
+export const PROMPT_VERSION = 272;

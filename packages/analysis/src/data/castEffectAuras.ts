@@ -87,3 +87,17 @@ export function castEffectPairs(): ReadonlyArray<readonly [string, string]> {
     for (const a of auras) out.push([cast, a]);
   return out;
 }
+
+/** Is this CAST in an aura-keyed id set — by its own id or one of its effect
+ * auras? For a set built from aura ids (`ccSpellIds` lists Song of Chi-Ji by
+ * its disorient 198909, Lightning Lasso by its stun 305485) read with a cast
+ * id (res-readiness F-C23). */
+export function castInAuraSet(
+  castSpellId: string,
+  auraIds: ReadonlySet<string>,
+): boolean {
+  return (
+    auraIds.has(castSpellId) ||
+    effectAurasOfCast(castSpellId).some((a) => auraIds.has(a))
+  );
+}
