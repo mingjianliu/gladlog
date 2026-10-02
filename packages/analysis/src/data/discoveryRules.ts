@@ -17,7 +17,17 @@ export const DISCOVERY_TAG_RULES: { pattern: RegExp; tags: SpellTag[] }[] = [
     tags: [SpellTag.Defensive],
   },
   {
-    pattern: /avatar|wrath|power|infusion|berserk|recklessness|lust|ascendance|metamorph|shadowfiend|bender/,
+    // `\bpower\b`, a whole word: bare `power` also matched "Em-power Rune
+    // Weapon" 47568, which is a rotation button in 12.x (2 charges / 30 s,
+    // no aura, cast 3-19 times a round - triage kick-eaten F-K2, ruling C7).
+    // Its catalog Offensive tag went on 2026-10-01 and this rule put it
+    // straight back on every Frost Death Knight who talented it (agy review
+    // of that batch). Of the 493 active talent spells, the ones naming
+    // "power" with a cooldown >= 30 s are Power Infusion, Power Word:
+    // Barrier, Power Siphon and Empower Rune Weapon: the word boundary drops
+    // exactly the last (pinned in test/data.test.ts).
+    pattern:
+      /avatar|wrath|\bpower\b|infusion|berserk|recklessness|lust|ascendance|metamorph|shadowfiend|bender/,
     tags: [SpellTag.Offensive],
   },
   {

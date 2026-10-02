@@ -813,7 +813,6 @@ export const SPEC_EXCLUSIVE_SPELLS: Record<string, CombatUnitSpec[]> = {
     CombatUnitSpec.DeathKnight_Unholy,
   ], // Asphyxiate
   "51271": [CombatUnitSpec.DeathKnight_Frost], // Pillar of Frost
-  "47568": [CombatUnitSpec.DeathKnight_Frost], // Empower Rune Weapon
   "279302": [CombatUnitSpec.DeathKnight_Frost], // Frostwyrm's Fury
   "196770": [CombatUnitSpec.DeathKnight_Frost], // Remorseless Winter
   "152279": [CombatUnitSpec.DeathKnight_Frost], // Breath of Sindragosa

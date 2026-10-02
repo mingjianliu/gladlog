@@ -97,7 +97,12 @@ export const SPELL_EFFECT_OVERRIDES: Record<string, IMinedSpell> =
       e("391109", "Dark Ascension", 60, 20),
       e("375087", "Dragonrage", 120, 18),
       e("51271", "Pillar of Frost", 60, 12),
-      e("47568", "Empower Rune Weapon", 120, 20),
+      // Empower Rune Weapon 47568 had `120, 20` here until 2026-10-01. In
+      // 12.x it is a damage button, not a cooldown window: DB2 gives 2 charges
+      // on a 30 s recharge and no duration, and on 605 S2 files its 392 casts
+      // (44 Frost Death Knight rounds, 3–19 casts a round, gaps p50 12.2 s)
+      // applied the aura 0 times (triage kick-eaten F-K2, Game-Behaviour
+      // legs a + c; ruling C7). The DB2 row now stands on its own.
       e("275699", "Apocalypse", 90, 15),
       e("207289", "Unholy Assault", 90, 20),
       e("106951", "Berserk", 180, 20),

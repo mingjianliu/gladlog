@@ -36,11 +36,24 @@ describe("spellEffectData 双层合并:dispelType 字段级恢复", () => {
     }
   });
 
-  it("范围 pin:校准字段(charges)不做恢复 —— override 的沉默是手工建模选择,生成层 2×30s 与校准 120s 是两套模型不能混", () => {
-    // Empower Rune Weapon: 生成层 charges 2×30s,override 校准单 cd 120s。
-    // 恢复 charges 会让 chargesAvailableAt 按「2 充能 × 120s」混算 —— 比
+  it("范围 pin:校准字段(charges)不做恢复 —— override 的沉默是手工建模选择,生成层 1×180s 与校准 210s 是两套模型不能混", () => {
+    // Shield Wall: 生成层 charges 1×180s,override 校准单 cd 210s。
+    // 恢复 charges 会让 chargesAvailableAt 按生成层的充能回转混算 —— 比
     // 遮蔽更错。若将来要多充能,需在 override 里显式写 charges。
-    expect(spellEffectData["47568"]?.cooldownSeconds).toBe(120);
-    expect(spellEffectData["47568"]?.charges).toBeUndefined();
+    // (2026-10-01 之前这条钉在符文武器增效 47568 上;它的 override 已删,见下。)
+    expect(spellEffectData["871"]?.cooldownSeconds).toBe(210);
+    expect(spellEffectData["871"]?.charges).toBeUndefined();
+  });
+
+  it("符文武器增效 47568 不再有手工 override:按 DB2 是 2 充能 / 30 s 回转、无持续时间(triage kick-eaten F-K2,裁决 C7)", () => {
+    // 12.x 里它是循环伤害按钮:605 个 S2 文件 392 次施放、0 次光环。回填
+    // 120 s / 20 s 会让它重新变成「爆发窗口」。
+    expect(SPELL_EFFECT_OVERRIDES["47568"]).toBeUndefined();
+    expect(spellEffectData["47568"]?.cooldownSeconds).toBeUndefined();
+    expect(spellEffectData["47568"]?.durationSeconds).toBeUndefined();
+    expect(spellEffectData["47568"]?.charges).toEqual({
+      charges: 2,
+      chargeCooldownSeconds: 30,
+    });
   });
 });

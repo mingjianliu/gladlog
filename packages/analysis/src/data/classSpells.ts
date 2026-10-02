@@ -158,7 +158,10 @@ export const classMetadata: IClassSpellMetadata[] = [
       a("410358", "Anti-Magic Shell", D), // W1g 2026-09-26: a defensive players press that the ledger never admitted (ledgerGapScan, 605 archive files: Spellwarden's ally-cast id, 224 rounds)
       a("51052", "Anti-Magic Zone", D),
       a("51271", "Pillar of Frost", O),
-      a("47568", "Empower Rune Weapon", O),
+      // Empower Rune Weapon 47568 was tagged Offensive until 2026-10-01: in
+      // 12.x it is a rotational damage button (2 charges / 30 s, no aura —
+      // triage kick-eaten F-K2, ruling C7), so it opened a 120 s "burst"
+      // window ten times a round (5e8b11c1: `[ENEMY CD] … [1/10]`).
       a("275699", "Apocalypse", O),
       // Triage 2026-09-29 res-readiness F-C20 × sync-burst F-S4 (user ruling
       // A′1 = A, 2026-09-30; G7-P9): in OFFENSIVE_CD_SPELL_IDS already, but no

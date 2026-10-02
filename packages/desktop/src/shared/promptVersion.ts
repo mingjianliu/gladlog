@@ -599,5 +599,10 @@
  *  instant cooldown is no longer "running" for 10 s, and a zero-length burst
  *  (Soul Fire) prints no "No damage dealt" line. The observed-aura half of
  *  the ruling waits for the cast→effect table (G3).
+ *  v255 (2026-10-01): triage kick-eaten F-K2 (ruling C7). Empower Rune
+ *  Weapon 47568 is no longer an offensive cooldown: the 120 s / 20 s hand
+ *  override and the Offensive tag are gone (12.x: 2 charges / 30 s, a damage
+ *  button with no aura), so it opens no `[ENEMY CD]` / `[OFFENSIVE WINDOW]`
+ *  / `enemyBurst` any more and leaves the Frost Death Knight ledger.
  */
-export const PROMPT_VERSION = 254;
+export const PROMPT_VERSION = 255;

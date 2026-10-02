@@ -37,9 +37,13 @@ describe("OFFENSIVE_CD_SPELL_IDS — canonical membership", () => {
     }
   });
 
-  it("the six former forward-gap ids (classMetadata-only, live) are members now", () => {
+  it("Empower Rune Weapon is not an offensive cooldown: a 12.x rotation button with no aura (triage kick-eaten F-K2, ruling C7)", () => {
+    expect(OFFENSIVE_CD_SPELL_IDS.has("47568")).toBe(false);
+    expect(isOffensiveSpell("47568")).toBe(false);
+  });
+
+  it("the five former forward-gap ids (classMetadata-only, live) are members now", () => {
     for (const id of [
-      "47568", // Empower Rune Weapon
       "114050", // Ascendance (Elemental)
       "123904", // Invoke Xuen, the White Tiger
       "191427", // Metamorphosis
@@ -62,8 +66,8 @@ describe("OFFENSIVE_CD_SPELL_IDS — canonical membership", () => {
     }
   });
 
-  it("union-minus-dead arithmetic: 43 ∪ 46 (overlap 19) − 9 dead = 61 (2026-09-18: + Zenith, + 10 casts and the Voidform aura id from offensiveCdGapScan; 2026-09-30: + Heroism 204362, triage G7-P1)", () => {
-    expect(OFFENSIVE_CD_SPELL_IDS.size).toBe(61);
+  it("union-minus-dead arithmetic: 43 ∪ 45 (overlap 19) − 9 dead = 60 (2026-09-18: + Zenith, + 10 casts and the Voidform aura id from offensiveCdGapScan; 2026-09-30: + Heroism 204362, triage G7-P1; 2026-10-01: − Empower Rune Weapon 47568, triage kick-eaten F-K2)", () => {
+    expect(OFFENSIVE_CD_SPELL_IDS.size).toBe(60);
     expect(OFFENSIVE_CD_SPELL_IDS.has("204362")).toBe(true);
     // live renumber of a registered spell, and the Shadow successor
     expect(OFFENSIVE_CD_SPELL_IDS.has("446035")).toBe(true);

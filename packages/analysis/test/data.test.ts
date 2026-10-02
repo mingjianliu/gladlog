@@ -6,6 +6,7 @@ import {
 import { ccSpellIds } from "../src/data/spellTags";
 import { CANDIDATE_TYPE_FLAGS } from "../src/data/candidateTypeFlags";
 import { DISCOVERY_TAG_RULES } from "../src/data/discoveryRules";
+import { SpellTag } from "../src/data/spellTypes";
 
 describe("data layer", () => {
   it("overrides:每条含 cooldown 或 duration 至少其一,id 键一致", () => {
@@ -36,6 +37,16 @@ describe("data layer", () => {
     );
     expect(DISCOVERY_TAG_RULES.length).toBeGreaterThan(0);
     expect(DISCOVERY_TAG_RULES[0]!.pattern).toBeInstanceOf(RegExp);
+  });
+  it('discoveryRules: "power" tags Offensive only as a whole word — Empower Rune Weapon gets no tag (triage kick-eaten F-K2)', () => {
+    const tagsOf = (name: string) =>
+      DISCOVERY_TAG_RULES.filter((r) => r.pattern.test(name.toLowerCase()))
+        .flatMap((r) => r.tags)
+        .sort();
+    expect(tagsOf("Empower Rune Weapon")).toEqual([]);
+    expect(tagsOf("Power Infusion")).toEqual([SpellTag.Offensive]);
+    expect(tagsOf("Power Siphon")).toEqual([SpellTag.Offensive]);
+    expect(tagsOf("Power Word: Barrier")).toEqual([SpellTag.Offensive]);
   });
   it("candidateTypeFlags(Task 9,2026-08-15 四个 P1/P2 起爆开关全量上线;2026-08-19 missedSyncWindow、2026-08-29 unsyncedBurst/missedPurge/ccHeld、2026-08-30 killReview/cdSpentIdle 下架);manaPressure/manaEfficiency 两开关已随候选退役删除(2026-08-21 管线审查第 3 条,#26 结案、后继 #33)", () => {
     expect(CANDIDATE_TYPE_FLAGS).toEqual({

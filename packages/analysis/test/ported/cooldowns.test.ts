@@ -1620,10 +1620,15 @@ describe("extractMajorCooldowns", () => {
     expect(cds.find((c) => c.spellId === "740")).toBeUndefined();
   });
 
-  it("B102: deduplicates consecutive casts of the same major cooldown within 2 seconds", () => {
+  it("Empower Rune Weapon is not on a Frost Death Knight's ledger, talented and cast or not (triage kick-eaten F-K2: neither the catalog nor talent discovery admits it)", () => {
+    // talent node 76096 / entry 96225 = Empower Rune Weapon 47568 (active);
+    // 101929 / 125874 = Pillar of Frost 51271, the control that stays
+    const ERW_TALENT = { id1: 76096, id2: 96225, count: 1 };
+    const PILLAR_TALENT = { id1: 101929, id2: 125874, count: 1 };
     const owner = makeUnit("player-1", {
       class: CombatUnitClass.DeathKnight,
       spec: CombatUnitSpec.DeathKnight_Frost,
+      info: { talents: [ERW_TALENT, PILLAR_TALENT], pvpTalents: [] } as never,
       spellCastEvents: [
         makeSpellCastEvent(
           "47568",
@@ -1632,41 +1637,70 @@ describe("extractMajorCooldowns", () => {
           "Target",
           "player-1",
           "Empower Rune Weapon",
+        ),
+        makeSpellCastEvent(
+          "51271",
+          T0 + 12_000,
+          "player-1",
+          "Target",
+          "player-1",
+          "Pillar of Frost",
+        ),
+      ],
+    });
+    const combat = makeCombatFull({ "player-1": owner });
+    const ids = extractMajorCooldowns(owner, combat).map((c) => c.spellId);
+    expect(ids).toContain("51271");
+    expect(ids).not.toContain("47568");
+  });
+
+  it("B102: deduplicates consecutive casts of the same major cooldown within 2 seconds", () => {
+    const owner = makeUnit("player-1", {
+      class: CombatUnitClass.DeathKnight,
+      spec: CombatUnitSpec.DeathKnight_Frost,
+      spellCastEvents: [
+        makeSpellCastEvent(
+          "51271",
+          T0 + 10_000,
+          "player-1",
+          "Target",
+          "player-1",
+          "Pillar of Frost",
         ), // Manual cast
         makeSpellCastEvent(
-          "47568",
+          "51271",
           T0 + 10_500,
           "player-1",
           "Target",
           "player-1",
-          "Empower Rune Weapon",
+          "Pillar of Frost",
         ), // Duplicate at +0.5s
         makeSpellCastEvent(
-          "47568",
+          "51271",
           T0 + 11_500,
           "player-1",
           "Target",
           "player-1",
-          "Empower Rune Weapon",
+          "Pillar of Frost",
         ), // Duplicate at +1.5s
         makeSpellCastEvent(
-          "47568",
+          "51271",
           T0 + 30_000,
           "player-1",
           "Target",
           "player-1",
-          "Empower Rune Weapon",
+          "Pillar of Frost",
         ), // Separate cast > 2s
       ] as any,
     });
     const combat = makeCombatFull({ "player-1": owner });
 
     const cds = extractMajorCooldowns(owner, combat);
-    const erw = cds.find((c) => c.spellId === "47568");
-    expect(erw).toBeDefined();
-    expect(erw?.casts).toHaveLength(2); // Should only keep 10s and 30s
-    expect(erw?.casts[0].timeSeconds).toBe(10);
-    expect(erw?.casts[1].timeSeconds).toBe(30);
+    const pillar = cds.find((c) => c.spellId === "51271");
+    expect(pillar).toBeDefined();
+    expect(pillar?.casts).toHaveLength(2); // Should only keep 10s and 30s
+    expect(pillar?.casts[0].timeSeconds).toBe(10);
+    expect(pillar?.casts[1].timeSeconds).toBe(30);
   });
 
   it("B102: filters out casts that match the PASSIVE_SPELL_BLOCKLIST", () => {
@@ -1675,7 +1709,7 @@ describe("extractMajorCooldowns", () => {
       spec: CombatUnitSpec.DeathKnight_Frost,
       spellCastEvents: [
         makeSpellCastEvent(
-          "47568",
+          "51271",
           T0 + 10_000,
           "player-1",
           "Target",
@@ -1689,9 +1723,9 @@ describe("extractMajorCooldowns", () => {
     const combat = makeCombatFull({ "player-1": owner });
 
     const cds = extractMajorCooldowns(owner, combat);
-    const erw = cds.find((c) => c.spellId === "47568");
-    expect(erw).toBeDefined();
-    expect(erw?.casts).toHaveLength(0); // Filtered out by name
+    const pillar = cds.find((c) => c.spellId === "51271");
+    expect(pillar).toBeDefined();
+    expect(pillar?.casts).toHaveLength(0); // Filtered out by name
   });
 
   describe("isPassiveProcCast (2026-09-11: id-keyed passive procs)", () => {

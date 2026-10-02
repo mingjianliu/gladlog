@@ -36,7 +36,7 @@ export interface IMinedSpell {
 // reached the main table. Field-restore dispelType only: the calibration
 // fields (cd/duration/charges) stay override-authoritative as written, since
 // their silence is itself a hand-modeling choice (e.g. generated
-// charges 2×30s for Empower Rune Weapon contradicts the calibrated 120s —
+// charges 1×180s for Shield Wall contradicts the calibrated 210s —
 // restoring charges wholesale would mix the two models).
 export const spellEffectData = (() => {
   const merged = {
