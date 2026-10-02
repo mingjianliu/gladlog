@@ -15,6 +15,10 @@ import { DEATH_WINDOW_S, TIMELINE_LINE_FLAGS } from "../data/timelineLineFlags";
 import { buildAuraIntervals } from "../utils/auraIntervals";
 import { buffFullDurationForCaster } from "../utils/buffDuration";
 import { silenceIntervals } from "../utils/cannotCastIntervals";
+import {
+  EMPOWER_PRESS_MATCH_MS,
+  empowerSpans,
+} from "../utils/castCommitSpans";
 import type { ICcBreakEvent } from "../utils/ccBreakAnalysis";
 import {
   castEndedCcWindow,
@@ -923,15 +927,44 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
    * The tag states the fact only; whether L1 was right (Flameshaper tap-spam
    * is a real style) is the model's call, not an accusation baked in here.
    *
-   * `SPELL_EMPOWER_END` fires at release, essentially the same instant as the
-   * cast's own SPELL_CAST_SUCCESS — matched by spellId within ±1.5s, each END
-   * consumed once.
+   * The END is matched to the press by spellId within ±1.5s, each END
+   * consumed once. KNOWN GAP (docs/predicate-index.md "Not yet unified"): the
+   * press's SPELL_CAST_SUCCESS is logged when the hold STARTS, the END when it
+   * is released, so this window reaches a tap and misses a full charge held
+   * longer than 1.5 s.
+   *
+   * `[EMPOWER not released — cut short after Ns]` (triage other F-O6): a hold
+   * that ended in SPELL_EMPOWER_INTERRUPT released nothing, yet its
+   * SPELL_CAST_SUCCESS — the press, logged at SPELL_EMPOWER_START — rendered
+   * exactly like a release. The tag does NOT say "interrupted": the log writes
+   * that event for every hold that did not release, and on the 60-file library
+   * only 20 of 35 coincide with an enemy CC or kick (the rest: moved, or let
+   * go before the first rank). The cause, when there is one, is on the
+   * timeline's own [CC ON TEAM] / kick line at that second.
+   * Read from `empowerSpans` (the predicate occupancyWithin counts
+   * the hold with), matched on the START instant and checked BEFORE the END
+   * lookup: an interrupted press followed by a quick re-press must not take
+   * the second press's END.
    */
   const consumedEmpowerEnds = new Set<unknown>();
+  const ownerInterruptedEmpowers = (empowerSpans(owner) ?? []).filter(
+    (s) => s.interrupted,
+  );
+  const consumedEmpowerInterrupts = new Set<unknown>();
   function ownerEmpowerTag(spellId: string, castTimeSeconds: number): string {
     const ends = owner.empowerEnds;
-    if (!ends || ends.length === 0) return "";
     const castMs = matchStartMs + castTimeSeconds * 1000;
+    const cut = ownerInterruptedEmpowers.find(
+      (s) =>
+        s.spellId === spellId &&
+        !consumedEmpowerInterrupts.has(s) &&
+        Math.abs(s.startMs - castMs) <= EMPOWER_PRESS_MATCH_MS,
+    );
+    if (cut) {
+      consumedEmpowerInterrupts.add(cut);
+      return ` [EMPOWER not released — cut short after ${((cut.endMs - cut.startMs) / 1000).toFixed(1)}s]`;
+    }
+    if (!ends || ends.length === 0) return "";
     const end = ends.find(
       (e) =>
         e.spellId === spellId &&

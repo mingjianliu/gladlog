@@ -107,7 +107,8 @@ export interface ISpellEvent extends ICombatEvent {
 /** `SPELL_EMPOWER_END` — an Evoker empowered cast and the charge level it was
  * released at. Deliberately NOT folded into spellCastEvents: the same cast
  * already appears there as its own SPELL_CAST_SUCCESS, so folding would
- * double-count every empowered cast. */
+ * double-count every empowered cast. `SPELL_EMPOWER_INTERRUPT` has the same
+ * shape: `level` is then the level reached when the hold was cut short. */
 export interface IEmpowerEvent extends ICombatEvent {
   /** Release level (1-based; Font of Magic raises the cap, the log only
    * carries the level actually reached). */
@@ -201,6 +202,14 @@ export interface ICombatUnit {
   /** Empowered casts BY this unit with their release level. Same
    * absent-on-old-archives caveat as healAbsorbsIn. */
   empowerEnds?: IEmpowerEvent[];
+  /** `SPELL_EMPOWER_START` — when this unit began holding an empowered cast
+   * (the cast's SPELL_CAST_SUCCESS is logged at this instant, not at the
+   * release). Undefined on documents stored before 2026-10-01: unknown, not
+   * "held none". Read through analysis `empowerSpans`, not directly. */
+  empowerStarts?: ISpellEvent[];
+  /** `SPELL_EMPOWER_INTERRUPT` — empowered casts BY this unit that were cut
+   * short instead of released; `level` is the level reached. Same caveat. */
+  empowerInterrupts?: IEmpowerEvent[];
 }
 
 export interface IAdvancedAction {

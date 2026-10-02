@@ -41,6 +41,8 @@ export function collectEvents(
       advancedSamples: [],
       healAbsorbsIn: [],
       empowerEnds: [],
+      empowerStarts: [],
+      empowerInterrupts: [],
       missesOut: [],
       missesIn: [],
     });
@@ -148,21 +150,37 @@ export function collectEvents(
       }
     }
 
-    // 2c. Empowered casts (Evoker) and their release level.
+    // 2c. Empowered casts (Evoker): when the hold began, and how it ended —
+    // released at a level (END) or cut short (INTERRUPT).
     if (
-      record.eventName === "SPELL_EMPOWER_END" &&
+      (record.eventName === "SPELL_EMPOWER_END" ||
+        record.eventName === "SPELL_EMPOWER_INTERRUPT") &&
       typeof record.empowerLevel === "number"
     ) {
       if (srcGuid && srcGuid !== "0000000000000000") {
         const srcUnit = gladUnits.get(srcGuid);
         if (srcUnit) {
-          srcUnit.empowerEnds.push({
+          const empowerEvent = {
             ...baseEvent,
             spellId,
             spellName,
             level: record.empowerLevel,
-          });
+          };
+          if (record.eventName === "SPELL_EMPOWER_END") {
+            srcUnit.empowerEnds.push(empowerEvent);
+          } else {
+            srcUnit.empowerInterrupts?.push(empowerEvent);
+          }
         }
+      }
+    }
+    if (record.eventName === "SPELL_EMPOWER_START") {
+      if (srcGuid && srcGuid !== "0000000000000000") {
+        gladUnits.get(srcGuid)?.empowerStarts?.push({
+          ...baseEvent,
+          spellId,
+          spellName,
+        });
       }
     }
 

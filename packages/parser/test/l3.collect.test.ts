@@ -149,3 +149,38 @@ describe("collectEvents", () => {
     ).toHaveLength(1);
   });
 });
+
+describe("collectEvents: empowered casts (start / release / interrupt)", () => {
+  const EMP = (ev: string, i: number, tail = "") =>
+    L(
+      `${ev},Player-1-A,"Alice-X",0x511,0x80000000,0000000000000000,nil,0x80000000,0x80000000,355936,"Dream Breath",0x8${tail}`,
+      i,
+    );
+  const empRecords: ParsedLine[] = [
+    // A real line for the roster (an empower names no dest unit).
+    records[0]!,
+    EMP("SPELL_EMPOWER_START", 10),
+    EMP("SPELL_EMPOWER_INTERRUPT", 11, ",1"),
+    EMP("SPELL_EMPOWER_START", 20),
+    EMP("SPELL_EMPOWER_END", 23, ",3"),
+  ];
+  const a = collectEvents(empRecords, buildRoster(empRecords)).get(
+    "Player-1-A",
+  )!;
+
+  it("keeps every START on the caster", () => {
+    expect(a.empowerStarts!.map((e) => e.eventName)).toEqual([
+      "SPELL_EMPOWER_START",
+      "SPELL_EMPOWER_START",
+    ]);
+    expect(a.empowerStarts![0]!.spellId).toBe(355936);
+  });
+
+  it("an INTERRUPT goes to empowerInterrupts with the level reached, never to empowerEnds", () => {
+    expect(a.empowerInterrupts).toHaveLength(1);
+    expect(a.empowerInterrupts![0]!.level).toBe(1);
+    expect(a.empowerInterrupts![0]!.eventName).toBe("SPELL_EMPOWER_INTERRUPT");
+    expect(a.empowerEnds).toHaveLength(1);
+    expect(a.empowerEnds[0]!.level).toBe(3);
+  });
+});

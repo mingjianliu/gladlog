@@ -41,7 +41,8 @@ export interface ParsedLine {
   missed?: ReturnType<typeof decodeMissed>;
   /** `SPELL_HEAL_ABSORBED` — healing eaten by a heal-absorb debuff. */
   healAbsorbed?: ReturnType<typeof decodeHealAbsorbed>;
-  /** `SPELL_EMPOWER_END`'s trailing field: how far the empowered cast was
-   * charged (Evoker). Absent on `SPELL_EMPOWER_START`. */
+  /** The trailing field of `SPELL_EMPOWER_END` and `SPELL_EMPOWER_INTERRUPT`:
+   * how far the empowered cast was charged (Evoker) when it was released /
+   * interrupted. Absent on `SPELL_EMPOWER_START`. */
   empowerLevel?: number;
 }

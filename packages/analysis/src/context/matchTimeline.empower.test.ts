@@ -94,6 +94,29 @@ const empowerEnd = (
   },
 });
 
+const empowerStart = (spellId: string, spellName: string, t: number) => ({
+  ...cast(spellId, spellName, t),
+  logLine: {
+    event: "SPELL_EMPOWER_START" as LogEvent,
+    timestamp: t,
+    parameters: [],
+  },
+});
+
+const empowerInterrupt = (
+  spellId: string,
+  spellName: string,
+  t: number,
+  level: number,
+) => ({
+  ...empowerEnd(spellId, spellName, t, level),
+  logLine: {
+    event: "SPELL_EMPOWER_INTERRUPT" as LogEvent,
+    timestamp: t,
+    parameters: [],
+  },
+});
+
 function baseParams(
   owner: ICombatUnit,
   ownerCDs: BuildMatchTimelineParams["ownerCDs"] = [],
@@ -184,5 +207,70 @@ describe("[EMPOWER L?] on the owner's empowered casts", () => {
       .split("\n")
       .filter((l) => l.includes("[EMPOWER")).length;
     expect(tagged).toBe(1);
+  });
+});
+
+describe("[EMPOWER not released — cut short after Ns] — a hold that ended in SPELL_EMPOWER_INTERRUPT", () => {
+  // ba8c0510: Dream Breath START 34.102 (its SPELL_CAST_SUCCESS 1 ms later),
+  // feared, SPELL_EMPOWER_INTERRUPT 34.519 — rendered as a plain release.
+  it("the press is tagged with how long it was held", () => {
+    const owner = mkUnit("o", "Voker-Realm", {
+      spellCastEvents: [cast(DREAM_BREATH, "Dream Breath", 34_103)] as never,
+      empowerStarts: [
+        empowerStart(DREAM_BREATH, "Dream Breath", 34_102),
+      ] as never,
+      empowerInterrupts: [
+        empowerInterrupt(DREAM_BREATH, "Dream Breath", 34_519, 1),
+      ] as never,
+      empowerEnds: [],
+    });
+    const timeline = buildMatchTimeline(baseParams(owner));
+    expect(timeline).toContain(
+      "Dream Breath [EMPOWER not released — cut short after 0.4s]",
+    );
+    // The log calls every unreleased hold an "interrupt"; the tag must not
+    // assert an enemy cause.
+    expect(timeline).not.toContain("interrupted");
+    expect(timeline).not.toContain("[EMPOWER L");
+  });
+
+  it("an interrupted press does not take the END of the re-press that followed it", () => {
+    const owner = mkUnit("o", "Voker-Realm", {
+      spellCastEvents: [
+        cast(DREAM_BREATH, "Dream Breath", 30_001),
+        cast(DREAM_BREATH, "Dream Breath", 31_201),
+      ] as never,
+      empowerStarts: [
+        empowerStart(DREAM_BREATH, "Dream Breath", 30_000),
+        empowerStart(DREAM_BREATH, "Dream Breath", 31_200),
+      ] as never,
+      empowerInterrupts: [
+        empowerInterrupt(DREAM_BREATH, "Dream Breath", 30_400, 0),
+      ] as never,
+      // 1.399 s after the first press's SUCCESS (30_001): inside the END
+      // lookup's ±1.5 s, so without the not-released check coming first the
+      // FIRST press would take this END.
+      empowerEnds: [
+        empowerEnd(DREAM_BREATH, "Dream Breath", 31_400, 1),
+      ] as never,
+    });
+    const lines = buildMatchTimeline(baseParams(owner))
+      .split("\n")
+      .filter((l) => l.includes("[EMPOWER"));
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toContain(
+      "[EMPOWER not released — cut short after 0.4s]",
+    );
+    expect(lines[1]).toContain("[EMPOWER L1]");
+  });
+
+  it("a document with no empowerStarts (stored before the parser kept them) renders as before", () => {
+    const owner = mkUnit("o", "Voker-Realm", {
+      spellCastEvents: [cast(DREAM_BREATH, "Dream Breath", 34_103)] as never,
+      empowerInterrupts: [
+        empowerInterrupt(DREAM_BREATH, "Dream Breath", 34_519, 1),
+      ] as never,
+    });
+    expect(buildMatchTimeline(baseParams(owner))).not.toContain("[EMPOWER");
   });
 });

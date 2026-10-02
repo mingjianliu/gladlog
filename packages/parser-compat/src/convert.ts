@@ -463,7 +463,33 @@ function convertUnit(
   const missesOut: IMissEvent[] = (unit.missesOut ?? []).map(convertMiss);
   const missesIn: IMissEvent[] = (unit.missesIn ?? []).map(convertMiss);
 
+  const convertEmpower = (
+    event: NonNullable<GladUnit["empowerEnds"]>[number],
+  ): IEmpowerEvent => ({
+    spellId: String(event.spellId),
+    spellName: event.spellName,
+    timestamp: event.timestamp,
+    ...unitFlagFields(event.params),
+    srcUnitId: event.srcId,
+    srcUnitName: event.srcName,
+    destUnitId: event.destId,
+    destUnitName: event.destName,
+    level: event.level,
+    logLine: {
+      event: event.eventName as LogEvent,
+      timestamp: event.timestamp,
+      parameters: convertParams(event.params),
+      lineIndex: event.lineIndex,
+    },
+  });
   const empowerEnds: IEmpowerEvent[] = (unit.empowerEnds ?? []).map(
+    convertEmpower,
+  );
+  // Absent on documents stored before the parser kept them: stay undefined
+  // ("unknown"), never [] ("this unit held no empower").
+  const empowerInterrupts: IEmpowerEvent[] | undefined =
+    unit.empowerInterrupts?.map(convertEmpower);
+  const empowerStarts: ISpellEvent[] | undefined = unit.empowerStarts?.map(
     (event) => ({
       spellId: String(event.spellId),
       spellName: event.spellName,
@@ -473,7 +499,6 @@ function convertUnit(
       srcUnitName: event.srcName,
       destUnitId: event.destId,
       destUnitName: event.destName,
-      level: event.level,
       logLine: {
         event: event.eventName as LogEvent,
         timestamp: event.timestamp,
@@ -672,6 +697,8 @@ function convertUnit(
     missesOut,
     missesIn,
     empowerEnds,
+    ...(empowerStarts ? { empowerStarts } : {}),
+    ...(empowerInterrupts ? { empowerInterrupts } : {}),
   };
 }
 

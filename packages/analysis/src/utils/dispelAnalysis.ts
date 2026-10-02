@@ -24,6 +24,12 @@ import {
 } from "../data/spellEffectData";
 import spellIdListsData from "../data/spellIdLists";
 import { buildCannotCastIntervals } from "./cannotCastIntervals";
+import {
+  CHANNEL_AURA_LAG_MS,
+  channelSpans,
+  EMPOWER_PRESS_MATCH_MS,
+  empowerSpans,
+} from "./castCommitSpans";
 import { charmedThrough } from "./charmedPlayer";
 import {
   applyCdTalentModifiers,
@@ -1806,7 +1812,12 @@ function hardCastBarsWithin(
 }
 
 /** What occupied a unit, for the acceptance split (F-C11). */
-export type OccupancyKind = "hardcast" | "proxy" | "drink";
+export type OccupancyKind =
+  | "hardcast"
+  | "empower"
+  | "channel"
+  | "proxy"
+  | "drink";
 
 export interface IOccupancy extends IHardCastOccupancy {
   kinds: OccupancyKind[];
@@ -1853,11 +1864,16 @@ function selfAuraIntervals(
  * user ruling A43 = B, 2026-09-30) — the owner's `ownerCasting*` and a
  * teammate dispeller's `dispellerCasting*` both read it. The union of:
  *  - `hardCastOccupancyWithin`'s bars;
+ *  - an empowered cast being held and a channel whose length the log
+ *    records — the two commitments with no SPELL_CAST_START bar, read from
+ *    `castCommitSpans.ts` (triage F-C10, 2026-10-01). Before this an
+ *    Evoker's breaths and Disintegrate counted as free hands. Cut at the
+ *    first cannot-cast interval like a bar (rule (c)), and one press is one
+ *    entry: an empower that is also in the channelled table is its hold, and
+ *    a channel that begins at its own bar's success extends that bar;
  *  - a channel the log shows only as the caster's self-aura
  *    (`CHANNEL_PROXY_IDS`, Ultimate Penitence 421453);
  *  - drinking (`DRINK_AURA_IDS`).
- * (Channels of `CHANNELED_SPELL_IDS` paired with their self-aura are
- * missed-cleanse F-C10's half — the G6 parser/compat session.)
  * occupiedMs is the union's overlap with the window; startedBeforeWindow is
  * true when any counted interval began before it. null = no cast-start
  * stream and no aura (unknown, not idle).
@@ -1877,8 +1893,60 @@ export function occupancyWithin(
     failedCasts,
   );
   if (bars === null && !Array.isArray(unit.auraEvents)) return null;
+  const barItems = (bars ?? []).map((b) => ({
+    ...b,
+    kind: "hardcast" as OccupancyKind,
+  }));
+  const cutters = buildCannotCastIntervals(unit, enemyIds)
+    .map((iv) => iv.from)
+    .sort((a, b) => a - b);
+  const holds = empowerSpans(unit) ?? [];
+  const channels = channelSpans(unit).filter(
+    (c) =>
+      !holds.some(
+        (h) =>
+          h.spellId === c.spellId &&
+          Math.abs(h.startMs - c.startMs) <= EMPOWER_PRESS_MATCH_MS,
+      ),
+  );
+  const noBar: Array<IOccupancyInterval & { kind: OccupancyKind }> = [];
+  // A bar takes at most ONE channel: once extended, its `to` is the channel's
+  // end, and a second channel of the same spell starting right there is a
+  // second press, not the first one's tail.
+  const extended = new Set<IOccupancyInterval>();
+  for (const [kind, spans] of [
+    ["empower", holds],
+    ["channel", channels],
+  ] as const) {
+    for (const span of spans) {
+      const cut = cutters.find((c) => c > span.startMs);
+      const to = Math.min(span.endMs, cut ?? Infinity);
+      const ownBar =
+        kind === "channel"
+          ? barItems.find(
+              (b) =>
+                !extended.has(b) &&
+                b.spellId === span.spellId &&
+                Math.abs(b.to - span.startMs) <= CHANNEL_AURA_LAG_MS,
+            )
+          : undefined;
+      if (ownBar) {
+        extended.add(ownBar);
+        ownBar.to = Math.max(ownBar.to, to);
+        continue;
+      }
+      noBar.push({
+        from: span.startMs,
+        to,
+        spellId: span.spellId,
+        spellName: getEnglishSpellName(span.spellId, span.spellName),
+        kind,
+      });
+    }
+  }
   const tagged: Array<IOccupancyInterval & { kind: OccupancyKind }> = [
-    ...(bars ?? []).map((b) => ({ ...b, kind: "hardcast" as const })),
+    ...barItems,
+    ...noBar,
     ...selfAuraIntervals(unit, CHANNEL_PROXY_IDS, windowEndMs).map((b) => ({
       ...b,
       kind: "proxy" as const,

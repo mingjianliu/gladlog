@@ -87,6 +87,18 @@ describe("SPELL_EMPOWER_END (#5)", () => {
     );
     expect(parseLine(start)!.empowerLevel).toBeUndefined();
   });
+
+  it("INTERRUPT carries the level reached, like END", () => {
+    // Real line: a Dream Breath cut short by a fear 0.42 s into the hold.
+    const interrupt =
+      '8/9/2026 00:07:16.038-4  SPELL_EMPOWER_INTERRUPT,Player-57-0D9F157E,"Bumbingdr-Illidan-US",0x511,0x80000004,0000000000000000,nil,0x80000000,0x80000000,355936,"Dream Breath",0x8,1';
+    const parsed = parseLine(interrupt)!;
+    expect(parsed.known).toBe(true);
+    expect(parsed.eventName).toBe("SPELL_EMPOWER_INTERRUPT");
+    expect(parsed.empowerLevel).toBe(1);
+    expect(parsed.spell?.spellId).toBe(355936);
+    expect(parsed.base?.srcGuid).toBe("Player-57-0D9F157E");
+  });
 });
 
 describe("SPELL_HEAL_ABSORBED (#7)", () => {

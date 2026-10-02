@@ -614,5 +614,20 @@
  *  credited to the active CC with the most official time left
  *  (`bindBreakToWindow`), not the longest-running one — [CC ON TEAM] `trinket
  *  broke this CC` and [ENEMY TRINKET] `out of X` name that CC.
+ *  v258 (2026-10-01, triage G6: other F-O6 + missed-cleanse F-C10 + pets
+ *  F-PS2): (1) an owner empower that ended in SPELL_EMPOWER_INTERRUPT renders
+ *  `[EMPOWER not released — cut short after Ns]` on its press line (it
+ *  released nothing; the parser now keeps SPELL_EMPOWER_START / _INTERRUPT, so
+ *  fresh parses only; no cause is asserted — CC, kick, movement and an early
+ *  let-go all log the same event); (2) missed-cleanse `ownerCastingS` /
+ *  `ownerCastingSpells` / `ownerCastingPreCommitted` (and a teammate's
+ *  dispellerCasting*, through `occupancyWithin`) count empowered holds
+ *  (fresh parses) and channels (every document) — `castCommitSpans.ts` —
+ *  which have no SPELL_CAST_START bar; (3) a guardian with no SPELL_SUMMON in
+ *  the round takes its owner from its advanced block (fresh parses only), so
+ *  a totem's CC gets its [CC ON TEAM] line. 605 files: ids unchanged; 77
+ *  not-released tags, 4 [EMPOWER L?] tags move to the press that released, 38
+ *  missed-cleanse items change casting facts (25 owner, 13 teammate), +3
+ *  [CC ON TEAM] lines.
  */
-export const PROMPT_VERSION = 257;
+export const PROMPT_VERSION = 258;

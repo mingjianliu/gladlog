@@ -161,13 +161,15 @@ export function parseLine(
       result.missed = decodeMissed(params, 11);
     } else if (
       eventName === "SPELL_EMPOWER_START" ||
-      eventName === "SPELL_EMPOWER_END"
+      eventName === "SPELL_EMPOWER_END" ||
+      eventName === "SPELL_EMPOWER_INTERRUPT"
     ) {
       result.base = decodeBaseUnits(params);
       result.spell = decodeSpell(params, 8);
-      // END carries the charge level it was released at as its last field;
-      // START has no such field.
-      if (eventName === "SPELL_EMPOWER_END") {
+      // END carries the charge level it was released at as its last field, and
+      // INTERRUPT (same shape) the level reached when the empower was cut
+      // short; START has no such field.
+      if (eventName !== "SPELL_EMPOWER_START") {
         const level = parseInt(params[params.length - 1] ?? "", 10);
         if (!Number.isNaN(level)) result.empowerLevel = level;
       }

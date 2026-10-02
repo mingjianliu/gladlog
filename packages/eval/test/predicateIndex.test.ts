@@ -92,6 +92,7 @@ import * as gapClosers from "@gladlog/analysis/src/utils/gapClosers";
 import * as burstLedger from "@gladlog/analysis/src/utils/burstLedger";
 import * as kickAudit from "@gladlog/analysis/src/utils/kickAudit";
 import * as castCancels from "@gladlog/analysis/src/utils/castCancels";
+import * as castCommitSpans from "@gladlog/analysis/src/utils/castCommitSpans";
 import * as castParam from "@gladlog/analysis/src/utils/castParam";
 import * as ccTargetState from "@gladlog/analysis/src/utils/ccTargetState";
 import * as ccTrinketAnalysis from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
@@ -1068,6 +1069,19 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/cannotCastIntervals.ts`,
     symbol: "buildCannotCastIntervals",
     mod: cannotCastIntervals,
+  },
+  // Triage 2026-09-29 (missed-cleanse F-C10 / other F-O6): commitments with
+  // no SPELL_CAST_START bar — the occupancy facts and the interrupted-empower
+  // tag read the same spans.
+  {
+    file: `${A}/utils/castCommitSpans.ts`,
+    symbol: "empowerSpans",
+    mod: castCommitSpans,
+  },
+  {
+    file: `${A}/utils/castCommitSpans.ts`,
+    symbol: "channelSpans",
+    mod: castCommitSpans,
   },
   {
     file: `${A}/utils/cannotCastIntervals.ts`,

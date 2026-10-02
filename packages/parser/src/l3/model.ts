@@ -99,7 +99,9 @@ export interface GladHealAbsorbEvent {
 
 /** `SPELL_EMPOWER_END` — an Evoker empowered cast and the charge level it was
  * released at. Kept out of `casts` on purpose: folding it in would double-count
- * every empowered cast, which already appears as its own SPELL_CAST_SUCCESS. */
+ * every empowered cast, which already appears as its own SPELL_CAST_SUCCESS.
+ * `SPELL_EMPOWER_INTERRUPT` has the same shape; there `level` is the level
+ * reached when the empower was cut short (nothing was released). */
 export interface GladEmpowerEvent extends GladEventBase {
   level: number;
 }
@@ -141,6 +143,15 @@ export interface GladUnit {
   healAbsorbsIn: GladHealAbsorbEvent[];
   /** Empowered casts BY this unit, with their release level. */
   empowerEnds: GladEmpowerEvent[];
+  /** `SPELL_EMPOWER_START` — the instant this unit began holding an empowered
+   * cast. The cast's own SPELL_CAST_SUCCESS is logged at this instant too (not
+   * at the release), so START → END / INTERRUPT is the only record of how long
+   * the unit was committed to it. Absent on documents stored before
+   * 2026-10-01 — absent means unknown. */
+  empowerStarts?: GladSpellEvent[];
+  /** Empowered casts BY this unit that were cut short (CC, kick, movement)
+   * instead of released. Same absent-on-older-documents caveat. */
+  empowerInterrupts?: GladEmpowerEvent[];
   /** Attacks BY this unit that missed, with the reason (IMMUNE, REFLECT, …). */
   missesOut: GladMissEvent[];
   /** Attacks ON this unit that missed — "I was immune to that". */

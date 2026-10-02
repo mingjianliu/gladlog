@@ -629,3 +629,40 @@ describe("absorbs carry the ATTACKER's spell (GH #100: what did the shield eat)"
     expect(out[0]!.attackSpellId).toBe("50622");
   });
 });
+
+describe("empowered casts: starts and interrupts cross into the legacy unit (triage other F-O6 / missed-cleanse F-C10)", () => {
+  const EMP = (ev: string, tail = "") =>
+    `${ev},Player-1-A,"Alice-X",0x511,0x80000000,0000000000000000,nil,0x80000000,0x80000000,355936,"Dream Breath",0x8${tail}`;
+  const { matches } = parseLines([
+    "ARENA_MATCH_START,1825,41,3v3,1",
+    CI("Player-1-A", 0, 1468, 2400),
+    EMP("SPELL_EMPOWER_START"),
+    EMP("SPELL_EMPOWER_INTERRUPT", ",1"),
+    EMP("SPELL_EMPOWER_START"),
+    EMP("SPELL_EMPOWER_END", ",3"),
+    "ARENA_MATCH_END,0,30,1500,1501",
+  ]);
+  const a = toLegacyMatch(matches[0]!).units["Player-1-A"]!;
+
+  it("empowerStarts / empowerInterrupts are exposed, and an interrupt is not a release", () => {
+    expect(a.empowerStarts).toHaveLength(2);
+    expect(a.empowerStarts![0]!.spellId).toBe("355936");
+    expect(a.empowerStarts![0]!.logLine.event).toBe("SPELL_EMPOWER_START");
+    expect(a.empowerInterrupts).toHaveLength(1);
+    expect(a.empowerInterrupts![0]!.level).toBe(1);
+    expect(a.empowerEnds).toHaveLength(1);
+    expect(a.empowerEnds![0]!.level).toBe(3);
+  });
+
+  it("a document stored before the parser kept them leaves the fields undefined (unknown, not none)", () => {
+    const old = structuredClone(matches[0]!);
+    for (const u of Object.values(old.units)) {
+      delete (u as { empowerStarts?: unknown }).empowerStarts;
+      delete (u as { empowerInterrupts?: unknown }).empowerInterrupts;
+    }
+    const legacy = toLegacyMatch(old).units["Player-1-A"]!;
+    expect(legacy.empowerStarts).toBeUndefined();
+    expect(legacy.empowerInterrupts).toBeUndefined();
+    expect(legacy.empowerEnds).toHaveLength(1);
+  });
+});
