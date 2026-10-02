@@ -1,10 +1,22 @@
-import { describe, expect, it } from "vitest";
+import {
+  type AtomicArenaCombat,
+  CombatUnitClass,
+  CombatUnitSpec,
+} from "@gladlog/parser-compat";
+import { beforeAll, describe, expect, it } from "vitest";
 
+import { makeSpellCastEvent, makeUnit } from "../../test/ported/testHelpers";
+import { ensureAnalysisData } from "../data/ensure";
 import {
   buildDpsKillWindowLines,
+  createKillWindowFactsComputer,
   killWindowAcquittal,
   killWindowFactsSuffix,
 } from "./killWindowFacts";
+
+beforeAll(async () => {
+  await ensureAnalysisData();
+});
 
 const facts = (over: Record<string, unknown> = {}) => ({
   readyOffCds: ["Avenging Wrath"],
@@ -83,5 +95,132 @@ describe("killWindowFacts (GH #31 ①)", () => {
     expect(killLines[0]).toContain("[KILL WINDOW] 0:50–0:55");
     expect(killLines[0]).toContain("team burst 900k");
     expect(killLines[0]).toContain("no team offensive CD ready");
+  });
+});
+
+// Triage 2026-09-29, group G4: sync-burst F-KW1 + res-readiness F-C8 / F-C9
+// (ruling A46) / F-C12 — one grammar for the readiness clause.
+describe("kill-window readiness grammar", () => {
+  it("names the sampled second; `none` is none AT that second, with what changed inside", () => {
+    expect(
+      killWindowFactsSuffix(
+        facts({
+          readyOffCds: [],
+          accountable: false,
+          readyAtSecond: 207,
+          maybeOffCds: [{ name: "Adrenaline Rush", withinSeconds: 144 }],
+          pressedInside: [{ name: "Adrenaline Rush", atSeconds: 221.617 }],
+        }),
+      ),
+    ).toBe(
+      "team offensive CDs ready at 3:27: none (may already be back: Adrenaline Rush ≤144s; pressed inside: Adrenaline Rush 3:41)",
+    );
+  });
+
+  it("clause order is fixed: maybe, pressed at start, back inside, pressed inside; empty clauses are left out", () => {
+    const all = killWindowFactsSuffix(
+      facts({
+        readyOffCds: ["Avatar"],
+        readyAtSecond: 243,
+        maybeOffCds: [{ name: "Recklessness", withinSeconds: 54 }],
+        pressedAtStart: [{ name: "Bestial Wrath", atSeconds: 243.34 }],
+        backInside: [{ name: "Kingsbane", atSeconds: 249 }],
+        pressedInside: [
+          { name: "Avenging Wrath", atSeconds: 250.2 },
+          { name: "Invoke Xuen, the White Tiger", atSeconds: 251 },
+        ],
+        healerLocked: true,
+      }),
+    );
+    expect(all).toBe(
+      "team offensive CDs ready at 4:03: Avatar (may already be back: Recklessness ≤54s; pressed at start: Bestial Wrath 4:03; back inside: Kingsbane 4:09; pressed inside: Avenging Wrath 4:10、Invoke Xuen, the White Tiger 4:11); enemy healer hard-CC'd in window",
+    );
+    expect(
+      killWindowFactsSuffix(facts({ readyOffCds: [], readyAtSecond: 83 })),
+    ).toBe("team offensive CDs ready at 1:23: none");
+  });
+
+  it("the acquittal does not state certain unavailability for a maybe-ready cooldown (GH #106 step 3)", () => {
+    expect(
+      killWindowAcquittal(
+        facts({
+          readyOffCds: [],
+          accountable: false,
+          readyAtSecond: 380,
+          maybeOffCds: [{ name: "Adrenaline Rush", withinSeconds: 107 }],
+        }),
+      ),
+    ).toBe(
+      "no offensive CD certainly ready (may already be back: Adrenaline Rush ≤107s)",
+    );
+    expect(
+      killWindowAcquittal(
+        facts({ readyOffCds: [], accountable: false, readyAtSecond: 380 }),
+      ),
+    ).toBe("no offensive CD was ready");
+  });
+
+  describe("facts() on real cooldown data", () => {
+    const START = 1_000_000;
+    const SMASH = "167105"; // Colossus Smash, 45 s
+    const warrior = (castSeconds: number[]) =>
+      makeUnit("P1", {
+        class: CombatUnitClass.Warrior,
+        spec: CombatUnitSpec.Warrior_Arms,
+        spellCastEvents: castSeconds.map((s) =>
+          makeSpellCastEvent(
+            SMASH,
+            START + s * 1000,
+            "E1",
+            "Enemy",
+            "P1",
+            "P1",
+            0,
+            "Colossus Smash",
+          ),
+        ),
+      });
+    const target = makeUnit("E1");
+    const factsFor = (castSeconds: number[], from: number, to: number) => {
+      const f = warrior(castSeconds);
+      return createKillWindowFactsComputer(
+        {
+          startTime: START,
+          endTime: START + 300_000,
+          units: { P1: f, E1: target },
+        } as unknown as AtomicArenaCombat,
+        [f],
+        [target],
+      ).facts(target, from, to);
+    };
+
+    it("A46: readiness is sampled at the start's rendered second — a press earlier in that second is spent and named `pressed at start`", () => {
+      // pressed 48.548, span starts 48.731 → sampled at 0:48
+      const f = factsFor([48.548], 48.731, 60);
+      expect(f.readyAtSecond).toBe(48);
+      expect(f.readyOffCds).not.toContain("Colossus Smash");
+      expect(f.pressedAtStart).toEqual([
+        { name: "Colossus Smash", atSeconds: 48.548 },
+      ]);
+      expect(f.pressedInside).toEqual([]);
+    });
+
+    it("F-KW1: a cooldown coming back inside the span is named at its first whole second, and later presses as `pressed inside`", () => {
+      // pressed at 10 → back at 55; pressed again at 57.3
+      const f = factsFor([10, 57.3], 48.731, 60);
+      expect(f.readyOffCds).not.toContain("Colossus Smash");
+      expect(f.backInside).toEqual([{ name: "Colossus Smash", atSeconds: 55 }]);
+      expect(f.pressedInside).toEqual([
+        { name: "Colossus Smash", atSeconds: 57.3 },
+      ]);
+      expect(f.pressedAtStart).toEqual([]);
+    });
+
+    it("a cooldown ready at the sampled second is in the certain list and has no `back inside`", () => {
+      const f = factsFor([1], 48.731, 60);
+      expect(f.readyOffCds).toContain("Colossus Smash");
+      expect(f.backInside!.map((b) => b.name)).not.toContain("Colossus Smash");
+      expect(f.accountable).toBe(true);
+    });
   });
 });

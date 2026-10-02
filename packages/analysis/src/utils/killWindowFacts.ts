@@ -24,11 +24,18 @@
 import { CombatUnitClass, type ICombatUnit } from "@gladlog/parser-compat";
 
 import { enemyHealerCcWindows } from "../analysis/candidates/cooldownTiming";
-import { cdAvailableAt, extractMajorCooldowns, isMeleeSpec } from "./cooldowns";
+import {
+  cdAvailableAt,
+  cdIsProcOnly,
+  cdLatestRemainingSeconds,
+  cdMaybeAvailableAt,
+  extractMajorCooldowns,
+  isMeleeSpec,
+} from "./cooldowns";
 import { getUnitPositionAtTime } from "./losAnalysis";
 import { CLOSE_RANGE_YARDS } from "./positionAnalysis";
 import { LOS_SWEEP_GAP_MS } from "./positionSampling";
-import { fmtTime } from "./renderGrid";
+import { fmtTime, toRenderSecond } from "./renderGrid";
 import { canReachTargetAt } from "./rootReachability";
 import { OFFENSIVE_CD_SPELL_IDS } from "./spellDanger";
 import { RANGE_HITBOX_SLACK_YD, spellRangeForCaster } from "./spellRange";
@@ -70,9 +77,37 @@ function friendlyReachesAt(
   return canReachTargetAt(pos, target, tMs, zoneId, yards, true);
 }
 
+/** A cooldown named on a kill-window line with the second it is about. */
+export interface IKillWindowCdAt {
+  name: string;
+  /** seconds from match start (a whole second for `backInside`; a press's own
+   * instant for the `pressed…` lists — both print through `fmtTime`) */
+  atSeconds: number;
+}
+
 export interface IKillWindowGateFacts {
-  /** Canonical friendly offensive CDs ready at the span/burst start. */
+  /** Canonical friendly offensive CDs CERTAINLY ready (`cdAvailableAt`) at
+   * the span/burst start's rendered second, holders dead by then left out.
+   * The accusation side reads this list and nothing else. */
   readyOffCds: string[];
+  /** The rendered second `readyOffCds` was sampled at — `toRenderSecond` of
+   * the span start (ruling A46, 2026-09-30: the line prints that floored
+   * second, so "ready" is read on it; the GH #31 start instant is unchanged
+   * for reach and the healer-CC overlap). Absent on hand-built facts. */
+  readyAtSecond?: number;
+  /** GH #106 step 3: not certainly ready at that second but past the earliest
+   * this cooldown has been seen back (`cdMaybeAvailableAt`) — "≤Ns" is the
+   * [RES] ledger's own number (`cdLatestRemainingSeconds`). A FACT only: it
+   * keeps the line from stating certain unavailability, never accuses. */
+  maybeOffCds?: Array<{ name: string; withinSeconds: number }>;
+  /** Presses of a team offensive CD in the start's own rendered second —
+   * already spent at the sample (ruling A45), so invisible in `readyOffCds`. */
+  pressedAtStart?: IKillWindowCdAt[];
+  /** For a CD not certainly ready at the start: the first whole second inside
+   * the span at which it is (`cdAvailableAt`), its holder still alive. */
+  backInside?: IKillWindowCdAt[];
+  /** Presses of a team offensive CD after the start's second, up to the end. */
+  pressedInside?: IKillWindowCdAt[];
   /** false only when positions WERE recorded and no friendly could reach the
    * target (range+LoS); true when reachable; null when no position data. */
   reachable: boolean | null;
@@ -128,17 +163,63 @@ export function createKillWindowFactsComputer(
       toSeconds: number,
     ): IKillWindowGateFacts {
       const tMs = startMs + fromSeconds * 1000;
+      // F-C9 (ruling A46): readiness is sampled on the rendered second the
+      // line prints, not at the fractional start — only the readiness
+      // sample; reach (below) and the healer-CC overlap keep the raw span.
+      const readyAtSecond = toRenderSecond(fromSeconds);
       // F-KW2 (triage sync-burst): a friendly dead at the instant holds no
       // cooldown — 539b6ed0's [VULNERABLE] 1:23 accused the team of holding
       // Incarnation for a Druid who died at 67.0. `isDeadAt` is the one
       // dead-at predicate (missed-sync-window's ready filter and [RES] read
-      // the same one).
-      const readyOffCds = teamCds
-        .filter(
-          ({ cd, holder }) =>
-            !isDeadAt(holder, tMs) && cdAvailableAt(cd, fromSeconds),
+      // the same one). It filters every clause: a dead holder's cooldown is
+      // neither ready, nor maybe back, nor back inside.
+      const living = teamCds.filter(({ holder }) => !isDeadAt(holder, tMs));
+      const certain = living.filter(({ cd }) =>
+        cdAvailableAt(cd, readyAtSecond),
+      );
+      const readyOffCds = certain.map(({ cd }) => cd.spellName);
+      const notCertain = living.filter((x) => !certain.includes(x));
+      // F-C8 (GH #106 step 3): "no CD ready" must not state certain
+      // unavailability for a cooldown combat shortens.
+      const maybeOffCds = notCertain
+        .filter(({ cd }) => cdMaybeAvailableAt(cd, readyAtSecond))
+        .map(({ cd }) => ({
+          name: cd.spellName,
+          withinSeconds: cdLatestRemainingSeconds(cd, readyAtSecond),
+        }));
+      // F-KW1: the first WHOLE second inside the span at which a CD that was
+      // not certainly ready is — the same `cdAvailableAt` on the same grid.
+      const lastSecond = Math.floor(toSeconds);
+      const backInside: IKillWindowCdAt[] = [];
+      for (const { cd, holder } of notCertain)
+        for (let s = readyAtSecond + 1; s <= lastSecond; s++) {
+          if (isDeadAt(holder, startMs + s * 1000)) break;
+          if (cdAvailableAt(cd, s)) {
+            backInside.push({ name: cd.spellName, atSeconds: s });
+            break;
+          }
+        }
+      // F-KW1 / F-C12: what the team pressed. A press in the start's own
+      // rendered second is spent at the sample (A45) and would otherwise be
+      // invisible; everything later, up to the span end, is "inside".
+      // (a proc-only entry has no button: its activations are not presses)
+      const presses = teamCds
+        .filter(({ cd }) => !cdIsProcOnly(cd))
+        .flatMap(({ cd }) =>
+          cd.casts
+            .filter(
+              (c) =>
+                c.timeSeconds >= readyAtSecond && c.timeSeconds <= toSeconds,
+            )
+            .map((c) => ({ name: cd.spellName, atSeconds: c.timeSeconds })),
         )
-        .map(({ cd }) => cd.spellName);
+        .sort((a, b) => a.atSeconds - b.atSeconds);
+      const pressedAtStart = presses.filter(
+        (p) => toRenderSecond(p.atSeconds) === readyAtSecond,
+      );
+      const pressedInside = presses.filter(
+        (p) => toRenderSecond(p.atSeconds) > readyAtSecond,
+      );
       // Fail OPEN: reachable stays null until a recorded position pair
       // actually disproves reach for EVERY sampled friendly.
       let reachable: boolean | null = null;
@@ -160,6 +241,11 @@ export function createKillWindowFactsComputer(
       }
       return {
         readyOffCds,
+        readyAtSecond,
+        maybeOffCds,
+        pressedAtStart,
+        backInside,
+        pressedInside,
         reachable,
         healerLocked: healerWindows.some(
           (h) => h.fromSeconds <= toSeconds && h.toSeconds >= fromSeconds,
@@ -170,15 +256,59 @@ export function createKillWindowFactsComputer(
   };
 }
 
-/** Render the shared facts suffix — one wording for both views so the gate
- * (and any future re-parse) sees identical text. */
+/** `X ≤Ns、Y ≤Ns` — the maybe-ready list, one wording for the suffix and the
+ * acquittal. Lists on these lines are joined with "、", like the ready list:
+ * offensive cooldown names carry commas (Invoke Xuen, the White Tiger; Storm,
+ * Earth, and Fire). */
+function maybeClause(f: IKillWindowGateFacts): string {
+  return (f.maybeOffCds ?? [])
+    .map((m) => `${m.name} ≤${m.withinSeconds}s`)
+    .join("、");
+}
+
+/**
+ * Render the shared facts suffix — one wording for both views so the gate
+ * (and any future re-parse) sees identical text.
+ *
+ * One grammar (triage 2026-09-29: sync-burst F-KW1, res-readiness F-C8 / F-C9
+ * / F-C12 — the three had specified competing rewrites of the same clause):
+ *
+ *   team offensive CDs ready at M:SS: <certain list | none>[ (<clauses>)]
+ *
+ * M:SS is the sampled second, so "none" no longer reads as "none for the
+ * whole window". The parenthesis holds, in this order and only when
+ * non-empty, joined by "; ":
+ *   may already be back: X ≤Ns     GH #106 step 3 (F-C8)
+ *   pressed at start: X M:SS       spent in the start's own second (F-C12)
+ *   back inside: X M:SS            came off cooldown inside the span (F-KW1)
+ *   pressed inside: X M:SS         pressed after the start's second (F-KW1)
+ * Hand-built facts without `readyAtSecond` keep the legacy wording.
+ */
 export function killWindowFactsSuffix(f: IKillWindowGateFacts): string {
   const parts: string[] = [];
-  parts.push(
-    f.readyOffCds.length > 0
-      ? `team offensive CDs ready: ${f.readyOffCds.join("、")}`
-      : "no team offensive CD ready",
-  );
+  if (f.readyAtSecond === undefined) {
+    parts.push(
+      f.readyOffCds.length > 0
+        ? `team offensive CDs ready: ${f.readyOffCds.join("、")}`
+        : "no team offensive CD ready",
+    );
+  } else {
+    const at = (list: IKillWindowCdAt[] | undefined) =>
+      (list ?? []).map((x) => `${x.name} ${fmtTime(x.atSeconds)}`).join("、");
+    const clauses = [
+      ["may already be back", maybeClause(f)],
+      ["pressed at start", at(f.pressedAtStart)],
+      ["back inside", at(f.backInside)],
+      ["pressed inside", at(f.pressedInside)],
+    ]
+      .filter(([, body]) => body !== "")
+      .map(([label, body]) => `${label}: ${body}`);
+    parts.push(
+      `team offensive CDs ready at ${fmtTime(f.readyAtSecond)}: ${
+        f.readyOffCds.length > 0 ? f.readyOffCds.join("、") : "none"
+      }${clauses.length > 0 ? ` (${clauses.join("; ")})` : ""}`,
+    );
+  }
   if (f.reachable === false)
     parts.push("target unreachable (positions recorded)");
   if (f.healerLocked) parts.push("enemy healer hard-CC'd in window");
@@ -189,7 +319,15 @@ export function killWindowFactsSuffix(f: IKillWindowGateFacts): string {
  * "never punished" accusation when the gate fails. */
 export function killWindowAcquittal(f: IKillWindowGateFacts): string {
   const reasons: string[] = [];
-  if (f.readyOffCds.length === 0) reasons.push("no offensive CD was ready");
+  // F-C8: with a maybe-ready cooldown the acquittal is "none CERTAINLY
+  // ready" — the gate itself (`accountable`) still reads the certain list.
+  const maybe = maybeClause(f);
+  if (f.readyOffCds.length === 0)
+    reasons.push(
+      maybe
+        ? `no offensive CD certainly ready (may already be back: ${maybe})`
+        : "no offensive CD was ready",
+    );
   if (f.reachable === false) reasons.push("target unreachable");
   return reasons.join(" and ");
 }

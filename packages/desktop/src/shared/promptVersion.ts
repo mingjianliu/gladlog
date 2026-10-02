@@ -666,5 +666,16 @@
  *  silenceable kick; a pet kick is asked of the pet) is not UP — when every
  *  off-cooldown kicker is held the note reads `no enemy interrupt usable
  *  (CC'd: X)`. A legend line is printed with the note.
+ *  v263 (2026-10-02, triage G4 kill-window readiness: sync-burst F-KW1,
+ *  res-readiness F-C8 + F-C9 + F-C12, ruling A46): one grammar for the
+ *  readiness clause of [KILL WINDOW] / [VULNERABLE] lines — `team offensive
+ *  CDs ready at M:SS: <list | none>` followed, when there is anything to
+ *  say, by one parenthesis: `may already be back: X ≤Ns` (GH #106 step 3),
+ *  `pressed at start: X M:SS`, `back inside: X M:SS`, `pressed inside: X
+ *  M:SS`. Readiness is sampled on the span start's rendered second (A46),
+ *  not the fractional start; a proc-only entry is never "pressed"; a
+ *  [VULNERABLE] acquittal with a maybe-ready cooldown reads `no offensive CD
+ *  certainly ready (may already be back: …)`. The accusation gate still reads
+ *  the certain list only.
  */
-export const PROMPT_VERSION = 262;
+export const PROMPT_VERSION = 263;

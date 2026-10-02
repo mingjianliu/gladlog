@@ -1511,6 +1511,21 @@ function cdSecondsUntilReadyConsumed(
   return Math.max(0, last.timeSeconds + own - tSeconds);
 }
 
+/**
+ * The whole seconds a cooldown is at most away at `tSeconds` — the number
+ * behind `(Ns)` / `(≤Ns)` on a [RES] `cd:` entry and behind the kill-window
+ * facts' `may already be back: X ≤Ns` (triage res-readiness F-C8: one source
+ * for both, so the two lines can never quote different seconds for one
+ * cooldown at one instant). Never below 1: a cooldown that is not ready is
+ * not "0 s away".
+ */
+export function cdLatestRemainingSeconds(
+  cd: Parameters<typeof cdSecondsUntilReady>[0],
+  tSeconds: number,
+): number {
+  return Math.max(1, Math.round(cdSecondsUntilReady(cd, tSeconds)));
+}
+
 /** Charges of X in hand at `tSeconds` — the [RES] `[k/N]` suffix; N is the
  *  talent-resolved `charges`, the simulation `cdAvailableAt` runs. */
 export function cdChargesReadyAt(

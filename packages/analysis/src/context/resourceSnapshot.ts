@@ -6,6 +6,7 @@ import {
   cdAvailableAt,
   cdChargesReadyAt,
   cdIsProcOnly,
+  cdLatestRemainingSeconds,
   cdMaybeAvailableAt,
   cdNeverSpent,
   cdSecondsUntilReady,
@@ -309,7 +310,7 @@ export function chargesReadyCount(
  * Everything else keeps the exact `(Ns)`.
  */
 function remainingText(cd: IMajorCooldownInfo, timeSeconds: number): string {
-  const latest = Math.max(1, Math.round(cdSecondsUntilReady(cd, timeSeconds)));
+  const latest = cdLatestRemainingSeconds(cd, timeSeconds);
   if (cd.earliestCooldownSeconds === undefined) return `${latest}s`;
   if (cdMaybeAvailableAt(cd, timeSeconds)) return `≤${latest}s`;
   const soonest = Math.max(
