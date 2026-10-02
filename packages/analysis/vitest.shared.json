@@ -150,6 +150,7 @@
     "test/incomingPressure.test.ts",
     "test/interruptReadySince.test.ts",
     "test/kickLockout.test.ts",
+    "test/kickPressure.test.ts",
     "test/killAttempts.test.ts",
     "test/matchNarrative.arc.test.ts",
     "test/matchTimeline.ccAvoidedSource.test.ts",

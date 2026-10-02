@@ -564,5 +564,10 @@
  *  locked school (not on a cast that goes out inside a holding lock: Demonic
  *  Circle: Teleport, Holy Fire, passive rows). "Not ready" is recognised in
  *  fr / es / ru / zh-TW logs too. Legend updated to match.
+ *  v250 (2026-10-01): triage kick-eaten F-K3 / F-K9b (rulings A31 = A,
+ *  A33 = A). `enemyBurst` / `ourBurst` name only cooldowns already running
+ *  when the kick landed (one pressed inside the lockout afterwards is not
+ *  listed, so a kick can become harmless and leave the menu), and a unit's
+ *  ticks inside an immunity are not its low HP. Legend updated.
  */
-export const PROMPT_VERSION = 249;
+export const PROMPT_VERSION = 250;

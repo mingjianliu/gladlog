@@ -1053,10 +1053,15 @@ export function gridHpMinInWindow(
   matchStartMs: number,
   fromSec: number,
   toSec: number,
+  /** Rendered seconds to leave out of the minimum (kick pressure: a unit
+   * inside an immunity is not "low" for those ticks). The grid and the
+   * sampler are unchanged — the same ticks, fewer of them. */
+  skipSec?: (sec: number) => boolean,
 ): { pct: number; atSec: number } | null {
   let best: { pct: number; atSec: number } | null = null;
   for (let s = fromSec; s <= toSec; s++) {
     if (isDeadAtRenderSecond(unit, matchStartMs, s)) break;
+    if (skipSec?.(s)) continue;
     const pct = gridHpPct(unit, matchStartMs + s * 1000);
     if (pct === null) continue;
     if (best === null || pct < best.pct) best = { pct, atSec: s };

@@ -91,6 +91,18 @@ export function immunityProcHeals(
   return out;
 }
 
+/** When `unit` carried an immunity (`IMMUNITY_IDS`), seconds since the match
+ * start, from the shared aura pairing. For readers that must not treat an
+ * immune unit's HP as pressure (kick-eaten's `ourLow*` / `theirLow*`). */
+export function immunityIntervals(
+  unit: ICombatUnit,
+  combat: Parameters<typeof buildAuraIntervals>[1],
+): Array<{ spellId: string; fromS: number; toS: number }> {
+  return buildAuraIntervals(unit, combat)
+    .filter((iv) => IMMUNITY_IDS.has(iv.spellId))
+    .map((iv) => ({ spellId: iv.spellId, fromS: iv.fromS, toS: iv.toS }));
+}
+
 /** Floor for "a real defensive": the same 20 % door as the kill-opportunity
  * gated tier (WALL_IN_HAND_MIT_IDS). Applied twice — to the table value when
  * building MITIGATION_AURA_IDS, and again per aura through `resolveMitigation`

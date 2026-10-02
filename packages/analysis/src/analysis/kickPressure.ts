@@ -25,6 +25,15 @@
  * lockout ends. HP is `gridHpMinInWindow` — the [STATE] tick sampler — with
  * CRISIS_HP_PCT_RENDERED as the low line, so a rendered "13%" is the same
  * reading a [STATE] tick at that second prints.
+ *
+ * Triage 2026-09-29 (kick-eaten F-K3 / F-K9b), user rulings 2026-09-30:
+ *  - A31 = A: an offensive cooldown counts only when it was ALREADY RUNNING
+ *    when the kick landed. One pressed inside the lockout after the kick is
+ *    not what the kick served (141470d0 @60.4: Force of Nature pressed 2.8 s
+ *    later, 0.16 s before the lock ended, read `enemyBurst=Force of Nature`).
+ *  - A33 = A: a unit's ticks while it carries an immunity (`IMMUNITY_IDS`,
+ *    the shared set) are not its low HP (0068182d @72.5: `ourLowPct=40` was a
+ *    mage inside Ice Block from 69.6 to 75.9).
  */
 import type { AtomicArenaCombat, ICombatUnit } from "@gladlog/parser-compat";
 
@@ -36,6 +45,7 @@ import {
   playerTalentIdSets,
 } from "../utils/cooldowns";
 import { reconstructEnemyCDTimeline } from "../utils/enemyCDs";
+import { immunityIntervals } from "../utils/enemyDefensives";
 import { OFFENSIVE_CD_SPELL_IDS } from "../utils/spellDanger";
 import { CRISIS_HP_PCT_RENDERED } from "./crisisDecisionPoints";
 
@@ -47,7 +57,8 @@ export interface KickSidePressure {
   low?: { unit: string; pct: number; atSec: number };
   /** The side's first death from the kick to KICK_OUTCOME_S after the lockout. */
   death?: { unit: string; atSec: number };
-  /** The OTHER side's offensive cooldowns running during the lockout. */
+  /** The OTHER side's offensive cooldowns already running when the kick
+   * landed (ruling A31). */
   burstAgainst: string[];
 }
 
@@ -90,6 +101,17 @@ export function kickPressureFor(params: {
   const deathS = (u: ICombatUnit) =>
     u.deathRecords?.[0] ? (u.deathRecords[0].timestamp - start) / 1000 : null;
   const talents = new Map(friends.map((u) => [u.id, playerTalentIdSets(u)]));
+  const immune = new Map<string, ReturnType<typeof immunityIntervals>>();
+  /** Does the unit carry an immunity at that rendered second? */
+  const immuneAt = (u: ICombatUnit) => {
+    let spans = immune.get(u.id);
+    if (!spans) {
+      spans = immunityIntervals(u, combat);
+      immune.set(u.id, spans);
+    }
+    const s = spans;
+    return (sec: number) => s.some((iv) => iv.fromS <= sec && sec < iv.toS);
+  };
 
   const side = (
     units: ICombatUnit[],
@@ -101,7 +123,7 @@ export function kickPressureFor(params: {
     const s1 = Math.ceil(t1);
     let low: KickSidePressure["low"];
     for (const u of units) {
-      const m = gridHpMinInWindow(u, start, s0, s1);
+      const m = gridHpMinInWindow(u, start, s0, s1, immuneAt(u));
       if (m && m.pct <= CRISIS_HP_PCT_RENDERED && (!low || m.pct < low.pct))
         low = { unit: u.name, pct: Math.round(m.pct), atSec: m.atSec };
     }
@@ -112,7 +134,9 @@ export function kickPressureFor(params: {
         death = { unit: u.name, atSec: d };
     }
     const burstAgainst = [
-      ...new Set(against.filter((b) => b.from < t1 && b.to > t0).map((b) => b.spell)),
+      ...new Set(
+        against.filter((b) => b.from <= t0 && b.to > t0).map((b) => b.spell),
+      ),
     ];
     return { ...(low ? { low } : {}), ...(death ? { death } : {}), burstAgainst };
   };
