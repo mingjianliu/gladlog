@@ -15,6 +15,7 @@ import {
   racialTrinketLockoutMs,
   SHARED_CD_RACIAL_SPELL_IDS,
 } from "../data/racialAbilities";
+import { castsOfEffectAura } from "../data/castEffectAuras";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import {
   immunityCoversSpell,
@@ -1241,6 +1242,16 @@ export function breakableCcBeforeDeath(
 // Main analysis
 // ---------------------------------------------------------------------------
 
+/** cc-dr F-RF1 (ruling A51 = A): a REFRESH of a CC on the holder is a new
+ * CC when its source cast it in this window before the refresh (the probe's
+ * 3 s, `probes/cc-dr/p14_sim_refresh.ts`). */
+export const CAST_BACKED_REFRESH_MS = 3_000;
+/** cc-dr F-RF1 (codex 35-CD-14): the cast that OPENED a CC window can be
+ * logged a moment after its own APPLIED (Bull Rush: APPLIED 10.000, cast
+ * 10.001); a cast this close after the opening is that cast, not a recast — no
+ * CC can be recast inside a quarter second. */
+const OPENING_CAST_SKEW_MS = 250;
+
 export function analyzePlayerCCAndTrinket(
   player: ICombatUnit,
   enemies: ICombatUnit[],
@@ -1315,6 +1326,40 @@ export function analyzePlayerCCAndTrinket(
     applyMs: number;
     removeMs: number;
   }> = [];
+
+  // cc-dr F-RF1: did the aura's source (or a pet's owner) cast this CC again
+  // — its own id or a cast whose effect aura it is (the one cast → effect
+  // table) — after the open window began and within `CAST_BACKED_REFRESH_MS`
+  // before the refresh, at this unit or at no unit (an AoE)? The cast that
+  // opened the window does not count: one Bull Rush logs APPLIED then a
+  // REFRESH a moment later (06bb9860), which is one CC.
+  const castersById = new Map(
+    [player, ...enemies, ...enemyPets].map((u) => [u.id, u]),
+  );
+  const castBackedRefresh = (
+    srcId: string,
+    auraSpellId: string,
+    atMs: number,
+    openedAtMs: number,
+  ): boolean => {
+    const castIds = new Set([auraSpellId, ...castsOfEffectAura(auraSpellId)]);
+    const src = castersById.get(srcId);
+    const owner = src?.ownerId ? castersById.get(src.ownerId) : undefined;
+    return [src, owner].some((u) =>
+      (u?.spellCastEvents ?? []).some(
+        (e) =>
+          e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+          !!e.spellId &&
+          castIds.has(e.spellId) &&
+          (!e.destUnitId ||
+            /^0+$/.test(e.destUnitId) ||
+            e.destUnitId === player.id) &&
+          e.timestamp > openedAtMs + OPENING_CAST_SKEW_MS &&
+          e.timestamp <= atMs &&
+          e.timestamp >= atMs - CAST_BACKED_REFRESH_MS,
+      ),
+    );
+  };
 
   // same-ms REMOVED→APPLIED re-broadcasts are one aura (d78f: a second CC)
   for (const aura of dropAuraRebroadcasts(player.auraEvents)) {
@@ -1407,6 +1452,38 @@ export function analyzePlayerCCAndTrinket(
         });
         pendingCC.delete(matchKey);
       }
+    } else if (
+      event === LogEvent.SPELL_AURA_REFRESH &&
+      ccSpellIds.has(spellId) &&
+      pendingCC.has(ccKey) &&
+      castBackedRefresh(
+        aura.srcUnitId,
+        spellId,
+        aura.timestamp,
+        pendingCC.get(ccKey)!.applyMs,
+      )
+    ) {
+      // Triage 2026-09-29 cc-dr F-RF1 (ruling A51 = A): a REFRESH its source
+      // cast for is a new CC — close the window at the refresh and open the
+      // next one, as the outgoing chain does (`analyzeOutgoingCCChains`), so
+      // the second cast renders with its own DR (5677ba13: one 9 s
+      // Polymorph line → 6 s Full + 3 s 50 %). A refresh with no cast behind
+      // it (a periodic re-broadcast) stays inside the window.
+      const pending = pendingCC.get(ccKey)!;
+      ccWindows.push({
+        spellId,
+        spellName: pending.spellName,
+        srcName: pending.srcName,
+        srcUnitId: pending.srcUnitId,
+        applyMs: pending.applyMs,
+        removeMs: aura.timestamp,
+      });
+      pendingCC.set(ccKey, {
+        applyMs: aura.timestamp,
+        spellName: getEnglishSpellName(spellId, aura.spellName),
+        srcName: aura.srcUnitName,
+        srcUnitId: aura.srcUnitId,
+      });
     }
   }
 

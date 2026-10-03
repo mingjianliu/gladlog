@@ -751,5 +751,11 @@
  *  ENEMY]` windows, uncleansed windows and healing gaps — a CC applied at or
  *  after it is dropped, a removal or activity after it no longer lengthens a
  *  window or closes a gap.
+ *  v276 (2026-10-02, triage cc-dr F-RF1, ruling A51 = A): a REFRESH of a CC
+ *  whose source cast it (its own id or through the cast → effect table) in
+ *  the 3 s before is a new CC on both sides — `[CC ON TEAM]` / `[CC ON
+ *  ENEMY]` print the second cast with its own DR, and every reader of the
+ *  instances ([CONSEQ], [RES] `cc:`, death-setup, HEALER EXPOSURE, kill-window
+ *  enemy healer DR) sees two CCs.
  */
-export const PROMPT_VERSION = 275;
+export const PROMPT_VERSION = 276;
