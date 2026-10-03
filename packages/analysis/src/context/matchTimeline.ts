@@ -2101,7 +2101,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       const tail =
         brokeAt !== undefined
           ? ` | trinket broke this disarm after ${(brokeAt - d.atSeconds).toFixed(0)}s (cut short — it had not expired)`
-          : ` | ${d.durationSeconds.toFixed(0)}s`;
+          : ` | ${renderedCcSeconds(d)}s`;
       // the legend counts only lines that print (codex 35-CD-15: a disarm
       // past the match end is skipped)
       if (
@@ -2405,8 +2405,8 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
         )
           continue;
         const durStr = enemyTremor
-          ? ` | enemy Tremor Totem from ${enemyPid(enemyTremor.shamanName)} ended this CC after ${cc.durationSeconds.toFixed(0)}s (cut short — it had not expired)`
-          : ` (${cc.durationSeconds.toFixed(0)}s)`;
+          ? ` | enemy Tremor Totem from ${enemyPid(enemyTremor.shamanName)} ended this CC after ${renderedCcSeconds(cc)}s (cut short — it had not expired)`
+          : ` (${renderedCcSeconds(cc)}s)`;
         addEntry(
           cc.atSeconds,
           `${fmtTime(cc.atSeconds)}  [CC ON ENEMY]   ${enemyPid(summary.playerName)} ← ${cc.spellName} (by ${actorLabel(cc.sourceName, "friendly", cc.sourceId)})${durStr}`,

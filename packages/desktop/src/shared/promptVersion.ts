@@ -768,5 +768,9 @@
  *  before (GH #83: a landed cast proves LoS), and drops the caster distance
  *  right after a Shadowstep when it is beyond the spell's reach (the log's
  *  stale pre-teleport position).
+ *  v279 (2026-10-02, triage cc-dr F-DU1): one CC duration formatter
+ *  (`renderedCcSeconds`, whole seconds) — the `[DMG SPIKE]` "enemy CC in
+ *  window" list prints `(2s)`, not `(1.5s)`, matching `[CC ON TEAM]`;
+ *  `[CC ON ENEMY]`, `[CONSEQ]`, `[DISARM]` and FORCED TRINKET read it too.
  */
-export const PROMPT_VERSION = 278;
+export const PROMPT_VERSION = 279;

@@ -1227,7 +1227,10 @@ export function pvpTrinketRemainingSecondsAt(
 
 /** The whole seconds a `[CC ON TEAM]` line prints for this instance — its
  *  `| Ns`, or the "after Ns" of a trinket / racial / Tremor break. One
- *  rounding for the line and every predicate that reads it back. */
+ *  rounding for the line and every predicate that reads it back. Triage
+ *  cc-dr F-DU1: the one CC duration formatter — `[CC ON ENEMY]`, `[CONSEQ]`,
+ *  the `[DMG SPIKE]` "enemy CC in window" list (it printed `(1.5s)` for a
+ *  `2s` CC), `[DISARM]` and FORCED TRINKET read it too. */
 export function renderedCcSeconds(
   cc: Pick<ICCInstance, "durationSeconds">,
 ): number {

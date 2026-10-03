@@ -50,9 +50,7 @@ describe("emitDmgSpikeEntries · 敌方 CC 掩护标注", () => {
     expect(seg).toBeDefined();
     // 受害者第一,owner 治疗第二,其余按时间;第 4 条折进 +1 more
     expect(
-      seg.startsWith(
-        "Kidney Shot→the target@0:18 (5.0s), Cyclone→you@0:11 (3.0s)",
-      ),
+      seg.startsWith("Kidney Shot→the target@0:18 (5s), Cyclone→you@0:11 (3s)"),
     ).toBe(true);
     expect(seg).toContain("+1 more");
     expect(seg).not.toContain("Shockwave");

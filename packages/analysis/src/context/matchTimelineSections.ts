@@ -8,6 +8,7 @@ import {
   breakableCcBeforeDeath,
   DEATH_BREAKABLE_CC_LOOKBACK_S,
   pvpTrinketRemainingSecondsAt,
+  renderedCcSeconds,
 } from "../utils/ccTrinketAnalysis";
 import {
   cdCanHelpAnotherUnit,
@@ -468,7 +469,8 @@ export function emitDmgSpikeEntries(params: {
           hits.push({
             at: cc.atSeconds,
             pri: isTarget ? 0 : isOwner || isHealerUnit ? 1 : 2,
-            txt: `${cc.spellName}\u2192${who}@${fmtTime(cc.atSeconds)} (${cc.durationSeconds.toFixed(1)}s)`,
+            // cc-dr F-DU1: whole seconds, the one CC formatter
+            txt: `${cc.spellName}\u2192${who}@${fmtTime(cc.atSeconds)} (${renderedCcSeconds(cc)}s)`,
           });
         }
       }

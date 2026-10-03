@@ -35,7 +35,10 @@ import {
 } from "@gladlog/parser-compat";
 
 import { getEnglishSpellName } from "../data/spellEffectData";
-import { IPlayerCCTrinketSummary } from "../utils/ccTrinketAnalysis";
+import {
+  IPlayerCCTrinketSummary,
+  renderedCcSeconds,
+} from "../utils/ccTrinketAnalysis";
 import { gridHpMinInWindow, gridHpPct, isHealerSpec } from "../utils/cooldowns";
 import { kickLockoutSecondsFor } from "../utils/kickLockout";
 import { fmtTime } from "../utils/renderGrid";
@@ -226,7 +229,7 @@ export function formatObservedConsequences(params: {
         : `no teammate dropped ${CONSEQ_DROP_MIN_PCT}% or more`;
       entries.push({
         atS: cc.atSeconds,
-        line: `${fmtTime(cc.atSeconds)}  [CONSEQ]   ${who} ${label(healer.name)} in ${cc.spellName} for ${cc.durationSeconds.toFixed(0)}s → during it: ${body}${died}`,
+        line: `${fmtTime(cc.atSeconds)}  [CONSEQ]   ${who} ${label(healer.name)} in ${cc.spellName} for ${renderedCcSeconds(cc)}s → during it: ${body}${died}`,
       });
     }
   }
