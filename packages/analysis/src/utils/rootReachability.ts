@@ -26,7 +26,7 @@
  * ids) — not a hand list, so nothing to register in curatedIdRegistry.
  */
 import type { ICombatUnit } from "@gladlog/parser-compat";
-import { CombatUnitReaction } from "@gladlog/parser-compat";
+import { CombatUnitReaction, LogEvent } from "@gladlog/parser-compat";
 
 import { resolveSummonOwner } from "../context/timelineHelpers";
 import { ROOT_DR_IDS, ROOT_SPELL_IDS } from "../data/rootSpells";
@@ -106,6 +106,9 @@ export interface IRootInstance {
   worstAlly?: { name: string; seconds: number };
   /** `unreachableSeconds >= ROOT_UNREACHABLE_MIN_S` */
   significant: boolean;
+  /** cc-dr F-RT1: successful casts the rooted unit landed on another player
+   * inside the root (it acted, so the root did not work like hard CC) */
+  castsOnOthers?: Array<{ spellName: string; destId: string }>;
   /**
    * The fact side of the same sweep (triage missed-cleanse F-C5, rulings A40 =
    * B and U7, 2026-09-30); `[ROOT]` / `significant` never read these. Each
@@ -340,6 +343,26 @@ export function computeRootReachability(
         worstAlly: worst ? { name: worst[0], seconds: worst[1] } : undefined,
         significant: unreachable >= ROOT_UNREACHABLE_MIN_S,
         reachSweep: sweep,
+        ...(() => {
+          // cc-dr F-RT1: casts at another player inside the root
+          const fromMs = combat.startTime + iv.fromS * 1000;
+          const toMs = combat.startTime + iv.toS * 1000;
+          const casts = (X.spellCastEvents ?? [])
+            .filter(
+              (e) =>
+                e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+                e.timestamp >= fromMs &&
+                e.timestamp <= toMs &&
+                !!e.destUnitId &&
+                e.destUnitId !== X.id &&
+                players.some((p) => p.id === e.destUnitId),
+            )
+            .map((e) => ({
+              spellName: getEnglishSpellName(e.spellId ?? "", e.spellName),
+              destId: e.destUnitId,
+            }));
+          return casts.length ? { castsOnOthers: casts } : {};
+        })(),
       });
     }
   }
@@ -352,6 +375,9 @@ export const ROOT_ENTRY_TAG = "[ROOT]   ";
 export function formatRootReachabilityEntries(
   instances: IRootInstance[],
   ownerId: string,
+  /** roster label for a unit id (cc-dr F-RT1's cast targets); absent = the
+   * raw id */
+  labelOf: (unitId: string) => string = (id) => id,
 ): Array<{ atSeconds: number; line: string }> {
   return instances
     .filter((r) => r.significant)
@@ -360,11 +386,16 @@ export function formatRootReachabilityEntries(
         r.rootedId === ownerId ? `[YOU] ${r.rootedName}` : r.rootedName;
       const side = r.rootedIsFriendly ? "friendly" : "enemy";
       const head = `${r.spellName} (from ${r.sourceLabel}) rooted ${side} ${who} (${r.rootedRole}) for ${r.durationSeconds.toFixed(1)}s`;
+      // cc-dr F-RT1: a rooted unit that cast on others meanwhile was not
+      // locked out — say what it did instead of "worked like hard CC"
+      const acted = r.castsOnOthers?.length
+        ? `; cast ${r.castsOnOthers.length} spell${r.castsOnOthers.length === 1 ? "" : "s"} on others meanwhile (${r.castsOnOthers.map((c) => `${c.spellName} → ${labelOf(c.destId)}`).join(", ")})`
+        : undefined;
       let why: string;
       if (r.rootedRole === "melee")
-        why = `nearest enemy beyond ${CLOSE_RANGE_YARDS}yd for ${r.unreachableSeconds}s — could not attack; this stretch worked like hard CC`;
+        why = `nearest enemy beyond ${CLOSE_RANGE_YARDS}yd for ${r.unreachableSeconds}s — could not attack${acted ?? "; this stretch worked like hard CC"}`;
       else if (r.rootedRole === "healer")
-        why = `${r.worstAlly?.name ?? "a damaged ally"} (taking damage) out of range/LoS for ${r.worstAlly?.seconds ?? r.unreachableSeconds}s — could not be healed; this stretch worked like hard CC on the healer`;
+        why = `${r.worstAlly?.name ?? "a damaged ally"} (taking damage) out of range/LoS for ${r.worstAlly?.seconds ?? r.unreachableSeconds}s — could not be healed${acted ?? "; this stretch worked like hard CC on the healer"}`;
       else
         why = `no enemy in range/LoS for ${r.unreachableSeconds}s — could not attack`;
       return {

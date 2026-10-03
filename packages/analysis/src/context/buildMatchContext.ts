@@ -1,4 +1,8 @@
-import { AtomicArenaCombat, ICombatUnit } from "@gladlog/parser-compat";
+import {
+  AtomicArenaCombat,
+  CombatUnitReaction,
+  ICombatUnit,
+} from "@gladlog/parser-compat";
 
 import {
   type BurstWindowDecisionPoint,
@@ -900,6 +904,20 @@ export function buildMatchContext(
         Object.values(combat.units) as ICombatUnit[],
       ),
       owner.id,
+      // cc-dr F-RT1: the roster label of a cast target (`4(RShaman)`)
+      (id) => {
+        const u = [
+          ...(friends as ICombatUnit[]),
+          ...(enemies as ICombatUnit[]),
+        ].find((x) => x.id === id);
+        if (!u) return id;
+        const map =
+          u.reaction === CombatUnitReaction.Friendly ? playerIdMap : enemyIdMap;
+        const n = map.get(u.name);
+        return n !== undefined
+          ? `${n}(${abbrevSpec(specToString(u.spec))})`
+          : u.name.split("-")[0]!;
+      },
     ).map((entry) => ({
       atSeconds: entry.atSeconds,
       line: `${fmtTime(entry.atSeconds)}  ${entry.line}`,

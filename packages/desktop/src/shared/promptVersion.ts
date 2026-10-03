@@ -821,5 +821,8 @@
  *  DR the outgoing chain holds for that landing (`(2s) [DR: Stun 50%]`; a
  *  backlash aura has none); the [CC ON ENEMY] span gate and the FORCED
  *  TRINKET cross-check accept the optional tag.
+ *  v292 (2026-10-03, triage cc-dr F-RT1): a [ROOT] line whose rooted unit
+ *  cast on another player inside the root says `cast N spell(s) on others
+ *  meanwhile (X → pid)` instead of "this stretch worked like hard CC".
  */
-export const PROMPT_VERSION = 291;
+export const PROMPT_VERSION = 292;
