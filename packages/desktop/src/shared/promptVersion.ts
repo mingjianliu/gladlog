@@ -793,5 +793,10 @@
  *  the healer's lock chain (`A → B → C (locked N of the last 12s)`, the
  *  death-setup chain's helper `deathLockChain`), and `[DEFENSIVE AVAILABLE]`
  *  appends the holder's `(free Ns before the death)` (F-D2's helper).
+ *  v285 (2026-10-03, triage pets-summons F-PS3, ruling A17 = A): the ENEMY
+ *  CC KIT header and [HEALER EXPOSURE] credit a summon's landed CC (a
+ *  Capacitor Totem's stun, a pet's Intimidation) to its owner, so the owner
+ *  no longer falls back to a spec template; its reach is measured from the
+ *  owner (FLAG, predicate-index).
  */
-export const PROMPT_VERSION = 284;
+export const PROMPT_VERSION = 285;

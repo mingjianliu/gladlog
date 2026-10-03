@@ -107,6 +107,7 @@ export function extractMatchDynamics(
           ccTrinketSummaries,
           combat.startInfo.zoneId,
           combat.startTime,
+          Object.values(combat.units ?? {}) as ICombatUnit[],
         )
       : [];
 

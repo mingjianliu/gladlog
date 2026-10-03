@@ -51,6 +51,7 @@ import {
 } from "./positionSampling";
 import { fmtTime } from "./renderGrid";
 import { ccThreatRadiusYards } from "./spellRange";
+import { summonOwnerById } from "./summonOwner";
 
 // An enemy standing outside cast range cannot land a CC, line of sight or not.
 // The range is the single-source export from positionSampling — note that it and
@@ -213,8 +214,21 @@ function computeExposureLabel(
  * Build a map of enemyName → observed CC categories from all friendly CC summaries.
  * Prefer observed data over spec inference — only falls back to spec if no CC observed.
  */
-function buildEnemyCCHistory(
+/**
+ * The CC each enemy PLAYER landed on our team, keyed by that player's name.
+ * Triage pets-summons F-PS3 (ruling A17 = A): a summon's CC (a Capacitor
+ * Totem's stun, a pet's Intimidation) is its owner's — the source player
+ * itself, else `summonOwnerById` (the GH #99 resolver `[CC ON TEAM]` uses),
+ * else it is skipped; `cc.sourceName` is no longer the key (a totem's name
+ * matched no enemy, so its owner fell back to a spec template).
+ * FLAG (accepted under A17): the threat's reach / LoS is then measured from
+ * the OWNER's position, while a totem's area sits at the totem — registered
+ * in predicate-index "Not yet unified"; the DB2-radius check is in Needs.
+ */
+export function buildEnemyCCHistory(
   allFriendlyCCSummaries: IPlayerCCTrinketSummary[],
+  enemies: readonly ICombatUnit[],
+  allUnits?: Iterable<ICombatUnit>,
 ): Map<
   string,
   Array<{ spellName: string; spellId: string; category: string }>
@@ -227,7 +241,11 @@ function buildEnemyCCHistory(
     for (const cc of summary.ccInstances) {
       const category = DR_CATEGORY_MAP[cc.spellId];
       if (!category) continue;
-      const existing = result.get(cc.sourceName) ?? [];
+      const owner =
+        enemies.find((e) => e.id === cc.sourceId) ??
+        summonOwnerById(allUnits, cc.sourceId, enemies);
+      if (!owner) continue;
+      const existing = result.get(owner.name) ?? [];
       if (!existing.some((e) => e.category === category)) {
         existing.push({
           spellName: cc.spellName,
@@ -235,7 +253,7 @@ function buildEnemyCCHistory(
           category,
         });
       }
-      result.set(cc.sourceName, existing);
+      result.set(owner.name, existing);
     }
   }
   return result;
@@ -253,8 +271,15 @@ export function analyzeHealerExposureAtBurst(
   allFriendlyCCSummaries: IPlayerCCTrinketSummary[],
   zoneId: string,
   matchStartMs: number,
+  /** every unit of the round, so a summon's CC is credited to its owner
+   * (pets-summons F-PS3); absent = player-sourced CC only */
+  allUnits?: Iterable<ICombatUnit>,
 ): IHealerBurstExposure[] {
-  const enemyCCHistory = buildEnemyCCHistory(allFriendlyCCSummaries);
+  const enemyCCHistory = buildEnemyCCHistory(
+    allFriendlyCCSummaries,
+    enemies,
+    allUnits,
+  );
   const results: IHealerBurstExposure[] = [];
 
   for (const window of burstWindows) {
@@ -958,5 +983,6 @@ export function computeHealerExposureEvents(
     ccTrinketSummaries,
     combat.startInfo?.zoneId ?? "",
     combat.startTime,
+    units,
   );
 }

@@ -208,7 +208,8 @@ describe('healerExposureAnalysis — exposure calculation', () => {
     // Observed CC: Mage (enemy) cast Polymorph on a teammate
     const friendCCSummary: any = {
       ccInstances: [
-        { sourceName: 'E1', spellId: '118', spellName: 'Polymorph' }, // Incapacitate category
+        // keyed by the source PLAYER id (pets-summons F-PS3), not its name
+        { sourceName: 'E1', sourceId: 'e', spellId: '118', spellName: 'Polymorph' }, // Incapacitate category
       ],
     };
 

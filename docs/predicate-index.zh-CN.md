@@ -525,6 +525,8 @@
 
 **2026-10-02 登记,有意不同(分诊 death-kill F-M1)** —— 「死亡前 5 秒施法者是否一直被锁」。缺省选项标签(`had X available, was in CC` / `caster in CC`,`deathOutcomeAnalysis.ts` → `wasLockedOutByCannotCast`)问唯一的不能施法谓词(`buildCannotCastIntervals`:硬控、沉默、打断锁系、反噬、被反射的控制),被沉默的治疗不再写成「caster was free」(2c6e85ec)。`[DEATH] Unused`(`matchTimelineSections.ts`,经 `wasLockedOutThroughWindow` / `wasLockedOutByStunOnly`)和 `counterfactual.ts` 仍用硬控 `ccInstances`:沉默或锁系挡不住物理减伤,而这两处本就豁免减伤。两者共用连续空档规则(`LETHAL_WINDOW_SECONDS`、`MIN_FREE_GAP_SECONDS`,同一个核心);裁决 A′8(2026-09-30)起,饰品解掉的控制在两种输入里都算到按饰品那一刻。
 
+**2026-10-03 登记,已接受的差异(分诊 pets-summons F-PS3,裁决 A17 = A)** —— 召唤物控制的距离从主人量。`healerExposureAnalysis.ts` → `buildEnemyCCHistory` 把召唤物命中的控制(电能图腾的昏迷、宠物的胁迫)经 `summonOwnerById`(`[CC ON TEAM]` 用的 GH #99 解析器)记到主人名下，于是 ENEMY CC KIT 表头和 `[HEALER EXPOSURE]` 都列在主人下;之后每个威胁的距离 / 视线判断从**主人的位置**算，而图腾的作用范围在图腾处。用户知情签了 A;保留 FLAG。动手前要收集的证据(Needs):召唤物控制的 DB2 半径，以及按主人到受害者距离切分的语料命中统计。
+
 ## 怎么保证这页不腐烂
 
 `packages/eval/test/predicateIndex.test.ts` 是这个页面可执行的另一半。它会:
