@@ -2550,7 +2550,9 @@ export function checkConseqHpStateConsistency(lines: string[]): string[] {
           );
       }
     }
-    if (drops.length === 0 && body.startsWith("no teammate dropped")) {
+    // hp-state F-C1: "no surviving teammate dropped" is the same claim for the
+    // living (the dead ids carry no numeric tick and are skipped)
+    if (drops.length === 0 && /^no (surviving )?teammate dropped/.test(body)) {
       const startTicks = stateAt.get(start)?.[side];
       if (!startTicks) return;
       for (const [id, v0] of startTicks) {

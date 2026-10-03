@@ -236,7 +236,7 @@ export function buildFindingsPrompt(
     // arms): the overreach class ("nobody could heal you" over a span with no
     // HP drop) was B's main failure — hence the third NEVER.
     `- You MAY state an observable consequence the match context shows: a kick on a cast bar meant that cast never landed (not a kick-eaten with phase=channel — that spell had already gone out); while a healer was kicked or CC'd a teammate dropped as an OBSERVED CONSEQUENCES line states; an opponent trinketed out of your CC. You MAY give the reason behind advice ("split the two defensives so each covers one burst").`,
-    `- NEVER pin a death, loss or win on one event ("led to the death", "cost you the round", "that's why you lost"); NEVER claim what would certainly have happened in this match ("had you pressed it you would have lived"); NEVER infer a state the context does not show ("nobody could heal you", "only X kept you alive", "you had no choice but") — when an OBSERVED CONSEQUENCES line says no teammate dropped, do not say the team suffered.`,
+    `- NEVER pin a death, loss or win on one event ("led to the death", "cost you the round", "that's why you lost"); NEVER claim what would certainly have happened in this match ("had you pressed it you would have lived"); NEVER infer a state the context does not show ("nobody could heal you", "only X kept you alive", "you had no choice but") — when an OBSERVED CONSEQUENCES line says no teammate dropped and names no death, do not say the team suffered.`,
     // GH #77 (user rulings 2026-09-19 / 2026-09-24): a [PEEL OPTION] line is a
     // feasible, unused instant CC on the main attacker before a death — an
     // additional option to offer, never a verdict about the death.

@@ -809,5 +809,10 @@
  *  mitigation-audit line says its overlap is `in the final 10s`, and an
  *  off-table row reads `(not in the mitigation table — not modeled in the
  *  arithmetic)` — it no longer calls shields, dodges and heals a redirect.
+ *  v289 (2026-10-03, triage G7-P7: hp-state F-C1 + cc-dr F-CS1): a
+ *  [CONSEQ] line with no drop that names a death says `no surviving teammate
+ *  dropped …`; a healer silence (the [SILENCE] intervals, ≥ HEALER_CC_MIN_S)
+ *  gets its own `in X (silence) for Ns → during it` line; the rules line
+ *  reads "says no teammate dropped and names no death".
  */
-export const PROMPT_VERSION = 288;
+export const PROMPT_VERSION = 289;

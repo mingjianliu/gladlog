@@ -35,6 +35,7 @@ import {
 } from "@gladlog/parser-compat";
 
 import { getEnglishSpellName } from "../data/spellEffectData";
+import { enemySourceIds, silenceIntervals } from "../utils/cannotCastIntervals";
 import {
   IPlayerCCTrinketSummary,
   renderedCcSeconds,
@@ -147,6 +148,15 @@ function diedIn(
     : "";
 }
 
+/** hp-state F-C1: with nobody under the drop threshold, a line that also
+ * names a death inside the span says the SURVIVORS did not drop — "no
+ * teammate dropped" next to "died inside it" read as a contradiction. */
+function noDropBody(died: string): string {
+  return died
+    ? `no surviving teammate dropped ${CONSEQ_DROP_MIN_PCT}% or more`
+    : `no teammate dropped ${CONSEQ_DROP_MIN_PCT}% or more`;
+}
+
 export function formatObservedConsequences(params: {
   combat: IArenaMatch | IShuffleRound;
   friends: ICombatUnit[];
@@ -194,9 +204,7 @@ export function formatObservedConsequences(params: {
         a.extraSpellId !== undefined
           ? getEnglishSpellName(a.extraSpellId, a.extraSpellName ?? "")
           : "a cast";
-      const body = parts.length
-        ? parts.join(", ")
-        : `no teammate dropped ${CONSEQ_DROP_MIN_PCT}% or more`;
+      const body = parts.length ? parts.join(", ") : noDropBody(died);
       entries.push({
         atS: t,
         line: `${fmtTime(t)}  [CONSEQ]   ${who} ${label(victim.name)} kicked (${stopped}; ${lockS}s school lockout) → inside the lockout: ${body}${died}`,
@@ -224,12 +232,42 @@ export function formatObservedConsequences(params: {
         cc.atSeconds + cc.durationSeconds,
       );
       if (!measured && !died) continue;
-      const body = parts.length
-        ? parts.join(", ")
-        : `no teammate dropped ${CONSEQ_DROP_MIN_PCT}% or more`;
+      const body = parts.length ? parts.join(", ") : noDropBody(died);
       entries.push({
         atS: cc.atSeconds,
         line: `${fmtTime(cc.atSeconds)}  [CONSEQ]   ${who} ${label(healer.name)} in ${cc.spellName} for ${renderedCcSeconds(cc)}s → during it: ${body}${died}`,
+      });
+    }
+  }
+
+  // 3) cc-dr F-CS1: a healer silenced (the `[SILENCE]` source) → the team's
+  // HP inside the silence, under the same rules as a CC
+  const allUnits = Object.values(combat.units ?? {}) as ICombatUnit[];
+  for (const healer of healers) {
+    const { team, label, who } = sideOf(healer);
+    const otherSide = team === friends ? enemies : friends;
+    const mates = team.filter((m) => m.id !== healer.id);
+    for (const s of silenceIntervals(
+      healer,
+      enemySourceIds(otherSide, allUnits),
+    )) {
+      // an open-ended silence (no removal before the round ended) runs to
+      // Infinity; clamp to the combat end as the [SILENCE] renderer does —
+      // unclamped, the HP sampler never terminated (codex 35-CD-30)
+      const toMs = Math.min(s.to, combat.endTime);
+      if (!(toMs > s.from)) continue;
+      const atS = (s.from - start) / 1000;
+      const durS = (toMs - s.from) / 1000;
+      if (atS < 0 || durS < HEALER_CC_MIN_S) continue;
+      const from = Math.floor(atS);
+      const to = Math.floor(atS + durS);
+      const { parts, measured } = teamDrops(mates, label, start, from, to);
+      const died = diedIn(mates, label, start, atS, atS + durS);
+      if (!measured && !died) continue;
+      const body = parts.length ? parts.join(", ") : noDropBody(died);
+      entries.push({
+        atS,
+        line: `${fmtTime(atS)}  [CONSEQ]   ${who} ${label(healer.name)} in ${getEnglishSpellName(s.spellId, s.spellName)} (silence) for ${renderedCcSeconds({ durationSeconds: durS })}s → during it: ${body}${died}`,
       });
     }
   }

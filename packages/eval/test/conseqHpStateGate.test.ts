@@ -68,6 +68,26 @@ describe("checkConseqHpStateConsistency (GH #70 — [CONSEQ] ⟺ [STATE] grid)",
     expect(f).toHaveLength(1);
     expect(f[0]).toContain("no teammate dropped");
   });
+  it('hp-state F-C1 / cc-dr F-CS1: "no surviving teammate dropped" (and a silence line) is checked the same way', () => {
+    const SURVIVING =
+      "1:00  [CONSEQ]   friendly healer 1(HPriest) in Strangulate (silence) for 3s → during it: no surviving teammate dropped 10% or more; died inside it: 3(RPaladin)";
+    // the living teammate held → passes; the dead one has no numeric tick
+    expect(
+      checkConseqHpStateConsistency([
+        state("1:00", "2(AWarrior):80 3(RPaladin):40"),
+        state("1:02", "2(AWarrior):78 3(RPaladin):dead"),
+        SURVIVING,
+      ]),
+    ).toEqual([]);
+    // the living teammate dropped 15 → red
+    expect(
+      checkConseqHpStateConsistency([
+        state("1:00", "2(AWarrior):80 3(RPaladin):40"),
+        state("1:02", "2(AWarrior):65 3(RPaladin):dead"),
+        SURVIVING,
+      ]),
+    ).toHaveLength(1);
+  });
   it("dead ticks and seconds without a tick are not failures", () => {
     expect(
       checkConseqHpStateConsistency([state("1:01", "2(AWarrior):dead"), CC]),
