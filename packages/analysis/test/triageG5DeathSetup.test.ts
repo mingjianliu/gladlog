@@ -18,7 +18,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { extractCandidateFindings } from "../src/analysis/candidateFindings";
 import { deathSetupEvents } from "../src/analysis/candidates/death";
 import { ensureAnalysisData } from "../src/data/ensure";
-import { freeMsBefore } from "../src/utils/cannotCastIntervals";
+import { deathLockChain, freeMsBefore } from "../src/utils/cannotCastIntervals";
 import {
   deathWindowFreedom,
   formatDeathOutcomeForContext,
@@ -267,5 +267,23 @@ describe("death-kill F-M2 — longest free stretch, and what held the caster at 
     expect(text).toContain(
       "Victim-R died — Caster-R had Rallying Cry available, caster's longest free stretch 2.9s of the last 5s, then in Song of Chi-Ji from 1:39 through the death",
     );
+  });
+});
+
+describe("cc-dr F-KS1 — KILL SEQUENCE reads the same lock chain", () => {
+  it("deathLockChain: unclipped runs, named links without lockouts, locked ms of the window", () => {
+    // 7d1f14af shape: Strangulate → Blinding Sleet → Polymorph 42.553–54.439,
+    // a kick lockout inside, death at 55.6
+    const named = [
+      iv(42.553, 46.0, "47476"),
+      iv(45.9, 50.0, "207167"),
+      iv(48.0, 49.0, "2139", true),
+      iv(49.9, 54.439, "118"),
+    ];
+    const c = deathLockChain(named, START + 55_600, 12_000);
+    expect(c.runs).toEqual([{ from: START + 42_553, to: START + 54_439 }]);
+    expect(c.links.map((l) => l.spellId)).toEqual(["47476", "207167", "118"]);
+    // window 43.6–55.6: locked 43.6–54.439
+    expect(c.lockedMs).toBe(10_839);
   });
 });

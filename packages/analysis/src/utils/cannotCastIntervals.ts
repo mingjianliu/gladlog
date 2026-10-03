@@ -331,6 +331,36 @@ export function cannotCastRuns(
 }
 
 /**
+ * Triage G5 (crisis-external F-AS1 / death-kill F-S1, reused by cc-dr F-KS1):
+ * the lock chain before a death. `runs` = every contiguous cannot-cast run
+ * touching [deathMs − lookbackMs, deathMs], not clipped at the window start;
+ * `links` = the cast-blocking auras inside those runs that began before the
+ * death, in time order (a kick lockout counts toward the runs and `lockedMs`
+ * but is not a CC to name); `lockedMs` = cannot-cast ms of the window.
+ */
+export function deathLockChain<
+  T extends { from: number; to: number; lockout: boolean },
+>(
+  named: ReadonlyArray<T>,
+  deathMs: number,
+  lookbackMs: number,
+): { runs: Array<{ from: number; to: number }>; links: T[]; lockedMs: number } {
+  const winFromMs = deathMs - lookbackMs;
+  const runs = cannotCastRuns(named).filter(
+    (r) => r.to > winFromMs && r.from < deathMs,
+  );
+  const links = named
+    .filter(
+      (iv) =>
+        !iv.lockout &&
+        iv.from < deathMs &&
+        runs.some((r) => iv.from < r.to && iv.to > r.from),
+    )
+    .sort((a, b) => a.from - b.from);
+  return { runs, links, lockedMs: coveredMsWithin(named, winFromMs, deathMs) };
+}
+
+/**
  * Free milliseconds just before `atMs`: `atMs` − the end of the last
  * cannot-cast run that starts before it, 0 when that run covers `atMs`, or
  * undefined when no run starts before it (never a `Math.max` over nothing).

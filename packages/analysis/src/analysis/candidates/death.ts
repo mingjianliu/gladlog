@@ -9,11 +9,7 @@
  * 2026-09-24.)
  */
 import { getEnglishSpellName } from "../../data/spellEffectData";
-import {
-  cannotCastRuns,
-  coveredMsWithin,
-  freeMsBefore,
-} from "../../utils/cannotCastIntervals";
+import { deathLockChain, freeMsBefore } from "../../utils/cannotCastIntervals";
 import {
   cdReadyInTimeAt,
   type IMajorCooldownInfo,
@@ -128,24 +124,19 @@ function lockChainFacts(
   if (!cc?.cannotCast || cc.matchStartMs === undefined) return {};
   const start = cc.matchStartMs;
   const deathMs = start + parts.deathT * 1000;
-  const winFromMs = deathMs - DEATH_CC_LOOKBACK_S * 1000;
-  const facts: Record<string, string> = {};
-  const runs = cannotCastRuns(cc.cannotCast).filter(
-    (r) => r.to > winFromMs && r.from < deathMs,
+  const { runs, links, lockedMs } = deathLockChain(
+    cc.cannotCast,
+    deathMs,
+    DEATH_CC_LOOKBACK_S * 1000,
   );
-  const chain: Array<{ at: number; text: string }> = [];
-  for (const iv of cc.cannotCast) {
-    // names come from the cast-blocking auras (F-AS1); a kick lockout counts
-    // toward the runs and `lockedS` but is not a CC to name
-    if (iv.lockout || iv.from >= deathMs) continue;
-    if (!runs.some((r) => iv.from < r.to && iv.to > r.from)) continue;
+  const facts: Record<string, string> = {};
+  const chain: Array<{ at: number; text: string }> = links.map((iv) => {
     const at = (iv.from - start) / 1000;
-    const name = getEnglishSpellName(iv.spellId);
-    chain.push({
+    return {
       at,
-      text: `${name} ${fmtFactTime(at)}`,
-    });
-  }
+      text: `${getEnglishSpellName(iv.spellId)} ${fmtFactTime(at)}`,
+    };
+  });
   for (const r of cc.roots ?? []) {
     if (
       r.atSeconds < parts.deathT &&
@@ -161,9 +152,7 @@ function lockChainFacts(
   if (texts.length) facts.chain = texts.join("; ");
   if (runs.length)
     facts.chainFrom = fmtFactTime((runs[0]!.from - start) / 1000);
-  facts.lockedS = fmt(
-    Math.round(coveredMsWithin(cc.cannotCast, winFromMs, deathMs) / 100) / 10,
-  );
+  facts.lockedS = fmt(Math.round(lockedMs / 100) / 10);
   const freeMs = freeMsBefore(cc.cannotCast, deathMs);
   if (freeMs !== undefined)
     facts.freeBeforeDeathS = fmt(Math.round(freeMs / 100) / 10);

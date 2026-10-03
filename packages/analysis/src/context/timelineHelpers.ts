@@ -8,7 +8,14 @@ import {
 } from "@gladlog/parser-compat";
 
 import { DRUID_FORM_AURA_IDS, FORM_BOUND_BUFF_IDS } from "../data/druidForms";
+import { DEATH_CC_LOOKBACK_S } from "../analysis/candidates/death";
 import { getEnglishSpellName } from "../data/spellEffectData";
+import {
+  deathLockChain,
+  enemySourceIds,
+  freeMsBefore,
+  namedCannotCastIntervals,
+} from "../utils/cannotCastIntervals";
 import { dropAuraRebroadcasts } from "../utils/auraIntervals";
 import { buffFullDurationForCaster } from "../utils/buffDuration";
 import { IPlayerCCTrinketSummary } from "../utils/ccTrinketAnalysis";
@@ -1269,6 +1276,9 @@ export function buildMatchEndBlock(params: {
 
 // ── [KILL SEQUENCE] block (F113) ──────────────────────────────────────────────
 
+/** [KILL SEQUENCE] `[HEALER CC]`: the death-setup look-back (`DEATH_CC_LOOKBACK_S`). */
+const KILL_SEQ_LOCK_LOOKBACK_S = DEATH_CC_LOOKBACK_S;
+
 export function buildKillSequenceBlock(params: {
   matchStartMs: number;
   matchEndSeconds: number;
@@ -1310,6 +1320,9 @@ export function buildKillSequenceBlock(params: {
   rosterSides?: RosterSides;
   /** unit GUID → name (absorbed-hit attackers) */
   unitNames?: ReadonlyMap<string, string>;
+  /** every unit of the round — the cannot-cast sources include pets (cc-dr
+   * F-KS1); absent = players only */
+  allUnits?: ReadonlyArray<{ id: string; ownerId?: string }>;
 }): string[] {
   const {
     matchStartMs,
@@ -1358,7 +1371,33 @@ export function buildKillSequenceBlock(params: {
         const healerSummary = ccTrinketSummaries.find(
           (s) => s.playerName === dyingHealer.name,
         );
-        if (healerSummary) {
+        // cc-dr F-KS1: the lock chain of the death-setup facts (unclipped
+        // cannot-cast runs touching the 12 s, `deathLockChain`), not only the
+        // latest-starting CC (7d1f14af: Strangulate → Blinding Sleet →
+        // Polymorph, locked 10.2 of the last 12 s)
+        const deathMs = matchStartMs + Math.round(deathTime * 1000);
+        const lockSources = enemySourceIds(
+          isFriendlyDeath ? enemies : friends,
+          params.allUnits ?? [],
+        );
+        const lockChain = deathLockChain(
+          namedCannotCastIntervals(dyingHealer as ICombatUnit, lockSources),
+          deathMs,
+          KILL_SEQ_LOCK_LOOKBACK_S * 1000,
+        );
+        // our healer only, as before (a summary exists for friends only):
+        // the enemy healer has no roster label here and would print a bare
+        // character name
+        if (healerSummary && lockChain.links.length > 0) {
+          const names = lockChain.links
+            .map((iv) => getEnglishSpellName(iv.spellId))
+            .filter((n, i, all) => i === 0 || all[i - 1] !== n);
+          killSeqEntries.push({
+            timeSeconds: (lockChain.links[0]!.from - matchStartMs) / 1000,
+            label: "[HEALER CC]",
+            text: `${pid(dyingHealer.name)} (${specToString(dyingHealer.spec)}) ← ${names.join(" → ")} (locked ${(Math.round(lockChain.lockedMs / 100) / 10).toFixed(1)} of the last ${KILL_SEQ_LOCK_LOOKBACK_S}s)`,
+          });
+        } else if (healerSummary) {
           const relevantCC = [...healerSummary.ccInstances]
             .filter(
               (cc) =>
@@ -1480,10 +1519,24 @@ export function buildKillSequenceBlock(params: {
               .sort((a, b) => b.cd.cooldownSeconds - a.cd.cooldownSeconds)
               .slice(0, 2);
             topUnused.forEach((u) => {
+              // cc-dr F-KS1: the holder's free time just before the death —
+              // crisis-external F-D2's `freeBeforeDeathS` (`freeMsBefore`, the
+              // same intervals); nothing when no lock started before it
+              const freeMs = freeMsBefore(
+                namedCannotCastIntervals(
+                  u.player as ICombatUnit,
+                  enemySourceIds(enemies, params.allUnits ?? []),
+                ),
+                matchStartMs + Math.round(deathTime * 1000),
+              );
+              const freeNote =
+                freeMs === undefined
+                  ? ""
+                  : ` (free ${(Math.round(freeMs / 100) / 10).toFixed(1)}s before the death)`;
               killSeqEntries.push({
                 timeSeconds: Math.max(0, deathTime - 1),
                 label: "[DEFENSIVE AVAILABLE]",
-                text: `${pid(u.player.name)}: ${u.cd.spellName} available but unused`,
+                text: `${pid(u.player.name)}: ${u.cd.spellName} available but unused${freeNote}`,
               });
             });
           }

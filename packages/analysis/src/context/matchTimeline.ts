@@ -3571,6 +3571,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       summonOwners,
       unitNames,
       rosterSides,
+      allUnits,
     }),
   );
 

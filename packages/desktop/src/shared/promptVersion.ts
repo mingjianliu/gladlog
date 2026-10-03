@@ -789,5 +789,9 @@
  *  the longest free stretch of the last 5 s and, when a cannot-cast interval
  *  covers the death, `then in X from M:SS through the death` (a kick lockout:
  *  `then school-locked (X) …`), in place of `was in CC` / `caster was free`.
+ *  v284 (2026-10-02, triage cc-dr F-KS1): KILL SEQUENCE `[HEALER CC]` names
+ *  the healer's lock chain (`A → B → C (locked N of the last 12s)`, the
+ *  death-setup chain's helper `deathLockChain`), and `[DEFENSIVE AVAILABLE]`
+ *  appends the holder's `(free Ns before the death)` (F-D2's helper).
  */
-export const PROMPT_VERSION = 283;
+export const PROMPT_VERSION = 284;
