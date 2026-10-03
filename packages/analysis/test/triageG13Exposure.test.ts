@@ -3,7 +3,9 @@
  *  - pets-summons F-PS3 (ruling A17 = A): a summon's CC is credited to its
  *    owner (`buildEnemyCCHistory`, keyed by the enemy player);
  *  - cc-dr F-KT1 (A17, R3 = A): the KIT header names the healer when the log
- *    owner is not the healer, and marks a spec default never seen landing.
+ *    owner is not the healer, and marks a spec default never seen landing;
+ *  - cc-dr F-EX1 (ruling A′19): a window that opens while the healer is in a
+ *    CC says so and drops the LoS-break advice.
  */
 import { CombatUnitReaction } from "@gladlog/parser-compat";
 import { describe, expect, it } from "vitest";
@@ -11,6 +13,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildEnemyCCHistory,
   formatEnemyCCKitHeader,
+  formatHealerExposureEntries,
 } from "../src/utils/healerExposureAnalysis";
 import { makeUnit } from "./ported/testHelpers";
 
@@ -98,5 +101,43 @@ describe("cc-dr F-KT1 — the ENEMY CC KIT label and its spec defaults", () => {
     expect(formatEnemyCCKitHeader(exposures)[0]).toMatch(
       /^ENEMY CC KIT \(threats to you\): /,
     );
+  });
+});
+
+describe("cc-dr F-EX1 — the healer is already in a CC at the window start", () => {
+  const exposure = (over: object) =>
+    ({
+      atSeconds: 55.9,
+      burstDangerLabel: "Critical",
+      trinketState: "available",
+      trinketAvailableAtSeconds: null,
+      threats: [
+        {
+          enemyName: "Valkyirie",
+          enemySpec: "Frost Mage",
+          ccCategory: "Incapacitate",
+          ccSpellName: "Polymorph",
+          healerDRLevel: "Full",
+          losBlocked: false,
+        },
+      ],
+      exposureLabel: "Exposed",
+      losBreak: { repositionYards: 16.7, blocksEnemyName: "Valkyirie" },
+      ...over,
+    }) as never;
+
+  it("539b6ed0 shape: says the CC and drops the LoS break", () => {
+    const [e] = formatHealerExposureEntries([
+      exposure({ alreadyIn: { spellName: "Polymorph", untilSeconds: 61.567 } }),
+    ]);
+    expect(e!.line).toContain(
+      "healer trinket ready — healer already in Polymorph until 1:01 (the DR levels count it) — exposure:",
+    );
+    expect(e!.line).not.toContain("LoS break");
+  });
+  it("control: not in a CC → the LoS break stays", () => {
+    const [e] = formatHealerExposureEntries([exposure({})]);
+    expect(e!.line).toContain("LoS break ~16.7yd away");
+    expect(e!.line).not.toContain("already in");
   });
 });

@@ -167,6 +167,9 @@ export interface IHealerBurstExposure {
   /** F194: nearest verified LoS-breaking reposition against an exposed threat.
    *  null when the zone is unmapped or no obstacle blocks any exposed threat. */
   losBreak?: { repositionYards: number; blocksEnemyName: string } | null;
+  /** cc-dr F-EX1: the healer's CC active at the window start (the
+   * `[CC ON TEAM]` instances, `at <= t < at + duration`) */
+  alreadyIn?: { spellName: string; untilSeconds: number };
 }
 
 // ---------------------------------------------------------------------------
@@ -422,6 +425,22 @@ export function analyzeHealerExposureAtBurst(
             blocksEnemyName: losBreak.blocksEnemyName,
           }
         : null,
+      ...(() => {
+        // cc-dr F-EX1: the healer's CC active at the window start
+        const cc = healerCCSummary.ccInstances.find(
+          (c) =>
+            c.atSeconds <= window.fromSeconds &&
+            window.fromSeconds < c.atSeconds + c.durationSeconds,
+        );
+        return cc
+          ? {
+              alreadyIn: {
+                spellName: cc.spellName,
+                untilSeconds: cc.atSeconds + cc.durationSeconds,
+              },
+            }
+          : {};
+      })(),
     });
   }
 
@@ -641,7 +660,13 @@ export function formatHealerExposureEntries(
       verdict = "Full-DR CC in LoS; healer trinket up (sole CC counter)";
     }
 
-    let body = `${e.burstDangerLabel} burst — ${trinketStr} — ${labelStr}${pillarStr}`;
+    // cc-dr F-EX1: the window opens while the healer is already in a CC —
+    // say so (its DR counts in the levels below), and (ruling A′19) drop
+    // the LoS-break advice to a healer who cannot move
+    const alreadyStr = e.alreadyIn
+      ? ` — healer already in ${e.alreadyIn.spellName} until ${fmtTime(e.alreadyIn.untilSeconds)} (the DR levels count it)`
+      : "";
+    let body = `${e.burstDangerLabel} burst — ${trinketStr}${alreadyStr} — ${labelStr}${e.alreadyIn ? "" : pillarStr}`;
     if (losStr) body += ` | IN LoS: ${losStr}`;
     if (blockedRefs) body += ` | Pillar-blocked: ${blockedRefs}`;
     if (verdict) body += ` | → ${verdict}`;

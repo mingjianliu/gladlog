@@ -802,5 +802,8 @@
  *  KIT header reads `threats to your healer <pid> at enemy burst windows`
  *  when the log owner is not the healer, and a spec default the enemy was
  *  never seen landing is marked `(spec default, not seen)`.
+ *  v287 (2026-10-03, triage cc-dr F-EX1, ruling A′19): a [HEALER EXPOSURE]
+ *  window that opens while the healer is in a CC says `healer already in X
+ *  until M:SS (the DR levels count it)` and drops the LoS-break advice.
  */
-export const PROMPT_VERSION = 286;
+export const PROMPT_VERSION = 287;
