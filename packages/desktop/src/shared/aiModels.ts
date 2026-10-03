@@ -111,6 +111,9 @@ export const AI_MODELS: Record<AiBackend, AiModelOption[]> = {
   codebuddy: [
     { id: "hy3", label: "Hy3(免费)" },
     { id: "hy3-x", label: "Hy3-X(x0.05)" },
+    // hy4 系列 2026-08 上线,credits 倍率待 /model 选择器确认,故 label 暂不标注 (xN)。
+    { id: "hy4-preview", label: "Hy4-Preview" },
+    { id: "hy4-preview-x", label: "Hy4-Preview-X" },
     { id: "glm-5.3", label: "GLM-5.3(x0.79)" },
     { id: "glm-5.2", label: "GLM-5.2(x0.79)" },
     { id: "glm-5.1", label: "GLM-5.1(x0.79)" },

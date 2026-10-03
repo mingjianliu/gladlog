@@ -1,5 +1,5 @@
 /**
- * Generated at: 2026-09-05T00:11:43.532Z
+ * Generated at: 2026-09-30T08:26:51.697Z
  * Build: 12.1.0.69587
  * Mined: 43403 (universe = corpus-attested u SpellCooldowns u candidates)
  * The data lives in the .json of the same name (vite json.stringify ->

@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { agyCliModelName, type CliAiBackend } from "../shared/aiModels";
 import type { AnthropicLike } from "./ai";
 import {
+  cliSpawnEnv,
   type CliVersionProbe,
   detectLocalCliCached,
   isWindowsBatchFile,
@@ -229,11 +230,18 @@ export const defaultRun: Runner = (file, args, stdin, opts) =>
     }
     const isWinBatch = isWindowsBatchFile(file);
     if (isWinBatch) assertNoWindowsCmdMetacharacters(args, file);
+    // cliSpawnEnv: a Dock-launched app's PATH lacks /opt/homebrew/bin, and
+    // these CLIs are `#!/usr/bin/env node` scripts — without the augmented
+    // PATH the child dies 127 before reading stdin (see cliDetect.ts).
     const child = isWinBatch
       ? spawn("cmd.exe", ["/c", file, ...args], {
           stdio: ["pipe", "pipe", "pipe"],
+          env: cliSpawnEnv(file),
         })
-      : spawn(file, args, { stdio: ["pipe", "pipe", "pipe"] });
+      : spawn(file, args, {
+          stdio: ["pipe", "pipe", "pipe"],
+          env: cliSpawnEnv(file),
+        });
     activeChildren.add(child);
     // Accumulate Buffers and decode once at the end — a per-chunk
     // `+= d.toString()` decodes each half into U+FFFD garbage when a

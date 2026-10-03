@@ -307,3 +307,32 @@ it("切场清状态(终审 F4):match1 的失败标记/草稿不带进 match2", a
   expect(screen.queryByText(/发送失败/)).toBeNull();
   expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe("");
 });
+
+it("教练回复按 Markdown 渲染;用户自己的提问保持纯文本", async () => {
+  stubChat({
+    status: "ready",
+    backend: "claudeCli",
+    model: "sonnet",
+    messages: [
+      { role: "user", content: "我的 **问题** 就这么写的", at: Date.now() },
+      {
+        role: "assistant",
+        content: "## 结论\n\n- 先开 **爆发**\n- 再看时机",
+        at: Date.now(),
+      },
+    ],
+    busy: false,
+  });
+  render(<CoachChatCard source={src} matchId="m1" />);
+  await screen.findByText(/结论/);
+  const coachBubble = document.querySelector(
+    ".coach-chat-msg--coach",
+  ) as HTMLElement;
+  // The reply gets real elements instead of literal `##` / `**` characters.
+  // "##" lands on h4 — h1/h2 have no business inside a chat bubble.
+  expect(coachBubble.querySelector("h4.coach-md-h")?.textContent).toBe("结论");
+  expect(coachBubble.querySelector("strong")?.textContent).toBe("爆发");
+  expect(coachBubble.querySelectorAll("li")).toHaveLength(2);
+  // The user's own turn is not re-interpreted as markup.
+  expect(screen.getByText("我的 **问题** 就这么写的")).toBeTruthy();
+});

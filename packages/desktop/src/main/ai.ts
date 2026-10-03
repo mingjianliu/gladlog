@@ -61,13 +61,27 @@ export type AiLanguage = "zh" | "en";
  * Coach system prompt (backlog #1): persona plus output language. The language
  * is a request parameter, not a prompt-builder change -- PROMPT_VERSION is not
  * bumped, and the timeline prompt itself stays in English.
+ *
+ * `markdown` is opt-in per call site (only the follow-up chat turns it on): the
+ * analysis/compare/learning paths parse the reply as JSON, so asking them for
+ * Markdown headings and tables would be actively harmful.
  */
-export function buildCoachSystemPrompt(lang: AiLanguage): string {
+export function buildCoachSystemPrompt(
+  lang: AiLanguage,
+  opts?: { markdown?: boolean },
+): string {
   const language =
     lang === "zh"
       ? "Respond entirely in Simplified Chinese (简体中文). Keep spell/ability names in English exactly as written in the data — never translate them into Chinese, even inline; you may explain them in Chinese, but the name token itself must stay English. Every other fact string quoted from the data (facts.postKick such as \"pressed 3x but rejected (Not yet recovered)\", lockout / reach / DR labels, [BURST ANSWERED] extras) must be rendered in Chinese in your own words — never paste an English phrase other than a spell name into the reply (reliability round 3 N12: English postKick text appeared verbatim in Chinese replies)."
       : "Respond in English.";
-  return `You are a World of Warcraft arena coach reviewing a player's match. Be direct, specific, and grounded strictly in the provided events. ${language}`;
+  const parts = [
+    `You are a World of Warcraft arena coach reviewing a player's match. Be direct, specific, and grounded strictly in the provided events. ${language}`,
+  ];
+  if (opts?.markdown)
+    parts.push(
+      "Format your answer with Markdown: short headings (## level) for each section, bullet or numbered lists for steps, **bold** for spell names and key terms, and a table when you compare two or more options. Never wrap the whole reply in a code fence.",
+    );
+  return parts.join(" ");
 }
 
 export type { AiBackend } from "../shared/aiModels";

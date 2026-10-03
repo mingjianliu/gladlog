@@ -195,9 +195,25 @@ function renderRichText(text: string, ctx: Ctx): ReactNode {
 export function makeRichText(
   source: ReportSource,
   lang: "zh" | "en",
-  deps: RichDeps = defaultDeps(),
+  deps?: RichDeps,
 ): (text?: string | null) => ReactNode {
   const match = buildMatchSpellIndex(source);
-  return (text) =>
-    text ? renderRichText(text, { match, lang, deps }) : (text ?? null);
+  return (text) => {
+    if (!text) return text ?? null;
+    // The deps are read per call, not once. A snapshot taken here would freeze
+    // `nameIndex: null` whenever the report mounts before the 12MB spellNames
+    // table has streamed in (it starts loading at module evaluation), and since
+    // the caller memoizes this function (MatchReport's useMemo on
+    // [source, aiLang] — aiLang keeps its "zh" initial value when that is also
+    // the stored setting, so React bails out and nothing recomputes), the whole
+    // session would stay plain text. data/ensure.ts promises exactly the
+    // opposite for display paths: they degrade and "heal themselves on the next
+    // render", which only holds if dependencies are resolved at render time.
+    // Explicit deps stay frozen on purpose — that is what the tests pin.
+    return renderRichText(text, {
+      match,
+      lang,
+      deps: deps ?? defaultDeps(),
+    });
+  };
 }
