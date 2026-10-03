@@ -7,7 +7,8 @@
  *  - missed-cleanse F-C3: uncleansed windows clip the same way (ba8c0510:
  *    a Polymorph 0.6 s in the round was a 6 s missed cleanse).
  * Also cc-dr F-RF1 (ruling A51 = A): a REFRESH its source cast for is a new
- * CC on the holder.
+ * CC on the holder; enemy-def F-E18 / cc-dr F-DA1: the disarm a trinket
+ * press broke.
  * cc-dr F-HG1 (healing gaps) is in `ported/healingGaps.test.ts`.
  */
 import {
@@ -18,7 +19,10 @@ import {
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { ensureAnalysisData } from "../src/data/ensure";
-import { analyzePlayerCCAndTrinket } from "../src/utils/ccTrinketAnalysis";
+import {
+  analyzePlayerCCAndTrinket,
+  findBrokenDisarm,
+} from "../src/utils/ccTrinketAnalysis";
 import { reconstructDispelSummary } from "../src/utils/dispelAnalysis";
 import { roundEndMs } from "../src/utils/roundEnd";
 import {
@@ -215,5 +219,28 @@ describe("cc-dr F-RF1 — a cast-backed REFRESH is a new CC", () => {
     expect(cc.map((c) => Math.round(c.durationSeconds * 10) / 10)).toEqual([
       8.6,
     ]);
+  });
+});
+
+describe("enemy-def F-E18 / cc-dr F-DA1 — the disarm a trinket broke", () => {
+  // 8930cb36: Dismantle 15.191–16.133, Medallion cast 16.134 (1 ms after)
+  const dismantle = {
+    atSeconds: 15.191,
+    durationSeconds: 0.942,
+    spellId: "207777",
+    spellName: "Dismantle",
+    sourceName: "Babyrou",
+    sourceId: "e1",
+    sourceSpec: "Assassination Rogue",
+  };
+  it("binds a press 1 ms after the removal (the CC binder's tolerance)", () => {
+    expect(findBrokenDisarm([dismantle], START, START + 16_134)).toBe(
+      dismantle,
+    );
+  });
+  it("control: a press 1 s after the removal binds nothing", () => {
+    expect(findBrokenDisarm([dismantle], START, START + 17_133)).toBe(
+      undefined,
+    );
   });
 });

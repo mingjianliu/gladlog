@@ -25,12 +25,14 @@ import {
   castEndedCcWindow,
   CC_AVOIDANCE_BUFF_SPELLS,
   findBrokenCC,
+  findBrokenDisarm,
   GROUNDING_TOTEM_SPELL_ID,
   GROUNDING_TOTEM_WINDOW_S,
   immunityBreak,
   IPlayerCCTrinketSummary,
   renderedCcSeconds,
   tremorTotemBreak,
+  TRINKET_BREAK_AFTER_REMOVAL_MS,
 } from "../utils/ccTrinketAnalysis";
 import {
   IFormInterval,
@@ -1311,15 +1313,18 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     lines: (string | DeferredSnapshot)[];
   }> = [];
 
+  /** Adds a timeline entry; false when it was skipped (past the match
+   * end), so a legend counter counts only lines that print. */
   function addEntry(
     timeSeconds: number,
     ...lines: (string | DeferredSnapshot)[]
-  ) {
+  ): boolean {
     // B103: skip events that fall past match end — they're irrelevant post-game
     // and would appear with timestamps after [MATCH END] confusing the timeline.
-    if (timeSeconds > matchEndSeconds) return;
+    if (timeSeconds > matchEndSeconds) return false;
 
     entries.push({ timeSeconds, lines: lines.filter(Boolean) });
+    return true;
   }
 
   // ── Dampening Milestone Alerts (F149) ──────────────────────────────────────
@@ -2059,12 +2064,53 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
 
   // ── [TRINKET] and [CC ON TEAM] events ──────────────────────────────────────
 
+  // enemy-def F-E18: a press that broke a disarm (a loss of control the CC
+  // windows do not hold) — the CC binder, asked of the disarm windows only
+  // when no CC took the press (a CC-bound press says so on its [CC ON TEAM]
+  // line). One reading for the [TRINKET] line and the [DISARM] tail (F-DA1).
+  const trinketBrokenDisarm = (
+    summary: IPlayerCCTrinketSummary,
+    t: number,
+  ) => {
+    const rawCastMs = matchStartMs + Math.round(t * 1000);
+    return findBrokenCC(summary.ccInstances, matchStartMs, rawCastMs)
+      ? undefined
+      : findBrokenDisarm(summary.disarmInstances, matchStartMs, rawCastMs);
+  };
+  let disarmLineCount = 0;
   for (const summary of ccTrinketSummaries) {
     for (const t of summary.trinketUseTimes) {
+      // F-E18: name the disarm, as [ENEMY TRINKET] names its CC
+      const brokenDisarm = trinketBrokenDisarm(summary, t);
+      const disarmPart = brokenDisarm
+        ? ` out of ${brokenDisarm.spellName} (by ${actorLabel(brokenDisarm.sourceName, "enemy", brokenDisarm.sourceId)})`
+        : "";
       addEntry(
         t,
-        `${fmtTime(t)}  [TRINKET]   ${pid(summary.playerName)} used PvP trinket`,
+        `${fmtTime(t)}  [TRINKET]   ${pid(summary.playerName)} used PvP trinket${disarmPart}`,
       );
+    }
+
+    // cc-dr F-DA1 (ruling A54 = A): a disarm on any player of our team gets
+    // a line in the [SILENCE] format (it was only a [RES] `cc:` token); a
+    // trinket press that broke it (`trinketBrokenDisarm`) takes the tail.
+    for (const d of summary.disarmInstances) {
+      const brokeAt = summary.trinketUseTimes.find(
+        (t) => trinketBrokenDisarm(summary, t) === d,
+      );
+      const tail =
+        brokeAt !== undefined
+          ? ` | trinket broke this disarm after ${(brokeAt - d.atSeconds).toFixed(0)}s (cut short — it had not expired)`
+          : ` | ${d.durationSeconds.toFixed(0)}s`;
+      // the legend counts only lines that print (codex 35-CD-15: a disarm
+      // past the match end is skipped)
+      if (
+        addEntry(
+          d.atSeconds,
+          `${fmtTime(d.atSeconds)}  [DISARM]   ${pid(summary.playerName)} ← ${d.spellName} (by ${actorLabel(d.sourceName, "enemy", d.sourceId)})${tail}`,
+        )
+      )
+        disarmLineCount++;
     }
 
     for (const cc of summary.ccInstances) {
@@ -2223,9 +2269,16 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
           const at = (s.from - matchStartMs) / 1000;
           const endMs = Math.min(s.to, matchEndMs);
           const durS = Math.max(0, (endMs - s.from) / 1000);
+          // enemy-def F-E17: the Medallion cast is logged up to a few ms
+          // after the removal it caused (dfcccbf2: silence removed 21.020,
+          // trinket 21.021) — the CC binder's `TRINKET_BREAK_AFTER_REMOVAL_MS`
           const trinketAt = trinketTimes.find((t) => {
             const tMs = matchStartMs + t * 1000;
-            return tMs >= s.from && tMs <= endMs && endMs - tMs <= 300;
+            return (
+              tMs >= s.from &&
+              tMs <= endMs + TRINKET_BREAK_AFTER_REMOVAL_MS &&
+              endMs - tMs <= 300
+            );
           });
           const tail =
             trinketAt !== undefined
@@ -3425,6 +3478,11 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       ? [
           "  [SILENCE] = that player was silenced from that second for the stated time: no spells (the [CC ON TEAM] / [CC ON ENEMY]",
           "    lines do not include silences). `trinket broke this silence` = a PvP trinket ended it early.",
+        ]
+      : []),
+    ...(disarmLineCount > 0
+      ? [
+          "  [DISARM] = a disarm on a player of your team: weapon abilities are locked, spells are not. `trinket broke this disarm` = a PvP trinket ended it early.",
         ]
       : []),
     ...(enemyTrinketCount > 0

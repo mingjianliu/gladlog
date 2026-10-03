@@ -707,6 +707,25 @@ export function findBrokenCC(
   return bindBreakToWindow(breakable, castTsMs)?.cc;
 }
 
+/** enemy-def F-E18: the disarm a PvP trinket press broke — `bindBreakToWindow`
+ * (the CC binder, same tolerances) over the disarm windows. A disarm has no
+ * official end here, so the ranking is ended-at-the-press, then on-the-unit,
+ * then the longer window. Also the `[DISARM]` line's trinket tail (cc-dr
+ * F-DA1). */
+export function findBrokenDisarm(
+  instances: IRootInstance[],
+  matchStartMs: number,
+  castTsMs: number,
+): IRootInstance | undefined {
+  const breakable = instances.map((d) => ({
+    d,
+    applyMs: matchStartMs + Math.round(d.atSeconds * 1000),
+    removeMs:
+      matchStartMs + Math.round((d.atSeconds + d.durationSeconds) * 1000),
+  }));
+  return bindBreakToWindow(breakable, castTsMs)?.d;
+}
+
 export interface IRootInstance {
   atSeconds: number;
   durationSeconds: number;

@@ -757,5 +757,11 @@
  *  ENEMY]` print the second cast with its own DR, and every reader of the
  *  instances ([CONSEQ], [RES] `cc:`, death-setup, HEALER EXPOSURE, kill-window
  *  enemy healer DR) sees two CCs.
+ *  v277 (2026-10-02, triage enemy-def F-E17 / F-E18, cc-dr F-DA1 (A54 =
+ *  A)): a silence a trinket broke is tagged when the press is logged up to
+ *  `TRINKET_BREAK_AFTER_REMOVAL_MS` after the removal; `[TRINKET] … used PvP
+ *  trinket out of <disarm> (by X)` when the press broke a disarm; a new
+ *  `[DISARM]` line (and legend) for a disarm on any player of our team, with
+ *  the same trinket-break tail.
  */
-export const PROMPT_VERSION = 276;
+export const PROMPT_VERSION = 277;

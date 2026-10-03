@@ -347,3 +347,39 @@ describe("F-NE1 — an aimed CC with no aura and no miss", () => {
     expect(lineWith(t, "[YOU] [CC]")).toContain("[no CC aura logged]");
   });
 });
+
+describe("cc-dr F-DA1 — the [DISARM] legend counts only printed lines (codex 35-CD-15)", () => {
+  const summary = (atSeconds: number) => ({
+    playerName: ME[1],
+    trinketUseTimes: [],
+    ccInstances: [],
+    disarmInstances: [
+      {
+        atSeconds,
+        durationSeconds: 4,
+        spellId: "236077",
+        spellName: "Disarm",
+        sourceName: ENEMY[1],
+        sourceId: ENEMY[0],
+        sourceSpec: "Arms Warrior",
+      },
+    ],
+  });
+  const render = (atSeconds: number) =>
+    buildMatchTimeline(
+      params(mkUnit(ME[0], ME[1]), [hostile(ENEMY)], {
+        matchEndMs: 60_000,
+        ccTrinketSummaries: [summary(atSeconds)] as never,
+      }),
+    );
+  it("a disarm past the match end prints neither the line nor the legend", () => {
+    const t = render(61);
+    expect(t).not.toContain("[DISARM]   ");
+    expect(t).not.toContain("[DISARM] = ");
+  });
+  it("control: a disarm inside the match prints both", () => {
+    const t = render(30);
+    expect(t).toContain("[DISARM]   ");
+    expect(t).toContain("[DISARM] = ");
+  });
+});
