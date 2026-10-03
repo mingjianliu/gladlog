@@ -729,6 +729,34 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
    * grid (atSeconds in the chain is fractional, and so is cast.timeSeconds, so
    * floor both before comparing).
    */
+  function enemyCcDrTag(
+    targetName: string,
+    spellId: string,
+    atSeconds: number,
+    sourceId: string | undefined,
+    sourceName: string,
+  ): string {
+    const src = friends.find((f) => f.id === sourceId);
+    const unit = src ?? allUnits?.find((u) => u.id === sourceId);
+    const ownerOf = unit?.ownerId
+      ? friends.find((f) => f.id === unit.ownerId)
+      : undefined;
+    const caster = src?.name ?? ownerOf?.name ?? sourceName;
+    const t = toRenderSecond(atSeconds);
+    for (const chain of outgoingCCChains ?? []) {
+      if (chain.targetName !== targetName) continue;
+      for (const app of chain.applications)
+        if (
+          app.spellId === spellId &&
+          app.casterName === caster &&
+          app.drInfo &&
+          toRenderSecond(app.atSeconds) === t
+        )
+          return ` [DR: ${app.drInfo.category} ${app.drInfo.level}]`;
+    }
+    return "";
+  }
+
   function outgoingDrTag(
     spellId: string,
     cast: { timeSeconds: number },
@@ -2418,9 +2446,21 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
           !keptForFollowUp
         )
           continue;
+        // cc-dr F-CE1: the DR the OUTGOING chain holds for this landing —
+        // same target, spell, caster (a pet's CC is its owner's, as the
+        // chain credits it) and render second; never the enemy-side summary's
+        // drInfo (the two pair REFRESH differently). A backlash aura has no
+        // chain application and no tag.
+        const drTag = enemyCcDrTag(
+          summary.playerName,
+          cc.spellId,
+          cc.atSeconds,
+          cc.sourceId,
+          cc.sourceName,
+        );
         const durStr = enemyTremor
-          ? ` | enemy Tremor Totem from ${enemyPid(enemyTremor.shamanName)} ended this CC after ${renderedCcSeconds(cc)}s (cut short — it had not expired)`
-          : ` (${renderedCcSeconds(cc)}s)`;
+          ? `${drTag} | enemy Tremor Totem from ${enemyPid(enemyTremor.shamanName)} ended this CC after ${renderedCcSeconds(cc)}s (cut short — it had not expired)`
+          : ` (${renderedCcSeconds(cc)}s)${drTag}`;
         addEntry(
           cc.atSeconds,
           `${fmtTime(cc.atSeconds)}  [CC ON ENEMY]   ${enemyPid(summary.playerName)} ← ${cc.spellName} (by ${actorLabel(cc.sourceName, "friendly", cc.sourceId)})${durStr}`,

@@ -817,5 +817,9 @@
  *  v290 (2026-10-03, triage cc-dr F-AO1): an owner AoE CC line whose
  *  targets landed at different DR levels says each (`[DR: Disorient — 4(MHunter)
  *  50%, 3(HPriest) Full]`); only the owner's own applications count.
+ *  v291 (2026-10-03, triage cc-dr F-CE1): a [CC ON ENEMY] line carries the
+ *  DR the outgoing chain holds for that landing (`(2s) [DR: Stun 50%]`; a
+ *  backlash aura has none); the [CC ON ENEMY] span gate and the FORCED
+ *  TRINKET cross-check accept the optional tag.
  */
-export const PROMPT_VERSION = 290;
+export const PROMPT_VERSION = 291;

@@ -432,3 +432,56 @@ describe("cc-dr F-AO1 — an AoE CC line gives the DR per target when it differs
     );
   });
 });
+
+describe("cc-dr F-CE1 — [CC ON ENEMY] prints the outgoing chain's DR", () => {
+  const ccInst = (spellId: string, spellName: string) => ({
+    atSeconds: 100.86,
+    durationSeconds: 2,
+    spellId,
+    spellName,
+    sourceName: MATE[1],
+    sourceId: MATE[0],
+    sourceSpec: "Outlaw Rogue",
+    trinketState: "none",
+  });
+  const render = (spellId: string, spellName: string) =>
+    lineWith(
+      buildMatchTimeline(
+        params(mkUnit(ME[0], ME[1]), [hostile(ENEMY)], {
+          friends: [mkUnit(ME[0], ME[1]), mkUnit(MATE[0], MATE[1])],
+          enemyCCSummaries: [
+            {
+              playerName: ENEMY[1],
+              trinketUseTimes: [],
+              ccInstances: [ccInst(spellId, spellName)],
+              disarmInstances: [],
+            },
+          ] as never,
+          outgoingCCChains: [
+            {
+              targetName: ENEMY[1],
+              targetSpec: "Arms Warrior",
+              applications: [
+                {
+                  atSeconds: 100.86,
+                  durationSeconds: 2,
+                  spellId: "1833",
+                  spellName: "Cheap Shot",
+                  casterName: MATE[1],
+                  casterSpec: "Outlaw Rogue",
+                  drInfo: { category: "Stun", level: "50%", sequenceIndex: 1 },
+                },
+              ],
+            },
+          ] as never,
+        }),
+      ),
+      "[CC ON ENEMY]",
+    );
+  it("483f7433 shape: Cheap Shot at 50 % says so", () => {
+    expect(render("1833", "Cheap Shot")).toMatch(/\(2s\) \[DR: Stun 50%\]$/);
+  });
+  it("a landing with no chain application (a backlash aura) has no tag", () => {
+    expect(render("196364", "Unstable Affliction")).not.toContain("[DR:");
+  });
+});

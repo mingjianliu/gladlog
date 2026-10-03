@@ -682,6 +682,25 @@ describe("checkForcedTrinketConsistency — [FORCED TRINKET] agrees with the tri
       ),
     ).toHaveLength(1);
   });
+  it("cc-dr F-CE1: accepts the aura line with its outgoing-chain DR tag, both forms", () => {
+    const tagged = ccOn.replace("(6s)", "(6s) [DR: Disorient Full]");
+    expect(
+      checkForcedTrinketConsistency(ok.map((l) => (l === ccOn ? tagged : l))),
+    ).toEqual([]);
+    const tremorTagged =
+      "0:17  [CC ON ENEMY]   5(DPriest) ← Intimidating Shout (by 1(AWarrior)) [DR: Disorient Full] | enemy Tremor Totem from 6(RShaman) ended this CC after 6s (cut short — it had not expired)";
+    expect(
+      checkForcedTrinketConsistency(
+        ok.map((l) => (l === ccOn ? tremorTagged : l)),
+      ),
+    ).toEqual([]);
+    // the duration is still checked behind the tag
+    expect(
+      checkForcedTrinketConsistency(
+        ok.map((l) => (l === ccOn ? tagged.replace("(6s)", "(1s)") : l)),
+      ),
+    ).toHaveLength(1);
+  });
   it("fails a missing trinket or attempt line", () => {
     expect(
       checkForcedTrinketConsistency(ok.filter((l) => l !== trinket)),

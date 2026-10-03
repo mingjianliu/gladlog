@@ -1087,7 +1087,8 @@ const DMG_SPIKE_BOUNDS_LINE =
   /^\s*(\d+):(\d{2})–(\d+):(\d{2})\s+\[DMG SPIKE\]\s+(\S+) \(/;
 const YOU_CC_LINE = /^\s*(\d+):(\d{2})\s+\[YOU\] \[CC\]\s+(.+?) →/;
 const CC_ON_ENEMY_SPAN_LINE =
-  /^\s*(\d+):(\d{2})\s+\[CC ON ENEMY\]\s+(\S+) ← .*?(?:\((\d+(?:\.\d+)?)s\))?\s*$/;
+  // cc-dr F-CE1: an optional ` [DR: <category> <level>]` after the span
+  /^\s*(\d+):(\d{2})\s+\[CC ON ENEMY\]\s+(\S+) ← .*?(?:\((\d+(?:\.\d+)?)s\))?(?: \[DR: [^\]]+\])?\s*$/;
 const CC_USE_COUNTS_LINE = /^\s*Counts: (.*)$/;
 const CC_USE_COUNT_ITEM = /^(.+) cast (\d+)× \(first (\d+):(\d{2})\)$/;
 
@@ -1342,7 +1343,7 @@ export function checkForcedTrinketConsistency(lines: string[]): string[] {
     const esc = spell.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const ccOn = ownerId
       ? new RegExp(
-          `^\\s*${fmtTime(cS)}\\s+\\[CC ON ENEMY\\]\\s+${unit.replace(/[()]/g, "\\$&")} ← ${esc} \\(by ${ownerId}\\([^)]*\\)\\)(?: \\(${dur}s\\)$| \\| enemy Tremor Totem from \\S+ ended this CC after ${dur}s )`,
+          `^\\s*${fmtTime(cS)}\\s+\\[CC ON ENEMY\\]\\s+${unit.replace(/[()]/g, "\\$&")} ← ${esc} \\(by ${ownerId}\\([^)]*\\)\\)(?: \\(${dur}s\\)(?: \\[DR: [^\\]]+\\])?$|(?: \\[DR: [^\\]]+\\])? \\| enemy Tremor Totem from \\S+ ended this CC after ${dur}s )`,
         )
       : null;
     if (!ccOn || !lines.some((l) => ccOn.test(l)))
