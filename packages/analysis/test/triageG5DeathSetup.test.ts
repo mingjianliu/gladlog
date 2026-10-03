@@ -6,13 +6,26 @@
  *    `(root)`, `landedWhileLocked`; death-kill F-S1's `lockedS`;
  *  - crisis-external F-D2 (ruling A′5): `freeBeforeDeathS`;
  *  - crisis-external F-D3 (ruling A49 = B): a death / death-setup after the
- *    log owner's own death leaves the menu.
+ *    log owner's own death leaves the menu;
+ *  - death-kill F-M1: the missed-options lock test asks the cannot-cast
+ *    predicate (a silence locks a caster).
  */
-import { describe, expect, it } from "vitest";
+import { LogEvent } from "@gladlog/parser-compat";
+import { beforeAll, describe, expect, it } from "vitest";
 
 import { extractCandidateFindings } from "../src/analysis/candidateFindings";
 import { deathSetupEvents } from "../src/analysis/candidates/death";
+import { ensureAnalysisData } from "../src/data/ensure";
 import { freeMsBefore } from "../src/utils/cannotCastIntervals";
+import {
+  wasLockedOutByCannotCast,
+  wasLockedOutThroughWindow,
+} from "../src/utils/deathOutcomeAnalysis";
+import { makeAuraEvent, makeUnit } from "./ported/testHelpers";
+
+beforeAll(async () => {
+  await ensureAnalysisData();
+});
 
 const START = 1_000_000;
 const victim = { id: "v1", name: "Victim-R" };
@@ -148,5 +161,42 @@ describe("crisis-external F-D3 — events after the owner's death leave the menu
     const ids = extractCandidateFindings(combat(20_000), "a").map((e) => e.id);
     expect(ids).toContain("death:c:20");
     expect(ids).toContain("death:a:30");
+  });
+});
+
+describe("death-kill F-M1 — a silence locks a caster for the missed-options tags", () => {
+  it("Strangulate across the 5 s window: cannot-cast locked, hard-CC free", () => {
+    // 2c6e85ec shape: silenced from 2 s before the window to the death
+    const caster = makeUnit("c1", {
+      auraEvents: [
+        {
+          ...makeAuraEvent(
+            LogEvent.SPELL_AURA_APPLIED,
+            "47476",
+            START + 94_000,
+            "e1",
+            "c1",
+          ),
+          spellName: "Strangulate",
+        },
+        {
+          ...makeAuraEvent(
+            LogEvent.SPELL_AURA_REMOVED,
+            "47476",
+            START + 101_000,
+            "e1",
+            "c1",
+          ),
+          spellName: "Strangulate",
+        },
+      ],
+    });
+    expect(wasLockedOutByCannotCast(caster, new Set(["e1"]), START, 100)).toBe(
+      true,
+    );
+    // the hard-CC test (still [DEATH] Unused's input) sees no CC
+    expect(
+      wasLockedOutThroughWindow({ playerName: "c1", ccInstances: [] }, 100),
+    ).toBe(false);
   });
 });

@@ -7,6 +7,7 @@ import {
 
 import { MITIGATION_TABLE } from "../data/mitigationData";
 import { getEnglishSpellName } from "../data/spellEffectData";
+import { buildCannotCastIntervals } from "./cannotCastIntervals";
 import { IPlayerCCTrinketSummary } from "./ccTrinketAnalysis";
 import {
   auraOnlyActivationSeconds,
@@ -571,12 +572,33 @@ function computeLockoutWindow(
   const windowEnd = deathSeconds;
   if (windowEnd <= windowStart) return null;
 
-  const intervals = ccSummary.ccInstances
-    .filter((cc) => cc.trinketState !== "used")
-    .map((cc) => ({
-      start: Math.max(windowStart, cc.atSeconds),
-      end: Math.min(windowEnd, cc.atSeconds + cc.durationSeconds),
+  // Ruling A′8 (2026-09-30): a CC the unit trinketed out of counts until the
+  // press — its logged removal, the press's own millisecond (539b6ed0: the
+  // Scream REMOVED and the Medallion both at 66.879) — not dropped whole.
+  return freeGapCore(
+    ccSummary.ccInstances.map((cc) => ({
+      start: cc.atSeconds,
+      end: cc.atSeconds + cc.durationSeconds,
       isStun: isStunCcInstance(cc),
+    })),
+    windowStart,
+    windowEnd,
+  );
+}
+
+/** The contiguous-gap rule over any lock intervals (seconds): the longest
+ * free gap in [windowStart, windowEnd] and whether every interval inside it
+ * was a stun. */
+function freeGapCore(
+  locks: ReadonlyArray<{ start: number; end: number; isStun: boolean }>,
+  windowStart: number,
+  windowEnd: number,
+): LockoutWindowResult {
+  const intervals = locks
+    .map((iv) => ({
+      start: Math.max(windowStart, iv.start),
+      end: Math.min(windowEnd, iv.end),
+      isStun: iv.isStun,
     }))
     .filter((iv) => iv.end > iv.start)
     .sort((a, b) => a.start - b.start);
@@ -597,12 +619,42 @@ function computeLockoutWindow(
 /**
  * True only if the player had NO contiguous CC-free gap >= MIN_FREE_GAP_SECONDS in the
  * [death - windowSeconds, death] window — i.e. they were effectively locked out for the
- * whole lethal window. CC the player trinketed out of (`trinketState === 'used'`) does not
- * count as lockout. Uniform CC model: every CC type is treated the same for THIS boolean
+ * whole lethal window. CC the player trinketed out of counts until the press (ruling
+ * A′8, 2026-09-30; it used to be dropped whole). Uniform CC model: every CC type is treated the same for THIS boolean
  * (it only answers "were they locked out at all", used for informational "was in CC" tags
  * and combined by callers with `wasLockedOutByStunOnly` where the CC type matters — see
  * that function's doc comment).
  */
+/**
+ * Triage death-kill F-M1: the missed-options "caster in CC / was in CC" tags
+ * ask the one cannot-cast predicate (`buildCannotCastIntervals`: hard CC,
+ * silences, kick lockouts, backlash, reflected CC) under the same
+ * contiguous-gap rule (`LETHAL_WINDOW_SECONDS`, `MIN_FREE_GAP_SECONDS`). Only
+ * those two tags: `[DEATH] Unused` and the counterfactual keep the hard-CC
+ * input (a silence does not stop a physical wall) — registered in
+ * predicate-index "Not yet unified".
+ */
+export function wasLockedOutByCannotCast(
+  unit: ICombatUnit,
+  hostileIds: Set<string>,
+  matchStartMs: number,
+  deathSeconds: number,
+  windowSeconds = LETHAL_WINDOW_SECONDS,
+): boolean {
+  const windowStart = Math.max(0, deathSeconds - windowSeconds);
+  if (deathSeconds <= windowStart) return false;
+  const result = freeGapCore(
+    buildCannotCastIntervals(unit, hostileIds).map((iv) => ({
+      start: (iv.from - matchStartMs) / 1000,
+      end: (iv.to - matchStartMs) / 1000,
+      isStun: false,
+    })),
+    windowStart,
+    deathSeconds,
+  );
+  return result.maxFreeGapSeconds < MIN_FREE_GAP_SECONDS;
+}
+
 export function wasLockedOutThroughWindow(
   ccSummary: Pick<IPlayerCCTrinketSummary, "playerName" | "ccInstances">,
   deathSeconds: number,
@@ -731,8 +783,30 @@ export function buildDeathOutcomeSummary(
         "casts" | "cooldownSeconds" | "charges" | "sharedCasts"
       >
     | undefined,
+  /**
+   * Triage death-kill F-M1: enemy players ∪ their pets, for the
+   * missed-options tags' cannot-cast test (`wasLockedOutByCannotCast`).
+   * Absent = the hard-CC test from `ccSummaries`, as before.
+   */
+  cannotCastSourceIds?: Set<string>,
 ): IDeathOutcomeSummary {
   const matchStartMs = combat.startTime;
+  const lockedAt = (
+    unit: ICombatUnit,
+    summary:
+      Pick<IPlayerCCTrinketSummary, "playerName" | "ccInstances"> | undefined,
+    atSeconds: number,
+  ) =>
+    cannotCastSourceIds
+      ? wasLockedOutByCannotCast(
+          unit,
+          cannotCastSourceIds,
+          matchStartMs,
+          atSeconds,
+        )
+      : summary
+        ? wasLockedOutThroughWindow(summary, atSeconds)
+        : false;
   const events: IDeathOutcomeEvent[] = [];
 
   // B29: pre-build lockout intervals once per (unit, spell) pair to avoid O(N) filter+sort per death
@@ -796,9 +870,7 @@ export function buildDeathOutcomeSummary(
         availableImmunities.push({
           spellId,
           spellName: spell.name,
-          wasInCC: ccSummary
-            ? wasLockedOutThroughWindow(ccSummary, atSeconds)
-            : false,
+          wasInCC: lockedAt(unit, ccSummary, atSeconds),
         });
       }
 
@@ -875,9 +947,7 @@ export function buildDeathOutcomeSummary(
             casterSpec: specToString(teammate.spec),
             spellId,
             spellName: spell.name,
-            casterWasInCC: teammateCCSummary
-              ? wasLockedOutThroughWindow(teammateCCSummary, atSeconds)
-              : false,
+            casterWasInCC: lockedAt(teammate, teammateCCSummary, atSeconds),
           });
         }
       }

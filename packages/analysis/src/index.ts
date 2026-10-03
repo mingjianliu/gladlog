@@ -38,6 +38,9 @@ export { nodeMaps } from "./data/talentStrings";
 export { zoneMetadata } from "./data/zoneMetadata";
 export * from "./utils/auraIntervals";
 export * from "./utils/burstLedger";
+// the hostile-source set every cannot-cast reader passes (death-kill F-M1:
+// the desktop death recap asks the same predicate as the prompt)
+export { enemySourceIds } from "./utils/cannotCastIntervals";
 export * from "./utils/ccBreakAnalysis";
 export * from "./utils/ccTrinketAnalysis";
 export * from "./utils/cooldowns";

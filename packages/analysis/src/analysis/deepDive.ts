@@ -10,6 +10,7 @@ import {
   analyzeBurstLedger,
   type IBurstLedgerEntry,
 } from "../utils/burstLedger";
+import { enemySourceIds } from "../utils/cannotCastIntervals";
 import {
   analyzePlayerCCAndTrinket,
   trinketStateFact,
@@ -397,6 +398,8 @@ export function buildDeepDivePack(
       friends,
       ccSummaries,
       (unit, spellId) => resolvedCdByUnit.get(unit.id)?.get(spellId),
+      // death-kill F-M1: the missed-options tags ask the cannot-cast predicate
+      enemySourceIds(enemies, [...enemyPets]),
     );
     for (const ev of outcome.events) {
       if (!inWin(ev.atSeconds)) continue;

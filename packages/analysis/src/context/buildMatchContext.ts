@@ -22,6 +22,7 @@ import {
   auditWindowTargeting,
   formatBurstLedgerForContext,
 } from "../utils/burstLedger";
+import { enemySourceIds } from "../utils/cannotCastIntervals";
 import { analyzeCcBreaks } from "../utils/ccBreakAnalysis";
 import { analyzePlayerCCAndTrinket } from "../utils/ccTrinketAnalysis";
 import { extractStasisEvents } from "../utils/combatStates";
@@ -388,6 +389,8 @@ export function buildMatchContext(
     friends as ICombatUnit[],
     ccTrinketSummaries,
     (unit, spellId) => resolvedCdByUnit.get(unit.id)?.get(spellId),
+    // death-kill F-M1: the missed-options tags ask the cannot-cast predicate
+    enemySourceIds(enemies, allUnitsForPets),
   );
   const offensiveWaste = buildOffensiveWasteSummary(
     combat,

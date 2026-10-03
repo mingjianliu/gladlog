@@ -781,5 +781,9 @@
  *  v281 (2026-10-02, triage death-kill F-D1): the "death" legend prints
  *  only when the menu has a death and no longer defines a side=enemy death
  *  (kill review is retired).
+ *  v282 (2026-10-02, triage death-kill F-M1, ruling A′8): the
+ *  missed-options "caster in CC / was in CC" tags ask the cannot-cast
+ *  predicate (silences and kick lockouts lock a caster), and a CC the unit
+ *  trinketed out of counts until the press in the lockout window.
  */
-export const PROMPT_VERSION = 281;
+export const PROMPT_VERSION = 282;

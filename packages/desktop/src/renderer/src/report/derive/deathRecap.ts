@@ -6,6 +6,7 @@ import {
   computeUnusedSelfCounterfactuals,
   COUNTERFACTUAL_WINDOW_S,
   detectPanicDefensives,
+  enemySourceIds,
   extractMajorCooldowns,
   findCheaperDefensiveAlternatives,
   ICounterfactualHit,
@@ -228,12 +229,15 @@ export function deriveDeathRecaps(source: ReportSource): DeathRecap[] {
         friendlyPlayers,
         ccSummaries,
         resolved,
+        // death-kill F-M1: the same cannot-cast predicate as the prompt
+        enemySourceIds(hostilePlayers, Object.values(legacy.units)),
       ).events,
       ...buildDeathOutcomeSummary(
         outcomeCombat,
         hostilePlayers,
         ccSummaries,
         resolved,
+        enemySourceIds(friendlyPlayers, Object.values(legacy.units)),
       ).events,
     ];
     const ccSummaryByUnit = new Map(

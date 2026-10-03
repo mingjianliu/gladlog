@@ -523,6 +523,8 @@
 
 **2026-08-15 登记,结构上做不到共享 export(改走平价测试)** —— `packages/eval/src/explore/candidateCalibration.ts` 的 `RoundContext.ownerResolvable` 读 `splitTeams(legacy).owner`(`packages/eval/src/explore/storeAccess.ts`),这是生产真实 owner 解析的手抄副本:`packages/desktop/src/renderer/src/report/derive/analysisInput.ts:31-45` 的 `resolveOwner`(playerId 命中带 `.info` 的友方玩家,否则回退第一个友方治疗,否则 `undefined`)。两边判的是同一个事实,实测今天逻辑完全等价——但做不成真正的共享 export:`packages/eval` 不依赖 `packages/desktop`,而 `analysisInput.ts` 会顺带拉进 `rawStreamsCache.ts` 的 `bridge`——一个 Electron 渲染进程的 `window.gladlog` 依赖,在 Node 的 vitest/tsx 运行环境里没有立足之地(要导入就得要么新增一条违反本仓惯例的 `eval`→`desktop` 依赖边,要么把 `resolveOwner` 挪出渲染层——两者本次都没做)。按 CLAUDE.md 的退路,两边改钉同一张五档真值表,不再靠共享 import:`packages/desktop/test/analysisInput.test.ts` 的 `describe("resolveOwner")`(①-⑤ 五档)与 `packages/eval/test/explore.candidateCalibration.test.ts` 的 `describe("ownerResolvable parity vs resolveOwner's own truth table")`(同样的①-⑤,断言 `ownerResolvable` 与之一致)——以后任一函数的分支结构变了,两个文件必须同改。Task 6 自己「全库 100% owner 可解析」的语料实测结论(`raw-streams-calibration.md`)就压在这份平价关系上。
 
+**2026-10-02 登记,有意不同(分诊 death-kill F-M1)** —— 「死亡前 5 秒施法者是否一直被锁」。缺省选项标签(`had X available, was in CC` / `caster in CC`,`deathOutcomeAnalysis.ts` → `wasLockedOutByCannotCast`)问唯一的不能施法谓词(`buildCannotCastIntervals`:硬控、沉默、打断锁系、反噬、被反射的控制),被沉默的治疗不再写成「caster was free」(2c6e85ec)。`[DEATH] Unused`(`matchTimelineSections.ts`,经 `wasLockedOutThroughWindow` / `wasLockedOutByStunOnly`)和 `counterfactual.ts` 仍用硬控 `ccInstances`:沉默或锁系挡不住物理减伤,而这两处本就豁免减伤。两者共用连续空档规则(`LETHAL_WINDOW_SECONDS`、`MIN_FREE_GAP_SECONDS`,同一个核心);裁决 A′8(2026-09-30)起,饰品解掉的控制在两种输入里都算到按饰品那一刻。
+
 ## 怎么保证这页不腐烂
 
 `packages/eval/test/predicateIndex.test.ts` 是这个页面可执行的另一半。它会:

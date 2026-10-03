@@ -344,9 +344,13 @@ describe("wasLockedOutThroughWindow", () => {
     ).toBe(false);
   });
 
-  it("ignores CC the player trinketed out of", () => {
+  it("counts CC the player trinketed out of until the press (ruling A′8, 2026-09-30)", () => {
+    // CC 5–9.9, trinketed at its removal: window [5, 10] has a 0.1 s gap
     const summary = { playerName: "p", ccInstances: [cc(5, 4.9, "used")] };
-    expect(wasLockedOutThroughWindow(summary, 10)).toBe(false);
+    expect(wasLockedOutThroughWindow(summary, 10)).toBe(true);
+    // the press ends it: trinketed at 6, the rest of the window is free
+    const early = { playerName: "p", ccInstances: [cc(5, 1, "used")] };
+    expect(wasLockedOutThroughWindow(early, 10)).toBe(false);
   });
 
   it("clamps the window to match start for an early death", () => {
@@ -417,7 +421,7 @@ describe("wasLockedOutByStunOnly", () => {
     ).toBe(false);
   });
 
-  it("ignores CC the player trinketed out of, same as wasLockedOutThroughWindow", () => {
+  it("a trinketed Disorient locks (A′8) but is not a stun-only lockout", () => {
     const summary = {
       playerName: "p",
       ccInstances: [cc(5, 4.9, "Disorient", "used")],
