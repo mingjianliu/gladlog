@@ -55,6 +55,7 @@ import {
 } from "./losAnalysis";
 import { DISPEL_MAX_RANGE_YARDS, LOS_SWEEP_GAP_MS } from "./positionSampling";
 import { fmtTime } from "./renderGrid";
+import { roundEndMs } from "./roundEnd";
 import { spellRangeForCaster, spellReachForCaster } from "./spellRange";
 import { hasOffensivePurgeTalent } from "./talentBehaviors";
 import {
@@ -2424,7 +2425,10 @@ export function reconstructDispelSummary(
     startTime: number;
     endTime: number;
     zoneId?: string;
-    startInfo?: { zoneId?: string };
+    startInfo?: { zoneId?: string; bracket?: string };
+    // the round's units, for `roundEndMs` (missed-cleanse F-C3); absent =
+    // the round ends at `endTime`
+    units?: Record<string, unknown> | ReadonlyArray<unknown>;
   },
   // B45: friendly pet/guardian units whose dispels should be attributed to their owner player
   friendlyPets: ICombatUnit[] = [],
@@ -2434,6 +2438,7 @@ export function reconstructDispelSummary(
   enemyPets: ICombatUnit[] = [],
 ): IDispelSummary {
   const zoneId = combat.zoneId ?? combat.startInfo?.zoneId;
+  const roundEnd = roundEndMs(combat);
   const friendlyIds = new Set(friends.map((u) => u.id));
   const enemyIds = new Set(enemies.map((u) => u.id));
   // B45: pets are also considered friendly sources; owner lookup is via ownerId
@@ -2764,14 +2769,27 @@ export function reconstructDispelSummary(
       const removals = removedTimes.get(spellId) ?? [];
 
       for (const { ts: applyTs, spellName } of applications) {
-        const removal = removals.find((r) => r.ts >= applyTs);
-        if (!removal) continue;
+        // Triage 2026-09-29 missed-cleanse F-C3 (with cc-dr F-CI1, one round
+        // end): a window ends at `roundEndMs`. A CC still up when the round
+        // ended paired with a removal logged after it and read as a full-
+        // length uncleansed window (ba8c0510 Polymorph: 0.6 s in the round,
+        // "6s", missed-cleanse High). A CC applied at or after the end is
+        // not in the round. A removal after the end is the round ending, not
+        // a dispel, a rider or a break.
+        if (applyTs >= roundEnd) continue;
+        const paired = removals.find((r) => r.ts >= applyTs);
+        if (!paired) continue;
+        const clippedAtRoundEnd = paired.ts > roundEnd;
+        const removal = clippedAtRoundEnd
+          ? { ts: roundEnd, brokenByDamage: false }
+          : paired;
 
         const durationSeconds = (removal.ts - applyTs) / 1000;
 
         // D1: freed by its own rider (form shift / form expiry) → not a
         // cleanse window at all (user ruling 2026-09-24).
         if (
+          !clippedAtRoundEnd &&
           wasRemovedBySelfRider(
             allyCleanse,
             spellId,
@@ -2781,12 +2799,14 @@ export function reconstructDispelSummary(
         )
           continue;
         // Was removed by a friendly dispel near that removal time?
-        const removedByDispel = wasRemovedByAllyDispel(
-          allyCleanse,
-          spellId,
-          unit.name,
-          (removal.ts - combat.startTime) / 1000,
-        );
+        const removedByDispel =
+          !clippedAtRoundEnd &&
+          wasRemovedByAllyDispel(
+            allyCleanse,
+            spellId,
+            unit.name,
+            (removal.ts - combat.startTime) / 1000,
+          );
 
         // CC broke from incoming damage — not a missed cleanse, but not a healer cleanse either
         if (removal.brokenByDamage) {

@@ -73,6 +73,7 @@ import {
 import { fmtTime } from "./renderGrid";
 import { isSilenceableCast } from "./spellMechanics";
 import { rootIntervalsOf } from "./rootReachability";
+import { roundEndMs } from "./roundEnd";
 import { RANGE_HITBOX_SLACK_YD, spellRangeForCaster } from "./spellRange";
 import { medianFinite } from "./stats";
 import { interruptImmuneWindows } from "./talentBehaviors";
@@ -1243,7 +1244,14 @@ export function breakableCcBeforeDeath(
 export function analyzePlayerCCAndTrinket(
   player: ICombatUnit,
   enemies: ICombatUnit[],
-  combat: { startTime: number; endTime: number; startInfo: { zoneId: string } },
+  combat: {
+    startTime: number;
+    endTime: number;
+    startInfo: { zoneId: string; bracket?: string };
+    // the round's units, for `roundEndMs` (a Solo Shuffle round ends at its
+    // first player death); absent = the round ends at `endTime`
+    units?: Record<string, unknown> | ReadonlyArray<unknown>;
+  },
   // 2026-07-18 baseline investigation: CC from enemy pets (Intimidation,
   // Seduction, …) used to be silently dropped by the "src ∈ enemy players"
   // filter (Intimidation missing in 54/176 matches) — leaving [CC ON TEAM],
@@ -1461,7 +1469,19 @@ export function analyzePlayerCCAndTrinket(
   // here on the belief that the VT backlash horror carried the DoT's id; it is
   // 87204, and the ≤4 s window was exactly the DoT's refresh gap — every VT
   // re-application on a teammate became a 0 s CC. 34914 no longer enters.)
-  const filteredCCWindows = ccWindows;
+  //
+  // Triage 2026-09-29 cc-dr F-CI1: a window ends at the round end
+  // (`roundEndMs`, the one round end shared with missed-cleanse F-C3 and
+  // healing gaps F-HG1). A removal logged after it — the next Solo Shuffle
+  // round's prep, the scoreboard — printed the CC at its full length (ba8c0510
+  // Polymorph: 0.6 s in the round read "6s"). A CC applied at or after the
+  // round end is not in the round and is dropped before the clip (clip-only
+  // rendered fd45b5d0's Scatter Shot as "-0s"); a dropped instance also
+  // leaves the DR history, which only later CCs (post-round too) read.
+  const roundEnd = roundEndMs(combat);
+  const filteredCCWindows = ccWindows
+    .filter((w) => w.applyMs < roundEnd)
+    .map((w) => (w.removeMs > roundEnd ? { ...w, removeMs: roundEnd } : w));
 
   // B111: bind each trinket cast to the SINGLE CC it actually broke, instead of tagging
   // every CC that landed within 5s of the cast. An active PvP trinket (Gladiator's Medallion

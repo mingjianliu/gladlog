@@ -83,10 +83,16 @@ export function mateHitDuringCc(
   matchStartMs: number,
   cc: { atSeconds: number; durationSeconds: number },
 ): boolean {
-  const died = (mate.deathRecords ?? []).some((d) => {
-    const s = (d.timestamp - matchStartMs) / 1000;
-    return s >= cc.atSeconds && s <= cc.atSeconds + cc.durationSeconds;
-  });
+  // whole ms (triage G9 cc-dr F-CI1): a CC clipped to the round end ends at
+  // the round-ending death exactly, and the float sum `at + duration` can
+  // land a hair before it (92-1: a Polymorph on the healer through the death
+  // lost its death-setup)
+  const fromMs = matchStartMs + Math.round(cc.atSeconds * 1000);
+  const toMs =
+    matchStartMs + Math.round((cc.atSeconds + cc.durationSeconds) * 1000);
+  const died = (mate.deathRecords ?? []).some(
+    (d) => d.timestamp >= fromMs && d.timestamp <= toMs,
+  );
   if (died) return true;
   const hp = mateHpAcross(
     mate,
@@ -126,11 +132,12 @@ function diedIn(
   fromS: number,
   toS: number,
 ): string {
+  // whole ms, as `mateHitDuringCc` (a window clipped to the round end ends
+  // at the round-ending death exactly)
+  const fromMs = matchStartMs + Math.round(fromS * 1000);
+  const toMs = matchStartMs + Math.round(toS * 1000);
   const died = team.filter((u) =>
-    u.deathRecords.some((d) => {
-      const s = (d.timestamp - matchStartMs) / 1000;
-      return s >= fromS && s <= toS;
-    }),
+    u.deathRecords.some((d) => d.timestamp >= fromMs && d.timestamp <= toMs),
   );
   return died.length
     ? `; died inside it: ${died.map((u) => label(u.name)).join(", ")}`

@@ -512,3 +512,60 @@ describe("healingGaps — formatting", () => {
     expect(res.join("\n")).toContain("Warrior (Player1) took 150k damage");
   });
 });
+
+describe("healingGaps — round end (triage 2026-09-29 cc-dr F-HG1)", () => {
+  // A Solo Shuffle round ends at its first player death; the healer's
+  // activity logged after it (the next round's prep) must not close a gap.
+  function shuffleRound(deathAtMs: number) {
+    const dead = makeUnit("x", {
+      info: {},
+      deathRecords: [{ timestamp: deathAtMs }],
+    });
+    return {
+      startTime: MATCH_START,
+      endTime: MATCH_START + 60_000,
+      startInfo: { bracket: "Rated Solo Shuffle" },
+      units: { x: dead },
+    };
+  }
+
+  it("a gap closed by post-end activity is the tail gap — none here", () => {
+    const healer = makeUnit("h", {
+      spec: CombatUnitSpec.Priest_Holy,
+      spellCastEvents: [
+        makeSpellCastEvent("2061", MATCH_START + 10_000, "f1"),
+        makeSpellCastEvent("2061", MATCH_START + 19_000, "f1"),
+        // after the round-ending death at +20 s
+        makeSpellCastEvent("2061", MATCH_START + 28_000, "f1"),
+      ],
+    });
+    const friend = makeUnit("f1", {
+      spec: CombatUnitSpec.Warrior_Arms,
+      damageIn: [
+        {
+          logLine: { timestamp: MATCH_START + 22_000 },
+          effectiveAmount: -100_000,
+        },
+      ] as any,
+    });
+    const enemy = makeUnit("e1");
+    const args = [healer, [healer, friend], [enemy]] as any[];
+
+    // the match end alone (no bracket): the 19 → 28 s gap is charged
+    const plain = detectHealingGaps(args[0], args[1], args[2], {
+      startTime: MATCH_START,
+      endTime: MATCH_START + 60_000,
+    });
+    expect(plain.map((g) => g.durationSeconds)).toEqual([9]);
+
+    // Solo Shuffle, death at +20 s: the round ends there; 1 s of tail, no gap
+    expect(
+      detectHealingGaps(
+        args[0],
+        args[1],
+        args[2],
+        shuffleRound(MATCH_START + 20_000) as any,
+      ),
+    ).toEqual([]);
+  });
+});

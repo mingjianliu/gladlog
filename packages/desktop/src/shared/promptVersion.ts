@@ -745,5 +745,11 @@
  *  F-K9b-B split). Cloak of Shadows, Blessing of Protection and Blessing of
  *  Spellwarding show as the target's defensive ("Target had a major
  *  defensive up"); burst-into-mitigation still ignores them.
+ *  v275 (2026-10-02, triage G9 round end: cc-dr F-CI1 / F-HG1,
+ *  missed-cleanse F-C3): one round end (`roundEndMs`: a Solo Shuffle round's
+ *  first player death, else the combat end) for `[CC ON TEAM]` / `[CC ON
+ *  ENEMY]` windows, uncleansed windows and healing gaps — a CC applied at or
+ *  after it is dropped, a removal or activity after it no longer lengthens a
+ *  window or closes a gap.
  */
-export const PROMPT_VERSION = 274;
+export const PROMPT_VERSION = 275;

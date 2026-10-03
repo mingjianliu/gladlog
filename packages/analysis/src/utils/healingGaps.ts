@@ -8,6 +8,7 @@ import {
 import { isHealerSpec, isPassiveProcCast, specToString } from "./cooldowns";
 import { getLowestHpPercentInWindow } from "./killWindowTargetSelection";
 import { fmtTime } from "./renderGrid";
+import { roundEndMs } from "./roundEnd";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -118,6 +119,8 @@ export function detectHealingGaps(
   combat: {
     startTime: number;
     endTime: number;
+    // `startInfo.bracket` + the units' deaths give `roundEndMs` (F-HG1)
+    startInfo?: { bracket?: string };
     units?: Record<string, { id: string; ownerId?: string }>;
   },
   /** The last playable instant, epoch ms (`playableEndMs`: a Solo Shuffle
@@ -134,7 +137,12 @@ export function detectHealingGaps(
   );
   const teammates = friends.filter((u) => u.id !== healer.id);
   const matchStartMs = combat.startTime;
-  const matchEndMs = combat.endTime;
+  // Triage 2026-09-29 cc-dr F-HG1: gaps end at the round end (`roundEndMs`,
+  // shared with the CC windows F-CI1 and missed-cleanse F-C3). Activity
+  // logged after it — the next Solo Shuffle round's prep — closed a gap that
+  // ran past the end and was scored as idle time (e5b3534b); it is dropped
+  // below, so a gap reaching the end is the tail gap and takes the tail rule.
+  const matchEndMs = roundEndMs(combat);
 
   // All timestamps where the healer produced a heal event or successfully cast a spell, sorted ascending
   const healTimestamps = healer.healOut.map((h) => h.logLine.timestamp);
@@ -149,7 +157,9 @@ export function detectHealingGaps(
 
   const activeTimestamps = Array.from(
     new Set([...healTimestamps, ...castTimestamps]),
-  ).sort((a, b) => a - b);
+  )
+    .filter((ts) => ts <= matchEndMs)
+    .sort((a, b) => a - b);
 
   // Build raw gap intervals [fromMs, toMs] where no heal/cast was produced
   const rawGaps: Array<{ fromMs: number; toMs: number }> = [];

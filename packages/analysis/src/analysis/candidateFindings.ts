@@ -97,6 +97,7 @@ import {
   formatDuringExternalForOwner,
 } from "../utils/externalDamage";
 import { detectHealingGaps, type IHealingGap } from "../utils/healingGaps";
+import { shuffleRoundEndMs } from "../utils/roundEnd";
 import {
   attemptIntoTrinketEvents,
   extractKillAttempts,
@@ -693,23 +694,10 @@ export function afterShuffleRoundEnd(
   return (t) => t > firstDeathS;
 }
 
-/** Solo Shuffle only: the round-ending (first) player death, epoch ms, or
- * undefined for other brackets / a round with no player death. The one
- * definition behind `afterShuffleRoundEnd` and the owner gate's round-end
- * clip. */
-export function shuffleRoundEndMs(
-  combat: any,
-  units: any[],
-): number | undefined {
-  if (combat?.startInfo?.bracket !== "Rated Solo Shuffle") return undefined;
-  let firstDeathMs = Infinity;
-  for (const u of units) {
-    if (!u.info) continue;
-    for (const d of (u.deathRecords ?? []) as any[])
-      firstDeathMs = Math.min(firstDeathMs, d.timestamp ?? 0);
-  }
-  return Number.isFinite(firstDeathMs) ? firstDeathMs : undefined;
-}
+/** Solo Shuffle only: the round-ending (first) player death — defined in
+ * `utils/roundEnd.ts` (triage G9: one round end for the candidate layer, the
+ * CC windows, the uncleansed windows and the healing gaps). */
+export { shuffleRoundEndMs };
 
 /** 3v3 only: the first friendly player death, epoch ms — the instant the
  * match is decided (user ruling 2026-09-30) — or undefined for other brackets
