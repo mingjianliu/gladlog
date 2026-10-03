@@ -376,7 +376,7 @@ describe("counterfactualOf 按 (name, atSeconds) 精确匹配(#17b Task4 复核 
     // Death ①: the Barkskin arithmetic line is derived exactly from the 300k
     // damage inside death ①'s window.
     expect(block1).toContain(
-      "Mitigation audit: Barkskin blocked ~75k (≈8% max HP) over 6.0s active",
+      "Mitigation audit: Barkskin blocked ~75k (≈8% max HP) over 6.0s active in the final 10s",
     );
     // Death ②: Barkskin was removed long before, so no whitelisted mitigation
     // is active inside death ②'s window — no Mitigation audit line may appear

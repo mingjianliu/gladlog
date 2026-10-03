@@ -1323,7 +1323,7 @@ describe("context.timelineSections.test.ts", () => {
           seenArgs.push([victimName, atSeconds]);
           return {
             auditLines: [
-              "Mitigation audit: Barkskin blocked ~75k (≈8% max HP) over 6.0s active",
+              "Mitigation audit: Barkskin blocked ~75k (≈8% max HP) over 6.0s active in the final 10s",
             ],
             decisiveLines: [
               `Counterfactual (arithmetic, single-factor): Pain Suppression from Priest1 would have cut window damage below lethal (margin >${DECISIVE_MARGIN_PCT}% max HP)`,
@@ -1342,7 +1342,7 @@ describe("context.timelineSections.test.ts", () => {
       // [DEATH] + snapshot placeholder (no HP trajectory/top damage: empty advancedActions/damageIn) + 2 appended lines
       expect(lines).toHaveLength(4);
       expect(lines[2]).toBe(
-        "               Mitigation audit: Barkskin blocked ~75k (≈8% max HP) over 6.0s active",
+        "               Mitigation audit: Barkskin blocked ~75k (≈8% max HP) over 6.0s active in the final 10s",
       );
       expect(lines[3]).toBe(
         `               Counterfactual (arithmetic, single-factor): Pain Suppression from Priest1 would have cut window damage below lethal (margin >${DECISIVE_MARGIN_PCT}% max HP)`,
@@ -1440,7 +1440,7 @@ describe("context.timelineSections.test.ts", () => {
         blockedPctMaxHp: 8,
       };
       expect(formatMitigationAuditLine(row)).toBe(
-        "Mitigation audit: Barkskin blocked ~75k (≈8% max HP) over 6.0s active",
+        "Mitigation audit: Barkskin blocked ~75k (≈8% max HP) over 6.0s active in the final 10s",
       );
     });
 
@@ -1453,7 +1453,7 @@ describe("context.timelineSections.test.ts", () => {
         blockedAmount: 75000,
       };
       expect(formatMitigationAuditLine(row)).toBe(
-        "Mitigation audit: Barkskin blocked ~75k over 6.0s active",
+        "Mitigation audit: Barkskin blocked ~75k over 6.0s active in the final 10s",
       );
     });
 
@@ -1466,7 +1466,7 @@ describe("context.timelineSections.test.ts", () => {
         damageTakenDuringImmunity: 0,
       };
       expect(formatMitigationAuditLine(row)).toBe(
-        "Mitigation audit: Divine Shield immunity covered 8.0s (still took ~0k during it — dmg the immunity did not block)",
+        "Mitigation audit: Divine Shield immunity covered 8.0s in the final 10s (still took ~0k during it — dmg the immunity did not block)",
       );
     });
 
@@ -1478,7 +1478,7 @@ describe("context.timelineSections.test.ts", () => {
         activeOverlapS: 3.2,
       };
       expect(formatMitigationAuditLine(row)).toBe(
-        "Mitigation audit: Blessing of Sacrifice active 3.2s (mechanic — redirect/reflect, not modeled in the arithmetic)",
+        "Mitigation audit: Blessing of Sacrifice active 3.2s in the final 10s (not in the mitigation table — not modeled in the arithmetic)",
       );
     });
 

@@ -805,5 +805,9 @@
  *  v287 (2026-10-03, triage cc-dr F-EX1, ruling A′19): a [HEALER EXPOSURE]
  *  window that opens while the healer is in a CC says `healer already in X
  *  until M:SS (the DR levels count it)` and drops the LoS-break advice.
+ *  v288 (2026-10-03, triage G7-P5: other F-O5 + cc-dr F-MA1): every
+ *  mitigation-audit line says its overlap is `in the final 10s`, and an
+ *  off-table row reads `(not in the mitigation table — not modeled in the
+ *  arithmetic)` — it no longer calls shields, dodges and heals a redirect.
  */
-export const PROMPT_VERSION = 287;
+export const PROMPT_VERSION = 288;

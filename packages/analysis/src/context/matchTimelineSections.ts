@@ -670,22 +670,27 @@ export const MITIGATION_AUDIT_INDEPENDENT_NOTE =
  */
 export function formatMitigationAuditLine(row: IMitigationAuditRow): string {
   const overlap = row.activeOverlapS.toFixed(1);
+  // triage G7-P5 (other F-O5 + cc-dr F-MA1, one wording): every form says the
+  // overlap is inside the final window before the death
+  const inWindow = `in the final ${COUNTERFACTUAL_WINDOW_S}s`;
   if (row.kind === "arith") {
     const blockedK = Math.round((row.blockedAmount ?? 0) / 1000);
     const pctPart =
       row.blockedPctMaxHp !== undefined
         ? ` (≈${row.blockedPctMaxHp}% max HP)`
         : "";
-    return `Mitigation audit: ${row.spellName} blocked ~${blockedK}k${pctPart} over ${overlap}s active`;
+    return `Mitigation audit: ${row.spellName} blocked ~${blockedK}k${pctPart} over ${overlap}s active ${inWindow}`;
   }
   if (row.kind === "immunity") {
     const dmgK = Math.round((row.damageTakenDuringImmunity ?? 0) / 1000);
     const outsideK = Math.round((row.damageOutsideImmunitySchool ?? 0) / 1000);
     const outsidePart =
       outsideK > 0 ? `; ~${outsideK}k of it outside the immunity's school` : "";
-    return `Mitigation audit: ${row.spellName} immunity covered ${overlap}s (still took ~${dmgK}k during it — dmg the immunity did not block${outsidePart})`;
+    return `Mitigation audit: ${row.spellName} immunity covered ${overlap}s ${inWindow} (still took ~${dmgK}k during it — dmg the immunity did not block${outsidePart})`;
   }
-  return `Mitigation audit: ${row.spellName} active ${overlap}s (mechanic — redirect/reflect, not modeled in the arithmetic)`;
+  // other F-O5: 24 of 25 such rows were shields, dodges or heals — "redirect /
+  // reflect" named one; say only what is true of all of them
+  return `Mitigation audit: ${row.spellName} active ${overlap}s ${inWindow} (not in the mitigation table — not modeled in the arithmetic)`;
 }
 
 /**

@@ -28,8 +28,8 @@ import {
  *    mitigation **already active** inside the death window — arith entries
  *    back out the blocked amount from the observed damage; immunity (pct=100)
  *    is never back-computed, it only reports coverage duration and the damage
- *    observed during it; mechanic/off-table entries (transfer, reflect, …) get
- *    no invented numbers; positional (Darkness) is not modelled this round and
+ *    observed during it; off-table entries (not in the mitigation table: shields,
+ *    dodges, heals, transfers, reflects …) get no invented numbers; positional (Darkness) is not modelled this round and
  *    is skipped without emitting a row.
  *  - B (computeMissedExternalCounterfactuals): a teammate external that was
  *    **available but not given**, on the discount measure (saved = damage of
