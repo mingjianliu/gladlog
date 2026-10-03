@@ -8,7 +8,9 @@
  *  - crisis-external F-D3 (ruling A49 = B): a death / death-setup after the
  *    log owner's own death leaves the menu;
  *  - death-kill F-M1: the missed-options lock test asks the cannot-cast
- *    predicate (a silence locks a caster).
+ *    predicate (a silence locks a caster);
+ *  - death-kill F-M2: the tag says the longest free stretch and what held
+ *    the caster through the death.
  */
 import { LogEvent } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -18,6 +20,8 @@ import { deathSetupEvents } from "../src/analysis/candidates/death";
 import { ensureAnalysisData } from "../src/data/ensure";
 import { freeMsBefore } from "../src/utils/cannotCastIntervals";
 import {
+  deathWindowFreedom,
+  formatDeathOutcomeForContext,
   wasLockedOutByCannotCast,
   wasLockedOutThroughWindow,
 } from "../src/utils/deathOutcomeAnalysis";
@@ -198,5 +202,70 @@ describe("death-kill F-M1 — a silence locks a caster for the missed-options ta
     expect(
       wasLockedOutThroughWindow({ playerName: "c1", ccInstances: [] }, 100),
     ).toBe(false);
+  });
+});
+
+describe("death-kill F-M2 — longest free stretch, and what held the caster at the death", () => {
+  const aura = (
+    event: LogEvent,
+    spellId: string,
+    ms: number,
+    name: string,
+  ) => ({
+    ...makeAuraEvent(event, spellId, START + ms, "e1", "c1"),
+    spellName: name,
+  });
+  // 9c6ab747 shape: Paralysis to 96.97, free 96.97–99.844, Song of Chi-Ji
+  // 99.844 through the death at 101.975
+  const caster = makeUnit("c1", {
+    auraEvents: [
+      aura(LogEvent.SPELL_AURA_APPLIED, "115078", 94_805, "Paralysis"),
+      aura(LogEvent.SPELL_AURA_REMOVED, "115078", 96_970, "Paralysis"),
+      aura(LogEvent.SPELL_AURA_APPLIED, "198909", 99_844, "Song of Chi-Ji"),
+      aura(LogEvent.SPELL_AURA_REMOVED, "198909", 103_097, "Song of Chi-Ji"),
+    ],
+  });
+
+  it("measures the longest contiguous gap and names the interval covering the death", () => {
+    const f = deathWindowFreedom(caster, new Set(["e1"]), START, 101.975)!;
+    // the window opens at 96.975 (death − 5 s), after Paralysis ended
+    expect(f.longestFreeS).toBeCloseTo(2.869, 3);
+    expect(f.heldAtDeath).toMatchObject({
+      spellName: "Song of Chi-Ji",
+      fromSeconds: 99.844,
+      lockout: false,
+    });
+  });
+
+  it("renders the stretch and the held-at-death clause on the missed-options line", () => {
+    const freedom = deathWindowFreedom(
+      caster,
+      new Set(["e1"]),
+      START,
+      101.975,
+    )!;
+    const text = formatDeathOutcomeForContext({
+      events: [
+        {
+          deadPlayer: "Victim-R",
+          deadPlayerSpec: "Arms Warrior",
+          atSeconds: 101.975,
+          availableImmunities: [],
+          missedExternals: [
+            {
+              casterName: "Caster-R",
+              casterSpec: "Arms Warrior",
+              spellId: "97462",
+              spellName: "Rallying Cry",
+              casterWasInCC: false,
+              casterFreedom: freedom,
+            },
+          ],
+        },
+      ],
+    } as never);
+    expect(text).toContain(
+      "Victim-R died — Caster-R had Rallying Cry available, caster's longest free stretch 2.9s of the last 5s, then in Song of Chi-Ji from 1:39 through the death",
+    );
   });
 });

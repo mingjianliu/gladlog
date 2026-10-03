@@ -785,5 +785,9 @@
  *  missed-options "caster in CC / was in CC" tags ask the cannot-cast
  *  predicate (silences and kick lockouts lock a caster), and a CC the unit
  *  trinketed out of counts until the press in the lockout window.
+ *  v283 (2026-10-02, triage death-kill F-M2): the missed-options tail says
+ *  the longest free stretch of the last 5 s and, when a cannot-cast interval
+ *  covers the death, `then in X from M:SS through the death` (a kick lockout:
+ *  `then school-locked (X) …`), in place of `was in CC` / `caster was free`.
  */
-export const PROMPT_VERSION = 282;
+export const PROMPT_VERSION = 283;

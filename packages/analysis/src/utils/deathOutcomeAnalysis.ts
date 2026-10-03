@@ -7,7 +7,7 @@ import {
 
 import { MITIGATION_TABLE } from "../data/mitigationData";
 import { getEnglishSpellName } from "../data/spellEffectData";
-import { buildCannotCastIntervals } from "./cannotCastIntervals";
+import { namedCannotCastIntervals } from "./cannotCastIntervals";
 import { IPlayerCCTrinketSummary } from "./ccTrinketAnalysis";
 import {
   auraOnlyActivationSeconds,
@@ -234,10 +234,22 @@ const EXTERNAL_DEFENSIVE_SPELLS: Record<
 
 export { EXTERNAL_DEFENSIVE_SPELLS };
 
+/** Triage death-kill F-M2: how free the unit was in the last
+ * `LETHAL_WINDOW_SECONDS` (from the cannot-cast intervals, F-M1). */
+export interface IDeathWindowFreedom {
+  /** the longest contiguous free gap — the gap `MIN_FREE_GAP_SECONDS` tests */
+  longestFreeS: number;
+  /** the cannot-cast interval covering the death instant, if any (the
+   * earliest-starting one) */
+  heldAtDeath?: { spellName: string; fromSeconds: number; lockout: boolean };
+}
+
 export interface IDeathImmuneAvailable {
   spellId: string;
   spellName: string;
   wasInCC: boolean;
+  /** death-kill F-M2; absent when the cannot-cast sources were not given */
+  freedom?: IDeathWindowFreedom;
 }
 
 export interface IMissedExternal {
@@ -246,6 +258,8 @@ export interface IMissedExternal {
   spellId: string;
   spellName: string;
   casterWasInCC: boolean;
+  /** death-kill F-M2; absent when the cannot-cast sources were not given */
+  casterFreedom?: IDeathWindowFreedom;
 }
 
 export interface IDeathOutcomeEvent {
@@ -641,10 +655,31 @@ export function wasLockedOutByCannotCast(
   deathSeconds: number,
   windowSeconds = LETHAL_WINDOW_SECONDS,
 ): boolean {
+  const f = deathWindowFreedom(
+    unit,
+    hostileIds,
+    matchStartMs,
+    deathSeconds,
+    windowSeconds,
+  );
+  return f !== null && f.longestFreeS < MIN_FREE_GAP_SECONDS;
+}
+
+/** death-kill F-M2: the longest free gap in the window and what held the
+ * unit at the death, from the same intervals as `wasLockedOutByCannotCast`.
+ * Null for an empty window. */
+export function deathWindowFreedom(
+  unit: ICombatUnit,
+  hostileIds: Set<string>,
+  matchStartMs: number,
+  deathSeconds: number,
+  windowSeconds = LETHAL_WINDOW_SECONDS,
+): IDeathWindowFreedom | null {
   const windowStart = Math.max(0, deathSeconds - windowSeconds);
-  if (deathSeconds <= windowStart) return false;
+  if (deathSeconds <= windowStart) return null;
+  const named = namedCannotCastIntervals(unit, hostileIds);
   const result = freeGapCore(
-    buildCannotCastIntervals(unit, hostileIds).map((iv) => ({
+    named.map((iv) => ({
       start: (iv.from - matchStartMs) / 1000,
       end: (iv.to - matchStartMs) / 1000,
       isStun: false,
@@ -652,7 +687,22 @@ export function wasLockedOutByCannotCast(
     windowStart,
     deathSeconds,
   );
-  return result.maxFreeGapSeconds < MIN_FREE_GAP_SECONDS;
+  const deathMs = matchStartMs + Math.round(deathSeconds * 1000);
+  const cover = named
+    .filter((iv) => iv.from < deathMs && iv.to >= deathMs)
+    .sort((a, b) => a.from - b.from)[0];
+  return {
+    longestFreeS: result.maxFreeGapSeconds,
+    ...(cover
+      ? {
+          heldAtDeath: {
+            spellName: getEnglishSpellName(cover.spellId),
+            fromSeconds: (cover.from - matchStartMs) / 1000,
+            lockout: cover.lockout,
+          },
+        }
+      : {}),
+  };
 }
 
 export function wasLockedOutThroughWindow(
@@ -791,22 +841,33 @@ export function buildDeathOutcomeSummary(
   cannotCastSourceIds?: Set<string>,
 ): IDeathOutcomeSummary {
   const matchStartMs = combat.startTime;
-  const lockedAt = (
+  // death-kill F-M1 / F-M2: with the hostile sources, the cannot-cast
+  // predicate decides the tag and supplies the free stretch; without them the
+  // hard-CC test, as before
+  const lockAt = (
     unit: ICombatUnit,
     summary:
       Pick<IPlayerCCTrinketSummary, "playerName" | "ccInstances"> | undefined,
     atSeconds: number,
-  ) =>
-    cannotCastSourceIds
-      ? wasLockedOutByCannotCast(
-          unit,
-          cannotCastSourceIds,
-          matchStartMs,
-          atSeconds,
-        )
-      : summary
-        ? wasLockedOutThroughWindow(summary, atSeconds)
-        : false;
+  ): { locked: boolean; freedom?: IDeathWindowFreedom } => {
+    if (cannotCastSourceIds) {
+      const freedom = deathWindowFreedom(
+        unit,
+        cannotCastSourceIds,
+        matchStartMs,
+        atSeconds,
+      );
+      return freedom
+        ? {
+            locked: freedom.longestFreeS < MIN_FREE_GAP_SECONDS,
+            freedom,
+          }
+        : { locked: false };
+    }
+    return {
+      locked: summary ? wasLockedOutThroughWindow(summary, atSeconds) : false,
+    };
+  };
   const events: IDeathOutcomeEvent[] = [];
 
   // B29: pre-build lockout intervals once per (unit, spell) pair to avoid O(N) filter+sort per death
@@ -870,7 +931,13 @@ export function buildDeathOutcomeSummary(
         availableImmunities.push({
           spellId,
           spellName: spell.name,
-          wasInCC: lockedAt(unit, ccSummary, atSeconds),
+          ...(() => {
+            const l = lockAt(unit, ccSummary, atSeconds);
+            return {
+              wasInCC: l.locked,
+              ...(l.freedom ? { freedom: l.freedom } : {}),
+            };
+          })(),
         });
       }
 
@@ -947,7 +1014,13 @@ export function buildDeathOutcomeSummary(
             casterSpec: specToString(teammate.spec),
             spellId,
             spellName: spell.name,
-            casterWasInCC: lockedAt(teammate, teammateCCSummary, atSeconds),
+            ...(() => {
+              const l = lockAt(teammate, teammateCCSummary, atSeconds);
+              return {
+                casterWasInCC: l.locked,
+                ...(l.freedom ? { casterFreedom: l.freedom } : {}),
+              };
+            })(),
           });
         }
       }
@@ -967,6 +1040,19 @@ export function buildDeathOutcomeSummary(
   return { events };
 }
 
+/** death-kill F-M2 (cc-dr X-M2: the number is the LONGEST contiguous free
+ * gap, the one `MIN_FREE_GAP_SECONDS` tests — not the total free time), and
+ * what held the unit through the death when a cannot-cast interval covers
+ * it. */
+function freedomNote(who: string, f: IDeathWindowFreedom): string {
+  const held = f.heldAtDeath
+    ? f.heldAtDeath.lockout
+      ? `, then school-locked (${f.heldAtDeath.spellName}) from ${fmtTime(f.heldAtDeath.fromSeconds)} through the death`
+      : `, then in ${f.heldAtDeath.spellName} from ${fmtTime(f.heldAtDeath.fromSeconds)} through the death`
+    : "";
+  return `, ${who}longest free stretch ${f.longestFreeS.toFixed(1)}s of the last ${LETHAL_WINDOW_SECONDS}s${held}`;
+}
+
 export function formatDeathOutcomeForContext(
   summary: IDeathOutcomeSummary,
 ): string {
@@ -975,13 +1061,21 @@ export function formatDeathOutcomeForContext(
   for (const ev of summary.events) {
     const t = fmtTime(ev.atSeconds);
     for (const imm of ev.availableImmunities) {
-      const ccNote = imm.wasInCC ? ", was in CC" : ", was not CC'd";
+      const ccNote = imm.freedom
+        ? freedomNote("", imm.freedom)
+        : imm.wasInCC
+          ? ", was in CC"
+          : ", was not CC'd";
       lines.push(
         `  [${t}] ${ev.deadPlayerSpec} (${ev.deadPlayer}) — had ${imm.spellName} available${ccNote}`,
       );
     }
     for (const ext of ev.missedExternals) {
-      const ccNote = ext.casterWasInCC ? ", caster in CC" : ", caster was free";
+      const ccNote = ext.casterFreedom
+        ? freedomNote("caster's ", ext.casterFreedom)
+        : ext.casterWasInCC
+          ? ", caster in CC"
+          : ", caster was free";
       lines.push(
         `  [${t}] ${ev.deadPlayer} died — ${ext.casterName} had ${ext.spellName} available${ccNote}`,
       );
