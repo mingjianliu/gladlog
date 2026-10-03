@@ -1,12 +1,17 @@
 /**
  * Triage 2026-09-29, group G13 — healer exposure and the enemy CC kit:
  *  - pets-summons F-PS3 (ruling A17 = A): a summon's CC is credited to its
- *    owner (`buildEnemyCCHistory`, keyed by the enemy player).
+ *    owner (`buildEnemyCCHistory`, keyed by the enemy player);
+ *  - cc-dr F-KT1 (A17, R3 = A): the KIT header names the healer when the log
+ *    owner is not the healer, and marks a spec default never seen landing.
  */
 import { CombatUnitReaction } from "@gladlog/parser-compat";
 import { describe, expect, it } from "vitest";
 
-import { buildEnemyCCHistory } from "../src/utils/healerExposureAnalysis";
+import {
+  buildEnemyCCHistory,
+  formatEnemyCCKitHeader,
+} from "../src/utils/healerExposureAnalysis";
 import { makeUnit } from "./ported/testHelpers";
 
 const cc = (sourceId: string, sourceName: string) => ({
@@ -56,5 +61,42 @@ describe("pets-summons F-PS3 — a summon's CC is its owner's", () => {
       [shaman],
     );
     expect([...h.keys()]).toEqual(["Frogtide"]);
+  });
+});
+
+describe("cc-dr F-KT1 — the ENEMY CC KIT label and its spec defaults", () => {
+  const threat = (over: object) => ({
+    enemyName: "Alphawolf",
+    enemySpec: "Restoration Druid",
+    ccCategory: "Disorient",
+    ccSpellName: "Cyclone",
+    healerDRLevel: "Full" as const,
+    losBlocked: false,
+    ...over,
+  });
+  const exposures = [
+    {
+      atSeconds: 30,
+      threats: [
+        threat({ fromTemplate: true }),
+        threat({
+          enemyName: "Syrtangz",
+          enemySpec: "Fury Warrior",
+          ccCategory: "Stun",
+          ccSpellName: "Shockwave",
+        }),
+      ],
+    },
+  ] as never;
+
+  it("names the healer for a DPS owner and marks the spec default", () => {
+    expect(formatEnemyCCKitHeader(exposures, "2(RDruid)")).toEqual([
+      "ENEMY CC KIT (threats to your healer 2(RDruid) at enemy burst windows): Restoration Druid (Alphawolf): Cyclone [Disorient] (spec default, not seen); Fury Warrior (Syrtangz): Shockwave [Stun]",
+    ]);
+  });
+  it("keeps 'threats to you' for a healer owner", () => {
+    expect(formatEnemyCCKitHeader(exposures)[0]).toMatch(
+      /^ENEMY CC KIT \(threats to you\): /,
+    );
   });
 });

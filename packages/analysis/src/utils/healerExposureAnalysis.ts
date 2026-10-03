@@ -150,6 +150,9 @@ export interface IHealerCCThreat {
   healerDRLevel: Exclude<DRLevel, "Immune">;
   /** true = this enemy is behind a pillar relative to the healer */
   losBlocked: boolean;
+  /** cc-dr F-KT1: the CC is the spec's default (`getPrimaryCC`), not one this
+   * enemy was seen landing */
+  fromTemplate?: boolean;
 }
 
 export interface IHealerBurstExposure {
@@ -357,6 +360,7 @@ export function analyzeHealerExposureAtBurst(
       // Use observed CC history; fall back to spec-based primary CC
       const observedCCs = enemyCCHistory.get(enemy.name) ?? [];
       const primaryCC = getPrimaryCC(enemySpec);
+      const fromTemplate = observedCCs.length === 0 && !!primaryCC;
       const ccSources =
         observedCCs.length > 0 ? observedCCs : primaryCC ? [primaryCC] : [];
 
@@ -377,6 +381,7 @@ export function analyzeHealerExposureAtBurst(
           ccSpellName: spellName,
           healerDRLevel: healerDRLevel as Exclude<DRLevel, "Immune">,
           losBlocked,
+          ...(fromTemplate ? { fromTemplate: true } : {}),
         });
       }
     }
@@ -481,11 +486,23 @@ function buildEnemyRefMap(
  */
 export function formatEnemyCCKitHeader(
   exposures: IHealerBurstExposure[],
+  /** cc-dr F-KT1 (ruling A17, cc-dr R3 = A): the healer's roster label when
+   * the log owner is not the healer — the kit is threats to THAT healer at
+   * enemy burst windows, not to the reader (33 DPS-owner rounds read "threats
+   * to you") */
+  healerLabel?: string,
 ): string[] {
   const enemyOrder: string[] = [];
   const kits = new Map<
     string,
-    { spec: string; spells: Array<{ spellName: string; category: string }> }
+    {
+      spec: string;
+      spells: Array<{
+        spellName: string;
+        category: string;
+        fromTemplate?: boolean;
+      }>;
+    }
   >();
 
   for (const e of exposures) {
@@ -501,7 +518,11 @@ export function formatEnemyCCKitHeader(
           (s) => s.spellName === t.ccSpellName && s.category === t.ccCategory,
         )
       ) {
-        kit.spells.push({ spellName: t.ccSpellName, category: t.ccCategory });
+        kit.spells.push({
+          spellName: t.ccSpellName,
+          category: t.ccCategory,
+          ...(t.fromTemplate ? { fromTemplate: true } : {}),
+        });
       }
     }
   }
@@ -509,17 +530,21 @@ export function formatEnemyCCKitHeader(
   if (enemyOrder.length === 0) return [];
 
   const parts = enemyOrder.map((name) => {
-    const kit = kits.get(name) as {
-      spec: string;
-      spells: Array<{ spellName: string; category: string }>;
-    };
+    const kit = kits.get(name)!;
+    // cc-dr F-KT1: a spec default the enemy was never seen landing says so
     const spellsStr = kit.spells
-      .map((s) => `${s.spellName} [${s.category}]`)
+      .map(
+        (s) =>
+          `${s.spellName} [${s.category}]${s.fromTemplate ? " (spec default, not seen)" : ""}`,
+      )
       .join(", ");
     return `${kit.spec} (${name}): ${spellsStr}`;
   });
 
-  return [`ENEMY CC KIT (threats to you): ${parts.join("; ")}`];
+  const who = healerLabel
+    ? `threats to your healer ${healerLabel} at enemy burst windows`
+    : "threats to you";
+  return [`ENEMY CC KIT (${who}): ${parts.join("; ")}`];
 }
 
 /** Compact single-line-per-window exposure entries (see module comment above). */

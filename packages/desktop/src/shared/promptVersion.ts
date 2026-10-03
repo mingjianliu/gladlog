@@ -798,5 +798,9 @@
  *  Capacitor Totem's stun, a pet's Intimidation) to its owner, so the owner
  *  no longer falls back to a spec template; its reach is measured from the
  *  owner (FLAG, predicate-index).
+ *  v286 (2026-10-03, triage cc-dr F-KT1, ruling A17 / R3 = A): the ENEMY CC
+ *  KIT header reads `threats to your healer <pid> at enemy burst windows`
+ *  when the log owner is not the healer, and a spec default the enemy was
+ *  never seen landing is marked `(spec default, not seen)`.
  */
-export const PROMPT_VERSION = 285;
+export const PROMPT_VERSION = 286;

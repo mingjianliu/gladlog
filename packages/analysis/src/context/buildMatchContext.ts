@@ -113,7 +113,7 @@ import {
 import { buildMatchTimeline, BuildMatchTimelineParams } from "./matchTimeline";
 import { buildPlayerLoadout } from "./resourceSnapshot";
 import { dmgSpikeWindowsOf, mergeTimestampedLines } from "./timelineHelpers";
-import { unitLabeler } from "./unitLabel";
+import { abbrevSpec, unitLabeler } from "./unitLabel";
 import type { RawStreams } from "../utils/rawStreams";
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -687,7 +687,15 @@ export function buildMatchContext(
   // per-window entries are merged inline into the timeline below so each exposure sits
   // chronologically next to the burst it belongs to (2026-07-09 week-eval:
   // inferenceScaffolding regression from the after-timeline block position).
-  const enemyCCKitLines = formatEnemyCCKitHeader(healerExposures);
+  // cc-dr F-KT1: name the healer when the log owner is not the healer
+  const kitHealerLabel =
+    healerUnit && healerUnit.id !== owner.id
+      ? `${playerIdMap.get(healerUnit.name) ?? healerUnit.name.split("-")[0]}(${abbrevSpec(specToString(healerUnit.spec))})`
+      : undefined;
+  const enemyCCKitLines = formatEnemyCCKitHeader(
+    healerExposures,
+    kitHealerLabel,
+  );
   if (enemyCCKitLines.length > 0) {
     tLines.push("");
     enemyCCKitLines.forEach((l) => tLines.push(l));
