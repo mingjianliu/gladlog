@@ -2533,7 +2533,17 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
         : "";
       addEntry(
         x.atSeconds,
-        `${fmtTime(x.atSeconds)}  [CC REMOVED]   ${unitLabel(pal)}'s Blessing of Sanctuary removed ${srcLabel ? `${srcLabel}'s ` : ""}${x.ccSpellName} from ${unitLabel(target)}`,
+        // cc-dr F-CR1: how long it held and how much was left (the
+        // [CC BROKEN] arithmetic; an unknown full duration says held only)
+        `${fmtTime(x.atSeconds)}  [CC REMOVED]   ${unitLabel(pal)}'s Blessing of Sanctuary removed ${srcLabel ? `${srcLabel}'s ` : ""}${x.ccSpellName} from ${unitLabel(target)}${
+          x.heldSeconds === undefined
+            ? ""
+            : ` after ${x.heldSeconds.toFixed(0)}s${
+                x.leftSeconds != null
+                  ? ` (~${x.leftSeconds.toFixed(0)}s of it left)`
+                  : ""
+              }`
+        }`,
       );
     }
     if (rawStreams?.available) {

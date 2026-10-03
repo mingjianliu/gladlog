@@ -88,6 +88,72 @@ const isRootType = (spellId: string): boolean =>
  * BROKEN/BROKEN_SPELL is the breaker the key usually does not match → pair
  * against the earliest pending entry with the same spellId.
  */
+/**
+ * How much of a CC was left when it ended early: official full duration
+ * (`ccFullDurationForCaster`: DB2 PvP duration, caster-aware talents) × DR
+ * factor at the apply × Oppressing Roar (+30 % when the debuff was on the
+ * holder at application) − time already held. No duration known → null (no
+ * guess). The one arithmetic for `[CC BROKEN]` and `[CC REMOVED]` (triage
+ * cc-dr F-CR1).
+ */
+export function ccRemainingSeconds(p: {
+  spellId: string;
+  holder: ICombatUnit;
+  caster: ICombatUnit | undefined;
+  applyMs: number;
+  endMs: number;
+  opponentIds: Set<string>;
+  matchStartMs: number;
+  roarAtApply: boolean;
+}): number | null {
+  const baseDuration = ccFullDurationForCaster(p.spellId, p.caster);
+  if (baseDuration === undefined) return null;
+  const tableDuration =
+    baseDuration * (p.roarAtApply ? OPPRESSING_ROAR_PVP_CC_DURATION_MULT : 1);
+  const category = getDRCategory(p.spellId);
+  let factor = 1;
+  if (category) {
+    const history = buildCcCategoryHistory(
+      p.holder,
+      category,
+      p.opponentIds,
+      p.matchStartMs,
+    );
+    const level = getDRLevelAtTime(
+      history,
+      category,
+      (p.applyMs - p.matchStartMs) / 1000,
+      p.matchStartMs,
+    );
+    factor = drDurationFactor(level);
+  }
+  return Math.max(0, tableDuration * factor - (p.endMs - p.applyMs) / 1000);
+}
+
+/** Was the Oppressing Roar debuff on `holder` when the CC application
+ * `applied` (one of `holder.auraEvents`) landed — the +30 % CC duration
+ * `ccRemainingSeconds` applies? Walks the stream up to that event, so a Roar
+ * change later in log order at the same timestamp does not count (the
+ * application-time state `analyzeCcBreaks` keeps). */
+export function oppressingRoarOnAt(
+  holder: ICombatUnit,
+  applied: ICombatUnit["auraEvents"][number],
+): boolean {
+  let on = false;
+  for (const a of holder.auraEvents) {
+    if (a === applied) break;
+    if (a.spellId !== OPPRESSING_ROAR_SPELL_ID) continue;
+    const ev = a.logLine.event;
+    if (
+      ev === LogEvent.SPELL_AURA_APPLIED ||
+      ev === LogEvent.SPELL_AURA_REFRESH
+    )
+      on = true;
+    else if (ev === LogEvent.SPELL_AURA_REMOVED) on = false;
+  }
+  return on;
+}
+
 export function analyzeCcBreaks(
   friends: ICombatUnit[],
   enemies: ICombatUnit[],
@@ -199,43 +265,16 @@ export function analyzeCcBreaks(
 
         const heldSeconds = (aura.timestamp - entry.applyMs) / 1000;
 
-        // Remaining duration: official full duration (ccFullDurationSeconds:
-        // DB2 PvP duration, hand fallback only where DB2 is blank) × DR factor
-        // × Oppressing Roar (+30 % when the debuff was on the holder at
-        // application) − time already held; no duration known → no guess (null)
-        let remainingSeconds: number | null = null;
-        // Caster-aware: talent-lengthened CC (CC_DURATION_TALENT_MODIFIERS,
-        // e.g. Resonant Voice → Intimidating Shout 7.2 s) counts as the full
-        // duration only when the caster is known to hold the talent.
-        const baseDuration = ccFullDurationForCaster(
+        const remainingSeconds = ccRemainingSeconds({
           spellId,
-          playerById.get(entry.casterId),
-        );
-        const tableDuration =
-          baseDuration === undefined
-            ? undefined
-            : baseDuration *
-              (entry.roarAtApply ? OPPRESSING_ROAR_PVP_CC_DURATION_MULT : 1);
-        if (tableDuration !== undefined) {
-          const category = getDRCategory(spellId);
-          let factor = 1;
-          if (category) {
-            const history = buildCcCategoryHistory(
-              holder,
-              category,
-              opponentIds,
-              combat.startTime,
-            );
-            const level = getDRLevelAtTime(
-              history,
-              category,
-              (entry.applyMs - combat.startTime) / 1000,
-              combat.startTime,
-            );
-            factor = drDurationFactor(level);
-          }
-          remainingSeconds = Math.max(0, tableDuration * factor - heldSeconds);
-        }
+          holder,
+          caster: playerById.get(entry.casterId),
+          applyMs: entry.applyMs,
+          endMs: aura.timestamp,
+          opponentIds,
+          matchStartMs: combat.startTime,
+          roarAtApply: entry.roarAtApply,
+        });
 
         events.push({
           atSeconds: (aura.timestamp - combat.startTime) / 1000,

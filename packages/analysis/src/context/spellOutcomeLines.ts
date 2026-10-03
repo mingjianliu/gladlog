@@ -15,6 +15,10 @@ import { getEnglishSpellName } from "../data/spellEffectData";
 import { ccSpellIds } from "../data/spellTags";
 import { getSortedAdvancedActions } from "../utils/advancedActions";
 import { binarySearchClosest } from "../utils/binarySearch";
+import {
+  ccRemainingSeconds,
+  oppressingRoarOnAt,
+} from "../utils/ccBreakAnalysis";
 import { groundingRedirects } from "../utils/groundingRedirects";
 import { pvpTrinketUses } from "../utils/pvpTrinketUses";
 import type { CastFailedEvent } from "../utils/rawStreams";
@@ -227,6 +231,58 @@ export interface ICcRemovedBySanctuary {
   /** the CC's caster by GUID — a same-named summon on both teams (Capacitor
    *  Totem) must not resolve by name (agy review, the GH #99 class) */
   ccSourceId?: string;
+  /** cc-dr F-CR1: seconds the CC had held when it was removed (from its
+   * APPLIED / REFRESH by that source) */
+  heldSeconds?: number;
+  /** cc-dr F-CR1: seconds of it left (`ccRemainingSeconds`); null when the
+   * full duration is unknown */
+  leftSeconds?: number | null;
+}
+
+/** cc-dr F-CR1: how long the removed CC had held, and how much was left
+ * (the `[CC BROKEN]` arithmetic, `ccRemainingSeconds`). The application is
+ * the last APPLIED / REFRESH by that source BEFORE `removed` in the stream —
+ * a re-application later in log order at the removal's ms is not it. */
+function heldAndLeft(
+  target: ICombatUnit,
+  removed: ICombatUnit["auraEvents"][number],
+  units: readonly ICombatUnit[],
+  matchStartMs: number,
+): { heldSeconds?: number; leftSeconds?: number | null } {
+  const spellId = removed.spellId;
+  const srcId = removed.srcUnitId;
+  const removedMs = removed.logLine.timestamp;
+  const stream = target.auraEvents ?? [];
+  let applied: (typeof stream)[number] | undefined;
+  for (let i = stream.indexOf(removed) - 1; i >= 0; i--) {
+    const x = stream[i]!;
+    if (
+      x.spellId === spellId &&
+      x.srcUnitId === srcId &&
+      (x.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
+        x.logLine.event === LogEvent.SPELL_AURA_REFRESH)
+    ) {
+      applied = x;
+      break;
+    }
+  }
+  if (!spellId || !applied) return {};
+  const opponentIds = new Set(
+    units.filter((u) => u.reaction !== target.reaction).map((u) => u.id),
+  );
+  return {
+    heldSeconds: (removedMs - applied.timestamp) / 1000,
+    leftSeconds: ccRemainingSeconds({
+      spellId,
+      holder: target,
+      caster: units.find((u) => u.id === srcId),
+      applyMs: applied.timestamp,
+      endMs: removedMs,
+      opponentIds,
+      matchStartMs,
+      roarAtApply: oppressingRoarOnAt(target, applied),
+    }),
+  };
 }
 
 /** A control that left its target within 50 ms AFTER Blessing of Sanctuary
@@ -275,6 +331,7 @@ export function sanctuaryRemovals(
           ccSpellName: getEnglishSpellName(a.spellId, a.spellName),
           ccSourceName: a.srcUnitName ?? "",
           ...(a.srcUnitId ? { ccSourceId: a.srcUnitId } : {}),
+          ...heldAndLeft(target, a, units, matchStartMs),
         });
       }
     }

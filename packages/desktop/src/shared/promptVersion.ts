@@ -824,5 +824,9 @@
  *  v292 (2026-10-03, triage cc-dr F-RT1): a [ROOT] line whose rooted unit
  *  cast on another player inside the root says `cast N spell(s) on others
  *  meanwhile (X → pid)` instead of "this stretch worked like hard CC".
+ *  v293 (2026-10-03, triage cc-dr F-CR1): a [CC REMOVED] line says how
+ *  long the CC held and how much was left (`after 3s (~1s of it left)`; the
+ *  [CC BROKEN] arithmetic, `ccRemainingSeconds`); an unknown full duration
+ *  says `after Ns` only.
  */
-export const PROMPT_VERSION = 292;
+export const PROMPT_VERSION = 293;
