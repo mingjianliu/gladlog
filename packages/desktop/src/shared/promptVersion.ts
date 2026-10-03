@@ -778,5 +778,8 @@
  *  `lockedS` / `freeBeforeDeathS` / `landedWhileLocked`; the legend says what
  *  the lock was (the CROSS-THEME G5 sentence); a death or death-setup after
  *  the log owner's own death leaves the menu.
+ *  v281 (2026-10-02, triage death-kill F-D1): the "death" legend prints
+ *  only when the menu has a death and no longer defines a side=enemy death
+ *  (kill review is retired).
  */
-export const PROMPT_VERSION = 280;
+export const PROMPT_VERSION = 281;

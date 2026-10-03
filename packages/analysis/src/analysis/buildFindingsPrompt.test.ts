@@ -36,6 +36,20 @@ describe("buildFindingsPrompt", () => {
     expect(p).toMatch(/no digits|words|discarded/i); // strict no-raw-digit guidance
   });
 
+  it("death-kill F-D1: the death legend prints only with a death on the menu, and names friendly deaths only", () => {
+    const withDeath = buildFindingsPrompt(candidates, "", "Discipline Priest");
+    expect(withDeath).toContain(
+      `- "death": one of YOUR team's players died (facts.side=friendly); enemy deaths are timeline context only.`,
+    );
+    expect(withDeath).not.toContain("facts.side=enemy");
+    const noDeath = buildFindingsPrompt(
+      [{ ...candidates[0]!, id: "cd-waste:x", type: "cd-waste" }],
+      "",
+      "Discipline Priest",
+    );
+    expect(noDeath).not.toContain(`- "death":`);
+  });
+
   it("category 收敛为枚举(与 FINDING_CATEGORIES 单源渲染)", () => {
     const p = buildFindingsPrompt(candidates, "", "Discipline Priest");
     for (const c of FINDING_CATEGORIES) expect(p).toContain(`"${c}"`);

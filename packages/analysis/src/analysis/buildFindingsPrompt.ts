@@ -206,7 +206,15 @@ export function buildFindingsPrompt(
     menu || "  (none)",
     ``,
     `Event legend:`,
-    `- "death": a player died. facts.side=friendly means it was one of YOUR team's deaths (a loss to coach around); facts.side=enemy means your team scored the kill (reinforce what worked).`,
+    // death-kill F-D1: only when the menu has a death (2v2 menus never do),
+    // and without the enemy-death clause — kill review is retired (GH #18
+    // ruling d), so the menu never carries a side=enemy death
+    ...legendLines(
+      {
+        death: `- "death": one of YOUR team's players died (facts.side=friendly); enemy deaths are timeline context only.`,
+      },
+      candidates,
+    ),
     `- "cd-waste": a major defensive cooldown the player never successfully cast the entire match (facts.spell names it). This is a whole-round observation with no timestamp.${COST_NORM_LEGEND_NOTE}${ATTEMPTED_LEGEND_NOTE}`,
     // Legends for DPS-owner event types are emitted only when the menu
     // contains that type -- a healer menu has none of them, so the healer
