@@ -763,5 +763,10 @@
  *  trinket out of <disarm> (by X)` when the press broke a disarm; a new
  *  `[DISARM]` line (and legend) for a disarm on any player of our team, with
  *  the same trinket-break tail.
+ *  v278 (2026-10-02, triage position F-L1 / F-D1): `[CC ON TEAM]` drops
+ *  "LoS blocked" when the CC's targeted cast succeeded on that unit just
+ *  before (GH #83: a landed cast proves LoS), and drops the caster distance
+ *  right after a Shadowstep when it is beyond the spell's reach (the log's
+ *  stale pre-teleport position).
  */
-export const PROMPT_VERSION = 277;
+export const PROMPT_VERSION = 278;

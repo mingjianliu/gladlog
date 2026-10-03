@@ -8,10 +8,11 @@
  *    a Polymorph 0.6 s in the round was a 6 s missed cleanse).
  * Also cc-dr F-RF1 (ruling A51 = A): a REFRESH its source cast for is a new
  * CC on the holder; enemy-def F-E18 / cc-dr F-DA1: the disarm a trinket
- * press broke.
+ * press broke; position F-D1: no caster distance from a pre-teleport spot.
  * cc-dr F-HG1 (healing gaps) is in `ported/healingGaps.test.ts`.
  */
 import {
+  CombatUnitClass,
   CombatUnitReaction,
   CombatUnitSpec,
   LogEvent,
@@ -26,6 +27,7 @@ import {
 import { reconstructDispelSummary } from "../src/utils/dispelAnalysis";
 import { roundEndMs } from "../src/utils/roundEnd";
 import {
+  makeAdvancedAction,
   makeAuraEvent,
   makeSpellCastEvent,
   makeUnit,
@@ -242,5 +244,42 @@ describe("enemy-def F-E18 / cc-dr F-DA1 — the disarm a trinket broke", () => {
     expect(findBrokenDisarm([dismantle], START, START + 17_133)).toBe(
       undefined,
     );
+  });
+});
+
+describe("position F-D1 — no distance from a pre-teleport position", () => {
+  const combat = {
+    startTime: START,
+    endTime: START + 300_000,
+    startInfo: { zoneId: "1672" },
+  };
+  // 539b6ed0 shape: Kidney Shot 408 lands while the log still has the rogue
+  // 15 yd away, 0.1 s after a Shadowstep
+  const kidney = (withStep: boolean) => {
+    const rogue = makeUnit("e1", {
+      reaction: CombatUnitReaction.Hostile,
+      class: CombatUnitClass.Rogue,
+      spec: CombatUnitSpec.Rogue_Assassination,
+      advancedActions: [makeAdvancedAction(START + 99_900, 15, 0)],
+      spellCastEvents: withStep
+        ? [makeSpellCastEvent("36554", START + 99_903, "v", "v", "e1")]
+        : [],
+    });
+    const victim = makeUnit("v", {
+      advancedActions: [makeAdvancedAction(START + 99_950, 0, 0)],
+      auraEvents: [
+        aura(LogEvent.SPELL_AURA_APPLIED, "408", 100, "v"),
+        aura(LogEvent.SPELL_AURA_REMOVED, "408", 104, "v"),
+      ],
+    });
+    return analyzePlayerCCAndTrinket(victim, [rogue], combat).ccInstances[0];
+  };
+
+  it("drops the distance beyond reach right after a Shadowstep", () => {
+    expect(kidney(true).distanceYards).toBe(null);
+    expect(kidney(true).losBlocked).toBe(null);
+  });
+  it("control: without the step the distance stands", () => {
+    expect(kidney(false).distanceYards).toBe(15);
   });
 });

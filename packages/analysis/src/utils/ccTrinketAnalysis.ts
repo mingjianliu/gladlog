@@ -75,7 +75,11 @@ import { fmtTime } from "./renderGrid";
 import { isSilenceableCast } from "./spellMechanics";
 import { rootIntervalsOf } from "./rootReachability";
 import { roundEndMs } from "./roundEnd";
-import { RANGE_HITBOX_SLACK_YD, spellRangeForCaster } from "./spellRange";
+import {
+  RANGE_HITBOX_SLACK_YD,
+  spellRangeForCaster,
+  spellReachForCaster,
+} from "./spellRange";
 import { medianFinite } from "./stats";
 import { interruptImmuneWindows } from "./talentBehaviors";
 import { getTalentAvoidanceBuffs } from "./talentBehaviors";
@@ -1261,6 +1265,20 @@ export function breakableCcBeforeDeath(
 // Main analysis
 // ---------------------------------------------------------------------------
 
+/** position F-D1: teleports after which the log keeps the caster at its
+ * pre-teleport spot for a moment (Shadowstep: ~0.4 s, `probes/position/p7`).
+ * Registered in `curatedIdRegistry.ts`. */
+export const PRE_TELEPORT_POSITION_SPELL_IDS: ReadonlySet<string> = new Set([
+  "36554", // Shadowstep
+]);
+/** position F-D1: how long after such a teleport a CC's caster distance is
+ * suspect. */
+const PRE_TELEPORT_STALE_MS = 500;
+/** position F-L1: a targeted cast that succeeded on the CC's holder within
+ * this window before the aura proves line of sight (`probes/position/p8`:
+ * casts land 0–3 ms before the aura). */
+const LANDED_CAST_PROVES_LOS_MS = 1_500;
+
 /** cc-dr F-RF1 (ruling A51 = A): a REFRESH of a CC on the holder is a new
  * CC when its source cast it in this window before the refresh (the probe's
  * 3 s, `probes/cc-dr/p14_sim_refresh.ts`). */
@@ -1726,17 +1744,53 @@ export function analyzePlayerCCAndTrinket(
 
       const rawDistance =
         casterPos && targetPos ? distanceBetween(casterPos, targetPos) : null;
+      // position F-D1: right after a teleport (Shadowstep) the log still
+      // holds the caster's pre-teleport spot (539b6ed0 Kidney Shot "15.1 yd
+      // from caster", 0.1 s after the step). A distance beyond the spell's
+      // reach there is that stale spot, not where the CC came from — no
+      // distance (and no LoS) is said. Without a known reach it stays.
+      const casterCasts = casterUnit?.spellCastEvents ?? [];
+      const reach = casterUnit
+        ? spellReachForCaster(casterUnit, w.spellId)
+        : null;
+      const staleAfterTeleport =
+        rawDistance !== null &&
+        reach !== null &&
+        rawDistance > reach + RANGE_HITBOX_SLACK_YD &&
+        casterCasts.some(
+          (e) =>
+            e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+            !!e.spellId &&
+            PRE_TELEPORT_POSITION_SPELL_IDS.has(e.spellId) &&
+            e.timestamp <= w.applyMs &&
+            e.timestamp >= w.applyMs - PRE_TELEPORT_STALE_MS,
+        );
       const distanceYards =
-        rawDistance !== null && rawDistance <= CC_MAX_PLAUSIBLE_RANGE_YARDS
+        rawDistance !== null &&
+        rawDistance <= CC_MAX_PLAUSIBLE_RANGE_YARDS &&
+        !staleAfterTeleport
           ? Math.round(rawDistance * 10) / 10
           : null;
 
+      // position F-L1 (the GH #83 rule): a targeted cast of this CC that
+      // succeeded on this unit just before the aura proves line of sight —
+      // the geometric test does not get to call it blocked.
+      const landedTargetedCast = casterCasts.some(
+        (e) =>
+          e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+          e.spellId === w.spellId &&
+          e.destUnitId === player.id &&
+          e.timestamp <= w.applyMs &&
+          e.timestamp >= w.applyMs - LANDED_CAST_PROVES_LOS_MS,
+      );
       const losBlocked =
         distanceYards !== null && casterPos && targetPos
-          ? (() => {
-              const los = hasLineOfSight(zoneId, casterPos, targetPos);
-              return los === null ? null : !los;
-            })()
+          ? landedTargetedCast
+            ? false
+            : (() => {
+                const los = hasLineOfSight(zoneId, casterPos, targetPos);
+                return los === null ? null : !los;
+              })()
           : null;
 
       const expectedDurationSeconds = expectedDurationS(w, idx);

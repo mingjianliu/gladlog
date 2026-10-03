@@ -60,6 +60,7 @@ import {
   MAGIC_ONLY_IMMUNITY_IDS,
   TARGET_BOUND_MOBILITY_IDS,
   PHYSICAL_CC_IDS,
+  PRE_TELEPORT_POSITION_SPELL_IDS,
   REPOSITIONING_SPELL_IDS,
   TARGETED_CC_DODGE_SPELLS,
   TREMOR_BREAKABLE_CC_IDS,
@@ -506,6 +507,14 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
       m.talentId,
       ...m.interruptedSpellIds,
     ]),
+  ),
+  // position F-D1: teleports whose caster keeps its pre-teleport position
+  // in the log for a moment (Shadowstep)
+  t(
+    "PRE_TELEPORT_POSITION_SPELL_IDS",
+    "utils/ccTrinketAnalysis.ts",
+    "cast",
+    () => set(PRE_TELEPORT_POSITION_SPELL_IDS),
   ),
   t("NON_PLAYER_INTERRUPT_IDS", "utils/enemyInterrupts.ts", "cast", () =>
     set(NON_PLAYER_INTERRUPT_IDS),
