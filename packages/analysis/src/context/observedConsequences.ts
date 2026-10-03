@@ -78,8 +78,8 @@ export function mateHpAcross(
  * test: a drop of `CONSEQ_DROP_MIN_PCT` from the CC's first rendered second
  * to its lowest reading inside the CC, or a death inside it. Shared with
  * death-setup `healer-locked` (reliability round 2 W1c), so the menu never
- * says "the healer was CC'd through the kill window" next to a `[CONSEQ]`
- * line saying nobody dropped during that CC (be835950).
+ * says a CC held the healer before the death next to a `[CONSEQ]` line
+ * saying nobody dropped during that CC (be835950).
  */
 export function mateHitDuringCc(
   mate: ICombatUnit,

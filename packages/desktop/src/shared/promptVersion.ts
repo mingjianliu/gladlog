@@ -772,5 +772,11 @@
  *  (`renderedCcSeconds`, whole seconds) — the `[DMG SPIKE]` "enemy CC in
  *  window" list prints `(2s)`, not `(1.5s)`, matching `[CC ON TEAM]`;
  *  `[CC ON ENEMY]`, `[CONSEQ]`, `[DISARM]` and FORCED TRINKET read it too.
+ *  v280 (2026-10-02, triage G5 death setup: death-kill F-S1 / F-L2 (A16),
+ *  crisis-external F-AS1 / F-D2 (A′5) / F-D3 (A49 = B)): healer-locked names
+ *  the qualifying CC that ends latest and carries `chain` / `chainFrom` /
+ *  `lockedS` / `freeBeforeDeathS` / `landedWhileLocked`; the legend says what
+ *  the lock was (the CROSS-THEME G5 sentence); a death or death-setup after
+ *  the log owner's own death leaves the menu.
  */
-export const PROMPT_VERSION = 279;
+export const PROMPT_VERSION = 280;

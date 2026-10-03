@@ -311,6 +311,44 @@ export function silenceIntervals(
 }
 
 /**
+ * The contiguous runs of the intervals' union, sorted (touching intervals
+ * merge). Triage G5: the death-setup `chain` is the CCs of every run that
+ * touches the 12 s before the death (crisis-external F-AS1).
+ */
+export function cannotCastRuns(
+  intervals: ReadonlyArray<{ from: number; to: number }>,
+): Array<{ from: number; to: number }> {
+  const sorted = [...intervals]
+    .filter((iv) => iv.to > iv.from)
+    .sort((a, b) => a.from - b.from);
+  const runs: Array<{ from: number; to: number }> = [];
+  for (const iv of sorted) {
+    const last = runs[runs.length - 1];
+    if (last && iv.from <= last.to) last.to = Math.max(last.to, iv.to);
+    else runs.push({ from: iv.from, to: iv.to });
+  }
+  return runs;
+}
+
+/**
+ * Free milliseconds just before `atMs`: `atMs` − the end of the last
+ * cannot-cast run that starts before it, 0 when that run covers `atMs`, or
+ * undefined when no run starts before it (never a `Math.max` over nothing).
+ * Triage G5: death-setup `freeBeforeDeathS` (crisis-external F-D2) and the
+ * `[DEFENSIVE AVAILABLE]` "free Ns before the death" (cc-dr F-KS1) — one
+ * helper, one interval list.
+ */
+export function freeMsBefore(
+  intervals: ReadonlyArray<{ from: number; to: number }>,
+  atMs: number,
+): number | undefined {
+  const before = cannotCastRuns(intervals).filter((r) => r.from < atMs);
+  const last = before[before.length - 1];
+  if (!last) return undefined;
+  return last.to >= atMs ? 0 : atMs - last.to;
+}
+
+/**
  * Milliseconds of [fromMs, toMs] covered by the union of the intervals
  * (clipped to the window, overlaps merged so a stun inside a silence is not
  * counted twice).

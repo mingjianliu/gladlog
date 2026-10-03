@@ -38,6 +38,7 @@ import {
   actWindowFor,
   buildCannotCastIntervals,
   enemySourceIds,
+  namedCannotCastIntervals,
 } from "../utils/cannotCastIntervals";
 import { type OwnerCastCancels, ownerCastCancels } from "../utils/castCancels";
 import {
@@ -98,6 +99,7 @@ import {
 } from "../utils/externalDamage";
 import { detectHealingGaps, type IHealingGap } from "../utils/healingGaps";
 import { shuffleRoundEndMs } from "../utils/roundEnd";
+import { firstDeathMs } from "../utils/unitDeath";
 import {
   attemptIntoTrinketEvents,
   extractKillAttempts,
@@ -619,12 +621,34 @@ export function extractCandidateFindings(
             .map((e) => trimFoldedLocksAfter(e, after));
         })();
 
+  // crisis-external F-D3 (ruling A49 = B, 2026-09-30): a death or a
+  // death-setup after the log owner's own death does not enter the menu —
+  // the player was already dead and could press nothing. The owner's own
+  // death stays (t = the death). Keyed on the event's `t`, as the round-end
+  // cut is; the dead-at instant is the one helper (`firstDeathMs`). In 3v3
+  // the first-friendly-death cut above already covers it.
+  const ownerUnit = resolvedOwnerId
+    ? units.find((u: any) => u.id === resolvedOwnerId)
+    : undefined;
+  const ownerDeadS = ownerUnit
+    ? (firstDeathMs(ownerUnit) - start) / 1000
+    : Infinity;
+  // Our team's deaths only: an enemy death reaches the menu only under the
+  // retired kill-review flag, and the ruling is about our side's losses.
+  const ownerAlive = inRound.filter(
+    (e) =>
+      !(
+        e.type === "death-setup" ||
+        (e.type === "death" && e.facts["side"] === "friendly")
+      ) || e.t <= ownerDeadS,
+  );
+
   // Per-bracket allow-list (GH #18 ruling 2026-08-30): a listed bracket keeps
   // only its named types; the rest of the menu becomes context.
   const bk = bracketKey(combat?.startInfo?.bracket);
   const allow = bk ? BRACKET_TYPE_ALLOWLIST[bk] : undefined;
   return dropCdHoardedBesideExternalUnused(
-    allow ? inRound.filter((e) => allow.has(e.type)) : inRound,
+    allow ? ownerAlive.filter((e) => allow.has(e.type)) : ownerAlive,
   );
 }
 
@@ -3566,9 +3590,17 @@ function extractDeathSetups(
       // menu-wide try/catch).
       if (healer && healer.id !== u.id) {
         try {
+          const healerSummary = ccOf(healer);
           parts.healerCC = {
             healerName: healer.name,
-            ccInstances: ccOf(healer).ccInstances,
+            ccInstances: healerSummary.ccInstances,
+            // triage G5: the lock chain / free time facts (death.ts)
+            cannotCast: namedCannotCastIntervals(
+              healer,
+              enemySourceIds(enemies, units),
+            ),
+            roots: healerSummary.rootInstances,
+            matchStartMs: start,
           };
         } catch {
           /* same as above */

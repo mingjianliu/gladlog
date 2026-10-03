@@ -8,6 +8,12 @@
  * `death-unused-defensive`, retired 2026-08-29; its emitter was deleted
  * 2026-09-24.)
  */
+import { getEnglishSpellName } from "../../data/spellEffectData";
+import {
+  cannotCastRuns,
+  coveredMsWithin,
+  freeMsBefore,
+} from "../../utils/cannotCastIntervals";
 import {
   cdReadyInTimeAt,
   type IMajorCooldownInfo,
@@ -50,6 +56,25 @@ export interface DeathSetupParts {
       spellName: string;
       sourceName: string;
     }>;
+    /**
+     * Triage G5 (death-kill F-S1, crisis-external F-AS1 / F-D2): the
+     * healer's named cannot-cast intervals (`namedCannotCastIntervals`, epoch
+     * ms), its roots (seconds) and the round start. Absent (hand-built
+     * fixtures) = no `chain` / `chainFrom` / `lockedS` / `freeBeforeDeathS` /
+     * `landedWhileLocked` facts.
+     */
+    cannotCast?: ReadonlyArray<{
+      from: number;
+      to: number;
+      spellId: string;
+      lockout: boolean;
+    }>;
+    roots?: ReadonlyArray<{
+      atSeconds: number;
+      durationSeconds: number;
+      spellName: string;
+    }>;
+    matchStartMs?: number;
   };
 }
 
@@ -81,6 +106,77 @@ export interface DeathSetupParts {
  */
 export const DEATH_CC_LOOKBACK_S = 12;
 
+/**
+ * Triage G5 facts on a healer-locked event, from the healer's cannot-cast
+ * intervals (`buildCannotCastIntervals`' named form), all on the raw death
+ * (codex c1 09-30: not the rendered `deathT`):
+ *  - crisis-external F-AS1 (amends death-kill F-S1): `chain` = the CCs of
+ *    every contiguous cannot-cast run that touches [death − 12 s, death], not
+ *    clipped at the window start, with `chainFrom` = the earliest run's
+ *    start; roots overlapping the window are listed `(root)` but count toward
+ *    no run; `landedWhileLocked` = the named CC landed inside an earlier
+ *    cannot-cast interval;
+ *  - death-kill F-S1: `lockedS` = cannot-cast seconds of the 12 s window;
+ *  - crisis-external F-D2 (ruling A′5): `freeBeforeDeathS` = free seconds just
+ *    before the death (`freeMsBefore`; 0 = still locked at the death).
+ */
+function lockChainFacts(
+  parts: DeathSetupParts,
+  lock: { atSeconds: number },
+): Record<string, string> {
+  const cc = parts.healerCC;
+  if (!cc?.cannotCast || cc.matchStartMs === undefined) return {};
+  const start = cc.matchStartMs;
+  const deathMs = start + parts.deathT * 1000;
+  const winFromMs = deathMs - DEATH_CC_LOOKBACK_S * 1000;
+  const facts: Record<string, string> = {};
+  const runs = cannotCastRuns(cc.cannotCast).filter(
+    (r) => r.to > winFromMs && r.from < deathMs,
+  );
+  const chain: Array<{ at: number; text: string }> = [];
+  for (const iv of cc.cannotCast) {
+    // names come from the cast-blocking auras (F-AS1); a kick lockout counts
+    // toward the runs and `lockedS` but is not a CC to name
+    if (iv.lockout || iv.from >= deathMs) continue;
+    if (!runs.some((r) => iv.from < r.to && iv.to > r.from)) continue;
+    const at = (iv.from - start) / 1000;
+    const name = getEnglishSpellName(iv.spellId);
+    chain.push({
+      at,
+      text: `${name} ${fmtFactTime(at)}`,
+    });
+  }
+  for (const r of cc.roots ?? []) {
+    if (
+      r.atSeconds < parts.deathT &&
+      r.atSeconds + r.durationSeconds > parts.deathT - DEATH_CC_LOOKBACK_S
+    )
+      chain.push({
+        at: r.atSeconds,
+        text: `${r.spellName} (root) ${fmtFactTime(r.atSeconds)}`,
+      });
+  }
+  chain.sort((a, b) => a.at - b.at);
+  const texts = [...new Set(chain.map((c) => c.text))];
+  if (texts.length) facts.chain = texts.join("; ");
+  if (runs.length)
+    facts.chainFrom = fmtFactTime((runs[0]!.from - start) / 1000);
+  facts.lockedS = fmt(
+    Math.round(coveredMsWithin(cc.cannotCast, winFromMs, deathMs) / 100) / 10,
+  );
+  const freeMs = freeMsBefore(cc.cannotCast, deathMs);
+  if (freeMs !== undefined)
+    facts.freeBeforeDeathS = fmt(Math.round(freeMs / 100) / 10);
+  // whole ms: the named CC's own aura starts exactly here and is not earlier
+  const lockMs = start + Math.round(lock.atSeconds * 1000);
+  facts.landedWhileLocked = cc.cannotCast.some(
+    (iv) => iv.from < lockMs && iv.to > lockMs,
+  )
+    ? "true"
+    : "false";
+  return facts;
+}
+
 export function deathSetupEvents(parts: DeathSetupParts): CandidateEvent[] {
   const { deathT, victim } = parts;
   const out: CandidateEvent[] = [];
@@ -96,12 +192,31 @@ export function deathSetupEvents(parts: DeathSetupParts): CandidateEvent[] {
   // 0.4 s (b12bfef4), a backlash 0.95 s inside the healer's own GCD
   // (eb8041ce); a Kidney Shot with the victim 84 % → 80 % during it, the
   // lethal dive after the healer was free (be835950).
-  const lock = parts.healerCC?.ccInstances.find(
-    (cc) =>
-      cc.atSeconds < deathT &&
-      overlapS(cc) >= HEALER_LOCK_MIN_S &&
-      (parts.victimHitDuring?.(cc) ?? true),
-  );
+  //
+  // death-kill F-S1 (ruling A16, 2026-09-30): of the qualifying CCs, name the
+  // one that ends latest — the lock nearest the death, not the first in list
+  // order (9c6ab747: Storm Bolt → Song of Chi-Ji, which covers the death).
+  const endOf = (cc: { atSeconds: number; durationSeconds: number }) =>
+    cc.atSeconds + cc.durationSeconds;
+  const lock = parts.healerCC?.ccInstances
+    .filter(
+      (cc) =>
+        cc.atSeconds < deathT &&
+        overlapS(cc) >= HEALER_LOCK_MIN_S &&
+        (parts.victimHitDuring?.(cc) ?? true),
+    )
+    .reduce<
+      | NonNullable<DeathSetupParts["healerCC"]>["ccInstances"][number]
+      | undefined
+    >(
+      (best, cc) =>
+        !best ||
+        endOf(cc) > endOf(best) ||
+        (endOf(cc) === endOf(best) && cc.atSeconds > best.atSeconds)
+          ? cc
+          : best,
+      undefined,
+    );
   if (lock) {
     out.push({
       id: `death-setup:${victim.id}:${Math.round(deathT)}:healer-locked`,
@@ -123,6 +238,7 @@ export function deathSetupEvents(parts: DeathSetupParts): CandidateEvent[] {
         healer: parts.healerCC!.healerName,
         cc: lock.spellName,
         duration: lock.durationSeconds.toFixed(1),
+        ...lockChainFacts(parts, lock),
       },
     });
   }
