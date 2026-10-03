@@ -3,6 +3,11 @@ import { describe, expect, it } from "vitest";
 import { MITIGATION_TABLE } from "../src/data/mitigationData";
 import { SPELL_CATEGORIES } from "../src/data/spellCategories";
 import { IMMUNITY_SPELLS } from "../src/utils/deathOutcomeAnalysis";
+import {
+  FULL_IMMUNITY_IDS,
+  IMMUNITY_IDS,
+  SCHOOL_LIMITED_IMMUNITY_IDS,
+} from "../src/utils/enemyDefensives";
 
 /**
  * 免疫三表一致性(2026-08-21,接地审计 D1 的最后一块残留)。
@@ -40,6 +45,26 @@ describe("免疫三表一致性(权威 = MITIGATION_TABLE pct=100)", () => {
 
   it("deathOutcome IMMUNITY_SPELLS ≡ 权威表全学派免疫(双向,无多无漏)", () => {
     expect(Object.keys(IMMUNITY_SPELLS).sort()).toEqual(fullSchool);
+  });
+
+  it("the split of IMMUNITY_IDS (ruling F-K9b-B, 2026-10-02): full ≡ the every-school rows, school-limited ≡ the rest, nothing in both, nothing in neither", () => {
+    expect([...FULL_IMMUNITY_IDS].sort()).toEqual(fullSchool);
+    expect([...FULL_IMMUNITY_IDS].sort()).toEqual(
+      Object.keys(IMMUNITY_SPELLS).sort(),
+    );
+    expect(
+      [...FULL_IMMUNITY_IDS, ...SCHOOL_LIMITED_IMMUNITY_IDS].sort(),
+    ).toEqual([...IMMUNITY_IDS].sort());
+    for (const id of SCHOOL_LIMITED_IMMUNITY_IDS)
+      expect(FULL_IMMUNITY_IDS.has(id)).toBe(false);
+    // the six rows as ruled: a seventh pct-100 row must be looked at before
+    // it lands on either side
+    expect([...FULL_IMMUNITY_IDS].sort()).toEqual(["186265", "45438", "642"]);
+    expect([...SCHOOL_LIMITED_IMMUNITY_IDS].sort()).toEqual([
+      "1022",
+      "204018",
+      "31224",
+    ]);
   });
 
   it("SPELL_CATEGORIES immunities ≡ 权威表 pct=100 全集(双向,无多无漏)", () => {

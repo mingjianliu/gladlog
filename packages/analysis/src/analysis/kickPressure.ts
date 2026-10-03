@@ -31,9 +31,13 @@
  *    when the kick landed. One pressed inside the lockout after the kick is
  *    not what the kick served (141470d0 @60.4: Force of Nature pressed 2.8 s
  *    later, 0.16 s before the lock ended, read `enemyBurst=Force of Nature`).
- *  - A33 = A: a unit's ticks while it carries an immunity (`IMMUNITY_IDS`,
- *    the shared set) are not its low HP (0068182d @72.5: `ourLowPct=40` was a
- *    mage inside Ice Block from 69.6 to 75.9).
+ *  - A33 = A: a unit's ticks while it carries an immunity are not its low HP
+ *    (0068182d @72.5: `ourLowPct=40` was a mage inside Ice Block from 69.6 to
+ *    75.9). Since ruling F-K9b-B (2026-10-02) a FULL immunity only
+ *    (`FULL_IMMUNITY_IDS`): under Blessing of Protection, Blessing of
+ *    Spellwarding or Cloak of Shadows the unit can still be hurt by the other
+ *    kind of damage and is read as low (605 files: 12 of the 28 low facts the
+ *    whole set removed were under one of those three).
  */
 import {
   type AtomicArenaCombat,
@@ -49,7 +53,7 @@ import {
   playerTalentIdSets,
 } from "../utils/cooldowns";
 import { reconstructEnemyCDTimeline } from "../utils/enemyCDs";
-import { immunityIntervals } from "../utils/enemyDefensives";
+import { fullImmunityIntervals } from "../utils/enemyDefensives";
 import { OFFENSIVE_CD_SPELL_IDS } from "../utils/spellDanger";
 import { CRISIS_HP_PCT_RENDERED } from "./crisisDecisionPoints";
 
@@ -129,12 +133,12 @@ export function kickPressureFor(params: {
   const deathS = (u: ICombatUnit) =>
     u.deathRecords?.[0] ? (u.deathRecords[0].timestamp - start) / 1000 : null;
   const talents = new Map(friends.map((u) => [u.id, playerTalentIdSets(u)]));
-  const immune = new Map<string, ReturnType<typeof immunityIntervals>>();
-  /** Does the unit carry an immunity at that rendered second? */
+  const immune = new Map<string, ReturnType<typeof fullImmunityIntervals>>();
+  /** Does the unit carry a full immunity at that rendered second? */
   const immuneAt = (u: ICombatUnit) => {
     let spans = immune.get(u.id);
     if (!spans) {
-      spans = immunityIntervals(u, combat);
+      spans = fullImmunityIntervals(u, combat);
       immune.set(u.id, spans);
     }
     const s = spans;

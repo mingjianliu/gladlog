@@ -12,7 +12,10 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { CRISIS_HP_PCT_RENDERED } from "../src/analysis/crisisDecisionPoints";
 import { kickIsHarmless, kickPressureFor } from "../src/analysis/kickPressure";
 import { ensureAnalysisData } from "../src/data/ensure";
-import { IMMUNITY_IDS } from "../src/utils/enemyDefensives";
+import {
+  FULL_IMMUNITY_IDS,
+  SCHOOL_LIMITED_IMMUNITY_IDS,
+} from "../src/utils/enemyDefensives";
 import {
   makeAdvancedAction,
   makeAuraEvent,
@@ -62,6 +65,7 @@ function enemyRet(castSeconds: number[]) {
 function friendlyMage(
   points: Record<number, number>,
   iceBlock?: [number, number],
+  auraId = ICE_BLOCK,
 ) {
   return makeUnit("f2", {
     name: "Mage",
@@ -73,7 +77,7 @@ function friendlyMage(
       ? [
           makeAuraEvent(
             LogEvent.SPELL_AURA_APPLIED,
-            ICE_BLOCK,
+            auraId,
             T0 + iceBlock[0] * 1000,
             "f2",
             "f2",
@@ -81,7 +85,7 @@ function friendlyMage(
           ),
           makeAuraEvent(
             LogEvent.SPELL_AURA_REMOVED,
-            ICE_BLOCK,
+            auraId,
             T0 + iceBlock[1] * 1000,
             "f2",
             "f2",
@@ -165,7 +169,7 @@ describe("kickPressureFor", () => {
   });
 
   it("the same teammate inside Ice Block is not our side's low (ruling A33, 0068182d @72.5)", () => {
-    expect(IMMUNITY_IDS.has(ICE_BLOCK)).toBe(true);
+    expect(FULL_IMMUNITY_IDS.has(ICE_BLOCK)).toBe(true);
     const low = CRISIS_HP_PCT_RENDERED;
     // Ice Block 69.6 → 75.9: the ticks at 72..75 are skipped, the tick at 76
     // (after it) reads 80 %
@@ -174,6 +178,28 @@ describe("kickPressureFor", () => {
       enemyRet([]),
     )({ atSeconds: 72.5, lockoutDurationSeconds: 3 });
     expect(p.ours.low).toBeUndefined();
+  });
+
+  it("a teammate under a school-limited immunity is still our side's low (ruling F-K9b-B: Cloak of Shadows, Blessing of Protection, Blessing of Spellwarding)", () => {
+    const low = CRISIS_HP_PCT_RENDERED;
+    for (const id of ["31224", "1022", "204018"]) {
+      expect(SCHOOL_LIMITED_IMMUNITY_IDS.has(id)).toBe(true);
+      const p = pressure(
+        friendlyMage({ 0: 100, 72: low, 76: 80 }, [69.559, 75.865], id),
+        enemyRet([]),
+      )({ atSeconds: 72.5, lockoutDurationSeconds: 3 });
+      expect(p.ours.low).toEqual({ unit: "Mage", pct: low, atSec: 72 });
+    }
+    // and every full immunity skips, Aspect of the Turtle and Divine Shield
+    // like Ice Block
+    for (const id of ["186265", "642"]) {
+      expect(FULL_IMMUNITY_IDS.has(id)).toBe(true);
+      const p = pressure(
+        friendlyMage({ 0: 100, 72: low, 76: 80 }, [69.559, 75.865], id),
+        enemyRet([]),
+      )({ atSeconds: 72.5, lockoutDurationSeconds: 3 });
+      expect(p.ours.low).toBeUndefined();
+    }
   });
 
   it("a tick after the immunity ended still counts", () => {

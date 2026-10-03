@@ -734,6 +734,21 @@ const INDEX: PredicateRow[] = [
     mod: kickAudit,
   },
   {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "FULL_IMMUNITY_IDS",
+    mod: enemyDefensives,
+  },
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "SCHOOL_LIMITED_IMMUNITY_IDS",
+    mod: enemyDefensives,
+  },
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "fullImmunityIntervals",
+    mod: enemyDefensives,
+  },
+  {
     file: `${A}/utils/kickAudit.ts`,
     symbol: "CAST_QUEUE_TOLERANCE_MS",
     mod: kickAudit,

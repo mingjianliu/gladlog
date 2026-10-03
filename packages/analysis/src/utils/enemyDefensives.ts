@@ -43,6 +43,40 @@ export const IMMUNITY_IDS = new Set<string>(
     .map(([id]) => id),
 );
 
+/** Every damage school (`IMitigationEntry.schoolMask`). */
+const EVERY_SCHOOL_MASK = 0x7f;
+
+/** The pct-100 rows that stop EVERY school — Ice Block, Divine Shield, Aspect
+ * of the Turtle: under one the unit takes no damage at all.
+ *
+ * User ruling F-K9b-B (2026-10-02): `IMMUNITY_IDS` is split in two and a
+ * reader that asks "can this unit be hurt right now" reads only this half —
+ * kick-eaten's low-HP skip and the stayed-in skip of position-mistake import
+ * the same two sets, so there is one answer. Derived from the signed table,
+ * so a new pct-100 row falls on one side by its mask
+ * (`test/immunityTables.test.ts` pins both halves, and their keys against
+ * `deathOutcomeAnalysis.IMMUNITY_SPELLS`).
+ * Interim: enemy-def F-E24 (ruling A30: a school-limited immunity counts as
+ * full when >= 50 % of the incoming damage is of the school it stops) is the
+ * finer rule; whether these two readers move to it is decided when it lands. */
+export const FULL_IMMUNITY_IDS: ReadonlySet<string> = new Set(
+  Object.entries(MITIGATION_TABLE)
+    .filter(
+      ([, e]) =>
+        e.pct === 100 &&
+        (e.schoolMask & EVERY_SCHOOL_MASK) === EVERY_SCHOOL_MASK,
+    )
+    .map(([id]) => id),
+);
+
+/** The pct-100 rows that stop one kind of damage only — Blessing of
+ * Protection (physical), Blessing of Spellwarding and Cloak of Shadows
+ * (magic). A unit under one can still be hurt, and killed, by the other
+ * kind. `IMMUNITY_IDS` = this ∪ `FULL_IMMUNITY_IDS`. */
+export const SCHOOL_LIMITED_IMMUNITY_IDS: ReadonlySet<string> = new Set(
+  [...IMMUNITY_IDS].filter((id) => !FULL_IMMUNITY_IDS.has(id)),
+);
+
 /** Feign Death's cast id. Its success is never logged; the ledger reads the
  * press from the aura(s) `AURA_ONLY_ACTIVATION_IDS` lists for it (Survival
  * Tactics 202748), and so does this file — one table for "a Feign Death
@@ -91,15 +125,18 @@ export function immunityProcHeals(
   return out;
 }
 
-/** When `unit` carried an immunity (`IMMUNITY_IDS`), seconds since the match
- * start, from the shared aura pairing. For readers that must not treat an
- * immune unit's HP as pressure (kick-eaten's `ourLow*` / `theirLow*`). */
-export function immunityIntervals(
+/** When `unit` carried a FULL immunity (`FULL_IMMUNITY_IDS`), seconds since
+ * the match start, from the shared aura pairing. For readers that must not
+ * treat an immune unit's HP as pressure (kick-eaten's `ourLow*` /
+ * `theirLow*`). A school-limited immunity is not in it (ruling F-K9b-B): a
+ * Rogue at 12 % inside Cloak of Shadows still dies to physical damage
+ * (cb6f3e66 @79.5). */
+export function fullImmunityIntervals(
   unit: ICombatUnit,
   combat: Parameters<typeof buildAuraIntervals>[1],
 ): Array<{ spellId: string; fromS: number; toS: number }> {
   return buildAuraIntervals(unit, combat)
-    .filter((iv) => IMMUNITY_IDS.has(iv.spellId))
+    .filter((iv) => FULL_IMMUNITY_IDS.has(iv.spellId))
     .map((iv) => ({ spellId: iv.spellId, fromS: iv.fromS, toS: iv.toS }));
 }
 

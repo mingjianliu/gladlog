@@ -696,5 +696,10 @@
  *  kick was never used or never ran out of charges.
  *  v267 (2026-10-03, triage G7-P4 follow-up): the [RES] legend says a delta
  *  row carries the (no mana a/b) tag only where the cooldown is listed.
+ *  v268 (2026-10-02): triage kick-eaten F-K9b, user ruling F-K9b-B. Only a
+ *  FULL immunity (Ice Block, Divine Shield, Aspect of the Turtle) keeps a
+ *  unit from being read as low in kick-eaten's `ourLow*` / `theirLow*`; under
+ *  Blessing of Protection, Blessing of Spellwarding or Cloak of Shadows it is
+ *  read as low again, and the legend says so. Interim until enemy-def F-E24.
  */
-export const PROMPT_VERSION = 267;
+export const PROMPT_VERSION = 268;
