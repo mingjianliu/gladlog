@@ -383,3 +383,52 @@ describe("cc-dr F-DA1 — the [DISARM] legend counts only printed lines (codex 3
     expect(t).toContain("[DISARM] = ");
   });
 });
+
+describe("cc-dr F-AO1 — an AoE CC line gives the DR per target when it differs", () => {
+  const ENEMY2: [string, string] = ["e2", "Second-Realm"];
+  const app = (atSeconds: number, level: string, casterName = ME[1]) => ({
+    atSeconds,
+    durationSeconds: 8,
+    spellId: "8122",
+    spellName: "Psychic Scream",
+    casterName,
+    casterSpec: "Discipline Priest",
+    drInfo: { category: "Disorient", level, sequenceIndex: 0 },
+  });
+  const chains = (l1: string, l2: string, caster2 = ME[1]) => [
+    {
+      targetName: ENEMY[1],
+      targetSpec: "Arms Warrior",
+      applications: [app(30.1, l1)],
+    },
+    {
+      targetName: ENEMY2[1],
+      targetSpec: "Holy Priest",
+      applications: [app(30.1, l2, caster2)],
+    },
+  ];
+  const render = (c: unknown) =>
+    lineWith(
+      buildMatchTimeline(
+        params(mkUnit(ME[0], ME[1]), [hostile(ENEMY), hostile(ENEMY2)], {
+          ownerCDs: [ledger("8122", "Psychic Scream", "CC", 30.1)] as never,
+          outgoingCCChains: c as never,
+        }),
+      ),
+      "Psychic Scream",
+    );
+
+  it("537209d8 shape: different levels → per-target enemy labels", () => {
+    const line = render(chains("50%", "Full"));
+    expect(line).toMatch(/\[DR: Disorient — \S+ 50%, \S+ Full\]/);
+    expect(line).not.toContain("Enemy-Realm");
+  });
+  it("one level → the single form", () => {
+    expect(render(chains("Full", "Full"))).toContain("[DR: Disorient Full]");
+  });
+  it("another caster's same spell at that second does not count", () => {
+    expect(render(chains("Full", "50%", "Mate-Realm"))).toContain(
+      "[DR: Disorient Full]",
+    );
+  });
+});

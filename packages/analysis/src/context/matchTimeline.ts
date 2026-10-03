@@ -733,16 +733,30 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     spellId: string,
     cast: { timeSeconds: number },
   ): string {
+    // cc-dr F-AO1: every application of this spell by the OWNER at the
+    // line's render second (an AoE lands on several enemies at different DR
+    // levels; any caster's same spell used to match). One level → as before;
+    // several → per target, labelled with `enemyPid` (the chain's targets are
+    // enemies — codex c2 10-02).
     const t = toRenderSecond(cast.timeSeconds);
+    const hits: Array<{ target: string; category: string; level: string }> =
+      [];
     for (const chain of outgoingCCChains ?? []) {
       for (const app of chain.applications) {
         if (app.spellId !== spellId) continue;
         if (toRenderSecond(app.atSeconds) !== t) continue;
-        if (!app.drInfo) continue;
-        return ` [DR: ${app.drInfo.category} ${app.drInfo.level}]`;
+        if (!app.drInfo || app.casterName !== owner.name) continue;
+        hits.push({
+          target: chain.targetName,
+          category: app.drInfo.category,
+          level: app.drInfo.level,
+        });
       }
     }
-    return "";
+    if (hits.length === 0) return "";
+    if (new Set(hits.map((h) => h.level)).size === 1)
+      return ` [DR: ${hits[0]!.category} ${hits[0]!.level}]`;
+    return ` [DR: ${hits[0]!.category} — ${hits.map((h) => `${enemyPid(h.target)} ${h.level}`).join(", ")}]`;
   }
 
   /**

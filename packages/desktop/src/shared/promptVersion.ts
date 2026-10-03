@@ -814,5 +814,8 @@
  *  dropped …`; a healer silence (the [SILENCE] intervals, ≥ HEALER_CC_MIN_S)
  *  gets its own `in X (silence) for Ns → during it` line; the rules line
  *  reads "says no teammate dropped and names no death".
+ *  v290 (2026-10-03, triage cc-dr F-AO1): an owner AoE CC line whose
+ *  targets landed at different DR levels says each (`[DR: Disorient — 4(MHunter)
+ *  50%, 3(HPriest) Full]`); only the owner's own applications count.
  */
-export const PROMPT_VERSION = 289;
+export const PROMPT_VERSION = 290;
