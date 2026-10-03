@@ -2980,10 +2980,25 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       : [];
 
   const DR_CLASH_CAP = 3;
+  // cc-dr F-DC1: the cap keeps the owner's own clashes first — (1) the owner
+  // is the diminished caster, (2) the owner is the prior caster, (3) the
+  // rest; time order within — then renders the kept ones in time order (it
+  // kept the first three by time and dropped the owner's later ones).
+  const ownerRank = (c: ITeammateDrClash) =>
+    c.diminishedCasterName === owner.name
+      ? 0
+      : c.priorCasterName === owner.name
+        ? 1
+        : 2;
+  const keptClashes = teammateDrClashes
+    .filter((c) => c.atSeconds <= matchEndSeconds)
+    .map((c, i) => ({ c, i }))
+    .sort((a, b) => ownerRank(a.c) - ownerRank(b.c) || a.i - b.i)
+    .slice(0, DR_CLASH_CAP)
+    .sort((a, b) => a.i - b.i)
+    .map(({ c }) => c);
   const drClashEntries: Array<{ atSeconds: number; line: string }> = [];
-  for (const clash of teammateDrClashes) {
-    if (clash.atSeconds > matchEndSeconds) continue;
-    if (drClashEntries.length >= DR_CLASH_CAP) break;
+  for (const clash of keptClashes) {
     const victimWho =
       clash.diminishedCasterName === owner.name
         ? "your"

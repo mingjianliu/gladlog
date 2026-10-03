@@ -828,5 +828,8 @@
  *  long the CC held and how much was left (`after 3s (~1s of it left)`; the
  *  [CC BROKEN] arithmetic, `ccRemainingSeconds`); an unknown full duration
  *  says `after Ns` only.
+ *  v294 (2026-10-03, triage cc-dr F-DC1): the [DR CLASH] cap (3) keeps
+ *  the owner's own clashes first — owner diminished, then owner prior, then
+ *  the rest — and renders the kept ones in time order.
  */
-export const PROMPT_VERSION = 293;
+export const PROMPT_VERSION = 294;
