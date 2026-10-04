@@ -527,6 +527,8 @@
 
 **2026-10-03 登记,已接受的差异(分诊 pets-summons F-PS3,裁决 A17 = A)** —— 召唤物控制的距离从主人量。`healerExposureAnalysis.ts` → `buildEnemyCCHistory` 把召唤物命中的控制(电能图腾的昏迷、宠物的胁迫)经 `summonOwnerById`(`[CC ON TEAM]` 用的 GH #99 解析器)记到主人名下，于是 ENEMY CC KIT 表头和 `[HEALER EXPOSURE]` 都列在主人下;之后每个威胁的距离 / 视线判断从**主人的位置**算，而图腾的作用范围在图腾处。用户知情签了 A;保留 FLAG。动手前要收集的证据(Needs):召唤物控制的 DB2 半径，以及按主人到受害者距离切分的语料命中统计。
 
+**2026-10-04 登记,未收口(分诊 CD,CR1 遗留;CD 发现、T2 登记)** ——「施加这次控制的那一刻,目标身上有没有压迫怒吼」(怒吼让控制时长 +30 %)。同一个 `ccRemainingSeconds` 由两份实现喂入:`packages/analysis/src/utils/ccBreakAnalysis.ts` → `analyzeCcBreaks` 一边走光环流一边自己维护内联的 `roarActive` 标志;`packages/analysis/src/utils/ccBreakAnalysis.ts` → `oppressingRoarOnAt`(CR1 导出,`context/spellOutcomeLines.ts` 在读)对单个施加事件回答同一个问题。CR1 第 2 轮已让 `oppressingRoarOnAt` 停在那个具体的施加事件上,与 `analyzeCcBreaks` 原有的语义一致(有测试),但仍是两份代码。两者都把任何人的怒吼算进去,不只看施控方那一队 —— 原样保留。修法:让 `analyzeCcBreaks` 调用 `oppressingRoarOnAt`(或两边共用同一个光环流遍历)。`predicateIndex.test.ts` 钉住两个符号。
+
 ## 怎么保证这页不腐烂
 
 `packages/eval/test/predicateIndex.test.ts` 是这个页面可执行的另一半。它会:

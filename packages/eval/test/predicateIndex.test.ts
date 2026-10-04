@@ -89,6 +89,7 @@ import * as auraIntervals from "@gladlog/analysis/src/utils/auraIntervals";
 import * as bracketKey from "@gladlog/analysis/src/utils/bracketKey";
 import * as buffDuration from "@gladlog/analysis/src/utils/buffDuration";
 import * as cannotCastIntervals from "@gladlog/analysis/src/utils/cannotCastIntervals";
+import * as ccBreakAnalysis from "@gladlog/analysis/src/utils/ccBreakAnalysis";
 import * as gapClosers from "@gladlog/analysis/src/utils/gapClosers";
 import * as burstLedger from "@gladlog/analysis/src/utils/burstLedger";
 import * as kickAudit from "@gladlog/analysis/src/utils/kickAudit";
@@ -2393,6 +2394,10 @@ describe("谓词索引:刻意不统一的配对,两边的符号都还在", () =>
   it("kick-eaten 的突进门(gapCloserStateAt)与 kick-priority 的跑动模型(meleeKickReachYd)—— 方向相反的保守,见「Not yet unified」(triage F-K6b × F-P3)", () => {
     expect(typeof gapClosers.gapCloserStateAt).toBe("function");
     expect(typeof kickPriority.meleeKickReachYd).toBe("function");
+  });
+  it("「施加控制时压迫怒吼在不在」的两份实现:analyzeCcBreaks 内联的 roarActive 与 oppressingRoarOnAt —— 未收口,见「Not yet unified」(triage CD CR1 遗留)", () => {
+    expect(typeof ccBreakAnalysis.analyzeCcBreaks).toBe("function");
+    expect(typeof ccBreakAnalysis.oppressingRoarOnAt).toBe("function");
   });
 });
 
