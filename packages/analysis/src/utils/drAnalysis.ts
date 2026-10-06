@@ -299,11 +299,22 @@ export function buildCcCategoryHistory(
   const appliesBySpell = new Map<string, number[]>();
   const removesBySpell = new Map<string, number[]>();
   // a same-ms REMOVED→APPLIED re-broadcast is one application, not two DR
-  // steps (cc-dr F-RB1, ruling A50 = A: the shared `dropAuraRebroadcasts`)
-  for (const aura of dropAuraRebroadcasts(unit.auraEvents)) {
+  // steps (cc-dr F-RB1, ruling A50 = A: the shared `dropAuraRebroadcasts`).
+  // Filter BEFORE the re-broadcast pass: this runs once per CC break / dispel
+  // window, so re-keying every aura of the unit each call made it O(calls ×
+  // auras) with a string build per aura (firstPaint report-heavy: ccBreakDash
+  // 15 → 74 ms). Equivalent: the filter reads only spellId and srcUnitId, both
+  // part of `dropAuraRebroadcasts`' pairing key, so each key group is kept or
+  // dropped whole and in order.
+  const relevant = unit.auraEvents.filter(
+    (aura) =>
+      !!aura.spellId &&
+      srcUnitIds.has(aura.srcUnitId) &&
+      getDRCategory(aura.spellId) === category,
+  );
+  for (const aura of dropAuraRebroadcasts(relevant)) {
     const sid = aura.spellId;
-    if (!sid || !srcUnitIds.has(aura.srcUnitId)) continue;
-    if (getDRCategory(sid) !== category) continue;
+    if (!sid) continue;
     if (aura.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
       const b = appliesBySpell.get(sid) ?? [];
       appliesBySpell.set(sid, [...b, aura.timestamp]);
@@ -675,7 +686,14 @@ export function analyzeOutgoingCCChains(
       // every aura consumer filters through. Counted as two, it gave a landed
       // CC `[DR: … Immune]` and KILL ATTEMPTS an extra stun (bd790c92 R:557,
       // 4446729d R:311 `2 stuns` → `1 stun`).
-      for (const aura of dropAuraRebroadcasts(enemy.auraEvents)) {
+      // (CC ids only, filtered first — the filter reads only spellId, part of
+      // the pairing key, so the result is unchanged and the re-broadcast pass
+      // keys a few CC auras instead of every aura on the enemy)
+      for (const aura of dropAuraRebroadcasts(
+        enemy.auraEvents.filter(
+          (a) => !!a.spellId && ccSpellIds.has(a.spellId),
+        ),
+      )) {
         const { spellId } = aura;
         if (!spellId || !ccSpellIds.has(spellId)) continue;
         const event = aura.logLine.event;
