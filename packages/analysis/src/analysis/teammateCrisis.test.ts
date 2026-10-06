@@ -102,6 +102,8 @@ function mate(over: Record<string, unknown> = {}) {
     damageIn: [
       {
         timestamp: T0 + 1500,
+        // production rows carry their log line (the school split keys on it)
+        logLine: { timestamp: T0 + 1500, parameters: [] },
         srcUnitId: "E1",
         amount: -30,
         effectiveAmount: -30,

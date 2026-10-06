@@ -39,10 +39,14 @@ import {
 } from "../utils/cooldowns";
 import { castEffectPairs } from "../data/castEffectAuras";
 import { isEnemyCdWindowSpell } from "../utils/enemyCDs";
-import { logSchoolMask } from "../utils/incomingPressure";
+import {
+  documentRecordsAttackSpell,
+  incomingPressureBySchool,
+} from "../utils/incomingPressure";
 import { PVP_TRINKET_SPELL_IDS } from "../utils/killWindowTargetSelection";
 import { auraOffensiveOccurrences } from "../utils/offensiveAuraOccurrences";
 import { rootIntervalsOf } from "../utils/rootReachability";
+import { buildRosterSides } from "../utils/rosterSide";
 import { OFFENSIVE_CD_SPELL_IDS } from "../utils/spellDanger";
 import { buildFilteredAuraIntervals } from "../utils/utils";
 
@@ -163,10 +167,16 @@ export interface DecisionPoint {
   hpPct: number;
   dmg2s: number;
   /**
-   * The same `DMG_WINDOW_MS` damage as `dmg2s` (same events, same amounts),
-   * summed per log school mask (`spellSchoolId`, 0x1 = physical; a swing is
-   * 0x1). Read by `schoolShareCoveredBy`; the reference tables never read
-   * it. Optional so hand-built fixtures need not carry it.
+   * What was aimed at the unit in `dmg2s`'s window, per school mask
+   * (`incomingPressureBySchool`; 0x1 = physical, a swing is 0x1): the hits
+   * that landed AND the hits a shield ate, a teammate's redistribution left
+   * out. Not a split of `dmg2s` — that stays landed damage, the number the
+   * reference tables were built on. A school-limited save is judged by what
+   * the enemy was throwing, and a Power Word: Shield on the unit ate exactly
+   * the school the save would have covered (user ruling U-KA2, 2026-10-06:
+   * the same reading KILL ATTEMPTS has had since F-E22 / F-E24). Read by
+   * `schoolShareCoveredBy`; the reference tables never read it. Optional so
+   * hand-built fixtures need not carry it.
    */
   dmg2sBySchool?: Record<string, number>;
   attackers2s: number;
@@ -722,8 +732,13 @@ export function crisisDecisionPoints(
     t: d.timestamp,
     src: d.srcUnitId,
     a: Math.abs(d.effectiveAmount ?? d.amount ?? 0),
-    school: logSchoolMask(d.spellSchoolId),
   }));
+  // the school split's inputs (`incomingPressureBySchool`): whose side a
+  // redistribution row's source is on, and whether this document records an
+  // absorbed attack's spell — both read off the round, not the crisis unit
+  const rosterSides = units.length > 0 ? buildRosterSides(units) : undefined;
+  const recordsAttackSpell =
+    units.length > 0 ? documentRecordsAttackSpell(units) : undefined;
   const healIn = ((owner.healIn ?? []) as any[]).map((h) => ({
     t: h.timestamp,
     src: h.srcUnitId,
@@ -1025,10 +1040,15 @@ export function crisisDecisionPoints(
       tSec,
       hpPct: anchor.hpPct,
       dmg2s: dmg2sRounded,
-      dmg2sBySchool: recent.reduce<Record<string, number>>((m, d) => {
-        m[String(d.school)] = (m[String(d.school)] ?? 0) + d.a;
-        return m;
-      }, {}),
+      // the window of `recent`: (dmgEnd − DMG_WINDOW_MS, dmgEnd]
+      dmg2sBySchool: incomingPressureBySchool(
+        owner,
+        dmgEnd - DMG_WINDOW_MS,
+        dmgEnd,
+        rosterSides,
+        recordsAttackSpell,
+        true,
+      ),
       attackers2s: attackers.size,
       enemyBurst: enemyBurstCasts.some(
         (b) => b > t - ENEMY_BURST_LOOKBACK_MS && b <= t,

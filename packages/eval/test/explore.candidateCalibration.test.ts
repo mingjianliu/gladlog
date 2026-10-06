@@ -325,6 +325,8 @@ describe("countsAtThresholds — cd-hoarded wiring", () => {
   function damageAction(t: number, srcUnitId: string, amount: number) {
     return {
       timestamp: START + t,
+      // production rows carry their log line (the school split keys on it)
+      logLine: { timestamp: START + t, parameters: [] },
       srcUnitId,
       effectiveAmount: -amount,
     } as never;

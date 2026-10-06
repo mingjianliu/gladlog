@@ -741,6 +741,7 @@ describe("crisis-no-response wiring(菜单接线 + death-unused-defensive preced
           damageIn: [
             {
               timestamp: T0 + 1500,
+              logLine: { timestamp: T0 + 1500, parameters: [] },
               srcUnitId: "E1",
               amount: -30,
               effectiveAmount: -30,
@@ -783,6 +784,7 @@ describe("crisis-no-response wiring(菜单接线 + death-unused-defensive preced
           damageIn: [
             {
               timestamp: T0 + 1500,
+              logLine: { timestamp: T0 + 1500, parameters: [] },
               srcUnitId: "H",
               amount: -30,
               effectiveAmount: -30,

@@ -221,7 +221,7 @@ export function sumAbsorbedPressure(
 
 /** The log's own school bits of one hit record (`spellSchoolId` is the hex
  * string of the line; a swing is 0x1). 0 = the line carried none. The one
- * reading cd-hoarded's `dmg2sBySchool` and `incomingPressureBySchool` share. */
+ * reading of every per-school sum (`incomingPressureBySchool`). */
 export function logSchoolMask(spellSchoolId: string | undefined): number {
   return Number.parseInt(String(spellSchoolId ?? "0x0"), 16) || 0;
 }
@@ -234,6 +234,13 @@ export function logSchoolMask(spellSchoolId: string | undefined): number {
  * its school" would otherwise delete its own evidence — the better an
  * Anti-Magic Shell works, the less magic damage lands (Fable review of
  * triage enemy-def F-E22 / F-E24, 2026-10-02).
+ *
+ * Two readers, one answer to "which schools was this unit being hit with":
+ * KILL ATTEMPTS (`attributeFailure`: does the enemy's school-limited save
+ * cover our go) and cd-hoarded (`DecisionPoint.dmg2sBySchool`: does the
+ * owner's school-limited save cover the crisis). cd-hoarded read landed
+ * damage only until 2026-10-06 — a Power Word: Shield on the crisis unit hid
+ * the school it was eating (user ruling U-KA2).
  *
  * The school of an absorbed hit: the SPELL_ABSORBED line's own attack-school
  * field (spell form, `parameters[10]`), else the attack spell's official
@@ -252,7 +259,14 @@ export function incomingPressureBySchool(
    * this unit alone when omitted — wrong for a unit whose only absorbs are
    * swings (codex review, 2026-10-03). */
   recordsAttackSpell?: boolean,
+  /** The window is (fromMs, toMs] instead of [fromMs, toMs] — the shape of
+   * a look-back that ends at an instant (cd-hoarded's `DMG_WINDOW_MS` before
+   * the HP reading), so a row exactly `DMG_WINDOW_MS` back is in neither
+   * this split nor the `dmg2s` it stands beside. */
+  fromExclusive = false,
 ): Record<string, number> {
+  const before = (t: number): boolean =>
+    fromExclusive ? t <= fromMs : t < fromMs;
   const by: Record<string, number> = {};
   const add = (mask: number, amount: number): void => {
     if (!(amount > 0) || !Number.isFinite(amount)) return;
@@ -260,7 +274,7 @@ export function incomingPressureBySchool(
   };
   for (const d of unit.damageIn ?? []) {
     const t = d.logLine.timestamp;
-    if (t < fromMs || t > toMs) continue;
+    if (before(t) || t > toMs) continue;
     if (
       isRedistributionRow(
         unit,
@@ -282,7 +296,7 @@ export function incomingPressureBySchool(
     recordsAttackSpell ?? absorbs.some((a) => a.attackSpellId !== undefined);
   for (const a of absorbs) {
     const t = a.logLine.timestamp;
-    if (t < fromMs || t > toMs) continue;
+    if (before(t) || t > toMs) continue;
     if (
       isRedistributionRow(
         unit,

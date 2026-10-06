@@ -7,6 +7,8 @@ import { describe, expect, it } from "vitest";
 
 // the [STATE] renderer's own HP sampler — imported, not re-derived
 import { gridHpPct } from "../utils/cooldowns";
+import { incomingPressureBySchool } from "../utils/incomingPressure";
+import { coversCrisisSchool } from "./candidates/cooldownTiming";
 import {
   CRISIS_HP_PCT,
   CRISIS_MIN_DMG2S,
@@ -38,7 +40,19 @@ const hp = (
   advancedActorPositionX: x,
   advancedActorPositionY: y,
 });
+/** Production damage rows carry their log line; the school split
+ * (`incomingPressureBySchool`) keys on its timestamp. */
+const withLogLine = (rows: any[]) =>
+  rows.map((d) => ({
+    logLine: { timestamp: d.timestamp, parameters: [] },
+    ...d,
+  }));
 function unit(over: Record<string, unknown> = {}) {
+  const u: any = unitFields(over);
+  u.damageIn = withLogLine(u.damageIn ?? []);
+  return u;
+}
+function unitFields(over: Record<string, unknown> = {}) {
   return {
     id: "H",
     name: "Heals-R",
@@ -986,5 +1000,112 @@ describe("crisisDecisionPoints — render-grid anchoring", () => {
       ],
     });
     expect(crisisDecisionPoints(o, combat(o, [enemy()]))).toEqual([]);
+  });
+});
+
+describe("dmg2sBySchool — what was aimed at the unit, shields included (user ruling U-KA2)", () => {
+  const row = (
+    t: number,
+    amount: number,
+    school: string,
+    extra: Record<string, unknown> = {},
+  ) => ({
+    timestamp: T0 + t,
+    srcUnitId: "E1",
+    amount: -amount,
+    effectiveAmount: -amount,
+    spellSchoolId: school,
+    ...extra,
+  });
+  // a SPELL_ABSORBED in the spell form: parameters[10] is the attack's school
+  const absorbed = (t: number, amount: number, school: string) => {
+    const parameters: unknown[] = [];
+    parameters[10] = school;
+    return {
+      timestamp: T0 + t,
+      logLine: { timestamp: T0 + t, parameters },
+      absorbedAmount: amount,
+      spellId: "17", // Power Word: Shield
+      attackSpellId: "116",
+      attackerId: "E1",
+    };
+  };
+  const BOP = "1022"; // physical only
+
+  it("an absorbed hit is in the split and not in dmg2s; the split is the shared predicate's", () => {
+    const o = unit({
+      damageIn: [row(1500, 30, "0x1")],
+      absorbsIn: [absorbed(1800, 60, "0x10")],
+    });
+    const c = combat(o, [enemy()]);
+    const p = crisisDecisionPoints(o, c)[0]!;
+    expect(p.dmg2s).toBe(0.3); // landed damage only, as the reference tables read it
+    expect(p.dmg2sBySchool).toEqual({ "1": 30, "16": 60 });
+    // window of the point: (t − 2 s, t], t = the HP reading at 2.000
+    expect(p.dmg2sBySchool).toEqual(
+      incomingPressureBySchool(
+        o as never,
+        T0,
+        T0 + 2000,
+        undefined,
+        undefined,
+        true,
+      ),
+    );
+  });
+
+  it("a shield that ate the magic no longer makes the crisis look physical to a physical-only save", () => {
+    const landedOnly = unit({ damageIn: [row(1500, 30, "0x1")] });
+    expect(
+      coversCrisisSchool(
+        BOP,
+        crisisDecisionPoints(landedOnly, combat(landedOnly, [enemy()]))[0]!,
+      ),
+    ).toBe(true);
+    const shielded = unit({
+      damageIn: [row(1500, 30, "0x1")],
+      absorbsIn: [absorbed(1800, 60, "0x10")],
+    });
+    // 30 physical of 90 aimed at the unit: Blessing of Protection covers a third
+    expect(
+      coversCrisisSchool(
+        BOP,
+        crisisDecisionPoints(shielded, combat(shielded, [enemy()]))[0]!,
+      ),
+    ).toBe(false);
+  });
+
+  it("the look-back is half-open like dmg2s: a row exactly DMG_WINDOW_MS before the reading is in neither", () => {
+    const o = unit({
+      damageIn: [row(0, 40, "0x10"), row(1500, 30, "0x1")],
+      absorbsIn: [absorbed(0, 50, "0x10")],
+    });
+    const p = crisisDecisionPoints(o, combat(o, [enemy()]))[0]!;
+    expect(p.dmg2s).toBe(0.3);
+    expect(p.dmg2sBySchool).toEqual({ "1": 30 });
+  });
+
+  it("a teammate's Void Leech is not a school the enemy was throwing (dmg2s keeps it: landed HP loss)", () => {
+    const mate = {
+      id: "M",
+      name: "Mate-R",
+      reaction: CombatUnitReaction.Friendly,
+      info: { teamId: "0" },
+      spellCastEvents: [],
+      advancedActions: [],
+    };
+    const o = unit({
+      damageIn: [
+        row(1500, 30, "0x1"),
+        row(1600, 20, "0x20", {
+          spellId: "451963",
+          srcUnitId: "M",
+          srcUnitFlags: 0x511,
+        }),
+      ],
+    });
+    const p = crisisDecisionPoints(o, combat(o, [enemy(), mate]))[0]!;
+    expect(p.dmg2s).toBe(0.5);
+    expect(p.dmg2sBySchool).toEqual({ "1": 30 });
   });
 });

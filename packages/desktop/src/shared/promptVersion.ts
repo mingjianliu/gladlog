@@ -932,5 +932,12 @@
  *  longer offers Blessing of Sacrifice when the owner was the only friendly
  *  under fire at the press — it cannot be put on the caster. Timeline note
  *  only; the menu is unchanged.
+ *  v310 (2026-10-06, user ruling U-KA2): cd-hoarded judges a school-limited
+ *  save (Blessing of Protection, Spellwarding, Cloak of Shadows, Anti-Magic
+ *  Shell) by what was aimed at the crisis unit in the 2 s before the
+ *  reading — hits that landed and hits a shield ate, a teammate's
+ *  redistribution left out (`incomingPressureBySchool`, the reading KILL
+ *  ATTEMPTS already had) — instead of landed damage only. `readyCds` of a
+ *  crisis under a shield can gain or lose such a save; counts in the commit.
  */
-export const PROMPT_VERSION = 309;
+export const PROMPT_VERSION = 310;
