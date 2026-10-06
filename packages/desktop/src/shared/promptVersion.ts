@@ -911,5 +911,10 @@
  *  personal rating in this bracket is N" — instead of "MMR" (the number is
  *  COMBATANT_INFO personalRating, not the lobby's matchmaking rating).
  *  Wording only; the caveat's condition and every number are unchanged.
+ *  v306 (2026-10-06, triage other F-O12): a HEALER OFFENSE [KILL WINDOW] /
+ *  [VULNERABLE] line's `free Ns of Ms` counts the seconds the owner could
+ *  cast (buildCannotCastIntervals: hard CC, silences, kick lockouts, enemy
+ *  pets included) instead of the seconds outside a [CC ON TEAM] instance.
+ *  Only that number moves; slack lines and the menu are unchanged.
  */
-export const PROMPT_VERSION = 305;
+export const PROMPT_VERSION = 306;

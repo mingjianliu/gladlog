@@ -7,6 +7,8 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
+import { ensureAnalysisData } from "../../src/data/ensure";
+import { buildCannotCastIntervals } from "../../src/utils/cannotCastIntervals";
 import { specToString } from "../../src/utils/cooldowns";
 import { IEnemyCDTimeline } from "../../src/utils/enemyCDs";
 import {
@@ -17,6 +19,7 @@ import {
 import {
   makeAdvancedAction,
   makeAuraEvent,
+  makeInterruptEvent,
   makeSpellCastEvent,
   makeUnit,
 } from "./testHelpers";
@@ -395,7 +398,7 @@ describe("computeWindowContributions", () => {
       [owner],
       [enemyDk, enemyHealer],
       [makeWindow(40, 50)],
-      [{ atSeconds: 42, durationSeconds: 4 }], // owner feared 42–46
+      [{ from: T0 + 42_000, to: T0 + 46_000 }], // owner could not cast 42–46
       // enemy healer feared at t=38 for 6s → same 'Disorient'-category DR window is still hot at 40
       [
         {
@@ -419,14 +422,30 @@ describe("computeWindowContributions", () => {
       [enemyDk, enemyHealer],
       [makeWindow(40, 50)],
       [
-        { atSeconds: 42, durationSeconds: 4 }, // 42–46
-        { atSeconds: 43, durationSeconds: 3 }, // 43–46, overlaps the above
+        { from: T0 + 42_000, to: T0 + 46_000 }, // 42–46
+        { from: T0 + 43_000, to: T0 + 46_000 }, // 43–46, overlaps the above
       ],
       [],
       stubFactsComputer,
     );
-    // Union of CC'd seconds is still {42,43,44,45} = 4s, so ownerFreeSeconds is 6, not 10-(4+3)=3.
+    // Union of blocked seconds is still {42,43,44,45} = 4s, so ownerFreeSeconds is 6, not 10-(4+3)=3.
     expect(result[0].ownerFreeSeconds).toBe(6);
+  });
+
+  it("a never-removed lock (to = Infinity) blocks every second after it starts", () => {
+    const owner = makeFriend("owner");
+    const result = computeWindowContributions(
+      combat,
+      owner,
+      [owner],
+      [enemyDk, enemyHealer],
+      [makeWindow(40, 50)],
+      [{ from: T0 + 47_500, to: Infinity }],
+      [],
+      stubFactsComputer,
+    );
+    // seconds 48 and 49 start inside the lock; 47 starts before it
+    expect(result[0].ownerFreeSeconds).toBe(8);
   });
 });
 
@@ -795,6 +814,114 @@ describe("[KILL WINDOW] free seconds vs the rendered window (2026-09-30)", () =>
     expect(m).not.toBeNull();
     expect(Number(m![2])).toBe(20);
     expect(Number(m![1])).toBeLessThanOrEqual(Number(m![2]));
+  });
+});
+
+describe("[KILL WINDOW] free seconds are castable seconds (triage other F-O12)", () => {
+  beforeAll(async () => {
+    await ensureAnalysisData();
+  });
+  const enemyHealer = makeUnit("enemy-h", {
+    reaction: CombatUnitReaction.Hostile,
+    spec: CombatUnitSpec.Shaman_Restoration,
+    name: "Rsham",
+  });
+  const enemyDk = makeUnit("enemy-1", {
+    reaction: CombatUnitReaction.Hostile,
+    name: "Edk",
+  });
+  const freeOf = (
+    owner: ICombatUnit,
+    units?: Record<string, ICombatUnit>,
+  ): number => {
+    const summary = buildHealerOffenseSummary(
+      { ...combat, units },
+      owner,
+      [owner],
+      [enemyDk, enemyHealer],
+      [makeWindow(40, 55)],
+      emptyEnemyTimeline(),
+      [], // the [CC ON TEAM] instance list sees neither lock below
+      [],
+      [],
+    );
+    return summary.windowContributions[0]!.ownerFreeSeconds;
+  };
+
+  it("a silence and a kick lockout are not free time, though neither is a CC instance", () => {
+    expect(freeOf(makeFriend("owner"))).toBe(15);
+    // Strangulate 42.0–46.0 (4 s), then Pummel at 50.0 (its lockout)
+    const owner = makeFriend("owner", {
+      auraEvents: [
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          "47476",
+          T0 + 42_000,
+          "enemy-1",
+          "owner",
+        ),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_REMOVED,
+          "47476",
+          T0 + 46_000,
+          "enemy-1",
+          "owner",
+        ),
+      ] as never,
+      actionIn: [
+        makeInterruptEvent(
+          "6552",
+          "Pummel",
+          "2061",
+          "Flash Heal",
+          T0 + 50_000,
+          "enemy-1",
+        ),
+      ] as never,
+    });
+    const blocked = buildCannotCastIntervals(
+      owner,
+      new Set(["enemy-1", "enemy-h"]),
+    );
+    expect(blocked).toHaveLength(2);
+    const lockoutS = (blocked[1]!.to - blocked[1]!.from) / 1000;
+    expect(lockoutS).toBeGreaterThanOrEqual(3);
+    // 4 silenced seconds + the lockout's whole seconds inside 50–55
+    expect(freeOf(owner)).toBe(15 - 4 - Math.min(5, Math.ceil(lockoutS)));
+  });
+
+  it("an enemy pet's stun counts when the round's units name its owner", () => {
+    const pet = makeUnit("pet-1", {
+      reaction: CombatUnitReaction.Hostile,
+      name: "Pet",
+      ownerId: "enemy-1",
+    } as never);
+    const owner = makeFriend("owner", {
+      auraEvents: [
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          "853",
+          T0 + 44_000,
+          "pet-1",
+          "owner",
+        ),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_REMOVED,
+          "853",
+          T0 + 47_000,
+          "pet-1",
+          "owner",
+        ),
+      ] as never,
+    });
+    expect(freeOf(owner)).toBe(15); // no units: the pet is nobody's
+    expect(
+      freeOf(owner, {
+        "enemy-1": enemyDk,
+        "enemy-h": enemyHealer,
+        "pet-1": pet,
+      }),
+    ).toBe(12);
   });
 });
 

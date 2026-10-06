@@ -5,6 +5,10 @@ import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { ccSpellIds } from "../data/spellTags";
 import {
+  buildCannotCastIntervals,
+  enemySourceIds,
+} from "./cannotCastIntervals";
+import {
   chargesAvailableAt,
   isHealerSpec,
   specToString,
@@ -501,7 +505,8 @@ export interface IWindowContribution {
   ownerCCReady: Array<{ spellName: string; enemyHealerDR: DRLevel | null }>;
   ownerCastCCInWindow: boolean;
   ownerDamageInWindow: number;
-  /** Seconds of the window the owner was NOT in CC. */
+  /** Seconds of the window the owner could cast: not inside any
+   * `buildCannotCastIntervals` interval (hard CC, silence, kick lockout). */
   ownerFreeSeconds: number;
   /** Lowest friendly HP% during the window; null without advanced logging. */
   teamMinHpPct: number | null;
@@ -581,7 +586,12 @@ export function computeWindowContributions(
   friends: ICombatUnit[],
   enemies: ICombatUnit[],
   offensiveWindows: IOffensiveWindow[],
-  ownerCCInstances: CCInterval,
+  /** When the owner could not cast, epoch ms — `buildCannotCastIntervals`
+   * over the enemy players and everything they summoned (hard CC, silences,
+   * kick lockouts). NOT the `[CC ON TEAM]` instance list: "free" here means
+   * free to act, and a Strangulate or a Pummel lockout is not that (triage
+   * other F-O12: 7d1f14af printed "free 6s of 15s" with ~2 s castable). */
+  ownerCannotCast: ReadonlyArray<{ from: number; to: number }>,
   enemyHealerCCInstances: CCWithDR,
   factsComputer: IKillWindowFactsComputer,
 ): IWindowContribution[] {
@@ -647,11 +657,18 @@ export function computeWindowContributions(
       // log convention; max(0,·) yielded absorb-only "your damage" figures.
       .reduce((sum, d) => sum + Math.abs(d.effectiveAmount), 0);
 
-    let ccdSeconds = 0;
+    // Sampled per whole second, as the CC instances were before F-O12: a
+    // second is not free when its start lies inside a cannot-cast interval.
+    let blockedSeconds = 0;
     for (let t = Math.floor(fromSeconds); t < toSeconds; t++) {
-      if (isOwnerCCdAt(ownerCCInstances, t)) ccdSeconds++;
+      const ms = matchStartMs + t * 1000;
+      if (ownerCannotCast.some((iv) => iv.from <= ms && ms < iv.to))
+        blockedSeconds++;
     }
-    const ownerFreeSeconds = Math.max(0, toSeconds - fromSeconds - ccdSeconds);
+    const ownerFreeSeconds = Math.max(
+      0,
+      toSeconds - fromSeconds - blockedSeconds,
+    );
 
     let teamMinHpPct: number | null = null;
     for (const f of friends) {
@@ -878,7 +895,13 @@ export function buildHealerOffenseSummary(
       friends,
       enemies,
       offensiveWindows,
-      ownerCCInstances,
+      // One predicate for "could not cast", built as `healingGaps` and
+      // `positionAnalysis` build it; only the free-seconds count reads it —
+      // the slack segments above keep the CC instance list (F-O12's scope).
+      buildCannotCastIntervals(
+        owner,
+        enemySourceIds(enemies, Object.values(combat.units ?? {})),
+      ),
       enemyHealerCCInstances,
       createKillWindowFactsComputer(combat, friends, enemies),
     ),
