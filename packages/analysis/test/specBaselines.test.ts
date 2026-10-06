@@ -51,7 +51,7 @@ describe("specBaselines — formatSpecBaselines", () => {
     const lines = formatSpecBaselines("Arms Warrior", ownerCDs, mockData);
 
     expect(lines).toHaveLength(5);
-    expect(lines[0]).toBe("SPEC BASELINES — Arms Warrior at ≥2100 MMR (n=150):");
+    expect(lines[0]).toBe("SPEC BASELINES — Arms Warrior at ≥2100 personal rating (n=150):");
     expect(lines[1]).toBe("  Defensive timing: Optimal 45% | Early 20% | Late 15% | Reactive 10% | Unknown 9%");
     expect(lines[2]).toBe("  CD reference (% of matches used | median first use | p75 first use):");
     expect(lines[3]).toBe("    Die by the Sword: 85% used | 0:35 median | 1:05 p75");
@@ -80,7 +80,7 @@ describe("specBaselines — formatSpecBaselines", () => {
     };
 
     const lines = formatSpecBaselines("Fire Mage", [], noTimingData);
-    expect(lines).toEqual(["SPEC BASELINES — Fire Mage at ≥2100 MMR (n=50):"]);
+    expect(lines).toEqual(["SPEC BASELINES — Fire Mage at ≥2100 personal rating (n=50):"]);
   });
 });
 
@@ -126,7 +126,7 @@ describe("specBaselines — formatDTPSBaselines", () => {
     const lines = formatDTPSBaselines(["Arms Warrior", "Holy Paladin", "No Pressure Spec"], mockData);
 
     expect(lines).toEqual([
-      "INCOMING DAMAGE BASELINES (per 10s window, ≥2100 MMR):",
+      "INCOMING DAMAGE BASELINES (per 10s window, ≥2100 personal rating):",
       "  Arms Warrior (n=150): p50 120k | p90 251k",
       "  Holy Paladin (n=200): p50 95k | p90 190k",
     ]);

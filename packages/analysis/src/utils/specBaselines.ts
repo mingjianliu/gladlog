@@ -30,8 +30,13 @@ export interface IBenchmarkData {
 
 export const benchmarks: IBenchmarkData = benchmarksJson as unknown as IBenchmarkData;
 
-/** The rating floor of the benchmark corpus (collectBenchmarks --min-rating). */
-export const BASELINE_MMR_FLOOR = 2100;
+/** The rating floor of the benchmark corpus — `collectBenchmarks`' default
+ * `--min-rating`, which imports this constant. Both sides read the same field:
+ * COMBATANT_INFO `personalRating`, the player's own rating in the bracket. It
+ * is NOT the lobby's matchmaking rating (ARENA_MATCH_END carries that, and
+ * nothing here reads it) — triage other F-O2: 52 of 60 rounds printed the
+ * personal rating as "MMR", median 806 away from the team's MMR. */
+export const BASELINE_RATING_FLOOR = 2100;
 
 export function formatSpecBaselines(
   ownerSpec: string,
@@ -49,11 +54,13 @@ export function formatSpecBaselines(
   // model reads the rates as what higher-rated players do, not as a target.
   const ratingNote =
     ownerRating && ownerRating > 0
-      ? ownerRating < BASELINE_MMR_FLOOR
-        ? ` — you played this match at ${ownerRating} MMR, below the reference bracket: read the rates as what higher-rated players do, not as a norm for this match`
-        : ` — you played this match at ${ownerRating} MMR`
+      ? ownerRating < BASELINE_RATING_FLOOR
+        ? ` — your personal rating in this bracket is ${ownerRating}, below the reference bracket: read the rates as what higher-rated players do, not as a norm for this match`
+        : ` — your personal rating in this bracket is ${ownerRating}`
       : "";
-  lines.push(`SPEC BASELINES — ${ownerSpec} at ≥${BASELINE_MMR_FLOOR} MMR (n=${spec.sampleCount})${ratingNote}:`);
+  lines.push(
+    `SPEC BASELINES — ${ownerSpec} at ≥${BASELINE_RATING_FLOOR} personal rating (n=${spec.sampleCount})${ratingNote}:`,
+  );
 
   const dt = spec.defensiveTiming;
   if (dt) {
@@ -82,7 +89,8 @@ export function formatSpecBaselines(
 /**
  * Emits a per-spec incoming-damage baseline block for all friendly specs that have
  * benchmark data. Helps the model interpret [DMG SPIKE] magnitudes.
- * Each value is the total damage received in a 10-second window at ≥2100 MMR.
+ * Each value is the total damage received in a 10-second window by players at
+ * ≥ BASELINE_RATING_FLOOR personal rating.
  */
 export function formatDTPSBaselines(friendlySpecs: string[], data: IBenchmarkData): string[] {
   const rows: string[] = [];
@@ -94,5 +102,5 @@ export function formatDTPSBaselines(friendlySpecs: string[], data: IBenchmarkDat
     rows.push(`  ${spec} (n=${entry.sampleCount}): p50 ${p50k}k | p90 ${p90k}k`);
   }
   if (rows.length === 0) return [];
-  return ['INCOMING DAMAGE BASELINES (per 10s window, ≥2100 MMR):', ...rows];
+  return [`INCOMING DAMAGE BASELINES (per 10s window, ≥${BASELINE_RATING_FLOOR} personal rating):`, ...rows];
 }

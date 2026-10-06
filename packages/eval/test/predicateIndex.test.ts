@@ -128,6 +128,7 @@ import * as resourceAt from "@gladlog/analysis/src/utils/resourceAt";
 import * as rootReachability from "@gladlog/analysis/src/utils/rootReachability";
 import * as rosterSide from "@gladlog/analysis/src/utils/rosterSide";
 import * as spellDanger from "@gladlog/analysis/src/utils/spellDanger";
+import * as specBaselines from "@gladlog/analysis/src/utils/specBaselines";
 import * as spellMechanics from "@gladlog/analysis/src/utils/spellMechanics";
 import * as spellRange from "@gladlog/analysis/src/utils/spellRange";
 import * as stats from "@gladlog/analysis/src/utils/stats";
@@ -915,6 +916,12 @@ const INDEX: PredicateRow[] = [
     file: `${A}/context/timelineHelpers.ts`,
     symbol: "DMG_SPIKE_THRESHOLD",
     mod: timelineHelpers,
+  },
+  // triage other F-O2: the benchmark bracket is a PERSONAL rating floor
+  {
+    file: `${A}/utils/specBaselines.ts`,
+    symbol: "BASELINE_RATING_FLOOR",
+    mod: specBaselines,
   },
   // GH #100: kill evidence for totems / guardians (12.x logs carry no UNIT_DIED)
   {

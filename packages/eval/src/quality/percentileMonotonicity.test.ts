@@ -15,7 +15,7 @@ import { checkPercentileMonotonicity } from "./promptQualityCheck";
 describe("checkPercentileMonotonicity", () => {
   it("**回归**:线上真实坏行 —— MM 猎人 p50 > p90", () => {
     const v = checkPercentileMonotonicity([
-      "INCOMING DAMAGE BASELINES (per 10s window, ≥2100 MMR):",
+      "INCOMING DAMAGE BASELINES (per 10s window, ≥2100 personal rating):",
       "  Marksmanship Hunter (n=87): p50 214k | p90 65k",
     ]);
     expect(v).toHaveLength(1);
@@ -32,7 +32,7 @@ describe("checkPercentileMonotonicity", () => {
 
   it("正常行不误报", () => {
     const v = checkPercentileMonotonicity([
-      "INCOMING DAMAGE BASELINES (per 10s window, ≥2100 MMR):",
+      "INCOMING DAMAGE BASELINES (per 10s window, ≥2100 personal rating):",
       "  Fury Warrior (n=9): p50 187k | p90 527k",
       "  Beast Mastery Hunter (n=9): p50 112k | p90 486k",
       "  Discipline Priest (n=220): p50 98k | p75 180k | p90 265k | p95 310k",

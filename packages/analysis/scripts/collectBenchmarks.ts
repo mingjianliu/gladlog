@@ -23,6 +23,7 @@ import { gunzipSync } from "zlib";
 import { createBenchmarkAccumulator } from "../src/benchmark/metrics";
 import { type SampleMeta,stratifiedSample } from "../src/benchmark/stratify";
 import { isHealerSpec, specToString } from "../src/utils/cooldowns";
+import { BASELINE_RATING_FLOOR } from "../src/utils/specBaselines";
 
 // ── Argument parsing ──────────────────────────────────────────────────────────
 
@@ -36,7 +37,7 @@ function parseArgs(): {
   const args = process.argv.slice(2);
   const result = {
     manifest: "",
-    minRating: 2100,
+    minRating: BASELINE_RATING_FLOOR,
     minN: 30,
     perStratumCap: 40,
     out: "packages/analysis/benchmarks/benchmark_data.json",
@@ -137,6 +138,8 @@ async function main() {
         const units: any[] = Object.values(combat.units);
         const players = units.filter((u) => u.info);
         for (const unit of players) {
+          // personalRating, the field BASELINE_RATING_FLOOR is stated in
+          // (the prompt's "≥2100 personal rating" header reads the same one).
           if ((unit.info?.personalRating ?? 0) < minRating) continue;
           const spec = specToString(unit.spec) || String(unit.spec);
           const team = players.filter(

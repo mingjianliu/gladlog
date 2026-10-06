@@ -13,7 +13,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { extractOwnerCDBuffExpiry } from "../src/context/timelineHelpers";
 import { ensureAnalysisData } from "../src/data/ensure";
 import { hardCastOccupancyWithin } from "../src/utils/dispelAnalysis";
-import { formatSpecBaselines } from "../src/utils/specBaselines";
+import { BASELINE_RATING_FLOOR, formatDTPSBaselines, formatSpecBaselines } from "../src/utils/specBaselines";
 import { makeAuraEvent, makeSpellCastEvent, makeUnit } from "./ported/testHelpers";
 
 const T0 = 1_700_000_000_000;
@@ -103,9 +103,18 @@ describe("SPEC BASELINES names the owner's rating against the reference bracket"
   };
   const cds = [{ spellId: "47788", spellName: "Guardian Spirit", tag: "Defensive", casts: [], cooldownSeconds: 180, neverUsed: true, availableWindows: [] }] as never;
   it("below 2100 → the header says so; above → rating only; unknown → nothing", () => {
-    expect(formatSpecBaselines("Holy Priest", cds, data, 1650)[0]).toContain("1650 MMR, below the reference bracket");
-    expect(formatSpecBaselines("Holy Priest", cds, data, 2350)[0]).toMatch(/2350 MMR:$/);
+    expect(formatSpecBaselines("Holy Priest", cds, data, 1650)[0]).toContain(
+      "your personal rating in this bracket is 1650, below the reference bracket",
+    );
+    expect(formatSpecBaselines("Holy Priest", cds, data, 2350)[0]).toMatch(/your personal rating in this bracket is 2350:$/);
     expect(formatSpecBaselines("Holy Priest", cds, data, 0)[0]).toMatch(/\(n=10\):$/);
+    // triage other F-O2: the number is COMBATANT_INFO personalRating — the
+    // lobby MMR is a different number and the header must not call it that.
+    for (const rating of [1650, 2350, 0])
+      expect(formatSpecBaselines("Holy Priest", cds, data, rating).join("\n")).not.toMatch(/MMR/);
+    expect(formatDTPSBaselines(["Holy Priest"], { bySpec: { "Holy Priest": { ...data.bySpec["Holy Priest"], pressureWindows: { p50: 1, p75: 2, p90: 3, p95: 4 } } } })[0]).toBe(
+      `INCOMING DAMAGE BASELINES (per 10s window, ≥${BASELINE_RATING_FLOOR} personal rating):`,
+    );
   });
 });
 

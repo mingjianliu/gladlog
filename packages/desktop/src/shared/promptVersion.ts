@@ -906,5 +906,10 @@
  *  KILL row; a death credited in an attempt's kill-credit slack is not
  *  "outside every attempt window"; an enemy sitting in our own breakable CC
  *  (Disorient / Incapacitate) is not named as the softer target.
+ *  v305 (2026-10-06, triage other F-O2): SPEC BASELINES and INCOMING DAMAGE
+ *  BASELINES call the bracket what it is — "≥2100 personal rating", "your
+ *  personal rating in this bracket is N" — instead of "MMR" (the number is
+ *  COMBATANT_INFO personalRating, not the lobby's matchmaking rating).
+ *  Wording only; the caveat's condition and every number are unchanged.
  */
-export const PROMPT_VERSION = 304;
+export const PROMPT_VERSION = 305;
