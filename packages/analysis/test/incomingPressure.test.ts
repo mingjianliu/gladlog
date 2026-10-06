@@ -9,6 +9,7 @@ import {
   logSchoolMask,
   sumAbsorbedPressure,
   sumIncomingPressure,
+  sumLandedPressure,
 } from "../src/utils/incomingPressure";
 import { makeUnit } from "./ported/testHelpers";
 
@@ -65,6 +66,39 @@ describe("incomingPressure — the single predicate for incoming pressure", () =
     expect(sumIncomingPressure(unit, 1000, 2000)).toBe(400);
     expect(sumAbsorbedPressure(unit, 1000, 2000)).toBe(300);
     expect(sumIncomingPressure(unit, 0, 10_000)).toBe(1100);
+  });
+
+  it("sumLandedPressure is the landed part only, under the same redistribution rule (missed-cleanse F-C1)", () => {
+    const leech = {
+      ...(dmg(1500, 11_000) as object),
+      spellId: "451963",
+      srcUnitId: "mate",
+      srcUnitFlags: 0x511,
+    } as never;
+    const unit = makeUnit("victim", {
+      reaction: CombatUnitReaction.Friendly,
+      damageIn: [dmg(1000, 100), leech, dmg(5000, 700)],
+      absorbsIn: [abs(2000, 300)],
+    });
+    // landed + absorbed = the whole; the Void Leech from a teammate is in neither
+    expect(sumLandedPressure(unit, 1000, 2000)).toBe(100);
+    expect(sumLandedPressure(unit, 0, 10_000)).toBe(800);
+    expect(
+      sumLandedPressure(unit, 0, 10_000) + sumAbsorbedPressure(unit, 0, 10_000),
+    ).toBe(sumIncomingPressure(unit, 0, 10_000));
+    // the same id from the OTHER side is a hit
+    const hostileLeech = {
+      ...(leech as object),
+      srcUnitId: "enemy-1",
+      srcUnitFlags: 0x548,
+    } as never;
+    expect(
+      sumLandedPressure(
+        makeUnit("victim", { damageIn: [hostileLeech] }),
+        0,
+        10_000,
+      ),
+    ).toBe(11_000);
   });
 
   it("drops NaN and non-positive absorbs rather than poisoning the sum", () => {

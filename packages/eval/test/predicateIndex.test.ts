@@ -567,6 +567,12 @@ const INDEX: PredicateRow[] = [
     symbol: "isSameSideSource",
     mod: rosterSide,
   },
+  // triage missed-cleanse F-C1: postCcDamage = landed hits minus redistribution
+  {
+    file: `${A}/utils/incomingPressure.ts`,
+    symbol: "sumLandedPressure",
+    mod: incomingPressure,
+  },
   {
     file: `${A}/utils/incomingPressure.ts`,
     symbol: "incomingPressureBySchool",

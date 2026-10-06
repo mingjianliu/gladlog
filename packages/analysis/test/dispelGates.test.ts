@@ -96,6 +96,65 @@ function summarize(friends: any[], combat: any = COMBAT) {
  * its own coverage in candidateFindings.test.ts). */
 const DISPEL_OWNER = { spec: CombatUnitSpec.Priest_Discipline };
 
+describe("postCcDamage — a teammate's redistribution is not damage taken (triage missed-cleanse F-C1)", () => {
+  const row = (
+    tS: number,
+    amount: number,
+    spellId: string,
+    srcUnitId: string,
+    srcUnitFlags: number,
+  ) => ({
+    logLine: { event: LogEvent.SPELL_DAMAGE, timestamp: S(tS), parameters: [] },
+    timestamp: S(tS),
+    effectiveAmount: -amount,
+    amount: -amount,
+    spellId,
+    spellName: spellId,
+    srcUnitId,
+    srcUnitFlags,
+    destUnitId: "t1",
+  });
+  const FRIENDLY = 0x511;
+  const HOSTILE = 0x548;
+  const hostile = () =>
+    makeUnit("e1", {
+      spec: CombatUnitSpec.Hunter_Marksmanship,
+      reaction: CombatUnitReaction.Hostile,
+    });
+  const window = (damageIn: any[]) => {
+    const t1 = targetWithBinding(10, 16);
+    (t1 as any).damageIn = damageIn;
+    return reconstructDispelSummary(
+      [t1, discPriest("h1")] as any,
+      [hostile()] as any,
+      COMBAT,
+    ).missedCleanseWindows[0];
+  };
+
+  it("6062daf2's shape: the only rows in the 5 s are the owner's Void Leech → 0", () => {
+    const w = window([
+      row(11.4, 11_337, "451963", "h1", FRIENDLY),
+      row(14.4, 9_070, "451963", "h1", FRIENDLY),
+    ]);
+    expect(w.postCcDamage).toBe(0);
+  });
+
+  it("enemy hits stay, and so does every other same-side id (a self-sourced deferral is enemy damage paid late)", () => {
+    const w = window([
+      row(11, 37_300, "451963", "h1", FRIENDLY), // Void Leech from the priest: out
+      row(12, 27_000, "19434", "e1", HOSTILE), // Aimed Shot: in
+      row(13, 400, "361029", "t1", FRIENDLY), // Time Dilation tick on itself: in
+      row(16, 50_000, "19434", "e1", HOSTILE), // 6 s after the application: outside the 5 s
+    ]);
+    expect(w.postCcDamage).toBe(27_400);
+  });
+
+  it("a Void Leech from the other roster (a charmed victim's drain) is a hit", () => {
+    const w = window([row(11, 5_000, "451963", "e1", HOSTILE)]);
+    expect(w.postCcDamage).toBe(5_000);
+  });
+});
+
 describe("门 b+c 无法施法(硬控∪踢锁,自由时间 < 3s 反应阈值)", () => {
   it("基线:无任何门数据 → 窗口成立且不豁免,候选照常产出", () => {
     const ds = summarize([targetWithBinding(10, 16), discPriest("h1")]);

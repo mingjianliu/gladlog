@@ -916,5 +916,11 @@
  *  cast (buildCannotCastIntervals: hard CC, silences, kick lockouts, enemy
  *  pets included) instead of the seconds outside a [CC ON TEAM] instance.
  *  Only that number moves; slack lines and the menu are unchanged.
+ *  v307 (2026-10-06, triage missed-cleanse F-C1): a missed / late cleanse
+ *  window's post-CC damage (`[UNCLEANSED DEBUFF] … Nk taken`, missed-cleanse
+ *  `postCcDamageK`, the #39 consequence gate and the cap order) leaves out a
+ *  teammate's Spirit Link / Void Leech — the redistribution rule of the
+ *  pressure total (ruling A22 = B). A Critical window whose only damage was
+ *  redistribution demotes to High (the ruled zero-damage behaviour).
  */
-export const PROMPT_VERSION = 306;
+export const PROMPT_VERSION = 307;

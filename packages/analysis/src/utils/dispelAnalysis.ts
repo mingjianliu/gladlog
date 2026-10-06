@@ -31,6 +31,7 @@ import {
   empowerSpans,
 } from "./castCommitSpans";
 import { charmedThrough } from "./charmedPlayer";
+import { sumLandedPressure } from "./incomingPressure";
 import {
   applyCdTalentModifiers,
   chargeStateAt,
@@ -55,6 +56,7 @@ import {
 } from "./losAnalysis";
 import { DISPEL_MAX_RANGE_YARDS, LOS_SWEEP_GAP_MS } from "./positionSampling";
 import { fmtTime } from "./renderGrid";
+import { buildRosterSides } from "./rosterSide";
 import { roundEndMs } from "./roundEnd";
 import { spellRangeForCaster, spellReachForCaster } from "./spellRange";
 import { hasOffensivePurgeTalent } from "./talentBehaviors";
@@ -1254,7 +1256,8 @@ export interface IMissedCleanseWindow {
   spellId: string;
   priority: DispelPriority;
   dispelType: DispelType; // always set; null case is filtered before pushing
-  /** Damage the target took in the first POST_CC_PRESSURE_WINDOW_S seconds after CC was applied */
+  /** Damage the target took in the first POST_CC_PRESSURE_WINDOW_S seconds after CC was applied
+   * (`sumLandedPressure`: landed hits, same-side redistribution left out) */
   postCcDamage: number;
   /** BACKLOG #39 (user ruling A, 2026-08-25): true when this window's a-priori
    * tier said Critical but the measured consequence was zero (no damage in the
@@ -1528,7 +1531,11 @@ export function purgePriorityForTest(
  * field the corpus measurement used). Note it deliberately excludes absorbed
  * pressure for now — same basis as the 22/125 baseline; folding
  * incomingPressure in would change the ruling's evidence base and is a
- * separate call.
+ * separate call. Since triage missed-cleanse F-C1 (2026-10-06) the sum is
+ * `sumLandedPressure`: the same landed rows minus same-side redistribution
+ * (`REDISTRIBUTION_DAMAGE_IDS`, user ruling A22 = B) — a teammate's Void
+ * Leech is not a consequence of the missed dispel. The 22/125 baseline was
+ * measured on the unfiltered sum.
  */
 export function consequenceGatedPriority(
   priority: DispelPriority,
@@ -2439,6 +2446,15 @@ export function reconstructDispelSummary(
 ): IDispelSummary {
   const zoneId = combat.zoneId ?? combat.startInfo?.zoneId;
   const roundEnd = roundEndMs(combat);
+  // Whose side a damage row's source is on, for `postCcDamage`'s
+  // redistribution rule — the round's roster as every pressure reader builds
+  // it; the units this call was handed when the caller passed no roster.
+  const roundUnits = (
+    Array.isArray(combat.units) ? combat.units : Object.values(combat.units ?? {})
+  ) as ICombatUnit[];
+  const rosterSides = buildRosterSides(
+    roundUnits.length > 0 ? roundUnits : [...friends, ...enemies, ...friendlyPets, ...enemyPets],
+  );
   const friendlyIds = new Set(friends.map((u) => u.id));
   const enemyIds = new Set(enemies.map((u) => u.id));
   // B45: pets are also considered friendly sources; owner lookup is via ownerId
@@ -2874,13 +2890,7 @@ export function reconstructDispelSummary(
             }
             const windowDispelType = getDispelType(spellId) as DispelType;
             const windowEndMs = applyTs + POST_CC_PRESSURE_WINDOW_S * 1000;
-            const postCcDamage = unit.damageIn
-              .filter(
-                (d) =>
-                  d.logLine.timestamp >= applyTs &&
-                  d.logLine.timestamp <= windowEndMs,
-              )
-              .reduce((sum, d) => sum + Math.abs(d.effectiveAmount), 0);
+            const postCcDamage = sumLandedPressure(unit, applyTs, windowEndMs, rosterSides);
             const lateDied = targetDiedAround(unit, applyTs, removal.ts);
             const lateGate = consequenceGatedPriority(
               priority,
@@ -3043,13 +3053,7 @@ export function reconstructDispelSummary(
 
           // Measure post-CC pressure: damage taken in first POST_CC_PRESSURE_WINDOW_S seconds
           const windowEndMs = applyTs + POST_CC_PRESSURE_WINDOW_S * 1000;
-          const postCcDamage = unit.damageIn
-            .filter(
-              (d) =>
-                d.logLine.timestamp >= applyTs &&
-                d.logLine.timestamp <= windowEndMs,
-            )
-            .reduce((sum, d) => sum + Math.abs(d.effectiveAmount), 0);
+          const postCcDamage = sumLandedPressure(unit, applyTs, windowEndMs, rosterSides);
 
           let cleanseWasOnCD = false;
           let cdBurnedOn:

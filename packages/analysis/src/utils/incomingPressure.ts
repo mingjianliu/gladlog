@@ -180,6 +180,30 @@ export function sumIncomingPressure(
   return sum;
 }
 
+/**
+ * The landed share of [fromMs, toMs] — health the unit actually lost to hits
+ * (`damageIn`), without what a shield ate. Same list, so the same
+ * redistribution rule: a teammate's Void Leech or Spirit Link moving health
+ * onto the unit is not a hit it took. The reading of missed-cleanse's
+ * `postCcDamage` (triage missed-cleanse F-C1: 6062daf2's "18k taken" under
+ * Landslide was two Void Leech rows from the owner himself), which stays
+ * landed-only on purpose — BACKLOG #39's consequence baseline was measured
+ * on landed damage.
+ */
+export function sumLandedPressure(
+  unit: PressureUnit,
+  fromMs: number,
+  toMs: number,
+  sides?: RosterSides,
+): number {
+  let sum = 0;
+  for (const e of incomingPressureEvents(unit, sides)) {
+    if (e.isAbsorb || e.timestamp < fromMs || e.timestamp > toMs) continue;
+    sum += e.amount;
+  }
+  return sum;
+}
+
 /** The absorbed share of [fromMs, toMs] — what `damageIn` alone cannot see. */
 export function sumAbsorbedPressure(
   unit: PressureUnit,
