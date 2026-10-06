@@ -12,6 +12,7 @@ import {
 import spellIdLists, {
   ENEMY_ALLY_SAVE_IDS,
   ENEMY_AREA_SAVE_IDS,
+  ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS,
   ENEMY_IMMUNITY_SAVE_AURAS,
   ENEMY_REDIRECT_SAVE_IDS,
   ENEMY_SELF_SAVE_ONLY_IDS,
@@ -25,6 +26,7 @@ import {
   externalAuraOf,
   IMMUNITY_IDS,
   IMMUNITY_SAVE_AURA_NAMES,
+  immunityCountsWhenAlreadyUp,
   immunityLastsItsAura,
   isExternalSaveId,
   isImmunitySaveAura,
@@ -894,7 +896,7 @@ describe("Anti-Magic Shell routing and the school-limited save masks", () => {
     );
   });
 
-  it("an immunity lasts its aura only for a pct-100 table row or an aura with DB2's all-school immunity", () => {
+  it("an immunity lasts its aura for a pct-100 table row, an aura with DB2's all-school immunity, and Burrow / Vanish / Mass Invisibility (rulings U-KA3, U-KA3b)", () => {
     // table rows
     for (const id of ["642", "45438", BOP, SPELLWARDING])
       expect(immunityLastsItsAura(id), id).toBe(true);
@@ -903,12 +905,44 @@ describe("Anti-Magic Shell routing and the school-limited save masks", () => {
       expect(immunitySchoolMask(id), id).toBe(0x7f);
       expect(immunityLastsItsAura(id), id).toBe(true);
     }
-    // Burrow (mechanic immunities only), Vanish, Mass Invisibility, Cheat
-    // Death, Cauterize: the moment, not the aura
-    for (const id of ["409293", "11327", "414664", "45182", "87023"]) {
+    // Burrow and Vanish: user ruling U-KA3 (2026-10-06) — the unit cannot
+    // be attacked while the aura is up; a DoT already on it and area damage
+    // still land, and are not evidence against the immunity. Neither has a
+    // school immunity in DB2, so the signed list is what admits them.
+    // Mass Invisibility: U-KA3b, "和消失一样算免疫".
+    for (const id of ["409293", "11327", "414664"]) {
+      expect(isImmunitySaveAura(id), id).toBe(true);
+      expect(immunitySchoolMask(id) ?? 0, id).not.toBe(0x7f);
+      expect(ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS.has(id), id).toBe(true);
+      expect(immunityLastsItsAura(id), id).toBe(true);
+    }
+    // Cheat Death, Cauterize, Feign Death's Survival Tactics: the moment,
+    // not the aura (other-than-periodic damage lands through 7 / 10, 62 / 72
+    // and 1,135 / 1,474 of their auras)
+    for (const id of ["45182", "87023", "202748"]) {
       expect(isImmunitySaveAura(id), id).toBe(true);
       expect(immunityLastsItsAura(id), id).toBe(false);
     }
+    // the signed list never admits an aura the enemy-save predicate does not know
+    for (const id of ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS)
+      expect(id in ENEMY_IMMUNITY_SAVE_AURAS, id).toBe(true);
+  });
+
+  it("already-up immunities: the ruled-in stealth-kind auras count only when the log saw them end (ruling P-FU-b8)", () => {
+    const iv = (spellId: string, inferredEnd: boolean) => ({
+      spellId,
+      inferredEnd,
+    });
+    for (const id of ["409293", "11327", "414664"]) {
+      expect(immunityCountsWhenAlreadyUp(iv(id, false)), id).toBe(true);
+      // closed at the official length because the REMOVED was lost
+      expect(immunityCountsWhenAlreadyUp(iv(id, true)), id).toBe(false);
+    }
+    // a pct-100 table row and a DB2 all-school immunity keep the cap
+    for (const id of ["642", "45438", "378441"])
+      expect(immunityCountsWhenAlreadyUp(iv(id, true)), id).toBe(true);
+    // a 'moment' immunity never counts when already up
+    expect(immunityCountsWhenAlreadyUp(iv("87023", false))).toBe(false);
   });
 
   it("the absorb mask is the DB2 one (datagen), read through cd-hoarded's saveSchoolMask — no literal", () => {

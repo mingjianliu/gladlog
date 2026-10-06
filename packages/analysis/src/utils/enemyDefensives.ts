@@ -22,6 +22,7 @@ import spellIdListsData, {
   ENEMY_AREA_SAVE_IDS,
   ENEMY_IMMUNITY_EXTERNAL_CASTS,
   ENEMY_IMMUNITY_HEAL_PROCS,
+  ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS,
   ENEMY_IMMUNITY_SAVE_AURAS,
   ENEMY_REDIRECT_SAVE_IDS,
   ENEMY_SELF_SAVE_ONLY_IDS,
@@ -115,38 +116,74 @@ export function isImmunitySaveAura(spellId: string): boolean {
  * count an immunity that was "already up when the attempt began" only then.
  * True for
  *  - the pct-100 table rows (Divine Shield, Ice Block, Blessing of
- *    Protection …), and
+ *    Protection …),
  *  - an immunity-kind save whose own aura carries DB2's all-school
  *    SCHOOL_IMMUNITY (aura 39, mask 127 — `immunitySchoolMask`): Time Stop
- *    378441 and Guardian of the Forgotten Queen 228050.
+ *    378441 and Guardian of the Forgotten Queen 228050, and
+ *  - Burrow 409293, Vanish 11327 and Mass Invisibility 414664, by user
+ *    rulings U-KA3 / U-KA3b (2026-10-06, `ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS`):
+ *    the unit cannot be attacked while the aura is up; a DoT already on it,
+ *    area damage and a hit inside the aura's first second still land and are
+ *    no evidence against it.
  * The rest of the enemy-only aura list marks the MOMENT a unit could not be
- * killed, and its aura outlasts that moment. Corpus leg, the 605 S2 files
- * (fix-KA/immAuraProbe.ts, 2026-10-02 — damage that LANDED on the carrier
- * while the aura was up, 0.3 s after it went up to 0.1 s before it dropped):
+ * killed, and its aura outlasts that moment. Corpus leg, the 605 S2 files —
+ * damage on the carrier while the aura was up (0.3 s after it went up to
+ * 0.1 s before it dropped), any row (fix-KA/immAuraProbe.ts, 2026-10-02) and
+ * rows other than a periodic tick (fix-FU/immSplitRaw.py, 2026-10-06; an
+ * aura whose REMOVED the log lost is set aside there):
  *
- *   Divine Shield     408 auras, 0 with a landed hit      (table row)
- *   Ice Block         343,       1                         (table row)
- *   Time Stop          35,       1 (one 33k hit); 533 IMMUNE misses
- *   Forgotten Queen     2,       0;                53 IMMUNE misses
- *   Burrow             89,      80 (909 hits, 5.3M) — DB2 gives it mechanic
- *                                immunities only (root / snare), no school
- *   Vanish            533,     264
- *   Cauterize          72,      66
- *   Cheat Death        10,       7
- *   Mass Invisibility 691,     138 (median aura 0.6 s; on allies too)
+ *                      auras   any damage   other than a periodic tick
+ *   Divine Shield        408        0          0 (Blessing of Sacrifice's
+ *                                                 own split aside)
+ *   Ice Block            343        1          1 (Spirit Link)
+ *   Time Stop             35        1          1 (Spirit Link); 533 IMMUNE
+ *   Forgotten Queen        2        0          0;                53 IMMUNE
+ *   Burrow                89       80         16 — splash, procs, area
+ *   Vanish               533      264        123 of 462 — area damage and
+ *                                                 splinters, all ≤ 1.5 s in
+ *   Mass Invisibility    691      138         47 of 593, all ≤ 1.0 s in
+ *   Cauterize             72       66         62 — melee swings first
+ *   Cheat Death           10        7          7
+ *   Feign Death (202748) 1,474  1,328      1,135
  *
  * The first cut applied the rule to every immunity-kind aura: 334 attempts
  * became "forced a full immunity" on a target a stun had just landed on, 250
  * of them an enemy mage's opening Mass Invisibility (fix-KA/immcheck.py,
- * 2026-10-01). Needs the official spell facts loaded (`ensureAnalysisData`);
+ * 2026-10-01). U-KA3b rules Mass Invisibility in with that on the table. Needs the official spell facts loaded (`ensureAnalysisData`);
  * before that only the table rows answer true.
  */
 export function immunityLastsItsAura(spellId: string): boolean {
   if (IMMUNITY_IDS.has(spellId)) return true;
   return (
     IMMUNITY_SAVE_AURA_NAMES.has(spellId) &&
-    ((immunitySchoolMask(spellId) ?? 0) & ALL_SCHOOLS) === ALL_SCHOOLS
+    (ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS.has(spellId) ||
+      ((immunitySchoolMask(spellId) ?? 0) & ALL_SCHOOLS) === ALL_SCHOOLS)
   );
+}
+
+/**
+ * May an immunity that was ALREADY UP when a kill attempt began count as why
+ * it failed (KILL ATTEMPTS rule 2)? `immunityLastsItsAura`, and for the
+ * ruled-in stealth-kind auras (`ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS`: Burrow,
+ * Vanish, Mass Invisibility) only an aura the log SAW end — user ruling
+ * P-FU-b8 (2026-10-06, option C): "群体隐形只在光环被观测到仍在时算免疫,丢
+ * REMOVED 的不按 12 s 封顶".
+ *
+ * Why: a unit that goes unseen often takes its aura's REMOVED line with it,
+ * and `buildAuraIntervals` then closes the aura at its official length
+ * (`inferredEnd`). For Mass Invisibility that is 12 s, while a logged one on
+ * an ally ends within 0.6 s (median; an attack or a cast breaks it). Counted
+ * at the cap, the 605 S2 files turned 293 attempts into "forced a full
+ * immunity [up since …]", 233 of them rows that count stuns which LANDED on
+ * the "immune" target. One rule for the three ruled-in auras: they are the
+ * ones whose carrier goes unseen. A pct-100 table row or a DB2 all-school
+ * immunity keeps the cap, as before.
+ */
+export function immunityCountsWhenAlreadyUp(
+  iv: Pick<IAuraInterval, "spellId" | "inferredEnd">,
+): boolean {
+  if (!immunityLastsItsAura(iv.spellId)) return false;
+  return !(ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS.has(iv.spellId) && iv.inferredEnd);
 }
 
 /** The unit's immunity-kind saves that leave no aura — a heal proc on itself

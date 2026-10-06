@@ -948,5 +948,14 @@
  *  holding one counts as able to break a stun. Divine Shield and Ice Block
  *  are never listed after `cheaper available:` (ruling P-FU-b7-DS, the
  *  cost-norm sign-off book). Counts in the commit.
+ *  v312 (2026-10-06, user rulings U-KA3 / U-KA3b): a kill attempt that began
+ *  with the target already burrowed, vanished or under Mass Invisibility
+ *  reads `forced a full immunity [up since m:ss]`, as it does for a Divine
+ *  Shield that was already up — the three hold while their aura is up (a
+ *  DoT already on the unit, area damage and a hit in the aura's first second
+ *  still land, and are no evidence against it) — and only an aura the log
+ *  saw end counts: one closed at its official length because its REMOVED
+ *  was lost does not (ruling P-FU-b8). Cauterize, Cheat Death and Feign
+ *  Death stay a moment. Counts in the commit.
  */
-export const PROMPT_VERSION = 311;
+export const PROMPT_VERSION = 312;

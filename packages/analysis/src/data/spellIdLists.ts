@@ -269,6 +269,56 @@ export const ENEMY_IMMUNITY_SAVE_AURAS: Readonly<Record<string, string>> = {
   "228050": "Guardian of the Forgotten Queen", // 2 — applied by the summoned guardian, see the cast map below
 };
 
+/**
+ * The `ENEMY_IMMUNITY_SAVE_AURAS` whose immunity holds for as long as the
+ * aura is up, by user ruling U-KA3 (2026-10-06): "遁地 / 消失算免疫;但期间
+ * 残留的 DoT 仍可命中 —— 免疫只挡直接伤害,判定「有伤害打进来」时排除持续
+ * 伤害跳", and U-KA3b the same day: "群体隐形和消失一样算免疫:允许残留持续
+ * 伤害与开启头 1 s 的伤害". KILL ATTEMPTS may count one of these when it was
+ * already up as the attempt began (`immunityLastsItsAura`), as it does a
+ * pct-100 table row.
+ *
+ * The 2026-10-02 count that kept them out ("Burrow 80 of 89 auras with damage
+ * landing, Vanish 264 of 533") did not tell a DoT tick from a hit, and paired
+ * 71 Vanish applications whose REMOVED the log lost with a later removal.
+ * Re-measured on the same 605 S2 files (`fix-FU/immSplitRaw.py`; hostile
+ * damage on the carrier from 0.3 s after the aura went up to 0.1 s before it
+ * dropped):
+ *
+ *   Burrow   89 auras: 78 with a periodic tick, 16 with any other damage row
+ *            (60 rows — Caustic Spatter, Nimble Flurry, Frost Splinter,
+ *            Starfall: splash, procs and area damage), 8 past the first second
+ *   Vanish  462 auras of ≤ 3.5 s: 205 with a periodic tick, 123 with any other
+ *            damage row (273 rows, every one in the first 1.5 s — Consecration,
+ *            Frost / Arcane Splinter, Sun's Avatar, Bladestorm, Frozen Orb,
+ *            Death and Decay: area damage and embedded splinters), 42 past the
+ *            first second
+ *   Mass Invisibility  593 auras of ≤ 6.5 s (median 0.6 s; on the mage and on
+ *            allies): 99 with a periodic tick, 47 with any other damage row
+ *            (60 rows — Ruptured Viscera, Consecration, Fists of Fury), none
+ *            past the first second
+ *
+ * What lands is what is already on the unit or covers the ground it stands
+ * on; nothing aimed at it does. The evidence standard of the two rulings: a
+ * periodic tick, and damage inside the first second after the aura went up
+ * (already in flight), do not deny the immunity.
+ *
+ * Mass Invisibility was first kept out on other evidence — applied to it,
+ * the 2026-10-01 first cut called 250 opening Mass Invisibilities "forced a
+ * full immunity" on a target a stun had just landed on (`fix-KA/immcheck.py`)
+ * — and U-KA3b rules it in with that known. The rest of ruling A25's list
+ * stays a MOMENT: Cauterize (62 of 72 auras take other-than-periodic damage,
+ * melee swings first, 47 past the first second), Cheat Death (7 of 10) and
+ * Feign Death's Survival Tactics (1,135 of 1,474) are hit through. Time Stop
+ * and Guardian of the Forgotten Queen need no row: DB2 gives their auras an
+ * all-school immunity.
+ */
+export const ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS: ReadonlySet<string> = new Set([
+  "409293", // Burrow
+  "11327", // Vanish
+  "414664", // Mass Invisibility (U-KA3b)
+]);
+
 /** An immunity that leaves no aura: the save is a SPELL_HEAL of this id on the
  * unit itself. Nature's Guardian — 306 heals in 107 files, no cast, no aura. */
 export const ENEMY_IMMUNITY_HEAL_PROCS: Readonly<Record<string, string>> = {

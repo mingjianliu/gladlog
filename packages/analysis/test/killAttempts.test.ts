@@ -1126,20 +1126,70 @@ describe("attributeFailure — windows, bound trinket, school gates", () => {
     expect(formatKillAttemptsForContext([bop]).join("\n")).toContain(
       "FAILED: forced a full immunity [up since 0:04] (a win — re-open after it drops)",
     );
-    // Mass Invisibility (aura 414664) from the enemy mage's opener is still
-    // "up" on his ally when the stun lands on that ally 6 s later.
+    // Mass Invisibility (aura 414664) counts exactly like Vanish (user ruling
+    // U-KA3b, 2026-10-06): up on the target as the attempt began, it is why
+    // the attempt failed. Until then it was a 'moment' immunity and this
+    // attempt read "pressure".
     const massInvis = run(
       stunned({
         auraEvents: [
           ...stunAuras("e1", KIDNEY, 10, 5),
-          ...up(MASS_INVISIBILITY, "e2", "e1", 4, 16),
+          ...up(MASS_INVISIBILITY, "e2", "e1", 9.5, 10.4),
         ],
       }),
     );
-    expect(massInvis.attribution?.immunityBaited).toBe(false);
-    expect(massInvis.attribution?.primary).toBe("pressure");
-    // Burrow's aura is no all-school immunity in DB2, and damage lands
-    // through it (605 files: 80 of 89 auras) — up at the start it is nothing
+    expect(massInvis.attribution?.primary).toBe("immunity-baited");
+    expect(massInvis.attribution?.immunityUpSinceS).toBeCloseTo(9.5, 6);
+    // …and gone before the attempt began, it is nothing
+    const massInvisOver = run(
+      stunned({
+        auraEvents: [
+          ...stunAuras("e1", KIDNEY, 10, 5),
+          ...up(MASS_INVISIBILITY, "e2", "e1", 4, 4.6),
+        ],
+      }),
+    );
+    expect(massInvisOver.attribution?.immunityBaited).toBe(false);
+    // User ruling P-FU-b8 (option C): only an aura the log SAW end. A Mass
+    // Invisibility whose REMOVED was never logged is closed at its official
+    // 12 s by the interval builder (`inferredEnd`) — "up" at the attempt's
+    // start by that cap alone, with a stun landing on the target.
+    const massInvisUnseen = run(
+      stunned({
+        auraEvents: [
+          ...stunAuras("e1", KIDNEY, 10, 5),
+          auraEv(MASS_INVISIBILITY, "e2", "e1", 4, LogEvent.SPELL_AURA_APPLIED),
+        ],
+      }),
+    );
+    expect(massInvisUnseen.attribution?.immunityBaited).toBe(false);
+    // the same for Vanish and Burrow: one rule for the ruled-in auras
+    for (const id of ["11327", BURROW]) {
+      const unseen = run(
+        stunned({
+          auraEvents: [
+            ...stunAuras("e1", KIDNEY, 10, 5),
+            auraEv(id, "e1", "e1", 9, LogEvent.SPELL_AURA_APPLIED),
+          ],
+        }),
+      );
+      expect(unseen.attribution?.immunityBaited, id).toBe(false);
+    }
+    // a pct-100 table row keeps the cap: a Divine Shield with no logged
+    // REMOVED is still why the attempt failed
+    const shieldUnseen = run(
+      stunned({
+        auraEvents: [
+          ...stunAuras("e1", KIDNEY, 10, 5),
+          auraEv(DIVINE_SHIELD, "e1", "e1", 8, LogEvent.SPELL_AURA_APPLIED),
+        ],
+      }),
+    );
+    expect(shieldUnseen.attribution?.primary).toBe("immunity-baited");
+    // Burrow (user ruling U-KA3, 2026-10-06): the unit cannot be attacked
+    // while it is burrowed — up at the start, it is why the attempt failed.
+    // What lands through it is a DoT already ticking and area damage (605
+    // files: 78 of 89 auras take a periodic tick, 16 any other damage row).
     const burrow = run(
       stunned({
         auraEvents: [
@@ -1148,7 +1198,29 @@ describe("attributeFailure — windows, bound trinket, school gates", () => {
         ],
       }),
     );
-    expect(burrow.attribution?.immunityBaited).toBe(false);
+    expect(burrow.attribution?.primary).toBe("immunity-baited");
+    expect(burrow.attribution?.immunityUpSinceS).toBeCloseTo(9, 6);
+    // Vanish, the same ruling: the aura 11327 up as the attempt began
+    const vanish = run(
+      stunned({
+        auraEvents: [
+          ...stunAuras("e1", KIDNEY, 10, 5),
+          ...up("11327", "e1", "e1", 9.4, 10.9),
+        ],
+      }),
+    );
+    expect(vanish.attribution?.primary).toBe("immunity-baited");
+    expect(vanish.attribution?.immunityUpSinceS).toBeCloseTo(9.4, 6);
+    // Cauterize's aura lingers 6 s after the hit it refused — still a moment
+    const cauterize = run(
+      stunned({
+        auraEvents: [
+          ...stunAuras("e1", KIDNEY, 10, 5),
+          ...up("87023", "e1", "e1", 8, 14),
+        ],
+      }),
+    );
+    expect(cauterize.attribution?.immunityBaited).toBe(false);
     // Time Stop's aura IS the immunity (DB2 aura 39, every school): thrown
     // on the target before the attempt, it is why the attempt failed
     const timeStop = run(

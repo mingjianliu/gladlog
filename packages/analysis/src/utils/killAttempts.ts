@@ -87,7 +87,7 @@ import {
   enemyDefensiveEvents,
   externalAuraOf,
   type IEnemyDefensiveEvent,
-  immunityLastsItsAura,
+  immunityCountsWhenAlreadyUp,
   immunityProcHeals,
   type ISaveAuraInterval,
   isImmunitySaveAura,
@@ -1110,13 +1110,15 @@ function attributeFailure(
     const bySelf = isIntervalFrom(iv, target);
     // An immunity that went up inside the credit window, or (rule 2) one
     // that was already up when the attempt began — the second only when the
-    // aura IS the immunity (`immunityLastsItsAura`): Mass Invisibility on a
-    // mage's ally, Feign Death or Cauterize are still "up" long after the
-    // moment they saved anyone, and a stun landing on the target shows it.
+    // aura IS the immunity (`immunityCountsWhenAlreadyUp`): Feign Death or
+    // Cauterize are still "up" long after the moment they saved anyone, and
+    // a Mass Invisibility / Vanish / Burrow whose REMOVED the log lost is
+    // "up" only by the official-length cap (ruling P-FU-b8) — a stun landing
+    // on the target shows it.
     const immunityInSpan = inCredit(startMs);
     if (
       isImmunitySaveAura(iv.spellId) &&
-      (immunityInSpan || (upAtStart && immunityLastsItsAura(iv.spellId))) &&
+      (immunityInSpan || (upAtStart && immunityCountsWhenAlreadyUp(iv))) &&
       immunityCovers(iv.spellId)
     ) {
       immunityBaited = true;

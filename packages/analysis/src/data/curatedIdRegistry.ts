@@ -201,6 +201,7 @@ import spellIdLists, {
   ENEMY_ALLY_SAVE_IDS,
   ENEMY_IMMUNITY_EXTERNAL_CASTS,
   ENEMY_IMMUNITY_HEAL_PROCS,
+  ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS,
   ENEMY_IMMUNITY_SAVE_AURAS,
   ENEMY_REDIRECT_SAVE_IDS,
   ENEMY_SELF_SAVE_ONLY_IDS,
@@ -310,6 +311,13 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
     "data/spellIdLists.ts",
     "aura",
     () => keys(ENEMY_IMMUNITY_SAVE_AURAS),
+  ),
+  // user ruling U-KA3: the immunity-kind auras that hold while they are up
+  t(
+    "spellIdLists.ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS",
+    "data/spellIdLists.ts",
+    "aura",
+    () => set(ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS),
   ),
   t(
     "spellIdLists.ENEMY_IMMUNITY_HEAL_PROCS",
