@@ -6,11 +6,15 @@
  *  null = not locked yet. Loosening any value requires the reason to go into
  *  the commit message.
  *
- *  Three consumers: parse      → packages/parser/test/parseBudget.test.ts
- *                   firstPaint → packages/desktop/qa/visual/firstPaint.spec.ts
- *                   coldStart  → packages/desktop/qa/e2e/import.spec.ts
+ *  Consumers: parse           → packages/parser/test/parseBudget.test.ts
+ *             firstPaint      → packages/desktop/qa/visual/firstPaint.spec.ts
+ *             firstPaintRatio → packages/desktop/qa/visual/firstPaint.spec.ts
+ *             coldStart       → packages/desktop/qa/e2e/import.spec.ts
  *
- *  Why all three budgets live in one place: they are one family of constants
+ *  Every entry is milliseconds except firstPaintRatio, which is a
+ *  dimensionless ratio of two same-run millisecond floors (see its comment).
+ *
+ *  Why all the budgets live in one place: they are one family of constants
  *  under one strategy, so the predicate is single-source — spread across their
  *  own packages, a strategy change would inevitably miss one. This file
  *  deliberately has zero imports so the parser's test process can consume it
@@ -19,6 +23,8 @@
 export const BUDGET_MS: {
   parse: number | null;
   firstPaint: number | null;
+  /** Dimensionless — NOT milliseconds. */
+  firstPaintRatio: number | null;
   coldStart: number | null;
 } = {
   // Basis for the lock: 3 CI samples taken on ubuntu-latest on 2026-07-19,
@@ -90,8 +96,65 @@ export const BUDGET_MS: {
   //
   // 如果 6,400 之后又开始假红,下一步**不是**继续抬门,而是把指标改成同一次运行
   // 内的**相对量**(轻场景 vs 重场景之比),那才能真正把 runner 速度约掉。
+  //
+  // 2026-10-06: that next step, taken. firstPaint 6400 → 12800 (now only an
+  // absolute backstop) + new firstPaintRatio (the regular gate once locked;
+  // MEASURE-ONLY for now — user ruling 2026-10-06, see below).
+  //
+  // Why 6400 stopped working: the same-code floor population on ubuntu-latest
+  // widened again — 40 consecutive frontend-qa runs (2026-10-01 → 10-06) span
+  // 3,011–6,994 ms (2.32×), and 2026-10-06 alone went red twice at 6,763 /
+  // 7,317 next to a 3,878 on a neighbouring commit. Over the same 40 runs the
+  // light `settings` scene's whole-test duration moved 2.3 → 4.0 s and
+  // correlates with the floor at r = 0.79: the runner, not the code. A fixed
+  // millisecond line cannot separate a 2× runner from a 2× regression, so
+  // re-locking it a fourth time would only buy the same failure later.
+  //
+  // firstPaintRatio = min(heavy) / min(control), both measured in the SAME
+  // test, interleaved reload by reload, so both floors see the same runner
+  // state and the runner's speed divides out. Control = `report-battle`: the
+  // same real fixture at 1× through the same report view, waited on the same
+  // `rpt-timeline` anchor; heavy = that fixture ×12 (`report-heavy`). What the
+  // ratio measures is "how much more the report costs at 12× the data" —
+  // exactly the class an accidental O(n²) in a derive lands in.
+  //
+  // PROVISIONAL lock, local samples only (one Mac, system Chrome, vite
+  // preview, 5 interleaved pairs per run; 2026-10-06):
+  //   this spec, 7 runs:   4.145 4.185 4.058 4.145 4.040 4.172 4.199
+  //   standalone mirror, 6: 4.259 4.363 4.354 4.398 4.364 4.414
+  // (the mirror skips the test runner, so its control floor is ~1.06 s
+  // against the spec's ~1.20 s). This file's single-sample rule over the
+  // max of both, rounded up to 0.1: 4.414 × 1.5 = 6.62 → 6.7 would be the
+  // local candidate, but it is NOT applied: user ruling 2026-10-06 = measure
+  // only (null) until CI data exists, per this file's measure-then-lock rule.
+  // **Lock from CI** once the
+  // `[budget] firstPaintRatio=` lines of ≥ 10 ubuntu-latest runs exist — the
+  // CI ratio level is unknown (no CI log has ever recorded a control floor),
+  // and a CPU-throttled local run (DevTools Emulation, renderer main thread
+  // only) reads 6.54 at 1.6× / 7.56 at 2×, because ~70% of the control's
+  // ~1.05 s is not main-thread script and does not slow down with it. Real
+  // runners slow down every thread, which is what the settings-scene
+  // correlation above says, but only CI samples can show the band.
+  //
+  // What each line now catches, and what it does not:
+  //   - ratio: anything that scales with the data. A temporarily injected
+  //     O(n²) over advancedSamples in deriveTimeline (control floor unmoved,
+  //     heavy +5 s) read 8.08 in this spec and failed it; at half that
+  //     strength (heavy +2.5 s, +53%) the mirror read 6.69 — just under the
+  //     line, which is where a ×1.5 headroom puts the edge.
+  //   - firstPaint 12800 (= 2 × the old lock): a fixed per-load cost — a big
+  //     blob at module top level, the 13.8 MB SpellMisc icon table of
+  //     2026-07-25, the historical 22 s object literal — raises heavy AND
+  //     control alike, so the ratio is blind to it BY CONSTRUCTION; only the
+  //     absolute floor sees it. 12800 is 1.75× the slowest same-code floor
+  //     ever logged (7,317) and still trips the 22 s regression 1.7×. It
+  //     does NOT catch a +50% fixed-cost regression like the icon table any
+  //     more — nothing measured in absolute ms can on a runner population
+  //     that itself spans 2.3×; catching that class needs its own same-run
+  //     normaliser (a CPU-calibration workload), which is not built.
   parse: 4900,
-  firstPaint: 6400,
+  firstPaint: 12800,
+  firstPaintRatio: null, // measure-only until ≥ 10 CI samples (ruling 2026-10-06)
   coldStart: 2600,
 };
 
@@ -100,4 +163,14 @@ export const BUDGET_MS: {
 export function reportBudget(name: string, ms: number, samples: number): void {
   // eslint-disable-next-line no-console
   console.log(`[budget] ${name}=${ms.toFixed(0)}ms n=${samples}`);
+}
+
+/** Same format family for a dimensionless budget (firstPaintRatio). */
+export function reportBudgetRatio(
+  name: string,
+  ratio: number,
+  samples: number,
+): void {
+  // eslint-disable-next-line no-console
+  console.log(`[budget] ${name}=${ratio.toFixed(3)} n=${samples}`);
 }

@@ -109,6 +109,11 @@ for f in /tmp/bl/scenes.spec.ts/*.png; do n=$(basename $f);   cmp -s "$f" packag
 - 真要抬门,合法路径是**用记录下来的 floor 分布重锁**(从 CI 日志的
   `[budget] firstPaint samples=` 逐条抓最小值,给出样本量与分位数,并说明 headroom
   倍率为何是这个数),不是拍一个能过的数;
+- 2026-10-06 起常规门是**同次运行内的比值** `firstPaintRatio = min(heavy)/min(report-battle)`,
+  毫秒值 `firstPaint` 只剩数量级兜底(12800)。比值红 = 随数据量放大的那部分变慢了(derive 里的
+  O(n²) 之类),不是 runner 慢;重锁比值用 CI 日志的 `[budget] firstPaintRatio=` 行。
+  **比值对固定成本回归(模块顶层大块数据、大表)天生是瞎的** —— 两个场景一起变慢;新增大表仍须自己
+  实测首渲,别指望这条门替你拦;
 - 反过来,判断一个改动对首屏是好是坏也只能实测多轮取分布:2026-08-22 的动态载入把
   主 chunk 从 3,494 降到 3,135 kB,firstPaint 反而更差,已回滚(`50b50001`)。
 
