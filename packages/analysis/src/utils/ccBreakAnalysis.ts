@@ -6,6 +6,7 @@ import {
   OPPRESSING_ROAR_SPELL_ID,
 } from "../data/spellEffectData";
 import { SPELL_CATEGORIES } from "../data/spellCategories";
+import { dropAuraRebroadcasts } from "./auraIntervals";
 import { ccFullDurationForCaster } from "./ccDuration";
 import {
   buildCcCategoryHistory,
@@ -194,7 +195,8 @@ export function analyzeCcBreaks(
     // stream so the remaining-duration estimate uses the lengthened base.
     let roarActive = false;
 
-    for (const aura of holder.auraEvents) {
+    // cc-dr F-RB1: a same-ms re-broadcast is not a break and a new CC
+    for (const aura of dropAuraRebroadcasts(holder.auraEvents)) {
       const spellId = aura.spellId;
       if (!spellId) continue;
       const ev = aura.logLine.event;

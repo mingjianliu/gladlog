@@ -98,7 +98,7 @@ const OPEN_EVENTS = new Set<string>([
  * aura had it truncated (SW:P capped at 16 s instead of 20 s on 4,162
  * intervals). Passing no `castersById` keeps the previous no-caster answer.
  */
-function officialDurationS(
+export function officialDurationS(
   spellId: string,
   caster:
     | (Pick<ICombatUnit, "spec" | "info" | "spellCastEvents"> &

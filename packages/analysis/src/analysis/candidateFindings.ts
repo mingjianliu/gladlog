@@ -2982,6 +2982,7 @@ function teamPlayEvents(
                 null,
               enemyDeathS,
               ref: lookupSyncWindowPrior(combat?.startInfo?.bracket ?? ""),
+              ownerId: owner?.id,
             }),
           );
         }

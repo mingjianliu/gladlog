@@ -28,6 +28,7 @@ import { effectAurasOfCast } from "../data/castEffectAuras";
 import { spellClassMap } from "../data/drCategories";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { ccSpellIds } from "../data/spellTags";
+import { dropAuraRebroadcasts, officialDurationS } from "./auraIntervals";
 import { specToString } from "./cooldowns";
 import { summonOwnerById } from "./summonOwner";
 
@@ -297,7 +298,9 @@ export function buildCcCategoryHistory(
 }> {
   const appliesBySpell = new Map<string, number[]>();
   const removesBySpell = new Map<string, number[]>();
-  for (const aura of unit.auraEvents) {
+  // a same-ms REMOVED→APPLIED re-broadcast is one application, not two DR
+  // steps (cc-dr F-RB1, ruling A50 = A: the shared `dropAuraRebroadcasts`)
+  for (const aura of dropAuraRebroadcasts(unit.auraEvents)) {
     const sid = aura.spellId;
     if (!sid || !srcUnitIds.has(aura.srcUnitId)) continue;
     if (getDRCategory(sid) !== category) continue;
@@ -667,7 +670,12 @@ export function analyzeOutgoingCCChains(
         });
       };
 
-      for (const aura of enemy.auraEvents) {
+      // cc-dr F-RB1 (ruling A50 = A): a same-ms REMOVED→APPLIED re-broadcast
+      // of one cast is one application — the shared `dropAuraRebroadcasts`
+      // every aura consumer filters through. Counted as two, it gave a landed
+      // CC `[DR: … Immune]` and KILL ATTEMPTS an extra stun (bd790c92 R:557,
+      // 4446729d R:311 `2 stuns` → `1 stun`).
+      for (const aura of dropAuraRebroadcasts(enemy.auraEvents)) {
         const { spellId } = aura;
         if (!spellId || !ccSpellIds.has(spellId)) continue;
         const event = aura.logLine.event;
@@ -714,9 +722,27 @@ export function analyzeOutgoingCCChains(
         }
       }
 
-      // Close any still-pending CCs at match end
+      // Close any still-pending CCs at match end — capped at the CC's
+      // official length (crisis-external F-K5: the cap `buildAuraIntervals`
+      // applies, `officialDurationS`). Closed at the round end, one Chastise
+      // lasted 98.87 s and glued four stuns across 100 s into one kill
+      // attempt (69546267). A capped close has no logged cause.
       for (const key of Array.from(pending.keys())) {
-        closePending(key, combat.endTime);
+        const p = pending.get(key)!;
+        const caster =
+          friendlies.find((f) => f.id === p.srcId) ??
+          allUnits.find((u) => u.id === p.srcId);
+        const officialS = officialDurationS(
+          key.split(":")[0] ?? "",
+          caster,
+          p.applyMs,
+        );
+        closePending(
+          key,
+          officialS === null
+            ? combat.endTime
+            : Math.min(combat.endTime, p.applyMs + officialS * 1000),
+        );
       }
 
       applications.sort((a, b) => a.atSeconds - b.atSeconds);

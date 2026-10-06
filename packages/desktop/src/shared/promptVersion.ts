@@ -893,5 +893,11 @@
  *  (extractMajorCooldowns returns it on request only); cd-hoarded's ready set
  *  drops a save Forbearance blocks on its recipient and Touch of Karma with
  *  no living enemy in reach.
+ *  v303 (2026-10-06, triage G2: cc-dr F-RB1, crisis-external F-K5,
+ *  sync-burst F-S3): an outgoing CC re-broadcast in the same millisecond is
+ *  one application (DR tags, KILL ATTEMPTS stun counts, [CC BROKEN]); a CC
+ *  never removed ends at its official length, not the round end; a
+ *  missed-sync-window line says what ended the healer's lock early
+ *  (`endedBy`), with one legend sentence.
  */
-export const PROMPT_VERSION = 302;
+export const PROMPT_VERSION = 303;

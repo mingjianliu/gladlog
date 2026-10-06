@@ -41,8 +41,15 @@ import {
 import {
   analyzeOutgoingCCChains,
   DR_CATEGORY_MAP,
+  drDurationFactor,
   type DRLevel,
 } from "../../utils/drAnalysis";
+import { ccFullDurationForCaster } from "../../utils/ccDuration";
+import {
+  ccRemovalCause,
+  formatCcRemovalCause,
+  type ICcRemovalCause,
+} from "../../utils/ccTrinketAnalysis";
 import {
   type ActWindowState,
   buildCannotCastIntervals,
@@ -103,6 +110,9 @@ export interface IEnemyHealerCcWindow {
   spellId: string;
   healerName: string;
   drLevel?: DRLevel;
+  /** what ended the lock, when the log says (`ccRemovalCause`; sync-burst
+   * F-S3) — a CC that ran out or was capped at the round end has none */
+  endedBy?: ICcRemovalCause;
 }
 
 /**
@@ -137,9 +147,30 @@ export function enemyHealerCcWindows(
   const out: IEnemyHealerCcWindow[] = [];
   for (const chain of analyzeOutgoingCCChains(friends, enemies, combat)) {
     if (!healerNames.has(chain.targetName)) continue;
+    const healer = enemies.find((e) => e.name === chain.targetName);
     for (const app of chain.applications) {
       if (!HARD_CC_CATEGORIES.has(app.drInfo.category)) continue;
       if (app.drInfo.level === "Immune") continue;
+      const applyMs = Math.round(combat.startTime + app.atSeconds * 1000);
+      // the official length at its DR step, as `[CC ON ENEMY] broke out`
+      // reads it: a CC that ran its course was not ended by a press
+      const full = ccFullDurationForCaster(
+        app.spellId,
+        friends.find((f) => f.name === app.casterName),
+      );
+      const endedBy = healer
+        ? ccRemovalCause(
+            healer,
+            app.spellId,
+            applyMs,
+            Math.round(
+              combat.startTime + (app.atSeconds + app.durationSeconds) * 1000,
+            ),
+            full === undefined
+              ? undefined
+              : applyMs + full * drDurationFactor(app.drInfo.level) * 1000,
+          )
+        : undefined;
       out.push({
         fromSeconds: app.atSeconds,
         toSeconds: app.atSeconds + app.durationSeconds,
@@ -147,6 +178,7 @@ export function enemyHealerCcWindows(
         spellId: app.spellId,
         healerName: chain.targetName,
         drLevel: app.drInfo.level,
+        ...(endedBy ? { endedBy } : {}),
       });
     }
   }
@@ -290,6 +322,7 @@ export function mergeHealerCcWindows<
     | "spellId"
     | "healerName"
     | "drLevel"
+    | "endedBy"
   >,
 >(windows: readonly W[]): Array<W & { componentStartsSeconds: number[] }> {
   const out: Array<W & { componentStartsSeconds: number[] }> = [];
@@ -306,7 +339,14 @@ export function mergeHealerCcWindows<
     let starts: number[] = [];
     for (const w of sorted) {
       if (cur && w.fromSeconds <= cur.toSeconds) {
+        // the chain ends where its last-ending component ends, and so does
+        // what ended it (sync-burst F-S3: "the last component's removal")
+        const extends_ = w.toSeconds >= cur.toSeconds;
         cur = { ...cur, toSeconds: Math.max(cur.toSeconds, w.toSeconds) };
+        if (extends_) {
+          if (w.endedBy) cur.endedBy = w.endedBy;
+          else delete cur.endedBy;
+        }
         if (names[names.length - 1] !== w.spellName) names.push(w.spellName);
         starts.push(w.fromSeconds);
         continue;
@@ -693,6 +733,7 @@ export function missedSyncWindowEvents(
     | "spellId"
     | "healerName"
     | "drLevel"
+    | "endedBy"
   >[],
   offensiveCds: SyncWindowCd[],
   probes: {
@@ -704,6 +745,9 @@ export function missedSyncWindowEvents(
     enemyMinHpUnitAt?: (fromSeconds: number, toSeconds: number) => string | null;
     /** seconds (match-relative) of every enemy deathRecord. */
     enemyDeathS: number[];
+    /** the log owner's unit id — an `endedBy` breaker that is the owner
+     * reads "you"; optional (absent, the breaker is named). */
+    ownerId?: string;
     /** The bracket's reference cell, or null when the bracket has no cell,
      * misses the n floor, or fails the min-contrast door — null silences
      * the type for the whole round (the resurrection's bracket gate). */
@@ -816,6 +860,11 @@ export function missedSyncWindowEvents(
           // the same held CDs through later healer locks (rendered seconds,
           // "、"-joined — a ", " would cut the facts value)
           ...(alsoHeld.length ? { alsoHeldAt: alsoHeld.join("、") } : {}),
+          // sync-burst F-S3: what ended the lock, only when the log says —
+          // a lock your own team's damage cut short is its own lesson
+          ...(w.endedBy
+            ? { endedBy: formatCcRemovalCause(w.endedBy, probes.ownerId) }
+            : {}),
           // Corpus reference (syncWindowPrior.ts) — the gate
           // (checkSyncWindowRefConsistency) redoes the lookup from cellKey
           // and re-checks every one of these numbers plus the door.

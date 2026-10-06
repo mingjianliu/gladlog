@@ -2303,7 +2303,7 @@ export function wasRemovedByAllyDispel(
 
 /** The 50 ms SPELL_DISPEL ↔ SPELL_AURA_REMOVED pairing tolerance (see B11
  * above), shared by both removal matchers. */
-const ALLY_DISPEL_MATCH_TOLERANCE_S = 0.05;
+export const ALLY_DISPEL_MATCH_TOLERANCE_S = 0.05;
 
 /**
  * One cleanse press removing several debuffs logs one SPELL_DISPEL per

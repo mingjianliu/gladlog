@@ -56,6 +56,7 @@ import {
   IDRInfo,
   matchPendingCcKey,
 } from "./drAnalysis";
+import { ALLY_DISPEL_MATCH_TOLERANCE_S } from "./dispelAnalysis";
 import { IMMUNITY_IDS } from "./enemyDefensives";
 import {
   interruptCooldownRemainingMs,
@@ -1143,6 +1144,120 @@ export function breakAbilityPresses(
     if (castId) out.push({ ts: a.logLine.timestamp, spellId: castId });
   }
   return out.sort((x, y) => x.ts - y.ts);
+}
+
+/** What ended a CC application, when the log says (sync-burst F-S3). */
+export interface ICcRemovalCause {
+  /** broken = a damage event (`SPELL_AURA_BROKEN[_SPELL]`, its source the
+   * breaker); trinket / break = the holder's own press at the removal;
+   * dispel = a `SPELL_DISPEL` of this aura on the holder */
+  kind: "broken" | "trinket" | "break" | "dispel";
+  spellName: string;
+  byUnitId?: string;
+  byName?: string;
+}
+
+/**
+ * Why a CC on `holder` that was removed at `removeMs` ended — only from a
+ * logged cause, else undefined (a CC that ran out, or one closed at the
+ * round end, has none). In order: the removal event itself is a break
+ * (`SPELL_AURA_BROKEN_SPELL`: its source is the breaker and its extra spell
+ * the breaking spell — 141470d0's Polymorph broken by the owner's Fire
+ * Breath; `SPELL_AURA_BROKEN`: a melee swing); the holder's own PvP trinket
+ * or CC-break press that ended it (`castEndedCcWindow`, and `breakRemovesCc`
+ * for a break other than the trinket — the predicates the [CC ON TEAM] /
+ * [ENEMY TRINKET] lines use; a break press needs the CC cut short of
+ * `officialEndMs`, as the [CC ON ENEMY] break line does); a `SPELL_DISPEL` of
+ * this aura on the holder within the dispel pairing tolerance
+ * (`ALLY_DISPEL_MATCH_TOLERANCE_S`).
+ */
+export function ccRemovalCause(
+  holder: ICombatUnit,
+  spellId: string,
+  applyMs: number,
+  removeMs: number,
+  /** the CC's official end at its DR step; unknown → no claim either way */
+  officialEndMs?: number,
+): ICcRemovalCause | undefined {
+  for (const a of holder.auraEvents ?? []) {
+    if (a.spellId !== spellId || a.logLine.timestamp !== removeMs) continue;
+    const ev = a.logLine.event as string;
+    if (ev === LogEvent.SPELL_AURA_BROKEN_SPELL) {
+      const params = a.logLine.parameters ?? [];
+      const id = params[11] === undefined ? "" : String(params[11]);
+      const name = typeof params[12] === "string" ? params[12] : "";
+      if (!id && !name) return undefined;
+      return {
+        kind: "broken",
+        spellName: getEnglishSpellName(id, name),
+        byUnitId: a.srcUnitId,
+        byName: a.srcUnitName,
+      };
+    }
+    if (ev === LogEvent.SPELL_AURA_BROKEN)
+      return {
+        kind: "broken",
+        spellName: "Melee",
+        byUnitId: a.srcUnitId,
+        byName: a.srcUnitName,
+      };
+  }
+  const window = { applyMs, removeMs };
+  const trinket = pvpTrinketUses(holder).find((u) =>
+    castEndedCcWindow(window, u.atMs),
+  );
+  if (trinket)
+    return {
+      kind: "trinket",
+      spellName:
+        trinket.kind === "adaptation"
+          ? "Adaptation"
+          : getEnglishSpellName(MEDALLION_SPELL_ID, "Gladiator's Medallion"),
+    };
+  const press = breakAbilityPresses(holder).find(
+    (p) =>
+      castEndedCcWindow(window, p.ts) &&
+      breakRemovesCc(p.spellId, spellId) &&
+      (officialEndMs === undefined || removeMs < officialEndMs),
+  );
+  if (press)
+    return {
+      kind: "break",
+      spellName: ccBreakAbilityName(press.spellId) ?? press.spellId,
+    };
+  for (const x of holder.actionIn ?? []) {
+    if ((x.logLine.event as string) !== LogEvent.SPELL_DISPEL) continue;
+    if (x.extraSpellId !== spellId) continue;
+    if (
+      Math.abs(x.logLine.timestamp - removeMs) >
+      ALLY_DISPEL_MATCH_TOLERANCE_S * 1000
+    )
+      continue;
+    return {
+      kind: "dispel",
+      spellName: getEnglishSpellName(x.spellId ?? "", x.spellName),
+      byUnitId: x.srcUnitId,
+      byName: x.srcUnitName,
+    };
+  }
+  return undefined;
+}
+
+/** `endedBy` as a facts value: `trinket (Gladiator's Medallion)`, a break
+ * ability's name, or `<spell> (<who>)` with "you" for the log owner. Never a
+ * ", " (it would cut the facts block). */
+export function formatCcRemovalCause(
+  c: ICcRemovalCause,
+  ownerId: string | undefined,
+): string {
+  const clean = (x: string) => x.replace(/, /g, " ");
+  if (c.kind === "trinket") return `trinket (${clean(c.spellName)})`;
+  if (c.kind === "break") return clean(c.spellName);
+  const who =
+    c.byUnitId !== undefined && c.byUnitId === ownerId
+      ? "you"
+      : clean(c.byName || "unknown");
+  return `${clean(c.spellName)} (${who})`;
 }
 
 export interface IPlayerCCTrinketSummary {
