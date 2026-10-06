@@ -899,5 +899,12 @@
  *  never removed ends at its official length, not the round end; a
  *  missed-sync-window line says what ended the healer's lock early
  *  (`endedBy`), with one legend sentence.
+ *  v304 (2026-10-06, triage G2: death-kill F-K1 / F-K2 / F-K6, ruling A13
+ *  / A′7, and the T2 one-death-one-KILL defect): a burst attempt covered by
+ *  a stun attempt that did not get the kill, and that alone reaches its
+ *  target's death, is kept as a KILL row; one enemy death is credited to one
+ *  KILL row; a death credited in an attempt's kill-credit slack is not
+ *  "outside every attempt window"; an enemy sitting in our own breakable CC
+ *  (Disorient / Incapacitate) is not named as the softer target.
  */
-export const PROMPT_VERSION = 303;
+export const PROMPT_VERSION = 304;

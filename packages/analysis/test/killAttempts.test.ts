@@ -9,6 +9,7 @@ import {
   attemptIntoTrinketEvents,
   extractKillAttempts,
   formatKillAttemptsForContext,
+  softerTargetAt,
 } from "../src/utils/killAttempts";
 
 /**
@@ -349,6 +350,28 @@ describe("attemptIntoTrinketEvents(候选 mapper)", () => {
     return { f1, e1, e2, combat: makeCombat(f1, e1, [e2]) };
   }
 
+  it("G2 F-K6: a softer candidate sitting in our own breakable CC is skipped", () => {
+    const { e1, e2 } = lockedScenario();
+    expect(softerTargetAt(e1, [e1, e2], 10, MATCH_START)?.name).toBe("e2");
+    expect(
+      softerTargetAt(e1, [e1, e2], 10, MATCH_START, (e) => e.id === "e2"),
+    ).toBeNull();
+  });
+
+  it("G2 F-K6 through extractKillAttempts: our Polymorph on the softer enemy skips it; our Kidney Shot does not", () => {
+    const softerWith = (spellId: string) => {
+      const { f1, e1, e2 } = lockedScenario();
+      // our CC on e2 from 9 to 15 — the attempt on e1 opens at 10
+      e2.auraEvents = stunAuras("e2", spellId, 9, 6);
+      return extractKillAttempts([f1], [e1, e2], makeCombat(f1, e1, [e2]))[0]!
+        .softerTarget;
+    };
+    // Polymorph (DR Incapacitate): damage would break it — no softer target
+    expect(softerWith("118")).toBeUndefined();
+    // Kidney Shot (DR Stun): a stunned enemy is still the softer target
+    expect(softerWith(KIDNEY)?.name).toBe("e2");
+  });
+
   it("locked 上的失败尝试 + 场上有 prime → 出候选,facts 可验证", () => {
     const { f1, e1, e2, combat } = lockedScenario();
     const attempts = extractKillAttempts([f1], [e1, e2], combat);
@@ -532,6 +555,84 @@ describe("extractKillAttempts — 大招锚定(v2)", () => {
     const attempts = extractKillAttempts([f1], [e1], makeCombat(f1, e1));
     expect(attempts).toHaveLength(1);
     expect(attempts[0]!.anchor).toBe("stun");
+  });
+
+  it("G2 F-K2: a covered burst cluster that alone reaches the kill is kept; the stun attempt did not get it", () => {
+    // Kidney 40–45 (credit to 50); Recklessness from 40 (span to ~52);
+    // the target dies at 55 — only the burst's credit window holds it
+    const e1 = unit("e1", {
+      auraEvents: stunAuras("e1", KIDNEY, 40, 5),
+      deathRecords: [{ timestamp: ms(55) }],
+    });
+    const f1 = unit("f1", {
+      reaction: 1,
+      spellCastEvents: [offensiveCast(40)],
+      damageOut: [dmg("f1", "e1", 42, 60_000)],
+    });
+    const attempts = extractKillAttempts([f1], [e1], makeCombat(f1, e1));
+    expect(attempts.map((a) => [a.anchor, a.killed])).toEqual([
+      ["stun", false],
+      ["burst", true],
+    ]);
+  });
+
+  it("G2 F-K2: a covered cluster whose death goes to another row stays skipped (no extra FAILED row)", () => {
+    // Kidney 40–45 (credit to 50) covers Recklessness 40–52 (credit to 57);
+    // a second go at 53 runs past the death at 56, so it gets the kill
+    const e1 = unit("e1", {
+      auraEvents: stunAuras("e1", KIDNEY, 40, 5),
+      deathRecords: [{ timestamp: ms(56) }],
+    });
+    const f1 = unit("f1", {
+      reaction: 1,
+      spellCastEvents: [offensiveCast(40), offensiveCast(53)],
+      damageOut: [dmg("f1", "e1", 42, 60_000), dmg("f1", "e1", 54, 60_000)],
+    });
+    const attempts = extractKillAttempts([f1], [e1], makeCombat(f1, e1));
+    expect(attempts.map((a) => [a.anchor, a.fromSeconds, a.killed])).toEqual([
+      ["stun", 40, false],
+      ["burst", 53, true],
+    ]);
+  });
+
+  it("G2: one death, one KILL — the attempt the death fell inside gets it; the other is a failed attempt", () => {
+    // Kidney 40–45 credits a death up to 50; a burst opened at 46 (not
+    // overlapping the stun) runs past the death at 48
+    const e1 = unit("e1", {
+      auraEvents: stunAuras("e1", KIDNEY, 40, 5),
+      deathRecords: [{ timestamp: ms(48) }],
+    });
+    const f1 = unit("f1", {
+      reaction: 1,
+      spellCastEvents: [offensiveCast(46)],
+      damageOut: [dmg("f1", "e1", 42, 60_000), dmg("f1", "e1", 47, 60_000)],
+    });
+    const attempts = extractKillAttempts([f1], [e1], makeCombat(f1, e1));
+    expect(attempts.filter((a) => a.killed)).toHaveLength(1);
+    const kill = attempts.find((a) => a.killed)!;
+    expect(kill.anchor).toBe("burst");
+    expect(kill.killedAtSeconds).toBeCloseTo(48, 6);
+    const other = attempts.find((a) => !a.killed)!;
+    expect(other.anchor).toBe("stun");
+    expect(other.attribution).toBeDefined();
+  });
+
+  it("G2 F-K1: a death credited to a KILL in its slack is not 'outside every attempt window'", () => {
+    const e1 = unit("e1", {
+      auraEvents: stunAuras("e1", KIDNEY, 10, 5),
+      deathRecords: [{ timestamp: ms(18) }],
+    });
+    const f1 = unit("f1", {
+      reaction: 1,
+      damageOut: [dmg("f1", "e1", 12, 50_000)],
+    });
+    const attempts = extractKillAttempts([f1], [e1], makeCombat(f1, e1));
+    expect(attempts[0]!.killed).toBe(true);
+    const text = formatKillAttemptsForContext(attempts, [18, 70]).join("\n");
+    // 18 s is the KILL's death (in the slack after 15 s); 70 s is outside
+    expect(text).toContain(
+      "Enemy deaths this round: 2 (1 outside every attempt window)",
+    );
   });
 
   it("大招 span 内伤害 <30k → 不算尝试(同一伤害地板)", () => {
@@ -1401,11 +1502,7 @@ describe("extractKillAttempts — broke out with a racial / class ability", () =
       reaction: 1,
       damageOut: [dmg("f1", "e1", 11, 50_000), dmg("f1", "e1", 42, 50_000)],
     });
-    const [first, second] = extractKillAttempts(
-      [f1],
-      [e1],
-      makeCombat(f1, e1),
-    );
+    const [first, second] = extractKillAttempts([f1], [e1], makeCombat(f1, e1));
     expect(first.attribution?.primary).toBe("broke-out");
     expect(formatKillAttemptsForContext([first]).join("\n")).toContain(
       "FAILED: broke out (Will to Survive)",

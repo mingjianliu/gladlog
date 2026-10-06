@@ -212,6 +212,9 @@ export interface IKillAttempt {
   /** 0–100: share of team damage that landed on the attempt's target. */
   teamOnTargetPct: number;
   killed: boolean;
+  /** The death this attempt is credited with, match-relative seconds —
+   * present exactly when `killed` (one death, one KILL). */
+  killedAtSeconds?: number;
   /** Present exactly when !killed. */
   attribution?: IKillAttemptAttribution;
 }
@@ -230,6 +233,13 @@ const TIER_RANK: Record<KillOpportunityTier, number> = {
   gated: 1,
   locked: 2,
 };
+
+/** The DR categories of a CC damage breaks (or, Cyclone, that cannot be
+ * hit): an enemy in one of OUR CCs of these is no softer target (F-K6). */
+const BREAKABLE_DR_CATEGORIES: ReadonlySet<string> = new Set([
+  "Disorient",
+  "Incapacitate",
+]);
 
 /**
  * Among the OTHER enemies still alive at `atSeconds`, the one in a strictly
@@ -253,6 +263,11 @@ export function softerTargetAt(
   enemies: readonly ICombatUnit[],
   atSeconds: number,
   matchStartMs: number,
+  /** death-kill F-K6 (ruling A′7 = A): an enemy sitting in a CC our team
+   * applied that damage would break (DR Disorient / Incapacitate; Cyclone
+   * cannot be hit at all) is no softer target — the team could not act on
+   * it without breaking its own control. Absent ⇒ nobody is skipped. */
+  inOurBreakableCc?: (e: ICombatUnit, atMs: number) => boolean,
 ): IKillAttemptSofterTarget | null {
   const atMs = matchStartMs + atSeconds * 1000;
   const targetRank =
@@ -263,6 +278,7 @@ export function softerTargetAt(
   for (const e of enemies) {
     if (e.id === target.id) continue;
     if (e.deathRecords.some((rec) => rec.timestamp <= atMs)) continue;
+    if (inOurBreakableCc?.(e, atMs)) continue;
     const opp = killOpportunityAt(e, atSeconds, matchStartMs);
     if (opp.tier === "locked") continue;
     const rank = TIER_RANK[opp.tier];
@@ -282,8 +298,15 @@ function softerField(
   enemies: readonly ICombatUnit[],
   atSeconds: number,
   matchStartMs: number,
+  inOurBreakableCc?: (e: ICombatUnit, atMs: number) => boolean,
 ): { softerTarget?: IKillAttemptSofterTarget } {
-  const softer = softerTargetAt(target, enemies, atSeconds, matchStartMs);
+  const softer = softerTargetAt(
+    target,
+    enemies,
+    atSeconds,
+    matchStartMs,
+    inOurBreakableCc,
+  );
   return softer ? { softerTarget: softer } : {};
 }
 
@@ -301,6 +324,38 @@ export function extractKillAttempts(
   const chainGapS = drResetMsAt(matchStartMs) / 1000;
   const enemyByName = new Map(enemies.map((e) => [e.name, e]));
   const readingsOf = targetReadingsFactory(enemies, friendlies, combat);
+  // F-K6: the target's CC instances (`[CC ON ENEMY]`'s, our pets as sources)
+  // read once per enemy through the same per-match readings
+  const inOurBreakableCc = (e: ICombatUnit, atMs: number): boolean => {
+    const t = (atMs - matchStartMs) / 1000;
+    return readingsOf(e)
+      .ccSummary()
+      .ccInstances.some(
+        (cc) =>
+          BREAKABLE_DR_CATEGORIES.has(cc.drInfo?.category ?? "") &&
+          cc.atSeconds <= t &&
+          t < cc.atSeconds + cc.durationSeconds,
+      );
+  };
+  // One death, one KILL (T2 → G2): the death each `killed` attempt credits,
+  // decided once every attempt exists; failures are attributed after that.
+  const creditedDeathMs = new Map<IKillAttempt, number>();
+  // F-K2: covered burst clusters kept only because they reach the death
+  const keptForTheKill = new Set<IKillAttempt>();
+  const toAttribute: Array<{
+    attempt: IKillAttempt;
+    target: ICombatUnit;
+    span: { fromMs: number; toMs: number; creditToMs: number };
+    anchor: AttemptAnchor;
+  }> = [];
+  const creditOf = (
+    target: ICombatUnit,
+    spanFromMs: number,
+    spanToMs: number,
+  ): number | undefined =>
+    target.deathRecords.find(
+      (rec) => rec.timestamp >= spanFromMs && rec.timestamp <= spanToMs,
+    )?.timestamp;
 
   // 1) Stun landings per target (Full/50% only — an Immune landing has no
   //    duration and anchors nothing).
@@ -370,10 +425,8 @@ export function extractKillAttempts(
       // same floor offensiveWindows uses for its burst sub-windows.
       if (teamDamageToTarget < KW_BURST_MIN_DAMAGE) continue;
 
-      const killed = target.deathRecords.some((rec) => {
-        const t = rec.timestamp;
-        return t >= spanFromMs && t <= spanToMs;
-      });
+      const deathMs = creditOf(target, spanFromMs, spanToMs);
+      const killed = deathMs !== undefined;
 
       const attempt: IKillAttempt = {
         targetUnitId: target.id,
@@ -384,7 +437,13 @@ export function extractKillAttempts(
         toSeconds,
         stuns: group,
         opportunity: killOpportunityAt(target, fromSeconds, matchStartMs),
-        ...softerField(target, enemies, fromSeconds, matchStartMs),
+        ...softerField(
+          target,
+          enemies,
+          fromSeconds,
+          matchStartMs,
+          inOurBreakableCc,
+        ),
         openingDrLevel: group[0].drLevel,
         teamDamageToTarget,
         teamDamageTotal,
@@ -394,21 +453,17 @@ export function extractKillAttempts(
             : 0,
         killed,
       };
-      if (!killed) {
-        attempt.attribution = attributeFailure(
-          target,
-          enemies,
-          friendlies,
-          combat,
-          {
-            fromMs: spanFromMs,
-            toMs: matchStartMs + toSeconds * 1000,
-            creditToMs: spanToMs,
-          },
-          { kind: "stun", stuns: group },
-          readingsOf(target),
-        );
-      }
+      if (deathMs !== undefined) creditedDeathMs.set(attempt, deathMs);
+      toAttribute.push({
+        attempt,
+        target,
+        span: {
+          fromMs: spanFromMs,
+          toMs: matchStartMs + toSeconds * 1000,
+          creditToMs: spanToMs,
+        },
+        anchor: { kind: "stun", stuns: group },
+      });
       attempts.push(attempt);
     }
   }
@@ -487,11 +542,25 @@ export function extractKillAttempts(
           a.fromSeconds <= toSeconds &&
           a.toSeconds >= fromSeconds,
       );
-      if (covered) continue;
-      const killed = target.deathRecords.some((rec) => {
-        const t = rec.timestamp;
-        return t >= spanFromMs && t <= spanToMs;
-      });
+      const deathMs = creditOf(target, spanFromMs, spanToMs);
+      // death-kill F-K2 (ruling A13 = R1 option A): "the stun anchor wins"
+      // only when that stun attempt got the kill. A covered cluster that
+      // alone reaches its target's death is kept (a0a48716 [2:33–3:01]:
+      // the stun attempt's credit ended before the Bloodlust go killed).
+      if (
+        covered &&
+        (deathMs === undefined ||
+          attempts.some(
+            (a) =>
+              a.anchor === "stun" &&
+              a.killed &&
+              a.targetUnitId === target!.id &&
+              a.fromSeconds <= toSeconds &&
+              a.toSeconds >= fromSeconds,
+          ))
+      )
+        continue;
+      const killed = deathMs !== undefined;
       const attempt: IKillAttempt = {
         targetUnitId: target.id,
         targetName: target.name,
@@ -501,7 +570,13 @@ export function extractKillAttempts(
         toSeconds,
         stuns: [],
         opportunity: killOpportunityAt(target, fromSeconds, matchStartMs),
-        ...softerField(target, enemies, fromSeconds, matchStartMs),
+        ...softerField(
+          target,
+          enemies,
+          fromSeconds,
+          matchStartMs,
+          inOurBreakableCc,
+        ),
         teamDamageToTarget,
         teamDamageTotal,
         teamOnTargetPct:
@@ -510,23 +585,63 @@ export function extractKillAttempts(
             : 0,
         killed,
       };
-      if (!killed) {
-        attempt.attribution = attributeFailure(
-          target,
-          enemies,
-          friendlies,
-          combat,
-          {
-            fromMs: spanFromMs,
-            toMs: matchStartMs + toSeconds * 1000,
-            creditToMs: spanToMs,
-          },
-          { kind: "burst" },
-          readingsOf(target),
-        );
-      }
+      if (deathMs !== undefined) creditedDeathMs.set(attempt, deathMs);
+      if (covered) keptForTheKill.add(attempt);
+      toAttribute.push({
+        attempt,
+        target,
+        span: {
+          fromMs: spanFromMs,
+          toMs: matchStartMs + toSeconds * 1000,
+          creditToMs: spanToMs,
+        },
+        anchor: { kind: "burst" },
+      });
       attempts.push(attempt);
     }
+  }
+
+  // One death, one KILL (from the T2 session; 605 files: 44 (owner, target)
+  // pairs with two or more KILL rows). Attempts credit a death anywhere in
+  // [from, to + KILL_CREDIT_SLACK_S], so a burst cluster opened after a stun
+  // attempt ended can credit the same death. It goes to the attempt the
+  // death fell inside ([from, to]); among several, or none, the one that
+  // started last before it. The others are attempts that did not convert.
+  const byDeath = new Map<string, IKillAttempt[]>();
+  for (const [a, ms] of creditedDeathMs) {
+    const key = `${a.targetUnitId}:${ms}`;
+    byDeath.set(key, [...(byDeath.get(key) ?? []), a]);
+  }
+  for (const [key, list] of byDeath) {
+    const deathS = (Number(key.split(":").pop()) - matchStartMs) / 1000;
+    if (list.length > 1) {
+      const inside = list.filter(
+        (a) => deathS >= a.fromSeconds && deathS <= a.toSeconds,
+      );
+      const keep = (inside.length > 0 ? inside : list).reduce((b, a) =>
+        a.fromSeconds > b.fromSeconds ? a : b,
+      );
+      for (const a of list) if (a !== keep) a.killed = false;
+    }
+    for (const a of list) if (a.killed) a.killedAtSeconds = deathS;
+  }
+  // …and a covered cluster whose death went to another row did not "alone
+  // reach the kill": it stays skipped, as before F-K2
+  for (let i = attempts.length - 1; i >= 0; i--) {
+    const a = attempts[i]!;
+    if (keptForTheKill.has(a) && !a.killed) attempts.splice(i, 1);
+  }
+  for (const { attempt, target, span, anchor } of toAttribute) {
+    if (attempt.killed || keptForTheKill.has(attempt)) continue;
+    attempt.attribution = attributeFailure(
+      target,
+      enemies,
+      friendlies,
+      combat,
+      span,
+      anchor,
+      readingsOf(target),
+    );
   }
 
   attempts.sort((a, b) => a.fromSeconds - b.fromSeconds);
@@ -674,8 +789,17 @@ export function formatKillAttemptsForContext(
     `  Summary: ${attempts.length} attempts (${attempts.length - burstAnchored} stun-anchored, ${burstAnchored} burst-anchored; ${onPrime} on PRIME targets), ${kills} kill${kills === 1 ? "" : "s"} inside an attempt; ${withSofter} opened while a softer target existed.` +
       (() => {
         if (!enemyDeathSeconds || enemyDeathSeconds.length <= kills) return "";
+        // death-kill F-K1: a death some attempt credits as its kill (in that
+        // attempt's kill-credit slack) is not "outside every attempt window"
         const outside = enemyDeathSeconds.filter(
-          (d) => !attempts.some((a) => d >= a.fromSeconds && d <= a.toSeconds),
+          (d) =>
+            !attempts.some(
+              (a) =>
+                (d >= a.fromSeconds && d <= a.toSeconds) ||
+                (a.killed &&
+                  a.killedAtSeconds !== undefined &&
+                  Math.abs(a.killedAtSeconds - d) < 0.001),
+            ),
         ).length;
         return ` Enemy deaths this round: ${enemyDeathSeconds.length}${outside > 0 ? ` (${outside} outside every attempt window)` : ""}.`;
       })(),
