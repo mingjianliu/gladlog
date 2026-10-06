@@ -10,11 +10,11 @@ import type { CdPriorHoldEpisode } from "../analysis/cdTriggerPrior";
 import type { StackedDefensivePair } from "../analysis/stackedDefensives";
 import { BACKLASH_AURA_CC_TYPE } from "../data/backlashCc";
 import { castAndEffectIds } from "../data/castEffectAuras";
-import { BREAK_RACIAL_SPELL_IDS } from "../data/racialAbilities";
+import "../data/racialAbilities";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { ccSpellIds } from "../data/spellTags";
 import { DEATH_WINDOW_S, TIMELINE_LINE_FLAGS } from "../data/timelineLineFlags";
-import { buildAuraIntervals } from "../utils/auraIntervals";
+import "../utils/auraIntervals";
 import { buffFullDurationForCaster } from "../utils/buffDuration";
 import { silenceIntervals } from "../utils/cannotCastIntervals";
 import {
@@ -29,7 +29,6 @@ import {
   findBrokenDisarm,
   GROUNDING_TOTEM_SPELL_ID,
   GROUNDING_TOTEM_WINDOW_S,
-  type ICCInstance,
   immunityBreak,
   IPlayerCCTrinketSummary,
   renderedCcSeconds,
@@ -45,7 +44,6 @@ import {
   cdIsProcOnly,
   getUnitHpAtTimestamp,
   gridHpPct,
-  hasOffensiveSpellActive,
   HP_SAMPLE_RADIUS_MS,
   hpAtPress,
   IDamageBucket,
@@ -79,26 +77,14 @@ import {
 import {
   IEnemyCDCast,
   IEnemyCDTimeline,
-  isEnemyCdWindowSpell,
 } from "../utils/enemyCDs";
-import {
-  enemyDefensiveEvents,
-  renderedObservedSeconds,
-} from "../utils/enemyDefensives";
-import {
-  INTERRUPT_SPELL_IDS,
-  interruptCooldownSeconds,
-  interruptForUnit,
-  kickCastSpellId,
-} from "../utils/enemyInterrupts";
-import {
-  externalDamageForApplication,
-  formatDuringExternal,
-} from "../utils/externalDamage";
+import "../utils/enemyDefensives";
+import "../utils/enemyInterrupts";
+import "../utils/externalDamage";
 import { IHealingGap } from "../utils/healingGaps";
 import { sumIncomingPressure } from "../utils/incomingPressure";
 import { buildRosterSides } from "../utils/rosterSide";
-import { MEDALLION_SPELL_ID } from "../utils/pvpTrinketUses";
+import "../utils/pvpTrinketUses";
 import type { RawStreams } from "../utils/rawStreams";
 import { ownerResUtilityCds } from "./resUtilityCds";
 import {
@@ -175,20 +161,21 @@ import {
 import { emitBuffFadedEntries } from "./timelineSections/buffFaded";
 import { emitCcBrokenEntries } from "./timelineSections/ccBroken";
 import { emitCcCastEntries } from "./timelineSections/ccCast";
+import { emitCcOnEnemyEntries } from "./timelineSections/ccOnEnemy";
 import type { DeferredSnapshot } from "./timelineSections/ctx";
 import { emitDampeningEntries } from "./timelineSections/dampening";
 import { emitEnemyBuffEntries } from "./timelineSections/enemyBuff";
 import { emitEnemyCdEntries } from "./timelineSections/enemyCd";
+import { emitEnemyDefEntries } from "./timelineSections/enemyDef";
+import { emitEnemyHardCastEntries } from "./timelineSections/enemyHardCast";
 import { emitHealerCastGapFillerEntries } from "./timelineSections/healerCastGapFiller";
+import { emitKickEntries } from "./timelineSections/kick";
 import { emitMinorDispelEntries } from "./timelineSections/minorDispels";
 import { emitOffensiveWindowEntries } from "./timelineSections/offensiveWindow";
 import { emitOwnerCdEntries } from "./timelineSections/ownerCd";
 import { emitPurgeEntries } from "./timelineSections/purges";
 import { emitTeamCdEntries } from "./timelineSections/teamCd";
-import {
-  auraBlocksMechanic,
-  INTERRUPT_MECHANIC,
-} from "../utils/spellMechanics";
+import "../utils/spellMechanics";
 
 function isDeferredSnapshot(line: unknown): line is DeferredSnapshot {
   return !!(
@@ -200,10 +187,6 @@ function isDeferredSnapshot(line: unknown): line is DeferredSnapshot {
 }
 
 // ── buildMatchTimeline ─────────────────────────────────────────────────────
-
-/** Two SPELL_MISSED rows of one kick (Skull Bash logs 93985 and 106839
- * 1 ms apart) are one `[KICK] … missed — IMMUNE` line. */
-const IMMUNE_KICK_DEDUPE_MS = 50;
 
 export const DR_CLASH_LEGEND = [
   "  [DR CLASH] = a friendly CC landed at diminished DR (50% or Immune) because another teammate",
@@ -1913,193 +1896,26 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   // falsified by every dispel; agy round 1), and `— removed early` is the
   // coaching pivot. Separate tag on purpose: [ENEMY CD] feeds the burst-window
   // builder, and a wall must never read as an opener there.
-  if (TIMELINE_LINE_FLAGS.enemyDef === "timeline") {
-    const combatSpan = {
-      startTime: matchStartMs,
-      endTime: matchStartMs + matchEndSeconds * 1000,
-    };
-    for (const enemy of enemies ?? []) {
-      for (const d of enemyDefensiveEvents(enemy, enemies ?? [], combatSpan)) {
-        if (d.atSeconds < 0 || d.atSeconds > matchEndSeconds) continue;
-        const who = `${enemyPid(enemy.name)} (${specToString(enemy.spec)})`;
-        const dur =
-          d.observedSeconds !== undefined
-            ? `${renderedObservedSeconds(d.observedSeconds).toFixed(1)}s${d.removedEarly ? " — removed early" : ""}`
-            : "";
-        const tSec = toRenderSecond(d.atSeconds);
-        const tMs = matchStartMs + tSec * 1000;
-        const friendlyIds = new Set(friends.map((f) => f.id));
-        const hasBurst =
-          friends.some((f) =>
-            hasOffensiveSpellActive(
-              f,
-              tMs,
-              friendlyIds,
-              undefined,
-              roundBounds,
-            ),
-          ) ||
-          (enemies ?? []).some((e) =>
-            hasOffensiveSpellActive(
-              e,
-              tMs,
-              friendlyIds,
-              isEnemyCdWindowSpell,
-              roundBounds,
-            ),
-          );
-        const burstStr = hasBurst ? " [friendly offensive CD active]" : "";
-        const targetUnit =
-          d.kind === "external"
-            ? (enemies?.find((e) => e.id === d.recipientId) ??
-              enemies?.find((e) => e.name === d.recipientName))
-            : enemy;
-        // HP at the press (A21, enemy-def F-E11) — the same sampler as the
-        // owner's press lines; c2058ed4's Turtle read 26 % on the grid
-        const hpPct = targetUnit
-          ? hpAtPress(
-              targetUnit,
-              // the cast that put an aura up, when logged — not the aura
-              matchStartMs + Math.round((d.pressSeconds ?? d.atSeconds) * 1000),
-              { spellId: d.spellId, srcUnitId: enemy.id },
-            )
-          : null;
-        let line: string;
-        if (d.kind === "external") {
-          const hpStr =
-            hpPct !== null ? ` (target at ${hpPct.toFixed(0)}% HP)` : "";
-          // GH #91: the application line owns the "what did our attackers do
-          // during it" fact (GH #99 item 3 ownership rule); one shared
-          // predicate with the burst-into-mitigation fact and the eval gate.
-          let duringStr = "";
-          if (
-            TIMELINE_LINE_FLAGS.duringExternal === "annotate" &&
-            targetUnit &&
-            d.auraFromS !== undefined &&
-            d.auraToS !== undefined
-          ) {
-            const obs = externalDamageForApplication(
-              {
-                spellId: d.spellId,
-                spellName: d.spellName,
-                srcUnitName: d.auraSrcName ?? d.casterName,
-                fromS: d.auraFromS,
-                toS: d.auraToS,
-                inferredStart: !!d.auraInferredStart,
-                inferredEnd: !!d.auraInferredEnd,
-              },
-              targetUnit,
-              friends,
-              enemies ?? [],
-              combatSpan,
-            );
-            if (obs.length > 0)
-              duringStr = ` | during it: ${obs.map((o) => formatDuringExternal(o, pid)).join("; ")}`;
-          }
-          line = `${d.spellName} → ${enemyPid(d.recipientName ?? "")}${dur ? ` (${dur})` : ""}${burstStr}${hpStr}${duringStr}`;
-        } else if (d.kind === "area") {
-          // Ruling A15 (2026-09-30): who pressed it and when — no %, no
-          // recipients, no duration, no HP (nobody is "the target").
-          line = `${d.spellName} (area)`;
-        } else if (d.kind === "self-save") {
-          const hpStr = hpPct !== null ? ` (at ${hpPct.toFixed(0)}% HP)` : "";
-          line = `${d.spellName} (self-save)${burstStr}${hpStr}`;
-        } else {
-          const strength = d.kind === "immune" ? "immune" : `${d.pct}%`;
-          const hpStr = hpPct !== null ? ` (at ${hpPct.toFixed(0)}% HP)` : "";
-          line = `${d.spellName} (${strength}${dur ? `, ${dur}` : ""})${burstStr}${hpStr}`;
-        }
-        addEntry(
-          d.atSeconds,
-          `${fmtTime(d.atSeconds)}  [ENEMY DEF]   ${who}: ${line}`,
-        );
-      }
-    }
-  }
+  emitEnemyDefEntries({
+    matchStartMs,
+    matchEndSeconds,
+    enemies,
+    enemyPid,
+    friends,
+    roundBounds,
+    pid,
+    addEntry,
+  });
 
   // ── F170: [ENEMY HARD CAST] — hard-cast kill spells (Chaos Bolt, Pyroblast) ─
-  {
-    const HARD_CAST_KILL_SPELLS = new Set(["116858", "11366", "1254294"]); // Chaos Bolt, Pyroblast
-    /** below this a START→SUCCESS pair is an instant (Hot Streak), not a bar */
-    const HARD_CAST_MIN_MS = 300;
-    /** above this the success belongs to a later press, not this bar */
-    const HARD_CAST_MAX_MS = 12_000;
-    for (const enemy of enemies ?? []) {
-      // A success belongs to one bar (codex: START 5 s / SUCCESS 7.5 s /
-      // START 7.5 s / SUCCESS 10 s — the second START must not re-read the
-      // first bar's 7.5 s success as a 0 s "instant").
-      const consumedSuccess = new Set<object>();
-      const starts = [...(enemy.castStartEvents ?? [])]
-        .filter((e) => e.logLine.event === LogEvent.SPELL_CAST_START)
-        .sort(
-          (a, b) =>
-            a.timestamp - b.timestamp ||
-            (a.logLine.lineIndex ?? 0) - (b.logLine.lineIndex ?? 0),
-        );
-      for (const event of starts) {
-        if (!event.spellId || !HARD_CAST_KILL_SPELLS.has(event.spellId))
-          continue;
-        const timeSeconds = (event.timestamp - matchStartMs) / 1000;
-        if (timeSeconds < 0 || timeSeconds > matchEndSeconds) continue;
-        // Reliability round 3 N10 (7d1f): every SPELL_CAST_START rendered — an
-        // instant Hot Streak Pyroblast (START → SUCCESS 3–27 ms) and a bar the
-        // mage aborted both read as "kept hard-casting Pyroblast". A line now
-        // needs the same spell's SUCCESS ≥ HARD_CAST_MIN_MS after the start
-        // and before the next start of it; instants and aborted bars are not
-        // hard casts (a kick that stopped one shows on the [kick] line).
-        // You cannot run two bars at once: ANY later START by this enemy
-        // (any spell) ends this bar's window — the rule hardCastOccupancyWithin
-        // uses (codex: an abandoned Pyroblast followed by a Fireball bar and a
-        // Hot Streak instant read "3.0s cast, landed").
-        const nextStart = starts.find(
-          (e) =>
-            e.timestamp > event.timestamp ||
-            (e.timestamp === event.timestamp &&
-              (e.logLine.lineIndex ?? 0) > (event.logLine.lineIndex ?? 0)),
-        );
-        // event order, not bare timestamps (codex: an instant START and its
-        // SUCCESS at the same ms must not be read as the previous bar's end)
-        const beforeNextStart = (e: {
-          timestamp: number;
-          logLine: { lineIndex?: number };
-        }) =>
-          nextStart === undefined ||
-          e.timestamp < nextStart.timestamp ||
-          (e.timestamp === nextStart.timestamp &&
-            (e.logLine.lineIndex ?? 0) < (nextStart.logLine.lineIndex ?? 0));
-        // The FIRST same-spell success after the start is this bar's outcome
-        // (codex: skipping a 20 ms success to a later instant printed "3.0s
-        // cast, landed"); an instant (< HARD_CAST_MIN_MS), no success before
-        // the next start, or a success further than a bar can run
-        // (HARD_CAST_MAX_MS) all mean "not a landed hard cast".
-        const first = enemy.spellCastEvents.find(
-          (e) =>
-            e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
-            e.spellId === event.spellId &&
-            !consumedSuccess.has(e) &&
-            (e.timestamp > event.timestamp ||
-              (e.timestamp === event.timestamp &&
-                (e.logLine.lineIndex ?? 0) >=
-                  (event.logLine.lineIndex ?? 0))) &&
-            beforeNextStart(e),
-        );
-        if (!first) continue;
-        consumedSuccess.add(first);
-        const castMs = first.timestamp - event.timestamp;
-        if (castMs < HARD_CAST_MIN_MS || castMs > HARD_CAST_MAX_MS) continue;
-        const landed = first;
-        const spellName = getEnglishSpellName(event.spellId, event.spellName);
-        const target = event.destUnitName
-          ? ` → ${pid(event.destUnitName)}`
-          : "";
-        const castS = ((landed.timestamp - event.timestamp) / 1000).toFixed(1);
-        addEntry(
-          timeSeconds,
-          `${fmtTime(timeSeconds)}  [ENEMY HARD CAST]   ${enemyPid(enemy.name)}: ${spellName}${target} (${castS}s cast, landed)`,
-        );
-      }
-    }
-  }
+  emitEnemyHardCastEntries({
+    enemies,
+    matchStartMs,
+    matchEndSeconds,
+    pid,
+    addEntry,
+    enemyPid,
+  });
 
   // ── [CC BROKEN] — our damage breaking our own CC (#36(e)) ──────────────────
   // Corpus baseline (ccBreakAnalysis header): 6.14 breaks/round, and the
@@ -2378,147 +2194,23 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     ownerCDs.filter((cd) => ccSpellIds.has(cd.spellId)).map((cd) => cd.spellId),
   );
   let enemyTrinketCount = 0;
-  if (enemyCCSummaries) {
-    for (const summary of enemyCCSummaries) {
-      // Enemy trinket usage was previously not rendered at all (60-match wild
-      // audit: 30/57 matches below 80% coverage, every gap on the hostile side)
-      // — "did the target trinket or not" is the core fact of a burst-conversion
-      // audit, and without it the coach can only downgrade confidence with
-      // "trinket state never observed".
-      const enemyUnit = enemies?.find((e) => e.name === summary.playerName);
-      const friendlyIds = new Set(friends.map((f) => f.id));
-      /** One `[ENEMY TRINKET]` line: `used <what>[ out of <CC> (by <src>)]`. */
-      const addEnemyBreakLine = (
-        t: number,
-        what: string,
-        /** the press's own id — the HP is read AT the press (F-E11) */
-        pressSpellId: string,
-        brokenCC:
-          | Pick<ICCInstance, "spellName" | "sourceName" | "sourceId">
-          | undefined,
-      ) => {
-        const tSec = toRenderSecond(t);
-        const tMs = matchStartMs + tSec * 1000;
-        const ccPart = brokenCC
-          ? ` out of ${brokenCC.spellName} (by ${actorLabel(brokenCC.sourceName, "friendly", brokenCC.sourceId)})`
-          : "";
-        const hasBurst =
-          friends.some((f) =>
-            hasOffensiveSpellActive(
-              f,
-              tMs,
-              friendlyIds,
-              undefined,
-              roundBounds,
-            ),
-          ) ||
-          (enemies ?? []).some((e) =>
-            hasOffensiveSpellActive(
-              e,
-              tMs,
-              friendlyIds,
-              isEnemyCdWindowSpell,
-              roundBounds,
-            ),
-          );
-        const burstPart = hasBurst ? " [friendly offensive CD active]" : "";
-        const hpPct = enemyUnit
-          ? hpAtPress(enemyUnit, matchStartMs + Math.round(t * 1000), {
-              spellId: pressSpellId,
-              srcUnitId: enemyUnit.id,
-            })
-          : null;
-        const hpPart =
-          hpPct !== null ? ` (target at ${hpPct.toFixed(0)}% HP)` : "";
-        addEntry(
-          t,
-          `${fmtTime(t)}  [ENEMY TRINKET]   ${enemyPid(summary.playerName)} used ${what}${ccPart}${burstPart}${hpPart}`,
-        );
-      };
-      for (const t of summary.trinketUseTimes) {
-        enemyTrinketCount++;
-        addEnemyBreakLine(
-          t,
-          "PvP trinket",
-          MEDALLION_SPELL_ID,
-          findBrokenCC(
-            summary.ccInstances,
-            matchStartMs,
-            matchStartMs + Math.round(t * 1000),
-          ),
-        );
-      }
-      // F-E21 / ruling A′15: the same line for a break that was not the
-      // trinket. A break RACIAL renders on every press — the trinket
-      // equivalents, and Escape Artist, which locks nothing and names no CC
-      // (`breakRemovesCc`) but is still the racial pressed (codex review,
-      // 2026-10-03: keyed on the trinket lock, it never rendered). A class
-      // ability (Blink, Berserker Shout …) only when it broke a control —
-      // every other Blink is not a break.
-      for (const u of summary.breakAbilityUses ?? []) {
-        if (u.atSeconds < 0 || u.atSeconds > matchEndSeconds) continue;
-        if (!BREAK_RACIAL_SPELL_IDS.has(u.spellId) && !u.brokenCc) continue;
-        enemyTrinketCount++; // keeps the [ENEMY TRINKET] legend in the prompt
-        addEnemyBreakLine(u.atSeconds, u.name, u.spellId, u.brokenCc);
-      }
-      for (const cc of summary.ccInstances) {
-        // F148: Cleanse Success Verification — check if this CC was removed by an enemy dispel
-        const isCleansed = enemyDispelSummary
-          ? wasRemovedByAllyDispel(
-              enemyDispelSummary.allyCleanse,
-              cc.spellId,
-              summary.playerName,
-              cc.atSeconds + cc.durationSeconds,
-            )
-          : false;
-        // Mirror of the [CC ON TEAM] tremor note (user 2026-09-20: Tremor
-        // "depending on the situation" — i.e. when it did something): the
-        // ENEMY dropped Tremor Totem mid-fear and our fear ended that instant.
-        const trinketBroke =
-          cc.trinketState === "used" || cc.trinketState === "racial_break";
-        const enemyTremor =
-          !trinketBroke && !isCleansed
-            ? tremorTotemBreak(cc, matchStartMs, enemies ?? [])
-            : null;
-        // The owner's own tracked CC normally renders on its [YOU] [CC] cast
-        // line only; that line is per cast, not per target, so a tremor break
-        // keeps this per-target line.
-        // A QUICK FOLLOW-UPS line cites this landing, so it keeps its line.
-        const keptForFollowUp = (params.keepOwnerCcOnEnemy ?? []).some(
-          (k) =>
-            k.targetName === summary.playerName &&
-            k.spellId === cc.spellId &&
-            k.ccAtS === cc.atSeconds,
-        );
-        if (
-          cc.sourceName === owner.name &&
-          ownerRenderedCcIds.has(cc.spellId) &&
-          !enemyTremor &&
-          !keptForFollowUp
-        )
-          continue;
-        // cc-dr F-CE1: the DR the OUTGOING chain holds for this landing —
-        // same target, spell, caster (a pet's CC is its owner's, as the
-        // chain credits it) and render second; never the enemy-side summary's
-        // drInfo (the two pair REFRESH differently). A backlash aura has no
-        // chain application and no tag.
-        const drTag = enemyCcDrTag(
-          summary.playerName,
-          cc.spellId,
-          cc.atSeconds,
-          cc.sourceId,
-          cc.sourceName,
-        );
-        const durStr = enemyTremor
-          ? `${drTag} | enemy Tremor Totem from ${enemyPid(enemyTremor.shamanName)} ended this CC after ${renderedCcSeconds(cc)}s (cut short — it had not expired)`
-          : ` (${renderedCcSeconds(cc)}s)${drTag}`;
-        addEntry(
-          cc.atSeconds,
-          `${fmtTime(cc.atSeconds)}  [CC ON ENEMY]   ${enemyPid(summary.playerName)} ← ${cc.spellName} (by ${actorLabel(cc.sourceName, "friendly", cc.sourceId)})${durStr}`,
-        );
-      }
-    }
-  }
+  ({ enemyTrinketCount } = emitCcOnEnemyEntries({
+    enemyCCSummaries,
+    enemies,
+    friends,
+    matchStartMs,
+    actorLabel,
+    roundBounds,
+    addEntry,
+    enemyPid,
+    enemyTrinketCount,
+    matchEndSeconds,
+    enemyDispelSummary,
+    params,
+    owner,
+    ownerRenderedCcIds,
+    enemyCcDrTag,
+  }));
 
   // ── Spell outcomes the log records and the timeline did not state ─────────
   // User ruling 2026-09-26 (reliability round 3 N10 / N18, ASK-batch10 with
@@ -2746,221 +2438,17 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   // ("enemy interrupts UP") tell the model what *could* be kicked, but without
   // these lines every successful kick — including ones that decided a death — is
   // invisible in the timeline.
-  {
-    const friendlyNames = new Set(friends.map((f) => f.name));
-    const enemyNames = new Set((enemies ?? []).map((e) => e.name));
-    // Pet kicks (ghoul Shambling Rush, felhunter Spell Lock, …) log the pet as
-    // the source; attribute them to the owning player so the model doesn't
-    // have to guess whose pet an unknown name belongs to (F134-adjacent).
-    const resolveKicker = (name: string, unitId?: string): string => {
-      if (friendlyNames.has(name)) return pid(name);
-      if (enemyNames.has(name)) return enemyPid(name);
-      // Same name collision as actorLabel (GH #99) — the kick line has no side
-      // to fall back on, so the source GUID is the only exact key here.
-      const petOwner = resolveSummonOwner({
-        allUnits,
-        friends,
-        enemies,
-        name,
-        sourceId: unitId,
-      });
-      if (petOwner) {
-        const ownerLabel = friendlyNames.has(petOwner.name)
-          ? pid(petOwner.name)
-          : enemyPid(petOwner.name);
-        return `${ownerLabel}'s pet`;
-      }
-      const short = name.split("-")[0];
-      // Unresolved unit = pet/NPC whose owner lookup failed. Its name is
-      // client-localized — don't leak a non-ASCII unit name into the prompt.
-      const isLocalized = [...short].some((c) => c.charCodeAt(0) > 127);
-      return isLocalized ? "[pet]" : short;
-    };
-    /** The enemy player behind a kick (the kicker, or a pet's owner), or
-     * null for a friendly / unresolved kicker. */
-    const enemyKickerUnit = (
-      name: string,
-      unitId?: string,
-    ): ICombatUnit | null => {
-      const direct = (enemies ?? []).find((e) => e.name === name);
-      if (direct) return direct;
-      if (friendlyNames.has(name)) return null;
-      const petOwner = resolveSummonOwner({
-        allUnits,
-        friends,
-        enemies,
-        name,
-        sourceId: unitId,
-      });
-      return petOwner && enemyNames.has(petOwner.name)
-        ? ((enemies ?? []).find((e) => e.name === petOwner.name) ?? null)
-        : null;
-    };
-    /** Cooldown behind an enemy kick. SPELL_INTERRUPT carries the interrupt
-     * EFFECT id, which for some kits is not the cast id the cooldown lives on
-     * (Skull Bash 93985 vs 106839, Solar Beam 97547 vs 78675) — fall back to
-     * the cast id (`kickCastSpellId`, the same resolver kick-eaten's range
-     * reads), then to the kicker's kit entry (`interruptForUnit`, what the
-     * "enemy interrupts UP" ledger keys on) when it is the same spell by
-     * name. */
-    const enemyKickCooldown = (
-      unit: ICombatUnit,
-      spellId: string,
-      kickSpell: string,
-    ): number | undefined => {
-      const direct = interruptCooldownSeconds(spellId, unit);
-      if (direct !== undefined) return direct;
-      const cast = kickCastSpellId(spellId);
-      const viaCast =
-        cast !== spellId ? interruptCooldownSeconds(cast, unit) : undefined;
-      if (viaCast !== undefined) return viaCast;
-      const def = interruptForUnit(unit);
-      return def && getEnglishSpellName(def.spellId, def.name) === kickSpell
-        ? interruptCooldownSeconds(def.spellId, unit)
-        : undefined;
-    };
-    const seenKicks = new Set<string>();
-    const allUnitsForKicks = friends ? [...friends] : [];
-    if (enemies) {
-      allUnitsForKicks.push(...enemies);
-    }
-    for (const unit of allUnitsForKicks) {
-      const actions = [...(unit.actionOut ?? []), ...(unit.actionIn ?? [])];
-      for (const action of actions) {
-        if (action.logLine.event !== LogEvent.SPELL_INTERRUPT) continue;
-        const key = `${action.timestamp}|${action.srcUnitName}|${action.destUnitName}|${action.spellId}`;
-        if (seenKicks.has(key)) continue;
-        seenKicks.add(key);
-        const atSeconds = (action.timestamp - matchStartMs) / 1000;
-        if (atSeconds < 0) continue;
-        const kicker = resolveKicker(action.srcUnitName, action.srcUnitId);
-        // Victims get the same resolution as kickers: players → pid, pets →
-        // owner attribution ("N's pet"), localized NPC names suppressed.
-        const victim = resolveKicker(action.destUnitName, action.destUnitId);
-        const kickSpell = getEnglishSpellName(
-          action.spellId ?? "",
-          action.spellName ?? "interrupt",
-        );
-        const stoppedSpell =
-          action.extraSpellId !== undefined
-            ? getEnglishSpellName(action.extraSpellId, action.extraSpellName)
-            : "";
-        // GH #103 A3: an ENEMY kick says when it is back — the responder
-        // otherwise estimated the return ("Disrupt would have been coming back
-        // around the time you were free") from nothing. The kicker's cooldown
-        // (`interruptCooldownSeconds` with the kicker: their talent-resolved
-        // cooldown, the same number the "enemy
-        // interrupts UP" ledger reads); no row → no suffix.
-        const enemyKicker = enemyKickerUnit(
-          action.srcUnitName,
-          action.srcUnitId,
-        );
-        const kickCd =
-          enemyKicker && action.spellId
-            ? enemyKickCooldown(enemyKicker, action.spellId, kickSpell)
-            : undefined;
-        const backSuffix =
-          kickCd !== undefined ? `; back ${fmtTime(atSeconds + kickCd)}` : "";
-        addEntry(
-          atSeconds,
-          `${fmtTime(atSeconds)}  [KICK]   ${kicker} interrupted ${victim}${
-            stoppedSpell ? `'s ${stoppedSpell}` : ""
-          } (${kickSpell}${backSuffix})`,
-        );
-      }
-    }
-
-    // Triage 2026-09-29 kick-eaten F-K14a: an ENEMY kick the game rejected as
-    // IMMUNE on a friendly player rendered nothing — the kick was spent into
-    // an interrupt immunity and the timeline showed only the buff and the
-    // cast (5e8b11c1 2:10: Mind Freeze into Spiritwalker's Aegis). "Kick" =
-    // the interrupt kit (`INTERRUPT_SPELL_IDS`), the same ids the "enemy
-    // interrupts UP" ledger calls an interrupt. The immunity is named only
-    // when an aura on the victim is officially interrupt-immune (DB2 aura 77
-    // mechanic 26, `auraBlocksMechanic`); otherwise bare IMMUNE, never a
-    // guess.
-    const kickKitIds = new Set(INTERRUPT_SPELL_IDS);
-    const castersById = new Map(_allUnits.map((u) => [u.id, u]));
-    const immuneAuraCache = new Map<
-      string,
-      Array<{ fromMs: number; toMs: number; name: string }>
-    >();
-    /** The unit's interrupt-immune auras as [fromMs, toMs], through the shared
-     * pairing (`buildAuraIntervals`: BROKEN closes too, an aura with no
-     * REMOVED ends at its official duration, events are sorted). The pairing
-     * clamps every event to its `startTime`, so an aura put up in the prep
-     * room and never REMOVED would restart its official duration at 0:00 and
-     * read as up for the first seconds of the round; the origin is therefore
-     * moved back to the unit's earliest aura event and the result is kept in
-     * absolute milliseconds. */
-    const immuneAurasOf = (unit: ICombatUnit) => {
-      let hit = immuneAuraCache.get(unit.id);
-      if (!hit) {
-        const originMs = (unit.auraEvents ?? []).reduce(
-          (lo, a) => Math.min(lo, a.timestamp),
-          matchStartMs,
-        );
-        hit = buildAuraIntervals(
-          unit,
-          { startTime: originMs, endTime: matchEndMs },
-          castersById,
-        )
-          .filter(
-            (i) => auraBlocksMechanic(i.spellId, INTERRUPT_MECHANIC) === true,
-          )
-          .map((i) => ({
-            fromMs: originMs + i.fromS * 1000,
-            toMs: originMs + i.toS * 1000,
-            name: getEnglishSpellName(i.spellId, i.spellName),
-          }));
-        immuneAuraCache.set(unit.id, hit);
-      }
-      return hit;
-    };
-    const seenImmuneKicks: Array<{ key: string; ms: number }> = [];
-    for (const friend of friends) {
-      for (const m of friend.missesIn ?? []) {
-        if (m.missType !== "IMMUNE" || !m.spellId) continue;
-        if (!kickKitIds.has(m.spellId)) continue;
-        if (!enemyKickerUnit(m.srcUnitName, m.srcUnitId)) continue;
-        const atSeconds = (m.timestamp - matchStartMs) / 1000;
-        if (atSeconds < 0) continue;
-        // one kick, one line: Skull Bash logs its two ids 1 ms apart
-        const key = `${m.srcUnitId}|${friend.id}|${kickCastSpellId(m.spellId)}`;
-        if (
-          seenImmuneKicks.some(
-            (s) =>
-              s.key === key &&
-              Math.abs(s.ms - m.timestamp) <= IMMUNE_KICK_DEDUPE_MS,
-          )
-        )
-          continue;
-        seenImmuneKicks.push({ key, ms: m.timestamp });
-        // every interrupt-immune aura on the victim that covers the miss
-        // (inclusive: one removed in the miss's own millisecond was still
-        // up; 0.5 ms absorbs the seconds round trip), in the order applied —
-        // with two up at once either is a true reason, so both are named
-        const why = [
-          ...new Set(
-            immuneAurasOf(friend)
-              .filter(
-                (i) =>
-                  i.fromMs - 0.5 <= m.timestamp && m.timestamp <= i.toMs + 0.5,
-              )
-              .sort((a, b) => a.fromMs - b.fromMs)
-              .map((i) => i.name),
-          ),
-        ].join(" + ");
-        addEntry(
-          atSeconds,
-          `${fmtTime(atSeconds)}  [KICK]   ${resolveKicker(m.srcUnitName, m.srcUnitId)}'s ${getEnglishSpellName(
-            m.spellId,
-            m.spellName ?? "interrupt",
-          )} on ${pid(friend.name)} missed — IMMUNE${why ? ` (${why})` : ""}`,
-        );
-      }
-    }
-  }
+  emitKickEntries({
+    friends,
+    enemies,
+    pid,
+    enemyPid,
+    allUnits,
+    matchStartMs,
+    addEntry,
+    _allUnits,
+    matchEndMs,
+  });
 
   // ── [DMG SPIKE] events ─────────────────────────────────────────────────────
 

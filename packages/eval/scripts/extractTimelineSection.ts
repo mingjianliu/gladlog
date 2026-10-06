@@ -69,6 +69,12 @@ interface Config {
    * function of buildMatchTimeline references the binding, in the range or
    * out (see OuterBinding.closureRefs). */
   threaded?: string[];
+  /** module-scope consts of matchTimeline.ts that move WITH the section (with
+   * their JSDoc) instead of being refused as a same-file module-scope use.
+   * Allowed only for an un-exported single-name `const` whose initializer
+   * names no identifier (a literal) and whose every reference in the file is
+   * inside the range — so nothing else can observe the move. */
+  moveModuleConsts?: string[];
 }
 
 const cfg = JSON.parse(fs.readFileSync(process.argv[2]!, "utf8")) as Config;
@@ -111,10 +117,78 @@ for (const o of r.outer) {
 }
 for (const d of r.declaredInsideUsedAfter)
   problems.push(`declares ${d.name} (L${d.declLine}), used after the range`);
-for (const d of r.moduleLocal)
-  problems.push(
-    `uses module-scope ${d.name} (L${d.declLine}) of matchTimeline.ts`,
+// module-scope consts moving with the section: verify, and capture their text
+const moveConsts = new Set(cfg.moveModuleConsts ?? []);
+const movedConstBlocks: string[] = [];
+const rangeStartPos = sf.getPositionOfLineAndCharacter(cfg.bodyStart - 1, 0);
+const rangeEndPos = sf.getPositionOfLineAndCharacter(cfg.bodyEnd, 0);
+for (const name of moveConsts) {
+  const stmt = sf.statements.find(
+    (s): s is ts.VariableStatement =>
+      ts.isVariableStatement(s) &&
+      s.declarationList.declarations.some(
+        (d) => ts.isIdentifier(d.name) && d.name.text === name,
+      ),
   );
+  if (!stmt) {
+    problems.push(`moveModuleConsts: no module-scope declaration of ${name}`);
+    continue;
+  }
+  const decl = stmt.declarationList.declarations[0]!;
+  if (
+    stmt.declarationList.declarations.length !== 1 ||
+    !(stmt.declarationList.flags & ts.NodeFlags.Const) ||
+    stmt.modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword)
+  ) {
+    problems.push(
+      `moveModuleConsts: ${name} is not an un-exported single-name const`,
+    );
+    continue;
+  }
+  let namesIdentifier = false;
+  const scanInit = (n: ts.Node): void => {
+    if (ts.isIdentifier(n)) namesIdentifier = true;
+    n.forEachChild(scanInit);
+  };
+  if (decl.initializer) scanInit(decl.initializer);
+  if (namesIdentifier) {
+    problems.push(
+      `moveModuleConsts: ${name}'s initializer names an identifier (only literals move)`,
+    );
+    continue;
+  }
+  // Any occurrence of the NAME outside the range refuses the move — by text,
+  // not by symbol: symbol resolution misses shorthand properties, export
+  // specifiers and JSDoc (`@type {typeof X}`), and a false refusal costs
+  // nothing (agy review 2026-10-06). The declaration itself (and its JSDoc,
+  // which may mention the name) is excluded.
+  const fullText = sf.getFullText();
+  const declJsDoc = (stmt as { jsDoc?: ts.JSDoc[] }).jsDoc;
+  const declFrom = declJsDoc?.[0]?.getStart(sf) ?? stmt.getStart(sf);
+  const declTo = stmt.getEnd();
+  const outside: number[] = [];
+  const wordRe = new RegExp(`(?<![\\w$])${name}(?![\\w$])`, "g");
+  for (const m of fullText.matchAll(wordRe)) {
+    const at = m.index!;
+    if (at >= declFrom && at < declTo) continue;
+    if (at >= rangeStartPos && at < rangeEndPos) continue;
+    outside.push(sf.getLineAndCharacterOfPosition(at).line + 1);
+  }
+  if (outside.length) {
+    problems.push(
+      `moveModuleConsts: ${name} is also used outside the range (L${outside.join(",")})`,
+    );
+    continue;
+  }
+  const jsDoc = (stmt as { jsDoc?: ts.JSDoc[] }).jsDoc;
+  const start = jsDoc?.[0]?.getStart(sf) ?? stmt.getStart(sf);
+  movedConstBlocks.push(sf.getFullText().slice(start, stmt.getEnd()));
+}
+for (const d of r.moduleLocal)
+  if (!moveConsts.has(d.name))
+    problems.push(
+      `uses module-scope ${d.name} (L${d.declLine}) of matchTimeline.ts`,
+    );
 for (const l of r.escapingReturns)
   problems.push(`returns from buildMatchTimeline at L${l}`);
 if (problems.length) {
@@ -176,6 +250,7 @@ const out = [
   ...importLines,
   'import type { TimelineCtx } from "./ctx";',
   "",
+  ...movedConstBlocks.flatMap((b) => [b, ""]),
   `export function ${cfg.exportName}(`,
   `  ctx: Pick<TimelineCtx, ${fieldNames.map((f) => `"${f}"`).join(" | ")}>,`,
   threadedNames.length
@@ -234,7 +309,21 @@ for (const e of r.imports.values()) {
   if (e.defaultName) movedImportNames.add(e.defaultName);
   if (e.namespaceName) movedImportNames.add(e.namespaceName);
 }
-const pruned = pruneImports(file, newLines.join("\n"), movedImportNames);
+// remove the moved consts (exact text, exactly once) and the blank line they leave
+let newText = newLines.join("\n");
+for (const block of movedConstBlocks) {
+  const at = newText.indexOf(block);
+  if (at < 0 || newText.indexOf(block, at + 1) >= 0)
+    throw new Error(`moved const text not found exactly once: ${block}`);
+  let end = at + block.length;
+  if (newText[end] === "\n") end++;
+  // the blank line after it goes too when the block was preceded by a blank
+  // line — or sat at the very start of the file (agy)
+  const precededByBlank = at === 0 || newText.slice(at - 2, at) === "\n\n";
+  if (precededByBlank && newText[end] === "\n") end++;
+  newText = newText.slice(0, at) + newText.slice(end);
+}
+const pruned = pruneImports(file, newText, movedImportNames);
 fs.writeFileSync(file, pruned.text);
 
 console.log(

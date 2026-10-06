@@ -61,8 +61,19 @@ export interface TimelineCtx {
   enemies: P["enemies"];
   enemyCDTimeline: P["enemyCDTimeline"];
   bracket: P["bracket"];
+  friends: P["friends"];
+  /** params.allUnits as passed (may be undefined — see `_allUnits`) */
+  allUnits: P["allUnits"];
+  enemyCCSummaries: P["enemyCCSummaries"];
+  matchEndMs: P["matchEndMs"];
 
   // ── derived values ──
+  /** (matchEndMs − matchStartMs) / 1000 */
+  matchEndSeconds: number;
+  /** the round, as reconstructEnemyCDTimeline reads it (GH #119) */
+  roundBounds: { startTime: number; endTime: number };
+  /** the owner's CC spell ids that already have a [YOU] [CC] cast line */
+  ownerRenderedCcIds: Set<string>;
   /** params.allUnits, or friends + enemies when absent */
   _allUnits: ICombatUnit[];
   /** friends + enemies (dampening, rot pressure) */
@@ -92,8 +103,24 @@ export interface TimelineCtx {
    * the legend line for the tag is emitted only then. Emitters that set it
    * take the current value and return the new one. */
   procLinesEmitted: boolean;
+  /** enemy trinket lines rendered; the [ENEMY TRINKET] legend needs > 0 */
+  enemyTrinketCount: number;
 
   // ── closure helpers ──
+  /** caster label for "(by X)": player -> pid / enemyPid, pet / totem -> its owner */
+  actorLabel: (
+    name: string,
+    side: "friendly" | "enemy",
+    sourceId?: string,
+  ) => string;
+  /** the DR tag on our CC landing on an enemy */
+  enemyCcDrTag: (
+    targetName: string,
+    spellId: string,
+    atSeconds: number,
+    sourceId: string | undefined,
+    sourceName: string,
+  ) => string;
   /** friendly player name -> short id (+ spec tag) */
   pid: (name: string) => string;
   /** friendly player name -> short id (+ spec tag); undefined for a name that
