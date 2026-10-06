@@ -831,5 +831,11 @@
  *  v294 (2026-10-03, triage cc-dr F-DC1): the [DR CLASH] cap (3) keeps
  *  the owner's own clashes first — owner diminished, then owner prior, then
  *  the rest — and renders the kept ones in time order.
+ *  v295 (2026-10-03): triage G16, the observed-chain half of ruling A14 = B
+ *  (kick-eaten F-K1 × sync-burst F-L3). An offensive cooldown's span — and
+ *  every `buffEndSeconds` reader — ends where its effect aura was seen to
+ *  end (own id or a G3 cast→effect aura, any unit, applied by the caster,
+ *  re-applications within 0.5 s extend it), else at the official duration.
+ *  kick-eaten's silenced test reads the same cast→effect table.
  */
-export const PROMPT_VERSION = 294;
+export const PROMPT_VERSION = 295;

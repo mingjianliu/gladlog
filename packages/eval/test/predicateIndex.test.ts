@@ -730,6 +730,11 @@ const INDEX: PredicateRow[] = [
     mod: burstLedger,
   },
   {
+    file: `${A}/utils/enemyCDs.ts`,
+    symbol: "observedEffectEndSeconds",
+    mod: enemyCDs,
+  },
+  {
     file: `${A}/utils/kickAudit.ts`,
     symbol: "analyzeKickAudit",
     mod: kickAudit,

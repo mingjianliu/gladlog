@@ -4,11 +4,13 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
+import { castAndEffectIds } from "../data/castEffectAuras";
 import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
 import {
   effectiveCooldownSeconds,
   spellEffectData,
 } from "../data/spellEffectData";
+import { buildAuraIntervals, type IAuraInterval } from "./auraIntervals";
 import { buffFullDurationForCaster } from "./buffDuration";
 import {
   getUnitHpAtTimestamp,
@@ -63,8 +65,10 @@ export interface IEnemyCDCast {
    * scoring read. */
   dangerWeight: number;
   /**
-   * When the buff granted by this CD expires. Computed from spellEffectData.durationSeconds
-   * when available; falls back to castTimeSeconds when duration data is missing.
+   * When the effect of this cast ended: the end of its OBSERVED aura chain
+   * when the log shows one (`observedEffectEndSeconds`), else the official
+   * duration for the caster (spellEffectData / `buffFullDurationForCaster`),
+   * else the cast time. `burstCastSpan` reads it.
    */
   buffEndSeconds: number;
   /** GH #119: "fact" = shown, never part of a burst window (a Demonic
@@ -156,6 +160,96 @@ export function isEnemyCdWindowSpell(spellId: string): boolean {
  * and when each CD will be available again. Also identifies aligned burst windows where
  * multiple enemies stacked offensive CDs together.
  */
+/** A re-application this close after the previous interval's end continues
+ * the same effect (triage kick-eaten F-K1, Sim R1-A: 02c8e3ac's Dragonrage
+ * re-applied through 29.9 and removed at 45.4). */
+export const EFFECT_CHAIN_GAP_S = 0.5;
+
+/** A chain starts at an application in [cast − this, cast + `EFFECT_START_AFTER_S`]
+ * — the entry's Sim R1-A window (an aura's APPLIED can be logged a little
+ * before the cast's SUCCESS). */
+export const EFFECT_START_BEFORE_S = 0.5;
+export const EFFECT_START_AFTER_S = 2;
+
+/** Every unit's aura intervals, once per combat. */
+const AURA_INDEX = new WeakMap<
+  object,
+  Array<{ destId: string; iv: IAuraInterval }>
+>();
+function auraIndexOf(combat: AtomicArenaCombat) {
+  let idx = AURA_INDEX.get(combat);
+  if (!idx) {
+    idx = [];
+    for (const u of Object.values(combat.units ?? {}))
+      for (const iv of buildAuraIntervals(u, combat))
+        idx.push({ destId: u.id, iv });
+    AURA_INDEX.set(combat, idx);
+  }
+  return idx;
+}
+
+/**
+ * Where one cast's effect was seen to end, in seconds from the match start —
+ * or null when the log does not show it.
+ *
+ * Triage kick-eaten F-K1, the observed-chain half of ruling A14 = B (the
+ * floor half landed 2026-10-02): `burstCastSpan` ends at the observed aura
+ * chain of the cast. The cast's effect auras are its own id plus the
+ * cast→effect table's (`castAndEffectIds`, CROSS-THEME G3, ruling A10), on
+ * ANY unit (The Hunt's DoT is on its target, Strike of the Windlord's debuff
+ * too), applied by the caster: an interval that starts in [cast −
+ * `EFFECT_START_BEFORE_S`, cast + `EFFECT_START_AFTER_S`] (before the
+ * caster's next press of the same spell), extended by re-applications on the
+ * same unit no more than `EFFECT_CHAIN_GAP_S` after it ended. Several chains
+ * (a caster buff and a target DoT) → the one that ends last, and only when
+ * THAT end was logged: a chain closed only by the official-length cap
+ * (`inferredEnd`) says nothing about when the effect ended, so a longer
+ * unclosed DoT is not cut short by a shorter buff's removal (codex review:
+ * The Hunt's 0.4 s buff against its unclosed DoT) — null, the official
+ * duration stands. Sim R1-A of the entry, rule for rule.
+ */
+export function observedEffectEndSeconds(
+  caster: ICombatUnit,
+  castSpellId: string,
+  castS: number,
+  nextSameCastS: number,
+  combat: AtomicArenaCombat,
+): number | null {
+  const ids = castAndEffectIds(castSpellId);
+  const mine = auraIndexOf(combat).filter(
+    ({ iv }) =>
+      ids.has(iv.spellId) &&
+      iv.srcUnitName === caster.name &&
+      !iv.inferredStart &&
+      iv.fromS < nextSameCastS,
+  );
+  let best: { end: number; observed: boolean } | null = null;
+  for (const dest of new Set(mine.map((m) => m.destId))) {
+    const ivs = mine
+      .filter((m) => m.destId === dest)
+      .map((m) => m.iv)
+      .sort((a, b) => a.fromS - b.fromS);
+    const first = ivs.findIndex(
+      (iv) =>
+        iv.fromS >= castS - EFFECT_START_BEFORE_S &&
+        iv.fromS <= castS + EFFECT_START_AFTER_S,
+    );
+    if (first < 0) continue;
+    let chainEnd = ivs[first]!.toS;
+    let observed = !ivs[first]!.inferredEnd;
+    for (const iv of ivs.slice(first + 1)) {
+      if (iv.fromS > chainEnd + EFFECT_CHAIN_GAP_S) break;
+      if (iv.toS > chainEnd) {
+        chainEnd = iv.toS;
+        observed = !iv.inferredEnd;
+      }
+    }
+    if (best === null || chainEnd > best.end)
+      best = { end: chainEnd, observed };
+  }
+  return best?.observed ? best.end : null;
+}
+
 export function reconstructEnemyCDTimeline(
   enemies: ICombatUnit[],
   combat: AtomicArenaCombat,
@@ -219,6 +313,24 @@ export function reconstructEnemyCDTimeline(
           (id) => effectiveCooldownSeconds(id) ?? 0,
         ),
       });
+    }
+
+    // The span of each LOGGED cast ends where its effect was seen to end
+    // (`observedEffectEndSeconds`) — before the aura-evidence merge below,
+    // which keeps its own say for the effects it owns.
+    for (const cd of offensiveCDs) {
+      const next = offensiveCDs.find(
+        (c) =>
+          c.spellId === cd.spellId && c.castTimeSeconds > cd.castTimeSeconds,
+      );
+      const end = observedEffectEndSeconds(
+        enemy,
+        cd.spellId,
+        cd.castTimeSeconds,
+        next?.castTimeSeconds ?? Infinity,
+        combat,
+      );
+      if (end !== null) cd.buffEndSeconds = end;
     }
 
     // GH #119: effects whose only evidence is an aura (Havoc Metamorphosis —

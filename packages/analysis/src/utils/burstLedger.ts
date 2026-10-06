@@ -152,10 +152,12 @@ export interface IBurstLedgerEntry {
  * cooldown is now a zero-length span: it is "running" for nobody and groups
  * only with casts in its own instant.
  *
- * NOT done here (waits for the cast→effect table of CROSS-THEME G3, ruling
- * A10): ending the span at the OBSERVED aura chain — an effect that ended
- * early (The Hunt's 0.4 s caster buff) or that re-application kept alive
- * past its nominal end (02c8e3ac Dragonrage) still reads the official length.
+ * The span ends at the OBSERVED aura chain when the log shows one (the
+ * second half of A14, after the cast→effect table of CROSS-THEME G3, ruling
+ * A10): `buffEndSeconds` is `enemyCDs.ts` → `observedEffectEndSeconds` when
+ * it is known — an effect that ended early ends the span early, one that
+ * re-application kept alive (02c8e3ac Dragonrage) lengthens it — else the
+ * official duration.
  * `enemyCDs.ts`' aligned-window clustering keeps its own reach
  * (`BURST_CLUSTER_SECONDS`): "which casts form one go" is a different
  * question from "how long does one cast's effect run".

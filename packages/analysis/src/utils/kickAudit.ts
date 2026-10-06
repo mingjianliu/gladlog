@@ -5,6 +5,7 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
+import { isCastOrEffect } from "../data/castEffectAuras";
 import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import {
@@ -245,17 +246,19 @@ export function analyzeKickAudit(
     }
 
     // 2b. The kick's own silence aura on an enemy: it landed without a cast
-    // to stop (fa5e6c66: six Silences read "hit nothing"). The SAME spell id
-    // only, applied by the kicker at or after the kick — a generic "any aura
-    // from the kicker" test would accept Mass Entanglement 6 ms after a Solar
-    // Beam that silenced nobody (2c6e85ec). A kick whose silence carries a
-    // different id (Solar Beam 78675 → 81261) needs the cast→effect table of
-    // CROSS-THEME G3 and stays "missed" until then.
+    // to stop (fa5e6c66: six Silences read "hit nothing"). The kick's own id
+    // or one of its effect auras in the cast→effect table (`isCastOrEffect`,
+    // CROSS-THEME G3), applied by the kicker at or after the kick — a generic
+    // "any aura from the kicker" test would accept Mass Entanglement 6 ms
+    // after a Solar Beam that silenced nobody (2c6e85ec). The table holds no
+    // interrupt row today (2026-10-03): Solar Beam's silence leaves no aura on
+    // its target (only CAST_FAILED "silenced"), so a Solar Beam that stopped
+    // nothing still reads "missed".
     const carriesKickAura = (enemy: ICombatUnit) =>
       (enemy.auraEvents ?? []).some(
         (a) =>
           a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
-          a.spellId === kick.spellId &&
+          isCastOrEffect(kick.spellId ?? "", a.spellId ?? "") &&
           kickerIds.has(a.srcUnitId) &&
           a.timestamp >= kickMs &&
           a.timestamp <= kickMs + LANDED_PAIR_MS,

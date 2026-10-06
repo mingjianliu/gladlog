@@ -678,11 +678,13 @@ export function buildResourceSnapshot({
   const enemyActiveParts: string[] = [];
   for (const player of enemyCDTimeline.players) {
     for (const cd of player.offensiveCDs) {
-      // If the buff duration is known, show it until it expires (capped at 30s to prevent bugs).
-      // If duration is 0 (instant cast), show it for 8 seconds to ensure AI has context.
+      // Shown until its effect ends — `buffEndSeconds`, the burst span's own
+      // end (the observed aura chain, else the official duration; triage
+      // G16). The old 30 s cap made a chain the log shows running 52 s read
+      // "5s left" at 35 s (codex review): no cap. If duration is 0 (instant
+      // cast), show it for 8 seconds to ensure AI has context.
       const buffDuration = cd.buffEndSeconds - cd.castTimeSeconds;
-      const displayWindowSeconds =
-        buffDuration > 0 ? Math.min(buffDuration, 30) : 8;
+      const displayWindowSeconds = buffDuration > 0 ? buffDuration : 8;
 
       const agoSeconds = timeSeconds - cd.castTimeSeconds;
       if (agoSeconds >= 0 && agoSeconds <= displayWindowSeconds) {
