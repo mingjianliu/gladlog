@@ -753,6 +753,28 @@ export function wasLockedOutByStunOnly(
   );
 }
 
+/**
+ * The CC auras of the lethal window (`[death - windowSeconds, death]`, the
+ * window `wasLockedOutByStunOnly` judges) — when that test is true, the
+ * stuns the unit was held by. What a school-limited purge is checked against
+ * (`usableWhileStunned`'s third argument; ruling U-T1: Blessing of
+ * Protection gets its caster out of a physical stun only).
+ */
+export function lockoutWindowCcSpellIds(
+  ccSummary: Pick<IPlayerCCTrinketSummary, "ccInstances">,
+  deathSeconds: number,
+  windowSeconds = LETHAL_WINDOW_SECONDS,
+): string[] {
+  const windowStart = Math.max(0, deathSeconds - windowSeconds);
+  return ccSummary.ccInstances
+    .filter(
+      (cc) =>
+        cc.atSeconds < deathSeconds &&
+        cc.atSeconds + cc.durationSeconds > windowStart,
+    )
+    .map((cc) => cc.spellId);
+}
+
 // Per-spell reach for "could this teammate have thrown it": official DB2 via
 // data/spellReachGenerated.json (GH #34 batch 4 ②, user ruling 2026-08-29) —
 // cast range for targeted spells, range + radius for placed areas, radius for

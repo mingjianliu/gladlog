@@ -1330,6 +1330,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     ownerCCSummary,
     ownerHardCcTagAt,
     ownerStunnedAtCast,
+    ownerStunIdsAtCast,
     ownerInterruptImmuneReasonAt,
   } = prepareOwnerCdContext({
     ownerCDs,
@@ -1368,6 +1369,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     addEntry,
     ownerHardCcTagAt,
     ownerStunnedAtCast,
+    ownerStunIdsAtCast,
   }));
 
   // ── [BUFF FADED] events (F70, B31: renamed from [CD EXPIRED]) ──────────────

@@ -36,6 +36,7 @@ import {
 } from "../utils/counterfactual";
 import {
   enemyTargetReaches,
+  lockoutWindowCcSpellIds,
   wasLockedOutByStunOnly,
   wasLockedOutThroughWindow,
 } from "../utils/deathOutcomeAnalysis";
@@ -862,10 +863,15 @@ export function emitFriendlyDeathEntries<S>(params: {
             // 同 death.ts:走谓词而不是直接查无条件集合(单源)。条件层要看
             // 死者的 PvP 天赋(2026-09-26 天赋影响审计:之前传 undefined,
             // 条件层在死亡行里永远不生效)。
+            // U-T1: the list is the dying unit's own saves, so a
+            // school-limited purge is judged against the stuns that held it.
             (isLockedOutStunOnly &&
               usableWhileStunned(
                 cd.spellId,
                 new Set<string>(dyingUnit.info?.pvpTalents ?? []),
+                summary
+                  ? lockoutWindowCcSpellIds(summary, death.atSeconds)
+                  : undefined,
               )),
         )
         // Forbearance: a paladin can't press Spellwarding/BoP/LoH/Divine Shield if it self-applied

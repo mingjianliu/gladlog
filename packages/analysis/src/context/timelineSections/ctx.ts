@@ -288,4 +288,6 @@ export interface TimelineCtx {
   /** The owner was stunned at this cast: strictly inside a stun, or the cast
    * is the one that ended it (triage enemy-def F-E20). */
   ownerStunnedAtCast: (timeSeconds: number) => boolean;
+  /** The stun auras behind `ownerStunnedAtCast` (empty when it is false). */
+  ownerStunIdsAtCast: (timeSeconds: number) => string[];
 }

@@ -288,6 +288,40 @@ describe("a group save and the ally-only Blessing of Sacrifice (user ruling U-T2
   });
 });
 
+describe("Divine Shield is never the cheaper choice (user ruling P-FU-b7-DS; the cost-norm sign-off book)", () => {
+  const BOP = "1022";
+  const ICE_BLOCK = "45438";
+  it("a Blessing of Protection on oneself is not told Divine Shield was cheaper — stunned or not", () => {
+    const ledger = [
+      ledgerEntry(BOP, "Blessing of Protection", 300, [44]),
+      ledgerEntry(DIVINE_SHIELD, "Divine Shield", 210, []),
+      ledgerEntry(DIVINE_PROTECTION, "Divine Protection", 60, []),
+    ];
+    const free = lineWith(
+      timeline({ ownerCDs: ledger }),
+      "[YOU] [CD]",
+      "Blessing of Protection",
+    );
+    expect(free).toContain("cheaper available: Divine Protection");
+    expect(free).not.toContain("Divine Shield");
+    // under a stun Divine Shield is pressable (ruling U-T1) and still not offered
+    const stunned = lineWith(
+      timeline({ ownerCDs: ledger, cc: [hoj(42.494, 6)] }),
+      "[YOU] [CD]",
+      "Blessing of Protection",
+    );
+    expect(stunned).toContain("cheaper available: Divine Protection");
+    expect(stunned).not.toContain("Divine Shield");
+  });
+  it("the same sign-off entry covers Ice Block", () => {
+    const cds = [
+      ledgerEntry("55342", "Mirror Image", 120, [30]),
+      ledgerEntry(ICE_BLOCK, "Ice Block", 60, []),
+    ];
+    expect(findCheaperDefensiveAlternatives(cds[0]!, cds, 30)).toEqual([]);
+  });
+});
+
 describe("owner stunned at the cast (enemy-def F-E20)", () => {
   // e10c6bea: Hammer of Justice 162.494 → REMOVED 165.286 inside Divine
   // Shield's purge, SPELL_CAST_SUCCESS 165.287.

@@ -132,8 +132,10 @@ function breakToolsFor(target: ICombatUnit, mech: number): string[] {
     if (e.spellId) ids.add(e.spellId);
   // A designed breaker (mechanic listed on its own aura 77) counts outright;
   // a full-school immunity (Ice Block, Divine Shield) only where the official
-  // usable-while attribute says it can be pressed in that state (user ruling
-  // 2026-09-04: neither is usable while stunned).
+  // usable-while table says it can be pressed in that state. Under a stun it
+  // can: both are on the immunity-purge route (user ruling U-T1, 2026-10-06,
+  // reversing 2026-09-04 — `USABLE_WHILE_STUNNED_BY_PURGE_IDS`); the feared
+  // and confused tables still leave them out.
   // An immunity only counts when it lands on its caster: Cyclone, Imprison
   // and Banish make their TARGET immune (official ImplicitTarget = enemy;
   // corpus: Cyclone's aura on the caster 5 times of 1,052, Imprison 0 / 38,

@@ -11,7 +11,10 @@ import baselineDefensivesGenerated from "../data/baselineDefensivesGenerated.jso
 import CD_RECAST_FLOORS from "../data/cdRecastFloorGenerated.json";
 import { classMetadata } from "../data/classSpells";
 import CONDITIONAL_COOLDOWNS from "../data/conditionalCooldownsGenerated.json";
-import { CURATED_ABILITY_FACTS } from "../data/curatedAbilityFacts";
+import {
+  costNormPhrase,
+  CURATED_ABILITY_FACTS,
+} from "../data/curatedAbilityFacts";
 import { DISCOVERY_TAG_RULES } from "../data/discoveryRules";
 import {
   healerSaveCdRoster,
@@ -27,6 +30,7 @@ import {
 } from "../data/spellEffectData";
 import { CORPUS_COOLDOWN_PATCHES } from "../data/spellEffectOverrides";
 import spellIdListsData from "../data/spellIdLists";
+import { spellSchoolMask } from "../data/spellSchools";
 import { hasOfficialTargeting, reachesAlly } from "../data/spellTargeting";
 import { SpellTag } from "../data/spellTypes";
 import { replacedSpellIds } from "../data/talentReplaces";
@@ -35,7 +39,10 @@ import {
   eventReductionsFor,
   freeRecastWindowFor,
 } from "../data/talentScriptedCooldowns";
-import { USABLE_WHILE_CC_GENERATED } from "../data/usableWhileCcGenerated";
+import {
+  STUN_PURGE_GENERATED,
+  USABLE_WHILE_CC_GENERATED,
+} from "../data/usableWhileCcGenerated";
 import { getSortedAdvancedActions } from "./advancedActions";
 import { buildAuraIntervals, type IAuraInterval } from "./auraIntervals";
 import { binarySearchClosest } from "./binarySearch";
@@ -427,6 +434,78 @@ export const USABLE_WHILE_CONFUSED_SPELL_IDS = new Set<string>([
   ...USABLE_WHILE_CC_GENERATED.confused,
 ]);
 
+const EVERY_SCHOOL_MASK = 0x7f;
+
+/**
+ * Spells DB2's immunity route nominates that are NOT taken into the
+ * usable-while-stunned table — user ruling U-T1b (2026-10-06): "只收用户点名
+ * 的四个(圣盾 / 寒冰屏障 / 冰封之韧 / 自身保护祝福),闪现与小鬼逃跑这次不收".
+ * Blink 1953 / 119415 and the imp's Flee 89792 carry "Immunity Purges
+ * Effect" and a stun-mechanic immunity exactly as Icebound Fortitude does;
+ * they are withheld by the ruling, not by the data. `genUsableWhileCc`
+ * leaves them out of `STUN_PURGE_GENERATED` and names them in its header.
+ * Registered in curatedIdRegistry.
+ */
+export const STUN_PURGE_WITHHELD_IDS: ReadonlySet<string> = new Set([
+  "1953", // Blink
+  "119415", // Blink (the second logged id)
+  "89792", // Flee (Imp)
+]);
+
+/**
+ * The immunity route to "usable while stunned" (user ruling U-T1,
+ * 2026-10-06; `STUN_PURGE_GENERATED`, genUsableWhileCc.ts): a spell carrying
+ * DB2's "Immunity Purges Effect" attribute whose own effect makes its caster
+ * immune to the stun can be pressed through it, and the press ends the stun.
+ * This set is the part that holds against ANY stun — an all-school immunity
+ * (Divine Shield, Ice Block) or an immunity to the stun mechanic itself
+ * (Icebound Fortitude). All of them are self-only buttons. Blink and the
+ * imp's Flee are on the same route and withheld by ruling U-T1b
+ * (`STUN_PURGE_WITHHELD_IDS`).
+ *
+ * A school-limited one is not in it: Blessing of Protection covers physical
+ * only, so it purges a Kidney Shot and not a Hammer of Justice, and only
+ * when cast on oneself — `usableWhileStunned`'s third argument.
+ * Corpus (605 S2 files, `fix-FU/stunCastProbe.py`, own casts that ended a
+ * stun on the caster): Divine Shield 99 / 417, Ice Block 42 / 343, Icebound
+ * Fortitude 108 / 247, Blessing of Protection on self 13 / 56 (13 physical
+ * stuns) and on another unit 0 / 179; Spellwarding on self 0 / 46, Cloak of
+ * Shadows 0 / 499, Aspect of the Turtle 0 / 224.
+ */
+export const USABLE_WHILE_STUNNED_BY_PURGE_IDS: ReadonlySet<string> = new Set(
+  Object.entries(STUN_PURGE_GENERATED)
+    .filter(
+      ([, r]) =>
+        r.stunMechanic ||
+        (r.schoolMask & EVERY_SCHOOL_MASK) === EVERY_SCHOOL_MASK,
+    )
+    .map(([id]) => id),
+);
+
+/**
+ * Does a school-limited purge (`STUN_PURGE_GENERATED` rows outside
+ * `USABLE_WHILE_STUNNED_BY_PURGE_IDS`) get its caster out of these stuns —
+ * is every one of them wholly inside the schools the immunity covers? An
+ * immunity to a school stops, and purges, only an effect all of whose
+ * schools it covers. False with no stun named, and for a stun whose school
+ * the official table does not know (`spellSchoolMask`).
+ */
+function schoolPurgeCoversStuns(
+  spellId: string,
+  stunSpellIds: readonly string[] | undefined,
+): boolean {
+  const route = STUN_PURGE_GENERATED[spellId];
+  if (!route || route.schoolMask === 0 || !stunSpellIds?.length) return false;
+  return stunSpellIds.every((id) => {
+    const school = spellSchoolMask(id);
+    return (
+      school !== undefined &&
+      school !== 0 &&
+      (school & route.schoolMask) === school
+    );
+  });
+}
+
 /**
  * Spell IDs that can be cast while the player is stunned. Used to avoid
  * blaming players for "unused" defensives when they were locked out.
@@ -441,10 +520,18 @@ export const USABLE_WHILE_CONFUSED_SPELL_IDS = new Set<string>([
  * Shield and 48792 Icebound Fortitude were re-ruled NOT usable while stunned
  * by the user on 2026-09-04 (no named bit, 1 / 0 casts-in-stun in 1028
  * matches); 55233 Vampiric Blood stays out (2026-08-14 "都不行").
+ *
+ * 2026-10-06 (user ruling U-T1) reverses that re-ruling with the evidence it
+ * lacked: Divine Shield, Ice Block and Icebound Fortitude come back through
+ * the IMMUNITY route (`USABLE_WHILE_STUNNED_BY_PURGE_IDS` below), a second
+ * official way to cast under a stun that the named bits do not express. The
+ * "1 / 0 casts-in-stun" count was a strict-inside test, and a purge ends the
+ * stun a millisecond before its own cast line.
  */
 export const USABLE_WHILE_CC_SPELL_IDS = new Set<string>([
   ...USABLE_WHILE_CC_GENERATED.stunned,
   ...USABLE_WHILE_CC_GAP_IDS,
+  ...USABLE_WHILE_STUNNED_BY_PURGE_IDS,
 ]);
 
 /**
@@ -488,12 +575,21 @@ export const USABLE_WHILE_CC_CONDITIONAL: Record<
  *   false. This is the conservative direction: withhold "usable" rather than
  *   assume a talent the caller couldn't confirm the player has — same
  *   false-accusation-averse posture as the unconditional set's own gap layer.
+ * - A school-limited purge (Blessing of Protection, ruling U-T1) → true only
+ *   when the caller names the stuns the unit was under (`selfCastUnderStuns`)
+ *   and each is wholly a school the immunity covers. The caller passes them
+ *   only where the press would land on the stunned unit ITSELF: the immunity
+ *   has to be the caster's own. Not named → false, the same conservative
+ *   direction.
  */
 export function usableWhileStunned(
   spellId: string,
   pvpTalentIds?: ReadonlySet<string>,
+  /** the stun auras on the unit, when the press in question is on itself */
+  selfCastUnderStuns?: readonly string[],
 ): boolean {
   if (USABLE_WHILE_CC_SPELL_IDS.has(spellId)) return true;
+  if (schoolPurgeCoversStuns(spellId, selfCastUnderStuns)) return true;
   const conditional = USABLE_WHILE_CC_CONDITIONAL[spellId];
   if (!conditional) return false;
   return pvpTalentIds?.has(conditional.requiresTalent) ?? false;
@@ -3608,7 +3704,12 @@ export function findCheaperDefensiveAlternatives(
     /** Set when the caster was stunned at this cast (strictly inside the
      * stun, or the stun this very cast ended): only buttons the game lets a
      * stunned player press are alternatives (triage enemy-def F-E20). */
-    stunnedCaster?: { pvpTalentIds: ReadonlySet<string> };
+    stunnedCaster?: {
+      pvpTalentIds: ReadonlySet<string>;
+      /** the stuns the caster was under, when the alternative would be
+       * cast on the caster itself (`usableWhileStunned`'s third argument) */
+      selfCastUnderStuns?: readonly string[];
+    };
   } = {},
 ): string[] {
   // Nothing was chosen when a proc fired, so there is no "cheaper" choice to
@@ -3631,6 +3732,13 @@ export function findCheaperDefensiveAlternatives(
         // available:` mentions on the 605 files, which that ruling did not
         // decide — left for the user.
         !RESPONSE_ONLY_DEFENSIVE_IDS.has(other.spellId) &&
+        // User ruling P-FU-b7-DS (2026-10-06): Divine Shield is never the
+        // "cheaper" choice — the cost-norm sign-off book says it (and Ice
+        // Block, the same entry) is "too costly to coach as a routine
+        // answer, a last resort under lethal threat" (`costNormPhrase`, the
+        // predicate cc-avoidable and cd-waste already read). The ruling came
+        // when U-T1 made it pressable under a stun; it holds stunned or not.
+        costNormPhrase(other.spellId) === null &&
         !NON_SUBSTITUTE_DEFENSIVE_IDS.has(other.spellId) &&
         other.cooldownSeconds < cd.cooldownSeconds &&
         other.availableWindows.some(
@@ -3654,7 +3762,11 @@ export function findCheaperDefensiveAlternatives(
         ((!!opts.castTargetIsTeammate && !opts.onlyCasterUnderFire) ||
           !SELF_CAST_NOOP_EXTERNAL_IDS.has(other.spellId)) &&
         (!opts.stunnedCaster ||
-          usableWhileStunned(other.spellId, opts.stunnedCaster.pvpTalentIds)),
+          usableWhileStunned(
+            other.spellId,
+            opts.stunnedCaster.pvpTalentIds,
+            opts.stunnedCaster.selfCastUnderStuns,
+          )),
     )
     .map((other) => other.spellName);
 }

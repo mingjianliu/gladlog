@@ -83,6 +83,7 @@ import {
   TEAM_SAVE_CD_IDS,
   THROUGHPUT_EMPOWER_DEFENSIVE_IDS,
   USABLE_WHILE_CC_CONDITIONAL,
+  STUN_PURGE_WITHHELD_IDS,
   USABLE_WHILE_CC_GAP_IDS,
   USABLE_WHILE_FEARED_GAP_IDS,
 } from "../utils/cooldowns";
@@ -459,6 +460,10 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   // stays registered and is named in the test's DELIBERATELY_EMPTY list.
   t("USABLE_WHILE_CC_GAP_IDS", "utils/cooldowns.ts", "cast", () =>
     set(USABLE_WHILE_CC_GAP_IDS),
+  ),
+  // user ruling U-T1b: nominated by DB2's immunity route, not taken
+  t("STUN_PURGE_WITHHELD_IDS", "utils/cooldowns.ts", "cast", () =>
+    set(STUN_PURGE_WITHHELD_IDS),
   ),
   t("USABLE_WHILE_FEARED_GAP_IDS", "utils/cooldowns.ts", "cast", () =>
     set(USABLE_WHILE_FEARED_GAP_IDS),

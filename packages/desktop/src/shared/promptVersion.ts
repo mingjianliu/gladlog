@@ -939,5 +939,14 @@
  *  redistribution left out (`incomingPressureBySchool`, the reading KILL
  *  ATTEMPTS already had) — instead of landed damage only. `readyCds` of a
  *  crisis under a shield can gain or lose such a save; counts in the commit.
+ *  v311 (2026-10-06, user ruling U-T1): Divine Shield, Ice Block and
+ *  Icebound Fortitude are usable while stunned again, and Blessing of
+ *  Protection on oneself under a physical stun — DB2's immunity route
+ *  ("Immunity Purges Effect" + an own immunity covering the stun), which the
+ *  2026-09-04 named-bit table did not read. A unit that died stunned through
+ *  the lethal window can have them under `[DEATH] … Unused:`; a target
+ *  holding one counts as able to break a stun. Divine Shield and Ice Block
+ *  are never listed after `cheaper available:` (ruling P-FU-b7-DS, the
+ *  cost-norm sign-off book). Counts in the commit.
  */
-export const PROMPT_VERSION = 310;
+export const PROMPT_VERSION = 311;

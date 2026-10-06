@@ -62,6 +62,7 @@ import * as castEffectAuras from "@gladlog/analysis/src/data/castEffectAuras";
 import { CANDIDATE_TYPE_FLAGS } from "@gladlog/analysis/src/data/candidateTypeFlags";
 import * as candidateTypeRegistry from "@gladlog/analysis/src/data/candidateTypeRegistry";
 import * as cdTriggerPriorData from "@gladlog/analysis/src/data/cdTriggerPrior";
+import * as curatedAbilityFacts from "@gladlog/analysis/src/data/curatedAbilityFacts";
 import * as dispelObservedGenerated from "@gladlog/analysis/src/data/dispelObservedGenerated";
 import * as dispelVerdicts from "@gladlog/analysis/src/data/dispelVerdicts";
 import * as healerSaveCd from "@gladlog/analysis/src/data/healerSaveCd";
@@ -396,6 +397,12 @@ const INDEX: PredicateRow[] = [
     symbol: "selfCastNoopAnnotatedName",
     mod: cooldowns,
   },
+  // user ruling P-FU-b7-DS: the cost-norm book has a third reader (the cheaper note)
+  {
+    file: `${A}/data/curatedAbilityFacts.ts`,
+    symbol: "costNormPhrase",
+    mod: curatedAbilityFacts,
+  },
   {
     file: `${A}/data/dispelVerdicts.ts`,
     symbol: "DISPEL_VERDICTS",
@@ -474,6 +481,12 @@ const INDEX: PredicateRow[] = [
   {
     file: `${A}/utils/cooldowns.ts`,
     symbol: "USABLE_WHILE_CC_SPELL_IDS",
+    mod: cooldowns,
+  },
+  // user ruling U-T1: the immunity route to usable-while-stunned
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "USABLE_WHILE_STUNNED_BY_PURGE_IDS",
     mod: cooldowns,
   },
   {

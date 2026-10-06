@@ -4,14 +4,22 @@ import {
   ANCHOR_HAND_EXEMPTIONS,
   attrBit,
   DIMENSIONS,
+  IMMUNITY_PURGES_EFFECT_BIT,
   NAMED_BITS,
+  stunPurgeRoute,
   usableWhile,
   verifyAnchors,
 } from "../../scripts/datagen/genUsableWhileCc";
 import { UWC_ANCHORS } from "../../scripts/datagen/usableWhileCcAnchors";
 import observed from "../../src/data/observedSpellIdsGenerated.json";
-import { USABLE_WHILE_CC_GENERATED } from "../../src/data/usableWhileCcGenerated";
-import { USABLE_WHILE_CC_CONDITIONAL } from "../../src/utils/cooldowns";
+import {
+  STUN_PURGE_GENERATED,
+  USABLE_WHILE_CC_GENERATED,
+} from "../../src/data/usableWhileCcGenerated";
+import {
+  STUN_PURGE_WITHHELD_IDS,
+  USABLE_WHILE_CC_CONDITIONAL,
+} from "../../src/utils/cooldowns";
 
 // 2026-09-04 (BACKLOG #41 (8)): the table reads the NAMED SpellMisc bits
 // (SimC sc_spell_info.cpp / TrinityCore SharedDefines.h) — stunned 163 ∪ 378,
@@ -20,6 +28,10 @@ import { USABLE_WHILE_CC_CONDITIONAL } from "../../src/utils/cooldowns";
 // Encounter End" as the second stun bit and admitted 213 observed long
 // cooldowns; three anchors (Divine Shield / Ice Block / Icebound Fortitude)
 // were re-ruled NOT usable that day, so every non-null cell now agrees.
+// 2026-10-06 (user ruling U-T1): those three are usable again, and Blessing
+// of Protection with them, through the second official route — "Immunity
+// Purges Effect" (bit 47) + an own immunity covering the stun — emitted as
+// STUN_PURGE_GENERATED. A stunned anchor agrees through either route.
 const observedIds = new Set((observed as unknown as number[]).map(String));
 
 describe("usableWhileCcGenerated — named bits vs signed anchors", () => {
@@ -34,7 +46,8 @@ describe("usableWhileCcGenerated — named bits vs signed anchors", () => {
         if (dim === "stunned" && a.spellId in USABLE_WHILE_CC_CONDITIONAL)
           continue;
         expect(
-          USABLE_WHILE_CC_GENERATED[dim].has(a.spellId),
+          USABLE_WHILE_CC_GENERATED[dim].has(a.spellId) ||
+            (dim === "stunned" && a.spellId in STUN_PURGE_GENERATED),
           `${a.name} ${dim}`,
         ).toBe(expected);
       }
@@ -56,9 +69,55 @@ describe("usableWhileCcGenerated — named bits vs signed anchors", () => {
       expect(USABLE_WHILE_CC_GENERATED.stunned.has(id), id).toBe(true);
   });
 
-  it("user re-ruling 2026-09-04: Divine Shield 642 / Ice Block 45438 / Icebound Fortitude 48792 are NOT usable while stunned", () => {
-    for (const id of ["642", "45438", "48792"])
+  it("user ruling U-T1 (2026-10-06): Divine Shield 642 / Ice Block 45438 / Icebound Fortitude 48792 / Blessing of Protection 1022 carry no named bit and are on the immunity route", () => {
+    for (const id of ["642", "45438", "48792", "1022"])
       expect(USABLE_WHILE_CC_GENERATED.stunned.has(id), id).toBe(false);
+    expect(STUN_PURGE_GENERATED["642"]).toEqual({
+      schoolMask: 0x7f,
+      stunMechanic: false,
+    });
+    expect(STUN_PURGE_GENERATED["45438"]).toEqual({
+      schoolMask: 0x7f,
+      stunMechanic: false,
+    });
+    expect(STUN_PURGE_GENERATED["48792"]).toEqual({
+      schoolMask: 0,
+      stunMechanic: true,
+    });
+    // physical only: it purges a Kidney Shot, not a Hammer of Justice
+    expect(STUN_PURGE_GENERATED["1022"]).toEqual({
+      schoolMask: 0x1,
+      stunMechanic: false,
+    });
+  });
+
+  it("the route's negative controls: Spellwarding (aura 39 without bit 47), Cloak of Shadows, Aspect of the Turtle", () => {
+    for (const id of ["204018", "31224", "186265"]) {
+      expect(STUN_PURGE_GENERATED[id], id).toBeUndefined();
+      expect(USABLE_WHILE_CC_GENERATED.stunned.has(id), id).toBe(false);
+    }
+  });
+
+  it("user ruling U-T1b: the map is the four named spells — Blink and the imp's Flee are nominated by the route and withheld", () => {
+    expect(Object.keys(STUN_PURGE_GENERATED).sort()).toEqual(
+      ["1022", "45438", "48792", "642"].sort(),
+    );
+    expect([...STUN_PURGE_WITHHELD_IDS].sort()).toEqual(
+      ["119415", "1953", "89792"].sort(),
+    );
+    for (const id of STUN_PURGE_WITHHELD_IDS) {
+      expect(STUN_PURGE_GENERATED[id], id).toBeUndefined();
+      expect(USABLE_WHILE_CC_GENERATED.stunned.has(id), id).toBe(false);
+      expect(observedIds.has(id), id).toBe(true);
+    }
+  });
+
+  it("the purge map holds only ids the named bits do not already admit, and nothing from the conditional layer", () => {
+    for (const id of Object.keys(STUN_PURGE_GENERATED)) {
+      expect(USABLE_WHILE_CC_GENERATED.stunned.has(id), id).toBe(false);
+      expect(id in USABLE_WHILE_CC_CONDITIONAL, id).toBe(false);
+      expect(observedIds.has(id), id).toBe(true);
+    }
   });
 
   it("the signed conditional layer is withheld from the unconditional stunned set", () => {
@@ -90,6 +149,60 @@ describe("genUsableWhileCc pure functions", () => {
     expect(usableWhile(row({ 5: 1 << 17 }), "feared")).toBe(true);
     expect(usableWhile(row({ 5: 1 << 18 }), "confused")).toBe(true);
     expect(usableWhile(row({ 10: 1 << 13 }), "stunned")).toBe(false); // the old wrong bit
+  });
+
+  it("stunPurgeRoute needs bit 47 AND an own immunity that covers a stun", () => {
+    const purges = { 1: 1 << 15 }; // Attributes_1 bit 15
+    expect(IMMUNITY_PURGES_EFFECT_BIT).toBe(47);
+    const eff = (aura: string, misc: string) => ({
+      EffectAura: aura,
+      EffectMiscValue_0: misc,
+    });
+    // all schools, across two effect rows (Ice Block: 0x1 + 0x7f)
+    expect(
+      stunPurgeRoute(row(purges), [eff("39", "1"), eff("39", "127")]),
+    ).toEqual({ schoolMask: 0x7f, stunMechanic: false });
+    // physical only (Blessing of Protection)
+    expect(stunPurgeRoute(row(purges), [eff("39", "1")])).toEqual({
+      schoolMask: 0x1,
+      stunMechanic: false,
+    });
+    // the stun mechanic itself (Icebound Fortitude)
+    expect(stunPurgeRoute(row(purges), [eff("77", "12")])).toEqual({
+      schoolMask: 0,
+      stunMechanic: true,
+    });
+    // a school immunity without the attribute (Blessing of Spellwarding)
+    expect(stunPurgeRoute(row({}), [eff("39", "126")])).toBeNull();
+    // the attribute with an immunity to another mechanic (Will of the Forsaken: fear)
+    expect(stunPurgeRoute(row(purges), [eff("77", "5")])).toBeNull();
+    expect(stunPurgeRoute(row(purges), [])).toBeNull();
+  });
+
+  it("verifyAnchors: a stunned anchor agrees through the purge route too", () => {
+    const byId = new Map<string, Record<string, string>>([["9", row({})]]);
+    const anchor = {
+      spellId: "9",
+      name: "purger",
+      stunned: true,
+      feared: false,
+      confused: null,
+      rationale: "",
+      source: "",
+    };
+    expect(verifyAnchors(byId, [anchor]).disagreements).toHaveLength(1);
+    expect(
+      verifyAnchors(byId, [anchor], undefined, new Set(["9"])).disagreements,
+    ).toEqual([]);
+    // only the stunned dimension: a feared=true anchor is not rescued
+    expect(
+      verifyAnchors(
+        byId,
+        [{ ...anchor, feared: true }],
+        undefined,
+        new Set(["9"]),
+      ).disagreements,
+    ).toHaveLength(1);
   });
 
   it("verifyAnchors reports disagreements and honours hand exemptions", () => {

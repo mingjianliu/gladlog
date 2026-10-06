@@ -1,10 +1,16 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 
-import { USABLE_WHILE_CC_GENERATED } from "../src/data/usableWhileCcGenerated";
+import { ensureAnalysisData } from "../src/data/ensure";
 import {
+  STUN_PURGE_GENERATED,
+  USABLE_WHILE_CC_GENERATED,
+} from "../src/data/usableWhileCcGenerated";
+import {
+  STUN_PURGE_WITHHELD_IDS,
   USABLE_WHILE_CC_CONDITIONAL,
   USABLE_WHILE_CC_GAP_IDS,
   USABLE_WHILE_CC_SPELL_IDS,
+  USABLE_WHILE_STUNNED_BY_PURGE_IDS,
   usableWhileStunned,
 } from "../src/utils/cooldowns";
 
@@ -15,6 +21,8 @@ import {
 // 163 ∪ 378; the gap layer's three ids are covered by 378 and the layer is
 // empty; Divine Shield 642 / Icebound Fortitude 48792 were re-ruled NOT
 // usable while stunned by the user.
+// 2026-10-06 (user ruling U-T1): that re-ruling is reversed — the shim also
+// unions the DB2 immunity route (`STUN_PURGE_GENERATED`).
 describe("USABLE_WHILE_CC_SPELL_IDS shim", () => {
   it("is a superset of the generated stunned table (union semantics)", () => {
     for (const id of USABLE_WHILE_CC_GENERATED.stunned) {
@@ -40,15 +48,49 @@ describe("USABLE_WHILE_CC_SPELL_IDS shim", () => {
     expect(USABLE_WHILE_CC_SPELL_IDS.has(id), id).toBe(true);
   });
 
-  // User ruling 2026-09-04: Divine Shield / Icebound Fortitude carry no named
-  // stun bit (only the client-error-suppression flag 244) and show 1 / 0
-  // casts-in-stun in 1028 matches — NOT usable while stunned.
+  // User ruling U-T1 (2026-10-06) reverses the 2026-09-04 re-ruling ("no named
+  // bit, 1 / 0 casts-in-stun"): these come through the IMMUNITY route — DB2
+  // "Immunity Purges Effect" + an own immunity that covers the stun — and the
+  // old count was a strict-inside test that a purge can never satisfy (the
+  // stun is REMOVED just before the cast line). 605 S2 files: 99 of 417
+  // Divine Shield casts, 42 of 343 Ice Blocks, 108 of 247 Icebound Fortitudes
+  // ended a stun on their caster.
   it.each([
     ["642", "Divine Shield"],
+    ["45438", "Ice Block"],
     ["48792", "Icebound Fortitude"],
-  ])("old member %s (%s) is NOT usable while stunned (re-ruled 2026-09-04)", (id) => {
+  ])("%s (%s) is usable while stunned through the immunity route, not a named bit", (id) => {
     expect(USABLE_WHILE_CC_GENERATED.stunned.has(id), id).toBe(false);
+    expect(STUN_PURGE_GENERATED[id], id).toBeDefined();
+    expect(USABLE_WHILE_STUNNED_BY_PURGE_IDS.has(id), id).toBe(true);
+    expect(USABLE_WHILE_CC_SPELL_IDS.has(id), id).toBe(true);
+    expect(usableWhileStunned(id), id).toBe(true);
+  });
+
+  // User ruling U-T1b (2026-10-06): Blink and the imp's Flee sit on the same
+  // DB2 route as Icebound Fortitude and are NOT taken — only the four named.
+  it.each([
+    ["1953", "Blink"],
+    ["119415", "Blink"],
+    ["89792", "Flee"],
+  ])("%s (%s) is withheld by ruling: not usable while stunned", (id) => {
+    expect(STUN_PURGE_WITHHELD_IDS.has(id), id).toBe(true);
+    expect(USABLE_WHILE_STUNNED_BY_PURGE_IDS.has(id), id).toBe(false);
     expect(USABLE_WHILE_CC_SPELL_IDS.has(id), id).toBe(false);
+    expect(usableWhileStunned(id), id).toBe(false);
+  });
+
+  // The route's negative controls: an immunity or a wall WITHOUT the purge
+  // attribute (0 of 46 / 499 / 224 / 304 own casts ended a stun).
+  it.each([
+    ["204018", "Blessing of Spellwarding"],
+    ["31224", "Cloak of Shadows"],
+    ["186265", "Aspect of the Turtle"],
+    ["108271", "Astral Shift"],
+  ])("%s (%s) is not on the immunity route", (id) => {
+    expect(STUN_PURGE_GENERATED[id], id).toBeUndefined();
+    expect(USABLE_WHILE_CC_SPELL_IDS.has(id), id).toBe(false);
+    expect(usableWhileStunned(id, undefined, ["1833"]), id).toBe(false);
   });
 
   // User ruling 2026-08-14: 55233 Vampiric Blood is NOT usable while stunned
@@ -57,6 +99,38 @@ describe("USABLE_WHILE_CC_SPELL_IDS shim", () => {
   it("does NOT carry forward Vampiric Blood 55233 (user-ruled correction, 2026-08-14)", () => {
     expect(USABLE_WHILE_CC_GENERATED.stunned.has("55233")).toBe(false);
     expect(USABLE_WHILE_CC_SPELL_IDS.has("55233")).toBe(false);
+  });
+});
+
+describe("Blessing of Protection: a school-limited purge, on oneself (ruling U-T1)", () => {
+  beforeAll(async () => {
+    await ensureAnalysisData();
+  });
+  const BOP = "1022";
+  const CHEAP_SHOT = "1833"; // physical
+  const KIDNEY_SHOT = "408"; // physical
+  const HAMMER_OF_JUSTICE = "853"; // holy
+
+  it("is on the route with the physical mask only, and outside the every-stun set", () => {
+    expect(STUN_PURGE_GENERATED[BOP]).toEqual({ schoolMask: 1, stunMechanic: false });
+    expect(USABLE_WHILE_STUNNED_BY_PURGE_IDS.has(BOP)).toBe(false);
+    expect(USABLE_WHILE_CC_SPELL_IDS.has(BOP)).toBe(false);
+  });
+
+  it("no stun named (the caller cannot say the press is on the stunned unit itself) → not usable", () => {
+    expect(usableWhileStunned(BOP)).toBe(false);
+    expect(usableWhileStunned(BOP, new Set(), [])).toBe(false);
+  });
+
+  it("usable under physical stuns — 13 of 13 purged stuns in the corpus were physical", () => {
+    expect(usableWhileStunned(BOP, undefined, [CHEAP_SHOT])).toBe(true);
+    expect(usableWhileStunned(BOP, undefined, [CHEAP_SHOT, KIDNEY_SHOT])).toBe(true);
+  });
+
+  it("not under a magic stun, a mix, or a stun whose school is unknown", () => {
+    expect(usableWhileStunned(BOP, undefined, [HAMMER_OF_JUSTICE])).toBe(false);
+    expect(usableWhileStunned(BOP, undefined, [CHEAP_SHOT, HAMMER_OF_JUSTICE])).toBe(false);
+    expect(usableWhileStunned(BOP, undefined, ["999999999"])).toBe(false);
   });
 });
 

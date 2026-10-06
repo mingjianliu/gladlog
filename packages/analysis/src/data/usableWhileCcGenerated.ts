@@ -1,5 +1,5 @@
 /**
- * Generated at: 2026-09-05T01:39:41.512Z
+ * Generated at: 2026-10-07T00:53:48.652Z
  * Build: 12.1.0.69587
  * Source: DB2 SpellMisc.Attributes_0..16, the NAMED bits (SimulationCraft
  *   sc_spell_info.cpp attribute table / TrinityCore SharedDefines.h; global
@@ -10,11 +10,17 @@
  * Restricted to the observed corpus (observedSpellIdsGenerated.json) —
  *   .has()===false for an UNOBSERVED id means "unknown", not "confirmed not
  *   usable"; self-heals on the next observed-id refresh + regen.
- * Verification: 29 signed anchor cells (usableWhileCcAnchors.ts)
+ * Verification: 30 signed anchor cells (usableWhileCcAnchors.ts)
  *   agree with the bits; hand-exempted: 7744 被遗忘者的意志 feared=true (hand gap layer).
  * Withheld from stunned (signed conditional layer, cooldowns.ts
  *   USABLE_WHILE_CC_CONDITIONAL): 119996 Transcendence: Transfer.
- * stunned:437 feared:403 confused:405
+ * Purge route (stunned only): Attributes_1 bit 15 "Immunity Purges Effect"
+ *   + an own SCHOOL_IMMUNITY (aura 39) or MECHANIC_IMMUNITY (aura 77) of
+ *   mechanic 12; ids the named bits already admit are left out:
+ *   642 Divine Shield (schools 0x7f), 1022 Blessing of Protection (schools 0x1), 45438 Ice Block (schools 0x7f), 48792 Icebound Fortitude (stun mechanic).
+ *   Nominated by the route and withheld by user ruling (cooldowns.ts
+ *   STUN_PURGE_WITHHELD_IDS): 1953 Blink, 89792 Flee, 119415 Blink.
+ * stunned:437 feared:403 confused:405 stunnedByPurge:4
  * stunned sample: 379 Earth Shield, 498 Divine Protection, 3355 Freezing Trap, 16953 Primal Fury, 17767 Shadow Bulwark, 19574 Bestial Wrath, 22812 Barkskin, 27285 Seed of Corruption, 33206 Pain Suppression, 42223 Rain of Fire, 45181 Cheated Death, 45242 Focused Will
  * feared sample: 379 Earth Shield, 3355 Freezing Trap, 17767 Shadow Bulwark, 19574 Bestial Wrath, 22812 Barkskin, 27285 Seed of Corruption, 42223 Rain of Fire, 45181 Cheated Death, 47585 Dispersion, 47755 Shield Discipline, 51637 Venomous Vim, 52042 Healing Stream Totem
  * confused sample: 379 Earth Shield, 3355 Freezing Trap, 17767 Shadow Bulwark, 19574 Bestial Wrath, 27285 Seed of Corruption, 42223 Rain of Fire, 45181 Cheated Death, 47755 Shield Discipline, 51637 Venomous Vim, 52042 Healing Stream Totem, 52212 Death and Decay, 53480 Roar of Sacrifice
@@ -36,4 +42,29 @@ export const USABLE_WHILE_CC_GENERATED: UsableWhileCcGenerated = {
   confused: new Set(
     ["379","3355","17767","19574","27285","42223","45181","47755","51637","52042","52212","53480","73921","77478","77489","77505","77616","80396","81262","81269","81297","81751","81782","82691","84721","85000","87204","88751","94472","94632","108416","110310","113942","115464","117526","117679","119898","119905","119907","119909","119910","119914","120692","120696","121557","123982","124507","125355","130654","132413","132463","132467","132951","135299","138248","145629","146739","148135","148859","153596","153640","155158","163073","163212","163272","171557","178173","178963","182422","186254","186401","186403","186406","188290","188370","188389","190357","191037","193472","194249","195897","195975","196278","196771","197548","198137","199260","200587","201594","202274","202346","202644","203337","203794","203981","204242","204255","204395","204598","204843","207400","207685","208997","209693","209788","210042","210141","211319","211336","211545","211793","214975","218558","225787","225788","227255","228354","228532","228537","228597","228598","228600","233433","234084","243241","247455","247456","253797","255546","255723","269651","272651","272678","272682","273977","279303","281871","283167","289045","289277","289655","290219","291843","298765","325174","328951","328953","328960","330069","334581","334934","335148","335152","336126","341263","342857","346111","347600","347765","353084","353132","353293","353807","353813","353821","355689","355916","355941","356474","356687","356689","357209","358134","358861","359077","361195","365080","369374","370371","370437","370667","370889","370960","375904","375905","376080","377048","377253","377588","377589","377913","378001","378989","378990","378991","378992","379029","381414","381931","383015","383706","385727","388024","388025","388588","388598","388599","388600","388602","388973","389325","389328","389860","390964","390971","391232","391776","392329","393831","394108","394111","396288","403516","404369","405746","406430","410559","411060","413231","414219","420217","422785","424669","427487","427490","427901","428079","428832","430191","431177","431398","431620","434141","435802","436132","436159","436304","438609","440121","440734","440751","441424","441426","442396","442419","443106","443404","444505","444763","445474","447448","451199","451500","451897","451903","451934","452307","453112","453113","453334","455147","455157","456820","460614","468655","471521","474754","1214676","1219545","1220755","1220758","1221107","1221389","1222865","1223412","1223628","1223878","1226974","1233619","1235388","1236211","1236550","1236942","1239507","1239574","1240913","1241102","1241289","1241502","1241530","1241871","1241922","1242230","1242475","1244332","1244890","1245025","1245577","1245969","1246949","1247778","1248010","1249208","1250319","1251951","1253798","1253828","1254567","1254631","1255476","1256081","1257698","1261158","1261166","1261176","1261679","1261710","1261759","1262515","1262862","1263768","1263963","1264175","1264176","1264305","1264676","1265323","1265577","1265646","1265980","1265991","1266301","1267745","1268673","1268684","1269158","1269517","1269518","1270181","1270828","1270879","1271663","1271712","1272321","1272350","1272710","1272711","1272713","1276227","1277482","1277738","1277769","1279686","1280078","1280212","1280386","1280757","1281579","1285912","1286243","1287975","1288123","1289650","1291580","1291581","1291657","1291723","1291724","1292159","1292166","1292247","1292249","1293138","1293799","1295123","1295825","1295942","1296565","1296567","1299185","1299509","1301742","1302055","1302060","1302061","1302568","1302577","1302580","1302600","1302602","1302662","1302776","1305773","1305981","1307639"],
   ),
+};
+
+/** The immunity route to "usable while stunned" (see the header): spell →
+ * the school mask its own immunity covers (0 = none) and whether it is
+ * immune to the stun mechanic itself. The immunity lands on the CASTER —
+ * a targeted one (Blessing of Protection) only counts cast on oneself. */
+export const STUN_PURGE_GENERATED: Readonly<
+  Record<string, { schoolMask: number; stunMechanic: boolean }>
+> = {
+  "642": {
+    "schoolMask": 127,
+    "stunMechanic": false
+  },
+  "1022": {
+    "schoolMask": 1,
+    "stunMechanic": false
+  },
+  "45438": {
+    "schoolMask": 127,
+    "stunMechanic": false
+  },
+  "48792": {
+    "schoolMask": 0,
+    "stunMechanic": true
+  }
 };

@@ -77,6 +77,7 @@ export function emitOwnerCdEntries(
     | "addEntry"
     | "ownerHardCcTagAt"
     | "ownerStunnedAtCast"
+    | "ownerStunIdsAtCast"
   >,
 ): Pick<TimelineCtx, "procLinesEmitted"> {
   const {
@@ -106,6 +107,7 @@ export function emitOwnerCdEntries(
     addEntry,
     ownerHardCcTagAt,
     ownerStunnedAtCast,
+    ownerStunIdsAtCast,
   } = ctx;
   // threaded: read from ctx, returned to the caller (GH #116)
   let { procLinesEmitted } = ctx;
@@ -345,8 +347,15 @@ export function emitOwnerCdEntries(
             castTargetIsTeammate,
             onlyCasterUnderFire,
             // F-E20: a stunned owner can only be offered what a stunned player can press.
+            // U-T1: a school-limited purge (Blessing of Protection) is an
+            // alternative only where it would go on the stunned owner himself.
             stunnedCaster: ownerStunnedAtCast(cast.timeSeconds)
-              ? { pvpTalentIds: ownerPvpTalentIds }
+              ? {
+                  pvpTalentIds: ownerPvpTalentIds,
+                  selfCastUnderStuns: castTargetIsTeammate
+                    ? undefined
+                    : ownerStunIdsAtCast(cast.timeSeconds),
+                }
               : undefined,
           },
         );

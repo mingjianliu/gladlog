@@ -134,14 +134,22 @@ export function prepareOwnerCdContext(
       removeMs:
         matchStartMs + Math.round((cc.atSeconds + cc.durationSeconds) * 1000),
     }));
-  function ownerStunnedAtCast(timeSeconds: number): boolean {
+  /** The stun auras the owner was under at this cast (same test as
+   * `ownerStunnedAtCast`) — what a school-limited purge is checked against
+   * (ruling U-T1: Blessing of Protection ends a physical stun only). */
+  function ownerStunIdsAtCast(timeSeconds: number): string[] {
     const castMs = matchStartMs + Math.round(timeSeconds * 1000);
-    return ownerStunWindows.some(
-      (w) =>
-        (timeSeconds > w.cc.atSeconds &&
-          timeSeconds < w.cc.atSeconds + w.cc.durationSeconds) ||
-        castEndedCcWindow(w, castMs),
-    );
+    return ownerStunWindows
+      .filter(
+        (w) =>
+          (timeSeconds > w.cc.atSeconds &&
+            timeSeconds < w.cc.atSeconds + w.cc.durationSeconds) ||
+          castEndedCcWindow(w, castMs),
+      )
+      .map((w) => w.cc.spellId);
+  }
+  function ownerStunnedAtCast(timeSeconds: number): boolean {
+    return ownerStunIdsAtCast(timeSeconds).length > 0;
   }
 
   // B139: interrupt/silence-immunity windows granted by the owner's PvP talents (Obsidian Mettle → Obsidian
@@ -165,6 +173,7 @@ export function prepareOwnerCdContext(
     ownerCCSummary,
     ownerHardCcTagAt,
     ownerStunnedAtCast,
+    ownerStunIdsAtCast,
     ownerInterruptImmuneReasonAt,
   };
 }
