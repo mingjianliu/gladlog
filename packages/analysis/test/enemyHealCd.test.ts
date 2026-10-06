@@ -36,14 +36,21 @@ describe("G7-P3", () => {
     const out = emitEnemyCdEntries({
       enemyCDTimeline: { players: [], alignedBurstWindows: [] } as never,
       cdPurgeAnnotations: new Map(),
-      addEntry: (_t: number, ...l: unknown[]) => lines.push(...(l as string[])),
+      addEntry: (_t: number, ...l: unknown[]) => {
+        lines.push(...(l as string[]));
+        return true; // the real addEntry: true = the entry was kept
+      },
       enemyPid: (n: string) => `5(${n})`,
       matchStartMs: T0,
       enemies: [
         {
           name: "Misanthropy",
           spec: CombatUnitSpec.Priest_Holy,
-          spellCastEvents: [cast("2050", 12.3), cast("200183", 60.7), cast("2050", 30.1)],
+          spellCastEvents: [
+            cast("2050", 12.3),
+            cast("200183", 60.7),
+            cast("2050", 30.1),
+          ],
         },
         {
           name: "Pally",

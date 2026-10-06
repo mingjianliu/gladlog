@@ -15,11 +15,16 @@
  */
 import type { ICombatUnit } from "@gladlog/parser-compat";
 
-import type { IPlayerCCTrinketSummary } from "../../utils/ccTrinketAnalysis";
+import type {
+  findBrokenDisarm,
+  IPlayerCCTrinketSummary,
+} from "../../utils/ccTrinketAnalysis";
 import type { IAoeCCEvent } from "../../utils/drAnalysis";
 import type { IEnemyCDCast } from "../../utils/enemyCDs";
+import type { buildRosterSides } from "../../utils/rosterSide";
 import type { BuildMatchTimelineParams } from "../matchTimeline";
 import type {
+  buildSummonOwnerNames,
   extractEnemyMajorBuffIntervals,
   extractOwnerCDBuffExpiry,
   IEnemyBuffInterval,
@@ -66,8 +71,17 @@ export interface TimelineCtx {
   allUnits: P["allUnits"];
   enemyCCSummaries: P["enemyCCSummaries"];
   matchEndMs: P["matchEndMs"];
+  playerIdMap: P["playerIdMap"];
+  enemyIdMap: P["enemyIdMap"];
+  rawStreams: P["rawStreams"];
 
   // ── derived values ──
+  /** summon GUID -> owner name (a pet / guardian is named through its owner) */
+  summonOwners: ReturnType<typeof buildSummonOwnerNames>;
+  /** unit GUID -> name, over `_allUnits` */
+  unitNames: Map<string, string>;
+  /** unit GUID -> roster side (a roster fact, not the event's reaction flags) */
+  rosterSides: ReturnType<typeof buildRosterSides>;
   /** (matchEndMs − matchStartMs) / 1000 */
   matchEndSeconds: number;
   /** the round, as reconstructEnemyCDTimeline reads it (GH #119) */
@@ -105,8 +119,20 @@ export interface TimelineCtx {
   procLinesEmitted: boolean;
   /** enemy trinket lines rendered; the [ENEMY TRINKET] legend needs > 0 */
   enemyTrinketCount: number;
+  /** [DISARM] tail lines rendered; the [DISARM] legend needs > 0 */
+  disarmLineCount: number;
 
   // ── closure helpers ──
+  /** GH #103 A6: who provided the avoidance aura on a `[CC AVOIDED?]` line */
+  avoidanceSourceTag: (
+    sourceName: string | undefined,
+    targetName: string,
+  ) => string;
+  /** enemy-def F-E18: the disarm a trinket press at `t` broke, when no CC took it */
+  trinketBrokenDisarm: (
+    summary: IPlayerCCTrinketSummary,
+    t: number,
+  ) => ReturnType<typeof findBrokenDisarm> | undefined;
   /** caster label for "(by X)": player -> pid / enemyPid, pet / totem -> its owner */
   actorLabel: (
     name: string,
@@ -143,10 +169,12 @@ export interface TimelineCtx {
     castTimeSeconds: number,
   ) => string;
   ownerInterruptImmuneReasonAt: (timeSeconds: number) => string | undefined;
+  /** false when the entry was dropped (past match end, B103) — a legend that
+   * counts lines counts only the ones that print */
   addEntry: (
     timeSeconds: number,
     ...lines: (string | DeferredSnapshot)[]
-  ) => void;
+  ) => boolean;
   manaCooldownNote: (
     spellId: string,
     timeSeconds: number,

@@ -8,7 +8,7 @@ import {
 import { type BurstWindowDecisionPoint } from "../analysis/burstWindowDecisionPoints";
 import type { CdPriorHoldEpisode } from "../analysis/cdTriggerPrior";
 import type { StackedDefensivePair } from "../analysis/stackedDefensives";
-import { BACKLASH_AURA_CC_TYPE } from "../data/backlashCc";
+import "../data/backlashCc";
 import { castAndEffectIds } from "../data/castEffectAuras";
 import "../data/racialAbilities";
 import { getEnglishSpellName } from "../data/spellEffectData";
@@ -29,10 +29,7 @@ import {
   findBrokenDisarm,
   GROUNDING_TOTEM_SPELL_ID,
   GROUNDING_TOTEM_WINDOW_S,
-  immunityBreak,
   IPlayerCCTrinketSummary,
-  renderedCcSeconds,
-  tremorTotemBreak,
   TRINKET_BREAK_AFTER_REMOVAL_MS,
 } from "../utils/ccTrinketAnalysis";
 import {
@@ -64,7 +61,6 @@ import {
   IMissedPurgeWindow,
   missedPurgesFor,
   POST_CC_PRESSURE_WINDOW_S,
-  wasRemovedByAllyDispel,
 } from "../utils/dispelAnalysis";
 import {
   detectTeammateDrClashes,
@@ -87,15 +83,10 @@ import { buildRosterSides } from "../utils/rosterSide";
 import "../utils/pvpTrinketUses";
 import type { RawStreams } from "../utils/rawStreams";
 import { ownerResUtilityCds } from "./resUtilityCds";
-import {
-  groundedControls,
-  ownerRejectRuns,
-  reflectedSpells,
-  sanctuaryRemovals,
-} from "./spellOutcomeLines";
+import "./spellOutcomeLines";
 import { fmtTime, toRenderSecond } from "../utils/renderGrid";
 import { resourceDeltaPct } from "../utils/resourceAt";
-import { SUMMON_REACH_MIN_S, summonReach } from "../utils/summonReachability";
+import "../utils/summonReachability";
 import { interruptImmuneWindows as interruptImmuneWindowsOf } from "../utils/talentBehaviors";
 import {
   BURST_ANSWERED_LEGEND,
@@ -137,26 +128,18 @@ import {
   buildMatchEndBlock,
   buildSummonOwnerNames,
   computeHealingInWindow,
-  CONTESTABLE_ENEMY_SUMMON_NPC_IDS,
   CRITICAL_NON_PLAYER_NPC_NAMES,
-  damageEventLabel,
   DMG_SPIKE_THRESHOLD,
   extractEnemyMajorBuffIntervals,
   extractOwnerCDBuffExpiry,
   getNpcIdFromGuid,
-  getTopDamageSourcesInWindow,
   GROUNDING_TOTEM_NPC_ID,
   HEALING_AMPLIFIER_SPELL_IDS,
   HEALING_WINDOW_EARLY_CD_SECONDS,
   HEALING_WINDOW_MIN_HPS,
   IEnemyBuffInterval,
-  isCriticalNonPlayerUnit,
   MANA_COOLDOWN_SPELL_IDS,
-  nonPlayerUnitKill,
-  opposingHitsOnUnit,
   resolveSummonOwner,
-  summonedAtMs,
-  summonLifetimeAtKillS,
 } from "./timelineHelpers";
 import { emitBuffFadedEntries } from "./timelineSections/buffFaded";
 import { emitCcBrokenEntries } from "./timelineSections/ccBroken";
@@ -174,7 +157,10 @@ import { emitMinorDispelEntries } from "./timelineSections/minorDispels";
 import { emitOffensiveWindowEntries } from "./timelineSections/offensiveWindow";
 import { emitOwnerCdEntries } from "./timelineSections/ownerCd";
 import { emitPurgeEntries } from "./timelineSections/purges";
+import { emitSpellOutcomeEntries } from "./timelineSections/spellOutcomes";
 import { emitTeamCdEntries } from "./timelineSections/teamCd";
+import { emitTrinketCcOnTeamEntries } from "./timelineSections/trinketCcOnTeam";
+import { emitUnitDestroyedEntries } from "./timelineSections/unitDestroyed";
 import "../utils/spellMechanics";
 
 function isDeferredSnapshot(line: unknown): line is DeferredSnapshot {
@@ -1439,120 +1425,22 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   // UNIT_DIED for totems/guardians, so the deathRecords form of this block
   // rendered 24 lines in 3,520 prompts — every one Xuen or Darkglare, zero
   // totems (GH #100; user ruling 2026-09-20: restore it, Grounding included).
-  if (allUnits) {
-    const durationS = (matchEndMs - matchStartMs) / 1000;
-    for (const unit of allUnits) {
-      if (!isCriticalNonPlayerUnit(unit)) continue;
-      const kill = nonPlayerUnitKill(unit);
-      if (!kill) {
-        // GH #100 / BACKLOG #51 (user ruling 2026-09-20): an ENEMY summon a
-        // team is expected to kill, that was NOT killed — say how much the
-        // owner's team hit it. A fact; no lifetime is claimed (the log has no
-        // despawn event) and nothing here says anyone should have done more.
-        const npcId = getNpcIdFromGuid(unit.id) ?? "";
-        if (!CONTESTABLE_ENEMY_SUMMON_NPC_IDS.has(npcId)) continue;
-        const summonerSide = allUnits.find(
-          (u) => u.id === unit.ownerId,
-        )?.reaction;
-        const unitSide =
-          unit.reaction === CombatUnitReaction.Hostile ||
-          unit.reaction === CombatUnitReaction.Friendly
-            ? unit.reaction
-            : summonerSide;
-        if (unitSide !== CombatUnitReaction.Hostile) continue;
-        const summonMs = summonedAtMs(unit);
-        if (summonMs === null) continue;
-        const summonS = (summonMs - matchStartMs) / 1000;
-        if (summonS < 0 || summonS > durationS) continue;
-        const summoner = allUnits.find((u) => u.id === unit.ownerId);
-        const by = summoner ? ` (by ${enemyPid(summoner.name)})` : "";
-        const { hits, hitters } = opposingHitsOnUnit(unit, unitSide);
-        const resolveHitterLabel = (id: string): string => {
-          const u = allUnits?.find((x) => x.id === id);
-          if (!u) return "[pet]";
-          if (friends.some((f) => f.id === u.id)) return pid(u.name);
-          const ownerUnit = resolveSummonOwner({
-            allUnits,
-            friends,
-            enemies,
-            name: u.name,
-            sourceId: u.id,
-            side: "friendly",
-          });
-          if (ownerUnit && friends.some((f) => f.id === ownerUnit.id)) {
-            return pid(ownerUnit.name);
-          }
-          return "[pet]";
-        };
-        const who = hitters.map(resolveHitterLabel);
-        // Feasibility travels with the fact (user-approved 2026-09-20, in
-        // place of a separate accusation candidate): who could have hit it,
-        // and for how much of its official duration. Absent when nobody had
-        // SUMMON_REACH_MIN_S in reach and free — the bare fact then accuses
-        // no one.
-        const reach = summonReach(
-          unit,
-          { endTime: matchEndMs, startInfo: { zoneId: params.zoneId } },
-          friends,
-          enemies ?? [],
-        );
-        const reachStr =
-          reach?.best && reach.best.seconds >= SUMMON_REACH_MIN_S
-            ? `; ${pid(reach.best.unit.name)} was in range and free to act for ${reach.best.seconds}s of its ${reach.windowSeconds}s`
-            : "";
-        addEntry(
-          summonS,
-          `${fmtTime(summonS)}  [ENEMY SUMMON]   ${CRITICAL_NON_PLAYER_NPC_NAMES[npcId]}${by} — not killed: ` +
-            (hits === 0
-              ? "0 hits from your team"
-              : `hit ${hits}× by ${[...new Set(who)].join(", ")}`) +
-            reachStr,
-        );
-        continue;
-      }
-      const atSeconds = (kill.timestamp - matchStartMs) / 1000;
-      if (atSeconds < 0 || atSeconds > durationS) continue; // Match End cleanup suppression
-      // A totem's own flags are sometimes neutral (20 of 3,076 lines rendered
-      // "Unknown" on the 605-match acceptance set); its summoner's side is not.
-      const side =
-        unit.reaction === CombatUnitReaction.Friendly ||
-        unit.reaction === CombatUnitReaction.Hostile
-          ? unit.reaction
-          : allUnits.find((u) => u.id === unit.ownerId)?.reaction;
-      const reactionStr =
-        side === CombatUnitReaction.Friendly
-          ? "Friendly"
-          : side === CombatUnitReaction.Hostile
-            ? "Enemy"
-            : "Unknown";
-      let line = `${fmtTime(atSeconds)}  [UNIT DESTROYED]   ${CRITICAL_NON_PLAYER_NPC_NAMES[getNpcIdFromGuid(unit.id) ?? ""] ?? unit.name} (${reactionStr})`;
-      // The final blow names the killer exactly. The 10 s top-sources window
-      // stays as the fallback for a bare UNIT_DIED; it cannot serve totems,
-      // whose damageIn effectiveAmount is zeroed (pet/guardian target).
-      if (kill.finalBlow) {
-        line += ` killed by: ${damageEventLabel(kill.finalBlow, playerIdMap, enemyIdMap, summonOwners)}`;
-      } else {
-        const topSources = getTopDamageSourcesInWindow(
-          unit,
-          kill.timestamp,
-          10_000,
-          2,
-          playerIdMap,
-          enemyIdMap,
-          summonOwners,
-          unitNames,
-          rosterSides,
-        );
-        if (topSources.length > 0)
-          line += ` killed by: ${topSources.join(", ")}`;
-      }
-      // GH #86 (user 2026-09-22): how long it stood — summon to kill. Stated
-      // only when the summon is in the log; no "expected" lifetime, ever.
-      const stood = summonLifetimeAtKillS(unit, kill);
-      if (stood !== null) line += `, ${stood} s after it was summoned`;
-      addEntry(atSeconds, line);
-    }
-  }
+  emitUnitDestroyedEntries({
+    allUnits,
+    matchEndMs,
+    matchStartMs,
+    enemyPid,
+    friends,
+    pid,
+    enemies,
+    params,
+    addEntry,
+    playerIdMap,
+    enemyIdMap,
+    summonOwners,
+    unitNames,
+    rosterSides,
+  });
 
   // ── [YOU] [CD] events ───────────────────────────────────────────────────────
   // Set when any owner / teammate proc-only activation was rendered as [PROC];
@@ -1945,174 +1833,18 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       : findBrokenDisarm(summary.disarmInstances, matchStartMs, rawCastMs);
   };
   let disarmLineCount = 0;
-  for (const summary of ccTrinketSummaries) {
-    for (const t of summary.trinketUseTimes) {
-      // F-E18: name the disarm, as [ENEMY TRINKET] names its CC
-      const brokenDisarm = trinketBrokenDisarm(summary, t);
-      const disarmPart = brokenDisarm
-        ? ` out of ${brokenDisarm.spellName} (by ${actorLabel(brokenDisarm.sourceName, "enemy", brokenDisarm.sourceId)})`
-        : "";
-      addEntry(
-        t,
-        `${fmtTime(t)}  [TRINKET]   ${pid(summary.playerName)} used PvP trinket${disarmPart}`,
-      );
-    }
-
-    // cc-dr F-DA1 (ruling A54 = A): a disarm on any player of our team gets
-    // a line in the [SILENCE] format (it was only a [RES] `cc:` token); a
-    // trinket press that broke it (`trinketBrokenDisarm`) takes the tail.
-    for (const d of summary.disarmInstances) {
-      const brokeAt = summary.trinketUseTimes.find(
-        (t) => trinketBrokenDisarm(summary, t) === d,
-      );
-      const tail =
-        brokeAt !== undefined
-          ? ` | trinket broke this disarm after ${(brokeAt - d.atSeconds).toFixed(0)}s (cut short — it had not expired)`
-          : ` | ${renderedCcSeconds(d)}s`;
-      // the legend counts only lines that print (codex 35-CD-15: a disarm
-      // past the match end is skipped)
-      if (
-        addEntry(
-          d.atSeconds,
-          `${fmtTime(d.atSeconds)}  [DISARM]   ${pid(summary.playerName)} ← ${d.spellName} (by ${actorLabel(d.sourceName, "enemy", d.sourceId)})${tail}`,
-        )
-      )
-        disarmLineCount++;
-    }
-
-    for (const cc of summary.ccInstances) {
-      if (cc.durationSeconds === 0) continue;
-      let trinketNote = "";
-      if (cc.trinketState === "used") {
-        // B111: with the active-at-cast attribution fix, 'used' means the trinket was pressed while this
-        // CC was still active — it BROKE the CC. The logged length is the truncated endured time (aura
-        // was cut short at the break), NOT the CC's natural duration, so the standalone "| Ns" is
-        // suppressed below and this note states how long the player endured and that the CC had NOT
-        // expired on its own — otherwise the coach misreads a trinket-shortened "1s" as a trivial CC
-        // that was not worth trinketing (see 294 Finding "trinketed a 1-second Hammer").
-        trinketNote = ` | trinket broke this CC after ${renderedCcSeconds(cc)}s (cut short — it had not expired)`;
-      } else if (cc.trinketState === "racial_break") {
-        // Same truncated-duration semantics as the trinket break, but state
-        // what actually happened: the racial was pressed, not the trinket.
-        trinketNote = ` | ${cc.breakRacialName ?? "racial"} broke this CC after ${renderedCcSeconds(cc)}s (cut short — it had not expired); PvP trinket NOT used`;
-      } else if (cc.trinketState === "on_cooldown") {
-        const cdLeft =
-          cc.trinketCDSecondsLeft !== undefined
-            ? `${cc.trinketCDSecondsLeft}s left`
-            : "on CD";
-        trinketNote = ` | trinket: ON CD (${cdLeft})`;
-      }
-      // F-E21: the player's trinket-equivalent racial not back when this CC
-      // landed — on its own cooldown from an earlier press (9c6ab747 1:37:
-      // Will of the Forsaken broke the 0:18 Song, and the later Song said
-      // only "trinket: ON CD"), or held by a trinket press's shared lock.
-      // Not on a CC that was itself broken — that note says who did.
-      if (
-        cc.breakRacialOnCd &&
-        cc.trinketState !== "used" &&
-        cc.trinketState !== "racial_break"
-      )
-        trinketNote += `${trinketNote ? ";" : " |"} ${cc.breakRacialOnCd.name}: ON CD (${cc.breakRacialOnCd.secondsLeft}s left)`;
-
-      // F148: Cleanse Success Verification — check if this CC was removed by a friendly dispel
-      const isCleansed = wasRemovedByAllyDispel(
-        dispelSummary.allyCleanse,
-        cc.spellId,
-        summary.playerName,
-        cc.atSeconds + cc.durationSeconds,
-      );
-      const cleansedNote = isCleansed ? " [CLEANSED]" : "";
-
-      // GH #100 (user 2026-09-20): a friendly Tremor Totem dropped mid-fear
-      // ends it the same instant — the one tremor fact the log supports.
-      // Same "cut short" wording and duration handling as the trinket break
-      // (B111): the logged length is the endured time, not the CC's length.
-      const trinketBroke =
-        cc.trinketState === "used" || cc.trinketState === "racial_break";
-      const tremor =
-        !trinketBroke && !isCleansed
-          ? tremorTotemBreak(cc, matchStartMs, friends)
-          : null;
-      const tremorNote = tremor
-        ? ` | Tremor Totem from ${pid(tremor.shamanName)} ended this CC after ${renderedCcSeconds(cc)}s (cut short — it had not expired)`
-        : "";
-      // Triage enemy-def F-E20: the player's own immunity ended it (Divine
-      // Shield out of a stun). The trinket / racial / Tremor notes above name
-      // their own break first; the `| Ns` duration stays, this note says why
-      // the CC ended there.
-      const ccdUnit = friends.find((f) => f.name === summary.playerName);
-      const immunity =
-        !trinketBroke && !isCleansed && !tremor && ccdUnit
-          ? immunityBreak(cc, matchStartMs, ccdUnit)
-          : null;
-      const immunityNote = immunity
-        ? ` | ${immunity.spellName} broke this CC after ${renderedCcSeconds(cc)}s`
-        : "";
-
-      // `spell:<id>` is getDRCategory's self-DR fallback for a CC no DR
-      // family claims (Infernal Awakening 22703 — drShareScan 2026-09-25: full
-      // 79 % after a stun, 88 % after disorient / incapacitate, i.e. it shares
-      // none) — a key, not a category the reader can use, so no tag.
-      const drStr =
-        cc.drInfo &&
-        cc.drInfo.category !== "Unknown" &&
-        !cc.drInfo.category.startsWith("spell:")
-          ? ` [DR: ${cc.drInfo.category} ${cc.drInfo.level}]`
-          : "";
-      // GH #103: the tag names the CC (the coach guessed "stun" for a silence)
-      // and reads the one backlash table (data/backlashCc.ts).
-      const backlashType = BACKLASH_AURA_CC_TYPE.get(cc.spellId);
-      const backlashStr = backlashType
-        ? ` [DISPEL BACKLASH CC: ${backlashType}]`
-        : "";
-
-      // B111: for a trinket-broken CC the logged duration is the truncated endured time, not the CC's
-      // natural length; suppress the standalone "| Ns" (the trinket note carries the endured time) so it
-      // is not misread as the CC's trivial full duration.
-      const durStr =
-        cc.trinketState === "used" ||
-        cc.trinketState === "racial_break" ||
-        tremor
-          ? ""
-          : ` | ${renderedCcSeconds(cc)}s`;
-
-      // B124: surface the caster→target range (and LoS) already computed at CC application, so claims
-      // like "walked into the CC" / "should have LoS'd it" become checkable instead of inferred. Only
-      // shown when advanced logging supplied positions.
-      // cc-dr F-SR1 (ruling A52 = A): the holder's own CC sent back to it —
-      // no caster to name and no caster distance to measure
-      const reflectedBack =
-        cc.sourceId !== undefined &&
-        cc.sourceId ===
-          friends.find((u) => u.name === summary.playerName)?.id;
-      let posStr = "";
-      if (cc.distanceYards !== null && !reflectedBack) {
-        const losTag = cc.losBlocked === true ? ", LoS blocked" : "";
-        posStr = ` | ${cc.distanceYards}yd from caster${losTag}`;
-      }
-      const byStr = reflectedBack
-        ? "(reflected back)"
-        : `(by ${actorLabel(cc.sourceName, "enemy", cc.sourceId)})`;
-
-      // passive_trinket → player has no active trinket, no annotation
-      addEntry(
-        cc.atSeconds,
-        // B112: "(by N)" not "(N)" — the bare "(6)" caster-id was misread as a "6s" duration.
-        `${fmtTime(cc.atSeconds)}  [CC ON TEAM]   ${pid(summary.playerName)} ← ${cc.spellName} ${byStr}${durStr}${drStr}${backlashStr}${posStr}${trinketNote}${tremorNote}${immunityNote}${cleansedNote}`,
-      );
-    }
-
-    if (summary.ccAvoidedInstances) {
-      for (const avoided of summary.ccAvoidedInstances) {
-        addEntry(
-          avoided.atSeconds,
-          // M-g: state the observed facts (CC cast did not land; avoidance ability present),
-          // not a causal verdict. Let the model infer whether the ability caused the avoidance.
-          `${fmtTime(avoided.atSeconds)}  [CC AVOIDED?]   ${pid(summary.playerName)}: ${avoided.spellName} (by ${actorLabel(avoided.sourceName, "enemy", avoided.sourceId)}) did not land; ${avoided.avoidanceSpellName}${avoidanceSourceTag(avoided.avoidanceSourceName, summary.playerName)} active`,
-        );
-      }
-    }
-  }
+  ({ disarmLineCount } = emitTrinketCcOnTeamEntries({
+    ccTrinketSummaries,
+    trinketBrokenDisarm,
+    actorLabel,
+    addEntry,
+    pid,
+    disarmLineCount,
+    dispelSummary,
+    matchStartMs,
+    friends,
+    avoidanceSourceTag,
+  }));
 
   // ── [SILENCE]: silences on players (reliability round 2 W1b, 2026-09-25) ───
   // Garrote - Silence / Strangulate / Spider Venom are cast-blocking auras
@@ -2218,97 +1950,19 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   // (controls always; damage spells only when they came back for real
   // damage), a control removed by Blessing of Sanctuary, and the owner's own
   // repeated rejections outside CC. Builders: spellOutcomeLines.ts.
-  {
-    const unitLabel = (u: ICombatUnit): string =>
-      actorLabel(
-        u.name,
-        u.reaction === owner.reaction ? "friendly" : "enemy",
-        u.id,
-      );
-    const byId = new Map(_allUnits.map((u) => [u.id, u]));
-    const inMatch = (t: number) => t >= 0 && t <= matchEndSeconds;
-    for (const g of groundedControls(
-      _allUnits,
-      matchStartMs,
-      new Set([owner.id]),
-    )) {
-      if (!inMatch(g.atSeconds)) continue;
-      const caster = byId.get(g.casterId);
-      const totemOwner = resolveSummonOwner({
-        allUnits: _allUnits,
-        friends,
-        enemies,
-        name: "",
-        sourceId: g.totemId,
-      });
-      const totemOf = totemOwner
-        ? `${friends.some((f) => f.id === totemOwner.id) ? pid(totemOwner.name) : enemyPid(totemOwner.name)}'s Grounding Totem`
-        : "a Grounding Totem";
-      addEntry(
-        g.atSeconds,
-        `${fmtTime(g.atSeconds)}  [GROUNDED]   ${caster ? unitLabel(caster) : "?"}'s ${g.spellName} was redirected into ${totemOf}`,
-      );
-    }
-    for (const r of reflectedSpells(_allUnits, matchStartMs)) {
-      if (!inMatch(r.atSeconds)) continue;
-      const caster = byId.get(r.casterId)!;
-      const reflector = byId.get(r.reflectorId)!;
-      const back = r.isControl
-        ? " (a control — sent back at the caster)"
-        : ` (came back for ${Math.round(r.damageBack / 1000)}k)`;
-      addEntry(
-        r.atSeconds,
-        `${fmtTime(r.atSeconds)}  [REFLECTED]   ${unitLabel(caster)}'s ${r.spellName} reflected by ${unitLabel(reflector)}${back}`,
-      );
-    }
-    for (const x of sanctuaryRemovals(_allUnits, matchStartMs)) {
-      if (!inMatch(x.atSeconds)) continue;
-      const pal = byId.get(x.paladinId)!;
-      const target = byId.get(x.targetId)!;
-      // by GUID (a summon resolves to its owner through actorLabel); the
-      // CC came from the side opposing the unit it was removed from
-      const srcLabel = x.ccSourceName
-        ? actorLabel(
-            x.ccSourceName,
-            target.reaction === owner.reaction ? "enemy" : "friendly",
-            x.ccSourceId,
-          )
-        : "";
-      addEntry(
-        x.atSeconds,
-        // cc-dr F-CR1: how long it held and how much was left (the
-        // [CC BROKEN] arithmetic; an unknown full duration says held only)
-        `${fmtTime(x.atSeconds)}  [CC REMOVED]   ${unitLabel(pal)}'s Blessing of Sanctuary removed ${srcLabel ? `${srcLabel}'s ` : ""}${x.ccSpellName} from ${unitLabel(target)}${
-          x.heldSeconds === undefined
-            ? ""
-            : ` after ${x.heldSeconds.toFixed(0)}s${
-                x.leftSeconds != null
-                  ? ` (~${x.leftSeconds.toFixed(0)}s of it left)`
-                  : ""
-              }`
-        }`,
-      );
-    }
-    if (rawStreams?.available) {
-      for (const run of ownerRejectRuns(rawStreams.castFailed, owner.id)) {
-        if (!inMatch(run.fromSeconds)) continue;
-        const why =
-          run.kind === "out of range"
-            ? "out of range"
-            : run.kind === "moving"
-              ? "can't cast while moving"
-              : "target not in line of sight";
-        const span =
-          toRenderSecond(run.toSeconds) > toRenderSecond(run.fromSeconds)
-            ? ` (${fmtTime(run.fromSeconds)}–${fmtTime(run.toSeconds)})`
-            : "";
-        addEntry(
-          run.fromSeconds,
-          `${fmtTime(run.fromSeconds)}  [REJECTED]   your ${run.spellName} ×${run.count} — ${why}${span}`,
-        );
-      }
-    }
-  }
+  emitSpellOutcomeEntries({
+    actorLabel,
+    owner,
+    _allUnits,
+    matchEndSeconds,
+    matchStartMs,
+    friends,
+    enemies,
+    pid,
+    enemyPid,
+    addEntry,
+    rawStreams,
+  });
 
   // ── [UNCLEANSED DEBUFF] and [CLEANSE] events ──────────────────────────────────
 
