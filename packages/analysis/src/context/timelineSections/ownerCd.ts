@@ -30,6 +30,8 @@ import {
   isInterruptUsable,
 } from "../../utils/enemyInterrupts";
 import { fmtTime } from "../../utils/renderGrid";
+import { unitUnderFireAt } from "../../utils/threatAssessment";
+import { isDeadAt } from "../../utils/unitDeath";
 import {
   CHANNELED_CD_SPELL_IDS,
   channelWasInterrupted,
@@ -313,17 +315,35 @@ export function emitOwnerCdEntries(
         // Triage hp-state F-T1: the test is the team-SAVE set (the heals plus the group walls of
         // the 2026-09-26 ruling) — a nil-dest Spirit Link Totem / Aura Mastery read as a self-cast
         // and was offered Astral Shift / Divine Protection.
-        const castTargetIsTeammate =
-          isTeamSaveCD(cd.spellId) ||
-          (!!cast.targetName &&
-            cast.targetName !== "nil" &&
-            cast.targetName.split("-")[0] !== owner.name.split("-")[0]);
+        const castOnTeammate =
+          !!cast.targetName &&
+          cast.targetName !== "nil" &&
+          cast.targetName.split("-")[0] !== owner.name.split("-")[0];
+        const castTargetIsTeammate = isTeamSaveCD(cd.spellId) || castOnTeammate;
+        // U-T2 (user ruling 2026-10-06): a group save names no recipient. When
+        // the owner was the only friendly under fire at the press, the danger
+        // it answered was the owner's own, and a tool that only works on
+        // another unit (Blessing of Sacrifice) was not an alternative.
+        const pressMs = matchStartMs + cast.timeSeconds * 1000;
+        const onlyCasterUnderFire =
+          castTargetIsTeammate &&
+          !castOnTeammate &&
+          unitUnderFireAt(owner, pressMs) &&
+          // a teammate who died just before the press still has his fatal
+          // hits inside the ± window — nothing can be put on a corpse
+          !params.friends.some(
+            (f) =>
+              f.id !== owner.id &&
+              !isDeadAt(f, pressMs) &&
+              unitUnderFireAt(f, pressMs),
+          );
         const cheaperAvailable = findCheaperDefensiveAlternatives(
           cd,
           ownerCDs,
           cast.timeSeconds,
           {
             castTargetIsTeammate,
+            onlyCasterUnderFire,
             // F-E20: a stunned owner can only be offered what a stunned player can press.
             stunnedCaster: ownerStunnedAtCast(cast.timeSeconds)
               ? { pvpTalentIds: ownerPvpTalentIds }

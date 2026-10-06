@@ -927,5 +927,10 @@
  *  spell inside the half-second heal pairing after the hardcast) carries
  *  `healCasts`; both legends say the amount is then a sum. Menu ids and the
  *  cap order are unchanged.
+ *  v309 (2026-10-06, user ruling U-T2 on hp-state F-T1): the `cheaper
+ *  available:` note of a group save with no cast target (Aura Mastery) no
+ *  longer offers Blessing of Sacrifice when the owner was the only friendly
+ *  under fire at the press — it cannot be put on the caster. Timeline note
+ *  only; the menu is unchanged.
  */
-export const PROMPT_VERSION = 308;
+export const PROMPT_VERSION = 309;

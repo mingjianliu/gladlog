@@ -547,6 +547,12 @@ const INDEX: PredicateRow[] = [
     symbol: "threatActiveAt",
     mod: threatAssessment,
   },
+  // user ruling U-T2: the per-unit half of threatActiveAt
+  {
+    file: `${A}/utils/threatAssessment.ts`,
+    symbol: "unitUnderFireAt",
+    mod: threatAssessment,
+  },
   {
     file: `${A}/utils/threatAssessment.ts`,
     symbol: "matchThreatLevel",

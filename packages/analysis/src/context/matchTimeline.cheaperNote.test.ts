@@ -110,9 +110,21 @@ function timeline(opts: {
   ownerCDs: IMajorCooldownInfo[];
   ownerCasts?: ReturnType<typeof castSuccess>[];
   cc?: ICCInstance[];
+  /** damage rows on the owner / on a teammate "m" (U-T2: who was under fire) */
+  ownerDamageIn?: unknown[];
+  mateDamageIn?: unknown[];
+  /** the teammate's death, seconds from the match start */
+  mateDeathS?: number;
 }): string {
   const owner = mkUnit("o", {
     spellCastEvents: (opts.ownerCasts ?? []) as never,
+    damageIn: (opts.ownerDamageIn ?? []) as never,
+  });
+  const mate = mkUnit("m", {
+    damageIn: (opts.mateDamageIn ?? []) as never,
+    deathRecords: (opts.mateDeathS === undefined
+      ? []
+      : [{ timestamp: opts.mateDeathS * 1000 }]) as never,
   });
   const enemy = mkUnit("e", { reaction: CombatUnitReaction.Hostile });
   const summary: IPlayerCCTrinketSummary = {
@@ -148,7 +160,7 @@ function timeline(opts: {
     enemyDeaths: [],
     pressureWindows: [],
     healingGaps: [],
-    friends: [owner],
+    friends: opts.mateDamageIn ? [owner, mate] : [owner],
     enemies: [enemy],
     matchStartMs: 0,
     matchEndMs: 120_000,
@@ -184,6 +196,95 @@ describe("cheaper note for a team save (hp-state F-T1)", () => {
     expect(lineWith(t, "[YOU] [CD]", "Divine Shield")).toContain(
       "cheaper available: Divine Protection",
     );
+  });
+});
+
+describe("a group save and the ally-only Blessing of Sacrifice (user ruling U-T2)", () => {
+  const AURA_MASTERY = "31821";
+  const SACRIFICE = "6940";
+  // one hit above any pressure threshold (no advanced data → the role fallback)
+  const hit = (tS: number) => ({
+    logLine: {
+      event: LogEvent.SPELL_DAMAGE,
+      timestamp: tS * 1000,
+      parameters: [],
+    },
+    timestamp: tS * 1000,
+    effectiveAmount: -2_000_000,
+    amount: -2_000_000,
+    spellId: "1",
+    srcUnitId: "e",
+  });
+  const ledger = [
+    ledgerEntry(AURA_MASTERY, "Aura Mastery", 180, [30]),
+    ledgerEntry(SACRIFICE, "Blessing of Sacrifice", 120, []),
+    ledgerEntry(DIVINE_PROTECTION, "Divine Protection", 60, []),
+  ];
+  const auraMastery = (o: {
+    ownerDamageIn?: unknown[];
+    mateDamageIn?: unknown[];
+    mateDeathS?: number;
+  }) =>
+    lineWith(
+      timeline({ ownerCDs: ledger, ...o }),
+      "[YOU] [CD]",
+      "Aura Mastery",
+    );
+
+  it("only the owner under fire at the press → Sacrifice is not offered (it cannot go on the caster)", () => {
+    const line = auraMastery({ ownerDamageIn: [hit(29)], mateDamageIn: [] });
+    expect(line).toBeDefined();
+    expect(line).not.toContain("Blessing of Sacrifice");
+    // and the self-only wall stays out, as F-T1 ruled for a team save
+    expect(line).not.toContain("cheaper available");
+  });
+
+  it("a teammate under fire (alone, or with the owner) → Sacrifice had a recipient", () => {
+    expect(auraMastery({ mateDamageIn: [hit(31)] })).toContain(
+      "cheaper available: Blessing of Sacrifice",
+    );
+    expect(
+      auraMastery({ ownerDamageIn: [hit(29)], mateDamageIn: [hit(31)] }),
+    ).toContain("cheaper available: Blessing of Sacrifice");
+  });
+
+  it("a teammate who died just before the press is not 'another friendly under fire': his fatal hits are inside the window", () => {
+    const line = auraMastery({
+      ownerDamageIn: [hit(29)],
+      mateDamageIn: [hit(28.4)],
+      mateDeathS: 28.5,
+    });
+    expect(line).toBeDefined();
+    expect(line).not.toContain("Blessing of Sacrifice");
+    // the same hits on a teammate who lived keep the alternative
+    expect(
+      auraMastery({ ownerDamageIn: [hit(29)], mateDamageIn: [hit(28.4)] }),
+    ).toContain("cheaper available: Blessing of Sacrifice");
+  });
+
+  it("nobody under fire (a pre-emptive press) is outside the ruling: unchanged", () => {
+    expect(auraMastery({ mateDamageIn: [] })).toContain(
+      "cheaper available: Blessing of Sacrifice",
+    );
+    // the hit is outside the ±3 s threat window of the press
+    expect(
+      auraMastery({ ownerDamageIn: [hit(20)], mateDamageIn: [] }),
+    ).toContain("cheaper available: Blessing of Sacrifice");
+  });
+
+  it("findCheaperDefensiveAlternatives: the flag removes only the self-cast no-op set", () => {
+    const cds = ledger;
+    expect(
+      findCheaperDefensiveAlternatives(cds[0]!, cds, 30, {
+        castTargetIsTeammate: true,
+      }),
+    ).toEqual(["Blessing of Sacrifice"]);
+    expect(
+      findCheaperDefensiveAlternatives(cds[0]!, cds, 30, {
+        castTargetIsTeammate: true,
+        onlyCasterUnderFire: true,
+      }),
+    ).toEqual([]);
   });
 });
 

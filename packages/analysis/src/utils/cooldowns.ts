@@ -3598,6 +3598,13 @@ export function findCheaperDefensiveAlternatives(
   atSeconds: number,
   opts: {
     castTargetIsTeammate?: boolean;
+    /** Set for a group save with no cast target (Aura Mastery) pressed
+     * while the caster was the only friendly under fire: the group it
+     * covered needed nothing but the caster's own save, so a tool that only
+     * helps ANOTHER unit (`SELF_CAST_NOOP_EXTERNAL_IDS`) had nobody to go on
+     * (user ruling U-T2, 2026-10-06: Blessing of Sacrifice cannot be put on
+     * the caster and is not offered then). */
+    onlyCasterUnderFire?: boolean;
     /** Set when the caster was stunned at this cast (strictly inside the
      * stun, or the stun this very cast ended): only buttons the game lets a
      * stunned player press are alternatives (triage enemy-def F-E20). */
@@ -3643,7 +3650,8 @@ export function findCheaperDefensiveAlternatives(
             !THROUGHPUT_EMPOWER_DEFENSIVE_IDS.has(other.spellId))) &&
         // Self-cast context: exclude damage-redirect externals that do nothing when
         // caster === target (verified mechanic, not a broad External exclusion).
-        (!!opts.castTargetIsTeammate ||
+        // U-T2: the same when a group save answered the caster's own danger only.
+        ((!!opts.castTargetIsTeammate && !opts.onlyCasterUnderFire) ||
           !SELF_CAST_NOOP_EXTERNAL_IDS.has(other.spellId)) &&
         (!opts.stunnedCaster ||
           usableWhileStunned(other.spellId, opts.stunnedCaster.pvpTalentIds)),
