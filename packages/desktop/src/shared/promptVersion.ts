@@ -922,5 +922,10 @@
  *  teammate's Spirit Link / Void Leech — the redistribution rule of the
  *  pressure total (ruling A22 = B). A Critical window whose only damage was
  *  redistribution demotes to High (the ruled zero-damage behaviour).
+ *  v308 (2026-10-06, triage kick-priority F-P4): a kick-priority line whose
+ *  `healK` sums more than one cast of the heal (an instant cast of the same
+ *  spell inside the half-second heal pairing after the hardcast) carries
+ *  `healCasts`; both legends say the amount is then a sum. Menu ids and the
+ *  cap order are unchanged.
  */
-export const PROMPT_VERSION = 307;
+export const PROMPT_VERSION = 308;

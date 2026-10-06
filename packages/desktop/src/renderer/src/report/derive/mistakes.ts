@@ -366,6 +366,12 @@ export interface Mistake {
 
 const RULE_BY_TYPE = new Map(MISTAKE_RULES.map((r) => [r.type, r]));
 
+/** kick-priority: "N 次施法合计" beside the kill target's heal amount — only
+ *  when that amount is not zero (a heal that went to another unit sums in
+ *  `healedWhom`, which this card does not print). */
+const healCastsNote = (f: Record<string, string | undefined>): string =>
+  f.healCasts && f.healK !== "0" ? `,${f.healCasts} 次施法合计` : "";
+
 export function candidateDetail(c: CandidateEvent): string {
   const f = c.facts as Record<string, string | undefined>;
   switch (c.type) {
@@ -429,14 +435,14 @@ export function candidateDetail(c: CandidateEvent): string {
     case "backlash-dispel":
       return `${f.t ?? "?"}s 给 ${f.targetHpPct ?? "?"}% 血的 ${f.target ?? ""} 解掉 ${f.debuff ?? ""}${f.stacks && f.stacks !== "1" ? `×${f.stacks}` : ""},自己吃 ${f.backlash ?? ""},4 秒内承伤 ${f.selfDmgTrend ?? "?"}、治疗 ${f.healTrend ?? "?"}${f.cdCcSpell ? `;驱散 CD 里 ${f.cdCcTarget ?? ""} 吃了 ${f.cdCcDurationS ?? "?"}s ${f.cdCcSpell} 无人能解` : ""}`;
     case "kick-priority-missed":
-      return `${f.t ?? "?"}s ${f.healer ?? ""} 读 ${f.castS ?? "?"}s ${f.heal ?? ""} 奶 ${f.targetHpPct ?? "?"}% 血的击杀目标 ${f.target ?? ""}(+${f.healK ?? "?"}k),你的 ${f.kick ?? ""} 空着、${
+      return `${f.t ?? "?"}s ${f.healer ?? ""} 读 ${f.castS ?? "?"}s ${f.heal ?? ""} 奶 ${f.targetHpPct ?? "?"}% 血的击杀目标 ${f.target ?? ""}(+${f.healK ?? "?"}k${healCastsNote(f)}),你的 ${f.kick ?? ""} 空着、${
         // 近战踢是按「读条期间跑得到」放行的,不是站在射程里(分诊 kick-priority F-P3)
         f.reachYd
           ? `距离 ${f.distanceYd ?? "?"} 码(近战踢 ${f.kickRangeYd ?? "?"} 码,读条期间跑得到)`
           : `${f.distanceYd ?? "?"} 码内`
       },没踢${f.othersFeasible && f.othersFeasible !== "none" ? `;${f.othersFeasible} 也能踢` : ""}`;
     case "kick-priority-team":
-      return `${f.t ?? "?"}s ${f.healer ?? ""} 读 ${f.castS ?? "?"}s ${f.heal ?? ""} 奶 ${f.targetHpPct ?? "?"}% 血的击杀目标 ${f.target ?? ""}(+${f.healK ?? "?"}k),你踢不了(${f.ownerWhy ?? ""}),${f.teammates ?? ""} 能踢,没人踢`;
+      return `${f.t ?? "?"}s ${f.healer ?? ""} 读 ${f.castS ?? "?"}s ${f.heal ?? ""} 奶 ${f.targetHpPct ?? "?"}% 血的击杀目标 ${f.target ?? ""}(+${f.healK ?? "?"}k${healCastsNote(f)}),你踢不了(${f.ownerWhy ?? ""}),${f.teammates ?? ""} 能踢,没人踢`;
     case "backlash-dispel-window":
       return f.reason === "immune"
         ? `${f.t ?? "?"}s ${f.target ?? ""}(${f.targetHpPct ?? "?"}%)身上的 ${f.debuff ?? ""} 可解:你当时有 ${f.immuneBuff ?? ""},反噬控制无效`

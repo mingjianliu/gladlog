@@ -119,6 +119,33 @@ export const KICK_MIN_FREE_S = 0.5;
 const CAST_PAIR_MAX_MS = 10_000;
 /** SPELL_HEAL from the healer on the target within this after SPELL_CAST_SUCCESS. */
 const HEAL_LAND_PAIR_MS = 500;
+/**
+ * How many casts of `sid` the heal pairing of a hardcast that finished at
+ * `endMs` sums: the hardcast itself plus every later SPELL_CAST_SUCCESS of
+ * the same spell inside the window the SPELL_HEAL rows are paired in
+ * (`(endMs, endMs + HEAL_LAND_PAIR_MS]`). SPELL_HEAL names no cast, so an
+ * instant cast of the same heal right behind the hardcast is summed into
+ * `healAmount` and can only be counted, not separated (triage kick-priority
+ * F-P4).
+ */
+export function healCastsPaired(
+  successes: ReadonlyArray<{
+    spellId?: string | null;
+    logLine: { timestamp: number };
+  }>,
+  sid: string,
+  endMs: number,
+): number {
+  let n = 1;
+  for (const c of successes)
+    if (
+      c.spellId === sid &&
+      c.logLine.timestamp > endMs &&
+      c.logLine.timestamp <= endMs + HEAL_LAND_PAIR_MS
+    )
+      n++;
+  return n;
+}
 export const KICK_PRIORITY_CAP = 2;
 
 export interface KickPriorityFriend {
@@ -187,6 +214,12 @@ export interface IKickPriorityPoint {
    * nothing landed. */
   healOtherName: string | null;
   healOtherAmount: number;
+  /** How many casts of this spell the amounts above sum: 1, plus every
+   * SPELL_CAST_SUCCESS of it by the healer inside the heal pairing window
+   * after the hardcast finished — an instant cast of the same heal half a
+   * second behind it lands in the same window and cannot be told apart
+   * (triage kick-priority F-P4: b711d4ac, 292k read as one cast was two). */
+  healCasts: number;
   windowFromS: number;
   windowToS: number;
   friends: KickPriorityFriend[];
@@ -476,7 +509,9 @@ export function kickPriorityDecisionPoints(
       let healAmount = 0;
       let healOtherName: string | null = null;
       let healOtherAmount = 0;
+      let healCasts = 1;
       if (outcome === "completed") {
+        healCasts = healCastsPaired(successes, sid, endMs);
         const byDest = new Map<string, number>();
         for (const h of healer.healOut ?? []) {
           const t = h.logLine.timestamp;
@@ -660,6 +695,7 @@ export function kickPriorityDecisionPoints(
         healAmount,
         healOtherName,
         healOtherAmount,
+        healCasts,
         windowFromS: w.fromSeconds,
         windowToS: w.toSeconds,
         friends: friendsOut,
@@ -703,6 +739,10 @@ const healedWhom = (p: IKickPriorityPoint): string =>
       ? `${p.healOtherName} (${k(p.healOtherAmount)}k)`
       : "none";
 
+/** `healCasts`, present only when the amounts sum more than one cast. */
+const healCastsFact = (p: IKickPriorityPoint): { healCasts?: string } =>
+  p.healCasts > 1 ? { healCasts: String(p.healCasts) } : {};
+
 export function kickPriorityMissedEvents(
   points: IKickPriorityPoint[],
   owner: { id: string; name: string },
@@ -735,6 +775,7 @@ export function kickPriorityMissedEvents(
         target: p.targetName,
         targetHpPct: String(p.targetHpPct),
         healK: k(p.healAmount),
+        ...healCastsFact(p),
         healedWhom: healedWhom(p),
         // the detector's span (F-P1): the whole defenseless span of the
         // target, which the rendered KILL WINDOW lines (the bursts) sit inside
@@ -817,6 +858,7 @@ export function kickPriorityTeamEvents(
         target: p.targetName,
         targetHpPct: String(p.targetHpPct),
         healK: k(p.healAmount),
+        ...healCastsFact(p),
         healedWhom: healedWhom(p),
         windowFrom: fmtTime(p.windowFromS),
         windowTo: fmtTime(p.windowToS),
