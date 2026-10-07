@@ -15,6 +15,7 @@ import {
   pressSpentBy,
   specToString,
 } from "../utils/cooldowns";
+import { positionalWallReach } from "../utils/deathOutcomeAnalysis";
 import { IEnemyCDTimeline } from "../utils/enemyCDs";
 import { sumIncomingPressure } from "../utils/incomingPressure";
 import { toRenderSecond } from "../utils/renderGrid";
@@ -430,6 +431,55 @@ function friendlyResCds(
   ];
 }
 
+/**
+ * B14a: the [RES] display names of positional cooldowns whose holder stood
+ * out of their reach of `outOfReachOf.victim` at that instant
+ * (`positionalWallReach` === "out-of-reach": the reach predicate of
+ * `positionalWallReaches`, with "no position sample" kept apart; a
+ * non-positional cooldown always reaches, the victim's own cooldowns are
+ * never listed). `buildResourceSnapshot` drops
+ * these from a death row's `rdy:`; the snapshot resolver counts the rows
+ * that lost one, for the legend.
+ */
+export function positionalOutOfReachNames(
+  ownerUnit: ICombatUnit | undefined,
+  ownerCDs: IMajorCooldownInfo[],
+  teammateCDs: ResTeammateCds[],
+  outOfReachOf: { victim: ICombatUnit; atMs: number },
+): Set<string> {
+  const out = new Set<string>();
+  const holders: Array<{
+    unit: ICombatUnit | undefined;
+    cds: IMajorCooldownInfo[];
+    label?: string;
+  }> = [
+    { unit: ownerUnit, cds: ownerCDs },
+    ...teammateCDs.map(({ player, cds, playerLabel }) => ({
+      unit: player,
+      cds,
+      label: playerLabel,
+    })),
+  ];
+  for (const { unit, cds, label } of holders) {
+    if (!unit || unit.id === outOfReachOf.victim.id) continue;
+    for (const cd of cds)
+      // only a KNOWN out-of-reach leaves the row: a missing position sample
+      // drops nothing (the row is a fact, and its legend says "stood out of
+      // reach" — agy review of the batch: the first cut used the
+      // accusation-side predicate, which fails closed)
+      if (
+        positionalWallReach(
+          cd.spellId,
+          unit,
+          outOfReachOf.victim,
+          outOfReachOf.atMs,
+        ) === "out-of-reach"
+      )
+        out.add(label ? `${label}:${cd.spellName}` : cd.spellName);
+  }
+  return out;
+}
+
 export function computeReadyNames(
   timeSeconds: number,
   ownerCDs: IMajorCooldownInfo[],
@@ -504,6 +554,18 @@ interface ResourceSnapshotParams {
    * the `(no mana …)` tag on the owner's ready cooldowns (`affordableAt`) */
   manaFallback?: ManaFallback;
   roundBounds?: { startTime: number; endTime: number };
+  /**
+   * B-tier B14a (user ruling 2026-10-06, "够不着就不列"): the snapshot under
+   * a friendly [DEATH]. A POSITIONAL cooldown (`MITIGATION_TABLE`
+   * `positional`: Darkness' zone) whose holder stood out of its reach of the
+   * dying player at `atMs` is left out of `rdy:` — `positionalWallReach`,
+   * the reach predicate cd-hoarded and [DEFENSIVE AVAILABLE] read (A58 /
+   * F-MC1) with its third answer kept apart: a missing position sample is
+   * "unknown" and drops nothing here (it fails closed on the accusation side).
+   * The dying player's own cooldowns are untouched. Only on a full line
+   * (no `prevReadyNames`): a delta would print the drop as a spent `-X`.
+   */
+  outOfReachOf?: { victim: ICombatUnit; atMs: number };
 }
 
 export function buildResourceSnapshot({
@@ -522,6 +584,7 @@ export function buildResourceSnapshot({
   rosterSides,
   manaFallback,
   roundBounds,
+  outOfReachOf,
 }: ResourceSnapshotParams): string {
   // Render-grid anchor (CLAUDE.md shared-predicate rule; GH #63, 2026-09-04):
   // callers hand in the cast's fractional instant, but the line is printed
@@ -547,12 +610,22 @@ export function buildResourceSnapshot({
   }));
   const deaths: ResHolderDeaths | undefined =
     matchStartMs !== undefined ? { matchStartMs, ownerUnit } : undefined;
+  // B14a: positional cooldowns out of reach of the dying friendly
+  const outOfReach =
+    outOfReachOf && prevReadyNames === undefined
+      ? positionalOutOfReachNames(
+          ownerUnit,
+          ownerCDs,
+          labelledTeammates,
+          outOfReachOf,
+        )
+      : new Set<string>();
   const readyNames = computeReadyNames(
     timeSeconds,
     ownerCDs,
     labelledTeammates,
     deaths,
-  );
+  ).filter((n) => !outOfReach.has(n));
 
   // Build on-CD display list with player attribution (B34) and delta filtering (B35).
   const onCDParts: string[] = [];

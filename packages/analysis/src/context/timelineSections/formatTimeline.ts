@@ -32,6 +32,7 @@ export function formatTimeline(
     | "disarmLineCount"
     | "trinketLastUsedCount"
     | "gripLineCount"
+    | "resOutOfReachRows"
     | "enemyTrinketCount"
     | "enemyCdRender"
     | "isHealer"
@@ -72,6 +73,7 @@ export function formatTimeline(
     disarmLineCount,
     trinketLastUsedCount,
     gripLineCount,
+    resOutOfReachRows,
     enemyTrinketCount,
     enemyCdRender,
     isHealer,
@@ -179,6 +181,13 @@ export function formatTimeline(
     // from "not available".
     "  [RES] lists TRACKED major cooldowns (plus your own interrupt and Death Grip) — an ability absent from both `rdy:` and `cd:`",
     "    is one this ledger does not track, NOT one that was unavailable. Other sections may still cite it.",
+    ...(resOutOfReachRows > 0
+      ? [
+          "  On the [RES] row under a friendly [DEATH], a positional cooldown (Darkness: it covers only a small area around its",
+          "    caster) whose holder stood out of its reach of the dying player is left out of `rdy:` — it was off cooldown, but",
+          "    could not have covered them from there; never count it as an unused save for that death.",
+        ]
+      : []),
     "  [RES] rdy: = abilities READY at that instant. `rdy:Δ` = unchanged since the previous [RES];",
     // res-readiness F-C3 (ruling res R2 = A): off cooldown, but not payable —
     // legended only when a row carries the tag (the F-C16 convention)

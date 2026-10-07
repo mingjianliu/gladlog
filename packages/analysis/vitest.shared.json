@@ -85,6 +85,7 @@
     "test/benchmark.test.ts",
     "test/btierD1KickFacts.test.ts",
     "test/btierD3RejectsAndKillingBlow.test.ts",
+    "test/btierD4ResReach.test.ts",
     "test/btierD6Facts.test.ts",
     "test/btierD8TopDamager.test.ts",
     "test/btierRowFacts.test.ts",

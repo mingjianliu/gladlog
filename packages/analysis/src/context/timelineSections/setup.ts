@@ -995,12 +995,14 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
     timeSeconds: number,
     forceFull = false,
     bypassDebounce = false,
+    deathOfUnitId?: string,
   ): DeferredSnapshot {
     return {
       type: "resource_snapshot",
       timeSeconds,
       forceFull,
       bypassDebounce,
+      ...(deathOfUnitId ? { deathOfUnitId } : {}),
       id: nextPlaceholderId++,
     };
   }

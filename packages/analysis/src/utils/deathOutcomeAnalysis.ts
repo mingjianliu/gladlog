@@ -819,12 +819,31 @@ export function positionalWallReaches(
   target: ICombatUnit,
   atMs: number,
 ): boolean {
-  if (!MITIGATION_TABLE[spellId]?.positional) return true;
+  return positionalWallReach(spellId, holder, target, atMs) === "reaches";
+}
+
+/**
+ * The three answers behind `positionalWallReaches`, for a reader that must
+ * tell "stood too far" from "the log has no position": `reaches` (not a
+ * positional wall, or within its reach), `out-of-reach` (both positions
+ * sampled, farther than the reach), `unknown` (a sample is missing). An
+ * ACCUSATION reads `positionalWallReaches` — unknown fails closed there; a
+ * FACT that says "out of reach" (the [RES] row under a friendly death, B14a)
+ * reads `out-of-reach` only. One sampler, one reach, one instant.
+ */
+export function positionalWallReach(
+  spellId: string,
+  holder: ICombatUnit,
+  target: ICombatUnit,
+  atMs: number,
+): "reaches" | "out-of-reach" | "unknown" {
+  if (!MITIGATION_TABLE[spellId]?.positional) return "reaches";
   const a = getUnitPositionAtTime(holder, atMs, LOS_SWEEP_GAP_MS);
   const b = getUnitPositionAtTime(target, atMs, LOS_SWEEP_GAP_MS);
-  return (
-    !!a && !!b && distanceBetween(a, b) <= externalReachYards(spellId, holder)
-  );
+  if (!a || !b) return "unknown";
+  return distanceBetween(a, b) <= externalReachYards(spellId, holder)
+    ? "reaches"
+    : "out-of-reach";
 }
 
 /**

@@ -953,7 +953,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   });
 
   // Precompute snapshots chronologically, then mutate entries in-place
-  resolveDeferredSnapshots({
+  const { resOutOfReachRows } = resolveDeferredSnapshots({
     entries,
     teammateCDs,
     playerIdMap,
@@ -979,6 +979,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     disarmLineCount,
     trinketLastUsedCount,
     gripLineCount,
+    resOutOfReachRows,
     enemyTrinketCount,
     enemyCdRender,
     isHealer,

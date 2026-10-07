@@ -42,6 +42,9 @@ export interface DeferredSnapshot {
   timeSeconds: number;
   forceFull: boolean;
   bypassDebounce?: boolean;
+  /** the friendly player whose [DEATH] this snapshot sits under (unit id) —
+   * a positional cooldown out of its reach of them leaves `rdy:` (B14a) */
+  deathOfUnitId?: string;
   id: number;
 }
 
@@ -196,6 +199,9 @@ export interface TimelineCtx {
   trinketLastUsedCount: number;
   /** [GRIP] lines rendered (B17b-U8); the [GRIP] legend needs > 0 */
   gripLineCount: number;
+  /** [RES] rows under a friendly death whose `rdy:` lost a positional
+   * cooldown out of reach of the dying player (B14a); legend needs > 0 */
+  resOutOfReachRows: number;
 
   // ── closure helpers ──
   /** GH #103 A6: who provided the avoidance aura on a `[CC AVOIDED?]` line */
@@ -282,6 +288,7 @@ export interface TimelineCtx {
     timeSeconds: number,
     forceFull?: boolean,
     bypassDebounce?: boolean,
+    deathOfUnitId?: string,
   ) => DeferredSnapshot;
   findAndConsumeAoeCC: (
     castTimeSeconds: number,

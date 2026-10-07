@@ -1014,5 +1014,10 @@
  *  early"); and a `[MISSED PURGE OPPORTUNITY]` line says `| you stole the
  *  other copy at m:ss` when the owner took the same caster's other copy
  *  meanwhile. Counts in the commit.
+ *  v320 (2026-10-07, user ruling B14a of 2026-10-06): on the [RES] row under
+ *  a friendly [DEATH], a positional cooldown (Darkness) whose holder stood
+ *  out of its reach of the dying player is left out of `rdy:` — the reach
+ *  predicate cd-hoarded and [DEFENSIVE AVAILABLE] read; a legend line says
+ *  so when it happened. Counts in the commit.
  */
-export const PROMPT_VERSION = 319;
+export const PROMPT_VERSION = 320;

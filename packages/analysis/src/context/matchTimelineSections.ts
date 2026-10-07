@@ -779,6 +779,7 @@ export function emitFriendlyDeathEntries<S>(params: {
     timeSeconds: number,
     forceFull?: boolean,
     bypassDebounce?: boolean,
+    deathOfUnitId?: string,
   ) => S;
   addEntry: (timeSeconds: number, ...lines: (string | S)[]) => void;
 }): void {
@@ -944,7 +945,9 @@ export function emitFriendlyDeathEntries<S>(params: {
       // unusedDefensives on the same line and the MISSED OPTIONS block are both
       // evaluated at death.atSeconds, so this aligns with them. 2026-07-20
       // full corpus: 3/1245 matches contradicted themselves because of this.
-      requestSnapshotPlaceholder(death.atSeconds, true, true),
+      // B14a: under a friendly death, a positional cooldown whose holder
+      // stood out of its reach of the dying player is not `rdy:`
+      requestSnapshotPlaceholder(death.atSeconds, true, true, dyingUnit?.id),
     ];
     if (dyingUnit) {
       // HP trajectory

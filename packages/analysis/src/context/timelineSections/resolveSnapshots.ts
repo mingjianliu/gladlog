@@ -12,6 +12,7 @@
 import {
   computeOnCDDisplayNames,
   computeReadyNames,
+  positionalOutOfReachNames,
 } from "../resourceSnapshot";
 import type { TimelineCtx } from "./ctx";
 import { type DeferredSnapshot, isDeferredSnapshot } from "./ctx";
@@ -33,7 +34,7 @@ export function resolveDeferredSnapshots(
     | "manaFallback"
     | "roundBounds"
   >,
-): void {
+): Pick<TimelineCtx, "resOutOfReachRows"> {
   const {
     entries,
     teammateCDs,
@@ -70,6 +71,8 @@ export function resolveDeferredSnapshots(
   });
 
   const snapshotResults = new Map<number, string>();
+  // B14a: death rows whose `rdy:` lost a positional cooldown (legend count)
+  let resOutOfReachRows = 0;
   let prevReadyNamesState: string[] | null = null;
   let prevOnCDNamesState: string[] | null = null;
   let lastSnapshotTime = -100;
@@ -125,6 +128,20 @@ export function resolveDeferredSnapshots(
     prevReadyNamesState = currentReadyNames;
     prevOnCDNamesState = currentOnCDNames;
 
+    const deathVictim = req.deathOfUnitId
+      ? [owner, ...teammateCDs.map((t) => t.player)].find(
+          (u) => u.id === req.deathOfUnitId,
+        )
+      : undefined;
+    if (deathVictim && forceFullRefresh) {
+      const far = positionalOutOfReachNames(
+        owner,
+        resOwnerCDs,
+        teammateCDsWithLabel,
+        { victim: deathVictim, atMs: matchStartMs + timeSeconds * 1000 },
+      );
+      if (currentReadyNames.some((n) => far.has(n))) resOutOfReachRows++;
+    }
     const snapshotStr = snapshotFn({
       timeSeconds,
       ownerCDs: resOwnerCDs,
@@ -141,6 +158,15 @@ export function resolveDeferredSnapshots(
       rosterSides,
       manaFallback,
       roundBounds,
+      // B14a: the dying friendly this (full) snapshot sits under
+      ...(deathVictim
+        ? {
+            outOfReachOf: {
+              victim: deathVictim,
+              atMs: matchStartMs + timeSeconds * 1000,
+            },
+          }
+        : {}),
     });
     snapshotResults.set(req.id, snapshotStr);
   }
@@ -156,4 +182,5 @@ export function resolveDeferredSnapshots(
       })
       .filter(Boolean);
   }
+  return { resOutOfReachRows };
 }
