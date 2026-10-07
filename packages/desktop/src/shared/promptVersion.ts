@@ -1031,5 +1031,10 @@
  *  (`1 of N purgeable buffs on it`, `N purgeable buffs on it then`), and the
  *  missed-purge menu row carries `purgeableOnTarget`; a legend line when
  *  rendered. Counts in the commit.
+ *  v323 (2026-10-07, user ruling B1 of 2026-10-07, variant B of the 605
+ *  scan): cd-hoarded gains `otherAttempts` — defensives NOT among the ready
+ *  ones that the player pressed inside the response window and the game
+ *  rejected while they were on their own cooldown. A fact; the event is not
+ *  waived. Counts in the commit.
  */
-export const PROMPT_VERSION = 322;
+export const PROMPT_VERSION = 323;

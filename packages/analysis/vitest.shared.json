@@ -85,6 +85,7 @@
     "test/benchmark.test.ts",
     "test/btierD10GuardianSave.test.ts",
     "test/btierD10PurgeableCount.test.ts",
+    "test/btierD11OtherAttempts.test.ts",
     "test/btierD1KickFacts.test.ts",
     "test/btierD3RejectsAndKillingBlow.test.ts",
     "test/btierD4ResReach.test.ts",

@@ -74,7 +74,12 @@ import {
 } from "../crisisDecisionPoints";
 import { fmtFactNum as fmt } from "../factFormat";
 import { CandidateEvent } from "../types";
-import { filterIntentGuardEvidence, formatAttemptedFact } from "./shared";
+import {
+  filterIntentGuardEvidence,
+  formatAttemptedFact,
+  INTENT_GUARD_GCD_S,
+  NOT_READY_REASONS,
+} from "./shared";
 
 /**
  * HARD_CC_CATEGORIES (P1 sync-lens, 2026-08-15, `missedSyncWindowEvents` /
@@ -742,7 +747,8 @@ function rawReturnAfter(cd: SyncWindowCd, probeS: number): number | null {
   }
   const last = lock.at(-1);
   if (!last) return null;
-  const ret = last.timeSeconds + (last.cooldownSecondsOverride ?? cd.cooldownSeconds);
+  const ret =
+    last.timeSeconds + (last.cooldownSecondsOverride ?? cd.cooldownSeconds);
   return ret > probeS ? ret : null;
 }
 
@@ -768,7 +774,10 @@ export function missedSyncWindowEvents(
     enemyMinHpPctAt: (fromSeconds: number, toSeconds: number) => number | null;
     /** Whose reading `enemyMinHpPctAt` returned (`enemyMinHpInWindow`);
      * optional — absent, the unit fact is omitted. Facts only (F-S7). */
-    enemyMinHpUnitAt?: (fromSeconds: number, toSeconds: number) => string | null;
+    enemyMinHpUnitAt?: (
+      fromSeconds: number,
+      toSeconds: number,
+    ) => string | null;
     /** seconds (match-relative) of every enemy deathRecord. */
     enemyDeathS: number[];
     /** the log owner's unit id — an `endedBy` breaker that is the owner
@@ -1879,6 +1888,49 @@ export function cdHoardedEvents(
         .sort((a, b) => a.at - b.at)
         .map((x) => `${x.name} ${(point.tSec - x.at).toFixed(1)}s before`)
         .join("; ");
+      // B1 (user ruling 2026-10-07, variant B of the 605 scan; a fact — the
+      // accusation is not waived): a defensive that would have helped here
+      // and is NOT among the ready ones, pressed inside the response window
+      // and rejected as not ready while the ledger says it was on its own
+      // cooldown at that press. Only key repeats right after that same
+      // spell's cast are left out; another cast's global cooldown is not
+      // (14055cb2 @63: two Ice Barrier presses 0.5 and 0.7 s after an Ice
+      // Storm cast, Ice Barrier itself on cooldown).
+      const readyIds = new Set(ready.map((cd) => cd.spellId));
+      const otherAttempts = rawStreams
+        ? ownerCds
+            .filter(
+              (cd) =>
+                isSpendableDefensiveCd(cd) &&
+                (own || cdCanHelpAnotherUnit(cd)) &&
+                !readyIds.has(cd.spellId),
+            )
+            .map((cd) => {
+              const n = castFailedInWindow(
+                rawStreams,
+                owner.id,
+                windowFromS,
+                windowToS,
+                Number(cd.spellId),
+              ).filter(
+                (h) =>
+                  NOT_READY_REASONS.has(h.reason) &&
+                  // at the press itself, without the rendered-second slack
+                  // `cdAvailableAt` adds (the `attempted` guard above does
+                  // the same): a reject 0.3 s before the cooldown came back
+                  // was still a press into its own cooldown
+                  !cdAvailableAt(cd, h.tSeconds - CD_INSTANT_SLACK_S) &&
+                  !cd.casts.some(
+                    (c) =>
+                      h.tSeconds >= c.timeSeconds &&
+                      h.tSeconds - c.timeSeconds <= INTENT_GUARD_GCD_S,
+                  ),
+              ).length;
+              return n > 0 ? `${cd.spellName}${n > 1 ? ` ×${n}` : ""}` : "";
+            })
+            .filter(Boolean)
+            .join("、")
+        : "";
       const ownerCc = act?.blocks.length
         ? act.blocks
             .map(
@@ -1927,6 +1979,7 @@ export function cdHoardedEvents(
             ? { ownerCc, ownerFreeS: act.freeAfterS.toFixed(1) }
             : {}),
           ...(ownBurstPressed ? { ownBurstPressed } : {}),
+          ...(otherAttempts ? { otherAttempts } : {}),
         },
       };
     })
