@@ -40,12 +40,10 @@ import {
 import {
   cdIsProcOnly,
   getUnitHpAtTimestamp,
-  gridHpPct,
   HP_SAMPLE_RADIUS_MS,
   hpAtPress,
   IDamageBucket,
   IMajorCooldownInfo,
-  isDeadAtRenderSecond,
   isHealerSpec,
   isTeamHealCD,
   specToString,
@@ -97,7 +95,6 @@ import {
   emitDmgSpikeEntries,
   emitEnemyDeathEntries,
   emitFriendlyDeathEntries,
-  emitManaMarkerEntries,
   emitRotPressureEntries,
 } from "./matchTimelineSections";
 import {
@@ -118,11 +115,7 @@ export {
   type PeakSpikePlacement,
   peakSpikePlacement,
 };
-import {
-  buildResourceSnapshot,
-  computeOnCDDisplayNames,
-  computeReadyNames,
-} from "./resourceSnapshot";
+import { buildResourceSnapshot } from "./resourceSnapshot";
 import {
   buildKillSequenceBlock,
   buildMatchEndBlock,
@@ -153,24 +146,19 @@ import { emitEnemyDefEntries } from "./timelineSections/enemyDef";
 import { emitEnemyHardCastEntries } from "./timelineSections/enemyHardCast";
 import { emitHealerCastGapFillerEntries } from "./timelineSections/healerCastGapFiller";
 import { emitKickEntries } from "./timelineSections/kick";
+import { emitManaContextEntries } from "./timelineSections/manaContext";
 import { emitMinorDispelEntries } from "./timelineSections/minorDispels";
 import { emitOffensiveWindowEntries } from "./timelineSections/offensiveWindow";
 import { emitOwnerCdEntries } from "./timelineSections/ownerCd";
 import { emitPurgeEntries } from "./timelineSections/purges";
+import { resolveDeferredSnapshots } from "./timelineSections/resolveSnapshots";
 import { emitSpellOutcomeEntries } from "./timelineSections/spellOutcomes";
+import { emitStasisEntries } from "./timelineSections/stasis";
+import { emitStateEntries } from "./timelineSections/state";
 import { emitTeamCdEntries } from "./timelineSections/teamCd";
 import { emitTrinketCcOnTeamEntries } from "./timelineSections/trinketCcOnTeam";
 import { emitUnitDestroyedEntries } from "./timelineSections/unitDestroyed";
 import "../utils/spellMechanics";
-
-function isDeferredSnapshot(line: unknown): line is DeferredSnapshot {
-  return !!(
-    line &&
-    typeof line === "object" &&
-    "type" in line &&
-    line.type === "resource_snapshot"
-  );
-}
 
 // ── buildMatchTimeline ─────────────────────────────────────────────────────
 
@@ -2326,291 +2314,55 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     enemyDeaths.map((d) => [d.name, d.atSeconds]),
   );
 
-  const lastEmittedHp = new Map<string, number>();
-  const lastEmittedStatus = new Map<string, string>(); // 'alive' | 'dead'
-  const STATE_MIN_GAP_SECONDS = 3;
-  let lastStateEmitT = -100;
-
-  for (let t = 0; t <= Math.floor(matchDurationS); t++) {
-    const tsMs = matchStartMs + t * 1000;
-
-    const friendlyParts: string[] = [];
-    const currentFriendlies = friendlyHpUnits.map(({ unit, label }) => {
-      let isDead = isDeadAtRenderSecond(unit, matchStartMs, t);
-
-      const isGhost = spiritOfRedemptionIntervals.some(
-        (i) =>
-          i.player.name === unit.name &&
-          i.intervals.some(
-            (int) => t >= int.startSeconds && t <= int.endSeconds,
-          ),
-      );
-
-      const clamped = gridHpPct(unit, tsMs);
-
-      if (isGhost) {
-        friendlyParts.push(`${label(unit.name)}:ghost`);
-        isDead = false;
-      } else if (isDead) {
-        friendlyParts.push(`${label(unit.name)}:dead`);
-      } else if (clamped !== null) {
-        if (clamped < 100) {
-          friendlyParts.push(`${label(unit.name)}:${clamped}`);
-        }
-      }
-      return { name: unit.name, isDead, hp: clamped };
-    });
-
-    const enemyParts: string[] = [];
-    const currentEnemies =
-      criticalWindowSet.has(t) && enemyHpUnits.length > 0
-        ? enemyHpUnits.map(({ unit, label }) => {
-            let isDead = isDeadAtRenderSecond(unit, matchStartMs, t);
-
-            const isGhost = spiritOfRedemptionIntervals.some(
-              (i) =>
-                i.player.name === unit.name &&
-                i.intervals.some(
-                  (int) => t >= int.startSeconds && t <= int.endSeconds,
-                ),
-            );
-
-            const clamped = gridHpPct(unit, tsMs);
-
-            if (isGhost) {
-              enemyParts.push(`${label(unit.name)}:ghost`);
-              isDead = false;
-            } else if (isDead) {
-              enemyParts.push(`${label(unit.name)}:dead`);
-            } else if (clamped !== null) {
-              if (clamped < 100) {
-                enemyParts.push(`${label(unit.name)}:${clamped}`);
-              }
-            }
-            return { name: unit.name, isDead, hp: clamped };
-          })
-        : [];
-
-    if (friendlyParts.length === 0 && enemyParts.length === 0) continue;
-
-    // B15: Option 2 (Event-Gating) - strictly emit ONLY inside critical windows, or if a player died.
-    const isInCritical = criticalWindowSet.has(t);
-    const someoneDied =
-      currentFriendlies.some((p) => p.isDead) ||
-      currentEnemies.some((p) => p.isDead);
-
-    const wasSomeoneDead = Array.from(lastEmittedStatus.values()).some(
-      (status) => status === "dead",
-    );
-    const isFirstDeathTick = someoneDied && !wasSomeoneDead;
-
-    // H18: a crisis anchor second is cited by a candidate — its tick is
-    // always printed
-    const isCrisisAnchor = crisisAnchorSeconds?.has(t) ?? false;
-
-    // Only emit if inside critical window, or death. No time anchors!
-    if (!isInCritical && !isFirstDeathTick && !isCrisisAnchor) continue;
-
-    // Decide if it's a key moment or delta change
-    let shouldEmit = false;
-    if (t === 0) {
-      shouldEmit = true; // Always emit first tick
-    } else if (keyMomentSeconds.has(t) || isCrisisAnchor) {
-      shouldEmit = true; // Key moment snapshot
-    } else if (
-      t - lastStateEmitT < STATE_MIN_GAP_SECONDS &&
-      !isFirstDeathTick
-    ) {
-      // T3: per-second STATE inside critical windows is the timeline's largest
-      // token source and, per blind review, a breeding ground for "read the
-      // adjacent line" misattribution; enforce a ≥3s gap at non-key instants
-      // (deaths / keyMoments are exempt)
-      shouldEmit = false;
-    } else {
-      // Check if any player's HP changed by at least 10% or status changed since last emitted tick
-      for (const p of [...currentFriendlies, ...currentEnemies]) {
-        const lastHp = lastEmittedHp.get(p.name);
-        const lastStatus = lastEmittedStatus.get(p.name) ?? "alive";
-        const currentStatus = p.isDead ? "dead" : "alive";
-
-        if (currentStatus !== lastStatus) {
-          shouldEmit = true;
-          break;
-        }
-
-        if (p.hp !== null) {
-          if (lastHp === undefined || Math.abs(p.hp - lastHp) >= 10) {
-            shouldEmit = true;
-            break;
-          }
-        }
-      }
-    }
-
-    if (!shouldEmit) continue;
-
-    // Update last emitted state
-    for (const p of [...currentFriendlies, ...currentEnemies]) {
-      if (p.hp !== null) lastEmittedHp.set(p.name, p.hp);
-      lastEmittedStatus.set(p.name, p.isDead ? "dead" : "alive");
-    }
-
-    let stateParts: string;
-    if (friendlyParts.length > 0 && enemyParts.length > 0) {
-      stateParts = `friends ${friendlyParts.join(" ")} / enemies ${enemyParts.join(" ")}`;
-    } else if (friendlyParts.length > 0) {
-      stateParts = `friends ${friendlyParts.join(" ")}`;
-    } else {
-      stateParts = `enemies ${enemyParts.join(" ")}`;
-    }
-
-    lastStateEmitT = t;
-    addEntry(t, `${fmtTime(t)}  [STATE]   ${stateParts}`);
-  }
-
-  // 8.5 Add Mana Context for long matches (F144)
-  if (matchDurationS > 300) {
-    emitManaMarkerEntries({
-      owner,
-      friends,
-      enemies: enemies ?? [],
-      matchStartMs,
-      matchDurationS,
-      friendlyDeathAtByName,
-      enemyDeathAtByName,
-      pid,
-      enemyPid,
-      addEntry,
-      manaFallback,
-    });
-  }
-
-  // 10. Process Stasis Events
-  for (const stasis of stasisEvents) {
-    // Prefer resolved spell names; fall back to the stored-spell count so an
-    // unidentified release is never shown as an empty "→ " (which reads as a
-    // wasted Stasis). Only skip releases that genuinely stored nothing.
-    const contents =
-      stasis.spells.length > 0
-        ? stasis.spells.join(", ")
-        : stasis.storedCount > 0
-          ? `${stasis.storedCount} spell(s) stored (contents not identified)`
-          : "";
-    if (contents) {
-      addEntry(
-        stasis.releaseSeconds,
-        `${fmtTime(stasis.releaseSeconds)}  [YOU] [STASIS RELEASE] → ${contents}`,
-      );
-    }
-  }
-
-  // Precompute snapshots chronologically
-  const placeholders: DeferredSnapshot[] = [];
-  for (const entry of entries) {
-    for (const line of entry.lines) {
-      if (isDeferredSnapshot(line)) {
-        placeholders.push(line);
-      }
-    }
-  }
-
-  placeholders.sort((a, b) => {
-    if (a.timeSeconds !== b.timeSeconds) {
-      return a.timeSeconds - b.timeSeconds;
-    }
-    if (a.forceFull !== b.forceFull) {
-      return (b.forceFull ? 1 : 0) - (a.forceFull ? 1 : 0);
-    }
-    return a.id - b.id;
+  emitStateEntries({
+    matchDurationS,
+    matchStartMs,
+    friendlyHpUnits,
+    spiritOfRedemptionIntervals,
+    criticalWindowSet,
+    enemyHpUnits,
+    crisisAnchorSeconds,
+    keyMomentSeconds,
+    addEntry,
   });
 
-  const snapshotResults = new Map<number, string>();
-  let prevReadyNamesState: string[] | null = null;
-  let prevOnCDNamesState: string[] | null = null;
-  let lastSnapshotTime = -100;
-  let lastFullSnapshotTime = -100;
-  const FULL_SNAPSHOT_REFRESH_SECONDS = 60;
+  // 8.5 Add Mana Context for long matches (F144)
+  emitManaContextEntries({
+    matchDurationS,
+    owner,
+    friends,
+    enemies,
+    matchStartMs,
+    friendlyDeathAtByName,
+    enemyDeathAtByName,
+    pid,
+    enemyPid,
+    addEntry,
+    manaFallback,
+  });
 
-  for (const req of placeholders) {
-    const timeSeconds = req.timeSeconds;
-    const forceFull = req.forceFull;
+  // 10. Process Stasis Events
+  emitStasisEntries({
+    stasisEvents,
+    addEntry,
+  });
 
-    const isSameTime = Math.abs(timeSeconds - lastSnapshotTime) < 0.001;
-    const shouldDebounce =
-      !req.bypassDebounce && timeSeconds - lastSnapshotTime < 2.0;
-    if (isSameTime || shouldDebounce) {
-      snapshotResults.set(req.id, "");
-      continue;
-    }
-    lastSnapshotTime = timeSeconds;
-
-    const teammateCDsWithLabel = teammateCDs.map(({ player, cds, spec }) => ({
-      cds,
-      spec,
-      player,
-      playerLabel: playerIdMap
-        ? String(playerIdMap.get(player.name) ?? player.name)
-        : player.name,
-    }));
-    // F-C4: the same dead-holder cut the snapshot applies, so the delta state
-    // never carries a dead holder's entries forward.
-    const resDeaths = { matchStartMs, ownerUnit: owner };
-    const currentReadyNames = computeReadyNames(
-      timeSeconds,
-      resOwnerCDs,
-      teammateCDsWithLabel,
-      resDeaths,
-    );
-    const currentOnCDNames = computeOnCDDisplayNames(
-      timeSeconds,
-      resOwnerCDs,
-      teammateCDsWithLabel,
-      resDeaths,
-    );
-    const forceFullRefresh =
-      forceFull ||
-      timeSeconds - lastFullSnapshotTime >= FULL_SNAPSHOT_REFRESH_SECONDS;
-    const prevReadyNames = forceFullRefresh
-      ? undefined
-      : (prevReadyNamesState ?? undefined);
-    const prevOnCDNames = forceFullRefresh
-      ? undefined
-      : (prevOnCDNamesState ?? undefined);
-    if (forceFullRefresh) lastFullSnapshotTime = timeSeconds;
-    prevReadyNamesState = currentReadyNames;
-    prevOnCDNamesState = currentOnCDNames;
-
-    const snapshotStr = snapshotFn({
-      timeSeconds,
-      ownerCDs: resOwnerCDs,
-      ownerName: owner.name,
-      ownerSpec,
-      teammateCDs,
-      ccTrinketSummaries,
-      enemyCDTimeline,
-      playerIdMap,
-      prevReadyNames,
-      prevOnCDNames,
-      matchStartMs,
-      ownerUnit: owner,
-      rosterSides,
-      manaFallback,
-      roundBounds,
-    });
-    snapshotResults.set(req.id, snapshotStr);
-  }
-
-  // Mutate entries in-place to resolve deferred snapshots
-  for (const entry of entries) {
-    entry.lines = entry.lines
-      .map((line) => {
-        if (isDeferredSnapshot(line)) {
-          return snapshotResults.get(line.id) ?? "";
-        }
-        return line;
-      })
-      .filter(Boolean);
-  }
+  // Precompute snapshots chronologically, then mutate entries in-place
+  resolveDeferredSnapshots({
+    entries,
+    teammateCDs,
+    playerIdMap,
+    matchStartMs,
+    owner,
+    resOwnerCDs,
+    snapshotFn,
+    ownerSpec,
+    ccTrinketSummaries,
+    enemyCDTimeline,
+    rosterSides,
+    manaFallback,
+    roundBounds,
+  });
 
   // ── Sort and format ───────────────────────────────────────────────────────
 

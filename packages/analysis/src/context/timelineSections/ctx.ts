@@ -23,6 +23,7 @@ import type { IAoeCCEvent } from "../../utils/drAnalysis";
 import type { IEnemyCDCast } from "../../utils/enemyCDs";
 import type { buildRosterSides } from "../../utils/rosterSide";
 import type { BuildMatchTimelineParams } from "../matchTimeline";
+import type { buildResourceSnapshot } from "../resourceSnapshot";
 import type {
   buildSummonOwnerNames,
   extractEnemyMajorBuffIntervals,
@@ -38,6 +39,18 @@ export interface DeferredSnapshot {
   forceFull: boolean;
   bypassDebounce?: boolean;
   id: number;
+}
+
+/** Is this timeline entry line a deferred snapshot placeholder (as opposed
+ * to a rendered string)? Moved here from matchTimeline.ts with the type it
+ * guards (GH #116). */
+export function isDeferredSnapshot(line: unknown): line is DeferredSnapshot {
+  return !!(
+    line &&
+    typeof line === "object" &&
+    "type" in line &&
+    line.type === "resource_snapshot"
+  );
 }
 
 type P = BuildMatchTimelineParams;
@@ -74,8 +87,37 @@ export interface TimelineCtx {
   playerIdMap: P["playerIdMap"];
   enemyIdMap: P["enemyIdMap"];
   rawStreams: P["rawStreams"];
+  ownerSpec: P["ownerSpec"];
+  crisisAnchorSeconds: P["crisisAnchorSeconds"];
+  /** defaulted to [] by the destructuring */
+  spiritOfRedemptionIntervals: NonNullable<P["spiritOfRedemptionIntervals"]>;
+
+  // ── the entries every emitter feeds; the snapshot pass rewrites them in place ──
+  entries: Array<{
+    timeSeconds: number;
+    lines: (string | DeferredSnapshot)[];
+  }>;
 
   // ── derived values ──
+  /** (matchEndMs − matchStartMs) / 1000 */
+  matchDurationS: number;
+  /** power-sample fallback for stored matches without power samples */
+  manaFallback: { rawStreams: P["rawStreams"]; matchStartMs: number };
+  /** the [RES] snapshot builder (buildResourceSnapshot) */
+  snapshotFn: typeof buildResourceSnapshot;
+  /** ownerCDs plus the owner's kick / Death Grip, for the [RES] line only */
+  resOwnerCDs: P["ownerCDs"];
+  /** whole seconds where a major event happens — [STATE] always renders there */
+  keyMomentSeconds: Set<number>;
+  /** the HP tokens of [STATE], in player-id order */
+  friendlyHpUnits: Array<{
+    unit: ICombatUnit;
+    label: (name: string) => string;
+  }>;
+  enemyHpUnits: Array<{ unit: ICombatUnit; label: (name: string) => string }>;
+  /** death time by name (mana markers take names, not units) */
+  friendlyDeathAtByName: Map<string, number>;
+  enemyDeathAtByName: Map<string, number>;
   /** summon GUID -> owner name (a pet / guardian is named through its owner) */
   summonOwners: ReturnType<typeof buildSummonOwnerNames>;
   /** unit GUID -> name, over `_allUnits` */
