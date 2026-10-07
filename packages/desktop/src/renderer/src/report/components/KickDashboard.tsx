@@ -112,7 +112,9 @@ export function KickDashboard({
                           {k.result === "landed" &&
                             ` 打断 ${k.interruptedSpellName ?? ""}`}
                           {k.result === "juked" &&
-                            ` 被假读条骗掉(${k.jukedBySpellName ?? ""})`}
+                            (k.jukedChannelStoppedAgoS !== undefined
+                              ? ` 被骗掉(${k.jukedBySpellName ?? ""} 引导刚停)`
+                              : ` 被假读条骗掉(${k.jukedBySpellName ?? ""})`)}
                           {k.result === "silenced" &&
                             (k.openCastSpellName
                               ? ` 沉默生效(${k.openCastSpellName} 读条未完成)`

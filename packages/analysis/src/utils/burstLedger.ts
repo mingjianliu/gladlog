@@ -10,7 +10,7 @@ import {
   SELF_CAST_NOOP_EXTERNAL_IDS,
 } from "./cooldowns";
 import { IEnemyCDCast, reconstructEnemyCDTimeline } from "./enemyCDs";
-import type { IKickAuditEntry } from "./kickAudit";
+import { type IKickAuditEntry, jukedByStoppedChannelText } from "./kickAudit";
 import { MIN_WINDOW_SECONDS } from "./killWindowTargetSelection";
 import { IOffensiveWindow } from "./offensiveWindows";
 import { fmtTime, toRenderSecond } from "./renderGrid";
@@ -673,7 +673,9 @@ export function formatBurstLedgerForContext(
               : "no cast interrupted"
           })`;
         case "juked":
-          return `${at} ${k.kickSpellName} → JUKED by fake ${k.jukedBySpellName}`;
+          return k.jukedChannelStoppedAgoS !== undefined
+            ? `${at} ${k.kickSpellName} → ${jukedByStoppedChannelText(k)}`
+            : `${at} ${k.kickSpellName} → JUKED by fake ${k.jukedBySpellName}`;
         case "missed":
           return `${at} ${k.kickSpellName} → hit nothing`;
         default:

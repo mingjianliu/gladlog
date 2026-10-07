@@ -41,6 +41,7 @@ import {
   namedCannotCastIntervals,
 } from "../utils/cannotCastIntervals";
 import { type OwnerCastCancels, ownerCastCancels } from "../utils/castCancels";
+import { STOPPED_JUST_BEFORE_S } from "../utils/castStopEvidence";
 import {
   analyzePlayerCCAndTrinket,
   applicableCCAvoidanceIds,
@@ -1529,6 +1530,29 @@ export function kickEatenEvents(
   // order, the old cap.
   const tierOf = (p: KickPressure | undefined) =>
     p ? kickPressureTier(p) : 2;
+  // B6 (user ruling 2026-10-06; a fact, no new accusation): the round's kicks
+  // on the player by kicker — EVERY kick passed in, the harmless ones and
+  // the ones the cap drops included, so a line can say "this kicker, 7 times,
+  // on these spells" when the menu lists 4 (141470d0: Counter Shot ×7).
+  const byKicker = new Map<string, Map<string, number>>();
+  for (const k of instances) {
+    const spells = byKicker.get(k.sourceName) ?? new Map<string, number>();
+    spells.set(
+      k.interruptedSpellName,
+      (spells.get(k.interruptedSpellName) ?? 0) + 1,
+    );
+    byKicker.set(k.sourceName, spells);
+  }
+  const sameKickerFact = (kicker: string): Record<string, string> => {
+    const spells = [...(byKicker.get(kicker) ?? [])].sort(
+      (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
+    );
+    const total = spells.reduce((n, [, c]) => n + c, 0);
+    if (total < 2) return {};
+    return {
+      sameKicker: `${kicker} ×${total} (${spells.map(([name, c]) => `${name} ×${c}`).join(" + ")})`,
+    };
+  };
   let capped = 0;
   let exempt = 0;
   return withPresses
@@ -1688,6 +1712,7 @@ export function kickEatenEvents(
         ...(p ? kickPressureFacts(p) : {}),
         ...(cancels ? castCancelFacts(cancels, k.sourceName) : {}),
         ...(cancels ? stoppedJustBeforeFact(cancels, k.castStartS) : {}),
+        ...sameKickerFact(k.sourceName),
       },
     }));
 }
@@ -1883,9 +1908,10 @@ function castCancelFacts(
   };
 }
 
-/** How close before the kicked cast's start a self-stopped cast counts as
- * "just before" (user ruling A35, 2026-09-30: 0.5 s). */
-export const STOPPED_JUST_BEFORE_S = 0.5;
+// How close before the kicked cast's start a self-stopped cast counts as
+// "just before" (user ruling A35, 2026-09-30: 0.5 s) — `castStopEvidence.ts`,
+// shared with kickAudit's stopped-channel test (B21b).
+export { STOPPED_JUST_BEFORE_S };
 
 /** `stoppedJustBefore=<spell> Ns before (~Ms in)`: the owner stopped a cast
  * themselves at most `STOPPED_JUST_BEFORE_S` before starting the cast that
@@ -2884,7 +2910,35 @@ function teamPlayEvents(
     try {
       const points = kickPriorityDecisionPoints(friends, enemies, combat);
       const probes = { lookup: lookupKickPriorityPrior };
-      out.push(...kickPriorityMissedEvents(points, owner, probes));
+      // B7b: the owner's occupancy during the heal's cast — the predicate and
+      // the inputs missed-cleanse's `ownerCastingSpells` reads
+      const ownerFailedCasts = rawStreams?.available
+        ? rawStreams.castFailed
+            .filter((f) => f.unitGuid === owner.id)
+            .map((f) => ({
+              spellId: String(f.spellId),
+              ms: combat.startTime + f.tSeconds * 1000,
+            }))
+        : undefined;
+      const ownerBusyWith = (fromS: number, toS: number): string => {
+        if (typeof combat?.startTime !== "number") return "";
+        const occ = occupancyWithin(
+          owner,
+          cannotCastSrcIds,
+          combat.startTime + fromS * 1000,
+          combat.startTime + toS * 1000,
+          ownerFailedCasts,
+        );
+        return occ && (occ.occupiedMs / 1000).toFixed(1) !== "0.0"
+          ? joinSpellCounts(occ.spellNames)
+          : "";
+      };
+      out.push(
+        ...kickPriorityMissedEvents(points, owner, {
+          ...probes,
+          ownerBusyWith,
+        }),
+      );
       out.push(...kickPriorityTeamEvents(points, owner, probes));
     } catch {
       /* kick-priority not computable → types absent */

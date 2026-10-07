@@ -12,6 +12,13 @@ import {
   classifyKickedSpell,
   type KickedSpellCategory,
 } from "../data/kickedSpellCategories";
+import { buffFullDurationForCaster } from "./buffDuration";
+import { CHANNEL_AURA_LAG_MS, channelSpans } from "./castCommitSpans";
+import {
+  CANCEL_CC_NEAR_S,
+  forcedStopInstantsMs,
+  STOPPED_JUST_BEFORE_S,
+} from "./castStopEvidence";
 import { kickCastSpellId } from "./enemyInterrupts";
 
 type SpellEntry = { type: string };
@@ -36,6 +43,14 @@ export const CAST_QUEUE_TOLERANCE_MS = 400;
  * Anchored on the cast-bar cap: an uncompleted cast is over within this long
  * (desktop castBars CAST_BAR_MAX_MS renders the same fact — keep equal). */
 export const JUKE_LOOKBACK_MS = 4_000;
+/** A channel counts as STOPPED (not run out) only when its logged length is
+ * under this share of its official duration. Haste shortens a channel that
+ * runs its course, and the log has no "channel finished" row, so the bound
+ * is deliberately far below any hasted natural end: the direction that keeps
+ * today's `missed` when unsure. 60 triage picks (2026-10-07): the 8 channels
+ * that ended ≤ 0.5 s before a kick that stopped nothing ran 0.05–0.19 of
+ * their duration (6) and 0.43 / 0.58 (two Void Torrents). */
+export const CHANNEL_STOPPED_MAX_SHARE = 0.5;
 
 export interface IKickAuditEntry {
   atSeconds: number;
@@ -63,6 +78,10 @@ export interface IKickAuditEntry {
   interruptedCategory?: KickedSpellCategory;
   /** juked: the cast that was faked. */
   jukedBySpellName?: string;
+  /** juked by a CHANNEL the target stopped itself: how long before the kick
+   * it stopped, seconds (≤ `STOPPED_JUST_BEFORE_S`). Absent for a faked
+   * hardcast. */
+  jukedChannelStoppedAgoS?: number;
   /** silenced: who carried the kick's aura. */
   silencedTargetName?: string;
   /** silenced: the cast that target had open AT the kick and never finished
@@ -72,6 +91,21 @@ export interface IKickAuditEntry {
    * only be said when this is absent — and whether the silence or the
    * target stopped it the log cannot tell, so the wording says neither. */
   openCastSpellName?: string;
+}
+
+/** The one wording for a kick juked by a channel its target stopped
+ * (`jukedChannelStoppedAgoS`): the prompt's `Kicks:` line and any other
+ * rendering of the audit read it. The offset is floored to a tenth; under a
+ * tenth it says so instead of "0.0s". */
+export function jukedByStoppedChannelText(
+  k: Pick<IKickAuditEntry, "jukedBySpellName" | "jukedChannelStoppedAgoS">,
+): string {
+  const ago = k.jukedChannelStoppedAgoS ?? 0;
+  const shown =
+    ago < 0.1
+      ? "under 0.1s"
+      : `${(Math.floor(ago * 10 + 1e-9) / 10).toFixed(1)}s`;
+  return `JUKED — their ${k.jukedBySpellName} channel stopped ${shown} before the kick`;
 }
 
 /**
@@ -90,7 +124,12 @@ export interface IKickAuditEntry {
  *     the target (sync-burst F-L6) — decided before any juke test, so a
  *     Strangulate that silenced its target is never "juked";
  *  3. only what is left is tested for a juke, with a cast's completion
- *     bounded at the target's next cast start (kick-priority F-B1).
+ *     bounded at the target's next cast start (kick-priority F-B1). A channel
+ *     the target stopped itself at most `STOPPED_JUST_BEFORE_S` before the
+ *     kick is the bait before any earlier unfinished hardcast (B-tier B21b,
+ *     user ruling 2026-10-06 — the mirror of kick-eaten's `stoppedJustBefore`:
+ *     0e0663e6, a Mind Freeze 0.1 s after Divine Hymn stopped read "JUKED by
+ *     fake Benediction", a bar from 3.4 s earlier).
  */
 export function analyzeKickAudit(
   player: ICombatUnit,
@@ -209,6 +248,44 @@ export function analyzeKickAudit(
     return open;
   };
 
+  /** The channel `enemy` stopped itself just before `kickMs`: a logged
+   * channel (`channelSpans`, the one channel-length predicate) that ended in
+   * the `STOPPED_JUST_BEFORE_S` before the kick, short of its official
+   * duration by `CHANNEL_STOPPED_MAX_SHARE`, that nobody interrupted, with
+   * no control / silence / landed displacement on the unit within
+   * `CANCEL_CC_NEAR_S` of its end (ruling A′17 applies here as it does to the
+   * owner's own stops). Of two, the one that ended last. */
+  const stoppedChannelOf = (enemy: ICombatUnit, kickMs: number) => {
+    const forced = forcedStopInstantsMs(enemy);
+    const forcedNear = (ms: number) =>
+      [...forced.cc, ...forced.displaced].some(
+        (t) => Math.abs(t - ms) <= CANCEL_CC_NEAR_S * 1000,
+      );
+    return channelSpans(enemy)
+      .filter((ch) => {
+        if (ch.endMs > kickMs) return false;
+        if (kickMs - ch.endMs > STOPPED_JUST_BEFORE_S * 1000) return false;
+        const fullS = buffFullDurationForCaster(ch.spellId, enemy, ch.startMs);
+        if (fullS === undefined || !(fullS > 0)) return false;
+        if (
+          !((ch.endMs - ch.startMs) / 1000 < fullS * CHANNEL_STOPPED_MAX_SHARE)
+        )
+          return false;
+        if (
+          allInterrupts.some(
+            (a) =>
+              a.destUnitId === enemy.id &&
+              (a as CombatExtraSpellAction).extraSpellId === ch.spellId &&
+              a.logLine.timestamp >= ch.startMs &&
+              a.logLine.timestamp <= ch.endMs + CHANNEL_AURA_LAG_MS,
+          )
+        )
+          return false;
+        return !forcedNear(ch.endMs);
+      })
+      .sort((a, b) => b.endMs - a.endMs)[0];
+  };
+
   for (const kick of kicks) {
     const kickMs = kick.logLine.timestamp;
     const base = {
@@ -293,6 +370,22 @@ export function analyzeKickAudit(
     const candidates = kick.destUnitId
       ? enemyPlayers.filter((e) => e.id === kick.destUnitId)
       : enemyPlayers;
+    const stopped = candidates
+      .map((enemy) => stoppedChannelOf(enemy, kickMs))
+      .filter((ch): ch is NonNullable<typeof ch> => ch !== undefined)
+      .sort((a, b) => b.endMs - a.endMs)[0];
+    if (stopped) {
+      entries.push({
+        ...base,
+        result: "juked",
+        jukedBySpellName: getEnglishSpellName(
+          stopped.spellId,
+          stopped.spellName,
+        ),
+        jukedChannelStoppedAgoS: (kickMs - stopped.endMs) / 1000,
+      });
+      continue;
+    }
     let jukedBy: string | undefined;
     for (const enemy of candidates) {
       jukedBy = openCastOf(enemy, kickMs);

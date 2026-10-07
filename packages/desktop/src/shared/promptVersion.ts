@@ -973,5 +973,15 @@
  *  "you (X)" when the player cast only X of the chain); cd-hoarded gains
  *  `ownBurstPressed` (the player's offensive cooldowns pressed in the 2 s
  *  before the crisis reading, each with how long before it). Counts in the commit.
+ *  v315 (2026-10-07, user rulings B6 / B7b / B21b of 2026-10-06; facts and
+ *  one wording, no accusation added): kick-eaten gains `sameKicker`
+ *  ("<kicker> ×N (<spell> ×n + …)", every kick on the player by this line's
+ *  kicker, unlisted ones included); kick-priority-missed gains
+ *  `youChannelling` (what the player was hard-casting or channelling while
+ *  the heal was cast — the missed-cleanse occupancy predicate); and the
+ *  burst ledger's `Kicks:` line says `JUKED — their X channel stopped Ns
+ *  before the kick` when the target stopped a channel at most 0.5 s before
+ *  the kick, instead of naming an older unfinished cast or "hit nothing".
+ *  Counts in the commit.
  */
-export const PROMPT_VERSION = 314;
+export const PROMPT_VERSION = 315;

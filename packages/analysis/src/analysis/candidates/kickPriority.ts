@@ -746,7 +746,15 @@ const healCastsFact = (p: IKickPriorityPoint): { healCasts?: string } =>
 export function kickPriorityMissedEvents(
   points: IKickPriorityPoint[],
   owner: { id: string; name: string },
-  probes: { lookup: () => KickPriorityRef | null },
+  probes: {
+    lookup: () => KickPriorityRef | null;
+    /** B7b (user ruling 2026-10-06; a fact, the verdict is unchanged): what
+     * the player was hard-casting or channelling while the heal was being
+     * cast — the names `occupancyWithin` (the one "was this player busy"
+     * predicate, missed-cleanse's `ownerCastingSpells`) returns for
+     * [castStartS, castEndS], "、"-joined; "" or absent ⇒ no fact. */
+    ownerBusyWith?: (castStartS: number, castEndS: number) => string;
+  },
   overrides?: { cap?: number },
 ): CandidateEvent[] {
   const cap = overrides?.cap ?? KICK_PRIORITY_CAP;
@@ -760,6 +768,8 @@ export function kickPriorityMissedEvents(
         (f) => f.id !== owner.id && f.feasible && f.reachableBeforeLanding,
       )
       .map((f) => f.name);
+    const youChannelling =
+      probes.ownerBusyWith?.(p.castStartS, p.castEndS) ?? "";
     return {
       id: `kick-priority-missed:${owner.id}:${Math.round(p.castStartS)}`,
       type: "kick-priority-missed",
@@ -793,6 +803,7 @@ export function kickPriorityMissedEvents(
           ? {}
           : { reachYd: String(Math.round(me.reachYd)) }),
         othersFeasible: others.length ? others.join("; ") : "none",
+        ...(youChannelling ? { youChannelling } : {}),
         refNCompleted: String(ref.nCompleted),
         refNInterrupted: String(ref.nInterrupted),
         refDeathCompleted: String(ref.deathCompletedPct),

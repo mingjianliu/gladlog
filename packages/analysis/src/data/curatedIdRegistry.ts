@@ -45,7 +45,7 @@ import {
   UNRELENTING_ONSLAUGHT_TALENT_ID,
   USABLE_IN_BLADESTORM_WITH_TALENT,
 } from "../utils/castingLocks";
-import { DISPLACEMENT_EVIDENCE_IDS } from "../utils/castCancels";
+import { DISPLACEMENT_EVIDENCE_IDS } from "../utils/castStopEvidence";
 import { COPY_CAST_IDS } from "../utils/castPress";
 import {
   BREAKABLE_CC_SPELL_IDS,
@@ -579,7 +579,7 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   ),
   // Triage 2026-09-29 F-K10b (ruling A′17): enemy displacements that break a
   // cast bar — the knockback family plus Typhoon's daze aura.
-  t("DISPLACEMENT_EVIDENCE_IDS", "utils/castCancels.ts", "mixed", () =>
+  t("DISPLACEMENT_EVIDENCE_IDS", "utils/castStopEvidence.ts", "mixed", () =>
     set(DISPLACEMENT_EVIDENCE_IDS),
   ),
   // Triage 2026-09-29 F-K6b (ruling A12 + U2): caster-displacing abilities

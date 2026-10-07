@@ -241,7 +241,11 @@ export function BurstLedgerCard({
                 <Chip kind="good">打断 {kk.interruptedSpellName}</Chip>
               )}
               {kk.result === "juked" && (
-                <Chip kind="bad">被假读条骗掉({kk.jukedBySpellName})</Chip>
+                <Chip kind="bad">
+                  {kk.jukedChannelStoppedAgoS !== undefined
+                    ? `被骗掉(${kk.jukedBySpellName} 引导刚停)`
+                    : `被假读条骗掉(${kk.jukedBySpellName})`}
+                </Chip>
               )}
               {kk.result === "silenced" && (
                 <Chip kind="dim">
