@@ -1043,5 +1043,11 @@
  *  the next row. A round's first [RES] row is always a full one, and a
  *  cooldown the ledger had not reported yet shows up as `+X` instead of
  *  never. Counts in the commit.
+ *  v325 (2026-10-07, user ruling B16b of 2026-10-06, "as A29: name both"): a
+ *  FAILED kill attempt that met the target's own save AND an external names
+ *  both — `popped X; saved by external (Y)` (and `; self-saved (Z)` when
+ *  that was there too) — instead of the wall alone. Without an external the
+ *  cause is unchanged. The [ENEMY DEF] reference gate reads the cause clause
+ *  by clause. Counts in the commit.
  */
-export const PROMPT_VERSION = 324;
+export const PROMPT_VERSION = 325;

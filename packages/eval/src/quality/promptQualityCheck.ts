@@ -1843,9 +1843,14 @@ export function checkPetCreditSide(lines: string[]): string[] {
 const ENEMY_DEF_LEGEND = /^\s*\[ENEMY DEF\] = /;
 /** `  [m:ss–m:ss] on <unit> — … | FAILED: popped A/B`,
  * `… | FAILED: saved by external (A/B)` or (B4a, 2026-09-25)
- * `… | FAILED: self-saved (A/B)`; names may carry `@m:ss` (stamp mode). */
+ * `… | FAILED: self-saved (A/B)`; names may carry `@m:ss` (stamp mode).
+ * Since B-tier B16b (2026-10-07) a cause can be several of those clauses
+ * joined with "; " (`popped A; saved by external (B)`): the line regex takes
+ * the whole cause and `KILL_ATTEMPT_SAVE_CLAUSE` reads each clause. */
 const KILL_ATTEMPT_DEFENSIVE =
-  /^\s*\[(\d+):(\d\d)–(\d+):(\d\d)\] on (\S+) — .*\| FAILED: (?:popped |saved by external \(|self-saved \()([^|()]+?)\)?\s*$/;
+  /^\s*\[(\d+):(\d\d)–(\d+):(\d\d)\] on (\S+) — .*\| FAILED: ((?:popped |saved by external \(|self-saved \()[^|]+?)\s*$/;
+const KILL_ATTEMPT_SAVE_CLAUSE =
+  /^(?:popped ([^()]+?)|saved by external \(([^()]+)\)|self-saved \(([^()]+)\))$/;
 /** `m:ss  [ENEMY DEF]   <pid> (<spec>): <Spell> (…)` / `: <Spell> → <pid> (…)` */
 const ENEMY_DEF_LINE =
   /^(\d+):(\d\d) {2}\[ENEMY DEF\] {3}[^:]+: (.+?)(?: \(| → |$)/;
@@ -1931,7 +1936,18 @@ export function checkEnemyDefRefConsistency(lines: string[]): string[] {
     // the attempt's target, as the timeline numbers it (undefined = the
     // roster does not resolve the name → the unit is not compared)
     const targetId = idOf.get(m[5]!);
-    for (const raw of m[6]!.split("/")) {
+    const names: string[] = [];
+    for (const clause of m[6]!.split("; ")) {
+      const c = KILL_ATTEMPT_SAVE_CLAUSE.exec(clause.trim());
+      if (!c) {
+        failures.push(
+          `line ${i + 1}: KILL ATTEMPTS FAILED cause has a clause the gate cannot read ("${clause.trim()}"): "${line.trim()}"`,
+        );
+        continue;
+      }
+      names.push(...(c[1] ?? c[2] ?? c[3])!.split("/"));
+    }
+    for (const raw of names) {
       let spell = raw.replace(/@\d+:\d\d$/, "").trim();
       const up = KILL_ATTEMPT_UP_SINCE.exec(spell);
       if (up) spell = spell.slice(0, up.index).trim();

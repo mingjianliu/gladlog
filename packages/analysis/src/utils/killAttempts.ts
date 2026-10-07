@@ -704,11 +704,40 @@ function failureText(
     case "immunity-baited":
       return immunity;
     case "defensive":
-      return `popped ${stampNames(attr.defensivePopped, attr.defensivePoppedAtS, spanFromSeconds)}`;
     case "external":
-      return `saved by external (${stampNames(attr.externalReceived, attr.externalReceivedAtS, spanFromSeconds)})`;
-    case "self-saved":
-      return `self-saved (${stampNames(attr.selfSaved, attr.selfSavedAtS, spanFromSeconds)})`;
+    case "self-saved": {
+      const popped = attr.defensivePopped.length
+        ? `popped ${stampNames(attr.defensivePopped, attr.defensivePoppedAtS, spanFromSeconds)}`
+        : "";
+      // An external that carries a % reduction (Pain Suppression, Ironbark)
+      // is already on the wall list — `defensivePopped` names every wall
+      // aura on the target, whoever put it there — so it is not named a
+      // second time as the external beside it.
+      const extra = attr.externalReceived
+        .map((_, i) => i)
+        .filter(
+          (i) => !attr.defensivePopped.includes(attr.externalReceived[i]!),
+        );
+      const external = extra.length
+        ? `saved by external (${stampNames(
+            extra.map((i) => attr.externalReceived[i]!),
+            extra.map((i) => attr.externalReceivedAtS[i]!),
+            spanFromSeconds,
+          )})`
+        : "";
+      const selfSaved = attr.selfSaved.length
+        ? `self-saved (${stampNames(attr.selfSaved, attr.selfSavedAtS, spanFromSeconds)})`
+        : "";
+      // B-tier B16b (user ruling 2026-10-06, "照 A29 两个都写"): an attempt
+      // that met the target's own save AND an external names both — the wall
+      // used to hide the external that did the saving (7f67e778 [5:07–5:22]:
+      // Enraged Regeneration at 22 %, Lay on Hands at 12 %, "popped Enraged
+      // Regeneration"). Without an external the line is unchanged: the first
+      // of wall / self-save, as `primary` orders them.
+      if (external && (popped || selfSaved))
+        return [popped, external, selfSaved].filter(Boolean).join("; ");
+      return popped || external || selfSaved;
+    }
     case "outhealed":
       return "healed through";
     case "pressure":
@@ -750,7 +779,7 @@ export function formatKillAttemptsForContext(
   );
   // F-E22 / F-E22b (rulings A29, A′4): what a FAILED cause is allowed to be.
   lines.push(
-    "  A FAILED wall / external / self-save went up inside the attempt, or was already up when it began (`[up since m:ss]`) — one pressed after the attempt was over is not its cause; an immunity, the trinket or a break in the next 5 s still is. `target trinketed out` / `broke out (X)` = the trinket / a racial or class ability removed a control of this attempt.",
+    "  A FAILED wall / external / self-save went up inside the attempt, or was already up when it began (`[up since m:ss]`) — one pressed after the attempt was over is not its cause; an immunity, the trinket or a break in the next 5 s still is. A cause naming both the target's own save and an external (`popped X; saved by external (Y)`) met both: neither alone is the reason. `target trinketed out` / `broke out (X)` = the trinket / a racial or class ability removed a control of this attempt.",
   );
   let kills = 0;
   let withSofter = 0;

@@ -1625,3 +1625,130 @@ describe("extractKillAttempts — broke out with a racial / class ability", () =
     expect(a.attribution?.primary).toBe("defensive");
   });
 });
+
+// B-tier B16b (user ruling 2026-10-06, "照 A29 两个都写"): the target's own
+// save and an external in one attempt are both named.
+describe("FAILED cause: own save + external in one attempt (B16b)", () => {
+  const attempt = (attribution: Record<string, unknown>): any => ({
+    targetUnitId: "e1",
+    targetName: "Warrior-R",
+    anchor: "burst",
+    anchorSpellName: "Adrenaline Rush",
+    fromSeconds: 307.2,
+    toSeconds: 322.4,
+    stuns: [],
+    opportunity: { tier: "locked", wallsInHand: [] },
+    teamDamageToTarget: 980_000,
+    teamDamageTotal: 980_000,
+    teamOnTargetPct: 100,
+    killed: false,
+    attribution: {
+      trinketed: false,
+      brokeOut: [],
+      immunityBaited: false,
+      defensivePopped: [],
+      defensivePoppedAtS: [],
+      externalReceived: [],
+      externalReceivedAtS: [],
+      selfSaved: [],
+      selfSavedAtS: [],
+      outhealed: false,
+      ...attribution,
+    },
+  });
+  const failed = (attribution: Record<string, unknown>) =>
+    formatKillAttemptsForContext([attempt(attribution)])
+      .find((l) => l.includes("| FAILED: "))!
+      .split("| FAILED: ")[1];
+
+  it("a wall and an external: both, the wall first (7f67e778 [5:07–5:22])", () => {
+    expect(
+      failed({
+        primary: "defensive",
+        defensivePopped: ["Enraged Regeneration"],
+        defensivePoppedAtS: [317.1],
+        externalReceived: ["Lay on Hands"],
+        externalReceivedAtS: [319.4],
+      }),
+    ).toBe("popped Enraged Regeneration; saved by external (Lay on Hands)");
+  });
+
+  it("an external and a no-% self-save: both; all three when all three were there", () => {
+    expect(
+      failed({
+        primary: "external",
+        externalReceived: ["Life Cocoon"],
+        externalReceivedAtS: [310],
+        selfSaved: ["Desperate Prayer"],
+        selfSavedAtS: [312],
+      }),
+    ).toBe("saved by external (Life Cocoon); self-saved (Desperate Prayer)");
+    expect(
+      failed({
+        primary: "defensive",
+        defensivePopped: ["Barkskin"],
+        defensivePoppedAtS: [300], // already up when the attempt began
+        externalReceived: ["Ironbark"],
+        externalReceivedAtS: [311],
+        selfSaved: ["Renewal"],
+        selfSavedAtS: [313],
+      }),
+    ).toBe(
+      "popped Barkskin [up since 5:00]; saved by external (Ironbark); self-saved (Renewal)",
+    );
+  });
+
+  it("an external that is itself the wall on the list (Pain Suppression, Ironbark) is named once", () => {
+    // 605 S2 files: the first cut printed `popped Pain Suppression; saved by
+    // external (Pain Suppression)` on 113 lines — the wall list names every
+    // wall aura on the target, whoever put it there
+    expect(
+      failed({
+        primary: "defensive",
+        defensivePopped: ["Pain Suppression"],
+        defensivePoppedAtS: [311],
+        externalReceived: ["Pain Suppression"],
+        externalReceivedAtS: [311],
+        selfSaved: ["Desperate Prayer"],
+        selfSavedAtS: [313],
+      }),
+    ).toBe("popped Pain Suppression");
+    expect(
+      failed({
+        primary: "defensive",
+        defensivePopped: ["Pain Suppression"],
+        defensivePoppedAtS: [311],
+        externalReceived: ["Pain Suppression", "Leap of Faith"],
+        externalReceivedAtS: [311, 300],
+      }),
+    ).toBe(
+      "popped Pain Suppression; saved by external (Leap of Faith [up since 5:00])",
+    );
+  });
+
+  it("without an external nothing changes: one cause, as `primary` orders them", () => {
+    expect(
+      failed({
+        primary: "defensive",
+        defensivePopped: ["Barkskin"],
+        defensivePoppedAtS: [310],
+        selfSaved: ["Renewal"],
+        selfSavedAtS: [313],
+      }),
+    ).toBe("popped Barkskin");
+    expect(
+      failed({
+        primary: "external",
+        externalReceived: ["Ironbark"],
+        externalReceivedAtS: [311],
+      }),
+    ).toBe("saved by external (Ironbark)");
+    expect(
+      failed({
+        primary: "self-saved",
+        selfSaved: ["Renewal"],
+        selfSavedAtS: [313],
+      }),
+    ).toBe("self-saved (Renewal)");
+  });
+});

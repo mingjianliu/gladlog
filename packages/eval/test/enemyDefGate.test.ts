@@ -59,6 +59,46 @@ describe("checkEnemyDefRefConsistency", () => {
     expect(checkEnemyDefRefConsistency(lines)).toEqual([]);
   });
 
+  it("B16b: a cause of several clauses (`popped X; saved by external (Y)`) is read clause by clause", () => {
+    const DEFS = [
+      "5:17  [ENEMY DEF]   3(FWarrior) (Fury Warrior): Enraged Regeneration (30%, 11.0s) (at 22% HP)",
+      "5:19  [ENEMY DEF]   4(HPaladin) (Holy Paladin): Lay on Hands → 3(FWarrior) (target at 12% HP)",
+    ];
+    const both = ATTEMPT(
+      "5:07–5:22",
+      "popped Enraged Regeneration; saved by external (Lay on Hands)",
+    );
+    expect(checkEnemyDefRefConsistency([LEGEND, ...DEFS, both])).toEqual([]);
+    // the external has no line: the second clause is checked, not skipped
+    const noExternal = checkEnemyDefRefConsistency([LEGEND, DEFS[0]!, both]);
+    expect(noExternal).toHaveLength(1);
+    expect(noExternal[0]).toContain('"Lay on Hands"');
+    // three clauses, one name already up before the span
+    const three = ATTEMPT(
+      "5:07–5:22",
+      "popped Barkskin [up since 5:00]; saved by external (Lay on Hands); self-saved (Renewal/Frenzied Regeneration)",
+    );
+    const res = checkEnemyDefRefConsistency([
+      LEGEND,
+      "5:00  [ENEMY DEF]   3(FDruid) (Feral Druid): Barkskin (20%, 12.0s)",
+      DEFS[1]!,
+      "5:12  [ENEMY DEF]   3(FDruid) (Feral Druid): Renewal (self-save) (at 30% HP)",
+      three,
+    ]);
+    expect(res).toHaveLength(1);
+    expect(res[0]).toContain('"Frenzied Regeneration"');
+  });
+
+  it("B16b: a clause the gate cannot read is a failure, never a silent pass", () => {
+    const res = checkEnemyDefRefConsistency([
+      LEGEND,
+      "5:17  [ENEMY DEF]   3(FWarrior) (Fury Warrior): Enraged Regeneration (30%, 11.0s)",
+      ATTEMPT("5:07–5:22", "popped Enraged Regeneration; and then something"),
+    ]);
+    expect(res).toHaveLength(1);
+    expect(res[0]).toContain("cannot read");
+  });
+
   it("`forced a full immunity [up since m:ss]` needs an [ENEMY DEF] line at that second", () => {
     const tail =
       "forced a full immunity [up since 0:04] (a win — re-open after it drops)";
