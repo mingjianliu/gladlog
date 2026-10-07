@@ -148,6 +148,13 @@ export function formatTimeline(
       (l) => typeof l === "string" && l.includes(", next spike in "),
     ),
   );
+  // B18 (user ruling 2026-10-06): the Guardian Spirit save clause is
+  // legended only when a press line carries it.
+  const guardianSaveRendered = entries.some((e) =>
+    e.lines.some(
+      (l) => typeof l === "string" && l.includes(" | save triggered "),
+    ),
+  );
   // F-C5b (triage res-readiness, ruling A′16): "UP" means usable at that
   // instant, which the bare word does not say — legend it when rendered.
   const interruptNoteRendered = entries.some((e) =>
@@ -278,6 +285,13 @@ export function formatTimeline(
           "    disarm it broke (no `on X` = the log ties no control to that press). It says where the cooldown went, nothing",
           "    more: never write from it that the trinket was used too early, wasted or should have been saved — breaking a",
           "    control to keep a burst or a heal going is a normal use.",
+        ]
+      : []),
+    ...(guardianSaveRendered
+      ? [
+          "  `| save triggered Ns later (m:ss)` on a Guardian Spirit line = at m:ss the buff absorbed a hit that would have",
+          "    killed its target and healed it (`healed Nk` = what reached that target; absent when the log shows none). A",
+          "    Guardian Spirit line without the clause logged no such save.",
         ]
       : []),
     ...(enemyTrinketCount > 0

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   checkBrokeOutRefConsistency,
   checkEnemyDefRefConsistency,
+  checkGuardianSpiritSaveClause,
 } from "../src/quality/promptQualityCheck";
 
 /**
@@ -250,5 +251,45 @@ describe("checkBrokeOutRefConsistency", () => {
         ATTEMPT("1:41–1:44", "popped Barkskin"),
       ]),
     ).toEqual([]);
+  });
+});
+
+describe("checkGuardianSpiritSaveClause (B18)", () => {
+  const ok = [
+    "2:12  [TEAM] [CD]   3(HPriest) (Holy Priest): Guardian Spirit → 1(AWarrior) | save triggered 0.5s later (2:12): a killing blow was prevented, healed 353k",
+    "0:21  [TEAM] [CD]   3(HPriest) (Holy Priest): Guardian Spirit → 2(SHunter) | save triggered 5.4s later (0:26): a killing blow was prevented, healed 348k",
+    "2:44  [ENEMY DEF]   4(HPriest) (Holy Priest): Guardian Spirit → 5(FDKnight) (8.3s — removed early) [friendly offensive CD active] (target at 29% HP) | save triggered 5.8s later (2:49): a killing blow was prevented, healed 172k | during it: 1(AWarrior) 0k on target · no damage on any enemy player · 0 of 8 s",
+    "0:33  [YOU] [CD]   Guardian Spirit → 2(SHunter) (41% HP) | save triggered 2.0s later (0:35): a killing blow was prevented | dampening: 20%",
+    // the legend quotes the shape and is not a clause
+    "  `| save triggered Ns later (m:ss)` on a Guardian Spirit line = at m:ss the buff absorbed a hit that would have",
+    // a Guardian Spirit line with no clause is not checked
+    "1:08  [ENEMY DEF]   4(HPriest) (Holy Priest): Guardian Spirit → 5(FDKnight) (12.0s) (target at 58% HP)",
+  ];
+  it("passes the rendered forms", () => {
+    expect(checkGuardianSpiritSaveClause(ok)).toEqual([]);
+  });
+  it.each([
+    [
+      "a stamp that is not the line's second plus the delay",
+      "0:21  [TEAM] [CD]   3(HPriest) (Holy Priest): Guardian Spirit → 2(SHunter) | save triggered 5.4s later (0:36): a killing blow was prevented, healed 348k",
+    ],
+    [
+      "a delay past the predicate's window",
+      "0:21  [TEAM] [CD]   3(HPriest) (Holy Priest): Guardian Spirit → 2(SHunter) | save triggered 16.0s later (0:37): a killing blow was prevented, healed 348k",
+    ],
+    [
+      "the clause on another spell's line",
+      "0:21  [TEAM] [CD]   3(HPriest) (Holy Priest): Pain Suppression → 2(SHunter) | save triggered 5.4s later (0:26): a killing blow was prevented, healed 348k",
+    ],
+    [
+      "a heal of 0k",
+      "0:21  [TEAM] [CD]   3(HPriest) (Holy Priest): Guardian Spirit → 2(SHunter) | save triggered 5.4s later (0:26): a killing blow was prevented, healed 0k",
+    ],
+    [
+      "a clause the gate cannot read",
+      "0:21  [TEAM] [CD]   3(HPriest) (Holy Priest): Guardian Spirit → 2(SHunter) | save triggered later (0:26): a killing blow was prevented",
+    ],
+  ])("fails %s", (_why, line) => {
+    expect(checkGuardianSpiritSaveClause([line])).toHaveLength(1);
   });
 });

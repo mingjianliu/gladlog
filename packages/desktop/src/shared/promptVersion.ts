@@ -1019,5 +1019,11 @@
  *  out of its reach of the dying player is left out of `rdy:` — the reach
  *  predicate cd-hoarded and [DEFENSIVE AVAILABLE] read; a legend line says
  *  so when it happened. Counts in the commit.
+ *  v321 (2026-10-07, user ruling B18 of 2026-10-06): a Guardian Spirit press
+ *  line ([YOU] [CD] / [TEAM] [CD] / [ENEMY DEF]) whose save triggered gains
+ *  `| save triggered Ns later (m:ss): a killing blow was prevented, healed
+ *  Nk` — the save heal the ledger's recovery already reads; a legend line
+ *  when one is rendered; KILL ATTEMPTS causes unchanged. A hardFailure class
+ *  checks the clause against its own line. Counts in the commit.
  */
-export const PROMPT_VERSION = 320;
+export const PROMPT_VERSION = 321;

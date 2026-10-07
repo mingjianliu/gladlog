@@ -7,7 +7,8 @@
  *  - B17b-U8: an enemy Death Grip on a player of our team gets a `[GRIP]`
  *    line (a displacement with no aura had no line);
  *  - B7a: the owner's kick that stopped nothing gets a `[KICK]` line with the
- *    kick audit's result.
+ *    kick audit's result;
+ *  - B18 (D10): a Guardian Spirit press line says when its save triggered.
  */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import {
@@ -486,5 +487,119 @@ describe("[KICK]: the owner's kick that stopped nothing (B7a)", () => {
     const text = buildMatchTimeline(params(owner, enemy));
     expect(text).toContain("interrupted");
     expect(kickLine(text)).toBe("");
+  });
+});
+
+describe("Guardian Spirit: the press line says when the save triggered (B18)", () => {
+  const GS = "47788";
+  const PRIEST: [string, string] = ["p", "Priest-Realm"];
+  const gsLedger = (pressS: number): any => ({
+    spellId: GS,
+    spellName: "Guardian Spirit",
+    tag: "External",
+    cooldownSeconds: 180,
+    maxChargesDetected: 1,
+    casts: [{ timeSeconds: pressS, targetName: "Me-Realm" }],
+    availableWindows: [],
+    neverUsed: false,
+  });
+  const priest = (saveS?: number) =>
+    mkUnit("p", "Priest-Realm", {
+      info: {} as never,
+      class: CombatUnitClass.Priest,
+      spec: CombatUnitSpec.Priest_Holy,
+      healOut: (saveS === undefined
+        ? []
+        : [
+            ev(
+              LogEvent.SPELL_HEAL,
+              "48153",
+              "Guardian Spirit",
+              saveS,
+              PRIEST,
+              ME,
+              {
+                amount: 352_625,
+                effectiveAmount: 352_625,
+              },
+            ),
+          ]) as never,
+    });
+  const run = (saveS?: number) => {
+    const owner = mkUnit("o", "Me-Realm", { info: {} as never });
+    const mate = priest(saveS);
+    return buildMatchTimeline(
+      params(
+        owner,
+        mkUnit("e", "Enemy-Realm", { reaction: CombatUnitReaction.Hostile }),
+        {
+          friends: [owner, mate],
+          teammateCDs: [
+            { player: mate, spec: "Holy Priest", cds: [gsLedger(132.213)] },
+          ] as never,
+          matchEndMs: at(200),
+        },
+      ),
+    );
+  };
+  const teamLine = (text: string) =>
+    text.split("\n").find((l) => l.includes("[TEAM] [CD]")) ?? "";
+
+  it("triggered: the clause on the [TEAM] [CD] line, and the legend", () => {
+    const text = run(132.715);
+    expect(teamLine(text)).toContain("Guardian Spirit");
+    expect(teamLine(text)).toContain(
+      " | save triggered 0.5s later (2:12): a killing blow was prevented, healed 353k",
+    );
+    expect(text).toContain(
+      "`| save triggered Ns later (m:ss)` on a Guardian Spirit line",
+    );
+  });
+
+  it("an ENEMY priest's Guardian Spirit on themselves (a self-save line) carries the clause too", () => {
+    const FOE_PRIEST: [string, string] = ["e", "Enemy-Realm"];
+    const enemyPriest = mkUnit("e", "Enemy-Realm", {
+      info: {} as never,
+      reaction: CombatUnitReaction.Hostile,
+      class: CombatUnitClass.Priest,
+      spec: CombatUnitSpec.Priest_Holy,
+      spellCastEvents: [
+        ev(
+          LogEvent.SPELL_CAST_SUCCESS,
+          GS,
+          "Guardian Spirit",
+          60,
+          FOE_PRIEST,
+          FOE_PRIEST,
+        ),
+      ] as never,
+      healOut: [
+        ev(
+          LogEvent.SPELL_HEAL,
+          "48153",
+          "Guardian Spirit",
+          62.4,
+          FOE_PRIEST,
+          FOE_PRIEST,
+          { amount: 300_000, effectiveAmount: 300_000 },
+        ),
+      ] as never,
+    });
+    const owner = mkUnit("o", "Me-Realm", { info: {} as never });
+    const text = buildMatchTimeline(
+      params(owner, enemyPriest, { matchEndMs: at(200) }),
+    );
+    const line =
+      text.split("\n").find((l) => /^\d+:\d\d {2}\[ENEMY DEF\]/.test(l)) ?? "";
+    expect(line).toContain("Guardian Spirit (self-save)");
+    expect(line).toContain(
+      " | save triggered 2.4s later (1:02): a killing blow was prevented, healed 300k",
+    );
+  });
+
+  it("not triggered: the line is as before and there is no legend", () => {
+    const text = run();
+    expect(teamLine(text)).toContain("Guardian Spirit");
+    expect(text).not.toContain("save triggered");
   });
 });

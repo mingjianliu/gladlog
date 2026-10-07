@@ -31,6 +31,7 @@
 import {
   droppableNoChangeResRows,
   ensureAnalysisData,
+  GUARDIAN_SPIRIT_SAVE_WINDOW_S,
   PEAK_SPIKE_MARKERS,
   peakSpikePlacement,
 } from "@gladlog/analysis";
@@ -1538,6 +1539,48 @@ export function checkForcedTrinketConsistency(lines: string[]): string[] {
     failures.push(
       `[FORCED TRINKET] ${count} 条,超过上限 ${FORCED_FOLLOWUP_CAP}`,
     );
+  return failures;
+}
+
+/** `m:ss  […] … Guardian Spirit … | save triggered N.Ns later (m:ss): a killing blow was prevented[, healed Nk]` */
+const GUARDIAN_SAVE_LINE =
+  /^(\d+):(\d\d) {2}\[.*\| save triggered (\d+\.\d)s later \((\d+):(\d\d)\): a killing blow was prevented(?:, healed (\d+)k)?(?: \||$| \[)/;
+
+/**
+ * The Guardian Spirit `| save triggered` clause (B-tier B18, 2026-10-07) is
+ * rendered by `guardianSpiritSaveClause` from the priest's save heal
+ * (`guardianSpiritSaveOf`). The text must agree with itself: the clause sits
+ * on a Guardian Spirit press line, the delay is inside the predicate's own
+ * window (`GUARDIAN_SPIRIT_SAVE_WINDOW_S`, imported — not a second number),
+ * the stamp is the line's second plus the delay on the rendered grid (the
+ * press is anywhere inside its floored second and the delay is rounded to
+ * 0.1 s, so ±1 s), and a quoted heal is never 0k.
+ */
+export function checkGuardianSpiritSaveClause(lines: string[]): string[] {
+  const failures: string[] = [];
+  lines.forEach((line, i) => {
+    if (!line.includes("| save triggered ")) return;
+    // the legend quotes the clause's shape
+    if (line.includes("`| save triggered Ns later")) return;
+    const fail = (why: string) =>
+      failures.push(
+        `line ${i + 1}: Guardian Spirit save clause (${why}) —— ${line.trim().slice(0, 200)}`,
+      );
+    const m = line.match(GUARDIAN_SAVE_LINE);
+    if (!m) return fail("unreadable");
+    if (!line.includes("Guardian Spirit"))
+      return fail("not a Guardian Spirit line");
+    const lineS = Number(m[1]) * 60 + Number(m[2]);
+    const delay = Number(m[3]);
+    const stampS = Number(m[4]) * 60 + Number(m[5]);
+    if (delay > GUARDIAN_SPIRIT_SAVE_WINDOW_S)
+      fail(
+        `delay ${delay}s is past the ${GUARDIAN_SPIRIT_SAVE_WINDOW_S}s save window`,
+      );
+    if (Math.abs(stampS - (lineS + delay)) > 1.05)
+      fail(`stamp ${m[4]}:${m[5]} is not the line's second + ${delay}s`);
+    if (m[6] !== undefined && Number(m[6]) === 0) fail("healed 0k");
+  });
   return failures;
 }
 
@@ -3278,6 +3321,7 @@ export function checkMatch(
   hardFailures.push(...checkPeelOptionConsistency(lines));
   hardFailures.push(...checkCcBookmarkConsistency(lines));
   hardFailures.push(...checkForcedTrinketConsistency(lines));
+  hardFailures.push(...checkGuardianSpiritSaveClause(lines));
 
   return {
     ordinal: entry.ordinal,

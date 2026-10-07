@@ -19,6 +19,7 @@ import { ccSpellIds } from "../../data/spellTags";
 import {
   cdIsProcOnly,
   gridHpPct,
+  guardianSpiritSaveClause,
   isDeadAtRenderSecond,
 } from "../../utils/cooldowns";
 import { fmtTime, toRenderSecond } from "../../utils/renderGrid";
@@ -137,7 +138,20 @@ export function emitTeamCdEntries(
             isProc || reachesAlly(cd.spellId)
               ? ""
               : ccImmuneTagFor(player, cd.spellId, cast.timeSeconds, named);
-          line = `${fmtTime(cast.timeSeconds)}  [TEAM] ${isProc ? "[PROC]" : "[CD]"}   ${pid(player.name)} (${spec}): ${cd.spellName}${recipientPart}${groundingNote}${immunePart}${unnecessaryNote}`;
+          // B18: a Guardian Spirit whose save triggered says so (the same
+          // heal the ledger's recovery reads)
+          const saveNote = isProc
+            ? ""
+            : guardianSpiritSaveClause(
+                cd.spellId,
+                player,
+                cast.timeSeconds,
+                matchStartMs,
+                cast.targetName && cast.targetName !== "nil"
+                  ? cast.targetName
+                  : player.name,
+              );
+          line = `${fmtTime(cast.timeSeconds)}  [TEAM] ${isProc ? "[PROC]" : "[CD]"}   ${pid(player.name)} (${spec}): ${cd.spellName}${recipientPart}${groundingNote}${immunePart}${saveNote}${unnecessaryNote}`;
         }
         addEntry(
           cast.timeSeconds,

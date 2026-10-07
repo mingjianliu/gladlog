@@ -19,6 +19,7 @@ import {
   cdIsProcOnly,
   cdRoleTag,
   findCheaperDefensiveAlternatives,
+  guardianSpiritSaveClause,
   type IDamageBucket,
   isTeamSaveCD,
   rendersOnCaster,
@@ -303,6 +304,18 @@ export function emitOwnerCdEntries(
       // Throughput CDs (e.g. Power Infusion) are excluded by findCheaperDefensiveAlternatives.
       // H11: when this cast was an external thrown on a teammate, only suggest alternatives
       // that can themselves target a teammate — a self-only tool (e.g. Barkskin) can't help.
+      // B18: the owner's own Guardian Spirit whose save triggered says so
+      const guardianSaveNote = isProc
+        ? ""
+        : guardianSpiritSaveClause(
+            cd.spellId,
+            owner,
+            cast.timeSeconds,
+            matchStartMs,
+            cast.targetName && cast.targetName !== "nil"
+              ? cast.targetName
+              : owner.name,
+          );
       let cheaperNote = "";
       if (
         !isCC &&
@@ -455,7 +468,7 @@ export function emitOwnerCdEntries(
 
       addEntry(
         cast.timeSeconds,
-        `${fmtTime(cast.timeSeconds)}  ${prefix}   ${displayNameWithChannel}${effectiveTargetPart}${outgoingDrNote}${immuneNote}${empowerNote}${dampeningNote}${cheaperNote}${groundingNote}${interruptNote}${returnNote}${isProc ? "" : ownerHardCcTagAt(cast.timeSeconds)}${unnecessaryNote}`,
+        `${fmtTime(cast.timeSeconds)}  ${prefix}   ${displayNameWithChannel}${effectiveTargetPart}${outgoingDrNote}${immuneNote}${empowerNote}${guardianSaveNote}${dampeningNote}${cheaperNote}${groundingNote}${interruptNote}${returnNote}${isProc ? "" : ownerHardCcTagAt(cast.timeSeconds)}${unnecessaryNote}`,
         ...extraLines,
       );
     }

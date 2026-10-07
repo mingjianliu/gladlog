@@ -725,26 +725,98 @@ export const GUARDIAN_SPIRIT_SAVE_HEAL_ID = "48153";
  * 12s duration (spellEffectOverrides) plus 3s of slack. */
 export const GUARDIAN_SPIRIT_SAVE_WINDOW_S = 15;
 
+/** A Guardian Spirit press's save, as the log shows it. */
+export interface IGuardianSpiritSave {
+  /** the save heal's instant, seconds from the match start (raw) */
+  atSeconds: number;
+  /** the unit the save heal's row landed on, and what reached it */
+  healedUnitId: string;
+  healedUnitName: string;
+  healed: number;
+}
+
+/**
+ * The save of the Guardian Spirit pressed at `castTimeSeconds`: the priest's
+ * first save heal (48153) within GUARDIAN_SPIRIT_SAVE_WINDOW_S of the press,
+ * or null when the buff ran out unused.
+ *
+ * What the heal means (Game-Behaviour rule, checked 2026-10-07): DB2 47788
+ * carries three effects — +60 % healing taken (aura 118), a dummy 40 (the
+ * heal's share of max health) and aura 316 on all schools, the aura type of
+ * Cheat Death 31230, Cauterize 86949, Purgatory 114556 and Ardent Defender
+ * 31850 (a hit that would kill is absorbed instead); 48153 is a bare heal
+ * effect with no trigger of its own. Corpus (605 S2 files, 1,239 presses):
+ * 79 save heals, every one within 0.3 s of a SPELL_ABSORBED row whose
+ * absorbing spell is 47788, and all 89 such rows sit at a save heal — the
+ * heal is logged exactly when Guardian Spirit absorbed a killing blow. The
+ * heal row itself landed on the buff's target in 74 of the 79 (on the priest
+ * in 4, at full health), so `healed` is only quoted for the unit it names.
+ */
+export function guardianSpiritSaveOf(
+  unit: Pick<ICombatUnit, "healOut">,
+  castTimeSeconds: number,
+  matchStartMs: number,
+): IGuardianSpiritSave | null {
+  let first: IGuardianSpiritSave | null = null;
+  for (const h of unit.healOut ?? []) {
+    if (h.spellId !== GUARDIAN_SPIRIT_SAVE_HEAL_ID) continue;
+    const t = (h.timestamp - matchStartMs) / 1000;
+    if (
+      t < castTimeSeconds ||
+      t > castTimeSeconds + GUARDIAN_SPIRIT_SAVE_WINDOW_S
+    )
+      continue;
+    if (!first || t < first.atSeconds)
+      first = {
+        atSeconds: t,
+        healedUnitId: h.destUnitId,
+        healedUnitName: h.destUnitName,
+        healed: Math.abs(h.effectiveAmount),
+      };
+  }
+  return first;
+}
+
 /**
  * Did this Guardian Spirit press actually save someone? The answer decides
  * which cooldown it recovers on (see `CUSTOM_TALENT_MODIFIERS["47788"]`), so
  * it is a predicate, not an inline check — the ledger stamps
  * `ICooldownCast.cooldownSecondsOverride` from it and any gate that wants to
- * re-derive availability must use the same rule.
+ * re-derive availability must use the same rule. The press lines' `save
+ * triggered` clause reads the same heal (`guardianSpiritSaveOf`).
  */
 export function guardianSpiritSaved(
   unit: Pick<ICombatUnit, "healOut">,
   castTimeSeconds: number,
   matchStartMs: number,
 ): boolean {
-  return (unit.healOut ?? []).some((h) => {
-    if (h.spellId !== GUARDIAN_SPIRIT_SAVE_HEAL_ID) return false;
-    const t = (h.timestamp - matchStartMs) / 1000;
-    return (
-      t >= castTimeSeconds &&
-      t <= castTimeSeconds + GUARDIAN_SPIRIT_SAVE_WINDOW_S
-    );
-  });
+  return guardianSpiritSaveOf(unit, castTimeSeconds, matchStartMs) !== null;
+}
+
+/**
+ * B-tier B18 (user ruling 2026-10-06, wording from `fix-BT/p10`): the clause
+ * a Guardian Spirit press line gains when the save triggered — never when it
+ * did not. `Ns later` is measured from the press (raw), the stamp is the
+ * save's rendered second. `healed Nk` is what reached the unit the line
+ * names; it is left out when the heal row landed elsewhere or healed nothing.
+ */
+export function guardianSpiritSaveClause(
+  spellId: string,
+  caster: Pick<ICombatUnit, "healOut">,
+  pressSeconds: number,
+  matchStartMs: number,
+  targetName: string | undefined,
+): string {
+  if (spellId !== GUARDIAN_SPIRIT_SPELL_ID) return "";
+  const save = guardianSpiritSaveOf(caster, pressSeconds, matchStartMs);
+  if (!save) return "";
+  const healed =
+    targetName !== undefined &&
+    save.healedUnitName === targetName &&
+    Math.round(save.healed / 1000) > 0
+      ? `, healed ${Math.round(save.healed / 1000)}k`
+      : "";
+  return ` | save triggered ${(save.atSeconds - pressSeconds).toFixed(1)}s later (${fmtTime(save.atSeconds)}): a killing blow was prevented${healed}`;
 }
 
 /**

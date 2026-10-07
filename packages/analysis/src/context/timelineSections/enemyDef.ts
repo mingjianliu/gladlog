@@ -9,6 +9,7 @@
  */
 import { TIMELINE_LINE_FLAGS } from "../../data/timelineLineFlags";
 import {
+  guardianSpiritSaveClause,
   hasOffensiveSpellActive,
   hpAtPress,
   specToString,
@@ -132,14 +133,32 @@ export function emitEnemyDefEntries(
             if (obs.length > 0)
               duringStr = ` | during it: ${obs.map((o) => formatDuringExternal(o, pid)).join("; ")}`;
           }
-          line = `${d.spellName} → ${enemyPid(d.recipientName ?? "")}${dur ? ` (${dur})` : ""}${burstStr}${hpStr}${duringStr}`;
+          // B18: a Guardian Spirit whose save triggered says so — ahead of
+          // `| during it:`, which the gate reads to the end of the line
+          const saveStr = guardianSpiritSaveClause(
+            d.spellId,
+            enemy,
+            d.pressSeconds ?? d.atSeconds,
+            matchStartMs,
+            targetUnit?.name,
+          );
+          line = `${d.spellName} → ${enemyPid(d.recipientName ?? "")}${dur ? ` (${dur})` : ""}${burstStr}${hpStr}${saveStr}${duringStr}`;
         } else if (d.kind === "area") {
           // Ruling A15 (2026-09-30): who pressed it and when — no %, no
           // recipients, no duration, no HP (nobody is "the target").
           line = `${d.spellName} (area)`;
         } else if (d.kind === "self-save") {
           const hpStr = hpPct !== null ? ` (at ${hpPct.toFixed(0)}% HP)` : "";
-          line = `${d.spellName} (self-save)${burstStr}${hpStr}`;
+          // B18: a Guardian Spirit the priest put on THEMSELVES is a
+          // self-save here, not an external (agy review of the batch)
+          const selfSaveStr = guardianSpiritSaveClause(
+            d.spellId,
+            enemy,
+            d.pressSeconds ?? d.atSeconds,
+            matchStartMs,
+            enemy.name,
+          );
+          line = `${d.spellName} (self-save)${burstStr}${hpStr}${selfSaveStr}`;
         } else {
           const strength = d.kind === "immune" ? "immune" : `${d.pct}%`;
           const hpStr = hpPct !== null ? ` (at ${hpPct.toFixed(0)}% HP)` : "";
