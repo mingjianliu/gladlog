@@ -1067,5 +1067,10 @@
  *  row and [RES] entry. Death Pact is a defensive for every reader of the
  *  ledger (ready defensives, `cheaper available`, `[DEATH] Unused`);
  *  Lichborne is on the ledger only. Counts in the commit.
+ *  v329 (2026-10-07, user ruling B16c of 2026-10-06): Smoke Bomb (the PvP
+ *  talent's cast id 212182) joins the Rogue roster — press line, loadout
+ *  row, [RES] entry. Not a defensive (ruling of 2026-10-07 on the 605
+ *  report): no reader of "ready defensives" sees it. No [CONSEQ] line for it
+ *  yet. Counts in the commit.
  */
-export const PROMPT_VERSION = 328;
+export const PROMPT_VERSION = 329;

@@ -121,6 +121,21 @@ export const classMetadata: IClassSpellMetadata[] = [
       a("408", "Kidney Shot", C),
       a("1833", "Cheap Shot", C),
       a("1776", "Gouge", C),
+      // B-tier B16c (user ruling 2026-10-06; res-readiness R5, the defensive /
+      // movement half, this one item): Smoke Bomb had no press line, no
+      // loadout row and no [RES] entry (483f7433 round 0: the Outlaw owner
+      // dropped it, "Smoke Bomb" 0 times in the prompt). The PvP talent's
+      // cast id, all three specs; 605 S2 files: 468 casts by 198 units
+      // (359053: 0). Not in a talent tree — owned on PvP-talent or cast
+      // evidence.
+      // NOT a defensive (user ruling 2026-10-07 on the 605 report, option
+      // B): half of its presses are offensive (232 owner presses, 116 at
+      // ≥ 90 % HP — it cuts the enemy healer's line of sight).
+      // `SpellTag.Utility`: on the ledger, the press line, the loadout and
+      // [RES]; never a "ready defensive" (as a Defensive it had produced 62
+      // cd-hoarded rows, 35 cd-waste rows and `Unused: Smoke Bomb` on 22
+      // deaths on the 605 files).
+      a("212182", "Smoke Bomb", U),
       a("207777", "Dismantle", C), // W1g 2026-09-25: control kit a player cast in the corpus (DB2 control mechanic, ≥ 30 s cooldown) that no roster listed
     ],
   },

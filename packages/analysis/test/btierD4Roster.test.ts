@@ -33,3 +33,14 @@ describe("Death Knight: Death Pact and Lichborne are on the roster (B15a)", () =
     expect(OBSERVED.has(id)).toBe(true);
   });
 });
+
+describe("Rogue: Smoke Bomb is on the roster (B16c)", () => {
+  it("212182 — the PvP talent's cast id, on the ledger but not a defensive (ruling 2026-10-07), cast in the corpus; the dead 359053 is not listed", () => {
+    const r = row(CombatUnitClass.Rogue, "212182");
+    expect(r).toBeDefined();
+    expect(r!.name).toBe("Smoke Bomb");
+    expect(r!.tags).toEqual([SpellTag.Utility]);
+    expect(OBSERVED.has("212182")).toBe(true);
+    expect(row(CombatUnitClass.Rogue, "359053")).toBeUndefined();
+  });
+});
