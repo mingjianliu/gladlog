@@ -996,6 +996,7 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
     forceFull = false,
     bypassDebounce = false,
     deathOfUnitId?: string,
+    keepFollowing = false,
   ): DeferredSnapshot {
     return {
       type: "resource_snapshot",
@@ -1003,6 +1004,7 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
       forceFull,
       bypassDebounce,
       ...(deathOfUnitId ? { deathOfUnitId } : {}),
+      ...(keepFollowing ? { keepFollowing } : {}),
       id: nextPlaceholderId++,
     };
   }

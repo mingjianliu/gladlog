@@ -68,6 +68,10 @@ export function resolveDeferredSnapshots(
     if (a.forceFull !== b.forceFull) {
       return (b.forceFull ? 1 : 0) - (a.forceFull ? 1 : 0);
     }
+    // B14b: a death row and an offensive-window row at one instant — the
+    // death row is kept (it carries the reach cut), the other is the same row
+    if (!!a.deathOfUnitId !== !!b.deathOfUnitId)
+      return (b.deathOfUnitId ? 1 : 0) - (a.deathOfUnitId ? 1 : 0);
     return a.id - b.id;
   });
 
@@ -77,6 +81,9 @@ export function resolveDeferredSnapshots(
   let prevReadyNamesState: string[] | null = null;
   let prevOnCDNamesState: string[] | null = null;
   let lastSnapshotTime = -100;
+  // B14b: the last offensive-window row — a request at the same instant is
+  // the same row, but the 2 s debounce does not count from it
+  let lastWindowSnapshotTime = -100;
   let lastFullSnapshotTime = -100;
   const FULL_SNAPSHOT_REFRESH_SECONDS = 60;
 
@@ -84,14 +91,17 @@ export function resolveDeferredSnapshots(
     const timeSeconds = req.timeSeconds;
     const forceFull = req.forceFull;
 
-    const isSameTime = Math.abs(timeSeconds - lastSnapshotTime) < 0.001;
+    const isSameTime =
+      Math.abs(timeSeconds - lastSnapshotTime) < 0.001 ||
+      Math.abs(timeSeconds - lastWindowSnapshotTime) < 0.001;
     const shouldDebounce =
       !req.bypassDebounce && timeSeconds - lastSnapshotTime < 2.0;
     if (isSameTime || shouldDebounce) {
       snapshotResults.set(req.id, "");
       continue;
     }
-    lastSnapshotTime = timeSeconds;
+    if (req.keepFollowing) lastWindowSnapshotTime = timeSeconds;
+    else lastSnapshotTime = timeSeconds;
 
     const teammateCDsWithLabel = teammateCDs.map(({ player, cds, spec }) => ({
       cds,

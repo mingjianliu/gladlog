@@ -45,6 +45,10 @@ export interface DeferredSnapshot {
   /** the friendly player whose [DEATH] this snapshot sits under (unit id) —
    * a positional cooldown out of its reach of them leaves `rdy:` (B14a) */
   deathOfUnitId?: string;
+  /** B14b: the full row under an [OFFENSIVE WINDOW] header. It does not
+   * start the 2 s debounce for the requests after it — the owner's press a
+   * second into the burst keeps its own (delta) row. */
+  keepFollowing?: boolean;
   id: number;
 }
 
@@ -289,6 +293,7 @@ export interface TimelineCtx {
     forceFull?: boolean,
     bypassDebounce?: boolean,
     deathOfUnitId?: string,
+    keepFollowing?: boolean,
   ) => DeferredSnapshot;
   findAndConsumeAoeCC: (
     castTimeSeconds: number,

@@ -15,10 +15,20 @@ import type { TimelineCtx } from "./ctx";
 export function emitOffensiveWindowEntries(
   ctx: Pick<
     TimelineCtx,
-    "enemyCDTimeline" | "pressureWindows" | "addEntry" | "pid"
+    | "enemyCDTimeline"
+    | "pressureWindows"
+    | "addEntry"
+    | "pid"
+    | "requestSnapshotPlaceholder"
   >,
 ): void {
-  const { enemyCDTimeline, pressureWindows, addEntry, pid } = ctx;
+  const {
+    enemyCDTimeline,
+    pressureWindows,
+    addEntry,
+    pid,
+    requestSnapshotPlaceholder,
+  } = ctx;
 
   for (const burst of enemyCDTimeline.alignedBurstWindows) {
     // Take the highest-damage spike inside the window — matching the rendered
@@ -62,6 +72,17 @@ export function emitOffensiveWindowEntries(
       // drew a wrong conclusion from exactly this). Label the window the damage
       // belongs to explicitly so number and interval line up.
       `${fmtTime(burst.fromSeconds)}  [OFFENSIVE WINDOW]   ${fmtTime(burst.fromSeconds)}–${fmtTime(burst.toSeconds)} | peak spike ${dmgM}M on ${pid(overlappingSpike.targetName)} (${overlappingSpike.targetSpec}) over ${fmtTime(overlappingSpike.fromSeconds)}–${fmtTime(overlappingSpike.toSeconds)}${marker} | CDs: ${cdNames}`,
+      // B14b (user ruling 2026-10-06/07): what the team had ready when the
+      // burst began — a full [RES] row, past the debounce, that leaves the
+      // rows after it alone. Its `enemy:` column is the state at the window's
+      // whole second; the opener pressed inside that second is on the header.
+      requestSnapshotPlaceholder(
+        burst.fromSeconds,
+        true,
+        true,
+        undefined,
+        true,
+      ),
     );
   }
 }

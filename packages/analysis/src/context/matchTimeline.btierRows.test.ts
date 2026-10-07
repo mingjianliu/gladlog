@@ -10,7 +10,9 @@
  *    kick audit's result;
  *  - B15a step 2 (D10): the owner's Death Pact press line says what its heal
  *    absorb ate, and a death under it quotes that in the death block;
- *  - B18 (D10): a Guardian Spirit press line says when its save triggered.
+ *  - B18 (D10): a Guardian Spirit press line says when its save triggered;
+ *  - B14b (D10): every [OFFENSIVE WINDOW] header is followed by a full [RES]
+ *    row.
  */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import {
@@ -764,5 +766,117 @@ describe("an enemy Touch of Karma line carries `| fed by` (B20a) — the timelin
     const line = run(false);
     expect(line).toContain("Touch of Karma (self-save)");
     expect(line).not.toContain("fed by");
+  });
+});
+
+describe("[OFFENSIVE WINDOW] is followed by a full [RES] row (B14b)", () => {
+  const ledger = (
+    spellId: string,
+    spellName: string,
+    cooldownSeconds: number,
+    casts: number[],
+  ): any => ({
+    spellId,
+    spellName,
+    tag: "Defensive",
+    cooldownSeconds,
+    maxChargesDetected: 1,
+    casts: casts.map((timeSeconds) => ({ timeSeconds })),
+    availableWindows: [],
+    neverUsed: casts.length === 0,
+  });
+  const run = (ownerCasts: { ibf: number[]; ams: number[] }, fromS = 75) => {
+    const owner = mkUnit("o", "Me-Realm", {
+      info: {} as never,
+      class: CombatUnitClass.DeathKnight,
+      spec: CombatUnitSpec.DeathKnight_Frost,
+    });
+    const text = buildMatchTimeline(
+      params(
+        owner,
+        mkUnit("e", "Enemy-Realm", { reaction: CombatUnitReaction.Hostile }),
+        {
+          ownerSpec: "DeathKnight_Frost",
+          ownerCDs: [
+            ledger("48792", "Icebound Fortitude", 120, ownerCasts.ibf),
+            ledger("48707", "Anti-Magic Shell", 60, ownerCasts.ams),
+          ],
+          enemyCDTimeline: {
+            players: [],
+            alignedBurstWindows: [
+              {
+                fromSeconds: fromS,
+                toSeconds: fromS + 20,
+                activeCDs: [
+                  {
+                    playerName: "Enemy-Realm",
+                    spellId: "107574",
+                    spellName: "Avatar",
+                    castSeconds: fromS + 0.4,
+                  },
+                ],
+                threatScore: 100,
+                threatLabel: "Critical",
+              } as never,
+            ],
+          },
+          pressureWindows: [
+            {
+              fromSeconds: fromS + 2,
+              toSeconds: fromS + 12,
+              totalDamage: 5_000_000,
+              targetName: "Me-Realm",
+              targetSpec: "Frost Death Knight",
+            } as never,
+          ],
+          matchEndMs: at(200),
+        },
+      ),
+    );
+    return text.split("\n");
+  };
+  // timeline lines only: the legend names both tags too
+  const after = (lines: string[], needle: string) =>
+    lines[
+      lines.findIndex((l) => /^\d+:\d\d {2}\[/.test(l) && l.includes(needle)) +
+        1
+    ] ?? "";
+  const resRows = (lines: string[]) =>
+    lines.filter((l) => /^ {6}\[RES\] rdy:/.test(l));
+
+  it("a full row right under the header — not a delta", () => {
+    const lines = run({ ibf: [], ams: [] });
+    const row = after(lines, "[OFFENSIVE WINDOW]");
+    expect(row).toContain("[RES] rdy:");
+    expect(row).not.toContain("rdy:Δ");
+    expect(row).toContain("Icebound Fortitude");
+    expect(row).toContain("Anti-Magic Shell");
+  });
+
+  it("a [RES] row 1.5 s before the window does not debounce it; the press 1 s into the burst keeps its own delta row", () => {
+    const lines = run({ ibf: [73.5], ams: [76] });
+    // the window's row: Icebound Fortitude spent 1.5 s earlier, Anti-Magic Shell still ready
+    const row = after(lines, "[OFFENSIVE WINDOW]");
+    expect(row).toContain("[RES] rdy:");
+    expect(row).not.toContain("rdy:Δ");
+    expect(row).toMatch(/rdy:[^ ]*Anti-Magic Shell/);
+    expect(row).toMatch(/cd:[^ ]*Icebound Fortitude/);
+    // the press at 1:16 is not swallowed by the window's row
+    const press = after(lines, "[YOU] [CD]   Anti-Magic Shell");
+    expect(press).toContain("[RES] rdy:Δ");
+    expect(press).toContain("-Anti-Magic Shell");
+  });
+
+  it("a press at the window's own instant: one row, the full one, under the window's header", () => {
+    const lines = run({ ibf: [75], ams: [] });
+    expect(resRows(lines).length).toBe(1);
+    expect(resRows(lines)[0]).not.toContain("rdy:Δ");
+    // the one row is the WINDOW's (without the window's request the press's
+    // own row would be the full one — review 37-BD-41): it sits under the
+    // header, and the press line carries none
+    expect(after(lines, "[OFFENSIVE WINDOW]")).toContain("[RES] rdy:");
+    expect(after(lines, "[YOU] [CD]   Icebound Fortitude")).not.toContain(
+      "[RES]",
+    );
   });
 });

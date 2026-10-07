@@ -243,6 +243,8 @@ export function formatTimeline(
     "    that changed nothing are omitted. Roots have no DR tier and are not hard CC (the rooted player can still cast).",
     "  [OFFENSIVE WINDOW] `X on <unit>` = damage DEALT TO that unit (it is the victim, not the dealer);",
     "    its `peak spike` figure covers the spike's own sub-window, printed after it — not the whole offensive window; a marker means the spike's sub-window extends past the offensive window (the +5 s allowance).",
+    "    The full [RES] row under an [OFFENSIVE WINDOW] header = what your team had ready at the whole second the window opened;",
+    "    the opener itself, pressed inside that second, is on the header's `CDs:` list and may be missing from that row's `enemy:` column.",
     ...(TIMELINE_LINE_FLAGS.enemyDef === "timeline"
       ? [
           "  [ENEMY DEF] = an enemy pressed a defensive at that second: `(N%, Ts)` = official damage reduction (with the",

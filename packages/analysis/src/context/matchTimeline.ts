@@ -396,6 +396,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     pressureWindows,
     addEntry,
     pid,
+    requestSnapshotPlaceholder,
   });
 
   // ── [DEATH] events ────────────────────────────────────────────────────────

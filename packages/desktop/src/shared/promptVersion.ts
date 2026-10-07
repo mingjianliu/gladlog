@@ -1096,5 +1096,10 @@
  *  the total, and what it sent back onto whom. A fact, never an accusation;
  *  a legend line when rendered and a hardFailure class that the parts add
  *  up. Counts in the commit.
+ *  v333 (2026-10-07, user ruling B14b of 2026-10-06/07): every [OFFENSIVE
+ *  WINDOW] header is followed by a full [RES] row — what the team had ready
+ *  at the second the enemy's burst began. The row bypasses the 2 s debounce
+ *  and does not start it for the rows after it; the delta chain restarts
+ *  from it. Counts in the commit.
  */
-export const PROMPT_VERSION = 332;
+export const PROMPT_VERSION = 333;
