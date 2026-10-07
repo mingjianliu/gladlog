@@ -206,6 +206,12 @@ export interface IPositionEvent {
    *  enemy's own distance at the end */
   endEnemyName?: string;
   startEnemyEndYards?: number;
+  /** STAYED_IN (B-tier B24b): the enemy player who dealt the most landed
+   *  damage to the owner over the span's rendered seconds, and that damage
+   *  (`topEnemyDamagerInSpan`). The nearest enemy is often the enemy healer
+   *  (2abc9185 @81: nearest = a Holy Priest with 8k of the 1.9M taken). */
+  topDamagerName?: string;
+  topDamagerDamage?: number;
   /** STAYED_IN: the owner's own straight-line displacement between the span's
    *  first and last render seconds. Reliability round 2 F13 (06bb): the owner
    *  walked ~18.5 yd while a Death Knight kept up, and "STAYED IN … little
@@ -271,6 +277,66 @@ function allLivingEnemiesKnown(enemies: ICombatUnit[], tMs: number): boolean {
       getUnitPositionAtTime(e, tMs, POSITION_MAX_GAP_MS) !== null,
   );
 }
+
+/**
+ * B-tier B24b (user ruling 2026-10-06): the enemy PLAYER who dealt the most
+ * landed damage to `owner` over the rendered seconds [fromRenderS, toRenderS]
+ * (both whole seconds in full — the span a STAYED IN line prints), with that
+ * damage. A pet's or summon's damage counts for its owner (`ownerId`); a
+ * source that is neither an enemy player nor owned by one is ignored (a
+ * charmed teammate, the owner's own deferred damage). Landed damage only —
+ * what a shield absorbed is not in it. null when no enemy damage landed.
+ * Ties go to the name that sorts first, so the two readers cannot differ.
+ *
+ * ONE predicate, two readers: the STAYED IN producer below (the rendered
+ * line and the menu's `topDamager`) and the positioning gate's G4c, which
+ * re-reads the rendered span and name and calls this again.
+ */
+export function topEnemyDamagerInSpan(
+  owner: Pick<ICombatUnit, "damageIn">,
+  enemies: ReadonlyArray<Pick<ICombatUnit, "id" | "name">>,
+  allUnits: ReadonlyArray<Pick<ICombatUnit, "id" | "ownerId">>,
+  matchStartMs: number,
+  fromRenderS: number,
+  toRenderS: number,
+): { name: string; damage: number } | null {
+  const enemyNameById = new Map(enemies.map((e) => [e.id, e.name]));
+  const ownerOf = new Map(
+    allUnits
+      .filter((u) => u.ownerId && enemyNameById.has(u.ownerId))
+      .map((u) => [u.id, u.ownerId as string]),
+  );
+  const fromMs = matchStartMs + fromRenderS * 1000;
+  const toMs = matchStartMs + (toRenderS + 1) * 1000;
+  const byEnemy = new Map<string, number>();
+  for (const d of owner.damageIn ?? []) {
+    const ts = d.logLine.timestamp;
+    if (ts < fromMs || ts >= toMs) continue;
+    const dmg = Math.abs(d.effectiveAmount);
+    if (!(dmg > 0) || !d.srcUnitId) continue;
+    const enemyId = enemyNameById.has(d.srcUnitId)
+      ? d.srcUnitId
+      : ownerOf.get(d.srcUnitId);
+    if (!enemyId) continue;
+    byEnemy.set(enemyId, (byEnemy.get(enemyId) ?? 0) + dmg);
+  }
+  let top: { name: string; damage: number } | null = null;
+  for (const [id, damage] of byEnemy) {
+    const name = enemyNameById.get(id)!;
+    if (
+      !top ||
+      damage > top.damage ||
+      (damage === top.damage && name < top.name)
+    )
+      top = { name, damage };
+  }
+  return top;
+}
+
+/** The rendered clause of a STAYED IN line for `topEnemyDamagerInSpan` — the
+ *  producer writes it and the positioning gate's G4c parses it back. */
+export const topDamagerClause = (name: string, damage: number): string =>
+  ` — most damage to you in the span: ${name} (${Math.round(damage / 1000)}k)`;
 
 /** The owner's straight-line displacement between two rendered seconds,
  *  one decimal — the "you moved N yd yourself (span start→end)" fact. The
@@ -843,6 +909,15 @@ export function computeOwnerPositionEvents(params: {
         if (hp !== null && (hpMin === null || hp < hpMin)) hpMin = hp;
       }
 
+      // B24b: who actually hit the owner over the rendered span
+      const topDamager = topEnemyDamagerInSpan(
+        owner,
+        enemies,
+        combatUnits,
+        matchStartMs,
+        tStart,
+        tEnd,
+      );
       events.push({
         type: "STAYED_IN",
         atSeconds: w.fromSeconds,
@@ -854,6 +929,12 @@ export function computeOwnerPositionEvents(params: {
         nearestEnemyName: start.enemyName,
         endEnemyName: end.enemyName,
         ...(startEnemyEndYards !== undefined ? { startEnemyEndYards } : {}),
+        ...(topDamager
+          ? {
+              topDamagerName: topDamager.name,
+              topDamagerDamage: topDamager.damage,
+            }
+          : {}),
         dangerLabel: w.dangerLabel,
         dampeningPct: w.dampeningPct,
         ownerDefensiveAvailable:
@@ -1363,8 +1444,15 @@ export function formatPositionEventsForContext(
         e.toSeconds !== undefined && e.toSeconds > e.atSeconds
           ? `${fmtTime(e.atSeconds)}–${fmtTime(e.toSeconds)}`
           : fmtTime(e.atSeconds);
+      // B24b: only on a span line (the gate re-reads both seconds)
+      const topStr =
+        e.topDamagerName !== undefined &&
+        e.topDamagerDamage !== undefined &&
+        spanStr.includes("–")
+          ? topDamagerClause(e.topDamagerName, e.topDamagerDamage)
+          : "";
       lines.push(
-        `    ${spanStr} [${e.dangerLabel} burst] ${e.startDistanceYards}→${e.endDistanceYards}yd from ${stayedEndpointNames(e)}${rangeStr(e)}${movedStr(e)}${lockStr(e)}${targetStr}${exposureStr}${hpStr}${defStr}`,
+        `    ${spanStr} [${e.dangerLabel} burst] ${e.startDistanceYards}→${e.endDistanceYards}yd from ${stayedEndpointNames(e)}${rangeStr(e)}${movedStr(e)}${lockStr(e)}${targetStr}${exposureStr}${hpStr}${topStr}${defStr}`,
       );
     }
   }

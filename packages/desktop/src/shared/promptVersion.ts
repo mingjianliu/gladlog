@@ -983,5 +983,11 @@
  *  before the kick` when the target stopped a channel at most 0.5 s before
  *  the kick, instead of naming an older unfinished cast or "hit nothing".
  *  Counts in the commit.
+ *  v316 (2026-10-07, user ruling B24b of 2026-10-06; a fact): a STAYED IN
+ *  line and its position-mistake (stayed-in) menu line name the enemy player
+ *  who dealt the most damage to the owner over the span — ` — most damage to
+ *  you in the span: <name> (Nk)` and `topDamager` — beside `enemy` /
+ *  `endEnemy`, which are only who stood nearest. The positioning gate
+ *  recomputes it (G4c). Counts in the commit.
  */
-export const PROMPT_VERSION = 315;
+export const PROMPT_VERSION = 316;

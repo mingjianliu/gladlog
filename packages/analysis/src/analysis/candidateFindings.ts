@@ -2269,7 +2269,7 @@ export function healingGapEvents(
  * don't re-derive a narrower one).
  */
 export function positionMistakeEvents(
-  events: Pick<
+  events: (Pick<
     IPositionEvent,
     | "type"
     | "atSeconds"
@@ -2285,7 +2285,8 @@ export function positionMistakeEvents(
     | "endEnemyName"
     | "ownerCcSeconds"
     | "ownerRootSeconds"
-  >[],
+  > &
+    Partial<Pick<IPositionEvent, "topDamagerName">>)[],
   owner: { id: string; name: string },
 ): CandidateEvent[] {
   return events
@@ -2331,6 +2332,11 @@ export function positionMistakeEvents(
           facts.maxDist = String(Math.round(e.maxDistanceYards));
         if (e.endEnemyName && e.endEnemyName !== e.nearestEnemyName)
           facts.endEnemy = e.endEnemyName;
+        // B24b (user ruling 2026-10-06): who dealt the most damage to the
+        // owner over the span — `enemy` / `endEnemy` are only who stood
+        // nearest. The same event field the STAYED IN line renders and the
+        // positioning gate recomputes (G4c).
+        if (e.topDamagerName) facts.topDamager = e.topDamagerName;
         if (e.ownerCcSeconds !== undefined)
           facts.ccS = String(Math.round(e.ownerCcSeconds));
         if (e.ownerRootSeconds !== undefined)

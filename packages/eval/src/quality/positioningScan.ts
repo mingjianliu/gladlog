@@ -31,6 +31,11 @@
  *                     F13, 06bb: "little distance gained" was retold as "stood
  *                     still" while the owner walked ~18.5 yd; codex review of
  *                     batch 10: the ±2 s slack let a mutated number pass).
+ *  G4c TOP_DAMAGER — STAYED "most damage to you in the span: <name> (Nk)"
+ *                     (B-tier B24b, 2026-10-07): <name> and N must be what the
+ *                     producer's own `topEnemyDamagerInSpan` returns over the
+ *                     span's rendered seconds — the nearest enemy is often
+ *                     the healer, so the line names who actually hit.
  *  G5 LOS_BREAK     — "LoS break ~N.Nyd away (pillar-blocks <name>)": the map
  *                     must have obstacle data, and at that instant the owner
  *                     and that enemy must actually see each other (you can
@@ -60,6 +65,7 @@ import {
   LOS_SWEEP_SLACK_S,
   ownerDisplacementYards,
   positionSampleInstants,
+  topEnemyDamagerInSpan,
 } from "@gladlog/analysis";
 
 type GeoClaimKind =
@@ -68,6 +74,7 @@ type GeoClaimKind =
   | "CD_RANGE"
   | "STAYED_OR_KITED"
   | "OWNER_MOVED"
+  | "TOP_DAMAGER"
   | "LOS_BREAK";
 
 interface GeoClaim {
@@ -88,6 +95,8 @@ interface GeoClaim {
   subjectName?: string;
   /** G4: which distance of "A→B" this claim is (start A, STAYED end B, KITED peak B) */
   endpoint?: "start" | "end" | "end-own" | "peak";
+  /** G4c: the damage (thousands, as rendered) the claim credits `unitName` */
+  amountK?: number;
   raw: string;
 }
 
@@ -270,6 +279,23 @@ export function extractGeoClaims(promptText: string): GeoExtraction {
             distanceYards: Number(mv[1]),
             raw: line,
           });
+        // G4c: "— most damage to you in the span: <name> (Nk)" (B24b) — the
+        // enemy player who dealt the most landed damage to the owner over the
+        // span's rendered seconds.
+        const td = line.match(
+          / most damage to you in the span: (\S+) \((\d+)k\)/,
+        );
+        if (td && m[2])
+          claims.push({
+            kind: "TOP_DAMAGER",
+            lineNo,
+            atSeconds: parseTime(m[1]),
+            toSeconds: parseTime(m[2]),
+            distanceYards: 0,
+            unitName: td[1]!,
+            amountK: Number(td[2]),
+            raw: line,
+          });
       }
       continue;
     }
@@ -302,6 +328,9 @@ interface CheckContext {
   matchStartMs: number;
   /** The prompt's authoritative pid→full-name map */
   unitIdMap?: Map<number, string>;
+  /** Every unit of the combat — pets and summons carry the `ownerId` G4c's
+   * predicate credits their damage through. Absent ⇒ players only. */
+  units?: ICombatUnit[];
 }
 
 /** Name resolution: prompt full name (Name-Realm-US) → unit. The pid label
@@ -611,6 +640,35 @@ export function checkGeoClaims(
         break;
       }
 
+      case "TOP_DAMAGER": {
+        // The producer's own predicate over the rendered span (shared, not
+        // re-derived): the name must be the top enemy damager and the
+        // rendered thousands must match.
+        const top = topEnemyDamagerInSpan(
+          ctx.owner,
+          ctx.enemies,
+          ctx.units ?? [...ctx.friends, ...ctx.enemies],
+          ctx.matchStartMs,
+          claim.atSeconds,
+          claim.toSeconds ?? claim.atSeconds,
+        );
+        checked++;
+        const claimed = claim.unitName
+          ? (resolveUnit(claim.unitName, ctx)?.name ?? claim.unitName)
+          : "";
+        if (
+          !top ||
+          top.name !== claimed ||
+          Math.round(top.damage / 1000) !== claim.amountK
+        )
+          violations.push({
+            claim,
+            code: "G4_TOP_DAMAGER",
+            detail: `claimed most damage from ${claim.unitName} (${claim.amountK}k); recomputed ${top ? `${top.name} (${Math.round(top.damage / 1000)}k)` : "no enemy damage in the span"}`,
+          });
+        break;
+      }
+
       case "LOS_BREAK": {
         // Two-step hallucination check: 1) the map must have obstacle data;
         // 2) at this instant the owner and that enemy must see each other
@@ -697,7 +755,11 @@ export function mutationDetectionRate(
     if (c.kind === "LOS_BREAK") continue; // distance mutation is meaningless for G5
     // Distance +15yd: tol = max(3, 0.25·claim) < 15 holds for every claim
     // < 45yd, so detection should be 100%
-    const m1: GeoClaim = { ...c, distanceYards: c.distanceYards + 15 };
+    // (G4c carries an amount, not a distance: the same +15 on its thousands)
+    const m1: GeoClaim =
+      c.kind === "TOP_DAMAGER"
+        ? { ...c, amountK: (c.amountK ?? 0) + 15 }
+        : { ...c, distanceYards: c.distanceYards + 15 };
     const r1 = checkGeoClaims([m1], ctx);
     if (r1.checked > 0) {
       mutated++;

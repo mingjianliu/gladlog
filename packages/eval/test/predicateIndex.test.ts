@@ -924,6 +924,16 @@ const INDEX: PredicateRow[] = [
     mod: positionAnalysis,
   },
   {
+    file: `${A}/utils/positionAnalysis.ts`,
+    symbol: "topEnemyDamagerInSpan",
+    mod: positionAnalysis,
+  },
+  {
+    file: `${A}/utils/positionAnalysis.ts`,
+    symbol: "topDamagerClause",
+    mod: positionAnalysis,
+  },
+  {
     file: `${A}/context/timelineHelpers.ts`,
     symbol: "dmgSpikeWindowsOf",
     mod: timelineHelpers,

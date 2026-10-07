@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 import {
   checkGeoClaims,
   extractGeoClaims,
+  mutationDetectionRate,
 } from "../src/quality/positioningScan";
 
 /** A stationary unit: fixed coordinates for the entire match. */
@@ -302,5 +303,94 @@ describe("CC_DISTANCE checks the rendered second only (ccDistanceClaimWindowS)",
   it("a distance only true two seconds earlier is a violation", () => {
     const r = checkGeoClaims(extractGeoClaims(line("25.0")).claims, movingCtx);
     expect(r.violations.map((v) => v.code)).toEqual(["G1_DISTANCE_MISMATCH"]);
+  });
+});
+
+describe("G4c TOP_DAMAGER — STAYED 'most damage to you in the span' (B24b)", () => {
+  const dmg = (s: number, srcUnitId: string, amount: number) => ({
+    logLine: { timestamp: START + s * 1000 },
+    srcUnitId,
+    effectiveAmount: -amount,
+  });
+  const healer = { ...staticUnit("Heal-Realm-US", 3, 0, START), id: "e-heal" };
+  const mage = { ...staticUnit("Mage-Realm-US", 30, 0, START), id: "e-mage" };
+  const hunter = { ...staticUnit("Hunt-Realm-US", 30, 5, START), id: "e-hunt" };
+  const me = {
+    ...owner,
+    id: "me",
+    damageIn: [
+      dmg(81, "e-heal", 8_000),
+      dmg(83, "e-mage", 600_000),
+      dmg(91.9, "e-mage", 495_000),
+      dmg(85, "e-hunt-pet", 400_000),
+      dmg(86, "e-hunt", 376_000),
+      // outside the rendered span
+      dmg(92, "e-hunt", 900_000),
+    ],
+  };
+  const tctx = {
+    ...ctx,
+    owner: me,
+    friends: [me],
+    enemies: [healer, mage, hunter],
+    units: [me, healer, mage, hunter, { id: "e-hunt-pet", ownerId: "e-hunt" }],
+  } as any;
+  const line = (name: string, k: number) =>
+    `    1:21–1:31 [High burst] 3→3yd from Heal-Realm-US — your HP 91%→33% (min over window) (near-death — the stay was costly) — most damage to you in the span: ${name} (${k}k) — a defensive CD was available`;
+  const top = (name: string, k: number) =>
+    extractGeoClaims(line(name, k)).claims.filter(
+      (c) => c.kind === "TOP_DAMAGER",
+    );
+
+  it("extracts the claim with the span's two rendered seconds", () => {
+    const [c] = top("Mage-Realm-US", 1095);
+    expect(c).toMatchObject({
+      kind: "TOP_DAMAGER",
+      atSeconds: 81,
+      toSeconds: 91,
+      unitName: "Mage-Realm-US",
+      amountK: 1095,
+    });
+  });
+
+  it("passes for the producer's own answer", () => {
+    const r = checkGeoClaims(top("Mage-Realm-US", 1095), tctx);
+    expect(r.checked).toBe(1);
+    expect(r.violations).toEqual([]);
+  });
+
+  it("catches the wrong player (the nearest enemy, the healer) and a wrong amount", () => {
+    expect(
+      checkGeoClaims(top("Heal-Realm-US", 8), tctx).violations.map(
+        (v) => v.code,
+      ),
+    ).toEqual(["G4_TOP_DAMAGER"]);
+    expect(
+      checkGeoClaims(top("Mage-Realm-US", 1110), tctx).violations.map(
+        (v) => v.code,
+      ),
+    ).toEqual(["G4_TOP_DAMAGER"]);
+  });
+
+  it("credits a pet to its owner only when the units are passed — the scan passes them", () => {
+    // pet 400k + hunter 376k = 776k < mage 1095k: still the mage; with the
+    // mage's hits removed the hunter leads only through the pet
+    const noMage = {
+      ...tctx,
+      owner: {
+        ...me,
+        damageIn: me.damageIn.filter(
+          (d: { srcUnitId: string }) => d.srcUnitId !== "e-mage",
+        ),
+      },
+    };
+    expect(
+      checkGeoClaims(top("Hunt-Realm-US", 776), noMage).violations,
+    ).toEqual([]);
+  });
+
+  it("the mutation harness perturbs the amount and is detected", () => {
+    const m = mutationDetectionRate(top("Mage-Realm-US", 1095), tctx);
+    expect(m.byKind["TOP_DAMAGER"]).toEqual({ mutated: 1, detected: 1 });
   });
 });

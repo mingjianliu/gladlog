@@ -140,6 +140,7 @@ async function main() {
       zoneId: String(combat.startInfo?.zoneId ?? ""),
       matchStartMs: combat.startTime,
       unitIdMap,
+      units,
     };
 
     const result = checkGeoClaims(claims, ctx);
