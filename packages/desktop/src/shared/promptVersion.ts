@@ -1036,5 +1036,12 @@
  *  ones that the player pressed inside the response window and the game
  *  rejected while they were on their own cooldown. A fact; the event is not
  *  waived. Counts in the commit.
+ *  v324 (2026-10-07, found on the 605-file capture of B14b; a defect, no
+ *  ruling involved): the [RES] delta state is read at the second the row
+ *  renders — the row's own anchor — and a full row that printed nothing (the
+ *  ledger reports nothing in a round's first 5 s) is no longer the base of
+ *  the next row. A round's first [RES] row is always a full one, and a
+ *  cooldown the ledger had not reported yet shows up as `+X` instead of
+ *  never. Counts in the commit.
  */
-export const PROMPT_VERSION = 323;
+export const PROMPT_VERSION = 324;

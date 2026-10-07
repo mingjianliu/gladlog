@@ -54,6 +54,7 @@
     "src/context/peelOptions.test.ts",
     "src/context/timelineHelpers.topSources.test.ts",
     "src/context/timelineSections/alterTime.test.ts",
+    "src/context/timelineSections/resolveSnapshots.test.ts",
     "src/data/behaviorPrior.test.ts",
     "src/data/candidateTypeRegistry.test.ts",
     "src/data/cdTriggerPrior.test.ts",

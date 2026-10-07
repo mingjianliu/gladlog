@@ -9,6 +9,7 @@
  * the in-place rewrite reaches the caller). Output is pinned by the 605-file
  * acceptanceCapture context hash.
  */
+import { toRenderSecond } from "../../utils/renderGrid";
 import {
   computeOnCDDisplayNames,
   computeReadyNames,
@@ -103,14 +104,21 @@ export function resolveDeferredSnapshots(
     // F-C4: the same dead-holder cut the snapshot applies, so the delta state
     // never carries a dead holder's entries forward.
     const resDeaths = { matchStartMs, ownerUnit: owner };
+    // The delta state is what the row PRINTS, so it is read at the row's
+    // rendered second — the snapshot builder's own anchor (shared-predicate
+    // rule). Read at the fractional instant it disagreed with the printed
+    // row: a request at 5.7 s printed second 5 (the ledger reports nothing
+    // in the first 5 s) while the state already held everything as ready,
+    // so no later row ever said so.
+    const stateSeconds = toRenderSecond(timeSeconds);
     const currentReadyNames = computeReadyNames(
-      timeSeconds,
+      stateSeconds,
       resOwnerCDs,
       teammateCDsWithLabel,
       resDeaths,
     );
     const currentOnCDNames = computeOnCDDisplayNames(
-      timeSeconds,
+      stateSeconds,
       resOwnerCDs,
       teammateCDsWithLabel,
       resDeaths,
@@ -124,6 +132,15 @@ export function resolveDeferredSnapshots(
     const prevOnCDNames = forceFullRefresh
       ? undefined
       : (prevOnCDNamesState ?? undefined);
+    const stateBefore: {
+      ready: string[] | null;
+      onCd: string[] | null;
+      full: number;
+    } = {
+      ready: prevReadyNamesState,
+      onCd: prevOnCDNamesState,
+      full: lastFullSnapshotTime,
+    };
     if (forceFullRefresh) lastFullSnapshotTime = timeSeconds;
     prevReadyNamesState = currentReadyNames;
     prevOnCDNamesState = currentOnCDNames;
@@ -168,6 +185,17 @@ export function resolveDeferredSnapshots(
           }
         : {}),
     });
+    // A FULL row the builder printed nothing for (the ledger reports nothing
+    // in a round's first 5 s) is not a row: the next one is the round's
+    // first, and is full — not `rdy:Δ +every cooldown` against an empty
+    // state (605-file capture: the first [RES] row of 182 of 3,520 prompts
+    // was a delta). The delta state and the full-refresh clock go back; the
+    // debounce still counts from it.
+    if (snapshotStr === "" && forceFullRefresh) {
+      prevReadyNamesState = stateBefore.ready;
+      prevOnCDNamesState = stateBefore.onCd;
+      lastFullSnapshotTime = stateBefore.full;
+    }
     snapshotResults.set(req.id, snapshotStr);
   }
 

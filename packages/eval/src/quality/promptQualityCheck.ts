@@ -1584,6 +1584,106 @@ export function checkGuardianSpiritSaveClause(lines: string[]): string[] {
   return failures;
 }
 
+/** `      [RES] rdy:<…>  cd:<…>[  enemy:… / focus:… / cc:… | Atonements: N]` */
+const RES_ROW =
+  /^ {6}\[RES\] rdy:(.*?) {2}cd:(.*?)(?: {2}(?:enemy|focus|cc):| \| Atonements|$)/;
+/** A `cd:` entry whose return is exact: `Name(Ns)` — no `a–b` range, no `≤`,
+ * no charge suffix. */
+const RES_CD_EXACT = /^(.*)\((\d+)s\)$/;
+/** A ledger name without its display suffixes (`[1/2]`, `(no mana 6.1k/11.5k)`). */
+const resLedgerName = (n: string): string =>
+  n.trim().replace(/(\[[\d–-]+\/\d+\]|\(no mana [^)]*\))+$/, "");
+/** The ledger joins entries with a bare comma; a name may hold ", " itself
+ * (Invoke Chi-Ji, the Red Crane). */
+const splitResList = (s: string): string[] => s.split(/,(?! )/);
+
+/**
+ * The [RES] delta chain must let a reader follow a cooldown back to ready.
+ * A row prints `cd:X(Ns)`: X is back N s after that row's second. At the
+ * first later row at least 1 s past that moment, the reader's picture — the
+ * last full `rdy:` list plus every `+X` / `-X` since — must hold X as ready,
+ * unless that row lists X under `cd:` again (pressed again).
+ *
+ * What it catches: the delta state taken at another instant than the row
+ * prints. Main 7315f4fd, 605 S2 files: 2,826 of 33,050 followed returns
+ * (8.6 %, in 1,569 of 3,520 prompts) were never shown — the state was read at
+ * the request's fractional instant with the availability slack on top, so a
+ * cooldown back within a second of a row was "already ready" in the state
+ * and never printed as `+X`. With the state read at the row's rendered
+ * second: 0 of 33,227.
+ *
+ * Only exact `(Ns)` entries are followed. The check stops at the prompt's
+ * first friendly [DEATH]: a dead holder's entries leave the ledger without a
+ * `-X` (F-C4) and a death row cuts what was out of reach (B14a), by design.
+ */
+export function checkResReturnAnnounced(lines: string[]): string[] {
+  const failures: string[] = [];
+  let ready: Set<string> | null = null;
+  /** ledger name → the second it is back, with the row that said so */
+  const pending = new Map<string, { backS: number; line: number }>();
+  let t: number | null = null;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const stamp = line.match(/^(\d+):(\d\d)\s/);
+    if (stamp) {
+      const s = Number(stamp[1]) * 60 + Number(stamp[2]);
+      if (line.includes("[DEATH]") && line.includes("friendly")) break;
+      // another stamped block starting over is not this chain
+      if (t !== null && s < t) {
+        ready = null;
+        pending.clear();
+      }
+      t = s;
+      continue;
+    }
+    const m = line.match(RES_ROW);
+    if (!m || t === null) continue;
+    const rdy = m[1];
+    const cd = m[2];
+    if (rdy.startsWith("Δ")) {
+      if (ready === null) ready = new Set();
+      for (const tok of rdy
+        .slice(1)
+        .trim()
+        .split(/ (?=[+-])/)) {
+        if (tok.startsWith("+")) ready.add(resLedgerName(tok.slice(1)));
+        else if (tok.startsWith("-")) ready.delete(resLedgerName(tok.slice(1)));
+      }
+    } else {
+      ready = new Set(
+        rdy.trim() === "—" ? [] : splitResList(rdy).map(resLedgerName),
+      );
+      pending.clear();
+    }
+    const listed = new Set<string>();
+    if (cd.trim() !== "—") {
+      for (const raw of splitResList(cd)) {
+        const entry = raw.trim();
+        const exact = entry.match(RES_CD_EXACT);
+        const name = resLedgerName(
+          entry.replace(/\([^()]*\)(\[[^\]]*\])?$/, ""),
+        );
+        listed.add(name);
+        if (exact)
+          pending.set(resLedgerName(exact[1]), {
+            backS: t + Number(exact[2]),
+            line: i + 1,
+          });
+        else pending.delete(name);
+      }
+    }
+    for (const [name, p] of [...pending]) {
+      if (listed.has(name) || p.backS + 1 > t) continue;
+      pending.delete(name);
+      if (!ready.has(name))
+        failures.push(
+          `line ${i + 1}: [RES] never shows ${name} coming back — line ${p.line} put it back at ${Math.floor(p.backS / 60)}:${String(p.backS % 60).padStart(2, "0")}, and no row since lists it as ready —— ${line.trim().slice(0, 160)}`,
+        );
+    }
+  }
+  return failures;
+}
+
 /** `[ENEMY DEF] … X → 5(DDHunter) (11.0s …)` — the observed duration of an external. */
 const ENEMY_DEF_EXTERNAL_DUR =
   /\[ENEMY DEF\]\s+.*?→\s*\S+\s*\((\d+(?:\.\d+)?)s/;
@@ -3322,6 +3422,7 @@ export function checkMatch(
   hardFailures.push(...checkCcBookmarkConsistency(lines));
   hardFailures.push(...checkForcedTrinketConsistency(lines));
   hardFailures.push(...checkGuardianSpiritSaveClause(lines));
+  hardFailures.push(...checkResReturnAnnounced(lines));
 
   return {
     ordinal: entry.ordinal,

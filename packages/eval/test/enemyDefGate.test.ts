@@ -4,6 +4,7 @@ import {
   checkBrokeOutRefConsistency,
   checkEnemyDefRefConsistency,
   checkGuardianSpiritSaveClause,
+  checkResReturnAnnounced,
 } from "../src/quality/promptQualityCheck";
 
 /**
@@ -291,5 +292,101 @@ describe("checkGuardianSpiritSaveClause (B18)", () => {
     ],
   ])("fails %s", (_why, line) => {
     expect(checkGuardianSpiritSaveClause([line])).toHaveLength(1);
+  });
+});
+
+describe("checkResReturnAnnounced (the [RES] delta chain, b19)", () => {
+  const FULL =
+    "      [RES] rdy:Barkskin,2:Ice Block  cd:Ironbark(3s),2:Alter Time(40s)  focus:2";
+  const chain = (...rows: string[]) => [
+    "0:10  [YOU] [CD]   Ironbark → 2(FMage)",
+    FULL,
+    ...rows,
+  ];
+
+  it("a cooldown back at 0:13 that the next row (0:20) does not hold as ready is a failure", () => {
+    const f = checkResReturnAnnounced(
+      chain(
+        "0:20  [YOU] [CD]   Barkskin",
+        "      [RES] rdy:Δ -Barkskin  cd:Barkskin(34s)",
+      ),
+    );
+    expect(f).toHaveLength(1);
+    expect(f[0]).toContain("never shows Ironbark coming back");
+    expect(f[0]).toContain("back at 0:13");
+  });
+
+  it("`+X` on that row, or on an earlier one, satisfies it", () => {
+    expect(
+      checkResReturnAnnounced(
+        chain(
+          "0:20  [YOU] [CD]   Barkskin",
+          "      [RES] rdy:Δ +Ironbark -Barkskin  cd:Barkskin(34s)",
+        ),
+      ),
+    ).toEqual([]);
+  });
+
+  it("a row inside the cooldown, or in the second it returns, is too early to judge; the judgement falls on the next row", () => {
+    const early = chain(
+      "0:13  [YOU] [CD]   Barkskin",
+      "      [RES] rdy:Δ -Barkskin  cd:Barkskin(34s)",
+    );
+    expect(checkResReturnAnnounced(early)).toEqual([]);
+    expect(
+      checkResReturnAnnounced([
+        ...early,
+        "0:30  [TEAM] [CD]   2(FMage): Ice Block",
+        "      [RES] rdy:Δ -2:Ice Block  cd:2:Ice Block(240s)",
+      ]),
+    ).toHaveLength(1);
+  });
+
+  it("pressed again by that row (listed under cd: again) is not a missing return", () => {
+    expect(
+      checkResReturnAnnounced(
+        chain(
+          "0:20  [YOU] [CD]   Ironbark → 2(FMage)",
+          "      [RES] rdy:Δ  cd:Ironbark(90s)",
+        ),
+      ),
+    ).toEqual([]);
+  });
+
+  it("a full row restates both lists and restarts the chain: nothing earlier is judged at it or after it", () => {
+    expect(
+      checkResReturnAnnounced(
+        chain(
+          "1:10  [YOU] [CD]   Barkskin",
+          "      [RES] rdy:Ironbark,2:Ice Block,2:Alter Time  cd:Barkskin(34s)",
+          "1:20  [TEAM] [CD]   2(FMage): Ice Block",
+          "      [RES] rdy:Δ -2:Ice Block  cd:2:Ice Block(240s)",
+        ),
+      ),
+    ).toEqual([]);
+  });
+
+  it("only exact `(Ns)` entries are followed: a range, `≤`, a charge suffix are not; a name with a comma is one name", () => {
+    expect(
+      checkResReturnAnnounced([
+        "0:10  [YOU] [CD]   Avatar",
+        "      [RES] rdy:Pummel  cd:Avatar(3–20s),Bladestorm(≤4s),2:Blur(2s)[0/2],Invoke Chi-Ji, the Red Crane(3s)",
+        "0:30  [YOU] [CD]   Pummel",
+        "      [RES] rdy:Δ +Invoke Chi-Ji, the Red Crane -Pummel  cd:Pummel(15s)",
+      ]),
+    ).toEqual([]);
+  });
+
+  it("stops at the first friendly death: a dead holder's entries leave without a `-X`", () => {
+    expect(
+      checkResReturnAnnounced(
+        chain(
+          "0:15  [DEATH]  2(FMage) (Frost Mage — friendly) | dampening: 10%",
+          "      [RES] rdy:Barkskin  cd:—",
+          "0:20  [YOU] [CD]   Barkskin",
+          "      [RES] rdy:Δ -Barkskin  cd:Barkskin(34s)",
+        ),
+      ),
+    ).toEqual([]);
   });
 });
