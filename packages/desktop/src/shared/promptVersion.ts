@@ -1054,5 +1054,11 @@
  *  opens a burst cluster (`Avenging Wrath burst (no stun)` rows go) nor
  *  extends a teammate's. The enemy side (burst windows, crisis `enemyBurst`)
  *  is untouched (ruling A27). Counts in the commit.
+ *  v327 (2026-10-07, user ruling X3 of 2026-10-06): kick-eaten's
+ *  `outRangeable=yes` needs the kicker to have stood farther beyond its kick
+ *  range than it could walk during the cast (cast length × 7 yd/s); a line
+ *  that fails only this reads `no (kicker N yd beyond kick range could walk
+ *  in during the Ts cast at 7 yd/s)`. No line gains a `yes`. Counts in the
+ *  commit.
  */
-export const PROMPT_VERSION = 326;
+export const PROMPT_VERSION = 327;

@@ -569,6 +569,7 @@ describe("analyzePlayerCCAndTrinket — structured data contract (N4)", () => {
       lockoutDurationSeconds: 3,
       postKick: "idle",
       kickDepthPct: null,
+      castWindowS: null,
       channelS: null,
       kickersInRange: null,
       kickImmunityEnded: null,
@@ -1571,6 +1572,54 @@ describe("analyzePlayerCCAndTrinket — structured data contract (N4)", () => {
     expect(player.castStartEvents!.map((e) => e.logLine.timestamp)).toEqual(
       orderBefore,
     );
+  });
+
+  it("X3 castWindowS: the round's bar, else the official base cast, never less than the cast had run; neither known → null (review 37-BD-33)", () => {
+    const enemy = makeUnit("enemy-1", {
+      name: "EnemyRogue",
+      spec: CombatUnitSpec.Rogue_Subtlety,
+      reaction: CombatUnitReaction.Hostile,
+    });
+    const start = (spellId: string, atMs: number) =>
+      ({
+        logLine: {
+          event: LogEvent.SPELL_CAST_START,
+          timestamp: atMs,
+          parameters: [],
+        },
+        spellId,
+      }) as any;
+    const windowOf = (spellId: string, kickedAfterMs: number) => {
+      const player = makeUnit("player-1", {
+        name: "PlayerMage",
+        spec: CombatUnitSpec.Mage_Frost,
+        reaction: CombatUnitReaction.Friendly,
+        castStartEvents: [start(spellId, MATCH_START + 30_000)],
+        spellCastEvents: [],
+        actionIn: [
+          makeInterruptEvent(
+            "1766",
+            "Kick",
+            spellId,
+            "A Hardcast",
+            MATCH_START + 30_000 + kickedAfterMs,
+            "enemy-1",
+            "EnemyRogue",
+          ),
+        ],
+      });
+      return analyzePlayerCCAndTrinket(player, [enemy], makeCombat())
+        .interruptInstances[0].castWindowS;
+    };
+    // no completed bar in the round and no official cast time: kicked 0.2 s
+    // in is NOT a 0.2 s cast — unknown
+    expect(windowOf("999003", 200)).toBeNull();
+    // Polymorph (118): no completed bar, the official base cast stands in
+    const base = windowOf("118", 200);
+    expect(base).not.toBeNull();
+    expect(base!).toBeGreaterThan(1);
+    // … and a cast that had already run longer than that is at least that long
+    expect(windowOf("118", 4_000)).toBe(4);
   });
 });
 

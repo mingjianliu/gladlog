@@ -39,6 +39,14 @@ export function isInstantCast(spellId: string): boolean {
   return SPELLS[spellId]?.castMs === 0;
 }
 
+/** The spell's official BASE cast time in seconds (unhasted — an upper bound
+ * on the bar a hasted caster shows); undefined for an instant or a spell the
+ * table does not know. */
+export function baseCastSeconds(spellId: string): number | undefined {
+  const ms = SPELLS[spellId]?.castMs;
+  return ms !== undefined && ms > 0 ? ms / 1000 : undefined;
+}
+
 /** Does carrying this aura make the carrier immune to a CC of `mech`?
  * `null` = unknown (the aura carries an aura-147 mask whose bit order is
  * unresolved — see genSpellMechanics.ts). */

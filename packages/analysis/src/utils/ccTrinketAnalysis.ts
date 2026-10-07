@@ -85,7 +85,7 @@ import {
 import { fmtTime } from "./renderGrid";
 import { rootIntervalsOf } from "./rootReachability";
 import { roundEndMs } from "./roundEnd";
-import { isSilenceableCast } from "./spellMechanics";
+import { baseCastSeconds, isSilenceableCast } from "./spellMechanics";
 import {
   RANGE_HITBOX_SLACK_YD,
   spellRangeForCaster,
@@ -983,6 +983,12 @@ export interface IInterruptInstance {
   /** Percentage of nominal cast elapsed before interruption (GH #87, B7).
    * null for a channel kick (`channelS` set): the cast had already finished. */
   kickDepthPct?: number | null;
+  /** How long the kicker had to close in on this cast, seconds: the cast's
+   * nominal length (the divisor of `kickDepthPct`; the official base cast
+   * time, unhasted, when the round has no completed bar of it), and never
+   * less than the cast had run when the kick landed. null without a cast
+   * start. Read by kick-eaten's out-range verdict (B-tier X3). */
+  castWindowS?: number | null;
   /** Seconds into the CHANNEL when the kick landed — the spell had already
    * gone out (its SPELL_CAST_SUCCESS precedes the kick), so it was not
    * "interrupted before it landed" and there was no cast bar left to fake.
@@ -2330,6 +2336,7 @@ export function analyzePlayerCCAndTrinket(
     let kickImmunityEnded: { auraName: string; intoCastS: number } | null =
       null;
     let kickDepthPct: number | null = null;
+    let castWindowS: number | null = null;
 
     // W1k: for an officially channelled spell (CHANNELED_SPELL_IDS, DB2
     // SpellMisc "Is Channelled"), a SPELL_CAST_SUCCESS after its own cast
@@ -2375,6 +2382,19 @@ export function analyzePlayerCCAndTrinket(
           Math.min(100, Math.round((elapsedS / nominalS) * 100)),
         );
       }
+      // X3: how long the kicker had to close in — the round's own bar when
+      // it is known, else the official base cast (unhasted, so never too
+      // short), and never less than the cast had already run at the kick.
+      // Neither known → null, which closes the out-range verdict: the time
+      // the cast had run when the kick landed is a floor, not a length
+      // (review 37-BD-33: a cast kicked 0.2 s in read as a 0.2 s cast and
+      // kept `yes`).
+      const nominalWindowS =
+        nominalS != null && nominalS > 0
+          ? nominalS
+          : baseCastSeconds(interruptedSpellId);
+      castWindowS =
+        nominalWindowS != null ? Math.max(nominalWindowS, elapsedS) : null;
 
       // Codex review P2: sample strictly at cast start — do not substitute interruption
       // timestamp when cast-start position is missing, to avoid mixed-time calculations.
@@ -2591,6 +2611,7 @@ export function analyzePlayerCCAndTrinket(
       ownerImmobileBy,
       kickImmunityEnded,
       kickDepthPct,
+      castWindowS,
       channelS,
       castStartS: castStartEvent
         ? (castStartEvent.logLine.timestamp - matchStartMs) / 1000

@@ -1405,11 +1405,51 @@ describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
       },
     ) =>
       kickEatenEvents(
-        [switchedInst(inst)],
+        // a 0.2 s cast window by default: too short to walk in from anywhere
+        // these cases stand (condition 6 has its own cases below)
+        [switchedInst({ castWindowS: 0.2, ...inst })],
         { id: "P1", name: "Me" },
         undefined,
         () => r,
       )[0]!.facts;
+
+    it("X3 (condition 6): yes only when the kicker stood farther beyond its kick than it could walk during the cast, at 7 yd/s", () => {
+      // 5e8b11c1 @43.6: 18.4 yd from a 15 yd Mind Freeze, a 1.6 s Hex
+      const r = { yourReachYd: 30, kickRangeYd: 15 };
+      expect(
+        facts({ sourceDistYd: 18.4, castWindowS: 1.57 }, r)["outRangeable"],
+      ).toBe(
+        "no (kicker 3.4 yd beyond kick range could walk in during the 1.6s cast at 7 yd/s)",
+      );
+      // 1.5 s × 7 = 10.5 yd: 10.5 yd beyond is walkable, 10.6 is not
+      expect(
+        facts({ sourceDistYd: 25.5, castWindowS: 1.5 }, r)["outRangeable"],
+      ).toMatch(/^no \(kicker 10\.5 yd beyond/);
+      expect(
+        facts({ sourceDistYd: 25.6, castWindowS: 1.5 }, r)["outRangeable"],
+      ).toMatch(/^yes \(/);
+    });
+
+    it("X3: a cast window the log does not give closes it; a line another condition closes keeps that reason", () => {
+      expect(
+        facts({ sourceDistYd: 18.4, castWindowS: null })["outRangeable"],
+      ).toBe("no (cast length unknown)");
+      expect(
+        facts({ sourceDistYd: 5.6, castWindowS: 3 })["outRangeable"],
+      ).toBe(
+        "no (kicker within 2 yd of kick range at cast start — inside it once hitboxes count)",
+      );
+      expect(
+        facts({
+          sourceDistYd: 18.4,
+          castWindowS: 3,
+          ownerImmobileBy: "Earthgrab",
+        })["outRangeable"],
+      ).toBe("no (you were held by Earthgrab)");
+      expect(
+        facts({ sourceDistYd: 18.4, castWindowS: 3 })["outRangeable"],
+      ).not.toContain(", ");
+    });
 
     it("is absent when the ranges are unknown (the legend then forbids the advice)", () => {
       expect(facts({ sourceDistYd: 20 }, null)["outRangeable"]).toBeUndefined();

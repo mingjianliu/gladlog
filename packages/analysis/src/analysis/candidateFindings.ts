@@ -173,6 +173,7 @@ import {
   ZONE_EXTERNAL_RADIUS_YD,
 } from "./candidates/death";
 import {
+  KICK_RUN_SPEED_YD_S,
   kickPriorityDecisionPoints,
   kickPriorityMissedEvents,
   kickPriorityTeamEvents,
@@ -1454,6 +1455,7 @@ export function kickEatenEvents(
         | "kickImmunityEnded"
         | "switchWasEmpowered"
         | "castStartS"
+        | "castWindowS"
         | "diedAfterKickS"
       >
     > &
@@ -1749,7 +1751,15 @@ export function kickEatenEvents(
  *     slack of — a kick that reaches as far as the spell
  *     (`maxKickRangeSlackYd`), nor one whose kick came back between the
  *     cast's start and this kick (`maxKickRangeLateYd`);
- *  5. the player was not rooted or in hard CC (`ownerImmobileBy`).
+ *  5. the player was not rooted or in hard CC (`ownerImmobileBy`);
+ *  6. the source must have stood outside its kick range by more than it
+ *     could WALK during the cast (B-tier X3, user ruling 2026-10-06):
+ *     distance − kick range must exceed `castWindowS` × `KICK_RUN_SPEED_YD_S`
+ *     (7 yd/s — the run speed kick-priority's reach model gives the owner).
+ *     5e8b11c1 @43.6: the Death Knight stood 18.4 yd off a 15 yd Mind Freeze,
+ *     walked the 3.4 yd inside the Hex cast, and the line said the kick could
+ *     have been out-ranged. A cast window the log does not give closes it.
+ *     Tested last, so a line another condition closes keeps that reason.
  * A gap-closer the kicker never cast this round is not in its kit as far as
  * the log shows, and the legend says `yes` covers only the ones it was seen
  * using. Values never contain ", " (`checkFactsBlockIntegrity`). */
@@ -1762,6 +1772,7 @@ function outRangeFact(
     sourceGapCloser?: IInterruptInstance["sourceGapCloser"];
     ownerImmobileBy?: string | null;
     channelS?: number | null;
+    castWindowS?: number | null;
   },
   r: { yourReachYd?: number; yourCastRangeYd?: number; kickRangeYd: number },
 ): { outRangeable: string } {
@@ -1807,6 +1818,14 @@ function outRangeFact(
       `another kicker in range got its ${Math.round(k.maxKickRangeLateYd)} yd kick back during the cast`,
     );
   if (k.ownerImmobileBy) return no(`you were held by ${k.ownerImmobileBy}`);
+  // 6 (X3): the kicker walks in during the cast. Last, so every line that
+  // was already closed keeps the reason it had.
+  if (k.castWindowS == null) return no("cast length unknown");
+  const beyondYd = k.sourceDistYd - r.kickRangeYd;
+  if (!(beyondYd > k.castWindowS * KICK_RUN_SPEED_YD_S))
+    return no(
+      `kicker ${beyondYd.toFixed(1)} yd beyond kick range could walk in during the ${k.castWindowS.toFixed(1)}s cast at ${KICK_RUN_SPEED_YD_S} yd/s`,
+    );
   return {
     outRangeable:
       "yes (kicker outside kick range; no gap-closer of theirs just used or ready)",
