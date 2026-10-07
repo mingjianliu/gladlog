@@ -168,6 +168,14 @@ export interface GladMatchBase {
   playerId: string; // GUID of the log's owner
   playerTeamId: number | null;
   winningTeamId: number | null;
+  /** The lobby's matchmaking rating per team id, as the closing
+   * ARENA_MATCH_END line carries it (params 2 and 3) — NOT a player's
+   * personal rating (COMBATANT_INFO `personalRating`). null when the segment
+   * closed without that line or either value is not a positive number. A
+   * Solo Shuffle round carries its SHUFFLE's closing line: teams re-form
+   * every round, so the two numbers are not "this round's two teams".
+   * Absent on documents stored before 2026-10-07 — absent means unknown. */
+  teamMmr?: { team0: number; team1: number } | null;
   result: MatchResult;
   linesTotal: number;
   linesDropped: number;

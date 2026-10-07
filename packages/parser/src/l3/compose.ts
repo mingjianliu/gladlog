@@ -55,6 +55,7 @@ export function buildMatch(seg: Segment, end: ParsedLine): GladMatch {
 
   const winningTeamId = end.arenaEnd ? end.arenaEnd.winningTeamId : null;
   const result = matchResult(winningTeamId, playerTeamId);
+  const teamMmr = teamMmrOf(end);
 
   const rawLines = [...seg.rawLines, end.raw];
   const id = calculateFnv1a32(rawLines);
@@ -76,6 +77,7 @@ export function buildMatch(seg: Segment, end: ParsedLine): GladMatch {
     playerId,
     playerTeamId,
     winningTeamId,
+    teamMmr,
     result,
     linesTotal: rawLines.length,
     linesDropped: 0,
@@ -83,6 +85,19 @@ export function buildMatch(seg: Segment, end: ParsedLine): GladMatch {
     hasAdvancedLogging,
     timezone: "local",
   };
+}
+
+/** The lobby's matchmaking rating per team id off a closing ARENA_MATCH_END
+ * line; null without that line (an abnormal close, a shuffle cut at EOF) or
+ * when either value is not a positive number (unrated lobbies write 0). */
+function teamMmrOf(end: {
+  arenaEnd?: { team0Mmr: number; team1Mmr: number };
+}): { team0: number; team1: number } | null {
+  const a = end.arenaEnd;
+  if (!a) return null;
+  return a.team0Mmr > 0 && a.team1Mmr > 0
+    ? { team0: a.team0Mmr, team1: a.team1Mmr }
+    : null;
 }
 
 function buildShuffleRound(
@@ -205,9 +220,13 @@ export function buildShuffle(close: ShuffleClose): GladShuffle {
     }
   }
 
-  const rounds = close.rounds.map((roundSeg, idx) =>
-    buildShuffleRound(roundSeg, idx, ownerId),
-  );
+  // every round carries the shuffle's closing line's lobby MMR (the rounds
+  // themselves have no ARENA_MATCH_END)
+  const teamMmr = teamMmrOf(close.end);
+  const rounds = close.rounds.map((roundSeg, idx) => ({
+    ...buildShuffleRound(roundSeg, idx, ownerId),
+    teamMmr,
+  }));
 
   const startTime = rounds[0] ? rounds[0].startTime : 0;
   const endTime = close.end.timestamp;

@@ -1,4 +1,5 @@
 import benchmarksJson from '../data/benchmarks.json';
+import { bracketKey } from './bracketKey';
 import { cdIsProcOnly, IMajorCooldownInfo } from './cooldowns';
 import { fmtTime } from './renderGrid';
 
@@ -37,6 +38,41 @@ export const benchmarks: IBenchmarkData = benchmarksJson as unknown as IBenchmar
  * nothing here reads it) — triage other F-O2: 52 of 60 rounds printed the
  * personal rating as "MMR", median 806 away from the team's MMR. */
 export const BASELINE_RATING_FLOOR = 2100;
+
+/**
+ * B-tier B21a (user ruling 2026-10-06): the lobby's matchmaking rating as its
+ * own MATCH FACTS line — a fact beside the personal rating, never part of the
+ * "below the reference bracket" comparison (that one stays on personal
+ * rating, which is what the reference corpus is filtered on). `teamMmr` is
+ * the parser's ARENA_MATCH_END pair by team id. "your team / enemy team" only
+ * for a 2v2 / 3v3 with a known own team: a Solo Shuffle round (`bracketKey`
+ * "solo") carries the shuffle's closing pair and its teams re-form every
+ * round, so there the two numbers are printed without sides. [] when the log
+ * did not say.
+ */
+export function formatLobbyMmrFact(combat: {
+  teamMmr?: { team0: number; team1: number } | null;
+  playerTeamId?: string | null;
+  startInfo?: { bracket?: string };
+}): string[] {
+  const m = combat.teamMmr;
+  if (!m || !(m.team0 > 0) || !(m.team1 > 0)) return [];
+  const tail =
+    " — the lobby's rating, not your personal rating; the reference rates below are filtered on personal rating, never on this";
+  const own =
+    bracketKey(combat.startInfo?.bracket) === "solo"
+      ? null
+      : combat.playerTeamId === "0"
+        ? { mine: m.team0, theirs: m.team1 }
+        : combat.playerTeamId === "1"
+          ? { mine: m.team1, theirs: m.team0 }
+          : null;
+  return [
+    own
+      ? `  Lobby matchmaking rating (MMR): your team ${own.mine} | enemy team ${own.theirs}${tail}`
+      : `  Lobby matchmaking rating (MMR): ${m.team0} / ${m.team1}${tail}`,
+  ];
+}
 
 export function formatSpecBaselines(
   ownerSpec: string,

@@ -817,6 +817,7 @@ export function toLegacyMatch(m: GladMatch): IArenaMatch {
     playerTeamId: m.playerTeamId != null ? String(m.playerTeamId) : null,
     result: resultToLegacy(m.result),
     winningTeamId: m.winningTeamId != null ? String(m.winningTeamId) : null,
+    ...(m.teamMmr !== undefined ? { teamMmr: m.teamMmr } : {}),
     rawLines: m.rawLines,
     durationInSeconds: (m.endTime - m.startTime) / 1000,
     hasAdvancedLogging: m.hasAdvancedLogging,
@@ -857,6 +858,7 @@ export function toLegacyShuffle(s: GladShuffle): IShuffleMatch {
       result: resultToLegacy(round.result),
       winningTeamId:
         round.winningTeamId != null ? String(round.winningTeamId) : null,
+      ...(round.teamMmr !== undefined ? { teamMmr: round.teamMmr } : {}),
       rawLines: round.rawLines,
       durationInSeconds: (round.endTime - round.startTime) / 1000,
       hasAdvancedLogging: round.hasAdvancedLogging,

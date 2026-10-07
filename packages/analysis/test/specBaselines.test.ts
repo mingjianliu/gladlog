@@ -4,6 +4,7 @@ import { IMajorCooldownInfo } from "../src/utils/cooldowns";
 import {
   benchmarks,
   formatDTPSBaselines,
+  formatLobbyMmrFact,
   formatSpecBaselines,
   IBenchmarkData,
 } from "../src/utils/specBaselines";
@@ -138,5 +139,69 @@ describe("specBaselines — production benchmarks json", () => {
     expect(benchmarks).toBeDefined();
     expect(benchmarks.bySpec).toBeDefined();
     expect(Object.keys(benchmarks.bySpec).length).toBeGreaterThan(0);
+  });
+});
+
+describe("formatLobbyMmrFact (B21a: the lobby's MMR as its own fact)", () => {
+  const TAIL =
+    " — the lobby's rating, not your personal rating; the reference rates below are filtered on personal rating, never on this";
+  it("3v3 / 2v2: your team and the enemy team, by the owner's team id", () => {
+    // e10c6bea: ARENA_MATCH_END,1,234,1548,1725 with the owner on team 1
+    expect(
+      formatLobbyMmrFact({
+        teamMmr: { team0: 1548, team1: 1725 },
+        playerTeamId: "1",
+        startInfo: { bracket: "3v3" },
+      }),
+    ).toEqual([
+      `  Lobby matchmaking rating (MMR): your team 1725 | enemy team 1548${TAIL}`,
+    ]);
+    expect(
+      formatLobbyMmrFact({
+        teamMmr: { team0: 2596, team1: 2584 },
+        playerTeamId: "0",
+        startInfo: { bracket: "2v2" },
+      })[0],
+    ).toContain("your team 2596 | enemy team 2584");
+  });
+
+  it("Solo Shuffle, or an unknown own team: the two numbers without sides", () => {
+    expect(
+      formatLobbyMmrFact({
+        teamMmr: { team0: 2247, team1: 2253 },
+        playerTeamId: "1",
+        startInfo: { bracket: "Rated Solo Shuffle" },
+      }),
+    ).toEqual([`  Lobby matchmaking rating (MMR): 2247 / 2253${TAIL}`]);
+    expect(
+      formatLobbyMmrFact({
+        teamMmr: { team0: 1548, team1: 1725 },
+        playerTeamId: null,
+        startInfo: { bracket: "3v3" },
+      })[0],
+    ).toContain("(MMR): 1548 / 1725 —");
+  });
+
+  it("nothing when the log did not say: null, absent (an older document), zero", () => {
+    expect(formatLobbyMmrFact({ teamMmr: null, playerTeamId: "0" })).toEqual(
+      [],
+    );
+    expect(formatLobbyMmrFact({ playerTeamId: "0" })).toEqual([]);
+    expect(
+      formatLobbyMmrFact({
+        teamMmr: { team0: 0, team1: 1725 },
+        playerTeamId: "0",
+      }),
+    ).toEqual([]);
+  });
+
+  it("the personal-rating comparison does not read it", () => {
+    const data = {
+      bySpec: { "Holy Paladin": { sampleCount: 298, cdUsage: {} } },
+    } as unknown as IBenchmarkData;
+    // personal rating 192 in a 1725-MMR lobby: still "below the reference bracket"
+    expect(formatSpecBaselines("Holy Paladin", [], data, 192)[0]).toContain(
+      "your personal rating in this bracket is 192, below the reference bracket",
+    );
   });
 });

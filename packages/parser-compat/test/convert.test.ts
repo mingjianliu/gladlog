@@ -47,6 +47,8 @@ describe("toLegacyMatch", () => {
     expect(legacy.playerId).toBe("Player-1-A");
     expect(legacy.playerTeamId).toBe("0");
     expect(legacy.winningTeamId).toBe("0");
+    // the lobby's matchmaking ratings pass through untouched (B21a)
+    expect(legacy.teamMmr).toEqual({ team0: 1500, team1: 1501 });
     expect(legacy.result).toBe(CombatResult.Win);
     expect(legacy.durationInSeconds).toBeGreaterThan(0);
     expect(legacy.rawLines.length).toBeGreaterThanOrEqual(5);

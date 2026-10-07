@@ -989,5 +989,11 @@
  *  you in the span: <name> (Nk)` and `topDamager` — beside `enemy` /
  *  `endEnemy`, which are only who stood nearest. The positioning gate
  *  recomputes it (G4c). Counts in the commit.
+ *  v317 (2026-10-07, user ruling B21a of 2026-10-06; a fact): MATCH FACTS
+ *  gains `Lobby matchmaking rating (MMR): your team N | enemy team M` (the
+ *  two numbers without sides in Solo Shuffle) when the log's ARENA_MATCH_END
+ *  carries them — the parser now keeps that pair (`teamMmr`). The SPEC
+ *  BASELINES sentence and its "below the reference bracket" comparison stay
+ *  on personal rating. Counts in the commit.
  */
-export const PROMPT_VERSION = 316;
+export const PROMPT_VERSION = 317;

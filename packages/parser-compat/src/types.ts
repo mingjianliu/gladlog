@@ -250,6 +250,10 @@ export interface IArenaCombatBase {
   playerTeamId: string | null;
   result: CombatResult;
   winningTeamId: string | null;
+  /** The lobby's matchmaking rating per team id (ARENA_MATCH_END) — the
+   * parser's `teamMmr`, passed through. Not a personal rating. null = the
+   * log did not say; absent = a document stored before the parser kept it. */
+  teamMmr?: { team0: number; team1: number } | null;
   rawLines: string[];
   durationInSeconds: number;
   hasAdvancedLogging: boolean;

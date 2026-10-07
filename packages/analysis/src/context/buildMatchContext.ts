@@ -96,6 +96,7 @@ import {
 import {
   benchmarks,
   formatDTPSBaselines,
+  formatLobbyMmrFact,
   formatSpecBaselines,
 } from "../utils/specBaselines";
 import { heroBuildGroupOf } from "../utils/talents";
@@ -560,6 +561,8 @@ export function buildMatchContext(
   );
   tLines.push(`  My team: ${myTeam}`);
   tLines.push(`  Enemy team: ${enemyTeam}`);
+  // B21a: the lobby's matchmaking rating, when the log carries it
+  tLines.push(...formatLobbyMmrFact(combat));
   tLines.push("");
 
   tLines.push("PURGE RESPONSIBILITY");
