@@ -9,7 +9,7 @@ import {
 } from "../src/explore/closureBindings";
 
 // A big function with outer bindings, and a marked range that uses them.
-function analyse(rangeBody: string, after = "") {
+function analyse(rangeBody: string, after = "", beforeRange = "") {
   const lines = [
     "import { imported, type ImportedType } from './somewhere';",
     "const MODULE_CONST = 1;",
@@ -18,6 +18,7 @@ function analyse(rangeBody: string, after = "") {
     "  const obj = { x: 0, nested: [] as number[], list: [] as number[] };",
     "  const set = new Set<number>();",
     "  function helper(): number { return a; }",
+    `  ${beforeRange}`,
     "  // RANGE START",
     ...rangeBody.split("\n").map((l) => `  ${l}`),
     "  // RANGE END",
@@ -128,6 +129,139 @@ describe("analyzeRange: member mutation, calls, types", () => {
   it("a declaration in the range used after it is reported", () => {
     const { r } = analyse("const made = 1;", "void made;");
     expect(r.declaredInsideUsedAfter.map((d) => d.name)).toEqual(["made"]);
+  });
+});
+
+describe("analyzeRange: escaping vs local-sync closures (threading)", () => {
+  const esc = (range: string) => {
+    const b = analyse(range).r.outer.find((o) => o.name === "b")!;
+    return {
+      refs: b.closureRefs.length,
+      escaping: b.escapingClosureRefs.length,
+    };
+  };
+
+  it("a const arrow declared in the range and only called there does not escape", () => {
+    expect(esc("const bump = () => { b++; };\nbump();\nbump();")).toEqual({
+      refs: 1,
+      escaping: 0,
+    });
+  });
+
+  it("a function declaration only called in the range does not escape", () => {
+    expect(esc("function bump2() { b++; }\nbump2();")).toEqual({
+      refs: 1,
+      escaping: 0,
+    });
+  });
+
+  it("an inline callback of a synchronous array method does not escape", () => {
+    expect(esc("[1, 2].forEach(() => { b++; });")).toEqual({
+      refs: 1,
+      escaping: 0,
+    });
+  });
+
+  it.each([
+    [
+      "passed as a value",
+      "const f = () => { b++; };\nobj.list.push(f as never);",
+    ],
+    ["kept in a literal", "const f = () => { b++; };\nvoid { f };"],
+    ["a non-array-method callback", "setTimeout(() => { b++; }, 0);"],
+    ["returned as a value", "const g = () => b;\nvoid g;"],
+    [
+      "nested in an escaping one",
+      "const outerFn = () => [1].map(() => b++);\nvoid outerFn;",
+    ],
+  ])("%s escapes", (_label, range) => {
+    expect(esc(range).escaping).toBe(1);
+  });
+
+  it("a closure outside the range always counts as escaping", () => {
+    // helper() (declared before the range) returns a
+    const a = analyse("a++;").r.outer.find((o) => o.name === "a")!;
+    expect(a.escapingClosureRefs).toEqual(a.closureRefs);
+  });
+});
+
+describe("analyzeRange: declarations handed back after the range", () => {
+  it("records the kind, writes after the range and references before it", () => {
+    const c = analyse("const made = 1;", "void made;").r
+      .declaredInsideUsedAfter;
+    expect(c).toMatchObject([
+      { name: "made", kind: "const", writtenAfter: false, refsBefore: [] },
+    ]);
+    const l = analyse("let lm = 1;", "lm = 2;").r.declaredInsideUsedAfter;
+    expect(l).toMatchObject([{ name: "lm", kind: "let", writtenAfter: true }]);
+    const f = analyse(
+      "function fd(): number { return 1; }",
+      "void fd();",
+      "void fd();",
+    ).r.declaredInsideUsedAfter;
+    expect(f).toMatchObject([{ name: "fd", kind: "function" }]);
+    expect(f[0]!.refsBeforeTopLevel).toHaveLength(1);
+    const d = analyse("const { n: pn } = params;", "void pn;").r
+      .declaredInsideUsedAfter;
+    expect(d).toMatchObject([{ name: "pn", kind: "const" }]);
+  });
+
+  it("knows whether the range runs to the end of the function", () => {
+    expect(analyse("void 0;").r.rangeReachesEnd).toBe(false);
+    const text = [
+      "export function tail(): number {",
+      "  const k = 1;",
+      "  if (k) return 2;",
+      "  return k;",
+      "}",
+    ].join("\n");
+    const { sf, checker } = programFor("/virtual/tail.ts", text);
+    const r = analyzeRange(sf, checker, findFunction(sf, "tail"), 3, 4);
+    expect(r.rangeReachesEnd).toBe(true);
+    expect(r.escapingReturns).toHaveLength(2);
+  });
+
+  it("a range inside the last top-level statement does not reach the end", () => {
+    // agy 2026-10-06: `return moved()` there would end the loop early
+    const text = [
+      "export function loop(): number {",
+      "  let s = 0;",
+      "  for (let i = 0; i < 3; i++) {",
+      "    s += i;",
+      "    if (s > 9) return s;",
+      "  }",
+      "}",
+    ].join("\n");
+    const { sf, checker } = programFor("/virtual/loop.ts", text);
+    const r = analyzeRange(sf, checker, findFunction(sf, "loop"), 4, 5);
+    expect(r.rangeReachesEnd).toBe(false);
+  });
+
+  it("a binding declared in the range and referenced only before it is reported", () => {
+    // agy 2026-10-06: a hoisted function called before the range, never after
+    const r = analyse(
+      "function hoisted(): number { return 1; }",
+      "",
+      "void hoisted();",
+    ).r;
+    expect(r.declaredInsideUsedAfter).toEqual([]);
+    expect(r.declaredInsideUsedBefore.map((d) => d.name)).toEqual(["hoisted"]);
+  });
+});
+
+describe("analyzeRange: a `.map` on something that is not an array", () => {
+  it("escapes — only array / Map / Set callbacks are known to be synchronous", () => {
+    const b = analyse(
+      "const fake = { map: (cb: () => void) => setTimeout(cb, 0) };\nfake.map(() => { b++; });",
+    ).r.outer.find((o) => o.name === "b")!;
+    expect(b.escapingClosureRefs).toHaveLength(1);
+  });
+
+  it("a Map's forEach is synchronous", () => {
+    const b = analyse(
+      "new Map<string, number>([['k', 1]]).forEach(() => { b++; });",
+    ).r.outer.find((o) => o.name === "b")!;
+    expect(b.escapingClosureRefs).toHaveLength(0);
   });
 });
 

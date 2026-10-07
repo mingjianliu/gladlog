@@ -25,6 +25,9 @@ import type { IEnemyCDCast } from "../../utils/enemyCDs";
 import type { buildRosterSides } from "../../utils/rosterSide";
 import type { BuildMatchTimelineParams } from "../matchTimeline";
 import type { buildResourceSnapshot } from "../resourceSnapshot";
+import type { emitContextFactEntries } from "./contextFacts";
+import type { emitEnemyCdEntries } from "./enemyCd";
+
 import type {
   buildSummonOwnerNames,
   extractEnemyMajorBuffIntervals,
@@ -55,6 +58,7 @@ export function isDeferredSnapshot(line: unknown): line is DeferredSnapshot {
 }
 
 type P = BuildMatchTimelineParams;
+type ContextFacts = ReturnType<typeof emitContextFactEntries>;
 
 export interface TimelineCtx {
   // ── params (as destructured by buildMatchTimeline) ──
@@ -89,6 +93,23 @@ export interface TimelineCtx {
   enemyIdMap: P["enemyIdMap"];
   rawStreams: P["rawStreams"];
   ownerSpec: P["ownerSpec"];
+  burstWindows: P["burstWindows"];
+  cdPriorEpisodes: P["cdPriorEpisodes"];
+  cdPriorCohort: P["cdPriorCohort"];
+  stackedDefensives: P["stackedDefensives"];
+  outgoingCCChains: P["outgoingCCChains"];
+  enemyDeaths: P["enemyDeaths"];
+  /** defaulted to [] by the destructuring */
+  shapeshiftIntervals: NonNullable<P["shapeshiftIntervals"]>;
+
+  // ── what earlier emitters report back (read by the legends) ──
+  enemyCdRender: ReturnType<typeof emitEnemyCdEntries>;
+  burstAnsweredEntries: ContextFacts["burstAnsweredEntries"];
+  cdPriorEntries: ContextFacts["cdPriorEntries"];
+  stackedDefensiveEntries: ContextFacts["stackedDefensiveEntries"];
+  drClashEntries: ContextFacts["drClashEntries"];
+  /** [SILENCE] lines rendered; the legend needs > 0 */
+  silenceLineCount: number;
   crisisAnchorSeconds: P["crisisAnchorSeconds"];
   /** defaulted to [] by the destructuring */
   spiritOfRedemptionIntervals: NonNullable<P["spiritOfRedemptionIntervals"]>;

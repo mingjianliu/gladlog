@@ -74,6 +74,18 @@ if (threadedLet) {
     );
   extracted = extracted.slice(0, ret.index);
 }
+// an emitter with exportBindings ends with exactly
+// `// exported: returned to the caller (GH #116)` + `return { a, b };` —
+// strip that pair only, and only when the return is a plain name list
+const exported =
+  /\n\s*\/\/ exported: returned to the caller \(GH #116\)\n {2}return \{([^}]*)\};\s*$/.exec(
+    extracted,
+  );
+if (exported) {
+  if (!isNameList(names(exported[1]!)))
+    throw new Error(`exported return is not a plain name list: ${exported[0]}`);
+  extracted = extracted.slice(0, exported.index);
+}
 
 const r = sameStatements(original, extracted);
 if (r.equal) {

@@ -30,6 +30,30 @@ export interface OuterBinding {
    * in the range can escape it and would capture a moved copy's local, which
    * stops tracking the caller's binding: codex review 2026-09-27) */
   closureRefs: number[];
+  /** the subset of `closureRefs` not proven non-escaping: every reference
+   * outside the range, plus those inside it whose chain of nested functions
+   * up to the enclosing function is not all "local and synchronous" — a
+   * function declared in the range whose name is only ever a direct callee in
+   * the range, or an inline callback of a synchronous array method
+   * (forEach / map / some / …) called in the range. A local-sync closure runs
+   * while the moved code runs and dies with it, so a threaded copy of the
+   * binding is exact for it (2026-10-06, for [SILENCE]'s `renderSide`). */
+  escapingClosureRefs: number[];
+}
+
+export interface UsedAfterBinding {
+  name: string;
+  declLine: number;
+  /** how it is declared: an exported const / function / class can be handed
+   * back by the moved code; a let / var cannot (it would be a snapshot) */
+  kind: "const" | "let" | "var" | "function" | "class" | "other";
+  /** assigned (incl. ++ / destructuring) after the range */
+  writtenAfter: boolean;
+  /** lines before the range that reference it; `refsBeforeTopLevel` are the
+   * ones not inside a nested function (a hoisted function called before the
+   * range would break once it becomes a returned value) */
+  refsBefore: number[];
+  refsBeforeTopLevel: number[];
 }
 
 export interface ImportUse {
@@ -43,7 +67,18 @@ export interface RangeAnalysis {
   /** bindings declared in the function but outside the range, used in it */
   outer: OuterBinding[];
   /** declared inside the range and referenced after it (inside the function) */
-  declaredInsideUsedAfter: Array<{ name: string; declLine: number }>;
+  declaredInsideUsedAfter: UsedAfterBinding[];
+  /** declared inside the range and referenced BEFORE it (hoisted functions,
+   * closures defined earlier) — whether or not also used after */
+  declaredInsideUsedBefore: Array<{
+    name: string;
+    declLine: number;
+    lines: number[];
+  }>;
+  /** true when no statement of the function body starts after the range —
+   * the range runs to the end, so `return movedCode(...)` is equivalent even
+   * with `return`s inside it */
+  rangeReachesEnd: boolean;
   /** module-scope declarations of the same file (not imports) used in the range */
   moduleLocal: Array<{ name: string; declLine: number }>;
   /** `return`s in the range that return from the enclosing function itself */
@@ -66,6 +101,40 @@ const MUTATORS = new Set([
   "fill",
   "reverse",
   "copyWithin",
+]);
+
+/** Is `t` an array, tuple, Map or Set (every member of a union)? Only their
+ * SYNC_CALLBACK_METHODS are known to call back synchronously. An unresolved
+ * type (any / error) is not. */
+function isSyncCollection(checker: ts.TypeChecker, t: ts.Type): boolean {
+  if (t.isUnion()) return t.types.every((m) => isSyncCollection(checker, m));
+  if (checker.isArrayType(t) || checker.isTupleType(t)) return true;
+  const name = t.getSymbol()?.getName();
+  return (
+    name === "Map" ||
+    name === "ReadonlyMap" ||
+    name === "Set" ||
+    name === "ReadonlySet"
+  );
+}
+
+/** Array methods that call their callback synchronously and keep no
+ * reference to it after returning. */
+const SYNC_CALLBACK_METHODS = new Set([
+  "forEach",
+  "map",
+  "filter",
+  "some",
+  "every",
+  "find",
+  "findIndex",
+  "findLast",
+  "findLastIndex",
+  "reduce",
+  "reduceRight",
+  "flatMap",
+  "sort",
+  "toSorted",
 ]);
 
 const isAssignOp = (k: ts.SyntaxKind) =>
@@ -207,7 +276,8 @@ export function programFor(
   const options: ts.CompilerOptions = {
     noResolve: true,
     noEmit: true,
-    noLib: text !== undefined,
+    // the standard library is loaded so array / Map / Set types resolve
+    // (isSyncCollection); imports stay unresolved
     target: ts.ScriptTarget.ES2022,
     module: ts.ModuleKind.ESNext,
   };
@@ -263,7 +333,23 @@ export function analyzeRange(
     p >= fn.parameters.pos && p < fn.parameters.end;
 
   const outer = new Map<ts.Symbol, OuterBinding>();
-  const usedAfter = new Map<ts.Symbol, { name: string; declLine: number }>();
+  const usedAfter = new Map<ts.Symbol, UsedAfterBinding>();
+  // refs before the range to bindings declared in it (merged into usedAfter)
+  const before = new Map<ts.Symbol, { all: number[]; top: number[] }>();
+  const writtenAfter = new Set<ts.Symbol>();
+  const usedBefore = new Map<
+    ts.Symbol,
+    { name: string; declLine: number; lines: number[] }
+  >();
+  const declKind = (decl: ts.Declaration): UsedAfterBinding["kind"] => {
+    if (ts.isFunctionDeclaration(decl)) return "function";
+    if (ts.isClassDeclaration(decl)) return "class";
+    const list = ts.findAncestor(decl, ts.isVariableDeclarationList);
+    if (!list) return "other";
+    if (list.flags & ts.NodeFlags.Const) return "const";
+    if (list.flags & ts.NodeFlags.Let) return "let";
+    return "var";
+  };
   const moduleLocal = new Map<ts.Symbol, { name: string; declLine: number }>();
   const escapingReturns: number[] = [];
   const imports = new Map<string, ImportUse>();
@@ -299,6 +385,7 @@ export function analyzeRange(
               classes: new Set(),
               lines: [],
               closureRefs: [],
+              escapingClosureRefs: [],
             };
             outer.set(sym, u);
           }
@@ -306,8 +393,34 @@ export function analyzeRange(
           const l = lineOf(pos);
           if (!u.lines.includes(l)) u.lines.push(l);
         }
-        if (inRange(dp) && pos >= rEnd && inBody(pos))
-          usedAfter.set(sym, { name: n.text, declLine: lineOf(dp) });
+        if (inRange(dp) && pos >= rEnd && inBody(pos)) {
+          if (!usedAfter.has(sym))
+            usedAfter.set(sym, {
+              name: n.text,
+              declLine: lineOf(dp),
+              kind: declKind(decl),
+              writtenAfter: false,
+              refsBefore: [],
+              refsBeforeTopLevel: [],
+            });
+          if (isAssignmentTarget(n)) writtenAfter.add(sym);
+        }
+        if (inRange(dp) && pos < rStart && inFn(pos)) {
+          let b = before.get(sym);
+          if (!b) before.set(sym, (b = { all: [], top: [] }));
+          b.all.push(lineOf(pos));
+          if (nearestFunction(n) === fn) b.top.push(lineOf(pos));
+          // every binding declared in the range and referenced before it,
+          // used after or not (agy: a hoisted function called before the
+          // range and never after was invisible)
+          if (!usedBefore.has(sym))
+            usedBefore.set(sym, {
+              name: n.text,
+              declLine: lineOf(dp),
+              lines: [],
+            });
+          usedBefore.get(sym)!.lines.push(lineOf(pos));
+        }
         if (inRange(pos) && !inBody(dp)) {
           if (
             ts.isImportSpecifier(decl) ||
@@ -340,6 +453,71 @@ export function analyzeRange(
   };
   sf.forEachChild(visit);
 
+  // A nested function is "local and synchronous" when it is inside the range
+  // and either (a) an inline callback of a synchronous array method, or (b)
+  // declared in the range (`const f = () => …` / `function f() {}`) with every
+  // reference to its name — anywhere in the file — a direct call inside the
+  // range. Such a function cannot outlive the moved code.
+  const localSyncCache = new Map<ts.Node, boolean>();
+  const isLocalSync = (f: ts.Node): boolean => {
+    const hit = localSyncCache.get(f);
+    if (hit !== undefined) return hit;
+    let ok = false;
+    if (inRange(f.getStart(sf))) {
+      const p = f.parent;
+      if (
+        (ts.isArrowFunction(f) || ts.isFunctionExpression(f)) &&
+        ts.isCallExpression(p) &&
+        p.arguments.some((a) => a === f) &&
+        ts.isPropertyAccessExpression(p.expression) &&
+        SYNC_CALLBACK_METHODS.has(p.expression.name.text) &&
+        // the receiver must really be an array / Map / Set — a custom object
+        // with a `.map` could run the callback later (agy 2026-10-06)
+        isSyncCollection(
+          checker,
+          checker.getTypeAtLocation(p.expression.expression),
+        )
+      ) {
+        ok = true;
+      } else {
+        let nameNode: ts.Identifier | undefined;
+        if (
+          (ts.isArrowFunction(f) || ts.isFunctionExpression(f)) &&
+          ts.isVariableDeclaration(p) &&
+          p.initializer === f &&
+          ts.isIdentifier(p.name) &&
+          ts.isVariableDeclarationList(p.parent) &&
+          p.parent.flags & ts.NodeFlags.Const
+        )
+          nameNode = p.name;
+        else if (ts.isFunctionDeclaration(f) && f.name) nameNode = f.name;
+        if (nameNode) {
+          const fSym = checker.getSymbolAtLocation(nameNode);
+          let allDirectCalls = !!fSym;
+          const scan = (n: ts.Node): void => {
+            if (!allDirectCalls) return;
+            if (ts.isIdentifier(n) && n !== nameNode && symbolFor(n) === fSym) {
+              const directCall =
+                ts.isCallExpression(n.parent) && n.parent.expression === n;
+              if (!directCall || !inRange(n.getStart(sf)))
+                allDirectCalls = false;
+            }
+            n.forEachChild(scan);
+          };
+          sf.forEachChild(scan);
+          ok = allDirectCalls;
+        }
+      }
+    }
+    localSyncCache.set(f, ok);
+    return ok;
+  };
+  const nonEscaping = (ref: ts.Node): boolean => {
+    for (let f = nearestFunction(ref); f && f !== fn; f = nearestFunction(f))
+      if (!isLocalSync(f)) return false;
+    return true;
+  };
+
   // second pass: references to the outer bindings from any nested function of
   // the enclosing function, inside the range or out
   const closureScan = (n: ts.Node): void => {
@@ -350,15 +528,41 @@ export function analyzeRange(
       if (u && inFn(pos) && nearestFunction(n) !== fn) {
         const l = lineOf(pos);
         if (!u.closureRefs.includes(l)) u.closureRefs.push(l);
+        if (
+          (!inRange(pos) || !nonEscaping(n)) &&
+          !u.escapingClosureRefs.includes(l)
+        )
+          u.escapingClosureRefs.push(l);
       }
     }
     n.forEachChild(closureScan);
   };
   fn.forEachChild(closureScan);
 
+  for (const [sym, u] of usedAfter) {
+    u.writtenAfter = writtenAfter.has(sym);
+    const b = before.get(sym);
+    if (b) {
+      u.refsBefore = b.all;
+      u.refsBeforeTopLevel = b.top;
+    }
+  }
+  // the range must be exactly a suffix of WHOLE top-level statements — not
+  // statements inside the last one (agy 2026-10-06: a range inside the last
+  // top-level `for` would make `return movedCode()` end the loop early)
+  const startsInside = body.statements.filter((s) => s.getStart(sf) >= rStart);
+  const rangeReachesEnd =
+    startsInside.length > 0 &&
+    startsInside.every((s) => s.getEnd() <= rEnd) &&
+    body.statements
+      .filter((s) => s.getStart(sf) < rStart)
+      .every((s) => s.getEnd() <= rStart);
+
   return {
     outer: [...outer.values()],
     declaredInsideUsedAfter: [...usedAfter.values()],
+    declaredInsideUsedBefore: [...usedBefore.values()],
+    rangeReachesEnd,
     moduleLocal: [...moduleLocal.values()],
     escapingReturns,
     imports,

@@ -75,6 +75,19 @@ interface Config {
    * names no identifier (a literal) and whose every reference in the file is
    * inside the range — so nothing else can observe the move. */
   moveModuleConsts?: string[];
+  /** bindings DECLARED in the range and used after it, handed back by the
+   * emitter (`return { a, b }`) and destructured by the caller
+   * (callText e.g. `const { a, b } = emitX($CTX);`). Must list every such
+   * binding. Allowed only for a const / function / class that is never
+   * assigned after the range; a function also must not be referenced before
+   * the range (its hoisting would be lost). Not combinable with `threaded`. */
+  exportBindings?: string[];
+  /** the range runs to the end of buildMatchTimeline: its `return`s become the
+   * emitter's, and the caller is `return emitX($CTX);` — so a return anywhere
+   * in the range still ends buildMatchTimeline with the same value. Refused
+   * unless the range really reaches the end. Not combinable with `threaded`
+   * or `exportBindings`. */
+  returnTail?: boolean;
 }
 
 const cfg = JSON.parse(fs.readFileSync(process.argv[2]!, "utf8")) as Config;
@@ -102,11 +115,21 @@ for (const t of threaded) {
   const o = r.outer.find((x) => x.name === t);
   if (!o?.classes.has("WRITE"))
     problems.push(`threaded ${t} is not written by the range`);
-  else if (o.closureRefs.length)
+  else if (o.escapingClosureRefs.length)
     problems.push(
-      `threaded ${t} is referenced by a nested function (L${o.closureRefs.join(",")}) — it could observe the binding mid-update, or capture the emitter's local copy and outlive it`,
+      `threaded ${t} is referenced by a nested function that may escape (L${o.escapingClosureRefs.join(",")}) — it could observe the binding mid-update, or capture the emitter's local copy and outlive it`,
     );
 }
+const exportNames = new Set(cfg.exportBindings ?? []);
+if (threaded.size && (exportNames.size || cfg.returnTail))
+  problems.push("threaded cannot be combined with exportBindings / returnTail");
+if (exportNames.size && cfg.returnTail)
+  problems.push("exportBindings cannot be combined with returnTail");
+for (const name of exportNames)
+  if (!r.declaredInsideUsedAfter.some((d) => d.name === name))
+    problems.push(
+      `exportBindings: ${name} is not declared in the range and used after it`,
+    );
 for (const o of r.outer) {
   if (o.classes.has("WRITE") && !threaded.has(o.name))
     problems.push(`writes outer binding ${o.name} (L${o.lines.join(",")})`);
@@ -115,8 +138,35 @@ for (const o of r.outer) {
       `names function-local type ${o.name} (L${o.lines.join(",")})`,
     );
 }
-for (const d of r.declaredInsideUsedAfter)
-  problems.push(`declares ${d.name} (L${d.declLine}), used after the range`);
+// declared in the range and referenced before it: once moved, those references
+// would no longer resolve (or would lose hoisting) — refused unless the binding
+// is exported, where a before-range CLOSURE resolves to the caller's
+// destructured binding (top-level / function cases are refused below)
+for (const d of r.declaredInsideUsedBefore)
+  if (!exportNames.has(d.name))
+    problems.push(
+      `declares ${d.name} (L${d.declLine}), referenced before the range (L${d.lines.join(",")})`,
+    );
+for (const d of r.declaredInsideUsedAfter) {
+  if (!exportNames.has(d.name)) {
+    problems.push(`declares ${d.name} (L${d.declLine}), used after the range`);
+    continue;
+  }
+  if (d.kind !== "const" && d.kind !== "function" && d.kind !== "class")
+    problems.push(
+      `exportBindings: ${d.name} is a ${d.kind} — a returned value would be a snapshot`,
+    );
+  if (d.writtenAfter)
+    problems.push(`exportBindings: ${d.name} is assigned after the range`);
+  if (d.kind === "function" && d.refsBefore.length)
+    problems.push(
+      `exportBindings: function ${d.name} is referenced before the range (L${d.refsBefore.join(",")}) — its hoisting would be lost`,
+    );
+  if (d.refsBeforeTopLevel.length)
+    problems.push(
+      `exportBindings: ${d.name} is used before the range at top level (L${d.refsBeforeTopLevel.join(",")})`,
+    );
+}
 // module-scope consts moving with the section: verify, and capture their text
 const moveConsts = new Set(cfg.moveModuleConsts ?? []);
 const movedConstBlocks: string[] = [];
@@ -189,8 +239,13 @@ for (const d of r.moduleLocal)
     problems.push(
       `uses module-scope ${d.name} (L${d.declLine}) of matchTimeline.ts`,
     );
-for (const l of r.escapingReturns)
-  problems.push(`returns from buildMatchTimeline at L${l}`);
+if (cfg.returnTail && !r.rangeReachesEnd)
+  problems.push(
+    "returnTail: the range does not run to the end of the function",
+  );
+if (!(cfg.returnTail && r.rangeReachesEnd))
+  for (const l of r.escapingReturns)
+    problems.push(`returns from buildMatchTimeline at L${l}`);
 if (problems.length) {
   console.error("REFUSED:\n  " + problems.join("\n  "));
   process.exit(1);
@@ -233,6 +288,13 @@ const lines = sf.getFullText().split("\n");
 const fieldNames = r.outer.map((o) => o.name);
 const threadedNames = fieldNames.filter((f) => threaded.has(f));
 const constNames = fieldNames.filter((f) => !threaded.has(f));
+// exported bindings in declaration order
+const exportList = r.declaredInsideUsedAfter
+  .filter((d) => exportNames.has(d.name))
+  .sort((a, b) => a.declLine - b.declLine)
+  .map((d) => d.name);
+const outerReturnType =
+  findFunction(sf, "buildMatchTimeline").type?.getText(sf) ?? "unknown";
 const pad = " ".repeat(cfg.dedent);
 const bodyLines = lines.slice(cfg.bodyStart - 1, cfg.bodyEnd).map((l, i) => {
   if (l.trim() === "") return "";
@@ -255,7 +317,11 @@ const out = [
   `  ctx: Pick<TimelineCtx, ${fieldNames.map((f) => `"${f}"`).join(" | ")}>,`,
   threadedNames.length
     ? `): Pick<TimelineCtx, ${threadedNames.map((f) => `"${f}"`).join(" | ")}> {`
-    : "): void {",
+    : cfg.returnTail
+      ? `): ${outerReturnType} {`
+      : exportNames.size
+        ? ") {"
+        : "): void {",
   `  const { ${constNames.join(", ")} } = ctx;`,
   ...(threadedNames.length
     ? [
@@ -267,6 +333,13 @@ const out = [
   ...bodyLines,
   ...(threadedNames.length
     ? ["", `  return { ${threadedNames.join(", ")} };`]
+    : []),
+  ...(exportNames.size
+    ? [
+        "",
+        "  // exported: returned to the caller (GH #116)",
+        `  return { ${exportList.join(", ")} };`,
+      ]
     : []),
   "}",
   "",

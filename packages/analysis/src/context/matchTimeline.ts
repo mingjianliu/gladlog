@@ -13,10 +13,10 @@ import { castAndEffectIds } from "../data/castEffectAuras";
 import "../data/racialAbilities";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { ccSpellIds } from "../data/spellTags";
-import { DEATH_WINDOW_S, TIMELINE_LINE_FLAGS } from "../data/timelineLineFlags";
+import "../data/timelineLineFlags";
 import "../utils/auraIntervals";
 import { buffFullDurationForCaster } from "../utils/buffDuration";
-import { silenceIntervals } from "../utils/cannotCastIntervals";
+import "../utils/cannotCastIntervals";
 import {
   EMPOWER_PRESS_MATCH_MS,
   empowerSpans,
@@ -30,7 +30,6 @@ import {
   GROUNDING_TOTEM_SPELL_ID,
   GROUNDING_TOTEM_WINDOW_S,
   IPlayerCCTrinketSummary,
-  TRINKET_BREAK_AFTER_REMOVAL_MS,
 } from "../utils/ccTrinketAnalysis";
 import {
   IFormInterval,
@@ -58,12 +57,10 @@ import {
   missedPurgesFor,
 } from "../utils/dispelAnalysis";
 import {
-  detectTeammateDrClashes,
   extractAoeCCEvents,
   IAoeCCEvent,
   IOutgoingCCChain,
   isStunCcInstance,
-  ITeammateDrClash,
 } from "../utils/drAnalysis";
 import {
   IEnemyCDCast,
@@ -83,11 +80,8 @@ import { fmtTime, toRenderSecond } from "../utils/renderGrid";
 import { resourceDeltaPct } from "../utils/resourceAt";
 import "../utils/summonReachability";
 import { interruptImmuneWindows as interruptImmuneWindowsOf } from "../utils/talentBehaviors";
-import {
-  BURST_ANSWERED_LEGEND,
-  formatBurstAnsweredLines,
-} from "./burstAnswered";
-import { CD_PRIOR_LEGEND, formatCdPriorLines } from "./cdPrior";
+import "./burstAnswered";
+import "./cdPrior";
 import {
   emitDmgSpikeEntries,
   emitEnemyDeathEntries,
@@ -100,11 +94,8 @@ import {
   type PeakSpikePlacement,
   peakSpikePlacement,
 } from "./peakSpikePlacement";
-import { pruneZeroLossResRows } from "./resLedgerPrune";
-import {
-  formatStackedDefensiveLines,
-  STACKED_DEFENSIVES_LEGEND,
-} from "./stackedDefensives";
+import "./resLedgerPrune";
+import "./stackedDefensives";
 import { abbrevSpec } from "./unitLabel";
 export {
   PEAK_SPIKE_MARKERS,
@@ -114,8 +105,6 @@ export {
 };
 import { buildResourceSnapshot } from "./resourceSnapshot";
 import {
-  buildKillSequenceBlock,
-  buildMatchEndBlock,
   buildSummonOwnerNames,
   computeHealingInWindow,
   CRITICAL_NON_PLAYER_NPC_NAMES,
@@ -136,12 +125,17 @@ import { emitCcBrokenEntries } from "./timelineSections/ccBroken";
 import { emitCcCastEntries } from "./timelineSections/ccCast";
 import { emitCcOnEnemyEntries } from "./timelineSections/ccOnEnemy";
 import { emitCleanseEntries } from "./timelineSections/cleanse";
+import {
+  DR_CLASH_LEGEND,
+  emitContextFactEntries,
+} from "./timelineSections/contextFacts";
 import type { DeferredSnapshot } from "./timelineSections/ctx";
 import { emitDampeningEntries } from "./timelineSections/dampening";
 import { emitEnemyBuffEntries } from "./timelineSections/enemyBuff";
 import { emitEnemyCdEntries } from "./timelineSections/enemyCd";
 import { emitEnemyDefEntries } from "./timelineSections/enemyDef";
 import { emitEnemyHardCastEntries } from "./timelineSections/enemyHardCast";
+import { formatTimeline } from "./timelineSections/formatTimeline";
 import { emitHealerCastGapFillerEntries } from "./timelineSections/healerCastGapFiller";
 import { emitKickEntries } from "./timelineSections/kick";
 import { emitManaContextEntries } from "./timelineSections/manaContext";
@@ -150,6 +144,7 @@ import { emitOffensiveWindowEntries } from "./timelineSections/offensiveWindow";
 import { emitOwnerCdEntries } from "./timelineSections/ownerCd";
 import { emitPurgeEntries } from "./timelineSections/purges";
 import { resolveDeferredSnapshots } from "./timelineSections/resolveSnapshots";
+import { emitSilenceEntries } from "./timelineSections/silence";
 import { emitSpellOutcomeEntries } from "./timelineSections/spellOutcomes";
 import { emitStasisEntries } from "./timelineSections/stasis";
 import { emitStateEntries } from "./timelineSections/state";
@@ -160,10 +155,9 @@ import "../utils/spellMechanics";
 
 // ── buildMatchTimeline ─────────────────────────────────────────────────────
 
-export const DR_CLASH_LEGEND = [
-  "  [DR CLASH] = a friendly CC landed at diminished DR (50% or Immune) because another teammate",
-  "    used a CC in the same category within the reset window — a timing note about DR conflict, not a verdict.",
-];
+// [DR CLASH] legend: moved to timelineSections/contextFacts.ts with its section
+// (GH #116); re-exported here for existing importers.
+export { DR_CLASH_LEGEND };
 
 export interface BuildMatchTimelineParams {
   owner: ICombatUnit;
@@ -1841,66 +1835,19 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   // sides; a PvP trinket pressed inside the silence that ended it is stated the
   // way the CC lines state it.
   let silenceLineCount = 0;
-  {
-    const idsOf = (players: ReadonlyArray<ICombatUnit>) => {
-      const ids = new Set(players.map((u) => u.id));
-      for (const u of allUnits ?? [])
-        if (u.ownerId && ids.has(u.ownerId)) ids.add(u.id);
-      return ids;
-    };
-    const friendIds = idsOf(friends);
-    const enemyIds = idsOf(enemies ?? []);
-    const renderSide = (
-      victims: ReadonlyArray<ICombatUnit>,
-      attackerIds: Set<string>,
-      side: "friendly" | "enemy",
-    ) => {
-      for (const u of victims) {
-        const trinketTimes =
-          side === "friendly"
-            ? (ccTrinketSummaries.find((s) => s.playerName === u.name)
-                ?.trinketUseTimes ?? [])
-            : [];
-        for (const s of silenceIntervals(u, attackerIds)) {
-          const at = (s.from - matchStartMs) / 1000;
-          const endMs = Math.min(s.to, matchEndMs);
-          const durS = Math.max(0, (endMs - s.from) / 1000);
-          // enemy-def F-E17: the Medallion cast is logged up to a few ms
-          // after the removal it caused (dfcccbf2: silence removed 21.020,
-          // trinket 21.021) — the CC binder's `TRINKET_BREAK_AFTER_REMOVAL_MS`
-          const trinketAt = trinketTimes.find((t) => {
-            const tMs = matchStartMs + t * 1000;
-            return (
-              tMs >= s.from &&
-              tMs <= endMs + TRINKET_BREAK_AFTER_REMOVAL_MS &&
-              endMs - tMs <= 300
-            );
-          });
-          const tail =
-            trinketAt !== undefined
-              ? ` | trinket broke this silence after ${(trinketAt - at).toFixed(0)}s (cut short — it had not expired)`
-              : ` | ${durS.toFixed(0)}s`;
-          const who = side === "friendly" ? pid(u.name) : enemyPid(u.name);
-          // cc-dr F-SR1: a silence the unit's own reflect sent back to it
-          const by =
-            s.srcUnitId === u.id
-              ? "(reflected back)"
-              : `(by ${actorLabel(
-                  s.srcUnitName,
-                  side === "friendly" ? "enemy" : "friendly",
-                  s.srcUnitId,
-                )})`;
-          addEntry(
-            at,
-            `${fmtTime(at)}  [SILENCE]   ${who} ← ${getEnglishSpellName(s.spellId, s.spellName)} ${by}${tail}`,
-          );
-          silenceLineCount++;
-        }
-      }
-    };
-    renderSide(friends, enemyIds, "friendly");
-    renderSide(enemies ?? [], friendIds, "enemy");
-  }
+  ({ silenceLineCount } = emitSilenceEntries({
+    allUnits,
+    friends,
+    enemies,
+    ccTrinketSummaries,
+    matchStartMs,
+    matchEndMs,
+    pid,
+    enemyPid,
+    actorLabel,
+    addEntry,
+    silenceLineCount,
+  }));
 
   // ── [CC ON ENEMY]: our CC landing on enemies (2026-07-18 coverage fix) ─────
   // The owner's CC is skipped only when it already has a [YOU] [CC] cast line
@@ -2028,88 +1975,24 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     addEntry,
   });
 
-  // ── [BURST ANSWERED] context lines ─────────────────────────────────────────
-  // Descriptive credit for a correct reaction, NOT a candidate — see
-  // context/burstAnswered.ts. Capped and gated there; emitted here so the
-  // lines land in the same time-sorted stream as every other per-second entry
-  // (and so the legend below can be conditional on there being any).
-  // `addEntry` silently drops anything past match end (B103), so the legend
-  // must be decided on what actually RENDERS, not on what the builder
-  // returned — otherwise a window opening after [MATCH END] leaves a legend
-  // describing lines that are not in the prompt (1 of 309 corpus prompts).
-  const burstAnsweredEntries = formatBurstAnsweredLines(
-    burstWindows ?? [],
-  ).filter((e) => e.atSeconds <= matchEndSeconds);
-  for (const e of burstAnsweredEntries) {
-    addEntry(e.atSeconds, `${fmtTime(e.atSeconds)}  ${e.line}`);
-  }
-
-  // ── [CD PRIOR] context lines ───────────────────────────────────────────────
-  // Cohort-norm fact for a held save cooldown, NOT a candidate — see
-  // context/cdPrior.ts. Same render-vs-legend discipline as [BURST ANSWERED]:
-  // the legend is decided on what actually renders.
-  const cdPriorEntries =
-    cdPriorCohort && cdPriorEpisodes
-      ? formatCdPriorLines(cdPriorEpisodes, cdPriorCohort).filter(
-          (e) => e.atSeconds <= matchEndSeconds,
-        )
-      : [];
-  for (const e of cdPriorEntries) {
-    addEntry(e.atSeconds, `${fmtTime(e.atSeconds)}  ${e.line}`);
-  }
-
-  // ── [STACKED DEFENSIVES] context lines (GH #95) ───────────────────────────
-  // Two major defensives from two players on one friendly — a fact about the
-  // stack, NOT a candidate; see context/stackedDefensives.ts. Same
-  // render-vs-legend discipline as [CD PRIOR].
-  const stackedDefensiveEntries = formatStackedDefensiveLines(
-    stackedDefensives ?? [],
-  ).filter((e) => e.atSeconds <= matchEndSeconds);
-  for (const e of stackedDefensiveEntries) {
-    addEntry(e.atSeconds, `${fmtTime(e.atSeconds)}  ${e.line}`);
-  }
-
-  // ── [DR CLASH] context lines (GH #67 S3) ──────────────────────────────────
-  // A friendly CC landed at diminished DR because another teammate put the
-  // target on DR earlier within the reset window.
-  const teammateDrClashes: ITeammateDrClash[] =
-    outgoingCCChains && outgoingCCChains.length > 0
-      ? detectTeammateDrClashes(outgoingCCChains, matchStartMs)
-      : [];
-
-  const DR_CLASH_CAP = 3;
-  // cc-dr F-DC1: the cap keeps the owner's own clashes first — (1) the owner
-  // is the diminished caster, (2) the owner is the prior caster, (3) the
-  // rest; time order within — then renders the kept ones in time order (it
-  // kept the first three by time and dropped the owner's later ones).
-  const ownerRank = (c: ITeammateDrClash) =>
-    c.diminishedCasterName === owner.name
-      ? 0
-      : c.priorCasterName === owner.name
-        ? 1
-        : 2;
-  const keptClashes = teammateDrClashes
-    .filter((c) => c.atSeconds <= matchEndSeconds)
-    .map((c, i) => ({ c, i }))
-    .sort((a, b) => ownerRank(a.c) - ownerRank(b.c) || a.i - b.i)
-    .slice(0, DR_CLASH_CAP)
-    .sort((a, b) => a.i - b.i)
-    .map(({ c }) => c);
-  const drClashEntries: Array<{ atSeconds: number; line: string }> = [];
-  for (const clash of keptClashes) {
-    const victimWho =
-      clash.diminishedCasterName === owner.name
-        ? "your"
-        : `${pid(clash.diminishedCasterName)}'s`;
-    const priorWho =
-      clash.priorCasterName === owner.name
-        ? "your"
-        : `${pid(clash.priorCasterName)}'s`;
-    const target = pid(clash.targetName);
-    const line = `[DR CLASH]   ${victimWho} ${clash.diminishedSpellName} on ${target} landed at ${clash.level} DR (${clash.category}) — ${priorWho} ${clash.priorSpellName} ${clash.gapSeconds}s earlier put them on DR`;
-    drClashEntries.push({ atSeconds: clash.atSeconds, line });
-    addEntry(clash.atSeconds, `${fmtTime(clash.atSeconds)}  ${line}`);
-  }
+  // ── Context fact lines ([BURST ANSWERED], [CD PRIOR], [STACKED DEFENSIVES], [DR CLASH])
+  const {
+    burstAnsweredEntries,
+    cdPriorEntries,
+    stackedDefensiveEntries,
+    drClashEntries,
+  } = emitContextFactEntries({
+    burstWindows,
+    matchEndSeconds,
+    addEntry,
+    cdPriorCohort,
+    cdPriorEpisodes,
+    stackedDefensives,
+    outgoingCCChains,
+    matchStartMs,
+    owner,
+    pid,
+  });
 
   // ── [HEALER INACTIVITY] events (healer only) ────────────────────────────────────
 
@@ -2281,271 +2164,42 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     roundBounds,
   });
 
-  // ── Sort and format ───────────────────────────────────────────────────────
-
-  entries.sort((a, b) => a.timeSeconds - b.timeSeconds);
-
-  const summaryLines: string[] = [];
-  if (shapeshiftIntervals.length > 0) {
-    summaryLines.push("## NOTABLE STATES");
-    for (const { player, intervals } of shapeshiftIntervals) {
-      const bearTime = intervals
-        .filter((i) => i.form === "Bear")
-        .reduce((acc, i) => acc + (i.endSeconds - i.startSeconds), 0);
-      const catTime = intervals
-        .filter((i) => i.form === "Cat")
-        .reduce((acc, i) => acc + (i.endSeconds - i.startSeconds), 0);
-      const pLabel = player.id === owner.id ? "YOU" : pid(player.name);
-
-      if (bearTime > 0)
-        summaryLines.push(
-          `- ${pLabel} spent ${Math.round(bearTime)}s in Bear Form.`,
-        );
-      if (catTime > 0)
-        summaryLines.push(
-          `- ${pLabel} spent ${Math.round(catTime)}s in Cat Form.`,
-        );
-    }
-    if (summaryLines.length > 1) {
-      summaryLines.push("");
-    } else {
-      summaryLines.length = 0; // Empty if no valid times found
-    }
-  }
-
-  // F-C3 (triage res-readiness): the `(no mana a/b)` tag on a [RES] `rdy:`
-  // entry is legended only when a row carries it (snapshots are resolved to
-  // strings above).
-  const noManaRendered = entries.some((e) =>
-    e.lines.some((l) => typeof l === "string" && l.includes("(no mana ")),
-  );
-  // F-C16 (triage res-readiness): the `next spike in Ns on X` suffix on
-  // [YOU] [CD] lines is hindsight — legend it whenever one is rendered.
-  const nextSpikeRendered = entries.some((e) =>
-    e.lines.some(
-      (l) => typeof l === "string" && l.includes(", next spike in "),
-    ),
-  );
-  // F-C5b (triage res-readiness, ruling A′16): "UP" means usable at that
-  // instant, which the bare word does not say — legend it when rendered.
-  const interruptNoteRendered = entries.some((e) =>
-    e.lines.some(
-      (l) =>
-        typeof l === "string" &&
-        (l.includes(" | enemy interrupts UP: ") ||
-          l.includes(" | no enemy interrupt usable (")),
-    ),
-  );
-  const outputLines: string[] = [
-    ...summaryLines,
-    "MATCH TIMELINE",
-    "  Units: M = Million damage (1,000,000), k = Thousand damage (1,000)",
-    // 2026-07-18 baseline: two independent responders read [DR: Full] backwards
-    // as "fully diminished / CC useless" — one legend line disambiguates it
-    // (Full = no DR = full duration = the best moment to land CC).
-    "  [DR: <category> <level>] on CC lines = diminishing returns state when it LANDED:",
-    "    Full = NO diminishing returns yet (full duration — the best time to land CC);",
-    "    50% = duration reduced to half; Immune = DR'd to zero.",
-    // 2026-07-20 eval: 9/50 matches were judged "notation without a legend" —
-    // the same notation could be read with the opposite meaning. The four lines
-    // below each address one ambiguity the judge cited.
-    "  [n/m] after a spell = CHARGES REMAINING / total (so [1/2] = one charge left, one on cooldown); `[a–b/m]` =",
-    "    a to b charges left on a cooldown combat shortens.",
-    // Class D (2026-07-20 eval): the ledger did not list Lay on Hands while
-    // DEATHS WITH MISSED OPTIONS said it was available — the judge read this as
-    // two judgements contradicting each other. In fact the ledger simply does
-    // **not track** that ability (1 cast across a thousand-match corpus, no
-    // empirical basis for tracking it), and "not listed" was indistinguishable
-    // from "not available".
-    "  [RES] lists TRACKED major cooldowns (plus your own interrupt and Death Grip) — an ability absent from both `rdy:` and `cd:`",
-    "    is one this ledger does not track, NOT one that was unavailable. Other sections may still cite it.",
-    "  [RES] rdy: = abilities READY at that instant. `rdy:Δ` = unchanged since the previous [RES];",
-    // res-readiness F-C3 (ruling res R2 = A): off cooldown, but not payable —
-    // legended only when a row carries the tag (the F-C16 convention)
-    ...(noManaRendered
-      ? [
-          "    `X(no mana a/b)` = X is off cooldown but your mana (a) was below its cost (b) at that second — not pressable as it stood.",
-          "    The tag is printed where X is listed: a full `rdy:` row or the `Δ` row where X came back. A later `Δ` row that",
-          "    does not list X says nothing about its mana.",
-        ]
-      : []),
-    "    a leading `-<spell>` marks one that just LEFT the ready set. `cd:<spell>(Ns)` = seconds until it returns.",
-    // GH #106 step 3: cooldowns combat shortens (rage spent, resets, procs)
-    // print a range — the static number is only the latest they can return.
-    "    `cd:<spell>(a–Ns)` = a cooldown that combat shortens: back in a to N s. `cd:<spell>(≤Ns)` = back in at",
-    "    most N s and it MAY ALREADY BE BACK — never state that such a spell was certainly unavailable.",
-    // GH #99 item 5: a bare `rdy:Δ  cd:—` row survives only when it states a
-    // fact no other line does (resLedgerPrune.ts); tell the reader so an
-    // absent ledger row is not misread as "nothing was tracked here".
-    "  A `rdy:Δ  cd:—` row is printed only when it carries a fact no other line states (a focus target no",
-    "    surviving [RES] shows, a CC no [CC ON …] line covers at that second, an enemy CD with no [ENEMY CD] line);",
-    "    a `rdy:Δ  cd:—` row whose facts are all stated elsewhere is omitted, so its absence means nothing changed.",
-    "  [DMG SPIKE] `START–END` = the window's exact bounds; its `A% -> B% HP` maps directly to those two timestamps.",
-    // A21 (user ruling 2026-09-30): HP on press lines is read at the press
-    // (worded without the literal line tags: tests and scans find press
-    // lines by their tag)
-    "  HP printed on your own press lines (the lines tagged [YOU]) — `(self: N% HP …)`, `→ X (N% HP …)`, `lowest ally N% HP`,",
-    "    `(N% HP)` — is that unit's HP at the moment of the press (just before the press's own heal), not the [STATE]",
-    "    reading of that second; the two can differ, and inside one second the press value is the one to quote about the press.",
-    "    The `at N% HP` inside a cooldown line's unnecessary-press note is the same press reading — on your own lines",
-    "    and on a teammate's cooldown line alike.",
-    "  Window durations `(Ns)` are computed from the displayed start/end timestamps, so they always match what you see.",
-    // GH #24 (2026-08-30): roots carry no DR and are not hard CC; a [ROOT]
-    // line appears only when the rooted player could not reach anyone.
-    "  [ROOT] = a root that left its target unable to reach anyone (melee: no enemy in melee range; healer: a damaged",
-    "    ally out of range/LoS; ranged: no enemy in range/LoS) for the stated seconds — only such roots are listed; roots",
-    "    that changed nothing are omitted. Roots have no DR tier and are not hard CC (the rooted player can still cast).",
-    "  [OFFENSIVE WINDOW] `X on <unit>` = damage DEALT TO that unit (it is the victim, not the dealer);",
-    "    its `peak spike` figure covers the spike's own sub-window, printed after it — not the whole offensive window; a marker means the spike's sub-window extends past the offensive window (the +5 s allowance).",
-    ...(TIMELINE_LINE_FLAGS.enemyDef === "timeline"
-      ? [
-          "  [ENEMY DEF] = an enemy pressed a defensive at that second: `(N%, Ts)` = official damage reduction (with the",
-          "    caster's own talents where the log shows them) and the OBSERVED duration in this round; `immune` = full",
-          "    immunity, or the unit could not be hit or killed for that moment (Burrow, Time Stop, Mass Invisibility, Vanish,",
-          "    Feign Death, a Cheat Death / Cauterize / Nature's Guardian proc) — KILL ATTEMPTS counts each as a forced",
-          "    immunity; `— removed early` = it ended before its full duration (dispelled, broken or cancelled);",
-          "    `X → unit` = an external put on that unit; one with no duration is an instant heal (Lay on Hands) or a grip /",
-          "    redirect (Leap of Faith, Intervene, Roar of Sacrifice, Master's Call); `(area)` = an area save pressed at that",
-          "    second (Anti-Magic Zone, Darkness, Rallying Cry, Spirit Link Totem, Power Word: Barrier) — who was inside it is not stated. Absent = not pressed.",
-          "    `(self-save)` = the enemy's own save that carries no damage reduction — an absorb, a heal or avoidance (Guardian",
-          "    Spirit on itself, Desperate Prayer, Touch of Karma, Dark Pact, Evasion, Healthstone, Ice Barrier…) — KILL",
-          "    ATTEMPTS `self-saved (X)` names these.",
-          "    `[friendly offensive CD active]` indicates at least one friendly offensive cooldown was active at that displayed second.",
-          "    `(at N% HP)` / `(target at N% HP)` reflects the target's HP at the press (just before the press's own",
-          "    heal), not the [STATE] reading of that second.",
-          ...(TIMELINE_LINE_FLAGS.duringExternal === "annotate"
-            ? [
-                "    `| during it: A Nk on target · X% of their enemy-player damage · direct/periodic · damage in K of M s` = what each",
-                "    friendly who had hit that unit in the 3 s before the external kept doing while it was up (damage on it, share of",
-                "    their damage on enemy players, seconds with damage; `(+Ak absorbed)` = eaten by the target's shields; for a",
-                "    school-limited wall, how much of it was in the wall's school; `N hits immune` = hits the target was immune to).",
-                "    A measurement, not a verdict — the team's CC lines say whether they could act.",
-              ]
-            : []),
-        ]
-      : []),
-    ...(silenceLineCount > 0
-      ? [
-          "  [SILENCE] = that player was silenced from that second for the stated time: no spells (the [CC ON TEAM] / [CC ON ENEMY]",
-          "    lines do not include silences). `trinket broke this silence` = a PvP trinket ended it early.",
-        ]
-      : []),
-    ...(disarmLineCount > 0
-      ? [
-          "  [DISARM] = a disarm on a player of your team: weapon abilities are locked, spells are not. `trinket broke this disarm` = a PvP trinket ended it early.",
-        ]
-      : []),
-    ...(enemyTrinketCount > 0
-      ? [
-          "  [ENEMY TRINKET] = an enemy used PvP trinket; `out of <spell> (by <source>)` indicates breaking out of that CC.",
-          "    `used <ability>` in place of `PvP trinket` = a racial press (Will to Survive, Will of the Forsaken, Stoneform and",
-          "    Fireblood also lock the trinket for 30–60 s; Escape Artist locks nothing) or a class ability (Blink, Berserker",
-          "    Shout, Icebound Fortitude …) that removed that CC.",
-          "    `[friendly offensive CD active]` indicates at least one friendly offensive cooldown was active at that displayed second.",
-          "    `(target at N% HP)` reflects the target's HP at the press, not the [STATE] reading of that second.",
-        ]
-      : []),
-    // F-C2 (triage res-readiness): the cast ordinal has its own notation
-    ...(enemyCdRender.ordinalRendered
-      ? [
-          "  `(cast k of N)` on [ENEMY CD] / [ENEMY HEAL CD] = the k-th of N casts of that spell this round (not charges).",
-        ]
-      : []),
-    // F-E8 (A26 = A): the healer throughput tag, outside the burst windows
-    ...(enemyCdRender.healCdRendered
-      ? [
-          "  [ENEMY HEAL CD] = an enemy healer pressed a major healing / throughput cooldown (Divine Hymn, Apotheosis,",
-          "    Avenging Crusader, …); it is not an offensive burst and opens no [OFFENSIVE WINDOW].",
-        ]
-      : []),
-    ...(nextSpikeRendered
-      ? [
-          "  `next spike in Ns on X` on a [YOU] [CD] line = the next damage spike after that press, known only in hindsight —",
-          "    the player could not see it coming.",
-        ]
-      : []),
-    ...(interruptNoteRendered
-      ? [
-          "  `enemy interrupts UP: X` on a channeled [YOU] [CD] line = enemy kicks that were off cooldown AND usable at that",
-          "    instant (the kicker alive and not in a cast-blocking CC); `no enemy interrupt usable (CC'd: X)` = off cooldown,",
-          "    but the kicker was crowd-controlled or silenced right then.",
-        ]
-      : []),
-    // F-C17 (triage res-readiness): the per-cast lines come from the healer
-    // gap filler only, so only a healer owner gets their legend.
-    ...(isHealer && TIMELINE_LINE_FLAGS.deathWindowUnfold === "perCast"
-      ? [
-          `  [YOU] [CAST] lines inside the ${DEATH_WINDOW_S}s before a friendly death are printed per cast with the target's HP`,
-          "    at the press, even for spells that are folded `(xN over Ns)` elsewhere; the fold still counts them.",
-        ]
-      : []),
-    ...(isHealer && TIMELINE_LINE_FLAGS.deathWindowUnfold === "summary"
-      ? [
-          `  [YOU] [HEALS] = every cast you made in the ${DEATH_WINDOW_S}s before a friendly death, counted by spell and target.`,
-        ]
-      : []),
-    // Conditional: a round with no such line pays no tokens for its legend.
-    ...(burstAnsweredEntries.length > 0 ? BURST_ANSWERED_LEGEND : []),
-    ...(cdPriorEntries.length > 0 ? CD_PRIOR_LEGEND : []),
-    ...(stackedDefensiveEntries.length > 0 ? STACKED_DEFENSIVES_LEGEND : []),
-    ...(drClashEntries.length > 0 ? DR_CLASH_LEGEND : []),
-    ...(procLinesEmitted
-      ? [
-          "[PROC] = an automatically applied effect (a passive or a talent-replaced button); no button was pressed at that second, so it is never a timing or choice to judge.",
-        ]
-      : []),
-    "",
-    `[PERSPECTIVE: Log Owner - ${ownerSpec}]`,
-    `(You are the ${ownerSpec} in this match. Your actions and effects on you are marked with [YOU].)`,
-    "",
-  ];
-  for (const entry of entries) {
-    outputLines.push(...(entry.lines as string[]));
-  }
-
-  outputLines.push(
-    ...buildKillSequenceBlock({
-      matchStartMs,
-      matchEndSeconds,
-      owner,
-      friends,
-      enemies: enemies ?? [],
-      ownerCDs,
-      teammateCDs,
-      enemyCDTimeline,
-      ccTrinketSummaries,
-      friendlyDeaths,
-      enemyDeaths,
-      isHealer,
-      pid,
-      actorLabel,
-      playerIdMap,
-      enemyIdMap,
-      summonOwners,
-      unitNames,
-      rosterSides,
-      allUnits,
-    }),
-  );
-
-  outputLines.push(
-    ...buildMatchEndBlock({
-      matchStartMs,
-      matchEndMs,
-      matchEndSeconds,
-      bracket,
-      owner,
-      friends,
-      enemies: enemies ?? [],
-      friendlyDeaths,
-      enemyDeaths,
-      pid,
-      enemyPid,
-    }),
-  );
-
-  // GH #99 item 5 (user ruling 2026-09-22): drop the no-change [RES] rows
-  // whose every fact the surviving text already states — same predicate the
-  // eval gate `checkResNoChangeRowsPruned` re-applies to the rendered prompt.
-  return pruneZeroLossResRows(outputLines).join("\n");
+  // ── Sort and format (timelineSections/formatTimeline.ts) ─────────────────
+  return formatTimeline({
+    entries,
+    shapeshiftIntervals,
+    owner,
+    pid,
+    silenceLineCount,
+    disarmLineCount,
+    enemyTrinketCount,
+    enemyCdRender,
+    isHealer,
+    burstAnsweredEntries,
+    cdPriorEntries,
+    stackedDefensiveEntries,
+    drClashEntries,
+    procLinesEmitted,
+    ownerSpec,
+    matchStartMs,
+    matchEndSeconds,
+    friends,
+    enemies,
+    ownerCDs,
+    teammateCDs,
+    enemyCDTimeline,
+    ccTrinketSummaries,
+    friendlyDeaths,
+    enemyDeaths,
+    actorLabel,
+    playerIdMap,
+    enemyIdMap,
+    summonOwners,
+    unitNames,
+    rosterSides,
+    allUnits,
+    matchEndMs,
+    bracket,
+    enemyPid,
+  });
 }
