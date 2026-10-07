@@ -3,7 +3,10 @@ import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { KpiChips } from "../src/renderer/src/report/components/KpiChips";
-import { deriveDispelDash } from "../src/renderer/src/report/derive/dispelDash";
+import {
+  deriveDispelDash,
+  scopedMissedPurgeInstances,
+} from "../src/renderer/src/report/derive/dispelDash";
 import { deriveStatsTable } from "../src/renderer/src/report/derive/statsTable";
 import type { StoredMatch } from "../src/renderer/src/report/derive/types";
 import { loadMatchFixture } from "./fixtures/loadFixture";
@@ -137,5 +140,101 @@ describe("dispel dashboard splits deliberate vs passive (UI review #3)", () => {
       <KpiChips mistakes={[]} bands={[]} kickRows={[]} dispelDash={dash} />,
     );
     expect(container.querySelector(".rpt-kpi-passive")).toBeNull();
+  });
+});
+
+/**
+ * B-tier X1 (user ruling 2026-10-06): the dispel panel lists the windows only
+ * a scoped removal could have answered — Shattering Throw on an immunity
+ * shield — for each teammate who holds it, the ones that were not actionable
+ * included and flagged (the prompt's "not actionable"). 47867c33 round 1
+ * 1:41: Divine Shield on a Holy Paladin, unpurged for 8 s, an Arms Warrior
+ * with Shattering Throw.
+ */
+describe("dispel panel: scoped missed removals (X1)", () => {
+  const tool = {
+    name: "Shattering Throw",
+    scope: "immunity" as const,
+    note: "immunity shields only, 1.5s cast",
+    castSeconds: 1.5,
+  };
+  // only `name` and the spec are read: an Arms Warrior is no general purger
+  const warrior = { id: "w1", name: "Warrior-R", spec: "71" } as never;
+  const priest = { id: "p1", name: "Priest-R", spec: "256" } as never;
+  const win = (
+    over: Record<string, unknown>,
+    holder: Record<string, unknown>,
+  ) =>
+    ({
+      timeSeconds: 101.2,
+      durationSeconds: 8,
+      enemyName: "Paladin-E",
+      enemySpec: "Holy Paladin",
+      spellName: "Divine Shield",
+      spellId: "642",
+      priority: "Critical",
+      purgeWasOnCD: false,
+      teamUnderPressure: false,
+      purgersLockedOut: false,
+      losReachable: true,
+      scopedPurgers: [
+        {
+          purgerName: "Warrior-R",
+          tool,
+          lockedOut: false,
+          losReachable: true,
+          ...holder,
+        },
+      ],
+      ...over,
+    }) as never;
+
+  it("an actionable window: one row naming the tool and its holder, no flag", () => {
+    const rows = scopedMissedPurgeInstances([warrior, priest], [win({}, {})]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.tS).toBe(101.2);
+    expect(rows[0]!.unitName).toBe("Paladin-E");
+    expect(rows[0]!.label).toContain("挂在 Paladin-E 身上 8s 未被打掉");
+    expect(rows[0]!.label).toContain("可用 Shattering Throw(Warrior-R)");
+    expect(rows[0]!.label).not.toContain("当时做不到");
+    expect(rows[0]!.notActionable).toBeUndefined();
+  });
+
+  it("a window its holder could not answer is still listed, flagged with the reason", () => {
+    const flagged = (holder: Record<string, unknown>) =>
+      scopedMissedPurgeInstances([warrior], [win({}, holder)])[0]!;
+    const locked = flagged({ lockedOut: true });
+    expect(locked.notActionable).toBe(true);
+    expect(locked.label).toContain("(持有者被控/被锁)");
+    expect(locked.label.endsWith(" · 当时做不到")).toBe(true);
+    expect(flagged({ losReachable: false }).label).toContain(
+      "(无视线/超射程) · 当时做不到",
+    );
+    // back with 3 s of the buff left: under the 3 s reaction + 1.5 s cast
+    const onCd = flagged({ purgeReadyAtSeconds: 106.2 });
+    expect(onCd.label).toContain("(技能全程在 CD) · 当时做不到");
+    // back with 6 s left: actionable again
+    expect(
+      flagged({ purgeReadyAtSeconds: 103.2 }).notActionable,
+    ).toBeUndefined();
+    // an unknown reach is not a reason
+    expect(flagged({ losReachable: null }).notActionable).toBeUndefined();
+  });
+
+  it("nobody holding a scoped removal: no rows; and the time range filters them", () => {
+    expect(scopedMissedPurgeInstances([priest], [win({}, {})])).toEqual([]);
+    expect(
+      scopedMissedPurgeInstances([warrior], [win({}, {})], {
+        fromS: 0,
+        toS: 60,
+      } as never),
+    ).toEqual([]);
+  });
+
+  it("the unmodified fixture has no scoped window: the panel's list is what it was", () => {
+    const dash = deriveDispelDash(m);
+    expect(dash.missedPurges.some((i) => i.label.includes("可用 "))).toBe(
+      false,
+    );
   });
 });

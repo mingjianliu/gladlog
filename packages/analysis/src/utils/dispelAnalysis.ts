@@ -2387,6 +2387,40 @@ export function formatMissedCleanseExemption(
   return out;
 }
 
+/**
+ * Why a missed-purge window was not actionable for the purgers its facts
+ * describe — the three conditions `formatMissedPurgeExemption` words as "not
+ * actionable". ONE predicate, two readers: that formatter (the prompt's
+ * `[MISSED PURGE OPPORTUNITY]` line) and the desktop dispel panel's scoped
+ * rows (B-tier X1), so the panel cannot label a window differently from the
+ * prompt.
+ *  - lockedOut: every purger was CC'd / locked out for the window;
+ *  - noReach: no purger had range / line of sight (`false` only — unknown is
+ *    not a reason);
+ *  - onCooldownThroughout: the removal came back with less of the buff left
+ *    than the reaction threshold plus its own cast time.
+ */
+export function missedPurgeNotActionable(
+  w: Pick<
+    IMissedPurgeWindow,
+    | "purgersLockedOut"
+    | "losReachable"
+    | "purgeReadyAtSeconds"
+    | "timeSeconds"
+    | "durationSeconds"
+    | "viaScopedTool"
+  >,
+): { lockedOut: boolean; noReach: boolean; onCooldownThroughout: boolean } {
+  return {
+    lockedOut: w.purgersLockedOut,
+    noReach: w.losReachable === false,
+    onCooldownThroughout:
+      w.purgeReadyAtSeconds !== undefined &&
+      w.timeSeconds + w.durationSeconds - w.purgeReadyAtSeconds <
+        MISSED_PURGE_THRESHOLD_S + (w.viaScopedTool?.castSeconds ?? 0),
+  };
+}
+
 /** Feasibility-exemption suffix for the [MISSED PURGE OPPORTUNITY] line (same
  *  treatment as the cleanse side). */
 export function formatMissedPurgeExemption(
@@ -2405,18 +2439,17 @@ export function formatMissedPurgeExemption(
   // the facts after it are that tool's cooldown and reach
   if (w.viaScopedTool)
     out += ` | your removal for it: ${w.viaScopedTool.name} (${w.viaScopedTool.note})`;
-  if (w.purgersLockedOut)
-    out += " | purgers were CC'd/locked out — not actionable";
-  if (w.losReachable === false)
+  const why = missedPurgeNotActionable(w);
+  if (why.lockedOut) out += " | purgers were CC'd/locked out — not actionable";
+  if (why.noReach)
     out += " | no purger had range/line of sight — not actionable";
   // F-P7 (codex r2 09-30): say WHEN the purge came back — "on cooldown at
   // application" alone hides 9 s of a buff that was purgeable after.
   if (w.purgeReadyAtSeconds !== undefined) {
     const left = w.timeSeconds + w.durationSeconds - w.purgeReadyAtSeconds;
-    out +=
-      left < MISSED_PURGE_THRESHOLD_S + (w.viaScopedTool?.castSeconds ?? 0)
-        ? ` | purge on cooldown for the whole buff (ready ${fmtTime(w.purgeReadyAtSeconds)}) — not actionable`
-        : ` | purge on cooldown at application — ready at ${fmtTime(w.purgeReadyAtSeconds)} (${Math.round(left)}s of the buff left)`;
+    out += why.onCooldownThroughout
+      ? ` | purge on cooldown for the whole buff (ready ${fmtTime(w.purgeReadyAtSeconds)}) — not actionable`
+      : ` | purge on cooldown at application — ready at ${fmtTime(w.purgeReadyAtSeconds)} (${Math.round(left)}s of the buff left)`;
   }
   return out;
 }

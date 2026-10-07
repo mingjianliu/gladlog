@@ -368,6 +368,11 @@ const INDEX: PredicateRow[] = [
     mod: dispelAnalysis,
   },
   {
+    file: `${A}/utils/dispelAnalysis.ts`,
+    symbol: "missedPurgeNotActionable",
+    mod: dispelAnalysis,
+  },
+  {
     file: `${A}/utils/pvpTrinketUses.ts`,
     symbol: "pvpTrinketUses",
     mod: pvpTrinketUsesMod,

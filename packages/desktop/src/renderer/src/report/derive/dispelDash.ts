@@ -1,9 +1,12 @@
 import {
   annotateMissedPurgesWithKillWindows,
   computeOffensiveWindows,
+  missedPurgeNotActionable,
+  missedPurgesFor,
   reconstructDispelSummary,
   type ICCEfficiencyStat,
   type IDispelEvent,
+  type IMissedPurgeWindow,
 } from "@gladlog/analysis";
 import { CombatUnitReaction } from "@gladlog/parser-compat";
 
@@ -22,6 +25,11 @@ export interface DispelInstance {
   /** proc or rider — not a cleanse decision (analysis `dispelKind`,
    * UI review 2026-08-21 #3). */
   passive: boolean;
+  /** A missed scoped removal (Shattering Throw on an immunity shield) whose
+   * holder could not have pressed it — locked out, out of reach, or on
+   * cooldown for the whole buff (analysis `missedPurgeNotActionable`, the
+   * prompt's "not actionable"). Listed all the same (user ruling X1). */
+  notActionable?: boolean;
 }
 
 export interface DispelDashRow {
@@ -47,7 +55,10 @@ export interface DispelDash {
    * engagement tab label (they used to each reduce `rows`). */
   totals: { friendlyDeliberate: number; friendlyPassive: number };
   /** Offensive dispel opportunities our side missed (a Critical/High enemy
-   * buff sat for >3s). */
+   * buff sat for >3s) — and, since B-tier X1, the windows only a SCOPED
+   * removal could have answered (analysis `scopedMissedPurgeWindows`), one
+   * row per teammate who holds that removal, the ones that were not
+   * actionable included and flagged. The mistake cards do not read this. */
   missedPurges: DispelInstance[];
   /** Windows where our side missed a cleanse of CC / a debuff. */
   missedCleanses: DispelInstance[];
@@ -66,6 +77,49 @@ const EMPTY: DispelDash = {
 
 const fmtName = (id: string, fallback: string): string =>
   displaySpellName(id, fallback);
+
+/**
+ * B-tier X1 (user ruling 2026-10-06): the windows only a SCOPED removal could
+ * have answered (Shattering Throw on an immunity shield), one row per
+ * teammate holding that removal — analysis' own per-player view
+ * (`missedPurgesFor`, the one the prompt's owner line is built from) over the
+ * scoped array only, so a window a general purger carried is not listed
+ * twice. Every such window is shown; one its holder could not have answered
+ * says so (`missedPurgeNotActionable`, the prompt's "not actionable").
+ */
+export function scopedMissedPurgeInstances(
+  friends: ReadonlyArray<Parameters<typeof missedPurgesFor>[0]>,
+  scopedWindows: IMissedPurgeWindow[],
+  range?: TimeRange | null,
+): DispelInstance[] {
+  const out: DispelInstance[] = [];
+  for (const f of friends) {
+    const mine = missedPurgesFor(f, {
+      missedPurgeWindows: [],
+      scopedMissedPurgeWindows: scopedWindows,
+    });
+    for (const w of mine) {
+      if (!w.viaScopedTool || !tInRange(w.timeSeconds, range)) continue;
+      const why = missedPurgeNotActionable(w);
+      const notActionable =
+        why.lockedOut || why.noReach || why.onCooldownThroughout;
+      out.push({
+        tS: w.timeSeconds,
+        label: `${fmtName(w.spellId, w.spellName)} 挂在 ${w.enemyName} 身上 ${Math.round(
+          w.durationSeconds,
+        )}s 未被打掉 · 可用 ${w.viaScopedTool.name}(${f.name})${
+          why.lockedOut ? "(持有者被控/被锁)" : ""
+        }${why.noReach ? "(无视线/超射程)" : ""}${
+          why.onCooldownThroughout ? "(技能全程在 CD)" : ""
+        }${notActionable ? " · 当时做不到" : ""}`,
+        unitName: w.enemyName,
+        passive: false,
+        ...(notActionable ? { notActionable: true } : {}),
+      });
+    }
+  }
+  return out;
+}
 
 /**
  * Dispel dashboard (backlog #3): the completed ledger (purge / cleanse /
@@ -193,8 +247,15 @@ export function deriveDispelDash(
         }`,
         unitName: w.enemyName,
         passive: false,
-      }))
-      .sort((a, b) => a.tS - b.tS);
+      }));
+    missedPurges.push(
+      ...scopedMissedPurgeInstances(
+        friends,
+        ours.scopedMissedPurgeWindows ?? [],
+        range,
+      ),
+    );
+    missedPurges.sort((a, b) => a.tS - b.tS);
 
     const missedCleanses: DispelInstance[] = ours.missedCleanseWindows
       .filter((w) => tInRange(w.timeSeconds, range))

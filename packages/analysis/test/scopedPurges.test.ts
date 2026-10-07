@@ -27,6 +27,7 @@ import {
   canOffensivePurge,
   formatMissedPurgeExemption,
   getDispelType,
+  missedPurgeNotActionable,
   isMagicPurgeTarget,
   missedPurgesFor,
   reconstructDispelSummary,
@@ -438,5 +439,62 @@ describe("Shiv removes enrage effects — a scope for the roster scan, never a l
       "  Log owner (Discipline Priest): CAN offensive purge",
       "  Team purgers: none",
     ]);
+  });
+});
+
+// B-tier X1: the desktop dispel panel flags a scoped window "not actionable"
+// through the predicate the prompt's exemption suffix is worded from.
+describe("missedPurgeNotActionable — the formatter's three 'not actionable' conditions", () => {
+  const w = (over: Record<string, unknown>) => ({
+    timeSeconds: 100,
+    durationSeconds: 8,
+    purgersLockedOut: false,
+    losReachable: true as boolean | null,
+    viaScopedTool: {
+      name: "Shattering Throw",
+      scope: "immunity" as const,
+      note: "immunity shields only, 1.5s cast",
+      castSeconds: 1.5,
+    },
+    ...over,
+  });
+  const agree = (over: Record<string, unknown>) => {
+    const why = missedPurgeNotActionable(w(over));
+    const text = formatMissedPurgeExemption(w(over));
+    // the predicate says "not actionable" exactly when the suffix does
+    expect(
+      why.lockedOut || why.noReach || why.onCooldownThroughout,
+    ).toBe(text.includes("not actionable"));
+    return why;
+  };
+
+  it("agrees with the rendered suffix on every condition", () => {
+    expect(agree({})).toEqual({
+      lockedOut: false,
+      noReach: false,
+      onCooldownThroughout: false,
+    });
+    expect(agree({ purgersLockedOut: true }).lockedOut).toBe(true);
+    expect(agree({ losReachable: false }).noReach).toBe(true);
+    expect(agree({ losReachable: null }).noReach).toBe(false);
+    // 4.4 s of the buff left < 3 s reaction + 1.5 s cast
+    expect(agree({ purgeReadyAtSeconds: 103.6 }).onCooldownThroughout).toBe(
+      true,
+    );
+    // 4.6 s left: the tool came back in time
+    expect(agree({ purgeReadyAtSeconds: 103.4 }).onCooldownThroughout).toBe(
+      false,
+    );
+  });
+
+  it("the cast time is the scoped tool's: a general purge needs only the reaction threshold", () => {
+    const general = { ...w({ purgeReadyAtSeconds: 104.5 }) } as any;
+    delete general.viaScopedTool;
+    // 3.5 s left ≥ 3 s: actionable for an instant purge, not for a 1.5 s cast
+    expect(missedPurgeNotActionable(general).onCooldownThroughout).toBe(false);
+    expect(
+      missedPurgeNotActionable(w({ purgeReadyAtSeconds: 104.5 }))
+        .onCooldownThroughout,
+    ).toBe(true);
   });
 });
