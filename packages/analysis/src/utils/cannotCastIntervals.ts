@@ -8,6 +8,7 @@ import { BACKLASH_AURA_CC_TYPE } from "../data/backlashCc";
 
 import { ccSpellIds, officialSilenceIds } from "../data/spellTags";
 import { REACTION_WINDOW_S } from "./cooldowns";
+import { matchPendingCcKey } from "./drAnalysis";
 import { kickLockoutSecondsFor } from "./kickLockout";
 import { isSilenceableCast } from "./spellMechanics";
 import { firstDeathMs } from "./unitDeath";
@@ -144,30 +145,36 @@ export function castBlockingAuraIntervals(
   unit: ICombatUnit,
   enemyIds: Set<string>,
 ): CastBlockingAura[] {
-  // `seq` is the position in the unit's aura stream (log order). Pairing is by
-  // position, not by timestamp: a Cyclone re-applied in the same millisecond
-  // as the previous one's REMOVED (e5b3534b 23.317, REMOVED logged first) used
-  // to pair with that earlier REMOVED — `r >= a.ts` — and became a zero-length
-  // interval, so the owner read as free for the whole 4.8 s (triage
-  // 2026-09-29 H23).
-  const applied = new Map<
+  // Pairing is by position in the unit's aura stream (log order), not by
+  // timestamp: a Cyclone re-applied in the same millisecond as the previous
+  // one's REMOVED (e5b3534b 23.317, REMOVED logged first) used to pair with
+  // that earlier REMOVED — `r >= a.ts` — and became a zero-length interval,
+  // so the owner read as free for the whole 4.8 s (triage 2026-09-29 H23).
+  //
+  // And by CASTER (user ruling P-FU-H23, 2026-10-06): a removal closes the
+  // application of ITS source — `matchPendingCcKey`, the pairing `ccInstances`
+  // and the CC-break analysis use (exact `spell:source` key; a BROKEN line's
+  // source is the breaker, so it falls back to the earliest pending
+  // application of the spell). Until then every application paired with the
+  // first later removal of the SPELL: a second paladin's Hammer of Justice
+  // landing while the first was still up ended at the first one's REMOVED,
+  // and the unit read as free for the rest of the second stun.
+  const pending = new Map<
     string,
-    Array<{
-      seq: number;
-      ts: number;
+    {
+      applyMs: number;
+      spellId: string;
       name: string;
       srcId: string;
       srcName: string;
-    }>
+    }
   >();
-  const removals = new Map<string, Array<{ seq: number; ts: number }>>();
+  const out: CastBlockingAura[] = [];
 
   // Fixture-built units may lack either stream (momentSnapshot.test.ts has
   // healers with no actionIn) — an absent stream is "nothing happened", not a
   // throw that the caller's try/catch would turn into "no gaps at all".
-  let seq = 0;
   for (const aura of unit.auraEvents ?? []) {
-    seq++;
     const spellId = aura.spellId;
     if (!spellId) continue;
     // cc-dr F-SR1 (ruling A52 = A, 2026-09-30): a CC / silence whose source
@@ -186,43 +193,50 @@ export function castBlockingAuraIntervals(
     )
       continue;
 
+    const key = `${spellId}:${aura.srcUnitId}`;
     if (aura.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
-      const bucket = applied.get(spellId) ?? [];
-      bucket.push({
-        seq,
-        ts: aura.timestamp,
-        name: aura.spellName ?? spellId,
-        srcId: aura.srcUnitId,
-        srcName: aura.srcUnitName ?? "",
-      });
-      applied.set(spellId, bucket);
+      // a second APPLIED from the same caster with no removal between keeps
+      // the first one's start (both used to run to the same removal)
+      if (!pending.has(key))
+        pending.set(key, {
+          applyMs: aura.timestamp,
+          spellId,
+          name: aura.spellName ?? spellId,
+          srcId: aura.srcUnitId,
+          srcName: aura.srcUnitName ?? "",
+        });
     } else if (
       aura.logLine.event === LogEvent.SPELL_AURA_REMOVED ||
       aura.logLine.event === LogEvent.SPELL_AURA_BROKEN ||
       aura.logLine.event === LogEvent.SPELL_AURA_BROKEN_SPELL
     ) {
-      const bucket = removals.get(spellId) ?? [];
-      bucket.push({ seq, ts: aura.timestamp });
-      removals.set(spellId, bucket);
-    }
-  }
-
-  const out: CastBlockingAura[] = [];
-  for (const [spellId, applications] of applied) {
-    const removed = removals.get(spellId) ?? [];
-    for (const a of applications) {
-      const removalTs = removed.find((r) => r.seq > a.seq)?.ts;
+      const matchKey = matchPendingCcKey(pending, spellId, key);
+      const p = matchKey ? pending.get(matchKey) : undefined;
+      if (!p || !matchKey) continue;
+      pending.delete(matchKey);
       out.push({
         spellId,
-        spellName: a.name,
-        srcUnitId: a.srcId,
-        srcUnitName: a.srcName,
-        from: a.ts,
-        to: removalTs ?? Infinity,
+        spellName: p.name,
+        srcUnitId: p.srcId,
+        srcUnitName: p.srcName,
+        from: p.applyMs,
+        to: aura.timestamp,
       });
     }
   }
-  return out;
+  // never removed: open-ended
+  for (const p of pending.values())
+    out.push({
+      spellId: p.spellId,
+      spellName: p.name,
+      srcUnitId: p.srcId,
+      srcUnitName: p.srcName,
+      from: p.applyMs,
+      to: Infinity,
+    });
+  // in application order (a stable sort: same-millisecond applications keep
+  // their log order)
+  return out.sort((a, b) => a.from - b.from);
 }
 
 /** A cast-blocking aura that is a silence and not hard CC — the same split

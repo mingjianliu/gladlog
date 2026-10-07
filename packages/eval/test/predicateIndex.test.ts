@@ -1187,6 +1187,12 @@ const INDEX: PredicateRow[] = [
     symbol: "buildCannotCastIntervals",
     mod: cannotCastIntervals,
   },
+  // user ruling P-FU-H23: the removal pairing has a fourth reader (cannot-cast)
+  {
+    file: `${A}/utils/drAnalysis.ts`,
+    symbol: "matchPendingCcKey",
+    mod: drAnalysis,
+  },
   // Triage 2026-09-29 (missed-cleanse F-C10 / other F-O6): commitments with
   // no SPELL_CAST_START bar — the occupancy facts and the interrupted-empower
   // tag read the same spans.

@@ -957,5 +957,13 @@
  *  saw end counts: one closed at its official length because its REMOVED
  *  was lost does not (ruling P-FU-b8). Cauterize, Cheat Death and Feign
  *  Death stay a moment. Counts in the commit.
+ *  v313 (2026-10-06, user ruling P-FU-H23; triage H23, second leg): the
+ *  cannot-cast predicate pairs a CC / silence aura's removal with ITS
+ *  caster's application (`matchPendingCcKey`, the pairing `ccInstances`
+ *  uses). A second caster's same-id stun landing while the first is still up
+ *  no longer ends at the first one's removal, so its tail is no longer free
+ *  time for any reader — the cd-hoarded owner gate, healing gaps, HEALER
+ *  OFFENSE free seconds, kick-priority, the missed-cleanse / purge lock
+ *  tests, [RES] `cc:`. Counts in the commit.
  */
-export const PROMPT_VERSION = 312;
+export const PROMPT_VERSION = 313;

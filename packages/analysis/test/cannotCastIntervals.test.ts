@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildCannotCastIntervals,
+  castBlockingAuraIntervals,
   coveredMsWithin,
   enemySourceIds,
   silenceIntervals,
@@ -284,6 +285,109 @@ describe("cannotCastIntervals — log-order pairing and pet sources (H23)", () =
     expect(buildCannotCastIntervals(unit, new Set(["Enemy-1"]))).toEqual([
       { from: 23_103, to: 23_317 },
       { from: 23_317, to: 28_109 },
+    ]);
+  });
+
+  it("a removal closes ITS caster's application: a second caster's same-id stun runs to its own removal (ruling P-FU-H23)", () => {
+    // 110-5-617's shape: Hammer of Justice from one paladin at 90.0 (5 s),
+    // from the other at 95.1 — landing before the first one's REMOVED at
+    // 95.5 — and removed at 98.1. Paired by spell alone, the second stun
+    // ended at 95.5 and the unit read as free for 2.6 s of it.
+    const unit = {
+      id: "Player-1",
+      auraEvents: [
+        ev("853", "Enemy-1", 90_000, LogEvent.SPELL_AURA_APPLIED),
+        ev("853", "Enemy-2", 95_100, LogEvent.SPELL_AURA_APPLIED),
+        ev("853", "Enemy-1", 95_500, LogEvent.SPELL_AURA_REMOVED),
+        ev("853", "Enemy-2", 98_100, LogEvent.SPELL_AURA_REMOVED),
+      ],
+      actionIn: [],
+    } as unknown as ICombatUnit;
+    const both = new Set(["Enemy-1", "Enemy-2"]);
+    expect(buildCannotCastIntervals(unit, both)).toEqual([
+      { from: 90_000, to: 95_500 },
+      { from: 95_100, to: 98_100 },
+    ]);
+    expect(
+      coveredMsWithin(buildCannotCastIntervals(unit, both), 90_000, 99_000),
+    ).toBe(8_100);
+    // each interval names its own caster
+    expect(
+      castBlockingAuraIntervals(unit, both).map((a) => [
+        a.srcUnitId,
+        a.from,
+        a.to,
+      ]),
+    ).toEqual([
+      ["Enemy-1", 90_000, 95_500],
+      ["Enemy-2", 95_100, 98_100],
+    ]);
+  });
+
+  it("a BROKEN line's source is the breaker: it closes the earliest pending application of the spell", () => {
+    // Fear from the enemy warlock, broken by the enemy mage's damage — the
+    // BROKEN_SPELL line carries the mage, and still ends the warlock's Fear.
+    // No REMOVED line here on purpose: the break alone has to close it (with
+    // the caster's REMOVED in the fixture the exact-key match would close the
+    // interval at the same time and the fallback would go untested).
+    const both = new Set(["Enemy-1", "Enemy-2"]);
+    for (const breakEvent of [
+      LogEvent.SPELL_AURA_BROKEN_SPELL,
+      LogEvent.SPELL_AURA_BROKEN,
+    ]) {
+      const unit = {
+        id: "Player-1",
+        auraEvents: [
+          ev("5782", "Enemy-1", 10_000, LogEvent.SPELL_AURA_APPLIED),
+          ev("5782", "Enemy-2", 12_400, breakEvent),
+        ],
+        actionIn: [],
+      } as unknown as ICombatUnit;
+      expect(castBlockingAuraIntervals(unit, both)).toEqual([
+        expect.objectContaining({
+          srcUnitId: "Enemy-1",
+          from: 10_000,
+          to: 12_400,
+        }),
+      ]);
+    }
+  });
+
+  it("the log's shape — BROKEN, then the caster's REMOVED: one interval ending at the break, and the REMOVED closes nothing else", () => {
+    // the REMOVED arrives 300 ms after the break here so the two cannot be
+    // told apart by luck; a later Fear from the same caster is its own
+    // interval, not swallowed by the leftover REMOVED
+    const unit = {
+      id: "Player-1",
+      auraEvents: [
+        ev("5782", "Enemy-1", 10_000, LogEvent.SPELL_AURA_APPLIED),
+        ev("5782", "Enemy-2", 12_400, LogEvent.SPELL_AURA_BROKEN_SPELL),
+        ev("5782", "Enemy-1", 12_700, LogEvent.SPELL_AURA_REMOVED),
+        ev("5782", "Enemy-1", 20_000, LogEvent.SPELL_AURA_APPLIED),
+        ev("5782", "Enemy-1", 23_000, LogEvent.SPELL_AURA_REMOVED),
+      ],
+      actionIn: [],
+    } as unknown as ICombatUnit;
+    expect(
+      buildCannotCastIntervals(unit, new Set(["Enemy-1", "Enemy-2"])),
+    ).toEqual([
+      { from: 10_000, to: 12_400 },
+      { from: 20_000, to: 23_000 },
+    ]);
+  });
+
+  it("one caster re-applying with no removal between keeps one interval from the first application", () => {
+    const unit = {
+      id: "Player-1",
+      auraEvents: [
+        ev("853", "Enemy-1", 10_000, LogEvent.SPELL_AURA_APPLIED),
+        ev("853", "Enemy-1", 11_000, LogEvent.SPELL_AURA_APPLIED),
+        ev("853", "Enemy-1", 14_000, LogEvent.SPELL_AURA_REMOVED),
+      ],
+      actionIn: [],
+    } as unknown as ICombatUnit;
+    expect(buildCannotCastIntervals(unit, new Set(["Enemy-1"]))).toEqual([
+      { from: 10_000, to: 14_000 },
     ]);
   });
 
