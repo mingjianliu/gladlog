@@ -965,5 +965,13 @@
  *  time for any reader — the cd-hoarded owner gate, healing gaps, HEALER
  *  OFFENSE free seconds, kick-priority, the missed-cleanse / purge lock
  *  tests, [RES] `cc:`. Counts in the commit.
+ *  v314 (2026-10-07, user rulings B2 / B11b of 2026-10-06; facts only, no
+ *  verdict or reference number changes): missed-sync-window gains
+ *  `enteredNextLock` (a ready cooldown whose first press after the lock
+ *  entered the next lock on the enemy healer — the verdict's own "entered"
+ *  test) and `setupBy` ("you" when the lock was the player's own control,
+ *  "you (X)" when the player cast only X of the chain); cd-hoarded gains
+ *  `ownBurstPressed` (the player's offensive cooldowns pressed in the 2 s
+ *  before the crisis reading, each with how long before it). Counts in the commit.
  */
-export const PROMPT_VERSION = 313;
+export const PROMPT_VERSION = 314;

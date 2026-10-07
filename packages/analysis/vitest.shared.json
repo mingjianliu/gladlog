@@ -82,6 +82,7 @@
     "test/base-utils.test.ts",
     "test/baselineDefensives.test.ts",
     "test/benchmark.test.ts",
+    "test/btierD6Facts.test.ts",
     "test/buffDuration.test.ts",
     "test/burstCastSpan.test.ts",
     "test/burstLedgerHeader.test.ts",

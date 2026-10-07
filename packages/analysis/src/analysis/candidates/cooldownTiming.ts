@@ -109,6 +109,9 @@ export interface IEnemyHealerCcWindow {
   spellName: string;
   spellId: string;
   healerName: string;
+  /** who applied it (`IOutgoingCCApplication.casterName`, the log's source
+   * name) — read only by the `setupBy` fact (B11b) */
+  casterName?: string;
   drLevel?: DRLevel;
   /** what ended the lock, when the log says (`ccRemovalCause`; sync-burst
    * F-S3) — a CC that ran out or was capped at the round end has none */
@@ -177,6 +180,7 @@ export function enemyHealerCcWindows(
         spellName: app.spellName,
         spellId: app.spellId,
         healerName: chain.targetName,
+        casterName: app.casterName,
         drLevel: app.drInfo.level,
         ...(endedBy ? { endedBy } : {}),
       });
@@ -313,6 +317,13 @@ const MISSED_SYNC_WINDOW_CAP = 2; // <标定定稿 2026-08-15,报告 p1p2-calibr
  * overlap or touch merge; the merged window keeps the opener's id / DR and
  * names the chain "Fear→Cheap Shot".
  */
+/** What `mergeHealerCcWindows` adds to the opener: every component's start
+ * (a merged lock is judged at each) and who cast each component. */
+export interface MergedLockParts {
+  componentStartsSeconds: number[];
+  componentCasters: Array<{ spellName: string; casterName?: string }>;
+}
+
 export function mergeHealerCcWindows<
   W extends Pick<
     IEnemyHealerCcWindow,
@@ -321,11 +332,12 @@ export function mergeHealerCcWindows<
     | "spellName"
     | "spellId"
     | "healerName"
+    | "casterName"
     | "drLevel"
     | "endedBy"
   >,
->(windows: readonly W[]): Array<W & { componentStartsSeconds: number[] }> {
-  const out: Array<W & { componentStartsSeconds: number[] }> = [];
+>(windows: readonly W[]): Array<W & MergedLockParts> {
+  const out: Array<W & MergedLockParts> = [];
   const byHealer = new Map<string, W[]>();
   for (const w of windows) {
     const list = byHealer.get(w.healerName) ?? [];
@@ -337,6 +349,7 @@ export function mergeHealerCcWindows<
     let cur = null as W | null;
     let names: string[] = [];
     let starts: number[] = [];
+    let casters: MergedLockParts["componentCasters"] = [];
     for (const w of sorted) {
       if (cur && w.fromSeconds <= cur.toSeconds) {
         // the chain ends where its last-ending component ends, and so does
@@ -349,6 +362,7 @@ export function mergeHealerCcWindows<
         }
         if (names[names.length - 1] !== w.spellName) names.push(w.spellName);
         starts.push(w.fromSeconds);
+        casters.push({ spellName: w.spellName, casterName: w.casterName });
         continue;
       }
       if (cur)
@@ -356,16 +370,19 @@ export function mergeHealerCcWindows<
           ...cur,
           spellName: names.join("→"),
           componentStartsSeconds: starts,
+          componentCasters: casters,
         });
       cur = { ...w };
       names = [w.spellName];
       starts = [w.fromSeconds];
+      casters = [{ spellName: w.spellName, casterName: w.casterName }];
     }
     if (cur)
       out.push({
         ...cur,
         spellName: names.join("→"),
         componentStartsSeconds: starts,
+        componentCasters: casters,
       });
   }
   return out.sort((a, b) => a.fromSeconds - b.fromSeconds);
@@ -583,26 +600,34 @@ export function evaluateSyncWindow(
     return syncCdReachable(cd, readyAtS, w.toSeconds, blocked);
   });
   const entered = cds.some((cd) =>
-    cd.casts.some((c) => {
-      const spanEnd =
-        c.timeSeconds +
-        (cd.owner ? (buffFullDurationForCaster(cd.spellId, cd.owner) ?? 0) : 0);
-      // a press leading the lock by ≤ SYNC_ENTER_LEAD_S (the old test), or a
-      // burst still ACTIVE when the lock starts — a burst that ended before
-      // the lock is not in it, however close
-      // a hard-cast CD enters when its bar STARTS inside the lock (round 3
-      // W1a, f4eb: Summon Demonic Tyrant started 166.724 inside a lock
-      // ending 167.143, landed 167.861 — "none entered")
-      const startS = syncPressStartS(cd, c.timeSeconds);
-      const pressedIn =
-        (c.timeSeconds >= w.fromSeconds - SYNC_ENTER_LEAD_S &&
-          c.timeSeconds <= w.toSeconds) ||
-        (startS >= w.fromSeconds - SYNC_ENTER_LEAD_S && startS <= w.toSeconds);
-      const activeIn = c.timeSeconds <= w.toSeconds && spanEnd > w.fromSeconds;
-      return pressedIn || activeIn;
-    }),
+    cd.casts.some((c) => castEntersWindow(cd, c, w)),
   );
   return { ready, entered };
+}
+
+/** Did this press of `cd` enter the lock `w` — the ONE "entered" test
+ *  (`evaluateSyncWindow`'s verdict and the `enteredNextLock` fact). */
+function castEntersWindow(
+  cd: SyncWindowCd,
+  c: { timeSeconds: number },
+  w: { fromSeconds: number; toSeconds: number },
+): boolean {
+  const spanEnd =
+    c.timeSeconds +
+    (cd.owner ? (buffFullDurationForCaster(cd.spellId, cd.owner) ?? 0) : 0);
+  // a press leading the lock by ≤ SYNC_ENTER_LEAD_S (the old test), or a
+  // burst still ACTIVE when the lock starts — a burst that ended before
+  // the lock is not in it, however close
+  // a hard-cast CD enters when its bar STARTS inside the lock (round 3
+  // W1a, f4eb: Summon Demonic Tyrant started 166.724 inside a lock
+  // ending 167.143, landed 167.861 — "none entered")
+  const startS = syncPressStartS(cd, c.timeSeconds);
+  const pressedIn =
+    (c.timeSeconds >= w.fromSeconds - SYNC_ENTER_LEAD_S &&
+      c.timeSeconds <= w.toSeconds) ||
+    (startS >= w.fromSeconds - SYNC_ENTER_LEAD_S && startS <= w.toSeconds);
+  const activeIn = c.timeSeconds <= w.toSeconds && spanEnd > w.fromSeconds;
+  return pressedIn || activeIn;
 }
 
 /**
@@ -732,6 +757,7 @@ export function missedSyncWindowEvents(
     | "spellName"
     | "spellId"
     | "healerName"
+    | "casterName"
     | "drLevel"
     | "endedBy"
   >[],
@@ -748,6 +774,13 @@ export function missedSyncWindowEvents(
     /** the log owner's unit id — an `endedBy` breaker that is the owner
      * reads "you"; optional (absent, the breaker is named). */
     ownerId?: string;
+    /** the log owner's name as the CC applications carry it (`casterName`)
+     * — with it, a lock the owner cast (part of) carries `setupBy` (B11b).
+     * Facts only. */
+    ownerName?: string;
+    /** the last playable second (`playableEndMs`): a later lock, or a press
+     * after it, never reaches `enteredNextLock`. Absent ⇒ no cut. */
+    playableEndS?: number;
     /** The bracket's reference cell, or null when the bracket has no cell,
      * misses the n floor, or fails the min-contrast door — null silences
      * the type for the whole round (the resurrection's bracket gate). */
@@ -760,8 +793,9 @@ export function missedSyncWindowEvents(
   const cap = overrides?.cap ?? MISSED_SYNC_WINDOW_CAP;
   const ref = probes.ref;
   if (ref === null || !syncRefClearsMinContrast(ref)) return [];
+  const merged = mergeHealerCcWindows(ccWindows);
   const candidates: Array<{
-    w: (typeof ccWindows)[number];
+    w: (typeof merged)[number];
     ready: string[];
     readyCds: SyncWindowCd[];
     minHp: number | null;
@@ -780,7 +814,7 @@ export function missedSyncWindowEvents(
     SyncWindowCd,
     { end: number; cand: (typeof candidates)[number] }
   >();
-  for (const w of mergeHealerCcWindows(ccWindows)) {
+  for (const w of merged) {
     if (!syncWindowEligible(w, probes.enemyDeathS)) continue;
     const ev = evaluateSyncWindow(w, offensiveCds);
     const ready = ev.ready.map((cd) => cd.spellName);
@@ -833,6 +867,38 @@ export function missedSyncWindowEvents(
       const t = toRenderSecond(w.fromSeconds);
       const windowEndT = toRenderSecond(w.toSeconds);
       const timing = syncReadyTimingFacts(w, readyCds);
+      // B2-① (user ruling 2026-10-06; facts only — the verdict and the
+      // reference numbers are unchanged): a ready CD whose FIRST press after
+      // this lock entered the NEXT lock on an enemy healer, by the verdict's
+      // own `castEntersWindow`. fe1a9355 @94: Kingsbane, unpressed through
+      // the Seduction, went into the Kidney Shot→Fear lock that followed.
+      const afterEnd = (s: number) =>
+        probes.playableEndS !== undefined && s > probes.playableEndS;
+      const next = merged.find((n) => n.fromSeconds > w.toSeconds);
+      const enteredNext =
+        next && !afterEnd(next.fromSeconds)
+          ? readyCds.flatMap((cd) => {
+              const first = cd.casts
+                .filter((c) => c.timeSeconds > w.toSeconds)
+                .sort((a, b) => a.timeSeconds - b.timeSeconds)[0];
+              if (!first || afterEnd(first.timeSeconds)) return [];
+              if (!castEntersWindow(cd, first, next)) return [];
+              return [
+                `${cd.spellName} at ${toRenderSecond(first.timeSeconds)} in the ${toRenderSecond(next.fromSeconds)}–${toRenderSecond(next.toSeconds)} lock (${next.spellName})`,
+              ];
+            })
+          : [];
+      // B11b (user ruling 2026-10-06): whose control the lock was. Only the
+      // owner is named; a chain the owner cast part of names that part.
+      const ownParts = probes.ownerName
+        ? w.componentCasters.filter((c) => c.casterName === probes.ownerName)
+        : [];
+      const setupBy =
+        ownParts.length === 0
+          ? ""
+          : ownParts.length === w.componentCasters.length
+            ? "you"
+            : `you (${[...new Set(ownParts.map((c) => c.spellName))].join("、")})`;
       return {
         // spellId disambiguates two CC windows on the same healer that floor
         // to the same rendered second (review fix round 2, 2026-08-15) — the
@@ -865,6 +931,10 @@ export function missedSyncWindowEvents(
           ...(w.endedBy
             ? { endedBy: formatCcRemovalCause(w.endedBy, probes.ownerId) }
             : {}),
+          ...(enteredNext.length
+            ? { enteredNextLock: enteredNext.join("; ") }
+            : {}),
+          ...(setupBy ? { setupBy } : {}),
           // Corpus reference (syncWindowPrior.ts) — the gate
           // (checkSyncWindowRefConsistency) redoes the lookup from cellKey
           // and re-checks every one of these numbers plus the door.
@@ -1062,6 +1132,10 @@ const CD_HOARD_CAP = 2;
  * different question: "did the crisis unit do ANYTHING" vs. "did the OWNER
  * spend THIS specific ready cooldown"). */
 export const CD_HOARD_RESPONSE_S = 5;
+/** How far before the crisis reading an offensive press of the player's own
+ *  still counts as "just pressed" for `facts.ownBurstPressed` (B2-②, user
+ *  ruling 2026-10-06: "within 2 s before the crisis"). */
+export const OWN_BURST_LEAD_S = 2;
 
 /**
  * The schools a save covers: its signed `MITIGATION_TABLE` row's mask, else —
@@ -1782,6 +1856,29 @@ export function cdHoardedEvents(
         .sort((a, b) => a.at - b.at)
         .map((x) => `${x.name} (${x.who}) ${off(x.at)}s`)
         .join("; ");
+      // B2-② (user ruling 2026-10-06; facts only — verdict and reference
+      // unchanged): offensive cooldowns the player pressed in the
+      // OWN_BURST_LEAD_S before the crisis reading — raw instants, and each
+      // says how long BEFORE THE READING it was. Not an offset from `t` like
+      // the line's other offsets: `t` is the reading's floored second, so a
+      // press 0.5 s before a 29.8 s reading would print "+0.3s" — after `t`,
+      // on a fact that says "before" (agy review of the batch). 537209d8 @29:
+      // Power Infusion and Voidform 1–2 s before the 37 % reading with
+      // Dispersion ready.
+      const ownBurstPressed = ownerCds
+        .filter((cd) => OFFENSIVE_CD_SPELL_IDS.has(String(cd.spellId)))
+        .flatMap((cd) =>
+          cd.casts
+            .filter(
+              (c) =>
+                c.timeSeconds >= point.tSec - OWN_BURST_LEAD_S &&
+                c.timeSeconds <= point.tSec,
+            )
+            .map((c) => ({ at: c.timeSeconds, name: cd.spellName })),
+        )
+        .sort((a, b) => a.at - b.at)
+        .map((x) => `${x.name} ${(point.tSec - x.at).toFixed(1)}s before`)
+        .join("; ");
       const ownerCc = act?.blocks.length
         ? act.blocks
             .map(
@@ -1829,6 +1926,7 @@ export function cdHoardedEvents(
           ...(ownerCc && act
             ? { ownerCc, ownerFreeS: act.freeAfterS.toFixed(1) }
             : {}),
+          ...(ownBurstPressed ? { ownBurstPressed } : {}),
         },
       };
     })

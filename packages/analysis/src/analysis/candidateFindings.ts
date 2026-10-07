@@ -2983,6 +2983,13 @@ function teamPlayEvents(
               enemyDeathS,
               ref: lookupSyncWindowPrior(combat?.startInfo?.bracket ?? ""),
               ownerId: owner?.id,
+              ownerName: owner?.name,
+              playableEndS: (() => {
+                const endMs = playableEndMs(combat, units);
+                return endMs === undefined
+                  ? undefined
+                  : (endMs - startMs) / 1000;
+              })(),
             }),
           );
         }
