@@ -995,5 +995,13 @@
  *  carries them — the parser now keeps that pair (`teamMmr`). The SPEC
  *  BASELINES sentence and its "below the reference bracket" comparison stay
  *  on personal rating. Counts in the commit.
+ *  v318 (2026-10-07, user rulings B15b / X5 / B15c-U11 of 2026-10-06; facts):
+ *  the owner's range / line-of-sight / moving rejects in the 10 s before a
+ *  teammate's death get their `[REJECTED]` line whatever their count (runs
+ *  elsewhere still need 3 presses); a reject for SPELL_FAILED_VISION_OBSCURED
+ *  is its own kind, `— vision obscured (Smoke Bomb)`, apart from a pillar's
+ *  line of sight (the German string leaves the line-of-sight list); and a
+ *  friendly death block gains `Killing blow: <source> — <spell> (an execute)`
+ *  when the killing blow was Touch of Death. Counts in the commit.
  */
-export const PROMPT_VERSION = 317;
+export const PROMPT_VERSION = 318;

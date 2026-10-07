@@ -341,7 +341,11 @@ export function sanctuaryRemovals(
 
 // ── Owner's rejected presses outside CC ──────────────────────────────────────
 
-export type RejectKind = "out of range" | "moving" | "no line of sight";
+export type RejectKind =
+  | "out of range"
+  | "moving"
+  | "no line of sight"
+  | "vision obscured";
 
 /** SPELL_CAST_FAILED reason texts per kind, for every client locale the
  *  corpus carries. The texts are the client's own strings (wago.tools
@@ -351,10 +355,18 @@ export type RejectKind = "out of range" | "moving" | "no line of sight";
  *  605-file capture slice — before, the fr / ru / es / zh-TW clients' rejects
  *  were unmapped (out of range 255, moving 226, no line of sight 102 presses)
  *  and never formed a `[REJECTED]` run; after, 0. it-IT has official strings
- *  too but no press in that slice, so it is not listed. The German "Die Sicht
- *  auf Euer Ziel ist behindert." is SPELL_FAILED_VISION_OBSCURED (Smoke Bomb),
- *  not a pillar — 0 presses in the slice; left in place, open in the triage
- *  file (position Needs E1). */
+ *  too but no press in that slice, so it is not listed.
+ *
+ *  "vision obscured" (B-tier X5, user ruling 2026-10-06) is
+ *  SPELL_FAILED_VISION_OBSCURED — a different event from a pillar: DB2 gives
+ *  the interfere-targeting aura (322) to Smoke Bomb 212183 and to Shadowy
+ *  Duel, which 12.x no longer has, and on the 605 files 288 of its 320
+ *  rejects (90.0 %) fall within 5.5 s after a Smoke Bomb cast against 31 of
+ *  5,369 (0.6 %) for LINE_OF_SIGHT (tier-C C17). Its strings are the same
+ *  GlobalStrings dump's (en 263 presses, zh-CN 49, ko 8; de / es-MX / pt-BR
+ *  have none in the slice and are listed from the dump). The German "Die
+ *  Sicht auf Euer Ziel ist behindert." sat under "no line of sight" until
+ *  then. */
 export const REJECT_REASONS: Readonly<Record<RejectKind, readonly string[]>> = {
   "out of range": [
     "Out of range",
@@ -384,12 +396,29 @@ export const REJECT_REASONS: Readonly<Record<RejectKind, readonly string[]>> = {
     "目標不在視野中",
     "대상이 시야에 없습니다.",
     "Ziel ist nicht im Sichtfeld.",
-    "Die Sicht auf Euer Ziel ist behindert.",
     "Alvo fora do campo de visão.",
     "No puedes ver al objetivo",
     "Cible hors du champ de vision",
     "Цель вне поля зрения.",
   ],
+  "vision obscured": [
+    "Your vision of the target is obscured",
+    "你的视线被遮挡了",
+    "대상이 흐릿해서 포착할 수 없습니다.",
+    "Die Sicht auf Euer Ziel ist behindert.",
+    "Se ha oscurecido tu visión del objetivo",
+    "Sua visão do alvo está obscurecida",
+  ],
+};
+
+/** What a `[REJECTED]` line says after the dash, per kind. "vision obscured
+ *  (Smoke Bomb)" is the user's wording (X5): the reject means the target
+ *  stood in a Smoke Bomb, not behind a pillar. */
+export const REJECT_WHY: Readonly<Record<RejectKind, string>> = {
+  "out of range": "out of range",
+  moving: "can't cast while moving",
+  "no line of sight": "target not in line of sight",
+  "vision obscured": "vision obscured (Smoke Bomb)",
 };
 const KIND_OF = new Map<string, RejectKind>(
   (Object.entries(REJECT_REASONS) as [RejectKind, readonly string[]][]).flatMap(
@@ -402,6 +431,13 @@ const KIND_OF = new Map<string, RejectKind>(
 export const REJECT_RUN_MIN = 3;
 /** Presses further apart than this are separate runs. */
 export const REJECT_RUN_GAP_S = 2;
+/** B-tier B15b (user ruling 2026-10-06): a run that touches the last this
+ *  many seconds before a friendly player's death is stated whatever its
+ *  count — "you were reaching for him, he was behind the pillar" changes the
+ *  reading of the death (9d899d10 2:41: two line-of-sight rejects and one
+ *  "moving" 1.3 s before the Fire Mage died, no line). 60 triage rounds: 16
+ *  of 47 friendly deaths had such presses, 31 in all. */
+export const REJECT_NEAR_DEATH_S = 10;
 
 export interface IRejectRun {
   fromSeconds: number;
@@ -413,15 +449,25 @@ export interface IRejectRun {
 }
 
 /** Runs of the same spell rejected for the same kind of reason (`castFailed`
- *  is match-relative seconds, parseRawStreams' clock). */
+ *  is match-relative seconds, parseRawStreams' clock). A run is stated from
+ *  `REJECT_RUN_MIN` presses — or from one, when it touches the
+ *  `REJECT_NEAR_DEATH_S` before one of `friendlyDeathSeconds` (B15b; the
+ *  caller passes the owner's TEAMMATES' deaths, match-relative seconds).
+ *  Control rejects are not a kind here and never enter (ruling 2026-09-26,
+ *  unchanged). */
 export function ownerRejectRuns(
   castFailed: readonly CastFailedEvent[],
   ownerId: string,
+  friendlyDeathSeconds: readonly number[] = [],
 ): IRejectRun[] {
   const runs: IRejectRun[] = [];
   let cur: IRejectRun | null = null;
+  const nearDeath = (r: IRejectRun) =>
+    friendlyDeathSeconds.some(
+      (d) => r.fromSeconds <= d && r.toSeconds >= d - REJECT_NEAR_DEATH_S,
+    );
   const flush = () => {
-    if (cur && cur.count >= REJECT_RUN_MIN) runs.push(cur);
+    if (cur && (cur.count >= REJECT_RUN_MIN || nearDeath(cur))) runs.push(cur);
     cur = null;
   };
   // every owner failure takes part — the same spell refused for a reason

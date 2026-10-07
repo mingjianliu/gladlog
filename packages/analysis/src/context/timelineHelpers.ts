@@ -37,6 +37,7 @@ import {
   positionalWallReaches,
 } from "../utils/deathOutcomeAnalysis";
 import { IEnemyCDTimeline } from "../utils/enemyCDs";
+import { playerKillingBlow } from "../utils/killingBlow";
 import { getHpPercentAtTime } from "../utils/killWindowTargetSelection";
 import { fmtTime } from "../utils/renderGrid";
 import { isSameSideSource, type RosterSides } from "../utils/rosterSide";
@@ -1007,20 +1008,9 @@ export interface INonPlayerUnitKill {
  *    is not a kill;
  *  - a `UNIT_DIED` death record, still honoured for the units that get one.
  */
-/** The blow that killed a player: the last damage event with overkill > 0 at
- * or before the death (+500 ms log slack), else undefined. */
-export function playerKillingBlow(
-  unit: ICombatUnit,
-  deathMs: number,
-): ICombatUnit["damageIn"][number] | undefined {
-  let best: ICombatUnit["damageIn"][number] | undefined;
-  for (const d of unit.damageIn) {
-    if ((d.overkill ?? 0) <= 0) continue;
-    if (d.logLine.timestamp > deathMs + 500) continue;
-    if (!best || d.logLine.timestamp >= best.logLine.timestamp) best = d;
-  }
-  return best;
-}
+// `playerKillingBlow` lives in utils/killingBlow.ts (one predicate with the
+// death block's execute line); re-exported for this module's importers.
+export { playerKillingBlow };
 
 export function nonPlayerUnitKill(
   unit: ICombatUnit,

@@ -46,6 +46,7 @@ import {
   USABLE_IN_BLADESTORM_WITH_TALENT,
 } from "../utils/castingLocks";
 import { DISPLACEMENT_EVIDENCE_IDS } from "../utils/castStopEvidence";
+import { EXECUTE_KILLING_BLOW_IDS } from "../utils/killingBlow";
 import { COPY_CAST_IDS } from "../utils/castPress";
 import {
   BREAKABLE_CC_SPELL_IDS,
@@ -667,6 +668,11 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
     "analysis/candidates/cooldownTiming.ts",
     "cast",
     () => set(HEALER_TEAM_BURST_IDS),
+  ),
+  // B-tier B15c-U11 (user ruling 2026-10-06): killing blows the friendly
+  // [DEATH] block names as an execute.
+  t("EXECUTE_KILLING_BLOW_IDS", "utils/killingBlow.ts", "cast", () =>
+    set(EXECUTE_KILLING_BLOW_IDS),
   ),
   t("PHYSICAL_CC_IDS", "utils/ccTrinketAnalysis.ts", "aura", () =>
     set(PHYSICAL_CC_IDS),

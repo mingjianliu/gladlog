@@ -14,6 +14,7 @@ import {
   groundedControls,
   ownerRejectRuns,
   reflectedSpells,
+  REJECT_WHY,
   sanctuaryRemovals,
 } from "../spellOutcomeLines";
 import { resolveSummonOwner } from "../timelineHelpers";
@@ -120,14 +121,20 @@ export function emitSpellOutcomeEntries(
     );
   }
   if (rawStreams?.available) {
-    for (const run of ownerRejectRuns(rawStreams.castFailed, owner.id)) {
+    // B15b: the owner's TEAMMATES' deaths — a reject in the 10 s before one
+    // is stated whatever its count
+    const teammateDeathSeconds = friends
+      .filter((f) => f.id !== owner.id)
+      .flatMap((f) =>
+        (f.deathRecords ?? []).map((d) => (d.timestamp - matchStartMs) / 1000),
+      );
+    for (const run of ownerRejectRuns(
+      rawStreams.castFailed,
+      owner.id,
+      teammateDeathSeconds,
+    )) {
       if (!inMatch(run.fromSeconds)) continue;
-      const why =
-        run.kind === "out of range"
-          ? "out of range"
-          : run.kind === "moving"
-            ? "can't cast while moving"
-            : "target not in line of sight";
+      const why = REJECT_WHY[run.kind];
       const span =
         toRenderSecond(run.toSeconds) > toRenderSecond(run.fromSeconds)
           ? ` (${fmtTime(run.fromSeconds)}–${fmtTime(run.toSeconds)})`

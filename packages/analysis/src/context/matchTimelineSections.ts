@@ -42,11 +42,13 @@ import {
 } from "../utils/deathOutcomeAnalysis";
 import { sumAbsorbedPressure } from "../utils/incomingPressure";
 import type { RosterSides } from "../utils/rosterSide";
+import { executeKillingBlowOf } from "../utils/killingBlow";
 import { getHpPercentAtTime } from "../utils/killWindowTargetSelection";
 import { fmtTime, toRenderSecond } from "../utils/renderGrid";
 import { type ManaFallback, manaReadingAt } from "../utils/resourceAt";
 import { benchmarks } from "../utils/specBaselines";
 import {
+  damageEventLabel,
   DMG_SPIKE_THRESHOLD,
   getTopDamageSourcesInWindow,
 } from "./timelineHelpers";
@@ -993,6 +995,13 @@ export function emitFriendlyDeathEntries<S>(params: {
       if (topSources.length > 0) {
         deathLines.push(
           `               Top damage in final ${COUNTERFACTUAL_WINDOW_S}s: ${topSources.join(", ")}`,
+        );
+      }
+      // B15c-U11: the killing blow, only when it was an execute
+      const execute = executeKillingBlowOf(dyingUnit, deathMs);
+      if (execute) {
+        deathLines.push(
+          `               Killing blow: ${damageEventLabel(execute, playerIdMap, enemyIdMap, summonOwners)} (an execute)`,
         );
       }
 
