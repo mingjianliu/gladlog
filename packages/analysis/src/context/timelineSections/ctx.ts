@@ -191,6 +191,11 @@ export interface TimelineCtx {
   enemyTrinketCount: number;
   /** [DISARM] tail lines rendered; the [DISARM] legend needs > 0 */
   disarmLineCount: number;
+  /** `trinket: ON CD (…; last used m:ss …)` notes rendered (B4a); their
+   * legend line needs > 0 */
+  trinketLastUsedCount: number;
+  /** [GRIP] lines rendered (B17b-U8); the [GRIP] legend needs > 0 */
+  gripLineCount: number;
 
   // ── closure helpers ──
   /** GH #103 A6: who provided the avoidance aura on a `[CC AVOIDED?]` line */

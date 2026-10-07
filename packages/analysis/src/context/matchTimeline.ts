@@ -100,6 +100,7 @@ import { foldMissedPurges } from "./timelineSections/purgeFolding";
 import { emitPurgeEntries } from "./timelineSections/purges";
 import { resolveDeferredSnapshots } from "./timelineSections/resolveSnapshots";
 import { prepareTimelineSetup } from "./timelineSections/setup";
+import { emitGripEntries } from "./timelineSections/grip";
 import { emitSilenceEntries } from "./timelineSections/silence";
 import { emitSpellOutcomeEntries } from "./timelineSections/spellOutcomes";
 import { emitStasisEntries } from "./timelineSections/stasis";
@@ -685,13 +686,15 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       : findBrokenDisarm(summary.disarmInstances, matchStartMs, rawCastMs);
   };
   let disarmLineCount = 0;
-  ({ disarmLineCount } = emitTrinketCcOnTeamEntries({
+  let trinketLastUsedCount = 0;
+  ({ disarmLineCount, trinketLastUsedCount } = emitTrinketCcOnTeamEntries({
     ccTrinketSummaries,
     trinketBrokenDisarm,
     actorLabel,
     addEntry,
     pid,
     disarmLineCount,
+    trinketLastUsedCount,
     dispelSummary,
     matchStartMs,
     friends,
@@ -706,6 +709,18 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   // coach read the healer as free. Same predicate (`silenceIntervals`), both
   // sides; a PvP trinket pressed inside the silence that ended it is stated the
   // way the CC lines state it.
+  // ── [GRIP]: an enemy Death Grip on our team (timelineSections/grip.ts) ────
+  let gripLineCount = 0;
+  ({ gripLineCount } = emitGripEntries({
+    friends,
+    enemies,
+    matchStartMs,
+    pid,
+    actorLabel,
+    addEntry,
+    gripLineCount,
+  }));
+
   let silenceLineCount = 0;
   ({ silenceLineCount } = emitSilenceEntries({
     allUnits,
@@ -779,6 +794,8 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     qualifyingMissedPurges,
     consumedMissedPurges,
     enemyPid,
+    enemies,
+    matchStartMs,
   });
 
   // ── [PURGE] / [ENEMY PURGE] events (T5 dispel coverage) ───────────────────
@@ -826,6 +843,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     addEntry,
     _allUnits,
     matchEndMs,
+    owner,
   });
 
   // ── [DMG SPIKE] events ─────────────────────────────────────────────────────
@@ -959,6 +977,8 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     pid,
     silenceLineCount,
     disarmLineCount,
+    trinketLastUsedCount,
+    gripLineCount,
     enemyTrinketCount,
     enemyCdRender,
     isHealer,

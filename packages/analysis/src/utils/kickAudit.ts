@@ -82,6 +82,17 @@ export interface IKickAuditEntry {
    * it stopped, seconds (≤ `STOPPED_JUST_BEFORE_S`). Absent for a faked
    * hardcast. */
   jukedChannelStoppedAgoS?: number;
+  /** missed: somebody else's interrupt had stopped a cast of the kick's
+   * target at most `STOPPED_JUST_BEFORE_S` before this kick (B-tier B7a:
+   * 1b930c17 1:36, a Wind Shear 0.07 s after the Hunter's Counter Shot had
+   * interrupted the Hex). The result stays `missed`; this is why. */
+  beatenBy?: {
+    kickerId: string;
+    kickerName: string;
+    kickSpellName: string;
+    interruptedSpellName: string;
+    agoS: number;
+  };
   /** silenced: who carried the kick's aura. */
   silencedTargetName?: string;
   /** silenced: the cast that target had open AT the kick and never finished
@@ -392,11 +403,44 @@ export function analyzeKickAudit(
       if (jukedBy) break;
     }
 
-    entries.push(
-      jukedBy
-        ? { ...base, result: "juked", jukedBySpellName: jukedBy }
-        : { ...base, result: "missed" },
-    );
+    if (jukedBy) {
+      entries.push({ ...base, result: "juked", jukedBySpellName: jukedBy });
+      continue;
+    }
+    // B7a: nothing to kick because another interrupt had just landed on the
+    // kick's target — the latest one in the 0.5 s before this kick
+    const candidateIds = new Set(candidates.map((e) => e.id));
+    const beat = allInterrupts
+      .filter(
+        (a) =>
+          !kickerIds.has(a.srcUnitId) &&
+          candidateIds.has(a.destUnitId) &&
+          a.logLine.timestamp <= kickMs &&
+          kickMs - a.logLine.timestamp <= STOPPED_JUST_BEFORE_S * 1000,
+      )
+      .sort((a, b) => b.logLine.timestamp - a.logLine.timestamp)[0] as
+      CombatExtraSpellAction | undefined;
+    entries.push({
+      ...base,
+      result: "missed",
+      ...(beat
+        ? {
+            beatenBy: {
+              kickerId: beat.srcUnitId,
+              kickerName: beat.srcUnitName,
+              kickSpellName: getEnglishSpellName(
+                beat.spellId ?? "",
+                beat.spellName ?? "",
+              ),
+              interruptedSpellName: getEnglishSpellName(
+                beat.extraSpellId ?? "",
+                beat.extraSpellName ?? "",
+              ),
+              agoS: (kickMs - beat.logLine.timestamp) / 1000,
+            },
+          }
+        : {}),
+    });
   }
 
   return entries.sort((a, b) => a.atSeconds - b.atSeconds);

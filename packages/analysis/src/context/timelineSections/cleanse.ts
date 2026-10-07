@@ -14,6 +14,7 @@ import {
   formatMissedCleanseExemption,
   formatMissedPurgeExemption,
   type IDispelEvent,
+  ownerRemovedOtherCopy,
   POST_CC_PRESSURE_WINDOW_S,
 } from "../../utils/dispelAnalysis";
 import { fmtTime } from "../../utils/renderGrid";
@@ -29,6 +30,8 @@ export function emitCleanseEntries(
     | "qualifyingMissedPurges"
     | "consumedMissedPurges"
     | "enemyPid"
+    | "enemies"
+    | "matchStartMs"
   >,
 ): void {
   const {
@@ -39,6 +42,8 @@ export function emitCleanseEntries(
     qualifyingMissedPurges,
     consumedMissedPurges,
     enemyPid,
+    enemies,
+    matchStartMs,
   } = ctx;
 
   for (const miss of dispelSummary.missedCleanseWindows) {
@@ -76,9 +81,20 @@ export function emitCleanseEntries(
   // with no removal for the buff has none.)
   for (const miss of qualifyingMissedPurges) {
     if (consumedMissedPurges.has(miss)) continue;
+    // B13d: the owner took the same caster's other copy meanwhile
+    const other = ownerRemovedOtherCopy(
+      miss,
+      owner.name,
+      dispelSummary.ourPurges,
+      enemies ?? [],
+      matchStartMs,
+    );
+    const otherNote = other
+      ? ` | you ${other.isSpellSteal ? "stole" : "purged"} the other copy at ${fmtTime(other.atSeconds)}`
+      : "";
     addEntry(
       miss.timeSeconds,
-      `${fmtTime(miss.timeSeconds)}  [MISSED PURGE OPPORTUNITY]   ${miss.spellName} active on ${enemyPid(miss.enemyName)} (unpurged for ${Math.round(miss.durationSeconds)}s)${formatMissedPurgeExemption(miss)}`,
+      `${fmtTime(miss.timeSeconds)}  [MISSED PURGE OPPORTUNITY]   ${miss.spellName} active on ${enemyPid(miss.enemyName)} (unpurged for ${Math.round(miss.durationSeconds)}s)${formatMissedPurgeExemption(miss)}${otherNote}`,
     );
   }
 

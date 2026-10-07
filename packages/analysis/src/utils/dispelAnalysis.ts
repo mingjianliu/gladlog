@@ -2388,6 +2388,69 @@ export function formatMissedCleanseExemption(
 }
 
 /**
+ * B-tier B13d (user ruling 2026-10-06, "照出但加注"): while this buff sat
+ * unpurged, did `ownerName` take the SAME caster's other copy of it off
+ * another enemy? 0068182d 0:17: Blessing of Freedom "unpurged for 8s" on the
+ * Paladin while the owner Spellstole the Paladin's Freedom off the Warrior
+ * at 0:20. The line still prints; this is the note it gains.
+ *
+ * "The same caster's" is read off the auras: the unit that applied this
+ * buff to the window's enemy (latest SPELL_AURA_APPLIED of the id at or
+ * before the window's start) must be the one that applied the removed copy
+ * to its target (latest at or before the removal). A copy whose source the
+ * log does not show is not claimed. The removal must fall inside the
+ * window, be the owner's, and be on a different enemy. The first such
+ * removal is returned.
+ */
+export function ownerRemovedOtherCopy(
+  miss: Pick<
+    IMissedPurgeWindow,
+    "timeSeconds" | "durationSeconds" | "enemyName" | "spellId"
+  >,
+  ownerName: string,
+  ourPurges: readonly IDispelEvent[],
+  enemies: ReadonlyArray<Pick<ICombatUnit, "name" | "auraEvents">>,
+  matchStartMs: number,
+): { atSeconds: number; isSpellSteal: boolean } | null {
+  /** who applied `spellId` to `unitName`, as of round second `atS` */
+  const sourceOf = (unitName: string, atS: number): string | undefined => {
+    const unit = enemies.find((e) => e.name === unitName);
+    const atMs = matchStartMs + atS * 1000 + AURA_SOURCE_SLACK_MS;
+    let src: string | undefined;
+    let best = -Infinity;
+    for (const a of unit?.auraEvents ?? []) {
+      if (a.logLine.event !== LogEvent.SPELL_AURA_APPLIED) continue;
+      if (a.spellId !== miss.spellId || a.timestamp > atMs) continue;
+      if (a.timestamp >= best) {
+        best = a.timestamp;
+        src = a.srcUnitId || undefined;
+      }
+    }
+    return src;
+  };
+  const caster = sourceOf(miss.enemyName, miss.timeSeconds);
+  if (!caster) return null;
+  const end = miss.timeSeconds + miss.durationSeconds;
+  const hit = ourPurges
+    .filter(
+      (p) =>
+        p.sourceName === ownerName &&
+        p.removedSpellId === miss.spellId &&
+        p.targetName !== miss.enemyName &&
+        p.timeSeconds >= miss.timeSeconds &&
+        p.timeSeconds <= end &&
+        sourceOf(p.targetName, p.timeSeconds) === caster,
+    )
+    .sort((a, b) => a.timeSeconds - b.timeSeconds)[0];
+  return hit
+    ? { atSeconds: hit.timeSeconds, isSpellSteal: hit.isSpellSteal }
+    : null;
+}
+/** A buff's SPELL_AURA_APPLIED may be written a tick after the instant a
+ * window or a removal is stamped at. */
+const AURA_SOURCE_SLACK_MS = 100;
+
+/**
  * Why a missed-purge window was not actionable for the purgers its facts
  * describe — the three conditions `formatMissedPurgeExemption` words as "not
  * actionable". ONE predicate, two readers: that formatter (the prompt's

@@ -30,6 +30,8 @@ export function formatTimeline(
     | "pid"
     | "silenceLineCount"
     | "disarmLineCount"
+    | "trinketLastUsedCount"
+    | "gripLineCount"
     | "enemyTrinketCount"
     | "enemyCdRender"
     | "isHealer"
@@ -68,6 +70,8 @@ export function formatTimeline(
     pid,
     silenceLineCount,
     disarmLineCount,
+    trinketLastUsedCount,
+    gripLineCount,
     enemyTrinketCount,
     enemyCdRender,
     isHealer,
@@ -249,6 +253,22 @@ export function formatTimeline(
     ...(disarmLineCount > 0
       ? [
           "  [DISARM] = a disarm on a player of your team: weapon abilities are locked, spells are not. `trinket broke this disarm` = a PvP trinket ended it early.",
+        ]
+      : []),
+    ...(gripLineCount > 0
+      ? [
+          "  [GRIP] = an enemy Death Knight's Death Grip on that player: it is pulled to the Death Knight at that second. A",
+          "    displacement with no control aura, so it is on no [CC ON TEAM] line; `did not land (…)` = the pull failed.",
+        ]
+      : []),
+    // B4a (user ruling 2026-10-06): the clause states where the cooldown
+    // went; the guard is part of the ruling ("不得据此说饰品交早了")
+    ...(trinketLastUsedCount > 0
+      ? [
+          "  `trinket: ON CD (Ns left; last used m:ss on X)` = when that player's PvP trinket was last pressed and the control or",
+          "    disarm it broke (no `on X` = the log ties no control to that press). It says where the cooldown went, nothing",
+          "    more: never write from it that the trinket was used too early, wasted or should have been saved — breaking a",
+          "    control to keep a burst or a heal going is a normal use.",
         ]
       : []),
     ...(enemyTrinketCount > 0

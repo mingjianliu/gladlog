@@ -1003,5 +1003,16 @@
  *  line of sight (the German string leaves the line-of-sight list); and a
  *  friendly death block gains `Killing blow: <source> — <spell> (an execute)`
  *  when the killing blow was Touch of Death. Counts in the commit.
+ *  v319 (2026-10-07, user rulings B7a / B17a / B17b-U8 / B4a / B13d of
+ *  2026-10-06; timeline facts, no accusation): the owner's kick that stopped
+ *  nothing gets `[KICK] your X on N — JUKED by fake Y` / `hit nothing[ — Z's
+ *  kick had interrupted the Y Ns earlier]`; `[IMMUNE]` on our team's control
+ *  says why when the log shows it (`— DR: <family> Immune`, `— N's Cyclone
+ *  was on the target`, beside the existing immunity-aura note); an enemy
+ *  Death Grip on our team gets a `[GRIP]` line; `trinket: ON CD (Ns left)`
+ *  gains `; last used m:ss on X` with a legend guard (never "used too
+ *  early"); and a `[MISSED PURGE OPPORTUNITY]` line says `| you stole the
+ *  other copy at m:ss` when the owner took the same caster's other copy
+ *  meanwhile. Counts in the commit.
  */
-export const PROMPT_VERSION = 318;
+export const PROMPT_VERSION = 319;

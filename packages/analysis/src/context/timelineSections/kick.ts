@@ -8,7 +8,11 @@
  * with it (its only user). Output is pinned by the 605-file acceptanceCapture
  * context hash.
  */
-import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
+import {
+  type AtomicArenaCombat,
+  type ICombatUnit,
+  LogEvent,
+} from "@gladlog/parser-compat";
 
 import { getEnglishSpellName } from "../../data/spellEffectData";
 import { buildAuraIntervals } from "../../utils/auraIntervals";
@@ -18,6 +22,10 @@ import {
   interruptForUnit,
   kickCastSpellId,
 } from "../../utils/enemyInterrupts";
+import {
+  analyzeKickAudit,
+  jukedByStoppedChannelText,
+} from "../../utils/kickAudit";
 import { fmtTime } from "../../utils/renderGrid";
 import {
   auraBlocksMechanic,
@@ -42,8 +50,10 @@ export function emitKickEntries(
     | "addEntry"
     | "_allUnits"
     | "matchEndMs"
+    | "owner"
   >,
 ): void {
+  const { owner } = ctx;
   const {
     friends,
     enemies,
@@ -265,5 +275,36 @@ export function emitKickEntries(
         )} on ${pid(friend.name)} missed — IMMUNE${why ? ` (${why})` : ""}`,
       );
     }
+  }
+
+  // B-tier B7a (user ruling 2026-10-06, a fact — never an accusation): the
+  // OWNER's kicks that stopped nothing, with the kick audit's own result — the
+  // audit the burst ledger's `Kicks:` line and the desktop's missed-kick card
+  // read. A landed kick has its `[KICK] … interrupted …` line above and a
+  // silencing one its `[SILENCE]` line; these had no line at all for a
+  // non-healer owner, and for a healer only the bare `[YOU] [CAST]` press
+  // (1b930c17 1:36: Wind Shear 0.07 s after the Hunter's Counter Shot had
+  // interrupted the Hex).
+  const audit = analyzeKickAudit(owner, enemies ?? [], {
+    startTime: matchStartMs,
+    units: Object.fromEntries(_allUnits.map((u) => [u.id, u])),
+  } as unknown as AtomicArenaCombat);
+  for (const k of audit) {
+    if (k.result !== "juked" && k.result !== "missed") continue;
+    const on = k.targetName
+      ? ` on ${resolveKicker(k.targetName, k.targetId)}`
+      : "";
+    const outcome =
+      k.result === "juked"
+        ? k.jukedChannelStoppedAgoS !== undefined
+          ? jukedByStoppedChannelText(k)
+          : `JUKED by fake ${k.jukedBySpellName}`
+        : k.beatenBy
+          ? `hit nothing — ${resolveKicker(k.beatenBy.kickerName, k.beatenBy.kickerId)}'s ${k.beatenBy.kickSpellName} had interrupted ${k.beatenBy.interruptedSpellName ? `the ${k.beatenBy.interruptedSpellName}` : "the cast"} ${k.beatenBy.agoS < 0.1 ? "under 0.1s" : `${(Math.floor(k.beatenBy.agoS * 10 + 1e-9) / 10).toFixed(1)}s`} earlier`
+          : "hit nothing";
+    addEntry(
+      k.atSeconds,
+      `${fmtTime(k.atSeconds)}  [KICK]   your ${k.kickSpellName}${on} — ${outcome}`,
+    );
   }
 }

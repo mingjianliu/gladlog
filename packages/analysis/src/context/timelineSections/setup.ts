@@ -19,6 +19,7 @@ import {
 } from "@gladlog/parser-compat";
 
 import { castAndEffectIds } from "../../data/castEffectAuras";
+import { CYCLONE_SPELL_ID } from "../../analysis/candidates/massDispel";
 import { getEnglishSpellName } from "../../data/spellEffectData";
 import { ccSpellIds } from "../../data/spellTags";
 import { buffFullDurationForCaster } from "../../utils/buffDuration";
@@ -38,6 +39,7 @@ import {
   isTeamHealCD,
   specToString,
 } from "../../utils/cooldowns";
+import { getDRCategory, getDRLevel } from "../../utils/drAnalysis";
 import { sumIncomingPressure } from "../../utils/incomingPressure";
 import { toRenderSecond } from "../../utils/renderGrid";
 import { resourceDeltaPct } from "../../utils/resourceAt";
@@ -612,7 +614,67 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
       immunityName = [...active.values()][0] ?? "";
     }
     const word = unnamedLabel ? `IMMUNE: ${unnamedLabel}` : "IMMUNE";
-    return immunityName ? ` [${word} — ${immunityName} was up]` : ` [${word}]`;
+    if (immunityName) return ` [${word} — ${immunityName} was up]`;
+    // B-tier B17a (user ruling 2026-10-06, "三种都写；找不到原因不加注"): the
+    // two other reasons the log can show, after the immunity aura above —
+    // our own team's Cyclone on the target, then diminishing returns.
+    const why = target
+      ? (ccImmuneByOwnCyclone(target, miss.timestamp) ??
+        ccImmuneByDr(target, miss.spellId!, miss.timestamp))
+      : undefined;
+    return why ? ` [${word} — ${why}]` : ` [${word}]`;
+  }
+
+  /** B17a: a friendly Druid's Cyclone was on the target at the miss — a
+   * cycloned unit is immune to everything, our own control included. */
+  function ccImmuneByOwnCyclone(
+    target: ICombatUnit,
+    missMs: number,
+  ): string | undefined {
+    const friendIds = new Set(friends.map((f) => f.id));
+    let by: string | undefined;
+    for (const a of target.auraEvents ?? []) {
+      if (a.timestamp > missMs) break;
+      if (a.spellId !== CYCLONE_SPELL_ID) continue;
+      const ev = a.logLine.event;
+      if (
+        ev === LogEvent.SPELL_AURA_APPLIED ||
+        ev === LogEvent.SPELL_AURA_REFRESH
+      )
+        by = friendIds.has(a.srcUnitId) ? a.srcUnitId : undefined;
+      else if (ev === LogEvent.SPELL_AURA_REMOVED) by = undefined;
+    }
+    if (!by) return undefined;
+    const druid = friends.find((f) => f.id === by)!;
+    return `${pid(druid.name)}'s Cyclone was on the target`;
+  }
+
+  /** B17a: the target's diminishing returns for this control's family were
+   * already at immune — the DR engine's own chain walk (`getDRLevel`) over
+   * the applications `outgoingCCChains` holds for that target and family
+   * (ba8c0510 0:22: Freezing Trap after two Saps). Nothing is said for a
+   * family the DR table does not know. */
+  function ccImmuneByDr(
+    target: ICombatUnit,
+    missSpellId: string,
+    missMs: number,
+  ): string | undefined {
+    const category = getDRCategory(missSpellId);
+    if (category.startsWith("spell:") || category === "Unknown")
+      return undefined;
+    const history = (outgoingCCChains ?? [])
+      .filter((chain) => chain.targetName === target.name)
+      .flatMap((chain) => chain.applications)
+      .filter((app) => app.drInfo?.category === category)
+      .map((app) => ({
+        applyMs: matchStartMs + app.atSeconds * 1000,
+        removeMs: matchStartMs + (app.atSeconds + app.durationSeconds) * 1000,
+        spellId: app.spellId,
+      }))
+      .sort((a, b) => a.applyMs - b.applyMs);
+    return getDRLevel(history, missMs).level === "Immune"
+      ? `DR: ${category} Immune`
+      : undefined;
   }
 
   /**

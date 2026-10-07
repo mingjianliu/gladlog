@@ -12,6 +12,7 @@
 import { BACKLASH_AURA_CC_TYPE } from "../../data/backlashCc";
 import {
   immunityBreak,
+  lastTrinketPressBefore,
   renderedCcSeconds,
   tremorTotemBreak,
 } from "../../utils/ccTrinketAnalysis";
@@ -32,8 +33,9 @@ export function emitTrinketCcOnTeamEntries(
     | "matchStartMs"
     | "friends"
     | "avoidanceSourceTag"
+    | "trinketLastUsedCount"
   >,
-): Pick<TimelineCtx, "disarmLineCount"> {
+): Pick<TimelineCtx, "disarmLineCount" | "trinketLastUsedCount"> {
   const {
     ccTrinketSummaries,
     trinketBrokenDisarm,
@@ -46,7 +48,7 @@ export function emitTrinketCcOnTeamEntries(
     avoidanceSourceTag,
   } = ctx;
   // threaded: read from ctx, returned to the caller (GH #116)
-  let { disarmLineCount } = ctx;
+  let { disarmLineCount, trinketLastUsedCount } = ctx;
 
   for (const summary of ccTrinketSummaries) {
     for (const t of summary.trinketUseTimes) {
@@ -103,7 +105,17 @@ export function emitTrinketCcOnTeamEntries(
           cc.trinketCDSecondsLeft !== undefined
             ? `${cc.trinketCDSecondsLeft}s left`
             : "on CD";
-        trinketNote = ` | trinket: ON CD (${cdLeft})`;
+        // B4a: where that cooldown went — the press, and what it broke
+        const last = lastTrinketPressBefore(
+          summary,
+          cc.atSeconds,
+          matchStartMs,
+        );
+        const lastStr = last
+          ? `; last used ${fmtTime(last.atSeconds)}${last.brokeSpellName ? ` on ${last.brokeSpellName}` : ""}`
+          : "";
+        if (last) trinketLastUsedCount++;
+        trinketNote = ` | trinket: ON CD (${cdLeft}${lastStr})`;
       }
       // F-E21: the player's trinket-equivalent racial not back when this CC
       // landed — on its own cooldown from an earlier press (9c6ab747 1:37:
@@ -216,5 +228,5 @@ export function emitTrinketCcOnTeamEntries(
     }
   }
 
-  return { disarmLineCount };
+  return { disarmLineCount, trinketLastUsedCount };
 }

@@ -1402,6 +1402,48 @@ export function pvpTrinketRemainingSecondsAt(
   return remaining;
 }
 
+/**
+ * B-tier B4a (user ruling 2026-10-06): the PvP trinket press whose own
+ * cooldown is still running at round second `atS`, and what it removed —
+ * the `last used m:ss on X` clause of a `trinket: ON CD` note. Read off the
+ * predicates the note itself uses: `pvpTrinketRemainingSecondsAt` WITHOUT
+ * the racial locks (a trinket locked only by a racial press was not "last
+ * used"), and the break binder (`findBrokenCC`, then `findBrokenDisarm` —
+ * the order the `[TRINKET]` line names a disarm in). `brokeSpellName` is
+ * absent when the press removed nothing the log ties to it. null when no
+ * press explains the cooldown.
+ */
+export function lastTrinketPressBefore(
+  summary: Pick<
+    IPlayerCCTrinketSummary,
+    | "trinketUseTimes"
+    | "trinketCooldownSeconds"
+    | "ccInstances"
+    | "disarmInstances"
+  > &
+    Partial<Pick<IPlayerCCTrinketSummary, "trinketType" | "trinketReadyAt">>,
+  atS: number,
+  matchStartMs: number,
+): { atSeconds: number; brokeSpellName?: string } | null {
+  const ownRemaining = pvpTrinketRemainingSecondsAt(
+    { ...summary, racialTrinketLocks: [] },
+    atS,
+  );
+  if (ownRemaining === null || !(ownRemaining > 0)) return null;
+  const last = summary.trinketUseTimes
+    .filter((t) => t <= atS)
+    .sort((a, b) => b - a)[0];
+  if (last === undefined) return null;
+  const pressMs = matchStartMs + Math.round(last * 1000);
+  const broke =
+    findBrokenCC(summary.ccInstances, matchStartMs, pressMs) ??
+    findBrokenDisarm(summary.disarmInstances, matchStartMs, pressMs);
+  return {
+    atSeconds: last,
+    ...(broke ? { brokeSpellName: broke.spellName } : {}),
+  };
+}
+
 /** The whole seconds a `[CC ON TEAM]` line prints for this instance — its
  *  `| Ns`, or the "after Ns" of a trinket / racial / Tremor break. One
  *  rounding for the line and every predicate that reads it back. Triage
