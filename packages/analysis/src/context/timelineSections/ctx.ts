@@ -99,6 +99,7 @@ export interface TimelineCtx {
   stackedDefensives: P["stackedDefensives"];
   outgoingCCChains: P["outgoingCCChains"];
   enemyDeaths: P["enemyDeaths"];
+  healingGaps: P["healingGaps"];
   /** defaulted to [] by the destructuring */
   shapeshiftIntervals: NonNullable<P["shapeshiftIntervals"]>;
 
