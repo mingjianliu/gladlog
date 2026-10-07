@@ -47,6 +47,8 @@ import {
 } from "../utils/castingLocks";
 import { DISPLACEMENT_EVIDENCE_IDS } from "../utils/castStopEvidence";
 import { HEAL_ABSORB_SELF_SAVE_IDS } from "../utils/healAbsorbSave";
+import { AUTO_ATTACK_REPLACEMENT_IDS } from "../utils/damagePress";
+import { TOUCH_OF_KARMA_FEED_IDS } from "../utils/karmaFeed";
 import { KILL_ATTEMPT_NON_ANCHOR_CDS } from "../utils/killAttempts";
 import { EXECUTE_KILLING_BLOW_IDS } from "../utils/killingBlow";
 import { COPY_CAST_IDS } from "../utils/castPress";
@@ -686,6 +688,16 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   // heal absorb on the caster — the press line says what it ate.
   t("HEAL_ABSORB_SELF_SAVE_IDS", "utils/healAbsorbSave.ts", "cast", () =>
     set(HEAL_ABSORB_SELF_SAVE_IDS),
+  ),
+  // B-tier B20a (user ruling 2026-10-06/07): Touch of Karma's cast / shield
+  // id and the id of the damage it sends back — the `| fed by` clause.
+  t("TOUCH_OF_KARMA_FEED_IDS", "utils/karmaFeed.ts", "mixed", () =>
+    set(TOUCH_OF_KARMA_FEED_IDS),
+  ),
+  // User ruling 2026-10-07 (B11a's 605 report): spells swung in place of the
+  // auto-attack are not a press (`pressBehindDamageOf`).
+  t("AUTO_ATTACK_REPLACEMENT_IDS", "utils/damagePress.ts", "cast", () =>
+    set(AUTO_ATTACK_REPLACEMENT_IDS),
   ),
   // B-tier B15c-U11 (user ruling 2026-10-06): killing blows the friendly
   // [DEATH] block names as an execute.

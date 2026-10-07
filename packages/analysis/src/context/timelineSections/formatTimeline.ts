@@ -155,6 +155,11 @@ export function formatTimeline(
       (l) => typeof l === "string" && l.includes(" | save triggered "),
     ),
   );
+  // B20a (user ruling 2026-10-06/07): the Touch of Karma feed clause is
+  // legended only when a line carries it.
+  const karmaFeedRendered = entries.some((e) =>
+    e.lines.some((l) => typeof l === "string" && l.includes(" | fed by")),
+  );
   // B13e (user ruling 2026-10-07): the purgeable-buff count is legended only
   // when a line carries it.
   const purgeableCountRendered = entries.some((e) =>
@@ -305,6 +310,17 @@ export function formatTimeline(
           "    purge could remove were on that enemy at that moment, the named one included (raid buffs count). A purge removes",
           "    ONE of them and the player does not pick which: with N on the target, one press takes a given buff about 1 time",
           "    in N. Read a missed purge, and a purge that took the buff you wanted, with that in mind.",
+        ]
+      : []),
+    ...(karmaFeedRendered
+      ? [
+          "  `| fed by …` on a Touch of Karma line = your team's damage that Touch of Karma absorbed (it sends damage back onto",
+          "    the player the monk cast it on). Per player: only damage from spells PRESSED 1 s or more after it went up — a",
+          "    lower bound, the log ties a hit to a press only by spell; `DoTs already ticking` = ticks of effects applied",
+          "    before that; `pressed before that` = hits of spells pressed before then (a cast under way, a ground effect or",
+          "    missile already out — nothing left to hold back); `procs / auto-attacks / pets` = what has no press at all. The",
+          "    four add up to `absorbed Nk in all`. `sent back` = Karma damage that landed, and on whom. A fact about where",
+          "    the damage went — not a verdict on anyone.",
         ]
       : []),
     ...(enemyTrinketCount > 0

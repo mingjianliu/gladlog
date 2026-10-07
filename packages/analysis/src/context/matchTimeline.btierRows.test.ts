@@ -704,3 +704,65 @@ describe("Guardian Spirit: the press line says when the save triggered (B18)", (
     expect(text).not.toContain("save triggered");
   });
 });
+
+describe("an enemy Touch of Karma line carries `| fed by` (B20a) — the timeline wiring", () => {
+  const KARMA = "122470";
+  const MONK: [string, string] = ["e", "Enemy-Realm"];
+  const ME: [string, string] = ["o", "Me-Realm"];
+  const run = (withAbsorb: boolean) => {
+    const monk = mkUnit("e", "Enemy-Realm", {
+      info: {} as never,
+      reaction: CombatUnitReaction.Hostile,
+      class: CombatUnitClass.Monk,
+      spec: CombatUnitSpec.Monk_Windwalker,
+      spellCastEvents: [
+        ev(LogEvent.SPELL_CAST_SUCCESS, KARMA, "Touch of Karma", 60, MONK, ME),
+      ] as never,
+      absorbsIn: (withAbsorb
+        ? [
+            {
+              spellId: KARMA,
+              timestamp: at(63),
+              attackerId: "o",
+              absorbedAmount: 80_000,
+              attackSpellId: "78674",
+              attackSpellName: "Starsurge",
+            },
+          ]
+        : []) as never,
+    });
+    const owner = mkUnit("o", "Me-Realm", {
+      info: {} as never,
+      spellCastEvents: [
+        // pressed 2.5 s after the shield went up
+        ev(LogEvent.SPELL_CAST_SUCCESS, "78674", "Starsurge", 62.5, ME, MONK),
+      ] as never,
+    });
+    const text = buildMatchTimeline(
+      params(owner, monk, { matchEndMs: at(200) }),
+    );
+    return (
+      text
+        .split("\n")
+        .find(
+          (l) =>
+            /^\d+:\d\d {2}\[ENEMY DEF\]/.test(l) &&
+            l.includes("Touch of Karma"),
+        ) ?? ""
+    );
+  };
+
+  it("the press made after the cut is put on the owner, with the total", () => {
+    const line = run(true);
+    expect(line).toContain("Touch of Karma (self-save)");
+    expect(line).toContain(
+      " | fed by (pressed 1 s or more after it went up): Me 80k · absorbed 80k in all by 1:03 · sent back: 0",
+    );
+  });
+
+  it("nothing absorbed and nothing sent back: the line stands without a clause", () => {
+    const line = run(false);
+    expect(line).toContain("Touch of Karma (self-save)");
+    expect(line).not.toContain("fed by");
+  });
+});

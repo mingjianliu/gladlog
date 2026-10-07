@@ -648,6 +648,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     roundBounds,
     pid,
     addEntry,
+    _allUnits,
   });
 
   // ── F170: [ENEMY HARD CAST] — hard-cast kill spells (Chaos Bolt, Pyroblast) ─

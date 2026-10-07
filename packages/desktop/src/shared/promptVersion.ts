@@ -1087,5 +1087,14 @@
  *  own Death Pact …`). All read off the log (the aura row's amount, the
  *  SPELL_HEAL_ABSORBED rows); nothing when a row is missing. Counts in the
  *  commit.
+ *  v332 (2026-10-07, user ruling B20a of 2026-10-06/07): an enemy
+ *  Windwalker's `[ENEMY DEF] … Touch of Karma` line gains `| fed by …` —
+ *  per player the damage it absorbed from spells PRESSED 1 s or more after
+ *  it went up, ticks of effects already running apart, then (ruling of
+ *  2026-10-07, option B) hits of presses made before that and what has no
+ *  press at all (procs, auto-attacks, pets), each on its own,
+ *  the total, and what it sent back onto whom. A fact, never an accusation;
+ *  a legend line when rendered and a hardFailure class that the parts add
+ *  up. Counts in the commit.
  */
-export const PROMPT_VERSION = 331;
+export const PROMPT_VERSION = 332;

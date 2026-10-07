@@ -1584,6 +1584,81 @@ export function checkGuardianSpiritSaveClause(lines: string[]): string[] {
   return failures;
 }
 
+/**
+ * The Touch of Karma `| fed by` clause (B-tier B20a, 2026-10-07) is rendered
+ * by `karmaFeedClause` (`utils/karmaFeed.ts`). The text must add up: the
+ * per-player amounts, the DoT ticks, the hits of earlier presses and the
+ * pressless rest (user ruling 2026-10-07, option B) are a partition of
+ * `absorbed Nk in all` (each figure is rounded to 1k on its own, so the sum
+ * may differ by one per figure — and a part under 0.5k is not printed at
+ * all: KARMA_UNPRINTED_PARTS_K covers those), the clause sits on a Touch of
+ * Karma line, no player is listed twice, and `nobody pressed into it` names
+ * no player.
+ */
+/** Parts the clause leaves out because they round to 0k: up to three
+ * players and the three unnamed parts, each under 0.5k. */
+const KARMA_UNPRINTED_PARTS_K = 3;
+
+export function checkKarmaFedClause(lines: string[]): string[] {
+  const failures: string[] = [];
+  lines.forEach((line, i) => {
+    const at = line.indexOf(" | fed by");
+    if (at < 0 || !line.includes("[ENEMY DEF]")) return;
+    const fail = (why: string) =>
+      failures.push(
+        `line ${i + 1}: Touch of Karma fed-by clause (${why}) —— ${line.trim().slice(0, 220)}`,
+      );
+    if (!line.slice(0, at).includes("Touch of Karma"))
+      return fail("not a Touch of Karma line");
+    const parts = line.slice(at + 3).split(" · ");
+    const head = parts[0]!;
+    const total = parts
+      .map((p) => p.match(/^absorbed (\d+)k in all by \d+:\d\d$/))
+      .find(Boolean);
+    const sent = parts.find((p) => p.startsWith("sent back: "));
+    if (!sent) return fail("no `sent back`");
+    let figures: number[] = [];
+    const players: string[] = [];
+    const nobody = head.startsWith("fed by: nobody pressed into it");
+    if (nobody) {
+      // no per-player figure
+    } else {
+      const first = head.match(
+        /^fed by \(pressed \d+ s or more after it went up\): (\S+) (\d+)k$/,
+      );
+      if (!first) return fail("unreadable head");
+      players.push(first[1]!);
+      figures.push(Number(first[2]));
+    }
+    for (const p of parts.slice(1)) {
+      if (p === sent || /^absorbed \d+k in all by /.test(p)) continue;
+      const dots = p.match(/^DoTs already ticking: (\d+)k$/);
+      const before = p.match(/^pressed before that: (\d+)k$/);
+      const rest = p.match(/^procs \/ auto-attacks \/ pets: (\d+)k$/);
+      const player = p.match(/^(\S+) (\d+)k$/);
+      const m = dots ?? before ?? rest ?? player;
+      if (!m) return fail(`unreadable part "${p}"`);
+      if (player && !dots && !before && !rest) players.push(player[1]!);
+      figures = figures.concat(Number(m[m.length - 1]));
+    }
+    if (new Set(players).size !== players.length) fail("a player listed twice");
+    if (nobody && players.length > 0)
+      fail("`nobody pressed into it` beside a player's figure");
+    if (figures.some((n) => n === 0)) fail("a 0k figure");
+    if (!total) {
+      if (figures.length) fail("figures without `absorbed Nk in all`");
+      return;
+    }
+    const sum = figures.reduce((a, b) => a + b, 0);
+    if (
+      Math.abs(sum - Number(total[1])) >
+      figures.length + KARMA_UNPRINTED_PARTS_K
+    )
+      fail(`parts sum to ${sum}k, total says ${total[1]}k`);
+  });
+  return failures;
+}
+
 /** `      [RES] rdy:<…>  cd:<…>[  enemy:… / focus:… / cc:… | Atonements: N]` */
 const RES_ROW =
   /^ {6}\[RES\] rdy:(.*?) {2}cd:(.*?)(?: {2}(?:enemy|focus|cc):| \| Atonements|$)/;
@@ -3438,6 +3513,7 @@ export function checkMatch(
   hardFailures.push(...checkCcBookmarkConsistency(lines));
   hardFailures.push(...checkForcedTrinketConsistency(lines));
   hardFailures.push(...checkGuardianSpiritSaveClause(lines));
+  hardFailures.push(...checkKarmaFedClause(lines));
   hardFailures.push(...checkResReturnAnnounced(lines));
 
   return {

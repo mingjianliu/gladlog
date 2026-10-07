@@ -4,6 +4,7 @@ import {
   checkBrokeOutRefConsistency,
   checkEnemyDefRefConsistency,
   checkGuardianSpiritSaveClause,
+  checkKarmaFedClause,
   checkResReturnAnnounced,
 } from "../src/quality/promptQualityCheck";
 
@@ -332,6 +333,64 @@ describe("checkGuardianSpiritSaveClause (B18)", () => {
     ],
   ])("fails %s", (_why, line) => {
     expect(checkGuardianSpiritSaveClause([line])).toHaveLength(1);
+  });
+});
+
+describe("checkKarmaFedClause (B20a)", () => {
+  const P =
+    "4:24  [ENEMY DEF]   5(WMonk) (Windwalker Monk): Touch of Karma (self-save) (at 58% HP)";
+  const ok = [
+    `${P} | fed by (pressed 1 s or more after it went up): 2(ARogue) 122k · 3(FMage) 5k · DoTs already ticking: 66k · pressed before that: 207k · procs / auto-attacks / pets: 152k · absorbed 551k in all by 4:31 · sent back: 229k onto 3(FMage)`,
+    `${P} | fed by: nobody pressed into it 1 s or more after it went up · DoTs already ticking: 61k · pressed before that: 103k · procs / auto-attacks / pets: 21k · absorbed 185k in all by 2:40 · sent back: 0`,
+    `${P} | fed by (pressed 1 s or more after it went up): 2(ARogue) 40k · absorbed 40k in all by 4:26 · sent back: 0`,
+    // nothing absorbed, damage still sent back
+    `${P} | fed by: nobody pressed into it 1 s or more after it went up · sent back: 12k onto 1(RDruid)`,
+    `${P}`,
+  ];
+  it("passes the rendered forms", () => {
+    expect(checkKarmaFedClause(ok)).toEqual([]);
+  });
+  it.each([
+    [
+      "parts that do not add up to the total",
+      `${P} | fed by (pressed 1 s or more after it went up): 2(ARogue) 122k · DoTs already ticking: 66k · absorbed 551k in all by 4:31 · sent back: 0`,
+    ],
+    [
+      "a player listed twice",
+      `${P} | fed by (pressed 1 s or more after it went up): 2(ARogue) 100k · 2(ARogue) 22k · absorbed 122k in all by 4:31 · sent back: 0`,
+    ],
+    [
+      "the clause on another spell's line",
+      `4:24  [ENEMY DEF]   5(WMonk) (Windwalker Monk): Fortifying Brew (20%, 15.0s) | fed by: nobody pressed into it 1 s or more after it went up · sent back: 0`,
+    ],
+    [
+      "a clause with no `sent back`",
+      `${P} | fed by (pressed 1 s or more after it went up): 2(ARogue) 40k · absorbed 40k in all by 4:26`,
+    ],
+    [
+      "`nobody pressed into it` beside a player's figure",
+      `${P} | fed by: nobody pressed into it 1 s or more after it went up · 2(ARogue) 100k · absorbed 100k in all by 4:26 · sent back: 0`,
+    ],
+    [
+      "a part the gate cannot read",
+      `${P} | fed by (pressed 1 s or more after it went up): 2(ARogue) 40k · something else 3k · absorbed 43k in all by 4:26 · sent back: 0`,
+    ],
+  ])("fails %s", (_why, line) => {
+    expect(checkKarmaFedClause([line])).toHaveLength(1);
+  });
+
+  it("parts under 0.5k are not printed: a small total with no printed part still adds up (review 37-BD-39)", () => {
+    expect(
+      checkKarmaFedClause([
+        `${P} | fed by: nobody pressed into it 1 s or more after it went up · absorbed 1k in all by 4:26 · sent back: 0`,
+      ]),
+    ).toEqual([]);
+    // … but the allowance is three unprinted parts, not a free pass
+    expect(
+      checkKarmaFedClause([
+        `${P} | fed by: nobody pressed into it 1 s or more after it went up · absorbed 5k in all by 4:26 · sent back: 0`,
+      ]),
+    ).toHaveLength(1);
   });
 });
 

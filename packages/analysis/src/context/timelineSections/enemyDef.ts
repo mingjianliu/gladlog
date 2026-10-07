@@ -23,6 +23,11 @@ import {
   externalDamageForApplication,
   formatDuringExternal,
 } from "../../utils/externalDamage";
+import {
+  karmaFeedClause,
+  karmaFeedOf,
+  TOUCH_OF_KARMA_ID,
+} from "../../utils/karmaFeed";
 import { fmtTime, toRenderSecond } from "../../utils/renderGrid";
 import type { TimelineCtx } from "./ctx";
 
@@ -37,6 +42,7 @@ export function emitEnemyDefEntries(
     | "roundBounds"
     | "pid"
     | "addEntry"
+    | "_allUnits"
   >,
 ): void {
   const {
@@ -48,6 +54,7 @@ export function emitEnemyDefEntries(
     roundBounds,
     pid,
     addEntry,
+    _allUnits,
   } = ctx;
 
   if (TIMELINE_LINE_FLAGS.enemyDef === "timeline") {
@@ -56,7 +63,8 @@ export function emitEnemyDefEntries(
       endTime: matchStartMs + matchEndSeconds * 1000,
     };
     for (const enemy of enemies ?? []) {
-      for (const d of enemyDefensiveEvents(enemy, enemies ?? [], combatSpan)) {
+      const events = enemyDefensiveEvents(enemy, enemies ?? [], combatSpan);
+      for (const d of events) {
         if (d.atSeconds < 0 || d.atSeconds > matchEndSeconds) continue;
         const who = `${enemyPid(enemy.name)} (${specToString(enemy.spec)})`;
         const dur =
@@ -158,7 +166,33 @@ export function emitEnemyDefEntries(
             matchStartMs,
             enemy.name,
           );
-          line = `${d.spellName} (self-save)${burstStr}${hpStr}${selfSaveStr}`;
+          // B20a: Touch of Karma says what our side fed it and where it
+          // sent the damage — a fact, by PRESS time (karmaFeed.ts)
+          let karmaStr = "";
+          if (d.spellId === TOUCH_OF_KARMA_ID) {
+            const pressS = d.pressSeconds ?? d.atSeconds;
+            const nextS = events
+              .filter(
+                (o) =>
+                  o.spellId === TOUCH_OF_KARMA_ID &&
+                  (o.pressSeconds ?? o.atSeconds) > pressS,
+              )
+              .map((o) => o.pressSeconds ?? o.atSeconds)
+              .sort((a, b) => a - b)[0];
+            karmaStr = karmaFeedClause(
+              karmaFeedOf(
+                enemy,
+                pressS,
+                nextS,
+                friends,
+                _allUnits,
+                matchStartMs,
+              ),
+              pid,
+              fmtTime,
+            );
+          }
+          line = `${d.spellName} (self-save)${burstStr}${hpStr}${selfSaveStr}${karmaStr}`;
         } else {
           const strength = d.kind === "immune" ? "immune" : `${d.pct}%`;
           const hpStr = hpPct !== null ? ` (at ${hpPct.toFixed(0)}% HP)` : "";
