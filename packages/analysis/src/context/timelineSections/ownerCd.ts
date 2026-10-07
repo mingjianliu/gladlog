@@ -12,6 +12,7 @@
  * is pinned by the 605-file acceptanceCapture context hash.
  */
 
+import { saveCoversPressureOn } from "../../analysis/candidates/cooldownTiming";
 import { reachesAlly } from "../../data/spellTargeting";
 import { ccSpellIds } from "../../data/spellTags";
 import { buffFullDurationForCaster } from "../../utils/buffDuration";
@@ -26,11 +27,13 @@ import {
   THROUGHPUT_EMPOWER_DEFENSIVE_IDS,
 } from "../../utils/cooldowns";
 import { getDampeningPercentage } from "../../utils/dampening";
+import { documentRecordsAttackSpell } from "../../utils/incomingPressure";
 import {
   computeEnemyInterruptAvailability,
   isInterruptUsable,
 } from "../../utils/enemyInterrupts";
 import { fmtTime } from "../../utils/renderGrid";
+import { buildRosterSides } from "../../utils/rosterSide";
 import { unitUnderFireAt } from "../../utils/threatAssessment";
 import { isDeadAt } from "../../utils/unitDeath";
 import {
@@ -110,6 +113,11 @@ export function emitOwnerCdEntries(
     ownerStunnedAtCast,
     ownerStunIdsAtCast,
   } = ctx;
+  // B3a: the round-level inputs of the school split (`saveCoversPressureOn`)
+  const roundFacts = {
+    sides: buildRosterSides(_allUnits),
+    recordsAttackSpell: documentRecordsAttackSpell(_allUnits),
+  };
   // threaded: read from ctx, returned to the caller (GH #116)
   let { procLinesEmitted } = ctx;
 
@@ -352,6 +360,17 @@ export function emitOwnerCdEntries(
               !isDeadAt(f, pressMs) &&
               unitUnderFireAt(f, pressMs),
           );
+        // B3a: the unit the save went on — the named teammate, the owner for
+        // a self-cast, the owner for a group save that answered only the
+        // owner's danger; a group save with no single recipient has none,
+        // and no school gate
+        const recipient = castOnTeammate
+          ? params.friends.find(
+              (f) => f.name.split("-")[0] === cast.targetName!.split("-")[0],
+            )
+          : !castTargetIsTeammate || onlyCasterUnderFire
+            ? owner
+            : undefined;
         const cheaperAvailable = findCheaperDefensiveAlternatives(
           cd,
           ownerCDs,
@@ -359,6 +378,10 @@ export function emitOwnerCdEntries(
           {
             castTargetIsTeammate,
             onlyCasterUnderFire,
+            coversSchool: recipient
+              ? (spellId) =>
+                  saveCoversPressureOn(spellId, recipient, pressMs, roundFacts)
+              : undefined,
             // F-E20: a stunned owner can only be offered what a stunned player can press.
             // U-T1: a school-limited purge (Blessing of Protection) is an
             // alternative only where it would go on the stunned owner himself.

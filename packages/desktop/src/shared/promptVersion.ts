@@ -1072,5 +1072,12 @@
  *  row, [RES] entry. Not a defensive (ruling of 2026-10-07 on the 605
  *  report): no reader of "ready defensives" sees it. No [CONSEQ] line for it
  *  yet. Counts in the commit.
+ *  v330 (2026-10-07, user ruling B3a of 2026-10-06, a consistency fix): the
+ *  `cheaper available:` note and the friendly `[DEATH] … (Unused: …)` list
+ *  read cd-hoarded's school rule — a school-limited save (Blessing of
+ *  Protection / Spellwarding, Anti-Magic Shell, Cloak of Shadows) is named
+ *  only when it covers at least half of what the unit was being hit with in
+ *  the 2 s before, absorbs included — and a Holy Paladin's Avenging Wrath is
+ *  never offered as the cheaper save. Counts in the commit.
  */
-export const PROMPT_VERSION = 329;
+export const PROMPT_VERSION = 330;

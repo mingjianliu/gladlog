@@ -3694,6 +3694,13 @@ export const NON_SUBSTITUTE_DEFENSIVE_IDS = new Set<string>([
   "370537", // Stasis (Evoker) — spell storage utility
   "204336", // Grounding Totem (Shaman) — single-spell reflect
   "79206", // Spiritwalker's Grace (Shaman) — cast-while-moving utility
+  // B-tier B3a (user ruling 2026-10-06: "复仇之怒不再出现在「更便宜的保命」
+  // 里"): in a Holy Paladin's hands it is a healing amplifier — a signed
+  // save_role (2026-09-04), so cd-hoarded keeps it, but never the cheaper
+  // substitute for a wall or an external (06bb9860 0:18: Lay on Hands at
+  // 32 % "cheaper available: … Avenging Wrath"). Both ids the ledger keys it
+  // under.
+  "31884", // Avenging Wrath (Paladin)
 ]);
 
 /**
@@ -3782,6 +3789,13 @@ export function findCheaperDefensiveAlternatives(
        * cast on the caster itself (`usableWhileStunned`'s third argument) */
       selfCastUnderStuns?: readonly string[];
     };
+    /** B-tier B3a (user ruling 2026-10-06): does this alternative's school
+     * cover what the cast's recipient was being hit with — cd-hoarded's rule
+     * at the press (`saveCoversPressureOn`, built by the caller, which knows
+     * the recipient). A school-limited save that fails it is not offered
+     * (fe1a9355 4:52: Blessing of Spellwarding against 58 % physical). Absent
+     * ⇒ no school gate (no known recipient, hand-built fixtures). */
+    coversSchool?: (spellId: string) => boolean;
   } = {},
 ): string[] {
   // Nothing was chosen when a proc fired, so there is no "cheaper" choice to
@@ -3812,6 +3826,7 @@ export function findCheaperDefensiveAlternatives(
         // when U-T1 made it pressable under a stun; it holds stunned or not.
         costNormPhrase(other.spellId) === null &&
         !NON_SUBSTITUTE_DEFENSIVE_IDS.has(other.spellId) &&
+        (opts.coversSchool?.(other.spellId) ?? true) &&
         other.cooldownSeconds < cd.cooldownSeconds &&
         other.availableWindows.some(
           (w) => atSeconds >= w.fromSeconds && atSeconds <= w.toSeconds,

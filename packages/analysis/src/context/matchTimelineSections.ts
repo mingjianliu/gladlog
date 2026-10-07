@@ -1,6 +1,7 @@
 import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import { CD_WASTE_PRESSURE_HP_PCT } from "../analysis/candidateFindings";
+import { saveCoversPressureOn } from "../analysis/candidates/cooldownTiming";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import {
   IPlayerCCTrinketSummary,
@@ -40,7 +41,10 @@ import {
   wasLockedOutByStunOnly,
   wasLockedOutThroughWindow,
 } from "../utils/deathOutcomeAnalysis";
-import { sumAbsorbedPressure } from "../utils/incomingPressure";
+import {
+  documentRecordsAttackSpell,
+  sumAbsorbedPressure,
+} from "../utils/incomingPressure";
 import type { RosterSides } from "../utils/rosterSide";
 import { executeKillingBlowOf } from "../utils/killingBlow";
 import { getHpPercentAtTime } from "../utils/killWindowTargetSelection";
@@ -911,6 +915,20 @@ export function emitFriendlyDeathEntries<S>(params: {
             dyingUnit,
             enemies as ICombatUnit[],
             matchStartMs + death.atSeconds * 1000,
+          ),
+        )
+        // B-tier B3a (user ruling 2026-10-06): a school-limited save is
+        // "unused" only when it covered what was killing them — cd-hoarded's
+        // rule over the 2 s up to the death (`saveCoversPressureOn`)
+        .filter((cd) =>
+          saveCoversPressureOn(
+            cd.spellId,
+            dyingUnit,
+            matchStartMs + death.atSeconds * 1000,
+            {
+              sides: rosterSides,
+              recordsAttackSpell: documentRecordsAttackSpell(allUnits),
+            },
           ),
         )
         .map((cd) => cd.spellName);

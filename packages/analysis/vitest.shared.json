@@ -91,6 +91,7 @@
     "test/btierD3RejectsAndKillingBlow.test.ts",
     "test/btierD4ResReach.test.ts",
     "test/btierD4Roster.test.ts",
+    "test/btierD4School.test.ts",
     "test/btierD6Facts.test.ts",
     "test/btierD8TopDamager.test.ts",
     "test/btierRowFacts.test.ts",

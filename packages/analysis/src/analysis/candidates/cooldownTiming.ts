@@ -56,7 +56,9 @@ import {
   couldActForMostOf,
 } from "../../utils/cannotCastIntervals";
 import { getEnglishSpellName } from "../../data/spellEffectData";
+import { incomingPressureBySchool } from "../../utils/incomingPressure";
 import { castFailedInWindow, type RawStreams } from "../../utils/rawStreams";
+import type { RosterSides } from "../../utils/rosterSide";
 import {
   type DecisionRecord,
   isDecisionTraceActive,
@@ -69,6 +71,7 @@ import { ABILITY_EFFECTS_GENERATED } from "../../data/abilityEffectsGenerated";
 import { MITIGATION_TABLE } from "../../data/mitigationData";
 import {
   type DecisionPoint,
+  DMG_WINDOW_MS,
   RESPONSE_PRE_MS,
   schoolShareCoveredBy,
 } from "../crisisDecisionPoints";
@@ -1179,6 +1182,36 @@ export function coversCrisisSchool(
   if (mask === undefined || (mask & ALL_SCHOOLS) === ALL_SCHOOLS) return true;
   const share = schoolShareCoveredBy(point, mask);
   return share === null || share >= SCHOOL_SAVE_MIN_SHARE;
+}
+
+/**
+ * `coversCrisisSchool` at an arbitrary instant (B-tier B3a, user ruling
+ * 2026-10-06: `cheaper available:` and `[DEATH] … Unused:` read cd-hoarded's
+ * school rule): does this save cover at least `SCHOOL_SAVE_MIN_SHARE` of what
+ * `unit` was being hit with in the `DMG_WINDOW_MS` up to `atMs` — the window
+ * and the split a crisis point's `dmg2sBySchool` is built from
+ * (`incomingPressureBySchool`, landed and absorbed, exclusive start). A save
+ * with no school claim, an all-school one, and a window with no damage all
+ * cover — the fail-open direction `coversCrisisSchool` has.
+ */
+export function saveCoversPressureOn(
+  spellId: string,
+  unit: Parameters<typeof incomingPressureBySchool>[0],
+  atMs: number,
+  round: { sides?: RosterSides; recordsAttackSpell?: boolean } = {},
+): boolean {
+  const mask = saveSchoolMask(spellId);
+  if (mask === undefined || (mask & ALL_SCHOOLS) === ALL_SCHOOLS) return true;
+  return coversCrisisSchool(spellId, {
+    dmg2sBySchool: incomingPressureBySchool(
+      unit,
+      atMs - DMG_WINDOW_MS,
+      atMs,
+      round.sides,
+      round.recordsAttackSpell,
+      true,
+    ),
+  });
 }
 
 /**
