@@ -19,6 +19,7 @@ import type {
   findBrokenDisarm,
   IPlayerCCTrinketSummary,
 } from "../../utils/ccTrinketAnalysis";
+import type { IMissedPurgeWindow } from "../../utils/dispelAnalysis";
 import type { IAoeCCEvent } from "../../utils/drAnalysis";
 import type { IEnemyCDCast } from "../../utils/enemyCDs";
 import type { buildRosterSides } from "../../utils/rosterSide";
@@ -153,6 +154,11 @@ export interface TimelineCtx {
   buffPurgeAnnotations: Map<IEnemyBuffInterval, string>;
   /** GH #99 Rules B & C: missed-purge notes attached to an enemy CD cast line */
   cdPurgeAnnotations: Map<IEnemyCDCast, string>;
+  /** the owner's missed purges worth naming (high-value buff or a scoped
+   * immunity tool) — GH #99 folds some into lines, the rest render alone */
+  qualifyingMissedPurges: IMissedPurgeWindow[];
+  /** GH #99 Rules B & C: missed purges already folded into a line */
+  consumedMissedPurges: Set<IMissedPurgeWindow>;
 
   // ── threaded (in / out) ──
   /** set when any owner / teammate proc-only activation rendered as [PROC];
