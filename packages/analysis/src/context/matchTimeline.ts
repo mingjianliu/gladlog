@@ -12,7 +12,6 @@ import {
 } from "../data/purgeWhitelist";
 import "../data/spellEffectData";
 import { ccSpellIds } from "../data/spellTags";
-import "../data/timelineLineFlags";
 import "../utils/auraIntervals";
 import "../utils/buffDuration";
 import "../utils/cannotCastIntervals";
@@ -43,14 +42,11 @@ import "../utils/externalDamage";
 import { IHealingGap } from "../utils/healingGaps";
 import "../utils/incomingPressure";
 import "../utils/rosterSide";
-import "../utils/pvpTrinketUses";
 import type { RawStreams } from "../utils/rawStreams";
 import "./resUtilityCds";
 import "./spellOutcomeLines";
-import "../utils/renderGrid";
 import "../utils/resourceAt";
 import "../utils/summonReachability";
-import "../utils/talentBehaviors";
 import "./burstAnswered";
 import "./cdPrior";
 import {
@@ -66,7 +62,6 @@ import {
   peakSpikePlacement,
 } from "./peakSpikePlacement";
 import "./resLedgerPrune";
-import "./stackedDefensives";
 import "./unitLabel";
 export {
   PEAK_SPIKE_MARKERS,
