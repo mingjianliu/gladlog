@@ -2,6 +2,8 @@
 
 Rules first, history second: every rule below was paid for by a specific incident. The incidents are recorded in [`docs/rule-history.md`](docs/rule-history.md) — read that when a rule seems too strict, not before following it. The docs map is [`docs/README.md`](docs/README.md).
 
+The maintainer's curated working notes — methodology, domain knowledge, preferences — are indexed in [`.claude/knowledge/README.md`](.claude/knowledge/README.md); read them before deep work.
+
 ## Shared-Predicate Rule
 
 Analysis code (`packages/analysis`) and verification gates (`packages/eval`'s positioningScan / qualityCheck / layerA audit) must share **the same predicate** for **the same fact** (HP, distance, LoS, timestamp): same constant, same sampling function, same tolerance, and **anchored to the rendered value** — the prompt renders `fmtTime` (floor to whole seconds) and the gate re-parses the rendered text, so fractional seconds / raw timestamps inside analysis must be floored to the rendering grid before any gate-recalculated check. One signed exception: the HP printed on a **press line** (`[YOU] [CD]` / `[CC]` / `[PROC]` / `[CAST]`, `[ENEMY DEF]`, `[ENEMY TRINKET]`) is the HP at the press (`hpAtPress`), not the grid reading — user ruling 2026-09-30; the gate exempts those tags through `PRESS_HP_LINE_TAGS`. The 2026-10-01 extension puts the cooldown ledger's `cast.targetHpPct` on the same reading: the `[UNNECESSARY — … at N% HP]` note (on `[YOU]` and `[TEAM]` cooldown lines) and the questionable-external fact. Do not "fix" it back, and do not move any other reading off the grid.
