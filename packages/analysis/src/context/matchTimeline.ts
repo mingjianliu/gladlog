@@ -338,6 +338,8 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     stackedDefensives,
     rawStreams,
   } = params;
+  // friends + enemies (dampening, rot pressure, and setup closures below)
+  const allPlayers = friends.concat(enemies ?? []);
   const manaFallback = { rawStreams, matchStartMs };
 
   const matchDurationS = (matchEndMs - matchStartMs) / 1000;
@@ -1217,7 +1219,6 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   }
 
   // ── Dampening Milestone Alerts (F149) ──────────────────────────────────────
-  const allPlayers = friends.concat(enemies ?? []);
   emitDampeningEntries({
     bracket,
     allPlayers,
