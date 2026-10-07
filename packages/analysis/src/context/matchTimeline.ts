@@ -519,6 +519,8 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     cdExpiryEvents,
     ownerCCSummary,
     enemies,
+    friends,
+    summonOwners,
     ownerInterruptImmuneReasonAt,
     addEntry,
     ownerHardCcTagAt,

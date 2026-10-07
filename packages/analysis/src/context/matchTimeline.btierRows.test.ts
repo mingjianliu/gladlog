@@ -8,6 +8,8 @@
  *    line (a displacement with no aura had no line);
  *  - B7a: the owner's kick that stopped nothing gets a `[KICK]` line with the
  *    kick audit's result;
+ *  - B15a step 2 (D10): the owner's Death Pact press line says what its heal
+ *    absorb ate, and a death under it quotes that in the death block;
  *  - B18 (D10): a Guardian Spirit press line says when its save triggered.
  */
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -487,6 +489,105 @@ describe("[KICK]: the owner's kick that stopped nothing (B7a)", () => {
     const text = buildMatchTimeline(params(owner, enemy));
     expect(text).toContain("interrupted");
     expect(kickLine(text)).toBe("");
+  });
+});
+
+describe("Death Pact: the press line and the death block say what the heal absorb ate (B15a step 2)", () => {
+  const DEATH_PACT = "48743";
+  const pact = (pressS: number): any => ({
+    spellId: DEATH_PACT,
+    spellName: "Death Pact",
+    tag: "Defensive",
+    cooldownSeconds: 120,
+    maxChargesDetected: 1,
+    casts: [{ timeSeconds: pressS }],
+    availableWindows: [],
+    neverUsed: false,
+  });
+  const dkOwner = (opts: { removedS?: number; deathS?: number }) =>
+    mkUnit("o", "Me-Realm", {
+      info: {} as never,
+      class: CombatUnitClass.DeathKnight,
+      spec: CombatUnitSpec.DeathKnight_Frost,
+      spellCastEvents: [
+        ev(LogEvent.SPELL_CAST_SUCCESS, DEATH_PACT, "Death Pact", 62, ME, ME),
+      ] as never,
+      auraEvents: [
+        ev(LogEvent.SPELL_AURA_APPLIED, DEATH_PACT, "Death Pact", 62, ME, ME, {
+          amount: 283_511,
+        }),
+        ...(opts.removedS === undefined
+          ? []
+          : [
+              ev(
+                LogEvent.SPELL_AURA_REMOVED,
+                DEATH_PACT,
+                "Death Pact",
+                opts.removedS,
+                ME,
+                ME,
+              ),
+            ]),
+      ] as never,
+      healIn: [
+        ev(LogEvent.SPELL_HEAL, DEATH_PACT, "Death Pact", 62, ME, ME, {
+          amount: 425_000,
+          effectiveAmount: 425_000,
+        }),
+      ] as never,
+      healAbsorbsIn: [
+        {
+          absorbSpellId: DEATH_PACT,
+          timestamp: at(64),
+          healerId: "o",
+          absorbedAmount: 200_000,
+        },
+      ] as never,
+      deathRecords: (opts.deathS === undefined
+        ? []
+        : [{ timestamp: at(opts.deathS) }]) as never,
+    });
+  const foe = () =>
+    mkUnit("e", "Enemy-Realm", { reaction: CombatUnitReaction.Hostile });
+  const pressLine = (text: string) =>
+    text.split("\n").find((l) => l.includes("[YOU] [CD]")) ?? "";
+
+  it("the press line carries the clause, ahead of the dampening note", () => {
+    const text = buildMatchTimeline(
+      params(dkOwner({ removedS: 77 }), foe(), {
+        ownerSpec: "DeathKnight_Frost",
+        ownerCDs: [pact(62)],
+      }),
+    );
+    const line = pressLine(text);
+    expect(line).toContain("Death Pact");
+    expect(line).toContain(
+      " | healed 425k · heal absorb 284k: ate 200k of healing (1 heal — own 200k) · ended at 1:17 with 84k unspent",
+    );
+    expect(text).not.toContain("Heal absorb: own Death Pact");
+    // its aura is the heal absorb, not a buff: no [BUFF FADED] line for it
+    expect(text).not.toContain("[BUFF FADED]   Death Pact");
+  });
+
+  it("a death under the absorb: the press line says so and the death block quotes it", () => {
+    const text = buildMatchTimeline(
+      params(dkOwner({ deathS: 70 }), foe(), {
+        ownerSpec: "DeathKnight_Frost",
+        ownerCDs: [pact(62)],
+        friendlyDeaths: [
+          { spec: "Frost Death Knight", name: "Me-Realm", atSeconds: 70 },
+        ],
+      }),
+    );
+    expect(pressLine(text)).toContain(
+      "ate 200k of healing (1 heal — own 200k) through 1:10 · no healing landed after the press · 84k of it unspent at death",
+    );
+    const quoted = text
+      .split("\n")
+      .find((l) => l.includes("Heal absorb: own Death Pact"));
+    expect(quoted).toBeDefined();
+    expect(quoted).toContain("(pressed 1:02) ate 200k of the healing aimed at");
+    expect(quoted).toContain("healing that landed after 1:02: 0");
   });
 });
 

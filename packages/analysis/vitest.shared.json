@@ -85,6 +85,7 @@
     "test/baselineDefensives.test.ts",
     "test/benchmark.test.ts",
     "test/btierD10GuardianSave.test.ts",
+    "test/btierD10HealAbsorb.test.ts",
     "test/btierD10PurgeableCount.test.ts",
     "test/btierD11OtherAttempts.test.ts",
     "test/btierD1KickFacts.test.ts",

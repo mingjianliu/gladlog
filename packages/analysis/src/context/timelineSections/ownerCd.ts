@@ -27,6 +27,11 @@ import {
   THROUGHPUT_EMPOWER_DEFENSIVE_IDS,
 } from "../../utils/cooldowns";
 import { getDampeningPercentage } from "../../utils/dampening";
+import {
+  healAbsorbPressClause,
+  healAbsorbUseOf,
+  healerCreditOf,
+} from "../../utils/healAbsorbSave";
 import { documentRecordsAttackSpell } from "../../utils/incomingPressure";
 import {
   computeEnemyInterruptAvailability,
@@ -77,6 +82,8 @@ export function emitOwnerCdEntries(
     | "cdExpiryEvents"
     | "ownerCCSummary"
     | "enemies"
+    | "friends"
+    | "summonOwners"
     | "ownerInterruptImmuneReasonAt"
     | "addEntry"
     | "ownerHardCcTagAt"
@@ -107,6 +114,8 @@ export function emitOwnerCdEntries(
     cdExpiryEvents,
     ownerCCSummary,
     enemies,
+    friends,
+    summonOwners,
     ownerInterruptImmuneReasonAt,
     addEntry,
     ownerHardCcTagAt,
@@ -312,6 +321,29 @@ export function emitOwnerCdEntries(
       // Throughput CDs (e.g. Power Infusion) are excluded by findCheaperDefensiveAlternatives.
       // H11: when this cast was an external thrown on a teammate, only suggest alternatives
       // that can themselves target a teammate — a self-only tool (e.g. Barkskin) can't help.
+      // B15a step 2 (wording approved 2026-10-07): a self-save that puts a
+      // heal absorb on the owner (Death Pact) says what the absorb ate
+      const healAbsorbUse =
+        isProc || isCC
+          ? null
+          : healAbsorbUseOf(
+              owner,
+              cd.spellId,
+              matchStartMs + cast.timeSeconds * 1000,
+              params.matchEndMs,
+              healerCreditOf([...friends, ...(enemies ?? [])], summonOwners),
+            );
+      const healAbsorbNote = healAbsorbUse
+        ? healAbsorbPressClause(
+            healAbsorbUse,
+            owner.id,
+            (unitId) => {
+              const u = _allUnits.find((x) => x.id === unitId);
+              return u ? pid(u.name) : unitId;
+            },
+            (ms) => fmtTime((ms - matchStartMs) / 1000),
+          )
+        : "";
       // B18: the owner's own Guardian Spirit whose save triggered says so
       const guardianSaveNote = isProc
         ? ""
@@ -491,7 +523,7 @@ export function emitOwnerCdEntries(
 
       addEntry(
         cast.timeSeconds,
-        `${fmtTime(cast.timeSeconds)}  ${prefix}   ${displayNameWithChannel}${effectiveTargetPart}${outgoingDrNote}${immuneNote}${empowerNote}${guardianSaveNote}${dampeningNote}${cheaperNote}${groundingNote}${interruptNote}${returnNote}${isProc ? "" : ownerHardCcTagAt(cast.timeSeconds)}${unnecessaryNote}`,
+        `${fmtTime(cast.timeSeconds)}  ${prefix}   ${displayNameWithChannel}${effectiveTargetPart}${outgoingDrNote}${immuneNote}${empowerNote}${healAbsorbNote}${guardianSaveNote}${dampeningNote}${cheaperNote}${groundingNote}${interruptNote}${returnNote}${isProc ? "" : ownerHardCcTagAt(cast.timeSeconds)}${unnecessaryNote}`,
         ...extraLines,
       );
     }

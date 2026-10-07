@@ -1079,5 +1079,13 @@
  *  only when it covers at least half of what the unit was being hit with in
  *  the 2 s before, absorbs included — and a Holy Paladin's Avenging Wrath is
  *  never offered as the cheaper save. Counts in the commit.
+ *  v331 (2026-10-07, user ruling B15a step 2 of 2026-10-06, wording approved
+ *  2026-10-07): the owner's Death Pact press line says what its heal absorb
+ *  did — `| healed Nk · heal absorb Nk: ate Nk of healing (N heals — who)`
+ *  and how it ended (used up / ended with Nk unspent / unspent at death) —
+ *  and a death under the absorb quotes it in the death block (`Heal absorb:
+ *  own Death Pact …`). All read off the log (the aura row's amount, the
+ *  SPELL_HEAL_ABSORBED rows); nothing when a row is missing. Counts in the
+ *  commit.
  */
-export const PROMPT_VERSION = 330;
+export const PROMPT_VERSION = 331;

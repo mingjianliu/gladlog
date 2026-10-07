@@ -46,6 +46,12 @@ import {
   sumAbsorbedPressure,
 } from "../utils/incomingPressure";
 import type { RosterSides } from "../utils/rosterSide";
+import {
+  HEAL_ABSORB_SELF_SAVE_IDS,
+  healAbsorbDeathLine,
+  healAbsorbUseOf,
+  healerCreditOf,
+} from "../utils/healAbsorbSave";
 import { executeKillingBlowOf } from "../utils/killingBlow";
 import { getHpPercentAtTime } from "../utils/killWindowTargetSelection";
 import { fmtTime, toRenderSecond } from "../utils/renderGrid";
@@ -807,6 +813,9 @@ export function emitFriendlyDeathEntries<S>(params: {
     addEntry,
   } = params;
 
+  const allUnitsById = new Map(
+    Array.from(unitsByName.values()).map((u) => [u.id, u]),
+  );
   for (const death of friendlyDeaths) {
     const dyingUnit = unitsByName.get(death.name);
     let unusedDefensives = "";
@@ -1017,6 +1026,44 @@ export function emitFriendlyDeathEntries<S>(params: {
         deathLines.push(
           `               Top damage in final ${COUNTERFACTUAL_WINDOW_S}s: ${topSources.join(", ")}`,
         );
+      }
+      // B15a step 2: the death fell under the dying unit's own heal absorb
+      // (Death Pact) — quote what it ate, the fact its press line carries
+      {
+        const press = (dyingUnit.spellCastEvents ?? [])
+          .filter(
+            (c) =>
+              c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+              !!c.spellId &&
+              HEAL_ABSORB_SELF_SAVE_IDS.has(c.spellId) &&
+              c.logLine.timestamp <= deathMs,
+          )
+          .sort((a, b) => b.logLine.timestamp - a.logLine.timestamp)[0];
+        const use = press
+          ? healAbsorbUseOf(
+              dyingUnit,
+              press.spellId!,
+              press.logLine.timestamp,
+              deathMs,
+              healerCreditOf(Array.from(unitsByName.values()), summonOwners),
+            )
+          : null;
+        if (press && use && use.ended === "death" && use.endMs === deathMs) {
+          const numId = (unitId: string): string => {
+            const u = allUnitsById.get(unitId);
+            const n = u ? playerIdMap?.get(u.name) : undefined;
+            return n !== undefined ? String(n) : (u?.name ?? unitId);
+          };
+          deathLines.push(
+            `               ${healAbsorbDeathLine(
+              use,
+              getEnglishSpellName(press.spellId!, press.spellName ?? ""),
+              dyingUnit.id,
+              numId,
+              (ms) => fmtTime((ms - matchStartMs) / 1000),
+            )}`,
+          );
+        }
       }
       // B15c-U11: the killing blow, only when it was an execute
       const execute = executeKillingBlowOf(dyingUnit, deathMs);
