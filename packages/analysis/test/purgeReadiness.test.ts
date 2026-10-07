@@ -181,7 +181,7 @@ describe("F-P7 fixtures through buildMatchContext", () => {
       .filter((l) => l.includes("[MISSED PURGE OPPORTUNITY]"));
   it("(a) a Tranquilizing Shot that removed nothing, BoP 12–15.5 s → whole buff", () => {
     expect(liveLine(hunter(6), bopOn(12, 15.5))).toEqual([
-      "0:12  [MISSED PURGE OPPORTUNITY]   Blessing of Protection active on 2(RPaladin) (unpurged for 4s) | purge on cooldown for the whole buff (ready 0:16) — not actionable",
+      "0:12  [MISSED PURGE OPPORTUNITY]   Blessing of Protection active on 2(RPaladin) (unpurged for 4s) | purge on cooldown for the whole buff (ready 0:16) — not actionable | 1 purgeable buff on it then",
     ]);
   });
   it("(b) a Tranquilizing Shot that removed Blessing of Freedom, same BoP → whole buff", () => {
@@ -189,12 +189,12 @@ describe("F-P7 fixtures through buildMatchContext", () => {
       "purged Blessing of Freedom off 2(RPaladin) (Tranquilizing Shot)",
     );
     expect(liveLine(hunter(6, "1044"), bopOn(12, 15.5))).toEqual([
-      "0:12  [MISSED PURGE OPPORTUNITY]   Blessing of Protection active on 2(RPaladin) (unpurged for 4s) | purge on cooldown for the whole buff (ready 0:16) — not actionable",
+      "0:12  [MISSED PURGE OPPORTUNITY]   Blessing of Protection active on 2(RPaladin) (unpurged for 4s) | purge on cooldown for the whole buff (ready 0:16) — not actionable | 1 purgeable buff on it then",
     ]);
   });
   it("(c) BoP 15–25 s → back at 0:16 with 9 s of the buff left", () => {
     expect(liveLine(hunter(6), bopOn(15, 25))).toEqual([
-      "0:15  [MISSED PURGE OPPORTUNITY]   Blessing of Protection active on 2(RPaladin) (unpurged for 10s) | purge on cooldown at application — ready at 0:16 (9s of the buff left)",
+      "0:15  [MISSED PURGE OPPORTUNITY]   Blessing of Protection active on 2(RPaladin) (unpurged for 10s) | purge on cooldown at application — ready at 0:16 (9s of the buff left) | 1 purgeable buff on it then",
     ]);
   });
 });

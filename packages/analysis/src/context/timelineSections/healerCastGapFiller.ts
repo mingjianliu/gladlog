@@ -27,6 +27,7 @@ import { dropAuraRebroadcasts } from "../../utils/auraIntervals";
 import { COPY_CAST_IDS } from "../../utils/castPress";
 import { isControlledPlayerFlags } from "../../utils/charmedPlayer";
 import { cdRoleTag, hpAtPress, rendersOnCaster } from "../../utils/cooldowns";
+import { purgeableCountText } from "../../utils/dispelAnalysis";
 import { fmtTime } from "../../utils/renderGrid";
 import {
   getNpcIdFromGuid,
@@ -508,7 +509,16 @@ export function emitHealerCastGapFillerEntries(
       const removedNames = matchingPurges
         .map((p) => getEnglishSpellName(p.removedSpellId, p.removedSpellName))
         .join(", ");
-      purgeNote = ` [removed: ${removedNames}]`;
+      // B13e: how many purgeable buffs the target carried (one cast, one
+      // target — the removals share the count)
+      const onTarget = matchingPurges.find(
+        (p) => p.purgeableOnTarget !== undefined,
+      )?.purgeableOnTarget;
+      const countNote =
+        onTarget !== undefined
+          ? ` — ${matchingPurges.length} of ${purgeableCountText(onTarget)} on the target`
+          : "";
+      purgeNote = ` [removed: ${removedNames}${countNote}]`;
     }
 
     const empowerNote = ownerEmpowerTag(e.spellId, timeSeconds);

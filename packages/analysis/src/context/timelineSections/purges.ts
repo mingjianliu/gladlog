@@ -9,7 +9,10 @@
  * acceptanceCapture context hash.
  */
 import { getEnglishSpellName } from "../../data/spellEffectData";
-import type { IDispelEvent } from "../../utils/dispelAnalysis";
+import {
+  type IDispelEvent,
+  purgeableCountText,
+} from "../../utils/dispelAnalysis";
 import { LogEvent } from "@gladlog/parser-compat";
 
 import { fmtTime } from "../../utils/renderGrid";
@@ -77,7 +80,8 @@ export function emitPurgeEntries(
     const effects = group
       .map(
         (c) =>
-          `${getEnglishSpellName(c.removedSpellId, c.removedSpellName)} off ${enemyPid(c.targetName)}`,
+          // B13e: a purge takes one of the purgeable buffs on the target
+          `${getEnglishSpellName(c.removedSpellId, c.removedSpellName)} off ${enemyPid(c.targetName)}${c.purgeableOnTarget !== undefined ? ` (1 of ${purgeableCountText(c.purgeableOnTarget)} on it)` : ""}`,
       )
       .join(", ");
     addEntry(

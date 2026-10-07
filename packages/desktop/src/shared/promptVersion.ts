@@ -1025,5 +1025,11 @@
  *  Nk` — the save heal the ledger's recovery already reads; a legend line
  *  when one is rendered; KILL ATTEMPTS causes unchanged. A hardFailure class
  *  checks the clause against its own line. Counts in the commit.
+ *  v322 (2026-10-07, user ruling B13e of 2026-10-07; the priority table is
+ *  untouched): our purge lines and missed-purge lines say how many purgeable
+ *  buffs — official dispel type Magic — the enemy carried at that moment
+ *  (`1 of N purgeable buffs on it`, `N purgeable buffs on it then`), and the
+ *  missed-purge menu row carries `purgeableOnTarget`; a legend line when
+ *  rendered. Counts in the commit.
  */
-export const PROMPT_VERSION = 321;
+export const PROMPT_VERSION = 322;

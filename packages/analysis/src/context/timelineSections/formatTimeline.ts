@@ -155,6 +155,11 @@ export function formatTimeline(
       (l) => typeof l === "string" && l.includes(" | save triggered "),
     ),
   );
+  // B13e (user ruling 2026-10-07): the purgeable-buff count is legended only
+  // when a line carries it.
+  const purgeableCountRendered = entries.some((e) =>
+    e.lines.some((l) => typeof l === "string" && l.includes(" purgeable buff")),
+  );
   // F-C5b (triage res-readiness, ruling A′16): "UP" means usable at that
   // instant, which the bare word does not say — legend it when rendered.
   const interruptNoteRendered = entries.some((e) =>
@@ -292,6 +297,14 @@ export function formatTimeline(
           "  `| save triggered Ns later (m:ss)` on a Guardian Spirit line = at m:ss the buff absorbed a hit that would have",
           "    killed its target and healed it (`healed Nk` = what reached that target; absent when the log shows none). A",
           "    Guardian Spirit line without the clause logged no such save.",
+        ]
+      : []),
+    ...(purgeableCountRendered
+      ? [
+          "  `N purgeable buffs on it then` / `1 of N purgeable buffs on it` (purge and missed-purge lines) = how many Magic buffs a",
+          "    purge could remove were on that enemy at that moment, the named one included (raid buffs count). A purge removes",
+          "    ONE of them and the player does not pick which: with N on the target, one press takes a given buff about 1 time",
+          "    in N. Read a missed purge, and a purge that took the buff you wanted, with that in mind.",
         ]
       : []),
     ...(enemyTrinketCount > 0

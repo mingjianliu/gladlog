@@ -1364,6 +1364,7 @@ export function missedPurgeEvents(
     | "duringKillWindow"
     | "purgersLockedOut"
     | "losReachable"
+    | "purgeableOnTarget"
   >[],
 ): CandidateEvent[] {
   return windows
@@ -1399,6 +1400,10 @@ export function missedPurgeEvents(
         duration: w.durationSeconds.toFixed(1),
         priority: w.priority,
         inKillWindow: w.duringKillWindow ? "yes" : "no",
+        // B13e: a purge takes one of the purgeable buffs on the target
+        ...(w.purgeableOnTarget !== undefined
+          ? { purgeableOnTarget: String(w.purgeableOnTarget) }
+          : {}),
       },
     }));
 }

@@ -16,6 +16,7 @@ import {
   formatMissedPurgeExemption,
   type IMissedPurgeWindow,
   missedPurgesFor,
+  purgeableCountText,
 } from "../../utils/dispelAnalysis";
 import type { IEnemyCDCast } from "../../utils/enemyCDs";
 import { toRenderSecond } from "../../utils/renderGrid";
@@ -64,7 +65,12 @@ export function foldMissedPurges(
       ? rawExemption.replace(/^\s*\|\s*/, "").replace(/\s*\|\s*/g, "; ")
       : "";
     const exemptionSuffix = exemptionPart ? `; ${exemptionPart}` : "";
-    return ` (purgeable; unpurged for ${Math.round(miss.durationSeconds)}s${exemptionSuffix})`;
+    // B13e: a purge takes one of the purgeable buffs on the target
+    const countSuffix =
+      miss.purgeableOnTarget !== undefined
+        ? `; ${purgeableCountText(miss.purgeableOnTarget)} on it then`
+        : "";
+    return ` (purgeable; unpurged for ${Math.round(miss.durationSeconds)}s${exemptionSuffix}${countSuffix})`;
   }
 
   const droppedBuffIntervals = new Set<IEnemyBuffInterval>();

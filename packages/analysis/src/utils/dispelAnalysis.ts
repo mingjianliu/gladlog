@@ -23,6 +23,7 @@ import {
   spellEffectData,
 } from "../data/spellEffectData";
 import spellIdListsData from "../data/spellIdLists";
+import { buildAuraIntervals, type IAuraInterval } from "./auraIntervals";
 import { buildCannotCastIntervals } from "./cannotCastIntervals";
 import {
   CHANNEL_AURA_LAG_MS,
@@ -777,6 +778,23 @@ export function scopedToolAnswers(
 //   1. Immunity shells — target is spell-immune while active, so purge cannot land
 //   2. Passive/visual auras — registered as Magic but not dispel-targetable
 //   3. Cross-team targeting issues — buff is on your ally, not an enemy
+/**
+ * The blocklist entries that cannot be REMOVED at all by a purge — immunity
+ * shells, passive / visual auras, the two the user ruled unpurgeable
+ * (2026-08-21). The rest of `PURGE_BLOCKLIST` (raid buffs, Nature's
+ * Swiftness, Innervate) can be purged and is only not worth a missed-purge
+ * line. `purgeableBuffIntervals` counts what a purge could take, so it reads
+ * this subset; a test pins it inside the blocklist.
+ */
+export const UNPURGEABLE_MAGIC_AURAS: ReadonlySet<string> = new Set([
+  "642", // Divine Shield
+  "45438", // Ice Block
+  "186265", // Aspect of the Turtle
+  "188501", // Spectral Sight
+  "6940", // Blessing of Sacrifice
+  "378441", // Time Stop
+]);
+
 /** @internal exported for data/curatedIdRegistry (corpus rot scan) */
 export const PURGE_BLOCKLIST = new Set<string>([
   // ── Immunity shells (target is spell-immune; purge cannot land) ──────────────────
@@ -850,6 +868,63 @@ function unitCastSpellIds(unit: ICombatUnit): Set<string> {
       .map((e) => e.spellId)
       .filter((id): id is string => id !== null),
   );
+}
+
+/** Two instants this close are one moment for "was the buff on the unit
+ * then": the removed buff's interval ends at the purge, the missed buff's
+ * begins at its application. */
+const PURGEABLE_AT_SLACK_S = 0.05;
+
+/**
+ * B-tier B13e (user ruling 2026-10-07): the Magic buffs on `unit` an
+ * offensive purge could take — official dispel type Magic (`getDispelType`,
+ * DB2 — not a corpus stand-in), a BUFF on the unit, and not one of
+ * `UNPURGEABLE_MAGIC_AURAS`. Raid buffs count: they are purgeable
+ * and they are what a purge most often takes (21562 / 1459 / 1126 lead the
+ * corpus's dispelled ids). Intervals come from `buildAuraIntervals`, so a
+ * buff that was up before the log began is on the list.
+ */
+export function purgeableBuffIntervals(
+  unit: ICombatUnit,
+  sameSideIds: ReadonlySet<string>,
+  combat: { startTime: number; endTime: number },
+): IAuraInterval[] {
+  const auraEvents = unit.auraEvents.filter((a) => {
+    if (!a.spellId) return false;
+    // A BUFF is one whoever cast it: a buff the unit STOLE keeps its first
+    // caster as the source (69546267 round 3: Body and Soul stolen from our
+    // priest, then purged back off the mage). Only a row with no marker
+    // falls back to "its own side put it there".
+    const type = getAuraType(a);
+    if (type === "DEBUFF") return false;
+    if (type === null && !sameSideIds.has(a.srcUnitId)) return false;
+    return (
+      getDispelType(a.spellId) === "Magic" &&
+      !UNPURGEABLE_MAGIC_AURAS.has(a.spellId)
+    );
+  });
+  return buildAuraIntervals({ ...unit, auraEvents }, combat);
+}
+
+/** `4 purgeable buffs` — the count's one wording (the timeline lines and
+ * their legend); "" for an absent count. */
+export const purgeableCountText = (n: number | undefined): string =>
+  n === undefined ? "" : `${n} purgeable buff${n === 1 ? "" : "s"}`;
+
+/** How many distinct purgeable buffs (`purgeableBuffIntervals`) were on the
+ * unit at `atSeconds` (round seconds). */
+export function purgeableBuffCountAt(
+  intervals: readonly IAuraInterval[],
+  atSeconds: number,
+): number {
+  const ids = new Set<string>();
+  for (const iv of intervals)
+    if (
+      iv.fromS <= atSeconds + PURGEABLE_AT_SLACK_S &&
+      iv.toS >= atSeconds - PURGEABLE_AT_SLACK_S
+    )
+      ids.add(iv.spellId);
+  return ids.size;
 }
 
 /**
@@ -1241,6 +1316,11 @@ export interface IDispelEvent {
    * Weak …); rider = side effect of a movement/form action. One predicate,
    * utils/dispelKind.ts — the desktop counts and the prompt fold read this. */
   dispelKind: DispelKind;
+  /** B13e, our purges of a Magic buff only: how many purgeable buffs
+   * (`purgeableBuffIntervals`) were on the target at the removal, the
+   * removed one included. Absent when the removed aura is not one (an
+   * enrage, an immunity a scoped tool took) or the count came out 0. */
+  purgeableOnTarget?: number;
   wasFatal?: boolean;
   fatalUnitName?: string;
   fatalUnitSpec?: string;
@@ -1334,6 +1414,10 @@ export interface IMissedPurgeWindow {
   spellName: string;
   spellId: string;
   priority: DispelPriority;
+  /** B13e: how many purgeable buffs (`purgeableBuffIntervals`) were on the
+   * enemy when this one went up, this one included. Absent for a buff only a
+   * scoped tool answers (not a Magic purge target) or when the count is 0. */
+  purgeableOnTarget?: number;
   /** True if all eligible purgers had their purge ability on CD at the start of the miss window */
   purgeWasOnCD: boolean;
   /** F-P7: when the team's purge came back (match seconds), only when it
@@ -3648,6 +3732,42 @@ export function reconstructDispelSummary(
 
     missedPurgeWindows.sort((a, b) => a.timeSeconds - b.timeSeconds);
     scopedMissedPurgeWindows.sort((a, b) => a.timeSeconds - b.timeSeconds);
+  }
+
+  // B13e: a purge takes ONE of the purgeable buffs on its target, so every
+  // purge of ours and every missed-purge window says how many were there.
+  {
+    const span = { startTime: combat.startTime, endTime: combat.endTime };
+    // a pet's buff on its owner's team is theirs too (Master's Call)
+    const enemySideIds = new Set([...enemyIds, ...enemyPetIds]);
+    const cache = new Map<string, IAuraInterval[]>();
+    const countOn = (enemyName: string, atSeconds: number): number => {
+      // 138e632d: the unit is "Antagonist", its event rows name
+      // "Antagonist-Balnazzar-US" — the bare name is tried second
+      const enemy =
+        enemies.find((e) => e.name === enemyName) ??
+        enemies.find((e) => e.name === enemyName.split("-")[0]);
+      if (!enemy) return 0;
+      let ivs = cache.get(enemy.id);
+      if (!ivs) {
+        ivs = purgeableBuffIntervals(enemy, enemySideIds, span);
+        cache.set(enemy.id, ivs);
+      }
+      return purgeableBuffCountAt(ivs, atSeconds);
+    };
+    const isCounted = (spellId: string) =>
+      getDispelType(spellId) === "Magic" &&
+      !UNPURGEABLE_MAGIC_AURAS.has(spellId);
+    for (const p of ourPurges) {
+      if (!isCounted(p.removedSpellId)) continue;
+      const n = countOn(p.targetName, p.timeSeconds);
+      if (n > 0) p.purgeableOnTarget = n;
+    }
+    for (const w of [...missedPurgeWindows, ...scopedMissedPurgeWindows]) {
+      if (!isCounted(w.spellId)) continue;
+      const n = countOn(w.enemyName, w.timeSeconds);
+      if (n > 0) w.purgeableOnTarget = n;
+    }
   }
 
   const ccEfficiency: ICCEfficiencyStat[] = [...efficiencyMap.values()]

@@ -16,6 +16,7 @@ import {
   type IDispelEvent,
   ownerRemovedOtherCopy,
   POST_CC_PRESSURE_WINDOW_S,
+  purgeableCountText,
 } from "../../utils/dispelAnalysis";
 import { fmtTime } from "../../utils/renderGrid";
 import type { TimelineCtx } from "./ctx";
@@ -92,9 +93,14 @@ export function emitCleanseEntries(
     const otherNote = other
       ? ` | you ${other.isSpellSteal ? "stole" : "purged"} the other copy at ${fmtTime(other.atSeconds)}`
       : "";
+    // B13e: a purge takes one of the purgeable buffs on the target
+    const countNote =
+      miss.purgeableOnTarget !== undefined
+        ? ` | ${purgeableCountText(miss.purgeableOnTarget)} on it then`
+        : "";
     addEntry(
       miss.timeSeconds,
-      `${fmtTime(miss.timeSeconds)}  [MISSED PURGE OPPORTUNITY]   ${miss.spellName} active on ${enemyPid(miss.enemyName)} (unpurged for ${Math.round(miss.durationSeconds)}s)${formatMissedPurgeExemption(miss)}${otherNote}`,
+      `${fmtTime(miss.timeSeconds)}  [MISSED PURGE OPPORTUNITY]   ${miss.spellName} active on ${enemyPid(miss.enemyName)} (unpurged for ${Math.round(miss.durationSeconds)}s)${formatMissedPurgeExemption(miss)}${countNote}${otherNote}`,
     );
   }
 

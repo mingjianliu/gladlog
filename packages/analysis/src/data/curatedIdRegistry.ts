@@ -106,6 +106,7 @@ import {
   PURGE_GATE_SPELL_BY_SPEC,
   PURGE_SPELLS_BY_SPEC,
   STELLAR_PROTECTION_PENALIZED_SPELLS,
+  UNPURGEABLE_MAGIC_AURAS,
 } from "../utils/dispelAnalysis";
 import { MOVEMENT_ROOT_BREAK_DISPEL_IDS } from "../utils/dispelKind";
 import { AOE_CC_SPELL_IDS } from "../utils/drAnalysis";
@@ -565,6 +566,11 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   ),
   t("PURGE_BLOCKLIST", "utils/dispelAnalysis.ts", "aura", () =>
     set(PURGE_BLOCKLIST),
+  ),
+  // B-tier B13e (user ruling 2026-10-07): the blocklist's subset no purge
+  // can remove — what the purgeable-buff count leaves out.
+  t("UNPURGEABLE_MAGIC_AURAS", "utils/dispelAnalysis.ts", "aura", () =>
+    set(UNPURGEABLE_MAGIC_AURAS),
   ),
   // GH #83: the spell each spec dispels with — its range is the reach gate
   t("CLEANSE_SPELLS_BY_TYPE", "utils/dispelAnalysis.ts", "cast", () =>

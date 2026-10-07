@@ -417,10 +417,10 @@ describe("a general purger's window is untouched by a scoped teammate", () => {
     // the priest owner's line: no tool note, no cooldown — exactly the
     // general purger's line (only the enemy's player number moved)
     expect(purgeLines(pr, [pr, w], enemy)).toEqual([
-      "0:20  [MISSED PURGE OPPORTUNITY]   Blessing of Protection active on 3(FMage) (unpurged for 10s)",
+      "0:20  [MISSED PURGE OPPORTUNITY]   Blessing of Protection active on 3(FMage) (unpurged for 10s) | 1 purgeable buff on it then",
     ]);
     expect(purgeLines(pr, [pr], enemy)).toEqual([
-      "0:20  [MISSED PURGE OPPORTUNITY]   Blessing of Protection active on 2(FMage) (unpurged for 10s)",
+      "0:20  [MISSED PURGE OPPORTUNITY]   Blessing of Protection active on 2(FMage) (unpurged for 10s) | 1 purgeable buff on it then",
     ]);
   });
 });
