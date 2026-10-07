@@ -8,6 +8,17 @@ export enum SpellTag {
   Offensive = "Offensive",
   Defensive = "Defensive",
   Control = "Control",
+  /**
+   * On the cooldown ledger and none of the three above (user rulings of
+   * 2026-10-07 on Lichborne and Smoke Bomb: "进名单,不算减伤"). The entry
+   * gets a press line, a loadout row and a [RES] entry; every reader of a
+   * role tests for the tag it wants (`=== "Defensive"`, `=== "Control"`,
+   * `includes(Offensive)`), so a Utility entry is no ready defensive, no
+   * `cheaper available`, no `[DEATH] Unused`, no cd-waste, no CC USE row and
+   * no burst anchor. It has producers and, on purpose, no consumer branch —
+   * the opposite of the `External` member removed below.
+   */
+  Utility = "Utility",
   // 2026-08-22(GH #29 阶段 0):删掉了 `External = "External"`。它从来没有生产者
   // —— classSpells.ts 的 122 条 ability 一条都没带它,discoveryRules 的三条名字
   // 正则只产 D/O/C,extractMajorCooldowns 的两处运行时注入分别给 Defensive 和

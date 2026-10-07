@@ -277,7 +277,20 @@ export interface IProposedHealingVerdict extends Omit<
 export const PROPOSED_HEALING_VERDICTS: Record<
   string,
   IProposedHealingVerdict
-> = {};
+> = {
+  // B-tier B15a-1 (2026-10-07): Death Pact joined the Death Knight ledger and
+  // so entered this book's domain. A proposal only — nothing reads it.
+  "48743": {
+    zh: "天灾契约",
+    official: { healsSelf: true, healsOthers: false, isWall: false },
+    proposed: "burst-answer",
+    wouldFlipIf:
+      "它挂的治疗吸收(光环行上的数额,82a2d681 两次都是 28.4 万)会吃掉之后打在身上的治疗:如果你认为「有治疗在抬你的时候按它等于白按」,该是 sustain-only 或 unresolved。例:82a2d681 第 5 回合 2:45,30% 血按下回了 21.5 万,之后 8.5 秒里 32 次治疗共 20 万全被吃掉,死时吸收还剩 8.4 万;同场 1:02 那次 14% 血按下回 42.5 万,吸收 5 秒内被吃满,人活了下来。",
+    note: "瞬发回自己一大口(官方:最大生命的一个百分比),同时在自己身上挂一个治疗吸收。按键行上的治疗吸收从句(B15a 第 2 步)把这件事写成了事实;这里要签的只是「爆发打在脸上时它算不算应对」。",
+    source:
+      "2026-10-07 B 档 B15a-1:天灾契约 48743 进死亡骑士冷却账本(605 场 196 次施放)后进入完备域;档位待用户签",
+  },
+};
 
 /** 这一册的完备域:挂 Defensive 牌子 **且** 官方数据说它治疗的技能。 */
 export function healingVerdictDomain(): string[] {

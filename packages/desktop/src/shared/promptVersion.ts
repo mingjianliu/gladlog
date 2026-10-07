@@ -1060,5 +1060,12 @@
  *  that fails only this reads `no (kicker N yd beyond kick range could walk
  *  in during the Ts cast at 7 yd/s)`. No line gains a `yes`. Counts in the
  *  commit.
+ *  v328 (2026-10-07, user ruling B15a of 2026-10-06, "the missing press line
+ *  is a defect"; ruling of 2026-10-07 on the 605 report: Lichborne is not a
+ *  defensive): Death Pact and Lichborne join the Death Knight roster — a
+ *  Death Knight owner's presses of them get their `[YOU] [CD]` line, loadout
+ *  row and [RES] entry. Death Pact is a defensive for every reader of the
+ *  ledger (ready defensives, `cheaper available`, `[DEATH] Unused`);
+ *  Lichborne is on the ledger only. Counts in the commit.
  */
-export const PROMPT_VERSION = 327;
+export const PROMPT_VERSION = 328;

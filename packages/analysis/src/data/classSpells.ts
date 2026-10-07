@@ -25,6 +25,7 @@ interface IClassSpellMetadata {
 const D = SpellTag.Defensive;
 const O = SpellTag.Offensive;
 const C = SpellTag.Control;
+const U = SpellTag.Utility;
 const a = (
   spellId: string,
   name: string,
@@ -168,6 +169,19 @@ export const classMetadata: IClassSpellMetadata[] = [
       // roster listed them, so msw's `entered` / `ready` never saw an Army
       // covering a lock (82a2d681 @33). DB2 cooldowns: Army 90 s, DT 45 s.
       // Unholy talents (in 252's tree only): other specs need cast evidence.
+      // B-tier B15a (user ruling 2026-10-06, "按键缺行当缺陷修"): the owner's
+      // own Death Pact / Lichborne had no press line and no loadout row
+      // (82a2d681 round 5: both pressed at 2:45, zero lines) while the ENEMY
+      // side has listed them since A11 (`ENEMY_SELF_SAVE_ONLY_IDS`). Class
+      // talents of all three specs; 605 S2 files: 196 / 231 casts.
+      a("48743", "Death Pact", D),
+      // Lichborne is NOT a defensive (user ruling 2026-10-07 on the 605
+      // report): it frees the Death Knight from charm / fear / sleep, it
+      // saves nobody. `SpellTag.Utility`: on the ledger, the press line, the
+      // loadout and [RES], and out of every role reader (cd-hoarded,
+      // cd-waste, `cheaper available`, `[DEATH] Unused`, CC USE). As a
+      // Defensive it had produced 5 cd-hoarded rows on the 605 files.
+      a("49039", "Lichborne", U),
       a("42650", "Army of the Dead", O),
       a("1233448", "Dark Transformation", O),
       a("207289", "Unholy Assault", O),
