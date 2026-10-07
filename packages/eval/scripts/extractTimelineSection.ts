@@ -137,6 +137,12 @@ for (const o of r.outer) {
     problems.push(
       `names function-local type ${o.name} (L${o.lines.join(",")})`,
     );
+  // declared AFTER the range (a closure in the range reads it later): it is
+  // not initialised yet where the emitter is called, so it cannot be passed
+  if (o.declLine > cfg.bodyEnd)
+    problems.push(
+      `${o.name} is declared after the range (L${o.declLine}) — not initialised at the call; move its declaration up first`,
+    );
 }
 // declared in the range and referenced before it: once moved, those references
 // would no longer resolve (or would lose hoisting) — refused unless the binding

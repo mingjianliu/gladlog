@@ -11,6 +11,10 @@ import type { StackedDefensivePair } from "../analysis/stackedDefensives";
 import "../data/backlashCc";
 import { castAndEffectIds } from "../data/castEffectAuras";
 import "../data/racialAbilities";
+import {
+  HIGH_VALUE_PURGEABLE_BUFFS,
+  PURGE_WHITELIST_DATA_BLOCKED,
+} from "../data/purgeWhitelist";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { ccSpellIds } from "../data/spellTags";
 import "../data/timelineLineFlags";
@@ -23,7 +27,6 @@ import {
 } from "../utils/castCommitSpans";
 import type { ICcBreakEvent } from "../utils/ccBreakAnalysis";
 import {
-  castEndedCcWindow,
   CC_AVOIDANCE_BUFF_SPELLS,
   findBrokenCC,
   findBrokenDisarm,
@@ -37,7 +40,6 @@ import {
   IStasisEvent,
 } from "../utils/combatStates";
 import {
-  cdIsProcOnly,
   getUnitHpAtTimestamp,
   HP_SAMPLE_RADIUS_MS,
   hpAtPress,
@@ -49,23 +51,14 @@ import {
 } from "../utils/cooldowns";
 import { getDampeningPercentage } from "../utils/dampening";
 import {
-  canOffensivePurge,
   canRemoveFrom,
-  formatMissedPurgeExemption,
   IDispelSummary,
-  IMissedPurgeWindow,
-  missedPurgesFor,
 } from "../utils/dispelAnalysis";
 import {
   extractAoeCCEvents,
-  IAoeCCEvent,
   IOutgoingCCChain,
-  isStunCcInstance,
 } from "../utils/drAnalysis";
-import {
-  IEnemyCDCast,
-  IEnemyCDTimeline,
-} from "../utils/enemyCDs";
+import { IEnemyCDTimeline } from "../utils/enemyCDs";
 import "../utils/enemyDefensives";
 import "../utils/enemyInterrupts";
 import "../utils/externalDamage";
@@ -79,7 +72,7 @@ import "./spellOutcomeLines";
 import { fmtTime, toRenderSecond } from "../utils/renderGrid";
 import { resourceDeltaPct } from "../utils/resourceAt";
 import "../utils/summonReachability";
-import { interruptImmuneWindows as interruptImmuneWindowsOf } from "../utils/talentBehaviors";
+import "../utils/talentBehaviors";
 import "./burstAnswered";
 import "./cdPrior";
 import {
@@ -106,20 +99,15 @@ export {
 import { buildResourceSnapshot } from "./resourceSnapshot";
 import {
   buildSummonOwnerNames,
-  computeHealingInWindow,
   CRITICAL_NON_PLAYER_NPC_NAMES,
   DMG_SPIKE_THRESHOLD,
   extractEnemyMajorBuffIntervals,
-  extractOwnerCDBuffExpiry,
   getNpcIdFromGuid,
   GROUNDING_TOTEM_NPC_ID,
-  HEALING_AMPLIFIER_SPELL_IDS,
-  HEALING_WINDOW_EARLY_CD_SECONDS,
-  HEALING_WINDOW_MIN_HPS,
-  IEnemyBuffInterval,
   MANA_COOLDOWN_SPELL_IDS,
   resolveSummonOwner,
 } from "./timelineHelpers";
+import { prepareAoeCcFolding } from "./timelineSections/aoeCcFolding";
 import { emitBuffFadedEntries } from "./timelineSections/buffFaded";
 import { emitCcBrokenEntries } from "./timelineSections/ccBroken";
 import { emitCcCastEntries } from "./timelineSections/ccCast";
@@ -142,6 +130,8 @@ import { emitManaContextEntries } from "./timelineSections/manaContext";
 import { emitMinorDispelEntries } from "./timelineSections/minorDispels";
 import { emitOffensiveWindowEntries } from "./timelineSections/offensiveWindow";
 import { emitOwnerCdEntries } from "./timelineSections/ownerCd";
+import { prepareOwnerCdContext } from "./timelineSections/ownerCdSetup";
+import { foldMissedPurges } from "./timelineSections/purgeFolding";
 import { emitPurgeEntries } from "./timelineSections/purges";
 import { resolveDeferredSnapshots } from "./timelineSections/resolveSnapshots";
 import { emitSilenceEntries } from "./timelineSections/silence";
@@ -307,57 +297,9 @@ export interface BuildMatchTimelineParams {
   stackedDefensives?: StackedDefensivePair[];
 }
 
-/**
- * Emit-side whitelist: which enemy buffs are worth reporting as "you could
- * have purged this".
- *
- * ⚠ This set is **not** the only gate. For a miss to reach here it must first
- * clear two gates in dispelAnalysis:
- *   ① spellEffectData[id].dispelType === "Magic"   (DB2 mining + manual overrides)
- *   ② SPELL_CATEGORIES[id] type maps to Critical/High (absent → Low → dropped)
- * All three lists assert the same fact ("this buff is purgeable and worth
- * purging") yet are maintained independently — 2026-07-21 full-corpus
- * measurement: 7 of the 9 entries were dead, the product could only ever emit
- * Power Infusion and BoP.
- *
- * So consistency between this set and its upstream gates is asserted by
- * `matchTimeline.purgeWhitelist.test.ts`; entries known to be dead for lack of
- * dispelType data are registered in `PURGE_WHITELIST_DATA_BLOCKED`, and the
- * test will surface them the next time the DB2 data is refreshed. Do not just
- * add an id here — adding one alone has no effect.
- */
-// 2026-08-21 S2 corpus scan (10,682 matches): removed Dark Soul: Instability 113858, 113861 (no DB2 name), Icy Veins 12472, Temporal Shield 198111; old Alter Time 110909 → live 342246 — 0 occurrences, ability gone in 12.x (eval-private/reports/s2-health-2026-08-21)
-export const HIGH_VALUE_PURGEABLE_BUFFS = new Set<string>([
-  "10060", // Power Infusion
-  "1022", // Blessing of Protection
-  "1044", // Blessing of Freedom
-  "342246", // Alter Time (live id; getDispelType → Magic, so not data-blocked)
-  "6940", // Blessing of Sacrifice
-  // 2026-07-22 decision: added seven discrete active CDs (no permanent
-  // HoTs/shields) — validated both ways against the corpus; see the same-day
-  // note in spellCategories.ts.
-  "210256", // Blessing of Sanctuary
-  "29166", // Innervate
-  "212295", // Nether Ward
-  "378441", // Time Stop
-  "370553", // Tip the Scales
-  "132158", // Nature's Swiftness
-  "378081", // Nature's Swiftness (variant id)
-  "79206", // Spiritwalker's Grace
-]);
-
-/**
- * Whitelist entries that currently cannot be emitted — what is missing is
- * dispelType (DB2 mining only covers 123 of 3560 spells; absent ≠ not
- * dispellable, it just was not mined). These are not "should not report", they
- * are "cannot report". Delete them from here once the data is filled in.
- */
-// 2026-08-21 S2 corpus scan (10,682 matches): removed 113858/113861/12472/198111 (see above); 110909 replaced by 342246 which has dispelType Magic and is therefore not blocked — 0 occurrences, ability gone in 12.x (eval-private/reports/s2-health-2026-08-21)
-// 2026-08-23:燃烧 190319 从这里**和**上面的白名单一起摘掉 —— 它不是「缺 dispelType
-// 数据所以暂时发不出」,是**根本偷不掉**。归档 400 个文件实测:上身 440 次、施放 425 次、
-// 出现在 55 个文件,而 SPELL_STOLEN 与 SPELL_DISPEL **各 0 次**;官方 getDispelType 也是
-// null。不是样本不足,是这个 buff 在 12.1 就偷不走。用户 2026-08-23 裁定「不能」。
-export const PURGE_WHITELIST_DATA_BLOCKED = new Set<string>([]);
+// The purge whitelist and its data-blocked twin live in data/purgeWhitelist.ts
+// (GH #116); re-exported here for existing importers.
+export { HIGH_VALUE_PURGEABLE_BUFFS, PURGE_WHITELIST_DATA_BLOCKED };
 
 export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   const {
@@ -1243,62 +1185,17 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   }
 
   // ── GH #99 item 3 (Rule A): AoE CC folding into friendly cast lines ─────────
-  const aoeCCEvents =
-    outgoingCCChains && outgoingCCChains.length > 0
-      ? extractAoeCCEvents(outgoingCCChains)
-      : [];
-  const consumedAoeEvents = new Set<IAoeCCEvent>();
-
-  function findAndConsumeAoeCC(
-    castTimeSeconds: number,
-    casterName: string,
-    spellName: string,
-    isOwnerCast: boolean,
-  ): IAoeCCEvent | undefined {
-    const castSec = toRenderSecond(castTimeSeconds);
-    for (const aoe of aoeCCEvents) {
-      if (consumedAoeEvents.has(aoe)) continue;
-      if (toRenderSecond(aoe.atSeconds) !== castSec) continue;
-      if (aoe.spellName !== spellName) continue;
-      const aoeIsOwner =
-        aoe.casterName === owner.name ||
-        aoe.casterName.split("-")[0] === owner.name.split("-")[0] ||
-        pid(aoe.casterName) === pid(owner.name);
-      if (isOwnerCast) {
-        if (!aoeIsOwner) continue;
-      } else {
-        if (aoeIsOwner) continue;
-        const matchCaster =
-          aoe.casterName === casterName ||
-          aoe.casterName.split("-")[0] === casterName.split("-")[0] ||
-          pid(aoe.casterName) === pid(casterName);
-        if (!matchCaster) continue;
-      }
-      consumedAoeEvents.add(aoe);
-      return aoe;
-    }
-    return undefined;
-  }
-
-  // The cast line keeps its own target part verbatim (primary target plus any
-  // HP / velocity note) and the AoE landing list is appended after it; the
-  // primary target stays first even when it is absent from the landed list
-  // (immune / missed — 2/309 prompts on the first fold, both Intimidating
-  // Shout), so no (second, caster, spell, target) fact is lost by folding.
-  function formatAoeTargetPart(
-    aoe: IAoeCCEvent,
-    existingTargetPart: string,
-  ): string {
-    const labels = aoe.targets.map((t) => enemyPid(t.name));
-    const primary = existingTargetPart.match(/→ (\S+)/)?.[1] ?? "";
-    const others = primary ? labels.filter((l) => l !== primary) : labels;
-    const total =
-      primary && !labels.includes(primary) ? labels.length + 1 : labels.length;
-    const countNote = total > 1 ? ` [${total} enemies]` : "";
-    if (!existingTargetPart) return ` → ${others.join(", ")}${countNote}`;
-    if (others.length === 0) return `${existingTargetPart}${countNote}`;
-    return `${existingTargetPart}, ${others.join(", ")}${countNote}`;
-  }
+  const {
+    aoeCCEvents,
+    consumedAoeEvents,
+    findAndConsumeAoeCC,
+    formatAoeTargetPart,
+  } = prepareAoeCcFolding({
+    outgoingCCChains,
+    owner,
+    pid,
+    enemyPid,
+  });
 
   const entries: Array<{
     timeSeconds: number;
@@ -1427,120 +1324,21 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   // the legend line explaining the tag is emitted only then.
   let procLinesEmitted = false;
 
-  // F114 (Variant C): precompute which amplifier-spell casts get a [HEALING] block.
-  // Per spell, emit only the first eligible cast and the worst subsequent eligible
-  // cast (score = overhealPct * 1000 - maxBucketHps; higher = worse). Casts
-  // suppressed by the early-low-activity gate are never eligible.
-  const healingEmissionTimes = new Map<string, Set<number>>();
-  for (const cd of ownerCDs) {
-    if (!HEALING_AMPLIFIER_SPELL_IDS.has(cd.spellId)) continue;
-    // A proc-only entry's "casts" are aura activations, not presses — no
-    // [HEALING] verdict on something nobody chose (round 3 N5).
-    if (cdIsProcOnly(cd)) continue;
-    const duration = buffFullDurationForCaster(cd.spellId, owner);
-    if (!duration) continue;
-    const eligible: { timeSeconds: number; score: number }[] = [];
-    for (const cast of cd.casts) {
-      const fromMs = matchStartMs + cast.timeSeconds * 1000;
-      const toMs = fromMs + duration * 1000;
-      const healStats = computeHealingInWindow(owner.healOut, fromMs, toMs);
-      const maxBucketHps = healStats
-        ? Math.max(...healStats.buckets.map((b) => b.hps))
-        : 0;
-      const isEarlyLowActivity =
-        cast.timeSeconds < HEALING_WINDOW_EARLY_CD_SECONDS &&
-        maxBucketHps < HEALING_WINDOW_MIN_HPS;
-      if (isEarlyLowActivity) continue;
-      const score = (healStats?.overhealPct ?? 0) * 1000 - maxBucketHps;
-      eligible.push({ timeSeconds: cast.timeSeconds, score });
-    }
-    if (eligible.length === 0) continue;
-    const emit = new Set<number>([eligible[0].timeSeconds]);
-    if (eligible.length > 1) {
-      let worstIdx = 1;
-      for (let i = 2; i < eligible.length; i++) {
-        if (eligible[i].score > eligible[worstIdx].score) worstIdx = i;
-      }
-      emit.add(eligible[worstIdx].timeSeconds);
-    }
-    healingEmissionTimes.set(cd.spellId, emit);
-  }
-
-  const cdExpiryEvents = extractOwnerCDBuffExpiry(
+  const {
+    healingEmissionTimes,
+    cdExpiryEvents,
+    ownerCCSummary,
+    ownerHardCcTagAt,
+    ownerStunnedAtCast,
+    ownerInterruptImmuneReasonAt,
+  } = prepareOwnerCdContext({
     ownerCDs,
-    owner.id,
-    friends,
-    matchStartMs,
     owner,
-  );
-
-  // H13: computed once — used to confirm early-ended channels were a real kick/CC, not a
-  // self-cancel/movement, without recomputing the find() per cast.
-  const ownerCCSummary = ccTrinketSummaries.find(
-    (s) => s.playerName === owner.name,
-  );
-
-  // B145: an action taken while the owner is hard-CC'd (stun/incap) is NOT a free choice — the game
-  // allowed it because it was a usable-while-stunned defensive, a PvP trinket, or an immune channel
-  // (verified against raw logs: e.g. Emerald Communion channels through a full Hammer of Justice stun).
-  // Tag [YOU] [CD]/[CAST] lines with the CC so the model reads a forced/immune action as such rather
-  // than judging its timing as elective.
-  const CC_VERB: Record<string, string> = {
-    Stun: "stunned",
-    Incapacitate: "incapacitated",
-  };
-  function ownerHardCcTagAt(timeSeconds: number): string {
-    if (!ownerCCSummary) return "";
-    for (const cc of ownerCCSummary.ccInstances) {
-      const verb = cc.drInfo ? CC_VERB[cc.drInfo.category] : undefined;
-      if (!verb) continue;
-      if (
-        timeSeconds > cc.atSeconds &&
-        timeSeconds < cc.atSeconds + cc.durationSeconds
-      ) {
-        return ` [while ${verb}: ${cc.spellName}]`;
-      }
-    }
-    return "";
-  }
-  // Triage enemy-def F-E20: "stunned at the cast" for the cheaper-alternative
-  // note. The tag above is strict-inside; a cast that ENDED the stun (Divine
-  // Shield out of Hammer of Justice) is logged a millisecond after the stun's
-  // REMOVED and matches no instance strictly, so it also counts when it is
-  // the cast that ended a stun (`castEndedCcWindow`, the predicate of the
-  // `[CC ON TEAM]` break note). Stun only: the usable-while table has no
-  // incapacitate dimension.
-  const ownerStunWindows = (ownerCCSummary?.ccInstances ?? [])
-    .filter(isStunCcInstance)
-    .map((cc) => ({
-      cc,
-      applyMs: matchStartMs + Math.round(cc.atSeconds * 1000),
-      removeMs:
-        matchStartMs + Math.round((cc.atSeconds + cc.durationSeconds) * 1000),
-    }));
-  function ownerStunnedAtCast(timeSeconds: number): boolean {
-    const castMs = matchStartMs + Math.round(timeSeconds * 1000);
-    return ownerStunWindows.some(
-      (w) =>
-        (timeSeconds > w.cc.atSeconds &&
-          timeSeconds < w.cc.atSeconds + w.cc.durationSeconds) ||
-        castEndedCcWindow(w, castMs),
-    );
-  }
-
-  // B139: interrupt/silence-immunity windows granted by the owner's PvP talents (Obsidian Mettle → Obsidian
-  // Scales, Zen Focus Tea → Thunder Focus Tea). Each is a passive with no marker aura gated on a normal CD
-  // aura, so it's driven by the talentBehaviors catalog (gated on pvpTalents). Used to correct the "enemy
-  // interrupts UP" note on the owner's channels — a kick that cannot land is not a risk.
-  const interruptImmuneWindows = interruptImmuneWindowsOf(owner, matchEndMs);
-  function ownerInterruptImmuneReasonAt(
-    timeSeconds: number,
-  ): string | undefined {
-    if (interruptImmuneWindows.length === 0) return undefined;
-    const ms = matchStartMs + timeSeconds * 1000;
-    return interruptImmuneWindows.find((w) => ms >= w.from && ms <= w.to)
-      ?.reason;
-  }
+    matchStartMs,
+    friends,
+    ccTrinketSummaries,
+    matchEndMs,
+  });
 
   ({ procLinesEmitted } = emitOwnerCdEntries({
     ownerCDs,
@@ -1637,100 +1435,19 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
 
   // ── GH #99 item 3 (Rules B & C): ENEMY BUFF, ENEMY CD, and MISSED PURGE folding ──
 
-  function sameEnemyUnit(name1: string, name2: string): boolean {
-    if (name1 === name2) return true;
-    if (name1.split("-")[0] === name2.split("-")[0]) return true;
-    if (enemyPid(name1) === enemyPid(name2)) return true;
-    return false;
-  }
-
-  // The windows the OWNER could have answered (`missedPurgesFor`): a general
-  // purger's are the team's; an owner holding only a scoped removal (P-P5b =
-  // C: Shattering Throw) gets the ones that tool answers, with that tool's
-  // cooldown and reach. An immunity shield is worth the line by
-  // itself; everything else stays behind the high-value whitelist.
-  const qualifyingMissedPurges = missedPurgesFor(owner, dispelSummary).filter(
-    (m) =>
-      HIGH_VALUE_PURGEABLE_BUFFS.has(m.spellId) ||
-      m.viaScopedTool?.scope === "immunity",
-  );
-
-  function formatPurgeAnnotationWithMiss(miss: IMissedPurgeWindow): string {
-    const rawExemption = formatMissedPurgeExemption(miss);
-    const exemptionPart = rawExemption
-      ? rawExemption.replace(/^\s*\|\s*/, "").replace(/\s*\|\s*/g, "; ")
-      : "";
-    const exemptionSuffix = exemptionPart ? `; ${exemptionPart}` : "";
-    return ` (purgeable; unpurged for ${Math.round(miss.durationSeconds)}s${exemptionSuffix})`;
-  }
-
-  const droppedBuffIntervals = new Set<IEnemyBuffInterval>();
-  const buffPurgeAnnotations = new Map<IEnemyBuffInterval, string>();
-  const cdPurgeAnnotations = new Map<IEnemyCDCast, string>();
-  const consumedMissedPurges = new Set<IMissedPurgeWindow>();
-
-  for (const [enemyName, intervals] of enemyBuffIntervals) {
-    for (const interval of intervals) {
-      // Step 1: Check if there is a matching missed purge window for this buff (Rule C)
-      let matchedMiss: IMissedPurgeWindow | undefined;
-      for (const miss of qualifyingMissedPurges) {
-        if (consumedMissedPurges.has(miss)) continue;
-        if (
-          toRenderSecond(miss.timeSeconds) !==
-          toRenderSecond(interval.startSeconds)
-        )
-          continue;
-        if (!sameEnemyUnit(miss.enemyName, enemyName)) continue;
-        if (
-          miss.spellName !== interval.spellName &&
-          miss.spellId !== interval.spellId
-        )
-          continue;
-        matchedMiss = miss;
-        consumedMissedPurges.add(miss);
-        break;
-      }
-
-      const purgeAnnotation = matchedMiss
-        ? formatPurgeAnnotationWithMiss(matchedMiss)
-        : interval.purgeable && canOffensivePurge(owner)
-          ? " (purgeable)"
-          : "";
-
-      // Step 2: Check if there is a matching [ENEMY CD] line for the SAME unit and SAME spell (Rule B)
-      let matchedCd: IEnemyCDCast | undefined;
-      for (const player of enemyCDTimeline.players) {
-        if (!sameEnemyUnit(player.playerName, enemyName)) continue;
-        for (const cd of player.offensiveCDs) {
-          if (
-            toRenderSecond(cd.castTimeSeconds) !==
-            toRenderSecond(interval.startSeconds)
-          )
-            continue;
-          if (
-            cd.spellName !== interval.spellName &&
-            cd.spellId !== interval.spellId
-          )
-            continue;
-          matchedCd = cd;
-          break;
-        }
-        if (matchedCd) break;
-      }
-
-      if (matchedCd) {
-        // Self-buff: fold [ENEMY BUFF] start line into [ENEMY CD]
-        droppedBuffIntervals.add(interval);
-        if (purgeAnnotation) {
-          cdPurgeAnnotations.set(matchedCd, purgeAnnotation);
-        }
-      } else {
-        if (purgeAnnotation) {
-          buffPurgeAnnotations.set(interval, purgeAnnotation);
-        }
-      }
-    }
-  }
+  const {
+    qualifyingMissedPurges,
+    droppedBuffIntervals,
+    buffPurgeAnnotations,
+    cdPurgeAnnotations,
+    consumedMissedPurges,
+  } = foldMissedPurges({
+    enemyPid,
+    owner,
+    dispelSummary,
+    enemyBuffIntervals,
+    enemyCDTimeline,
+  });
 
   // ── [ENEMY BUFF] / [ENEMY BUFF END] events (F67b) ─────────────────────────
 

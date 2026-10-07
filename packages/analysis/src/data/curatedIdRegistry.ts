@@ -27,10 +27,6 @@ import {
   CRISIS_PROC_ANSWERS,
   CRISIS_PROTECTIVE_ANSWER_IDS,
 } from "../analysis/crisisDecisionPoints";
-import {
-  HIGH_VALUE_PURGEABLE_BUFFS,
-  PURGE_WHITELIST_DATA_BLOCKED,
-} from "../context/matchTimeline";
 import { DOT_SPELL_IDS } from "../context/matchTimelineSections";
 import { DEFERRED_DAMAGE_SPELL_IDS } from "../context/timelineHelpers";
 import {
@@ -171,6 +167,10 @@ import {
 } from "./mitigationData";
 import { MITIGATION_VERDICTS } from "./mitigationVerdicts";
 import { CHANNEL_PROXY_IDS, DRINK_AURA_IDS } from "./occupancyAuras";
+import {
+  HIGH_VALUE_PURGEABLE_BUFFS,
+  PURGE_WHITELIST_DATA_BLOCKED,
+} from "./purgeWhitelist";
 import {
   RACIAL_ABILITIES,
   SHARED_CD_RACIAL_SPELL_IDS,
@@ -673,10 +673,10 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
     set(LOCK_IGNORING_CAST_IDS),
   ),
   // context/
-  t("HIGH_VALUE_PURGEABLE_BUFFS", "context/matchTimeline.ts", "aura", () =>
+  t("HIGH_VALUE_PURGEABLE_BUFFS", "data/purgeWhitelist.ts", "aura", () =>
     set(HIGH_VALUE_PURGEABLE_BUFFS),
   ),
-  t("PURGE_WHITELIST_DATA_BLOCKED", "context/matchTimeline.ts", "aura", () =>
+  t("PURGE_WHITELIST_DATA_BLOCKED", "data/purgeWhitelist.ts", "aura", () =>
     set(PURGE_WHITELIST_DATA_BLOCKED),
   ),
   t("HEALER_CAST_SPELL_ID_TO_NAME", "context/timelineHelpers.ts", "cast", () =>
