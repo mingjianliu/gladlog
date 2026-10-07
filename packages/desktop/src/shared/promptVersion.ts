@@ -1049,5 +1049,10 @@
  *  that was there too) — instead of the wall alone. Without an external the
  *  cause is unchanged. The [ENEMY DEF] reference gate reads the cause clause
  *  by clause. Counts in the commit.
+ *  v326 (2026-10-07, user ruling B15c-U10 of 2026-10-06): our own Holy
+ *  Paladin's Avenging Wrath no longer anchors a kill attempt — it neither
+ *  opens a burst cluster (`Avenging Wrath burst (no stun)` rows go) nor
+ *  extends a teammate's. The enemy side (burst windows, crisis `enemyBurst`)
+ *  is untouched (ruling A27). Counts in the commit.
  */
-export const PROMPT_VERSION = 325;
+export const PROMPT_VERSION = 326;

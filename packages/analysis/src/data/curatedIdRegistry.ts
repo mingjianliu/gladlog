@@ -46,6 +46,7 @@ import {
   USABLE_IN_BLADESTORM_WITH_TALENT,
 } from "../utils/castingLocks";
 import { DISPLACEMENT_EVIDENCE_IDS } from "../utils/castStopEvidence";
+import { KILL_ATTEMPT_NON_ANCHOR_CDS } from "../utils/killAttempts";
 import { EXECUTE_KILLING_BLOW_IDS } from "../utils/killingBlow";
 import { COPY_CAST_IDS } from "../utils/castPress";
 import {
@@ -674,6 +675,11 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
     "analysis/candidates/cooldownTiming.ts",
     "cast",
     () => set(HEALER_TEAM_BURST_IDS),
+  ),
+  // B-tier B15c-U10 (user ruling 2026-10-06): a Holy Paladin's Avenging Wrath
+  // does not anchor a kill attempt of its own team.
+  t("KILL_ATTEMPT_NON_ANCHOR_CDS", "utils/killAttempts.ts", "cast", () =>
+    set([...KILL_ATTEMPT_NON_ANCHOR_CDS.values()].flatMap((s) => [...s])),
   ),
   // B-tier B15c-U11 (user ruling 2026-10-06): killing blows the friendly
   // [DEATH] block names as an execute.

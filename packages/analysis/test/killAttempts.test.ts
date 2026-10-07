@@ -1,11 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { LogEvent } from "@gladlog/parser-compat";
+import { CombatUnitSpec, LogEvent } from "@gladlog/parser-compat";
 import { describe, expect, it } from "vitest";
 
 import { extractCandidateFindings } from "../src/analysis/candidateFindings";
 import { CANDIDATE_TYPE_FLAGS } from "../src/data/candidateTypeFlags";
 import { ensureAnalysisData } from "../src/data/ensure";
 import {
+  anchorsKillAttempt,
   attemptIntoTrinketEvents,
   extractKillAttempts,
   formatKillAttemptsForContext,
@@ -1750,5 +1751,69 @@ describe("FAILED cause: own save + external in one attempt (B16b)", () => {
         selfSavedAtS: [313],
       }),
     ).toBe("self-saved (Renewal)");
+  });
+});
+
+// B-tier B15c-U10 (user ruling 2026-10-06): our Holy Paladin's Avenging Wrath
+// does not anchor a kill attempt — it neither opens a burst cluster nor
+// extends one. Any other spec's wings, and any other cooldown, still do.
+describe("burst anchor: a Holy Paladin's Avenging Wrath is not one (B15c-U10)", () => {
+  const cast = (spellId: string, spellName: string, atS: number): any => ({
+    spellId,
+    spellName,
+    logLine: {
+      event: LogEvent.SPELL_CAST_SUCCESS,
+      timestamp: ms(atS),
+      parameters: [],
+    },
+  });
+  const wings = (atS: number) => cast("31884", "Avenging Wrath", atS);
+
+  it("the predicate: Holy Paladin + Avenging Wrath (or its activation) only", () => {
+    const holy = { spec: CombatUnitSpec.Paladin_Holy };
+    const ret = { spec: CombatUnitSpec.Paladin_Retribution };
+    expect(anchorsKillAttempt(holy, "31884")).toBe(false);
+    expect(anchorsKillAttempt(holy, "454351")).toBe(false); // Radiant Glory's proc of it
+    expect(anchorsKillAttempt(ret, "31884")).toBe(true);
+    expect(anchorsKillAttempt(holy, "1719")).toBe(true);
+  });
+
+  it("wings alone with real team damage behind them: no attempt for Holy, one for Retribution", async () => {
+    await ensureAnalysisData();
+    const attemptsFor = (spec: CombatUnitSpec) => {
+      const e1 = unit("e1");
+      const f1 = unit("f1", {
+        reaction: 1,
+        spec,
+        spellCastEvents: [wings(40)],
+        damageOut: [dmg("f1", "e1", 42, 60_000)],
+      });
+      return extractKillAttempts([f1], [e1], makeCombat(f1, e1));
+    };
+    expect(attemptsFor(CombatUnitSpec.Paladin_Holy)).toHaveLength(0);
+    const ret = attemptsFor(CombatUnitSpec.Paladin_Retribution);
+    expect(ret).toHaveLength(1);
+    expect(ret[0]!.anchorSpellName).toBe("Avenging Wrath");
+  });
+
+  it("it does not open a teammate's cluster either: the attempt starts at the teammate's cooldown and carries its name", async () => {
+    await ensureAnalysisData();
+    const e1 = unit("e1");
+    const pal = unit("f1", {
+      reaction: 1,
+      spec: CombatUnitSpec.Paladin_Holy,
+      spellCastEvents: [wings(40)],
+    });
+    const war = unit("f2", {
+      reaction: 1,
+      spellCastEvents: [offensiveCast(46)],
+      damageOut: [dmg("f2", "e1", 48, 60_000)],
+    });
+    const combat = makeCombat(pal, e1);
+    combat.units.f2 = war;
+    const attempts = extractKillAttempts([pal, war], [e1], combat);
+    expect(attempts).toHaveLength(1);
+    expect(attempts[0]!.anchorSpellName).toBe("Recklessness");
+    expect(attempts[0]!.fromSeconds).toBe(46);
   });
 });

@@ -57,6 +57,7 @@
  * 辅判据(dps 事后分布的速率分位)未实现 —— 需要自己的接地轮,留档。
  */
 import {
+  CombatUnitSpec,
   IArenaMatch,
   ICombatUnit,
   IShuffleRound,
@@ -117,6 +118,7 @@ import { KW_BURST_MIN_DAMAGE } from "./offensiveWindows";
 import { pvpTrinketUses } from "./pvpTrinketUses";
 import { fmtTime, toRenderSecond } from "./renderGrid";
 import { buildRosterSides, type RosterSides } from "./rosterSide";
+import { offensiveEffectCdId } from "./spellDanger";
 
 // The defensive sets live in enemyDefensives.ts since GH #97 (2026-09-15):
 // the timeline's [ENEMY DEF] line and this attribution must agree on what a
@@ -482,6 +484,7 @@ export function extractKillAttempts(
       const cds =
         reconstructEnemyCDTimeline([f], combat).players[0]?.offensiveCDs ?? [];
       for (const cd of cds) {
+        if (!anchorsKillAttempt(f, cd.spellId)) continue;
         const span = burstCastSpan(cd);
         teamCasts.push({
           cast: cd.castTimeSeconds,
@@ -646,6 +649,34 @@ export function extractKillAttempts(
 
   attempts.sort((a, b) => a.fromSeconds - b.fromSeconds);
   return attempts;
+}
+
+/**
+ * Offensive cooldowns that do NOT anchor a kill attempt of the attacking
+ * team, by the spec that pressed them — B-tier B15c-U10 (user ruling
+ * 2026-10-06): "我方奶骑的复仇之怒不当击杀尝试的锚". A Holy Paladin's wings
+ * are a healing cooldown as often as a go (06bb9860: two `Avenging Wrath
+ * burst (no stun)` rows opened by the log owner healing through pressure).
+ * The cast neither opens a burst cluster nor extends one. Keyed on the
+ * canonical cooldown (`offensiveEffectCdId`), so an activation of it is
+ * covered too. The ENEMY side — burst windows, crisis `enemyBurst` — does not
+ * read this (ruling A27 stands). Registered in curatedIdRegistry.
+ */
+export const KILL_ATTEMPT_NON_ANCHOR_CDS: ReadonlyMap<
+  CombatUnitSpec,
+  ReadonlySet<string>
+> = new Map([
+  [CombatUnitSpec.Paladin_Holy, new Set(["31884"])], // Avenging Wrath
+]);
+
+/** May this friendly's offensive cast open or extend a burst-anchored kill
+ * attempt (`KILL_ATTEMPT_NON_ANCHOR_CDS`)? */
+export function anchorsKillAttempt(
+  attacker: Pick<ICombatUnit, "spec">,
+  spellId: string,
+): boolean {
+  const cdId = offensiveEffectCdId(spellId) ?? spellId;
+  return !KILL_ATTEMPT_NON_ANCHOR_CDS.get(attacker.spec)?.has(cdId);
 }
 
 /** GH #97 cheap alternative to the [ENEMY DEF] timeline line: the summary
