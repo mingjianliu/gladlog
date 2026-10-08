@@ -1,11 +1,11 @@
 {
   "meta": {
-    "generatedAt": "2026-09-27",
-    "corpus": "wowarenalogs archive 2026-09-27",
+    "generatedAt": "2026-10-08",
+    "corpus": "wowarenalogs archive, GH #115 regen 2026-10-07",
     "command": "npx tsx packages/eval/scripts/cdTriggerPriorScan.ts emit-table --in <scan.jsonl> --out <file.json>",
     "cohort": "all",
     "cohortRule": "all 12.1+ healer rounds in the archive",
-    "rows": 301025,
+    "rows": 300198,
     "nFloor": 50,
     "predicateVersion": 1
   },
@@ -156,7 +156,7 @@
       "spellName": "Divine Shield"
     },
     "Holy Paladin|*|6940": {
-      "n": 10036,
+      "n": 9209,
       "medianHpPct": 54,
       "spellName": "Blessing of Sacrifice"
     },
@@ -216,8 +216,8 @@
       "spellName": "Divine Shield"
     },
     "Holy Paladin|Herald of the Sun|6940": {
-      "n": 3509,
-      "medianHpPct": 53,
+      "n": 3214,
+      "medianHpPct": 54,
       "spellName": "Blessing of Sacrifice"
     },
     "Holy Paladin|Lightsmith|1022": {
@@ -271,7 +271,7 @@
       "spellName": "Divine Shield"
     },
     "Holy Paladin|Lightsmith|6940": {
-      "n": 6527,
+      "n": 5995,
       "medianHpPct": 54,
       "spellName": "Blessing of Sacrifice"
     },

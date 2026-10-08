@@ -1,7 +1,7 @@
 {
   "meta": {
-    "generatedAt": "2026-09-27",
-    "corpus": "wowarenalogs archive 2026-09-27",
+    "generatedAt": "2026-10-08",
+    "corpus": "wowarenalogs archive, GH #115 regen 2026-10-07",
     "weeks": [
       "2026-W33",
       "2026-W34",
@@ -13,9 +13,9 @@
   },
   "cells": {
     "2v2|healer|*": {
-      "nNoResp": 2809,
+      "nNoResp": 2936,
       "deathNoResp": 0.3,
-      "nResp": 8862,
+      "nResp": 9207,
       "deathResp": 0.1,
       "top": [
         [
@@ -28,16 +28,16 @@
         ],
         [
           "selfHeal",
-          0.23
+          0.22
         ]
       ],
       "outcome": "ownDeath10s"
     },
     "2v2|healer|10-20%": {
-      "nNoResp": 1573,
-      "deathNoResp": 0.27,
-      "nResp": 4120,
-      "deathResp": 0.09,
+      "nNoResp": 1549,
+      "deathNoResp": 0.25,
+      "nResp": 4117,
+      "deathResp": 0.08,
       "top": [
         [
           "protective",
@@ -49,15 +49,15 @@
         ],
         [
           "control",
-          0.21
+          0.22
         ]
       ],
       "outcome": "ownDeath10s"
     },
     "2v2|healer|>=20%": {
-      "nNoResp": 1236,
-      "deathNoResp": 0.34,
-      "nResp": 4742,
+      "nNoResp": 1387,
+      "deathNoResp": 0.35,
+      "nResp": 5090,
       "deathResp": 0.11,
       "top": [
         [
@@ -76,39 +76,39 @@
       "outcome": "ownDeath10s"
     },
     "3v3|healer|*": {
-      "nNoResp": 1642,
+      "nNoResp": 1674,
       "deathNoResp": 0.38,
-      "nResp": 4722,
+      "nResp": 4787,
       "deathResp": 0.1,
       "top": [
         [
           "selfHeal",
-          0.5
-        ],
-        [
-          "wall",
-          0.24
+          0.49
         ],
         [
           "carriedHeal",
+          0.24
+        ],
+        [
+          "wall",
           0.24
         ]
       ],
       "outcome": "ownDeath10s"
     },
     "3v3|healer|10-20%": {
-      "nNoResp": 547,
-      "deathNoResp": 0.35,
-      "nResp": 1184,
-      "deathResp": 0.08,
+      "nNoResp": 499,
+      "deathNoResp": 0.36,
+      "nResp": 1100,
+      "deathResp": 0.09,
       "top": [
         [
           "selfHeal",
-          0.43
+          0.41
         ],
         [
           "carriedHeal",
-          0.26
+          0.28
         ],
         [
           "wall",
@@ -118,9 +118,9 @@
       "outcome": "ownDeath10s"
     },
     "3v3|healer|>=20%": {
-      "nNoResp": 1095,
+      "nNoResp": 1175,
       "deathNoResp": 0.39,
-      "nResp": 3538,
+      "nResp": 3687,
       "deathResp": 0.11,
       "top": [
         [
@@ -139,9 +139,9 @@
       "outcome": "ownDeath10s"
     },
     "Rated Solo Shuffle|healer|*": {
-      "nNoResp": 1182,
+      "nNoResp": 1244,
       "deathNoResp": 0.34,
-      "nResp": 5902,
+      "nResp": 6050,
       "deathResp": 0.15,
       "top": [
         [
@@ -160,18 +160,18 @@
       "outcome": "teamDeath15s"
     },
     "Rated Solo Shuffle|healer|10-20%": {
-      "nNoResp": 621,
+      "nNoResp": 622,
       "deathNoResp": 0.34,
-      "nResp": 2176,
+      "nResp": 2110,
       "deathResp": 0.16,
       "top": [
         [
           "selfHeal",
-          0.32
+          0.31
         ],
         [
           "wall",
-          0.27
+          0.26
         ],
         [
           "carriedHeal",
@@ -181,9 +181,9 @@
       "outcome": "teamDeath15s"
     },
     "Rated Solo Shuffle|healer|>=20%": {
-      "nNoResp": 561,
+      "nNoResp": 622,
       "deathNoResp": 0.33,
-      "nResp": 3726,
+      "nResp": 3940,
       "deathResp": 0.15,
       "top": [
         [
@@ -192,7 +192,7 @@
         ],
         [
           "wall",
-          0.32
+          0.31
         ],
         [
           "carriedHeal",

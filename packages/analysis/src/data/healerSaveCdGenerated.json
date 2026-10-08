@@ -1,6 +1,6 @@
 {
   "meta": {
-    "generatedAt": "2026-09-26",
+    "generatedAt": "2026-10-08",
     "corpus": "1814 archived files (12.1+ rounds only)",
     "command": "npx tsx packages/eval/scripts/healerSaveCdScan.ts emit-table --in <counts.json> --out <file.json>",
     "minShare": 0.02,
@@ -517,9 +517,10 @@
           "share": 0.677,
           "rounds": 245,
           "casts": 258,
-          "savesAlly": false,
+          "savesAlly": true,
           "savesSelf": true,
           "why": [
+            "ally: team-heal (registered)",
             "self: self-heal"
           ]
         },

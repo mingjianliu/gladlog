@@ -1,28 +1,28 @@
 {
   "meta": {
-    "corpus": "wowarenalogs archive 2026-09-27",
-    "generatedAt": "2026-09-27",
-    "windows": 97499,
+    "corpus": "wowarenalogs archive, GH #115 regen 2026-10-07",
+    "generatedAt": "2026-10-07",
+    "windows": 102077,
     "predicate": "eligible window: enemyHealerCcWindows merged per healer; team burst = countsAsTeamBurst (canonical offensive table, a healer's own only Power Infusion) (mergeHealerCcWindows: one continuous lock = one window), syncWindowEligible (rendered dur>=3s, rendered t>=30s, no enemy death in-window), evaluateSyncWindow: >=1 canonical OFFENSIVE_CD_SPELL_IDS off cooldown at the window start or at a merged component's start, whose owner was then free to act for most of the rest of the lock (couldActForMostOf) and, for a CD that hits an enemy, within its reach (cdOutOfRangeReachYards) of a non-healer enemy at some half-second of it; entered = such a CD pressed (cast START or success) in [from-2s, to] or still active (buffFullDurationForCaster) at the lock start; kill15 = enemy death in (from, from+15s]"
   },
   "cells": {
     "Rated Solo Shuffle": {
-      "nEntered": 30354,
-      "killEntered": 0.09188245371285497,
-      "nUnentered": 15552,
-      "killUnentered": 0.05324074074074074
+      "nEntered": 32560,
+      "killEntered": 0.09161547911547911,
+      "nUnentered": 16185,
+      "killUnentered": 0.05159097930182267
     },
     "2v2": {
-      "nEntered": 9231,
-      "killEntered": 0.09186437005741523,
-      "nUnentered": 6954,
-      "killUnentered": 0.04256542996836353
+      "nEntered": 9324,
+      "killEntered": 0.09180609180609181,
+      "nUnentered": 7069,
+      "killUnentered": 0.04243881737162258
     },
     "3v3": {
-      "nEntered": 24327,
-      "killEntered": 0.08052780860771981,
-      "nUnentered": 11081,
-      "killUnentered": 0.04124176518364769
+      "nEntered": 25890,
+      "killEntered": 0.07995365005793743,
+      "nUnentered": 11049,
+      "killUnentered": 0.04353335143451896
     }
   }
 }

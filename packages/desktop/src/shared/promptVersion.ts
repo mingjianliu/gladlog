@@ -1101,5 +1101,12 @@
  *  at the second the enemy's burst began. The row bypasses the 2 s debounce
  *  and does not start it for the rows after it; the delta chain restarts
  *  from it. Counts in the commit.
+ *  v334 (2026-10-08, GH #115 batched regen #2, user ruling 2026-09-26 + 10-07):
+ *  every stale corpus reference table regenerated at 859883a6 on the corpus
+ *  of the table it replaces (sync-window, burst-window, behaviorPrior,
+ *  cdTriggerPrior, kick-priority + heal spells, healerSaveCd, backlashDispel,
+ *  cdRecastFloor, corpus-tools reference_vectors) and CD_HOARDED_OUTCOME_REF
+ *  re-measured (4.5 / 11.4 % n=16,960 → 5.8 / 13.0 % n=15,645). Reference
+ *  numbers quoted in facts move; counts in the commit.
  */
-export const PROMPT_VERSION = 333;
+export const PROMPT_VERSION = 334;
