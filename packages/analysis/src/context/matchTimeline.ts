@@ -62,6 +62,7 @@ import {
   peakSpikePlacement,
 } from "./peakSpikePlacement";
 import "./resLedgerPrune";
+import "./stackedDefensives";
 import "./unitLabel";
 export {
   PEAK_SPIKE_MARKERS,
@@ -554,7 +555,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       formatAoeTargetPart,
       ownerCcImmuneTag,
       ownerCcMissTag,
-    ownerNoCcAuraTag,
+      ownerNoCcAuraTag,
       requestSnapshotPlaceholder,
       getCDTargetAndVelocityPart,
       manaCooldownNote,
@@ -680,10 +681,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   // windows do not hold) — the CC binder, asked of the disarm windows only
   // when no CC took the press (a CC-bound press says so on its [CC ON TEAM]
   // line). One reading for the [TRINKET] line and the [DISARM] tail (F-DA1).
-  const trinketBrokenDisarm = (
-    summary: IPlayerCCTrinketSummary,
-    t: number,
-  ) => {
+  const trinketBrokenDisarm = (summary: IPlayerCCTrinketSummary, t: number) => {
     const rawCastMs = matchStartMs + Math.round(t * 1000);
     return findBrokenCC(summary.ccInstances, matchStartMs, rawCastMs)
       ? undefined
