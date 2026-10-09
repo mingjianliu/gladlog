@@ -24,6 +24,7 @@ import {
 } from "../../utils/enemyInterrupts";
 import {
   analyzeKickAudit,
+  kickMissTag,
   jukedByStoppedChannelText,
 } from "../../utils/kickAudit";
 import { fmtTime } from "../../utils/renderGrid";
@@ -305,7 +306,7 @@ export function emitKickEntries(
           : "hit nothing";
     addEntry(
       k.atSeconds,
-      `${fmtTime(k.atSeconds)}  [KICK]   your ${k.kickSpellName}${on} — ${outcome}`,
+      `${fmtTime(k.atSeconds)}  [KICK]   your ${k.kickSpellName}${on} — ${outcome}${kickMissTag(k, resolveKicker)}`,
     );
   }
 }

@@ -1222,5 +1222,9 @@
  *  area controls (Dragon's Breath, Shockwave, Chaos Nova, Blinding Sleet,
  *  Void Nova) list who they landed on, on [YOU] [CC] and [TEAM] [CC] lines,
  *  and read `[hit no enemy player]` when they hit none. Counts in the commit.
+ *  v354 (2026-10-09, FT-T11a, same approval): a kick that interrupted
+ *  nothing carries the miss the log wrote — ` [REFLECTED by X]`,
+ *  ` [IMMUNE: X]`, ` [MISSED on X]` — on `[KICK] your …` and the ledger's
+ *  `Kicks:` line. The landed / juked / missed verdict is unchanged.
  */
-export const PROMPT_VERSION = 353;
+export const PROMPT_VERSION = 354;

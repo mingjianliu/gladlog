@@ -25,6 +25,7 @@ import {
   analyzeKickAudit,
   CHANNEL_STOPPED_MAX_SHARE,
   jukedByStoppedChannelText,
+  kickMissTag,
 } from "../src/utils/kickAudit";
 import {
   makeAuraEvent,
@@ -108,6 +109,135 @@ const priest = (fromS: number, toS: number, extra: Record<string, any> = {}) =>
     castStartEvents: extra.castStartEvents ?? [castStart(BENEDICTION, 1)],
     actionIn: extra.actionIn ?? [],
   } as any);
+
+describe("kickAudit: the miss line the log wrote for the kick (FT-T11)", () => {
+  const missEvent = (
+    spellId: string,
+    atS: number,
+    dest: [string, string],
+    missType: string,
+  ): any => ({
+    spellId,
+    spellName: spellId,
+    timestamp: T0 + atS * 1000,
+    srcUnitId: "p1",
+    srcUnitName: "Knight",
+    destUnitId: dest[0],
+    destUnitName: dest[1],
+    missType,
+    amount: 0,
+    logLine: { event: LogEvent.SPELL_MISSED, timestamp: T0 + atS * 1000 },
+  });
+  const kickerWith = (kickS: number, misses: any[]) => {
+    const k = kicker(kickS);
+    (k as any).missesOut = misses;
+    return k;
+  };
+  const label = (name: string) => `<${name}>`;
+
+  it("被反射的打断:事实挂在条目上,判定不变;文案 [REFLECTED by X]", () => {
+    // no cast was open: the kick "hit nothing" — and the log says why
+    const enemy = priest(10, 20);
+    const [k] = analyzeKickAudit(
+      kickerWith(30, [missEvent(MIND_FREEZE, 30, ["e1", "Priest"], "REFLECT")]),
+      [enemy],
+      combat,
+    );
+    expect(k!.result).toBe("missed");
+    expect(k!.kickMiss).toEqual({
+      missType: "REFLECT",
+      targetId: "e1",
+      targetName: "Priest",
+    });
+    expect(kickMissTag(k!, label)).toBe(" [REFLECTED by <Priest>]");
+  });
+
+  it("免疫 / 未命中各有各的词;吸收不算打断的落空;超出配对窗口的不算", () => {
+    const run = (misses: any[]) =>
+      analyzeKickAudit(kickerWith(30, misses), [priest(10, 20)], combat)[0]!;
+    expect(
+      kickMissTag(
+        run([missEvent(MIND_FREEZE, 30.004, ["e1", "Priest"], "IMMUNE")]),
+        label,
+      ),
+    ).toBe(" [IMMUNE: <Priest>]");
+    expect(
+      kickMissTag(
+        run([missEvent(MIND_FREEZE, 30, ["e1", "Priest"], "MISS")]),
+        label,
+      ),
+    ).toBe(" [MISSED on <Priest>]");
+    expect(
+      run([missEvent(MIND_FREEZE, 30, ["e1", "Priest"], "ABSORB")]).kickMiss,
+    ).toBeUndefined();
+    expect(
+      run([missEvent(MIND_FREEZE, 30.2, ["e1", "Priest"], "IMMUNE")]).kickMiss,
+    ).toBeUndefined();
+    // another spell's miss in the same ms is not the kick's
+    expect(
+      run([missEvent("49998", 30, ["e1", "Priest"], "IMMUNE")]).kickMiss,
+    ).toBeUndefined();
+  });
+
+  it("codex 40-FT-38 P2: 瞄准的目标免疫、沉默落在另一个人身上 —— silenced 的条目也带着那条免疫", () => {
+    const SILENCE = "15487";
+    const silencer = makeUnit("p1", {
+      name: "Knight",
+      info,
+      spellCastEvents: [
+        makeSpellCastEvent(
+          SILENCE,
+          T0 + 30_000,
+          "e1",
+          "Priest",
+          "p1",
+          "Knight",
+        ),
+      ],
+    } as any);
+    (silencer as any).missesOut = [
+      missEvent(SILENCE, 30, ["e1", "Priest"], "IMMUNE"),
+    ];
+    const other = makeUnit("e2", {
+      name: "Mage",
+      info,
+      auraEvents: [
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          SILENCE,
+          T0 + 30_050,
+          "p1",
+          "e2",
+          "DEBUFF",
+        ),
+      ],
+    } as any);
+    const [k] = analyzeKickAudit(silencer, [priest(10, 20), other], combat);
+    expect(k!.result).toBe("silenced");
+    expect(k!.silencedTargetName).toBe("Mage");
+    expect(k!.kickMiss).toEqual({
+      missType: "IMMUNE",
+      targetId: "e1",
+      targetName: "Priest",
+    });
+  });
+
+  it("没有落空行 → 没有这个事实;juke 的判定带着落空事实一起留着", () => {
+    const [plain] = analyzeKickAudit(kicker(30), [priest(10, 20)], combat);
+    expect(plain!.kickMiss).toBeUndefined();
+    expect(kickMissTag(plain!, label)).toBe("");
+    // a channel the target stopped 0.1 s before the kick, and the kick itself IMMUNE
+    const [juked] = analyzeKickAudit(
+      kickerWith(44.751, [
+        missEvent(MIND_FREEZE, 44.751, ["e1", "Priest"], "IMMUNE"),
+      ]),
+      [priest(44.01, 44.648)],
+      combat,
+    );
+    expect(juked!.result).toBe("juked");
+    expect(juked!.kickMiss?.missType).toBe("IMMUNE");
+  });
+});
 
 describe("kickAudit: a channel the target stopped just before the kick (B21b)", () => {
   it("is the bait, ahead of an unfinished hardcast from earlier in the lookback (0e0663e6 @44)", () => {

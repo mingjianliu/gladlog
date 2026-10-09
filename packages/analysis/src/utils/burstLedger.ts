@@ -10,7 +10,11 @@ import {
   SELF_CAST_NOOP_EXTERNAL_IDS,
 } from "./cooldowns";
 import { IEnemyCDCast, reconstructEnemyCDTimeline } from "./enemyCDs";
-import { type IKickAuditEntry, jukedByStoppedChannelText } from "./kickAudit";
+import {
+  type IKickAuditEntry,
+  jukedByStoppedChannelText,
+  kickMissTag,
+} from "./kickAudit";
 import { MIN_WINDOW_SECONDS } from "./killWindowTargetSelection";
 import { IOffensiveWindow } from "./offensiveWindows";
 import { fmtTime, toRenderSecond } from "./renderGrid";
@@ -664,6 +668,8 @@ export function formatBurstLedgerForContext(
   }
 
   if (kicks.length > 0) {
+    // the target as this line names units elsewhere (`silenced <name>`)
+    const missTag = (k: IKickAuditEntry) => kickMissTag(k, (name) => name);
     const parts = kicks.map((k) => {
       const at = fmtTime(k.atSeconds);
       switch (k.result) {
@@ -676,15 +682,15 @@ export function formatBurstLedgerForContext(
             k.openCastSpellName
               ? `their ${k.openCastSpellName} cast did not finish`
               : "no cast interrupted"
-          })`;
+          })${missTag(k)}`;
         case "juked":
           return k.jukedChannelStoppedAgoS !== undefined
-            ? `${at} ${k.kickSpellName} → ${jukedByStoppedChannelText(k)}`
-            : `${at} ${k.kickSpellName} → JUKED by fake ${k.jukedBySpellName}`;
+            ? `${at} ${k.kickSpellName} → ${jukedByStoppedChannelText(k)}${missTag(k)}`
+            : `${at} ${k.kickSpellName} → JUKED by fake ${k.jukedBySpellName}${missTag(k)}`;
         case "missed":
-          return `${at} ${k.kickSpellName} → hit nothing`;
+          return `${at} ${k.kickSpellName} → hit nothing${missTag(k)}`;
         default:
-          return `${at} ${k.kickSpellName} → outcome unknown (no cast-start data)`;
+          return `${at} ${k.kickSpellName} → outcome unknown (no cast-start data)${missTag(k)}`;
       }
     });
     lines.push(`  Kicks: ${parts.join(" | ")}`);

@@ -93,6 +93,13 @@ export interface IKickAuditEntry {
     interruptedSpellName: string;
     agoS: number;
   };
+  /** not landed (juked / missed / unknown, and a `silenced` whose aura went
+   * onto ANOTHER unit): the SPELL_MISSED line the log wrote for this kick — the
+   * target reflected it, was immune to it, or it missed (FT-T11: 195 of the
+   * 4,269 kicks that interrupted nothing on the 605-file capture have one;
+   * the audit read none and they all said "hit nothing" or "JUKED"). A fact
+   * beside `result`, which it does not change. */
+  kickMiss?: IKickMiss;
   /** silenced: who carried the kick's aura. */
   silencedTargetName?: string;
   /** silenced: the cast that target had open AT the kick and never finished
@@ -102,6 +109,38 @@ export interface IKickAuditEntry {
    * only be said when this is absent — and whether the silence or the
    * target stopped it the log cannot tell, so the wording says neither. */
   openCastSpellName?: string;
+}
+
+export interface IKickMiss {
+  /** the log's own miss type: REFLECT, IMMUNE, MISS, DODGE, … */
+  missType: string;
+  targetId: string;
+  targetName: string;
+}
+/** A kick and its SPELL_MISSED line share the ms on every pair of the
+ * 605-file probe; 100 ms is the allowance. */
+export const KICK_MISS_PAIR_MS = 100;
+const KICK_MISS_WORD: Readonly<Record<string, string>> = {
+  MISS: "MISSED on",
+  DODGE: "DODGED by",
+  PARRY: "PARRIED by",
+  EVADE: "EVADED by",
+  DEFLECT: "DEFLECTED by",
+  RESIST: "RESISTED by",
+};
+/** The one wording of `kickMiss`, for every rendering of the audit: the tag
+ * vocabulary the control lines use (` [REFLECTED by X]`, ` [IMMUNE: X]`,
+ * ` [MISSED on X]`). `label` resolves the target's roster label. */
+export function kickMissTag(
+  k: Pick<IKickAuditEntry, "kickMiss">,
+  label: (name: string, unitId: string) => string,
+): string {
+  if (!k.kickMiss) return "";
+  const who = label(k.kickMiss.targetName, k.kickMiss.targetId);
+  if (k.kickMiss.missType === "REFLECT") return ` [REFLECTED by ${who}]`;
+  if (k.kickMiss.missType === "IMMUNE") return ` [IMMUNE: ${who}]`;
+  const word = KICK_MISS_WORD[k.kickMiss.missType];
+  return word ? ` [${word} ${who}]` : "";
 }
 
 /** The one wording for a kick juked by a channel its target stopped
@@ -154,11 +193,16 @@ export function analyzeKickAudit(
   // owner's pets as well (~5 matches mislabeled in the 2026-07-16 DPS
   // baseline).
   const kickerIds = new Set<string>([player.id]);
+  const kickerUnits: ICombatUnit[] = [player];
   for (const u of Object.values(
     (combat as { units?: Record<string, ICombatUnit> }).units ?? {},
   )) {
-    if (u.ownerId === player.id) kickerIds.add(u.id);
+    if (u.ownerId === player.id) {
+      kickerIds.add(u.id);
+      kickerUnits.push(u);
+    }
   }
+  const kickerMisses = kickerUnits.flatMap((u) => u.missesOut ?? []);
 
   const kickRows = player.spellCastEvents
     .filter(
@@ -339,6 +383,29 @@ export function analyzeKickAudit(
       continue;
     }
 
+    // FT-T11: the miss line the log wrote for this kick, on the unit it was
+    // aimed at (first) or on an enemy player. An ABSORB is no miss of a kick.
+    const missLines = kickerMisses.filter(
+      (m) =>
+        isCastOrEffect(kick.spellId ?? "", m.spellId ?? "") &&
+        Math.abs(m.timestamp - kickMs) <= KICK_MISS_PAIR_MS &&
+        m.missType !== "ABSORB" &&
+        !!m.destUnitId &&
+        (m.destUnitId === kick.destUnitId ||
+          enemyPlayers.some((e) => e.id === m.destUnitId)),
+    );
+    const missLine =
+      missLines.find((m) => m.destUnitId === kick.destUnitId) ?? missLines[0];
+    const missed: Pick<IKickAuditEntry, "kickMiss"> = missLine
+      ? {
+          kickMiss: {
+            missType: missLine.missType,
+            targetId: missLine.destUnitId,
+            targetName: missLine.destUnitName,
+          },
+        }
+      : {};
+
     // 2b. The kick's own silence aura on an enemy: it landed without a cast
     // to stop (fa5e6c66: six Silences read "hit nothing"). The kick's own id
     // or one of its effect auras in the cast→effect table (`isCastOrEffect`,
@@ -368,8 +435,12 @@ export function analyzeKickAudit(
         : enemyPlayers.find(carriesKickAura);
     if (silenced) {
       const open = openCastOf(silenced, kickMs, true);
+      // the aimed unit's miss stays beside "silenced <other>" — it is why
+      // the intended target was unaffected (codex 40-FT-38: Avenger's Shield
+      // IMMUNE on the aimed enemy, its silence on another)
       entries.push({
         ...base,
+        ...missed,
         result: "silenced",
         silencedTargetName: silenced.name,
         ...(open ? { openCastSpellName: open } : {}),
@@ -378,7 +449,7 @@ export function analyzeKickAudit(
     }
 
     if (!hasCastStartData) {
-      entries.push({ ...base, result: "unknown" });
+      entries.push({ ...base, ...missed, result: "unknown" });
       continue;
     }
 
@@ -394,6 +465,7 @@ export function analyzeKickAudit(
     if (stopped) {
       entries.push({
         ...base,
+        ...missed,
         result: "juked",
         jukedBySpellName: getEnglishSpellName(
           stopped.spellId,
@@ -410,7 +482,12 @@ export function analyzeKickAudit(
     }
 
     if (jukedBy) {
-      entries.push({ ...base, result: "juked", jukedBySpellName: jukedBy });
+      entries.push({
+        ...base,
+        ...missed,
+        result: "juked",
+        jukedBySpellName: jukedBy,
+      });
       continue;
     }
     // B7a: nothing to kick because another interrupt had just landed on the
@@ -428,6 +505,7 @@ export function analyzeKickAudit(
       CombatExtraSpellAction | undefined;
     entries.push({
       ...base,
+      ...missed,
       result: "missed",
       ...(beat
         ? {
