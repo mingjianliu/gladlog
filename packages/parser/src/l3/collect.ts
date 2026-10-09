@@ -49,7 +49,7 @@ export function collectEvents(
     });
   }
 
-  const landedTwins = swingLandedTwins(records);
+  const twinnedSwings = new Set(swingLandedTwins(records).values());
 
   for (const record of records) {
     const srcGuid = record.base?.srcGuid;
@@ -70,15 +70,19 @@ export function collectEvents(
       lineIndex: record.lineIndex,
     };
 
-    // 1. Damage group. One swing is logged as SWING_DAMAGE and / or
-    // SWING_DAMAGE_LANDED (see swingTwins.ts): a LANDED line that repeats a
-    // SWING_DAMAGE line is skipped, a LANDED line that stands alone IS the
-    // swing. A lone LANDED line with nothing landed (fully absorbed) is not a
-    // damage event — like a fully absorbed spell, it exists as its
-    // SPELL_ABSORBED record (and SWING_MISSED, when the log has one).
+    // 1. Damage group. One swing is logged as SWING_DAMAGE (attacker side)
+    // and / or SWING_DAMAGE_LANDED (victim side) — see swingTwins.ts. The
+    // victim-side line is the swing's damage event: it carries what landed
+    // (where the two lines disagree the victim's health follows the LANDED
+    // amount, 1,494 of 1,494 measured). A SWING_DAMAGE line stands in only
+    // when it has no LANDED twin. A LANDED line with nothing landed (the
+    // swing was absorbed whole) is not a damage event — like a fully absorbed
+    // spell, it exists as its SPELL_ABSORBED record (and SWING_MISSED, when
+    // the log has one).
     const skippedSwingLine =
-      record.eventName === "SWING_DAMAGE_LANDED" &&
-      (landedTwins.has(record) || !(record.damage && record.damage.amount > 0));
+      record.eventName === "SWING_DAMAGE_LANDED"
+        ? !(record.damage && record.damage.amount > 0)
+        : record.eventName === "SWING_DAMAGE" && twinnedSwings.has(record);
     if (record.damage && !skippedSwingLine) {
       const hpEvent: GladHpEvent = {
         ...baseEvent,

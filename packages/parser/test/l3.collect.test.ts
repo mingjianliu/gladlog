@@ -113,7 +113,7 @@ describe("collectEvents", () => {
     ).toHaveLength(1);
   });
 
-  it("SWING dedup: of a SWING_DAMAGE + SWING_DAMAGE_LANDED twin pair only SWING_DAMAGE is in the damage arrays, but both are in actions (a lone LANDED line: l3.swingTwins.test.ts)", () => {
+  it("SWING dedup: of a SWING_DAMAGE + SWING_DAMAGE_LANDED twin pair only the victim-side LANDED line is in the damage arrays, but both are in actions (lone lines, disagreeing amounts: l3.swingTwins.test.ts)", () => {
     const swingRecords = [
       L(
         'SWING_DAMAGE,Player-1-A,"Alice-X",0x511,0x80000000,Player-2-B,"Bob-Y",0x548,0x80000000,Player-2-B,0000000000000000,900,1000,0,0,0,0,0,0,0,100,100,0,1.0,-1.0,0,1.0,70,77,90,-1,1,0,0,0,nil,nil,nil',
@@ -130,10 +130,10 @@ describe("collectEvents", () => {
     const swingB = swingUnits.get("Player-2-B")!;
 
     expect(swingA.damageOut).toHaveLength(1);
-    expect(swingA.damageOut[0]!.eventName).toBe("SWING_DAMAGE");
+    expect(swingA.damageOut[0]!.eventName).toBe("SWING_DAMAGE_LANDED");
 
     expect(swingB.damageIn).toHaveLength(1);
-    expect(swingB.damageIn[0]!.eventName).toBe("SWING_DAMAGE");
+    expect(swingB.damageIn[0]!.eventName).toBe("SWING_DAMAGE_LANDED");
 
     expect(
       swingA.actionsOut.filter((x) => x.eventName === "SWING_DAMAGE"),

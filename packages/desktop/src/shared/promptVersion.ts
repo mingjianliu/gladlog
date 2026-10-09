@@ -1115,5 +1115,12 @@
  *  that include such swings move ([DMG SPIKE], [OFFENSIVE WINDOW] peak, the
  *  DPS on press lines) and a [KILL] line can name a killing blow it lacked.
  *  Counts in the commit.
+ *  v336 (2026-10-09, FT-T02c, user approval 2026-10-09 "按你的建议做"): a
+ *  melee swing's damage event is its victim-side line (SWING_DAMAGE_LANDED)
+ *  whenever the log has one — where the two lines of a swing disagree, the
+ *  victim's health follows the LANDED amount (1,494 of 1,494). Swing damage
+ *  the attacker-side line reported and a shield in fact absorbed is no
+ *  longer counted as landed (and again as absorbed). Damage sums that
+ *  include such swings move. Counts in the commit.
  */
-export const PROMPT_VERSION = 335;
+export const PROMPT_VERSION = 336;

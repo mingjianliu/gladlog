@@ -2,21 +2,30 @@ import type { ParsedLine } from "../l1/types";
 
 /**
  * One melee swing is logged up to twice: `SWING_DAMAGE` carries the attacker's
- * advanced block, `SWING_DAMAGE_LANDED` the victim's. The attacker-side line is
- * NOT always there — a guardian the logging client has not resolved an owner
- * for (Unholy's Lesser Ghoul, unit flags 0xa28) swings with a LANDED line only.
- * Dropping every LANDED line (the pre-FT-T01 rule) lost 5,767 swings / 3.94M
- * damage in the 60 raw logs of the 2026-10-08 re-eval, two of them killing
- * blows (06bb9860, 7d1f14af).
+ * advanced block, `SWING_DAMAGE_LANDED` the victim's.
+ *
+ * The attacker-side line is NOT always there — a guardian the logging client
+ * has not resolved an owner for (Unholy's Lesser Ghoul, unit flags 0xa28)
+ * swings with a LANDED line only. Dropping every LANDED line (the pre-FT-T01
+ * rule) lost 5,767 swings / 3.94M damage in the 60 raw logs of the 2026-10-08
+ * re-eval, two of them killing blows (06bb9860, 7d1f14af).
+ *
+ * And the two lines do not always agree: `amount` / `absorbed` differ in 1,501
+ * of the 48,537 pairs (the attacker-side line does not see every absorb, nor
+ * every modifier applied on the victim). The victim-side line is the one that
+ * says what landed — on the 1,494 disagreeing pairs with a health reading
+ * before the hit, the victim's health moved by the LANDED amount 1,494 times
+ * and by the SWING_DAMAGE amount 0 times (FT-T02). So `collectEvents` takes
+ * the LANDED line as the swing's damage event and the SWING_DAMAGE line only
+ * when it has no twin (14 lines).
  *
  * Twin predicate, measured on those 60 logs (65,099 LANDED / 48,551
  * SWING_DAMAGE lines): same source, same target, same `baseAmount` (the
- * pre-mitigation roll — the landed `amount` and `absorbed` differ between the
- * two sides in 1,501 pairs), nearest line first. All 48,537 pairs lie within
- * 451 ms (99.4% within 25 ms; the LANDED line comes first in 314) and no
- * candidate pair exists between 452 ms and 3 s, so the window sits in an empty
- * band — neither a twin split in two (the swing counted twice) nor two swings
- * merged (one dropped) at this value.
+ * pre-mitigation roll, the one field both sides share), nearest line first.
+ * All 48,537 pairs lie within 451 ms (99.4% within 25 ms; the LANDED line
+ * comes first in 314) and no candidate pair exists between 452 ms and 3 s, so
+ * the window sits in an empty band — neither a twin split in two (the swing
+ * counted twice) nor two swings merged (one dropped) at this value.
  */
 export const SWING_TWIN_WINDOW_MS = 1_000;
 

@@ -1,23 +1,33 @@
 /**
- * FT-T01 fact-vs-raw scan: does every melee swing in the raw log reach the
- * parsed damage arrays exactly once?
+ * FT-T01 / FT-T02 fact-vs-raw scan: does every melee swing in the raw log
+ * reach the parsed damage arrays exactly once, with the amount that landed?
  *
  * A swing is logged as `SWING_DAMAGE` (attacker's advanced block) and / or
- * `SWING_DAMAGE_LANDED` (victim's). The parser keeps the first and has to keep
- * a LANDED line that has no twin — a guardian the logging client has no owner
- * for swings with LANDED lines only. A parser drop is invisible to the prompt
- * gates (they read the parser's own output), so this scan re-reads `rawLines`.
+ * `SWING_DAMAGE_LANDED` (victim's). The victim-side line is the one that says
+ * what landed: where the two disagree on `amount` (1,501 of 48,537 pairs on
+ * the 60 raw logs of the 2026-10-08 re-eval) the victim's health moved by the
+ * LANDED amount every time and by the SWING_DAMAGE amount never
+ * (fix-FT/scripts/t02_pair_truth.py, 1,494 of 1,494). And the attacker-side
+ * line is not always there — a guardian the logging client has no owner for
+ * swings with LANDED lines only. A parser drop or a wrong side is invisible
+ * to the prompt gates (they read the parser's own output), so this scan
+ * re-reads `rawLines`.
  *
  * The twin predicate is the parser's own (`swingLandedTwins`, registered in
  * docs/predicate-index.md); the scan reports its pair-gap histogram so the
  * window can be re-checked on a new corpus.
  *
- * Classes (per match / shuffle round, rawLines-indexed):
- *   MISSING    LANDED-only line, amount > 0, target is a parsed unit, and the
- *              line is in nobody's damageIn                       → must be 0
- *   DOUBLE     twin LANDED line that IS in a damage array (the swing counted
- *              twice)                                             → must be 0
- *   ZERO-NOABS LANDED-only line with amount 0 and absorbed > 0 whose absorbed
+ * Classes — per swing (a twin pair, or a line that stands alone), per match /
+ * shuffle round, rawLines-indexed. `expected` = the victim-side amount (the
+ * LANDED line's; a lone SWING_DAMAGE line's own):
+ *   MISSING    expected > 0, the target is a parsed unit, and neither line of
+ *              the swing is in a damage array                     → must be 0
+ *   DOUBLE     both lines of a pair are in a damage array         → must be 0
+ *   MISMATCH   the amount the swing's PARSED event carries differs from
+ *              `expected` (the attacker-side amount was kept; PHANTOM = it
+ *              says damage landed where the victim-side line says none did)
+ *                                                                 → must be 0
+ *   ZERO-NOABS LANDED line with amount 0 and absorbed > 0 whose absorbed
  *              amount is not met by SPELL_ABSORBED records of the same swing
  *              (melee form, same attacker and victim, `totalAmount` = the
  *              line's `baseAmount`, inside the twin window; each record used
@@ -76,6 +86,12 @@ interface Tally {
   doubleDamage: number;
   zero: number;
   zeroNoAbsorb: number;
+  mismatch: number;
+  mismatchAbs: number;
+  mismatchNet: number;
+  phantom: number;
+  phantomDamage: number;
+  swingOnly: number;
   amountDiffers: number;
 }
 
@@ -100,6 +116,12 @@ const newTally = (): Tally => ({
   doubleDamage: 0,
   zero: 0,
   zeroNoAbsorb: 0,
+  mismatch: 0,
+  mismatchAbs: 0,
+  mismatchNet: 0,
+  phantom: 0,
+  phantomDamage: 0,
+  swingOnly: 0,
   amountDiffers: 0,
 });
 
@@ -128,11 +150,20 @@ function scanItem(m: GladMatchBase): Tally {
     records.push(r);
   });
 
-  const inDamageArrays = new Set<number>();
+  // The amount the PARSED event carries, by the raw line it came from. One
+  // event sits in the victim's damageIn and the attacker's damageOut (the same
+  // line index); a second amount for one line would itself be a mismatch.
+  const storedAmount = new Map<number, number>();
+  const conflicting = new Set<number>();
   for (const u of Object.values(m.units)) {
-    for (const e of [...u.damageIn, ...u.damageOut])
-      if (e.lineIndex != null) inDamageArrays.add(e.lineIndex);
+    for (const e of [...u.damageIn, ...u.damageOut]) {
+      if (e.lineIndex == null) continue;
+      const seen = storedAmount.get(e.lineIndex);
+      if (seen !== undefined && seen !== e.amount) conflicting.add(e.lineIndex);
+      else storedAmount.set(e.lineIndex, e.amount);
+    }
   }
+  const inDamageArrays = { has: (i: number) => storedAmount.has(i) };
 
   // Melee SPELL_ABSORBED records keyed attacker|victim|totalAmount (a spell's
   // absorb names the attacking spell; a Soul Link share names the pet).
@@ -186,6 +217,8 @@ function scanItem(m: GladMatchBase): Tally {
     // Pair statistics come from the matcher's own pairing, never a second
     // derivation of it.
     const twin = twins.get(r);
+    const landedIn = inDamageArrays.has(idx);
+    const swingIn = !!twin && inDamageArrays.has(twin.lineIndex!);
     if (twin) {
       t.pairs++;
       const gap = Math.abs(twin.timestamp - r.timestamp);
@@ -193,37 +226,74 @@ function scanItem(m: GladMatchBase): Tally {
       t.gaps[GAP_EDGES.findIndex((e) => gap <= e)]!++;
       if (twin.lineIndex! > idx) t.landedFirst++;
       if (twin.damage!.amount !== amount) t.amountDiffers++;
-      if (inDamageArrays.has(idx)) {
-        t.double++;
-        show("DOUBLE", m, r);
-        t.doubleDamage += amount;
+    } else {
+      t.landedOnly++;
+      if (amount > 0) {
+        t.landedOnlyHit++;
+        t.landedOnlyHitDamage += amount;
       }
-      continue;
     }
-    t.landedOnly++;
     if (!(amount > 0)) {
       t.zero++;
       if (absorbed > 0 && !absorbCovered(r)) {
         t.zeroNoAbsorb++;
         show("ZERO-NOABS", m, r);
       }
-      continue;
     }
-    t.landedOnlyHit++;
-    t.landedOnlyHitDamage += amount;
     if (!m.units[r.base.destGuid]) {
-      t.targetNotAUnit++;
+      if (amount > 0) t.targetNotAUnit++;
       continue;
     }
-    if (!inDamageArrays.has(idx)) {
-      t.missing++;
-      show("MISSING", m, r);
-      t.missingDamage += amount;
-      if (r.base.destGuid.startsWith("Player-")) {
-        t.missingOnPlayer++;
-        t.missingOnPlayerDamage += amount;
+    // what the parsed arrays hold for this swing — the stored amounts, not
+    // the raw lines' (a LANDED-indexed event carrying the attacker-side
+    // amount is a mismatch; codex review of FT-T02c)
+    const inArrays =
+      (landedIn ? storedAmount.get(idx)! : 0) +
+      (swingIn ? storedAmount.get(twin!.lineIndex!)! : 0);
+    if (landedIn && swingIn) {
+      t.double++;
+      t.doubleDamage += storedAmount.get(twin!.lineIndex!)!;
+      show("DOUBLE", m, r);
+    } else if (!landedIn && !swingIn) {
+      if (amount > 0) {
+        t.missing++;
+        show("MISSING", m, r);
+        t.missingDamage += amount;
+        if (r.base.destGuid.startsWith("Player-")) {
+          t.missingOnPlayer++;
+          t.missingOnPlayerDamage += amount;
+        }
+        if (overkill > 0) t.missingKillingBlows++;
       }
-      if (overkill > 0) t.missingKillingBlows++;
+    } else if (
+      inArrays !== amount ||
+      conflicting.has(idx) ||
+      (twin !== undefined && conflicting.has(twin.lineIndex!))
+    ) {
+      t.mismatch++;
+      t.mismatchAbs += Math.abs(inArrays - amount);
+      t.mismatchNet += inArrays - amount;
+      if (amount === 0) {
+        t.phantom++;
+        t.phantomDamage += inArrays;
+      }
+      show("MISMATCH", m, r);
+    }
+  }
+  // A SWING_DAMAGE line with no LANDED twin is the swing's only line.
+  const twinned = new Set(twins.values());
+  for (const r of records) {
+    if (r.eventName !== "SWING_DAMAGE" || !r.damage || !r.base) continue;
+    if (twinned.has(r)) continue;
+    t.swingOnly++;
+    if (
+      r.damage.amount > 0 &&
+      m.units[r.base.destGuid] &&
+      !inDamageArrays.has(r.lineIndex!)
+    ) {
+      t.missing++;
+      t.missingDamage += r.damage.amount;
+      show("MISSING", m, r);
     }
   }
   return t;
@@ -254,7 +324,7 @@ for (const file of args.flatMap(rawFiles)) {
   console.log(
     `${tag} items=${t.items} landed=${t.landed} pairs=${t.pairs} landedOnlyHit=${t.landedOnlyHit} ` +
       `MISSING=${t.missing} (${t.missingDamage} dmg, on players ${t.missingOnPlayerDamage}, killing blows ${t.missingKillingBlows}) ` +
-      `DOUBLE=${t.double} ZERO-NOABS=${t.zeroNoAbsorb}/${t.zero}`,
+      `DOUBLE=${t.double} MISMATCH=${t.mismatch} (phantom ${t.phantom}) ZERO-NOABS=${t.zeroNoAbsorb}/${t.zero}`,
   );
 }
 
@@ -269,14 +339,23 @@ console.log(
 );
 console.log(
   `LANDED-only ${total.landedOnly}: amount>0 ${total.landedOnlyHit} (${total.landedOnlyHitDamage} dmg), ` +
-    `amount=0 ${total.zero}; target not a parsed unit ${total.targetNotAUnit}`,
+    `amount=0 LANDED lines ${total.zero}; SWING_DAMAGE-only ${total.swingOnly}; target not a parsed unit ${total.targetNotAUnit}`,
 );
 console.log(
   `MISSING ${total.missing} lines / ${total.missingDamage} dmg ` +
     `(on players ${total.missingOnPlayer} / ${total.missingOnPlayerDamage}; killing blows ${total.missingKillingBlows})`,
 );
-console.log(`DOUBLE ${total.double} lines / ${total.doubleDamage} dmg`);
+console.log(`DOUBLE ${total.double} swings / ${total.doubleDamage} dmg`);
+console.log(
+  `MISMATCH ${total.mismatch} swings / ${total.mismatchAbs} dmg apart (net ${total.mismatchNet}); ` +
+    `PHANTOM ${total.phantom} swings / ${total.phantomDamage} dmg the victim-side line says did not land`,
+);
 console.log(`ZERO-NOABS ${total.zeroNoAbsorb} of ${total.zero}`);
 process.exit(
-  total.missing > 0 || total.double > 0 || total.zeroNoAbsorb > 0 ? 1 : 0,
+  total.missing > 0 ||
+    total.double > 0 ||
+    total.mismatch > 0 ||
+    total.zeroNoAbsorb > 0
+    ? 1
+    : 0,
 );

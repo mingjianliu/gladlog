@@ -183,15 +183,16 @@ describe("event-name fidelity + SWING dedup (adjudication #10/#12)", () => {
   it("logLine.event preserves the real event name (PERIODIC stays PERIODIC)", () => {
     const evs = a.damageOut.map((e) => e.logLine.event).sort();
     expect(evs).toContain(LogEvent.SPELL_PERIODIC_DAMAGE);
-    expect(evs).toContain(LogEvent.SWING_DAMAGE);
+    // a paired swing's damage event is its victim-side line (FT-T02c)
+    expect(evs).toContain(LogEvent.SWING_DAMAGE_LANDED);
   });
 
-  it("SWING_DAMAGE_LANDED is NOT double-counted in damage arrays (old-parser dedup rule)", () => {
+  it("a SWING_DAMAGE + SWING_DAMAGE_LANDED pair is ONE damage event — the victim-side line — not two", () => {
     const swings = a.damageOut.filter((e) =>
       String(e.logLine.event).startsWith("SWING"),
     );
     expect(swings).toHaveLength(1);
-    expect(swings[0]!.logLine.event).toBe(LogEvent.SWING_DAMAGE);
+    expect(swings[0]!.logLine.event).toBe(LogEvent.SWING_DAMAGE_LANDED);
     // The damage total contains only one swing: periodic 55 + swing 77 (using
     // the negative-sign convention)
     const total = a.damageOut.reduce(

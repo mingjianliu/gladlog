@@ -121,15 +121,45 @@ describe("swingLandedTwins: which LANDED lines repeat a SWING_DAMAGE", () => {
   });
 });
 
-describe("collectEvents: a swing reaches the damage arrays exactly once (FT-T01)", () => {
-  it("成对的平砍只进一次,取 SWING_DAMAGE 那一行", () => {
+describe("collectEvents: a swing reaches the damage arrays exactly once, with the victim-side amount (FT-T01, FT-T02)", () => {
+  it("成对的平砍只进一次,取受害者侧的 LANDED 那一行", () => {
     const units = collect([
       swing(0, A, tail(77, 90)),
       landed(12, A, tail(77, 90)),
     ]);
     const b = units.get("Player-2-B")!;
-    expect(b.damageIn.map((e) => e.eventName)).toEqual(["SWING_DAMAGE"]);
+    expect(b.damageIn.map((e) => e.eventName)).toEqual(["SWING_DAMAGE_LANDED"]);
+    expect(b.damageIn[0]!.lineIndex).toBe(1);
     expect(units.get("Player-1-A")!.damageOut).toHaveLength(1);
+  });
+
+  it("两侧金额不一致时取受害者侧:攻击者侧写 15851,落地 11889", () => {
+    const units = collect([
+      swing(0, A, tail(15851, 20963)),
+      landed(1, A, tail(11889, 20963)),
+    ]);
+    expect(
+      units.get("Player-2-B")!.damageIn.map((e) => [e.amount, e.absorbed]),
+    ).toEqual([[11889, 0]]);
+    expect(units.get("Player-1-A")!.damageOut.map((e) => e.amount)).toEqual([
+      11889,
+    ]);
+  });
+
+  it("攻击者侧写落地、受害者侧写全吸收:不是伤害事件(不再和 SPELL_ABSORBED 重复计)", () => {
+    const units = collect([
+      swing(0, A, tail(554, 773)),
+      landed(0, A, tail(0, 773, -1, 554)),
+    ]);
+    expect(units.get("Player-2-B")!.damageIn).toHaveLength(0);
+    expect(units.get("Player-1-A")!.damageOut).toHaveLength(0);
+  });
+
+  it("只有 SWING_DAMAGE 行的平砍照常进", () => {
+    const units = collect([swing(0, A, tail(77, 90))]);
+    expect(units.get("Player-2-B")!.damageIn.map((e) => e.eventName)).toEqual([
+      "SWING_DAMAGE",
+    ]);
   });
 
   it("只有 LANDED 行的平砍进 damageIn / damageOut,致死一击带 overkill", () => {
@@ -159,7 +189,7 @@ describe("collectEvents: a swing reaches the damage arrays exactly once (FT-T01)
       swing(118, A, tail(60, 70)),
     ]);
     expect(units.get("Player-2-B")!.damageIn.map((e) => e.eventName)).toEqual([
-      "SWING_DAMAGE",
+      "SWING_DAMAGE_LANDED",
     ]);
   });
 });

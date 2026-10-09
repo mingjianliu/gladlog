@@ -279,7 +279,9 @@ for (const f of files) {
   >();
   for (const line of text.split("\n")) {
     parser.push(line);
-    if (!line.includes("_DAMAGE,")) continue;
+    // a melee hit's damage event is its victim-side line (FT-T02c)
+    if (!line.includes("_DAMAGE,") && !line.includes("SWING_DAMAGE_LANDED,"))
+      continue;
     const pl = parseLine(line);
     if (!pl?.damage || !pl.base || pl.eventName === "DAMAGE_SPLIT") continue;
     tails.set(
@@ -323,7 +325,7 @@ for (const f of files) {
         if (
           !ev ||
           ev === "DAMAGE_SPLIT" ||
-          !ev.endsWith("_DAMAGE") ||
+          !(ev.endsWith("_DAMAGE") || ev === "SWING_DAMAGE_LANDED") ||
           d.srcId === u.id
         )
           continue;
