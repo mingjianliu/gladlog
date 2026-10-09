@@ -4,6 +4,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 import { saveSchoolMask } from "../src/analysis/candidates/cooldownTiming";
 import { ABILITY_EFFECTS_GENERATED } from "../src/data/abilityEffectsGenerated";
+import castEffectAurasJson from "../src/data/castEffectAuraGenerated.json";
 import { ensureAnalysisData } from "../src/data/ensure";
 import {
   MITIGATION_TABLE,
@@ -705,6 +706,13 @@ describe("a re-applied aura with no REMOVED between is one press (F-E12)", () =>
  * Triage 2026-09-29, enemy-def F-E1a: Blur and Greater Invisibility are table
  * rows keyed by the cast id; the log carries another aura id on the caster.
  */
+const castEffectAuras = castEffectAurasJson as unknown as {
+  casts: Record<
+    string,
+    { aura: string; casts: number; hits: number; via: string }[]
+  >;
+};
+
 describe("a wall keyed by its cast is found under its logged aura (F-E1a)", () => {
   const BLUR_CAST = "198589";
   const BLUR_AURA = "212800";
@@ -723,6 +731,46 @@ describe("a wall keyed by its cast is found under its logged aura (F-E1a)", () =
       expect(wallTableIdOfAura(aura)).toBe(castId);
     }
     expect(wallTableIdOfAura(BARKSKIN)).toBe(BARKSKIN);
+  });
+
+  it("FT-T05: every table row whose cast logs a same-named aura under another id is linked (forward check against the generated cast→aura table)", () => {
+    // rows read some other way than "an aura with the row's id on the unit":
+    // an area save renders from its cast (ENEMY_AREA_SAVE_IDS)
+    const readFromCast = new Set(["98008"]); // Spirit Link Totem
+    const linked = new Set(Object.values(SELF_WALL_AURA_TO_CAST_ID));
+    const unlinked: string[] = [];
+    for (const castId of Object.keys(MITIGATION_TABLE)) {
+      if (linked.has(castId) || readFromCast.has(castId)) continue;
+      for (const e of castEffectAuras.casts[castId] ?? []) {
+        // the cast's own buff: applied by (nearly) every cast, under the
+        // cast's name — not a rider another talent adds to some casts
+        if (e.aura === castId || !e.via.includes("name")) continue;
+        if (e.hits / e.casts < 0.9) continue;
+        unlinked.push(`${castId} → ${e.aura} (${e.hits}/${e.casts})`);
+      }
+    }
+    expect(unlinked).toEqual([]);
+    expect(SELF_WALL_AURA_TO_CAST_ID["120954"]).toBe("115203");
+  });
+
+  it("an enemy Fortifying Brew: one self wall at 20 %, timed by the 120954 aura", () => {
+    const monk = unit("e1", {
+      spec: "269",
+      spellCastEvents: [cast("115203", "0000000000000000", 40)],
+      auraEvents: [
+        applied("120954", "e1", "e1", 40),
+        removed("120954", "e1", "e1", 55),
+      ],
+    });
+    const evs = enemyDefensiveEvents(monk, [monk], combat);
+    expect(evs).toHaveLength(1);
+    expect(evs[0]).toMatchObject({
+      kind: "self",
+      spellId: "120954",
+      pct: MITIGATION_TABLE["115203"].pct,
+      atSeconds: 40,
+    });
+    expect(evs[0].observedSeconds).toBeCloseTo(15, 5);
   });
 
   it("an enemy Blur: one self wall at 25 %, timed by the 212800 aura", () => {

@@ -1208,5 +1208,9 @@
  *  (Psychic Scream, Howl of Terror, Leg Sweep, …) that put its aura on no
  *  enemy player and logged no miss on one reads `[hit no enemy player]` on
  *  its [YOU] [CC] line instead of nothing. Counts in the commit.
+ *  v351 (2026-10-09, FT-T05, same approval): an enemy Fortifying Brew is
+ *  found under the aura the log carries (120954 → table row 115203) — it
+ *  gets its [ENEMY DEF] line and KILL ATTEMPTS can say `popped Fortifying
+ *  Brew`. Counts in the commit.
  */
-export const PROMPT_VERSION = 350;
+export const PROMPT_VERSION = 351;

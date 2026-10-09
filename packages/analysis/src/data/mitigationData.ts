@@ -79,6 +79,13 @@ export const MITIGATION_OVERRIDES: Record<string, IMitigationEntry> = {
  * Both aura ids are observed (605-file capture: 212800 428 applications for
  * 448 casts of 198589; 110960 714 for 713 of 110959). Greater Invisibility's
  * 60 % is the user's kept verdict, see the FLAG on its row above.
+ * FT-T05 (2026-10-09): Fortifying Brew was the third and was missing — its
+ * row is keyed by the cast 115203, the buff on the monk is 120954
+ * (`castEffectAuraGenerated.json`: 562 of 563 casts; the 60 re-eval logs: 29
+ * casts, 28 applications of 120954, none of 115203), so an enemy monk's brew
+ * never rendered: 605-file capture, 217 friendly cast lines against 0
+ * `[ENEMY DEF]` lines. `test/enemyDefensives.test.ts` now checks the whole
+ * table against the generated cast→aura table, so a fourth cannot hide.
  * Read by the enemy predicate only: the friendly pricing readers
  * (burst-into-mitigation's door, the death-window audit) still do not see
  * these auras — widening them changes accusations and is its own decision.
@@ -86,6 +93,7 @@ export const MITIGATION_OVERRIDES: Record<string, IMitigationEntry> = {
 export const SELF_WALL_AURA_TO_CAST_ID: Readonly<Record<string, string>> = {
   "212800": "198589", // Blur
   "110960": "110959", // Greater Invisibility
+  "120954": "115203", // Fortifying Brew
 };
 
 /**
