@@ -1175,5 +1175,10 @@
  *  the log's own amount. Legends state what each damage figure is: the
  *  [DMG SPIKE] total, the INCOMING DAMAGE BASELINES rows, KILL ATTEMPTS'
  *  `on target`, BURST LEDGER's `your damage`. Counts in the commit.
+ *  v345 (2026-10-09, FT-T02a): ABILITIES INTO IMMUNITY/DR lists the spells
+ *  that made at least 5 % of the caster's damage — the filter summed the
+ *  compat layer's negative amounts and kept exactly the spells BELOW 5 %
+ *  (filler listed, the main damage spells dropped). Lines appear, disappear
+ *  and change their spell lists. Counts in the commit.
  */
-export const PROMPT_VERSION = 344;
+export const PROMPT_VERSION = 345;

@@ -109,14 +109,33 @@ function buildDefenseWindows(
   return windows;
 }
 
-function getHighValueSpellIds(unit: ICombatUnit): Set<string> {
+/**
+ * The spells that each made at least 5 % of the unit's damage this round.
+ *
+ * `damageOut`'s `effectiveAmount` is NEGATIVE for a hit and POSITIVE for the
+ * absorbed-part rows interleaved with them (parser-compat convert.ts), so the
+ * hits are summed as magnitudes and the absorbed rows — keyed by the shield's
+ * id, not by a spell of this unit — are left out. Until FT-T02a (2026-10-09) they were
+ * summed signed: the threshold came out negative and `v >= threshold` kept
+ * exactly the spells BELOW a 5 % share — 82a2d681's Arms Warrior into Astral
+ * Shift was listed as "Rend + Charge + Hamstring" while three Mortal Strikes
+ * were dropped.
+ */
+export function getHighValueSpellIds(
+  unit: Pick<ICombatUnit, "damageOut">,
+): Set<string> {
   const totals: Record<string, number> = {};
   let grandTotal = 0;
 
   for (const dmg of unit.damageOut) {
+    // An absorbed hit is a row of its own in damageOut, keyed by the SHIELD's
+    // spell id (convert.ts) — not a spell of this unit. The share is of landed
+    // damage, spell by spell.
+    if ((dmg.logLine?.event as string) === LogEvent.SPELL_ABSORBED) continue;
     const id = dmg.spellId ?? "melee";
-    totals[id] = (totals[id] ?? 0) + (dmg.effectiveAmount ?? 0);
-    grandTotal += dmg.effectiveAmount ?? 0;
+    const amount = Math.abs(dmg.effectiveAmount ?? 0);
+    totals[id] = (totals[id] ?? 0) + amount;
+    grandTotal += amount;
   }
 
   if (grandTotal === 0) return new Set(Object.keys(totals));

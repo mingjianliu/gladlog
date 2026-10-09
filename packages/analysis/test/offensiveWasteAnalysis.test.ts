@@ -10,6 +10,7 @@ import { ensureAnalysisData } from "../src/data/ensure";
 import {
   buildOffensiveWasteSummary,
   formatOffensiveWasteForContext,
+  getHighValueSpellIds,
 } from "../src/utils/offensiveWasteAnalysis";
 import {
   makeAdvancedAction,
@@ -22,6 +23,53 @@ import {
 
 beforeAll(async () => {
   await ensureAnalysisData();
+});
+
+describe("offensiveWasteAnalysis — getHighValueSpellIds (FT-T02a)", () => {
+  const hit = (spellId: string, effectiveAmount: number) =>
+    ({ spellId, effectiveAmount }) as never;
+
+  it("兼容层的 damageOut 是负数:占比 ≥ 5% 的技能留下,不到 5% 的丢掉(82a2d681 的形状)", () => {
+    const ids = getHighValueSpellIds({
+      damageOut: [
+        hit("12294", -600_000), // Mortal Strike
+        hit("7384", -300_000), // Overpower
+        hit("100", -30_000), // Charge — 3.2 %
+        hit("1715", -20_000), // Hamstring — 2.1 %
+      ],
+    });
+    expect([...ids].sort()).toEqual(["12294", "7384"]);
+  });
+
+  it("正数金额(旧文档 / 手工夹具)结果相同", () => {
+    const ids = getHighValueSpellIds({
+      damageOut: [hit("12294", 600_000), hit("1715", 20_000)],
+    });
+    expect([...ids]).toEqual(["12294"]);
+  });
+
+  it("被吸收的部分在 damageOut 里是按盾的法术 id 记的正数行:不进占比,也不抬高门槛", () => {
+    const absorbed = (shieldId: string, amount: number) =>
+      ({
+        spellId: shieldId,
+        effectiveAmount: amount,
+        logLine: { event: "SPELL_ABSORBED" },
+      }) as never;
+    const ids = getHighValueSpellIds({
+      damageOut: [
+        hit("12294", -100_000),
+        hit("7384", -6_000), // 5.7 % of the 106k that landed
+        absorbed("17", 900_000), // Power Word: Shield ate 900k
+      ],
+    });
+    expect([...ids].sort()).toEqual(["12294", "7384"]);
+  });
+
+  it("没有任何伤害时不过滤:返回全部 id", () => {
+    expect([...getHighValueSpellIds({ damageOut: [hit("1", 0)] })]).toEqual([
+      "1",
+    ]);
+  });
 });
 
 describe("offensiveWasteAnalysis — buildOffensiveWasteSummary", () => {
